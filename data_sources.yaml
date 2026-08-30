@@ -1,0 +1,145 @@
+# ============================================================
+# CopyLane 소스 레지스트리 (D-15 · D-18 · D-22 · D-23)
+# ------------------------------------------------------------
+# 규칙
+#  - 여기 등록되지 않았거나 grade가 G1이면 수집 스크립트가 실행을 거부한다.
+#  - grade: G3(원문 자유) / G2(사실만 추출) / G1(배제) / G0(미표기 → G2 취급, 문의 후 승격)
+#  - use:   U1 학습 · U2 RAG인덱싱 · U3 화면인용 · U4 배포   (각각 allow/deny)
+#  - constraints: BY / NC / SA / PII / TOS / GATED
+#                 + NOREDIST (데이터 재가공·배포 금지 — D-71)
+#                 + NOSTORE (저장·별도DB 금지) / QUERYLOG (요청이 제공자에 보관됨) /
+#                   PREAPPROVAL (결과물 공개 전 사전승인)  — D-73
+#                 🚨 NOREDIST는 U4(모델 배포)를 막지 않는다. 축이 다르다 (D-71)
+#  - 등급은 소스의 "기본값"이며 실제 판정 단위는 FRAGMENT (D-18)
+#  - 경계 케이스(G1/G2, G2/G3)는 2인 판정 후 reviewed_by 기록
+#  - 모델 가중치도 이 레지스트리의 대상이다 (D-23, 하단 models 섹션)
+# ============================================================
+
+sources:
+  ftc_decisions:
+    name: 공정거래위원회 의결서
+    url: https://www.data.go.kr/data/15103301/fileData.do
+    api: [https://www.data.go.kr/data/15103246/openapi.do, https://www.data.go.kr/data/15103247/openapi.do]
+    grade: G3            # "이용허락범위 제한 없음" 확인
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: []
+    masking: 업체명·상표·대표자명 즉시 마스킹, 원문 미보관 (D-17)
+    fragment_note: 광고 화면 캡처 이미지는 G1~G2로 개별 하향 (D-18)
+    access: 공식다운로드/API
+    collected_at: null
+    decided_at: 2026-08-14
+    decided_by: 오한빈
+    reviewed_by: null
+    evidence_url: https://www.data.go.kr/data/15103301/fileData.do
+
+  law_go_kr:
+    name: 법제처 국가법령정보 OPEN API (법령·시행령·시행규칙·행정규칙/고시)
+    url: https://open.law.go.kr/LSO/openApi/guideList.do
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: []
+    access: API (OC 키 필요 — .env LAW_OC_KEY)
+    collected_at: null
+    decided_at: 2026-08-14
+    decided_by: 오한빈
+    reviewed_by: null
+
+  mfds_press:
+    name: 식약처 온라인 부당광고 점검 보도자료
+    grade: G3            # 확인 필요 플래그 유지
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: []
+    note: 키워드+집계만 공개, 전체 문구는 이미지 캡처인 경우 있음
+    decided_at: 2026-08-14
+    decided_by: 오한빈
+    reviewed_by: null
+
+  kfia_approved_list:
+    name: 기능성표시식품 심의완료 공개목록 (적법 라벨 + 합법 어휘 사전 원천)
+    url: https://adf.kfia.or.kr/company/open/openData.do?menuKey=406
+    # 🚨 URL 확인 필요 (D-80 ⑤) — 검색에서 「한국건강기능식품협회 기능성표시 광고심의」로
+    #    잡히는 것은 ad.khff.or.kr 이다. 공개목록 위치가 이전되었을 수 있으므로
+    #    수집 착수 전에 실제 접속 확인. 10장 즉시할일 6번의 선결 조건.
+    grade: G0            # → G2 취급. 문의 확정 시 승격
+    use: {U1: allow, U2: allow, U3: deny, U4: deny}
+    constraints: [TOS]
+    decided_at: 2026-08-14
+    decided_by: 오한빈
+    reviewed_by: null
+
+  kcia_guideline:
+    name: 대한화장품협회 광고자문 기준(해설서)
+    url: https://kcia.or.kr/inc/down.php?dir=BOARD&file_name=202303_167929681468454_1.pdf
+    grade: G0            # → G2 취급. 이용조건 문의 발송 (W1 월요일)
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}   # 사실(표현 목록)만 추출, 해설 문장 금지 (D-16)
+    constraints: [TOS]
+    note: 금지/허용 표현 목록은 원 출처(화장품법·고시)로 소급해 G3화 (D-16)
+    decided_at: 2026-08-14
+    decided_by: 오한빈
+    reviewed_by: null
+
+  aihub_review_corpus:
+    name: AI Hub 한국어 리뷰·감성 코퍼스 (세그먼트 구획용 — 어휘 1차 소스 아님, D-28)
+    grade: G0            # 이용약관 확인 후 등재 — 철수 조건 6
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [TOS, GATED]
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
+  # ── 검토 예정 (D-64) · 조사·제안: 이서은
+  #    판정 클래스가 아니라 「생성 안전 필터」 용도로만 검토한다.
+  #    🚨 라이선스 확인 전에는 어떤 용도로도 쓰지 않는다. share-alike면 D-60에 직접 걸린다.
+  unsmile:
+    name: UnSmile Dataset (스마일게이트 AI) — 한국어 혐오표현 카테고리별 멀티라벨
+    url: https://huggingface.co/datasets/smilegate-ai/kor_unsmile
+    grade: G0            # 라이선스 확인 필요
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [TOS]
+    note: 생성물 사후 안전 필터 · 키워드 사전 선별(D-29) 보강 용도 검토
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
+  k_mhas:
+    name: K-MHaS — Korean Multi-label Hate Speech Dataset (뉴스 댓글 기반)
+    grade: G0
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [TOS]
+    note: 검토 예정 (D-64)
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
+  korean_hatespeech:
+    name: Korean HateSpeech Dataset (고려대) — 뉴스 댓글 혐오표현 코퍼스
+    grade: G0            # 🚨 share-alike 여부 확인 최우선
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [TOS]
+    note: 검토 예정 (D-64). SA 계열이면 파인튜닝 산출물 배포에 제약이 걸린다
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
+  apeach:
+    name: APEACH — 혐오표현 탐지용 크라우드소싱 데이터셋
+    grade: G0
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [TOS]
+    note: 검토 예정 (D-64)
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
+  # 🚨 협상 불가 — 어떤 사정에서도 편입하지 않는다 (기획서 4-2)
+  blocked:
+    - {name: 쿠팡·네이버·올리브영 리뷰 직접 크롤링, grade: G1, reason: 약관 위반 + robots}
+    - {name: 고객사 CRM·구매이력·NPS 개인 레코드, grade: G1, reason: 개인정보}
+    - {name: FGI 인터뷰 녹취·전사본, grade: G1, reason: 개인정보 + 비밀유지}
+
+models:  # 모델 라이선스도 G-게이트 대상 (D-23)
+  qwen3_4b:        {license: Apache-2.0, grade: G3}
+  kure_v1:         {license: MIT,        grade: G3}
+  bge_reranker_v2_m3: {license: Apache-2.0, grade: G3}
+  kcbert_base:     {license: Apache-2.0, grade: G3}   # ★ 주 백본 (D-70)
+  klue_roberta:    {license: 없음,       grade: G0}   # 🚨 라이선스 부재 확인 (D-70) — 비교군 전용, 배포 금지
