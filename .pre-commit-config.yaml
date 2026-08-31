@@ -1,0 +1,40 @@
+# ============================================================
+# pre-commit hooks (security check P0-2, D-51)
+#
+# NOTE: keep this file ASCII-only.
+#   pre-commit may read it with the system code page (cp949 on
+#   Korean Windows) and non-ASCII characters break autoupdate.
+#
+# Install (once per developer):
+#   uv run pre-commit install
+#
+# rev values are pinned. To bump them run:
+#   uv run pre-commit autoupdate
+# and commit the result. Do not hand-edit rev.
+# ============================================================
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.5
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Secret scanning. Config is read from .gitleaks.toml at repo root.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        # Two trailing spaces mean <br> in Markdown. Do not strip them.
+        args: [--markdown-linebreak-ext=md]
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=5000]

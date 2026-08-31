@@ -12,9 +12,13 @@ launcher는 얇은 껍데기이고 로직은 여기 있다 (D-51).
 
 표준 라이브러리만 쓴다 — uv 환경이 서기 전에도, 팀원 누구의 OS에서도 돈다.
 """
+
 from __future__ import annotations
-import argparse, json, sys
-from collections import Counter, defaultdict
+
+import argparse
+import json
+import sys
+from collections import Counter
 from pathlib import Path
 
 # ── 거버넌스 (D-19) — 위치가 곧 게이트. G3 자료만 여기서 읽는다.
@@ -22,17 +26,17 @@ DATA_DIR = Path("data/g3/cases")
 
 # ── 레코드 계약 ────────────────────────────────────────────────────────────
 CASE_FIELDS = {
-    "case_id":        "str   · 사건 식별자 (소스 내 고유)",
-    "source":         "str   · ftc_decisions | mfds_action | ...  (data_sources.yaml 키)",
-    "source_url":     "str   · 원문 URL",
-    "fragment_id":    "str   · 🚨 필수 — 캐스케이드 삭제 경로 (D-20)",
-    "decided_date":   "str   · YYYY-MM-DD · 처분·의결일",
-    "law":            "str   · 표시광고법 | 식품표시광고법 | 화장품법",
-    "category":       "str   · 일반 | 식품 | 건기식 | 화장품",
+    "case_id": "str   · 사건 식별자 (소스 내 고유)",
+    "source": "str   · ftc_decisions | mfds_action | ...  (data_sources.yaml 키)",
+    "source_url": "str   · 원문 URL",
+    "fragment_id": "str   · 🚨 필수 — 캐스케이드 삭제 경로 (D-20)",
+    "decided_date": "str   · YYYY-MM-DD · 처분·의결일",
+    "law": "str   · 표시광고법 | 식품표시광고법 | 화장품법",
+    "category": "str   · 일반 | 식품 | 건기식 | 화장품",
     "violation_types": "list · 위법 유형 (다중). VIOLATION_TYPES 참조",
-    "has_ad_text":    "bool  · 🚨 광고 문구 원문이 인용돼 있는가",
+    "has_ad_text": "bool  · 🚨 광고 문구 원문이 인용돼 있는가",
     "ad_text_before": "str|null · 시정 전 문구 (마스킹 후 — D-17)",
-    "ad_text_after":  "str|null · 시정 후 문구",
+    "ad_text_after": "str|null · 시정 후 문구",
 }
 
 # 현행 3법령의 기존 위법 유형 — 30건 미달이 하나라도 있으면 확장 금지 (D-65)
@@ -52,7 +56,7 @@ CANDIDATE_TYPES = [
     "실증책임_위반",
 ]
 
-MIN_SAMPLES = 30   # D-40 — 유형별 최소 표본. 미달은 「측정 불가」
+MIN_SAMPLES = 30  # D-40 — 유형별 최소 표본. 미달은 「측정 불가」
 
 
 def load_cases(path: Path = DATA_DIR):
@@ -96,14 +100,16 @@ def cmd_validate(_):
     for i, c in enumerate(cases, 1):
         miss = [k for k in required if k not in c]
         if miss:
-            print(f"X #{i} {c.get('case_id','?')}  누락 필드 — {', '.join(miss)}")
+            print(f"X #{i} {c.get('case_id', '?')}  누락 필드 — {', '.join(miss)}")
             bad += 1
         if not c.get("fragment_id"):
-            print(f"X #{i} {c.get('case_id','?')}  fragment_id 없음 — 캐스케이드 삭제가 깨집니다 (D-20)")
+            print(
+                f"X #{i} {c.get('case_id', '?')}  fragment_id 없음 — 캐스케이드 삭제가 깨집니다 (D-20)"
+            )
             bad += 1
         for t in c.get("violation_types", []):
             if t not in known:
-                print(f"! #{i} {c.get('case_id','?')}  미등록 유형 — {t}")
+                print(f"! #{i} {c.get('case_id', '?')}  미등록 유형 — {t}")
     print(f"\n{'O' if bad == 0 else 'X'} 레코드 {len(cases)}건 · 오류 {bad}건")
     return 0 if bad == 0 else 1
 
@@ -124,8 +130,7 @@ def cmd_report(_):
 
     # ── ② ③ 건수보다 중요한 두 숫자 (D-65)
     with_text = sum(1 for c in cases if c.get("has_ad_text"))
-    with_pair = sum(1 for c in cases
-                    if c.get("ad_text_before") and c.get("ad_text_after"))
+    with_pair = sum(1 for c in cases if c.get("ad_text_before") and c.get("ad_text_after"))
     # 유형별 「실질」 = 문구 원문이 있는 것만
     eff = Counter()
     for c in cases:
@@ -133,10 +138,14 @@ def cmd_report(_):
             eff.update(c.get("violation_types", []))
 
     print(f"\n[1] 총 사례            {n}건")
-    print(f"[2] 광고 문구 원문 인용  {with_text}건 ({with_text/n*100:.1f}%)"
-          "   <- 없으면 학습 데이터가 되지 않는다")
-    print(f"[3] 시정 전/후 페어      {with_pair}건 ({with_pair/n*100:.1f}%)"
-          "   <- 파인튜닝 데이터의 크기 (D-26)")
+    print(
+        f"[2] 광고 문구 원문 인용  {with_text}건 ({with_text / n * 100:.1f}%)"
+        "   <- 없으면 학습 데이터가 되지 않는다"
+    )
+    print(
+        f"[3] 시정 전/후 페어      {with_pair}건 ({with_pair / n * 100:.1f}%)"
+        "   <- 파인튜닝 데이터의 크기 (D-26)"
+    )
 
     print(f"\n[4] 유형별 건수 — 기준 {MIN_SAMPLES}건 (D-40)")
     print(f"    {'유형':<24}{'전체':>6}{'실질':>7}   판정")
@@ -148,20 +157,19 @@ def cmd_report(_):
             blocked.append(t)
         print(f"    {t:<24}{tot:>6}{e:>7}   {'O 측정 가능' if ok else 'X 측정 불가'}")
 
-    print(f"\n[5] 편입 후보 유형")
+    print("\n[5] 편입 후보 유형")
     admit, defer = [], []
     for t in CANDIDATE_TYPES:
         tot, e = by_type.get(t, 0), eff.get(t, 0)
         (admit if e >= MIN_SAMPLES else defer).append((t, tot, e))
-        print(f"    {t:<24}{tot:>6}{e:>7}   "
-              f"{'O 편입 가능' if e >= MIN_SAMPLES else 'X 표본 부족'}")
+        print(f"    {t:<24}{tot:>6}{e:>7}   {'O 편입 가능' if e >= MIN_SAMPLES else 'X 표본 부족'}")
 
-    print(f"\n[6] 연도 분포")
+    print("\n[6] 연도 분포")
     yrs = Counter((c.get("decided_date") or "????")[:4] for c in cases)
     for y in sorted(yrs):
         print(f"    {y}  {yrs[y]:>5}")
 
-    print(f"\n[7] 카테고리 분포")
+    print("\n[7] 카테고리 분포")
     for k, v in Counter(c.get("category", "?") for c in cases).most_common():
         print(f"    {k:<12}{v:>5}")
 
@@ -170,16 +178,16 @@ def cmd_report(_):
     if blocked:
         print("! 확장 금지 — 기존 유형에 표본 미달이 있습니다")
         for t in blocked:
-            print(f"    X {t}  실질 {eff.get(t,0)}건 / {MIN_SAMPLES}")
+            print(f"    X {t}  실질 {eff.get(t, 0)}건 / {MIN_SAMPLES}")
         print("\n  있는 것도 측정하지 못하는 상태에서 범위를 넓히지 않습니다 (D-65).")
         print("  먼저 기존 유형의 표본을 채우십시오.")
     elif admit:
         print("O 편입 가능 — 아래 유형만 편입합니다 (법령이 아니라 유형 단위)")
-        for t, tot, e in admit:
+        for t, _tot, e in admit:
             print(f"    O {t}  실질 {e}건")
         if defer:
             print("\n  아래는 편입하지 않고 「측정 불가 유형」으로 기록만 합니다.")
-            for t, tot, e in defer:
+            for t, _tot, e in defer:
                 print(f"    - {t}  실질 {e}건 / {MIN_SAMPLES}")
     else:
         print("O 기존 유형은 전부 측정 가능하나, 편입 후보 중 기준을 넘는 유형이 없습니다.")
@@ -204,10 +212,10 @@ def cmd_fetch(args):
 def main():
     p = argparse.ArgumentParser(description="제재 사례 수집 · 범위 판정 집계 (D-65)")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("schema",   help="레코드 계약 출력").set_defaults(fn=cmd_schema)
+    sub.add_parser("schema", help="레코드 계약 출력").set_defaults(fn=cmd_schema)
     sub.add_parser("validate", help="레코드 계약 검증").set_defaults(fn=cmd_validate)
-    sub.add_parser("report",   help="D-65 범위 판정 집계").set_defaults(fn=cmd_report)
-    sub.add_parser("fetch",    help="소스별 수집 (T1 구현 예정)").set_defaults(fn=cmd_fetch)
+    sub.add_parser("report", help="D-65 범위 판정 집계").set_defaults(fn=cmd_report)
+    sub.add_parser("fetch", help="소스별 수집 (T1 구현 예정)").set_defaults(fn=cmd_fetch)
     a = p.parse_args()
     sys.exit(a.fn(a) or 0)
 
