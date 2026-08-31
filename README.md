@@ -61,7 +61,8 @@ CopyLane_Final_project/
 │   ├── 02_설계/             # 청크·DB·LangGraph 상태 스키마
 │   ├── 03_데이터/           # 전처리 사양 (D-74)
 │   ├── 04_보안/
-│   └── 05_배포/
+│   ├── 05_배포/
+│   └── ohb/ ksr/ lse/ psj/ ssm/   # 개인 작업 문서 — 이니셜 = 브랜치명
 └── scripts/                 # doctor.py · collect.py · build_pdf.py · db/init/
 ```
 
