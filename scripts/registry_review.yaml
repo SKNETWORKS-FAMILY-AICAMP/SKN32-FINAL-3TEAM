@@ -1,0 +1,305 @@
+# ============================================================
+# 2인 확인 원장 — 등급 판정의 결정·검토 기록 (D-66 · D-90 ④)
+# ------------------------------------------------------------
+#  🚨 이 파일이 입력이다. data_sources.yaml 은 생성물이므로
+#     거기에 reviewed_by 를 손으로 적으면 다음 생성 때 사라진다.
+#     (집행계약 §6 「생성 경로 — 손으로 고치지 않는 것」)
+#
+#  규칙
+#   - decided_by 와 reviewed_by 는 서로 달라야 한다 (DB ck_source_four_eyes)
+#   - 🚨 reviewed_by 가 비면 collect.registry.require() 가 수집을 거부한다
+#   - collected_at 은 손으로 적지 않는다 — 수집기가 mark_collected() 로 찍는다
+#
+#  절차 (S0-14)
+#   1. uv run python scripts/review_sheet.py   → build/review_sheet.md
+#   2. 검토자가 그 표를 보고 판정에 동의하면 여기 reviewed_by·reviewed_at 기입
+#   3. uv run python scripts/gen_registry.py   → data_sources.yaml 재생성
+#   4. uv run pytest -m gate
+# ============================================================
+
+ftc_decisions:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+ftc_decisions_api:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+mfds_sanctions:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+mfds_press:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+ftc_noviolation:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+kfia_approved_list:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+mfds_hf_ingredient:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+mfds_hf_individual:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+hf_standard:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+kcia_guideline:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+law_go_kr:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+platform_guide:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+mfds_hf_ingredient_board:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+cosmetic_ingredient:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+cosmetic_restricted:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+aihub_71486:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+aihub_71723:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+aihub_558:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+aihub_71694:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+aihub_71843:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+bab2min_shopping:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+nsmc:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+klue_dataset:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+k_mhas:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+kobaco_mcr:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+kobaco_mcr_report:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+krei_food:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+khff_survey:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+nasmedia_npr:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+nasmedia_fb:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+kcc_media:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+kosis:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+knhanes:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+kisdi_panel:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+aihub_review_corpus:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+meta_adlibrary:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+google_atc:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+youtube_api:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+google_trends:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+self_sanction_stat:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+mfds_production:
+  decided_by: 오한빈
+  decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null

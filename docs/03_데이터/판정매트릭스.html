@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CopyLane — 데이터 거버넌스 판정 매트릭스 v2</title>
+<style>
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb; --page:#f9f9f7;
+  --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+  --rule:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --good-bg:rgba(12,163,12,.10); --warn-bg:rgba(250,178,25,.16);
+  --crit-bg:rgba(208,59,59,.10); --unk-bg:rgba(137,135,129,.12);
+  --ser-bg:rgba(236,131,90,.13);
+  --accent:#2a78d6; --accent-bg:rgba(42,120,214,.10);
+  --shadow:0 1px 2px rgba(11,11,11,.05), 0 8px 24px rgba(11,11,11,.05);
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#1a1a19; --page:#0d0d0d;
+  --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+  --rule:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+  --good-bg:rgba(12,163,12,.16); --warn-bg:rgba(250,178,25,.14);
+  --crit-bg:rgba(208,59,59,.16); --unk-bg:rgba(137,135,129,.16);
+  --ser-bg:rgba(236,131,90,.16);
+  --accent:#3987e5; --accent-bg:rgba(57,135,229,.14);
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--page);color:var(--ink-1);
+  font-family:system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1520px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:26px;line-height:1.25;margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:17px;margin:0 0 4px;letter-spacing:-.005em}
+.sub{color:var(--ink-2);font-size:13px;margin:0}
+.muted{color:var(--ink-3)}
+section{margin-top:34px}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.sec-head .n{font-size:11px;font-weight:700;color:var(--ink-3);letter-spacing:.09em;
+  border:1px solid var(--border);border-radius:4px;padding:2px 7px}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;
+  padding:16px 18px;box-shadow:var(--shadow)}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.themebtn{background:var(--surface-1);border:1px solid var(--border);color:var(--ink-2);
+  border-radius:8px;padding:7px 13px;cursor:pointer;font-size:12.5px;font-family:inherit;white-space:nowrap}
+.themebtn:hover{border-color:var(--axis)}
+.disclaim{margin-top:16px;border-left:3px solid var(--warn);background:var(--warn-bg);
+  border-radius:0 8px 8px 0;padding:11px 15px;font-size:12.5px;color:var(--ink-1)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:10px}
+.tile{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:13px 15px}
+.tile .lab{font-size:11.5px;color:var(--ink-2);margin-bottom:3px}
+.tile .val{font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+.tile .foot{font-size:11px;color:var(--ink-3);margin-top:3px}
+.tile.b-good{border-left:3px solid var(--good)} .tile.b-warn{border-left:3px solid var(--warn)}
+.tile.b-crit{border-left:3px solid var(--crit)} .tile.b-unk{border-left:3px solid var(--ink-3)}
+.tile.b-acc{border-left:3px solid var(--accent)} .tile.b-ser{border-left:3px solid var(--serious)}
+.grades{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.gcard{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:15px 17px;
+  border-top:3px solid var(--axis)}
+.gcard.g3{border-top-color:var(--good)} .gcard.g2{border-top-color:var(--warn)}
+.gcard.g1{border-top-color:var(--crit)} .gcard.g0{border-top-color:var(--ink-3)}
+.gcard .gname{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;margin-bottom:2px}
+.gcard .gdef{font-size:13px;margin-bottom:9px;font-weight:500}
+.gcard ul{margin:0;padding-left:16px;font-size:12.5px;color:var(--ink-2)}
+.gcard li{margin-bottom:3px}
+.gcard .gcount{margin-left:auto;font-size:11.5px;color:var(--ink-3);font-weight:500}
+.dot{width:10px;height:10px;border-radius:2px;flex:none;display:inline-block}
+.dot.good{background:var(--good)} .dot.warn{background:var(--warn)}
+.dot.crit{background:var(--crit)} .dot.unk{background:var(--ink-3)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+.rule-t th,.rule-t td{border-bottom:1px solid var(--rule);padding:9px 11px;text-align:left;vertical-align:top}
+.rule-t th{font-size:11.5px;color:var(--ink-2);font-weight:600;background:var(--page)}
+.rule-t td code{font-size:12px;background:var(--unk-bg);padding:1px 5px;border-radius:4px}
+.flags{display:flex;flex-wrap:wrap;gap:8px}
+.flag{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);
+  border-radius:7px;padding:7px 11px;background:var(--surface-1);font-size:12.5px}
+.flag b{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;
+  background:var(--unk-bg);padding:1px 6px;border-radius:4px;color:var(--ink-1)}
+.ctrls{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.chip{border:1px solid var(--border);background:var(--surface-1);color:var(--ink-2);
+  border-radius:99px;padding:6px 13px;font-size:12.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.chip:hover{border-color:var(--axis)}
+.chip[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent);color:var(--ink-1);font-weight:600}
+input[type=search]{border:1px solid var(--border);background:var(--surface-1);color:var(--ink-1);
+  border-radius:8px;padding:7px 12px;font-size:13px;min-width:200px;font-family:inherit}
+input[type=search]:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp .gl{font-size:11px;color:var(--ink-3);letter-spacing:.06em;font-weight:600;margin-right:2px}
+.mwrap{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;
+  overflow:auto;box-shadow:var(--shadow);max-height:80vh}
+.m{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
+.m thead th{position:sticky;top:0;z-index:3;background:var(--surface-1);
+  border-bottom:1.5px solid var(--axis);padding:9px 7px;font-size:11.5px;color:var(--ink-2);
+  font-weight:600;text-align:center;white-space:nowrap}
+.m thead th.tl{text-align:left;min-width:280px;left:0;z-index:4}
+.m thead th .qh{display:block;font-size:10.5px;color:var(--ink-3);font-weight:400;margin-top:1px}
+.m tbody td{border-bottom:1px solid var(--rule);padding:7px;vertical-align:middle;text-align:center}
+.m tbody td.tl{text-align:left;position:sticky;left:0;background:var(--surface-1);z-index:2}
+.m tbody tr{cursor:pointer}
+.m tbody tr:hover td,.m tbody tr:hover td.tl{background:var(--accent-bg)}
+.m tbody tr.sel td,.m tbody tr.sel td.tl{background:var(--accent-bg)}
+.lgroup td{background:var(--page)!important;font-size:11px;font-weight:700;color:var(--ink-2);
+  letter-spacing:.07em;padding:7px 10px!important;text-align:left!important;
+  border-bottom:1px solid var(--axis)!important;position:sticky;left:0}
+.sname{font-weight:550;line-height:1.35}
+.sorg{font-size:11px;color:var(--ink-3);margin-top:1px}
+.badge{display:inline-block;font-size:9.5px;font-weight:700;border-radius:3px;padding:1px 5px;margin-left:5px;vertical-align:1px}
+.badge.ver{background:var(--accent-bg);color:var(--ink-1);border:1px solid var(--accent)}
+.gtag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+  border-radius:5px;padding:3px 8px;border:1px solid var(--border);white-space:nowrap}
+.gtag.G3{background:var(--good-bg)} .gtag.G2{background:var(--warn-bg)}
+.gtag.G1{background:var(--crit-bg)} .gtag.G0{background:var(--unk-bg)}
+.mini{display:inline-block;font-family:ui-monospace,Menlo,monospace;
+  font-size:10px;background:var(--unk-bg);border-radius:3px;padding:1px 4px;margin:1px 2px 0 0;color:var(--ink-2)}
+.mk{display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  border-radius:6px;padding:4px 8px;font-size:11.5px;font-weight:600;min-width:58px;
+  border:1px solid transparent;color:var(--ink-1)}
+.mk.ok{background:var(--good-bg);border-color:rgba(12,163,12,.35)}
+.mk.cond{background:var(--warn-bg);border-color:rgba(250,178,25,.5)}
+.mk.no{background:var(--crit-bg);border-color:rgba(208,59,59,.35)}
+.mk.unknown{background:var(--unk-bg);border-color:var(--border);color:var(--ink-2)}
+.mk .g{font-size:12px;line-height:1}
+.ct{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:4px 8px;
+  font-size:11.5px;font-weight:600;border:1px solid transparent;white-space:nowrap;min-width:74px;justify-content:center}
+.ct.free{background:var(--good-bg);border-color:rgba(12,163,12,.3)}
+.ct.gated{background:var(--warn-bg);border-color:rgba(250,178,25,.45)}
+.ct.paid{background:var(--ser-bg);border-color:rgba(236,131,90,.45)}
+.ct.unknown{background:var(--unk-bg);border-color:var(--border);color:var(--ink-2)}
+.vt{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+  border-radius:6px;font-size:12.5px;font-weight:800;border:1px solid var(--border)}
+.vt.A{background:var(--good-bg);border-color:rgba(12,163,12,.45)}
+.vt.B{background:var(--accent-bg);border-color:rgba(42,120,214,.4)}
+.vt.C{background:var(--unk-bg)}
+.vt.D{background:var(--ser-bg);border-color:rgba(236,131,90,.4)}
+.vt.X{background:var(--crit-bg);border-color:rgba(208,59,59,.4)}
+.detail{margin-top:14px;background:var(--surface-1);border:1px solid var(--border);
+  border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+.detail .dh{padding:15px 18px;border-bottom:1px solid var(--rule);
+  display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.detail .dh .t{font-size:16px;font-weight:650;line-height:1.3}
+.detail .dh .m2{font-size:12px;color:var(--ink-3);margin-top:2px}
+.detail .db{padding:16px 18px}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:10px;margin-bottom:14px}
+.q{border:1px solid var(--border);border-radius:8px;padding:11px 13px;background:var(--page)}
+.q .ql{font-size:11.5px;color:var(--ink-2);margin-bottom:6px;font-weight:600}
+.q .qn{font-size:12px;color:var(--ink-2);margin-top:7px;line-height:1.5}
+.banner{border-radius:0 8px 8px 0;padding:10px 14px;font-size:12.5px;margin-bottom:10px}
+.b-val{border-left:3px solid var(--good);background:var(--good-bg)}
+.b-cost{border-left:3px solid var(--accent);background:var(--accent-bg)}
+.b-why{border-left:3px solid var(--accent);background:var(--accent-bg)}
+.b-caut{border-left:3px solid var(--serious);background:var(--ser-bg)}
+.dlink{display:inline-block;margin-top:10px;font-size:12.5px;color:var(--accent)}
+.empty{padding:30px;text-align:center;color:var(--ink-3);font-size:13px}
+.acts{display:grid;gap:9px}
+.act{display:flex;gap:12px;align-items:flex-start;background:var(--surface-1);
+  border:1px solid var(--border);border-radius:9px;padding:12px 15px;border-left:3px solid var(--crit)}
+.act.soon{border-left-color:var(--warn)} .act.later{border-left-color:var(--ink-3)}
+.act .an{font-size:11px;font-weight:700;color:var(--ink-3);min-width:52px;padding-top:2px}
+.act .at{font-size:13px;font-weight:600;margin-bottom:2px}
+.act .ad{font-size:12.5px;color:var(--ink-2)}
+footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--rule);
+  font-size:12px;color:var(--ink-3);line-height:1.7}
+@media print{.ctrls,.themebtn{display:none}.mwrap{max-height:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="top">
+  <div>
+    <h1>데이터 거버넌스 판정 매트릭스 <span class="muted" style="font-size:17px;font-weight:500">v2</span></h1>
+    <p class="sub">CopyLane · <b>「써도 되는가 · 쓸 가치가 있는가 · 얼마가 드는가」</b>를 한 화면에서 &nbsp;·&nbsp; 기준일 <b>2026-08-20</b> &nbsp;·&nbsp; 기획문서 v3.8 4-1·4-2절 + 당일 온라인 실측 &nbsp;·&nbsp; <b>작성자 오한빈 (팀장)</b></p>
+  </div>
+  <button class="themebtn" id="tt">◐ 다크 모드</button>
+</div>
+
+<div class="disclaim">
+  <b>⚠️ 팀의 운영 판정이지 법적 확정 판단이 아닙니다.</b>
+  학내 프로젝트 범위에서 <b>5인이 같은 기준으로 판단</b>하기 위한 것입니다. 상업 배포 전에는 각 소스의 이용조건을 다시 확인하고, 경계 사례는 <b>2인 확인 + 근거 URL 기록</b>을 남기십시오.
+  ❔는 <b>확인되지 않았다는 뜻이지 허용된다는 뜻이 아닙니다</b> — G0는 확정될 때까지 G2로 취급합니다.
+  <b>비용</b>은 금액만이 아니라 <b>리드타임(승인 대기)</b>을 포함합니다 — 9주 프로젝트에서는 2주 심사가 3만원보다 비쌉니다.
+</div>
+
+<section>
+  <div class="sec-head"><span class="n">요약</span><h2>지금 상태</h2></div>
+  <div class="tiles" id="tiles"></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">1</span><h2>등급이 뜻하는 것</h2>
+    <span class="sub">등급은 <b>소스가 아니라 추출물(FRAGMENT)의 속성</b>입니다 — 한 문서 안에서도 조각마다 갈립니다.</span></div>
+  <div class="grades" id="grades"></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">2</span><h2>활용 가치와 비용</h2>
+    <span class="sub"><b>「써도 되는가」와 「쓸 가치가 있는가」는 다른 질문</b>입니다. 써도 되지만 가치 없는 것, 가치 있지만 못 쓰는 것이 각각 있습니다.</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px">
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:9px">활용 가치</div>
+      <table class="rule-t"><tbody>
+        <tr><td style="width:34px"><span class="vt A">A</span></td><td><b>핵심</b> — 없으면 해당 태스크가 죽는다</td><td class="muted" style="width:44px;text-align:right" id="cA"></td></tr>
+        <tr><td><span class="vt B">B</span></td><td><b>유용</b> — 품질을 올린다</td><td class="muted" style="text-align:right" id="cB"></td></tr>
+        <tr><td><span class="vt C">C</span></td><td><b>보조</b> — 있으면 좋다</td><td class="muted" style="text-align:right" id="cC"></td></tr>
+        <tr><td><span class="vt D">D</span></td><td><b>가치 낮음</b> — 비용 대비 이득이 작다</td><td class="muted" style="text-align:right" id="cD"></td></tr>
+        <tr><td><span class="vt X">X</span></td><td><b>탈락</b> — 쓸 수 없거나 쓸 이유가 없다</td><td class="muted" style="text-align:right" id="cX"></td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:9px">비용 — 돈과 시간을 함께 봅니다</div>
+      <table class="rule-t"><tbody>
+        <tr><td style="width:92px"><span class="ct free">✔ 무료</span></td><td>즉시 받을 수 있다. 인증키 자동 발급 포함</td></tr>
+        <tr><td><span class="ct gated">△ 승인필요</span></td><td><b>돈은 안 들지만 시간이 든다.</b> 신청·심사 2~6주. <b>9주 프로젝트에서는 이게 진짜 비용</b></td></tr>
+        <tr><td><span class="ct paid">$ 유료</span></td><td>금전 지출이 발생한다</td></tr>
+        <tr><td><span class="ct unknown">? 미확인</span></td><td>확인되지 않았다</td></tr>
+      </tbody></table>
+      <div style="font-size:12px;color:var(--ink-2);margin-top:10px;border-left:3px solid var(--serious);background:var(--ser-bg);padding:9px 12px;border-radius:0 7px 7px 0">
+        🚨 <b>숨은 비용 셋</b> — ① 회신 대기(협회 문의는 무기한) ② GPU(모델은 무료여도 학습은 아니다) ③ 상업화 시점의 라이선스 협의
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">3</span><h2>제약 플래그</h2>
+    <span class="sub">등급과 <b>별개로</b> 동시에 붙습니다. G3여도 플래그가 붙으면 용도가 막힙니다.</span></div>
+  <div class="flags" id="flags"></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">4</span><h2>다섯 질문과 판정 규칙</h2></div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table class="rule-t">
+      <thead><tr><th style="width:112px">질문</th><th style="width:180px">무엇을 묻는가</th><th>판정 규칙</th><th style="width:240px">막히면 무슨 일이</th></tr></thead>
+      <tbody>
+        <tr><td><b>학습</b><div class="muted" style="font-size:11.5px">U1</div></td>
+          <td>AI 모델 학습에 투입할 수 있는가</td>
+          <td><code>G3</code> → 원문 그대로 · <code>G2</code> → 추출한 <b>사실만</b> · <code>G1</code> → 금지 · <code>NC/재배포금지</code>가 붙고 <b>배포 모델</b>이면 → <b>금지</b></td>
+          <td>DAPT·sLLM 파인튜닝에서 제외. 군집화 같은 <b>배치 분석</b>은 별도 판정</td></tr>
+        <tr><td><b>상업</b></td>
+          <td>상업적으로 써도 문제가 없는가</td>
+          <td><code>NC 없음</code> AND <code>U4 허용</code> → <span class="mk ok"><span class="g">✔</span>가능</span> · <code>NC</code> → <span class="mk no"><span class="g">✕</span>불가</span> · <code>BY</code>만 → 출처표시 <span class="mk cond"><span class="g">△</span>조건부</span></td>
+          <td>학내 진행은 되나 <b>제품화 경로가 막힘</b>. 지금 구분 안 하면 나중에 데이터를 뜯어내야 함</td></tr>
+        <tr><td><b>원문</b></td>
+          <td>문장 원문을 그대로 쓸 수 있는가</td>
+          <td><code>G3</code> → <span class="mk ok"><span class="g">✔</span>가능</span> · <code>G2</code> → <span class="mk no"><span class="g">✕</span>불가</span> (사실·어휘·수치만) · <code>G1</code> → <span class="mk no"><span class="g">✕</span>불가</span><br><span class="muted">🚨 저작권은 <b>표현</b>을 보호하고 <b>사실</b>은 보호하지 않는다 — 이것이 G2의 근거</span></td>
+          <td>금지 표현 <b>목록</b>은 취해도 <b>해설 문장</b>은 못 취함. 원 출처(법령·고시)로 소급하면 G3로 올라감</td></tr>
+        <tr><td><b>인용</b><div class="muted" style="font-size:11.5px">U3</div></td>
+          <td>화면·리포트에 근거로 인용할 수 있는가</td>
+          <td><code>G3</code> → <span class="mk ok"><span class="g">✔</span>가능</span> · <code>G2</code> → 원 출처로 <b>소급 인용</b> · <code>BY</code> → 출처표시 필수</td>
+          <td>RAG 인용 검증에서 제외. <b>협회 해설서 대신 시행규칙 별표를 인용</b>하면 인용 품질도 함께 올라감</td></tr>
+        <tr><td><b>배포</b><div class="muted" style="font-size:11.5px">U4</div></td>
+          <td><b>모델·서비스</b>를 내보낼 수 있는가</td>
+          <td>🚨 <b>「모델 배포」와 「데이터 재배포」는 다른 축이다</b> — 뭉뚱그리면 과잉 차단이 난다<br>
+            <code>U4 모델 배포</code> → 이 열이 답한다 · <code>NOREDIST</code> → 데이터 재가공·배포 금지 <b>플래그로 따로 표시</b><br>
+            <span class="muted">전파 규칙: <code>배포 모델 학습 = { f | f.U1 AND f.U4 }</code> — <b>NOREDIST는 여기에 걸리지 않는다</b><br>
+            데이터셋 공개 = <code>NOREDIST 없음</code></span></td>
+          <td>가중치에 흡수된 데이터는 되돌릴 수 없다. <b>이 판정을 학습 전에</b> 내려야 하는 이유</td></tr>
+        <tr><td><b>NOREDIST</b><div class="muted" style="font-size:11.5px">플래그</div></td>
+          <td>데이터를 <b>재가공해 배포</b>할 수 있는가</td>
+          <td><span class="mk no"><span class="g">✕</span>불가</span>여도 <b>학습·상업·모델 배포는 열려 있을 수 있다</b><br>
+            <span class="muted">🚨 AI Hub가 정확히 이 경우다 — 모델·서비스 배포와 영리 활용은 자유, 데이터 재배포만 불가</span></td>
+          <td>골든셋에 해당 데이터 유래 문장이 섞이면 <b>그 골든셋을 공개할 수 없다</b>. <code>provenance</code> 필드로 추적</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div style="margin:22px 0;padding:14px 18px;border-left:4px solid #b45309;background:#fffbeb;border-radius:0 6px 6px 0;line-height:1.65">
+  <b style="color:#b45309">🔄 2026-08-31 — 이 매트릭스와 <code>data_sources.yaml</code> 은 범위가 다릅니다 (D-90)</b><br>
+  <span style="font-size:13px">
+  이 문서는 <b>판정 근거</b>(왜 그렇게 봤는가)이고 <b>73건</b>입니다.
+  레지스트리 <code>data_sources.yaml</code> 은 <b>집행 대상</b>(수집기가 읽는 허용 목록)이고
+  <b>등재 43 · 편입금지 9 · 미채택 10</b> 입니다.<br>
+  차이가 나는 이유는 등재 단위가 「데이터셋」이 아니라 <b>「이용조건」</b> 이기 때문입니다 —
+  법제처 OPEN API로 받는 11종(법령·별표·고시·지침·재결례·판례)은 OC 키 하나·조건 하나이므로
+  <code>law_go_kr</code> <b>1건</b>으로 묶입니다. 반대로 AI Hub 6종은 <b>승인 상태가 따로 흐르므로</b> 각각 등재합니다.<br>
+  <b>정정 4건</b> — <code>kcia_guideline</code> G0→<b>G2</b>(2025판) ·
+  <code>aihub_review_corpus</code> 전 용도 deny→<b>G3 + NOREDIST</b> ·
+  <code>unsmile</code> <b>미채택</b>(ND 조항) · <code>k_mhas</code> <b>G3</b>(CC BY-SA 확인).<br>
+  🚨 <b>G0 는 전 용도 deny 로 닫혔습니다</b> — 「미확인」을 「아마 괜찮음」으로 읽는 순간 등급이 무의미해지기 때문입니다.
+  아래 표의 <b>학습·상업·원문·인용·배포</b> 열이 <code>cond</code> 인 G0 행은 레지스트리에서 전부 <code>deny</code> 입니다.
+  </span>
+</div>
+
+<div class="sec-head"><span class="n">5</span><h2>소스 × 판정 매트릭스</h2>
+    <span class="sub">행을 클릭하면 <b>가치 판단·비용·근거·주의사항</b>이 아래에 펼쳐집니다.</span></div>
+  <div class="ctrls">
+    <div class="grp"><span class="gl">층</span><span id="f-layer"></span></div>
+    <div class="grp"><span class="gl">등급</span><span id="f-grade"></span></div>
+    <div class="grp"><span class="gl">가치</span><span id="f-value"></span></div>
+    <div class="grp"><span class="gl">비용</span><span id="f-cost"></span></div>
+    <div class="grp"><span class="gl">보기</span>
+      <button class="chip" data-view="now" aria-pressed="false">지금 쓸 수 있는 것</button>
+      <button class="chip" data-view="blocked" aria-pressed="false">막힌 것</button>
+      <button class="chip" data-view="unknown" aria-pressed="false">확인 필요</button>
+      <button class="chip" data-view="verified" aria-pressed="false">실측 완료</button>
+    </div>
+    <input type="search" id="q" placeholder="소스·기관·키워드 검색">
+    <button class="chip" id="reset">초기화</button>
+    <span class="muted" style="font-size:12px" id="cnt"></span>
+  </div>
+  <div class="mwrap">
+    <table class="m">
+      <thead><tr>
+        <th class="tl">소스</th>
+        <th style="width:88px">등급</th>
+        <th style="width:98px">제약</th>
+        <th style="width:96px">비용<span class="qh">돈+시간</span></th>
+        <th style="width:82px">학습<span class="qh">AI 학습</span></th>
+        <th style="width:82px">상업<span class="qh">상업 이용</span></th>
+        <th style="width:82px">원문<span class="qh">문장 원문</span></th>
+        <th style="width:82px">인용<span class="qh">화면 인용</span></th>
+        <th style="width:82px">배포<span class="qh">함께 배포</span></th>
+        <th style="width:56px">가치<span class="qh">A~X</span></th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div id="detail"></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">6</span><h2>이 표에서 바로 나오는 조치</h2></div>
+  <div class="acts">
+    <div class="act"><div class="an">🚨 오늘</div><div><div class="at">KLUE-RoBERTa를 kcbert-base로 교체할지 반나절 안에 결정</div>
+      <div class="ad">모델 카드와 HF API를 교차 확인한 결과 <b><code>license</code> 키가 아예 없습니다.</b> 데이터셋의 CC BY-SA가 모델 가중치에 적용된다고 볼 근거가 없습니다. <code>beomi/kcbert-base</code>는 <b>Apache 2.0</b>이고, 댓글·구어체 사전학습이라 광고 문구 도메인에 <b>오히려 더 적합</b>합니다. 나란히 베이스라인을 돌려 성능차를 재고 결정하십시오 — 지금이면 비용 0, 파인튜닝 후에 알면 트랙 하나가 날아갑니다. (D-60)</div></div></div>
+    <div class="act"><div class="an">오늘</div><div><div class="at">법제처 OPEN API OC 키 신청</div>
+      <div class="ad">3층 전체와 4층 별표가 이 키 하나에 달려 있습니다. 발급 1~2 영업일 — <b>선행기간(~8/27) 내</b>에 던져야 1W 수집이 밀리지 않습니다.</div></div></div>
+    <div class="act"><div class="an">오늘</div><div><div class="at">문의 2건 동시 발송 — 화장품협회 · KOBACO</div>
+      <div class="ad">협회는 해설서 이용조건(G2→G3 승격), KOBACO는 MCR의 <b>재배포·AI 학습 조항</b>입니다. MCR 약관에는 그 조항이 <b>아예 없는데, 없다는 건 허용이 아니라 미정</b>입니다. 서면 답변을 받아두는 것이 이 프로젝트에서 가장 값싼 리스크 제거입니다.</div></div></div>
+    <div class="act soon"><div class="an">선행</div><div><div class="at">KREI 식품소비행태조사를 먼저 받아 본다 — 절차가 0이다</div>
+      <div class="ad">신청·승인·회원가입 없이 <b>SPSS 원자료가 즉시</b> 나옵니다(3,188가구 / 성인 5,851명). 다만 <b>건강기능식품 문항 포함 여부가 미확인</b>이니 성인 설문지 PDF를 먼저 열어보십시오 — 1시간.</div></div></div>
+    <div class="act soon"><div class="an">1W</div><div><div class="at">기능성 원료 소스 3중 중복을 하나로 정리</div>
+      <div class="ad">식품안전나라 게시판(고시형 96 + 개별인정형 472) · API 15058359 · API 15074311이 같은 데이터를 다르게 담고 있을 수 있습니다. 셋을 열어 대조하고 <b>하나를 정본으로</b> 정하십시오. 안 하면 세 벌을 다 수집합니다.</div></div></div>
+    <div class="act soon"><div class="an">2W</div><div><div class="at">Meta 광고 라이브러리에서 수기로 100~200건 — 평가셋 전용</div>
+      <div class="ad">API는 <b>한국 상업광고를 0건 반환</b>합니다(EU 외 지역은 정치·이슈 광고만). 하지만 UI에서는 <b>현재 집행 중인 한국 화장품·건기식 광고 본문 카피</b>를 그대로 볼 수 있습니다. 자동 수집은 약관 위반이니 <b>수기로, 평가셋에만</b>. 학습 출처와 분리되어 홀드아웃 품질이 크게 오릅니다.</div></div></div>
+    <div class="act soon"><div class="an">🔄 정정</div><div><div class="at">AI Hub 격리 정책을 뒤집습니다 — 막을 곳이 반대였습니다</div>
+      <div class="ad">FAQ 원문 확인 결과 <b>모델·서비스 배포와 영리 판매는 자유</b>이고, 막히는 건 <b>데이터 재가공 배포</b>뿐입니다. 앞서 잡았던 <code>data/g2_nc/</code>(학습 스크립트에서 제외)는 <b>과잉 차단이었습니다.</b> 바꿀 것: 디렉터리를 <code>data/g2_norepub/</code>로, doctor 14번을 <b>「학습 스크립트가 참조하는가」에서 「데이터셋 공개·배포 스크립트가 참조하는가」로</b>. 그리고 골든셋 각 행에 <code>provenance</code> 필드를 두어 AI Hub 유래분을 추적하십시오 — <b>그 골든셋은 공개 배포할 수 없습니다.</b></div></div></div>
+    <div class="act later"><div class="an">선행</div><div><div class="at">디렉터리 물리 분리 + doctor 검사 + 캐스케이드 삭제 테스트</div>
+      <div class="ad">5인이 각자 작업하면 문서 안내만으로는 반드시 누가 그냥 엽니다. 경로 정책은 grep으로 강제하십시오. 캐스케이드 삭제는 <b>데이터가 쌓인 뒤에는 만들 수 없습니다.</b></div></div></div>
+  </div>
+</section>
+
+<footer>
+  <b>판정 근거</b> — 기획문서 v3.8 4-1절(거버넌스 게이트) · 4-2절(채택 4 / 제외 6) · 4-3절(6층 수집 대상) · 7-3절(모델 라이선스도 게이트 대상)<br>
+  <b>당일 실측</b> — 화장품협회 2025 해설서 · AI Hub 이용정책 및 개별 데이터셋 4종 · 법제처 OPEN API · 기능성표시식품 공개목록 · KOSIS / KOBACO MCR / KREI / KNHANES / KISDI · HF 모델·데이터셋 라이선스 · Meta·Google·YouTube·X·Reddit API 약관 · AiSAC 상세 페이지<br>
+  <b>작성자</b> — 오한빈 (팀장) · SKN Final Project · CopyLane · 주관 트랙 T1<br>
+  <b>★ 표시</b>는 신규 발견 또는 정정 항목 · <b>실측</b> 배지는 2026-08-20에 직접 확인한 항목 · <b>미확인</b>은 접근 차단으로 검증하지 못한 항목이며 추측으로 채우지 않았습니다
+</footer>
+</div>
+<script>
+// CopyLane 데이터 거버넌스 판정 매트릭스 v2 — 소스 데이터
+// 기준일 2026-08-20 · 기획문서 v3.8 4-1/4-2절 + 2026-08-20 온라인 실측
+// v2 추가 축: 비용(금액 + 리드타임) · 활용가치(A~X)
+
+const OK='ok', CD='cond', NO='no', UN='unknown';
+
+// 🚨 2026-08-20 정정 — AI Hub FAQ 원문 확인으로 앞선 판정을 뒤집는다.
+//   "다운로드 받은 데이터로 학습하여 만들어진 AI모델과 서비스는 자유롭게 배포·활용 가능"
+//   "영리적으로 판매·활용하는 행위는 제한하지 않으나 AI허브 데이터를 사용하였음을 명시하여야 함"
+//   "다만 NIA 및 구축기업과 사전 협의한 경우를 제외하고 데이터를 재가공하여 배포하는 행위는 원칙적으로 불가"
+// → 막히는 것은 「데이터 재배포」이지 「모델·서비스 배포」가 아니다. 새 플래그 NOREDIST로 분리한다.
+
+const SOURCES = [
+// ══════════════════ 제품 사실 테이블 ══════════════════
+{id:'mfds_hf_ingredient_board', layer:'제품 사실', name:'식품안전나라 「건강기능식품 원료별 정보」', org:'식품의약품안전처',
+ grade:'G3', constraints:[], access:'웹 게시판 크롤링', verified:true,
+ scale:'고시형 96 + 개별인정형 472 = 568건', cost:'free', costNote:'무료 · 게시판 크롤링 (bbs987, ntctxt_no 단위)',
+ value:'A', valueNote:'★ 성분 → 인정 기능성 문구 매핑의 1순위 소스. 이게 있어야 「이 제품이 이 표현을 쓸 자격이 있는가」(A 자격형 판정)가 성립한다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'인정 기능성 문구 = 100% 지향 프레임',commercial:'공공저작물',raw:'고시가 정한 문구 형식',cite:'★ A 자격형 판정의 직접 근거',deploy:'제한 없음'},
+ why:'식약처 공식 게시판. fmis.kr 경유로 구조·건수 확인(고시형 96 / 개별인정형 472).',
+ caution:'🚨 일괄 다운로드·API가 없어 게시판 크롤링이 필요. 568건이면 수집 비용은 감당 가능. / API 15074311(개별인정형)이 같은 데이터일 가능성이 있으나 15058359와의 정확한 차이는 미확인 — 1W에 셋 다 열어 대조.',
+ url:'https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660'},
+
+{id:'cosmetic_ingredient', layer:'제품 사실', name:'식약처 화장품 원료성분정보 API (15111774)', org:'식품의약품안전처',
+ grade:'G3', constraints:[], access:'오픈API (추정)', verified:false,
+ scale:'미확인', cost:'free', costNote:'무료 추정 · 인증키 즉시 발급',
+ value:'C', valueNote:'성분 표기 정규화(동의어 사전)와 카테고리 판별 보조. 다만 화장품은 기능성화장품 고시 문구 체계가 별도라 「인정 기능성 문구」 매핑에는 직접 쓰이지 않는다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'성분 마스터(한글명·INCI·배합목적)',commercial:'공공데이터 추정',raw:'사실 데이터',cite:'제한 없음',deploy:'제한 없음'},
+ why:'식약처 공공데이터. 다만 data.go.kr 접근이 차단돼 응답 필드·건수·이용허락범위는 미확인.',
+ caution:'⚠️ 명칭 외 전부 미확인. 1W에 브라우저로 직접 열어 필드를 확인하고 등급을 확정할 것. 지금 G3는 「식약처 공공데이터」라는 정황 판단이다.',
+ url:'https://www.data.go.kr/data/15111774/openapi.do'},
+
+{id:'cosmetic_restricted', layer:'제품 사실', name:'식약처 화장품 사용제한 원료정보 API (15111772)', org:'식품의약품안전처',
+ grade:'G3', constraints:[], access:'오픈API (추정)', verified:false,
+ scale:'미확인', cost:'free', costNote:'무료 추정',
+ value:'D', valueNote:'🚨 결이 다르다 — 이건 「성분 배합의 적법성」 판정용이지 「광고 문구」 판정용이 아니다. CopyLane 범위 밖',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'사용금지·사용한도 원료 목록',commercial:'공공데이터 추정',raw:'사실 데이터',cite:'제한 없음',deploy:'제한 없음'},
+ why:'식약처 공공데이터. 필드·건수·이용조건 미확인.',
+ caution:'⚠️ 범위 확장 유혹을 조심할 것. 「이 성분이 들어간 제품 자체가 부적합」은 다른 제품이다. 기획서가 정한 경계(광고 문구 판정)를 넘으면 9주 안에 못 끝낸다.',
+ url:'https://www.data.go.kr/data/15111772/openapi.do'},
+
+// ══════════════════ 1층 판정 라벨 ══════════════════
+{id:'ftc_decisions_bulk', layer:'1층 판정라벨', name:'공정거래위원회 결정문 (파일데이터)', org:'공정거래위원회',
+ grade:'G3', constraints:[], access:'공식 다운로드', verified:false,
+ scale:'5,870건 (표시광고법 필터 후 미측정)', cost:'free', costNote:'무료 · 즉시',
+ value:'A', valueNote:'★ 문장 라벨의 1차 원천. 필터 후 잔여 건수가 곧 이 프로젝트의 규모 상한',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'"이용허락범위 제한 없음"',raw:'광고 문구 원문 인용 + 텍스트 레이어 존재(OCR 불필요)',cite:'사건번호와 함께',deploy:'제한 없음'},
+ why:'공공저작물. 데이터포털에 이용허락범위 제한 없음으로 등재.',
+ caution:'🚨 프래그먼트별로 등급이 갈린다 — 의결서 안 <그림 N> 광고 캡처는 광고주 이미지 저작물이라 G1(미추출). 업체명·대표자명은 등급 무관 즉시 마스킹.',
+ url:'https://www.data.go.kr/data/15103301/fileData.do'},
+
+{id:'ftc_decisions_api', layer:'1층 판정라벨', name:'공정위 결정문 목록/본문 API', org:'공정거래위원회',
+ grade:'G3', constraints:[], access:'API 키', verified:false,
+ scale:'증분 갱신용', cost:'free', costNote:'무료 · 인증키 즉시',
+ value:'B', valueNote:'벌크는 파일로, 증분은 API로. 3W 이후 갱신 자동화',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'파일데이터와 동일',commercial:'동일',raw:'동일',cite:'동일',deploy:'동일'},
+ why:'위 파일데이터와 같은 원천.',
+ caution:'호출 간격 0.5초 이상 + 재시도 3회(지수 백오프).',
+ url:'https://www.data.go.kr/data/15103246/openapi.do'},
+
+{id:'mfds_sanctions', layer:'1층 판정라벨', name:'식약처 행정처분결과 API ★신규발견', org:'식품의약품안전처',
+ grade:'G3', constraints:[], access:'API 키', verified:true,
+ scale:'미측정 — 1W 실측', cost:'free', costNote:'무료 · 인증키 즉시',
+ value:'A', valueNote:'★ 위험도 라벨의 실측 경로. 규정(별표) 연역과 실측 귀납이 갈리는 지점이 곧 감경·가중 사유이고, 그것이 「주의 vs 처분」 경계 학습 데이터다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'위반사실 → 처분 매핑 실측 라벨',commercial:'공공데이터 개방',raw:'구조화 레코드',cite:'처분 근거와 함께',deploy:'제한 없음'},
+ why:'공공데이터포털 개방 API. 기획서 4층에 없던 소스.',
+ caution:'위반내용 필드가 자연어인지 코드인지 1W 확인. 업체명 마스킹 필수.',
+ url:'https://www.data.go.kr/data/15059500/openapi.do'},
+
+{id:'mfds_press', layer:'1층 판정라벨', name:'식약처 부당광고 점검 보도자료', org:'식품의약품안전처',
+ grade:'G3', constraints:[], access:'공식 다운로드', verified:false,
+ scale:'회차당 수십~수백 건', cost:'free', costNote:'무료 · 즉시',
+ value:'B', valueNote:'★ 학습 출처(의결서)와 기관이 다르므로 평가용 홀드아웃에 최적. 편향이 독립적이다',
+ u:{train:CD, commercial:OK, raw:CD, cite:OK, deploy:OK},
+ note:{train:'⚠️ 키워드·집계만 텍스트 — 문장 라벨로는 저품질',commercial:'공공저작물',raw:'⚠️ 문구 전체는 이미지 캡처',cite:'적발 통계·유형 분포 인용에 유용',deploy:'제한 없음'},
+ why:'등급은 G3. 제약은 라이선스가 아니라 기술적 한계다.',
+ caution:'test_holdout 출처로 쓰고 train에는 넣지 않는다.', url:''},
+
+{id:'ftc_noviolation', layer:'1층 판정라벨', name:'공정위 무혐의·심의절차종료 결정', org:'공정거래위원회',
+ grade:'G0', constraints:['TOS'], access:'미확인', verified:false,
+ scale:'미확인', cost:'unknown', costNote:'미확인',
+ value:'B', valueNote:'실재한다면 최고 품질의 적법 라벨 — 「위법이 아니다」가 기관 판단으로 붙은 유일한 데이터',
+ u:{train:UN, commercial:UN, raw:UN, cite:UN, deploy:UN},
+ note:{train:'공개 여부 미확인',commercial:'미확인',raw:'미확인',cite:'미확인',deploy:'미확인'},
+ why:'G0는 G2로 취급 — 확인 전까지 사실만.',
+ caution:'1W에 공개 여부 확인(30분). 확인 비용이 작고 이득이 크다.', url:''},
+
+// ══════════════════ 2층 적법 라벨 ══════════════════
+{id:'kfia_approved', layer:'2층 적법라벨', name:'기능성표시식품 심의완료 공개목록', org:'한국식품산업협회',
+ grade:'G0', constraints:['TOS'], access:'페이지네이션 크롤링', verified:true,
+ scale:'100건 이상 (10페이지×10건 확인)', cost:'free', costNote:'무료 · 크롤링 개발 0.5일',
+ value:'A', valueNote:'★ 진입점 A에서는 「적법 라벨」, 진입점 B에서는 「쓸 수 있는 어휘 사전」 — 같은 데이터를 두 번 쓴다',
+ u:{train:CD, commercial:CD, raw:CD, cite:CD, deploy:CD},
+ note:{train:'⚠️ G0 → G2 취급. 기능성 표시내용은 고시가 정한 문구 형식이라 사실로 취득 가능',commercial:'⚠️ 이용조건 미표기 — 사실 한정',raw:'⚠️ "본 제품에는 ~에 도움을 줄 수 있다고 알려진 ~이 들어있습니다"는 고시의 틀이지 협회 창작물이 아니다',cite:'⚠️ 원 출처(고시)로 소급 인용',deploy:'⚠️ 사실 한정'},
+ why:'법정 공개 의무 데이터이나 이용조건 미표기 → G0 → G2 취급.',
+ caution:'🚨 엑셀 다운로드 없음 → 페이지네이션 수집기 필요. robots.txt 확인 후 실행. 정확 건수 1W 실측(철수 조건 2번).',
+ url:'https://adf.kfia.or.kr/company/open/openData.do?menuKey=406'},
+
+{id:'mfds_hf_ingredient', layer:'2층 적법라벨', name:'건기식 기능성 원료인정 현황 API (15058359)', org:'식품의약품안전처',
+ grade:'G3', constraints:[], access:'API 키', verified:true,
+ scale:'수백 건', cost:'free', costNote:'무료 · 인증키 즉시',
+ value:'A', valueNote:'★ 지향 어휘 사전의 1차 원천. v2.4 정정(「지향 어휘 1차 소스는 리뷰가 아니다」)의 기계 판독 경로',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'인정 기능성 문구',commercial:'공공데이터 개방',raw:'★ 100% 지향 프레임으로 쓰여 있다',cite:'원료명·인정번호와 함께',deploy:'제한 없음'},
+ why:'공공데이터포털 개방 API.',
+ caution:'15074311(개별인정형)·식품안전나라 게시판과 3중으로 겹칠 수 있다. 1W에 셋을 대조해 하나를 정본으로 정하고 나머지는 보조로 내린다.',
+ url:'https://www.data.go.kr/data/15058359/openapi.do'},
+
+{id:'mfds_hf_individual', layer:'2층 적법라벨', name:'건기식 개별인정형 정보 API (15074311)', org:'식품의약품안전처',
+ grade:'G3', constraints:[], access:'API 키', verified:true,
+ scale:'472건 (fmis 경유 확인)', cost:'free', costNote:'무료 · 인증키 즉시',
+ value:'A', valueNote:'개별인정형 472건. 고시형 96건은 건강기능식품 공전에서 별도 확보 필요',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'원료별 인정 기능성 + 일일섭취량',commercial:'공공데이터 개방',raw:'제한 없음',cite:'인정번호와 함께',deploy:'제한 없음'},
+ why:'식품안전나라 API svc_no=I-0050과 동일 서비스임을 확인.',
+ caution:'「미인정 기능성 집합」은 이 목록의 여집합으로 계산 — 제품별로 동적.',
+ url:'https://www.data.go.kr/data/15074311/openapi.do'},
+
+{id:'hf_standard', layer:'2층 적법라벨', name:'「건강기능식품의 기준 및 규격」 고시', org:'식약처 / 법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'고시 전문 + 고시형 원료 96건', cost:'free', costNote:'무료 · OC 키 1~2영업일',
+ value:'A', valueNote:'승인 기능성 문구의 원 출처. API 결과를 여기로 소급하면 인용 품질이 함께 올라간다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'공공저작물',raw:'법령·고시 원문 자유이용',cite:'★ 인용의 최상위 근거',deploy:'제한 없음'},
+ why:'법령·고시는 공공저작물.',
+ caution:'개정일(effective_date) 필수 기록.', url:''},
+
+{id:'kcia_guideline_2025', layer:'2층 적법라벨', name:'대한화장품협회 광고자문 기준 해설서 2025 ★2025판', org:'대한화장품협회',
+ grade:'G2', constraints:['BY'], access:'공식 다운로드', verified:true,
+ scale:'금지 79 / 허용 47 / 실증 19범주 (실측)', cost:'free', costNote:'무료 · 즉시 (단 이용조건 회신은 무기한)',
+ value:'A', valueNote:'✅ 철수 조건 1번을 이것 하나로 충족(각 40개 기준 대비 79/47)',
+ u:{train:CD, commercial:CD, raw:NO, cite:NO, deploy:CD},
+ note:{train:'⚠️ 표현 목록(문자열)만. 해설 문장은 투입 금지',commercial:'⚠️ 사실은 저작권 대상이 아니므로 사실 한정으로만',raw:'❌ 해설 문장·편집·배열은 협회 저작물',cite:'❌ 해설서를 인용하지 않는다. 화장품법·고시·시행규칙 별표로 소급',deploy:'⚠️ 어휘 사전 형태로만'},
+ why:'🚨 공지에 "저작권은 대한화장품협회에 귀속" 명시 확인. G0 추정이 아니라 G2 확정이며 G3 승격은 협회 회신이 있어야만 가능.',
+ caution:'🚨 기획서의 2023판 링크는 폐기. 2025-11-10 개정판이 최신이고 「천연·유기농」·「비건」 표현 안내가 추가됐다.',
+ url:'https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039'},
+
+// ══════════════════ 3층 판단 규범 ══════════════════
+{id:'law_acts', layer:'3층 판단규범', name:'표시광고법·식품표시광고법·화장품법 (+시행령·시행규칙)', org:'법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:true,
+ scale:'6종', cost:'free', costNote:'무료 · 🚨 OC 키 발급 1~2영업일 (오늘 신청)',
+ value:'A', valueNote:'★ 3층 전체와 4층 별표가 이 키 하나에 달려 있다. 리드타임이 곧 일정 리스크',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'공공저작물',raw:'조문 원문 자유이용',cite:'★ 판정 근거의 최상위',deploy:'제한 없음'},
+ why:'공공저작물. 법령/행정규칙/판례/자치법규/조약 API 제공 확인.',
+ caution:'🚨 선행기간(~8/27) 내 신청 필수. 청크 메타에 effective_date + superseded_at 쌍으로 기록.',
+ url:'https://open.law.go.kr/LSO/openApi/guideList.do'},
+
+{id:'law_annex', layer:'3층 판단규범', name:'시행령 [별표] 부당한 표시·광고의 유형 및 기준', org:'법제처',
+ grade:'G3', constraints:[], access:'법제처 API + 파싱', verified:false,
+ scale:'3종', cost:'free', costNote:'무료 · 파싱 검수 1일',
+ value:'A', valueNote:'법률 조문보다 구체적이라 판정 정밀도를 직접 올린다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'공공저작물',raw:'제한 없음',cite:'인용 가치 높음',deploy:'제한 없음'},
+ why:'공공저작물.',
+ caution:'🚨 별표는 RAG에 평문화해 넣지 않는다 — 표 구조가 깨지고 「블랙박스 점수 금지」 원칙과 충돌. 관계형 테이블 + 코드 조회. 병합 셀이 흔해 2인 대조 필수.', url:''},
+
+{id:'mfds_notice', layer:'3층 판단규범', name:'식약처 고시 「식품등의 부당한 표시 또는 광고의 내용 기준」', org:'식약처 / 법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'6범주', cost:'free', costNote:'무료',
+ value:'A', valueNote:'★ 금지 표현 사전 초판이 여기서 나온다. Phase 0 최소 집합',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'금지 표현 사전 원천',commercial:'공공저작물',raw:'제한 없음',cite:'제한 없음',deploy:'제한 없음'},
+ why:'행정규칙은 공공저작물.',
+ caution:'6범주: 의약품 오인 / 건기식 오인 / 소비자 기만 / 경쟁사 비방 / 미사용 원재료 강조 / 사행심·음란성.', url:''},
+
+{id:'func_claim_rule', layer:'3층 판단규범', name:'「부당한 표시·광고로 보지 아니하는 식품등의 기능성 표시·광고 규정」', org:'식약처 / 법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'1종', cost:'free', costNote:'무료',
+ value:'A', valueNote:'★ A 자격형 / B 실증형 / C 절대형 3분 판정(D-59)의 근거 규정',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'공공저작물',raw:'제한 없음',cite:'★ A 자격형 근거',deploy:'제한 없음'},
+ why:'공공저작물.', caution:'Phase 0 필수 수집.', url:''},
+
+{id:'ftc_guidelines', layer:'3층 판단규범', name:'공정위 고시·지침 5종 (유형기준/추천·보증/환경/비교/인터넷)', org:'공정위 / 법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'5종', cost:'free', costNote:'무료',
+ value:'B', valueNote:'추천·보증 심사지침이 뒷광고(V6 소비자 기만) 판정의 근거',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'공공저작물',raw:'제한 없음',cite:'제한 없음',deploy:'제한 없음'},
+ why:'행정규칙.', caution:'Phase 1 항목.', url:''},
+
+{id:'cosmetic_guides', layer:'3층 판단규범', name:'화장품 지침 3종 (관리지침/실증규정/기능성심사규정)', org:'식약처 / 법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'3종', cost:'free', costNote:'무료',
+ value:'B', valueNote:'협회 해설서(G2)의 원 출처. 여기로 소급하면 등급이 G3로 올라간다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'공공저작물',raw:'제한 없음',cite:'제한 없음',deploy:'제한 없음'},
+ why:'행정규칙 원문은 G3.',
+ caution:'⚠️ 같은 문서라도 출처에 따라 등급이 갈린다 — 법제처 경유 G3, 협회 해설서 경유 G2. 항상 법제처 우선.', url:''},
+
+{id:'platform_guide', layer:'3층 판단규범', name:'플랫폼 심의 가이드 (카카오 등)', org:'카카오 외',
+ grade:'G2', constraints:['TOS','BY'], access:'웹', verified:false,
+ scale:'1~2종', cost:'free', costNote:'무료',
+ value:'C', valueNote:'실무의 1차 관문이라 가치는 있으나 Phase 5 항목. 급하지 않다',
+ u:{train:CD, commercial:NO, raw:NO, cite:NO, deploy:NO},
+ note:{train:'⚠️ 금지 항목(사실)만',commercial:'❌ 민간 사업자 저작물',raw:'❌',cite:'❌ 인용하지 않는다',deploy:'❌'},
+ why:'법이 아니라 민간 사업자 내부 기준.', caution:'우선순위 낮음.', url:''},
+
+// ══════════════════ 4층 위험도 ══════════════════
+{id:'sanction_annex', layer:'4층 위험도', name:'행정처분 기준 [별표] (화장품법·식품표시광고법)', org:'법제처',
+ grade:'G3', constraints:[], access:'법제처 API + 파싱', verified:false,
+ scale:'2종', cost:'free', costNote:'무료 · 파싱 검수 1일',
+ value:'A', valueNote:'★ 위험도 순서형 라벨의 정답. 「걸리면 얼마나 무는가」 — 제품의 절반',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'위반유형 × 차수 → 정지일수',commercial:'공공저작물',raw:'제한 없음',cite:'★ 위험도 근거',deploy:'제한 없음'},
+ why:'공공저작물.',
+ caution:'🚨 관계형 테이블로. 벡터에는 「이 별표가 규정하는 내용」 요약 문장만 넣어 검색 진입점으로.', url:''},
+
+{id:'penalty_notice', layer:'4층 위험도', name:'과징금 부과 세부기준 고시 (2026.7.1 개정)', org:'공정위 / 법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'1종', cost:'free', costNote:'무료',
+ value:'B', valueNote:'부과기준율 3등급 + 정액 기준금액. R3 구간의 정량 근거',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'공공저작물',raw:'제한 없음',cite:'제한 없음',deploy:'제한 없음'},
+ why:'공공저작물.',
+ caution:'🚨 2026.7.1 개정으로 반복위반 가중 50%→100%, 「상당한 주의」 감경 삭제. 구판을 쓰면 판정이 통째로 틀린다.', url:''},
+
+{id:'penal_clause', layer:'4층 위험도', name:'각 법 벌칙 조항 (징역·벌금 상한)', org:'법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'3개 법', cost:'free', costNote:'무료',
+ value:'A', valueNote:'R4(형사 리스크) 구간의 유일한 근거. Phase 0 최소 집합',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'위험도 최상단 근거',commercial:'공공저작물',raw:'제한 없음',cite:'제한 없음',deploy:'제한 없음'},
+ why:'공공저작물.', caution:'식품표시광고법 제26조 — 질병 표방 시 10년 이하 징역.', url:''},
+
+// ══════════════════ 5층 코퍼스·반례 ══════════════════
+{id:'admin_appeal', layer:'5층 코퍼스·반례', name:'행정심판 재결례', org:'법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'미측정', cost:'free', costNote:'무료',
+ value:'B', valueNote:'★ 처분이 취소된 사례 = 경계 학습. Abstention 설계와 직결',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'경계 클래스 근거',commercial:'공공저작물',raw:'제한 없음',cite:'제한 없음',deploy:'제한 없음'},
+ why:'공공저작물.', caution:'Phase 2 항목.', url:''},
+
+{id:'precedent', layer:'5층 코퍼스·반례', name:'표시광고법 관련 판례', org:'법제처',
+ grade:'G3', constraints:[], access:'법제처 API', verified:false,
+ scale:'미측정', cost:'free', costNote:'무료',
+ value:'C', valueNote:'법원이 뒤집은 기준. Phase 2 항목',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'공공저작물',raw:'제한 없음',cite:'제한 없음',deploy:'제한 없음'},
+ why:'공공저작물.', caution:'급하지 않다.', url:''},
+
+{id:'aihub_71723', layer:'5층 코퍼스·반례', name:'AI Hub 생성형AI 법률/규정 텍스트 분석 (고도화) ★사용자제공', org:'NIA / AI Hub',
+ grade:'G3', constraints:['GATED','BY','NOREDIST'], access:'🔄 회원가입 + 신청 → 즉시', verified:true,
+ scale:'원문 251,946건 · 어노테이션 157,455건 · QA 90,944건', cost:'free', costNote:'✅ 무료 · 🔄 **신청 즉시 다운로드**(2026-08-20 확인) · 국외반출만 별도합의',
+ value:'A', valueNote:'★★ <b>정정으로 B→A.</b> 「법령 참조 태깅」 태스크가 「이 문구 → 위반 조항」 매핑과 정확히 동형인데, 이제 <b>배포 모델 학습에 쓸 수 있다</b>. 원문 251,946건 · 어노테이션 157,455건. 단 판례 중심(행정 26.67%)이라 식약처 고시·표시광고법 원문 자체는 없다 — 규제 원문은 3층에서 별도 수집',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'✅ 자유롭게 학습 가능',commercial:'✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)',raw:'✅ 원문 그대로 파이프라인 내 사용 가능',cite:'⚠️ &quot;AI허브 데이터를 사용하였음&quot; 명시 의무',deploy:'✅ 모델·서비스 배포 자유. 🚨 단 <b>데이터 재가공 배포는 불가</b>(NOREDIST)'},
+ why:'AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).',
+ caution:'🚨 이전의 「학내에서는 쓰고 상업화 시점에 협의」라는 판정은 <b>불필요한 자기 제약</b>이었다. 영리 활용이 허용된다. / 실제 제약은 <b>우리가 만든 파생 데이터셋을 공개 배포할 때</b> 발생한다 — 골든셋에 AI Hub 유래분이 섞이면 그 골든셋은 공개할 수 없다.',
+ url:'https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723'},
+
+{id:'aihub_558', layer:'5층 코퍼스·반례', name:'AI Hub 텍스트 윤리검증 데이터 ★사용자제공', org:'NIA / 심심이(주)',
+ grade:'G3', constraints:['GATED','BY','NOREDIST'], access:'🔄 회원가입 + 신청 → 즉시', verified:true,
+ scale:'문장 451,110 · 대화세트 132,303 · 7개 라벨', cost:'free', costNote:'✅ 무료 · 🔄 **신청 즉시 다운로드**',
+ value:'B', valueNote:'★ <b>정정으로 C→B.</b> 라벨이 대화체 혐오·욕설(비난/혐오/차별/선정/욕설/폭력/범죄)이라 「과장·오인 유발」 축과 직접 겹치진 않지만, <b>451,110문장 다중 라벨 분류를 배포 모델 학습에 쓸 수 있다</b>. 멀티라벨 파이프라인의 사전학습 보조로 실효가 있다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'✅ 자유롭게 학습 가능',commercial:'✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)',raw:'✅ 원문 그대로 파이프라인 내 사용 가능',cite:'⚠️ &quot;AI허브 데이터를 사용하였음&quot; 명시 의무',deploy:'✅ 모델·서비스 배포 자유. 🚨 단 <b>데이터 재가공 배포는 불가</b>(NOREDIST)'},
+ why:'AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).',
+ caution:'★ 라이선스가 열렸으니 「데이터를 안 쓰고 구조만 참조」할 이유가 줄었다. 다만 도메인 거리는 그대로이므로, 쓸지 말지는 <b>라이선스가 아니라 도메인 적합도</b>로 판단하라. 라이선스 안전한 대체재 K-MHaS(CC BY-SA, 109,692건)와 비교해 결정할 것.',
+ url:'https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558'},
+
+{id:'aihub_71843', layer:'5층 코퍼스·반례', name:'AI Hub 지식재산권법 LLM 사전학습·Instruction 데이터 ★사용자제공', org:'NIA / AI Hub',
+ grade:'G3', constraints:['GATED','BY','NOREDIST','TOS'], access:'🔄 신청 → 즉시 · 🚨 내국인만', verified:true,
+ scale:'원천 4,816,124문장 · 라벨 100,700건', cost:'free', costNote:'✅ 무료 · 🔄 **신청 즉시** · 🚨 내국인 한정',
+ value:'D', valueNote:'🚨 도메인 불일치 — 특허·상표·저작권 심결문 중심이라 표시광고 규제와 결이 다르다. 법률 문체 사전학습용으로는 쓸 만하나 우선순위 낮음. 이 프로젝트는 9주짜리다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'✅ 자유롭게 학습 가능',commercial:'✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)',raw:'✅ 원문 그대로 파이프라인 내 사용 가능',cite:'⚠️ &quot;AI허브 데이터를 사용하였음&quot; 명시 의무',deploy:'✅ 모델·서비스 배포 자유. 🚨 단 <b>데이터 재가공 배포는 불가</b>(NOREDIST)'},
+ why:'AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).',
+ caution:'정정으로 라이선스는 열렸으나 <b>판단은 그대로 보류</b>다 — 막았던 것이 라이선스가 아니라 <b>도메인 불일치</b>(특허·상표·저작권 심결문)이기 때문이다. 480만 문장이라도 도메인이 어긋나면 DAPT는 손해다. 9주 프로젝트에서 우선순위 낮음.',
+ url:'https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71843'},
+
+{id:'aihub_71486', layer:'5층 코퍼스·반례', name:'AI Hub 문장 유형(추론·예측 등) 판단 데이터 ★★사용자제공 · 최대발견', org:'NIA / 성균관대 산학협력단',
+ grade:'G3', constraints:['GATED','BY','NOREDIST','TOS'], access:'🔄 신청 → 즉시 · 🚨 내국인만', verified:true,
+ scale:'라벨링 166,339문장 / 10,021문서 · 뉴스 54,000 · 매거진 54,000 · 도서 36,000 · 블로그 18,000 · 방송대본 18,000', cost:'free', costNote:'✅ 무료 · 🔄 **신청 즉시** · 🚨 내국인 한정',
+ value:'A', valueNote:'★★ 이 데이터셋의 라벨 축이 기획서 변환 규칙과 1:1로 맞물린다. 「확실성(확실/불확실)」 = R2 단정→조건부 · 「시제(과거/현재/미래)」 = R1 실적→예상 · 「문장 유형(사실형 39.90% / 추론형 26.56% / 대화형 26.41% / 예측형 7.10%)」 = B 실증형 판정. 🚨 지금 기획서에는 「시정이 제대로 됐는지 측정하는 방법」이 비어 있는데, 그 빈칸을 이 축들이 채운다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'✅ 자유롭게 학습 가능',commercial:'✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)',raw:'✅ 원문 그대로 파이프라인 내 사용 가능',cite:'⚠️ &quot;AI허브 데이터를 사용하였음&quot; 명시 의무',deploy:'✅ 모델·서비스 배포 자유. 🚨 단 <b>데이터 재가공 배포는 불가</b>(NOREDIST)'},
+ why:'AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).',
+ caution:'★★ 정정 후에도 최선의 활용법은 그대로다 — <b>라벨 축을 빌려오는 것</b>. 「확실성 / 시제 / 문장유형」 3축은 아이디어라 저작권 대상이 아니고, 우리 스키마에 넣는 데 승인도 출처표시도 필요 없다. ✅ <b>여기에 더해 이제 데이터 자체도 배포 모델 학습에 쓸 수 있다</b> — 보조 태스크로 확실성·시제 판별기를 만들면 R1·R2 변환의 성공 여부를 자동 측정할 수 있다. / 도메인은 뉴스·매거진·도서·블로그라 광고가 아니다(생활·건강 카테고리는 있음).',
+ url:'https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486'},
+
+{id:'aihub_71694', layer:'5층 코퍼스·반례', name:'AI Hub 생성형AI 한국어 SNS 멀티턴 대화 ★사용자제공', org:'NIA / AI Hub',
+ grade:'G3', constraints:['GATED','BY','NOREDIST'], access:'🔄 회원가입 + 신청 → 즉시', verified:false,
+ scale:'🚨 미확인 — 제목만 확인됨', cost:'free', costNote:'✅ 무료 · 🔄 **신청 즉시 다운로드**',
+ value:'C', valueNote:'⚠️ 제목만 확인했고 규모·라벨 체계·주제 분포는 미확인이다. SNS 구어체 어휘 파악에는 쓸 수 있으나, 지향 어휘의 1차 소스는 2층이라는 v2.4 정정이 여기에도 적용된다 — 대화 코퍼스는 세그먼트 구획 보조에 그친다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'✅ 자유롭게 학습 가능',commercial:'✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)',raw:'✅ 원문 그대로 파이프라인 내 사용 가능',cite:'⚠️ &quot;AI허브 데이터를 사용하였음&quot; 명시 의무',deploy:'✅ 모델·서비스 배포 자유. 🚨 단 <b>데이터 재가공 배포는 불가</b>(NOREDIST)'},
+ why:'AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외). 단 이 데이터셋의 규모·라벨 체계·주제 분포는 상세 페이지 오류로 확인하지 못했다.',
+ caution:'🚨 AI Hub 상세 페이지는 URL 파라미터 조합에 따라 <b>엉뚱한 데이터셋 내용을 반환</b>한다. 실제로 이번에 71694·63 두 URL이 동일한 「상표 이미지 및 텍스트」를 반환했고, 파라미터 없는 URL로 다시 열어서야 제목이 바로잡혔다. <b>데이터셋 번호와 제목을 반드시 눈으로 대조할 것.</b>',
+ url:'https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694'},
+
+{id:'aihub_63', layer:'5층 코퍼스·반례', name:'AI Hub 상표 이미지 및 텍스트 (63) ★사용자제공', org:'NIA / 인사이터',
+ grade:'G3', constraints:['GATED','BY','NOREDIST','TOS'], access:'🔄 신청 → 즉시 · 🚨 내국인만', verified:true,
+ scale:'이미지 원천 1,176,039 → 학습 2,603,273 · 텍스트 원천 420만 → 학습 839,621', cost:'free', costNote:'✅ 무료 · 🔄 **신청 즉시** · 🚨 내국인 한정',
+ value:'X', valueNote:'🚨 탈락 — 도메인이 완전히 다르다. 상표 출원 거절 사유(발음유사 / 관념 / 식별력) 분류이지 광고 문구 규제와 무관하다. 태스크도 Image Classification / Object Detection 중심',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'✅ 자유롭게 학습 가능',commercial:'✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)',raw:'✅ 원문 그대로 파이프라인 내 사용 가능',cite:'⚠️ &quot;AI허브 데이터를 사용하였음&quot; 명시 의무',deploy:'✅ 모델·서비스 배포 자유. 🚨 단 <b>데이터 재가공 배포는 불가</b>(NOREDIST)'},
+ why:'AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).',
+ caution:'정정 후에도 <b>탈락 그대로</b>다 — 막았던 것이 라이선스가 아니라 도메인이다. ★ 유일한 참고점: 「거절 사유를 발음유사/관념/식별력 3분류로 라벨링」한 구조가 우리의 「불가 사유 A 자격형 / B 실증형 / C 절대형」(D-59)과 형태가 같다.',
+ url:'https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=63'},
+
+{id:'modu_web', layer:'5층 코퍼스·반례', name:'국립국어원 모두의 말뭉치 🔄C→X 탈락', org:'국립국어원',
+ grade:'G2', constraints:['GATED','NC','PREAPPROVAL','TOS'], access:'신청 → 승인 (목적 구속)', verified:true,
+ scale:'웹 말뭉치 2,107,076건 (블로그·게시판)', cost:'gated', costNote:'무료 · 🚨 수집 승인 + **산출물 공개마다 별도 사전승인**',
+ value:'X', valueNote:'🚨 **일정 리스크로 탈락.** 라이선스가 금지해서가 아니라, 「결과물 외부 공개 전 국립국어원 사전승인」 조항이 우리 일정과 양립하지 않는다. 최종 발표·시연영상·소스코드 제출이 전부 10/16 기능동결 이후 작업일 6일에 몰려 있는데, 그 안에 외부 기관 승인을 끼워 넣을 수 없다',
+ u:{train:CD, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{
+   train:'⚠️ "국어·언어정보처리 분야 연구 및 기술 개발용"이며 **승인된 이용 목적에 한정**. 학습 자체는 가능하나 목적을 벗어나면 위반',
+   commercial:'❌ 용도가 연구·기술개발로 한정돼 상업 서비스는 범위 밖',
+   raw:'❌ **결과물에 말뭉치와 원문 일부 또는 전부가 포함되어서는 안 됨** — 명시 조항',
+   cite:'⚠️ 원문 인용 자체가 금지되므로 사실상 인용 불가',
+   deploy:'🚨 **결과물 외부 공개 전 국립국어원 사전승인 필수** — 이게 배포 경로를 막는다'},
+ why:'🚨 이용 조건 실측(2026-08). 세 겹으로 걸린다 — ① 용도가 연구·기술개발로 한정 ② 승인된 목적에만 사용 ③ **결과물 공개 시 원문 미포함 + 사전승인**.',
+ caution:'🚨 **문제는 ③이다.** 승인이 수집 시점에 한 번이 아니라 **산출물을 공개할 때마다** 걸린다. 발표(10/26)·시연영상·소스코드 공개가 전부 승인 대상이 되고, 그 리드타임을 우리가 통제할 수 없다. / ✅ **대체재가 이미 충분하다** — 구어체·소비자 어휘는 bab2min 네이버쇼핑(Public Domain)과 AI Hub 71603으로 덮이고, ★ **kcbert-base로 백본을 바꾸면 댓글 8,900만 문장 사전학습이 이미 모델 안에 들어 있어 이 말뭉치의 역할이 대부분 사라진다.**',
+ url:'https://kli.korean.go.kr/corpus/main/requestMain.do'},
+
+{id:'bab2min_shopping', layer:'5층 코퍼스·반례', name:'bab2min 네이버쇼핑 리뷰 코퍼스', org:'bab2min (GitHub)',
+ grade:'G3', constraints:[], access:'자유 다운로드', verified:true,
+ scale:'200,000건 (긍부정 균형, 2020.6~7 수집)', cost:'free', costNote:'무료 · 즉시',
+ value:'B', valueNote:'★ 쇼핑 리뷰 도메인에서 상업 이용까지 안전한 유일한 코퍼스. 소비자 실사용 어휘 파악에 바로 쓸 수 있다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'Public Domain',commercial:'✅ 제한 없음',raw:'제한 없음',cite:'출처표시 권장',deploy:'제한 없음'},
+ why:'저장소 README에 Public Domain 명시.',
+ caution:'⚠️ Public Domain은 배포자의 선언이며 네이버 서비스 약관·원 리뷰 작성자 저작권과는 별개다. 다만 이 프로젝트 규모에서는 수용 가능한 리스크.',
+ url:'https://github.com/bab2min/corpus'},
+
+{id:'nsmc', layer:'5층 코퍼스·반례', name:'NSMC 네이버 영화 리뷰', org:'e9t (GitHub/HF)',
+ grade:'G3', constraints:['BY'], access:'자유 다운로드', verified:true,
+ scale:'200,000건 (train 150k / test 50k)', cost:'free', costNote:'무료 · 즉시',
+ value:'C', valueNote:'영화 도메인이라 화장품·건기식과 거리가 멀다. 감성분류 베이스라인 확인용',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'제한 없음',commercial:'✅ CC0 기준 무제한',raw:'제한 없음',cite:'출처표시 이행 권장',deploy:'제한 없음'},
+ why:'원본 GitHub은 CC0 1.0, HF는 cc-by-2.0 태그. 배포처 간 표기가 다르다.',
+ caution:'⚠️ 원본 CC0를 근거로 삼되 출처표시(CC BY 2.0 조건)까지 함께 이행하면 양쪽 해석을 모두 충족한다.',
+ url:'https://github.com/e9t/nsmc'},
+
+{id:'klue_dataset', layer:'5층 코퍼스·반례', name:'KLUE 벤치마크 데이터셋 (모델 아님)', org:'KLUE',
+ grade:'G3', constraints:['BY','SA'], access:'자유 다운로드', verified:true,
+ scale:'205k+ (ynat/nli/sts/ner/re/dp/mrc/wos)', cost:'free', costNote:'무료 · 즉시',
+ value:'B', valueNote:'한국어 이해 태스크 베이스라인. NER·RE가 주장 스팬 추출 설계 참조에 유용',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'CC BY-SA 4.0',commercial:'✅ 가능',raw:'제한 없음',cite:'출처표시',deploy:'⚠️ ShareAlike — 데이터셋을 개작·배포하면 동일 라이선스'},
+ why:'GitHub·HF 양쪽 CC BY-SA 4.0 일치 확인.',
+ caution:'⚠️ SA 전염성 — 데이터셋을 파생·배포하지 않고 모델 학습에만 쓰면 통상 문제되지 않는다. 🚨 데이터셋의 CC BY-SA가 KLUE-RoBERTa 「모델」에 적용된다고 가정하면 안 된다(아래 모델 항목 참조).',
+ url:'https://github.com/KLUE-benchmark/KLUE'},
+
+{id:'kmhas', layer:'5층 코퍼스·반례', name:'K-MHaS 한국어 혐오표현 (멀티라벨)', org:'jeanlee (HF)',
+ grade:'G3', constraints:['BY','SA'], access:'자유 다운로드', verified:true,
+ scale:'109,692건 · 8개 카테고리 멀티라벨', cost:'free', costNote:'무료 · 즉시',
+ value:'C', valueNote:'★ AI Hub 558의 라이선스 안전한 대체재. 멀티라벨 분류 아키텍처 참조용으로는 동등하고 상업 이용까지 열려 있다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'CC BY-SA 4.0',commercial:'✅ 가능',raw:'제한 없음',cite:'출처표시',deploy:'⚠️ SA'},
+ why:'CC BY-SA 4.0.',
+ caution:'도메인은 혐오표현이라 광고와 무관. 쓴다면 「멀티라벨 학습 레시피」 검증용.',
+ url:'https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech'},
+
+{id:'kr3', layer:'5층 코퍼스·반례', name:'KR3 한국 음식점 리뷰', org:'leey4n (HF)',
+ grade:'G2', constraints:['NC','BY','SA'], access:'자유 다운로드', verified:true,
+ scale:'641,762건', cost:'free', costNote:'무료 · 즉시 (단 상업 경로 없음)',
+ value:'X', valueNote:'🚨 탈락. NC(비상업) + 제작자가 "크롤링 금지 약관에 동의하지 않았다"고 자인. 규모가 커서 탐나지만 상업화 전제와 정면 충돌',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌ 배포 모델 학습 불가',commercial:'❌ CC BY-NC-SA',raw:'❌',cite:'⚠️ 출처표시 조건 인용만',deploy:'❌'},
+ why:'CC BY-NC-SA 4.0. 제작자가 fair use 주장으로 비상업 범위를 명시.',
+ caution:'🚨 후보에서 제외. 대체재는 bab2min 네이버쇼핑 리뷰(Public Domain).',
+ url:'https://huggingface.co/datasets/leey4n/KR3'},
+
+{id:'unsmile', layer:'5층 코퍼스·반례', name:'Smilegate UnSmile 혐오표현', org:'스마일게이트 AI',
+ grade:'G2', constraints:['NC','BY'], access:'자유 다운로드', verified:true,
+ scale:'18,742 문장', cost:'free', costNote:'무료 (상업 이용은 개별 문의)',
+ value:'X', valueNote:'🚨 탈락. NC에 더해 ND(변경금지)까지 걸려 전처리·파생 데이터 생성 자체가 제약된다',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌',commercial:'❌ CC BY-NC-ND',raw:'❌',cite:'⚠️ 인용만',deploy:'❌'},
+ why:'데이터셋은 CC BY-NC-ND 4.0 (코드·베이스라인만 Apache 2.0).',
+ caution:'🚨 ND가 특히 치명적 — 비상업이어도 개작이 막힌다. K-MHaS로 대체.',
+ url:'https://github.com/smilegate-ai/korean_unsmile_dataset'},
+
+{id:'ecommerce_pages', layer:'5층 코퍼스·반례', name:'이커머스 상세페이지 직접 크롤링', org:'각 셀러',
+ grade:'G1', constraints:['TOS','PII'], access:'크롤링 (대부분 금지)', verified:false,
+ scale:'—', cost:'free', costNote:'금전 비용 0 · 🚨 법적 리스크가 비용',
+ value:'X', valueNote:'🚨 탈락. DAPT용으로 탐나지만 위험 대비 이득이 작다',
+ u:{train:CD, commercial:NO, raw:NO, cite:NO, deploy:NO},
+ note:{train:'⚠️ robots 허용 + 약관 무저촉이 확인된 범위만. 기본값은 배제',commercial:'❌ 타사 저작물',raw:'❌ 원문 미보관',cite:'❌',deploy:'❌'},
+ why:'🚨 기본값 G1(배제).',
+ caution:'쓰더라도 원문 미보관 — 수집 스크립트와 통계만 커밋.', url:''},
+
+// ══════════════════ 6층 세그먼트·페르소나 ══════════════════
+{id:'kobaco_mcr', layer:'6층 세그먼트·페르소나', name:'KOBACO 소비자행태조사(MCR) 원시·통계데이터 ★1순위 · 🔄G2→G3 정정', org:'한국방송광고진흥공사',
+ grade:'G3', constraints:['BY'], access:'웹 서비스 · 항목 선택 다운로드', verified:true,
+ scale:'만13~64세 5,000명 · 연1회 · 1999~', cost:'free', costNote:'✅ 무료 · 즉시 · 🔄 문의 불필요 (FAQ에 조건 명시돼 있었음)',
+ value:'A', valueNote:'★★ 페르소나 1순위이자 이제 제약도 없다. 인구통계 × 80여 업종 구매행태 × 브랜드 선호 × 구매 시 고려사항 × 라이프스타일 100항목(6점척도) × 매체이용이 한 응답자 안에 결합된 유일한 공개 소스',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{
+   train:'✅ 공공누리 1유형 — 변형·2차적 저작물 작성 가능이므로 학습 투입에 제약 없음',
+   commercial:'✅ 공공누리 1유형 — 상업적 이용 가능',
+   raw:'✅ 응답 레코드 원문 사용 가능',
+   cite:'✅ 지정 문구로 출처표시',
+   deploy:'✅ 제한 없음'},
+ why:'🔄 **v2.1 정정.** FAQ에 명시돼 있었다 — ①원시데이터·②통계데이터는 **공공누리 제1유형**(출처표시 / 상업 이용 가능 / 변형·2차적 저작물 작성 가능). "모든 자료는 2차적 저작물로 가공하여 이용 가능"까지 적혀 있다. 이용약관 페이지만 보고 "조항이 없다"고 판정했던 것이 오판이었다.',
+ caution:'출처표시 문구: "한국방송광고진흥공사 소비자행태조사(MCR) 데이터 서비스를 사용한 결과임" — 온라인은 하이퍼링크 병기. / 금지: 반사회·비도덕 내용과 결합, 공사가 후원하거나 특수관계인 것처럼 오인시키는 표시. / ⚠️ 연례보고서는 별도 항목(공공누리 2유형, 비상업 한정)이니 섞지 말 것.',
+ url:'https://adstat.kobaco.co.kr/mcr/portal/community/articleListPage.do?bbsId=FAQ'},
+
+{id:'kobaco_mcr_report', layer:'6층 세그먼트·페르소나', name:'KOBACO MCR 연례보고서 ★신규구분', org:'한국방송광고진흥공사',
+ grade:'G2', constraints:['NC','BY'], access:'웹 다운로드', verified:true,
+ scale:'연 1회 발간', cost:'free', costNote:'무료 (상업 경로 없음)',
+ value:'C', valueNote:'해석·요약이 붙어 있어 읽을 가치는 있으나, 원시·통계데이터로 직접 계산하면 되므로 필수는 아니다',
+ u:{train:NO, commercial:NO, raw:NO, cite:OK, deploy:NO},
+ note:{
+   train:'❌ 공공누리 2유형 — 비상업 한정이라 배포 모델 학습 불가',
+   commercial:'❌ 상업적 이용 금지',
+   raw:'❌ 보고서 문장은 저작물',
+   cite:'✅ 출처표시하고 인용',
+   deploy:'❌'},
+ why:'🚨 **같은 기관 같은 조사인데 자료 종류에 따라 유형이 갈린다** — 원시·통계데이터는 1유형, 연례보고서는 2유형(비상업).',
+ caution:'★ 이것이 「등급은 소스가 아니라 추출물의 속성」의 교과서적 사례다. "KOBACO MCR = G3"라고 뭉뚱그리면 연례보고서를 상업 경로에 넣게 된다. 파일 저장 시 디렉터리를 분리할 것.',
+ url:'https://adstat.kobaco.co.kr/mcr/portal/community/articleListPage.do?bbsId=FAQ'},
+
+{id:'krei_food', layer:'6층 세그먼트·페르소나', name:'KREI 식품소비행태조사 ★접근성 1위', org:'한국농촌경제연구원',
+ grade:'G0', constraints:[], access:'✅ 신청·승인·회원가입 없이 즉시 다운로드', verified:true,
+ scale:'3,188가구 / 성인 5,851명 / 청소년 588명 · Excel + SPSS', cost:'free', costNote:'✅ 무료 · 즉시 · 절차 0',
+ value:'A', valueNote:'★ 파일럿에 가장 빠르다. 식생활 행태 + 식품 안전성·식품 표시 인식 + 라이프스타일 + 소비자역량. 「식품 표시」 문항이 있다는 게 이 프로젝트엔 특히 크다',
+ u:{train:CD, commercial:CD, raw:CD, cite:CD, deploy:CD},
+ note:{train:'⚠️ G0 → G2 취급. 이용조건이 웹에 미기재',commercial:'⚠️ 미확인 — 「원시자료 이용자 가이드」 PDF 확인 필요',raw:'⚠️ 응답 레코드는 사실 데이터',cite:'⚠️ 출처표시',deploy:'⚠️ 집계값만'},
+ why:'페이지에 이용조건 미기재 → G0 → G2 취급. 「원시자료 이용자 가이드」 PDF(2021.07.20)에 수록 추정.',
+ caution:'🚨 건강기능식품 문항 포함 여부가 미확인이다 — 2023 기초분석보고서·2024 통계보고서 목차에 건기식 전용 장절이 없다. 성인 설문지 PDF를 직접 열어 확인할 것(1시간).',
+ url:'https://www.krei.re.kr/foodSurvey/page/460'},
+
+{id:'khff_survey', layer:'6층 세그먼트·페르소나', name:'건기식협회 연령대별 건강고민 보도자료 ★사용자제공', org:'한국건강기능식품협회',
+ grade:'G2', constraints:['BY'], access:'보도자료 웹 공개', verified:true,
+ scale:'소비자실태 3,050명 (서울+5대광역시, 만20~79세)', cost:'free', costNote:'✅ 보도자료 무료 · 🚨 원보고서는 유료 36만원(회원가 18만원)',
+ value:'A', valueNote:'★★ 페르소나 속성이 그대로 나와 있다 — 눈 38.8% / 피로회복 32.2% / 스트레스 27.8% / 콜레스테롤 26.2% / 관절 25.8%. 20·30대=피로·스트레스, 50·60대=관절, 70대=혈압·콜레스테롤. 연령별 선호 원료(61세+ 홍삼 12.9%, 2030 프로바이오틱스 22.5%, 40대 종합비타민 11.1%)',
+ u:{train:CD, commercial:CD, raw:NO, cite:OK, deploy:CD},
+ note:{train:'⚠️ 집계 수치(사실)만',commercial:'⚠️ 사실 인용 수준',raw:'❌ 보도자료 문장은 협회 저작물',cite:'✅ 출처표시하고 수치 인용',deploy:'⚠️ 수치만'},
+ why:'집계 통계는 사실이므로 인용 가능. 문장·표 전재는 별개.',
+ caution:'★ 원시데이터가 없으니 페르소나 「검증용 앵커」로 쓴다 — 군집 결과가 이 분포와 크게 어긋나면 군집이 틀린 것이다. 표 전재는 협회 문의 필요.',
+ url:'https://khff.or.kr/user/info/InfoBoardUserView.do?_menuNo=369&boardSeqno=10035&postsSeqno=119567'},
+
+{id:'nasmedia_npr', layer:'6층 세그먼트·페르소나', name:'나스미디어 2026 NPR 인터넷 이용자 조사 ★사용자제공', org:'KT 나스미디어',
+ grade:'G2', constraints:['BY'], access:'✅ 무료 PDF (소속+이메일만)', verified:true,
+ scale:'n=2,000 · 2026.02.04~13 · 2004년부터 연1회', cost:'free', costNote:'✅ 무료 · 즉시 · 회원가입 불필요',
+ value:'A', valueNote:'★★ 이 프로젝트 타깃 업종이 그대로 1·2위 — 크리에이터 추천 구매 품목 화장품 46.6% / 식품 37.9%. 추천 영향받음 46.1%(20대 52.0%), 숏폼 시청 후 즉시 구매 24.7%. 연령대(10~50대)별 제공',
+ u:{train:CD, commercial:CD, raw:NO, cite:OK, deploy:CD},
+ note:{train:'⚠️ 집계 수치만',commercial:'⚠️ 인용조건 미확인 — PDF 저작권 문구 확인 필요',raw:'❌ 보고서 문장·도표는 나스미디어 저작물',cite:'✅ 출처표시 인용 (조건 확인 후)',deploy:'⚠️ 수치만'},
+ why:'무료 배포 보고서. 통상 출처표기 조건이나 원문 확인 필요.',
+ caution:'★ 「왜 이 제품군인가」를 발표에서 설득할 때 쓸 수 있는 가장 좋은 숫자다. 화장품·식품이 크리에이터 추천 구매 1·2위이고 그 채널이 규제 사각지대라는 논리가 바로 선다.',
+ url:'https://www.nasmedia.co.kr/정기보고서/2026-03-npr-usersurvey-insight/'},
+
+{id:'nasmedia_fb', layer:'6층 세그먼트·페르소나', name:'나스미디어 2026 식음료 트렌드 ★사용자제공 · 명칭정정', org:'KT 나스미디어',
+ grade:'G2', constraints:['BY'], access:'✅ 무료 PDF', verified:true,
+ scale:'2026.05.29 발행 · 업종 시리즈(1)', cost:'free', costNote:'✅ 무료 · 즉시',
+ value:'B', valueNote:'⚠️ 「FB」는 Facebook이 아니라 Food & Beverage(식음료)다. 연령대별 구매 채널(10대 편의점 / 20대 배달앱 / 30대 이커머스 / 40대+ 대형마트)과 정보 획득 경로(30대 미만 SNS·동영상). ★ 2025 「건강기능식품」 업종 리포트가 별도로 존재 — 그게 더 중요하다',
+ u:{train:CD, commercial:CD, raw:NO, cite:OK, deploy:CD},
+ note:{train:'⚠️ 집계 수치만',commercial:'⚠️ 인용조건 미확인',raw:'❌ 보고서 저작물',cite:'✅ 출처표시 인용',deploy:'⚠️ 수치만'},
+ why:'무료 배포 보고서.',
+ caution:'★ 2025 「주요 업종 시리즈 06 건강기능식품」 PDF를 함께 받을 것 — 이 프로젝트에는 식음료 일반보다 그쪽이 직결된다.',
+ url:'https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/'},
+
+{id:'kcc_media', layer:'6층 세그먼트·페르소나', name:'방송매체 이용행태 조사 자료 (3068653) ★명칭정정', org:'방송미디어통신위원회',
+ grade:'G3', constraints:[], access:'파일 다운로드', verified:false,
+ scale:'4,633가구 / 만13세+ 7,055명 (2023 기준)', cost:'free', costNote:'무료 · 즉시',
+ value:'C', valueNote:'🚨 사용자가 「나이대별 매체 이용 현황」으로 지목했으나 실제 명칭은 「방송미디어통신위원회_방송매체 이용행태 조사 자료_20251231」이다. 그리고 이건 「매체 이용 연령대」이지 「제품 구매 연령대」가 아니다 — 「어느 채널에 광고를 태울지」에는 맞지만 「누가 이 제품을 사는지」에는 맞지 않는다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'집계 통계',commercial:'공공저작물 추정',raw:'사실 데이터',cite:'출처표시',deploy:'제한 없음'},
+ why:'정부 조사 자료. 다만 이용허락범위·파일형식·수록 컬럼은 data.go.kr 접근 차단으로 미확인.',
+ caution:'⚠️ 집계표인지 마이크로데이터인지도 미확인. 다운로드 전 검증 필요. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사.',
+ url:'https://www.data.go.kr/data/3068653/fileData.do'},
+
+{id:'kosis', layer:'6층 세그먼트·페르소나', name:'KOSIS 국가통계 오픈API', org:'국가데이터처 (구 통계청)',
+ grade:'G3', constraints:['BY'], access:'✅ 인증키 자동 발급 (즉시)', verified:true,
+ scale:'통계표 다수 · 소득5분위 × 17개 시도', cost:'free', costNote:'✅ 무료 · 인증키 즉시 · 요청당 4만 셀 이하',
+ value:'B', valueNote:'★ 철수 조건 6번(「세그먼트 코퍼스 G-게이트 통과 1종」)을 이것 하나로 무조건 충족한다. AI Hub 승인이 늦어져도 Phase 3 착수가 막히지 않는다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'인구통계 축',commercial:'✅ 상업 이용 명시 허용 (무가공 유료판매만 금지)',raw:'집계 수치 — 저작권 대상 아님',cite:'출처 명시 필수(기관·조사명·시점·URL)',deploy:'제한 없음'},
+ why:'실측: "무료 / 자유로운 사용·재사용·재배포 / 비상업·상업 모두 가능 / 별도 가공절차 없이 유료 판매만 불가 / 반드시 출처 명시".',
+ caution:'★ 조사 대상 전체에서 상업 이용이 명시적으로 허용된 몇 안 되는 항목이다. 지금 바로 붙일 것.',
+ url:'https://kosis.kr/serviceInfo/openAPIGuide.do'},
+
+{id:'knhanes', layer:'6층 세그먼트·페르소나', name:'국민건강영양조사 (KNHANES)', org:'질병관리청',
+ grade:'G2', constraints:['NC','BY'], access:'원시자료 다운로드 (로그인)', verified:false,
+ scale:'전국 표본 · 「최근 1년 2주 이상 식이보충제 복용」 문항 확인', cost:'free', costNote:'무료 (상업 경로 없음)',
+ value:'C', valueNote:'🚨 CC-BY-NC → 상업 서비스 투입 불가. 건기식 섭취 실태 문항이 있어 아깝지만, 집계 통계(국민건강통계 보고서) 인용 수준으로 제한하는 게 맞다',
+ u:{train:NO, commercial:NO, raw:NO, cite:OK, deploy:NO},
+ note:{train:'❌ 배포 모델 학습 불가',commercial:'❌ CC-BY-NC',raw:'❌',cite:'✅ 출처표시 인용',deploy:'❌'},
+ why:'국가연구데이터플랫폼(DataON) 등록 라이선스 CC-BY-NC.',
+ caution:'⚠️ 공식 사이트 robots 차단으로 신청 절차 상세는 미확인. 상업화 전제라면 인용만.',
+ url:'https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab'},
+
+{id:'kisdi_panel', layer:'6층 세그먼트·페르소나', name:'KISDI 한국미디어패널조사', org:'정보통신정책연구원',
+ grade:'G2', constraints:['NC','BY'], access:'웹 다운로드 (이메일+목적 입력)', verified:true,
+ scale:'3,956가구 / 8,411명 · 2010~2025', cost:'free', costNote:'무료 · 즉시',
+ value:'D', valueNote:'🚨 공공누리 제2유형 = 상업 이용 금지. 게다가 제품 카테고리 구매 변수가 약해 이 프로젝트에는 KOBACO MCR보다 열등하다',
+ u:{train:NO, commercial:NO, raw:NO, cite:OK, deploy:NO},
+ note:{train:'❌',commercial:'❌ 공공누리 2유형',raw:'❌',cite:'✅ 출처 명기',deploy:'❌'},
+ why:'포털 하단 공공누리 제2유형 인증마크 확인.',
+ caution:'⚠️ 다운로드 폼의 이용목적에 「마케팅」 옵션이 있어 2유형과 상충 소지가 있다. 쓸 거면 KISDI에 직접 확인. 다만 우선순위상 안 써도 된다.',
+ url:'https://stat.kisdi.re.kr/kor/dataset/rdssListPage.html'},
+
+{id:'mdis', layer:'6층 세그먼트·페르소나', name:'MDIS 마이크로데이터 통합서비스', org:'국가데이터처',
+ grade:'G2', constraints:['GATED','PII','TOS'], access:'심사·승인 (5단계)', verified:false,
+ scale:'가계동향·국민건강영양 등 개인 레코드', cost:'gated', costNote:'무료 · 🚨 심사 + 보안서약 + 결과물 반출 승인',
+ value:'X', valueNote:'🚨 이번 목적에 비효율. 개인 레코드가 필요 없다는 전제라면 심사·반출승인 비용 대비 이득이 없다. 9주 프로젝트에서 2~6주 심사는 치명적',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌ 통계법 제33조 — 목적 외 사용 금지',commercial:'❌ 상업 목적 승인 난이도 높음',raw:'❌ 원본 반출 불가',cite:'⚠️ 승인된 결과물만',deploy:'❌'},
+ why:'통계법 제33조. 인가용은 보안서약·USB 차단·결과물 반출 승인 필수.',
+ caution:'후보에서 내리는 것이 답이다.', url:''},
+
+{id:'aihub_review', layer:'6층 세그먼트·페르소나', name:'AI Hub 속성기반 감정분석 데이터 (71603)', org:'NIA / AI Hub',
+ grade:'G3', constraints:['GATED','BY','NOREDIST','TOS'], access:'🔄 신청 → 즉시 · 🚨 내국인만', verified:true,
+ scale:'250,312건 — 쇼핑몰 리뷰 225,300 + SNS 리뷰 25,012', cost:'free', costNote:'✅ 무료 · 🔄 **신청 즉시 다운로드**',
+ value:'A', valueNote:'★★ <b>정정으로 가치가 크게 올랐다.</b> 화장품 카테고리(스킨케어/헤어바디/메이크업)가 명시 포함된 국내 유일의 정식 리뷰 데이터셋 25만건인데, <b>배포 모델 학습도 영리 활용도 가능</b>하다. 앞서 「배포 모델 학습 금지」로 판정했던 것은 오판이었다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'✅ 자유롭게 학습 가능',commercial:'✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)',raw:'✅ 원문 그대로 파이프라인 내 사용 가능',cite:'⚠️ &quot;AI허브 데이터를 사용하였음&quot; 명시 의무',deploy:'✅ 모델·서비스 배포 자유. 🚨 단 <b>데이터 재가공 배포는 불가</b>(NOREDIST)'},
+ why:'AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).',
+ caution:'🚨 <b>이전 판정을 뒤집는다.</b> 「data/g2_nc/에 격리하고 학습 스크립트에서 제외」는 <b>불필요</b>했다. 정확한 제약은 <b>데이터 재배포</b>이므로, 격리해야 할 대상은 학습 스크립트가 아니라 <b>데이터셋 공개·산출물 배포 스크립트</b>다. / 남는 제약 셋 — ① 내국인만 신청 ② 출처 명시 의무 ③ 골든셋에 AI Hub 유래 문장이 섞이면 그 골든셋을 공개 배포할 수 없다(<b>provenance 필드로 추적</b>할 것).',
+ url:'https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603'},
+
+{id:'platform_reviews', layer:'6층 세그먼트·페르소나', name:'쿠팡·네이버·올리브영 리뷰 직접 크롤링', org:'각 플랫폼',
+ grade:'G1', constraints:['TOS','PII'], access:'🚨 공식 API 경로 부재 확정', verified:true,
+ scale:'—', cost:'free', costNote:'금전 0 · 🚨 법적 리스크가 비용',
+ value:'X', valueNote:'🚨 탈락. 실측 결과 국내 주요 이커머스 어디에도 리뷰 API가 없다 — 쿠팡 Open API/파트너스에 리뷰 엔드포인트 없음, 네이버 커머스API는 2024-08-30 공식 답변으로 "제공 계획 없음", 올리브영은 개발자 포털 자체가 없음',
+ u:{train:NO, commercial:NO, raw:NO, cite:NO, deploy:NO},
+ note:{train:'❌ 배제',commercial:'❌',raw:'❌',cite:'❌',deploy:'❌'},
+ why:'🚨 약관 위반 + robots 금지. 협상 불가 항목.',
+ caution:'data/.g1_blocked 빈 디렉터리에 배제 기록만 남긴다. doctor 10번이 이 디렉터리에 파일이 있으면 즉시 실패시킨다.', url:''},
+
+{id:'client_crm', layer:'6층 세그먼트·페르소나', name:'고객사 CRM·구매이력·NPS 개인 레코드', org:'—',
+ grade:'G1', constraints:['PII','TOS'], access:'—', verified:false,
+ scale:'—', cost:'free', costNote:'—',
+ value:'X', valueNote:'★ 이 배제가 오히려 온프레미스 차별점을 강화한다 — "고객사 CRM을 외부 LLM에 보내지 않는다"가 세일즈 포인트',
+ u:{train:NO, commercial:NO, raw:NO, cite:NO, deploy:NO},
+ note:{train:'❌ 개인정보',commercial:'❌',raw:'❌',cite:'❌',deploy:'❌'},
+ why:'🚨 개인정보. 편입 시에도 집계 세그먼트 수준만.',
+ caution:'개인 레코드는 sLLM 진입 금지.', url:''},
+
+// ══════════════════ 7층 광고 카피 (신규) ══════════════════
+{id:'meta_adlibrary', layer:'7층 광고 카피', name:'Meta 광고 라이브러리 (UI) ★사용자제공', org:'Meta Platforms',
+ grade:'G2', constraints:['TOS'], access:'🚨 UI 열람만 · 자동 수집은 약관 위반', verified:true,
+ scale:'한국 = 현재 집행 중(active)인 전 상업광고', cost:'free', costNote:'무료 · 🚨 수기 수집 인건비가 비용',
+ value:'B', valueNote:'★ 실제 집행된 한국어 화장품·건기식 광고 본문 카피를 그대로 볼 수 있는 유일한 경로. 단 「현재 집행 중」인 것만 — 종료된 과거 광고는 사라진다. 학습셋이 아니라 평가셋/도메인 감각 확보용 수백 건 규모',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌ 자동 수집이 약관 위반이라 대량 학습셋 구성 불가',commercial:'❌ 광고주 저작물',raw:'❌ 원문 보관 금지',cite:'⚠️ 소량 예시 인용',deploy:'❌'},
+ why:'🚨 Meta 이용약관 "You may not access or collect data from our Products using automated means" — UI 스크래핑은 명시적 약관 위반.',
+ caution:'★ 열람 항목: 본문 카피 전문, 헤드라인, CTA 버튼 텍스트, 랜딩 URL, 게재 기간. 국가 필터에 대한민국 + 키워드 검색 가능. / 수기로 100~200건만 모아 test_holdout에 넣으면 실사례 평가 품질이 크게 오른다.',
+ url:'https://www.facebook.com/ads/library/?locale=ko_KR'},
+
+{id:'meta_adlibrary_api', layer:'7층 광고 카피', name:'Meta Ad Library API ★사용자제공', org:'Meta Platforms',
+ grade:'G2', constraints:['GATED','TOS'], access:'신원확인 + 앱 등록', verified:true,
+ scale:'🚨 한국 상업광고는 0건', cost:'gated', costNote:'무료 · 신원확인 수일 · 시간당 ~200콜',
+ value:'X', valueNote:'🚨 탈락. 공식 문서 명시 — "EU에 도달하지 않은 광고는 사회이슈·선거·정치 광고만 반환". ad_creative_bodies 필드는 존재하지만 KR 화장품·건기식 광고에는 레코드 자체가 없다. EU/UK만 DSA로 전 상업광고 개방',
+ u:{train:NO, commercial:NO, raw:NO, cite:NO, deploy:NO},
+ note:{train:'❌ 반환 데이터 없음',commercial:'❌',raw:'❌',cite:'❌',deploy:'❌'},
+ why:'developers.facebook.com/docs/graph-api/reference/ads_archive/ 직접 확인.',
+ caution:'🚨 「API가 있으니 되겠지」가 가장 비싼 착각이다. 신원확인에 수일을 쓰고 나서 0건을 확인하게 된다.',
+ url:'https://www.facebook.com/ads/library/api/?locale=ko_KR'},
+
+{id:'google_atc', layer:'7층 광고 카피', name:'Google 광고 투명성 센터 ★사용자제공', org:'Google LLC',
+ grade:'G2', constraints:['TOS'], access:'🚨 UI 열람만 · 공식 API 없음', verified:true,
+ scale:'인증(verified) 광고주의 전 광고 · 보관 ~13개월', cost:'free', costNote:'무료 · 수기 수집',
+ value:'C', valueNote:'텍스트 광고 헤드라인·설명문 열람 가능. 다만 공식 API·벌크 다운로드가 없고 BigQuery 공개셋은 정치광고 전용(한국은 선거광고 인증 미운영이라 사실상 무의미)',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌ 대량 수집 경로 부재',commercial:'❌ 광고주 저작물',raw:'❌',cite:'⚠️ 소량 예시 인용',deploy:'❌'},
+ why:'robots.txt는 404이나 Google 이용약관이 리버스 엔지니어링·자동화 수집을 금지. 제3자 스크래퍼는 회색지대.',
+ caution:'⚠️ ATC 추가 서비스 약관 본문은 JS SPA라 추출 실패 — 저장·재배포 조항 미확인. / Meta 라이브러리와 같은 용도(수기 평가셋)로만.',
+ url:'https://adstransparency.google.com/?region=KR&hl=ko'},
+
+{id:'aisac', layer:'7층 광고 카피', name:'KOBACO AiSAC AI 광고영상 아카이브 ★사용자제공', org:'한국방송광고진흥공사',
+ grade:'G1', constraints:['TOS','BY'], access:'열람만 · 다운로드 금지', verified:true,
+ scale:'광고영상 36,000편', cost:'free', costNote:'무료 열람 · 🚨 상업적 이용 금지',
+ value:'X', valueNote:'🚨 탈락 — 광고 카피 텍스트가 애초에 없다. 상세 페이지를 직접 열어 확인한 결과 표시 항목은 광고주명·캠페인명·방영일·대행사·제작사·AI 검출 태그뿐이고, 키워드는 영상에서 검출된 사물·동작 태그(#빙글 #분수 #헬멧)이지 광고 문구가 아니다. 자막·나레이션·스크립트 일체 없음',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌ 카피 텍스트 부재 + 상업적 이용 금지',commercial:'❌ 회원은 게시 자료를 상업적으로 이용할 수 없음',raw:'❌ 공식 기능 외 다운로드·캡처 금지',cite:'⚠️ 출처표시 열람 인용',deploy:'❌ 저작권 공사·원저작권자 귀속'},
+ why:'🚨 이용약관 실측: "공식적으로 제공하는 기능 외의 방법으로 다운로드, 캡처 등을 할 수 없다" + 상업적 이용 금지.',
+ caution:'⚠️ AiSAC의 「카피라이팅」 메뉴는 기존 카피를 제공하는 게 아니라 제품 속성을 넣으면 AI가 생성해 주는 기능이다. / 다만 「트렌드 분석」은 네이버 API 기반 쇼핑트렌드·키워드 인사이트를 성별·연령대(10~60대+) 분포와 함께 CSV·PDF로 내려받을 수 있다 — 그건 쓸 수 있다.',
+ url:'https://aisac.kobaco.co.kr/site/main/advideo/list_all_top'},
+
+{id:'channelio_copy', layer:'7층 광고 카피', name:'채널톡 광고카피 222개 모음집 ★사용자제공', org:'채널코퍼레이션',
+ grade:'G1', constraints:['TOS'], access:'웹페이지 열람', verified:true,
+ scale:'222개 / 12업종 — 뷰티 16 + 식품 28 + 건강 7 = 약 51개', cost:'free', costNote:'무료 · 즉시',
+ value:'D', valueNote:'🚨 양·성격·저작권 모두 부적합. 51개는 절대량이 부족하고, 성격이 브랜드 슬로건("바른 바를거리", "바르는 홍삼을 만나다")이라 검수 대상인 효능·기능성 소구 문구와 결이 다르다. 퍼포먼스 광고 카피가 아니다',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌ 각 카피 저작권은 원 브랜드 귀속',commercial:'❌',raw:'❌',cite:'⚠️ 소량 예시 인용',deploy:'❌'},
+ why:'페이지에 수록 카피에 대한 개별 귀속·라이선스 고지가 없다. 저작권은 원 브랜드에 있다.',
+ caution:'학습 데이터가 아니라 톤앤매너 참조용 정성 자료로만. 진입점 B의 「문체 감각」 참고에 30분 읽는 정도.',
+ url:'https://channel.io/kr/blog/articles/ffa64ebe'},
+
+// ══════════════════ 플랫폼 API ══════════════════
+{id:'naver_datalab', layer:'플랫폼 API', name:'네이버 데이터랩 오픈API 🔄B→X 탈락', org:'네이버',
+ grade:'G1', constraints:['TOS','NOSTORE','QUERYLOG','GATED'], access:'🚨 2026-07-30부로 신규 신청 접수 중단', verified:true,
+ scale:'—', cost:'unknown', costNote:'🚨 개발자센터 경로 폐쇄 · NCP(네이버 클라우드) 유료 경로로 이관',
+ value:'X', valueNote:'🚨 **네 겹으로 막힌다.** 신규 신청 자체가 불가하고, 받더라도 저장·가공이 금지이며, 결과 데이터에 권리가 없고, 우리가 보낸 쿼리를 네이버가 1년 보관·활용한다',
+ u:{train:NO, commercial:NO, raw:NO, cite:NO, deploy:NO},
+ note:{
+   train:'❌ 8.2 — 승낙은 "제한된 사용권 부여"일 뿐 결과 데이터에 대한 권리 취득이 아니다',
+   commercial:'❌ 7.2③ — 사용자들로부터 "API서비스 이용에 대한 대가"를 받을 수 없다',
+   raw:'❌ 7.3③ — 취득 정보를 무단 복제·**저장(캐시 포함)**·가공·배포 금지. "별도 데이터베이스로 관리하며 이용하는 행위"가 명시적 금지 예시',
+   cite:'❌ 8.1 — 결과 데이터 저작권은 회사 또는 원저작자에게 있다',
+   deploy:'❌ 7.3⑥ — API서비스를 다시 제3자에게 제공하는 행위 금지'},
+ why:'🚨 **부칙 제2조(2026-07-31 시행)가 결정적.** 2026-07-30 24:00 기점으로 개발자센터를 통한 **Search Trend API·Shopping Insight API 신규 이용 신청 접수가 중단**됐다. 유예는 그 시점까지 신청을 완료한 **기존 이용자 한정**(2027-06-30까지)이고, 이후 이용하려면 **NAVER API HUB(NCP)의 별도 절차·약관**을 따라야 한다. 우리는 기존 이용자가 아니므로 **애초에 받을 수 없다.**',
+ caution:'🚨 **11.5·11.6이 이 프로젝트에 특히 치명적이다** — 우리가 API로 보낸 정보(=검사 대상 문구, 관심 키워드)를 네이버가 **최대 1년 보관하고 성능 향상에 활용**하며, 이용자는 **자신의 고객으로부터 그 점에 대한 동의를 받아야** 한다. 「고객사 데이터를 외부로 보내지 않는다」는 온프레미스 차별점과 정면 충돌한다. / ✅ **대체 확보됨** — 관심사 축은 KOBACO MCR 라이프스타일 100항목 + 건기식협회 연령대별 건강고민으로 덮인다. / ⚠️ Search API의 「쇼핑」 데이터는 2026-07-31 24:00부로 **제공 종료**됐다.',
+ url:'https://developers.naver.com/products/terms/'},
+
+{id:'google_trends', layer:'플랫폼 API', name:'Google Trends API (alpha) / pytrends', org:'Google',
+ grade:'G2', constraints:['GATED','TOS'], access:'🚨 신청 게이트 · 대기열', verified:true,
+ scale:'롤링 1,800일 · 요청 간 일관 스케일', cost:'unknown', costNote:'미공개 · 🚨 승인 불확실',
+ value:'C', valueNote:'⚠️ 2025-07 발표 후 1년이 지나도 application-gated alpha 유지 — self-serve 가입도, API 키 생성 버튼도 없다. 신청은 걸어두되 일정에 물리지 말 것. pytrends는 2025-04-17 아카이브(유지보수 중단) + 약관 회색지대',
+ u:{train:CD, commercial:UN, raw:NO, cite:CD, deploy:UN},
+ note:{train:'⚠️ 지수만',commercial:'미확인',raw:'❌',cite:'⚠️ 지수 인용',deploy:'미확인'},
+ why:'승인 여부가 불확실해 의존 설계 불가.',
+ caution:'🚨 pytrends는 비공식 내부 엔드포인트 호출이라 상업 제품 데이터 소스로는 비권장. 학내 프로토타입 한정.',
+ url:'https://developers.google.com/search/blog/2025/07/trends-api'},
+
+{id:'youtube_api', layer:'플랫폼 API', name:'YouTube Data API v3 (댓글)', org:'Google',
+ grade:'G2', constraints:['TOS'], access:'API 키', verified:true,
+ scale:'commentThreads.list · 1 unit/호출', cost:'free', costNote:'✅ 무료 10,000 units/일 · 🚨 저장 30일 상한',
+ value:'C', valueNote:'🚨 원문 코퍼스로는 부적합 — 30일 저장 상한이 학습 데이터 누적을 구조적으로 봉쇄한다. ★ 다만 30일 내 수집 → 즉시 비식별 집계·키워드 빈도로 변환 후 원문 폐기하는 파이프라인이면 정책 안에서 돌아간다',
+ u:{train:CD, commercial:CD, raw:NO, cite:CD, deploy:CD},
+ note:{train:'⚠️ 파생 집계만. 원문 학습셋 축적 불가',commercial:'⚠️ 감사(audit) 대상',raw:'❌ 30일 상한 (III.E.4.c/d)',cite:'⚠️ 집계 인용',deploy:'⚠️ 파생 지표만'},
+ why:'ToS·EMEA ToS·Developer Policies 3개 문서에서 "machine learning"/"train"/"model" 문자열 부재 — 명시적 학습 금지는 없다. 실질 제약은 30일 저장 상한이다.',
+ caution:'★ 2026-05/06 개정으로 audited developer + analytics 유즈케이스에 한해 30일 초과 통계 저장이 승인제로 열렸다. 원문 댓글은 여전히 30일.',
+ url:'https://developers.google.com/youtube/terms/developer-policies'},
+
+{id:'x_api', layer:'플랫폼 API', name:'X (구 Twitter) API v2', org:'X Corp',
+ grade:'G2', constraints:['TOS'], access:'유료', verified:true,
+ scale:'pay-per-usage 월 300만 read 상한', cost:'paid', costNote:'🚨 $0.005/read · 2026-02-06부로 신규 무료 접근 종료 · 학술 트랙 없음',
+ value:'X', valueNote:'🚨 탈락. 10만 건만 모아도 $500. 학술 예외 경로가 존재하지 않고(2023년 폐지, 대체 없음) 한국어 커머스 트렌드 커버리지도 약하다',
+ u:{train:UN, commercial:UN, raw:NO, cite:CD, deploy:UN},
+ note:{train:'미확인',commercial:'미확인',raw:'❌ 비용 장벽',cite:'⚠️',deploy:'미확인'},
+ why:'비용 대비 이득이 없다.',
+ caution:'기존 가입자 한정 Basic $200/월, Pro $5,000/월 유지.',
+ url:'https://docs.x.com/x-api/getting-started/pricing'},
+
+{id:'reddit_api', layer:'플랫폼 API', name:'Reddit Data API', org:'Reddit Inc.',
+ grade:'G1', constraints:['TOS','GATED'], access:'사전 승인 (2~4주)', verified:true,
+ scale:'무료 100 QPM', cost:'paid', costNote:'무료 100 QPM · 초과 ~$0.24/1k · 상업 티어 ~$12,000/월',
+ value:'X', valueNote:'🚨 탈락. 조사 대상 중 유일하게 AI 학습을 약관에서 직접·명시적으로 금지한다 — "서면 승인 없이 머신러닝·AI 모델 학습 목적으로 Reddit 데이터를 상업화할 수 없다". 상업화 전제와 정면 충돌하고 한국어 데이터도 없다',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'🚨 약관 명시 금지',commercial:'❌ 서면 승인 필수',raw:'❌ 보유 최소화 + 삭제 동기화 의무',cite:'⚠️',deploy:'❌'},
+ why:'Responsible Builder Policy (2026-06-05 갱신) 직접 확인.',
+ caution:'🚨 학내 연구 단계에서 쓴 데이터를 상업 모델로 이월할 수 없다. 시작부터 배제하는 편이 재작업 비용을 아낀다.',
+ url:'https://support.reddithelp.com/hc/en-us/articles/42728983564564-Responsible-Builder-Policy'},
+
+{id:'meta_graph', layer:'플랫폼 API', name:'Instagram/Meta Graph API · Content Library', org:'Meta Platforms',
+ grade:'G1', constraints:['TOS','GATED','PII'], access:'학술 심사 (ICPSR, 2~6주)', verified:true,
+ scale:'공개 게시물 수집 불가 · 본인 소유 계정만', cost:'paid', costNote:'UI 무료 · 🚨 SOMAR VDE 팀당 $371/월 + 신규팀 1회 $1,000',
+ value:'X', valueNote:'🚨 탈락 4중. (1) Graph API는 본인 소유 Business/Creator 계정만 — 임의 공개 계정 수집 경로 아님 (2) Content Library는 "surveillance or commercial purposes" 사용 금지 (3) 자격이 학술·비영리 소속에 묶여 상업화 시점에 상실 (4) 격리 clean-room 밖으로 학습 데이터 반출 불가',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌ 반출 불가',commercial:'❌ 상업 목적 명시 금지',raw:'❌',cite:'⚠️',deploy:'❌'},
+ why:'Meta Platform Terms 3.a.iv(판매·라이선스 금지), 3.d.i.2(삭제 의무) + Content Library 상업 목적 금지.',
+ caution:'롤링 7일 500,000 items 반출 한도, 180일마다 삭제 의무.',
+ url:'https://transparency.meta.com/researchtools/meta-content-library/'},
+
+// ══════════════════ 경제성 근거 (채점 D축 27%) ══════════════════
+{id:'self_sanction_stat', layer:'경제성 근거', name:'★ 자체 산출 — 부당광고 제재 실적 (행정처분 API + 의결서)', org:'★ 우리 파이프라인',
+ grade:'G3', constraints:[], access:'이미 수집하는 데이터에서 계산', verified:true,
+ scale:'의결문 5,870건 + 식약처 행정처분 레코드', cost:'free', costNote:'✅ 무료 · 추가 수집 0 · 계산 반나절',
+ value:'A', valueNote:'★★ 경제적 가치(채점 D축 27%, 최대 배점)의 근거를 <b>남의 보고서에서 사지 말고 우리 데이터에서 직접 계산</b>한다. "부당광고 1건당 평균 제재는 X원, 연간 Y건 발생, 업종별 분포는 Z" — 이건 4층 수집이 끝나면 자동으로 나온다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'파생 통계',commercial:'원천이 전부 공공저작물',raw:'우리가 산출한 값',cite:'★ 발표의 핵심 근거',deploy:'제한 없음'},
+ why:'원천(공정위 의결서·식약처 행정처분 API)이 전부 G3이므로 파생 통계도 G3.',
+ caution:'★★ 인용한 숫자보다 <b>산출한 숫자</b>가 강하다. "MarketsandMarkets에 따르면"보다 "우리가 수집한 처분 레코드에서 계산하면"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 <b>제품의 일부</b>다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다.', url:''},
+
+{id:'mfds_production', layer:'경제성 근거', name:'식약처 화장품 생산·수출 실적 통계 (연 1회)', org:'식품의약품안전처',
+ grade:'G3', constraints:['BY'], access:'보도자료 + 통계 공표', verified:true,
+ scale:"'24년 실적 2025-05-27 발표 · 생산·수출 모두 사상 최대", cost:'free', costNote:'✅ 무료 · 즉시',
+ value:'B', valueNote:'★ 국내 화장품 시장 규모의 공식 숫자. 건기식은 협회 발표(2024년 6조 440억)와 짝을 이룬다. TAM을 말할 때 이 둘이 근거가 된다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'집계 통계',commercial:'공공저작물',raw:'수치는 사실',cite:'✅ 출처표시 인용',deploy:'제한 없음'},
+ why:'정부 공표 통계.',
+ caution:'★ 여기에 「화장품책임판매업체 수」·「기능성표시식품 심의 건수」를 곱하면 <b>고객 수 기반 TAM 역산</b>이 된다 — 시장 금액보다 이쪽이 우리 제품 정의에 맞는다.',
+ url:'https://eiec.kdi.re.kr/policy/materialView.do?num=267032'},
+
+{id:'mnm_aidataset', layer:'경제성 근거', name:'MarketsandMarkets AI 학습 데이터셋 시장 ★사용자제공', org:'MarketsandMarkets',
+ grade:'G2', constraints:['BY','TOS'], access:'요약만 무료 · 본문 유료', verified:true,
+ scale:'$2.82B(2024) → $9.58B(2029) · CAGR 27.7%', cost:'paid', costNote:'🚨 Single User $4,950 / Corporate $8,150 · 무료 샘플만',
+ value:'D', valueNote:'🚨 <b>시장 정의가 어긋난다.</b> 이건 「AI 학습 데이터셋을 파는 시장」이지 「광고 규제 준수 검수 시장」이 아니다. 우리는 데이터셋을 팔지 않는다. 발표에 넣으면 심사에서 "그건 당신들 시장이 아니지 않나"가 나오고, 그게 최대 배점 축(D 27%)에서 감점이 된다',
+ u:{train:NO, commercial:NO, raw:NO, cite:CD, deploy:NO},
+ note:{train:'❌ 학습 데이터가 아니다',commercial:'❌ 유료 보고서 · 저작권 전면 유보',raw:'❌ "©2026 MarketsandMarkets. All rights reserved"',cite:'⚠️ 무료 공개된 요약 수치만 출처표시 인용',deploy:'❌'},
+ why:'상업 리서치사 저작물. 페이지에 저작권 전면 유보 표기.',
+ caution:'★ <b>대안이 더 낫고 무료다</b> — ① 우리 4층 데이터로 산출한 제재 실적(위 항목) ② 국내 화장품 생산실적 + 건기식 6조 440억 ③ 대체 비용(법무 자문 단가·협회 사전심의 수수료와 소요일). 셋 다 <b>우리 제품 정의에 정확히 맞는 시장</b>을 가리킨다. $4,950을 쓸 이유가 없다.',
+ url:'https://www.marketsandmarkets.com/ResearchInsight/ai-training-dataset-market.asp'},
+
+// ══════════════════ 모델 라이선스 ══════════════════
+{id:'qwen3', layer:'모델 라이선스', name:'Qwen3 4B (sLLM)', org:'Alibaba',
+ grade:'G3', constraints:['BY'], access:'Hugging Face', verified:false,
+ scale:'Apache 2.0 · 4B', cost:'free', costNote:'✅ 가중치 무료 · 🚨 GPU 비용은 별도',
+ value:'A', valueNote:'라이선스가 깨끗하고 소형 GPU로 구동. 채택 모델',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'파인튜닝 자유',commercial:'✅ Apache 2.0',raw:'해당 없음',cite:'출처표시',deploy:'✅ 파생 모델 배포 허용'},
+ why:'Apache 2.0.',
+ caution:'가중치를 재배포하지 않더라도 파생 모델 조항이 걸릴 수 있으므로 레지스트리에 등재.', url:''},
+
+{id:'kure', layer:'모델 라이선스', name:'KURE-v1 (임베딩)', org:'—',
+ grade:'G3', constraints:[], access:'Hugging Face', verified:false,
+ scale:'MIT', cost:'free', costNote:'✅ 무료',
+ value:'A', valueNote:'MIT. 채택 모델',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'자유',commercial:'✅ MIT',raw:'해당 없음',cite:'출처표시',deploy:'✅'},
+ why:'MIT.', caution:'—', url:''},
+
+{id:'bge_reranker', layer:'모델 라이선스', name:'bge-reranker-v2-m3 (리랭커)', org:'BAAI',
+ grade:'G3', constraints:['BY'], access:'Hugging Face', verified:false,
+ scale:'Apache 2.0', cost:'free', costNote:'✅ 무료',
+ value:'A', valueNote:'Apache 2.0. 채택 모델',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'자유',commercial:'✅ Apache 2.0',raw:'해당 없음',cite:'출처표시',deploy:'✅'},
+ why:'Apache 2.0.',
+ caution:'⚠️ 512 토큰 제한 — 청크 상한을 여기에 맞춘다.', url:''},
+
+{id:'klue_roberta', layer:'모델 라이선스', name:'KLUE-RoBERTa-base (인코더) 🚨라이선스 부재 확정', org:'KLUE',
+ grade:'G0', constraints:['TOS'], access:'Hugging Face', verified:true,
+ scale:'0.1B · 라이선스 표기 없음', cost:'free', costNote:'가중치 무료 · 🚨 법적 근거가 비어 있음',
+ value:'X', valueNote:'🚨 교체 권장. 모델 카드·HF API 양쪽에서 교차 확인 — `license` 키가 JSON에 아예 존재하지 않고 `license:*` 태그도 없다. 데이터셋의 CC BY-SA 4.0이 모델 가중치에 적용된다고 가정할 근거가 없다. 라이선스 부재 = 명시적 허락 부재',
+ u:{train:UN, commercial:NO, raw:UN, cite:UN, deploy:NO},
+ note:{train:'🚨 근거 없음',commercial:'❌ 상업 배포 시 법적 근거 부재',raw:'해당 없음',cite:'미확인',deploy:'❌ 근거 없음'},
+ why:'🚨 D-60 선결 조건이 해소가 아니라 악화됐다. 이 프로젝트 인코더 트랙 전체의 백본인데 법적 근거가 비어 있다.',
+ caution:'🚨 두 갈래 중 하나 — ① KLUE 팀에 GitHub Issue로 문의해 서면 근거 확보(회신 불확실) ② beomi/kcbert-base(Apache 2.0)로 교체. ★ ②가 낫다. 라이선스가 깨끗할 뿐 아니라 댓글·구어체 학습이라 소비자 어휘·광고 문구 도메인에 오히려 더 적합하다. 지금 바꾸면 비용 0, 파인튜닝 후에 알면 트랙 하나가 날아간다.',
+ url:'https://huggingface.co/klue/roberta-base'},
+
+{id:'kcbert', layer:'모델 라이선스', name:'beomi/kcbert-base (인코더) ★KLUE 대안', org:'이준범',
+ grade:'G3', constraints:['BY'], access:'Hugging Face', verified:true,
+ scale:'0.1B · Apache 2.0 · 댓글 8,900만 문장 학습', cost:'free', costNote:'✅ 무료 · 즉시',
+ value:'A', valueNote:'★★ KLUE-RoBERTa의 직접 대안. Apache 2.0으로 라이선스가 깨끗하고, 네이버 뉴스 댓글 구어체로 사전학습돼 광고 문구·소비자 어휘 도메인 적합도가 오히려 더 높다',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'✅ 파인튜닝 자유',commercial:'✅ Apache 2.0',raw:'해당 없음',cite:'출처표시',deploy:'✅ 파생 모델 배포 허용'},
+ why:'HF 모델 카드에 Apache 2.0 명시 확인.',
+ caution:'⚠️ 모델은 Apache 2.0이나 학습에 쓰인 댓글 코퍼스 자체의 라이선스는 미확인이다. 우리가 코퍼스를 재배포하지 않고 모델만 쓰면 문제 범위 밖. / 🚨 1W에 KLUE-RoBERTa와 나란히 베이스라인을 돌려 성능차를 측정하고 결정할 것 — 반나절.',
+ url:'https://huggingface.co/beomi/kcbert-base'},
+
+{id:'exaone', layer:'모델 라이선스', name:'EXAONE 계열', org:'LG AI Research',
+ grade:'G0', constraints:['TOS','NC'], access:'Hugging Face', verified:false,
+ scale:'사용 제한 조항 확인 필요', cost:'free', costNote:'가중치 무료 · 조항 미확인',
+ value:'X', valueNote:'채택 모델이 아니다. 확인 비용을 들이지 말고 목록에서 내리는 것이 답',
+ u:{train:UN, commercial:NO, raw:UN, cite:UN, deploy:NO},
+ note:{train:'미확인',commercial:'❌ 사용 제한 조항 존재 가능성',raw:'해당 없음',cite:'미확인',deploy:'❌ 확인 전 배포 불가'},
+ why:'후보군일 뿐 채택 모델이 아니다.',
+ caution:'Qwen3로 간다.', url:''}
+];
+
+
+const GRADES = [
+  {k:'G3', cls:'good', name:'G3 — 원문 자유', def:'원문을 그대로 써도 된다',
+   li:['학습 · RAG · 화면 인용 · 배포 <b>전부 허용</b>','법령·고시·공공데이터가 여기 속한다',
+       '★ <b>Phase 0을 G3만으로 완성</b>하면 회신을 기다리는 동안에도 데모가 성립한다']},
+  {k:'G2', cls:'warn', name:'G2 — 사실만', def:'원문은 못 쓰고, 사실·근거만 뽑아 쓴다',
+   li:['<b>표현 목록은 취하되 해설 문장·편집·배열은 취하지 않는다</b>',
+       '저작권은 <b>표현</b>을 보호하고 <b>사실</b>은 보호하지 않는다',
+       '가능하면 <b>원 출처(법령·고시)로 소급</b>해 2차 문서 의존을 끊는다 → G3 승격 + 인용 품질 상승']},
+  {k:'G1', cls:'crit', name:'G1 — 배제', def:'수집 자체를 하지 않는다',
+   li:['AI 학습·TDM 금지 명시 / robots 크롤링 금지 / 재배포 금지 서약',
+       '개인정보 포함 + 비식별 불가 / 영업비밀 / 저작권자 불명',
+       '<code>data/.g1_blocked</code>에 <b>배제했다는 기록만</b> 남긴다']},
+  {k:'G0', cls:'unk', name:'G0 — 미표기', def:'이용조건이 적혀 있지 않다 → G2로 취급',
+   li:['🚨 <b>허용이 아니라 미확인이다</b>','문의해 확정되면 승격, 회신이 없으면 <b>G2로 고정</b>',
+       '<code>data/quarantine/</code>에 두고 <b>어떤 스크립트도 읽지 않는다</b>']}
+];
+const FLAGS = [
+  ['BY','출처표시','쓸 수 있으나 출처를 밝혀야 한다'],
+  ['NC','비영리','🚨 상업 이용 불가 — 제품화 경로가 막힌다'],
+  ['SA','동일조건','파생물에 같은 라이선스를 물려야 한다'],
+  ['PII','개인정보','🚨 마스킹 불가면 G1 배제'],
+  ['TOS','약관제약','서비스 약관이 별도 제한을 건다'],
+  ['GATED','게이팅','🚨 신청·승인 — 리드타임이 곧 비용'],
+  ['NOREDIST','데이터 재배포 금지','🚨 <b>모델 배포와는 다른 축</b> — 학습·영리 활용은 열려 있을 수 있다'],
+  ['PREAPPROVAL','산출물 사전승인','🚨🚨 <b>결과물을 공개할 때마다</b> 제공기관 승인 — 수집이 아니라 <b>발표·배포 시점</b>을 막는다'],
+  ['NOSTORE','저장·별도DB 금지','🚨 <b>수집해서 쌓는 것 자체가 금지</b> — 캐시도 포함. 파이프라인이 성립하지 않는다'],
+  ['QUERYLOG','쿼리 역유출','🚨 <b>우리가 보낸 요청을 제공자가 보관·활용</b>한다 — 「고객 데이터를 외부로 보내지 않는다」는 온프레미스 전제와 충돌']
+];
+const GLYPH={ok:'✔',cond:'△',no:'✕',unknown:'?'}, LABEL={ok:'가능',cond:'조건부',no:'불가',unknown:'미확인'};
+const CGLYPH={free:'✔',gated:'△',paid:'$',unknown:'?'}, CLABEL={free:'무료',gated:'승인필요',paid:'유료',unknown:'미확인'};
+const QCOLS=[['train','학습'],['commercial','상업'],['raw','원문'],['cite','인용'],['deploy','배포']];
+
+(function(){
+  const g=k=>SOURCES.filter(s=>s.grade===k).length, v=k=>SOURCES.filter(s=>s.value===k).length;
+  const c=k=>SOURCES.filter(s=>s.cost===k).length;
+  const nowUsable=SOURCES.filter(s=>s.cost==='free'&&['A','B'].includes(s.value)&&s.u.train!=='no'&&s.u.train!=='unknown').length;
+  const t=[
+    {c:'b-good',lab:'G3 · 원문 자유',val:g('G3'),foot:'전체 '+SOURCES.length+'종 중'},
+    {c:'b-warn',lab:'G2 · 사실만',val:g('G2'),foot:'원문 사용 불가'},
+    {c:'b-crit',lab:'G1 · 배제',val:g('G1'),foot:'수집하지 않음'},
+    {c:'b-unk',lab:'G0 · 미확인',val:g('G0'),foot:'🚨 확정 전까지 G2'},
+    {c:'b-good',lab:'가치 A · 핵심',val:v('A'),foot:'B 유용 '+v('B')+'종'},
+    {c:'b-crit',lab:'가치 X · 탈락',val:v('X'),foot:'D 가치낮음 '+v('D')+'종'},
+    {c:'b-good',lab:'무료·즉시',val:c('free'),foot:'절차 없이 받는다'},
+    {c:'b-warn',lab:'승인 필요',val:c('gated'),foot:'🚨 리드타임 2~6주'},
+    {c:'b-ser',lab:'유료',val:c('paid'),foot:'금전 지출 발생'},
+    {c:'b-acc',lab:'★ 지금 착수 가능',val:nowUsable,foot:'무료 + 가치 A·B + 학습 가능'}
+  ];
+  document.getElementById('tiles').innerHTML=t.map(x=>
+    `<div class="tile ${x.c}"><div class="lab">${x.lab}</div><div class="val">${x.val}</div><div class="foot">${x.foot}</div></div>`).join('');
+  ['A','B','C','D','X'].forEach(k=>{const el=document.getElementById('c'+k); if(el) el.textContent=v(k)+'종';});
+})();
+
+document.getElementById('grades').innerHTML=GRADES.map(g=>{
+  const n=SOURCES.filter(s=>s.grade===g.k).length;
+  return `<div class="gcard ${g.k.toLowerCase()}"><div class="gname"><span class="dot ${g.cls}"></span>${g.name}<span class="gcount">${n}종</span></div>
+    <div class="gdef">${g.def}</div><ul>${g.li.map(x=>`<li>${x}</li>`).join('')}</ul></div>`;}).join('');
+
+document.getElementById('flags').innerHTML=FLAGS.map(([k,n,d])=>
+  `<span class="flag"><b>${k}</b><span><b style="font-weight:600">${n}</b> <span class="muted">— ${d}</span></span></span>`).join('');
+
+const LAYERS=[...new Set(SOURCES.map(s=>s.layer))];
+const state={layer:new Set(),grade:new Set(),value:new Set(),cost:new Set(),view:null,q:''};
+document.getElementById('f-layer').innerHTML=LAYERS.map(l=>`<button class="chip" data-k="layer" data-v="${l}" aria-pressed="false">${l}</button>`).join('');
+document.getElementById('f-grade').innerHTML=['G3','G2','G1','G0'].map(g=>`<button class="chip" data-k="grade" data-v="${g}" aria-pressed="false">${g}</button>`).join('');
+document.getElementById('f-value').innerHTML=['A','B','C','D','X'].map(g=>`<button class="chip" data-k="value" data-v="${g}" aria-pressed="false">${g}</button>`).join('');
+document.getElementById('f-cost').innerHTML=[['free','무료'],['gated','승인필요'],['paid','유료']].map(([k,n])=>`<button class="chip" data-k="cost" data-v="${k}" aria-pressed="false">${n}</button>`).join('');
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.chip'); if(!b) return;
+  if(b.id==='reset'){['layer','grade','value','cost'].forEach(k=>state[k].clear()); state.view=null; state.q='';
+    document.getElementById('q').value=''; document.querySelectorAll('.chip[aria-pressed]').forEach(c=>c.setAttribute('aria-pressed','false')); render(); return;}
+  if(b.dataset.view!==undefined){
+    const on=b.getAttribute('aria-pressed')==='true';
+    document.querySelectorAll('[data-view]').forEach(c=>c.setAttribute('aria-pressed','false'));
+    state.view=on?null:b.dataset.view; if(!on) b.setAttribute('aria-pressed','true'); render(); return;}
+  const k=b.dataset.k,v=b.dataset.v; if(!k) return;
+  const set=state[k];
+  if(set.has(v)){set.delete(v); b.setAttribute('aria-pressed','false');} else {set.add(v); b.setAttribute('aria-pressed','true');}
+  render();
+});
+document.getElementById('q').addEventListener('input',e=>{state.q=e.target.value.trim().toLowerCase(); render();});
+
+let selected=null;
+function pass(s){
+  if(state.layer.size&&!state.layer.has(s.layer)) return false;
+  if(state.grade.size&&!state.grade.has(s.grade)) return false;
+  if(state.value.size&&!state.value.has(s.value)) return false;
+  if(state.cost.size&&!state.cost.has(s.cost)) return false;
+  if(state.view==='now'&&!(s.cost==='free'&&['A','B'].includes(s.value)&&s.u.train!=='no'&&s.u.train!=='unknown')) return false;
+  if(state.view==='blocked'&&!QCOLS.some(([k])=>s.u[k]==='no')) return false;
+  if(state.view==='unknown'&&!(s.grade==='G0'||QCOLS.some(([k])=>s.u[k]==='unknown')||s.cost==='unknown')) return false;
+  if(state.view==='verified'&&!s.verified) return false;
+  if(state.q){const h=(s.name+' '+s.org+' '+s.layer+' '+s.why+' '+s.caution+' '+s.scale+' '+s.valueNote+' '+s.costNote+' '+s.constraints.join(' ')).toLowerCase();
+    if(!h.includes(state.q)) return false;}
+  return true;
+}
+const mk=v=>`<span class="mk ${v}"><span class="g">${GLYPH[v]}</span>${LABEL[v]}</span>`;
+const ct=v=>`<span class="ct ${v}"><span>${CGLYPH[v]}</span>${CLABEL[v]}</span>`;
+const gd=g=>`<span class="gtag ${g}"><span class="dot ${g==='G3'?'good':g==='G2'?'warn':g==='G1'?'crit':'unk'}"></span>${g}</span>`;
+
+function render(){
+  const rows=SOURCES.filter(pass);
+  document.getElementById('cnt').textContent=`${rows.length} / ${SOURCES.length}종`;
+  let html='',last=null;
+  for(const s of rows){
+    if(s.layer!==last){last=s.layer; html+=`<tr class="lgroup"><td colspan="10">${s.layer}</td></tr>`;}
+    html+=`<tr data-id="${s.id}" class="${selected===s.id?'sel':''}">
+      <td class="tl"><div class="sname">${s.name}${s.verified?'<span class="badge ver">실측</span>':''}</div>
+        <div class="sorg">${s.org} · ${s.access} · ${s.scale}</div></td>
+      <td>${gd(s.grade)}</td>
+      <td>${s.constraints.length?s.constraints.map(c=>`<span class="mini">${c}</span>`).join(''):'<span class="muted" style="font-size:11px">없음</span>'}</td>
+      <td>${ct(s.cost)}</td>
+      ${QCOLS.map(([k])=>`<td>${mk(s.u[k])}</td>`).join('')}
+      <td><span class="vt ${s.value}">${s.value}</span></td></tr>`;
+  }
+  document.getElementById('tb').innerHTML=html||`<tr><td colspan="10" class="empty">조건에 맞는 소스가 없습니다.</td></tr>`;
+  if(selected&&!rows.some(r=>r.id===selected)) selected=null;
+  renderDetail();
+}
+document.getElementById('tb').addEventListener('click',e=>{
+  const tr=e.target.closest('tr[data-id]'); if(!tr) return;
+  selected=(selected===tr.dataset.id)?null:tr.dataset.id; render();
+  if(selected) document.getElementById('detail').scrollIntoView({behavior:'smooth',block:'nearest'});
+});
+function renderDetail(){
+  const el=document.getElementById('detail');
+  if(!selected){el.innerHTML=''; return;}
+  const s=SOURCES.find(x=>x.id===selected);
+  el.innerHTML=`<div class="detail">
+    <div class="dh"><div style="flex:1;min-width:240px"><div class="t">${s.name}</div>
+      <div class="m2">${s.layer} · ${s.org} · ${s.access} · ${s.scale}</div></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span class="vt ${s.value}">${s.value}</span>${ct(s.cost)}${gd(s.grade)}
+        ${s.constraints.map(c=>`<span class="mini">${c}</span>`).join('')}</div></div>
+    <div class="db">
+      <div class="banner b-val"><b>활용 가치 ${s.value}</b> — ${s.valueNote}</div>
+      <div class="banner b-cost"><b>비용</b> — ${s.costNote}</div>
+      <div class="qgrid">${QCOLS.map(([k,lab])=>`<div class="q"><div class="ql">${lab}</div>${mk(s.u[k])}<div class="qn">${s.note[k]}</div></div>`).join('')}</div>
+      <div class="banner b-why"><b>왜 이 등급인가</b> — ${s.why}</div>
+      <div class="banner b-caut" style="margin-bottom:0"><b>주의</b> — ${s.caution}</div>
+      ${s.url?`<a class="dlink" href="${s.url}" target="_blank" rel="noopener">근거 페이지 열기 ↗</a>`:''}
+    </div></div>`;
+}
+const tt=document.getElementById('tt');
+if(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.dataset.theme='dark';
+function syncBtn(){tt.textContent=document.documentElement.dataset.theme==='dark'?'◐ 라이트 모드':'◐ 다크 모드';}
+tt.addEventListener('click',()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'; syncBtn();});
+syncBtn(); render();
+</script>
+</body>
+</html>

@@ -35,6 +35,11 @@ repos:
         # Two trailing spaces mean <br> in Markdown. Do not strip them.
         args: [--markdown-linebreak-ext=md]
       - id: check-yaml
+        # registry_head/tail are FRAGMENTS concatenated into data_sources.yaml
+        # by scripts/gen_registry.py. They are not standalone documents, so
+        # parsing them alone is meaningless. Their validity is proven by the
+        # assembled data_sources.yaml, which this hook and the gate tests do check.
+        exclude: ^scripts/registry_(head|tail)\.yaml$
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=5000]
