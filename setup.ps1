@@ -45,10 +45,42 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 Ok "$(uv --version)"
 
 # PATH 영구 등록
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($userPath -notlike "*$uvHome*") {
-    [Environment]::SetEnvironmentVariable("Path", "$uvHome;$userPath", "User")
-    Ok "PATH 영구 등록 (새 창부터 적용)"
+#  🚨 [Environment]::SetEnvironmentVariable(..., "User") 을 쓰지 않는다.
+#     그 API 는 값을 **전개된 형태**로 되돌려 써서 %USERPROFILE% 같은 항목을
+#     고정 문자열로 바꾸고 REG_EXPAND_SZ 를 REG_SZ 로 떨어뜨린다.
+#     계정 이름이 다른 팀원 기기에서 이것이 사고가 된다.
+#     레지스트리를 직접 열어 원본 형태를 보존한 채 앞에 붙인다.
+$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
+try {
+    $raw = $key.GetValue(
+        "Path", "",
+        [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+    )
+    $kind = if ($raw -match "%") { "ExpandString" } else { $key.GetValueKind("Path") }
+
+    # 중복 제거 — 같은 경로가 여러 번 들어가 있어도 하나로 만든다
+    $parts = @($raw -split ";" | Where-Object { $_.Trim() -ne "" })
+    $seen = New-Object System.Collections.Generic.HashSet[string](
+        [StringComparer]::OrdinalIgnoreCase
+    )
+    $kept = @()
+    foreach ($part in $parts) {
+        $norm = [Environment]::ExpandEnvironmentVariables($part).TrimEnd("\\")
+        if ($norm -ieq $uvHome) { continue }   # uv 경로는 아래에서 맨 앞에 한 번만 넣는다
+        if ($seen.Add($norm)) { $kept += $part }
+    }
+
+    $newRaw = (@($uvHome) + $kept) -join ";"
+    if ($newRaw -ne $raw) {
+        $key.SetValue("Path", $newRaw, $kind)
+        $removed = $parts.Count - $kept.Count
+        if ($removed -gt 1) { Ok "PATH 정리 — 중복 $($removed - 1)건 제거 후 등록 (새 창부터 적용)" }
+        else { Ok "PATH 영구 등록 (새 창부터 적용)" }
+    } else {
+        Ok "PATH 이미 등록됨"
+    }
+} finally {
+    $key.Dispose()
 }
 
 # ── [2] 한글 인코딩 ───────────────────────────────────────

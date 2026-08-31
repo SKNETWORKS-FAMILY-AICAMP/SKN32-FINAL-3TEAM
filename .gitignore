@@ -10,13 +10,13 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# data — 등급 디렉터리 원본은 커밋하지 않는다 (수집 스크립트·통계만 커밋)
-data/g3/*
-data/g2_facts/*
-data/g2_norepub/*
-data/quarantine/*
-data/.g1_blocked/*
+# data — 등급 디렉터리 내용은 커밋하지 않는다 (D-19). 구조와 원장만 남긴다.
+#  🚨 `!data/**/` 가 필요하다 — 디렉터리 자체를 무시하면 git 이 그 아래로 내려가지
+#     않아 중첩된 .gitkeep 을 되살릴 수 없다.
+data/**
+!data/**/
 !data/**/.gitkeep
+!data/manifest.jsonl
 
 # models & experiments
 models/

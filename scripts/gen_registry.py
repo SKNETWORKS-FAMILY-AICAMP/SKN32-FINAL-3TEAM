@@ -26,10 +26,23 @@
 import json
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 with open(ROOT / "docs/03_데이터/_matrix/sources.json", encoding="utf-8") as _f:
     SRC = json.load(_f)
 BY_ID = {s["id"]: s for s in SRC}
+
+# ── 2인 확인 원장 (D-66 · D-90 ④) — 생성기의 입력이다.
+#    🚨 data_sources.yaml 은 생성물이므로 거기에 reviewed_by 를 적으면 사라진다.
+REVIEW_PATH = ROOT / "scripts/registry_review.yaml"
+REVIEW = yaml.safe_load(REVIEW_PATH.read_text(encoding="utf-8")) or {}
+
+
+def _scalar(v):
+    """YAML 스칼라로. 빈 값은 null."""
+    return "null" if v in (None, "", "null") else str(v)
+
 
 # ── 1. 법제처 OPEN API 한 건으로 묶는 것들 (같은 OC 키 · 같은 이용조건)
 LAW_COVERS = [
@@ -138,10 +151,15 @@ def block(key, s, extra=None, covers=None, status="collect"):
         L.append("    " + line)
     if s.get("caution"):
         L.append(f"    caution: {esc(s['caution'])}")
-    L.append("    collected_at: null")
-    L.append("    decided_at: 2026-08-20")
-    L.append("    decided_by: 오한빈")
-    L.append("    reviewed_by: null")
+    # 🚨 판정·검토·수집 시각은 하드코딩하지 않는다. 원장(registry_review.yaml)이 단일 출처다.
+    #    여기에 박아 두면 손으로 채운 reviewed_by 가 다음 생성 때 사라진다.
+    rv = REVIEW.get(key) or {}
+    L.append(f"    collected_at: {_scalar(rv.get('collected_at'))}")
+    L.append(f"    decided_at: {_scalar(rv.get('decided_at'))}")
+    L.append(f"    decided_by: {_scalar(rv.get('decided_by'))}")
+    L.append(f"    reviewed_by: {_scalar(rv.get('reviewed_by'))}")
+    if rv.get("reviewed_at"):
+        L.append(f"    reviewed_at: {_scalar(rv.get('reviewed_at'))}")
     if s.get("url"):
         L.append(f"    evidence_url: {esc(s['url'])}")
     return "\n".join(L)

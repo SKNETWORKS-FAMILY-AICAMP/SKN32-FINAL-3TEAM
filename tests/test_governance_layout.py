@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -247,3 +248,69 @@ def test_모든_모델에_라이선스와_등급과_배포용도가_있다() -> 
             assert use["U4"] == "deny", (
                 f"{key}: 라이선스가 없는데 U4 가 allow 다 — 배포하면 근거 없는 재배포가 된다"
             )
+
+
+# ══════════════════════════════════════════════════════════
+# D-92 — raw/ 는 소비 금지 구역이다
+#
+# 🚨 원문은 등급 디렉터리 밖(data/raw/)에 둔다. D-18(판정 단위는 FRAGMENT)과
+#    D-19(위치가 곧 게이트)를 동시에 만족시키는 유일한 배치다 — 한 원문 파일 안에
+#    등급이 갈리는 조각이 섞이면, 그 파일은 어느 등급 디렉터리에도 놓을 수 없다.
+#
+#    그 대가로 raw/ 안에서는 등급이 섞인다. D-19 가 실제로 막으려는 것은
+#    「소비 경로가 낮은 등급을 읽는 것」이므로, 소비가 raw/ 를 보지 않도록
+#    아래 두 게이트가 그 자리를 대신한다.
+# ══════════════════════════════════════════════════════════
+
+# raw/ 를 읽어도 되는 곳 — 수집기와 전처리기뿐이다.
+RAW_READERS = {"collect", "preprocess"}
+
+
+@pytest.mark.gate
+def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
+    """학습·RAG·배포가 data/raw/ 를 직접 읽으면 D-19 가 무력화된다.
+
+    🚨 구조가 못 막는 것을 코드가 막는다. 검사 16(판정 경로 외부 API = 0)과 같은 방식이다.
+       raw/ 에는 등급이 섞여 있으므로, 여기를 글롭하는 학습 스크립트가 하나만 있어도
+       G2·G0 원문이 학습에 들어간다.
+    """
+    offenders: list[str] = []
+    for path in ROOT.rglob("*.py"):
+        rel = path.relative_to(ROOT)
+        parts = rel.parts
+        if parts[0] in {".venv", "build", "dist", ".git"}:
+            continue
+        if parts[0] in RAW_READERS or rel == Path("tests/test_governance_layout.py"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "data/raw" in text or "data\\raw" in text:
+            offenders.append(str(rel))
+
+    assert not offenders, (
+        "data/raw/ 를 수집·전처리 밖에서 참조한다 — 소비 경로는 등급 디렉터리와 "
+        f"derived/ 만 읽는다 (D-92): {offenders}"
+    )
+
+
+@pytest.mark.gate
+def test_manifest의_소스는_레지스트리에_있고_G1이_아니다() -> None:
+    """raw/ 에 무엇이 들어왔는지는 manifest 가 증언한다 (수집기 공통 규약 3).
+
+    🚨 G1 은 수집 자체를 하지 않는다. raw/ 는 등급 디렉터리가 아니라서 구조가
+       막지 못하므로, 원장에 G1 이 찍히는 순간 실패시킨다 (doctor 검사 18 의 확장).
+    """
+    manifest = ROOT / "data" / "manifest.jsonl"
+    assert manifest.exists(), "data/manifest.jsonl 이 없다 — 수집 원장은 저장소에 남는다"
+
+    sources = _sources()
+    for lineno, line in enumerate(manifest.read_text(encoding="utf-8").splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        sid = row.get("source_id")
+        assert sid, f"manifest:{lineno} — source_id 가 없다"
+        assert sid in sources, f"manifest:{lineno} — {sid!r} 가 레지스트리에 없다"
+        assert sources[sid].get("grade") != "G1", (
+            f"manifest:{lineno} — {sid!r} 는 G1 이다. 수집 자체를 하지 않는다"
+        )
