@@ -17,6 +17,8 @@ name = "copylane"
 version = "0.1.0"
 description = "광고 문구 준법 검수·생성 플랫폼 (SKN Final Project)"
 readme = "README.md"
+# 🚨 패치 버전 고정은 .python-version 파일이 한다 (uv 가 자동으로 읽는다).
+#    여기는 상한/하한 가드이고, 실제 고정값은 .python-version 이다.
 requires-python = "==3.11.*"
 
 # ------------------------------------------------------------

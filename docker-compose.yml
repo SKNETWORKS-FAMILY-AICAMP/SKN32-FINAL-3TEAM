@@ -1,0 +1,42 @@
+# ============================================================
+# CopyLane 로컬 개발 DB (D-51 · 배포계획 P3-14)
+# ------------------------------------------------------------
+#  🚨 호스트 포트를 0.0.0.0 에 열지 않는다. 127.0.0.1 에만 바인딩한다.
+#     배포계획 P3-14: "보안 그룹에 5432 를 여는 것이 사고 1위".
+#     로컬도 같은 규칙으로 습관을 들인다.
+#
+#  🚨 pgvector 는 윈도우 네이티브 postgres 에 붙이려면 직접 컴파일해야 한다.
+#     이 이미지는 PostgreSQL 16 + pgvector 가 미리 들어 있다.
+#
+#  사용: uv run python launcher.py db-up   (또는 docker compose up -d)
+# ============================================================
+
+services:
+  postgres:
+    # 🚨 `pg16` 는 롤링 태그다 — 받는 시점에 따라 팀원마다 다른 이미지가 온다.
+    #    pgvector 버전 · PostgreSQL 16 · 베이스 OS 까지 고정한다.
+    #    올릴 때는 팀장이 단독으로 바꾸고 커밋한다 (.python-version 과 같은 규칙).
+    image: pgvector/pgvector:0.8.6-pg16-bookworm
+    container_name: copylane-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-copylane}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-copylane}
+      POSTGRES_DB: ${POSTGRES_DB:-copylane}
+      # 한글 자료를 다루므로 UTF-8 을 명시한다
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      # 🚨 "5432:5432" 로 쓰지 말 것 — 그러면 0.0.0.0 에 열린다
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 최초 기동 시 1회만 실행된다 (데이터 디렉터리가 비어 있을 때)
+      - ./scripts/db/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-copylane} -d ${POSTGRES_DB:-copylane}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
