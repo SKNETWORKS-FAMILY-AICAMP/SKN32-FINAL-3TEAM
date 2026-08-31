@@ -26,6 +26,9 @@ mlruns/
 
 # build (D-53: 제출본은 빌드 결과물)
 dist/
+# 🚨 생성물 전용 디렉터리. 손으로 쓴 입력은 여기 두지 않는다 —
+#    scripts/registry_head.yaml · registry_tail.yaml 이 그 입력이고 커밋 대상이다.
+build/
 
 # misc
 .DS_Store

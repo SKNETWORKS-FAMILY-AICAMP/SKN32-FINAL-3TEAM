@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CopyLane — 데이터 거버넌스 판정 매트릭스 v2</title>
+<style>
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb; --page:#f9f9f7;
+  --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+  --rule:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --good-bg:rgba(12,163,12,.10); --warn-bg:rgba(250,178,25,.16);
+  --crit-bg:rgba(208,59,59,.10); --unk-bg:rgba(137,135,129,.12);
+  --ser-bg:rgba(236,131,90,.13);
+  --accent:#2a78d6; --accent-bg:rgba(42,120,214,.10);
+  --shadow:0 1px 2px rgba(11,11,11,.05), 0 8px 24px rgba(11,11,11,.05);
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#1a1a19; --page:#0d0d0d;
+  --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+  --rule:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+  --good-bg:rgba(12,163,12,.16); --warn-bg:rgba(250,178,25,.14);
+  --crit-bg:rgba(208,59,59,.16); --unk-bg:rgba(137,135,129,.16);
+  --ser-bg:rgba(236,131,90,.16);
+  --accent:#3987e5; --accent-bg:rgba(57,135,229,.14);
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--page);color:var(--ink-1);
+  font-family:system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1520px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:26px;line-height:1.25;margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:17px;margin:0 0 4px;letter-spacing:-.005em}
+.sub{color:var(--ink-2);font-size:13px;margin:0}
+.muted{color:var(--ink-3)}
+section{margin-top:34px}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.sec-head .n{font-size:11px;font-weight:700;color:var(--ink-3);letter-spacing:.09em;
+  border:1px solid var(--border);border-radius:4px;padding:2px 7px}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;
+  padding:16px 18px;box-shadow:var(--shadow)}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.themebtn{background:var(--surface-1);border:1px solid var(--border);color:var(--ink-2);
+  border-radius:8px;padding:7px 13px;cursor:pointer;font-size:12.5px;font-family:inherit;white-space:nowrap}
+.themebtn:hover{border-color:var(--axis)}
+.disclaim{margin-top:16px;border-left:3px solid var(--warn);background:var(--warn-bg);
+  border-radius:0 8px 8px 0;padding:11px 15px;font-size:12.5px;color:var(--ink-1)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:10px}
+.tile{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:13px 15px}
+.tile .lab{font-size:11.5px;color:var(--ink-2);margin-bottom:3px}
+.tile .val{font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+.tile .foot{font-size:11px;color:var(--ink-3);margin-top:3px}
+.tile.b-good{border-left:3px solid var(--good)} .tile.b-warn{border-left:3px solid var(--warn)}
+.tile.b-crit{border-left:3px solid var(--crit)} .tile.b-unk{border-left:3px solid var(--ink-3)}
+.tile.b-acc{border-left:3px solid var(--accent)} .tile.b-ser{border-left:3px solid var(--serious)}
+.grades{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.gcard{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:15px 17px;
+  border-top:3px solid var(--axis)}
+.gcard.g3{border-top-color:var(--good)} .gcard.g2{border-top-color:var(--warn)}
+.gcard.g1{border-top-color:var(--crit)} .gcard.g0{border-top-color:var(--ink-3)}
+.gcard .gname{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;margin-bottom:2px}
+.gcard .gdef{font-size:13px;margin-bottom:9px;font-weight:500}
+.gcard ul{margin:0;padding-left:16px;font-size:12.5px;color:var(--ink-2)}
+.gcard li{margin-bottom:3px}
+.gcard .gcount{margin-left:auto;font-size:11.5px;color:var(--ink-3);font-weight:500}
+.dot{width:10px;height:10px;border-radius:2px;flex:none;display:inline-block}
+.dot.good{background:var(--good)} .dot.warn{background:var(--warn)}
+.dot.crit{background:var(--crit)} .dot.unk{background:var(--ink-3)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+.rule-t th,.rule-t td{border-bottom:1px solid var(--rule);padding:9px 11px;text-align:left;vertical-align:top}
+.rule-t th{font-size:11.5px;color:var(--ink-2);font-weight:600;background:var(--page)}
+.rule-t td code{font-size:12px;background:var(--unk-bg);padding:1px 5px;border-radius:4px}
+.flags{display:flex;flex-wrap:wrap;gap:8px}
+.flag{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);
+  border-radius:7px;padding:7px 11px;background:var(--surface-1);font-size:12.5px}
+.flag b{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;
+  background:var(--unk-bg);padding:1px 6px;border-radius:4px;color:var(--ink-1)}
+.ctrls{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.chip{border:1px solid var(--border);background:var(--surface-1);color:var(--ink-2);
+  border-radius:99px;padding:6px 13px;font-size:12.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.chip:hover{border-color:var(--axis)}
+.chip[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent);color:var(--ink-1);font-weight:600}
+input[type=search]{border:1px solid var(--border);background:var(--surface-1);color:var(--ink-1);
+  border-radius:8px;padding:7px 12px;font-size:13px;min-width:200px;font-family:inherit}
+input[type=search]:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp .gl{font-size:11px;color:var(--ink-3);letter-spacing:.06em;font-weight:600;margin-right:2px}
+.mwrap{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;
+  overflow:auto;box-shadow:var(--shadow);max-height:80vh}
+.m{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
+.m thead th{position:sticky;top:0;z-index:3;background:var(--surface-1);
+  border-bottom:1.5px solid var(--axis);padding:9px 7px;font-size:11.5px;color:var(--ink-2);
+  font-weight:600;text-align:center;white-space:nowrap}
+.m thead th.tl{text-align:left;min-width:280px;left:0;z-index:4}
+.m thead th .qh{display:block;font-size:10.5px;color:var(--ink-3);font-weight:400;margin-top:1px}
+.m tbody td{border-bottom:1px solid var(--rule);padding:7px;vertical-align:middle;text-align:center}
+.m tbody td.tl{text-align:left;position:sticky;left:0;background:var(--surface-1);z-index:2}
+.m tbody tr{cursor:pointer}
+.m tbody tr:hover td,.m tbody tr:hover td.tl{background:var(--accent-bg)}
+.m tbody tr.sel td,.m tbody tr.sel td.tl{background:var(--accent-bg)}
+.lgroup td{background:var(--page)!important;font-size:11px;font-weight:700;color:var(--ink-2);
+  letter-spacing:.07em;padding:7px 10px!important;text-align:left!important;
+  border-bottom:1px solid var(--axis)!important;position:sticky;left:0}
+.sname{font-weight:550;line-height:1.35}
+.sorg{font-size:11px;color:var(--ink-3);margin-top:1px}
+.badge{display:inline-block;font-size:9.5px;font-weight:700;border-radius:3px;padding:1px 5px;margin-left:5px;vertical-align:1px}
+.badge.ver{background:var(--accent-bg);color:var(--ink-1);border:1px solid var(--accent)}
+.gtag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+  border-radius:5px;padding:3px 8px;border:1px solid var(--border);white-space:nowrap}
+.gtag.G3{background:var(--good-bg)} .gtag.G2{background:var(--warn-bg)}
+.gtag.G1{background:var(--crit-bg)} .gtag.G0{background:var(--unk-bg)}
+.mini{display:inline-block;font-family:ui-monospace,Menlo,monospace;
+  font-size:10px;background:var(--unk-bg);border-radius:3px;padding:1px 4px;margin:1px 2px 0 0;color:var(--ink-2)}
+.mk{display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  border-radius:6px;padding:4px 8px;font-size:11.5px;font-weight:600;min-width:58px;
+  border:1px solid transparent;color:var(--ink-1)}
+.mk.ok{background:var(--good-bg);border-color:rgba(12,163,12,.35)}
+.mk.cond{background:var(--warn-bg);border-color:rgba(250,178,25,.5)}
+.mk.no{background:var(--crit-bg);border-color:rgba(208,59,59,.35)}
+.mk.unknown{background:var(--unk-bg);border-color:var(--border);color:var(--ink-2)}
+.mk .g{font-size:12px;line-height:1}
+.ct{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:4px 8px;
+  font-size:11.5px;font-weight:600;border:1px solid transparent;white-space:nowrap;min-width:74px;justify-content:center}
+.ct.free{background:var(--good-bg);border-color:rgba(12,163,12,.3)}
+.ct.gated{background:var(--warn-bg);border-color:rgba(250,178,25,.45)}
+.ct.paid{background:var(--ser-bg);border-color:rgba(236,131,90,.45)}
+.ct.unknown{background:var(--unk-bg);border-color:var(--border);color:var(--ink-2)}
+.vt{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+  border-radius:6px;font-size:12.5px;font-weight:800;border:1px solid var(--border)}
+.vt.A{background:var(--good-bg);border-color:rgba(12,163,12,.45)}
+.vt.B{background:var(--accent-bg);border-color:rgba(42,120,214,.4)}
+.vt.C{background:var(--unk-bg)}
+.vt.D{background:var(--ser-bg);border-color:rgba(236,131,90,.4)}
+.vt.X{background:var(--crit-bg);border-color:rgba(208,59,59,.4)}
+.detail{margin-top:14px;background:var(--surface-1);border:1px solid var(--border);
+  border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+.detail .dh{padding:15px 18px;border-bottom:1px solid var(--rule);
+  display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.detail .dh .t{font-size:16px;font-weight:650;line-height:1.3}
+.detail .dh .m2{font-size:12px;color:var(--ink-3);margin-top:2px}
+.detail .db{padding:16px 18px}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:10px;margin-bottom:14px}
+.q{border:1px solid var(--border);border-radius:8px;padding:11px 13px;background:var(--page)}
+.q .ql{font-size:11.5px;color:var(--ink-2);margin-bottom:6px;font-weight:600}
+.q .qn{font-size:12px;color:var(--ink-2);margin-top:7px;line-height:1.5}
+.banner{border-radius:0 8px 8px 0;padding:10px 14px;font-size:12.5px;margin-bottom:10px}
+.b-val{border-left:3px solid var(--good);background:var(--good-bg)}
+.b-cost{border-left:3px solid var(--accent);background:var(--accent-bg)}
+.b-why{border-left:3px solid var(--accent);background:var(--accent-bg)}
+.b-caut{border-left:3px solid var(--serious);background:var(--ser-bg)}
+.dlink{display:inline-block;margin-top:10px;font-size:12.5px;color:var(--accent)}
+.empty{padding:30px;text-align:center;color:var(--ink-3);font-size:13px}
+.acts{display:grid;gap:9px}
+.act{display:flex;gap:12px;align-items:flex-start;background:var(--surface-1);
+  border:1px solid var(--border);border-radius:9px;padding:12px 15px;border-left:3px solid var(--crit)}
+.act.soon{border-left-color:var(--warn)} .act.later{border-left-color:var(--ink-3)}
+.act .an{font-size:11px;font-weight:700;color:var(--ink-3);min-width:52px;padding-top:2px}
+.act .at{font-size:13px;font-weight:600;margin-bottom:2px}
+.act .ad{font-size:12.5px;color:var(--ink-2)}
+footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--rule);
+  font-size:12px;color:var(--ink-3);line-height:1.7}
+@media print{.ctrls,.themebtn{display:none}.mwrap{max-height:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="top">
+  <div>
+    <h1>데이터 거버넌스 판정 매트릭스 <span class="muted" style="font-size:17px;font-weight:500">v2</span></h1>
+    <p class="sub">CopyLane · <b>「써도 되는가 · 쓸 가치가 있는가 · 얼마가 드는가」</b>를 한 화면에서 &nbsp;·&nbsp; 기준일 <b>2026-08-20</b> &nbsp;·&nbsp; 기획문서 v3.8 4-1·4-2절 + 당일 온라인 실측 &nbsp;·&nbsp; <b>작성자 오한빈 (팀장)</b></p>
+  </div>
+  <button class="themebtn" id="tt">◐ 다크 모드</button>
+</div>
+
+<div class="disclaim">
+  <b>⚠️ 팀의 운영 판정이지 법적 확정 판단이 아닙니다.</b>
+  학내 프로젝트 범위에서 <b>5인이 같은 기준으로 판단</b>하기 위한 것입니다. 상업 배포 전에는 각 소스의 이용조건을 다시 확인하고, 경계 사례는 <b>2인 확인 + 근거 URL 기록</b>을 남기십시오.
+  ❔는 <b>확인되지 않았다는 뜻이지 허용된다는 뜻이 아닙니다</b> — G0는 확정될 때까지 G2로 취급합니다.
+  <b>비용</b>은 금액만이 아니라 <b>리드타임(승인 대기)</b>을 포함합니다 — 9주 프로젝트에서는 2주 심사가 3만원보다 비쌉니다.
+</div>
+
+<section>
+  <div class="sec-head"><span class="n">요약</span><h2>지금 상태</h2></div>
+  <div class="tiles" id="tiles"></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">1</span><h2>등급이 뜻하는 것</h2>
+    <span class="sub">등급은 <b>소스가 아니라 추출물(FRAGMENT)의 속성</b>입니다 — 한 문서 안에서도 조각마다 갈립니다.</span></div>
+  <div class="grades" id="grades"></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">2</span><h2>활용 가치와 비용</h2>
+    <span class="sub"><b>「써도 되는가」와 「쓸 가치가 있는가」는 다른 질문</b>입니다. 써도 되지만 가치 없는 것, 가치 있지만 못 쓰는 것이 각각 있습니다.</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px">
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:9px">활용 가치</div>
+      <table class="rule-t"><tbody>
+        <tr><td style="width:34px"><span class="vt A">A</span></td><td><b>핵심</b> — 없으면 해당 태스크가 죽는다</td><td class="muted" style="width:44px;text-align:right" id="cA"></td></tr>
+        <tr><td><span class="vt B">B</span></td><td><b>유용</b> — 품질을 올린다</td><td class="muted" style="text-align:right" id="cB"></td></tr>
+        <tr><td><span class="vt C">C</span></td><td><b>보조</b> — 있으면 좋다</td><td class="muted" style="text-align:right" id="cC"></td></tr>
+        <tr><td><span class="vt D">D</span></td><td><b>가치 낮음</b> — 비용 대비 이득이 작다</td><td class="muted" style="text-align:right" id="cD"></td></tr>
+        <tr><td><span class="vt X">X</span></td><td><b>탈락</b> — 쓸 수 없거나 쓸 이유가 없다</td><td class="muted" style="text-align:right" id="cX"></td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:9px">비용 — 돈과 시간을 함께 봅니다</div>
+      <table class="rule-t"><tbody>
+        <tr><td style="width:92px"><span class="ct free">✔ 무료</span></td><td>즉시 받을 수 있다. 인증키 자동 발급 포함</td></tr>
+        <tr><td><span class="ct gated">△ 승인필요</span></td><td><b>돈은 안 들지만 시간이 든다.</b> 신청·심사 2~6주. <b>9주 프로젝트에서는 이게 진짜 비용</b></td></tr>
+        <tr><td><span class="ct paid">$ 유료</span></td><td>금전 지출이 발생한다</td></tr>
+        <tr><td><span class="ct unknown">? 미확인</span></td><td>확인되지 않았다</td></tr>
+      </tbody></table>
+      <div style="font-size:12px;color:var(--ink-2);margin-top:10px;border-left:3px solid var(--serious);background:var(--ser-bg);padding:9px 12px;border-radius:0 7px 7px 0">
+        🚨 <b>숨은 비용 셋</b> — ① 회신 대기(협회 문의는 무기한) ② GPU(모델은 무료여도 학습은 아니다) ③ 상업화 시점의 라이선스 협의
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">3</span><h2>제약 플래그</h2>
+    <span class="sub">등급과 <b>별개로</b> 동시에 붙습니다. G3여도 플래그가 붙으면 용도가 막힙니다.</span></div>
+  <div class="flags" id="flags"></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">4</span><h2>다섯 질문과 판정 규칙</h2></div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table class="rule-t">
+      <thead><tr><th style="width:112px">질문</th><th style="width:180px">무엇을 묻는가</th><th>판정 규칙</th><th style="width:240px">막히면 무슨 일이</th></tr></thead>
+      <tbody>
+        <tr><td><b>학습</b><div class="muted" style="font-size:11.5px">U1</div></td>
+          <td>AI 모델 학습에 투입할 수 있는가</td>
+          <td><code>G3</code> → 원문 그대로 · <code>G2</code> → 추출한 <b>사실만</b> · <code>G1</code> → 금지 · <code>NC/재배포금지</code>가 붙고 <b>배포 모델</b>이면 → <b>금지</b></td>
+          <td>DAPT·sLLM 파인튜닝에서 제외. 군집화 같은 <b>배치 분석</b>은 별도 판정</td></tr>
+        <tr><td><b>상업</b></td>
+          <td>상업적으로 써도 문제가 없는가</td>
+          <td><code>NC 없음</code> AND <code>U4 허용</code> → <span class="mk ok"><span class="g">✔</span>가능</span> · <code>NC</code> → <span class="mk no"><span class="g">✕</span>불가</span> · <code>BY</code>만 → 출처표시 <span class="mk cond"><span class="g">△</span>조건부</span></td>
+          <td>학내 진행은 되나 <b>제품화 경로가 막힘</b>. 지금 구분 안 하면 나중에 데이터를 뜯어내야 함</td></tr>
+        <tr><td><b>원문</b></td>
+          <td>문장 원문을 그대로 쓸 수 있는가</td>
+          <td><code>G3</code> → <span class="mk ok"><span class="g">✔</span>가능</span> · <code>G2</code> → <span class="mk no"><span class="g">✕</span>불가</span> (사실·어휘·수치만) · <code>G1</code> → <span class="mk no"><span class="g">✕</span>불가</span><br><span class="muted">🚨 저작권은 <b>표현</b>을 보호하고 <b>사실</b>은 보호하지 않는다 — 이것이 G2의 근거</span></td>
+          <td>금지 표현 <b>목록</b>은 취해도 <b>해설 문장</b>은 못 취함. 원 출처(법령·고시)로 소급하면 G3로 올라감</td></tr>
+        <tr><td><b>인용</b><div class="muted" style="font-size:11.5px">U3</div></td>
+          <td>화면·리포트에 근거로 인용할 수 있는가</td>
+          <td><code>G3</code> → <span class="mk ok"><span class="g">✔</span>가능</span> · <code>G2</code> → 원 출처로 <b>소급 인용</b> · <code>BY</code> → 출처표시 필수</td>
+          <td>RAG 인용 검증에서 제외. <b>협회 해설서 대신 시행규칙 별표를 인용</b>하면 인용 품질도 함께 올라감</td></tr>
+        <tr><td><b>배포</b><div class="muted" style="font-size:11.5px">U4</div></td>
+          <td><b>모델·서비스</b>를 내보낼 수 있는가</td>
+          <td>🚨 <b>「모델 배포」와 「데이터 재배포」는 다른 축이다</b> — 뭉뚱그리면 과잉 차단이 난다<br>
+            <code>U4 모델 배포</code> → 이 열이 답한다 · <code>NOREDIST</code> → 데이터 재가공·배포 금지 <b>플래그로 따로 표시</b><br>
+            <span class="muted">전파 규칙: <code>배포 모델 학습 = { f | f.U1 AND f.U4 }</code> — <b>NOREDIST는 여기에 걸리지 않는다</b><br>
+            데이터셋 공개 = <code>NOREDIST 없음</code></span></td>
+          <td>가중치에 흡수된 데이터는 되돌릴 수 없다. <b>이 판정을 학습 전에</b> 내려야 하는 이유</td></tr>
+        <tr><td><b>NOREDIST</b><div class="muted" style="font-size:11.5px">플래그</div></td>
+          <td>데이터를 <b>재가공해 배포</b>할 수 있는가</td>
+          <td><span class="mk no"><span class="g">✕</span>불가</span>여도 <b>학습·상업·모델 배포는 열려 있을 수 있다</b><br>
+            <span class="muted">🚨 AI Hub가 정확히 이 경우다 — 모델·서비스 배포와 영리 활용은 자유, 데이터 재배포만 불가</span></td>
+          <td>골든셋에 해당 데이터 유래 문장이 섞이면 <b>그 골든셋을 공개할 수 없다</b>. <code>provenance</code> 필드로 추적</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div style="margin:22px 0;padding:14px 18px;border-left:4px solid #b45309;background:#fffbeb;border-radius:0 6px 6px 0;line-height:1.65">
+  <b style="color:#b45309">🔄 2026-08-31 — 이 매트릭스와 <code>data_sources.yaml</code> 은 범위가 다릅니다 (D-90)</b><br>
+  <span style="font-size:13px">
+  이 문서는 <b>판정 근거</b>(왜 그렇게 봤는가)이고 <b>73건</b>입니다.
+  레지스트리 <code>data_sources.yaml</code> 은 <b>집행 대상</b>(수집기가 읽는 허용 목록)이고
+  <b>등재 43 · 편입금지 9 · 미채택 10</b> 입니다.<br>
+  차이가 나는 이유는 등재 단위가 「데이터셋」이 아니라 <b>「이용조건」</b> 이기 때문입니다 —
+  법제처 OPEN API로 받는 11종(법령·별표·고시·지침·재결례·판례)은 OC 키 하나·조건 하나이므로
+  <code>law_go_kr</code> <b>1건</b>으로 묶입니다. 반대로 AI Hub 6종은 <b>승인 상태가 따로 흐르므로</b> 각각 등재합니다.<br>
+  <b>정정 4건</b> — <code>kcia_guideline</code> G0→<b>G2</b>(2025판) ·
+  <code>aihub_review_corpus</code> 전 용도 deny→<b>G3 + NOREDIST</b> ·
+  <code>unsmile</code> <b>미채택</b>(ND 조항) · <code>k_mhas</code> <b>G3</b>(CC BY-SA 확인).<br>
+  🚨 <b>G0 는 전 용도 deny 로 닫혔습니다</b> — 「미확인」을 「아마 괜찮음」으로 읽는 순간 등급이 무의미해지기 때문입니다.
+  아래 표의 <b>학습·상업·원문·인용·배포</b> 열이 <code>cond</code> 인 G0 행은 레지스트리에서 전부 <code>deny</code> 입니다.
+  </span>
+</div>
+
+<div class="sec-head"><span class="n">5</span><h2>소스 × 판정 매트릭스</h2>
+    <span class="sub">행을 클릭하면 <b>가치 판단·비용·근거·주의사항</b>이 아래에 펼쳐집니다.</span></div>
+  <div class="ctrls">
+    <div class="grp"><span class="gl">층</span><span id="f-layer"></span></div>
+    <div class="grp"><span class="gl">등급</span><span id="f-grade"></span></div>
+    <div class="grp"><span class="gl">가치</span><span id="f-value"></span></div>
+    <div class="grp"><span class="gl">비용</span><span id="f-cost"></span></div>
+    <div class="grp"><span class="gl">보기</span>
+      <button class="chip" data-view="now" aria-pressed="false">지금 쓸 수 있는 것</button>
+      <button class="chip" data-view="blocked" aria-pressed="false">막힌 것</button>
+      <button class="chip" data-view="unknown" aria-pressed="false">확인 필요</button>
+      <button class="chip" data-view="verified" aria-pressed="false">실측 완료</button>
+    </div>
+    <input type="search" id="q" placeholder="소스·기관·키워드 검색">
+    <button class="chip" id="reset">초기화</button>
+    <span class="muted" style="font-size:12px" id="cnt"></span>
+  </div>
+  <div class="mwrap">
+    <table class="m">
+      <thead><tr>
+        <th class="tl">소스</th>
+        <th style="width:88px">등급</th>
+        <th style="width:98px">제약</th>
+        <th style="width:96px">비용<span class="qh">돈+시간</span></th>
+        <th style="width:82px">학습<span class="qh">AI 학습</span></th>
+        <th style="width:82px">상업<span class="qh">상업 이용</span></th>
+        <th style="width:82px">원문<span class="qh">문장 원문</span></th>
+        <th style="width:82px">인용<span class="qh">화면 인용</span></th>
+        <th style="width:82px">배포<span class="qh">함께 배포</span></th>
+        <th style="width:56px">가치<span class="qh">A~X</span></th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div id="detail"></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">6</span><h2>이 표에서 바로 나오는 조치</h2></div>
+  <div class="acts">
+    <div class="act"><div class="an">🚨 오늘</div><div><div class="at">KLUE-RoBERTa를 kcbert-base로 교체할지 반나절 안에 결정</div>
+      <div class="ad">모델 카드와 HF API를 교차 확인한 결과 <b><code>license</code> 키가 아예 없습니다.</b> 데이터셋의 CC BY-SA가 모델 가중치에 적용된다고 볼 근거가 없습니다. <code>beomi/kcbert-base</code>는 <b>Apache 2.0</b>이고, 댓글·구어체 사전학습이라 광고 문구 도메인에 <b>오히려 더 적합</b>합니다. 나란히 베이스라인을 돌려 성능차를 재고 결정하십시오 — 지금이면 비용 0, 파인튜닝 후에 알면 트랙 하나가 날아갑니다. (D-60)</div></div></div>
+    <div class="act"><div class="an">오늘</div><div><div class="at">법제처 OPEN API OC 키 신청</div>
+      <div class="ad">3층 전체와 4층 별표가 이 키 하나에 달려 있습니다. 발급 1~2 영업일 — <b>선행기간(~8/27) 내</b>에 던져야 1W 수집이 밀리지 않습니다.</div></div></div>
+    <div class="act"><div class="an">오늘</div><div><div class="at">문의 2건 동시 발송 — 화장품협회 · KOBACO</div>
+      <div class="ad">협회는 해설서 이용조건(G2→G3 승격), KOBACO는 MCR의 <b>재배포·AI 학습 조항</b>입니다. MCR 약관에는 그 조항이 <b>아예 없는데, 없다는 건 허용이 아니라 미정</b>입니다. 서면 답변을 받아두는 것이 이 프로젝트에서 가장 값싼 리스크 제거입니다.</div></div></div>
+    <div class="act soon"><div class="an">선행</div><div><div class="at">KREI 식품소비행태조사를 먼저 받아 본다 — 절차가 0이다</div>
+      <div class="ad">신청·승인·회원가입 없이 <b>SPSS 원자료가 즉시</b> 나옵니다(3,188가구 / 성인 5,851명). 다만 <b>건강기능식품 문항 포함 여부가 미확인</b>이니 성인 설문지 PDF를 먼저 열어보십시오 — 1시간.</div></div></div>
+    <div class="act soon"><div class="an">1W</div><div><div class="at">기능성 원료 소스 3중 중복을 하나로 정리</div>
+      <div class="ad">식품안전나라 게시판(고시형 96 + 개별인정형 472) · API 15058359 · API 15074311이 같은 데이터를 다르게 담고 있을 수 있습니다. 셋을 열어 대조하고 <b>하나를 정본으로</b> 정하십시오. 안 하면 세 벌을 다 수집합니다.</div></div></div>
+    <div class="act soon"><div class="an">2W</div><div><div class="at">Meta 광고 라이브러리에서 수기로 100~200건 — 평가셋 전용</div>
+      <div class="ad">API는 <b>한국 상업광고를 0건 반환</b>합니다(EU 외 지역은 정치·이슈 광고만). 하지만 UI에서는 <b>현재 집행 중인 한국 화장품·건기식 광고 본문 카피</b>를 그대로 볼 수 있습니다. 자동 수집은 약관 위반이니 <b>수기로, 평가셋에만</b>. 학습 출처와 분리되어 홀드아웃 품질이 크게 오릅니다.</div></div></div>
+    <div class="act soon"><div class="an">🔄 정정</div><div><div class="at">AI Hub 격리 정책을 뒤집습니다 — 막을 곳이 반대였습니다</div>
+      <div class="ad">FAQ 원문 확인 결과 <b>모델·서비스 배포와 영리 판매는 자유</b>이고, 막히는 건 <b>데이터 재가공 배포</b>뿐입니다. 앞서 잡았던 <code>data/g2_nc/</code>(학습 스크립트에서 제외)는 <b>과잉 차단이었습니다.</b> 바꿀 것: 디렉터리를 <code>data/g2_norepub/</code>로, doctor 14번을 <b>「학습 스크립트가 참조하는가」에서 「데이터셋 공개·배포 스크립트가 참조하는가」로</b>. 그리고 골든셋 각 행에 <code>provenance</code> 필드를 두어 AI Hub 유래분을 추적하십시오 — <b>그 골든셋은 공개 배포할 수 없습니다.</b></div></div></div>
+    <div class="act later"><div class="an">선행</div><div><div class="at">디렉터리 물리 분리 + doctor 검사 + 캐스케이드 삭제 테스트</div>
+      <div class="ad">5인이 각자 작업하면 문서 안내만으로는 반드시 누가 그냥 엽니다. 경로 정책은 grep으로 강제하십시오. 캐스케이드 삭제는 <b>데이터가 쌓인 뒤에는 만들 수 없습니다.</b></div></div></div>
+  </div>
+</section>
+
+<footer>
+  <b>판정 근거</b> — 기획문서 v3.8 4-1절(거버넌스 게이트) · 4-2절(채택 4 / 제외 6) · 4-3절(6층 수집 대상) · 7-3절(모델 라이선스도 게이트 대상)<br>
+  <b>당일 실측</b> — 화장품협회 2025 해설서 · AI Hub 이용정책 및 개별 데이터셋 4종 · 법제처 OPEN API · 기능성표시식품 공개목록 · KOSIS / KOBACO MCR / KREI / KNHANES / KISDI · HF 모델·데이터셋 라이선스 · Meta·Google·YouTube·X·Reddit API 약관 · AiSAC 상세 페이지<br>
+  <b>작성자</b> — 오한빈 (팀장) · SKN Final Project · CopyLane · 주관 트랙 T1<br>
+  <b>★ 표시</b>는 신규 발견 또는 정정 항목 · <b>실측</b> 배지는 2026-08-20에 직접 확인한 항목 · <b>미확인</b>은 접근 차단으로 검증하지 못한 항목이며 추측으로 채우지 않았습니다
+</footer>
+</div>
+<script>
+/*__DATA__*/
+
+const GRADES = [
+  {k:'G3', cls:'good', name:'G3 — 원문 자유', def:'원문을 그대로 써도 된다',
+   li:['학습 · RAG · 화면 인용 · 배포 <b>전부 허용</b>','법령·고시·공공데이터가 여기 속한다',
+       '★ <b>Phase 0을 G3만으로 완성</b>하면 회신을 기다리는 동안에도 데모가 성립한다']},
+  {k:'G2', cls:'warn', name:'G2 — 사실만', def:'원문은 못 쓰고, 사실·근거만 뽑아 쓴다',
+   li:['<b>표현 목록은 취하되 해설 문장·편집·배열은 취하지 않는다</b>',
+       '저작권은 <b>표현</b>을 보호하고 <b>사실</b>은 보호하지 않는다',
+       '가능하면 <b>원 출처(법령·고시)로 소급</b>해 2차 문서 의존을 끊는다 → G3 승격 + 인용 품질 상승']},
+  {k:'G1', cls:'crit', name:'G1 — 배제', def:'수집 자체를 하지 않는다',
+   li:['AI 학습·TDM 금지 명시 / robots 크롤링 금지 / 재배포 금지 서약',
+       '개인정보 포함 + 비식별 불가 / 영업비밀 / 저작권자 불명',
+       '<code>data/.g1_blocked</code>에 <b>배제했다는 기록만</b> 남긴다']},
+  {k:'G0', cls:'unk', name:'G0 — 미표기', def:'이용조건이 적혀 있지 않다 → G2로 취급',
+   li:['🚨 <b>허용이 아니라 미확인이다</b>','문의해 확정되면 승격, 회신이 없으면 <b>G2로 고정</b>',
+       '<code>data/quarantine/</code>에 두고 <b>어떤 스크립트도 읽지 않는다</b>']}
+];
+const FLAGS = [
+  ['BY','출처표시','쓸 수 있으나 출처를 밝혀야 한다'],
+  ['NC','비영리','🚨 상업 이용 불가 — 제품화 경로가 막힌다'],
+  ['SA','동일조건','파생물에 같은 라이선스를 물려야 한다'],
+  ['PII','개인정보','🚨 마스킹 불가면 G1 배제'],
+  ['TOS','약관제약','서비스 약관이 별도 제한을 건다'],
+  ['GATED','게이팅','🚨 신청·승인 — 리드타임이 곧 비용'],
+  ['NOREDIST','데이터 재배포 금지','🚨 <b>모델 배포와는 다른 축</b> — 학습·영리 활용은 열려 있을 수 있다'],
+  ['PREAPPROVAL','산출물 사전승인','🚨🚨 <b>결과물을 공개할 때마다</b> 제공기관 승인 — 수집이 아니라 <b>발표·배포 시점</b>을 막는다'],
+  ['NOSTORE','저장·별도DB 금지','🚨 <b>수집해서 쌓는 것 자체가 금지</b> — 캐시도 포함. 파이프라인이 성립하지 않는다'],
+  ['QUERYLOG','쿼리 역유출','🚨 <b>우리가 보낸 요청을 제공자가 보관·활용</b>한다 — 「고객 데이터를 외부로 보내지 않는다」는 온프레미스 전제와 충돌']
+];
+const GLYPH={ok:'✔',cond:'△',no:'✕',unknown:'?'}, LABEL={ok:'가능',cond:'조건부',no:'불가',unknown:'미확인'};
+const CGLYPH={free:'✔',gated:'△',paid:'$',unknown:'?'}, CLABEL={free:'무료',gated:'승인필요',paid:'유료',unknown:'미확인'};
+const QCOLS=[['train','학습'],['commercial','상업'],['raw','원문'],['cite','인용'],['deploy','배포']];
+
+(function(){
+  const g=k=>SOURCES.filter(s=>s.grade===k).length, v=k=>SOURCES.filter(s=>s.value===k).length;
+  const c=k=>SOURCES.filter(s=>s.cost===k).length;
+  const nowUsable=SOURCES.filter(s=>s.cost==='free'&&['A','B'].includes(s.value)&&s.u.train!=='no'&&s.u.train!=='unknown').length;
+  const t=[
+    {c:'b-good',lab:'G3 · 원문 자유',val:g('G3'),foot:'전체 '+SOURCES.length+'종 중'},
+    {c:'b-warn',lab:'G2 · 사실만',val:g('G2'),foot:'원문 사용 불가'},
+    {c:'b-crit',lab:'G1 · 배제',val:g('G1'),foot:'수집하지 않음'},
+    {c:'b-unk',lab:'G0 · 미확인',val:g('G0'),foot:'🚨 확정 전까지 G2'},
+    {c:'b-good',lab:'가치 A · 핵심',val:v('A'),foot:'B 유용 '+v('B')+'종'},
+    {c:'b-crit',lab:'가치 X · 탈락',val:v('X'),foot:'D 가치낮음 '+v('D')+'종'},
+    {c:'b-good',lab:'무료·즉시',val:c('free'),foot:'절차 없이 받는다'},
+    {c:'b-warn',lab:'승인 필요',val:c('gated'),foot:'🚨 리드타임 2~6주'},
+    {c:'b-ser',lab:'유료',val:c('paid'),foot:'금전 지출 발생'},
+    {c:'b-acc',lab:'★ 지금 착수 가능',val:nowUsable,foot:'무료 + 가치 A·B + 학습 가능'}
+  ];
+  document.getElementById('tiles').innerHTML=t.map(x=>
+    `<div class="tile ${x.c}"><div class="lab">${x.lab}</div><div class="val">${x.val}</div><div class="foot">${x.foot}</div></div>`).join('');
+  ['A','B','C','D','X'].forEach(k=>{const el=document.getElementById('c'+k); if(el) el.textContent=v(k)+'종';});
+})();
+
+document.getElementById('grades').innerHTML=GRADES.map(g=>{
+  const n=SOURCES.filter(s=>s.grade===g.k).length;
+  return `<div class="gcard ${g.k.toLowerCase()}"><div class="gname"><span class="dot ${g.cls}"></span>${g.name}<span class="gcount">${n}종</span></div>
+    <div class="gdef">${g.def}</div><ul>${g.li.map(x=>`<li>${x}</li>`).join('')}</ul></div>`;}).join('');
+
+document.getElementById('flags').innerHTML=FLAGS.map(([k,n,d])=>
+  `<span class="flag"><b>${k}</b><span><b style="font-weight:600">${n}</b> <span class="muted">— ${d}</span></span></span>`).join('');
+
+const LAYERS=[...new Set(SOURCES.map(s=>s.layer))];
+const state={layer:new Set(),grade:new Set(),value:new Set(),cost:new Set(),view:null,q:''};
+document.getElementById('f-layer').innerHTML=LAYERS.map(l=>`<button class="chip" data-k="layer" data-v="${l}" aria-pressed="false">${l}</button>`).join('');
+document.getElementById('f-grade').innerHTML=['G3','G2','G1','G0'].map(g=>`<button class="chip" data-k="grade" data-v="${g}" aria-pressed="false">${g}</button>`).join('');
+document.getElementById('f-value').innerHTML=['A','B','C','D','X'].map(g=>`<button class="chip" data-k="value" data-v="${g}" aria-pressed="false">${g}</button>`).join('');
+document.getElementById('f-cost').innerHTML=[['free','무료'],['gated','승인필요'],['paid','유료']].map(([k,n])=>`<button class="chip" data-k="cost" data-v="${k}" aria-pressed="false">${n}</button>`).join('');
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.chip'); if(!b) return;
+  if(b.id==='reset'){['layer','grade','value','cost'].forEach(k=>state[k].clear()); state.view=null; state.q='';
+    document.getElementById('q').value=''; document.querySelectorAll('.chip[aria-pressed]').forEach(c=>c.setAttribute('aria-pressed','false')); render(); return;}
+  if(b.dataset.view!==undefined){
+    const on=b.getAttribute('aria-pressed')==='true';
+    document.querySelectorAll('[data-view]').forEach(c=>c.setAttribute('aria-pressed','false'));
+    state.view=on?null:b.dataset.view; if(!on) b.setAttribute('aria-pressed','true'); render(); return;}
+  const k=b.dataset.k,v=b.dataset.v; if(!k) return;
+  const set=state[k];
+  if(set.has(v)){set.delete(v); b.setAttribute('aria-pressed','false');} else {set.add(v); b.setAttribute('aria-pressed','true');}
+  render();
+});
+document.getElementById('q').addEventListener('input',e=>{state.q=e.target.value.trim().toLowerCase(); render();});
+
+let selected=null;
+function pass(s){
+  if(state.layer.size&&!state.layer.has(s.layer)) return false;
+  if(state.grade.size&&!state.grade.has(s.grade)) return false;
+  if(state.value.size&&!state.value.has(s.value)) return false;
+  if(state.cost.size&&!state.cost.has(s.cost)) return false;
+  if(state.view==='now'&&!(s.cost==='free'&&['A','B'].includes(s.value)&&s.u.train!=='no'&&s.u.train!=='unknown')) return false;
+  if(state.view==='blocked'&&!QCOLS.some(([k])=>s.u[k]==='no')) return false;
+  if(state.view==='unknown'&&!(s.grade==='G0'||QCOLS.some(([k])=>s.u[k]==='unknown')||s.cost==='unknown')) return false;
+  if(state.view==='verified'&&!s.verified) return false;
+  if(state.q){const h=(s.name+' '+s.org+' '+s.layer+' '+s.why+' '+s.caution+' '+s.scale+' '+s.valueNote+' '+s.costNote+' '+s.constraints.join(' ')).toLowerCase();
+    if(!h.includes(state.q)) return false;}
+  return true;
+}
+const mk=v=>`<span class="mk ${v}"><span class="g">${GLYPH[v]}</span>${LABEL[v]}</span>`;
+const ct=v=>`<span class="ct ${v}"><span>${CGLYPH[v]}</span>${CLABEL[v]}</span>`;
+const gd=g=>`<span class="gtag ${g}"><span class="dot ${g==='G3'?'good':g==='G2'?'warn':g==='G1'?'crit':'unk'}"></span>${g}</span>`;
+
+function render(){
+  const rows=SOURCES.filter(pass);
+  document.getElementById('cnt').textContent=`${rows.length} / ${SOURCES.length}종`;
+  let html='',last=null;
+  for(const s of rows){
+    if(s.layer!==last){last=s.layer; html+=`<tr class="lgroup"><td colspan="10">${s.layer}</td></tr>`;}
+    html+=`<tr data-id="${s.id}" class="${selected===s.id?'sel':''}">
+      <td class="tl"><div class="sname">${s.name}${s.verified?'<span class="badge ver">실측</span>':''}</div>
+        <div class="sorg">${s.org} · ${s.access} · ${s.scale}</div></td>
+      <td>${gd(s.grade)}</td>
+      <td>${s.constraints.length?s.constraints.map(c=>`<span class="mini">${c}</span>`).join(''):'<span class="muted" style="font-size:11px">없음</span>'}</td>
+      <td>${ct(s.cost)}</td>
+      ${QCOLS.map(([k])=>`<td>${mk(s.u[k])}</td>`).join('')}
+      <td><span class="vt ${s.value}">${s.value}</span></td></tr>`;
+  }
+  document.getElementById('tb').innerHTML=html||`<tr><td colspan="10" class="empty">조건에 맞는 소스가 없습니다.</td></tr>`;
+  if(selected&&!rows.some(r=>r.id===selected)) selected=null;
+  renderDetail();
+}
+document.getElementById('tb').addEventListener('click',e=>{
+  const tr=e.target.closest('tr[data-id]'); if(!tr) return;
+  selected=(selected===tr.dataset.id)?null:tr.dataset.id; render();
+  if(selected) document.getElementById('detail').scrollIntoView({behavior:'smooth',block:'nearest'});
+});
+function renderDetail(){
+  const el=document.getElementById('detail');
+  if(!selected){el.innerHTML=''; return;}
+  const s=SOURCES.find(x=>x.id===selected);
+  el.innerHTML=`<div class="detail">
+    <div class="dh"><div style="flex:1;min-width:240px"><div class="t">${s.name}</div>
+      <div class="m2">${s.layer} · ${s.org} · ${s.access} · ${s.scale}</div></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span class="vt ${s.value}">${s.value}</span>${ct(s.cost)}${gd(s.grade)}
+        ${s.constraints.map(c=>`<span class="mini">${c}</span>`).join('')}</div></div>
+    <div class="db">
+      <div class="banner b-val"><b>활용 가치 ${s.value}</b> — ${s.valueNote}</div>
+      <div class="banner b-cost"><b>비용</b> — ${s.costNote}</div>
+      <div class="qgrid">${QCOLS.map(([k,lab])=>`<div class="q"><div class="ql">${lab}</div>${mk(s.u[k])}<div class="qn">${s.note[k]}</div></div>`).join('')}</div>
+      <div class="banner b-why"><b>왜 이 등급인가</b> — ${s.why}</div>
+      <div class="banner b-caut" style="margin-bottom:0"><b>주의</b> — ${s.caution}</div>
+      ${s.url?`<a class="dlink" href="${s.url}" target="_blank" rel="noopener">근거 페이지 열기 ↗</a>`:''}
+    </div></div>`;
+}
+const tt=document.getElementById('tt');
+if(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.dataset.theme='dark';
+function syncBtn(){tt.textContent=document.documentElement.dataset.theme==='dark'?'◐ 라이트 모드':'◐ 다크 모드';}
+tt.addEventListener('click',()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'; syncBtn();});
+syncBtn(); render();
+</script>
+</body>
+</html>
