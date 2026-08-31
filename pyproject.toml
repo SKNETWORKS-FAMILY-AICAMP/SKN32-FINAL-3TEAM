@@ -1,0 +1,83 @@
+# ============================================================
+# CopyLane — 프로젝트 정의 · 의존성 · 도구 설정
+# ------------------------------------------------------------
+#  🚨 환경 동일성의 단일 출처는 uv.lock 이다 (D-51).
+#     이 파일은 "무엇을" 쓰는지, uv.lock 은 "정확히 어느 버전"을 쓰는지 적는다.
+#     uv.lock 은 반드시 커밋한다 — 5인 환경 불일치 = 최소 1주 손실 (기획서 W1 #7).
+#
+#  사용법
+#    uv sync                 # 개발 환경 (dev 그룹 포함)
+#    uv sync --no-dev        # 배포 이미지 (테스트 도구 제외 — D-78)
+#    uv run pytest
+#    uv run ruff check .
+# ============================================================
+
+[project]
+name = "copylane"
+version = "0.1.0"
+description = "광고 문구 준법 검수·생성 플랫폼 (SKN Final Project)"
+readme = "README.md"
+# 🚨 패치 버전 고정은 .python-version 파일이 한다 (uv 가 자동으로 읽는다).
+#    여기는 상한/하한 가드이고, 실제 고정값은 .python-version 이다.
+requires-python = "==3.11.*"
+
+# ------------------------------------------------------------
+# 런타임 의존성 — W1 최소셋 (cli · db · 설정)
+#  🚨 주차별로 필요할 때 추가한다. 지금 LangGraph·GPU 패키지까지 넣으면
+#     W3 에 재 lock 이 반복되고 lock 충돌이 팀 전체로 번진다.
+# ------------------------------------------------------------
+dependencies = [
+    "typer>=0.12",          # launcher 껍데기 (D-51)
+    "rich>=13.7",           # 콘솔 메뉴·진단 출력
+    "pyyaml>=6.0",          # data_sources.yaml 레지스트리 (D-15)
+    "python-dotenv>=1.0",   # .env 로드 (.env 은 커밋 금지)
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2", # Windows 5인 환경 — binary 휠 필수
+    "pgvector>=0.3",
+    "alembic>=1.13",
+]
+
+[dependency-groups]
+# 🚨 dev 는 배포 이미지에 딸려가지 않는다 (uv sync --no-dev)
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "pre-commit>=3.7",
+]
+
+# ============================================================
+# ruff — lint + format
+# ============================================================
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# 🚨 docs/ 제외 — 문서 안의 예시 코드는 사람이 읽으라고 정렬한 것이다.
+#    포매터가 손대면 D-54 단일 출처 문서가 의도 없이 바뀐다.
+extend-exclude = ["data", "dist", "models", "mlruns", ".idea", "docs"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort — import 정렬
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+]
+ignore = [
+    "E501",  # 줄 길이는 formatter 가 처리
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ============================================================
+# pytest
+# ============================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "gate: 거버넌스 게이트 — 실패 시 진행 불가 (D-51)",
+]

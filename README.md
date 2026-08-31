@@ -1,7 +1,7 @@
 # CopyLane
 
 > **작성자** 오한빈 (팀장)
-> **작성** 2026-08-16 *(추정)* · **최종 갱신** 2026-08-31 04:31 KST
+> **작성** 2026-08-16 *(추정)* · **최종 갱신** 2026-08-31 12:13 KST
 
 **광고 문구 준법 검수·생성 플랫폼** — SKN Final Project (발표: 2026-10-26)
 
@@ -11,11 +11,39 @@
 > 설계 결정의 단일 출처는 [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md)입니다.
 > **ADR 개별 파일은 만들지 않습니다** — 결정은 `D-XX` 번호로만 지칭하십시오 (D-58).
 
+## 시작하기 — 처음 한 번
+
+```
+git clone https://github.com/LukasBeanz/CopyLane_Final_project.git
+cd CopyLane_Final_project
+setup.bat        더블클릭
+```
+
+이것으로 끝입니다. uv·Python 3.11.9·의존성·커밋 훅·`.env`·로컬 DB까지 자동으로 섭니다.
+여러 번 실행해도 안전합니다(멱등). 두 번째부터는 `uv run python launcher.py` 로 바로 들어가면 됩니다.
+
+**손이 필요한 것 두 가지**
+
+| 항목 | 이유 |
+|---|---|
+| **Docker Desktop** 설치 | 관리자 권한 + 재부팅이 필요해 자동화 불가. 없으면 DB만 빠지고 나머지는 그대로 섭니다 |
+| **`.env` 의 `LAW_OC_KEY`** | 법제처 개인 발급 키. 기계가 만들 수 없습니다 |
+
+> 🚨 `.python-version` · `uv.lock` · DB 이미지 태그는 **팀장 단독 변경**입니다. 각자 올리면 그 순간 환경이 갈립니다.
+> 커밋이 훅에 막히면 실패가 아닙니다 — 훅이 파일을 고친 것이니 `git add` 후 같은 커밋을 한 번 더 하십시오.
+
 ## 폴더 구조
 
 ```
-SKN32_Final_project/
-├── README.md
+CopyLane_Final_project/
+├── setup.bat                # ★ 더블클릭 진입점 — 이것만 실행하면 환경이 선다
+├── setup.ps1                #   부트스트랩 본문 (uv·PATH·의존성·훅·.env·DB·게이트)
+├── launcher.py              # ★ 작업 진입점 — 대화형 메뉴 + 직접 실행 (D-51)
+├── pyproject.toml           # 의존성 선언 · ruff · pytest 설정
+├── uv.lock                  # 🚨 커밋 필수 — 5인 환경 동일성은 여기서 보장된다
+├── .python-version          # 파이썬 패치 버전 고정
+├── docker-compose.yml       # 로컬 DB — pgvector. 127.0.0.1 만 바인딩 (P3-14)
+├── .pre-commit-config.yaml  # 커밋 훅 — ruff · gitleaks (P0-2)
 ├── data_sources.yaml        # 소스 레지스트리 — 등급(G0~G3)·용도(U1~U4) 게이트 (D-15)
 ├── .env.example             # 법제처 OC 키 · DB 접속 정보 틀 (.env은 절대 커밋 금지)
 ├── data/                    # 🚨 등급별 물리 분리 (D-19) — 위치가 곧 게이트
@@ -24,26 +52,42 @@ SKN32_Final_project/
 │   ├── g2_norepub/          #   데이터 재배포 금지 (모델 배포는 허용 — D-71)
 │   ├── quarantine/          #   G0 미판정 — 어떤 스크립트도 읽지 않는다
 │   └── .g1_blocked/         #   빈 디렉터리. 존재 자체가 「배제했다」는 기록
+├── tests/                   # 거버넌스 게이트 — 저장소 구조를 코드가 검사
 ├── docs/
 │   ├── 00_사실원장.md            # ★ 사실 원장 (SSOT)
-│   ├── 00_설계결정기록.md        # ★ 결정의 단일 원장 D-01~D-75 (adr/ 디렉터리 없음 — D-58)
-│   ├── 00_산출물현황.md            # 산출물 현황 (제출본은 여기서 빌드 — D-53)
+│   ├── 00_설계결정기록.md        # ★ 결정의 단일 원장 (adr/ 디렉터리 없음 — D-58)
+│   ├── 00_산출물현황.md          # 산출물 현황 (제출본은 여기서 빌드 — D-53)
 │   ├── 01_기획/
-│   │   ├── 01_주제확정_및_실행일정_v1.1.md
-│   │   └── 02_프로젝트기획서_v3.8.md
-│   ├── 02_설계/             # W1 산출물 — 청크·DB·LangGraph 상태 스키마
-│   └── 03_데이터/           # 전처리 사양 (D-74)
-└── scripts/                 # doctor.py · collect.py · build_pdf.py · gate.py (W1)
+│   ├── 02_설계/             # 청크·DB·LangGraph 상태 스키마
+│   ├── 03_데이터/           # 전처리 사양 (D-74)
+│   ├── 04_보안/
+│   ├── 05_배포/
+│   └── ohb/ ksr/ lse/ psj/ ssm/   # 개인 작업 문서 — 이니셜 = 브랜치명
+└── scripts/                 # doctor.py · collect.py · build_pdf.py · db/init/
 ```
 
-## 지금 어디인가 — W0 종료 시점 (8/16)
+## 지금 어디인가 — 1W (8/28 공식 착수 · 8/31 기준)
+
+> 일정·게이트 날짜의 단일 출처는 [`docs/00_사실원장.md`](docs/00_사실원장.md)입니다.
+> 🚨 기획서 8-1의 `W1`~`W10` 표기는 **폐기**했습니다. 주차는 공식 WBS의 `1W`~`9W` 로만 씁니다 (D-62).
 
 | 다음 마감 | 내용 |
 |---|---|
-| **W1 (8/17~8/23)** | 거버넌스 레지스트리 · 청크/DB/LangGraph 상태 스키마 · 법제처 OC 키 · launcher/doctor · W1 결단 체크리스트 7건 (기획서 8-4) |
-| **G0 (8/30)** | walking skeleton — end-to-end 한 바퀴 |
+| **Phase 0 게이트 — 9/2 (수)** | **end-to-end 1회전** (walking skeleton) |
 
-W1 첫날(월) 먼저 보낼 것: **법제처 OC 키 신청**, **화장품협회 해설서 이용조건 문의** (회신 대기가 있는 항목).
+**선 것 — 저장소 기반 (D-51 중 launcher 부분)**
+
+- 개인 작업 브랜치 5개 (`ohb` `ksr` `ise` `psj` `ssm`) · PR 병합
+- 환경 고정: Python 3.11.9 · `uv.lock` · pre-commit(ruff · gitleaks)
+- 거버넌스 게이트 11건 — `uv run python launcher.py gate`
+- 로컬 DB — pgvector 컨테이너 (`127.0.0.1:5432`)
+- `setup.bat` 1회로 위 전부 자동 구성
+
+**아직 없는 것 — Phase 0 게이트 대상**
+
+- `scripts/doctor.py` 본문 (검사 16종 목록만 있음)
+- Alembic 마이그레이션 · DB 스키마 실물
+- FastAPI · LangGraph — end-to-end 경로 전부
 
 ## 팀 규칙 (요약)
 
