@@ -1,0 +1,743 @@
+# 생성물 — scripts/extract_rationale.py 가 판정매트릭스.html 에서 뽑는다.
+# 🚨 손으로 고치지 마십시오. 근거를 바꾸려면 판정매트릭스를 고치고 다시 뽑습니다.
+admin_appeal:
+  note:
+    U1 학습: 경계 클래스 근거
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: ★ 처분이 취소된 사례 = 경계 학습. Abstention 설계와 직결
+  why: 공공저작물.
+aihub_558:
+  note:
+    U1 학습: ✅ 자유롭게 학습 가능
+    U3 인용: ⚠️ "AI허브 데이터를 사용하였음" 명시 의무
+    U4 배포: ✅ 모델·서비스 배포 자유. 🚨 단 데이터 재가공 배포는 불가(NOREDIST)
+    상업: ✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)
+    원문: ✅ 원문 그대로 파이프라인 내 사용 가능
+  url: https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558
+  valueNote: ★ 정정으로 C→B. 라벨이 대화체 혐오·욕설(비난/혐오/차별/선정/욕설/폭력/범죄)이라 「과장·오인 유발」 축과 직접 겹치진 않지만, 451,110문장 다중 라벨 분류를 배포 모델 학습에 쓸 수 있다. 멀티라벨 파이프라인의 사전학습 보조로 실효가 있다
+  why: 'AI Hub FAQ 원문: 학습해 만들어진 AI 모델과 서비스는 자유롭게 배포·활용 가능하고 영리적 판매·활용도 제한하지 않는다(출처 명시 조건). 막히는 것은 데이터를 재가공해 배포하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).'
+aihub_63:
+  note:
+    U1 학습: ✅ 자유롭게 학습 가능
+    U3 인용: ⚠️ "AI허브 데이터를 사용하였음" 명시 의무
+    U4 배포: ✅ 모델·서비스 배포 자유. 🚨 단 데이터 재가공 배포는 불가(NOREDIST)
+    상업: ✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)
+    원문: ✅ 원문 그대로 파이프라인 내 사용 가능
+  url: https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=63
+  valueNote: 🚨 탈락 — 도메인이 완전히 다르다. 상표 출원 거절 사유(발음유사 / 관념 / 식별력) 분류이지 광고 문구 규제와 무관하다. 태스크도 Image Classification / Object Detection 중심
+  why: 'AI Hub FAQ 원문: 학습해 만들어진 AI 모델과 서비스는 자유롭게 배포·활용 가능하고 영리적 판매·활용도 제한하지 않는다(출처 명시 조건). 막히는 것은 데이터를 재가공해 배포하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).'
+aihub_71486:
+  note:
+    U1 학습: ✅ 자유롭게 학습 가능
+    U3 인용: ⚠️ "AI허브 데이터를 사용하였음" 명시 의무
+    U4 배포: ✅ 모델·서비스 배포 자유. 🚨 단 데이터 재가공 배포는 불가(NOREDIST)
+    상업: ✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)
+    원문: ✅ 원문 그대로 파이프라인 내 사용 가능
+  url: https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486
+  valueNote: ★★ 이 데이터셋의 라벨 축이 기획서 변환 규칙과 1:1로 맞물린다. 「확실성(확실/불확실)」 = R2 단정→조건부 · 「시제(과거/현재/미래)」 = R1 실적→예상 · 「문장 유형(사실형 39.90% / 추론형 26.56% / 대화형 26.41% / 예측형 7.10%)」 = B 실증형 판정. 🚨 지금 기획서에는 「시정이 제대로 됐는지 측정하는 방법」이 비어 있는데, 그 빈칸을 이 축들이 채운다
+  why: 'AI Hub FAQ 원문: 학습해 만들어진 AI 모델과 서비스는 자유롭게 배포·활용 가능하고 영리적 판매·활용도 제한하지 않는다(출처 명시 조건). 막히는 것은 데이터를 재가공해 배포하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).'
+aihub_71694:
+  note:
+    U1 학습: ✅ 자유롭게 학습 가능
+    U3 인용: ⚠️ "AI허브 데이터를 사용하였음" 명시 의무
+    U4 배포: ✅ 모델·서비스 배포 자유. 🚨 단 데이터 재가공 배포는 불가(NOREDIST)
+    상업: ✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)
+    원문: ✅ 원문 그대로 파이프라인 내 사용 가능
+  url: https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694
+  valueNote: ⚠️ 제목만 확인했고 규모·라벨 체계·주제 분포는 미확인이다. SNS 구어체 어휘 파악에는 쓸 수 있으나, 지향 어휘의 1차 소스는 2층이라는 v2.4 정정이 여기에도 적용된다 — 대화 코퍼스는 세그먼트 구획 보조에 그친다
+  why: 'AI Hub FAQ 원문: 학습해 만들어진 AI 모델과 서비스는 자유롭게 배포·활용 가능하고 영리적 판매·활용도 제한하지 않는다(출처 명시 조건). 막히는 것은 데이터를 재가공해 배포하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외). 단 이 데이터셋의 규모·라벨 체계·주제 분포는 상세 페이지 오류로 확인하지 못했다.'
+aihub_71723:
+  note:
+    U1 학습: ✅ 자유롭게 학습 가능
+    U3 인용: ⚠️ "AI허브 데이터를 사용하였음" 명시 의무
+    U4 배포: ✅ 모델·서비스 배포 자유. 🚨 단 데이터 재가공 배포는 불가(NOREDIST)
+    상업: ✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)
+    원문: ✅ 원문 그대로 파이프라인 내 사용 가능
+  url: https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723
+  valueNote: ★★ 정정으로 B→A. 「법령 참조 태깅」 태스크가 「이 문구 → 위반 조항」 매핑과 정확히 동형인데, 이제 배포 모델 학습에 쓸 수 있다. 원문 251,946건 · 어노테이션 157,455건. 단 판례 중심(행정 26.67%)이라 식약처 고시·표시광고법 원문 자체는 없다 — 규제 원문은 3층에서 별도 수집
+  why: 'AI Hub FAQ 원문: 학습해 만들어진 AI 모델과 서비스는 자유롭게 배포·활용 가능하고 영리적 판매·활용도 제한하지 않는다(출처 명시 조건). 막히는 것은 데이터를 재가공해 배포하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).'
+aihub_71843:
+  note:
+    U1 학습: ✅ 자유롭게 학습 가능
+    U3 인용: ⚠️ "AI허브 데이터를 사용하였음" 명시 의무
+    U4 배포: ✅ 모델·서비스 배포 자유. 🚨 단 데이터 재가공 배포는 불가(NOREDIST)
+    상업: ✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)
+    원문: ✅ 원문 그대로 파이프라인 내 사용 가능
+  url: https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71843
+  valueNote: 🚨 도메인 불일치 — 특허·상표·저작권 심결문 중심이라 표시광고 규제와 결이 다르다. 법률 문체 사전학습용으로는 쓸 만하나 우선순위 낮음. 이 프로젝트는 9주짜리다
+  why: 'AI Hub FAQ 원문: 학습해 만들어진 AI 모델과 서비스는 자유롭게 배포·활용 가능하고 영리적 판매·활용도 제한하지 않는다(출처 명시 조건). 막히는 것은 데이터를 재가공해 배포하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).'
+aihub_review:
+  note: &id001
+    U1 학습: ✅ 자유롭게 학습 가능
+    U3 인용: ⚠️ "AI허브 데이터를 사용하였음" 명시 의무
+    U4 배포: ✅ 모델·서비스 배포 자유. 🚨 단 데이터 재가공 배포는 불가(NOREDIST)
+    상업: ✅ 영리적 판매·활용 제한 없음 (출처 명시 조건)
+    원문: ✅ 원문 그대로 파이프라인 내 사용 가능
+  url: https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603
+  valueNote: ★★ 정정으로 가치가 크게 올랐다. 화장품 카테고리(스킨케어/헤어바디/메이크업)가 명시 포함된 국내 유일의 정식 리뷰 데이터셋 25만건인데, 배포 모델 학습도 영리 활용도 가능하다. 앞서 「배포 모델 학습 금지」로 판정했던 것은 오판이었다
+  why: 'AI Hub FAQ 원문: 학습해 만들어진 AI 모델과 서비스는 자유롭게 배포·활용 가능하고 영리적 판매·활용도 제한하지 않는다(출처 명시 조건). 막히는 것은 데이터를 재가공해 배포하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).'
+aihub_review_corpus:
+  note: *id001
+  url: https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603
+  valueNote: ★★ 정정으로 가치가 크게 올랐다. 화장품 카테고리(스킨케어/헤어바디/메이크업)가 명시 포함된 국내 유일의 정식 리뷰 데이터셋 25만건인데, 배포 모델 학습도 영리 활용도 가능하다. 앞서 「배포 모델 학습 금지」로 판정했던 것은 오판이었다
+  why: 'AI Hub FAQ 원문: 학습해 만들어진 AI 모델과 서비스는 자유롭게 배포·활용 가능하고 영리적 판매·활용도 제한하지 않는다(출처 명시 조건). 막히는 것은 데이터를 재가공해 배포하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외).'
+aisac:
+  note:
+    U1 학습: ❌ 카피 텍스트 부재 + 상업적 이용 금지
+    U3 인용: ⚠️ 출처표시 열람 인용
+    U4 배포: ❌ 저작권 공사·원저작권자 귀속
+    상업: ❌ 회원은 게시 자료를 상업적으로 이용할 수 없음
+    원문: ❌ 공식 기능 외 다운로드·캡처 금지
+  url: https://aisac.kobaco.co.kr/site/main/advideo/list_all_top
+  valueNote: '🚨 탈락 — 광고 카피 텍스트가 애초에 없다. 상세 페이지를 직접 열어 확인한 결과 표시 항목은 광고주명·캠페인명·방영일·대행사·제작사·AI 검출 태그뿐이고, 키워드는 영상에서 검출된 사물·동작 태그(#빙글 #분수 #헬멧)이지 광고 문구가 아니다. 자막·나레이션·스크립트 일체 없음'
+  why: '🚨 이용약관 실측: "공식적으로 제공하는 기능 외의 방법으로 다운로드, 캡처 등을 할 수 없다" + 상업적 이용 금지.'
+bab2min_shopping:
+  note:
+    U1 학습: Public Domain
+    U3 인용: 출처표시 권장
+    U4 배포: 제한 없음
+    상업: ✅ 제한 없음
+    원문: 제한 없음
+  url: https://github.com/bab2min/corpus
+  valueNote: ★ 쇼핑 리뷰 도메인에서 상업 이용까지 안전한 유일한 코퍼스. 소비자 실사용 어휘 파악에 바로 쓸 수 있다
+  why: 저장소 README에 Public Domain 명시.
+bge_reranker:
+  note:
+    U1 학습: 자유
+    U3 인용: 출처표시
+    U4 배포: ✅
+    상업: ✅ Apache 2.0
+    원문: 해당 없음
+  valueNote: Apache 2.0. 채택 모델
+  why: Apache 2.0.
+channelio_copy:
+  note:
+    U1 학습: ❌ 각 카피 저작권은 원 브랜드 귀속
+    U3 인용: ⚠️ 소량 예시 인용
+    U4 배포: ❌
+    상업: ❌
+    원문: ❌
+  url: https://channel.io/kr/blog/articles/ffa64ebe
+  valueNote: 🚨 양·성격·저작권 모두 부적합. 51개는 절대량이 부족하고, 성격이 브랜드 슬로건("바른 바를거리", "바르는 홍삼을 만나다")이라 검수 대상인 효능·기능성 소구 문구와 결이 다르다. 퍼포먼스 광고 카피가 아니다
+  why: 페이지에 수록 카피에 대한 개별 귀속·라이선스 고지가 없다. 저작권은 원 브랜드에 있다.
+client_crm:
+  note:
+    U1 학습: ❌ 개인정보
+    U3 인용: ❌
+    U4 배포: ❌
+    상업: ❌
+    원문: ❌
+  valueNote: ★ 이 배제가 오히려 온프레미스 차별점을 강화한다 — "고객사 CRM을 외부 LLM에 보내지 않는다"가 세일즈 포인트
+  why: 🚨 개인정보. 편입 시에도 집계 세그먼트 수준만.
+cosmetic_guides:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: 협회 해설서(G2)의 원 출처. 여기로 소급하면 등급이 G3로 올라간다
+  why: 행정규칙 원문은 G3.
+cosmetic_ingredient:
+  note:
+    U1 학습: 성분 마스터(한글명·INCI·배합목적)
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공데이터 추정
+    원문: 사실 데이터
+  url: https://www.data.go.kr/data/15111774/openapi.do
+  valueNote: 성분 표기 정규화(동의어 사전)와 카테고리 판별 보조. 다만 화장품은 기능성화장품 고시 문구 체계가 별도라 「인정 기능성 문구」 매핑에는 직접 쓰이지 않는다
+  why: 식약처 공공데이터. 다만 data.go.kr 접근이 차단돼 응답 필드·건수·이용허락범위는 미확인.
+cosmetic_restricted:
+  note:
+    U1 학습: 사용금지·사용한도 원료 목록
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공데이터 추정
+    원문: 사실 데이터
+  url: https://www.data.go.kr/data/15111772/openapi.do
+  valueNote: 🚨 결이 다르다 — 이건 「성분 배합의 적법성」 판정용이지 「광고 문구」 판정용이 아니다. CopyLane 범위 밖
+  why: 식약처 공공데이터. 필드·건수·이용조건 미확인.
+ecommerce_pages:
+  note:
+    U1 학습: ⚠️ robots 허용 + 약관 무저촉이 확인된 범위만. 기본값은 배제
+    U3 인용: ❌
+    U4 배포: ❌
+    상업: ❌ 타사 저작물
+    원문: ❌ 원문 미보관
+  valueNote: 🚨 탈락. DAPT용으로 탐나지만 위험 대비 이득이 작다
+  why: 🚨 기본값 G1(배제).
+exaone:
+  note:
+    U1 학습: 미확인
+    U3 인용: 미확인
+    U4 배포: ❌ 확인 전 배포 불가
+    상업: ❌ 사용 제한 조항 존재 가능성
+    원문: 해당 없음
+  valueNote: 채택 모델이 아니다. 확인 비용을 들이지 말고 목록에서 내리는 것이 답
+  why: 후보군일 뿐 채택 모델이 아니다.
+ftc_decisions:
+  note: &id002
+    U1 학습: 제한 없음
+    U3 인용: 사건번호와 함께
+    U4 배포: 제한 없음
+    상업: '"이용허락범위 제한 없음"'
+    원문: 광고 문구 원문 인용 + 텍스트 레이어 존재(OCR 불필요)
+  url: https://www.data.go.kr/data/15103301/fileData.do
+  valueNote: ★ 문장 라벨의 1차 원천. 필터 후 잔여 건수가 곧 이 프로젝트의 규모 상한
+  why: 공공저작물. 데이터포털에 이용허락범위 제한 없음으로 등재.
+ftc_decisions_api:
+  note:
+    U1 학습: 파일데이터와 동일
+    U3 인용: 동일
+    U4 배포: 동일
+    상업: 동일
+    원문: 동일
+  url: https://www.data.go.kr/data/15103246/openapi.do
+  valueNote: 벌크는 파일로, 증분은 API로. 3W 이후 갱신 자동화
+  why: 위 파일데이터와 같은 원천.
+ftc_decisions_bulk:
+  note: *id002
+  url: https://www.data.go.kr/data/15103301/fileData.do
+  valueNote: ★ 문장 라벨의 1차 원천. 필터 후 잔여 건수가 곧 이 프로젝트의 규모 상한
+  why: 공공저작물. 데이터포털에 이용허락범위 제한 없음으로 등재.
+ftc_guidelines:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: 추천·보증 심사지침이 뒷광고(V6 소비자 기만) 판정의 근거
+  why: 행정규칙.
+ftc_noviolation:
+  note:
+    U1 학습: 공개 여부 미확인
+    U3 인용: 미확인
+    U4 배포: 미확인
+    상업: 미확인
+    원문: 미확인
+  valueNote: 실재한다면 최고 품질의 적법 라벨 — 「위법이 아니다」가 기관 판단으로 붙은 유일한 데이터
+  why: G0는 G2로 취급 — 확인 전까지 사실만.
+func_claim_rule:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: ★ A 자격형 근거
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: ★ A 자격형 / B 실증형 / C 절대형 3분 판정(D-59)의 근거 규정
+  why: 공공저작물.
+google_atc:
+  note:
+    U1 학습: ❌ 대량 수집 경로 부재
+    U3 인용: ⚠️ 소량 예시 인용
+    U4 배포: ❌
+    상업: ❌ 광고주 저작물
+    원문: ❌
+  url: https://adstransparency.google.com/?region=KR&hl=ko
+  valueNote: 텍스트 광고 헤드라인·설명문 열람 가능. 다만 공식 API·벌크 다운로드가 없고 BigQuery 공개셋은 정치광고 전용(한국은 선거광고 인증 미운영이라 사실상 무의미)
+  why: robots.txt는 404이나 Google 이용약관이 리버스 엔지니어링·자동화 수집을 금지. 제3자 스크래퍼는 회색지대.
+google_trends:
+  note:
+    U1 학습: ⚠️ 지수만
+    U3 인용: ⚠️ 지수 인용
+    U4 배포: 미확인
+    상업: 미확인
+    원문: ❌
+  url: https://developers.google.com/search/blog/2025/07/trends-api
+  valueNote: ⚠️ 2025-07 발표 후 1년이 지나도 application-gated alpha 유지 — self-serve 가입도, API 키 생성 버튼도 없다. 신청은 걸어두되 일정에 물리지 말 것. pytrends는 2025-04-17 아카이브(유지보수 중단) + 약관 회색지대
+  why: 승인 여부가 불확실해 의존 설계 불가.
+hf_standard:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: ★ 인용의 최상위 근거
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 법령·고시 원문 자유이용
+  valueNote: 승인 기능성 문구의 원 출처. API 결과를 여기로 소급하면 인용 품질이 함께 올라간다
+  why: 법령·고시는 공공저작물.
+k_mhas:
+  note: &id004
+    U1 학습: CC BY-SA 4.0
+    U3 인용: 출처표시
+    U4 배포: ⚠️ SA
+    상업: ✅ 가능
+    원문: 제한 없음
+  url: https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech
+  valueNote: ★ AI Hub 558의 라이선스 안전한 대체재. 멀티라벨 분류 아키텍처 참조용으로는 동등하고 상업 이용까지 열려 있다
+  why: CC BY-SA 4.0.
+kcbert:
+  note:
+    U1 학습: ✅ 파인튜닝 자유
+    U3 인용: 출처표시
+    U4 배포: ✅ 파생 모델 배포 허용
+    상업: ✅ Apache 2.0
+    원문: 해당 없음
+  url: https://huggingface.co/beomi/kcbert-base
+  valueNote: ★★ KLUE-RoBERTa의 직접 대안. Apache 2.0으로 라이선스가 깨끗하고, 네이버 뉴스 댓글 구어체로 사전학습돼 광고 문구·소비자 어휘 도메인 적합도가 오히려 더 높다
+  why: HF 모델 카드에 Apache 2.0 명시 확인.
+kcc_media:
+  note:
+    U1 학습: 집계 통계
+    U3 인용: 출처표시
+    U4 배포: 제한 없음
+    상업: 공공저작물 추정
+    원문: 사실 데이터
+  url: https://www.data.go.kr/data/3068653/fileData.do
+  valueNote: 🚨 사용자가 「나이대별 매체 이용 현황」으로 지목했으나 실제 명칭은 「방송미디어통신위원회_방송매체 이용행태 조사 자료_20251231」이다. 그리고 이건 「매체 이용 연령대」이지 「제품 구매 연령대」가 아니다 — 「어느 채널에 광고를 태울지」에는 맞지만 「누가 이 제품을 사는지」에는 맞지 않는다
+  why: 정부 조사 자료. 다만 이용허락범위·파일형식·수록 컬럼은 data.go.kr 접근 차단으로 미확인.
+kcia_guideline:
+  note: &id003
+    U1 학습: ⚠️ 표현 목록(문자열)만. 해설 문장은 투입 금지
+    U3 인용: ❌ 해설서를 인용하지 않는다. 화장품법·고시·시행규칙 별표로 소급
+    U4 배포: ⚠️ 어휘 사전 형태로만
+    상업: ⚠️ 사실은 저작권 대상이 아니므로 사실 한정으로만
+    원문: ❌ 해설 문장·편집·배열은 협회 저작물
+  url: https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039
+  valueNote: ✅ 철수 조건 1번을 이것 하나로 충족(각 40개 기준 대비 79/47)
+  why: 🚨 공지에 "저작권은 대한화장품협회에 귀속" 명시 확인. G0 추정이 아니라 G2 확정이며 G3 승격은 협회 회신이 있어야만 가능.
+kcia_guideline_2025:
+  note: *id003
+  url: https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039
+  valueNote: ✅ 철수 조건 1번을 이것 하나로 충족(각 40개 기준 대비 79/47)
+  why: 🚨 공지에 "저작권은 대한화장품협회에 귀속" 명시 확인. G0 추정이 아니라 G2 확정이며 G3 승격은 협회 회신이 있어야만 가능.
+kfia_approved:
+  note:
+    U1 학습: ⚠️ G0 → G2 취급. 기능성 표시내용은 고시가 정한 문구 형식이라 사실로 취득 가능
+    U3 인용: ⚠️ 원 출처(고시)로 소급 인용
+    U4 배포: ⚠️ 사실 한정
+    상업: ⚠️ 이용조건 미표기 — 사실 한정
+    원문: ⚠️ "본 제품에는 ~에 도움을 줄 수 있다고 알려진 ~이 들어있습니다"는 고시의 틀이지 협회 창작물이 아니다
+  url: https://adf.kfia.or.kr/company/open/openData.do?menuKey=406
+  valueNote: ★ 진입점 A에서는 「적법 라벨」, 진입점 B에서는 「쓸 수 있는 어휘 사전」 — 같은 데이터를 두 번 쓴다
+  why: 법정 공개 의무 데이터이나 이용조건 미표기 → G0 → G2 취급.
+khff_survey:
+  note:
+    U1 학습: ⚠️ 집계 수치(사실)만
+    U3 인용: ✅ 출처표시하고 수치 인용
+    U4 배포: ⚠️ 수치만
+    상업: ⚠️ 사실 인용 수준
+    원문: ❌ 보도자료 문장은 협회 저작물
+  url: https://khff.or.kr/user/info/InfoBoardUserView.do?_menuNo=369&boardSeqno=10035&postsSeqno=119567
+  valueNote: ★★ 페르소나 속성이 그대로 나와 있다 — 눈 38.8% / 피로회복 32.2% / 스트레스 27.8% / 콜레스테롤 26.2% / 관절 25.8%. 20·30대=피로·스트레스, 50·60대=관절, 70대=혈압·콜레스테롤. 연령별 선호 원료(61세+ 홍삼 12.9%, 2030 프로바이오틱스 22.5%, 40대 종합비타민 11.1%)
+  why: 집계 통계는 사실이므로 인용 가능. 문장·표 전재는 별개.
+kisdi_panel:
+  note:
+    U1 학습: ❌
+    U3 인용: ✅ 출처 명기
+    U4 배포: ❌
+    상업: ❌ 공공누리 2유형
+    원문: ❌
+  url: https://stat.kisdi.re.kr/kor/dataset/rdssListPage.html
+  valueNote: 🚨 공공누리 제2유형 = 상업 이용 금지. 게다가 제품 카테고리 구매 변수가 약해 이 프로젝트에는 KOBACO MCR보다 열등하다
+  why: 포털 하단 공공누리 제2유형 인증마크 확인.
+klue_dataset:
+  note:
+    U1 학습: CC BY-SA 4.0
+    U3 인용: 출처표시
+    U4 배포: ⚠️ ShareAlike — 데이터셋을 개작·배포하면 동일 라이선스
+    상업: ✅ 가능
+    원문: 제한 없음
+  url: https://github.com/KLUE-benchmark/KLUE
+  valueNote: 한국어 이해 태스크 베이스라인. NER·RE가 주장 스팬 추출 설계 참조에 유용
+  why: GitHub·HF 양쪽 CC BY-SA 4.0 일치 확인.
+klue_roberta:
+  note:
+    U1 학습: 🚨 근거 없음
+    U3 인용: 미확인
+    U4 배포: ❌ 근거 없음
+    상업: ❌ 상업 배포 시 법적 근거 부재
+    원문: 해당 없음
+  url: https://huggingface.co/klue/roberta-base
+  valueNote: 🚨 교체 권장. 모델 카드·HF API 양쪽에서 교차 확인 — `license` 키가 JSON에 아예 존재하지 않고 `license:*` 태그도 없다. 데이터셋의 CC BY-SA 4.0이 모델 가중치에 적용된다고 가정할 근거가 없다. 라이선스 부재 = 명시적 허락 부재
+  why: 🚨 D-60 선결 조건이 해소가 아니라 악화됐다. 이 프로젝트 인코더 트랙 전체의 백본인데 법적 근거가 비어 있다.
+kmhas:
+  note: *id004
+  url: https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech
+  valueNote: ★ AI Hub 558의 라이선스 안전한 대체재. 멀티라벨 분류 아키텍처 참조용으로는 동등하고 상업 이용까지 열려 있다
+  why: CC BY-SA 4.0.
+knhanes:
+  note:
+    U1 학습: ❌ 배포 모델 학습 불가
+    U3 인용: ✅ 출처표시 인용
+    U4 배포: ❌
+    상업: ❌ CC-BY-NC
+    원문: ❌
+  url: https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab
+  valueNote: 🚨 CC-BY-NC → 상업 서비스 투입 불가. 건기식 섭취 실태 문항이 있어 아깝지만, 집계 통계(국민건강통계 보고서) 인용 수준으로 제한하는 게 맞다
+  why: 국가연구데이터플랫폼(DataON) 등록 라이선스 CC-BY-NC.
+kobaco_mcr:
+  note:
+    U1 학습: ✅ 공공누리 1유형 — 변형·2차적 저작물 작성 가능이므로 학습 투입에 제약 없음
+    U3 인용: ✅ 지정 문구로 출처표시
+    U4 배포: ✅ 제한 없음
+    상업: ✅ 공공누리 1유형 — 상업적 이용 가능
+    원문: ✅ 응답 레코드 원문 사용 가능
+  url: https://adstat.kobaco.co.kr/mcr/portal/community/articleListPage.do?bbsId=FAQ
+  valueNote: ★★ 페르소나 1순위이자 이제 제약도 없다. 인구통계 × 80여 업종 구매행태 × 브랜드 선호 × 구매 시 고려사항 × 라이프스타일 100항목(6점척도) × 매체이용이 한 응답자 안에 결합된 유일한 공개 소스
+  why: 🔄 **v2.1 정정.** FAQ에 명시돼 있었다 — ①원시데이터·②통계데이터는 **공공누리 제1유형**(출처표시 / 상업 이용 가능 / 변형·2차적 저작물 작성 가능). "모든 자료는 2차적 저작물로 가공하여 이용 가능"까지 적혀 있다. 이용약관 페이지만 보고 "조항이 없다"고 판정했던 것이 오판이었다.
+kobaco_mcr_report:
+  note:
+    U1 학습: ❌ 공공누리 2유형 — 비상업 한정이라 배포 모델 학습 불가
+    U3 인용: ✅ 출처표시하고 인용
+    U4 배포: ❌
+    상업: ❌ 상업적 이용 금지
+    원문: ❌ 보고서 문장은 저작물
+  url: https://adstat.kobaco.co.kr/mcr/portal/community/articleListPage.do?bbsId=FAQ
+  valueNote: 해석·요약이 붙어 있어 읽을 가치는 있으나, 원시·통계데이터로 직접 계산하면 되므로 필수는 아니다
+  why: 🚨 **같은 기관 같은 조사인데 자료 종류에 따라 유형이 갈린다** — 원시·통계데이터는 1유형, 연례보고서는 2유형(비상업).
+kosis:
+  note:
+    U1 학습: 인구통계 축
+    U3 인용: 출처 명시 필수(기관·조사명·시점·URL)
+    U4 배포: 제한 없음
+    상업: ✅ 상업 이용 명시 허용 (무가공 유료판매만 금지)
+    원문: 집계 수치 — 저작권 대상 아님
+  url: https://kosis.kr/serviceInfo/openAPIGuide.do
+  valueNote: ★ 철수 조건 6번(「세그먼트 코퍼스 G-게이트 통과 1종」)을 이것 하나로 무조건 충족한다. AI Hub 승인이 늦어져도 Phase 3 착수가 막히지 않는다
+  why: '실측: "무료 / 자유로운 사용·재사용·재배포 / 비상업·상업 모두 가능 / 별도 가공절차 없이 유료 판매만 불가 / 반드시 출처 명시".'
+kr3:
+  note:
+    U1 학습: ❌ 배포 모델 학습 불가
+    U3 인용: ⚠️ 출처표시 조건 인용만
+    U4 배포: ❌
+    상업: ❌ CC BY-NC-SA
+    원문: ❌
+  url: https://huggingface.co/datasets/leey4n/KR3
+  valueNote: 🚨 탈락. NC(비상업) + 제작자가 "크롤링 금지 약관에 동의하지 않았다"고 자인. 규모가 커서 탐나지만 상업화 전제와 정면 충돌
+  why: CC BY-NC-SA 4.0. 제작자가 fair use 주장으로 비상업 범위를 명시.
+krei_food:
+  note:
+    U1 학습: ⚠️ G0 → G2 취급. 이용조건이 웹에 미기재
+    U3 인용: ⚠️ 출처표시
+    U4 배포: ⚠️ 집계값만
+    상업: ⚠️ 미확인 — 「원시자료 이용자 가이드」 PDF 확인 필요
+    원문: ⚠️ 응답 레코드는 사실 데이터
+  url: https://www.krei.re.kr/foodSurvey/page/460
+  valueNote: ★ 파일럿에 가장 빠르다. 식생활 행태 + 식품 안전성·식품 표시 인식 + 라이프스타일 + 소비자역량. 「식품 표시」 문항이 있다는 게 이 프로젝트엔 특히 크다
+  why: 페이지에 이용조건 미기재 → G0 → G2 취급. 「원시자료 이용자 가이드」 PDF(2021.07.20)에 수록 추정.
+kure:
+  note:
+    U1 학습: 자유
+    U3 인용: 출처표시
+    U4 배포: ✅
+    상업: ✅ MIT
+    원문: 해당 없음
+  valueNote: MIT. 채택 모델
+  why: MIT.
+law_acts:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: ★ 판정 근거의 최상위
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 조문 원문 자유이용
+  url: https://open.law.go.kr/LSO/openApi/guideList.do
+  valueNote: ★ 3층 전체와 4층 별표가 이 키 하나에 달려 있다. 리드타임이 곧 일정 리스크
+  why: 공공저작물. 법령/행정규칙/판례/자치법규/조약 API 제공 확인.
+law_annex:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: 인용 가치 높음
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: 법률 조문보다 구체적이라 판정 정밀도를 직접 올린다
+  why: 공공저작물.
+law_go_kr:
+  bundle:
+    admin_appeal: 공공저작물.
+    cosmetic_guides: 행정규칙 원문은 G3.
+    ftc_guidelines: 행정규칙.
+    func_claim_rule: 공공저작물.
+    law_acts: 공공저작물. 법령/행정규칙/판례/자치법규/조약 API 제공 확인.
+    law_annex: 공공저작물.
+    mfds_notice: 행정규칙은 공공저작물.
+    penal_clause: 공공저작물.
+    penalty_notice: 공공저작물.
+    precedent: 공공저작물.
+    sanction_annex: 공공저작물.
+  why: 법제처 OPEN API 로 받는 11종을 **이용조건 하나**로 묶은 것이다 (D-90). 전부 공공저작물이라 조건이 같고, OC 키도 하나다. 개별 근거는 아래와 같다.
+mdis:
+  note:
+    U1 학습: ❌ 통계법 제33조 — 목적 외 사용 금지
+    U3 인용: ⚠️ 승인된 결과물만
+    U4 배포: ❌
+    상업: ❌ 상업 목적 승인 난이도 높음
+    원문: ❌ 원본 반출 불가
+  valueNote: 🚨 이번 목적에 비효율. 개인 레코드가 필요 없다는 전제라면 심사·반출승인 비용 대비 이득이 없다. 9주 프로젝트에서 2~6주 심사는 치명적
+  why: 통계법 제33조. 인가용은 보안서약·USB 차단·결과물 반출 승인 필수.
+meta_adlibrary:
+  note:
+    U1 학습: ❌ 자동 수집이 약관 위반이라 대량 학습셋 구성 불가
+    U3 인용: ⚠️ 소량 예시 인용
+    U4 배포: ❌
+    상업: ❌ 광고주 저작물
+    원문: ❌ 원문 보관 금지
+  url: https://www.facebook.com/ads/library/?locale=ko_KR
+  valueNote: ★ 실제 집행된 한국어 화장품·건기식 광고 본문 카피를 그대로 볼 수 있는 유일한 경로. 단 「현재 집행 중」인 것만 — 종료된 과거 광고는 사라진다. 학습셋이 아니라 평가셋/도메인 감각 확보용 수백 건 규모
+  why: 🚨 Meta 이용약관 "You may not access or collect data from our Products using automated means" — UI 스크래핑은 명시적 약관 위반.
+meta_adlibrary_api:
+  note:
+    U1 학습: ❌ 반환 데이터 없음
+    U3 인용: ❌
+    U4 배포: ❌
+    상업: ❌
+    원문: ❌
+  url: https://www.facebook.com/ads/library/api/?locale=ko_KR
+  valueNote: 🚨 탈락. 공식 문서 명시 — "EU에 도달하지 않은 광고는 사회이슈·선거·정치 광고만 반환". ad_creative_bodies 필드는 존재하지만 KR 화장품·건기식 광고에는 레코드 자체가 없다. EU/UK만 DSA로 전 상업광고 개방
+  why: developers.facebook.com/docs/graph-api/reference/ads_archive/ 직접 확인.
+meta_graph:
+  note:
+    U1 학습: ❌ 반출 불가
+    U3 인용: ⚠️
+    U4 배포: ❌
+    상업: ❌ 상업 목적 명시 금지
+    원문: ❌
+  url: https://transparency.meta.com/researchtools/meta-content-library/
+  valueNote: 🚨 탈락 4중. (1) Graph API는 본인 소유 Business/Creator 계정만 — 임의 공개 계정 수집 경로 아님 (2) Content Library는 "surveillance or commercial purposes" 사용 금지 (3) 자격이 학술·비영리 소속에 묶여 상업화 시점에 상실 (4) 격리 clean-room 밖으로 학습 데이터 반출 불가
+  why: Meta Platform Terms 3.a.iv(판매·라이선스 금지), 3.d.i.2(삭제 의무) + Content Library 상업 목적 금지.
+mfds_hf_individual:
+  note:
+    U1 학습: 원료별 인정 기능성 + 일일섭취량
+    U3 인용: 인정번호와 함께
+    U4 배포: 제한 없음
+    상업: 공공데이터 개방
+    원문: 제한 없음
+  url: https://www.data.go.kr/data/15074311/openapi.do
+  valueNote: 개별인정형 472건. 고시형 96건은 건강기능식품 공전에서 별도 확보 필요
+  why: 식품안전나라 API svc_no=I-0050과 동일 서비스임을 확인.
+mfds_hf_ingredient:
+  note:
+    U1 학습: 인정 기능성 문구
+    U3 인용: 원료명·인정번호와 함께
+    U4 배포: 제한 없음
+    상업: 공공데이터 개방
+    원문: ★ 100% 지향 프레임으로 쓰여 있다
+  url: https://www.data.go.kr/data/15058359/openapi.do
+  valueNote: ★ 지향 어휘 사전의 1차 원천. v2.4 정정(「지향 어휘 1차 소스는 리뷰가 아니다」)의 기계 판독 경로
+  why: 공공데이터포털 개방 API.
+mfds_hf_ingredient_board:
+  note:
+    U1 학습: 인정 기능성 문구 = 100% 지향 프레임
+    U3 인용: ★ A 자격형 판정의 직접 근거
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 고시가 정한 문구 형식
+  url: https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660
+  valueNote: ★ 성분 → 인정 기능성 문구 매핑의 1순위 소스. 이게 있어야 「이 제품이 이 표현을 쓸 자격이 있는가」(A 자격형 판정)가 성립한다
+  why: 식약처 공식 게시판. fmis.kr 경유로 구조·건수 확인(고시형 96 / 개별인정형 472).
+mfds_notice:
+  note:
+    U1 학습: 금지 표현 사전 원천
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: ★ 금지 표현 사전 초판이 여기서 나온다. Phase 0 최소 집합
+  why: 행정규칙은 공공저작물.
+mfds_press:
+  note:
+    U1 학습: ⚠️ 키워드·집계만 텍스트 — 문장 라벨로는 저품질
+    U3 인용: 적발 통계·유형 분포 인용에 유용
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: ⚠️ 문구 전체는 이미지 캡처
+  valueNote: ★ 학습 출처(의결서)와 기관이 다르므로 평가용 홀드아웃에 최적. 편향이 독립적이다
+  why: 등급은 G3. 제약은 라이선스가 아니라 기술적 한계다.
+mfds_production:
+  note:
+    U1 학습: 집계 통계
+    U3 인용: ✅ 출처표시 인용
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 수치는 사실
+  url: https://eiec.kdi.re.kr/policy/materialView.do?num=267032
+  valueNote: ★ 국내 화장품 시장 규모의 공식 숫자. 건기식은 협회 발표(2024년 6조 440억)와 짝을 이룬다. TAM을 말할 때 이 둘이 근거가 된다
+  why: 정부 공표 통계.
+mfds_sanctions:
+  note:
+    U1 학습: 위반사실 → 처분 매핑 실측 라벨
+    U3 인용: 처분 근거와 함께
+    U4 배포: 제한 없음
+    상업: 공공데이터 개방
+    원문: 구조화 레코드
+  url: https://www.data.go.kr/data/15059500/openapi.do
+  valueNote: ★ 위험도 라벨의 실측 경로. 규정(별표) 연역과 실측 귀납이 갈리는 지점이 곧 감경·가중 사유이고, 그것이 「주의 vs 처분」 경계 학습 데이터다
+  why: 공공데이터포털 개방 API. 기획서 4층에 없던 소스.
+mnm_aidataset:
+  note:
+    U1 학습: ❌ 학습 데이터가 아니다
+    U3 인용: ⚠️ 무료 공개된 요약 수치만 출처표시 인용
+    U4 배포: ❌
+    상업: ❌ 유료 보고서 · 저작권 전면 유보
+    원문: ❌ "©2026 MarketsandMarkets. All rights reserved"
+  url: https://www.marketsandmarkets.com/ResearchInsight/ai-training-dataset-market.asp
+  valueNote: 🚨 시장 정의가 어긋난다. 이건 「AI 학습 데이터셋을 파는 시장」이지 「광고 규제 준수 검수 시장」이 아니다. 우리는 데이터셋을 팔지 않는다. 발표에 넣으면 심사에서 "그건 당신들 시장이 아니지 않나"가 나오고, 그게 최대 배점 축(D 27%)에서 감점이 된다
+  why: 상업 리서치사 저작물. 페이지에 저작권 전면 유보 표기.
+modu_web:
+  note:
+    U1 학습: ⚠️ "국어·언어정보처리 분야 연구 및 기술 개발용"이며 **승인된 이용 목적에 한정**. 학습 자체는 가능하나 목적을 벗어나면 위반
+    U3 인용: ⚠️ 원문 인용 자체가 금지되므로 사실상 인용 불가
+    U4 배포: 🚨 **결과물 외부 공개 전 국립국어원 사전승인 필수** — 이게 배포 경로를 막는다
+    상업: ❌ 용도가 연구·기술개발로 한정돼 상업 서비스는 범위 밖
+    원문: ❌ **결과물에 말뭉치와 원문 일부 또는 전부가 포함되어서는 안 됨** — 명시 조항
+  url: https://kli.korean.go.kr/corpus/main/requestMain.do
+  valueNote: 🚨 **일정 리스크로 탈락.** 라이선스가 금지해서가 아니라, 「결과물 외부 공개 전 국립국어원 사전승인」 조항이 우리 일정과 양립하지 않는다. 최종 발표·시연영상·소스코드 제출이 전부 10/16 기능동결 이후 작업일 6일에 몰려 있는데, 그 안에 외부 기관 승인을 끼워 넣을 수 없다
+  why: 🚨 이용 조건 실측(2026-08). 세 겹으로 걸린다 — ① 용도가 연구·기술개발로 한정 ② 승인된 목적에만 사용 ③ **결과물 공개 시 원문 미포함 + 사전승인**.
+nasmedia_fb:
+  note:
+    U1 학습: ⚠️ 집계 수치만
+    U3 인용: ✅ 출처표시 인용
+    U4 배포: ⚠️ 수치만
+    상업: ⚠️ 인용조건 미확인
+    원문: ❌ 보고서 저작물
+  url: https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/
+  valueNote: ⚠️ 「FB」는 Facebook이 아니라 Food & Beverage(식음료)다. 연령대별 구매 채널(10대 편의점 / 20대 배달앱 / 30대 이커머스 / 40대+ 대형마트)과 정보 획득 경로(30대 미만 SNS·동영상). ★ 2025 「건강기능식품」 업종 리포트가 별도로 존재 — 그게 더 중요하다
+  why: 무료 배포 보고서.
+nasmedia_npr:
+  note:
+    U1 학습: ⚠️ 집계 수치만
+    U3 인용: ✅ 출처표시 인용 (조건 확인 후)
+    U4 배포: ⚠️ 수치만
+    상업: ⚠️ 인용조건 미확인 — PDF 저작권 문구 확인 필요
+    원문: ❌ 보고서 문장·도표는 나스미디어 저작물
+  url: https://www.nasmedia.co.kr/정기보고서/2026-03-npr-usersurvey-insight/
+  valueNote: ★★ 이 프로젝트 타깃 업종이 그대로 1·2위 — 크리에이터 추천 구매 품목 화장품 46.6% / 식품 37.9%. 추천 영향받음 46.1%(20대 52.0%), 숏폼 시청 후 즉시 구매 24.7%. 연령대(10~50대)별 제공
+  why: 무료 배포 보고서. 통상 출처표기 조건이나 원문 확인 필요.
+naver_datalab:
+  note:
+    U1 학습: ❌ 8.2 — 승낙은 "제한된 사용권 부여"일 뿐 결과 데이터에 대한 권리 취득이 아니다
+    U3 인용: ❌ 8.1 — 결과 데이터 저작권은 회사 또는 원저작자에게 있다
+    U4 배포: ❌ 7.3⑥ — API서비스를 다시 제3자에게 제공하는 행위 금지
+    상업: ❌ 7.2③ — 사용자들로부터 "API서비스 이용에 대한 대가"를 받을 수 없다
+    원문: ❌ 7.3③ — 취득 정보를 무단 복제·**저장(캐시 포함)**·가공·배포 금지. "별도 데이터베이스로 관리하며 이용하는 행위"가 명시적 금지 예시
+  url: https://developers.naver.com/products/terms/
+  valueNote: 🚨 **네 겹으로 막힌다.** 신규 신청 자체가 불가하고, 받더라도 저장·가공이 금지이며, 결과 데이터에 권리가 없고, 우리가 보낸 쿼리를 네이버가 1년 보관·활용한다
+  why: 🚨 **부칙 제2조(2026-07-31 시행)가 결정적.** 2026-07-30 24:00 기점으로 개발자센터를 통한 **Search Trend API·Shopping Insight API 신규 이용 신청 접수가 중단**됐다. 유예는 그 시점까지 신청을 완료한 **기존 이용자 한정**(2027-06-30까지)이고, 이후 이용하려면 **NAVER API HUB(NCP)의 별도 절차·약관**을 따라야 한다. 우리는 기존 이용자가 아니므로 **애초에 받을 수 없다.**
+nsmc:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: 출처표시 이행 권장
+    U4 배포: 제한 없음
+    상업: ✅ CC0 기준 무제한
+    원문: 제한 없음
+  url: https://github.com/e9t/nsmc
+  valueNote: 영화 도메인이라 화장품·건기식과 거리가 멀다. 감성분류 베이스라인 확인용
+  why: 원본 GitHub은 CC0 1.0, HF는 cc-by-2.0 태그. 배포처 간 표기가 다르다.
+penal_clause:
+  note:
+    U1 학습: 위험도 최상단 근거
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: R4(형사 리스크) 구간의 유일한 근거. Phase 0 최소 집합
+  why: 공공저작물.
+penalty_notice:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: 부과기준율 3등급 + 정액 기준금액. R3 구간의 정량 근거
+  why: 공공저작물.
+platform_guide:
+  note:
+    U1 학습: ⚠️ 금지 항목(사실)만
+    U3 인용: ❌ 인용하지 않는다
+    U4 배포: ❌
+    상업: ❌ 민간 사업자 저작물
+    원문: ❌
+  valueNote: 실무의 1차 관문이라 가치는 있으나 Phase 5 항목. 급하지 않다
+  why: 법이 아니라 민간 사업자 내부 기준.
+platform_reviews:
+  note:
+    U1 학습: ❌ 배제
+    U3 인용: ❌
+    U4 배포: ❌
+    상업: ❌
+    원문: ❌
+  valueNote: 🚨 탈락. 실측 결과 국내 주요 이커머스 어디에도 리뷰 API가 없다 — 쿠팡 Open API/파트너스에 리뷰 엔드포인트 없음, 네이버 커머스API는 2024-08-30 공식 답변으로 "제공 계획 없음", 올리브영은 개발자 포털 자체가 없음
+  why: 🚨 약관 위반 + robots 금지. 협상 불가 항목.
+precedent:
+  note:
+    U1 학습: 제한 없음
+    U3 인용: 제한 없음
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: 법원이 뒤집은 기준. Phase 2 항목
+  why: 공공저작물.
+qwen3:
+  note:
+    U1 학습: 파인튜닝 자유
+    U3 인용: 출처표시
+    U4 배포: ✅ 파생 모델 배포 허용
+    상업: ✅ Apache 2.0
+    원문: 해당 없음
+  valueNote: 라이선스가 깨끗하고 소형 GPU로 구동. 채택 모델
+  why: Apache 2.0.
+reddit_api:
+  note:
+    U1 학습: 🚨 약관 명시 금지
+    U3 인용: ⚠️
+    U4 배포: ❌
+    상업: ❌ 서면 승인 필수
+    원문: ❌ 보유 최소화 + 삭제 동기화 의무
+  url: https://support.reddithelp.com/hc/en-us/articles/42728983564564-Responsible-Builder-Policy
+  valueNote: 🚨 탈락. 조사 대상 중 유일하게 AI 학습을 약관에서 직접·명시적으로 금지한다 — "서면 승인 없이 머신러닝·AI 모델 학습 목적으로 Reddit 데이터를 상업화할 수 없다". 상업화 전제와 정면 충돌하고 한국어 데이터도 없다
+  why: Responsible Builder Policy (2026-06-05 갱신) 직접 확인.
+sanction_annex:
+  note:
+    U1 학습: 위반유형 × 차수 → 정지일수
+    U3 인용: ★ 위험도 근거
+    U4 배포: 제한 없음
+    상업: 공공저작물
+    원문: 제한 없음
+  valueNote: ★ 위험도 순서형 라벨의 정답. 「걸리면 얼마나 무는가」 — 제품의 절반
+  why: 공공저작물.
+self_sanction_stat:
+  note:
+    U1 학습: 파생 통계
+    U3 인용: ★ 발표의 핵심 근거
+    U4 배포: 제한 없음
+    상업: 원천이 전부 공공저작물
+    원문: 우리가 산출한 값
+  valueNote: ★★ 경제적 가치(채점 D축 27%, 최대 배점)의 근거를 남의 보고서에서 사지 말고 우리 데이터에서 직접 계산한다. "부당광고 1건당 평균 제재는 X원, 연간 Y건 발생, 업종별 분포는 Z" — 이건 4층 수집이 끝나면 자동으로 나온다
+  why: 원천(공정위 의결서·식약처 행정처분 API)이 전부 G3이므로 파생 통계도 G3.
+unsmile:
+  note:
+    U1 학습: ❌
+    U3 인용: ⚠️ 인용만
+    U4 배포: ❌
+    상업: ❌ CC BY-NC-ND
+    원문: ❌
+  url: https://github.com/smilegate-ai/korean_unsmile_dataset
+  valueNote: 🚨 탈락. NC에 더해 ND(변경금지)까지 걸려 전처리·파생 데이터 생성 자체가 제약된다
+  why: 데이터셋은 CC BY-NC-ND 4.0 (코드·베이스라인만 Apache 2.0).
+x_api:
+  note:
+    U1 학습: 미확인
+    U3 인용: ⚠️
+    U4 배포: 미확인
+    상업: 미확인
+    원문: ❌ 비용 장벽
+  url: https://docs.x.com/x-api/getting-started/pricing
+  valueNote: 🚨 탈락. 10만 건만 모아도 $500. 학술 예외 경로가 존재하지 않고(2023년 폐지, 대체 없음) 한국어 커머스 트렌드 커버리지도 약하다
+  why: 비용 대비 이득이 없다.
+youtube_api:
+  note:
+    U1 학습: ⚠️ 파생 집계만. 원문 학습셋 축적 불가
+    U3 인용: ⚠️ 집계 인용
+    U4 배포: ⚠️ 파생 지표만
+    상업: ⚠️ 감사(audit) 대상
+    원문: ❌ 30일 상한 (III.E.4.c/d)
+  url: https://developers.google.com/youtube/terms/developer-policies
+  valueNote: 🚨 원문 코퍼스로는 부적합 — 30일 저장 상한이 학습 데이터 누적을 구조적으로 봉쇄한다. ★ 다만 30일 내 수집 → 즉시 비식별 집계·키워드 빈도로 변환 후 원문 폐기하는 파이프라인이면 정책 안에서 돌아간다
+  why: ToS·EMEA ToS·Developer Policies 3개 문서에서 "machine learning"/"train"/"model" 문자열 부재 — 명시적 학습 금지는 없다. 실질 제약은 30일 저장 상한이다.
