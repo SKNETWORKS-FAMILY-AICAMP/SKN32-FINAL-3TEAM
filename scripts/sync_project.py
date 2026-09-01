@@ -17,10 +17,12 @@
 
 from __future__ import annotations
 
-import re
-import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from docmeta import version_of  # noqa: E402  — 버전을 읽는 방법은 한 곳뿐이다
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "build" / "project_sync"
@@ -52,15 +54,6 @@ MAP: dict[str, str] = {
 #    CopyLane_설계스키마_3종.md : docs/02_설계/{DB,청크,LangGraph} 합본 — 손으로 만든다.
 #    CopyLane_소스레지스트리.md : data_sources.yaml 에 머리말을 붙인 사본 — 손으로 만든다.
 
-VERSION = re.compile(r"\bv(\d+\.\d+)\b")
-
-
-def version_of(text: str) -> str:
-    """버전은 문서가 스스로 말한다. 머리말 30줄 안에서 처음 나오는 vX.Y."""
-    head = "\n".join(text.splitlines()[:30])
-    m = VERSION.search(head)
-    return f"v{m.group(1)}" if m else "—"
-
 
 def last_commit(rel: str) -> tuple[str, str]:
     """그 문서를 **마지막으로 바꾼** 커밋. HEAD 가 아니다 —
@@ -76,9 +69,8 @@ def last_commit(rel: str) -> tuple[str, str]:
 
 
 def main() -> None:
-    if OUT.exists():
-        shutil.rmtree(OUT)
-    OUT.mkdir(parents=True)
+    OUT.mkdir(parents=True, exist_ok=True)
+    before = {f.name for f in OUT.iterdir() if f.is_file()}
 
     rows, missing = [], []
     for rel, dst in MAP.items():
@@ -87,7 +79,7 @@ def main() -> None:
             missing.append(rel)
             continue
         text = src.read_text(encoding="utf-8")
-        ver = version_of(text)
+        ver = version_of(text) or "판 없음"
         sha, date = last_commit(rel)
         stamp = (
             f"> 📌 **레포 사본** · {ver} · 갱신 {date} · 커밋 `{sha}` · 원본 `{rel}`  \n"
@@ -102,12 +94,25 @@ def main() -> None:
         (OUT / Path(dst).name).write_text(stamp + text, encoding="utf-8")
         rows.append((Path(dst).name, ver, sha, date))
 
+    # 🚨 MAP 에서 빠진 사본이 남아 있으면 낡은 것을 올리게 된다. 지우거나, 못 지우면 알린다.
+    stale = sorted(before - {r[0] for r in rows})
+    left = []
+    for name in stale:
+        try:
+            (OUT / name).unlink()
+        except OSError:
+            left.append(name)
+
     w = max(len(r[0]) for r in rows)
     for name, ver, sha, date in rows:
         print(f"  {name:<{w}}  {ver:>5}  {sha:>8}  {date}")
     print(f"\n{len(rows)}건 → {OUT.relative_to(ROOT)}/")
     if missing:
         print(f"🚨 원본 없음 {len(missing)}건: {', '.join(missing)}")
+    if stale:
+        print(f"🧹 MAP 에 없는 낡은 사본 {len(stale)}건 정리: {', '.join(stale)}")
+    if left:
+        print(f"🚨 지우지 못한 사본 {len(left)}건 — 손으로 지우십시오: {', '.join(left)}")
 
 
 if __name__ == "__main__":

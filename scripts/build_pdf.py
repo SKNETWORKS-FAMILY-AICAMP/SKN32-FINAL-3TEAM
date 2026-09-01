@@ -18,7 +18,12 @@ PDF는 dist/ 에 생성한다(.gitignore 대상).
 import argparse
 import base64
 import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import re
+
+from docmeta import versioned_stem  # noqa: E402  — 버전을 읽는 방법은 한 곳뿐이다
 
 BRAND_INK = "#0C1A2B"
 BRAND_BLUE = "#2B5BD7"
@@ -194,7 +199,11 @@ def main():
     ap.add_argument("--footer", default="팀 공유용")
     a = ap.parse_args()
 
-    out = a.out or "dist/" + pathlib.Path(a.src).stem + ".pdf"
+    # 🚨 발행물 파일명에는 버전을 붙인다 — 원본은 계속 고쳐지므로 경로가 고정돼야 하고,
+    #    PDF 는 그 시점에서 얼어붙은 것이라 이름이 바뀔 일이 없다.
+    #    「PDF 발행이 버전을 고정하는 사건」이라는 개정 규칙이 여기에 산다.
+    src_text = pathlib.Path(a.src).read_text(encoding="utf-8")
+    out = a.out or "dist/" + versioned_stem(pathlib.Path(a.src).stem, src_text) + ".pdf"
     pathlib.Path(out).parent.mkdir(parents=True, exist_ok=True)
     meta = (
         "문제 · 도메인 제안 &nbsp;<b>권소라</b><br>"
