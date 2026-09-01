@@ -167,6 +167,11 @@ transform_pair    1  ->  0
 | 🔄 **측정 축** | `certainty` · `tense` · `sent_type` | **D-74** |
 | 주장 스팬 | `claim_spans JSONB` | **D-30** — 주입 좌표에서 자동 생성 |
 | 🚨 **출처 추적** | `provenance` · `redistributable` | **D-71** |
+| 🔄 **동의** | `consent` (사용자 입력 유래 행) | **D-96** |
+
+> 🔄 **`consent` 는 사용자 입력에서 온 행에만 의미가 있습니다** (D-96). 결함 주입(D-25)·시정 페어(D-26) 유래는
+> 우리가 만든 것이라 해당되지 않습니다. **학습 데이터 구성 시 `provenance` 가 사용자 입력이면 `consent=true` 를 요구**하고,
+> 게이트가 이를 검사합니다 — `redistributable` 과 정확히 같은 처리입니다.
 
 > 🚨 **`ck_golden_injected_not_holdout`** — 주입본이 `test_holdout` 에 들어가는 것을 DB가 거부합니다. 평가는 **실사례 홀드아웃으로만** 해야 하는데, 이건 사람이 실수하기 가장 쉬운 지점입니다.
 
