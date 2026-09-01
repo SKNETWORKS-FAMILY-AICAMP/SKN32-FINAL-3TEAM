@@ -3,7 +3,7 @@
 제출본은 저장소가 아니라 빌드 결과물이므로, 레포에는 이 스크립트만 두고
 PDF는 dist/ 에 생성한다(.gitignore 대상).
 
-  python scripts/build_pdf.py docs/01_기획/02_프로젝트기획서_v3.8.md
+  python scripts/build_pdf.py docs/01_기획/02_프로젝트기획서.md
 
 동작
   1) 마크다운 -> HTML (표·코드펜스 확장)
