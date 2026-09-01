@@ -19,7 +19,31 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
-OC = os.environ.get("LAW_OC", "").strip()
+
+def _read_oc() -> str:
+    """🚨 .env 의 LAW_OC_KEY 를 읽는다.
+
+    이전 판은 `LAW_OC` 를 봤는데 `.env` 에는 `LAW_OC_KEY` 로 적혀 있어
+    **키를 채워도 못 찾았다** (2026-08-31 수정).
+    이 스크립트는 uv 환경이 서기 전에도 돌아야 하므로 표준 라이브러리로 직접 읽는다.
+    """
+    for name in ("LAW_OC_KEY", "LAW_OC"):
+        v = (os.environ.get(name) or "").strip()
+        if v:
+            return v
+    env = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(env):
+        with open(env, encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                if k.strip() in ("LAW_OC_KEY", "LAW_OC"):
+                    return v.split("#")[0].strip()
+    return ""
+
+
+OC = _read_oc()
 BASE_SEARCH = "https://www.law.go.kr/DRF/lawSearch.do"
 BASE_SERVICE = "https://www.law.go.kr/DRF/lawService.do"
 UA = {"User-Agent": "CopyLane-smoke/1.0 (SKN final project)"}
@@ -63,7 +87,7 @@ def text(node, *names):
 
 def main():
     if not OC:
-        sys.exit("LAW_OC 환경변수가 비어 있습니다.  export LAW_OC='발급받은ID'")
+        sys.exit("LAW_OC_KEY 가 비어 있습니다 — .env 에 값을 넣으십시오 (S0-01).")
 
     print(f"OC = {OC!r}\n" + "=" * 72)
 
