@@ -121,7 +121,10 @@ def _env_line() -> str:
 # ══════════════════════════════════════════════════════════
 @app.command()
 def setup() -> None:
-    """환경 설정 — uv sync · pre-commit 훅 · .env 생성."""
+    """처음 한 번. 필요한 것을 전부 설치하고 준비한다.
+
+    파이썬 패키지(`uv sync`) · 커밋 훅(pre-commit) · 설정 파일(`.env`).
+    """
     run("uv", "sync")
     run("uv", "run", "pre-commit", "install")
 
@@ -136,7 +139,10 @@ def setup() -> None:
 @app.command()
 @stub("W1", "scripts/doctor.py 본문 구현 — 지금은 검사 목록만 있는 자리표시자다")
 def doctor() -> None:
-    """환경·거버넌스 진단 — 무엇이 틀렸나가 아니라 어떻게 고치나를 낸다."""
+    """내 PC 설정이 팀과 같은지 검사한다.
+
+    틀린 것을 알리는 데서 끝내지 않고 **어떻게 고치는지**까지 낸다 (D-51 · D-89).
+    """
 
 
 @app.command(
@@ -149,20 +155,23 @@ def test(ctx: typer.Context) -> None:
 
 @app.command()
 def gate() -> None:
-    """거버넌스 게이트만 실행 — 실패하면 다음 단계로 가지 않는다 (D-51)."""
+    """다음 단계로 가도 되는지 검사한다.
+
+    거버넌스 게이트만 골라 실행한다. **실패하면 진행하지 않는다** (D-51).
+    """
     raise typer.Exit(run("uv", "run", "pytest", "-m", "gate", "-v"))
 
 
 @app.command()
 def fmt() -> None:
-    """포맷·린트 — ruff format + ruff check --fix."""
+    """코드 서식과 import 순서를 자동으로 맞춘다."""
     run("uv", "run", "ruff", "format", ".")
     raise typer.Exit(run("uv", "run", "ruff", "check", "--fix", "."))
 
 
 @app.command()
 def check() -> None:
-    """커밋 직전 점검 — 포맷·린트 후 게이트.
+    """커밋 전에 한 번. 코드 정리 + 게이트 검사.
 
     🚨 순서가 핵심이다. `ruff check` 만 돌리고 커밋하면 `ruff-format` 훅이
        커밋 시점에 파일을 고치고 커밋이 중단된다. 고칠 것을 **먼저** 고친다.
@@ -178,7 +187,7 @@ def check() -> None:
 # ══════════════════════════════════════════════════════════
 @app.command()
 def registry() -> None:
-    """레지스트리 재생성 — head·review·tail 을 합쳐 data_sources.yaml 로.
+    """어떤 데이터를 수집해도 되는지 목록을 다시 만든다.
 
     🚨 `data_sources.yaml` 을 손으로 고치지 않는다. 생성물이다.
        판정·검토 기록은 `scripts/registry_review.yaml` 에 적는다.
@@ -188,7 +197,7 @@ def registry() -> None:
 
 @app.command()
 def review() -> None:
-    """S0-14 검토표 — 근거를 다시 뽑아 위험 순으로 낸다 (D-66 · D-99).
+    """다른 사람이 등급 판정을 재확인할 표를 뽑는다.
 
     판정 근거를 매트릭스에서 다시 뽑고 검토표를 낸다. 검토자는 A 구간을 자세히,
     B 를 확인, C 를 훑는다. 결과는 `scripts/registry_review.yaml` 에 적는다.
@@ -200,13 +209,17 @@ def review() -> None:
 
 @app.command()
 def matrix() -> None:
-    """판정매트릭스 빌드 — data.js 에서 HTML 을 만든다 (D-87 · D-90)."""
+    """소스별 등급 근거 페이지를 다시 만든다.
+
+    소스마다 왜 그 등급인지를 정리한 HTML 이다.
+    `_matrix/data.js` -> `sources.json` + `판정매트릭스.html` (D-87 · D-90).
+    """
     raise typer.Exit(run("uv", "run", "python", "scripts/build_matrix.py"))
 
 
 @app.command()
 def sync() -> None:
-    """프로젝트 사본 — build/project_sync/ 에 스탬프를 찍어 낸다.
+    """문서를 claude.ai 프로젝트에 올릴 사본으로 복사한다.
 
     🚨 레포가 원본이고 claude.ai 프로젝트는 사본이다. 업로드 자체는 사람이 한다.
     """
@@ -216,12 +229,15 @@ def sync() -> None:
 @app.command()
 @stub("W8", "제출 문서 목록 확정 — 지금은 `pdf <문서경로>` 로 한 건씩 뽑는다")
 def package() -> None:
-    """제출본 일괄 빌드 — 00_산출물현황.md 를 읽어 dist/ 를 만든다 (D-53)."""
+    """제출용 PDF 를 한꺼번에 만든다.
+
+    `00_산출물현황.md` 의 목록을 읽어 `dist/` 에 낸다 (D-53).
+    """
 
 
 @app.command()
 def pdf(src: str) -> None:
-    """제출용 PDF 빌드 (D-53) — 발행물 이름에는 버전이 붙는다.
+    """문서 하나를 제출용 PDF 로 만든다. 파일 이름에 버전이 붙는다.
 
     예:  python launcher.py pdf docs/01_기획/03_작업일정.md
     """
@@ -230,7 +246,10 @@ def pdf(src: str) -> None:
 
 @app.command(name="db-up")
 def db_up() -> None:
-    """postgres + pgvector 컨테이너 기동 (127.0.0.1:5432)."""
+    """로컬 데이터베이스를 켠다 (Docker Desktop 필요).
+
+    postgres + pgvector 컨테이너. `127.0.0.1` 에만 열린다 (P3-14).
+    """
     if run("docker", "compose", "up", "-d") != 0:
         console.print(
             Panel(
@@ -263,7 +282,7 @@ def db_up() -> None:
 
 @app.command(name="db-down")
 def db_down() -> None:
-    """컨테이너 중지 — 데이터는 볼륨에 남는다."""
+    """데이터베이스를 끈다. 저장된 데이터는 그대로 남는다."""
     raise typer.Exit(run("docker", "compose", "stop"))
 
 
@@ -273,43 +292,55 @@ def db_down() -> None:
 @app.command()
 @stub("W2", "alembic/ 초기화 + postgres 기동")
 def migrate() -> None:
-    """DB 마이그레이션 — Alembic 으로 스키마를 코드로 관리한다."""
+    """데이터베이스 테이블을 만들고 바꾼다.
+
+    Alembic 으로 스키마 변경을 코드로 남긴다.
+    """
 
 
 @app.command()
 @stub("W2", "scripts/collect.py 수집 로직 구현")
 def collect() -> None:
-    """데이터 수집 — 게이트 통과분만 (D-15)."""
+    """허가가 끝난 소스만 골라 내려받는다.
+
+    2인 확인이 안 끝난 소스는 게이트가 거부한다 (D-15).
+    """
 
 
 @app.command()
 @stub("W3", "수집 코퍼스 확보")
 def golden() -> None:
-    """골든셋 생성 — 정답 문장에 결함을 주입해 평가셋을 만든다."""
+    """일부러 틀린 문장을 만들어 채점용 정답셋을 꾸린다."""
 
 
 @app.command()
 @stub("W4~", "골든셋 · GPU 경로 확정")
 def train() -> None:
-    """학습 — 인코더 파인튜닝과 sLLM 학습 (트랙별 분배)."""
+    """모델을 학습시킨다.
+
+    인코더 파인튜닝과 sLLM 학습. 트랙별로 나눠 돌린다 (D-94).
+    """
 
 
 @app.command(name="eval")
 @stub("W4~", "학습 산출물")
 def eval_() -> None:
-    """평가 — L1 품질 · L2 통합 · L3 운영 · L4 거버넌스 (D-77)."""
+    """학습한 모델이 얼마나 맞히는지 잰다.
+
+    4층 지표 — L1 품질 · L2 통합 · L3 운영 · L4 거버넌스 (D-77).
+    """
 
 
 @app.command()
 @stub("W2", "walking skeleton")
 def serve() -> None:
-    """서버 실행 — FastAPI 로 판정·생성 엔드포인트를 연다."""
+    """웹 API 를 띄운다. 판정·생성을 호출할 수 있다."""
 
 
 @app.command()
 @stub("W8~", "GGUF 변환 · 오프라인 경로")
 def demo() -> None:
-    """데모 모드 — 오프라인 GGUF 경로로 발표용 구동."""
+    """인터넷 없이 도는 발표용 모드로 띄운다."""
 
 
 # ══════════════════════════════════════════════════════════
@@ -323,7 +354,7 @@ def demo() -> None:
 
 
 def _menu_test() -> None:
-    """테스트 — pytest 전체 실행."""
+    """테스트를 전부 돌린다."""
     run("uv", "run", "pytest")
 
 
@@ -360,17 +391,18 @@ MENU: list[tuple[str, str, object]] = [
 
 
 def summary(fn) -> str:
-    """메뉴 설명문 — **docstring 에서 나온다.**
+    """메뉴 설명문. **docstring 첫 줄에서 나온다.**
 
     🚨 설명을 메뉴 표에 따로 적지 않는다. 그러면 docstring(=`--help` 가 쓰는 것)과
-       메뉴가 두 벌이 되고, 한쪽만 갱신된다 — 오늘 `ACTIONS` 에서 본 그대로다.
-       `"환경 설정 — uv sync · 훅 · .env"` 처럼 앞이 제목과 겹치면 뒤만 쓴다.
+       메뉴가 두 벌이 되고, 한쪽만 갱신된다 — `ACTIONS` 에서 본 그대로다.
+
+    🚨 **첫 줄에는 「눌렀을 때 무슨 일이 일어나는지」만 쓴다.**
+       런처를 여는 사람은 이 저장소를 만들지 않은 팀원이다. 파일 이름·내부 용어·
+       D 번호는 첫 줄에 넣지 않는다 — 필요하면 docstring 본문에 적는다.
+       `"data.js 에서 HTML 을 만든다 (D-87)"` 는 만든 사람만 아는 말이다.
     """
     lines = (fn.__doc__ or "").strip().splitlines()
-    doc = lines[0].strip() if lines else ""
-    if "—" in doc:
-        doc = doc.split("—", 1)[1].strip()
-    return doc.rstrip(".")
+    return (lines[0].strip() if lines else "").rstrip(".")
 
 
 def _draw() -> None:
