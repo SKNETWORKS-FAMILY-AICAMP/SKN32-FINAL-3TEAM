@@ -134,9 +134,12 @@ def main():
         re.S,
     )
     if m2:
+        # 🚨 전문을 다 찍으면 터미널이 넘친다. 필드명만 보면 되므로 태그 줄만 남긴다.
         for line in m2.group(0).splitlines():
-            if line.strip():
-                print("      " + line.strip()[:150])
+            t = line.strip()
+            if t.startswith("<별표") and not t.startswith("<별표내용"):
+                print("      " + t[:130])
+        print("      ... (별표내용은 [4] 에서 요약)")
     else:
         print("      (행정처분 블록을 못 찾음)")
     print()
