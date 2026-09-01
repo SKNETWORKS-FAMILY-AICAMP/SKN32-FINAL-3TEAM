@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import platform
 import shutil
 import subprocess
@@ -59,6 +60,31 @@ def planned(name: str, when: str, needs: str) -> None:
             border_style="yellow",
         )
     )
+
+
+def stub(when: str, needs: str):
+    """아직 대상이 없는 명령을 감싼다.
+
+    🚨 「미구현」이라는 사실을 **한 곳에만** 적기 위한 것이다.
+       예전에는 함수 본문과 메뉴 표(`ready` 플래그)에 따로 적었고, 그래서
+       `doctor` 가 메뉴에서는 정상으로 보이면서 실행하면 죽는 상태가 됐다.
+       이제 메뉴의 표기는 이 표시에서 나온다.
+    """
+
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper() -> None:
+            planned(cli_name(fn), when, needs)
+
+        wrapper._planned = True
+        return wrapper
+
+    return deco
+
+
+def cli_name(fn) -> str:
+    """함수 이름 -> CLI 명령 이름. `db_up` -> `db-up`, `eval_` -> `eval`."""
+    return getattr(fn, "_cli", fn.__name__.rstrip("_").replace("_", "-"))
 
 
 def _git_branch() -> str:
@@ -108,9 +134,9 @@ def setup() -> None:
 
 
 @app.command()
+@stub("W1", "scripts/doctor.py 본문 구현 — 지금은 검사 목록만 있는 자리표시자다")
 def doctor() -> None:
     """환경·거버넌스 진단 — 무엇이 틀렸나가 아니라 어떻게 고치나를 낸다."""
-    raise typer.Exit(run("uv", "run", "python", "scripts/doctor.py"))
 
 
 @app.command(
@@ -132,6 +158,74 @@ def fmt() -> None:
     """포맷·린트 — ruff format + ruff check --fix."""
     run("uv", "run", "ruff", "format", ".")
     raise typer.Exit(run("uv", "run", "ruff", "check", "--fix", "."))
+
+
+@app.command()
+def check() -> None:
+    """커밋 직전 점검 — 포맷·린트 후 게이트.
+
+    🚨 순서가 핵심이다. `ruff check` 만 돌리고 커밋하면 `ruff-format` 훅이
+       커밋 시점에 파일을 고치고 커밋이 중단된다. 고칠 것을 **먼저** 고친다.
+    """
+    run("uv", "run", "ruff", "format", ".")
+    if run("uv", "run", "ruff", "check", "--fix", ".") != 0:
+        raise typer.Exit(1)
+    raise typer.Exit(run("uv", "run", "pytest", "-m", "gate"))
+
+
+# ══════════════════════════════════════════════════════════
+# 데이터 거버넌스 — 레지스트리·검토표·매트릭스는 전부 생성물이다
+# ══════════════════════════════════════════════════════════
+@app.command()
+def registry() -> None:
+    """레지스트리 재생성 — registry_head/review/tail -> data_sources.yaml.
+
+    🚨 `data_sources.yaml` 을 손으로 고치지 않는다. 생성물이다.
+       판정·검토 기록은 `scripts/registry_review.yaml` 에 적는다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "scripts/gen_registry.py"))
+
+
+@app.command()
+def review() -> None:
+    """S0-14 2인 확인 검토표 생성 (D-66 · D-99).
+
+    판정 근거를 매트릭스에서 다시 뽑고 검토표를 낸다. 검토자는 A 구간을 자세히,
+    B 를 확인, C 를 훑는다. 결과는 `scripts/registry_review.yaml` 에 적는다.
+    """
+    if run("uv", "run", "python", "scripts/extract_rationale.py") != 0:
+        raise typer.Exit(1)
+    raise typer.Exit(run("uv", "run", "python", "scripts/review_sheet.py"))
+
+
+@app.command()
+def matrix() -> None:
+    """판정매트릭스 HTML 빌드 (D-87 · D-90)."""
+    raise typer.Exit(run("uv", "run", "python", "scripts/build_matrix.py"))
+
+
+@app.command()
+def sync() -> None:
+    """프로젝트 사본 생성 — build/project_sync/ 에 스탬프를 찍어 낸다.
+
+    🚨 레포가 원본이고 claude.ai 프로젝트는 사본이다. 업로드 자체는 사람이 한다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "scripts/sync_project.py"))
+
+
+@app.command()
+@stub("W8", "제출 문서 목록 확정 — 지금은 `pdf <문서경로>` 로 한 건씩 뽑는다")
+def package() -> None:
+    """제출본 일괄 빌드 — 00_산출물현황.md 를 읽어 dist/ 를 만든다 (D-53)."""
+
+
+@app.command()
+def pdf(src: str) -> None:
+    """제출용 PDF 빌드 (D-53) — 발행물 이름에는 버전이 붙는다.
+
+    예:  python launcher.py pdf docs/01_기획/03_작업일정.md
+    """
+    raise typer.Exit(run("uv", "run", "python", "scripts/build_pdf.py", src))
 
 
 @app.command(name="db-up")
@@ -177,87 +271,91 @@ def db_down() -> None:
 # 아직 대상이 없는 명령 — 메뉴에는 보이되 눌러도 안전하다
 # ══════════════════════════════════════════════════════════
 @app.command()
+@stub("W2", "alembic/ 초기화 + postgres 기동")
 def migrate() -> None:
     """DB 마이그레이션 (Alembic)."""
-    planned("migrate", "W2", "alembic/ 초기화 + postgres 기동")
 
 
 @app.command()
+@stub("W2", "scripts/collect.py 수집 로직 구현")
 def collect() -> None:
     """데이터 수집 — 게이트 통과분만 (D-15)."""
-    planned("collect", "W2", "scripts/collect.py 수집 로직 구현")
 
 
 @app.command()
+@stub("W3", "수집 코퍼스 확보")
 def golden() -> None:
     """골든셋 생성 (결함 주입)."""
-    planned("golden", "W3", "수집 코퍼스 확보")
 
 
 @app.command()
+@stub("W4~", "골든셋 · GPU 경로 확정")
 def train() -> None:
     """학습 — 인코더 / sLLM."""
-    planned("train", "W4~", "골든셋 · GPU 경로 확정")
 
 
 @app.command(name="eval")
+@stub("W4~", "학습 산출물")
 def eval_() -> None:
     """평가 — 전체 / 지표 선택."""
-    planned("eval", "W4~", "학습 산출물")
 
 
 @app.command()
+@stub("W2", "walking skeleton")
 def serve() -> None:
     """API 서버 실행 (FastAPI)."""
-    planned("serve", "W2", "walking skeleton")
 
 
 @app.command()
+@stub("W8~", "GGUF 변환 · 오프라인 경로")
 def demo() -> None:
     """데모 모드 (오프라인 GGUF)."""
-    planned("demo", "W8~", "GGUF 변환 · 오프라인 경로")
 
 
 # ══════════════════════════════════════════════════════════
 # 대화형 메뉴
 # ══════════════════════════════════════════════════════════
-MENU: list[tuple[str, str, str, bool]] = [
-    ("1", "환경 설정", "setup", True),
-    ("2", "환경 진단", "doctor", True),
-    ("-", "", "", True),
-    ("d", "DB 기동", "db-up", True),
-    ("x", "DB 중지", "db-down", True),
-    ("3", "DB 마이그레이션", "migrate", False),
-    ("4", "데이터 수집", "collect", False),
-    ("5", "골든셋 생성", "golden", False),
-    ("-", "", "", True),
-    ("6", "학습", "train", False),
-    ("7", "평가", "eval", False),
-    ("g", "Phase 게이트 판정", "gate", True),
-    ("-", "", "", True),
-    ("8", "서버 실행", "serve", False),
-    ("9", "데모 모드", "demo", False),
-    ("-", "", "", True),
-    ("t", "테스트", "test", True),
-    ("f", "포맷·린트", "fmt", True),
-    ("q", "종료", "", True),
-]
+# 🚨 메뉴는 **함수를 직접 든다.** 예전에는 명령 이름 문자열을 든 MENU 와
+#    이름->함수 표(ACTIONS)가 따로 있었고, 그 둘이 이미 어긋나 있었다
+#    (`test` 가 MENU 에만 있고 ACTIONS 에는 없었다). 같은 사실을 두 곳에 두면
+#    갈라진다 — D-99 와 같은 형태다.
+#    「미구현」 표기도 여기 적지 않는다. @stub 이 붙었는지로 판정한다.
 
-ACTIONS = {
-    "setup": setup,
-    "db-up": db_up,
-    "db-down": db_down,
-    "doctor": doctor,
-    "gate": gate,
-    "fmt": fmt,
-    "migrate": migrate,
-    "collect": collect,
-    "golden": golden,
-    "train": train,
-    "eval": eval_,
-    "serve": serve,
-    "demo": demo,
-}
+
+def _menu_test() -> None:
+    run("uv", "run", "pytest")
+
+
+_menu_test._cli = "test"
+
+SEP = ("-", "", None)
+
+MENU: list[tuple[str, str, object]] = [
+    ("1", "환경 설정", setup),
+    ("2", "환경 진단", doctor),
+    SEP,
+    ("d", "DB 기동", db_up),
+    ("x", "DB 중지", db_down),
+    ("3", "DB 마이그레이션", migrate),
+    SEP,
+    ("r", "레지스트리 재생성", registry),
+    ("v", "S0-14 검토표", review),
+    ("m", "판정매트릭스 빌드", matrix),
+    ("s", "프로젝트 사본", sync),
+    SEP,
+    ("4", "데이터 수집", collect),
+    ("5", "골든셋 생성", golden),
+    ("6", "학습", train),
+    ("7", "평가", eval_),
+    ("8", "서버 실행", serve),
+    ("9", "데모 모드", demo),
+    SEP,
+    ("g", "Phase 게이트 판정", gate),
+    ("c", "커밋 전 점검", check),
+    ("t", "테스트", _menu_test),
+    ("f", "포맷·린트", fmt),
+    ("q", "종료", None),
+]
 
 
 def _draw() -> None:
@@ -266,16 +364,17 @@ def _draw() -> None:
     table.add_column(width=20)
     table.add_column(style="dim")
 
-    for key, label, cmd, ready in MENU:
+    for key, label, fn in MENU:
         if key == "-":
             table.add_row("", "", "")
             continue
-        note = cmd if ready else f"{cmd}  (미구현)"
+        ready = fn is None or not getattr(fn, "_planned", False)
+        note = "" if fn is None else cli_name(fn) + ("" if ready else "  (미구현)")
         # 🚨 Rich 는 대괄호를 마크업으로 읽는다. [g]·[t] 같은 한 글자 키가 통째로 사라진다.
         #    escape 로 리터럴 대괄호를 만든다.
         table.add_row(
             escape(f"[{key}]"),
-            f"[dim]{label}[/dim]" if not ready else label,
+            label if ready else f"[dim]{label}[/dim]",
             note,
         )
 
@@ -291,21 +390,15 @@ def menu() -> None:
             continue
         if choice in {"q", "quit", "exit"}:
             return
-        if choice == "t":
-            run("uv", "run", "pytest")
-            continue
 
         entry = next((m for m in MENU if m[0] == choice and m[0] != "-"), None)
-        if entry is None:
+        if entry is None or entry[2] is None:
             console.print("  [red]없는 항목이다[/red]")
             continue
 
-        action = ACTIONS.get(entry[2])
-        if action is None:
-            continue
         # 각 명령은 종료 코드를 typer.Exit 로 던진다. 메뉴에서는 그걸로 끝내면 안 된다.
         with contextlib.suppress(typer.Exit):
-            action()
+            entry[2]()
 
 
 @app.callback(invoke_without_command=True)
