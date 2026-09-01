@@ -25,22 +25,40 @@ FAMILY = "law"
 BASE_SEARCH = "https://www.law.go.kr/DRF/lawSearch.do"
 BASE_SERVICE = "https://www.law.go.kr/DRF/lawService.do"
 
-# 수집리스트 S1-01 · S1-02. 🚨 목록을 여기서 늘리지 않는다 —
-#    새 소스는 레지스트리에 먼저 등재하고 그다음 여기에 온다 (D-15).
-TARGETS: dict[str, list[tuple[str, str]]] = {
+# 수집리스트 S1-01 · S1-02.
+#  🚨 **ID 로 직접 조회한다. 이름으로 검색하지 않는다.**
+#     수집전처리 기획 C1 이 재현성 근거로 「ID+시행일 고정」을 든 이유가 이것이다 —
+#     이름 검색은 법령명이 개정되거나 검색 순위가 바뀌면 **다른 법령을 가져온다.**
+#     실제로 스모크(2026-08-31)에서 코드의 「표시·광고」와 법령의 「표시 또는 광고」가
+#     달랐는데 부분 매칭으로 우연히 통과했다. 운에 기대지 않는다.
+#
+#  🚨 목록을 여기서 늘리지 않는다 — 새 소스는 레지스트리에 먼저 등재하고 그다음 여기에 온다 (D-15).
+#  ID 는 scripts/law_api_smoke.py 로 확인한 실측값이다 (2026-08-31).
+TARGETS: dict[str, list[tuple[str, str, str]]] = {
+    # (ID, 법령명, 수집리스트 항목)
     "law": [
-        ("표시·광고의 공정화에 관한 법률", "S1-01"),
-        ("식품 등의 표시·광고에 관한 법률", "S1-01"),
-        ("화장품법", "S1-01"),
-        ("표시·광고의 공정화에 관한 법률 시행령", "S1-01"),
-        ("식품 등의 표시·광고에 관한 법률 시행규칙", "S1-01"),
-        ("화장품법 시행규칙", "S1-01"),
+        ("002011", "표시·광고의 공정화에 관한 법률", "S1-01"),
+        ("013094", "식품 등의 표시·광고에 관한 법률", "S1-01"),
+        ("002015", "화장품법", "S1-01"),
+        ("008741", "화장품법 시행규칙", "S1-01"),
     ],
     "admrul": [
-        ("식품등의 부당한 표시 또는 광고의 내용 기준", "S1-02"),
-        ("부당한 표시·광고로 보지 아니하는 식품등의 기능성 표시·광고에 관한 규정", "S1-02"),
+        ("69549", "식품등의 부당한 표시 또는 광고의 내용 기준", "S1-02"),
+        (
+            "75449",
+            "부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정",
+            "S1-02",
+        ),
+        ("37971", "건강기능식품 기능성 원료 및 기준·규격 인정에 관한 규정", "S1-04 원출처"),
     ],
 }
+
+# ⬜ 미확보 — 스모크에서 ID 를 못 받은 것. 확인 후 위 표로 옮긴다.
+#    표시·광고의 공정화에 관한 법률 시행령 · 식품 등의 표시·광고에 관한 법률 시행규칙
+PENDING = [
+    ("law", "표시·광고의 공정화에 관한 법률 시행령", "S1-01"),
+    ("law", "식품 등의 표시·광고에 관한 법률 시행규칙", "S1-01"),
+]
 
 ID_FIELDS = ("법령ID", "행정규칙ID", "법령일련번호", "행정규칙일련번호")
 NAME_FIELDS = ("법령명한글", "행정규칙명")
@@ -92,20 +110,18 @@ def collect(target: str, *, dry_run: bool = False) -> int:
     oc = env.get("LAW_OC_KEY")
 
     saved = 0
-    for query, sid in TARGETS[target]:
-        hit = search(oc, target, query)
-        if hit is None:
-            print(f"  ❌ [{sid}] {query} — 검색어를 바꿔 재시도 필요")
-            continue
-
-        law_id, name, eff = hit
-        print(f"  ✅ [{sid}] {name}  ID={law_id}  시행일={eff or '미상'}")
-        if dry_run:
-            continue
-
+    for law_id, name, sid in TARGETS[target]:
         body = _call(BASE_SERVICE, oc, target=target, ID=law_id)
-        if _parse(body) is None:
-            print(f"     ⚠️  본문이 XML 이 아니다 — 건너뛴다 ({law_id})")
+        root = _parse(body)
+        if root is None:
+            print(f"  ❌ [{sid}] {name} (ID={law_id}) — XML 이 아니다. OC 를 확인하라")
+            continue
+
+        # 🚨 받은 것이 요청한 것인지 확인한다. ID 는 고정이지만 응답은 검증한다.
+        got = _text(root, *NAME_FIELDS) or _text(root, ".//법령명_한글", ".//행정규칙명")
+        eff = _text(root, *EFF_FIELDS) or _text(root, ".//시행일자", ".//발령일자")
+        print(f"  ✅ [{sid}] {got or name}  ID={law_id}  시행일={eff or '미상'}")
+        if dry_run:
             continue
 
         # 🚨 파일명에 시행일을 넣는다. 개정되면 새 파일이 되고 원본은 남는다 (규약 2)
@@ -123,16 +139,45 @@ def collect(target: str, *, dry_run: bool = False) -> int:
             print(f"     💾 {path.relative_to(store.ROOT)}  ({len(body):,} bytes)")
             saved += 1
 
+    if PENDING and target == "law":
+        print("\n  ⬜ 미확보 (ID 확인 필요):")
+        for _t, nm, sid in PENDING:
+            print(f"     · [{sid}] {nm}")
+
     return saved
+
+
+def find_pending() -> None:
+    """미확보 항목의 ID 를 검색해서 알려준다. 🚨 자동으로 TARGETS 에 넣지 않는다.
+
+    검색은 **사람이 확인할 후보를 내는 도구**이지 수집 경로가 아니다.
+    ID 는 사람이 확인하고 코드에 박는다 — 그래야 재현성이 유지된다 (C1).
+    """
+    registry.require(SOURCE_ID, use="U1")
+    oc = env.get("LAW_OC_KEY")
+
+    print("미확보 항목 ID 검색 — 확인 후 TARGETS 에 직접 옮기십시오\n")
+    for target, query, sid in PENDING:
+        hit = search(oc, target, query)
+        if hit is None:
+            print(f"  ❌ [{sid}] {query} — 검색어를 바꿔 재시도")
+            continue
+        law_id, name, eff = hit
+        print(f"  ✅ [{sid}] {name}")
+        print(f'        ("{law_id}", "{name}", "{sid}"),   # 시행일 {eff}')
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="법제처 OPEN API 수집기 (S1-01 · S1-02)")
     ap.add_argument("--target", choices=sorted(TARGETS), default="law")
     ap.add_argument("--dry-run", action="store_true", help="저장하지 않고 조회만")
+    ap.add_argument("--find", action="store_true", help="미확보 항목의 ID 를 검색만 한다")
     args = ap.parse_args()
 
     try:
+        if args.find:
+            find_pending()
+            return 0
         saved = collect(args.target, dry_run=args.dry_run)
     except (registry.RegistryError, env.MissingKey) as e:
         # 🚨 게이트와 키 부재는 「고치는 법」을 그대로 보여준다 (D-51)
