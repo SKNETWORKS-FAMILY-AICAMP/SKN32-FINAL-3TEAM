@@ -36,6 +36,11 @@ OUT = ROOT / "docs/03_데이터/S0-14_2인확인_검토표.md"
 USES = ["U1", "U2", "U3", "U4"]
 RISKY_FLAGS = ("GATED", "TOS", "PREAPPROVAL", "NOSTORE", "QUERYLOG", "PII", "NC")
 
+# 🚨 판정 근거가 스스로 「못 봤다」고 말하는 표현.
+#    등급은 맞을 수 있으나 **확인되지 않은 것**이고, 확인되지 않은 것은 자명할 수 없다.
+#    (판정매트릭스: 「미확인」을 「아마 괜찮음」으로 읽는 순간 등급이 무의미해진다)
+UNVERIFIED = ("미확인", "확인 필요", "확인필요", "불명", "차단돼", "차단으로")
+
 
 def risk(s: dict, r: dict | None = None) -> tuple[int, list[str]]:
     """위험 점수와 그 이유. 🚨 점수가 아니라 **이유**가 검토자에게 필요한 것이다.
@@ -64,6 +69,18 @@ def risk(s: dict, r: dict | None = None) -> tuple[int, list[str]]:
     if "정정" in text or "🔄" in text:
         score += 2
         why.append("**판정이 한 번 바뀐 이력**이 있다 — 무엇이 왜 바뀌었는지 확인")
+    blob = ((r or {}).get("why") or "") + " ".join(((r or {}).get("note") or {}).values())
+    seen = sorted({w for w in UNVERIFIED if w in blob})
+    if seen:
+        # 🚨 단독으로 A 구간(>=4)에 올린다. 확인되지 않은 소스는 「확인만」이 될 수 없고,
+        #    B 구간은 이 지시를 실을 자리가 없다.
+        score += 4
+        why.append(
+            f"🚨 **판정 근거가 스스로 「{seen[0]}」이라고 적고 있다.** "
+            "등급은 맞을 수 있으나 **확인된 적이 없다** — 확인되지 않은 것은 자명할 수 없다. "
+            "**근거 URL 을 열어 이용허락범위를 눈으로 확인**하고, 확인되면 팀장에게 근거 갱신을 "
+            "요청하고, 열리지 않으면 그것이 이견이다"
+        )
     if (r or {}).get("bundle"):
         n = len((r or {})["bundle"])
         score += 2

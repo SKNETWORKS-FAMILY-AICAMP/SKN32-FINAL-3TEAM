@@ -314,3 +314,37 @@ def test_manifest의_소스는_레지스트리에_있고_G1이_아니다() -> No
         assert sources[sid].get("grade") != "G1", (
             f"manifest:{lineno} — {sid!r} 는 G1 이다. 수집 자체를 하지 않는다"
         )
+
+
+@pytest.mark.gate
+def test_검토_대상_소스는_모두_판정_근거를_가진다() -> None:
+    """2인 확인은 판정을 **재현**하는 절차다 (D-66). 근거가 없으면 재현할 것이 없다.
+
+    🚨 이 게이트가 실제로 지키는 것은 「매트릭스 id ↔ 레지스트리 키」 매핑이다.
+       둘은 단위가 다르다 — 매트릭스는 「판정 근거」 단위, 레지스트리는 「이용조건」
+       단위다 (D-90). 그래서 이름이 어긋나거나 N:1 로 묶인 것이 있고, 그 매핑은
+       extract_rationale.py 의 ALIAS 표가 들고 있다.
+
+       표가 낡으면 근거가 **조용히** 사라진다. 검토표에는 「판정 근거 없음」만 뜨고,
+       근거가 없어서인지 이름이 어긋나서인지 검토자는 구분할 수 없다.
+       그 상태로 서명이 들어가면 그것이 D-66 이 막으려던 「동의만 찍는 검토」다.
+    """
+    rationale_path = ROOT / "scripts" / "registry_rationale.yaml"
+    assert rationale_path.exists(), (
+        "scripts/registry_rationale.yaml 이 없다 — "
+        "uv run python scripts/extract_rationale.py 로 뽑는다"
+    )
+    rationale = yaml.safe_load(rationale_path.read_text(encoding="utf-8")) or {}
+
+    missing = [
+        key
+        for key, src in _sources().items()
+        if any((src.get("use") or {}).get(u) == "allow" for u in sorted(VALID_USES))
+        and not (rationale.get(key) or {}).get("why")
+    ]
+
+    assert not missing, (
+        "용도가 열린 소스에 판정 근거가 없다 — 검토자가 등급을 재현할 수 없다 (D-66 · D-90). "
+        "판정매트릭스에 엔트리를 넣거나, id 가 다를 뿐이라면 extract_rationale.py 의 "
+        f"ALIAS 에 잇는다: {missing}"
+    )
