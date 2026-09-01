@@ -46,6 +46,15 @@ dev = [
     "pre-commit>=3.7",
 ]
 
+# 🚨 문서 빌드 전용 — 기본 설치에 넣지 않는다.
+#    5인이 매일 쓰는 것이 아니고, playwright 는 브라우저 바이너리까지 받는다.
+#    제출본이 필요할 때만:  uv sync --group docs  &&  uv run playwright install chromium
+docs = [
+    "markdown>=3.6",      # 마크다운 -> HTML
+    "playwright>=1.45",   # HTML -> PDF 렌더
+    "pdfplumber>=0.11",   # 1차 렌더에서 쪽 번호 실측 (목차 주입)
+]
+
 # ============================================================
 # ruff — lint + format
 # ============================================================
