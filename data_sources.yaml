@@ -112,21 +112,23 @@ sources:
   mfds_press:
     name: "식약처 부당광고 점검 보도자료"
     org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
     layer: "1층 판정라벨"
     grade: G3
     use: {U1: deny, U2: deny, U3: allow, U4: allow}
-    constraints: []
+    constraints: [BY]
     redistributable: true
     value: B
     cost: free
     status: collect
     access: "공식 다운로드"
     scale: "회차당 수십~수백 건"
-    caution: "test_holdout 출처로 쓰고 train에는 넣지 않는다."
+    caution: "test_holdout 출처로 쓰고 train에는 넣지 않는다. 🚨 수집한 게시물마다 공공누리 부착 여부를 확인해 미부착 건은 격리한다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   ftc_noviolation:
     name: "공정위 무혐의·심의절차종료 결정"
@@ -213,6 +215,7 @@ sources:
   hf_standard:
     name: "「건강기능식품의 기준 및 규격」 고시"
     org: "식약처 / 법제처"
+    url: "https://open.law.go.kr/LSO/openApi/guideList.do"
     layer: "2층 적법라벨"
     grade: G3
     use: {U1: allow, U2: allow, U3: allow, U4: allow}
@@ -223,11 +226,12 @@ sources:
     status: collect
     access: "법제처 API"
     scale: "고시 전문 + 고시형 원료 96건"
-    caution: "개정일(effective_date) 필수 기록."
+    caution: "개정일(effective_date) 필수 기록. ⚠️ 이용조건이 law_go_kr 과 같으므로 D-90 의 「이용조건 단위 등재」로는 covers 후보다 — 별도 등재를 유지할지는 팀장 판단."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    evidence_url: "https://open.law.go.kr/LSO/openApi/guideList.do"
 
   kcia_guideline:
     name: "대한화장품협회 광고자문 기준 해설서 2025 ★2025판"
@@ -877,6 +881,7 @@ sources:
   self_sanction_stat:
     name: "★ 자체 산출 — 부당광고 제재 실적 (행정처분 API + 의결서)"
     org: "★ 우리 파이프라인"
+    url: "docs/01_기획/경제성_근거.md"
     layer: "경제성 근거"
     grade: G3
     use: {U1: allow, U2: allow, U3: allow, U4: allow}
@@ -887,11 +892,12 @@ sources:
     status: collect
     access: "이미 수집하는 데이터에서 계산"
     scale: "의결문 5,870건 + 식약처 행정처분 레코드"
-    caution: "★★ 인용한 숫자보다 산출한 숫자가 강하다. \"MarketsandMarkets에 따르면\"보다 \"우리가 수집한 처분 레코드에서 계산하면\"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 제품의 일부다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다."
+    caution: "★★ 인용한 숫자보다 산출한 숫자가 강하다. \"MarketsandMarkets에 따르면\"보다 \"우리가 수집한 처분 레코드에서 계산하면\"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 제품의 일부다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    evidence_url: "docs/01_기획/경제성_근거.md"
 
   mfds_production:
     name: "식약처 화장품 생산·수출 실적 통계 (연 1회)"

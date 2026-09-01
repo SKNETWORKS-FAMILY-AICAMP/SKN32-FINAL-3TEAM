@@ -431,13 +431,13 @@ const SOURCES = [
  url:'https://www.data.go.kr/data/15059500/openapi.do'},
 
 {id:'mfds_press', layer:'1층 판정라벨', name:'식약처 부당광고 점검 보도자료', org:'식품의약품안전처',
- grade:'G3', constraints:[], access:'공식 다운로드', verified:false,
+ grade:'G3', constraints:['BY'], access:'공식 다운로드', verified:true,
  scale:'회차당 수십~수백 건', cost:'free', costNote:'무료 · 즉시',
  value:'B', valueNote:'★ 학습 출처(의결서)와 기관이 다르므로 평가용 홀드아웃에 최적. 편향이 독립적이다',
  u:{train:CD, commercial:OK, raw:CD, cite:OK, deploy:OK},
  note:{train:'⚠️ 키워드·집계만 텍스트 — 문장 라벨로는 저품질',commercial:'공공저작물',raw:'⚠️ 문구 전체는 이미지 캡처',cite:'적발 통계·유형 분포 인용에 유용',deploy:'제한 없음'},
- why:'등급은 G3. 제약은 라이선스가 아니라 기술적 한계다.',
- caution:'test_holdout 출처로 쓰고 train에는 넣지 않는다.', url:''},
+ why:'2026-09-01 식약처 저작권정책을 직접 열어 확인 — 저작권법 제24조의2로 <b>별도 허락 없이 이용 가능</b>하고 제36조로 <b>개작도 된다</b>. 다만 <b>제37조 출처 명시가 의무</b>라 BY가 붙는다(기존 제약 공란은 누락이었다). 🚨 「<b>공공누리가 부착되지 않은 자료</b>는 게시물 등록 부서 담당자와 <b>사전 협의</b>」 단서가 있어 게시물마다 갈린다 — 프래그먼트 단위 확인 사항이다(D-18).',
+ caution:'test_holdout 출처로 쓰고 train에는 넣지 않는다. 🚨 수집한 게시물마다 공공누리 부착 여부를 확인해 미부착 건은 격리한다.', url:'https://www.mfds.go.kr/wpge/m_34/de010803l001.do', accessUrl:'https://www.mfds.go.kr/brd/m_99/list.do'},
 
 {id:'ftc_noviolation', layer:'1층 판정라벨', name:'공정위 무혐의·심의절차종료 결정', org:'공정거래위원회',
  grade:'G0', constraints:['TOS'], access:'미확인', verified:false,
@@ -485,8 +485,8 @@ const SOURCES = [
  value:'A', valueNote:'승인 기능성 문구의 원 출처. API 결과를 여기로 소급하면 인용 품질이 함께 올라간다',
  u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
  note:{train:'제한 없음',commercial:'공공저작물',raw:'법령·고시 원문 자유이용',cite:'★ 인용의 최상위 근거',deploy:'제한 없음'},
- why:'법령·고시는 공공저작물.',
- caution:'개정일(effective_date) 필수 기록.', url:''},
+ why:'법령·고시는 공공저작물. 이 고시는 <b>법제처 OPEN API 로 받으므로 이용조건 근거가 law_acts 와 동일</b>하다(같은 OC 키·같은 조건). 고시 실물은 law.go.kr/행정규칙/건강기능식품의기준및규격 에서 2026-09-01 존재를 확인했다.',
+ caution:'개정일(effective_date) 필수 기록. ⚠️ 이용조건이 law_go_kr 과 같으므로 D-90 의 「이용조건 단위 등재」로는 covers 후보다 — 별도 등재를 유지할지는 팀장 판단.', url:'https://open.law.go.kr/LSO/openApi/guideList.do'},
 
 {id:'kcia_guideline_2025', layer:'2층 적법라벨', name:'대한화장품협회 광고자문 기준 해설서 2025 ★2025판', org:'대한화장품협회',
  grade:'G2', constraints:['BY'], access:'공식 다운로드', verified:true,
@@ -1020,8 +1020,8 @@ const SOURCES = [
  value:'A', valueNote:'★★ 경제적 가치(채점 D축 27%, 최대 배점)의 근거를 <b>남의 보고서에서 사지 말고 우리 데이터에서 직접 계산</b>한다. "부당광고 1건당 평균 제재는 X원, 연간 Y건 발생, 업종별 분포는 Z" — 이건 4층 수집이 끝나면 자동으로 나온다',
  u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
  note:{train:'파생 통계',commercial:'원천이 전부 공공저작물',raw:'우리가 산출한 값',cite:'★ 발표의 핵심 근거',deploy:'제한 없음'},
- why:'원천(공정위 의결서·식약처 행정처분 API)이 전부 G3이므로 파생 통계도 G3.',
- caution:'★★ 인용한 숫자보다 <b>산출한 숫자</b>가 강하다. "MarketsandMarkets에 따르면"보다 "우리가 수집한 처분 레코드에서 계산하면"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 <b>제품의 일부</b>다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다.', url:''},
+ why:'원천(공정위 의결서·식약처 행정처분 API)이 전부 G3이므로 파생 통계도 G3. 🚨 <b>라이선스 페이지가 존재하지 않는 자체 산출물</b>이라 근거가 URL 이 아니라 <b>산출 근거 문서</b>다 — docs/01_기획/경제성_근거.md 가 산출 방법과 원천을 적는다(D-75 · D-99). 원천 등급이 내려가면 이 파생 통계도 함께 내려간다.',
+ caution:'★★ 인용한 숫자보다 <b>산출한 숫자</b>가 강하다. "MarketsandMarkets에 따르면"보다 "우리가 수집한 처분 레코드에서 계산하면"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 <b>제품의 일부</b>다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다.', url:'docs/01_기획/경제성_근거.md'},
 
 {id:'mfds_production', layer:'경제성 근거', name:'식약처 화장품 생산·수출 실적 통계 (연 1회)', org:'식품의약품안전처',
  grade:'G3', constraints:['BY'], access:'보도자료 + 통계 공표', verified:true,
