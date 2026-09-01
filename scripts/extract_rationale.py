@@ -58,11 +58,12 @@ ALIAS: dict[str, list[str]] = {
         "penal_clause",
         "admin_appeal",
         "precedent",
+        "hf_standard",
     ],
 }
 
 BUNDLE_WHY = (
-    "법제처 OPEN API 로 받는 11종을 **이용조건 하나**로 묶은 것이다 (D-90). "
+    "법제처 OPEN API 로 받는 12종을 **이용조건 하나**로 묶은 것이다 (D-90 · D-102). "
     "전부 공공저작물이라 조건이 같고, OC 키도 하나다. 개별 근거는 아래와 같다."
 )
 

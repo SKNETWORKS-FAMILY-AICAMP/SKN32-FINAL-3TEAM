@@ -212,27 +212,6 @@ sources:
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15074311/openapi.do"
 
-  hf_standard:
-    name: "「건강기능식품의 기준 및 규격」 고시"
-    org: "식약처 / 법제처"
-    url: "https://open.law.go.kr/LSO/openApi/guideList.do"
-    layer: "2층 적법라벨"
-    grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
-    constraints: []
-    redistributable: true
-    value: A
-    cost: free
-    status: collect
-    access: "법제처 API"
-    scale: "고시 전문 + 고시형 원료 96건"
-    caution: "개정일(effective_date) 필수 기록. ⚠️ 이용조건이 law_go_kr 과 같으므로 D-90 의 「이용조건 단위 등재」로는 covers 후보다 — 별도 등재를 유지할지는 팀장 판단."
-    collected_at: null
-    decided_at: 2026-08-20
-    decided_by: 오한빈
-    reviewed_by: null
-    evidence_url: "https://open.law.go.kr/LSO/openApi/guideList.do"
-
   kcia_guideline:
     name: "대한화장품협회 광고자문 기준 해설서 2025 ★2025판"
     org: "대한화장품협회"
@@ -281,6 +260,7 @@ sources:
       - "각 법 벌칙 조항 (징역 · 벌금 상한)"
       - "행정심판 재결례"
       - "표시광고법 관련 판례"
+      - "「건강기능식품의 기준 및 규격」 고시"
     scale: "아래 covers 11종"
     access: API (OC 키 필요 — .env LAW_OC_KEY · 2026-08-20 승인 완료)
     note: >-
@@ -380,7 +360,7 @@ sources:
     url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486"
     layer: "5층 코퍼스·반례"
     grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
     constraints: [GATED, BY, NOREDIST, TOS]
     redistributable: false
     value: A
@@ -401,7 +381,7 @@ sources:
     url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723"
     layer: "5층 코퍼스·반례"
     grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
     constraints: [GATED, BY, NOREDIST]
     redistributable: false
     value: A
@@ -422,7 +402,7 @@ sources:
     url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558"
     layer: "5층 코퍼스·반례"
     grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
     constraints: [GATED, BY, NOREDIST]
     redistributable: false
     value: B
@@ -443,7 +423,7 @@ sources:
     url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694"
     layer: "5층 코퍼스·반례"
     grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
     constraints: [GATED, BY, NOREDIST]
     redistributable: false
     value: C
@@ -464,7 +444,7 @@ sources:
     url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71843"
     layer: "5층 코퍼스·반례"
     grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
     constraints: [GATED, BY, NOREDIST, TOS]
     redistributable: false
     value: D
@@ -779,7 +759,7 @@ sources:
     url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603"
     layer: "6층 세그먼트·페르소나"
     grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
     constraints: [GATED, BY, NOREDIST, TOS]
     redistributable: false
     value: A
