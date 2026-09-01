@@ -57,6 +57,7 @@ LAW_COVERS = [
     ("penal_clause", "각 법 벌칙 조항 (징역 · 벌금 상한)"),
     ("admin_appeal", "행정심판 재결례"),
     ("precedent", "표시광고법 관련 판례"),
+    ("hf_standard", "「건강기능식품의 기준 및 규격」 고시"),  # D-102 로 흡수
 ]
 LAW_IDS = {i for i, _ in LAW_COVERS}
 
@@ -195,7 +196,6 @@ ORDER = [
     "kfia_approved_list",
     "mfds_hf_ingredient",
     "mfds_hf_individual",
-    "hf_standard",
     "kcia_guideline",
     # 3층 판단 규범
     "law_go_kr",
