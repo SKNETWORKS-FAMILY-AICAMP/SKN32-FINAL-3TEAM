@@ -178,7 +178,7 @@ def check() -> None:
 # ══════════════════════════════════════════════════════════
 @app.command()
 def registry() -> None:
-    """레지스트리 재생성 — registry_head/review/tail -> data_sources.yaml.
+    """레지스트리 재생성 — head·review·tail 을 합쳐 data_sources.yaml 로.
 
     🚨 `data_sources.yaml` 을 손으로 고치지 않는다. 생성물이다.
        판정·검토 기록은 `scripts/registry_review.yaml` 에 적는다.
@@ -188,7 +188,7 @@ def registry() -> None:
 
 @app.command()
 def review() -> None:
-    """S0-14 2인 확인 검토표 생성 (D-66 · D-99).
+    """S0-14 검토표 — 근거를 다시 뽑아 위험 순으로 낸다 (D-66 · D-99).
 
     판정 근거를 매트릭스에서 다시 뽑고 검토표를 낸다. 검토자는 A 구간을 자세히,
     B 를 확인, C 를 훑는다. 결과는 `scripts/registry_review.yaml` 에 적는다.
@@ -200,13 +200,13 @@ def review() -> None:
 
 @app.command()
 def matrix() -> None:
-    """판정매트릭스 HTML 빌드 (D-87 · D-90)."""
+    """판정매트릭스 빌드 — data.js 에서 HTML 을 만든다 (D-87 · D-90)."""
     raise typer.Exit(run("uv", "run", "python", "scripts/build_matrix.py"))
 
 
 @app.command()
 def sync() -> None:
-    """프로젝트 사본 생성 — build/project_sync/ 에 스탬프를 찍어 낸다.
+    """프로젝트 사본 — build/project_sync/ 에 스탬프를 찍어 낸다.
 
     🚨 레포가 원본이고 claude.ai 프로젝트는 사본이다. 업로드 자체는 사람이 한다.
     """
@@ -273,7 +273,7 @@ def db_down() -> None:
 @app.command()
 @stub("W2", "alembic/ 초기화 + postgres 기동")
 def migrate() -> None:
-    """DB 마이그레이션 (Alembic)."""
+    """DB 마이그레이션 — Alembic 으로 스키마를 코드로 관리한다."""
 
 
 @app.command()
@@ -285,31 +285,31 @@ def collect() -> None:
 @app.command()
 @stub("W3", "수집 코퍼스 확보")
 def golden() -> None:
-    """골든셋 생성 (결함 주입)."""
+    """골든셋 생성 — 정답 문장에 결함을 주입해 평가셋을 만든다."""
 
 
 @app.command()
 @stub("W4~", "골든셋 · GPU 경로 확정")
 def train() -> None:
-    """학습 — 인코더 / sLLM."""
+    """학습 — 인코더 파인튜닝과 sLLM 학습 (트랙별 분배)."""
 
 
 @app.command(name="eval")
 @stub("W4~", "학습 산출물")
 def eval_() -> None:
-    """평가 — 전체 / 지표 선택."""
+    """평가 — L1 품질 · L2 통합 · L3 운영 · L4 거버넌스 (D-77)."""
 
 
 @app.command()
 @stub("W2", "walking skeleton")
 def serve() -> None:
-    """API 서버 실행 (FastAPI)."""
+    """서버 실행 — FastAPI 로 판정·생성 엔드포인트를 연다."""
 
 
 @app.command()
 @stub("W8~", "GGUF 변환 · 오프라인 경로")
 def demo() -> None:
-    """데모 모드 (오프라인 GGUF)."""
+    """데모 모드 — 오프라인 GGUF 경로로 발표용 구동."""
 
 
 # ══════════════════════════════════════════════════════════
@@ -323,6 +323,7 @@ def demo() -> None:
 
 
 def _menu_test() -> None:
+    """테스트 — pytest 전체 실행."""
     run("uv", "run", "pytest")
 
 
@@ -358,27 +359,42 @@ MENU: list[tuple[str, str, object]] = [
 ]
 
 
+def summary(fn) -> str:
+    """메뉴 설명문 — **docstring 에서 나온다.**
+
+    🚨 설명을 메뉴 표에 따로 적지 않는다. 그러면 docstring(=`--help` 가 쓰는 것)과
+       메뉴가 두 벌이 되고, 한쪽만 갱신된다 — 오늘 `ACTIONS` 에서 본 그대로다.
+       `"환경 설정 — uv sync · 훅 · .env"` 처럼 앞이 제목과 겹치면 뒤만 쓴다.
+    """
+    lines = (fn.__doc__ or "").strip().splitlines()
+    doc = lines[0].strip() if lines else ""
+    if "—" in doc:
+        doc = doc.split("—", 1)[1].strip()
+    return doc.rstrip(".")
+
+
 def _draw() -> None:
     table = Table(show_header=False, box=None, padding=(0, 1))
     table.add_column(width=3, justify="right")
     table.add_column(width=20)
-    table.add_column(style="dim")
+    table.add_column(width=50, style="dim", no_wrap=True, overflow="ellipsis")
+    table.add_column(width=10, style="dim")
 
     for key, label, fn in MENU:
         if key == "-":
-            table.add_row("", "", "")
+            table.add_row("", "", "", "")
             continue
         ready = fn is None or not getattr(fn, "_planned", False)
-        note = "" if fn is None else cli_name(fn) + ("" if ready else "  (미구현)")
         # 🚨 Rich 는 대괄호를 마크업으로 읽는다. [g]·[t] 같은 한 글자 키가 통째로 사라진다.
         #    escape 로 리터럴 대괄호를 만든다.
         table.add_row(
             escape(f"[{key}]"),
             label if ready else f"[dim]{label}[/dim]",
-            note,
+            "" if fn is None else summary(fn),
+            "" if fn is None else (cli_name(fn) if ready else "[yellow]미구현[/yellow]"),
         )
 
-    console.print(Panel(table, title="CopyLane Launcher", subtitle=_env_line()))
+    console.print(Panel(table, title="CopyLane Launcher", subtitle=_env_line(), width=96))
 
 
 def menu() -> None:
