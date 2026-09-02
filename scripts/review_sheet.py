@@ -42,7 +42,8 @@ RISKY_FLAGS = ("GATED", "TOS", "PREAPPROVAL", "NOSTORE", "QUERYLOG", "PII", "NC"
 # 🚨 판정 근거가 스스로 「못 봤다」고 말하는 표현.
 #    등급은 맞을 수 있으나 **확인되지 않은 것**이고, 확인되지 않은 것은 자명할 수 없다.
 #    (판정매트릭스: 「미확인」을 「아마 괜찮음」으로 읽는 순간 등급이 무의미해진다)
-UNVERIFIED = ("미확인", "확인 필요", "확인필요", "불명", "차단돼", "차단으로")
+# 「추정」도 넣는다 — 용도별 근거가 「공공저작물 추정」이면 그 용도는 확인된 것이 아니다.
+UNVERIFIED = ("미확인", "확인 필요", "확인필요", "불명", "추정", "차단돼", "차단으로")
 
 
 def risk(s: dict, r: dict | None = None) -> tuple[int, list[str]]:
@@ -72,7 +73,11 @@ def risk(s: dict, r: dict | None = None) -> tuple[int, list[str]]:
     if "정정" in text or "🔄" in text:
         score += 2
         why.append("**판정이 한 번 바뀐 이력**이 있다 — 무엇이 왜 바뀌었는지 확인")
-    blob = ((r or {}).get("why") or "") + " ".join(((r or {}).get("note") or {}).values())
+    # 🚨 **`why` 산문이 아니라 용도별 근거(`note`)만 본다.**
+    #    `why` 는 해소 이력을 담는 자리라, *"종전 「접근 차단으로 미확인」은 일시적 차단이었다"*
+    #    처럼 **고쳤다고 적은 문장이 도리어 벌점을 만든다**(2026-09-02 예행 검토에서 발견).
+    #    미확인이 용도에 걸리는지는 note 가 말한다 — 「상업: ⚠️ 인용조건 미확인」처럼.
+    blob = " ".join(((r or {}).get("note") or {}).values())
     seen = sorted({w for w in UNVERIFIED if w in blob})
     if seen:
         # 🚨 단독으로 A 구간(>=4)에 올린다. 확인되지 않은 소스는 「확인만」이 될 수 없고,

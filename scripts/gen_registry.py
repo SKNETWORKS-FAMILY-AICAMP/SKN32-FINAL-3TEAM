@@ -176,10 +176,25 @@ def block(key, s, extra=None, covers=None, status="collect"):
 
 
 # ── 수동 보강 (기존 yaml 에 있던 손으로 쓴 필드를 잃지 않는다)
+# 🚨 D-17(업체명 마스킹)은 **저작권이 아니라 명예·개인정보 축**이라 등급으로 막히지 않는다.
+#    업체명이 들어오는 소스에는 전부 붙어야 하는데 `ftc_decisions` 하나에만 있었다
+#    (권소라 역검토 v1.2 §4-2 · 2026-09-02 예행 검토에서 대상 4건 확정).
 EXTRA = {
     "ftc_decisions": [
         "masking: 업체명·상표·대표자명 즉시 마스킹, 원문 미보관 (D-17)",
         "fragment_note: 광고 화면 캡처 이미지는 G1~G2로 개별 하향 (D-18)",
+    ],
+    "ftc_decisions_api": [
+        "masking: 업체명·상표·대표자명 즉시 마스킹, 원문 미보관 (D-17)",
+        "fragment_note: 🚨 ftc_decisions 와 같은 원천이다 — 조건이 다를 이유가 없다",
+    ],
+    "mfds_sanctions": [
+        "masking: 업체명·대표자명 즉시 마스킹, 원문 미보관 (D-17)",
+        "fragment_note: 행정처분 레코드에 처분 대상 업체가 들어온다",
+    ],
+    "self_sanction_stat": [
+        "masking: 🚨 원천이 마스킹된 뒤의 값만 쓴다 — 「반복 위반 비율」은 업체 식별을 전제하므로",
+        "  집계 단계에서 식별자를 다시 만들지 않는다 (D-17)",
     ],
     "kcia_guideline": [
         "note: >-",

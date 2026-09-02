@@ -81,6 +81,8 @@ sources:
     status: collect
     access: "API 키"
     scale: "증분 갱신용"
+    masking: 업체명·상표·대표자명 즉시 마스킹, 원문 미보관 (D-17)
+    fragment_note: 🚨 ftc_decisions 와 같은 원천이다 — 조건이 다를 이유가 없다
     caution: "호출 간격 0.5초 이상 + 재시도 3회(지수 백오프)."
     collected_at: null
     decided_at: 2026-08-20
@@ -102,6 +104,8 @@ sources:
     status: collect
     access: "API 키"
     scale: "미측정 — 1W 실측"
+    masking: 업체명·대표자명 즉시 마스킹, 원문 미보관 (D-17)
+    fragment_note: 행정처분 레코드에 처분 대상 업체가 들어온다
     caution: "위반내용 필드가 자연어인지 코드인지 1W 확인. 업체명 마스킹 필수."
     collected_at: null
     decided_at: 2026-08-20
@@ -677,14 +681,14 @@ sources:
     layer: "6층 세그먼트·페르소나"
     grade: G3
     use: {U1: allow, U2: allow, U3: allow, U4: allow}
-    constraints: []
+    constraints: [BY]
     redistributable: true
     value: C
     cost: free
     status: collect
     access: "파일 다운로드"
-    scale: "4,633가구 / 만13세+ 7,055명 (2023 기준)"
-    caution: "⚠️ 집계표인지 마이크로데이터인지도 미확인. 다운로드 전 검증 필요. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사."
+    scale: "4,633가구 / 만13세+ 7,055명 · 🔄 공개판은 20241231 (CSV)"
+    caution: "🔄 2026-09-02 확인 — CSV · 가구/개인 통계표 + 다이어리 자료. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
@@ -873,6 +877,8 @@ sources:
     status: collect
     access: "이미 수집하는 데이터에서 계산"
     scale: "의결문 5,870건 + 식약처 행정처분 레코드"
+    masking: 🚨 원천이 마스킹된 뒤의 값만 쓴다 — 「반복 위반 비율」은 업체 식별을 전제하므로
+      집계 단계에서 식별자를 다시 만들지 않는다 (D-17)
     caution: "★★ 인용한 숫자보다 산출한 숫자가 강하다. \"MarketsandMarkets에 따르면\"보다 \"우리가 수집한 처분 레코드에서 계산하면\"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 제품의 일부다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다."
     collected_at: null
     decided_at: 2026-08-20
