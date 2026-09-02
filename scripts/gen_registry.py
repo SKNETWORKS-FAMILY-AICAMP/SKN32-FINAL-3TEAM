@@ -241,6 +241,13 @@ EXTRA = {
         "  🚨 2026-09-02 탐침 — 협회 공지 페이지에 **이용조건 문구가 없다.** 근거 URL 이 조건을",
         "  말하지 않는다 (확인 항목 4). 바로 위 「문의 회신 시 재판정」과 같은 자리다.",
     ],
+    "mfds_hf_ingredient": [
+        "fragment_note: >-",
+        "  ★ 취하는 것 — 인정번호 · 인정일자 · 신청원료명 · **기능성 내용** · 1일 섭취량 · 섭취시 주의사항.",
+        "  🚨 **업체명 · 업종 · 주소는 취하지 않는다.** 응답에 함께 오지만 우리가 쓸 이유가 없고,",
+        "  **주소는 사업장 소재지**라 더욱 그렇다. 판정 단위는 FRAGMENT 다 (D-18).",
+        "  ★ 게시판(mfds_hf_ingredient_board)이 주던 것과 **같은 필드**다 — 조건이 깨끗한 경로로 대체된다.",
+    ],
     # ★ 2026-09-02 게시물 본문 실물 확인으로 프래그먼트가 갈렸다.
     "mfds_hf_ingredient_board": [
         "fragment_note: >-",
@@ -374,7 +381,6 @@ ORDER = [
     "law_go_kr",
     "platform_guide",
     "mfds_hf_ingredient_board",
-    "foodsafety_api",
     # 제품 사실
     "cosmetic_ingredient",
     "cosmetic_restricted",
@@ -419,7 +425,6 @@ STATUS = {
     "platform_guide": "hold",
     "knhanes": "hold",
     "kisdi_panel": "hold",
-    "foodsafety_api": "hold",
     "kobaco_mcr_report": "hold",
     "aihub_71843": "hold",
     # D-108 — G0 는 확인이 선행이다. 확인 전에 자동으로 가져오면 fail-closed 가 수집 단계에서 뚫린다

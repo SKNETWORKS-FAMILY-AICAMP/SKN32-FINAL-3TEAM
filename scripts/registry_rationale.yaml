@@ -179,16 +179,6 @@ exaone:
     원문: 해당 없음
   valueNote: 채택 모델이 아니다. 확인 비용을 들이지 말고 목록에서 내리는 것이 답
   why: 후보군일 뿐 채택 모델이 아니다.
-foodsafety_api:
-  note:
-    U1 학습: 미확인
-    U3 인용: 미확인
-    U4 배포: 미확인
-    상업: 미확인
-    원문: 미확인
-  url: https://openapi.foodsafetykorea.go.kr/
-  valueNote: ★ 게시판(mfds_hf_ingredient_board)이 이용조건 미확인으로 막힌 자리를 조건이 다른 경로로 대체할 수 있다. 같은 기관이지만 다른 서비스이므로 이용조건도 따로 본다
-  why: '🆕 2026-09-02 신규 등재 — 아직 판정하지 않았다. 팀장이 엔드포인트 형식을 확인했다: http://openapi.foodsafetykorea.go.kr/api/{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}. 🚨 data.go.kr 이 아니라 식약처 자체 포털이고 호출 규약도 경로 파라미터라 다르다. G0 는 「미확인」이므로 전 용도를 닫아 둔다 — 확인 후 2인 판정으로 승격한다 (D-72). 등재 단위는 「이용조건」이므로 포털 1건으로 묶고 serviceId 를 covers 로 편다 (law_go_kr 과 같은 형태).'
 ftc_decisions:
   note: &id002
     U1 학습: 제한 없음
@@ -587,7 +577,7 @@ mfds_sanctions:
     원문: 구조화 레코드
   url: https://www.data.go.kr/data/15059500/openapi.do
   valueNote: ★ 위험도 라벨의 실측 경로. 규정(별표) 연역과 실측 귀납이 갈리는 지점이 곧 감경·가중 사유이고, 그것이 「주의 vs 처분」 경계 학습 데이터다
-  why: 공공데이터포털 개방 API. 기획서 4층에 없던 소스.
+  why: 🔄 2026-09-02 상세 재확인 — 이용허락범위 제한 없음 · 비용 무료 · 심의유형 개발단계 자동승인 / 운영단계 자동승인(심의승인이 붙은 넷과 다르다) · 활용신청 11,885건 · 관리부서 데이터혁신기획팀 043-719-1623. 공공데이터포털 개방 API. 기획서 4층에 없던 소스.
 mnm_aidataset:
   note:
     U1 학습: ❌ 학습 데이터가 아니다

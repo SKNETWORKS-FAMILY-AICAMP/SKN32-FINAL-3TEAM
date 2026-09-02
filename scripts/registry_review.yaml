@@ -142,15 +142,6 @@ mfds_hf_ingredient_board:
   #   🚨 robots 는 약관·저작권 판단이 아니다 — 그 축은 constraints 가 따로 진다.
   robots_checked_at: 2026-09-02
 
-foodsafety_api:
-  # 🆕 2026-09-02 신규 등재 — 아직 판정 전이다. G0 · 전 용도 deny.
-  #    탐침이 포털 이용조건을 긁어 오면 그때 판정하고 2인 확인을 받는다.
-  decided_by: null
-  decided_at: null
-  reviewed_by: null
-  reviewed_at: null
-  collected_at: null
-
 cosmetic_ingredient:
   decided_by: 오한빈
   decided_at: 2026-08-20

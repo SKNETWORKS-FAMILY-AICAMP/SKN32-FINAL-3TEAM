@@ -26,9 +26,13 @@
 # ============================================================
 
 mfds_hf_ingredient:      # 15058359 건기식 기능성 원료인정 현황
-  url: null              # 🚨 미기재 — 상세기능에서 요청주소 확인
+  # 🚨 data.go.kr 상세의 **API 유형이 LINK** 다 — 자체 엔드포인트 없이 원 기관으로 연결한다.
+  #    그래서 호출처가 식품안전나라이고, 이용조건은 data.go.kr 쪽(제한 없음)이 대표한다.
+  #    포털 페이지가 엔드포인트가 아니라는 것이 여기서 **두 겹**이었다.
+  url: http://openapi.foodsafetykorea.go.kr/api
+  style: path            # /{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}
   fmt: json
-  style: query
+  service_id: null       # 🚨 미기재 — 화면의 svc_no 는 I-0040 이나 호출용 값과 같은지 확인 필요
   params: {}
 
 mfds_hf_individual:      # 15074311 건기식 개별인정형 정보
@@ -54,14 +58,4 @@ cosmetic_ingredient:     # 15111774 화장품 원료성분정보
 cosmetic_restricted:     # 15111772 화장품 사용제한 원료정보
   url: null
   fmt: json
-  params: {}
-
-# 🆕 식품안전나라 자체 포털 — data.go.kr 이 아니다 (2026-09-02)
-#    🚨 아직 **레지스트리에서 G0 · 전 용도 deny** 다. 수집기가 첫 줄에서 거부한다 (D-15 · D-72).
-#       이용조건 확인 → 2인 판정 → 그 뒤에 이 칸이 의미를 갖는다.
-foodsafety_api:
-  url: http://openapi.foodsafetykorea.go.kr/api
-  style: path            # /{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}
-  fmt: json
-  service_id: null       # 🚨 미기재 — 어느 서비스가 건기식 기능성 원료인지 확인 필요
   params: {}

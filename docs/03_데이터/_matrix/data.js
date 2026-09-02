@@ -23,16 +23,6 @@ const SOURCES = [
  caution:'🔧 <b>2026-09-02 정정 2건</b>(권소라 §6-3·4) — ① 화면에 「출처 명시 필요」가 있어 <b>BY 를 붙였다</b>(mfds_press 와 같은 누락이었다) ② <b>게시물 전체 650건</b>으로 종전 568건과 82건 차이. 어느 쪽이 맞는지는 수집 시 실측한다. / API 15074311(개별인정형 472)과 겹치는 범위 확인이 남는다. ★★ <b>2026-09-02 게시물 본문 실물 확인</b>(오한빈) — <b>PDF 가 아니라 HTML 본문</b>이고 「○ 키 : 값」으로 구조화돼 있다. 원료명 · 인정번호 · 업체명 · <b>기능성내용</b> · 일일섭취량 · 섭취 시 주의사항 (+ 영문판 병기). 🚨 <b>「기능성내용 : 체지방 감소에 도움을 줄 수 있음」이 곧 승인된 표시 문구다</b> — 2층이 찾던 「어떤 표현이 승인되나」의 답이 여기 있다. API(15058359)가 이걸 주는지는 아직 모르지만 <b>게시판에는 확실히 있고 2인 확인도 끝났다.</b> 수집기는 목록 페이징 → 상세 HTML 저장이면 되고, 「○ 키 : 값」 파싱은 전처리가 한다(규약 2 — 수집기는 원본을 저장하고 파싱하지 않는다).',
  url:'https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660'},
 
-{id:'foodsafety_api', layer:'2층 적법라벨', name:'식품안전나라 공공데이터 OpenAPI 🆕미판정', org:'식품의약품안전처',
- grade:'G0', constraints:['TOS'], access:'🚨 별도 포털 · 인증키 신청 · 경로 파라미터 방식', verified:false,
- scale:'🚨 미확인 — serviceId 목록을 아직 못 봤다', cost:'unknown', costNote:'미확인',
- value:'A', valueNote:'★ 게시판(mfds_hf_ingredient_board)이 이용조건 미확인으로 막힌 자리를 <b>조건이 다른 경로</b>로 대체할 수 있다. 같은 기관이지만 <b>다른 서비스이므로 이용조건도 따로</b> 본다',
- u:{train:UN, commercial:UN, raw:UN, cite:UN, deploy:UN},
- note:{train:'미확인',commercial:'미확인',raw:'미확인',cite:'미확인',deploy:'미확인'},
- why:'🆕 <b>2026-09-02 신규 등재 — 아직 판정하지 않았다.</b> 팀장이 엔드포인트 형식을 확인했다: <code>http://openapi.foodsafetykorea.go.kr/api/{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}</code>. 🚨 <b>data.go.kr 이 아니라 식약처 자체 포털</b>이고 호출 규약도 경로 파라미터라 다르다. G0 는 「미확인」이므로 전 용도를 닫아 둔다 — 확인 후 2인 판정으로 승격한다 (D-72). 등재 단위는 「이용조건」이므로 포털 1건으로 묶고 serviceId 를 covers 로 편다 (law_go_kr 과 같은 형태).',
- caution:'🚨 <b>확인할 것 셋</b> — ① 포털 이용약관·저작권 표기(공공누리 배지 유무와 유형 · D-110) ② serviceId 목록과 그중 건기식 기능성 원료가 있는지 ③ dataType(json/xml)과 페이징 상한(startIdx/endIdx). ★ <b>②가 게시판 문제를 닫을 수 있다</b> — 「기능성내용」을 조건이 깨끗한 경로로 받으면 mfds_hf_ingredient_board 의 「무단 복제」 문구를 우회한다.',
- url:'https://openapi.foodsafetykorea.go.kr/'},
-
 {id:'cosmetic_ingredient', layer:'제품 사실', name:'식약처 화장품 원료성분정보 API (15111774)', org:'식품의약품안전처',
  grade:'G3', constraints:[], access:'오픈API (추정)', verified:true,
  scale:'미확인', cost:'free', costNote:'무료 추정 · 인증키 즉시 발급',
@@ -80,7 +70,7 @@ const SOURCES = [
  value:'A', valueNote:'★ 위험도 라벨의 실측 경로. 규정(별표) 연역과 실측 귀납이 갈리는 지점이 곧 감경·가중 사유이고, 그것이 「주의 vs 처분」 경계 학습 데이터다',
  u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
  note:{train:'위반사실 → 처분 매핑 실측 라벨',commercial:'공공데이터 개방',raw:'구조화 레코드',cite:'처분 근거와 함께',deploy:'제한 없음'},
- why:'공공데이터포털 개방 API. 기획서 4층에 없던 소스.',
+ why:'🔄 <b>2026-09-02 상세 재확인</b> — 이용허락범위 <b>제한 없음</b> · 비용 무료 · 심의유형 <b>개발단계 자동승인 / 운영단계 자동승인</b>(심의승인이 붙은 넷과 다르다) · 활용신청 11,885건 · 관리부서 데이터혁신기획팀 043-719-1623. 공공데이터포털 개방 API. 기획서 4층에 없던 소스.',
  caution:'위반내용 필드가 자연어인지 코드인지 1W 확인. 업체명 마스킹 필수.',
  url:'https://www.data.go.kr/data/15059500/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15059500/openapi.do'},
 
@@ -120,7 +110,7 @@ const SOURCES = [
  u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
  note:{train:'인정 기능성 문구',commercial:'공공데이터 개방',raw:'★ 100% 지향 프레임으로 쓰여 있다',cite:'원료명·인정번호와 함께',deploy:'제한 없음'},
  why:'공공데이터포털 개방 API.',
- caution:'15074311(개별인정형)·식품안전나라 게시판과 3중으로 겹칠 수 있다. 1W에 셋을 대조해 하나를 정본으로 정하고 나머지는 보조로 내린다.',
+ caution:'★★ <b>2026-09-02 — 요청주소가 확정됐다.</b> data.go.kr 상세에 <b>API 유형: LINK</b> 라고 적혀 있다 — 자체 엔드포인트 없이 <b>원 기관 API 로 연결</b>한다는 뜻이고, 그 원 기관이 식품안전나라다: <code>http://openapi.foodsafetykorea.go.kr/api/{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}</code> · 서비스 <b>I-0040 「건강기능식품 기능성 원료인정현황」</b>. 🚨 <b>포털 페이지가 엔드포인트가 아니라는 것이 두 겹이었다</b> — 소개 페이지도 아니고, 중계 주소도 아니고, 원 기관 주소다. / 속성정보 9개: 인정번호 · 인정일자 · 업체명 · 업종 · 주소 · 신청원료명 · <b>기능성 내용</b> · 1일 섭취량 · 섭취시 주의사항. ★ <b>「기능성 내용」이 구조화 필드로 나온다 — 2층이 찾던 것이다.</b> 🚨 API 호출제한 500 (단위 불명) · 데이터 포맷 JSON+XML. / 15074311(개별인정형)·식품안전나라 게시판과 3중으로 겹칠 수 있다. 1W에 셋을 대조해 하나를 정본으로 정하고 나머지는 보조로 내린다.',
  url:'https://www.data.go.kr/data/15058359/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15058359/openapi.do'},
 
 {id:'mfds_hf_individual', layer:'2층 적법라벨', name:'건기식 개별인정형 정보 API (15074311)', org:'식품의약품안전처',
