@@ -10,8 +10,11 @@
    근거는 `scripts/registry_rationale.yaml` 에서 온다 (extract_rationale.py).
 
 🚨 건수를 뭉뚱그리지 않는다.
-   「용도가 열린 것」과 「status: collect」는 다른 집합이다. 우연히 둘 다 33이라
-   같아 보였을 뿐이고, 실제로 겹치는 것은 29건이다.
+   「용도가 열린 것」과 「작업 계획에 있는 것」은 다른 집합이다. 우연히 둘 다 33이라
+   같아 보였을 뿐이고, 실제로 겹치는 것은 28건이다.
+   검토 대상은 앞쪽이다 — 수집 계획이 없어도 용도가 열려 있으면 누군가 부르면 나간다.
+   뒤쪽에는 수기 경로(status: manual)도 든다. status 는 「수집기가 도는가」이지
+   「할 일인가」가 아니다 (D-108).
 
 절차
     py -m uv run python scripts/extract_rationale.py   # 근거가 바뀌었을 때만
@@ -102,6 +105,26 @@ def risk(s: dict, r: dict | None = None) -> tuple[int, list[str]]:
     return score, why
 
 
+def redist(s: dict) -> str:
+    """재배포 표시. 🚨 `true` 가 두 상태를 뭉개지 않게 제약을 함께 낸다.
+
+    `redistributable` 은 **우리가 만든 데이터셋을 공개 배포할 수 있는가**이고(D-71),
+    게이트 14 가 `NOREDIST` 의 정확한 반대임을 강제한다 — 그래서 2값이어야 한다.
+    그런데 **SA 는 「공개 불가」가 아니라 「공개하면 라이선스가 전염」**이다.
+    골든셋에 SA 소스가 한 문장이라도 섞이면 **골든셋 전체가 그 라이선스가 되고**,
+    D-60(저장소 공개 라이선스)의 선택지가 그만큼 좁아진다.
+    열을 3값으로 바꾸면 게이트 14 가 깨지므로, **표시에서 가른다.**
+    """
+    if not s.get("redistributable"):
+        return "🚨 불가"
+    flags = set(s.get("constraints") or [])
+    if "SA" in flags:
+        return "가능 · 🚨 **SA 전염** (골든셋 전체가 동일 라이선스 · D-60)"
+    if "BY" in flags:
+        return "가능 · 출처표시"
+    return "가능"
+
+
 def opened(s: dict) -> str:
     use = s.get("use") or {}
     return " ".join(u for u in USES if use.get(u) == "allow") or "—"
@@ -141,8 +164,7 @@ def block(key: str, s: dict, led: dict, rat: dict) -> list[str]:
         "",
         f"| 등급 | **{s.get('grade')}** | 열린 용도 | {opened(s)} |",
         "|---|---|---|---|",
-        f"| 제약 | {', '.join(s.get('constraints') or []) or '—'} "
-        f"| 재배포 | {'가능' if s.get('redistributable') else '🚨 **불가**'} |",
+        f"| 제약 | {', '.join(s.get('constraints') or []) or '—'} | 재배포 | {redist(s)} |",
         f"| 판정 | {led.get('decided_by') or '—'} ({led.get('decided_at') or '일자 미상'}) "
         f"| 규모 | {str(s.get('scale') or '—')[:60]} |",
         "",
@@ -174,8 +196,7 @@ def compact(key: str, s: dict, rat: dict) -> list[str]:
         f"**`{key}`** — {s.get('name', '')}{hold_mark(s)}  \n"
         f"**{s.get('grade')}** · 열린 용도 {opened(s)} · "
         f"제약 {', '.join(s.get('constraints') or []) or '없음'} · "
-        f"재배포 {'가능' if s.get('redistributable') else '🚨 불가'} · "
-        + (f"[근거 확인]({ev})" if ev else "⬜ URL 없음")
+        f"재배포 {redist(s)} · " + (f"[근거 확인]({ev})" if ev else "⬜ URL 없음")
     )
     body = (
         f"> {r['why']}"
@@ -195,7 +216,7 @@ def row(key: str, s: dict) -> str:
     return (
         f"| `{key}` | {str(s.get('name', ''))[:38]} | **{s.get('grade')}** | {opened(s)} "
         f"| {', '.join(s.get('constraints') or []) or '—'} "
-        f"| {'가능' if s.get('redistributable') else '🚨 불가'} "
+        f"| {redist(s)} "
         f"| {f'[근거]({ev})' if ev else '⬜ 없음'} |"
     )
 
@@ -234,7 +255,9 @@ def main() -> None:
         for k, v in sources.items()
         if any((v.get("use") or {}).get(u) == "allow" for u in USES)
     }
-    planned = {k: v for k, v in sources.items() if v.get("status") == "collect"}
+    # D-108 — 작업 계획에는 수기 경로(manual)도 든다. status 는 「수집기가 도는가」이지
+    #          「할 일인가」가 아니다. meta_adlibrary·google_atc 는 사람이 직접 옮긴다.
+    planned = {k: v for k, v in sources.items() if v.get("status") in ("collect", "manual")}
     both = set(targets) & set(planned)
     closed = {k: v for k, v in planned.items() if k not in targets}
     pending = {k: v for k, v in targets.items() if not (ledger.get(k) or {}).get("reviewed_by")}
@@ -260,13 +283,17 @@ def main() -> None:
         "|---|:-:|",
         f"| 레지스트리 전체 | {len(sources)} |",
         f"| 용도가 하나라도 열린 것 — **게이트가 통과시킬 수 있는 것** | **{len(targets)}** |",
-        f"| `status: collect` — 수집 계획이 있는 것 | {len(planned)} |",
+        f"| `status: collect` + `manual` — 작업 계획에 있는 것 | {len(planned)} |",
         f"| 둘 다인 것 | {len(both)} |",
         f"| 아직 `reviewed_by` 가 비어 있어 **이 표에 실린 것** | **{len(pending)}** |",
         "",
-        "> 🚨 앞의 두 숫자가 같아도 **같은 집합이 아닙니다.** 검토는 「수집할 것」이 아니라 "
-        "**「게이트가 통과시킬 수 있는 것」**을 대상으로 합니다 — 수집 계획이 없어도 용도가 "
-        "열려 있으면 누군가 부르면 나갑니다.",
+        "> 🚨 앞의 두 숫자는 **같은 집합이 아닙니다** — 값이 우연히 가까워도 마찬가지입니다. "
+        "검토는 「수집할 것」이 아니라 **「게이트가 통과시킬 수 있는 것」**을 대상으로 합니다 — "
+        "수집 계획이 없어도 용도가 열려 있으면 누군가 부르면 나갑니다.",
+        "",
+        "> `status` 는 **가져오는가**이고 `use` 는 **가져온 것을 쓸 수 있는가**입니다 (D-108). "
+        "`collect` 는 자동 수집기가 도는 것, `manual` 은 🚨 **자동 수집이 약관 위반이라 사람이 "
+        "수기로만** 옮기는 것, `hold` 는 이번 범위 밖입니다.",
         "",
         "## 이 검토가 막으려는 것",
         "",
@@ -360,16 +387,21 @@ def main() -> None:
         L += [
             "---",
             "",
-            f"## 게이트가 이미 닫아 둔 것 ({len(closed)}건) — 검토 불필요",
+            f"## 작업 계획에는 있으나 게이트가 닫아 둔 것 ({len(closed)}건) — 검토 불필요",
             "",
-            "> `status: collect` 이지만 **전 용도 deny** 입니다. 게이트가 어떤 용도로도 "
-            "내보내지 않으므로 2인 확인의 대상이 아닙니다. 여는 것은 **재판정**이지 검토가 아닙니다.",
+            "> **전 용도 deny** 입니다. 게이트가 어떤 용도로도 내보내지 않으므로 2인 확인의 "
+            "대상이 아닙니다. 여는 것은 **재판정**이지 검토가 아닙니다.",
+            "",
+            "> 🚨 **`status: collect` 는 여기 올 수 없습니다** — 게이트 22 가 막습니다 (D-108). "
+            "가져오는데 쓸 곳이 없는 자동 수집은 판정 없이 원문을 손에 쥐는 일입니다. "
+            "여기 남는 것은 **수기 경로(`manual`)** 뿐이고, 그 용도 축은 아직 미결입니다.",
             "",
             "| 소스 | 이름 | 등급 | 닫아 둔 이유 |",
             "|---|---|:-:|---|",
             *[
                 f"| `{k}` | {str(s.get('name'))[:34]} | **{s.get('grade')}** "
-                f"| {'G0 — 미판정이라 fail-closed' if s.get('grade') == 'G0' else str(s.get('access'))[:46]} |"
+                f"| {'G0 — 미판정이라 fail-closed' if s.get('grade') == 'G0' else str(s.get('access'))[:46]}"
+                f"{' · 🚨 수기 경로' if s.get('status') == 'manual' else ''} |"
                 for k, s in closed.items()
             ],
             "",

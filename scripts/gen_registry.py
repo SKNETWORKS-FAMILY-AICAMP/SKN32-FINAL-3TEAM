@@ -188,6 +188,14 @@ EXTRA = {
         "masking: 업체명·상표·대표자명 즉시 마스킹, 원문 미보관 (D-17)",
         "fragment_note: 🚨 ftc_decisions 와 같은 원천이다 — 조건이 다를 이유가 없다",
     ],
+    "kcc_media": [
+        "fragment_note: >-",
+        "  🚨 통계표만 받는다 — 다이어리 자료·아동 조사표는 수집 대상에서 제외한다 (D-18).",
+        "  2026-09-02 data.go.kr 실측 구성: 가구·개인 통계표 + 방송매체 이용행태 다이어리 +",
+        "  아동 조사표. 다이어리는 응답자별 시간대 기록이라 개인 단위 레코드다.",
+        "  🚨 다이어리를 받게 되면 그때는 PII 플래그가 붙어야 한다 — 지금은 그 조각을",
+        "  가져오지 않으므로 소스 전체에 플래그를 다는 것이 과하다. 판정 단위는 FRAGMENT 다.",
+    ],
     "mfds_sanctions": [
         "masking: 업체명·대표자명 즉시 마스킹, 원문 미보관 (D-17)",
         "fragment_note: 행정처분 레코드에 처분 대상 업체가 들어온다",
@@ -200,6 +208,32 @@ EXTRA = {
         "note: >-",
         "  🔄 2026-08-20 정정 — 2025판 확인으로 G0 → G2. 금지/허용 표현 목록은",
         "  원 출처(화장품법·고시)로 소급해 G3화한다 (D-16). 이용조건 문의 회신 시 재판정.",
+    ],
+    # D-108 — status 를 옮긴 4건. 「왜 collect 가 아닌가」를 사람이 읽을 자리에 남긴다
+    "kfia_approved_list": [
+        "status_note: >-",
+        "  🚨 D-108 — G0 라 용도가 전부 닫혀 있는데 collect 였다. 가져와도 쓸 곳이 없다.",
+        "  선행 작업은 robots.txt 확인과 실측 건수(철수 조건 2번)다. 확인 후 2인 판정으로",
+        "  승격하면(D-72) 그때 collect 로 올린다. 가치 A 이므로 확인 우선순위는 높다.",
+    ],
+    "krei_food": [
+        "status_note: >-",
+        "  🚨 D-108 — G0 라 용도가 전부 닫혀 있는데 collect 였다. 선행 작업은 성인 설문지 PDF를",
+        "  직접 열어 건강기능식품 문항 존재를 확인하는 것(1시간)이다. 문항이 없으면 6층에서",
+        "  기대한 값이 나오지 않으므로 확인이 수집보다 먼저다. 가치 A · 접근성 1위.",
+    ],
+    "meta_adlibrary": [
+        "status_note: >-",
+        "  🚨 D-108 — 자동 수집은 약관 위반이다. 그 사실이 caution 자유 문장에만 있었고",
+        "  기계가 읽는 자리에 없었다. status: manual 은 수집기가 이 키를 거부한다는 뜻이다.",
+        "  🚨 용도 축이 미결이다 — 실제 용도는 test_holdout(평가)인데 U1~U4 에 평가 축이 없다.",
+        "  게다가 G2(원문 미보관)와 골든셋 원문 보관이 충돌한다. 수기 경로 규약과 함께 결정한다.",
+    ],
+    "google_atc": [
+        "status_note: >-",
+        "  🚨 D-108 — 공식 API 가 없고 UI 열람만 가능하다. meta_adlibrary 와 같은 이유로 manual.",
+        "  ⚠️ ATC 추가 약관이 JS SPA 라 저장·재배포 조항을 아직 못 읽었다 — 미확인인 채로",
+        "  자동 수집을 열어 두는 것이 가장 나쁘다.",
     ],
     "law_go_kr": [
         "access: API (OC 키 필요 — .env LAW_OC_KEY · 2026-08-20 승인 완료)",
@@ -259,15 +293,26 @@ ORDER = [
     "self_sanction_stat",
     "mfds_production",
 ]
-HOLD = {
-    "ftc_noviolation",
-    "google_trends",
-    "youtube_api",
-    "platform_guide",
-    "knhanes",
-    "kisdi_panel",
-    "kobaco_mcr_report",
-    "aihub_71843",
+# 🚨 status 는 「수집기가 이 소스를 실행하는가」 하나만 뜻한다 — 작업 목록이 아니다 (D-108).
+#    collect : 자동 수집기가 실행한다.  use 중 최소 하나가 allow 여야 한다 (게이트 22)
+#    manual  : 🚨 사람이 눈으로 보고 손으로 옮긴다. 자동 수집은 약관 위반이라 수집기가 거부한다
+#    hold    : 이번 범위 밖 — 판정 완료·착수 전이거나 선결 조건 대기
+#    여기 없는 키는 collect 다. blocked·not_adopted 는 status 값이 아니라 별도 섹션이다.
+STATUS = {
+    "ftc_noviolation": "hold",
+    "google_trends": "hold",
+    "youtube_api": "hold",
+    "platform_guide": "hold",
+    "knhanes": "hold",
+    "kisdi_panel": "hold",
+    "kobaco_mcr_report": "hold",
+    "aihub_71843": "hold",
+    # D-108 — G0 는 확인이 선행이다. 확인 전에 자동으로 가져오면 fail-closed 가 수집 단계에서 뚫린다
+    "kfia_approved_list": "hold",
+    "krei_food": "hold",
+    # D-108 — ★사용자제공. 자동 수집이 약관 위반이라는 사실을 caution 문장이 아니라 기계가 읽는 자리에 둔다
+    "meta_adlibrary": "manual",
+    "google_atc": "manual",
 }
 
 REV = {v: k for k, v in RENAME.items()}
@@ -277,7 +322,7 @@ for key in ORDER:
     mid = REV.get(key, key)
     s = BY_ID[mid]
     covers = LAW_COVERS if key == "law_go_kr" else None
-    st = "hold" if key in HOLD else "collect"
+    st = STATUS.get(key, "collect")
     out.append(block(key, s, EXTRA.get(key), covers, st))
 
 (ROOT / "build").mkdir(exist_ok=True)

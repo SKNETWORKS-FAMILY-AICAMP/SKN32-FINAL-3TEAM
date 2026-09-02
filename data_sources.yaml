@@ -34,7 +34,18 @@
 #  - redistributable: 데이터셋 자체를 공개 배포할 수 있는가. NOREDIST와 짝이다 (D-71).
 #      🚨 골든셋에 redistributable:false 소스가 한 문장이라도 섞이면 그 골든셋 전체를
 #         공개할 수 없다. 프래그먼트 단위로 provenance를 남기지 않으면 나중에 되돌릴 수 없다.
-#  - status: collect(수집 대상) / hold(판정 완료 · 착수 전 또는 선결 조건 대기)
+#  - status: 🚨 「수집기가 이 소스를 실행하는가」 하나만 뜻한다 — 작업 목록이 아니다 (D-108)
+#
+#      값       │ 뜻                                        │ use 와의 관계
+#      ─────────┼───────────────────────────────────────────┼──────────────────────────
+#      collect  │ 자동 수집기가 실행한다                    │ 🚨 최소 하나 allow (게이트 22)
+#      manual   │ 사람이 수기로만 — 자동 수집은 약관 위반    │ 제약 없음 (경로가 다르다)
+#      hold     │ 이번 범위 밖 — 착수 전 또는 선결 조건 대기 │ 제약 없음 (열려 있어도 정상)
+#
+#    아무 용도도 열리지 않은 소스를 자동으로 가져오는 것은 판정 없이 원문을 손에 쥐는 일이다.
+#    G0 를 fail-closed 로 닫아 둔 이유(D-72)가 수집 단계에서 우회된다. 그래서 collect 에만 건다.
+#    🚨 역은 성립하지 않는다 — hold 인데 용도가 열려 있는 것은 「판정 끝, 착수만 남음」이다.
+#    blocked · not_adopted 는 status 값이 아니라 별도 섹션이다. 스키마부터 다르다(name/grade/reason).
 #  - value: A~D 활용 가치 (D-72 — 가치를 등급보다 먼저 본다)
 #  - 등급은 소스의 "기본값"이며 실제 판정 단위는 FRAGMENT (D-18)
 #  - 경계 케이스(G1/G2, G2/G3)는 2인 판정 후 reviewed_by 기록
@@ -164,9 +175,13 @@ sources:
     redistributable: true
     value: A
     cost: free
-    status: collect
+    status: hold
     access: "페이지네이션 크롤링"
     scale: "100건 이상 (10페이지×10건 확인)"
+    status_note: >-
+      🚨 D-108 — G0 라 용도가 전부 닫혀 있는데 collect 였다. 가져와도 쓸 곳이 없다.
+      선행 작업은 robots.txt 확인과 실측 건수(철수 조건 2번)다. 확인 후 2인 판정으로
+      승격하면(D-72) 그때 collect 로 올린다. 가치 A 이므로 확인 우선순위는 높다.
     caution: "🚨 엑셀 다운로드 없음 → 페이지네이션 수집기 필요. robots.txt 확인 후 실행. 정확 건수 1W 실측(철수 조건 2번)."
     collected_at: null
     decided_at: 2026-08-20
@@ -601,9 +616,13 @@ sources:
     redistributable: true
     value: A
     cost: free
-    status: collect
+    status: hold
     access: "✅ 신청·승인·회원가입 없이 즉시 다운로드"
     scale: "3,188가구 / 성인 5,851명 / 청소년 588명 · Excel + SPSS"
+    status_note: >-
+      🚨 D-108 — G0 라 용도가 전부 닫혀 있는데 collect 였다. 선행 작업은 성인 설문지 PDF를
+      직접 열어 건강기능식품 문항 존재를 확인하는 것(1시간)이다. 문항이 없으면 6층에서
+      기대한 값이 나오지 않으므로 확인이 수집보다 먼저다. 가치 A · 접근성 1위.
     caution: "🚨 건강기능식품 문항 포함 여부가 미확인이다 — 2023 기초분석보고서·2024 통계보고서 목차에 건기식 전용 장절이 없다. 성인 설문지 PDF를 직접 열어 확인할 것(1시간)."
     collected_at: null
     decided_at: 2026-08-20
@@ -688,6 +707,12 @@ sources:
     status: collect
     access: "파일 다운로드"
     scale: "4,633가구 / 만13세+ 7,055명 · 🔄 공개판은 20241231 (CSV)"
+    fragment_note: >-
+      🚨 통계표만 받는다 — 다이어리 자료·아동 조사표는 수집 대상에서 제외한다 (D-18).
+      2026-09-02 data.go.kr 실측 구성: 가구·개인 통계표 + 방송매체 이용행태 다이어리 +
+      아동 조사표. 다이어리는 응답자별 시간대 기록이라 개인 단위 레코드다.
+      🚨 다이어리를 받게 되면 그때는 PII 플래그가 붙어야 한다 — 지금은 그 조각을
+      가져오지 않으므로 소스 전체에 플래그를 다는 것이 과하다. 판정 단위는 FRAGMENT 다.
     caution: "🔄 2026-09-02 확인 — CSV · 가구/개인 통계표 + 다이어리 자료. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사."
     collected_at: null
     decided_at: 2026-08-20
@@ -790,9 +815,14 @@ sources:
     redistributable: true
     value: B
     cost: free
-    status: collect
+    status: manual
     access: "🚨 UI 열람만 · 자동 수집은 약관 위반"
     scale: "한국 = 현재 집행 중(active)인 전 상업광고"
+    status_note: >-
+      🚨 D-108 — 자동 수집은 약관 위반이다. 그 사실이 caution 자유 문장에만 있었고
+      기계가 읽는 자리에 없었다. status: manual 은 수집기가 이 키를 거부한다는 뜻이다.
+      🚨 용도 축이 미결이다 — 실제 용도는 test_holdout(평가)인데 U1~U4 에 평가 축이 없다.
+      게다가 G2(원문 미보관)와 골든셋 원문 보관이 충돌한다. 수기 경로 규약과 함께 결정한다.
     caution: "★ 열람 항목: 본문 카피 전문, 헤드라인, CTA 버튼 텍스트, 랜딩 URL, 게재 기간. 국가 필터에 대한민국 + 키워드 검색 가능. / 수기로 100~200건만 모아 test_holdout에 넣으면 실사례 평가 품질이 크게 오른다."
     collected_at: null
     decided_at: 2026-08-20
@@ -811,9 +841,13 @@ sources:
     redistributable: true
     value: C
     cost: free
-    status: collect
+    status: manual
     access: "🚨 UI 열람만 · 공식 API 없음"
     scale: "인증(verified) 광고주의 전 광고 · 보관 ~13개월"
+    status_note: >-
+      🚨 D-108 — 공식 API 가 없고 UI 열람만 가능하다. meta_adlibrary 와 같은 이유로 manual.
+      ⚠️ ATC 추가 약관이 JS SPA 라 저장·재배포 조항을 아직 못 읽었다 — 미확인인 채로
+      자동 수집을 열어 두는 것이 가장 나쁘다.
     caution: "⚠️ ATC 추가 서비스 약관 본문은 JS SPA라 추출 실패 — 저장·재배포 조항 미확인. / Meta 라이브러리와 같은 용도(수기 평가셋)로만."
     collected_at: null
     decided_at: 2026-08-20
