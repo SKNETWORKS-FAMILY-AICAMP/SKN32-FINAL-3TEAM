@@ -320,6 +320,33 @@ def probe(source: str = typer.Argument("", help="소스 id 하나만 (비우면 
 
 
 @app.command()
+def count(path: str = typer.Argument(..., help="받아 온 파일이나 폴더")) -> None:
+    """받아 온 파일을 세어 본다 — 옮기지도 등록하지도 않는다.
+
+    파일 수·줄 수·크기·sha256 만 냅니다. 2인 확인 전에도 돌고, 레지스트리의
+    `scale` 이 실제와 맞는지 확인하는 자리입니다 (D-109).
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "collect.ingest", "count", path))
+
+
+@app.command()
+def register(
+    source: str = typer.Argument(..., help="레지스트리 소스 id"),
+    path: str = typer.Argument(..., help="받아 온 파일이나 폴더"),
+    use: str = typer.Option(..., "--use", help="U1~U4 중 하나"),
+) -> None:
+    """사람이 받아 온 파일을 원장에 올린다 — 🚨 2인 확인이 끝나야 통과한다.
+
+    AI Hub 처럼 신청·승인을 거쳐 사람이 내려받는 소스는 수집기가 가져오지 않습니다.
+    그래서 원장에 안 남고, provenance 는 나중에 못 붙입니다 (D-71). 이 명령이 그 자리입니다.
+    data/raw/<소스id>/ 로 복사하고 manifest 에 1행 남깁니다 — 등급 디렉터리가 아닙니다 (D-92).
+    """
+    raise typer.Exit(
+        run("uv", "run", "python", "-m", "collect.ingest", "register", source, path, "--use", use)
+    )
+
+
+@app.command()
 @stub("W2", "scripts/collect.py 수집 로직 구현")
 def collect() -> None:
     """허가가 끝난 소스만 골라 내려받는다.
@@ -395,6 +422,8 @@ MENU: list[tuple[str, str, object]] = [
     ("v", "S0-14 검토표", review),
     ("m", "판정매트릭스 빌드", matrix),
     ("p", "소스 실측 (저장 없음)", probe),
+    ("n", "받은 파일 세기", count),
+    ("g", "받은 파일 등록", register),
     ("s", "프로젝트 사본", sync),
     SEP,
     ("4", "데이터 수집", collect),

@@ -299,6 +299,11 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
     🚨 구조가 못 막는 것을 코드가 막는다. 검사 16(판정 경로 외부 API = 0)과 같은 방식이다.
        raw/ 에는 등급이 섞여 있으므로, 여기를 글롭하는 학습 스크립트가 하나만 있어도
        G2·G0 원문이 학습에 들어간다.
+
+    🔄 **주석과 docstring 은 보지 않는다** (2026-09-02). 런처의 `register` 설명에
+       *"data/raw/<소스id>/ 로 복사한다"* 라고 적었더니 **그 설명이 위반으로 잡혔다** —
+       게이트 23 에서 겪은 것과 같은 형태다. 🚨 **게이트가 산문을 검사하기 시작하면
+       사람이 주석을 지운다.** 막으려는 것은 「읽는 코드」이지 「읽는다고 적은 문장」이 아니다.
     """
     offenders: list[str] = []
     for path in ROOT.rglob("*.py"):
@@ -309,7 +314,19 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
         if parts[0] in RAW_READERS or rel == Path("tests/test_governance_layout.py"):
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if "data/raw" in text or "data\\raw" in text:
+        if "data/raw" not in text and "data\\raw" not in text:
+            continue
+        # 주석·docstring 을 걷어낸 뒤 다시 본다 — 남아 있으면 그것은 코드다.
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            offenders.append(str(rel))
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+                node.value.value = ""  # docstring 을 비운다
+        code = ast.unparse(tree)
+        if "data/raw" in code or "data\\raw" in code:
             offenders.append(str(rel))
 
     assert not offenders, (
@@ -691,3 +708,51 @@ def test_gated_소스는_승인_기록_없이는_열리지_않는다() -> None:
         if opened:
             with pytest.raises(RegistryError):
                 require(key, use=opened[0])
+
+
+@pytest.mark.gate
+def test_등록은_2인확인_게이트를_지나야_한다() -> None:
+    """🚨 **탐침의 반대편**이다 — 게이트 23 이 「저장하지 않음」을 지켰다면 여기는 반대다 (D-109).
+
+    AI Hub 처럼 **사람이 신청해 내려받는** 소스는 수집기가 가져오지 않는다. 그래서
+    `manifest_append` · `mark_collected` 가 한 번도 안 불리고, **파일은 있는데 원장에는 없는**
+    상태가 된다. `collect/ingest.py` 가 그 자리를 메운다.
+
+    🚨 **사람이 손으로 받아 왔다는 사실이 2인 확인을 면제하지 않는다.** 오히려 수집기가
+    돌지 않는 소스에서는 이 문이 **유일하게 남은 게이트**다. 그래서 `register` 는
+    `registry.require()`(= `reviewed_by` 검사)로 시작해야 하고, 탐침의 느슨한 문
+    `registry.probe()` 를 쓰면 안 된다.
+    """
+    src = (ROOT / "collect" / "ingest.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    fns = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    assert "cmd_register" in fns, "등록 진입점이 없다"
+
+    def calls(node: ast.AST) -> set[str]:
+        out = set()
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call):
+                f = n.func
+                out.add(f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", ""))
+        return out
+
+    reg = calls(fns["cmd_register"])
+    assert "require" in reg, (
+        "🚨 register 가 registry.require() 로 시작하지 않는다 — "
+        "reviewed_by 검사를 지나지 않고 원장에 올라간다 (규약 1 · D-66)"
+    )
+    assert "probe" not in reg, (
+        "🚨 register 가 탐침의 느슨한 문(registry.probe)을 쓴다 — "
+        "탐침은 reviewed_by 를 면제한다. 등록에 그 면제를 물려주면 게이트가 사라진다"
+    )
+    assert {"manifest_append", "mark_collected"} <= reg, (
+        "등록이 원장에 남기지 않는다 — provenance 는 나중에 못 붙인다 (규약 3·7 · D-71)"
+    )
+
+    # 🚨 count 는 반대로 **아무것도 바꾸면 안 된다.** 2인 확인 전에도 도는 자리다.
+    cnt = calls(fns["cmd_count"])
+    forbidden = {"manifest_append", "mark_collected", "copy2", "move", "write_bytes", "write_text"}
+    assert not (cnt & forbidden), (
+        f"🚨 count 가 상태를 바꾼다 — 읽기 전용이어야 한다 (D-109): {sorted(cnt & forbidden)}"
+    )
