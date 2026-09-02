@@ -68,7 +68,11 @@ def load() -> None:
     """`.env` 를 한 번만 읽는다. 이미 설정된 환경 변수는 덮어쓰지 않는다."""
     global _loaded
     if not _loaded:
-        load_dotenv(ROOT / ".env", override=False)
+        # 🚨 encoding 을 명시한다. Windows 편집기가 .env 를 **UTF-8 BOM** 으로 저장하면
+        #    dotenv 가 첫 줄 키 이름 앞에 U+FEFF 를 붙인다 — `LAW_OC_KEY` 를 넣어도
+        #    `\ufeffLAW_OC_KEY` 로 들어가 못 읽는다. 값이 있는데 없다고 나오는,
+        #    가장 찾기 어려운 종류의 실패다 (2026-09-02 실제 발생).
+        load_dotenv(ROOT / ".env", override=False, encoding="utf-8-sig")
         _loaded = True
 
 

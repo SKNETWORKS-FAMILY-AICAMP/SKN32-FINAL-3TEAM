@@ -130,10 +130,39 @@ def setup() -> None:
 
     env = ROOT / ".env"
     if env.exists():
-        console.print("  [green]OK[/green]   .env 이미 있음")
+        console.print(
+            "  [green]OK[/green]   .env 이미 있음 — 키 현황은 "
+            "[bold]launcher.py keys[/bold], 안내 주석 복원은 [bold]keys --repair[/bold]"
+        )
     else:
         env.write_bytes((ROOT / ".env.example").read_bytes())
         console.print("  [green]생성[/green] .env  — [bold]LAW_OC_KEY 를 채워야 한다[/bold]")
+
+
+@app.command()
+def setkey(name: str = typer.Argument(..., help="키 이름 (예: FOODSAFETY_KEY)")) -> None:
+    """API 키를 화면에 뜨지 않게 입력해 설정 파일에 넣는다.
+
+    🚨 값을 **인자로 주지 않는다.** 이름만 주면 물어보고, 입력은 화면에 표시되지 않는다.
+       인자로 주면 PowerShell 기록 파일(`ConsoleHost_history.txt`)에 그대로 남는다 —
+       터미널을 닫아도 남고, 지운 줄 알아도 남아 있다.
+       확인은 값이 아니라 **지문**으로 낸다. 지문은 붙여 넣어도 안전하다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "collect.setkey", name))
+
+
+@app.command()
+def keys(
+    repair: bool = typer.Option(False, "--repair", help="설정 파일의 안내 주석을 되살린다"),
+) -> None:
+    """어떤 키가 채워졌는지 본다 — 값은 화면에 올리지 않는다.
+
+    지금까지 확인하는 방법이 `.env` 를 편집기로 여는 것뿐이었다. 확인하려고 열면
+    화면에 뜬다 — **확인 행위 자체가 유출 경로**였다. 그 자리를 이 명령이 대신한다.
+    `--repair` 는 손으로 만든 `.env` 에 발급 안내를 되살리고 BOM 을 벗긴다 (값은 보존).
+    """
+    args = ["uv", "run", "python", "-m", "collect.setkey"]
+    raise typer.Exit(run(*args, "--repair") if repair else run(*args))
 
 
 @app.command()
@@ -442,6 +471,7 @@ MENU: list[tuple[str, str, object]] = [
     ("8", "서버 실행", serve),
     ("9", "데모 모드", demo),
     SEP,
+    ("k", "API 키 현황", keys),
     ("g", "Phase 게이트 판정", gate),
     ("c", "커밋 전 점검", check),
     ("t", "테스트", _menu_test),

@@ -792,3 +792,114 @@ def test_파생_소스는_원천보다_넓게_열리지_않는다() -> None:
                 "파생물이 원천보다 먼저 서명되는 순서다. 원천을 확인하지 않은 사람이 "
                 "파생물의 등급을 재현할 수 없다 (D-66 · 권소라 2인확인 §6-8)"
             )
+
+
+# ══════════════════════════════════════════════════════════
+# 키 — 유출은 언제나 「덮은 줄 알았던 경로」로 난다 (2026-09-02)
+#
+# 🚨 이 세 게이트는 사고 뒤에 생겼다. API 키가 대화창에 붙여넣어졌고, 원인을 따라가니
+#    막힌 경로는 하나(.env 커밋)뿐이고 나머지가 열려 있었다.
+#      ① 화면    — 확인하려고 .env 를 편집기로 열면 그때 화면에 뜬다
+#      ② 셸 기록 — 값을 인자로 주면 ConsoleHost_history.txt 에 남는다
+#      ③ 이름    — .env 는 덮여 있지만 .env.bak · .env.example 은 커밋된다
+#    ①은 `launcher.py keys`(지문), ②는 getpass 가 맡고, 여기서는 ②③을 검사한다.
+#    🚨 검사 대상은 **사람이 지킬 약속이 아니라 저장소의 상태**다 — 약속은 잊힌다.
+# ══════════════════════════════════════════════════════════
+
+# .env.example 에서 값을 가져도 되는 것 — 비밀이 아니라 기본값인 줄뿐이다.
+EXAMPLE_DEFAULTS = {"DATABASE_URL", "MLFLOW_TRACKING_URI"}
+
+
+@pytest.mark.gate
+def test_env_example_에는_실제_값이_없다() -> None:
+    """🚨 `.env` 는 gitignore 에 있고 `.env.example` 은 **커밋된다** — 한 글자 차이다.
+
+    발급받은 키를 채울 때 파일을 잘못 여는 것은 드문 실수가 아니라 **예상되는 실수**다.
+    두 파일이 나란히 있고 내용이 거의 같기 때문이다. gitleaks 훅이 마지막 그물이지만
+    그것은 키 **모양**을 보고 걸러서, 모양이 평범한 키는 지나간다.
+    여기서는 모양이 아니라 **자리**를 본다 — 예제에 값이 있으면 그 자체가 위반이다.
+    """
+    path = ROOT / ".env.example"
+    assert path.exists(), ".env.example 이 없다 — 키 이름의 단일 출처다"
+
+    filled = []
+    for no, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, value = stripped.split("=", 1)
+        name = name.strip().removeprefix("export ").strip()
+        if value.strip() and name not in EXAMPLE_DEFAULTS:
+            filled.append(f"{no}행 {name}")
+
+    assert not filled, (
+        f"🚨 .env.example 에 값이 채워져 있다 — {filled}. 이 파일은 커밋된다.\n"
+        f"   값은 .env 에 넣는다: uv run python launcher.py setkey <이름>\n"
+        f"   기본값이라 값이 있어야 한다면 EXAMPLE_DEFAULTS 에 등재하고 왜인지 적는다."
+    )
+
+
+@pytest.mark.gate
+def test_키_입력_경로가_값을_인자로_받지_않는다() -> None:
+    """🚨 값이 인자로 지나가면 셸 기록에 남는다 — 마스킹 입력을 만든 뜻이 사라진다.
+
+    `--key` 옵션 하나가 편의를 이유로 다시 생기는 것을 막는다. 「급하니까 이번만」이
+    커밋되면 그 뒤로는 그것이 표준 사용법이 된다.
+
+    검사는 **AST** 로 한다. 문자열로 찾으면 주석·docstring 이 걸려서, 사람이
+    주석을 지워 게이트를 통과시키는 쪽으로 움직인다 (게이트 17 에서 겪은 그대로).
+    """
+    src = (ROOT / "collect" / "setkey.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert "getpass" in names | attrs, (
+        "🚨 collect/setkey.py 가 getpass 를 쓰지 않는다 — 입력이 화면에 뜬다"
+    )
+
+    # 런처 쪽 — setkey 명령의 인자가 「이름」 하나뿐이어야 한다
+    ltree = ast.parse((ROOT / "launcher.py").read_text(encoding="utf-8"))
+    fn = next(
+        (n for n in ltree.body if isinstance(n, ast.FunctionDef) and n.name == "setkey"),
+        None,
+    )
+    assert fn is not None, "launcher.py 에 setkey 명령이 없다"
+    params = [a.arg for a in fn.args.args]
+    assert params == ["name"], (
+        f"🚨 launcher.setkey 의 인자가 {params} 다 — 이름 하나여야 한다.\n"
+        "   값을 받는 인자가 생기면 PowerShell 기록에 키가 남는다."
+    )
+
+
+@pytest.mark.gate
+def test_설정파일이_이름을_바꿔_새지_않는다() -> None:
+    """🚨 `.gitignore` 의 `.env` 한 줄로는 모자라다.
+
+    편집기와 OS 가 `.env~` · `.env.bak` · `.env.save` · `.env.local` 을 만든다.
+    안에 든 것은 똑같은 키인데 이름이 달라서 그 한 줄에 안 걸린다.
+    `.env.*` 로 덮고 `!.env.example` 로 템플릿만 되살린다 — 순서가 뒤바뀌면
+    예제가 커밋되지 않아 팀원이 키 이름을 알 수 없게 된다.
+    """
+    lines = [ln.strip() for ln in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()]
+    for need in (".env", ".env.*", "!.env.example"):
+        assert need in lines, f"🚨 .gitignore 에 `{need}` 가 없다"
+    assert lines.index(".env.*") < lines.index("!.env.example"), (
+        "🚨 `!.env.example` 이 `.env.*` 보다 앞에 있으면 되살리지 못한다 — gitignore 는 "
+        "뒤에 오는 규칙이 이긴다"
+    )
+
+    # 실제 추적 상태 — 규칙이 맞아도 이미 추적 중이면 gitignore 는 아무것도 못 한다
+    proc = subprocess.run(
+        ["git", "ls-files", "-z", "--", ".env", ".env.*"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode == 0:
+        tracked = {p for p in proc.stdout.split("\0") if p and p != ".env.example"}
+        assert not tracked, (
+            f"🚨 키 파일이 이미 git 에 추적되고 있다 — {sorted(tracked)}. "
+            "gitignore 는 **추적되지 않는 파일**에만 듣는다. "
+            "`git rm --cached <파일>` 로 먼저 떼어 내고, 이미 push 했다면 키를 재발급한다."
+        )

@@ -1,5 +1,10 @@
 # env & secrets
+# 🚨 `.env` 한 줄로는 모자란다. 편집기·백업·OS 가 곁가지를 만든다
+#    (.env~ · .env.bak · .env.save · .env.local). 그 파일들에도 키가 그대로 들어 있는데
+#    이름이 달라서 위 한 줄에 안 걸린다 — 유출은 항상 「덮은 줄 알았던 이름」으로 난다.
 .env
+.env.*
+!.env.example
 *.key
 
 # python
