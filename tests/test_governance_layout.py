@@ -903,3 +903,105 @@ def test_설정파일이_이름을_바꿔_새지_않는다() -> None:
             "gitignore 는 **추적되지 않는 파일**에만 듣는다. "
             "`git rm --cached <파일>` 로 먼저 떼어 내고, 이미 push 했다면 키를 재발급한다."
         )
+
+
+@pytest.mark.gate
+def test_오류_메시지가_키를_그대로_찍지_않는다() -> None:
+    """🚨 D-111 이 센 경로는 셋이었다 — 화면 입력 · 셸 기록 · 키 이름. **넷째가 있었다.**
+
+    2026-09-02, `cosmetic_*` 두 건이 403 으로 실패했고 `FetchError` 가 요청 URL 을
+    통째로 찍어 `serviceKey` 값이 터미널·스크롤백·대화 기록에 남았다. 키를 재발급했다.
+
+    앞의 셋과 성질이 다르다 — **사람이 실수해야 새는 것이 아니라 코드가 정상 동작할 때
+    샌다.** 실패할 때마다 샌다. 그리고 `probe.py` 는 이 메시지를 `실측_<날짜>.md` 와
+    `build/probe_results.json` 에 적고 **그것이 커밋된다.** 터미널은 닫으면 사라지지만
+    커밋은 남는다.
+
+    두 겹으로 본다.
+      ① 구조 — `raise FetchError(...)` 안에 **가공되지 않은 `url`** 이 들어가지 않는다 (AST)
+      ② 동작 — 실제로 가려지는가. 구조만 보면 `redact` 가 빈 껍데기여도 통과한다
+    """
+    src = (ROOT / "collect" / "http.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    # ── ① 구조 — raise FetchError(f"{url} …") 를 막는다
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call)):
+            continue
+        callee = node.exc.func
+        if getattr(callee, "id", getattr(callee, "attr", None)) != "FetchError":
+            continue
+        for sub in ast.walk(node.exc):
+            # f-string 안의 `{url}` 은 FormattedValue 의 값이 Name 으로 온다
+            if isinstance(sub, ast.FormattedValue) and isinstance(sub.value, ast.Name):
+                assert sub.value.id != "url", (
+                    "🚨 collect/http.py 의 FetchError 가 url 을 그대로 찍는다.\n"
+                    "   키는 쿼리(serviceKey·OC)에도, **경로**(식품안전나라 /api/<키>/…)에도 있다.\n"
+                    "   `redact(url)` 을 거쳐야 한다 — 예외를 만드는 이 한 곳을 막으면\n"
+                    "   그것을 받아쓰는 probe.py 의 실측 문서·리포트까지 함께 막힌다."
+                )
+
+    # ── ② 동작 — 세 겹이 실제로 도는가
+    from collect import http  # noqa: PLC0415
+
+    http.register_secret("게이트_시험키", "ZZtestSECRET0123456789+/=")
+
+    누출 = "ZZtestSECRET"
+    검사 = [
+        # 값으로 — 원문 · 인코딩 · 🚨 이중 인코딩(2026-09-02 실제로 나온 형태)
+        "https://apis.data.go.kr/a/b?serviceKey=ZZtestSECRET0123456789%2B%2F%3D&pageNo=1",
+        "https://apis.data.go.kr/a/b?serviceKey=ZZtestSECRET0123456789%252B%252F%253D&pageNo=1",
+        "https://apis.data.go.kr/a/b?serviceKey=ZZtestSECRET0123456789+/=&pageNo=1",
+        # 🚨 경로에 키가 있는 규약 — 쿼리만 가리는 마스킹은 이쪽을 못 막는다
+        "http://openapi.foodsafetykorea.go.kr/api/ZZtestSECRET0123456789/I0470/json/1/100",
+    ]
+    for url in 검사:
+        가림 = http.redact(url)
+        assert 누출 not in 가림, f"🚨 키가 가려지지 않는다 — {url[:60]}… → {가림}"
+
+    # 이름 그물 — 등록되지 않은 키(손으로 만든 URL)도 잡는다
+    assert "hong1234" not in http.redact(
+        "https://www.law.go.kr/DRF/lawSearch.do?OC=hong1234&target=ftc&type=XML"
+    ), "🚨 등록되지 않은 키를 파라미터 이름으로도 못 잡는다"
+
+    # 🚨 과잉 마스킹도 결함이다 — 오류 메시지를 읽을 수 없으면 고칠 수 없다
+    정상 = "http://openapi.foodsafetykorea.go.kr/api/sample/I-0040/json/1/5"
+    assert http.redact(정상) == 정상, f"🚨 키가 아닌 곳을 가렸다 — {http.redact(정상)}"
+
+
+@pytest.mark.gate
+def test_키를_읽는_곳이_가릴_것을_등록한다() -> None:
+    """🚨 가리기는 **값으로** 해야 강하다 — 쿼리든 경로든, 인코딩이 어떻든 잡힌다.
+
+    그러려면 누군가 값을 알려 줘야 하는데, 키를 손에 쥐는 곳은 `env.get()` **하나뿐**이다
+    (D-51 이래로 `.env` 를 읽는 유일한 자리). 그 자리가 등록을 빠뜨리면 ①이 통째로
+    꺼지고, 남는 것은 파라미터 이름 그물뿐이다 — 이름을 모르는 API 에서는 그물이 없다.
+
+    🚨 의존 방향에 주의한다. `http` 가 `env` 를 부르면 순환이 된다. 반대로 뒤집혀 있어야 한다.
+    """
+    tree = ast.parse((ROOT / "collect" / "env.py").read_text(encoding="utf-8"))
+
+    fn = next(
+        (n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "get"),
+        None,
+    )
+    assert fn is not None, "collect/env.py 에 get() 이 없다"
+
+    부름 = {
+        getattr(n.func, "attr", getattr(n.func, "id", None))
+        for n in ast.walk(fn)
+        if isinstance(n, ast.Call)
+    }
+    assert "register_secret" in 부름, (
+        "🚨 collect/env.py 의 get() 이 http.register_secret() 을 부르지 않는다.\n"
+        "   키를 읽고도 「가릴 것」으로 등록하지 않으면 오류 메시지에 값이 그대로 남는다."
+    )
+
+    # 순환 방지 — http 는 env 를 import 하지 않는다
+    htree = ast.parse((ROOT / "collect" / "http.py").read_text(encoding="utf-8"))
+    수입 = {
+        alias.name for n in ast.walk(htree) if isinstance(n, ast.ImportFrom) for alias in n.names
+    } | {n.module or "" for n in ast.walk(htree) if isinstance(n, ast.ImportFrom)}
+    assert "env" not in 수입, (
+        "🚨 collect/http.py 가 env 를 import 한다 — 순환이다. 등록은 env → http 방향으로만 흐른다."
+    )

@@ -13,6 +13,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from collect import http
+
 ROOT = Path(__file__).resolve().parent.parent
 _loaded = False
 
@@ -77,9 +79,17 @@ def load() -> None:
 
 
 def get(name: str, *, required: bool = True) -> str:
-    """키를 읽는다. 없으면 무엇을 어디서 받는지 알려주며 실패한다."""
+    """키를 읽는다. 없으면 무엇을 어디서 받는지 알려주며 실패한다.
+
+    🚨 읽은 값은 곧바로 `http.register_secret()` 에 등록한다 (D-111 확장).
+       **키를 손에 쥐는 곳이 여기 하나뿐**이므로, 가릴 것을 알려 주는 자리도 여기다.
+       등록해 두면 `FetchError` 가 URL 을 찍어도 그 값이 `<이름>` 으로 바뀐다 —
+       2026-09-02 에 `serviceKey` 가 오류 메시지로 샜다.
+    """
     load()
     value = (os.environ.get(name) or "").strip()
+    if value:
+        http.register_secret(name, value)
     if value or not required:
         return value
 
