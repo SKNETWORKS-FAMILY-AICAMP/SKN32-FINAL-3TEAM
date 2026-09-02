@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import re as _re
 import sys
@@ -31,6 +32,11 @@ from collect import http, registry
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs/03_데이터"
+# 🚨 누적 결과. **단일 소스 탐침이 전체 리포트를 덮어쓰던 것**을 막는다 (2026-09-02).
+#    `probe mfds_hf_ingredient` 한 번에 32건 결과가 사라졌다 — 리포트가 그 실행의
+#    rows 만으로 렌더링됐기 때문이다. 여기에 소스별로 쌓고 리포트는 전체에서 그린다.
+#    🚨 build/ 다. data/ 가 아니다 — 탐침은 등급 디렉터리에 쓰지 않는다 (게이트 23).
+CACHE = ROOT / "build" / "probe_results.json"
 
 # 🚨 본문에서 이용조건을 말하는 자리. 검토 확인 항목 1·3·5 가 찾는 문구다.
 LICENSE_HINTS = (
@@ -256,9 +262,21 @@ def main(argv: list[str]) -> int:
                 }
             )
 
+    # 🚨 이번 실행 결과를 누적본에 **덮어쓰지 않고 갱신**한다.
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    merged: dict[str, dict[str, Any]] = {}
+    if CACHE.exists():
+        try:
+            merged = json.loads(CACHE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            merged = {}
+    for r in rows:
+        merged[r["id"]] = r
+    CACHE.write_text(json.dumps(merged, ensure_ascii=False, indent=1), encoding="utf-8")
+
     out = OUT / f"실측_{date.today().isoformat()}.md"
-    out.write_text(render(rows), encoding="utf-8")
-    print(f"탐침 {len(rows)}건 · 게이트가 막은 것 {len(skipped)}건")
+    out.write_text(render(list(merged.values())), encoding="utf-8")
+    print(f"탐침 {len(rows)}건 · 게이트가 막은 것 {len(skipped)}건 · 리포트 누적 {len(merged)}건")
     for s in skipped:
         print(f"  ⏸ {s}")
     print(f"→ {out.relative_to(ROOT)}")

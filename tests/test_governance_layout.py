@@ -539,16 +539,13 @@ def test_탐침은_저장_경로를_부를_수_없다() -> None:
         "🚨 탐침이 저장 경로에 손을 댔다 — 게이트 전체의 우회로가 된다 (D-109): " + str(hits)
     )
 
-    # 🚨 쓰기는 딱 한 자리여야 하고 그 자리는 docs/ 다. 등급 디렉터리는 수집기만 쓴다 (D-19).
-    writes = [
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Attribute)
-        and n.func.attr == "write_text"
-    ]
-    assert len(writes) == 1, f"탐침의 쓰기는 리포트 한 자리뿐이어야 한다 (현재 {len(writes)}곳)"
-    assert 'ROOT / "docs' in src, "탐침 산출은 docs/ 로만 나간다"
+    # 🚨 **쓰기의 개수가 아니라 목적지를 본다** (2026-09-02 정정).
+    #    처음에는 `write_text` 를 한 자리로 못박았는데, 그 제약이 실제 결함을 낳았다 —
+    #    단일 소스 탐침이 **전체 리포트를 덮어써** 32건 결과가 사라졌고, 고치려면
+    #    누적 캐시에 한 번 더 써야 했다. 지킬 것은 「한 번만 쓴다」가 아니라
+    #    **「data/ 에는 쓰지 않는다」**이므로 그쪽을 검사한다 (D-19).
+    assert 'ROOT / "docs' in src, "탐침 리포트는 docs/ 로 나간다"
+    assert 'ROOT / "build"' in src, "탐침 캐시는 build/ 로 나간다"
 
     # 🚨 **런타임으로 증명한다** — 문자열 검사는 「안 썼다」만 말하고
     #    「쓸 수 없다」는 말하지 못한다. 탐침을 새 프로세스에서 import 했을 때
