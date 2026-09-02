@@ -184,6 +184,10 @@ def block(key, s, extra=None, covers=None, status="collect"):
     #    제4항에 실려 있는데 그 주소는 `why` 산문 안에 텍스트로만 박혀 있었다.
     #    🚨 폴백은 하되 **폴백했다고 말한다** — 추정한 URL 은 빈 칸보다 나쁘다.
     #    빈 칸은 「미확인」이라 말하지만 추정값은 「확인됨」이라고 거짓말한다.
+    # 🔄 파생 소스의 원천 (권소라 2인확인 §6-7·8). 🚨 「어디서 나왔는가」는 산문이 아니라
+    #    필드여야 한다 — 원천이 재판정되면 파생물도 따라가야 하고, 그 추적을 게이트가 한다.
+    if s.get("derivedFrom"):
+        L.append("    derived_from: [" + ", ".join(s["derivedFrom"]) + "]")
     ev = s.get("evidenceUrl") or s.get("url")
     if ev:
         L.append(f"    evidence_url: {esc(ev)}")
@@ -350,6 +354,7 @@ ORDER = [
     # 3층 판단 규범
     "law_go_kr",
     "platform_guide",
+    "mfds_hf_ingredient_board",
     # 제품 사실
     "cosmetic_ingredient",
     "cosmetic_restricted",
@@ -418,7 +423,7 @@ with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8") as _out:
 print("등재", len(ORDER), "건 · 법제처 covers", len(LAW_COVERS), "종 흡수")
 # 🔄 미채택으로 내린 것은 매트릭스에 판정 근거로 남지만 레지스트리 sources 에는 없다.
 #    registry_tail.yaml 의 not_adopted 가 그 자리다 (D-110).
-NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb", "mfds_hf_ingredient_board", "kfia_approved"}
+NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb", "kfia_approved"}
 missing = [
     s["id"]
     for s in SRC

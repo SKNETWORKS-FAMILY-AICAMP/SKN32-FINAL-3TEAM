@@ -756,3 +756,42 @@ def test_등록은_2인확인_게이트를_지나야_한다() -> None:
     assert not (cnt & forbidden), (
         f"🚨 count 가 상태를 바꾼다 — 읽기 전용이어야 한다 (D-109): {sorted(cnt & forbidden)}"
     )
+
+
+@pytest.mark.gate
+def test_파생_소스는_원천보다_넓게_열리지_않는다() -> None:
+    """🚨 파생물이 원천보다 넓게 열리면 **등급 체계가 파생 경로로 새어 나간다** (권소라 §6-8).
+
+    `self_sanction_stat` 은 공정위 의결문 · 식약처 행정처분 API · **과징금 고시**에서 계산한
+    자체 통계다. 원천이 셋인데 판정 근거는 **둘만 적고 있었고**, 원천 하나가 재판정으로
+    닫혀도 파생물은 열린 채 남는다 — 아무도 그 연결을 보지 않기 때문이다.
+
+    그래서 `derived_from` 을 **필드로** 두고 두 가지를 검사한다.
+      ① **allow 집합의 포함** — 파생물이 연 용도는 **모든 원천이 함께 연** 것이어야 한다
+      ② **서명 순서** — 파생물에 `reviewed_by` 가 있으면 원천에도 있어야 한다.
+         🚨 원천을 확인하지 않은 사람이 파생물의 등급을 재현할 수는 없다 (D-66).
+    """
+    srcs = _sources()
+    derived = {k: v for k, v in srcs.items() if v.get("derived_from")}
+    assert derived, "파생 소스가 없다 — self_sanction_stat 가 사라졌으면 이 게이트를 다시 본다"
+
+    for key, src in derived.items():
+        origins = src.get("derived_from") or []
+        for o in origins:
+            assert o in srcs, f"{key}.derived_from 의 {o!r} 가 레지스트리에 없다"
+
+        opened = {u for u in sorted(VALID_USES) if (src.get("use") or {}).get(u) == "allow"}
+        for o in origins:
+            o_open = {u for u in sorted(VALID_USES) if (srcs[o].get("use") or {}).get(u) == "allow"}
+            assert opened <= o_open, (
+                f"🚨 {key} 가 원천 {o} 보다 넓게 열려 있다 — {sorted(opened - o_open)}. "
+                "파생물의 용도는 모든 원천이 함께 연 것이어야 한다 (D-71 · 규약 7)"
+            )
+
+        if src.get("reviewed_by"):
+            unsigned = [o for o in origins if not srcs[o].get("reviewed_by")]
+            assert not unsigned, (
+                f"🚨 {key} 는 서명됐는데 원천 {unsigned} 가 미검토다 — "
+                "파생물이 원천보다 먼저 서명되는 순서다. 원천을 확인하지 않은 사람이 "
+                "파생물의 등급을 재현할 수 없다 (D-66 · 권소라 2인확인 §6-8)"
+            )

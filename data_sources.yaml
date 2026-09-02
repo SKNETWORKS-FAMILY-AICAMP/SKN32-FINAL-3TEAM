@@ -86,7 +86,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15103301/fileData.do"
 
   ftc_decisions_api:
@@ -114,7 +115,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15103246/openapi.do"
 
   mfds_sanctions:
@@ -137,7 +139,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15059500/openapi.do"
 
   mfds_press:
@@ -162,7 +165,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   ftc_noviolation:
@@ -202,7 +206,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15058359/openapi.do"
 
   mfds_hf_individual:
@@ -226,7 +231,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15074311/openapi.do"
 
   kcia_guideline:
@@ -254,6 +260,8 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    reviewed_at: 2026-09-02
+    dissent_note: "판정 근거의 「저작권은 대한화장품협회에 귀속」을 재현하지 못함 — 공지 본문에 해당 문구가 없고, 첨부 해설서 PDF 전문(35p·28,233자)에도 저작권·귀속·무단·전재·복제·배포·Copyright 이 0건. 등급 G2 자체는 유지 가능하나 근거 문장의 출처(어느 페이지 어느 문장인지)를 특정해 주십시오"
     evidence_url: "https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039"
     evidence_is_access: true
 
@@ -313,6 +321,30 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
 
+  mfds_hf_ingredient_board:
+    name: "식품안전나라 「건강기능식품 원료별 정보」"
+    org: "식품의약품안전처"
+    url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
+    layer: "2층 적법라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: collect
+    access: "웹 게시판 크롤링"
+    scale: "🔄 게시물 전체 650건 (2026-09-02 실측 · 권소라). 종전 「고시형 96 + 개별인정형 472 = 568건」과 82건 차이"
+    caution: "🔧 2026-09-02 정정 2건(권소라 §6-3·4) — ① 화면에 「출처 명시 필요」가 있어 BY 를 붙였다(mfds_press 와 같은 누락이었다) ② 게시물 전체 650건으로 종전 568건과 82건 차이. 어느 쪽이 맞는지는 수집 시 실측한다. / API 15074311(개별인정형 472)과 겹치는 범위 확인이 남는다."
+    collected_at: null
+    decided_at: 2026-08-20
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
+    robots_checked_at: 2026-09-02
+    evidence_url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
+    evidence_is_access: true
+
   cosmetic_ingredient:
     name: "식약처 화장품 원료성분정보 API (15111774)"
     org: "식품의약품안전처"
@@ -330,11 +362,12 @@ sources:
     probe_note: >-
       🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」. G3 전 용도 개방이 뒷받침된다.
       🚨 운영단계 심의승인 + 개발계정 트래픽 10,000. caution 의 「전부 미확인」은 해소됐다.
-    caution: "⚠️ 명칭 외 전부 미확인. 1W에 브라우저로 직접 열어 필드를 확인하고 등급을 확정할 것. 지금 G3는 「식약처 공공데이터」라는 정황 판단이다."
+    caution: "🔄 2026-09-02 해소 — 종전 「명칭 외 전부 미확인 · 등급을 확정할 것 · 정황 판단」은 09-02 실측 이전 문장이라 why 와 정면으로 모순됐다(권소라 §6-5). 이용허락범위 「제한 없음」이 확인됐고 2인 확인도 끝났다. 🚨 남은 것은 운영단계 심의승인(개발단계는 자동승인) — 배포 시점의 선결 조건이다. 필드 목록은 수집 시 확인한다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15111774/openapi.do"
 
   cosmetic_restricted:
@@ -353,11 +386,12 @@ sources:
     scale: "미확인"
     probe_note: >-
       🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.
-    caution: "⚠️ 범위 확장 유혹을 조심할 것. 「이 성분이 들어간 제품 자체가 부적합」은 다른 제품이다. 기획서가 정한 경계(광고 문구 판정)를 넘으면 9주 안에 못 끝낸다."
+    caution: "🔄 2026-09-02 — 이용허락범위 「제한 없음」 확인 · 2인 확인 완료(권소라). 🚨 운영단계 심의승인이 남는다. / ⚠️ 범위 확장 유혹을 조심할 것. 「이 성분이 들어간 제품 자체가 부적합」은 다른 제품이다. 기획서가 정한 경계(광고 문구 판정)를 넘으면 9주 안에 못 끝낸다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15111772/openapi.do"
 
   aihub_71486:
@@ -510,7 +544,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://github.com/bab2min/corpus"
     evidence_is_access: true
 
@@ -528,11 +563,12 @@ sources:
     status: collect
     access: "자유 다운로드"
     scale: "200,000건 (train 150k / test 50k)"
-    caution: "⚠️ 원본 CC0를 근거로 삼되 출처표시(CC BY 2.0 조건)까지 함께 이행하면 양쪽 해석을 모두 충족한다."
+    caution: "⚠️ 원본 CC0를 근거로 삼되 출처표시(CC BY 2.0 조건)까지 함께 이행하면 양쪽 해석을 모두 충족한다. 🔧 2026-09-02(권소라 §6-10) — 🚨 라이선스는 HF 카드 본문이 아니라 페이지 상단 메타데이터에 있다. 본문의 Licensing Information 은 [More Information Needed] 로 비어 있어 다음 검토자가 같은 곳에서 헤맨다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://github.com/e9t/nsmc"
     evidence_is_access: true
 
@@ -598,7 +634,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://adstat.kobaco.co.kr/mcr/portal/community/articleListPage.do?bbsId=FAQ"
     evidence_is_access: true
 
@@ -668,7 +705,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://khff.or.kr/user/info/InfoBoardUserView.do?_menuNo=369&boardSeqno=10035&postsSeqno=119567"
     evidence_is_access: true
 
@@ -695,11 +733,12 @@ sources:
     probe_note: >-
       🔄 2026-09-02 탐침 확인 — 「공공저작물 : 출처표시 (제 1유형)」.
       BY 를 붙인 판정(D-108 작업)이 실측으로 확인됐다.
-    caution: "🔄 2026-09-02 확인 — CSV · 가구/개인 통계표 + 다이어리 자료. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사."
+    caution: "🔄 2026-09-02 확인 — CSV · 가구/개인 통계표 + 다이어리 자료. 🔧 2인 확인 시 추가 관찰(권소라 §6-9) — 「자녀별 설문 통계표」가 하나 더 있고 OpenAPI 배지도 있다. why 는 CSV 3종만 적으므로 수집 경로가 갈릴 수 있다. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/3068653/fileData.do"
 
   kosis:
@@ -720,13 +759,13 @@ sources:
       🚨 2026-09-02 탐침 — 근거 URL(serviceInfo/openAPIGuide.do)은 **API 가이드 페이지이고
       이용조건을 말하지 않는다.** caution 은 「상업 이용이 명시적으로 허용된 몇 안 되는 항목」
       이라고 단언하는데, 그 근거를 보여 주는 페이지가 지금 없다. 역검토 v1.3 §2 가 예측한 형태다.
-    caution: "★ 조사 대상 전체에서 상업 이용이 명시적으로 허용된 몇 안 되는 항목이다. 지금 바로 붙일 것."
+    caution: "★ 조사 대상 전체에서 상업 이용이 명시적으로 허용된 몇 안 되는 항목이다. 🚨 다만 전부는 아니다(2026-09-02 권소라 §6-2) — 국제·북한통계는 비상업 전용 + 재배포 금지이고, 간행물은 공공누리 유형 안내를 따른다. NC 가 걸리는 하위 집합이 있으므로 프래그먼트 단위 확인 사항이다(D-18 · mfds_press 와 같은 형태). 통계표를 고를 때 이 둘을 피한다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
-    evidence_url: "https://kosis.kr/serviceInfo/openAPIGuide.do"
-    evidence_is_access: true
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
+    evidence_url: "https://kosis.kr/serviceInfo/useGuide.do"
 
   knhanes:
     name: "국민건강영양조사 (KNHANES)"
@@ -873,7 +912,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://developers.google.com/youtube/terms/developer-policies"
 
   google_trends:
@@ -894,7 +934,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://developers.google.com/search/blog/2025/07/trends-api"
     evidence_is_access: true
 
@@ -914,11 +955,13 @@ sources:
     scale: "의결문 5,870건 + 식약처 행정처분 레코드"
     masking: 🚨 원천이 마스킹된 뒤의 값만 쓴다 — 「반복 위반 비율」은 업체 식별을 전제하므로
       집계 단계에서 식별자를 다시 만들지 않는다 (D-17)
-    caution: "★★ 인용한 숫자보다 산출한 숫자가 강하다. \"MarketsandMarkets에 따르면\"보다 \"우리가 수집한 처분 레코드에서 계산하면\"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 제품의 일부다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다."
+    caution: "★★ 인용한 숫자보다 산출한 숫자가 강하다. \"MarketsandMarkets에 따르면\"보다 \"우리가 수집한 처분 레코드에서 계산하면\"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 제품의 일부다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다. 🚨 2026-09-02 — 파생물이 원천보다 먼저 서명됐다(권소라 §6-8): 이 소스는 서명됐는데 원천인 law_go_kr 은 아직 미검토다. 인계문서 §3-② 게이트(파생 소스의 allow 집합 ⊆ 모든 원천의 allow 집합)가 있으면 코드가 잡는다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    reviewed_at: 2026-09-02
+    derived_from: [ftc_decisions, mfds_sanctions, law_go_kr]
     evidence_url: "../01_기획/경제성_근거.md"
 
   mfds_production:
@@ -939,7 +982,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   # ── 검토 예정 (D-64) · 조사·제안: 이서은
@@ -1002,10 +1046,6 @@ sources:
 #       등급 축 자체가 오염되고, 나중에 필요해졌을 때 재판정 비용이 생긴다.
 #    실제 등급을 그대로 두고 「왜 안 쓰는가」만 기록한다 (D-72 — 가치 판정과 등급 판정은 다른 축).
 not_adopted:
-  # 🔄 2026-09-02 — 팀장이 게시판 이용조건을 직접 확인. 사용금지 조항이 있었다.
-  #    🚨 값이 없어서가 아니라 **조건이 맞는 경로가 따로 있어서** 내린다 (D-110 과 같은 처방).
-  - {key: mfds_hf_ingredient_board, name: 식품안전나라 「건강기능식품 원료별 정보」, grade: G2, value: A,
-     reason: "🚨 사용금지 조항 확인(2026-09-02 · 오한빈). 같은 데이터가 data.go.kr API 15074311 로 나오고 그쪽은 「이용허락범위 제한 없음」이 실측 확인됐다 — API 를 정본으로 삼는다. ✅ 게시판 크롤링(S1-06 568건)과 robots 확인이 불필요해진다. 🚨 고시형 96건이 API 로 덮이는지는 15058359 와 대조가 남는다"}
   # 🔄 2026-09-02 — PDF 마지막 장의 이용조건을 직접 열어 확인하고 내렸다 (D-110).
   #    🚨 가치가 없어서가 아니다. NPR 은 가치 A 였고 지금도 A 다 — 조건이 우리와 안 맞을 뿐이다.
   - {key: nasmedia_npr, name: 나스미디어 2026 NPR 인터넷 이용자 조사, grade: G2, value: A,
