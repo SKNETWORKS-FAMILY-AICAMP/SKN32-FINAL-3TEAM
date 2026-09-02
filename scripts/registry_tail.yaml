@@ -70,8 +70,10 @@ not_adopted:
      reason: "라이선스가 아니라 도메인이 막는다 — 상표 심사이지 광고 표현이 아니다. 다만 거절 사유 3분류 구조는 D-59의 불가 사유 A/B/C와 형태가 같아 설계 참고만"}
   - {key: mnm_aidataset, name: MarketsandMarkets AI 학습 데이터셋 시장 보고서, grade: G2, value: D,
      reason: "$4,950 · 시장 정의가 우리 제품과 다르다. D-75에 따라 자체 산출로 대체"}
-  - {key: klue_roberta, name: KLUE-RoBERTa-base, grade: G1, value: X,
-     reason: "🚨 모델 카드·HF API 양쪽에 license 키 자체가 부재. kcbert-base(Apache 2.0)로 교체 (D-70). 비교군 유지는 D-106 으로 철회 — 확인된 허락 부재는 G1 이다"}
+  # 🚨 klue_roberta 는 여기 없다 (D-106). 아래 `models:` 에 G1 로 등재돼 있고 그것이 단일 출처다.
+  #    not_adopted 는 「후보였다가 안 쓴 것」이고 models 는 「등재해서 게이트 대상인 것」이다.
+  #    D-70 교체 때 models 에 남긴 채 not_adopted 에도 적어 두 벌이 됐고,
+  #    등급을 G1 로 내리자 게이트 11 이 그것을 잡았다 — 「G1 은 미채택이 아니라 배제다」.
   - {key: exaone, name: EXAONE 계열, grade: G0, value: X,
      reason: 라이선스 제약. Qwen3 4B(Apache 2.0)로 간다 (D-23)}
 
