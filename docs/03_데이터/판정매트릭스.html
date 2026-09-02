@@ -1021,7 +1021,7 @@ const SOURCES = [
  u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
  note:{train:'파생 통계',commercial:'원천이 전부 공공저작물',raw:'우리가 산출한 값',cite:'★ 발표의 핵심 근거',deploy:'제한 없음'},
  why:'원천(공정위 의결서·식약처 행정처분 API)이 전부 G3이므로 파생 통계도 G3. 🚨 <b>라이선스 페이지가 존재하지 않는 자체 산출물</b>이라 근거가 URL 이 아니라 <b>산출 근거 문서</b>다 — docs/01_기획/경제성_근거.md 가 산출 방법과 원천을 적는다(D-75 · D-99). 원천 등급이 내려가면 이 파생 통계도 함께 내려간다.',
- caution:'★★ 인용한 숫자보다 <b>산출한 숫자</b>가 강하다. "MarketsandMarkets에 따르면"보다 "우리가 수집한 처분 레코드에서 계산하면"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 <b>제품의 일부</b>다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다.', url:'docs/01_기획/경제성_근거.md'},
+ caution:'★★ 인용한 숫자보다 <b>산출한 숫자</b>가 강하다. "MarketsandMarkets에 따르면"보다 "우리가 수집한 처분 레코드에서 계산하면"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 <b>제품의 일부</b>다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다.', url:'../01_기획/경제성_근거.md'},
 
 {id:'mfds_production', layer:'경제성 근거', name:'식약처 화장품 생산·수출 실적 통계 (연 1회)', org:'식품의약품안전처',
  grade:'G3', constraints:['BY'], access:'보도자료 + 통계 공표', verified:true,
@@ -1029,9 +1029,9 @@ const SOURCES = [
  value:'B', valueNote:'★ 국내 화장품 시장 규모의 공식 숫자. 건기식은 협회 발표(2024년 6조 440억)와 짝을 이룬다. TAM을 말할 때 이 둘이 근거가 된다',
  u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
  note:{train:'집계 통계',commercial:'공공저작물',raw:'수치는 사실',cite:'✅ 출처표시 인용',deploy:'제한 없음'},
- why:'정부 공표 통계.',
- caution:'★ 여기에 「화장품책임판매업체 수」·「기능성표시식품 심의 건수」를 곱하면 <b>고객 수 기반 TAM 역산</b>이 된다 — 시장 금액보다 이쪽이 우리 제품 정의에 맞는다.',
- url:'https://eiec.kdi.re.kr/policy/materialView.do?num=267032'},
+ why:'정부 공표 통계. 🔄 2026-09-02 근거 URL 을 KDI 재게시 페이지에서 식약처 저작권정책으로 교체했다 — 근거 URL 은 「그 조건을 말하는 페이지」여야 하는데(확인 항목 4), KDI 에서는 식약처의 이용허락범위를 확인할 수 없다. 저작권법 제24조의2 로 별도 허락 없이 이용 가능하고 제37조 출처 명시가 의무라 BY 가 붙는다 (mfds_press 와 같은 근거 · D-102 ④).',
+ caution:'★ 여기에 「화장품책임판매업체 수」·「기능성표시식품 심의 건수」를 곱하면 <b>고객 수 기반 TAM 역산</b>이 된다 — 시장 금액보다 이쪽이 우리 제품 정의에 맞는다. 🔄 자료 위치(2차 게시처): KDI 경제정보센터 materialView.do?num=267032 — 근거가 아니라 다운로드 경로다',
+ url:'https://www.mfds.go.kr/wpge/m_34/de010803l001.do'},
 
 {id:'mnm_aidataset', layer:'경제성 근거', name:'MarketsandMarkets AI 학습 데이터셋 시장 ★사용자제공', org:'MarketsandMarkets',
  grade:'G2', constraints:['BY','TOS'], access:'요약만 무료 · 본문 유료', verified:true,
