@@ -22,6 +22,8 @@ GRADE_DIRS = ["g3", "g2_facts", "g2_norepub", "quarantine", ".g1_blocked"]
 
 VALID_GRADES = {"G0", "G1", "G2", "G3"}
 VALID_USES = {"U1", "U2", "U3", "U4"}
+# D-108 — status 는 「수집기가 실행하는가」다. blocked·not_adopted 는 값이 아니라 별도 섹션이다.
+VALID_STATUS = {"collect", "manual", "hold"}
 VALID_FLAGS = {
     "BY",
     "NC",
@@ -436,3 +438,41 @@ def test_판정은_다형_참조의_대상을_제약으로_고정한다() -> Non
     )
     assert "ck_copy_sentence_origin" in _checks(CopySentence), "copy_sentence.origin CHECK 가 없다"
     assert "ck_work_doc_kind" in _checks(WorkDoc), "work_doc.kind CHECK 가 없다"
+
+
+@pytest.mark.gate
+def test_status_는_수집기_실행_여부이고_collect_는_용도가_열려있다() -> None:
+    """🚨 `status` 가 두 뜻으로 쓰이고 있었다 — 「수집기가 돈다」와 「작업 목록에 있다」 (D-108).
+
+    같은 `collect` 값이 정반대 두 상황에 붙어 있었다.
+
+    * `kfia_approved_list` · `krei_food` — 자동 수집기가 도는데 **G0 라 용도가 전부 닫혀**
+      있었다. 가져오지만 쓸 곳이 없다. G0 를 fail-closed 로 닫아 둔 이유(D-72)가
+      **수집 단계에서 우회**된다 — 확인이 수집보다 먼저다.
+    * `meta_adlibrary` · `google_atc` — 자동 수집이 **약관 위반**이라 사람이 수기로 옮긴다.
+      그 사실이 `caution` 자유 문장에만 있었고 **기계가 읽는 자리에 없었다.**
+
+    그래서 값을 셋으로 고정하고(`collect`/`manual`/`hold`), `collect` 에만 교차 규칙을 건다.
+    🚨 **역은 성립하지 않는다** — `hold` 인데 용도가 열려 있는 것은 「판정 끝, 착수만 남음」이며
+    정상이다. 두 축은 다르다: `status` 는 가져오는가, `use` 는 가져온 것을 쓸 수 있는가.
+    """
+    offenders = []
+    bad_value = []
+    for key, src in _sources().items():
+        status = src.get("status")
+        if status not in VALID_STATUS:
+            bad_value.append(f"{key}={status!r}")
+            continue
+        if status != "collect":
+            continue
+        use = src.get("use") or {}
+        if not any(use.get(u) == "allow" for u in sorted(VALID_USES)):
+            offenders.append(f"{key}(G{src.get('grade', '?')[-1]} · 전 용도 deny)")
+
+    assert not bad_value, (
+        f"status 값이 어휘 밖이다 {sorted(VALID_STATUS)} 만 허용한다 (D-108): {bad_value}"
+    )
+    assert not offenders, (
+        "status: collect 인데 열린 용도가 하나도 없다 — 가져와서 쓸 곳이 없는 자동 수집이다. "
+        "확인이 선행이면 hold, 수기 경로면 manual 로 옮긴다 (D-108): " + str(offenders)
+    )

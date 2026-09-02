@@ -118,10 +118,20 @@ def main() -> None:
         if len(found) == 1:
             out[reg_key] = dict(found[0][1])
         else:
+            # 🚨 번들에도 용도별 근거를 실어 나른다. 없으면 **서명 한 번이 12종에 걸리는
+            #    소스가 판단할 정보를 가장 적게** 갖는다 (권소라 역검토 v1.2 §11).
+            #    12종의 조건이 같다는 것이 묶음의 전제이므로, 대표 1종의 note 를 싣고
+            #    어느 것에서 왔는지 밝힌다.
+            rep = next((e for _, e in found if e.get("note")), None)
             out[reg_key] = {
                 "why": BUNDLE_WHY,
                 "bundle": {m: e.get("why", "") for m, e in found},
             }
+            if rep:
+                rep_id = next(m for m, e in found if e is rep)
+                out[reg_key]["note"] = {
+                    k: f"{v}  〔대표: {rep_id}〕" for k, v in rep["note"].items()
+                }
 
     OUT.write_text(
         "# 생성물 — scripts/extract_rationale.py 가 판정매트릭스.html 에서 뽑는다.\n"
