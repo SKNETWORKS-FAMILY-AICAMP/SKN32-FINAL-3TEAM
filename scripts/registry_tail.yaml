@@ -70,8 +70,8 @@ not_adopted:
      reason: "라이선스가 아니라 도메인이 막는다 — 상표 심사이지 광고 표현이 아니다. 다만 거절 사유 3분류 구조는 D-59의 불가 사유 A/B/C와 형태가 같아 설계 참고만"}
   - {key: mnm_aidataset, name: MarketsandMarkets AI 학습 데이터셋 시장 보고서, grade: G2, value: D,
      reason: "$4,950 · 시장 정의가 우리 제품과 다르다. D-75에 따라 자체 산출로 대체"}
-  - {key: klue_roberta, name: KLUE-RoBERTa-base, grade: G0, value: X,
-     reason: "🚨 모델 카드·HF API 양쪽에 license 키 자체가 부재. kcbert-base(Apache 2.0)로 교체 (D-70). 비교군으로만 남긴다"}
+  - {key: klue_roberta, name: KLUE-RoBERTa-base, grade: G1, value: X,
+     reason: "🚨 모델 카드·HF API 양쪽에 license 키 자체가 부재. kcbert-base(Apache 2.0)로 교체 (D-70). 비교군 유지는 D-106 으로 철회 — 확인된 허락 부재는 G1 이다"}
   - {key: exaone, name: EXAONE 계열, grade: G0, value: X,
      reason: 라이선스 제약. Qwen3 4B(Apache 2.0)로 간다 (D-23)}
 
@@ -104,9 +104,17 @@ models:  # 모델 가중치도 G-게이트 대상이다 (D-23)
     license: Apache-2.0
     grade: G3
     use: {U1: allow, U2: deny, U3: deny, U4: allow}
+  # 🚨 G0 가 아니라 G1 이다 (D-106). G0 는 「미표기·미확인」인데 이것은 네 경로로
+  #    확인해서 「없다」를 알아낸 상태다 — 확인 결과가 「허락 없음」이면 배제다.
+  #    비교군 유지(D-70 마지막 문장)는 D-106 으로 철회했다. 지우지 않고 사유와 함께 남긴다 (D-21).
   klue_roberta:
-    role: 인코더 (비교군 전용)
+    role: ✕ 배제 — 비교군으로도 쓰지 않는다
     license: 없음
-    grade: G0
-    use: {U1: allow, U2: deny, U3: deny, U4: deny}
-    note: 🚨 라이선스 부재 확인 (D-70). 비교군은 배포되지 않으므로 U1만 열고 U4를 닫는다
+    grade: G1
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    note: >-
+      🚨 라이선스 부재를 확인했다 (D-70) — HF 모델 카드·API JSON·cardData·tags·GitHub README
+      다섯 경로 전부에 license 키가 없다. 「사용은 되고 배포만 안 된다」는 구분은 라이선스가
+      있을 때 성립하는 것이고, 없으면 그 구분을 해 줄 문서 자체가 없다.
+      비교군 실익도 없다 — D-70 이 (a) 문의를 「회신 시점 통제 불가」로 기각했으므로
+      비교에서 앞서도 쓸 수 없다. 백본 선택 근거는 kcbert-base × KcELECTRA-base 로 충분하다.

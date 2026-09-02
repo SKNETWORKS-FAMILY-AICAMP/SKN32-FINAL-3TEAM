@@ -199,9 +199,9 @@ const SOURCES = [
  grade:'G2', constraints:['TOS','BY'], access:'웹', verified:false,
  scale:'1~2종', cost:'free', costNote:'무료',
  value:'C', valueNote:'실무의 1차 관문이라 가치는 있으나 Phase 5 항목. 급하지 않다',
- u:{train:CD, commercial:NO, raw:NO, cite:NO, deploy:NO},
- note:{train:'⚠️ 금지 항목(사실)만',commercial:'❌ 민간 사업자 저작물',raw:'❌',cite:'❌ 인용하지 않는다',deploy:'❌'},
- why:'법이 아니라 민간 사업자 내부 기준.', caution:'우선순위 낮음.', url:''},
+ u:{train:NO, commercial:NO, raw:NO, cite:NO, deploy:NO},
+ note:{train:'❌ 근거 URL 이 없어 확인 항목 4 를 수행할 수 없다 — 열어 둘 근거가 없다 (D-99)',commercial:'❌ 민간 사업자 저작물',raw:'❌',cite:'❌ 인용하지 않는다',deploy:'❌'},
+ why:'법이 아니라 민간 사업자 내부 기준. 🔄 2026-09-02 U1 을 닫았다 — 네 축 중 셋이 이미 닫혀 있었고 열린 하나에 근거 URL 이 없었다. 「수집 계획이 없어도 용도가 열려 있으면 누군가 부르면 나간다」(D-99)는 원칙대로 fail-closed 로 되돌린다. 필요해지면 URL 을 채우고 다시 연다.', caution:'우선순위 낮음. 🔄 전 용도 deny — 여는 것은 재판정이지 검토가 아니다.', url:''},
 
 // ══════════════════ 4층 위험도 ══════════════════
 {id:'sanction_annex', layer:'4층 위험도', name:'행정처분 기준 [별표] (화장품법·식품표시광고법)', org:'법제처',
