@@ -587,3 +587,58 @@ def test_탐침_게이트는_G1과_수기와_승인선행을_막는다() -> None
     ]
     for key in g0[:1]:
         assert probe(key), f"{key}: G0 가 탐침에서 막혔다 — 확인 수단이 판정 뒤로 밀린다"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/",
+        "https://www.data.go.kr/data/15103301/fileData.do",
+        "https://adf.kfia.or.kr/company/open/openData.do?menuKey=406",
+    ],
+)
+def test_수집_url_은_ascii_로_인코딩된다(url: str) -> None:
+    """🚨 한글 경로 URL 이 `urllib` 에서 **잡히지 않고** 죽던 자리 (2026-09-02 탐침 1회전).
+
+    `UnicodeEncodeError` 는 `FetchError` 가 아니라 **재시도 루프 밖에서** 터진다 —
+    한 소스가 전체 실행을 멈춘다. 국내 기관 사이트에 한글 경로는 흔하고,
+    `collect/http.py` 는 **탐침과 수집기의 공용**이라 같은 URL 로 수집기도 죽었다.
+
+    ★ 탐침이 먼저 돈 덕에 **수집 착수 전에** 나왔다 — D-109 가 노린 효과가 이것이다.
+    """
+    from collect.http import encode  # noqa: PLC0415
+
+    out = encode(url)
+    assert out.isascii(), f"인코딩 후에도 ASCII 가 아니다: {out!r}"
+    assert encode(out) == out, "🚨 멱등하지 않다 — 이미 인코딩된 URL 이 두 번 인코딩된다"
+    assert out.encode("ascii"), "urllib 이 받을 수 없다"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("path", "name"),
+    [("scripts/gen_registry.py", "EXTRA"), ("scripts/gen_registry.py", "STATUS")],
+)
+def test_수동보강_표에_중복_키가_없다(path: str, name: str) -> None:
+    """🚨 dict 리터럴의 중복 키는 **조용히 뒤엣것이 이긴다.**
+
+    2026-09-02 탐침 소견을 `EXTRA` 에 넣다가 `kcc_media`·`ftc_decisions_api`·`kcia_guideline`
+    셋을 중복으로 적었고, 그 순간 **기존의 `masking`·`fragment_note` 가 통째로 사라졌다.**
+    파이썬은 경고하지 않고 ruff 도 잡지 않는다 — 실행도 성공하고 게이트도 초록불이다.
+
+    🚨 **이 저장소의 반복 결함과 같은 형태다** — 값이 두 칸 사이에서 조용히 사라지고,
+    사라진 자리를 검사하는 것이 없다 (역검토 v1.3 부록). 그래서 여기에 검사를 둔다.
+    """
+    tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if name not in targets or not isinstance(node.value, ast.Dict):
+            continue
+        keys = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
+        dupes = sorted({k for k in keys if keys.count(k) > 1})
+        assert not dupes, f"🚨 {path}:{name} 에 중복 키가 있다 — 앞의 값이 조용히 버려진다: {dupes}"
+        return
+    pytest.fail(f"{path} 에서 {name} dict 를 찾지 못했다 — 이름이 바뀌었으면 게이트도 고친다")

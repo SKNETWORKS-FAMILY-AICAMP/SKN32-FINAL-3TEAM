@@ -51,7 +51,7 @@ const SOURCES = [
  note:{train:'제한 없음',commercial:'"이용허락범위 제한 없음"',raw:'광고 문구 원문 인용 + 텍스트 레이어 존재(OCR 불필요)',cite:'사건번호와 함께',deploy:'제한 없음'},
  why:'공공저작물. 데이터포털에 이용허락범위 제한 없음으로 등재.',
  caution:'🚨 프래그먼트별로 등급이 갈린다 — 의결서 안 <그림 N> 광고 캡처는 광고주 이미지 저작물이라 G1(미추출). 업체명·대표자명은 등급 무관 즉시 마스킹.',
- url:'https://www.data.go.kr/data/15103301/fileData.do'},
+ url:'https://www.data.go.kr/data/15103301/fileData.do', evidenceUrl:'https://www.data.go.kr/data/15103301/fileData.do'},
 
 {id:'ftc_decisions_api', layer:'1층 판정라벨', name:'공정위 결정문 목록/본문 API', org:'공정거래위원회',
  grade:'G3', constraints:[], access:'API 키', verified:false,
@@ -61,7 +61,7 @@ const SOURCES = [
  note:{train:'파일데이터와 동일',commercial:'동일',raw:'동일',cite:'동일',deploy:'동일'},
  why:'위 파일데이터와 같은 원천.',
  caution:'호출 간격 0.5초 이상 + 재시도 3회(지수 백오프).',
- url:'https://www.data.go.kr/data/15103246/openapi.do'},
+ url:'https://www.data.go.kr/data/15103246/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15103246/openapi.do'},
 
 {id:'mfds_sanctions', layer:'1층 판정라벨', name:'식약처 행정처분결과 API ★신규발견', org:'식품의약품안전처',
  grade:'G3', constraints:[], access:'API 키', verified:true,
@@ -71,7 +71,7 @@ const SOURCES = [
  note:{train:'위반사실 → 처분 매핑 실측 라벨',commercial:'공공데이터 개방',raw:'구조화 레코드',cite:'처분 근거와 함께',deploy:'제한 없음'},
  why:'공공데이터포털 개방 API. 기획서 4층에 없던 소스.',
  caution:'위반내용 필드가 자연어인지 코드인지 1W 확인. 업체명 마스킹 필수.',
- url:'https://www.data.go.kr/data/15059500/openapi.do'},
+ url:'https://www.data.go.kr/data/15059500/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15059500/openapi.do'},
 
 {id:'mfds_press', layer:'1층 판정라벨', name:'식약처 부당광고 점검 보도자료', org:'식품의약품안전처',
  grade:'G3', constraints:['BY'], access:'공식 다운로드', verified:true,
@@ -110,7 +110,7 @@ const SOURCES = [
  note:{train:'인정 기능성 문구',commercial:'공공데이터 개방',raw:'★ 100% 지향 프레임으로 쓰여 있다',cite:'원료명·인정번호와 함께',deploy:'제한 없음'},
  why:'공공데이터포털 개방 API.',
  caution:'15074311(개별인정형)·식품안전나라 게시판과 3중으로 겹칠 수 있다. 1W에 셋을 대조해 하나를 정본으로 정하고 나머지는 보조로 내린다.',
- url:'https://www.data.go.kr/data/15058359/openapi.do'},
+ url:'https://www.data.go.kr/data/15058359/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15058359/openapi.do'},
 
 {id:'mfds_hf_individual', layer:'2층 적법라벨', name:'건기식 개별인정형 정보 API (15074311)', org:'식품의약품안전처',
  grade:'G3', constraints:[], access:'API 키', verified:true,
@@ -120,7 +120,7 @@ const SOURCES = [
  note:{train:'원료별 인정 기능성 + 일일섭취량',commercial:'공공데이터 개방',raw:'제한 없음',cite:'인정번호와 함께',deploy:'제한 없음'},
  why:'식품안전나라 API svc_no=I-0050과 동일 서비스임을 확인.',
  caution:'「미인정 기능성 집합」은 이 목록의 여집합으로 계산 — 제품별로 동적.',
- url:'https://www.data.go.kr/data/15074311/openapi.do'},
+ url:'https://www.data.go.kr/data/15074311/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15074311/openapi.do'},
 
 {id:'hf_standard', layer:'2층 적법라벨', name:'「건강기능식품의 기준 및 규격」 고시', org:'식약처 / 법제처',
  grade:'G3', constraints:[], access:'법제처 API', verified:false,
@@ -490,7 +490,7 @@ const SOURCES = [
  note:{train:'❌ 배포 모델 학습 불가',commercial:'❌ CC-BY-NC',raw:'❌',cite:'✅ 출처표시 인용',deploy:'❌'},
  why:'국가연구데이터플랫폼(DataON) 등록 라이선스 CC-BY-NC.',
  caution:'⚠️ 공식 사이트 robots 차단으로 신청 절차 상세는 미확인. 상업화 전제라면 인용만.',
- url:'https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab'},
+ url:'https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab', evidenceUrl:'https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab'},
 
 {id:'kisdi_panel', layer:'6층 세그먼트·페르소나', name:'KISDI 한국미디어패널조사', org:'정보통신정책연구원',
  grade:'G2', constraints:['NC','BY'], access:'웹 다운로드 (이메일+목적 입력)', verified:true,

@@ -77,7 +77,6 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15103301/fileData.do"
-    evidence_is_access: true
 
   ftc_decisions_api:
     name: "공정위 결정문 목록/본문 API"
@@ -95,13 +94,17 @@ sources:
     scale: "증분 갱신용"
     masking: 업체명·상표·대표자명 즉시 마스킹, 원문 미보관 (D-17)
     fragment_note: 🚨 ftc_decisions 와 같은 원천이다 — 조건이 다를 이유가 없다
+    probe_note: >-
+      🔄 2026-09-02 탐침 확인 — data.go.kr 「이용허락범위 제한 없음」.
+      🚨 다만 심의유형이 「개발단계: 자동승인 / 운영단계: 심의승인」이다 — 개발은 그냥 되지만
+      **운영 계정은 심의를 받는다.** 배포(U4) 시점의 선결 조건인데 지금 어느 플래그도
+      이것을 말하지 않는다. mfds_hf_individual · cosmetic 2건도 같은 조건이다. 2인 확인에서 판단할 것.
     caution: "호출 간격 0.5초 이상 + 재시도 3회(지수 백오프)."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15103246/openapi.do"
-    evidence_is_access: true
 
   mfds_sanctions:
     name: "식약처 행정처분결과 API ★신규발견"
@@ -125,7 +128,6 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15059500/openapi.do"
-    evidence_is_access: true
 
   mfds_press:
     name: "식약처 부당광고 점검 보도자료"
@@ -213,7 +215,6 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15058359/openapi.do"
-    evidence_is_access: true
 
   mfds_hf_individual:
     name: "건기식 개별인정형 정보 API (15074311)"
@@ -229,13 +230,15 @@ sources:
     status: collect
     access: "API 키"
     scale: "472건 (fmis 경유 확인)"
+    probe_note: >-
+      🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.
+      🚨 ftc_decisions_api 와 같은 조건이다 (아래 cosmetic 2건도 같다).
     caution: "「미인정 기능성 집합」은 이 목록의 여집합으로 계산 — 제품별로 동적."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15074311/openapi.do"
-    evidence_is_access: true
 
   kcia_guideline:
     name: "대한화장품협회 광고자문 기준 해설서 2025 ★2025판"
@@ -254,6 +257,9 @@ sources:
     note: >-
       🔄 2026-08-20 정정 — 2025판 확인으로 G0 → G2. 금지/허용 표현 목록은
       원 출처(화장품법·고시)로 소급해 G3화한다 (D-16). 이용조건 문의 회신 시 재판정.
+    probe_note: >-
+      🚨 2026-09-02 탐침 — 협회 공지 페이지에 **이용조건 문구가 없다.** 근거 URL 이 조건을
+      말하지 않는다 (확인 항목 4). 바로 위 「문의 회신 시 재판정」과 같은 자리다.
     caution: "🚨 기획서의 2023판 링크는 폐기. 2025-11-10 개정판이 최신이고 「천연·유기농」·「비건」 표현 안내가 추가됐다."
     collected_at: null
     decided_at: 2026-08-20
@@ -332,6 +338,10 @@ sources:
     status: collect
     access: "웹 게시판 크롤링"
     scale: "고시형 96 + 개별인정형 472 = 568건"
+    probe_note: >-
+      🚨 2026-09-02 탐침 — 게시판이라 **이용조건 문구가 없다.** 근거 페이지가 따로 필요하다.
+      같은 데이터가 API 15074311 로도 나오고 그쪽은 「제한 없음」이 확인됐다 —
+      caution 이 말한 「셋을 대조해 정본을 정한다」의 답이 여기서 갈릴 수 있다.
     caution: "🚨 일괄 다운로드·API가 없어 게시판 크롤링이 필요. 568건이면 수집 비용은 감당 가능. / API 15074311(개별인정형)이 같은 데이터일 가능성이 있으나 15058359와의 정확한 차이는 미확인 — 1W에 셋 다 열어 대조."
     collected_at: null
     decided_at: 2026-08-20
@@ -355,6 +365,9 @@ sources:
     status: collect
     access: "오픈API (추정)"
     scale: "미확인"
+    probe_note: >-
+      🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」. G3 전 용도 개방이 뒷받침된다.
+      🚨 운영단계 심의승인 + 개발계정 트래픽 10,000. caution 의 「전부 미확인」은 해소됐다.
     caution: "⚠️ 명칭 외 전부 미확인. 1W에 브라우저로 직접 열어 필드를 확인하고 등급을 확정할 것. 지금 G3는 「식약처 공공데이터」라는 정황 판단이다."
     collected_at: null
     decided_at: 2026-08-20
@@ -376,6 +389,8 @@ sources:
     status: collect
     access: "오픈API (추정)"
     scale: "미확인"
+    probe_note: >-
+      🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.
     caution: "⚠️ 범위 확장 유혹을 조심할 것. 「이 성분이 들어간 제품 자체가 부적합」은 다른 제품이다. 기획서가 정한 경계(광고 문구 판정)를 넘으면 9주 안에 못 끝낸다."
     collected_at: null
     decided_at: 2026-08-20
@@ -732,6 +747,9 @@ sources:
       아동 조사표. 다이어리는 응답자별 시간대 기록이라 개인 단위 레코드다.
       🚨 다이어리를 받게 되면 그때는 PII 플래그가 붙어야 한다 — 지금은 그 조각을
       가져오지 않으므로 소스 전체에 플래그를 다는 것이 과하다. 판정 단위는 FRAGMENT 다.
+    probe_note: >-
+      🔄 2026-09-02 탐침 확인 — 「공공저작물 : 출처표시 (제 1유형)」.
+      BY 를 붙인 판정(D-108 작업)이 실측으로 확인됐다.
     caution: "🔄 2026-09-02 확인 — CSV · 가구/개인 통계표 + 다이어리 자료. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사."
     collected_at: null
     decided_at: 2026-08-20
@@ -753,6 +771,10 @@ sources:
     status: collect
     access: "✅ 인증키 자동 발급 (즉시)"
     scale: "통계표 다수 · 소득5분위 × 17개 시도"
+    probe_note: >-
+      🚨 2026-09-02 탐침 — 근거 URL(serviceInfo/openAPIGuide.do)은 **API 가이드 페이지이고
+      이용조건을 말하지 않는다.** caution 은 「상업 이용이 명시적으로 허용된 몇 안 되는 항목」
+      이라고 단언하는데, 그 근거를 보여 주는 페이지가 지금 없다. 역검토 v1.3 §2 가 예측한 형태다.
     caution: "★ 조사 대상 전체에서 상업 이용이 명시적으로 허용된 몇 안 되는 항목이다. 지금 바로 붙일 것."
     collected_at: null
     decided_at: 2026-08-20
@@ -775,13 +797,15 @@ sources:
     status: hold
     access: "원시자료 다운로드 (로그인)"
     scale: "전국 표본 · 「최근 1년 2주 이상 식이보충제 복용」 문항 확인"
+    probe_note: >-
+      🔄 2026-09-02 탐침 확인 — 라이선스 「저작자표시-비영리」. NC·BY 표기가 맞다.
+      상업 제품 전제에서는 인용만 가능하다는 기존 판단이 실측으로 뒷받침된다.
     caution: "⚠️ 공식 사이트 robots 차단으로 신청 절차 상세는 미확인. 상업화 전제라면 인용만."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab"
-    evidence_is_access: true
 
   kisdi_panel:
     name: "KISDI 한국미디어패널조사"
@@ -797,6 +821,9 @@ sources:
     status: hold
     access: "웹 다운로드 (이메일+목적 입력)"
     scale: "3,956가구 / 8,411명 · 2010~2025"
+    probe_note: >-
+      🚨 2026-09-02 탐침 — TLS 인증서 검증 실패(self-signed in chain). 접근 자체가 안 된다.
+      🚨 검증을 끄지 않는다 — 이용조건을 확인하러 가는 길에 검증을 끄는 것은 앞뒤가 안 맞는다.
     caution: "⚠️ 다운로드 폼의 이용목적에 「마케팅」 옵션이 있어 2유형과 상충 소지가 있다. 쓸 거면 KISDI에 직접 확인. 다만 우선순위상 안 써도 된다."
     collected_at: null
     decided_at: 2026-08-20
