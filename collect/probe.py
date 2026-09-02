@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import re
+import re as _re
 import sys
 from datetime import date
 from pathlib import Path
@@ -71,6 +72,29 @@ def _license_lines(text: str) -> list[str]:
     return out[:6]
 
 
+# 🚨 규모를 말하는 자리. 「568건」·「166,339문장」처럼 **숫자 + 단위**로 나타난다.
+SCALE_UNITS = "건|문장|문서|개|명|가구|세트|쌍|어절|이미지|행|레코드"
+_SCALE = _re.compile(rf"[\d,]{{2,}}\s*(?:{SCALE_UNITS})")
+
+
+def _scale_lines(text: str) -> list[str]:
+    """접근 페이지에서 규모로 보이는 조각. 🚨 **판정이 아니라 길잡이**다.
+
+    `caution` 이 「미확인」이라 적은 규모를 사람이 확인하러 갈 때, 어디를 볼지 좁혀 준다.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for m in _SCALE.finditer(text):
+        # 🚨 중복은 **맞은 값**으로 거른다. 문맥 조각으로 거르면 가까이 붙은 숫자들이
+        #    서로를 삼킨다 — 「166,339문장 / 10,021문서」에서 뒤엣것이 사라졌다.
+        val = m.group(0).replace(" ", "")
+        if val in seen:
+            continue
+        seen.add(val)
+        out.append(f"**{m.group(0)}** … {text[max(0, m.start() - 45) : m.end() + 25].strip()}")
+    return out[:8]
+
+
 def _robots(url: str) -> str:
     """robots.txt 를 그대로 읽어 온다. 🚨 판단은 사람이 한다 — 요약해서 넘기지 않는다."""
     p = urlsplit(url)
@@ -109,6 +133,21 @@ def probe_one(source_id: str) -> dict[str, Any]:
     row["license"] = _license_lines(text)
     row["robots"] = _robots(url)
     row["result"] = "✅ 열림"
+
+    # 🚨 **근거 페이지와 접근 페이지는 다른 질문에 답한다** (2026-09-02 2회전에서 드러났다).
+    #    AI Hub 6종은 `evidenceUrl` 이 이용정책이라, 승인이 나서 탐침이 열렸는데도
+    #    **데이터셋 상세를 한 번도 안 봤다** — `aihub_71694` 의 「규모 미확인」이 그대로 남았다.
+    #    조건은 근거 페이지가, **규모·필드는 접근 페이지가** 말한다. 둘 다 본다.
+    access_url = s.get("url")
+    if access_url and access_url != url and str(access_url).startswith("http"):
+        row["access_url"] = access_url
+        try:
+            atext = _text(http.fetch(access_url))
+            row["access_bytes"] = len(atext)
+            row["scale_hits"] = _scale_lines(atext)
+        except http.FetchError as e:
+            row["scale_hits"] = []
+            row["access_error"] = str(e)
     return row
 
 
@@ -145,6 +184,16 @@ def render(rows: list[dict[str, Any]]) -> str:
         L += [f"- {x}" for x in lic] or [
             "- ⬜ **찾지 못했습니다.** 🚨 이 페이지는 근거가 아닐 수 있습니다"
         ]
+        if r.get("access_url"):
+            L += [
+                "",
+                f"**접근 페이지** → <{r['access_url']}>"
+                + (f"  🚨 {r['access_error']}" if r.get("access_error") else ""),
+                "",
+                "규모로 보이는 것 — ⚠️ **기계가 긁은 길잡이**입니다",
+                "",
+            ]
+            L += [f"- {x}" for x in (r.get("scale_hits") or [])] or ["- ⬜ 숫자를 못 찾았습니다"]
         if r.get("robots"):
             L += [
                 "",
