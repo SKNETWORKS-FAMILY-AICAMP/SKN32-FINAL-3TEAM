@@ -121,8 +121,17 @@ mfds_hf_ingredient_board:
   # 확인 2026-09-02 — 게시판 정상 열림 · 게시물 존재 · 저작권/무단전재 안내 없음
   # 🔧 정정 요청 1 — 화면에 「출처 명시 필요」가 있다. constraints 에 BY 가 빠졌다 (mfds_press 와 같은 누락)
   # 🔧 정정 요청 2 — 게시물 전체 650건. 판정 근거의 568건(고시형 96 / 개별인정형 472)과 82건 차이
-  reviewed_by: 권소라
+  # ⏸ 2026-09-02 **서명 보류로 되돌림** — 검토 근거가 재현되지 않는다.
+  #    검토자는 「저작권/무단전재 안내 없음」으로 서명했으나, 팀장이 같은 날 화면에서 문구를 찾았다:
+  #    「해당 정보를 무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임을 질 수 있습니다」
+  #    🚨 근거가 재현되지 않으면 그것이 이견이다 — 검토자 자신이 kcia_guideline 에 적용한 기준이다.
+  #    확인할 것: **공공누리 배지가 붙어 있는가, 붙었다면 몇 유형인가** (D-110).
+  #      · 부착 + 제1유형 → 출처표시만. 서명 복원
+  #      · 미부착        → 식약처 저작권정책의 「등록 부서와 사전 협의」 단서에 걸린다 (mfds_press 와 같은 형태)
+  reviewed_by: null
   reviewed_at: 2026-09-02
+  dissent_note: "검토 근거 「저작권/무단전재 안내 없음」이 재현되지 않음 — 화면에 「무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임」 문구가 있다. 공공누리 부착 여부와 유형 확인 후 재판정 (D-110)"
+
   collected_at: null
   # 크롤링형 — robots.txt 확인 (규약 6). 2026-09-02 오한빈 직접 확인:
   #   foodsafetykorea.go.kr/robots.txt 에 `User-agent: *` 그룹이 없다.
@@ -132,6 +141,15 @@ mfds_hf_ingredient_board:
   #   → 적용되는 금지 규칙 없음. 「명시적 허용」이 아니라 「금지 없음」이다.
   #   🚨 robots 는 약관·저작권 판단이 아니다 — 그 축은 constraints 가 따로 진다.
   robots_checked_at: 2026-09-02
+
+foodsafety_api:
+  # 🆕 2026-09-02 신규 등재 — 아직 판정 전이다. G0 · 전 용도 deny.
+  #    탐침이 포털 이용조건을 긁어 오면 그때 판정하고 2인 확인을 받는다.
+  decided_by: null
+  decided_at: null
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
 
 cosmetic_ingredient:
   decided_by: 오한빈

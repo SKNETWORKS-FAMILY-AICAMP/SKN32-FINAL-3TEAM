@@ -17,12 +17,18 @@
 #    rows_key   응답에서 목록이 들어 있는 키 (JSON 기준). 모르면 비워 둔다
 #    total_key  전체 건수 키. 페이징 종료 판단에 쓴다
 #    params     serviceKey·pageNo·numOfRows 외에 고정으로 붙일 것
-#    fmt        json | xml  — data.go.kr 은 API 마다 다르다
+#    fmt        json | xml  — API 마다 다르다
+#    style      query | path
+#               🚨 포털마다 호출 규약이 다르다 (2026-09-02).
+#               query : data.go.kr — ?serviceKey=..&pageNo=..&numOfRows=..
+#               path  : 식품안전나라 — /api/{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}
+#               같은 「오픈API」라는 말이 같은 호출을 뜻하지 않는다.
 # ============================================================
 
 mfds_hf_ingredient:      # 15058359 건기식 기능성 원료인정 현황
   url: null              # 🚨 미기재 — 상세기능에서 요청주소 확인
   fmt: json
+  style: query
   params: {}
 
 mfds_hf_individual:      # 15074311 건기식 개별인정형 정보
@@ -48,4 +54,14 @@ cosmetic_ingredient:     # 15111774 화장품 원료성분정보
 cosmetic_restricted:     # 15111772 화장품 사용제한 원료정보
   url: null
   fmt: json
+  params: {}
+
+# 🆕 식품안전나라 자체 포털 — data.go.kr 이 아니다 (2026-09-02)
+#    🚨 아직 **레지스트리에서 G0 · 전 용도 deny** 다. 수집기가 첫 줄에서 거부한다 (D-15 · D-72).
+#       이용조건 확인 → 2인 판정 → 그 뒤에 이 칸이 의미를 갖는다.
+foodsafety_api:
+  url: http://openapi.foodsafetykorea.go.kr/api
+  style: path            # /{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}
+  fmt: json
+  service_id: null       # 🚨 미기재 — 어느 서비스가 건기식 기능성 원료인지 확인 필요
   params: {}
