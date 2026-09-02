@@ -1,0 +1,198 @@
+"""app/models.py — 런타임 층 ORM (D-103 · D-104).
+
+🚨 **판정은 다형 참조로 저장한다.**
+   규제가 붙는 대상은 도메인상 문장이 아니라 **주장**이다. 그러나 주장의 축은
+   9/17 범위 확정(D-65)에서 정해지고, 「기능」의 값 집합은 인정 기능성 원료 데이터가
+   들어와야 나온다. **지금 정하면 근거 없이 정하는 것이다.**
+   `subject_type` 을 두면 주장 계층이 열릴 때 행이 **추가**될 뿐이므로,
+   그 결정을 9/17 이후로 **미룰 수 있다.**
+
+🚨 **`law_version` 은 문장이 아니라 판정에 붙는다.** 재판정하면 새 판정 행이 쌓이고
+   이력이 남는다. 문장에 박으면 덮어써서 「언제 무엇으로 판정했었나」를 잃는다 (D-103 ③).
+
+🚨 **`consent` 기본값은 미보관이다** (D-96). 동의가 없으면 이 행들은 세션 종료와 함께 지운다.
+   템플릿 조립은 동의 여부와 무관하게 동작한다 — 동의가 기능의 대가가 되면 안 된다.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def _pk() -> Mapped[uuid.UUID]:
+    return mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+
+class WorkDoc(Base):
+    """사용자 작업 문서 — 제품 1개 기준의 **재료 창고** (D-103 ②).
+
+    템플릿은 이 문서를 조립한다. 문서는 슬롯을 모른다.
+
+    🚨 **`product_category` 를 여기 두지 않는다** (D-82 · D-105).
+       배치 검수는 한 실행 안에서 SKU 마다 카테고리가 다르고(건기식·화장품 혼재),
+       D-82 는 카테고리를 **사용자에게 묻지 않고 우리가 판별**한다고 정했다.
+       카테고리는 문서의 속성이 아니라 **판정의 결과**다 → `Judgment` 로 옮겼다.
+    """
+
+    __tablename__ = "work_doc"
+
+    id: Mapped[uuid.UUID] = _pk()
+    title: Mapped[str] = mapped_column(String(200))
+    # 'single' = 사용자가 직접 쓰는 문서 · 'batch' = 배치 검수 1회가 만든 문서
+    # 🚨 배치 실행 1회 = work_doc 1개다. batch_run.doc_id 가 그것을 가리킨다.
+    kind: Mapped[str] = mapped_column(String(10), default="single")
+    # 🚨 D-96 — 기본값은 미보관. true 일 때만 서버에 남는다
+    consent_store: Mapped[bool] = mapped_column(default=False, nullable=False)
+    consent_train: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    sentences: Mapped[list[CopySentence]] = relationship(
+        back_populates="doc", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (CheckConstraint("kind in ('single','batch')", name="ck_work_doc_kind"),)
+
+
+class CopySentence(Base):
+    """사용자가 쓰거나 우리가 생성한 문구 한 줄.
+
+    🚨 수집한 원문의 `sentence` 와 다른 개체다 — fragment 에서 오지 않는다.
+    """
+
+    __tablename__ = "copy_sentence"
+
+    id: Mapped[uuid.UUID] = _pk()
+    doc_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("work_doc.id", ondelete="CASCADE"), index=True
+    )
+    # D-84 ① · D-91 — 매칭은 정규화문에서, 보고는 원문 좌표로
+    raw: Mapped[str] = mapped_column(Text)
+    norm: Mapped[str] = mapped_column(Text)
+    offset_map: Mapped[dict | None] = mapped_column(JSONB)
+    # 'user'(붙여넣기) | 'generated'(진입점 B) | 'batch'(CSV 일괄) | 'crawl'(URL — 설계만)
+    origin: Mapped[str] = mapped_column(String(16))
+    external_ref: Mapped[str | None] = mapped_column(String(120))  # 배치 SKU · 출처 URL
+    # 🚨 D-104 — 이미지 설명 생성 보조를 나중에 얹기 위한 자리.
+    #    비워 두는 것이 「지금 넣지 않는다」를 고를 수 있게 한 조건이다.
+    image_description: Mapped[str | None] = mapped_column(Text)
+    # 승인은 판정의 속성이 아니라 상태다 (D-103)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    doc: Mapped[WorkDoc] = relationship(back_populates="sentences")
+
+    __table_args__ = (
+        CheckConstraint(
+            "origin in ('user','generated','batch','crawl')", name="ck_copy_sentence_origin"
+        ),
+    )
+
+
+class BatchRun(Base):
+    """배치 검수 1회 — CSV/엑셀 일괄 판정 (D-105).
+
+    🚨 **판정 코어 위의 for-loop 다.** 새 모델도 새 데이터도 없고, 결과 집계와 리포트가 전부다.
+       그래서 판정 코어(Phase 0)만 서면 바로 붙는다.
+    """
+
+    __tablename__ = "batch_run"
+
+    id: Mapped[uuid.UUID] = _pk()
+    doc_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("work_doc.id", ondelete="CASCADE"), index=True
+    )
+    source_name: Mapped[str] = mapped_column(String(200))  # 업로드 파일명
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    done: Mapped[int] = mapped_column(Integer, default=0)
+    state: Mapped[str] = mapped_column(String(24), default="pending")
+    # 🚨 **집계 스냅샷** — 위험도 추이가 보관 동의에 걸리지 않게 하는 장치다.
+    #    D-96 대로 동의가 없으면 원문(copy_sentence)은 세션 종료와 함께 사라지는데,
+    #    그러면 judgment 를 조인해 계산하는 추이도 함께 사라진다.
+    #    원문을 지우고 **집계만 남기면** 추이는 남는다 — 권소라 역검토 회신에서
+    #    반려 문구에 적용한 것과 같은 형태다(원문 없이 집계만).
+    #    { "verdict": {...}, "violation_type": {...}, "category": {...} }
+    summary: Mapped[dict | None] = mapped_column(JSONB)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "state in ('pending','parsing','checking','revising','ready','failed')",
+            name="ck_batch_run_state",
+        ),
+        CheckConstraint("done <= total", name="ck_batch_run_progress"),
+    )
+
+
+class Judgment(Base):
+    """판정 — **다형 참조**. 지금은 `copy_sentence` 만, 나중에 `claim` 이 추가된다.
+
+    🚨 다형이라 FK 무결성이 DB 수준에서 안 걸린다. 게이트 테스트로 대신 막는다.
+    """
+
+    __tablename__ = "judgment"
+
+    id: Mapped[uuid.UUID] = _pk()
+    subject_type: Mapped[str] = mapped_column(String(20))
+    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    verdict: Mapped[str] = mapped_column(String(24))
+    # D-82 — 사용자에게 묻지 않고 우리가 판별한다. 그래서 판정 결과에 속한다
+    product_category: Mapped[str | None] = mapped_column(String(40))
+    violation_type: Mapped[str | None] = mapped_column(String(40))
+    evidence: Mapped[dict | None] = mapped_column(JSONB)  # 근거 조문 집합
+    risk_floor: Mapped[int | None] = mapped_column(Integer)  # 코드 하한 (D-84 ③)
+    risk_final: Mapped[int | None] = mapped_column(Integer)
+    # 🚨 D-103 ③ — 개정되면 「재검증 대기」의 판단 근거가 된다
+    law_version: Mapped[str] = mapped_column(String(40))
+    attempt: Mapped[int] = mapped_column(Integer, default=0)  # 재판정 회차 (K=2)
+    judged_by: Mapped[str] = mapped_column(String(80))  # 코드/모델 버전
+    judged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "subject_type in ('copy_sentence','claim')", name="ck_judgment_subject_type"
+        ),
+        Index("ix_judgment_subject", "subject_type", "subject_id"),
+    )
+
+
+class SlotAssignment(Base):
+    """템플릿 조립 — 슬롯에 무엇이 들어갔는가 (D-103 ①).
+
+    🚨 **슬롯은 승인 객체만 받는다.** `sentence_id` 가 없는 슬롯은 「미검수」로 남고,
+       그 표시는 산출물에서 제거할 수 없다.
+    """
+
+    __tablename__ = "slot_assignment"
+
+    id: Mapped[uuid.UUID] = _pk()
+    doc_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("work_doc.id", ondelete="CASCADE"), index=True
+    )
+    template: Mapped[str] = mapped_column(String(24))  # 'detail_page' | ...
+    slot: Mapped[str] = mapped_column(String(24))
+    position: Mapped[int] = mapped_column(Integer)
+    sentence_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("copy_sentence.id", ondelete="SET NULL")
+    )
+    image_ref: Mapped[str | None] = mapped_column(String(200))
+    # 🚨 승인 객체가 아닌 것이 들어간 슬롯 — 제거 불가능한 고지
+    unreviewed_note: Mapped[str | None] = mapped_column(Text)
