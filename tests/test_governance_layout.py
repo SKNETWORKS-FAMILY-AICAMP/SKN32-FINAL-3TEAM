@@ -8,8 +8,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -476,3 +478,167 @@ def test_status_는_수집기_실행_여부이고_collect_는_용도가_열려�
         "status: collect 인데 열린 용도가 하나도 없다 — 가져와서 쓸 곳이 없는 자동 수집이다. "
         "확인이 선행이면 hold, 수기 경로면 manual 로 옮긴다 (D-108): " + str(offenders)
     )
+
+
+@pytest.mark.gate
+def test_탐침은_저장_경로를_부를_수_없다() -> None:
+    """🚨 탐침에 「저장 안 함」은 약속이 아니라 **구조**여야 한다 (D-109).
+
+    규약 1 이 경고한 것이 정확히 이 자리다 — *"「일단 받아두고 나중에 판정한다」는 경로가
+    있으면 그 경로로만 다니게 된다."* 탐침은 `reviewed_by` 를 요구하지 않으므로,
+    **여기에 쓰기가 한 줄이라도 생기면 그것이 게이트 전체의 우회로**가 된다.
+
+    그래서 사람이 지키는 규칙이 아니라 **없는 경로**로 만든다 (D-107 조건 1 과 같은 형태) —
+    `store` 를 import 하지 않고, `mark_collected` 를 부르지 않고, 쓰기 API 를 쓰지 않는다.
+    """
+    # 🚨 **문자열이 아니라 AST 로 본다.** 산문에 「store 를 부르지 않는다」라고 쓰면
+    #    문자열 검사는 그 문장에 걸린다 — 설명이 위반으로 읽히는 게이트는 못 쓴다.
+    src = (ROOT / "collect" / "probe.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    FORBIDDEN_MOD = {"collect.store", "store"}
+    FORBIDDEN_CALL = {
+        "mark_collected": "수집 시각 기록 (규약 3 · 게이트 15)",
+        "manifest_append": "수집 원장 append (규약 3)",
+        "save_raw": "원본 파일 쓰기 (규약 2)",
+        "drop_raw_for_g2": "G2 raw 삭제 (D-17)",
+        "require": "수집기 게이트 — 탐침은 registry.probe 를 쓴다",
+        "write_bytes": "파일 쓰기",
+    }
+    hits: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "") in FORBIDDEN_MOD:
+            hits.append(f"from {node.module} import …")
+        if isinstance(node, ast.ImportFrom) and node.module == "collect":
+            hits += [f"collect.{a.name}" for a in node.names if a.name in FORBIDDEN_MOD]
+        if isinstance(node, ast.Import):
+            hits += [a.name for a in node.names if a.name in FORBIDDEN_MOD]
+        if isinstance(node, ast.Call):
+            fn = node.func
+            name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+            if name in FORBIDDEN_CALL:
+                hits.append(f"{name}() — {FORBIDDEN_CALL[name]}")
+    assert not hits, (
+        "🚨 탐침이 저장 경로에 손을 댔다 — 게이트 전체의 우회로가 된다 (D-109): " + str(hits)
+    )
+
+    # 🚨 쓰기는 딱 한 자리여야 하고 그 자리는 docs/ 다. 등급 디렉터리는 수집기만 쓴다 (D-19).
+    writes = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "write_text"
+    ]
+    assert len(writes) == 1, f"탐침의 쓰기는 리포트 한 자리뿐이어야 한다 (현재 {len(writes)}곳)"
+    assert 'ROOT / "docs' in src, "탐침 산출은 docs/ 로만 나간다"
+
+    # 🚨 **런타임으로 증명한다** — 문자열 검사는 「안 썼다」만 말하고
+    #    「쓸 수 없다」는 말하지 못한다. 탐침을 새 프로세스에서 import 했을 때
+    #    `collect.store` 가 sys.modules 에 없어야 한다.
+    #    (한때 `collect/__init__.py` 가 store 를 재수출해서, 탐침 프로세스에
+    #     저장 코드가 통째로 로드되고 있었다.)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import collect.probe; "
+            "print('LOADED' if 'collect.store' in sys.modules else 'CLEAN')",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, f"탐침 import 실패: {proc.stderr[-500:]}"
+    assert proc.stdout.strip() == "CLEAN", (
+        "🚨 탐침 프로세스에 collect.store 가 로드된다 — 「안 부른다」가 아니라 "
+        "「부를 수 없다」여야 한다 (D-109)"
+    )
+
+
+@pytest.mark.gate
+def test_탐침_게이트는_G1과_수기와_승인선행을_막는다() -> None:
+    """🚨 탐침이 `reviewed_by` 를 면제받는 대신 **다른 넷은 그대로 막는다** (D-109).
+
+    면제의 근거는 *"탐침은 아무것도 가져오지 않는다"* 인데, 그 논리가 통하지 않는 자리가 있다.
+    G1 은 **여는 것 자체가 문제**이고, `manual` 과 `GATED` 는 **접근 방식이 조건 위반**이며,
+    robots 는 애초에 수집이 아니라 **접근**의 조건이다. 면제 하나가 넷을 데려가면 안 된다.
+    """
+    from collect.registry import RegistryError, probe  # noqa: PLC0415
+
+    srcs = _sources()
+    manual = [k for k, v in srcs.items() if v.get("status") == "manual"]
+    gated = [k for k, v in srcs.items() if "GATED" in (v.get("constraints") or [])]
+    assert manual and gated, "표본이 없다 — 레지스트리가 바뀌었으면 이 게이트를 다시 본다"
+
+    for key in manual[:1] + gated[:1]:
+        with pytest.raises(RegistryError):
+            probe(key)
+
+    # 🚨 G0 는 **통과해야 한다.** 전 용도 deny 인 채로 탐침 대상인 것이 정상이다 —
+    #    오히려 G0 야말로 탐침이 가장 필요한 등급이다 (D-72 의 「확인 후 승격」).
+    g0 = [
+        k
+        for k, v in srcs.items()
+        if v.get("grade") == "G0"
+        and v.get("status") != "manual"
+        and "GATED" not in (v.get("constraints") or [])
+        and not any(w in str(v.get("access") or "") for w in CRAWL_ACCESS)
+    ]
+    for key in g0[:1]:
+        assert probe(key), f"{key}: G0 가 탐침에서 막혔다 — 확인 수단이 판정 뒤로 밀린다"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/",
+        "https://www.data.go.kr/data/15103301/fileData.do",
+        "https://adf.kfia.or.kr/company/open/openData.do?menuKey=406",
+    ],
+)
+def test_수집_url_은_ascii_로_인코딩된다(url: str) -> None:
+    """🚨 한글 경로 URL 이 `urllib` 에서 **잡히지 않고** 죽던 자리 (2026-09-02 탐침 1회전).
+
+    `UnicodeEncodeError` 는 `FetchError` 가 아니라 **재시도 루프 밖에서** 터진다 —
+    한 소스가 전체 실행을 멈춘다. 국내 기관 사이트에 한글 경로는 흔하고,
+    `collect/http.py` 는 **탐침과 수집기의 공용**이라 같은 URL 로 수집기도 죽었다.
+
+    ★ 탐침이 먼저 돈 덕에 **수집 착수 전에** 나왔다 — D-109 가 노린 효과가 이것이다.
+    """
+    from collect.http import encode  # noqa: PLC0415
+
+    out = encode(url)
+    assert out.isascii(), f"인코딩 후에도 ASCII 가 아니다: {out!r}"
+    assert encode(out) == out, "🚨 멱등하지 않다 — 이미 인코딩된 URL 이 두 번 인코딩된다"
+    assert out.encode("ascii"), "urllib 이 받을 수 없다"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("path", "name"),
+    [("scripts/gen_registry.py", "EXTRA"), ("scripts/gen_registry.py", "STATUS")],
+)
+def test_수동보강_표에_중복_키가_없다(path: str, name: str) -> None:
+    """🚨 dict 리터럴의 중복 키는 **조용히 뒤엣것이 이긴다.**
+
+    2026-09-02 탐침 소견을 `EXTRA` 에 넣다가 `kcc_media`·`ftc_decisions_api`·`kcia_guideline`
+    셋을 중복으로 적었고, 그 순간 **기존의 `masking`·`fragment_note` 가 통째로 사라졌다.**
+    파이썬은 경고하지 않고 ruff 도 잡지 않는다 — 실행도 성공하고 게이트도 초록불이다.
+
+    🚨 **이 저장소의 반복 결함과 같은 형태다** — 값이 두 칸 사이에서 조용히 사라지고,
+    사라진 자리를 검사하는 것이 없다 (역검토 v1.3 부록). 그래서 여기에 검사를 둔다.
+    """
+    tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if name not in targets or not isinstance(node.value, ast.Dict):
+            continue
+        keys = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
+        dupes = sorted({k for k in keys if keys.count(k) > 1})
+        assert not dupes, f"🚨 {path}:{name} 에 중복 키가 있다 — 앞의 값이 조용히 버려진다: {dupes}"
+        return
+    pytest.fail(f"{path} 에서 {name} dict 를 찾지 못했다 — 이름이 바뀌었으면 게이트도 고친다")

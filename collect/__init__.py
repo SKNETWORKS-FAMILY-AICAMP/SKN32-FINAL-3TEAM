@@ -12,15 +12,9 @@
   7. 모든 산출 행에 provenance + redistributable            → store.py
 """
 
-from collect.registry import RegistryError, require, spec
-from collect.store import manifest_append, raw_dir, save_raw, stamp
-
-__all__ = [
-    "RegistryError",
-    "require",
-    "spec",
-    "save_raw",
-    "raw_dir",
-    "manifest_append",
-    "stamp",
-]
+# 🚨 **여기서 아무것도 import 하지 않는다** (D-109).
+#    `collect/probe.py` 는 저장을 하지 않는 경로인데, 이 파일이 `store` 를 끌어오면
+#    **탐침 프로세스에 저장 코드가 로드된다.** 「안 부른다」는 약속과 「부를 수 없다」는
+#    구조는 다르고, 게이트 23 이 검사하는 것은 뒤쪽이다.
+#    쓰는 쪽이 `from collect import registry, store` 처럼 필요한 것만 집어 간다 —
+#    실제로 재수출을 쓰는 곳은 한 군데도 없었다.

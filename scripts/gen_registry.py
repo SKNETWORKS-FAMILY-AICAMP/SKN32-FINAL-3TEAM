@@ -16,7 +16,7 @@
 
 설계 원칙 (2026-08-31 · 아키텍처 검토)
   1. 레지스트리의 등재 단위는 「데이터셋」이 아니라 「이용조건」이다.
-     법제처 OPEN API로 받는 11종(법령·별표·고시·지침·재결례·판례)은
+     법제처 OPEN API로 받는 12종(법령·별표·고시·지침·재결례·판례 + 건기식 기준규격 고시)은
      하나의 이용조건을 공유하므로 law_go_kr 1건으로 묶고 covers 로 편다.
   2. 미채택 판정은 blocked(협상 불가 · G1)와 분리해 not_adopted 로 둔다.
      가치가 없다는 이유로 G2 자료에 G1을 찍으면 등급 축 자체가 오염된다.
@@ -72,7 +72,9 @@ RENAME = {
 
 MODEL_IDS = {"qwen3", "kure", "bge_reranker", "kcbert"}
 
-# 법제처 OPEN API — 11종을 흡수한 합성 레코드 (이용조건이 하나이므로 등재도 하나)
+# 법제처 OPEN API — 12종을 흡수한 합성 레코드 (이용조건이 하나이므로 등재도 하나)
+# 🚨 숫자는 LAW_COVERS 의 길이다. hf_standard 흡수(D-102 ②)로 11 → 12 가 됐는데
+#    **숫자를 적은 문장들만 안 고쳐져** 네 곳이 어긋나 있었다 (권소라 역검토 v1.3 §6).
 BY_ID["law_go_kr"] = {
     "id": "law_go_kr",
     "layer": "3층 판단규범 · 4층 위험도 · 5층 반례",
@@ -83,7 +85,7 @@ BY_ID["law_go_kr"] = {
     "value": "A",
     "cost": "free",
     "url": "https://open.law.go.kr/LSO/openApi/guideList.do",
-    "scale": "아래 covers 11종",
+    "scale": "아래 covers 12종",
     "u": {"train": "ok", "raw": "ok", "cite": "ok", "deploy": "ok", "commercial": "ok"},
     "caution": "",
 }
@@ -170,8 +172,17 @@ def block(key, s, extra=None, covers=None, status="collect"):
         L.append(f"    dissent_note: {esc(rv['dissent_note'])}")
     if rv.get("robots_checked_at"):
         L.append(f"    robots_checked_at: {_scalar(rv.get('robots_checked_at'))}")
-    if s.get("url"):
-        L.append(f"    evidence_url: {esc(s['url'])}")
+    # 🚨 **근거 URL 과 접근 URL 은 다른 것이다** (권소라 역검토 v1.3 §2 · 인계 §3-①).
+    #    한 필드를 두 자리에 넣고 있어서, 검토표의 확인 항목 4번(「근거 URL 이 실제로 그 조건을
+    #    말하는가」)이 **31건 전부에서 성립하지 않았다.** AI Hub 판정의 전체 무게가 이용정책
+    #    제4항에 실려 있는데 그 주소는 `why` 산문 안에 텍스트로만 박혀 있었다.
+    #    🚨 폴백은 하되 **폴백했다고 말한다** — 추정한 URL 은 빈 칸보다 나쁘다.
+    #    빈 칸은 「미확인」이라 말하지만 추정값은 「확인됨」이라고 거짓말한다.
+    ev = s.get("evidenceUrl") or s.get("url")
+    if ev:
+        L.append(f"    evidence_url: {esc(ev)}")
+        if not s.get("evidenceUrl"):
+            L.append("    evidence_is_access: true")
     return "\n".join(L)
 
 
@@ -187,6 +198,11 @@ EXTRA = {
     "ftc_decisions_api": [
         "masking: 업체명·상표·대표자명 즉시 마스킹, 원문 미보관 (D-17)",
         "fragment_note: 🚨 ftc_decisions 와 같은 원천이다 — 조건이 다를 이유가 없다",
+        "probe_note: >-",
+        "  🔄 2026-09-02 탐침 확인 — data.go.kr 「이용허락범위 제한 없음」.",
+        "  🚨 다만 심의유형이 「개발단계: 자동승인 / 운영단계: 심의승인」이다 — 개발은 그냥 되지만",
+        "  **운영 계정은 심의를 받는다.** 배포(U4) 시점의 선결 조건인데 지금 어느 플래그도",
+        "  이것을 말하지 않는다. mfds_hf_individual · cosmetic 2건도 같은 조건이다. 2인 확인에서 판단할 것.",
     ],
     "kcc_media": [
         "fragment_note: >-",
@@ -195,6 +211,9 @@ EXTRA = {
         "  아동 조사표. 다이어리는 응답자별 시간대 기록이라 개인 단위 레코드다.",
         "  🚨 다이어리를 받게 되면 그때는 PII 플래그가 붙어야 한다 — 지금은 그 조각을",
         "  가져오지 않으므로 소스 전체에 플래그를 다는 것이 과하다. 판정 단위는 FRAGMENT 다.",
+        "probe_note: >-",
+        "  🔄 2026-09-02 탐침 확인 — 「공공저작물 : 출처표시 (제 1유형)」.",
+        "  BY 를 붙인 판정(D-108 작업)이 실측으로 확인됐다.",
     ],
     "mfds_sanctions": [
         "masking: 업체명·대표자명 즉시 마스킹, 원문 미보관 (D-17)",
@@ -208,6 +227,46 @@ EXTRA = {
         "note: >-",
         "  🔄 2026-08-20 정정 — 2025판 확인으로 G0 → G2. 금지/허용 표현 목록은",
         "  원 출처(화장품법·고시)로 소급해 G3화한다 (D-16). 이용조건 문의 회신 시 재판정.",
+        "probe_note: >-",
+        "  🚨 2026-09-02 탐침 — 협회 공지 페이지에 **이용조건 문구가 없다.** 근거 URL 이 조건을",
+        "  말하지 않는다 (확인 항목 4). 바로 위 「문의 회신 시 재판정」과 같은 자리다.",
+    ],
+    # 🔄 2026-09-02 탐침 1회전(S0-16 · D-109)에서 나온 것. 「열어봐야 답이 나온다」던 자리들이다.
+    "mfds_hf_individual": [
+        "probe_note: >-",
+        "  🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.",
+        "  🚨 ftc_decisions_api 와 같은 조건이다 (아래 cosmetic 2건도 같다).",
+    ],
+    "cosmetic_ingredient": [
+        "probe_note: >-",
+        "  🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」. G3 전 용도 개방이 뒷받침된다.",
+        "  🚨 운영단계 심의승인 + 개발계정 트래픽 10,000. caution 의 「전부 미확인」은 해소됐다.",
+    ],
+    "cosmetic_restricted": [
+        "probe_note: >-",
+        "  🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.",
+    ],
+    "mfds_hf_ingredient_board": [
+        "probe_note: >-",
+        "  🚨 2026-09-02 탐침 — 게시판이라 **이용조건 문구가 없다.** 근거 페이지가 따로 필요하다.",
+        "  같은 데이터가 API 15074311 로도 나오고 그쪽은 「제한 없음」이 확인됐다 —",
+        "  caution 이 말한 「셋을 대조해 정본을 정한다」의 답이 여기서 갈릴 수 있다.",
+    ],
+    "kosis": [
+        "probe_note: >-",
+        "  🚨 2026-09-02 탐침 — 근거 URL(serviceInfo/openAPIGuide.do)은 **API 가이드 페이지이고",
+        "  이용조건을 말하지 않는다.** caution 은 「상업 이용이 명시적으로 허용된 몇 안 되는 항목」",
+        "  이라고 단언하는데, 그 근거를 보여 주는 페이지가 지금 없다. 역검토 v1.3 §2 가 예측한 형태다.",
+    ],
+    "kisdi_panel": [
+        "probe_note: >-",
+        "  🚨 2026-09-02 탐침 — TLS 인증서 검증 실패(self-signed in chain). 접근 자체가 안 된다.",
+        "  🚨 검증을 끄지 않는다 — 이용조건을 확인하러 가는 길에 검증을 끄는 것은 앞뒤가 안 맞는다.",
+    ],
+    "knhanes": [
+        "probe_note: >-",
+        "  🔄 2026-09-02 탐침 확인 — 라이선스 「저작자표시-비영리」. NC·BY 표기가 맞다.",
+        "  상업 제품 전제에서는 인용만 가능하다는 기존 판단이 실측으로 뒷받침된다.",
     ],
     # D-108 — status 를 옮긴 4건. 「왜 collect 가 아닌가」를 사람이 읽을 자리에 남긴다
     "kfia_approved_list": [

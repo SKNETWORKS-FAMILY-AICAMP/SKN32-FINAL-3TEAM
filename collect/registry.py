@@ -88,6 +88,52 @@ def require(source_id: str, use: str) -> dict[str, Any]:
     return s
 
 
+def probe(source_id: str) -> dict[str, Any]:
+    """🚨 **탐침의 첫 줄** — `require()` 와 다른 게이트다 (D-109).
+
+    탐침은 **열어보고 세는 것**이고 수집이 아니다. 그래서 `reviewed_by` 를 요구하지 않는다 —
+    요구하면 자기모순이 된다. D-72 가 *"확인 후 2인 판정으로 승격한다"* 고 말하는데,
+    **확인 수단 자체를 판정 뒤로 미루면 아무것도 확인할 수 없다.**
+
+    막는 것은 그대로 막는다.
+
+    * **G1** — 받는 순간 끝이다. 열어보는 것도 하지 않는다
+    * **`manual`** — 🚨 자동 접근이 약관 위반이다. 탐침도 자동 접근이다 (D-108)
+    * **`GATED`** — 신청·승인이 선행이다. 승인 전 접근은 조건 위반이다
+    * **크롤링형인데 `robots_checked_at` 없음** — 규약 6 은 수집이 아니라 **접근**의 조건이다
+
+    🚨 **용도(`use`)는 보지 않는다.** 용도는 「가져온 것을 무엇에 쓰는가」이고 탐침은
+    아무것도 가져오지 않는다. G0 가 전 용도 `deny` 인 채로 탐침 대상인 것이 정상이다 —
+    오히려 **G0 야말로 탐침이 가장 필요한 등급**이다.
+    """
+    s = spec(source_id)
+    grade = s.get("grade")
+
+    if grade == "G1":
+        raise RegistryError(
+            f"{source_id!r} 는 G1(배제)이다. 🚨 탐침도 하지 않는다 — "
+            "받아서 지우는 것과 받지 않는 것은 다르다."
+        )
+    if s.get("status") == "manual":
+        raise RegistryError(
+            f"{source_id!r} 는 status: manual 이다. 🚨 자동 접근이 약관 위반이라 "
+            "사람이 수기로만 본다 (D-108). 탐침도 자동 접근이다."
+        )
+    flags = set(s.get("constraints") or [])
+    if "GATED" in flags:
+        raise RegistryError(
+            f"{source_id!r} 는 GATED 다 — 신청·승인이 선행이다. "
+            "승인 전에 접근하는 것은 조건 위반이고, 그것은 탐침이라도 같다."
+        )
+    access = str(s.get("access") or "")
+    if any(k in access for k in CRAWL_ACCESS) and not s.get("robots_checked_at"):
+        raise RegistryError(
+            f"{source_id!r} 는 크롤링형인데 robots_checked_at 이 없다 (규약 6). "
+            "🚨 규약 6 은 수집이 아니라 **접근**의 조건이다 — 탐침에도 걸린다."
+        )
+    return s
+
+
 def is_g2(source_id: str) -> bool:
     """G2 여부 — raw 를 사실 추출 후 삭제해야 하는 소스인가 (D-17 · D-92)."""
     return spec(source_id).get("grade") == "G2"

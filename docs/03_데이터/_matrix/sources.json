@@ -61,7 +61,8 @@
   },
   "why": "🔄 2026-09-02 data.go.kr 페이지를 직접 열어 확인 — **이용허락범위 제한 없음** (제공기관 식품의약품안전처). G3 전 용도 개방이 근거로 뒷받침된다. 종전 「접근 차단으로 미확인」은 일시적 차단이었다. 🚨 응답 필드·건수는 여전히 미확인이나 그것은 이용조건이 아니라 규모 축이다.",
   "caution": "⚠️ 명칭 외 전부 미확인. 1W에 브라우저로 직접 열어 필드를 확인하고 등급을 확정할 것. 지금 G3는 「식약처 공공데이터」라는 정황 판단이다.",
-  "url": "https://www.data.go.kr/data/15111774/openapi.do"
+  "url": "https://www.data.go.kr/data/15111774/openapi.do",
+  "evidenceUrl": "https://www.data.go.kr/data/15111774/openapi.do"
  },
  {
   "id": "cosmetic_restricted",
@@ -93,7 +94,8 @@
   },
   "why": "🔄 2026-09-02 data.go.kr 페이지를 직접 열어 확인 — **이용허락범위 제한 없음** (제공기관 식품의약품안전처). 등급 근거는 확정. 🚨 다만 **가치 판정은 그대로 X 다** — 성분 배합 판정용이지 광고 문구 판정용이 아니고 수집리스트 「명시적 배제 19종」에 있다. 등급과 가치는 다른 축이다 (D-90 ②).",
   "caution": "⚠️ 범위 확장 유혹을 조심할 것. 「이 성분이 들어간 제품 자체가 부적합」은 다른 제품이다. 기획서가 정한 경계(광고 문구 판정)를 넘으면 9주 안에 못 끝낸다.",
-  "url": "https://www.data.go.kr/data/15111772/openapi.do"
+  "url": "https://www.data.go.kr/data/15111772/openapi.do",
+  "evidenceUrl": "https://www.data.go.kr/data/15111772/openapi.do"
  },
  {
   "id": "ftc_decisions_bulk",
@@ -125,7 +127,8 @@
   },
   "why": "공공저작물. 데이터포털에 이용허락범위 제한 없음으로 등재.",
   "caution": "🚨 프래그먼트별로 등급이 갈린다 — 의결서 안 <그림 N> 광고 캡처는 광고주 이미지 저작물이라 G1(미추출). 업체명·대표자명은 등급 무관 즉시 마스킹.",
-  "url": "https://www.data.go.kr/data/15103301/fileData.do"
+  "url": "https://www.data.go.kr/data/15103301/fileData.do",
+  "evidenceUrl": "https://www.data.go.kr/data/15103301/fileData.do"
  },
  {
   "id": "ftc_decisions_api",
@@ -157,7 +160,8 @@
   },
   "why": "위 파일데이터와 같은 원천.",
   "caution": "호출 간격 0.5초 이상 + 재시도 3회(지수 백오프).",
-  "url": "https://www.data.go.kr/data/15103246/openapi.do"
+  "url": "https://www.data.go.kr/data/15103246/openapi.do",
+  "evidenceUrl": "https://www.data.go.kr/data/15103246/openapi.do"
  },
  {
   "id": "mfds_sanctions",
@@ -189,7 +193,8 @@
   },
   "why": "공공데이터포털 개방 API. 기획서 4층에 없던 소스.",
   "caution": "위반내용 필드가 자연어인지 코드인지 1W 확인. 업체명 마스킹 필수.",
-  "url": "https://www.data.go.kr/data/15059500/openapi.do"
+  "url": "https://www.data.go.kr/data/15059500/openapi.do",
+  "evidenceUrl": "https://www.data.go.kr/data/15059500/openapi.do"
  },
  {
   "id": "mfds_press",
@@ -223,8 +228,8 @@
   },
   "why": "2026-09-01 식약처 저작권정책을 직접 열어 확인 — 저작권법 제24조의2로 <b>별도 허락 없이 이용 가능</b>하고 제36조로 <b>개작도 된다</b>. 다만 <b>제37조 출처 명시가 의무</b>라 BY가 붙는다(기존 제약 공란은 누락이었다). 🚨 「<b>공공누리가 부착되지 않은 자료</b>는 게시물 등록 부서 담당자와 <b>사전 협의</b>」 단서가 있어 게시물마다 갈린다 — 프래그먼트 단위 확인 사항이다(D-18).",
   "caution": "test_holdout 출처로 쓰고 train에는 넣지 않는다. 🚨 수집한 게시물마다 공공누리 부착 여부를 확인해 미부착 건은 격리한다.",
-  "url": "https://www.mfds.go.kr/wpge/m_34/de010803l001.do",
-  "accessUrl": "https://www.mfds.go.kr/brd/m_99/list.do"
+  "url": "https://www.mfds.go.kr/brd/m_99/list.do",
+  "evidenceUrl": "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
  },
  {
   "id": "ftc_noviolation",
@@ -324,7 +329,8 @@
   },
   "why": "공공데이터포털 개방 API.",
   "caution": "15074311(개별인정형)·식품안전나라 게시판과 3중으로 겹칠 수 있다. 1W에 셋을 대조해 하나를 정본으로 정하고 나머지는 보조로 내린다.",
-  "url": "https://www.data.go.kr/data/15058359/openapi.do"
+  "url": "https://www.data.go.kr/data/15058359/openapi.do",
+  "evidenceUrl": "https://www.data.go.kr/data/15058359/openapi.do"
  },
  {
   "id": "mfds_hf_individual",
@@ -356,7 +362,8 @@
   },
   "why": "식품안전나라 API svc_no=I-0050과 동일 서비스임을 확인.",
   "caution": "「미인정 기능성 집합」은 이 목록의 여집합으로 계산 — 제품별로 동적.",
-  "url": "https://www.data.go.kr/data/15074311/openapi.do"
+  "url": "https://www.data.go.kr/data/15074311/openapi.do",
+  "evidenceUrl": "https://www.data.go.kr/data/15074311/openapi.do"
  },
  {
   "id": "hf_standard",
@@ -845,7 +852,8 @@
   },
   "why": "AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외). 🚨 2026-09-01 <b>이용정책 원문 확인</b> — 제4항 「본 AI데이터는 <b>인공지능 학습모델의 학습용으로만</b> 사용할 수 있습니다」, 제5항 「승인받지 않은 제3자에게 <b>열람하게 하거나</b> 제공·양도·대여·판매 금지」. 제7항의 주어는 「AI 데이터셋의 <b>판매</b>」이므로 <b>모델 배포는 그대로 가능</b>하고 FAQ와 모순이 아니다(그것이 NOREDIST). 그러나 제4항은 FAQ에 대응물이 없다 — <b>RAG 원문색인과 화면인용은 학습이 아니므로 닫힌다</b> (D-102). 근거 화면: https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105",
   "caution": "🚨 이전의 「학내에서는 쓰고 상업화 시점에 협의」라는 판정은 <b>불필요한 자기 제약</b>이었다. 영리 활용이 허용된다. / 실제 제약은 <b>우리가 만든 파생 데이터셋을 공개 배포할 때</b> 발생한다 — 골든셋에 AI Hub 유래분이 섞이면 그 골든셋은 공개할 수 없다.",
-  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723"
+  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723",
+  "evidenceUrl": "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
  },
  {
   "id": "aihub_558",
@@ -881,7 +889,8 @@
   },
   "why": "AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외). 🚨 2026-09-01 <b>이용정책 원문 확인</b> — 제4항 「본 AI데이터는 <b>인공지능 학습모델의 학습용으로만</b> 사용할 수 있습니다」, 제5항 「승인받지 않은 제3자에게 <b>열람하게 하거나</b> 제공·양도·대여·판매 금지」. 제7항의 주어는 「AI 데이터셋의 <b>판매</b>」이므로 <b>모델 배포는 그대로 가능</b>하고 FAQ와 모순이 아니다(그것이 NOREDIST). 그러나 제4항은 FAQ에 대응물이 없다 — <b>RAG 원문색인과 화면인용은 학습이 아니므로 닫힌다</b> (D-102). 근거 화면: https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105",
   "caution": "★ 라이선스가 열렸으니 「데이터를 안 쓰고 구조만 참조」할 이유가 줄었다. 다만 도메인 거리는 그대로이므로, 쓸지 말지는 <b>라이선스가 아니라 도메인 적합도</b>로 판단하라. 라이선스 안전한 대체재 K-MHaS(CC BY-SA, 109,692건)와 비교해 결정할 것.",
-  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558"
+  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558",
+  "evidenceUrl": "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
  },
  {
   "id": "aihub_71843",
@@ -918,7 +927,8 @@
   },
   "why": "AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외). 🚨 2026-09-01 <b>이용정책 원문 확인</b> — 제4항 「본 AI데이터는 <b>인공지능 학습모델의 학습용으로만</b> 사용할 수 있습니다」, 제5항 「승인받지 않은 제3자에게 <b>열람하게 하거나</b> 제공·양도·대여·판매 금지」. 제7항의 주어는 「AI 데이터셋의 <b>판매</b>」이므로 <b>모델 배포는 그대로 가능</b>하고 FAQ와 모순이 아니다(그것이 NOREDIST). 그러나 제4항은 FAQ에 대응물이 없다 — <b>RAG 원문색인과 화면인용은 학습이 아니므로 닫힌다</b> (D-102). 근거 화면: https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105",
   "caution": "정정으로 라이선스는 열렸으나 <b>판단은 그대로 보류</b>다 — 막았던 것이 라이선스가 아니라 <b>도메인 불일치</b>(특허·상표·저작권 심결문)이기 때문이다. 480만 문장이라도 도메인이 어긋나면 DAPT는 손해다. 9주 프로젝트에서 우선순위 낮음.",
-  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71843"
+  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71843",
+  "evidenceUrl": "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
  },
  {
   "id": "aihub_71486",
@@ -955,7 +965,8 @@
   },
   "why": "AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외). 🚨 2026-09-01 <b>이용정책 원문 확인</b> — 제4항 「본 AI데이터는 <b>인공지능 학습모델의 학습용으로만</b> 사용할 수 있습니다」, 제5항 「승인받지 않은 제3자에게 <b>열람하게 하거나</b> 제공·양도·대여·판매 금지」. 제7항의 주어는 「AI 데이터셋의 <b>판매</b>」이므로 <b>모델 배포는 그대로 가능</b>하고 FAQ와 모순이 아니다(그것이 NOREDIST). 그러나 제4항은 FAQ에 대응물이 없다 — <b>RAG 원문색인과 화면인용은 학습이 아니므로 닫힌다</b> (D-102). 근거 화면: https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105",
   "caution": "★★ 정정 후에도 최선의 활용법은 그대로다 — <b>라벨 축을 빌려오는 것</b>. 「확실성 / 시제 / 문장유형」 3축은 아이디어라 저작권 대상이 아니고, 우리 스키마에 넣는 데 승인도 출처표시도 필요 없다. ✅ <b>여기에 더해 이제 데이터 자체도 배포 모델 학습에 쓸 수 있다</b> — 보조 태스크로 확실성·시제 판별기를 만들면 R1·R2 변환의 성공 여부를 자동 측정할 수 있다. / 도메인은 뉴스·매거진·도서·블로그라 광고가 아니다(생활·건강 카테고리는 있음).",
-  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486"
+  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486",
+  "evidenceUrl": "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
  },
  {
   "id": "aihub_71694",
@@ -991,7 +1002,8 @@
   },
   "why": "AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외). 단 이 데이터셋의 규모·라벨 체계·주제 분포는 상세 페이지 오류로 확인하지 못했다. 🚨 2026-09-01 <b>이용정책 원문 확인</b> — 제4항 「본 AI데이터는 <b>인공지능 학습모델의 학습용으로만</b> 사용할 수 있습니다」, 제5항 「승인받지 않은 제3자에게 <b>열람하게 하거나</b> 제공·양도·대여·판매 금지」. 제7항의 주어는 「AI 데이터셋의 <b>판매</b>」이므로 <b>모델 배포는 그대로 가능</b>하고 FAQ와 모순이 아니다(그것이 NOREDIST). 그러나 제4항은 FAQ에 대응물이 없다 — <b>RAG 원문색인과 화면인용은 학습이 아니므로 닫힌다</b> (D-102). 근거 화면: https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105",
   "caution": "🚨 AI Hub 상세 페이지는 URL 파라미터 조합에 따라 <b>엉뚱한 데이터셋 내용을 반환</b>한다. 실제로 이번에 71694·63 두 URL이 동일한 「상표 이미지 및 텍스트」를 반환했고, 파라미터 없는 URL로 다시 열어서야 제목이 바로잡혔다. <b>데이터셋 번호와 제목을 반드시 눈으로 대조할 것.</b>",
-  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694"
+  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694",
+  "evidenceUrl": "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
  },
  {
   "id": "aihub_63",
@@ -1544,7 +1556,8 @@
   },
   "why": "🔄 2026-09-02 data.go.kr 페이지를 직접 열어 확인 — **이용허락범위: 공공저작물 출처표시(공공누리 제1유형)**. 그래서 BY 가 붙는다(kobaco_mcr·mfds_press 와 같은 조건·같은 표기). 제공기관은 방송미디어통신위원회. 형식은 CSV 이고 가구·개인 통계표 + 다이어리 자료다. 종전 「접근 차단으로 미확인」은 일시적 차단이었다.",
   "caution": "🔄 2026-09-02 확인 — CSV · 가구/개인 통계표 + 다이어리 자료. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사.",
-  "url": "https://www.data.go.kr/data/3068653/fileData.do"
+  "url": "https://www.data.go.kr/data/3068653/fileData.do",
+  "evidenceUrl": "https://www.data.go.kr/data/3068653/fileData.do"
  },
  {
   "id": "kosis",
@@ -1613,7 +1626,8 @@
   },
   "why": "국가연구데이터플랫폼(DataON) 등록 라이선스 CC-BY-NC.",
   "caution": "⚠️ 공식 사이트 robots 차단으로 신청 절차 상세는 미확인. 상업화 전제라면 인용만.",
-  "url": "https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab"
+  "url": "https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab",
+  "evidenceUrl": "https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab"
  },
  {
   "id": "kisdi_panel",
@@ -1721,7 +1735,8 @@
   },
   "why": "AI Hub FAQ 원문: 학습해 만들어진 <b>AI 모델과 서비스는 자유롭게 배포·활용 가능</b>하고 <b>영리적 판매·활용도 제한하지 않는다</b>(출처 명시 조건). 막히는 것은 <b>데이터를 재가공해 배포</b>하는 행위뿐이다(NIA·구축기업 사전 협의 시 예외). 🚨 2026-09-01 <b>이용정책 원문 확인</b> — 제4항 「본 AI데이터는 <b>인공지능 학습모델의 학습용으로만</b> 사용할 수 있습니다」, 제5항 「승인받지 않은 제3자에게 <b>열람하게 하거나</b> 제공·양도·대여·판매 금지」. 제7항의 주어는 「AI 데이터셋의 <b>판매</b>」이므로 <b>모델 배포는 그대로 가능</b>하고 FAQ와 모순이 아니다(그것이 NOREDIST). 그러나 제4항은 FAQ에 대응물이 없다 — <b>RAG 원문색인과 화면인용은 학습이 아니므로 닫힌다</b> (D-102). 근거 화면: https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105",
   "caution": "🚨 <b>이전 판정을 뒤집는다.</b> 「data/g2_nc/에 격리하고 학습 스크립트에서 제외」는 <b>불필요</b>했다. 정확한 제약은 <b>데이터 재배포</b>이므로, 격리해야 할 대상은 학습 스크립트가 아니라 <b>데이터셋 공개·산출물 배포 스크립트</b>다. / 남는 제약 셋 — ① 내국인만 신청 ② 출처 명시 의무 ③ 골든셋에 AI Hub 유래 문장이 섞이면 그 골든셋을 공개 배포할 수 없다(<b>provenance 필드로 추적</b>할 것).",
-  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603"
+  "url": "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603",
+  "evidenceUrl": "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
  },
  {
   "id": "platform_reviews",
@@ -2069,7 +2084,8 @@
   },
   "why": "ToS·EMEA ToS·Developer Policies 3개 문서에서 \"machine learning\"/\"train\"/\"model\" 문자열 부재 — 명시적 학습 금지는 없다. 실질 제약은 30일 저장 상한이다.",
   "caution": "★ 2026-05/06 개정으로 audited developer + analytics 유즈케이스에 한해 30일 초과 통계 저장이 승인제로 열렸다. 원문 댓글은 여전히 30일.",
-  "url": "https://developers.google.com/youtube/terms/developer-policies"
+  "url": "https://developers.google.com/youtube/terms/developer-policies",
+  "evidenceUrl": "https://developers.google.com/youtube/terms/developer-policies"
  },
  {
   "id": "x_api",
@@ -2206,7 +2222,8 @@
   },
   "why": "원천(공정위 의결서·식약처 행정처분 API)이 전부 G3이므로 파생 통계도 G3. 🚨 <b>라이선스 페이지가 존재하지 않는 자체 산출물</b>이라 근거가 URL 이 아니라 <b>산출 근거 문서</b>다 — docs/01_기획/경제성_근거.md 가 산출 방법과 원천을 적는다(D-75 · D-99). 원천 등급이 내려가면 이 파생 통계도 함께 내려간다.",
   "caution": "★★ 인용한 숫자보다 <b>산출한 숫자</b>가 강하다. \"MarketsandMarkets에 따르면\"보다 \"우리가 수집한 처분 레코드에서 계산하면\"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 <b>제품의 일부</b>다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다.",
-  "url": "../01_기획/경제성_근거.md"
+  "url": "../01_기획/경제성_근거.md",
+  "evidenceUrl": "../01_기획/경제성_근거.md"
  },
  {
   "id": "mfds_production",
@@ -2240,7 +2257,8 @@
   },
   "why": "정부 공표 통계. 🔄 2026-09-02 근거 URL 을 KDI 재게시 페이지에서 식약처 저작권정책으로 교체했다 — 근거 URL 은 「그 조건을 말하는 페이지」여야 하는데(확인 항목 4), KDI 에서는 식약처의 이용허락범위를 확인할 수 없다. 저작권법 제24조의2 로 별도 허락 없이 이용 가능하고 제37조 출처 명시가 의무라 BY 가 붙는다 (mfds_press 와 같은 근거 · D-102 ④).",
   "caution": "★ 여기에 「화장품책임판매업체 수」·「기능성표시식품 심의 건수」를 곱하면 <b>고객 수 기반 TAM 역산</b>이 된다 — 시장 금액보다 이쪽이 우리 제품 정의에 맞는다. 🔄 자료 위치(2차 게시처): KDI 경제정보센터 materialView.do?num=267032 — 근거가 아니라 다운로드 경로다",
-  "url": "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+  "url": "https://www.mfds.go.kr/wpge/m_34/de010803l001.do",
+  "evidenceUrl": "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
  },
  {
   "id": "mnm_aidataset",
