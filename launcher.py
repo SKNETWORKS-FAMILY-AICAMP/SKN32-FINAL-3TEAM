@@ -290,12 +290,21 @@ def db_down() -> None:
 # 아직 대상이 없는 명령 — 메뉴에는 보이되 눌러도 안전하다
 # ══════════════════════════════════════════════════════════
 @app.command()
-@stub("W2", "alembic/ 초기화 + postgres 기동")
 def migrate() -> None:
-    """데이터베이스 테이블을 만들고 바꾼다.
+    """데이터베이스 테이블을 최신 상태로 맞춘다.
 
-    Alembic 으로 스키마 변경을 코드로 남긴다.
+    Alembic 으로 스키마 변경을 코드로 남긴다. DB 가 떠 있어야 한다 (`db-up`).
     """
+    raise typer.Exit(run("uv", "run", "alembic", "upgrade", "head"))
+
+
+@app.command(name="migrate-new")
+def migrate_new(message: str) -> None:
+    """모델 변경분으로 새 마이그레이션을 뽑는다 (autogenerate).
+
+    🚨 뽑은 파일을 **눈으로 확인**한 뒤 커밋한다. autogenerate 는 초안이지 정답이 아니다.
+    """
+    raise typer.Exit(run("uv", "run", "alembic", "revision", "--autogenerate", "-m", message))
 
 
 @app.command()
