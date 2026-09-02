@@ -568,12 +568,27 @@ def test_탐침_게이트는_G1과_수기와_승인선행을_막는다() -> None
 
     srcs = _sources()
     manual = [k for k, v in srcs.items() if v.get("status") == "manual"]
-    gated = [k for k, v in srcs.items() if "GATED" in (v.get("constraints") or [])]
+    # 🔄 승인이 난 GATED 는 이제 통과한다 (approved_at · 2026-09-02 AI Hub 5건).
+    #    표본은 **아직 승인이 없는** GATED 여야 한다 — 게이트 27 이 그 짝을 검사한다.
+    gated = [
+        k
+        for k, v in srcs.items()
+        if "GATED" in (v.get("constraints") or []) and not v.get("approved_at")
+    ]
     assert manual and gated, "표본이 없다 — 레지스트리가 바뀌었으면 이 게이트를 다시 본다"
 
     for key in manual[:1] + gated[:1]:
         with pytest.raises(RegistryError):
             probe(key)
+
+    # 🔄 반대로 **승인이 난 GATED 는 통과해야 한다** — 막는 것은 승인 부재이지 GATED 자체가 아니다.
+    approved = [
+        k
+        for k, v in srcs.items()
+        if "GATED" in (v.get("constraints") or []) and v.get("approved_at")
+    ]
+    for key in approved[:1]:
+        assert probe(key), f"{key}: 승인이 났는데도 탐침이 막힌다"
 
     # 🚨 G0 는 **통과해야 한다.** 전 용도 deny 인 채로 탐침 대상인 것이 정상이다 —
     #    오히려 G0 야말로 탐침이 가장 필요한 등급이다 (D-72 의 「확인 후 승격」).
@@ -642,3 +657,37 @@ def test_수동보강_표에_중복_키가_없다(path: str, name: str) -> None:
         assert not dupes, f"🚨 {path}:{name} 에 중복 키가 있다 — 앞의 값이 조용히 버려진다: {dupes}"
         return
     pytest.fail(f"{path} 에서 {name} dict 를 찾지 못했다 — 이름이 바뀌었으면 게이트도 고친다")
+
+
+@pytest.mark.gate
+def test_gated_소스는_승인_기록_없이는_열리지_않는다() -> None:
+    """🚨 **수집기가 GATED 를 아예 보지 않고 있었다** (D-109 · 2026-09-02).
+
+    탐침(`probe()`)이 *"승인 전 접근은 조건 위반"* 이라며 막던 조건을, 정작 **실제로
+    받아 오는 `require()` 는 검사하지 않았다.** 승인 없이 받는 경로가 열려 있었던 것이고,
+    **탐침을 만들지 않았으면 드러나지 않았을 자리**다.
+
+    승인은 사람이 신청해 받아 오는 사실이라 사람이 적는다 — `robots_checked_at` 과 같은 종류다.
+    🚨 그리고 **「신청했다」가 아니라 「승인됐다」의 날짜**여야 한다. 둘을 같은 칸에 적으면
+    승인 대기 중인 소스가 승인된 것으로 읽히고, 그 오독은 약관 위반으로 끝난다.
+    """
+    from collect.registry import RegistryError, probe, require  # noqa: PLC0415
+
+    srcs = _sources()
+    gated = {k: v for k, v in srcs.items() if "GATED" in (v.get("constraints") or [])}
+    assert gated, "GATED 소스가 없다 — 레지스트리가 바뀌었으면 이 게이트를 다시 본다"
+
+    for key, src in gated.items():
+        if src.get("approved_at"):
+            assert src.get("approved_by"), (
+                f"{key}: approved_at 만 있고 approved_by 가 없다 — "
+                "누가 신청했는지가 남아야 한다 (AI Hub 는 내국인 한정 데이터셋이 있다)"
+            )
+            continue
+        # 승인 기록이 없으면 탐침도 수집기도 거부해야 한다
+        with pytest.raises(RegistryError, match="approved_at"):
+            probe(key)
+        opened = [u for u in sorted(VALID_USES) if (src.get("use") or {}).get(u) == "allow"]
+        if opened:
+            with pytest.raises(RegistryError):
+                require(key, use=opened[0])

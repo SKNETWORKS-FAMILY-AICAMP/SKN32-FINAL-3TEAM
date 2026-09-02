@@ -63,8 +63,13 @@ body{
 .sum .n{font-family:"IBM Plex Mono",monospace; font-size:27px; font-weight:600; line-height:1.1; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
 .sum .t{font-size:13.5px; font-weight:600}
 .sum .w{font-size:12px; color:var(--muted)}
+.sum .n em{font-style:normal; font-size:16px; color:var(--faint); font-weight:400}
 .sum.now .n{color:var(--stop)}
 .sum.heavy .n{color:var(--wait)}
+.done{opacity:.62}
+.done .act{text-decoration:line-through; text-decoration-color:var(--faint)}
+.stamp{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600;
+  color:var(--go); background:var(--go-soft); padding:1px 6px; border-radius:2px; letter-spacing:.02em}
 
 .leadin{color:var(--muted); font-size:13.5px; margin:14px 0 0; max-width:74ch}
 .leadin strong{color:var(--ink)}
@@ -149,10 +154,10 @@ img{max-width:100%}
 </header>
 
 <div class="summary">
-  <div class="sum now">
-    <span class="n">10</span>
+  <div class="sum">
+    <span class="n">4<em>/10</em></span>
     <span class="t">① 신청 버튼</span>
-    <span class="w">1인 30분 · 🚨 오늘</span>
+    <span class="w">✅ AI Hub 5건 승인 완료</span>
   </div>
   <div class="sum">
     <span class="n">3</span>
@@ -180,38 +185,38 @@ img{max-width:100%}
     <h2>신청 버튼 — 그 뒤는 자동</h2>
     <span class="gcost">10건 · 1인 30분</span>
   </div>
-  <p class="gnote">클릭 몇 번인데 <strong>92만 문장</strong>이 걸려 있습니다. 승인에 시간이 걸릴 수 있어 가장 먼저 시작해야 합니다. <strong>탐침이 이 10건을 전부 막았습니다</strong> — 「승인 전 접근은 조건 위반」이라서요. 즉 <strong>신청 전에는 자동으로 아무것도 못 합니다.</strong> 여기가 지금 병목입니다.</p>
+  <p class="gnote">✅ <strong>2026-09-02 · AI Hub 5건 승인 완료</strong> — <strong>92만 문장</strong>이 열렸습니다. 승인 사실은 <code>approved_at</code> 으로 원장에 적혀 있고, 그게 없으면 탐침도 수집기도 계속 거부합니다. <strong>남은 것은 폼 입력 4건</strong>입니다.</p>
 
   <div class="rows">
-    <div class="row">
+    <div class="row done">
       <span class="id">aihub_71486<span class="nm">문장유형(추론·예측) 판단</span></span>
       <span class="val A">A</span>
       <span class="size">166,339문장</span>
-      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486">aihub.or.kr/…dataSetSn=71486</a><span class="go">신청 → 즉시 · 🚨 내국인만</span></span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486">aihub.or.kr/…dataSetSn=71486</a><span class="go"><span class="stamp">승인 09-02</span> 신청 → 즉시 · 🚨 내국인만</span></span>
     </div>
-    <div class="row">
+    <div class="row done">
       <span class="id">aihub_71723<span class="nm">생성형AI 법률/규정 텍스트</span></span>
       <span class="val A">A</span>
       <span class="size">원문 251,946</span>
-      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723">aihub.or.kr/…dataSetSn=71723</a><span class="go">회원가입 + 신청 → 즉시</span></span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723">aihub.or.kr/…dataSetSn=71723</a><span class="go"><span class="stamp">승인 09-02</span> 회원가입 + 신청 → 즉시</span></span>
     </div>
-    <div class="row">
+    <div class="row done">
       <span class="id">aihub_review_corpus<span class="nm">속성기반 감정분석 (71603)</span></span>
       <span class="val A">A</span>
       <span class="size">250,312건</span>
-      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603">aihub.or.kr/…dataSetSn=71603</a><span class="go">신청 → 즉시 · 🚨 내국인만</span></span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603">aihub.or.kr/…dataSetSn=71603</a><span class="go"><span class="stamp">승인 09-02</span> 신청 → 즉시 · 🚨 내국인만</span></span>
     </div>
-    <div class="row">
+    <div class="row done">
       <span class="id">aihub_558<span class="nm">텍스트 윤리검증</span></span>
       <span class="val B">B</span>
       <span class="size">451,110문장</span>
-      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558">aihub.or.kr/…dataSetSn=558</a><span class="go">회원가입 + 신청 → 즉시</span></span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558">aihub.or.kr/…dataSetSn=558</a><span class="go"><span class="stamp">승인 09-02</span> 회원가입 + 신청 → 즉시</span></span>
     </div>
-    <div class="row">
+    <div class="row done">
       <span class="id">aihub_71694<span class="nm">SNS 멀티턴 대화</span></span>
       <span class="val C">C</span>
       <span class="size">🚨 규모 미확인</span>
-      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694">aihub.or.kr/…dataSetSn=71694</a><span class="go">회원가입 + 신청 → 즉시</span></span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694">aihub.or.kr/…dataSetSn=71694</a><span class="go"><span class="stamp">승인 09-02</span> 회원가입 + 신청 → 즉시</span></span>
     </div>
     <div class="row flag">
       <span class="id">aihub_71843<span class="nm">지식재산권법 — 보류 중</span></span>
@@ -224,7 +229,8 @@ img{max-width:100%}
   <div class="warn stop"><span class="k">🚨</span><span><strong>데이터셋 번호와 제목을 눈으로 대조하십시오.</strong> AI Hub 상세 페이지는 URL 파라미터 조합에 따라 <strong>엉뚱한 데이터셋을 반환한 전례</strong>가 있습니다 — 71694 와 63 이 같은 「상표 이미지」 화면을 냈습니다.</span></div>
   <div class="warn"><span class="k">이용정책</span><span>제4항 <strong>「학습용으로만」</strong> · 제5항 <strong>「제3자 열람 금지」</strong> — 그래서 U2(원문색인)·U3(화면인용)가 닫혀 있습니다. <a href="https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&amp;topMenu=105">이용정책 원문</a></span></div>
 
-  <div class="rows" style="margin-top:16px">
+  <p class="gnote" style="margin-top:20px">🚨 <strong>남은 4건 — 폼 입력.</strong> 아래는 아직 신청 전입니다.</p>
+  <div class="rows" style="margin-top:10px">
     <div class="row">
       <span class="id">nasmedia_npr<span class="nm">2026 인터넷 이용자 조사</span></span>
       <span class="val A">A</span>

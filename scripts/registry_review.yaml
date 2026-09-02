@@ -9,6 +9,10 @@
 #   - decided_by 와 reviewed_by 는 서로 달라야 한다 (DB ck_source_four_eyes)
 #   - 🚨 reviewed_by 가 비면 collect.registry.require() 가 수집을 거부한다
 #   - collected_at 은 손으로 적지 않는다 — 수집기가 mark_collected() 로 찍는다
+#   - 🔄 approved_at — GATED 소스의 **승인이 난 날**. 사람이 신청해 받아 온 사실이라
+#     사람이 적는다. robots_checked_at 과 같은 종류다 (D-109).
+#     🚨 비면 탐침도 수집기도 거부한다 — 「신청했다」와 「승인됐다」는 다르다.
+#     approved_by 는 실제로 계정을 만들고 신청한 사람이다 (AI Hub 는 내국인 한정 3건이 있다).
 #
 #  절차 (S0-14)
 #   1. uv run python scripts/review_sheet.py   → build/review_sheet.md
@@ -131,6 +135,8 @@ aihub_71486:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
+  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
+  approved_by: 오한빈
   collected_at: null
 
 aihub_71723:
@@ -138,6 +144,8 @@ aihub_71723:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
+  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
+  approved_by: 오한빈
   collected_at: null
 
 aihub_558:
@@ -145,6 +153,8 @@ aihub_558:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
+  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
+  approved_by: 오한빈
   collected_at: null
 
 aihub_71694:
@@ -152,6 +162,8 @@ aihub_71694:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
+  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
+  approved_by: 오한빈
   collected_at: null
 
 aihub_71843:
@@ -264,6 +276,8 @@ aihub_review_corpus:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
+  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
+  approved_by: 오한빈
   collected_at: null
 
 meta_adlibrary:

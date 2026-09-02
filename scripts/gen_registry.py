@@ -172,6 +172,12 @@ def block(key, s, extra=None, covers=None, status="collect"):
         L.append(f"    dissent_note: {esc(rv['dissent_note'])}")
     if rv.get("robots_checked_at"):
         L.append(f"    robots_checked_at: {_scalar(rv.get('robots_checked_at'))}")
+    # 🔄 GATED 승인 기록 — 사람이 신청해 받아 온 사실이라 사람이 적는다 (D-109).
+    #    🚨 「신청했다」가 아니라 「승인됐다」의 날짜다. 둘을 같은 칸에 적으면
+    #       승인 대기 중인 소스가 승인된 것으로 읽힌다.
+    if rv.get("approved_at"):
+        L.append(f"    approved_at: {_scalar(rv.get('approved_at'))}")
+        L.append(f"    approved_by: {_scalar(rv.get('approved_by'))}")
     # 🚨 **근거 URL 과 접근 URL 은 다른 것이다** (권소라 역검토 v1.3 §2 · 인계 §3-①).
     #    한 필드를 두 자리에 넣고 있어서, 검토표의 확인 항목 4번(「근거 URL 이 실제로 그 조건을
     #    말하는가」)이 **31건 전부에서 성립하지 않았다.** AI Hub 판정의 전체 무게가 이용정책

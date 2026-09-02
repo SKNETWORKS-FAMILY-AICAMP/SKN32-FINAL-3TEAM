@@ -417,6 +417,8 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71723:
@@ -438,6 +440,8 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_558:
@@ -459,6 +463,8 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71694:
@@ -480,6 +486,8 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71843:
@@ -851,6 +859,8 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   meta_adlibrary:
