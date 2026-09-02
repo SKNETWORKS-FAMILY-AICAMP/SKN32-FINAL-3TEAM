@@ -309,12 +309,6 @@ EXTRA = {
         "  상업 제품 전제에서는 인용만 가능하다는 기존 판단이 실측으로 뒷받침된다.",
     ],
     # D-108 — status 를 옮긴 4건. 「왜 collect 가 아닌가」를 사람이 읽을 자리에 남긴다
-    "kfia_approved_list": [
-        "status_note: >-",
-        "  🚨 D-108 — G0 라 용도가 전부 닫혀 있는데 collect 였다. 가져와도 쓸 곳이 없다.",
-        "  선행 작업은 robots.txt 확인과 실측 건수(철수 조건 2번)다. 확인 후 2인 판정으로",
-        "  승격하면(D-72) 그때 collect 로 올린다. 가치 A 이므로 확인 우선순위는 높다.",
-    ],
     "krei_food": [
         "probe_note: >-",
         "  ✅ 2026-09-02 확인 완료 — D-108 로 hold 였던 것이 풀렸다. 건기식 문항 존재 확인,",
@@ -350,7 +344,6 @@ ORDER = [
     "mfds_press",
     "ftc_noviolation",
     # 2층 적법 라벨
-    "kfia_approved_list",
     "mfds_hf_ingredient",
     "mfds_hf_individual",
     "kcia_guideline",
@@ -404,7 +397,6 @@ STATUS = {
     "kobaco_mcr_report": "hold",
     "aihub_71843": "hold",
     # D-108 — G0 는 확인이 선행이다. 확인 전에 자동으로 가져오면 fail-closed 가 수집 단계에서 뚫린다
-    "kfia_approved_list": "hold",
     # D-108 — ★사용자제공. 자동 수집이 약관 위반이라는 사실을 caution 문장이 아니라 기계가 읽는 자리에 둔다
     "meta_adlibrary": "manual",
     "google_atc": "manual",
@@ -426,7 +418,7 @@ with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8") as _out:
 print("등재", len(ORDER), "건 · 법제처 covers", len(LAW_COVERS), "종 흡수")
 # 🔄 미채택으로 내린 것은 매트릭스에 판정 근거로 남지만 레지스트리 sources 에는 없다.
 #    registry_tail.yaml 의 not_adopted 가 그 자리다 (D-110).
-NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb", "mfds_hf_ingredient_board"}
+NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb", "mfds_hf_ingredient_board", "kfia_approved"}
 missing = [
     s["id"]
     for s in SRC

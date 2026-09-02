@@ -449,14 +449,14 @@ const SOURCES = [
  caution:'1W에 공개 여부 확인(30분). 확인 비용이 작고 이득이 크다.', url:''},
 
 // ══════════════════ 2층 적법 라벨 ══════════════════
-{id:'kfia_approved', layer:'2층 적법라벨', name:'기능성표시식품 심의완료 공개목록', org:'한국식품산업협회',
- grade:'G0', constraints:['TOS'], access:'페이지네이션 크롤링', verified:true,
- scale:'100건 이상 (10페이지×10건 확인)', cost:'free', costNote:'무료 · 크롤링 개발 0.5일',
- value:'A', valueNote:'★ 진입점 A에서는 「적법 라벨」, 진입점 B에서는 「쓸 수 있는 어휘 사전」 — 같은 데이터를 두 번 쓴다',
- u:{train:CD, commercial:CD, raw:CD, cite:CD, deploy:CD},
- note:{train:'⚠️ G0 → G2 취급. 기능성 표시내용은 고시가 정한 문구 형식이라 사실로 취득 가능',commercial:'⚠️ 이용조건 미표기 — 사실 한정',raw:'⚠️ "본 제품에는 ~에 도움을 줄 수 있다고 알려진 ~이 들어있습니다"는 고시의 틀이지 협회 창작물이 아니다',cite:'⚠️ 원 출처(고시)로 소급 인용',deploy:'⚠️ 사실 한정'},
- why:'법정 공개 의무 데이터이나 이용조건 미표기 → G0 → G2 취급.',
- caution:'🚨 엑셀 다운로드 없음 → 페이지네이션 수집기 필요. robots.txt 확인 후 실행. 정확 건수 1W 실측(철수 조건 2번).',
+{id:'kfia_approved', layer:'2층 적법라벨', name:'기능성표시식품 심의완료 공개목록 🚨편입금지', org:'한국식품산업협회',
+ grade:'G1', constraints:['TOS'], access:'🚨 단순 열람만 허용 — 복제·배포·개작 명시 금지', verified:true,
+ scale:'100건 이상 (10페이지×10건 확인)', cost:'free', costNote:'무료',
+ value:'A', valueNote:'🚨 <b>값은 A 였다</b> — 2층 적법라벨에서 「실제로 승인된 표시 문구」를 주는 유일한 소스였다. 막은 것은 가치가 아니라 <b>명시적 금지</b>다',
+ u:{train:NO, commercial:NO, raw:NO, cite:NO, deploy:NO},
+ note:{train:'🚨 학습은 복제+개작이다',commercial:'🚨 금지',raw:'🚨 색인은 복제다',cite:'🚨 인용은 복제·배포다',deploy:'🚨 금지'},
+ why:'🚨 <b>2026-09-02 게시판 유의사항 원문 확인</b>(오한빈) — 「<b>단순 열람 외에 무단 변경, 복제 · 배포, 개작 등의 이용을 금지</b>하며, 이를 위반할 경우 관련법률에 의거 <b>법적 처벌</b>을 받을 수 있음」. 허용된 것은 <b>열람 하나</b>이고 우리 용도는 전부 금지 범위다. 🚨 <b>수기 전사도 복제</b>라 status: manual 로도 갈 수 없다 — meta_adlibrary(약관상 자동 수집만 금지)와 갈리는 지점이다. D-106 이 「확인된 허락 없음은 G1」이라 했는데 여기는 그보다 강한 <b>명시적 금지</b>다.',
+ caution:'✅ <b>근거 규정 자체는 이미 우리 손에 있다.</b> 게시판이 인용한 「부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정」 제7조는 <b>law_go_kr covers 12종에 포함</b>돼 G3 로 받고 있다. 🚨 <b>잃는 것은 「규정」이 아니라 「그 규정에 따라 실제 승인된 제품·문구 목록」</b>이다 — 2층에서 그 자리가 빈다. / ⚠️ robots.txt 는 404(규칙 없음)였다. <b>robots 가 막은 것이 아니다</b> — 확인 순서가 반대였다면 그대로 위반했다.',
  url:'https://adf.kfia.or.kr/company/open/openData.do?menuKey=406'},
 
 {id:'mfds_hf_ingredient', layer:'2층 적법라벨', name:'건기식 기능성 원료인정 현황 API (15058359)', org:'식품의약품안전처',
