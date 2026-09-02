@@ -46,6 +46,17 @@
 #    G0 를 fail-closed 로 닫아 둔 이유(D-72)가 수집 단계에서 우회된다. 그래서 collect 에만 건다.
 #    🚨 역은 성립하지 않는다 — hold 인데 용도가 열려 있는 것은 「판정 끝, 착수만 남음」이다.
 #    blocked · not_adopted 는 status 값이 아니라 별도 섹션이다. 스키마부터 다르다(name/grade/reason).
+#
+#  🚨 「공공누리」는 조건이 아니다 — **유형이 조건이다** (2026-09-02 · D-110)
+#      제1유형 출처표시만        → ✅ 우리가 쓸 수 있는 유일한 유형
+#      제2유형 + 상업 금지       → ❌ 우리 제품은 상업 전제다
+#      제3유형 + 변경 금지       → ❌ 학습은 변경의 극단이다
+#      제4유형 + 상업·변경 금지  → ❌
+#    「공공저작물이니 괜찮다」는 판정은 성립하지 않는다. **넷 중 하나만 통과한다.**
+#    기관 정책 페이지는 「유형을 보라」고만 말하므로, 확인 단위는 **그 데이터셋에 붙은 배지**다.
+#    🚨 배지가 자료마다 다를 수 있다 — mfds_press 는 「미부착 자료는 담당자와 사전 협의」라
+#       프래그먼트 단위 확인이다 (D-18).
+#
 #  - value: A~D 활용 가치 (D-72 — 가치를 등급보다 먼저 본다)
 #  - 등급은 소스의 "기본값"이며 실제 판정 단위는 FRAGMENT (D-18)
 #  - 경계 케이스(G1/G2, G2/G3)는 2인 판정 후 reviewed_by 기록
@@ -69,13 +80,16 @@ sources:
     status: collect
     access: "공식 다운로드"
     scale: "5,870건 (표시광고법 필터 후 미측정)"
-    masking: 업체명·상표·대표자명 즉시 마스킹, 원문 미보관 (D-17)
+    masking: 업체명·상표·대표자명·🔄 **주소** 즉시 마스킹, 원문 미보관 (D-17)
+      🚨 2026-09-02 의결서 실물 확인 — 피심인 항목에 **사업장 주소와 대표이사 성명**이 전면에
+      나온다(「서울특별시 종로구 서린동 88 · 대표이사 임충헌」). 종전 masking 문구에 주소가 빠져 있었다.
     fragment_note: 광고 화면 캡처 이미지는 G1~G2로 개별 하향 (D-18)
-    caution: "🚨 프래그먼트별로 등급이 갈린다 — 의결서 안 <그림 N> 광고 캡처는 광고주 이미지 저작물이라 G1(미추출). 업체명·대표자명은 등급 무관 즉시 마스킹."
+    caution: "★★★ 2026-09-02 의결서 실물 확인 — 화장품 건이 존재한다(오한빈). 의결 제2000-99호 「한국화장품(주) 및 (주)혜명교역의 부당한 광고행위에 대한 건」. 🚨 식약처 행정처분 5종이 전부 식품이라 비어 있던 화장품 자리를 이것이 메운다 — 표시광고법은 업종을 안 가린다. 1층이 선다. ★★ 구조가 학습 라벨에 그대로 맞는다 — 「주문」이 금지 문구를 원문 인용으로 적시하고(예: '바르는게 운동입니다' · '미국의 FDA … 통과하여 국제적으로 인정'), 그 뒤에 위반 유형(비만완화 효과가 있는 것처럼 · 합격판정을 받은 것처럼)이 붙으며, 「판단」이 왜 부당한지를 적는다(실증자료가 임상실험이 아니라 설문조사 100명). 입력·라벨·근거가 한 문서에 다 있다 (D-59 A/B/C 와 같은 형태). 🚨 확인이 남는 것 셋 — ① 시점 분포: 이 건은 2000년이고 매체가 신문·잡지다. 현재 온라인 광고와 표현이 다를 수 있어 최근 건 비중을 봐야 한다 ② 파일데이터의 실체: 의결서가 PDF 인데 15103301 이 PDF 묶음인지 메타데이터 CSV 인지 ③ 마스킹 범위: 업체명·대표자명·주소가 전면에 나온다 — masking 필드가 이미 붙어 있으나 주소까지 포함해야 한다 (D-17). / ★★ 2026-09-02 표시광고법 필터 코드 확인(오한빈) — 공정위 사건처리 검색화면(case.ftc.go.kr)의 위반유형 파라미터가 <code>reprsntVioltTy=0609*</code> 다. 🚨 와일드카드가 붙어 하위 유형을 전부 포함한다 — 표시광고법 제3조의 넷(거짓·과장 / 기만적 / 부당하게 비교하는 / 비방적인 표시·광고)이 다 걸린다. 키워드 검색(「부당한 광고」)으로는 표현이 다른 건이 빠진다 — 유형 코드로 걸러야 한다. 🚨 다만 이건 검색화면의 코드이지 파일데이터의 컬럼값이 아닐 수 있다 — 파일을 열어 위반유형 컬럼의 실제 표기를 확인해야 필터가 선다. 🚨 case.ftc.go.kr 은 레지스트리에 없는 별도 접근 경로다 — 2인 확인이 덮는 것은 data.go.kr 파일데이터(15103301)다. 사람이 눈으로 세는 것은 무방하나 자동 수집하려면 등재·판정이 선행이다 (D-15). / 🚨 프래그먼트별로 등급이 갈린다 — 의결서 안 <그림 N> 광고 캡처는 광고주 이미지 저작물이라 G1(미추출). 업체명·대표자명은 등급 무관 즉시 마스킹."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15103301/fileData.do"
 
   ftc_decisions_api:
@@ -103,7 +117,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15103246/openapi.do"
 
   mfds_sanctions:
@@ -122,11 +137,12 @@ sources:
     scale: "미측정 — 1W 실측"
     masking: 업체명·대표자명 즉시 마스킹, 원문 미보관 (D-17)
     fragment_note: 행정처분 레코드에 처분 대상 업체가 들어온다
-    caution: "위반내용 필드가 자연어인지 코드인지 1W 확인. 업체명 마스킹 필수."
-    collected_at: null
+    caution: "★★ 2026-09-02 식품안전나라 서비스 목록 확인(오한빈) — 「행정처분결과」가 다섯으로 나뉜다: I0470 행정처분결과 · I0480 식품제조가공업 · I0481 식품판매업 · I0482 수입식품업 · I2630 식품접객업. 🚨 serviceId 에 하이픈이 없다 — I-0040·I-0050 과 형식이 다르다. 화면 그대로 적는다. 🚨🚨 다섯 전부 「식품」이다 — 화장품 행정처분이 이 경로에 없다. 우리 도메인은 화장품·건기식 둘인데 제재 데이터가 식품 쪽만 잡힌다. 1층 판정라벨의 절반이 빌 수 있다 — 화장품 행정처분의 별도 경로를 찾아야 한다(식약처 의약품안전나라 계열 또는 별도 API). 이것이 확인되기 전에는 「1층이 채워졌다」고 말할 수 없다. / 위반내용 필드가 자연어인지 코드인지 1W 확인. 업체명 마스킹 필수."
+    collected_at: 2026-09-02
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15059500/openapi.do"
 
   mfds_press:
@@ -143,11 +159,16 @@ sources:
     status: collect
     access: "공식 다운로드"
     scale: "회차당 수십~수백 건"
+    probe_note: >-
+      🔄 2026-09-02 탐침 — 보도자료 게시판 총량 **4,347건**(435페이지)을 처음 확인했다.
+      레지스트리의 「회차당 수십~수백 건」은 회차 기준이라 총량이 없었다.
+      🚨 부당광고 점검 회차만 걸러야 하므로 4,347 이 곧 수집량은 아니다.
     caution: "test_holdout 출처로 쓰고 train에는 넣지 않는다. 🚨 수집한 게시물마다 공공누리 부착 여부를 확인해 미부착 건은 격리한다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   ftc_noviolation:
@@ -169,32 +190,6 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
 
-  kfia_approved_list:
-    name: "기능성표시식품 심의완료 공개목록"
-    org: "한국식품산업협회"
-    url: "https://adf.kfia.or.kr/company/open/openData.do?menuKey=406"
-    layer: "2층 적법라벨"
-    grade: G0
-    use: {U1: deny, U2: deny, U3: deny, U4: deny}
-    constraints: [TOS]
-    redistributable: true
-    value: A
-    cost: free
-    status: hold
-    access: "페이지네이션 크롤링"
-    scale: "100건 이상 (10페이지×10건 확인)"
-    status_note: >-
-      🚨 D-108 — G0 라 용도가 전부 닫혀 있는데 collect 였다. 가져와도 쓸 곳이 없다.
-      선행 작업은 robots.txt 확인과 실측 건수(철수 조건 2번)다. 확인 후 2인 판정으로
-      승격하면(D-72) 그때 collect 로 올린다. 가치 A 이므로 확인 우선순위는 높다.
-    caution: "🚨 엑셀 다운로드 없음 → 페이지네이션 수집기 필요. robots.txt 확인 후 실행. 정확 건수 1W 실측(철수 조건 2번)."
-    collected_at: null
-    decided_at: 2026-08-20
-    decided_by: 오한빈
-    reviewed_by: null
-    evidence_url: "https://adf.kfia.or.kr/company/open/openData.do?menuKey=406"
-    evidence_is_access: true
-
   mfds_hf_ingredient:
     name: "건기식 기능성 원료인정 현황 API (15058359)"
     org: "식품의약품안전처"
@@ -209,11 +204,17 @@ sources:
     status: collect
     access: "API 키"
     scale: "수백 건"
-    caution: "15074311(개별인정형)·식품안전나라 게시판과 3중으로 겹칠 수 있다. 1W에 셋을 대조해 하나를 정본으로 정하고 나머지는 보조로 내린다."
-    collected_at: null
+    fragment_note: >-
+      ★ 취하는 것 — 인정번호 · 인정일자 · 신청원료명 · **기능성 내용** · 1일 섭취량 · 섭취시 주의사항.
+      🚨 **업체명 · 업종 · 주소는 취하지 않는다.** 응답에 함께 오지만 우리가 쓸 이유가 없고,
+      **주소는 사업장 소재지**라 더욱 그렇다. 판정 단위는 FRAGMENT 다 (D-18).
+      ★ 게시판(mfds_hf_ingredient_board)이 주던 것과 **같은 필드**다 — 조건이 깨끗한 경로로 대체된다.
+    caution: "★★ 2026-09-02 — 요청주소가 확정됐다. data.go.kr 상세에 API 유형: LINK 라고 적혀 있다 — 자체 엔드포인트 없이 원 기관 API 로 연결한다는 뜻이고, 그 원 기관이 식품안전나라다: <code>http://openapi.foodsafetykorea.go.kr/api/{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}</code> · 서비스 I-0040 「건강기능식품 기능성 원료인정현황」. 🚨 2026-09-02 — data.go.kr 에 활용신청 버튼 자체가 없다(오한빈). LINK 유형이라 신청도 원 기관에서 받는다: 식품안전나라 회원가입 + 인증키 신청(<code>.env FOODSAFETY_KEY</code>). 🚨 그래서 2인 확인이 덮는 경로와 실제 이용 경로가 갈린다 — 검토자가 본 「이용허락범위 제한 없음」은 data.go.kr 화면의 표시이고, 실제 호출은 식품안전나라에서 하며 가입 시 그쪽 약관에 동의하게 된다. 가입 화면의 이용약관에 추가 제약이 있으면 재판정 대상이다 — 오늘 반복해서 나온 형태다(조건은 늘 실제로 이용하는 화면에 있었다). / 🚨 포털 페이지가 엔드포인트가 아니라는 것이 두 겹이었다 — 소개 페이지도 아니고, 중계 주소도 아니고, 원 기관 주소다. / 속성정보 9개: 인정번호 · 인정일자 · 업체명 · 업종 · 주소 · 신청원료명 · 기능성 내용 · 1일 섭취량 · 섭취시 주의사항. ★ 「기능성 내용」이 구조화 필드로 나온다 — 2층이 찾던 것이다. 🚨 API 호출제한 500 (단위 불명) · 데이터 포맷 JSON+XML. / 15074311(개별인정형)·식품안전나라 게시판과 3중으로 겹칠 수 있다. 1W에 셋을 대조해 하나를 정본으로 정하고 나머지는 보조로 내린다."
+    collected_at: 2026-09-02
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15058359/openapi.do"
 
   mfds_hf_individual:
@@ -233,11 +234,12 @@ sources:
     probe_note: >-
       🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.
       🚨 ftc_decisions_api 와 같은 조건이다 (아래 cosmetic 2건도 같다).
-    caution: "「미인정 기능성 집합」은 이 목록의 여집합으로 계산 — 제품별로 동적."
-    collected_at: null
+    caution: "★★ 2026-09-02 출력항목 확인(오한빈) — 식품안전나라 I-0050 · 샘플 <code>/api/sample/I-0050/xml/1/5</code>. 🚨 serviceId 는 하이픈 포함이다. 출력 7항목: HF_FNCLTY_MTRAL_RCOGN_NO(원료인정번호) · DAY_INTK_HIGHLIMIT/LOWLIMIT(1일 섭취량 상·하한) · WT_UNIT(중량단위) · RAWMTRL_NM(원재료명) · IFTKN_ATNT_MATR_CN(섭취시 주의사항) · PRIMARY_FNCLTY(주된 기능성). ★ PRIMARY_FNCLTY 가 2층이 찾던 승인 문구다. ★★ 업체명·업종·주소가 아예 오지 않는다 — I-0040(9항목)과 달리 마스킹 대상이 없다. 구조가 우리 용도에 더 맞는다. 🚨 15074311 의 API 유형이 LINK 인지는 확인이 남는다 — LINK 가 아니면 data.go.kr 에 별도 엔드포인트가 있고, 그때는 2인 확인이 덮는 경로가 어느 쪽인지가 갈린다(같은 데이터라도 다른 접근 경로다). / 「미인정 기능성 집합」은 이 목록의 여집합으로 계산 — 제품별로 동적."
+    collected_at: 2026-09-02
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15074311/openapi.do"
 
   kcia_guideline:
@@ -265,6 +267,8 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    reviewed_at: 2026-09-02
+    dissent_note: "판정 근거의 「저작권은 대한화장품협회에 귀속」을 재현하지 못함 — 공지 본문에 해당 문구가 없고, 첨부 해설서 PDF 전문(35p·28,233자)에도 저작권·귀속·무단·전재·복제·배포·Copyright 이 0건. 등급 G2 자체는 유지 가능하나 근거 문장의 출처(어느 페이지 어느 문장인지)를 특정해 주십시오"
     evidence_url: "https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039"
     evidence_is_access: true
 
@@ -298,10 +302,11 @@ sources:
     note: >-
       🚨 [별표] 조회 가능 여부가 미확인이다. 조회되지 않으면 시행령 별표를
       본문 HTML 파싱으로 받아야 하며 수집 경로가 갈린다 (수집리스트 S2-04).
-    collected_at: null
+    collected_at: 2026-09-02
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://open.law.go.kr/LSO/openApi/guideList.do"
     evidence_is_access: true
 
@@ -328,25 +333,39 @@ sources:
     name: "식품안전나라 「건강기능식품 원료별 정보」"
     org: "식품의약품안전처"
     url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
-    layer: "제품 사실"
+    layer: "2층 적법라벨"
     grade: G3
     use: {U1: allow, U2: allow, U3: allow, U4: allow}
-    constraints: []
+    constraints: [BY]
     redistributable: true
     value: A
     cost: free
     status: collect
-    access: "웹 게시판 크롤링"
-    scale: "고시형 96 + 개별인정형 472 = 568건"
-    probe_note: >-
-      🚨 2026-09-02 탐침 — 게시판이라 **이용조건 문구가 없다.** 근거 페이지가 따로 필요하다.
-      같은 데이터가 API 15074311 로도 나오고 그쪽은 「제한 없음」이 확인됐다 —
-      caution 이 말한 「셋을 대조해 정본을 정한다」의 답이 여기서 갈릴 수 있다.
-    caution: "🚨 일괄 다운로드·API가 없어 게시판 크롤링이 필요. 568건이면 수집 비용은 감당 가능. / API 15074311(개별인정형)이 같은 데이터일 가능성이 있으나 15058359와의 정확한 차이는 미확인 — 1W에 셋 다 열어 대조."
+    access: "🔄 게시판 목록 + 게시물 본문 (HTML · API 아님)"
+    scale: "🔄 게시물 전체 650건 (2026-09-02 실측 · 권소라). 종전 「고시형 96 + 개별인정형 472 = 568건」과 82건 차이"
+    fragment_note: >-
+      ★ **게시물 본문만 취한다** — 원료명 · 인정번호 · **기능성내용** · 일일섭취량 · 섭취 시 주의사항.
+      🚨 **첨부 「소비자 리포트」 PDF 는 취하지 않는다.** 1쪽에 이렇게 적혀 있다:
+      「소비자 이해를 돕기 위하여 작성하였으며 **건강기능식품 판매 목적의 표시·광고 또는
+      홍보 수단으로 사용할 수 없음**을 알려드립니다」.
+      🚨 **이 프로젝트에서 그 금지는 남의 일이 아니다** — 우리 제품은 광고 문구를 **생성**한다.
+      PDF 의 「12주간 섭취시킨 결과 체지방률이 대조군 대비 유의적으로 개선되었음」 같은
+      인체적용시험 서술이 학습에 들어가면, 생성 모델이 그 문장을 뱉고 사용자가 광고에 쓴다.
+      **그것이 정확히 우리가 막으려는 부당광고다.** 원천이 스스로 금지한 것을 우리가 유통하는 꼴이 된다.
+      ✅ 반면 **기능성내용 문구는 취해도 된다** — 「체지방 감소에 도움을 줄 수 있음」은 인정 사실이고
+      제품 라벨에 실제로 찍히는 법정 표시사항이다. 금지된 것은 **리포트를 광고 수단으로 쓰는 것**이지
+      인정 문구 자체가 아니다.
+      🚨 **업체명은 취하지 않는다** — 제재 맥락은 아니지만(D-17 과 사유가 다르다) 학습 데이터에
+      회사명이 들어갈 이유가 없다.
+      ★ 영문판 병기 · 관련 규정은 「건강기능식품 기능성 원료 및 기준·규격 인정에 관한 규정」 제15조 —
+      law_go_kr covers 에 이 규정이 있는지 확인이 남는다.
+    caution: "🔧 2026-09-02 정정 2건(권소라 §6-3·4) — ① 화면에 「출처 명시 필요」가 있어 BY 를 붙였다(mfds_press 와 같은 누락이었다) ② 게시물 전체 650건으로 종전 568건과 82건 차이. 어느 쪽이 맞는지는 수집 시 실측한다. / API 15074311(개별인정형 472)과 겹치는 범위 확인이 남는다. ★★ 2026-09-02 게시물 본문 실물 확인(오한빈) — PDF 가 아니라 HTML 본문이고 「○ 키 : 값」으로 구조화돼 있다. 원료명 · 인정번호 · 업체명 · 기능성내용 · 일일섭취량 · 섭취 시 주의사항 (+ 영문판 병기). 🚨 「기능성내용 : 체지방 감소에 도움을 줄 수 있음」이 곧 승인된 표시 문구다 — 2층이 찾던 「어떤 표현이 승인되나」의 답이 여기 있다. API(15058359)가 이걸 주는지는 아직 모르지만 게시판에는 확실히 있고 2인 확인도 끝났다. 수집기는 목록 페이징 → 상세 HTML 저장이면 되고, 「○ 키 : 값」 파싱은 전처리가 한다(규약 2 — 수집기는 원본을 저장하고 파싱하지 않는다)."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    reviewed_at: 2026-09-02
+    dissent_note: "검토 근거 「저작권/무단전재 안내 없음」이 재현되지 않음 — 화면에 「무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임」 문구가 있다. 공공누리 부착 여부와 유형 확인 후 재판정 (D-110)"
     robots_checked_at: 2026-09-02
     evidence_url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
     evidence_is_access: true
@@ -368,11 +387,12 @@ sources:
     probe_note: >-
       🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」. G3 전 용도 개방이 뒷받침된다.
       🚨 운영단계 심의승인 + 개발계정 트래픽 10,000. caution 의 「전부 미확인」은 해소됐다.
-    caution: "⚠️ 명칭 외 전부 미확인. 1W에 브라우저로 직접 열어 필드를 확인하고 등급을 확정할 것. 지금 G3는 「식약처 공공데이터」라는 정황 판단이다."
-    collected_at: null
+    caution: "🔄 2026-09-02 해소 — 종전 「명칭 외 전부 미확인 · 등급을 확정할 것 · 정황 판단」은 09-02 실측 이전 문장이라 why 와 정면으로 모순됐다(권소라 §6-5). 이용허락범위 「제한 없음」이 확인됐고 2인 확인도 끝났다. 🚨 남은 것은 운영단계 심의승인(개발단계는 자동승인) — 배포 시점의 선결 조건이다. 필드 목록은 수집 시 확인한다."
+    collected_at: 2026-09-02
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15111774/openapi.do"
 
   cosmetic_restricted:
@@ -391,11 +411,12 @@ sources:
     scale: "미확인"
     probe_note: >-
       🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.
-    caution: "⚠️ 범위 확장 유혹을 조심할 것. 「이 성분이 들어간 제품 자체가 부적합」은 다른 제품이다. 기획서가 정한 경계(광고 문구 판정)를 넘으면 9주 안에 못 끝낸다."
-    collected_at: null
+    caution: "🔄 2026-09-02 — 이용허락범위 「제한 없음」 확인 · 2인 확인 완료(권소라). 🚨 운영단계 심의승인이 남는다. / ⚠️ 범위 확장 유혹을 조심할 것. 「이 성분이 들어간 제품 자체가 부적합」은 다른 제품이다. 기획서가 정한 경계(광고 문구 판정)를 넘으면 9주 안에 못 끝낸다."
+    collected_at: 2026-09-02
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15111772/openapi.do"
 
   aihub_71486:
@@ -412,11 +433,17 @@ sources:
     status: collect
     access: "🔄 신청 → 즉시 · 🚨 내국인만"
     scale: "라벨링 166,339문장 / 10,021문서 · 뉴스 54,000 · 매거진 54,000 · 도서 36,000 · 블로그 18,000 · 방송대본 18,000"
+    probe_note: >-
+      🚨 2026-09-02 탐침 — 규모 불일치. 레지스트리 「라벨링 166,339문장」 vs 상세 페이지
+      「데이터 구축량 2022년/165,000개 문장」. 문서 수 10,021 은 일치한다(합계 10,021 100%).
+      어느 쪽이 맞는지 2인 확인에서 눈으로 정한다.
     caution: "★★ 정정 후에도 최선의 활용법은 그대로다 — 라벨 축을 빌려오는 것. 「확실성 / 시제 / 문장유형」 3축은 아이디어라 저작권 대상이 아니고, 우리 스키마에 넣는 데 승인도 출처표시도 필요 없다. ✅ 여기에 더해 이제 데이터 자체도 배포 모델 학습에 쓸 수 있다 — 보조 태스크로 확실성·시제 판별기를 만들면 R1·R2 변환의 성공 여부를 자동 측정할 수 있다. / 도메인은 뉴스·매거진·도서·블로그라 광고가 아니다(생활·건강 카테고리는 있음)."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71723:
@@ -433,11 +460,19 @@ sources:
     status: collect
     access: "🔄 회원가입 + 신청 → 즉시"
     scale: "원문 251,946건 · 어노테이션 157,455건 · QA 90,944건"
+    probe_note: >-
+      🚨 2026-09-02 탐침 — 규모가 크게 다르다. 레지스트리 「원문 251,946 · 어노테이션 157,455 ·
+      QA 90,944」 vs 상세 페이지 「데이터셋1 원천 66,511 · 라벨링 66,511 / 데이터셋2 QA 20,160」.
+      🚨 QA 가 90,944 대 20,160 이다 — 오차가 아니라 **다른 것을 세고 있다.**
+      이름에 「(고도화)」가 붙어 있으므로 **판본이 갈렸을 가능성**이 높다. 숫자를 고치기 전에
+      어느 판본을 받았는지부터 확인한다 — 판본이 다르면 고칠 것이 아니라 적을 것이다.
     caution: "🚨 이전의 「학내에서는 쓰고 상업화 시점에 협의」라는 판정은 불필요한 자기 제약이었다. 영리 활용이 허용된다. / 실제 제약은 우리가 만든 파생 데이터셋을 공개 배포할 때 발생한다 — 골든셋에 AI Hub 유래분이 섞이면 그 골든셋은 공개할 수 없다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_558:
@@ -454,11 +489,17 @@ sources:
     status: collect
     access: "🔄 회원가입 + 신청 → 즉시"
     scale: "문장 451,110 · 대화세트 132,303 · 7개 라벨"
+    probe_note: >-
+      🚨 2026-09-02 탐침 — 규모 불일치. 레지스트리 「문장 451,110 · 대화세트 132,303」 vs
+      상세 페이지 「453,340문장(대화세트 132,807건)」. 둘 다 어긋난다(+2,230 / +504).
+      상세 페이지에 비윤리 문장 251,064 · 문형 258,904 · 어휘단위 77,978 도 함께 나온다.
     caution: "★ 라이선스가 열렸으니 「데이터를 안 쓰고 구조만 참조」할 이유가 줄었다. 다만 도메인 거리는 그대로이므로, 쓸지 말지는 라이선스가 아니라 도메인 적합도로 판단하라. 라이선스 안전한 대체재 K-MHaS(CC BY-SA, 109,692건)와 비교해 결정할 것."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71694:
@@ -475,11 +516,18 @@ sources:
     status: collect
     access: "🔄 회원가입 + 신청 → 즉시"
     scale: "🚨 미확인 — 제목만 확인됨"
+    probe_note: >-
+      🚨 2026-09-02 탐침 2회전 — 승인 후 상세 페이지를 열었는데도 **규모가 여전히 안 나온다.**
+      페이지에 데이터 구축량 표기가 없고 잡힌 숫자는 예시 표의 「20 건」뿐이다.
+      🚨 「미확인」을 유지한다 — 탐침이 못 찾은 것이지 없는 것이 아니다. 승인이 났으므로
+      이제 **다운로드해서 직접 세는 것**이 가장 확실하다(가치 C 라 우선순위는 낮다).
     caution: "🚨 AI Hub 상세 페이지는 URL 파라미터 조합에 따라 엉뚱한 데이터셋 내용을 반환한다. 실제로 이번에 71694·63 두 URL이 동일한 「상표 이미지 및 텍스트」를 반환했고, 파라미터 없는 URL로 다시 열어서야 제목이 바로잡혔다. 데이터셋 번호와 제목을 반드시 눈으로 대조할 것."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71843:
@@ -521,7 +569,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://github.com/bab2min/corpus"
     evidence_is_access: true
 
@@ -539,11 +588,12 @@ sources:
     status: collect
     access: "자유 다운로드"
     scale: "200,000건 (train 150k / test 50k)"
-    caution: "⚠️ 원본 CC0를 근거로 삼되 출처표시(CC BY 2.0 조건)까지 함께 이행하면 양쪽 해석을 모두 충족한다."
+    caution: "⚠️ 원본 CC0를 근거로 삼되 출처표시(CC BY 2.0 조건)까지 함께 이행하면 양쪽 해석을 모두 충족한다. 🔧 2026-09-02(권소라 §6-10) — 🚨 라이선스는 HF 카드 본문이 아니라 페이지 상단 메타데이터에 있다. 본문의 Licensing Information 은 [More Information Needed] 로 비어 있어 다음 검토자가 같은 곳에서 헤맨다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://github.com/e9t/nsmc"
     evidence_is_access: true
 
@@ -609,7 +659,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://adstat.kobaco.co.kr/mcr/portal/community/articleListPage.do?bbsId=FAQ"
     evidence_is_access: true
 
@@ -636,24 +687,24 @@ sources:
     evidence_is_access: true
 
   krei_food:
-    name: "KREI 식품소비행태조사 ★접근성 1위"
+    name: "KREI 식품소비행태조사 ★접근성 1위 · 🔄G0→G3"
     org: "한국농촌경제연구원"
     url: "https://www.krei.re.kr/foodSurvey/page/460"
     layer: "6층 세그먼트·페르소나"
-    grade: G0
-    use: {U1: deny, U2: deny, U3: deny, U4: deny}
-    constraints: []
+    grade: G3
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    constraints: [BY]
     redistributable: true
     value: A
     cost: free
-    status: hold
+    status: collect
     access: "✅ 신청·승인·회원가입 없이 즉시 다운로드"
     scale: "3,188가구 / 성인 5,851명 / 청소년 588명 · Excel + SPSS"
-    status_note: >-
-      🚨 D-108 — G0 라 용도가 전부 닫혀 있는데 collect 였다. 선행 작업은 성인 설문지 PDF를
-      직접 열어 건강기능식품 문항 존재를 확인하는 것(1시간)이다. 문항이 없으면 6층에서
-      기대한 값이 나오지 않으므로 확인이 수집보다 먼저다. 가치 A · 접근성 1위.
-    caution: "🚨 건강기능식품 문항 포함 여부가 미확인이다 — 2023 기초분석보고서·2024 통계보고서 목차에 건기식 전용 장절이 없다. 성인 설문지 PDF를 직접 열어 확인할 것(1시간)."
+    probe_note: >-
+      ✅ 2026-09-02 확인 완료 — D-108 로 hold 였던 것이 풀렸다. 건기식 문항 존재 확인,
+      공공누리 **제1유형**(출처표시만) 확인으로 G0 → G3 승격. status 도 collect 로 올린다.
+      🚨 개인 단위 응답 레코드다 — 세그먼트 생성 시 k-익명성 게이트가 걸린다.
+    caution: "🚨 개인 단위 응답 레코드다. 등급은 G3 지만 세그먼트를 만들 때 k-익명성 게이트(segment.member_count >= K_MIN)가 걸린다 — 5명짜리 군집은 DB가 생성을 거부한다. 🚨 U2·U3 를 닫은 것은 등급 때문이 아니라 성격 때문이다 — 설문 응답은 RAG 로 색인하거나 화면에 인용할 「원문」이 아니다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
@@ -679,52 +730,9 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://khff.or.kr/user/info/InfoBoardUserView.do?_menuNo=369&boardSeqno=10035&postsSeqno=119567"
-    evidence_is_access: true
-
-  nasmedia_npr:
-    name: "나스미디어 2026 NPR 인터넷 이용자 조사 ★사용자제공"
-    org: "KT 나스미디어"
-    url: "https://www.nasmedia.co.kr/정기보고서/2026-03-npr-usersurvey-insight/"
-    layer: "6층 세그먼트·페르소나"
-    grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
-    constraints: [BY]
-    redistributable: true
-    value: A
-    cost: free
-    status: collect
-    access: "✅ 무료 PDF (소속+이메일만)"
-    scale: "n=2,000 · 2026.02.04~13 · 2004년부터 연1회"
-    caution: "★ 「왜 이 제품군인가」를 발표에서 설득할 때 쓸 수 있는 가장 좋은 숫자다. 화장품·식품이 크리에이터 추천 구매 1·2위이고 그 채널이 규제 사각지대라는 논리가 바로 선다."
-    collected_at: null
-    decided_at: 2026-08-20
-    decided_by: 오한빈
-    reviewed_by: null
-    evidence_url: "https://www.nasmedia.co.kr/정기보고서/2026-03-npr-usersurvey-insight/"
-    evidence_is_access: true
-
-  nasmedia_fb:
-    name: "나스미디어 2026 식음료 트렌드 ★사용자제공 · 명칭정정"
-    org: "KT 나스미디어"
-    url: "https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/"
-    layer: "6층 세그먼트·페르소나"
-    grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
-    constraints: [BY]
-    redistributable: true
-    value: B
-    cost: free
-    status: collect
-    access: "✅ 무료 PDF"
-    scale: "2026.05.29 발행 · 업종 시리즈(1)"
-    caution: "★ 2025 「주요 업종 시리즈 06 건강기능식품」 PDF를 함께 받을 것 — 이 프로젝트에는 식음료 일반보다 그쪽이 직결된다."
-    collected_at: null
-    decided_at: 2026-08-20
-    decided_by: 오한빈
-    reviewed_by: null
-    evidence_url: "https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/"
     evidence_is_access: true
 
   kcc_media:
@@ -750,11 +758,12 @@ sources:
     probe_note: >-
       🔄 2026-09-02 탐침 확인 — 「공공저작물 : 출처표시 (제 1유형)」.
       BY 를 붙인 판정(D-108 작업)이 실측으로 확인됐다.
-    caution: "🔄 2026-09-02 확인 — CSV · 가구/개인 통계표 + 다이어리 자료. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사."
+    caution: "🔄 2026-09-02 확인 — CSV · 가구/개인 통계표 + 다이어리 자료. 🔧 2인 확인 시 추가 관찰(권소라 §6-9) — 「자녀별 설문 통계표」가 하나 더 있고 OpenAPI 배지도 있다. why 는 CSV 3종만 적으므로 수집 경로가 갈릴 수 있다. / 대안 후보: 15147369 KOBACO 성별·연령별 OTT 이용 빈도, 15145170 언론재단 언론수용자 조사."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/3068653/fileData.do"
 
   kosis:
@@ -775,13 +784,13 @@ sources:
       🚨 2026-09-02 탐침 — 근거 URL(serviceInfo/openAPIGuide.do)은 **API 가이드 페이지이고
       이용조건을 말하지 않는다.** caution 은 「상업 이용이 명시적으로 허용된 몇 안 되는 항목」
       이라고 단언하는데, 그 근거를 보여 주는 페이지가 지금 없다. 역검토 v1.3 §2 가 예측한 형태다.
-    caution: "★ 조사 대상 전체에서 상업 이용이 명시적으로 허용된 몇 안 되는 항목이다. 지금 바로 붙일 것."
+    caution: "★ 조사 대상 전체에서 상업 이용이 명시적으로 허용된 몇 안 되는 항목이다. 🚨 다만 전부는 아니다(2026-09-02 권소라 §6-2) — 국제·북한통계는 비상업 전용 + 재배포 금지이고, 간행물은 공공누리 유형 안내를 따른다. NC 가 걸리는 하위 집합이 있으므로 프래그먼트 단위 확인 사항이다(D-18 · mfds_press 와 같은 형태). 통계표를 고를 때 이 둘을 피한다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
-    evidence_url: "https://kosis.kr/serviceInfo/openAPIGuide.do"
-    evidence_is_access: true
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
+    evidence_url: "https://kosis.kr/serviceInfo/useGuide.do"
 
   knhanes:
     name: "국민건강영양조사 (KNHANES)"
@@ -846,11 +855,15 @@ sources:
     status: collect
     access: "🔄 신청 → 즉시 · 🚨 내국인만"
     scale: "250,312건 — 쇼핑몰 리뷰 225,300 + SNS 리뷰 25,012"
+    probe_note: >-
+      ✅ 2026-09-02 탐침 — 상세 페이지 「250,312건」으로 레지스트리와 **일치 확인**.
     caution: "🚨 이전 판정을 뒤집는다. 「data/g2_nc/에 격리하고 학습 스크립트에서 제외」는 불필요했다. 정확한 제약은 데이터 재배포이므로, 격리해야 할 대상은 학습 스크립트가 아니라 데이터셋 공개·산출물 배포 스크립트다. / 남는 제약 셋 — ① 내국인만 신청 ② 출처 명시 의무 ③ 골든셋에 AI Hub 유래 문장이 섞이면 그 골든셋을 공개 배포할 수 없다(provenance 필드로 추적할 것)."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    approved_at: 2026-09-02
+    approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   meta_adlibrary:
@@ -924,7 +937,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://developers.google.com/youtube/terms/developer-policies"
 
   google_trends:
@@ -945,7 +959,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://developers.google.com/search/blog/2025/07/trends-api"
     evidence_is_access: true
 
@@ -965,11 +980,13 @@ sources:
     scale: "의결문 5,870건 + 식약처 행정처분 레코드"
     masking: 🚨 원천이 마스킹된 뒤의 값만 쓴다 — 「반복 위반 비율」은 업체 식별을 전제하므로
       집계 단계에서 식별자를 다시 만들지 않는다 (D-17)
-    caution: "★★ 인용한 숫자보다 산출한 숫자가 강하다. \"MarketsandMarkets에 따르면\"보다 \"우리가 수집한 처분 레코드에서 계산하면\"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 제품의 일부다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다."
+    caution: "★★ 인용한 숫자보다 산출한 숫자가 강하다. \"MarketsandMarkets에 따르면\"보다 \"우리가 수집한 처분 레코드에서 계산하면\"이 심사에서 훨씬 잘 먹힌다. / 게다가 이 계산 자체가 제품의 일부다 — 위험도 산정의 「예상 제재 금액」이 바로 이 분포에서 나온다. 하나를 만들어 두 번 쓴다. 🚨 원천이 재판정되면 이 통계도 재판정 대상이다 — 근거가 남의 약관이 아니라 우리 원천이기 때문이다. 🚨 2026-09-02 — 파생물이 원천보다 먼저 서명됐다(권소라 §6-8): 이 소스는 서명됐는데 원천인 law_go_kr 은 아직 미검토다. 인계문서 §3-② 게이트(파생 소스의 allow 집합 ⊆ 모든 원천의 allow 집합)가 있으면 코드가 잡는다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
+    reviewed_at: 2026-09-02
+    derived_from: [ftc_decisions, mfds_sanctions, law_go_kr]
     evidence_url: "../01_기획/경제성_근거.md"
 
   mfds_production:
@@ -990,7 +1007,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   # ── 검토 예정 (D-64) · 조사·제안: 이서은
@@ -1032,6 +1050,11 @@ sources:
   #    여기 있는 것은 「가치가 없어서」가 아니라 「법적·윤리적으로 막혀서」다.
   #    가치 판정으로 내린 것은 아래 not_adopted 에 둔다 — 등급 축을 오염시키지 않기 위해서다.
   blocked:
+    # 🚨 2026-09-02 — 게시판 유의사항 원문을 직접 확인하고 올렸다 (오한빈).
+    #    「단순 열람 외에 무단 변경, 복제·배포, 개작 등의 이용을 금지」 + 법적 처벌 경고.
+    #    🚨 수기 전사도 복제라 manual 로도 갈 수 없다. robots.txt 는 404(규칙 없음)였다 —
+    #       robots 가 막은 것이 아니고, 확인 순서가 반대였다면 그대로 위반했다.
+    - {name: 기능성표시식품 심의완료 공개목록 (한국식품산업협회), grade: G1, reason: "🚨 「단순 열람 외에 무단 변경, 복제·배포, 개작 등의 이용을 금지하며 위반 시 법적 처벌」 명시. 학습=복제+개작 · 색인=복제 · 인용=복제·배포 — 전 용도가 금지 범위다. ✅ 근거 규정(기능성 표시·광고 규정 제7조)은 law_go_kr covers 로 이미 확보. 잃는 것은 「그 규정에 따라 실제 승인된 제품·문구 목록」이다"}
     - {name: 쿠팡·네이버·올리브영 리뷰 직접 크롤링, grade: G1, reason: 약관 위반 + robots 금지}
     - {name: 고객사 CRM·구매이력·NPS 개인 레코드, grade: G1, reason: 개인정보 — sLLM 진입 금지}
     - {name: FGI 인터뷰 녹취·전사본, grade: G1, reason: 개인정보 + 비밀유지}
@@ -1048,6 +1071,12 @@ sources:
 #       등급 축 자체가 오염되고, 나중에 필요해졌을 때 재판정 비용이 생긴다.
 #    실제 등급을 그대로 두고 「왜 안 쓰는가」만 기록한다 (D-72 — 가치 판정과 등급 판정은 다른 축).
 not_adopted:
+  # 🔄 2026-09-02 — PDF 마지막 장의 이용조건을 직접 열어 확인하고 내렸다 (D-110).
+  #    🚨 가치가 없어서가 아니다. NPR 은 가치 A 였고 지금도 A 다 — 조건이 우리와 안 맞을 뿐이다.
+  - {key: nasmedia_npr, name: 나스미디어 2026 NPR 인터넷 이용자 조사, grade: G2, value: A,
+     reason: "🚨 NC + PREAPPROVAL + ND 성격 — 「상업적으로 활용할 수 없습니다」 · 「인용 및 활용 시 사전 동의를 득해야」 · 「텍스트를 임의로 가공해 재인용 금지」. ①은 모두의 말뭉치가, ③은 UnSmile 이 탈락한 조항이다. 🚨 자체 조사(n=2,000)라 소급할 원본이 없다"}
+  - {key: nasmedia_fb, name: 나스미디어 TrendIssue 업종 리포트 (식음료·건강기능식품), grade: G2, value: B,
+     reason: "🚨 NPR 과 같은 조항. ✅ 다만 모든 장에 원본 출처가 표기돼 있어 건기식협회·식약처·엠브레인으로 소급 가능하다 — 보고서는 길잡이로만 쓰고 숫자는 원본에서 가져온다 (D-16 과 같은 처방)"}
   - {key: modu_web, name: 국립국어원 모두의 말뭉치, grade: G2, value: X,
      reason: "🚨 PREAPPROVAL — 산출물 공개마다 사전 승인이 걸리고 리드타임을 통제할 수 없다. 발표·시연영상·코드 공개가 전부 승인 대상"}
   - {key: unsmile, name: Smilegate UnSmile 혐오표현, grade: G2, value: X,

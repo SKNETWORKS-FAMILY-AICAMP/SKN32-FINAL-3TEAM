@@ -13,6 +13,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from collect import http
+
 ROOT = Path(__file__).resolve().parent.parent
 _loaded = False
 
@@ -31,6 +33,12 @@ KEYS = {
     "DATA_GO_KR_KEY": (
         "공공데이터포털 — 식약처 API 4종 (S1-04 · S1-05 · S2-03)",
         "data.go.kr 활용신청 (S0-05) — 즉시~1일",
+    ),
+    "FOODSAFETY_KEY": (
+        "식품안전나라 OpenAPI — 건기식 기능성 원료 I-0040 · 개별인정형 I-0050",
+        "🚨 data.go.kr 키가 아니다. 15058359 는 **API 유형이 LINK** 라 실제 호출이 "
+        "openapi.foodsafetykorea.go.kr 로 가고, 인증키도 그쪽에서 따로 발급받는다. "
+        "data.go.kr 활용신청 버튼이 그 사이트로 보낸다",
     ),
     "KOSIS_KEY": (
         "KOSIS 국가통계 — 6층 세그먼트",
@@ -62,14 +70,26 @@ def load() -> None:
     """`.env` 를 한 번만 읽는다. 이미 설정된 환경 변수는 덮어쓰지 않는다."""
     global _loaded
     if not _loaded:
-        load_dotenv(ROOT / ".env", override=False)
+        # 🚨 encoding 을 명시한다. Windows 편집기가 .env 를 **UTF-8 BOM** 으로 저장하면
+        #    dotenv 가 첫 줄 키 이름 앞에 U+FEFF 를 붙인다 — `LAW_OC_KEY` 를 넣어도
+        #    `\ufeffLAW_OC_KEY` 로 들어가 못 읽는다. 값이 있는데 없다고 나오는,
+        #    가장 찾기 어려운 종류의 실패다 (2026-09-02 실제 발생).
+        load_dotenv(ROOT / ".env", override=False, encoding="utf-8-sig")
         _loaded = True
 
 
 def get(name: str, *, required: bool = True) -> str:
-    """키를 읽는다. 없으면 무엇을 어디서 받는지 알려주며 실패한다."""
+    """키를 읽는다. 없으면 무엇을 어디서 받는지 알려주며 실패한다.
+
+    🚨 읽은 값은 곧바로 `http.register_secret()` 에 등록한다 (D-111 확장).
+       **키를 손에 쥐는 곳이 여기 하나뿐**이므로, 가릴 것을 알려 주는 자리도 여기다.
+       등록해 두면 `FetchError` 가 URL 을 찍어도 그 값이 `<이름>` 으로 바뀐다 —
+       2026-09-02 에 `serviceKey` 가 오류 메시지로 샜다.
+    """
     load()
     value = (os.environ.get(name) or "").strip()
+    if value:
+        http.register_secret(name, value)
     if value or not required:
         return value
 

@@ -299,6 +299,11 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
     🚨 구조가 못 막는 것을 코드가 막는다. 검사 16(판정 경로 외부 API = 0)과 같은 방식이다.
        raw/ 에는 등급이 섞여 있으므로, 여기를 글롭하는 학습 스크립트가 하나만 있어도
        G2·G0 원문이 학습에 들어간다.
+
+    🔄 **주석과 docstring 은 보지 않는다** (2026-09-02). 런처의 `register` 설명에
+       *"data/raw/<소스id>/ 로 복사한다"* 라고 적었더니 **그 설명이 위반으로 잡혔다** —
+       게이트 23 에서 겪은 것과 같은 형태다. 🚨 **게이트가 산문을 검사하기 시작하면
+       사람이 주석을 지운다.** 막으려는 것은 「읽는 코드」이지 「읽는다고 적은 문장」이 아니다.
     """
     offenders: list[str] = []
     for path in ROOT.rglob("*.py"):
@@ -309,7 +314,19 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
         if parts[0] in RAW_READERS or rel == Path("tests/test_governance_layout.py"):
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if "data/raw" in text or "data\\raw" in text:
+        if "data/raw" not in text and "data\\raw" not in text:
+            continue
+        # 주석·docstring 을 걷어낸 뒤 다시 본다 — 남아 있으면 그것은 코드다.
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            offenders.append(str(rel))
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+                node.value.value = ""  # docstring 을 비운다
+        code = ast.unparse(tree)
+        if "data/raw" in code or "data\\raw" in code:
             offenders.append(str(rel))
 
     assert not offenders, (
@@ -522,16 +539,13 @@ def test_탐침은_저장_경로를_부를_수_없다() -> None:
         "🚨 탐침이 저장 경로에 손을 댔다 — 게이트 전체의 우회로가 된다 (D-109): " + str(hits)
     )
 
-    # 🚨 쓰기는 딱 한 자리여야 하고 그 자리는 docs/ 다. 등급 디렉터리는 수집기만 쓴다 (D-19).
-    writes = [
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Attribute)
-        and n.func.attr == "write_text"
-    ]
-    assert len(writes) == 1, f"탐침의 쓰기는 리포트 한 자리뿐이어야 한다 (현재 {len(writes)}곳)"
-    assert 'ROOT / "docs' in src, "탐침 산출은 docs/ 로만 나간다"
+    # 🚨 **쓰기의 개수가 아니라 목적지를 본다** (2026-09-02 정정).
+    #    처음에는 `write_text` 를 한 자리로 못박았는데, 그 제약이 실제 결함을 낳았다 —
+    #    단일 소스 탐침이 **전체 리포트를 덮어써** 32건 결과가 사라졌고, 고치려면
+    #    누적 캐시에 한 번 더 써야 했다. 지킬 것은 「한 번만 쓴다」가 아니라
+    #    **「data/ 에는 쓰지 않는다」**이므로 그쪽을 검사한다 (D-19).
+    assert 'ROOT / "docs' in src, "탐침 리포트는 docs/ 로 나간다"
+    assert 'ROOT / "build"' in src, "탐침 캐시는 build/ 로 나간다"
 
     # 🚨 **런타임으로 증명한다** — 문자열 검사는 「안 썼다」만 말하고
     #    「쓸 수 없다」는 말하지 못한다. 탐침을 새 프로세스에서 import 했을 때
@@ -568,12 +582,27 @@ def test_탐침_게이트는_G1과_수기와_승인선행을_막는다() -> None
 
     srcs = _sources()
     manual = [k for k, v in srcs.items() if v.get("status") == "manual"]
-    gated = [k for k, v in srcs.items() if "GATED" in (v.get("constraints") or [])]
+    # 🔄 승인이 난 GATED 는 이제 통과한다 (approved_at · 2026-09-02 AI Hub 5건).
+    #    표본은 **아직 승인이 없는** GATED 여야 한다 — 게이트 27 이 그 짝을 검사한다.
+    gated = [
+        k
+        for k, v in srcs.items()
+        if "GATED" in (v.get("constraints") or []) and not v.get("approved_at")
+    ]
     assert manual and gated, "표본이 없다 — 레지스트리가 바뀌었으면 이 게이트를 다시 본다"
 
     for key in manual[:1] + gated[:1]:
         with pytest.raises(RegistryError):
             probe(key)
+
+    # 🔄 반대로 **승인이 난 GATED 는 통과해야 한다** — 막는 것은 승인 부재이지 GATED 자체가 아니다.
+    approved = [
+        k
+        for k, v in srcs.items()
+        if "GATED" in (v.get("constraints") or []) and v.get("approved_at")
+    ]
+    for key in approved[:1]:
+        assert probe(key), f"{key}: 승인이 났는데도 탐침이 막힌다"
 
     # 🚨 G0 는 **통과해야 한다.** 전 용도 deny 인 채로 탐침 대상인 것이 정상이다 —
     #    오히려 G0 야말로 탐침이 가장 필요한 등급이다 (D-72 의 「확인 후 승격」).
@@ -642,3 +671,337 @@ def test_수동보강_표에_중복_키가_없다(path: str, name: str) -> None:
         assert not dupes, f"🚨 {path}:{name} 에 중복 키가 있다 — 앞의 값이 조용히 버려진다: {dupes}"
         return
     pytest.fail(f"{path} 에서 {name} dict 를 찾지 못했다 — 이름이 바뀌었으면 게이트도 고친다")
+
+
+@pytest.mark.gate
+def test_gated_소스는_승인_기록_없이는_열리지_않는다() -> None:
+    """🚨 **수집기가 GATED 를 아예 보지 않고 있었다** (D-109 · 2026-09-02).
+
+    탐침(`probe()`)이 *"승인 전 접근은 조건 위반"* 이라며 막던 조건을, 정작 **실제로
+    받아 오는 `require()` 는 검사하지 않았다.** 승인 없이 받는 경로가 열려 있었던 것이고,
+    **탐침을 만들지 않았으면 드러나지 않았을 자리**다.
+
+    승인은 사람이 신청해 받아 오는 사실이라 사람이 적는다 — `robots_checked_at` 과 같은 종류다.
+    🚨 그리고 **「신청했다」가 아니라 「승인됐다」의 날짜**여야 한다. 둘을 같은 칸에 적으면
+    승인 대기 중인 소스가 승인된 것으로 읽히고, 그 오독은 약관 위반으로 끝난다.
+    """
+    from collect.registry import RegistryError, probe, require  # noqa: PLC0415
+
+    srcs = _sources()
+    gated = {k: v for k, v in srcs.items() if "GATED" in (v.get("constraints") or [])}
+    assert gated, "GATED 소스가 없다 — 레지스트리가 바뀌었으면 이 게이트를 다시 본다"
+
+    for key, src in gated.items():
+        if src.get("approved_at"):
+            assert src.get("approved_by"), (
+                f"{key}: approved_at 만 있고 approved_by 가 없다 — "
+                "누가 신청했는지가 남아야 한다 (AI Hub 는 내국인 한정 데이터셋이 있다)"
+            )
+            continue
+        # 승인 기록이 없으면 탐침도 수집기도 거부해야 한다
+        with pytest.raises(RegistryError, match="approved_at"):
+            probe(key)
+        opened = [u for u in sorted(VALID_USES) if (src.get("use") or {}).get(u) == "allow"]
+        if opened:
+            with pytest.raises(RegistryError):
+                require(key, use=opened[0])
+
+
+@pytest.mark.gate
+def test_등록은_2인확인_게이트를_지나야_한다() -> None:
+    """🚨 **탐침의 반대편**이다 — 게이트 23 이 「저장하지 않음」을 지켰다면 여기는 반대다 (D-109).
+
+    AI Hub 처럼 **사람이 신청해 내려받는** 소스는 수집기가 가져오지 않는다. 그래서
+    `manifest_append` · `mark_collected` 가 한 번도 안 불리고, **파일은 있는데 원장에는 없는**
+    상태가 된다. `collect/ingest.py` 가 그 자리를 메운다.
+
+    🚨 **사람이 손으로 받아 왔다는 사실이 2인 확인을 면제하지 않는다.** 오히려 수집기가
+    돌지 않는 소스에서는 이 문이 **유일하게 남은 게이트**다. 그래서 `register` 는
+    `registry.require()`(= `reviewed_by` 검사)로 시작해야 하고, 탐침의 느슨한 문
+    `registry.probe()` 를 쓰면 안 된다.
+    """
+    src = (ROOT / "collect" / "ingest.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    fns = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    assert "cmd_register" in fns, "등록 진입점이 없다"
+
+    def calls(node: ast.AST) -> set[str]:
+        out = set()
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call):
+                f = n.func
+                out.add(f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", ""))
+        return out
+
+    reg = calls(fns["cmd_register"])
+    assert "require" in reg, (
+        "🚨 register 가 registry.require() 로 시작하지 않는다 — "
+        "reviewed_by 검사를 지나지 않고 원장에 올라간다 (규약 1 · D-66)"
+    )
+    assert "probe" not in reg, (
+        "🚨 register 가 탐침의 느슨한 문(registry.probe)을 쓴다 — "
+        "탐침은 reviewed_by 를 면제한다. 등록에 그 면제를 물려주면 게이트가 사라진다"
+    )
+    assert {"manifest_append", "mark_collected"} <= reg, (
+        "등록이 원장에 남기지 않는다 — provenance 는 나중에 못 붙인다 (규약 3·7 · D-71)"
+    )
+
+    # 🚨 count 는 반대로 **아무것도 바꾸면 안 된다.** 2인 확인 전에도 도는 자리다.
+    cnt = calls(fns["cmd_count"])
+    forbidden = {"manifest_append", "mark_collected", "copy2", "move", "write_bytes", "write_text"}
+    assert not (cnt & forbidden), (
+        f"🚨 count 가 상태를 바꾼다 — 읽기 전용이어야 한다 (D-109): {sorted(cnt & forbidden)}"
+    )
+
+
+@pytest.mark.gate
+def test_파생_소스는_원천보다_넓게_열리지_않는다() -> None:
+    """🚨 파생물이 원천보다 넓게 열리면 **등급 체계가 파생 경로로 새어 나간다** (권소라 §6-8).
+
+    `self_sanction_stat` 은 공정위 의결문 · 식약처 행정처분 API · **과징금 고시**에서 계산한
+    자체 통계다. 원천이 셋인데 판정 근거는 **둘만 적고 있었고**, 원천 하나가 재판정으로
+    닫혀도 파생물은 열린 채 남는다 — 아무도 그 연결을 보지 않기 때문이다.
+
+    그래서 `derived_from` 을 **필드로** 두고 두 가지를 검사한다.
+      ① **allow 집합의 포함** — 파생물이 연 용도는 **모든 원천이 함께 연** 것이어야 한다
+      ② **서명 순서** — 파생물에 `reviewed_by` 가 있으면 원천에도 있어야 한다.
+         🚨 원천을 확인하지 않은 사람이 파생물의 등급을 재현할 수는 없다 (D-66).
+    """
+    srcs = _sources()
+    derived = {k: v for k, v in srcs.items() if v.get("derived_from")}
+    assert derived, "파생 소스가 없다 — self_sanction_stat 가 사라졌으면 이 게이트를 다시 본다"
+
+    for key, src in derived.items():
+        origins = src.get("derived_from") or []
+        for o in origins:
+            assert o in srcs, f"{key}.derived_from 의 {o!r} 가 레지스트리에 없다"
+
+        opened = {u for u in sorted(VALID_USES) if (src.get("use") or {}).get(u) == "allow"}
+        for o in origins:
+            o_open = {u for u in sorted(VALID_USES) if (srcs[o].get("use") or {}).get(u) == "allow"}
+            assert opened <= o_open, (
+                f"🚨 {key} 가 원천 {o} 보다 넓게 열려 있다 — {sorted(opened - o_open)}. "
+                "파생물의 용도는 모든 원천이 함께 연 것이어야 한다 (D-71 · 규약 7)"
+            )
+
+        if src.get("reviewed_by"):
+            unsigned = [o for o in origins if not srcs[o].get("reviewed_by")]
+            assert not unsigned, (
+                f"🚨 {key} 는 서명됐는데 원천 {unsigned} 가 미검토다 — "
+                "파생물이 원천보다 먼저 서명되는 순서다. 원천을 확인하지 않은 사람이 "
+                "파생물의 등급을 재현할 수 없다 (D-66 · 권소라 2인확인 §6-8)"
+            )
+
+
+# ══════════════════════════════════════════════════════════
+# 키 — 유출은 언제나 「덮은 줄 알았던 경로」로 난다 (2026-09-02)
+#
+# 🚨 이 세 게이트는 사고 뒤에 생겼다. API 키가 대화창에 붙여넣어졌고, 원인을 따라가니
+#    막힌 경로는 하나(.env 커밋)뿐이고 나머지가 열려 있었다.
+#      ① 화면    — 확인하려고 .env 를 편집기로 열면 그때 화면에 뜬다
+#      ② 셸 기록 — 값을 인자로 주면 ConsoleHost_history.txt 에 남는다
+#      ③ 이름    — .env 는 덮여 있지만 .env.bak · .env.example 은 커밋된다
+#    ①은 `launcher.py keys`(지문), ②는 getpass 가 맡고, 여기서는 ②③을 검사한다.
+#    🚨 검사 대상은 **사람이 지킬 약속이 아니라 저장소의 상태**다 — 약속은 잊힌다.
+# ══════════════════════════════════════════════════════════
+
+# .env.example 에서 값을 가져도 되는 것 — 비밀이 아니라 기본값인 줄뿐이다.
+EXAMPLE_DEFAULTS = {"DATABASE_URL", "MLFLOW_TRACKING_URI"}
+
+
+@pytest.mark.gate
+def test_env_example_에는_실제_값이_없다() -> None:
+    """🚨 `.env` 는 gitignore 에 있고 `.env.example` 은 **커밋된다** — 한 글자 차이다.
+
+    발급받은 키를 채울 때 파일을 잘못 여는 것은 드문 실수가 아니라 **예상되는 실수**다.
+    두 파일이 나란히 있고 내용이 거의 같기 때문이다. gitleaks 훅이 마지막 그물이지만
+    그것은 키 **모양**을 보고 걸러서, 모양이 평범한 키는 지나간다.
+    여기서는 모양이 아니라 **자리**를 본다 — 예제에 값이 있으면 그 자체가 위반이다.
+    """
+    path = ROOT / ".env.example"
+    assert path.exists(), ".env.example 이 없다 — 키 이름의 단일 출처다"
+
+    filled = []
+    for no, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, value = stripped.split("=", 1)
+        name = name.strip().removeprefix("export ").strip()
+        if value.strip() and name not in EXAMPLE_DEFAULTS:
+            filled.append(f"{no}행 {name}")
+
+    assert not filled, (
+        f"🚨 .env.example 에 값이 채워져 있다 — {filled}. 이 파일은 커밋된다.\n"
+        f"   값은 .env 에 넣는다: uv run python launcher.py setkey <이름>\n"
+        f"   기본값이라 값이 있어야 한다면 EXAMPLE_DEFAULTS 에 등재하고 왜인지 적는다."
+    )
+
+
+@pytest.mark.gate
+def test_키_입력_경로가_값을_인자로_받지_않는다() -> None:
+    """🚨 값이 인자로 지나가면 셸 기록에 남는다 — 마스킹 입력을 만든 뜻이 사라진다.
+
+    `--key` 옵션 하나가 편의를 이유로 다시 생기는 것을 막는다. 「급하니까 이번만」이
+    커밋되면 그 뒤로는 그것이 표준 사용법이 된다.
+
+    검사는 **AST** 로 한다. 문자열로 찾으면 주석·docstring 이 걸려서, 사람이
+    주석을 지워 게이트를 통과시키는 쪽으로 움직인다 (게이트 17 에서 겪은 그대로).
+    """
+    src = (ROOT / "collect" / "setkey.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert "getpass" in names | attrs, (
+        "🚨 collect/setkey.py 가 getpass 를 쓰지 않는다 — 입력이 화면에 뜬다"
+    )
+
+    # 런처 쪽 — setkey 명령의 인자가 「이름」 하나뿐이어야 한다
+    ltree = ast.parse((ROOT / "launcher.py").read_text(encoding="utf-8"))
+    fn = next(
+        (n for n in ltree.body if isinstance(n, ast.FunctionDef) and n.name == "setkey"),
+        None,
+    )
+    assert fn is not None, "launcher.py 에 setkey 명령이 없다"
+    params = [a.arg for a in fn.args.args]
+    assert params == ["name"], (
+        f"🚨 launcher.setkey 의 인자가 {params} 다 — 이름 하나여야 한다.\n"
+        "   값을 받는 인자가 생기면 PowerShell 기록에 키가 남는다."
+    )
+
+
+@pytest.mark.gate
+def test_설정파일이_이름을_바꿔_새지_않는다() -> None:
+    """🚨 `.gitignore` 의 `.env` 한 줄로는 모자라다.
+
+    편집기와 OS 가 `.env~` · `.env.bak` · `.env.save` · `.env.local` 을 만든다.
+    안에 든 것은 똑같은 키인데 이름이 달라서 그 한 줄에 안 걸린다.
+    `.env.*` 로 덮고 `!.env.example` 로 템플릿만 되살린다 — 순서가 뒤바뀌면
+    예제가 커밋되지 않아 팀원이 키 이름을 알 수 없게 된다.
+    """
+    lines = [ln.strip() for ln in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()]
+    for need in (".env", ".env.*", "!.env.example"):
+        assert need in lines, f"🚨 .gitignore 에 `{need}` 가 없다"
+    assert lines.index(".env.*") < lines.index("!.env.example"), (
+        "🚨 `!.env.example` 이 `.env.*` 보다 앞에 있으면 되살리지 못한다 — gitignore 는 "
+        "뒤에 오는 규칙이 이긴다"
+    )
+
+    # 실제 추적 상태 — 규칙이 맞아도 이미 추적 중이면 gitignore 는 아무것도 못 한다
+    proc = subprocess.run(
+        ["git", "ls-files", "-z", "--", ".env", ".env.*"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode == 0:
+        tracked = {p for p in proc.stdout.split("\0") if p and p != ".env.example"}
+        assert not tracked, (
+            f"🚨 키 파일이 이미 git 에 추적되고 있다 — {sorted(tracked)}. "
+            "gitignore 는 **추적되지 않는 파일**에만 듣는다. "
+            "`git rm --cached <파일>` 로 먼저 떼어 내고, 이미 push 했다면 키를 재발급한다."
+        )
+
+
+@pytest.mark.gate
+def test_오류_메시지가_키를_그대로_찍지_않는다() -> None:
+    """🚨 D-111 이 센 경로는 셋이었다 — 화면 입력 · 셸 기록 · 키 이름. **넷째가 있었다.**
+
+    2026-09-02, `cosmetic_*` 두 건이 403 으로 실패했고 `FetchError` 가 요청 URL 을
+    통째로 찍어 `serviceKey` 값이 터미널·스크롤백·대화 기록에 남았다. 키를 재발급했다.
+
+    앞의 셋과 성질이 다르다 — **사람이 실수해야 새는 것이 아니라 코드가 정상 동작할 때
+    샌다.** 실패할 때마다 샌다. 그리고 `probe.py` 는 이 메시지를 `실측_<날짜>.md` 와
+    `build/probe_results.json` 에 적고 **그것이 커밋된다.** 터미널은 닫으면 사라지지만
+    커밋은 남는다.
+
+    두 겹으로 본다.
+      ① 구조 — `raise FetchError(...)` 안에 **가공되지 않은 `url`** 이 들어가지 않는다 (AST)
+      ② 동작 — 실제로 가려지는가. 구조만 보면 `redact` 가 빈 껍데기여도 통과한다
+    """
+    src = (ROOT / "collect" / "http.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    # ── ① 구조 — raise FetchError(f"{url} …") 를 막는다
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call)):
+            continue
+        callee = node.exc.func
+        if getattr(callee, "id", getattr(callee, "attr", None)) != "FetchError":
+            continue
+        for sub in ast.walk(node.exc):
+            # f-string 안의 `{url}` 은 FormattedValue 의 값이 Name 으로 온다
+            if isinstance(sub, ast.FormattedValue) and isinstance(sub.value, ast.Name):
+                assert sub.value.id != "url", (
+                    "🚨 collect/http.py 의 FetchError 가 url 을 그대로 찍는다.\n"
+                    "   키는 쿼리(serviceKey·OC)에도, **경로**(식품안전나라 /api/<키>/…)에도 있다.\n"
+                    "   `redact(url)` 을 거쳐야 한다 — 예외를 만드는 이 한 곳을 막으면\n"
+                    "   그것을 받아쓰는 probe.py 의 실측 문서·리포트까지 함께 막힌다."
+                )
+
+    # ── ② 동작 — 세 겹이 실제로 도는가
+    from collect import http  # noqa: PLC0415
+
+    http.register_secret("게이트_시험키", "ZZtestSECRET0123456789+/=")
+
+    누출 = "ZZtestSECRET"
+    검사 = [
+        # 값으로 — 원문 · 인코딩 · 🚨 이중 인코딩(2026-09-02 실제로 나온 형태)
+        "https://apis.data.go.kr/a/b?serviceKey=ZZtestSECRET0123456789%2B%2F%3D&pageNo=1",
+        "https://apis.data.go.kr/a/b?serviceKey=ZZtestSECRET0123456789%252B%252F%253D&pageNo=1",
+        "https://apis.data.go.kr/a/b?serviceKey=ZZtestSECRET0123456789+/=&pageNo=1",
+        # 🚨 경로에 키가 있는 규약 — 쿼리만 가리는 마스킹은 이쪽을 못 막는다
+        "http://openapi.foodsafetykorea.go.kr/api/ZZtestSECRET0123456789/I0470/json/1/100",
+    ]
+    for url in 검사:
+        가림 = http.redact(url)
+        assert 누출 not in 가림, f"🚨 키가 가려지지 않는다 — {url[:60]}… → {가림}"
+
+    # 이름 그물 — 등록되지 않은 키(손으로 만든 URL)도 잡는다
+    assert "hong1234" not in http.redact(
+        "https://www.law.go.kr/DRF/lawSearch.do?OC=hong1234&target=ftc&type=XML"
+    ), "🚨 등록되지 않은 키를 파라미터 이름으로도 못 잡는다"
+
+    # 🚨 과잉 마스킹도 결함이다 — 오류 메시지를 읽을 수 없으면 고칠 수 없다
+    정상 = "http://openapi.foodsafetykorea.go.kr/api/sample/I-0040/json/1/5"
+    assert http.redact(정상) == 정상, f"🚨 키가 아닌 곳을 가렸다 — {http.redact(정상)}"
+
+
+@pytest.mark.gate
+def test_키를_읽는_곳이_가릴_것을_등록한다() -> None:
+    """🚨 가리기는 **값으로** 해야 강하다 — 쿼리든 경로든, 인코딩이 어떻든 잡힌다.
+
+    그러려면 누군가 값을 알려 줘야 하는데, 키를 손에 쥐는 곳은 `env.get()` **하나뿐**이다
+    (D-51 이래로 `.env` 를 읽는 유일한 자리). 그 자리가 등록을 빠뜨리면 ①이 통째로
+    꺼지고, 남는 것은 파라미터 이름 그물뿐이다 — 이름을 모르는 API 에서는 그물이 없다.
+
+    🚨 의존 방향에 주의한다. `http` 가 `env` 를 부르면 순환이 된다. 반대로 뒤집혀 있어야 한다.
+    """
+    tree = ast.parse((ROOT / "collect" / "env.py").read_text(encoding="utf-8"))
+
+    fn = next(
+        (n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "get"),
+        None,
+    )
+    assert fn is not None, "collect/env.py 에 get() 이 없다"
+
+    부름 = {
+        getattr(n.func, "attr", getattr(n.func, "id", None))
+        for n in ast.walk(fn)
+        if isinstance(n, ast.Call)
+    }
+    assert "register_secret" in 부름, (
+        "🚨 collect/env.py 의 get() 이 http.register_secret() 을 부르지 않는다.\n"
+        "   키를 읽고도 「가릴 것」으로 등록하지 않으면 오류 메시지에 값이 그대로 남는다."
+    )
+
+    # 순환 방지 — http 는 env 를 import 하지 않는다
+    htree = ast.parse((ROOT / "collect" / "http.py").read_text(encoding="utf-8"))
+    수입 = {
+        alias.name for n in ast.walk(htree) if isinstance(n, ast.ImportFrom) for alias in n.names
+    } | {n.module or "" for n in ast.walk(htree) if isinstance(n, ast.ImportFrom)}
+    assert "env" not in 수입, (
+        "🚨 collect/http.py 가 env 를 import 한다 — 순환이다. 등록은 env → http 방향으로만 흐른다."
+    )

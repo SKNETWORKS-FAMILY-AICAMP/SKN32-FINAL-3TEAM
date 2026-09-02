@@ -9,10 +9,6 @@
 #   - decided_by 와 reviewed_by 는 서로 달라야 한다 (DB ck_source_four_eyes)
 #   - 🚨 reviewed_by 가 비면 collect.registry.require() 가 수집을 거부한다
 #   - collected_at 은 손으로 적지 않는다 — 수집기가 mark_collected() 로 찍는다
-#   - 🔄 approved_at — GATED 소스의 **승인이 난 날**. 사람이 신청해 받아 온 사실이라
-#     사람이 적는다. robots_checked_at 과 같은 종류다 (D-109).
-#     🚨 비면 탐침도 수집기도 거부한다 — 「신청했다」와 「승인됐다」는 다르다.
-#     approved_by 는 실제로 계정을 만들고 신청한 사람이다 (AI Hub 는 내국인 한정 3건이 있다).
 #
 #  절차 (S0-14)
 #   1. uv run python scripts/review_sheet.py   → build/review_sheet.md
@@ -43,7 +39,7 @@ mfds_sanctions:
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-02
+  collected_at: null
 
 mfds_press:
   decided_by: 오한빈
@@ -68,25 +64,15 @@ kfia_approved_list:
   reviewed_at: null
   collected_at: null
   # 🚨 크롤링형 — robots.txt 를 사람이 열어 본 날을 적는다 (규약 6)
-  #   🔄 2026-09-02 확인 (오한빈) — https://adf.kfia.or.kr/robots.txt → **HTTP 404**.
-  #   RFC 9309 §2.3.1.3: 4xx 면 크롤러는 모든 자원에 접근할 수 있다. 404 는 「규칙을
-  #   게시하지 않았다」이지 「금지한다」가 아니다. robots.txt 는 **호스트마다 따로**다.
-  #   🚨 그러나 게시판 유의사항에 「단순 열람 외에 무단 변경·복제·배포·개작 금지 + 법적 처벌」이
-  #      있어 **G1 로 blocked 이관**했다 (D-110). robots 가 열려도 등급은 열리지 않는다.
-  robots_checked_at: 2026-09-02
+  robots_checked_at: null
 
 mfds_hf_ingredient:
   decided_by: 오한빈
   decided_at: 2026-08-20
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음
-  # 🚨 2026-09-02 후속 — API 유형이 **LINK** 임이 드러났다. 실제 호출은 식품안전나라
-  #    (openapi.foodsafetykorea.go.kr · I-0040)이고 인증키도 그쪽에서 발급받는다.
-  #    data.go.kr 에는 활용신청 버튼조차 없다.
-  #    🚨 **검토자가 본 화면과 실제 이용 경로가 다르다.** 서명은 유지하되, 식품안전나라
-  #    가입 시 이용약관에 추가 제약이 있으면 **재판정 대상**이다 (D-72).
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-02
+  collected_at: null
 
 mfds_hf_individual:
   decided_by: 오한빈
@@ -94,7 +80,7 @@ mfds_hf_individual:
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음 (제공기관 식약처)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-02
+  collected_at: null
 
 
 kcia_guideline:
@@ -109,15 +95,9 @@ kcia_guideline:
 law_go_kr:
   decided_by: 오한빈
   decided_at: 2026-08-20
-  # 확인 2026-09-02 — law.go.kr/LSW/lawPetitionForm.do?menuId=13&subMenuId=79 「법적효력/저작권」
-  #   「저작권법 제7조에 해당하는 정보 (…) 별도의 이용허락 없이 자유이용이 가능」
-  #   「영리 목적의 이용을 포함하여 자유로운 활용이 보장」 — 저작권법 제7조 + 공공데이터법.
-  #   확인 근거 정리: docs/ohb/검토요청_2026-09-02_law_go_kr.md
-  #   🚨 레지스트리의 evidence_url 은 아직 API 목록 페이지(evidence_is_access: true)다 —
-  #      위 「법적효력/저작권」 페이지로 교체가 남아 있다 (data.js 에서).
-  reviewed_by: 권소라
-  reviewed_at: 2026-09-02
-  collected_at: 2026-09-02
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
 
 platform_guide:
   decided_by: 오한빈
@@ -132,17 +112,8 @@ mfds_hf_ingredient_board:
   # 확인 2026-09-02 — 게시판 정상 열림 · 게시물 존재 · 저작권/무단전재 안내 없음
   # 🔧 정정 요청 1 — 화면에 「출처 명시 필요」가 있다. constraints 에 BY 가 빠졌다 (mfds_press 와 같은 누락)
   # 🔧 정정 요청 2 — 게시물 전체 650건. 판정 근거의 568건(고시형 96 / 개별인정형 472)과 82건 차이
-  # ⏸ 2026-09-02 **서명 보류로 되돌림** — 검토 근거가 재현되지 않는다.
-  #    검토자는 「저작권/무단전재 안내 없음」으로 서명했으나, 팀장이 같은 날 화면에서 문구를 찾았다:
-  #    「해당 정보를 무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임을 질 수 있습니다」
-  #    🚨 근거가 재현되지 않으면 그것이 이견이다 — 검토자 자신이 kcia_guideline 에 적용한 기준이다.
-  #    확인할 것: **공공누리 배지가 붙어 있는가, 붙었다면 몇 유형인가** (D-110).
-  #      · 부착 + 제1유형 → 출처표시만. 서명 복원
-  #      · 미부착        → 식약처 저작권정책의 「등록 부서와 사전 협의」 단서에 걸린다 (mfds_press 와 같은 형태)
-  reviewed_by: null
+  reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  dissent_note: "검토 근거 「저작권/무단전재 안내 없음」이 재현되지 않음 — 화면에 「무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임」 문구가 있다. 공공누리 부착 여부와 유형 확인 후 재판정 (D-110)"
-
   collected_at: null
   # 크롤링형 — robots.txt 확인 (규약 6). 2026-09-02 오한빈 직접 확인:
   #   foodsafetykorea.go.kr/robots.txt 에 `User-agent: *` 그룹이 없다.
@@ -161,7 +132,7 @@ cosmetic_ingredient:
   #    why(이용허락범위 제한 없음 · G3 전 용도 개방이 근거로 뒷받침된다)와 정면으로 모순 (역검토 v1.4 문제 5)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-02
+  collected_at: null
 
 cosmetic_restricted:
   decided_by: 오한빈
@@ -170,15 +141,13 @@ cosmetic_restricted:
   # 🔧 정정 요청 — caution 이 09-02 실측 이전 문장이다 (역검토 v1.4 문제 5)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-02
+  collected_at: null
 
 aihub_71486:
   decided_by: 오한빈
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
-  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
-  approved_by: 오한빈
   collected_at: null
 
 aihub_71723:
@@ -186,8 +155,6 @@ aihub_71723:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
-  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
-  approved_by: 오한빈
   collected_at: null
 
 aihub_558:
@@ -195,8 +162,6 @@ aihub_558:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
-  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
-  approved_by: 오한빈
   collected_at: null
 
 aihub_71694:
@@ -204,8 +169,6 @@ aihub_71694:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
-  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
-  approved_by: 오한빈
   collected_at: null
 
 aihub_71843:
@@ -341,8 +304,6 @@ aihub_review_corpus:
   decided_at: 2026-08-20
   reviewed_by: null
   reviewed_at: null
-  approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
-  approved_by: 오한빈
   collected_at: null
 
 meta_adlibrary:
@@ -387,11 +348,7 @@ self_sanction_stat:
   #    셋 다 G3 라 파생물 G3 라는 결론은 유지된다. derived_from 에도 law_go_kr 을 넣어야 한다
   # 🔧 정정 요청 2 — 🚨 원천인 law_go_kr 이 아직 미검토다. 파생물이 원천보다 먼저 서명되는 순서가 된다.
   #    인계문서 §3-② 의 게이트(파생 소스의 allow 집합 ⊆ 모든 원천의 allow 집합)가 있으면 코드가 잡는다
-  # ⏸ 2026-09-02 — 🚨 **게이트 29 를 만들었더니 그대로 잡혔다.** 지적이 옳았다.
-  #    확인 자체는 끝났다(경제성_근거.md 113행 · 권소라). 서명만 원천 뒤로 미룬다.
-  #    🚨 이것은 **이견이 아니라 순서 대기**다 — 그래서 dissent_note 를 쓰지 않는다.
-  #    law_go_kr 이 서명되면 여기도 바로 채운다.
-  reviewed_by: null
+  reviewed_by: 권소라
   reviewed_at: 2026-09-02
   collected_at: null
 

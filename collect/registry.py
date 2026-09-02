@@ -78,6 +78,15 @@ def require(source_id: str, use: str) -> dict[str, Any]:
             "🚨 수집을 시작하는 순간이 2인 확인의 마지노선이다 (D-66 · D-90 ④)."
         )
 
+    # 🚨 **수집기는 GATED 를 아예 보지 않고 있었다.** 탐침(probe)이 막던 조건을
+    #    정작 실제로 받아 오는 쪽은 검사하지 않았다 — 승인 없이 받는 경로가 열려 있었다.
+    #    탐침을 만들면서 드러났다 (D-109).
+    if "GATED" in set(s.get("constraints") or []) and not s.get("approved_at"):
+        raise RegistryError(
+            f"{source_id!r} 는 GATED 인데 approved_at 이 없다 — 승인 없이 받지 않는다. "
+            "승인 후 scripts/registry_review.yaml 에 approved_at·approved_by 를 적는다."
+        )
+
     access = str(s.get("access") or "")
     if any(k in access for k in CRAWL_ACCESS) and not s.get("robots_checked_at"):
         raise RegistryError(
@@ -120,10 +129,11 @@ def probe(source_id: str) -> dict[str, Any]:
             "사람이 수기로만 본다 (D-108). 탐침도 자동 접근이다."
         )
     flags = set(s.get("constraints") or [])
-    if "GATED" in flags:
+    if "GATED" in flags and not s.get("approved_at"):
         raise RegistryError(
-            f"{source_id!r} 는 GATED 다 — 신청·승인이 선행이다. "
-            "승인 전에 접근하는 것은 조건 위반이고, 그것은 탐침이라도 같다."
+            f"{source_id!r} 는 GATED 인데 approved_at 이 없다 — 신청·승인이 선행이다. "
+            "🚨 「신청했다」가 아니라 「승인됐다」를 적는다. 승인 전 접근은 조건 위반이고, "
+            "그것은 탐침이라도 같다. 승인 후 scripts/registry_review.yaml 에 날짜를 적는다."
         )
     access = str(s.get("access") or "")
     if any(k in access for k in CRAWL_ACCESS) and not s.get("robots_checked_at"):

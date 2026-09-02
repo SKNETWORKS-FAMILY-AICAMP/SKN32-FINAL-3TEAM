@@ -1,7 +1,7 @@
 """collect/law_api.py — 법제처 OPEN API 수집기 (S1-01 · S1-02 · D-92).
 
-  uv run python -m collect.law_api --target law      # 법령 6종
-  uv run python -m collect.law_api --target admrul   # 고시·행정규칙 2종
+  uv run python -m collect.law_api --target law      # 법률 3 + 시행령·시행규칙 4
+  uv run python -m collect.law_api --target admrul   # 고시 3종
   uv run python -m collect.law_api --dry-run         # 저장하지 않고 무엇을 받을지만
 
 🚨 첫 줄이 registry.require() 다 (수집기 공통 규약 1). 게이트를 우회하는 경로를 만들지 않는다.
@@ -22,6 +22,10 @@ from collect import env, http, registry, store
 SOURCE_ID = "law_go_kr"
 FAMILY = "law"
 
+#: 🚨 성공 응답의 최소 크기. 오류 봉투는 138바이트였다.
+#:    자식 요소 검사가 주 방어이고 이것은 그물이다.
+MIN_BODY = 1000
+
 BASE_SEARCH = "https://www.law.go.kr/DRF/lawSearch.do"
 BASE_SERVICE = "https://www.law.go.kr/DRF/lawService.do"
 
@@ -37,12 +41,22 @@ BASE_SERVICE = "https://www.law.go.kr/DRF/lawService.do"
 TARGETS: dict[str, list[tuple[str, str, str]]] = {
     # (ID, 법령명, 수집리스트 항목)
     "law": [
-        ("002011", "표시·광고의 공정화에 관한 법률", "S1-01"),
-        ("013094", "식품 등의 표시·광고에 관한 법률", "S1-01"),
+        # ── 법률 3 ────────────────────────────────────────────
+        ("002011", "표시ㆍ광고의 공정화에 관한 법률", "S1-01"),
+        ("013094", "식품 등의 표시ㆍ광고에 관한 법률", "S1-01"),
         ("002015", "화장품법", "S1-01"),
+        # ── 시행령·시행규칙 4 (2026-09-02 확보) ────────────────
+        #  🚨 새 소스가 아니다 — `law_go_kr` 의 covers 가 이미 「3법 (+시행령·시행규칙)」과
+        #     「시행령 [별표] 부당한 표시·광고의 유형 및 기준」·「행정처분 기준 [별표]」를
+        #     적고 있다. 서명이 덮는 범위 안이므로 D-15 에 걸리지 않는다.
+        ("005361", "표시ㆍ광고의 공정화에 관한 법률 시행령", "S1-01"),
+        ("013453", "식품 등의 표시ㆍ광고에 관한 법률 시행령", "S1-01"),
+        ("013475", "식품 등의 표시ㆍ광고에 관한 법률 시행규칙", "S1-01"),
+        ("005668", "화장품법 시행령", "S1-01"),
         ("008741", "화장품법 시행규칙", "S1-01"),
     ],
     "admrul": [
+        # ── 식약처 고시 3 ─────────────────────────────────────
         ("69549", "식품등의 부당한 표시 또는 광고의 내용 기준", "S1-02"),
         (
             "75449",
@@ -50,17 +64,46 @@ TARGETS: dict[str, list[tuple[str, str, str]]] = {
             "S1-02",
         ),
         ("37971", "건강기능식품 기능성 원료 및 기준·규격 인정에 관한 규정", "S1-04 원출처"),
+        # ── 공정위 고시·지침 5 (2026-09-02 확보) ───────────────
+        #  🚨 「부당한 표시·광고의 유형 및 기준」은 **시행령 [별표]가 아니라 고시**다.
+        #     기획문서 3층 표가 「시행령 [별표]」로 적어 둔 것이 절반만 맞았다 —
+        #     표시광고법 시행령(005361)에는 과징금·과태료 부과기준 3개뿐이고,
+        #     유형기준은 ① 이 고시(34717) ② 식품표시광고법 시행령 [별표 1]
+        #     「부당한 표시 또는 광고의 내용」(013453) 둘로 갈려 있다.
+        ("34717", "부당한 표시·광고행위의 유형 및 기준 지정고시", "S1-02"),
+        ("35032", "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침", "S1-02"),
+        ("35037", "환경 관련 표시·광고에 관한 심사지침", "S1-02"),
+        ("20207", "비교표시·광고에 관한 심사지침", "S1-02"),
+        # 🚨 ID 자릿수가 다르다(7자리). 다른 것과 형식이 달라도 화면 그대로 적는다
+        ("2052445", "인터넷 광고에 관한 심사지침", "S1-02"),
+        # ── 화장품 고시 2 ─────────────────────────────────────
+        #  🚨 기획문서의 「화장품 지침 3종」 중 **「화장품 표시·광고 관리 지침」은 없다** —
+        #     행정규칙이 아니라 **민원인 안내서**라 법제처에 등재되지 않는다.
+        #     식약처에서 따로 받아야 하고, 그것은 별도 소스 등재 대상이다 (D-15).
+        ("41277", "화장품 표시·광고 실증에 관한 규정", "S1-02"),
+        ("36122", "기능성화장품 심사에 관한 규정", "S1-02"),
     ],
 }
 
 # ⬜ 미확보 — 스모크에서 ID 를 못 받은 것. 확인 후 위 표로 옮긴다.
-#    표시·광고의 공정화에 관한 법률 시행령 · 식품 등의 표시·광고에 관한 법률 시행규칙
-PENDING = [
-    ("law", "표시·광고의 공정화에 관한 법률 시행령", "S1-01"),
-    ("law", "식품 등의 표시·광고에 관한 법률 시행규칙", "S1-01"),
-]
+#  ✅ 2026-09-02 해소 — 두 건 모두 검색으로 ID 를 확인해 TARGETS 로 옮겼다.
+#     같은 검색에서 식품표시광고법 시행령(013453)·화장품법 시행령(005668)도 확보했다.
+#  🚨 `·`(U+00B7)와 `ㆍ`(U+318D)는 검색에 영향이 없다 — 둘 다 같은 1건을 낸다.
+#     법령명 원문은 `ㆍ` 쪽이라 TARGETS 의 표기를 원문에 맞췄다.
+PENDING: list[tuple[str, str, str]] = []
 
 ID_FIELDS = ("법령ID", "행정규칙ID", "법령일련번호", "행정규칙일련번호")
+
+#: 🚨 본문 조회의 **ID 파라미터 이름이 target 마다 다르다** (2026-09-02 실측).
+#:
+#:   law    → ID=<법령ID>            예) ID=002011
+#:   admrul → LID=<행정규칙ID>       예) LID=69549
+#:
+#: `admrul` 에 `ID=69549` 를 보내면 「일치하는 행정규칙이 없습니다」가 온다 —
+#: 그 자리의 `ID` 는 **행정규칙일련번호**(2100000269428)를 뜻하기 때문이다.
+#: 일련번호는 개정마다 바뀌므로 쓰지 않는다. `LID` 는 행정규칙ID 라 **개정을 건너 안정**하고,
+#: `law` 의 법령ID 와 같은 성질이다(항상 최신 시행본을 준다).
+ID_PARAM = {"law": "ID", "admrul": "LID"}
 NAME_FIELDS = ("법령명한글", "행정규칙명")
 EFF_FIELDS = ("시행일자", "발령일자")
 
@@ -103,35 +146,73 @@ def search(oc: str, target: str, query: str) -> tuple[str, str, str] | None:
     return _text(first, *ID_FIELDS), _text(first, *NAME_FIELDS) or query, _text(first, *EFF_FIELDS)
 
 
-def collect(target: str, *, dry_run: bool = False) -> int:
-    """대상 하나를 수집한다. 돌려주는 값은 새로 저장한 건수."""
+def _reject_reason(root: ET.Element | None, body: bytes) -> str:
+    """성공 응답이 아니면 사유를, 맞으면 빈 문자열을 돌려준다.
+
+    🚨 **「XML 로 파싱된다」는 성공이 아니다.** 법제처는 조회 실패도 XML 로 돌려준다:
+
+        <?xml version="1.0" encoding="utf-8"?>
+        <Law>일치하는 행정규칙이 없습니다.  행정규칙명을 확인하여 주십시오.</Law>
+
+    138바이트짜리 이 응답이 2026-09-02 에 **✅ 로 찍히고 저장되고 `collected_at` 까지
+    기록됐다.** 파싱만 보고 통과시켰기 때문이다. 3층이 「채워졌다」고 표시된 채 비어 있었다.
+
+    구분은 **자식 요소의 유무**로 한다. 성공 응답은 `<법령>`·`<AdmRulService>` 아래에
+    기본정보·조문이 달리고, 오류 응답은 `<Law>` 하나에 텍스트만 있다. 문구로 찾지 않는다 —
+    메시지가 바뀌면 다시 새기 때문이다.
+    """
+    if root is None:
+        return "XML 이 아니다 — OC 가 승인되지 않았거나 값이 틀렸다"
+    if len(root) == 0:
+        return f"본문이 없다 — 서버 응답: {(root.text or root.tag).strip()[:80]}"
+    if len(body) < MIN_BODY:
+        return f"본문이 너무 짧다 ({len(body):,} bytes) — 조회가 실패했을 수 있다"
+    return ""
+
+
+def collect(target: str, *, dry_run: bool = False) -> tuple[int, int]:
+    """대상 하나를 수집한다. 돌려주는 값은 (새로 저장한 건수, 실패 건수)."""
     # ── 규약 1 — 게이트가 첫 줄이다 ──────────────────────────
     registry.require(SOURCE_ID, use="U1")
     oc = env.get("LAW_OC_KEY")
 
-    saved = 0
+    id_param = ID_PARAM[target]  # 🚨 law 는 ID, admrul 은 LID
+    saved = failed = 0
     for law_id, name, sid in TARGETS[target]:
-        body = _call(BASE_SERVICE, oc, target=target, ID=law_id)
+        body = _call(BASE_SERVICE, oc, target=target, **{id_param: law_id})
         root = _parse(body)
-        if root is None:
-            print(f"  ❌ [{sid}] {name} (ID={law_id}) — XML 이 아니다. OC 를 확인하라")
-            continue
 
         # 🚨 받은 것이 요청한 것인지 확인한다. ID 는 고정이지만 응답은 검증한다.
+        reason = _reject_reason(root, body)
+        if reason:
+            print(f"  ❌ [{sid}] {name} ({id_param}={law_id}) — {reason}")
+            failed += 1
+            continue
+
         got = _text(root, *NAME_FIELDS) or _text(root, ".//법령명_한글", ".//행정규칙명")
         eff = _text(root, *EFF_FIELDS) or _text(root, ".//시행일자", ".//발령일자")
-        print(f"  ✅ [{sid}] {got or name}  ID={law_id}  시행일={eff or '미상'}")
+        # 🚨 시행일을 못 읽으면 파일명이 `unknown` 이 되어 다음 개정본과 충돌한다.
+        #    이름·시행일 둘 다 못 읽으면 응답 모양이 바뀐 것이므로 저장하지 않는다.
+        if not (got and eff):
+            print(
+                f"  ❌ [{sid}] {name} ({id_param}={law_id}) — 이름·시행일을 못 읽었다 "
+                f"(이름={got or '없음'} 시행일={eff or '없음'}). 응답 구조를 확인하라"
+            )
+            failed += 1
+            continue
+
+        print(f"  ✅ [{sid}] {got}  {id_param}={law_id}  시행일={eff}")
         if dry_run:
             continue
 
         # 🚨 파일명에 시행일을 넣는다. 개정되면 새 파일이 되고 원본은 남는다 (규약 2)
-        filename = f"{target}_{law_id}_{eff or 'unknown'}.xml"
+        filename = f"{target}_{law_id}_{eff}.xml"
         path = store.save_raw(
             SOURCE_ID,
             FAMILY,
             filename,
             body,
-            url=f"{BASE_SERVICE}?target={target}&ID={law_id}",
+            url=f"{BASE_SERVICE}?target={target}&{id_param}={law_id}",
         )
         if path is None:
             print(f"     ⏭  동일본 스킵 (sha256 일치) — {filename}")
@@ -144,7 +225,7 @@ def collect(target: str, *, dry_run: bool = False) -> int:
         for _t, nm, sid in PENDING:
             print(f"     · [{sid}] {nm}")
 
-    return saved
+    return saved, failed
 
 
 def find_pending() -> None:
@@ -178,22 +259,30 @@ def main() -> int:
         if args.find:
             find_pending()
             return 0
-        saved = collect(args.target, dry_run=args.dry_run)
+        saved, failed = collect(args.target, dry_run=args.dry_run)
     except (registry.RegistryError, env.MissingKey) as e:
         # 🚨 게이트와 키 부재는 「고치는 법」을 그대로 보여준다 (D-51)
         print(f"\n수집을 시작할 수 없다 —\n{e}\n", file=sys.stderr)
         return 1
 
     if args.dry_run:
-        print("\n(dry-run — 저장하지 않았다)")
-        return 0
+        print(f"\n(dry-run — 저장하지 않았다){f' · 🚨 실패 {failed}건' if failed else ''}")
+        return 1 if failed else 0
 
-    print(f"\n새로 저장 {saved}건")
+    print(f"\n새로 저장 {saved}건" + (f" · 🚨 실패 {failed}건" if failed else ""))
     if saved:
         registry.mark_collected(SOURCE_ID)
         print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    if failed:
+        # 🚨 일부 실패를 0 으로 끝내지 않는다. 2026-09-02 에 admrul 3건이 전부 오류 응답이었는데
+        #    「새로 저장 3건」과 종료코드 0 이 나와, 3층이 채워진 것으로 보였다.
+        print(
+            "🚨 실패한 항목이 있다 — collected_at 이 찍혔더라도 **그 항목은 받지 못했다.**\n"
+            "   위 사유를 먼저 해결하고 다시 돌린다.",
+            file=sys.stderr,
+        )
     print("🚨 이어서 반드시:  uv run pytest -m gate")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

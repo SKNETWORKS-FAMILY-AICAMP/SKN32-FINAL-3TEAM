@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>CopyLane 수기 작업 17건</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Serif+KR:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#eceff3; --surface:#ffffff; --surface-2:#f5f7f9;
+  --ink:#141a20; --muted:#59636f; --faint:#818d99;
+  --line:#d3dae1; --line-soft:#e4e9ee;
+  --accent:#1a4f6e; --accent-soft:#e3edf3;
+  --stop:#a32a1f; --stop-soft:#fbe9e7;
+  --wait:#8a5a00; --wait-soft:#fbf1de;
+  --go:#1c6b4a; --go-soft:#e4f2ea;
+  --shadow:0 1px 2px rgba(20,26,32,.06), 0 6px 18px rgba(20,26,32,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0f1418; --surface:#181f26; --surface-2:#141b21;
+    --ink:#e7ecf1; --muted:#9aa6b2; --faint:#77838f;
+    --line:#28313a; --line-soft:#212930;
+    --accent:#7fbcd9; --accent-soft:#16303f;
+    --stop:#f08a7e; --stop-soft:#3a1e1a;
+    --wait:#e0b169; --wait-soft:#33270f;
+    --go:#7bc9a2; --go-soft:#122e22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0f1418; --surface:#181f26; --surface-2:#141b21;
+  --ink:#e7ecf1; --muted:#9aa6b2; --faint:#77838f;
+  --line:#28313a; --line-soft:#212930;
+  --accent:#7fbcd9; --accent-soft:#16303f;
+  --stop:#f08a7e; --stop-soft:#3a1e1a;
+  --wait:#e0b169; --wait-soft:#33270f;
+  --go:#7bc9a2; --go-soft:#122e22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans KR", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1100px; margin:0 auto; padding:28px 22px 72px}
+
+/* ── 머리 ── */
+.masthead{display:flex; flex-wrap:wrap; align-items:flex-end; gap:14px 22px; padding-bottom:18px; border-bottom:2px solid var(--ink)}
+.masthead h1{
+  font-family:"Noto Serif KR", Georgia, serif; font-weight:700;
+  font-size:clamp(26px,4vw,38px); line-height:1.2; margin:0; letter-spacing:-.01em; text-wrap:balance;
+}
+.masthead .sub{color:var(--muted); font-size:13.5px; margin:0; max-width:62ch}
+.meta{margin-left:auto; text-align:right; font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--faint); line-height:1.8; white-space:nowrap}
+.meta b{color:var(--muted); font-weight:500}
+
+/* ── 요약 ── */
+.summary{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); margin:22px 0 8px; border-radius:3px; overflow:hidden}
+.sum{background:var(--surface); padding:14px 16px; display:flex; flex-direction:column; gap:3px}
+.sum .n{font-family:"IBM Plex Mono",monospace; font-size:27px; font-weight:600; line-height:1.1; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.sum .t{font-size:13.5px; font-weight:600}
+.sum .w{font-size:12px; color:var(--muted)}
+.sum .n em{font-style:normal; font-size:16px; color:var(--faint); font-weight:400}
+.sum.now .n{color:var(--stop)}
+.sum.heavy .n{color:var(--wait)}
+.done{opacity:.62}
+.done .act{text-decoration:line-through; text-decoration-color:var(--faint)}
+.stamp{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600;
+  color:var(--go); background:var(--go-soft); padding:1px 6px; border-radius:2px; letter-spacing:.02em}
+
+.leadin{color:var(--muted); font-size:13.5px; margin:14px 0 0; max-width:74ch}
+.leadin strong{color:var(--ink)}
+
+/* ── 그룹 ── */
+.group{margin-top:34px}
+.ghead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding-bottom:9px; border-bottom:1px solid var(--line)}
+.gnum{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; color:var(--surface); background:var(--accent); width:23px; height:23px; display:grid; place-items:center; border-radius:2px; flex:none; align-self:center}
+.ghead h2{font-family:"Noto Serif KR",Georgia,serif; font-size:20px; font-weight:600; margin:0; letter-spacing:-.01em}
+.gcost{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted); white-space:nowrap}
+.gnote{font-size:13px; color:var(--muted); margin:10px 0 0; max-width:76ch}
+.gnote strong{color:var(--ink)}
+
+/* ── 행 ── */
+.rows{display:flex; flex-direction:column; gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); border-radius:3px; margin-top:12px; overflow:hidden}
+.row{background:var(--surface); display:grid; grid-template-columns:minmax(0,1.55fr) 42px minmax(0,1.15fr) minmax(0,1.5fr); gap:14px; padding:11px 15px; align-items:baseline}
+.row.flag{background:var(--stop-soft)}
+.id{font-family:"IBM Plex Mono",monospace; font-size:12.5px; font-weight:500; word-break:break-all}
+.id .nm{display:block; font-family:"IBM Plex Sans KR",sans-serif; font-size:12.5px; color:var(--muted); font-weight:400; margin-top:1px}
+.val{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; text-align:center; border-radius:2px; padding:1px 0; align-self:center}
+.val.A{color:var(--surface); background:var(--accent)}
+.val.B{color:var(--accent); background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent)}
+.val.C,.val.D{color:var(--faint); box-shadow:inset 0 0 0 1px var(--line)}
+.size{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+.act{font-size:13px}
+.act a{color:var(--accent); text-decoration:none; border-bottom:1px solid currentColor; word-break:break-all}
+.act a:hover{background:var(--accent-soft)}
+.act a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.act .go{display:block; margin-top:2px; font-size:12.5px; color:var(--muted)}
+
+/* ── 경고 ── */
+.warn{display:flex; gap:9px; padding:9px 14px; font-size:12.5px; line-height:1.55; background:var(--surface-2); border-left:3px solid var(--wait)}
+.warn.stop{border-left-color:var(--stop)}
+.warn.ok{border-left-color:var(--go)}
+.warn .k{flex:none; font-weight:600; color:var(--wait)}
+.warn.stop .k{color:var(--stop)}
+.warn.ok .k{color:var(--go)}
+.warn strong{color:var(--ink)}
+.warn a{color:var(--accent)}
+
+/* ── 꼬리 ── */
+.faq{margin-top:38px; border-top:2px solid var(--ink); padding-top:18px}
+.faq h2{font-family:"Noto Serif KR",Georgia,serif; font-size:19px; margin:0 0 4px}
+.qa{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.6fr); gap:10px 20px; padding:12px 0; border-bottom:1px solid var(--line-soft); align-items:baseline}
+.qa .q{font-weight:600; font-size:13.5px}
+.qa .a{font-size:13px; color:var(--muted)}
+.qa .a strong{color:var(--ink)}
+code{font-family:"IBM Plex Mono",monospace; font-size:.9em; background:var(--surface-2); padding:1px 4px; border-radius:2px; box-shadow:inset 0 0 0 1px var(--line-soft)}
+
+@media (max-width:760px){
+  .row{grid-template-columns:1fr 42px; gap:6px 12px}
+  .size{grid-column:1/-1}
+  .act{grid-column:1/-1}
+  .qa{grid-template-columns:1fr; gap:4px}
+  .meta{margin-left:0; text-align:left}
+}
+</style>
+<style>
+img{max-width:100%}
+[hidden]{display:none!important}
+@media print{
+  body{background:#fff}
+  .warn,.rows,.summary{break-inside:avoid}
+  .group{break-inside:avoid-page}
+  a{color:#1a4f6e}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div>
+    <h1>사람 손이 필요한 소스 17건</h1>
+    <p class="sub">수집기는 대부분 자동으로 돕니다. 여기 있는 것은 <strong>사람만 할 수 있는 일</strong>입니다 — 눌러서 신청하거나, 눈으로 확인하거나, 손으로 옮겨야 하는 것들.</p>
+  </div>
+  <div class="meta">
+    <b>오한빈</b> · 2026-09-02<br>
+    근거 <b>data_sources.yaml</b> <b>b1d048b</b><br>
+    탐침 1회전 · <b>D-109</b>
+  </div>
+</header>
+
+<div class="summary">
+  <div class="sum">
+    <span class="n">4<em>/10</em></span>
+    <span class="t">① 신청 버튼</span>
+    <span class="w">✅ AI Hub 5건 승인 완료</span>
+  </div>
+  <div class="sum">
+    <span class="n">3</span>
+    <span class="t">② 눈으로 확인</span>
+    <span class="w">1인 2시간</span>
+  </div>
+  <div class="sum">
+    <span class="n">1</span>
+    <span class="t">③ robots 확인</span>
+    <span class="w">20분</span>
+  </div>
+  <div class="sum heavy">
+    <span class="n">3</span>
+    <span class="t">④ 손으로 옮기기</span>
+    <span class="w">반나절 이상</span>
+  </div>
+</div>
+
+<p class="leadin">① ~ ③ 은 <strong>한 번 하면 끝</strong>이고 ④ 만 반복 작업입니다. 그래서 순서가 중요합니다 — <strong>①을 오늘 눌러 두지 않으면 ④를 다 끝내 놓고도 학습을 못 돌립니다.</strong></p>
+
+<!-- ① -->
+<section class="group">
+  <div class="ghead">
+    <span class="gnum">1</span>
+    <h2>신청 버튼 — 그 뒤는 자동</h2>
+    <span class="gcost">10건 · 1인 30분</span>
+  </div>
+  <p class="gnote">✅ <strong>2026-09-02 · AI Hub 5건 승인 완료</strong> — <strong>92만 문장</strong>이 열렸습니다. 승인 사실은 <code>approved_at</code> 으로 원장에 적혀 있고, 그게 없으면 탐침도 수집기도 계속 거부합니다. <strong>남은 것은 폼 입력 4건</strong>입니다.</p>
+
+  <div class="rows">
+    <div class="row done">
+      <span class="id">aihub_71486<span class="nm">문장유형(추론·예측) 판단</span></span>
+      <span class="val A">A</span>
+      <span class="size">166,339문장</span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486">aihub.or.kr/…dataSetSn=71486</a><span class="go"><span class="stamp">승인 09-02</span> 신청 → 즉시 · 🚨 내국인만</span></span>
+    </div>
+    <div class="row done">
+      <span class="id">aihub_71723<span class="nm">생성형AI 법률/규정 텍스트</span></span>
+      <span class="val A">A</span>
+      <span class="size">원문 251,946</span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723">aihub.or.kr/…dataSetSn=71723</a><span class="go"><span class="stamp">승인 09-02</span> 회원가입 + 신청 → 즉시</span></span>
+    </div>
+    <div class="row done">
+      <span class="id">aihub_review_corpus<span class="nm">속성기반 감정분석 (71603)</span></span>
+      <span class="val A">A</span>
+      <span class="size">250,312건</span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603">aihub.or.kr/…dataSetSn=71603</a><span class="go"><span class="stamp">승인 09-02</span> 신청 → 즉시 · 🚨 내국인만</span></span>
+    </div>
+    <div class="row done">
+      <span class="id">aihub_558<span class="nm">텍스트 윤리검증</span></span>
+      <span class="val B">B</span>
+      <span class="size">451,110문장</span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558">aihub.or.kr/…dataSetSn=558</a><span class="go"><span class="stamp">승인 09-02</span> 회원가입 + 신청 → 즉시</span></span>
+    </div>
+    <div class="row done">
+      <span class="id">aihub_71694<span class="nm">SNS 멀티턴 대화</span></span>
+      <span class="val C">C</span>
+      <span class="size">🚨 규모 미확인</span>
+      <span class="act"><a href="https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694">aihub.or.kr/…dataSetSn=71694</a><span class="go"><span class="stamp">승인 09-02</span> 회원가입 + 신청 → 즉시</span></span>
+    </div>
+    <div class="row flag">
+      <span class="id">aihub_71843<span class="nm">지식재산권법 — 보류 중</span></span>
+      <span class="val D">D</span>
+      <span class="size">480만 문장</span>
+      <span class="act"><span class="go"><strong>🚨 신청하지 마십시오</strong> — 도메인 불일치(특허·상표 심결문)로 보류. 480만 문장이라도 도메인이 어긋나면 손해입니다.</span></span>
+    </div>
+  </div>
+
+  <div class="warn stop"><span class="k">🚨</span><span><strong>데이터셋 번호와 제목을 눈으로 대조하십시오.</strong> AI Hub 상세 페이지는 URL 파라미터 조합에 따라 <strong>엉뚱한 데이터셋을 반환한 전례</strong>가 있습니다 — 71694 와 63 이 같은 「상표 이미지」 화면을 냈습니다.</span></div>
+  <div class="warn"><span class="k">이용정책</span><span>제4항 <strong>「학습용으로만」</strong> · 제5항 <strong>「제3자 열람 금지」</strong> — 그래서 U2(원문색인)·U3(화면인용)가 닫혀 있습니다. <a href="https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&amp;topMenu=105">이용정책 원문</a></span></div>
+
+  <p class="gnote" style="margin-top:20px">🚨 <strong>남은 4건 — 폼 입력.</strong> 아래는 아직 신청 전입니다.</p>
+  <div class="rows" style="margin-top:10px">
+    <div class="row">
+      <span class="id">nasmedia_npr<span class="nm">2026 인터넷 이용자 조사</span></span>
+      <span class="val A">A</span>
+      <span class="size">n=2,000</span>
+      <span class="act"><a href="https://www.nasmedia.co.kr/정기보고서/2026-03-npr-usersurvey-insight/">nasmedia.co.kr/정기보고서/2026-03-npr…</a><span class="go">소속 + 이메일 입력 → 무료 PDF</span></span>
+    </div>
+    <div class="row">
+      <span class="id">nasmedia_fb<span class="nm">2026 식음료 트렌드</span></span>
+      <span class="val B">B</span>
+      <span class="size">2026-05-29 발행</span>
+      <span class="act"><a href="https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/">nasmedia.co.kr/정기보고서/2026-fb-trend…</a><span class="go">소속 + 이메일 입력 → 무료 PDF</span></span>
+    </div>
+    <div class="row">
+      <span class="id">kisdi_panel<span class="nm">한국미디어패널조사</span></span>
+      <span class="val D">D</span>
+      <span class="size">8,411명</span>
+      <span class="act"><a href="https://stat.kisdi.re.kr/kor/dataset/rdssListPage.html">stat.kisdi.re.kr/kor/dataset/rdssListPage.html</a><span class="go">이메일 + 이용목적 입력</span></span>
+    </div>
+    <div class="row">
+      <span class="id">google_trends<span class="nm">Trends API (alpha)</span></span>
+      <span class="val C">C</span>
+      <span class="size">롤링 1,800일</span>
+      <span class="act"><a href="https://developers.google.com/search/blog/2025/07/trends-api">developers.google.com/…/trends-api</a><span class="go">🚨 신청 게이트 · <strong>대기열</strong></span></span>
+    </div>
+  </div>
+
+  <div class="warn ok"><span class="k">함께</span><span><code>nasmedia_npr</code> 받으실 때 <strong>2025 「주요 업종 시리즈 06 건강기능식품」</strong> PDF도 같이 받아 주십시오 — 이 프로젝트엔 식음료 일반보다 그쪽이 직결됩니다.</span></div>
+  <div class="warn stop"><span class="k">🚨</span><span><code>kisdi_panel</code> 은 <strong>TLS 인증서 검증에 실패</strong>합니다 (self-signed in chain · 2026-09-02 탐침). <strong>검증을 끄지 마십시오</strong> — 이용조건을 확인하러 가는 길에 검증을 끄는 것은 앞뒤가 안 맞습니다. 폼의 이용목적에 <strong>「마케팅」 옵션</strong>이 있어 공공누리 2유형과 상충 소지도 있습니다. 가치 D라 안 써도 됩니다.</span></div>
+  <div class="warn"><span class="k">결정</span><span><code>google_trends</code> 는 <strong>대기열</strong>이라 오늘 신청해도 언제 열릴지 모릅니다. <strong>쓸 거면 오늘 신청, 안 쓸 거면 미채택으로 내립니다</strong> — 보류해 두고 결정 안 하는 것이 최악입니다.</span></div>
+</section>
+
+<!-- ② -->
+<section class="group">
+  <div class="ghead">
+    <span class="gnum">2</span>
+    <h2>눈으로 확인 — 판정이 여기 걸려 있다</h2>
+    <span class="gcost">3건 · 1인 2시간</span>
+  </div>
+  <p class="gnote">탐침(자동)으로 <strong>안 풀린 것들</strong>입니다. 페이지는 열렸는데 <strong>이용조건 문구가 없거나 PDF 안에</strong> 있습니다. ①의 나스미디어 2건도 PDF 안을 봐야 하므로 받으실 때 함께 확인해 주십시오.</p>
+
+  <div class="rows">
+    <div class="row">
+      <span class="id">krei_food<span class="nm">식품소비행태조사</span></span>
+      <span class="val A">A</span>
+      <span class="size">1시간</span>
+      <span class="act"><strong>성인 설문지 PDF에 건강기능식품 문항이 있는가.</strong> 없으면 6층 세그먼트에서 기대한 값이 안 나옵니다.<span class="go"><a href="https://www.krei.re.kr/foodSurvey/page/460">krei.re.kr/foodSurvey/page/460</a></span></span>
+    </div>
+    <div class="row">
+      <span class="id">mfds_hf_ingredient_board<span class="nm">식품안전나라 원료별 정보</span></span>
+      <span class="val A">A</span>
+      <span class="size">40분 · 568건</span>
+      <span class="act">게시판이라 <strong>이용조건 문구가 없습니다.</strong> API 15074311 과 대조해 <strong>정본을 정합니다.</strong><span class="go"><a href="https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&amp;menu_no=2660">foodsafetykorea.go.kr/portal/board/…menu_no=2660</a></span></span>
+    </div>
+    <div class="row">
+      <span class="id">kosis<span class="nm">국가통계 오픈API</span></span>
+      <span class="val B">B</span>
+      <span class="size">20분</span>
+      <span class="act">🚨 우리 기록은 <strong>「상업 이용 명시적 허용」</strong>이라 단언하는데 <strong>그걸 말하는 페이지가 없습니다.</strong><span class="go"><a href="https://kosis.kr/serviceInfo/openAPIGuide.do">kosis.kr/serviceInfo/openAPIGuide.do</a></span></span>
+    </div>
+  </div>
+
+  <div class="warn ok"><span class="k">대조상대</span><span><code>mfds_hf_individual</code> API는 <strong>「이용허락범위 제한 없음」이 2026-09-02 실측으로 확인</strong>됐습니다. 같은 데이터라면 이쪽을 정본으로 삼는 편이 낫습니다 — <strong>게시판 크롤링이 통째로 사라집니다.</strong> <a href="https://www.data.go.kr/data/15074311/openapi.do">data.go.kr/data/15074311/openapi.do</a></span></div>
+</section>
+
+<!-- ③ -->
+<section class="group">
+  <div class="ghead">
+    <span class="gnum">3</span>
+    <h2>확인 한 줄 — 이거 하나로 자동이 열린다</h2>
+    <span class="gcost">1건 · 20분</span>
+  </div>
+
+  <div class="rows">
+    <div class="row">
+      <span class="id">kfia_approved_list<span class="nm">기능성표시식품 심의완료 목록</span></span>
+      <span class="val A">A</span>
+      <span class="size">100건 이상</span>
+      <span class="act"><a href="https://adf.kfia.or.kr/robots.txt">adf.kfia.or.kr/robots.txt</a> 를 <strong>열어서 보고</strong>, 확인한 날짜를 <code>scripts/registry_review.yaml</code> 의 <code>robots_checked_at</code> 에 적습니다.<span class="go">대상 페이지 · <a href="https://adf.kfia.or.kr/company/open/openData.do?menuKey=406">adf.kfia.or.kr/company/open/openData.do</a></span></span>
+    </div>
+  </div>
+
+  <div class="warn"><span class="k">지금</span><span>탐침도 막힙니다 — <strong>규약 6은 수집이 아니라 「접근」의 조건</strong>입니다. 확인이 끝나면 G0 등급도 재판정 대상이 되고(2인 확인), 그다음 페이지네이션 수집기가 필요합니다(엑셀 다운로드가 없습니다).</span></div>
+</section>
+
+<!-- ④ -->
+<section class="group">
+  <div class="ghead">
+    <span class="gnum">4</span>
+    <h2>손으로 옮기기 — 여기가 진짜 일이다</h2>
+    <span class="gcost">3건 · 반나절 이상</span>
+  </div>
+
+  <div class="rows">
+    <div class="row flag">
+      <span class="id">meta_adlibrary<span class="nm">Meta 광고 라이브러리</span></span>
+      <span class="val B">B</span>
+      <span class="size">100~200건</span>
+      <span class="act">국가=<strong>대한민국</strong> + 화장품·건기식 키워드로 열람해 옮김. 항목: 본문 카피 전문 · 헤드라인 · CTA 텍스트 · 랜딩 URL · 게재 기간.<span class="go"><a href="https://www.facebook.com/ads/library/?locale=ko_KR">facebook.com/ads/library/?locale=ko_KR</a></span></span>
+    </div>
+    <div class="row">
+      <span class="id">google_atc<span class="nm">Google 광고 투명성 센터</span></span>
+      <span class="val C">C</span>
+      <span class="size">보관 ~13개월</span>
+      <span class="act">같은 방식. 공식 API가 없습니다.<span class="go"><a href="https://adstransparency.google.com/?region=KR&amp;hl=ko">adstransparency.google.com/?region=KR</a></span></span>
+    </div>
+    <div class="row">
+      <span class="id">kcia_guideline<span class="nm">화장품협회 광고자문 기준 해설서 2025</span></span>
+      <span class="val A">A</span>
+      <span class="size">79 / 47 / 19</span>
+      <span class="act">PDF에서 <strong>금지 79 · 허용 47 · 실증 19범주</strong> 표 추출 + 검수.<span class="go"><a href="https://kcia.or.kr/ad/cs/notice.php?type=view&amp;no=17039">kcia.or.kr/ad/cs/notice.php?no=17039</a></span></span>
+    </div>
+  </div>
+
+  <div class="warn stop"><span class="k">🚨 착수 전</span><span><code>meta_adlibrary</code> 는 <strong>아직 착수 조건이 안 섰습니다.</strong> 실제 용도가 <code>test_holdout</code>(평가)인데 용도 축 U1~U4에 <strong>평가가 없고</strong>, G2(원문 미보관)와 골든셋 원문 보관이 <strong>정면 충돌</strong>합니다. <strong>먼저 결정하고 옮기십시오</strong> — 200건 옮긴 뒤 못 쓰게 되는 것이 가장 아깝습니다.</span></div>
+  <div class="warn stop"><span class="k">🚨 자동금지</span><span><code>meta_adlibrary</code> · <code>google_atc</code> 는 <strong>자동 수집이 약관 위반</strong>입니다. 스크립트 · 확장프로그램 · 매크로 <strong>전부 금지</strong>이고, 레지스트리에 <code>status: manual</code> 로 박혀 있어 수집기와 탐침 둘 다 거부합니다.</span></div>
+  <div class="warn"><span class="k">범위</span><span><code>kcia_guideline</code> 은 <strong>「표현 목록만」</strong> 취합니다 — 해설 문장 · 편집 · 배열은 협회 저작물입니다. 협회 공지 페이지에 이용조건 문구가 없어(2026-09-02 탐침) 문의 회신이 오면 재판정합니다.</span></div>
+</section>
+
+<!-- FAQ -->
+<section class="faq">
+  <h2>미리 답하는 것</h2>
+
+  <div class="qa">
+    <div class="q">그냥 스크립트로 긁으면 안 되나요?</div>
+    <div class="a">④의 두 건은 <strong>약관이 금지</strong>합니다. 나머지는 금지가 아니라 <strong>로그인·승인이 사람을 요구</strong>하는 것이라 자동화할 대상 자체가 없습니다.</div>
+  </div>
+  <div class="qa">
+    <div class="q">왜 승인 전에는 열어보지도 못하나요?</div>
+    <div class="a">신청·승인이 <strong>접근의 조건</strong>이기 때문입니다. 「받아서 지우는 것」과 「받지 않는 것」은 다릅니다. 탐침(<code>python launcher.py probe</code>)은 저장을 하지 않지만 <strong>접근은 하므로</strong> 같은 조건에 걸립니다.</div>
+  </div>
+  <div class="qa">
+    <div class="q">받은 데이터를 그냥 저장하면 되나요?</div>
+    <div class="a">🚨 <strong>아닙니다.</strong> <code>reviewed_by</code> 가 비어 있으면 수집기가 거부합니다. <strong>S0-14 2인 확인 31건이 아직 0건</strong>이고, 그것이 지금 전체를 막고 있습니다.</div>
+  </div>
+  <div class="qa">
+    <div class="q">확인해 보니 조건이 다르면요?</div>
+    <div class="a">그것이 <strong>이견</strong>입니다. <code>reviewed_by</code> 를 <strong>비워 두고</strong> <code>reviewed_at</code> 과 <code>dissent_note</code> 만 적어 주십시오. 팀장이 재판정합니다 — <strong>동의만 찍는 검토는 게이트가 아닙니다.</strong></div>
+  </div>
+</section>
+
+</div>
+
+</body>
+</html>
