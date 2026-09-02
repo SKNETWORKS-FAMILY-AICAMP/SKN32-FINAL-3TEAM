@@ -146,6 +146,21 @@ def test_등급이_허용하는_용도_상한을_넘지_않는다() -> None:
             f"{grade} 의 상한은 {sorted(cap) or '없음'}"
         )
 
+    # 🚨 models 도 같은 규칙을 받는다. 소스 쪽은 D-90 ④-1 로 해소됐는데(G0 인데 용도가 열린
+    #    소스 0건) **모델 섹션만 남아 있었다** — `klue_roberta` 가 G0 인데 U1: allow 다.
+    #    D-90 ④-1 이 만들어진 이유가 정확히 이 결함이고, 잡는 자리를 반쪽만 만들었다
+    #    (권소라 역검토 v1.2 §4).
+    for key, spec in (_registry().get("models") or {}).items():
+        grade = spec.get("grade")
+        if grade not in GRADE_CAP:
+            continue
+        allowed = {a for a, v in (spec.get("use") or {}).items() if v == "allow"}
+        over = allowed - GRADE_CAP[grade]
+        assert not over, (
+            f"models[{key}]: 등급 {grade} 인데 {sorted(over)} 가 allow 다 — "
+            f"{grade} 의 상한은 {sorted(GRADE_CAP[grade]) or '없음'} (D-72)"
+        )
+
 
 @pytest.mark.gate
 def test_제약_플래그는_정의된_것만_쓴다() -> None:
@@ -201,6 +216,13 @@ def test_편입금지_목록은_전부_G1이고_사유가_있다() -> None:
         name = item.get("name", "?")
         assert item.get("grade") == "G1", f"blocked[{name}]: grade 가 G1 이 아니다"
         assert item.get("reason"), f"blocked[{name}]: reason 이 없다"
+        # 🚨 reason 이 「비어 있지만 않으면」 통과했다. YAML 플로우 매핑에서 인용 없는 값의
+        #    쉼표는 구분자라, 사유 뒷문장이 통째로 **유령 키**가 되고 앞 절반만 남는다.
+        #    실제로 KOBACO AiSAC 이 그 상태였다 (권소라 역검토 v1.2 §3).
+        assert set(item) == {"name", "grade", "reason"}, (
+            f"blocked[{name}]: 키가 {sorted(item)} 다 — {{name, grade, reason}} 뿐이어야 한다. "
+            '값에 쉼표가 있으면 "..." 로 감싼다'
+        )
 
 
 @pytest.mark.gate
@@ -336,15 +358,81 @@ def test_검토_대상_소스는_모두_판정_근거를_가진다() -> None:
     )
     rationale = yaml.safe_load(rationale_path.read_text(encoding="utf-8")) or {}
 
-    missing = [
-        key
-        for key, src in _sources().items()
-        if any((src.get("use") or {}).get(u) == "allow" for u in sorted(VALID_USES))
-        and not (rationale.get(key) or {}).get("why")
-    ]
+    targets = {
+        k: v
+        for k, v in _sources().items()
+        if any((v.get("use") or {}).get(u) == "allow" for u in sorted(VALID_USES))
+    }
+    missing = [k for k in targets if not (rationale.get(k) or {}).get("why")]
+
+    # 🚨 `why` 존재만 보면 「근거가 있긴 한데 재현에 못 쓰는 상태」가 그물을 빠져나간다.
+    #    확인 항목 4 가 *"근거 URL 이 실제로 그 조건을 말하는가 — 링크를 열어 보십시오"* 인데,
+    #    URL 이 없으면 그 항목이 성립하지 않는다 (권소라 역검토 v1.2 §5).
+    #    외부 URL 이 없는 자체 산출물은 **산출 근거 문서 경로**를 넣는다 (D-99).
+    no_url = [k for k, v in targets.items() if not v.get("evidence_url")]
+    assert not no_url, (
+        "용도가 열린 소스에 근거 URL 이 없다 — 확인 항목 4(링크를 열어 확인)가 성립하지 않는다 "
+        f"(D-99). 자체 산출물이면 산출 근거 문서 경로를 넣는다: {no_url}"
+    )
 
     assert not missing, (
         "용도가 열린 소스에 판정 근거가 없다 — 검토자가 등급을 재현할 수 없다 (D-66 · D-90). "
         "판정매트릭스에 엔트리를 넣거나, id 가 다를 뿐이라면 extract_rationale.py 의 "
         f"ALIAS 에 잇는다: {missing}"
     )
+
+
+# 크롤링형으로 판정되는 `access` 표현 — collect/registry.py 의 CRAWL_ACCESS 와 같은 집합이다.
+CRAWL_ACCESS = {"크롤링", "게시판", "스크래핑"}
+
+
+@pytest.mark.gate
+def test_크롤링형_소스는_robots_확인_기록을_가진다() -> None:
+    """🚨 게이트는 초록불인데 수집기 첫 줄에서 죽던 자리다.
+
+    `collect/registry.py` 의 규약 6 이 크롤링형 소스에 `robots_checked_at` 을 요구하는데,
+    **그 필드를 만드는 코드가 어디에도 없었다** — `gen_registry.py` 의 `block()` 이 쓰는
+    필드 목록에도, `EXTRA` 하드코딩에도 없었다. 그래서 `mfds_hf_ingredient_board`(S1-06 ·
+    고시형 96 + 개별인정형 472 = 568건 · 2층 적법 라벨의 실체)가 **영구히 수집 불가**였다.
+
+    🚨 **규약이 수집 시점에만 걸리면 CI 는 통과하고 사람이 부딪힌다.** 저장소에서 답이
+    하나인 검사이므로 pytest 쪽이다 (D-89). 값은 **사람이 robots.txt 를 열어 본 날**이며,
+    비워 두면 이 게이트가 막는다 — 확인 없이 여는 것을 막는 것이 목적이다 (D-72).
+    """
+    offenders = []
+    for key, src in _sources().items():
+        access = str(src.get("access") or "")
+        if not any(w in access for w in CRAWL_ACCESS):
+            continue
+        if not any((src.get("use") or {}).get(u) == "allow" for u in sorted(VALID_USES)):
+            continue  # 전 용도 닫힘 — 게이트가 이미 막는다
+        if not src.get("robots_checked_at"):
+            offenders.append(f"{key}(access={access!r})")
+
+    assert not offenders, (
+        "크롤링형인데 robots_checked_at 이 없다 — 수집기가 규약 6 에서 거부한다. "
+        "robots.txt 를 열어 확인한 날을 scripts/registry_review.yaml 에 적는다: "
+        f"{offenders}"
+    )
+
+
+@pytest.mark.gate
+def test_판정은_다형_참조의_대상을_제약으로_고정한다() -> None:
+    """다형 참조는 FK 무결성이 DB 수준에서 안 걸린다 — 그 자리를 CHECK 가 대신한다 (D-103).
+
+    🚨 `judgment.subject_type` 이 열려 있으면 오타 하나가 조용히 새 종류의 판정을 만든다.
+       주장 계층을 9/17 이후로 미룰 수 있게 하는 것이 이 컬럼인데, 값 집합이 고정되지
+       않으면 미루는 것이 아니라 흐려지는 것이다.
+    """
+    from app.models import CopySentence, Judgment, WorkDoc
+
+    def _checks(model) -> set[str]:
+        return {
+            c.name for c in model.__table__.constraints if c.__class__.__name__ == "CheckConstraint"
+        }
+
+    assert "ck_judgment_subject_type" in _checks(Judgment), (
+        "judgment 에 subject_type CHECK 가 없다 — 다형 참조의 유일한 방어선이다 (D-103)"
+    )
+    assert "ck_copy_sentence_origin" in _checks(CopySentence), "copy_sentence.origin CHECK 가 없다"
+    assert "ck_work_doc_kind" in _checks(WorkDoc), "work_doc.kind CHECK 가 없다"

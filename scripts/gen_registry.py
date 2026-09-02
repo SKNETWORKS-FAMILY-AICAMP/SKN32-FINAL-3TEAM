@@ -161,6 +161,15 @@ def block(key, s, extra=None, covers=None, status="collect"):
     L.append(f"    reviewed_by: {_scalar(rv.get('reviewed_by'))}")
     if rv.get("reviewed_at"):
         L.append(f"    reviewed_at: {_scalar(rv.get('reviewed_at'))}")
+    # 🚨 크롤링형 소스는 `collect/registry.py` 의 규약 6 이 robots_checked_at 을 요구하는데,
+    #    그 필드를 만드는 코드가 어디에도 없었다 — 게이트는 초록불이고 수집기 첫 줄에서 죽는다
+    #    (권소라 역검토 v1.2 §1). 원장에서 읽어 낸다. 값은 **사람이 robots.txt 를 열어 본 날**이다.
+    # 🔄 이견 기록 — 「보고 반대함」과 「아직 안 봄」을 가른다 (권소라 역검토 v1.2 §21).
+    #    게이트와 require() 는 그대로 reviewed_by 만 본다.
+    if rv.get("dissent_note"):
+        L.append(f"    dissent_note: {esc(rv['dissent_note'])}")
+    if rv.get("robots_checked_at"):
+        L.append(f"    robots_checked_at: {_scalar(rv.get('robots_checked_at'))}")
     if s.get("url"):
         L.append(f"    evidence_url: {esc(s['url'])}")
     return "\n".join(L)

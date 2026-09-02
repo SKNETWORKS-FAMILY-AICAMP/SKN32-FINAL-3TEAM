@@ -58,6 +58,8 @@ kfia_approved_list:
   reviewed_by: null
   reviewed_at: null
   collected_at: null
+  # 🚨 크롤링형 — robots.txt 를 사람이 열어 본 날을 적는다 (규약 6)
+  robots_checked_at: null
 
 mfds_hf_ingredient:
   decided_by: 오한빈
@@ -73,12 +75,6 @@ mfds_hf_individual:
   reviewed_at: null
   collected_at: null
 
-hf_standard:
-  decided_by: 오한빈
-  decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
-  collected_at: null
 
 kcia_guideline:
   decided_by: 오한빈
@@ -107,6 +103,14 @@ mfds_hf_ingredient_board:
   reviewed_by: null
   reviewed_at: null
   collected_at: null
+  # 크롤링형 — robots.txt 확인 (규약 6). 2026-09-02 오한빈 직접 확인:
+  #   foodsafetykorea.go.kr/robots.txt 에 `User-agent: *` 그룹이 없다.
+  #   선언된 것은 Googlebot 그룹 하나이고, 그 안의 Disallow 도
+  #   /api/board/...menu_grp=MENU_GRP33&menu_no=690 하나뿐이다.
+  #   🚨 우리 대상은 /portal/board/...menu_grp=MENU_NEW01&menu_no=2660 으로 경로가 다르다.
+  #   → 적용되는 금지 규칙 없음. 「명시적 허용」이 아니라 「금지 없음」이다.
+  #   🚨 robots 는 약관·저작권 판단이 아니다 — 그 축은 constraints 가 따로 진다.
+  robots_checked_at: 2026-09-02
 
 cosmetic_ingredient:
   decided_by: 오한빈
@@ -300,6 +304,23 @@ self_sanction_stat:
 mfds_production:
   decided_by: 오한빈
   decided_at: 2026-08-20
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+# 🚨 registry_tail.yaml 에 손으로 쓴 항목이라 ORDER 에 없다. 원장에도 없어서
+#    mark_collected() 가 죽는다 — D-64 검토로 용도를 하나라도 열면 그때 터진다
+#    (권소라 역검토 v1.2 §2). 지금 자리를 만들어 둔다.
+korean_hatespeech:
+  decided_by: null
+  decided_at: null
+  reviewed_by: null
+  reviewed_at: null
+  collected_at: null
+
+apeach:
+  decided_by: null
+  decided_at: null
   reviewed_by: null
   reviewed_at: null
   collected_at: null

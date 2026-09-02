@@ -86,6 +86,9 @@ quote-style = "double"
 # ============================================================
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 🚨 저장소 루트를 import 경로에 넣는다. 게이트가 `app.models` 를 읽어 CHECK 제약을
+#    검사하는데(D-103 다형 참조), 이것이 없으면 ModuleNotFoundError 로 죽는다.
+pythonpath = ["."]
 addopts = "-q --strict-markers"
 markers = [
     "gate: 거버넌스 게이트 — 실패 시 진행 불가 (D-51)",
