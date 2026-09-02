@@ -1,4 +1,8 @@
-"""공공데이터포털 오픈API 수집기 — 6개 소스 공용.
+"""오픈API 수집기 — 여러 포털 공용.
+
+🚨 처음 이름은 `data_go_kr.py` 였으나 **틀린 이름이 됐다** — data.go.kr 의 API 유형이
+   `LINK` 인 소스는 실제 호출이 **원 기관 포털**로 간다(식품안전나라). 이름이 거짓이 되면
+   다음 사람이 그 이름을 믿고 판단한다. 오늘 갈아 둔다.
 
 🚨 **첫 줄이 `registry.require()` 다** (수집기 공통 규약 1). 게이트를 우회하는 경로를 만들지 않는다.
 
@@ -6,8 +10,8 @@
 만들면 규약 2·3·5·7 을 여섯 번 다시 쓰게 되고, 그중 하나가 빠지는 것이 실제로 일어난다.
 다른 것은 **요청주소와 응답 모양뿐**이고 그것은 `collect/endpoints.yaml` 이 진다 (D-89).
 
-    uv run python -m collect.data_go_kr mfds_hf_ingredient --use U1
-    uv run python -m collect.data_go_kr mfds_hf_ingredient --use U1 --pages 1   # 첫 장만
+    uv run python -m collect.openapi mfds_hf_ingredient --use U1
+    uv run python -m collect.openapi mfds_hf_ingredient --use U1 --pages 1   # 첫 장만
 
 🚨 첫 실행은 `--pages 1` 로 한다. 응답 모양을 눈으로 보고 나서 전량을 받는다 —
    5,000건을 받아 놓고 필드가 기대와 다른 것을 아는 것이 가장 비싸다.
@@ -46,8 +50,23 @@ def spec_of(source_id: str) -> dict[str, Any]:
 
 
 def fetch_page(ep: dict[str, Any], key: str, page: int) -> bytes:
+    """🚨 포털마다 호출 규약이 다르다 — 같은 「오픈API」가 같은 모양을 뜻하지 않는다.
+
+    query : data.go.kr      ?serviceKey=..&pageNo=..&numOfRows=..
+    path  : 식품안전나라     /{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}
+    """
+    fmt = ep.get("fmt") or "json"
+    if (ep.get("style") or "query") == "path":
+        sid = ep.get("service_id")
+        if not sid:
+            raise registry.RegistryError(
+                "style: path 인데 service_id 가 없다. 🚨 하이픈까지 화면 그대로 적는다 (예: I-0040)"
+            )
+        start = (page - 1) * ROWS + 1  # 🚨 1-based 포함 구간이다
+        return http.fetch(f"{ep['url']}/{key}/{sid}/{fmt}/{start}/{start + ROWS - 1}")
+
     params = {"serviceKey": key, "pageNo": page, "numOfRows": ROWS, **(ep.get("params") or {})}
-    if (ep.get("fmt") or "json") == "json":
+    if fmt == "json":
         params.setdefault("type", "json")
     return http.fetch(f"{ep['url']}?{urlencode(params, safe='')}")
 
@@ -84,7 +103,8 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
     registry.require(source_id, use=use)  # 🚨 규약 1 — 첫 줄
     ep = spec_of(source_id)
     env.load()
-    key = env.get("DATA_GO_KR_KEY")
+    # 🚨 포털마다 키가 다르다. LINK 유형은 원 기관에서 따로 발급받는다 (2026-09-02).
+    key = env.get("FOODSAFETY_KEY" if (ep.get("style") or "query") == "path" else "DATA_GO_KR_KEY")
 
     page, saved, total = 1, 0, None
     while True:
@@ -123,7 +143,7 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
 def main(argv: list[str]) -> int:
     import argparse  # noqa: PLC0415
 
-    ap = argparse.ArgumentParser(prog="collect.data_go_kr")
+    ap = argparse.ArgumentParser(prog="collect.openapi")
     ap.add_argument("source_id")
     ap.add_argument("--use", required=True, choices=sorted(registry.VALID_USES))
     ap.add_argument("--pages", type=int, default=None, help="🚨 첫 실행은 1 로 한다")

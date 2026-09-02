@@ -39,6 +39,9 @@ OUT = ROOT / "docs/03_데이터"
 CACHE = ROOT / "build" / "probe_results.json"
 
 # 🚨 본문에서 이용조건을 말하는 자리. 검토 확인 항목 1·3·5 가 찾는 문구다.
+# 🚨 data.go.kr 의 「API 유형」. LINK 면 실제 호출과 **신청처가 원 기관**이다 (2026-09-02).
+#    이걸 못 보면 활용신청 버튼을 찾다가 시간을 버린다 — 15058359 가 그랬다.
+PORTAL_HINTS = ("API 유형", "심의유형", "이용허락범위", "End Point", "엔드포인트", "요청주소")
 LICENSE_HINTS = (
     "이용허락범위",
     "공공누리",
@@ -64,6 +67,17 @@ def _text(raw: bytes) -> str:
     s = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", s)
     s = re.sub(r"(?s)<[^>]+>", " ", s)
     return re.sub(r"\s+", " ", s).strip()
+
+
+def _portal_lines(text: str) -> list[str]:
+    """포털 메타 — 「API 유형 : LINK」처럼 **신청·호출 경로를 가르는 한 줄**을 잡는다."""
+    out: list[str] = []
+    for hint in PORTAL_HINTS:
+        i = text.find(hint)
+        if i < 0:
+            continue
+        out.append(f"**{hint}** … {text[i : i + 70].strip()}")
+    return out
 
 
 def _license_lines(text: str) -> list[str]:
@@ -157,6 +171,7 @@ def probe_one(source_id: str) -> dict[str, Any]:
     row["bytes"] = len(raw)
     row["license"] = _license_lines(text)
     row["endpoints"] = _endpoints(text)
+    row["portal"] = _portal_lines(text)
     row["robots"] = _robots(url)
     row["result"] = "✅ 열림"
 
@@ -221,6 +236,9 @@ def render(rows: list[dict[str, Any]]) -> str:
                 "",
             ]
             L += [f"- {x}" for x in (r.get("scale_hits") or [])] or ["- ⬜ 숫자를 못 찾았습니다"]
+        if r.get("portal"):
+            L += ["", "🔧 **포털 메타** — API 유형이 `LINK` 면 신청·호출이 원 기관이다", ""]
+            L += [f"- {x}" for x in r["portal"]]
         if r.get("endpoints"):
             L += ["", "🔧 **요청주소 후보** — `collect/endpoints.yaml` 에 적을 것", ""]
             L += [f"- `{u}`" for u in r["endpoints"]]

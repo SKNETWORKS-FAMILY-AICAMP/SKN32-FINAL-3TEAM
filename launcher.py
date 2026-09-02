@@ -357,7 +357,7 @@ def collect(
     2인 확인이 안 끝난 소스는 게이트가 첫 줄에서 거부합니다 (D-15 · D-66).
     요청주소는 `collect/endpoints.yaml` 에 있고, 비어 있으면 어디를 볼지 알려줍니다.
     """
-    args = ["uv", "run", "python", "-m", "collect.data_go_kr", source, "--use", use]
+    args = ["uv", "run", "python", "-m", "collect.openapi", source, "--use", use]
     if pages:
         args += ["--pages", str(pages)]
     raise typer.Exit(run(*args))

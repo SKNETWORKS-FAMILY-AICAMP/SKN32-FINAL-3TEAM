@@ -79,6 +79,11 @@ mfds_hf_ingredient:
   decided_by: 오한빈
   decided_at: 2026-08-20
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음
+  # 🚨 2026-09-02 후속 — API 유형이 **LINK** 임이 드러났다. 실제 호출은 식품안전나라
+  #    (openapi.foodsafetykorea.go.kr · I-0040)이고 인증키도 그쪽에서 발급받는다.
+  #    data.go.kr 에는 활용신청 버튼조차 없다.
+  #    🚨 **검토자가 본 화면과 실제 이용 경로가 다르다.** 서명은 유지하되, 식품안전나라
+  #    가입 시 이용약관에 추가 제약이 있으면 **재판정 대상**이다 (D-72).
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
   collected_at: null

@@ -32,17 +32,34 @@ mfds_hf_ingredient:      # 15058359 건기식 기능성 원료인정 현황
   url: http://openapi.foodsafetykorea.go.kr/api
   style: path            # /{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}
   fmt: json
-  service_id: null       # 🚨 미기재 — 화면의 svc_no 는 I-0040 이나 호출용 값과 같은지 확인 필요
+  service_id: I-0040     # 🔄 2026-09-02 확인 — 샘플 URL 이 /api/sample/I-0050/xml/1/5 라 **하이픈 포함**이 맞다
   params: {}
 
-mfds_hf_individual:      # 15074311 건기식 개별인정형 정보
-  url: null
+mfds_hf_individual:      # 15074311 건기식 개별인정형 정보 = 식품안전나라 I-0050
+  # 🔄 2026-09-02 — 요청주소·출력항목 확인. 샘플: /api/sample/I-0050/xml/1/5
+  #    출력 7항목: HF_FNCLTY_MTRAL_RCOGN_NO(원료인정번호) · DAY_INTK_HIGHLIMIT/LOWLIMIT(1일 섭취량
+  #    상·하한) · WT_UNIT(중량단위) · RAWMTRL_NM(원재료명) · IFTKN_ATNT_MATR_CN(섭취시 주의사항) ·
+  #    **PRIMARY_FNCLTY(주된 기능성)** ← 2층이 찾던 승인 문구.
+  #    ★ 업체명·주소가 **없다** — I-0040 과 달리 마스킹 대상이 아예 안 온다.
+  #    🚨 15074311 의 API 유형이 LINK 인지는 확인이 남는다. LINK 가 아니면 data.go.kr 쪽에
+  #       별도 엔드포인트가 있고, 그때는 **서명이 덮는 경로가 어느 쪽인지**가 갈린다.
+  url: http://openapi.foodsafetykorea.go.kr/api
+  style: path
   fmt: json
+  service_id: I-0050
   params: {}
 
 mfds_sanctions:          # 15059500 식약처 행정처분결과
+  # 🔄 2026-09-02 — 식품안전나라에 「행정처분결과」가 **다섯으로 나뉘어** 있다:
+  #    I0470 행정처분결과 / I0480 식품제조가공업 / I0481 식품판매업 /
+  #    I0482 수입식품업 / I2630 식품접객업
+  #    🚨 serviceId 에 **하이픈이 없다** — I-0040·I-0050 과 형식이 다르다. 추정하지 않는다.
+  #    🚨 15059500 이 이 중 어느 것에 대응하는지, LINK 인지 아직 모른다.
+  #    🚨🚨 다섯 전부 「식품」이다 — **화장품 행정처분이 없다.** 1층의 절반이 빌 수 있다.
   url: null
   fmt: json
+  style: query
+  service_id: null
   params: {}
 
 ftc_decisions_api:       # 15103246 공정위 결정문 목록/본문

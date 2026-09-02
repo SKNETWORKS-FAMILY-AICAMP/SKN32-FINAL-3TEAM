@@ -32,6 +32,12 @@ KEYS = {
         "공공데이터포털 — 식약처 API 4종 (S1-04 · S1-05 · S2-03)",
         "data.go.kr 활용신청 (S0-05) — 즉시~1일",
     ),
+    "FOODSAFETY_KEY": (
+        "식품안전나라 OpenAPI — 건기식 기능성 원료 I-0040 · 개별인정형 I-0050",
+        "🚨 data.go.kr 키가 아니다. 15058359 는 **API 유형이 LINK** 라 실제 호출이 "
+        "openapi.foodsafetykorea.go.kr 로 가고, 인증키도 그쪽에서 따로 발급받는다. "
+        "data.go.kr 활용신청 버튼이 그 사이트로 보낸다",
+    ),
     "KOSIS_KEY": (
         "KOSIS 국가통계 — 6층 세그먼트",
         "kosis.kr/serviceInfo/openAPIGuide.do (S0-06) — 자동 발급",
