@@ -382,8 +382,6 @@ ORDER = [
     "kobaco_mcr_report",
     "krei_food",
     "khff_survey",
-    "nasmedia_npr",
-    "nasmedia_fb",
     "kcc_media",
     "kosis",
     "knhanes",
@@ -434,11 +432,15 @@ for key in ORDER:
 with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8") as _out:
     _out.write("\n\n".join(out) + "\n")
 print("등재", len(ORDER), "건 · 법제처 covers", len(LAW_COVERS), "종 흡수")
+# 🔄 미채택으로 내린 것은 매트릭스에 판정 근거로 남지만 레지스트리 sources 에는 없다.
+#    registry_tail.yaml 의 not_adopted 가 그 자리다 (D-110).
+NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb"}
 missing = [
     s["id"]
     for s in SRC
     if s["id"] not in LAW_IDS
     and s["id"] not in MODEL_IDS
+    and s["id"] not in NOT_ADOPTED_IDS
     and RENAME.get(s["id"], s["id"]) not in ORDER
 ]
 print("미등재", len(missing))

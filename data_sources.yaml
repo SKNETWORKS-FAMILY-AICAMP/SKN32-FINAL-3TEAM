@@ -714,50 +714,6 @@ sources:
     evidence_url: "https://khff.or.kr/user/info/InfoBoardUserView.do?_menuNo=369&boardSeqno=10035&postsSeqno=119567"
     evidence_is_access: true
 
-  nasmedia_npr:
-    name: "나스미디어 2026 NPR 인터넷 이용자 조사 ★사용자제공"
-    org: "KT 나스미디어"
-    url: "https://www.nasmedia.co.kr/정기보고서/2026-03-npr-usersurvey-insight/"
-    layer: "6층 세그먼트·페르소나"
-    grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
-    constraints: [BY]
-    redistributable: true
-    value: A
-    cost: free
-    status: collect
-    access: "✅ 무료 PDF (소속+이메일만)"
-    scale: "n=2,000 · 2026.02.04~13 · 2004년부터 연1회"
-    caution: "★ 「왜 이 제품군인가」를 발표에서 설득할 때 쓸 수 있는 가장 좋은 숫자다. 화장품·식품이 크리에이터 추천 구매 1·2위이고 그 채널이 규제 사각지대라는 논리가 바로 선다."
-    collected_at: null
-    decided_at: 2026-08-20
-    decided_by: 오한빈
-    reviewed_by: null
-    evidence_url: "https://www.nasmedia.co.kr/정기보고서/2026-03-npr-usersurvey-insight/"
-    evidence_is_access: true
-
-  nasmedia_fb:
-    name: "나스미디어 2026 식음료 트렌드 ★사용자제공 · 명칭정정"
-    org: "KT 나스미디어"
-    url: "https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/"
-    layer: "6층 세그먼트·페르소나"
-    grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
-    constraints: [BY]
-    redistributable: true
-    value: B
-    cost: free
-    status: collect
-    access: "✅ 무료 PDF"
-    scale: "2026.05.29 발행 · 업종 시리즈(1)"
-    caution: "★ 2025 「주요 업종 시리즈 06 건강기능식품」 PDF를 함께 받을 것 — 이 프로젝트에는 식음료 일반보다 그쪽이 직결된다."
-    collected_at: null
-    decided_at: 2026-08-20
-    decided_by: 오한빈
-    reviewed_by: null
-    evidence_url: "https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/"
-    evidence_is_access: true
-
   kcc_media:
     name: "방송매체 이용행태 조사 자료 (3068653) ★명칭정정"
     org: "방송미디어통신위원회"
@@ -1083,6 +1039,12 @@ sources:
 #       등급 축 자체가 오염되고, 나중에 필요해졌을 때 재판정 비용이 생긴다.
 #    실제 등급을 그대로 두고 「왜 안 쓰는가」만 기록한다 (D-72 — 가치 판정과 등급 판정은 다른 축).
 not_adopted:
+  # 🔄 2026-09-02 — PDF 마지막 장의 이용조건을 직접 열어 확인하고 내렸다 (D-110).
+  #    🚨 가치가 없어서가 아니다. NPR 은 가치 A 였고 지금도 A 다 — 조건이 우리와 안 맞을 뿐이다.
+  - {key: nasmedia_npr, name: 나스미디어 2026 NPR 인터넷 이용자 조사, grade: G2, value: A,
+     reason: "🚨 NC + PREAPPROVAL + ND 성격 — 「상업적으로 활용할 수 없습니다」 · 「인용 및 활용 시 사전 동의를 득해야」 · 「텍스트를 임의로 가공해 재인용 금지」. ①은 모두의 말뭉치가, ③은 UnSmile 이 탈락한 조항이다. 🚨 자체 조사(n=2,000)라 소급할 원본이 없다"}
+  - {key: nasmedia_fb, name: 나스미디어 TrendIssue 업종 리포트 (식음료·건강기능식품), grade: G2, value: B,
+     reason: "🚨 NPR 과 같은 조항. ✅ 다만 모든 장에 원본 출처가 표기돼 있어 건기식협회·식약처·엠브레인으로 소급 가능하다 — 보고서는 길잡이로만 쓰고 숫자는 원본에서 가져온다 (D-16 과 같은 처방)"}
   - {key: modu_web, name: 국립국어원 모두의 말뭉치, grade: G2, value: X,
      reason: "🚨 PREAPPROVAL — 산출물 공개마다 사전 승인이 걸리고 리드타임을 통제할 수 없다. 발표·시연영상·코드 공개가 전부 승인 대상"}
   - {key: unsmile, name: Smilegate UnSmile 혐오표현, grade: G2, value: X,
