@@ -292,12 +292,6 @@ EXTRA = {
         "probe_note: >-",
         "  🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.",
     ],
-    "mfds_hf_ingredient_board": [
-        "probe_note: >-",
-        "  🚨 2026-09-02 탐침 — 게시판이라 **이용조건 문구가 없다.** 근거 페이지가 따로 필요하다.",
-        "  같은 데이터가 API 15074311 로도 나오고 그쪽은 「제한 없음」이 확인됐다 —",
-        "  caution 이 말한 「셋을 대조해 정본을 정한다」의 답이 여기서 갈릴 수 있다.",
-    ],
     "kosis": [
         "probe_note: >-",
         "  🚨 2026-09-02 탐침 — 근거 URL(serviceInfo/openAPIGuide.do)은 **API 가이드 페이지이고",
@@ -364,7 +358,6 @@ ORDER = [
     "law_go_kr",
     "platform_guide",
     # 제품 사실
-    "mfds_hf_ingredient_board",
     "cosmetic_ingredient",
     "cosmetic_restricted",
     # 5층 코퍼스·반례
@@ -434,7 +427,7 @@ with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8") as _out:
 print("등재", len(ORDER), "건 · 법제처 covers", len(LAW_COVERS), "종 흡수")
 # 🔄 미채택으로 내린 것은 매트릭스에 판정 근거로 남지만 레지스트리 sources 에는 없다.
 #    registry_tail.yaml 의 not_adopted 가 그 자리다 (D-110).
-NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb"}
+NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb", "mfds_hf_ingredient_board"}
 missing = [
     s["id"]
     for s in SRC

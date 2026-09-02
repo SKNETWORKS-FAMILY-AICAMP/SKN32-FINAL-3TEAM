@@ -328,33 +328,6 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
 
-  mfds_hf_ingredient_board:
-    name: "식품안전나라 「건강기능식품 원료별 정보」"
-    org: "식품의약품안전처"
-    url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
-    layer: "제품 사실"
-    grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
-    constraints: []
-    redistributable: true
-    value: A
-    cost: free
-    status: collect
-    access: "웹 게시판 크롤링"
-    scale: "고시형 96 + 개별인정형 472 = 568건"
-    probe_note: >-
-      🚨 2026-09-02 탐침 — 게시판이라 **이용조건 문구가 없다.** 근거 페이지가 따로 필요하다.
-      같은 데이터가 API 15074311 로도 나오고 그쪽은 「제한 없음」이 확인됐다 —
-      caution 이 말한 「셋을 대조해 정본을 정한다」의 답이 여기서 갈릴 수 있다.
-    caution: "🚨 일괄 다운로드·API가 없어 게시판 크롤링이 필요. 568건이면 수집 비용은 감당 가능. / API 15074311(개별인정형)이 같은 데이터일 가능성이 있으나 15058359와의 정확한 차이는 미확인 — 1W에 셋 다 열어 대조."
-    collected_at: null
-    decided_at: 2026-08-20
-    decided_by: 오한빈
-    reviewed_by: null
-    robots_checked_at: 2026-09-02
-    evidence_url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
-    evidence_is_access: true
-
   cosmetic_ingredient:
     name: "식약처 화장품 원료성분정보 API (15111774)"
     org: "식품의약품안전처"
@@ -684,7 +657,7 @@ sources:
       🚨 D-108 — G0 라 용도가 전부 닫혀 있는데 collect 였다. 선행 작업은 성인 설문지 PDF를
       직접 열어 건강기능식품 문항 존재를 확인하는 것(1시간)이다. 문항이 없으면 6층에서
       기대한 값이 나오지 않으므로 확인이 수집보다 먼저다. 가치 A · 접근성 1위.
-    caution: "🚨 건강기능식품 문항 포함 여부가 미확인이다 — 2023 기초분석보고서·2024 통계보고서 목차에 건기식 전용 장절이 없다. 성인 설문지 PDF를 직접 열어 확인할 것(1시간)."
+    caution: "🚨 남은 확인은 1분짜리다 — 원시자료 다운로드 페이지에 붙은 공공누리 배지가 몇 유형인가. kcc_media 는 탐침이 data.go.kr 에서 「공공저작물 : 출처표시 (제 1유형)」을 그대로 긁어냈다. 같은 표기를 찾으면 된다. 🚨 mfds_press 와 같은 형태다 — 거기도 「공공누리가 부착되지 않은 자료는 담당자와 사전 협의」 단서 때문에 게시물마다 갈린다(D-18 프래그먼트). ✅ 건기식 문항 확인은 끝났다(2026-09-02)."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
@@ -1039,6 +1012,10 @@ sources:
 #       등급 축 자체가 오염되고, 나중에 필요해졌을 때 재판정 비용이 생긴다.
 #    실제 등급을 그대로 두고 「왜 안 쓰는가」만 기록한다 (D-72 — 가치 판정과 등급 판정은 다른 축).
 not_adopted:
+  # 🔄 2026-09-02 — 팀장이 게시판 이용조건을 직접 확인. 사용금지 조항이 있었다.
+  #    🚨 값이 없어서가 아니라 **조건이 맞는 경로가 따로 있어서** 내린다 (D-110 과 같은 처방).
+  - {key: mfds_hf_ingredient_board, name: 식품안전나라 「건강기능식품 원료별 정보」, grade: G2, value: A,
+     reason: "🚨 사용금지 조항 확인(2026-09-02 · 오한빈). 같은 데이터가 data.go.kr API 15074311 로 나오고 그쪽은 「이용허락범위 제한 없음」이 실측 확인됐다 — API 를 정본으로 삼는다. ✅ 게시판 크롤링(S1-06 568건)과 robots 확인이 불필요해진다. 🚨 고시형 96건이 API 로 덮이는지는 15058359 와 대조가 남는다"}
   # 🔄 2026-09-02 — PDF 마지막 장의 이용조건을 직접 열어 확인하고 내렸다 (D-110).
   #    🚨 가치가 없어서가 아니다. NPR 은 가치 A 였고 지금도 A 다 — 조건이 우리와 안 맞을 뿐이다.
   - {key: nasmedia_npr, name: 나스미디어 2026 NPR 인터넷 이용자 조사, grade: G2, value: A,
