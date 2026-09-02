@@ -347,12 +347,20 @@ def register(
 
 
 @app.command()
-@stub("W2", "scripts/collect.py 수집 로직 구현")
-def collect() -> None:
-    """허가가 끝난 소스만 골라 내려받는다.
+def collect(
+    source: str = typer.Argument(..., help="레지스트리 소스 id"),
+    use: str = typer.Option("U1", "--use", help="U1~U4"),
+    pages: int = typer.Option(0, "--pages", help="🚨 첫 실행은 1 로 — 응답을 보고 전량을 받는다"),
+) -> None:
+    """공공데이터포털 오픈API 를 내려받는다 — 6개 소스 공용.
 
-    2인 확인이 안 끝난 소스는 게이트가 거부한다 (D-15).
+    2인 확인이 안 끝난 소스는 게이트가 첫 줄에서 거부합니다 (D-15 · D-66).
+    요청주소는 `collect/endpoints.yaml` 에 있고, 비어 있으면 어디를 볼지 알려줍니다.
     """
+    args = ["uv", "run", "python", "-m", "collect.data_go_kr", source, "--use", use]
+    if pages:
+        args += ["--pages", str(pages)]
+    raise typer.Exit(run(*args))
 
 
 @app.command()
@@ -424,6 +432,7 @@ MENU: list[tuple[str, str, object]] = [
     ("p", "소스 실측 (저장 없음)", probe),
     ("n", "받은 파일 세기", count),
     ("g", "받은 파일 등록", register),
+    ("c", "오픈API 수집", collect),
     ("s", "프로젝트 사본", sync),
     SEP,
     ("4", "데이터 수집", collect),

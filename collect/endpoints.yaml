@@ -1,0 +1,51 @@
+# ============================================================
+# 오픈API 요청주소 — 수집기가 실제로 부르는 곳
+# ------------------------------------------------------------
+#  🚨 레지스트리의 url 은 **포털 소개 페이지**이고 엔드포인트가 아니다.
+#     data_sources.yaml 에 넣지 않는 이유: 그 파일은 「이용조건」의 집행 목록이고
+#     여기는 「어떻게 부르는가」다. 축이 다르면 파일도 다르다 (D-89).
+#
+#  🚨 값은 **추정하지 않는다.** 비어 있으면 수집기가 거부하고 어디를 봐야 하는지 알려준다.
+#     찾는 법: 포털 소개 페이지 → 「상세기능」 → 요청주소(엔드포인트).
+#     `python launcher.py probe <소스id>` 가 화면에서 후보를 주워 실측 리포트에 적는다.
+#
+#  🚨 serviceKey 는 여기 적지 않는다 — .env 의 DATA_GO_KR_KEY 를 코드가 붙인다.
+#     키를 이 파일에 적으면 커밋된다 (gitleaks 가 막지만 애초에 넣지 않는다).
+#
+#  필드
+#    url        요청주소. 쿼리스트링 없이 경로까지만
+#    rows_key   응답에서 목록이 들어 있는 키 (JSON 기준). 모르면 비워 둔다
+#    total_key  전체 건수 키. 페이징 종료 판단에 쓴다
+#    params     serviceKey·pageNo·numOfRows 외에 고정으로 붙일 것
+#    fmt        json | xml  — data.go.kr 은 API 마다 다르다
+# ============================================================
+
+mfds_hf_ingredient:      # 15058359 건기식 기능성 원료인정 현황
+  url: null              # 🚨 미기재 — 상세기능에서 요청주소 확인
+  fmt: json
+  params: {}
+
+mfds_hf_individual:      # 15074311 건기식 개별인정형 정보
+  url: null
+  fmt: json
+  params: {}
+
+mfds_sanctions:          # 15059500 식약처 행정처분결과
+  url: null
+  fmt: json
+  params: {}
+
+ftc_decisions_api:       # 15103246 공정위 결정문 목록/본문
+  url: null
+  fmt: json
+  params: {}
+
+cosmetic_ingredient:     # 15111774 화장품 원료성분정보
+  url: null
+  fmt: json
+  params: {}
+
+cosmetic_restricted:     # 15111772 화장품 사용제한 원료정보
+  url: null
+  fmt: json
+  params: {}

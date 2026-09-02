@@ -95,6 +95,25 @@ def _scale_lines(text: str) -> list[str]:
     return out[:8]
 
 
+# 🚨 오픈API 의 **요청주소**. 레지스트리에는 포털 소개 페이지만 있고 실제 엔드포인트가 없어서
+#    수집기를 쓸 수 없었다 (2026-09-02). 포털 상세 화면이 이 문자열을 노출하면 주워 온다.
+_ENDPOINT = _re.compile(
+    r"https?://(?:apis\.)?data\.go\.kr/[\w./%-]+|http://apis\.data\.go\.kr/[\w./%-]+"
+)
+
+
+def _endpoints(text: str) -> list[str]:
+    """요청주소 후보. 🚨 **추정하지 않는다** — 화면에 실제로 있는 문자열만 낸다."""
+    out: list[str] = []
+    for m in _ENDPOINT.finditer(text):
+        u = m.group(0)
+        if "/data/" in u and u.endswith((".do", "openapi.do", "fileData.do")):
+            continue  # 포털 소개 페이지는 엔드포인트가 아니다
+        if u not in out:
+            out.append(u)
+    return out[:6]
+
+
 def _robots(url: str) -> str:
     """robots.txt 를 그대로 읽어 온다. 🚨 판단은 사람이 한다 — 요약해서 넘기지 않는다."""
     p = urlsplit(url)
@@ -131,6 +150,7 @@ def probe_one(source_id: str) -> dict[str, Any]:
     text = _text(raw)
     row["bytes"] = len(raw)
     row["license"] = _license_lines(text)
+    row["endpoints"] = _endpoints(text)
     row["robots"] = _robots(url)
     row["result"] = "✅ 열림"
 
@@ -145,6 +165,7 @@ def probe_one(source_id: str) -> dict[str, Any]:
             atext = _text(http.fetch(access_url))
             row["access_bytes"] = len(atext)
             row["scale_hits"] = _scale_lines(atext)
+            row["endpoints"] = _endpoints(atext)
         except http.FetchError as e:
             row["scale_hits"] = []
             row["access_error"] = str(e)
@@ -194,6 +215,9 @@ def render(rows: list[dict[str, Any]]) -> str:
                 "",
             ]
             L += [f"- {x}" for x in (r.get("scale_hits") or [])] or ["- ⬜ 숫자를 못 찾았습니다"]
+        if r.get("endpoints"):
+            L += ["", "🔧 **요청주소 후보** — `collect/endpoints.yaml` 에 적을 것", ""]
+            L += [f"- `{u}`" for u in r["endpoints"]]
         if r.get("robots"):
             L += [
                 "",
