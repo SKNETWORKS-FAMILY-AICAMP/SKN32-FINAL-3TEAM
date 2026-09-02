@@ -43,7 +43,7 @@ mfds_sanctions:
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: null
+  collected_at: 2026-09-02
 
 mfds_press:
   decided_by: 오한빈
@@ -86,7 +86,7 @@ mfds_hf_ingredient:
   #    가입 시 이용약관에 추가 제약이 있으면 **재판정 대상**이다 (D-72).
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: null
+  collected_at: 2026-09-02
 
 mfds_hf_individual:
   decided_by: 오한빈
@@ -94,7 +94,7 @@ mfds_hf_individual:
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음 (제공기관 식약처)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: null
+  collected_at: 2026-09-02
 
 
 kcia_guideline:
@@ -109,9 +109,15 @@ kcia_guideline:
 law_go_kr:
   decided_by: 오한빈
   decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
-  collected_at: null
+  # 확인 2026-09-02 — law.go.kr/LSW/lawPetitionForm.do?menuId=13&subMenuId=79 「법적효력/저작권」
+  #   「저작권법 제7조에 해당하는 정보 (…) 별도의 이용허락 없이 자유이용이 가능」
+  #   「영리 목적의 이용을 포함하여 자유로운 활용이 보장」 — 저작권법 제7조 + 공공데이터법.
+  #   확인 근거 정리: docs/ohb/검토요청_2026-09-02_law_go_kr.md
+  #   🚨 레지스트리의 evidence_url 은 아직 API 목록 페이지(evidence_is_access: true)다 —
+  #      위 「법적효력/저작권」 페이지로 교체가 남아 있다 (data.js 에서).
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-02
+  collected_at: 2026-09-02
 
 platform_guide:
   decided_by: 오한빈
@@ -155,7 +161,7 @@ cosmetic_ingredient:
   #    why(이용허락범위 제한 없음 · G3 전 용도 개방이 근거로 뒷받침된다)와 정면으로 모순 (역검토 v1.4 문제 5)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: null
+  collected_at: 2026-09-02
 
 cosmetic_restricted:
   decided_by: 오한빈
@@ -164,7 +170,7 @@ cosmetic_restricted:
   # 🔧 정정 요청 — caution 이 09-02 실측 이전 문장이다 (역검토 v1.4 문제 5)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: null
+  collected_at: 2026-09-02
 
 aihub_71486:
   decided_by: 오한빈
