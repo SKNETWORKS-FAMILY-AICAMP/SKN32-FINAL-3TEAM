@@ -308,6 +308,18 @@ def migrate_new(message: str) -> None:
 
 
 @app.command()
+def probe(source: str = typer.Argument("", help="소스 id 하나만 (비우면 전체)")) -> None:
+    """소스를 열어보고 이용조건 문구를 긁는다 — 🚨 저장은 하지 않는다.
+
+    2인 확인 전에도 돈다. 확인하려면 열어봐야 하고, 열어보는 것은 수집이 아니다 (D-109).
+    산출은 `docs/03_데이터/실측_<날짜>.md` 한 장이고 그것이 검토자가 서명할 근거다.
+    G1·수기 소스·승인 선행(GATED)·robots 미확인 크롤링형은 그대로 막힌다.
+    """
+    args = ["uv", "run", "python", "-m", "collect.probe"]
+    raise typer.Exit(run(*args, source) if source else run(*args))
+
+
+@app.command()
 @stub("W2", "scripts/collect.py 수집 로직 구현")
 def collect() -> None:
     """허가가 끝난 소스만 골라 내려받는다.
@@ -382,6 +394,7 @@ MENU: list[tuple[str, str, object]] = [
     ("r", "레지스트리 재생성", registry),
     ("v", "S0-14 검토표", review),
     ("m", "판정매트릭스 빌드", matrix),
+    ("p", "소스 실측 (저장 없음)", probe),
     ("s", "프로젝트 사본", sync),
     SEP,
     ("4", "데이터 수집", collect),
