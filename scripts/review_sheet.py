@@ -46,6 +46,9 @@ RISKY_FLAGS = ("GATED", "TOS", "PREAPPROVAL", "NOSTORE", "QUERYLOG", "PII", "NC"
 #    등급은 맞을 수 있으나 **확인되지 않은 것**이고, 확인되지 않은 것은 자명할 수 없다.
 #    (판정매트릭스: 「미확인」을 「아마 괜찮음」으로 읽는 순간 등급이 무의미해진다)
 # 「추정」도 넣는다 — 용도별 근거가 「공공저작물 추정」이면 그 용도는 확인된 것이 아니다.
+# 판정이 한 번 바뀐 흔적. 🚨 문자열 매칭이라 「이전 판정을 뒤집는다」처럼 글자가 다르면
+# 놓친다 — 근본 해법은 `data.js` 의 필드(`revised`)이지만 10주 안에서는 어휘를 넓힌다.
+REVISED = ("정정", "🔄", "뒤집", "불필요한 자기 제약", "종전", "판단:")
 UNVERIFIED = ("미확인", "확인 필요", "확인필요", "불명", "추정", "차단돼", "차단으로")
 
 
@@ -72,29 +75,52 @@ def risk(s: dict, r: dict | None = None) -> tuple[int, list[str]]:
     if hit:
         score += len(hit)
         why.append(f"제약 {', '.join(hit)} — 각각이 별도 확인 대상")
-    text = (s.get("name") or "") + (s.get("caution") or "")
-    if "정정" in text or "🔄" in text:
+    # 🚨 정정 이력은 `why` 를 **본다** — 바로 아래 UNVERIFIED 가 `why` 를 **안 보는** 것과
+    #    반대인데, 이것은 우연이 아니라 두 규칙이 찾는 것이 다르기 때문이다.
+    #      · UNVERIFIED = 「아직 확인 안 됨」  → 해소 이력이 섞인 `why` 를 보면 오탐이 난다
+    #      · 정정 이력   = 「한 번 바뀌었음」  → 그 사실이 적히는 자리가 바로 `why` 다
+    #    한쪽에만 이유가 적혀 있어 우연처럼 보였다 (권소라 역검토 v1.3 §4).
+    text = (s.get("name") or "") + (s.get("caution") or "") + ((r or {}).get("why") or "")
+    if any(w in text for w in REVISED):
         score += 2
         why.append("**판정이 한 번 바뀐 이력**이 있다 — 무엇이 왜 바뀌었는지 확인")
     # 🚨 **`why` 산문이 아니라 용도별 근거(`note`)만 본다.**
     #    `why` 는 해소 이력을 담는 자리라, *"종전 「접근 차단으로 미확인」은 일시적 차단이었다"*
     #    처럼 **고쳤다고 적은 문장이 도리어 벌점을 만든다**(2026-09-02 예행 검토에서 발견).
     #    미확인이 용도에 걸리는지는 note 가 말한다 — 「상업: ⚠️ 인용조건 미확인」처럼.
-    blob = " ".join(((r or {}).get("note") or {}).values())
+    note = (r or {}).get("note") or {}
+    blob = " ".join(note.values())
     seen = sorted({w for w in UNVERIFIED if w in blob})
+    # 🚨 **어느 축에서 걸렸는지**를 함께 낸다 (권소라 역검토 v1.3 §8·§10b).
+    #    `google_trends` 는 U4·상업 두 축에서 걸렸는데 하나로만 보였고,
+    #    나스미디어 2건은 **`use` 에 없는 「상업」 축 하나로** A 에 올라와 있었다.
+    axes = unverified_axes(r)
     if seen:
         # 🚨 단독으로 A 구간(>=4)에 올린다. 확인되지 않은 소스는 「확인만」이 될 수 없고,
         #    B 구간은 이 지시를 실을 자리가 없다.
         score += 4
+        only_biz = axes == ["상업"]
         why.append(
-            f"🚨 **판정 근거가 스스로 「{seen[0]}」이라고 적고 있다.** "
+            f"🚨 **판정 근거가 스스로 「{'」·「'.join(seen)}」이라고 적고 있다** "
+            f"— 걸린 축: **{', '.join(axes) or '미상'}**. "
             "등급은 맞을 수 있으나 **확인된 적이 없다** — 확인되지 않은 것은 자명할 수 없다. "
             "**근거 URL 을 열어 이용허락범위를 눈으로 확인**하고, 확인되면 팀장에게 근거 갱신을 "
             "요청하고, 열리지 않으면 그것이 이견이다"
+            + (
+                "  \n🚨 **걸린 축이 「상업」 하나뿐이다** — 이것은 `use`(U1~U4)에 **없는 축**이고 "
+                "게이트가 집행하지 않는다. 열린 용도의 근거는 확인돼 있다. 그래도 A 인 이유는 "
+                "**우리 제품이 상업적**이라서다 (확인 항목 5번)."
+                if only_biz
+                else ""
+            )
         )
     if (r or {}).get("bundle"):
         n = len((r or {})["bundle"])
-        score += 2
+        # 🚨 종수에 연동한다 (권소라 역검토 v1.2 §11 · v1.3 §10a).
+        #    +2 고정이면 **서명 한 번이 12종에 걸리는 소스가 B 구간(확인만)** 에 앉는다 —
+        #    판단할 정보가 가장 적은 소스가 가장 적게 검토받는 구조다. n 을 문구에만 쓰고
+        #    점수에 안 쓰던 것이 그 원인이었다.
+        score += 4 if n >= 6 else 2
         why.append(
             f"**{n}종이 한 건으로 묶인 등재**다 (D-90) — 서명 한 번이 {n}종 전부에 걸린다. "
             "묶은 근거(조건이 정말 같은가)를 먼저 확인한다"
@@ -103,6 +129,37 @@ def risk(s: dict, r: dict | None = None) -> tuple[int, list[str]]:
         score += 3
         why.append("🚨 **등급 상한 초과 의심** — G3 아닌데 원문 색인·화면 인용이 열려 있다")
     return score, why
+
+
+def ev_link(s: dict, *, inline: bool = False) -> str:
+    """근거 URL 표기. 🚨 **폴백했으면 폴백했다고 말한다** (권소라 역검토 v1.3 §2).
+
+    `evidence_url` 이 접근 URL 로 대체된 것이면 검토자는 링크를 열어도
+    **그 조건을 말하지 않는 페이지**를 보게 된다. 표시하지 않으면 확인 항목 4번이
+    「확인했다」로 지나간다 — 추정한 URL 은 빈 칸보다 나쁘다.
+    """
+    ev = s.get("evidence_url")
+    if not ev:
+        return "⬜ URL 없음"
+    mark = " ⚠️ 접근 URL 로 대체됨" if s.get("evidence_is_access") else ""
+    return (f"[근거 확인]({ev}){mark}") if inline else f"<{ev}>{mark}"
+
+
+def unverified_axes(r: dict | None) -> list[str]:
+    """근거가 스스로 「미확인」이라 말하는 축. 🚨 채점과 집계가 같은 규칙을 봐야 한다."""
+    note = (r or {}).get("note") or {}
+    return [ax for ax, v in note.items() if any(w in str(v) for w in UNVERIFIED)]
+
+
+def cut(text: object, n: int) -> str:
+    """🚨 자를 때는 잘렸다고 말한다 (권소라 역검토 v1.3 §9).
+
+    `aihub_71486` 의 `scale` 이 88자라 60자에서 잘리면 「도서 36,000」이 **「도서 36,00」**
+    으로 남는다. 생략 표시가 없으면 검토자는 **잘린 흔적이 아니라 오타 난 숫자로 읽는다.**
+    숫자가 틀린 것과 숫자가 잘린 것은 검토자가 취할 행동이 다르다.
+    """
+    t = str(text)
+    return t if len(t) <= n else t[:n] + "…"
 
 
 def redist(s: dict) -> str:
@@ -166,7 +223,7 @@ def block(key: str, s: dict, led: dict, rat: dict) -> list[str]:
         "|---|---|---|---|",
         f"| 제약 | {', '.join(s.get('constraints') or []) or '—'} | 재배포 | {redist(s)} |",
         f"| 판정 | {led.get('decided_by') or '—'} ({led.get('decided_at') or '일자 미상'}) "
-        f"| 규모 | {str(s.get('scale') or '—')[:60]} |",
+        f"| 규모 | {cut(s.get('scale') or '—', 60)} |",
         "",
         "**왜 자세히 봐야 하는가**",
         "",
@@ -178,10 +235,9 @@ def block(key: str, s: dict, led: dict, rat: dict) -> list[str]:
             "",
             "**활용 주의** — 판정 근거가 아니라 쓸 때 조심할 것입니다.",
             "",
-            f"> {str(s['caution'])[:600]}",
+            f"> {cut(s['caution'], 600)}",
         ]
-    ev = s.get("evidence_url")
-    lines += ["", f"**근거 확인** → <{ev}>" if ev else "**근거 확인** → ⬜ URL 없음 (하단 참조)"]
+    lines += ["", f"**근거 확인** → {ev_link(s)}"]
     if s.get("access"):
         lines += ["", f"접근 방법: {s['access']}"]
     lines.append("")
@@ -190,13 +246,12 @@ def block(key: str, s: dict, led: dict, rat: dict) -> list[str]:
 
 def compact(key: str, s: dict, rat: dict) -> list[str]:
     """B 구간 — 표는 근거를 못 싣는다. 한 줄 근거를 붙인 목록으로 낸다."""
-    ev = s.get("evidence_url")
     r = rat.get(key) or {}
     head = (
         f"**`{key}`** — {s.get('name', '')}{hold_mark(s)}  \n"
         f"**{s.get('grade')}** · 열린 용도 {opened(s)} · "
         f"제약 {', '.join(s.get('constraints') or []) or '없음'} · "
-        f"재배포 {redist(s)} · " + (f"[근거 확인]({ev})" if ev else "⬜ URL 없음")
+        f"재배포 {redist(s)} · " + ev_link(s, inline=True)
     )
     body = (
         f"> {r['why']}"
@@ -205,19 +260,33 @@ def compact(key: str, s: dict, rat: dict) -> list[str]:
     )
     out = [head, "", body, ""]
     if s.get("caution"):
-        out += [f"> ⚠️ **활용 주의** — {str(s['caution'])[:300]}", ""]
+        out += [f"> ⚠️ **활용 주의** — {cut(s['caution'], 300)}", ""]
     if r.get("bundle"):
         out += [f"- **{m}** — {w}" for m, w in r["bundle"].items()] + [""]
+    # 🚨 **`note` 를 여기서 버리고 있었다** (권소라 역검토 v1.3 §7).
+    #    v1.2 §11 을 받아 `extract_rationale.py` 가 번들 대표 `note` 를 싣도록 고쳤는데,
+    #    소비자인 `compact()` 가 렌더링하지 않아 `law_go_kr`(B 구간)의 용도별 근거가
+    #    **검토표에 한 글자도 안 나왔다.** 생산자에 주석까지 달려 있어 「처리됨」으로 보였다 —
+    #    문제 1 과 같은 형태다: 게이트는 초록불인데 사람에게 도달하지 않는다.
+    if r.get("note"):
+        out += ["용도별 근거"] + [f"- **{k}** — {v}" for k, v in r["note"].items()] + [""]
     return out
 
 
-def row(key: str, s: dict) -> str:
+def ev_cell(s: dict) -> str:
+    """C 구간 표의 근거 칸. 좁은 칸이라 ⚠️ 하나로 폴백을 표시한다."""
     ev = s.get("evidence_url")
+    if not ev:
+        return "⬜ 없음"
+    return f"{'⚠️' if s.get('evidence_is_access') else ''}[근거]({ev})"
+
+
+def row(key: str, s: dict) -> str:
     return (
-        f"| `{key}` | {str(s.get('name', ''))[:38]} | **{s.get('grade')}** | {opened(s)} "
+        f"| `{key}` | {cut(s.get('name', ''), 38)} | **{s.get('grade')}** | {opened(s)} "
         f"| {', '.join(s.get('constraints') or []) or '—'} "
         f"| {redist(s)} "
-        f"| {f'[근거]({ev})' if ev else '⬜ 없음'} |"
+        f"| {ev_cell(s)} |"
     )
 
 
@@ -267,6 +336,11 @@ def main() -> None:
     b = [(k, s) for k, s in scored if 1 <= risk(s, rat.get(k))[0] < 4]
     c = [(k, s) for k, s in scored if risk(s, rat.get(k))[0] == 0]
 
+    # 🚨 소요는 배치에서 **계산한다** — 손으로 적은 「2시간 36분」이 배치가 바뀔 때마다 낡는다.
+    unv = [k for k in pending if unverified_axes(rat.get(k))]
+    a_unv = sum(1 for k, _ in a if k in unv)
+    mins = 15 + a_unv * 10 + (len(a) - a_unv) * 6 + len(b) * 4 + len(c) * 1
+
     gaps = [(url_gap(k, s), k) for k, s in pending.items() if not s.get("evidence_url")]
     need = [g for g in gaps if g[0][0] == "필요"]
     no_basis = [k for k in pending if not (rat.get(k) or {}).get("why")]
@@ -304,12 +378,23 @@ def main() -> None:
         "> ⚠️ **「판정 근거」와 「활용 주의」는 다릅니다.** 앞은 등급을 그렇게 본 이유이고, "
         "뒤는 쓸 때 조심할 것입니다. 서명의 대상은 **앞** 입니다.",
         "",
-        "**확인하는 것 넷**",
+        "**확인하는 것 다섯**",
         "",
         "1. **등급이 맞는가** — G3(원문 자유) · G2(사실만·원문 미보관) · G0(미표기 → fail-closed)",
         "2. **열린 용도가 등급 상한을 넘지 않는가** — G2 에 U2(원문 색인)·U3(화면 인용)가 열리면 정의 위반",
         "3. **재배포 축을 등급과 혼동하지 않았는가** — 🚨 등급 G3 인데 재배포 불가인 것이 있습니다 (D-71)",
-        "4. **근거 URL 이 실제로 그 조건을 말하는가** — 링크를 열어 보십시오",
+        "4. **근거 URL 이 실제로 그 조건을 말하는가** — 링크를 열어 보십시오. "
+        "🔄 **⚠️ 접근 URL 로 대체됨** 표시가 붙은 것은 **아직 근거 페이지가 없는 것**입니다 — "
+        "그 소스는 링크를 열어도 조건이 안 나오므로, 확인이 안 되면 그것이 이견입니다 (역검토 v1.3 §2)",
+        "5. 🔄 **상업 이용이 확인됐는가** — 🚨 이 축은 `use`(U1~U4)에 **없습니다.** 게이트가 "
+        "집행하지 않지만 **우리 제품이 상업적**이라 실제로는 가장 자주 걸립니다. "
+        "채점이 이 축의 미확인에 +4 를 주므로, 확인 항목에도 있어야 합니다 (역검토 v1.3 §8).",
+        "",
+        "> 🚨 **3번의 「재배포」가 무엇을 가리키는지** — `redistributable` 은 **우리가 만든 "
+        "파생 데이터셋을 공개 배포할 수 있는가**입니다. 원문 열람·이용 가부가 아닙니다 (D-71). "
+        "골든셋에 `false` 인 소스가 **한 문장이라도** 섞이면 그 골든셋 전체를 공개할 수 없고, "
+        "`SA` 가 섞이면 공개는 되지만 **골든셋 전체가 그 라이선스로 전염**됩니다 (D-60). "
+        "표의 「재배포」 칸이 그 둘을 갈라서 표시합니다.",
         "",
         "## 이견이 나오면",
         "",
@@ -371,7 +456,30 @@ def main() -> None:
         *[row(k, s) for k, s in c],
         "",
     ]
-    # 🚨 표에는 자리가 없어 「활용 주의」가 통째로 사라졌다. 팀이 **검토해서 수용하기로 한
+    # 🚨 **표에 판정 근거를 실을 자리가 없어 C 13건이 재현 불가였다** (권소라 역검토 v1.3 §1).
+    #    검토표가 스스로 *"서명의 대상은 「판정 근거」다"* 라고 두 번 못 박아 놓고, 정작 C 구간에는
+    #    `caution`(활용 주의)만 실려 있었다 — 31건 중 13건(42%)이 **활용 아이디어를 읽고 등급에
+    #    서명하는** 상태였다. `no_basis` 검사는 근거가 **없는** 소스만 잡고, 근거가 **있는데
+    #    안 실리는** 경우는 아무것도 잡지 않는다.
+    #    🚨 두 목록을 **분리해서** 낸다. 한 목록에 섞으면 위 구분이 다시 무너진다.
+    cb = [(k, (rat.get(k) or {})) for k, _ in c]
+    cb = [(k, r) for k, r in cb if r.get("why")]
+    if cb:
+        L += [
+            f"**C 구간의 판정 근거 ({len(cb)}건)** — 🚨 **서명의 대상은 이쪽입니다.**",
+            "",
+        ]
+        L += [f"- **`{k}`** — {cut(r['why'], 300)}" for k, r in cb]
+        L += [""]
+    cn = [k for k, _ in c if not (rat.get(k) or {}).get("why")]
+    if cn:
+        L += [
+            f"> ⬜ **판정 근거가 없는 것 {len(cn)}건** — `{'` · `'.join(cn)}`. "
+            "팀장이 근거를 적어 주기 전에는 서명하지 마십시오.",
+            "",
+        ]
+    # 🚨 아래는 「활용 주의」다 — 위와 섞지 않는다. 팀이 **검토해서 수용하기로 한
+    #    표에는 자리가 없어 「활용 주의」가 통째로 사라졌다. 팀이 **검토해서 수용하기로 한
     #    리스크**가 기록에서 없어지면, 나중에 「이걸 왜 괜찮다고 했는지」부터 다시 조사해야 한다
     #    (D-21 · 권소라 역검토 v1.2 §9).
     cc = [(k, s) for k, s in c if s.get("caution")]
@@ -380,7 +488,7 @@ def main() -> None:
             f"**C 구간의 활용 주의 ({len(cc)}건)** — 판정 근거가 아니라 쓸 때 조심할 것입니다.",
             "",
         ]
-        L += [f"- **`{k}`** — {str(s['caution'])[:300]}" for k, s in cc]
+        L += [f"- **`{k}`** — {cut(s['caution'], 300)}" for k, s in cc]
         L += [""]
 
     if closed:
@@ -446,15 +554,17 @@ def main() -> None:
         "",
         "```yaml",
         "# scripts/registry_review.yaml  ← 여기에 적습니다",
-        "law_go_kr:",
-        "  decided_by: 오한빈",
-        "  decided_at: 2026-08-20",
-        "  reviewed_by: 권소라      # 🚨 판정자와 달라야 합니다 (ck_source_four_eyes)",
+        "ftc_decisions_api:          # 🚨 예시는 C 구간의 자명한 소스로 둡니다",
+        "  reviewed_by: 권소라       # 🚨 판정자(decided_by)와 달라야 합니다 (ck_source_four_eyes)",
         "  reviewed_at: 2026-09-03",
         "  # 🔄 이견이면 reviewed_by 는 비우고 reviewed_at 과 dissent_note 만 적습니다",
         "  # dissent_note: 근거 URL 이 이용허락범위를 말하지 않음",
-        "  collected_at: null       # 손으로 적지 않습니다 — 수집기가 찍습니다",
         "```",
+        "",
+        "> 🚨 **검토자가 적는 것은 위 셋뿐입니다** — `reviewed_by` · `reviewed_at` · "
+        "(이견 시) `dissent_note`. `decided_by` · `decided_at` 은 **판정자의 기록**이라 "
+        "손대지 않고, `collected_at` 은 **수집기가 찍습니다.** "
+        "예시에 판정자 필드를 함께 두면 복붙으로 덮어쓰게 됩니다 (역검토 v1.3 §11).",
         "",
         "기입 후 `uv run python scripts/gen_registry.py` → `uv run pytest -m gate` 로 확인합니다.",
         "",
@@ -469,6 +579,25 @@ def main() -> None:
     if no_basis:
         print(f"🚨 판정 근거 없음 {len(no_basis)}건: {', '.join(no_basis)}")
     print(f"→ {OUT.relative_to(ROOT)}")
+
+    # 🚨 **D-54 가 반대 방향으로 돌고 있었다** (권소라 역검토 v1.3 §3).
+    #    사실원장이 수치의 단일 출처인데, 검토표는 재생성되어 자동으로 최신이고
+    #    사실원장은 손으로 갱신해야 해서 **생성물이 SSOT 를 앞질렀다.**
+    #    그래서 생성기가 **붙여넣을 줄을 직접 낸다** — 사람이 옮겨 적을 것을 줄인다.
+    print("\n── 00_사실원장.md 갱신용 (그대로 교체) ──")
+    print(
+        f"| S0-14 검토 대상 | **{len(pending)}건** — 용도열림 {len(targets)} · "
+        f"작업계획 {len(planned)} · 🚨 **겹침 {len(both)}** (같은 집합이 아니다) |"
+    )
+    print(
+        f"| 검토 구간 | A 자세히 **{len(a)}** · B 확인 **{len(b)}** · C 자명 **{len(c)}** "
+        f"· 예상 {mins // 60}시간 {mins % 60}분 |"
+    )
+    print(
+        f"| 🚨 근거가 「미확인」이라 말하는 소스 | **{len(unv)}건** — "
+        + " · ".join(f"`{k}`" for k in unv)
+        + " |"
+    )
 
 
 if __name__ == "__main__":

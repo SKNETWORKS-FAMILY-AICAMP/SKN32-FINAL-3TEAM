@@ -4,7 +4,7 @@
 # 작성자: 오한빈 (팀장) · 최종 갱신 2026-08-31
 #
 # 등재 단위 — 「데이터셋」이 아니라 「이용조건」이다.
-#   법제처 OPEN API로 받는 11종(법령·별표·고시·지침·재결례·판례)은 OC 키 하나로
+#   법제처 OPEN API로 받는 12종(법령·별표·고시·지침·재결례·판례 + 건기식 기준규격 고시)은 OC 키 하나로
 #   같은 조건 아래 받으므로 law_go_kr 1건으로 묶고 covers 로 편다.
 #   반대로 AI Hub 6종은 데이터셋마다 승인 상태가 따로 흐르므로 각각 등재한다.
 #
@@ -77,6 +77,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15103301/fileData.do"
+    evidence_is_access: true
 
   ftc_decisions_api:
     name: "공정위 결정문 목록/본문 API"
@@ -100,6 +101,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15103246/openapi.do"
+    evidence_is_access: true
 
   mfds_sanctions:
     name: "식약처 행정처분결과 API ★신규발견"
@@ -123,11 +125,12 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15059500/openapi.do"
+    evidence_is_access: true
 
   mfds_press:
     name: "식약처 부당광고 점검 보도자료"
     org: "식품의약품안전처"
-    url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+    url: "https://www.mfds.go.kr/brd/m_99/list.do"
     layer: "1층 판정라벨"
     grade: G3
     use: {U1: deny, U2: deny, U3: allow, U4: allow}
@@ -188,6 +191,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://adf.kfia.or.kr/company/open/openData.do?menuKey=406"
+    evidence_is_access: true
 
   mfds_hf_ingredient:
     name: "건기식 기능성 원료인정 현황 API (15058359)"
@@ -209,6 +213,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15058359/openapi.do"
+    evidence_is_access: true
 
   mfds_hf_individual:
     name: "건기식 개별인정형 정보 API (15074311)"
@@ -230,6 +235,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.data.go.kr/data/15074311/openapi.do"
+    evidence_is_access: true
 
   kcia_guideline:
     name: "대한화장품협회 광고자문 기준 해설서 2025 ★2025판"
@@ -254,6 +260,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039"
+    evidence_is_access: true
 
   law_go_kr:
     name: "법제처 국가법령정보 OPEN API (법령·시행령·시행규칙·행정규칙/고시·재결례·판례)"
@@ -280,7 +287,7 @@ sources:
       - "행정심판 재결례"
       - "표시광고법 관련 판례"
       - "「건강기능식품의 기준 및 규격」 고시"
-    scale: "아래 covers 11종"
+    scale: "아래 covers 12종"
     access: API (OC 키 필요 — .env LAW_OC_KEY · 2026-08-20 승인 완료)
     note: >-
       🚨 [별표] 조회 가능 여부가 미확인이다. 조회되지 않으면 시행령 별표를
@@ -290,6 +297,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://open.law.go.kr/LSO/openApi/guideList.do"
+    evidence_is_access: true
 
   platform_guide:
     name: "플랫폼 심의 가이드 (카카오 등)"
@@ -331,6 +339,7 @@ sources:
     reviewed_by: null
     robots_checked_at: 2026-09-02
     evidence_url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
+    evidence_is_access: true
 
   cosmetic_ingredient:
     name: "식약처 화장품 원료성분정보 API (15111774)"
@@ -393,7 +402,7 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
-    evidence_url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71486"
+    evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71723:
     name: "AI Hub 생성형AI 법률/규정 텍스트 분석 (고도화) ★사용자제공"
@@ -414,7 +423,7 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
-    evidence_url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71723"
+    evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_558:
     name: "AI Hub 텍스트 윤리검증 데이터 ★사용자제공"
@@ -435,7 +444,7 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
-    evidence_url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=558"
+    evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71694:
     name: "AI Hub 생성형AI 한국어 SNS 멀티턴 대화 ★사용자제공"
@@ -456,7 +465,7 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
-    evidence_url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71694"
+    evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   aihub_71843:
     name: "AI Hub 지식재산권법 LLM 사전학습·Instruction 데이터 ★사용자제공"
@@ -477,7 +486,7 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
-    evidence_url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71843"
+    evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   bab2min_shopping:
     name: "bab2min 네이버쇼핑 리뷰 코퍼스"
@@ -499,6 +508,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://github.com/bab2min/corpus"
+    evidence_is_access: true
 
   nsmc:
     name: "NSMC 네이버 영화 리뷰"
@@ -520,6 +530,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://github.com/e9t/nsmc"
+    evidence_is_access: true
 
   klue_dataset:
     name: "KLUE 벤치마크 데이터셋 (모델 아님)"
@@ -541,6 +552,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://github.com/KLUE-benchmark/KLUE"
+    evidence_is_access: true
 
   k_mhas:
     name: "K-MHaS 한국어 혐오표현 (멀티라벨)"
@@ -562,6 +574,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech"
+    evidence_is_access: true
 
   kobaco_mcr:
     name: "KOBACO 소비자행태조사(MCR) 원시·통계데이터 ★1순위 · 🔄G2→G3 정정"
@@ -583,6 +596,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://adstat.kobaco.co.kr/mcr/portal/community/articleListPage.do?bbsId=FAQ"
+    evidence_is_access: true
 
   kobaco_mcr_report:
     name: "KOBACO MCR 연례보고서 ★신규구분"
@@ -604,6 +618,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://adstat.kobaco.co.kr/mcr/portal/community/articleListPage.do?bbsId=FAQ"
+    evidence_is_access: true
 
   krei_food:
     name: "KREI 식품소비행태조사 ★접근성 1위"
@@ -629,6 +644,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.krei.re.kr/foodSurvey/page/460"
+    evidence_is_access: true
 
   khff_survey:
     name: "건기식협회 연령대별 건강고민 보도자료 ★사용자제공"
@@ -650,6 +666,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://khff.or.kr/user/info/InfoBoardUserView.do?_menuNo=369&boardSeqno=10035&postsSeqno=119567"
+    evidence_is_access: true
 
   nasmedia_npr:
     name: "나스미디어 2026 NPR 인터넷 이용자 조사 ★사용자제공"
@@ -671,6 +688,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.nasmedia.co.kr/정기보고서/2026-03-npr-usersurvey-insight/"
+    evidence_is_access: true
 
   nasmedia_fb:
     name: "나스미디어 2026 식음료 트렌드 ★사용자제공 · 명칭정정"
@@ -692,6 +710,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.nasmedia.co.kr/정기보고서/2026-fb-trend-report/"
+    evidence_is_access: true
 
   kcc_media:
     name: "방송매체 이용행태 조사 자료 (3068653) ★명칭정정"
@@ -740,6 +759,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://kosis.kr/serviceInfo/openAPIGuide.do"
+    evidence_is_access: true
 
   knhanes:
     name: "국민건강영양조사 (KNHANES)"
@@ -761,6 +781,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://dataon.kisti.re.kr/search/view.do?svcId=c3aaeefa557772ed8c57515a0793ffab"
+    evidence_is_access: true
 
   kisdi_panel:
     name: "KISDI 한국미디어패널조사"
@@ -782,6 +803,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://stat.kisdi.re.kr/kor/dataset/rdssListPage.html"
+    evidence_is_access: true
 
   aihub_review_corpus:
     name: "AI Hub 속성기반 감정분석 데이터 (71603)"
@@ -802,7 +824,7 @@ sources:
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: null
-    evidence_url: "https://aihub.or.kr/aihubdata/data/view.do?dataSetSn=71603"
+    evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   meta_adlibrary:
     name: "Meta 광고 라이브러리 (UI) ★사용자제공"
@@ -829,6 +851,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://www.facebook.com/ads/library/?locale=ko_KR"
+    evidence_is_access: true
 
   google_atc:
     name: "Google 광고 투명성 센터 ★사용자제공"
@@ -854,6 +877,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://adstransparency.google.com/?region=KR&hl=ko"
+    evidence_is_access: true
 
   youtube_api:
     name: "YouTube Data API v3 (댓글)"
@@ -896,6 +920,7 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
     evidence_url: "https://developers.google.com/search/blog/2025/07/trends-api"
+    evidence_is_access: true
 
   self_sanction_stat:
     name: "★ 자체 산출 — 부당광고 제재 실적 (행정처분 API + 의결서)"

@@ -16,7 +16,7 @@
 
 설계 원칙 (2026-08-31 · 아키텍처 검토)
   1. 레지스트리의 등재 단위는 「데이터셋」이 아니라 「이용조건」이다.
-     법제처 OPEN API로 받는 11종(법령·별표·고시·지침·재결례·판례)은
+     법제처 OPEN API로 받는 12종(법령·별표·고시·지침·재결례·판례 + 건기식 기준규격 고시)은
      하나의 이용조건을 공유하므로 law_go_kr 1건으로 묶고 covers 로 편다.
   2. 미채택 판정은 blocked(협상 불가 · G1)와 분리해 not_adopted 로 둔다.
      가치가 없다는 이유로 G2 자료에 G1을 찍으면 등급 축 자체가 오염된다.
@@ -72,7 +72,9 @@ RENAME = {
 
 MODEL_IDS = {"qwen3", "kure", "bge_reranker", "kcbert"}
 
-# 법제처 OPEN API — 11종을 흡수한 합성 레코드 (이용조건이 하나이므로 등재도 하나)
+# 법제처 OPEN API — 12종을 흡수한 합성 레코드 (이용조건이 하나이므로 등재도 하나)
+# 🚨 숫자는 LAW_COVERS 의 길이다. hf_standard 흡수(D-102 ②)로 11 → 12 가 됐는데
+#    **숫자를 적은 문장들만 안 고쳐져** 네 곳이 어긋나 있었다 (권소라 역검토 v1.3 §6).
 BY_ID["law_go_kr"] = {
     "id": "law_go_kr",
     "layer": "3층 판단규범 · 4층 위험도 · 5층 반례",
@@ -83,7 +85,7 @@ BY_ID["law_go_kr"] = {
     "value": "A",
     "cost": "free",
     "url": "https://open.law.go.kr/LSO/openApi/guideList.do",
-    "scale": "아래 covers 11종",
+    "scale": "아래 covers 12종",
     "u": {"train": "ok", "raw": "ok", "cite": "ok", "deploy": "ok", "commercial": "ok"},
     "caution": "",
 }
@@ -170,8 +172,17 @@ def block(key, s, extra=None, covers=None, status="collect"):
         L.append(f"    dissent_note: {esc(rv['dissent_note'])}")
     if rv.get("robots_checked_at"):
         L.append(f"    robots_checked_at: {_scalar(rv.get('robots_checked_at'))}")
-    if s.get("url"):
-        L.append(f"    evidence_url: {esc(s['url'])}")
+    # 🚨 **근거 URL 과 접근 URL 은 다른 것이다** (권소라 역검토 v1.3 §2 · 인계 §3-①).
+    #    한 필드를 두 자리에 넣고 있어서, 검토표의 확인 항목 4번(「근거 URL 이 실제로 그 조건을
+    #    말하는가」)이 **31건 전부에서 성립하지 않았다.** AI Hub 판정의 전체 무게가 이용정책
+    #    제4항에 실려 있는데 그 주소는 `why` 산문 안에 텍스트로만 박혀 있었다.
+    #    🚨 폴백은 하되 **폴백했다고 말한다** — 추정한 URL 은 빈 칸보다 나쁘다.
+    #    빈 칸은 「미확인」이라 말하지만 추정값은 「확인됨」이라고 거짓말한다.
+    ev = s.get("evidenceUrl") or s.get("url")
+    if ev:
+        L.append(f"    evidence_url: {esc(ev)}")
+        if not s.get("evidenceUrl"):
+            L.append("    evidence_is_access: true")
     return "\n".join(L)
 
 

@@ -45,7 +45,7 @@ ALIAS: dict[str, list[str]] = {
     "kcia_guideline": ["kcia_guideline_2025"],
     "k_mhas": ["kmhas"],
     "aihub_review_corpus": ["aihub_review"],
-    # 법제처 OPEN API 는 OC 키 하나·조건 하나라 11종이 레지스트리 1건으로 묶인다.
+    # 법제처 OPEN API 는 OC 키 하나·조건 하나라 12종이 레지스트리 1건으로 묶인다.
     "law_go_kr": [
         "law_acts",
         "law_annex",
