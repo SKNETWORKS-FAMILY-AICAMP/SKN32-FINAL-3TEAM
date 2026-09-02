@@ -34,7 +34,10 @@ RATIONALE = ROOT / "scripts/registry_rationale.yaml"
 OUT = ROOT / "docs/03_데이터/S0-14_2인확인_검토표.md"
 
 USES = ["U1", "U2", "U3", "U4"]
-RISKY_FLAGS = ("GATED", "TOS", "PREAPPROVAL", "NOSTORE", "QUERYLOG", "PII", "NC")
+# 🚨 SA 는 D-60(저장소 공개 라이선스)의 선결 사안이다 — 「데이터셋을 쓸 수 있는가」와
+#    「학습 산출물을 어떤 라이선스로 배포할 수 있는가」는 다른 질문이고 후자가 D-60 을 좌우한다.
+#    빠져 있어서 k_mhas·klue_dataset 이 C(자명)에 있었다 (권소라 역검토 v1.2 §7).
+RISKY_FLAGS = ("GATED", "TOS", "PREAPPROVAL", "NOSTORE", "QUERYLOG", "PII", "NC", "SA")
 
 # 🚨 판정 근거가 스스로 「못 봤다」고 말하는 표현.
 #    등급은 맞을 수 있으나 **확인되지 않은 것**이고, 확인되지 않은 것은 자명할 수 없다.
@@ -118,7 +121,7 @@ def basis(key: str, rat: dict) -> list[str]:
         ]
     lines = ["", "**판정 근거** (판정매트릭스 `why`)", "", f"> {r['why']}"]
     if r.get("bundle"):
-        lines += ["", "묶인 11종의 개별 근거"]
+        lines += ["", f"묶인 {len(r['bundle'])}종의 개별 근거"]
         lines += [f"- **{m}** — {w}" for m, w in r["bundle"].items()]
     if r.get("note"):
         lines += ["", "용도별 근거"]
@@ -175,6 +178,8 @@ def compact(key: str, s: dict, rat: dict) -> list[str]:
         else "> ⬜ 판정 근거 없음 — 서명 전에 팀장에게 요청하십시오."
     )
     out = [head, "", body, ""]
+    if s.get("caution"):
+        out += [f"> ⚠️ **활용 주의** — {str(s['caution'])[:300]}", ""]
     if r.get("bundle"):
         out += [f"- **{m}** — {w}" for m, w in r["bundle"].items()] + [""]
     return out
@@ -192,10 +197,14 @@ def row(key: str, s: dict) -> str:
 
 def url_gap(key: str, s: dict) -> tuple[str, str]:
     """근거 URL 이 없는 이유를 가른다. 넷을 똑같이 🚨 로 세우면 실제보다 부풀려진다."""
-    if s.get("status") != "collect":
+    # 🚨 「보류」 조건에 **용도 개방 여부**를 함께 본다. 검토표 자신의 논리가
+    #    *"수집 계획이 없어도 용도가 열려 있으면 누군가 부르면 나간다"* 인데 여기만 status 로
+    #    갈라서, A그룹에 있는 소스가 「채울 것 0건」으로 집계됐다 (권소라 역검토 v1.2 §8).
+    opened_any = any((s.get("use") or {}).get(u) == "allow" for u in USES)
+    if s.get("status") != "collect" and not opened_any:
         return (
             "보류",
-            f"`{key}` — status `{s.get('status')}`. 수집 계획이 없으므로 지금 채우지 않습니다.",
+            f"`{key}` — status `{s.get('status')}` · 전 용도 닫힘. 지금 채우지 않습니다.",
         )
     if str(s.get("org") or "").startswith("★") or "우리" in str(s.get("org") or ""):
         return "자체", (
@@ -314,6 +323,17 @@ def main() -> None:
         *[row(k, s) for k, s in c],
         "",
     ]
+    # 🚨 표에는 자리가 없어 「활용 주의」가 통째로 사라졌다. 팀이 **검토해서 수용하기로 한
+    #    리스크**가 기록에서 없어지면, 나중에 「이걸 왜 괜찮다고 했는지」부터 다시 조사해야 한다
+    #    (D-21 · 권소라 역검토 v1.2 §9).
+    cc = [(k, s) for k, s in c if s.get("caution")]
+    if cc:
+        L += [
+            f"**C 구간의 활용 주의 ({len(cc)}건)** — 판정 근거가 아니라 쓸 때 조심할 것입니다.",
+            "",
+        ]
+        L += [f"- **`{k}`** — {str(s['caution'])[:300]}" for k, s in cc]
+        L += [""]
 
     if closed:
         L += [
