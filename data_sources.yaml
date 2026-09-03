@@ -148,10 +148,11 @@ sources:
       ㈜24프로미 부당한 광고행위 건(2016서소1562)의 「주문」에 금지 광고행위가 원문으로 적혀 있다.
       🚨 심의유형 「개발 자동승인 / 운영 심의승인」 — 배포 시점의 선결 조건이다.
     caution: "🚨 API 유형이 LINK 다 — 실제 호출처는 공정위가 아니라 법제처다(linkUrl: open.law.go.kr/…cmtInfoGuide#ftc). 요청은 <code>https://www.law.go.kr/DRF/lawService.do?OC=..&target=ftc&ID=&lt;결정문일련번호&gt;&type=XML</code> 이고 인증이 OC 라 <code>LAW_OC_KEY</code> 를 쓴다 — law_go_kr · ftc_decisions_api 와 같은 포털·같은 키다. / 🚨 <code>type=HTML</code> 은 껍데기(1.8KB)만 오고 JS 로 채운다. <code>type=XML</code> 이어야 본문이 온다. / 🚨 ID 는 목록 API(15103246)의 <code>결정문일련번호</code> 다 — 목록과 본문이 쌍으로 움직인다. / ★ 출력 구조가 학습 라벨에 그대로 맞는다: 결정문일련번호·문서유형·사건번호·사건명·피심정보·회의종류·결정번호·결정일자·의결문·주문·신청취지·이유·별지·결정요지·위원정보. / ★★ PDF 보다 낫다 — ① 텍스트라 OCR 불필요 ② 대표자명이 이미 마스킹돼 온다(「대표이사 이ㅇㅇ」) ③ &lt;그림 N&gt; 광고 캡처가 안 온다 — 그것은 광고주 이미지 저작물이라 G1(미추출)이었는데 구조적으로 들어오지 않는다(D-18 프래그먼트 문제가 사라진다). / 🚨 업체명과 피심인 주소는 그대로 온다 — 우리 마스킹은 여전히 필요하다 (D-17). / 🚨 심의유형이 「개발단계: 자동승인 / 운영단계: 심의승인」이다 — 배포(U4) 시점의 선결 조건 (ftc_decisions_api 와 같다). / 🚨 호출 간격 0.5초 이상 + 재시도 3회."
-    collected_at: null
+    collected_at: 2026-09-03
     decided_at: 2026-09-02
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15103247/openapi.do"
 
   mfds_sanctions:
