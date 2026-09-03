@@ -85,7 +85,7 @@ const SOURCES = [
  url:'https://www.data.go.kr/data/15059500/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15059500/openapi.do'},
 
 {id:'mfds_press', layer:'1층 판정라벨', name:'식약처 부당광고 점검 보도자료', org:'식품의약품안전처',
- grade:'G3', constraints:['BY'], access:'공식 다운로드', verified:true,
+ grade:'G3', constraints:['BY'], access:'게시판', verified:true,
  scale:'회차당 수십~수백 건', cost:'free', costNote:'무료 · 즉시',
  value:'B', valueNote:'★ 학습 출처(의결서)와 기관이 다르므로 평가용 홀드아웃에 최적. 편향이 독립적이다',
  u:{train:CD, commercial:OK, raw:CD, cite:OK, deploy:OK},

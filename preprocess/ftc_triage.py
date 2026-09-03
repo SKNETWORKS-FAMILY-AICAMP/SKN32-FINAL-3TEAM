@@ -20,9 +20,11 @@
   `표시·광고의 공정화에 관한 법률` 매칭에 걸리지 않는다.
   법률명으로 세면 270건, 사건명 행위유형으로 세면 660건이다.
 
-🚨 가운뎃점이 두 종류다 — 원천이 `ㆍ`(U+318D 아래아)와 `·`(U+00B7)를 섞어 쓴다.
-   정규화하지 않으면 「중요한 표시ㆍ광고사항 고시 위반」 13건이 통째로 샌다.
-   law_annex.SEPARATORS 에서 이미 겪은 것과 같은 함정이다.
+🚨 나열 구분자가 여러 종류다 — 원천이 `ㆍ`(U+318D 아래아)·`·`(U+00B7)·`.` 를 섞어 쓴다.
+   펴지 않으면 「중요한 표시ㆍ광고사항 고시 위반」 13건이 통째로 샌다.
+   🔄 2026-09-03 — 이 파일이 들고 있던 표를 **`preprocess.text.sep_norm` 으로 올렸다.**
+      여기서 아래아만 처리하고 있었더니 `mfds_press` 가 마침표 구분자를 또 놓쳤다 —
+      같은 함정 세 번째였다 (D-117). 표가 두 곳에 있으면 한 곳만 고치게 된다.
 ──────────────────────────────────────────────────────────────
 """
 
@@ -35,11 +37,13 @@ import pathlib
 import re
 import xml.etree.ElementTree as ET
 
+from preprocess.text import sep_norm
+
 RAW = pathlib.Path("data/raw/ftc")
 OUT = pathlib.Path("data/derived/ftc_layer1_triage.json")
 
-#: 🚨 가운뎃점 이형 정규화. 이것을 빼면 사건명 매칭이 조용히 13건을 흘린다.
-SEP_NORM = str.maketrans({"ㆍ": "·", "․": "·", "‧": "·", "･": "·"})
+#: 🚨 구분자 정규화는 **공용 모듈이 진다** (D-117). 여기서 따로 표를 들고 있다가
+#:    `mfds_press` 가 마침표 구분자(「표시.광고」)를 또 놓쳤다 — 같은 함정 세 번째였다.
 
 #: A — 표시광고법 본건. 사건명의 **행위유형**이 곧 적용 법률이다.
 RE_AD = re.compile(
@@ -83,6 +87,9 @@ _ZW = re.compile(r"[​-‏﻿⁠]")
 #: 🚨 구분자는 **글자마다 선택**이다 — 「다·이어트」처럼 한 곳만 쪼개는 것이 실제 모양이다.
 #:    모든 자리에 요구하면(`다·이·어·트`) 실사례를 놓친다. 대신 선택으로 두면 원형
 #:    「다이어트」까지 걸리므로, **매칭 문자열에 구분자가 실제로 있는지 뒤에서 확인한다.**
+#: 🚨 `preprocess.text.SEPARATORS` 와 **겹치지만 같은 것이 아니다.** 그쪽은 「나열」을
+#:    펴는 표(표시ㆍ광고 → 표시·광고)이고, 이쪽은 「낱말이 쪼개졌는가」를 보는 문자 집합이다.
+#:    합치면 `sep_norm` 이 이미 편 뒤라 회피 표기를 못 세게 된다 — 축이 다르므로 따로 둔다.
 _SEP_CHARS = "·.-+~*^/|,_"
 _SEPS = r"[" + re.escape(_SEP_CHARS) + r"]{0,2}"
 _S2 = [
@@ -142,12 +149,16 @@ def main() -> int:
     ev_cnt, ev_core = collections.Counter(), collections.Counter()
     for p in sorted(RAW.glob("*.xml")):
         r = ET.parse(p).getroot()
-        name, order, gist, reason = (
-            _text(r, f).translate(SEP_NORM) for f in ("사건명", "주문", "결정요지", "이유")
-        )
+        raw = {f: _text(r, f) for f in ("사건명", "주문", "결정요지", "이유")}
+        # 🚨 **분류는 정규화문, 회피 표기는 원문**이다. 섞으면 안 된다 —
+        #    `sep_norm` 은 마침표까지 `·` 로 펴므로, 정규화문에서 회피 표기를 세면
+        #    **문장의 정상 마침표가 구분자로 둔갑**해 오탐이 쏟아진다.
+        #    분류는 「낱말이 어떻게 쓰였든 같은 뜻」을 보고, 회피 표기는 「어떻게 쓰였는가」
+        #    자체를 본다 — 정규화가 지우는 것이 바로 뒤쪽의 신호다 (사양 1-2 ②).
+        name, order, gist, reason = (sep_norm(raw[f]) for f in raw)
         k = classify(name, order, gist, reason)
         # 🚨 회피 표기는 **인용된 광고 원문**에 있다. 「이유」가 그것을 담는 자리다.
-        flags = evasion(reason)
+        flags = evasion(raw["이유"])
         buck[k] += 1
         for f in flags:
             ev_cnt[f] += 1
@@ -161,7 +172,7 @@ def main() -> int:
                 "분류": k,
                 "1층후보": k in CORE,
                 "회피표기": flags,
-                "이유길이": len(reason),
+                "이유길이": len(raw["이유"]),
             }
         )
 

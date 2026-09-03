@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import http.client  # noqa: F401 — 아래 IncompleteRead 를 잡기 위한 stdlib 모듈
 import re
 import time
 import urllib.error
@@ -196,7 +197,17 @@ def fetch(url: str, *, timeout: int = 30) -> bytes:
             with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
                 _last_call = time.monotonic()
                 return resp.read()
-        except (urllib.error.URLError, TimeoutError) as e:
+        # 🚨 `IncompleteRead` 가 여기 없어서 색인이 120장에서 통째로 죽었다 (2026-09-03).
+        #    서버가 chunked 응답을 중간에 끊는 것은 **일시적 오류**인데, URLError 계열이
+        #    아니라 `http.client.HTTPException` 이라 재시도 루프를 그냥 통과해 버렸다.
+        #    🚨 재시도 목록은 「무엇이 실패인가」가 아니라 「어떤 예외 클래스인가」로 적힌다 —
+        #       한 클래스가 빠지면 그 실패만 재시도 없이 죽는다. 넓게 잡는다.
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            http.client.HTTPException,
+            ConnectionError,
+        ) as e:
             _last_call = time.monotonic()
             last_error = e
             if attempt < MAX_RETRY - 1:
