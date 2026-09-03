@@ -33,7 +33,7 @@
 | 층 | 무엇 | 상태 |
 |---|---|---|
 | **거버넌스·수집·학습** | `source` `fragment` `document` `sentence` `chunk` `golden_sample` … **18 테이블** | ✅ **DDL v1.0 에 있고 PostgreSQL 16.13 으로 실측 검증됨** |
-| **런타임 — 사용자 작업** | `work_doc` `copy_sentence` `judgment` `slot_assignment` | 🚨 **없다. Phase 0 walking skeleton 이 필요로 하는 것이 이쪽이다** |
+| **런타임 — 사용자 작업** | `work_doc` `copy_sentence` `judgment` `slot_assignment` 🔄 `upload_blob`(D-128·D-129) · `work_doc` 에 수명 키 `owner_id`·`session_id`·`expires_at` · `judgment.doc_id FK CASCADE` · `verdict` 4종 CHECK(D-127) · `is_public`·`screened_at` | 🚨 **없다. Phase 0 walking skeleton 이 필요로 하는 것이 이쪽이다** |
 
 > 그래서 **초기 마이그레이션은 런타임 층부터** 만든다. 거버넌스 층은 수집이 열릴 때(S0-14 통과 후)
 > DDL v1.0 을 그대로 옮긴다. 오늘 둘을 한꺼번에 넣으면 **검증할 수 없는 마이그레이션**이 된다.

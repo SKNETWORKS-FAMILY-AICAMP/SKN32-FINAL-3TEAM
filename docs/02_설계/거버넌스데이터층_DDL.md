@@ -170,7 +170,7 @@ transform_pair    1  ->  0
 | 🔄 **동의** | `consent` (사용자 입력 유래 행) | **D-96** |
 
 > 🔄 **`consent` 는 사용자 입력에서 온 행에만 의미가 있습니다** (D-96). 결함 주입(D-25)·시정 페어(D-26) 유래는
-> 우리가 만든 것이라 해당되지 않습니다. **학습 데이터 구성 시 `provenance` 가 사용자 입력이면 `consent=true` 를 요구**하고,
+> 우리가 만든 것이라 해당되지 않습니다. 🔄 **D-128** — 사용자 유래 행은 `provenance = 'user'` · `fragment_id NULL` 허용(`CHECK (fragment_id IS NOT NULL OR provenance = 'user')`) · `consent_train` 을 `work_doc` 에서 행으로 복사(D-71 형태). 🚨 아래 SQL 에는 아직 `consent` 열과 이 CHECK 가 **없다** — 다음 DDL 개정에서 `golden_sample` 에 넣는다. **학습 데이터 구성 시 `provenance` 가 사용자 입력이면 `consent=true` 를 요구**하고,
 > 게이트가 이를 검사합니다 — `redistributable` 과 정확히 같은 처리입니다.
 
 > 🚨 **`ck_golden_injected_not_holdout`** — 주입본이 `test_holdout` 에 들어가는 것을 DB가 거부합니다. 평가는 **실사례 홀드아웃으로만** 해야 하는데, 이건 사람이 실수하기 가장 쉬운 지점입니다.
