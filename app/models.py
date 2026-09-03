@@ -12,6 +12,13 @@
 
 🚨 **`consent` 기본값은 미보관이다** (D-96). 동의가 없으면 이 행들은 세션 종료와 함께 지운다.
    템플릿 조립은 동의 여부와 무관하게 동작한다 — 동의가 기능의 대가가 되면 안 된다.
+
+🚨 **지울 키가 있어야 지운다** (D-129). `work_doc` 의 `owner_id`·`session_id`·`expires_at` 이 그 키이고,
+   `judgment.doc_id` 가 문장이 지워질 때 판정 행을 고아로 남기지 않는다. 업로드물은 `upload_blob` 한 곳에만
+   경로가 있다 — 게이트 35 가 보는 것은 그 경로다 (D-128 · `UPLOAD_ROOT`).
+
+🚨 **`consent_train` 은 `NOTRAIN` 의 유일한 해제다** (D-128). 학습·색인 코드가 `UPLOAD_ROOT` 를 참조할 때
+   이 필터를 거치지 않으면 게이트 35 가 실패한다.
 """
 
 from __future__ import annotations
@@ -62,13 +69,23 @@ class WorkDoc(Base):
     # 🚨 D-96 — 기본값은 미보관. true 일 때만 서버에 남는다
     consent_store: Mapped[bool] = mapped_column(default=False, nullable=False)
     consent_train: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # 🚨 D-129 — 수명 키. 비회원(D-66 「A 는 가입 없음」)은 owner_id NULL · session_id + expires_at 로 지운다
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    session_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     sentences: Mapped[list[CopySentence]] = relationship(
         back_populates="doc", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (CheckConstraint("kind in ('single','batch')", name="ck_work_doc_kind"),)
+    __table_args__ = (
+        CheckConstraint("kind in ('single','batch')", name="ck_work_doc_kind"),
+        # 동의 없는 문서는 반드시 만료가 있다 — 「세션 종료와 함께 지운다」의 구조적 형태
+        CheckConstraint(
+            "consent_store OR expires_at IS NOT NULL", name="ck_work_doc_expiry_without_consent"
+        ),
+    )
 
 
 class CopySentence(Base):
@@ -151,9 +168,18 @@ class Judgment(Base):
     __tablename__ = "judgment"
 
     id: Mapped[uuid.UUID] = _pk()
+    # 🚨 D-129 — 다형 subject_id 와 별개로 문서 FK 를 둔다. 문장·문서가 지워지면 판정도 지워진다
+    doc_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("work_doc.id", ondelete="CASCADE"), index=True
+    )
     subject_type: Mapped[str] = mapped_column(String(20))
     subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    # D-127 — 상태 4종. 「근거 불일치(인용 검증 실패)」는 상태가 아니라 재생성 이벤트다 (D-126 카운터)
+    #   confirmed 확정 · hold 보류(hold_reason 필수) · no_basis 근거없음(위험도·유형 유지) ·
+    #   unjudged 미판정(오류·타임아웃 — 🚨 통과로 집계 금지)
     verdict: Mapped[str] = mapped_column(String(24))
+    # hold 일 때만: low_conf | gap2 | cat_unknown | rd1
+    hold_reason: Mapped[str | None] = mapped_column(String(16))
     # D-82 — 사용자에게 묻지 않고 우리가 판별한다. 그래서 판정 결과에 속한다
     product_category: Mapped[str | None] = mapped_column(String(40))
     violation_type: Mapped[str | None] = mapped_column(String(40))
@@ -162,7 +188,11 @@ class Judgment(Base):
     risk_final: Mapped[int | None] = mapped_column(Integer)
     # 🚨 D-103 ③ — 개정되면 「재검증 대기」의 판단 근거가 된다
     law_version: Mapped[str] = mapped_column(String(40))
-    attempt: Mapped[int] = mapped_column(Integer, default=0)  # 재판정 회차 (K=2)
+    # D-126 — 0-base. 총 라운드 K+1=3 이므로 0·1·2 만 가능
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    # D-68 — 공개 여부와 스크리닝 시각 (DB_스키마 W1 필수 · D-129 로 ORM 에 반영)
+    is_public: Mapped[bool] = mapped_column(default=False, nullable=False)
+    screened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     judged_by: Mapped[str] = mapped_column(String(80))  # 코드/모델 버전
     judged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -170,8 +200,43 @@ class Judgment(Base):
         CheckConstraint(
             "subject_type in ('copy_sentence','claim')", name="ck_judgment_subject_type"
         ),
+        CheckConstraint(
+            "verdict in ('confirmed','hold','no_basis','unjudged')", name="ck_judgment_verdict"
+        ),
+        CheckConstraint(
+            "(verdict = 'hold') = (hold_reason IS NOT NULL)", name="ck_judgment_hold_reason"
+        ),
+        CheckConstraint(
+            "hold_reason IS NULL OR hold_reason in ('low_conf','gap2','cat_unknown','rd1')",
+            name="ck_judgment_hold_reason_values",
+        ),
+        CheckConstraint("attempt BETWEEN 0 AND 2", name="ck_judgment_attempt"),
+        # 🚨 위험도 값 범위 CHECK 는 아직 걸지 않는다 — 4단계인지 R0 포함 5값인지 미결 (설계검토 R3)
         Index("ix_judgment_subject", "subject_type", "subject_id"),
     )
+
+
+class UploadBlob(Base):
+    """사용자 업로드물 — CSV · 이미지 (D-128 · D-129).
+
+    🚨 **업로드물의 경로는 이 테이블에만 있다.** `path` 는 `UPLOAD_ROOT` 아래이고, 그 상수가
+       D-122 의 `NOTRAIN` 이다 — 소스 플래그가 아니라 저장 경로다. 게이트 35 는 학습·색인 코드가
+       `UPLOAD_ROOT` 를 `consent_train=true` 필터 없이 참조하면 실패한다.
+    """
+
+    __tablename__ = "upload_blob"
+
+    id: Mapped[uuid.UUID] = _pk()
+    doc_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("work_doc.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(8))  # 'csv' | 'image'
+    path: Mapped[str] = mapped_column(String(300))  # UPLOAD_ROOT 상대 경로
+    sha256: Mapped[str] = mapped_column(String(64))
+    bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (CheckConstraint("kind in ('csv','image')", name="ck_upload_blob_kind"),)
 
 
 class SlotAssignment(Base):
