@@ -199,6 +199,16 @@ ftc_decisions_api:
   url: https://www.data.go.kr/data/15103246/openapi.do
   valueNote: 벌크는 파일로, 증분은 API로. 3W 이후 갱신 자동화
   why: 위 파일데이터와 같은 원천.
+ftc_decisions_body:
+  note:
+    U1 학습: 파일데이터·목록 API 와 동일 원천
+    U3 인용: 동일
+    U4 배포: 동일
+    상업: 동일
+    원문: 동일
+  url: https://www.data.go.kr/data/15103247/openapi.do
+  valueNote: ★★★ 1층의 본체가 여기서 열린다. 15103301(파일데이터 5,870건)은 data.go.kr 에 파일이 없다 — 제공형태가 「기관자체에서 다운로드(제공데이터URL기재)」이고 실물 PDF 는 case.ftc.go.kr 에 있으며 일괄 다운로드가 없다. 5,870번을 개별로 받거나, case.ftc.go.kr 을 별도 등재·판정해야 한다(D-15). 이 API 는 같은 결정문을 XML 본문으로 준다.
+  why: data.go.kr 15103247 「이용허락범위 제한 없음」(2026-09-02 실측). ftc_decisions(15103301) · ftc_decisions_api(15103246)와 같은 원천이고 조건도 같다.
 ftc_decisions_bulk:
   note: *id002
   url: https://www.data.go.kr/data/15103301/fileData.do
