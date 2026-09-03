@@ -113,7 +113,7 @@ transform_pair    1  ->  0
 | 테이블 | 역할 | 핵심 제약 |
 |---|---|---|
 | **`source`** | 소스 레지스트리 — `data_sources.yaml` 의 DB 표현 | 🚨 `decided_by <> reviewed_by` · `BY` 플래그면 `attribution` 필수 |
-| `source_constraint` | 제약 플래그 (1:N) | 10종 열거형 — `NOREDIST` `NOSTORE` `QUERYLOG` `PREAPPROVAL` 포함 (D-71·D-73) |
+| `source_constraint` | 제약 플래그 (1:N) | 🔄 **11종** 열거형 — `NOREDIST` `NOSTORE` `QUERYLOG` `PREAPPROVAL` + **`NOTRAIN`**(사용자 업로드물 · D-122) 포함 (D-71·D-73) |
 | `source_use` | U1~U4 허용 여부 | 전파 규칙은 애플리케이션 계층에서 적용 |
 | `collect_manifest` | 수집 이력 · 재현성 | `sha256` 동일하면 스킵. `event` 로 삭제 이벤트도 기록 |
 
@@ -203,6 +203,7 @@ data/raw/                    →  (DB 미적재)  원본 무손상 보관
 data/g3/                     →  fragment.grade = 'G3'
 data/g2_facts/               →  fragment.grade = 'G2'  (사실만)
 data/g2_norepub/             →  source_constraint.flag = 'NOREDIST'   🔄 D-71
+(업로드물 저장 경로)          →  source_constraint.flag = 'NOTRAIN'    🔄 D-122
 data/quarantine/             →  fragment.grade = 'G0'  · 어떤 스크립트도 읽지 않는다
 data/.g1_blocked             →  fragment.excluded = true
 data/derived/                →  sentence · chunk · dict_entry · golden_sample
@@ -286,7 +287,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TYPE grade_t       AS ENUM ('G0','G1','G2','G3');
 CREATE TYPE use_t         AS ENUM ('U1_train','U2_rag','U3_cite','U4_deploy');
 CREATE TYPE flag_t        AS ENUM ('BY','NC','SA','PII','TOS','GATED',
-                                   'NOREDIST','NOSTORE','QUERYLOG','PREAPPROVAL');
+                                   'NOREDIST','NOSTORE','QUERYLOG','PREAPPROVAL',
+                                   'NOTRAIN');   -- 🔄 D-122 · 사용자 업로드물은 학습·색인 금지
 CREATE TYPE cost_t        AS ENUM ('free','gated','paid','unknown');
 CREATE TYPE value_t       AS ENUM ('A','B','C','D','X');
 CREATE TYPE violation_t   AS ENUM ('V0','V1','V2','V3','V4','V5','V6','V7','V8');

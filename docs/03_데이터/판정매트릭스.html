@@ -421,6 +421,16 @@ const SOURCES = [
  caution:'호출 간격 0.5초 이상 + 재시도 3회(지수 백오프).',
  url:'https://www.data.go.kr/data/15103246/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15103246/openapi.do'},
 
+{id:'ftc_decisions_body', layer:'1층 판정라벨', name:'공정위 결정문 <b>본문 조회</b> API ★신규등재', org:'공정거래위원회',
+ grade:'G3', constraints:[], access:'API (OC 키 — law_go_kr 과 같은 LAW_OC_KEY)', verified:true,
+ scale:'2008년 이후 공개 결정문 본문 (목록 API 기준 8,255건)', cost:'free', costNote:'무료 · 키 이미 보유',
+ value:'A', valueNote:'★★★ <b>1층의 본체가 여기서 열린다.</b> 15103301(파일데이터 5,870건)은 <b>data.go.kr 에 파일이 없다</b> — 제공형태가 「기관자체에서 다운로드(제공데이터URL기재)」이고 실물 PDF 는 case.ftc.go.kr 에 있으며 <b>일괄 다운로드가 없다</b>. 5,870번을 개별로 받거나, case.ftc.go.kr 을 별도 등재·판정해야 한다(D-15). 이 API 는 <b>같은 결정문을 XML 본문으로</b> 준다.',
+ u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
+ note:{train:'파일데이터·목록 API 와 동일 원천',commercial:'동일',raw:'동일',cite:'동일',deploy:'동일'},
+ why:'data.go.kr 15103247 「이용허락범위 제한 없음」(2026-09-02 실측). ftc_decisions(15103301) · ftc_decisions_api(15103246)와 같은 원천이고 조건도 같다.',
+ caution:'🚨 <b>API 유형이 LINK 다</b> — 실제 호출처는 공정위가 아니라 <b>법제처</b>다(linkUrl: open.law.go.kr/…cmtInfoGuide#ftc). 요청은 <code>https://www.law.go.kr/DRF/lawService.do?OC=..&target=ftc&ID=&lt;결정문일련번호&gt;&type=XML</code> 이고 인증이 <b>OC</b> 라 <code>LAW_OC_KEY</code> 를 쓴다 — law_go_kr · ftc_decisions_api 와 <b>같은 포털·같은 키</b>다. / 🚨 <b><code>type=HTML</code> 은 껍데기(1.8KB)만 오고 JS 로 채운다. <code>type=XML</code> 이어야 본문이 온다.</b> / 🚨 ID 는 목록 API(15103246)의 <code>결정문일련번호</code> 다 — <b>목록과 본문이 쌍으로 움직인다.</b> / ★ 출력 구조가 학습 라벨에 그대로 맞는다: 결정문일련번호·문서유형·사건번호·사건명·피심정보·회의종류·결정번호·결정일자·<b>의결문·주문·신청취지·이유·별지·결정요지</b>·위원정보. / ★★ <b>PDF 보다 낫다</b> — ① 텍스트라 <b>OCR 불필요</b> ② 대표자명이 <b>이미 마스킹돼 온다</b>(「대표이사 이ㅇㅇ」) ③ <b>&lt;그림 N&gt; 광고 캡처가 안 온다</b> — 그것은 광고주 이미지 저작물이라 G1(미추출)이었는데 <b>구조적으로 들어오지 않는다</b>(D-18 프래그먼트 문제가 사라진다). / 🚨 <b>업체명과 피심인 주소는 그대로 온다</b> — 우리 마스킹은 여전히 필요하다 (D-17). / 🚨 심의유형이 「개발단계: 자동승인 / 운영단계: 심의승인」이다 — 배포(U4) 시점의 선결 조건 (ftc_decisions_api 와 같다). / 🚨 호출 간격 0.5초 이상 + 재시도 3회.',
+ url:'https://www.data.go.kr/data/15103247/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15103247/openapi.do'},
+
 {id:'mfds_sanctions', layer:'1층 판정라벨', name:'식약처 행정처분결과 API ★신규발견', org:'식품의약품안전처',
  grade:'G3', constraints:[], access:'API 키', verified:true,
  scale:'미측정 — 1W 실측', cost:'free', costNote:'무료 · 인증키 즉시',
@@ -432,7 +442,7 @@ const SOURCES = [
  url:'https://www.data.go.kr/data/15059500/openapi.do', evidenceUrl:'https://www.data.go.kr/data/15059500/openapi.do'},
 
 {id:'mfds_press', layer:'1층 판정라벨', name:'식약처 부당광고 점검 보도자료', org:'식품의약품안전처',
- grade:'G3', constraints:['BY'], access:'공식 다운로드', verified:true,
+ grade:'G3', constraints:['BY'], access:'게시판', verified:true,
  scale:'회차당 수십~수백 건', cost:'free', costNote:'무료 · 즉시',
  value:'B', valueNote:'★ 학습 출처(의결서)와 기관이 다르므로 평가용 홀드아웃에 최적. 편향이 독립적이다',
  u:{train:CD, commercial:OK, raw:CD, cite:OK, deploy:OK},

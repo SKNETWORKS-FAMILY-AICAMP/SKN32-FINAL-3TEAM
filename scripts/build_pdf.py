@@ -197,6 +197,7 @@ def main():
     ap.add_argument("--doc-title", default="CopyLane 기획문서 v3.8")
     ap.add_argument("--org", default="SKN Final Project")
     ap.add_argument("--footer", default="팀 공유용")
+    ap.add_argument("--meta", default=None, help="표지 메타 HTML — 생략하면 기본 크레딧")
     a = ap.parse_args()
 
     # 🚨 발행물 파일명에는 버전을 붙인다 — 원본은 계속 고쳐지므로 경로가 고정돼야 하고,
@@ -205,11 +206,11 @@ def main():
     src_text = pathlib.Path(a.src).read_text(encoding="utf-8")
     out = a.out or "dist/" + versioned_stem(pathlib.Path(a.src).stem, src_text) + ".pdf"
     pathlib.Path(out).parent.mkdir(parents=True, exist_ok=True)
-    meta = (
-        "문제 · 도메인 제안 &nbsp;<b>권소라</b><br>"
-        "시스템 설계 · 검증 · 문서 &nbsp;<b>오한빈</b> (팀장)<br>"
-        "구현 &nbsp;<b>팀 5인</b> — 오한빈 · 권소라 · 이서은 · 소성민 · 박수진<br>"
-        "발표 &nbsp;<b>2026년 10월 26일</b>"
+    meta = a.meta or (
+        "팀장 &nbsp;<b>오한빈</b><br>"
+        "팀원 &nbsp;<b>박수진 · 권소라 · 소성민 · 이서은</b><br>"
+        "작성자 &nbsp;<b>오한빈</b> (팀장)<br>"
+        "도메인 제안 &nbsp;<b>권소라</b>"
     )
 
     html = build_html(a.src, a.logo, a.title, a.subtitle, meta, a.footer)

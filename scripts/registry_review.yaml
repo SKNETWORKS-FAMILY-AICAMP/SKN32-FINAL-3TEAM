@@ -37,6 +37,23 @@ ftc_decisions_api:
   reviewed_at: 2026-09-02
   collected_at: null
 
+ftc_decisions_body:
+  decided_by: 오한빈
+  decided_at: 2026-09-02
+  # 🆕 2026-09-02 신규 등재 (D-15) — 기획문서 1층이 적어 둔 세 경로 중
+  #    「본문 API 15103247」이 레지스트리에 없었다. 파일데이터 15103301 은
+  #    data.go.kr 에 파일이 없고(기관자체 다운로드) 일괄 내려받기가 없어,
+  #    1층 본체를 여는 실질 경로가 이쪽이다.
+  #    조건은 15103246 과 같다 — 같은 원천 · 이용허락범위 제한 없음 · 같은 LAW_OC_KEY.
+  # 확인 2026-09-02 — data.go.kr 15103247 「이용허락범위 제한 없음」· 포맷 XML · API 유형 LINK.
+  #   실제 호출은 법제처(lawService.do?target=ftc&ID=<결정문일련번호>&type=XML)이고
+  #   그 경로의 이용조건은 law_go_kr 서명 근거와 같은 페이지에서 확인된다
+  #   (저작권법 제7조 + 공공데이터법 · 영리 포함 자유 활용 보장).
+  #   확인 근거 정리: docs/ohb/검토요청_2026-09-02_ftc_decisions_body.md
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-02
+  collected_at: 2026-09-03
+
 mfds_sanctions:
   decided_by: 오한빈
   decided_at: 2026-08-20
@@ -52,6 +69,19 @@ mfds_press:
   #    「공공누리 미부착 게시물은 등록 부서와 사전 협의」 단서 확인 — 프래그먼트 단위 확인 사항 (D-18)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
+  # 🚨 크롤링형 — robots.txt 를 사람이 열어 본 날을 적는다 (규약 6)
+  #   🔄 2026-09-03 확인 (오한빈) — https://www.mfds.go.kr/robots.txt, probe 리포트 원문:
+  #        User-agent: Googlebot / Disallow: /search/search.do / Allow: /
+  #        User-agent: *        / Allow: /
+  #      `*` 그룹에 Disallow 가 한 줄도 없다. 유일한 차단은 **Googlebot 한정**이고
+  #      경로도 /search/search.do 라 우리가 쓰는 /brd/m_99/ 와 겹치지 않는다.
+  #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 (mfds_hf_ingredient_board 와 같은 축).
+  #      식약처 저작권정책의 「공공누리 미부착 게시물은 등록 부서와 사전 협의」가 그대로 살아 있고,
+  #      그 확인은 **게시물마다** 해야 한다 (D-18 프래그먼트 단위) — 수집기의 필수 동작이다.
+  #   🚨 access 를 「공식 다운로드」에서 「게시판」으로 고쳤다 (data.js · D-117).
+  #      종전 표기로는 registry.require 의 CRAWL_ACCESS 검사를 그냥 지나가
+  #      **robots 확인 없이 크롤링이 시작될 수 있었다.**
+  robots_checked_at: 2026-09-03
   collected_at: null
 
 ftc_noviolation:

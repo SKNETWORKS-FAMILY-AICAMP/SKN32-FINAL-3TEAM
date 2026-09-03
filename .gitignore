@@ -39,3 +39,6 @@ build/
 .DS_Store
 Thumbs.db
 .idea/
+
+# Claude 앱이 떨어뜨리는 산출물 ? 레포 원본의 사본이라 커밋하지 않는다
+Claude outputs/
