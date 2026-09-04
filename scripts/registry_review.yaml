@@ -84,7 +84,7 @@ mfds_press:
   #      종전 표기로는 registry.require 의 CRAWL_ACCESS 검사를 그냥 지나가
   #      **robots 확인 없이 크롤링이 시작될 수 있었다.**
   robots_checked_at: 2026-09-03
-  collected_at: null
+  collected_at: 2026-09-04
 
 # ── 🔄 2026-09-03 D-132 신규 등재 3건 — 판정 근거는 data.js `why`. reviewed_by 는 다른 팀원이
 #    저작권법 제24조의2 제1항 조문 + 식약처 자료실 게시 화면을 열어 재현한 뒤 기입한다 (권소라 외).
