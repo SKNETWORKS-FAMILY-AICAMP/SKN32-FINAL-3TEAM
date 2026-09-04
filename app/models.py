@@ -68,6 +68,8 @@ class WorkDoc(Base):
     kind: Mapped[str] = mapped_column(String(10), default="single")
     # 🚨 D-96 — 기본값은 미보관. true 일 때만 서버에 남는다
     consent_store: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # 🔄 D-96 개정분 ② — 「품질 개선을 위한 학습 · 검토 활용」. 학습(D-128 NOTRAIN 해제)과
+    #    관리자 「원문 조회」 열람을 **같이** 연다. 열람용 플래그를 따로 두지 않는다. 기본 미동의.
     consent_train: Mapped[bool] = mapped_column(default=False, nullable=False)
     # 🚨 D-129 — 수명 키. 비회원(D-66 「A 는 가입 없음」)은 owner_id NULL · session_id + expires_at 로 지운다
     owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
