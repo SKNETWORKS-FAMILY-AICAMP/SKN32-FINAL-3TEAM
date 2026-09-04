@@ -65,6 +65,8 @@ mfds_sanctions:
 mfds_press:
   decided_by: 오한빈
   decided_at: 2026-08-20
+  # 🔄 2026-09-03 D-132 — 공공누리 미부착 게시물도 제24조의2 제1항으로 수집. 격리 → 「미부착 사실 기록」.
+  #    단서 1~4호 해당 없음 · 제3자 광고 이미지 G1 미추출. 재확인(2인)은 다른 팀원이 조문+자료실 화면으로.
   # 확인 2026-09-02 — 식약처 저작권정책(wpge/m_34/de010803l001.do): 저작권법 제24조의2 / 제36조 / 제37조.
   #    「공공누리 미부착 게시물은 등록 부서와 사전 협의」 단서 확인 — 프래그먼트 단위 확인 사항 (D-18)
   reviewed_by: 권소라
@@ -82,7 +84,28 @@ mfds_press:
   #      종전 표기로는 registry.require 의 CRAWL_ACCESS 검사를 그냥 지나가
   #      **robots 확인 없이 크롤링이 시작될 수 있었다.**
   robots_checked_at: 2026-09-03
+  collected_at: 2026-09-04
+
+# ── 🔄 2026-09-03 D-132 신규 등재 3건 — 판정 근거는 data.js `why`. reviewed_by 는 다른 팀원이
+#    저작권법 제24조의2 제1항 조문 + 식약처 자료실 게시 화면을 열어 재현한 뒤 기입한다 (권소라 외).
+mfds_casebook:
+  decided_by: 오한빈
+  decided_at: 2026-09-03
+  reviewed_by: null
   collected_at: null
+mfds_online_guideline:
+  decided_by: 오한빈
+  decided_at: 2026-09-03
+  reviewed_by: null
+  collected_at: null
+foodsafety_faq:
+  decided_by: 오한빈
+  decided_at: 2026-09-03
+  reviewed_by: null
+  collected_at: null
+  # 🚨 크롤링형 — robots.txt(https://www.foodsafetykorea.go.kr/robots.txt)를 사람이 열어 본 날을 적는다.
+  #    mfds_hf_ingredient_board 의 09-02 확인과 같은 도메인이지만 값은 소스마다 사람이 적는다.
+  # robots_checked_at:
 
 ftc_noviolation:
   decided_by: 오한빈

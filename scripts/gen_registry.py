@@ -389,6 +389,7 @@ ORDER = [
     "ftc_decisions_body",
     "mfds_sanctions",
     "mfds_press",
+    "mfds_casebook",
     "ftc_noviolation",
     # 2층 적법 라벨
     "mfds_hf_ingredient",
@@ -396,6 +397,8 @@ ORDER = [
     "kcia_guideline",
     # 3층 판단 규범
     "law_go_kr",
+    "mfds_online_guideline",
+    "foodsafety_faq",
     "platform_guide",
     "mfds_hf_ingredient_board",
     # 제품 사실
@@ -437,6 +440,8 @@ ORDER = [
 #    여기 없는 키는 collect 다. blocked·not_adopted 는 status 값이 아니라 별도 섹션이다.
 STATUS = {
     "ftc_noviolation": "hold",
+    # D-132 — 등급은 G3 로 판정됐으나 크롤링형이라 robots_checked_at 과 「무단 복제」 문구 확인이 선행. use 는 UN(fail-closed)
+    "foodsafety_faq": "hold",
     "google_trends": "hold",
     "youtube_api": "hold",
     "platform_guide": "hold",

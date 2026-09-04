@@ -37,7 +37,7 @@ import pathlib
 import re
 import xml.etree.ElementTree as ET
 
-from preprocess.text import sep_norm
+from preprocess.text import evasion, sep_norm
 
 RAW = pathlib.Path("data/raw/ftc")
 OUT = pathlib.Path("data/derived/ftc_layer1_triage.json")
@@ -72,36 +72,8 @@ BUCKETS = [
 #: A·A'·B·C 가 1층 학습 라벨 후보다. C'·D·E 는 후보에서 뺀다.
 CORE = {"A", "A'", "B", "C"}
 
-# ── 회피 표기 (전처리 사양 [P11] SURFACE_VARIANTS) ────────────
-#: 🚨 사전([P6])이 아직 없다. 그때까지 **판정 대상 어휘의 최소 집합**으로 센다 —
-#:    여기서 나온 수는 하한이지 전량이 아니다. 사전이 서면 다시 센다.
-LEX = ["치료", "효과", "완치", "부작용", "다이어트", "미백", "주름", "개선", "예방", "특효"]
-_ZW = re.compile(r"[​-‏﻿⁠]")
-
-#: S2 구분자 삽입 — `치·료` `치.료` `치+료`.
-#: 🚨 **공백을 구분자로 넣으면 안 된다** (2026-09-03 오탐으로 확인).
-#:    「45**개 선**불식 할부거래업자」가 `개선` 의 회피 표기로 잡혔다. 한국어는 어절을
-#:    공백으로 가르므로, 공백 하나만 허용해도 인접 두 어절의 끝·첫 글자가 늘 걸린다.
-#:    회피 표기의 실제 모양은 눈에 보이는 기호(`·` `.` `+` `~`)다 — 그것만 센다.
-#: 🚨 앞뒤를 어절 경계로 묶는다. 묶지 않으면 더 긴 낱말의 일부가 걸린다.
-#: 🚨 구분자는 **글자마다 선택**이다 — 「다·이어트」처럼 한 곳만 쪼개는 것이 실제 모양이다.
-#:    모든 자리에 요구하면(`다·이·어·트`) 실사례를 놓친다. 대신 선택으로 두면 원형
-#:    「다이어트」까지 걸리므로, **매칭 문자열에 구분자가 실제로 있는지 뒤에서 확인한다.**
-#: 🚨 `preprocess.text.SEPARATORS` 와 **겹치지만 같은 것이 아니다.** 그쪽은 「나열」을
-#:    펴는 표(표시ㆍ광고 → 표시·광고)이고, 이쪽은 「낱말이 쪼개졌는가」를 보는 문자 집합이다.
-#:    합치면 `sep_norm` 이 이미 편 뒤라 회피 표기를 못 세게 된다 — 축이 다르므로 따로 둔다.
-_SEP_CHARS = "·.-+~*^/|,_"
-_SEPS = r"[" + re.escape(_SEP_CHARS) + r"]{0,2}"
-_S2 = [
-    (w, re.compile(r"(?<![가-힣A-Za-z0-9])" + _SEPS.join(w) + r"(?![가-힣A-Za-z0-9])")) for w in LEX
-]
-
-#: S3 자모 분리 — `ㅊl료` `다ㅇㅣ어트`. 낱자 자모가 단어 안에 끼어든 형태.
-#: 🚨 **`ㅇ` 은 세지 않는다.** 의결서는 개인정보를 `대표이사 이ㅇㅇ` · `소갑 제ㅇ호증`
-#:    처럼 **`ㅇ` 자리표시자로 가려서** 보낸다 (원천 마스킹 · D-17 검토요청서에서 확인).
-#:    이것을 회피 표기로 세면 16건이 전부 오탐이 된다 — 실제로 그렇게 나왔다.
-#:    자음은 `ㅇ` 을 뺀 나머지만, 모음은 전부 본다.
-_S3 = re.compile(r"[가-힣][ㄱ-ㅆㅈ-ㅎㅏ-ㅣ][가-힣]|[ㄱ-ㅆㅈ-ㅎ][a-zA-Z][가-힣]")
+# 🔄 회피 표기 탐지는 **공용 모듈이 진다** (D-117 · 2026-09-04).
+#    `mfds_press` 도 같은 계수기를 써야 두 소스의 수를 비교할 수 있다.
 
 
 def _text(node: ET.Element, path: str) -> str:
@@ -121,19 +93,6 @@ def classify(name: str, order: str, gist: str, reason: str) -> str:
     if RE_ECOM.search(name):
         return "C" if law else "C'"
     return "D" if law else "E"
-
-
-def evasion(text: str) -> list[str]:
-    """이 결정문에 실재하는 회피 표기 종류. 사양 2-5 의 `evasion_observed`."""
-    flags = []
-    if _ZW.search(text):
-        flags.append("S4")
-    # 🚨 구분자가 실제로 들어간 매칭만 센다 — 원형 낱말은 회피 표기가 아니다.
-    if any(any(c in _SEP_CHARS for c in m.group(0)) for _, p in _S2 for m in p.finditer(text)):
-        flags.append("S2")
-    if _S3.search(text):
-        flags.append("S3")
-    return flags
 
 
 def main() -> int:

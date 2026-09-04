@@ -22,9 +22,12 @@
 
 🚨 **robots 가 열린 것과 저작물을 써도 되는 것은 다르다.**
    robots.txt 는 `User-agent: *` 에 Disallow 가 없다 (2026-09-03 확인 · 규약 6).
-   그러나 식약처 저작권정책은 **공공누리 미부착 게시물은 등록 부서와 사전 협의**를 요구한다.
-   → `nuri` 필드를 게시물마다 기록하고, **미부착 건은 격리 디렉터리로 보낸다** (D-18).
-      격리는 「받지 않는다」가 아니라 「받되 쓰지 않는다」이다 — 부착 여부 자체가 실측 결과다.
+   식약처 저작권정책은 「공공누리 미부착 게시물은 등록 부서와 사전 협의」라고 안내하지만,
+   🔄 **D-132 (2026-09-03)** — 국가기관이 업무상 작성·공표한 저작물은 **저작권법 제24조의2 제1항**으로
+   허락 없이 이용 가능하고 제37조 출처표시만 의무다. 안내문은 허락 요건이 아니다.
+   → 미부착 건도 **같은 디렉터리에 받는다.** 대신 `kogl_badge` 를 게시물마다 기록한다
+     (`data/derived/mfds_press/kogl_badge.jsonl`) — 나중에 협의 요청이 오면 어느 자료인지 바로 나온다.
+   🚨 게시물 안의 **제3자 광고 이미지·캡처는 G1 미추출**(광고주 저작물 · D-18) — 전처리가 문구만 취한다.
 
 🚨 **살아 있는 게시판이다.** 총량이 2026-09-02 에 4,347 → 09-03 에 4,348 이었다.
    페이지 번호는 시간이 지나면 다른 글을 가리킨다. 그래서 **manifest 의 기준은 페이지가
@@ -40,6 +43,7 @@ import json
 import re
 import sys
 import time
+from urllib.parse import urljoin
 
 from collect import http, registry, store
 from preprocess.text import sep_norm
@@ -390,6 +394,100 @@ def diag(no: str) -> int:
     return 0
 
 
+#: 첨부 파일명 ↔ `down.do` 링크 쌍. 🚨 **목록·본문과 같은 원칙 — 링크를 조립하지 않는다**
+#:    (D-118 ①). `file_seq` 를 짐작하면 다른 첨부를 받는다.
+_ATTACH = re.compile(
+    r"<strong>([^<]{5,200}\.(?:hwpx?|pdf|zip|xlsx?|pptx?))</strong>\s*"
+    r'<a\s+href="([^"]*down\.do[^"]*)"',
+    re.I | re.S,
+)
+#: 🚨 **PDF 만 받는다.** 같은 보도자료가 `.hwpx` 와 `.pdf` 로 두 벌 붙어 있고 내용이 같다.
+#:    둘 다 받으면 용량이 두 배이고, HWPX 는 파싱에 별도 의존성이 든다.
+_WANT = re.compile(r"\.pdf$", re.I)
+ATTACH_MIN = 20_000  # 오류 페이지·빈 파일 그물 (D-118 ②)
+
+
+def attach_links(html_text: str) -> list[tuple[str, str]]:
+    """게시물 HTML 에서 [(파일명, 상대 URL)]. 🚨 PDF 만 돌려준다."""
+    out = []
+    for name, href in _ATTACH.findall(html_text):
+        name = html.unescape(name).strip()
+        if _WANT.search(name):
+            out.append((name, html.unescape(href).strip()))
+    return out
+
+
+def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, int]:
+    """받아 둔 게시물 HTML 에서 첨부 PDF 를 받는다. 돌려주는 값은 (저장, 건너뜀, 실패).
+
+    🚨 **왜 별도 단계인가** — 2026-09-04 실측: **게시물 HTML 에 본문이 없다.**
+       제목·등록일·조회수·첨부 파일명뿐이고, 40자 넘는 줄은 전부 검색 도움말이다.
+       광고 문구(=회피 표기 실사례 · 사양 2-5)는 **첨부 PDF 에만 있다.**
+       D-118 ⑤ 가 「미확인」으로 남긴 자리의 답이다.
+
+    🚨 **텍스트만 쓴다 — 이미지는 추출하지 않는다.** 보도자료 PDF 의 적발 광고 캡처는
+       **광고주 저작물**이라 D-132 의 제24조의2 대상이 아니고 D-18 에서 G1(미추출)이다.
+       PDF 를 통째로 보관하는 것과 이미지를 뽑아 쓰는 것은 다르다 — 전처리가 텍스트만 뽑는다.
+    """
+    registry.require(SOURCE_ID, use=USE)
+
+    src_dir = store.raw_dir(FAMILY)
+    pages = sorted(src_dir.glob("*.html"))
+    if not pages:
+        raise FileNotFoundError(
+            "게시물 HTML 이 없다.\n   먼저:  uv run python -m collect.mfds_press\n"
+            "   🚨 첨부 링크는 그 HTML 안에 있다 — 링크를 조립하지 않는다 (D-118 ①)."
+        )
+
+    saved = skipped = failed = seen = 0
+    out_dir = store.raw_dir(f"{FAMILY}_pdf")
+    print(f"  게시물 {len(pages)}건에서 첨부를 찾는다\n")
+
+    for page in pages:
+        text = page.read_text(encoding="utf-8", errors="replace")
+        links = attach_links(text)
+        if not links:
+            # 🚨 조용히 넘기지 않는다 — 첨부가 없는 회차인지 파서가 틀린 것인지 갈린다.
+            print(f"  ⬜ {page.stem:>9}  PDF 첨부가 없다")
+            continue
+        for idx, (name, href) in enumerate(links, 1):
+            if limit and seen >= limit:
+                print(f"\n  ⏸ --limit {limit} 에서 멈춘다.")
+                return saved, skipped, failed
+            seen += 1
+            dest = f"{page.stem}_{idx}.pdf"
+            if (out_dir / dest).exists():
+                skipped += 1
+                continue
+
+            url = urljoin(f"{VIEW_URL}?", href)  # ./down.do → 절대 URL
+            try:
+                body = http.fetch(http.encode(url))
+            except http.FetchError as e:
+                print(f"  ❌ {page.stem:>9}  {name[:40]} — {e}")
+                failed += 1
+                continue
+            if len(body) < ATTACH_MIN or not body.startswith(b"%PDF"):
+                # 🚨 크기 **와** 매직바이트 둘 다 본다. 오류 페이지가 20KB 를 넘을 수 있다.
+                head = body[:16].decode("latin-1", "replace")
+                print(f"  ❌ {page.stem:>9}  PDF 가 아니다 ({len(body):,} B · {head!r})")
+                failed += 1
+                continue
+
+            print(f"  ✅ {page.stem:>9}  {name[:46]}  ({len(body):,} B)")
+            if dry_run:
+                continue
+            if store.save_raw(SOURCE_ID, f"{FAMILY}_pdf", dest, body, url=url) is None:
+                skipped += 1
+                continue
+            saved += 1
+            time.sleep(0.5)  # 규약 5
+
+    if dry_run:
+        print("\n  (dry-run — 저장하지 않았다)")
+    return saved, skipped, failed
+
+
 def collect(
     *, query: str, limit: int | None, dry_run: bool, topic_only: bool
 ) -> tuple[int, int, int, int]:
@@ -401,7 +499,9 @@ def collect(
     saved = skipped = nonuri = failed = seen = 0
     sizes: list[int] = []
     out_dir = store.raw_dir(FAMILY)
+    # 🔄 D-132 — 격리 디렉터리는 더 이상 쓰지 않는다. 09-03 이전에 격리된 것이 있으면 규약 4 로 건너뛴다.
     quarantine = store.raw_dir(f"{FAMILY}_격리")
+    badge_log = store.derived_dir(FAMILY) / "kogl_badge.jsonl"
 
     # 🚨 색인이 먼저다. 없으면 무엇을 받을지 모른다 — 게시판 검색이 무시되기 때문이다.
     targets = read_index()
@@ -443,11 +543,10 @@ def collect(
         if dry_run:
             continue
 
-        # 🚨 미부착 건도 **받아서 격리**한다. 안 받으면 「몇 건이 미부착인지」를
-        #    영영 못 세고, 그 수가 없으면 사전 협의를 요청할 근거도 없다.
+        # 🔄 D-132 — 미부착 건도 같은 자리에 받는다 (제24조의2). 부착 여부는 기록으로 남긴다.
         path = store.save_raw(
             SOURCE_ID,
-            FAMILY if nuri else f"{FAMILY}_격리",
+            FAMILY,
             f"{no}.html",
             body,
             url=f"{VIEW_URL}?ntctxtNo={no}",
@@ -456,6 +555,15 @@ def collect(
             skipped += 1  # 규약 4 — sha256 동일
             continue
         saved += 1
+        badge_log.parent.mkdir(parents=True, exist_ok=True)
+        with badge_log.open("a", encoding="utf-8") as fh:
+            fh.write(
+                json.dumps(
+                    {"no": no, "kogl_badge": "present" if nuri else "none", "title": title},
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
         time.sleep(0.5)  # 규약 5
 
     if dry_run:
@@ -478,6 +586,11 @@ def main() -> int:
         "--restart", action="store_true", help="--index 를 처음부터 다시 (기본은 이어받기)"
     )
     ap.add_argument("--diag", metavar="번호", help="한 건을 받아 공공누리 표시를 실물로 확인한다")
+    ap.add_argument(
+        "--attach",
+        action="store_true",
+        help="④ 받아 둔 게시물에서 첨부 PDF 를 받는다 — 🚨 **광고 문구는 여기에만 있다**",
+    )
     ap.add_argument("--limit", type=int, default=None, help="🚨 첫 실행은 5 로")
     ap.add_argument("--dry-run", action="store_true", help="받아 보되 저장하지 않는다")
     a = ap.parse_args()
@@ -488,6 +601,22 @@ def main() -> int:
         return build_index(restart=a.restart)
     if a.diag:
         return diag(a.diag)
+    if a.attach:
+        try:
+            saved, skipped, failed = collect_attachments(limit=a.limit, dry_run=a.dry_run)
+        except (registry.RegistryError, FileNotFoundError) as e:
+            print(f"\n{e}\n", file=sys.stderr)
+            return 1
+        print(
+            f"\n첨부 PDF — 새로 저장 {saved}건 · 건너뜀 {skipped}건"
+            + (f" · 🚨 실패 {failed}건" if failed else "")
+        )
+        if saved and not a.dry_run:
+            print(
+                "🚨 **텍스트만 쓴다** — 적발 광고 캡처는 광고주 저작물이라 G1(미추출)이다 (D-18 · D-132)."
+            )
+        print("🚨 이어서 반드시:  uv run pytest -m gate")
+        return 1 if failed else 0
 
     try:
         saved, skipped, nonuri, failed = collect(
@@ -509,10 +638,10 @@ def main() -> int:
         f"\n새로 저장 {saved}건 · 건너뜀 {skipped}건" + (f" · 🚨 실패 {failed}건" if failed else "")
     )
     if nonuri:
-        # 🚨 이것은 실패가 아니라 **실측 결과**다. 수를 알아야 협의를 요청할 수 있다.
+        # 🔄 D-132 — 실패도 격리도 아니다. 제24조의2 로 수집하되 미부착 사실을 남겼다.
         print(
-            f"🚨 공공누리 미부착 {nonuri}건 — data/raw/{FAMILY}_격리/ 로 보냈다.\n"
-            "   식약처 저작권정책상 등록 부서와 **사전 협의** 전에는 쓰지 않는다 (D-18)."
+            f"🔄 공공누리 미부착 {nonuri}건 — 제24조의2 제1항으로 수집 · kogl_badge=none 기록 "
+            f"(data/derived/{FAMILY}/kogl_badge.jsonl · D-132)."
         )
     if saved and not a.dry_run:
         registry.mark_collected(SOURCE_ID)
