@@ -184,6 +184,8 @@ class Judgment(Base):
     product_category: Mapped[str | None] = mapped_column(String(40))
     violation_type: Mapped[str | None] = mapped_column(String(40))
     evidence: Mapped[dict | None] = mapped_column(JSONB)  # 근거 조문 집합
+    # D-131 — 인코더가 하한 위로 올릴 때 반드시 붙는 근거 스팬 (raw 좌표 · D-30 주장 BIO)
+    evidence_span: Mapped[dict | None] = mapped_column(JSONB)
     risk_floor: Mapped[int | None] = mapped_column(Integer)  # 코드 하한 (D-84 ③)
     risk_final: Mapped[int | None] = mapped_column(Integer)
     # 🚨 D-103 ③ — 개정되면 「재검증 대기」의 판단 근거가 된다
@@ -211,7 +213,18 @@ class Judgment(Base):
             name="ck_judgment_hold_reason_values",
         ),
         CheckConstraint("attempt BETWEEN 0 AND 2", name="ck_judgment_attempt"),
-        # 🚨 위험도 값 범위 CHECK 는 아직 걸지 않는다 — 4단계인지 R0 포함 5값인지 미결 (설계검토 R3)
+        # D-130 — 5값 순서형 R0(특이사항 없음)~R4(형사 위험). R2·R3 순서는 검증 ② 에서 확정
+        CheckConstraint(
+            "risk_floor IS NULL OR risk_floor BETWEEN 0 AND 4", name="ck_judgment_risk_floor"
+        ),
+        CheckConstraint(
+            "risk_final IS NULL OR risk_final BETWEEN 0 AND 4", name="ck_judgment_risk_final"
+        ),
+        # D-131 — 인코더 상향은 근거 스팬이 있을 때만. 하한보다 높은데 스팬이 없으면 위반
+        CheckConstraint(
+            "risk_final IS NULL OR risk_floor IS NULL OR risk_final <= risk_floor OR evidence_span IS NOT NULL",
+            name="ck_judgment_raise_needs_evidence",
+        ),
         Index("ix_judgment_subject", "subject_type", "subject_id"),
     )
 
