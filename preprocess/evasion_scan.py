@@ -1,12 +1,15 @@
-"""preprocess/mfds_press_scan.py — 식약처 보도자료 PDF 에서 **회피 표기 실사례를 센다**.
+"""preprocess/evasion_scan.py — 수집한 PDF 에서 **회피 표기 실사례를 센다** (소스 공용).
 
-  uv run python -m preprocess.mfds_press_scan
-  uv run python -m preprocess.mfds_press_scan --dump    # 문서별 결과를 파일로
+  uv run python -m preprocess.evasion_scan mfds_press_pdf --dump
+  uv run python -m preprocess.evasion_scan mfds_casebook --dump
+
+🚨 **소스마다 따로 만들지 않는다.** 계수기가 다르면 「A 는 0건 · B 는 N건」이라는
+   비교 자체가 성립하지 않는다 — 같은 함정을 D-117 에서 세 번 밟았다.
 
 전처리 사양 2-5 미해결 #3 의 답을 내는 자리다 — **실사례 30건 미만이면 「측정 불가」** (D-40).
 
 ──────────────────────────────────────────────────────────────
-🚨 **왜 HTML 이 아니라 PDF 인가** (2026-09-04 실측)
+🚨 **왜 HTML 이 아니라 PDF 인가** (2026-09-04 실측 · `mfds_press`)
 
   게시물 HTML 에는 **본문이 없다.** 제목·등록일·조회수·첨부 파일명뿐이고,
   40자 넘는 줄은 전부 검색 도움말이다. 광고 문구는 **첨부 PDF 에만 있다.**
@@ -33,13 +36,18 @@ import re
 
 from preprocess.text import LEX, evasion
 
-RAW = pathlib.Path("data/raw/mfds_press_pdf")
-OUT = pathlib.Path("data/derived/mfds_press/evasion_scan.json")
-QUOTES = pathlib.Path("data/derived/mfds_press/quotes.json")
-#: 🚨 [P1] 파싱 산출물. **PDF 를 매번 다시 열지 않는다** — 107건에 2분 넘게 걸리고,
-#:    그러면 어휘를 하나 고칠 때마다 2분을 낸다. 되돌리기 싼 구조가 실제로 되돌리게 한다
-#:    (색인을 본문과 나눈 것과 같은 이유 · D-118 ④).
-CACHE = pathlib.Path("data/derived/mfds_press/text")
+
+#: 🚨 소스 이름이 곧 경로다 — `data/raw/<이름>/` 을 읽고 `data/derived/<이름>/` 에 쓴다.
+#:    수집기가 그렇게 저장하므로(store.raw_dir) 여기서 규칙을 다시 만들지 않는다.
+def paths(source: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
+    raw = pathlib.Path("data/raw") / source
+    der = pathlib.Path("data/derived") / source
+    return raw, der / "evasion_scan.json", der / "quotes.json", der / "text"
+
+
+#: 🚨 [P1] 파싱 산출물을 캐시한다. **PDF 를 매번 다시 열지 않는다** — 107건에 2분 넘게
+#:    걸리고, 그러면 어휘를 하나 고칠 때마다 2분을 낸다. 되돌리기 싼 구조가 실제로
+#:    되돌리게 한다 (색인을 본문과 나눈 것과 같은 이유 · D-118 ④).
 
 #: 🚨 D-40 — 실사례가 이 수에 못 미치면 **「측정 불가」로 보고한다.**
 #:    합성 변형만으로 낸 수를 실사례 성능처럼 말하지 않는다.
@@ -50,12 +58,12 @@ MIN_CASES = 30
 _QUOTE = re.compile(r"[「『\"'“‘]([^」』\"'”’\n]{6,80})[」』\"'”’]")
 
 
-def pdf_text(path: pathlib.Path, *, refresh: bool = False) -> str:
+def pdf_text(path: pathlib.Path, cache: pathlib.Path, *, refresh: bool = False) -> str:
     """PDF 한 건의 텍스트. 🚨 이미지는 추출하지 않는다 (위 머리말).
 
     캐시가 있으면 그것을 쓴다 — `--refresh` 로 강제한다.
     """
-    cached = CACHE / f"{path.stem}.txt"
+    cached = cache / f"{path.stem}.txt"
     if not refresh and cached.exists():
         return cached.read_text(encoding="utf-8")
 
@@ -66,21 +74,84 @@ def pdf_text(path: pathlib.Path, *, refresh: bool = False) -> str:
         for page in pdf.pages:
             parts.append(page.extract_text() or "")
     text = "\n".join(parts)
-    CACHE.mkdir(parents=True, exist_ok=True)
+    cache.mkdir(parents=True, exist_ok=True)
     cached.write_text(text, encoding="utf-8")
     return text
 
 
+def image_stats(files: list[pathlib.Path]) -> None:
+    """🚨 **캡처가 실려 있는가**를 쪽 면적 대비 크기로 가른다.
+
+    보도자료 실측(2026-09-04)에서는 이미지 110개 중 **106개(96%)가 89×31pt 급 로고·머리글**
+    이었고 캡처는 4개뿐이었다 — 「이미지가 있다」와 「캡처가 있다」는 다르다.
+    회피 표기가 이미지 안에 살아 있을 수 있는지는 이 분포가 답한다 (D-133 ②).
+    """
+    import pdfplumber  # noqa: PLC0415
+
+    buckets: collections.Counter[str] = collections.Counter()
+    sample: dict[str, str] = {}
+    pages = 0
+    for f in files:
+        try:
+            with pdfplumber.open(f) as pdf:
+                for pg in pdf.pages:
+                    pages += 1
+                    pw, ph = pg.width, pg.height
+                    for im in pg.images:
+                        w = im["x1"] - im["x0"]
+                        h = im["bottom"] - im["top"]
+                        frac = (w * h) / (pw * ph) if pw and ph else 0
+                        k = (
+                            "① 아주 작음 (로고·아이콘)"
+                            if frac < 0.01
+                            else "② 작음 (표·도장)"
+                            if frac < 0.06
+                            else "③ 중간 (캡처 후보)"
+                            if frac < 0.25
+                            else "④ 큼 (전면 캡처)"
+                        )
+                        buckets[k] += 1
+                        sample.setdefault(k, f"{f.stem} {w:.0f}×{h:.0f}pt ({frac * 100:.1f}%)")
+        except Exception as e:  # noqa: BLE001
+            print(f"  ❌ {f.name} — {type(e).__name__}")
+    total = sum(buckets.values())
+    print(f"\n이미지 {total}개 / {pages}쪽 — 쪽 면적 대비 크기")
+    if not total:
+        print("  ⬜ 이미지가 없다 — 순수 텍스트 문서다.")
+        return
+    for k in sorted(buckets):
+        pct = buckets[k] * 100 // total
+        print(f"  {k:22}{buckets[k]:>5}개 {pct:>3}%   {sample.get(k, '')}")
+    big = buckets["③ 중간 (캡처 후보)"] + buckets["④ 큼 (전면 캡처)"]
+    if big:
+        print(f"\n  ★ 캡처 후보 {big}개 — 회피 표기가 **이미지 안에** 있을 수 있다.")
+        print(
+            "     🚨 그러나 캡처는 광고주 저작물이라 G1(미추출)이다 — **문구만** 취한다 (D-133 · D-18)."
+        )
+        print("     🚨 OCR 은 「기ㆍ억력」을 「기억력」으로 교정한다 — 검증 없이 낸 수는 못 쓴다.")
+    else:
+        print("\n  이미지가 전부 장식이다 — 캡처가 없다. 텍스트 계수 결과가 곧 결론이다.")
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="식약처 보도자료 PDF — 회피 표기 실사례 계수")
-    ap.add_argument("--dump", action="store_true", help=f"문서별 결과를 {OUT} 로 쓴다")
+    ap = argparse.ArgumentParser(description="수집 PDF — 회피 표기 실사례 계수 (소스 공용)")
+    ap.add_argument("source", help="data/raw/ 아래 디렉터리 이름 (예: mfds_casebook)")
+    ap.add_argument(
+        "--dump", action="store_true", help="문서별 결과·인용문을 data/derived/<소스>/ 로 쓴다"
+    )
     ap.add_argument("--limit", type=int, default=None, help="앞 N건만")
     ap.add_argument("--refresh", action="store_true", help="캐시를 무시하고 PDF 를 다시 연다")
+    ap.add_argument(
+        "--images",
+        action="store_true",
+        help="🚨 캡처가 실려 있는지 크기 분포로 가른다 (PDF 를 다시 연다)",
+    )
     a = ap.parse_args()
 
+    RAW, OUT, QUOTES, CACHE = paths(a.source)
     files = sorted(RAW.glob("*.pdf"))[: a.limit]
     if not files:
-        print(f"🚨 {RAW} 가 비었다 — 먼저 uv run python -m collect.mfds_press --attach")
+        print(f"🚨 {RAW} 에 PDF 가 없다 — 먼저 수집기를 돌린다.")
         return 1
 
     rows, flag_docs = [], collections.Counter()
@@ -89,7 +160,7 @@ def main() -> int:
     empty = 0
     for p in files:
         try:
-            text = pdf_text(p, refresh=a.refresh)
+            text = pdf_text(p, CACHE, refresh=a.refresh)
         except Exception as e:  # noqa: BLE001 — 어떤 PDF 가 깨졌는지 알아야 한다
             print(f"  ❌ {p.name} — 텍스트 추출 실패: {type(e).__name__}: {e}")
             rows.append({"file": p.name, "chars": 0, "flags": [], "error": str(e)[:120]})
@@ -151,6 +222,9 @@ def main() -> int:
         print("     그러면 이 소스는 회피 표기 출처로도 쓸 수 없다 — 사양 2-5 를 다시 봐야 한다.")
 
     print("\n🚨 사전([P6])이 아직 없어 어휘 10개로만 셌다 — 이 수는 하한이다.")
+
+    if a.images:
+        image_stats(files)
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)

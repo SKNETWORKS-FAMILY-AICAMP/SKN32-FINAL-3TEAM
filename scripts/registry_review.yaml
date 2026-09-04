@@ -91,8 +91,16 @@ mfds_press:
 mfds_casebook:
   decided_by: 오한빈
   decided_at: 2026-09-03
-  reviewed_by: null
-  collected_at: null
+  # 확인 2026-09-04 — caution 의 2인 확인 항목 셋을 전부 본 뒤 서명.
+  #   ① 자료실 게시 화면: 식약처 명의 · 사이버조사팀 · 2026-04-29 → 제24조의2 제1항 「국가기관이
+  #      업무상 작성하여 공표」에 해당 (D-132)
+  #   ② 제1항 단서 1~4호 해당 없음 — 국유재산 등록 저작물이 아니다
+  #   ③ 🚨 스크린샷은 취하지 않는다 — 적발 광고 캡처는 광고주 저작물이라 제24조의2 대상이 아니고
+  #      D-18 에서 G1(미추출)이다. **문구만** 취하고 그 조각은 G2 로 다룬다 (D-133)
+  #   근거 정리: docs/ohb/소스후보_2026-09-04_안내서·자료실.md 부록 A
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-04
+  collected_at: 2026-09-04
 mfds_online_guideline:
   decided_by: 오한빈
   decided_at: 2026-09-03
