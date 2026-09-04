@@ -43,6 +43,7 @@ import json
 import re
 import sys
 import time
+from urllib.parse import urljoin
 
 from collect import http, registry, store
 from preprocess.text import sep_norm
@@ -393,6 +394,100 @@ def diag(no: str) -> int:
     return 0
 
 
+#: 첨부 파일명 ↔ `down.do` 링크 쌍. 🚨 **목록·본문과 같은 원칙 — 링크를 조립하지 않는다**
+#:    (D-118 ①). `file_seq` 를 짐작하면 다른 첨부를 받는다.
+_ATTACH = re.compile(
+    r"<strong>([^<]{5,200}\.(?:hwpx?|pdf|zip|xlsx?|pptx?))</strong>\s*"
+    r'<a\s+href="([^"]*down\.do[^"]*)"',
+    re.I | re.S,
+)
+#: 🚨 **PDF 만 받는다.** 같은 보도자료가 `.hwpx` 와 `.pdf` 로 두 벌 붙어 있고 내용이 같다.
+#:    둘 다 받으면 용량이 두 배이고, HWPX 는 파싱에 별도 의존성이 든다.
+_WANT = re.compile(r"\.pdf$", re.I)
+ATTACH_MIN = 20_000  # 오류 페이지·빈 파일 그물 (D-118 ②)
+
+
+def attach_links(html_text: str) -> list[tuple[str, str]]:
+    """게시물 HTML 에서 [(파일명, 상대 URL)]. 🚨 PDF 만 돌려준다."""
+    out = []
+    for name, href in _ATTACH.findall(html_text):
+        name = html.unescape(name).strip()
+        if _WANT.search(name):
+            out.append((name, html.unescape(href).strip()))
+    return out
+
+
+def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, int]:
+    """받아 둔 게시물 HTML 에서 첨부 PDF 를 받는다. 돌려주는 값은 (저장, 건너뜀, 실패).
+
+    🚨 **왜 별도 단계인가** — 2026-09-04 실측: **게시물 HTML 에 본문이 없다.**
+       제목·등록일·조회수·첨부 파일명뿐이고, 40자 넘는 줄은 전부 검색 도움말이다.
+       광고 문구(=회피 표기 실사례 · 사양 2-5)는 **첨부 PDF 에만 있다.**
+       D-118 ⑤ 가 「미확인」으로 남긴 자리의 답이다.
+
+    🚨 **텍스트만 쓴다 — 이미지는 추출하지 않는다.** 보도자료 PDF 의 적발 광고 캡처는
+       **광고주 저작물**이라 D-132 의 제24조의2 대상이 아니고 D-18 에서 G1(미추출)이다.
+       PDF 를 통째로 보관하는 것과 이미지를 뽑아 쓰는 것은 다르다 — 전처리가 텍스트만 뽑는다.
+    """
+    registry.require(SOURCE_ID, use=USE)
+
+    src_dir = store.raw_dir(FAMILY)
+    pages = sorted(src_dir.glob("*.html"))
+    if not pages:
+        raise FileNotFoundError(
+            "게시물 HTML 이 없다.\n   먼저:  uv run python -m collect.mfds_press\n"
+            "   🚨 첨부 링크는 그 HTML 안에 있다 — 링크를 조립하지 않는다 (D-118 ①)."
+        )
+
+    saved = skipped = failed = seen = 0
+    out_dir = store.raw_dir(f"{FAMILY}_pdf")
+    print(f"  게시물 {len(pages)}건에서 첨부를 찾는다\n")
+
+    for page in pages:
+        text = page.read_text(encoding="utf-8", errors="replace")
+        links = attach_links(text)
+        if not links:
+            # 🚨 조용히 넘기지 않는다 — 첨부가 없는 회차인지 파서가 틀린 것인지 갈린다.
+            print(f"  ⬜ {page.stem:>9}  PDF 첨부가 없다")
+            continue
+        for idx, (name, href) in enumerate(links, 1):
+            if limit and seen >= limit:
+                print(f"\n  ⏸ --limit {limit} 에서 멈춘다.")
+                return saved, skipped, failed
+            seen += 1
+            dest = f"{page.stem}_{idx}.pdf"
+            if (out_dir / dest).exists():
+                skipped += 1
+                continue
+
+            url = urljoin(f"{VIEW_URL}?", href)  # ./down.do → 절대 URL
+            try:
+                body = http.fetch(http.encode(url))
+            except http.FetchError as e:
+                print(f"  ❌ {page.stem:>9}  {name[:40]} — {e}")
+                failed += 1
+                continue
+            if len(body) < ATTACH_MIN or not body.startswith(b"%PDF"):
+                # 🚨 크기 **와** 매직바이트 둘 다 본다. 오류 페이지가 20KB 를 넘을 수 있다.
+                head = body[:16].decode("latin-1", "replace")
+                print(f"  ❌ {page.stem:>9}  PDF 가 아니다 ({len(body):,} B · {head!r})")
+                failed += 1
+                continue
+
+            print(f"  ✅ {page.stem:>9}  {name[:46]}  ({len(body):,} B)")
+            if dry_run:
+                continue
+            if store.save_raw(SOURCE_ID, f"{FAMILY}_pdf", dest, body, url=url) is None:
+                skipped += 1
+                continue
+            saved += 1
+            time.sleep(0.5)  # 규약 5
+
+    if dry_run:
+        print("\n  (dry-run — 저장하지 않았다)")
+    return saved, skipped, failed
+
+
 def collect(
     *, query: str, limit: int | None, dry_run: bool, topic_only: bool
 ) -> tuple[int, int, int, int]:
@@ -491,6 +586,11 @@ def main() -> int:
         "--restart", action="store_true", help="--index 를 처음부터 다시 (기본은 이어받기)"
     )
     ap.add_argument("--diag", metavar="번호", help="한 건을 받아 공공누리 표시를 실물로 확인한다")
+    ap.add_argument(
+        "--attach",
+        action="store_true",
+        help="④ 받아 둔 게시물에서 첨부 PDF 를 받는다 — 🚨 **광고 문구는 여기에만 있다**",
+    )
     ap.add_argument("--limit", type=int, default=None, help="🚨 첫 실행은 5 로")
     ap.add_argument("--dry-run", action="store_true", help="받아 보되 저장하지 않는다")
     a = ap.parse_args()
@@ -501,6 +601,22 @@ def main() -> int:
         return build_index(restart=a.restart)
     if a.diag:
         return diag(a.diag)
+    if a.attach:
+        try:
+            saved, skipped, failed = collect_attachments(limit=a.limit, dry_run=a.dry_run)
+        except (registry.RegistryError, FileNotFoundError) as e:
+            print(f"\n{e}\n", file=sys.stderr)
+            return 1
+        print(
+            f"\n첨부 PDF — 새로 저장 {saved}건 · 건너뜀 {skipped}건"
+            + (f" · 🚨 실패 {failed}건" if failed else "")
+        )
+        if saved and not a.dry_run:
+            print(
+                "🚨 **텍스트만 쓴다** — 적발 광고 캡처는 광고주 저작물이라 G1(미추출)이다 (D-18 · D-132)."
+            )
+        print("🚨 이어서 반드시:  uv run pytest -m gate")
+        return 1 if failed else 0
 
     try:
         saved, skipped, nonuri, failed = collect(
