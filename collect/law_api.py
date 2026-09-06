@@ -259,11 +259,34 @@ def _in_domain(case_name: str) -> bool:
     return any(word in case_name for word in CASE_NAME_KEYWORDS)
 
 
+#: 🚨 원천이 **「비어 있음」을 문자열로 표현**한다 (2026-09-06 실측).
+#:    `ftc` ID=18691·18701·18717·18719 네 건이 이렇게 왔다 —
+#:
+#:      <문서유형>null</문서유형><사건번호>null</사건번호><사건명><![CDATA[null]]></사건명>
+#:
+#: 🚨 **`"null"` 은 참인 문자열이다.** `if not (got and eff)` 검사를 그대로 통과하고,
+#:    파일명·원장에 `null` 이 그대로 들어간다. 그 네 건은 352 B 였고 `MIN_BODY` **그물**이
+#:    잡았다 — **1,000 B 만 넘었으면 사건명이 `null` 인 파일이 저장됐다.**
+#:    크기와 무관한 문제이므로 그물에 맡기지 않고 값을 읽는 자리에서 막는다.
+#:
+#: 🚨 `"-"` 는 넣지 않는다 — 실제 값으로 쓰는 원천이 있다(`decc` 의 `처분종료일`).
+#:    「빈 값의 표기」와 「짧은 값」을 섞지 않는다.
+_EMPTY_MARKERS = frozenset({"null", "none", "nil"})
+
+
 def _text(node: ET.Element, *names: str) -> str:
+    """이름 목록을 순서대로 보고 **처음 만나는 실제 값**을 돌려준다.
+
+    🚨 빈 값 표기(`null` 등)는 없는 것으로 보고 **다음 이름으로 넘어간다.**
+       원천마다 필드 이름이 다른 상황(D-118)에서 한 이름이 `null` 이라고 멈추면
+       뒤에 있는 진짜 값을 놓친다.
+    """
     for n in names:
         el = node.find(n)
         if el is not None and el.text:
-            return el.text.strip()
+            value = el.text.strip()
+            if value and value.lower() not in _EMPTY_MARKERS:
+                return value
     return ""
 
 

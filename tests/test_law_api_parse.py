@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from collect.law_api import _parse, _parse_failure
+from collect.law_api import _parse, _parse_failure, _text
 
 HEAD = '<?xml version="1.0" encoding="UTF-8"?>'
 
@@ -141,3 +141,53 @@ def test_real_responses_never_reach_the_failure_path() -> None:
     """
     for body in (MIDDOT_BODY, PLAIN_BODY):
         assert _parse(body) is not None, body[:80]
+
+
+# ─────────────────────────────────────────────────────────────
+#  🚨 원천이 「비어 있음」을 문자열로 보낼 때 (2026-09-06)
+# ─────────────────────────────────────────────────────────────
+#  `ftc` ID=18691 등 네 건이 값 전부를 `null` 이라는 **글자**로 보냈다.
+#  그 네 건은 352 B 라 `MIN_BODY` 그물에 걸렸지만, **그것은 운이었다** —
+#  `"null"` 은 참인 문자열이라 값 검사를 그대로 통과한다.
+
+
+FTC_NULL_BODY = (
+    f"{HEAD}<FtcService><결정문일련번호>18691</결정문일련번호>"
+    "<문서유형>null</문서유형><사건번호>null</사건번호>"
+    "<사건명><![CDATA[null]]></사건명><결정일자>null</결정일자></FtcService>"
+).encode()
+
+
+def test_null_string_is_treated_as_empty() -> None:
+    """🚨 이 수정의 핵심 — `null` 이라는 **글자**를 값으로 받아들이지 않는다."""
+    root = _parse(FTC_NULL_BODY)
+    assert root is not None
+    assert _text(root, "사건명") == ""
+    assert _text(root, "결정일자") == ""
+    # 진짜 값은 그대로 읽힌다 — 필드 전체를 버리는 것이 아니다.
+    assert _text(root, "결정문일련번호") == "18691"
+
+
+@pytest.mark.parametrize("marker", ["null", "NULL", "Null", "none", "None", "nil"])
+def test_empty_markers_are_case_insensitive(marker: str) -> None:
+    """대소문자를 가리지 않는다 — 원천이 어느 표기를 쓸지 우리가 정하지 않는다."""
+    assert _text(_parse(f"{HEAD}<r><a>{marker}</a></r>".encode()), "a") == ""
+
+
+def test_falls_through_to_the_next_name() -> None:
+    """🚨 빈 값 표기는 **없는 것으로 보고 다음 이름으로 넘어간다.**
+
+    원천마다 필드 이름이 다른 상황(D-118)에서, 한 이름이 `null` 이라고 멈추면
+    뒤에 있는 진짜 값을 놓친다.
+    """
+    body = f"{HEAD}<r><처분일자>null</처분일자><의결일자>20161125</의결일자></r>".encode()
+    assert _text(_parse(body), "처분일자", "의결일자") == "20161125"
+
+
+def test_real_values_are_untouched() -> None:
+    """양성 대조 — 「null 을 포함한」 정상 값까지 버리지 않는다."""
+    body = f"{HEAD}<r><a>nullity 판결</a><b>-</b></r>".encode()
+    root = _parse(body)
+    assert _text(root, "a") == "nullity 판결"
+    # 🚨 `-` 는 빈 값 표기에 넣지 않았다 — 실제 값으로 쓰는 원천이 있다.
+    assert _text(root, "b") == "-"
