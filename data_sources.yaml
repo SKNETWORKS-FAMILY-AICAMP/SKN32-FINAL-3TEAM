@@ -361,7 +361,7 @@ sources:
     note: >-
       🚨 [별표] 조회 가능 여부가 미확인이다. 조회되지 않으면 시행령 별표를
       본문 HTML 파싱으로 받아야 하며 수집 경로가 갈린다 (수집리스트 S2-04).
-    collected_at: 2026-09-02
+    collected_at: 2026-09-06
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: 권소라
