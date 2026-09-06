@@ -64,9 +64,39 @@ import xml.etree.ElementTree as ET
 
 MASK_ORG = "[업체]"
 MASK_CEO = "[대표]"
+MASK_ADDR = "[주소]"
+MASK_BRAND = "[상표]"
+
+#: 🚨 **원천마다 마스킹 대상이 다르다.** 레지스트리가 그렇게 적어 두었다 —
+#:
+#:     ftc_decisions_body   masking: 업체명·상표·피심인 주소 즉시 마스킹
+#:     mfds_sanctions       masking: 업체명·대표자명 즉시 마스킹
+#:
+#:   `ftc` 에는 「상표」가 있고 `mfds_sanctions` 에는 **없다.** 우연이 아니다 —
+#:   `ftc` 의 상표는 **영업표지**(「청년피자」)이고, `mfds` 에서 상표 자리에 오는 것은
+#:   **제품명**인데 그게 곧 위법 광고 문구다(「혈압케어 혈액 순환 정맥류 혈관」).
+#:   지우면 1층 라벨의 증거가 사라진다.
+#:
+#: 🚨 **이 표는 레지스트리의 사본이다 — 두 번째 원본이 아니다** (D-54).
+#:    `tests/test_mask.py` 가 레지스트리 원문과 대조한다. 원문이 바뀌면 테스트가 깨진다.
+POLICY: dict[str, frozenset[str]] = {
+    "ftc": frozenset({"org", "brand", "addr", "person"}),
+    "mfds_sanctions": frozenset({"org", "person"}),
+}
+
+#: 정책 키 ↔ 레지스트리 문언. 대조 테스트가 이걸 쓴다.
+POLICY_WORDS = {"org": "업체명", "brand": "상표", "addr": "주소", "person": "대표자명"}
+
+#: 🚨 `ftc_decisions_body` 의 `masking:` 에는 「대표자명」이 없고 대신 이 문장이 있다 —
+#:    「대표자명은 원천이 이미 가려서 준다 — 그래도 우리 쪽 마스킹을 끄지 않는다.
+#:     원천의 정책이지 우리의 보장이 아니다.」
+#:    ⛔ 나는 2026-09-06 에 가림 표기가 47.6% 라는 실측을 보고 「원천이 처리해 놓았다」고
+#:       적었다. 레지스트리가 그 함정을 **미리 적어 두었는데 안 읽고 시작했다.**
+_PERSON_EXEMPT_WORDING = "원천의 정책이지 우리의 보장이 아니다"
 
 RAW = pathlib.Path("data/raw")
-OUT = pathlib.Path("data/derived/mask_survey.json")
+DERIVED = pathlib.Path("data/derived")
+OUT = DERIVED / "mask_survey.json"
 
 #: 법인격 표기. 앵커에서 떼고, 변형을 만들 때 다시 붙인다.
 #: 🚨 순서가 길이순이다 — `주식회사` 를 `㈜` 보다 먼저 봐야 「농업회사법인 … 주식회사」가 산다.
@@ -336,6 +366,126 @@ def _drop_particle(name: str) -> str:
     return cut if len(cut) >= 2 else name
 
 
+# ══ 이름을 몰라도 지우는 것들 ═════════════════════════════════
+#
+# 🚨 앵커(피심인) 방식은 **제3자를 구조적으로 못 잡는다** (2026-09-06 실측 · 6,244종).
+#    「수급사업자인 (주)미래이엔지에게」·「원사업자인 케이티건설 주식회사가」 —
+#    이 이름들이 사건의 골자라서, 이름 목록으로는 절대 못 따라간다.
+# ★ 그래서 **이름이 아니라 자리를 지운다.** 법인격 표기가 붙은 자리는 회사가 확실하다.
+#
+# 🚨 **이것은 반쪽이다.** 「(주)창연실업」은 잡지만 두 번째 언급의 「창연실업」은 못 잡는다.
+#    `redistributable: true` 인 데이터에서 반쪽을 「됐다」로 읽는 것이 제일 위험하므로,
+#    `residual_orgs()` 로 **남은 것을 세는 것과 한 짝으로만** 쓴다.
+
+#: B — 법인격이 붙은 자리 전체. 앞뒤 두 꼴을 **따로** 훑는다(`residual_orgs` 와 같은 이유).
+_SLOT_PREFIX = re.compile(
+    f"(?:{_ORG_WORD}" + r"\s+|" + f"{_ORG_SIGN}" + r"\s*)([가-힣A-Za-z0-9]{2,12})"
+)
+_SLOT_SUFFIX = re.compile(r"[가-힣A-Za-z0-9]{2,12}\s*" + _ORG_FORM)
+
+
+def _slot_sub(m: re.Match[str]) -> str:
+    """🚨 뒤에 붙은 조사는 **남긴다.**
+
+    ⛔ 첫 판은 「(주)미래이엔지**에게** 건설위탁한」을 「[업체] 건설위탁한」으로 만들었다.
+       이름을 지우려다 문장 성분을 먹었다. 판정 어휘는 아니지만, 마스킹이 **필요 이상으로
+       지우는 실패는 조용하다** — 오늘 `1,000만` 을 먹은 것과 같은 종류다.
+    """
+    name = m.group(1)
+    tail = _PARTICLE.search(name)
+    if tail and len(name) - len(tail.group(0)) >= 2:
+        return MASK_ORG + tail.group(0)
+    return MASK_ORG
+
+
+def mask_org_slots(text: str) -> str:
+    """법인격이 붙은 자리를 이름과 무관하게 `[업체]` 로 바꾼다.
+
+    🚨 이미 `[업체]` 인 자리는 건드리지 않는다 — 앵커 치환이 먼저 돈다.
+    """
+    text = _SLOT_PREFIX.sub(_slot_sub, text)
+    return _SLOT_SUFFIX.sub(MASK_ORG, text)
+
+
+#: 🚨 **피심인 주소** (레지스트리 `ftc_decisions_body.masking`). 실측 —
+#:      「주식회사 덕화스포츠 **서울 서대문구 연희동 81-32** 대표이사 …」
+#: 🚨 시도명 뒤에 **주소 꼴 토막이 하나 이상** 있어야 한다. 안 그러면
+#:    「**서울** 지역 시장에서」의 「서울」까지 [주소] 가 된다 — 잔여 상위에 1,622건이었다.
+_SIDO = (
+    r"(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북도|충북|충청남도|충남"
+    r"|전라북도|전북|전라남도|전남|경상북도|경북|경상남도|경남|제주)"
+)
+_ADDRESS = re.compile(
+    _SIDO + r"(?:특별시|광역시|특별자치시|특별자치도|도)?"
+    r"(?:\s+[가-힣A-Za-z0-9]+(?:시|군|구|읍|면|동|리|로|길|가))+"
+    r"(?:\s+[0-9][0-9\-]*)?"
+    r"(?:\s+[가-힣A-Za-z0-9]+(?:빌딩|타워|타운|센터|아파트|오피스텔|빌라|프라자))?"
+    r"(?:\s*,?\s*[0-9]+호)?"
+)
+
+
+def mask_address(text: str) -> str:
+    """주소를 `[주소]` 로. 🚨 시·도 이름 하나만 있는 자리는 안 건드린다."""
+    return _ADDRESS.sub(MASK_ADDR, text)
+
+
+#: 🚨 **영업표지**는 따옴표 안에 있고 앞에 그 말이 붙는다 (실측) —
+#:      「자신의 **영업표지 '청년피자'**를 사용하여」
+#:      「'에듀플렉스, 에듀코치 **영업표지** …」
+#: 🚨 문맥 없이 따옴표만 보고 지우면 **인용된 광고 문구가 사라진다** —
+#:    결정문은 위법 문구도 따옴표로 인용한다(「'바르는게 운동입니다'」).
+#:    그것이 우리가 가장 원하는 데이터다. 그래서 **앞말을 요구한다.**
+_BRAND = re.compile(
+    r"(영업표지|상표|서비스표|상호)(\s*(?:인|는|가|를|은)?\s*)['‘“「『]([^'’”」』\n]{1,20})['’”」』]"
+)
+
+
+def mask_brand(text: str) -> str:
+    """「영업표지 'X'」의 X 만 `[상표]` 로. 앞말과 따옴표는 남긴다."""
+    return _BRAND.sub(lambda m: f"{m.group(1)}{m.group(2)}'{MASK_BRAND}'", text)
+
+
+class MaskPolicyError(RuntimeError):
+    """마스킹 정책이 없는 원천을 지우려 했다."""
+
+
+def apply_policy(text: str, bare: str, source: str) -> str:
+    """레지스트리가 그 원천에 정한 것만 지운다 (`POLICY`).
+
+    🚨 순서가 있다 — 앵커(정확) → 자리(넓음) → 주소 → 상표 → 사람.
+       넓은 것을 먼저 돌리면 앵커가 이미 지워진 자리를 또 훑어 `[업체]` 가 겹친다.
+
+    🔴 **모르는 원천은 통과시키지 않고 거부한다** (D-72 fail-closed · 2026-09-06).
+
+       `data_sources.yaml` 을 훑어 보니 `masking:` 을 선언한 원천이 **5종뿐**이다.
+       `mfds_press`(부당광고 점검 보도자료)·`mfds_casebook`(사례집)에는 없는데,
+       **둘 다 적발 업체명이 나오는 문서다.**
+
+       🚨 선언이 없는 것이 「마스킹 불필요」인지 「안 적은 것」인지 **구분이 안 된다.**
+          조용히 통과시키면 그 구분이 영영 안 생긴다 — 「돌아갔으니 됐다」가 되기 때문이다.
+          그래서 멈추고, **레지스트리를 채우라고 말한다.** 판단은 2인 확인이 한다.
+    """
+    if source not in POLICY:
+        raise MaskPolicyError(
+            f"{source!r} 의 마스킹 정책이 없다.\n"
+            f"  🚨 조용히 통과시키지 않는다 (D-72 fail-closed) — 선언이 없는 것이\n"
+            f"     「불필요」인지 「안 적은 것」인지 구분이 안 되기 때문이다.\n"
+            f"  고치는 법 — ① data_sources.yaml 의 {source!r} 에 masking: 을 적는다\n"
+            f"              ② 2인 확인을 거친다 (게이트 15)\n"
+            f"              ③ preprocess/mask.py 의 POLICY 에 같은 뜻으로 옮긴다\n"
+            f"     🚨 마스킹이 정말 불필요하다면 그 판단도 masking: 에 적는다 — 빈 칸으로 두지 않는다."
+        )
+    todo = POLICY[source]
+    if "org" in todo:
+        text = mask(text, bare)  # 앵커 + 사람(항상)
+        text = mask_org_slots(text)
+    if "addr" in todo:
+        text = mask_address(text)
+    if "brand" in todo:
+        text = mask_brand(text)
+    return text
+
+
 def _iter_ftc(limit: int | None):
     d = RAW / "ftc"
     for n, p in enumerate(sorted(d.glob("*.xml")), 1):
@@ -586,6 +736,44 @@ def fields(limit: int | None) -> int:
     return 0
 
 
+def apply(target: str, limit: int | None) -> int:
+    """🔴 **마스킹된 사본을 만든다.** D-17 이 「수집 직후 즉시」라고 한 그 자리다.
+
+    🚨 이게 없던 동안 마스킹은 **함수일 뿐이었다.** 부르는 사람이 없으면 안 돌고,
+       실제로 `preprocess/ftc_triage.py` 가 `data/derived/ftc_layer1_triage.json` 에
+       **마스킹 안 된 사건명**(「㈜비에스비푸드의 …」)을 쓰고 있었다.
+       규칙을 아무리 다듬어도 **적용을 강제하지 않으면 소용이 없다.**
+
+    산출 — `data/derived/masked/<target>.jsonl` (한 줄에 한 문서)
+    🚨 `data/` 는 커밋되지 않는다 (D-19). 이 스크립트가 원본이고, 산출물은 재생성한다.
+    """
+    out = DERIVED / "masked"
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"{target}.jsonl"
+    left: collections.Counter[str] = collections.Counter()
+    n = 0
+    with path.open("w", encoding="utf-8") as f:
+        for doc, _raw, bare, body, _pronoun in ITER[target](limit):
+            masked = apply_policy(body, bare, target)
+            left.update(residual_orgs(masked))
+            f.write(
+                json.dumps({"doc": doc, "source_id": target, "text": masked}, ensure_ascii=False)
+                + "\n"
+            )
+            n += 1
+    print(f"\n  → {path}  ({n:,}건)")
+    print(f"    적용한 정책: {' · '.join(sorted(POLICY.get(target, ())))}")
+    # 🚨 만들면서 동시에 잰다. 산출과 검증을 두 명령으로 나누면 두 번째를 안 돌린다.
+    if left:
+        print(f"\n  🚨 마스킹 뒤에도 법인격을 달고 남은 이름 — {len(left):,}종 (오탐 섞인 하한)")
+        for name, c in left.most_common(10):
+            print(f"       {name:20}{c:>6,}건")
+        print("     🚨 0 이 아니다. **「됐다」로 읽지 마라** — 원장에 이 수를 적는다 (D-54).")
+    else:
+        print("\n  ✅ 법인격을 달고 남은 이름 0 — 다만 법인격 없이 쓴 이름은 이 검사 밖이다.")
+    return 0
+
+
 def _shape(v: str, bare: str) -> str:
     """변형을 사람이 읽을 모양으로. `주식회사 비에스비푸드` → `주식회사 X`."""
     return v.replace(bare, "X") if bare else v
@@ -603,6 +791,7 @@ def main() -> int:
     ap.add_argument("--target", choices=sorted(ITER), required=True)
     ap.add_argument("--survey", action="store_true", help="🚨 재기만 한다. 아무것도 쓰지 않는다")
     ap.add_argument("--fields", action="store_true", help="필드별 마스킹 부담 (ftc 전용)")
+    ap.add_argument("--apply", action="store_true", help="🔴 마스킹된 사본을 만든다 (D-17)")
     ap.add_argument("--limit", type=int, help="앞 N건만")
     ap.add_argument("--dump", action="store_true", help=f"문서별 표를 {OUT} 로 쓴다")
     a = ap.parse_args()
@@ -610,6 +799,8 @@ def main() -> int:
     if not (RAW / a.target).exists():
         print(f"🚨 {RAW / a.target} 가 없다 — 먼저 수집한다", file=sys.stderr)
         return 1
+    if a.apply:
+        return apply(a.target, a.limit)
     if a.fields:
         if a.target != "ftc":
             # 🚨 다른 원천은 필드가 하나뿐이라 나눌 것이 없다. 조용히 빈 표를 내지 않는다.
@@ -617,9 +808,7 @@ def main() -> int:
             return 1
         return fields(a.limit)
     if not a.survey:
-        # 🚨 마스킹 결과를 쓰는 경로는 아직 없다. 측정이 끝나고 변형 목록이 확정되면
-        #    그때 [P2] 로 넘기는 자리를 만든다 — 사양 0장의 순서(P3 → P2)다.
-        print("지금은 --survey 만 있다. 재고 나서 짠다.", file=sys.stderr)
+        print("--survey · --fields · --apply 중 하나를 골라라.", file=sys.stderr)
         return 1
     return survey(a.target, a.limit, a.dump)
 

@@ -34,6 +34,7 @@ import json
 import pathlib
 import re
 
+from preprocess.mask import apply_policy
 from preprocess.text import LEX, evasion
 
 
@@ -177,7 +178,11 @@ def main() -> int:
         for m in _QUOTE.finditer(text):
             q = " ".join(m.group(1).split())
             if any(w in q for w in LEX):
-                quotes.append((p.stem, q))
+                # 🔴 **derived 로 나가는 것은 마스킹을 지난다** (D-17 · 2026-09-06).
+                #    인용된 광고 문구에는 업체명·제품명이 섞여 들어온다.
+                #    🚨 이 원천에 masking: 선언이 없으면 여기서 **멈춘다** (D-72 fail-closed).
+                #       조용히 통과시키면 「선언이 없다」와 「불필요하다」가 구분되지 않는다.
+                quotes.append((p.stem, apply_policy(q, "", a.source)))
         # 🚨 텍스트가 비면 **스캔 PDF**다 — 0건이 「없다」인지 「못 읽었다」인지 갈린다
         if len(text) < 200:
             empty += 1

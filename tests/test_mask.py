@@ -16,7 +16,26 @@ from __future__ import annotations
 
 import pytest
 
-from preprocess.mask import MASK_CEO, MASK_ORG, mask, residue, strip_legal, variants
+from collect import registry
+from preprocess.mask import (
+    MASK_ADDR,
+    MASK_BRAND,
+    MASK_CEO,
+    MASK_ORG,
+    POLICY,
+    POLICY_WORDS,
+    apply_policy,
+    mask,
+    mask_address,
+    mask_brand,
+    mask_org_slots,
+    residue,
+    strip_legal,
+    variants,
+)
+
+#: 정책 키의 원천 — `preprocess.mask.POLICY` 는 이것의 사본이다.
+_REGISTRY_SOURCE = {"ftc": "ftc_decisions_body", "mfds_sanctions": "mfds_sanctions"}
 
 
 @pytest.mark.parametrize(
@@ -215,3 +234,95 @@ def test_ordinary_text_is_untouched() -> None:
     """양성 대조 — 마스킹이 멀쩡한 문장을 건드리면 그 실패는 **조용하다.**"""
     text = "체지방 감소에 도움을 줄 수 있음"
     assert mask(text, "오션유닛1") == text
+
+
+# ─────────────────────────────────────────────────────────────
+#  🚨 POLICY 는 레지스트리의 사본이다 — 두 번째 원본이 아니다 (D-54)
+# ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("target", sorted(POLICY))
+def test_policy_matches_the_registry(target: str) -> None:
+    """🚨 **원장이 원본이고 코드가 사본이다.** 어긋나면 여기서 깨진다.
+
+    레지스트리의 `masking:` 은 산문이라 기계가 못 읽는다. 그래서 코드에 표를 두되,
+    그 표가 **원문과 같은 말을 하는지**를 검사한다. 두 곳에 같은 판정을 두면
+    한 곳만 고치게 되고, 고쳐지지 않은 쪽이 실제로 도는 쪽일 수 있다 (D-99).
+
+    🚨 `ftc` 의 `person` 은 예외다 — `masking:` 에 「대표자명」이라는 말이 없고
+       대신 「원천이 이미 가려서 준다 — **그래도 우리 쪽 마스킹을 끄지 않는다**」가 있다.
+       ⛔ 2026-09-06 에 내가 정확히 그 문장이 경고한 자리에 빠졌다 (가림 47.6% 를 보고
+          「원천이 처리해 놓았다」로 읽음). 그래서 그 문장 자체를 검사한다.
+    """
+    spec = registry.spec(_REGISTRY_SOURCE[target])
+    wording = str(spec.get("masking") or "")
+    assert wording, f"{target} 에 masking 문언이 없다 — 레지스트리부터 채운다"
+
+    for key, word in POLICY_WORDS.items():
+        declared = key in POLICY[target]
+        if target == "ftc" and key == "person":
+            assert declared, "ftc 는 대표자명을 지운다 — 원천의 정책은 우리의 보장이 아니다"
+            assert "원천의 정책이지 우리의 보장이 아니다" in wording
+            continue
+        assert declared == (word in wording), (
+            f"{target}: POLICY 는 {key}={declared} 인데 레지스트리 masking 문언은 "
+            f"{word!r} 를 {'포함' if word in wording else '미포함'} 한다"
+        )
+
+
+def test_brand_is_masked_for_ftc_but_not_for_mfds() -> None:
+    """🚨 **원천마다 「상표」의 뜻이 다르다.** 레지스트리가 이미 다르게 적었다.
+
+    ftc  「자신의 영업표지 '청년피자'를」        → 브랜드다. 지운다
+    mfds 「(제품명 중) 혈압케어 … 정맥류 혈관」  → **위법 광고 문구다.** 남긴다
+    """
+    assert "brand" in POLICY["ftc"]
+    assert "brand" not in POLICY["mfds_sanctions"]
+    kept = apply_policy(
+        "(제품명 중) 혈압케어 혈액 순환 정맥류 혈관, (관련태그) #혈압영양제",
+        "오션유닛1",
+        "mfds_sanctions",
+    )
+    for w in ("혈압케어", "정맥류", "#혈압영양제"):
+        assert w in kept, f"{w!r} 가 사라졌다 — 1층 라벨의 증거다"
+
+
+def test_brand_needs_the_context_word() -> None:
+    """🚨 따옴표만 보고 지우면 **인용된 위법 문구가 사라진다.**
+
+    결정문은 위법 광고도 따옴표로 인용한다(「'바르는게 운동입니다'」) — 그게 우리가
+    가장 원하는 데이터다. 그래서 앞말(영업표지·상표…)을 요구한다.
+    """
+    quoted = "피심인은 '바르는게 운동입니다' 라고 광고하였다"
+    assert mask_brand(quoted) == quoted
+    assert MASK_BRAND in mask_brand("자신의 영업표지 '청년피자'를 사용하여")
+
+
+def test_address_needs_more_than_a_province_name() -> None:
+    """⬜ 「서울」 하나만 있는 자리는 안 건드린다.
+
+    실측 잔여 상위가 「서울 1,622건」이었는데, 그중 상당수가 「**서울** 지역 시장에서」
+    같은 자리다. 시·도 이름만 보고 지우면 문장이 무너진다.
+    """
+    assert mask_address("서울 지역 시장에서") == "서울 지역 시장에서"
+    assert mask_address("서울 서대문구 연희동 81-32") == MASK_ADDR
+
+
+def test_org_slot_keeps_the_particle() -> None:
+    """⛔ 「(주)미래이엔지**에게**」를 「[업체] 」로 만들어 조사를 먹었다.
+
+    🚨 판정 어휘는 아니지만 **필요 이상으로 지우는 실패는 조용하다** —
+       오늘 `1,000만` 을 먹은 것과 같은 종류다.
+    """
+    assert mask_org_slots("(주)미래이엔지에게 위탁한") == f"{MASK_ORG}에게 위탁한"
+
+
+def test_org_slot_catches_third_parties() -> None:
+    """🚨 앵커가 못 잡는 제3자를 **이름과 무관하게** 잡는다 (6,244종의 답).
+
+    🚨 다만 **반쪽이다** — 법인격 없이 쓴 두 번째 언급은 못 잡는다. 그것이 이 함수를
+       `residual_orgs()` 와 **한 짝으로만** 쓰는 이유다.
+    """
+    out = mask_org_slots("원사업자인 케이티건설 주식회사가 수급사업자인 문원건설 주식회사에")
+    assert "케이티건설" not in out and "문원건설" not in out
+    assert mask_org_slots("문원건설에 직접 지급하여야") == "문원건설에 직접 지급하여야"
