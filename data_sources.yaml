@@ -150,7 +150,7 @@ sources:
       ㈜24프로미 부당한 광고행위 건(2016서소1562)의 「주문」에 금지 광고행위가 원문으로 적혀 있다.
       🚨 심의유형 「개발 자동승인 / 운영 심의승인」 — 배포 시점의 선결 조건이다.
     caution: "🚨 API 유형이 LINK 다 — 실제 호출처는 공정위가 아니라 법제처다(linkUrl: open.law.go.kr/…cmtInfoGuide#ftc). 요청은 <code>https://www.law.go.kr/DRF/lawService.do?OC=..&target=ftc&ID=&lt;결정문일련번호&gt;&type=XML</code> 이고 인증이 OC 라 <code>LAW_OC_KEY</code> 를 쓴다 — law_go_kr · ftc_decisions_api 와 같은 포털·같은 키다. / 🚨 <code>type=HTML</code> 은 껍데기(1.8KB)만 오고 JS 로 채운다. <code>type=XML</code> 이어야 본문이 온다. / 🚨 ID 는 목록 API(15103246)의 <code>결정문일련번호</code> 다 — 목록과 본문이 쌍으로 움직인다. / ★ 출력 구조가 학습 라벨에 그대로 맞는다: 결정문일련번호·문서유형·사건번호·사건명·피심정보·회의종류·결정번호·결정일자·의결문·주문·신청취지·이유·별지·결정요지·위원정보. / ★★ PDF 보다 낫다 — ① 텍스트라 OCR 불필요 ② 대표자명이 이미 마스킹돼 온다(「대표이사 이ㅇㅇ」) ③ &lt;그림 N&gt; 광고 캡처가 안 온다 — 그것은 광고주 이미지 저작물이라 G1(미추출)이었는데 구조적으로 들어오지 않는다(D-18 프래그먼트 문제가 사라진다). / 🚨 업체명과 피심인 주소는 그대로 온다 — 우리 마스킹은 여전히 필요하다 (D-17). / 🚨 심의유형이 「개발단계: 자동승인 / 운영단계: 심의승인」이다 — 배포(U4) 시점의 선결 조건 (ftc_decisions_api 와 같다). / 🚨 호출 간격 0.5초 이상 + 재시도 3회."
-    collected_at: 2026-09-03
+    collected_at: 2026-09-06
     decided_at: 2026-09-02
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -223,10 +223,11 @@ sources:
     access: "자료실 PDF 다운로드 + 수기 전사"
     scale: "78쪽 · 유형 5(질병표방·의약품오인·건기식오인·거짓과장·기만) × 사례 약 100~150건 · 보도자료 22건(2024-01~2025-12) 기반 · Ⅲ장 플랫폼별 사례에 조문(제8조1항N호+시행령[별표1]) 매핑"
     caution: "🚨 2인 확인 항목 — ① 자료실 게시 화면(식약처 명의·사이버조사팀·2026-04-29) ② 제24조의2 제1항 단서 1~4호 해당 없음(국유재산 등록 저작물 아님) ③ 스크린샷은 취하지 않는다는 처리. / ★ 보도자료 22건의 날짜 목록이 p3 에 있다 — mfds_press 색인 4,349건 중 이 22건부터 받는다. / 규모 100~150건이라 유형별 30건(D-40)은 1호·5호만 넘는다 — mfds_sanctions 전량과 합쳐야 홀드아웃이 선다(R8). / 수기 전사 반나절(팀원 1)."
-    collected_at: null
+    collected_at: 2026-09-04
     decided_at: 2026-09-03
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-04
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   ftc_noviolation:
@@ -360,7 +361,7 @@ sources:
     note: >-
       🚨 [별표] 조회 가능 여부가 미확인이다. 조회되지 않으면 시행령 별표를
       본문 HTML 파싱으로 받아야 하며 수집 경로가 갈린다 (수집리스트 S2-04).
-    collected_at: 2026-09-02
+    collected_at: 2026-09-06
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: 권소라

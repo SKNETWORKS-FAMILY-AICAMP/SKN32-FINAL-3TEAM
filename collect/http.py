@@ -174,7 +174,28 @@ def encode(url: str) -> str:
             p.scheme,
             p.netloc.encode("idna").decode("ascii") if not p.netloc.isascii() else p.netloc,
             urllib.parse.quote(p.path, safe="/%"),
-            urllib.parse.quote(p.query, safe="=&?/%"),
+            #: 🚨 `+` 가 safe 에 있어야 한다 (2026-09-05). `urlencode` 는 **공백**을 `+` 로
+            #:    내는데, 그것을 다시 인코딩하면 `%2B` — 서버가 **리터럴 더하기**로 읽는다.
+            #:    법제처는 그 검색어에 아무것도 못 맞히고 0건 대신 **필터 없는 기본 목록**을
+            #:    돌려준다. 예외도 0건도 아닌 그럴듯한 다른 결과라 눈으로는 안 잡힌다.
+            #:
+            #:    ASCII 95자 전수 확인 — 깨지는 것은 **U+0020 공백 하나**다. 리터럴 `+`
+            #:    (U+002B)는 `urlencode` 단계에서 이미 `%2B` 가 되어 무사하다.
+            #:
+            #: 🚨 **이것은 임시 처방이다.** 「호출부가 `urlencode` 를 탄다」는 전제에서만 옳다.
+            #:    원문 URL 을 그대로 넘기는 경로(`mfds_press` 방식)에서는 이 수정이 리터럴
+            #:    `+` 를 공백으로 바꿔 버린다 — `%` 가 겪는 것과 **같은 모호성**이고,
+            #:    `%` 는 `safe` 를 어떻게 조정해도 못 고친다. 문자 하나만 보고는 원문인지
+            #:    이스케이프인지 알 방법이 없기 때문이다.
+            #:
+            #:    근본 원인은 `encode()` 가 양립 못 하는 두 일을 겸하는 것이다 —
+            #:      ① 원문 URL 을 인코딩해 고치기   ② 이미 인코딩된 URL 을 안 건드리기
+            #:    해법은 `fetch()` 가 조립된 URL 이 아니라 `(base, params)` 를 받는 것이고,
+            #:    **설계 변경이라 결정 사항이다.** 그때까지 이 자리는 미봉이다.
+            #:
+            #:    🚨 그 대가와 미해결분은 `tests/test_http_encode.py` 의 strict xfail 둘이
+            #:       들고 있다. 지우면 「50% 할인」·「1+1 행사」가 조용히 깨지는 것으로 돌아간다.
+            urllib.parse.quote(p.query, safe="=&?/%+"),
             urllib.parse.quote(p.fragment, safe="/%"),
         )
     )
