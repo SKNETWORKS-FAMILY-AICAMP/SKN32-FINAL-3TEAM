@@ -37,6 +37,7 @@ import pathlib
 import re
 import xml.etree.ElementTree as ET
 
+from preprocess.mask import anchor_ftc, apply_policy
 from preprocess.text import evasion, sep_norm
 
 RAW = pathlib.Path("data/raw/ftc")
@@ -123,10 +124,16 @@ def main() -> int:
             ev_cnt[f] += 1
             if k in CORE:
                 ev_core[f] += 1
+        # 🔴 **derived 로 나가는 것은 마스킹을 지난다** (D-17 · 2026-09-06).
+        #    ⛔ 이 줄이 없던 동안 `data/derived/ftc_layer1_triage.json` 에
+        #       「㈜비에스비푸드의 …」가 **업체명 그대로** 쌓이고 있었다.
+        #    🚨 마스킹 규칙을 아무리 다듬어도 **부르지 않으면 소용이 없다.**
+        #       게이트 `test_derived_로_나가는_원문은_마스킹을_지난다` 가 이 자리를 지킨다.
+        _, bare = anchor_ftc(r)
         rows.append(
             {
                 "seq": _text(r, "결정문일련번호"),
-                "사건명": name,
+                "사건명": apply_policy(name, bare, "ftc"),
                 "결정일자": _text(r, "결정일자"),
                 "분류": k,
                 "1층후보": k in CORE,

@@ -309,7 +309,9 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
     for path in ROOT.rglob("*.py"):
         rel = path.relative_to(ROOT)
         parts = rel.parts
-        if parts[0] in {".venv", "build", "dist", ".git"}:
+        # 🚨 `Claude outputs/` 는 Claude 앱이 떨어뜨리는 사본이다 — `.gitignore` 에 이미 있다.
+        #    레포 소스가 아니라서 게이트 대상도 아니다 (2026-09-06 에 여기 걸렸다).
+        if parts[0] in {".venv", "build", "dist", ".git", "Claude outputs"}:
             continue
         if parts[0] in RAW_READERS or rel == Path("tests/test_governance_layout.py"):
             continue
@@ -357,6 +359,56 @@ def test_manifest의_소스는_레지스트리에_있고_G1이_아니다() -> No
         assert sources[sid].get("grade") != "G1", (
             f"manifest:{lineno} — {sid!r} 는 G1 이다. 수집 자체를 하지 않는다"
         )
+
+
+@pytest.mark.gate
+def test_derived_로_나가는_원문은_마스킹을_지난다() -> None:
+    """🔴 **마스킹은 「즉시」여야 하는데 지금까지 「부르면」이었다** (D-17 · 2026-09-06).
+
+    사양 [P3] 은 마스킹을 「등급과 무관하게 **수집 직후 즉시**」로 못 박았다. 그런데
+    `preprocess/mask.py` 는 함수일 뿐이라 **부르지 않으면 안 돈다.**
+
+    ⛔ 실제로 새고 있었다 — `preprocess/ftc_triage.py` 가
+       `data/derived/ftc_layer1_triage.json` 에 사건명을 **원문 그대로** 썼다:
+
+           {"사건명": "㈜비에스비푸드의 가맹사업법 위반행위에 대한 건", …}
+
+       업체명이 마스킹 없이 derived 로 나가 있었고, `ftc_decisions_body` 는
+       `redistributable: true` 라 그 산출물이 **공개 배포까지 간다** (D-71).
+
+    🚨 그래서 검사한다 — **`data/raw/` 를 읽으면서 `data/derived/` 에 쓰는 모듈은
+       `preprocess.mask` 를 import 한다.** 규칙이 좋아지는 것과 규칙이 도는 것은 다른 일이고,
+       오늘 하루가 앞의 것만 다듬은 날이었다.
+
+    🚨 **import 만 본다. 「제대로 마스킹했는가」는 이 게이트가 못 본다** —
+       그것은 `mask --apply` 의 잔여 계수와 사람이 본다. 여기서 막는 것은
+       **아예 안 부르는 것**이다. 못 하는 것을 하는 척하지 않는다.
+
+    🚨 주석·docstring 은 보지 않는다 (바로 위 게이트와 같은 이유).
+    """
+    offenders: list[str] = []
+    for path in (ROOT / "preprocess").rglob("*.py"):
+        rel = path.relative_to(ROOT)
+        if path.name in {"__init__.py", "mask.py"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+                node.value.value = ""
+        code = ast.unparse(tree)
+        reads_raw = "data/raw" in code or "data\\raw" in code
+        writes_derived = "data/derived" in code or "data\\derived" in code
+        if reads_raw and writes_derived and "preprocess.mask" not in code:
+            offenders.append(str(rel))
+
+    assert not offenders, (
+        "raw 를 읽어 derived 로 쓰면서 preprocess.mask 를 부르지 않는다 — "
+        f"마스킹이 「즉시」가 아니라 「부르면」이 된다 (D-17 · D-71): {offenders}"
+    )
 
 
 @pytest.mark.gate

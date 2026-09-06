@@ -12,9 +12,23 @@
 
     uv run python -m collect.openapi mfds_hf_ingredient --use U1
     uv run python -m collect.openapi mfds_hf_ingredient --use U1 --pages 1   # 첫 장만
+    uv run python -m collect.openapi A B C --use U1 --measure               # 규모만 잰다
 
 🚨 첫 실행은 `--pages 1` 로 한다. 응답 모양을 눈으로 보고 나서 전량을 받는다 —
    5,000건을 받아 놓고 필드가 기대와 다른 것을 아는 것이 가장 비싸다.
+
+🔴 **그런데 `--pages 1` 에서 멈춘 채 잊히는 일이 실제로 일어났다** (2026-09-06 전수조사).
+   다섯 소스가 `page_0001.json` **한 장씩만** 있었다 — 26~60 KB.
+   2026-09-02 에 검문소를 통과시키고 2단계(전량)로 넘어가지 않은 것이다.
+
+   🚨 나쁜 것은 멈춘 것이 아니라 **멈춘 자리가 아무 데도 안 남은 것**이다.
+      이 수집기는 1장을 받을 때 「전체 건수」를 **화면에 찍는다.** 그 숫자가 그때
+      터미널에 있었고, 원장에도 코드에도 남지 않았다. 나흘 뒤엔 아무도 모른다.
+      `ftc` 664건이 나흘간 드러나지 않은 것과 **같은 모양**이다 (§3⑥).
+
+   그래서 `--measure` 를 뒀다 — **규모만 재고 저장하지 않는다.** 재는 일과 받는 일을
+   갈라 두면 「재기만 하고 안 받았다」가 원장의 빈 칸으로 남아 눈에 띈다.
+   🚨 잰 값은 반드시 `docs/00_사실원장.md` 에 적는다 (D-54). 화면은 증언이 아니다.
 """
 
 from __future__ import annotations
@@ -99,6 +113,49 @@ def total_of(payload: bytes) -> int | None:
     return walk(obj)
 
 
+def measure(source_ids: list[str], use: str) -> int:
+    """전량 규모만 잰다 — 소스당 호출 **1번**, 저장 **없음** (§3⑥).
+
+    🚨 저장하지 않는 것이 이 함수의 요점이다.
+       ① 원장은 「raw 에 무엇이 들어왔는가」의 증언이다 (규약 3). 안 받았으면 줄을 쓰지 않는다.
+       ② 그래야 「규모는 알지만 아직 안 받았다」가 원장의 **빈 칸**으로 남는다.
+          받아 버리면 그 상태가 안 보이고, 안 보이면 넉 달 뒤에도 1장짜리로 남는다.
+
+    🚨 `registry.require()` 는 그대로 부른다 — 규약 6 은 수집이 아니라 **접근**의 조건이다.
+       재는 것도 남의 서버를 두드리는 일이다.
+
+    🚨 한 소스가 실패해도 멈추지 않는다. 다섯을 재려고 부른 사람에게 첫 실패로
+       나머지 넷을 안 보여주면, 그 사람은 다시 네 번 부른다 — 서버를 네 번 더 두드린다.
+    """
+    env.load()
+    print(f"\n  {'source_id':26}{'전체 건수':>12}{'장':>8}   {'예상 소요':>10}")
+    worst = 0
+    for source_id in source_ids:
+        try:
+            registry.require(source_id, use=use)  # 🚨 규약 1 — 재는 것도 접근이다
+            ep = spec_of(source_id)
+            key = env.get(
+                "FOODSAFETY_KEY" if (ep.get("style") or "query") == "path" else "DATA_GO_KR_KEY"
+            )
+            total = total_of(fetch_page(ep, key, 1))
+        except Exception as e:  # noqa: BLE001 — 실패 사유가 곧 결과다
+            worst = 1
+            print(f"  {source_id:26}{'🔴 실패':>12}   {type(e).__name__}: {e}")
+            continue
+        if total is None:
+            worst = 1
+            print(f"  {source_id:26}{'🔴 못 읽음':>12}        응답에 전체 건수가 없다")
+            continue
+        pages = -(-total // ROWS)  # 올림
+        # 규약 5 — 공공기관 서버 간격 0.5초. 재는 사람이 각오할 시간이 여기서 나온다.
+        secs = pages * 0.5
+        span = f"{secs / 60:.0f}분" if secs >= 60 else f"{secs:.0f}초"
+        print(f"  {source_id:26}{total:>12,}{pages:>8,}   {span:>10}")
+
+    print("\n  🚨 저장하지 않았다. 잰 값을 docs/00_사실원장.md 에 적고 나서 받는다 (D-54).")
+    return worst
+
+
 def collect(source_id: str, use: str, max_pages: int | None) -> int:
     registry.require(source_id, use=use)  # 🚨 규약 1 — 첫 줄
     ep = spec_of(source_id)
@@ -144,11 +201,27 @@ def main(argv: list[str]) -> int:
     import argparse  # noqa: PLC0415
 
     ap = argparse.ArgumentParser(prog="collect.openapi")
-    ap.add_argument("source_id")
+    # 🚨 여럿을 받는다 — `--measure` 는 나란히 놓고 봐야 「어느 것부터」가 정해진다.
+    ap.add_argument("source_id", nargs="+")
     ap.add_argument("--use", required=True, choices=sorted(registry.VALID_USES))
     ap.add_argument("--pages", type=int, default=None, help="🚨 첫 실행은 1 로 한다")
+    ap.add_argument(
+        "--measure",
+        action="store_true",
+        help="전량 규모만 잰다 — 소스당 호출 1번, 저장 없음 (§3⑥)",
+    )
     a = ap.parse_args(argv[1:])
-    return collect(a.source_id, a.use, a.pages)
+
+    if a.measure:
+        if a.pages is not None:
+            # 🚨 둘을 같이 주면 무엇을 기대한 것인지 알 수 없다. 조용히 한쪽을 이기지 않는다.
+            ap.error("--measure 와 --pages 는 같이 쓰지 않는다 — 재는 일과 받는 일은 다르다")
+        return measure(a.source_id, a.use)
+
+    worst = 0
+    for source_id in a.source_id:
+        worst = collect(source_id, a.use, a.pages) or worst
+    return worst
 
 
 if __name__ == "__main__":
