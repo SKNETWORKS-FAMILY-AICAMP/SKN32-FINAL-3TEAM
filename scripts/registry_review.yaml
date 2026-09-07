@@ -207,8 +207,11 @@ mfds_hf_ingredient_board:
   reviewed_by: 권소라
   reviewed_at: 2026-09-07
   dissent_note: "검토 근거 「저작권/무단전재 안내 없음」이 재현되지 않음 — 화면에 「무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임」 문구가 있다. 공공누리 부착 여부와 유형 확인 후 재판정 (D-110)"
-
-  collected_at: null
+  # 🚨 2026-09-07 — 이 항목의 빈 줄 때문에 mark_collected 가 두 번 헛돌았다.
+  #    `collect/registry.py` 는 블록 끝을 **빈 줄**로 판단하므로, 항목 안에 빈 줄이 있으면
+  #    그 뒤 필드를 **못 본다**. 「줄이 없다」는 오진이었다 — 줄은 있었고 빈 줄이 갈랐다.
+  #    🚨 **원장 항목 안에 빈 줄을 넣지 않는다.**
+  collected_at: 2026-09-07
   # 크롤링형 — robots.txt 확인 (규약 6). 2026-09-02 오한빈 직접 확인:
   #   foodsafetykorea.go.kr/robots.txt 에 `User-agent: *` 그룹이 없다.
   #   선언된 것은 Googlebot 그룹 하나이고, 그 안의 Disallow 도
