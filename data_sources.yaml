@@ -150,7 +150,7 @@ sources:
       ㈜24프로미 부당한 광고행위 건(2016서소1562)의 「주문」에 금지 광고행위가 원문으로 적혀 있다.
       🚨 심의유형 「개발 자동승인 / 운영 심의승인」 — 배포 시점의 선결 조건이다.
     caution: "🚨 API 유형이 LINK 다 — 실제 호출처는 공정위가 아니라 법제처다(linkUrl: open.law.go.kr/…cmtInfoGuide#ftc). 요청은 <code>https://www.law.go.kr/DRF/lawService.do?OC=..&target=ftc&ID=&lt;결정문일련번호&gt;&type=XML</code> 이고 인증이 OC 라 <code>LAW_OC_KEY</code> 를 쓴다 — law_go_kr · ftc_decisions_api 와 같은 포털·같은 키다. / 🚨 <code>type=HTML</code> 은 껍데기(1.8KB)만 오고 JS 로 채운다. <code>type=XML</code> 이어야 본문이 온다. / 🚨 ID 는 목록 API(15103246)의 <code>결정문일련번호</code> 다 — 목록과 본문이 쌍으로 움직인다. / ★ 출력 구조가 학습 라벨에 그대로 맞는다: 결정문일련번호·문서유형·사건번호·사건명·피심정보·회의종류·결정번호·결정일자·의결문·주문·신청취지·이유·별지·결정요지·위원정보. / ★★ PDF 보다 낫다 — ① 텍스트라 OCR 불필요 ② 대표자명이 이미 마스킹돼 온다(「대표이사 이ㅇㅇ」) ③ &lt;그림 N&gt; 광고 캡처가 안 온다 — 그것은 광고주 이미지 저작물이라 G1(미추출)이었는데 구조적으로 들어오지 않는다(D-18 프래그먼트 문제가 사라진다). / 🚨 업체명과 피심인 주소는 그대로 온다 — 우리 마스킹은 여전히 필요하다 (D-17). / 🚨 심의유형이 「개발단계: 자동승인 / 운영단계: 심의승인」이다 — 배포(U4) 시점의 선결 조건 (ftc_decisions_api 와 같다). / 🚨 호출 간격 0.5초 이상 + 재시도 3회."
-    collected_at: 2026-09-06
+    collected_at: 2026-09-07
     decided_at: 2026-09-02
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -228,6 +228,94 @@ sources:
     decided_by: 오한빈
     reviewed_by: 권소라
     reviewed_at: 2026-09-04
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  foodsafety_admin_measure:
+    name: "식품안전나라 행정처분 (위반내용 원문 인용) ★신규등재 2026-09-07"
+    org: "식품의약품안전처"
+    url: "https://www.foodsafetykorea.go.kr/portal/fooddanger/administMeasureList.do?menu_no=4411&menu_grp=MENU_NEW02"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: collect
+    access: "🔄 웹 목록 JSON API — POST /portal/fooddanger/searchAdministMeasureList.do (2026-09-07 실측)"
+    scale: "🚨 전수 86건 중 표시광고법 위반은 13건뿐 (2026-09-07 census). 수입식품안전관리 특별법 36 · 식품위생법 22 · 식품 등의 표시·광고에 관한 법률 13 · 위생용품 관리법 13 · 건강기능식품에 관한 법률 2. 기간 2024-09-09~2026-09-04(2년) · 롤링형(09-05 실측 87 → 09-06·09-07 86)"
+    masking: >-
+      업체명·대표자명 즉시 마스킹, 원문 미보관 (D-17).
+      🚨 2026-09-07 전수 확인 — JSON 필드 `prcscitypoint_prsdntnm` 에 **대표자 실명이 86건 전부
+      평문으로** 온다(예: 문종국). ★ RSS 경로는 title 에 위반내용만 있고 업체명이 없어
+      **개인정보가 구조적으로 빠진다** — 증분 갱신은 RSS 를 쓴다.
+    fragment_note: 위반내용 안의 인용 문구는 광고주 표현이나 처분서가 인용한 것이라 사실로 취한다 (D-18)
+    caution: "🚨 표시광고법 13건은 MIN_SAMPLES=30(D-40) 미달이다. 유형별로 쪼개면 건강기능식품_오인 5 · 질병_예방치료_표방 2 · 심의_미이행 1 · 기타 5. 이 소스 하나로 1층이 서지 않는다 — ftc 8,253건 파싱이 본체다. 롤링이라 2년치에 13건이면 연 7건 페이스여서 기다려도 30건이 되지 않는다. / 🚨 대표자 실명이 86건 전부 평문으로 온다(prcscitypoint_prsdntnm). D-17 마스킹 필수. / ★ RSS(/rss/rss.do?menu_no=2714)는 title 에 위반내용만 있고 업체명이 없다 — 개인정보가 구조적으로 빠진 경로다. 전량은 웹 목록, 증분 갱신은 RSS. / 🚨 엑셀 다운로드는 GPKI(공인인증) 설치를 요구해 막혀 있다. / ★ 키워드 스터핑 유형이 여기서 나온다(「혈압케어 혈압 혈액 순환 정맥 90캡슐 거미 정맥류에 나이아신 진저카이엔 페퍼로 혈관 다리 합니다」) — VIOLATION_TYPES 6종·CANDIDATE_TYPES 3종 어디에도 없다."
+    collected_at: null
+    decided_at: 2026-09-07
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_cosmetic_sanction:
+    name: "의약품안전나라 화장품 행정처분 ★신규등재 2026-09-07"
+    org: "식품의약품안전처"
+    url: "https://nedrug.mfds.go.kr/pbp/CCBAO01/getList?searchTypeCode=C"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: manual
+    access: "🚨 수기 — robots 가 전면 차단이라 엑셀다운로드 버튼을 사람이 누른다"
+    scale: "196건 (2026-09-07 실측) · 공개종료일자 컬럼 있음 → 롤링형"
+    masking: 업체명·소재지(번지)·품목명 즉시 마스킹, 원문 미보관 (D-17)
+    fragment_note: >-
+      🚨 위반내용이 「붙임과 같이」로 넘어가 **광고 문구 원문이 웹에 없다**.
+      라벨로 쓰는 것은 `근거법령`(화장품법 제13조제1항 각 호)과 제품명이다.
+    retention_note: >-
+      🔄 D-137 — `공개종료일자`를 필수 필드로 받고 **만료분도 보존한다**.
+      법령(화장품법 제28조의2·시행령 제13조)에 공개 종료 규정이 없어 단서 3호가 아니다(판정 E).
+    caution: "🚨 robots.txt 가 「User-agent: * / Disallow: /」 전면 차단이다(2026-09-07 실측 · D-136). 자동 수집기를 붙이지 않는다 — status: manual 이 유일한 경로이고, 사이트가 스스로 제공하는 엑셀다운로드 버튼을 사람이 누른다. 같은 기관 본청(mfds.go.kr)은 「User-agent: * / Allow:/」로 정반대다. / 🚨 data_sources.yaml:176 의 09-02 질문에 절반만 답한다 — 「화장품 행정처분이 어디 있나」의 답은 여기가 맞으나 문구 원문은 안 준다. 화장품 문구 원문은 ftc 의결서(화장품 건 실재 — 의결 제2000-99호)에서 와야 한다. / 🚨 소재지가 번지까지 나오고 업종·업체명이 평문이다 — D-17 마스킹 필수. / 🔄 공개종료일자를 필수 필드로 받고 만료분도 보존한다(D-137)."
+    collected_at: null
+    decided_at: 2026-09-07
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_special_use_guide:
+    name: "식약처 「특수용도식품 표시·광고 해설서」 (표시·광고 심의 사례 포함 · 2017-03) ★신규등재 2026-09-07"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_512/view.do?seq=26285"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: collect
+    access: "자료실 게시물 · hwp 1개 (🚨 PDF 없음)"
+    scale: "71쪽 · 본문 107,190자 · 10개 제품유형 × 4블록(삭제 문구 / 수정 문구 / 근거자료 제출 문구 / 삭제 이미지) + 유형별 key-word 표. 영아용 조제식 실측: 삭제 19 · 수정 6쌍 · 근거자료 10 · key-word 10"
+    fragment_note: >-
+      🚨 D-138 — **3층(판단규범)에 넣지 않는다.** 식품위생법 제12조의3 사전심의 기준이고
+      현행은 식품표시광고법 제10조 자율심의다. **1층 사례로만** 쓰고 레코드에
+      `심의제도: 사전심의(식품위생법 제12조의3)` · `연도: 2017` 을 남긴다.
+      ★ 「삭제 이미지」는 이미지가 아니라 **이미지의 서술**이라 D-18 의 G1 문제가 없다.
+    label_mapping: >-
+      🔄 D-139 — 해설서 3분류가 VIOLATION_TYPES 를 뭉친다.
+      질병예방치료·의약품혼동·건강기능식품혼동 → 3종 / 거짓·과장·기만 → 2종 / 부당한 비교·비방 → 부당_비교광고.
+      🚨 `후기_체험기_기만` 이 해설서에 없다 — 「엄마들의 경험담을 직접 확인하세요!」가 거짓·과장·기만이다.
+    caution: "🚨🚨 제도 시점이 어긋난다 — 3층(판단규범)에 넣지 않는다(D-138). 목적 조항이 근거를 직접 적는다: 「식품위생법」제12조의3의 규정에 따라 … 식품의약품안전처장(한국식품산업협회에 위탁)의 심의를 받을 때」. 현행법(law_013094 식품 등의 표시·광고에 관한 법률)은 제10조 「표시 또는 광고의 자율심의」다 — 사전심의 → 자율심의로 바뀌기 전 자료다. 문서 스스로도 「법적 구속력을 가지는 것은 아니므로 … 관련 법령 및 고시 전문을 확인」하라고 적는다. 1층 사례로만 쓰고 심의제도·연도를 필수 필드로 남긴다. / 🚨 현행 수집기로는 못 받는다 — 첨부가 hwp 단독인데 collect/mfds_board.py 는 「PDF 만 받는다」. 대안: 사이트 자체 문서변환(/common/convertDocViewer.do)이 hwp→xhtml 을 주고 텍스트가 그대로 나온다. 🚨 다만 표 셀이 줄로 흩어져 「유형 │ 내용」 대응이 무너진다 — 라벨 정확도가 필요하면 hwp 원본 표 파싱이 낫다. / 🚨 라벨 체계가 우리 것과 어긋난다(D-139): 해설서 3분류(질병예방치료·의약품혼동·건강기능식품혼동 / 거짓·과장·기만 / 부당한 비교·비방)가 VIOLATION_TYPES 6종을 3→1, 2→1 로 뭉친다. 후기_체험기_기만이 해설서에 없고 「엄마들의 경험담을 직접 확인하세요!」가 거짓·과장·기만으로 분류돼 있다. / 🚨 정확한 문구 건수는 표 파싱 후에 말한다 — 뷰어 텍스트 자동 집계는 블록 경계가 새어 신뢰할 수 없다."
+    collected_at: null
+    decided_at: 2026-09-07
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   ftc_noviolation:
@@ -361,7 +449,7 @@ sources:
     note: >-
       🚨 [별표] 조회 가능 여부가 미확인이다. 조회되지 않으면 시행령 별표를
       본문 HTML 파싱으로 받아야 하며 수집 경로가 갈린다 (수집리스트 S2-04).
-    collected_at: 2026-09-06
+    collected_at: 2026-09-07
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -387,7 +475,8 @@ sources:
     collected_at: null
     decided_at: 2026-09-03
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   foodsafety_faq:
@@ -464,8 +553,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
-    reviewed_at: 2026-09-02
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     dissent_note: "검토 근거 「저작권/무단전재 안내 없음」이 재현되지 않음 — 화면에 「무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임」 문구가 있다. 공공누리 부착 여부와 유형 확인 후 재판정 (D-110)"
     robots_checked_at: 2026-09-02
     evidence_url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
@@ -542,7 +631,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
@@ -571,7 +661,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
@@ -598,7 +689,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
@@ -626,7 +718,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
@@ -649,7 +742,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   bab2min_shopping:
@@ -726,19 +820,20 @@ sources:
     url: "https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech"
     layer: "5층 코퍼스·반례"
     grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    use: {U1: allow, U2: allow, U3: deny, U4: deny}
     constraints: [BY, SA]
     redistributable: true
     value: C
     cost: free
-    status: collect
+    status: hold
     access: "자유 다운로드"
-    scale: "109,692건 · 8개 카테고리 멀티라벨"
-    caution: "도메인은 혐오표현이라 광고와 무관. 쓴다면 「멀티라벨 학습 레시피」 검증용."
+    scale: "🔄 109,692건 (train 78,977 / val 8,776 / test 21,939) · 9종 라벨 — 0 origin · 1 physical · 2 politics · 3 profanity · 4 age · 5 gender · 6 race · 7 religion · 8 not_hate_speech (2026-09-07 HF 데이터카드 실측)"
+    caution: "🔄 2026-09-07 정정 — 종전 「광고와 무관」은 D-64 에 어긋난다. D-64 는 이 데이터셋군을 판정 클래스가 아니라 생성 파이프라인의 안전 필터로 쓰기로 했고, 레지스트리 layer 도 5층이다. 실제로 1 physical · 4 age · 5 gender 는 화장품·건기식 광고와 정확히 겹친다. / 🚨 다만 분포가 다르다 — 뉴스 댓글의 외모 라벨은 사람을 향한 인신공격(「뚱보끼린」·「와!! 못생겨따」)이고, 광고의 외모 표현은 제품 소구점(「칙칙한 피부」)이다. 같은 축, 다른 화행이라 그대로 태우면 광고 카피에서 거의 안 걸린다. 재현율 실측 없이 투입하지 않는다. / 🚨 status: hold — Phase 3 안건이다 (D-64 상태: 「조건부 · 검토 예정 · Phase 3 이후」). 현재 Phase 0 게이트도 미통과다. 재개 조건 둘: ① Phase 3 진입 ② aihub_558 의 최상위 온톨로지 3개가 외모·연령 축을 덮지 않음이 확인될 때. ②가 확인되면 근거 있는 not_adopted 로 내린다 — 지금 내리면 실측하지 않은 가치 판정을 적는 것이다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech"
     evidence_is_access: true
 
@@ -809,7 +904,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://www.krei.re.kr/foodSurvey/page/460"
     evidence_is_access: true
 
@@ -962,7 +1058,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"

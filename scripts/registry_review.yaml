@@ -52,7 +52,7 @@ ftc_decisions_body:
   #   확인 근거 정리: docs/ohb/검토요청_2026-09-02_ftc_decisions_body.md
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-06
+  collected_at: 2026-09-07
 
 mfds_sanctions:
   decided_by: 오한빈
@@ -102,9 +102,11 @@ mfds_casebook:
   reviewed_at: 2026-09-04
   collected_at: 2026-09-04
 mfds_online_guideline:
+  # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
   decided_at: 2026-09-03
-  reviewed_by: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   collected_at: null
 foodsafety_faq:
   decided_by: 오한빈
@@ -178,7 +180,7 @@ law_go_kr:
   #      위 「법적효력/저작권」 페이지로 교체가 남아 있다 (data.js 에서).
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-06
+  collected_at: 2026-09-07
 
 platform_guide:
   decided_by: 오한빈
@@ -188,6 +190,8 @@ platform_guide:
   collected_at: null
 
 mfds_hf_ingredient_board:
+  # 🔄 2026-09-07 — 판정 A(A-1)로 이견 해소. 배지 없음 → 공공누리 체계 밖 → 제24조의2.
+  #    🚨 아래 dissent_note 는 이력으로 남긴다 — 지우지 않는다.
   decided_by: 오한빈
   decided_at: 2026-08-20
   # 확인 2026-09-02 — 게시판 정상 열림 · 게시물 존재 · 저작권/무단전재 안내 없음
@@ -200,8 +204,8 @@ mfds_hf_ingredient_board:
   #    확인할 것: **공공누리 배지가 붙어 있는가, 붙었다면 몇 유형인가** (D-110).
   #      · 부착 + 제1유형 → 출처표시만. 서명 복원
   #      · 미부착        → 식약처 저작권정책의 「등록 부서와 사전 협의」 단서에 걸린다 (mfds_press 와 같은 형태)
-  reviewed_by: null
-  reviewed_at: 2026-09-02
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   dissent_note: "검토 근거 「저작권/무단전재 안내 없음」이 재현되지 않음 — 화면에 「무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임」 문구가 있다. 공공누리 부착 여부와 유형 확인 후 재판정 (D-110)"
 
   collected_at: null
@@ -234,46 +238,51 @@ cosmetic_restricted:
   collected_at: 2026-09-07
 
 aihub_71486:
+  # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
   decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
   approved_by: 오한빈
   collected_at: null
 
 aihub_71723:
+  # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
   decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
   approved_by: 오한빈
   collected_at: null
 
 aihub_558:
+  # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
   decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
   approved_by: 오한빈
   collected_at: null
 
 aihub_71694:
+  # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
   decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
   approved_by: 오한빈
   collected_at: null
 
 aihub_71843:
+  # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
   decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   collected_at: null
 
 bab2min_shopping:
@@ -304,12 +313,15 @@ klue_dataset:
   collected_at: null
 
 k_mhas:
+  # 🔄 2026-09-07 — status: hold 로 내리고 deploy·cite 를 UN 으로 닫은 뒤 서명.
+  #    서명 대상은 「열린 용도(train·commercial·raw)가 CC BY-SA 로 맞는가」이고 그것은 재현 가능하다.
+  #    🚨 미결이던 SA 산출물 파급은 deploy 를 닫아 우리 사용 범위 밖으로 나갔다 (D-60 선결 조건 해소).
   decided_by: 오한빈
   decided_at: 2026-08-20
   # 확인 2026-09-02 — HF CC BY-SA 4.0 확인. 데이터셋 이용 조건은 재현됨
   # ⏸ 서명 보류 — SA 파급이 W5 결정 대상 (D-71)
-  reviewed_by: null
-  reviewed_at: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   collected_at: null
 
 kobaco_mcr:
@@ -329,10 +341,11 @@ kobaco_mcr_report:
   collected_at: null
 
 krei_food:
+  # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
   decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   collected_at: null
 
 khff_survey:
@@ -398,10 +411,11 @@ kisdi_panel:
   collected_at: null
 
 aihub_review_corpus:
+  # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
   decided_at: 2026-08-20
-  reviewed_by: null
-  reviewed_at: null
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   approved_at: 2026-09-02      # 🔄 AI Hub 신청·승인 완료
   approved_by: 오한빈
   collected_at: null
@@ -481,4 +495,27 @@ apeach:
   decided_at: null
   reviewed_by: null
   reviewed_at: null
+  collected_at: null
+
+# 🔄 2026-09-07 신규 등재 3건 — 2인 확인 판정 A(A-1)·B·E 로 열렸다.
+#    근거: docs/ohb/공공누리_판정근거_2026-09-06.md (09-07 증보) · D-132 · D-136 · D-137 · D-138 · D-139
+foodsafety_admin_measure:
+  decided_by: 오한빈
+  decided_at: 2026-09-07
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
+  collected_at: null
+
+mfds_cosmetic_sanction:
+  decided_by: 오한빈
+  decided_at: 2026-09-07
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
+  collected_at: null
+
+mfds_special_use_guide:
+  decided_by: 오한빈
+  decided_at: 2026-09-07
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
   collected_at: null

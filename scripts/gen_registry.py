@@ -201,6 +201,34 @@ def block(key, s, extra=None, covers=None, status="collect"):
 #    업체명이 들어오는 소스에는 전부 붙어야 하는데 `ftc_decisions` 하나에만 있었다
 #    (권소라 역검토 v1.2 §4-2 · 2026-09-02 예행 검토에서 대상 4건 확정).
 EXTRA = {
+    "foodsafety_admin_measure": [
+        "masking: >-",
+        "  업체명·대표자명 즉시 마스킹, 원문 미보관 (D-17).",
+        "  🚨 2026-09-07 전수 확인 — JSON 필드 `prcscitypoint_prsdntnm` 에 **대표자 실명이 86건 전부",
+        "  평문으로** 온다(예: 문종국). ★ RSS 경로는 title 에 위반내용만 있고 업체명이 없어",
+        "  **개인정보가 구조적으로 빠진다** — 증분 갱신은 RSS 를 쓴다.",
+        "fragment_note: 위반내용 안의 인용 문구는 광고주 표현이나 처분서가 인용한 것이라 사실로 취한다 (D-18)",
+    ],
+    "mfds_cosmetic_sanction": [
+        "masking: 업체명·소재지(번지)·품목명 즉시 마스킹, 원문 미보관 (D-17)",
+        "fragment_note: >-",
+        "  🚨 위반내용이 「붙임과 같이」로 넘어가 **광고 문구 원문이 웹에 없다**.",
+        "  라벨로 쓰는 것은 `근거법령`(화장품법 제13조제1항 각 호)과 제품명이다.",
+        "retention_note: >-",
+        "  🔄 D-137 — `공개종료일자`를 필수 필드로 받고 **만료분도 보존한다**.",
+        "  법령(화장품법 제28조의2·시행령 제13조)에 공개 종료 규정이 없어 단서 3호가 아니다(판정 E).",
+    ],
+    "mfds_special_use_guide": [
+        "fragment_note: >-",
+        "  🚨 D-138 — **3층(판단규범)에 넣지 않는다.** 식품위생법 제12조의3 사전심의 기준이고",
+        "  현행은 식품표시광고법 제10조 자율심의다. **1층 사례로만** 쓰고 레코드에",
+        "  `심의제도: 사전심의(식품위생법 제12조의3)` · `연도: 2017` 을 남긴다.",
+        "  ★ 「삭제 이미지」는 이미지가 아니라 **이미지의 서술**이라 D-18 의 G1 문제가 없다.",
+        "label_mapping: >-",
+        "  🔄 D-139 — 해설서 3분류가 VIOLATION_TYPES 를 뭉친다.",
+        "  질병예방치료·의약품혼동·건강기능식품혼동 → 3종 / 거짓·과장·기만 → 2종 / 부당한 비교·비방 → 부당_비교광고.",
+        "  🚨 `후기_체험기_기만` 이 해설서에 없다 — 「엄마들의 경험담을 직접 확인하세요!」가 거짓·과장·기만이다.",
+    ],
     "ftc_decisions": [
         "masking: 업체명·상표·대표자명·🔄 **주소** 즉시 마스킹, 원문 미보관 (D-17)",
         "  🚨 2026-09-02 의결서 실물 확인 — 피심인 항목에 **사업장 주소와 대표이사 성명**이 전면에",
@@ -390,6 +418,10 @@ ORDER = [
     "mfds_sanctions",
     "mfds_press",
     "mfds_casebook",
+    # 🔄 2026-09-07 신규 — 2인 확인 판정 A(A-1)·B·E 로 열렸다
+    "foodsafety_admin_measure",
+    "mfds_cosmetic_sanction",
+    "mfds_special_use_guide",
     "ftc_noviolation",
     # 2층 적법 라벨
     "mfds_hf_ingredient",
@@ -449,8 +481,14 @@ STATUS = {
     "kisdi_panel": "hold",
     "kobaco_mcr_report": "hold",
     "aihub_71843": "hold",
+    # 🔄 2026-09-07 D-64 — 혐오표현 데이터셋군은 Phase 3 이후 안건이다. aihub_558(비윤리 251,064문장·
+    #    어휘단위 77,978·강도축)이 같은 자리를 더 넓게 덮어 K-MHaS 는 보조로 내린다. deploy·cite 는 UN.
+    "k_mhas": "hold",
     # D-108 — G0 는 확인이 선행이다. 확인 전에 자동으로 가져오면 fail-closed 가 수집 단계에서 뚫린다
     # D-108 — ★사용자제공. 자동 수집이 약관 위반이라는 사실을 caution 문장이 아니라 기계가 읽는 자리에 둔다
+    # 🔄 2026-09-07 D-136 — nedrug.mfds.go.kr robots 가 「User-agent: * / Disallow: /」 전면 차단이다.
+    #    자동 수집기를 붙이지 않는다. 사이트가 제공하는 엑셀다운로드를 사람이 누르는 경로만 남는다.
+    "mfds_cosmetic_sanction": "manual",
     "meta_adlibrary": "manual",
     "google_atc": "manual",
 }
