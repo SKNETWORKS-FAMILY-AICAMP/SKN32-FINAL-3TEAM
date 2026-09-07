@@ -496,3 +496,26 @@ apeach:
   reviewed_by: null
   reviewed_at: null
   collected_at: null
+
+# 🔄 2026-09-07 신규 등재 3건 — 2인 확인 판정 A(A-1)·B·E 로 열렸다.
+#    근거: docs/ohb/공공누리_판정근거_2026-09-06.md (09-07 증보) · D-132 · D-136 · D-137 · D-138 · D-139
+foodsafety_admin_measure:
+  decided_by: 오한빈
+  decided_at: 2026-09-07
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
+  collected_at: null
+
+mfds_cosmetic_sanction:
+  decided_by: 오한빈
+  decided_at: 2026-09-07
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
+  collected_at: null
+
+mfds_special_use_guide:
+  decided_by: 오한빈
+  decided_at: 2026-09-07
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-07
+  collected_at: null
