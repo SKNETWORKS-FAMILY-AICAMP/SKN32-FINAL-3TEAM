@@ -449,6 +449,9 @@ STATUS = {
     "kisdi_panel": "hold",
     "kobaco_mcr_report": "hold",
     "aihub_71843": "hold",
+    # 🔄 2026-09-07 D-64 — 혐오표현 데이터셋군은 Phase 3 이후 안건이다. aihub_558(비윤리 251,064문장·
+    #    어휘단위 77,978·강도축)이 같은 자리를 더 넓게 덮어 K-MHaS 는 보조로 내린다. deploy·cite 는 UN.
+    "k_mhas": "hold",
     # D-108 — G0 는 확인이 선행이다. 확인 전에 자동으로 가져오면 fail-closed 가 수집 단계에서 뚫린다
     # D-108 — ★사용자제공. 자동 수집이 약관 위반이라는 사실을 caution 문장이 아니라 기계가 읽는 자리에 둔다
     "meta_adlibrary": "manual",

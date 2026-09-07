@@ -387,7 +387,8 @@ sources:
     collected_at: null
     decided_at: 2026-09-03
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   foodsafety_faq:
@@ -464,8 +465,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
-    reviewed_at: 2026-09-02
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     dissent_note: "검토 근거 「저작권/무단전재 안내 없음」이 재현되지 않음 — 화면에 「무단으로 복제하거나 이용하는 경우 저작권법 등에 따라 법적책임」 문구가 있다. 공공누리 부착 여부와 유형 확인 후 재판정 (D-110)"
     robots_checked_at: 2026-09-02
     evidence_url: "https://www.foodsafetykorea.go.kr/portal/board/board.do?menu_grp=MENU_NEW01&menu_no=2660"
@@ -542,7 +543,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
@@ -571,7 +573,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
@@ -598,7 +601,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
@@ -626,7 +630,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
@@ -649,7 +654,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"
 
   bab2min_shopping:
@@ -726,19 +732,20 @@ sources:
     url: "https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech"
     layer: "5층 코퍼스·반례"
     grade: G3
-    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    use: {U1: allow, U2: allow, U3: deny, U4: deny}
     constraints: [BY, SA]
     redistributable: true
     value: C
     cost: free
-    status: collect
+    status: hold
     access: "자유 다운로드"
-    scale: "109,692건 · 8개 카테고리 멀티라벨"
-    caution: "도메인은 혐오표현이라 광고와 무관. 쓴다면 「멀티라벨 학습 레시피」 검증용."
+    scale: "🔄 109,692건 (train 78,977 / val 8,776 / test 21,939) · 9종 라벨 — 0 origin · 1 physical · 2 politics · 3 profanity · 4 age · 5 gender · 6 race · 7 religion · 8 not_hate_speech (2026-09-07 HF 데이터카드 실측)"
+    caution: "🔄 2026-09-07 정정 — 종전 「광고와 무관」은 D-64 에 어긋난다. D-64 는 이 데이터셋군을 판정 클래스가 아니라 생성 파이프라인의 안전 필터로 쓰기로 했고, 레지스트리 layer 도 5층이다. 실제로 1 physical · 4 age · 5 gender 는 화장품·건기식 광고와 정확히 겹친다. / 🚨 다만 분포가 다르다 — 뉴스 댓글의 외모 라벨은 사람을 향한 인신공격(「뚱보끼린」·「와!! 못생겨따」)이고, 광고의 외모 표현은 제품 소구점(「칙칙한 피부」)이다. 같은 축, 다른 화행이라 그대로 태우면 광고 카피에서 거의 안 걸린다. 재현율 실측 없이 투입하지 않는다. / 🚨 status: hold — Phase 3 안건이다 (D-64 상태: 「조건부 · 검토 예정 · Phase 3 이후」). 현재 Phase 0 게이트도 미통과다. 재개 조건 둘: ① Phase 3 진입 ② aihub_558 의 최상위 온톨로지 3개가 외모·연령 축을 덮지 않음이 확인될 때. ②가 확인되면 근거 있는 not_adopted 로 내린다 — 지금 내리면 실측하지 않은 가치 판정을 적는 것이다."
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech"
     evidence_is_access: true
 
@@ -809,7 +816,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     evidence_url: "https://www.krei.re.kr/foodSurvey/page/460"
     evidence_is_access: true
 
@@ -962,7 +970,8 @@ sources:
     collected_at: null
     decided_at: 2026-08-20
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-07
     approved_at: 2026-09-02
     approved_by: 오한빈
     evidence_url: "https://aihub.or.kr/intrcn/guid/usagepolicy.do?currMenu=151&topMenu=105"

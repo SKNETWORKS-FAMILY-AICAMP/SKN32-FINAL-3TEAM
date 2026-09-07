@@ -395,12 +395,12 @@ const SOURCES = [
 
 {id:'kmhas', layer:'5층 코퍼스·반례', name:'K-MHaS 한국어 혐오표현 (멀티라벨)', org:'jeanlee (HF)',
  grade:'G3', constraints:['BY','SA'], access:'자유 다운로드', verified:true,
- scale:'109,692건 · 8개 카테고리 멀티라벨', cost:'free', costNote:'무료 · 즉시',
- value:'C', valueNote:'★ AI Hub 558의 라이선스 안전한 대체재. 멀티라벨 분류 아키텍처 참조용으로는 동등하고 상업 이용까지 열려 있다',
- u:{train:OK, commercial:OK, raw:OK, cite:OK, deploy:OK},
- note:{train:'CC BY-SA 4.0',commercial:'✅ 가능',raw:'제한 없음',cite:'출처표시',deploy:'⚠️ SA — 🚨 **학습 산출물로의 파급은 미확인** (D-71 · D-60 선결 · W5 결정)'},
+ scale:'🔄 109,692건 (train 78,977 / val 8,776 / test 21,939) · <b>9종 라벨</b> — 0 origin · 1 physical · 2 politics · 3 profanity · 4 age · 5 gender · 6 race · 7 religion · 8 not_hate_speech (2026-09-07 HF 데이터카드 실측)', cost:'free', costNote:'무료 · 즉시',
+ value:'C', valueNote:'🔄 <b>2026-09-07 재판정 — 보조로 내린다.</b> aihub_558 이 같은 자리를 더 넓게 덮는다: <b>비윤리 문장 251,064</b>(K-MHaS 전체의 2.3배) · <b>어휘단위 77,978</b>(D-64 용도 2번이 요구하는 사전이 딸려 온다) · <b>비윤리 강도 축</b>(K-MHaS 에 없다). K-MHaS 의 유일한 증분은 9종 세분 라벨인데, <b>D-64 의 주 용도(생성물 사후 안전 필터)는 이진 판단이면 충분</b>해서 그 증분이 쓰이지 않는다',
+ u:{train:OK, commercial:OK, raw:OK, cite:UN, deploy:UN},
+ note:{train:'CC BY-SA 4.0',commercial:'✅ 가능',raw:'제한 없음',cite:'🔄 UN — 화면 인용은 배포에 준한다. deploy 와 함께 닫는다',deploy:'🔄 <b>UN (fail-closed)</b> — SA 의 학습 산출물 파급이 미확인이고 <b>저장소를 공개할 계획</b>이라(D-60) 배포 경로를 연 채로 둘 수 없다. 🚨 <b>이 차단이 D-60 선결 조건을 해소한다</b> — 배포 산출물에 K-MHaS 유래가 못 들어가면 「SA 가 산출물에 파급되는가」는 우리 사용 범위 밖 질문이 된다'},
  why:'CC BY-SA 4.0 (GitHub·HF 표기 일치). 🚨 **데이터셋을 쓸 수 있는가는 확인됐고, 학습 산출물의 라이선스 파급은 미결이다** — D-71 이 「후자가 D-60 을 좌우한다」로 선결 조건에 남겼다. **W5 결정 대상**이고, 그때까지 이 소스에서 온 문장은 provenance 로 추적해 둔다. 🚨 아직 쓰지 않는 korean_hatespeech 에는 같은 경고가 붙어 있는데 이미 쓰는 이 소스에는 없었다.',
- caution:'도메인은 혐오표현이라 광고와 무관. 쓴다면 「멀티라벨 학습 레시피」 검증용.',
+ caution:'🔄 <b>2026-09-07 정정 — 종전 「광고와 무관」은 D-64 에 어긋난다.</b> D-64 는 이 데이터셋군을 <b>판정 클래스가 아니라 생성 파이프라인의 안전 필터</b>로 쓰기로 했고, 레지스트리 layer 도 5층이다. 실제로 <b>1 physical · 4 age · 5 gender 는 화장품·건기식 광고와 정확히 겹친다</b>. / 🚨 <b>다만 분포가 다르다</b> — 뉴스 댓글의 외모 라벨은 사람을 향한 인신공격(「뚱보끼린」·「와!! 못생겨따」)이고, 광고의 외모 표현은 제품 소구점(「칙칙한 피부」)이다. 같은 축, 다른 화행이라 그대로 태우면 광고 카피에서 거의 안 걸린다. <b>재현율 실측 없이 투입하지 않는다.</b> / 🚨 <b>status: hold — Phase 3 안건이다</b> (D-64 상태: 「조건부 · 검토 예정 · Phase 3 이후」). 현재 Phase 0 게이트도 미통과다. <b>재개 조건 둘: ① Phase 3 진입 ② aihub_558 의 최상위 온톨로지 3개가 외모·연령 축을 덮지 않음이 확인될 때.</b> ②가 확인되면 근거 있는 not_adopted 로 내린다 — 지금 내리면 실측하지 않은 가치 판정을 적는 것이다.',
  url:'https://huggingface.co/datasets/jeanlee/kmhas_korean_hate_speech'},
 
 {id:'kr3', layer:'5층 코퍼스·반례', name:'KR3 한국 음식점 리뷰', org:'leey4n (HF)',
