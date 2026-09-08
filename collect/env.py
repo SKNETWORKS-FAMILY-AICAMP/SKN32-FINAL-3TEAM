@@ -45,7 +45,7 @@ KEYS = {
         "kosis.kr/serviceInfo/openAPIGuide.do (S0-06) — 자동 발급",
     ),
     "AIHUB_KEY": (
-        "AI Hub aihubshell — 승인받은 데이터셋 5종 (aihub_* · 5층 코퍼스)",
+        "AI Hub aihubshell — 승인된 데이터셋 (aihub_* · 5층 코퍼스)",
         "aihub.or.kr > 오픈 API(aihubshell) > API key 발급 → 메일로 온다. "
         "🚨 데이터셋 **승인이 따로** 필요하다 — 키만으로는 못 받는다 (constraints: GATED). "
         "🚨 aihubshell 은 bash 도구다. Windows 에서는 그대로 안 돈다",
