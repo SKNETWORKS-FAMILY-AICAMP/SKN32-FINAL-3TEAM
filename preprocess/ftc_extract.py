@@ -43,12 +43,15 @@ import pathlib
 import re
 import xml.etree.ElementTree as ET
 
+from preprocess import stage
 from preprocess.ftc_triage import CORE, _text, classify
 from preprocess.mask import anchor_ftc, apply_policy
 from preprocess.text import sep_norm
 
 RAW = pathlib.Path("data/raw/ftc")
 OUT = pathlib.Path("data/derived/ftc_layer1_phrases.json")
+#: 🔴 **단계 물질화** (D-143). `data/` 아래 — 배포되지 않는다.
+STAGE = pathlib.Path("data/derived/ftc_stage.jsonl")
 
 #: 인용부호 5종. 원천이 섞어 쓴다.
 QUOTE = re.compile(r"[‘'\"“「『]([^’'\"”」』\n]{4,120})[’'\"”」』]")
@@ -142,6 +145,11 @@ def phrases_in(order: str) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description="공정위 결정문 주문 → 1층 라벨 삼요소")
     ap.add_argument("--dump", action="store_true", help=f"{OUT} 로 쓴다")
+    ap.add_argument(
+        "--stage",
+        action="store_true",
+        help=f"{STAGE} 에 단계 산출물을 적고 **지난 판과 맞대 본다** (D-143)",
+    )
     a = ap.parse_args()
 
     if not RAW.exists():
@@ -157,6 +165,7 @@ def main() -> int:
     #    마스킹은 **모자라도 실패, 지나쳐도 실패**인데 지나친 쪽만 계측이 없었다.
     #    실제로 643 → 619 문구 · 285 → 280 문서가 삼켜지고 있었고 **재기 전까지 아무도 몰랐다.**
     #    그래서 여기서는 늘 마스킹 **전**으로도 뽑아 맞대 본다 (비용은 정규식 한 벌).
+    stage_rows: list[dict] = []
     raw_ph = raw_docs = 0
     #: 🚨 **늘 우는 지표는 무시당한다.** 그래서 「줄었다」가 아니라 **버린 근거**로 가른다.
     #:
@@ -169,12 +178,16 @@ def main() -> int:
     watch: list[tuple[str, str]] = []
 
     for p in sorted(RAW.glob("*.xml")):
+        blob = p.read_bytes()
         r = ET.parse(p).getroot()
         raw = {f: _text(r, f) for f in ("사건명", "주문", "결정요지", "이유")}
         name, order, gist, reason = (sep_norm(raw[f]) for f in raw)
         k = classify(name, order, gist, reason)
         buck[k] += 1
+        seq = _text(r, "결정문일련번호")
         if k not in CORE:
+            # 🚨 후보가 아닌 것도 한 줄 적는다 — `classify` 를 고쳤을 때 **분류 이동**이 보인다
+            stage_rows.append({"seq": seq, "src": stage.src_hash(blob), "분류": k})
             continue
 
         # 🔴 뽑기 **전에** 마스킹한다. 뽑은 뒤에 걸면 문구 안의 업체명이 남는다.
@@ -187,6 +200,16 @@ def main() -> int:
         raw_docs += bool(before)
 
         ps = phrases_in(masked)
+        stage_rows.append(
+            {
+                "seq": seq,
+                "src": stage.src_hash(blob),
+                "분류": k,
+                "사건명": apply_policy(name, bare, "ftc"),
+                "주문_마스킹": masked,
+                "문구": ps,
+            }
+        )
         for q in QUOTE.findall(masked):
             q = q.strip()
             if q in ps or content_len(q) < 4 or q.isdigit():
@@ -202,7 +225,7 @@ def main() -> int:
         grounds = [m.group(1).strip() for m in GROUND.finditer(masked)][:3]
         rows.append(
             {
-                "seq": _text(r, "결정문일련번호"),
+                "seq": seq,
                 "결정일자": _text(r, "결정일자"),
                 "분류": k,
                 "사건명": apply_policy(name, bare, "ftc"),
@@ -247,6 +270,13 @@ def main() -> int:
         print(
             "    🚨 유형은 문구가 아니라 **주문의 서술어**에서 온다. 없으면 「근거절」로 사람이 붙인다"
         )
+
+    if a.stage:
+        print()
+        prev = stage.load(STAGE)
+        stage.save(STAGE, stage_rows)
+        stage.report(stage.compare(prev, stage.load(STAGE)))
+        print(f"    → {STAGE}")
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
