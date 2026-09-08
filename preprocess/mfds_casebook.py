@@ -388,9 +388,14 @@ def _report(rows: list[dict], stat: dict) -> None:
     by: dict[int, int] = collections.Counter(r["호"] for r in rows if isinstance(r.get("호"), int))
     for h in sorted(by):
         f, c = _types([h])
-        print(
-            f"    {'★' if by[h] >= 30 else '🚨'} {by[h]:>4}  {h}호  확정{f or '없음'} 후보{c or '없음'}"
-        )
+        print(f"    · {by[h]:>4}  {h}호  확정{f or '없음'} 후보{c or '없음'}")
+    # ⛔ 예전에는 여기서 30건(D-40)과 견주어 ★/🚨 를 찍었다. **그게 틀렸다.**
+    #    D-40 은 **유형별** 표본을 말하는데 이 수는 **이 원천 안에서의** 수다.
+    #    실제로 「4호 28건은 2건 모자라다」고 문서에 적었다가 정정했다 —
+    #    `거짓_과장` 은 `ftc` 에만 211건이다 (D-161).
+    #    🚨 계측기가 매번 그렇게 읽으라고 부추기고 있었다. 부추기지 않게 고친다.
+    print("     🚨 D-40 의 30건은 **유형별** 표본이다 — 이 표는 **이 원천 안에서의** 수다.")
+    print("        유형이 서는지는 원천을 합쳐서 본다 (사실원장 ②).")
     plat = [r for r in rows if r["부"] == "Ⅲ"]
     if plat:
         ho = collections.Counter(h for r in plat for h in r["호"])

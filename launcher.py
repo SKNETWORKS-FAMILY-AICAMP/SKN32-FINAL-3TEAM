@@ -49,6 +49,16 @@ def run(*args: str) -> int:
     return subprocess.run(args, cwd=ROOT).returncode
 
 
+def _table(title: str, rows: dict[str, str]) -> Table:
+    """원천 id → 모듈 표. 🚨 **표는 `preprocess/__init__.py` 에 있다** — 여기서 만들지 않는다."""
+    t = Table(title=title, box=None, padding=(0, 2))
+    t.add_column("원천 id")
+    t.add_column("모듈", style="dim")
+    for k, v in sorted(rows.items()):
+        t.add_row(k, v)
+    return t
+
+
 def planned(name: str, when: str, needs: str) -> None:
     """아직 대상 스크립트가 없는 메뉴. 눌러도 에러 대신 현황을 보여준다."""
     console.print(
@@ -411,6 +421,61 @@ def collect(
 
 
 @app.command()
+def extract(
+    source: str = typer.Argument("", help="원천 id (비우면 표를 보여준다)"),
+    dump: bool = typer.Option(False, "--dump", help="파생물을 쓴다 — 🔴 마스킹 정책이 있어야 한다"),
+    sheet: int = typer.Option(0, "--sheet", help="사람이 채울 검증셋을 N건씩 만든다"),
+    verify: bool = typer.Option(False, "--verify", help="원천의 선언과 대조만 한다"),
+) -> None:
+    """받아 둔 원문에서 라벨을 뽑는다 — 원천별 전처리 모듈로 위임한다.
+
+    🔴 `--dump` 는 마스킹 정책이 선언된 원천에서만 돕니다 (D-72 fail-closed).
+    🚨 `--verify` 를 먼저 돌립니다 — 원천이 스스로 밝힌 수(목차 쪽번호·전체 건수)와 맞춰 봅니다.
+    ⛔ 원천마다 받는 옵션이 다릅니다. 없는 옵션을 주면 그 모듈이 알려 줍니다.
+    """
+    from preprocess import EXTRACTORS  # noqa: PLC0415 — 표는 로직 쪽에 있다 (D-99)
+
+    if not source:
+        console.print(_table("전처리 추출", EXTRACTORS))
+        raise typer.Exit(0)
+    module = EXTRACTORS.get(source)
+    if module is None:
+        console.print(
+            f"  [red]{source} 의 전처리 모듈이 없다[/red] — preprocess/__init__.py 의 표를 본다"
+        )
+        raise typer.Exit(1)
+    args = ["uv", "run", "python", "-m", module]
+    if verify:
+        args.append("--verify")
+    if dump:
+        args.append("--dump")
+    if sheet:
+        args += ["--sheet", str(sheet)]
+    raise typer.Exit(run(*args))
+
+
+@app.command()
+def scan(source: str = typer.Argument("", help="원천 id (비우면 표를 보여준다)")) -> None:
+    """원천을 세어 본다 — 🚨 라벨을 만들지 않는다. 산출물이 없다.
+
+    두 가지를 묻습니다 — **받은 것이 전부인가**(D-161) · **광고 문구가 실제로 실리는가**(D-40).
+    🔴 유일 행이 원천 선언에 못 미치면 종료코드 1 로 끝납니다. 지금 `mfds_sanctions` 가 그렇습니다.
+    """
+    from preprocess import SCANNERS  # noqa: PLC0415
+
+    if not source:
+        console.print(_table("원천 계측", SCANNERS))
+        raise typer.Exit(0)
+    module = SCANNERS.get(source)
+    if module is None:
+        console.print(
+            f"  [red]{source} 의 계측 모듈이 없다[/red] — preprocess/__init__.py 의 표를 본다"
+        )
+        raise typer.Exit(1)
+    raise typer.Exit(run("uv", "run", "python", "-m", module, source))
+
+
+@app.command()
 @stub("W3", "수집 코퍼스 확보")
 def golden() -> None:
     """일부러 틀린 문장을 만들어 채점용 정답셋을 꾸린다."""
@@ -454,6 +519,14 @@ def demo() -> None:
 #    (`test` 가 MENU 에만 있고 ACTIONS 에는 없었다). 같은 사실을 두 곳에 두면
 #    갈라진다 — D-99 와 같은 형태다.
 #    「미구현」 표기도 여기 적지 않는다. @stub 이 붙었는지로 판정한다.
+#
+# 🔴 **키가 겹치면 뒤엣것은 영영 안 눌린다** (2026-09-08 · D-162).
+#    `g` 가 「받은 파일 등록」과 「Phase 게이트 판정」에, `c` 가 「오픈API 수집」과
+#    「커밋 전 점검」에 둘씩 있었다. 조회가 `next(...)` 라 **앞엣것만** 걸린다 —
+#    메뉴에는 네 줄이 다 보이는데 두 줄은 눌러도 다른 것이 돈다.
+#    ⛔ 그런데 **에러가 안 난다.** `g` 를 누르면 `register` 가 인자 없이 돌아
+#       「인자가 부족하다」는 그럴듯한 메시지를 낸다 — 게이트 판정이 안 돌았다는 말은 없다.
+#    ★ 등록을 `i`, 커밋 전 점검을 `l` 로 옮겼다. `g`·`c` 는 **표에 적힌 대로** 돌게 뒀다.
 
 
 def _menu_test() -> None:
@@ -478,8 +551,10 @@ MENU: list[tuple[str, str, object]] = [
     ("m", "판정매트릭스 빌드", matrix),
     ("p", "소스 실측 (저장 없음)", probe),
     ("n", "받은 파일 세기", count),
-    ("g", "받은 파일 등록", register),
+    ("i", "받은 파일 등록", register),
     ("c", "오픈API 수집", collect),
+    ("e", "전처리 추출", extract),
+    ("o", "원천 계측", scan),
     ("s", "프로젝트 사본", sync),
     SEP,
     ("4", "데이터 수집", collect),
@@ -491,7 +566,7 @@ MENU: list[tuple[str, str, object]] = [
     SEP,
     ("k", "API 키 현황", keys),
     ("g", "Phase 게이트 판정", gate),
-    ("c", "커밋 전 점검", check),
+    ("l", "커밋 전 점검", check),
     ("t", "테스트", _menu_test),
     ("f", "포맷·린트", fmt),
     ("q", "종료", None),
