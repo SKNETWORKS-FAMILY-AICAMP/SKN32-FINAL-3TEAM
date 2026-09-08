@@ -30,6 +30,7 @@ EXTRACTORS: dict[str, str] = {
     "mfds_hf_ingredient_board": "preprocess.mfds_hf",
     "mfds_special_use_guide": "preprocess.mfds_guide",
     "ftc_decisions_body": "preprocess.ftc_extract",
+    "mfds_press": "preprocess.mfds_press",
 }
 
 #: 원천 id → 계측 모듈. 🔴 **라벨을 만들지 않고 세기만 한다** — 산출물이 없다.
