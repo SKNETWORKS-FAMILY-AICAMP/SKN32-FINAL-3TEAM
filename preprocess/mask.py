@@ -528,6 +528,20 @@ def doc_org_names(text: str) -> list[str]:
     return sorted(seen, key=len, reverse=True)
 
 
+#: 🚨 마스킹 **직후 괄호 안의 원어 표기**. 「[업체](NGK Spark Plug Co., Ltd)」 꼴이다.
+#:    한글 상호는 지웠는데 원어가 남아 같은 법인이 그대로 드러난다.
+#:    ★ 새 판단이 아니다 — **이미 지우기로 판정된 그 법인**의 다른 표기다.
+#:    🚨 이것으로 외국 법인 누출의 **7%(38/500)만** 막힌다. 나머지 462건은 본문에
+#:       그냥 실명으로 나오고(「한일홀딩스」·「프리스케일 세미컨덕터즈 리미티드」),
+#:       한글의 「법인격이 곧 경계」 전략이 영문에는 통하지 않는다 — **미결이다**.
+_MASKED_PAREN = re.compile(r"(\[(?:업체|대표)\])\s*\([^)\n]{2,80}\)")
+
+
+def mask_paren_alias(text: str) -> str:
+    """`[업체](Original Name)` 의 괄호를 지운다. 앞의 마스킹 자국은 남긴다."""
+    return _MASKED_PAREN.sub(r"\1", text)
+
+
 def mask_org_bare(text: str, names: list[str]) -> tuple[str, list[str]]:
     """문서 자기 사전으로 맨몸 언급을 `[업체]` 로. **무엇을 지웠는지 함께 돌려준다.**
 
@@ -595,6 +609,7 @@ def apply_policy(text: str, bare: str, source: str) -> str:
         names = doc_org_names(text)  # 🚨 자리 치환 **전에** 캔다 — 치환 뒤엔 이름이 없다
         text = mask_org_slots(text)
         text, _ = mask_org_bare(text, names)  # 2패스 — 같은 문서의 맨몸 언급
+        text = mask_paren_alias(text)  # 마스킹 직후 괄호 안 원어 표기
     if "addr" in todo:
         text = mask_address(text)
     if "brand" in todo:
