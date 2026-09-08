@@ -24,6 +24,8 @@ from preprocess.mask import (
     MASK_ORG,
     POLICY,
     POLICY_WORDS,
+    Ledger,
+    Trace,
     apply_policy,
     mask,
     mask_address,
@@ -418,7 +420,9 @@ def test_log_does_not_change_output() -> None:
     text = "원사업자인 케이티건설 주식회사가 수급사업자인 문원건설 주식회사에 위탁하였다"
     log: list[dict] = []
     assert apply_policy(text, "", "ftc", log) == apply_policy(text, "", "ftc")
-    assert log and all({"규칙", "원문", "자리"} <= set(x) for x in log)
+    # 🔄 2026-09-08 D-165 — `원문` 은 더 이상 담지 않는다. 개수와 규칙만 남는다.
+    assert log and all({"규칙", "자리"} <= set(x) for x in log)
+    assert all("원문" not in x for x in log)
 
 
 def test_slot_prefix_keeps_particle_after_sign() -> None:
@@ -457,3 +461,53 @@ def test_person_axis_is_separable() -> None:
     text = "모유분석 000건"
     assert apply_policy(text, "", "mfds_sanctions") != text  # person 이 켜진 원천
     assert mask(text, "") == text  # 🚨 `mask()` 는 이제 사람을 건드리지 않는다
+
+
+# ─────────────────────────────────────────────────────────────
+#  🔴 치환 원장은 **개수**를 남기고 원문은 남기지 않는다 (D-165)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_ledger_keeps_no_source_by_default() -> None:
+    """🔴 ⛔ 2026-09-08 — `ftc_stage.jsonl` 에 실명·주소 원문이 416줄 들어 있었다.
+
+    레지스트리 `masking:` 은 「원문 미보관 (D-17)」이라고 말하고 있었다.
+    ★ 그냥 `list` 를 넘겨도 안전해야 한다 — **안전한 쪽이 기본값**이다.
+    """
+    for log in (Ledger(), []):
+        mask_person("대표이사 김홍익을 고발한다", log)
+        assert log, "원장이 비었다 — 개수는 남아야 한다"
+        assert all("원문" not in r for r in log), f"원문이 남았다: {log}"
+        assert all(r["규칙"] and r["자리"] for r in log)
+
+
+def test_trace_is_the_only_way_to_see_the_source() -> None:
+    """진단은 `Trace` 로만. 🚨 이 값을 파일로 쓰는 코드를 만들지 않는다."""
+    log = Trace()
+    mask_person("대표이사 김홍익을 고발한다", log)
+    assert any(r.get("원문") for r in log)
+
+
+def test_count_alone_catches_a_broken_rule() -> None:
+    """★ 원문을 빼도 검출은 된다 — 2026-09-08 에 결손을 잡은 것은 **416 → 398 이라는 수**였다."""
+    a, b = Ledger(), Ledger()
+    mask_person("대표이사 김홍익을 고발한다", a)
+    mask_person("대표이사 김홍익을 고발한다", b)
+    assert len(a) == len(b)
+    mask_person("추가로 대표이사 박철수도", b)
+    assert len(b) > len(a)  # 규칙이 움직이면 수가 달라진다
+
+
+def test_rare_surname_is_masked() -> None:
+    """⛔ 「원」이 성씨 목록에 없어 「대표이사 **원호봉**을」이 산출물에 남아 있었다."""
+    assert "원호봉" not in mask_person("피심인 및 대표이사 원호봉을 각각 고발한다")
+    assert "구상모" not in mask_person("대표이사 구상모")
+
+
+def test_widening_surnames_does_not_eat_form_words() -> None:
+    """🚨 「대표자 **성명**」의 「성」은 실제 성씨다 — 넓히면 양식 문구가 지워진다.
+
+    ⛔ 그래서 성씨 확장과 불용어는 **같이 가야 한다.** 하나만 하면 다른 쪽이 깨진다.
+    """
+    assert mask_person("대표자 성명 기재") == "대표자 성명 기재"
+    assert mask_person("사장 에서 물러난") == "사장 에서 물러난"

@@ -41,11 +41,12 @@ import collections
 import json
 import pathlib
 import re
+import sys
 import xml.etree.ElementTree as ET
 
 from preprocess import stage
 from preprocess.ftc_triage import CORE, _text, classify
-from preprocess.mask import anchor_ftc, apply_policy
+from preprocess.mask import Ledger, Trace, anchor_ftc, apply_policy
 from preprocess.text import sep_norm
 
 RAW = pathlib.Path("data/raw/ftc")
@@ -150,7 +151,21 @@ def main() -> int:
         action="store_true",
         help=f"{STAGE} 에 단계 산출물을 적고 **지난 판과 맞대 본다** (D-143)",
     )
+    ap.add_argument(
+        "--trace",
+        action="store_true",
+        help="🔴 치환된 **원문**을 화면에 찍는다 (진단용). 저장 경로와 같이 쓸 수 없다",
+    )
     a = ap.parse_args()
+
+    # 🔴 진단과 저장을 같이 켤 수 없다 (D-165). 켤 수 있게 두면 언젠가 켠 채로 돈다.
+    if a.trace and (a.stage or a.dump):
+        print(
+            "🔴 --trace 는 --stage·--dump 와 같이 쓸 수 없다.\n"
+            "   원문은 화면에서만 본다 — 파일로 나가면 그때부터 보관이다 (D-17 · D-165).",
+            file=sys.stderr,
+        )
+        return 1
 
     if not RAW.exists():
         print(f"🚨 {RAW} 가 없다 — 먼저 uv run python -m collect.ftc_body")
@@ -208,10 +223,13 @@ def main() -> int:
 
         # 🔴 뽑기 **전에** 마스킹한다. 뽑은 뒤에 걸면 문구 안의 업체명이 남는다.
         _, bare = anchor_ftc(r)
-        # 🔴 **치환 원장** (D-144). 무엇을 무엇으로 바꿨는지 적는다.
-        #    🚨 원장에는 **지워진 실명**이 들어 있다 — `stage_rows`(=`data/`) 로만 간다.
-        #       배포되는 `rows`(=`OUT`) 와 **자료구조가 아예 분리돼 있다**. 섞이면 실명이 배포된다.
-        mlog: list[dict] = []
+        # 🔴 **치환 원장** (D-144). 무엇을 몇 번 바꿨는지 적는다.
+        #    🔄 2026-09-08 D-165 — **원문은 안 담는다.** 예전에는 담았고, 그래서
+        #       `ftc_stage.jsonl` 에 실명 6건·괄호원어 14건·주소 36건이 남아 있었다.
+        #       ★ 배포물(`rows`→`OUT`)과 자료구조가 분리돼 있어 배포되진 않았다 —
+        #         그 방어는 유효했다. 다만 문서는 「원문 미보관」을 말하고 있었다.
+        #    ★ `--trace` 로 볼 수 있고, 그 경로는 **저장을 거부한다.**
+        mlog = Trace() if a.trace else Ledger()
         # 분류·유형 판별은 **정규화문**으로 한다 (D-117 — 원문으로 classify 하면 135건이 샌다)
         masked = apply_policy(order, bare, "ftc")
         # 🔴 저장은 **원문**으로 한다. 원장도 이쪽에 건다 — 나가는 것이 이쪽이다
@@ -308,6 +326,16 @@ def main() -> int:
         print(
             "    🚨 유형은 문구가 아니라 **주문의 서술어**에서 온다. 없으면 「근거절」로 사람이 붙인다"
         )
+
+    if a.trace:
+        print("\n🔴 치환된 원문 — **화면에만 찍는다. 저장되지 않는다** (D-165)")
+        seen = 0
+        for row in stage_rows:
+            for m in row["치환원장"]:
+                if "원문" in m:
+                    print(f"    {row['seq']:>7}  {m['규칙']:12} {m['원문'][:40]!r} → {m['자리']}")
+                    seen += 1
+        print(f"  총 {seen:,}건. 🚨 이 화면을 파일로 옮기지 않는다 — 필요하면 다시 돌린다.")
 
     if a.stage:
         print()
