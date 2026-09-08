@@ -82,6 +82,12 @@ MASK_BRAND = "[상표]"
 POLICY: dict[str, frozenset[str]] = {
     "ftc": frozenset({"org", "brand", "addr", "person"}),
     "mfds_sanctions": frozenset({"org", "person"}),
+    # ── 2026-09-08 판정 (검토요청_2026-09-08_마스킹정책_3종.md §4)
+    # 🔴 해설서만 `person` 을 뺀다 — 실측 오탐 11 · 진짜 0. 원천이 사람이 아닌 것을
+    #    같은 기호로 가려서, 이 축이 **판정 대상 문구**를 먹는다 (D-157).
+    "mfds_special_use_guide": frozenset({"org", "brand", "addr"}),
+    "mfds_casebook": frozenset({"org", "brand", "addr", "person"}),
+    "mfds_hf_ingredient_board": frozenset({"org", "brand", "addr", "person"}),
 }
 
 #: 정책 키 ↔ 레지스트리 문언. 대조 테스트가 이걸 쓴다.
