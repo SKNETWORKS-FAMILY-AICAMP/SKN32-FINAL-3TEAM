@@ -60,7 +60,7 @@ mfds_sanctions:
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-07
+  collected_at: 2026-09-08
 
 mfds_press:
   decided_by: 오한빈
@@ -521,4 +521,4 @@ mfds_special_use_guide:
   decided_at: 2026-09-07
   reviewed_by: 권소라
   reviewed_at: 2026-09-07
-  collected_at: null
+  collected_at: 2026-09-08

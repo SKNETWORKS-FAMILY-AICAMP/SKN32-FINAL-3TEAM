@@ -86,8 +86,16 @@ RAW = ROOT / "data" / "raw"
 #    저장소 뿌리가 아니라서 `from collect import registry` 가 실패한다.
 #    scripts/ 에 `__init__.py` 를 두어 `-m` 으로 부르게 하는 방법도 있지만,
 #    그러면 다른 스크립트의 호출법까지 같이 바뀐다. 여기서만 흡수한다.
-if str(ROOT) not in sys.path:
+# 🔄 **2026-09-08 — 「들어 있나」가 아니라 「맨 앞인가」를 본다.**
+#    ⛔ 첫 판은 `if str(ROOT) not in sys.path` 였다. `PYTHONPATH=.` 로 부르면
+#       ROOT 가 **이미 들어 있지만 `scripts/` 뒤**라서 가드가 통과되고,
+#       `from collect import registry` 가 `scripts/collect.py` 를 집어 죽었다.
+#    ★ 막으려던 것이 「가려짐」인데 검사한 것은 「존재」였다 — 같은 종류의 실수를
+#      오늘 마스킹에서도 했다(계수기가 0 인 것과 대상이 사라진 것은 다르다).
+if sys.path and sys.path[0] != str(ROOT):
     sys.path.insert(0, str(ROOT))
+
+from collect import registry  # noqa: E402 — 위 sys.path 조정 뒤여야 한다
 
 
 def _rows() -> list[dict[str, Any]]:
@@ -203,7 +211,37 @@ def check_data(*, verify_hash: bool) -> int:
         print("     🚨 두 가지가 섞여 있고, 하나는 정상이다 —")
         print("        ㄱ. G2 소스는 사실 추출 뒤 원본을 지우는 것이 규칙이다 (D-17)")
         print("        ㄴ. 다른 클론에서 받은 것은 여기 없는 것이 정상이다 (D-19)")
-        print("     어느 쪽인지는 source_id 별 등급을 보고 판단한다.")
+        # 🔄 **2026-09-08 — 「등급을 보고 판단한다」를 doctor 가 대신 한다.**
+        #    사람에게 넘기면 아무도 안 본다. 실제로 73건이 그렇게 남아 있었다.
+        #    ★ 등급을 적용하면 **설명 ㄱ이 배제되는 원천**이 드러나고, 거기는
+        #      「정상일 수도 있다」가 아니라 **재수집으로만 닫힌다.**
+        by_sid: collections.Counter[str] = collections.Counter()
+        for path_str in missing:
+            sid = by_path[path_str][0].get("source_id") or "<source_id 없음>"
+            by_sid[sid] += 1
+        g2, rest = [], []
+        for sid, n in by_sid.most_common():
+            try:
+                grade = str(registry.spec(sid).get("grade", "?"))
+            except Exception:  # noqa: BLE001 — 미등록 자체가 검사 결과다
+                grade = "🔴 미등록"
+            (g2 if grade.startswith("G2") else rest).append((sid, n, grade))
+        if g2:
+            print(
+                f"     ✅ ㄱ 으로 설명되는 것 {sum(n for _, n, _ in g2):,}개 (G2 — 지우는 것이 규칙)"
+            )
+            for sid, n, grade in g2:
+                print(f"       {sid:26} {n:>5,}  {grade}")
+        if rest:
+            print(
+                f"     🚨 ㄱ 이 **배제되는** 것 {sum(n for _, n, _ in rest):,}개 — 설명이 ㄴ 하나뿐이다"
+            )
+            for sid, n, grade in rest:
+                print(f"       {sid:26} {n:>5,}  {grade}")
+            print("        ★ 「다른 클론에서 받았다」와 「유실됐다」는 원장으로 구분되지 않는다.")
+            print(
+                "          **이 기기에서 재수집하면 닫힌다** — 동일하면 수집기가 스킵한다(규약 2)."
+            )
         # 🚨 디렉터리로 묶을 때 **문자열 앞자리로 세지 않는다.**
         #    `data/raw/mfds_press` 는 `data/raw/mfds_press_pdf` 의 앞자리이기도 해서
         #    startswith 로 세면 107개가 양쪽에 잡혀 합이 실제보다 커진다.
@@ -246,8 +284,6 @@ def check_data(*, verify_hash: bool) -> int:
                 print(f"       … 외 {len(orphans) - 20:,}개")
 
     # ── ④ 원천별 요약 (게이트 18 겸) ───────────────────────
-    from collect import registry
-
     uniq: collections.Counter[str] = collections.Counter()
     size: collections.Counter[str] = collections.Counter()
     on_disk: collections.Counter[str] = collections.Counter()
