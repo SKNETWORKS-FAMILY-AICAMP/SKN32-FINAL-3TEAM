@@ -99,7 +99,13 @@ def _label_fill(t: Table) -> dict[int, str]:
 def extract(path: pathlib.Path) -> list[dict]:
     """레코드들. 🚨 마스킹은 여기서 하지 않는다 — 부르는 쪽이 정책을 지고 건다."""
     rows: list[dict] = []
-    for idx, (t, lead) in enumerate(tables_with_lead(path)):
+    # 🚨 앞 문단 창을 **12** 로 둔다. 6 이면 표 51 이 놓친다 —
+    #    그 표 앞에는 제품유형 목록(「신장질환자용식품」…)이 여섯 줄 넘게 깔려 있어
+    #    블록 이름(「심의시 '삭제'판정을 받은 문구」)이 창 밖으로 밀린다.
+    # ★ 창을 넓히는 것은 안전하다 — `block_of` 가 **가장 가까운 것**을 고르기 때문이다.
+    #   ⛔ 대신 「머리글이 부당한 표시면 삭제로 본다」로 메우려다 말았다. 그것은 추정이고,
+    #      추정한 블록은 틀려도 티가 안 난다. 근거는 문서 안에 있어야 한다.
+    for idx, (t, lead) in enumerate(tables_with_lead(path, lead=12)):
         why = t.check()
         if why:
             raise ValueError(f"표 {idx} 가 원천의 선언과 어긋난다 — {why}")
