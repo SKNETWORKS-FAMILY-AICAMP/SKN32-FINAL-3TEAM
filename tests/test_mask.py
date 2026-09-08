@@ -388,3 +388,26 @@ def test_foreign_org_keeps_lead_words() -> None:
     out = mask_org_foreign("중국의 샤오미 테크놀로지 코 엘티디 등이 있으며")
     assert out.startswith("중국의 ") and out.endswith(" 등이 있으며")
     assert "샤오미" not in out
+
+
+# ══ 치환 원장 (D-144 · 2026-09-08) ═════════════════════════════════════
+
+
+def test_log_does_not_change_output() -> None:
+    """🔴 **켜는 것이 결과를 바꾸면 계측이 아니다.** 원장은 곁에서 적기만 한다."""
+    text = "원사업자인 케이티건설 주식회사가 수급사업자인 문원건설 주식회사에 위탁하였다"
+    log: list[dict] = []
+    assert apply_policy(text, "", "ftc", log) == apply_policy(text, "", "ftc")
+    assert log and all({"규칙", "원문", "자리"} <= set(x) for x in log)
+
+
+def test_slot_prefix_keeps_particle_after_sign() -> None:
+    """🔴 **조사를 회사명으로 먹지 않는다** — 치환 원장이 잡아낸 버그 (63건).
+
+    ⛔ 「석정건설**(주)에게**」에서 기호 뒤 캡처가 「에게」를 이름으로 잡아
+       「석정건설[업체]」가 됐다. 조사가 통째로 사라지고 이름은 남았다.
+    🚨 `residual_orgs` 는 `_ONLY_PARTICLE` 로 이걸 걷어내고 있었다 —
+       **세는 쪽만 고쳐 두면 지우는 쪽이 조용히 틀린다.**
+    """
+    assert mask_org_slots("석정건설(주)에게 위탁한") == f"{MASK_ORG}에게 위탁한"
+    assert mask_org_slots("㈜미래이엔지에게 위탁한") == f"{MASK_ORG}에게 위탁한"

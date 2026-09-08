@@ -72,6 +72,12 @@ def load(path: pathlib.Path) -> dict[str, dict]:
     return out
 
 
+#: 🚨 **산출물이 같아도 본문은 바뀔 수 있다.** 2026-09-08 에 조사 먹힘을 고쳤더니
+#:    `주문_마스킹` 이 63곳 바뀌었는데 `문구` 는 그대로여서 「내용바뀜 0」으로 보고됐다.
+#:    산출물만 보면 **마스킹 규칙 변경이 통째로 안 보인다** — 축을 둘로 나눈다.
+TEXT_FIELD = "주문_마스킹"
+
+
 def compare(old: dict[str, dict], new: dict[str, dict], field: str = "문구") -> dict:
     """지난 판과 이번 판. **원천 탓과 규칙 탓을 갈라서** 센다.
 
@@ -85,11 +91,17 @@ def compare(old: dict[str, dict], new: dict[str, dict], field: str = "문구") -
         return sum(len(d[k].get(field) or []) for k in keys)
 
     changed = [k for k in both if old[k].get(field) != new[k].get(field)]
+    text_changed = [k for k in both if old[k].get(TEXT_FIELD) != new[k].get(TEXT_FIELD)]
+    n_repl = sum(len(r.get("치환원장") or []) for r in new.values())
     rules = {r.get("rule") for r in new.values() if r.get("rule")}
     return {
         "문서_추가": len(added),
         "문서_사라짐": len(gone),
         "문서_내용바뀜": len(changed),
+        "문서_본문바뀜": len(text_changed),
+        "예시_본문바뀐문서": sorted(text_changed)[:8],
+        "치환_이번판": n_repl,
+        "치환_지난판": sum(len(r.get("치환원장") or []) for r in old.values()),
         "예시_바뀐문서": sorted(changed)[:8],
         f"{field}_지난판": n(old, ko),
         f"{field}_이번판": n(new, kn),
@@ -114,8 +126,13 @@ def report(c: dict, field: str = "문구") -> None:
     if c["🚨판섞임"]:
         print("    🚨 **판이 섞였다** — 규칙을 고친 뒤 일부만 재생성됐다. 전량 재생성할 것")
     print(
-        f"    문서   추가 {c['문서_추가']:+,} · 사라짐 -{c['문서_사라짐']:,} · 내용바뀜 {c['문서_내용바뀜']:,}"
+        f"    문서   추가 {c['문서_추가']:+,} · 사라짐 -{c['문서_사라짐']:,}"
+        f" · 산출바뀜 {c['문서_내용바뀜']:,} · **본문바뀜 {c['문서_본문바뀜']:,}**"
     )
+    if c["문서_본문바뀜"] and not c["문서_내용바뀜"]:
+        print("    🚨 **산출물은 같은데 본문이 바뀌었다** — 마스킹 규칙이 움직였다는 뜻이다")
+        print(f"       예: {', '.join(c['예시_본문바뀐문서'])}")
+    print(f"    치환   {c['치환_지난판']:,} → {c['치환_이번판']:,}건 (치환 원장 · D-144)")
     print(f"    {field}   {c[f'{field}_지난판']:,} → {c[f'{field}_이번판']:,}")
     print(f"      ├ 원천 탓 {c[f'{field}_원천탓']:+,}   (문서가 늘거나 줄어서)")
     print(f"      └ 규칙 탓 {c[f'{field}_규칙탓']:+,}   ← **이쪽이 우리가 한 일이다**")

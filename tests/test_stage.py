@@ -52,3 +52,17 @@ def test_detects_mixed_rule_versions() -> None:
     mixed = {"1": _row("1", ["가"], rule="r1"), "2": _row("2", ["나"], rule="r2")}
     assert compare({}, mixed)["🚨판섞임"] is True
     assert compare({}, {"1": _row("1", ["가"])})["🚨판섞임"] is False
+
+
+def test_text_change_is_visible_even_when_output_is_same() -> None:
+    """🚨 **산출물이 같아도 본문은 바뀔 수 있다.**
+
+    2026-09-08 에 조사 먹힘을 고쳤더니 `주문_마스킹` 이 63곳 바뀌었는데
+    `문구` 는 그대로여서 「내용바뀜 0」으로 보고됐다.
+    산출물만 보면 **마스킹 규칙 변경이 통째로 안 보인다.**
+    """
+    old = {"1": {"seq": "1", "문구": ["가"], "주문_마스킹": "석정건설[업체] 위탁", "rule": "r1"}}
+    new = {"1": {"seq": "1", "문구": ["가"], "주문_마스킹": "[업체]에게 위탁", "rule": "r2"}}
+    c = compare(old, new)
+    assert c["문서_내용바뀜"] == 0  # 산출물은 같다
+    assert c["문서_본문바뀜"] == 1  # 🚨 그래도 본문은 바뀌었다

@@ -192,7 +192,11 @@ def main() -> int:
 
         # 🔴 뽑기 **전에** 마스킹한다. 뽑은 뒤에 걸면 문구 안의 업체명이 남는다.
         _, bare = anchor_ftc(r)
-        masked = apply_policy(order, bare, "ftc")
+        # 🔴 **치환 원장** (D-144). 무엇을 무엇으로 바꿨는지 적는다.
+        #    🚨 원장에는 **지워진 실명**이 들어 있다 — `stage_rows`(=`data/`) 로만 간다.
+        #       배포되는 `rows`(=`OUT`) 와 **자료구조가 아예 분리돼 있다**. 섞이면 실명이 배포된다.
+        mlog: list[dict] = []
+        masked = apply_policy(order, bare, "ftc", mlog)
 
         # 🔴 계측 — 마스킹을 지나지 않은 문구. **산출물에는 쓰지 않는다** (D-17).
         before = phrases_in(order)
@@ -208,6 +212,7 @@ def main() -> int:
                 "사건명": apply_policy(name, bare, "ftc"),
                 "주문_마스킹": masked,
                 "문구": ps,
+                "치환원장": mlog,
             }
         )
         for q in QUOTE.findall(masked):
