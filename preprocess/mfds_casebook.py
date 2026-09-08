@@ -54,6 +54,8 @@ import random
 import re
 import sys
 
+from preprocess.text import quoted
+
 SOURCE_ID = "mfds_casebook"
 RAW_DIR = pathlib.Path("data/raw") / SOURCE_ID
 OUT = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
@@ -92,8 +94,6 @@ _GROUP = re.compile(r"^부당광고 유형 및 사례\s*\((\d+)\)$")
 _ITEM = re.compile(r"^(\d+)\.\s*(.+)$")
 _HO_CITE = re.compile(r"제8조\s*제1항\s*제(\d)호")
 _MOK = re.compile(r"\[별표\s*1\]\s*(\d)\.\s*.*?\s([가-힣])\.\s")
-#: 인용부호. 🚨 원천이 여는 따옴표로 닫기도 한다(「‘난임예방‘」) — 짝을 안 따진다.
-_QUOTES = (re.compile(r"[‘’]([^‘’\n]{1,80})[‘’]"), re.compile(r"[“”]([^“”\n]{1,120})[”“]"))
 
 
 def _n(s: str) -> str:
@@ -193,11 +193,14 @@ def _types(hos: list[int]) -> tuple[list[str], list[str]]:
 
 
 def quotes(text: str) -> list[str]:
-    """인용부호 안의 표현. **이것이 이 원천의 「광고 문구」다** — 캡처 이미지는 안 쓴다."""
-    out: list[str] = []
-    for pat in _QUOTES:
-        out += [_n(x) for x in pat.findall(text)]
-    return [x for x in dict.fromkeys(out) if x]
+    """인용부호 안의 표현. **이것이 이 원천의 「광고 문구」다** — 캡처 이미지는 안 쓴다.
+
+    🚨 계수기는 `preprocess.text.quoted` **하나뿐이다** (D-160). 여기서는 종수만 쓰므로
+       중복을 접는다 — `evasion_scan` 은 회수도 쓰기 때문에 접지 않는다.
+    ★ 가족을 전부 열어 둬도 결과가 같다는 것을 재 봤다 (2026-09-08 · 250종 == 250종) —
+      Ⅱ·Ⅲ부 레코드 글에는 `「」`·`""` 인용이 없다. 그래서 기본값을 그대로 쓴다.
+    """
+    return list(dict.fromkeys(quoted(text)))
 
 
 def own_text(rec: dict) -> str:
@@ -429,7 +432,9 @@ def main() -> int:
             for r in pick:
                 f.write(json.dumps({**r, "붙인이": "", "붙인날": ""}, ensure_ascii=False) + "\n")
         print(f"\n  ⓒ 검증셋 {len(pick):,}건 → {SHEET}  (seed={a.seed} · 후보가 둘인 5호만)")
-        print("     🚨 `확정유형` 은 **사람이** 채운다. AI 가 채우면 홀드아웃이 자기 채점이 된다.")
+        print(
+            "     🚨 `확정유형` 은 **사람이** 채운다 — 추출기가 채우면 홀드아웃이 자기 채점이 된다."
+        )
 
     if a.dump:
         out, changed, log = masked(rows)

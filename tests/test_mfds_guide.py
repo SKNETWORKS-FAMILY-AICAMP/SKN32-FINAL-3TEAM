@@ -9,7 +9,14 @@
 from __future__ import annotations
 
 from preprocess.hwp import Cell, Table
-from preprocess.mfds_guide import CANDIDATES, REGIME, block_of, extract  # noqa: F401
+from preprocess.mfds_guide import (  # noqa: F401
+    CANDIDATES,
+    MASK_FIELDS,
+    REGIME,
+    block_of,
+    extract,
+    masked,
+)
 from scripts.collect import CANDIDATE_TYPES, VIOLATION_TYPES
 
 
@@ -53,3 +60,30 @@ def test_table_check_is_enforced_before_extract() -> None:
     """🔴 어긋난 표에서 라벨을 만들지 않는다 — 파싱 오류는 데이터에 박히면 못 되돌린다."""
     t = Table(rows=2, cols=1, row_cells=(1, 1), cells=[Cell(0, 0, 1, 1)])
     assert t.check()  # 선언 (1,1) 인데 셀이 하나뿐이다
+
+
+def test_masking_keeps_order_and_count() -> None:
+    """🔴 `--sheet` 가 마스킹 사본에서 뽑는다 — 그래도 **같은 seed 면 같은 행**이어야 한다 (D-54).
+
+    마스킹이 순서나 개수를 바꾸면 재현 조건이 깨진다. 그래서 여기를 고정한다.
+    """
+    rows = [{"종류": "위반문구", "원천라벨": "가", "문구": f"문구{i}"} for i in range(5)]
+    out, _ = masked(rows)
+    assert len(out) == len(rows)
+    assert [r["원천라벨"] for r in out] == [r["원천라벨"] for r in rows]
+
+
+def test_masking_is_applied_to_the_sheet_fields() -> None:
+    """⛔ 2026-09-08 까지 `--sheet` 만 원문을 썼다. `data/derived/` 에 떨어지면 D-17 대상이다.
+
+    🚨 그때도 **깨끗해 보였다** — 이 원천의 상호는 3,037문구 중 2건뿐이라 표본에 안 걸렸다.
+       **오늘 깨끗한 것은 표본 운이지 규칙이 아니다.**
+    """
+    out, changed = masked([{"문구": "㈜oo과 전략적 MOU를 체결했습니다"}])
+    assert out[0]["문구"] != "㈜oo과 전략적 MOU를 체결했습니다"
+    assert changed["문구"] == 1
+
+
+def test_mask_fields_cover_every_text_that_leaves() -> None:
+    """🚨 나가는 글은 전부 지나야 한다 — `원천라벨` 에도 원천의 표기가 들어온다."""
+    assert set(MASK_FIELDS) == {"문구", "수정문구", "원천라벨"}
