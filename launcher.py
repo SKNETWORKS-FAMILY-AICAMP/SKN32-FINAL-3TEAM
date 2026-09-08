@@ -166,12 +166,30 @@ def keys(
 
 
 @app.command()
-@stub("W1", "scripts/doctor.py 본문 구현 — 지금은 검사 목록만 있는 자리표시자다")
-def doctor() -> None:
-    """내 PC 설정이 팀과 같은지 검사한다.
+def doctor(
+    hash_check: bool = typer.Option(False, "--hash", help="전 파일 해시를 다시 계산한다 (느리다)"),
+) -> None:
+    """내 PC 의 데이터가 원장과 맞는지 검사한다 — 원장 ↔ 디스크 대조.
 
     틀린 것을 알리는 데서 끝내지 않고 **어떻게 고치는지**까지 낸다 (D-51 · D-89).
+
+    🔄 **2026-09-08 — `@stub` 을 뗀다. 검사는 있는데 부르는 길이 없었다.**
+
+       `scripts/doctor.py --data` 는 09-06 부터 돌아가고 있었는데 이 명령이
+       자리표시자여서 **메뉴에서 부를 수 없었다.** 그래서 아무도 안 돌렸고,
+       「원장에 있는데 이 기기에 없는 파일 73개」가 그동안 보이지 않았다.
+       그중 `mfds_sanctions` 는 **54개 전부**가 없는데 `collected_at` 은 찍혀 있다.
+
+    ★ **만들어 두고 부르지 않는 검사는 없는 검사다.** 오늘 마스킹에서 배운 것과
+      같은 자리다 — 세는 쪽만 있고 그것을 보는 길이 없으면 조용히 틀린다.
+
+    🚨 게이트가 아니다 (D-89). 답이 **기기마다 다르므로** `check` 에 넣지 않는다.
+       🟡(내 기기에 없음)로는 실패하지 않고, 🔴(출처 불명·해시 불일치)만 실패한다.
     """
+    args = ["uv", "run", "python", "scripts/doctor.py", "--data"]
+    if hash_check:
+        args.append("--hash")
+    raise typer.Exit(run(*args))
 
 
 @app.command(

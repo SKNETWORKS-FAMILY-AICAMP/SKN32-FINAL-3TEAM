@@ -156,6 +156,79 @@ def measure(source_ids: list[str], use: str) -> int:
     return worst
 
 
+#: 🔴 **응답이 데이터인지 오류인지 본다** (2026-09-08 · D-147).
+#:
+#: ⛔ 식품안전나라가 이렇게 답한 것을 **그대로 raw 에 저장했다** —
+#:      {"I-0050":{"total_count":"0","RESULT":{
+#:        "MSG":"09시~19시에는 서비스가 제한됩니다·","CODE":"ERROR-503"}}}
+#:    146바이트짜리 오류 본문이 `page_0001.json` 이 되고 원장에 「저장」으로 적혔다.
+#:    `mfds_hf_individual` 은 원래 파일이 없던 자리라 **doctor 가 다음부터 「있다」고 본다** —
+#:    **없는 것보다 나쁘다. 쓰레기가 정상으로 보인다.**
+#:
+#: ★ 화면에는 「전체 건수: 0」이 찍혔다. **신호는 있었는데 아무도 안 멈췄다.**
+def result_code(payload: bytes) -> tuple[str, str] | None:
+    """응답의 결과 코드와 메시지. 🚨 못 읽으면 None — **추정하지 않는다.**"""
+    try:
+        obj = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+    def walk(o: Any) -> tuple[str, str] | None:
+        if isinstance(o, dict):
+            if "CODE" in o and isinstance(o.get("CODE"), str):
+                return str(o["CODE"]), str(o.get("MSG") or "")
+            if "resultCode" in o:
+                return str(o["resultCode"]), str(o.get("resultMsg") or "")
+            for v in o.values():
+                got = walk(v)
+                if got:
+                    return got
+        elif isinstance(o, list):
+            for v in o:
+                got = walk(v)
+                if got:
+                    return got
+        return None
+
+    return walk(obj)
+
+
+#: 🔴 **행 수가 맞아도 전량이 아니다** (2026-09-08 · D-149).
+#:
+#:    `mfds_sanctions` 54장을 받으니 행 합계가 **5,381 = 원천 신고 5,381** 로 딱 맞았다.
+#:    **맞아서 아무도 안 볼 뻔했다.** 서로 다른 행을 세니 **5,122** 였다 —
+#:    236종이 완전히 같은 행으로 두 번 이상 왔다.
+#:
+#: ★ offset 페이징인데 **정렬 키가 유일하지 않으면** 페이지 경계에서 같은 행이 두 번 나오고,
+#:   그만큼 다른 행이 **빠진다.** 즉 259행이 중복인 만큼 **못 받은 행이 있을 수 있다.**
+#:   합계가 맞는 것은 「다 받았다」의 근거가 아니다.
+#:
+#: 🚨 여기서 하는 것은 **세는 것뿐이다.** 파싱해서 저장하지 않는다 (규약 2) —
+#:    `total_of` 가 이미 같은 이유로 payload 를 읽는다.
+def rows_of(payload: bytes) -> list[dict[str, Any]]:
+    """응답 안의 레코드 목록. 🚨 키 이름을 모르는 채로 찾는다 — 원천마다 다르다."""
+    try:
+        obj = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return []
+
+    def walk(o: Any) -> list[dict[str, Any]]:
+        if isinstance(o, list):
+            return [x for x in o if isinstance(x, dict)] if o else []
+        if isinstance(o, dict):
+            for v in o.values():
+                got = walk(v)
+                if got:
+                    return got
+        return []
+
+    return walk(obj)
+
+
+#: 성공으로 보는 코드. 🚨 **화이트리스트다** — 모르는 코드는 오류로 본다 (D-72 fail-closed).
+OK_CODES = frozenset({"INFO-000", "00", "0"})
+
+
 def collect(source_id: str, use: str, max_pages: int | None) -> int:
     registry.require(source_id, use=use)  # 🚨 규약 1 — 첫 줄
     ep = spec_of(source_id)
@@ -164,11 +237,25 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
     key = env.get("FOODSAFETY_KEY" if (ep.get("style") or "query") == "path" else "DATA_GO_KR_KEY")
 
     page, saved, total = 1, 0, None
+    n_rows, seen = 0, set()  # 🔴 D-149 — 행 수와 **서로 다른 행 수**를 따로 센다
     while True:
         payload = fetch_page(ep, key, page)
         if total is None:
             total = total_of(payload)
             print(f"  전체 건수: {total if total is not None else '읽지 못함 — 빈 장까지 받는다'}")
+        # 🔴 **저장하기 전에 오류인지 본다.** 저장한 뒤엔 쓰레기가 데이터로 보인다.
+        rc = result_code(payload)
+        if rc and rc[0] not in OK_CODES:
+            print(f"\n  🔴 원천이 오류를 돌려줬다 — {rc[0]}")
+            print(f"     {rc[1]}")
+            print("     🚨 **저장하지 않고 멈춘다.** 오류 본문을 raw 에 넣으면")
+            print("        다음부터 doctor 가 「파일 있음」으로 보아 **없는 것보다 나빠진다.**")
+            print("     🚨 mark_collected 도 찍지 않는다 — 「받았다」가 거짓이 된다.")
+            return 1
+        if page == 1 and total == 0:
+            print("\n  🔴 첫 장부터 전체 건수가 0 이다 — 저장하지 않고 멈춘다")
+            print("     오류 코드가 없어도 받을 것이 없다. 빈 장을 원장에 적을 이유가 없다.")
+            return 1
         path = store.save_raw(
             source_id,
             source_id,
@@ -176,6 +263,9 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
             payload,
             url=ep["url"],
         )
+        for row in rows_of(payload):
+            n_rows += 1
+            seen.add(hash(json.dumps(row, sort_keys=True, ensure_ascii=False)))
         if path:
             saved += 1
         print(f"  page {page:>4} · {len(payload):>9,} bytes {'저장' if path else '동일 — 스킵'}")
@@ -189,9 +279,32 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
             break
         page += 1
 
-    if saved:
+    # 🔴 **2026-09-08 — `--pages` 로 일부만 받고 「수집 완료」를 찍고 있었다.**
+    #    `--pages 1` 은 **탐침**이다. 54장 중 1장을 받고 `collected_at` 이 찍히면
+    #    원장이 「다 받았다」고 거짓말한다 — 그리고 아무도 다시 안 본다.
+    #    🚨 `mfds_hf_board.py` 는 같은 상황에서 안 찍는 규약을 지키고 있었다.
+    #       **한쪽 수집기만 고쳐 둔 규약은 규약이 아니다** (오늘 `_ONLY_PARTICLE` 과 같은 자리).
+    if max_pages:
+        print(f"  🚨 --pages {max_pages} 로 일부만 받았다 — mark_collected 를 찍지 않는다")
+    elif saved:
         registry.mark_collected(source_id)  # 규약 3 · 게이트 15
     print(f"\n{source_id} — {saved}장 저장 → data/raw/{source_id}/")
+    if n_rows:
+        dup = n_rows - len(seen)
+        print(
+            f"  받은 행 {n_rows:,} · 서로 다른 행 {len(seen):,}"
+            + (f" · 🚨 중복 {dup:,}" if dup else "")
+        )
+        if total is not None and n_rows == total and dup:
+            print(
+                "  🔴 **합계는 원천 신고와 맞는데 중복이 있다 — 그만큼 못 받은 행이 있을 수 있다.**"
+            )
+            print(
+                "     offset 페이징인데 정렬 키가 유일하지 않으면 경계에서 같은 행이 두 번 나오고"
+            )
+            print(
+                "     그만큼 다른 행이 빠진다. **합계가 맞는 것은 「다 받았다」의 근거가 아니다** (D-149)."
+            )
     if registry.is_g2(source_id):
         print("🚨 G2 다 — 사실 추출 후 원본을 지운다 (D-17 · store.drop_raw_for_g2)")
     return 0

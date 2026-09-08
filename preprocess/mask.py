@@ -221,7 +221,29 @@ def usable(bare: str) -> bool:
     return bool(bare.strip())
 
 
-def mask(text: str, bare: str) -> str:
+# ══ 치환 원장 (D-144 · 2026-09-08) ═════════════════════════════
+#
+# ★ **무엇을 무엇으로 바꿨는지 적는다.** 지금까지 마스킹 함수는 문자열만 돌려줬고,
+#   그래서 규칙이 문장을 먹어도 **무엇을 먹었는지 알 방법이 없었다** (D-142 의 643→619).
+#
+# 🚨 **이것은 「가역」이 아니다 — 「원장」이다.**
+#    각 패스는 **앞 패스가 이미 바꾼 글자** 위에서 돈다. 그래서 기록을 거꾸로 되짚어
+#    원문을 기계적으로 복원하는 것은 보장되지 않는다(겹침·조사 보존 때문).
+#    이 원장이 답하는 질문은 둘이다 —
+#      ① **무엇이 지워졌나** (과잉삭제 사후 추적 · 2인 확인 때의 원문 대조)
+#      ② **이 문서에서 `[업체]` 는 어떤 이름들이었나** (D-142 (가) 번호 붙이기의 근거)
+#    「복원된다」고 적으면 다음 사람이 그걸 믿는다. 못 하는 것은 못 한다고 적는다.
+#
+# 🔴 **원장에는 지워진 실명이 들어 있다.** `data/` 아래에만 쓰고 배포하지 않는다 (D-71).
+
+
+def _note(log: list[dict] | None, rule: str, src: str, dst: str) -> None:
+    """원장 한 줄. `log` 가 없으면 아무 일도 안 한다 — 기본 경로는 그대로다."""
+    if log is not None and src:
+        log.append({"규칙": rule, "원문": src, "자리": dst})
+
+
+def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
     """자유 텍스트에서 앵커의 변형을 `[업체]` 로, 가려진 이름을 `[대표]` 로 바꾼다.
 
     🚨 짧은 앵커는 **법인격이 붙은 형태만** 지운다 — 「㈜대상」은 지우고 「대상」은 남긴다.
@@ -229,12 +251,22 @@ def mask(text: str, bare: str) -> str:
     """
     if usable(bare):
         for v in variants(bare, with_bare=not is_short(bare)):
+            if v in text:
+                _note(log, "앵커", v, MASK_ORG)
             text = text.replace(v, MASK_ORG)
-    text = _REDACTED_NAME.sub(MASK_CEO, text)
+    text = _REDACTED_NAME.sub(
+        lambda m: _note(log, "가려진이름", m.group(0), MASK_CEO) or MASK_CEO, text
+    )
     # 🚨 직함을 남기고 이름만 지운다 — 「대표이사 [대표]」.
     #    직함까지 지우면 그 자리가 사람이었다는 사실이 사라져, 다음 사람이
     #    「여기 이름이 있었나」를 못 본다. 지운 자국은 남긴다.
-    return _TITLED_PERSON.sub(lambda m: m.group(1) + MASK_CEO, text)
+    return _TITLED_PERSON.sub(
+        lambda m: (
+            _note(log, "직함+이름", m.group(0)[len(m.group(1)) :], MASK_CEO)
+            or m.group(1) + MASK_CEO
+        ),
+        text,
+    )
 
 
 def residue(text: str, bare: str) -> int:
@@ -318,6 +350,76 @@ _ORG_SUFFIX = re.compile(r"([가-힣A-Za-z0-9]{2,12})\s*" + _ORG_FORM)
 #:    `_ORG_SUFFIX` 는 **잔여 계수**용이라 넓게 두고, 수집은 이쪽을 쓴다.
 _ORG_SUFFIX_WORD = re.compile(r"([가-힣A-Za-z0-9]{2,12})\s*" + _ORG_WORD)
 
+# ── 외국 법인격 ────────────────────────────────────────────────────────
+#
+# 🔄 **2026-09-08 — 「사전을 만들자」에서 출발했다가 모수가 틀렸다는 것을 먼저 알았다.**
+#
+#    잔여를 `ftc` 8,253건 **전 필드**로 세면 293건인데, 그중 **247건이 「이유」**다.
+#    「이유」는 산출물에 실리지 않는다. 산출물이 싣는 면(사건명·주문)으로 세면 **4건**,
+#    학습 입력인 `문구` 로 세면 **0 / 619** 다.
+#    ★ **계측은 배포면에서 한다.** 원천 전체를 세면 신호가 247:1 로 노이즈에 묻힌다.
+#
+# ★ 그리고 사전이 필요 없었다 — **회사 이름은 열린 집합이지만 법인격 표기는 닫힌 집합이다.**
+#   한글에서 잔여 0 을 만든 것이 `_ORG_WORD` 라는 닫힌 집합이었던 것과 같은 이치다.
+#   후보 상호 581종을 사람이 정리하는 대신, 표기 15종을 적는다.
+#
+# 🚨 **모호한 표기는 뺐다** — 컴퍼니·에이지·에스에이·케이케이·비브이·코·AB·AG·Oy·SA.
+#    일반어와 충돌한다. 「… 컴퍼니 리미티드」는 「리미티드」 쪽에서 걸리므로 손해가 없다.
+_ORG_WORD_FOREIGN = (
+    r"(?:(?:프라이빗\s+)?리미티드|엘티디|엘엘씨|엘엘피|아이엔씨|인코퍼레이티드"
+    r"|코퍼레이션|게엠베하|피티이|에스디엔\s+비에이치디)"
+)
+#: 🚨 영문은 낱말 경계만으로 부족하다. ⛔ 첫 판이 「Summer **Limited** Edition 출시」를
+#:    「[업체] Edition 출시」로 만들었다 — **마스킹이 학습 입력을 먹었다.**
+#:    그래서 뒤에 **영문 낱말이 더 오면 법인격으로 보지 않는다**(`(?!\s+[A-Za-z])`).
+#:    법인격은 상호의 **끝**에 온다. 「… Corporation Singapore Pte」는 끝의 Pte 에서 걸린다.
+#:    전량 실측(8,253건 · 사건명·주문)에서 영문 자리 23종이 **전부 실제 상호**였다 — 오탐 0.
+_ORG_WORD_FOREIGN_EN = (
+    r"(?<![A-Za-z])(?:Ltd|Limited|Inc|LLC|L\.L\.C|Corp|Corporation|GmbH"
+    r"|Pte|Pty|PLC|N\.V|B\.V|S\.p\.A|Sdn\s+Bhd)\.?(?![A-Za-z])(?!\s+[A-Za-z])"
+)
+_ORG_FORM_FOREIGN = f"(?:{_ORG_WORD_FOREIGN}|{_ORG_WORD_FOREIGN_EN})"
+
+#: 🚨 **외국 상호는 여러 어절이다** — 「엠아이씨티더블유 서플라이 체인 서비스 싱가포르
+#:    프라이빗 리미티드」. 한글처럼 한 어절만 잡으면 **법인격만 사라지고 이름은 남는다.**
+#:
+#: ⛔ 첫 판이 정확히 그랬다. 한 어절 판으로 재니 잔여가 11 → 0 이 되었는데,
+#:    실제 출력에는 「오션스카이 인터넷 인포메이션 [업체]」가 남아 있었다.
+#:    **세는 것이 법인격이라서 이름이 남은 것을 못 봤다** — 계수기가 0 이 되는 것과
+#:    대상이 사라지는 것은 다른 일이다. 그래서 이 규칙은 **바뀐 자리를 눈으로 확인**하고 넣었다.
+_ORG_RUN_FOREIGN = re.compile(
+    # 🚨 법인격 **바로 앞** 어절만 1자를 허용한다 — 「샤오미 테크놀로지 **코** 엘티디」.
+    #    2자를 요구했더니 이 문장이 통째로 안 걸렸다. 과잉삭제보다 **누락이 더 조용하다.**
+    r"((?:[가-힣A-Za-z0-9&]{2,15}\s+){0,6}[가-힣A-Za-z0-9&]{1,15}\s*" + _ORG_FORM_FOREIGN + r")"
+)
+
+#: 이름 **앞에서 멈추는 말**. 여기서 안 멈추면 「피심인」·「중국의」·항목번호까지 먹는다.
+#: 🚨 `_slot_sub` 가 조사를 남기는 것과 같은 이유다 — 필요 이상으로 지우는 실패는 조용하다.
+_FOREIGN_LEAD_STOP = re.compile(
+    r"^(?:피심인|피심인들|신청인|이의신청인|원사업자|수급사업자|사업자|위반사업자"
+    r"|피취득회사|취득회사|계열회사|모회사|자회사|주식회사"
+    r"|및|또는|그리고|등|이하|기타|위|해당|당해|각|같은|아래)"
+    r"(?:들|은|는|이|가|과|와|의|에|에게|인)?$"
+    r"|^[가-힣]{2,4}의$"  # 중국의 · 영국의 · 미국의
+    r"|^[0-9]+[)\.·]?$"  # 항목 번호
+)
+
+
+def _foreign_sub(m: re.Match[str], log: list[dict] | None = None) -> str:
+    """앞말을 되돌리고 이름만 `[업체]` 로 바꾼다."""
+    run = m.group(1)
+    parts = run.split()
+    while len(parts) > 1 and _FOREIGN_LEAD_STOP.match(parts[0]):
+        parts.pop(0)
+    lead = run[: len(run) - len(" ".join(parts))]
+    _note(log, "외국법인격", " ".join(parts), MASK_ORG)
+    return lead + MASK_ORG
+
+
+def mask_org_foreign(text: str, log: list[dict] | None = None) -> str:
+    """외국 법인격이 붙은 자리를 `[업체]` 로. 🚨 앞말(역할명사·항목번호)은 남긴다."""
+    return _ORG_RUN_FOREIGN.sub(lambda m: _foreign_sub(m, log), text)
+
 
 def residual_orgs(text: str) -> list[str]:
     """마스킹 뒤 텍스트에 법인격 표기를 달고 남은 이름들.
@@ -390,7 +492,7 @@ _SLOT_PREFIX = re.compile(
 _SLOT_SUFFIX = re.compile(r"[가-힣A-Za-z0-9]{2,12}\s*" + _ORG_FORM)
 
 
-def _slot_sub(m: re.Match[str]) -> str:
+def _slot_sub(m: re.Match[str], log: list[dict] | None = None) -> str:
     """🚨 뒤에 붙은 조사는 **남긴다.**
 
     ⛔ 첫 판은 「(주)미래이엔지**에게** 건설위탁한」을 「[업체] 건설위탁한」으로 만들었다.
@@ -398,19 +500,31 @@ def _slot_sub(m: re.Match[str]) -> str:
        지우는 실패는 조용하다** — 오늘 `1,000만` 을 먹은 것과 같은 종류다.
     """
     name = m.group(1)
+    # 🔄 **2026-09-08 — 치환 원장이 잡아냈다 (D-144).** 「석정건설**(주)에게**」에서
+    #    기호 뒤 캡처가 「에게」를 회사명으로 잡아 **조사를 통째로 먹고 있었다** (63건).
+    #    기호(㈜·(주))는 이름이 공백 없이 붙는 것이 정상이라 공백을 요구할 수 없고,
+    #    그 대가로 조사가 걸린다 — `residual_orgs` 는 `_ONLY_PARTICLE` 로 걷어내는데
+    #    **지우는 쪽에는 그 방어가 없었다.** 세는 쪽만 고쳐 두면 이렇게 된다.
+    # ★ 손대지 않고 넘기면 뒤꼴 규칙이 「석정건설(주)」를 제대로 잡아 「[업체]에게」가 된다.
+    if _ONLY_PARTICLE.match(name) or name.isdigit():
+        return m.group(0)
     tail = _PARTICLE.search(name)
     if tail and len(name) - len(tail.group(0)) >= 2:
+        _note(log, "자리(앞꼴)", m.group(0)[: -len(tail.group(0))], MASK_ORG)
         return MASK_ORG + tail.group(0)
+    _note(log, "자리(앞꼴)", m.group(0), MASK_ORG)
     return MASK_ORG
 
 
-def mask_org_slots(text: str) -> str:
+def mask_org_slots(text: str, log: list[dict] | None = None) -> str:
     """법인격이 붙은 자리를 이름과 무관하게 `[업체]` 로 바꾼다.
 
     🚨 이미 `[업체]` 인 자리는 건드리지 않는다 — 앵커 치환이 먼저 돈다.
     """
-    text = _SLOT_PREFIX.sub(_slot_sub, text)
-    return _SLOT_SUFFIX.sub(MASK_ORG, text)
+    text = _SLOT_PREFIX.sub(lambda m: _slot_sub(m, log), text)
+    return _SLOT_SUFFIX.sub(
+        lambda m: _note(log, "자리(뒤꼴)", m.group(0), MASK_ORG) or MASK_ORG, text
+    )
 
 
 #: 🚨 **피심인 주소** (레지스트리 `ftc_decisions_body.masking`). 실측 —
@@ -430,9 +544,9 @@ _ADDRESS = re.compile(
 )
 
 
-def mask_address(text: str) -> str:
+def mask_address(text: str, log: list[dict] | None = None) -> str:
     """주소를 `[주소]` 로. 🚨 시·도 이름 하나만 있는 자리는 안 건드린다."""
-    return _ADDRESS.sub(MASK_ADDR, text)
+    return _ADDRESS.sub(lambda m: _note(log, "주소", m.group(0), MASK_ADDR) or MASK_ADDR, text)
 
 
 # ══ 2패스 — 문서 안에서 사전을 만든다 ═══════════════════════════════
@@ -537,12 +651,16 @@ def doc_org_names(text: str) -> list[str]:
 _MASKED_PAREN = re.compile(r"(\[(?:업체|대표)\])\s*\([^)\n]{2,80}\)")
 
 
-def mask_paren_alias(text: str) -> str:
+def mask_paren_alias(text: str, log: list[dict] | None = None) -> str:
     """`[업체](Original Name)` 의 괄호를 지운다. 앞의 마스킹 자국은 남긴다."""
-    return _MASKED_PAREN.sub(r"\1", text)
+    return _MASKED_PAREN.sub(
+        lambda m: _note(log, "괄호원어", m.group(0)[len(m.group(1)) :], "") or m.group(1), text
+    )
 
 
-def mask_org_bare(text: str, names: list[str]) -> tuple[str, list[str]]:
+def mask_org_bare(
+    text: str, names: list[str], log: list[dict] | None = None
+) -> tuple[str, list[str]]:
     """문서 자기 사전으로 맨몸 언급을 `[업체]` 로. **무엇을 지웠는지 함께 돌려준다.**
 
     🚨 지운 목록을 돌려주는 것이 설계다 — 결정요청 §4 가 *「지우는 것과 세는 것을
@@ -552,6 +670,7 @@ def mask_org_bare(text: str, names: list[str]) -> tuple[str, list[str]]:
     used: list[str] = []
     for n in names:
         if n in text:
+            _note(log, "맨몸(2패스)", n, MASK_ORG)
             text = text.replace(n, MASK_ORG)
             used.append(n)
     return text, used
@@ -568,16 +687,22 @@ _BRAND = re.compile(
 )
 
 
-def mask_brand(text: str) -> str:
+def mask_brand(text: str, log: list[dict] | None = None) -> str:
     """「영업표지 'X'」의 X 만 `[상표]` 로. 앞말과 따옴표는 남긴다."""
-    return _BRAND.sub(lambda m: f"{m.group(1)}{m.group(2)}'{MASK_BRAND}'", text)
+    return _BRAND.sub(
+        lambda m: (
+            _note(log, "영업표지", m.group(3), MASK_BRAND)
+            or f"{m.group(1)}{m.group(2)}'{MASK_BRAND}'"
+        ),
+        text,
+    )
 
 
 class MaskPolicyError(RuntimeError):
     """마스킹 정책이 없는 원천을 지우려 했다."""
 
 
-def apply_policy(text: str, bare: str, source: str) -> str:
+def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = None) -> str:
     """레지스트리가 그 원천에 정한 것만 지운다 (`POLICY`).
 
     🚨 순서가 있다 — 앵커(정확) → 자리(넓음) → 주소 → 상표 → 사람.
@@ -605,15 +730,16 @@ def apply_policy(text: str, bare: str, source: str) -> str:
         )
     todo = POLICY[source]
     if "org" in todo:
-        text = mask(text, bare)  # 앵커 + 사람(항상)
+        text = mask(text, bare, log)  # 앵커 + 사람(항상)
         names = doc_org_names(text)  # 🚨 자리 치환 **전에** 캔다 — 치환 뒤엔 이름이 없다
-        text = mask_org_slots(text)
-        text, _ = mask_org_bare(text, names)  # 2패스 — 같은 문서의 맨몸 언급
-        text = mask_paren_alias(text)  # 마스킹 직후 괄호 안 원어 표기
+        text = mask_org_slots(text, log)
+        text = mask_org_foreign(text, log)  # 외국 법인격 — 여러 어절 상호까지 (2026-09-08)
+        text, _ = mask_org_bare(text, names, log)  # 2패스 — 같은 문서의 맨몸 언급
+        text = mask_paren_alias(text, log)  # 마스킹 직후 괄호 안 원어 표기
     if "addr" in todo:
-        text = mask_address(text)
+        text = mask_address(text, log)
     if "brand" in todo:
-        text = mask_brand(text)
+        text = mask_brand(text, log)
     return text
 
 
