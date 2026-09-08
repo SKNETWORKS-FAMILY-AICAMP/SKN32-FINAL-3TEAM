@@ -244,7 +244,9 @@ def _note(log: list[dict] | None, rule: str, src: str, dst: str) -> None:
 
 
 def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
-    """자유 텍스트에서 앵커의 변형을 `[업체]` 로, 가려진 이름을 `[대표]` 로 바꾼다.
+    """자유 텍스트에서 **앵커의 변형만** `[업체]` 로 바꾼다.
+
+    🔄 사람은 `mask_person()` 이 한다 (D-157) — `POLICY` 의 `person` 축을 따르게 하려고 뗐다.
 
     🚨 짧은 앵커는 **법인격이 붙은 형태만** 지운다 — 「㈜대상」은 지우고 「대상」은 남긴다.
        남긴 것은 `residue()` 가 센다. 지우지 못한 것을 **세지도 않는 것**이 제일 나쁘다.
@@ -254,6 +256,30 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
             if v in text:
                 _note(log, "앵커", v, MASK_ORG)
             text = text.replace(v, MASK_ORG)
+    return text
+
+
+def mask_person(text: str, log: list[dict] | None = None) -> str:
+    """가려진 이름과 「직함+이름」을 `[대표]` 로.
+
+    🔄 **2026-09-08 — `mask()` 에서 떼어냈다 (D-157).**
+
+    ⛔ 예전에는 `mask()` 안에 있었고 `apply_policy` 가 `if "org" in todo` 에서 불렀다.
+       주석이 「앵커 + 사람(**항상**)」이라고 적혀 있었는데 `POLICY` 에는 `person` 축이
+       따로 있다 — **선언에 축이 있는데 코드가 안 따랐다.** `org` 를 켜면 `person` 이 딸려 왔다.
+       ★ 오늘 내내 잡은 「선언한 쪽과 하는 쪽이 어긋남」의 변형이다.
+
+    🚨 **원천은 사람 이름만 가리는 게 아니다** — 그래서 축을 끌 수 있어야 한다.
+       해설서 실측(2026-09-08): 11건 전부 오탐이었다.
+           「전문oo – 전문oo식」  원천이 가린 것은 **업체명**  → 「전[대표]」
+           「모유분석 000건」      원천이 가린 것은 **숫자**    → 「[대표]건」
+       둘 다 **판정 대상 문구**다. 반면 사례집의 「20대 김○○님」은 진짜 사람이다.
+    """
+    # ⛔ **2026-09-08 — 이 줄을 한 번 통째로 날렸다.** 함수를 떼어내며 `_REDACTED_NAME` 을
+    #    되살리지 않았고, **가려진 이름 18건이 안 지워진 채로 돌았다.** 마스킹이 덜 되는 쪽,
+    #    즉 개인정보가 남는 실패다.
+    #    ★ D-143 의 「치환 416 → 398」이 그것을 잡았다 — 문자열 결과는 854/854 같았고
+    #      산출물도 그대로여서 **개수 지표 하나만 달랐다.** 그 하나를 안 좇았으면 놓쳤다.
     text = _REDACTED_NAME.sub(
         lambda m: _note(log, "가려진이름", m.group(0), MASK_CEO) or MASK_CEO, text
     )
@@ -729,13 +755,24 @@ def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = Non
             f"     🚨 마스킹이 정말 불필요하다면 그 판단도 masking: 에 적는다 — 빈 칸으로 두지 않는다."
         )
     todo = POLICY[source]
+    # 🔴 **축을 선언대로 건다** (D-157). 예전에는 `org` 안에서 사람까지 걸었다.
+    # 🚨 **자리는 그대로 둔다 — 앵커 바로 뒤다.** 축을 떼면서 사람을 맨 앞으로 옮겼더니
+    #    치환이 416 → 398 로 줄었다(D-143 이 「본문바뀜 8」로 즉시 잡았다).
+    #    앵커가 먼저 돌아야 하는 이유가 있다 — 앵커는 **정확**하고 사람 규칙은 넓다.
+    # ⛔ docstring 은 「앵커 → 자리 → 주소 → 상표 → **사람**」이라 적고 있었는데
+    #    코드는 사람을 앵커와 함께 **맨 앞**에서 돌리고 있었다. **적어 둔 순서와 도는 순서가 달랐다.**
+    #    지금은 코드가 맞다고 보고 그대로 두되, 그 사실을 여기 적는다 (D-157).
     if "org" in todo:
-        text = mask(text, bare, log)  # 앵커 + 사람(항상)
+        text = mask(text, bare, log)  # 앵커만
+        if "person" in todo:
+            text = mask_person(text, log)  # 앵커 바로 뒤 — 예전과 같은 자리
         names = doc_org_names(text)  # 🚨 자리 치환 **전에** 캔다 — 치환 뒤엔 이름이 없다
         text = mask_org_slots(text, log)
         text = mask_org_foreign(text, log)  # 외국 법인격 — 여러 어절 상호까지 (2026-09-08)
         text, _ = mask_org_bare(text, names, log)  # 2패스 — 같은 문서의 맨몸 언급
         text = mask_paren_alias(text, log)  # 마스킹 직후 괄호 안 원어 표기
+    elif "person" in todo:
+        text = mask_person(text, log)
     if "addr" in todo:
         text = mask_address(text, log)
     if "brand" in todo:
