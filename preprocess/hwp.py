@@ -18,6 +18,15 @@
    6·8·10 을 다 찍어 보고 골랐다 — 6 은 「열=256」, 10 은 「행병합=42247」이 나온다.
    문서만 보고 6 을 골랐으면 **조용히 틀린 표**가 나왔을 것이다.
 
+🔴 **두 가지를 대조한다 — 구조와 글자.**
+
+   ① **구조** — `HWPTAG_TABLE` 이 행 수·열 수·행별 셀 수를 들고 있다 (아래).
+   ② **글자** — hwp 는 저작 도구가 만든 평문 미리보기 `PrvText` 스트림을 들고 있다.
+      **우리가 만들지 않은 독립 렌더링**이라, 우리 추출과 맞대면 제어문자 규칙이 맞는지 알 수 있다.
+      `--verify` 가 그것을 한다. 실측(해설서) — **17/17 일치**.
+      🚨 `PrvText` 는 **표 경계에 `<` `>` 를 넣는다.** 그건 미리보기의 표기이지 문서의 글자가 아니라
+         빼고 맞댄다. 안 빼면 4건이 어긋나 보이는데 **전부 그 자리**다.
+
 🔴 **표의 선언과 실제를 대조한다.** `HWPTAG_TABLE` 이 행 수·열 수·**행별 셀 수**를 들고 있다.
    우리가 모은 셀이 그것과 다르면 **멈춘다.** 파싱이 어긋난 채로 라벨을 만들면
    그 오류는 데이터에 박혀 되돌릴 수 없다 — 조용한 실패의 자리다.
@@ -180,17 +189,61 @@ def tables(path: pathlib.Path) -> list[Table]:
     return [t for t, _ in tables_with_lead(path)]
 
 
+def verify(path: pathlib.Path) -> int:
+    """🔴 **우리가 만들지 않은 렌더링과 맞댄다.**
+
+    hwp 는 저작 도구가 만든 평문 미리보기(`PrvText`)를 들고 있다. 표 구조는 `Table.check()` 가
+    원천의 선언과 대조하지만 **셀 안의 글자**는 그것으로 검증되지 않는다 —
+    제어문자가 먹는 길이(8 wchar)를 틀리면 **읽히기는 하는데 내용이 밀린다.**
+    미리보기와 맞대면 그 실패가 드러난다.
+
+    🚨 `PrvText` 는 표 경계에 `<` `>` 를 넣는다 — 미리보기의 표기이지 문서의 글자가 아니다.
+    """
+    import re  # noqa: PLC0415
+
+    ole = olefile.OleFileIO(str(path))
+    if "PrvText" not in {"/".join(x) for x in ole.listdir()}:
+        print("🚨 PrvText 가 없다 — 이 검사를 할 수 없다. 못 하는 것을 못 한다고 적는다")
+        return 1
+    prv = ole.openstream("PrvText").read().decode("utf-16-le", errors="replace")
+    body = "".join(
+        para_text(d) for buf in sections(path) for tag, _, d in records(buf) if tag == PARA_TEXT
+    )
+    sq = re.compile(r"\s+")
+    b = sq.sub("", body)
+    pv = sq.sub("", prv).replace("<", "").replace(">", "")
+    frags = [pv[i : i + 30] for i in range(0, max(len(pv) - 30, 1), 40)]
+    miss = [f for f in frags if f and f not in b]
+    print(f"미리보기 {len(pv):,}자 · 본문 {len(b):,}자 (공백 제거)")
+    print(f"  조각 {len(frags)}개 중 본문에 그대로 있는 것 **{len(frags) - len(miss)}**")
+    if miss:
+        print(f"  🔴 어긋난 조각 {len(miss)}개 — **제어문자 규칙을 의심한다**")
+        for f in miss[:5]:
+            k = next((j for j in range(1, len(f) + 1) if f[:j] not in b), len(f) + 1) - 1
+            print(f"     맞는 데까지: {f[:k]!r}  →  다음: {f[k : k + 6]!r}")
+        return 1
+    print("★ 전부 일치한다 — 제어문자가 먹는 길이가 맞다")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="HWP 5.x 표 읽기 (읽기 전용)")
     ap.add_argument("path")
     ap.add_argument("--probe", action="store_true", help="표 목록과 검증 결과만")
     ap.add_argument("--table", type=int, default=None, help="표 하나를 찍는다 (0부터)")
+    ap.add_argument(
+        "--verify",
+        action="store_true",
+        help="🔴 저작 도구의 미리보기(PrvText)와 글자를 맞댄다 — 제어문자 규칙 검증",
+    )
     a = ap.parse_args()
 
     p = pathlib.Path(a.path)
     if not p.exists():
         print(f"🚨 {p} 가 없다", file=sys.stderr)
         return 1
+    if a.verify:
+        return verify(p)
     ts = tables(p)
     bad = [(i, t.check()) for i, t in enumerate(ts) if t.check()]
     print(f"표 {len(ts)}개 · 셀 {sum(len(t.cells) for t in ts):,}개")

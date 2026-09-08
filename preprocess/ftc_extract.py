@@ -165,6 +165,11 @@ def main() -> int:
     #    마스킹은 **모자라도 실패, 지나쳐도 실패**인데 지나친 쪽만 계측이 없었다.
     #    실제로 643 → 619 문구 · 285 → 280 문서가 삼켜지고 있었고 **재기 전까지 아무도 몰랐다.**
     #    그래서 여기서는 늘 마스킹 **전**으로도 뽑아 맞대 본다 (비용은 정규식 한 벌).
+    # 🔴 **정규화 계측** (D-154). 사슬에서 유일하게 안 세던 단계다.
+    #    D-117 이 「정규화를 안 거치고 classify 를 부르면 135건이 샌다」를 **한 번** 쟀고
+    #    그 뒤로 아무도 안 쟀다. 원천의 구분자 습관이 바뀌면 분류가 **조용히** 달라진다.
+    #    ★ 일회성 사실을 **상시 수치**로 바꾼다 — 오늘 D-142·D-143 이 한 것과 같은 일이다.
+    norm_shift: collections.Counter[tuple[str, str]] = collections.Counter()
     stage_rows: list[dict] = []
     raw_ph = raw_docs = 0
     #: 🚨 **늘 우는 지표는 무시당한다.** 그래서 「줄었다」가 아니라 **버린 근거**로 가른다.
@@ -181,8 +186,19 @@ def main() -> int:
         blob = p.read_bytes()
         r = ET.parse(p).getroot()
         raw = {f: _text(r, f) for f in ("사건명", "주문", "결정요지", "이유")}
+        # 🔴 **정규화문과 원문을 둘 다 든다** (2026-09-08 · D-152).
+        #    ⛔ 예전에는 `sep_norm` 을 한 번 걸고 그 결과로 **분류도 하고 저장도** 했다.
+        #       `preprocess/text.py` 가 「매칭 직전에만 쓴다 · 원문을 보관한다」고 적어 뒀는데
+        #       호출부가 어겼다. 실측 — 저장된 627문구 중 **70건(11.2%)이 망가져 있었다**:
+        #         「명중률 97.5%」→「97·5%」 · 「2.5배」→「2·5배」 · 「1/3」→「1·3」
+        #         「www.youtube.com」→「www·youtube·com」 · 문장 마침표 65건
+        #    🔴 **수치가 망가지면 거짓·과장 판정의 근거가 사라진다.**
         name, order, gist, reason = (sep_norm(raw[f]) for f in raw)
         k = classify(name, order, gist, reason)
+        # 🚨 원문으로도 분류해 본다 — **저장에는 쓰지 않는다**. 세기만 한다.
+        k_raw = classify(raw["사건명"], raw["주문"], raw["결정요지"], raw["이유"])
+        if k_raw != k:
+            norm_shift[(k_raw, k)] += 1
         buck[k] += 1
         seq = _text(r, "결정문일련번호")
         if k not in CORE:
@@ -196,26 +212,29 @@ def main() -> int:
         #    🚨 원장에는 **지워진 실명**이 들어 있다 — `stage_rows`(=`data/`) 로만 간다.
         #       배포되는 `rows`(=`OUT`) 와 **자료구조가 아예 분리돼 있다**. 섞이면 실명이 배포된다.
         mlog: list[dict] = []
-        masked = apply_policy(order, bare, "ftc", mlog)
+        # 분류·유형 판별은 **정규화문**으로 한다 (D-117 — 원문으로 classify 하면 135건이 샌다)
+        masked = apply_policy(order, bare, "ftc")
+        # 🔴 저장은 **원문**으로 한다. 원장도 이쪽에 건다 — 나가는 것이 이쪽이다
+        masked_raw = apply_policy(raw["주문"], bare, "ftc", mlog)
 
         # 🔴 계측 — 마스킹을 지나지 않은 문구. **산출물에는 쓰지 않는다** (D-17).
-        before = phrases_in(order)
+        before = phrases_in(raw["주문"])
         raw_ph += len(before)
         raw_docs += bool(before)
 
-        ps = phrases_in(masked)
+        ps = phrases_in(masked_raw)
         stage_rows.append(
             {
                 "seq": seq,
                 "src": stage.src_hash(blob),
                 "분류": k,
-                "사건명": apply_policy(name, bare, "ftc"),
-                "주문_마스킹": masked,
+                "사건명": apply_policy(raw["사건명"], bare, "ftc"),  # 🔴 원문 (D-152)
+                "주문_마스킹": masked_raw,
                 "문구": ps,
                 "치환원장": mlog,
             }
         )
-        for q in QUOTE.findall(masked):
+        for q in QUOTE.findall(masked_raw):
             q = q.strip()
             if q in ps or content_len(q) < 4 or q.isdigit():
                 continue
@@ -227,7 +246,7 @@ def main() -> int:
         ts = types_in(masked)
         for t in ts:
             lab[t["label"]] += 1
-        grounds = [m.group(1).strip() for m in GROUND.finditer(masked)][:3]
+        grounds = [m.group(1).strip() for m in GROUND.finditer(masked_raw)][:3]
         rows.append(
             {
                 "seq": seq,
@@ -245,6 +264,20 @@ def main() -> int:
     print(f"결정문 {sum(buck.values()):,}건 · 1층 후보 {total_core:,}건")
     print(f"  주문에 광고 문구가 있는 문서  {docs_with:,}건 ({docs_with * 100 // total_core}%)")
     print(f"  뽑은 문구                    {n_ph:,}개 (문서당 {n_ph / max(docs_with, 1):.1f})")
+    print()
+    n_shift = sum(norm_shift.values())
+    print("  🔵 정규화 계측 — **구분자를 펴지 않으면 분류가 달라지는 문서** (D-154)")
+    print(
+        f"    {n_shift:,}건 / {sum(buck.values()):,}  — 원천이 `·`·`ㆍ`·`.` 를 섞어 쓰기 때문이다"
+    )
+    # 🚨 루프 변수를 `a` 로 쓰지 않는다 — argparse 네임스페이스가 `a` 다 (방금 덮어서 죽었다).
+    for (was, now), cnt in norm_shift.most_common(6):
+        core = " ★1층 후보로 들어옴" if now in CORE and was not in CORE else ""
+        print(f"      {cnt:>5}  {was or '(분류없음)'} → {now or '(분류없음)'}{core}")
+    gained = sum(c for (w, n), c in norm_shift.items() if n in CORE and w not in CORE)
+    lost = sum(c for (w, n), c in norm_shift.items() if w in CORE and n not in CORE)
+    print(f"    ★ 1층 후보 기준 — 정규화로 **들어온 것 {gained:,} · 나간 것 {lost:,}**")
+    print("    🚨 이 수가 0 이 되면 원천이 구분자를 안 섞는다는 뜻이다 — 그때 다시 판단한다")
     print()
     print("  🔴 마스킹 과잉삭제 계측 — **지나친 쪽 실패는 조용하다** (D-142)")
     print(f"    마스킹 전  문서 {raw_docs:,} · 문구 {raw_ph:,}")
