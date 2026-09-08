@@ -36,6 +36,13 @@ dependencies = [
     "pgvector>=0.3",
     "alembic>=1.13",
     "olefile>=0.47",      # HWP 5.x 복합문서 읽기 (D-150) — 순수 파이썬
+    # 🔄 2026-09-08 docs 그룹 → 런타임으로 옮겼다 (D-158).
+    #    사례집 PDF 파싱이 **전처리 파이프라인의 일부**가 됐다. 문서 빌드 전용이 아니다.
+    #    ⛔ docs 그룹에 둔 채 모듈을 쓰다가 `uv run` 이 ModuleNotFoundError 로 죽었다 —
+    #       테스트는 전부 통과했다. 데이터 경로를 타는 코드가 `pages()` 안의 지연 import 뿐이라
+    #       **테스트가 이 의존성을 한 번도 안 건드린다.** 여기서는 lock 이 유일한 대조기다.
+    #    ★ docs 그룹을 나눈 이유는 playwright(브라우저 바이너리)였지 pdfplumber 가 아니다.
+    "pdfplumber>=0.11",   # 사례집 PDF → 1층 판정라벨 (D-158)
 ]
 
 [dependency-groups]
@@ -53,7 +60,7 @@ dev = [
 docs = [
     "markdown>=3.6",      # 마크다운 -> HTML
     "playwright>=1.45",   # HTML -> PDF 렌더
-    "pdfplumber>=0.11",   # 1차 렌더에서 쪽 번호 실측 (목차 주입)
+    # 🔄 pdfplumber 는 런타임 의존성으로 옮겼다 (D-158) — 여기서도 그대로 쓸 수 있다.
 ]
 
 # ============================================================

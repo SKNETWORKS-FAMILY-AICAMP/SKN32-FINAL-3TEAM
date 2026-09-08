@@ -37,7 +37,17 @@ from preprocess.mask import (
 )
 
 #: 정책 키의 원천 — `preprocess.mask.POLICY` 는 이것의 사본이다.
-_REGISTRY_SOURCE = {"ftc": "ftc_decisions_body", "mfds_sanctions": "mfds_sanctions"}
+#: ⛔ 2026-09-08 에 `POLICY` 를 2종 → 5종으로 늘리면서 **이 표를 안 늘렸다.**
+#:    이 테스트는 `sorted(POLICY)` 로 파라미터를 만드는데, 그날 돌린 것은
+#:    `-m` 로 추린 38건이라 새 세 개가 **한 번도 안 돌았다.** 대조기를 늘리지 않으면
+#:    대조가 늘지 않는다 — 오늘 하루의 주제 그대로다.
+_REGISTRY_SOURCE = {
+    "ftc": "ftc_decisions_body",
+    "mfds_sanctions": "mfds_sanctions",
+    "mfds_special_use_guide": "mfds_special_use_guide",
+    "mfds_casebook": "mfds_casebook",
+    "mfds_hf_ingredient_board": "mfds_hf_ingredient_board",
+}
 
 
 @pytest.mark.parametrize(
@@ -265,6 +275,15 @@ def test_policy_matches_the_registry(target: str) -> None:
         if target == "ftc" and key == "person":
             assert declared, "ftc 는 대표자명을 지운다 — 원천의 정책은 우리의 보장이 아니다"
             assert "원천의 정책이지 우리의 보장이 아니다" in wording
+            continue
+        # 🚨 **끈 것도 문언으로 증명한다.** 해설서 문언에는 「대표자명」이라는 낱말이
+        #    들어 있지만 뜻은 반대다 — 「대표자명(person)은 **끈다**」.
+        #    ⛔ 낱말만 세면 「지운다」와 「끈다」를 구별하지 못한다. 그래서 축을 끈 원천은
+        #       **끈다고 적힌 문장**을 확인한다. 켤 때만 근거를 요구하고 끌 때는 안 하면,
+        #       실수로 꺼진 축이 조용히 통과한다.
+        if target == "mfds_special_use_guide" and key == "person":
+            assert not declared, "해설서는 대표자명을 끈다 — 실측 오탐 11 · 진짜 0 (D-157)"
+            assert "대표자명(person)은 끈다" in wording
             continue
         assert declared == (word in wording), (
             f"{target}: POLICY 는 {key}={declared} 인데 레지스트리 masking 문언은 "
