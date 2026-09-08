@@ -18,10 +18,12 @@ import pytest
 
 from collect import registry
 from preprocess.mask import (
+    MARK_RE,
     MASK_ADDR,
     MASK_BRAND,
     MASK_CEO,
     MASK_ORG,
+    MASKS,
     POLICY,
     POLICY_WORDS,
     Ledger,
@@ -35,6 +37,7 @@ from preprocess.mask import (
     mask_person,
     residue,
     strip_legal,
+    to_natural,
     variants,
 )
 
@@ -511,3 +514,34 @@ def test_widening_surnames_does_not_eat_form_words() -> None:
     """
     assert mask_person("대표자 성명 기재") == "대표자 성명 기재"
     assert mask_person("사장 에서 물러난") == "사장 에서 물러난"
+
+
+def test_particle_survives_person_masking() -> None:
+    """🔴 「대표이사 원호봉**을** 각각」이 「대표이사 [대표] 각각」이 되어 조사가 사라졌다.
+
+    `_slot_sub` 가 업체 쪽에서 이미 고친 것과 **같은 버그**가 사람 쪽에 남아 있었다 (D-166).
+    실측 — 직함+이름 12,754건 중 4자 850, 그중 끝이 조사인 것 291건.
+    """
+    assert mask_person("대표이사 원호봉을 각각 고발한다") == "대표이사 [대표]을 각각 고발한다"
+    # 🚨 3자는 이름 그대로인 경우가 압도적이라(2자 616 · 3자 11,288 · 4자 850) 떼지 않는다
+    assert mask_person("대표이사 김홍익") == "대표이사 [대표]"
+
+
+def test_marks_have_one_source() -> None:
+    """⛔ `ftc_extract._MARK` 가 자국 꼴을 **따로** 들고 있었다 — 표기를 바꾸면 조용히 어긋난다."""
+    from preprocess.ftc_extract import _MARK  # noqa: PLC0415
+
+    assert _MARK is MARK_RE
+    assert all(MARK_RE.fullmatch(m) for m in MASKS)
+
+
+def test_natural_form_is_one_way_only() -> None:
+    """🔴 저장은 자국으로, 내보낼 때만 `○` 로 (D-166).
+
+    ⛔ 자국 자체를 `○` 로 바꿔 봤다가 되돌렸다 — 원천이 **숫자·URL 도** ○ 로 가려서
+       (「○○○km」·「www.○○○○.com」) 계수기가 우리 자국과 구분하지 못했다.
+    ★ 한 방향으로만 간다. 되돌릴 수 없으므로 **정보가 많은 쪽으로 저장한다** (D-152 와 같은 모양).
+    """
+    assert to_natural("피심인 [업체] 및 대표이사 [대표]을") == "피심인 ○○○○ 및 대표이사 ○○○을"
+    # 🚨 원천이 가린 ○ 는 건드리지 않는다 — 우리 자국만 바꾼다
+    assert to_natural("1회 충전으로 ○○○km 이상") == "1회 충전으로 ○○○km 이상"

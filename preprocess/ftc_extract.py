@@ -46,7 +46,7 @@ import xml.etree.ElementTree as ET
 
 from preprocess import stage
 from preprocess.ftc_triage import CORE, _text, classify
-from preprocess.mask import Ledger, Trace, anchor_ftc, apply_policy
+from preprocess.mask import MARK_RE, Ledger, Trace, anchor_ftc, apply_policy
 from preprocess.text import sep_norm
 
 RAW = pathlib.Path("data/raw/ftc")
@@ -91,7 +91,10 @@ NOISE = re.compile(
 #: ★ `[업체]` 자체는 학습 입력으로 문제가 아니다 — 일관된 **자리표시자**라
 #:   모델이 「여기는 상호 자리」로 배운다. 버려야 할 것은 자국이 든 인용이 아니라
 #:   **자국을 걷어내면 아무것도 안 남는 인용**이다(인용이 상호뿐이었던 것 — 5건).
-_MARK = re.compile(r"\[(?:업체|대표|주소|상표)\]")
+#: 🔴 자국의 단일 출처는 `mask.MARK_RE` 다 (D-166). 여기서 다시 만들지 않는다 —
+#:    2026-09-08 까지 이 파일이 `[업체]` 꼴을 따로 들고 있었고, 표기를 바꾸는 순간
+#:    「상호뿐인 인용」을 못 걸러 학습 입력이 늘어난 것처럼 보였을 것이다.
+_MARK = MARK_RE
 #: 자국 **뒤에 붙은 조사**까지 걷어내고 센다 — 「[업체]는」의 알맹이는 0 이다.
 _MARK_TAIL = re.compile(r"^(?:에게|에서|으로|은|는|이|가|을|를|의|와|과|에|로|도|만)")
 
