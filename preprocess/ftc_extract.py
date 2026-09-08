@@ -165,6 +165,11 @@ def main() -> int:
     #    마스킹은 **모자라도 실패, 지나쳐도 실패**인데 지나친 쪽만 계측이 없었다.
     #    실제로 643 → 619 문구 · 285 → 280 문서가 삼켜지고 있었고 **재기 전까지 아무도 몰랐다.**
     #    그래서 여기서는 늘 마스킹 **전**으로도 뽑아 맞대 본다 (비용은 정규식 한 벌).
+    # 🔴 **정규화 계측** (D-154). 사슬에서 유일하게 안 세던 단계다.
+    #    D-117 이 「정규화를 안 거치고 classify 를 부르면 135건이 샌다」를 **한 번** 쟀고
+    #    그 뒤로 아무도 안 쟀다. 원천의 구분자 습관이 바뀌면 분류가 **조용히** 달라진다.
+    #    ★ 일회성 사실을 **상시 수치**로 바꾼다 — 오늘 D-142·D-143 이 한 것과 같은 일이다.
+    norm_shift: collections.Counter[tuple[str, str]] = collections.Counter()
     stage_rows: list[dict] = []
     raw_ph = raw_docs = 0
     #: 🚨 **늘 우는 지표는 무시당한다.** 그래서 「줄었다」가 아니라 **버린 근거**로 가른다.
@@ -190,6 +195,10 @@ def main() -> int:
         #    🔴 **수치가 망가지면 거짓·과장 판정의 근거가 사라진다.**
         name, order, gist, reason = (sep_norm(raw[f]) for f in raw)
         k = classify(name, order, gist, reason)
+        # 🚨 원문으로도 분류해 본다 — **저장에는 쓰지 않는다**. 세기만 한다.
+        k_raw = classify(raw["사건명"], raw["주문"], raw["결정요지"], raw["이유"])
+        if k_raw != k:
+            norm_shift[(k_raw, k)] += 1
         buck[k] += 1
         seq = _text(r, "결정문일련번호")
         if k not in CORE:
@@ -255,6 +264,20 @@ def main() -> int:
     print(f"결정문 {sum(buck.values()):,}건 · 1층 후보 {total_core:,}건")
     print(f"  주문에 광고 문구가 있는 문서  {docs_with:,}건 ({docs_with * 100 // total_core}%)")
     print(f"  뽑은 문구                    {n_ph:,}개 (문서당 {n_ph / max(docs_with, 1):.1f})")
+    print()
+    n_shift = sum(norm_shift.values())
+    print("  🔵 정규화 계측 — **구분자를 펴지 않으면 분류가 달라지는 문서** (D-154)")
+    print(
+        f"    {n_shift:,}건 / {sum(buck.values()):,}  — 원천이 `·`·`ㆍ`·`.` 를 섞어 쓰기 때문이다"
+    )
+    # 🚨 루프 변수를 `a` 로 쓰지 않는다 — argparse 네임스페이스가 `a` 다 (방금 덮어서 죽었다).
+    for (was, now), cnt in norm_shift.most_common(6):
+        core = " ★1층 후보로 들어옴" if now in CORE and was not in CORE else ""
+        print(f"      {cnt:>5}  {was or '(분류없음)'} → {now or '(분류없음)'}{core}")
+    gained = sum(c for (w, n), c in norm_shift.items() if n in CORE and w not in CORE)
+    lost = sum(c for (w, n), c in norm_shift.items() if w in CORE and n not in CORE)
+    print(f"    ★ 1층 후보 기준 — 정규화로 **들어온 것 {gained:,} · 나간 것 {lost:,}**")
+    print("    🚨 이 수가 0 이 되면 원천이 구분자를 안 섞는다는 뜻이다 — 그때 다시 판단한다")
     print()
     print("  🔴 마스킹 과잉삭제 계측 — **지나친 쪽 실패는 조용하다** (D-142)")
     print(f"    마스킹 전  문서 {raw_docs:,} · 문구 {raw_ph:,}")
