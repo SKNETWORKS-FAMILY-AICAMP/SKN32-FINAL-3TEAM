@@ -30,6 +30,7 @@ from preprocess.mask import (
     mask_brand,
     mask_org_foreign,
     mask_org_slots,
+    mask_person,
     residue,
     strip_legal,
     variants,
@@ -182,7 +183,7 @@ def test_redacted_names_are_unified(redacted: str) -> None:
 
     실측 — `ftc/19353` 은 `000`, `ftc/19321` 은 `고ㅇㅇ`.
     """
-    assert MASK_CEO in mask(redacted, "")
+    assert MASK_CEO in mask_person(redacted)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -204,20 +205,20 @@ def test_unredacted_person_names_are_masked(text: str, name: str) -> None:
     🚨 숫자를 봤는데 뜻을 잘못 읽었다 — 「원천이 처리해 놓았다」로.
        회사명은 학습에 남으면 곤란한 정도지만 **개인 실명은 종류가 다르다** (D-17).
     """
-    out = mask(text, "경기고속")
+    out = mask_person(text)  # 🔄 D-157 — 사람은 이 함수가 한다
     assert name not in out
     assert MASK_CEO in out
 
 
 def test_title_survives_the_name() -> None:
     """🚨 직함은 남긴다 — 지운 자국을 남겨야 다음 사람이 「여기 이름이 있었나」를 본다."""
-    out = mask("대표이사 김창범", "")
+    out = mask_person("대표이사 김창범")
     assert out == f"대표이사 {MASK_CEO}"
 
 
 def test_name_list_is_masked_as_one() -> None:
     """「담당변호사 진종백, 김철수」처럼 이름이 나열된다 — 첫 하나만 지우면 안 된다."""
-    out = mask("담당변호사 진종백, 김철수, 최영수", "")
+    out = mask_person("담당변호사 진종백, 김철수, 최영수")
     assert "김철수" not in out and "최영수" not in out
 
 
@@ -411,3 +412,29 @@ def test_slot_prefix_keeps_particle_after_sign() -> None:
     """
     assert mask_org_slots("석정건설(주)에게 위탁한") == f"{MASK_ORG}에게 위탁한"
     assert mask_org_slots("㈜미래이엔지에게 위탁한") == f"{MASK_ORG}에게 위탁한"
+
+
+def test_apply_policy_wires_person() -> None:
+    """🔴 **배선을 잠근다** — 함수가 있어도 `apply_policy` 가 안 부르면 소용없다.
+
+    ⛔ 2026-09-08, `mask()` 에서 사람을 떼어내며 `_REDACTED_NAME` 줄을 **통째로 날렸다.**
+       결과 문자열은 854/854 같았고 산출물도 627 그대로였다 —
+       **치환 원장의 개수 하나(416 → 398)만 달랐다.** 그 하나를 안 좇았으면 놓쳤을 것이고,
+       놓친 것은 **가려진 이름 18건이 안 지워진 채 나가는 일**이었다.
+    ★ 그래서 단위 동작만이 아니라 **`apply_policy` 를 통해서도** 확인한다.
+    """
+    out = apply_policy("피심인 대표이사 000 및 대표이사 김창범", "", "ftc")
+    assert "000" not in out and "김창범" not in out
+    assert out.count(MASK_CEO) >= 2
+
+
+def test_person_axis_is_separable() -> None:
+    """🚨 `POLICY` 에 축이 있으면 **끌 수 있어야** 한다 (D-157).
+
+    해설서처럼 원천이 **사람이 아닌 것**을 같은 기호로 가리는 자료가 있다 —
+    「전문oo」(업체명) · 「모유분석 000건」(숫자). 거기서는 이 축이 오탐만 낸다.
+    ⛔ 예전에는 `org` 를 켜면 `person` 이 **딸려 왔다** — 선언에 축이 있는데 코드가 안 따랐다.
+    """
+    text = "모유분석 000건"
+    assert apply_policy(text, "", "mfds_sanctions") != text  # person 이 켜진 원천
+    assert mask(text, "") == text  # 🚨 `mask()` 는 이제 사람을 건드리지 않는다

@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import pathlib
 import random
@@ -206,7 +207,7 @@ def main() -> int:
         print("     🚨 `확정유형` 은 **사람이** 채운다. AI 가 채우면 홀드아웃이 자기 채점이 된다.")
 
     if a.dump:
-        from preprocess.mask import POLICY  # noqa: PLC0415
+        from preprocess.mask import POLICY, apply_policy  # noqa: PLC0415
 
         if SOURCE_ID not in POLICY:
             print(
@@ -219,7 +220,29 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        raise SystemExit("🚨 정책이 생기면 여기에 apply_policy 를 건다 — 지금은 도달하지 않는다")
+        # 🔴 **마스킹은 여기서 건다** (D-17 · 정책은 2026-09-08 2인 확인).
+        #    🚨 앵커가 없는 원천이라 `bare` 는 빈 문자열이다 — 앵커 치환은 건너뛴다.
+        #    ★ 해설서는 `person` 이 꺼져 있다: 원천이 **사람이 아닌 것**을 같은 기호로 가려서
+        #      그 축이 판정 대상 문구를 먹는다 (D-157 · 실측 오탐 11 · 진짜 0).
+        FIELDS = ("문구", "수정문구", "원천라벨")
+        changed = collections.Counter()
+        out: list[dict] = []
+        for r in rows:
+            rec = dict(r)
+            for f in FIELDS:
+                if rec.get(f):
+                    m = apply_policy(rec[f], "", SOURCE_ID)
+                    if m != rec[f]:
+                        changed[f] += 1
+                    rec[f] = m
+            out.append(rec)
+        OUT.parent.mkdir(parents=True, exist_ok=True)
+        with OUT.open("w", encoding="utf-8") as fh:
+            for rec in out:
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        print(f"\n  🔴 마스킹 — 바뀐 필드 {dict(changed) or '없음'}")
+        print("     🚨 0 이라고 안 건 것이 아니다 — 정책이 꺼져 있으면 애초에 안 돈다.")
+        print(f"  → {OUT}  ({len(out):,}줄)")
     return 0
 
 
