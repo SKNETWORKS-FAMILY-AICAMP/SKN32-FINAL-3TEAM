@@ -174,8 +174,76 @@ def check_data(*, verify_hash: bool) -> int:
             print(f"\n  🟡 그중 **내용이 갈린 것** {len(split):,}개 — 같은 이름, 다른 바이트")
             print("     원천이 같은 이름으로 다른 것을 준 자리다. 지금은 수집기가 새 판으로")
             print("     저장하므로 수집이 멈추지 않는다 (`store.EDITION_MARK`).")
-            print("     🚨 무엇이 바뀌었는지는 여전히 사람이 원장에 적는다 (D-54).")
+            # 🔄 **2026-09-08 — 원천별로 묶는다.** 예전에는 갈린 것을 전부 뿌렸다.
+            #    실측에서 56개 중 53개가 `mfds_sanctions` 페이지였고, **화면 54줄이 그것으로 덮여**
+            #    정작 봐야 할 셋(146B 오류 응답 · law_002011 · page_0001 3판)이 묻혔다.
+            # 🚨 그리고 안내가 틀렸다 — 한 원천에서 페이지가 **한꺼번에** 갈리는 것은
+            #    「원천이 고쳤다」가 아니라 **offset 페이징에서 경계가 밀린 것**일 수 있다 (D-149).
+            #    레코드 하나만 들어와도 그 뒤 전 페이지의 바이트가 달라진다.
+            # ★ doctor 는 어느 쪽인지 모른다 — **모른다고 말하고 갈래를 보여 준다.**
+            by_src: collections.Counter[str] = collections.Counter()
+            for k in split:
+                by_src[(by_path.get(k) or [{}])[0].get("source_id") or "<미상>"] += 1
+            print(f"     원천별 — {dict(by_src.most_common())}")
+            bulk = [sid for sid, n in by_src.items() if n >= 5]
+            if bulk:
+                print(f"     🚨 **한꺼번에 갈린 원천 {bulk}** — 개별 파일이 바뀐 것이 아니라")
+                print("        **offset 페이징에서 경계가 밀린 것**일 수 있다 (D-149).")
+                print("        레코드 하나만 들어와도 그 뒤 전 페이지의 바이트가 달라진다.")
+                print("        🚨 이 원천에서는 **파일 해시로 판을 비교하는 것이 의미가 약하다.**")
+            # 🔴 **크기가 급감한 판을 따로 잡는다** (2026-09-08 · D-147 을 자동으로 잡는 자리).
+            #    ⛔ `mfds_hf_individual/page_0001.json` 이 51,636 B → **146 B** 로 바뀌었는데
+            #       그냥 목록에 섞여 지나갔다. 그 146바이트는 `ERROR-503` **오류 본문**이었다.
+            #    ★ 급감은 「원천이 내용을 고쳤다」가 아니라 **오류 응답이 데이터로 저장된 것**의
+            #      전형적 모양이다. 사람이 54줄에서 그걸 찾아내길 기대하면 안 된다.
+            # 🚨 **디스크를 본다 — 원장만 보면 영영 운다.**
+            #    ⛔ 첫 판은 원장 줄만 보고 🔴 를 냈다. 그런데 그 146바이트 파일은 **이미 지웠고**
+            #       원장 줄은 append 전용이라 남는다 — **고칠 것이 없는데 매번 🔴 가 뜬다.**
+            #       늘 우는 지표는 사람이 안 보게 만든다 (오늘 D-142 (다)에서 같은 실수를 했다).
+            #    ★ 그래서 **지금 디스크에 그 나쁜 판이 살아 있을 때만** 🔴 다.
+            #      지워졌으면 이력이고, 그건 위의 「원장에 있고 디스크에 없는 것」이 이미 센다.
+            live: list[tuple[str, int, int]] = []
+            past: list[str] = []
             for k, v in split.items():
+                ordered = sorted(v, key=lambda y: y.get("fetched_at", ""))
+                # 🚨 `strict=False` 다 — `ordered[1:]` 은 **한 칸 짧은 것이 설계**다.
+                #    이웃한 두 판을 맞대는 것이라 길이가 같으면 오히려 틀린다.
+                for a, b in zip(ordered, ordered[1:], strict=False):
+                    pa, pb = a.get("bytes") or 0, b.get("bytes") or 0
+                    if not (pa >= 1000 and pb < pa * 0.2):
+                        continue
+                    disk = _disk_path(k)
+                    if disk.exists() and abs(disk.stat().st_size - pb) <= 2:
+                        live.append((k, pa, pb))
+                    else:
+                        past.append(k)
+            if live:
+                red += len(live)
+                print(f"\n  🔴 **크기가 급감한 판이 지금 디스크에 있다 {len(live)}개**")
+                print(
+                    "     원천이 HTTP 200 에 오류를 실어 주면 수집기가 그것을 데이터로 저장한다 (D-147)."
+                )
+                for k, pa, pb in live[:8]:
+                    print(f"       {k}  {pa:,} B → **{pb:,} B** ({pb * 100 // max(pa, 1)}%)")
+                print("     고치는 법 — 그 파일을 열어 본다. 오류 본문이면 지우고 다시 받는다.")
+                print(
+                    "     🚨 원장 줄은 지우지 않는다 — 「그때 원천이 오류를 줬다」는 참인 사실이다."
+                )
+            if past:
+                print(
+                    f"\n  🟡 크기가 급감한 판이 **원장에만** 있다 {len(past)}개 — 이미 치웠다는 뜻이다"
+                )
+                for k in past[:4]:
+                    print(f"       {k}")
+
+            print("\n     🚨 무엇이 바뀌었는지는 여전히 사람이 원장에 적는다 (D-54).")
+            print("     아래는 **원천마다 두 개까지만** 보인다 — 전량은 원장을 본다.")
+            shown: collections.Counter[str] = collections.Counter()
+            for k, v in split.items():
+                sid = (by_path.get(k) or [{}])[0].get("source_id") or "<미상>"
+                shown[sid] += 1
+                if shown[sid] > 2:
+                    continue
                 print(f"       {k}")
                 for x in sorted(v, key=lambda y: y.get("fetched_at", "")):
                     stamp = x.get("fetched_at", "")[:19]
