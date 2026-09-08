@@ -181,6 +181,13 @@ def main() -> int:
         blob = p.read_bytes()
         r = ET.parse(p).getroot()
         raw = {f: _text(r, f) for f in ("사건명", "주문", "결정요지", "이유")}
+        # 🔴 **정규화문과 원문을 둘 다 든다** (2026-09-08 · D-152).
+        #    ⛔ 예전에는 `sep_norm` 을 한 번 걸고 그 결과로 **분류도 하고 저장도** 했다.
+        #       `preprocess/text.py` 가 「매칭 직전에만 쓴다 · 원문을 보관한다」고 적어 뒀는데
+        #       호출부가 어겼다. 실측 — 저장된 627문구 중 **70건(11.2%)이 망가져 있었다**:
+        #         「명중률 97.5%」→「97·5%」 · 「2.5배」→「2·5배」 · 「1/3」→「1·3」
+        #         「www.youtube.com」→「www·youtube·com」 · 문장 마침표 65건
+        #    🔴 **수치가 망가지면 거짓·과장 판정의 근거가 사라진다.**
         name, order, gist, reason = (sep_norm(raw[f]) for f in raw)
         k = classify(name, order, gist, reason)
         buck[k] += 1
@@ -196,26 +203,29 @@ def main() -> int:
         #    🚨 원장에는 **지워진 실명**이 들어 있다 — `stage_rows`(=`data/`) 로만 간다.
         #       배포되는 `rows`(=`OUT`) 와 **자료구조가 아예 분리돼 있다**. 섞이면 실명이 배포된다.
         mlog: list[dict] = []
-        masked = apply_policy(order, bare, "ftc", mlog)
+        # 분류·유형 판별은 **정규화문**으로 한다 (D-117 — 원문으로 classify 하면 135건이 샌다)
+        masked = apply_policy(order, bare, "ftc")
+        # 🔴 저장은 **원문**으로 한다. 원장도 이쪽에 건다 — 나가는 것이 이쪽이다
+        masked_raw = apply_policy(raw["주문"], bare, "ftc", mlog)
 
         # 🔴 계측 — 마스킹을 지나지 않은 문구. **산출물에는 쓰지 않는다** (D-17).
-        before = phrases_in(order)
+        before = phrases_in(raw["주문"])
         raw_ph += len(before)
         raw_docs += bool(before)
 
-        ps = phrases_in(masked)
+        ps = phrases_in(masked_raw)
         stage_rows.append(
             {
                 "seq": seq,
                 "src": stage.src_hash(blob),
                 "분류": k,
-                "사건명": apply_policy(name, bare, "ftc"),
-                "주문_마스킹": masked,
+                "사건명": apply_policy(raw["사건명"], bare, "ftc"),  # 🔴 원문 (D-152)
+                "주문_마스킹": masked_raw,
                 "문구": ps,
                 "치환원장": mlog,
             }
         )
-        for q in QUOTE.findall(masked):
+        for q in QUOTE.findall(masked_raw):
             q = q.strip()
             if q in ps or content_len(q) < 4 or q.isdigit():
                 continue
@@ -227,7 +237,7 @@ def main() -> int:
         ts = types_in(masked)
         for t in ts:
             lab[t["label"]] += 1
-        grounds = [m.group(1).strip() for m in GROUND.finditer(masked)][:3]
+        grounds = [m.group(1).strip() for m in GROUND.finditer(masked_raw)][:3]
         rows.append(
             {
                 "seq": seq,
