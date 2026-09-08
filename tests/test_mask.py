@@ -28,6 +28,7 @@ from preprocess.mask import (
     mask,
     mask_address,
     mask_brand,
+    mask_org_foreign,
     mask_org_slots,
     residue,
     strip_legal,
@@ -326,3 +327,64 @@ def test_org_slot_catches_third_parties() -> None:
     out = mask_org_slots("원사업자인 케이티건설 주식회사가 수급사업자인 문원건설 주식회사에")
     assert "케이티건설" not in out and "문원건설" not in out
     assert mask_org_slots("문원건설에 직접 지급하여야") == "문원건설에 직접 지급하여야"
+
+
+# ══ 외국 법인격 (2026-09-08) ═══════════════════════════════════════════
+#
+# 🚨 이 절이 지키는 것은 **계수기가 아니라 이름이 사라졌는가**이다.
+#    첫 판은 잔여 계수 11→0 을 만들고도 「오션스카이 인터넷 인포메이션 [업체]」를 남겼다.
+#    그래서 여기서는 전부 **이름 문자열이 없는지**로 확인한다.
+
+
+def test_foreign_org_single_word() -> None:
+    """한 어절 상호 — 앞말(역할명사)은 남는다."""
+    out = mask_org_foreign("1· 피심인 구글 엘엘씨는 자신이 운영하는")
+    assert "구글" not in out
+    assert out.startswith("1· 피심인 ") and "는 자신이" in out
+
+
+def test_foreign_org_multiword() -> None:
+    """🚨 **여러 어절 상호.** 한 어절만 잡으면 이름이 남는다 — 그 실패를 막는 자리."""
+    out = mask_org_foreign(
+        "1) 오션스카이 인터넷 인포메이션 테크놀로지 프라이빗 리미티드 : 90,000,000원"
+    )
+    for frag in ("오션스카이", "인터넷", "인포메이션", "테크놀로지"):
+        assert frag not in out, out
+    assert out.startswith("1) ") and "90,000,000원" in out  # 항목번호·금액은 산다
+
+
+def test_foreign_org_english() -> None:
+    out = mask_org_foreign("Imabari Shipbuilding Co Ltd 와 AT&T Inc")
+    assert "Imabari" not in out and "AT&T" not in out
+
+
+def test_foreign_org_keeps_english_words() -> None:
+    """🔴 **광고 문구를 먹지 않는다.** 「Limited Edition」의 Limited 는 법인격이 아니다.
+
+    ⛔ 첫 판이 이것을 「[업체] Edition 출시」로 만들었다. 마스킹이 학습 입력을 먹는
+       실패는 조용하다 — 개인정보가 남는 것과 달리 아무도 놀라지 않는다.
+    ★ 규칙: 법인격은 상호의 **끝**에 온다. 뒤에 영문 낱말이 더 오면 법인격이 아니다.
+    """
+    for s in ("Summer Limited Edition 출시", "Incredible 효과", "Corporate 이미지"):
+        assert mask_org_foreign(s) == s
+
+
+def test_foreign_org_form_at_tail() -> None:
+    """「… Corporation Singapore Pte」는 **끝의 Pte** 에서 걸린다 — 이름 전체가 사라진다."""
+    assert "Hanwha" not in mask_org_foreign("Hanwha Energy Corporation Singapore Pte 는")
+
+
+def test_foreign_org_one_char_token() -> None:
+    """🚨 법인격 바로 앞 어절이 **1자**인 것 — 「샤오미 테크놀로지 **코** 엘티디」.
+
+    2자를 요구했더니 이 문장이 통째로 안 걸렸다. **누락이 과잉삭제보다 조용하다.**
+    """
+    out = mask_org_foreign("구글 아시아 퍼시픽 피티이 엘티디")
+    assert "구글" not in out and "퍼시픽" not in out
+
+
+def test_foreign_org_keeps_lead_words() -> None:
+    """앞말은 되돌린다 — 「중국의」·「및」·항목번호까지 먹으면 문장이 망가진다."""
+    out = mask_org_foreign("중국의 샤오미 테크놀로지 코 엘티디 등이 있으며")
+    assert out.startswith("중국의 ") and out.endswith(" 등이 있으며")
+    assert "샤오미" not in out
