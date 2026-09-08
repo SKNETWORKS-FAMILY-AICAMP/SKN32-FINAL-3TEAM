@@ -154,6 +154,57 @@ def extract(path: pathlib.Path) -> list[dict]:
     return rows
 
 
+#: 마스킹을 거는 자리. 🚨 `원천라벨` 까지 건다 — 라벨 문자열에도 원천의 표기가 들어온다.
+MASK_FIELDS = ("문구", "수정문구", "원천라벨")
+
+
+def masked(rows: list[dict]) -> tuple[list[dict], collections.Counter]:
+    """마스킹을 건 사본과 계측. **산출물로 나가는 모든 길이 여기를 지난다.**
+
+    🔴 `--sheet` 도 여기를 지난다 (2026-09-08 · D-159).
+       ⛔ 그 전에는 `--dump` 만 지났다. 검증셋은 사람이 읽는 파일이라 무심코 원문을 썼는데,
+          `data/derived/` 에 떨어지는 순간 다른 파생물과 똑같이 D-17 대상이다.
+       🚨 그런데도 **깨끗해 보였다** — 이 원천의 상호는 3,037문구 중 2건뿐이라
+          150건 표본에 안 걸렸다. **오늘 깨끗한 것은 표본 운이지 규칙이 아니다.**
+
+    🚨 앵커가 없는 원천이라 `bare` 는 빈 문자열이다 — 앵커 치환은 건너뛴다.
+    ★ 해설서는 `person` 이 꺼져 있다: 원천이 **사람이 아닌 것**을 같은 기호로 가려서
+      그 축이 판정 대상 문구를 먹는다 (D-157 · 실측 오탐 11 · 진짜 0).
+    """
+    from preprocess.mask import apply_policy  # noqa: PLC0415
+
+    changed: collections.Counter = collections.Counter()
+    out: list[dict] = []
+    for r in rows:
+        rec = dict(r)
+        for f in MASK_FIELDS:
+            if rec.get(f):
+                m = apply_policy(rec[f], "", SOURCE_ID)
+                if m != rec[f]:
+                    changed[f] += 1
+                rec[f] = m
+        out.append(rec)
+    return out, changed
+
+
+def policy_or_stop() -> bool:
+    """🔴 정책이 없으면 **아무것도 내보내지 않는다** (D-72 fail-closed). 시트도 포함이다."""
+    from preprocess.mask import POLICY  # noqa: PLC0415
+
+    if SOURCE_ID in POLICY:
+        return True
+    print(
+        f"\n🔴 {SOURCE_ID!r} 의 마스킹 정책이 없다 — **내보내지 않는다** (D-72 fail-closed).\n"
+        "   실측(2026-09-08 · 문구 3,037): 원천이 이미 가려서 준다 —\n"
+        "     가림표기(oo·㈜**) 238건 · 법인격 2건(둘 다 이미 가려짐) ·\n"
+        "     대표자명 0 · 주소 0 · URL 0 · 🚨 전화번호 1건(033-332-4000)\n"
+        "   🚨 「가려져 있으니 불필요」로 가지 않는다 — **원천의 정책이지 우리의 보장이 아니다.**\n"
+        "   고치는 법 — ① data_sources.yaml 의 masking: 기입 ② 2인 확인 ③ mask.POLICY 반영",
+        file=sys.stderr,
+    )
+    return False
+
+
 def _hwp() -> pathlib.Path:
     got = sorted(RAW_DIR.glob("*.hwp"))
     if not got:
@@ -194,48 +245,33 @@ def main() -> int:
         )
 
     if a.sheet:
+        if not policy_or_stop():
+            return 1
+        # 🔴 검증셋도 마스킹을 지난다 (D-159). 표본 **선택**은 마스킹 전과 같다 —
+        #    마스킹은 순서도 개수도 안 바꾸므로 seed 가 같으면 같은 행이 뽑힌다 (D-54).
+        safe, sheet_changed = masked(viol)
         rnd = random.Random(a.seed)
         pick: list[dict] = []
         for k in sorted(by):
-            pool = [r for r in viol if r["원천라벨"] == k]
+            pool = [r for r in safe if r["원천라벨"] == k]
             pick += rnd.sample(pool, min(a.sheet, len(pool)))
         SHEET.parent.mkdir(parents=True, exist_ok=True)
         with SHEET.open("w", encoding="utf-8") as f:
             for r in pick:
                 f.write(json.dumps({**r, "붙인이": "", "붙인날": ""}, ensure_ascii=False) + "\n")
         print(f"\n  ⓒ 검증셋 {len(pick):,}건 → {SHEET}  (seed={a.seed})")
-        print("     🚨 `확정유형` 은 **사람이** 채운다. AI 가 채우면 홀드아웃이 자기 채점이 된다.")
+        print(
+            f"     🔴 마스킹을 지났다 — 위반문구 전체에서 바뀐 필드 {dict(sheet_changed) or '없음'}"
+        )
+        print("     🚨 표본에 안 걸렸다고 안전한 것이 아니다 — **표본 운이지 규칙이 아니다.**")
+        print(
+            "     🚨 `확정유형` 은 **사람이** 채운다 — 추출기가 채우면 홀드아웃이 자기 채점이 된다."
+        )
 
     if a.dump:
-        from preprocess.mask import POLICY, apply_policy  # noqa: PLC0415
-
-        if SOURCE_ID not in POLICY:
-            print(
-                f"\n🔴 {SOURCE_ID!r} 의 마스킹 정책이 없다 — **내보내지 않는다** (D-72 fail-closed).\n"
-                "   실측(2026-09-08 · 문구 3,037): 원천이 이미 가려서 준다 —\n"
-                "     가림표기(oo·㈜**) 238건 · 법인격 2건(둘 다 이미 가려짐) ·\n"
-                "     대표자명 0 · 주소 0 · URL 0 · 🚨 전화번호 1건(033-332-4000)\n"
-                "   🚨 「가려져 있으니 불필요」로 가지 않는다 — **원천의 정책이지 우리의 보장이 아니다.**\n"
-                "   고치는 법 — ① data_sources.yaml 의 masking: 기입 ② 2인 확인 ③ mask.POLICY 반영",
-                file=sys.stderr,
-            )
+        if not policy_or_stop():
             return 1
-        # 🔴 **마스킹은 여기서 건다** (D-17 · 정책은 2026-09-08 2인 확인).
-        #    🚨 앵커가 없는 원천이라 `bare` 는 빈 문자열이다 — 앵커 치환은 건너뛴다.
-        #    ★ 해설서는 `person` 이 꺼져 있다: 원천이 **사람이 아닌 것**을 같은 기호로 가려서
-        #      그 축이 판정 대상 문구를 먹는다 (D-157 · 실측 오탐 11 · 진짜 0).
-        FIELDS = ("문구", "수정문구", "원천라벨")
-        changed = collections.Counter()
-        out: list[dict] = []
-        for r in rows:
-            rec = dict(r)
-            for f in FIELDS:
-                if rec.get(f):
-                    m = apply_policy(rec[f], "", SOURCE_ID)
-                    if m != rec[f]:
-                        changed[f] += 1
-                    rec[f] = m
-            out.append(rec)
+        out, changed = masked(rows)
         OUT.parent.mkdir(parents=True, exist_ok=True)
         with OUT.open("w", encoding="utf-8") as fh:
             for rec in out:

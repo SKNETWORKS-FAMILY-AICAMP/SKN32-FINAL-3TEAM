@@ -32,10 +32,9 @@ import argparse
 import collections
 import json
 import pathlib
-import re
 
 from preprocess.mask import apply_policy
-from preprocess.text import LEX, evasion
+from preprocess.text import LEX, evasion, quoted
 
 
 #: 🚨 소스 이름이 곧 경로다 — `data/raw/<이름>/` 을 읽고 `data/derived/<이름>/` 에 쓴다.
@@ -56,7 +55,12 @@ MIN_CASES = 30
 
 #: 광고 문구가 실린 자리를 알아보는 말. 🚨 이것은 **계수 기준이 아니라 길잡이**다 —
 #:    본문에 광고 문구가 실제로 실리는지 눈으로 확인하려고 뽑는다.
-_QUOTE = re.compile(r"[「『\"'“‘]([^」』\"'”’\n]{6,80})[」』\"'”’]")
+#: 🔄 2026-09-08 — 자체 정규식을 버리고 `preprocess.text.quoted` 로 옮겼다 (D-160).
+#:    ⛔ 옛 정규식은 닫는 자리에 여는 따옴표를 안 두어, 원천이 「‘난임예방‘」처럼 적으면
+#:       **멈추지 못하고 다음 따옴표까지 물었다.** 버려진 게 아니라 **틀린 종이 만들어졌다** —
+#:       「피로개선‘, ‘뇌건강」은 두 표현인데 한 종으로 세어졌다.
+#:    🚨 범위 차이는 정규식이 아니라 **선언된 파라미터**로 둔다 — 아래 두 값이 전부다.
+QUOTE_MIN, QUOTE_MAX = 6, 80
 
 
 def pdf_text(path: pathlib.Path, cache: pathlib.Path, *, refresh: bool = False) -> str:
@@ -175,8 +179,7 @@ def main() -> int:
                 lex_hits[w] += 1
         # 🚨 **광고 문구가 실제로 실리는지** 눈으로 본다 — 이 소스를 받는 이유가 그것이다.
         #    판정 어휘를 품은 인용만 모은다 (기관 명칭·법령 인용을 걸러내는 값싼 그물).
-        for m in _QUOTE.finditer(text):
-            q = " ".join(m.group(1).split())
+        for q in quoted(text, min_len=QUOTE_MIN, max_len=QUOTE_MAX):
             if any(w in q for w in LEX):
                 # 🔴 **derived 로 나가는 것은 마스킹을 지난다** (D-17 · 2026-09-06).
                 #    인용된 광고 문구에는 업체명·제품명이 섞여 들어온다.

@@ -18,12 +18,16 @@ import pytest
 
 from collect import registry
 from preprocess.mask import (
+    MARK_RE,
     MASK_ADDR,
     MASK_BRAND,
     MASK_CEO,
     MASK_ORG,
+    MASKS,
     POLICY,
     POLICY_WORDS,
+    Ledger,
+    Trace,
     apply_policy,
     mask,
     mask_address,
@@ -33,11 +37,22 @@ from preprocess.mask import (
     mask_person,
     residue,
     strip_legal,
+    to_natural,
     variants,
 )
 
 #: 정책 키의 원천 — `preprocess.mask.POLICY` 는 이것의 사본이다.
-_REGISTRY_SOURCE = {"ftc": "ftc_decisions_body", "mfds_sanctions": "mfds_sanctions"}
+#: ⛔ 2026-09-08 에 `POLICY` 를 2종 → 5종으로 늘리면서 **이 표를 안 늘렸다.**
+#:    이 테스트는 `sorted(POLICY)` 로 파라미터를 만드는데, 그날 돌린 것은
+#:    `-m` 로 추린 38건이라 새 세 개가 **한 번도 안 돌았다.** 대조기를 늘리지 않으면
+#:    대조가 늘지 않는다 — 오늘 하루의 주제 그대로다.
+_REGISTRY_SOURCE = {
+    "ftc": "ftc_decisions_body",
+    "mfds_sanctions": "mfds_sanctions",
+    "mfds_special_use_guide": "mfds_special_use_guide",
+    "mfds_casebook": "mfds_casebook",
+    "mfds_hf_ingredient_board": "mfds_hf_ingredient_board",
+}
 
 
 @pytest.mark.parametrize(
@@ -266,6 +281,15 @@ def test_policy_matches_the_registry(target: str) -> None:
             assert declared, "ftc 는 대표자명을 지운다 — 원천의 정책은 우리의 보장이 아니다"
             assert "원천의 정책이지 우리의 보장이 아니다" in wording
             continue
+        # 🚨 **끈 것도 문언으로 증명한다.** 해설서 문언에는 「대표자명」이라는 낱말이
+        #    들어 있지만 뜻은 반대다 — 「대표자명(person)은 **끈다**」.
+        #    ⛔ 낱말만 세면 「지운다」와 「끈다」를 구별하지 못한다. 그래서 축을 끈 원천은
+        #       **끈다고 적힌 문장**을 확인한다. 켤 때만 근거를 요구하고 끌 때는 안 하면,
+        #       실수로 꺼진 축이 조용히 통과한다.
+        if target == "mfds_special_use_guide" and key == "person":
+            assert not declared, "해설서는 대표자명을 끈다 — 실측 오탐 11 · 진짜 0 (D-157)"
+            assert "대표자명(person)은 끈다" in wording
+            continue
         assert declared == (word in wording), (
             f"{target}: POLICY 는 {key}={declared} 인데 레지스트리 masking 문언은 "
             f"{word!r} 를 {'포함' if word in wording else '미포함'} 한다"
@@ -399,7 +423,9 @@ def test_log_does_not_change_output() -> None:
     text = "원사업자인 케이티건설 주식회사가 수급사업자인 문원건설 주식회사에 위탁하였다"
     log: list[dict] = []
     assert apply_policy(text, "", "ftc", log) == apply_policy(text, "", "ftc")
-    assert log and all({"규칙", "원문", "자리"} <= set(x) for x in log)
+    # 🔄 2026-09-08 D-165 — `원문` 은 더 이상 담지 않는다. 개수와 규칙만 남는다.
+    assert log and all({"규칙", "자리"} <= set(x) for x in log)
+    assert all("원문" not in x for x in log)
 
 
 def test_slot_prefix_keeps_particle_after_sign() -> None:
@@ -438,3 +464,84 @@ def test_person_axis_is_separable() -> None:
     text = "모유분석 000건"
     assert apply_policy(text, "", "mfds_sanctions") != text  # person 이 켜진 원천
     assert mask(text, "") == text  # 🚨 `mask()` 는 이제 사람을 건드리지 않는다
+
+
+# ─────────────────────────────────────────────────────────────
+#  🔴 치환 원장은 **개수**를 남기고 원문은 남기지 않는다 (D-165)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_ledger_keeps_no_source_by_default() -> None:
+    """🔴 ⛔ 2026-09-08 — `ftc_stage.jsonl` 에 실명·주소 원문이 416줄 들어 있었다.
+
+    레지스트리 `masking:` 은 「원문 미보관 (D-17)」이라고 말하고 있었다.
+    ★ 그냥 `list` 를 넘겨도 안전해야 한다 — **안전한 쪽이 기본값**이다.
+    """
+    for log in (Ledger(), []):
+        mask_person("대표이사 김홍익을 고발한다", log)
+        assert log, "원장이 비었다 — 개수는 남아야 한다"
+        assert all("원문" not in r for r in log), f"원문이 남았다: {log}"
+        assert all(r["규칙"] and r["자리"] for r in log)
+
+
+def test_trace_is_the_only_way_to_see_the_source() -> None:
+    """진단은 `Trace` 로만. 🚨 이 값을 파일로 쓰는 코드를 만들지 않는다."""
+    log = Trace()
+    mask_person("대표이사 김홍익을 고발한다", log)
+    assert any(r.get("원문") for r in log)
+
+
+def test_count_alone_catches_a_broken_rule() -> None:
+    """★ 원문을 빼도 검출은 된다 — 2026-09-08 에 결손을 잡은 것은 **416 → 398 이라는 수**였다."""
+    a, b = Ledger(), Ledger()
+    mask_person("대표이사 김홍익을 고발한다", a)
+    mask_person("대표이사 김홍익을 고발한다", b)
+    assert len(a) == len(b)
+    mask_person("추가로 대표이사 박철수도", b)
+    assert len(b) > len(a)  # 규칙이 움직이면 수가 달라진다
+
+
+def test_rare_surname_is_masked() -> None:
+    """⛔ 「원」이 성씨 목록에 없어 「대표이사 **원호봉**을」이 산출물에 남아 있었다."""
+    assert "원호봉" not in mask_person("피심인 및 대표이사 원호봉을 각각 고발한다")
+    assert "구상모" not in mask_person("대표이사 구상모")
+
+
+def test_widening_surnames_does_not_eat_form_words() -> None:
+    """🚨 「대표자 **성명**」의 「성」은 실제 성씨다 — 넓히면 양식 문구가 지워진다.
+
+    ⛔ 그래서 성씨 확장과 불용어는 **같이 가야 한다.** 하나만 하면 다른 쪽이 깨진다.
+    """
+    assert mask_person("대표자 성명 기재") == "대표자 성명 기재"
+    assert mask_person("사장 에서 물러난") == "사장 에서 물러난"
+
+
+def test_particle_survives_person_masking() -> None:
+    """🔴 「대표이사 원호봉**을** 각각」이 「대표이사 [대표] 각각」이 되어 조사가 사라졌다.
+
+    `_slot_sub` 가 업체 쪽에서 이미 고친 것과 **같은 버그**가 사람 쪽에 남아 있었다 (D-166).
+    실측 — 직함+이름 12,754건 중 4자 850, 그중 끝이 조사인 것 291건.
+    """
+    assert mask_person("대표이사 원호봉을 각각 고발한다") == "대표이사 [대표]을 각각 고발한다"
+    # 🚨 3자는 이름 그대로인 경우가 압도적이라(2자 616 · 3자 11,288 · 4자 850) 떼지 않는다
+    assert mask_person("대표이사 김홍익") == "대표이사 [대표]"
+
+
+def test_marks_have_one_source() -> None:
+    """⛔ `ftc_extract._MARK` 가 자국 꼴을 **따로** 들고 있었다 — 표기를 바꾸면 조용히 어긋난다."""
+    from preprocess.ftc_extract import _MARK  # noqa: PLC0415
+
+    assert _MARK is MARK_RE
+    assert all(MARK_RE.fullmatch(m) for m in MASKS)
+
+
+def test_natural_form_is_one_way_only() -> None:
+    """🔴 저장은 자국으로, 내보낼 때만 `○` 로 (D-166).
+
+    ⛔ 자국 자체를 `○` 로 바꿔 봤다가 되돌렸다 — 원천이 **숫자·URL 도** ○ 로 가려서
+       (「○○○km」·「www.○○○○.com」) 계수기가 우리 자국과 구분하지 못했다.
+    ★ 한 방향으로만 간다. 되돌릴 수 없으므로 **정보가 많은 쪽으로 저장한다** (D-152 와 같은 모양).
+    """
+    assert to_natural("피심인 [업체] 및 대표이사 [대표]을") == "피심인 ○○○○ 및 대표이사 ○○○을"
+    # 🚨 원천이 가린 ○ 는 건드리지 않는다 — 우리 자국만 바꾼다
+    assert to_natural("1회 충전으로 ○○○km 이상") == "1회 충전으로 ○○○km 이상"

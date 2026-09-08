@@ -19,3 +19,24 @@
 🚨 **여기서 아무것도 import 하지 않는다** — `collect/__init__.py` 와 같은 이유다 (D-109).
    쓰는 쪽이 필요한 것만 집어 간다.
 """
+
+#: 원천 id → 전처리(추출) 모듈.
+#:
+#: 🚨 **런처가 이 표를 읽는다 — 런처에 사본을 두지 않는다** (D-99).
+#:    런처는 껍데기이고 진실의 원천이 아니다. 원천이 늘면 여기만 고친다.
+#: 🚨 표에 문자열만 둔다. import 는 하지 않는다 (위 주석).
+EXTRACTORS: dict[str, str] = {
+    "mfds_casebook": "preprocess.mfds_casebook",
+    "mfds_hf_ingredient_board": "preprocess.mfds_hf",
+    "mfds_special_use_guide": "preprocess.mfds_guide",
+    "ftc_decisions_body": "preprocess.ftc_extract",
+    "mfds_press": "preprocess.mfds_press",
+}
+
+#: 원천 id → 계측 모듈. 🔴 **라벨을 만들지 않고 세기만 한다** — 산출물이 없다.
+#:    받은 것이 전부인지(D-161) · 회피 표기와 광고 문구가 실제로 실리는지(D-40) 를 묻는다.
+SCANNERS: dict[str, str] = {
+    "mfds_sanctions": "preprocess.sanctions_scan",
+    "mfds_casebook": "preprocess.evasion_scan",
+    "mfds_press_pdf": "preprocess.evasion_scan",
+}
