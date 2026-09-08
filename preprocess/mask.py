@@ -312,6 +312,12 @@ _ORG_PREFIX = re.compile(
 #: 「**X** 주식회사」 — 법인격이 뒤에 오는 꼴
 _ORG_SUFFIX = re.compile(r"([가-힣A-Za-z0-9]{2,12})\s*" + _ORG_FORM)
 
+#: 🚨 이름 **수집** 전용 뒤꼴 — 기호 `(주)` 를 뺀다.
+#:    기호는 이름 **앞**에 오므로(「(주)미래이엔지」), 뒤꼴로 훑으면 그 앞의 무관한 낱말이
+#:    이름으로 잡힌다. 실측에서 「합계액」·「로부터」가 그렇게 들어왔다 (2026-09-07).
+#:    `_ORG_SUFFIX` 는 **잔여 계수**용이라 넓게 두고, 수집은 이쪽을 쓴다.
+_ORG_SUFFIX_WORD = re.compile(r"([가-힣A-Za-z0-9]{2,12})\s*" + _ORG_WORD)
+
 
 def residual_orgs(text: str) -> list[str]:
     """마스킹 뒤 텍스트에 법인격 표기를 달고 남은 이름들.
@@ -429,6 +435,128 @@ def mask_address(text: str) -> str:
     return _ADDRESS.sub(MASK_ADDR, text)
 
 
+# ══ 2패스 — 문서 안에서 사전을 만든다 ═══════════════════════════════
+#
+# 🚨 B(자리 치환)는 **반쪽이다** (P3결정요청_ftc_2026-09-06 §3-B).
+#    「(주)창연실업」은 잡지만, 같은 문서 뒤쪽의 맨몸 「창연실업」은 못 잡는다.
+#    실측 — `apply_policy` 를 돌린 뒤에도 **8,253건 중 1,972건(23.9%)** 에
+#    법인격 이름이 맨몸으로 남았다. 종으로는 2,118 (2026-09-07).
+#
+# ★ 외부 사전을 만들지 않는다. **그 문서가 스스로 알려 준 이름만** 쓴다 —
+#   「주식회사 X」 가 있는 문서에서만 「X」 를 지운다. 근거가 문서 안에 있다.
+#
+# 🚨 그냥 돌리면 위험하다. 필터 없이 재면 상위가 **「서울」466 · 「발주」113 ·
+#    「이하」113** 이었다. 「㈜서울…」 한 건 때문에 본문의 모든 「서울」이 사라진다 —
+#    **필요 이상으로 지우는 실패는 조용하다**(`_slot_sub` 가 같은 이유로 조사를 남긴다).
+#    그래서 셋을 건다: ① 최소 3자 ② 행정구역명 배제 ③ 일반어 배제.
+
+#: 행정구역 — 「성남시」처럼 회사명 조각으로 잡히면 본문의 지명까지 지운다.
+_ADMIN_DIV = re.compile(r"^(?:" + _SIDO + r"|[가-힣]{2,4}(?:특별시|광역시|시|군|구|도))$")
+
+#: 법인격 표기 주변에서 흔히 잘려 나오는 일반어. 회사명이 아니다.
+_GENERIC_ORG_WORDS = frozenset(
+    [
+        "발주",
+        "이하",
+        "대표",
+        "대표자",
+        "대표이사",
+        "제품",
+        "제품인",
+        "계열사",
+        "협력사",
+        "관계사",
+        "가맹점",
+        "가맹본부",
+        "대리점",
+        "합계액",
+        "청구액",
+        "지급액",
+        "법무법인",
+        "법무조합",
+        "회계법인",
+        "세무법인",
+        "특허법인",
+        "의료법인",
+        "학교법인",
+    ]
+)
+
+#: 🚨 **역할 명사 + 어미**. 「수급사업자**인** 주식회사 X」에서 앞말이 이름으로 잡힌다.
+#:    실측 — 필터 없이 돌리니 「수급사업자인」 200 · 「중소기업자인」 68 · 「중소기업자로서」 44 가
+#:    상위에 섰다 (2026-09-07 · `ftc` 8,253건). 어미가 붙으므로 낱말 집합으로는 못 막는다.
+#: 🚨 조사·어미만으로 된 토막. 「…**로부터** 주식회사 X」의 「로부터」가 이름으로 잡혔다.
+#:    `_drop_particle` 은 남는 길이를 지키느라 「로부터」를 통째로 두고 나온다 — 그 뒤를 여기서 막는다.
+_PARTICLE_ONLY = re.compile(
+    r"^(?:으로부터|로부터|에게서|에서|에게|으로|부터|까지|하여|하고|한|및|또는|그리고)$"
+)
+
+_ROLE_NOUN = re.compile(
+    r"^(?:수급사업자|원사업자|중소기업자|사업자|피심인|신청인|이의신청인|발주자"
+    r"|가맹점주|가맹본부|사업시행자|시공사|시행사|위탁자|수탁자)"
+    r"(?:인|로서|으로서|가|는|은|이|와|과|에게|의)?$"
+)
+
+#: 맨몸 치환의 최소 길이. `MIN_ANCHOR` 와 같은 뜻이나 **쓰임이 다르다** —
+#: 저쪽은 앵커(피심인 하나), 이쪽은 문서에서 캐낸 이름 여럿이라 오탐 비용이 크다.
+MIN_BARE = 3
+
+
+def _bare_candidate(name: str) -> str | None:
+    """법인격 표기에서 캐낸 토막을 맨몸 치환에 쓸 수 있는 이름으로. 아니면 None."""
+    name = _drop_particle(name).strip()
+    if len(name) < MIN_BARE:
+        return None
+    if name in _GENERIC_ORG_WORDS or _ADMIN_DIV.match(name) or _ROLE_NOUN.match(name):
+        return None
+    if _PARTICLE_ONLY.match(name):
+        return None
+    return name
+
+
+def doc_org_names(text: str) -> list[str]:
+    """이 문서가 **스스로 밝힌** 회사 이름들 (법인격 표기가 붙은 것).
+
+    🚨 앞꼴·뒷꼴을 따로 훑는다 — `residual_orgs` 와 같은 이유다.
+       긴 이름부터 돌려야 「대우건설」을 지우고 남은 「대우」가 또 잡히지 않는다.
+    """
+    seen: set[str] = set()
+    for pat in (_ORG_PREFIX, _ORG_SUFFIX_WORD):
+        for raw in pat.findall(text):
+            if (n := _bare_candidate(raw)) is not None:
+                seen.add(n)
+    return sorted(seen, key=len, reverse=True)
+
+
+#: 🚨 마스킹 **직후 괄호 안의 원어 표기**. 「[업체](NGK Spark Plug Co., Ltd)」 꼴이다.
+#:    한글 상호는 지웠는데 원어가 남아 같은 법인이 그대로 드러난다.
+#:    ★ 새 판단이 아니다 — **이미 지우기로 판정된 그 법인**의 다른 표기다.
+#:    🚨 이것으로 외국 법인 누출의 **7%(38/500)만** 막힌다. 나머지 462건은 본문에
+#:       그냥 실명으로 나오고(「한일홀딩스」·「프리스케일 세미컨덕터즈 리미티드」),
+#:       한글의 「법인격이 곧 경계」 전략이 영문에는 통하지 않는다 — **미결이다**.
+_MASKED_PAREN = re.compile(r"(\[(?:업체|대표)\])\s*\([^)\n]{2,80}\)")
+
+
+def mask_paren_alias(text: str) -> str:
+    """`[업체](Original Name)` 의 괄호를 지운다. 앞의 마스킹 자국은 남긴다."""
+    return _MASKED_PAREN.sub(r"\1", text)
+
+
+def mask_org_bare(text: str, names: list[str]) -> tuple[str, list[str]]:
+    """문서 자기 사전으로 맨몸 언급을 `[업체]` 로. **무엇을 지웠는지 함께 돌려준다.**
+
+    🚨 지운 목록을 돌려주는 것이 설계다 — 결정요청 §4 가 *「지우는 것과 세는 것을
+       한 짝으로」* 라고 적은 그 자리다. 세는 쪽이 없으면 커버리지가 오른 만큼
+       안심하게 되고, 안심한 만큼 확인을 안 하게 된다.
+    """
+    used: list[str] = []
+    for n in names:
+        if n in text:
+            text = text.replace(n, MASK_ORG)
+            used.append(n)
+    return text, used
+
+
 #: 🚨 **영업표지**는 따옴표 안에 있고 앞에 그 말이 붙는다 (실측) —
 #:      「자신의 **영업표지 '청년피자'**를 사용하여」
 #:      「'에듀플렉스, 에듀코치 **영업표지** …」
@@ -478,7 +606,10 @@ def apply_policy(text: str, bare: str, source: str) -> str:
     todo = POLICY[source]
     if "org" in todo:
         text = mask(text, bare)  # 앵커 + 사람(항상)
+        names = doc_org_names(text)  # 🚨 자리 치환 **전에** 캔다 — 치환 뒤엔 이름이 없다
         text = mask_org_slots(text)
+        text, _ = mask_org_bare(text, names)  # 2패스 — 같은 문서의 맨몸 언급
+        text = mask_paren_alias(text)  # 마스킹 직후 괄호 안 원어 표기
     if "addr" in todo:
         text = mask_address(text)
     if "brand" in todo:
