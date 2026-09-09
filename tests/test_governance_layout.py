@@ -1247,3 +1247,65 @@ def test_hold_과_manual_은_수집이_막힌다() -> None:
         "hold·manual 이면서 용도가 열린 소스가 없다 — 이 게이트가 아무것도 세지 않았다. "
         "레지스트리가 바뀌었으면 이 검사가 여전히 뜻이 있는지 다시 본다 (D-170)."
     )
+
+
+# ══════════════════════════════════════════════════════════
+# 🔴 생성기가 pre-commit 훅과 싸우지 않는가 (2026-09-09)
+#
+# ⛔ `scripts/data_status.py` 를 만들자마자 `end-of-file-fixer` 가 매번 그 파일을 고쳐
+#    커밋이 중단됐다. 생성기가 끝에 빈 줄을 하나 더 붙였기 때문이다.
+#    🚨 **한 번 고치면 끝나는 문제가 아니다** — 생성기가 다섯이고 앞으로 더 는다.
+#       다음 사람이 새 생성기를 쓰면 같은 자리를 밟고, 아무도 알려주지 않는다.
+#    🚨 그리고 이 싸움이 반복되면 **둘 중 하나를 끄게 된다** — 훅을 끄면 서식이 무너지고,
+#       생성기를 손으로 고치면 그게 곧 「생성물을 손으로 고친다」다 (D-90 이 막는 것).
+#
+# 그래서 규칙을 검사로 옮긴다. 훅을 실제로 돌리지 않고 **훅이 요구하는 모양**만 본다 —
+# 훅을 돌리려면 네트워크와 설치가 필요하고, 그러면 이 검사가 CI 밖에서 안 돈다.
+# ══════════════════════════════════════════════════════════
+
+#: 생성기가 쓰는 파일들. 🚨 **새 생성기를 만들면 여기 넣는다.**
+#   여기 없으면 이 검사는 그 파일을 안 본다 — 목록이 낡으면 검사도 낡는다.
+GENERATED = (
+    "data_sources.yaml",  # scripts/gen_registry.py
+    "docs/03_데이터/_matrix/sources.json",  # scripts/build_matrix.py
+    "docs/03_데이터/판정매트릭스.html",  # scripts/build_matrix.py
+    "scripts/registry_rationale.yaml",  # scripts/extract_rationale.py
+    "docs/03_데이터/데이터현황판.md",  # scripts/data_status.py
+    "docs/03_데이터/S0-14_2인확인_검토표.md",  # scripts/review_sheet.py
+)
+
+
+@pytest.mark.gate
+def test_생성물이_훅의_고정점이다() -> None:
+    """생성기 출력이 pre-commit 을 그대로 지나야 한다.
+
+    보는 것은 둘이다 — 이 둘이 2026-09-09 에 실제로 물었다.
+      `end-of-file-fixer`  파일은 개행 **하나**로 끝난다
+      `trailing-whitespace` 줄 끝에 공백이 없다
+        🚨 `.md` 는 예외가 있다 — 훅이 `--markdown-linebreak-ext=md` 로 돌아
+           **공백 두 개**는 줄바꿈이라 남긴다. 그래서 md 는 「둘이 아닌 공백」만 잡는다.
+    """
+    bad: list[str] = []
+    for rel in GENERATED:
+        path = ROOT / rel
+        if not path.exists():
+            continue  # 아직 안 만든 생성물은 이 검사의 자리가 아니다
+        text = path.read_text(encoding="utf-8")
+        if not text.endswith("\n") or text.endswith("\n\n"):
+            bad.append(
+                f"{rel}: 끝이 개행 하나가 아니다 ({text[-6:]!r}) — end-of-file-fixer 가 고친다"
+            )
+        for i, line in enumerate(text.split("\n"), 1):
+            stripped = line.rstrip()
+            if line == stripped:
+                continue
+            tail = line[len(stripped) :]
+            if path.suffix == ".md" and tail == "  ":
+                continue  # 마크다운 줄바꿈 — 훅이 남긴다
+            bad.append(f"{rel}:{i}: 줄 끝 공백 {tail!r} — trailing-whitespace 가 고친다")
+            break
+    assert not bad, (
+        "생성물이 pre-commit 훅과 싸운다 — 돌릴 때마다 훅이 고쳐 커밋이 중단된다.\n"
+        "  🚨 훅을 끄지 말고 **생성기가 훅의 모양을 지키게** 고친다 (D-90 — 생성물을 "
+        "손으로 고치지 않는다).\n  " + "\n  ".join(bad)
+    )
