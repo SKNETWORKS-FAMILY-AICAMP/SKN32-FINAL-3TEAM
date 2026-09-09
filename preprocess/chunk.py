@@ -1,0 +1,198 @@
+"""preprocess/chunk.py — [P5] 청킹. 조문·별표 노드 → RAG 청크.
+
+  uv run python -m preprocess.chunk               # 센다
+  uv run python -m preprocess.chunk --dump        # data/derived/chunks.jsonl
+
+왜 있는가 — 2026-09-09 확인: **[P5] 는 이름표만 있고 코드가 0줄이었다.** RAG 가 설계에만
+있고 코드에 없었다. `docs/02_설계/청크_스키마.md` 는 제목부터 「W1 확정 대상」이다.
+
+🚨 **조문 단위로 자른다. 임의 길이로 자르지 않는다.**
+   판정의 근거는 「제8조제1항제1호」처럼 **조문으로 인용**되어야 한다 (D-158).
+   200자씩 기계적으로 자르면 한 청크가 두 호에 걸치고, 화면이 어느 호를 인용하는지
+   말할 수 없게 된다. 그러면 D-51(오류는 고치는 법을 보여준다)이 성립하지 않는다.
+
+🚨 **512 토큰은 리랭커의 한계다** (bge-reranker-v2-m3). 넘는 조문은 **항 단위로 더 쪼갠다.**
+   그래도 넘으면 문장 경계로 자르되 **`part` 를 붙여 원 조문을 가리킨다** — 잘렸다는
+   사실을 데이터가 들고 있어야 화면이 「제N조 (1/3)」이라 말할 수 있다.
+
+🚨 **토큰 수는 재는 것이지 어림하는 것이 아니다.** 형태소·서브워드 수가 글자 수와 다르다.
+   여기서는 보수적으로 **글자 수 기반 상한**을 쓰고 그 사실을 적어 둔다 —
+   ⚠️ **실제 토크나이저로 재는 것이 W1 의 남은 일이다** (청크_스키마 TODO 3).
+   글자 상한은 실제 토큰 수를 **넘게 잡는 쪽**이라 512 를 초과할 위험은 없다(한국어는
+   글자당 토큰이 1 미만인 경우가 대부분이다). 대신 **불필요하게 잘게 잘릴 수 있다.**
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import pathlib
+import re
+
+from collect import store
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+DERIVED = ROOT / "data" / "derived"
+
+# 🚨 512 토큰 한계에 대한 **보수적** 글자 상한. 넘게 잡는 쪽이다 (위 docstring).
+MAX_CHARS = 700
+CATEGORY = {
+    "화장품": "화장품",
+    "건강기능식품": "건기식",
+    "식품 등의 표시": "식품",
+    "표시ㆍ광고의 공정화": "일반",
+    "표시·광고의 공정화": "일반",
+}
+_SENT = re.compile(r"(?<=[.。])\s+|\n")
+
+
+def category_of(title: str) -> str:
+    for key, val in CATEGORY.items():
+        if key in title:
+            return val
+    return "일반"
+
+
+def _split_long(text: str) -> list[str]:
+    """길면 문장 경계로 자른다. 🚨 자른 사실은 호출자가 `part` 로 남긴다."""
+    if len(text) <= MAX_CHARS:
+        return [text]
+    out, buf = [], ""
+    for piece in _SENT.split(text):
+        piece = (piece or "").strip()
+        if not piece:
+            continue
+        if len(buf) + len(piece) + 1 > MAX_CHARS and buf:
+            out.append(buf)
+            buf = piece
+        else:
+            buf = f"{buf} {piece}".strip()
+    if buf:
+        out.append(buf)
+    # 문장 경계가 없어 여전히 긴 경우 — 마지막 수단으로 글자로 자른다
+    final: list[str] = []
+    for c in out:
+        if len(c) <= MAX_CHARS:
+            final.append(c)
+        else:
+            final += [c[i : i + MAX_CHARS] for i in range(0, len(c), MAX_CHARS)]
+    return final
+
+
+def from_articles() -> list[dict]:
+    rows = []
+    p = DERIVED / "law_article.jsonl"
+    if not p.exists():
+        return rows
+    for r in (json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()):
+        body = (r.get("본문") or "").strip()
+        if not body or r.get("본문없음"):
+            continue
+        law = r["법령"]
+        article = f"제{r['조']}조" + (f"의{r['가지']}" if r.get("가지") else "")
+        doc_id = f"law:{r['파일'].replace('.xml', '')}"
+        parts = _split_long(body)
+        for i, text in enumerate(parts):
+            rows.append(
+                {
+                    # 🚨 원천이 주는 유일 키를 쓴다 — 조립하면 겹친다(law_article.py 참조)
+                    "chunk_id": f"{doc_id}#{r.get('키') or article}#{i}",
+                    "fragment_id": "law_go_kr:article",
+                    "doc_id": doc_id,
+                    "law_id": r["파일"].split("_")[1],
+                    "article": article,
+                    "paragraph": r.get("항") or "",
+                    "item": "",
+                    "doc_type": "법령",
+                    "category": [category_of(law)],
+                    "text": text,
+                    "part": f"{i + 1}/{len(parts)}" if len(parts) > 1 else "",
+                    "법령": law,
+                }
+            )
+    return rows
+
+
+def from_annex() -> list[dict]:
+    rows = []
+    d = DERIVED / "law_norm"
+    if not d.exists():
+        return rows
+    for p in sorted(d.glob("*.jsonl")):
+        for r in (json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()):
+            text = (r.get("text") or "").strip()
+            if not text:
+                continue
+            doc_id = f"annex:{p.stem}"
+            parts = _split_long(text)
+            for i, chunk in enumerate(parts):
+                rows.append(
+                    {
+                        "chunk_id": f"{doc_id}#{r['section']}#{r['path']}#{i}",
+                        "fragment_id": "law_go_kr:annex",
+                        "doc_id": doc_id,
+                        "law_id": r["law_id"],
+                        "article": r.get("article") or "",
+                        "paragraph": r["path"],
+                        "item": r["section"],
+                        "doc_type": "별표",
+                        "category": [category_of(r["annex_title"])],
+                        "text": chunk,
+                        "part": f"{i + 1}/{len(parts)}" if len(parts) > 1 else "",
+                        "법령": r["annex_title"],
+                    }
+                )
+    return rows
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="[P5] 조문·별표 → RAG 청크")
+    ap.add_argument("--dump", action="store_true")
+    args = ap.parse_args()
+
+    rows = from_articles() + from_annex()
+    if not rows:
+        print("청크 재료가 없다 — law_article · law_norm 을 먼저 돌린다")
+        return 1
+
+    # 🔴 **키가 겹치면 멈춘다** (D-149 · 2026-09-09).
+    #    ⛔ 첫 적재에서 청크 2,594 를 만들고 「임베딩 2594」라 찍었는데 DB 에는 **2,297** 이
+    #       들어갔다. `ON CONFLICT (chunk_id) DO UPDATE` 가 **297행을 조용히 덮었다.**
+    #       숫자는 초록이었고 아무도 안 봤으면 그대로 갔다.
+    #       원인 둘 — 「제1장 총칙」이 조문으로 들어와 키가 `제조` 로 뭉친 것,
+    #       행정규칙 최상위 마커(Ⅲ)가 본문과 부칙에서 두 번 쓰인 것.
+    #    🚨 덮지 않고 **멈춘다.** 적재 쪽에서 잡으면 이미 늦다 — 무엇이 지워졌는지 모른다.
+    seen: dict[str, str] = {}
+    clash: list[tuple[str, str, str]] = []
+    for r in rows:
+        if r["chunk_id"] in seen:
+            clash.append((r["chunk_id"], seen[r["chunk_id"]][:40], r["text"][:40]))
+        seen[r["chunk_id"]] = r["text"]
+    if clash:
+        print(f"\n🚨 chunk_id 가 겹친다 — {len(clash)}건 (D-149)")
+        for k, a, b in clash[:5]:
+            print(f"   {k}\n      먼저: {a!r}\n      나중: {b!r}")
+        print("   고치는 법 — 키를 만드는 자리(from_articles · from_annex)가 조·항·호를")
+        print("               유일하게 집는지 본다. 덮어쓰기로 넘기지 않는다.")
+        return 1
+
+    long_ = sum(1 for r in rows if r["part"])
+    cats: dict[str, int] = {}
+    for r in rows:
+        cats[r["category"][0]] = cats.get(r["category"][0], 0) + 1
+    print(f"  청크 {len(rows)}개 · 최장 {max(len(r['text']) for r in rows)}자")
+    print(f"  범주 {cats}")
+    print(f"  🚨 길어서 쪼갠 청크 {long_}개 — `part` 가 원 조문을 가리킨다")
+    print(f"  ⚠️ 토큰 수는 글자 상한({MAX_CHARS})으로 어림했다 — 실측은 W1 의 남은 일이다")
+
+    if args.dump:
+        out = DERIVED / "chunks.jsonl"
+        with out.open("w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(store.stamp(r, "law_go_kr"), ensure_ascii=False) + "\n")
+        print(f"  💾 → {out.relative_to(ROOT)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

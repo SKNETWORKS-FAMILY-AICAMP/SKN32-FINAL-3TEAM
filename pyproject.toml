@@ -43,6 +43,10 @@ dependencies = [
     #       **테스트가 이 의존성을 한 번도 안 건드린다.** 여기서는 lock 이 유일한 대조기다.
     #    ★ docs 그룹을 나눈 이유는 playwright(브라우저 바이너리)였지 pdfplumber 가 아니다.
     "pdfplumber>=0.11",   # 사례집 PDF → 1층 판정라벨 (D-158)
+    "sentence-transformers>=6.0.1",
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.4",
+    "jinja2>=3.1.6",
 ]
 
 [dependency-groups]

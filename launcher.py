@@ -150,6 +150,76 @@ def setup() -> None:
 
 
 @app.command()
+def onboard() -> None:
+    """새 기기에서 이어 붙일 때 — 무엇이 되고 무엇이 안 되는지 순서대로 냅니다.
+
+    🚨 **런처가 다 해 줄 수 없습니다.** 셋은 구조상 안 됩니다 —
+       ① `.env` 키 — `.gitignore` 라 안 따라옵니다. 사람이 다시 넣습니다 (D-111)
+       ② `data/raw` 원문 — `.gitignore` 라 안 따라옵니다 (D-19). **다시 받습니다**
+       ③ `git` — 팀 규칙상 사람이 직접 돕니다
+
+    그래서 이 명령은 **되는 것을 하고, 안 되는 자리를 이름으로 냅니다** (D-51).
+    """
+    import shutil  # noqa: PLC0415
+
+    console.print("\n[bold]1. 코드·문서·원장[/bold] — 🚨 사람이 돌립니다")
+    console.print("     [bold]git pull[/bold]")
+    console.print(
+        "     ★ 원장(`data/manifest.jsonl`)은 git 으로 따라옵니다 — 팀 축은 여기서 맞습니다"
+    )
+
+    console.print("\n[bold]2. 파이썬 패키지·커밋 훅·.env 틀[/bold]")
+    run("uv", "sync")
+    run("uv", "run", "pre-commit", "install")
+    envf = ROOT / ".env"
+    if not envf.exists():
+        envf.write_bytes((ROOT / ".env.example").read_bytes())
+        console.print("  [yellow]생성[/yellow] .env — 비어 있습니다")
+
+    console.print("\n[bold]3. API 키[/bold] — 🔴 git 에 없습니다. 사람이 다시 넣습니다")
+    console.print("     [bold]uv run python launcher.py keys[/bold]        현황")
+    console.print("     [bold]uv run python launcher.py setkey LAW_OC_KEY[/bold]")
+    console.print("     [bold]uv run python launcher.py setkey FOODSAFETY_KEY[/bold]")
+    console.print("     🚨 값을 인자로 주지 않습니다 — PowerShell 기록에 남습니다 (D-111)")
+
+    console.print("\n[bold]4. DB[/bold]")
+    if shutil.which("docker") is None:
+        console.print("  [red]docker 가 없습니다[/red] — Docker Desktop 을 먼저 켭니다")
+    else:
+        console.print("     [bold]uv run python launcher.py db-up[/bold]")
+        console.print(
+            "     [bold]uv run python launcher.py migrate[/bold]   거버넌스 18 + 런타임 6"
+        )
+
+    console.print("\n[bold]5. 이 기기에 무엇이 없는지[/bold]")
+    console.print("     [bold]uv run python launcher.py inventory[/bold]")
+    console.print(
+        "     🚨 「원장에 있다」는 「이 기기에 있다」가 아닙니다 — 없는 것을 이름으로 냅니다"
+    )
+    console.print(
+        "     그 목록대로 [bold]launcher.py collect <소스id> --use U1[/bold] 로 다시 받습니다"
+    )
+    console.print("     🔴 AI Hub 계열은 사람이 받아 [bold]launcher.py register[/bold] 로 올립니다")
+
+    console.print("\n[bold]6. 파생물 → DB → 벡터[/bold]  (원문을 받은 뒤)")
+    console.print("     [bold]uv run python launcher.py load[/bold]")
+    console.print("     [bold]uv run python launcher.py chunk --dump[/bold]")
+    console.print(
+        "     [bold]uv run python launcher.py embed --check[/bold]  🚨 먼저 차원을 잽니다"
+    )
+    console.print("     [bold]uv run python launcher.py embed[/bold]")
+    console.print("     ⚠️ KURE-v1 모델 2.27GB 를 처음 한 번 내려받습니다")
+
+    console.print("\n[bold]7. 확인[/bold]")
+    console.print("     [bold]uv run python launcher.py check[/bold]      게이트 전체")
+    console.print("     [bold]uv run python launcher.py status[/bold]     팀 축 — 쓴다/안 쓴다")
+    console.print("     [bold]uv run python launcher.py doctor[/bold]     원장 ↔ 디스크")
+    console.print("     [bold]uv run python launcher.py serve[/bold]      /health 로 층별 행 수")
+
+    console.print("\n[dim]무엇을 하던 중이었는지는 docs/ohb/ 의 최신 인계 문서에 있습니다.[/dim]\n")
+
+
+@app.command()
 def setkey(name: str = typer.Argument(..., help="키 이름 (예: FOODSAFETY_KEY)")) -> None:
     """API 키를 화면에 뜨지 않게 입력해 설정 파일에 넣는다.
 
@@ -351,6 +421,14 @@ def migrate() -> None:
     """데이터베이스 테이블을 최신 상태로 맞춘다.
 
     Alembic 으로 스키마 변경을 코드로 남긴다. DB 가 떠 있어야 한다 (`db-up`).
+
+    🔴 **층이 둘이고 관리 방식이 다르다** (2026-09-09) —
+
+        거버넌스·데이터 층 18테이블   `db/schema.sql`   손으로 쓴 DDL · 0001 이 읽어 실행
+        런타임 층 6테이블            `app/models.py`   ORM · `migrate-new` 로 autogenerate
+
+    🚨 거버넌스 층은 `--autogenerate` 대상이 아니다. `alembic/env.py` 의 `include_object`
+       가 시야에서 뺀다 — 안 그러면 **DROP 을 생성한다.**
     """
     raise typer.Exit(run("uv", "run", "alembic", "upgrade", "head"))
 
@@ -421,10 +499,96 @@ def collect(
 
 
 @app.command()
+def inventory() -> None:
+    """**이 기기**에 무엇이 있나 — 원장(팀 축)과 대조합니다.
+
+    🚨 축이 둘입니다. 원장은 git 으로 공유되지만 원문은 `.gitignore` 라 기기마다 다릅니다 (D-19).
+       「원장에 있다」는 「이 기기에 있다」가 아닙니다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "preprocess.inventory"))
+
+
+@app.command()
+def status() -> None:
+    """데이터 현황판을 다시 만듭니다 — 무엇을 쓰기로 했고 무엇을 안 쓰기로 했나.
+
+    🚨 **생성물입니다.** 손으로 적으면 갈립니다 (D-54). 2026-09-03 판이 그렇게 낡았습니다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "scripts.data_status", "--write"))
+
+
+@app.command()
+def load() -> None:
+    """파생물을 거버넌스 DB 에 적재한다 (D-95).
+
+    🚨 CHECK 둘을 못 지나는 소스는 **넣지 않고 이름을 냅니다** —
+       2인 확인 미완 · attribution 없음. 조용히 건너뛰면 「다 들어갔다」로 읽힙니다.
+    🔴 골든셋은 아직 못 넣습니다 — `split_t` 에 `test_sentence` 가 없고
+       `violation_t`(V0~V8) 대응표가 미판정입니다 (결정요청 ⑤).
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "scripts.load_db"))
+
+
+@app.command()
+def chunk(dump: bool = typer.Option(False, "--dump", help="chunks.jsonl 을 쓴다")) -> None:
+    """[P5] 조문·별표를 RAG 청크로 자릅니다 — 🚨 조문 단위입니다."""
+    args = ["uv", "run", "python", "-m", "preprocess.chunk"]
+    if dump:
+        args.append("--dump")
+    raise typer.Exit(run(*args))
+
+
+@app.command()
+def embed(
+    check: bool = typer.Option(False, "--check", help="모델 차원만 잽니다 (DB 불필요)"),
+) -> None:
+    """청크를 KURE-v1 로 임베딩해 pgvector 에 넣습니다.
+
+    🚨 `--check` 를 먼저 돌리십시오 — `vector(1024)` 가 모델과 맞는지 아무도 안 재 봤습니다.
+    """
+    args = ["uv", "run", "python", "-m", "scripts.embed"]
+    if check:
+        args.append("--check")
+    raise typer.Exit(run(*args))
+
+
+@app.command()
+def serve(reload: bool = typer.Option(True, "--reload/--no-reload")) -> None:
+    """FastAPI 를 띄웁니다 (D-42 · D-135 — Django 를 쓰지 않습니다).
+
+    🔄 2026-09-09 — `@stub("W2", "walking skeleton")` 자리를 대신합니다.
+       ⛔ 새 명령을 더하면서 **같은 이름의 스텁이 이미 있는지 안 봤습니다.**
+          `ruff F811` 이 잡았습니다 — 안 잡혔으면 뒤에 정의된 스텁이 이겨
+          `serve` 가 「아직 없다」를 찍고 서버는 안 떴을 것입니다.
+    """
+    # 🚨 없는 것을 「없다」고 말한다 (D-51 — 오류는 고치는 법을 보여준다).
+    #    ⛔ 2026-09-09 — `uv run uvicorn` 이 `program not found` 로 죽었다.
+    #       D-42·D-135 가 FastAPI 를 확정해 뒀는데 `pyproject.toml` 에는 없었다.
+    #       `sentence-transformers` 와 같은 부류다 — **코드가 0줄이면 의존성도 없다.**
+    #       스택은 결정돼 있었고 아무도 그것을 설치한 적이 없었다.
+    import importlib.util
+
+    missing = [m for m in ("fastapi", "uvicorn", "jinja2") if importlib.util.find_spec(m) is None]
+    if missing:
+        console.print(f"[red]없는 것 — {', '.join(missing)}[/red]")
+        console.print('  고치는 법 — [bold]uv add fastapi "uvicorn[standard]" jinja2[/bold]')
+        console.print("  🚨 D-42·D-135 가 FastAPI 를 확정해 뒀지만 의존성은 없었습니다.")
+        raise typer.Exit(1)
+
+    args = ["uv", "run", "uvicorn", "app.api:app"]
+    if reload:
+        args.append("--reload")
+    raise typer.Exit(run(*args))
+
+
+@app.command()
 def extract(
     source: str = typer.Argument("", help="원천 id (비우면 표를 보여준다)"),
     dump: bool = typer.Option(False, "--dump", help="파생물을 쓴다 — 🔴 마스킹 정책이 있어야 한다"),
     sheet: int = typer.Option(0, "--sheet", help="사람이 채울 검증셋을 N건씩 만든다"),
+    min_len: int = typer.Option(
+        0, "--min-len", help="검증셋 문구 길이 하한 — 낱말을 빼고 문장만 (0 = 안 건다)"
+    ),
     verify: bool = typer.Option(False, "--verify", help="원천의 선언과 대조만 한다"),
 ) -> None:
     """받아 둔 원문에서 라벨을 뽑는다 — 원천별 전처리 모듈로 위임한다.
@@ -451,6 +615,8 @@ def extract(
         args.append("--dump")
     if sheet:
         args += ["--sheet", str(sheet)]
+    if min_len:
+        args += ["--min-len", str(min_len)]
     raise typer.Exit(run(*args))
 
 
@@ -476,9 +642,38 @@ def scan(source: str = typer.Argument("", help="원천 id (비우면 표를 보�
 
 
 @app.command()
-@stub("W3", "수집 코퍼스 확보")
-def golden() -> None:
-    """일부러 틀린 문장을 만들어 채점용 정답셋을 꾸린다."""
+def golden(
+    write: bool = typer.Option(False, "--write", help="파생물을 실제로 쓴다 (기본은 보기만)"),
+) -> None:
+    """골든셋을 꾸린다 — **사전 → 주입 → 분할** 세 단계 (2026-09-09).
+
+    🚨 **라벨을 사람도 모델도 붙이지 않는다.** 조문이 붙이거나(사전) 규칙이 붙인다(주입).
+
+        [P12] 분할  🔴 **먼저다** — 출처 분리 · 문서 단위 봉인   preprocess.split
+        [P6] 사전   조문이 묶어 준 표현을 모은다 (train 만)     preprocess.dictionary
+        [P10] 주입  적법 문구를 규칙으로 위법화한다 (train 만)   preprocess.inject
+        물질화      문장·라벨을 한 파일로 (D-143)              preprocess.golden
+
+    🔴 **분할이 맨 앞이다.** 종전에는 사전이 먼저였는데, 그러면 사전이 **평가 문구로**
+       만들어진다 — 실측: 봉인된 평가 문구 118개 중 **118개**가 사전에 있었다.
+       그 사전으로 매칭기를 재면 외운 것을 맞힌다.
+
+    🔴 **주입본은 평가에 들어가지 않는다** ([P10] 규약 5). 합성으로 평가하면
+       「규칙을 배웠는가」를 재게 된다. 분할 게이트가 그것을 막는다.
+    """
+    steps = (
+        (["-m", "preprocess.split"], ["--write"]),
+        (["-m", "preprocess.dictionary"], ["--dump"]),
+        (["-m", "preprocess.inject"], ["--dump"]),
+        (["-m", "preprocess.golden"], ["--dump"]),
+    )
+    for mod, extra in steps:
+        args = ["uv", "run", "python", *mod] + (extra if write else [])
+        if run(*args) != 0:
+            raise typer.Exit(1)
+    if not write:
+        console.print("\n  [yellow]⬜ 아무것도 쓰지 않았다[/yellow] — `--write` 를 붙인다.")
+    raise typer.Exit(0)
 
 
 @app.command()
@@ -497,12 +692,6 @@ def eval_() -> None:
 
     4층 지표 — L1 품질 · L2 통합 · L3 운영 · L4 거버넌스 (D-77).
     """
-
-
-@app.command()
-@stub("W2", "walking skeleton")
-def serve() -> None:
-    """웹 API 를 띄운다. 판정·생성을 호출할 수 있다."""
 
 
 @app.command()

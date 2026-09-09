@@ -191,6 +191,29 @@ def _pdfs() -> list[pathlib.Path]:
     return got
 
 
+def _count_cols(stat: dict, head: list, roles: list, *, in_phrase_table: bool) -> None:
+    """역할이 없어 **행에 안 담기는 열**을 센다.
+
+    🔴 2026-09-09 — 여기가 비어 있었다. 원래는 「문구 열이 없는 표」에서만 셌고,
+       **문구 표 안에서 역할 없이 빠지는 열은 아무도 세지 않았다** (모르는 열 6종 16회 ·
+       버린 열 11종 69회). 바로 위 `DROP` 주석이 「버린 것을 세지 않는 것이 제일 나쁘다」인데
+       그 일을 하고 있었다.
+
+    🚨 **두 자리를 갈라서 센다.** 문구 없는 표의 모르는 열은 「우리가 안 쓰는 표」이고,
+       문구 표 안의 모르는 열은 **판정 재료 옆에서 버려진 것**이라 무게가 다르다.
+       실측으로 나온 것 — `광고 방법` 2 · `광고기간` 1 · `흑염소 함량(실제 / 표시)` 4.
+       ⛔ **세기만 한다. `ROLES` 는 안 바꾼다** — 3회는 근거가 아니다 (D-40).
+          늘어나는지 보고, 30 을 넘으면 그때 축을 연다.
+    """
+    suffix = "_문구표" if in_phrase_table else ""
+    for c, r in zip(head, roles, strict=True):
+        name = _n(c)
+        if r is not None or not name:
+            continue
+        key = "버린열" if any(d_ in name for d_ in DROP) else "모르는열"
+        stat[key + suffix][name[:24]] += 1
+
+
 def extract(limit: int | None = None) -> tuple[list[dict], dict]:
     """레코드들과 계측. 🚨 마스킹은 여기서 하지 않는다 — 부르는 쪽이 정책을 지고 건다."""
     rows: list[dict] = []
@@ -200,6 +223,9 @@ def extract(limit: int | None = None) -> tuple[list[dict], dict]:
         "문구열있음": 0,
         "버린열": collections.Counter(),
         "모르는열": collections.Counter(),
+        # 🔴 문구 표 **안**에서 버려지는 열 — 판정 재료 옆에서 사라지는 것이라 따로 센다
+        "버린열_문구표": collections.Counter(),
+        "모르는열_문구표": collections.Counter(),
         "원천유형": collections.Counter(),
     }
     for p in _pdfs()[:limit]:
@@ -212,13 +238,10 @@ def extract(limit: int | None = None) -> tuple[list[dict], dict]:
             if any(w in _n(" ".join(c or "" for c in t[0])) for w in _NOT_TABLE):
                 continue
             if "문구" not in cols:
-                for c, r in zip(t[0], cols, strict=True):
-                    name = _n(c)
-                    if r is None and name:
-                        key = "버린열" if any(d_ in name for d_ in DROP) else "모르는열"
-                        stat[key][name[:24]] += 1
+                _count_cols(stat, t[0], cols, in_phrase_table=False)
                 continue
             stat["문구열있음"] += 1
+            _count_cols(stat, t[0], cols, in_phrase_table=True)
             carry: dict[str, str] = {}
             for line in t[1:]:
                 cell = {r: _n(c) for r, c in zip(cols, line, strict=True) if r}
@@ -270,11 +293,30 @@ def main() -> int:
     print("  🔴 업체명·소재지는 담지 않는다 — 마스킹으로 가린 것이 아니라 **안 담았다** (D-159)")
 
     if a.verify:
-        print("\n  버린 열 (담지 않기로 한 것)")
+        # 🔴 **문구 표 안**부터 본다 — 여기가 판정 재료 옆에서 버려지는 자리다 (2026-09-09).
+        #    아래 「문구 없는 표」의 수는 우리가 안 쓰는 표라 무게가 다르다.
+        print("\n  🔴 문구 표 **안**에서 행에 안 담긴 열 — 여기가 진짜 손실이다")
+        print(
+            f"     담지 않기로 한 것 {sum(stat['버린열_문구표'].values())}회"
+            f" / {len(stat['버린열_문구표'])}종 (D-159)"
+        )
+        if stat["모르는열_문구표"]:
+            print(
+                f"     🚨 못 알아본 열 {sum(stat['모르는열_문구표'].values())}회"
+                f" / {len(stat['모르는열_문구표'])}종 — **세기만 한다.**"
+            )
+            for k, v in stat["모르는열_문구표"].most_common(12):
+                print(f"       {v:>4}  {k}")
+            print("     ⛔ 30 을 넘기 전에는 `ROLES` 를 안 바꾼다 (D-40). 늘어나는지만 본다.")
+
+        print("\n  버린 열 (담지 않기로 한 것 · 문구 없는 표)")
         for k, v in stat["버린열"].most_common(12):
             print(f"    {v:>4}  {k}")
         if stat["모르는열"]:
-            print(f"\n  🚨 못 알아본 열 {len(stat['모르는열'])}종 — `ROLES` 를 채울지 본다")
+            print(f"\n  🚨 못 알아본 열 {len(stat['모르는열'])}종 — 🔴 **전부 문구 없는 표다**")
+            print("     실측 2026-09-09 — 처분 4종(업무정지·등록취소·시정명령·과징금)은")
+            print("     「업무정지│등록취소│시정명령│과징금│경고│합계」 **한 줄짜리 집계표**다.")
+            print("     `ROLES` 에 넣어도 문구 레코드는 한 줄도 안 는다. **넣지 않는다.**")
             for k, v in stat["모르는열"].most_common(15):
                 print(f"    {v:>4}  {k}")
         if stat["원천유형"]:

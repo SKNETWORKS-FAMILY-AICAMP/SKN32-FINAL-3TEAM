@@ -44,6 +44,7 @@ import re
 import sys
 
 from preprocess.hwp import Table, tables_with_lead
+from preprocess.text import SheetOverwriteError, sheet_lengths, write_sheet
 
 SOURCE_ID = "mfds_special_use_guide"
 RAW_DIR = pathlib.Path("data/raw") / SOURCE_ID
@@ -220,6 +221,13 @@ def main() -> int:
     ap.add_argument("--dump", action="store_true", help=f"{OUT} 로 쓴다 (마스킹 정책 필요)")
     ap.add_argument("--sheet", type=int, default=0, help="유형별 N건씩 검증셋을 만든다 (ⓒ)")
     ap.add_argument("--seed", type=int, default=20260908, help="표본 추출 seed — 재현 조건 (D-54)")
+    ap.add_argument(
+        "--min-len",
+        type=int,
+        default=0,
+        dest="min_len",
+        help="문구 길이 하한 — 낱말을 빼고 문장만 뽑는다 (0 = 안 건다)",
+    )
     a = ap.parse_args()
 
     rows = extract(_hwp())
@@ -254,12 +262,18 @@ def main() -> int:
         pick: list[dict] = []
         for k in sorted(by):
             pool = [r for r in safe if r["원천라벨"] == k]
+            if a.min_len:
+                pool = [r for r in pool if len(_n(r.get("문구", ""))) >= a.min_len]
             pick += rnd.sample(pool, min(a.sheet, len(pool)))
-        SHEET.parent.mkdir(parents=True, exist_ok=True)
-        with SHEET.open("w", encoding="utf-8") as f:
-            for r in pick:
-                f.write(json.dumps({**r, "붙인이": "", "붙인날": ""}, ensure_ascii=False) + "\n")
-        print(f"\n  ⓒ 검증셋 {len(pick):,}건 → {SHEET}  (seed={a.seed})")
+        try:
+            carried, had = write_sheet(SHEET, pick, ("원천라벨", "문구"))
+        except SheetOverwriteError as e:
+            print(f"\n{e}", file=sys.stderr)
+            return 1
+        print(f"\n  ⓒ 검증셋 {len(pick):,}건 → {SHEET}  (seed={a.seed} · 길이하한 {a.min_len})")
+        if had:
+            print(f"     ★ 사람이 채워 둔 {had}건 중 {carried}건을 **이어받았다**")
+        sheet_lengths(pick, "문구", a.min_len)
         print(
             f"     🔴 마스킹을 지났다 — 위반문구 전체에서 바뀐 필드 {dict(sheet_changed) or '없음'}"
         )

@@ -72,6 +72,33 @@ mfds_hf_individual:      # 15074311 건기식 개별인정형 정보 = 식품안
   service_id: I-0050
   params: {}
 
+# 🔄 2026-09-09 신규 — I-0040·I-0050·I0470 과 같은 계열이라 같은 키를 쓴다
+
+foodsafety_ad_monitor:
+
+  url: "http://openapi.foodsafetykorea.go.kr/api"
+
+  style: path
+
+  fmt: json
+
+  service_id: I0500
+
+  params: {}
+
+foodsafety_penalty_std:
+
+  url: "http://openapi.foodsafetykorea.go.kr/api"
+
+  style: path
+
+  fmt: json
+
+  service_id: I1660
+
+  params: {}
+
+
 mfds_sanctions:          # 15059500 식약처 행정처분결과
   # ✅ 2026-09-02 해소 — **I0470 확정.** 근거 둘, 둘 다 재현 가능하다:
   #    ① selectApiLinkUrl.do(15059500) 의 linkUrl 이 …&svc_no=I0470 이다 (LINK 유형).

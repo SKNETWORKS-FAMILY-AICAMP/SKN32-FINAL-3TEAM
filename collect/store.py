@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -58,6 +59,47 @@ def edition_name(filename: str, day: str) -> str:
 
 def sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+#: 🔴 **응답에 호출마다 바뀌는 값이 박혀 있는 원천** — 「같은가?」를 물을 때만 지운다.
+#:
+#:  🚨 **저장은 원문 그대로다** (D-92 무손상). 여기서 지우는 것은 판정용 사본이고
+#:     디스크에도 원장에도 안 남는다. 이건 이 프로젝트에 **세 번째로 나오는 모양**이다 —
+#:     D-117(매칭은 정규화문 · 보관은 원문) · D-152(분류는 정규화문 · 저장은 원문),
+#:     그리고 여기 **동일성 판정은 정규화문 · 저장은 원문**.
+#:
+#:  ⛔ 2026-09-09 실측 — `mfds_press` 105 파일 **전부**가 원장에 「내용 갈림」으로 떴다.
+#:     `jsessionid=` 64자 토큰이 파일마다 정확히 2개, 길이가 고정이라
+#:     **바이트 수는 같고 해시만 달랐다.** D-149(offset 밀림)가 아니다 — 그건 크기가 변한다.
+#:     이 상태로는 **규약 4(동일하면 스킵)가 영원히 안 걸린다.** 돌릴 때마다 105개가
+#:     새 판으로 깔린다.
+#:
+#:  🚨 등록되지 않은 원천은 원문 해시를 그대로 쓴다 — 모르는 원천을 느슨하게 판정하지
+#:     않는다. 빠뜨리면 판이 쌓일 뿐 데이터를 잃지는 않는다 (안전한 쪽으로 틀린다).
+#:
+#:  ⬜ **열린 것** — 세션 토큰이 `data/raw/mfds_press/` 에 210개 들어 있다.
+#:     D-159(담지 않기가 가리기보다 앞선다)의 대상이지만 D-92(원본 무손상)와 부딪힌다.
+#:     여기서 정하지 않는다 — 팀장 판정 사항으로 남긴다.
+VOLATILE: dict[str, tuple[tuple[str, re.Pattern[bytes]], ...]] = {
+    "mfds_press": (("jsessionid", re.compile(rb"jsessionid=[A-Za-z0-9]+")),),
+}
+
+
+def _strip_volatile(source_id: str, payload: bytes) -> bytes:
+    """호출마다 바뀌는 값을 뺀 바이트. **판정에만 쓴다 — 저장하지 않는다.**"""
+    for _name, pat in VOLATILE.get(source_id, ()):
+        payload = pat.sub(b"", payload)
+    return payload
+
+
+def identity_sha256(source_id: str, payload: bytes) -> str:
+    """「같은 응답인가」를 묻는 해시 (규약 4).
+
+    🚨 원장의 `sha256` 과 **다른 것**이다. 원장의 것은 「이 파일의 내용」이고
+       이것은 「원천이 같은 것을 줬는가」다. 둘이 갈릴 때만 원장에 `identity_sha256`
+       칸이 생긴다 — 없으면 둘이 같다는 뜻이다.
+    """
+    return sha256(_strip_volatile(source_id, payload))
 
 
 def raw_dir(family: str) -> Path:
@@ -121,16 +163,18 @@ def save_raw(
        여기서 안 찍으면 아무도 모른다.
     """
     digest = sha256(payload)
+    # 🔴 「같은가?」는 **판정용 해시**로 묻는다 (`VOLATILE`). 원문은 그대로 저장한다.
+    ident = identity_sha256(source_id, payload)
     path = raw_dir(family) / filename
     supersedes: str | None = None
 
     if path.exists():
-        if sha256(path.read_bytes()) == digest:
+        if identity_sha256(source_id, path.read_bytes()) == ident:
             return None  # 규약 4 — 동일하면 스킵
 
         versioned = path.with_name(edition_name(filename, _today()))
         if versioned.exists():
-            if sha256(versioned.read_bytes()) == digest:
+            if identity_sha256(source_id, versioned.read_bytes()) == ident:
                 return None  # 오늘 판을 이미 받았다
             raise StoreError(
                 f"{versioned} 가 이미 있고 **또 내용이 다르다**.\n"
@@ -159,6 +203,7 @@ def save_raw(
         rows=rows,
         path=str(path.relative_to(ROOT)),
         supersedes=supersedes,
+        identity=None if ident == digest else ident,
     )
     return path
 
@@ -172,6 +217,7 @@ def manifest_append(
     rows: int | None = None,
     path: str | None = None,
     supersedes: str | None = None,
+    identity: str | None = None,
 ) -> None:
     """원장에 1행 append (규약 3).
 
@@ -182,6 +228,11 @@ def manifest_append(
        파일명만으로도 짐작은 되지만, 짐작과 기록은 다르다. 판이 여럿 쌓인 뒤에
        「이게 무엇의 다음 판인가」를 이름 규칙으로 되짚게 만들지 않는다.
        옛 행에는 이 칸이 없다 — 없으면 `None` 이고, 그것은 「새 판이 아니다」는 뜻이다.
+
+    🚨 `identity_sha256` — **동일성 판정에 쓴 해시** (2026-09-09 신설 · `store.VOLATILE`).
+       원문 해시와 **다를 때만** 칸이 생긴다. 칸이 있다는 것은 「이 원천은 응답에
+       호출마다 바뀌는 값이 박혀 있어서, 원문 해시로는 같은지 물을 수 없다」는 뜻이다.
+       ⛔ 이 칸을 「내용 해시」로 읽지 마라 — 판정용이라 **원문을 재현하지 못한다.**
     """
     registry.spec(source_id)  # 미등록이면 여기서 거부된다
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
@@ -198,6 +249,8 @@ def manifest_append(
     #    `null` 만 든 칸이 10,000줄 붙는다. 없는 것과 비어 있는 것은 다르다.
     if supersedes:
         row["supersedes"] = supersedes
+    if identity:
+        row["identity_sha256"] = identity
     with MANIFEST.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 

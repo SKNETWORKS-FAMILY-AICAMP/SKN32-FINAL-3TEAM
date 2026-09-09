@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -56,6 +57,35 @@ def test_등급_디렉터리가_존재한다(name: str) -> None:
     """등급 디렉터리가 없으면 수집 스크립트가 어디에 쓸지 알 수 없다."""
     path = ROOT / "data" / name
     assert path.is_dir(), f"data/{name}/ 가 없다 — D-19 물리 분리 위반"
+
+
+# 🚨 **트리를 통째로 훑지 않는다** (2026-09-09).
+#    ⛔ `ROOT.rglob("*.py")` 는 걸러내기 **전에** `.venv` 를 다 열거한다. 2026-09-09 에
+#       `sentence-transformers`(torch·transformers)를 넣자 `.venv` 의 .py 가 수만 개가 됐고,
+#       게이트 하나가 **3분을 넘겨** 전체 스위트가 못 끝났다. 건너뛰는 조건은 있었지만
+#       그 조건이 도는 시점이 이미 늦었다 — **걷지 않는 것과 걷고 버리는 것은 다르다.**
+_PRUNE = {
+    ".venv",
+    ".git",
+    "build",
+    "dist",
+    "data",
+    "__pycache__",
+    "node_modules",
+    ".ruff_cache",
+    ".pytest_cache",
+    "Claude outputs",
+    ".uv",
+}
+
+
+def _py_files(root: Path) -> list[Path]:
+    """`root` 아래 .py 를 낸다. 위 디렉터리는 **들어가지 않는다.**"""
+    out: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _PRUNE]
+        out += [Path(dirpath) / f for f in filenames if f.endswith(".py")]
+    return sorted(out)
 
 
 @pytest.mark.gate
@@ -306,7 +336,7 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
        사람이 주석을 지운다.** 막으려는 것은 「읽는 코드」이지 「읽는다고 적은 문장」이 아니다.
     """
     offenders: list[str] = []
-    for path in ROOT.rglob("*.py"):
+    for path in _py_files(ROOT):
         rel = path.relative_to(ROOT)
         parts = rel.parts
         # 🚨 `Claude outputs/` 는 Claude 앱이 떨어뜨리는 사본이다 — `.gitignore` 에 이미 있다.
@@ -387,7 +417,7 @@ def test_derived_로_나가는_원문은_마스킹을_지난다() -> None:
     🚨 주석·docstring 은 보지 않는다 (바로 위 게이트와 같은 이유).
     """
     offenders: list[str] = []
-    for path in (ROOT / "preprocess").rglob("*.py"):
+    for path in _py_files(ROOT / "preprocess"):
         rel = path.relative_to(ROOT)
         if path.name in {"__init__.py", "mask.py"}:
             continue
@@ -924,21 +954,59 @@ def test_키_입력_경로가_값을_인자로_받지_않는다() -> None:
     )
 
 
+#: 🔴 **키가 들어앉는 이름들.** 편집기·direnv·손복사가 만든다 — 안에 든 것은 같은 키다.
+#:    ⛔ 2026-09-09 이전에는 이 목록이 **docstring 에만** 있었고 검사는 `.env.*` 라는
+#:       **패턴 문자열이 파일에 있는지**만 봤다. 그래서 `.env~` 가 목록에 적혀 있으면서도
+#:       실제로는 안 걸리고 있었다 — `.env.*` 는 점 뒤에 글자가 와야 하는데 물결표 앞에는
+#:       점이 없다. **적어 놓은 것과 검사한 것이 달랐다.**
+LEAKY_ENV_NAMES = (".env", ".env~", ".envrc", ".env.bak", ".env.save", ".env.local")
+
+
 @pytest.mark.gate
 def test_설정파일이_이름을_바꿔_새지_않는다() -> None:
     """🚨 `.gitignore` 의 `.env` 한 줄로는 모자라다.
 
-    편집기와 OS 가 `.env~` · `.env.bak` · `.env.save` · `.env.local` 을 만든다.
-    안에 든 것은 똑같은 키인데 이름이 달라서 그 한 줄에 안 걸린다.
-    `.env.*` 로 덮고 `!.env.example` 로 템플릿만 되살린다 — 순서가 뒤바뀌면
-    예제가 커밋되지 않아 팀원이 키 이름을 알 수 없게 된다.
+    편집기와 OS 가 `.env~` · `.env.bak` · `.env.save` · `.env.local` 을 만들고
+    direnv 는 `.envrc` 를 만든다. 안에 든 것은 똑같은 키인데 이름이 달라서
+    그 한 줄에 안 걸린다. **유출은 항상 「덮은 줄 알았던 이름」으로 난다.**
+
+    🔴 **패턴 문자열이 아니라 동작을 본다** (2026-09-09).
+
+    종전에는 `.gitignore` 안에 `.env.*` 라는 **글자가 있는지**만 봤다. 그러면
+    「규칙이 무엇을 실제로 덮는가」를 아무도 안 보게 된다 — 실제로 `.env~` 가
+    docstring 에 이름까지 적혀 있으면서 패턴 밖에 있었고, 이 게이트는 초록이었다.
+    ★ **이제 `git check-ignore` 에게 직접 묻는다.** 규칙을 어떻게 쓰든 상관없다 —
+      위 이름들이 막히고 `.env.example` 은 살아 있으면 통과다.
+
+    🔴 **`--no-index` 가 없으면 뒤쪽 단언이 실패할 수 없다.** `git check-ignore` 는
+       **추적 중인 파일을 「무시되지 않음」으로 답한다.** `.env.example` 은 추적 중이라
+       `!.env.example` 을 통째로 지워도 답이 같다 — 규칙을 안 보고 인덱스를 본 것이다.
+       ⛔ 이 게이트를 고치면서 실제로 그 상태로 한 번 통과시켰다. 반대 대조를 돌려 보고서야
+       나왔다. **단언은 실패할 수 있어야 단언이다** (D-146 의 같은 모양).
+
+    🚨 그리고 규칙이 맞아도 **이미 추적 중이면 gitignore 는 아무것도 못 한다** — 아래.
+       그것은 인덱스를 봐야 하는 검사라 `git ls-files` 로 따로 묻는다.
     """
-    lines = [ln.strip() for ln in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()]
-    for need in (".env", ".env.*", "!.env.example"):
-        assert need in lines, f"🚨 .gitignore 에 `{need}` 가 없다"
-    assert lines.index(".env.*") < lines.index("!.env.example"), (
-        "🚨 `!.env.example` 이 `.env.*` 보다 앞에 있으면 되살리지 못한다 — gitignore 는 "
-        "뒤에 오는 규칙이 이긴다"
+    ignored = subprocess.run(
+        ["git", "check-ignore", "--no-index", "--", *LEAKY_ENV_NAMES, ".env.example"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    # 종료코드 0(전부 무시) · 1(일부만) 둘 다 정상 출력이다. 128 은 git 이 없는 것.
+    if ignored.returncode == 128:  # pragma: no cover — git 없는 환경
+        pytest.skip("git 이 없다 — 무시 규칙의 동작을 확인할 수 없다")
+    got = {ln.strip() for ln in ignored.stdout.splitlines() if ln.strip()}
+    missing = [n for n in LEAKY_ENV_NAMES if n not in got]
+    assert not missing, (
+        f"🚨 `.gitignore` 가 이 이름들을 안 덮는다 — {missing}\n"
+        "   키가 그대로 들어 있는 파일들이다. `.env*` 한 줄이면 전부 덮인다.\n"
+        "   ⛔ 이름을 주석에 적는 것과 규칙이 그것을 덮는 것은 다른 일이다."
+    )
+    assert ".env.example" not in got, (
+        "🚨 `.env.example` 까지 무시된다 — `!.env.example` 이 없거나 앞에 있다.\n"
+        "   gitignore 는 **뒤에 오는 규칙이 이긴다.** 예제가 커밋되지 않으면 "
+        "팀원이 키 이름을 알 수 없다."
     )
 
     # 실제 추적 상태 — 규칙이 맞아도 이미 추적 중이면 gitignore 는 아무것도 못 한다
@@ -1056,4 +1124,188 @@ def test_키를_읽는_곳이_가릴_것을_등록한다() -> None:
     } | {n.module or "" for n in ast.walk(htree) if isinstance(n, ast.ImportFrom)}
     assert "env" not in 수입, (
         "🚨 collect/http.py 가 env 를 import 한다 — 순환이다. 등록은 env → http 방향으로만 흐른다."
+    )
+
+
+# ══════════════════════════════════════════════════════════
+# 🚨 data_sources.yaml 은 **생성물**이다 — 손으로 고치면 다음 생성 때 사라진다
+#
+# ⛔ 2026-09-09 에 실제로 사라졌다. `mfds_press` 의 마스킹 정책 10줄을
+#    `data_sources.yaml` 에 직접 써서 커밋했고(13ddb4f), 세 시간 뒤 다른 작업 중
+#    `gen_registry.py` 가 한 번 더 돌면서 **통째로 지워진 채 커밋됐다**(1292407).
+#    커밋 메시지 어디에도 그 말이 없다. 조용히 사라졌다.
+#    `reviewed_at: 2026-09-09` 도 `2026-09-02` 로 되돌아갔다 — 2인 확인의 날짜다.
+#
+#    🚨 `collect/registry.py` 와 `gen_registry.py` 둘 다 「생성물이니 손으로 고치지
+#       말라」고 **주석으로** 적어 두고 있었다. 주석은 게이트가 못 읽는다 (D-89).
+#       아래 둘이 그 주석을 검사로 바꾼 것이다.
+# ══════════════════════════════════════════════════════════
+
+_SIGN_FIELDS = ("decided_by", "decided_at", "reviewed_by", "reviewed_at")
+
+
+@pytest.mark.gate
+def test_레지스트리_서명은_2인확인_원장과_같다() -> None:
+    """서명 필드의 단일 출처는 `scripts/registry_review.yaml` 이다 (D-54 · D-99).
+
+    🚨 `collected_at` 은 뺀다 — `mark_collected()` 가 원장에만 찍고 생성물은
+       다음 생성 때 따라오므로, 수집 직후에는 정상적으로 어긋나 있다.
+       서명 넷은 그런 시차가 없다. 어긋나면 손으로 고친 것이다.
+    """
+    import yaml
+
+    ledger = yaml.safe_load((ROOT / "scripts/registry_review.yaml").read_text(encoding="utf-8"))
+    sources = _registry().get("sources") or {}
+
+    bad: list[str] = []
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue  # `blocked` 처럼 소스가 아닌 항목이 섞여 있다
+        entry = (ledger or {}).get(key)
+        if not isinstance(entry, dict):
+            continue  # 원장에 없는 항목(꼬리말에 손으로 쓴 소스)은 이 검사 밖이다
+        for f in _SIGN_FIELDS:
+            got, want = spec.get(f), entry.get(f)
+            if got != want:
+                bad.append(f"{key}.{f}: 생성물 {got!r} ≠ 원장 {want!r}")
+    assert not bad, (
+        "data_sources.yaml 이 2인 확인 원장과 다르다 — 생성물을 손으로 고쳤다.\n"
+        "  고치는 법 — scripts/registry_review.yaml 에 적고 "
+        "`python scripts/gen_registry.py` 를 다시 돌린다.\n  " + "\n  ".join(bad)
+    )
+
+
+@pytest.mark.gate
+def test_생성물에만_있는_문언이_없다() -> None:
+    """`masking`·`attribution`·`license` 의 단일 출처는 `scripts/gen_registry.py` 다.
+
+    🚨 서명 게이트만으로는 부족하다. 2026-09-09 에 사라진 것은 `reviewed_at`(원장에 있다)과
+       `masking`(원장에 없다) **둘**이었다. masking 만 손으로 넣으면 위 게이트를 지난다.
+
+    🚨 공백을 지우고 비교한다 — 생성기 안에서는 한 문장이 여러 줄로 쪼개져 있고
+       (`>-` 접힘 · 암시적 문자열 이어붙이기), 포매터가 그 줄을 다시 나눌 수 있다.
+       줄바꿈 위치가 검사 결과를 바꾸면 그건 문언 검사가 아니라 서식 검사다.
+    """
+    gen = "".join((ROOT / "scripts/gen_registry.py").read_text(encoding="utf-8").split())
+    sources = _registry().get("sources") or {}
+
+    bad: list[str] = []
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue
+        for field in ("masking", "attribution", "license"):
+            wording = str(spec.get(field) or "").strip()
+            if not wording:
+                continue
+            head = "".join(wording.split())[:24]
+            if head not in gen:
+                bad.append(f"{key}.{field}: 「{wording[:28]}…」 가 gen_registry.py 에 없다")
+    assert not bad, (
+        "판정 문언이 생성물에만 있다 — 다음 생성 때 사라진다.\n"
+        "  고치는 법 — scripts/gen_registry.py 의 EXTRA · ATTRIB 에 넣고 다시 생성한다.\n  "
+        + "\n  ".join(bad)
+    )
+
+
+# ══════════════════════════════════════════════════════════
+# 🔴 「지금은 안 받는다」를 코드가 지키는가 (2026-09-09 · D-72)
+#
+# ⛔ `require()` 가 `status` 를 **아예 안 보고 있었다.** `manual` 검사는 `probe()` 에만 있어,
+#    탐침은 막고 **실제로 받아 오는 쪽은 안 막는** 모양이었다.
+#    D-109 에서 GATED 로 똑같은 일이 있었고 그때 GATED 만 옮겨 오고 status 는 두었다.
+#    **같은 함정을 두 번째로 밟았다.** 팀장 지적으로 드러났다 —
+#    「거버넌스에 위배되면 수집하지 않기로 한 것들은 수집 안 해야 하잖아」.
+# ══════════════════════════════════════════════════════════
+
+
+@pytest.mark.gate
+def test_hold_과_manual_은_수집이_막힌다() -> None:
+    """적어 두기만 하고 아무것도 안 막으면 그건 보류가 아니라 표시다."""
+    from collect import registry
+
+    sources = _registry().get("sources") or {}
+    checked = {"hold": 0, "manual": 0}
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue
+        st = spec.get("status")
+        if st not in ("hold", "manual"):
+            continue
+        for use, verdict in (spec.get("use") or {}).items():
+            if verdict != "allow":
+                continue  # 용도가 이미 닫혀 있으면 이 게이트가 볼 자리가 아니다
+            # 🚨 **막히기만 하면 되는 게 아니다 — 다른 이유로 막히면 이 검사가 아니다.**
+            #    `aihub_71843` 은 hold 이면서 GATED 라 승인 검사가 먼저 걸린다.
+            #    순서는 「되돌릴 수 없는 것부터」이므로 그게 맞다 — 여기서는 세지 않는다.
+            with pytest.raises(registry.RegistryError) as err:
+                registry.require(key, use=use)
+            if st in str(err.value):
+                checked[st] += 1
+    # 🚨 **셀 것이 없으면 이 검사는 아무것도 안 한 것이다** (D-170).
+    #    `hold`/`manual` 인데 용도가 열린 소스가 하나도 없으면 여기서 알린다.
+    assert sum(checked.values()) > 0, (
+        "hold·manual 이면서 용도가 열린 소스가 없다 — 이 게이트가 아무것도 세지 않았다. "
+        "레지스트리가 바뀌었으면 이 검사가 여전히 뜻이 있는지 다시 본다 (D-170)."
+    )
+
+
+# ══════════════════════════════════════════════════════════
+# 🔴 생성기가 pre-commit 훅과 싸우지 않는가 (2026-09-09)
+#
+# ⛔ `scripts/data_status.py` 를 만들자마자 `end-of-file-fixer` 가 매번 그 파일을 고쳐
+#    커밋이 중단됐다. 생성기가 끝에 빈 줄을 하나 더 붙였기 때문이다.
+#    🚨 **한 번 고치면 끝나는 문제가 아니다** — 생성기가 다섯이고 앞으로 더 는다.
+#       다음 사람이 새 생성기를 쓰면 같은 자리를 밟고, 아무도 알려주지 않는다.
+#    🚨 그리고 이 싸움이 반복되면 **둘 중 하나를 끄게 된다** — 훅을 끄면 서식이 무너지고,
+#       생성기를 손으로 고치면 그게 곧 「생성물을 손으로 고친다」다 (D-90 이 막는 것).
+#
+# 그래서 규칙을 검사로 옮긴다. 훅을 실제로 돌리지 않고 **훅이 요구하는 모양**만 본다 —
+# 훅을 돌리려면 네트워크와 설치가 필요하고, 그러면 이 검사가 CI 밖에서 안 돈다.
+# ══════════════════════════════════════════════════════════
+
+#: 생성기가 쓰는 파일들. 🚨 **새 생성기를 만들면 여기 넣는다.**
+#   여기 없으면 이 검사는 그 파일을 안 본다 — 목록이 낡으면 검사도 낡는다.
+GENERATED = (
+    "data_sources.yaml",  # scripts/gen_registry.py
+    "docs/03_데이터/_matrix/sources.json",  # scripts/build_matrix.py
+    "docs/03_데이터/판정매트릭스.html",  # scripts/build_matrix.py
+    "scripts/registry_rationale.yaml",  # scripts/extract_rationale.py
+    "docs/03_데이터/데이터현황판.md",  # scripts/data_status.py
+    "docs/03_데이터/S0-14_2인확인_검토표.md",  # scripts/review_sheet.py
+)
+
+
+@pytest.mark.gate
+def test_생성물이_훅의_고정점이다() -> None:
+    """생성기 출력이 pre-commit 을 그대로 지나야 한다.
+
+    보는 것은 둘이다 — 이 둘이 2026-09-09 에 실제로 물었다.
+      `end-of-file-fixer`  파일은 개행 **하나**로 끝난다
+      `trailing-whitespace` 줄 끝에 공백이 없다
+        🚨 `.md` 는 예외가 있다 — 훅이 `--markdown-linebreak-ext=md` 로 돌아
+           **공백 두 개**는 줄바꿈이라 남긴다. 그래서 md 는 「둘이 아닌 공백」만 잡는다.
+    """
+    bad: list[str] = []
+    for rel in GENERATED:
+        path = ROOT / rel
+        if not path.exists():
+            continue  # 아직 안 만든 생성물은 이 검사의 자리가 아니다
+        text = path.read_text(encoding="utf-8")
+        if not text.endswith("\n") or text.endswith("\n\n"):
+            bad.append(
+                f"{rel}: 끝이 개행 하나가 아니다 ({text[-6:]!r}) — end-of-file-fixer 가 고친다"
+            )
+        for i, line in enumerate(text.split("\n"), 1):
+            stripped = line.rstrip()
+            if line == stripped:
+                continue
+            tail = line[len(stripped) :]
+            if path.suffix == ".md" and tail == "  ":
+                continue  # 마크다운 줄바꿈 — 훅이 남긴다
+            bad.append(f"{rel}:{i}: 줄 끝 공백 {tail!r} — trailing-whitespace 가 고친다")
+            break
+    assert not bad, (
+        "생성물이 pre-commit 훅과 싸운다 — 돌릴 때마다 훅이 고쳐 커밋이 중단된다.\n"
+        "  🚨 훅을 끄지 말고 **생성기가 훅의 모양을 지키게** 고친다 (D-90 — 생성물을 "
+        "손으로 고치지 않는다).\n  " + "\n  ".join(bad)
     )

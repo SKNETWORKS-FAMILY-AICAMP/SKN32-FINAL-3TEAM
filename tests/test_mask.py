@@ -52,6 +52,9 @@ _REGISTRY_SOURCE = {
     "mfds_special_use_guide": "mfds_special_use_guide",
     "mfds_casebook": "mfds_casebook",
     "mfds_hf_ingredient_board": "mfds_hf_ingredient_board",
+    "mfds_press": "mfds_press",
+    "mfds_hf_ingredient": "mfds_hf_ingredient",
+    "mfds_hf_individual": "mfds_hf_individual",
 }
 
 
@@ -281,14 +284,25 @@ def test_policy_matches_the_registry(target: str) -> None:
             assert declared, "ftc 는 대표자명을 지운다 — 원천의 정책은 우리의 보장이 아니다"
             assert "원천의 정책이지 우리의 보장이 아니다" in wording
             continue
-        # 🚨 **끈 것도 문언으로 증명한다.** 해설서 문언에는 「대표자명」이라는 낱말이
+        # 🚨 **끈 것도 문언으로 증명한다.** 어떤 문언에는 「대표자명」이라는 낱말이
         #    들어 있지만 뜻은 반대다 — 「대표자명(person)은 **끈다**」.
         #    ⛔ 낱말만 세면 「지운다」와 「끈다」를 구별하지 못한다. 그래서 축을 끈 원천은
         #       **끈다고 적힌 문장**을 확인한다. 켤 때만 근거를 요구하고 끌 때는 안 하면,
         #       실수로 꺼진 축이 조용히 통과한다.
-        if target == "mfds_special_use_guide" and key == "person":
-            assert not declared, "해설서는 대표자명을 끈다 — 실측 오탐 11 · 진짜 0 (D-157)"
-            assert "대표자명(person)은 끈다" in wording
+        #    🔄 2026-09-09 — 해설서 한 원천의 특례로 적어 두었더니 `mfds_press` 가
+        #       같은 자리에 오면서 특례를 또 써야 했다. **두 번째면 규칙이다** — 원천
+        #       이름을 빼고 「`<축>(<key>)은 끈다` 라고 적혀 있으면 끈 것」으로 일반화했다.
+        #       다음 원천은 문언만 규약대로 적으면 여기를 안 고쳐도 된다.
+        #    ⛔ 2026-09-09 — 이 자리를 `if not declared and …` 로 썼다가 **또 무력하게**
+        #       만들었다. 문언에 「대표자명(person)은 끈다」가 있으면 낱말 「대표자명」도
+        #       들어 있으므로, `person` 을 실수로 **켜 두어도** 아래 `word in wording` 이
+        #       참이 되어 통과한다. 반대 대조를 돌려 보고서야 나왔다 (D-170 을 쓴 날에
+        #       D-170 을 다시 밟았다). **끈다고 적혔으면 꺼져 있어야 한다**로 고쳤다.
+        if f"{word}({key})은 끈다" in wording:
+            assert not declared, (
+                f"{target}: 레지스트리는 「{word}({key})은 끈다」인데 POLICY 는 켜 두었다 — "
+                "원장이 원본이고 코드가 사본이다 (D-54 · D-99)"
+            )
             continue
         assert declared == (word in wording), (
             f"{target}: POLICY 는 {key}={declared} 인데 레지스트리 masking 문언은 "
