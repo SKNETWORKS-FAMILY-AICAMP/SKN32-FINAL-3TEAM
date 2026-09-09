@@ -20,6 +20,7 @@ import os
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 app = FastAPI(
@@ -57,6 +58,41 @@ class SearchHit(BaseModel):
 class JudgeRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
     category: str = Field("일반", pattern="^(일반|식품|건기식|화장품)$")
+
+
+@app.get("/", response_class=HTMLResponse)
+def index() -> str:
+    """무엇이 있고 무엇이 아직 없는지 한 화면에 낸다.
+
+    ⛔ 2026-09-09 — 서버를 처음 띄우고 브라우저로 열었더니 **404** 였다. 루트가 비어 있었다.
+       🚨 **처음 여는 자리를 비워 두면 「안 도는 것」처럼 보인다.** 실제로는 돌고 있었다.
+       D-51 — 오류는 고치는 법을 보여준다. 여기서는 **어디를 볼지**를 보여준다.
+
+    🚨 되는 것과 안 되는 것을 같은 화면에 적는다. 안 되는 것을 감추면
+       팀원이 「되는 줄 알고」 붙었다가 두 번 고친다 (D-147 의 API 판).
+    """
+    return """<!doctype html><meta charset="utf-8"><title>CopyLane</title>
+<style>body{font-family:system-ui;max-width:44rem;margin:3rem auto;padding:0 1rem;line-height:1.7}
+code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
+.no{color:#b91c1c}.yes{color:#15803d}</style>
+<h1>CopyLane</h1>
+<p>광고 문구 준법 검수·생성 — 판정 근거를 조문으로 돌려준다.</p>
+<h2>지금 되는 것</h2>
+<ul>
+  <li class=yes><a href="/health">/health</a> — DB 층별 행 수</li>
+  <li class=yes><a href="/search?q=%EC%A7%88%EB%B3%91&amp;category=%EC%8B%9D%ED%92%88">/search</a>
+      — 조문 검색 <b>(아직 부분일치다. 벡터 검색이 아니다)</b></li>
+  <li class=yes><a href="/docs">/docs</a> — API 계약</li>
+</ul>
+<h2>아직 없는 것</h2>
+<ul>
+  <li class=no><code>POST /judge</code> — 판정 엔진(LangGraph)이 없다. <b>501</b> 을 낸다.
+      가짜 200 을 내면 프론트가 그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.</li>
+  <li class=no>화면(Jinja2 + HTMX) — D-56 이 정해 뒀고 아직 안 지었다.</li>
+  <li class=no><code>golden_sample</code> 적재 — <code>split_t</code>·<code>violation_t</code>
+      판정 둘이 걸려 있다.</li>
+</ul>
+"""
 
 
 @app.get("/health", response_model=Health)

@@ -472,6 +472,20 @@ def serve(reload: bool = typer.Option(True, "--reload/--no-reload")) -> None:
           `ruff F811` 이 잡았습니다 — 안 잡혔으면 뒤에 정의된 스텁이 이겨
           `serve` 가 「아직 없다」를 찍고 서버는 안 떴을 것입니다.
     """
+    # 🚨 없는 것을 「없다」고 말한다 (D-51 — 오류는 고치는 법을 보여준다).
+    #    ⛔ 2026-09-09 — `uv run uvicorn` 이 `program not found` 로 죽었다.
+    #       D-42·D-135 가 FastAPI 를 확정해 뒀는데 `pyproject.toml` 에는 없었다.
+    #       `sentence-transformers` 와 같은 부류다 — **코드가 0줄이면 의존성도 없다.**
+    #       스택은 결정돼 있었고 아무도 그것을 설치한 적이 없었다.
+    import importlib.util
+
+    missing = [m for m in ("fastapi", "uvicorn", "jinja2") if importlib.util.find_spec(m) is None]
+    if missing:
+        console.print(f"[red]없는 것 — {', '.join(missing)}[/red]")
+        console.print('  고치는 법 — [bold]uv add fastapi "uvicorn[standard]" jinja2[/bold]')
+        console.print("  🚨 D-42·D-135 가 FastAPI 를 확정해 뒀지만 의존성은 없었습니다.")
+        raise typer.Exit(1)
+
     args = ["uv", "run", "uvicorn", "app.api:app"]
     if reload:
         args.append("--reload")
