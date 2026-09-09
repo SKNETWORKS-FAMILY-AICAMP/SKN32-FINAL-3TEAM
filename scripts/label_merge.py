@@ -1,0 +1,156 @@
+"""scripts/label_merge.py — 사람이 붙인 라벨을 합치고 **일치도를 잰다** (D-40 · 기획문서 6-3).
+
+  uv run python scripts/label_merge.py data/derived/labels/*.jsonl
+  uv run python scripts/label_merge.py data/derived/labels/*.jsonl --merge out.jsonl
+
+──────────────────────────────────────────────────────────────
+★ **일치도가 라벨의 신뢰도다.** 「정답을 누가 붙였습니까」에 답하는 것은 이름이 아니라 κ 다.
+
+    두 사람이 독립으로 붙여 κ = 0.8 이면 → 「우리 라벨은 재현된다」
+    κ = 0.4 이면                       → 🔴 **기준이 없는 것이다.** 지시서부터 고친다
+
+🚨 **일치도를 재지 않으면 라벨이 몇 사람의 취향인지 알 수 없다.** 그리고 그것을 모른 채
+   학습하면, 모델이 배운 것이 법인지 취향인지도 알 수 없다.
+
+──────────────────────────────────────────────────────────────
+🔴 **불일치를 다수결로 덮지 않는다.** 갈린 항목은 목록으로 뽑아 **셋째 사람이 본다** —
+   두 사람이 갈렸다는 것은 그 항목이 어렵다는 뜻이고, 어려운 항목이 곧 경계다.
+   경계를 다수결로 지우면 지시서가 영영 안 좋아진다.
+
+🚨 이 스크립트는 **라벨을 만들지 않는다.** 세고, 갈린 것을 보여 줄 뿐이다.
+"""
+
+from __future__ import annotations
+
+import argparse
+import collections
+import itertools
+import json
+import pathlib
+import sys
+
+KEY_FIELDS = ("원천", "원천라벨", "문구", "글", "쪽", "호")
+HUMAN = ("확정유형", "붙인이", "붙인날")
+
+
+def _key(r: dict) -> str:
+    return "\x1f".join(" ".join(str(r.get(f, "")).split()) for f in KEY_FIELDS)
+
+
+def _label(r: dict) -> str | None:
+    v = r.get("확정유형")
+    if not v:
+        return None
+    return "|".join(sorted(v)) if isinstance(v, list) else str(v)
+
+
+def load(paths: list[pathlib.Path]) -> dict[str, dict[str, str]]:
+    """파일별로 {키: 라벨}. 🚨 **안 채운 행은 없는 것으로 본다** — 빈칸은 판단이 아니다."""
+    got: dict[str, dict[str, str]] = {}
+    for p in paths:
+        d: dict[str, str] = {}
+        for line in p.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            lab = _label(r)
+            if lab:
+                d[_key(r)] = lab
+        got[p.name] = d
+    return got
+
+
+def kappa(a: dict[str, str], b: dict[str, str]) -> tuple[float, int, int]:
+    """Cohen's κ — **겹치는 항목에서만** 잰다. (κ, 겹친 수, 일치 수)
+
+    🚨 단순 일치율을 쓰지 않는 이유 — 유형이 넷이면 찍어도 25% 는 맞는다.
+       κ 는 **우연히 맞을 확률을 뺀 뒤**의 일치도라 그 착시를 없앤다.
+
+    ⛔ 실측으로 확인한 극단 — **일치 51/60(85%) 인데 κ = 0.000** 이 나온다.
+       한 사람이 늘 같은 답을 고르면 그 사람은 정보를 주지 않고, 나머지가 그 답을
+       자주 맞혀도 「합의」가 아니다. **일치율만 봤으면 85% 라고 적었을 자리다.**
+    """
+    both = sorted(set(a) & set(b))
+    n = len(both)
+    if n == 0:
+        return float("nan"), 0, 0
+    agree = sum(1 for k in both if a[k] == b[k])
+    po = agree / n
+    ca, cb = collections.Counter(a[k] for k in both), collections.Counter(b[k] for k in both)
+    pe = sum(ca[x] * cb.get(x, 0) for x in ca) / (n * n)
+    k = 1.0 if pe == 1 else (po - pe) / (1 - pe)
+    return k, n, agree
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="라벨 취합 · 일치도 (κ)")
+    ap.add_argument("paths", nargs="+", help="사람마다 채운 labelsheet 파일들")
+    ap.add_argument("--merge", help="합의된 것만 이 경로로 쓴다 (불일치는 제외)")
+    a = ap.parse_args()
+
+    files = [pathlib.Path(x) for x in a.paths]
+    missing = [p for p in files if not p.exists()]
+    if missing:
+        print(f"🔴 없는 파일: {[str(p) for p in missing]}", file=sys.stderr)
+        return 1
+
+    data = load(files)
+    print("채운 건수 —")
+    for name, d in data.items():
+        print(f"  {name:44} {len(d):>5}건")
+
+    if len(files) < 2:
+        print("\n  ⬜ 파일이 하나다 — 일치도를 잴 수 없다.")
+        print("     🚨 **한 사람의 라벨은 신뢰도를 모른다.** 최소 두 사람이 겹쳐 붙여야")
+        print("        「우리 라벨이 재현되는가」에 답할 수 있다 (기획문서 6-3).")
+        return 0
+
+    print("\n일치도 (Cohen's κ) —")
+    worst = 1.0
+    for x, y in itertools.combinations(data, 2):
+        k, n, agree = kappa(data[x], data[y])
+        if n == 0:
+            print(f"  {x} ↔ {y}: 겹치는 항목이 없다 — 같은 행을 나눠 줘야 잰다")
+            continue
+        worst = min(worst, k)
+        mark = "✅" if k >= 0.8 else ("🟡" if k >= 0.6 else "🔴")
+        print(f"  {x} ↔ {y}: κ={k:.3f} {mark}  (겹침 {n} · 일치 {agree})")
+    print("     ★ 0.8 이상이면 「우리 라벨은 재현된다」고 말할 수 있다.")
+    print("     🔴 0.6 미만이면 라벨이 아니라 **지시서를 고친다** — 사람 탓이 아니다.")
+
+    # 🔴 갈린 항목 — 다수결로 덮지 않고 목록으로 낸다
+    allk = set().union(*[set(d) for d in data.values()])
+    split_rows = []
+    for k in sorted(allk):
+        labs = {name: d[k] for name, d in data.items() if k in d}
+        if len(set(labs.values())) > 1:
+            split_rows.append((k, labs))
+    print(f"\n🔴 **갈린 항목 {len(split_rows)}건** — 셋째 사람이 본다 (다수결로 덮지 않는다)")
+    for k, labs in split_rows[:8]:
+        txt = k.split("\x1f")[2] or k.split("\x1f")[3]
+        print(f"  · {txt[:56]}")
+        print(f"      {labs}")
+    if len(split_rows) > 8:
+        print(f"  … 외 {len(split_rows) - 8}건")
+
+    if a.merge:
+        out = pathlib.Path(a.merge)
+        agreed = {k for k in allk if len({d[k] for d in data.values() if k in d}) == 1}
+        base = files[0]
+        n = 0
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with out.open("w", encoding="utf-8") as f:
+            for line in base.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                r = json.loads(line)
+                if _key(r) in agreed and _label(r):
+                    f.write(line + "\n")
+                    n += 1
+        print(f"\n  → {out}  ({n}건 · **합의된 것만**)")
+        print(f"  🚨 갈린 {len(split_rows)}건은 **안 들어갔다.** 버린 것이 아니라 보류다.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

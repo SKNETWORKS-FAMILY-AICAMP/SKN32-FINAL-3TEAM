@@ -481,9 +481,32 @@ def scan(source: str = typer.Argument("", help="원천 id (비우면 표를 보�
 
 
 @app.command()
-@stub("W3", "수집 코퍼스 확보")
-def golden() -> None:
-    """일부러 틀린 문장을 만들어 채점용 정답셋을 꾸린다."""
+def golden(
+    write: bool = typer.Option(False, "--write", help="파생물을 실제로 쓴다 (기본은 보기만)"),
+) -> None:
+    """골든셋을 꾸린다 — **사전 → 주입 → 분할** 세 단계 (2026-09-09).
+
+    🚨 **라벨을 사람도 모델도 붙이지 않는다.** 조문이 붙이거나(사전) 규칙이 붙인다(주입).
+
+        [P6] 사전   조문이 묶어 준 표현을 모은다        preprocess.dictionary
+        [P10] 주입  적법 문구를 규칙으로 위법화한다      preprocess.inject
+        [P12] 분할  🔴 출처 분리 — 문서 단위로 봉인      preprocess.split
+
+    🔴 **주입본은 평가에 들어가지 않는다** ([P10] 규약 5). 합성으로 평가하면
+       「규칙을 배웠는가」를 재게 된다. 분할 게이트가 그것을 막는다.
+    """
+    steps = (
+        (["-m", "preprocess.dictionary"], ["--dump"]),
+        (["-m", "preprocess.inject"], ["--dump"]),
+        (["-m", "preprocess.split"], ["--write"]),
+    )
+    for mod, extra in steps:
+        args = ["uv", "run", "python", *mod] + (extra if write else [])
+        if run(*args) != 0:
+            raise typer.Exit(1)
+    if not write:
+        console.print("\n  [yellow]⬜ 아무것도 쓰지 않았다[/yellow] — `--write` 를 붙인다.")
+    raise typer.Exit(0)
 
 
 @app.command()
