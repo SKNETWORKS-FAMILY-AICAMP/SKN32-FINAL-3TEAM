@@ -54,7 +54,7 @@ import random
 import re
 import sys
 
-from preprocess.text import quoted
+from preprocess.text import quoted, sheet_lengths
 
 SOURCE_ID = "mfds_casebook"
 RAW_DIR = pathlib.Path("data/raw") / SOURCE_ID
@@ -413,6 +413,13 @@ def main() -> int:
     ap.add_argument("--dump", action="store_true", help=f"{OUT} 로 쓴다 (마스킹 정책 필요)")
     ap.add_argument("--sheet", type=int, default=0, help="5호 확정을 사람이 붙일 검증셋")
     ap.add_argument("--seed", type=int, default=20260908, help="표본 추출 seed — 재현 조건 (D-54)")
+    ap.add_argument(
+        "--min-len",
+        type=int,
+        default=0,
+        dest="min_len",
+        help="판단 재료(글) 길이 하한 — 낱말만 있는 항목을 뺀다 (0 = 안 건다)",
+    )
     a = ap.parse_args()
 
     if a.verify:
@@ -431,12 +438,20 @@ def main() -> int:
         rnd = random.Random(a.seed)
         safe, _, _ = masked(rows)  # 🔴 검증셋도 마스킹을 지난다
         pool = [r for r in safe if r["후보유형"] and r.get("인용표현")]
+        # 🔴 사람이 5호를 「소비자_기만 / 후기_체험기_기만」으로 가르려면 **맥락**이 필요하다.
+        #    인용표현은 낱말이라(중앙 4자) 그것만으로는 못 가른다 — 재료는 `글` 쪽이다.
+        if a.min_len:
+            pool = [r for r in pool if len(" ".join((r.get("글") or "").split())) >= a.min_len]
         pick = rnd.sample(pool, min(a.sheet, len(pool)))
         SHEET.parent.mkdir(parents=True, exist_ok=True)
         with SHEET.open("w", encoding="utf-8") as f:
             for r in pick:
                 f.write(json.dumps({**r, "붙인이": "", "붙인날": ""}, ensure_ascii=False) + "\n")
-        print(f"\n  ⓒ 검증셋 {len(pick):,}건 → {SHEET}  (seed={a.seed} · 후보가 둘인 5호만)")
+        print(
+            f"\n  ⓒ 검증셋 {len(pick):,}건 → {SHEET}"
+            f"  (seed={a.seed} · 후보가 둘인 5호만 · 길이하한 {a.min_len})"
+        )
+        sheet_lengths(pick, "글", a.min_len)
         print(
             "     🚨 `확정유형` 은 **사람이** 채운다 — 추출기가 채우면 홀드아웃이 자기 채점이 된다."
         )

@@ -924,21 +924,59 @@ def test_키_입력_경로가_값을_인자로_받지_않는다() -> None:
     )
 
 
+#: 🔴 **키가 들어앉는 이름들.** 편집기·direnv·손복사가 만든다 — 안에 든 것은 같은 키다.
+#:    ⛔ 2026-09-09 이전에는 이 목록이 **docstring 에만** 있었고 검사는 `.env.*` 라는
+#:       **패턴 문자열이 파일에 있는지**만 봤다. 그래서 `.env~` 가 목록에 적혀 있으면서도
+#:       실제로는 안 걸리고 있었다 — `.env.*` 는 점 뒤에 글자가 와야 하는데 물결표 앞에는
+#:       점이 없다. **적어 놓은 것과 검사한 것이 달랐다.**
+LEAKY_ENV_NAMES = (".env", ".env~", ".envrc", ".env.bak", ".env.save", ".env.local")
+
+
 @pytest.mark.gate
 def test_설정파일이_이름을_바꿔_새지_않는다() -> None:
     """🚨 `.gitignore` 의 `.env` 한 줄로는 모자라다.
 
-    편집기와 OS 가 `.env~` · `.env.bak` · `.env.save` · `.env.local` 을 만든다.
-    안에 든 것은 똑같은 키인데 이름이 달라서 그 한 줄에 안 걸린다.
-    `.env.*` 로 덮고 `!.env.example` 로 템플릿만 되살린다 — 순서가 뒤바뀌면
-    예제가 커밋되지 않아 팀원이 키 이름을 알 수 없게 된다.
+    편집기와 OS 가 `.env~` · `.env.bak` · `.env.save` · `.env.local` 을 만들고
+    direnv 는 `.envrc` 를 만든다. 안에 든 것은 똑같은 키인데 이름이 달라서
+    그 한 줄에 안 걸린다. **유출은 항상 「덮은 줄 알았던 이름」으로 난다.**
+
+    🔴 **패턴 문자열이 아니라 동작을 본다** (2026-09-09).
+
+    종전에는 `.gitignore` 안에 `.env.*` 라는 **글자가 있는지**만 봤다. 그러면
+    「규칙이 무엇을 실제로 덮는가」를 아무도 안 보게 된다 — 실제로 `.env~` 가
+    docstring 에 이름까지 적혀 있으면서 패턴 밖에 있었고, 이 게이트는 초록이었다.
+    ★ **이제 `git check-ignore` 에게 직접 묻는다.** 규칙을 어떻게 쓰든 상관없다 —
+      위 이름들이 막히고 `.env.example` 은 살아 있으면 통과다.
+
+    🔴 **`--no-index` 가 없으면 뒤쪽 단언이 실패할 수 없다.** `git check-ignore` 는
+       **추적 중인 파일을 「무시되지 않음」으로 답한다.** `.env.example` 은 추적 중이라
+       `!.env.example` 을 통째로 지워도 답이 같다 — 규칙을 안 보고 인덱스를 본 것이다.
+       ⛔ 이 게이트를 고치면서 실제로 그 상태로 한 번 통과시켰다. 반대 대조를 돌려 보고서야
+       나왔다. **단언은 실패할 수 있어야 단언이다** (D-146 의 같은 모양).
+
+    🚨 그리고 규칙이 맞아도 **이미 추적 중이면 gitignore 는 아무것도 못 한다** — 아래.
+       그것은 인덱스를 봐야 하는 검사라 `git ls-files` 로 따로 묻는다.
     """
-    lines = [ln.strip() for ln in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()]
-    for need in (".env", ".env.*", "!.env.example"):
-        assert need in lines, f"🚨 .gitignore 에 `{need}` 가 없다"
-    assert lines.index(".env.*") < lines.index("!.env.example"), (
-        "🚨 `!.env.example` 이 `.env.*` 보다 앞에 있으면 되살리지 못한다 — gitignore 는 "
-        "뒤에 오는 규칙이 이긴다"
+    ignored = subprocess.run(
+        ["git", "check-ignore", "--no-index", "--", *LEAKY_ENV_NAMES, ".env.example"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    # 종료코드 0(전부 무시) · 1(일부만) 둘 다 정상 출력이다. 128 은 git 이 없는 것.
+    if ignored.returncode == 128:  # pragma: no cover — git 없는 환경
+        pytest.skip("git 이 없다 — 무시 규칙의 동작을 확인할 수 없다")
+    got = {ln.strip() for ln in ignored.stdout.splitlines() if ln.strip()}
+    missing = [n for n in LEAKY_ENV_NAMES if n not in got]
+    assert not missing, (
+        f"🚨 `.gitignore` 가 이 이름들을 안 덮는다 — {missing}\n"
+        "   키가 그대로 들어 있는 파일들이다. `.env*` 한 줄이면 전부 덮인다.\n"
+        "   ⛔ 이름을 주석에 적는 것과 규칙이 그것을 덮는 것은 다른 일이다."
+    )
+    assert ".env.example" not in got, (
+        "🚨 `.env.example` 까지 무시된다 — `!.env.example` 이 없거나 앞에 있다.\n"
+        "   gitignore 는 **뒤에 오는 규칙이 이긴다.** 예제가 커밋되지 않으면 "
+        "팀원이 키 이름을 알 수 없다."
     )
 
     # 실제 추적 상태 — 규칙이 맞아도 이미 추적 중이면 gitignore 는 아무것도 못 한다

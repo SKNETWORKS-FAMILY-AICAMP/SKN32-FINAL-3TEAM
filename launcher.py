@@ -425,6 +425,9 @@ def extract(
     source: str = typer.Argument("", help="원천 id (비우면 표를 보여준다)"),
     dump: bool = typer.Option(False, "--dump", help="파생물을 쓴다 — 🔴 마스킹 정책이 있어야 한다"),
     sheet: int = typer.Option(0, "--sheet", help="사람이 채울 검증셋을 N건씩 만든다"),
+    min_len: int = typer.Option(
+        0, "--min-len", help="검증셋 문구 길이 하한 — 낱말을 빼고 문장만 (0 = 안 건다)"
+    ),
     verify: bool = typer.Option(False, "--verify", help="원천의 선언과 대조만 한다"),
 ) -> None:
     """받아 둔 원문에서 라벨을 뽑는다 — 원천별 전처리 모듈로 위임한다.
@@ -451,6 +454,8 @@ def extract(
         args.append("--dump")
     if sheet:
         args += ["--sheet", str(sheet)]
+    if min_len:
+        args += ["--min-len", str(min_len)]
     raise typer.Exit(run(*args))
 
 

@@ -165,3 +165,73 @@ def test_unrelated_files_are_unaffected(raw) -> None:
     assert a is not None and b is not None
     assert store.EDITION_MARK not in a.name
     assert store.EDITION_MARK not in b.name
+
+
+# ─────────────────────────────────────────────────────────────
+#  🔴 동일성 판정은 정규화문으로 · 저장은 원문으로 (2026-09-09)
+#
+#  ⛔ `mfds_press` 105 파일 **전부**가 원장에 「내용 갈림」으로 떴다. 원인은
+#     `jsessionid=` 64자 토큰이 파일마다 2개, 길이가 고정이라 **바이트 수는 같고
+#     해시만 달랐다.** 이 상태로는 규약 4 가 영원히 안 걸리고 돌릴 때마다 105개가
+#     새 판으로 깔린다. D-117(매칭은 정규화문·보관은 원문)의 세 번째 적용이다.
+# ─────────────────────────────────────────────────────────────
+
+_TOKEN = "jsessionid=" + "A" * 64
+_TOKEN2 = "jsessionid=" + "B" * 64
+
+
+def _press(payload: bytes, name: str = "50316.html"):
+    return store.save_raw("mfds_press", "probe_fam", name, payload, url="https://example.invalid/x")
+
+
+def test_volatile_token_alone_does_not_make_a_new_edition(raw) -> None:
+    """🔴 본론 — 세션 토큰만 다르면 **같은 응답**이다. 규약 4 가 걸려야 한다."""
+    assert _press(f"<a>{_TOKEN}</a>".encode()) is not None
+    assert _press(f"<a>{_TOKEN2}</a>".encode()) is None
+    assert len(_rows(raw)) == 1
+
+
+def test_stored_bytes_keep_the_token(raw) -> None:
+    """🚨 **저장은 원문 그대로다** (D-92 무손상).
+
+    지우는 것은 판정용 사본이고 디스크에 남지 않는다. 이 단언이 없으면
+    「같은지 묻기 위해」 시작한 정규화가 슬금슬금 원본을 깎는다.
+    """
+    body = f"<a>{_TOKEN}</a>".encode()
+    path = _press(body)
+    assert path.read_bytes() == body
+    assert _TOKEN.encode() in path.read_bytes()
+
+
+def test_a_real_change_still_becomes_a_new_edition(raw) -> None:
+    """양성 대조 — 토큰 말고 **본문**이 바뀌면 판이 서야 한다. 안 그러면 눈이 먼다."""
+    _press(f"<a>{_TOKEN}</a>".encode())
+    second = _press(f"<a>{_TOKEN2}</a><b>new</b>".encode())
+    assert second is not None
+    assert store.EDITION_MARK in second.name
+
+
+def test_unregistered_source_falls_back_to_the_raw_hash(raw) -> None:
+    """🚨 모르는 원천은 **느슨하게 판정하지 않는다.**
+
+    `VOLATILE` 에 없는 원천은 원문 해시를 그대로 쓴다 — 빠뜨리면 판이 쌓일 뿐
+    데이터를 잃지는 않는다. 안전한 쪽으로 틀린다.
+    """
+    _save(f"<a>{_TOKEN}</a>".encode())
+    second = _save(f"<a>{_TOKEN2}</a>".encode())
+    assert second is not None, "law_go_kr 은 VOLATILE 에 없으므로 갈려야 한다"
+
+
+def test_manifest_keeps_the_original_hash_and_marks_the_judging_one(raw) -> None:
+    """원장의 `sha256` 은 **파일 내용**이고 `identity_sha256` 은 **판정용**이다.
+
+    🚨 둘이 갈릴 때만 칸이 생긴다. 칸이 있다는 것은 「이 원천은 원문 해시로는
+       같은지 물을 수 없다」는 뜻이지 「내용이 이것이다」가 아니다.
+    """
+    body = f"<a>{_TOKEN}</a>".encode()
+    _press(body)
+    _save("평범한 본문".encode())
+    press_row, plain_row = _rows(raw)
+    assert press_row["sha256"] == store.sha256(body), "원장은 원문 해시를 증언한다"
+    assert press_row["identity_sha256"] != press_row["sha256"]
+    assert "identity_sha256" not in plain_row, "갈리지 않으면 칸을 만들지 않는다"
