@@ -53,6 +53,8 @@ _REGISTRY_SOURCE = {
     "mfds_casebook": "mfds_casebook",
     "mfds_hf_ingredient_board": "mfds_hf_ingredient_board",
     "mfds_press": "mfds_press",
+    "mfds_hf_ingredient": "mfds_hf_ingredient",
+    "mfds_hf_individual": "mfds_hf_individual",
 }
 
 

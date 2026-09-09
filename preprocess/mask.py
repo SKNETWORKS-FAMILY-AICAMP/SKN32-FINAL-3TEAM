@@ -143,6 +143,13 @@ POLICY: dict[str, frozenset[str]] = {
     # 🚨 두 번째 사례라 우연이 아니다 — **원천이 사람 아닌 것을 사람과 같은 기호로
     #    가릴 때** 이 축이 문구를 먹는다 (D-157).
     "mfds_press": frozenset({"org", "brand", "addr"}),
+    # ── 2026-09-09 판정 (검토요청_2026-09-09_마스킹정책_건기식API_2종.md §4)
+    # 🔴 **담지 않기가 먼저다** (D-159) — `mfds_hf_ingredient` 의 BSSH_NM·ADDR·INDUTY_NM 은
+    #    별도 열이라 추출기가 아예 안 담는다. 아래 축은 셀 안에 섞여 드는 것에 대한 두 번째 방어다.
+    # 🚨 실측 전량 — ingredient 873행×5필드 · individual 547행×7필드 모두 org 0 · addr 0 · person 0.
+    #    켜도 잃는 것이 없다. 그래서 넷 다 켠다 — 원천이 회차마다 필드를 바꿀 수 있다.
+    "mfds_hf_ingredient": frozenset({"org", "brand", "addr", "person"}),
+    "mfds_hf_individual": frozenset({"org", "brand", "addr", "person"}),
 }
 
 #: 정책 키 ↔ 레지스트리 문언. 대조 테스트가 이걸 쓴다.

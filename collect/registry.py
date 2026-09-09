@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import subprocess
 import sys
@@ -31,7 +32,20 @@ class RegistryError(RuntimeError):
     """수집을 거부한 이유. 🚨 삼키지 말 것 — 이 예외가 게이트다."""
 
 
+@functools.lru_cache(maxsize=1)
 def _load() -> dict[str, Any]:
+    """레지스트리를 읽는다.
+
+    🚨 **한 번만 읽는다.** 이 함수는 `spec()`·`redistributable()` 을 거쳐
+       `store.stamp()` 에서 **산출 행마다** 불린다. 캐시가 없으면 행 하나에
+       62KB YAML 파싱이 붙는다 — 2026-09-09 실측 **142ms/건**이고,
+       1,420행짜리 추출 하나가 **202초**가 된다(그래서 발견했다).
+       골든셋 1,910행 · ftc 16,506행도 같은 값을 내고 있었다.
+
+    🚨 실행 중에 이 파일은 바뀌지 않는다 — 바꾸는 것은 `gen_registry.py` 이고
+       별도 실행이다. `mark_collected()` 도 원장(`registry_review.yaml`)에만 쓴다.
+       그래도 바꿔야 하면 `_load.cache_clear()` 를 부른다.
+    """
     return yaml.safe_load(REGISTRY.read_text(encoding="utf-8")) or {}
 
 
