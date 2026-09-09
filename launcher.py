@@ -429,6 +429,25 @@ def collect(
 
 
 @app.command()
+def inventory() -> None:
+    """**이 기기**에 무엇이 있나 — 원장(팀 축)과 대조합니다.
+
+    🚨 축이 둘입니다. 원장은 git 으로 공유되지만 원문은 `.gitignore` 라 기기마다 다릅니다 (D-19).
+       「원장에 있다」는 「이 기기에 있다」가 아닙니다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "preprocess.inventory"))
+
+
+@app.command()
+def status() -> None:
+    """데이터 현황판을 다시 만듭니다 — 무엇을 쓰기로 했고 무엇을 안 쓰기로 했나.
+
+    🚨 **생성물입니다.** 손으로 적으면 갈립니다 (D-54). 2026-09-03 판이 그렇게 낡았습니다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "scripts.data_status", "--write"))
+
+
+@app.command()
 def load() -> None:
     """파생물을 거버넌스 DB 에 적재한다 (D-95).
 

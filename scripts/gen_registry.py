@@ -215,9 +215,15 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         "출처: 국가데이터처 KOSIS 국가통계포털 — 기관 · 조사명 · 시점 · URL 을 함께 표기한다",
     ),
     # ②′ D-132 준용 — 식약처 게시물 (2026-09-09 팀장 판정)
-    "foodsafety_admin_measure": (
+    "foodsafety_ad_monitor": (
         _LIC_MFDS_APPLIED,
-        "출처: 식품의약품안전처 식품안전나라 「행정처분」 (저작권법 제24조의2 제1항 · 제37조)",
+        "출처: 식품의약품안전처 식품안전나라 「과대광고 모니터링 적발 및 조치정보」 "
+        "(저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "foodsafety_penalty_std": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 식품안전나라 「과징금부과기준」 "
+        "(저작권법 제24조의2 제1항 · 제37조)",
     ),
     "mfds_hf_ingredient_board": (
         _LIC_MFDS_APPLIED,
@@ -659,6 +665,9 @@ ORDER = [
     # ⛔ 2026-09-09 내렸다 — `NOT_ADOPTED_IDS` 와 `registry_tail.yaml` 의 not_adopted 로 간다.
     #    🚨 ORDER 에 남겨 두면 미채택으로 적어 놓고도 sources 에 그대로 생성된다.
     #    "foodsafety_admin_measure",
+    # 🔄 2026-09-09 신규 — 식품안전나라 오픈API 2종. 근거는 판정 D + D-132 준용.
+    "foodsafety_ad_monitor",
+    "foodsafety_penalty_std",
     "mfds_cosmetic_sanction",
     "mfds_special_use_guide",
     "ftc_noviolation",
@@ -720,6 +729,13 @@ STATUS = {
     #      범위 및 준수사항」 · 「화장품 표시·광고 실증에 관한 규정」(admrul_41277) ·
     #      「기능성화장품 심사에 관한 규정」(admrul_36122) 을 2026-09-09 에 확보했다.
     #      🔴 다만 **2층(허용 표현 47종)은 대체되지 않았다** — 층이 다르다.
+    # 🔴 2026-09-09 — 등재 당일 hold 로 내렸다. **원천이 서비스를 제공하지 않는다.**
+    #    우리 키 · sample 키 둘 다 ERROR-310 「해당하는 서비스를 찾을 수 없습니다」.
+    #    🚨 응답이 `{"I0500":{"total_count":"0","RESULT":{...ERROR-310}}}` 라 서버가 요청 모양은
+    #       알아듣고 **서비스만 못 찾는다.** 안내 페이지는 살아 있는데 API 가 안 돈다.
+    #    ★ 배운 것 — **「안내 페이지가 있다」가 「서비스가 있다」가 아니다.**
+    #      풀려면 sample 키로 다시 부르고, 그때도 310 이면 not_adopted 로 내린다.
+    "foodsafety_ad_monitor": "hold",
     "kcia_guideline": "hold",
     "ftc_noviolation": "hold",
     # D-132 — 등급은 G3 로 판정됐으나 크롤링형이라 robots_checked_at 과 「무단 복제」 문구 확인이 선행. use 는 UN(fail-closed)

@@ -43,6 +43,9 @@ MAP: dict[str, str] = {
     "docs/03_데이터/수집리스트.md": "claude/CopyLane_수집리스트.md",
     "docs/03_데이터/수집전처리_기획.md": "claude/CopyLane_수집전처리_기획.md",
     "docs/03_데이터/전처리_사양.md": "claude/CopyLane_전처리_사양.md",
+    # 🔄 2026-09-09 신규 — 「무엇을 쓰기로 했고 무엇을 안 쓰기로 했나」의 단일 출처.
+    #    🚨 생성물이라 낡지 않는다 (D-54). 2026-09-03 판 현황판이 손으로 쓴 것이었다.
+    "docs/03_데이터/데이터현황판.md": "claude/CopyLane_데이터현황판.md",
     "docs/03_데이터/S0-14_2인확인_검토표.md": "claude/CopyLane_S0-14_2인확인_검토표.md",
     "docs/03_데이터/판정매트릭스.html": "claude/CopyLane_데이터거버넌스_판정매트릭스.html",
     "docs/04_보안/보안점검.md": "claude/CopyLane_보안점검.md",

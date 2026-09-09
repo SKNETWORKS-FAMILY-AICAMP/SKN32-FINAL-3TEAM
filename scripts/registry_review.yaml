@@ -542,6 +542,28 @@ foodsafety_admin_measure:
   robots_checked_at: 2026-09-06
   collected_at: null
 
+# 🔄 2026-09-09 신규 등재 2건 — 식품안전나라 오픈API.
+#    근거: 판정 D(식약처 저작권정책이 foodsafetykorea 를 덮는다 · 2026-09-07 푸터 실측)
+#          + D-132 준용(2026-09-09 팀장 서명) → 저작권법 제24조의2① · 제37조
+#    🚨 API 안내 페이지에 이용조건 문구는 **없다**(2026-09-09 확인). 근거는 법조 쪽이다.
+#    🚨 reviewed_by 는 비워 둔다 — 다른 팀원이 ① 식품안전나라 푸터의 저작권정책 링크
+#       ② 안내 페이지의 출력 필드 목록을 열어 재현한 뒤 기입한다 (D-66 · 게이트 15).
+foodsafety_ad_monitor:
+  decided_by: 오한빈
+  decided_at: 2026-09-09
+  # 확인 2026-09-09 — 식품안전나라 푸터 「저작권 정책」 링크 + API 안내 페이지 출력 필드 재현
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-09
+  collected_at: null
+
+foodsafety_penalty_std:
+  decided_by: 오한빈
+  decided_at: 2026-09-09
+  # 확인 2026-09-09 — 위와 같은 화면. 출력 필드 7종(처분기준명·식품법령·근거법령·위반유형·레벨·유효기간) 확인
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-09
+  collected_at: 2026-09-10
+
 mfds_cosmetic_sanction:
   decided_by: 오한빈
   decided_at: 2026-09-07
