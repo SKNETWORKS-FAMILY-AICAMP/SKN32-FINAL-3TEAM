@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -56,6 +57,35 @@ def test_등급_디렉터리가_존재한다(name: str) -> None:
     """등급 디렉터리가 없으면 수집 스크립트가 어디에 쓸지 알 수 없다."""
     path = ROOT / "data" / name
     assert path.is_dir(), f"data/{name}/ 가 없다 — D-19 물리 분리 위반"
+
+
+# 🚨 **트리를 통째로 훑지 않는다** (2026-09-09).
+#    ⛔ `ROOT.rglob("*.py")` 는 걸러내기 **전에** `.venv` 를 다 열거한다. 2026-09-09 에
+#       `sentence-transformers`(torch·transformers)를 넣자 `.venv` 의 .py 가 수만 개가 됐고,
+#       게이트 하나가 **3분을 넘겨** 전체 스위트가 못 끝났다. 건너뛰는 조건은 있었지만
+#       그 조건이 도는 시점이 이미 늦었다 — **걷지 않는 것과 걷고 버리는 것은 다르다.**
+_PRUNE = {
+    ".venv",
+    ".git",
+    "build",
+    "dist",
+    "data",
+    "__pycache__",
+    "node_modules",
+    ".ruff_cache",
+    ".pytest_cache",
+    "Claude outputs",
+    ".uv",
+}
+
+
+def _py_files(root: Path) -> list[Path]:
+    """`root` 아래 .py 를 낸다. 위 디렉터리는 **들어가지 않는다.**"""
+    out: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _PRUNE]
+        out += [Path(dirpath) / f for f in filenames if f.endswith(".py")]
+    return sorted(out)
 
 
 @pytest.mark.gate
@@ -306,7 +336,7 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
        사람이 주석을 지운다.** 막으려는 것은 「읽는 코드」이지 「읽는다고 적은 문장」이 아니다.
     """
     offenders: list[str] = []
-    for path in ROOT.rglob("*.py"):
+    for path in _py_files(ROOT):
         rel = path.relative_to(ROOT)
         parts = rel.parts
         # 🚨 `Claude outputs/` 는 Claude 앱이 떨어뜨리는 사본이다 — `.gitignore` 에 이미 있다.
@@ -387,7 +417,7 @@ def test_derived_로_나가는_원문은_마스킹을_지난다() -> None:
     🚨 주석·docstring 은 보지 않는다 (바로 위 게이트와 같은 이유).
     """
     offenders: list[str] = []
-    for path in (ROOT / "preprocess").rglob("*.py"):
+    for path in _py_files(ROOT / "preprocess"):
         rel = path.relative_to(ROOT)
         if path.name in {"__init__.py", "mask.py"}:
             continue

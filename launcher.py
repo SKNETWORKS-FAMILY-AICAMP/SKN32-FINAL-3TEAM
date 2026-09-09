@@ -429,6 +429,56 @@ def collect(
 
 
 @app.command()
+def load() -> None:
+    """파생물을 거버넌스 DB 에 적재한다 (D-95).
+
+    🚨 CHECK 둘을 못 지나는 소스는 **넣지 않고 이름을 냅니다** —
+       2인 확인 미완 · attribution 없음. 조용히 건너뛰면 「다 들어갔다」로 읽힙니다.
+    🔴 골든셋은 아직 못 넣습니다 — `split_t` 에 `test_sentence` 가 없고
+       `violation_t`(V0~V8) 대응표가 미판정입니다 (결정요청 ⑤).
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "scripts.load_db"))
+
+
+@app.command()
+def chunk(dump: bool = typer.Option(False, "--dump", help="chunks.jsonl 을 쓴다")) -> None:
+    """[P5] 조문·별표를 RAG 청크로 자릅니다 — 🚨 조문 단위입니다."""
+    args = ["uv", "run", "python", "-m", "preprocess.chunk"]
+    if dump:
+        args.append("--dump")
+    raise typer.Exit(run(*args))
+
+
+@app.command()
+def embed(
+    check: bool = typer.Option(False, "--check", help="모델 차원만 잽니다 (DB 불필요)"),
+) -> None:
+    """청크를 KURE-v1 로 임베딩해 pgvector 에 넣습니다.
+
+    🚨 `--check` 를 먼저 돌리십시오 — `vector(1024)` 가 모델과 맞는지 아무도 안 재 봤습니다.
+    """
+    args = ["uv", "run", "python", "-m", "scripts.embed"]
+    if check:
+        args.append("--check")
+    raise typer.Exit(run(*args))
+
+
+@app.command()
+def serve(reload: bool = typer.Option(True, "--reload/--no-reload")) -> None:
+    """FastAPI 를 띄웁니다 (D-42 · D-135 — Django 를 쓰지 않습니다).
+
+    🔄 2026-09-09 — `@stub("W2", "walking skeleton")` 자리를 대신합니다.
+       ⛔ 새 명령을 더하면서 **같은 이름의 스텁이 이미 있는지 안 봤습니다.**
+          `ruff F811` 이 잡았습니다 — 안 잡혔으면 뒤에 정의된 스텁이 이겨
+          `serve` 가 「아직 없다」를 찍고 서버는 안 떴을 것입니다.
+    """
+    args = ["uv", "run", "uvicorn", "app.api:app"]
+    if reload:
+        args.append("--reload")
+    raise typer.Exit(run(*args))
+
+
+@app.command()
 def extract(
     source: str = typer.Argument("", help="원천 id (비우면 표를 보여준다)"),
     dump: bool = typer.Option(False, "--dump", help="파생물을 쓴다 — 🔴 마스킹 정책이 있어야 한다"),
@@ -539,12 +589,6 @@ def eval_() -> None:
 
     4층 지표 — L1 품질 · L2 통합 · L3 운영 · L4 거버넌스 (D-77).
     """
-
-
-@app.command()
-@stub("W2", "walking skeleton")
-def serve() -> None:
-    """웹 API 를 띄운다. 판정·생성을 호출할 수 있다."""
 
 
 @app.command()
