@@ -150,6 +150,76 @@ def setup() -> None:
 
 
 @app.command()
+def onboard() -> None:
+    """새 기기에서 이어 붙일 때 — 무엇이 되고 무엇이 안 되는지 순서대로 냅니다.
+
+    🚨 **런처가 다 해 줄 수 없습니다.** 셋은 구조상 안 됩니다 —
+       ① `.env` 키 — `.gitignore` 라 안 따라옵니다. 사람이 다시 넣습니다 (D-111)
+       ② `data/raw` 원문 — `.gitignore` 라 안 따라옵니다 (D-19). **다시 받습니다**
+       ③ `git` — 팀 규칙상 사람이 직접 돕니다
+
+    그래서 이 명령은 **되는 것을 하고, 안 되는 자리를 이름으로 냅니다** (D-51).
+    """
+    import shutil  # noqa: PLC0415
+
+    console.print("\n[bold]1. 코드·문서·원장[/bold] — 🚨 사람이 돌립니다")
+    console.print("     [bold]git pull[/bold]")
+    console.print(
+        "     ★ 원장(`data/manifest.jsonl`)은 git 으로 따라옵니다 — 팀 축은 여기서 맞습니다"
+    )
+
+    console.print("\n[bold]2. 파이썬 패키지·커밋 훅·.env 틀[/bold]")
+    run("uv", "sync")
+    run("uv", "run", "pre-commit", "install")
+    envf = ROOT / ".env"
+    if not envf.exists():
+        envf.write_bytes((ROOT / ".env.example").read_bytes())
+        console.print("  [yellow]생성[/yellow] .env — 비어 있습니다")
+
+    console.print("\n[bold]3. API 키[/bold] — 🔴 git 에 없습니다. 사람이 다시 넣습니다")
+    console.print("     [bold]uv run python launcher.py keys[/bold]        현황")
+    console.print("     [bold]uv run python launcher.py setkey LAW_OC_KEY[/bold]")
+    console.print("     [bold]uv run python launcher.py setkey FOODSAFETY_KEY[/bold]")
+    console.print("     🚨 값을 인자로 주지 않습니다 — PowerShell 기록에 남습니다 (D-111)")
+
+    console.print("\n[bold]4. DB[/bold]")
+    if shutil.which("docker") is None:
+        console.print("  [red]docker 가 없습니다[/red] — Docker Desktop 을 먼저 켭니다")
+    else:
+        console.print("     [bold]uv run python launcher.py db-up[/bold]")
+        console.print(
+            "     [bold]uv run python launcher.py migrate[/bold]   거버넌스 18 + 런타임 6"
+        )
+
+    console.print("\n[bold]5. 이 기기에 무엇이 없는지[/bold]")
+    console.print("     [bold]uv run python launcher.py inventory[/bold]")
+    console.print(
+        "     🚨 「원장에 있다」는 「이 기기에 있다」가 아닙니다 — 없는 것을 이름으로 냅니다"
+    )
+    console.print(
+        "     그 목록대로 [bold]launcher.py collect <소스id> --use U1[/bold] 로 다시 받습니다"
+    )
+    console.print("     🔴 AI Hub 계열은 사람이 받아 [bold]launcher.py register[/bold] 로 올립니다")
+
+    console.print("\n[bold]6. 파생물 → DB → 벡터[/bold]  (원문을 받은 뒤)")
+    console.print("     [bold]uv run python launcher.py load[/bold]")
+    console.print("     [bold]uv run python launcher.py chunk --dump[/bold]")
+    console.print(
+        "     [bold]uv run python launcher.py embed --check[/bold]  🚨 먼저 차원을 잽니다"
+    )
+    console.print("     [bold]uv run python launcher.py embed[/bold]")
+    console.print("     ⚠️ KURE-v1 모델 2.27GB 를 처음 한 번 내려받습니다")
+
+    console.print("\n[bold]7. 확인[/bold]")
+    console.print("     [bold]uv run python launcher.py check[/bold]      게이트 전체")
+    console.print("     [bold]uv run python launcher.py status[/bold]     팀 축 — 쓴다/안 쓴다")
+    console.print("     [bold]uv run python launcher.py doctor[/bold]     원장 ↔ 디스크")
+    console.print("     [bold]uv run python launcher.py serve[/bold]      /health 로 층별 행 수")
+
+    console.print("\n[dim]무엇을 하던 중이었는지는 docs/ohb/ 의 최신 인계 문서에 있습니다.[/dim]\n")
+
+
+@app.command()
 def setkey(name: str = typer.Argument(..., help="키 이름 (예: FOODSAFETY_KEY)")) -> None:
     """API 키를 화면에 뜨지 않게 입력해 설정 파일에 넣는다.
 
