@@ -488,17 +488,23 @@ def golden(
 
     🚨 **라벨을 사람도 모델도 붙이지 않는다.** 조문이 붙이거나(사전) 규칙이 붙인다(주입).
 
-        [P6] 사전   조문이 묶어 준 표현을 모은다        preprocess.dictionary
-        [P10] 주입  적법 문구를 규칙으로 위법화한다      preprocess.inject
-        [P12] 분할  🔴 출처 분리 — 문서 단위로 봉인      preprocess.split
+        [P12] 분할  🔴 **먼저다** — 출처 분리 · 문서 단위 봉인   preprocess.split
+        [P6] 사전   조문이 묶어 준 표현을 모은다 (train 만)     preprocess.dictionary
+        [P10] 주입  적법 문구를 규칙으로 위법화한다 (train 만)   preprocess.inject
+        물질화      문장·라벨을 한 파일로 (D-143)              preprocess.golden
+
+    🔴 **분할이 맨 앞이다.** 종전에는 사전이 먼저였는데, 그러면 사전이 **평가 문구로**
+       만들어진다 — 실측: 봉인된 평가 문구 118개 중 **118개**가 사전에 있었다.
+       그 사전으로 매칭기를 재면 외운 것을 맞힌다.
 
     🔴 **주입본은 평가에 들어가지 않는다** ([P10] 규약 5). 합성으로 평가하면
        「규칙을 배웠는가」를 재게 된다. 분할 게이트가 그것을 막는다.
     """
     steps = (
+        (["-m", "preprocess.split"], ["--write"]),
         (["-m", "preprocess.dictionary"], ["--dump"]),
         (["-m", "preprocess.inject"], ["--dump"]),
-        (["-m", "preprocess.split"], ["--write"]),
+        (["-m", "preprocess.golden"], ["--dump"]),
     )
     for mod, extra in steps:
         args = ["uv", "run", "python", *mod] + (extra if write else [])

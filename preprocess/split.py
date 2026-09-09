@@ -39,6 +39,40 @@
 
 🚨 **30 미만 유형은 `unmeasurable` 에 적는다** (D-40). 「측정 불가」를 말할 수 있게
 만드는 것은 슬라이드가 아니라 이 JSON 한 줄이다.
+
+──────────────────────────────────────────────────────────────
+🔄 **2026-09-09 저녁 — 네 자리를 고쳤다.** 물질화 직전 검토에서 나왔다.
+
+  ① 🔴 **낱말과 문장을 한 시험지에 넣지 않는다.**
+     사례집 인용표현은 중앙 **4자**, `ftc` 문구는 중앙 **12자**다. 한 숫자로 보고하면
+     **두 과제를 평균한 수**가 된다.
+     ⛔ 그래서 D-171 의 「5/8 이 섰다」는 **단위를 섞은 수였다** — 문장 단위로는 2/8 이다.
+        D-155·D-172 가 경고한 바로 그 혼동을 그 D 를 쓰면서 다시 밟았다.
+
+     🔴 **그리고 사례집은 시험지가 아니라 사전이다** (D-155). 낱말 시험지를 따로
+        만들려고 사례집을 갈라 봤는데, **어느 쪽으로 갈라도 한쪽이 D-40 을 못 넘긴다** —
+
+            질병 41 → 사전 20 / 평가 21      의약품 38 → 19 / 19
+            건기식 32 → 16 / 16              거짓과장 32 → 16 / 16
+
+        데이터의 한계다. **D-155 가 이미 「사례집 = 금지 표현 사전」으로 정했으므로
+        그 결정을 따른다** — 사례집은 `train`(사전) 쪽이고, 낱말 시험지는 만들지 않는다.
+        🚨 그 결과 **8종 중 6종이 어느 단위로도 평가 데이터가 없다.** 이것이
+           열린 항목 A 의 실제 크기이고, 오늘 그것이 작아진 것이 아니라 **정확해졌다.**
+
+  ② 🔴 **다중 라벨 문서는 평가에 넣지 않는다.**
+     의결서가 제1호·제2호를 함께 걸면, 인용된 문구 각각이 **어느 호인지는 안 적혀 있다.**
+     문서 라벨을 문구에 전파하면 그 잡음이 시험지에 들어간다 (실측 44문서 · 문구 103개).
+     학습에서는 견디지만 평가에서는 못 견딘다 — **잡음은 train 으로 보낸다.**
+
+  ③ 🔴 **적법(음성) 표본을 평가에 넣는다.**
+     종전 시험지는 전부 위반이었다 — **「전부 위반」이라 답해도 Recall 100%** 다.
+     2층 승인 문구 일부를 봉인해 음성으로 쓴다. 없으면 Precision 이 정의되지 않는다.
+
+  ④ 🔴 **분할이 사전·주입보다 먼저다.**
+     종전 순서(사전 → 주입 → 분할)에서는 사전이 **평가 문구로 만들어졌다** —
+     실측: 봉인된 평가 문구 118개 중 **118개가 사전에 그대로** 있었다.
+     그 사전으로 매칭기를 재면 외운 것을 맞힌다. 이제 사전과 주입이 이 파일을 읽는다.
 """
 
 from __future__ import annotations
@@ -51,25 +85,22 @@ import random
 
 FTC_PHRASES = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
+HF = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
 OUT = pathlib.Path("data/derived/golden/split_manifest.json")
 
 #: 🚨 유형별 평가 목표. D-40 의 30 이 **하한**이고, 신뢰구간을 감안해 40 을 목표로 둔다.
 #:    40건에서 Recall 0.85 면 95% CI 가 ±11%p 다 (기획문서 6-3) — 30 은 아슬아슬하다.
 EVAL_TARGET = 40
-
-#: 🔴 가용이 목표 이하면 **전량을 평가로** 돌린다. 학습은 주입본([P10])으로 채울 수 있지만
-#:    평가는 실사례로만 채울 수 있다 — **못 만드는 쪽에 먼저 준다.**
-#:    ⛔ 처음에 이 값을 `EVAL_TARGET * 2` 로 뒀더니 `소비자_기만` 79건을 **통째로** 봉인해
-#:       학습 몫이 0 이 됐다. 40 이면 서는 것을 79 로 가져가는 것은 평가의 이득이 아니라
-#:       **학습의 손실**이다. 목표를 넘으면 목표만 가져간다.
-SCARCE = EVAL_TARGET
-
 MIN_MEASURABLE = 30  # D-40
 
+#: 🔴 음성(적법) 표본 목표. Precision 을 정의하려면 **위반이 아닌 것**이 있어야 한다.
+#:    ⛔ 종전 시험지는 전부 위반이라 「전부 위반」이라 답해도 Recall 100% 였다.
+NEG_TARGET = 60
 
-def _load_jsonl(p: pathlib.Path) -> list[dict]:
+
+def _jsonl(p: pathlib.Path) -> list[dict]:
     if not p.exists():
-        raise FileNotFoundError(f"{p} 가 없다 — 먼저 추출기를 돌린다")
+        raise FileNotFoundError(f"{p} 가 없다 — 먼저 그 원천의 추출기를 돌린다")
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
@@ -83,23 +114,23 @@ def ftc_docs() -> list[dict]:
     for r in json.loads(FTC_PHRASES.read_text(encoding="utf-8")):
         labels = sorted({u["label"] for u in (r.get("유형") or [])})
         if not labels or not r.get("문구"):
-            continue  # 🚨 라벨이나 문구가 없으면 어느 쪽에도 못 쓴다
+            continue
         got.append(
             {
                 "doc_id": f"ftc:{r['seq']}",
                 "원천": "ftc_decisions_body",
                 "유형": labels,
-                "문구수": len(r["문구"]),
-                "결정일자": r.get("결정일자"),
+                "문구": [str(x) for x in r["문구"]],
+                "단위": "문장",
             }
         )
     return got
 
 
 def casebook_docs() -> list[dict]:
-    """사례집 — `U1: deny` 라 **통째로 평가**다. 가르지 않는다."""
+    """사례집 — `U1: deny` 라 통째로 평가다. 🔴 **낱말**이라 문장 시험지와 섞지 않는다."""
     got = []
-    for i, r in enumerate(_load_jsonl(CASEBOOK)):
+    for i, r in enumerate(_jsonl(CASEBOOK)):
         labels = sorted(r.get("확정유형") or [])
         if not labels or not r.get("인용표현"):
             continue
@@ -108,39 +139,72 @@ def casebook_docs() -> list[dict]:
                 "doc_id": f"casebook:{r.get('쪽')}:{i}",
                 "원천": "mfds_casebook",
                 "유형": labels,
-                "문구수": len(r["인용표현"]),
-                "단위": "낱말",  # 🔴 문장이 아니다 (D-155)
+                "문구": [str(x) for x in r["인용표현"]],
+                "단위": "낱말",
             }
         )
+    return got
+
+
+def approved_docs() -> list[dict]:
+    """2층 **승인** 문구 — 음성 표본. 🚨 위반이 아니라 적법이다 (`유형` 이 빈 리스트)."""
+    import re
+
+    got, seen = [], set()
+    for i, r in enumerate(_jsonl(HF)):
+        raw = str(r.get("기능성내용") or "")
+        raw = re.sub(r"\s*\(\s*'?\d{2,4}\s*년\s*\d{1,2}\s*월\s*인정\s*\)\s*", "", raw)
+        for j, line in enumerate(re.split(r"[\n]+", raw)):
+            s = line.strip(" -·\t")
+            if len(s) < 6 or s in seen:
+                continue
+            seen.add(s)
+            got.append(
+                {
+                    "doc_id": f"hf:{i}:{j}",
+                    "원천": "mfds_hf_ingredient_board",
+                    "유형": [],  # 🔴 적법 — 라벨이 없는 것이 라벨이다
+                    "문구": [s],
+                    "단위": "문장",
+                }
+            )
     return got
 
 
 def plan(seed: int = 20260909) -> dict:
     """🚨 **희소한 유형부터 채운다.** 흔한 유형이 먼저 가져가면 희소한 것이 못 선다."""
     ftc = ftc_docs()
-    have = collections.Counter(t for d in ftc for t in d["유형"])
-    # 희소한 유형이 앞에 오도록 — 그 유형을 가진 문서를 먼저 평가로 봉인한다
-    order = sorted(have, key=lambda t: have[t])
-    need = {t: (have[t] if have[t] <= SCARCE else EVAL_TARGET) for t in have}
+    # 🔴 ② 다중 라벨 문서는 평가에서 뺀다 — 문구가 어느 호인지 안 적혀 있다
+    single = [d for d in ftc if len(d["유형"]) == 1]
+    multi = [d for d in ftc if len(d["유형"]) > 1]
+
+    have = collections.Counter(d["유형"][0] for d in single)
+    order = sorted(have, key=lambda x: have[x])
+    need = {t: min(have[t], EVAL_TARGET) for t in have}
 
     rnd = random.Random(seed)
-    pool = sorted(ftc, key=lambda d: d["doc_id"])
+    pool = sorted(single, key=lambda d: d["doc_id"])
     rnd.shuffle(pool)
 
     sealed: dict[str, dict] = {}
     got: collections.Counter = collections.Counter()
     for t in order:
         for d in pool:
-            if d["doc_id"] in sealed or t not in d["유형"]:
+            if d["doc_id"] in sealed or d["유형"][0] != t or got[t] >= need[t]:
                 continue
-            if got[t] >= need[t]:
-                break
             sealed[d["doc_id"]] = d
-            for x in d["유형"]:
-                got[x] += 1  # 🚨 다중 라벨 문서는 여러 유형을 동시에 채운다
+            got[t] += 1
 
-    train = [d for d in pool if d["doc_id"] not in sealed]
-    evals = list(sealed.values()) + casebook_docs()
+    # 🔴 ③ 음성 표본 — 승인 문구 일부를 봉인한다
+    approved = approved_docs()
+    rnd.shuffle(approved)
+    neg_eval = approved[:NEG_TARGET]
+    neg_train = approved[NEG_TARGET:]
+
+    # 🔴 사례집은 **사전 쪽**이다 (D-155) — 낱말 시험지를 만들지 않는다. 위 ① 참조.
+    term = casebook_docs()
+    train = [d for d in pool if d["doc_id"] not in sealed] + multi + neg_train + term
+    sent = list(sealed.values()) + neg_eval
 
     def tally(rows: list[dict]) -> dict[str, int]:
         c: collections.Counter = collections.Counter()
@@ -149,72 +213,115 @@ def plan(seed: int = 20260909) -> dict:
                 c[t] += 1
         return dict(sorted(c.items(), key=lambda x: -x[1]))
 
-    ev = tally(evals)
+    def phrases(rows: list[dict]) -> int:
+        return sum(len(d["문구"]) for d in rows)
+
+    sent_pos = tally(sent)
+    term_pos = tally(term)
+    AXIS = (
+        "질병_예방치료_표방",
+        "의약품_오인",
+        "건강기능식품_오인",
+        "거짓_과장",
+        "소비자_기만",
+        "후기_체험기_기만",
+        "부당_비교광고",
+        "비방광고",
+    )
     return {
         "seed": seed,
         "eval_target": EVAL_TARGET,
+        "neg_target": NEG_TARGET,
         "min_measurable": MIN_MEASURABLE,
         "split_key": "doc_id",
         "note": (
-            "평가셋은 조문 라벨 원천으로만 만든다 — 사람도 모델도 붙이지 않는다. "
+            "평가셋은 조문 라벨 원천으로만 만든다. 🔴 낱말(test_term)과 문장(test_sentence)을 "
+            "섞지 않는다 — 한 숫자로 보고하면 두 과제를 평균한 수가 된다. "
             "ftc 슬라이스는 학습과 같은 기관이라 원천 편향을 재지 못한다 (same_source)."
         ),
-        "counts": {"train": tally(train), "test_holdout": ev},
-        "sizes": {"train": len(train), "test_holdout": len(evals)},
-        "unmeasurable": sorted(t for t, n in ev.items() if n < MIN_MEASURABLE),
-        "absent": sorted(
-            t
-            for t in (
-                "질병_예방치료_표방",
-                "의약품_오인",
-                "건강기능식품_오인",
-                "거짓_과장",
-                "소비자_기만",
-                "후기_체험기_기만",
-                "부당_비교광고",
-                "비방광고",
-            )
-            if t not in ev
-        ),
+        "sizes": {
+            "train": {"문서": len(train), "문구": phrases(train)},
+            "test_sentence": {"문서": len(sent), "문구": phrases(sent)},
+            "사전(사례집)": {"문서": len(term), "문구": phrases(term)},
+        },
+        "counts": {
+            "train": tally(train),
+            "test_sentence": sent_pos,
+            "사전(사례집)": term_pos,
+        },
+        "negatives": {
+            "test_sentence": len(neg_eval),
+            "train": len(neg_train),
+        },
+        "unit": {"test_sentence": "문장"},
+        "unmeasurable": {
+            "test_sentence": sorted(t for t in AXIS if sent_pos.get(t, 0) < MIN_MEASURABLE),
+        },
+        # 🔴 어느 단위로도 평가 데이터가 없는 유형 — 열린 항목 A 의 실제 크기다
+        "no_eval_at_all": sorted(t for t in AXIS if sent_pos.get(t, 0) == 0),
         "source_sets": {
-            "train": ["ftc_decisions_body(비봉인)", "mfds_special_use_guide", "주입본[P10]"],
-            "test_holdout": ["ftc_decisions_body(봉인)", "mfds_casebook"],
+            "train": [
+                "ftc_decisions_body(비봉인·다중라벨)",
+                "mfds_hf_ingredient_board(비봉인)",
+                "mfds_special_use_guide",
+                "주입본[P10]",
+            ],
+            "test_sentence": ["ftc_decisions_body(봉인)", "mfds_hf_ingredient_board(봉인·음성)"],
         },
         "same_source": ["ftc_decisions_body"],
-        "sealed_doc_ids": sorted(sealed),
-        "train_doc_ids": sorted(d["doc_id"] for d in train),
+        "excluded_from_eval": {
+            "다중라벨_문서": len(multi),
+            "이유": "의결서가 두 호를 함께 걸면 인용 문구가 어느 호인지 적혀 있지 않다",
+        },
+        "assign": {
+            **{d["doc_id"]: "train" for d in train},
+            **{d["doc_id"]: "test_sentence" for d in sent},
+        },
     }
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="골든셋 분할 [P12] — 출처 분리")
+    ap = argparse.ArgumentParser(description="골든셋 분할 [P12] — 출처 분리 · 단위 분리")
     ap.add_argument("--write", action="store_true", help=f"{OUT} 로 쓴다")
     ap.add_argument("--seed", type=int, default=20260909, help="재현 조건 (D-54)")
     a = ap.parse_args()
 
     m = plan(a.seed)
+    s = m["sizes"]
     print(f"분할 seed={m['seed']} · 키={m['split_key']} · 평가 목표 유형당 {m['eval_target']}")
-    print(f"  train {m['sizes']['train']}문서 · test_holdout {m['sizes']['test_holdout']}문서\n")
-    print(f"  {'유형':22} {'train':>6} {'eval':>6}")
-    keys = sorted(set(m["counts"]["train"]) | set(m["counts"]["test_holdout"]))
-    for t in sorted(keys, key=lambda x: -m["counts"]["test_holdout"].get(x, 0)):
-        ev = m["counts"]["test_holdout"].get(t, 0)
-        mark = "✅" if ev >= MIN_MEASURABLE else "🔴 측정 불가"
-        print(f"  {t:22} {m['counts']['train'].get(t, 0):>6} {ev:>6}   {mark}")
+    print(
+        f"  train {s['train']['문서']}문서/{s['train']['문구']}문구 · "
+        f"test_sentence {s['test_sentence']['문서']}/{s['test_sentence']['문구']}"
+    )
+    print(
+        f"  🔴 음성(적법) — 평가 {m['negatives']['test_sentence']} · 학습 {m['negatives']['train']}"
+    )
+    print(
+        f"  🔴 평가에서 뺀 다중 라벨 문서 {m['excluded_from_eval']['다중라벨_문서']} — "
+        "문구가 어느 호인지 안 적혀 있다"
+    )
 
-    if m["unmeasurable"]:
-        print(f"\n  🔴 **측정 불가** {len(m['unmeasurable'])}종 — {m['unmeasurable']}")
-        print("     🚨 이 유형들은 지표를 내지 않는다. 「측정 불가」로 **보고한다** (D-40).")
-    if m["absent"]:
-        print(f"  🔴 **평가 데이터가 아예 없는 유형** — {m['absent']}")
-        print("     🚨 라벨링으로 안 풀린다. 원천에 사건 자체가 없다.")
-    print("\n  🚨 ftc 슬라이스는 학습과 **같은 기관**이다 — 원천 편향은 못 잰다.")
-    print("     `same_source: true` 를 박고 두 지표를 나란히 보고한다 (기획문서 6-2).")
+    for name in ("test_sentence",):
+        print(f"\n  ── {name} ({m['unit'][name]} 단위) ──")
+        c = m["counts"][name]
+        for t, n in sorted(c.items(), key=lambda x: -x[1]):
+            print(f"    {t:22} {n:>4}   {'✅' if n >= MIN_MEASURABLE else '🔴 측정 불가'}")
+        if m["unmeasurable"][name]:
+            print(f"    🔴 측정 불가 — {m['unmeasurable'][name]}")
+
+    print(f"\n  🔴 **어느 단위로도 평가 데이터가 없는 유형 {len(m['no_eval_at_all'])}종**")
+    print(f"     {m['no_eval_at_all']}")
+    print(
+        "     🚨 이것이 **열린 항목 A 의 실제 크기**다. 사례집은 시험지가 아니라 사전이다 (D-155)."
+    )
+    print(f"  ★ 사전 쪽으로 간 사례집 — {m['sizes']['사전(사례집)']['문서']}문서")
+    print("  🚨 ftc 슬라이스는 학습과 같은 기관이다 — 원천 편향은 못 잰다 (same_source).")
 
     if a.write:
         OUT.parent.mkdir(parents=True, exist_ok=True)
         OUT.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n  → {OUT}")
+        print("  🚨 **사전과 주입은 이 파일을 읽어 train 만 쓴다** — 안 그러면 누수다.")
     else:
         print(f"\n  ⬜ 쓰지 않았다 — `--write` 를 붙이면 {OUT} 에 고정된다.")
     return 0

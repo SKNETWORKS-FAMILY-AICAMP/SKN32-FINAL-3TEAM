@@ -22,6 +22,10 @@
 🚨 **원본도 함께 넣는다** ([P10] 규약 3). 안 넣으면 골든셋이 전부 위법이라
    「전부 위법」이라고 답해도 100% 가 된다 (기획서 5-3 클래스 불균형).
 
+🔴 **분할을 먼저 읽는다** (2026-09-09 저녁). 승인 문구 일부가 **음성 평가 표본**으로
+   봉인돼 있다. 그것으로 주입을 만들면 **시험지 문장이 학습에 들어간다.**
+   🚨 `split_manifest.json` 이 없으면 멈춘다 — 「없으면 전량으로」는 누수로 가는 길이다.
+
 ★ **이것이 지금 평가가 비어 있는 유형의 유일한 학습 경로다** —
   `후기_체험기_기만`(평가 0) · `부당_비교광고`(3) · `비방광고`(6) 는
   실사례가 없어서 라벨링으로 못 채운다. T6·T7 이 그 자리를 만든다.
@@ -37,7 +41,10 @@ import pathlib
 import random
 import re
 
+from preprocess.split import approved_docs as split_approved
+
 HF = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
+SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
 OUT = pathlib.Path("data/derived/injected_golden.jsonl")
 
 #: 완곡 표현 — 적법과 위법을 가르는 바로 그 조각이다 (D-156 실측).
@@ -73,12 +80,6 @@ SLANDER_FRAMES = (
     "시중 제품은 {핵} 효과가 전혀 없습니다",
     "다른 브랜드에 속지 마세요 — 진짜 {핵}은 여기뿐입니다",
 )
-
-
-def _clean(s: str) -> list[str]:
-    """한 셀에 여러 문구가 뭉쳐 온다 — 불릿·줄바꿈으로 가른다."""
-    s = TAIL.sub("", str(s))
-    return [x.strip(" -·\t") for x in re.split(r"[\n]+", s) if len(x.strip(" -·\t")) >= 6]
 
 
 def core(text: str) -> str:
@@ -174,41 +175,48 @@ def build(seed: int = 20260909) -> tuple[list[dict], dict]:
         raise FileNotFoundError(
             f"{HF} 가 없다 —\n  먼저: uv run python launcher.py extract mfds_hf_ingredient_board --dump"
         )
+    if not SPLIT.exists():
+        raise FileNotFoundError(
+            f"{SPLIT} 가 없다 — **분할이 먼저다** (D-171).\n"
+            "  먼저: uv run python -m preprocess.split --write\n"
+            "  🚨 봉인된 음성 평가 표본으로 주입을 만들면 시험지가 학습에 들어간다."
+        )
+    assign = json.loads(SPLIT.read_text(encoding="utf-8"))["assign"]
     rnd = random.Random(seed)
     diseases = disease_terms()
     rows: list[dict] = []
-    stat: dict = {"원본": 0, "적법": 0, "규칙별": collections.Counter()}
-    seen: set[str] = set()
+    stat: dict = {"원본": 0, "적법": 0, "규칙별": collections.Counter(), "봉인제외": 0}
 
-    for line in HF.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
+    # 🔴 **`doc_id` 를 만드는 곳은 한 곳뿐이다** (D-99). 처음에 여기서 따로 만들었더니
+    #    `split` 은 원본 줄 번호로, 여기는 **거른 뒤의 번호**로 매겨져 어긋났다 —
+    #    봉인 60개를 빼려다 449개를 뺐다. 바로 위 주석에 「같은 규칙이어야 한다」고
+    #    적어 놓고 그 줄에서 어겼다. 이제 `split.approved_docs()` 를 그대로 쓴다.
+    for d in split_approved():
+        text = d["문구"][0]
+        if assign.get(d["doc_id"]) != "train":
+            stat["봉인제외"] += 1
             continue
-        r = json.loads(line)
-        for text in _clean(r.get("기능성내용") or ""):
-            if text in seen:
-                continue
-            seen.add(text)
-            stat["원본"] += 1
-            # 🚨 규약 3 — 원본을 **적법(V0)** 으로 함께 넣는다
-            rows.append(
-                {
-                    "문구": text,
-                    "라벨": [],
-                    "rule_id": "V0",
-                    "규칙": "원본 — 인정받은 적법 문구",
-                    "근거": "건강기능식품 기능성 원료 인정",
-                    "원본": text,
-                    "핵심주장": core(text),
-                    "origin": "approved",
-                    "split": "train",
-                    "provenance": "mfds_hf_ingredient_board",
-                    "redistributable": True,
-                }
-            )
-            stat["적법"] += 1
-            for made in transform(text, rnd, diseases):
-                rows.append(made)
-                stat["규칙별"][made["rule_id"]] += 1
+        stat["원본"] += 1
+        # 🚨 규약 3 — 원본을 **적법(V0)** 으로 함께 넣는다
+        rows.append(
+            {
+                "문구": text,
+                "라벨": [],
+                "rule_id": "V0",
+                "규칙": "원본 — 인정받은 적법 문구",
+                "근거": "건강기능식품 기능성 원료 인정",
+                "원본": text,
+                "핵심주장": core(text),
+                "origin": "approved",
+                "split": "train",
+                "provenance": "mfds_hf_ingredient_board",
+                "redistributable": True,
+            }
+        )
+        stat["적법"] += 1
+        for made in transform(text, rnd, diseases):
+            rows.append(made)
+            stat["규칙별"][made["rule_id"]] += 1
     return rows, stat
 
 
@@ -222,6 +230,9 @@ def main() -> int:
     inj = sum(stat["규칙별"].values())
     print(f"주입 골든셋 **{len(rows):,}건** — 적법 {stat['적법']:,} · 위법 {inj:,}")
     print(f"  원본 적법 문구 {stat['원본']:,}종에서 나왔다 (중복 제거 후)")
+    print(
+        f"  🔴 음성 평가로 **봉인돼 제외한 문구 {stat['봉인제외']}개** — 시험지가 학습에 안 들어가게"
+    )
 
     print("\n  규칙별 —")
     for rid, desc, lab, _art in RULES:
