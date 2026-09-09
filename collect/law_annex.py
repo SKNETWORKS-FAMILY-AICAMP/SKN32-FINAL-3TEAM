@@ -257,7 +257,7 @@ def _marker_level(marker: str | None) -> int:
     return 2 if marker[0].isdigit() else 1
 
 
-def collect_annex(law_id: str, *, dry_run: bool = False) -> int:
+def collect_annex(law_id: str, *, dry_run: bool = False, forms: bool = False) -> int:
     registry.require(SOURCE_ID, use="U1")
     oc = env.get("LAW_OC_KEY")
 
@@ -283,6 +283,15 @@ def collect_annex(law_id: str, *, dry_run: bool = False) -> int:
         title = field("별표제목")
         content = field("별표내용")
         if not content or title.startswith("삭제"):
+            continue
+
+        # 🚨 이 수집기의 목적은 [별표]다 (S2-04). 서식은 같은 `<별표단위>` 로 오지만
+        #    등록신청서·자격증·수거증이라 광고 판정과 무관하다.
+        #    그런데 서식의 표 행도 `needs_review: True` 로 파싱 산출물에 들어간다 —
+        #    **화장품법 시행규칙은 별표 88행 · 서식 157행으로 서식이 64% 다**(2026-09-09 실측).
+        #    2인 대조가 봐야 할 목록의 3분의 2가 신청서 칸이 되면 대조는 형식만 남는다.
+        #    받고 싶으면 `--forms` 로 연다 — 기본은 닫는다 (D-72 fail-closed).
+        if kind != "별표" and not forms:
             continue
 
         table = parse_table(content)
@@ -377,16 +386,47 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="[별표] 수집·파싱 (S2-04 · D-98)")
     ap.add_argument("--law", default="008741", help="법령 ID (기본: 화장품법 시행규칙)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--forms",
+        action="store_true",
+        help="서식도 받는다 (기본: [별표]만 — 서식은 광고 판정과 무관하고 2인 대조를 덮는다)",
+    )
     args = ap.parse_args()
 
     try:
-        saved = collect_annex(args.law, dry_run=args.dry_run)
+        saved = collect_annex(args.law, dry_run=args.dry_run, forms=args.forms)
     except (registry.RegistryError, env.MissingKey) as e:
         print(f"\n수집을 시작할 수 없다 —\n{e}\n", file=sys.stderr)
         return 1
 
     print(f"\n새로 저장 {saved}건")
-    print("🚨 S2-04 는 2인 수동 대조가 필수다 — needs_review 가 그 표시다 (D-98).")
+
+    if args.dry_run:
+        return 0
+
+    # 🚨 감사를 여기서 부른다 — 「나중에 돌린다」는 안 돈다 (D-146 · D-98 개정).
+    #    종전 S2-04 는 「2인 수동 대조가 필수다」를 출력 한 줄로만 두었고,
+    #    강제하는 것이 없어 **이미 없는 검사였다.**
+    from scripts import annex_audit
+
+    stats = annex_audit.measure(annex_audit._load(args.law))
+    baseline = (
+        json.loads(annex_audit.BASELINE.read_text(encoding="utf-8"))
+        if annex_audit.BASELINE.exists()
+        else {}
+    )
+    bad = annex_audit.judge(stats, baseline)
+    if bad:
+        print("\n🚨 파싱 감사 실패 — 사람이 볼 자리다 (S2-04)", file=sys.stderr)
+        for b in bad:
+            print(f"   · {b}", file=sys.stderr)
+        print(
+            "   고치는 법 — 법 개정이면 `python -m scripts.annex_audit --update`,", file=sys.stderr
+        )
+        print("               아니면 파서가 잃은 것이다 (D-98).", file=sys.stderr)
+        return 1
+
+    print(f"✅ 파싱 감사 통과 — 별표 {len(stats)}건, 사람이 볼 행 0 (S2-04)")
     return 0
 
 

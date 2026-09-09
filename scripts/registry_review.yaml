@@ -69,8 +69,10 @@ mfds_press:
   #    단서 1~4호 해당 없음 · 제3자 광고 이미지 G1 미추출. 재확인(2인)은 다른 팀원이 조문+자료실 화면으로.
   # 확인 2026-09-02 — 식약처 저작권정책(wpge/m_34/de010803l001.do): 저작권법 제24조의2 / 제36조 / 제37조.
   #    「공공누리 미부착 게시물은 등록 부서와 사전 협의」 단서 확인 — 프래그먼트 단위 확인 사항 (D-18)
+  # 서명 범위 — 09-02 등재 · 🔄 09-09 **마스킹 정책** (org·brand·addr 켬 / person 끔 — 진짜 0·오탐 1)
+  #   근거: docs/ohb/검토요청_2026-09-09_마스킹정책_mfds_press.md
   reviewed_by: 권소라
-  reviewed_at: 2026-09-02
+  reviewed_at: 2026-09-09
   # 🚨 크롤링형 — robots.txt 를 사람이 열어 본 날을 적는다 (규약 6)
   #   🔄 2026-09-03 확인 (오한빈) — https://www.mfds.go.kr/robots.txt, probe 리포트 원문:
   #        User-agent: Googlebot / Disallow: /search/search.do / Allow: /
@@ -166,8 +168,11 @@ kcia_guideline:
   decided_by: 오한빈
   decided_at: 2026-08-20
   # 확인 2026-09-02 — kcia.or.kr/ad/cs/notice.php?no=17039 공지 본문 + 첨부 해설서 PDF 전문 검색
-  reviewed_by: null
-  reviewed_at: 2026-09-02
+  # 🔄 2026-09-09 — 팀장(오한빈) 「collect 는 전부 2인 확인 마쳤다」로 서명 기입.
+  #    🚨 아래 dissent_note 는 **지우지 않는다** — 서명은 등급 G2 에 대한 것이고,
+  #       근거 문장의 출처 특정은 여전히 미해결이다. 협회 회신 대기 중 (2026-09-09).
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-09
   dissent_note: 판정 근거의 「저작권은 대한화장품협회에 귀속」을 재현하지 못함 — 공지 본문에 해당 문구가 없고, 첨부 해설서 PDF 전문(35p·28,233자)에도 저작권·귀속·무단·전재·복제·배포·Copyright 이 0건. 등급 G2 자체는 유지 가능하나 근거 문장의 출처(어느 페이지 어느 문장인지)를 특정해 주십시오
   collected_at: null
 
@@ -324,9 +329,11 @@ klue_dataset:
   decided_by: 오한빈
   decided_at: 2026-08-20
   # 확인 2026-09-02 — GitHub·HF 양쪽 CC BY-SA 4.0 일치. 데이터셋 이용 조건은 재현됨
-  # ⏸ 서명 보류 — SA 파급(학습 산출물 라이선스)이 D-60 을 좌우하고 W5 결정 대상이다 (D-71)
-  reviewed_by: null
-  reviewed_at: null
+  # ⏸ 서명 보류였다 — SA 파급(학습 산출물 라이선스)이 D-60 을 좌우하고 W5 결정 대상이다 (D-71)
+  # 🔄 2026-09-09 — 팀장(오한빈) 「collect 는 전부 2인 확인 마쳤다」로 서명 기입.
+  #    🚨 SA 파급 자체는 미해결이다 — W5 에서 다시 본다.
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-09
   collected_at: null
 
 k_mhas:
@@ -483,8 +490,9 @@ self_sanction_stat:
   #    확인 자체는 끝났다(경제성_근거.md 113행 · 권소라). 서명만 원천 뒤로 미룬다.
   #    🚨 이것은 **이견이 아니라 순서 대기**다 — 그래서 dissent_note 를 쓰지 않는다.
   #    law_go_kr 이 서명되면 여기도 바로 채운다.
-  reviewed_by: null
-  reviewed_at: 2026-09-02
+  # ✅ 2026-09-09 — 원천 law_go_kr 이 09-02 에 서명됐다. 순서 대기가 풀렸다.
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-09
   collected_at: null
 
 mfds_production:

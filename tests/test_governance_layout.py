@@ -1095,3 +1095,83 @@ def test_키를_읽는_곳이_가릴_것을_등록한다() -> None:
     assert "env" not in 수입, (
         "🚨 collect/http.py 가 env 를 import 한다 — 순환이다. 등록은 env → http 방향으로만 흐른다."
     )
+
+
+# ══════════════════════════════════════════════════════════
+# 🚨 data_sources.yaml 은 **생성물**이다 — 손으로 고치면 다음 생성 때 사라진다
+#
+# ⛔ 2026-09-09 에 실제로 사라졌다. `mfds_press` 의 마스킹 정책 10줄을
+#    `data_sources.yaml` 에 직접 써서 커밋했고(13ddb4f), 세 시간 뒤 다른 작업 중
+#    `gen_registry.py` 가 한 번 더 돌면서 **통째로 지워진 채 커밋됐다**(1292407).
+#    커밋 메시지 어디에도 그 말이 없다. 조용히 사라졌다.
+#    `reviewed_at: 2026-09-09` 도 `2026-09-02` 로 되돌아갔다 — 2인 확인의 날짜다.
+#
+#    🚨 `collect/registry.py` 와 `gen_registry.py` 둘 다 「생성물이니 손으로 고치지
+#       말라」고 **주석으로** 적어 두고 있었다. 주석은 게이트가 못 읽는다 (D-89).
+#       아래 둘이 그 주석을 검사로 바꾼 것이다.
+# ══════════════════════════════════════════════════════════
+
+_SIGN_FIELDS = ("decided_by", "decided_at", "reviewed_by", "reviewed_at")
+
+
+@pytest.mark.gate
+def test_레지스트리_서명은_2인확인_원장과_같다() -> None:
+    """서명 필드의 단일 출처는 `scripts/registry_review.yaml` 이다 (D-54 · D-99).
+
+    🚨 `collected_at` 은 뺀다 — `mark_collected()` 가 원장에만 찍고 생성물은
+       다음 생성 때 따라오므로, 수집 직후에는 정상적으로 어긋나 있다.
+       서명 넷은 그런 시차가 없다. 어긋나면 손으로 고친 것이다.
+    """
+    import yaml
+
+    ledger = yaml.safe_load((ROOT / "scripts/registry_review.yaml").read_text(encoding="utf-8"))
+    sources = _registry().get("sources") or {}
+
+    bad: list[str] = []
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue  # `blocked` 처럼 소스가 아닌 항목이 섞여 있다
+        entry = (ledger or {}).get(key)
+        if not isinstance(entry, dict):
+            continue  # 원장에 없는 항목(꼬리말에 손으로 쓴 소스)은 이 검사 밖이다
+        for f in _SIGN_FIELDS:
+            got, want = spec.get(f), entry.get(f)
+            if got != want:
+                bad.append(f"{key}.{f}: 생성물 {got!r} ≠ 원장 {want!r}")
+    assert not bad, (
+        "data_sources.yaml 이 2인 확인 원장과 다르다 — 생성물을 손으로 고쳤다.\n"
+        "  고치는 법 — scripts/registry_review.yaml 에 적고 "
+        "`python scripts/gen_registry.py` 를 다시 돌린다.\n  " + "\n  ".join(bad)
+    )
+
+
+@pytest.mark.gate
+def test_생성물에만_있는_문언이_없다() -> None:
+    """`masking`·`attribution`·`license` 의 단일 출처는 `scripts/gen_registry.py` 다.
+
+    🚨 서명 게이트만으로는 부족하다. 2026-09-09 에 사라진 것은 `reviewed_at`(원장에 있다)과
+       `masking`(원장에 없다) **둘**이었다. masking 만 손으로 넣으면 위 게이트를 지난다.
+
+    🚨 공백을 지우고 비교한다 — 생성기 안에서는 한 문장이 여러 줄로 쪼개져 있고
+       (`>-` 접힘 · 암시적 문자열 이어붙이기), 포매터가 그 줄을 다시 나눌 수 있다.
+       줄바꿈 위치가 검사 결과를 바꾸면 그건 문언 검사가 아니라 서식 검사다.
+    """
+    gen = "".join((ROOT / "scripts/gen_registry.py").read_text(encoding="utf-8").split())
+    sources = _registry().get("sources") or {}
+
+    bad: list[str] = []
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue
+        for field in ("masking", "attribution", "license"):
+            wording = str(spec.get(field) or "").strip()
+            if not wording:
+                continue
+            head = "".join(wording.split())[:24]
+            if head not in gen:
+                bad.append(f"{key}.{field}: 「{wording[:28]}…」 가 gen_registry.py 에 없다")
+    assert not bad, (
+        "판정 문언이 생성물에만 있다 — 다음 생성 때 사라진다.\n"
+        "  고치는 법 — scripts/gen_registry.py 의 EXTRA · ATTRIB 에 넣고 다시 생성한다.\n  "
+        + "\n  ".join(bad)
+    )
