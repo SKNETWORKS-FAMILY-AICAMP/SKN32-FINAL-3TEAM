@@ -54,7 +54,7 @@ import random
 import re
 import sys
 
-from preprocess.text import quoted, sheet_lengths
+from preprocess.text import SheetOverwriteError, quoted, sheet_lengths, write_sheet
 
 SOURCE_ID = "mfds_casebook"
 RAW_DIR = pathlib.Path("data/raw") / SOURCE_ID
@@ -443,10 +443,13 @@ def main() -> int:
         if a.min_len:
             pool = [r for r in pool if len(" ".join((r.get("글") or "").split())) >= a.min_len]
         pick = rnd.sample(pool, min(a.sheet, len(pool)))
-        SHEET.parent.mkdir(parents=True, exist_ok=True)
-        with SHEET.open("w", encoding="utf-8") as f:
-            for r in pick:
-                f.write(json.dumps({**r, "붙인이": "", "붙인날": ""}, ensure_ascii=False) + "\n")
+        try:
+            carried, had = write_sheet(SHEET, pick, ("쪽", "호", "글"))
+        except SheetOverwriteError as e:
+            print(f"\n{e}", file=sys.stderr)
+            return 1
+        if had:
+            print(f"\n     ★ 사람이 채워 둔 {had}건 중 {carried}건을 **이어받았다**")
         print(
             f"\n  ⓒ 검증셋 {len(pick):,}건 → {SHEET}"
             f"  (seed={a.seed} · 후보가 둘인 5호만 · 길이하한 {a.min_len})"
