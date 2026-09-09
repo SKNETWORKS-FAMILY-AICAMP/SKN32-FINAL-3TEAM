@@ -151,7 +151,7 @@ mfds_hf_ingredient:
   #    가입 시 이용약관에 추가 제약이 있으면 **재판정 대상**이다 (D-72).
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-07
+  collected_at: 2026-09-09
 
 mfds_hf_individual:
   decided_by: 오한빈
@@ -159,7 +159,7 @@ mfds_hf_individual:
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음 (제공기관 식약처)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-07
+  collected_at: 2026-09-09
 
 
 kcia_guideline:

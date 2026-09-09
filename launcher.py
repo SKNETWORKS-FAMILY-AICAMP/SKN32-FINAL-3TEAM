@@ -351,6 +351,14 @@ def migrate() -> None:
     """데이터베이스 테이블을 최신 상태로 맞춘다.
 
     Alembic 으로 스키마 변경을 코드로 남긴다. DB 가 떠 있어야 한다 (`db-up`).
+
+    🔴 **층이 둘이고 관리 방식이 다르다** (2026-09-09) —
+
+        거버넌스·데이터 층 18테이블   `db/schema.sql`   손으로 쓴 DDL · 0001 이 읽어 실행
+        런타임 층 6테이블            `app/models.py`   ORM · `migrate-new` 로 autogenerate
+
+    🚨 거버넌스 층은 `--autogenerate` 대상이 아니다. `alembic/env.py` 의 `include_object`
+       가 시야에서 뺀다 — 안 그러면 **DROP 을 생성한다.**
     """
     raise typer.Exit(run("uv", "run", "alembic", "upgrade", "head"))
 

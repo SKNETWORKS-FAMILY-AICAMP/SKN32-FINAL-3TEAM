@@ -6,6 +6,27 @@
    알면 30분, 모르면 계속 깨진다 — 그래서 첫 파일부터 넣는다.
 
 🚨 접속 문자열은 `.env` 에서 온다. `collect.env` 가 `.env` 를 읽는 유일한 곳이다.
+   ⛔ `alembic.ini` 에 `sqlalchemy.url` 을 적으면 접속 문자열이 커밋된다 — gitleaks 가
+      막으려는 것이 그것이다.
+
+🔴 **`alembic.ini` 는 ASCII 만 담는다** (2026-09-09 실측).
+   alembic 은 그 파일을 `configparser` 로 **`encoding="locale"`** 로 읽는다. 한국어
+   Windows 에서 그건 cp949 다 — UTF-8 바이트가 하나라도 있으면 `alembic upgrade` 가
+   **DB 를 보기도 전에 `UnicodeDecodeError` 로 죽는다.**
+   ⛔ 9월 5일부터 잠복해 있었다. `alembic/versions/` 가 비어 있어 아무도 돌린 적이
+      없었기 때문에 안 터졌을 뿐이다. 설명은 전부 이 파일에 둔다 —
+      **파이썬 소스는 언제나 UTF-8 로 읽힌다.**
+
+🔴 **층이 둘이고, 관리 방식이 다르다** (2026-09-09).
+
+    거버넌스·데이터 층 (18테이블)   `db/schema.sql`   ← 원본. 손으로 쓴 DDL
+    런타임 층 (6테이블)             `app/models.py`   ← ORM. autogenerate 대상
+
+⛔ `target_metadata` 는 런타임 층뿐이다. 그대로 두면 `--autogenerate` 가 DB 에 있는
+   거버넌스 18테이블을 **「메타데이터에 없다」고 보고 DROP 을 생성한다.**
+   초안을 눈으로 보면 잡히지만, **안 보면 스키마가 통째로 날아간다.**
+★ 그래서 `include_object` 로 거버넌스 객체를 autogenerate 시야에서 뺀다.
+  🚨 목록은 `db/schema.sql` 에서 읽는다 — 두 곳에 같은 목록을 두지 않는다 (D-99).
 """
 
 from __future__ import annotations
@@ -36,6 +57,22 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _governance_objects() -> set[str]:
+    """`db/schema.sql` 이 만드는 테이블·뷰 이름. 🚨 **파일이 목록의 단일 출처다.**"""
+    import re  # noqa: PLC0415
+
+    sql = (ROOT / "db" / "schema.sql").read_text(encoding="utf-8")
+    return set(re.findall(r"^CREATE (?:TABLE|VIEW)\s+(\w+)", sql, re.M))
+
+
+GOVERNANCE = _governance_objects()
+
+
+def include_object(obj, name, type_, reflected, compare_to) -> bool:  # noqa: ANN001, ARG001
+    """🔴 거버넌스 객체는 autogenerate 가 보지 않는다 — 안 그러면 DROP 을 생성한다."""
+    return not (type_ in {"table", "view"} and name in GOVERNANCE)
+
+
 def _url() -> str:
     return dotenv.get("DATABASE_URL")
 
@@ -46,6 +83,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
+        include_object=include_object,
         dialect_opts={"paramstyle": "named"},
     )
     with context.begin_transaction():
@@ -62,6 +100,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=include_object,
         )
         with context.begin_transaction():
             context.run_migrations()
