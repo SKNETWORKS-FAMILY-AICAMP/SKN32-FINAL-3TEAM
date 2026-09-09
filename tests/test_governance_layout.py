@@ -1205,3 +1205,45 @@ def test_생성물에만_있는_문언이_없다() -> None:
         "  고치는 법 — scripts/gen_registry.py 의 EXTRA · ATTRIB 에 넣고 다시 생성한다.\n  "
         + "\n  ".join(bad)
     )
+
+
+# ══════════════════════════════════════════════════════════
+# 🔴 「지금은 안 받는다」를 코드가 지키는가 (2026-09-09 · D-72)
+#
+# ⛔ `require()` 가 `status` 를 **아예 안 보고 있었다.** `manual` 검사는 `probe()` 에만 있어,
+#    탐침은 막고 **실제로 받아 오는 쪽은 안 막는** 모양이었다.
+#    D-109 에서 GATED 로 똑같은 일이 있었고 그때 GATED 만 옮겨 오고 status 는 두었다.
+#    **같은 함정을 두 번째로 밟았다.** 팀장 지적으로 드러났다 —
+#    「거버넌스에 위배되면 수집하지 않기로 한 것들은 수집 안 해야 하잖아」.
+# ══════════════════════════════════════════════════════════
+
+
+@pytest.mark.gate
+def test_hold_과_manual_은_수집이_막힌다() -> None:
+    """적어 두기만 하고 아무것도 안 막으면 그건 보류가 아니라 표시다."""
+    from collect import registry
+
+    sources = _registry().get("sources") or {}
+    checked = {"hold": 0, "manual": 0}
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue
+        st = spec.get("status")
+        if st not in ("hold", "manual"):
+            continue
+        for use, verdict in (spec.get("use") or {}).items():
+            if verdict != "allow":
+                continue  # 용도가 이미 닫혀 있으면 이 게이트가 볼 자리가 아니다
+            # 🚨 **막히기만 하면 되는 게 아니다 — 다른 이유로 막히면 이 검사가 아니다.**
+            #    `aihub_71843` 은 hold 이면서 GATED 라 승인 검사가 먼저 걸린다.
+            #    순서는 「되돌릴 수 없는 것부터」이므로 그게 맞다 — 여기서는 세지 않는다.
+            with pytest.raises(registry.RegistryError) as err:
+                registry.require(key, use=use)
+            if st in str(err.value):
+                checked[st] += 1
+    # 🚨 **셀 것이 없으면 이 검사는 아무것도 안 한 것이다** (D-170).
+    #    `hold`/`manual` 인데 용도가 열린 소스가 하나도 없으면 여기서 알린다.
+    assert sum(checked.values()) > 0, (
+        "hold·manual 이면서 용도가 열린 소스가 없다 — 이 게이트가 아무것도 세지 않았다. "
+        "레지스트리가 바뀌었으면 이 검사가 여전히 뜻이 있는지 다시 본다 (D-170)."
+    )

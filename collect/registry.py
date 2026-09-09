@@ -101,6 +101,27 @@ def require(source_id: str, use: str) -> dict[str, Any]:
             "승인 후 scripts/registry_review.yaml 에 approved_at·approved_by 를 적는다."
         )
 
+    # 🔴 **`require()` 가 `status` 를 아예 안 보고 있었다** (2026-09-09 · 팀장 지적).
+    #    ⛔ `manual` 검사는 `probe()` 에만 있었다. 탐침은 막고 **실제로 받아 오는 쪽은
+    #       안 막는** 모양이다 — D-109 에서 GATED 로 똑같은 일이 있었고, 그때 GATED 만
+    #       옮겨 오고 `status` 는 그대로 두었다. **같은 함정을 두 번째로 밟았다.**
+    #    🚨 적어 두기만 하고 아무것도 안 막으면 그건 보류가 아니라 **표시**다 (D-72).
+    #    🚨 순서는 **되돌릴 수 없는 것부터**다(이 함수의 규칙) — G1 · 용도 · 2인 확인 ·
+    #       GATED(외부 조건 위반) 다음이 우리 쪽 판정 상태다.
+    status = s.get("status")
+    if status == "manual":
+        raise RegistryError(
+            f"{source_id!r} 는 status: manual 이다 — 자동 접근이 약관 위반이라 "
+            "사람이 수기로만 받는다 (D-108). 받아 온 파일은 `launcher.py register` 로 올린다."
+        )
+    if status == "hold":
+        raise RegistryError(
+            f"{source_id!r} 는 status: hold 다 — 판정이 끝나지 않았다. "
+            "🚨 보류는 「나중에 보자」가 아니라 「지금은 안 받는다」다 (D-72). "
+            "🚨 탐침(`probe`)은 막지 않는다 — 판정을 끝내려면 열어 봐야 한다 (D-109). "
+            "풀려면 판정 근거를 남기고 scripts/gen_registry.py 의 STATUS 에서 내린다."
+        )
+
     access = str(s.get("access") or "")
     if any(k in access for k in CRAWL_ACCESS) and not s.get("robots_checked_at"):
         raise RegistryError(
@@ -142,6 +163,11 @@ def probe(source_id: str) -> dict[str, Any]:
             f"{source_id!r} 는 status: manual 이다. 🚨 자동 접근이 약관 위반이라 "
             "사람이 수기로만 본다 (D-108). 탐침도 자동 접근이다."
         )
+    # ⛔ 2026-09-09 — 여기에 `hold` 검사를 넣었다가 **뺐다.** 기존 게이트가 잡았다:
+    #    `test_탐침_게이트는_G1과_수기와_승인선행을_막는다` 가 「G0 가 탐침에서 막힌다」로 깨졌다.
+    #    🚨 **탐침은 판정을 끝내려고 도는 것이다.** `hold` 인 소스야말로 탐침이 필요하다 —
+    #       막으면 판정이 영영 안 끝난다. 이 함수의 docstring 이 이미 그렇게 적어 두었다.
+    #    `hold` 는 **실제로 받아 오는 쪽**(`require`)에서 막는다.
     flags = set(s.get("constraints") or [])
     if "GATED" in flags and not s.get("approved_at"):
         raise RegistryError(

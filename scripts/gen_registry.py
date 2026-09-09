@@ -656,7 +656,9 @@ ORDER = [
     "mfds_press",
     "mfds_casebook",
     # 🔄 2026-09-07 신규 — 2인 확인 판정 A(A-1)·B·E 로 열렸다
-    "foodsafety_admin_measure",
+    # ⛔ 2026-09-09 내렸다 — `NOT_ADOPTED_IDS` 와 `registry_tail.yaml` 의 not_adopted 로 간다.
+    #    🚨 ORDER 에 남겨 두면 미채택으로 적어 놓고도 sources 에 그대로 생성된다.
+    #    "foodsafety_admin_measure",
     "mfds_cosmetic_sanction",
     "mfds_special_use_guide",
     "ftc_noviolation",
@@ -708,6 +710,17 @@ ORDER = [
 #    hold    : 이번 범위 밖 — 판정 완료·착수 전이거나 선결 조건 대기
 #    여기 없는 키는 collect 다. blocked·not_adopted 는 status 값이 아니라 별도 섹션이다.
 STATUS = {
+    # 🔴 2026-09-09 팀장 판정 — **거버넌스와 스스로 어긋나 있었다.**
+    #    `license` 는 「이용조건 문구가 없다 · 표기 부재는 자유 이용이 아니다(저작권법 제10조
+    #    무방식주의)」이고 `attribution` 은 「해설서를 인용하지 않는다 — 별표로 소급한다」인데,
+    #    `status: collect` 에 `U1 allow · U4 allow · redistributable: true` 였다.
+    #    **「허락이 없다」로 판정해 놓고 학습·배포를 열어 둔 채 수집 대상에 두고 있었다.**
+    #    🚨 협회 회신이 오면 판정 근거를 남기고 내린다. 그 전에는 받지 않는다 (D-72).
+    #    ★ 3층(금지 기준)은 대체가 끝났다 — 화장품법 시행규칙 [별표 5] 「화장품 표시ㆍ광고의
+    #      범위 및 준수사항」 · 「화장품 표시·광고 실증에 관한 규정」(admrul_41277) ·
+    #      「기능성화장품 심사에 관한 규정」(admrul_36122) 을 2026-09-09 에 확보했다.
+    #      🔴 다만 **2층(허용 표현 47종)은 대체되지 않았다** — 층이 다르다.
+    "kcia_guideline": "hold",
     "ftc_noviolation": "hold",
     # D-132 — 등급은 G3 로 판정됐으나 크롤링형이라 robots_checked_at 과 「무단 복제」 문구 확인이 선행. use 는 UN(fail-closed)
     "foodsafety_faq": "hold",
@@ -746,7 +759,9 @@ with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8") as _out:
 print("등재", len(ORDER), "건 · 법제처 covers", len(LAW_COVERS), "종 흡수")
 # 🔄 미채택으로 내린 것은 매트릭스에 판정 근거로 남지만 레지스트리 sources 에는 없다.
 #    registry_tail.yaml 의 not_adopted 가 그 자리다 (D-110).
-NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb", "kfia_approved"}
+# 🔄 2026-09-09 — `foodsafety_admin_measure` 를 내렸다 (팀장 판정).
+#    오픈API 가 같은 축을 더 넓게, **개인정보 없이** 준다. 사유는 registry_tail.yaml 에 있다.
+NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb", "kfia_approved", "foodsafety_admin_measure"}
 missing = [
     s["id"]
     for s in SRC
