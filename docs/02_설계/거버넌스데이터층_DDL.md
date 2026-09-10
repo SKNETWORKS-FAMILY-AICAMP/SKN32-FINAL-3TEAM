@@ -518,7 +518,11 @@ CREATE TABLE penal_clause (
 CREATE TABLE dict_entry (
     entry_id        BIGSERIAL PRIMARY KEY,
     fragment_id     TEXT NOT NULL REFERENCES fragment(fragment_id) ON DELETE CASCADE,
-    dict_kind       TEXT NOT NULL,   -- prohibited / allowed / disease_adj / mitigation_banned
+    -- 🔴 적재기가 넣는 값과 **같은 말로** 적는다 (2026-09-10).
+    --    ⛔ 주석은 영문(prohibited / allowed …)인데 `load_db` 는 `'금지표현'` 을 넣는다.
+    --       ENUM 이 아니라 TEXT 라 DB 가 안 막고, `uq_dict_term` 이 (dict_kind, term) 이라
+    --       **표기가 갈리면 같은 용어가 두 벌 들어간다.**
+    dict_kind       TEXT NOT NULL,        -- 금지표현 / 적법표현 / 질병표현 / 완화금지
     term            TEXT NOT NULL,
     violation_type  violation_t,
     law_ref         TEXT,
@@ -541,7 +545,13 @@ CREATE TABLE product_fact (
     daily_intake     TEXT,
     caution          TEXT,
     category         TEXT NOT NULL,
-    recog_kind       TEXT NOT NULL         -- 고시형 / 개별인정형
+    recog_kind       TEXT NOT NULL,        -- 고시형 / 개별인정형
+    -- 🔴 **자연키** (2026-09-10). ⛔ 없어서 적재가 멱등이 아니었다 —
+    --    `load_db` 가 `ON CONFLICT` 없는 순수 INSERT 라 **두 번 돌리면 1,250 → 2,500** 이다.
+    --    그 파일 docstring 은 「멱등이다. 모든 적재가 ON CONFLICT 로 간다」고 적어 뒀다.
+    --    여섯 적재기 중 여기만 빠져 있었고, 문서와 코드가 정면으로 어긋난 자리였다.
+    -- 🚨 인정번호는 NULL 일 수 있어 키에 못 쓴다 — 원료명 + 문구 + 종류가 한 행을 가른다.
+    CONSTRAINT uq_product_fact UNIQUE (fragment_id, ingredient, functional_claim, recog_kind)
 );
 CREATE INDEX ix_product_ingredient ON product_fact(ingredient);
 

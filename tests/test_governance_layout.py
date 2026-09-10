@@ -1382,3 +1382,62 @@ def test_생성물이_훅의_고정점이다() -> None:
         "  🚨 훅을 끄지 말고 **생성기가 훅의 모양을 지키게** 고친다 (D-90 — 생성물을 "
         "손으로 고치지 않는다).\n  " + "\n  ".join(bad)
     )
+
+
+# ══════════════════════════════════════════════════════════
+# 🔴 **수집기 디스패치** — 산문이 아니라 표가 판정한다 (2026-09-10 · D-179)
+# ══════════════════════════════════════════════════════════
+
+
+@pytest.mark.gate
+def test_수집하기로_한_소스는_받는_경로가_정해져_있다() -> None:
+    """🔴 `status: collect` 는 「수집기가 실행한다」는 뜻이다 — 그런데 아무도 안 물었다.
+
+    ⛔ 2026-09-10 실측 — `status: collect` 31건 중 실제로 받아지는 것은 **7건**뿐이었다.
+       `launcher.py collect` 가 소스와 무관하게 `collect.openapi` 한 곳으로만 보냈고,
+       D-108 게이트는 「열린 용도가 있는가」만 봤지 **수집기가 있는가**는 안 봤다.
+    ★ 「빠진 것」인지 「사람이 받는 것」인지 둘 다 이름으로 적는다 (D-110 의 not_adopted 와 같은 뜻).
+    """
+    from collect import COLLECTORS, MANUAL_SOURCES  # noqa: PLC0415
+
+    sources = _registry().get("sources") or {}
+    coll = {k for k, v in sources.items() if isinstance(v, dict) and v.get("status") == "collect"}
+    orphan = sorted(coll - set(COLLECTORS) - MANUAL_SOURCES)
+
+    assert not orphan, (
+        f"🚨 받기로 해 놓고 받는 경로가 없는 소스 {len(orphan)}건 — {orphan}\n"
+        "  → collect/__init__.py 의 COLLECTORS(수집기가 돈다) 또는\n"
+        "     MANUAL_SOURCES(사람이 받아 register 로 올린다) 에 적는다."
+    )
+
+
+@pytest.mark.gate
+def test_HTML_을_긁는_소스는_robots_확인_기록이_있다() -> None:
+    """🔴 규약 6 — 판단은 **표**가 한다 (D-179).
+
+    ⛔ 종전에는 `access` 산문에 `{크롤링, 게시판, 스크래핑}` 이 있는지로 봤다.
+       「자료실 PDF 다운로드」·「보도자료 웹 공개」·「웹 서비스」가 낱말표에 없어
+       **HTML 을 실제로 긁는 소스들이 robots 검사를 통째로 지나갔다.**
+       `collect/mfds_board.py` 는 게시물 HTML 을 파싱하는 명백한 스크래퍼인데 한 번도 안 걸렸다.
+    ★ 고치는 곳은 생성물이 아니라 원장이다 — `scripts/registry_review.yaml` 에
+      `robots_checked_at` 을 적고 `launcher.py registry` 로 다시 생성한다.
+    """
+    from collect import is_scraper  # noqa: PLC0415
+
+    sources = _registry().get("sources") or {}
+    bad = sorted(
+        k
+        for k, v in sources.items()
+        if isinstance(v, dict)
+        and v.get("status") == "collect"
+        and is_scraper(k)
+        and not v.get("robots_checked_at")
+    )
+
+    assert not bad, (
+        f"🚨 HTML 을 긁는데 robots 확인 기록이 없는 소스 {len(bad)}건 — {bad}\n"
+        "  🚨 종전 낱말표로는 이 소스들이 한 번도 안 걸렸다 — 게이트가 새로 보게 된 자리다.\n"
+        "  → scripts/registry_review.yaml 의 해당 소스에 `robots_checked_at: <잰 날>` 을 적고\n"
+        "     uv run python launcher.py registry 로 다시 생성한다.\n"
+        "     🚨 이미 잰 기록이 있으면 scripts/registry_rationale.yaml 을 본다."
+    )

@@ -44,10 +44,13 @@ class Health(BaseModel):
 
 class SearchHit(BaseModel):
     chunk_id: str
-    law_id: str
-    article: str
-    doc_type: str
-    category: list[str]
+    # 🔴 **DB 열이 NULL 을 허용한다** (`db/schema.sql` 의 chunk) — 모델도 그래야 한다.
+    #    ⛔ 종전에는 전부 필수라 NULL 행이 하나만 걸려도 `ValidationError` → 500 이었다.
+    #       별표 청크는 `article` 이 없을 수 있다.
+    law_id: str | None = None
+    article: str | None = None
+    doc_type: str | None = None
+    category: list[str] = Field(default_factory=list)
     text: str
     # 🚨 출처표시는 조립해서 낸다 — `attribution` 은 기관명·자료명뿐이고
     #    URL·게시일은 `source`·`document` 가 들고 있다 (D-132 · 결정요청 ③)
@@ -133,13 +136,20 @@ def search(q: str, category: str = "일반", limit: int = 5) -> list[SearchHit]:
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
             cur.execute(
                 """
+                -- 🔴 **`v_current_chunk` 를 쓴다** (2026-09-10).
+                --    ⛔ 종전에는 `chunk` 원표를 직접 조인해 `superseded_at IS NULL` 도
+                --       `fragment.excluded = false` 도 없었다. 스키마가 그 뷰를 만들며
+                --       *"검색은 항상 현행만. superseded_at 필터를 잊는 것이 가장 흔한 사고다"*
+                --       라고 적어 뒀는데, **구조로 막으려던 사고가 첫 소비자에서 그대로 났다.**
                 SELECT c.chunk_id, c.law_id, c.article, c.doc_type, c.category, c.text,
                        s.attribution, s.url
-                FROM chunk c
+                FROM v_current_chunk c
                 JOIN fragment f ON f.fragment_id = c.fragment_id
                 JOIN source   s ON s.source_id   = f.source_id
                 JOIN source_use u ON u.source_id = s.source_id AND u.use_code = 'U2_rag'
                 WHERE u.allowed AND c.text ILIKE %s AND %s = ANY(c.category)
+                -- 🚨 정렬이 없으면 `LIMIT` 결과가 **비결정적**이다 — 같은 질의가 다른 답을 낸다.
+                ORDER BY c.law_id, c.article NULLS LAST, c.chunk_id
                 LIMIT %s
                 """,
                 (f"%{q}%", category, limit),
