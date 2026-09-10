@@ -316,6 +316,22 @@ def build_graph():  # noqa: ANN201 — langgraph 타입은 지연 import 라 여
     🚨 **지연 import 다.** langgraph 가 없어도 이 모듈의 나머지(라우터·스텁 한 바퀴)는
        돌아야 한다 — D-124 가 「라우터 함수는 그래프 없이 단독 테스트」라고 정했다.
     """
+    # 🔴 **추적이 켜져 있으면 멈춘다** (D-43 · D-72 fail-closed · 2026-09-10).
+    #    ⛔ `langgraph` → `langchain-core` → `langsmith` 가 전이 의존이라 패키지를 못 뺀다.
+    #       켜지면 광고 문구 원문이 밖으로 나간다 — 온프레미스는 서사가 아니라 제품 요구사항이다.
+    #    ⛔ **조용히 끄지 않는다.** `os.environ` 을 덮어쓰면 켠 사람이 자기가 켠 것이
+    #       무시된 줄 모른다. 그리고 `app` 을 안 거치는 경로가 남아 「막은 척」이 된다 (D-146).
+    #    ★ 여기가 langgraph 를 실제로 쓰는 유일한 자리다. import 부작용이 아니라 함수 실행이라
+    #      멈추는 지점이 분명하다.
+    from langsmith.utils import tracing_is_enabled  # noqa: PLC0415
+
+    if tracing_is_enabled():
+        raise SystemExit(
+            "🔴 LangSmith 추적이 켜져 있다 — D-43 이 배제했다.\n"
+            "   🚨 켜면 광고 문구 원문이 외부로 나간다.\n"
+            "   끄는 법: LANGCHAIN_TRACING_V2 · LANGSMITH_TRACING 을 지우거나 false 로 둔다."
+        )
+
     from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
 
     g = StateGraph(JudgeState)

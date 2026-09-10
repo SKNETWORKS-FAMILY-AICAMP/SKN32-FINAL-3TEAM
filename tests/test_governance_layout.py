@@ -956,7 +956,14 @@ def test_파생_소스는_원천보다_넓게_열리지_않는다() -> None:
 # ══════════════════════════════════════════════════════════
 
 # .env.example 에서 값을 가져도 되는 것 — 비밀이 아니라 기본값인 줄뿐이다.
-EXAMPLE_DEFAULTS = {"DATABASE_URL", "MLFLOW_TRACKING_URI"}
+# 🔄 2026-09-10 — 추적 끄기 둘을 등재한다. 비밀이 아니라 **꺼져 있어야 하는 기본값**이라
+#    값이 보여야 뜻이 산다 (D-43). 아래 두 게이트가 이 값을 실제로 검사한다.
+EXAMPLE_DEFAULTS = {
+    "DATABASE_URL",
+    "MLFLOW_TRACKING_URI",
+    "LANGCHAIN_TRACING_V2",
+    "LANGSMITH_TRACING",
+}
 
 
 @pytest.mark.gate
@@ -1440,4 +1447,51 @@ def test_HTML_을_긁는_소스는_robots_확인_기록이_있다() -> None:
         "  → scripts/registry_review.yaml 의 해당 소스에 `robots_checked_at: <잰 날>` 을 적고\n"
         "     uv run python launcher.py registry 로 다시 생성한다.\n"
         "     🚨 이미 잰 기록이 있으면 scripts/registry_rationale.yaml 을 본다."
+    )
+
+
+# ══════════════════════════════════════════════════════════
+#  D-43 · LangSmith 배제 — 전이 의존이 생겼다 (2026-09-10)
+# ══════════════════════════════════════════════════════════
+#
+# 🔴 `langgraph` 를 넣으면서 `langchain-core → langsmith` 가 **딸려 왔다.** 하드 의존이라
+#    패키지를 뺄 수 없다. D-43 은 「외부 전송 금지」이고, 그 이유가 **제품 요구사항**이다 —
+#    온프레미스는 서사가 아니라 요구사항이라, 개발 중 트레이스도 나가면 안 된다.
+# 🚨 **완전 차단은 불가능하다.** `app` 을 안 거치고 langchain 을 직접 쓰면 그만이다.
+#    그래서 「막았다」고 적지 않는다. 여기서 하는 일은 둘이다 —
+#      ① 저장소의 기본값이 꺼짐인지 본다   ② 지금 이 환경에서 꺼져 있는지 본다
+#    실행 경로에서 멈추는 것은 `app.graph.build_graph()` 가 맡는다 (D-72 fail-closed).
+
+TRACING_VARS = ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING")
+
+
+@pytest.mark.gate
+def test_env_example_이_추적을_꺼_둔다() -> None:
+    """🚨 `.env.example` 이 `.env` 의 출발점이다 — 기본이 꺼짐이어야 한다."""
+    lines = (ROOT / ".env.example").read_text(encoding="utf-8-sig").splitlines()
+    got = {}
+    for line in lines:
+        s = line.strip()
+        if "=" in s and not s.startswith("#"):
+            k, v = s.split("=", 1)
+            if k.strip() in TRACING_VARS:
+                got[k.strip()] = v.strip().lower()
+    for var in TRACING_VARS:
+        assert got.get(var) == "false", (
+            f"🚨 `.env.example` 의 `{var}` 가 false 가 아니다 — {got.get(var)!r}\n"
+            "   ⛔ 켜지면 광고 문구 원문이 외부로 나간다 (D-43)."
+        )
+
+
+@pytest.mark.gate
+def test_지금_환경에서_추적이_꺼져_있다() -> None:
+    """🚨 저장소가 아니라 **실행 환경**을 본다 — 셸에서 켜 놓고 돌리는 경로가 있다.
+
+    ⛔ 조용히 끄지 않는다. 켠 사람이 자기가 켠 것이 무시된 줄 모르면 더 나쁘다.
+    """
+    on = [v for v in TRACING_VARS if os.environ.get(v, "").strip().lower() in ("1", "true", "yes")]
+    assert not on, (
+        f"🚨 추적이 켜져 있다 — {on} (D-43 이 배제했다)\n"
+        "   켜면 광고 문구 원문이 외부로 나간다. 온프레미스는 서사가 아니라 제품 요구사항이다.\n"
+        "   끄는 법: 그 변수를 지우거나 false 로 둔다."
     )
