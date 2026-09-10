@@ -102,7 +102,14 @@ def main() -> int:
                 "INSERT INTO chunk (chunk_id, fragment_id, doc_id, law_id, article, paragraph, "
                 "item, doc_type, category, text, token_count) "
                 "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-                "ON CONFLICT (chunk_id) DO UPDATE SET text=EXCLUDED.text",
+                # 🔴 **갱신 칸을 빠뜨리면 고친 코드가 기존 행에 안 닿는다** (2026-09-11).
+                #    ⛔ `token_count` 를 채우도록 고친 것이 09-10 인데, 그 전에 적재된
+                #       chunk 2,585행은 upsert 가 `text` 만 갱신해 **널로 남았다.**
+                #       그래서 0006 마이그레이션이 「먼저 embed 를 돌려라」고 안내했는데
+                #       **돌려도 안 채워지는** 상태였다 — 안내가 거짓이 되는 자리다.
+                #    ★ 규칙: 넣는 칸이 늘면 **갱신 칸도 같이 늘린다.**
+                "ON CONFLICT (chunk_id) DO UPDATE SET "
+                "  text=EXCLUDED.text, token_count=EXCLUDED.token_count",
                 (
                     r["chunk_id"],
                     r["fragment_id"],

@@ -350,15 +350,28 @@ def load_dict(cur, dry: bool) -> tuple[int, int]:
     return n, typed
 
 
+#: 🔴 **정본 축만 여기 들어온다** (2026-09-11 · D-185). `product_fact` 는 「**인정받은** 기능성
+#:    문구」다 — 업체 신고 현황(I-0040)의 표시 문구는 인정 사실이 아니므로 넣지 않는다.
+#:    ⛔ 종전에는 둘 다 넣었다. 그래서 `2024-19` 의 「인지기능 개선에 도움을 **줌**」이
+#:       — 정본은 「**노화로 인해 저하된** 인지기능 개선에 도움을 **줄 수 있음**」인데 —
+#:       **적법 근거로 적재돼 있었다.** 우리가 잡으려는 위반을 적법이라 가르치는 자리였다.
+#:    ★ 그 문구들은 사라지지 않는다. `hf_display_claims.jsonl` 에 **경계 사례 후보**로 남는다.
+PRODUCT_FACT_SOURCES = {
+    "mfds_hf_individual": ("PRIMARY_FNCLTY", "RAWMTRL_NM", "DAY_INTK_LOWLIMIT", "개별인정형"),
+}
+
+
 def load_product_fact(cur, dry: bool) -> int:
-    """2층 적법라벨 — 인정받은 기능성 문구."""
-    kinds = {
-        "mfds_hf_ingredient": ("FNCLTY_CN", "APLC_RAWMTRL_NM", "DAY_INTK_CN", "고시형"),
-        "mfds_hf_individual": ("PRIMARY_FNCLTY", "RAWMTRL_NM", "DAY_INTK_LOWLIMIT", "개별인정형"),
-    }
+    """2층 적법라벨 — **인정받은** 기능성 문구. 🚨 표시 문구는 여기 오지 않는다 (D-185)."""
+    kinds = PRODUCT_FACT_SOURCES
     n = 0
+    skipped: dict[str, int] = {}
     for r in _jsonl("hf_api_labels.jsonl"):
         src = r["원천"]
+        if src not in kinds:
+            # 🚨 조용히 거르지 않는다 — 몇 행을 왜 뺐는지 부른 쪽이 안다 (D-153)
+            skipped[src] = skipped.get(src, 0) + 1
+            continue
         claim_f, ing_f, intake_f, kind = kinds[src]
         claim = (r.get(claim_f) or "").strip()
         ingredient = (r.get(ing_f) or "").strip()
@@ -387,6 +400,10 @@ def load_product_fact(cur, dry: bool) -> int:
                 ),
             )
         n += 1
+    for src, cnt in sorted(skipped.items()):
+        print(
+            f"    ⬜ {src} {cnt}행은 product_fact 에 넣지 않았다 — 표시 문구는 인정이 아니다 (D-185)"
+        )
     return n
 
 
