@@ -1,0 +1,99 @@
+"""🔴 **입력 지문** — 같은 커밋·같은 seed 로도 결과가 갈린다 (D-176 · 2026-09-10).
+
+⛔ 실측 사고. 클론 B 는 원장에 「주입 902 · 골든셋 1,910」을 적었는데, **같은 커밋에서
+   같은 seed(20260909)로** 다른 기기가 돌리면 **908 · 1,915** 가 나왔다.
+
+       원인은 코드도 seed 도 아니었다 — `mfds_hf_labels.jsonl` 의 승인문구가
+       **178 vs 177**, 문구 **한 건** 차이였다. `V0 = 승인문구 − 60` 이라
+       그 한 건이 `118→117` 로 전파되고, 주입이 `V0 + 7×변형` 이라 7 배로 벌어진다.
+
+🚨 그리고 **지표로는 안 보인다.** 두 배치의 P·R·F1 이 소수점 셋째 자리까지 같았다.
+   「지표가 맞으니 같은 배치」라고 읽으면 틀린다.
+
+★ `data/**` 는 커밋되지 않으므로(D-19) **입력은 git 이 못 지킨다.** 산출물이 자기 입력의
+  sha256 을 들고 다니고 뒤 단계가 대조하는 것이, 이 사고를 잡는 유일한 자리다.
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+
+import pytest
+
+from preprocess import split
+
+pytestmark = pytest.mark.gate
+
+
+@pytest.fixture
+def inputs(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> list[pathlib.Path]:
+    files = []
+    for name in ("a.json", "b.jsonl", "c.jsonl"):
+        f = tmp_path / name
+        f.write_text(f"내용-{name}", encoding="utf-8")
+        files.append(f)
+    monkeypatch.setattr(split, "INPUTS", tuple(files))
+    return files
+
+
+def test_지문이_같으면_지나간다(inputs: list[pathlib.Path]) -> None:
+    split.verify_inputs({"inputs": split.fingerprint()}, who="테스트")
+
+
+def test_입력이_한_바이트만_달라도_멈춘다(inputs: list[pathlib.Path]) -> None:
+    """🚨 **한 건 차이가 902 와 908 을 갈랐다.** 경고가 아니라 정지여야 한다 (D-72)."""
+    m = {"inputs": split.fingerprint()}
+    inputs[2].write_text("내용-c.jsonl 에 한 줄 더", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as e:
+        split.verify_inputs(m, who="테스트")
+
+    assert inputs[2].as_posix() in str(e.value), "어느 파일이 갈렸는지 이름으로 내야 한다"
+    assert "D-176" in str(e.value)
+
+
+def test_지문이_없는_낡은_분할은_멈춘다(inputs: list[pathlib.Path]) -> None:
+    """⛔ 「없으면 그냥 통과」는 조용히 옛 상태로 돌아가는 길이다."""
+    with pytest.raises(SystemExit):
+        split.verify_inputs({"assign": {}}, who="테스트")
+
+
+def test_분할_산출물이_지문을_들고_있다() -> None:
+    """🔴 산출물에 지문이 없으면 뒤 단계가 대조할 것이 없다."""
+    if not split.OUT.exists():
+        pytest.skip(
+            "🔴 분할 산출물이 없어 **확인하지 못했다** — uv run python launcher.py golden --write"
+        )
+    m = json.loads(split.OUT.read_text(encoding="utf-8"))
+    assert "inputs" in m, f"{split.OUT} 에 `inputs` 지문이 없다 — 분할을 다시 돌린다 (D-176)"
+    assert set(m["inputs"]) == {f.as_posix() for f in split.INPUTS}
+    assert all(v["sha256"] for v in m["inputs"].values()), "입력이 비어 있다"
+    assert "승인문구_종수" in m, "902 vs 908 을 가른 수다 — 산출물에 적어 둔다"
+
+
+def test_반대_대조_shuffle_축이_분리돼_있다() -> None:
+    """🚨 pool 크기가 봉인 음성을 흔들지 못해야 한다 (D-176).
+
+    ⛔ 종전에는 `random.Random` 하나를 두 shuffle 에 공유했다. 고원을 넘으면
+       봉인 60개 중 21~26개가 조용히 교체됐다 — **고원 안에서는 0개라 안 드러난다.**
+    ★ 소스를 읽지 않고 **동작으로** 묻는다 (D-170).
+    """
+    import random
+
+    def seal(pool_n: int, *, shared: bool) -> list[int]:
+        rp = random.Random(20260909)
+        rn = rp if shared else random.Random(20260909)
+        pool = list(range(pool_n))
+        rp.shuffle(pool)
+        approved = list(range(300))
+        rn.shuffle(approved)
+        return approved[:60]
+
+    base = seal(211, shared=False)
+    assert all(seal(n, shared=False) == base for n in (190, 203, 214, 232)), (
+        "축을 나눴는데도 pool 크기가 봉인을 흔든다 — 구현이 바뀌었다"
+    )
+    assert any(seal(n, shared=True) != seal(211, shared=True) for n in (190, 203, 232)), (
+        "공유했을 때조차 안 흔들린다면 이 검사는 실패할 수 없다 (D-170)"
+    )

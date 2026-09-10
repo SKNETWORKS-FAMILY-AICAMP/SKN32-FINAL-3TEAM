@@ -53,7 +53,13 @@ def test_사전이_평가문구로_만들어지지_않았다() -> None:
     ★ 순서를 지켰는지 묻지 않고 **산출물이 실제로 그 규칙을 지켰는지**를 본다.
     """
     if not (DICT.exists() and GOLDEN.exists()):
-        pytest.skip("사전·골든셋이 아직 없다 — uv run python launcher.py golden --write")
+        # 🚨 skip 이지만 **무엇을 안 봤는지 이름으로 낸다.** 산출물이 없는 새 기기에서는
+        #    이 검사가 물리적으로 불가능하다 — 그러나 「초록불」로 읽히면 안 된다 (D-146).
+        #    ★ 산출물 없이도 도는 짝이 `tests/test_dictionary_leak.py` 에 있다 (D-175).
+        pytest.skip(
+            "🔴 누수 검사를 **안 돌렸다** — 산출물이 없다. 이 초록불은 D-174 를 확인하지 않았다.\n"
+            "   uv run python launcher.py golden --write 를 돌린 뒤 다시 본다."
+        )
     lines = [x for x in DICT.read_text(encoding="utf-8").splitlines() if x.strip()]
     terms = {json.loads(x)["term"] for x in lines}
     ev = [

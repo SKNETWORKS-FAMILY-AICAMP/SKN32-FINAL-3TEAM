@@ -76,26 +76,47 @@ def _jsonl(p: pathlib.Path) -> list[dict]:
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
-def approved_terms() -> list[str]:
-    """2층 **승인** 표현 — 인정받은 기능성 문구. 🚨 위반이 아니라 적법이다."""
-    got = []
-    for r in _jsonl(HF):
-        v = r.get("기능성내용") or r.get("문구") or ""
-        if v:
-            got.append(str(v))
-    return got
+def approved_terms(train: set[str]) -> list[str]:
+    """2층 **승인** 표현 — 인정받은 기능성 문구. 🚨 위반이 아니라 적법이다.
+
+    🔴 **`train` 만 본다** (2026-09-10 · D-175).
+
+      ⛔ 종전에는 HF **전량**을 읽었다. 봉인된 음성 평가 60행이 그 안에 있었고,
+         그것이 **어떤 항목을 `적법중첩` 으로 낙인찍어 판정 규칙에서 뺄지**를 정했다.
+         실측 — 봉인을 풀면 「적법 60행 오탐 **0.0%**」가 **5.0%(3행)** 가 된다.
+         「항산화」·「키성장에도움」 2종이 봉인된 적법 문장에 걸려 빠져 있었다.
+      🚨 D-174 의 문언(「봉인된 평가 문구가 사전에 **들어가면** 안 된다」)은 지켜졌었다 —
+         이 2종은 사전의 `term` 이 아니라 **`신뢰도` 칸**에만 영향을 준다.
+         **문언은 지키고 취지는 뚫린 자리다.** 사전 종수(536)가 안 변해서 아무도 못 봤다.
+      ★ **비대칭이 원인이었다** — 위반 표현(term)만 봉인하고 적법 표현(중첩 판정 코퍼스)은
+        전량으로 뒀다. 그 비대칭이 **정확히 Precision 쪽으로 유리하게** 기운다.
+
+    ★ 문구를 여기서 다시 자르지 않는다 — `split.approved_docs()` 를 그대로 쓴다 (D-99).
+      같은 규칙이 두 벌이면 한쪽만 고쳐져 조용히 갈린다.
+    """
+    from preprocess.split import approved_docs  # noqa: PLC0415 — 모듈 최상단이면 순환 import
+
+    return [q for d in approved_docs() if d["doc_id"] in train for q in d["문구"]]
 
 
-def train_only() -> set[str]:
-    """`train` 으로 배정된 `doc_id` 들. 🔴 없으면 멈춘다 — 조용히 전량으로 가지 않는다."""
+def assign_map() -> dict[str, str]:
+    """`doc_id` → `train`/`test_sentence`. 🔴 없으면 멈춘다 — 조용히 전량으로 가지 않는다."""
     if not SPLIT.exists():
         raise FileNotFoundError(
             f"{SPLIT} 가 없다 — **분할이 먼저다** (D-171).\n"
             "  먼저: uv run python -m preprocess.split --write\n"
             "  🚨 전량으로 사전을 만들면 평가 문구가 사전에 들어가 매칭기가 외운 것을 맞힌다."
         )
+    from preprocess import split as _split  # noqa: PLC0415 — 모듈 최상단이면 순환 import
+
     m = json.loads(SPLIT.read_text(encoding="utf-8"))
-    return {k for k, v in m["assign"].items() if v == "train"}
+    _split.verify_inputs(m, who="사전[P6]")  # 🔴 D-176 — 분할이 본 입력과 같은가
+    return dict(m["assign"])
+
+
+def train_only() -> set[str]:
+    """`train` 으로 배정된 `doc_id` 들."""
+    return {k for k, v in assign_map().items() if v == "train"}
 
 
 def _add(entries: dict, n: str, raw: str, types: set[str], arts: set[str], src: str) -> None:
@@ -112,13 +133,25 @@ def build() -> tuple[list[dict], dict]:
     🔴 **`train` 문서만 본다.** 평가로 봉인된 문구가 들어가면 매칭기가 외운 것을 맞힌다.
     """
     entries: dict[str, dict] = {}
-    stat: dict = {"사례집": 0, "의결서": 0, "충돌": collections.Counter(), "제외문서": 0}
-    train = train_only()
+    stat: dict = {
+        "사례집": 0,
+        "의결서": 0,
+        "충돌": collections.Counter(),
+        # 🚨 둘을 **가른다** (D-160 — 무엇을 세는지 먼저 적는다).
+        #    ⛔ 종전에는 한 칸이라 「봉인 133개」로 읽혔는데, 실측 봉인은 83 이고
+        #       나머지 50 은 `확정유형`·`인용표현` 이 없어 **애초에 못 쓰던 행**이다.
+        "봉인제외": 0,
+        "미배정": 0,
+    }
+    assign = assign_map()
+    train = {k for k, v in assign.items() if v == "train"}
 
     for i, r in enumerate(_jsonl(CASEBOOK)):
-        # 🔴 사례집은 전량 `test_term` 이다 — 사전에 넣으면 그 시험지를 외우는 것이다
-        if f"casebook:{r.get('쪽')}:{i}" not in train:
-            stat["제외문서"] += 1
+        # 🔴 사례집은 **사전 쪽**이라 분할에서 전량 train 이다 (D-155 · split.py:206).
+        #    여기서 빠지는 것은 봉인된 것이 아니라 라벨·인용이 없어 분할에 안 오른 행이다.
+        did = f"casebook:{r.get('쪽')}:{i}"
+        if did not in train:
+            stat["봉인제외" if did in assign else "미배정"] += 1
             continue
         types = set(r.get("확정유형") or [])
         if not types:
@@ -137,8 +170,9 @@ def build() -> tuple[list[dict], dict]:
         units = r.get("유형") or []
         if not units:
             continue
-        if f"ftc:{r['seq']}" not in train:
-            stat["제외문서"] += 1
+        did = f"ftc:{r['seq']}"
+        if did not in train:
+            stat["봉인제외" if did in assign else "미배정"] += 1
             continue
         types = {u["label"] for u in units}
         arts = {f"{FTC_LAW} {u['article']}" for u in units}
@@ -150,7 +184,7 @@ def build() -> tuple[list[dict], dict]:
             stat["의결서"] += 1
 
     # 🔴 D-156 — 승인 문장에 그대로 들어 있는 항목을 표시한다
-    approved = [norm(x) for x in approved_terms()]
+    approved = [norm(x) for x in approved_terms(train)]
     rows: list[dict] = []
     for n, e in sorted(entries.items()):
         types = sorted(e["유형"])
@@ -182,7 +216,12 @@ def main() -> int:
     rows, stat = build()
     print(f"사전 항목 **{len(rows):,}종** (정규화 기준 · D-117)")
     print(f"  들어온 인용 — 사례집 {stat['사례집']}회 · 의결서 {stat['의결서']}회")
-    print(f"  🔴 평가로 봉인돼 **제외한 문서 {stat['제외문서']}개** — 사전이 시험지를 외우지 않게")
+    print(f"  🔴 평가로 **봉인돼 제외한 문서 {stat['봉인제외']}개** — 사전이 시험지를 외우지 않게")
+    if stat["미배정"]:
+        print(
+            f"  ⬜ 라벨·인용이 없어 **애초에 못 쓰는 문서 {stat['미배정']}개**"
+            " — 봉인과 다른 것이다 (D-160)"
+        )
 
     by = collections.Counter(t for r in rows for t in r["유형"])
     print("\n  유형별 —")
