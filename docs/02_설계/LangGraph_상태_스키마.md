@@ -3,7 +3,7 @@
 > **작성자** 오한빈 (팀장)
 > **작성** 2026-08-16 *(추정)* · **최종 갱신** 2026-08-31 04:31 KST
 
-> 담당: 그래프·RAG 트랙 (🚨 SPOF — W2 walking skeleton은 2인 페어, D-50). LangGraph 1.2.x 핀 + langgraph-checkpoint-postgres.
+> 담당: 그래프·RAG 트랙 (🚨 SPOF — W2 walking skeleton은 2인 페어, D-50). 🔄 **LangGraph 1.2.11** + `langgraph-checkpoint-postgres` **3.1.2** (2026-09-10 확정).
 
 ## 상태에 반드시 담을 것 (기획서 3-2 · 3-3)
 
