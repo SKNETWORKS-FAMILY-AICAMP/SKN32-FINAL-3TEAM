@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -82,6 +83,20 @@ def sha256(payload: bytes) -> str:
 #:     여기서 정하지 않는다 — 팀장 판정 사항으로 남긴다.
 VOLATILE: dict[str, tuple[tuple[str, re.Pattern[bytes]], ...]] = {
     "mfds_press": (("jsessionid", re.compile(rb"jsessionid=[A-Za-z0-9]+")),),
+    # 🔴 2026-09-10 실측 — 게시판 목록 5개가 재수집에서 「달라졌다」고 나왔는데,
+    #    갈린 것은 **조회수 12건과 목록 순번 42건**뿐이었다. 게시물 번호는 0건 차이다.
+    #    ⛔ 이대로 두면 볼 때마다 판이 생기고, 그 판이 「원천이 바뀌었다」로 읽힌다.
+    #    🚨 `"no":` 는 `"ntctxt_no":` 와 안 겹친다 — 앞이 `"` 인지 `_` 인지로 갈린다.
+    "mfds_hf_ingredient_board": (
+        ("inqry_cnt", re.compile(rb'"inqry_cnt"\s*:\s*"?\d+"?')),
+        ("no", re.compile(rb'"no"\s*:\s*"?\d+"?')),
+    ),
+}
+
+#: 🚨 위 정규식과 **같은 뜻**을 필드 이름으로도 둔다 — 읽는 쪽은 파싱된 dict 를 본다.
+#:    ⛔ 두 벌이지만 축이 다르다(바이트 vs 필드). 한쪽만 고치면 갈리므로 여기 나란히 둔다 (D-99).
+VOLATILE_FIELDS: dict[str, tuple[str, ...]] = {
+    "mfds_hf_ingredient_board": ("inqry_cnt", "no"),
 }
 
 
@@ -100,6 +115,55 @@ def identity_sha256(source_id: str, payload: bytes) -> str:
        칸이 생긴다 — 없으면 둘이 같다는 뜻이다.
     """
     return sha256(_strip_volatile(source_id, payload))
+
+
+def fold_editions(paths: Iterable[Path]) -> tuple[dict[str, Path], list[tuple[str, Path]]]:
+    """파일 목록을 **원본 map** 과 **판 목록**으로 가른다. 🚨 정책은 안 정한다 — 가르기만 한다.
+
+    반환 — `({원본이름: 경로}, [(원본이름, 판 경로), …])`
+    """
+    base: dict[str, Path] = {}
+    eds: list[tuple[Path]] = []
+    for p in sorted(paths):
+        stem = p.stem
+        if EDITION_MARK in stem:
+            eds.append((stem.split(EDITION_MARK, 1)[0], p))
+        else:
+            base[stem] = p
+    return base, eds
+
+
+def current_files(
+    directory: Path, pattern: str = "*", *, allow_editions: bool = False
+) -> list[Path]:
+    """읽는 쪽의 **판 규칙** (2026-09-10 · D-177).
+
+    ⛔ `save_raw` 는 「원본은 그대로 둔다(규약 2 · D-92)」만 정하고 **읽는 쪽 규칙이 없었다.**
+       그래서 `data/raw/*` 를 `glob("*.xml")` 하는 추출기 16곳이 **원본과 판을 함께 읽었다.**
+       실측 사고 — `preprocess/mfds_hf.py:209` `index()` 가 `hf_board_index_*__c20260907.json`
+       5개를 함께 읽고 `setdefault` 로 **새 판의 행을 조용히 버리고** 있었다.
+
+    ★ 규칙 — **원본을 읽는다.** 원본이 없고 판만 있으면 그 판이 원본이다 (D-92).
+    🚨 그리고 판이 있으면 **기본값은 멈추는 것**이다. 판이 생겼다는 것은 원천이 달라졌다는
+       뜻이고, **어느 것을 쓸지는 사람이 정한다** (D-143). 「최신을 쓴다」를 기본으로 두면
+       2인 확인을 지난 적 없는 바이트가 조용히 판정 근거가 된다.
+       ★ 이미 스스로 대조 규칙을 가진 호출자(`mfds_hf.posts()`)만 `allow_editions=True` 로
+         받아 자기 정책을 적용한다.
+    """
+    if not directory.exists():
+        return []
+    base, eds = fold_editions(directory.glob(pattern))
+    for stem, p in eds:
+        base.setdefault(stem, p)  # 원본이 없으면 판이 원본이다
+    if eds and not allow_editions:
+        names = ", ".join(sorted(p.name for _, p in eds)[:5])
+        raise SystemExit(
+            f"🔴 {directory} 에 판(`{EDITION_MARK}`)이 {len(eds)}개 있는데 읽는 규칙이 없다.\n"
+            f"   {names}{' …' if len(eds) > 5 else ''}\n"
+            "  🚨 판이 생겼다는 것은 **원천이 달라졌다**는 뜻이다 — 어느 것을 쓸지는 사람이 정한다 (D-143).\n"
+            "  → 원본을 그대로 쓸 것이면 이 호출에 allow_editions=True 를 주고 대조 규칙을 적는다."
+        )
+    return [base[k] for k in sorted(base)]
 
 
 def raw_dir(family: str) -> Path:

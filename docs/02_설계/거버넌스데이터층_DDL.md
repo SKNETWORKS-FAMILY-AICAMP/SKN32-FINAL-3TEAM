@@ -23,7 +23,7 @@
 | | |
 |---|---|
 | **스택** | PostgreSQL 16 + **pgvector** (D-41 — 별도 벡터DB를 쓰지 않는다) |
-| **테이블** | **18개** + 뷰 3개 · 열거형 13종 |
+| **테이블** | **19개** + 뷰 3개 · 열거형 14종 |
 | **설계의 축** | 🚨 **모든 파생물이 `fragment_id` 하나에 매달린다.** 소스를 지우면 문장·청크·벡터·사전·골든셋이 함께 사라진다 |
 | **★ 이 문서의 특징** | **DDL을 실제로 실행해 검증했다.** 아래 결과는 추정이 아니라 실측이다 |
 
@@ -34,7 +34,7 @@
 | # | 제약 | 시도한 것 | 결과 |
 |:-:|---|---|:-:|
 | 1 | `ck_source_four_eyes` | 판정자와 확인자를 같은 사람으로 | ✅ **거부** |
-| 2 | `ck_golden_injected_not_holdout` | 주입본을 `test_holdout` 에 | ✅ **거부** |
+| 2 | `ck_golden_injected_not_holdout` | 주입본을 **평가 split**(`test_sentence`·`test_holdout`)에 | ✅ **거부** |
 | 3 | `ck_segment_k_anon` | 5명짜리 세그먼트 생성 | ✅ **거부** |
 | 4 | `ck_chunk_tokens` | 900 토큰 청크 | ✅ **거부** |
 | 5 | `ck_sentence_span` | 오프셋 역전(start > end) | ✅ **거부** |
@@ -173,7 +173,9 @@ transform_pair    1  ->  0
 > 우리가 만든 것이라 해당되지 않습니다. 🔄 **D-128** — 사용자 유래 행은 `provenance = 'user'` · `fragment_id NULL` 허용(`CHECK (fragment_id IS NOT NULL OR provenance = 'user')`) · `consent_train` 을 `work_doc` 에서 행으로 복사(D-71 형태). 🚨 아래 SQL 에는 아직 `consent` 열과 이 CHECK 가 **없다** — 다음 DDL 개정에서 `golden_sample` 에 넣는다. **학습 데이터 구성 시 `provenance` 가 사용자 입력이면 `consent=true` 를 요구**하고,
 > 게이트가 이를 검사합니다 — `redistributable` 과 정확히 같은 처리입니다.
 
-> 🚨 **`ck_golden_injected_not_holdout`** — 주입본이 `test_holdout` 에 들어가는 것을 DB가 거부합니다. 평가는 **실사례 홀드아웃으로만** 해야 하는데, 이건 사람이 실수하기 가장 쉬운 지점입니다.
+> 🚨 **`ck_golden_injected_not_holdout`** — 주입본이 **평가 split** 에 들어가는 것을 DB가 거부합니다. 평가는 **실사례 홀드아웃으로만** 해야 하는데, 이건 사람이 실수하기 가장 쉬운 지점입니다.
+>
+> ⛔ **2026-09-10 정정.** 종전 조건은 `split = 'test_holdout'` 하나였고, 파이프라인이 실제로 쓰는 평가 split 은 `test_sentence` 다 — **이 제약은 어떤 행에도 걸리지 않았다.** 그런데 이 문서는 위 표에 「실측 검증 ② 거부됨」을 성과로 적어 두었다. **검증한 값과 파이프라인이 쓰는 값이 달랐다** (D-170 · 실패할 수 없는 단언).
 
 ### 3-7. 세그먼트 · 재현성 (2)
 
@@ -298,11 +300,27 @@ CREATE TYPE flag_t        AS ENUM ('BY','NC','SA','PII','TOS','GATED',
                                    'NOTRAIN');   -- 🔄 D-122 · 사용자 업로드물은 학습·색인 금지
 CREATE TYPE cost_t        AS ENUM ('free','gated','paid','unknown');
 CREATE TYPE value_t       AS ENUM ('A','B','C','D','X');
-CREATE TYPE violation_t   AS ENUM ('V0','V1','V2','V3','V4','V5','V6','V7','V8');
+-- 🔴 위법 유형 — **우리 라벨이 곧 타입이다** (2026-09-10 · D-178).
+--    ⛔ 종전 'V0'~'V8' 은 뜻이 스키마 어디에도 없었고, 경쟁하는 대응표가 둘이었다
+--       (수집전처리_기획 §4-6 의 V표 vs 별표1 호수). 접으면 5종이 2칸으로 뭉갠다 —
+--       V6 ← 소비자_기만 + 후기_체험기_기만 + 추천_보증_뒷광고, V7 ← 부당_비교광고 + 비방광고.
+--       되돌릴 수 없는 손실이라 **라벨을 그대로 타입으로** 둔다.
+--    ★ 조문 대응(별표1 제1~8호)은 **타입이 아니라 데이터**다 — `violation_article` 을 본다.
+--      조문이 확정 라벨이면(D-158) 그 대응은 바뀔 수 있는 사실이지 스키마가 아니다.
+--    🚨 '적법' 값을 두지 않는다 — 적법은 `violations = '{}'` 다. 값으로 두면 두 표현이 생긴다.
+CREATE TYPE violation_t   AS ENUM ('질병_예방치료_표방','건강기능식품_오인','의약품_오인',
+                                   '거짓_과장','소비자_기만','후기_체험기_기만',
+                                   '추천_보증_뒷광고','부당_비교광고','비방광고',
+                                   '실증책임_위반');
 CREATE TYPE risk_t        AS ENUM ('R0','R1','R2','R3','R4');
 CREATE TYPE infeas_t      AS ENUM ('A','B','C');          -- D-59 자격형/실증형/절대형
 CREATE TYPE origin_t      AS ENUM ('real','injected','approved');
-CREATE TYPE split_t       AS ENUM ('train','dev','test_holdout');
+-- 🔴 분할 — `test_sentence` 가 없어 골든셋 1,908행이 DB 밖에 서 있었다 (2026-09-10).
+--    🚨 `test_holdout` 과 **뜻이 다르다.** test_sentence 는 문장 단위 평가(ftc 의결서 봉인 +
+--       승인 문구 음성)이고, test_holdout 은 `mfds_press` 홀드아웃 자리다. 접으면
+--       두 평가가 한 칸에 섞이고, 그것이 D-172 가 경고한 「단위를 섞는」 자리다.
+--    ⬜ 'dev' 는 코드·데이터 어디에서도 배정되지 않는 **죽은 값**이다. 쓸 자리가 생길 때까지 둔다.
+CREATE TYPE split_t       AS ENUM ('train','dev','test_sentence','test_holdout');
 CREATE TYPE certainty_t   AS ENUM ('확실','불확실');        -- D-74 측정 축
 CREATE TYPE tense_t       AS ENUM ('과거','현재','미래');
 CREATE TYPE senttype_t    AS ENUM ('사실형','추론형','대화형','예측형');
@@ -539,7 +557,10 @@ CREATE TABLE golden_sample (
     violations       violation_t[] NOT NULL DEFAULT '{}',
     three_elem       JSONB,                -- {false, misleading, anticomp}
     infeasibility    infeas_t,
-    risk             risk_t NOT NULL,
+    -- 🔄 2026-09-10 NOT NULL 을 뗐다 (D-178). 골든셋은 **정답 라벨을 담는 시험지**이지
+    --    위험도를 담는 곳이 아니다. 위험도는 판정 시 `sanction_rule` · `v_risk_lookup` 으로
+    --    계산한다 (D-09 래칫). ⛔ 없는 수를 지어내 칸을 채우면 그 수가 원장으로 흘러간다.
+    risk             risk_t,
     evidence         JSONB,                -- [{law_id, article, item}]
     claim_spans      JSONB,                -- [{start, end, label}]  ← 주입 좌표에서 자동 생성
     -- 🔄 D-74 측정 축 3종
@@ -556,8 +577,22 @@ CREATE TABLE golden_sample (
     provenance       TEXT NOT NULL,
     redistributable  BOOLEAN NOT NULL,
     split            split_t NOT NULL,
+    -- 🔴 **단위** — 문장인가 낱말인가 (2026-09-10 · D-155 · D-172).
+    --    ⛔ 이 칸이 없어서 골든셋의 단위 구분이 DB 에서 소실됐다. 사례집은 낱말(중앙 4자),
+    --       의결서는 문장(중앙 12자)이고, 한 시험지로 세면 **두 과제를 평균한 수**가 된다.
+    --       그 혼동을 이틀에 걸쳐 두 번 밟았다 — 칸으로 막는다.
+    --    🚨 **자리가 맨 뒤인 이유** — 마이그레이션의 `ADD COLUMN` 은 뒤에 붙는다.
+    --       중간에 두면 새 DB 와 옮긴 DB 의 컬럼 순서가 갈리고, `v_publishable_golden`
+    --       이 `g.*` 라 **뷰 컬럼 순서까지** 갈린다. 실측으로 확인한 유일한 차이였다.
+    unit             TEXT NOT NULL DEFAULT '문장'
+                     CHECK (unit IN ('문장','낱말')),
+    -- 🔴 **평가 split 전부**를 막는다 (2026-09-10 · D-170).
+    --    ⛔ 종전 조건은 `split = 'test_holdout'` 하나였다. 그런데 파이프라인이 실제로 쓰는
+    --       평가 split 은 `test_sentence` 라, 이 제약은 **어떤 행에도 걸리지 않았다.**
+    --       그런데 설계 문서는 「주입본을 test_holdout 에 넣으니 거부됐다」를 성과로 적어 뒀다 —
+    --       검증한 값과 파이프라인이 쓰는 값이 달랐다. 실패할 수 없는 제약이었다.
     CONSTRAINT ck_golden_injected_not_holdout
-      CHECK (NOT (origin = 'injected' AND split = 'test_holdout')),
+      CHECK (NOT (origin = 'injected' AND split IN ('test_sentence','test_holdout'))),
     -- 🚨 D-91 — 표면 변형은 S0 원형과 짝으로만 존재한다. 짝이 없으면 델타를 못 잰다
     CONSTRAINT ck_surface_pairing
       CHECK ((surface_variant = 'S0' AND surface_of IS NULL)
@@ -566,7 +601,26 @@ CREATE TABLE golden_sample (
 COMMENT ON CONSTRAINT ck_golden_injected_not_holdout ON golden_sample IS
   '4-8절 · 평가는 실사례 홀드아웃으로만 한다. 주입본이 섞이면 지표가 부풀려진다';
 CREATE INDEX ix_golden_split ON golden_sample(split);
+CREATE INDEX ix_golden_origin ON golden_sample(origin);
 CREATE INDEX ix_golden_viol  ON golden_sample USING GIN (violations);
+
+-- 🔴 라벨 ↔ 조문 대응 — **데이터다** (2026-09-10 · D-178).
+--    ⛔ 종전에는 이 대응이 어디에도 없었다. `후기_체험기_기만` 은 법에서 제5호의 **목**이고,
+--       별표1 제8호(사행심·음란)는 우리 목록에 없다 — 「빠진 것」인지 「뺀 것」인지
+--       문서에 없었다. 타입에 접으면 그 사실이 사라진다.
+--    ★ 조문이 확정 라벨이면(D-158) 대응은 **바뀔 수 있는 사실**이다. 개정되면 행을 고친다.
+--    🚨 `adopted=false` 가 「뺐다」를 남기는 자리다 — D-110 의 not_adopted 와 같은 뜻.
+CREATE TABLE violation_article (
+    violation   violation_t NOT NULL,
+    law_id      TEXT        NOT NULL,
+    article     TEXT        NOT NULL,
+    item        TEXT        NOT NULL DEFAULT '',
+    adopted     BOOLEAN     NOT NULL DEFAULT true,
+    note        TEXT,
+    PRIMARY KEY (violation, law_id, article, item)
+);
+COMMENT ON TABLE violation_article IS
+  '라벨 ↔ 조문 대응. 조문이 확정 라벨이라는 D-158 의 대응표이고, 타입이 아니라 데이터다';
 CREATE INDEX ix_golden_redis ON golden_sample(redistributable);
 
 -- D-26 · 실사례 시정 페어 (철수 조건 5번의 실물)

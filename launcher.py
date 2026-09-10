@@ -518,15 +518,26 @@ def status() -> None:
 
 
 @app.command()
-def load() -> None:
+def load(
+    allow_missing: bool = typer.Option(
+        False,
+        "--allow-missing",
+        help="🚨 파생물이 없어도 0행으로 적재합니다 — **일부러** 비운 채 돌릴 때만",
+    ),
+) -> None:
     """파생물을 거버넌스 DB 에 적재한다 (D-95).
 
     🚨 CHECK 둘을 못 지나는 소스는 **넣지 않고 이름을 냅니다** —
        2인 확인 미완 · attribution 없음. 조용히 건너뛰면 「다 들어갔다」로 읽힙니다.
+    🔴 **입력이 없으면 멈춥니다** (2026-09-10 · D-72). 종전에는 빈 리스트로 삼켜서
+       `document 0 · product_fact 0` 이 오류도 경고도 없이 「정상 완료」로 찍혔습니다.
     🔴 골든셋은 아직 못 넣습니다 — `split_t` 에 `test_sentence` 가 없고
        `violation_t`(V0~V8) 대응표가 미판정입니다 (결정요청 ⑤).
     """
-    raise typer.Exit(run("uv", "run", "python", "-m", "scripts.load_db"))
+    args = ["uv", "run", "python", "-m", "scripts.load_db"]
+    if allow_missing:
+        args.append("--allow-missing")
+    raise typer.Exit(run(*args))
 
 
 @app.command()

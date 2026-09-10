@@ -53,7 +53,13 @@ def load_rules() -> dict[str, str]:
 
 
 def judge(text: str, rules: dict[str, str]) -> set[str]:
-    """🚨 **정확 매칭만** 한다. 부분 유사도는 「위험도 하한」 자격이 없다 (수집전처리_기획 4-9)."""
+    """사전 항목이 **정규화문에 부분문자열로** 들어 있으면 그 유형으로 본다.
+
+    ⛔ 종전 docstring 은 「정확 매칭만 한다」였는데 코드는 `term in n` 이다 —
+       **문서가 코드를 잘못 적고 있었다** (2026-09-10 정정).
+    🚨 부분문자열이라 짧은 낱말이 위험하다. 그래서 앞에서 `단독판정` 자격
+       (적법중첩·모호 제외)이 거른다 — 자격 심사가 이 매칭의 안전장치다 (D-156).
+    """
     n = norm(text)
     return {lab for term, lab in rules.items() if term in n}
 
@@ -90,12 +96,22 @@ def main() -> int:
         for t in true - pred:
             fn[t] += 1
 
+    # 🚨 **정답에 없는 유형의 오탐도 표에 낸다** (2026-09-10).
+    #    ⛔ 종전에는 `sorted(gold, ...)` 라 `gold[t] == 0` 인 유형이 표에서 **사라졌다.**
+    #       실측에서 `질병_예방치료_표방` 에 오탐 1건이 있었는데 한 줄도 안 보였다.
+    #       Precision 을 재려고 만든 표에서 오탐이 숨는 것은 표를 착시로 만든다.
+    seen = sorted(set(gold) | set(tp) | set(fp), key=lambda x: (-gold[x], x))
     print(f"\n  {'유형':22} {'정답':>5} {'P':>7} {'R':>7} {'F1':>7}")
-    for t in sorted(gold, key=lambda x: -gold[x]):
+    for t in seen:
         p = tp[t] / (tp[t] + fp[t]) if tp[t] + fp[t] else 0.0
         rc = tp[t] / gold[t] if gold[t] else 0.0
         f1 = 2 * p * rc / (p + rc) if p + rc else 0.0
-        mark = "" if gold[t] >= MIN_MEASURABLE else "  🔴 측정 불가 (D-40)"
+        if gold[t] == 0:
+            mark = f"  🚨 정답 0인데 오탐 {fp[t]}건 — 시험지에 없는 유형이다"
+        elif gold[t] < MIN_MEASURABLE:
+            mark = "  🔴 측정 불가 (D-40)"
+        else:
+            mark = ""
         print(f"  {t:22} {gold[t]:>5} {p:>7.3f} {rc:>7.3f} {f1:>7.3f}{mark}")
 
     print(f"\n  🔴 **적법 {neg_total}행 중 {neg_fired}행에서 사전이 울렸다**", end="")

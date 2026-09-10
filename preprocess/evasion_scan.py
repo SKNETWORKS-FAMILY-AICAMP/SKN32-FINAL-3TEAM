@@ -33,6 +33,7 @@ import collections
 import json
 import pathlib
 
+from collect import store
 from preprocess.mask import apply_policy
 from preprocess.text import LEX, evasion, quoted
 
@@ -154,7 +155,7 @@ def main() -> int:
     a = ap.parse_args()
 
     RAW, OUT, QUOTES, CACHE = paths(a.source)
-    files = sorted(RAW.glob("*.pdf"))[: a.limit]
+    files = store.current_files(RAW, "*.pdf")[: a.limit]
     if not files:
         print(f"🚨 {RAW} 에 PDF 가 없다 — 먼저 수집기를 돌린다.")
         return 1

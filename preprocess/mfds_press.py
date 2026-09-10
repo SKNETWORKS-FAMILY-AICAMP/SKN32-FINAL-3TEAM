@@ -45,6 +45,7 @@ import pathlib
 import re
 import sys
 
+from collect import store
 from preprocess.text import quoted
 
 SOURCE_ID = "mfds_press"
@@ -183,7 +184,7 @@ def tables_of(path: pathlib.Path, *, refresh: bool = False) -> list[dict]:
 
 
 def _pdfs() -> list[pathlib.Path]:
-    got = sorted(RAW_DIR.glob("*.pdf"))
+    got = store.current_files(RAW_DIR, "*.pdf")
     if not got:
         raise FileNotFoundError(
             f"{RAW_DIR} 에 pdf 가 없다 —\n  먼저: uv run python -m collect.mfds_press"

@@ -31,26 +31,44 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
 MANIFEST = ROOT / "data" / "manifest.jsonl"
 
-# 폴더 이름이 소스 id 와 다른 것들 — 수집기가 계열로 묶어 저장한다
-ALIAS = {
-    "mfds_hf_ingredient_board": "mfds_hf_board",
-    "ftc_decisions_body": "ftc",
-    "ftc_decisions_api": "ftc",
-    "ftc_decisions": "ftc",
-    "law_go_kr": "law",
+# 폴더 이름이 소스 id 와 다른 것들 — 수집기가 계열로 묶어 저장한다.
+# 🔴 **한 소스가 여러 폴더를 쓸 수 있다** (2026-09-10). ⛔ 값이 문자열 하나였을 때
+#    `mfds_press` 의 첨부 PDF 107개가 `data/raw/mfds_press_pdf/` 에 따로 있는 것을
+#    통째로 못 봤다 — 원장 고유 214 인데 「이 기기 107」로 찍혀 **절반만 있는 것처럼** 보였다.
+#    실제로는 214/214 로 완전했다. 🚨 본문은 첨부 PDF 에만 있다 (D-118).
+ALIAS: dict[str, tuple[str, ...]] = {
+    "mfds_hf_ingredient_board": ("mfds_hf_board",),
+    "ftc_decisions_body": ("ftc",),
+    "ftc_decisions_api": ("ftc",),
+    "ftc_decisions": ("ftc",),
+    "law_go_kr": ("law",),
+    "mfds_press": ("mfds_press", "mfds_press_pdf"),
 }
 
 
-def ledger() -> collections.Counter:
-    c: collections.Counter = collections.Counter()
+def folders(source_id: str) -> tuple[str, ...]:
+    return ALIAS.get(source_id, (source_id,))
+
+
+def ledger() -> dict[str, set[str]]:
+    """소스별 **고유 path 집합**. 🚨 줄 수가 아니다 (D-54).
+
+    ⛔ 종전에는 줄마다 +1 이었다. 원장은 재수집마다 줄이 붙으므로 그 수는 **부풀어 오른다** —
+       실측 `mfds_press` 원장 줄 424 · 고유 path 214, `ftc_decisions_body` 16,506 vs 8,253.
+       `doctor` 가 바로 위에서 「원장 줄 수를 건수로 쓰지 마라」를 찍는데
+       `inventory` 의 팀 축이 그 줄 수였다.
+    """
+    got: dict[str, set[str]] = collections.defaultdict(set)
     if MANIFEST.exists():
         for line in MANIFEST.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                try:
-                    c[json.loads(line).get("source_id", "")] += 1
-                except json.JSONDecodeError:
-                    continue
-    return c
+            if not line.strip():
+                continue
+            try:
+                r = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            got[r.get("source_id", "")].add(r.get("path", ""))
+    return got
 
 
 def on_disk(source_id: str) -> int:
@@ -61,12 +79,21 @@ def on_disk(source_id: str) -> int:
        같은 날 `.venv` 팽창으로 게이트가 3분이 된 것과 **같은 부류**다 —
        걷는 비용을 안 재고 편한 API 를 썼다. `os.walk` 는 이름만 받아 온다.
     """
-    d = RAW / ALIAS.get(source_id, source_id)
-    if not d.exists():
-        d = RAW / source_id
-    if not d.exists():
-        return 0
-    return sum(len(files) for _, _, files in os.walk(d))
+    n = 0
+    for name in folders(source_id):
+        d = RAW / name
+        if d.exists():
+            n += sum(len(files) for _, _, files in os.walk(d))
+    return n
+
+
+def missing_paths(paths: set[str]) -> list[str]:
+    """원장에 있는데 **이 기기 디스크에 없는** path. 🚨 소스 단위 0/비0 이 아니라 path 단위다.
+
+    ⛔ 종전 분류는 「파일이 하나라도 있으면 둘 다 있음」이었다. 그래서
+       `mfds_hf_ingredient` 가 **10개 중 9개가 없는데** 「둘 다 있음」으로 갔다.
+    """
+    return sorted(p for p in paths if p and not (ROOT / p.replace("\\", "/")).exists())
 
 
 def main() -> int:
@@ -77,13 +104,16 @@ def main() -> int:
     led = ledger()
 
     # 한 폴더를 여러 소스가 쓰는지 먼저 센다
-    shared: collections.Counter = collections.Counter(ALIAS.get(k, k) for k in src)
+    shared: collections.Counter = collections.Counter(f for k in src for f in folders(k))
 
     both, only_ledger, only_disk, neither = [], [], [], []
-    print(f"{'소스':28}{'원장(팀)':>10}{'이 기기':>10}")
+    partial: list[tuple[str, int, int]] = []
+    print(f"{'소스':26}{'원장(고유)':>11}{'이 기기':>8}{'🔴없음':>8}")
     for k in sorted(src):
-        n_led, n_disk = led.get(k, 0), on_disk(k)
-        aliased = shared[ALIAS.get(k, k)] > 1 and not n_led
+        paths = led.get(k, set())
+        n_led, n_disk = len(paths), on_disk(k)
+        gone = missing_paths(paths)
+        aliased = any(shared[f] > 1 for f in folders(k)) and not n_led
         bucket = (
             both
             if (n_led and n_disk)
@@ -97,6 +127,10 @@ def main() -> int:
         mark = ""
         if n_led and not n_disk:
             mark = "  🔴 **다른 기기에서 받았다 — 이 기기엔 없다**"
+        elif gone:
+            # 🔴 **일부만 없는 것**을 종전에는 「둘 다 있음」으로 삼켰다 (2026-09-10).
+            partial.append((k, len(gone), n_led))
+            mark = f"  🔴 **{len(gone)}/{n_led} 이 이 기기에 없다**"
         elif n_disk and not n_led:
             # 🚨 **계열을 공유하는 소스는 오탐이다** (2026-09-09 실측).
             #    `ftc_decisions`·`ftc_decisions_api`·`ftc_decisions_body` 가 한 폴더(`ftc`)를
@@ -104,10 +138,10 @@ def main() -> int:
             #    오탐으로 시작한 검사는 곧 꺼진다 — 이름을 붙여 구분한다 (D-167).
             mark = (
                 "  ⤷ 계열 공유 폴더"
-                if shared[ALIAS.get(k, k)] > 1
+                if any(shared[f] > 1 for f in folders(k))
                 else "  🔴 원장에 없는데 파일이 있다 — 원장을 확인한다"
             )
-        print(f"  {k:26}{n_led or '—':>10}{n_disk or '—':>10}{mark}")
+        print(f"  {k:24}{n_led or '—':>11}{n_disk or '—':>8}{len(gone) or '—':>8}{mark}")
 
     print()
     print(
@@ -124,8 +158,21 @@ def main() -> int:
         print("\n🔴 **원장에 없는데 파일이 있다** — 규약 3 이 지켜지지 않았거나 원장이 밀렸다")
         for k in only_disk:
             print(f"   {k}")
-    if not only_ledger and not only_disk:
+    if partial:
+        print("\n🔴 **일부만 받은 것** — 소스 단위로는 「있다」로 보인다")
+        for k, g, n in partial:
+            print(f"   {k:26} {g}/{n} 없음")
+        print("   🚨 종전 분류는 파일이 하나라도 있으면 「둘 다 있음」이었다 (D-160).")
+    if not only_ledger and not only_disk and not partial:
         print("  ✅ 원장과 이 기기가 일치한다")
+
+    # 🚨 **세 번째 축은 여기서 안 잰다** — 「있다」는 「최신이다」가 아니다 (D-177).
+    #    ⛔ 실측 — `mfds_hf_ingredient_board` 672개 중 **662개가 팀 최신판이 아닌데**
+    #       이 표는 전부 「있음」으로 찍는다. 그 축은 해시를 봐야 갈린다.
+    print(
+        "\n⬜ **낡음은 여기서 안 본다** — 「이 기기에 있다」는 「이 기기 것이 최신이다」가 아니다."
+    )
+    print("   uv run python scripts/doctor.py --data --hash   ← 그 축은 여기서 잰다 (D-177)")
     return 0
 
 

@@ -61,11 +61,29 @@ def _records(directory: str) -> list[dict]:
                     return found
         return None
 
+    d = RAW / directory
+    # 🔴 **디렉터리가 없어도 glob 은 예외를 안 낸다** — 빈 이터레이터를 준다 (2026-09-10).
+    #    ⛔ 그래서 원문을 안 받았거나 폴더 이름이 바뀌면 「0행」을 찍고 **성공으로 끝났다.**
+    #       원장에는 수가 적혀 있는데 산출물만 조용히 비는, D-149 와 같은 모양이다.
+    if not d.exists():
+        raise SystemExit(
+            f"🔴 {d} 가 없다 — 이 원천의 원문을 이 기기에서 아직 안 받았다.\n"
+            f"  먼저: uv run python launcher.py collect {directory} --use U1\n"
+            "  🚨 「0행」을 성공으로 찍지 않는다 (D-72)."
+        )
+    files = store.current_files(d, "*.json")
+    if not files:
+        raise SystemExit(f"🔴 {d} 에 json 이 한 개도 없다 — 수집이 비었다.")
     out: list[dict] = []
-    for p in sorted((RAW / directory).glob("*.json")):
+    for p in files:
         got = dig(json.loads(p.read_text(encoding="utf-8")))
         if got:
             out += got
+    if not out:
+        raise SystemExit(
+            f"🔴 {d} 의 파일 {len(files)}개를 읽었는데 **레코드가 0** 이다.\n"
+            "  🚨 응답 껍데기가 바뀌어 `dig()` 가 엉뚱한 배열을 집었을 수 있다 — 파일을 열어 본다."
+        )
     return out
 
 

@@ -41,6 +41,7 @@ import pathlib
 import random
 import re
 
+from preprocess import split as split_mod
 from preprocess.split import approved_docs as split_approved
 
 HF = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
@@ -181,7 +182,9 @@ def build(seed: int = 20260909) -> tuple[list[dict], dict]:
             "  먼저: uv run python -m preprocess.split --write\n"
             "  🚨 봉인된 음성 평가 표본으로 주입을 만들면 시험지가 학습에 들어간다."
         )
-    assign = json.loads(SPLIT.read_text(encoding="utf-8"))["assign"]
+    _m = json.loads(SPLIT.read_text(encoding="utf-8"))
+    split_mod.verify_inputs(_m, who="주입[P10]")  # 🔴 D-176
+    assign = _m["assign"]
     rnd = random.Random(seed)
     diseases = disease_terms()
     rows: list[dict] = []
@@ -200,6 +203,11 @@ def build(seed: int = 20260909) -> tuple[list[dict], dict]:
         # 🚨 규약 3 — 원본을 **적법(V0)** 으로 함께 넣는다
         rows.append(
             {
+                # 🔴 **어느 원본에서 나왔는지 실어 보낸다** (2026-09-10).
+                #    ⛔ 없으면 물질화가 id 를 문구로 만들 수밖에 없는데, 정규화하면
+                #       「피부 보습에…」와 「피부보습에…」가 같은 문자열이 돼 **56쌍이 겹쳤다**.
+                #    ★ 원본 doc_id 는 분할과 같은 키이므로 추적도 된다 (D-99).
+                "src": d["doc_id"],
                 "문구": text,
                 "라벨": [],
                 "rule_id": "V0",
@@ -215,6 +223,7 @@ def build(seed: int = 20260909) -> tuple[list[dict], dict]:
         )
         stat["적법"] += 1
         for made in transform(text, rnd, diseases):
+            made["src"] = d["doc_id"]
             rows.append(made)
             stat["규칙별"][made["rule_id"]] += 1
     return rows, stat

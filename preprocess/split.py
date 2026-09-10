@@ -79,6 +79,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import pathlib
 import random
@@ -87,6 +88,7 @@ FTC_PHRASES = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
 HF = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
 OUT = pathlib.Path("data/derived/golden/split_manifest.json")
+SPLIT_NAME = OUT.as_posix()
 
 #: 🚨 유형별 평가 목표. D-40 의 30 이 **하한**이고, 신뢰구간을 감안해 40 을 목표로 둔다.
 #:    40건에서 Recall 0.85 면 95% CI 가 ±11%p 다 (기획문서 6-3) — 30 은 아슬아슬하다.
@@ -102,6 +104,61 @@ def _jsonl(p: pathlib.Path) -> list[dict]:
     if not p.exists():
         raise FileNotFoundError(f"{p} 가 없다 — 먼저 그 원천의 추출기를 돌린다")
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+#: 🔴 분할이 읽는 입력 전부. 이 셋이 1바이트라도 다르면 뒤의 수가 전부 달라진다.
+INPUTS = (FTC_PHRASES, CASEBOOK, HF)
+
+
+def fingerprint() -> dict[str, dict]:
+    """입력 파일들의 **지문**. 🚨 재현의 근거는 seed 가 아니라 이것이다 (D-176).
+
+    ⛔ 실측 사고 (2026-09-10). 클론 B 는 「주입 902 · 골든셋 1,910」을 원장에 적었는데
+       같은 커밋·같은 seed 로 이 기기에서 돌리면 **908 · 1,915** 가 나왔다.
+       원인은 코드도 seed 도 아니고 **`mfds_hf_labels.jsonl` 의 승인문구가 178 vs 177**,
+       문구 **한 건** 차이였다. 그 한 건이 `V0 118→117` 로 전파돼 7 배로 벌어진다.
+       🚨 `data/**` 는 커밋되지 않으므로(D-19) **입력은 git 이 못 지킨다.**
+    ★ 그래서 산출물이 자기 입력의 sha256 을 들고 다니고, 뒤 단계가 대조한다.
+      「같은 커밋이면 같은 결과」는 이 프로젝트에서 참이 아니다.
+    """
+    got: dict[str, dict] = {}
+    for f in INPUTS:
+        b = f.read_bytes() if f.exists() else b""
+        got[f.as_posix()] = {
+            "sha256": hashlib.sha256(b).hexdigest() if b else None,
+            "bytes": len(b),
+        }
+    return got
+
+
+def verify_inputs(manifest: dict, *, who: str) -> None:
+    """분할이 본 입력과 **지금 입력**이 같은지 대조한다. 다르면 멈춘다 (D-176 · D-72).
+
+    🚨 fail-closed 다. 「다르면 경고하고 계속」은 조용히 갈린 산출물을 만드는 길이고,
+       그 갈림은 **지표로는 안 보인다** — 실측에서 177/178 두 배치의 P·R·F1 이
+       소수점 셋째 자리까지 같았다.
+    """
+    want = manifest.get("inputs")
+    if not want:
+        raise SystemExit(
+            f"🔴 {SPLIT_NAME} 에 `inputs` 지문이 없다 — 낡은 분할이다.\n"
+            "  먼저: uv run python -m preprocess.split --write"
+        )
+    now = fingerprint()
+    bad = [k for k, v in want.items() if now.get(k, {}).get("sha256") != v.get("sha256")]
+    if bad:
+        lines = "\n".join(
+            f"    {k}\n      분할이 본 것 {want[k]['sha256']!s:.12}… ({want[k]['bytes']:,} B)"
+            f"\n      지금 있는 것 {now.get(k, {}).get('sha256')!s:.12}…"
+            f" ({now.get(k, {}).get('bytes', 0):,} B)"
+            for k in bad
+        )
+        raise SystemExit(
+            f"🔴 **{who} 의 입력이 분할이 본 것과 다르다** — {len(bad)}개 (D-176)\n"
+            f"{lines}\n"
+            "  🚨 이대로 진행하면 분할과 어긋난 산출물이 나오고, **지표로는 안 보인다.**\n"
+            "  → 분할을 다시 돌린다: uv run python launcher.py golden --write"
+        )
 
 
 def ftc_docs() -> list[dict]:
@@ -182,9 +239,16 @@ def plan(seed: int = 20260909) -> dict:
     order = sorted(have, key=lambda x: have[x])
     need = {t: min(have[t], EVAL_TARGET) for t in have}
 
-    rnd = random.Random(seed)
+    # 🚨 **축마다 Random 을 따로 만든다** (2026-09-10 · D-176).
+    #    ⛔ 종전에는 인스턴스 하나를 두 shuffle 에 공유했다. `random.shuffle(n)` 이 소모하는
+    #       워드 수가 n 의 구간마다 달라, ftc 코퍼스 크기가 **고원을 넘으면**
+    #       봉인 음성 60개 중 **21~26개(35~43%)가 조용히 교체된다** (실측).
+    #       고원 안(예 208~213)에서는 0개라 몇 건 늘려 보는 것으로는 안 드러난다.
+    #    ★ 축을 나누면 pool 을 21개까지 흔들어도 봉인 60개가 고정된다 (실측 확인).
+    rnd_pool = random.Random(seed)
+    rnd_neg = random.Random(seed)
     pool = sorted(single, key=lambda d: d["doc_id"])
-    rnd.shuffle(pool)
+    rnd_pool.shuffle(pool)
 
     sealed: dict[str, dict] = {}
     got: collections.Counter = collections.Counter()
@@ -197,7 +261,7 @@ def plan(seed: int = 20260909) -> dict:
 
     # 🔴 ③ 음성 표본 — 승인 문구 일부를 봉인한다
     approved = approved_docs()
-    rnd.shuffle(approved)
+    rnd_neg.shuffle(approved)
     neg_eval = approved[:NEG_TARGET]
     neg_train = approved[NEG_TARGET:]
 
@@ -230,6 +294,9 @@ def plan(seed: int = 20260909) -> dict:
     )
     return {
         "seed": seed,
+        # 🔴 **재현의 근거는 seed 가 아니라 이것이다** (D-176). 위 fingerprint() 참조.
+        "inputs": fingerprint(),
+        "승인문구_종수": len(approved),
         "eval_target": EVAL_TARGET,
         "neg_target": NEG_TARGET,
         "min_measurable": MIN_MEASURABLE,

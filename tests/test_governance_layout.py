@@ -321,6 +321,45 @@ def test_모든_모델에_라이선스와_등급과_배포용도가_있다() -> 
 # raw/ 를 읽어도 되는 곳 — 수집기와 전처리기뿐이다.
 RAW_READERS = {"collect", "preprocess"}
 
+#: 🚨 `data/raw` 를 **정당하게** 만지는 예외. 이름과 이유를 여기 적는다 (2026-09-10).
+#:    ⛔ 종전에는 이 목록이 없었고, 대신 검사가 뚫려서 조용히 지나가고 있었다 —
+#:       `scripts/doctor.py:83` 이 `ROOT / "data" / "raw"` 로 **분절해** 써서
+#:       `"data/raw" in code` 를 통과했다. 예외가 필요하면 목록으로 두지, 검사를 약하게 두지 않는다.
+RAW_EXCEPTIONS = {
+    # 원장 ↔ 디스크 대조가 이 도구의 일 자체다. 읽기만 하고 소비 경로가 아니다 (D-89).
+    Path("scripts/doctor.py"),
+    # 게이트 자신과, raw 를 다루는 코드를 검사하는 테스트들.
+    Path("tests/test_governance_layout.py"),
+    Path("tests/test_sanctions_scan.py"),
+    Path("tests/test_store_edition.py"),
+    Path("tests/test_store_read_editions.py"),
+}
+
+
+def _path_segments(tree: ast.AST) -> set[tuple[str, ...]]:
+    """`ROOT / "data" / "raw"` 같은 **분절 경로**를 조각 튜플로 모은다 (2026-09-10).
+
+    ⛔ 문자열 `"data/raw"` 만 찾으면 분절 표기가 통과한다. 실측 — `scripts/doctor.py` 가
+       그렇게 게이트를 지나고 있었고, 바로 그 게이트가 지키려던 규칙을 어기고 있었다.
+    ★ `pathlib` 의 `/` 는 `BinOp(Div)` 다. 사슬을 펴서 상수 조각만 이어 붙인다.
+    """
+    got: set[tuple[str, ...]] = set()
+
+    def flatten(node: ast.AST) -> list[str | None]:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            return flatten(node.left) + flatten(node.right)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return [node.value]
+        return [None]
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            parts = flatten(node)
+            for i in range(len(parts) - 1):
+                if parts[i] and parts[i + 1]:
+                    got.add((parts[i], parts[i + 1]))
+    return got
+
 
 @pytest.mark.gate
 def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
@@ -343,10 +382,10 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
         #    레포 소스가 아니라서 게이트 대상도 아니다 (2026-09-06 에 여기 걸렸다).
         if parts[0] in {".venv", "build", "dist", ".git", "Claude outputs"}:
             continue
-        if parts[0] in RAW_READERS or rel == Path("tests/test_governance_layout.py"):
+        if parts[0] in RAW_READERS or rel in RAW_EXCEPTIONS:
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if "data/raw" not in text and "data\\raw" not in text:
+        if "raw" not in text:
             continue
         # 주석·docstring 을 걷어낸 뒤 다시 본다 — 남아 있으면 그것은 코드다.
         try:
@@ -358,13 +397,32 @@ def test_raw_는_수집_전처리_밖에서_참조되지_않는다() -> None:
             if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
                 node.value.value = ""  # docstring 을 비운다
         code = ast.unparse(tree)
-        if "data/raw" in code or "data\\raw" in code:
+        # 🚨 **두 표기를 다 본다** — 한 덩어리 문자열과 `/` 로 분절한 것 (2026-09-10).
+        if "data/raw" in code or "data\\raw" in code or ("data", "raw") in _path_segments(tree):
             offenders.append(str(rel))
 
     assert not offenders, (
         "data/raw/ 를 수집·전처리 밖에서 참조한다 — 소비 경로는 등급 디렉터리와 "
-        f"derived/ 만 읽는다 (D-92): {offenders}"
+        f"derived/ 만 읽는다 (D-92): {offenders}\n"
+        "  🚨 정당한 예외면 `RAW_EXCEPTIONS` 에 **이유와 함께** 적는다 — 검사를 약하게 두지 않는다."
     )
+
+
+@pytest.mark.gate
+def test_반대_대조_분절_경로도_잡힌다() -> None:
+    """🚨 위 게이트가 **실패할 수 있는지** 스스로 보인다 (D-170).
+
+    ⛔ 2026-09-10 까지 `"data/raw" in code` 뿐이라 `ROOT / "data" / "raw"` 가 통과했다.
+       게이트가 지키려던 규칙을 게이트 대상이 어기고 있었는데 초록불이었다.
+    """
+    joined = ast.parse('p = ROOT / "data/raw" / "x"')
+    split_ = ast.parse('p = ROOT / "data" / "raw" / "x"')
+    innocent = ast.parse('p = ROOT / "data" / "derived"')
+
+    assert "data/raw" in ast.unparse(joined)
+    assert "data/raw" not in ast.unparse(split_), "이 표기가 종전 검사를 지나갔다"
+    assert ("data", "raw") in _path_segments(split_)
+    assert ("data", "raw") not in _path_segments(innocent)
 
 
 @pytest.mark.gate
@@ -626,8 +684,17 @@ def test_탐침은_저장_경로를_부를_수_없다() -> None:
     #    단일 소스 탐침이 **전체 리포트를 덮어써** 32건 결과가 사라졌고, 고치려면
     #    누적 캐시에 한 번 더 써야 했다. 지킬 것은 「한 번만 쓴다」가 아니라
     #    **「data/ 에는 쓰지 않는다」**이므로 그쪽을 검사한다 (D-19).
-    assert 'ROOT / "docs' in src, "탐침 리포트는 docs/ 로 나간다"
-    assert 'ROOT / "build"' in src, "탐침 캐시는 build/ 로 나간다"
+    # 🚨 **여기도 AST 로 본다** (2026-09-10). ⛔ 종전 두 줄은 `src`(원문 텍스트)를 봤다 —
+    #    바로 위 주석이 「문자열이 아니라 AST 로 본다」고 선언해 놓고 **두 줄 뒤에 어겼다.**
+    #    주석에 `# ROOT / "docs` 라고 적어 두면 탐침이 `data/` 에 써도 통과한다.
+    #    ★ 지킬 것은 「그 문장이 있다」가 아니라 **「data/ 로 나가는 경로가 없다」**이다 (D-19).
+    roots = {a for a, _ in _path_segments(tree)} | {b for _, b in _path_segments(tree)}
+    assert "data" not in roots, (
+        f"🚨 탐침이 data/ 아래 경로를 만든다 — 탐침은 저장하지 않는다 (D-109 · D-19): {sorted(roots)}"
+    )
+    assert {"docs", "build"} & roots, (
+        f"🚨 탐침이 docs/·build/ 로 나가는 경로를 안 만든다 — 리포트를 어디에 쓰나? {sorted(roots)}"
+    )
 
     # 🚨 **런타임으로 증명한다** — 문자열 검사는 「안 썼다」만 말하고
     #    「쓸 수 없다」는 말하지 못한다. 탐침을 새 프로세스에서 import 했을 때
@@ -1243,9 +1310,15 @@ def test_hold_과_manual_은_수집이_막힌다() -> None:
                 checked[st] += 1
     # 🚨 **셀 것이 없으면 이 검사는 아무것도 안 한 것이다** (D-170).
     #    `hold`/`manual` 인데 용도가 열린 소스가 하나도 없으면 여기서 알린다.
-    assert sum(checked.values()) > 0, (
-        "hold·manual 이면서 용도가 열린 소스가 없다 — 이 게이트가 아무것도 세지 않았다. "
-        "레지스트리가 바뀌었으면 이 검사가 여전히 뜻이 있는지 다시 본다 (D-170)."
+    # 🔴 **합산하면 한쪽이 0 이어도 초록이다** (2026-09-10 정정).
+    #    ⛔ 실측 — hold 6건 · manual **1건**(`mfds_cosmetic_sanction`)이다.
+    #       그 하나가 재분류되거나 `require()` 의 manual 분기가 사라져도
+    #       hold 6건이 합계를 채워 이 게이트가 계속 초록을 냈다.
+    zero = [st for st in ("hold", "manual") if checked[st] == 0]
+    assert not zero, (
+        f"{zero} 를 **하나도 세지 않았다** — 그 status 로 막히는 소스가 없거나 "
+        "`require()` 의 그 분기가 사라졌다. 합산으로 가리지 않는다 (D-170).\n"
+        f"  실제로 센 것 — {dict(checked)}"
     )
 
 

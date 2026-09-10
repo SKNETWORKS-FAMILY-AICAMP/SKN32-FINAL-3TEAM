@@ -162,7 +162,7 @@ def main() -> int:
         return 1
 
     total = 0
-    for p in sorted(ANNEX.glob("*.json")):
+    for p in store.current_files(ANNEX, "*.json"):
         d = json.loads(p.read_text(encoding="utf-8"))
         if d["table_rows"]:  # 표는 law_annex 가 맡는다
             continue

@@ -66,6 +66,8 @@ import pathlib
 import re
 import sys
 
+from collect import store
+
 SOURCE_ID = "mfds_hf_ingredient_board"
 RAW_DIR = pathlib.Path("data/raw/mfds_hf_board")  # 🚨 폴더 이름 ≠ 원천 id
 OUT = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
@@ -202,11 +204,48 @@ def fields(lines: list[str]) -> tuple[dict[str, str], list[str]]:
     return {k: "\n".join(v).strip() for k, v in got.items() if v}, unknown
 
 
+#: 볼 때마다 바뀌는 칸 — 목록 대조에서 뺀다. `store.VOLATILE` 의 필드 축이다.
+_VOL: tuple[str, ...] = store.VOLATILE_FIELDS.get("mfds_hf_ingredient_board", ())
+
+
 def index() -> dict[str, dict]:
     """게시물 번호 → 목록 행. 🚨 목록이 **분류와 제목의 유일한 출처**다 — 본문엔 없다."""
     idx: dict[str, dict] = {}
     total: set[int] = set()
-    for p in sorted(RAW_DIR.glob("hf_board_index_*.json")):
+    # 🔴 **판을 함께 읽지 않는다** (2026-09-10 · D-177).
+    #    ⛔ 종전에는 `RAW_DIR.glob("hf_board_index_*.json")` 이라 `__c20260907` 판 5개를
+    #       함께 읽었다. 정렬상 원본이 먼저 와서 `setdefault` 가 **새 판의 행을 조용히
+    #       버렸고**, `total_cnt` 가 한 번이라도 갈리면 `ValueError` 로 죽었다.
+    #       지금은 655 로 우연히 일치해 지나가고 있었을 뿐이다.
+    #    ★ 아래 `posts()` 는 **본문을 대조하고** 접는다 — 목록도 같은 규칙을 쓴다.
+    base, eds = store.fold_editions(RAW_DIR.glob("hf_board_index_*.json"))
+    for stem, p in eds:
+        b = base.get(stem)
+        if b is None:
+            base[stem] = p
+            continue
+
+        def _stable(path: pathlib.Path, vol: tuple[str, ...] = _VOL) -> dict[str, dict]:
+            """🚨 **순서와 휘발 칸을 빼고** 비교한다 — 게시물 번호를 키로 본다.
+
+            2026-09-10 실측, 재수집본이 「다르다」고 나온 이유가 둘이었다 —
+              ① 볼 때마다 바뀌는 칸: 조회수 12건 · 목록 순번 42건 (D-168 의 필드 축)
+              ② 🔴 **목록 순서 자체가 바뀐다** — 같은 행 집합이 다른 자리에 온다.
+                 offset 페이징의 정렬 키가 유일하지 않아서다. 이 함수 아래쪽
+                 「정렬 키가 유일하지 않으면 중복+누락이 함께 난다」가 경고하던 바로 그것이고,
+                 이번에 **실측으로 잡혔다** (D-149).
+            ★ 그래서 리스트가 아니라 **번호를 키로 한 map** 으로 비교한다.
+              순서는 원천의 사정이지 우리 자료의 내용이 아니다.
+            """
+            got = json.loads(path.read_text(encoding="utf-8")).get("list") or []
+            return {str(r["ntctxt_no"]): {k: v for k, v in r.items() if k not in vol} for r in got}
+
+        if _stable(b) != _stable(p):
+            raise ValueError(
+                f"목록 {stem} 의 재수집본이 처음 것과 다르다 — {p.name}\n"
+                "  🚨 원천이 바뀐 것이다. 어느 쪽을 쓸지는 사람이 정한다 (D-143)."
+            )
+    for p in [base[k] for k in sorted(base)]:
         d = json.loads(p.read_text(encoding="utf-8"))
         if d.get("total_cnt"):
             total.add(int(d["total_cnt"]))

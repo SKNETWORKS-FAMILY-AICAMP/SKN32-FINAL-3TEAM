@@ -28,6 +28,7 @@ import argparse
 import json
 import pathlib
 import re
+import sys
 
 from collect import store
 
@@ -150,10 +151,26 @@ def main() -> int:
     ap.add_argument("--dump", action="store_true")
     args = ap.parse_args()
 
-    rows = from_articles() + from_annex()
-    if not rows:
-        print("청크 재료가 없다 — law_article · law_norm 을 먼저 돌린다")
+    # 🔴 **한쪽만 있어도 실패한다** (2026-09-10 · D-72).
+    #    ⛔ 종전에는 `if not rows:` 라 **둘 다** 비어야 실패했다. `data/derived/law_norm/`
+    #       이 없으면 별표 청크 0개인 `chunks.jsonl` 이 **초록으로** 만들어진다 —
+    #       임베딩까지 그대로 흘러가고 수치는 아무 데도 안 튄다 (D-149 의 다른 문).
+    #    🚨 `law_norm.py` 의 docstring 이 `--dump` 라 적혀 있으나 실제 쓰기 플래그는
+    #       `--write` 다. 문서대로 돌린 사람은 별표가 통째로 빠진 채 여기 도착한다.
+    art, annex = from_articles(), from_annex()
+    missing = [
+        n for n, v in (("조문(law_article.jsonl)", art), ("별표(law_norm/)", annex)) if not v
+    ]
+    if missing:
+        print(
+            f"🔴 청크 재료가 비어 있다 — {' · '.join(missing)}\n"
+            "  조문: uv run python -m preprocess.law_article --dump\n"
+            "  별표: uv run python -m preprocess.law_norm --write   🚨 --dump 가 아니다\n"
+            "  🚨 한쪽만으로 만들면 그 층이 통째로 빠진 채 임베딩까지 간다.",
+            file=sys.stderr,
+        )
         return 1
+    rows = art + annex
 
     # 🔴 **키가 겹치면 멈춘다** (D-149 · 2026-09-09).
     #    ⛔ 첫 적재에서 청크 2,594 를 만들고 「임베딩 2594」라 찍었는데 DB 에는 **2,297** 이

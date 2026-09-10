@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import sys
 import xml.etree.ElementTree as ET
 
 from collect import store
@@ -73,8 +74,11 @@ def main() -> int:
     args = ap.parse_args()
 
     out_rows: dict[str, list[dict]] = {}
+    empty_kinds: list[str] = []
     for kind in ("prec", "decc"):
-        rows = [parse(p, kind) for p in sorted(LAW.glob(f"{kind}_*.xml"))]
+        rows = [parse(p, kind) for p in store.current_files(LAW, f"{kind}_*.xml")]
+        if not rows:
+            empty_kinds.append(kind)
         out_rows[kind] = rows
         body = "판결요지" if kind == "prec" else "재결요지"
         filled = sum(1 for r in rows if r[body])
@@ -82,6 +86,19 @@ def main() -> int:
         print(f"  {KIND[kind]:4} {len(rows):>4}건 · {body} 있음 {filled} · 없음 {len(empty)}")
         if empty[:3]:
             print(f"        요지 없는 사건: {empty[:3]}{' …' if len(empty) > 3 else ''}")
+
+    # 🔴 **한 종류라도 0건이면 멈춘다** (2026-09-10 · D-72).
+    #    ⛔ 종전에는 「판례 0건」을 찍고 `return 0` 이었다 — 5층 반례가 통째로 빠진 채
+    #       초록으로 지나간다. 🚨 질의 기반 원천이라 「필터가 뺀 것」과 「유실」이
+    #       원장으로 구분되지 않는다 (D-153) — 그래서 **사람이 보게** 만든다.
+    if empty_kinds:
+        print(
+            f"🔴 원문이 한 건도 없다 — {' · '.join(KIND[k] for k in empty_kinds)}\n"
+            "  먼저: uv run python -m collect.law_api --target prec\n"
+            "  🚨 질의 필터가 뺀 것이면 --dry-run 의 「질의별 실측」과 맞대 본다 (D-153).",
+            file=sys.stderr,
+        )
+        return 1
 
     if args.dump:
         for kind, rows in out_rows.items():
