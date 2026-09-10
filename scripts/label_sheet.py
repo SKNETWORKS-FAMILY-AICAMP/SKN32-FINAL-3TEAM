@@ -73,19 +73,39 @@ def _rows(sheet: pathlib.Path) -> list[dict]:
     return [json.loads(x) for x in sheet.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
+def pick(part: str | None, n: int) -> list[int]:
+    """`1-40,93-144` → 1부터 세는 행 번호들. 🚨 **구간을 여럿 받는다** (2026-09-10).
+
+    ⛔ 하나만 받으면 「전원이 겹쳐 붙이는 공통 블록 + 각자 고유 구간」을 못 만든다.
+       그래서 12건씩만 겹치게 됐는데, **κ 를 12건에서 재는 것**은 이 프로젝트 자기 기준
+       (D-40 · 30건 미만 측정 불가)에 안 맞는다. 겹치기도 30 이상이어야 뜻이 있다.
+    """
+    if not part:
+        return list(range(1, n + 1))
+    got: list[int] = []
+    for seg in part.split(","):
+        seg = seg.strip()
+        if not seg:
+            continue
+        a, _, b = seg.partition("-")
+        lo, hi = int(a), int(b or a)
+        if not (1 <= lo <= hi <= n):
+            raise SystemExit(f"🔴 구간 {seg!r} 이 시트 범위(1~{n}) 밖이다")
+        got += [i for i in range(lo, hi + 1) if i not in got]
+    return sorted(got)
+
+
 def export(sheet: pathlib.Path, who: str, part: str | None) -> int:
     rows = _rows(sheet)
-    lo, hi = 0, len(rows)
-    if part:
-        a, b = part.split("-")
-        lo, hi = int(a) - 1, int(b)
+    idx = pick(part, len(rows))
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / f"{who}.csv"
     # 🚨 BOM 을 붙인다 — 없으면 Windows 엑셀이 한글을 깨서 연다.
     with out.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(HEADER)
-        for i, r in enumerate(rows[lo:hi], start=lo + 1):
+        for i in idx:
+            r = rows[i - 1]
             t = _text(r)
             w.writerow([i, t, " / ".join(r.get("후보유형") or []), "", who, "", _fp(t)])
     legend = OUT_DIR / "유형번호표.csv"
@@ -95,7 +115,7 @@ def export(sheet: pathlib.Path, who: str, part: str | None) -> int:
         for n, t in enumerate(TYPES, 1):
             w.writerow([n, t, "판정 순서 — 위에서부터 보다가 걸리면 멈춘다"])
         w.writerow(["(비움)", "모르겠다", "🚨 빈칸은 실패가 아니라 판단이다"])
-    print(f"  → {out.relative_to(ROOT)}  ({hi - lo}행)")
+    print(f"  → {out.relative_to(ROOT)}  ({len(idx)}행)")
     print(f"  → {legend.relative_to(ROOT)}")
     print("\n  채우는 칸은 **`유형번호` 하나**다. 1~8, 둘이면 `1,5` 처럼 쉼표로.")
     print("  🚨 `문구`·`지문` 열은 건드리지 않는다 — 고치면 가져오기가 멈춘다.")
@@ -175,7 +195,7 @@ def main() -> int:
     e = sub.add_parser("export", help="시트 → 채울 CSV")
     e.add_argument("sheet", type=pathlib.Path)
     e.add_argument("--who", required=True, help="붙이는 사람 이름 — 파일명이 된다")
-    e.add_argument("--part", help="맡은 구간 (예: 1-50)")
+    e.add_argument("--part", help="맡은 구간 — 여럿 가능 (예: 1-40,93-144)")
     i = sub.add_parser("import", help="채운 CSV → data/derived/labels/<이름>.jsonl")
     i.add_argument("csv", type=pathlib.Path)
     i.add_argument("--sheet", type=pathlib.Path, required=True, help="export 에 쓴 원본 시트")
