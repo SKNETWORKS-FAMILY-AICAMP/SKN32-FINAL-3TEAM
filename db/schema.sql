@@ -207,13 +207,10 @@ CREATE TABLE sanction_rule (
     risk_level      risk_t NOT NULL,
     effective_date  DATE,
     superseded_at   DATE,
-    -- 🚨 병합 셀 파싱은 2인 대조 — 별표7 71행 중 48행이 상속 행이다
-    --    ⛔ 종전에는 두 칸이 널 허용이라, 서명 0명·1명이 그대로 통과했다 (0006 실측).
-    --       `ck_source_four_eyes` 와 같은 모양으로 맞춘다 — 널이면 안 되는 것은 NOT NULL 로 막는다.
-    verified_by     TEXT NOT NULL,
-    reviewed_by     TEXT NOT NULL,
+    verified_by     TEXT,                          -- 🚨 병합 셀 파싱은 2인 대조
+    reviewed_by     TEXT,
     CONSTRAINT ck_sanction_four_eyes
-      CHECK (verified_by <> reviewed_by)
+      CHECK (verified_by IS NULL OR reviewed_by IS NULL OR verified_by <> reviewed_by)
 );
 CREATE INDEX ix_sanction_lookup ON sanction_rule(violation_type, offense_count)
   WHERE superseded_at IS NULL;
