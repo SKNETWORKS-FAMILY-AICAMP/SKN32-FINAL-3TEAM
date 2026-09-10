@@ -1,0 +1,46 @@
+{
+  "outcome": "hold",
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "원료 수급이 어려워 한정 수량만 준비했습니다.",
+      "verdict": "no_basis",
+      "hold_reason": null,
+      "violations": [
+        "거짓_과장"
+      ],
+      "infeasibility": null,
+      "evidence": [],
+      "risk": {
+        "floor": "R1",
+        "encoder": null,
+        "final": "R1",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false
+    }
+  ],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    },
+    {
+      "node": "생성",
+      "ms": 0.0
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.1.0"
+}

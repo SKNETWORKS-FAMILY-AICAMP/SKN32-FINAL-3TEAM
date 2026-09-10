@@ -1,0 +1,54 @@
+{
+  "outcome": "search_failed",
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "기능성화장품 수준의 미백 효과.",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [
+        "기능성화장품_오인"
+      ],
+      "infeasibility": "B",
+      "evidence": [
+        {
+          "law_id": "008741",
+          "article": "제22조",
+          "item": "별표5 제2호나목",
+          "quote": "기능성화장품이 아님에도 기능성화장품으로 잘못 인식할 우려가 있는 표시·광고를 하지 말 것",
+          "chunk_id": "008741_별표5_2_나"
+        }
+      ],
+      "risk": {
+        "floor": "R3",
+        "encoder": "R3",
+        "final": "R3",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false
+    }
+  ],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 2,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    },
+    {
+      "node": "생성",
+      "ms": 0.0
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.1.0"
+}

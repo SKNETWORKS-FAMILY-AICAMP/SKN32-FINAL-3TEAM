@@ -17,11 +17,15 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+import pathlib
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
+
+# 🚨 계약은 `app/contracts.py` 하나가 원본이다 (D-124). 여기서 다시 정의하지 않는다 —
+#    두 곳에 있으면 화면이 보는 모양과 우리가 내는 모양이 조용히 갈린다.
+from app.contracts import JudgeRequest, JudgeResponse
 
 app = FastAPI(
     title="CopyLane",
@@ -58,11 +62,6 @@ class SearchHit(BaseModel):
     source_url: str | None = None
 
 
-class JudgeRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=2000)
-    category: str = Field("일반", pattern="^(일반|식품|건기식|화장품)$")
-
-
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
     """무엇이 있고 무엇이 아직 없는지 한 화면에 낸다.
@@ -85,15 +84,19 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
   <li class=yes><a href="/health">/health</a> — DB 층별 행 수</li>
   <li class=yes><a href="/search?q=%EC%A7%88%EB%B3%91&amp;category=%EC%8B%9D%ED%92%88">/search</a>
       — 조문 검색 <b>(아직 부분일치다. 벡터 검색이 아니다)</b></li>
-  <li class=yes><a href="/docs">/docs</a> — API 계약</li>
+  <li class=yes><a href="/docs">/docs</a> — API 계약 <b>(판정 응답 스키마 포함)</b></li>
+  <li class=yes><a href="/judge/fixtures">/judge/fixtures</a>
+      — 분기별 <b>고정 응답</b> 9건 (D-124). 화면·BFF 는 이것으로 붙는다.
+      <b>실제 판정이 아니다</b></li>
 </ul>
 <h2>아직 없는 것</h2>
 <ul>
   <li class=no><code>POST /judge</code> — 판정 엔진(LangGraph)이 없다. <b>501</b> 을 낸다.
       가짜 200 을 내면 프론트가 그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.</li>
   <li class=no>화면(Jinja2 + HTMX) — D-56 이 정해 뒀고 아직 안 지었다.</li>
-  <li class=no><code>golden_sample</code> 적재 — <code>split_t</code>·<code>violation_t</code>
-      판정 둘이 걸려 있다.</li>
+  <li class=no><code>chunk_embedding</code> — 벡터 검색. 청크 2,585개는 서 있다.</li>
+  <li class=no><code>violation_article</code>·<code>sanction_rule</code>
+      — 근거 조문 대응표와 제재 수치. 그래서 위험도가 아직 스텁이다.</li>
 </ul>
 """
 
@@ -172,17 +175,43 @@ def search(q: str, category: str = "일반", limit: int = 5) -> list[SearchHit]:
     ]
 
 
-@app.post("/judge")
-def judge(req: JudgeRequest) -> dict[str, Any]:
-    """판정 — 🚨 **아직 없다.** 가짜 200 을 내지 않는다.
+@app.post("/judge", response_model=JudgeResponse, responses={501: {"description": "엔진 미착수"}})
+def judge(req: JudgeRequest) -> JudgeResponse:
+    """판정 — 🚨 **엔진은 아직 없다.** 가짜 200 을 내지 않는다.
 
-    엔진(LangGraph · 판정기 A/B)이 붙는 자리다. 계약만 여기 적어 둔다:
-      입력  text · category
-      출력  violations[] · evidence[](조문 인용) · risk · rewrite 후보
+    🔄 2026-09-10 (D-124 ②) — `response_model` 을 붙였다. FastAPI 가 `/docs` 와
+       `openapi.json` 에 **완전한 응답 스키마**를 싣는다. 팀원은 그것으로 붙는다.
+       ★ 껍데기가 곧 목 서버라는 D-124 의 뜻이 이것이다 — **200 을 지어내지 않고도**
+         계약이 기계가 읽는 형태로 나간다.
+    🚨 고정 응답은 `/judge/fixtures/{name}` 이 낸다. **이 라우트는 501 을 지킨다** —
+       임의 입력에 픽스처를 돌려주면 그건 계약이 아니라 거짓말이다.
     """
     raise HTTPException(
         501,
-        "판정 엔진이 아직 없다. 계약만 정해져 있다 — "
-        "violations[] · evidence[](조문) · risk · rewrite. "
-        "가짜 응답을 내면 프론트가 그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.",
+        "판정 엔진이 아직 없다. 계약은 정해져 있다 — GET /judge/fixtures 로 분기별 "
+        "고정 응답을 받고, 스키마는 /docs 에서 본다. 가짜 200 을 내면 프론트가 "
+        "그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.",
     )
+
+
+#: 골든 픽스처 (D-124 ③) — 화면·BFF 가 모든 분기를 그리는 재료
+FIXTURE_DIR = pathlib.Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "judge"
+
+
+@app.get("/judge/fixtures")
+def judge_fixtures() -> list[str]:
+    """분기별 고정 응답 목록. 🚨 **실제 판정이 아니다** — 계약 확인용이다."""
+    return sorted(p.stem for p in FIXTURE_DIR.glob("*.json"))
+
+
+@app.get("/judge/fixtures/{name}", response_model=JudgeResponse)
+def judge_fixture(name: str) -> JudgeResponse:
+    """고정 응답 하나 (D-124 ②③).
+
+    ⛔ 파일을 그대로 흘려보내지 않고 **계약을 통과시켜** 낸다. 픽스처가 계약과
+       어긋나면 여기서 500 이 난다 — 화면이 어긋난 모양에 붙는 것보다 낫다.
+    """
+    f = FIXTURE_DIR / f"{name}.json"
+    if not f.exists():
+        raise HTTPException(404, "그런 픽스처가 없다 — 목록은 GET /judge/fixtures")
+    return JudgeResponse.model_validate_json(f.read_text(encoding="utf-8"))

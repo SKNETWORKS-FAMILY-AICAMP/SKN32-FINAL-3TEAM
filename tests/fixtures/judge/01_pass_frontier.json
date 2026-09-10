@@ -1,0 +1,78 @@
+{
+  "outcome": "pass",
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "피부 보습에 도움을 줄 수 있습니다.",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [],
+      "infeasibility": null,
+      "evidence": [],
+      "risk": {
+        "floor": "R1",
+        "encoder": "R1",
+        "final": "R1",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false
+    }
+  ],
+  "candidates": [
+    {
+      "label": "보수안",
+      "rewrite": {
+        "body": "피부 보습에 도움을 줄 수 있습니다.",
+        "mandatory_note": "기능성화장품 심사를 받지 않은 제품입니다.",
+        "placement": "본문 하단 · 본문과 같은 크기"
+      },
+      "residual_risk": "R0",
+      "appeal_retention": 0.62,
+      "pareto": true
+    },
+    {
+      "label": "균형안",
+      "rewrite": {
+        "body": "건조한 피부에 수분을 더합니다.",
+        "mandatory_note": "개인차가 있을 수 있습니다.",
+        "placement": "본문 직후 괄호 병기"
+      },
+      "residual_risk": "R1",
+      "appeal_retention": 0.81,
+      "pareto": true
+    },
+    {
+      "label": "공격안",
+      "rewrite": {
+        "body": "하루 종일 촉촉함이 이어집니다.",
+        "mandatory_note": "사용감에 대한 표현이며 효능·효과가 아닙니다.",
+        "placement": "본문 하단"
+      },
+      "residual_risk": "R2",
+      "appeal_retention": 0.94,
+      "pareto": true
+    }
+  ],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    },
+    {
+      "node": "생성",
+      "ms": 0.0
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.1.0"
+}

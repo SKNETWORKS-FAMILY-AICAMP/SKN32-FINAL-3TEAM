@@ -1,0 +1,58 @@
+{
+  "outcome": "certificate",
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "면역력 강화에 도움을 줍니다.",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [
+        "건강기능식품_오인"
+      ],
+      "infeasibility": "A",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제1호",
+          "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "013094_제8조_1"
+        }
+      ],
+      "risk": {
+        "floor": "R3",
+        "encoder": "R3",
+        "final": "R3",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false
+    }
+  ],
+  "candidates": [],
+  "certificate": {
+    "reason": "A",
+    "explanation": "일반식품은 기능성을 표방할 자격이 없습니다. 표현을 바꿔도 같은 위반이 반복됩니다.",
+    "guidance": "건강기능식품 기능성 원료 인정을 받으면 인정받은 범위에서 표방할 수 있습니다. 🚨 특허·수상·논문은 표방 자격이 되지 않습니다."
+  },
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    },
+    {
+      "node": "생성",
+      "ms": 0.0
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.1.0"
+}
