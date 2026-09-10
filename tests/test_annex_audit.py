@@ -84,3 +84,28 @@ def test_기준선에_없는_별표는_실패한다() -> None:
     rows = [_row(SANCTION, cells=["시정명령"], sanctions=[{"action": "시정명령"}])]
     bad = judge(measure(rows), {})
     assert any("기준선에 없다" in b for b in bad), bad
+
+
+@pytest.mark.gate
+def test_별표가_통째로_사라지면_실패한다() -> None:
+    """🔴 **「줄면 실패」인데 100% 줄면 통과했다** (2026-09-10 · D-149).
+
+    ⛔ `judge()` 가 `stats`(이번에 읽은 것)만 순회해서, 기준선에 있고 산출물에 없는
+       별표는 **비교 대상 자체가 없어** 아무 줄도 안 남겼다.
+       한 행이 줄면 잡고 **전 행이 사라지면 통과**하는 감사였다.
+    """
+    bad = judge({}, _base(71))
+
+    assert bad, "기준선에 있던 별표가 통째로 사라졌는데 감사가 통과했다"
+    assert "008741_별표_0007_00" in bad[0]
+    assert "71행 → 0" in bad[0] or "71" in bad[0]
+
+
+@pytest.mark.gate
+def test_반대_대조_기준선과_산출물이_같으면_통과한다() -> None:
+    """🚨 위 게이트가 **아무 때나 실패하는 것**이 아님을 보인다 (D-170).
+
+    오탐으로 시작한 검사는 곧 꺼진다 — 이 파일 머리말이 적어 둔 그대로다.
+    """
+    rows = [_row(SANCTION, cells=["가"], sanctions=[{"처분": "영업정지"}])]
+    assert not judge(measure(rows), _base(1))

@@ -81,8 +81,19 @@ def _load(law_id: str | None) -> list[dict]:
 
 
 def judge(stats: dict[str, dict], baseline: dict[str, dict]) -> list[str]:
-    """실패 사유를 문장으로 낸다. 빈 목록이면 통과다."""
+    """실패 사유를 문장으로 낸다. 빈 목록이면 통과다.
+
+    🔴 **양쪽을 다 돈다** (2026-09-10). ⛔ 종전에는 `stats`(이번에 읽은 것)만 순회해서
+       「행이 줄었다」는 잡고 **「별표 파일이 통째로 사라졌다」는 통과**시켰다.
+       이 감사의 본체가 「줄면 실패한다」인데 **100% 줄면 통과**하는 모양이었다 (D-149).
+    """
     bad: list[str] = []
+    for key in sorted(set(baseline) - set(stats)):
+        bad.append(
+            f"{key} 「{baseline[key].get('title', '')[:24]}」 **기준선에 있는데 산출물에 없다** "
+            f"({baseline[key].get('rows', '?')}행 → 0) — 별표가 통째로 빠졌다. "
+            "법에서 삭제됐으면 --update, 아니면 파서나 수집이 잃은 것이다"
+        )
     for key, st in sorted(stats.items()):
         is_sanction = SANCTION_TITLE in st["title"]
         if is_sanction and st["mute"]:
@@ -130,6 +141,17 @@ def main() -> int:
         )
 
     if args.update:
+        # 🚨 `--update` 는 `judge()` 를 **건너뛴다.** 그래서 사라진 별표를 먼저 보여 준다 —
+        #    ⛔ `{**baseline, **now}` 는 낡은 키를 안 지우므로, 말없이 갱신하면
+        #       「사라진 별표」가 기준선에 영원히 남아 매번 실패한다. 사람이 보고 정한다.
+        gone = sorted(set(baseline) - set(stats))
+        if gone:
+            print(f"\n🚨 **기준선에만 있는 별표 {len(gone)}건** — 갱신해도 기준선에서 안 지워진다:")
+            for k in gone:
+                print(
+                    f"     {k} 「{baseline[k].get('title', '')[:24]}」 {baseline[k].get('rows')}행"
+                )
+            print("     법에서 삭제된 것이면 scripts/annex_baseline.json 에서 손으로 뺀다.")
         now = {k: {"title": v["title"], "rows": v["rows"]} for k, v in stats.items()}
         merged = {**baseline, **now}
         BASELINE.write_text(

@@ -43,6 +43,7 @@ import random
 import re
 import sys
 
+from collect import store
 from preprocess.hwp import Table, tables_with_lead
 from preprocess.text import SheetOverwriteError, sheet_lengths, write_sheet
 
@@ -207,7 +208,7 @@ def policy_or_stop() -> bool:
 
 
 def _hwp() -> pathlib.Path:
-    got = sorted(RAW_DIR.glob("*.hwp"))
+    got = store.current_files(RAW_DIR, "*.hwp")
     if not got:
         raise FileNotFoundError(
             f"{RAW_DIR} 에 hwp 가 없다 —\n"

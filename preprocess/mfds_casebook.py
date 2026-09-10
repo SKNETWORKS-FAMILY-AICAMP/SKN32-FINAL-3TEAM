@@ -54,6 +54,7 @@ import random
 import re
 import sys
 
+from collect import store
 from preprocess.text import SheetOverwriteError, quoted, sheet_lengths, write_sheet
 
 SOURCE_ID = "mfds_casebook"
@@ -111,7 +112,7 @@ def pages() -> list[str]:
             "  🚨 2026-09-08 까지 docs 그룹에 있었다. 지금은 런타임 의존성이다."
         ) from e
 
-    got = sorted(RAW_DIR.glob("*.pdf"))
+    got = store.current_files(RAW_DIR, "*.pdf")
     if not got:
         raise FileNotFoundError(
             f"{RAW_DIR} 에 pdf 가 없다 —\n  먼저: 자료실에서 사례집을 내려받아 둔다 (레지스트리 access:)"

@@ -44,6 +44,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
+from collect import store
 from preprocess import stage
 from preprocess.ftc_triage import CORE, _text, classify
 from preprocess.mask import MARK_RE, Ledger, Trace, anchor_ftc, apply_policy
@@ -200,7 +201,7 @@ def main() -> int:
     #:   `NOISE` 로 버려진 것이 **필터가 삼킨 것**이다 — 오늘 고친 것이 정확히 이 자리다.
     watch: list[tuple[str, str]] = []
 
-    for p in sorted(RAW.glob("*.xml")):
+    for p in store.current_files(RAW, "*.xml"):
         blob = p.read_bytes()
         r = ET.parse(p).getroot()
         raw = {f: _text(r, f) for f in ("사건명", "주문", "결정요지", "이유")}

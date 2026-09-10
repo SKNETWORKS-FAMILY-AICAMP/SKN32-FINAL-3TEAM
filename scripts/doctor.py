@@ -75,7 +75,7 @@ import collections
 import hashlib
 import json
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -117,6 +117,17 @@ def _rows() -> list[dict[str, Any]]:
     if broken:
         print(f"  🔴 깨진 줄 {broken}개를 건너뛰고 검사했다. 아래 숫자는 그만큼 적다.")
     return out
+
+
+#: 휘발 값이 박힌 원천의 **폴더 이름**. 🚨 `store.VOLATILE` 은 소스 id 키인데
+#:    원장 경로는 폴더 이름이라 축이 다르다 — 여기서 한 번만 옮긴다 (D-99 의 대가).
+_VOLATILE_DIRS = {"mfds_press", "mfds_hf_board"}
+
+
+def _source_of(path_str: str) -> str:
+    """`data\\raw\\mfds_hf_board\\x.html` → `mfds_hf_board`. 🚨 폴더 이름이지 소스 id 가 아니다."""
+    parts = PurePath(path_str.replace("\\", "/")).parts
+    return parts[2] if len(parts) > 2 else "?"
 
 
 def _disk_path(recorded: str) -> Path:
@@ -258,6 +269,7 @@ def check_data(*, verify_hash: bool) -> int:
     # ── ② 디스크 대조 ──────────────────────────────────────
     missing: list[str] = []
     mismatched: list[str] = []
+    stale: list[str] = []
     checked = 0
     for path_str, entries in by_path.items():
         disk = _disk_path(path_str)
@@ -270,6 +282,15 @@ def check_data(*, verify_hash: bool) -> int:
         checked += 1
         if got not in {e.get("sha256") for e in entries}:
             mismatched.append(path_str)
+            continue
+        # 🔴 **세 번째 축** — 「있다」도 「훼손 안 됐다」도 아닌, **「팀 최신판인가」** (D-177).
+        #    ⛔ 바로 위 검사는 `got not in {기록된 sha 전부}` 라 「원본이 훼손됐는가」(규약 2 · D-92)를
+        #       묻는다. 그건 이 기기 파일이 **09-07 판**이어도 통과한다 — 그 판도 원장에 있으니까.
+        #    🚨 실측 2026-09-10 — `mfds_hf_ingredient_board` 672개 중 **662개**가
+        #       팀 최신 기록과 다른데 `--hash` 는 **0 을 냈다.** 묻는 것이 달라서다.
+        latest = max(entries, key=lambda e: str(e.get("fetched_at") or ""))
+        if got != latest.get("sha256"):
+            stale.append(path_str)
 
     present = len(by_path) - len(missing)
     print(f"\n  이 기기에 있는 파일 {present:,} / {len(by_path):,}")
@@ -330,6 +351,34 @@ def check_data(*, verify_hash: bool) -> int:
 
     if verify_hash:
         print(f"\n  해시를 다시 계산한 파일 {checked:,}개")
+        if stale:
+            groups: collections.Counter = collections.Counter(_source_of(x) for x in stale)
+            print(
+                f"  🟡 **팀 최신판이 아닌 파일 {len(stale):,}개** — "
+                "「있다」와 「최신이다」는 다른 축이다 (D-177)"
+            )
+            print(f"     원천별 — {dict(groups.most_common())}")
+            print(
+                "     ★ 위 🔴(훼손)과 **다르다.** 원본은 멀쩡하고, 다른 기기가 그 뒤에 더 받았다는 뜻이다."
+            )
+            # 🚨 휘발 값이 박힌 원천은 **원문 해시로 못 가른다** (D-168).
+            #    실측 — `mfds_press` 105건은 갈린 것이 `jsessionid` 뿐이었다.
+            #    여기서 「낡음」으로 세지만 실제로는 같을 수 있다. 오탐으로 시작한 검사는 곧 꺼진다.
+            vol = sorted(g for g in groups if g.split("_pdf")[0] in _VOLATILE_DIRS)
+            if vol:
+                print(
+                    f"     🚨 다만 {', '.join(vol)} 는 **휘발 값이 박힌 원천**이라"
+                    " 원문 해시로는 못 가른다 (D-168) —"
+                )
+                print(
+                    "        이 수에 「토큰만 갈린 것」이 섞여 있다."
+                    " 재수집해 「동일 — 스킵」이 나오면 같은 것이다."
+                )
+            print("     🚨 이 기기에서 그 원천을 추출하면 **팀이 보는 것과 다른 수가 나온다** —")
+            print("        실측: 승인문구 178 vs 177 이 골든셋 1,910 과 1,915 를 갈랐다 (D-176).")
+            print(
+                "     → 이 기기에서 다시 받는다: uv run python launcher.py collect <소스id> --use U1"
+            )
         if mismatched:
             red += len(mismatched)
             print(f"  🔴 원장과 해시가 다른 파일 {len(mismatched):,}개 — **원본이 바뀌었다**")
@@ -399,7 +448,17 @@ def main() -> int:
         #    🟡 로 1 을 내면 다른 클론에서는 항상 실패해서 아무도 안 돌리게 된다.
         print(f"🔴 {red:,}건 — 위 「고치는 법」을 먼저 읽어라.")
         return 1
-    print("🔴 없음. 🟡 가 있으면 기기 사정인지 사람이 확인한다.")
+    if args.hash:
+        print("🔴 없음. 🟡 가 있으면 기기 사정인지 사람이 확인한다.")
+        return 0
+    # 🔴 **해시를 안 봤으면 「없음」이라 말하지 않는다** (2026-09-10 · D-177).
+    #    ⛔ 종전에는 마지막 줄이 무조건 「🔴 없음」이었다. 실측 —
+    #       `mfds_hf_ingredient_board` 672개 중 **662개가 팀 최신판이 아닌 상태에서**
+    #       이 줄이 「🔴 없음」을 찍었다. 「있다」와 「최신이다」는 다른 축인데
+    #       마지막 줄이 그 구분을 지우고 안심시켰다.
+    print("⬜ 🔴 없음 — **다만 축 둘만 봤다.**")
+    print("   ① 있는가 ✅   ② 훼손됐는가 ⬜   ③ **팀 최신판인가** ⬜   (D-177)")
+    print("   → uv run python scripts/doctor.py --data --hash   ← ②③ 을 함께 본다")
     return 0
 
 

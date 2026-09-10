@@ -37,6 +37,7 @@ import pathlib
 import re
 import xml.etree.ElementTree as ET
 
+from collect import store
 from preprocess.mask import anchor_ftc, apply_policy
 from preprocess.text import evasion, sep_norm
 
@@ -107,7 +108,7 @@ def main() -> int:
 
     rows, buck = [], collections.Counter()
     ev_cnt, ev_core = collections.Counter(), collections.Counter()
-    for p in sorted(RAW.glob("*.xml")):
+    for p in store.current_files(RAW, "*.xml"):
         r = ET.parse(p).getroot()
         raw = {f: _text(r, f) for f in ("사건명", "주문", "결정요지", "이유")}
         # 🚨 **분류는 정규화문, 회피 표기는 원문**이다. 섞으면 안 된다 —

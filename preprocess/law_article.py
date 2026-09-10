@@ -213,7 +213,7 @@ def main() -> int:
     ap.add_argument("--dump", action="store_true")
     args = ap.parse_args()
 
-    files = [p for p in sorted(LAW.glob("*.xml")) if p.name.startswith(PREFIX)]
+    files = [p for p in store.current_files(LAW, "*.xml") if p.name.startswith(PREFIX)]
     if not files:
         print("조문 원문이 없다 — collect.law_api 를 먼저 돌린다")
         return 1

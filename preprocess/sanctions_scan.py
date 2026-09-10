@@ -49,6 +49,7 @@ import collections
 import json
 import pathlib
 
+from collect import store
 from preprocess.text import quoted
 
 #: 조문명에 이것이 들어 있으면 표시·광고 관련으로 본다. 🚨 **판정이 아니라 그물**이다.
@@ -67,7 +68,7 @@ def _rows(raw: pathlib.Path) -> tuple[list[dict], set[int], dict[str, list[dict]
     per: dict[str, list[dict]] = {}
     rows: list[dict] = []
     total: set[int] = set()
-    for f in sorted(raw.glob("page_*.json")):
+    for f in store.current_files(raw, "page_*.json"):
         d = json.loads(f.read_text(encoding="utf-8"))
         body = d[next(iter(d))]
         if body.get("total_count"):
