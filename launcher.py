@@ -520,6 +520,23 @@ def collect(
     raise typer.Exit(run(*args))
 
 
+@app.command(
+    name="labelsheet",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def labelsheet(ctx: typer.Context) -> None:
+    """라벨 시트 ↔ 엑셀(CSV) — 🚨 **사람은 번호만 채웁니다**.
+
+        labelsheet export <시트.jsonl> --who 권소라 --part 1-50
+        labelsheet import  build/labels/권소라.csv --sheet <시트.jsonl>
+
+    ⛔ 종전에는 JSONL 을 손으로 고치게 했습니다 — 대괄호를 빠뜨려 그 줄이 JSON 이 아니게 되거나,
+       유형 이름을 한 글자 틀려 **조용히 다른 라벨**이 되던 자리입니다.
+    ★ 번호는 지시서 §3 의 **판정 순서 그대로**입니다. 두 곳이 갈리면 게이트가 잡습니다 (D-99).
+    """
+    raise typer.Exit(run("uv", "run", "python", "scripts/label_sheet.py", *ctx.args))
+
+
 @app.command()
 def inventory() -> None:
     """**이 기기**에 무엇이 있나 — 원장(팀 축)과 대조합니다.
