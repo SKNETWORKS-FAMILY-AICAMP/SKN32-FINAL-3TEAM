@@ -128,3 +128,167 @@ def test_alembic_ini_는_ascii_만_담는다() -> None:
     )
     # 양성 대조 — 실제로 cp949 로 읽히는가
     ini.read_text(encoding="cp949")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 🔴 **값**을 본다 — 이 파일에 없던 축이다 (2026-09-10 · D-178)
+#
+# ⛔ 위 게이트 다섯은 전부 **파일 텍스트 검사**다(문서 동일성 · DDL 미복사 · include_object ·
+#    vector 차원 · ini ASCII). **ENUM 값이 파이프라인 산출값을 덮는지 보는 검사가 없었다.**
+#    그래서 `split_t` 에 `test_sentence` 가 없는 채로 골든셋 1,908행이 이틀 동안 DB 밖에
+#    서 있었고, 아무 게이트도 울리지 않았다.
+# ═══════════════════════════════════════════════════════════════════
+
+_ENUM = re.compile(r"CREATE TYPE\s+(\w+)\s+AS ENUM\s*\((.*?)\);", re.S)
+
+
+def _enums() -> dict[str, set[str]]:
+    sql = SCHEMA.read_text(encoding="utf-8")
+    return {name: set(re.findall(r"'([^']+)'", body)) for name, body in _ENUM.findall(sql)}
+
+
+@pytest.mark.gate
+def test_파이프라인이_쓰는_라벨이_violation_t_에_다_있다() -> None:
+    """🔴 라벨이 타입에 없으면 그 행은 **DB 에 못 들어간다** — 조용히 빠지는 것이 아니라 막힌다.
+
+    ⛔ 종전 `violation_t` 는 'V0'~'V8' 이었고 뜻이 스키마 어디에도 없었다. 접으면
+       5종이 2칸으로 뭉갠다(V6 ← 소비자_기만 + 후기_체험기_기만 + 추천_보증_뒷광고).
+    """
+    from scripts.collect import CANDIDATE_TYPES, VIOLATION_TYPES  # noqa: PLC0415
+
+    want = set(VIOLATION_TYPES) | set(CANDIDATE_TYPES)
+    got = _enums()["violation_t"]
+
+    assert want <= got, (
+        f"🚨 `violation_t` 에 없는 라벨 {sorted(want - got)}\n"
+        "   라벨 목록(scripts/collect.py)과 스키마가 갈렸다 — 그 행은 적재에서 막힌다."
+    )
+
+
+@pytest.mark.gate
+def test_파이프라인이_배정하는_split_이_split_t_에_다_있다() -> None:
+    """🔴 **이것이 없어서 골든셋이 이틀 동안 DB 밖에 있었다.**
+
+    `preprocess/split.py` 는 `train` / `test_sentence` 만 배정한다.
+    ⛔ `test_holdout` 은 예약값이라 배정된 적이 없고, `dev` 는 죽은 값이다 —
+       스키마에는 그 둘만 있었다.
+    """
+    assert {"train", "test_sentence"} <= _enums()["split_t"]
+
+
+@pytest.mark.gate
+def test_골든셋_산출물의_값이_전부_스키마에_있다() -> None:
+    """★ 상수가 아니라 **실제 산출물**로 대조한다 — 코드가 아니라 데이터가 진실이다."""
+    golden = ROOT / "data" / "derived" / "golden" / "golden.jsonl"
+    if not golden.exists():
+        pytest.skip(
+            "🔴 골든셋이 없어 **확인하지 못했다** — uv run python launcher.py golden --write"
+        )
+    import json  # noqa: PLC0415
+
+    rows = [json.loads(x) for x in golden.read_text(encoding="utf-8").splitlines() if x.strip()]
+    enums = _enums()
+    used = {
+        "violation_t": {t for r in rows for t in r["labels"]},
+        "split_t": {r["split"] for r in rows},
+        "origin_t": {r["origin"] for r in rows},
+    }
+    for name, vals in used.items():
+        assert vals <= enums[name], (
+            f"🚨 `{name}` 에 없는 값이 골든셋에 있다 — {sorted(vals - enums[name])}\n"
+            "   적재하면 그 행에서 막힌다. 스키마와 파생물 중 어느 쪽이 맞는지 정한다."
+        )
+    assert {r["unit"] for r in rows} <= {"문장", "낱말"}, "단위 축이 갈렸다 (D-155 · D-172)"
+
+
+@pytest.mark.gate
+def test_반대_대조_없는_값을_넣으면_잡힌다() -> None:
+    """🚨 위 셋이 **실패할 수 있는 단언**임을 보인다 (D-170)."""
+    enums = _enums()
+    assert "없는_유형" not in enums["violation_t"]
+    assert not ({"train", "없는_split"} <= enums["split_t"])
+
+
+MIG_DIR = ROOT / "db" / "migrations"
+
+
+def _views(sql: str) -> dict[str, str]:
+    return {n: b.strip() for n, b in re.findall(r"CREATE VIEW (\w+) AS(.*?);", sql, re.S)}
+
+
+@pytest.mark.gate
+def test_마이그레이션이_만드는_모양이_schema_sql_과_같다() -> None:
+    """🔴 **새 DB 와 옮긴 DB 가 갈리면 안 된다** (D-99).
+
+    새 기기는 `db/schema.sql` 하나로 서고, 이미 있는 DB 는 `db/migrations/*.sql` 로 옮긴다.
+    ⛔ 둘이 갈리면 **기기마다 스키마가 다르고 그 차이는 조용하다** — 한쪽에서만 적재가 막힌다.
+    ★ 마이그레이션이 다시 만드는 ENUM·뷰는 `schema.sql` 의 것과 **글자까지** 같아야 한다.
+      (마이그레이션에만 있는 `ALTER` 는 여기서 안 본다 — 차이를 적는 것이 그 파일의 일이다.)
+    """
+    schema = SCHEMA.read_text(encoding="utf-8")
+    s_enum = {n: re.findall(r"'([^']+)'", b) for n, b in _ENUM.findall(schema)}
+    s_view = _views(schema)
+
+    files = sorted(MIG_DIR.glob("*.sql")) if MIG_DIR.exists() else []
+    assert files, f"🚨 {MIG_DIR} 에 마이그레이션 SQL 이 없다"
+
+    for f in files:
+        sql = f.read_text(encoding="utf-8")
+        for name, vals in ((n, re.findall(r"'([^']+)'", b)) for n, b in _ENUM.findall(sql)):
+            assert name in s_enum, f"🚨 {f.name} 이 `schema.sql` 에 없는 타입 {name} 을 만든다"
+            assert vals == s_enum[name], (
+                f"🚨 {f.name} 의 `{name}` 값이 `db/schema.sql` 과 다르다.\n"
+                f"   마이그레이션 {vals}\n   schema.sql  {s_enum[name]}\n"
+                "   새 DB 와 옮긴 DB 가 갈린다 — 한쪽에서만 적재가 막힌다."
+            )
+        for name, body in _views(sql).items():
+            assert name in s_view, f"🚨 {f.name} 이 `schema.sql` 에 없는 뷰 {name} 을 만든다"
+            assert body == s_view[name], (
+                f"🚨 {f.name} 이 되만드는 뷰 `{name}` 정의가 `db/schema.sql` 과 다르다"
+            )
+
+
+@pytest.mark.gate
+def test_타입을_바꾸는_마이그레이션은_제약을_먼저_뗀다() -> None:
+    """🚨 **뷰만 붙잡는 게 아니다 — CHECK 제약도 컬럼 타입을 붙잡는다** (2026-09-10 실측).
+
+    ⛔ 처음에 뷰만 떼고 돌렸다가 `operator does not exist: text = split_t` 로 죽었다.
+       `ck_golden_injected_not_holdout` 이 `split = 'test_holdout'::split_t` 를 들고 있어서,
+       컬럼을 text 로 바꾸는 순간 제약 식이 `text = split_t` 가 된다.
+    ★ 컬럼 타입을 건드리는 마이그레이션은 **그 테이블의 제약을 먼저 떼고** 끝에서 되건다.
+    """
+    for f in sorted(MIG_DIR.glob("*.sql")) if MIG_DIR.exists() else []:
+        sql = f.read_text(encoding="utf-8")
+        typed = {t for t, _ in re.findall(r"ALTER TABLE (\w+) ALTER COLUMN (\w+) TYPE", sql)}
+        if not typed:
+            continue
+        added = set(re.findall(r"ALTER TABLE (\w+) ADD CONSTRAINT", sql))
+        for table in typed & added:
+            first_type = sql.index(f"ALTER TABLE {table} ALTER COLUMN")
+            drops = [m.start() for m in re.finditer(rf"ALTER TABLE {table} DROP CONSTRAINT", sql)]
+            assert drops and min(drops) < first_type, (
+                f"🚨 {f.name}: `{table}` 의 컬럼 타입을 바꾸기 전에 제약을 떼지 않는다.\n"
+                "   제약 식이 옛 타입을 들고 있으면 `operator does not exist` 로 죽는다."
+            )
+
+
+@pytest.mark.gate
+def test_타입을_바꾸는_마이그레이션은_뷰를_먼저_뗀다() -> None:
+    """🚨 뷰가 컬럼 타입을 붙잡는다 — 안 떼면 `cannot alter type ... used by a view` 로 죽는다.
+
+    ⛔ 처음에 이걸 안 보고 썼다가 `v_risk_lookup`(sanction_rule.violation_type)과
+       `v_publishable_golden`(golden_sample.*) 에서 막힐 뻔했다.
+    """
+    for f in sorted(MIG_DIR.glob("*.sql")) if MIG_DIR.exists() else []:
+        sql = f.read_text(encoding="utf-8")
+        made = set(_views(sql))
+        if not made:
+            continue
+        dropped = set(re.findall(r"DROP VIEW IF EXISTS (\w+)", sql))
+        assert made <= dropped, (
+            f"🚨 {f.name} 이 뷰 {sorted(made - dropped)} 를 만들면서 먼저 떼지 않는다"
+        )
+        for name in made:
+            assert sql.index(f"DROP VIEW IF EXISTS {name}") < sql.index(f"CREATE VIEW {name}"), (
+                f"🚨 {f.name}: `{name}` 을 떼기 전에 만든다 — 순서가 뒤집혔다"
+            )

@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
 import pathlib
@@ -156,6 +157,15 @@ def load_fragments(cur, dry: bool) -> int:
         ("mfds_hf_ingredient:api", "mfds_hf_ingredient", "기능성 원료인정", "G3"),
         ("mfds_hf_individual:api", "mfds_hf_individual", "개별인정형", "G3"),
         ("ftc_decisions_body:dict", "ftc_decisions_body", "금지표현 사전", "G2"),
+        # 🔴 골든셋의 판정 단위 (2026-09-10 · D-18). ⛔ 없어서 `golden_sample.fragment_id`
+        #    NOT NULL 을 채울 수 없었다 — 「막는 것 넷」 중 하나였다.
+        #    🚨 같은 소스라도 성격이 다르면 등급이 갈린다. 의결서 인용 광고 문구는 G2 다
+        #    (40자 상한 · NOREDIST 로 다루는 조각 · D-133).
+        ("ftc_decisions_body:golden", "ftc_decisions_body", "의결서 인용 광고 문구", "G2"),
+        ("mfds_casebook:golden", "mfds_casebook", "사례집 인용표현", "G2"),
+        ("mfds_hf_ingredient_board:approved", "mfds_hf_ingredient_board", "승인 기능성 문구", "G3"),
+        # 🚨 주입본은 **우리 생성물**이지만 원본이 승인 문구라 계보를 그쪽에 둔다 (D-71).
+        ("mfds_hf_ingredient_board:injected", "mfds_hf_ingredient_board", "규칙 주입 합성문", "G3"),
     ]
     known = set(_sources())
     n = 0
@@ -172,9 +182,48 @@ def load_fragments(cur, dry: bool) -> int:
     return n
 
 
-def _jsonl(name: str) -> list[dict]:
+#: 🚨 `--allow-missing` 이 켜졌는가. 모듈 전역이라 `_jsonl` 이 인자 없이 본다.
+ALLOW_MISSING = False
+
+#: 🔴 없으면 **적재가 0행이 되는** 입력들. 이름을 여기 적어 두는 것이 계약이다.
+REQUIRED = {
+    "law_article.jsonl": "uv run python -m preprocess.law_article --dump",
+    "banned_terms.jsonl": "uv run python launcher.py golden --write",
+    "hf_api_labels.jsonl": "uv run python -m preprocess.hf_api --dump",
+}
+
+
+def _jsonl_at(p: pathlib.Path, how: str) -> list[dict]:
+    """경로를 직접 받는 판. 🔴 없으면 멈춘다 — `_jsonl` 과 같은 계약이다."""
+    if not p.exists():
+        if not ALLOW_MISSING:
+            raise SystemExit(
+                f"🔴 {p} 가 없다 — 이대로 적재하면 그 테이블이 **0행인 채 성공**한다.\n"
+                f"  먼저: {how}\n"
+                "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
+            )
+        return []
+    return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def _jsonl(name: str, *, required: bool = True) -> list[dict]:
+    """🔴 **없으면 멈춘다** (2026-09-10 · D-72 fail-closed).
+
+    ⛔ 종전에는 없으면 빈 리스트를 돌려줬다. 그래서 `document 0 / dict_entry 0 /
+       product_fact 0` 이 **오류도 경고도 없이 「정상 완료」로** 찍혔다 —
+       원장에는 `document 32 · product_fact 1,250` 이라 적혀 있는데도.
+    🚨 ENUM 값에는 `SystemExit` 을 던지면서 입력 부재에는 침묵하는 것이
+       이 파일 docstring 의 fail-closed 원칙과 정면으로 어긋났다.
+    ★ `--allow-missing` 은 **일부러** 비운 채 돌릴 때만 쓴다 (새 기기 첫 적재 등).
+    """
     p = DERIVED / name
     if not p.exists():
+        if required and not ALLOW_MISSING:
+            raise SystemExit(
+                f"🔴 {p} 가 없다 — 이대로 적재하면 그 테이블이 **0행인 채 성공**한다.\n"
+                f"  먼저: {REQUIRED.get(name, '해당 전처리를 돌린다')}\n"
+                "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
+            )
         return []
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
 
@@ -240,6 +289,12 @@ def load_documents(cur, dry: bool) -> int:
             )
         n += 1
     norm_dir = DERIVED / "law_norm"
+    if not norm_dir.exists() and not ALLOW_MISSING:
+        raise SystemExit(
+            f"🔴 {norm_dir} 가 없다 — 별표가 통째로 빠진 채 document 가 채워진다.\n"
+            "  먼저: uv run python -m preprocess.law_norm --write   🚨 --dump 가 아니다\n"
+            "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
+        )
     for p in sorted(norm_dir.glob("*.jsonl")) if norm_dir.exists() else []:
         rows = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
         if not rows:
@@ -309,10 +364,77 @@ def load_product_fact(cur, dry: bool) -> int:
     return n
 
 
+#: 골든셋 행 → 프래그먼트. 🚨 `(provenance, origin)` 두 축으로 갈린다 (D-18).
+GOLDEN_FRAGMENT = {
+    ("ftc_decisions_body", "real"): "ftc_decisions_body:golden",
+    ("mfds_casebook", "real"): "mfds_casebook:golden",
+    ("mfds_hf_ingredient_board", "approved"): "mfds_hf_ingredient_board:approved",
+    ("mfds_hf_ingredient_board", "injected"): "mfds_hf_ingredient_board:injected",
+}
+
+
+def load_golden(cur, dry: bool) -> tuple[int, collections.Counter]:
+    """골든셋을 적재한다 (2026-09-10 · D-178).
+
+    ⛔ 2026-09-09~10 내내 「판정 둘이 걸려 있다」로 비어 있던 자리다. 실제로 막던 것은 **넷**이었다 —
+       `split_t` 에 `test_sentence` 없음 · `violation_t` 대응표 미정 ·
+       `risk` NOT NULL 인데 산출물에 그 필드가 없음 · `fragment_id` 에 대응이 없음.
+       앞의 둘만 풀어도 안 들어갔다.
+    🚨 `risk` 는 넣지 않는다 — 시험지는 위험도를 담는 곳이 아니다. 판정 시 계산한다 (D-09).
+    """
+    rows = _jsonl_at(
+        DERIVED / "golden" / "golden.jsonl", "uv run python launcher.py golden --write"
+    )
+    stat: collections.Counter = collections.Counter()
+    n = 0
+    for r in rows:
+        key = (r["provenance"], r["origin"])
+        fid = GOLDEN_FRAGMENT.get(key)
+        if fid is None:
+            raise SystemExit(
+                f"🔴 골든셋 행의 계보에 프래그먼트가 없다 — {key}\n"
+                "  🚨 등급·재배포 판정 단위가 없는 행은 넣지 않는다 (D-18).\n"
+                "     `GOLDEN_FRAGMENT` 와 `load_fragments()` 에 함께 등재한다."
+            )
+        stat[r["split"]] += 1
+        stat[f"unit:{r['unit']}"] += 1
+        if not dry:
+            cur.execute(
+                "INSERT INTO golden_sample "
+                "(sample_id, fragment_id, text, unit, violations, origin, rule_id, "
+                " provenance, redistributable, split) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                "ON CONFLICT (sample_id) DO UPDATE SET "
+                "  text = EXCLUDED.text, unit = EXCLUDED.unit, "
+                "  violations = EXCLUDED.violations, split = EXCLUDED.split",
+                (
+                    r["id"],
+                    fid,
+                    r["text"],
+                    r["unit"],
+                    r["labels"],
+                    r["origin"],
+                    r.get("rule_id"),
+                    r["provenance"],
+                    r["redistributable"],
+                    r["split"],
+                ),
+            )
+        n += 1
+    return n, stat
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="파생물 → 거버넌스 DB 적재")
     ap.add_argument("--dry-run", action="store_true", help="세기만 한다 — DB 에 붙지 않는다")
+    ap.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help="🚨 입력이 없어도 0행으로 적재한다 — **일부러** 비운 채 돌릴 때만",
+    )
     args = ap.parse_args()
+    global ALLOW_MISSING  # noqa: PLW0603 — CLI 플래그를 모듈 전역으로 내린다
+    ALLOW_MISSING = args.allow_missing
 
     if args.dry_run:
 
@@ -330,8 +452,10 @@ def main() -> int:
         print(f"  document          {load_documents(cur, True):>6}")
         print(f"  dict_entry        {load_dict(cur, True):>6}")
         print(f"  product_fact      {load_product_fact(cur, True):>6}")
-        print("\n🔴 golden_sample 은 넣지 않는다 — split_t 에 test_sentence 가 없고")
-        print("   violation_t(V0~V8) 대응표가 미판정이다 (결정요청 ⑤).")
+        n_gold, gstat = load_golden(cur, True)
+        print(f"  golden_sample     {n_gold:>6}")
+        for k in sorted(gstat):
+            print(f"      {k:18} {gstat[k]:>6}")
         return 0
 
     try:
@@ -355,7 +479,13 @@ def main() -> int:
         print(f"  document          {load_documents(cur, False):>6}")
         print(f"  dict_entry        {load_dict(cur, False):>6}")
         print(f"  product_fact      {load_product_fact(cur, False):>6}")
-    print("\n🔴 golden_sample 은 넣지 않았다 — 판정 둘이 걸려 있다 (결정요청 ⑤).")
+        n_gold, gstat = load_golden(cur, False)
+        print(f"  golden_sample     {n_gold:>6}")
+        for k in sorted(gstat):
+            print(f"      {k:18} {gstat[k]:>6}")
+    print("\n★ 골든셋이 들어갔다 (D-178). 🚨 `risk` 는 비워 둔다 — 시험지는 위험도를 담는 곳이")
+    print("   아니다. 판정 시 sanction_rule · v_risk_lookup 으로 계산한다 (D-09 래칫).")
+    print("⬜ `violation_article`(라벨 ↔ 조문 대응)은 아직 비어 있다 — 별표1 파싱에서 채운다.")
     return 0
 
 
