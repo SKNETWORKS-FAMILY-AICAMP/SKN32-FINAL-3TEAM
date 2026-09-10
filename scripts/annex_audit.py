@@ -68,7 +68,16 @@ def measure(rows: list[dict]) -> dict[str, dict]:
     return out
 
 
-def _load(law_id: str | None) -> list[dict]:
+def _load(law_id: str | None, *, forms: bool = False) -> list[dict]:
+    """파싱 산출물을 읽는다. 기본은 **[별표]만** — 서식은 세지 않는다.
+
+    🔴 2026-09-10 — 서식 31건이 매 전량 감사를 실패시키고 있었다. `collect.law_annex` 는
+       이미 기본으로 [별표]만 받지만(`--forms` 로만 연다), 그 필터가 생기기 전에 받아 둔
+       서식이 디스크에 남아 있다. **재수집으로는 안 없어진다** — 감사가 안 세야 한다.
+    ⛔ 등록신청서·자격증·수거증·회수확인서는 광고 판정과 무관하다. 도메인에 없는 것을 세면
+       「사람이 볼 자리」의 3분의 2가 신청서 칸이 되고, 그러면 대조는 형식만 남는다.
+       (`collect/law_annex.py` 가 같은 이유로 같은 선택을 한다 — 두 곳의 기준을 맞춘다.)
+    """
     if not DERIVED.exists():
         return []
     files = [DERIVED / f"{law_id}.jsonl"] if law_id else sorted(DERIVED.glob("*.jsonl"))
@@ -77,16 +86,36 @@ def _load(law_id: str | None) -> list[dict]:
         if not f.exists():
             continue
         rows += [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines() if x.strip()]
+    if not forms:
+        rows = [r for r in rows if r.get("kind") == "별표"]
     return rows
 
 
-def judge(stats: dict[str, dict], baseline: dict[str, dict]) -> list[str]:
+def _scope(baseline: dict[str, dict], law_id: str | None) -> dict[str, dict]:
+    """기준선을 산출물과 **같은 범위**로 좁힌다 (2026-09-10).
+
+    ⛔ 종전에는 `--law` 가 `_load()` 만 좁히고 기준선은 전량이었다. 그래서 한 법령만 받으면
+       나머지 4법령 별표 10건이 전부 「기준선에 있는데 산출물에 없다」로 떴다.
+       수집기가 저장 직후 부르는 감사도 같은 스코프라 — **단일 법령 수집은 언제나**
+       빨간 줄 10개를 달고 끝났다. 2026-09-10 화장품법 시행령(005668) 수집이 그랬다.
+    🚨 오탐으로 시작한 검사는 곧 꺼진다 (D-167). 이 감사의 값어치는 「줄면 실패한다」인데,
+       매번 실패하는 검사에서는 그 신호가 안 보인다.
+    """
+    if law_id is None:
+        return baseline
+    return {k: v for k, v in baseline.items() if k.startswith(f"{law_id}_")}
+
+
+def judge(
+    stats: dict[str, dict], baseline: dict[str, dict], law_id: str | None = None
+) -> list[str]:
     """실패 사유를 문장으로 낸다. 빈 목록이면 통과다.
 
     🔴 **양쪽을 다 돈다** (2026-09-10). ⛔ 종전에는 `stats`(이번에 읽은 것)만 순회해서
        「행이 줄었다」는 잡고 **「별표 파일이 통째로 사라졌다」는 통과**시켰다.
        이 감사의 본체가 「줄면 실패한다」인데 **100% 줄면 통과**하는 모양이었다 (D-149).
     """
+    baseline = _scope(baseline, law_id)
     bad: list[str] = []
     for key in sorted(set(baseline) - set(stats)):
         bad.append(
@@ -123,9 +152,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="[별표] 파싱 자동 감사 (S2-04 · D-98)")
     ap.add_argument("--law", default=None, help="법령 ID (생략하면 전량)")
     ap.add_argument("--update", action="store_true", help="기준선을 지금 값으로 갱신한다")
+    ap.add_argument(
+        "--forms",
+        action="store_true",
+        help="서식도 센다 (기본: [별표]만 — 서식은 광고 판정과 무관하다)",
+    )
     args = ap.parse_args()
 
-    rows = _load(args.law)
+    rows = _load(args.law, forms=args.forms)
     if not rows:
         print("감사할 파싱 산출물이 없다 — collect.law_annex 를 먼저 돌린다", file=sys.stderr)
         return 1
@@ -144,7 +178,7 @@ def main() -> int:
         # 🚨 `--update` 는 `judge()` 를 **건너뛴다.** 그래서 사라진 별표를 먼저 보여 준다 —
         #    ⛔ `{**baseline, **now}` 는 낡은 키를 안 지우므로, 말없이 갱신하면
         #       「사라진 별표」가 기준선에 영원히 남아 매번 실패한다. 사람이 보고 정한다.
-        gone = sorted(set(baseline) - set(stats))
+        gone = sorted(set(_scope(baseline, args.law)) - set(stats))
         if gone:
             print(f"\n🚨 **기준선에만 있는 별표 {len(gone)}건** — 갱신해도 기준선에서 안 지워진다:")
             for k in gone:
@@ -161,7 +195,7 @@ def main() -> int:
         print(f"\n💾 기준선 {len(merged)}건 → {BASELINE.relative_to(ROOT)}")
         return 0
 
-    bad = judge(stats, baseline)
+    bad = judge(stats, baseline, args.law)
     if bad:
         print("\n🚨 감사 실패 —", file=sys.stderr)
         for b in bad:

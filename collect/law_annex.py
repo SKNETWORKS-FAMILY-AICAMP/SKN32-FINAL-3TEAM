@@ -415,7 +415,7 @@ def main() -> int:
         if annex_audit.BASELINE.exists()
         else {}
     )
-    bad = annex_audit.judge(stats, baseline)
+    bad = annex_audit.judge(stats, baseline, args.law)
     if bad:
         print("\n🚨 파싱 감사 실패 — 사람이 볼 자리다 (S2-04)", file=sys.stderr)
         for b in bad:
