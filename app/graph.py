@@ -166,6 +166,27 @@ def frontier(state: JudgeState) -> dict[str, Any]:
     return {"outcome": Outcome.passed}
 
 
+@timed
+def hold(state: JudgeState) -> dict[str, Any]:
+    """전문가 검토 종착 (D-125).
+
+    🔴 **종착에도 노드가 있어야 한다** (2026-09-10 실측). ⛔ 처음에는 라우터가 `hold` 를
+       내면 곧장 `END` 로 보냈다. 그랬더니 컴파일본은 `outcome` 이 **None 인 채로 끝났고**,
+       같은 입력에서 스텁은 `hold` 를 냈다. 방문 순서는 같은데 결과가 달랐다 —
+       라우터 단독 테스트로는 안 잡히는 자리다. D-124 ② 가 「컴파일해서 본다」고 한 이유다.
+    """
+    return {"outcome": Outcome.hold}
+
+
+@timed
+def search_failed(state: JudgeState) -> dict[str, Any]:
+    """표현 탐색 실패 — B 가 K 를 소진했다 (D-125).
+
+    🚨 증명서를 내지 않는다. D-59 가 금지한 「B 를 C 처럼 답하기」다.
+    """
+    return {"outcome": Outcome.search_failed}
+
+
 NODES: dict[str, Callable[[JudgeState], dict[str, Any]]] = {
     f.__name__: f
     for f in (
@@ -178,6 +199,8 @@ NODES: dict[str, Callable[[JudgeState], dict[str, Any]]] = {
         generate,
         verify,
         frontier,
+        hold,
+        search_failed,
     )
 }
 
@@ -262,25 +285,16 @@ def run_stub(text: str, product: ProductContext | None = None) -> tuple[JudgeSta
         step(name)
 
     nxt = route_after_judge(state)
-    if nxt == "hold":
-        state["outcome"] = Outcome.hold
-        return state, visited
-    if nxt == "certificate":
-        step("certificate")
-        return state, visited
-    if nxt == "frontier":
-        step("frontier")
+    if nxt != "generate":
+        step(nxt)  # hold · certificate · frontier — 전부 노드다
         return state, visited
 
     while True:  # B 실증형 — 재생성 루프
         step("generate")
         step("verify")
         nxt = route_after_verify(state)
-        if nxt == "frontier":
-            step("frontier")
-            return state, visited
-        if nxt == "search_failed":
-            state["outcome"] = Outcome.search_failed
+        if nxt != "generate":
+            step(nxt)  # frontier · search_failed
             return state, visited
 
 
@@ -319,15 +333,20 @@ def build_graph():  # noqa: ANN201 — langgraph 타입은 지연 import 라 여
     g.add_conditional_edges(
         "assess_risk",
         route_after_judge,
-        {"hold": END, "certificate": "certificate", "generate": "generate", "frontier": "frontier"},
+        {
+            "hold": "hold",
+            "certificate": "certificate",
+            "generate": "generate",
+            "frontier": "frontier",
+        },
     )
     g.add_conditional_edges(
         "verify",
         route_after_verify,
-        {"frontier": "frontier", "generate": "generate", "search_failed": END},
+        {"frontier": "frontier", "generate": "generate", "search_failed": "search_failed"},
     )
-    g.add_edge("certificate", END)
-    g.add_edge("frontier", END)
+    for terminal in ("certificate", "frontier", "hold", "search_failed"):
+        g.add_edge(terminal, END)
     return g.compile()
 
 

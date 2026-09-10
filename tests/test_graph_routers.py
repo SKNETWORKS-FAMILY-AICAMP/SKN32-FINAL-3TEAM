@@ -196,3 +196,100 @@ def test_모든_노드가_상태를_깨지_않는다() -> None:
         out = fn(dict(base))  # type: ignore[arg-type]
         assert isinstance(out, dict), f"{name} 이 dict 를 안 냈다"
         assert set(out) <= allowed, f"🚨 {name} 이 상태에 없는 키를 낸다 — {set(out) - allowed}"
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  ② 컴파일본 — 스텁과 **같은 순서·같은 종착**이어야 한다 (D-124 ②)
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔴 **라우터 단독 테스트로는 안 잡히는 자리가 있다** (2026-09-10 실측).
+#    ⛔ 처음 배선에서 라우터가 `hold` 를 내면 곧장 `END` 로 보냈다. 라우터 테스트는
+#       전부 통과했고 방문 순서도 같았는데, 컴파일본만 `outcome` 이 **None 인 채로**
+#       끝났다. 스텁은 `hold` 를 냈다 — **같은 입력, 다른 결과.**
+#    ★ 그래서 D-124 는 「컴파일해서 방문 순서를 본다」를 따로 적어 뒀다.
+
+from app.graph import build_graph, timed  # noqa: E402
+from app.graph import judge as judge_node  # noqa: E402
+
+
+def _judge_stub(sents: list[SentenceJudgment]):  # noqa: ANN202
+    """🚨 `timed` 를 반드시 두른다 — 안 두르면 그 노드만 계측에서 빠지고,
+    「그래프가 judge 를 안 밟았다」로 잘못 읽힌다 (실제로 처음에 그렇게 실패했다)."""
+
+    def node(state: JudgeState) -> dict:
+        return {"sentences": list(sents)}
+
+    node.__name__ = "judge"
+    return timed(node)
+
+
+def _init(text: str = "문구") -> JudgeState:
+    from app.contracts import ProductContext
+
+    return {
+        "text": text,
+        "product": ProductContext(),
+        "sentences": [],
+        "rejects": [],
+        "timings": [],
+        "attempt": 0,
+    }
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("sents", "tail"),
+    [
+        (None, "hold"),  # 스텁 판정(unjudged) → 보류
+        ([_s(Verdict.confirmed)], "frontier"),
+        ([_s(Verdict.confirmed, infeas=Infeasibility.A)], "certificate"),
+        ([_s(Verdict.confirmed, infeas=Infeasibility.C)], "certificate"),
+        ([_s(Verdict.hold)], "hold"),
+    ],
+)
+def test_컴파일본이_스텁과_같은_길을_간다(
+    monkeypatch: pytest.MonkeyPatch, sents: list[SentenceJudgment] | None, tail: str
+) -> None:
+    """🚨 둘이 갈리면 「단독 테스트는 통과하는데 그래프는 다르게 돈다」가 된다."""
+    node = judge_node if sents is None else _judge_stub(sents)
+    monkeypatch.setitem(NODES, "judge", node)
+
+    state, visited = run_stub("문구")
+    out = build_graph().invoke(_init())
+
+    assert [t.node for t in out["timings"]] == visited
+    assert visited[-1] == tail
+    assert out.get("outcome") == state.get("outcome")
+    assert len(out["sentences"]) == len(state["sentences"])
+
+
+@pytest.mark.gate
+def test_모든_종착이_outcome_을_적는다() -> None:
+    """⛔ 종착에서 `outcome` 을 안 적으면 응답이 None 으로 끝난다 — 계약이 거부한다."""
+    for name in ("certificate", "frontier", "hold", "search_failed"):
+        assert "outcome" in NODES[name]({}), f"🚨 종착 노드 `{name}` 이 outcome 을 안 적는다"  # type: ignore[arg-type]
+
+
+@pytest.mark.gate
+def test_컴파일본에서_문장이_실제로_쌓인다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🚨 리듀서 **실증**이다 (D-124 ③).
+
+    선언(`Annotated[..., operator.add]`)이 맞아도 LangGraph 가 실제로 append 하는지는
+    돌려 봐야 안다. ⛔ 덮어쓰면 문장 셋이 하나가 되고 **오류는 안 난다.**
+    """
+    three = [_s(Verdict.confirmed, sid=f"s{i}") for i in range(3)]
+    monkeypatch.setitem(NODES, "judge", _judge_stub(three))
+    out = build_graph().invoke(_init())
+    assert len(out["sentences"]) == 3, "🚨 문장이 덮어써졌다 — `sentences` 리듀서를 본다"
+    assert [s.sent_id for s in out["sentences"]] == ["s0", "s1", "s2"]
+    # 계측도 누적 키다 — 노드 수만큼 쌓여야 한다
+    assert len(out["timings"]) == len({t.node for t in out["timings"]}) > 1
+
+
+@pytest.mark.gate
+def test_그래프_응답이_계약을_통과한다() -> None:
+    """🚨 상태를 계약으로 옮기는 자리에서 터져야 한다 — 화면보다 먼저다."""
+    out = build_graph().invoke(_init("면역력 강화에 도움을 줍니다."))
+    r = to_response(out)  # type: ignore[arg-type]
+    assert r.outcome is Outcome.hold
+    assert r.timings
