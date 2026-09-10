@@ -1,0 +1,48 @@
+{
+  "ad_format": "카드뉴스",
+  "sections": [
+    {
+      "order": 0,
+      "kind": "표시문구",
+      "text": "광고",
+      "placeholder": null
+    },
+    {
+      "order": 1,
+      "kind": "헤드라인",
+      "text": "하루 종일 촉촉함이 이어져요.",
+      "placeholder": null
+    },
+    {
+      "order": 2,
+      "kind": "이미지",
+      "text": null,
+      "placeholder": "제품 컷을 넣어주세요"
+    },
+    {
+      "order": 3,
+      "kind": "본문",
+      "text": null,
+      "placeholder": "사용 후기를 적어주세요"
+    }
+  ],
+  "screening": [
+    {
+      "sent_id": "g1",
+      "text": "하루 종일 촉촉함이 이어져요.",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [],
+      "infeasibility": null,
+      "evidence": [],
+      "risk": {
+        "floor": "R1",
+        "encoder": null,
+        "final": "R1",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false
+    }
+  ],
+  "disclosure_section_order": 0
+}

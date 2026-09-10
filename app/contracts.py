@@ -363,3 +363,224 @@ def is_pass(s: SentenceJudgment) -> bool:
     if s.risk.final is None:
         return False
     return s.risk.final.level <= PASS_RISK_MAX_PROVISIONAL.level
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  진입점 B — 카피 생성 (D-181 · 프로토타입 v7.2 `gen-input` → `gen-result`)
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🚨 **판정 코어는 하나다** (D-119). B 가 만든 문구도 위의 `SentenceJudgment` 를 지난다.
+#    아래 모델은 **생성의 입출력**이지 두 번째 판정기가 아니다.
+
+
+class Channel(enum.StrEnum):
+    """출력 프로파일 4종 (D-93). 🚨 뒤 둘은 **설계만** — 10주 안에 구현하지 않는다."""
+
+    상세페이지 = "상세페이지"
+    인스타 = "인스타"
+    기사형 = "기사형"  # 🚨 「광고」 표시 구조적 강제가 특히 중요한 자리
+    유튜브 = "유튜브"  # 스크립트·자막 (영상 아님)
+
+
+class MediaProfile(BaseModel):
+    """매체 프로파일 — **바꾸는 것이 넷뿐이다** (D-93 표).
+
+    🔴 **이 모델에 판정 기준·허용 어휘·근거 조문 필드를 두지 않는다.** 없는 것이 계약이다 —
+       필드가 없으면 프로파일이 그것을 바꿀 방법이 구조적으로 없다.
+    ⛔ 「플랫폼마다 규정이 다르다」는 D-93 이 **기각한 착각**이다. 표시 의무의 *내용* 은
+       매체와 무관하게 같고, 갈리는 것은 표시의 *방법* 뿐이다.
+    🔄 프로파일이 적용되는 자리는 C 가 아니라 **B 의 후단**이다 (D-181 · 화면 「채널별 각색」).
+    """
+
+    channel: Channel
+    max_chars: int | None = Field(None, ge=1)  # 길이
+    max_sentences: int | None = Field(None, ge=1)  # 문장 수
+    tone: str | None = None  # 문체
+    #: 표시 문구 배치 — 🚨 코드가 **먼저** 넣는다. sLLM 은 본문만 다시 쓴다 (D-93 · D-181)
+    disclosure_placement: str
+
+
+class Segment(BaseModel):
+    """대상고객 (프로토타입 `segments` · 「비슷한 리뷰 214건에서 모인 고객군」).
+
+    🚨 `member_count >= 20` 은 DB `ck_segment_k_anon` 과 **같은 규칙**이다 (K-익명).
+    """
+
+    segment_id: str
+    label: str
+    member_count: int = Field(..., ge=20)
+    vulnerable_flag: bool = False
+    top_terms: list[str] = Field(default_factory=list)
+
+
+class KeywordScreen(BaseModel):
+    """지향 키워드 선별 — 허용/차단 **+ 사유** (상태 스키마 「진입점 B」).
+
+    화면 문안: 「회색은 판정 코어가 막은 키워드라 고를 수 없어요.
+    차단된 키워드를 누르면 **사유를 볼 수 있어요**」
+    ⛔ 사유 없는 차단은 사용자에게 「왜 안 되는지 모르는 회색」이 된다 — 그건 판정이 아니다.
+    """
+
+    term: str
+    allowed: bool
+    reason: str | None = None
+    evidence: list[EvidenceArticle] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _blocked_needs_reason(self) -> KeywordScreen:
+        if not self.allowed and not self.reason:
+            raise ValueError(f"차단한 키워드에는 사유가 붙는다 — {self.term!r}")
+        return self
+
+
+class GenerateRequest(BaseModel):
+    """B 입력 — 세그먼트 + 키워드 + 제품 컨텍스트 (+ 매체 프로파일은 선택)."""
+
+    segment: Segment
+    keywords: list[KeywordScreen] = Field(default_factory=list)
+    product: ProductContext = Field(default_factory=ProductContext)
+    #: 비우면 각색 없이 후보만 낸다 — 각색은 B 의 **후단**이다 (D-181)
+    profile: MediaProfile | None = None
+
+    @model_validator(mode="after")
+    def _no_blocked_keywords(self) -> GenerateRequest:
+        bad = [k.term for k in self.keywords if not k.allowed]
+        if bad:
+            raise ValueError(
+                f"차단된 키워드를 생성 입력에 넣지 않는다 — {bad} "
+                "(화면에서 회색이라 고를 수 없는 것들이다)"
+            )
+        return self
+
+
+class GenerateResponse(BaseModel):
+    """B 출력 — 프론티어 (D-31 · D-34 N=3).
+
+    🚨 화면이 축의 뜻을 이미 적어 뒀다 — y 축은 **전환율이나 판매 성과가 아니라**
+       원문 대비 정보량 보존율이다. 지어낸 성과 지표를 여기 담지 않는다.
+    """
+
+    candidates: list[Candidate] = Field(default_factory=list)
+    keywords: list[KeywordScreen] = Field(default_factory=list)
+    #: 각색본 — 프로파일이 주어졌을 때만. 🚨 각 결과가 **판정 코어를 다시 지난다** (D-119)
+    adapted: list[AdaptedCopy] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _pareto_only(self) -> GenerateResponse:
+        # 화면 문안: 「파레토 최적 3안만 표시 — 지배당하는 후보는 자동 제외돼요」
+        if any(not c.pareto for c in self.candidates):
+            raise ValueError("지배당하는 후보는 프론티어에 올리지 않는다 (D-31)")
+        return self
+
+
+class AdaptedCopy(BaseModel):
+    """채널별 각색 결과 (D-181 · 화면 「채널별 각색」).
+
+    화면 문안이 이 모델의 계약이다 —
+      > 코드가 매체별 표시 위치에 광고 표시 문구를 **먼저** 넣고, sLLM이 본문만 매체 형식에
+      > 맞게 다시 쓴 뒤, 판정 코어가 각 결과를 **다시 검증**해요.
+
+    🔴 그래서 세 필드가 전부 필수다 — 표시 문구 · 배치 · 재검증 결과.
+    """
+
+    channel: Channel
+    rewrite: RewriteSet
+    #: 🚨 **「광고」 표시 없는 출력 경로를 만들지 않는다** (D-93 방어 · D-164)
+    disclosure: str = Field(..., min_length=1)
+    disclosure_placement: str = Field(..., min_length=1)
+    #: 재검증 결과. ⛔ 비면 D-63 「재검증 대기로는 템플릿에 쓰이지 않는다」가 무너진다
+    recheck: SentenceJudgment
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  진입점 C — AI 광고 생성 (D-164 · 프로토타입 `draft-setup` → `draft-editor`)
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔄 **C 는 진입점이면서 종착이다** (D-181). B 에서 각색된 문구를 받아 지면에 얹고,
+#    동시에 **독립 진입**도 받는다 — 종류 선택 → 내용 입력 → 판정 → 템플릿.
+# 🚨 D-93 이 경계한 것 — 「우리가 템플릿을 제공하면 **위장 광고 생성 도구로 읽힌다**」.
+#    답은 「템플릿이 「광고」 표시를 **구조적으로 강제**하고, 표시 없는 출력 경로를
+#    만들지 않는다」였다. 아래 검증기가 그 약속을 코드로 만든다.
+
+
+class AdFormat(enum.StrEnum):
+    """01 · 어떤 종류로 만들까요 (프로토타입 `draft-setup`)."""
+
+    상세페이지 = "상세페이지"
+    카드뉴스 = "카드뉴스"
+    배너 = "배너"
+
+
+class AdSection(BaseModel):
+    """섹션 골격 한 칸. 🚨 「규격 · 여백 · 글자 크기는 KRDS 표준형 스타일 기준」(화면)."""
+
+    order: int = Field(..., ge=0)
+    kind: str  # 헤드라인 / 본문 / 이미지 / 표시문구 …
+    text: str | None = None
+    #: 이미지·문구는 섹션별로 사용자가 직접 채운다 — 비어 있는 것이 정상이다
+    placeholder: str | None = None
+
+
+class ComposeRequest(BaseModel):
+    """C 입력 — 두 경로가 한 모델로 들어온다.
+
+    ① B 에서 넘어옴 — `source_copy` 에 **판정을 지난** 문구가 담긴다
+    ② 독립 진입     — `prompt` 에 사용자가 적은 내용. 「판정 코어가 입력한 내용을 먼저 걸러요」
+    """
+
+    ad_format: AdFormat
+    #: ① B 에서 넘어온 각색본
+    source_copy: AdaptedCopy | None = None
+    #: ② 「담고 싶은 내용을 적어주세요. 적은 내용에 맞춰 섹션 구성과 문구가 달라져요」
+    prompt: str | None = Field(None, max_length=2000)
+    product: ProductContext = Field(default_factory=ProductContext)
+
+    @model_validator(mode="after")
+    def _one_of_two_paths(self) -> ComposeRequest:
+        if (self.source_copy is None) == (self.prompt is None):
+            raise ValueError(
+                "C 는 두 경로 중 하나로 들어온다 — B 의 각색본(source_copy) 또는 "
+                "직접 입력(prompt). 둘 다이거나 둘 다 없으면 어느 쪽인지 정해지지 않는다"
+            )
+        return self
+
+
+class ComposeResponse(BaseModel):
+    """C 출력 — 지면에 얹힌 광고.
+
+    🔴 **불변식 셋을 계약이 지킨다** —
+       ① 「광고」 표시 섹션이 반드시 있다 (D-93 · D-164 — 표시 없는 출력 경로가 없다)
+       ② 판정을 지나지 않은 문구는 얹히지 않는다 (D-63 · D-119)
+       ③ 재검증이 `confirmed` 가 아니면 배치하지 않는다 (D-63 「재검증 대기」)
+    """
+
+    ad_format: AdFormat
+    sections: list[AdSection] = Field(default_factory=list)
+    #: 입력을 거른 판정 — 두 경로 모두 코어를 지난다 (D-119)
+    screening: list[SentenceJudgment] = Field(default_factory=list)
+    #: 🚨 구조적 강제 — 비면 거부한다
+    disclosure_section_order: int | None = None
+
+    @model_validator(mode="after")
+    def _disclosure_is_structural(self) -> ComposeResponse:
+        if self.disclosure_section_order is None:
+            raise ValueError(
+                "「광고」 표시 섹션이 없다 — 표시 없는 출력 경로를 만들지 않는다 (D-93 · D-164)"
+            )
+        if not any(s.order == self.disclosure_section_order for s in self.sections):
+            raise ValueError(
+                f"표시 섹션 자리({self.disclosure_section_order})가 섹션 목록에 없다 — "
+                "번호만 적고 칸을 안 만들면 표시가 안 나간다"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _only_confirmed_copy_lands(self) -> ComposeResponse:
+        # D-63 — 재검증 대기 상태로는 템플릿에 사용되지 않는다
+        pending = [s.sent_id for s in self.screening if s.verdict is not Verdict.confirmed]
+        if pending and any(s.text for s in self.sections):
+            raise ValueError(
+                f"판정이 확정되지 않은 문장이 있는데 섹션에 문구가 얹혔다 — {pending} "
+                "(D-63 재검증 대기로는 템플릿에 쓰이지 않는다)"
+            )
+        return self

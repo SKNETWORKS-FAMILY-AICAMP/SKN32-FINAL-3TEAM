@@ -181,3 +181,165 @@ def test_재생성_라운드는_셋을_넘지_않는다() -> None:
     """D-126 — 0-base, 총 라운드 K+1=3 이므로 0·1·2 만 (ck_judgment_attempt)."""
     with pytest.raises(ValidationError):
         JudgeResponse(outcome=Outcome.hold, attempt=3)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  진입점 B · C — 삼원 (D-119 · D-181)
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔴 **2026-09-10 까지 계약이 진입점 A 만 덮고 있었다.** 화면은 SCR-GN 3 · SCR-AD 3 으로
+#    이미 서 있는데 응답 모양이 없었다 — 「팀원 대기 해제」가 셋 중 하나만이었다.
+# 🚨 아래 검사는 D-93 이 경계한 것(「위장 광고 생성 도구로 읽힌다」)을 **코드로** 만든다.
+
+from app.contracts import (  # noqa: E402
+    AdaptedCopy,
+    AdFormat,
+    AdSection,
+    Candidate,
+    Channel,
+    ComposeRequest,
+    ComposeResponse,
+    GenerateRequest,
+    GenerateResponse,
+    KeywordScreen,
+    RewriteSet,
+    Segment,
+)
+
+FX_GENERATE = sorted((ROOT / "tests" / "fixtures" / "generate").glob("*.json"))
+FX_COMPOSE = sorted((ROOT / "tests" / "fixtures" / "compose").glob("*.json"))
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("path", FX_GENERATE, ids=lambda p: p.stem)
+def test_생성_픽스처가_계약으로_파싱된다(path: pathlib.Path) -> None:
+    GenerateResponse.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("path", FX_COMPOSE, ids=lambda p: p.stem)
+def test_광고생성_픽스처가_계약으로_파싱된다(path: pathlib.Path) -> None:
+    ComposeResponse.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.gate
+def test_세_진입점_모두_픽스처가_있다() -> None:
+    """⛔ 하나라도 비면 팀원이 그 화면을 못 그린다 (D-181)."""
+    assert FIXTURES and FX_GENERATE and FX_COMPOSE, (
+        f"🚨 픽스처 — 판정 {len(FIXTURES)} · 생성 {len(FX_GENERATE)} · 광고생성 {len(FX_COMPOSE)}"
+    )
+
+
+@pytest.mark.gate
+def test_대상고객은_K익명_20_을_지킨다() -> None:
+    """DB `ck_segment_k_anon` 과 **같은 규칙**이다. 두 곳이 다르면 늦게 터진다."""
+    Segment(segment_id="s", label="x", member_count=20)
+    with pytest.raises(ValidationError):
+        Segment(segment_id="s", label="x", member_count=19)
+
+
+@pytest.mark.gate
+def test_차단_키워드에는_사유가_붙는다() -> None:
+    """화면: 「차단된 키워드를 누르면 사유를 볼 수 있어요」.
+
+    ⛔ 사유 없는 차단은 「왜 안 되는지 모르는 회색」이다 — 그건 판정이 아니다.
+    """
+    with pytest.raises(ValidationError):
+        KeywordScreen(term="주름 개선", allowed=False)
+    KeywordScreen(term="주름 개선", allowed=False, reason="기능성 심사를 안 받은 제품")
+
+
+@pytest.mark.gate
+def test_차단된_키워드로_생성하지_않는다() -> None:
+    seg = Segment(segment_id="s", label="x", member_count=100)
+    blocked = KeywordScreen(term="최고", allowed=False, reason="절대적 표현")
+    with pytest.raises(ValidationError):
+        GenerateRequest(segment=seg, keywords=[blocked])
+
+
+@pytest.mark.gate
+def test_지배당하는_후보는_프론티어에_안_올라간다() -> None:
+    """화면: 「파레토 최적 3안만 표시 — 지배당하는 후보는 자동 제외돼요」 (D-31)."""
+    c = Candidate(
+        label="x",
+        rewrite=RewriteSet(body="본문"),
+        residual_risk=Risk.R1,
+        appeal_retention=0.5,
+        pareto=False,
+    )
+    with pytest.raises(ValidationError):
+        GenerateResponse(candidates=[c])
+
+
+@pytest.mark.gate
+def test_각색본은_표시문구_없이_못_나간다() -> None:
+    """🚨 D-93 방어의 핵심 — 「광고」 표시 없는 출력 경로를 만들지 않는다."""
+    ok = SentenceJudgment(sent_id="s", text="t", verdict=Verdict.confirmed)
+    with pytest.raises(ValidationError):
+        AdaptedCopy(
+            channel=Channel.인스타,
+            rewrite=RewriteSet(body="본문"),
+            disclosure="",
+            disclosure_placement="첫 줄",
+            recheck=ok,
+        )
+
+
+@pytest.mark.gate
+def test_C_는_두_경로_중_하나로만_들어온다() -> None:
+    """B 의 각색본이거나 직접 입력이거나 — 둘 다이거나 둘 다 없으면 정해지지 않는다."""
+    with pytest.raises(ValidationError):
+        ComposeRequest(ad_format=AdFormat.배너)
+    ComposeRequest(ad_format=AdFormat.배너, prompt="신제품")
+
+
+@pytest.mark.gate
+def test_광고표시_섹션이_없으면_거부한다() -> None:
+    """🚨 구조적 강제 (D-93 · D-164). 번호만 적고 칸이 없어도 거부한다."""
+    ok = SentenceJudgment(sent_id="s", text="t", verdict=Verdict.confirmed)
+    S = [AdSection(order=0, kind="헤드라인", text="문구")]
+    with pytest.raises(ValidationError):
+        ComposeResponse(ad_format=AdFormat.배너, sections=S, screening=[ok])
+    with pytest.raises(ValidationError):
+        ComposeResponse(
+            ad_format=AdFormat.배너, sections=S, screening=[ok], disclosure_section_order=9
+        )
+
+
+@pytest.mark.gate
+def test_판정_안_지난_문구는_지면에_안_얹힌다() -> None:
+    """D-63 — 재검증 대기 상태로는 템플릿에 사용되지 않는다."""
+    pending = SentenceJudgment(sent_id="s", text="t", verdict=Verdict.unjudged)
+    S = [AdSection(order=0, kind="표시문구", text="광고")]
+    with pytest.raises(ValidationError):
+        ComposeResponse(
+            ad_format=AdFormat.배너, sections=S, screening=[pending], disclosure_section_order=0
+        )
+    # 자리만 잡아 두는 것은 된다 — 사용자가 채우기 전 상태다
+    ComposeResponse(
+        ad_format=AdFormat.배너,
+        sections=[AdSection(order=0, kind="표시문구", placeholder="판정 통과 후")],
+        screening=[pending],
+        disclosure_section_order=0,
+    )
+
+
+@pytest.mark.gate
+def test_매체_프로파일은_판정을_못_바꾼다() -> None:
+    """🔴 D-93 표의 오른쪽 열 — **필드가 없는 것이 계약이다.**
+
+    ⛔ 프로파일에 판정 기준·허용 어휘·근거 조문 필드가 생기면 그 순간 우회로가 열린다.
+    """
+    from app.contracts import MediaProfile
+
+    forbidden = {"violations", "risk", "evidence", "verdict", "allowed_terms", "vocabulary"}
+    assert not (set(MediaProfile.model_fields) & forbidden), (
+        f"🚨 프로파일에 판정 축 필드가 생겼다 — {set(MediaProfile.model_fields) & forbidden}"
+    )
+    assert set(MediaProfile.model_fields) == {
+        "channel",
+        "max_chars",
+        "max_sentences",
+        "tone",
+        "disclosure_placement",
+    }

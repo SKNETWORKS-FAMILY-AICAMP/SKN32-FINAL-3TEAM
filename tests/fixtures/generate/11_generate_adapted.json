@@ -1,0 +1,133 @@
+{
+  "candidates": [
+    {
+      "label": "보수안",
+      "rewrite": {
+        "body": "건조한 피부에 수분을 더해요.",
+        "mandatory_note": "기능성화장품이 아닙니다.",
+        "placement": "본문 하단"
+      },
+      "residual_risk": "R0",
+      "appeal_retention": 0.62,
+      "pareto": true
+    },
+    {
+      "label": "균형안",
+      "rewrite": {
+        "body": "하루 종일 촉촉함이 이어져요.",
+        "mandatory_note": "사용감 표현이며 효능·효과가 아닙니다.",
+        "placement": "본문 직후 괄호 병기"
+      },
+      "residual_risk": "R1",
+      "appeal_retention": 0.81,
+      "pareto": true
+    },
+    {
+      "label": "공격안",
+      "rewrite": {
+        "body": "모니터 앞 12시간, 마르지 않는 피부.",
+        "mandatory_note": "개인차가 있을 수 있습니다.",
+        "placement": "본문 하단"
+      },
+      "residual_risk": "R2",
+      "appeal_retention": 0.94,
+      "pareto": true
+    }
+  ],
+  "keywords": [
+    {
+      "term": "촉촉한",
+      "allowed": true,
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "term": "수분 공급",
+      "allowed": true,
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "term": "주름 개선",
+      "allowed": false,
+      "reason": "기능성화장품 심사를 받지 않은 제품은 표방할 수 없어요",
+      "evidence": [
+        {
+          "law_id": "008741",
+          "article": "제22조",
+          "item": "별표5 제2호나목",
+          "quote": "기능성화장품이 아님에도 기능성화장품으로 잘못 인식할 우려가 있는 표시·광고를 하지 말 것",
+          "chunk_id": null
+        }
+      ]
+    },
+    {
+      "term": "최고",
+      "allowed": false,
+      "reason": "배타성을 띤 절대적 표현이에요 (별표5 제2호바목)",
+      "evidence": [
+        {
+          "law_id": "008741",
+          "article": "제22조",
+          "item": "별표5 제2호나목",
+          "quote": "기능성화장품이 아님에도 기능성화장품으로 잘못 인식할 우려가 있는 표시·광고를 하지 말 것",
+          "chunk_id": null
+        }
+      ]
+    }
+  ],
+  "adapted": [
+    {
+      "channel": "인스타",
+      "rewrite": {
+        "body": "하루 종일 촉촉함이 이어져요.",
+        "mandatory_note": "광고",
+        "placement": "본문 첫 줄"
+      },
+      "disclosure": "광고",
+      "disclosure_placement": "본문 첫 줄 · 해시태그 사이에 묻지 않음",
+      "recheck": {
+        "sent_id": "g1",
+        "text": "하루 종일 촉촉함이 이어져요.",
+        "verdict": "confirmed",
+        "hold_reason": null,
+        "violations": [],
+        "infeasibility": null,
+        "evidence": [],
+        "risk": {
+          "floor": "R1",
+          "encoder": null,
+          "final": "R1",
+          "evidence_span": null
+        },
+        "evidence_mismatch": false
+      }
+    },
+    {
+      "channel": "상세페이지",
+      "rewrite": {
+        "body": "모니터 앞 12시간, 마르지 않는 피부.",
+        "mandatory_note": "광고",
+        "placement": "구획 하단"
+      },
+      "disclosure": "광고",
+      "disclosure_placement": "구획별 하단 · 본문과 같은 크기",
+      "recheck": {
+        "sent_id": "g1",
+        "text": "하루 종일 촉촉함이 이어져요.",
+        "verdict": "confirmed",
+        "hold_reason": null,
+        "violations": [],
+        "infeasibility": null,
+        "evidence": [],
+        "risk": {
+          "floor": "R1",
+          "encoder": null,
+          "final": "R1",
+          "evidence_span": null
+        },
+        "evidence_mismatch": false
+      }
+    }
+  ]
+}

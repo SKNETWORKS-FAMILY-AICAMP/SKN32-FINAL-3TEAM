@@ -1,0 +1,42 @@
+{
+  "ad_format": "배너",
+  "sections": [
+    {
+      "order": 0,
+      "kind": "표시문구",
+      "text": "광고",
+      "placeholder": null
+    },
+    {
+      "order": 1,
+      "kind": "헤드라인",
+      "text": null,
+      "placeholder": "한 줄로 적어주세요"
+    },
+    {
+      "order": 2,
+      "kind": "이미지",
+      "text": null,
+      "placeholder": "배너 이미지"
+    }
+  ],
+  "screening": [
+    {
+      "sent_id": "g1",
+      "text": "하루 종일 촉촉함이 이어져요.",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [],
+      "infeasibility": null,
+      "evidence": [],
+      "risk": {
+        "floor": "R1",
+        "encoder": null,
+        "final": "R1",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false
+    }
+  ],
+  "disclosure_section_order": 0
+}

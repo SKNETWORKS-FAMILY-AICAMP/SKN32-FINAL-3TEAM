@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -25,7 +26,14 @@ from pydantic import BaseModel, Field
 
 # 🚨 계약은 `app/contracts.py` 하나가 원본이다 (D-124). 여기서 다시 정의하지 않는다 —
 #    두 곳에 있으면 화면이 보는 모양과 우리가 내는 모양이 조용히 갈린다.
-from app.contracts import JudgeRequest, JudgeResponse
+from app.contracts import (
+    ComposeRequest,
+    ComposeResponse,
+    GenerateRequest,
+    GenerateResponse,
+    JudgeRequest,
+    JudgeResponse,
+)
 
 app = FastAPI(
     title="CopyLane",
@@ -85,13 +93,15 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
   <li class=yes><a href="/search?q=%EC%A7%88%EB%B3%91&amp;category=%EC%8B%9D%ED%92%88">/search</a>
       — 조문 검색 <b>(아직 부분일치다. 벡터 검색이 아니다)</b></li>
   <li class=yes><a href="/docs">/docs</a> — API 계약 <b>(판정 응답 스키마 포함)</b></li>
-  <li class=yes><a href="/judge/fixtures">/judge/fixtures</a>
-      — 분기별 <b>고정 응답</b> 9건 (D-124). 화면·BFF 는 이것으로 붙는다.
+  <li class=yes><a href="/fixtures">/fixtures</a>
+      — <b>진입점 셋</b>의 고정 응답 14건 (D-124 · D-181):
+      judge 9 · generate 2 · compose 3. 화면·BFF 는 이것으로 붙는다.
       <b>실제 판정이 아니다</b></li>
 </ul>
 <h2>아직 없는 것</h2>
 <ul>
-  <li class=no><code>POST /judge</code> — 판정 엔진(LangGraph)이 없다. <b>501</b> 을 낸다.
+  <li class=no><code>POST /judge</code> · <code>/generate</code> · <code>/compose</code>
+      — 진입점 셋의 엔진이 없다. <b>501</b> 을 낸다 (D-119 — 판정 코어는 하나).
       가짜 200 을 내면 프론트가 그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.</li>
   <li class=no>화면(Jinja2 + HTMX) — D-56 이 정해 뒀고 아직 안 지었다.</li>
   <li class=no><code>chunk_embedding</code> — 벡터 검색. 청크 2,585개는 서 있다.</li>
@@ -195,23 +205,53 @@ def judge(req: JudgeRequest) -> JudgeResponse:
 
 
 #: 골든 픽스처 (D-124 ③) — 화면·BFF 가 모든 분기를 그리는 재료
-FIXTURE_DIR = pathlib.Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "judge"
+#: 🔄 2026-09-10 — **진입점 셋으로 나눴다** (D-181). 종전에는 판정 하나뿐이었고,
+#:    화면은 SCR-GN 3 · SCR-AD 3 으로 이미 서 있는데 응답 모양이 없었다.
+FIXTURE_ROOT = pathlib.Path(__file__).resolve().parent.parent / "tests" / "fixtures"
+FIXTURE_KINDS: dict[str, Any] = {
+    "judge": JudgeResponse,  # A 문구 검수
+    "generate": GenerateResponse,  # B 카피 생성
+    "compose": ComposeResponse,  # C AI 광고 생성
+}
 
 
-@app.get("/judge/fixtures")
-def judge_fixtures() -> list[str]:
-    """분기별 고정 응답 목록. 🚨 **실제 판정이 아니다** — 계약 확인용이다."""
-    return sorted(p.stem for p in FIXTURE_DIR.glob("*.json"))
+@app.get("/fixtures")
+def fixtures_index() -> dict[str, list[str]]:
+    """진입점별 고정 응답 목록. 🚨 **실제 판정이 아니다** — 계약 확인용이다."""
+    return {
+        kind: sorted(p.stem for p in (FIXTURE_ROOT / kind).glob("*.json")) for kind in FIXTURE_KINDS
+    }
 
 
-@app.get("/judge/fixtures/{name}", response_model=JudgeResponse)
-def judge_fixture(name: str) -> JudgeResponse:
-    """고정 응답 하나 (D-124 ②③).
+@app.get("/fixtures/{kind}/{name}")
+def fixture(kind: str, name: str) -> Any:
+    """고정 응답 하나 (D-124 ②③ · D-181).
 
     ⛔ 파일을 그대로 흘려보내지 않고 **계약을 통과시켜** 낸다. 픽스처가 계약과
        어긋나면 여기서 500 이 난다 — 화면이 어긋난 모양에 붙는 것보다 낫다.
     """
-    f = FIXTURE_DIR / f"{name}.json"
+    model = FIXTURE_KINDS.get(kind)
+    if model is None:
+        raise HTTPException(404, f"진입점은 {list(FIXTURE_KINDS)} 셋이다 — 목록은 GET /fixtures")
+    f = FIXTURE_ROOT / kind / f"{name}.json"
     if not f.exists():
-        raise HTTPException(404, "그런 픽스처가 없다 — 목록은 GET /judge/fixtures")
-    return JudgeResponse.model_validate_json(f.read_text(encoding="utf-8"))
+        raise HTTPException(404, "그런 픽스처가 없다 — 목록은 GET /fixtures")
+    return model.model_validate_json(f.read_text(encoding="utf-8"))
+
+
+@app.post(
+    "/generate", response_model=GenerateResponse, responses={501: {"description": "엔진 미착수"}}
+)
+def generate(req: GenerateRequest) -> GenerateResponse:
+    """진입점 B — 카피 생성 (D-181). 🚨 엔진은 아직 없다. 계약만 나간다."""
+    raise HTTPException(501, "생성 엔진이 아직 없다. 고정 응답은 GET /fixtures/generate/… 에 있다.")
+
+
+@app.post(
+    "/compose", response_model=ComposeResponse, responses={501: {"description": "엔진 미착수"}}
+)
+def compose(req: ComposeRequest) -> ComposeResponse:
+    """진입점 C — AI 광고 생성 (D-164 · D-181). 🚨 엔진은 아직 없다."""
+    raise HTTPException(
+        501, "템플릿 엔진이 아직 없다. 고정 응답은 GET /fixtures/compose/… 에 있다."
+    )
