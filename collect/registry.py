@@ -24,7 +24,11 @@ LEDGER = ROOT / "scripts/registry_review.yaml"  # 2인 확인 원장 — 이쪽�
 VALID_USES = {"U1", "U2", "U3", "U4"}
 
 # 🚨 크롤링형은 robots 확인 기록 없이는 돌지 않는다 (규약 6).
-#    access 값에 아래가 들어 있으면 크롤링으로 본다.
+# 🔴 **판단은 `collect.COLLECTORS` 표가 한다** (2026-09-10 · D-179).
+#    ⛔ 종전에는 `access` 산문에 아래 낱말이 있는지로 봤다. 「자료실 PDF 다운로드」·
+#       「보도자료 웹 공개」·「웹 서비스」가 목록에 없어 **HTML 을 긁는 소스 6건이
+#       robots 검사를 통째로 지나갔다.** 표기 한 줄로 뚫리는 판정이었다 (D-167 · D-89).
+#    ⬜ 아래 집합은 **표에 없는 소스**를 위한 보조 그물로만 남긴다 — 정본이 아니다.
 CRAWL_ACCESS = {"크롤링", "게시판", "스크래핑"}
 
 
@@ -122,11 +126,19 @@ def require(source_id: str, use: str) -> dict[str, Any]:
             "풀려면 판정 근거를 남기고 scripts/gen_registry.py 의 STATUS 에서 내린다."
         )
 
+    from collect import COLLECTORS, is_scraper  # noqa: PLC0415 — 순환 import 방지
+
     access = str(s.get("access") or "")
-    if any(k in access for k in CRAWL_ACCESS) and not s.get("robots_checked_at"):
+    scrapes = is_scraper(source_id) or (
+        source_id not in COLLECTORS and any(k in access for k in CRAWL_ACCESS)
+    )
+    if scrapes and not s.get("robots_checked_at"):
         raise RegistryError(
-            f"{source_id!r} 는 크롤링형인데 robots_checked_at 이 없다 (규약 6). "
-            "robots.txt 를 확인하고 레지스트리에 날짜를 적은 뒤 다시 실행하라."
+            f"{source_id!r} 는 HTML 을 긁는 수집기로 가는데 robots_checked_at 이 없다 (규약 6).\n"
+            "  🚨 판단은 `access` 산문이 아니라 `collect.COLLECTORS` 표가 한다 (D-179) —\n"
+            "     종전에는 「자료실 PDF 다운로드」 같은 표기가 낱말표에 없어 그냥 지나갔다.\n"
+            "  → robots.txt 를 확인하고 레지스트리에 날짜를 적은 뒤 다시 실행한다.\n"
+            "     🚨 이미 잰 기록이 있으면 scripts/registry_rationale.yaml 을 본다."
         )
 
     return s

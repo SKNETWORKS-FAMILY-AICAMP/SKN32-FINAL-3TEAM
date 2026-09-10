@@ -243,8 +243,12 @@ def load_manifest(cur, dry: bool) -> int:
             continue
         if not dry:
             cur.execute(
-                "INSERT INTO collect_manifest (source_id, fetched_at, url, sha256, bytes, rows) "
-                "SELECT %s,%s,%s,%s,%s,%s WHERE NOT EXISTS "
+                # 🔴 **`event` 를 넣는다** (2026-09-10). ⛔ 안 넣어서 전부 기본값 `'fetch'` 였다 —
+                #    스키마가 `fetch/skip/delete` 를 받게 해 뒀는데 **skip·delete 이력이 소실**됐다.
+                #    ★ 원장 줄이 `supersedes` 를 들고 있으면 새 판으로 저장된 것이다.
+                "INSERT INTO collect_manifest "
+                "(source_id, fetched_at, url, sha256, bytes, rows, event) "
+                "SELECT %s,%s,%s,%s,%s,%s,%s WHERE NOT EXISTS "
                 "(SELECT 1 FROM collect_manifest WHERE sha256 = %s AND sha256 IS NOT NULL)",
                 (
                     r["source_id"],
@@ -253,6 +257,7 @@ def load_manifest(cur, dry: bool) -> int:
                     r.get("sha256"),
                     r.get("bytes"),
                     r.get("rows"),
+                    "fetch",
                     r.get("sha256"),
                 ),
             )
@@ -310,24 +315,39 @@ def load_documents(cur, dry: bool) -> int:
     return n
 
 
-def load_dict(cur, dry: bool) -> int:
-    """금지표현 사전 (D-155). 🚨 `violation_type` 은 **비워 둔다** — V0~V8 대응이 미판정이다."""
-    n = 0
+def load_dict(cur, dry: bool) -> tuple[int, int]:
+    """금지표현 사전 (D-155). 반환 — (행 수, 유형이 붙은 수).
+
+    🔄 **`violation_type` 을 채운다** (2026-09-10 · D-178). 종전에는 「V0~V8 대응이
+       미판정」이라 비워 뒀는데, 라벨이 곧 타입이 되면서 대응이 필요 없어졌다.
+    🚨 **유형이 하나인 항목만** 채운다. `dict_entry.violation_type` 은 단수인데
+       실측 106종이 여러 유형에 걸린다 — 하나를 고르면 그건 판정이고,
+       **낱말이 라벨을 감당할 만큼 크지 않다는 뜻**이다 (D-155). 비워 두는 것이 사실에 맞다.
+    """
+    n = typed = 0
     for r in _jsonl("banned_terms.jsonl"):
+        kinds = r.get("유형") or []
+        vt = kinds[0] if len(kinds) == 1 else None
+        typed += vt is not None
         if not dry:
             cur.execute(
-                "INSERT INTO dict_entry (fragment_id, dict_kind, term, law_ref, exact_match) "
-                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (dict_kind, term) DO NOTHING",
+                "INSERT INTO dict_entry "
+                "(fragment_id, dict_kind, term, law_ref, exact_match, violation_type) "
+                "VALUES (%s,%s,%s,%s,%s,%s) "
+                "ON CONFLICT (dict_kind, term) DO UPDATE SET "
+                "  violation_type = EXCLUDED.violation_type, "
+                "  law_ref = EXCLUDED.law_ref, exact_match = EXCLUDED.exact_match",
                 (
                     "ftc_decisions_body:dict",
                     "금지표현",
                     r["term"],
                     "; ".join(r.get("근거") or []),
                     bool(r.get("단독판정")),
+                    vt,
                 ),
             )
         n += 1
-    return n
+    return n, typed
 
 
 def load_product_fact(cur, dry: bool) -> int:
@@ -348,7 +368,13 @@ def load_product_fact(cur, dry: bool) -> int:
             cur.execute(
                 "INSERT INTO product_fact (fragment_id, ingredient, recognition_no, "
                 "functional_claim, daily_intake, caution, category, recog_kind) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
+                # 🔴 **멱등** (2026-09-10). ⛔ 종전에는 ON CONFLICT 가 없어
+                #    두 번 돌리면 1,250 → 2,500 이었다. 이 파일 docstring 이
+                #    「모든 적재가 ON CONFLICT 로 간다」고 적어 뒀는데 여기만 빠졌다.
+                "ON CONFLICT ON CONSTRAINT uq_product_fact DO UPDATE SET "
+                "  recognition_no = EXCLUDED.recognition_no, "
+                "  daily_intake = EXCLUDED.daily_intake, caution = EXCLUDED.caution",
                 (
                     f"{src}:api",
                     ingredient,
@@ -450,7 +476,8 @@ def main() -> int:
         print(f"  fragment          {load_fragments(cur, True):>6}")
         print(f"  collect_manifest  {load_manifest(cur, True):>6}")
         print(f"  document          {load_documents(cur, True):>6}")
-        print(f"  dict_entry        {load_dict(cur, True):>6}")
+        n_dict, n_typed = load_dict(cur, True)
+        print(f"  dict_entry        {n_dict:>6}  (유형 붙은 것 {n_typed})")
         print(f"  product_fact      {load_product_fact(cur, True):>6}")
         n_gold, gstat = load_golden(cur, True)
         print(f"  golden_sample     {n_gold:>6}")
@@ -477,7 +504,8 @@ def main() -> int:
         print(f"  fragment          {load_fragments(cur, False):>6}")
         print(f"  collect_manifest  {load_manifest(cur, False):>6}")
         print(f"  document          {load_documents(cur, False):>6}")
-        print(f"  dict_entry        {load_dict(cur, False):>6}")
+        n_dict, n_typed = load_dict(cur, False)
+        print(f"  dict_entry        {n_dict:>6}  (유형 붙은 것 {n_typed})")
         print(f"  product_fact      {load_product_fact(cur, False):>6}")
         n_gold, gstat = load_golden(cur, False)
         print(f"  golden_sample     {n_gold:>6}")

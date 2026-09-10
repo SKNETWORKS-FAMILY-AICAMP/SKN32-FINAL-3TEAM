@@ -1,0 +1,58 @@
+{
+  "outcome": "certificate",
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "아토피가 낫습니다.",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [
+        "질병_예방치료_표방"
+      ],
+      "infeasibility": "C",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제1호",
+          "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "013094_제8조_1"
+        }
+      ],
+      "risk": {
+        "floor": "R4",
+        "encoder": "R4",
+        "final": "R4",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false
+    }
+  ],
+  "candidates": [],
+  "certificate": {
+    "reason": "C",
+    "explanation": "질병의 치료 효과를 표방하는 표현은 자격·근거와 무관하게 금지됩니다.",
+    "guidance": null
+  },
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    },
+    {
+      "node": "생성",
+      "ms": 0.0
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.1.0"
+}

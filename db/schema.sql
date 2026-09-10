@@ -27,10 +27,16 @@ CREATE TYPE value_t       AS ENUM ('A','B','C','D','X');
 --    ★ 조문 대응(별표1 제1~8호)은 **타입이 아니라 데이터**다 — `violation_article` 을 본다.
 --      조문이 확정 라벨이면(D-158) 그 대응은 바뀔 수 있는 사실이지 스키마가 아니다.
 --    🚨 '적법' 값을 두지 않는다 — 적법은 `violations = '{}'` 다. 값으로 두면 두 표현이 생긴다.
+-- 🔴 뒤 다섯은 **편입 후보**다 (D-65). 인코더가 예측하는 확정 클래스는
+--    `scripts/collect.py` 의 `VIOLATION_TYPES` 6종이고, 승격 판정일은 2026-09-17 이다.
+--    ⛔ 여기 있다는 것이 「인코더 클래스」라는 뜻이 아니다 — 대응표·사전·제재가 쓰는 어휘다.
+--    🔄 `기능성화장품_오인` 2026-09-10 등재 (0005) — 화장품법 시행규칙 [별표 5] 제2호 나목.
+--       앞의 셋은 식품표시광고법 제8조제1항 1~3호 구조라 식품 축이고, 화장품 축의 같은
+--       자리가 비어 있어 `violation_article` 에 나목을 적을 수가 없었다.
 CREATE TYPE violation_t   AS ENUM ('질병_예방치료_표방','건강기능식품_오인','의약품_오인',
                                    '거짓_과장','소비자_기만','후기_체험기_기만',
                                    '추천_보증_뒷광고','부당_비교광고','비방광고',
-                                   '실증책임_위반');
+                                   '실증책임_위반','기능성화장품_오인');
 CREATE TYPE risk_t        AS ENUM ('R0','R1','R2','R3','R4');
 CREATE TYPE infeas_t      AS ENUM ('A','B','C');          -- D-59 자격형/실증형/절대형
 CREATE TYPE origin_t      AS ENUM ('real','injected','approved');
@@ -166,10 +172,11 @@ CREATE TABLE chunk (
     doc_type        TEXT,
     category        TEXT[] NOT NULL DEFAULT '{}',
     text            TEXT NOT NULL,
-    token_count     INTEGER,
+    -- 🚨 NOT NULL 이라야 `ck_chunk_tokens` 가 실제로 막는다 (0006). 널이면 CHECK 가 통과한다
+    token_count     INTEGER NOT NULL,
     effective_date  DATE,
     superseded_at   DATE,
-    CONSTRAINT ck_chunk_tokens CHECK (token_count IS NULL OR token_count <= 512)
+    CONSTRAINT ck_chunk_tokens CHECK (token_count <= 512)
 );
 COMMENT ON CONSTRAINT ck_chunk_tokens ON chunk IS
   '리랭커 bge-reranker-v2-m3 의 512 토큰 상한에 맞춘다';
@@ -237,7 +244,11 @@ CREATE TABLE penal_clause (
 CREATE TABLE dict_entry (
     entry_id        BIGSERIAL PRIMARY KEY,
     fragment_id     TEXT NOT NULL REFERENCES fragment(fragment_id) ON DELETE CASCADE,
-    dict_kind       TEXT NOT NULL,   -- prohibited / allowed / disease_adj / mitigation_banned
+    -- 🔴 적재기가 넣는 값과 **같은 말로** 적는다 (2026-09-10).
+    --    ⛔ 주석은 영문(prohibited / allowed …)인데 `load_db` 는 `'금지표현'` 을 넣는다.
+    --       ENUM 이 아니라 TEXT 라 DB 가 안 막고, `uq_dict_term` 이 (dict_kind, term) 이라
+    --       **표기가 갈리면 같은 용어가 두 벌 들어간다.**
+    dict_kind       TEXT NOT NULL,        -- 금지표현 / 적법표현 / 질병표현 / 완화금지
     term            TEXT NOT NULL,
     violation_type  violation_t,
     law_ref         TEXT,
@@ -260,7 +271,13 @@ CREATE TABLE product_fact (
     daily_intake     TEXT,
     caution          TEXT,
     category         TEXT NOT NULL,
-    recog_kind       TEXT NOT NULL         -- 고시형 / 개별인정형
+    recog_kind       TEXT NOT NULL,        -- 고시형 / 개별인정형
+    -- 🔴 **자연키** (2026-09-10). ⛔ 없어서 적재가 멱등이 아니었다 —
+    --    `load_db` 가 `ON CONFLICT` 없는 순수 INSERT 라 **두 번 돌리면 1,250 → 2,500** 이다.
+    --    그 파일 docstring 은 「멱등이다. 모든 적재가 ON CONFLICT 로 간다」고 적어 뒀다.
+    --    여섯 적재기 중 여기만 빠져 있었고, 문서와 코드가 정면으로 어긋난 자리였다.
+    -- 🚨 인정번호는 NULL 일 수 있어 키에 못 쓴다 — 원료명 + 문구 + 종류가 한 행을 가른다.
+    CONSTRAINT uq_product_fact UNIQUE (fragment_id, ingredient, functional_claim, recog_kind)
 );
 CREATE INDEX ix_product_ingredient ON product_fact(ingredient);
 

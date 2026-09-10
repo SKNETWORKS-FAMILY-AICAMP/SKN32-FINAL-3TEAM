@@ -492,10 +492,49 @@ def collect(
     2인 확인이 안 끝난 소스는 게이트가 첫 줄에서 거부합니다 (D-15 · D-66).
     요청주소는 `collect/endpoints.yaml` 에 있고, 비어 있으면 어디를 볼지 알려줍니다.
     """
-    args = ["uv", "run", "python", "-m", "collect.openapi", source, "--use", use]
-    if pages:
+    from collect import COLLECTORS, MANUAL_SOURCES  # noqa: PLC0415 — 표는 collect 가 든다
+
+    if source in MANUAL_SOURCES:
+        typer.echo(
+            f"⬜ `{source}` 는 **사람이 받는 소스**입니다 — 신청·회원가입이 필요합니다.\n"
+            f"   받은 뒤: uv run python launcher.py register {source} <경로> --use {use}"
+        )
+        raise typer.Exit(1)
+    spec = COLLECTORS.get(source)
+    if spec is None:
+        typer.echo(
+            f"🔴 `{source}` 의 수집기가 표에 없습니다.\n"
+            "   표를 봅니다 — collect/__init__.py 의 COLLECTORS · MANUAL_SOURCES\n"
+            "   🚨 **추정하지 않습니다.** 오픈API 가 아닌 소스를 openapi 로 보내면"
+            " 엉뚱한 오류가 납니다 (D-179)."
+        )
+        raise typer.Exit(1)
+    module, shape = spec
+    args = ["uv", "run", "python", "-m", module]
+    if shape == "arg":
+        args += [source, "--use", use]
+    elif shape == "target":
+        args += ["--target", "law"]
+    if pages and module == "collect.openapi":
         args += ["--pages", str(pages)]
     raise typer.Exit(run(*args))
+
+
+@app.command(
+    name="labelsheet",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def labelsheet(ctx: typer.Context) -> None:
+    """라벨 시트 ↔ 엑셀(CSV) — 🚨 **사람은 번호만 채웁니다**.
+
+        labelsheet export <시트.jsonl> --who 권소라 --part 1-50
+        labelsheet import  build/labels/권소라.csv --sheet <시트.jsonl>
+
+    ⛔ 종전에는 JSONL 을 손으로 고치게 했습니다 — 대괄호를 빠뜨려 그 줄이 JSON 이 아니게 되거나,
+       유형 이름을 한 글자 틀려 **조용히 다른 라벨**이 되던 자리입니다.
+    ★ 번호는 지시서 §3 의 **판정 순서 그대로**입니다. 두 곳이 갈리면 게이트가 잡습니다 (D-99).
+    """
+    raise typer.Exit(run("uv", "run", "python", "scripts/label_sheet.py", *ctx.args))
 
 
 @app.command()

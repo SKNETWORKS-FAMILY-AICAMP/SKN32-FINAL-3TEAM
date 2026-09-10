@@ -38,6 +38,21 @@ def dsn() -> str:
     )
 
 
+def _tokens(model, text: str) -> int | None:
+    """임베딩 모델 토크나이저로 센 토큰 수. 못 세면 `None` — **지어내지 않는다**.
+
+    🚨 상한(`ck_chunk_tokens` 512)은 **이 모델의 상한**이므로 이 토크나이저로 세야 뜻이 맞다.
+    """
+    try:
+        tok = model.tokenizer
+    except AttributeError:
+        return None
+    try:
+        return len(tok.encode(text, add_special_tokens=True))
+    except Exception:  # noqa: BLE001 — 토크나이저 종류가 달라도 적재는 계속한다
+        return None
+
+
 def load_model():  # noqa: ANN201
     try:
         from sentence_transformers import SentenceTransformer
@@ -99,7 +114,11 @@ def main() -> int:
                     r["doc_type"],
                     r["category"],
                     r["text"],
-                    None,
+                    # 🔴 **실제로 센다** (2026-09-10). ⛔ 종전에는 항상 `None` 이라
+                    #    `ck_chunk_tokens`(512 상한)가 **영구히 무효**였다. 설계 문서는
+                    #    「900토큰 청크 거부 확인」을 성과로 적어 뒀는데 실무에서 안 걸린다.
+                    #    🚨 임베딩 모델의 토크나이저로 센다 — 상한이 그 모델의 상한이다.
+                    _tokens(model, r["text"]),
                 ),
             )
         done = 0

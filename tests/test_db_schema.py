@@ -140,6 +140,8 @@ def test_alembic_ini_는_ascii_만_담는다() -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 _ENUM = re.compile(r"CREATE TYPE\s+(\w+)\s+AS ENUM\s*\((.*?)\);", re.S)
+# 🔄 값을 **더하기만** 하는 마이그레이션 (0005). `CREATE TYPE` 재생성과 달리 앞 모양을 남긴다.
+_ADD_VALUE = re.compile(r"ALTER TYPE\s+(\w+)\s+ADD VALUE(?:\s+IF NOT EXISTS)?\s+'([^']+)'", re.I)
 
 
 def _enums() -> dict[str, set[str]]:
@@ -222,8 +224,13 @@ def test_마이그레이션이_만드는_모양이_schema_sql_과_같다() -> No
 
     새 기기는 `db/schema.sql` 하나로 서고, 이미 있는 DB 는 `db/migrations/*.sql` 로 옮긴다.
     ⛔ 둘이 갈리면 **기기마다 스키마가 다르고 그 차이는 조용하다** — 한쪽에서만 적재가 막힌다.
-    ★ 마이그레이션이 다시 만드는 ENUM·뷰는 `schema.sql` 의 것과 **글자까지** 같아야 한다.
-      (마이그레이션에만 있는 `ALTER` 는 여기서 안 본다 — 차이를 적는 것이 그 파일의 일이다.)
+
+    🔴 **파일 하나씩이 아니라 「전부 적용한 뒤」로 본다** (2026-09-10).
+       ⛔ 종전에는 마이그레이션마다 `CREATE TYPE` 을 따로 꺼내 `schema.sql` 과 맞췄다.
+          그러면 **나중 마이그레이션이 값을 더하는 순간 앞엣것이 틀린 것이 된다** —
+          0003 은 `violation_t` 10종을 만들고 0005 가 하나를 더하는데, 옮긴 DB 의
+          최종 모양은 11종으로 `schema.sql` 과 같다. 앞 파일은 **그때는 맞았던 값**이다.
+       ★ 이 게이트가 지키려는 것은 파일별 일치가 아니라 **끝난 뒤의 모양**이다.
     """
     schema = SCHEMA.read_text(encoding="utf-8")
     s_enum = {n: re.findall(r"'([^']+)'", b) for n, b in _ENUM.findall(schema)}
@@ -232,15 +239,30 @@ def test_마이그레이션이_만드는_모양이_schema_sql_과_같다() -> No
     files = sorted(MIG_DIR.glob("*.sql")) if MIG_DIR.exists() else []
     assert files, f"🚨 {MIG_DIR} 에 마이그레이션 SQL 이 없다"
 
+    # 마이그레이션을 순서대로 적용한 뒤의 ENUM 모양
+    m_enum: dict[str, list[str]] = {}
     for f in files:
         sql = f.read_text(encoding="utf-8")
-        for name, vals in ((n, re.findall(r"'([^']+)'", b)) for n, b in _ENUM.findall(sql)):
-            assert name in s_enum, f"🚨 {f.name} 이 `schema.sql` 에 없는 타입 {name} 을 만든다"
-            assert vals == s_enum[name], (
-                f"🚨 {f.name} 의 `{name}` 값이 `db/schema.sql` 과 다르다.\n"
-                f"   마이그레이션 {vals}\n   schema.sql  {s_enum[name]}\n"
-                "   새 DB 와 옮긴 DB 가 갈린다 — 한쪽에서만 적재가 막힌다."
+        for name, body in _ENUM.findall(sql):
+            m_enum[name] = re.findall(r"'([^']+)'", body)
+        for name, val in _ADD_VALUE.findall(sql):
+            assert name in m_enum, (
+                f"🚨 {f.name} 이 마이그레이션에서 만든 적 없는 타입 {name} 에 값을 더한다 —\n"
+                "   옮긴 DB 에는 그 타입이 어떤 모양인지 이 파일들만 보고는 알 수 없다."
             )
+            if val not in m_enum[name]:
+                m_enum[name].append(val)
+
+    for name, vals in m_enum.items():
+        assert name in s_enum, f"🚨 마이그레이션이 `schema.sql` 에 없는 타입 {name} 을 만든다"
+        assert vals == s_enum[name], (
+            f"🚨 마이그레이션을 다 적용한 뒤의 `{name}` 이 `db/schema.sql` 과 다르다.\n"
+            f"   마이그레이션 {vals}\n   schema.sql  {s_enum[name]}\n"
+            "   새 DB 와 옮긴 DB 가 갈린다 — 한쪽에서만 적재가 막힌다."
+        )
+
+    for f in files:
+        sql = f.read_text(encoding="utf-8")
         for name, body in _views(sql).items():
             assert name in s_view, f"🚨 {f.name} 이 `schema.sql` 에 없는 뷰 {name} 을 만든다"
             assert body == s_view[name], (

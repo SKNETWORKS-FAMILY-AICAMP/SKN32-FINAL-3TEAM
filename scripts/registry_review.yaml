@@ -104,6 +104,17 @@ mfds_casebook:
   #   근거: docs/ohb/검토요청_2026-09-08_마스킹정책_3종.md
   reviewed_by: 권소라
   reviewed_at: 2026-09-08
+  # 🚨 크롤링형 — robots.txt 를 **사람이 열어 본 날**을 적는다 (규약 6 · D-179)
+  #   2026-09-07 확인 (오한빈) — https://www.mfds.go.kr/robots.txt probe 실측:
+  #        User-agent: * / Allow:/   — 명시적 전면 허용. Disallow 한 줄도 없다.
+  #   근거 원문은 scripts/registry_rationale.yaml 의 mfds_special_use_guide.why 절에 있다:
+  #     「robots 는 「User-agent: * / Allow:/」로 명시적 전면 허용(2026-09-07 probe 실측).
+  #       mfds_casebook·mfds_online_guideline 과 같은 단일 게시물 패턴이다.」
+  #   ⛔ 2026-09-10 까지 이 칸이 비어 있었다. 규약 6 이 `access` **산문 낱말표**로 판정해서
+  #      「자료실 PDF 다운로드」가 목록에 없어 **한 번도 안 걸렸다** — 판정을 표 기반으로
+  #      바꾸자마자 게이트가 잡았다. 측정은 이미 있었고 **기록만 안 옮겨져 있었다.**
+  #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 — 그 축은 D-132 준용으로 별도다.
+  robots_checked_at: 2026-09-07
   collected_at: 2026-09-09
 mfds_online_guideline:
   # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
@@ -111,6 +122,17 @@ mfds_online_guideline:
   decided_at: 2026-09-03
   reviewed_by: 권소라
   reviewed_at: 2026-09-07
+  # 🚨 크롤링형 — robots.txt 를 **사람이 열어 본 날**을 적는다 (규약 6 · D-179)
+  #   2026-09-07 확인 (오한빈) — https://www.mfds.go.kr/robots.txt probe 실측:
+  #        User-agent: * / Allow:/   — 명시적 전면 허용. Disallow 한 줄도 없다.
+  #   근거 원문은 scripts/registry_rationale.yaml 의 mfds_special_use_guide.why 절에 있다:
+  #     「robots 는 「User-agent: * / Allow:/」로 명시적 전면 허용(2026-09-07 probe 실측).
+  #       mfds_casebook·mfds_online_guideline 과 같은 단일 게시물 패턴이다.」
+  #   ⛔ 2026-09-10 까지 이 칸이 비어 있었다. 규약 6 이 `access` **산문 낱말표**로 판정해서
+  #      「자료실 PDF 다운로드」가 목록에 없어 **한 번도 안 걸렸다** — 판정을 표 기반으로
+  #      바꾸자마자 게이트가 잡았다. 측정은 이미 있었고 **기록만 안 옮겨져 있었다.**
+  #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 — 그 축은 D-132 준용으로 별도다.
+  robots_checked_at: 2026-09-07
   collected_at: 2026-09-10
 foodsafety_faq:
   decided_by: 오한빈
@@ -153,7 +175,7 @@ mfds_hf_ingredient:
   #    가입 시 이용약관에 추가 제약이 있으면 **재판정 대상**이다 (D-72).
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-09
+  collected_at: 2026-09-10
 
 mfds_hf_individual:
   decided_by: 오한빈
@@ -161,7 +183,7 @@ mfds_hf_individual:
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음 (제공기관 식약처)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-09
+  collected_at: 2026-09-10
 
 
 kcia_guideline:
@@ -578,4 +600,15 @@ mfds_special_use_guide:
   #   근거: docs/ohb/검토요청_2026-09-08_마스킹정책_3종.md
   reviewed_by: 권소라
   reviewed_at: 2026-09-08
+  # 🚨 크롤링형 — robots.txt 를 **사람이 열어 본 날**을 적는다 (규약 6 · D-179)
+  #   2026-09-07 확인 (오한빈) — https://www.mfds.go.kr/robots.txt probe 실측:
+  #        User-agent: * / Allow:/   — 명시적 전면 허용. Disallow 한 줄도 없다.
+  #   근거 원문은 scripts/registry_rationale.yaml 의 mfds_special_use_guide.why 절에 있다:
+  #     「robots 는 「User-agent: * / Allow:/」로 명시적 전면 허용(2026-09-07 probe 실측).
+  #       mfds_casebook·mfds_online_guideline 과 같은 단일 게시물 패턴이다.」
+  #   ⛔ 2026-09-10 까지 이 칸이 비어 있었다. 규약 6 이 `access` **산문 낱말표**로 판정해서
+  #      「자료실 PDF 다운로드」가 목록에 없어 **한 번도 안 걸렸다** — 판정을 표 기반으로
+  #      바꾸자마자 게이트가 잡았다. 측정은 이미 있었고 **기록만 안 옮겨져 있었다.**
+  #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 — 그 축은 D-132 준용으로 별도다.
+  robots_checked_at: 2026-09-07
   collected_at: 2026-09-09

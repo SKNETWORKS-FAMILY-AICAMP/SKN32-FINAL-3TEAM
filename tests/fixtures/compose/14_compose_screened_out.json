@@ -1,0 +1,46 @@
+{
+  "ad_format": "상세페이지",
+  "sections": [
+    {
+      "order": 0,
+      "kind": "표시문구",
+      "text": null,
+      "placeholder": "판정을 통과하면 채워져요"
+    },
+    {
+      "order": 1,
+      "kind": "헤드라인",
+      "text": null,
+      "placeholder": "판정을 통과하면 채워져요"
+    }
+  ],
+  "screening": [
+    {
+      "sent_id": "c1",
+      "text": "아토피가 낫습니다.",
+      "verdict": "hold",
+      "hold_reason": "rd1",
+      "violations": [
+        "질병_예방치료_표방"
+      ],
+      "infeasibility": "C",
+      "evidence": [
+        {
+          "law_id": "008741",
+          "article": "제22조",
+          "item": "별표5 제2호나목",
+          "quote": "기능성화장품이 아님에도 기능성화장품으로 잘못 인식할 우려가 있는 표시·광고를 하지 말 것",
+          "chunk_id": null
+        }
+      ],
+      "risk": {
+        "floor": "R4",
+        "encoder": null,
+        "final": "R4",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false
+    }
+  ],
+  "disclosure_section_order": 0
+}

@@ -1,0 +1,58 @@
+{
+  "outcome": "hold",
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "임상적으로 입증된 효과입니다.",
+      "verdict": "hold",
+      "hold_reason": "rd1",
+      "violations": [
+        "실증책임_위반"
+      ],
+      "infeasibility": "B",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제1호",
+          "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "013094_제8조_1"
+        }
+      ],
+      "risk": {
+        "floor": "R2",
+        "encoder": "R3",
+        "final": "R3",
+        "evidence_span": {
+          "start": 0,
+          "end": 8,
+          "label": "주장"
+        }
+      },
+      "evidence_mismatch": true
+    }
+  ],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 1,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    },
+    {
+      "node": "생성",
+      "ms": 0.0
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.1.0"
+}

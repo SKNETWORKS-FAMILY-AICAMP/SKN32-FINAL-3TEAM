@@ -78,7 +78,13 @@ def kappa(a: dict[str, str], b: dict[str, str]) -> tuple[float, int, int]:
     po = agree / n
     ca, cb = collections.Counter(a[k] for k in both), collections.Counter(b[k] for k in both)
     pe = sum(ca[x] * cb.get(x, 0) for x in ca) / (n * n)
-    k = 1.0 if pe == 1 else (po - pe) / (1 - pe)
+    # 🔴 **`pe == 1` 이면 κ 는 정의되지 않는다** (2026-09-10 · D-170).
+    #    ⛔ 종전에는 1.0(완전 합의)을 냈다. 그런데 `pe == 1` 은 **두 사람이 전부 같은 한
+    #       라벨만 찍었다**는 뜻이고, 그때 정보량은 0 이다. 「우연히 맞을 확률을 뺀다」는
+    #       κ 의 취지에서 그 자리는 **뺄 것이 전부**라 답이 없다.
+    #    🚨 위 docstring 이 반대편 착시(일치 85%인데 κ=0.000)는 경고해 놓고 이쪽 극단은
+    #       열어 뒀다. 1.0 으로 보고하면 **가장 정보 없는 라벨링이 가장 좋아 보인다.**
+    k = float("nan") if pe >= 1 else (po - pe) / (1 - pe)
     return k, n, agree
 
 
@@ -133,9 +139,29 @@ def main() -> int:
     if len(split_rows) > 8:
         print(f"  … 외 {len(split_rows) - 8}건")
 
+    # 🔴 **한 사람만 채운 항목을 「합의」로 넣지 않는다** (2026-09-10 · D-66 2인 확인).
+    #    ⛔ 종전 조건은 `len({라벨들}) == 1` 뿐이었다. 한 파일에만 있는 키도 집합 크기가
+    #       1 이라 통과한다 — **겹치지 않은 라벨이 전부 「두 사람이 합의한 것」으로**
+    #       산출에 들어갔다. 2인 확인이 이 프로젝트의 뼈대인데(D-15 · D-66) 그 자리가 비어 있었다.
+    #    ★ 「몇 명이 채웠나」와 「그들이 같은가」는 다른 질문이다. 둘 다 묻는다.
+    solo = [k for k in allk if sum(1 for d in data.values() if k in d) == 1]
+    if solo:
+        print(f"\n🔴 **한 사람만 채운 항목 {len(solo)}건** — 합의가 아니다 (D-66)")
+        for k in solo[:5]:
+            txt = k.split("\x1f")[2] or k.split("\x1f")[3]
+            print(f"  · {txt[:56]}")
+        if len(solo) > 5:
+            print(f"  … 외 {len(solo) - 5}건")
+        print("  🚨 취합에 넣지 않는다. 버린 것이 아니라 **두 번째 사람을 기다리는 것**이다.")
+
     if a.merge:
         out = pathlib.Path(a.merge)
-        agreed = {k for k in allk if len({d[k] for d in data.values() if k in d}) == 1}
+        agreed = {
+            k
+            for k in allk
+            if sum(1 for d in data.values() if k in d) >= 2
+            and len({d[k] for d in data.values() if k in d}) == 1
+        }
         base = files[0]
         n = 0
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -147,8 +173,12 @@ def main() -> int:
                 if _key(r) in agreed and _label(r):
                     f.write(line + "\n")
                     n += 1
-        print(f"\n  → {out}  ({n}건 · **합의된 것만**)")
+        print(f"\n  → {out}  ({n}건 · **2인 이상이 채우고 답이 같은 것만**)")
         print(f"  🚨 갈린 {len(split_rows)}건은 **안 들어갔다.** 버린 것이 아니라 보류다.")
+        if solo:
+            print(
+                f"  🚨 한 사람만 채운 {len(solo)}건도 **안 들어갔다** — 2인 확인이 아니다 (D-66)."
+            )
     return 0
 
 
