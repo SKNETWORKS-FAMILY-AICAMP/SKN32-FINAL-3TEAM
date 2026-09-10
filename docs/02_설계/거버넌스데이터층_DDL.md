@@ -308,10 +308,16 @@ CREATE TYPE value_t       AS ENUM ('A','B','C','D','X');
 --    ★ 조문 대응(별표1 제1~8호)은 **타입이 아니라 데이터**다 — `violation_article` 을 본다.
 --      조문이 확정 라벨이면(D-158) 그 대응은 바뀔 수 있는 사실이지 스키마가 아니다.
 --    🚨 '적법' 값을 두지 않는다 — 적법은 `violations = '{}'` 다. 값으로 두면 두 표현이 생긴다.
+-- 🔴 뒤 다섯은 **편입 후보**다 (D-65). 인코더가 예측하는 확정 클래스는
+--    `scripts/collect.py` 의 `VIOLATION_TYPES` 6종이고, 승격 판정일은 2026-09-17 이다.
+--    ⛔ 여기 있다는 것이 「인코더 클래스」라는 뜻이 아니다 — 대응표·사전·제재가 쓰는 어휘다.
+--    🔄 `기능성화장품_오인` 2026-09-10 등재 (0005) — 화장품법 시행규칙 [별표 5] 제2호 나목.
+--       앞의 셋은 식품표시광고법 제8조제1항 1~3호 구조라 식품 축이고, 화장품 축의 같은
+--       자리가 비어 있어 `violation_article` 에 나목을 적을 수가 없었다.
 CREATE TYPE violation_t   AS ENUM ('질병_예방치료_표방','건강기능식품_오인','의약품_오인',
                                    '거짓_과장','소비자_기만','후기_체험기_기만',
                                    '추천_보증_뒷광고','부당_비교광고','비방광고',
-                                   '실증책임_위반');
+                                   '실증책임_위반','기능성화장품_오인');
 CREATE TYPE risk_t        AS ENUM ('R0','R1','R2','R3','R4');
 CREATE TYPE infeas_t      AS ENUM ('A','B','C');          -- D-59 자격형/실증형/절대형
 CREATE TYPE origin_t      AS ENUM ('real','injected','approved');
@@ -447,10 +453,11 @@ CREATE TABLE chunk (
     doc_type        TEXT,
     category        TEXT[] NOT NULL DEFAULT '{}',
     text            TEXT NOT NULL,
-    token_count     INTEGER,
+    -- 🚨 NOT NULL 이라야 `ck_chunk_tokens` 가 실제로 막는다 (0006). 널이면 CHECK 가 통과한다
+    token_count     INTEGER NOT NULL,
     effective_date  DATE,
     superseded_at   DATE,
-    CONSTRAINT ck_chunk_tokens CHECK (token_count IS NULL OR token_count <= 512)
+    CONSTRAINT ck_chunk_tokens CHECK (token_count <= 512)
 );
 COMMENT ON CONSTRAINT ck_chunk_tokens ON chunk IS
   '리랭커 bge-reranker-v2-m3 의 512 토큰 상한에 맞춘다';
@@ -481,10 +488,13 @@ CREATE TABLE sanction_rule (
     risk_level      risk_t NOT NULL,
     effective_date  DATE,
     superseded_at   DATE,
-    verified_by     TEXT,                          -- 🚨 병합 셀 파싱은 2인 대조
-    reviewed_by     TEXT,
+    -- 🚨 병합 셀 파싱은 2인 대조 — 별표7 71행 중 48행이 상속 행이다
+    --    ⛔ 종전에는 두 칸이 널 허용이라, 서명 0명·1명이 그대로 통과했다 (0006 실측).
+    --       `ck_source_four_eyes` 와 같은 모양으로 맞춘다 — 널이면 안 되는 것은 NOT NULL 로 막는다.
+    verified_by     TEXT NOT NULL,
+    reviewed_by     TEXT NOT NULL,
     CONSTRAINT ck_sanction_four_eyes
-      CHECK (verified_by IS NULL OR reviewed_by IS NULL OR verified_by <> reviewed_by)
+      CHECK (verified_by <> reviewed_by)
 );
 CREATE INDEX ix_sanction_lookup ON sanction_rule(violation_type, offense_count)
   WHERE superseded_at IS NULL;

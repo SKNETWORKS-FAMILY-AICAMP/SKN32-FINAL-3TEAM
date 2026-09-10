@@ -223,8 +223,15 @@ class Judgment(Base):
             "risk_final IS NULL OR risk_final BETWEEN 0 AND 4", name="ck_judgment_risk_final"
         ),
         # D-131 — 인코더 상향은 근거 스팬이 있을 때만. 하한보다 높은데 스팬이 없으면 위반
+        # ⛔ 종전 식은 `risk_floor IS NULL OR …` 라, **하한만 비우면** 근거 없이 R4 를
+        #    적을 수 있었다 (0006 실측). 상향의 정의가 「하한보다 높다」인데 하한이 없으면
+        #    상향이 정의되지 않아 무조건 통과였다.
+        # ★ 새 뜻 — 최종 위험도를 적으려면 하한이 반드시 있어야 하고, 하한보다 높으면
+        #    근거 스팬이 있어야 한다. 위험도를 안 적는 경우(unjudged·hold)는 그대로 통과.
         CheckConstraint(
-            "risk_final IS NULL OR risk_floor IS NULL OR risk_final <= risk_floor OR evidence_span IS NOT NULL",
+            "risk_final IS NULL"
+            " OR (risk_floor IS NOT NULL"
+            "     AND (risk_final <= risk_floor OR evidence_span IS NOT NULL))",
             name="ck_judgment_raise_needs_evidence",
         ),
         Index("ix_judgment_subject", "subject_type", "subject_id"),
