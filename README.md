@@ -301,7 +301,7 @@ uv run python launcher.py serve      # FastAPI
 
 ## 팀
 
-**SKN Final Project · 3팀 · 5인**
+**SKN Final Project · 3팀 「한끗」 · 5인**
 
 | 역할 | |
 |---|---|

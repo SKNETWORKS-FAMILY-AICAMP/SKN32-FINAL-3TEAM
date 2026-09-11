@@ -28,7 +28,22 @@ GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
 
 @pytest.fixture(scope="module")
 def m() -> dict:
-    return plan()
+    """🚨 파생물이 없는 기기에서는 **아래 다섯 검사가 물리적으로 불가능하다** (D-146).
+
+    ⛔ 2026-09-11 · CI 첫 판에서 ERROR 5개로 죽었다 — `data/derived/ftc_layer1_phrases.json`
+       이 없어서다. 55줄이 이미 **같은 상황을 skip 으로** 다루고 있었는데
+       **픽스처에만 그 가드가 없었다.** 그래서 skip 이 아니라 ERROR 가 났다.
+    🚨 「게이트 통과」가 지금까지 **팀장 기기에서만** 참이었다는 뜻이다 — 팀원이 클론해
+       돌려도 똑같이 죽는다. CI 가 그것을 처음 말해 주었다.
+    ★ 경로를 여기 다시 적지 않는다. `plan()` 이 읽는 입력 목록이 두 벌이 되면 갈린다(D-99).
+      `plan()` 이 여는 것은 전부 `data/` 파생물이므로, 여기서 나는 FileNotFoundError 는
+      **「산출물이 없다」 외의 뜻이 없다.**
+    """
+    try:
+        return plan()
+    except FileNotFoundError as e:
+        # 🚨 skip 이지만 **무엇을 안 봤는지 이름으로 낸다** — 「초록불」로 읽히면 안 된다.
+        pytest.skip(f"🔴 [P12] 출처 분리 검사 다섯을 **안 돌렸다** — 산출물이 없다.\n   {e}")
 
 
 @pytest.mark.gate

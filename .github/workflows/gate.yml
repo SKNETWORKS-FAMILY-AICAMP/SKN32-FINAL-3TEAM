@@ -1,0 +1,91 @@
+# ============================================================
+# CopyLane — 게이트 (CI)
+# ------------------------------------------------------------
+#  🚨 훅은 각자 `uv run pre-commit install` 을 쳐야 붙는다. 안 친 사람의 커밋에는
+#     아무 검사도 안 걸린다. 이 워크플로가 그 구멍을 막는다 — 여기는 안 칠 수 없다.
+#
+#  🚨 `paths-ignore` 를 넣지 않는다. docs/ 만 바뀌어도 게이트가 깨질 수 있다 —
+#     tests/test_governance_layout.py 가 문서를 읽어 D-54 단일 출처를 검사한다.
+#     「문서만 고쳤는데 왜 도냐」는 물음의 답이 이것이다.
+#
+#  🔴 `-rs` — **건너뛴 검사의 이름과 사유를 로그에 낸다** (D-146 · D-188).
+#     게이트 176 중 7 개는 `data/**` 파생물이 있어야 돌고, 그 파생물은 커밋하지
+#     않는다(D-19). 즉 그 일곱은 **CI 에서 영영 안 돈다** — 누수·측정불가·주입본이
+#     그 안에 있다. 초록불이 그것까지 봤다고 읽히면 D-188 이 적은 그대로가 된다:
+#     **무탐으로 끝난 검사는 안심시킨다.** 그래서 안 본 것을 이름으로 남긴다.
+#     ★ CI 가 증명하는 것은 「코드가 성립하는가」다. 「산출물이 규약을 지키는가」는
+#       데이터가 있는 기기에서 `uv run python launcher.py gate` 가 증명한다.
+#
+#  🚨 runner 가 windows 인 이유 — 팀 5인이 전부 Windows 다. CI 가 Linux 뿐이면
+#     「내 기기에서는 되는데」를 CI 가 못 잡는다. 🔄 Ubuntu 축은 배포 리허설(9/22)
+#     전에 붙인다 — Linux 에서 도는지 알아야 하는 시점이 거기다 (배포계획 §5).
+# ============================================================
+
+name: gate
+
+on:
+  push:
+    branches: [main, ohb]
+  pull_request:
+  workflow_dispatch:
+
+# 같은 브랜치에 연달아 밀면 앞엣것을 취소한다
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests (windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # .python-version 을 uv 가 읽는다 (3.11.9 고정)
+      - run: uv python install
+
+      # 🚨 --frozen — lock 을 고쳐서 통과시키는 길을 막는다.
+      #    uv.lock 과 pyproject 가 어긋나면 여기서 죽는다 (D-51 환경 동일성).
+      - run: uv sync --frozen
+
+      - run: uv run ruff check .
+
+      # 🔴 게이트 먼저 — 실패하면 여기서 멈춘다 (D-51)
+      - name: 거버넌스 게이트
+        run: uv run pytest -q -m gate -rs
+
+      - name: 전체 테스트
+        run: uv run pytest -q -rs
+
+  hooks:
+    name: hooks (pre-commit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - run: uv python install
+      - run: uv sync --frozen
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # --show-diff-on-failure — 훅이 무엇을 고쳤는지 로그에 남는다.
+      # 그래야 로컬에서 `pre-commit run --all-files` 한 번으로 끝난다.
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
