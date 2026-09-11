@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import pathlib
 from typing import Any
@@ -26,6 +27,7 @@ from pydantic import BaseModel, Field
 
 # 🚨 계약은 `app/contracts.py` 하나가 원본이다 (D-124). 여기서 다시 정의하지 않는다 —
 #    두 곳에 있으면 화면이 보는 모양과 우리가 내는 모양이 조용히 갈린다.
+from app import retrieve as rt
 from app.contracts import (
     ComposeRequest,
     ComposeResponse,
@@ -34,6 +36,10 @@ from app.contracts import (
     JudgeRequest,
     JudgeResponse,
 )
+
+# 🔴 **검색 로직은 이 파일에 없다** — `app/retrieve.py` 하나가 든다 (D-99 · D-51).
+#    ⛔ `app/graph.py` 의 `retrieve` 노드가 **같은 검색**을 부를 자리다(🔜 W4~).
+#       여기서 고치면 그때 두 벌이 된다. 이 파일은 **두 갈래를 불러 한 응답에 담는 껍데기**다.
 
 app = FastAPI(
     title="CopyLane",
@@ -68,6 +74,31 @@ class SearchHit(BaseModel):
     #    URL·게시일은 `source`·`document` 가 들고 있다 (D-132 · 결정요청 ③)
     attribution: str | None = None
     source_url: str | None = None
+    #: 🔴 **어느 갈래로 찾아졌는가** — `vector`(뜻) 또는 `text`(글자).
+    #:    두 갈래를 한 순위로 합치지 않는다. 합치려면 「거리 0.83 과 글자 일치를 어떻게
+    #:    더하나」라는 **[임의] 가중치**가 필요하고, 그 수는 판정 경로에 들어가면 안 된다.
+    #:    ★ 대신 **어떻게 찾았는지를 결과에 남긴다.** 묶어 보이는 것은 화면이 한다.
+    match: str
+    #: 코사인 거리 (작을수록 가깝다). 🚨 `text` 갈래는 `null` 이다 —
+    #:    0.0 으로 채우면 「완전 일치」라는 뜻이 되어 없는 값이 가장 좋은 값이 된다.
+    distance: float | None = None
+
+
+class SearchResult(BaseModel):
+    """🔴 목록이 아니라 **봉투**다 — 「왜 못 했는지」를 담을 자리가 있어야 한다.
+
+    ⛔ 벡터 검색이 안 될 때 조용히 텍스트 결과만 내면 「의미 검색을 했는데 0건」과
+       「의미 검색을 못 했다」가 구별되지 않는다. 2026-09-12 에 `mark_collected` 가
+       같은 모양으로 틀렸다 — **찍혔다 ≠ 받았다**.
+    🚨 2026-09-12 응답 모양이 `list[SearchHit]` 에서 이 봉투로 바뀌었다.
+       화면이 아직 없어서 지금이 바꿀 수 있는 마지막 때다 (D-147).
+    """
+
+    hits: list[SearchHit] = Field(default_factory=list)
+    #: `ok` 이거나, **안 된 이유**가 그대로 들어온다.
+    vector: str
+    #: 갈래별 건수 — 0 이 「못 했다」인지 「없다」인지는 위 `vector` 가 말한다.
+    counts: dict[str, int] = Field(default_factory=dict)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -91,7 +122,9 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
 <ul>
   <li class=yes><a href="/health">/health</a> — DB 층별 행 수</li>
   <li class=yes><a href="/search?q=%EC%A7%88%EB%B3%91&amp;category=%EC%8B%9D%ED%92%88">/search</a>
-      — 조문 검색 <b>(아직 부분일치다. 벡터 검색이 아니다)</b></li>
+      — 조문 검색. <b>뜻(벡터)과 글자(부분일치) 두 갈래를 따로 낸다</b> —
+      각 줄의 <code>match</code> 가 어느 쪽인지 말한다.
+      벡터가 안 되면 <code>vector</code> 칸에 이유가 적힌다</li>
   <li class=yes><a href="/docs">/docs</a> — API 계약 <b>(판정 응답 스키마 포함)</b></li>
   <li class=yes><a href="/fixtures">/fixtures</a>
       — <b>진입점 셋</b>의 고정 응답 14건 (D-124 · D-181):
@@ -104,7 +137,9 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
       — 진입점 셋의 엔진이 없다. <b>501</b> 을 낸다 (D-119 — 판정 코어는 하나).
       가짜 200 을 내면 프론트가 그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.</li>
   <li class=no>화면(Jinja2 + HTMX) — D-56 이 정해 뒀고 아직 안 지었다.</li>
-  <li class=no><code>chunk_embedding</code> — 벡터 검색. 청크 2,585개는 서 있다.</li>
+  <li class=no>벡터 <b>인덱스</b>와 리랭커 — 지금 규모(청크 수천)에서는 순차 스캔이 빠르고,
+      <code>ivfflat</code> 은 <code>lists</code> 를 잘못 잡으면 재현율이 조용히 떨어진다.
+      <b>빠뜨린 것이 아니라 판정이다</b> — 근거는 <code>app/retrieve.py</code> 머리말.</li>
   <li class=no><code>violation_article</code>·<code>sanction_rule</code>
       — 근거 조문 대응표와 제재 수치. 그래서 위험도가 아직 스텁이다.</li>
 </ul>
@@ -136,53 +171,42 @@ def health() -> Health:
         return Health(ok=False, db=f"down: {e}")
 
 
-@app.get("/search", response_model=list[SearchHit])
-def search(q: str, category: str = "일반", limit: int = 5) -> list[SearchHit]:
-    """조문 검색 — 🚨 **아직 벡터 검색이 아니다.** 텍스트 부분일치다.
+@app.get("/search", response_model=SearchResult)
+def search(q: str, category: str = "일반", limit: int = 5) -> SearchResult:
+    """조문 검색 — **두 갈래를 따로 낸다** (2026-09-12).
 
-    `chunk_embedding` 이 채워지면 `embedding <=> %s::vector` 로 바꾼다.
-    🔴 지금 상태를 감추지 않는다 — 「검색이 된다」와 「의미 검색이 된다」는 다르다.
+        vector   뜻이 가까운 것.  「면역력 쑥!」 → 「질병의 예방 및 치료에 효능이…」
+                 글자가 하나도 안 겹쳐도 찾는다. 광고 문구는 조문 표현을 그대로 안 쓴다.
+        text     글자가 그대로 있는 것.  「제5호 아목」
+                 🚨 **벡터는 기호를 못 찾는다** — 「제3호 나목」도 비슷하다고 본다.
+
+    🔴 합치지 않는 이유는 `app/retrieve.py` 머리말에 있다 — [임의] 가중치를 안 만든다.
+    🔴 벡터가 안 되면 **텍스트 결과를 내되 `vector` 칸에 이유를 적는다.** 조용히 안 떨어진다.
     """
-    import psycopg
+    import psycopg  # noqa: PLC0415 — DB 가 없어도 임포트는 서야 한다
 
+    hits: list[rt.Hit] = []
+    vector_state = "ok"
     try:
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                -- 🔴 **`v_current_chunk` 를 쓴다** (2026-09-10).
-                --    ⛔ 종전에는 `chunk` 원표를 직접 조인해 `superseded_at IS NULL` 도
-                --       `fragment.excluded = false` 도 없었다. 스키마가 그 뷰를 만들며
-                --       *"검색은 항상 현행만. superseded_at 필터를 잊는 것이 가장 흔한 사고다"*
-                --       라고 적어 뒀는데, **구조로 막으려던 사고가 첫 소비자에서 그대로 났다.**
-                SELECT c.chunk_id, c.law_id, c.article, c.doc_type, c.category, c.text,
-                       s.attribution, s.url
-                FROM v_current_chunk c
-                JOIN fragment f ON f.fragment_id = c.fragment_id
-                JOIN source   s ON s.source_id   = f.source_id
-                JOIN source_use u ON u.source_id = s.source_id AND u.use_code = 'U2_rag'
-                WHERE u.allowed AND c.text ILIKE %s AND %s = ANY(c.category)
-                -- 🚨 정렬이 없으면 `LIMIT` 결과가 **비결정적**이다 — 같은 질의가 다른 답을 낸다.
-                ORDER BY c.law_id, c.article NULLS LAST, c.chunk_id
-                LIMIT %s
-                """,
-                (f"%{q}%", category, limit),
-            )
-            rows = cur.fetchall()
-    except Exception as e:  # noqa: BLE001
+            try:
+                hits += rt.by_vector(cur, q, category, limit)
+            except rt.RetrieveError as e:
+                # ⛔ 삼키는 것이 아니다 — 응답에 담아 낸다 (D-162 · D-72).
+                vector_state = f"{type(e).__name__}: {e}"
+            hits += rt.by_text(cur, q, category, limit)
+    except psycopg.Error as e:
         raise HTTPException(503, f"DB 에 못 붙었다 — {e}") from e
-    return [
-        SearchHit(
-            chunk_id=r[0],
-            law_id=r[1],
-            article=r[2],
-            doc_type=r[3],
-            category=r[4],
-            text=r[5],
-            attribution=r[6],
-            source_url=r[7],
-        )
-        for r in rows
-    ]
+
+    counts = {
+        rt.MATCH_VECTOR: sum(1 for h in hits if h.match == rt.MATCH_VECTOR),
+        rt.MATCH_TEXT: sum(1 for h in hits if h.match == rt.MATCH_TEXT),
+    }
+    return SearchResult(
+        hits=[SearchHit(**dataclasses.asdict(h)) for h in hits],
+        vector=vector_state,
+        counts=counts,
+    )
 
 
 @app.post("/judge", response_model=JudgeResponse, responses={501: {"description": "엔진 미착수"}})

@@ -113,7 +113,20 @@ def classify(state: JudgeState) -> dict[str, Any]:
 
 @timed
 def retrieve(state: JudgeState) -> dict[str, Any]:
-    """조문 검색. 🔜 `chunk_embedding` 벡터 검색 + bge-reranker (512 토큰 상한)."""
+    """조문 검색. 🔜 `app/retrieve.py` 의 `by_vector()` 를 부른다 (+ bge-reranker).
+
+    🔴 **검색을 여기서 새로 쓰지 않는다** — 코어는 `app/retrieve.py` 하나다 (D-99 · D-51).
+       `/search` 가 이미 그것을 부르고 있고, 여기서 따로 쓰면 그 순간 두 벌이 된다.
+
+           from app import retrieve as rt
+           hits = rt.by_vector(cur, sentence_text, category, limit)
+
+    🚨 여기서는 **`by_vector` 만** 부른다. 입력이 광고 문구라 「제5호 아목」 같은 기호가
+       올 일이 없고, `by_text` 를 섞으면 순위 합산 가중치([임의])가 필요해진다.
+       `/search` 가 둘 다 부르는 것은 **사람이 기호로도 찾기 때문**이다 — 층이 다르다.
+    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다. 근거 없이 판정하면 D-100 위반이라
+       **`hold` 로 보내는 것**이 맞다 — 빈 근거로 `judge` 에 들어가지 않는다.
+    """
     return {}
 
 
