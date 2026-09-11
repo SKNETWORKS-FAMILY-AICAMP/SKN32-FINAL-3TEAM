@@ -111,7 +111,10 @@ def _git_branch() -> str:
         return "?"
 
 
+@functools.lru_cache(maxsize=1)
 def _docker_state() -> str:
+    """🚨 메뉴를 그릴 때마다 `docker info` 를 부르면 안 된다 (2026-09-11).
+    도커가 안 떠 있으면 그릴 때마다 타임아웃을 기다린다. 한 번만 잰다."""
     if shutil.which("docker") is None:
         return "[red]없음[/red]"
     probe = subprocess.run(["docker", "info"], capture_output=True)
@@ -345,6 +348,36 @@ def matrix() -> None:
 
 
 @app.command()
+def rebuild() -> None:
+    """등급 판정을 고친 뒤 — 생성물 셋을 한 벌로 다시 만든다.
+
+    🔴 **셋은 한 벌이다.** `_matrix/data.js`(사람이 쓴 판정) 하나에서 갈라진다 —
+
+        gen_registry.py   -> data_sources.yaml            집행 (게이트가 읽는다)
+        build_matrix.py   -> sources.json + 판정매트릭스   근거 (사람이 읽는다)
+        review_sheet.py   -> S0-14 검토표                  2인 확인
+
+    ⛔ 하나만 돌리면 그 순간 **두 벌**이 된다. D-90 이 적은 그 자리다 —
+       *"손으로 양쪽을 고치면 반드시 갈린다."* 사람이 셋을 기억하게 두지 않는다.
+
+    🚨 첫 실패에서 멈춘다. 중간이 실패했는데 끝까지 돈 것처럼 보이면 안 된다.
+    """
+    steps = (
+        (["scripts/gen_registry.py"], "레지스트리"),
+        (["scripts/build_matrix.py"], "판정매트릭스"),
+        (["scripts/extract_rationale.py"], "판정 근거"),
+        (["scripts/review_sheet.py"], "S0-14 검토표"),
+    )
+    for i, (script, label) in enumerate(steps, 1):
+        console.print(f"\n[bold]{i}/{len(steps)}  {label}[/bold]")
+        if run("uv", "run", "python", *script) != 0:
+            console.print(f"  [red]{label} 에서 멈췄다[/red] — 나머지는 돌리지 않는다")
+            raise typer.Exit(1)
+    console.print("\n  [green]생성물 넷이 같은 판정에서 다시 만들어졌다[/green]")
+    raise typer.Exit(0)
+
+
+@app.command()
 def sync() -> None:
     """문서를 claude.ai 프로젝트에 올릴 사본으로 복사한다.
 
@@ -470,7 +503,9 @@ def register(
     path: str = typer.Argument(..., help="받아 온 파일이나 폴더"),
     use: str = typer.Option(..., "--use", help="U1~U4 중 하나"),
 ) -> None:
-    """사람이 받아 온 파일을 원장에 올린다 — 🚨 2인 확인이 끝나야 통과한다.
+    """사람이 받아 온 파일을 원장에 올린다.
+
+    🚨 **2인 확인이 끝나야 통과한다.**
 
     AI Hub 처럼 신청·승인을 거쳐 사람이 내려받는 소스는 수집기가 가져오지 않습니다.
     그래서 원장에 안 남고, provenance 는 나중에 못 붙입니다 (D-71). 이 명령이 그 자리입니다.
@@ -759,56 +794,141 @@ def demo() -> None:
 #    갈라진다 — D-99 와 같은 형태다.
 #    「미구현」 표기도 여기 적지 않는다. @stub 이 붙었는지로 판정한다.
 #
+# 🔴 **그런데 그 함수를 파이썬에서 「직접 호출」하면 안 된다** (2026-09-11).
+#    Typer 로 등록된 함수를 그냥 부르면 인자가 기본값이 아니라
+#    `OptionInfo`·`ArgumentInfo` **객체**로 들어온다. 그리고 객체는 언제나 참이다.
+#    ⛔ 실측 — 메뉴 「골든셋 생성」이 `write=<OptionInfo>` 로 돌아 **dry-run 이 아니라
+#       실제 쓰기**를 했다. *"기본은 보기만"* 이라 적힌 버튼이 분할 매니페스트를 덮어썼다.
+#       `keys` 는 늘 `--repair`(설정 파일을 고친다), `doctor` 는 늘 `--hash`(느리다)로 돌았고,
+#       인자를 받는 여섯(collect·register·count·probe·extract·scan)은 소스 id 자리에
+#       객체가 들어가 「표에 없습니다」로 끝났다 — **에러처럼 보이지 않는 에러**다.
+#    ★ 원인은 **호출 경로가 둘**이라는 것이다 (CLI / 메뉴). 이 파일의 원칙이 이미
+#      *"launcher 는 얇은 껍데기다 — 밖으로 위임한다"* 인데 메뉴만 그 밖에 있었다.
+#      그래서 **메뉴도 CLI 를 부른다.** 경로가 하나면 갈릴 수 없다.
+#
 # 🔴 **키가 겹치면 뒤엣것은 영영 안 눌린다** (2026-09-08 · D-162).
-#    `g` 가 「받은 파일 등록」과 「Phase 게이트 판정」에, `c` 가 「오픈API 수집」과
-#    「커밋 전 점검」에 둘씩 있었다. 조회가 `next(...)` 라 **앞엣것만** 걸린다 —
-#    메뉴에는 네 줄이 다 보이는데 두 줄은 눌러도 다른 것이 돈다.
-#    ⛔ 그런데 **에러가 안 난다.** `g` 를 누르면 `register` 가 인자 없이 돌아
-#       「인자가 부족하다」는 그럴듯한 메시지를 낸다 — 게이트 판정이 안 돌았다는 말은 없다.
-#    ★ 등록을 `i`, 커밋 전 점검을 `l` 로 옮겼다. `g`·`c` 는 **표에 적힌 대로** 돌게 뒀다.
+#    그래서 번호는 `_check_menu()` 가 중복을 검사한다 — 표를 손으로 고쳐도 안 어긋난다.
 
 
-def _menu_test() -> None:
-    """테스트를 전부 돌린다."""
-    run("uv", "run", "pytest")
+def _invoke(fn, *extra: str) -> None:
+    """🔴 메뉴도 **CLI 를 거쳐** 부른다 — 경로를 하나로 (D-51 · D-99).
+
+    `sys.executable` 을 쓰므로 이미 venv 안이고 `uv run` 을 한 번 더 타지 않는다.
+    """
+    run(sys.executable, str(ROOT / "launcher.py"), cli_name(fn), *extra)
 
 
-_menu_test._cli = "test"
+#: 눌렀을 때 **위치 인자를 묻는다** — (물음, 필수인가, 보기 종류)
+#: 🚨 `register` 처럼 **둘 이상**을 받는 명령이 있다. 하나만 물으면 CLI 가 거부한다.
+#: 🔴 보기 종류가 있으면 **번호로 고르게 한다** — 소스 id 를 외워서 칠 이유가 없다.
+ASK_ARG: dict[str, list[tuple[str, bool, str]]] = {
+    "setkey": [("어떤 키를 넣을까", True, "key")],
+    "probe": [("어떤 소스를 열어 볼까", False, "collect")],
+    "collect": [("어떤 소스를 받을까", True, "collect")],
+    "count": [("받아 온 파일이나 폴더 경로", True, "path")],
+    "register": [("어떤 소스인가", True, "manual"), ("받아 온 파일이나 폴더 경로", True, "path")],
+    "extract": [("어떤 원천을 추출할까", False, "extract")],
+    "scan": [("어떤 원천을 셀까", False, "scan")],
+}
 
-SEP = ("-", "", None)
+#: 값을 받는 옵션 중 **필수**인 것 — (물음, 플래그, 보기)
+ASK_VALUE: dict[str, list[tuple[str, str, list[tuple[str, str]]]]] = {
+    "register": [
+        (
+            "무슨 용도로 쓸 것인가",
+            "--use",
+            [
+                ("U1", "학습"),
+                ("U2", "RAG 검색"),
+                ("U3", "인용 표시"),
+                ("U4", "배포"),
+            ],
+        )
+    ],
+}
 
+#: 눌렀을 때 **여부를 묻는** 플래그 — (물음, 플래그, 1번 설명, 2번 설명)
+#: 🚨 **1번이 언제나 「안 하는 쪽」**이고 기본이다. 엔터만 치면 안 붙는다.
+#:    ⛔ 종전에는 메뉴가 이 플래그들을 **늘 켠 채로** 돌렸다 (Typer 인자 객체가 참이라).
+ASK_FLAG: dict[str, list[tuple[str, str, str, str]]] = {
+    "doctor": [
+        ("해시 검사", "--hash", "빠르게 — 있는지만 본다", "느리게 — 전 파일 해시를 다시 잰다")
+    ],
+    "keys": [("설정 파일", "--repair", "보기만 한다", ".env 의 안내 주석을 되살린다")],
+    "golden": [("파생물", "--write", "보기만 한다", "실제로 쓴다 — 기존 분할이 덮어쓰인다")],
+    "load": [("원본이 없는 행", "--allow-missing", "있으면 멈춘다", "허용하고 적재한다")],
+    "chunk": [("chunks.jsonl", "--dump", "보기만 한다", "파일로 쓴다")],
+    "embed": [("범위", "--check", "전부 임베딩한다 (DB 필요)", "모델 차원만 잰다 (DB 불필요)")],
+    "extract": [("파생물", "--dump", "보기만 한다", "쓴다 — 🚨 마스킹 정책이 있어야 한다")],
+}
+
+#: 확인을 한 번 더 받는 동작 — **값은 이유다** (2026-09-11).
+#:    🚨 종전에는 다섯 곳이 전부 *"되돌리기 어렵다"* 라고 떴다. 그런데 `db-down` 은
+#:       볼륨이 남아 되돌리기 어렵지 않고, `setup` 은 멱등이다. **사실이 아닌 경고는
+#:       곧 안 읽힌다** — D-167 이 오탐에 대해 적은 것과 같은 자리다.
+#:    ★ 그래서 성질을 둘로 갈라 적는다 — 「되돌리기 어렵다」와 「무겁거나 끊는다」.
+DANGER: dict[str, str] = {
+    "db-down": "돌고 있는 작업이 끊긴다 — 저장된 데이터는 남는다",
+    "setup": "환경을 다시 세운다 — 몇 분 걸린다. 결과는 여러 번 돌려도 같다",
+    "load": "DB 내용이 바뀐다",
+}
+
+#: 🔴 **플래그가 붙었을 때만** 위험한 것 — (플래그, 이유)
+#:    안전한 경로에서 두 번 묻지 않는다. `golden` 은 보기만 할 때는 아무것도 안 쓴다.
+#:    **확인이 습관이 되면, 습관이 된 확인은 안 읽힌다.**
+DANGER_IF: dict[str, tuple[str, str]] = {
+    "golden": ("--write", "기존 분할이 덮어쓰인다 — 되돌릴 수 없다"),
+    "extract": ("--dump", "파생물이 덮어쓰인다"),
+}
+
+#: 경로를 물을 때 보여 줄 예시
+PATH_HINT = r"예: C:\Users\<이름>\Downloads\aihub_558  ·  data\raw\mfds_casebook"
+
+
+GROUP = "#"  # 그룹 제목 줄
 MENU: list[tuple[str, str, object]] = [
+    (GROUP, "환경", None),
     ("1", "환경 설정", setup),
-    ("2", "환경 진단", doctor),
-    SEP,
-    ("d", "DB 기동", db_up),
-    ("x", "DB 중지", db_down),
-    ("3", "DB 마이그레이션", migrate),
-    SEP,
-    ("r", "레지스트리 재생성", registry),
-    ("v", "S0-14 검토표", review),
-    ("m", "판정매트릭스 빌드", matrix),
-    ("p", "소스 실측 (저장 없음)", probe),
-    ("n", "받은 파일 세기", count),
-    ("i", "받은 파일 등록", register),
-    ("c", "오픈API 수집", collect),
-    ("e", "전처리 추출", extract),
-    ("o", "원천 계측", scan),
-    ("s", "프로젝트 사본", sync),
-    SEP,
-    ("4", "데이터 수집", collect),
-    ("5", "골든셋 생성", golden),
-    ("6", "학습", train),
-    ("7", "평가", eval_),
-    ("8", "서버 실행", serve),
-    ("9", "데모 모드", demo),
-    SEP,
-    ("k", "API 키 현황", keys),
-    ("g", "Phase 게이트 판정", gate),
-    ("l", "커밋 전 점검", check),
-    ("t", "테스트", _menu_test),
-    ("f", "포맷·린트", fmt),
-    ("q", "종료", None),
+    ("2", "새 기기 안내", onboard),
+    ("3", "환경 진단", doctor),
+    ("4", "이 기기 재고", inventory),
+    ("5", "API 키 현황", keys),
+    ("6", "API 키 입력", setkey),
+    (GROUP, "DB", None),
+    ("7", "DB 기동", db_up),
+    ("8", "DB 중지", db_down),
+    ("9", "DB 마이그레이션", migrate),
+    (GROUP, "거버넌스", None),
+    ("10", "생성물 한 벌 다시", rebuild),
+    ("11", "레지스트리만", registry),
+    ("12", "판정매트릭스만", matrix),
+    ("13", "S0-14 검토표만", review),
+    ("14", "데이터 현황판", status),
+    (GROUP, "수집", None),
+    ("15", "소스 실측", probe),
+    ("16", "오픈API 수집", collect),
+    ("17", "받은 파일 세기", count),
+    ("18", "받은 파일 등록", register),
+    (GROUP, "전처리 · 적재", None),
+    ("19", "전처리 추출", extract),
+    ("20", "원천 계측", scan),
+    ("21", "골든셋 생성", golden),
+    ("22", "DB 적재", load),
+    ("23", "청킹", chunk),
+    ("24", "임베딩", embed),
+    (GROUP, "학습 · 서비스", None),
+    ("25", "학습", train),
+    ("26", "평가", eval_),
+    ("27", "서버 실행", serve),
+    ("28", "데모 모드", demo),
+    (GROUP, "개발", None),
+    ("29", "테스트", test),
+    ("30", "포맷·린트", fmt),
+    ("31", "커밋 전 점검", check),
+    ("32", "Phase 게이트 판정", gate),
+    ("33", "프로젝트 사본", sync),
+    (GROUP, "", None),
+    ("0", "종료", None),
 ]
 
 
@@ -821,54 +941,288 @@ def summary(fn) -> str:
     🚨 **첫 줄에는 「눌렀을 때 무슨 일이 일어나는지」만 쓴다.**
        런처를 여는 사람은 이 저장소를 만들지 않은 팀원이다. 파일 이름·내부 용어·
        D 번호는 첫 줄에 넣지 않는다 — 필요하면 docstring 본문에 적는다.
-       `"data.js 에서 HTML 을 만든다 (D-87)"` 는 만든 사람만 아는 말이다.
     """
     lines = (fn.__doc__ or "").strip().splitlines()
-    return (lines[0].strip() if lines else "").rstrip(".")
+    first = (lines[0].strip() if lines else "").rstrip(".")
+    # 🚨 docstring 은 마크다운으로도 읽힌다(`--help`·문서). 화면에서는 `**` 가 글자로 보인다.
+    return first.replace("**", "")
+
+
+def _check_menu() -> None:
+    """🔴 **표가 스스로를 검사한다** (D-162 · D-170).
+
+    번호가 겹치면 뒤엣것은 영영 안 눌린다. 종전에는 그것을 사람이 눈으로 봤다.
+    🚨 실패할 수 있는 단언이다 — 표를 손으로 고치다 겹치면 **여기서 죽는다.**
+    """
+    nums = [k for k, _, _ in MENU if k != GROUP]
+    dup = {n for n in nums if nums.count(n) > 1}
+    if dup:
+        raise SystemExit(f"🔴 메뉴 번호가 겹친다: {sorted(dup)}")
+    names = {cli_name(fn) for _, _, fn in MENU if fn is not None}
+    asked = sorted(set(ASK_ARG) | set(ASK_VALUE) | set(ASK_FLAG) | set(DANGER) | set(DANGER_IF))
+    missing = [n for n in asked if n not in names]
+    if missing:
+        raise SystemExit(f"🔴 메뉴에 없는 명령을 묻고 있다: {missing}")
 
 
 def _draw() -> None:
+    """🔴 **터미널 폭에 맞춘다** (2026-09-11).
+
+    ⛔ 종전에는 설명 칸이 46칸 고정이었다. 한글은 한 글자가 **두 칸**을 쓰므로 23자뿐이고,
+       29개 중 **17개가 잘려** `…` 로 끝났다 — 가장 긴 것이 67칸이었다.
+    ★ 좁은 창에서는 맨 오른쪽 **명령어 칸을 접는다.** 그 이름은 아래 안내 줄과 `--help`
+      에도 있으니 둘 중 하나를 접어야 한다면 설명이 아니라 이름 쪽이다.
+    """
+    width = min(console.width, 120)
+    show_name = width >= 112
+    lead_w, label_w, name_w = 4, 22, (12 if show_name else 0)
+    cols = 3 + (1 if show_name else 0)
+    desc_w = max(28, width - 4 - lead_w - label_w - name_w - 2 * cols)
+
     table = Table(show_header=False, box=None, padding=(0, 1))
-    table.add_column(width=3, justify="right")
-    table.add_column(width=20)
-    table.add_column(width=50, style="dim", no_wrap=True, overflow="ellipsis")
-    table.add_column(width=10, style="dim")
+    table.add_column(width=lead_w, justify="right")
+    table.add_column(width=label_w)
+    table.add_column(width=desc_w, style="dim", no_wrap=True, overflow="ellipsis")
+    if show_name:
+        table.add_column(width=name_w, style="dim")
 
     for key, label, fn in MENU:
-        if key == "-":
-            table.add_row("", "", "", "")
+        if key == GROUP:
+            table.add_row(
+                *(["", f"[bold]{label}[/bold]" if label else "", ""] + ([""] if show_name else []))
+            )
             continue
         ready = fn is None or not getattr(fn, "_planned", False)
-        # 🚨 Rich 는 대괄호를 마크업으로 읽는다. [g]·[t] 같은 한 글자 키가 통째로 사라진다.
-        #    escape 로 리터럴 대괄호를 만든다.
-        table.add_row(
-            escape(f"[{key}]"),
-            label if ready else f"[dim]{label}[/dim]",
+        name = "" if fn is None else cli_name(fn)
+        mark = ""
+        if name in DANGER or name in DANGER_IF:
+            mark = " [yellow]⚠[/yellow]"
+        elif name in ASK_ARG:
+            mark = " [dim]→[/dim]"
+        if not ready:
+            mark += " [yellow]미구현[/yellow]"
+        # 🚨 Rich 는 대괄호를 마크업으로 읽는다. escape 로 리터럴 대괄호를 만든다.
+        cells = [
+            escape(f"{key}."),
+            (label if ready else f"[dim]{label}[/dim]") + mark,
             "" if fn is None else summary(fn),
-            "" if fn is None else (cli_name(fn) if ready else "[yellow]미구현[/yellow]"),
-        )
+        ]
+        if show_name:
+            cells.append("" if fn is None else name)
+        table.add_row(*cells)
 
-    console.print(Panel(table, title="CopyLane Launcher", subtitle=_env_line(), width=96))
+    console.print(Panel(table, title="CopyLane Launcher", subtitle=_env_line(), width=width))
+    # 🔴 **「다음에 뭘 눌러야 하지」에 답한다** (2026-09-11).
+    #    메뉴는 무엇이 있는지를 보여 주지만 **순서**는 안 보여 준다. 항목이 33개가 되면
+    #    「무엇이 중요한가」가 사라진다 — 매일 쓰는 것과 기기당 한 번이 같은 무게로 놓인다.
+    #    🚨 정적인 한 줄이다. 상태를 재지 않는다 — 재려면 DB·파일을 봐야 하고,
+    #       그건 껍데기가 할 일이 아니다 (D-51). 상태 축은 `doctor` 가 든다.
+    console.print(
+        "  [dim]흐름[/dim]  [cyan]1[/cyan] 설치 → [cyan]7[/cyan] DB → [cyan]16[/cyan] 수집 → "
+        "[cyan]19[/cyan] 추출 → [cyan]21[/cyan] 골든셋 → [cyan]22[/cyan] 적재 → "
+        "[cyan]23[/cyan] 청킹 → [cyan]24[/cyan] 임베딩 → [cyan]32[/cyan] 게이트"
+    )
+    console.print(
+        "  [dim]처음이면[/dim] [cyan]2[/cyan] 새 기기 안내    "
+        "[dim]번호나 명령 이름을 넣는다 — 예: 3 · doctor · 16 · collect[/dim]"
+    )
+
+
+def _choices(kind: str) -> list[tuple[str, str]]:
+    """보기를 **표에서** 가져온다 — 여기서 만들지 않는다 (D-99).
+
+    🚨 런처가 목록을 따로 들면 표와 갈라진다. 수집기 표·전처리 표·`.env.example` 이 원본이다.
+    """
+    if kind == "collect":
+        from collect import COLLECTORS  # noqa: PLC0415 — 표는 collect 가 든다
+
+        return [(k, v[0].replace("collect.", "")) for k, v in COLLECTORS.items()]
+    if kind == "manual":
+        from collect import MANUAL_SOURCES  # noqa: PLC0415
+
+        return [(k, "사람이 받는 소스") for k in sorted(MANUAL_SOURCES)]
+    if kind in {"extract", "scan"}:
+        import preprocess  # noqa: PLC0415
+
+        table = preprocess.EXTRACTORS if kind == "extract" else preprocess.SCANNERS
+        return [(k, v.replace("preprocess.", "")) for k, v in table.items()]
+    if kind == "key":
+        import re  # noqa: PLC0415
+
+        text = (ROOT / ".env.example").read_text(encoding="utf-8")
+        # 🚨 `DATABASE_URL`·`MLFLOW_TRACKING_URI` 같은 **설정값**은 키가 아니다.
+        #    이름이 `_KEY` 로 끝나는 것만 고른다 — `setkey` 는 비밀을 넣는 자리다.
+        return [(m.group(1), "") for m in re.finditer(r"^([A-Z][A-Z0-9_]*_KEY)=", text, re.M)]
+    return []
+
+
+#: 🔴 **`0` 은 어디서나 「뒤로」다** (2026-09-11).
+#:    첫 단계에서 누르면 메뉴로, 그 뒤에서는 **이전 단계로** 돌아간다.
+#:    ⛔ 종전에는 되돌아갈 길이 없었다 — `_confirm` 에서 엔터를 치면 「안 함」으로
+#:       **진행**했고, 3단계짜리 `register` 는 두 번째에서 틀리면 처음부터 다시였다.
+#:    ★ 개념 하나에 키 하나다. 「0 직접 입력」을 따로 두지 않는다 —
+#:      번호 대신 **값을 그대로 치면** 그것이 값으로 들어간다.
+BACK = object()
+
+
+def _foot(required: bool, skip_note: str = "") -> None:
+    console.print("    [cyan] 0[/cyan]  [dim]← 뒤로[/dim]")
+    if not required and skip_note:
+        console.print(f"    [dim] ⏎  {skip_note}[/dim]")
+
+
+def _pick(question: str, options: list[tuple[str, str]], *, required: bool, skip_note: str = ""):
+    """번호로 고르게 한다. `0` 또는 (필수일 때) 빈 입력은 **뒤로**.
+
+    🚨 Rich 는 대괄호를 마크업으로 읽는다 — 물음 줄에 `[y/N]` 같은 것을 쓰면 통째로 사라진다.
+       실제로 2026-09-11 에 그렇게 사라져서 무엇을 쳐야 할지 안 보였다. 여기서는 대괄호를 안 쓴다.
+    """
+    console.print(f"\n  [bold]{question}[/bold]")
+    for i, (value, note) in enumerate(options, 1):
+        tail = f"  [dim]{note}[/dim]" if note else ""
+        console.print(f"    [cyan]{i:>2}[/cyan]  {value}{tail}")
+    _foot(required, skip_note)
+
+    raw = console.input("  번호, 또는 값을 그대로 > ").strip()
+    if raw == "0":
+        return BACK
+    if not raw:
+        return BACK if required else ""
+    if raw.isdigit() and 1 <= int(raw) <= len(options):
+        return options[int(raw) - 1][0]
+    # 번호가 아니면 값으로 받는다 — 익숙해진 사람은 그냥 친다
+    return raw
+
+
+def _ask_path(question: str):
+    """경로는 보기를 줄 수 없다 — 예시를 보여 주고 받는다."""
+    console.print(f"\n  [bold]{question}[/bold]")
+    console.print(f"    [dim]{PATH_HINT}[/dim]")
+    _foot(required=True)
+    raw = console.input("  경로 > ").strip().strip('"')
+    return BACK if raw in {"", "0"} else raw
+
+
+def _confirm(title: str, no_label: str, yes_label: str, reason: str = ""):
+    """1=안 함(기본) · 2=함 · 0=뒤로. 🚨 **1번이 언제나 안전한 쪽**이다."""
+    console.print(f"\n  [bold]{title}[/bold]")
+    if reason:
+        console.print(f"    [yellow]이유[/yellow]  [dim]{reason}[/dim]")
+    console.print(f"    [cyan] 1[/cyan]  {no_label}  [dim](기본 · ⏎)[/dim]")
+    console.print(f"    [cyan] 2[/cyan]  {yes_label}")
+    console.print("    [cyan] 0[/cyan]  [dim]← 뒤로[/dim]")
+    raw = console.input("  번호 > ").strip()
+    if raw == "0":
+        return BACK
+    if raw in {"", "1", "n", "no"}:
+        return False
+    if raw in {"2", "y", "yes"}:
+        return True
+    console.print("  [yellow]못 알아들었다 — 다시 고른다[/yellow]")
+    return _confirm(title, no_label, yes_label, reason)
+
+
+def _steps(name: str) -> list[tuple[str, tuple]]:
+    """물어볼 것을 **한 줄로 편다** — 순서가 곧 단계다.
+
+    🚨 순서가 있다 — **위치 인자 → 값 옵션 → 플래그**.
+       위치 인자를 옵션 뒤에 붙이면 CLI 가 다르게 읽는다.
+    """
+    out: list[tuple[str, tuple]] = []
+    out += [("arg", s) for s in ASK_ARG.get(name, [])]
+    out += [("val", s) for s in ASK_VALUE.get(name, [])]
+    out += [("flag", s) for s in ASK_FLAG.get(name, [])]
+    return out
+
+
+def _ask(fn) -> list[str] | None:
+    """인자·옵션·플래그를 단계별로 묻는다. 메뉴로 돌아가면 None.
+
+    🔴 `0` 을 누르면 **이전 단계로** 간다. 첫 단계면 메뉴로 나간다.
+    """
+    name = cli_name(fn)
+    steps = _steps(name)
+    got: list[list[str]] = []
+    i = 0
+    try:
+        while i < len(steps):
+            kind, spec = steps[i]
+            if kind == "arg":
+                question, required, source = spec
+                if source == "path":
+                    value = _ask_path(question)
+                else:
+                    skip = "건너뛴다 — 전체를 보거나 표를 본다"
+                    value = _pick(question, _choices(source), required=required, skip_note=skip)
+                out = [value] if value and value is not BACK else ([] if value == "" else value)
+            elif kind == "val":
+                question, flag, options = spec
+                value = _pick(question, options, required=True)
+                out = [flag, value] if value is not BACK else BACK
+            else:
+                title, flag, no_label, yes_label = spec
+                answer = _confirm(title, no_label, yes_label)
+                out = ([flag] if answer else []) if answer is not BACK else BACK
+
+            if out is BACK:
+                if i == 0:
+                    return None  # 첫 단계에서 뒤로 = 메뉴로
+                i -= 1
+                got.pop()
+                continue
+            got.append(out)
+            i += 1
+
+        extra = [x for part in got for x in part]
+        reason = DANGER.get(name, "")
+        if name in DANGER_IF:
+            flag, why = DANGER_IF[name]
+            reason = why if flag in extra else reason
+        if reason:
+            answer = _confirm(
+                f"{name} 를 실행할까?", "실행하지 않는다", f"{name} 를 실행한다", reason
+            )
+            if answer is not True:
+                console.print("  [yellow]메뉴로 돌아간다[/yellow]")
+                return None
+        return extra
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n  [yellow]메뉴로 돌아간다[/yellow]")
+        return None
 
 
 def menu() -> None:
+    _check_menu()
+    by_num = {k: fn for k, _, fn in MENU if k != GROUP}
+    by_name = {cli_name(fn): fn for _, _, fn in MENU if fn is not None}
+
     while True:
         _draw()
-        choice = console.input("  선택 > ").strip().lower()
+        try:
+            choice = console.input("  선택 > ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            return
 
         if not choice:
             continue
-        if choice in {"q", "quit", "exit"}:
+        if choice in {"0", "q", "quit", "exit"}:
+            return
+        if choice in by_num and by_num[choice] is None:
             return
 
-        entry = next((m for m in MENU if m[0] == choice and m[0] != "-"), None)
-        if entry is None or entry[2] is None:
-            console.print("  [red]없는 항목이다[/red]")
+        fn = by_num.get(choice) or by_name.get(choice)
+        if fn is None:
+            console.print("  [red]없는 항목이다[/red] — 번호나 명령 이름을 넣는다")
             continue
 
-        # 각 명령은 종료 코드를 typer.Exit 로 던진다. 메뉴에서는 그걸로 끝내면 안 된다.
-        with contextlib.suppress(typer.Exit):
-            entry[2]()
+        extra = _ask(fn)
+        if extra is None:
+            continue
+        _invoke(fn, *extra)
+        # 🚨 결과를 읽기 전에 메뉴가 다시 그려지면 안 된다.
+        with contextlib.suppress(KeyboardInterrupt, EOFError):
+            console.input("\n  [dim]⏎ 계속[/dim]")
 
 
 @app.callback(invoke_without_command=True)
