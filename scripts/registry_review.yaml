@@ -266,7 +266,7 @@ mfds_hf_ingredient_board:
   #    `collect/registry.py` 는 블록 끝을 **빈 줄**로 판단하므로, 항목 안에 빈 줄이 있으면
   #    그 뒤 필드를 **못 본다**. 「줄이 없다」는 오진이었다 — 줄은 있었고 빈 줄이 갈랐다.
   #    🚨 **원장 항목 안에 빈 줄을 넣지 않는다.**
-  collected_at: 2026-09-09
+  collected_at: 2026-09-12
   # 크롤링형 — robots.txt 확인 (규약 6). 2026-09-02 오한빈 직접 확인:
   #   foodsafetykorea.go.kr/robots.txt 에 `User-agent: *` 그룹이 없다.
   #   선언된 것은 Googlebot 그룹 하나이고, 그 안의 Disallow 도
