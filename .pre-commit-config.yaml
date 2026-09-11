@@ -30,10 +30,21 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # Preserved artifacts are read-only archives: a hook that rewrites them
+      # defeats the reason they exist (2026-09-11, D-186 / D-53).
+      #   assets/brand/legacy/   earlier brand assets, cited by shipped documents
+      #   ^[^\x00-\x7F]          the presentation folder (its name is Korean).
+      #                          This file must stay ASCII-only -- see NOTE above --
+      #                          so the path is matched as "starts with a non-ASCII
+      #                          character" instead of spelled out. It is the only
+      #                          top-level directory whose name is not ASCII.
+      # Both were silently modified on 2026-09-11, before this exclude existed.
       - id: end-of-file-fixer
+        exclude: ^(assets/brand/legacy/|[^\x00-\x7F])
       - id: trailing-whitespace
         # Two trailing spaces mean <br> in Markdown. Do not strip them.
         args: [--markdown-linebreak-ext=md]
+        exclude: ^(assets/brand/legacy/|[^\x00-\x7F])
       - id: check-yaml
         # registry_head/tail are FRAGMENTS concatenated into data_sources.yaml
         # by scripts/gen_registry.py. They are not standalone documents, so
