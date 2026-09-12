@@ -251,6 +251,7 @@ def keys(
 @app.command()
 def doctor(
     hash_check: bool = typer.Option(False, "--hash", help="전 파일 해시를 다시 계산한다 (느리다)"),
+    env: bool = typer.Option(False, "--env", help="환경·git 신원·DB — 데이터 없이 돈다"),
 ) -> None:
     """내 PC 의 데이터가 원장과 맞는지 검사한다 — 원장 ↔ 디스크 대조.
 
@@ -269,9 +270,16 @@ def doctor(
     🚨 게이트가 아니다 (D-89). 답이 **기기마다 다르므로** `check` 에 넣지 않는다.
        🟡(내 기기에 없음)로는 실패하지 않고, 🔴(출처 불명·해시 불일치)만 실패한다.
     """
-    args = ["uv", "run", "python", "scripts/doctor.py", "--data"]
-    if hash_check:
-        args.append("--hash")
+    args = ["uv", "run", "python", "scripts/doctor.py"]
+    if env:
+        # 🆕 2026-09-12 밤 — **데이터 없이 도는 검사.** 새 클론에서 제일 먼저 부르는 자리다.
+        #    ⛔ 종전에는 「환경 진단」이 원장↔디스크 대조 **하나만** 봤다. 팀원이 초록을 보고도
+        #       파이썬 버전·git 신원·DB 리비전은 **아무도 안 본 상태**였다 (D-170).
+        args.append("--env")
+    else:
+        args.append("--data")
+        if hash_check:
+            args.append("--hash")
     raise typer.Exit(run(*args))
 
 
@@ -402,6 +410,23 @@ def pdf(src: str) -> None:
     예:  python launcher.py pdf docs/01_기획/03_작업일정.md
     """
     raise typer.Exit(run("uv", "run", "python", "scripts/build_pdf.py", src))
+
+
+@app.command(name="admin-add")
+def admin_add(initials: str = typer.Argument(..., help="docs/<이니셜>/ 과 같은 철자")) -> None:
+    """거버넌스 콘솔 계정을 만든다 — 가입 화면은 없다 (D-66 · D-213).
+
+    🚨 **비밀번호는 화면에 안 뜨고 셸 인자로도 안 받는다** (`getpass`). `setkey` 와 같은
+       이유다 — PowerShell 기록 파일에 값이 그대로 남는다 (D-111).
+    🔴 명단의 정본은 **디스크**다 — `docs/<이니셜>/` 이 없으면 거부한다 (D-99).
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "scripts.admin_account", "add", initials))
+
+
+@app.command(name="admin-list")
+def admin_list() -> None:
+    """거버넌스 콘솔 계정 목록 — ⛔ 해시는 안 찍는다."""
+    raise typer.Exit(run("uv", "run", "python", "-m", "scripts.admin_account", "list"))
 
 
 @app.command(name="db-up")
@@ -657,7 +682,11 @@ def embed(
 
 
 @app.command()
-def serve(reload: bool = typer.Option(True, "--reload/--no-reload")) -> None:
+def serve(
+    reload: bool = typer.Option(True, "--reload/--no-reload"),
+    host: str = typer.Option("127.0.0.1", "--host", help="🚨 0.0.0.0 은 사내망에 연다"),
+    port: int = typer.Option(8000, "--port", help="4명이 동시에 띄우면 겹친다"),
+) -> None:
     """FastAPI 를 띄웁니다 (D-42 · D-135 — Django 를 쓰지 않습니다).
 
     🔄 2026-09-09 — `@stub("W2", "walking skeleton")` 자리를 대신합니다.
@@ -679,7 +708,13 @@ def serve(reload: bool = typer.Option(True, "--reload/--no-reload")) -> None:
         console.print("  🚨 D-42·D-135 가 FastAPI 를 확정해 뒀지만 의존성은 없었습니다.")
         raise typer.Exit(1)
 
-    args = ["uv", "run", "uvicorn", "app.api:app"]
+    # 🔴 **`127.0.0.1` 이 기본이다** (보안점검 P2-10 · P1-7). 종전에는 `--host` 가 없어
+    #    uvicorn 기본값에 기대고 있었고, **그것이 판정이라고 적힌 데가 없었다.**
+    #    ⛔ 인증이 아직 0줄이라, `--host 0.0.0.0` 하나면 `/admin`·`/docs` 가 사내망에 열린다.
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        console.print(f"[red]🚨 --host {host} — 인증이 아직 없습니다 (보안점검 P1-5 · P1-7).[/red]")
+        console.print("  관리자 화면과 /docs 가 그대로 열립니다. 배포는 SSH 터널로만 (P2-10).")
+    args = ["uv", "run", "uvicorn", "app.api:app", "--host", host, "--port", str(port)]
     if reload:
         args.append("--reload")
     raise typer.Exit(run(*args))
@@ -842,6 +877,7 @@ def _invoke(fn, *extra: str) -> None:
 #: 🔴 보기 종류가 있으면 **번호로 고르게 한다** — 소스 id 를 외워서 칠 이유가 없다.
 ASK_ARG: dict[str, list[tuple[str, bool, str]]] = {
     "setkey": [("어떤 키를 넣을까", True, "key")],
+    "admin-add": [("누구의 계정인가 (이니셜)", True, "text")],
     "probe": [("어떤 소스를 열어 볼까", False, "collect")],
     "collect": [("어떤 소스를 받을까", True, "collect")],
     "count": [("받아 온 파일이나 폴더 경로", True, "path")],
@@ -871,7 +907,13 @@ ASK_VALUE: dict[str, list[tuple[str, str, list[tuple[str, str]]]]] = {
 #:    ⛔ 종전에는 메뉴가 이 플래그들을 **늘 켠 채로** 돌렸다 (Typer 인자 객체가 참이라).
 ASK_FLAG: dict[str, list[tuple[str, str, str, str]]] = {
     "doctor": [
-        ("해시 검사", "--hash", "빠르게 — 있는지만 본다", "느리게 — 전 파일 해시를 다시 잰다")
+        (
+            "무엇을 볼까",
+            "--env",
+            "데이터 — 원장 ↔ 디스크 대조",
+            "환경 — 파이썬·git 신원·DB (데이터 불필요)",
+        ),
+        ("해시 검사", "--hash", "빠르게 — 있는지만 본다", "느리게 — 전 파일 해시를 다시 잰다"),
     ],
     "keys": [("설정 파일", "--repair", "보기만 한다", ".env 의 안내 주석을 되살린다")],
     "golden": [("파생물", "--write", "보기만 한다", "실제로 쓴다 — 기존 분할이 덮어쓰인다")],
@@ -890,6 +932,11 @@ DANGER: dict[str, str] = {
     "db-down": "돌고 있는 작업이 끊긴다 — 저장된 데이터는 남는다",
     "setup": "환경을 다시 세운다 — 몇 분 걸린다. 결과는 여러 번 돌려도 같다",
     "load": "DB 내용이 바뀐다",
+    # 🆕 2026-09-12 밤 — **덮어쓰거나 지우는데 확인이 없었다.**
+    "status": "데이터 현황판을 덮어쓴다 — 보기만 하는 경로가 없다",
+    "sync": "사본을 다시 만들고 **MAP 에 없는 낡은 사본은 지운다**",
+    "embed": "DB 를 쓰고 **선언 밖 청크를 지운다** (D-187) · 모델 2.27GB 를 받는다",
+    "rebuild": "생성물 넷을 덮어쓴다 — 하나만 돌리면 두 벌이 된다",
 }
 
 #: 🔴 **플래그가 붙었을 때만** 위험한 것 — (플래그, 이유)
@@ -913,6 +960,9 @@ MENU: list[tuple[str, str, object]] = [
     ("4", "이 기기 재고", inventory),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
+    # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)
+    ("35", "콘솔 계정 만들기", admin_add),
+    ("36", "콘솔 계정 목록", admin_list),
     (GROUP, "DB", None),
     ("7", "DB 기동", db_up),
     ("8", "DB 중지", db_down),
@@ -938,7 +988,7 @@ MENU: list[tuple[str, str, object]] = [
     (GROUP, "학습 · 서비스", None),
     ("25", "학습", train),
     ("26", "평가", eval_),
-    ("27", "서버 실행", serve),
+    ("27", "서버 실행 (127.0.0.1)", serve),
     # 🚨 번호가 순서대로가 아니다 — 28~33 을 밀면 손에 익은 번호가 전부 바뀐다.
     #    `_check_menu()` 는 **중복만** 본다 (D-162). 새 명령은 뒤 번호를 받는다.
     ("34", "검색 실측", search_probe),

@@ -35,7 +35,7 @@ import pathlib
 import sys
 
 from app import retrieve as rt
-from app.settings import dsn
+from app.settings import PARAMS, dsn
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 QUERIES = ROOT / "data" / "derived" / "search_golden.jsonl"
@@ -45,7 +45,7 @@ QUERIES = ROOT / "data" / "derived" / "search_golden.jsonl"
 CATEGORIES = ("일반", "식품", "건기식", "화장품")
 
 #: D-40 — 이 아래면 「측정 불가」다. 순위는 찍되 **비율을 말하지 않는다.**
-MIN_MEASURABLE = 30
+MIN_MEASURABLE = PARAMS.min_measurable
 
 
 def rank_of(hits: list[rt.Hit], want: str) -> int | None:

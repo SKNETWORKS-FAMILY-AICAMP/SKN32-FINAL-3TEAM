@@ -34,6 +34,7 @@ import collections
 import json
 import pathlib
 
+from app.settings import PARAMS
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
 from preprocess.split import approved_docs, casebook_docs, ftc_docs
@@ -157,7 +158,7 @@ def main() -> int:
             for t in r["labels"]:
                 c[t] += 1
         for k, v in c.most_common():
-            mark = "✅" if s == "train" or v >= 30 else "🔴"
+            mark = "✅" if s == "train" or v >= PARAMS.min_measurable else "🔴"
             print(f"     {v:>5}  {k}  {mark}")
         units = collections.Counter(r["unit"] for r in sub)
         print(f"     단위 — {dict(units)}")

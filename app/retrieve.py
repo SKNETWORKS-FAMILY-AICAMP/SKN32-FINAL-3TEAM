@@ -45,6 +45,8 @@ import dataclasses
 import re
 from typing import Any
 
+from app.settings import DEFAULT_CATEGORY, PARAMS, load_kwargs
+
 #: 🚨 코사인이라야 한다. `scripts/embed.py` 는 `model.encode(...)` 를 그대로 쓰므로
 #:    저장된 벡터가 **정규화돼 있지 않다.** `<->`(L2)는 길이에 끌려가 뜻이 달라진다.
 VECTOR_OP = "<=>"
@@ -62,7 +64,7 @@ MATCH_TEXT = MATCH_LITERAL
 #: 🚨 **이 수는 가중치가 아니다.** 갈래 사이의 비중이 아니라 **상위 순위를 얼마나 더
 #:    쳐 주는가**의 완만함이다. k 를 바꿔도 한 갈래가 다른 갈래를 이기지 않는다 —
 #:    그래서 [임의] 가중치가 판정 경로에 들어가는 문제가 여기에는 없다 (D-193).
-RRF_K = 60
+RRF_K = PARAMS.rrf_k  # 🔄 값은 app/settings.py 가 든다 (D-99). 여기는 이름만 남긴다
 
 #: 각 갈래에서 뽑아 오는 후보 수. **`[설계]` — 근거는 기획서 5-6 RAG 파이프라인이다** (D-201).
 #:
@@ -82,7 +84,7 @@ RRF_K = 60
 #:    ⬜ 부르는 실측은 **이미 있다** — 09-12 오후 「타사 제품보다 3배」가 벡터 112위였다.
 #:       폭 50 이면 그 갈래에서 아예 안 보인다. ⛔ 그래도 지금 안 바꾼다: 3건이고(D-40),
 #:       그 실측은 폭 50→200 과 제목뿐인 조 185개 제외가 **같이 들어간 수**다 (D-190).
-POOL = 50
+POOL = PARAMS.pool  # 🔄 값은 app/settings.py · 바꾸는 조건도 거기 적혀 있다 (D-205)
 
 
 class RetrieveError(RuntimeError):
@@ -275,8 +277,14 @@ def encode(model_id: str, text: str) -> list[float]:
             raise EncoderUnavailable(
                 f"sentence-transformers 가 없다 — 질의를 임베딩할 수 없다 ({e})"
             ) from e
+        # 🔴 **DB 에서 온 이름을 그대로 로드하지 않는다** (보안점검 P0-3 · D-212).
+        #    허용 목록 밖이면 여기서 막는다 — `.bin`(pickle) 역직렬화 경로를 끊는다.
         try:
-            model = SentenceTransformer(model_id)
+            kwargs = load_kwargs(model_id)
+        except ValueError as e:
+            raise EncoderUnavailable(str(e)) from e
+        try:
+            model = SentenceTransformer(model_id, **kwargs)
         except Exception as e:  # noqa: BLE001 — 내려받기 실패·가중치 없음 모두 같은 결말이다
             raise EncoderUnavailable(f"모델 {model_id!r} 을 로드하지 못했다 — {e}") from e
         _model_cache[model_id] = model
@@ -412,7 +420,7 @@ _JOSA = tuple(
 _WORD = re.compile(r"[0-9A-Za-z가-힣]+")
 #: 조사를 깎은 뒤 이보다 짧아지면 **안 깎는다.** ⛔ 「효과」→「효」, 「제품」→「제」처럼
 #:    낱말 자체가 조사로 끝나는 것을 깎으면 뜻이 없는 접두어가 되어 아무 데나 붙는다.
-_MIN_STEM = 2
+_MIN_STEM = PARAMS.min_stem
 
 
 def _stem(word: str) -> str:
@@ -451,7 +459,9 @@ def tsquery(q: str) -> str:
     return " | ".join(f"{t}:*" for t in terms(q))
 
 
-def by_literal(cur: Any, q: str, category: str = "일반", limit: int = 5) -> list[Hit]:
+def by_literal(
+    cur: Any, q: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
+) -> list[Hit]:
     """글자가 그대로 들어 있는 것. 「제5호 아목」처럼 **기호**로 찾을 때 이쪽이다.
 
     🔴 **어휘 갈래로 대체하지 않는다** (D-167). `simple` 파서는 「제5호」를 어떻게
@@ -466,7 +476,9 @@ def by_literal(cur: Any, q: str, category: str = "일반", limit: int = 5) -> li
 by_text = by_literal
 
 
-def by_lexical(cur: Any, q: str, category: str = "일반", limit: int = 5) -> list[Hit]:
+def by_lexical(
+    cur: Any, q: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
+) -> list[Hit]:
     """어휘가 겹치는 것. 🔴 검색어가 하나도 안 남으면 **빈 목록**이다 — 오류가 아니다.
 
     ⛔ 빈 `to_tsquery` 를 그대로 넣으면 PostgreSQL 이 경고를 내고 0건을 준다. 같은 0건이라도
@@ -479,7 +491,9 @@ def by_lexical(cur: Any, q: str, category: str = "일반", limit: int = 5) -> li
     return _rows_to_hits(cur.fetchall(), MATCH_LEXICAL, score="lexical")
 
 
-def by_vector(cur: Any, text: str, category: str = "일반", limit: int = 5) -> list[Hit]:
+def by_vector(
+    cur: Any, text: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
+) -> list[Hit]:
     """뜻이 가까운 것. 「면역력 쑥!」처럼 **글자가 안 겹치는** 광고 문구가 이쪽이다.
 
     🔴 못 하면 `RetrieveError` 를 던진다 — **빈 목록으로 떨어지지 않는다.**
@@ -493,7 +507,7 @@ def by_vector(cur: Any, text: str, category: str = "일반", limit: int = 5) -> 
 
 
 def fuse(
-    vector_hits: list[Hit], lexical_hits: list[Hit], *, k: int = RRF_K, limit: int = 5
+    vector_hits: list[Hit], lexical_hits: list[Hit], *, k: int = RRF_K, limit: int = PARAMS.top_k
 ) -> list[Hit]:
     """두 순위를 RRF 로 섞는다 — `Σ 1/(k + 순위)` (D-193).
 
@@ -568,7 +582,11 @@ class SearchState:
 
 
 def search(
-    cur: Any, q: str, category: str = "일반", limit: int = 5, pool: int = POOL
+    cur: Any,
+    q: str,
+    category: str = DEFAULT_CATEGORY,
+    limit: int = PARAMS.top_k,
+    pool: int = POOL,
 ) -> tuple[list[Hit], SearchState]:
     """부르는 쪽이 쓰는 하나의 문. `(결과, 상태)` 를 낸다.
 

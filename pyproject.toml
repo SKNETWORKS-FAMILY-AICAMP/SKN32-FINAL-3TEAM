@@ -49,6 +49,16 @@ dependencies = [
     "jinja2>=3.1.6",
     "langgraph>=1.2.11",
     "langgraph-checkpoint-postgres>=3.1.2",
+    # 🔴 2026-09-12 밤 (D-213) — `governor` 로그인의 비밀번호 해시.
+    #    OWASP Password Storage Cheat Sheet 의 **preferred** 이고, 고시 제7조가 요구하는
+    #    「일방향 암호화」다 (보안점검 P1-7 — 단순 SHA-256 1회는 부적절).
+    #    🚨 scrypt(표준 라이브러리)를 한때 골랐다가 뒤집었다: OWASP 는 scrypt 를
+    #       *"Argon2id 를 못 쓸 때"* 로 규정하는데 **우리는 못 쓰는 게 아니고**(abi3 휠이 있다),
+    #       scrypt 최소 권고는 64~128 MiB/로그인인데 Argon2id 는 19 MiB 다 — 추론과 16 GiB 를
+    #       나눠 쓰는 배포에서 **무거운 쪽이 곧 공격자에게 주는 증폭기**다 (P2-11).
+    #    ⛔ 전이 의존이 셋 더 붙는다 — argon2-cffi-bindings · cffi · pycparser.
+    #       **팀원 코드가 0줄인 지금이 lock 을 만지는 가장 싼 순간**이라 지금 넣었다.
+    "argon2-cffi>=25.1",
 ]
 
 [dependency-groups]

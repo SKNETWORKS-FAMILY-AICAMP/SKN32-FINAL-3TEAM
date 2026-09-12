@@ -84,6 +84,8 @@ import json
 import pathlib
 import random
 
+from app.settings import PARAMS
+
 FTC_PHRASES = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
 HF = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
@@ -93,7 +95,7 @@ SPLIT_NAME = OUT.as_posix()
 #: 🚨 유형별 평가 목표. D-40 의 30 이 **하한**이고, 신뢰구간을 감안해 40 을 목표로 둔다.
 #:    40건에서 Recall 0.85 면 95% CI 가 ±11%p 다 (기획문서 6-3) — 30 은 아슬아슬하다.
 EVAL_TARGET = 40
-MIN_MEASURABLE = 30  # D-40
+MIN_MEASURABLE = PARAMS.min_measurable  # D-40
 
 #: 🔴 음성(적법) 표본 목표. Precision 을 정의하려면 **위반이 아닌 것**이 있어야 한다.
 #:    ⛔ 종전 시험지는 전부 위반이라 「전부 위반」이라 답해도 Recall 100% 였다.

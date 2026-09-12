@@ -35,13 +35,14 @@ import pathlib
 import re
 import sys
 
+from app.settings import PARAMS
 from collect import store
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DERIVED = ROOT / "data" / "derived"
 
 # 🚨 512 토큰 한계에 대한 **보수적** 글자 상한. 넘게 잡는 쪽이다 (위 docstring).
-MAX_CHARS = 700
+MAX_CHARS = PARAMS.chunk_max_chars
 CATEGORY = {
     "화장품": "화장품",
     "건강기능식품": "건기식",

@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -144,3 +145,120 @@ def test_경로_비교가_OS_에_안_흔들린다() -> None:
     )
     # 🚨 **정규화가 실제로 동작하는가** — 논증이 아니라 실행으로 (D-203)
     assert _rel(ROOT / "app" / "settings.py") == "app/settings.py"
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  🆕 2026-09-12 밤 — 파라미터를 코드에 흩지 않는다 (D-99 · D-208)
+# ══════════════════════════════════════════════════════════════════════
+
+#: 🔴 `app/settings.py` 로 옮긴 이름들. **다시 숫자를 물리면 여기서 걸린다.**
+#:    ⛔ 이름을 글자로 적되 **모양은 정규식으로** 본다 — 이 파일이 자기를 잡지 않게 (D-206).
+_MOVED = (
+    "POOL",
+    "RRF_K",
+    "MAX_ATTEMPT",
+    "MIN_MEASURABLE",
+    "MIN_SAMPLES",
+    "DIM",
+    "BATCH",
+    "MAX_CHARS",
+    "MODEL_ID",
+    "_MIN_STEM",
+)
+
+
+@pytest.mark.gate
+def test_판정_파라미터를_코드에_다시_적지_않는다() -> None:
+    """🔴 **D-99 의 실물.** `MIN_MEASURABLE = 30` 이 다섯 곳, `2`(재생성 K)가 세 곳이었다.
+
+    ⛔ 하나를 바꾸면 나머지가 **조용히 안 따라온다.** 그리고 `preprocess/golden.py` 는
+       상수도 주석도 없는 생리터럴 `30` 이었다 — D-40 을 바꾸면 거기만 남았을 것이다.
+    ★ 값은 `app/settings.py` 의 `PARAMS` 가 든다. 여기서는 **이름에 숫자를 다시 물리는 것**을 막는다.
+    """
+    me = Path(__file__).resolve()
+    pat = re.compile(
+        r"^\s*(" + "|".join(_MOVED) + r")\s*(?::\s*\w+\s*)?=\s*[\"']?\d|"
+        r"^\s*(" + "|".join(_MOVED) + r")\s*=\s*[\"'][^\"']*/",
+        re.MULTILINE,
+    )
+    bad: list[str] = []
+    for p in _sources():
+        if p.resolve() == me or _rel(p) == "app/settings.py":
+            continue
+        for m in pat.finditer(p.read_text(encoding="utf-8")):
+            bad.append(f"{_rel(p)}:{m.string[: m.start()].count(chr(10)) + 1}")
+    assert not bad, (
+        f"🔴 파라미터에 숫자를 다시 물렸다: {bad}\n"
+        "   고치는 법 — app/settings.py 의 PARAMS 를 import 해서 쓴다 (D-99)"
+    )
+
+
+@pytest.mark.gate
+def test_파라미터에_출처_태그가_붙어_있다() -> None:
+    """🚨 판정·게이트·적재에 걸리는 값에는 출처를 적는다 (D-201 → D-205).
+
+    ⛔ 출처 없는 값은 「누가 왜 정했는지 모르는 판정 파라미터」다.
+    """
+    src = (ROOT / "app" / "settings.py").read_text(encoding="utf-8")
+    body = src.split("class Params", 1)[1].split("PARAMS = Params()", 1)[0]
+    fields = re.findall(r"^\s{4}(\w+):\s", body, re.MULTILINE)
+    assert fields, "🔴 Params 에 필드가 없다"
+    tags = ("[측정]", "[문헌]", "[관행]", "[임의]", "[설계]")
+    for name in fields:
+        before = body.split(f"    {name}:", 1)[0]
+        block = before.rsplit("\n\n", 1)[-1]
+        assert any(t in block for t in tags), (
+            f"🔴 `{name}` 에 출처 태그가 없다 — {tags} 중 하나를 주석에 적는다 (D-201)"
+        )
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    "url",
+    ["postgresql://u:p@h:5432/d", "postgres://u:p@h:5432/d", "postgresql+psycopg://u:p@h:5432/d"],
+)
+def test_env_example_형태를_전부_받는다(url: str) -> None:
+    """🔴 **문서대로 복사한 사람이 밟던 자리다** (2026-09-12 밤).
+
+    ⛔ `.env.example` 이 「기본값 · 그대로 두면 됩니다」라 적어 둔 값은
+       `postgresql+psycopg://…` 인데, 검증기가 그것을 **거부하고 있었다.**
+       alembic(SQLAlchemy)은 `+psycopg` 를 **요구**하고 psycopg 직결은 그것을 **못 읽는다** —
+       소비자가 둘이라 값도 두 형태다.
+    """
+    from app.settings import Settings
+
+    assert Settings(database_url=url).database_url == url
+
+
+@pytest.mark.gate
+def test_한_값에서_두_형태가_나온다() -> None:
+    """🚨 psycopg 는 접미사를 떼고, SQLAlchemy 는 붙인다. **값은 하나다** (D-99)."""
+    import app.settings as S
+
+    for given in ("postgresql://u:p@h:5432/d", "postgresql+psycopg://u:p@h:5432/d"):
+        os.environ["DATABASE_URL"] = given
+        S.settings.cache_clear()
+        assert "+psycopg" not in S.dsn(), f"🔴 psycopg 용에 드라이버가 남았다 — {S.dsn()}"
+        assert "+psycopg" in S.sqlalchemy_url(), "🔴 SQLAlchemy 용에 드라이버가 없다"
+    os.environ.pop("DATABASE_URL", None)
+    S.settings.cache_clear()
+
+
+@pytest.mark.gate
+def test_env_example_의_기본값이_실제로_통과한다() -> None:
+    """🔴 **문서와 코드를 대조한다** — 둘이 갈리면 팀원 4명이 첫날 밟는다 (D-99 의 문서판)."""
+    import app.settings as S
+
+    line = next(
+        ln
+        for ln in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
+        if ln.startswith("DATABASE_URL=")
+    )
+    value = line.split("=", 1)[1].strip()
+    os.environ["DATABASE_URL"] = value
+    S.settings.cache_clear()
+    try:
+        assert S.dsn().startswith("postgresql://"), f"🔴 .env.example 의 값이 안 통한다 — {value}"
+    finally:
+        os.environ.pop("DATABASE_URL", None)
+        S.settings.cache_clear()

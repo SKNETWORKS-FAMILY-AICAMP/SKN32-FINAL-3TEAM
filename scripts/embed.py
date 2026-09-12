@@ -24,14 +24,14 @@ import json
 import pathlib
 import sys
 
-from app.settings import dsn
+from app.settings import PARAMS, dsn, load_kwargs
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CHUNKS = ROOT / "data" / "derived" / "chunks.jsonl"
 
-MODEL_ID = "nlpai-lab/KURE-v1"
-DIM = 1024  # 🚨 db/schema.sql 의 vector(1024) 와 같아야 한다
-BATCH = 32
+MODEL_ID = PARAMS.embed_model_id
+DIM = PARAMS.embed_dim  # 🚨 db/schema.sql 의 vector(1024) 와 같아야 한다
+BATCH = PARAMS.embed_batch
 
 # ── chunk 적재 — 🔴 **칸 목록이 한 곳이다** (2026-09-12 · D-99) ─────────────
 # ⛔ 종전에는 INSERT 칸·VALUES·DO UPDATE SET·값 튜플이 **네 벌**이었다. 그래서 09-10 에
@@ -197,7 +197,8 @@ def load_model():  # noqa: ANN201
             file=sys.stderr,
         )
         raise SystemExit(1) from None
-    return SentenceTransformer(MODEL_ID)
+    # 🔴 쓰는 쪽도 같은 문을 지난다 (P0-3 · D-212) — `safetensors` · `trust_remote_code=False`.
+    return SentenceTransformer(MODEL_ID, **load_kwargs(MODEL_ID))
 
 
 def main() -> int:
@@ -229,7 +230,16 @@ def main() -> int:
 
     import psycopg
 
-    conn = psycopg.connect(dsn())
+    # 🔴 **DB 가 없을 때 스택트레이스로 죽지 않는다** (2026-09-12 밤 · D-51).
+    #    ⛔ `load_db.py` 는 같은 자리를 감쌌는데 여기만 안 감쌌다. 팀원이 클론 첫날
+    #       `launcher.py embed` 를 누르면 `OperationalError` 트레이스백을 만난다.
+    try:
+        conn = psycopg.connect(dsn())
+    except psycopg.Error as e:
+        print(f"🚨 DB 에 못 붙었다 — {type(e).__name__}")
+        print("   uv run python launcher.py db-up 을 먼저 돌린다.")
+        print("   DB 없이 모델 차원만 재려면 — uv run python launcher.py embed --check")
+        raise SystemExit(1) from e
     with conn, conn.cursor() as cur:
         # 🚨 청크를 먼저 넣는다 — chunk_embedding 이 chunk 를 가리킨다
         for r in rows:

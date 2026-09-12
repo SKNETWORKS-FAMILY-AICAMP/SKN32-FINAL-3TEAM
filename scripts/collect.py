@@ -21,6 +21,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from app.settings import PARAMS
+
 # ── 거버넌스 (D-19) — 위치가 곧 게이트. G3 자료만 여기서 읽는다.
 DATA_DIR = Path("data/g3/cases")
 
@@ -69,7 +71,7 @@ CANDIDATE_TYPES = [
     "기능성화장품_오인",
 ]
 
-MIN_SAMPLES = 30  # D-40 — 유형별 최소 표본. 미달은 「측정 불가」
+MIN_SAMPLES = PARAMS.min_measurable  # D-40 — 유형별 최소 표본. 미달은 「측정 불가」
 
 
 def load_cases(path: Path = DATA_DIR):

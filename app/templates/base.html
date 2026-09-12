@@ -1,0 +1,43 @@
+{# app/templates/base.html — 공유 레이아웃 · 소유자 **팀장** (병렬작업 계약 §5)
+
+  🚨 이 파일은 화면 넷이 전부 상속한다. 여기서 충돌하면 네 사람이 동시에 막힌다 —
+     고칠 것이 있으면 **PR 로 올린다.** 각자 화면은 user/ · admin/ 아래 자기 파일에 쓴다.
+
+  🔴 **자동 이스케이프가 켜져 있다** (`Jinja2Templates` 기본값). `|safe` 를 쓰지 않는다 —
+     게이트 `test_템플릿에_safe_가_없다` 가 막는다 (보안점검 P2-9).
+     ⛔ 판정 결과 하이라이트를 **HTML 문자열로 조립하지 않는다.** `(offset, length, type)` 을
+        넘겨 템플릿이 그린다. 문자열로 조립하는 순간 이스케이프가 무의미해진다.
+#}<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{# 🔴 CSP 는 여기 없다 — **`app/api.py` 의 미들웨어가 헤더로 전부에 붙인다** (D-99 · D-212).
+   ⛔ `<meta>` 로 두면 **이 템플릿을 쓰는 페이지에만** 붙는다. 손으로 쓴 HTML(`/`)과
+      JSON·오류 응답은 그 밖이었다. 헤더는 하나가 전부를 덮는다.
+   🚨 정책 내용은 `_CSP_PAGE` 하나가 든다. 게이트가 **응답 헤더를 실제로 받아** 확인한다 #}
+<title>{% block title %}CopyLane{% endblock %}</title>
+<link rel="stylesheet" href="/static/base.css">
+{# ⬜ **HTMX 는 아직 안 받았다.** 저장소에 넣지 않았고 CDN 도 안 쓴다 (P0-3 — 공급망).
+   받는 법과 무결성 확인은 `app/static/vendor/README.md` 에 있다.
+   ★ 그때까지도 **화면은 돈다** — 아래 폼은 HTMX 없이 서버 렌더로 동작한다.
+   붙일 때 이 줄의 주석을 풀고 integrity 를 채운다. #}
+{# <script src="/static/vendor/htmx.min.js" integrity="sha384-…" crossorigin="anonymous" defer></script> #}
+</head>
+<body>
+<header>
+  <a href="/"><b>CopyLane</b></a>
+  <nav>
+    <a href="/u/">사용자</a>
+    <a href="/admin/">관리자</a>
+    <a href="/docs">API</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer>
+  <small>판정 근거를 조문으로 돌려준다 · 이 화면은 <b>골든 픽스처</b>로 그린다 (D-124)</small>
+</footer>
+</body>
+</html>
