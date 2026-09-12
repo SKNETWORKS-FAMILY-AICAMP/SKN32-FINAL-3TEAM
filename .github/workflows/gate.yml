@@ -19,13 +19,26 @@
 #  🚨 runner 가 windows 인 이유 — 팀 5인이 전부 Windows 다. CI 가 Linux 뿐이면
 #     「내 기기에서는 되는데」를 CI 가 못 잡는다. 🔄 Ubuntu 축은 배포 리허설(9/22)
 #     전에 붙인다 — Linux 에서 도는지 알아야 하는 시점이 거기다 (배포계획 §5).
+#
+#  🔴 **`uses:` 는 전부 커밋 SHA 로 못박는다** (D-215). 태그(`@v4`)는 **옮길 수 있다** —
+#     액션 소유자 계정이 털리면 `v4` 가 다른 커밋을 가리키고 runner 에서 임의 코드가 돈다.
+#     지금은 훔칠 secrets 가 없어 등급이 낮지만, **배포 자격증명이 여기 들어오는 날**
+#     그 태그의 주인이 곧 우리 배포 키의 주인이 된다. **그날 고치면 늦다.**
+#     🚨 옆의 `# vX.Y.Z` 주석은 사람이 읽는 것이고, **뜻을 정하는 것은 SHA 다.**
+#     ★ `tests/test_ci_pinning.py` 가 태그 핀을 막는다 — 적어 두는 것과 막는 것은 다르다 (D-117).
 # ============================================================
 
 name: gate
 
 on:
+  # 🔴 **2026-09-12 밤 — 모든 브랜치로 넓혔다** (D-211).
+  #    ⛔ 종전은 `[main, ohb]` 뿐이었다. 이 팀은 **팀원 브랜치 → ohb 머지 → 팀장만 PR** 이라,
+  #       팀원이 자기 브랜치에 push 해도 게이트가 **한 번도 안 돌았다.** PR 을 안 열면
+  #       팀장이 머지한 뒤 `ohb` push 에서 **처음** 돈다 — 즉 **깨진 것을 팀장이 받는다.**
+  #    ★ 5인 규모라 전 브랜치를 도는 비용보다 **팀장이 남의 실패를 디버깅하는 비용**이 크다.
+  #    🚨 `concurrency` 가 브랜치별로 앞엣것을 취소하므로 연달아 밀어도 한 번만 돈다.
   push:
-    branches: [main, ohb]
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
@@ -43,9 +56,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -71,9 +84,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -81,7 +94,7 @@ jobs:
       - run: uv python install
       - run: uv sync --frozen
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
