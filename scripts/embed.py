@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -47,6 +48,9 @@ CHUNK_COLS = (
     "article",
     "paragraph",
     "item",
+    # 🔴 2026-09-12 (0008) — 항 서수와 자립 텍스트. 여기 한 줄 더하면 나머지가 따라온다.
+    "paragraph_no",
+    "context",
     "doc_type",
     "category",
     "text",
@@ -59,6 +63,36 @@ SQL_CHUNK_UPSERT = (
     f"VALUES ({', '.join(['%s'] * len(CHUNK_COLS))}) "
     "ON CONFLICT (chunk_id) DO UPDATE SET "
     + ", ".join(f"{c}=EXCLUDED.{c}" for c in CHUNK_UPDATABLE)
+)
+
+
+def embed_input(r: dict) -> str:
+    """모델에 실제로 넣는 문자열 — `context` + `text` (2026-09-12 · 0008).
+
+    🔴 **`text` 를 바꾸지 않는다.** 인용 단위는 호 그대로 두고 **검색이 보는 것만** 키운다.
+       「1. 마약」이 「① …제조·수입하여서는 아니 된다 / 1. 마약」으로 임베딩되어
+       엉뚱한 질의에 붙지 않게 된다. `chunk_id` 도 `text` 도 그대로라 골든셋이 안 흔들린다.
+    🚨 **화면이 보여 주는 문맥과 같은 값**이다 (`chunk.context`). 두 문자열이면 갈린다 (D-99).
+    """
+    ctx = (r.get("context") or "").strip()
+    return f"{ctx}\n{r['text']}" if ctx else r["text"]
+
+
+def input_fingerprint(r: dict) -> str:
+    """임베딩 입력의 sha256 — 재현의 근거는 seed 가 아니라 **입력 지문**이다 (D-176).
+
+    ⛔ `model_id` 만으로는 문맥판과 무문맥판이 구별되지 않는다. 재임베딩을 중간에 멈추면
+       두 벡터공간이 한 표에 섞이고 **거리는 조용히 뜻을 잃는다.**
+    """
+    return hashlib.sha256(embed_input(r).encode("utf-8")).hexdigest()
+
+
+EMB_COLS = ("chunk_id", "embedding", "model_id", "input_sha256")
+EMB_UPDATABLE = tuple(c for c in EMB_COLS if c != "chunk_id")
+SQL_EMB_UPSERT = (
+    f"INSERT INTO chunk_embedding ({', '.join(EMB_COLS)}) "
+    f"VALUES ({', '.join(['%s'] * len(EMB_COLS))}) "
+    "ON CONFLICT (chunk_id) DO UPDATE SET " + ", ".join(f"{c}=EXCLUDED.{c}" for c in EMB_UPDATABLE)
 )
 
 
@@ -147,15 +181,18 @@ def main() -> int:
         done = 0
         for i in range(0, len(rows), BATCH):
             batch = rows[i : i + BATCH]
-            vecs = model.encode([b["text"] for b in batch])
+            vecs = model.encode([embed_input(b) for b in batch])
             for b, v in zip(batch, vecs, strict=True):
                 if len(v) != DIM:
                     raise SystemExit(f"🚨 차원이 {len(v)} 다 — vector({DIM}) 와 어긋난다")
                 cur.execute(
-                    "INSERT INTO chunk_embedding (chunk_id, embedding, model_id) "
-                    "VALUES (%s,%s,%s) ON CONFLICT (chunk_id) DO UPDATE SET "
-                    "embedding=EXCLUDED.embedding, model_id=EXCLUDED.model_id",
-                    (b["chunk_id"], "[" + ",".join(f"{x:.6f}" for x in v) + "]", MODEL_ID),
+                    SQL_EMB_UPSERT,
+                    (
+                        b["chunk_id"],
+                        "[" + ",".join(f"{x:.6f}" for x in v) + "]",
+                        MODEL_ID,
+                        input_fingerprint(b),
+                    ),
                 )
             done += len(batch)
             print(f"    {done}/{len(rows)}", end="\r")

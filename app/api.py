@@ -71,6 +71,11 @@ class SearchHit(BaseModel):
     #:    응답에는 아예 없었다. 그래서 화면이 **어느 호가 걸렸는지 말할 수 없었다.**
     paragraph: str | None = None
     item: str | None = None
+    #: 항 서수 (0008) — 원문에 「①」가 없는 호가 31% 다. 인용은 이쪽으로 조립된다.
+    paragraph_no: int | None = None
+    #: 자립 텍스트 — **임베딩이 본 것과 같은 값**이다. 화면은 이것을 접어서 보여 주고
+    #: `text` 를 펼쳐 보여 준다. 🚨 `null` 은 미적재, 빈 문자열은 붙일 문맥 없음이다.
+    context: str | None = None
     #: 「제8조제1항제1호」. 🚨 `null` 이면 **조립을 못 한 것**이지 근거가 없는 게 아니다 —
     #:    별표는 계층 표기가 달라 조립하지 않는다. 그때는 `article`·`paragraph` 를 쓴다.
     citation: str | None = None

@@ -120,6 +120,27 @@ def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
             {"doc_type": "별표", "article": "제19조제7항", "paragraph": "7.나.2", "item": "본문"},
             None,
         ),
+        # ★ 0008 — 원문에 「①」가 없어도 **우리가 센 서수**가 있으면 인용이 선다
+        (
+            {
+                "doc_type": "법령",
+                "article": "제10조",
+                "paragraph": "",
+                "item": "3.",
+                "paragraph_no": 1,
+            },
+            "제10조제1항제3호",
+        ),
+        (
+            {
+                "doc_type": "법령",
+                "article": "제10조",
+                "paragraph": "",
+                "item": "2.",
+                "paragraph_no": 2,
+            },
+            "제10조제2항제2호",
+        ),
         # 🔴 항번호가 없는데 호가 있다 — 「항 없음」이 아니라 **번호 안 쓴 제1항**이다.
         #    조까지만 내면 「제10조제3호」인데 실은 「제10조제1항제3호」다 (실측 283건).
         ({"doc_type": "법령", "article": "제10조", "paragraph": "", "item": "3."}, None),
@@ -140,3 +161,51 @@ def test_두_질의_모두_항과_호를_싣는다() -> None:
     for sql in QUERIES:
         assert "c.paragraph" in sql
         assert "c.item" in sql
+
+
+# ── 0008 자립 텍스트·입력 지문 ────────────────────────────────────────────
+@pytest.mark.gate
+def test_두_질의_모두_문맥과_항서수를_싣는다() -> None:
+    """⛔ `context` 는 **임베딩이 본 것과 같은 값**이다. 응답에 없으면 화면이 검색이 본
+    문맥을 모른 채 보여 준다 — 그러면 둘이 갈린 줄도 모른다 (D-99)."""
+    for sql in QUERIES:
+        assert "c.context" in sql
+        assert "c.paragraph_no" in sql
+
+
+@pytest.mark.gate
+def test_임베딩_입력판_섞임을_막는다() -> None:
+    """🔴 전부 옛판·전부 새판은 통과, **반쯤 옮긴 것만** 막는다 (D-176).
+
+    ⛔ `model_id` 는 문맥판과 무문맥판을 구별하지 못한다. 섞이면 거리가 조용히 뜻을 잃는다.
+    """
+
+    class _Cur:
+        def __init__(self, row: tuple[int, int]) -> None:
+            self.row = row
+
+        def execute(self, *_: object) -> None:
+            return None
+
+        def fetchone(self) -> tuple[int, int]:
+            return self.row
+
+    rt.check_inputs(_Cur((0, 0)))  # 빈 표
+    rt.check_inputs(_Cur((0, 2585)))  # 전부 새판
+    rt.check_inputs(_Cur((2585, 2585)))  # 전부 옛판
+    with pytest.raises(rt.InputsMixed):
+        rt.check_inputs(_Cur((100, 2585)))  # 🔴 섞였다
+
+
+def test_임베딩_입력이_문맥과_본문을_잇는다() -> None:
+    """🚨 `text` 는 그대로 두고 **입력만** 키운다 — 인용 단위가 살아 있어야 한다 (D-158)."""
+    from scripts import embed  # noqa: PLC0415 — 이 테스트에서만 든다
+
+    ctx = "제8조(부당한 표시 또는 광고행위의 금지)\n① 누구든지 …아니 된다"
+    row = {"context": ctx, "text": "1. 마약"}
+    assert embed.embed_input(row) == f"{ctx}\n1. 마약"
+    assert embed.embed_input({"context": "", "text": "1. 마약"}) == "1. 마약"
+    # ⛔ 문맥이 다르면 지문도 달라야 한다 — 같으면 섞임을 못 잡는다
+    assert embed.input_fingerprint(row) != embed.input_fingerprint(
+        {"context": "", "text": "1. 마약"}
+    )

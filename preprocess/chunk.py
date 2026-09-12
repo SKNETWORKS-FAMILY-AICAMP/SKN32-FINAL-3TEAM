@@ -54,6 +54,24 @@ def category_of(title: str) -> str:
     return "일반"
 
 
+def _context(r: dict) -> str:
+    """자립 텍스트를 조립한다 — **검색이 보는 것**이자 **화면이 보여 줄 문맥**이다 (0008).
+
+        호  →  조 제목 + 항 본문     「1. 마약」은 앞의 항이 있어야 읽힌다
+        항  →  조 제목               「① 누구든지 …아니 된다」만으로는 무슨 조인지 모른다
+        조  →  빈 문자열             `text` 가 이미 제목을 들고 있다 — 붙이면 중복이다
+
+    🔴 **한 값을 임베딩과 화면이 같이 쓴다.** 둘이 다른 문자열이면 「검색이 본 문맥」과
+       「사람이 본 문맥」이 갈린다 (D-99).
+    🚨 빈 문자열은 「붙일 문맥이 없음」이고 NULL(미적재)과 다르다.
+    """
+    if not r.get("키"):  # 조 행 — `키` 가 없는 것이 조다 (chunk_id 도 article 을 쓴다)
+        return ""
+    head = (r.get("제목") or "").strip()
+    hang = (r.get("항본문") or "").strip()
+    return "\n".join(p for p in (head, hang) if p)
+
+
 def _split_long(text: str) -> list[str]:
     """길면 문장 경계로 자른다. 🚨 자른 사실은 호출자가 `part` 로 남긴다."""
     if len(text) <= MAX_CHARS:
@@ -108,6 +126,10 @@ def from_articles() -> list[dict]:
                     #    ★ 이 둘이 갈려 있어야 `retrieve.citation()` 이 조립된다.
                     "paragraph": r.get("항") or "",
                     "item": r.get("호") or "",
+                    #: 🔴 원문에 항번호가 없어도 항은 있다 — 우리가 센 서수 (D-117 · 0008).
+                    "paragraph_no": r.get("항서수"),
+                    #: 🔴 **자립 텍스트** — 검색이 보는 것과 인용하는 것을 가른다 (0008).
+                    "context": _context(r),
                     "doc_type": "법령",
                     "category": [category_of(law)],
                     "text": text,
@@ -140,6 +162,11 @@ def from_annex() -> list[dict]:
                         "article": r.get("article") or "",
                         "paragraph": r["path"],
                         "item": r["section"],
+                        #: ⬜ **별표는 이번 범위 밖이다** (0008). 계층 표기가 `2.가.10` 이라
+                        #:    법령의 조·항·호 규칙이 안 먹는다. 빠뜨린 것이 아니라 판정이다 —
+                        #:    빈 문자열은 「붙일 문맥이 없음」, NULL 은 「아직 안 채움」이다.
+                        "paragraph_no": None,
+                        "context": "",
                         "doc_type": "별표",
                         "category": [category_of(r["annex_title"])],
                         "text": chunk,

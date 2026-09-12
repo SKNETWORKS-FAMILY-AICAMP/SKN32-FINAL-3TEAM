@@ -55,6 +55,10 @@ class ModelsMixed(RetrieveError):
     """`chunk_embedding` 에 모델이 둘 이상이다 — 어느 벡터공간인지 정할 수 없다."""
 
 
+class InputsMixed(RetrieveError):
+    """`chunk_embedding` 에 문맥판과 무문맥판이 섞였다 — 거리가 뜻을 잃는다 (D-176)."""
+
+
 class EncoderUnavailable(RetrieveError):
     """질의를 임베딩할 수 없다 — 라이브러리나 모델 가중치가 이 기기에 없다."""
 
@@ -70,6 +74,11 @@ class Hit:
     paragraph: str | None
     #: 호 — 「1.」. ⛔ 종전에는 법령 쪽이 **늘 빈 칸**이었다.
     item: str | None
+    #: 항 서수 — 원문에 「①」가 없어도 우리가 센 것. `paragraph` 가 비면 이쪽으로 인용한다.
+    paragraph_no: int | None
+    #: 자립 텍스트 (조 제목 + 항 본문). 🚨 `None` 은 **아직 재적재 안 됨**이고
+    #:    빈 문자열은 **붙일 문맥이 없음**(조 청크·별표)이다. 둘을 한 값으로 만들지 않는다.
+    context: str | None
     doc_type: str | None
     category: list[str]
     text: str
@@ -98,6 +107,11 @@ _SELECT: tuple[tuple[str, str], ...] = (
     #    ⛔ `chunk.py` 는 채우고 있었는데 **읽는 쪽이 없었다** — 생산자만 있고 소비자 없는 값.
     ("c.paragraph", "paragraph"),
     ("c.item", "item"),
+    # 🔴 2026-09-12 (0008) — 원문에 항번호가 없는 호가 31%(283/909)다. 원문(`paragraph`)과
+    #    우리가 센 서수(`paragraph_no`)를 갈라 두고, 인용은 **둘 중 있는 쪽**으로 조립한다.
+    ("c.paragraph_no", "paragraph_no"),
+    # 🔴 자립 텍스트 — 임베딩이 본 것과 **같은 값**이다. 화면이 문맥으로 접어 보여 준다.
+    ("c.context", "context"),
     ("c.doc_type", "doc_type"),
     ("c.category", "category"),
     ("c.text", "text"),
@@ -146,6 +160,25 @@ def stored_model_id(cur: Any) -> str:
     return ids[0]
 
 
+def check_inputs(cur: Any) -> None:
+    """임베딩 입력판이 **한 벌인가** (0008 · D-176).
+
+    🔴 `model_id` 는 문맥판과 무문맥판을 구별하지 못한다. 재임베딩을 중간에 멈추면
+       두 벡터공간이 한 표에 섞이고 **거리가 조용히 뜻을 잃는다** — 오류도 안 난다.
+    ★ 전부 NULL(옛판)이나 전부 채움(새판)은 통과시킨다. **섞인 것만** 막는다.
+       「아직 안 옮겼다」는 상태이고, 「반쯤 옮겼다」는 사고다.
+    """
+    cur.execute(
+        "SELECT count(*) FILTER (WHERE input_sha256 IS NULL), count(*) FROM chunk_embedding"
+    )
+    null_n, total = cur.fetchone()
+    if total and null_n and null_n != total:
+        raise InputsMixed(
+            f"임베딩 입력판이 섞였다 — 지문 없는 행 {null_n:,} / 전체 {total:,}. "
+            "재임베딩이 중간에 멈췄다. 다시: uv run python -m scripts.embed"
+        )
+
+
 def encode(model_id: str, text: str) -> list[float]:
     """질의 한 줄을 벡터로. 모델은 프로세스당 한 번만 로드한다."""
     model = _model_cache.get(model_id)
@@ -189,6 +222,10 @@ def citation(hit_like: dict) -> str | None:
         if i < 0 or para[1:]:  # 원문자 한 글자가 아니면 우리가 아는 모양이 아니다
             return None
         out += f"제{i + 1}항"
+    elif hit_like.get("paragraph_no"):
+        # ★ 원문에 항번호가 없어도 **우리가 센 서수**가 있으면 인용이 선다 (0008).
+        #    「①」를 지어내 `paragraph` 에 넣지 않고, 옆 칸의 수를 여기서만 옮긴다 (D-117).
+        out += f"제{int(hit_like['paragraph_no'])}항"
     elif ho_raw:
         # 🔴 **호가 있는데 항번호가 없다 — 항이 없는 게 아니다** (2026-09-12 실측 283건 · 호의 31%).
         #    법제처 XML 은 **항이 하나뿐인 조에 `<항번호>` 를 주지 않는다.** 「①」를 안 쓰니까.
@@ -196,8 +233,8 @@ def citation(hit_like: dict) -> str | None:
         #    빈 항번호는 「항이 없다」가 아니라 **「번호가 표기되지 않은 제1항」**이다.
         # ⛔ 여기서 항을 건너뛰면 「제10조제3호」가 되는데 정확한 인용은 「제10조제1항제3호」다.
         #    그것이 이 함수가 막으려는 **부분 인용** 바로 그것이다 (D-100).
-        # 🔜 마이그레이션 0008 의 `chunk.paragraph_no`(항 서수)가 들어오면 채운다.
-        #    ★ 원문에 없는 「①」를 지어내지 않는다 — 원문 칸과 우리가 센 칸을 가른다 (D-117).
+        # 🚨 여기에 오는 것은 `paragraph_no` 조차 없는 행 — **0008 재적재 전**이거나
+        #    법령이 아닌 경로로 들어온 것이다. 지어내지 않고 포기한다.
         return None
     ho = ho_raw.rstrip(".")
     if ho:
@@ -236,6 +273,7 @@ def by_vector(cur: Any, text: str, category: str = "일반", limit: int = 5) -> 
     🔴 못 하면 `RetrieveError` 를 던진다 — **빈 목록으로 떨어지지 않는다.**
     """
     model_id = stored_model_id(cur)
+    check_inputs(cur)
     vec = encode(model_id, text)
     literal = "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
     cur.execute(SQL_VECTOR, (literal, category, model_id, limit))
