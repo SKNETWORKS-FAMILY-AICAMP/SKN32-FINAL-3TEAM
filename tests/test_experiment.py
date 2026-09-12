@@ -100,9 +100,33 @@ def test_기록에_고정분이_같이_올라간다() -> None:
 
 
 def test_harness_가_없으면_멈춘다(tmp_path) -> None:  # noqa: ANN001 — pytest 픽스처
-    """🚨 게이트가 아니다 — `experiments/harness.yaml` 은 아직 없는 것이 정상이다.
+    """🚨 게이트가 아니다 — `experiments/harness.<트랙>.yaml` 은 아직 없는 것이 정상이다.
 
     ⬜ **팀장이 2W 말까지 채운다** (D-94). 없을 때 조용히 기본값으로 도는 것만 막는다.
     """
     with pytest.raises(SystemExit, match="harness 가 없다"):
-        ex.load_harness(tmp_path / "없다.yaml")
+        ex.load_harness("T2", tmp_path / "없다.yaml")
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("bad", ["T1", "T4", "T6", "", "t2"])
+def test_실험_트랙이_아니면_거부한다(bad: str) -> None:
+    """🔴 **sLLM LoRA 는 T5 다** (기획서 8-5) — 2026-09-12 밤에 `T2`·`T3` 만 열었다가 틀렸다.
+
+    ⛔ T1(데이터·거버넌스)·T4(그래프·RAG)는 하이퍼파라미터를 나눠 돌리는 종류가 아니다.
+       넣으면 「설정 하나」의 뜻이 흐려진다 (D-94).
+    🚨 트랙의 **뜻**은 여기 없다 — 기획서 8-5 가 정본이다 (D-54).
+    """
+    with pytest.raises(ValidationError, match="실험 분배 대상이 아니다"):
+        ex.ExperimentConfig(**{**_OK, "track": bad})
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("track", ex.TRACKS)
+def test_트랙마다_harness_가_따로다(track: str) -> None:
+    """🔴 인코더(T2)와 sLLM(T5)은 **split 도 평가 지표도 다르다** (2026-09-12 밤 배정).
+
+    ⛔ 한 파일로 두면 「같은 조건」이 트랙을 건너 거짓이 된다 — D-94 가 막으려던 그것이다.
+    """
+    assert ex.harness_file(track).name == f"harness.{track}.yaml"
+    assert len({ex.harness_file(t) for t in ex.TRACKS}) == len(ex.TRACKS)
