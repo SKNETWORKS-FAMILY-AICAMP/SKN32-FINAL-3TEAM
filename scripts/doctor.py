@@ -74,6 +74,7 @@ import argparse
 import collections
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path, PurePath
 from typing import Any
@@ -429,14 +430,116 @@ def check_data(*, verify_hash: bool) -> int:
     return red
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  🆕 --env — 팀원이 첫날 여는 검사 (2026-09-12 밤 · D-51 · D-208)
+# ══════════════════════════════════════════════════════════════════════
+
+#: 🚨 이 검사들은 **데이터가 없어도 돈다.** 새 클론에서 제일 먼저 부를 자리다.
+#:    ⛔ 종전에는 「환경 진단」(메뉴 3)이 원장↔디스크 대조 **하나만** 봤다. 팀원이 초록을
+#:       보고도 파이썬 버전·git 신원·DB 리비전은 **아무도 안 본 상태**였다 (D-170).
+
+
+def _git(*args: str) -> str:
+    """git 한 줄. 🚨 실패는 빈 문자열이다 — git 이 없어도 진단이 죽지 않는다."""
+    try:
+        out = subprocess.run(  # noqa: S603
+            ["git", *args], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip()
+
+
+def check_env() -> int:
+    """환경·신원·DB 를 본다. 🔴 반환값은 **빨간 건수**다.
+
+    ⬜ 여기서 안 보는 것 — uv.lock 동기화 · 모델 캐시 · GPU. 아직 자리표시자다 (D-188).
+    """
+    red = 0
+
+    # ① 파이썬 — 스택 핀 (D-87)
+    want = (
+        (ROOT / ".python-version").read_text(encoding="utf-8").strip()
+        if (ROOT / ".python-version").exists()
+        else ""
+    )
+    now = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    if want and not now.startswith(want.rsplit(".", 1)[0]):
+        print(f"🔴 파이썬 {now} — 핀은 {want} 다 (D-87).")
+        print("   고치는 법 — uv python install && uv sync --frozen")
+        red += 1
+    else:
+        print(f"✅ 파이썬 {now}" + (f" (핀 {want})" if want else ""))
+
+    # ② git 신원 — 🔴 없으면 커밋이 전부 같은 이름으로 들어온다
+    name, email = _git("config", "user.name"), _git("config", "user.email")
+    if not name or not email:
+        print("🔴 git 신원이 없다 — 커밋이 기기 계정 이름으로 들어간다.")
+        print("   ⛔ 실제로 커밋 266건 중 1건이 그렇게 남았다. 5인이 붙으면 저자를 못 가른다.")
+        print('   고치는 법 — git config user.name "이름"; git config user.email "메일"')
+        red += 1
+    else:
+        print(f"✅ git 신원 {name} <{email}>")
+
+    # ③ .env — 없으면 키가 하나도 안 읽힌다
+    if not (ROOT / ".env").exists():
+        print("🟡 .env 가 없다 — .env.example 을 복사한다 (setup 이 해 준다).")
+    else:
+        print("✅ .env 있음  (값은 launcher.py keys 로 지문만 본다)")
+
+    # ④ DB — 붙는가 · 리비전이 최신인가 · pgvector 가 있는가
+    try:
+        import psycopg  # noqa: PLC0415
+
+        from app.settings import dsn  # noqa: PLC0415
+
+        with psycopg.connect(dsn(), connect_timeout=5) as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+            has_vec = cur.fetchone() is not None
+            cur.execute("SELECT to_regclass('alembic_version')")
+            rev = None
+            if cur.fetchone()[0]:
+                cur.execute("SELECT version_num FROM alembic_version")
+                row = cur.fetchone()
+                rev = row[0] if row else None
+        print("✅ DB 접속" + (f" · alembic {rev}" if rev else " · 🔴 alembic 미적용"))
+        if not has_vec:
+            print("🔴 pgvector 확장이 없다 — CREATE EXTENSION vector (db-up 이 해 준다).")
+            red += 1
+        if not rev:
+            print("🔴 테이블이 없다 — uv run python launcher.py migrate 를 먼저 돌린다.")
+            red += 1
+    except Exception as e:  # noqa: BLE001
+        print(f"🟡 DB 에 못 붙었다 ({type(e).__name__}) — launcher.py db-up 을 먼저 돌린다.")
+
+    # ⑤ 화면 골격 — 팀원이 첫날 여는 자리
+    for rel in ("app/templates/base.html", "app/static/base.css"):
+        print(("✅ " if (ROOT / rel).exists() else "🔴 없다 — ") + rel)
+        red += 0 if (ROOT / rel).exists() else 1
+
+    return red
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="CopyLane 진단 (D-51 · D-89)")
     ap.add_argument("--data", action="store_true", help="원장 ↔ 디스크 대조")
     ap.add_argument("--hash", action="store_true", help="--data 에서 전 파일 해시를 재계산")
+    ap.add_argument("--env", action="store_true", help="환경·git 신원·DB — 데이터 없이 돈다")
     args = ap.parse_args()
 
+    if args.env:
+        print("── 환경 진단 ───────────────────────────────────")
+        red = check_env()
+        print("────────────────────────────────────────────────")
+        if red:
+            print(f"🔴 {red}건 — 위 「고치는 법」을 먼저 읽어라.")
+            return 1
+        print("🔴 없음. ⬜ 다만 uv.lock 동기화·모델 캐시·GPU 는 **아직 안 본다** (D-188).")
+        return 0 if not args.data else 0
+
     if not args.data:
-        print("doctor: 지금 도는 것은 --data 뿐이다. 나머지는 docstring 의 자리표시자다.")
+        print("doctor: 지금 도는 것은 --data · --env 다. 나머지는 docstring 의 자리표시자다.")
+        print("  uv run python scripts/doctor.py --env    ← 새 클론에서 먼저")
         print("  uv run python scripts/doctor.py --data [--hash]")
         return 0
 

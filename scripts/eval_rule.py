@@ -29,9 +29,11 @@ import re
 import sys
 import unicodedata
 
+from app.settings import PARAMS
+
 DICT = pathlib.Path("data/derived/banned_terms.jsonl")
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
-MIN_MEASURABLE = 30  # D-40
+MIN_MEASURABLE = PARAMS.min_measurable  # D-40
 
 
 def norm(s: str) -> str:
