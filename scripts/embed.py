@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -30,6 +31,114 @@ CHUNKS = ROOT / "data" / "derived" / "chunks.jsonl"
 MODEL_ID = "nlpai-lab/KURE-v1"
 DIM = 1024  # 🚨 db/schema.sql 의 vector(1024) 와 같아야 한다
 BATCH = 32
+
+# ── chunk 적재 — 🔴 **칸 목록이 한 곳이다** (2026-09-12 · D-99) ─────────────
+# ⛔ 종전에는 INSERT 칸·VALUES·DO UPDATE SET·값 튜플이 **네 벌**이었다. 그래서 09-10 에
+#    `token_count` 를 넣도록 고쳤는데 `DO UPDATE SET` 에 안 넣어 **기존 2,585행이 널로
+#    남았다.** 마이그레이션 0006 은 「먼저 embed 를 돌려라」고 안내했고 — 돌려도 안 채워졌다.
+#    🚨 그때 남긴 처방은 *「넣는 칸이 늘면 갱신 칸도 같이 늘린다」*는 **사람이 지키는 규칙**이었다.
+#       2026-09-12 에 `paragraph`·`item` 을 고치면서 **같은 자리를 또 밟을 뻔했다.**
+# ★ 그래서 규칙을 없애고 **구조로 옮긴다** — 칸을 여기 한 줄에만 적으면 나머지가 따라온다.
+#   D-189 가 호출 경로에 대해 한 것과 같다: 갈릴 수 있는 두 벌을 한 벌로 만든다.
+CHUNK_COLS = (
+    "chunk_id",
+    "fragment_id",
+    "doc_id",
+    "law_id",
+    "article",
+    "paragraph",
+    "item",
+    # 🔴 2026-09-12 (0008) — 항 서수와 자립 텍스트. 여기 한 줄 더하면 나머지가 따라온다.
+    "paragraph_no",
+    "context",
+    "doc_type",
+    "category",
+    "text",
+    "token_count",
+)
+#: 기본키는 갱신하지 않는다 — 나머지는 **전부** 갱신한다.
+CHUNK_UPDATABLE = tuple(c for c in CHUNK_COLS if c != "chunk_id")
+SQL_CHUNK_UPSERT = (
+    f"INSERT INTO chunk ({', '.join(CHUNK_COLS)}) "
+    f"VALUES ({', '.join(['%s'] * len(CHUNK_COLS))}) "
+    "ON CONFLICT (chunk_id) DO UPDATE SET "
+    + ", ".join(f"{c}=EXCLUDED.{c}" for c in CHUNK_UPDATABLE)
+)
+
+
+def embed_input(r: dict) -> str:
+    """모델에 실제로 넣는 문자열 — `context` + `text` (2026-09-12 · 0008).
+
+    🔴 **`text` 를 바꾸지 않는다.** 인용 단위는 호 그대로 두고 **검색이 보는 것만** 키운다.
+       「1. 마약」이 「① …제조·수입하여서는 아니 된다 / 1. 마약」으로 임베딩되어
+       엉뚱한 질의에 붙지 않게 된다. `chunk_id` 도 `text` 도 그대로라 골든셋이 안 흔들린다.
+    🚨 **화면이 보여 주는 문맥과 같은 값**이다 (`chunk.context`). 두 문자열이면 갈린다 (D-99).
+    """
+    ctx = (r.get("context") or "").strip()
+    return f"{ctx}\n{r['text']}" if ctx else r["text"]
+
+
+def input_fingerprint(r: dict) -> str:
+    """임베딩 입력의 sha256 — 재현의 근거는 seed 가 아니라 **입력 지문**이다 (D-176).
+
+    ⛔ `model_id` 만으로는 문맥판과 무문맥판이 구별되지 않는다. 재임베딩을 중간에 멈추면
+       두 벡터공간이 한 표에 섞이고 **거리는 조용히 뜻을 잃는다.**
+    """
+    return hashlib.sha256(embed_input(r).encode("utf-8")).hexdigest()
+
+
+EMB_COLS = ("chunk_id", "embedding", "model_id", "input_sha256")
+EMB_UPDATABLE = tuple(c for c in EMB_COLS if c != "chunk_id")
+SQL_EMB_UPSERT = (
+    f"INSERT INTO chunk_embedding ({', '.join(EMB_COLS)}) "
+    f"VALUES ({', '.join(['%s'] * len(EMB_COLS))}) "
+    "ON CONFLICT (chunk_id) DO UPDATE SET " + ", ".join(f"{c}=EXCLUDED.{c}" for c in EMB_UPDATABLE)
+)
+
+
+def chunk_values(r: dict, model) -> tuple:  # noqa: ANN001 — model 은 지연 로드 타입이다
+    """`CHUNK_COLS` 순서로 값을 낸다. 🚨 **순서를 손으로 맞추지 않는다.**
+
+    🔴 `token_count` 는 **실제로 센다** (2026-09-10). ⛔ 종전에는 항상 `None` 이라
+       `ck_chunk_tokens`(512 상한)가 **영구히 무효**였다. 설계 문서는 「900토큰 청크 거부
+       확인」을 성과로 적어 뒀는데 실무에서는 안 걸렸다 (D-170).
+    🚨 임베딩 모델의 토크나이저로 센다 — 상한이 그 모델의 상한이기 때문이다.
+    """
+    v = {**r, "token_count": _tokens(model, r["text"])}
+    missing = [c for c in CHUNK_COLS if c not in v]
+    if missing:
+        raise SystemExit(f"🔴 청크에 칸이 없다: {missing} — preprocess.chunk 를 다시 돌린다")
+    return tuple(v[c] for c in CHUNK_COLS)
+
+
+def sweep_orphans(cur, declared: set[str], *, partial: bool) -> int:  # noqa: ANN001
+    """선언에 없는 `chunk_id` 를 거둔다 — **적재는 선언한 상태로 만드는 것**이다 (D-187).
+
+    🔴 2026-09-12 오후 — 제목뿐인 조 청크를 `preprocess/chunk.py` 가 빼면서 필요해졌다
+       (D-195). ⛔ 거두지 않으면 뺀 청크가 DB 에 그대로 남아 **계속 검색에 걸린다** —
+       코드는 고쳤는데 증상이 안 사라지고, 다음 사람은 고친 코드를 의심한다.
+    🚨 `chunk_embedding` 은 `ON DELETE CASCADE` 라 같이 지워진다 (`db/schema.sql`).
+
+    ⛔ **`--limit` 로 돌렸으면 거두지 않는다.** 앞의 N개만 선언이므로 나머지 전부가
+       고아로 보인다 — **한 번의 연습 실행이 표를 비운다.**
+       🚨 2026-09-12 오전 `mark_collected` 가 정확히 같은 함정이었다. 같은 가드를 건다.
+    """
+    cur.execute("SELECT chunk_id FROM chunk")
+    orphans = {r[0] for r in cur.fetchall()} - declared
+    if not orphans:
+        return 0
+    if partial:
+        print(f"  ⬜ --limit 로 돌렸다 — 선언 밖 {len(orphans):,}행을 **거두지 않는다**")
+        print("     🚨 전량으로 다시 돌려야 DB 가 선언과 같아진다")
+        return 0
+    # 🚨 **몇 개를 왜 지우는지 먼저 찍는다** — 조용히 지우면 수가 줄어도 아무도 모른다 (D-149).
+    print(f"  🧹 선언에 없는 청크 {len(orphans):,}행을 거둔다 (D-187)")
+    for cid in sorted(orphans)[:5]:
+        print(f"     {cid}")
+    if len(orphans) > 5:
+        print(f"     … 외 {len(orphans) - 5:,}행")
+    cur.execute("DELETE FROM chunk WHERE chunk_id = ANY(%s)", (sorted(orphans),))
+    return len(orphans)
 
 
 def dsn() -> str:
@@ -98,48 +207,24 @@ def main() -> int:
     with conn, conn.cursor() as cur:
         # 🚨 청크를 먼저 넣는다 — chunk_embedding 이 chunk 를 가리킨다
         for r in rows:
-            cur.execute(
-                "INSERT INTO chunk (chunk_id, fragment_id, doc_id, law_id, article, paragraph, "
-                "item, doc_type, category, text, token_count) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-                # 🔴 **갱신 칸을 빠뜨리면 고친 코드가 기존 행에 안 닿는다** (2026-09-11).
-                #    ⛔ `token_count` 를 채우도록 고친 것이 09-10 인데, 그 전에 적재된
-                #       chunk 2,585행은 upsert 가 `text` 만 갱신해 **널로 남았다.**
-                #       그래서 0006 마이그레이션이 「먼저 embed 를 돌려라」고 안내했는데
-                #       **돌려도 안 채워지는** 상태였다 — 안내가 거짓이 되는 자리다.
-                #    ★ 규칙: 넣는 칸이 늘면 **갱신 칸도 같이 늘린다.**
-                "ON CONFLICT (chunk_id) DO UPDATE SET "
-                "  text=EXCLUDED.text, token_count=EXCLUDED.token_count",
-                (
-                    r["chunk_id"],
-                    r["fragment_id"],
-                    r["doc_id"],
-                    r["law_id"],
-                    r["article"],
-                    r["paragraph"],
-                    r["item"],
-                    r["doc_type"],
-                    r["category"],
-                    r["text"],
-                    # 🔴 **실제로 센다** (2026-09-10). ⛔ 종전에는 항상 `None` 이라
-                    #    `ck_chunk_tokens`(512 상한)가 **영구히 무효**였다. 설계 문서는
-                    #    「900토큰 청크 거부 확인」을 성과로 적어 뒀는데 실무에서 안 걸린다.
-                    #    🚨 임베딩 모델의 토크나이저로 센다 — 상한이 그 모델의 상한이다.
-                    _tokens(model, r["text"]),
-                ),
-            )
+            cur.execute(SQL_CHUNK_UPSERT, chunk_values(r, model))
+        # 🔴 **넣은 뒤에 거둔다** — 선언에 있는 것을 먼저 세워야 지울 것이 정해진다 (D-187).
+        swept = sweep_orphans(cur, {r["chunk_id"] for r in rows}, partial=bool(args.limit))
         done = 0
         for i in range(0, len(rows), BATCH):
             batch = rows[i : i + BATCH]
-            vecs = model.encode([b["text"] for b in batch])
+            vecs = model.encode([embed_input(b) for b in batch])
             for b, v in zip(batch, vecs, strict=True):
                 if len(v) != DIM:
                     raise SystemExit(f"🚨 차원이 {len(v)} 다 — vector({DIM}) 와 어긋난다")
                 cur.execute(
-                    "INSERT INTO chunk_embedding (chunk_id, embedding, model_id) "
-                    "VALUES (%s,%s,%s) ON CONFLICT (chunk_id) DO UPDATE SET "
-                    "embedding=EXCLUDED.embedding, model_id=EXCLUDED.model_id",
-                    (b["chunk_id"], "[" + ",".join(f"{x:.6f}" for x in v) + "]", MODEL_ID),
+                    SQL_EMB_UPSERT,
+                    (
+                        b["chunk_id"],
+                        "[" + ",".join(f"{x:.6f}" for x in v) + "]",
+                        MODEL_ID,
+                        input_fingerprint(b),
+                    ),
                 )
             done += len(batch)
             print(f"    {done}/{len(rows)}", end="\r")
@@ -152,13 +237,24 @@ def main() -> int:
         cur.execute("SELECT count(*) FROM chunk_embedding WHERE model_id = %s", (MODEL_ID,))
         n_emb = cur.fetchone()[0]
     print(f"\n  보낸 행 {len(rows)} · DB chunk {n_chunk} · embedding {n_emb} ({MODEL_ID})")
+    if swept:
+        print(f"  🧹 거둔 행 {swept:,} — 선언에 없던 옛 청크다 (D-187)")
     if n_chunk < len(rows):
         print(
             f"  🚨 {len(rows) - n_chunk}행이 들어가지 않았다 — chunk_id 가 겹친다 (D-149)",
             file=sys.stderr,
         )
         return 1
-    print("  ✅ 보낸 수와 들어간 수가 같다")
+    # 🔴 **거둔 뒤에는 「같다」가 아니라 「선언과 같다」라야 한다** (D-187).
+    #    ⛔ 전량으로 돌렸는데 DB 가 선언보다 많으면 못 거둔 것이 남았다는 뜻이다 —
+    #       초록으로 넘기면 지운 줄 알았던 청크가 계속 검색에 걸린다.
+    if not args.limit and n_chunk != len(rows):
+        print(
+            f"  🚨 DB {n_chunk:,} ≠ 선언 {len(rows):,} — 거두지 못한 행이 있다 (D-187)",
+            file=sys.stderr,
+        )
+        return 1
+    print("  ✅ DB 가 선언과 같다")
     return 0
 
 

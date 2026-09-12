@@ -453,22 +453,48 @@ CREATE TABLE chunk (
     doc_type        TEXT,
     category        TEXT[] NOT NULL DEFAULT '{}',
     text            TEXT NOT NULL,
+    -- 🔴 2026-09-12 (0008) — **검색이 보는 텍스트와 인용하는 텍스트를 가른다.**
+    --    호 한 줄(「1. 마약」)은 문맥이 없어 아무 질의에나 붙었다. 청크를 다시 자르는 대신
+    --    자립 텍스트를 옆 칸에 둔다 — `text` 는 한 글자도 안 바뀌므로 인용 단위가 산다 (D-158).
+    --    🚨 NULL 은 「아직 재적재 안 됨」, 빈 문자열은 「붙일 문맥이 없음」(조 청크)이다.
+    context         TEXT,
+    --    항 서수 — 원문에 항번호가 없어도 우리가 센 것. 법제처 XML 은 항이 하나뿐인 조에
+    --    <항번호>를 안 줘서 호의 31%(283/909)가 `paragraph` 빈 칸이다. 원문과 우리 셈을
+    --    갈라 둔다 — 원문에 없는 「①」를 지어내지 않는다 (D-117).
+    paragraph_no    SMALLINT,
     -- 🚨 NOT NULL 이라야 `ck_chunk_tokens` 가 실제로 막는다 (0006). 널이면 CHECK 가 통과한다
     token_count     INTEGER NOT NULL,
+    -- 🔴 2026-09-12 오후 (0010) — 어휘 검색(BM25 자리)의 색인. **생성열이다.**
+    --    ⛔ 표현식 인덱스로 두면 질의가 같은 to_tsvector(...) 를 다시 적어야 인덱스를 타고,
+    --       한쪽만 고치면 결과는 맞는데 **조용히 느려진다** (D-99). 정의는 이 한 줄뿐이다.
+    --    🚨 `context` 를 같이 담는다 — scripts/embed.py 의 embed_input() 과 **같은 문자열**.
+    --       두 갈래가 다른 텍스트를 보면 순위를 섞는(RRF · D-193) 뜻이 없다.
+    --    🚨 `simple` 파서는 공백으로만 자른다 — 형태소 분석기를 안 쓰는 것은 판정이다 (D-194).
+    tsv             tsvector GENERATED ALWAYS AS
+                      (to_tsvector('simple', coalesce(context, '') || ' ' || text)) STORED,
     effective_date  DATE,
     superseded_at   DATE,
     CONSTRAINT ck_chunk_tokens CHECK (token_count <= 512)
 );
 COMMENT ON CONSTRAINT ck_chunk_tokens ON chunk IS
   '리랭커 bge-reranker-v2-m3 의 512 토큰 상한에 맞춘다';
+COMMENT ON COLUMN chunk.tsv IS
+  '어휘 검색 색인 (0010). context + text — 임베딩 입력과 같은 문자열이다. '
+  '🚨 simple 파서라 조사가 붙어 있다: 질의 쪽에서 조사를 깎고 접두어로 맞춘다 (app/retrieve.py).';
 CREATE INDEX ix_chunk_fragment ON chunk(fragment_id);
 CREATE INDEX ix_chunk_current  ON chunk(law_id, article) WHERE superseded_at IS NULL;
+CREATE INDEX ix_chunk_tsv      ON chunk USING GIN (tsv);
 
 -- 🚨 D-41 · pgvector 를 쓰는 이유가 바로 이 CASCADE 다
 CREATE TABLE chunk_embedding (
     chunk_id   TEXT PRIMARY KEY REFERENCES chunk(chunk_id) ON DELETE CASCADE,
     embedding  vector(1024) NOT NULL,   -- 🚨 KURE-v1 실제 차원 1W 확인 후 확정
-    model_id   TEXT NOT NULL
+    model_id   TEXT NOT NULL,
+    -- 🔴 2026-09-12 (0008) — 이 벡터를 만든 **입력 문자열**의 sha256 (D-176).
+    --    ⛔ `model_id` 만으로는 문맥판과 무문맥판이 구별되지 않는다. 재임베딩을 중간에
+    --       멈추면 두 벡터공간이 한 표에 섞이고 **거리는 조용히 뜻을 잃는다.**
+    --    ★ `app/retrieve.py` 가 「일부만 NULL」을 섞임으로 보고 막는다.
+    input_sha256 TEXT
 );
 
 -- ═══════════════ 4. 위험도 — 🚨 RAG 가 아니라 관계형이다 ═══════════════

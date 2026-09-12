@@ -202,6 +202,16 @@ def collect(*, limit: int | None, dry_run: bool, refetch: bool) -> int:
     if limit:
         print("🚨 --limit 로 일부만 받았다 — mark_collected 를 찍지 않는다")
         return 0
+    # 🔴 2026-09-12 — **저장이 0 이면 찍지 않는다.**
+    #    ⛔ 종전에는 가드가 없었다. 09-12 에 655건 전량 스킵(저장 0)으로 끝났는데도
+    #       `collected_at` 이 09-09 → 09-12 로 올라갔고, 생성 체인을 타고
+    #       `data_sources.yaml` 까지 갔다. **찍혔다 ≠ 받았다** (D-177 의 사촌).
+    #    🚨 같은 규칙이 수집기 일곱 곳에 **손으로** 쓰여 있고 여기 하나만 빠져 있었다 —
+    #       `openapi:135` · `ingest:135` · `ftc_body:268` · `law_api:700` ·
+    #       `mfds_board:195` · `mfds_press:646` 는 모두 `if saved:` 다. D-99 의 실물.
+    if not saved:
+        print("⬜ 새로 저장한 것이 없다 — mark_collected 를 찍지 않는다 (원장의 날짜는 그대로)")
+        return 0
     registry.mark_collected(SOURCE_ID)
     return 0
 
