@@ -13,10 +13,10 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![tests](https://img.shields.io/badge/tests-546_(gate_176)-0F7B4F?style=flat-square)
-![decisions](https://img.shields.io/badge/설계결정-D--185-2B5BD7?style=flat-square)
+![tests](https://img.shields.io/badge/tests-704_(gate_286)-0F7B4F?style=flat-square)
+![decisions](https://img.shields.io/badge/설계결정-D--218-2B5BD7?style=flat-square)
 
-**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 185건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
+**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 218건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
 
 </div>
 
@@ -183,24 +183,26 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 
 ## 지금 무엇이 도는가
 
-> 아래는 **2026-09-11 실측**입니다. 수치의 단일 출처는 [`docs/00_사실원장.md`](docs/00_사실원장.md) 이며 이 표는 사본입니다 (D-54).
+> 아래는 **2026-09-12 밤 실측**(클론 B)입니다. 수치의 단일 출처는 [`docs/00_사실원장.md`](docs/00_사실원장.md) 이며 이 표는 사본입니다 (D-54).
 
 | 구성요소 | 상태 | 실측 |
 |---|:-:|---|
-| 수집 · 거버넌스 게이트 | 🟢 **동작** | 소스 **32** 등재 · 수집 원장 약 20,000행 |
+| 수집 · 거버넌스 게이트 | 🟢 **동작** | 소스 **46** 등재(수집 31 · 수기 3 · 보류 12) · 수집 원장 약 20,000행 |
 | 법령 별표 파싱 | 🟢 **동작** | 5법령 **12건 · 243행** · 감사 통과 |
 | 전처리 · 골든셋 | 🟢 **동작** | 금지 표현 사전 **536종** · 결함 주입 7규칙 |
-| DB — 데이터층 19표 + 런타임층 6표 | 🟢 **동작** | 마이그레이션 **0007** · `chunk` **2,585** |
-| 임베딩 (KURE-v1) | 🟢 **동작** | **1024차원** 실측 확인 · `chunk_embedding` **2,585** |
+| DB — 데이터층 19표 + 런타임층 6표 | 🟢 **동작** | 마이그레이션 **0012** · `chunk` **2,400** |
+| 임베딩 (KURE-v1) | 🟢 **동작** | **1024차원** 실측 확인 · `chunk_embedding` **2,400** |
 | 판정 그래프 (LangGraph) | 🟡 **부분** | **한 바퀴 돈다** — 노드 11 · 라우터 2. 판정 로직은 스텁 |
 | 판정 API | 🟡 **부분** | 계약 스키마 **19종** · 고정 응답 **14건**. 본체는 `501` |
-| 벡터 검색 배선 | 🔴 **미착수** | 임베딩은 들어갔으나 검색 경로가 아직 `ILIKE` |
+| 검색 — 벡터 + 어휘 하이브리드 | 🟢 **동작** | `pgvector` + `ts_rank_cd`(생성열 `chunk.tsv`) 를 **RRF** 로 섞은 한 순위 (D-193) |
+| 거버넌스 콘솔 인증 | 🟢 **동작** | Argon2id(OWASP m=19456·t=2·p=1) · 세션 · CSRF · 시도 제한 (D-66 · D-213) |
+| 리랭킹 (bge-reranker-v2-m3) | 🔴 **미착수** | 하이브리드까지 섰고 3층은 아직 |
 | 파인튜닝 · 평가 | 🔴 **미착수** | 평가 홀드아웃 4유형 공백 |
 
 ```
-게이트 테스트   pytest -m gate   176건
-전체 테스트     pytest           546건
-설계 결정       D-01 ~ D-185     빠진 번호 0
+게이트 테스트   pytest -m gate   286건
+전체 테스트     pytest           704건
+설계 결정       D-01 ~ D-218     빠진 번호 0
 ```
 
 ---
@@ -218,7 +220,7 @@ uv · Python 3.11.9 · 의존성 · 커밋 훅 · `.env` 틀 · 로컬 DB 컨테
 ```bash
 uv run python launcher.py            # 대화형 메뉴
 uv run python launcher.py doctor     # 이 기기의 상태 진단
-uv run python launcher.py gate       # 거버넌스 게이트 176건
+uv run python launcher.py gate       # 거버넌스 게이트 286건
 uv run python launcher.py db-up      # 로컬 DB — 127.0.0.1 만 바인딩
 uv run python launcher.py serve      # FastAPI
 ```
@@ -283,7 +285,7 @@ uv run python launcher.py serve      # FastAPI
 | 문서 | 무엇인가 |
 |---|---|
 | [`docs/00_사실원장.md`](docs/00_사실원장.md) | ★ **수치 · 일정 · 파라미터의 단일 출처.** 전부 실측이고, 어느 기기에서 쟀는지까지 적습니다 |
-| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 215건.** 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
+| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 218건.** 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
 | [`docs/00_거버넌스_집행계약.md`](docs/00_거버넌스_집행계약.md) | 게이트가 무엇을 어떻게 막는지 |
 | [`docs/00_산출물현황.md`](docs/00_산출물현황.md) | 산출물 현황 — 제출본은 여기서 빌드합니다 |
 | [`docs/01_기획/`](docs/01_기획/) · [`02_설계/`](docs/02_설계/) · [`03_데이터/`](docs/03_데이터/) | 기획서 · DB 스키마 · 청킹 · LangGraph 상태 · 전처리 사양 |
