@@ -85,3 +85,28 @@
 }
 .railway .seg{flex:1; text-align:center; padding:5px 4px; border:1px solid var(--line); border-radius:2px; background:#fff}
 .railway .to{color:var(--off)}
+
+/* ── 2열 대비 판 (E-03) ─────────────────────────────────────────── */
+.pair{display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start}
+.pipe{display:flex; align-items:stretch; gap:0; margin-top:16px}
+.pipe .box{flex:1; border:1px solid var(--line); border-radius:2px; padding:9px 11px; background:#fff}
+.pipe .box b{display:block; font-size:12px; margin-bottom:2px}
+.pipe .box span{display:block; color:var(--sub); font-size:11px}
+.pipe .box.pos{border-left:3px solid #286E4C; background:#F7FBF9}
+.pipe .box.pos b{color:#286E4C}
+.pipe .box.off{border:1px dashed #C4CCD4; background:var(--offbg)}
+.pipe .box.off b{color:var(--off)}
+.pipe .j{display:flex; align-items:center; padding:0 7px; color:var(--off); font-size:13px}
+
+/* ── 번호 단계 판 (A-03) ────────────────────────────────────────── */
+.steps{display:grid; grid-template-columns:1fr 1fr; gap:0 22px}
+.stp{display:grid; grid-template-columns:26px 1fr; gap:9px; padding:7px 0; border-top:1px solid var(--line)}
+.stp:first-child, .steps > .stp:nth-child(6){border-top:none}
+.stp .n{
+  width:24px; height:24px; border:1px solid var(--gov); border-radius:2px; color:var(--gov);
+  display:flex; align-items:center; justify-content:center; font-size:11.5px; font-weight:700;
+}
+.stp.pos .n{border-color:#286E4C; color:#286E4C}
+.stp b{display:block; font-size:12.5px}
+.stp span{display:block; color:var(--sub); font-size:11.3px}
+.inv{margin-top:4px; padding:5px 8px; background:#F7FAFC; border-left:3px solid var(--gov); font-size:10.8px; color:var(--gov); font-family:ui-monospace,Menlo,monospace}
