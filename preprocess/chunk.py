@@ -102,8 +102,12 @@ def from_articles() -> list[dict]:
                     "doc_id": doc_id,
                     "law_id": r["파일"].split("_")[1],
                     "article": article,
+                    # 🔴 항과 호를 **각자의 칸에** 담는다 (2026-09-12 · D-167).
+                    #    ⛔ 종전에는 `paragraph` 에 「①1.」이 통째로 들어가고 `item` 은
+                    #       **늘 빈 칸**이었다. 생산자가 안 채우는 열은 소비자도 못 읽는다.
+                    #    ★ 이 둘이 갈려 있어야 `retrieve.citation()` 이 조립된다.
                     "paragraph": r.get("항") or "",
-                    "item": "",
+                    "item": r.get("호") or "",
                     "doc_type": "법령",
                     "category": [category_of(law)],
                     "text": text,

@@ -99,3 +99,41 @@ def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
     from app.api import SearchHit  # noqa: PLC0415 — fastapi 는 이 테스트에서만 든다
 
     assert {f.name for f in dataclasses.fields(rt.Hit)} == set(SearchHit.model_fields)
+
+
+# ── citation 조립 (2026-09-12) ────────────────────────────────────────────
+@pytest.mark.parametrize(
+    ("row", "want"),
+    [
+        (
+            {"doc_type": "법령", "article": "제8조", "paragraph": "①", "item": "1."},
+            "제8조제1항제1호",
+        ),
+        (
+            {"doc_type": "법령", "article": "제8조의3", "paragraph": "②", "item": "5."},
+            "제8조의3제2항제5호",
+        ),
+        ({"doc_type": "법령", "article": "제8조", "paragraph": "①", "item": ""}, "제8조제1항"),
+        ({"doc_type": "법령", "article": "제18조", "paragraph": "", "item": ""}, "제18조"),
+        # ⛔ 별표는 계층 표기가 `2.가.10` 이라 같은 규칙이 안 먹는다 — 조립하지 않는다
+        (
+            {"doc_type": "별표", "article": "제19조제7항", "paragraph": "7.나.2", "item": "본문"},
+            None,
+        ),
+        # 🚨 모르는 항 표기 — 조까지만 내지 않고 **통째로 포기한다**
+        ({"doc_type": "법령", "article": "제8조", "paragraph": "제1항", "item": "1."}, None),
+        ({"doc_type": "법령", "article": "제8조", "paragraph": "①", "item": "가."}, None),
+        ({"doc_type": "법령", "article": "", "paragraph": "①", "item": "1."}, None),
+    ],
+)
+def test_citation_조립(row: dict, want: str | None) -> None:
+    """🔴 부분 인용을 내지 않는다 — 「제8조」가 실은 제3항이면 틀린 근거다 (D-100)."""
+    assert rt.citation(row) == want
+
+
+@pytest.mark.gate
+def test_두_질의_모두_항과_호를_싣는다() -> None:
+    """⛔ 이 둘이 빠지면 화면이 **어느 호가 걸렸는지 말할 수 없다** (D-158 · D-100)."""
+    for sql in QUERIES:
+        assert "c.paragraph" in sql
+        assert "c.item" in sql

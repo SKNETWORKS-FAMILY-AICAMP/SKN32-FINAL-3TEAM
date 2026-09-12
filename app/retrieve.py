@@ -66,12 +66,19 @@ class Hit:
     chunk_id: str
     law_id: str | None
     article: str | None
+    #: 항 — 「①」. 🚨 종전에는 `paragraph` 에 「①1.」이 뭉쳐 있었다 (2026-09-12 분리).
+    paragraph: str | None
+    #: 호 — 「1.」. ⛔ 종전에는 법령 쪽이 **늘 빈 칸**이었다.
+    item: str | None
     doc_type: str | None
     category: list[str]
     text: str
     attribution: str | None
     source_url: str | None
     match: str
+    #: 「제8조제1항제1호」. 🔴 조립할 수 없으면 `None` — **부분 인용을 내지 않는다.**
+    #:    「제8조」만 내면 실은 제3항인 근거가 제1항처럼 읽힌다. 틀린 인용은 없는 인용보다 나쁘다.
+    citation: str | None = None
     #: 코사인 거리. 🚨 `by_text` 는 `None` 이다 — **0.0 으로 채우지 않는다.**
     #:    0.0 은 「완전히 같다」는 뜻이라, 없는 값을 가장 좋은 값으로 만든다.
     distance: float | None = None
@@ -81,9 +88,24 @@ class Hit:
 # 🔴 `source_use.allowed AND use_code='U2_rag'` 를 빼면 U2 가 안 열린 원천이 RAG 에 실린다.
 #    `v_current_chunk` 를 안 쓰면 폐지된 조문과 제외된 프래그먼트가 섞인다.
 #    ⛔ 이 조인 넷은 **두 질의 모두**에 있어야 한다. `tests/test_retrieve.py` 가 검사한다.
-_COLS = (
-    "c.chunk_id, c.law_id, c.article, c.doc_type, c.category, c.text,\n       s.attribution, s.url"
+#: 🚨 **뽑는 칸과 이름을 한 곳에 둔다** — 자리번호로 꺼내면 칸이 늘 때 조용히 밀린다.
+#:    `scripts/embed.py` 의 `CHUNK_COLS` 와 같은 처방이다 (D-99).
+_SELECT: tuple[tuple[str, str], ...] = (
+    ("c.chunk_id", "chunk_id"),
+    ("c.law_id", "law_id"),
+    ("c.article", "article"),
+    # 🔴 2026-09-12 추가 — 이 둘이 없어 「제8조제1항제1호」로 인용할 수 없었다 (D-100).
+    #    ⛔ `chunk.py` 는 채우고 있었는데 **읽는 쪽이 없었다** — 생산자만 있고 소비자 없는 값.
+    ("c.paragraph", "paragraph"),
+    ("c.item", "item"),
+    ("c.doc_type", "doc_type"),
+    ("c.category", "category"),
+    ("c.text", "text"),
+    ("s.attribution", "attribution"),
+    ("s.url", "source_url"),
 )
+_COLS = ",\n       ".join(e for e, _ in _SELECT)
+_NAMES = tuple(n for _, n in _SELECT)
 _JOINS = """FROM v_current_chunk c
 JOIN fragment   f ON f.fragment_id = c.fragment_id
 JOIN source     s ON s.source_id   = f.source_id
@@ -142,22 +164,53 @@ def encode(model_id: str, text: str) -> list[float]:
     return [float(x) for x in model.encode([text])[0]]
 
 
+#: 항 표기 — 법제처 원문은 원문자다. 「제N항」으로 옮기려면 이 표가 있어야 한다.
+_CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+
+
+def citation(hit_like: dict) -> str | None:
+    """「제8조제1항제1호」를 조립한다. 🔴 확신이 없으면 `None` 이다.
+
+    ⛔ **별표는 조립하지 않는다.** 계층 표기가 `2.가.10` 처럼 달라 같은 규칙이 안 먹는다.
+       모르는 모양을 그럴듯하게 옮기는 것이 D-100 이 막으려는 바로 그 일이다.
+    🚨 항·호가 예상 밖 표기면 **조까지만 내지 않고 통째로 포기한다** — 부분 인용은
+       「제8조」라고 적어 놓고 실은 제3항인 근거를 가리킬 수 있다.
+    """
+    if hit_like.get("doc_type") != "법령":
+        return None
+    art = (hit_like.get("article") or "").strip()
+    if not art:
+        return None
+    out = art
+    para = (hit_like.get("paragraph") or "").strip()
+    if para:
+        i = _CIRCLED.find(para[:1])
+        if i < 0 or para[1:]:  # 원문자 한 글자가 아니면 우리가 아는 모양이 아니다
+            return None
+        out += f"제{i + 1}항"
+    ho = (hit_like.get("item") or "").strip().rstrip(".")
+    if ho:
+        if not ho.isdigit():
+            return None
+        out += f"제{ho}호"
+    return out
+
+
 def _rows_to_hits(rows: list[tuple], match: str, *, has_distance: bool) -> list[Hit]:
-    return [
-        Hit(
-            chunk_id=r[0],
-            law_id=r[1],
-            article=r[2],
-            doc_type=r[3],
-            category=list(r[4] or []),
-            text=r[5],
-            attribution=r[6],
-            source_url=r[7],
-            match=match,
-            distance=float(r[8]) if has_distance else None,
+    """🚨 자리번호가 아니라 **이름으로** 꺼낸다 — 칸이 늘어도 조용히 밀리지 않는다."""
+    out = []
+    for r in rows:
+        d = dict(zip(_NAMES, r, strict=False))
+        d["category"] = list(d.get("category") or [])
+        out.append(
+            Hit(
+                **d,
+                match=match,
+                citation=citation(d),
+                distance=float(r[len(_NAMES)]) if has_distance else None,
+            )
         )
-        for r in rows
-    ]
+    return out
 
 
 def by_text(cur: Any, q: str, category: str = "일반", limit: int = 5) -> list[Hit]:

@@ -67,6 +67,13 @@ class SearchHit(BaseModel):
     #       별표 청크는 `article` 이 없을 수 있다.
     law_id: str | None = None
     article: str | None = None
+    #: 🔴 2026-09-12 신설 — 항(「①」)과 호(「1.」). 종전에는 `paragraph` 에 둘이 뭉쳐 있고
+    #:    응답에는 아예 없었다. 그래서 화면이 **어느 호가 걸렸는지 말할 수 없었다.**
+    paragraph: str | None = None
+    item: str | None = None
+    #: 「제8조제1항제1호」. 🚨 `null` 이면 **조립을 못 한 것**이지 근거가 없는 게 아니다 —
+    #:    별표는 계층 표기가 달라 조립하지 않는다. 그때는 `article`·`paragraph` 를 쓴다.
+    citation: str | None = None
     doc_type: str | None = None
     category: list[str] = Field(default_factory=list)
     text: str
