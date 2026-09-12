@@ -120,6 +120,9 @@ def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
             {"doc_type": "별표", "article": "제19조제7항", "paragraph": "7.나.2", "item": "본문"},
             None,
         ),
+        # 🔴 항번호가 없는데 호가 있다 — 「항 없음」이 아니라 **번호 안 쓴 제1항**이다.
+        #    조까지만 내면 「제10조제3호」인데 실은 「제10조제1항제3호」다 (실측 283건).
+        ({"doc_type": "법령", "article": "제10조", "paragraph": "", "item": "3."}, None),
         # 🚨 모르는 항 표기 — 조까지만 내지 않고 **통째로 포기한다**
         ({"doc_type": "법령", "article": "제8조", "paragraph": "제1항", "item": "1."}, None),
         ({"doc_type": "법령", "article": "제8조", "paragraph": "①", "item": "가."}, None),

@@ -183,12 +183,23 @@ def citation(hit_like: dict) -> str | None:
         return None
     out = art
     para = (hit_like.get("paragraph") or "").strip()
+    ho_raw = (hit_like.get("item") or "").strip()
     if para:
         i = _CIRCLED.find(para[:1])
         if i < 0 or para[1:]:  # 원문자 한 글자가 아니면 우리가 아는 모양이 아니다
             return None
         out += f"제{i + 1}항"
-    ho = (hit_like.get("item") or "").strip().rstrip(".")
+    elif ho_raw:
+        # 🔴 **호가 있는데 항번호가 없다 — 항이 없는 게 아니다** (2026-09-12 실측 283건 · 호의 31%).
+        #    법제처 XML 은 **항이 하나뿐인 조에 `<항번호>` 를 주지 않는다.** 「①」를 안 쓰니까.
+        #    그런데 `law_article.py` 는 `hang.iter("호")` 로만 호를 만드므로 **조 직속 호는 없다** —
+        #    빈 항번호는 「항이 없다」가 아니라 **「번호가 표기되지 않은 제1항」**이다.
+        # ⛔ 여기서 항을 건너뛰면 「제10조제3호」가 되는데 정확한 인용은 「제10조제1항제3호」다.
+        #    그것이 이 함수가 막으려는 **부분 인용** 바로 그것이다 (D-100).
+        # 🔜 마이그레이션 0008 의 `chunk.paragraph_no`(항 서수)가 들어오면 채운다.
+        #    ★ 원문에 없는 「①」를 지어내지 않는다 — 원문 칸과 우리가 센 칸을 가른다 (D-117).
+        return None
+    ho = ho_raw.rstrip(".")
     if ho:
         if not ho.isdigit():
             return None
