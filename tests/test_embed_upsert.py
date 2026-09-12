@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 
 from scripts import embed
@@ -48,3 +50,36 @@ def test_칸이_빠진_청크는_멈춘다() -> None:
 
 class _NoTokenizer:
     """`_tokens()` 가 토크나이저를 못 찾으면 `None` 을 낸다 — 그 경로를 그대로 쓴다."""
+
+
+@pytest.mark.gate
+def test_토큰을_못_세면_원인_자리에서_멈춘다() -> None:
+    """🔴 **주석이 「적재는 계속한다」고 말하는데 계속되지 않았다** (2026-09-12 밤 · D-200).
+
+    `_tokens()` 가 `None` 을 내면 `token_count` 가 `None` 인 채 INSERT 로 가고, 스키마가
+    `NOT NULL` 이라 **psycopg 예외로 터진다.** ⛔ 터지는 자리가 원인에서 멀어
+    「토크나이저가 다르다」가 아니라 「적재가 깨졌다」로 읽힌다.
+    ★ 멈추는 것은 맞다 (D-72). **멈추는 자리와 문장**을 원인 쪽으로 옮긴 것을 여기서 잰다.
+
+    🚨 종전 게이트(`test_칸이_빠진_청크는_멈춘다`)는 **칸 누락**만 봤다 — 칸은 다 있고
+       값만 `None` 인 이 경로를 안 덮었다. 대칭인 두 경우 중 한쪽만 보는 검사였다 (D-170).
+    """
+    row = dict.fromkeys(embed.CHUNK_COLS, "…")
+    row["text"] = "1. 마약"
+    row["context"] = ""
+    with pytest.raises(SystemExit) as e:
+        embed.chunk_values(row, _NoTokenizer())
+    assert "토큰을 못 셌다" in str(e.value)
+
+
+@pytest.mark.gate
+def test_두_토큰_축을_따로_센다() -> None:
+    """🚨 `token_count` 는 `text`, `input_token_count` 는 `embed_input()` 이다 (D-200).
+
+    ⛔ 0008 이 `context` 를 만들면서 **재는 문자열과 모델에 들어가는 문자열이 갈렸다.**
+       한 수로 두면 「512 를 지킨다」가 어느 축의 말인지 알 수 없어진다 (D-185).
+    """
+    src = pathlib.Path(embed.__file__).read_text(encoding="utf-8")
+    assert '"token_count": _tokens(model, r["text"])' in src
+    assert '"input_token_count": _tokens(model, embed_input(r))' in src
+    assert {"token_count", "input_token_count"} <= set(embed.CHUNK_COLS)

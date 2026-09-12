@@ -76,8 +76,15 @@ class SearchHit(BaseModel):
     #: 자립 텍스트 — **임베딩이 본 것과 같은 값**이다. 화면은 이것을 접어서 보여 주고
     #: `text` 를 펼쳐 보여 준다. 🚨 `null` 은 미적재, 빈 문자열은 붙일 문맥 없음이다.
     context: str | None = None
+    #: 🔴 **이 근거가 조문의 일부인가** (0011 · D-199). `part_total > 1` 이면 조각이다.
+    #:    ⛔ `citation` 은 좌표로 맞지만 **전문이 아니다** — 화면은 「제18조 (1/3)」처럼 적고,
+    #:       인용 검증은 조문 집합 대조에 이 사실을 함께 넣는다 (기획서 5-6).
+    #:    🚨 `null` 은 「아직 재적재 안 됨」이지 「안 쪼갰다」가 아니다. 안 쪼갰으면 1/1 이다.
+    part_no: int | None = None
+    part_total: int | None = None
     #: 「제8조제1항제1호」. 🚨 `null` 이면 **조립을 못 한 것**이지 근거가 없는 게 아니다 —
     #:    별표는 계층 표기가 달라 조립하지 않는다. 그때는 `article`·`paragraph` 를 쓴다.
+    #:    🔴 값이 있다고 「조문 전문」이 아니다 — `part_total` 을 **같이** 본다 (D-199).
     citation: str | None = None
     doc_type: str | None = None
     category: list[str] = Field(default_factory=list)
@@ -115,9 +122,19 @@ class SearchResult(BaseModel):
     """
 
     hits: list[SearchHit] = Field(default_factory=list)
-    #: `ok` 이거나, **안 된 이유**가 그대로 들어온다.
+    #: `ok` 이거나, 벡터가 **안 된 이유**가 그대로 들어온다.
     vector: str
-    #: 갈래별 건수 — 0 이 「못 했다」인지 「없다」인지는 위 `vector` 가 말한다.
+    #: 🔴 2026-09-12 밤 (D-202) — 어휘 갈래도 같은 칸을 갖는다. `ok` 이거나 `no_terms: …`.
+    #:    ⛔ 종전에는 벡터만 있었다. 「질의에 검색어가 없다」와 「겹치는 조문이 없다」가
+    #:       둘 다 0건으로 나와 **부르는 쪽에서 구별이 없었다.**
+    lexical: str
+    #: 후보 폭 — `counts` 의 `*_pool` 이 이 수를 분모로 한다 (기획서 5-6 의 「상위 50」).
+    pool: int = 0
+    #: 🔴 **분모가 둘이다** (D-178 · D-202).
+    #:    `vector_pool`·`lexical_pool`  — 후보 `pool` 안에서 각 갈래가 잡은 수
+    #:    `vector_top`·`lexical_top`    — 돌려준 `limit` 안에서 각 갈래가 올린 수
+    #:    ⛔ 종전에는 뒤엣것 둘만 있었고 이름에 분모가 없었다. 그러면 「후보에는 있었는데
+    #:       상위에 못 들었다」가 「후보가 없었다」와 같은 0 으로 보인다.
     counts: dict[str, int] = Field(default_factory=dict)
 
 
@@ -145,7 +162,9 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
       — 조문 검색. <b>뜻(벡터)과 어휘를 RRF 로 섞은 한 순위</b> —
       각 줄의 <code>rank_vector</code>·<code>rank_lexical</code> 이
       <b>어느 갈래가 몇 위로 올렸는지</b> 말한다.
-      벡터가 안 되면 <code>vector</code> 칸에 이유가 적힌다</li>
+      갈래가 안 되면 <code>vector</code>·<code>lexical</code> 칸에 이유가 적히고,
+      <code>counts</code> 는 <b>후보(<code>_pool</code>)와 응답(<code>_top</code>)을 갈라</b> 센다.
+      <code>part_total</code> 이 1보다 크면 <b>그 근거는 조문의 일부</b>다</li>
   <li class=yes><a href="/docs">/docs</a> — API 계약 <b>(판정 응답 스키마 포함)</b></li>
   <li class=yes><a href="/fixtures">/fixtures</a>
       — <b>진입점 셋</b>의 고정 응답 14건 (D-124 · D-181):
@@ -161,12 +180,17 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
   <li class=no>벡터 <b>인덱스</b> — 지금 규모(청크 수천)에서는 순차 스캔이 빠르고,
       <code>ivfflat</code> 은 <code>lists</code> 를 잘못 잡으면 재현율이 조용히 떨어진다.
       <b>빠뜨린 것이 아니라 판정이다</b> — 근거는 <code>app/retrieve.py</code> 머리말.</li>
-  <li class=no><b>리랭커</b>(bge-reranker-v2-m3) — D-77 예산표의 다음 층이다.
-      어휘+벡터가 후보 50개를 만들고, 그 안의 순서를 리랭커가 고친다.
-      <b>후보에 없는 것은 리랭커도 못 건진다</b> — 그 몫은 규칙 매칭 사전이 맡는다.</li>
-  <li class=no><b>규칙 매칭 사전</b>(536행) — 「타사보다 3배」 같은 비방·부당비교는
-      조문과 어휘가 하나도 안 겹쳐 <b>어휘로도 벡터로도 후보에 안 든다</b>
-      (2026-09-12 실측: 50위 밖). 이 유형은 사전이 맡아야 한다.</li>
+  <li class=no><b>리랭커</b> — D-77 예산표의 다음 층이고 <b>지금 가장 급한 층</b>이다.
+      어휘+벡터가 후보 50개(기획서 5-6)를 만들고, 그 안의 순서를 리랭커가 고친다.
+      <b>「면역력이 쑥쑥」류가 이 층을 기다린다</b> — 2026-09-12 오후 실측에서
+      <b>어휘 후보 0건</b>이라 어휘가 못 돕고 벡터 15위였다. 후보 안에는 있으니
+      순서를 고칠 층이 리랭커뿐이다.
+      🚨 모델 미선정 — 기획서 7-3 이 v2-m3(0.6B)와 base(0.3B)를 <b>나란히 재라</b>고 했다.</li>
+  <li class=no><b>규칙 매칭 사전</b>(536행) — 어휘도 벡터도 못 잡는 유형을 맡는다.
+      ⚠️ <b>2026-09-12 오후에 근거가 뒤집혔다</b>: 종전 이 자리에 「타사보다 3배」류가
+      예로 적혀 있었는데, 실측에서 <b>어휘가 3위로 잡았다</b>
+      (조문 제8조제1항제6호의 「제품」이 겹친다). 그 예는 틀렸다.
+      <b>어느 유형이 이 층을 필요로 하는지는 골든셋 30건 뒤에 정한다</b> (D-40 · D-198).</li>
   <li class=no><code>violation_article</code>·<code>sanction_rule</code>
       — 근거 조문 대응표와 제재 수치. 그래서 위험도가 아직 스텁이다.</li>
 </ul>
@@ -205,7 +229,7 @@ def search(q: str, category: str = "일반", limit: int = 5) -> SearchResult:
         vector    뜻이 가까운 것.  「면역력 쑥!」 → 「질병의 예방 및 치료에 효능이…」
         lexical   어휘가 겹치는 것. 조사를 깎고 접두어로 맞춘다
         ↓
-        fused     `Σ 1/(60 + 순위)` — 점수가 아니라 **순위만** 쓴다
+        fused     `Σ 1/(k + 순위)` — 점수가 아니라 **순위만** 쓴다 (`k` 는 `rt.RRF_K`)
 
     🔄 종전에는 두 갈래를 **따로** 냈다. 합치지 않은 이유는 「[임의] 가중치를 안 만든다」였고,
        그 판정은 **가중합만 보고 내린 것**이었다. RRF 에는 더할 가중치가 없다 (D-193).
@@ -220,20 +244,24 @@ def search(q: str, category: str = "일반", limit: int = 5) -> SearchResult:
 
     try:
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
-            # 🚨 합치는 것도 상태 문자열을 짓는 것도 코어가 한다 — 여기는 얇다 (D-51 · D-99).
-            hits, vector_state = rt.search(cur, q, category, limit)
+            # 🚨 합치는 것도 상태를 짓는 것도 코어가 한다 — 여기는 얇다 (D-51 · D-99).
+            hits, state = rt.search(cur, q, category, limit)
     except psycopg.Error as e:
         raise HTTPException(503, f"DB 에 못 붙었다 — {e}") from e
 
-    # 🔴 **갈래별 건수는 합친 뒤에도 센다** — 「어휘만으로 올라온 줄이 몇이냐」가
-    #    한 갈래가 죽었는지 보는 가장 싼 신호다. 0 이 「못 했다」인지는 `vector` 가 말한다.
+    # 🔴 **분모를 이름에 박는다** (D-178 · D-202). `*_pool` 은 후보 폭 안, `*_top` 은 응답 안이다.
+    #    ⛔ 이름에 분모가 없으면 「후보에 없었다」와 「상위에 못 들었다」가 같은 0 으로 읽힌다.
     counts = {
-        rt.MATCH_VECTOR: sum(1 for h in hits if h.rank_vector is not None),
-        rt.MATCH_LEXICAL: sum(1 for h in hits if h.rank_lexical is not None),
+        f"{rt.MATCH_VECTOR}_pool": state.pool_vector,
+        f"{rt.MATCH_LEXICAL}_pool": state.pool_lexical,
+        f"{rt.MATCH_VECTOR}_top": sum(1 for h in hits if h.rank_vector is not None),
+        f"{rt.MATCH_LEXICAL}_top": sum(1 for h in hits if h.rank_lexical is not None),
     }
     return SearchResult(
         hits=[SearchHit(**dataclasses.asdict(h)) for h in hits],
-        vector=vector_state,
+        vector=state.vector,
+        lexical=state.lexical,
+        pool=state.pool,
         counts=counts,
     )
 
