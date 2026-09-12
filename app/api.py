@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import dataclasses
-import os
 import pathlib
 from typing import Any
 
@@ -36,6 +35,7 @@ from app.contracts import (
     JudgeRequest,
     JudgeResponse,
 )
+from app.settings import dsn
 
 # 🔴 **검색 로직은 이 파일에 없다** — `app/retrieve.py` 하나가 든다 (D-99 · D-51).
 #    ⛔ `app/graph.py` 의 `retrieve` 노드가 **같은 검색**을 부를 자리다(🔜 W4~).
@@ -46,12 +46,6 @@ app = FastAPI(
     description="광고 문구 준법 검수·생성 — 판정 근거를 조문으로 돌려준다",
     version="0.1.0",
 )
-
-
-def dsn() -> str:
-    return os.environ.get("DATABASE_URL") or (
-        "postgresql://copylane:copylane@localhost:5432/copylane"
-    )
 
 
 class Health(BaseModel):

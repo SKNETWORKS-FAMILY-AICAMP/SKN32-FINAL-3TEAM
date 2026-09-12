@@ -26,10 +26,17 @@ from collections.abc import Callable
 from typing import Annotated, Any, TypedDict
 
 from app.contracts import (
+    AdaptedCopy,
+    AdFormat,
+    AdSection,
+    Candidate,
     Infeasibility,
     JudgeResponse,
+    KeywordScreen,
+    MediaProfile,
     Outcome,
     ProductContext,
+    Segment,
     SentenceJudgment,
     Timing,
     Verdict,
@@ -58,14 +65,56 @@ class JudgeState(TypedDict, total=False):
     #: 0-base. 거부 3종(주장 원장·인용 검증·사후 대조)은 **한 카운터**를 쓴다
     attempt: int
     rejects: Annotated[list[str], operator.add]  # 🔴 누적 키 — 실패 사유
+    # ── 진입점 B — 카피 생성 (2026-09-12 밤 · D-181 · 상태 스키마 §개정) ────────
+    #  🔴 **넷이 빠져 있었다.** 상태 스키마 문서가 09-10 에 지목했는데 상태에는 안 왔다 —
+    #     `페르소나 목록(팬아웃)` · `키워드 선별 결과` · `후보 N=3` · `프론티어 점수`.
+    #  ⛔ 그래서 **ksr·lse 의 「AI 광고 생성」 BFF 가 붙을 자리가 없었다.** 값은 아직 스텁이지만
+    #     **키가 있으면 계약이 선다** — 뒤에 더하는 필드는 읽는 쪽을 낡게 만든다 (0008→0009).
+    #  ⬜ **계약과 어긋나는 자리 하나** — 상태 스키마 문서는 「페르소나 **목록**(팬아웃)」이라
+    #     적었는데 `GenerateRequest` 는 `segment` **하나**를 받는다. 둘 중 하나가 낡았다.
+    #     여기서는 **계약을 따른다**(하나) — 지어내지 않는다. 판정은 팀장 몫이다 (D-181).
+    segment: Segment
+    #: 허용/차단 + **사유**. 🔴 누적 키 — 키워드마다 노드가 갈릴 수 있다
+    keywords: Annotated[list[KeywordScreen], operator.add]
+    #: 프론티어 후보 N=3 (D-31 · D-34). 점수는 `Candidate.appeal_retention`·`residual_risk` 다 —
+    #: 🚨 「프론티어 점수」를 따로 두지 않는다. 두면 후보와 두 벌이 된다 (D-99)
+    candidates: Annotated[list[Candidate], operator.add]
+    #: 매체 프로파일 — **B 의 후단**에 산다 (D-181). 비면 각색 없이 후보만 낸다
+    profile: MediaProfile
+    #: 채널별 각색 (팬아웃). 🚨 각 결과가 **판정 코어를 다시 지난다** (D-119 · D-63)
+    adapted: Annotated[list[AdaptedCopy], operator.add]
+    # ── 진입점 C — AI 광고 생성 (D-164 · D-181) ──────────────────────────────
+    #  🚨 C 는 진입점이면서 종착이다 — B 에서 받기도 하고 독립 진입도 받는다
+    ad_format: AdFormat
+    #: 지면 섹션. 🔴 누적 키 — 섹션마다 판정이 붙는다
+    sections: Annotated[list[AdSection], operator.add]
     # ── 종료 ─────────────────────────────────────────────────────
     outcome: Outcome
     # ── 계측 (D-77 · D-43 이 LangSmith 를 배제해 이것이 유일한 경로) 🔴 누적 키 ──
     timings: Annotated[list[Timing], operator.add]
 
 
-#: 누적 키 목록 — 게이트가 이 셋에 리듀서가 붙어 있는지 본다
-REDUCER_KEYS = ("sentences", "rejects", "timings")
+#: 누적 키 목록 — 게이트가 여기 붙은 키 전부에 리듀서가 있는지 본다.
+#: 🚨 **키를 늘리면 여기 한 줄만 늘린다** — 게이트가 이 표를 돈다 (D-99).
+REDUCER_KEYS = (
+    "sentences",
+    "rejects",
+    "timings",
+    # 🆕 2026-09-12 밤 — 진입점 B·C (D-181)
+    "keywords",
+    "candidates",
+    "adapted",
+    "sections",
+)
+
+#: 진입점 셋이 상태에 다 있는가 — 게이트가 본다.
+#: ⛔ `JudgeState` 라는 **이름**은 아직 판정 전용으로 읽힌다. `PipelineState` 로 고치는 것은
+#:    게이트·문서가 같이 움직이는 일이라 **따로 판정한다** (병렬작업 계약 §8 ⑤).
+ENTRYPOINT_KEYS = {
+    "A_judge": ("text", "sents", "sentences", "attempt", "outcome"),
+    "B_generate": ("segment", "keywords", "candidates", "profile", "adapted"),
+    "C_compose": ("ad_format", "sections"),
+}
 
 
 # ══════════════════════════════════════════════════════════════════════

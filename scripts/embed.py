@@ -21,9 +21,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import pathlib
 import sys
+
+from app.settings import dsn
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CHUNKS = ROOT / "data" / "derived" / "chunks.jsonl"
@@ -167,12 +168,6 @@ def sweep_orphans(cur, declared: set[str], *, partial: bool) -> int:  # noqa: AN
         print(f"     … 외 {len(orphans) - 5:,}행")
     cur.execute("DELETE FROM chunk WHERE chunk_id = ANY(%s)", (sorted(orphans),))
     return len(orphans)
-
-
-def dsn() -> str:
-    return os.environ.get("DATABASE_URL") or (
-        "postgresql://copylane:copylane@localhost:5432/copylane"
-    )
 
 
 def _tokens(model, text: str) -> int | None:
