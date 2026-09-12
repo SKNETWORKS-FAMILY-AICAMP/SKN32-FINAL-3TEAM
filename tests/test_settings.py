@@ -22,6 +22,20 @@ ROOT = Path(__file__).resolve().parent.parent
 _SKIP = {".venv", "build", "dist", "data", "models", "mlruns", "__pycache__", ".ruff_cache"}
 
 
+def _rel(p: Path) -> str:
+    """저장소 기준 상대 경로를 **`/` 로 정규화**해서 낸다.
+
+    🔴 **2026-09-12 밤 — 여기서 게이트 셋이 Windows 에서 떨어졌다.**
+       `str(p.relative_to(ROOT))` 는 Windows 에서 `app\\settings.py` 를 낸다. 기대값을
+       `"app/settings.py"` 로 적어 두었으니 **팀 5인 전원과 CI(windows-latest)에서 실패**한다.
+    ⛔ 리눅스에서 검증하고 Windows 팀에 보낸 것이고, `gate.yml` 이 러너를 Windows 로 둔 이유가
+       *"「내 기기에서는 되는데」를 CI 가 못 잡는다"* 였다 — **그 문장을 반대 방향으로 밟았다** (D-206).
+    ★ 그래서 비교 직전에 고치지 않고 **경로를 내는 자리 하나**에서 정규화한다. 호출부가
+       `str()` 을 쓸 수 없게 만드는 것이 이 함수의 목적이다 (D-117 — 코드로 막는다).
+    """
+    return p.relative_to(ROOT).as_posix()
+
+
 def _sources() -> list[Path]:
     """저장소의 우리 파이썬 파일. 🚨 목록을 손으로 적지 않는다 — 새 파일이 새면 안 된다.
 
@@ -45,9 +59,7 @@ def test_dsn_정의가_저장소에_하나뿐이다() -> None:
        그것이 실제로 일어난 일이다 (`scripts/search_probe.py`, 2026-09-12 밤).
     """
     where = [
-        f"{p.relative_to(ROOT)}"
-        for p in _sources()
-        if re.search(r"^def dsn\(", p.read_text(encoding="utf-8"), re.M)
+        _rel(p) for p in _sources() if re.search(r"^def dsn\(", p.read_text(encoding="utf-8"), re.M)
     ]
     assert where == ["app/settings.py"], (
         f"🔴 `def dsn(` 이 여기 있다: {where}\n"
@@ -63,9 +75,7 @@ def test_기본_DSN_문자열이_저장소에_하나뿐이다() -> None:
        그대로 적지 않는다 — 그래서 이 검사의 대상은 파이썬 소스뿐이다.
     """
     needle = "postgresql://copylane:copylane@localhost:5432/copylane"
-    where = [
-        f"{p.relative_to(ROOT)}" for p in _sources() if needle in p.read_text(encoding="utf-8")
-    ]
+    where = [_rel(p) for p in _sources() if needle in p.read_text(encoding="utf-8")]
     assert where == ["app/settings.py"], f"🔴 기본 DSN 이 여기도 있다: {where}"
 
 
@@ -76,11 +86,7 @@ def test_env_를_읽는_자리가_하나다() -> None:
     ⛔ 두 곳이 되면 「어느 인코딩으로 읽었나」·「override 를 걸었나」가 갈린다.
        2026-09-02 에 UTF-8 BOM 으로 한 번 겪었다.
     """
-    where = [
-        f"{p.relative_to(ROOT)}"
-        for p in _sources()
-        if "load_dotenv(" in p.read_text(encoding="utf-8")
-    ]
+    where = [_rel(p) for p in _sources() if "load_dotenv(" in p.read_text(encoding="utf-8")]
     assert where == ["collect/env.py"], f"🔴 `.env` 를 읽는 자리가 여럿이다: {where}"
 
 
@@ -117,3 +123,24 @@ def test_기본값이면_기본_DSN_이_나온다(monkeypatch: pytest.MonkeyPatc
         assert st.dsn() == st.DEFAULT_DATABASE_URL
     finally:
         st.settings.cache_clear()
+
+
+@pytest.mark.gate
+def test_경로_비교가_OS_에_안_흔들린다() -> None:
+    """🚨 **이 게이트 셋이 Windows 에서 떨어진 자리를 검사로 만든다** (D-206).
+
+    ⛔ `str(Path.relative_to(...))` 는 Windows 에서 `\\` 를 낸다. 기대값을 `/` 로 적어 두면
+       **리눅스에서만 통과하는 게이트**가 된다 — 팀 5인 전원과 CI 러너가 Windows 인데.
+    ★ 그래서 이 파일은 경로를 `_rel()` 로만 낸다. 누가 `str()`·f-string 으로 되돌리면
+       여기서 걸린다 — 규칙이 아니라 검사다 (D-117).
+    """
+    src = Path(__file__).read_text(encoding="utf-8")
+    assert "as_posix()" in src, "🔴 `_rel()` 이 posix 정규화를 잃었다"
+    # 🚨 찾는 모양을 **글자 그대로 적지 않는다** — 적으면 이 검사가 자기를 잡는다.
+    #    ⛔ 오늘만 세 번째다(파일 자체 오탐 · 기본 DSN · 여기). 정규식으로 **모양**을 본다.
+    bad = re.search(r'f"\{\s*p\.relative_to', src)
+    assert not bad, (
+        "🔴 경로를 f-string 으로 직접 냈다 — Windows 에서 역슬래시가 나온다. `_rel(p)` 를 쓴다"
+    )
+    # 🚨 **정규화가 실제로 동작하는가** — 논증이 아니라 실행으로 (D-203)
+    assert _rel(ROOT / "app" / "settings.py") == "app/settings.py"
