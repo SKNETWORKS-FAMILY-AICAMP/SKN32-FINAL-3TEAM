@@ -46,6 +46,16 @@ CATEGORY = {
 }
 _SENT = re.compile(r"(?<=[.。])\s+|\n")
 
+#: 「제8조(부당한 표시 또는 광고행위의 금지)」처럼 **제목뿐인 조 머리 행**.
+#: 🔴 2026-09-12 오후 — 이런 청크를 **담지 않는다** (D-159 · D-195).
+#:    ⛔ 항이 있는 조는 법제처 XML 이 조 머리에 제목만 준다. 그것이 15토큰짜리 청크가 되어
+#:       임베딩 공간의 중앙부에 앉고, **어떤 질의에나 중간 거리**로 상위를 채웠다
+#:       (2026-09-12 실측 — 광고 문구 세 건 모두 상위를 이 부류가 점령했다).
+#:    🚨 규범이 한 글자도 없다 — 「제8조」라는 이름표뿐이다. 검색에 걸려도 인용할 근거가
+#:       없고, 화면은 「제8조가 걸렸다」고만 말하게 된다. 그것이 D-100 이 막으려는 부분 인용이다.
+#:    ⬜ 항이 없는 조(본문이 조 머리에 통째로 오는 것)는 **남는다** — 이 정규식에 안 맞는다.
+_TITLE_ONLY = re.compile(r"^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*$")
+
 
 def category_of(title: str) -> str:
     for key, val in CATEGORY.items():
@@ -98,14 +108,27 @@ def _split_long(text: str) -> list[str]:
     return final
 
 
-def from_articles() -> list[dict]:
+def from_articles() -> tuple[list[dict], int]:
+    """조문 노드 → 청크. **버린 수를 같이 낸다** — 0 이 아닌 수는 보여야 한다 (D-149).
+
+    🚨 반환이 목록 하나가 아니라 `(청크, 버린 수)` 다. ⛔ 버린 수를 안 돌려주면
+       「제목뿐인 조를 뺐다」가 **아무 출력에도 안 남고**, 다음 사람은 청크 수가 왜
+       줄었는지 모른 채 원장 수치와 어긋나는 것을 본다.
+    """
     rows = []
+    dropped = 0
     p = DERIVED / "law_article.jsonl"
     if not p.exists():
-        return rows
+        return rows, dropped
     for r in (json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()):
         body = (r.get("본문") or "").strip()
         if not body or r.get("본문없음"):
+            continue
+        # 🔴 제목뿐인 조 머리 행은 담지 않는다 (D-159 · D-195) — 위 `_TITLE_ONLY` 주석 참조.
+        #    🚨 **3층 노드에서 지우는 것이 아니다.** `law_article.jsonl` 은 그대로 두고
+        #       청킹 정책으로만 뺀다 — 원천의 수와 우리가 검색에 올리는 수는 다른 사실이다.
+        if _TITLE_ONLY.match(body):
+            dropped += 1
             continue
         law = r["법령"]
         article = f"제{r['조']}조" + (f"의{r['가지']}" if r.get("가지") else "")
@@ -137,7 +160,7 @@ def from_articles() -> list[dict]:
                     "법령": law,
                 }
             )
-    return rows
+    return rows, dropped
 
 
 def from_annex() -> list[dict]:
@@ -188,7 +211,7 @@ def main() -> int:
     #       임베딩까지 그대로 흘러가고 수치는 아무 데도 안 튄다 (D-149 의 다른 문).
     #    🚨 `law_norm.py` 의 docstring 이 `--dump` 라 적혀 있으나 실제 쓰기 플래그는
     #       `--write` 다. 문서대로 돌린 사람은 별표가 통째로 빠진 채 여기 도착한다.
-    art, annex = from_articles(), from_annex()
+    (art, dropped), annex = from_articles(), from_annex()
     missing = [
         n for n, v in (("조문(law_article.jsonl)", art), ("별표(law_norm/)", annex)) if not v
     ]
@@ -231,6 +254,9 @@ def main() -> int:
     print(f"  청크 {len(rows)}개 · 최장 {max(len(r['text']) for r in rows)}자")
     print(f"  범주 {cats}")
     print(f"  🚨 길어서 쪼갠 청크 {long_}개 — `part` 가 원 조문을 가리킨다")
+    # 🔴 **뺀 수를 매번 찍는다** — 조용히 줄면 다음 사람이 원장과 어긋나는 수를 보고 헤맨다.
+    print(f"  ⬜ 제목뿐인 조 머리 행 {dropped}개를 담지 않았다 (D-159 · D-195)")
+    print("     🚨 DB 에 남은 옛 청크는 `scripts/embed.py` 가 거둔다 — 여기서는 안 지운다 (D-187)")
     print(f"  ⚠️ 토큰 수는 글자 상한({MAX_CHARS})으로 어림했다 — 실측은 W1 의 남은 일이다")
 
     if args.dump:

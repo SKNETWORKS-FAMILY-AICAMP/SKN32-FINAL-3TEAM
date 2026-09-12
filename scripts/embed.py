@@ -111,6 +111,36 @@ def chunk_values(r: dict, model) -> tuple:  # noqa: ANN001 — model 은 지연 
     return tuple(v[c] for c in CHUNK_COLS)
 
 
+def sweep_orphans(cur, declared: set[str], *, partial: bool) -> int:  # noqa: ANN001
+    """선언에 없는 `chunk_id` 를 거둔다 — **적재는 선언한 상태로 만드는 것**이다 (D-187).
+
+    🔴 2026-09-12 오후 — 제목뿐인 조 청크를 `preprocess/chunk.py` 가 빼면서 필요해졌다
+       (D-195). ⛔ 거두지 않으면 뺀 청크가 DB 에 그대로 남아 **계속 검색에 걸린다** —
+       코드는 고쳤는데 증상이 안 사라지고, 다음 사람은 고친 코드를 의심한다.
+    🚨 `chunk_embedding` 은 `ON DELETE CASCADE` 라 같이 지워진다 (`db/schema.sql`).
+
+    ⛔ **`--limit` 로 돌렸으면 거두지 않는다.** 앞의 N개만 선언이므로 나머지 전부가
+       고아로 보인다 — **한 번의 연습 실행이 표를 비운다.**
+       🚨 2026-09-12 오전 `mark_collected` 가 정확히 같은 함정이었다. 같은 가드를 건다.
+    """
+    cur.execute("SELECT chunk_id FROM chunk")
+    orphans = {r[0] for r in cur.fetchall()} - declared
+    if not orphans:
+        return 0
+    if partial:
+        print(f"  ⬜ --limit 로 돌렸다 — 선언 밖 {len(orphans):,}행을 **거두지 않는다**")
+        print("     🚨 전량으로 다시 돌려야 DB 가 선언과 같아진다")
+        return 0
+    # 🚨 **몇 개를 왜 지우는지 먼저 찍는다** — 조용히 지우면 수가 줄어도 아무도 모른다 (D-149).
+    print(f"  🧹 선언에 없는 청크 {len(orphans):,}행을 거둔다 (D-187)")
+    for cid in sorted(orphans)[:5]:
+        print(f"     {cid}")
+    if len(orphans) > 5:
+        print(f"     … 외 {len(orphans) - 5:,}행")
+    cur.execute("DELETE FROM chunk WHERE chunk_id = ANY(%s)", (sorted(orphans),))
+    return len(orphans)
+
+
 def dsn() -> str:
     return os.environ.get("DATABASE_URL") or (
         "postgresql://copylane:copylane@localhost:5432/copylane"
@@ -178,6 +208,8 @@ def main() -> int:
         # 🚨 청크를 먼저 넣는다 — chunk_embedding 이 chunk 를 가리킨다
         for r in rows:
             cur.execute(SQL_CHUNK_UPSERT, chunk_values(r, model))
+        # 🔴 **넣은 뒤에 거둔다** — 선언에 있는 것을 먼저 세워야 지울 것이 정해진다 (D-187).
+        swept = sweep_orphans(cur, {r["chunk_id"] for r in rows}, partial=bool(args.limit))
         done = 0
         for i in range(0, len(rows), BATCH):
             batch = rows[i : i + BATCH]
@@ -205,13 +237,24 @@ def main() -> int:
         cur.execute("SELECT count(*) FROM chunk_embedding WHERE model_id = %s", (MODEL_ID,))
         n_emb = cur.fetchone()[0]
     print(f"\n  보낸 행 {len(rows)} · DB chunk {n_chunk} · embedding {n_emb} ({MODEL_ID})")
+    if swept:
+        print(f"  🧹 거둔 행 {swept:,} — 선언에 없던 옛 청크다 (D-187)")
     if n_chunk < len(rows):
         print(
             f"  🚨 {len(rows) - n_chunk}행이 들어가지 않았다 — chunk_id 가 겹친다 (D-149)",
             file=sys.stderr,
         )
         return 1
-    print("  ✅ 보낸 수와 들어간 수가 같다")
+    # 🔴 **거둔 뒤에는 「같다」가 아니라 「선언과 같다」라야 한다** (D-187).
+    #    ⛔ 전량으로 돌렸는데 DB 가 선언보다 많으면 못 거둔 것이 남았다는 뜻이다 —
+    #       초록으로 넘기면 지운 줄 알았던 청크가 계속 검색에 걸린다.
+    if not args.limit and n_chunk != len(rows):
+        print(
+            f"  🚨 DB {n_chunk:,} ≠ 선언 {len(rows):,} — 거두지 못한 행이 있다 (D-187)",
+            file=sys.stderr,
+        )
+        return 1
+    print("  ✅ DB 가 선언과 같다")
     return 0
 
 

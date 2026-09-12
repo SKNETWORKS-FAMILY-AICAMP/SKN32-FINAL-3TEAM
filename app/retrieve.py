@@ -1,14 +1,22 @@
 """app/retrieve.py — 조문 검색 코어. 두 소비자가 이것을 부른다 (D-99 · D-51).
 
-    app/api.py    /search       by_vector + by_text 둘 다
-                                사람이 친 말은 **뜻일 수도 기호일 수도** 있다
-    app/graph.py  retrieve()    by_vector 만
-                                입력이 **광고 문구**라 조문 번호가 올 일이 없다
+    app/api.py    /search       search() — 어휘 + 벡터를 RRF 로 섞은 한 순위
+    app/graph.py  retrieve()    search() — 같은 것을 부른다 (🔜 W4~)
 
-🔴 **둘을 합치는 규칙은 여기 없다 — 없는 것이 계약이다** (D-192).
-   순위를 섞으려면 「벡터 거리 0.83 과 글자 일치를 어떻게 더하나」라는 가중치가 필요한데,
-   그 수에는 근거가 없다. **[임의] 임계값이 판정 경로에 하나 더 생긴다.**
-   합칠지 말지는 **부르는 쪽이 정한다.** 코어는 두 갈래를 따로 낸다.
+갈래는 셋이고 **뜻이 각각 다르다** (D-167 — 열의 뜻으로 가른다):
+
+    by_vector    뜻이 가까운 것.  「면역력 쑥!」 → 「질병의 예방 및 치료에 효능이…」
+    by_lexical   어휘가 겹치는 것. 조사·어미를 깎고 접두어로 맞춘다
+    by_literal   글자가 그대로 있는 것. 「제5호 아목」처럼 **기호**로 찾을 때
+
+🔄 **2026-09-12 오후 — 「둘을 합치지 않는다」던 판정을 뒤집는다** (D-193).
+   ⛔ 종전 판정(D-192 의 적용): 「합치려면 벡터 거리 0.83 과 글자 일치를 어떻게 더하냐는
+      **[임의] 가중치**가 필요하고, 그 수는 판정 경로에 들어가면 안 된다.」
+   ★ 그 판정은 **가중합만 보고 내린 것**이다. RRF(Reciprocal Rank Fusion)는 점수를 안 쓰고
+      **순위만** 쓴다 — `Σ 1/(k + 순위)`. 더할 가중치가 없으니 [임의] 가 생기지 않는다.
+      상수는 `k` 하나이고 문헌값이 있다 (`RRF_K` 참조 · `[문헌]`).
+   🚨 뒤집은 이유는 **측정**이다. 2026-09-12 실측 — 광고 문구 세 건 중 정답 조문이
+      벡터 단독으로 6위 · 19위 · 50위 밖이었다. 한 갈래로는 상위가 서지 않는다.
 
 🚨 **모델 이름을 상수로 들지 않는다.** `chunk_embedding.model_id` 를 DB 에서 읽어
    **저장된 벡터를 만든 그 모델**을 로드한다. 상수를 손으로 맞출 자리가 없어지고
@@ -29,6 +37,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from typing import Any
 
 #: 🚨 코사인이라야 한다. `scripts/embed.py` 는 `model.encode(...)` 를 그대로 쓰므로
@@ -36,7 +45,25 @@ from typing import Any
 VECTOR_OP = "<=>"
 
 MATCH_VECTOR = "vector"
-MATCH_TEXT = "text"
+MATCH_LEXICAL = "lexical"
+MATCH_LITERAL = "literal"
+MATCH_FUSED = "fused"
+#: ⛔ 옛 이름. 2026-09-12 이전 응답은 `text` 였다 — 화면이 아직 없어 깨질 곳은 없지만
+#:    골든셋 기록이나 붙여 둔 JSON 이 이 문자열을 들고 있을 수 있다. 지우지 말고 가리킨다.
+MATCH_TEXT = MATCH_LITERAL
+
+#: RRF 상수. `[문헌]` — Cormack·Clarke·Buettcher (SIGIR 2009) 가 제시한 값이고
+#: 이후 하이브리드 검색 구현들이 기본값으로 쓴다.
+#: 🚨 **이 수는 가중치가 아니다.** 갈래 사이의 비중이 아니라 **상위 순위를 얼마나 더
+#:    쳐 주는가**의 완만함이다. k 를 바꿔도 한 갈래가 다른 갈래를 이기지 않는다 —
+#:    그래서 [임의] 가중치가 판정 경로에 들어가는 문제가 여기에는 없다 (D-193).
+RRF_K = 60
+
+#: 각 갈래에서 뽑아 오는 후보 수. `[임의]` — 🚨 판정 경로에 있는 임의 값이다 (보고 대상).
+#:    근거가 될 만한 것 하나 — 리랭커(bge-reranker-v2-m3)가 들어오면 이 수가 그대로
+#:    리랭커에 넣는 후보 수가 된다. 그때 **응답시간으로 실측해서** 정한다 (D-77 예산표).
+#:    지금 값은 2026-09-12 실측에서 정답이 19위·50위 밖이었다는 사실 하나에만 근거한다.
+POOL = 50
 
 
 class RetrieveError(RuntimeError):
@@ -88,9 +115,21 @@ class Hit:
     #: 「제8조제1항제1호」. 🔴 조립할 수 없으면 `None` — **부분 인용을 내지 않는다.**
     #:    「제8조」만 내면 실은 제3항인 근거가 제1항처럼 읽힌다. 틀린 인용은 없는 인용보다 나쁘다.
     citation: str | None = None
-    #: 코사인 거리. 🚨 `by_text` 는 `None` 이다 — **0.0 으로 채우지 않는다.**
+    #: 코사인 거리. 🚨 어휘·기호 갈래는 `None` 이다 — **0.0 으로 채우지 않는다.**
     #:    0.0 은 「완전히 같다」는 뜻이라, 없는 값을 가장 좋은 값으로 만든다.
     distance: float | None = None
+    #: `ts_rank_cd` 원점수. 🚨 벡터 갈래는 `None` — 같은 이유로 0.0 을 안 넣는다.
+    lexical: float | None = None
+    # ── 아래 셋은 `search()` 가 합칠 때만 찬다 ────────────────────────────────
+    #: 🔴 **합친 뒤에도 어느 갈래가 몇 위로 올렸는지 남긴다** (D-185 — 정본 축/관측 축).
+    #:    ⛔ 합친 순위만 내면 「어휘가 올린 것」과 「벡터가 올린 것」이 구별되지 않고,
+    #:       한 갈래가 죽어도 결과가 그럴듯해서 **안 보인다.** 2026-09-12 에 벡터 단독
+    #:       6위/19위/50위밖을 잰 것이 바로 이 구별이었다.
+    #:    🚨 1부터 센다. `None` 은 「그 갈래 후보에 없었다」이고 0 이 아니다.
+    rank_vector: int | None = None
+    rank_lexical: int | None = None
+    #: RRF 합산 점수. 클수록 앞. 🚨 **갈래 간 비교용이 아니다** — 같은 질의 안에서만 뜻이 있다.
+    rrf: float | None = None
 
 
 # ── 거버넌스를 **질의로** 건다 (게이트가 아니다) ────────────────────────────
@@ -125,11 +164,26 @@ JOIN fragment   f ON f.fragment_id = c.fragment_id
 JOIN source     s ON s.source_id   = f.source_id
 JOIN source_use u ON u.source_id   = s.source_id AND u.use_code = 'U2_rag'"""
 
-SQL_TEXT = f"""SELECT {_COLS}
+SQL_LITERAL = f"""SELECT {_COLS}
 {_JOINS}
 WHERE u.allowed AND c.text ILIKE %s AND %s = ANY(c.category)
 -- 🚨 정렬이 없으면 `LIMIT` 결과가 비결정적이다 — 같은 질의가 다른 답을 낸다.
 ORDER BY c.law_id, c.article NULLS LAST, c.chunk_id
+LIMIT %s"""
+
+# 🔴 **어휘 갈래 (0010).** `chunk.tsv` 는 **생성열**이다 — 여기서 `to_tsvector(...)` 를
+#    다시 쓰면 정의가 두 벌이 되고, 한쪽만 고치면 인덱스를 안 타면서 **조용히 느려진다** (D-99).
+#    ⛔ `@@` 로 거르지 않고 `ts_rank_cd` 로만 정렬하면 안 걸린 행도 0점으로 전부 딸려 온다.
+# 🚨 정규화 플래그 `32` = `rank/(rank+1)` — 0~1 로 눌러 담는다. `[관행]`
+#    **길이 정규화(`2`)는 일부러 안 건다.** 짧은 청크가 유리해지는데, 제목뿐인 조 청크가
+#    상위를 점령한 것이 2026-09-12 에 잰 바로 그 증상이었다 (D-195 로 그 청크는 뺐다).
+SQL_LEXICAL = f"""SELECT {_COLS},
+       ts_rank_cd(c.tsv, query, 32) AS lexical
+{_JOINS},
+     to_tsquery('simple', %s) AS query
+WHERE u.allowed AND %s = ANY(c.category) AND c.tsv @@ query
+-- 동점일 때도 같은 답을 내야 한다 — chunk_id 로 가른다 (D-176 의 결정성).
+ORDER BY lexical DESC, c.chunk_id
 LIMIT %s"""
 
 SQL_VECTOR = f"""SELECT {_COLS},
@@ -244,27 +298,147 @@ def citation(hit_like: dict) -> str | None:
     return out
 
 
-def _rows_to_hits(rows: list[tuple], match: str, *, has_distance: bool) -> list[Hit]:
-    """🚨 자리번호가 아니라 **이름으로** 꺼낸다 — 칸이 늘어도 조용히 밀리지 않는다."""
+def _rows_to_hits(rows: list[tuple], match: str, *, score: str | None = None) -> list[Hit]:
+    """🚨 자리번호가 아니라 **이름으로** 꺼낸다 — 칸이 늘어도 조용히 밀리지 않는다.
+
+    `score` 는 `_SELECT` 뒤에 하나 더 붙은 칸의 **이름**이다 (`distance` 또는 `lexical`).
+    🔴 이름을 받는다 — `has_distance=True/False` 였을 때는 갈래가 셋이 되는 순간
+       불리언이 하나 더 늘 참이었다. 늘어날 값에 불리언을 쓰지 않는다.
+    """
     out = []
     for r in rows:
         d = dict(zip(_NAMES, r, strict=False))
         d["category"] = list(d.get("category") or [])
-        out.append(
-            Hit(
-                **d,
-                match=match,
-                citation=citation(d),
-                distance=float(r[len(_NAMES)]) if has_distance else None,
-            )
-        )
+        extra = {score: float(r[len(_NAMES)])} if score else {}
+        out.append(Hit(**d, match=match, citation=citation(d), **extra))
     return out
 
 
-def by_text(cur: Any, q: str, category: str = "일반", limit: int = 5) -> list[Hit]:
-    """글자가 그대로 들어 있는 것. 「제5호 아목」처럼 **기호**로 찾을 때 이쪽이다."""
-    cur.execute(SQL_TEXT, (f"%{q}%", category, limit))
-    return _rows_to_hits(cur.fetchall(), MATCH_TEXT, has_distance=False)
+# ── 질의를 어휘로 바꾼다 ───────────────────────────────────────────────────────
+#: 🚨 **형태소 분석기를 안 쓴다 — 빠뜨린 것이 아니라 판정이다** (D-194).
+#:    mecab-ko 를 쓰려면 PostgreSQL 이미지를 갈아야 하는데, 스택 핀이
+#:    `pgvector/pgvector:0.8.6-pg16-bookworm` 으로 박혀 있다. 이미지를 갈면 pgvector
+#:    버전까지 같이 흔들린다. `simple` 파서는 **공백으로만** 자르므로 조사가 붙어 오고,
+#:    그것을 아래 두 가지로 메운다 — 조사 깎기 + 접두어 매칭.
+#: ⬜ 이 처방은 **근사다.** 「했다/하였다」 같은 어미 변형은 접두어로 안 잡힌다.
+#:    제대로 하려면 형태소 분석이고, 그것은 이미지 교체 판정과 함께 간다.
+#: 🚨 **길이 내림차순이라야 한다** — 「에서는」을 「는」보다 먼저 만나야 한 겹만 깎인다.
+#:    ⛔ 이 순서는 **눈으로 지키지 않는다.** 처음에 세 글자·두 글자·한 글자를 줄로 나눠 적었는데
+#:       `ruff --fix`(SIM905)가 한 줄로 폈다 — **읽으라고 만든 배치는 포매터가 지워 준다.**
+#:    ★ 그래서 배치가 아니라 게이트가 지킨다: `test_조사표가_길이_내림차순이다`.
+_JOSA = tuple(
+    [
+        "에서는",
+        "으로서",
+        "으로써",
+        "에게서",
+        "이라고",
+        "에서도",
+        "에게는",
+        "라고",
+        "에게",
+        "한테",
+        "께서",
+        "부터",
+        "까지",
+        "보다",
+        "처럼",
+        "마다",
+        "조차",
+        "밖에",
+        "으로",
+        "이나",
+        "에는",
+        "에도",
+        "에서",
+        "이란",
+        "라는",
+        "은",
+        "는",
+        "이",
+        "가",
+        "을",
+        "를",
+        "의",
+        "에",
+        "와",
+        "과",
+        "도",
+        "만",
+        "로",
+        "나",
+    ]
+)
+#: 어절에서 남길 글자 — 한글·영숫자. 🚨 `to_tsquery` 에 들어갈 문자열이므로
+#:    `&`·`|`·`!`·`:`·`(`·`)` 가 섞이면 **구문 오류로 500** 이 난다. 화이트리스트로 막는다.
+_WORD = re.compile(r"[0-9A-Za-z가-힣]+")
+#: 조사를 깎은 뒤 이보다 짧아지면 **안 깎는다.** ⛔ 「효과」→「효」, 「제품」→「제」처럼
+#:    낱말 자체가 조사로 끝나는 것을 깎으면 뜻이 없는 접두어가 되어 아무 데나 붙는다.
+_MIN_STEM = 2
+
+
+def _stem(word: str) -> str:
+    """어절에서 조사를 한 겹 깎는다. 🚨 못 깎으면 **그대로 돌려준다** (지어내지 않는다)."""
+    for j in _JOSA:  # 긴 것부터 — `_JOSA` 가 길이 내림차순으로 적혀 있다
+        if word.endswith(j) and len(word) - len(j) >= _MIN_STEM:
+            return word[: -len(j)]
+    return word
+
+
+#: 어절 전체가 조사인 것 — 「이 제품은…」의 「이」. 🔴 **검색어에서 뺀다.**
+#:    ⛔ 접두어 매칭이라 `이:*` 는 「이하」·「이상」·「이내」에 전부 붙는다.
+#:    한 글자라고 빼는 것이 아니다 — 「암」·「독」은 남아야 한다. **조사만** 뺀다.
+_JOSA_SET = frozenset(_JOSA)
+
+
+def terms(q: str) -> list[str]:
+    """질의 → 검색어들. 순서를 지키고 중복은 앞의 것만 남긴다 (결정성)."""
+    out: list[str] = []
+    for w in _WORD.findall(q):
+        s = _stem(w)
+        if s and s not in _JOSA_SET and s not in out:
+            out.append(s)
+    return out
+
+
+def tsquery(q: str) -> str:
+    """`to_tsquery('simple', ...)` 에 넣을 문자열. 🔴 없으면 **빈 문자열**이다.
+
+    🚨 **`&`(AND)가 아니라 `|`(OR)로 묶는다.** 광고 문구는 어절이 여남은 개이고
+       조문이 그 전부를 담는 일은 없다 — AND 면 거의 언제나 0건이다. OR 로 받고
+       **몇 개나 겹쳤는지로 `ts_rank_cd` 가 순위를 매긴다** (BM25 의 자리).
+    🚨 `:*` 는 접두어 매칭이다. 문서 쪽 어절에도 조사가 붙어 있으므로
+       질의 「면역력」이 문서의 「면역력을」·「면역력이」를 잡는다.
+    """
+    return " | ".join(f"{t}:*" for t in terms(q))
+
+
+def by_literal(cur: Any, q: str, category: str = "일반", limit: int = 5) -> list[Hit]:
+    """글자가 그대로 들어 있는 것. 「제5호 아목」처럼 **기호**로 찾을 때 이쪽이다.
+
+    🔴 **어휘 갈래로 대체하지 않는다** (D-167). `simple` 파서는 「제5호」를 어떻게
+       자를지 보장하지 않고, 기호 검색은 **부분 일치가 아니라 정확히 그 글자**를 원한다.
+       두 가지는 이름만 비슷하고 뜻이 다르다 — 한쪽으로 합치면 둘 다 나빠진다.
+    """
+    cur.execute(SQL_LITERAL, (f"%{q}%", category, limit))
+    return _rows_to_hits(cur.fetchall(), MATCH_LITERAL)
+
+
+#: ⛔ 옛 이름. 부르는 곳이 남아 있을 수 있어 가리켜만 둔다 (D-192 — 폐기는 계약에 적는다).
+by_text = by_literal
+
+
+def by_lexical(cur: Any, q: str, category: str = "일반", limit: int = 5) -> list[Hit]:
+    """어휘가 겹치는 것. 🔴 검색어가 하나도 안 남으면 **빈 목록**이다 — 오류가 아니다.
+
+    ⛔ 빈 `to_tsquery` 를 그대로 넣으면 PostgreSQL 이 경고를 내고 0건을 준다. 같은 0건이라도
+       「질의에 검색어가 없다」와 「겹치는 조문이 없다」는 다른 사실이라, 여기서 가른다.
+    """
+    tq = tsquery(q)
+    if not tq:
+        return []
+    cur.execute(SQL_LEXICAL, (tq, category, limit))
+    return _rows_to_hits(cur.fetchall(), MATCH_LEXICAL, score="lexical")
 
 
 def by_vector(cur: Any, text: str, category: str = "일반", limit: int = 5) -> list[Hit]:
@@ -277,4 +451,70 @@ def by_vector(cur: Any, text: str, category: str = "일반", limit: int = 5) -> 
     vec = encode(model_id, text)
     literal = "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
     cur.execute(SQL_VECTOR, (literal, category, model_id, limit))
-    return _rows_to_hits(cur.fetchall(), MATCH_VECTOR, has_distance=True)
+    return _rows_to_hits(cur.fetchall(), MATCH_VECTOR, score="distance")
+
+
+def fuse(
+    vector_hits: list[Hit], lexical_hits: list[Hit], *, k: int = RRF_K, limit: int = 5
+) -> list[Hit]:
+    """두 순위를 RRF 로 섞는다 — `Σ 1/(k + 순위)` (D-193).
+
+    🔴 **점수를 안 쓰고 순위만 쓴다.** 그래서 「코사인 거리 0.62 와 ts_rank 0.041 을 어떻게
+       더하나」라는 물음이 생기지 않는다. 두 갈래의 눈금이 달라도 상관없다.
+    🚨 한 갈래에만 있는 행도 들어온다 — 그쪽 항만 더해진다. ⛔ 없는 쪽을 **최하위로
+       채워 넣지 않는다.** 후보 50개 밖은 「50위」가 아니라 「모른다」다 (D-188).
+    🚨 동점은 `chunk_id` 로 가른다 — 같은 질의가 두 번 다른 답을 내면 안 된다.
+    """
+    ranks: dict[str, dict[str, int]] = {}
+    base: dict[str, Hit] = {}
+    #: 갈래별 원점수 — 🚨 `distance` 와 `lexical` 은 **서로 다른 갈래가 들고 온다.**
+    #:    한 행에 둘 다 실리려면 행이 아니라 칸을 모아야 한다.
+    scores: dict[str, dict[str, float]] = {}
+    for field, hits in (("rank_vector", vector_hits), ("rank_lexical", lexical_hits)):
+        for i, h in enumerate(hits, start=1):
+            ranks.setdefault(h.chunk_id, {})[field] = i
+            base.setdefault(h.chunk_id, h)
+            # 🔴 **점수는 행이 아니라 칸 단위로 모은다** (2026-09-12 오후 실측으로 고침).
+            #    ⛔ 종전에는 `base.setdefault` 로 **벡터 쪽 행 통째**를 들고 갔다. 그러면
+            #       양쪽에 다 걸린 줄이 `rank_lexical=3` 인데 `lexical=null` 로 나간다 —
+            #       **어휘가 올렸다고 말하면서 그 점수는 안 보여 주는 상태**다.
+            #    🚨 거리에만 대칭을 맞춰 두고 반대쪽을 안 봤다. 게이트도 `distance` 만 봤다.
+            if h.distance is not None:
+                scores.setdefault(h.chunk_id, {})["distance"] = h.distance
+            if h.lexical is not None:
+                scores.setdefault(h.chunk_id, {})["lexical"] = h.lexical
+    scored = []
+    for cid, r in ranks.items():
+        score = sum(1.0 / (k + rank) for rank in r.values())
+        scored.append(
+            dataclasses.replace(
+                base[cid],
+                match=MATCH_FUSED,
+                rank_vector=r.get("rank_vector"),
+                rank_lexical=r.get("rank_lexical"),
+                rrf=score,
+                **scores.get(cid, {}),
+            )
+        )
+    scored.sort(key=lambda h: (-(h.rrf or 0.0), h.chunk_id))
+    return scored[:limit]
+
+
+def search(
+    cur: Any, q: str, category: str = "일반", limit: int = 5, pool: int = POOL
+) -> tuple[list[Hit], str]:
+    """부르는 쪽이 쓰는 하나의 문. `(결과, 벡터 상태)` 를 낸다.
+
+    🔴 **벡터가 안 돼도 어휘 결과는 낸다 — 대신 왜 안 됐는지를 같이 낸다** (D-72 · D-162).
+       ⛔ 예외를 위로 던지면 화면이 통째로 500 이 되고, 삼키면 「의미 검색을 했는데 0건」과
+          「의미 검색을 못 했다」가 구별되지 않는다. **둘 다 아니게** 튜플로 낸다.
+    🚨 상태 문자열을 만드는 자리는 여기 하나다 — `app/api.py` 가 같은 문장을 또 짓지 않는다.
+    """
+    vector_state = "ok"
+    vector_hits: list[Hit] = []
+    try:
+        vector_hits = by_vector(cur, q, category, pool)
+    except RetrieveError as e:
+        vector_state = f"{type(e).__name__}: {e}"
+    lexical_hits = by_lexical(cur, q, category, pool)
+    return fuse(vector_hits, lexical_hits, limit=limit), vector_state

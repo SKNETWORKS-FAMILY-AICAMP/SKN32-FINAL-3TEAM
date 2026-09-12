@@ -464,14 +464,26 @@ CREATE TABLE chunk (
     paragraph_no    SMALLINT,
     -- 🚨 NOT NULL 이라야 `ck_chunk_tokens` 가 실제로 막는다 (0006). 널이면 CHECK 가 통과한다
     token_count     INTEGER NOT NULL,
+    -- 🔴 2026-09-12 오후 (0010) — 어휘 검색(BM25 자리)의 색인. **생성열이다.**
+    --    ⛔ 표현식 인덱스로 두면 질의가 같은 to_tsvector(...) 를 다시 적어야 인덱스를 타고,
+    --       한쪽만 고치면 결과는 맞는데 **조용히 느려진다** (D-99). 정의는 이 한 줄뿐이다.
+    --    🚨 `context` 를 같이 담는다 — scripts/embed.py 의 embed_input() 과 **같은 문자열**.
+    --       두 갈래가 다른 텍스트를 보면 순위를 섞는(RRF · D-193) 뜻이 없다.
+    --    🚨 `simple` 파서는 공백으로만 자른다 — 형태소 분석기를 안 쓰는 것은 판정이다 (D-194).
+    tsv             tsvector GENERATED ALWAYS AS
+                      (to_tsvector('simple', coalesce(context, '') || ' ' || text)) STORED,
     effective_date  DATE,
     superseded_at   DATE,
     CONSTRAINT ck_chunk_tokens CHECK (token_count <= 512)
 );
 COMMENT ON CONSTRAINT ck_chunk_tokens ON chunk IS
   '리랭커 bge-reranker-v2-m3 의 512 토큰 상한에 맞춘다';
+COMMENT ON COLUMN chunk.tsv IS
+  '어휘 검색 색인 (0010). context + text — 임베딩 입력과 같은 문자열이다. '
+  '🚨 simple 파서라 조사가 붙어 있다: 질의 쪽에서 조사를 깎고 접두어로 맞춘다 (app/retrieve.py).';
 CREATE INDEX ix_chunk_fragment ON chunk(fragment_id);
 CREATE INDEX ix_chunk_current  ON chunk(law_id, article) WHERE superseded_at IS NULL;
+CREATE INDEX ix_chunk_tsv      ON chunk USING GIN (tsv);
 
 -- 🚨 D-41 · pgvector 를 쓰는 이유가 바로 이 CASCADE 다
 CREATE TABLE chunk_embedding (

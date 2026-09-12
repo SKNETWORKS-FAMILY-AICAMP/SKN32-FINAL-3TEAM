@@ -17,7 +17,10 @@ import pytest
 
 from app import retrieve as rt
 
-QUERIES = (rt.SQL_VECTOR, rt.SQL_TEXT)
+#: 🔴 **갈래가 늘면 여기 한 줄만 늘린다** — 아래 게이트들이 전부 이 표를 돈다 (D-99).
+#:    ⛔ 2026-09-12 오후에 `SQL_LEXICAL` 이 늘었다. 표를 안 고쳤으면 새 갈래만
+#:       거버넌스 조인 검사를 **안 받은 채** 지나갔다 — 그것이 U2 가 새는 자리다.
+QUERIES = (rt.SQL_VECTOR, rt.SQL_LITERAL, rt.SQL_LEXICAL)
 
 
 @pytest.mark.gate
@@ -34,8 +37,8 @@ QUERIES = (rt.SQL_VECTOR, rt.SQL_TEXT)
         "v_current_chunk",
     ],
 )
-def test_두_질의_모두_거버넌스_조인을_든다(sql: str, needle: str) -> None:
-    """⛔ 둘 중 하나에만 있으면 그 갈래로 들어온 결과가 범위를 벗어난다."""
+def test_모든_질의가_거버넌스_조인을_든다(sql: str, needle: str) -> None:
+    """⛔ 하나에만 빠져도 그 갈래로 들어온 결과가 범위를 벗어난다."""
     assert needle in sql, f"질의에 {needle!r} 이 없다 — 거버넌스가 새는 자리다"
 
 
@@ -69,25 +72,51 @@ def test_동점을_chunk_id_로_가른다(sql: str) -> None:
     assert "c.chunk_id" in order
 
 
-def test_match_는_두_값뿐이다() -> None:
-    """⛔ 갈래가 늘면 화면이 모르는 값을 받는다. 늘릴 때는 화면과 같이 늘린다."""
-    assert {rt.MATCH_VECTOR, rt.MATCH_TEXT} == {"vector", "text"}
+def test_match_값이_넷이다() -> None:
+    """⛔ 갈래가 늘면 화면이 모르는 값을 받는다. 늘릴 때는 화면과 같이 늘린다.
+
+    🚨 `MATCH_TEXT` 는 **옛 이름**이고 `MATCH_LITERAL` 과 같은 값이라야 한다 (D-192).
+       ⛔ 갈라 두면 옛 이름으로 거르던 코드가 조용히 0건을 낸다.
+    """
+    assert {rt.MATCH_VECTOR, rt.MATCH_LEXICAL, rt.MATCH_LITERAL, rt.MATCH_FUSED} == {
+        "vector",
+        "lexical",
+        "literal",
+        "fused",
+    }
+    assert rt.MATCH_TEXT == rt.MATCH_LITERAL
 
 
-def test_text_갈래는_거리가_없다() -> None:
+def _hit(cid: str = "c1", **kw: object) -> rt.Hit:
+    """빈 `Hit` 한 줄. 🔴 **칸이 늘면 여기만 고친다** — 테스트마다 적으면 두 벌이 된다.
+
+    ⛔ 종전에는 테스트가 인자를 손으로 나열했고, 0008 이 `paragraph_no`·`context` 를
+       더했을 때 **`TypeError` 로 깨진 채** 남아 있었다 (게이트가 아니라 안 걸렸다).
+    """
+    base: dict = {
+        "chunk_id": cid,
+        "law_id": None,
+        "article": None,
+        "paragraph": None,
+        "item": None,
+        "paragraph_no": None,
+        "context": None,
+        "doc_type": None,
+        "category": [],
+        "text": "…",
+        "attribution": None,
+        "source_url": None,
+        "match": rt.MATCH_LITERAL,
+    }
+    return rt.Hit(**{**base, **kw})
+
+
+def test_어휘_기호_갈래는_거리가_없다() -> None:
     """🚨 0.0 으로 채우면 「완전 일치」가 되어 **없는 값이 가장 좋은 값**이 된다."""
-    hit = rt.Hit(
-        chunk_id="c1",
-        law_id=None,
-        article=None,
-        doc_type=None,
-        category=[],
-        text="…",
-        attribution=None,
-        source_url=None,
-        match=rt.MATCH_TEXT,
-    )
-    assert hit.distance is None
+    assert _hit(match=rt.MATCH_LITERAL).distance is None
+    assert _hit(match=rt.MATCH_LEXICAL).distance is None
+    # 🚨 반대쪽도 같다 — 벡터 갈래에 `lexical` 0.0 을 넣으면 「어휘가 하나도 안 겹쳤다」가 된다
+    assert _hit(match=rt.MATCH_VECTOR, distance=0.6).lexical is None
 
 
 def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
@@ -156,7 +185,7 @@ def test_citation_조립(row: dict, want: str | None) -> None:
 
 
 @pytest.mark.gate
-def test_두_질의_모두_항과_호를_싣는다() -> None:
+def test_모든_질의가_항과_호를_싣는다() -> None:
     """⛔ 이 둘이 빠지면 화면이 **어느 호가 걸렸는지 말할 수 없다** (D-158 · D-100)."""
     for sql in QUERIES:
         assert "c.paragraph" in sql
@@ -165,7 +194,7 @@ def test_두_질의_모두_항과_호를_싣는다() -> None:
 
 # ── 0008 자립 텍스트·입력 지문 ────────────────────────────────────────────
 @pytest.mark.gate
-def test_두_질의_모두_문맥과_항서수를_싣는다() -> None:
+def test_모든_질의가_문맥과_항서수를_싣는다() -> None:
     """⛔ `context` 는 **임베딩이 본 것과 같은 값**이다. 응답에 없으면 화면이 검색이 본
     문맥을 모른 채 보여 준다 — 그러면 둘이 갈린 줄도 모른다 (D-99)."""
     for sql in QUERIES:
@@ -209,3 +238,136 @@ def test_임베딩_입력이_문맥과_본문을_잇는다() -> None:
     assert embed.input_fingerprint(row) != embed.input_fingerprint(
         {"context": "", "text": "1. 마약"}
     )
+
+
+# ── 어휘 갈래 (0010 · D-193 · D-194) ──────────────────────────────────────
+@pytest.mark.gate
+def test_어휘_질의가_생성열을_쓴다() -> None:
+    """🔴 질의가 `to_tsvector(...)` 를 **다시 적으면** 정의가 두 벌이 된다 (D-99).
+
+    ⛔ 한쪽만 고치면 결과는 맞는데 인덱스를 안 타서 **조용히 느려진다** —
+       틀린 것보다 찾기 어렵다. 색인의 정의는 `db/schema.sql` 의 생성열 한 줄뿐이다.
+    """
+    assert "c.tsv" in rt.SQL_LEXICAL
+    assert "to_tsvector" not in rt.SQL_LEXICAL
+
+
+@pytest.mark.gate
+def test_어휘_질의가_걸린_것만_낸다() -> None:
+    """⛔ `@@` 없이 `ts_rank_cd` 로만 정렬하면 **안 걸린 행도 0점으로 전부** 딸려 온다.
+
+    그러면 후보 50개가 「겹치는 것 50개」가 아니라 「아무거나 50개」가 되고,
+    RRF 가 그 잡음에 순위를 준다 (D-72 — 없음이 성공으로 집계되지 않게).
+    """
+    assert "c.tsv @@ query" in rt.SQL_LEXICAL
+
+
+@pytest.mark.gate
+def test_조사표가_길이_내림차순이다() -> None:
+    """🔴 「에서는」을 「는」보다 먼저 만나야 **한 겹만** 깎인다.
+
+    ⛔ 짧은 것이 앞에 오면 「에서는」이 「에서」로만 깎여 접두어가 어긋난다.
+    """
+    lens = [len(j) for j in rt._JOSA]
+    assert lens == sorted(lens, reverse=True), f"조사표 순서가 어긋났다: {rt._JOSA}"
+
+
+@pytest.mark.gate
+def test_tsquery_에_구문문자가_안_섞인다() -> None:
+    """🔴 `&`·`|`·`!`·`(`·`)` 가 그대로 들어가면 `to_tsquery` 가 **구문 오류로 500** 이다.
+
+    🚨 사용자가 치는 말이다 — 「효과 100%! (최고)」 같은 것이 그대로 온다.
+    """
+    for q in ("효과 100%! (최고)", "a & b | c", "제5호 아목!!", "'; DROP TABLE chunk; --"):
+        out = rt.tsquery(q)
+        assert not set(out) & set("&!()'\";-"), f"{q!r} → {out!r} 에 구문문자가 남았다"
+
+
+@pytest.mark.parametrize(
+    ("word", "want"),
+    [
+        ("면역력이", "면역력"),
+        ("제품보다", "제품"),
+        ("질병의", "질병"),
+        ("광고에서는", "광고"),
+        # 🔴 **낱말 자체가 조사로 끝나는 것은 안 깎는다** — 깎으면 뜻 없는 한 글자가 된다
+        ("효과", "효과"),
+        ("제품", "제품"),
+        ("사과", "사과"),
+        # 조사가 아닌 끝 — 그대로
+        ("표시광고", "표시광고"),
+    ],
+)
+def test_조사_한_겹만_깎는다(word: str, want: str) -> None:
+    assert rt._stem(word) == want
+
+
+def test_질의가_OR_로_묶인다() -> None:
+    """🚨 AND 면 광고 문구는 거의 언제나 0건이다 — 조문이 어절 전부를 담지 않는다."""
+    out = rt.tsquery("면역력이 쑥쑥 올라갑니다")
+    assert out == "면역력:* | 쑥쑥:* | 올라갑니다:*"
+    assert "&" not in out
+
+
+def test_검색어가_없으면_빈_질의다() -> None:
+    """🔴 빈 `to_tsquery` 를 넣으면 0건이 나오는데, 그 0 은 「겹치는 조문이 없다」와 다르다."""
+    assert rt.tsquery("!!! ???") == ""
+    assert rt.tsquery("이 의 는") == ""  # 어절이 전부 조사뿐
+
+
+def test_조사만인_어절은_검색어가_아니다() -> None:
+    """⛔ `이:*` 는 접두어라 「이하」·「이상」·「이내」에 다 붙는다 — 잡음이 순위를 먹는다.
+
+    🚨 **한 글자라서 빼는 것이 아니다.** 「암」은 남아야 한다 — 조사인 것만 뺀다.
+    """
+    assert rt.terms("이 제품은 암 예방에 좋습니다") == ["제품", "암", "예방", "좋습니다"]
+
+
+# ── RRF 결합 (D-193) ──────────────────────────────────────────────────────
+def test_RRF_는_두_갈래_모두에_있는_것을_올린다() -> None:
+    """★ 이것이 합치는 이유 그 자체다 — 한쪽 6위가 다른 쪽 1위를 이기지 못하지만,
+    **양쪽에 걸친 것**은 한쪽만 1위인 것을 이긴다."""
+    vec = [_hit("both", match=rt.MATCH_VECTOR), _hit("v_only", match=rt.MATCH_VECTOR)]
+    lex = [_hit("l_only", match=rt.MATCH_LEXICAL), _hit("both", match=rt.MATCH_LEXICAL)]
+    out = rt.fuse(vec, lex, limit=5)
+    assert out[0].chunk_id == "both"
+    assert out[0].rank_vector == 1
+    assert out[0].rank_lexical == 2
+
+
+def test_RRF_가_한쪽에만_있는_것을_버리지_않는다() -> None:
+    """🚨 후보 밖은 **「모른다」이지 「최하위」가 아니다** (D-188) — 최하위로 채워 넣지 않는다."""
+    out = rt.fuse([_hit("v", match=rt.MATCH_VECTOR)], [_hit("l", match=rt.MATCH_LEXICAL)], limit=5)
+    assert {h.chunk_id for h in out} == {"v", "l"}
+    got = {h.chunk_id: h for h in out}
+    assert got["v"].rank_lexical is None  # ⛔ 0 도 아니고 51 도 아니다
+    assert got["l"].rank_vector is None
+
+
+def test_RRF_가_동점을_chunk_id_로_가른다() -> None:
+    """같은 질의가 두 번 다른 답을 내면 재현이 안 된다 (D-176)."""
+    a = rt.fuse([_hit("b"), _hit("a")], [], limit=2)
+    assert [h.rrf for h in a] == sorted((h.rrf for h in a), reverse=True)
+    tie = rt.fuse([_hit("z")], [_hit("a")], limit=2)
+    assert [h.chunk_id for h in tie] == ["a", "z"]
+
+
+@pytest.mark.gate
+def test_합친_줄이_양쪽_점수를_다_들고_있다() -> None:
+    """⛔ 합치면서 한쪽 점수를 잃으면 **그 갈래가 올렸다고 말하면서 근거는 안 보여 준다.**
+
+    🔴 2026-09-12 오후 실측에서 실제로 그랬다 — `rank_lexical: 3` 인데 `lexical: null`.
+       종전 구현이 `base.setdefault` 로 **벡터 쪽 행 통째**를 들고 갔기 때문이다.
+    🚨 종전 게이트는 `distance` 만 봤다. **한쪽만 보는 대칭 검사는 반대쪽을 못 잡는다** (D-170).
+    """
+    vec = [_hit("x", match=rt.MATCH_VECTOR, distance=0.62)]
+    lex = [_hit("x", match=rt.MATCH_LEXICAL, lexical=0.04)]
+    for a, b in ((vec, lex), (lex, vec)):  # 🚨 넣는 순서가 바뀌어도 같아야 한다
+        out = rt.fuse(a if a is vec else vec, b if b is lex else lex, limit=1)
+        assert out[0].distance == 0.62, "거리를 잃었다"
+        assert out[0].lexical == 0.04, "어휘 점수를 잃었다"
+        assert out[0].match == rt.MATCH_FUSED
+    # ⛔ 한쪽에만 있는 줄은 **없는 쪽이 None 그대로**라야 한다 — 0.0 으로 채우지 않는다
+    only = rt.fuse(vec, [], limit=1)[0]
+    assert only.distance == 0.62
+    assert only.lexical is None

@@ -86,14 +86,22 @@ class SearchHit(BaseModel):
     #    URL·게시일은 `source`·`document` 가 들고 있다 (D-132 · 결정요청 ③)
     attribution: str | None = None
     source_url: str | None = None
-    #: 🔴 **어느 갈래로 찾아졌는가** — `vector`(뜻) 또는 `text`(글자).
-    #:    두 갈래를 한 순위로 합치지 않는다. 합치려면 「거리 0.83 과 글자 일치를 어떻게
-    #:    더하나」라는 **[임의] 가중치**가 필요하고, 그 수는 판정 경로에 들어가면 안 된다.
-    #:    ★ 대신 **어떻게 찾았는지를 결과에 남긴다.** 묶어 보이는 것은 화면이 한다.
+    #: 🔴 **어느 갈래로 찾아졌는가** — `fused`(합친 순위) · `vector` · `lexical` · `literal`.
+    #:    🔄 2026-09-12 오후 — `/search` 는 이제 `fused` 를 낸다 (D-193). 종전 값 `text` 는
+    #:    `literal` 로 이름이 바뀌었다.
     match: str
-    #: 코사인 거리 (작을수록 가깝다). 🚨 `text` 갈래는 `null` 이다 —
+    #: 코사인 거리 (작을수록 가깝다). 🚨 어휘·기호 갈래는 `null` 이다 —
     #:    0.0 으로 채우면 「완전 일치」라는 뜻이 되어 없는 값이 가장 좋은 값이 된다.
     distance: float | None = None
+    #: `ts_rank_cd` 원점수 (클수록 가깝다). 🚨 벡터 갈래는 `null`.
+    lexical: float | None = None
+    #: 🔴 **합친 뒤에도 어느 갈래가 몇 위로 올렸는지 보인다** (D-185).
+    #:    ⛔ 이 둘이 없으면 한 갈래가 죽어도 결과가 그럴듯해서 **안 보인다.**
+    #:    🚨 `null` 은 「그 갈래 후보 50개 안에 없었다」이고, 「50위」가 아니다 (D-188).
+    rank_vector: int | None = None
+    rank_lexical: int | None = None
+    #: RRF 점수 (클수록 앞). 🚨 같은 질의 안에서만 뜻이 있다 — 질의끼리 비교하지 않는다.
+    rrf: float | None = None
 
 
 class SearchResult(BaseModel):
@@ -134,8 +142,9 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
 <ul>
   <li class=yes><a href="/health">/health</a> — DB 층별 행 수</li>
   <li class=yes><a href="/search?q=%EC%A7%88%EB%B3%91&amp;category=%EC%8B%9D%ED%92%88">/search</a>
-      — 조문 검색. <b>뜻(벡터)과 글자(부분일치) 두 갈래를 따로 낸다</b> —
-      각 줄의 <code>match</code> 가 어느 쪽인지 말한다.
+      — 조문 검색. <b>뜻(벡터)과 어휘를 RRF 로 섞은 한 순위</b> —
+      각 줄의 <code>rank_vector</code>·<code>rank_lexical</code> 이
+      <b>어느 갈래가 몇 위로 올렸는지</b> 말한다.
       벡터가 안 되면 <code>vector</code> 칸에 이유가 적힌다</li>
   <li class=yes><a href="/docs">/docs</a> — API 계약 <b>(판정 응답 스키마 포함)</b></li>
   <li class=yes><a href="/fixtures">/fixtures</a>
@@ -149,9 +158,15 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
       — 진입점 셋의 엔진이 없다. <b>501</b> 을 낸다 (D-119 — 판정 코어는 하나).
       가짜 200 을 내면 프론트가 그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.</li>
   <li class=no>화면(Jinja2 + HTMX) — D-56 이 정해 뒀고 아직 안 지었다.</li>
-  <li class=no>벡터 <b>인덱스</b>와 리랭커 — 지금 규모(청크 수천)에서는 순차 스캔이 빠르고,
+  <li class=no>벡터 <b>인덱스</b> — 지금 규모(청크 수천)에서는 순차 스캔이 빠르고,
       <code>ivfflat</code> 은 <code>lists</code> 를 잘못 잡으면 재현율이 조용히 떨어진다.
       <b>빠뜨린 것이 아니라 판정이다</b> — 근거는 <code>app/retrieve.py</code> 머리말.</li>
+  <li class=no><b>리랭커</b>(bge-reranker-v2-m3) — D-77 예산표의 다음 층이다.
+      어휘+벡터가 후보 50개를 만들고, 그 안의 순서를 리랭커가 고친다.
+      <b>후보에 없는 것은 리랭커도 못 건진다</b> — 그 몫은 규칙 매칭 사전이 맡는다.</li>
+  <li class=no><b>규칙 매칭 사전</b>(536행) — 「타사보다 3배」 같은 비방·부당비교는
+      조문과 어휘가 하나도 안 겹쳐 <b>어휘로도 벡터로도 후보에 안 든다</b>
+      (2026-09-12 실측: 50위 밖). 이 유형은 사전이 맡아야 한다.</li>
   <li class=no><code>violation_article</code>·<code>sanction_rule</code>
       — 근거 조문 대응표와 제재 수치. 그래서 위험도가 아직 스텁이다.</li>
 </ul>
@@ -185,34 +200,36 @@ def health() -> Health:
 
 @app.get("/search", response_model=SearchResult)
 def search(q: str, category: str = "일반", limit: int = 5) -> SearchResult:
-    """조문 검색 — **두 갈래를 따로 낸다** (2026-09-12).
+    """조문 검색 — **어휘와 벡터를 RRF 로 섞은 한 순위** (2026-09-12 오후 · D-193).
 
-        vector   뜻이 가까운 것.  「면역력 쑥!」 → 「질병의 예방 및 치료에 효능이…」
-                 글자가 하나도 안 겹쳐도 찾는다. 광고 문구는 조문 표현을 그대로 안 쓴다.
-        text     글자가 그대로 있는 것.  「제5호 아목」
-                 🚨 **벡터는 기호를 못 찾는다** — 「제3호 나목」도 비슷하다고 본다.
+        vector    뜻이 가까운 것.  「면역력 쑥!」 → 「질병의 예방 및 치료에 효능이…」
+        lexical   어휘가 겹치는 것. 조사를 깎고 접두어로 맞춘다
+        ↓
+        fused     `Σ 1/(60 + 순위)` — 점수가 아니라 **순위만** 쓴다
 
-    🔴 합치지 않는 이유는 `app/retrieve.py` 머리말에 있다 — [임의] 가중치를 안 만든다.
-    🔴 벡터가 안 되면 **텍스트 결과를 내되 `vector` 칸에 이유를 적는다.** 조용히 안 떨어진다.
+    🔄 종전에는 두 갈래를 **따로** 냈다. 합치지 않은 이유는 「[임의] 가중치를 안 만든다」였고,
+       그 판정은 **가중합만 보고 내린 것**이었다. RRF 에는 더할 가중치가 없다 (D-193).
+    🚨 각 줄의 `rank_vector`·`rank_lexical` 이 **어느 갈래가 올렸는지**를 말한다.
+       한 갈래가 죽어도 결과는 그럴듯하므로, 합친 순위만 보면 안 보인다 (D-185).
+    🔴 벡터가 안 되면 **어휘 결과를 내되 `vector` 칸에 이유를 적는다.** 조용히 안 떨어진다.
+    ⬜ 기호 검색(「제5호 아목」)은 `rt.by_literal` 이 맡고 **여기 섞지 않는다** (D-167).
+       기호는 부분 일치가 아니라 정확한 글자를 원한다 — 섞으면 둘 다 나빠진다.
+       🔜 진입점은 따로 낸다. 지금은 코어에만 있다.
     """
     import psycopg  # noqa: PLC0415 — DB 가 없어도 임포트는 서야 한다
 
-    hits: list[rt.Hit] = []
-    vector_state = "ok"
     try:
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
-            try:
-                hits += rt.by_vector(cur, q, category, limit)
-            except rt.RetrieveError as e:
-                # ⛔ 삼키는 것이 아니다 — 응답에 담아 낸다 (D-162 · D-72).
-                vector_state = f"{type(e).__name__}: {e}"
-            hits += rt.by_text(cur, q, category, limit)
+            # 🚨 합치는 것도 상태 문자열을 짓는 것도 코어가 한다 — 여기는 얇다 (D-51 · D-99).
+            hits, vector_state = rt.search(cur, q, category, limit)
     except psycopg.Error as e:
         raise HTTPException(503, f"DB 에 못 붙었다 — {e}") from e
 
+    # 🔴 **갈래별 건수는 합친 뒤에도 센다** — 「어휘만으로 올라온 줄이 몇이냐」가
+    #    한 갈래가 죽었는지 보는 가장 싼 신호다. 0 이 「못 했다」인지는 `vector` 가 말한다.
     counts = {
-        rt.MATCH_VECTOR: sum(1 for h in hits if h.match == rt.MATCH_VECTOR),
-        rt.MATCH_TEXT: sum(1 for h in hits if h.match == rt.MATCH_TEXT),
+        rt.MATCH_VECTOR: sum(1 for h in hits if h.rank_vector is not None),
+        rt.MATCH_LEXICAL: sum(1 for h in hits if h.rank_lexical is not None),
     }
     return SearchResult(
         hits=[SearchHit(**dataclasses.asdict(h)) for h in hits],
