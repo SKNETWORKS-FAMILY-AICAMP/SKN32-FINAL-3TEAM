@@ -1,0 +1,77 @@
+<!doctype html>
+<!--
+  E-03 · VectorDB 구조   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-09-12 재작성.** 종전 판은 어휘 갈래를 **BM25** 로 그렸다 — 실제는
+     PostgreSQL `ts_rank_cd` + 생성열 `chunk.tsv`(0010)다. 그리고 **리랭커를 이미 붙은 것처럼**
+     그렸는데 미착수다. ⛔ 도면이 보여 주는 것은 구조이므로 여기가 틀리면 도면이 거짓말을 한다.
+  ⛔ PNG 를 손으로 고치지 않는다. `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>E-03 VectorDB 구조</title>
+<link rel="stylesheet" href="plate.css">
+
+<div class="plate">
+  <header>
+    <span class="no">E-03</span>
+    <h1>VectorDB 구조</h1>
+    <span class="right">무엇을 벡터에 넣고 무엇을 안 넣는가 · 2026-09-12</span>
+  </header>
+
+  <div class="body">
+    <div class="pair">
+      <fieldset>
+        <legend>벡터에 넣는다 — 검색 대상 텍스트</legend>
+        <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
+          <b style="color:#186A5E">법령 조문 본문</b><span>조 · 항 · 호 단위 · chunk 2,400</span></div>
+        <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
+          <b style="color:#186A5E">고시 · 지침 본문</b><span>일반 · 화장품 · 건기식 · 식품</span></div>
+        <div class="card"><b>사례집 서술 문단</b><span>미확정 — 인용은 조문만 허용</span></div>
+        <p class="note" style="margin:8px 0 0">
+          🚨 <b>조가 길면 쪼갠다</b> — `part_total &gt; 1` 인 근거는 <b>조문의 일부</b>다 (0011 · D-199).
+          「제18조」라고만 적으면 3분의 1을 전문으로 인용하는 것이 된다.
+        </p>
+      </fieldset>
+
+      <fieldset class="rsk">
+        <legend>벡터에 넣지 않는다 — 관계형</legend>
+        <div class="card flag"><b>별표 제재 기준</b><span>차수 × 제재 × 기간</span></div>
+        <div class="card flag"><b>과징금 부과기준율</b></div>
+        <div class="card flag"><b>벌칙 조항 상한</b></div>
+        <div class="card flag"><b>금지 · 적법 표현 사전</b><span>정확매칭이 위험도 하한을 만든다</span></div>
+      </fieldset>
+    </div>
+
+    <div class="pipe">
+      <div class="box"><b>질의</b><span>광고 문구 한 문장</span></div>
+      <div class="j">→</div>
+      <div class="box pos"><b>어휘 갈래 ✅</b><span>ts_rank_cd · 생성열 chunk.tsv (0010)</span><span>조사 정규화 · to_tsquery('simple')</span></div>
+      <div class="j">+</div>
+      <div class="box pos"><b>벡터 갈래 ✅</b><span>KURE-v1 · 1024차원 · pgvector</span></div>
+      <div class="j">→</div>
+      <div class="box pos"><b>RRF ✅</b><span>Σ 1/(k+순위) · k=60 [문헌]</span><span>점수를 안 쓰고 순위만 쓴다</span></div>
+      <div class="j">→</div>
+      <div class="box off"><b>리랭커 ⬜</b><span>bge-reranker-v2-m3 · 512 상한</span><span>미착수 — 지금은 RRF 순위 그대로</span></div>
+      <div class="j">→</div>
+      <div class="box"><b>인용할 조문</b><span>출처표시 · 시행일 동반</span></div>
+    </div>
+
+    <p class="note" style="margin-top:14px">
+      🔴 <b>BM25 가 아니다.</b> 종전 도면은 그렇게 적혀 있었지만 어휘 갈래는 <b>PostgreSQL 전문검색</b>이다 —
+      벡터와 <b>같은 DB 안에서 끝나므로</b> 저장소가 하나로 유지된다. 별도 검색엔진을 두면
+      청크가 지워질 때 인덱스 정합을 사람이 지켜야 한다 (pgvector 를 고른 것과 같은 논거).
+    </p>
+    <p class="note">
+      <b>별표를 벡터에 넣지 않는 이유.</b> 「1차 시정명령 / 2차 업무정지 15일 / 3차 업무정지 1개월」은
+      <b>표 구조 자체가 의미</b>다. 평문화해 임베딩하면 차수와 제재의 대응이 깨지고, 검색은
+      「비슷한 문장」을 돌려줄 뿐 <b>어느 차수인지 보장하지 못한다.</b>
+    </p>
+  </div>
+
+  <footer>
+    <span class="k">검색은 두 갈래를 순위로 섞는다.</span>
+    점수를 섞으면 가중치가 <span class="k">[임의]</span>가 되고, 그 값이 판정 경로에 들어간다 —
+    RRF 는 상수 하나뿐이고 그 값에 문헌 근거가 있다 (D-193).
+    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/e-03-vectordb.html (D-217)</div>
+  </footer>
+</div>

@@ -412,6 +412,19 @@ def pdf(src: str) -> None:
     raise typer.Exit(run("uv", "run", "python", "scripts/build_pdf.py", src))
 
 
+@app.command()
+def diagram(only: str = typer.Option("", "--only", help="원천 파일 이름(확장자 없이)")) -> None:
+    """도면 원천(HTML) → PNG. ⛔ PNG 는 손으로 고치지 않는다 (D-90 · D-217).
+
+    🔴 원천이 있는 것만 뽑는다 — 21장 중 나머지는 원천이 저장소 밖에 있거나 없다 (D-188).
+    🚨 `build_pdf.py` 와 **같은** playwright chromium 을 쓴다 — 스택이 안 는다.
+    """
+    args = ["uv", "run", "python", "-m", "scripts.build_diagram"]
+    if only:
+        args += ["--only", only]
+    raise typer.Exit(run(*args))
+
+
 @app.command(name="admin-add")
 def admin_add(initials: str = typer.Argument(..., help="docs/<이니셜>/ 과 같은 철자")) -> None:
     """거버넌스 콘솔 계정을 만든다 — 가입 화면은 없다 (D-66 · D-213).
@@ -878,6 +891,7 @@ def _invoke(fn, *extra: str) -> None:
 ASK_ARG: dict[str, list[tuple[str, bool, str]]] = {
     "setkey": [("어떤 키를 넣을까", True, "key")],
     "admin-add": [("누구의 계정인가 (이니셜)", True, "text")],
+    "diagram": [("어느 도면인가 (엔터 = 전부)", False, "text")],
     "probe": [("어떤 소스를 열어 볼까", False, "collect")],
     "collect": [("어떤 소스를 받을까", True, "collect")],
     "count": [("받아 온 파일이나 폴더 경로", True, "path")],
@@ -937,6 +951,7 @@ DANGER: dict[str, str] = {
     "sync": "사본을 다시 만들고 **MAP 에 없는 낡은 사본은 지운다**",
     "embed": "DB 를 쓰고 **선언 밖 청크를 지운다** (D-187) · 모델 2.27GB 를 받는다",
     "rebuild": "생성물 넷을 덮어쓴다 — 하나만 돌리면 두 벌이 된다",
+    "diagram": "도면 PNG 를 덮어쓴다 — 원천이 있는 것만 (D-217)",
 }
 
 #: 🔴 **플래그가 붙었을 때만** 위험한 것 — (플래그, 이유)
@@ -999,6 +1014,7 @@ MENU: list[tuple[str, str, object]] = [
     ("31", "커밋 전 점검", check),
     ("32", "Phase 게이트 판정", gate),
     ("33", "프로젝트 사본", sync),
+    ("37", "도면 다시 그리기", diagram),
     (GROUP, "", None),
     ("0", "종료", None),
 ]

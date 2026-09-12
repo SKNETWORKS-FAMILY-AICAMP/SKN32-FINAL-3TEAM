@@ -1,0 +1,109 @@
+<!doctype html>
+<!--
+  A-04 · 막힌 구간   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-09-12 재작성.** 종전 판은 3행 중 2행이 뒤집혀 있었다 —
+     「별표1 파싱 미착수」(실제 243행 감사 통과) · 「임베딩 미실행」(실제 2,400행).
+     ⛔ 없는 것을 있다고, 있는 것을 없다고 그리면 공개 저장소 첫 화면에서
+        프로젝트를 실제보다 못한 것으로 보이게 한다.
+  🚨 수는 그린 시점 실측이다 — 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>A-04 막힌 구간</title>
+<link rel="stylesheet" href="plate.css">
+
+<div class="plate">
+  <header>
+    <span class="no">A-04</span>
+    <h1>막힌 구간</h1>
+    <span class="right">무엇이 없어서 무엇이 안 되나 · 2026-09-12 실측</span>
+  </header>
+
+  <div class="body">
+    <div class="flow">
+
+      <div class="step pos">
+        <b>별표 파싱 ✅ 완료</b>
+        <span>5법령 · 별표 12건 · <b style="display:inline">243행</b></span>
+        <span>감사 통과 — 사람이 볼 행 0</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>sanction_rule · penal_clause</b>
+        <span>0행 — <b style="display:inline">적재기가 없다</b></span>
+        <span>범위는 정해졌다 (별표7 광고 4행 · D-183)</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
+        <b>위험도 배지 · 제재 수치 · 프론티어 x축</b>
+        <span>SCR-RV-02 ② · SCR-GN-03 ①</span>
+      </div>
+      <p class="note pos">★ 앞칸이 뚫렸다 — <b>병목이 「파싱」에서 「적재기」로 한 칸 옮겨졌다.</b></p>
+
+      <div class="step">
+        <b>라벨 ↔ 조문 대응</b>
+        <span>사람 판정 + 2인 확인</span>
+        <span>원천 300노드는 law_norm 이 파싱해 뒀다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>violation_article</b>
+        <span>0행</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
+        <b>근거 조문 표시</b>
+        <span>SCR-RV-02 ③</span>
+      </div>
+      <p class="note">기계가 못 하는 자리다 — <b>사람이 판정하고 두 사람이 확인해야 한다.</b></p>
+
+      <div class="step pos">
+        <b>임베딩 ✅ · 검색 배선 ✅</b>
+        <span>KURE-v1 1024차원 · RRF 2층 (D-193)</span>
+        <span>벡터 + 어휘(ts_rank_cd · 생성열 chunk.tsv)</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step pos">
+        <b>chunk_embedding</b>
+        <span>2,400 — chunk 와 1:1</span>
+        <span>모델 입력 토큰 최대 422 / 상한 512</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step pos">
+        <b>의미 검색 ✅ 돈다</b>
+        <span>SCR-RV-03 — 한 순위로 섞어 낸다</span>
+      </div>
+      <p class="note pos">★ 이 줄은 <b>2026-09-12 에 뚫렸다.</b> 종전 도면은 여기를 회색으로 그리고 있었다.</p>
+
+      <div class="step off">
+        <b>리랭커 (3층)</b>
+        <span>bge-reranker-v2-m3 · 미착수</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>인용 순서 정밀화</b>
+        <span>지금은 RRF 순위를 그대로 쓴다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>⬜ 새로 생긴 빈칸</b>
+        <span>2층이 서면서 3층이 다음 자리가 됐다</span>
+      </div>
+
+    </div>
+
+    <div class="legend">
+      <span class="chip" style="background:#F7FBF9;color:#286E4C;border-color:#BFE0CE">✅ 돈다</span>
+      <span class="chip">⬜ 아직 없다</span>
+      <span class="chip rsk">🔴 그래서 막힌 화면</span>
+    </div>
+  </div>
+
+  <footer>
+    <span class="k">막힌 것을 그려서 남긴다.</span>
+    「설계상 있다」와 「지금 돈다」를 같은 글씨로 적지 않는다 —
+    <span class="k">뚫린 줄은 초록으로 바꾸고, 병목이 옮겨 간 것도 같이 적는다.</span>
+    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-04-blocked.html (D-217)</div>
+  </footer>
+</div>

@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+  A-03 · 판정 코어 — 순서와 불변식   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-09-12 재작성.** ⑤ 가 「BM25 + 벡터 → 리랭커」였다 — 어휘 갈래는 BM25 가 아니고
+     (`ts_rank_cd` + 생성열 `chunk.tsv`), 리랭커는 미착수다.
+  🚨 **요소마다 출처를 붙인다** (D-219) — **구현된 것은 `[실측]`, 미구현은 `[기획]`.**
+     ⛔ 「이 장은 전부 설계」라고 한 줄로 적으면 ⑤ 처럼 **이미 도는 것**이 계획으로 읽힌다.
+     ★ A-04(막힌 구간)와 축이 다르다 — 저기는 **무엇이 없어서 무엇이 안 되나**,
+        여기는 **순서와 불변식**이다. 둘 다 요소마다 출처를 붙인다.
+  ⛔ PNG 를 손으로 고치지 않는다. `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>A-03 판정 코어</title>
+<link rel="stylesheet" href="plate.css">
+
+<div class="plate">
+  <header>
+    <span class="no">A-03</span>
+    <h1>판정 코어 — 순서와 불변식</h1>
+    <span class="right">[실측] 은 돌고 있는 것 · [기획] 은 아직 · 2026-09-12</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip" style="background:#EAF5EF;color:#286E4C;border-color:#BFE0CE">[실측] 구현돼 있고 재 봤다</span>
+      <span class="chip">[기획] 아직 안 만들었다</span>
+    </div>
+    <div class="steps">
+
+      <div class="stp"><div class="n">1</div><div>
+        <b>정규화</b>
+        <span><span class="tag p">기획</span>회피 표기를 복원하되 원문 좌표를 보존한다. 매칭은 정규화문, 표시는 원문</span></div></div>
+
+      <div class="stp"><div class="n">6</div><div>
+        <b>인코더 판정</b>
+        <span><span class="tag p">기획</span>등급을 올리려면 근거 스팬을 반드시 붙인다</span>
+        <div class="inv">ck_judgment_raise_needs_evidence</div></div></div>
+
+      <div class="stp"><div class="n">2</div><div>
+        <b>문장 분할</b>
+        <span><span class="tag p">기획</span>입력 형태(단순 / 여러 개 / 긴 글)가 문서 경계를 선언한다. 길이·개행으로 추정하지 않는다</span></div></div>
+
+      <div class="stp"><div class="n">7</div><div>
+        <b>래칫</b>
+        <span><span class="tag p">기획</span>안전 방향 단조성 — 최종 등급은 하한 아래로 내려가지 않는다</span></div></div>
+
+      <div class="stp"><div class="n">3</div><div>
+        <b>카테고리 판별</b>
+        <span><span class="tag p">기획</span>사용자에게 묻지 않는다. 확신이 낮으면 가장 넓은 법령 집합을 걸고 보류로 표시한다</span></div></div>
+
+      <div class="stp"><div class="n">8</div><div>
+        <b>인용 검증</b>
+        <span><span class="tag p">기획</span>제시한 조문을 원문과 대조한다. 불일치면 재생성 — 최대 2회, 3회째는 미판정</span>
+        <div class="inv">CHECK attempt BETWEEN 0 AND 2</div></div></div>
+
+      <div class="stp"><div class="n">4</div><div>
+        <b>사전 정확매칭</b>
+        <span><span class="tag p">기획</span>금지·적법 표현 사전에서 위험도 하한을 뽑는다. 근사매칭은 하한 자격이 없다</span>
+        <div class="inv">불변식 ① 코드가 정한 하한을 모델이 낮출 수 없다</div></div></div>
+
+      <div class="stp"><div class="n">9</div><div>
+        <b>판정 확정</b>
+        <span><span class="tag p">기획</span>확정 · 보류 · 근거없음 · 미판정 넷 중 하나. 보류는 오류가 아니라 정의된 출력이다</span>
+        <div class="inv">CHECK (verdict='hold') = (hold_reason IS NOT NULL)</div></div></div>
+
+      <div class="stp"><div class="n">5</div><div>
+        <b>근거 검색 — 어휘 + 벡터를 순위로 섞는다</b>
+        <span><span class="tag m">실측</span>ts_rank_cd(생성열 chunk.tsv) + KURE-v1 1024차원 → RRF Σ 1/(k+순위) · k=60 [문헌]</span>
+        <span><span class="tag p">기획</span>그 뒤 리랭커(bge-reranker-v2-m3)로 상위를 다시 세운다. 현행 조문만 (v_current_chunk)</span>
+        <div class="inv">점수를 섞지 않는다 — 가중치가 [임의]가 되면 그 값이 판정 경로에 들어간다 (D-193)</div></div></div>
+
+      <div class="stp"><div class="n">—</div><div>
+        <b>출력</b>
+        <span><span class="tag p">기획</span>violations[] · evidence[] · risk · rewrite — disclaimer 는 항상 붙는다</span></div></div>
+
+    </div>
+
+    <p class="note" style="margin-top:14px">
+      🚨 <b>불변식 넷은 전부 DB 제약 또는 게이트로 강제된다</b> — 「그렇게 하기로 했다」가 아니라
+      <b>그렇게 안 하면 저장이 안 된다.</b> 위 네 줄 중 셋이 `CHECK` 이고 하나가 코드 하한이다.
+    </p>
+    <p class="note">
+      ⛔ <b>「설계상 있다」와 「지금 돈다」를 같은 글씨로 적지 않는다.</b> 그래서 한 장 단위가 아니라
+      <b>요소마다</b> 출처를 붙인다 (D-219) — ⑤ 의 검색은 <b>이미 돌고</b>, 그 뒤 리랭커는 아직이다.
+      🔴 다만 <b>그래프의 `retrieve` 노드는 아직 스텁</b>이다 — 「코어가 돈다」와 「그래프가 그것을
+      부른다」는 다른 말이고, 그 구분은 <b>A-04</b> 가 진다.
+    </p>
+  </div>
+
+  <footer>
+    <span class="k">순서가 안전을 만든다.</span>
+    사전이 하한을 먼저 박고, 모델은 <span class="k">올릴 때만</span> 말할 수 있으며,
+    올리려면 근거 스팬이 있어야 한다 — 그 셋이 뒤집히면 준법 도구가 아니다.
+    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-03-judge-core.html (D-217)</div>
+  </footer>
+</div>
