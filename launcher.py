@@ -487,6 +487,25 @@ def probe(source: str = typer.Argument("", help="소스 id 하나만 (비우면 
     raise typer.Exit(run(*args, source) if source else run(*args))
 
 
+@app.command(name="search-probe")
+def search_probe(
+    queries: str = typer.Option("", help="질의 JSONL 경로 (비우면 기본 경로)"),
+    pool: int = typer.Option(0, help="후보 폭 (0 이면 기획서 5-6 의 50)"),
+) -> None:
+    """검색 순위를 잰다 — 🚨 **원장에 올릴 수를 만드는 자리**다 (D-204).
+
+    범주 넷을 다 돌고 갈래별 순위와 RRF 순위를 낸다. 30건 미만이면 D-40 으로
+    「측정 불가」를 찍고 **비율을 말하지 않는다.**
+    ⛔ `collect.probe`(소스 탐침 · D-109)와 다른 물건이다 — 이름을 가른 이유가 그것이다.
+    """
+    a = ["uv", "run", "python", "-m", "scripts.search_probe"]
+    if queries:
+        a += ["--queries", queries]
+    if pool:
+        a += ["--pool", str(pool)]
+    raise typer.Exit(run(*a))
+
+
 @app.command()
 def count(path: str = typer.Argument(..., help="받아 온 파일이나 폴더")) -> None:
     """받아 온 파일을 세어 본다 — 옮기지도 등록하지도 않는다.
@@ -920,6 +939,9 @@ MENU: list[tuple[str, str, object]] = [
     ("25", "학습", train),
     ("26", "평가", eval_),
     ("27", "서버 실행", serve),
+    # 🚨 번호가 순서대로가 아니다 — 28~33 을 밀면 손에 익은 번호가 전부 바뀐다.
+    #    `_check_menu()` 는 **중복만** 본다 (D-162). 새 명령은 뒤 번호를 받는다.
+    ("34", "검색 실측", search_probe),
     ("28", "데모 모드", demo),
     (GROUP, "개발", None),
     ("29", "테스트", test),
