@@ -31,6 +31,42 @@ def _objects(sql: str) -> set[str]:
     return set(re.findall(r"^CREATE (?:TABLE|VIEW)\s+(\w+)", sql, re.M))
 
 
+#: 🔴 2026-09-12 — `SELECT c.*` 는 뷰를 만들 때 **열 목록으로 전개돼 고정된다.**
+#:    0008 이 `chunk` 에 열 둘을 더했는데 `v_current_chunk` 를 안 고쳐 검색이 503 이 났다.
+#:    게이트 193 은 못 잡았다 — 정적 검사는 질의 문자열만 보고, 재임베딩은 뷰를 안 지난다.
+MIGRATIONS = ROOT / "db" / "migrations"
+_ADD_CHUNK_COL = re.compile(r"ALTER\s+TABLE\s+chunk\s+ADD\s+COLUMN", re.I)
+_REFRESH_VIEW = re.compile(r"(?:CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+VIEW[^;]*v_current_chunk", re.I)
+
+
+@pytest.mark.gate
+def test_chunk_에_열을_더하면_뷰도_다시_만든다() -> None:
+    """⛔ **뷰가 낡으면 검색이 통째로 죽는다.** 그리고 그것은 실제 질의에서만 드러난다.
+
+    🚨 `db/schema.sql` 로 만드는 **새 DB 는 멀쩡하다** — 갈리는 것은 이미 돌던 DB 뿐이라
+       개발 기기와 배포 기기가 다르게 돈다. 0007 이 경고한 바로 그 모양이다.
+    ★ 사람이 기억할 일로 두지 않고 **순서로 검사한다** — 열을 더한 마이그레이션보다
+      뒤에 뷰를 다시 만드는 마이그레이션이 있어야 한다.
+    """
+    files = sorted(p.name for p in MIGRATIONS.glob("*.sql"))
+    added = [
+        n for n in files if _ADD_CHUNK_COL.search((MIGRATIONS / n).read_text(encoding="utf-8"))
+    ]
+    if not added:
+        pytest.skip("chunk 에 열을 더한 마이그레이션이 아직 없다")
+    refreshed = [
+        n for n in files if _REFRESH_VIEW.search((MIGRATIONS / n).read_text(encoding="utf-8"))
+    ]
+    assert refreshed, (
+        f"🔴 {added[-1]} 이 chunk 에 열을 더했는데 v_current_chunk 를 다시 만드는 "
+        "마이그레이션이 없다 — 뷰가 그 열을 못 본다"
+    )
+    assert refreshed[-1] > added[-1], (
+        f"🔴 {added[-1]} 이 chunk 에 열을 더했는데 그 뒤에 v_current_chunk 를 다시 만들지 "
+        f"않았다 (마지막 재생성: {refreshed[-1]}). `SELECT c.*` 는 생성 시점에 고정된다."
+    )
+
+
 @pytest.mark.gate
 def test_문서_부록과_schema_sql_이_같다() -> None:
     """🚨 **원본은 파일이고 문서는 사본이다** — 문서가 스스로 그렇게 적었다.
