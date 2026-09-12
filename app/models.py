@@ -39,6 +39,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.settings import PARAMS
+
 
 class Base(DeclarativeBase):
     pass
@@ -214,7 +216,10 @@ class Judgment(Base):
             "hold_reason IS NULL OR hold_reason in ('low_conf','gap2','cat_unknown','rd1')",
             name="ck_judgment_hold_reason_values",
         ),
-        CheckConstraint("attempt BETWEEN 0 AND 2", name="ck_judgment_attempt"),
+        # 🔄 상한은 `app/settings.py` 의 `PARAMS.max_attempt` 하나가 든다 (D-99 · D-126).
+        #    ⛔ 종전에는 여기·계약·라우터 셋이 각각 `2` 를 적고 있었다. K 를 올리면
+        #       라우터만 따라가고 DB 가 거부한다 — **가장 늦게 터지는 자리**였다.
+        CheckConstraint(f"attempt BETWEEN 0 AND {PARAMS.max_attempt}", name="ck_judgment_attempt"),
         # D-130 — 5값 순서형 R0(특이사항 없음)~R4(형사 위험). R2·R3 순서는 검증 ② 에서 확정
         CheckConstraint(
             "risk_floor IS NULL OR risk_floor BETWEEN 0 AND 4", name="ck_judgment_risk_floor"
@@ -283,3 +288,47 @@ class SlotAssignment(Base):
     image_ref: Mapped[str | None] = mapped_column(String(200))
     # 🚨 승인 객체가 아닌 것이 들어간 슬롯 — 제거 불가능한 고지
     unreviewed_note: Mapped[str | None] = mapped_column(Text)
+
+
+class AppAccount(Base):
+    """`governor` 계정 — **거버넌스 콘솔의 로그인** (D-66 · D-213 · 보안점검 P1-7).
+
+    ★ D-66 이 *"`decided_by`·`reviewed_by` 를 채우려면 누가 로그인했는지 알아야 한다"* 라고
+      적었다. **이 테이블이 그 「누가」다.** 없으면 2인 확인(D-66)의 서명이 손으로 적는 글자다.
+
+    🚨 **가입 화면은 없다** (D-66 — 온프레미스는 계정 주입). 만드는 길은 하나 —
+       `uv run python launcher.py admin-add <이니셜>`. 비밀번호는 `getpass` 로만 받는다
+       (`setkey` 와 같은 모양 — 값이 셸 기록에 안 남는다).
+
+    🔴 **`pw_hash` 는 PHC 문자열이다** — `$argon2id$v=19$m=19456,t=2,p=1$…`.
+       알고리즘과 파라미터가 값 안에 있어서 나중에 올릴 때 판별이 필요 없다.
+       ⛔ `CHECK` 가 접두어를 강제한다 — **SHA-256 한 방을 넣는 길을 코드가 막는다**
+       (고시 제7조 · P1-7 이 *"단순 SHA-256 1회 해시는 부적절"* 이라 적었다).
+
+    🚨 **역할은 `governor` 하나다** (D-66 — *"행동이 역할을 정한다"*). 역할을 늘리면
+       「마케터라고 주장하는 사람이 진짜인가」라는 검증 문제가 생긴다.
+
+    ⬜ **`work_doc.owner_id` 는 아직 이 테이블을 안 가리킨다.** 그 열은 **일반 사용자**의
+       수명 키이고(D-129), 일반 사용자 가입은 진입점 B 엔진과 함께 온다. FK 를 지금 걸면
+       비회원(`owner_id IS NULL`)만 있는 상태에서 **가리킬 곳 없는 제약**이 된다.
+       그때 같이 판정한다 — 계정을 하나로 볼지 둘로 볼지 (D-66 은 에디션별로 갈랐다).
+    """
+
+    __tablename__ = "app_account"
+
+    id: Mapped[uuid.UUID] = _pk()
+    #: 🚨 `docs/<이니셜>/` 과 같은 철자다 — **명단의 정본은 디스크**다 (D-99 · `experiment.py` 와 같은 방식)
+    initials: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(40))
+    role: Mapped[str] = mapped_column(String(16), default="governor")
+    pw_hash: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: 🚨 지우지 않고 **끈다** — 접속기록(고시 제8조)이 가리킬 행이 남아야 한다
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("role in ('governor')", name="ck_app_account_role"),
+        # 🔴 PHC 접두어 강제 — 약한 해시가 들어오는 길을 **DB 가** 막는다 (D-72 · P1-7)
+        CheckConstraint("pw_hash LIKE '$argon2id$%'", name="ck_app_account_phc"),
+    )

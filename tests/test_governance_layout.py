@@ -958,11 +958,17 @@ def test_파생_소스는_원천보다_넓게_열리지_않는다() -> None:
 # .env.example 에서 값을 가져도 되는 것 — 비밀이 아니라 기본값인 줄뿐이다.
 # 🔄 2026-09-10 — 추적 끄기 둘을 등재한다. 비밀이 아니라 **꺼져 있어야 하는 기본값**이라
 #    값이 보여야 뜻이 산다 (D-43). 아래 두 게이트가 이 값을 실제로 검사한다.
+# 🔄 2026-09-12 밤 (D-213) — `COPYLANE_EDITION` 을 등재한다. 비밀이 아니라 **어느 판으로
+#    뜨는가**이고, 기본값 `local` 이 **보여야** 팀원이 무엇을 바꾸는지 안다.
+#    🚨 이 게이트가 실제로 잡았다 — 값을 채우고 여기 등재를 잊었더니 낙방했다.
+#       ⛔ `COPYLANE_SESSION_SECRET` 은 **여기 없다.** 비어 있어야 하고, 값이 생기면
+#          그것은 비밀이므로 이 게이트가 잡아야 한다.
 EXAMPLE_DEFAULTS = {
     "DATABASE_URL",
     "MLFLOW_TRACKING_URI",
     "LANGCHAIN_TRACING_V2",
     "LANGSMITH_TRACING",
+    "COPYLANE_EDITION",
 }
 
 
@@ -1097,6 +1103,69 @@ def test_설정파일이_이름을_바꿔_새지_않는다() -> None:
             "gitignore 는 **추적되지 않는 파일**에만 듣는다. "
             "`git rm --cached <파일>` 로 먼저 떼어 내고, 이미 push 했다면 키를 재발급한다."
         )
+
+
+#: 🆕 2026-09-12 밤 — **배포 담당이 곧 받는 것들** (D-208 · D-211 · 보안점검 P0-2).
+#:    ⛔ `.ppk` 를 빠뜨리지 않는다 — 배포계획이 **MobaXterm** 을 쓰기로 했고 그것이 쓰는 형식이다.
+#:       「pem 만 막으면 된다」가 정확히 `.env~` 때 밟은 「덮은 줄 알았던 이름」이다.
+#: 🚨 로그도 여기 넣는다 — `app/logging_conf.py` 의 마스킹은 **그물이지 벽이 아니다** (D-210).
+LEAKY_SECRET_NAMES = (
+    "deploy.pem",
+    "key.ppk",
+    "cert.p12",
+    "cert.pfx",
+    "id_rsa",
+    "id_ed25519",
+    "credentials",
+    ".aws/credentials",
+    "app.log",
+    "logs/uvicorn.log",
+)
+
+#: 🔴 **반대 방향** — 이것들은 살아 있어야 한다. 무시 규칙이 넓어지면 여기서 걸린다.
+MUST_STAY = (
+    ".env.example",
+    "README.md",
+    "app/templates/base.html",
+    "app/static/vendor/htmx.min.js",
+    "scripts/registry_head.yaml",
+    "data/manifest.jsonl",
+)
+
+
+@pytest.mark.gate
+def test_열쇠와_로그가_이름을_바꿔_새지_않는다() -> None:
+    """🚨 `.env` 만 막으면 되는 시기는 끝났다 (2026-09-12 밤).
+
+    배포 담당이 생기면서 **`.pem`·`.ppk`·IAM 자격증명**이 기기에 내려온다. 배포계획 §3-1 은
+    *".pem 을 저장소 폴더 안에 두지 않습니다"* 라고 **사람에게** 지시하는데, D-117 이 적은 대로
+    **기록으로는 안 막히고 코드로만 막힌다.** 무시 규칙 한 줄이 그 지시보다 세다.
+
+    🔴 **패턴 문자열이 아니라 동작을 본다** — `.env~` 때 배운 그대로다. 규칙을 어떻게 쓰든
+       상관없다. 위 이름들이 막히고 `MUST_STAY` 가 살아 있으면 통과다.
+    ⛔ **반대 방향을 같이 본다.** 무시를 넓히다 `app/static/vendor/*.js`(받아서 커밋한다)나
+       `data/manifest.jsonl`(유일하게 커밋되는 원장)을 삼키면 여기서 걸린다.
+    """
+    proc = subprocess.run(
+        ["git", "check-ignore", "--no-index", "--", *LEAKY_SECRET_NAMES, *MUST_STAY],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode == 128:  # pragma: no cover — git 없는 환경
+        pytest.skip("git 이 없다 — 무시 규칙의 동작을 확인할 수 없다")
+    got = {ln.strip().strip('"') for ln in proc.stdout.splitlines() if ln.strip()}
+    missing = [n for n in LEAKY_SECRET_NAMES if n not in got]
+    assert not missing, (
+        f"🚨 `.gitignore` 가 이 이름들을 안 덮는다 — {missing}\n"
+        "   열쇠·자격증명·로그다. 한 번 push 되면 되돌릴 수 없고 키는 재발급이다.\n"
+        "   ⛔ 이름을 배포계획에 적는 것과 규칙이 그것을 덮는 것은 다른 일이다 (D-117)."
+    )
+    swallowed = [n for n in MUST_STAY if n in got]
+    assert not swallowed, (
+        f"🔴 커밋돼야 하는 것이 무시된다 — {swallowed}\n"
+        "   무시 규칙을 넓히다 삼킨 것이다. gitignore 는 **뒤에 오는 규칙이 이긴다**."
+    )
 
 
 @pytest.mark.gate

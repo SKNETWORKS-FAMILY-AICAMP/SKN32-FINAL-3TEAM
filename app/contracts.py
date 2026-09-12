@@ -30,6 +30,8 @@ import enum
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.settings import PARAMS
+
 # ══════════════════════════════════════════════════════════════════════
 #  축 ① 판정 상태 — D-127 · `app/models.py` ck_judgment_verdict
 # ══════════════════════════════════════════════════════════════════════
@@ -313,7 +315,7 @@ class Timing(BaseModel):
 
 
 class JudgeRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=2000)
+    text: str = Field(..., min_length=1, max_length=PARAMS.max_text_len)
     product: ProductContext = Field(default_factory=ProductContext)
 
 
@@ -325,7 +327,7 @@ class JudgeResponse(BaseModel):
     #: `outcome=certificate` 일 때만 (D-32 · D-125)
     certificate: Certificate | None = None
     #: 🔴 **0-base.** 총 라운드 K+1=3 이므로 0·1·2 만 (D-126 · ck_judgment_attempt)
-    attempt: int = Field(0, ge=0, le=2)
+    attempt: int = Field(0, ge=0, le=PARAMS.max_attempt)
     timings: list[Timing] = Field(default_factory=list)
     #: 🚨 개정되면 「재검증 대기」의 판단 근거가 된다 (D-103 ③)
     law_version: str = "unknown"
@@ -421,7 +423,7 @@ class Segment(BaseModel):
 
     segment_id: str
     label: str
-    member_count: int = Field(..., ge=20)
+    member_count: int = Field(..., ge=PARAMS.k_anon_min)
     vulnerable_flag: bool = False
     top_terms: list[str] = Field(default_factory=list)
 
@@ -545,7 +547,7 @@ class ComposeRequest(BaseModel):
     #: ① B 에서 넘어온 각색본
     source_copy: AdaptedCopy | None = None
     #: ② 「담고 싶은 내용을 적어주세요. 적은 내용에 맞춰 섹션 구성과 문구가 달라져요」
-    prompt: str | None = Field(None, max_length=2000)
+    prompt: str | None = Field(None, max_length=PARAMS.max_text_len)
     product: ProductContext = Field(default_factory=ProductContext)
 
     @model_validator(mode="after")

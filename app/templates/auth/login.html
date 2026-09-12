@@ -1,0 +1,23 @@
+{# app/templates/auth/login.html — governor 로그인 · 소유자 **팀장** (D-66 · D-213)
+
+  🚨 **가입 링크를 두지 않는다.** 온프레미스는 계정 주입이고 가입 화면이 없다 (D-66).
+  ⛔ 실패 이유를 나누어 보여 주지 않는다 — 「없는 계정」과 「틀린 비번」은 같은 답이다 (P1-5).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 로그인{% endblock %}
+{% block content %}
+<h1>거버넌스 콘솔</h1>
+
+<p>등급 판정과 2인 확인은 <b>누가 했는지</b>가 기록돼야 한다 (D-66).</p>
+
+<form method="post" action="/login">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="initials">이니셜</label>
+  <input id="initials" name="initials" autocomplete="username" maxlength="16" required>
+  <label for="password">비밀번호</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <button type="submit">로그인</button>
+</form>
+
+<p><small>🚨 계정은 팀장이 만든다 — <code>launcher.py admin-add &lt;이니셜&gt;</code>.
+가입 화면은 없다 (D-66).</small></p>
+{% endblock %}

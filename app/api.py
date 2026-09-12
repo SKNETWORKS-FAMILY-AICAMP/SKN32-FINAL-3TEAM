@@ -17,11 +17,14 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import pathlib
+import re
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # 🚨 계약은 `app/contracts.py` 하나가 원본이다 (D-124). 여기서 다시 정의하지 않는다 —
@@ -35,7 +38,16 @@ from app.contracts import (
     JudgeRequest,
     JudgeResponse,
 )
-from app.settings import dsn
+from app.logging_conf import mask, setup_logging
+from app.routers import admin_router, auth_router, user_router
+from app.settings import DEFAULT_CATEGORY, PARAMS, admin_is_mounted, dsn
+from app.templating import STATIC_ROOT
+
+# 🔴 **로거를 여기서 세운다** (보안점검 P1-4). import 시점이라 잊을 자리가 없다 —
+#    `uvicorn app.api:app` 이든 `TestClient` 든 이 모듈을 지나야 앱이 생긴다.
+#    ⛔ 「띄울 때 부르세요」로 두면 아무도 안 부른다 (D-117 — 코드로만 막힌다).
+setup_logging()
+_log = logging.getLogger("copylane.api")
 
 # 🔴 **검색 로직은 이 파일에 없다** — `app/retrieve.py` 하나가 든다 (D-99 · D-51).
 #    ⛔ `app/graph.py` 의 `retrieve` 노드가 **같은 검색**을 부를 자리다(🔜 W4~).
@@ -46,6 +58,72 @@ app = FastAPI(
     description="광고 문구 준법 검수·생성 — 판정 근거를 조문으로 돌려준다",
     version="0.1.0",
 )
+
+#: 🔴 **모든 응답에 붙는 보안 헤더** (2026-09-12 밤 · 보안점검 P2-9 · D-212).
+#: ⛔ `base.html` 의 CSP 는 **HTML 에만** 붙는다. JSON·오류 응답·`/docs` 는 그 밖이었다.
+#:    🚨 `nosniff` 가 없으면 브라우저가 JSON 을 HTML 로 추측해 그릴 수 있고, 그 순간
+#:       「데이터인데 실행됐다」가 된다. 헤더는 **한 곳에서 전부에** 붙여야 뜻이 있다 (D-99).
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    # 🚨 CSP 의 frame-ancestors 와 같은 뜻인데, 구형 브라우저는 이쪽만 본다
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    # ⛔ 우리는 이 셋을 안 쓴다 — 안 쓰는 것을 **명시적으로 끈다**
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+#: 🔴 **HTML 이 아닌 응답**(JSON·오류)의 CSP — 아무것도 안 부른다.
+_CSP_DATA = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+
+#: 🔴 **화면의 CSP — 여기가 단일 출처다** (D-99). 종전에는 `base.html` 의 `<meta>` 에만 있었고
+#:    그러면 **템플릿을 안 쓰는 응답에는 안 붙는다.** 헤더는 전부에 붙고 meta 는 그 페이지에만 붙는다.
+#: 🚨 `style-src` 에만 `unsafe-inline` 을 둔다 — HTMX 가 `style` 을 건드린다. ⬜ 좁힐 자리다.
+#:    ⛔ `script-src` 에는 **절대 열지 않는다** — 열면 P2-9 의 피해 범위가 그대로 커진다.
+_CSP_PAGE = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; "
+    "form-action 'self'; base-uri 'none'"
+)
+
+#: ⬜ **Swagger·ReDoc 은 CDN 에서 스크립트를 받는다** — 엄격한 CSP 를 걸면 `/docs` 가 안 뜨고,
+#:    그건 팀원이 계약을 보는 창구다. **면제하되 면제 사실을 여기 남긴다** (D-192).
+#:    🚨 배포 때는 `/docs` 자체를 닫는 판정이 필요하다 — 지금은 로컬뿐이라 연다.
+_CSP_EXEMPT = ("/docs", "/redoc", "/openapi.json")
+
+
+@app.middleware("http")
+async def _security_headers(request: Request, call_next: Any) -> Response:
+    """🚨 **미들웨어 하나가 전부를 덮는다** — 라우트마다 붙이면 새 라우트가 빠진다 (D-117).
+
+    ★ CSP 는 **여기 한 곳**에서 정한다 (D-99). `base.html` 의 `<meta>` 는 그 페이지에만
+      붙지만 헤더는 **전부에** 붙는다 — 손으로 쓴 HTML(`/`)과 오류 응답까지.
+    ⬜ `/docs`·`/redoc` 만 면제한다 — Swagger 가 CDN 스크립트를 받는다.
+    """
+    response = await call_next(request)
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    if not request.url.path.startswith(_CSP_EXEMPT):
+        html = response.headers.get("content-type", "").startswith("text/html")
+        response.headers.setdefault("Content-Security-Policy", _CSP_PAGE if html else _CSP_DATA)
+    return response
+
+
+# 🔴 **화면·BFF 는 여기 안 쓴다** (D-208 · 병렬작업 계약 §5). 팀원 4명이 같은 파일을
+#    고치지 않도록 `app/routers/` 로 갈랐다 — `user.py`(ksr·lse) · `admin.py`(ssm·psj).
+#    ⛔ 이 파일은 **판정 코어 API 와 조립부**다. 새 화면 라우트를 여기 더하지 않는다.
+app.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
+app.include_router(user_router)
+
+# 🔴 **관리자와 로그인은 에디션이 정한다** (D-213 · 배포계획 §1).
+#    ⛔ 배포 그림에 **제품 관리자 화면의 자리가 없었다** — `api:8000`(Caddy 뒤 · 공개)과
+#       `admin:8001 SQLAdmin`(터널) 둘뿐이었다. 공개 쪽에 두면 배포하는 순간
+#       **등급 판정 근거와 2인 확인 서명(사람 이름)이 인터넷에 선다.** 읽기 전용이어도 같다.
+#    ★ 배포계획이 이미 「에디션 = compose 프로파일」을 채택했다 — 그 손잡이를 쓴다.
+#    🚨 **닫는다 = 안 붙인다.** 라우트가 없으면 404 다 — 인증 실패(401)와 다른 답이고,
+#       **없는 것과 막힌 것은 다르다.**
+if admin_is_mounted():
+    app.include_router(admin_router)
+    app.include_router(auth_router)
 
 
 class Health(BaseModel):
@@ -152,8 +230,9 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
 <h2>지금 되는 것</h2>
 <ul>
   <li class=yes><a href="/health">/health</a> — DB 층별 행 수</li>
-  <li class=yes><a href="/search?q=%EC%A7%88%EB%B3%91&amp;category=%EC%8B%9D%ED%92%88">/search</a>
-      — 조문 검색. <b>뜻(벡터)과 어휘를 RRF 로 섞은 한 순위</b> —
+  <li class=yes><code>POST /search</code> (<a href="/docs#/default/search_search_post">/docs 에서 눌러 본다</a>)
+      — 조문 검색. 🔴 <b>GET 이 아니다</b> — 문구를 URL 에 실으면 접근 로그·히스토리·Referer 가
+      전부 나른다 (보안점검 P1-4). <b>뜻(벡터)과 어휘를 RRF 로 섞은 한 순위</b> —
       각 줄의 <code>rank_vector</code>·<code>rank_lexical</code> 이
       <b>어느 갈래가 몇 위로 올렸는지</b> 말한다.
       갈래가 안 되면 <code>vector</code>·<code>lexical</code> 칸에 이유가 적히고,
@@ -213,11 +292,31 @@ def health() -> Health:
                 counts[table] = cur.fetchone()[0]
         return Health(ok=True, db="up", counts=counts)
     except Exception as e:  # noqa: BLE001
-        return Health(ok=False, db=f"down: {e}")
+        # 🔴 **원인 문자열을 응답에 담지 않는다** — 호스트·포트·사용자명이 그 안에 있다.
+        #    ⛔ 게다가 이 응답은 **200 으로 나간다** — 모니터링에도 안 걸리면서 정보만 샌다.
+        _log.warning("health: DB 접속 실패 — %s", type(e).__name__)
+        return Health(ok=False, db=f"down: {type(e).__name__}")
 
 
-@app.get("/search", response_model=SearchResult)
-def search(q: str, category: str = "일반", limit: int = 5) -> SearchResult:
+class SearchRequest(BaseModel):
+    """조문 검색 요청. 🔴 **GET 이 아니라 POST 다** (보안점검 P1-4 · 2026-09-12 밤).
+
+    ⛔ **무엇이 있었나** — `GET /search?q=<문구>` 였다. P1-4 의 조치가
+       *"문구는 절대 URL 에 싣지 않는다 (POST 본문만)"* 라고 못박은 바로 그 형태다.
+       uvicorn 접근 로그·브라우저 히스토리·Referer·배포 후 ALB 로그가 전부 문구를 나른다.
+       D-76 이 관리자 화면에서 막은 원문이 로그로 다 보인다.
+    🚨 **화면이 붙기 전이 이 결정의 마지막 기회였다** — 팀원이 `hx-get="/search?q=…"` 를
+       쓰기 시작하면 고칠 곳이 네 사람의 템플릿이 된다.
+    ★ 상한 셋은 **없으면 무제한**이다 (보안점검 P2-11 — 자원 고갈).
+    """
+
+    q: str = Field(..., min_length=1, max_length=PARAMS.max_text_len)
+    category: str = DEFAULT_CATEGORY
+    limit: int = Field(PARAMS.top_k, ge=1, le=PARAMS.max_limit)
+
+
+@app.post("/search", response_model=SearchResult)
+def search(req: SearchRequest) -> SearchResult:
     """조문 검색 — **어휘와 벡터를 RRF 로 섞은 한 순위** (2026-09-12 오후 · D-193).
 
         vector    뜻이 가까운 것.  「면역력 쑥!」 → 「질병의 예방 및 치료에 효능이…」
@@ -239,9 +338,13 @@ def search(q: str, category: str = "일반", limit: int = 5) -> SearchResult:
     try:
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
             # 🚨 합치는 것도 상태를 짓는 것도 코어가 한다 — 여기는 얇다 (D-51 · D-99).
-            hits, state = rt.search(cur, q, category, limit)
+            hits, state = rt.search(cur, req.q, req.category, req.limit)
     except psycopg.Error as e:
-        raise HTTPException(503, f"DB 에 못 붙었다 — {e}") from e
+        # 🔴 **원인을 응답에 담지 않는다** (2026-09-12 밤). psycopg 의 OperationalError 는
+        #    호스트·포트·사용자명을 문자열에 담고, 배포 후에는 RDS 엔드포인트가 여기서 샌다.
+        #    ⛔ 대신 **로그에 남긴다** — 질의는 `mask()` 를 지난다 (P1-4).
+        _log.warning("DB 접속 실패 · 질의=%s · 원인=%s", mask(req.q), type(e).__name__)
+        raise HTTPException(503, "DB 에 못 붙었다 — 서버 로그를 본다") from e
 
     # 🔴 **분모를 이름에 박는다** (D-178 · D-202). `*_pool` 은 후보 폭 안, `*_top` 은 응답 안이다.
     #    ⛔ 이름에 분모가 없으면 「후보에 없었다」와 「상위에 못 들었다」가 같은 0 으로 읽힌다.
@@ -290,6 +393,10 @@ FIXTURE_KINDS: dict[str, Any] = {
 }
 
 
+#: 🔴 픽스처 이름은 **이 모양만** 받는다 — 영숫자·밑줄·붙임표. 점도 슬래시도 백슬래시도 없다.
+_FIXTURE_NAME = re.compile(r"[A-Za-z0-9_\-]{1,64}")
+
+
 @app.get("/fixtures")
 def fixtures_index() -> dict[str, list[str]]:
     """진입점별 고정 응답 목록. 🚨 **실제 판정이 아니다** — 계약 확인용이다."""
@@ -308,6 +415,15 @@ def fixture(kind: str, name: str) -> Any:
     model = FIXTURE_KINDS.get(kind)
     if model is None:
         raise HTTPException(404, f"진입점은 {list(FIXTURE_KINDS)} 셋이다 — 목록은 GET /fixtures")
+    # 🔴 **이름을 화이트리스트로 막는다** (2026-09-12 밤 · 경로 순회).
+    #    ⛔ `kind` 는 `FIXTURE_KINDS` 로 검증됐는데 `name` 은 검증이 없었다.
+    #       `%5C`(백슬래시)는 Starlette 의 `[^/]+` 를 통과하고 **Windows 의 `pathlib` 는
+    #       그것을 경로 구분자로 읽는다.** 팀 5인과 CI 가 전부 Windows 다.
+    #       내용이 나가려면 계약을 통과해야 해서 지금은 좁지만, **임의 `.json` 존재 오라클**이고
+    #       팀원이 업로드·다운로드 라우트를 이 패턴으로 복사하면 그대로 커진다.
+    #    ★ 「막는다」가 아니라 「받을 것만 받는다」로 적는다 — 부정 목록은 반드시 빠뜨린다.
+    if not _FIXTURE_NAME.fullmatch(name):
+        raise HTTPException(404, "그런 픽스처가 없다 — 목록은 GET /fixtures")
     f = FIXTURE_ROOT / kind / f"{name}.json"
     if not f.exists():
         raise HTTPException(404, "그런 픽스처가 없다 — 목록은 GET /fixtures")

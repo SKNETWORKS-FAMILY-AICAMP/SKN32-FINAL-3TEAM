@@ -41,9 +41,10 @@ from app.contracts import (
     Timing,
     Verdict,
 )
+from app.settings import PARAMS
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
-MAX_ATTEMPT = 2
+MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
 
 
 class JudgeState(TypedDict, total=False):

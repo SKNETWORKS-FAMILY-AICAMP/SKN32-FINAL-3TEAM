@@ -1,0 +1,22 @@
+/* app/static/base.css — 공유 스타일 · 소유자 팀장 (병렬작업 계약 §5)
+   🚨 화면별 스타일은 여기 쓰지 않는다. 사람별 파일을 따로 두고 base.html 에서 블록으로 넣는다. */
+:root { --fg:#18181b; --mut:#71717a; --line:#e4e4e7; --bad:#b91c1c; --ok:#15803d; }
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif;
+       max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem; line-height: 1.7; color: var(--fg); }
+header { display:flex; gap:1rem; align-items:baseline; border-bottom:1px solid var(--line);
+         padding-bottom:.75rem; margin-bottom:1.5rem; }
+header nav { margin-left:auto; display:flex; gap:1rem; }
+a { color: inherit; }
+h1 { font-size:1.5rem; } h2 { font-size:1.1rem; margin-top:2rem; }
+code { background:#f4f4f5; padding:.1rem .35rem; border-radius:.25rem; }
+textarea, input { width:100%; font:inherit; padding:.5rem; border:1px solid var(--line);
+                  border-radius:.375rem; }
+button { font:inherit; padding:.45rem 1rem; border:1px solid var(--line); border-radius:.375rem;
+         background:#fafafa; cursor:pointer; margin-top:.5rem; }
+table { border-collapse:collapse; width:100%; } th, td { text-align:left; padding:.35rem .5rem;
+        border-bottom:1px solid var(--line); }
+footer { margin-top:3rem; color:var(--mut); border-top:1px solid var(--line); padding-top:.75rem; }
+.warn { color: var(--bad); }
+.inline { display:inline; }
+label { display:block; margin-top:.75rem; font-weight:600; }
