@@ -1,0 +1,91 @@
+<!doctype html>
+<!--
+  A-01 · 전체 구성   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-09-12 재작성.** 종전 판은 `chunk_embedding` 을 「미실행」 회색으로 그렸고
+     (실제 2,400행), **로그인·관리자·에디션이 아예 없었다** (D-213 으로 섰다).
+  🚨 수집기·전처리 모듈 수는 2026-09-10 실측을 그대로 옮겼다 — 이 자리에서 다시 못 쟀다 (D-188).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>A-01 전체 구성</title>
+<link rel="stylesheet" href="plate.css">
+
+<div class="plate">
+  <header>
+    <span class="no">A-01</span>
+    <h1>전체 구성</h1>
+    <span class="right">오프라인 배치 ▸ 온라인 서비스 · 2026-09-12</span>
+  </header>
+
+  <div class="body">
+    <div class="cols5">
+
+      <fieldset>
+        <legend>외부 원천</legend>
+        <div class="card"><b>법령 API</b><span>법령 · 고시</span></div>
+        <div class="card"><b>공정위 의결서</b><span>ftc_decisions</span></div>
+        <div class="card"><b>식약처 게시판</b><span>mfds_board</span></div>
+        <div class="card"><b>사례집 · 고시 PDF</b><span>mfds_casebook</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>수집 게이트</legend>
+        <div class="card gov" style="border-left:3px solid #164B72;background:#F7FAFC">
+          <b>registry.require()</b><span>등급 G0~G3 × 용도 U1~U4</span><span>2인 서명까지 함께 본다</span></div>
+        <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
+          <b style="color:#8A94A0">미등재 · 미서명</b><span>수집이 실행되지 않는다</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>오프라인 배치</legend>
+        <div class="card"><b>collect/</b><span>수집기 15종</span></div>
+        <div class="card"><b>data/raw</b><span>원문 무손상</span></div>
+        <div class="card"><b>preprocess/</b><span>24 모듈</span></div>
+        <div class="card"><b>load_db.py</b><span>fail-closed (D-72)</span></div>
+        <div class="card"><b>embed.py</b><span>KURE-v1 · 1024차원</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>PostgreSQL 16 · pgvector</legend>
+        <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
+          <b style="color:#186A5E">데이터층 19표</b><span>법령 · 사전 · 골든셋 · 위험도</span></div>
+        <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
+          <b style="color:#186A5E">런타임층 7표</b><span>사용자 문서 · 판정 이력</span><span>app_account 신설 (D-213)</span></div>
+        <div class="card" style="border-left:3px solid #286E4C;background:#F7FBF9">
+          <b style="color:#286E4C">chunk_embedding ✅</b><span>2,400 · vector(1024)</span><span>chunk.tsv 생성열 (0010)</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>온라인 서비스</legend>
+        <div class="card"><b>FastAPI</b><span>/health · POST /search</span><span>보안 헤더 · 로그 마스킹</span></div>
+        <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
+          <b style="color:#8A94A0">판정 코어</b><span>/judge → 501</span></div>
+        <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
+          <b style="color:#8A94A0">생성기 · 템플릿</b><span>Phase 3</span></div>
+        <div class="card gov" style="border-left:3px solid #164B72;background:#F7FAFC">
+          <b>거버넌스 콘솔</b><span>/login · /admin — Argon2id</span><span>cloud 에디션에선 안 붙는다</span></div>
+      </fieldset>
+
+    </div>
+
+    <div class="railway">
+      <span class="seg">외부 원천</span><span class="to">→</span>
+      <span class="seg">게이트가 먼저 본다</span><span class="to">→</span>
+      <span class="seg">배치가 만든다</span><span class="to">→</span>
+      <span class="seg">DB 가 보관한다</span><span class="to">→</span>
+      <span class="seg">서비스는 조회만 한다</span>
+    </div>
+
+    <p class="note" style="margin-top:12px">
+      🔴 <b>판정 시각에 외부 API 를 부르지 않는다.</b> 근거는 미리 만들어 두고, 요청 때는 읽기만 한다 —
+      원천이 죽어도 검수는 돈다. <b>검색은 벡터 + 어휘(ts_rank_cd)를 RRF 로 섞은 한 순위다</b> (D-193).
+    </p>
+  </div>
+
+  <footer>
+    <span class="k">「설계상 있다」와 「지금 돈다」를 같은 글씨로 적지 않는다.</span>
+    점선·회색은 <span class="k">아직 없는 것</span>이고, 초록은 <span class="k">실측으로 확인한 것</span>이다.
+    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-01-overview.html (D-217)</div>
+  </footer>
+</div>
