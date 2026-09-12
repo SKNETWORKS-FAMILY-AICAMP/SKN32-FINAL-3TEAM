@@ -462,24 +462,62 @@ CREATE TABLE chunk (
     --    <항번호>를 안 줘서 호의 31%(283/909)가 `paragraph` 빈 칸이다. 원문과 우리 셈을
     --    갈라 둔다 — 원문에 없는 「①」를 지어내지 않는다 (D-117).
     paragraph_no    SMALLINT,
+    -- 🔴 2026-09-12 밤 (0011) — **쪼갠 조각이라는 사실**. 청크_스키마 TODO ③(리랭커 512 토큰
+    --    제한 대응 · 긴 조문 분할 규칙)의 못 채운 절반이다. `preprocess/chunk.py` 가 700자를
+    --    넘는 조문을 문장 경계로 쪼개면서 만들어 놓고 **아무도 읽지 않았다** (D-199).
+    --    ⛔ 읽는 쪽이 없으면 `citation()` 이 「제18조」를 내고 화면은 그것을 **조문 전문**으로
+    --       읽는다 — 기획서 5-6 의 「인용 검증은 존재가 아니라 일치까지」가 막으려는 자리다.
+    --    🚨 NULL 은 「아직 재적재 안 됨」이다. 1/1 로 채워 두지 않는다 — 그러면 쪼갠 121개가
+    --       「안 쪼갰다」고 **거짓말**한다 (0008 의 context 와 같은 규칙).
+    part_no         SMALLINT,
+    part_total      SMALLINT,
     -- 🚨 NOT NULL 이라야 `ck_chunk_tokens` 가 실제로 막는다 (0006). 널이면 CHECK 가 통과한다
+    --    🔴 이것이 재는 것은 **인용 단위(`text`)** 다. 모델·리랭커에 들어가는 것은 아래
+    --       `input_token_count` 이고 **둘은 0008 이후로 다른 문자열**이다 (D-200).
     token_count     INTEGER NOT NULL,
+    -- 🔴 2026-09-12 밤 (0011) — `scripts/embed.py` `embed_input()`(= context + text)의 토큰.
+    --    ⛔ **CHECK 을 걸지 않는다 — 빠뜨린 것이 아니라 판정이다** (D-200). 리랭커가 아직
+    --       미선정이라 상한이 수가 아니다: 기획서 7-3 이 `bge-reranker-v2-m3`(0.6B)와
+    --       `bge-reranker-base`(0.3B)를 **나란히 재라**고 했고 그 재기가 끝나야 수가 선다.
+    --    ★ 그때까지는 **재고 원장에 올린다.** 상한 없는 칸이 「지킨다」고 말하지 않게 한다.
+    --    🚨 NULL 은 「아직 재적재 안 됨」이다.
+    input_token_count SMALLINT,
     -- 🔴 2026-09-12 오후 (0010) — 어휘 검색(BM25 자리)의 색인. **생성열이다.**
     --    ⛔ 표현식 인덱스로 두면 질의가 같은 to_tsvector(...) 를 다시 적어야 인덱스를 타고,
     --       한쪽만 고치면 결과는 맞는데 **조용히 느려진다** (D-99). 정의는 이 한 줄뿐이다.
-    --    🚨 `context` 를 같이 담는다 — scripts/embed.py 의 embed_input() 과 **같은 문자열**.
-    --       두 갈래가 다른 텍스트를 보면 순위를 섞는(RRF · D-193) 뜻이 없다.
+    --    🚨 `context` 를 같이 담는다 — scripts/embed.py 의 embed_input() 과 **같은 토큰열**이다.
+    --       ⛔ 「같은 문자열」이 아니다: 구분자가 여기는 공백이고 embed_input 은 개행이며,
+    --          context 가 NULL 이면 여기만 앞에 공백이 하나 붙는다. `simple` 파서가 공백으로만
+    --          자르므로 **토큰열은 같다** — 재 보지 않고 「같은 문자열」이라 적었던 것을 고친다.
+    --       두 갈래가 다른 토큰을 보면 순위를 섞는(RRF · D-193) 뜻이 없다.
     --    🚨 `simple` 파서는 공백으로만 자른다 — 형태소 분석기를 안 쓰는 것은 판정이다 (D-194).
     tsv             tsvector GENERATED ALWAYS AS
                       (to_tsvector('simple', coalesce(context, '') || ' ' || text)) STORED,
     effective_date  DATE,
     superseded_at   DATE,
-    CONSTRAINT ck_chunk_tokens CHECK (token_count <= 512)
+    CONSTRAINT ck_chunk_tokens CHECK (token_count <= 512),
+    -- 🔴 둘 다 NULL(미적재)이거나 둘 다 서고, 서면 1 ≤ part_no ≤ part_total 이라야 한다 (0011).
+    --    ⛔ 한쪽만 서면 「3분의 몇인지 모르는 조각」이 되어 화면이 아무 말도 못 한다.
+    CONSTRAINT ck_chunk_part CHECK (
+        (part_no IS NULL AND part_total IS NULL)
+        OR (part_no >= 1 AND part_total >= 1 AND part_no <= part_total)
+    )
 );
 COMMENT ON CONSTRAINT ck_chunk_tokens ON chunk IS
-  '리랭커 bge-reranker-v2-m3 의 512 토큰 상한에 맞춘다';
+  '인용 단위(text)의 토큰 상한 512. 🔴 리랭커에 들어가는 것은 input_token_count 이고 '
+  '그 상한은 리랭커 모델 선정(기획서 7-3 · v2-m3 0.6B vs base 0.3B) 뒤에 건다 — '
+  '지금 이 CHECK 을 그 축의 보증으로 읽지 않는다 (D-200).';
+COMMENT ON COLUMN chunk.part_no IS
+  '쪼갠 조각의 번호 (1부터). 700자를 넘는 조문을 문장 경계로 쪼갠 것 — 청크_스키마 TODO ③. '
+  '🚨 NULL 은 「아직 재적재 안 됨」이지 「안 쪼갰다」가 아니다. 안 쪼갰으면 1/1 이다 (D-199).';
+COMMENT ON COLUMN chunk.part_total IS
+  '쪼갠 조각의 총수. part_total > 1 이면 이 청크는 조문의 일부다 — citation() 이 내는 '
+  '「제18조」는 좌표로는 맞지만 전문이 아니다. 화면·인용 검증은 이 칸을 보고 말한다 (D-199).';
+COMMENT ON COLUMN chunk.input_token_count IS
+  '임베딩·리랭커에 실제로 들어가는 문자열(embed_input = context + text)의 토큰 수 (0011). '
+  '🚨 상한 CHECK 이 없다 — 리랭커 미선정이라 상한이 아직 수가 아니다. 재고 원장에 올린다 (D-200).';
 COMMENT ON COLUMN chunk.tsv IS
-  '어휘 검색 색인 (0010). context + text — 임베딩 입력과 같은 문자열이다. '
+  '어휘 검색 색인 (0010). context + text — 임베딩 입력과 같은 토큰열이다(구분자만 다르다). '
   '🚨 simple 파서라 조사가 붙어 있다: 질의 쪽에서 조사를 깎고 접두어로 맞춘다 (app/retrieve.py).';
 CREATE INDEX ix_chunk_fragment ON chunk(fragment_id);
 CREATE INDEX ix_chunk_current  ON chunk(law_id, article) WHERE superseded_at IS NULL;

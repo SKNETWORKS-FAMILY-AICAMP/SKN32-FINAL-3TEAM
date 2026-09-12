@@ -26,10 +26,17 @@ from collections.abc import Callable
 from typing import Annotated, Any, TypedDict
 
 from app.contracts import (
+    AdaptedCopy,
+    AdFormat,
+    AdSection,
+    Candidate,
     Infeasibility,
     JudgeResponse,
+    KeywordScreen,
+    MediaProfile,
     Outcome,
     ProductContext,
+    Segment,
     SentenceJudgment,
     Timing,
     Verdict,
@@ -58,14 +65,56 @@ class JudgeState(TypedDict, total=False):
     #: 0-base. 거부 3종(주장 원장·인용 검증·사후 대조)은 **한 카운터**를 쓴다
     attempt: int
     rejects: Annotated[list[str], operator.add]  # 🔴 누적 키 — 실패 사유
+    # ── 진입점 B — 카피 생성 (2026-09-12 밤 · D-181 · 상태 스키마 §개정) ────────
+    #  🔴 **넷이 빠져 있었다.** 상태 스키마 문서가 09-10 에 지목했는데 상태에는 안 왔다 —
+    #     `페르소나 목록(팬아웃)` · `키워드 선별 결과` · `후보 N=3` · `프론티어 점수`.
+    #  ⛔ 그래서 **ksr·lse 의 「AI 광고 생성」 BFF 가 붙을 자리가 없었다.** 값은 아직 스텁이지만
+    #     **키가 있으면 계약이 선다** — 뒤에 더하는 필드는 읽는 쪽을 낡게 만든다 (0008→0009).
+    #  ⬜ **계약과 어긋나는 자리 하나** — 상태 스키마 문서는 「페르소나 **목록**(팬아웃)」이라
+    #     적었는데 `GenerateRequest` 는 `segment` **하나**를 받는다. 둘 중 하나가 낡았다.
+    #     여기서는 **계약을 따른다**(하나) — 지어내지 않는다. 판정은 팀장 몫이다 (D-181).
+    segment: Segment
+    #: 허용/차단 + **사유**. 🔴 누적 키 — 키워드마다 노드가 갈릴 수 있다
+    keywords: Annotated[list[KeywordScreen], operator.add]
+    #: 프론티어 후보 N=3 (D-31 · D-34). 점수는 `Candidate.appeal_retention`·`residual_risk` 다 —
+    #: 🚨 「프론티어 점수」를 따로 두지 않는다. 두면 후보와 두 벌이 된다 (D-99)
+    candidates: Annotated[list[Candidate], operator.add]
+    #: 매체 프로파일 — **B 의 후단**에 산다 (D-181). 비면 각색 없이 후보만 낸다
+    profile: MediaProfile
+    #: 채널별 각색 (팬아웃). 🚨 각 결과가 **판정 코어를 다시 지난다** (D-119 · D-63)
+    adapted: Annotated[list[AdaptedCopy], operator.add]
+    # ── 진입점 C — AI 광고 생성 (D-164 · D-181) ──────────────────────────────
+    #  🚨 C 는 진입점이면서 종착이다 — B 에서 받기도 하고 독립 진입도 받는다
+    ad_format: AdFormat
+    #: 지면 섹션. 🔴 누적 키 — 섹션마다 판정이 붙는다
+    sections: Annotated[list[AdSection], operator.add]
     # ── 종료 ─────────────────────────────────────────────────────
     outcome: Outcome
     # ── 계측 (D-77 · D-43 이 LangSmith 를 배제해 이것이 유일한 경로) 🔴 누적 키 ──
     timings: Annotated[list[Timing], operator.add]
 
 
-#: 누적 키 목록 — 게이트가 이 셋에 리듀서가 붙어 있는지 본다
-REDUCER_KEYS = ("sentences", "rejects", "timings")
+#: 누적 키 목록 — 게이트가 여기 붙은 키 전부에 리듀서가 있는지 본다.
+#: 🚨 **키를 늘리면 여기 한 줄만 늘린다** — 게이트가 이 표를 돈다 (D-99).
+REDUCER_KEYS = (
+    "sentences",
+    "rejects",
+    "timings",
+    # 🆕 2026-09-12 밤 — 진입점 B·C (D-181)
+    "keywords",
+    "candidates",
+    "adapted",
+    "sections",
+)
+
+#: 진입점 셋이 상태에 다 있는가 — 게이트가 본다.
+#: ⛔ `JudgeState` 라는 **이름**은 아직 판정 전용으로 읽힌다. `PipelineState` 로 고치는 것은
+#:    게이트·문서가 같이 움직이는 일이라 **따로 판정한다** (병렬작업 계약 §8 ⑤).
+ENTRYPOINT_KEYS = {
+    "A_judge": ("text", "sents", "sentences", "attempt", "outcome"),
+    "B_generate": ("segment", "keywords", "candidates", "profile", "adapted"),
+    "C_compose": ("ad_format", "sections"),
+}
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -119,7 +168,7 @@ def retrieve(state: JudgeState) -> dict[str, Any]:
        `/search` 가 이미 그것을 부르고 있고, 여기서 따로 쓰면 그 순간 두 벌이 된다.
 
            from app import retrieve as rt
-           hits, vector_state = rt.search(cur, sentence_text, category, limit)
+           hits, state = rt.search(cur, sentence_text, category, limit)   # state: rt.SearchState
 
     🔄 2026-09-12 오후 — 종전 주석은 「여기서는 `by_vector` 만 부른다. `by_text` 를 섞으면
        순위 합산 가중치([임의])가 필요해진다」였다. RRF 는 가중치가 없어 그 이유가
@@ -127,8 +176,13 @@ def retrieve(state: JudgeState) -> dict[str, Any]:
        벡터 단독은 정답 조문을 6위·19위·50위 밖에 두었다. `/search` 와 **같은 것**을 부른다.
     ⬜ 기호 검색(`by_literal`)은 여기서 안 부른다 — 입력이 광고 문구라 「제5호 아목」이
        올 일이 없다. 빠뜨린 것이 아니라 판정이다 (D-167 — 열의 뜻으로 가른다).
-    🚨 `search()` 가 내는 `vector_state` 를 **버리지 않는다.** 벡터가 죽은 채 어휘 결과만으로
-       판정하면 근거가 반쪽인데 응답은 그럴듯하다 — `hold` 로 보내는 근거가 이 값이다.
+    🚨 `search()` 가 내는 `state` 를 **버리지 않는다.** 벡터가 죽은 채 어휘 결과만으로
+       판정하면 근거가 반쪽인데 응답은 그럴듯하다 — `hold` 로 보내는 근거가 `state.vector` 다.
+       🔄 2026-09-12 밤 (D-202) — 반환이 문자열 하나에서 `SearchState` 로 바뀌었다.
+          `state.lexical` 도 같이 본다: 「검색어를 못 만들었다」는 「안 겹쳤다」와 다르다.
+    🔴 **`part_total > 1` 인 근거는 조문의 일부다** (0011 · D-199). `EvidenceArticle` 로 옮길 때
+       그 사실을 같이 옮긴다 — 「제18조」라고만 적으면 3분의 1을 전문으로 인용하는 것이다.
+       기획서 5-6 의 인용 검증(「존재」가 아니라 「일치」)이 이 칸을 본다.
     🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다. 근거 없이 판정하면 D-100 위반이라
        **`hold` 로 보내는 것**이 맞다 — 빈 근거로 `judge` 에 들어가지 않는다.
     """

@@ -12,10 +12,13 @@
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 
 from app import retrieve as rt
+
+ROOT = Path(__file__).resolve().parent.parent
 
 #: 🔴 **갈래가 늘면 여기 한 줄만 늘린다** — 아래 게이트들이 전부 이 표를 돈다 (D-99).
 #:    ⛔ 2026-09-12 오후에 `SQL_LEXICAL` 이 늘었다. 표를 안 고쳤으면 새 갈래만
@@ -101,6 +104,8 @@ def _hit(cid: str = "c1", **kw: object) -> rt.Hit:
         "item": None,
         "paragraph_no": None,
         "context": None,
+        "part_no": None,
+        "part_total": None,
         "doc_type": None,
         "category": [],
         "text": "…",
@@ -200,6 +205,32 @@ def test_모든_질의가_문맥과_항서수를_싣는다() -> None:
     for sql in QUERIES:
         assert "c.context" in sql
         assert "c.paragraph_no" in sql
+
+
+@pytest.mark.gate
+def test_모든_질의가_쪼갠_조각_여부를_싣는다() -> None:
+    """🔴 `part_total > 1` 이면 **이 근거는 조문의 일부**다 (0011 · D-199).
+
+    ⛔ 이 칸이 빠지면 `citation()` 이 낸 「제18조」가 3분의 1짜리 조각인지 전문인지
+       받는 쪽이 알 방법이 없다. 기획서 5-6 의 *"인용 검증은 「존재」가 아니라 「일치」까지"*
+       가 막으려는 자리다 — 존재는 맞고 일치가 아니다.
+    🚨 `preprocess/chunk.py` 는 2026-08 부터 이 값을 만들고 있었고 **읽는 쪽이 없었다.**
+       생산자만 있고 소비자 없는 값은 이렇게 게이트로 붙들어 둔다.
+    """
+    for sql in QUERIES:
+        assert "c.part_no" in sql
+        assert "c.part_total" in sql
+
+
+@pytest.mark.gate
+def test_citation_이_조각_표시를_문자열에_섞지_않는다() -> None:
+    """🚨 「제18조 (1/3)」로 내면 **인용 검증이 문자열 파싱**이 된다 (기획서 5-6 · 서술층 불변 ②).
+
+    ★ 좌표는 `citation`, 「일부다」는 `part_total` — 두 칸으로 가른 것이 판정이다 (D-199).
+    """
+    out = rt.citation({"doc_type": "법령", "article": "제18조", "paragraph": "", "item": ""})
+    assert out == "제18조"
+    assert "/" not in out and "(" not in out
 
 
 @pytest.mark.gate
@@ -359,15 +390,94 @@ def test_합친_줄이_양쪽_점수를_다_들고_있다() -> None:
     🔴 2026-09-12 오후 실측에서 실제로 그랬다 — `rank_lexical: 3` 인데 `lexical: null`.
        종전 구현이 `base.setdefault` 로 **벡터 쪽 행 통째**를 들고 갔기 때문이다.
     🚨 종전 게이트는 `distance` 만 봤다. **한쪽만 보는 대칭 검사는 반대쪽을 못 잡는다** (D-170).
+
+    🔄 **2026-09-12 밤 — 이 게이트 자신이 같은 병을 앓고 있었다** (D-203).
+       종전에는 「넣는 순서가 바뀌어도 같아야 한다」며 이렇게 돌았다 —
+
+           for a, b in ((vec, lex), (lex, vec)):
+               rt.fuse(a if a is vec else vec, b if b is lex else lex, limit=1)
+
+       두 바퀴 모두 `fuse(vec, lex)` 로 접힌다. **단언이 한 번도 안 걸렸다.**
+       ⛔ 그리고 단언 자체가 틀렸다 — `fuse()` 는 **인자 위치가 갈래를 정한다.** 진짜로 바꿔
+          부르면 어휘 결과가 `rank_vector` 로 집계되는 것이 **맞는 동작**이다.
+       ★ 그래서 루프를 고치지 않고 **재는 것을 바꿨다**: 어느 갈래가 그 행을 먼저 데려왔든
+         두 점수가 다 실리는가. `base` 를 만드는 쪽이 벡터냐 어휘냐로 갈리는 자리다.
     """
     vec = [_hit("x", match=rt.MATCH_VECTOR, distance=0.62)]
     lex = [_hit("x", match=rt.MATCH_LEXICAL, lexical=0.04)]
-    for a, b in ((vec, lex), (lex, vec)):  # 🚨 넣는 순서가 바뀌어도 같아야 한다
-        out = rt.fuse(a if a is vec else vec, b if b is lex else lex, limit=1)
-        assert out[0].distance == 0.62, "거리를 잃었다"
-        assert out[0].lexical == 0.04, "어휘 점수를 잃었다"
-        assert out[0].match == rt.MATCH_FUSED
-    # ⛔ 한쪽에만 있는 줄은 **없는 쪽이 None 그대로**라야 한다 — 0.0 으로 채우지 않는다
+
+    # ① 양쪽에 다 있는 행 — `base` 는 벡터 쪽에서 온다
+    both = rt.fuse(vec, lex, limit=1)[0]
+    assert both.distance == 0.62, "거리를 잃었다"
+    assert both.lexical == 0.04, "어휘 점수를 잃었다"
+    assert both.match == rt.MATCH_FUSED
+    assert (both.rank_vector, both.rank_lexical) == (1, 1)
+
+    # ② 🚨 **`base` 가 어휘 쪽에서 오는 경우** — 벡터 후보에 없고 어휘에만 있는 행이
+    #    벡터 목록의 뒤쪽 행과 같은 `chunk_id` 가 아닐 때다. 이쪽으로도 점수가 안 새는가.
+    lex_first = rt.fuse([_hit("v", match=rt.MATCH_VECTOR, distance=0.7)], lex, limit=2)
+    got = {h.chunk_id: h for h in lex_first}
+    assert got["x"].lexical == 0.04, "어휘에서만 온 행이 자기 점수를 잃었다"
+    assert got["x"].distance is None, "⛔ 없는 거리를 0.0 으로 채웠다"
+    assert got["v"].distance == 0.7
+    assert got["v"].lexical is None
+
+    # ③ 한쪽에만 있는 줄은 **없는 쪽이 None 그대로**라야 한다 — 0.0 으로 채우지 않는다
     only = rt.fuse(vec, [], limit=1)[0]
     assert only.distance == 0.62
     assert only.lexical is None
+
+
+@pytest.mark.gate
+def test_fuse_는_인자_위치로_갈래를_정한다() -> None:
+    """🚨 위 게이트가 종전에 「순서 무관」이라 적었던 것을 **명시적으로 뒤집어 둔다** (D-203).
+
+    ⛔ 「순서가 바뀌어도 같다」는 성립할 수 없는 단언이다 — 바꿔 부르면 어휘 결과가
+       `rank_vector` 로 집계된다. 그것은 버그가 아니라 **이 함수의 계약**이다.
+    ★ 계약을 검사로 박아 두면 다음 사람이 「대칭이어야 하는 것 아닌가」로 되돌아오지 않는다.
+    """
+    a = rt.fuse([_hit("only")], [], limit=1)[0]
+    b = rt.fuse([], [_hit("only")], limit=1)[0]
+    assert (a.rank_vector, a.rank_lexical) == (1, None)
+    assert (b.rank_vector, b.rank_lexical) == (None, 1)
+
+
+# ── 검색 상태 (D-202) ──────────────────────────────────────────────────────
+@pytest.mark.gate
+def test_상태가_어휘_갈래도_말한다() -> None:
+    """🔴 0건에는 두 뜻이 있다 — **겹치는 조문이 없다**와 **검색어를 못 만들었다**.
+
+    ⛔ `by_lexical` 이 *"여기서 가른다"*고 적어 놓고 둘 다 `[]` 를 냈다. 부르는 쪽에서는
+       구별이 없었고 응답 봉투에도 어휘 칸이 없었다 — **가른 것이 아니라 삼킨 것**이다.
+    🚨 상태를 만드는 자리는 `search()` 하나다 (D-51 · D-99).
+    """
+    assert rt.LEXICAL_OK == "ok"
+    assert rt.LEXICAL_NO_TERMS.startswith("no_terms:")
+    # 「이 의 는」은 어절이 전부 조사다 — 검색어가 0개다
+    assert rt.terms("이 의 는") == []
+    assert rt.terms("면역력이 쑥쑥") != []
+
+
+@pytest.mark.gate
+def test_상태가_분모를_같이_낸다() -> None:
+    """🚨 「후보에 없었다」와 「상위에 못 들었다」는 다른 0 이다 (D-178 · D-202).
+
+    ⛔ `counts` 만 있고 분모가 없으면 둘이 같은 수로 보인다. `pool` 과 `pool_*` 이
+       그 분모다 — 이름에 분모가 없는 수는 원장에서도 코드에서도 금지다.
+    """
+    names = {f.name for f in dataclasses.fields(rt.SearchState)}
+    assert names == {"vector", "lexical", "pool", "pool_vector", "pool_lexical"}
+
+
+@pytest.mark.gate
+def test_응답_봉투가_두_갈래_상태와_두_분모를_든다() -> None:
+    """⛔ 코어가 상태를 내도 **봉투에 칸이 없으면** 화면에 안 닿는다 (D-99 — 두 벌의 반대).
+
+    🚨 `counts` 의 키에 분모를 박는다 — `*_pool` 은 후보 폭 안, `*_top` 은 응답 안이다.
+    """
+    from app.api import SearchResult  # noqa: PLC0415 — fastapi 는 이 테스트에서만 든다
+
+    assert {"vector", "lexical", "pool", "counts", "hits"} <= set(SearchResult.model_fields)
+    src = (ROOT / "app" / "api.py").read_text(encoding="utf-8")
+    for key in ("_pool", "_top"):
+        assert f'f"{{rt.MATCH_VECTOR}}{key}"' in src, f"counts 키에 {key} 분모가 없다"

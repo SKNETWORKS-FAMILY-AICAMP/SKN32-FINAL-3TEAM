@@ -1,0 +1,241 @@
+{
+  "enums": {
+    "AdFormat": [
+      "배너",
+      "상세페이지",
+      "카드뉴스"
+    ],
+    "Category": [
+      "건기식",
+      "식품",
+      "일반",
+      "화장품"
+    ],
+    "Channel": [
+      "기사형",
+      "상세페이지",
+      "유튜브",
+      "인스타"
+    ],
+    "HoldReason": [
+      "cat_unknown",
+      "gap2",
+      "low_conf",
+      "rd1"
+    ],
+    "Infeasibility": [
+      "A",
+      "B",
+      "C"
+    ],
+    "Outcome": [
+      "certificate",
+      "hold",
+      "pass",
+      "search_failed"
+    ],
+    "Risk": [
+      "R0",
+      "R1",
+      "R2",
+      "R3",
+      "R4"
+    ],
+    "Verdict": [
+      "confirmed",
+      "hold",
+      "no_basis",
+      "unjudged"
+    ],
+    "Violation": [
+      "거짓_과장",
+      "건강기능식품_오인",
+      "기능성화장품_오인",
+      "부당_비교광고",
+      "비방광고",
+      "소비자_기만",
+      "실증책임_위반",
+      "의약품_오인",
+      "질병_예방치료_표방",
+      "추천_보증_뒷광고",
+      "후기_체험기_기만"
+    ]
+  },
+  "models": {
+    "AdSection": {
+      "kind": "req builtins.str",
+      "order": "req builtins.int",
+      "placeholder": "opt str | None",
+      "text": "opt str | None"
+    },
+    "AdaptedCopy": {
+      "channel": "req app.contracts.Channel",
+      "disclosure": "req builtins.str",
+      "disclosure_placement": "req builtins.str",
+      "recheck": "req app.contracts.SentenceJudgment",
+      "rewrite": "req app.contracts.RewriteSet"
+    },
+    "Candidate": {
+      "appeal_retention": "req builtins.float",
+      "label": "req builtins.str",
+      "pareto": "opt builtins.bool",
+      "residual_risk": "req app.contracts.Risk",
+      "rewrite": "req app.contracts.RewriteSet"
+    },
+    "Certificate": {
+      "explanation": "req builtins.str",
+      "guidance": "opt str | None",
+      "reason": "req app.contracts.Infeasibility"
+    },
+    "ComposeRequest": {
+      "ad_format": "req app.contracts.AdFormat",
+      "product": "opt app.contracts.ProductContext",
+      "prompt": "opt str | None",
+      "source_copy": "opt app.contracts.AdaptedCopy | None"
+    },
+    "ComposeResponse": {
+      "ad_format": "req app.contracts.AdFormat",
+      "disclosure_section_order": "opt int | None",
+      "screening": "opt list[app.contracts.SentenceJudgment]",
+      "sections": "opt list[app.contracts.AdSection]"
+    },
+    "EvidenceArticle": {
+      "article": "req builtins.str",
+      "chunk_id": "opt str | None",
+      "item": "opt builtins.str",
+      "law_id": "req builtins.str",
+      "quote": "opt str | None"
+    },
+    "GenerateRequest": {
+      "keywords": "opt list[app.contracts.KeywordScreen]",
+      "product": "opt app.contracts.ProductContext",
+      "profile": "opt app.contracts.MediaProfile | None",
+      "segment": "req app.contracts.Segment"
+    },
+    "GenerateResponse": {
+      "adapted": "opt ForwardRef('list[AdaptedCopy]')",
+      "candidates": "opt list[app.contracts.Candidate]",
+      "keywords": "opt list[app.contracts.KeywordScreen]"
+    },
+    "JudgeRequest": {
+      "product": "opt app.contracts.ProductContext",
+      "text": "req builtins.str"
+    },
+    "JudgeResponse": {
+      "attempt": "opt builtins.int",
+      "candidates": "opt list[app.contracts.Candidate]",
+      "certificate": "opt app.contracts.Certificate | None",
+      "judged_by": "opt builtins.str",
+      "law_version": "opt builtins.str",
+      "outcome": "req app.contracts.Outcome",
+      "sentences": "opt list[app.contracts.SentenceJudgment]",
+      "timings": "opt list[app.contracts.Timing]"
+    },
+    "KeywordScreen": {
+      "allowed": "req builtins.bool",
+      "evidence": "opt list[app.contracts.EvidenceArticle]",
+      "reason": "opt str | None",
+      "term": "req builtins.str"
+    },
+    "MediaProfile": {
+      "channel": "req app.contracts.Channel",
+      "disclosure_placement": "req builtins.str",
+      "max_chars": "opt int | None",
+      "max_sentences": "opt int | None",
+      "tone": "opt str | None"
+    },
+    "ProductContext": {
+      "category": "opt app.contracts.Category",
+      "has_recognized_function": "opt builtins.bool",
+      "recognition_no": "opt str | None"
+    },
+    "RewriteSet": {
+      "body": "req builtins.str",
+      "mandatory_note": "opt str | None",
+      "placement": "opt str | None"
+    },
+    "RiskAssessment": {
+      "encoder": "opt app.contracts.Risk | None",
+      "evidence_span": "opt app.contracts.Span | None",
+      "final": "opt app.contracts.Risk | None",
+      "floor": "opt app.contracts.Risk | None"
+    },
+    "Segment": {
+      "label": "req builtins.str",
+      "member_count": "req builtins.int",
+      "segment_id": "req builtins.str",
+      "top_terms": "opt list[str]",
+      "vulnerable_flag": "opt builtins.bool"
+    },
+    "SentenceJudgment": {
+      "evidence": "opt list[app.contracts.EvidenceArticle]",
+      "evidence_mismatch": "opt builtins.bool",
+      "hold_reason": "opt app.contracts.HoldReason | None",
+      "infeasibility": "opt app.contracts.Infeasibility | None",
+      "risk": "opt app.contracts.RiskAssessment",
+      "sent_id": "req builtins.str",
+      "text": "req builtins.str",
+      "verdict": "req app.contracts.Verdict",
+      "violations": "opt list[app.contracts.Violation]"
+    },
+    "Span": {
+      "end": "req builtins.int",
+      "label": "opt str | None",
+      "start": "req builtins.int"
+    },
+    "Timing": {
+      "ms": "req builtins.float",
+      "node": "req builtins.str"
+    }
+  },
+  "routes": [
+    [
+      "/",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/compose",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/fixtures",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/fixtures/{kind}/{name}",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/generate",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/health",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/judge",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/search",
+      [
+        "GET"
+      ]
+    ]
+  ]
+}

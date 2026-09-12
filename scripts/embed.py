@@ -21,9 +21,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import pathlib
 import sys
+
+from app.settings import dsn
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CHUNKS = ROOT / "data" / "derived" / "chunks.jsonl"
@@ -51,10 +52,17 @@ CHUNK_COLS = (
     # 🔴 2026-09-12 (0008) — 항 서수와 자립 텍스트. 여기 한 줄 더하면 나머지가 따라온다.
     "paragraph_no",
     "context",
+    # 🔴 2026-09-12 밤 (0011 · D-199) — 쪼갠 조각이라는 사실. `preprocess/chunk.py` 가
+    #    만들어 두고 **여기 없어서** 3년치 배선이 끊겨 있던 값이다.
+    "part_no",
+    "part_total",
     "doc_type",
     "category",
     "text",
     "token_count",
+    # 🔴 2026-09-12 밤 (0011 · D-200) — 모델에 **실제로 들어가는** 문자열의 토큰 수.
+    #    `token_count` 는 `text` 만 센다 — 0008 이후 둘은 다른 문자열이다.
+    "input_token_count",
 )
 #: 기본키는 갱신하지 않는다 — 나머지는 **전부** 갱신한다.
 CHUNK_UPDATABLE = tuple(c for c in CHUNK_COLS if c != "chunk_id")
@@ -99,15 +107,36 @@ SQL_EMB_UPSERT = (
 def chunk_values(r: dict, model) -> tuple:  # noqa: ANN001 — model 은 지연 로드 타입이다
     """`CHUNK_COLS` 순서로 값을 낸다. 🚨 **순서를 손으로 맞추지 않는다.**
 
-    🔴 `token_count` 는 **실제로 센다** (2026-09-10). ⛔ 종전에는 항상 `None` 이라
-       `ck_chunk_tokens`(512 상한)가 **영구히 무효**였다. 설계 문서는 「900토큰 청크 거부
-       확인」을 성과로 적어 뒀는데 실무에서는 안 걸렸다 (D-170).
+    🔴 토큰은 **두 축을 따로 센다** (2026-09-12 밤 · D-200).
+
+        token_count        `text` 만        인용 단위. `ck_chunk_tokens(512)` 가 보는 축
+        input_token_count  `embed_input()`  모델·리랭커에 실제로 들어가는 축. 상한 미정
+
+    ⛔ 0008 이 `context` 를 만들면서 **재는 문자열과 쓰는 문자열이 갈렸다.** 한 수로 두면
+       「512 를 지킨다」가 어느 축의 말인지 알 수 없어진다 (D-185 — 정본 축/관측 축).
     🚨 임베딩 모델의 토크나이저로 센다 — 상한이 그 모델의 상한이기 때문이다.
+
+    🔴 **못 세면 멈춘다** (D-72 fail-closed · 2026-09-12 밤). ⛔ 종전에는 `_tokens` 주석이
+       *"토크나이저 종류가 달라도 적재는 계속한다"* 고 적었는데, `token_count` 가
+       `NOT NULL` 이라 **계속되지 않고 psycopg 예외로 터졌다.** 그리고 터지는 자리가
+       원인에서 멀어 「토크나이저가 다르다」가 아니라 「적재가 깨졌다」로 읽혔다.
+       ★ 멈추는 것 자체는 맞다 — **멈추는 자리와 문장**을 원인 쪽으로 옮긴다.
     """
-    v = {**r, "token_count": _tokens(model, r["text"])}
+    v = {
+        **r,
+        "token_count": _tokens(model, r["text"]),
+        "input_token_count": _tokens(model, embed_input(r)),
+    }
     missing = [c for c in CHUNK_COLS if c not in v]
     if missing:
         raise SystemExit(f"🔴 청크에 칸이 없다: {missing} — preprocess.chunk 를 다시 돌린다")
+    if v["token_count"] is None:
+        raise SystemExit(
+            f"🔴 토큰을 못 셌다 — {MODEL_ID} 의 토크나이저를 못 읽는다 "
+            f"(chunk_id={r.get('chunk_id')!r}).\n"
+            "   `token_count` 는 NOT NULL 이라 그냥 두면 적재 도중 psycopg 예외로 터진다.\n"
+            "   🚨 상한(ck_chunk_tokens 512)이 이 수 위에 서 있으므로 **어림하지 않는다.**"
+        )
     return tuple(v[c] for c in CHUNK_COLS)
 
 
@@ -141,16 +170,13 @@ def sweep_orphans(cur, declared: set[str], *, partial: bool) -> int:  # noqa: AN
     return len(orphans)
 
 
-def dsn() -> str:
-    return os.environ.get("DATABASE_URL") or (
-        "postgresql://copylane:copylane@localhost:5432/copylane"
-    )
-
-
 def _tokens(model, text: str) -> int | None:
     """임베딩 모델 토크나이저로 센 토큰 수. 못 세면 `None` — **지어내지 않는다**.
 
     🚨 상한(`ck_chunk_tokens` 512)은 **이 모델의 상한**이므로 이 토크나이저로 세야 뜻이 맞다.
+    ⛔ **`None` 을 「괜찮다」로 읽지 않는다.** 이 함수는 모르는 것을 모른다고만 하고,
+       멈출지 말지는 `chunk_values()` 가 정한다 — 거기에 `chunk_id` 가 있어서
+       **어느 행에서 무엇을 못 셌는지**를 말할 수 있기 때문이다 (D-51 · D-72).
     """
     try:
         tok = model.tokenizer
@@ -158,7 +184,7 @@ def _tokens(model, text: str) -> int | None:
         return None
     try:
         return len(tok.encode(text, add_special_tokens=True))
-    except Exception:  # noqa: BLE001 — 토크나이저 종류가 달라도 적재는 계속한다
+    except Exception:  # noqa: BLE001 — 종류를 가리지 않는다. 판단은 chunk_values 가 한다
         return None
 
 
@@ -236,7 +262,18 @@ def main() -> int:
         n_chunk = cur.fetchone()[0]
         cur.execute("SELECT count(*) FROM chunk_embedding WHERE model_id = %s", (MODEL_ID,))
         n_emb = cur.fetchone()[0]
+        # 🔴 **상한이 없는 축은 재서 찍는다** (0011 · D-200). CHECK 이 못 지키는 축이므로
+        #    출력이 유일한 눈이다 — 안 찍으면 「모르는 채로 통과」가 된다 (D-188).
+        cur.execute(
+            "SELECT max(input_token_count), count(*) FILTER (WHERE input_token_count > 512),"
+            "       count(*) FILTER (WHERE part_total > 1)"
+            "  FROM chunk"
+        )
+        max_in, over, split = cur.fetchone()
     print(f"\n  보낸 행 {len(rows)} · DB chunk {n_chunk} · embedding {n_emb} ({MODEL_ID})")
+    print(f"  📏 모델 입력 토큰 최대 {max_in} · **512 초과 {over}행** — 상한 CHECK 없음 (D-200)")
+    print("     🚨 리랭커 모델을 고를 때 이 수가 상한을 정한다 (기획서 7-3). 원장에 올린다")
+    print(f"  ✂️  쪼갠 조각 {split}행 — `part_total > 1`. 화면·인용 검증이 이 칸을 본다 (D-199)")
     if swept:
         print(f"  🧹 거둔 행 {swept:,} — 선언에 없던 옛 청크다 (D-187)")
     if n_chunk < len(rows):

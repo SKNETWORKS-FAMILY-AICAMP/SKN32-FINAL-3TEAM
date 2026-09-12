@@ -11,9 +11,14 @@
    200자씩 기계적으로 자르면 한 청크가 두 호에 걸치고, 화면이 어느 호를 인용하는지
    말할 수 없게 된다. 그러면 D-51(오류는 고치는 법을 보여준다)이 성립하지 않는다.
 
-🚨 **512 토큰은 리랭커의 한계다** (bge-reranker-v2-m3). 넘는 조문은 **항 단위로 더 쪼갠다.**
-   그래도 넘으면 문장 경계로 자르되 **`part` 를 붙여 원 조문을 가리킨다** — 잘렸다는
-   사실을 데이터가 들고 있어야 화면이 「제N조 (1/3)」이라 말할 수 있다.
+🚨 **512 토큰은 리랭커의 한계다** (기획서 7-3 · bge-reranker-v2-m3). 넘는 조문은
+   **항 단위로 더 쪼갠다.** 그래도 넘으면 문장 경계로 자르되 **`part_no`·`part_total` 을
+   붙여 원 조문을 가리킨다** — 잘렸다는 사실을 데이터가 들고 있어야 화면이
+   「제N조 (1/3)」이라 말할 수 있다.
+   🔄 **2026-09-12 밤 (D-199)** — 종전에는 `part = "1/3"` 문자열 하나였고 **DB 에 열이 없어
+      아무도 읽지 않았다.** 만들어 놓고 읽는 쪽을 안 만든 값이었다. 수 둘로 갈라 0011 에
+      열을 세우고 `_SELECT` → `Hit` → `SearchHit` 까지 잇는다.
+      ⛔ 문자열 「1/3」로 두지 않는 이유 — 받는 쪽이 다시 파싱해야 하고 CHECK 이 못 지킨다.
 
 🚨 **토큰 수는 재는 것이지 어림하는 것이 아니다.** 형태소·서브워드 수가 글자 수와 다르다.
    여기서는 보수적으로 **글자 수 기반 상한**을 쓰고 그 사실을 적어 둔다 —
@@ -156,7 +161,10 @@ def from_articles() -> tuple[list[dict], int]:
                     "doc_type": "법령",
                     "category": [category_of(law)],
                     "text": text,
-                    "part": f"{i + 1}/{len(parts)}" if len(parts) > 1 else "",
+                    # 🔴 **쪼갠 조각이라는 사실** (D-199 · 0011). 안 쪼갰으면 1/1 이다 —
+                    #    빈 문자열이 아니다. 「모른다」는 적재 전 DB 의 NULL 이 맡는다.
+                    "part_no": i + 1,
+                    "part_total": len(parts),
                     "법령": law,
                 }
             )
@@ -193,7 +201,8 @@ def from_annex() -> list[dict]:
                         "doc_type": "별표",
                         "category": [category_of(r["annex_title"])],
                         "text": chunk,
-                        "part": f"{i + 1}/{len(parts)}" if len(parts) > 1 else "",
+                        "part_no": i + 1,
+                        "part_total": len(parts),
                         "법령": r["annex_title"],
                     }
                 )
@@ -247,13 +256,13 @@ def main() -> int:
         print("               유일하게 집는지 본다. 덮어쓰기로 넘기지 않는다.")
         return 1
 
-    long_ = sum(1 for r in rows if r["part"])
+    long_ = sum(1 for r in rows if r["part_total"] > 1)
     cats: dict[str, int] = {}
     for r in rows:
         cats[r["category"][0]] = cats.get(r["category"][0], 0) + 1
     print(f"  청크 {len(rows)}개 · 최장 {max(len(r['text']) for r in rows)}자")
     print(f"  범주 {cats}")
-    print(f"  🚨 길어서 쪼갠 청크 {long_}개 — `part` 가 원 조문을 가리킨다")
+    print(f"  🚨 길어서 쪼갠 청크 {long_}개 — `part_no`/`part_total` 이 원 조문을 가리킨다")
     # 🔴 **뺀 수를 매번 찍는다** — 조용히 줄면 다음 사람이 원장과 어긋나는 수를 보고 헤맨다.
     print(f"  ⬜ 제목뿐인 조 머리 행 {dropped}개를 담지 않았다 (D-159 · D-195)")
     print("     🚨 DB 에 남은 옛 청크는 `scripts/embed.py` 가 거둔다 — 여기서는 안 지운다 (D-187)")

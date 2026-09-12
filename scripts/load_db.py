@@ -34,11 +34,12 @@ from __future__ import annotations
 import argparse
 import collections
 import json
-import os
 import pathlib
 import sys
 
 import yaml
+
+from app.settings import dsn
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DERIVED = ROOT / "data" / "derived"
@@ -58,12 +59,6 @@ FLAGS = {
     "PREAPPROVAL",
     "NOTRAIN",
 }
-
-
-def dsn() -> str:
-    return os.environ.get("DATABASE_URL") or (
-        "postgresql://copylane:copylane@localhost:5432/copylane"
-    )
 
 
 def _sources() -> dict[str, dict]:

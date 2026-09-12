@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+from pathlib import Path
 
 import pytest
 
@@ -54,30 +55,92 @@ def test_chunk_에_열을_더하면_뷰도_다시_만든다() -> None:
        🚨 게이트가 **더 나은 방법을 막고 있었다.** 규칙을 「뒤 파일」이 아니라
           「뒤 순서」로 고친다 — 같은 파일이면 본문 안의 위치로 본다.
     """
-    files = sorted(p.name for p in MIGRATIONS.glob("*.sql"))
+    bad = view_refresh_violation(MIGRATIONS)
+    if bad == _NO_ADD:
+        pytest.skip("chunk 에 열을 더한 마이그레이션이 아직 없다")
+    assert bad is None, bad
+
+
+#: 「검사할 대상이 없다」와 「통과했다」를 가른다 — 둘을 같은 `None` 으로 내면
+#: 마이그레이션 폴더가 통째로 비어도 초록이 된다 (D-170).
+_NO_ADD = "no-add"
+
+
+def view_refresh_violation(migrations: Path) -> str | None:
+    """열을 더한 마지막 마이그레이션이 뷰를 다시 만들었는가. 어겼으면 **사유 문장**을 낸다.
+
+    🔴 2026-09-12 밤 — 검사 본문을 함수로 뺐다 (D-203). ⛔ 종전에는 테스트 안에 있어서
+       **「이 게이트가 0008 형을 실제로 잡는가」를 잴 방법이 없었다.** D-197 이
+       *"게이트를 고치려면 종전 규칙이 잡던 것을 새 규칙도 잡는다는 것을 보여야 한다"* 고
+       요구했는데, 09-12 오후에는 **논증으로만** 보였다.
+    ★ 함수로 빼면 **일부러 어긴 입력**을 넣어 볼 수 있다 — 아래 음성 픽스처가 그것이다.
+    """
+    files = sorted(p.name for p in migrations.glob("*.sql"))
     added = [
-        n for n in files if _ADD_CHUNK_COL.search((MIGRATIONS / n).read_text(encoding="utf-8"))
+        n for n in files if _ADD_CHUNK_COL.search((migrations / n).read_text(encoding="utf-8"))
     ]
     if not added:
-        pytest.skip("chunk 에 열을 더한 마이그레이션이 아직 없다")
+        return _NO_ADD
     last = added[-1]
-    src = (MIGRATIONS / last).read_text(encoding="utf-8")
+    src = (migrations / last).read_text(encoding="utf-8")
     add_at = _ADD_CHUNK_COL.search(src)
     refresh_at = _REFRESH_VIEW.search(src)
     # ① 같은 파일 안에서 ADD 뒤에 뷰 재생성이 오면 통과 — 한 트랜잭션이라 가장 안전하다
     if refresh_at and add_at and refresh_at.start() > add_at.start():
-        return
+        return None
     # ② 아니면 **더 뒤 파일**에서 다시 만들었어야 한다
     later = [
         n
         for n in files
-        if n > last and _REFRESH_VIEW.search((MIGRATIONS / n).read_text(encoding="utf-8"))
+        if n > last and _REFRESH_VIEW.search((migrations / n).read_text(encoding="utf-8"))
     ]
-    assert later, (
+    if later:
+        return None
+    return (
         f"🔴 {last} 이 chunk 에 열을 더했는데 v_current_chunk 를 다시 만들지 않았다 — "
         "같은 파일의 ADD 뒤에 두거나, 더 뒤 마이그레이션에서 다시 만든다. "
         "`SELECT c.*` 는 생성 시점에 열 목록으로 고정된다."
     )
+
+
+@pytest.mark.gate
+def test_뷰_게이트가_실제로_0008형을_잡는다(tmp_path: Path) -> None:
+    """🚨 **통과만 하는 게이트는 게이트가 아니다** — 집행계약이 세 번 적은 문장이다.
+
+    D-197 이 게이트를 느슨하게 고쳤다(다른 파일 → 뒤 순서). 그 조건은
+    *"종전 규칙이 잡던 것을 새 규칙도 잡는다는 것을 같은 커밋에서 보여야 한다"* 였는데
+    09-12 오후에는 **읽어서 그렇다고 말했을 뿐**이다. 여기서 실제로 잰다 (D-203).
+
+    ⛔ 검사 대상은 저장소의 진짜 마이그레이션이 아니라 **일부러 어긴 임시 폴더**다 —
+       진짜를 건드리면 검사가 스스로 사고를 만든다.
+    """
+    add_only = "ALTER TABLE chunk ADD COLUMN IF NOT EXISTS zzz TEXT;"
+    refresh = "DROP VIEW IF EXISTS v_current_chunk;\nCREATE VIEW v_current_chunk AS SELECT 1;"
+
+    # ① 0008 형 — 열만 더하고 뷰를 안 만든다. **잡혀야 한다**
+    (tmp_path / "0001_add.sql").write_text(add_only, encoding="utf-8")
+    assert view_refresh_violation(tmp_path), "🔴 0008 형(열 추가 · 뷰 없음)을 못 잡는다"
+
+    # ② 0009 형 — **뒤 파일**에서 다시 만든다. 통과해야 한다 (종전 규칙이 허용하던 모양)
+    (tmp_path / "0002_view.sql").write_text(refresh, encoding="utf-8")
+    assert view_refresh_violation(tmp_path) is None, "🔴 뒤 파일 재생성을 떨어뜨린다"
+
+    # ③ 0010 형 — **같은 파일**의 ADD 뒤에 둔다. D-197 이 열어 준 모양
+    one_file = tmp_path / "one"
+    one_file.mkdir()
+    (one_file / "0001_both.sql").write_text(f"{add_only}\n{refresh}", encoding="utf-8")
+    assert view_refresh_violation(one_file) is None, "🔴 한 파일에 담은 것을 떨어뜨린다 (D-197)"
+
+    # ④ 순서를 뒤집으면 다시 잡혀야 한다 — 뷰를 만든 **뒤에** 열을 더하면 낡은 채로 남는다
+    rev = tmp_path / "rev"
+    rev.mkdir()
+    (rev / "0001_both.sql").write_text(f"{refresh}\n{add_only}", encoding="utf-8")
+    assert view_refresh_violation(rev), "🔴 같은 파일 안의 **순서**를 안 본다"
+
+    # ⑤ 열을 더한 적이 없으면 「검사 대상 없음」이다 — 통과와 구별한다 (D-170)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert view_refresh_violation(empty) == _NO_ADD
 
 
 @pytest.mark.gate
