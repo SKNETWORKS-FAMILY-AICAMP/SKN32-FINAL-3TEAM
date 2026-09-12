@@ -248,6 +248,12 @@ uv run python launcher.py serve      # FastAPI
 ├── launcher.py            ★ 작업 진입점 — 대화형 메뉴 + 직접 실행
 ├── setup.bat / setup.ps1  부트스트랩 (환경 · 훅 · DB · 게이트)
 ├── app/                   FastAPI · 판정 계약(Pydantic) · LangGraph 그래프
+│   ├── settings.py        ★ 접속·판정 파라미터의 단일 출처 (D-209)
+│   ├── logging_conf.py    🔴 로그 마스킹 — 문구가 로그에 안 실린다 (D-210)
+│   ├── auth.py            🔴 governor 로그인 — Argon2id · 세션 · CSRF (D-66 · D-213)
+│   ├── routers/           화면·BFF — **사람별 파일** user.py · admin.py · auth.py (D-208)
+│   ├── templates/         Jinja2 — base.html(팀장) · user/ · admin/ · auth/
+│   └── static/            base.css · vendor/ (외부 스크립트는 받아서 커밋)
 ├── collect/               수집기 — registry 게이트 · 무손상 저장 · 원장 append
 ├── preprocess/            추출 · 정규화 · 마스킹 · 청킹
 ├── scripts/               doctor · load_db · embed · golden · 레지스트리 생성기
@@ -277,7 +283,7 @@ uv run python launcher.py serve      # FastAPI
 | 문서 | 무엇인가 |
 |---|---|
 | [`docs/00_사실원장.md`](docs/00_사실원장.md) | ★ **수치 · 일정 · 파라미터의 단일 출처.** 전부 실측이고, 어느 기기에서 쟀는지까지 적습니다 |
-| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 185건.** 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
+| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 213건.** 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
 | [`docs/00_거버넌스_집행계약.md`](docs/00_거버넌스_집행계약.md) | 게이트가 무엇을 어떻게 막는지 |
 | [`docs/00_산출물현황.md`](docs/00_산출물현황.md) | 산출물 현황 — 제출본은 여기서 빌드합니다 |
 | [`docs/01_기획/`](docs/01_기획/) · [`02_설계/`](docs/02_설계/) · [`03_데이터/`](docs/03_데이터/) | 기획서 · DB 스키마 · 청킹 · LangGraph 상태 · 전처리 사양 |
