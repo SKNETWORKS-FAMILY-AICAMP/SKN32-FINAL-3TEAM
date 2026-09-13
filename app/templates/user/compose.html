@@ -1,0 +1,236 @@
+{# app/templates/user/compose.html — AI 광고 생성(초안) 화면 · 소유자 **ksr** (병렬작업 계약 §5)
+
+  ★ 프로토타입의 `data-screen="draft-setup"` 과 `draft-editor` 의 **서버가 그릴 수 있는 부분**을
+    옮긴 것이다. ⛔ `draft-editor` 의 아트보드·인스펙터·줌·드래그는 전부 JS 다 —
+    CSP(`script-src 'self'`)에서 못 만든다. 섹션 골격은 `ComposeResponse.sections` 를
+    **서버가 순서대로 그린다.**
+  🔴 「광고」 표시는 **구조적 강제**다 (D-93 · D-164) — `disclosure_section_order` 가
+     비면 계약이 거부한다. 화면도 그 섹션을 지워 보이지 않는다.
+  ⛔ `POST /compose` 코어는 아직 없다 — 부르지 않는다. 결과는 골든 픽스처로만 (D-124 · D-147).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — AI 광고 생성{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+<style>
+/* ══ 화면 폭 ══════════════════════════════════════════════════════
+   🔴 `base.css` 의 `body { max-width: 52rem }` 이 데스크톱에서 **휴대폰처럼 좁게** 보인다.
+      프로토타입은 전폭이다. ⛔ `base.css` 는 팀장 소유라 고치지 않는다 (§5) —
+      사용자 화면에서만 이 `<style>` 이 덮어쓴다. 관리자·로그인 화면은 그대로 둔다.
+   ★ nav 와 사이드바는 좌우 끝까지 붙어야 해서 body 의 좌우 여백만큼 음수 마진을 준다. */
+body { max-width: none; padding: 1.5rem 2rem; }
+.user-nav { margin-left: -2rem; margin-right: -2rem; }
+@media (max-width: 44rem) {
+  body { padding: 1.5rem 1rem; }
+  .user-nav { margin-left: -1rem; margin-right: -1rem; }
+  .user-side { margin-left: -1rem; margin-right: -1rem; }
+}
+</style>
+<style>
+.cp-head { margin-bottom: 1.25rem; }
+.cp-head h1 { margin: 0 0 .25rem; }
+.cp-head p { margin: 0; color: var(--u-clay); font-size: .875rem; }
+
+.cp-card { border: 1px solid var(--u-line); border-radius: 1rem;
+           background: var(--u-surface); padding: 1.1rem 1.15rem; margin-bottom: 1rem; }
+.cp-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
+.cp-step { font-size: .72rem; color: var(--u-clay); letter-spacing: .04em; }
+.cp-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+
+.cp-pick { display: flex; flex-wrap: wrap; gap: .45rem; margin: .2rem 0 1rem; }
+.cp-pick input { position: absolute; opacity: 0; width: 0; height: 0; }
+.cp-pick label { display: inline-block; margin: 0; padding: .4rem .85rem; border-radius: 999px;
+                 border: 1px solid var(--u-line); background: var(--u-surface);
+                 font-size: .84rem; font-weight: 500; cursor: pointer; }
+.cp-pick input:checked + label { background: var(--u-signal); border-color: var(--u-signal);
+                                 color: #fff; font-weight: 600; }
+.cp-pick input:focus-visible + label { outline: 2px solid var(--u-signal-ink); outline-offset: 2px; }
+
+.cp-submit { background: var(--u-signal); border-color: var(--u-signal);
+             color: #fff; font-weight: 600; margin-top: .75rem; }
+
+/* 섹션 골격 */
+.cp-board { border: 1px solid var(--u-line); border-radius: .75rem; overflow: hidden; }
+.cp-sec { display: flex; gap: .75rem; align-items: flex-start;
+          border-top: 1px solid var(--u-line); padding: .75rem .85rem; }
+.cp-sec:first-child { border-top: 0; }
+.cp-sec .cp-ord { font-size: .72rem; color: var(--u-clay); min-width: 1.4rem; }
+.cp-sec .cp-kind { font-size: .74rem; color: var(--u-clay); min-width: 4.2rem; }
+.cp-sec .cp-body { flex: 1; font-size: .88rem; }
+.cp-sec .cp-ph { color: var(--u-clay); font-style: italic; }
+.cp-sec.is-disclosure { background: var(--u-signal-soft); }
+.cp-sec.is-disclosure .cp-kind,
+.cp-sec.is-disclosure .cp-body { color: var(--u-signal-ink); font-weight: 600; }
+
+.cp-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .5rem 0 0; }
+.cp-chip { display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+           font-size: .74rem; border: 1px solid var(--u-line);
+           color: var(--u-clay); background: var(--u-surface2); }
+.cp-chip.c-r0, .cp-chip.c-r1 { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.cp-chip.c-r2 { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.cp-chip.c-r3, .cp-chip.c-r4 { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.cp-chip.c-warn { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.cp-chip.c-violation { background: var(--u-signal-soft); color: var(--u-signal-ink);
+                       border-color: var(--u-signal-soft); }
+
+.cp-scr { border-top: 1px solid var(--u-line); padding: .75rem 0; }
+.cp-scr:first-of-type { border-top: 0; }
+.cp-scr p { margin: 0; font-size: .9rem; }
+.cp-law { border-left: 2px solid var(--u-signal); padding: .1rem 0 .1rem .6rem;
+          margin: .5rem 0 0; font-size: .8rem; }
+.cp-law .cp-lawid { color: var(--u-clay); font-size: .72rem; }
+.cp-law blockquote { margin: .25rem 0 0; color: var(--u-clay); font-size: .78rem; }
+
+.cp-pending { border: 1px dashed var(--u-line); border-radius: .75rem;
+              padding: .8rem .9rem; color: var(--u-clay); font-size: .85rem; }
+.cp-fixtures { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; padding: 0; margin: .5rem 0 0; }
+.cp-fixtures a { display: inline-block; padding: .2rem .6rem; border: 1px solid var(--u-line);
+                 border-radius: 999px; font-size: .76rem; text-decoration: none; color: var(--u-clay); }
+.cp-fixtures a:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+</style>{% endblock %}
+{% block content %}
+<div class="user-shell">
+{% include "user/_nav.html" %}
+
+{# 🔴 하위 메뉴가 **왼쪽 세로 사이드바**다 (프로토타입 side-slot).
+   `_nav.html` 이 상단 nav 와 `<aside class="user-side">` 를 내고,
+   화면 본문은 여기 `.user-main` 안에 든다 — `.user-shell` 의 그리드가 둘을 나란히 놓는다. #}
+<div class="user-main">
+
+<div class="cp-head">
+  <h1>AI 광고 생성</h1>
+  <p>고른 카피를 어디에 쓸지 정하면 <b>규격과 섹션 골격을 먼저 깔아드려요.</b> 이미지와 문구는 섹션별로 직접 채우면 돼요.</p>
+</div>
+
+{# ───────────── draft-setup ───────────── #}
+<form class="cp-card" method="post" action="/u/compose">
+  {# 🔴 POST 다 — 문구를 URL 에 싣지 않는다 (P1-4). 필드가 여럿이어도 parse_qs 로 판다 (D-87). #}
+  <h2><span class="cp-step">01 ·</span> 어떤 종류로 만들까요</h2>
+  <div class="cp-pick">
+    <input type="radio" id="f-detail" name="ad_format" value="상세페이지" checked>
+    <label for="f-detail">상세페이지</label>
+    <input type="radio" id="f-card" name="ad_format" value="카드뉴스">
+    <label for="f-card">카드뉴스</label>
+    <input type="radio" id="f-banner" name="ad_format" value="배너">
+    <label for="f-banner">배너</label>
+  </div>
+
+  <h2><span class="cp-step">02 ·</span> 어떤 내용을 담을까요</h2>
+  <p class="cp-note" style="margin:0 0 .4rem">
+    담고 싶은 내용을 적어주세요. 적은 내용에 맞춰 섹션 구성과 문구가 달라져요.
+  </p>
+  <textarea id="prompt" name="prompt" rows="3" maxlength="{{ max_text_len }}"
+            placeholder="예: 건조한 계절에 쓰기 좋은 보습 제품이라는 점을 알리고 싶어요"></textarea>
+  <p class="cp-note" style="margin-top:.4rem">
+    🚨 <b>판정 코어가 입력한 내용을 먼저 걸러요.</b> 걸러지지 않은 문구는 지면에 얹히지 않아요 (D-63 · D-119).
+  </p>
+
+  <button class="cp-submit" type="submit">템플릿 만들기</button>
+  <p class="cp-note" style="margin-top:.6rem">
+    규격 · 여백 · 글자 크기는 KRDS 표준형 스타일 기준으로 셋팅돼요.<br>
+    ⬜ 섹션을 끌어 옮기거나 확대·축소하는 편집기는 스크립트가 필요해서 아직 없어요 (CSP · 공급망 P0-3).
+  </p>
+</form>
+
+{# ───────────── 엔진 대기 ───────────── #}
+{% if engine_pending %}
+<div class="cp-card">
+  <h2>생성 결과</h2>
+  <p class="cp-pending">
+    광고 생성 코어가 아직 안 붙었어요. <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
+    고르신 것 — 종류 <b>{{ picked.ad_format }}</b>
+    {%- if picked.prompt %} · 내용 「{{ picked.prompt }}」{% endif %}<br>
+    아래 골든 픽스처로 결과 화면의 모든 분기를 볼 수 있어요.
+  </p>
+</div>
+{% endif %}
+
+{# ───────────── 결과 · 섹션 골격 ───────────── #}
+{% if result %}
+<div class="cp-card">
+  <h2>섹션 골격 — {{ result.ad_format.value }}{% if fixture_name %} <span class="cp-note">· {{ fixture_name }}</span>{% endif %}</h2>
+  <div class="cp-board">
+    {% for s in result.sections %}
+    <div class="cp-sec{% if s.order == result.disclosure_section_order %} is-disclosure{% endif %}">
+      <span class="cp-ord">{{ s.order }}</span>
+      <span class="cp-kind">{{ s.kind }}</span>
+      <span class="cp-body">
+        {%- if s.text %}{{ s.text }}
+        {%- elif s.placeholder %}<span class="cp-ph">{{ s.placeholder }}</span>
+        {%- else %}<span class="cp-ph">비어 있음</span>{% endif -%}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="cp-note" style="margin-top:.6rem">
+    🔴 보라색 줄이 <b>「광고」 표시 섹션</b>이에요. 계약이 이 섹션 없이는 응답을 받지 않아요 —
+    <b>표시 없는 출력 경로를 만들지 않아요</b> (D-93 · D-164).
+  </p>
+</div>
+
+{# ───────────── 결과 · 입력 스크리닝 ───────────── #}
+{% if result.screening %}
+<div class="cp-card">
+  <h2>입력 판정</h2>
+  {% for s in result.screening %}
+  <div class="cp-scr">
+    <p>{{ s.text }}</p>
+    <div class="cp-chips">
+      <span class="cp-chip">
+        {%- if s.verdict.value == "confirmed" %}확정
+        {%- elif s.verdict.value == "hold" %}보류
+        {%- elif s.verdict.value == "no_basis" %}근거 없음
+        {%- else %}미판정{% endif -%}
+      </span>
+      {% if s.hold_reason %}
+      <span class="cp-chip">
+        {%- if s.hold_reason.value == "low_conf" %}확신 부족
+        {%- elif s.hold_reason.value == "gap2" %}1·2위 격차 부족
+        {%- elif s.hold_reason.value == "cat_unknown" %}카테고리 판별 실패
+        {%- else %}라운드 1 미해소{% endif -%}
+      </span>
+      {% endif %}
+      {% if s.risk.final %}
+      <span class="cp-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
+      {% endif %}
+      {% if s.infeasibility %}
+      <span class="cp-chip c-warn">
+        {{ s.infeasibility.value }} ·
+        {%- if s.infeasibility.value == "A" %} 자격형
+        {%- elif s.infeasibility.value == "B" %} 실증형
+        {%- else %} 절대형{% endif %}
+      </span>
+      {% endif %}
+      {% for v in s.violations %}
+      <span class="cp-chip c-violation">{{ v.value|replace("_", " ") }}</span>
+      {% endfor %}
+    </div>
+    {% for e in s.evidence %}
+    <div class="cp-law">
+      <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
+      <div class="cp-lawid">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
+      {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+    </div>
+    {% endfor %}
+    {% if s.verdict.value != "confirmed" %}
+    <p class="cp-note" style="margin-top:.5rem">
+      ⛔ 재검증이 <b>확정</b>이 아니라서 이 문구는 지면에 배치되지 않아요 — 섹션이 빈 채로 남아요 (D-63).
+    </p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+<div class="cp-card">
+  <h2>골든 픽스처로 분기 보기</h2>
+  <p class="cp-note">⛔ 엔진이 없어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).</p>
+  <ul class="cp-fixtures">
+  {% for name in fixtures %}
+    <li><a href="/u/compose/preview/{{ name }}">{{ name }}</a></li>
+  {% endfor %}
+  </ul>
+</div>
+
+</div>{# /.user-main #}
+</div>
+{% endblock %}

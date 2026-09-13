@@ -1,0 +1,216 @@
+{# app/templates/user/landing.html — 랜딩(로그인 전 첫 화면) · 소유자 **ksr** (병렬작업 계약 §5)
+
+  ★ 프로토타입의 `data-screen="landing"` 을 옮긴 것이다.
+  ⛔ 프로토타입의 「이미 240개 팀이 매달 12,000건 넘는 광고 문구를 검수하고 있어요」는
+     **지어낸 수치**다. 실제 사용량이 아니므로 옮기지 않는다 (D-147) —
+     화면에서 지어낸 숫자를 빼는 규칙은 홈의 집계와 같다.
+  ⛔ 회원가입·비밀번호 찾기는 **라우트가 아직 없다** (`app/routers/auth.py` 에 `/login`·
+     `/logout` 만 있고, 그 파일은 팀장 소유다 §5). 없는 화면으로 링크하지 않는다 (D-147).
+  🚨 이 화면은 nav 를 넣지 않는다 — 로그인 전 화면이라 사용자 메뉴가 없다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 광고 문구 준법 검수·카피생성{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+<style>
+/* ══ 화면 폭 ══════════════════════════════════════════════════════
+   🔴 `base.css` 의 `body { max-width: 52rem }` 이 데스크톱에서 **휴대폰처럼 좁게** 보인다.
+      프로토타입은 전폭이다. ⛔ `base.css` 는 팀장 소유라 고치지 않는다 (§5) —
+      사용자 화면에서만 이 `<style>` 이 덮어쓴다. 관리자·로그인 화면은 그대로 둔다.
+   ★ nav 와 사이드바는 좌우 끝까지 붙어야 해서 body 의 좌우 여백만큼 음수 마진을 준다. */
+body { max-width: none; padding: 1.5rem 2rem; }
+.user-nav { margin-left: -2rem; margin-right: -2rem; }
+@media (max-width: 44rem) {
+  body { padding: 1.5rem 1rem; }
+  .user-nav { margin-left: -1rem; margin-right: -1rem; }
+  .user-side { margin-left: -1rem; margin-right: -1rem; }
+}
+</style>
+<style>
+.ld-top { display: flex; align-items: center; justify-content: space-between;
+          gap: 1rem; padding: .75rem 0 1.25rem; border-bottom: 1px solid var(--u-line);
+          margin-bottom: 2rem; }
+.ld-brand { font-weight: 700; font-size: 1.05rem; color: var(--u-ink); text-decoration: none; }
+.ld-cta { display: inline-block; padding: .42rem .95rem; border-radius: .6rem;
+          background: var(--u-signal); color: #fff; font-size: .85rem;
+          font-weight: 600; text-decoration: none; }
+.ld-cta.is-ghost { background: transparent; color: var(--u-signal-ink);
+                   border: 1px solid var(--u-line); }
+
+.ld-hero { display: grid; gap: 1.75rem; margin-bottom: 2.25rem; }
+@media (min-width: 52rem) { .ld-hero { grid-template-columns: 1fr 1fr; align-items: center; } }
+.ld-kicker { font-size: .78rem; color: var(--u-signal-ink); letter-spacing: .04em; margin: 0 0 .6rem; }
+.ld-hero h1 { font-size: 2rem; line-height: 1.3; margin: 0 0 .8rem; }
+.ld-hero h1 em { font-style: normal; color: var(--u-signal-ink); }
+.ld-lead { color: var(--u-clay); font-size: .95rem; line-height: 1.75; margin: 0 0 1.2rem; }
+.ld-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+/* 검수 미리보기 카드 */
+.ld-demo { border: 1px solid var(--u-line); border-radius: 1rem;
+           background: var(--u-surface); padding: 1.1rem 1.15rem; }
+.ld-demo-head { display: flex; align-items: center; justify-content: space-between;
+                gap: .5rem; margin-bottom: .75rem; }
+.ld-demo-head b { font-size: .88rem; }
+.ld-tag { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px;
+          background: var(--u-signal-soft); color: var(--u-signal-ink); }
+.ld-quote { font-size: .9rem; line-height: 1.8; margin: 0 0 .6rem;
+            border-left: 2px solid var(--u-line); padding-left: .7rem; }
+.ld-hit { background: #fde68a; border-radius: .2rem; padding: 0 .1rem; }
+.ld-basis { font-size: .78rem; color: #991b1b; background: #fef2f2;
+            border: 1px solid #fecaca; border-radius: .5rem; padding: .45rem .6rem; margin: 0 0 .7rem; }
+.ld-arrow { font-size: .74rem; color: var(--u-clay); margin: 0 0 .5rem; }
+.ld-fix { font-size: .9rem; line-height: 1.8; margin: 0;
+          border-left: 2px solid var(--u-signal); padding-left: .7rem; }
+
+.ld-warn { border: 1px solid #fde68a; background: #fffbeb; color: #92400e;
+           border-radius: .75rem; padding: .7rem .85rem; font-size: .82rem;
+           line-height: 1.6; margin-bottom: 2.25rem; }
+
+.ld-sect { margin-bottom: 2.25rem; }
+.ld-sect > h2 { font-size: 1.15rem; margin: 0 0 .3rem; }
+.ld-sect > p.ld-sub { color: var(--u-clay); font-size: .85rem; margin: 0 0 1rem; }
+
+.ld-feats { display: grid; gap: .7rem; }
+@media (min-width: 44rem) { .ld-feats { grid-template-columns: repeat(3, 1fr); } }
+.ld-feat { border: 1px solid var(--u-line); border-radius: 1rem;
+           padding: 1.1rem 1.15rem; background: var(--u-surface); }
+.ld-feat b { display: block; font-size: .98rem; margin-bottom: .35rem; }
+.ld-feat span { font-size: .84rem; color: var(--u-clay); line-height: 1.7; }
+/* 카드가 링크다 — 누르면 그 화면으로 간다 */
+a.ld-feat { display: block; text-decoration: none; color: inherit; }
+a.ld-feat:hover { border-color: var(--u-signal); }
+a.ld-feat:hover b { color: var(--u-signal-ink); }
+.ld-feat .ld-go { color: var(--u-signal); font-weight: 400; }
+
+.ld-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.ld-chips span { display: inline-block; padding: .25rem .65rem; border-radius: 999px;
+                 border: 1px solid var(--u-line); font-size: .78rem; color: var(--u-clay); }
+
+.ld-qa { border-top: 1px solid var(--u-line); padding: .85rem 0; }
+.ld-qa:first-of-type { border-top: 0; }
+.ld-qa b { display: block; font-size: .88rem; margin-bottom: .25rem; }
+.ld-qa p { margin: 0; font-size: .85rem; color: var(--u-clay); line-height: 1.75; }
+
+.ld-end { border: 1px solid var(--u-line); border-radius: 1rem; padding: 1.5rem 1.25rem;
+          text-align: center; background: var(--u-surface2); margin-bottom: 2rem; }
+.ld-end h2 { margin: 0 0 .3rem; font-size: 1.1rem; }
+.ld-end p { margin: 0 0 .9rem; color: var(--u-clay); font-size: .85rem; }
+.ld-end .ld-actions { justify-content: center; }
+
+.ld-foot { border-top: 1px solid var(--u-line); padding-top: 1rem;
+           display: flex; flex-wrap: wrap; gap: .5rem 1rem;
+           justify-content: space-between; font-size: .78rem; color: var(--u-clay); }
+.ld-foot a { color: var(--u-clay); }
+.ld-soon { color: var(--u-clay); font-size: .78rem; margin: .5rem 0 0; }
+</style>{% endblock %}
+{% block content %}
+<div class="user-shell">
+<div class="user-main">
+
+<div class="ld-top">
+  <a class="ld-brand" href="/u/landing">copylane</a>
+  <div class="ld-actions">
+    <a class="ld-cta" href="/login">로그인</a>
+  </div>
+</div>
+
+<div class="ld-hero">
+  <div>
+    <p class="ld-kicker">광고 문구 준법 검수 · 카피생성</p>
+    <h1>올리기 전에,<br>위법 소지부터<br><em>확인하세요</em></h1>
+    <p class="ld-lead">
+      문장 단위로 위법 표현과 <b>근거 조항</b>을 짚어드리고,
+      진단을 통과하는 어휘 안에서 <b>새 카피</b>까지 만들어드려요.
+    </p>
+    <div class="ld-actions">
+      <a class="ld-cta" href="/login">로그인하고 시작하기</a>
+      <a class="ld-cta is-ghost" href="/u/help">사용방법 보기</a>
+    </div>
+    {# ⛔ 회원가입·비밀번호 찾기 라우트가 아직 없다 — 없는 화면으로 링크하지 않는다 (D-147) #}
+    <p class="ld-soon">회원가입과 비밀번호 찾기는 준비 중이에요.</p>
+  </div>
+
+  <div class="ld-demo">
+    <div class="ld-demo-head">
+      <b>검수 미리보기</b>
+      <span class="ld-tag">예시</span>
+    </div>
+    <p class="ld-quote">이 영양제는 매일 섭취 시 <mark class="ld-hit">눈 피로 회복에 탁월한 효과</mark>가 있습니다. 간편하게 하루 한 알로 건강을 챙기세요.</p>
+    <p class="ld-basis">식품표시광고법 제8조 · 질병 예방·치료 효능 표방 소지</p>
+    <p class="ld-arrow">↓ 진단을 통과하는 대안</p>
+    <p class="ld-fix">장시간 화면을 보는 날에도 부담 없이, 하루 한 알로 눈 건강을 챙기는 습관을 시작해보세요.</p>
+  </div>
+</div>
+
+<div class="ld-warn">
+  CopyLane 의 진단 결과는 <b>참고용</b>이며 법적 확정 판단이 아니에요.
+  최종 게재 여부는 반드시 법무 검토를 거쳐 결정하세요.
+</div>
+
+<div class="ld-sect">
+  <h2>무엇을 할 수 있나요</h2>
+  <p class="ld-sub">검수부터 카피생성, 광고물 제작까지 한 곳에서 이어져요.</p>
+  {# ★ 카드 자체가 링크다 — 프로토타입은 로그인으로 보냈지만, 화면이 이미 서 있으니 바로 잇는다. #}
+  <div class="ld-feats">
+    <a class="ld-feat" href="/u/review">
+      <b>검수 <span class="ld-go">→</span></b>
+      <span>문구를 넣으면 문장 단위로 위험 표현과 근거 조항을 짚어드려요.</span>
+    </a>
+    <a class="ld-feat" href="/u/generate">
+      <b>카피생성 <span class="ld-go">→</span></b>
+      <span>진단을 통과하는 어휘 안에서 새 카피를 만들어드려요.</span>
+    </a>
+    <a class="ld-feat" href="/u/compose">
+      <b>AI 광고생성 <span class="ld-go">→</span></b>
+      <span>만든 카피를 상세페이지 · 카드뉴스 · 배너 규격의 광고물로 만들어드려요.</span>
+    </a>
+  </div>
+</div>
+
+<div class="ld-sect">
+  <h2>이런 분야에 씁니다</h2>
+  <p class="ld-sub">법령이 다른 만큼 판정 기준도 카테고리마다 갈려요.</p>
+  <div class="ld-chips">
+    <span>식품 · 건강기능식품</span>
+    <span>화장품</span>
+    <span>의료기기</span>
+    <span>금융 · 투자</span>
+    <span>여행 · 숙박</span>
+    <span>이커머스</span>
+    <span>뷰티 디바이스</span>
+    <span>일반</span>
+  </div>
+</div>
+
+<div class="ld-sect">
+  <h2>서비스 안내</h2>
+  <div>
+    <div class="ld-qa">
+      <b>진단은 법적 확정 판단인가요?</b>
+      <p>아니요, 참고용 진단이에요. 위험 표현과 근거 조항을 미리 보여드리지만, 최종 게재 여부는 법무 검토를 거쳐 직접 결정하셔야 해요.</p>
+    </div>
+    <div class="ld-qa">
+      <b>같은 조직 계정끼리 결과를 공유하나요?</b>
+      <p>같은 조직으로 로그인한 팀원끼리 검수 결과를 함께 보는 것을 목표로 하고 있어요. 조직 밖으로는 공유되지 않아요.</p>
+    </div>
+    <div class="ld-qa">
+      <b>가입에 비용이 드나요?</b>
+      <p>검수·카피생성 기본 기능은 무료로 시작할 수 있어요. 자세한 이용 조건은 로그인 후 확인하실 수 있어요.</p>
+    </div>
+  </div>
+</div>
+
+<div class="ld-end">
+  <h2>지금 로그인하고 시작해보세요</h2>
+  <p>첫 검수까지 3분이면 충분해요.</p>
+  <div class="ld-actions">
+    <a class="ld-cta" href="/login">로그인하고 시작하기</a>
+  </div>
+</div>
+
+<div class="ld-foot">
+  <span>© 2026 CopyLane</span>
+  <span><a href="/u/help">도움말</a></span>
+</div>
+
+</div>{# /.user-main #}
+</div>
+{% endblock %}

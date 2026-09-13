@@ -1,0 +1,117 @@
+{# app/templates/user/history.html — 검수 이력 · 소유자 **ksr** (병렬작업 계약 §5)
+
+  ★ 프로토타입의 `data-screen="history"` 를 옮긴 것이다.
+  ⛔ 목록도 「반복 지적 패턴」도 **판정 이력**에서 나온다 (문서 4-5 「판정 이력」 엔티티).
+     지금은 ① 판정 엔진이 없어 `judgment` 에 행이 없고 ② `app/` 에 DB 세션을 만드는
+     자리가 없다. 🚨 그래서 **목록을 지어내지 않는다** (D-147) —
+     화면 골격만 세우고 왜 비었는지 적는다. 붙는 순간 이 자리에 행이 들어온다.
+  ⬜ 프로토타입은 오른쪽에 상세를 접었다 펴는 서랍(`hist-drawer`)을 둔다 — 그건 JS 라
+     여기서는 문구를 누르면 그 검수 결과 화면으로 가는 링크로 바꾼다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 검수 이력{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+<style>
+/* ══ 화면 폭 ══════════════════════════════════════════════════════
+   🔴 `base.css` 의 `body { max-width: 52rem }` 이 데스크톱에서 **휴대폰처럼 좁게** 보인다.
+      프로토타입은 전폭이다. ⛔ `base.css` 는 팀장 소유라 고치지 않는다 (§5) —
+      사용자 화면에서만 이 `<style>` 이 덮어쓴다. 관리자·로그인 화면은 그대로 둔다.
+   ★ nav 와 사이드바는 좌우 끝까지 붙어야 해서 body 의 좌우 여백만큼 음수 마진을 준다. */
+body { max-width: none; padding: 1.5rem 2rem; }
+.user-nav { margin-left: -2rem; margin-right: -2rem; }
+@media (max-width: 44rem) {
+  body { padding: 1.5rem 1rem; }
+  .user-nav { margin-left: -1rem; margin-right: -1rem; }
+  .user-side { margin-left: -1rem; margin-right: -1rem; }
+}
+</style>
+<style>
+.ht-head { margin-bottom: 1.25rem; }
+.ht-head h1 { margin: 0 0 .25rem; }
+.ht-head p { margin: 0; color: var(--u-clay); font-size: .875rem; }
+
+.ht-card { border: 1px solid var(--u-line); border-radius: 1rem;
+           background: var(--u-surface); padding: 1.1rem 1.15rem; margin-bottom: 1rem; }
+.ht-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
+.ht-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+
+.ht-pattern { border: 1px solid var(--u-signal-soft); background: var(--u-signal-soft);
+              color: var(--u-signal-ink); border-radius: .75rem;
+              padding: .7rem .85rem; font-size: .85rem; line-height: 1.6; }
+
+.ht-row { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center;
+          justify-content: space-between; border-top: 1px solid var(--u-line);
+          padding: .7rem 0; }
+.ht-row:first-of-type { border-top: 0; }
+.ht-row .ht-text { flex: 1; min-width: 12rem; font-size: .88rem; }
+.ht-row .ht-meta { display: flex; gap: .5rem; align-items: center; }
+.ht-badge { display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+            font-size: .74rem; border: 1px solid var(--u-line); color: var(--u-clay); }
+.ht-date { font-size: .74rem; color: var(--u-clay); }
+
+.ht-empty { border: 1px dashed var(--u-line); border-radius: .75rem;
+            padding: 1rem .9rem; color: var(--u-clay); font-size: .85rem; line-height: 1.7; }
+.ht-fixtures { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; padding: 0; margin: .5rem 0 0; }
+.ht-fixtures a { display: inline-block; padding: .2rem .6rem; border: 1px solid var(--u-line);
+                 border-radius: 999px; font-size: .76rem; text-decoration: none; color: var(--u-clay); }
+.ht-fixtures a:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+</style>{% endblock %}
+{% block content %}
+<div class="user-shell">
+{% include "user/_nav.html" %}
+
+{# 🔴 하위 메뉴가 **왼쪽 세로 사이드바**다 (프로토타입 side-slot).
+   `_nav.html` 이 상단 nav 와 `<aside class="user-side">` 를 내고,
+   화면 본문은 여기 `.user-main` 안에 든다 — `.user-shell` 의 그리드가 둘을 나란히 놓는다. #}
+<div class="user-main">
+
+<div class="ht-head">
+  <h1>검수 이력</h1>
+  <p>지난 검수를 다시 열어볼 수 있어요.</p>
+</div>
+
+{# 🚨 집계도 판정 이력에서 나온다 — 없으면 이 카드를 아예 그리지 않는다.
+   「최근 10건 중 6건」 같은 문장을 자리만 채우려고 지어내지 않는다 (D-147). #}
+{% if pattern %}
+<div class="ht-card">
+  <h2>반복 지적 패턴</h2>
+  <p class="ht-pattern">{{ pattern }}</p>
+</div>
+{% endif %}
+
+<div class="ht-card">
+  <h2>검수 기록</h2>
+  {% if rows %}
+  {% for r in rows %}
+  <div class="ht-row">
+    <span class="ht-text">{{ r.text }}</span>
+    <span class="ht-meta">
+      <span class="ht-badge">{{ r.outcome }}</span>
+      <span class="ht-date">{{ r.judged_at }}</span>
+    </span>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="ht-empty">
+    아직 기록이 없어요.<br>
+    검수 기록은 <b>판정 이력</b>에 쌓여요. 지금은 판정 엔진이 붙지 않아 저장되는 것이 없어서,
+    <b>목록을 지어내지 않고 비워 둡니다.</b><br>
+    <span class="ht-note">엔진과 DB 연결이 붙으면 이 자리에 날짜 · 문구 · 위험도가 들어와요.</span>
+  </p>
+  {% endif %}
+</div>
+
+<div class="ht-card">
+  <h2>지금 결과 화면을 보려면</h2>
+  <p class="ht-note">
+    이력 대신 <b>골든 픽스처</b>로 각 분기의 결과 화면을 열 수 있어요 (D-124).
+  </p>
+  <ul class="ht-fixtures">
+  {% for name in fixtures %}
+    <li><a href="/u/preview/{{ name }}">{{ name }}</a></li>
+  {% endfor %}
+  </ul>
+</div>
+
+</div>{# /.user-main #}
+</div>
+{% endblock %}

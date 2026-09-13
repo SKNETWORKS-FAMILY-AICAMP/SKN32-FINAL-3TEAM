@@ -1,13 +1,57 @@
 {# app/templates/user/_nav.html — 사용자 화면 공통 nav · 소유자 lse (병렬작업 계약 §5)
 
-  🚨 화면이 늘 때(카피생성 등) 이 파일에 링크를 추가한다 — 화면마다 nav 를 새로 그리지 않는다.
-  ⬜ 실제로 존재하는 라우트만 링크한다 — 아직 없는 화면(마이페이지 등)은 붙이지 않는다 (D-147 의
-     정신과 같다: 없는 기능을 있는 것처럼 보이지 않는다).
+  🚨 화면이 늘 때 이 파일에 링크를 추가한다 — 화면마다 nav 를 새로 그리지 않는다.
+  ⬜ 실제로 존재하는 라우트만 링크한다 — 아직 없는 화면은 붙이지 않는다 (D-147).
+  🔴 2단이다 (프로토타입 `SECTIONS` · `side-slot`) —
+     **위가 가로 섹션 메뉴, 왼쪽이 세로 하위 메뉴**다. 하위가 가로줄이 아니다.
+     ⛔ 탭 전환을 스크립트로 하지 않는다 (CSP `script-src 'self'`) —
+        **현재 경로로 서버가 고른다.** JS 없이 돈다.
+  ★ 이 파일은 `<aside class="user-side">` 까지만 낸다. 화면 본문은 각 화면이
+    `<div class="user-main">` 에 담고, `.user-shell` 의 그리드가 둘을 나란히 놓는다 —
+    여는 태그를 여기서 내고 닫는 태그를 저기서 닫는 모양을 만들지 않는다.
 #}
+{% set path = request.url.path %}
+{% set section =
+     "adgen" if path.startswith("/u/compose") else
+     "about" if path.startswith("/u/help") else
+     "work"  if path.startswith("/u/review") or path.startswith("/u/generate")
+               or path.startswith("/u/history") or path.startswith("/u/preview")
+             else "home" %}
+
 <nav class="user-nav" aria-label="사용자 메뉴">
   <a class="user-nav-brand" href="/u/">CopyLane</a>
-  <a class="user-nav-link" href="/u/"
-     {% if request.url.path == "/u/" %}aria-current="page"{% endif %}>검수</a>
-  <a class="user-nav-link" href="/u/generate"
-     {% if request.url.path == "/u/generate" %}aria-current="page"{% endif %}>카피생성</a>
+  <a class="user-nav-link" href="/u/help"
+     {% if section == "about" %}aria-current="page"{% endif %}>copylane 소개</a>
+  <a class="user-nav-link" href="/u/review"
+     {% if section == "work" %}aria-current="page"{% endif %}>검수 및 카피생성</a>
+  <a class="user-nav-link" href="/u/compose"
+     {% if section == "adgen" %}aria-current="page"{% endif %}>AI 광고 생성</a>
+  <span class="user-nav-gap"></span>
+  <a class="user-nav-link" href="/u/mypage"
+     {% if path == "/u/mypage" %}aria-current="page"{% endif %}>마이페이지</a>
 </nav>
+
+{% if section != "home" %}
+<aside class="user-side" aria-label="하위 메뉴">
+  <p class="user-side-label">
+    {%- if section == "about" %}copylane 소개
+    {%- elif section == "work" %}검수 및 카피생성
+    {%- else %}AI 광고 생성{% endif -%}
+  </p>
+  {% if section == "about" %}
+    <a class="user-side-link" href="/u/help"
+       {% if request.url.query != "tab=faq" %}aria-current="page"{% endif %}>사용방법</a>
+    <a class="user-side-link" href="/u/help?tab=faq"
+       {% if request.url.query == "tab=faq" %}aria-current="page"{% endif %}>자주 묻는 질문</a>
+  {% elif section == "work" %}
+    <a class="user-side-link" href="/u/review"
+       {% if path.startswith("/u/review") or path.startswith("/u/preview") %}aria-current="page"{% endif %}>검수</a>
+    <a class="user-side-link" href="/u/generate"
+       {% if path.startswith("/u/generate") %}aria-current="page"{% endif %}>카피생성</a>
+    <a class="user-side-link" href="/u/history"
+       {% if path.startswith("/u/history") %}aria-current="page"{% endif %}>이력</a>
+  {% elif section == "adgen" %}
+    <a class="user-side-link" href="/u/compose" aria-current="page">광고 만들기</a>
+  {% endif %}
+</aside>
+{% endif %}

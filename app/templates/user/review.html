@@ -1,0 +1,332 @@
+{# app/templates/user/review.html — 문구 검수 화면 · 소유자 **ksr** (병렬작업 계약 §5)
+
+  🔄 종전에는 `user/index.html` 이었다. `/u/` 가 **홈**이 되면서 화면 이름과 파일 이름을
+     맞춰 옮겼다 — `index.html` 은 첫 화면(홈)이 든다.
+
+  ★ 프로토타입(02_프로토타입_v7.2.html) 의 `data-screen="review-input"` 을 옮긴 것이다.
+    ⛔ 그대로는 못 옮긴다 — 프로토타입은 Tailwind CDN + 인라인 JS 이고 `app/api.py` 의
+       `_CSP_PAGE`(`script-src 'self'`) 가 둘 다 막는다. **구조와 문구만** 옮기고
+       스타일은 `style-src 'unsafe-inline'` 이 열려 있는 화면별 `<style>` 로 든다.
+  🚨 공통 nav 와 색 토큰은 `user/_nav.html` · `static/user.css`(소유자 lse) 를 그대로 쓴다 —
+     화면마다 nav 를 새로 그리지 않는다.
+  🔴 하이라이트를 **HTML 문자열로 조립하지 않는다** (보안점검 P2-9 · D-131).
+     `risk.evidence_span` 의 (start, end) 로 원문을 **잘라서** 세 조각으로 그린다.
+  ⛔ 엔진이 없다 — 가짜 결과를 만들지 않는다 (D-147). 결과는 골든 픽스처로만 그린다 (D-124).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 문구 검수{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+<style>
+/* ══ 화면 폭 ══════════════════════════════════════════════════════
+   🔴 `base.css` 의 `body { max-width: 52rem }` 이 데스크톱에서 **휴대폰처럼 좁게** 보인다.
+      프로토타입은 전폭이다. ⛔ `base.css` 는 팀장 소유라 고치지 않는다 (§5) —
+      사용자 화면에서만 이 `<style>` 이 덮어쓴다. 관리자·로그인 화면은 그대로 둔다.
+   ★ nav 와 사이드바는 좌우 끝까지 붙어야 해서 body 의 좌우 여백만큼 음수 마진을 준다. */
+body { max-width: none; padding: 1.5rem 2rem; }
+.user-nav { margin-left: -2rem; margin-right: -2rem; }
+@media (max-width: 44rem) {
+  body { padding: 1.5rem 1rem; }
+  .user-nav { margin-left: -1rem; margin-right: -1rem; }
+  .user-side { margin-left: -1rem; margin-right: -1rem; }
+}
+</style>
+<style>
+/* 문구 검수 화면 전용. 공통 색 토큰(--u-*)은 user.css 의 .user-shell 에 있다. */
+.rv-head { margin-bottom: 1.25rem; }
+.rv-head h1 { margin: 0 0 .25rem; }
+.rv-head p { margin: 0; color: var(--u-clay); font-size: .875rem; }
+
+.rv-grid { display: grid; gap: 1.25rem; }
+@media (min-width: 48rem) { .rv-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+
+.rv-card {
+  border: 1px solid var(--u-line); border-radius: 1rem;
+  background: var(--u-surface); padding: 1.1rem 1.15rem; margin-bottom: 1rem;
+}
+.rv-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
+.rv-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+
+/* 입력 */
+.rv-count { float: right; color: var(--u-clay); font-size: .75rem; font-weight: 400; }
+.rv-submit {
+  background: var(--u-signal); border-color: var(--u-signal);
+  color: #fff; font-weight: 600; margin-top: .75rem;
+}
+
+/* 종착(outcome) 배지 */
+.rv-outcome {
+  display: inline-block; padding: .25rem .7rem; border-radius: 999px;
+  font-size: .8rem; font-weight: 600; border: 1px solid var(--u-line);
+}
+.rv-outcome.o-pass { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.rv-outcome.o-certificate { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.rv-outcome.o-search_failed { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.rv-outcome.o-hold { background: var(--u-signal-soft); color: var(--u-signal-ink); }
+
+/* 칩 */
+.rv-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .55rem 0 0; }
+.rv-chip {
+  display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+  font-size: .74rem; border: 1px solid var(--u-line); color: var(--u-clay);
+  background: var(--u-surface2);
+}
+.rv-chip.c-r0, .rv-chip.c-r1 { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.rv-chip.c-r2 { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.rv-chip.c-r3, .rv-chip.c-r4 { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.rv-chip.c-warn { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.rv-chip.c-violation { background: var(--u-signal-soft); color: var(--u-signal-ink); border-color: var(--u-signal-soft); }
+
+/* 문장 */
+.rv-sent { border-top: 1px solid var(--u-line); padding: .8rem 0; }
+.rv-sent:first-of-type { border-top: 0; padding-top: .2rem; }
+.rv-text { font-size: .95rem; line-height: 1.75; margin: 0; }
+.rv-hit { background: #fde68a; border-radius: .2rem; padding: 0 .1rem; }
+.rv-sid { font-size: .7rem; color: var(--u-clay); }
+
+/* 산출 내역 (D-09 래칫) */
+.rv-ratchet { display: flex; gap: .35rem; align-items: center; margin-top: .5rem;
+              font-size: .74rem; color: var(--u-clay); }
+.rv-ratchet b { color: var(--u-ink); }
+
+/* 근거 조문 */
+.rv-law { border-left: 2px solid var(--u-signal); padding: .1rem 0 .1rem .6rem;
+          margin: .5rem 0; font-size: .8rem; }
+.rv-law .rv-law-id { color: var(--u-clay); font-size: .72rem; }
+.rv-law blockquote { margin: .25rem 0 0; color: var(--u-clay); font-size: .78rem; }
+
+/* 대체 문구 후보 */
+.rv-cand { border: 1px solid var(--u-line); border-radius: .75rem;
+           padding: .7rem .8rem; margin-bottom: .6rem; background: var(--u-surface2); }
+.rv-cand h3 { margin: 0 0 .3rem; font-size: .85rem; }
+.rv-cand p { margin: .15rem 0; font-size: .85rem; }
+.rv-cand .rv-meta { color: var(--u-clay); font-size: .74rem; }
+
+/* 증명서 */
+.rv-cert { border: 1px solid #fecaca; background: #fef2f2; color: #7f1d1d;
+           border-radius: .75rem; padding: .8rem .9rem; }
+.rv-cert p { margin: .3rem 0; font-size: .85rem; }
+
+/* 엔진 대기 배너 */
+.rv-pending { border: 1px dashed var(--u-line); border-radius: .75rem;
+              padding: .8rem .9rem; color: var(--u-clay); font-size: .85rem; }
+
+/* 픽스처 목록 */
+.rv-fixtures { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; padding: 0; margin: .5rem 0 0; }
+.rv-fixtures a { display: inline-block; padding: .2rem .6rem; border: 1px solid var(--u-line);
+                 border-radius: 999px; font-size: .76rem; text-decoration: none; color: var(--u-clay); }
+.rv-fixtures a:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+.rv-empty { color: var(--u-clay); font-size: .85rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="user-shell">
+{% include "user/_nav.html" %}
+
+{# 🔴 하위 메뉴가 **왼쪽 세로 사이드바**다 (프로토타입 side-slot).
+   `_nav.html` 이 상단 nav 와 `<aside class="user-side">` 를 내고,
+   화면 본문은 여기 `.user-main` 안에 든다 — `.user-shell` 의 그리드가 둘을 나란히 놓는다. #}
+<div class="user-main">
+
+<div class="rv-head">
+  <h1>문구 검수</h1>
+  <p>문구를 넣고 <b>검수</b>를 누르면 오른쪽에 <b>어느 조문에 걸리는지</b>와 <b>왜 걸리는지</b>가 나와요.</p>
+</div>
+
+<div class="rv-grid">
+
+  {# ───────────── 왼쪽 · 문구 입력 ───────────── #}
+  <div>
+    <form class="rv-card" method="post" action="/u/judge">
+      {# 🔴 **POST 다.** 문구를 URL 에 싣지 않는다 (보안점검 P1-4) —
+         GET 이면 접근 로그·브라우저 히스토리·Referer 가 전부 문구를 나른다. #}
+      <h2>검수할 문구 <span class="rv-count">최대 {{ max_text_len }}자</span></h2>
+      <label for="text">광고 문구</label>
+      <textarea id="text" name="text" rows="6" maxlength="{{ max_text_len }}"
+                placeholder="예: 이 제품은 면역력을 높여 줍니다" required>{{ text }}</textarea>
+      <button class="rv-submit" type="submit">검수</button>
+      <p class="rv-note" style="margin-top:.6rem">
+        ⬜ 참고 자료 첨부(상세페이지 캡처·기존 광고물)는 <code>multipart/form-data</code> 가 필요해서
+        팀장 판정 전까지 만들지 않아요.
+      </p>
+    </form>
+
+    <div class="rv-card">
+      <h2>골든 픽스처로 분기 보기</h2>
+      <p class="rv-note">
+        ⛔ 엔진이 없어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).
+        가짜 200 을 만들지 않아요 — 진짜가 오면 두 번 고쳐야 하니까요 (D-147).
+      </p>
+      <ul class="rv-fixtures">
+      {% for name in fixtures %}
+        <li><a href="/u/preview/{{ name }}">{{ name }}</a></li>
+      {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  {# ───────────── 오른쪽 · 위험도 · 근거 ───────────── #}
+  <div>
+  {% if engine_pending %}
+    <div class="rv-card">
+      <h2>위험도</h2>
+      <p class="rv-pending">
+        판정 엔진이 아직 붙지 않았어요. 넣으신 문구는 그대로 두고, <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
+        지금은 왼쪽의 골든 픽스처로 각 분기가 어떻게 보이는지 확인할 수 있어요.
+      </p>
+    </div>
+  {% elif result %}
+    {# ── 종착 ── #}
+    <div class="rv-card">
+      <h2>위험도
+        <span class="rv-outcome o-{{ result.outcome.value }}">
+          {%- if result.outcome.value == "pass" %}통과
+          {%- elif result.outcome.value == "certificate" %}합법화 불가
+          {%- elif result.outcome.value == "search_failed" %}실증 자료 필요
+          {%- else %}전문가 검토{% endif -%}
+        </span>
+      </h2>
+
+      {% for s in result.sentences %}
+      <div class="rv-sent">
+        <span class="rv-sid">{{ s.sent_id }}</span>
+        {% set sp = s.risk.evidence_span %}
+        {% if sp and sp.end > sp.start and sp.end <= s.text|length %}
+        {# 🔴 문자열로 조립하지 않고 **잘라서** 세 조각으로 그린다 (P2-9 · D-131) #}
+        <p class="rv-text">{{ s.text[:sp.start] }}<mark class="rv-hit">{{ s.text[sp.start:sp.end] }}</mark>{{ s.text[sp.end:] }}</p>
+        {% else %}
+        <p class="rv-text">{{ s.text }}</p>
+        {% endif %}
+
+        <div class="rv-chips">
+          <span class="rv-chip">
+            {%- if s.verdict.value == "confirmed" %}확정
+            {%- elif s.verdict.value == "hold" %}보류
+            {%- elif s.verdict.value == "no_basis" %}근거 없음
+            {%- else %}미판정{% endif -%}
+          </span>
+          {% if s.hold_reason %}
+          <span class="rv-chip">
+            {%- if s.hold_reason.value == "low_conf" %}확신 부족
+            {%- elif s.hold_reason.value == "gap2" %}1·2위 격차 부족
+            {%- elif s.hold_reason.value == "cat_unknown" %}카테고리 판별 실패
+            {%- else %}라운드 1 미해소{% endif -%}
+          </span>
+          {% endif %}
+          {% if s.risk.final %}
+          <span class="rv-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
+          {% endif %}
+          {% if s.infeasibility %}
+          <span class="rv-chip c-warn">
+            {{ s.infeasibility.value }} ·
+            {%- if s.infeasibility.value == "A" %} 자격형
+            {%- elif s.infeasibility.value == "B" %} 실증형
+            {%- else %} 절대형{% endif %}
+          </span>
+          {% endif %}
+          {% for v in s.violations %}
+          <span class="rv-chip c-violation">{{ v.value|replace("_", " ") }}</span>
+          {% endfor %}
+          {% if s.evidence_mismatch %}
+          <span class="rv-chip c-warn">근거 불일치 · 재생성됨</span>
+          {% endif %}
+        </div>
+
+        {# 산출 내역 — D-09 래칫: 하한을 인코더가 내리지 못한다 #}
+        <div class="rv-ratchet">
+          <span>산출 내역</span>
+          <span>하한 <b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></span>
+          <span>인코더 <b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></span>
+          <span>최종 <b>{{ s.risk.final.value if s.risk.final else "—" }}</b></span>
+        </div>
+
+        {% for e in s.evidence %}
+        <div class="rv-law">
+          <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
+          <div class="rv-law-id">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
+          {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="rv-empty">문장 판정이 없어요.</p>
+      {% endfor %}
+    </div>
+
+    {# ── 합법화 불가 증명서 (A · C) ── #}
+    {% if result.certificate %}
+    <div class="rv-card">
+      <h2>합법화 불가 증명서</h2>
+      <div class="rv-cert">
+        <p><b>사유 {{ result.certificate.reason.value }}</b>
+          {%- if result.certificate.reason.value == "A" %} · 자격형 — 인정 기능성이 없어요
+          {%- elif result.certificate.reason.value == "B" %} · 실증형 — 근거를 대면 돼요
+          {%- else %} · 절대형 — 표현 자체가 금지예요{% endif %}</p>
+        <p>{{ result.certificate.explanation }}</p>
+        {% if result.certificate.guidance %}<p>{{ result.certificate.guidance }}</p>{% endif %}
+      </div>
+      <p class="rv-note" style="margin-top:.6rem">
+        ⛔ 사유 A 는 <b>대체 문구를 제안하지 않아요</b> — 표현이 아니라 자격의 문제라 재생성이
+        같은 위반을 반복해요 (D-59).
+      </p>
+    </div>
+    {% endif %}
+
+    {# ── 대체 문구 후보 (프론티어 3종 세트) ── #}
+    {% if result.candidates %}
+    <div class="rv-card">
+      <h2>대체 문구 후보</h2>
+      {% for c in result.candidates %}
+      <div class="rv-cand">
+        <h3>{{ c.label }}</h3>
+        <p>{{ c.rewrite.body }}</p>
+        {% if c.rewrite.mandatory_note %}
+        <p class="rv-meta">필수 병기 · {{ c.rewrite.mandatory_note }}</p>
+        {% endif %}
+        {% if c.rewrite.placement %}
+        <p class="rv-meta">배치 · {{ c.rewrite.placement }}</p>
+        {% endif %}
+        <div class="rv-chips">
+          <span class="rv-chip c-{{ c.residual_risk.value|lower }}">잔여 위험도 {{ c.residual_risk.value }}</span>
+          <span class="rv-chip">소구력 보존 {{ (c.appeal_retention * 100)|round|int }}%</span>
+        </div>
+      </div>
+      {% endfor %}
+      <p class="rv-note">
+        ※ 소구력은 전환율·판매 성과가 아니라 <b>원문 대비 정보량 보존율</b>이에요.
+        파레토 최적 후보만 나와요 — 지배당하는 후보는 자동으로 빠져요.
+      </p>
+    </div>
+    {% endif %}
+
+    {# ── 메타 ── #}
+    <div class="rv-card">
+      <h2>판정 메타</h2>
+      <table>
+        <tr><th>법령판</th><td>{{ result.law_version }}</td></tr>
+        <tr><th>판정 버전</th><td>{{ result.judged_by }}</td></tr>
+        <tr><th>라운드</th><td>{{ result.attempt }}</td></tr>
+      </table>
+      {% if result.timings %}
+      <table>
+        {% for t in result.timings %}
+        <tr><th>{{ t.node }}</th><td>{{ t.ms }} ms</td></tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+      <p class="rv-note" style="margin-top:.6rem">
+        본 진단은 문장 단위 1차 스크리닝이며 법적 확정 판단이 아니에요.
+        최종 판단은 심의기구·전문가 검토를 따르세요.
+      </p>
+    </div>
+  {% else %}
+    <div class="rv-card">
+      <h2>위험도 <span class="rv-outcome">검수 전</span></h2>
+      <p class="rv-note">
+        왼쪽에 문구를 넣고 검수를 누르거나, 골든 픽스처를 눌러 각 분기가 어떻게 보이는지 확인해 보세요.
+      </p>
+    </div>
+  {% endif %}
+  </div>
+
+</div>
+</div>{# /.user-main #}
+</div>
+{% endblock %}
