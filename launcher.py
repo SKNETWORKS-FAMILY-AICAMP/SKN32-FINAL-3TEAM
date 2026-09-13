@@ -137,10 +137,26 @@ def setup() -> None:
     """처음 한 번. 필요한 것을 전부 설치하고 준비한다.
 
     파이썬 패키지(`uv sync`) · 커밋 훅(pre-commit) · 설정 파일(`.env`).
+    🔄 **`onboard` 의 1단계와 같은 것을 부른다** (2026-09-13 · D-99) — 종전에는 두 곳에
+       같은 세 줄이 적혀 있었고, 한쪽만 고쳐지면 새 사람이 밟는 쪽이 낡는다.
+    ★ **새 기기라면 이것 말고 `onboard` 를 쓴다** — DB 까지 세우고 **끝에 판정한다.**
     """
-    run("uv", "sync")
-    run("uv", "run", "pre-commit", "install")
+    _install()
+    console.print("\n[dim]새 기기라면 launcher.py onboard 가 DB 까지 세우고 판정합니다.[/dim]")
 
+
+def _install() -> int:
+    """패키지 · 커밋 훅 · `.env` 틀. 🔴 되돌리는 값은 **빨간 건수**다 (D-220).
+
+    ⛔ 실패를 삼키지 않는다 — `uv sync` 가 죽었는데 다음 단계로 가면
+       「환경이 섰다」가 거짓이 된다 (D-162).
+    """
+    red = 0
+    if run("uv", "sync") != 0:
+        console.print("🔴 uv sync 실패 — uv 가 깔려 있는가. https://docs.astral.sh/uv/")
+        red += 1
+    if run("uv", "run", "pre-commit", "install") != 0:
+        console.print("🟡 pre-commit 훅을 못 걸었다 — 커밋은 되지만 검사가 안 돈다")
     env = ROOT / ".env"
     if env.exists():
         console.print(
@@ -150,76 +166,96 @@ def setup() -> None:
     else:
         env.write_bytes((ROOT / ".env.example").read_bytes())
         console.print("  [green]생성[/green] .env  — [bold]LAW_OC_KEY 를 채워야 한다[/bold]")
+    return red
 
 
 @app.command()
-def onboard() -> None:
-    """새 기기에서 이어 붙일 때 — 무엇이 되고 무엇이 안 되는지 순서대로 냅니다.
+def onboard(
+    check: bool = typer.Option(False, "--check", help="아무것도 바꾸지 않고 진단만 한다"),
+) -> None:
+    """새 기기에서 처음부터 — **세우고, 마지막에 판정한다** (D-51 · D-220).
 
-    🚨 **런처가 다 해 줄 수 없습니다.** 셋은 구조상 안 됩니다 —
-       ① `.env` 키 — `.gitignore` 라 안 따라옵니다. 사람이 다시 넣습니다 (D-111)
-       ② `data/raw` 원문 — `.gitignore` 라 안 따라옵니다 (D-19). **다시 받습니다**
-       ③ `git` — 팀 규칙상 사람이 직접 돕니다
+    🔄 **2026-09-13 — 안내만 하던 것을 실행·판정으로 올렸다.**
+       ⛔ 종전에는 DB 를 **화면에 명령어로 찍어 주고 끝**이었고, 종료코드는 **항상 0** 이었다.
+          그래서 팀원은 초록을 한 번도 못 본 채 「됐겠지」로 넘어갔다 (D-170 의 친척 —
+          **아무것도 판정하지 않는 안내**). 실제로 09-13 에 팀원이 막힌 자리가
+          정확히 **런처가 손을 놓는 그 자리**였다 (D-221).
 
-    그래서 이 명령은 **되는 것을 하고, 안 되는 자리를 이름으로 냅니다** (D-51).
+    🚨 **런처가 못 하는 셋은 그대로다** — 지어서 넘어가지 않고 **이름으로 낸다** (D-51) —
+       ① `.env` 키: `.gitignore` 라 안 따라온다. 사람이 다시 넣는다 (D-111)
+       ② `data/raw` 원문: `.gitignore` 라 안 따라온다 (D-19). **다시 받는다**
+       ③ `git`: 팀 규칙상 사람이 직접 돈다
+
+    🔴 **끝에 `doctor --env` 로 판정하고 그 종료코드를 그대로 낸다.** 빨강이면 1 이다.
     """
     import shutil  # noqa: PLC0415
 
     console.print("\n[bold]1. 코드·문서·원장[/bold] — 🚨 사람이 돌립니다")
     console.print("     [bold]git pull[/bold]")
-    console.print(
-        "     ★ 원장(`data/manifest.jsonl`)은 git 으로 따라옵니다 — 팀 축은 여기서 맞습니다"
-    )
+    console.print("     ★ 원장(`data/manifest.jsonl`)은 git 으로 따라옵니다")
 
-    console.print("\n[bold]2. 파이썬 패키지·커밋 훅·.env 틀[/bold]")
-    run("uv", "sync")
-    run("uv", "run", "pre-commit", "install")
-    envf = ROOT / ".env"
-    if not envf.exists():
-        envf.write_bytes((ROOT / ".env.example").read_bytes())
-        console.print("  [yellow]생성[/yellow] .env — 비어 있습니다")
+    if check:
+        console.print("\n[dim]--check — 2~4 단계는 건너뜁니다. 아래는 진단뿐입니다.[/dim]")
+    else:
+        console.print("\n[bold]2. 파이썬 패키지·커밋 훅·.env 틀[/bold]")
+        if _install():
+            console.print("\n🔴 여기서 멈춥니다 — 패키지가 없으면 뒤 단계가 전부 거짓이 됩니다.")
+            raise typer.Exit(1)
 
     console.print("\n[bold]3. API 키[/bold] — 🔴 git 에 없습니다. 사람이 다시 넣습니다")
-    console.print("     [bold]uv run python launcher.py keys[/bold]        현황")
+    console.print("     [bold]uv run python launcher.py keys[/bold]        현황(지문만)")
     console.print("     [bold]uv run python launcher.py setkey LAW_OC_KEY[/bold]")
-    console.print("     [bold]uv run python launcher.py setkey FOODSAFETY_KEY[/bold]")
     console.print("     🚨 값을 인자로 주지 않습니다 — PowerShell 기록에 남습니다 (D-111)")
 
-    console.print("\n[bold]4. DB[/bold]")
+    console.print("\n[bold]4. DB[/bold] — 거버넌스 19표 + 런타임 7표")
     if shutil.which("docker") is None:
-        console.print("  [red]docker 가 없습니다[/red] — Docker Desktop 을 먼저 켭니다")
-    else:
-        console.print("     [bold]uv run python launcher.py db-up[/bold]")
-        console.print(
-            "     [bold]uv run python launcher.py migrate[/bold]   거버넌스 18 + 런타임 6"
-        )
+        console.print("  [red]🔴 docker 가 없습니다[/red] — Docker Desktop 을 켜고 다시 부릅니다.")
+        console.print("     ⛔ 여기서 멈춥니다. DB 없이 「환경이 섰다」고 말하지 않습니다.")
+        raise typer.Exit(1)
+    if not check:
+        if run(sys.executable, str(ROOT / "launcher.py"), "db-up") != 0:
+            console.print("  [red]🔴 db-up 실패[/red] — Docker Desktop 이 켜져 있는지 봅니다.")
+            raise typer.Exit(1)
+        # 🔴 여기가 09-13 에 팀원이 막힌 자리다 (D-221). 이제 런처가 돌리고, 죽으면 멈춘다.
+        if run("uv", "run", "alembic", "upgrade", "head") != 0:
+            console.print(
+                "  [red]🔴 마이그레이션 실패[/red] — 빈 DB 에서만 나는 종류일 수 있습니다."
+            )
+            console.print(
+                "     [bold]uv run python launcher.py db-fresh[/bold] 의 출력을 팀에 주세요 (D-221)."
+            )
+            raise typer.Exit(1)
 
-    console.print("\n[bold]5. 이 기기에 무엇이 없는지[/bold]")
+    console.print("\n[bold]5. 판정[/bold] — 여기서 초록을 봅니다")
+    code = run("uv", "run", "python", "scripts/doctor.py", "--env")
+
+    console.print("\n[bold]6. 이 기기에 없는 것[/bold] — 데이터는 git 으로 안 옵니다 (D-19)")
     console.print("     [bold]uv run python launcher.py inventory[/bold]")
-    console.print(
-        "     🚨 「원장에 있다」는 「이 기기에 있다」가 아닙니다 — 없는 것을 이름으로 냅니다"
-    )
+    console.print("     🚨 「원장에 있다」는 「이 기기에 있다」가 아닙니다")
     console.print(
         "     그 목록대로 [bold]launcher.py collect <소스id> --use U1[/bold] 로 다시 받습니다"
     )
     console.print("     🔴 AI Hub 계열은 사람이 받아 [bold]launcher.py register[/bold] 로 올립니다")
 
-    console.print("\n[bold]6. 파생물 → DB → 벡터[/bold]  (원문을 받은 뒤)")
-    console.print("     [bold]uv run python launcher.py load[/bold]")
-    console.print("     [bold]uv run python launcher.py chunk --dump[/bold]")
+    console.print("\n[bold]7. 원문을 받은 뒤[/bold]  파생물 → DB → 벡터")
     console.print(
-        "     [bold]uv run python launcher.py embed --check[/bold]  🚨 먼저 차원을 잽니다"
+        "     [bold]launcher.py load[/bold] → [bold]chunk --dump[/bold] → "
+        "[bold]embed --check[/bold] → [bold]embed[/bold]"
     )
-    console.print("     [bold]uv run python launcher.py embed[/bold]")
     console.print("     ⚠️ KURE-v1 모델 2.27GB 를 처음 한 번 내려받습니다")
 
-    console.print("\n[bold]7. 확인[/bold]")
-    console.print("     [bold]uv run python launcher.py check[/bold]      게이트 전체")
-    console.print("     [bold]uv run python launcher.py status[/bold]     팀 축 — 쓴다/안 쓴다")
-    console.print("     [bold]uv run python launcher.py doctor[/bold]     원장 ↔ 디스크")
-    console.print("     [bold]uv run python launcher.py serve[/bold]      /health 로 층별 행 수")
+    console.print("\n[bold]8. 콘솔 계정[/bold] — 가입 화면이 없습니다 (D-66 · D-213)")
+    console.print("     [bold]uv run python launcher.py admin-add <이니셜>[/bold]")
 
+    if code:
+        console.print("\n[red]🔴 진단에 빨강이 있습니다[/red] — 위 「고치는 법」을 먼저 읽습니다.")
+    else:
+        console.print(
+            "\n[green]✅ 환경이 섰습니다.[/green] "
+            "⬜ 다만 데이터·모델은 아직입니다 (5·6단계 · D-188)."
+        )
     console.print("\n[dim]무엇을 하던 중이었는지는 docs/ohb/ 의 최신 인계 문서에 있습니다.[/dim]\n")
+    raise typer.Exit(code)
 
 
 @app.command()
@@ -990,6 +1026,7 @@ DANGER: dict[str, str] = {
     "diagram": "도면 PNG 를 덮어쓴다 — 원천이 있는 것만 (D-217)",
     "dmap": "build/decision_map.md 를 덮어쓴다 — 생성물이다 (D-90)",
     "db-fresh": "임시 DB `copylane_freshcheck` 를 만들었다 지운다 — 진짜 DB 는 안 건드린다",
+    "onboard": "패키지를 깔고 DB 컨테이너를 띄우고 마이그레이션을 돌린다 — 새 기기용 (D-221)",
 }
 
 #: 🔴 **플래그가 붙었을 때만** 위험한 것 — (플래그, 이유)

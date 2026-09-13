@@ -202,7 +202,7 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 ```
 게이트 테스트   pytest -m gate   286건
 전체 테스트     pytest           704건
-설계 결정       D-01 ~ D-219     빠진 번호 0
+설계 결정       D-01 ~ D-221     빠진 번호 0
 ```
 
 ---
@@ -213,14 +213,20 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 git clone https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN32-FINAL-3TEAM.git
 cd SKN32-FINAL-3TEAM
 setup.bat          # Windows — 더블클릭
+uv run python launcher.py onboard    # 새 기기 — 세우고 **끝에 판정합니다**
 ```
 
 uv · Python 3.11.9 · 의존성 · 커밋 훅 · `.env` 틀 · 로컬 DB 컨테이너가 한 번에 섭니다. **여러 번 실행해도 안전합니다**(멱등).
 
+🚨 **`onboard` 는 안내가 아니라 실행입니다** — 패키지·훅·`.env` 를 세우고 **DB 를 띄워
+마이그레이션까지 돌린 뒤**, `doctor --env` 로 판정해 **그 종료코드를 냅니다.** 빨강이면 1 입니다.
+⛔ 못 하는 셋은 이름으로만 냅니다 — `.env` 키(D-111) · `data/raw` 원문(D-19) · `git`.
+★ 아무것도 바꾸지 않고 보려면 `onboard --check`.
+
 ```bash
 uv run python launcher.py            # 대화형 메뉴
 uv run python launcher.py doctor     # 이 기기의 상태 진단
-uv run python launcher.py gate       # 거버넌스 게이트 286건
+uv run python launcher.py gate       # 거버넌스 게이트 (수의 정본은 사실원장 · D-54)
 uv run python launcher.py db-up      # 로컬 DB — 127.0.0.1 만 바인딩
 uv run python launcher.py serve      # FastAPI
 ```
