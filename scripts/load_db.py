@@ -8,6 +8,11 @@
 
 🚨 **멱등이다.** 같은 것을 두 번 넣지 않는다 — 모든 적재가 `ON CONFLICT` 로 간다.
    반쯤 넣고 죽은 뒤 다시 돌릴 수 있어야 한다.
+   🔴 **그런데 그것만으로는 부족했다** (2026-09-13 실측). `ON CONFLICT` 는 **같은 키**를 막을
+      뿐, **키가 바뀐 옛 행**은 그대로 남긴다. 골든셋 주입 id 는 `inj:{rule}:{번호}` 라
+      앞 단계가 바뀌면 id 가 갈리고, DB 에 **902행이 고아로 쌓여 있었다**(파일 1,910 / DB 2,812).
+   ★ 그래서 `sweep_golden()` 이 있다 — **적재는 「넣는 것」이 아니라 「선언한 상태로
+      만드는 것」이다** (D-187 · `scripts/embed.py` `sweep_orphans` 와 같은 어법).
 
 🚨 **fail-closed** (D-220). 열거형에 없는 값을 만나면 **멈춘다.** 조용히 건너뛰면
    「행 수가 맞아도 전량이 아니다」가 된다 (D-149).
@@ -66,15 +71,26 @@ def _sources() -> dict[str, dict]:
     return {k: v for k, v in raw.items() if isinstance(v, dict)}
 
 
-def load_sources(cur, dry: bool) -> tuple[int, list[str]]:
+def load_sources(cur, dry: bool) -> tuple[int, list[str], list[str]]:
     """🚨 CHECK 둘을 못 지나는 소스는 **넣지 않고 이름을 돌려준다.**
 
     - `ck_source_four_eyes` — `decided_by <> reviewed_by`, 둘 다 있어야 한다
     - `ck_source_by_attr`   — `attribution IS NOT NULL OR grade = 'G1'`
 
     조용히 건너뛰면 「46개가 다 들어갔다」로 읽힌다. 이름을 들고 나온다.
+
+    🆕 **셋째 값 — DB 에만 있는 소스** (2026-09-13 실측). ⛔ **거두지 않고 이름만 낸다.**
+
+       🔴 실측으로 하나 나왔다 — `foodsafety_admin_measure`. 2026-09-09 에 팀장이
+          **`not_adopted` 로 내린** 소스인데(사유: 웹 목록이 **대표자 실명을 평문으로** 준다)
+          `source` 표에는 `2인 확인 완료` 로 남아 있었다. **DB 만 보면 채택된 소스로 보인다.**
+       ⛔ **골든셋과 정반대 판단이다.** `fragment`·`collect_manifest`·`document` 가 전부
+          `source_id … ON DELETE CASCADE` 라 **한 줄을 지우면 그 아래가 통째로 날아간다.**
+          `sweep_golden` 은 거두는 게 싸고, 여기는 **남기는 게 싸다.**
+       🚨 그러니 이 값은 **판정을 부르는 신호**다 — 지우는 것도, `source` 에 채택 축을
+          만드는 것도 사람 몫이다 (D-66 · D-15).
     """
-    ok, skipped = 0, []
+    ok, skipped, sent = 0, [], set()
     for sid, s in sorted(_sources().items()):
         dec, rev = s.get("decided_by"), s.get("reviewed_by")
         attr = s.get("attribution")
@@ -84,6 +100,7 @@ def load_sources(cur, dry: bool) -> tuple[int, list[str]]:
         if not attr and s.get("grade") != "G1":
             skipped.append(f"{sid} (attribution 없음 · grade={s.get('grade')})")
             continue
+        sent.add(sid)
         if dry:
             ok += 1
             continue
@@ -136,7 +153,12 @@ def load_sources(cur, dry: bool) -> tuple[int, list[str]]:
                 (sid, USE_CODE[axis], val == "allow"),
             )
         ok += 1
-    return ok, skipped
+    # ⬜ 예행은 DB 에 안 붙는다 — **고아를 모른다.** 모르는 것을 0 으로 내지 않는다 (D-63).
+    orphans: list[str] = []
+    if not dry:
+        cur.execute("SELECT source_id FROM source")
+        orphans = sorted({r[0] for r in cur.fetchall()} - sent)
+    return ok, skipped, orphans
 
 
 def load_fragments(cur, dry: bool) -> int:
@@ -453,7 +475,55 @@ GOLDEN_FRAGMENT = {
 }
 
 
-def load_golden(cur, dry: bool) -> tuple[int, collections.Counter]:
+def sweep_golden(cur, declared: set[str]) -> int:
+    """파일에서 사라진 골든셋 행을 거둔다 (2026-09-13 · **D-187 의 골든셋 판**).
+
+    🔴 **왜 생겼나 — 실측 2026-09-13.** 파일 `golden.jsonl` 은 **1,910줄**인데 DB
+       `golden_sample` 은 **2,812행**이었다. `파일에만 0 · DB 에만 902` — **잃은 것은 없고
+       옛 행이 안 거둬진 것**이다.
+
+           origin/split          파일    DB
+           real/train             684   684   ✅
+           real/test_sentence     146   146   ✅
+           approved/test_sentence  60    60   ✅
+           injected/train         784  1568   🔴 정확히 2배
+           approved/train         236   354   🔴 +118
+
+    ⛔ **원천에서 온 행과 평가 split 은 한 행도 안 늘었다. 생성된 행만 쌓인다.**
+       주입 id 는 `inj:{rule_id}:{src}` 인데 `src` 가 **번호**라(`inj:T1:1017` …)
+       앞 단계(분할·사전)가 바뀌면 **id 가 통째로 갈리고 옛 행이 고아로 남는다.**
+    🚨 그러면 **옛 판 주입본이 학습 데이터에 계속 섞인다** — 코드는 고쳤는데 증상이 안
+       사라지고, 다음 사람은 고친 코드를 의심한다 (D-187 이 청크에서 겪은 것과 같다).
+
+    ★ **적재는 「넣는 것」이 아니라 「선언한 상태로 만드는 것」이다.**
+    🚨 `surface_of` 는 자기참조 `ON DELETE CASCADE` 다 — 변형판이 딸려 지워질 수 있어서
+       **고아 수와 실제 삭제 수를 둘 다 낸다.** 다르면 그 차이가 변형판이다.
+    ⛔ **선언이 비었으면 거두지 않는다** (D-220). `--allow-missing` 으로 빈 채 돌렸을 때
+       전부 고아로 보여 **표를 비우는** 자리다 — `embed` 의 `--limit` 가드와 같은 함정이다.
+    """
+    if not declared:
+        print("  ⬜ 선언이 비었다 — **아무것도 거두지 않는다** (표를 비우지 않는다)")
+        return 0
+    cur.execute("SELECT sample_id FROM golden_sample")
+    orphans = sorted({r[0] for r in cur.fetchall()} - declared)
+    if not orphans:
+        return 0
+    # 🚨 **몇 개를 왜 지우는지 먼저 찍는다** — 조용히 지우면 수가 줄어도 아무도 모른다 (D-149).
+    print(f"  🧹 선언에 없는 골든셋 {len(orphans):,}행을 거둔다 (D-187)")
+    for sid in orphans[:5]:
+        print(f"     {sid}")
+    if len(orphans) > 5:
+        print(f"     … 외 {len(orphans) - 5:,}행")
+    cur.execute("DELETE FROM golden_sample WHERE sample_id = ANY(%s)", (orphans,))
+    gone = cur.rowcount
+    if gone != len(orphans):
+        print(
+            f"     🚨 실제 삭제 {gone:,}행 — 차이 {gone - len(orphans):+,}는 `surface_of` 변형판이다"
+        )
+    return gone
+
+
+def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
     """골든셋을 적재한다 (2026-09-10 · D-178).
 
     ⛔ 2026-09-09~10 내내 「판정 둘이 걸려 있다」로 비어 있던 자리다. 실제로 막던 것은 **넷**이었다 —
@@ -466,6 +536,7 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter]:
         DERIVED / "golden" / "golden.jsonl", "uv run python launcher.py golden --write"
     )
     stat: collections.Counter = collections.Counter()
+    declared: set[str] = set()
     n = 0
     for r in rows:
         key = (r["provenance"], r["origin"])
@@ -478,6 +549,7 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter]:
             )
         stat[r["split"]] += 1
         stat[f"unit:{r['unit']}"] += 1
+        declared.add(r["id"])
         if not dry:
             cur.execute(
                 "INSERT INTO golden_sample "
@@ -501,7 +573,10 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter]:
                 ),
             )
         n += 1
-    return n, stat
+    # 🔴 **넣고 나서 거둔다** — 순서가 반대면 이번에 넣을 행까지 고아로 본다.
+    #    ⛔ `--dry-run` 은 DB 에 안 붙으므로 거두지 않는다. 그래서 예행은 **거둘 수를 모른다.**
+    swept = 0 if dry else sweep_golden(cur, declared)
+    return n, stat, swept
 
 
 def main() -> int:
@@ -517,13 +592,16 @@ def main() -> int:
     ALLOW_MISSING = args.allow_missing
 
     if args.dry_run:
+        # 🚨 **예행은 DB 를 안 본다.** 아래 수는 전부 **입력 파일 줄 수**이지 적재 결과가 아니다
+        #    (2026-09-13). ⛔ 종전에는 실제 적재 표와 **모양도 수도 같아서** 구별이 안 됐다.
+        print("── 예행 (--dry-run) ── 🚨 아래는 **입력 파일 줄 수**다. DB 를 안 봤다.")
 
         class _Null:
             def execute(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
                 raise AssertionError("dry-run 에서는 실행하지 않는다")
 
         cur = _Null()
-        n_src, skipped = load_sources(cur, True)
+        n_src, skipped, _ = load_sources(cur, True)
         print(f"  source            {n_src:>6}  (건너뜀 {len(skipped)})")
         for s in skipped:
             print(f"      ⛔ {s}")
@@ -533,8 +611,8 @@ def main() -> int:
         n_dict, n_typed = load_dict(cur, True)
         print(f"  dict_entry        {n_dict:>6}  (유형 붙은 것 {n_typed})")
         print(f"  product_fact      {load_product_fact(cur, True):>6}")
-        n_gold, gstat = load_golden(cur, True)
-        print(f"  golden_sample     {n_gold:>6}")
+        n_gold, gstat, _ = load_golden(cur, True)
+        print(f"  golden_sample     {n_gold:>6}  (⬜ DB 를 안 봐서 거둘 수는 모른다)")
         for k in sorted(gstat):
             print(f"      {k:18} {gstat[k]:>6}")
         return 0
@@ -551,18 +629,23 @@ def main() -> int:
         return 1
 
     with conn, conn.cursor() as cur:
-        n_src, skipped = load_sources(cur, False)
+        n_src, skipped, orphans = load_sources(cur, False)
         print(f"  source            {n_src:>6}  (건너뜀 {len(skipped)})")
         for s in skipped:
             print(f"      ⛔ {s}")
+        if orphans:
+            # 🚨 **지우지 않는다** — 이름만 낸다. 판정은 사람 몫이다 (docstring 참조).
+            print(f"      🔶 DB 에만 있는 소스 {len(orphans)}건 — **레지스트리 통과 목록에 없다**")
+            for s in orphans:
+                print(f"         {s}   ⛔ 거두지 않았다 (CASCADE 로 하위가 날아간다)")
         print(f"  fragment          {load_fragments(cur, False):>6}")
         print(f"  collect_manifest  {load_manifest(cur, False):>6}")
         print(f"  document          {load_documents(cur, False):>6}")
         n_dict, n_typed = load_dict(cur, False)
         print(f"  dict_entry        {n_dict:>6}  (유형 붙은 것 {n_typed})")
         print(f"  product_fact      {load_product_fact(cur, False):>6}")
-        n_gold, gstat = load_golden(cur, False)
-        print(f"  golden_sample     {n_gold:>6}")
+        n_gold, gstat, swept = load_golden(cur, False)
+        print(f"  golden_sample     {n_gold:>6}" + (f"  (거둠 {swept:,})" if swept else ""))
         for k in sorted(gstat):
             print(f"      {k:18} {gstat[k]:>6}")
     print("\n★ 골든셋이 들어갔다 (D-178). 🚨 `risk` 는 비워 둔다 — 시험지는 위험도를 담는 곳이")

@@ -249,10 +249,17 @@ def onboard(
 
     if code:
         console.print("\n[red]🔴 진단에 빨강이 있습니다[/red] — 위 「고치는 법」을 먼저 읽습니다.")
+    elif check:
+        # 🚨 **한 일과 하는 말을 맞춘다.** `--check` 는 아무것도 안 세웠다 —
+        #    여기서 「섰습니다」라고 하면 안내가 판정처럼 읽힌다 (D-170 의 친척).
+        console.print(
+            "\n[green]✅ 진단에 빨강이 없습니다.[/green] "
+            "⬜ **--check 라 아무것도 세우지 않았습니다** — 세우려면 옵션 없이 다시 부릅니다."
+        )
     else:
         console.print(
             "\n[green]✅ 환경이 섰습니다.[/green] "
-            "⬜ 다만 데이터·모델은 아직입니다 (5·6단계 · D-188)."
+            "⬜ 다만 데이터·모델은 아직입니다 (6·7단계 · D-188)."
         )
     console.print("\n[dim]무엇을 하던 중이었는지는 docs/ohb/ 의 최신 인계 문서에 있습니다.[/dim]\n")
     raise typer.Exit(code)
