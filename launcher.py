@@ -425,6 +425,22 @@ def diagram(only: str = typer.Option("", "--only", help="원천 파일 이름(�
     raise typer.Exit(run(*args))
 
 
+@app.command()
+def dmap(
+    open_only: bool = typer.Option(False, "--open", help="⬜ 열린 항목만 화면으로"),
+) -> None:
+    """결정이 코드의 어디에 사는지 표로 뽑는다 — `build/decision_map.md` (D-90).
+
+    ⛔ **「인용 0건」이 「미구현」은 아니다.** 세 갈래가 섞여 있고 **가르는 것은 사람이다** —
+       ① 코드가 아직 없다 ② 코드에는 있는데 D 번호를 안 적었다 ③ 코드로 갈 결정이 아니다.
+    ★ 그 판정은 `docs/02_설계/구현계획.md` 가 든다. 이 명령은 **셀 수 있는 것만** 낸다.
+    """
+    args = ["uv", "run", "python", "-m", "scripts.decision_map"]
+    if open_only:
+        args.append("--open")
+    raise typer.Exit(run(*args))
+
+
 @app.command(name="admin-add")
 def admin_add(initials: str = typer.Argument(..., help="docs/<이니셜>/ 과 같은 철자")) -> None:
     """거버넌스 콘솔 계정을 만든다 — 가입 화면은 없다 (D-66 · D-213).
@@ -952,6 +968,7 @@ DANGER: dict[str, str] = {
     "embed": "DB 를 쓰고 **선언 밖 청크를 지운다** (D-187) · 모델 2.27GB 를 받는다",
     "rebuild": "생성물 넷을 덮어쓴다 — 하나만 돌리면 두 벌이 된다",
     "diagram": "도면 PNG 를 덮어쓴다 — 원천이 있는 것만 (D-217)",
+    "dmap": "build/decision_map.md 를 덮어쓴다 — 생성물이다 (D-90)",
 }
 
 #: 🔴 **플래그가 붙었을 때만** 위험한 것 — (플래그, 이유)
@@ -1015,6 +1032,7 @@ MENU: list[tuple[str, str, object]] = [
     ("32", "Phase 게이트 판정", gate),
     ("33", "프로젝트 사본", sync),
     ("37", "도면 다시 그리기", diagram),
+    ("38", "결정 ↔ 코드 대응표", dmap),
     (GROUP, "", None),
     ("0", "종료", None),
 ]
