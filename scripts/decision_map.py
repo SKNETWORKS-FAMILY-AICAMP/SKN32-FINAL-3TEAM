@@ -54,6 +54,11 @@ _SKIP_DIRS = {
 #:    오탐이 늘면 목록을 아무도 안 읽고, 그러면 진짜 ⬜ 까지 같이 안 읽힌다 (D-167).
 _OPEN = re.compile(r"⬜|미착수|미구현|아직 없다|아직 아니|안 만들었|스텁|미실행|남았다|남는 것")
 
+#: 🚨 **폐기·대체된 결정이 인용 0건인 것은 정상이다.** 섞어 세면 「안 쓰이는 결정」 수가 부풀고,
+#:    부푼 수는 아무도 안 본다 (D-167). 색인 표의 **상태** 칸으로 가른다.
+#:    ⛔ 제목의 취소선(`~~`)으로 가르지 않는다 — 실측: 상태가 「대체됨」인 7건 중 **2건은 취소선이 없다**.
+_DEAD = re.compile(r"폐기|대체됨")
+
 _DREF = re.compile(r"\bD-(\d{1,3})\b")
 _HEAD = re.compile(r"^### (D-\d+) · (.+?)$", re.M)
 _INDEX = re.compile(r"^\|\s*(D-\d+)\s*\|([^|]*)\|([^|]*)\|([^|]*)\|", re.M)
@@ -111,7 +116,9 @@ def render(decisions: dict[str, dict], where: dict[str, list[str]], orphan: list
     def key(d: str) -> int:
         return int(d[2:])
 
-    cited = {d for d in decisions if where.get(f"D-{key(d):02d}")}
+    dead = {d for d in decisions if _DEAD.search(decisions[d]["status"])}
+    live = {d for d in decisions if d not in dead}
+    cited = {d for d in live if where.get(f"D-{key(d):02d}")}
     opened = {d for d in decisions if decisions[d]["open"]}
     L: list[str] = []
     a = L.append
@@ -129,8 +136,10 @@ def render(decisions: dict[str, dict], where: dict[str, list[str]], orphan: list
     a("| | |")
     a("|---|---:|")
     a(f"| 결정 본문 | **{len(decisions)}** |")
+    a(f"| 그중 **폐기·대체됨** — 안 쓰이는 것이 정상 | **{len(dead)}** |")
+    a(f"| **살아 있는 결정** | **{len(live)}** |")
     a(f"| 코드·설정·테스트에 D 번호가 인용된 것 | **{len(cited)}** |")
-    a(f"| 인용 0건 | **{len(decisions) - len(cited)}** |")
+    a(f"| 🔴 **살아 있는데 인용 0건** | **{len(live) - len(cited)}** |")
     a(f"| 본문에 ⬜ 열린 항목이 있는 것 | **{len(opened)}** |")
     a(f"| ⬜ 줄 총량 | **{sum(len(decisions[d]['open']) for d in opened)}** |")
     if orphan:
@@ -153,8 +162,8 @@ def render(decisions: dict[str, dict], where: dict[str, list[str]], orphan: list
             a("")
 
     a("## 2. 결정별 사는 자리\n")
-    a("| D | 분류 | 제목 | 인용 | 대표 자리 | ⬜ |")
-    a("|---|:-:|---|---:|---|:-:|")
+    a("| D | 분류 | 제목 | 인용 | 대표 자리 | ⬜ | 폐기 |")
+    a("|---|:-:|---|---:|---|:-:|:-:|")
     for d in sorted(decisions, key=key):
         v = decisions[d]
         hits = where.get(f"D-{key(d):02d}", [])
@@ -163,7 +172,8 @@ def render(decisions: dict[str, dict], where: dict[str, list[str]], orphan: list
             common = collections.Counter(h.split(":")[0] for h in hits).most_common(2)
             top = " · ".join(f"`{f}`×{c}" if c > 1 else f"`{f}`" for f, c in common)
         a(
-            f"| {d} | {v['cat']} | {v['title'][:52]} | {len(hits)} | {top} | {'⬜' if v['open'] else ''} |"
+            f"| {d} | {v['cat']} | {v['title'][:52]} | {len(hits)} | {top} | "
+            f"{'⬜' if v['open'] else ''} | {'🪦' if d in dead else ''} |"
         )
     a("")
     a("---")
@@ -179,7 +189,9 @@ def main() -> int:
 
     decisions, orphan = load_ledger()
     where = scan_code()
-    cited = sum(1 for d in decisions if where.get(f"D-{int(d[2:]):02d}"))
+    dead = [d for d in decisions if _DEAD.search(decisions[d]["status"])]
+    live = [d for d in decisions if d not in dead]
+    cited = sum(1 for d in live if where.get(f"D-{int(d[2:]):02d}"))
     opened = [d for d in decisions if decisions[d]["open"]]
 
     if args.open:
@@ -196,8 +208,8 @@ def main() -> int:
     print(
         f"✅ {OUT.relative_to(ROOT).as_posix()}  "
         f"({OUT.stat().st_size:,}B)\n"
-        f"   결정 {len(decisions)} · 인용된 것 {cited} · 인용 0건 {len(decisions) - cited} · "
-        f"⬜ 열린 결정 {len(opened)}"
+        f"   결정 {len(decisions)} (폐기·대체 {len(dead)}) · 살아 있는 것 {len(live)} · "
+        f"인용된 것 {cited} · 🔴 인용 0건 {len(live) - cited} · ⬜ 열린 결정 {len(opened)}"
     )
     if orphan:
         print(f"🔴 색인에만 있고 본문이 없는 결정: {' '.join(orphan)} — 인용하면 안 된다 (D-100)")
