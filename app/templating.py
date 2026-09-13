@@ -21,7 +21,7 @@ STATIC_ROOT = Path(__file__).resolve().parent / "static"
 templates = Jinja2Templates(directory=str(TEMPLATE_ROOT))
 
 # 🚨 **가정을 실행 시점에 확인한다.** Jinja2 의 기본값이 바뀌거나 누가 만드는 자리를
-#    늘리면 여기서 즉시 죽는다 — 조용히 열리는 것보다 낫다 (D-72 fail-closed).
+#    늘리면 여기서 즉시 죽는다 — 조용히 열리는 것보다 낫다 (D-220 fail-closed).
 if not templates.env.autoescape:  # pragma: no cover — 기본값이 바뀌어야 도달한다
     raise RuntimeError(
         "Jinja2 자동 이스케이프가 꺼져 있다 — 보안점검 P2-9.\n"
