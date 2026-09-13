@@ -15,18 +15,22 @@
   <header>
     <span class="no">E-03</span>
     <h1>VectorDB 구조</h1>
-    <span class="right">무엇을 벡터에 넣고 무엇을 안 넣는가 · 2026-09-12</span>
+    <span class="right">무엇을 벡터에 넣고 무엇을 안 넣는가 · [실측]/[기획] · 2026-09-12</span>
   </header>
 
   <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
+      <span class="chip">[기획] 아직 안 만들었다</span>
+    </div>
     <div class="pair">
       <fieldset>
         <legend>벡터에 넣는다 — 검색 대상 텍스트</legend>
         <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
-          <b style="color:#186A5E">법령 조문 본문</b><span>조 · 항 · 호 단위 · chunk 2,400</span></div>
+          <b style="color:#186A5E">법령 조문 본문</b><span><span class="tag m">실측</span>조 · 항 · 호 단위 · chunk 2,400</span></div>
         <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
-          <b style="color:#186A5E">고시 · 지침 본문</b><span>일반 · 화장품 · 건기식 · 식품</span></div>
-        <div class="card"><b>사례집 서술 문단</b><span>미확정 — 인용은 조문만 허용</span></div>
+          <b style="color:#186A5E">고시 · 지침 본문</b><span><span class="tag m">실측</span>일반 · 화장품 · 건기식 · 식품</span></div>
+        <div class="card"><b>사례집 서술 문단</b><span><span class="tag p">기획</span>미확정 — 인용은 조문만 허용</span></div>
         <p class="note" style="margin:8px 0 0">
           🚨 <b>조가 길면 쪼갠다</b> — `part_total &gt; 1` 인 근거는 <b>조문의 일부</b>다 (0011 · D-199).
           「제18조」라고만 적으면 3분의 1을 전문으로 인용하는 것이 된다.
@@ -35,25 +39,25 @@
 
       <fieldset class="rsk">
         <legend>벡터에 넣지 않는다 — 관계형</legend>
-        <div class="card flag"><b>별표 제재 기준</b><span>차수 × 제재 × 기간</span></div>
-        <div class="card flag"><b>과징금 부과기준율</b></div>
-        <div class="card flag"><b>벌칙 조항 상한</b></div>
-        <div class="card flag"><b>금지 · 적법 표현 사전</b><span>정확매칭이 위험도 하한을 만든다</span></div>
+        <div class="card flag"><b>별표 제재 기준</b><span><span class="tag p">기획</span>차수 × 제재 × 기간</span></div>
+        <div class="card flag"><b>과징금 부과기준율</b><span><span class="tag p">기획</span>sanction_rule 0행</span></div>
+        <div class="card flag"><b>벌칙 조항 상한</b><span><span class="tag p">기획</span>penal_clause 0행</span></div>
+        <div class="card flag"><b>금지 · 적법 표현 사전</b><span><span class="tag m">실측</span>정확매칭이 위험도 하한을 만든다</span></div>
       </fieldset>
     </div>
 
     <div class="pipe">
-      <div class="box"><b>질의</b><span>광고 문구 한 문장</span></div>
+      <div class="box"><b>질의</b><span><span class="tag m">실측</span>광고 문구 한 문장</span></div>
       <div class="j">→</div>
-      <div class="box pos"><b>어휘 갈래 ✅</b><span>ts_rank_cd · 생성열 chunk.tsv (0010)</span><span>조사 정규화 · to_tsquery('simple')</span></div>
+      <div class="box pos"><b>어휘 갈래</b><span><span class="tag m">실측</span>ts_rank_cd · 생성열 chunk.tsv (0010)</span><span>조사 정규화 · to_tsquery('simple')</span></div>
       <div class="j">+</div>
-      <div class="box pos"><b>벡터 갈래 ✅</b><span>KURE-v1 · 1024차원 · pgvector</span></div>
+      <div class="box pos"><b>벡터 갈래</b><span><span class="tag m">실측</span>KURE-v1 · 1024차원 · pgvector</span></div>
       <div class="j">→</div>
-      <div class="box pos"><b>RRF ✅</b><span>Σ 1/(k+순위) · k=60 [문헌]</span><span>점수를 안 쓰고 순위만 쓴다</span></div>
+      <div class="box pos"><b>RRF</b><span><span class="tag m">실측</span>Σ 1/(k+순위) · k=60 [문헌]</span><span>점수를 안 쓰고 순위만 쓴다</span></div>
       <div class="j">→</div>
-      <div class="box off"><b>리랭커 ⬜</b><span>bge-reranker-v2-m3 · 512 상한</span><span>미착수 — 지금은 RRF 순위 그대로</span></div>
+      <div class="box off"><b>리랭커</b><span><span class="tag p">기획</span>bge-reranker-v2-m3 · 512 상한</span><span>미착수 — 지금은 RRF 순위 그대로</span></div>
       <div class="j">→</div>
-      <div class="box"><b>인용할 조문</b><span>출처표시 · 시행일 동반</span></div>
+      <div class="box"><b>인용할 조문</b><span><span class="tag p">기획</span>출처표시 · 시행일 동반</span></div>
     </div>
 
     <p class="note" style="margin-top:14px">

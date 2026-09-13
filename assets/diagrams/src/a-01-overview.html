@@ -5,6 +5,8 @@
   🔴 **2026-09-12 재작성.** 종전 판은 `chunk_embedding` 을 「미실행」 회색으로 그렸고
      (실제 2,400행), **로그인·관리자·에디션이 아예 없었다** (D-213 으로 섰다).
   🚨 수집기·전처리 모듈 수는 2026-09-10 실측을 그대로 옮겼다 — 이 자리에서 다시 못 쟀다 (D-188).
+  🚨 **「외부 원천」 칸에는 `[실측]`/`[기획]` 을 안 붙인다** (D-219) — 그 축은 **우리가 구현했나**를
+     묻는데 남의 원천에는 뜻이 없다. P-01 의 경쟁 칸과 같은 이유다. **범례에 그렇게 적어 둔다.**
   ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
 -->
 <meta charset="utf-8">
@@ -15,14 +17,18 @@
   <header>
     <span class="no">A-01</span>
     <h1>전체 구성</h1>
-    <span class="right">오프라인 배치 ▸ 온라인 서비스 · 2026-09-12</span>
+    <span class="right">오프라인 배치 ▸ 온라인 서비스 · [실측]/[기획] · 2026-09-12</span>
   </header>
 
   <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
+      <span class="chip">[기획] 아직 안 만들었다</span>
+    </div>
     <div class="cols5">
 
       <fieldset>
-        <legend>외부 원천</legend>
+        <legend>외부 원천 — 남의 것이라 태그 없음</legend>
         <div class="card"><b>법령 API</b><span>법령 · 고시</span></div>
         <div class="card"><b>공정위 의결서</b><span>ftc_decisions</span></div>
         <div class="card"><b>식약처 게시판</b><span>mfds_board</span></div>
@@ -31,40 +37,40 @@
 
       <fieldset>
         <legend>수집 게이트</legend>
-        <div class="card gov" style="border-left:3px solid #164B72;background:#F7FAFC">
-          <b>registry.require()</b><span>등급 G0~G3 × 용도 U1~U4</span><span>2인 서명까지 함께 본다</span></div>
+        <div class="card gov">
+          <b>registry.require()</b><span><span class="tag m">실측</span>등급 G0~G3 × 용도 U1~U4</span><span>2인 서명까지 함께 본다</span></div>
         <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
-          <b style="color:#8A94A0">미등재 · 미서명</b><span>수집이 실행되지 않는다</span></div>
+          <b style="color:#8A94A0">미등재 · 미서명</b><span><span class="tag m">실측</span>수집이 실행되지 않는다</span></div>
       </fieldset>
 
       <fieldset>
         <legend>오프라인 배치</legend>
-        <div class="card"><b>collect/</b><span>수집기 15종</span></div>
-        <div class="card"><b>data/raw</b><span>원문 무손상</span></div>
-        <div class="card"><b>preprocess/</b><span>24 모듈</span></div>
-        <div class="card"><b>load_db.py</b><span>fail-closed (D-72)</span></div>
-        <div class="card"><b>embed.py</b><span>KURE-v1 · 1024차원</span></div>
+        <div class="card"><b>collect/</b><span><span class="tag m">실측</span>수집기 15종</span></div>
+        <div class="card"><b>data/raw</b><span><span class="tag m">실측</span>원문 무손상</span></div>
+        <div class="card"><b>preprocess/</b><span><span class="tag m">실측</span>24 모듈</span></div>
+        <div class="card"><b>load_db.py</b><span><span class="tag m">실측</span>fail-closed (D-72)</span></div>
+        <div class="card"><b>embed.py</b><span><span class="tag m">실측</span>KURE-v1 · 1024차원</span></div>
       </fieldset>
 
       <fieldset>
         <legend>PostgreSQL 16 · pgvector</legend>
         <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
-          <b style="color:#186A5E">데이터층 19표</b><span>법령 · 사전 · 골든셋 · 위험도</span></div>
+          <b style="color:#186A5E">데이터층 19표</b><span><span class="tag m">실측</span>법령 · 사전 · 골든셋 · 위험도</span></div>
         <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
-          <b style="color:#186A5E">런타임층 7표</b><span>사용자 문서 · 판정 이력</span><span>app_account 신설 (D-213)</span></div>
-        <div class="card" style="border-left:3px solid #286E4C;background:#F7FBF9">
-          <b style="color:#286E4C">chunk_embedding ✅</b><span>2,400 · vector(1024)</span><span>chunk.tsv 생성열 (0010)</span></div>
+          <b style="color:#186A5E">런타임층 7표</b><span><span class="tag m">실측</span>사용자 문서 · 판정 이력</span><span>app_account 신설 (D-213)</span></div>
+        <div class="card pos">
+          <b>chunk_embedding</b><span><span class="tag m">실측</span>2,400 · vector(1024)</span><span>chunk.tsv 생성열 (0010)</span></div>
       </fieldset>
 
       <fieldset>
         <legend>온라인 서비스</legend>
-        <div class="card"><b>FastAPI</b><span>/health · POST /search</span><span>보안 헤더 · 로그 마스킹</span></div>
+        <div class="card"><b>FastAPI</b><span><span class="tag m">실측</span>/health · POST /search</span><span>보안 헤더 · 로그 마스킹</span></div>
         <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
-          <b style="color:#8A94A0">판정 코어</b><span>/judge → 501</span></div>
+          <b style="color:#8A94A0">판정 코어</b><span><span class="tag m">실측</span>/judge → 501</span></div>
         <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
-          <b style="color:#8A94A0">생성기 · 템플릿</b><span>Phase 3</span></div>
-        <div class="card gov" style="border-left:3px solid #164B72;background:#F7FAFC">
-          <b>거버넌스 콘솔</b><span>/login · /admin — Argon2id</span><span>cloud 에디션에선 안 붙는다</span></div>
+          <b style="color:#8A94A0">생성기 · 템플릿</b><span><span class="tag p">기획</span>Phase 3</span></div>
+        <div class="card gov">
+          <b>거버넌스 콘솔</b><span><span class="tag m">실측</span>/login · /admin — Argon2id</span><span>cloud 에디션에선 안 붙는다</span></div>
       </fieldset>
 
     </div>

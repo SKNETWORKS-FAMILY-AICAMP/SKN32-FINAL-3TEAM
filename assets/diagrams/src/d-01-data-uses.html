@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+  D-01 · 학습 · RAG · 업무활용 3분류   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-09-13 재작성.** 종전 판에서 고친 것 넷 —
+     ① `chunk_embedding` 을 회색 「미실행」으로 그렸다 → **2,400행 · chunk 와 1:1** (상태 역전)
+     ② `law_annex` **392행** → 실제 **243행** (5법령 · 별표 12건 · 감사 통과)
+     ③ `injected_golden` **901** → **902** · `golden_sample` **1,908** → **1,910**
+     ④ 「law_article · law_annex · law_norm 은 **표가 아니라 파생 파일**」임을 칸에 적었다 —
+        옆칸의 `chunk_embedding`(표)과 같은 글씨로 놓여 **둘이 같은 것처럼** 보였다 (D-167).
+  ✅ **다시 재서 맞았던 것** — 아래 띠의 `등재 47 · U1 35 · U2 24 · U3 25 · U4 35 · 2인 서명 37`
+     은 2026-09-13 `data_sources.yaml` 실측과 **전부 일치한다.** 낡은 줄 알고 열었는데 아니었다.
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) · 수의 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>D-01 학습 · RAG · 업무활용 3분류</title>
+<link rel="stylesheet" href="plate.css">
+
+<div class="plate">
+  <header>
+    <span class="no">D-01</span>
+    <h1>학습 · RAG · 업무활용 3분류</h1>
+    <span class="right">용도 게이트가 실행 시점에 집행한다 · [실측]/[기획] · 2026-09-13</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 만들어졌고 세어 봤다</span>
+      <span class="chip">[기획] 아직</span>
+      <span class="chip gov">🔒 표(DB)와 파생 파일(JSONL)을 갈라 적는다</span>
+    </div>
+
+    <div class="cols">
+
+      <fieldset>
+        <legend>학습 — U1 (허용 35 / 47)</legend>
+        <div class="card pos"><b>golden_sample <span class="tag m">실측</span></b>
+          <span>🗄 표 · <b style="display:inline">1,910행</b> — 학습 1,704 · 평가 206</span>
+          <span>labels · unit · origin · split</span></div>
+        <div class="card pos"><b>injected_golden <span class="tag m">실측</span></b>
+          <span>📄 파생 파일 · <b style="display:inline">902건</b> · 규칙 T1~T10 주입</span>
+          <span>주입 1,375 → 902 (음성 평가로 봉인된 60문구 제외)</span>
+          <span>⬜ T3 제품유형 오인 미구현 — 건기식_오인은 주입 0</span></div>
+        <div class="card pos"><b>5층 코퍼스 · 반례 <span class="tag m">실측</span></b>
+          <span>aihub · nsmc · klue — 정상 문장</span></div>
+        <div class="card gov"><b>분할은 문서 단위</b>
+          <span><span class="tag m">실측</span>seed 20260909 · split_key = doc_id</span>
+          <span>입력 지문이 바뀌면 멈춘다</span></div>
+        <div class="card flag"><b>주입본은 평가셋에 못 들어간다</b>
+          <span><span class="tag m">실측</span>CHECK 로 막는다 — 문장으로 안 남긴다</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>RAG · 인용 — U2 24 / U3 25</legend>
+        <div class="card pos"><b>law_article <span class="tag m">실측</span></b>
+          <span>📄 파생 파일 · <b style="display:inline">2,207 노드</b> · 조 · 항 · 호</span>
+          <span>조 325 · 항 1,050 · 호 909 (+ 별표 301)</span></div>
+        <div class="card pos"><b>law_annex · law_norm <span class="tag m">실측</span></b>
+          <span>📄 파생 파일 · 별표 <b style="display:inline">243행</b> (5법령 · 12건) + 노름 <b style="display:inline">300 노드</b></span>
+          <span>별표 제재 기준 · 🚨 감사 통과 — 사람이 볼 행 0</span></div>
+        <div class="card pos"><b>chunk · chunk_embedding <span class="tag m">실측</span></b>
+          <span>🗄 표 · 청크 <b style="display:inline">2,400</b> = 벡터 <b style="display:inline">2,400</b> (1:1)</span>
+          <span>vector(1024) KURE-v1 · 어휘 tsv 생성열 (0010)</span>
+          <span>어휘 + 벡터를 RRF 로 섞는다 (D-193)</span></div>
+        <div class="card gov"><b>인용에 반드시 따라가는 것</b>
+          <span><span class="tag m">실측</span>조문번호 · doc_type · 시행일</span>
+          <span>attribution · url — 출처표시 의무</span></div>
+        <div class="card flag"><b>사례집은 U1 · U2 deny</b>
+          <span><span class="tag m">실측</span>해설서를 학습하면 해설서를 외운다</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>업무활용 — 사용자가 만든 것</legend>
+        <div class="card pos"><b>work_doc · copy_sentence <span class="tag m">실측</span></b>
+          <span>🗄 표 · consent_store 기본 false</span></div>
+        <div class="card pos"><b>judgment <span class="tag m">실측</span></b>
+          <span>🗄 표 · 새 행을 쌓는다 · law_version</span>
+          <span>고친 판정이 옛 판정을 덮지 않는다</span></div>
+        <div class="card pos"><b>upload_blob <span class="tag m">실측</span></b>
+          <span>🗄 표 · 판정 후 원문 파기</span></div>
+        <div class="card gov"><b>지울 키가 있어야 지운다</b>
+          <span><span class="tag m">실측</span>CHECK consent_store OR expires_at IS NOT NULL</span></div>
+        <div class="card pos"><b>학습으로 가는 경로가 없다</b>
+          <span><span class="tag m">실측</span>consent_train 이 유일한 해제</span>
+          <span>런타임층 → 데이터층 FK 가 없다 (E-02)</span></div>
+      </fieldset>
+    </div>
+
+    <div class="legend">
+      <span class="chip">등재 47</span>
+      <span class="chip">U1 35</span>
+      <span class="chip">U2 24</span>
+      <span class="chip">U3 25</span>
+      <span class="chip">U4 35</span>
+      <span class="chip pos">2인 서명 37 / 47</span>
+      <span class="chip">미채택 13</span>
+    </div>
+
+    <p class="note" style="margin:10px 0 0">
+      ⚠️ <b>「2인 서명」에 분모가 둘 있다</b> (D-178) — <code>data_sources.yaml</code> 은
+      <b>37 / 47</b>(등재만), <code>scripts/registry_review.yaml</code> 은 <b>38 / 51</b>(미채택 포함)이다.
+      <b>세는 대상이 달라서 다른 수</b>이고 둘 다 맞다. ⛔ 분모 없이 「37」만 옮겨 적지 않는다.
+      🚨 이 칸은 <b>사람만 채운다</b> — 내가 채우면 D-66 이 무효가 된다.
+    </p>
+  </div>
+
+  <footer>
+    <span class="k">용도는 문서가 아니라 실행 시점에 집행된다.</span>
+    등급표를 읽어 사람이 지키는 것이 아니라, <span class="k">적재기가 U1~U4 를 보고 스스로 건너뛴다</span> —
+    「학습에 쓰면 안 된다」가 주석으로만 남지 않게 (D-72 · D-117).
+    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 🗄 표 = DB · 📄 파생 파일 = data/derived · 원천은 src/d-01-data-uses.html (D-217)</div>
+  </footer>
+</div>
