@@ -61,7 +61,7 @@ LOCKOUT_SEC = 300
 
 
 class AuthUnavailable(RuntimeError):
-    """`argon2-cffi` 가 없다. 🚨 **조용히 약한 해시로 떨어지지 않는다** (D-72)."""
+    """`argon2-cffi` 가 없다. 🚨 **조용히 약한 해시로 떨어지지 않는다** (D-220)."""
 
 
 def _hasher():  # noqa: ANN202 — argon2 타입은 지연 import 라 여기서 못 적는다
@@ -184,7 +184,7 @@ def new_csrf() -> str:
 
 
 def csrf_ok(cookie: str | None, form_value: str | None) -> bool:
-    """이중 제출 대조. ⛔ 둘 중 하나라도 비면 실패다 (D-72 — 없음이 통과가 되지 않는다)."""
+    """이중 제출 대조. ⛔ 둘 중 하나라도 비면 실패다 (D-220 — 없음이 통과가 되지 않는다)."""
     return bool(cookie) and bool(form_value) and hmac.compare_digest(cookie, form_value or "")
 
 

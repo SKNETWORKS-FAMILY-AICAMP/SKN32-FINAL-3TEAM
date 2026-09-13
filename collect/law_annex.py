@@ -290,7 +290,7 @@ def collect_annex(law_id: str, *, dry_run: bool = False, forms: bool = False) ->
         #    그런데 서식의 표 행도 `needs_review: True` 로 파싱 산출물에 들어간다 —
         #    **화장품법 시행규칙은 별표 88행 · 서식 157행으로 서식이 64% 다**(2026-09-09 실측).
         #    2인 대조가 봐야 할 목록의 3분의 2가 신청서 칸이 되면 대조는 형식만 남는다.
-        #    받고 싶으면 `--forms` 로 연다 — 기본은 닫는다 (D-72 fail-closed).
+        #    받고 싶으면 `--forms` 로 연다 — 기본은 닫는다 (D-220 fail-closed).
         if kind != "별표" and not forms:
             continue
 

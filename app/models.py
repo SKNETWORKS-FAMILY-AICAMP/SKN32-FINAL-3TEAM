@@ -329,6 +329,6 @@ class AppAccount(Base):
 
     __table_args__ = (
         CheckConstraint("role in ('governor')", name="ck_app_account_role"),
-        # 🔴 PHC 접두어 강제 — 약한 해시가 들어오는 길을 **DB 가** 막는다 (D-72 · P1-7)
+        # 🔴 PHC 접두어 강제 — 약한 해시가 들어오는 길을 **DB 가** 막는다 (D-220 · P1-7)
         CheckConstraint("pw_hash LIKE '$argon2id$%'", name="ck_app_account_phc"),
     )

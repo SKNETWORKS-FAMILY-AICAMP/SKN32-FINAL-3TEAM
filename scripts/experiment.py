@@ -62,7 +62,7 @@ def harness_file(track: str) -> Path:
 
 #: 🔴 **팀원이 못 바꾸는 키.** D-94 가 「팀장이 고정하는 것」이라 적은 넷이다.
 #:    ⛔ 이 이름이 팀원 설정의 `params` 에 나타나면 거부한다 — 덮어쓰기가 아니라 **거부**다.
-#:       조용히 무시하면 팀원은 자기가 준 값으로 돈 줄 안다 (D-72 fail-closed).
+#:       조용히 무시하면 팀원은 자기가 준 값으로 돈 줄 안다 (D-220 fail-closed).
 LOCKED = ("split_id", "seed", "eval_metric", "noise_runs")
 
 
@@ -143,7 +143,7 @@ class ExperimentConfig(BaseModel):
 
 
 def load_harness(track: str, path: Path | None = None) -> Harness:
-    """트랙의 harness. 🚨 없으면 **멈춘다** — 「없음」이 기본값으로 집계되지 않게 (D-72)."""
+    """트랙의 harness. 🚨 없으면 **멈춘다** — 「없음」이 기본값으로 집계되지 않게 (D-220)."""
     path = path or harness_file(track)
     if not path.exists():
         raise SystemExit(

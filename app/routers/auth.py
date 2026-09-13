@@ -113,7 +113,7 @@ def _lookup(initials: str) -> str | None:
                 (initials,),
             )
             row = cur.fetchone()
-    except Exception:  # noqa: BLE001 — DB 없음·표 없음 모두 「로그인 불가」다 (D-72)
+    except Exception:  # noqa: BLE001 — DB 없음·표 없음 모두 「로그인 불가」다 (D-220)
         return None
     return row[0] if row else None
 

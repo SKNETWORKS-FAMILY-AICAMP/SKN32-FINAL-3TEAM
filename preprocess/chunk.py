@@ -215,7 +215,7 @@ def main() -> int:
     ap.add_argument("--dump", action="store_true")
     args = ap.parse_args()
 
-    # 🔴 **한쪽만 있어도 실패한다** (2026-09-10 · D-72).
+    # 🔴 **한쪽만 있어도 실패한다** (2026-09-10 · D-220).
     #    ⛔ 종전에는 `if not rows:` 라 **둘 다** 비어야 실패했다. `data/derived/law_norm/`
     #       이 없으면 별표 청크 0개인 `chunks.jsonl` 이 **초록으로** 만들어진다 —
     #       임베딩까지 그대로 흘러가고 수치는 아무 데도 안 튄다 (D-149 의 다른 문).
