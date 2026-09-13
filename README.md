@@ -13,8 +13,8 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![tests](https://img.shields.io/badge/tests-704_(gate_286)-0F7B4F?style=flat-square)
-![decisions](https://img.shields.io/badge/설계결정-D--219-2B5BD7?style=flat-square)
+![tests](https://img.shields.io/badge/tests-716_(gate_297)-0F7B4F?style=flat-square)
+![decisions](https://img.shields.io/badge/설계결정-D--223-2B5BD7?style=flat-square)
 
 **[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 219건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
 
@@ -200,8 +200,8 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 | 파인튜닝 · 평가 | 🔴 **미착수** | 평가 홀드아웃 4유형 공백 |
 
 ```
-게이트 테스트   pytest -m gate   286건
-전체 테스트     pytest           704건
+게이트 테스트   pytest -m gate   297건
+전체 테스트     pytest           716건
 설계 결정       D-01 ~ D-223     빠진 번호 0
 ```
 
@@ -305,7 +305,7 @@ uv run python launcher.py serve      # FastAPI
 | | |
 |---|---|
 | **D-54** | 수치는 한 곳에서만 정의한다 — 옮겨 적는 순간 최신화 비용이 문서 수만큼 는다 |
-| **D-72** | 게이트는 fail-closed — 모르면 막는다 |
+| **D-220** | **없음이 성공으로 집계되지 않는다** — fail-closed. 🚨 이 규칙이 오래 **D-72 로 잘못 인용**돼 있었다 |
 | **D-40** | 표본 30건 미만은 **「측정 불가」** — 좋다고도 나쁘다고도 적지 않는다 |
 | **D-170** | **실패할 수 없는 단언을 쓰지 않는다** — 항상 통과하는 테스트는 검사가 아니다 |
 | **D-175** | 평가셋은 **채점 규칙을 고르는 데도** 쓰지 않는다 |
