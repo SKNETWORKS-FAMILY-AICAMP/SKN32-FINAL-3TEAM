@@ -83,3 +83,16 @@ async def judge(request: Request) -> HTMLResponse:
         #    되돌려 그릴 때는 **템플릿이 이스케이프한다** (P2-9). 문자열 조립 금지.
         {"fixtures": names, "max_text_len": PARAMS.max_text_len},
     )
+
+
+@router.get("/generate", response_class=HTMLResponse)
+def generate_page(request: Request) -> HTMLResponse:
+    """카피 생성 화면 자리. ★ **골격만** — 세그먼트·키워드 폼은 세부 화면 담당이 채운다.
+
+    `judge`/`index` 와 같은 패턴이다: DB·엔진 없이 골든 픽스처(`GenerateResponse`,
+    D-181)로 뜬다. `POST /generate` 코어는 아직 501 이다 — 여기서 부르지 않는다.
+    """
+    from app.api import FIXTURE_ROOT  # noqa: PLC0415
+
+    names = sorted(p.stem for p in (FIXTURE_ROOT / "generate").glob("*.json"))
+    return templates.TemplateResponse(request, "user/generate.html", {"fixtures": names})

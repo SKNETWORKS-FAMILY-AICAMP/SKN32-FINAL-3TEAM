@@ -1,0 +1,32 @@
+{# app/templates/user/generate.html — 카피 생성 화면 · 소유자 ksr (병렬작업 계약 §5)
+
+  ★ 이 파일은 **골격만** 잡아 둔 것 — index.html 과 같은 요령이다. 세그먼트·키워드
+    선택 폼과 프론티어 결과(리스크–소구력)는 2W 산출물의 `gen-input`·`gen-result`
+    화면설계서를 옮겨서 채운다 (§8 ⑥).
+  🚨 `GenerateRequest` 는 `segment` 가 필수다 (app/contracts.py) — 폼 필드가 하나가
+     아니라서 `judge` 처럼 `_form_field` 로 안 끝난다. 여러 필드를 받게 되면
+     `python-multipart` 없이 `urllib.parse.parse_qs` 로 계속 갈지 판단이 필요하다.
+  ⛔ `POST /generate` 코어는 아직 501 이다 (D-181) — 진짜로 부르지 않는다.
+     지금은 `judge` 화면처럼 골든 픽스처 목록만 보여준다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 카피 생성{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block content %}
+<div class="user-shell">
+{% include "user/_nav.html" %}
+<h1>카피 생성</h1>
+
+<p>세그먼트와 키워드를 넣으면 리스크–소구력 프론티어(파레토 최적 3안)를 돌려준다.</p>
+
+<section>
+  <h2>지금 붙일 수 있는 것</h2>
+  {# ⛔ 엔진이 없다. 화면은 **픽스처로 모든 분기를 그린다** (D-124).
+     가짜 200 을 만들지 않는다 — 진짜가 오면 두 번 고친다 (D-147). #}
+  <ul>
+  {% for name in fixtures %}
+    <li><a href="/fixtures/generate/{{ name }}">{{ name }}</a></li>
+  {% endfor %}
+  </ul>
+</section>
+</div>
+{% endblock %}
