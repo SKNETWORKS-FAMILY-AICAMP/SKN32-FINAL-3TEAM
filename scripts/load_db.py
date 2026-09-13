@@ -71,7 +71,9 @@ def _sources() -> dict[str, dict]:
     return {k: v for k, v in raw.items() if isinstance(v, dict)}
 
 
-def load_sources(cur, dry: bool) -> tuple[int, list[str], list[str]]:
+def load_sources(
+    cur, dry: bool
+) -> tuple[int, list[str], list[str], list[tuple[str, int, int, int]]]:
     """🚨 CHECK 둘을 못 지나는 소스는 **넣지 않고 이름을 돌려준다.**
 
     - `ck_source_four_eyes` — `decided_by <> reviewed_by`, 둘 다 있어야 한다
@@ -79,16 +81,37 @@ def load_sources(cur, dry: bool) -> tuple[int, list[str], list[str]]:
 
     조용히 건너뛰면 「46개가 다 들어갔다」로 읽힌다. 이름을 들고 나온다.
 
-    🆕 **셋째 값 — DB 에만 있는 소스** (2026-09-13 실측). ⛔ **거두지 않고 이름만 낸다.**
+    🆕 **셋째·넷째 값 — DB 에만 있는 소스** (2026-09-13). **하위가 있느냐로 가른다.**
 
        🔴 실측으로 하나 나왔다 — `foodsafety_admin_measure`. 2026-09-09 에 팀장이
           **`not_adopted` 로 내린** 소스인데(사유: 웹 목록이 **대표자 실명을 평문으로** 준다)
           `source` 표에는 `2인 확인 완료` 로 남아 있었다. **DB 만 보면 채택된 소스로 보인다.**
-       ⛔ **골든셋과 정반대 판단이다.** `fragment`·`collect_manifest`·`document` 가 전부
-          `source_id … ON DELETE CASCADE` 라 **한 줄을 지우면 그 아래가 통째로 날아간다.**
-          `sweep_golden` 은 거두는 게 싸고, 여기는 **남기는 게 싸다.**
-       🚨 그러니 이 값은 **판정을 부르는 신호**다 — 지우는 것도, `source` 에 채택 축을
-          만드는 것도 사람 몫이다 (D-66 · D-15).
+
+       ★ **이건 새 판정이 아니라 판정의 귀결이다.** `source` 표는 **정본
+         (`data_sources.yaml`)의 사본**이다. 정본이 미채택이면 사본에서도 없어야 한다.
+         ⛔ 처음에는 「사람이 정할 것」으로 냈는데 **이미 내려진 판정을 다시 묻는 것**이었다.
+
+       🚨 **그래도 무조건 지우지는 않는다.** `source(source_id)` 를 가리키는 FK 는 **다섯**이다 —
+
+           source.supersedes    ON DELETE **SET NULL**   ← 🔴 제일 조용하다
+           source_constraint    ON DELETE CASCADE        ← 소속 속성
+           source_use           ON DELETE CASCADE        ← 소속 속성
+           fragment             ON DELETE CASCADE        ← 데이터
+           collect_manifest     ON DELETE CASCADE        ← 데이터
+
+           데이터·계보 참조 0  →  거둔다   (판정의 귀결)
+           하나라도 있다       →  **이름만 내고 멈춘다** (별개 사안)
+
+       🔴 **`supersedes` 를 세는 이유** — CASCADE 는 행이 사라져 눈에 띄지만 **SET NULL 은
+          남은 행의 칸 하나가 조용히 빈다.** *「내가 얘를 대체했다」* 는 계보가 **아무 표시 없이**
+          지워진다. ⛔ 처음 판에서 이 FK 를 빠뜨렸다 — 팀장이 *「정말 문제가 없나」* 라 물어
+          FK 를 전수로 세고 나서야 나왔다.
+       ⛔ `source_use`·`source_constraint` 는 **세지 않는다** — 소스의 **소속 속성**이라
+          소스 없이는 뜻이 없다. 같이 지워지는 게 맞다.
+          실측: `foodsafety_admin_measure` 는 `fragment` 0 · `collect_manifest` 0 ·
+          `document`(경유) 0 · `source_use` 4 · `source_constraint` 1.
+       ⛔ **`sent` 가 비면 아무것도 안 거둔다** — 레지스트리가 망가지면 전부 고아로 보인다.
+          `sweep_golden` 의 「선언이 비면」 가드와 같은 자리다 (D-220).
     """
     ok, skipped, sent = 0, [], set()
     for sid, s in sorted(_sources().items()):
@@ -154,11 +177,26 @@ def load_sources(cur, dry: bool) -> tuple[int, list[str], list[str]]:
             )
         ok += 1
     # ⬜ 예행은 DB 에 안 붙는다 — **고아를 모른다.** 모르는 것을 0 으로 내지 않는다 (D-63).
-    orphans: list[str] = []
-    if not dry:
+    swept: list[str] = []
+    kept: list[tuple[str, int, int, int]] = []
+    if not dry and sent:  # ⛔ 선언이 비면 손대지 않는다 (D-220)
         cur.execute("SELECT source_id FROM source")
-        orphans = sorted({r[0] for r in cur.fetchall()} - sent)
-    return ok, skipped, orphans
+        for sid in sorted({r[0] for r in cur.fetchall()} - sent):
+            cur.execute(
+                "SELECT (SELECT count(*) FROM fragment WHERE source_id = %s),"
+                "       (SELECT count(*) FROM collect_manifest WHERE source_id = %s),"
+                # 🔴 `ON DELETE SET NULL` 이라 지워도 안 죽는다 — **그래서 세야 한다.**
+                "       (SELECT count(*) FROM source WHERE supersedes = %s)",
+                (sid, sid, sid),
+            )
+            nfrag, nman, nsup = cur.fetchone()
+            if nfrag or nman or nsup:
+                kept.append((sid, nfrag, nman, nsup))
+                continue
+            # 🚨 지우기 전에 **무엇을 왜** 찍는다 (D-149). 조용히 지우면 수가 줄어도 모른다.
+            cur.execute("DELETE FROM source WHERE source_id = %s", (sid,))
+            swept.append(sid)
+    return ok, skipped, swept, kept
 
 
 def load_fragments(cur, dry: bool) -> int:
@@ -514,11 +552,15 @@ def sweep_golden(cur, declared: set[str]) -> int:
         print(f"     {sid}")
     if len(orphans) > 5:
         print(f"     … 외 {len(orphans) - 5:,}행")
+    cur.execute("SELECT count(*) FROM golden_sample")
+    before = cur.fetchone()[0]
     cur.execute("DELETE FROM golden_sample WHERE sample_id = ANY(%s)", (orphans,))
-    gone = cur.rowcount
+    cur.execute("SELECT count(*) FROM golden_sample")
+    gone = before - cur.fetchone()[0]
     if gone != len(orphans):
         print(
-            f"     🚨 실제 삭제 {gone:,}행 — 차이 {gone - len(orphans):+,}는 `surface_of` 변형판이다"
+            f"     🚨 표가 {gone:,}행 줄었다 — 거두려 한 것은 {len(orphans):,}행이다. "
+            f"차이 {gone - len(orphans):+,}는 `surface_of` 로 딸려 지워진 변형판이다"
         )
     return gone
 
@@ -601,7 +643,7 @@ def main() -> int:
                 raise AssertionError("dry-run 에서는 실행하지 않는다")
 
         cur = _Null()
-        n_src, skipped, _ = load_sources(cur, True)
+        n_src, skipped, _, _ = load_sources(cur, True)
         print(f"  source            {n_src:>6}  (건너뜀 {len(skipped)})")
         for s in skipped:
             print(f"      ⛔ {s}")
@@ -629,15 +671,23 @@ def main() -> int:
         return 1
 
     with conn, conn.cursor() as cur:
-        n_src, skipped, orphans = load_sources(cur, False)
+        n_src, skipped, swept_src, kept_src = load_sources(cur, False)
         print(f"  source            {n_src:>6}  (건너뜀 {len(skipped)})")
         for s in skipped:
             print(f"      ⛔ {s}")
-        if orphans:
-            # 🚨 **지우지 않는다** — 이름만 낸다. 판정은 사람 몫이다 (docstring 참조).
-            print(f"      🔶 DB 에만 있는 소스 {len(orphans)}건 — **레지스트리 통과 목록에 없다**")
-            for s in orphans:
-                print(f"         {s}   ⛔ 거두지 않았다 (CASCADE 로 하위가 날아간다)")
+        if swept_src:
+            print(
+                f"      🧹 레지스트리에 없는 소스 {len(swept_src)}건을 거뒀다 (하위 0 · 판정의 귀결)"
+            )
+            for s in swept_src:
+                print(f"         {s}")
+        for sid, nfrag, nman, nsup in kept_src:
+            # 🔴 **딸린 것이 있으면 안 지운다.** 🚨 `supersedes` 는 지워도 안 죽고
+            #    **조용히 NULL 이 된다** — 계보가 아무 표시 없이 사라지는 자리다.
+            print(
+                f"      🔶 {sid} — 레지스트리에 없는데 **딸린 것이 있다** "
+                f"(fragment {nfrag} · manifest {nman} · supersedes 참조 {nsup}) ⛔ 거두지 않았다"
+            )
         print(f"  fragment          {load_fragments(cur, False):>6}")
         print(f"  collect_manifest  {load_manifest(cur, False):>6}")
         print(f"  document          {load_documents(cur, False):>6}")
