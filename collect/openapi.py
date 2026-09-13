@@ -225,7 +225,7 @@ def rows_of(payload: bytes) -> list[dict[str, Any]]:
     return walk(obj)
 
 
-#: 성공으로 보는 코드. 🚨 **화이트리스트다** — 모르는 코드는 오류로 본다 (D-72 fail-closed).
+#: 성공으로 보는 코드. 🚨 **화이트리스트다** — 모르는 코드는 오류로 본다 (D-220 fail-closed).
 OK_CODES = frozenset({"INFO-000", "00", "0"})
 
 

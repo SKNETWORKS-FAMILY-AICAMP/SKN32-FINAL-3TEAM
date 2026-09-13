@@ -88,6 +88,9 @@ def load_ledger() -> tuple[dict[str, dict], list[str]]:
             "cat": cat,
             "status": status,
             "open": [_clean(ln) for ln in body.splitlines() if _OPEN.search(ln) and ln.strip()],
+            # 🆕 본문 원문 — 다른 축으로 원장을 훑는 쪽이 파서를 두 번 쓰지 않게 (D-99).
+            #    ⛔ 이 파일은 본문을 안 쓴다. `scripts/data_status.py` 가 소스 이름으로 훑는다.
+            "body": body,
         }
 
     # 🚨 색인에만 있고 본문이 없는 것 — 인용하면 안 되는 자리다 (D-100)

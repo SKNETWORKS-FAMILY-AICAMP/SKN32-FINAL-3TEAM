@@ -51,6 +51,38 @@ def _manifest() -> collections.Counter:
     return c
 
 
+def _decisions_by_source(keys: set[str]) -> dict[str, list[str]]:
+    """원장 본문에서 **소스 이름이 나오는 결정**을 모은다 (2026-09-14).
+
+    🚨 **「이 소스를 다룬 결정」이지 「이 소스를 판정한 결정」이 아니다.**
+       `dmap` 과 같은 성격이다 — *「세는 것은 인용이지 준수가 아니다」*.
+
+    ★ **실측 (표본 28건 · `mfds_press` 19 + `mfds_casebook` 9)** — 판정 **19** · 단순 언급 **9**
+      → **정밀도 68%**. 언급 9건의 성격은 재료 나열·비유·계기·파일명이다.
+
+    ⛔ **노이즈 필터를 만들어 재 봤더니 손해였다.** 명령줄(`launcher.py …`)과
+       파일경로(`preprocess/<id>.py`)를 걸렀더니 정밀도는 74%→71% · 56%→57% 로 **안 오르고**
+       판정을 셋 놓쳤다 — **D-136**(`launcher.py probe mfds_press` = robots 확인 판정) ·
+       **D-167**(`preprocess/mfds_press.py 를 만든다` = 결정문 본문) · **D-158**(같은 꼴).
+       🚨 **파일명·명령줄에 이름이 나오는 것이 오히려 판정의 표시였다.** 그래서 거르지 않는다.
+
+    ⬜ **여기서 안 보는 것** (D-188) — 이름이 안 나오는 결정. 소스를 다루면서 이름을
+       안 적은 결정은 0건으로 보인다. `dmap` 의 「D 번호를 안 적었다」 갈래와 같은 자리다.
+    """
+    from scripts.decision_map import load_ledger  # noqa: PLC0415 — 원장 파서를 두 벌 두지 않는다
+    from scripts.extract_rationale import ALIAS  # noqa: PLC0415 — id ↔ 키의 정본 (D-100)
+
+    decisions, _ = load_ledger()
+    hit: dict[str, list[str]] = {}
+    for key in sorted(keys):
+        names = {key, *ALIAS.get(key, [])}
+        names = {n for n in names if len(n) > 4}  # 🚨 짧은 이름은 아무 데나 걸린다
+        found = [d for d, v in decisions.items() if any(n in v.get("body", "") for n in names)]
+        if found:
+            hit[key] = sorted(found, key=lambda x: int(x[2:]))
+    return hit
+
+
 def build() -> str:
     reg = _registry()
     src = {k: v for k, v in reg["sources"].items() if isinstance(v, dict)}
@@ -165,13 +197,41 @@ def build() -> str:
         w(f"| {x.get('name')} | {str(x.get('reason'))[:130]} |")
     w("")
 
+    w("## 📜 판정 이력 — 이 소스를 다룬 결정")
+    w("")
+    w("> 🚨 **「다룬」이지 「판정한」이 아니다.** 원장 본문에 이름이 나온 결정을 전부 냅니다 —")
+    w("> 실측 표본 28건에서 **판정 19 · 단순 언급 9(정밀도 68%)** 였습니다. 거르지 않는 이유는")
+    w("> `scripts/data_status.py` 의 `_decisions_by_source()` docstring 에 적혀 있습니다.")
+    w(
+        "> ⛔ **매트릭스(`data.js`)가 인용한 D 와 다릅니다.** 매트릭스는 「등재 시점의 판정」을 들고,"
+    )
+    w("> 그 뒤에 바뀐 판정은 원장에만 쌓입니다 — 그 차이를 보이게 하는 것이 이 절의 목적입니다.")
+    w("")
+    hit = _decisions_by_source(set(src) | {str(x.get("key")) for x in na if x.get("key")})
+    w("| 소스 | 건 | 이 소스를 다룬 결정 |")
+    w("|---|--:|---|")
+    for k in sorted(hit, key=lambda x: (-len(hit[x]), x)):
+        w(f"| `{k}` | {len(hit[k])} | {' · '.join(hit[k])} |")
+    w("")
+    none = sorted((set(src) | {str(x.get("key")) for x in na if x.get("key")}) - set(hit))
+    w(
+        f"🔴 **원장에 이름이 한 번도 안 나온 소스 {len(none)}건** — 결함이 아니라 "
+        "**「아직 어떤 결정도 이 소스를 다루지 않았다」**는 사실입니다."
+    )
+    w("")
+    w(f"> {' · '.join('`' + k + '`' for k in none)}")
+    w("")
+
     w("## 파생물 — 원문이 무엇이 됐나")
     w("")
     w("| 산출물 | 크기 |")
     w("|---|--:|")
     if DERIVED.exists():
         for p in sorted(DERIVED.rglob("*.jsonl")) + sorted(DERIVED.rglob("*.json")):
-            w(f"| `{p.relative_to(ROOT)}` | {p.stat().st_size:,} B |")
+            # 🔴 **`as_posix()` 가 없으면 윈도우에서 `data\\derived\\…` 로 나온다** (2026-09-14 실측).
+            #    같은 명령이 기기마다 다른 생성물을 내면 diff 가 매번 뜨고, 그러면 아무도 안 본다
+            #    (D-19 — `data/` 는 기기마다 다르지만 **이 표는 파일 목록이라 같아야 한다**).
+            w(f"| `{p.relative_to(ROOT).as_posix()}` | {p.stat().st_size:,} B |")
     # 🚨 끝의 빈 줄을 턴다 — 안 그러면 `end-of-file-fixer` 가 **돌릴 때마다** 파일을 고쳐
     #    커밋이 중단된다(2026-09-09 실제로 걸렸다). 생성기가 훅과 싸우면 둘 중 하나를 끄게 된다.
     while out and not out[-1].strip():
