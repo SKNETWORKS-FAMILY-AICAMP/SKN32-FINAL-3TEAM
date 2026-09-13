@@ -11,7 +11,8 @@
    ② **스텁 노드로 컴파일해 방문 순서만** 본다 → `run_stub()` 이 langgraph 없이도
       같은 순서를 내므로, 의존성이 붙기 전에도 순서를 고정할 수 있다.
    ③ **리듀서 키를 따로 확인한다** → 잘못된 annotation 이 append 대신 **조용히 덮어쓴다.**
-      `sentences` · `timings` · `rejects` 셋이 누적 키다.
+      🚨 목록은 `REDUCER_KEYS` **한 곳**이다 (D-99) — 여기 또 적으면 늘 때 낡는다.
+      게이트가 그 표를 돌며 `Annotated[..., operator.add]` 를 확인한다.
 
 🔴 **스텁은 비어 있는 것이지 틀린 것이 아니다.** 각 노드는 자기 자리에 무엇이 올지
    적어 두고 상태를 그대로 넘긴다. ⛔ 그럴듯한 값을 지어 넣으면 그 값이 화면으로 흘러가고,
@@ -23,6 +24,7 @@ from __future__ import annotations
 import operator
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Annotated, Any, TypedDict
 
 from app.contracts import (
@@ -30,6 +32,7 @@ from app.contracts import (
     AdFormat,
     AdSection,
     Candidate,
+    EvidenceArticle,
     Infeasibility,
     JudgeResponse,
     KeywordScreen,
@@ -47,6 +50,39 @@ from app.settings import PARAMS
 MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
 
 
+@dataclass(frozen=True, slots=True)
+class SentEvidence:
+    """`retrieve` 가 문장 하나에 붙인 근거 — **노드 사이 운반체**다 (2026-09-13 · D-124 ③).
+
+    🔴 **왜 생겼나** — 종전에는 `retrieve` 가 찾아 온 것을 놓을 칸이 상태에 **없었다.**
+       ⛔ 그러면 붙이는 사람의 선택지가 둘뿐이고 둘 다 나쁘다 —
+          ① 리듀서 없는 칸에 넣는다 → 문장이 여럿일 때 **마지막 하나만 남는다.** 오류는 안 난다.
+          ② `judge` 안에서 검색을 다시 부른다 → **코어가 두 벌이 된다** (D-99).
+       ★ **키가 있으면 계약이 선다.** 09-12 밤에 진입점 B 의 넷을 같은 이유로 세웠다.
+
+    ⛔ **`app/contracts.py` 에 두지 않는다.** 저기는 밖과 맺은 계약이고
+       `tests/contract_surface.json` 이 지문을 잡는다 — 4인이 그 모양을 보고 화면을 붙인다.
+       이건 그래프 **내부 배선**이라 밖에서 볼 것이 아니다. 계약을 늘리면 사람이 묶인다.
+       🚨 문장 판정에 실려 나가는 것은 `SentenceJudgment.evidence`(= `EvidenceArticle` 목록)다.
+          **밖으로 나가는 모양은 안 바뀐다.**
+
+    🚨 `vector`·`lexical` 을 같이 나른다 — `retrieve` 주석이 *「`search()` 가 내는 state 를
+       버리지 않는다」* 고 적어 둔 그 값이다. **벡터가 죽은 채 어휘 결과만으로 판정하면
+       근거가 반쪽인데 응답은 그럴듯하다.** `hold` 로 보내는 근거가 이 둘이다 (D-202).
+    """
+
+    sent_id: str
+    #: 🔴 `part_total > 1` 인 조각은 조문의 **일부**다 (0011 · D-199) — 그 사실은
+    #:    `EvidenceArticle.chunk_id` 로 따라간다. 여기서 조문 이름만 남기지 않는다.
+    articles: tuple[EvidenceArticle, ...] = ()
+    #: 두 갈래가 각각 돌았는가. ⛔ **둘 다 False 면 근거 없이 판정하는 것**이다 (D-100) — `hold`
+    vector: bool = False
+    lexical: bool = False
+    #: 후보 풀 크기. 🚨 0 은 「안 겹쳤다」이고, `lexical=False` 는 「검색어를 못 만들었다」다.
+    #:    ★ 둘은 다른 사건이다 — 한 칸으로 접으면 왜 못 찾았는지가 사라진다 (D-202).
+    pool: int = 0
+
+
 class JudgeState(TypedDict, total=False):
     """상태 스키마 문서 「상태에 반드시 담을 것」이 그대로 이 모양이다.
 
@@ -60,6 +96,10 @@ class JudgeState(TypedDict, total=False):
     product: ProductContext
     # ── 분할 ──────────────────────────────────────────────────────
     sents: list[str]
+    # ── 근거 검색 🔴 누적 키 (2026-09-13) ────────────────────────
+    #: `retrieve` 가 넣고 `judge` 가 읽는다. 🚨 **문장마다 한 벌**이라 누적이다 —
+    #: 리듀서가 없으면 마지막 문장의 근거만 남고, 그 상태로도 응답은 그럴듯하다.
+    evidence: Annotated[list[SentEvidence], operator.add]
     # ── 판정 누적 🔴 누적 키 ─────────────────────────────────────
     sentences: Annotated[list[SentenceJudgment], operator.add]
     # ── 재생성 루프 (D-126) ──────────────────────────────────────
@@ -101,6 +141,8 @@ REDUCER_KEYS = (
     "sentences",
     "rejects",
     "timings",
+    # 🆕 2026-09-13 — `retrieve` → `judge` 배선 (D-124 ③)
+    "evidence",
     # 🆕 2026-09-12 밤 — 진입점 B·C (D-181)
     "keywords",
     "candidates",
@@ -112,7 +154,7 @@ REDUCER_KEYS = (
 #: ⛔ `JudgeState` 라는 **이름**은 아직 판정 전용으로 읽힌다. `PipelineState` 로 고치는 것은
 #:    게이트·문서가 같이 움직이는 일이라 **따로 판정한다** (병렬작업 계약 §8 ⑤).
 ENTRYPOINT_KEYS = {
-    "A_judge": ("text", "sents", "sentences", "attempt", "outcome"),
+    "A_judge": ("text", "sents", "evidence", "sentences", "attempt", "outcome"),
     "B_generate": ("segment", "keywords", "candidates", "profile", "adapted"),
     "C_compose": ("ad_format", "sections"),
 }
@@ -186,6 +228,15 @@ def retrieve(state: JudgeState) -> dict[str, Any]:
        기획서 5-6 의 인용 검증(「존재」가 아니라 「일치」)이 이 칸을 본다.
     🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다. 근거 없이 판정하면 D-100 위반이라
        **`hold` 로 보내는 것**이 맞다 — 빈 근거로 `judge` 에 들어가지 않는다.
+
+    🆕 **놓을 칸이 생겼다** (2026-09-13) — 문장마다 `SentEvidence` 하나를 `evidence` 에 쌓는다:
+
+        return {"evidence": [SentEvidence(sent_id=sid, articles=tuple(arts),
+                                          vector=st.vector, lexical=st.lexical, pool=st.pool)
+                             for sid, arts, st in ...]}
+
+    ⛔ **리듀서 없는 새 칸을 만들지 않는다.** 문장이 여럿이면 마지막 하나만 남는데
+       오류가 안 난다 (D-124 ③). ⛔ **`judge` 안에서 `search()` 를 다시 부르지 않는다** (D-99).
     """
     return {}
 
@@ -196,6 +247,12 @@ def judge(state: JudgeState) -> dict[str, Any]:
 
     🚨 스텁은 `unjudged` 를 낸다 — **통과로 집계 금지** (D-127). 비어 있음을 비어 있다고
        말하는 값이고, 그럴듯한 `confirmed` 를 지어내지 않는다.
+
+    🔴 **근거는 `state["evidence"]` 에서 온다** (2026-09-13) — `retrieve` 가 문장별로 쌓아 둔
+       `SentEvidence` 다. `sent_id` 로 맞춰 `SentenceJudgment.evidence` 에 옮긴다.
+       ⛔ **여기서 검색을 다시 부르지 않는다** — 코어는 `app/retrieve.py` 하나다 (D-99).
+       ⛔ 붙는 근거가 없으면 `confirmed` 를 못 낸다 — 계약이 거부한다 (D-100 · `_confirmed_needs_evidence`).
+          그 경우의 상태는 `no_basis` 이고, `vector`·`lexical` 이 왜 그런지를 말해 준다.
     """
     return {
         "sentences": [
