@@ -3,8 +3,10 @@
 ★ **여기서 하는 일** — 화면을 그리고, 코어(`/judge`·`/search`)나 픽스처를 불러 화면 모양으로
   바꾼다. ⛔ **판정 로직을 여기 쓰지 않는다** (D-119 — 판정 코어는 하나).
 
-🚨 **DB 없이도 화면이 떠야 한다** (D-124). 엔진이 없는 지금 화면은 **골든 픽스처**로 모든
-   분기를 그린다. 그래서 이 라우터는 DB 에 안 붙는다.
+🚨 **엔진이 필요한 화면은 DB 없이도 떠야 한다** (D-124) — `judge`·`generate_page` 는
+   골든 픽스처로 모든 분기를 그린다. ⬜ **`history` 는 예외다** — 한빈님 확인 후
+   (2026-09-13) 처음으로 실제 DB(`app/db.py`, `Judgment`)에 붙었다. 판정 엔진이
+   아직 없어 지금은 빈 목록으로 뜬다.
 
 ⬜ **2W 산출물의 화면 4종을 여기로 옮기는 것이 남은 일**이다 (계약 §8 ⑥).
 """
@@ -13,9 +15,13 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.db import get_session
+from app.models import Judgment
 from app.settings import PARAMS
 from app.templating import templates
 
@@ -96,3 +102,18 @@ def generate_page(request: Request) -> HTMLResponse:
 
     names = sorted(p.stem for p in (FIXTURE_ROOT / "generate").glob("*.json"))
     return templates.TemplateResponse(request, "user/generate.html", {"fixtures": names})
+
+
+@router.get("/history", response_class=HTMLResponse)
+def history(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    """검수 이력 — 🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인).
+
+    ⬜ 판정 엔진이 아직 없어 `judgment` 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
+       가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
+    """
+    rows = (
+        session.execute(select(Judgment).order_by(Judgment.judged_at.desc()).limit(50))
+        .scalars()
+        .all()
+    )
+    return templates.TemplateResponse(request, "user/history.html", {"judgments": rows})

@@ -1,0 +1,29 @@
+{# app/templates/user/history.html — 검수 이력 · 소유자 lse (병렬작업 계약 §5)
+
+  🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인). `judgment` 표를 그대로 읽는다.
+  ⬜ 판정 엔진이 아직 없어 지금은 항상 빈 목록이다 — 정상이다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 검수 이력{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block content %}
+<div class="user-shell">
+{% include "user/_nav.html" %}
+<h1>검수 이력</h1>
+
+{% if judgments %}
+<table>
+  <tr><th>판정 시각</th><th>결론</th><th>위험도</th><th>법령 버전</th></tr>
+  {% for j in judgments %}
+  <tr>
+    <td>{{ j.judged_at }}</td>
+    <td>{{ j.verdict }}</td>
+    <td>{{ j.risk_final if j.risk_final is not none else "—" }}</td>
+    <td>{{ j.law_version }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>아직 판정 기록이 없다 — 판정 엔진이 붙으면 여기 쌓인다.</p>
+{% endif %}
+</div>
+{% endblock %}

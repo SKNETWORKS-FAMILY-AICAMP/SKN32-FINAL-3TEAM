@@ -10,4 +10,6 @@
      {% if request.url.path == "/u/" %}aria-current="page"{% endif %}>검수</a>
   <a class="user-nav-link" href="/u/generate"
      {% if request.url.path == "/u/generate" %}aria-current="page"{% endif %}>카피생성</a>
+  <a class="user-nav-link" href="/u/history"
+     {% if request.url.path == "/u/history" %}aria-current="page"{% endif %}>이력</a>
 </nav>
