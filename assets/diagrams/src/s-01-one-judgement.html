@@ -1,0 +1,140 @@
+<!doctype html>
+<!--
+  S-01 · 판정 1회 — 무엇을 읽고 무엇을 쓰는가   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-09-13 재작성.** 종전 판 1행에 **없는 것이 둘** 있었다 —
+     ① `POST /v1/review` — 그런 라우트가 없다. 실제는 `POST /judge`(계약 · 501)와
+        `POST /u/judge`(화면 · 픽스처)다. 정본은 `app/api.py` 와 D-124 계약이다.
+     ② `input_mode` — 저장소 전체 grep 에 **0건**이다. `JudgeRequest` 는 `text` + `product` 뿐이다.
+     ⛔ 없는 엔드포인트로 그린 도면을 보고 팀원이 붙으면 **404 를 만난다** — 그림이 계약을 이긴다.
+  🔴 4행 정정 — 「벡터 검색」이 아니라 **어휘 `ts_rank_cd` + 벡터 KURE-v1 → RRF** 다 (D-193).
+  🚨 요소마다 `[실측]`/`[기획]` (D-219). ★ 이 장에서 **[실측]은 4행 하나뿐이다** —
+     흐름 전체가 그려져 있다고 흐름이 도는 것은 아니다.
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>S-01 판정 1회</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  /* 이 장만 쓰는 8행 시퀀스 판 — 좌 「누가 → 누구에게」, 우 「무엇을」 */
+  .seq{display:grid; grid-template-columns:32px 168px 1fr; gap:0}
+  .seq .row{display:contents}
+  .seq .n,.seq .who,.seq .what{
+    border:1px solid var(--line); border-top:none; padding:9px 11px; background:#fff;
+  }
+  .seq .row:first-child .n,.seq .row:first-child .who,.seq .row:first-child .what{border-top:1px solid var(--line)}
+  .seq .n{display:flex; align-items:center; justify-content:center; color:var(--off);
+          font-family:ui-monospace,Menlo,monospace; font-size:11.5px; border-right:none}
+  .seq .who{color:var(--sub); font-size:11.5px; display:flex; align-items:center; border-right:none}
+  .seq .who b{color:var(--gov)}
+  .seq .what b{display:block; font-size:12.5px; margin-bottom:2px}
+  .seq .what span{display:block; color:var(--sub); font-size:11.5px}
+  .seq .row.pos .n{border-left:3px solid #286E4C; background:#F7FBF9}
+  .seq .row.pos .who,.seq .row.pos .what{background:#F7FBF9}
+  .seq .row.pos .what b{color:#286E4C}
+  .seq .row.off .n{border-left:3px dashed #C4CCD4; background:var(--offbg)}
+  .seq .row.off .who,.seq .row.off .what{background:var(--offbg)}
+  .seq .row.off .what b{color:var(--off)}
+  .seq .row.rsk .n{border-left:3px solid var(--rsk); background:var(--rskbg)}
+  .seq .row.rsk .who,.seq .row.rsk .what{background:var(--rskbg)}
+  .seq .row.rsk .what b{color:var(--rsk)}
+  .seq .row.gov .n{border-left:3px solid var(--gov); background:#F7FAFC}
+  .seq .row.gov .who,.seq .row.gov .what{background:#F7FAFC}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">S-01</span>
+    <h1>판정 1회 — 무엇을 읽고 무엇을 쓰는가</h1>
+    <span class="right">데이터층은 읽기만 한다 · [실측]/[기획] · 2026-09-13</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 지금 돈다</span>
+      <span class="chip">[기획] 계약·표는 섰고 코드가 없다</span>
+      <span class="chip rsk">🔴 값이 없어 비어서 돌아온다</span>
+    </div>
+
+    <div class="seq">
+      <div class="row gov">
+        <div class="n">1</div><div class="who"><span>사용자 → <b>API</b></span></div>
+        <div class="what"><b>광고 문구 · 제품 맥락 전달</b>
+          <span><span class="tag m">실측</span><code>POST /judge</code> — 계약은 나가고 <b style="display:inline">엔진은 501</b> 을 지킨다 (D-124 · D-147)</span>
+          <span><span class="tag m">실측</span><code>POST /u/judge</code> — 화면 경로. 지금은 <b style="display:inline">골든 픽스처</b>로 분기를 그린다</span>
+          <span>본문은 <code>text</code> + <code>product</code> 뿐이다 — 🚨 <code>input_mode</code> 라는 칸은 <b style="display:inline">없다</b></span></div>
+      </div>
+
+      <div class="row off">
+        <div class="n">2</div><div class="who">API → 런타임층</div>
+        <div class="what"><b>work_doc · copy_sentence 생성</b>
+          <span><span class="tag p">기획</span>표는 섰다 — 🔴 <b style="display:inline">라우터가 아직 DB 에 안 붙는다</b> (D-124 · 화면이 DB 없이 떠야 한다)</span>
+          <span><span class="tag m">실측</span>동의 없으면 <code>expires_at</code> 필수 — <b style="display:inline">CHECK 이 이미 막는다</b></span></div>
+      </div>
+
+      <div class="row off">
+        <div class="n">3</div><div class="who">API → 데이터층</div>
+        <div class="what"><b>dict_entry 정확매칭 → 위험도 하한</b>
+          <span><span class="tag m">실측</span>사전 <b style="display:inline">536행</b> 적재됨 (유형 붙은 것 430)</span>
+          <span><span class="tag p">기획</span>매칭 코드가 없다 — <code>app/</code> 에서 <code>dict_entry</code> 를 읽는 곳은 관리자 표시뿐이다</span>
+          <span><code>exact_match = true</code> 인 항목만 하한 자격을 갖는다</span></div>
+      </div>
+
+      <div class="row pos">
+        <div class="n">4</div><div class="who">API → 데이터층</div>
+        <div class="what"><b>어휘 ts_rank_cd + 벡터 KURE-v1 → RRF → 근거 조문</b>
+          <span><span class="tag m">실측</span><code>/search</code> 로 <b style="display:inline">실제로 돈다</b> · 청크 2,400 = 벡터 2,400</span>
+          <span><span class="tag m">실측</span>RRF <code>Σ 1/(k+rank)</code> · <code>k=60</code> [문헌] (D-193) · <code>v_current_chunk</code> — 현행 조문 · RAG 허용 소스만</span>
+          <span><span class="tag p">기획</span>🔴 <b style="display:inline">그래프의 <code>retrieve</code> 노드는 아직 스텁이다</b> — 코어는 도는데 <b style="display:inline">판정이 그것을 못 쓴다</b></span></div>
+      </div>
+
+      <div class="row rsk">
+        <div class="n">5</div><div class="who">API → 데이터층</div>
+        <div class="what"><b>v_risk_lookup → 제재 · 위험도</b>
+          <span><span class="tag p">기획</span>뷰는 있고 <b style="display:inline">0행을 낸다</b> — <code>sanction_rule</code> 적재기가 아직 없다</span>
+          <span>별표 파싱은 끝났다 (5법령 · 12건 · 243행) — 남은 것은 <b style="display:inline">적재기</b>다</span></div>
+      </div>
+
+      <div class="row rsk">
+        <div class="n">6</div><div class="who">API → 데이터층</div>
+        <div class="what"><b>violation_article → 라벨 ↔ 조문 대응</b>
+          <span><span class="tag p">기획</span><b style="display:inline">0행</b> — 사람 판정 + 2인 확인이 선행이다 (D-66)</span>
+          <span>원천 300노드는 <code>law_norm</code> 이 이미 파싱해 뒀다</span></div>
+      </div>
+
+      <div class="row off">
+        <div class="n">7</div><div class="who">API → 런타임층</div>
+        <div class="what"><b>judgment 저장 — 새 행을 쌓는다</b>
+          <span><span class="tag m">실측</span>표·제약은 섰다 — <code>law_version</code> · <code>attempt</code> 0~2 · <b style="display:inline">덮어쓰지 않는다</b></span>
+          <span><span class="tag p">기획</span>쓰는 코드가 없다 — 2행과 같은 자리다</span></div>
+      </div>
+
+      <div class="row off">
+        <div class="n">8</div><div class="who">API → 사용자</div>
+        <div class="what"><b>violations · evidence · risk · rewrite</b>
+          <span><span class="tag m">실측</span>응답 스키마는 <code>/openapi.json</code> 에 <b style="display:inline">완전히 나가 있다</b> — 팀원은 그것으로 붙는다</span>
+          <span><span class="tag p">기획</span>값을 채우는 엔진이 없다 · <code>disclaimer</code> 는 항상 붙는다 — 빼는 옵션이 없다</span></div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="chip">쓰기는 런타임층에만</span>
+      <span class="chip pos">데이터층은 읽기만 한다</span>
+      <span class="chip rsk">5 · 6 은 값이 없어 지금은 비어서 돌아온다</span>
+      <span class="chip">실측 행 <b style="display:inline">1 / 8</b></span>
+    </div>
+
+    <p class="note" style="margin:12px 0 0">
+      🚨 <b>「도면이 8행이니 8행이 돈다」로 읽지 않는다.</b> 지금 값이 끝까지 흐르는 줄은
+      <b>4행 하나</b>이고, 그것도 <code>/search</code> 에서만 돈다 — 판정 그래프는 아직 그것을 부르지 않는다.
+      ⛔ 「설계상 있다」와 「지금 돈다」를 같은 글씨로 적지 않는 것이 이 장의 목적이다 (D-219 · A-04).
+    </p>
+  </div>
+
+  <footer>
+    <span class="k">판정은 데이터층에 한 글자도 쓰지 않는다.</span>
+    사용자 문구가 조문·사전·제재 표를 오염시킬 경로를 <span class="k">방향으로 막았다</span> —
+    쓰기는 런타임층 7표에만 간다 (E-02).
+    <div class="lock">라우트의 정본은 app/api.py 와 D-124 계약 · 수의 정본은 docs/00_사실원장.md (D-54) · 원천은 src/s-01-one-judgement.html (D-217)</div>
+  </footer>
+</div>

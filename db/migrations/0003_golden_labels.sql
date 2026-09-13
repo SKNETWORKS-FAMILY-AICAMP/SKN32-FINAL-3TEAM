@@ -31,6 +31,27 @@ ALTER TABLE dict_entry    ALTER COLUMN violation_type TYPE text USING violation_
 -- 🚨 GIN 인덱스도 컬럼 타입에 매여 있다 — 떼고 되만든다.
 DROP INDEX IF EXISTS ix_sanction_lookup;
 DROP INDEX IF EXISTS ix_golden_viol;
+
+-- 🔄 **2026-09-13 — 빈 DB 에서 처음부터 돌리면 여기서 죽었다** (이서은 제보 · D-221).
+--
+--     psycopg.errors.DependentObjectsStillExist: cannot drop type violation_t
+--     DETAIL:  column violation of table violation_article depends on type violation_t
+--
+-- 🔴 **원인은 이 파일이 아니라 `0001` 이다.** 0001 은 `db/schema.sql` 을 읽는데 그 파일은
+--    **움직이는 정본**이다. 그래서 새 DB 는 이 파일이 ⑥에서 만들려는 `violation_article` 을
+--    **이미 갖고 있고**, 그 표가 `violation_t` 를 붙잡는다.
+--    ⛔ 옛 DB(0002 시점)에는 그 표가 없었다 — **그래서 여태 아무도 안 밟았다.**
+--       다들 쓰던 DB 에 이어 붙였고 **빈 DB 에서 처음부터 돌린 적이 없다** (D-146).
+-- ⛔ `DROP ... CASCADE` 를 쓰지 않는다 — 힌트가 그렇게 말하지만 **그 열을 통째로 지운다.**
+-- ★ **있을 때만** 떼어 둔다. 아래 ⑥ 의 `CREATE TABLE IF NOT EXISTS` 와 짝이다 —
+--   새 DB 에서는 여기서 떼고 아래에서 되걸고, 옛 DB 에서는 둘 다 지나간다.
+DO $$
+BEGIN
+  IF to_regclass('violation_article') IS NOT NULL THEN
+    ALTER TABLE violation_article ALTER COLUMN violation TYPE text USING violation::text;
+  END IF;
+END $$;
+
 DROP TYPE violation_t;
 CREATE TYPE violation_t AS ENUM ('질병_예방치료_표방','건강기능식품_오인','의약품_오인',
                                  '거짓_과장','소비자_기만','후기_체험기_기만',
@@ -44,6 +65,16 @@ ALTER TABLE dict_entry    ALTER COLUMN violation_type TYPE violation_t USING vio
 CREATE INDEX ix_sanction_lookup ON sanction_rule(violation_type, offense_count)
   WHERE superseded_at IS NULL;
 CREATE INDEX ix_golden_viol ON golden_sample USING GIN (violations);
+
+-- 🔄 위에서 떼어 둔 것을 되건다 (2026-09-13). 🚨 기본키가 이 열을 쓰므로 색인은
+--    PostgreSQL 이 알아서 다시 만든다 — 손으로 떼었다 걸지 않는다.
+DO $$
+BEGIN
+  IF to_regclass('violation_article') IS NOT NULL THEN
+    ALTER TABLE violation_article
+      ALTER COLUMN violation TYPE violation_t USING violation::violation_t;
+  END IF;
+END $$;
 
 -- ── ② split_t — 'test_sentence' 가 없어 골든셋이 DB 밖에 서 있었다 ──────
 ALTER TABLE golden_sample ALTER COLUMN split TYPE text USING split::text;

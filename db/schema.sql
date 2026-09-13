@@ -476,8 +476,17 @@ SELECT g.* FROM golden_sample g
 WHERE g.redistributable = true;
 
 -- 위험도 산정은 코드가 이 뷰를 읽는다 (블랙박스 점수 금지)
+-- 🔴 **2인 확인이 끝난 행만 보인다** (2026-09-13 · 0013 · D-66 · D-170).
+--    ⛔ `ck_sanction_four_eyes` 는 **둘 다 NULL 이면 통과한다** — 0007 이 NOT NULL 을 걷으면서
+--       난 구멍이다. 그 판정 자체는 옳았다(「강제 지점은 collect/registry.py 하나」).
+--       🚨 다만 `sanction_rule` 은 **그 경로로 안 들어온다** — 별표 파싱이 직접 넣는다.
+--          그래서 서명 없는 행이 **위험도 하한으로 쓰이는 길**이 열려 있었다.
+--    ★ 막는 자리를 적재가 아니라 **읽는 자리**로 둔다 — 적재는 되고, 서명 전에는 안 보인다.
+--      적재를 막으면 파싱 결과를 둘 곳이 없어지고, 그러면 서명이 파일 위에서 이뤄진다.
 CREATE VIEW v_risk_lookup AS
 SELECT s.violation_type, s.offense_count, s.sanction_kind,
        s.sanction_value, s.unit, s.risk_level, s.law_id
 FROM sanction_rule s
-WHERE s.superseded_at IS NULL;
+WHERE s.superseded_at IS NULL
+  AND s.verified_by IS NOT NULL
+  AND s.reviewed_by IS NOT NULL;

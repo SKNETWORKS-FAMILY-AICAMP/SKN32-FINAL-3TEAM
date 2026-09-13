@@ -1,0 +1,178 @@
+<!doctype html>
+<!--
+  E-01 · 데이터층 19표 — 등급이 흐르는 뼈대   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-09-13 재작성.** 종전 판은 `chunk_embedding` 을 회색 + 「벡터 미실행」으로 그렸다 —
+     실제는 **2,400행이고 `chunk` 와 1:1** 이다 (2026-09-12 오후 실측 · 클론 B).
+     ⛔ **있는 것을 없다고 그리는 것**은 수치가 낡는 것과 다른 문제다.
+  🚨 요소마다 `[실측]`/`[기획]` 을 붙인다 (D-219) — 「표가 있다」와 「행이 들어왔다」를 가른다.
+  🚨 수는 그린 시점 실측이고 정본은 `docs/00_사실원장.md` 다 (D-54).
+     ⛔ **기기가 둘이다** — 행 수에는 어느 클론인지 같이 적는다 (D-178).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>E-01 데이터층 19표</title>
+<link rel="stylesheet" href="plate.css">
+
+<div class="plate">
+  <header>
+    <span class="no">E-01</span>
+    <h1>데이터층 19표 — 등급이 흐르는 뼈대</h1>
+    <span class="right">우리가 수집한 것 · [실측]/[기획] · 2026-09-13</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 표가 있고 <b style="display:inline">행이 들어왔다</b></span>
+      <span class="chip">[기획] 표는 섰는데 <b style="display:inline">적재기가 없다</b></span>
+      <span class="chip warn">행 수는 <b style="display:inline">클론 B</b> 실측 (D-178)</span>
+    </div>
+
+    <div class="pipe" style="margin-top:0">
+      <div class="box gov"><b>source</b>
+        <span>소스 원장 · 등급 G0~G3</span>
+        <span><span class="tag m">실측</span>decided_by ≠ reviewed_by 를 DB 가 막는다</span></div>
+      <div class="j">1:N →</div>
+      <div class="box gov"><b>fragment</b>
+        <span>등급이 실제로 갈리는 곳</span>
+        <span><span class="tag m">실측</span>소스 등급을 상속하지 않는다</span></div>
+      <div class="j">1:N →</div>
+      <div class="box"><b>아래 10표 전부</b>
+        <span>fragment_id 로 매달린다 · ON DELETE CASCADE</span>
+        <span>등급을 잃은 조각은 파생물도 같이 지워진다</span></div>
+    </div>
+
+    <div class="cols tight" style="margin-top:16px">
+
+      <fieldset>
+        <legend>① 거버넌스 5</legend>
+        <div class="card pos"><b>source</b>
+          <span><span class="tag m">실측</span>등급 · 용도 · 2인 서명</span></div>
+        <div class="card pos"><b>source_constraint</b>
+          <span><span class="tag m">실측</span>BY NC SA PII TOS GATED</span></div>
+        <div class="card pos"><b>source_use</b>
+          <span><span class="tag m">실측</span>U1 학습 U2 RAG U3 인용 U4 배포</span></div>
+        <div class="card pos"><b>fragment</b>
+          <span><span class="tag m">실측</span>개별 등급 · 마스킹 · 제외</span></div>
+        <div class="card pos"><b>collect_manifest</b>
+          <span><span class="tag m">실측</span>수집 1회 = 1행 · sha256</span></div>
+        <span class="chip pos">적재됨 — 등재 소스 47 · 2인 서명 37 / 47 · 미채택 13</span>
+      </fieldset>
+
+      <fieldset>
+        <legend>② 원문 · 문장 2</legend>
+        <div class="card pos"><b>document</b>
+          <span><span class="tag m">실측</span>법령 · 고시 · 의결서 단위</span>
+          <span>superseded_at → 현행 여부</span></div>
+        <div class="card pos"><b>sentence</b>
+          <span><span class="tag m">실측</span>raw 표시용 / norm 매칭용</span>
+          <span>start_off · end_off 원문 좌표</span></div>
+        <span class="chip pos">적재됨</span>
+        <p class="note" style="margin:10px 0 0">
+          ★ <b>raw 와 norm 을 가른 이유</b> — 화면은 사용자가 쓴 글자를 그대로 보여 주고,
+          매칭은 정규화한 글자로 한다. 좌표가 있어야 <b>둘을 되짚을 수 있다</b>.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>③ RAG 2 — 🆕 2026-09-12 에 뚫렸다</legend>
+        <div class="card pos"><b>chunk</b>
+          <span><span class="tag m">실측</span>조 · 항 · 호 단위 · <b style="display:inline">2,400행</b></span>
+          <span>ck_chunk_tokens: token_count ≤ 512</span>
+          <span><span class="tag m">실측</span>context (0008) · part_no/part_total (0011)</span>
+          <span><span class="tag m">실측</span>tsv <b style="display:inline">생성열</b> (0010) — GIN 색인</span></div>
+        <div class="card pos"><b>chunk_embedding</b>
+          <span><span class="tag m">실측</span>vector(1024) · 1:1 CASCADE · <b style="display:inline">2,400행</b></span>
+          <span>KURE-v1 · input_sha256 (0008 · D-176)</span>
+          <span>모델 입력 토큰 최대 422 / 상한 512</span></div>
+        <div class="legend" style="margin:0">
+          <span class="chip pos">청크 2,400 = 벡터 2,400</span>
+          <span class="chip pos">어휘 ts_rank_cd + 벡터 → RRF (D-193)</span>
+        </div>
+        <p class="note pos" style="margin:10px 0 0">
+          ★ 종전 도면은 여기를 <b>회색 「벡터 미실행」</b>으로 그리고 있었다.
+          2026-09-12 오후에 <b>2,400행이 다 들어왔다</b> (클론 B 실측).
+        </p>
+      </fieldset>
+    </div>
+
+    <div class="cols tight" style="margin-top:14px">
+
+      <fieldset class="rsk">
+        <legend>④ 위험도 3 — 🔴 여기가 지금 병목이다</legend>
+        <div class="card off"><b>sanction_rule</b>
+          <span><span class="tag p">기획</span>유형 × 차수 → 제재 · R0~R4 · <b style="display:inline">0행</b></span></div>
+        <div class="card off"><b>penalty_rule</b>
+          <span><span class="tag p">기획</span>과징금 부과기준율 · <b style="display:inline">0행</b></span></div>
+        <div class="card off"><b>penal_clause</b>
+          <span><span class="tag p">기획</span>징역 · 벌금 상한 · <b style="display:inline">0행</b></span></div>
+        <span class="chip rsk">적재기가 없다 — 파싱은 끝났다</span>
+        <p class="note" style="margin:10px 0 0">
+          🔴 <b>병목이 한 칸 옮겨졌다.</b> 별표 파싱은 <b>5법령 · 12건 · 243행</b>으로 끝났고
+          감사도 통과했다. 남은 것은 <b>그 243행을 이 세 표에 넣는 적재기</b>다 —
+          범위는 정해져 있다 (별표7 광고 4행 · D-183). A-04 가 같은 것을 그린다.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>⑤ 사전 · 사실 2</legend>
+        <div class="card pos"><b>dict_entry</b>
+          <span><span class="tag m">실측</span>금지 · 적법 · 질병 · 완화금지 · <b style="display:inline">536행</b></span>
+          <span>유형 붙은 것 430 · exact_match 만 하한 자격</span></div>
+        <div class="card pos"><b>product_fact</b>
+          <span><span class="tag m">실측</span>인정 기능성 원료 · <b style="display:inline">447행</b></span>
+          <span>🚨 전부 <b style="display:inline">개별인정형</b> — 고시형 0
+            (근거 고시가 본문 대신 첨부를 준다)</span>
+          <span>자격형 판정의 근거</span></div>
+        <p class="note" style="margin:10px 0 0">
+          ⚠️ <b>447 은 「정본 축만」 남긴 수다</b> — 종전 원장의 1,077 은 두 축을 함께 담던
+          게이트 상태의 수다 (D-178). <b>어느 게이트가 걸린 상태의 수인지</b>를 같이 읽는다.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>⑥ 골든셋 · 재현성 5</legend>
+        <div class="card pos"><b>golden_sample</b>
+          <span><span class="tag m">실측</span>violations[] · split · unit · <b style="display:inline">1,910행</b></span>
+          <span>test 206 · train 1,704 · 문장 1,597 · 낱말 313</span></div>
+        <div class="card off"><b>violation_article</b>
+          <span><span class="tag p">기획</span>라벨 ↔ 조문 · adopted · <b style="display:inline">0행</b></span>
+          <span>기계가 못 하는 자리 — 사람 판정 + 2인 확인</span></div>
+        <div class="card off"><b>transform_pair</b>
+          <span><span class="tag p">기획</span>before → after 시정 페어</span></div>
+        <div class="card off"><b>segment</b>
+          <span><span class="tag p">기획</span>k ≥ 20 강제 · Phase 3</span></div>
+        <div class="card off"><b>dataset_manifest</b>
+          <span><span class="tag p">기획</span>seed · counts · 측정 불가 목록</span></div>
+        <div class="legend" style="margin:0">
+          <span class="chip pos">골든 1,910</span>
+          <span class="chip rsk">대응표 0행</span>
+        </div>
+      </fieldset>
+    </div>
+
+    <fieldset class="diff" style="margin-top:16px">
+      <legend>뷰 3 — 잊기 쉬운 필터를 구조로 박았다 (0009) · [실측]</legend>
+      <div class="cols">
+        <div class="card gov"><b>v_current_chunk</b>
+          <span><span class="tag m">실측</span>superseded_at IS NULL AND excluded = false</span></div>
+        <div class="card gov"><b>v_publishable_golden</b>
+          <span><span class="tag m">실측</span>redistributable = true</span></div>
+        <div class="card gov"><b>v_risk_lookup</b>
+          <span><span class="tag m">실측</span>sanction_rule 중 현행만 — 🔴 지금은 0행을 낸다</span></div>
+      </div>
+      <p class="note" style="margin:10px 0 0">
+        검색 코드는 <b>chunk 원표를 직접 보지 않는다.</b> 폐지된 조문으로 판정하는 사고를 뷰가 막는다.
+        ⛔ <b>뷰가 있다고 데이터가 있는 것은 아니다</b> — <code>v_risk_lookup</code> 은 지금
+        <b>구조는 서 있고 행은 0</b> 이다. 「통과만 하는 게이트」와 같은 자리다 (D-170).
+      </p>
+    </fieldset>
+  </div>
+
+  <footer>
+    <span class="k">등급은 소스가 아니라 fragment 에서 갈린다.</span>
+    한 소스 안에서도 조각마다 쓸 수 있는 용도가 다르기 때문에,
+    <span class="k">파생물 10표를 전부 fragment 에 매달았다</span> — 등급을 잃으면 파생물도 같이 사라진다.
+    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 행 수는 클론 B 실측 (D-178) · 원천은 src/e-01-data-layer.html (D-217)</div>
+  </footer>
+</div>

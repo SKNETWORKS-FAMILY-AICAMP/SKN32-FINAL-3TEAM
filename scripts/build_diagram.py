@@ -12,15 +12,19 @@
 
 🚨 렌더러는 `scripts/build_pdf.py` 와 **같은 playwright chromium** 을 쓴다 — 스택이 안 는다.
    `uv sync --group docs && uv run playwright install chromium` 이 선행이다.
+   🔴 글꼴 검사도 **같은 한 벌**을 쓴다 — `scripts/fontcheck.py` (2026-09-13 · D-220 · D-99).
 """
 
 from __future__ import annotations
 
 import argparse
+import pathlib
 import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import fontcheck  # noqa: E402  — 글꼴 검사는 PDF 와 한 벌이다 (D-99)
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "assets" / "diagrams" / "src"
 OUT = ROOT / "assets" / "diagrams"
 
@@ -44,11 +48,17 @@ def build(only: str | None = None) -> int:
         print("🔴 playwright 가 없다 — uv sync --group docs && uv run playwright install chromium")
         return 1
 
+    #: 🔴 **한 벌만 적는다** — 글꼴 이름의 정본은 `plate.css` 다 (D-99).
+    css = (SRC / "plate.css").read_text(encoding="utf-8")
+    want = {"도면 본문": fontcheck.declared(css, "body")}
+
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         # 🚨 뷰포트 높이를 작게 잡는다 — `full_page` 는 max(내용, 뷰포트) 라
         #    800 으로 두면 내용이 짧은 장에 **빈 여백이 붙는다** (A-04 에서 밟았다).
         page = browser.new_page(viewport={"width": WIDTH, "height": 100}, device_scale_factor=SCALE)
+        # 🔴 뽑기 전에 잰다 — 한 장이라도 나가면 되돌리기가 비싸다 (2026-09-13 실측: 13장)
+        fontcheck.require(page, want, source="assets/diagrams/src/plate.css")
         for s in srcs:
             page.goto(s.as_uri(), wait_until="networkidle")
             target = OUT / f"{s.stem}.png"

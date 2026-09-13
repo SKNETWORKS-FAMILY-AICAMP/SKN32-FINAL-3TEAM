@@ -373,13 +373,50 @@ def test_마이그레이션이_만드는_모양이_schema_sql_과_같다() -> No
             "   새 DB 와 옮긴 DB 가 갈린다 — 한쪽에서만 적재가 막힌다."
         )
 
+    # 🔴 **뷰도 ENUM 과 같이 접는다 — 「끝난 뒤의 모양」이다** (2026-09-13).
+    #    ⛔ 종전에는 **파일마다** `schema.sql` 과 맞췄다. 그러면 **뷰 정의를 한 번이라도
+    #       바꾸는 순간 앞 파일이 전부 틀린 것이 된다** — 실측: 0013 이 `v_risk_lookup` 에
+    #       2인 확인 조건을 더하자 **0003(그 뷰를 떼었다 되만든 파일)이 빨개졌다.**
+    #    ★ 이 게이트의 docstring 이 이미 그렇게 적어 뒀다 — *「지키려는 것은 파일별 일치가
+    #      아니라 끝난 뒤의 모양」*. ENUM 쪽만 접고 뷰 쪽은 안 접혀 있었다.
+    #    🚨 고치는 쪽을 **0003 이 아니라 게이트**로 정했다 — 돈 마이그레이션의 본문을 고치면
+    #       그 파일이 하지 않은 일을 했다고 적게 된다 (0007 이 세운 규칙).
+    m_view: dict[str, str] = {}
     for f in files:
-        sql = f.read_text(encoding="utf-8")
-        for name, body in _views(sql).items():
+        for name, body in _views(f.read_text(encoding="utf-8")).items():
             assert name in s_view, f"🚨 {f.name} 이 `schema.sql` 에 없는 뷰 {name} 을 만든다"
-            assert body == s_view[name], (
-                f"🚨 {f.name} 이 되만드는 뷰 `{name}` 정의가 `db/schema.sql` 과 다르다"
-            )
+            m_view[name] = body  # 마지막에 만든 것이 옮긴 DB 의 모양이다
+    for name, body in m_view.items():
+        assert body == s_view[name], (
+            f"🚨 마이그레이션을 다 적용한 뒤의 뷰 `{name}` 이 `db/schema.sql` 과 다르다.\n"
+            f"   마이그레이션 {body!r}\n   schema.sql  {s_view[name]!r}\n"
+            "   새 DB 와 옮긴 DB 가 갈린다 — 한쪽에서만 질의가 다른 답을 낸다."
+        )
+
+
+@pytest.mark.gate
+def test_뷰_접기가_실제로_어긋남을_잡는다(tmp_path: Path) -> None:
+    """반대 대조 — **접었더니 아무것도 안 잡는 게이트**가 되지 않았는지 본다 (D-170).
+
+    🚨 접는 것은 「앞 파일이 옛 정의를 들고 있어도 된다」는 뜻이지
+       「마지막 정의가 틀려도 된다」는 뜻이 아니다. 그 경계를 여기서 고정한다.
+    """
+    old = "\nCREATE VIEW v_x AS\nSELECT 1;\n"
+    new = "\nCREATE VIEW v_x AS\nSELECT 2;\n"
+    (tmp_path / "0001_a.sql").write_text(old, encoding="utf-8")
+    (tmp_path / "0002_b.sql").write_text(new, encoding="utf-8")
+
+    def folded(d: Path) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for f in sorted(d.glob("*.sql")):
+            out.update(_views(f.read_text(encoding="utf-8")))
+        return out
+
+    got = folded(tmp_path)
+    # ✅ 앞 파일의 옛 정의는 통과한다 (그것이 이번에 고친 것)
+    assert got["v_x"] == _views(new)["v_x"], "🚨 접기가 마지막 정의를 안 집는다"
+    # 🔴 마지막 정의가 schema 와 다르면 여전히 잡힌다
+    assert got["v_x"] != _views(old)["v_x"], "🚨 접기가 어긋남을 통째로 삼킨다 — 게이트가 죽었다"
 
 
 @pytest.mark.gate

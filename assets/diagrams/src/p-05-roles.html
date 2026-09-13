@@ -1,0 +1,125 @@
+<!doctype html>
+<!--
+  P-05 · 역할 분담 — 기능 단위   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-09-13 재작성.** 종전 판은 **사용자 3 · 관리자 1** 이었다.
+     D-208(2026-09-12 밤)이 분할 축을 **층 → 기능**으로 바꾸면서 배치가 달라졌다 —
+     **사용자 2(ksr · lse) · 관리자 2(ssm · psj)** 이고, **배포·운영이 ssm 에 붙었다.**
+     ⛔ 종전 부제 「AI 에이전트 기준」도 뺐다 — 지금 나누는 축은 **기능**이다.
+  🚨 정본은 `docs/00_병렬작업_계약.md` §5 와 `.github/CODEOWNERS`(집행본)다.
+     ⛔ 여기 적힌 것은 요약이다 — 어긋나면 계약이 이긴다 (D-54).
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) — 「담당이 정해졌다」와 「그 산출물이 있다」를 가른다.
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>P-05 역할 분담</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  .hub{max-width:640px; margin:0 auto}
+  .dn{text-align:center; color:var(--off); font-size:14px; padding:8px 0}
+  .owner{font-family:ui-monospace,Menlo,monospace; font-size:10.5px; color:var(--gov)}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">P-05</span>
+    <h1>역할 분담 — 기능 단위 (D-208)</h1>
+    <span class="right">공통 기반 1 · 사용자 2 · 관리자 2 · 배포 1(겸) · 2026-09-13</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 파일이 있고 돈다</span>
+      <span class="chip">[기획] 담당은 정해졌고 산출물은 아직</span>
+      <span class="chip gov">🔒 잠금 자리는 팀장이 고친다 (계약 §5 등급 1)</span>
+    </div>
+
+    <div class="hub">
+      <div class="card gov"><b>공통 기반 — 팀장 (ohb)</b>
+        <span><span class="tag m">실측</span>API 표면 · 수집 · 전처리 · 적재 · 검색 코어 · 원장 3종 · <code>tests/**</code></span>
+        <span><span class="tag p">기획</span>판정 코어(그래프 노드) — 지금은 스텁이다</span>
+        <span class="owner">app/api.py · graph.py · retrieve.py · models.py · preprocess/** · scripts/** · tests/**</span></div>
+    </div>
+    <div class="dn">↓</div>
+
+    <div class="cols">
+      <fieldset>
+        <legend>사용자 화면 · BFF — 2명 (ksr · lse)</legend>
+        <div class="card pos"><b>검수 입력 · 결과 화면 + BFF</b>
+          <span><span class="tag m">실측</span><code>GET /u/</code> · <code>POST /u/judge</code> 가 뜬다 — <b style="display:inline">DB 없이</b></span>
+          <span>SCR-RV-01 · 02</span></div>
+        <div class="card off"><b>재검수 · 판정 게이트</b>
+          <span><span class="tag p">기획</span>고치면 잠긴다 · 새 판정 행 (W-02)</span></div>
+        <div class="card off"><b>근거 조문 표시 · 질의응답</b>
+          <span><span class="tag p">기획</span>SCR-RV-02 ④ · SCR-RV-03</span></div>
+        <span class="chip owner">app/routers/user.py · app/templates/user/</span>
+      </fieldset>
+
+      <fieldset>
+        <legend>관리자 화면 · BFF — 2명 (ssm · psj)</legend>
+        <div class="card pos"><b>거버넌스 콘솔</b>
+          <span><span class="tag m">실측</span><code>GET /login</code> · <code>GET /admin/</code> 이 뜬다 · Argon2id (0012 · D-213)</span>
+          <span>SCR-AM-01 · 02 · 03</span></div>
+        <div class="card off"><b>DB 저장 경로 파악</b>
+          <span><span class="tag p">기획</span>무엇이 어디에 저장되는가</span></div>
+        <div class="card off"><b>판정 근거 관리 · 2인 확인 UI</b>
+          <span><span class="tag p">기획</span>판정자 · 확인자 · 승인 상태</span>
+          <span>🚨 <b style="display:inline">사람만 채우는 칸</b>이다 — 자동 채움을 만들면 D-66 이 무효가 된다</span></div>
+        <span class="chip owner">app/routers/admin.py · app/templates/admin/</span>
+      </fieldset>
+
+      <fieldset>
+        <legend>🆕 배포 · 운영 — ssm 겸임 (D-208)</legend>
+        <div class="card pos"><b>CI 축</b>
+          <span><span class="tag m">실측</span><code>.github/workflows/</code> — 게이트 · 비밀값 스캔이 돈다</span>
+          <span>액션은 SHA 핀 · 컨테이너는 다이제스트 핀 (D-215)</span></div>
+        <div class="card off"><b>AWS · 서버 · 도메인</b>
+          <span><span class="tag p">기획</span>계정 · IAM · Budgets · EC2 · 보안그룹 · EIP · Caddy · SSH 키 · 백업 · 롤백</span>
+          <span>Phase 0~5 가 명령 단위까지 적혀 있다 — <b style="display:inline">넘기는 것이 설계가 아니라 실행</b>이다</span></div>
+        <div class="card gov"><b>이음매 — 「같이」는 파일 공동소유가 아니다</b>
+          <span>팀장은 <b style="display:inline">배포 가능한 상태를 코드로</b> 낸다 (환경 핀은 팀장 단독 · D-87)</span>
+          <span>ssm 은 <b style="display:inline">그것을 어디에 어떻게 올릴지</b>를 든다 — 계약이지 공유가 아니다 (D-124)</span></div>
+        <span class="chip owner">.github/workflows/** · docs/05_배포/</span>
+      </fieldset>
+    </div>
+
+    <fieldset class="diff" style="margin-top:16px">
+      <legend>왜 층이 아니라 기능인가 (D-208)</legend>
+      <div class="cols">
+        <div class="card gov"><b>① 억지 컷이 필요 없다</b>
+          <span>층으로 자르면 <code>tests/**</code> 에서 팀장과 겹쳐
+            <b style="display:inline">「검사 내용은 팀장 · 도는 판은 남」</b>이라는 인위적인 선을 그어야 했다</span>
+          <span>🚨 경계를 억지로 그어야 한다는 것 자체가 <b style="display:inline">그 분할이 틀렸다는 신호</b>다</span></div>
+        <div class="card gov"><b>② 눈에 보이는 산출물이 남는다</b>
+          <span>층으로 나누면 그의 일이 <b style="display:inline">「팀장을 위한 서비스」</b>가 되어
+            밀려도 아무도 모른다</span></div>
+        <div class="card gov"><b>③ 소유 = 승인권이 아니라 기본 담당</b>
+          <span>남이 고쳐도 된다 — <b style="display:inline">알리고, 같은 파일을 동시에 열지 않는다</b> (D-211)</span>
+          <span>잠금은 <b style="display:inline">여덟 자리뿐</b>이고 전부 이유가 있다 (계약 §5 등급 1)</span></div>
+      </div>
+    </fieldset>
+
+    <fieldset style="margin-top:14px">
+      <legend>개발 순서 — 통합을 마지막이 아니라 처음에</legend>
+      <div class="railway" style="margin:0">
+        <div class="seg" style="border-left:3px solid #286E4C;background:#F7FBF9">
+          <b style="color:#286E4C">1차 · 핵심</b> — walking skeleton · 문구 하나가 한 바퀴</div>
+        <span class="to">→</span>
+        <div class="seg"><b>2차</b> — 판정 품질 · 근거 검색</div>
+        <span class="to">→</span>
+        <div class="seg"><b>3차 · 살 붙이기</b> — 생성 · 템플릿 · 통계</div>
+      </div>
+      <p class="note" style="margin:10px 0 0">
+        뒤에 붙는 산출물이 상상이 아니라 <b>실측 위에</b> 놓이게 하려면 통합이 먼저다.
+        Git 은 개인 브랜치 → 팀장 흡수 → main PR, <b>직접 커밋 금지</b>.
+      </p>
+    </fieldset>
+  </div>
+
+  <footer>
+    <span class="k">기능으로 자르면 파일 소유가 저절로 갈린다.</span>
+    규칙을 늘려 지키게 하는 대신 <span class="k">부딪칠 일이 없게 나눈다</span> —
+    이유 없는 잠금이 많아지면 이유 있는 잠금까지 같이 안 읽힌다 (D-167 · D-211).
+    <div class="lock">정본은 docs/00_병렬작업_계약.md §5 와 .github/CODEOWNERS · 원천은 src/p-05-roles.html (D-217)</div>
+  </footer>
+</div>

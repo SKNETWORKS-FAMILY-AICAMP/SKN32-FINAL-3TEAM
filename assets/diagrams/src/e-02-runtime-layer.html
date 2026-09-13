@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+  E-02 · 런타임층 — 사용자가 쓴 것   ★ 원천 (D-90 · D-217)
+  🔴 2026-09-13 재작성. 종전 판은 **6표**였다 — `app_account`(0012 · D-213)가 빠져 있었다.
+  🚨 요소마다 [실측]/[기획] (D-219).
+-->
+<meta charset="utf-8">
+<title>E-02 런타임층</title>
+<link rel="stylesheet" href="plate.css">
+
+<div class="plate">
+  <header>
+    <span class="no">E-02</span>
+    <h1>런타임층 7표 — 사용자가 쓴 것</h1>
+    <span class="right">work_doc 이 수명의 단위다 · [실측]/[기획] · 2026-09-13</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 표가 있고 마이그레이션이 돌았다</span>
+      <span class="chip">[기획] 아직</span>
+    </div>
+
+    <div class="cols">
+      <fieldset>
+        <legend>수명의 단위</legend>
+        <div class="card gov">
+          <b>work_doc</b>
+          <span><span class="tag m">실측</span>consent_store · consent_train 기본 false</span>
+          <span>CHECK 동의 없으면 expires_at 필수</span></div>
+        <div class="card"><b>copy_sentence</b>
+          <span><span class="tag m">실측</span>raw / norm / offset_map</span>
+          <span>origin user·generated·batch·crawl</span></div>
+        <div class="card"><b>upload_blob</b>
+          <span><span class="tag m">실측</span>UPLOAD_ROOT 아래 · sha256</span>
+          <span>업로드물 경로는 여기 한 곳뿐</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>판정이 쌓이는 곳</legend>
+        <div class="card gov">
+          <b>judgment</b>
+          <span><span class="tag m">실측</span>verdict 4종 · hold_reason · attempt 0~2</span>
+          <span>risk_floor → risk_final · law_version</span></div>
+        <div class="card"><b>batch_run</b>
+          <span><span class="tag m">실측</span>done / total · state · summary</span>
+          <span>원문 없이 집계만</span></div>
+        <div class="card"><b>slot_assignment</b>
+          <span><span class="tag p">기획</span>template · slot · position</span>
+          <span>unreviewed_note 제거 불가 고지</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>🆕 계정 (0012 · D-213)</legend>
+        <div class="card pos">
+          <b>app_account</b>
+          <span><span class="tag m">실측</span>governor 하나 · Argon2id</span>
+          <span>CHECK pw_hash LIKE '$argon2id$%'</span>
+          <span>가입 화면 없음 — launcher admin-add</span></div>
+        <div class="card pos">
+          <b>데이터층으로 가는 FK 없음</b>
+          <span>읽기만 한다 — 학습에 섞이지 않는다</span></div>
+        <p class="note" style="margin:8px 0 0">
+          ⬜ <b>`work_doc.owner_id` 에 FK 를 안 걸었다</b> — 일반 사용자 가입이 진입점 B 와 함께
+          오기 때문이다 (D-129). 지금 걸면 가리킬 곳 없는 제약이 된다.
+        </p>
+      </fieldset>
+    </div>
+
+    <div class="cols" style="margin-top:14px">
+      <fieldset><legend>판정 상태 4종</legend>
+        <div class="legend" style="margin:0">
+          <span class="chip pos">confirmed 확정</span>
+          <span class="chip warn">hold 보류</span>
+          <span class="chip">no_basis 근거없음</span>
+          <span class="chip rsk">unjudged 미판정</span>
+        </div></fieldset>
+      <fieldset><legend>보류 사유 4종</legend>
+        <div class="legend" style="margin:0">
+          <span class="chip">low_conf</span><span class="chip">gap2</span>
+          <span class="chip">cat_unknown</span><span class="chip">rd1</span>
+        </div></fieldset>
+      <fieldset><legend>위험도 5값 · 순서형</legend>
+        <div class="legend" style="margin:0">
+          <span class="chip pos">R0 특이사항 없음</span>
+          <span class="chip warn">R1 · R2 주의</span>
+          <span class="chip rsk">R3 · R4 높음</span>
+        </div></fieldset>
+    </div>
+  </div>
+
+  <footer>
+    <span class="k">사용자가 쓴 것은 지울 키가 있어야 저장된다.</span>
+    동의가 없으면 <span class="k">expires_at</span> 이 필수이고, 그것을 DB `CHECK` 가 강제한다 —
+    「나중에 지운다」가 문장으로만 남지 않게 (D-128 · D-129).
+    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 원천 src/e-02-runtime-layer.html (D-217)</div>
+  </footer>
+</div>

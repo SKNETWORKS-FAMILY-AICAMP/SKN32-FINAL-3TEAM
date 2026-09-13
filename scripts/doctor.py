@@ -450,6 +450,47 @@ def _git(*args: str) -> str:
     return out.stdout.strip()
 
 
+def _sanction_signatures(cur) -> tuple[int, int] | None:  # noqa: ANN001
+    """`sanction_rule` 의 (전체, 서명 안 끝난 것). 표가 없으면 `None`.
+
+    🔴 **왜 doctor 인가** — 기기마다 답이 다르다 (D-89). `data/` 는 미커밋이고(D-19)
+       적재 상태가 클론마다 갈린다. pytest 로 옮길 수 없는 검사다.
+    """
+    cur.execute("SELECT to_regclass('sanction_rule')")
+    if not cur.fetchone()[0]:
+        return None
+    cur.execute(
+        "SELECT count(*), count(*) FILTER "
+        "(WHERE verified_by IS NULL OR reviewed_by IS NULL) FROM sanction_rule"
+    )
+    total, pending = cur.fetchone()
+    return int(total), int(pending)
+
+
+def _report_sanction(stat: tuple[int, int] | None) -> None:
+    """🔴 **서명 안 끝난 제재 행은 `v_risk_lookup` 에 안 보인다** (0013 · D-66 · D-170).
+
+    ⛔ 🔴 로 세지 않는다 — 적재하고 나서 서명하는 것이 정상 순서이고, 그 사이를 실패로
+       찍으면 이 검사는 곧 꺼진다 (D-170 이 경계한 반대 방향). 대신 **왜 문제인지**를 적는다.
+    ⬜ 여기서 안 보는 것 — **서명자가 누구여야 하는가** (사람 몫 · `registry_review.yaml`).
+    """
+    if stat is None:
+        print("⬜ sanction_rule 표가 없다 — 마이그레이션 전이다 (D-188).")
+        return
+    total, pending = stat
+    if total == 0:
+        print("⬜ sanction_rule 0행 — 2인 확인을 셀 것이 아직 없다. 적재기가 붙으면 여기가 센다.")
+        print("   🚨 **0행을 「초록」으로 읽지 않는다** — 셀 것이 없는 것과 다 맞는 것은 다르다.")
+        return
+    if pending:
+        print(f"🟡 sanction_rule {total:,}행 중 **2인 확인 대기 {pending:,}행** (D-66).")
+        print("   🔴 이 행들은 `v_risk_lookup` 에 **안 보인다** — 위험도 하한이 안 잡히고,")
+        print("      하한이 없으면 계약이 최종 위험도를 거부한다 (D-09 래칫). 판정이 멈춘다.")
+        print("   ★ 사람만 채운다 — verified_by · reviewed_by 는 서로 달라야 한다.")
+        return
+    print(f"✅ sanction_rule {total:,}행 · 2인 확인 전량 완료")
+
+
 def check_env() -> int:
     """환경·신원·DB 를 본다. 🔴 반환값은 **빨간 건수**다.
 
@@ -502,6 +543,7 @@ def check_env() -> int:
                 cur.execute("SELECT version_num FROM alembic_version")
                 row = cur.fetchone()
                 rev = row[0] if row else None
+            sanction = _sanction_signatures(cur)
         print("✅ DB 접속" + (f" · alembic {rev}" if rev else " · 🔴 alembic 미적용"))
         if not has_vec:
             print("🔴 pgvector 확장이 없다 — CREATE EXTENSION vector (db-up 이 해 준다).")
@@ -509,6 +551,7 @@ def check_env() -> int:
         if not rev:
             print("🔴 테이블이 없다 — uv run python launcher.py migrate 를 먼저 돌린다.")
             red += 1
+        _report_sanction(sanction)
     except Exception as e:  # noqa: BLE001
         print(f"🟡 DB 에 못 붙었다 ({type(e).__name__}) — launcher.py db-up 을 먼저 돌린다.")
 

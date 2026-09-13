@@ -13,6 +13,11 @@ PDF는 dist/ 에 생성한다(.gitignore 대상).
 
 의존성:  markdown, playwright(chromium), pdfplumber
 폰트   :  Noto Sans CJK KR + Noto Color Emoji 가 설치돼 있어야 한다
+         🔴 **없으면 멈춘다** (2026-09-13 · D-220) — `scripts/fontcheck.py` 가 렌더 직전에 잰다.
+            ⛔ 종전에는 검사가 없었다. 09-13 에 뽑은 114쪽에 박힌 글꼴을 재 봤더니
+               `MalgunGothic`·`GulimChe` 였다 — **선언한 글꼴이 하나도 안 들어갔는데**
+               「114쪽 · 목차 미매칭 0건」이 찍혔다. 내용은 맞고 **판형만 조용히 갈렸다.**
+            🚨 기존 제출본은 `NotoSansCJKkr` 로 뽑혔다 — 섞으면 발표에서 서체가 튄다.
 """
 
 import argparse
@@ -23,14 +28,41 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import re
 
+import fontcheck  # noqa: E402  — 글꼴 검사는 도면과 한 벌이다 (D-99)
 from docmeta import versioned_stem  # noqa: E402  — 버전을 읽는 방법은 한 곳뿐이다
 
 BRAND_INK = "#0C1A2B"
 BRAND_BLUE = "#2B5BD7"
 
 
+#: 🔴 `docs` 그룹은 기본 설치에 없다 (`pyproject.toml` 주석이 그렇게 적어 뒀다) —
+#:    5인이 매일 쓰는 것이 아니고 playwright 는 브라우저 바이너리까지 받는다.
+#:    ⛔ 그런데 **에러가 그 사실을 안 알려 줬다.** 날 `ModuleNotFoundError` 트레이스백만 나왔고
+#:       같은 자리를 두 번 밟았다 — D-51 이 *「에러가 고치는 법을 보여 준다」*고 적은 그 자리다.
+_DOCS_GROUP = (
+    "🔴 문서 빌드 의존성이 없다 — `docs` 그룹은 기본 설치에 안 들어간다.\n"
+    "   uv sync --group docs\n"
+    "   uv run playwright install chromium\n"
+    "🚨 두 줄을 다 돌린다. 첫 줄은 파이썬 패키지, 둘째 줄은 브라우저 바이너리다."
+)
+
+
+def _need(mod: str):
+    """`docs` 그룹 모듈을 부르되, 없으면 **고치는 법을 낸다** (D-51).
+
+    ⛔ 예외를 삼키지 않는다 — 사유를 붙여 다시 낸다 (D-162). 조용히 넘어가면
+       PDF 가 안 나온 채 「완료」로 읽힌다.
+    """
+    import importlib
+
+    try:
+        return importlib.import_module(mod)
+    except ImportError as e:
+        raise SystemExit(f"{_DOCS_GROUP}\n\n   없는 것: {mod}  ({e})") from e
+
+
 def md_to_html(md_text):
-    import markdown
+    markdown = _need("markdown")
 
     return markdown.markdown(
         md_text,
@@ -130,13 +162,24 @@ FOOTER = (
 )
 
 
+def _fonts():
+    """검사할 글꼴. 🔴 **이름의 정본은 위 `CSS` 다** — 여기 또 적지 않는다 (D-99)."""
+    return {
+        "본문": fontcheck.declared(CSS, "body"),
+        "코드": fontcheck.declared(CSS, "code"),
+    }
+
+
 def render(src_html, out_pdf, doc_title, org):
-    from playwright.sync_api import sync_playwright
+    sync_playwright = _need("playwright.sync_api").sync_playwright
 
     url = "file://" + str(pathlib.Path(src_html).resolve())
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()
+        # 🔴 렌더 전에 잰다 — 대체돼도 PDF 는 **오류 없이 나온다.** 그것이 09-13 의 사고였다.
+        #    ⬜ 이모지 글꼴(`Noto Color Emoji`)은 안 본다 — 폭 대조가 안 통한다 (D-188).
+        fontcheck.require(pg, _fonts(), source="scripts/build_pdf.py · CSS")
         pg.goto(url, wait_until="networkidle")
         pg.pdf(
             path=out_pdf,
@@ -159,7 +202,7 @@ def norm(t):
 
 def inject_page_numbers(html, pdf_path):
     """1차 렌더 결과에서 각 목차 항목의 실제 쪽수를 찾아 주입한다."""
-    import pdfplumber
+    pdfplumber = _need("pdfplumber")
 
     with pdfplumber.open(pdf_path) as pdf:
         pages = [norm(p.extract_text() or "") for p in pdf.pages]
