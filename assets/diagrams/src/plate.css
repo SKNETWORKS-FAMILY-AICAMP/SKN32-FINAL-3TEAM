@@ -111,6 +111,24 @@
 .stp span{display:block; color:var(--sub); font-size:11.3px}
 .inv{margin-top:4px; padding:5px 8px; background:#F7FAFC; border-left:3px solid var(--gov); font-size:10.8px; color:var(--gov); font-family:ui-monospace,Menlo,monospace}
 
+/* ── 카드·칩 상태색 (D-99) ──────────────────────────────────────── */
+/* 🚨 `.step.pos` 와 **같은 색을 쓴다** — 흐름 판과 카드 판이 다른 초록을 쓰면
+      같은 「돈다」가 장마다 다른 색으로 보인다. 인라인 style 로 적지 않는다. */
+.card.pos{border-left:3px solid #286E4C; background:#F7FBF9}
+.card.pos b{color:#286E4C}
+.card.off{border:1px dashed #C4CCD4; background:var(--offbg)}
+.card.off b{color:var(--off)}
+.card.gov{border-left:3px solid var(--gov); background:#F7FAFC}
+.card.gov b{color:var(--gov)}
+.chip.pos{background:#F7FBF9; color:#286E4C; border-color:#BFE0CE}
+.chip.warn{background:#FFF9EC; color:#8A6A1F; border-color:#E8D9AE}
+.chip.gov{background:#F7FAFC; color:var(--gov); border-color:#C6D6E2}
+.cols2{display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start}
+.cols4{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; align-items:start}
+.tight .card{margin-bottom:7px; padding:7px 9px}
+.tight .card b{font-size:11.8px}
+.tight .card span{font-size:10.9px}
+
 /* ── 출처 태그 (D-219) — 요소마다 「실측이냐 기획이냐」를 붙인다 ─────── */
 /* 🚨 `span.tag` 로 적는다 — `.stp span{display:block}` 과 특이도가 같으면 뒤엣것이 이겨
       태그가 한 줄을 통째로 먹는다. 실제로 한 번 밟았다. */
