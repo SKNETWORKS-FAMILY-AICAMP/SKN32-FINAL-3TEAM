@@ -357,13 +357,19 @@ def matrix() -> None:
 
 @app.command()
 def rebuild() -> None:
-    """등급 판정을 고친 뒤 — 생성물 셋을 한 벌로 다시 만든다.
+    """등급 판정을 고친 뒤 — 생성물 넷을 한 벌로 다시 만든다.
 
-    🔴 **셋은 한 벌이다.** `_matrix/data.js`(사람이 쓴 판정) 하나에서 갈라진다 —
+    🔴 **넷은 한 벌이다.** `_matrix/data.js`(사람이 쓴 판정) 하나에서 갈라진다 —
 
-        gen_registry.py   -> data_sources.yaml            집행 (게이트가 읽는다)
-        build_matrix.py   -> sources.json + 판정매트릭스   근거 (사람이 읽는다)
-        review_sheet.py   -> S0-14 검토표                  2인 확인
+        gen_registry.py      -> data_sources.yaml            집행 (게이트가 읽는다)
+        build_matrix.py      -> sources.json + 판정매트릭스   근거 (사람이 읽는다)
+        extract_rationale.py -> registry_rationale.yaml      판정 근거
+        review_sheet.py      -> S0-14 검토표                  2인 확인
+
+    🔄 **2026-09-13 — 이 docstring 이 「셋」이라 적고 있었다.** 아래 `steps` 는 넷이고
+       끝 줄과 `DANGER` 표도 「넷」이다 — **한 파일 안에서 두 벌이었다** (D-99 · D-167).
+       ⛔ 도면(`diagram`)은 **여기 안 넣는다** — 원천이 13/21 뿐이라 「한 벌로 다시」가
+          성립하지 않고, 글꼴 없는 기기에서 레지스트리 rebuild 까지 막힌다 (D-217 은 다른 축이다).
 
     ⛔ 하나만 돌리면 그 순간 **두 벌**이 된다. D-90 이 적은 그 자리다 —
        *"손으로 양쪽을 고치면 반드시 갈린다."* 사람이 셋을 기억하게 두지 않는다.
