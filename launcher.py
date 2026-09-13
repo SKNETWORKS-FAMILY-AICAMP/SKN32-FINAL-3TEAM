@@ -506,6 +506,20 @@ def db_down() -> None:
     raise typer.Exit(run("docker", "compose", "stop"))
 
 
+@app.command(name="db-fresh")
+def db_fresh(keep: bool = typer.Option(False, "--keep", help="임시 DB 를 안 지운다")) -> None:
+    """빈 DB 에서 `migrate` 가 끝까지 도는가 — **새로 클론한 사람이 밟는 자리** (D-221).
+
+    🔴 2026-09-13 에 팀원이 새 기기에서 막혔다. 다들 쓰던 DB 에 이어 붙이기만 해서
+       **빈 DB 에서 처음부터 돌린 적이 없었다** (D-146).
+    🚨 **옆에 임시 DB 를 만들어** 거기에만 적용하고 지운다 — 진짜 DB 는 안 건드린다.
+    """
+    args = ["uv", "run", "python", "-m", "scripts.db_fresh_check"]
+    if keep:
+        args.append("--keep")
+    raise typer.Exit(run(*args))
+
+
 # ══════════════════════════════════════════════════════════
 # 아직 대상이 없는 명령 — 메뉴에는 보이되 눌러도 안전하다
 # ══════════════════════════════════════════════════════════
@@ -975,6 +989,7 @@ DANGER: dict[str, str] = {
     "rebuild": "생성물 넷을 덮어쓴다 — 하나만 돌리면 두 벌이 된다",
     "diagram": "도면 PNG 를 덮어쓴다 — 원천이 있는 것만 (D-217)",
     "dmap": "build/decision_map.md 를 덮어쓴다 — 생성물이다 (D-90)",
+    "db-fresh": "임시 DB `copylane_freshcheck` 를 만들었다 지운다 — 진짜 DB 는 안 건드린다",
 }
 
 #: 🔴 **플래그가 붙었을 때만** 위험한 것 — (플래그, 이유)
@@ -1005,6 +1020,7 @@ MENU: list[tuple[str, str, object]] = [
     ("7", "DB 기동", db_up),
     ("8", "DB 중지", db_down),
     ("9", "DB 마이그레이션", migrate),
+    ("39", "빈 DB 에서 마이그레이션 검사", db_fresh),
     (GROUP, "거버넌스", None),
     ("10", "생성물 한 벌 다시", rebuild),
     ("11", "레지스트리만", registry),
