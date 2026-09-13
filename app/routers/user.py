@@ -13,11 +13,16 @@
 from __future__ import annotations
 
 import re
+from types import SimpleNamespace
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.db import get_session
+from app.models import CopySentence, Judgment
 from app.settings import PARAMS
 from app.templating import templates
 
@@ -342,17 +347,33 @@ def help_page(request: Request, tab: str = "guide") -> HTMLResponse:
 
 
 @router.get("/history", response_class=HTMLResponse)
-def history(request: Request) -> HTMLResponse:
-    """검수 이력.
+def history(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    """검수 이력 — DB 에 직접 붙는다 (judgment × copy_sentence join).
 
-    ⛔ 목록도 「반복 지적 패턴」도 **판정 이력**에서 나온다. 엔진도 DB 연결도 없어
-       넘길 것이 없다 — **빈 목록을 넘기고 화면이 왜 비었는지 적는다** (D-147).
-       🚨 `rows` 를 지어내지 않는다. 붙는 순간 여기서 조회해 넘긴다.
+    ★ 쿼리는 **lse** 가 준 것이다 (`app/db.py` + `Judgment` 모델). 화면(`user/history.html`)은
+      ksr 것이고, 넘기는 이름 셋(`rows`·`pattern`·`fixtures`)만 맞췄다 —
+      같은 화면을 둘이 만든 것을 이렇게 합쳤다 (§5).
+    ⬜ 판정 엔진이 아직 없어 지금은 항상 빈 목록이다 — **정상이다** (D-147).
+       🚨 빈 목록을 채우려고 가짜 행을 넣지 않는다. 엔진이 붙으면 여기에 쌓인다.
+    ⬜ `pattern`(반복 지적 패턴)은 집계 로직이 없어 아직 `None` 으로 넘긴다.
+       화면은 `None` 이면 그 카드를 아예 그리지 않는다.
+    🚨 이 라우트만 DB 를 본다 — 나머지 화면은 여전히 DB 없이 뜬다 (D-124).
     """
+    rows = session.execute(
+        select(Judgment.judged_at, Judgment.verdict, CopySentence.raw)
+        .join(CopySentence, CopySentence.id == Judgment.subject_id)
+        .where(Judgment.subject_type == "copy_sentence")
+        .order_by(Judgment.judged_at.desc())
+        .limit(50)
+    ).all()
+    history_rows = [
+        SimpleNamespace(text=raw, outcome=verdict, judged_at=judged_at)
+        for judged_at, verdict, raw in rows
+    ]
     return templates.TemplateResponse(
         request,
         "user/history.html",
-        {"rows": [], "pattern": None, "fixtures": _fixture_names("judge")},
+        {"rows": history_rows, "pattern": None, "fixtures": _fixture_names("judge")},
     )
 
 
