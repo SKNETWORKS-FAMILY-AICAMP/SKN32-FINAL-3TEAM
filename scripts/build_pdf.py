@@ -13,6 +13,11 @@ PDF는 dist/ 에 생성한다(.gitignore 대상).
 
 의존성:  markdown, playwright(chromium), pdfplumber
 폰트   :  Noto Sans CJK KR + Noto Color Emoji 가 설치돼 있어야 한다
+         🔴 **없으면 멈춘다** (2026-09-13 · D-220) — `scripts/fontcheck.py` 가 렌더 직전에 잰다.
+            ⛔ 종전에는 검사가 없었다. 09-13 에 뽑은 114쪽에 박힌 글꼴을 재 봤더니
+               `MalgunGothic`·`GulimChe` 였다 — **선언한 글꼴이 하나도 안 들어갔는데**
+               「114쪽 · 목차 미매칭 0건」이 찍혔다. 내용은 맞고 **판형만 조용히 갈렸다.**
+            🚨 기존 제출본은 `NotoSansCJKkr` 로 뽑혔다 — 섞으면 발표에서 서체가 튄다.
 """
 
 import argparse
@@ -23,6 +28,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import re
 
+import fontcheck  # noqa: E402  — 글꼴 검사는 도면과 한 벌이다 (D-99)
 from docmeta import versioned_stem  # noqa: E402  — 버전을 읽는 방법은 한 곳뿐이다
 
 BRAND_INK = "#0C1A2B"
@@ -156,6 +162,14 @@ FOOTER = (
 )
 
 
+def _fonts():
+    """검사할 글꼴. 🔴 **이름의 정본은 위 `CSS` 다** — 여기 또 적지 않는다 (D-99)."""
+    return {
+        "본문": fontcheck.declared(CSS, "body"),
+        "코드": fontcheck.declared(CSS, "code"),
+    }
+
+
 def render(src_html, out_pdf, doc_title, org):
     sync_playwright = _need("playwright.sync_api").sync_playwright
 
@@ -163,6 +177,9 @@ def render(src_html, out_pdf, doc_title, org):
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()
+        # 🔴 렌더 전에 잰다 — 대체돼도 PDF 는 **오류 없이 나온다.** 그것이 09-13 의 사고였다.
+        #    ⬜ 이모지 글꼴(`Noto Color Emoji`)은 안 본다 — 폭 대조가 안 통한다 (D-188).
+        fontcheck.require(pg, _fonts(), source="scripts/build_pdf.py · CSS")
         pg.goto(url, wait_until="networkidle")
         pg.pdf(
             path=out_pdf,
