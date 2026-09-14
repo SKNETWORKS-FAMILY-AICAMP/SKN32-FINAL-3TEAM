@@ -80,6 +80,48 @@ def index(request: Request) -> HTMLResponse:
     )
 
 
+def _list_sources() -> list[dict] | None:
+    """`source` 테이블 목록 — 목업 `sources` 화면 컬럼에 맞춰 낸다.
+
+    🚨 읽기 전용이다 — D-66 2인 확인 절차가 쓰기 경로를 아직 안 열었다.
+    ⬜ DB 접속 실패 시 **None** 을 낸다 (`_table_counts()` 의 빈 dict 와 같은 정신 —
+       화면이 죽지 않고 "DB 없음" 상태를 그린다, D-51).
+    """
+    try:
+        import psycopg  # noqa: PLC0415
+        from psycopg.rows import dict_row  # noqa: PLC0415
+
+        from app.settings import dsn  # noqa: PLC0415
+
+        with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT source_id, name, publisher, grade, layer, verified,
+                       grade_decided_at, grade_decided_by, grade_reviewed_by
+                FROM source
+                ORDER BY grade_decided_at DESC
+                """
+            )
+            return cur.fetchall()
+    except Exception as e:  # noqa: BLE001
+        _log.warning("admin: source 조회 실패 — %s", type(e).__name__)
+        return None
+
+
+@router.get("/sources", response_class=HTMLResponse)
+def sources(request: Request) -> HTMLResponse:
+    """판정 근거(소스 레지스트리) 목록 — 읽기 전용.
+
+    🚨 목업 `sources` 화면의 백엔드다. 쓰기(등급 판정·2인 확인)는 아직 안 연다 —
+       그 절차(§8 ⑬)가 정해지기 전까지 이 화면은 **보여 주기만** 한다 (D-90).
+    """
+    actor = require_governor(request)
+    rows = _list_sources()
+    return templates.TemplateResponse(
+        request, "admin/sources.html", {"sources": rows, "actor": actor}
+    )
+
+
 @router.get("/api/counts")
 def api_counts(request: Request) -> dict[str, int]:
     """🔌 **목업 프론트 연결 배관 테스트용** (2026-09-14).

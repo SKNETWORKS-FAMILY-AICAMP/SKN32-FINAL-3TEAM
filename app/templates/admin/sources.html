@@ -1,0 +1,37 @@
+{# app/templates/admin/sources.html — 판정 근거(소스 레지스트리) 목록 · 소유자 **ssm · psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 등급 판정·2인 확인 쓰기 경로는 아직 없다 (§8 ⑬ 이 정해지기 전까지).
+  ✅ `governor` 로그인을 지나야 뜬다 (index.html 과 같은 이유, D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 판정 근거{% endblock %}
+{% block content %}
+<h1>판정 근거 관리</h1>
+<p><a href="/admin/">← 관리자 첫 화면</a></p>
+<p class="warn">🚨 <b>읽기 전용이다.</b> 등급 판정·2인 확인은 별도 절차가 정해진 뒤에 연다.</p>
+
+{% if sources is none %}
+<p>DB 에 못 붙었다 — <code>launcher.py db-up</code> 을 먼저 돌린다.</p>
+{% elif not sources %}
+<p>등록된 소스가 없다.</p>
+{% else %}
+<table>
+  <tr>
+    <th>소스명</th><th>발행처</th><th>층</th><th>등급</th>
+    <th>검증</th><th>판정일</th><th>판정자</th><th>확인자</th>
+  </tr>
+  {% for s in sources %}
+  <tr>
+    <td>{{ s.name }}</td>
+    <td>{{ s.publisher }}</td>
+    <td>{{ s.layer }}</td>
+    <td>{{ s.grade }}</td>
+    <td>{{ "검증 완료" if s.verified else "미검증" }}</td>
+    <td>{{ s.grade_decided_at.strftime("%Y-%m-%d") if s.grade_decided_at else "-" }}</td>
+    <td>{{ s.grade_decided_by }}</td>
+    <td>{{ s.grade_reviewed_by }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}
