@@ -288,6 +288,18 @@ data/manifest.jsonl          →  collect_manifest
 --   D-20  모든 파생물은 fragment_id FK ON DELETE CASCADE 로 매달린다
 --   D-66  2인 확인(4-eyes)을 CHECK 제약으로 강제한다
 --   D-71  「데이터 재배포 금지」는 배포 축이지 학습 축이 아니다 → provenance 기록
+--
+--  🔄 2026-09-14 — 이 파일의 **지위**가 바뀌었다.
+--     종전: alembic 0번이 실행 시점에 이 파일을 읽었다 → 이 파일이 바뀌면
+--           「0003 이 도는 DB 의 모양」이 사람마다 달라졌다 (D-221 · 09-13·14 팀원 둘).
+--     지금: 0번은 동결본 `db/schema_0001.sql` 을 읽는다.
+--           이 파일은 **거버넌스 층의 현재 상태를 선언하는 정본**이다 (사람이 읽는 자리).
+--
+--  🚨 그래서 스키마를 바꿀 때 고치는 것은 **둘**이다 —
+--       ① 이 파일          현재 상태의 선언
+--       ② 새 마이그레이션    그 변화를 이미 있는 DB 에 옮기는 것
+--     ⛔ 하나만 고치면 「새로 세운 DB」와 「옮긴 DB」가 갈리고, 그 차이는 조용하다.
+--     ★ 갈렸는지는 `uv run python launcher.py db-drift` 가 임시 DB 둘을 떠서 대조한다.
 -- ═══════════════════════════════════════════════════════════════════
 
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -412,6 +424,11 @@ CREATE TABLE document (
     doc_type        TEXT NOT NULL,          -- 법률/시행령/시행규칙/고시/지침/의결서/처분/보도자료
     title           TEXT,
     law_id          TEXT,
+    -- 🆕 0015 — 별표 번호. **머리글(「■ … [별표 5] …」)에서 읽은 값만** 들어간다.
+    --    🔴 NULL = 「원문 머리글에 번호가 없다」. 파일명 일련번호로 채우지 않는다 (D-224).
+    --       채워 두면 인용이 「[별표 3]」이라 적히고 실은 다른 별표일 수 있다.
+    --    ⛔ 법령 문서(doc_type='법령')는 늘 NULL 이다 — 별표에만 뜻이 있다.
+    annex_no        SMALLINT,
     source_ref      TEXT,                   -- 사건번호 · 법령ID · 인정번호
     effective_date  DATE,
     superseded_at   DATE                    -- 🚨 NULL 이 아니면 현행이 아니다

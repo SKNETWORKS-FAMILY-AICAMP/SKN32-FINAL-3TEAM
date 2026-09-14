@@ -301,6 +301,14 @@ def test_그래프_응답이_계약을_통과한다() -> None:
 
 
 def _hit(**kw: object) -> object:
+    """`Hit` 한 줄. 🔴 **칸이 늘면 여기도 고친다** — `tests/test_retrieve.py::_hit` 와 짝이다.
+
+    ⛔ 공장이 두 곳인 이유는 만드는 모양이 다르기 때문이다 — 저쪽은 **빈 줄**, 이쪽은
+       **인용이 서는 줄**이다. 합치면 둘 중 하나가 남의 기본값을 쓴다 (D-99 의 예외).
+    🔄 2026-09-14 — 0015 가 `annex_no`·`doc_title` 을 더했을 때 **양쪽을 다 안 고쳐** 네
+       게이트가 `TypeError` 로 죽었다. ★ `Hit` 에 기본값을 안 준 것은 맞다 — 주면
+       `_rows_to_hits` 가 칸을 빠뜨려도 조용히 `None` 이 된다.
+    """
     from app import retrieve as rt
 
     d = dict(
@@ -314,6 +322,8 @@ def _hit(**kw: object) -> object:
         part_no=1,
         part_total=3,
         doc_type="법령",
+        annex_no=None,
+        doc_title=None,
         category=["일반"],
         text="…",
         attribution=None,

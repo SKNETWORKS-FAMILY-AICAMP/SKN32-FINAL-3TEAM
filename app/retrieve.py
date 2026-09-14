@@ -133,6 +133,11 @@ class Hit:
     part_no: int | None
     part_total: int | None
     doc_type: str | None
+    #: 🆕 별표 번호 — **원문 머리글에서 읽은 값만** (0015). `None` = 머리글에 번호가 없다.
+    #:    ⛔ 파일명 일련번호가 아니다. `None` 이면 별표 인용을 세우지 않는다 (D-224).
+    annex_no: int | None
+    #: 🆕 문서 이름 — 사람이 읽는 자리. 🚨 **좌표가 아니다** (좌표는 `citation`).
+    doc_title: str | None
     category: list[str]
     text: str
     attribution: str | None
@@ -188,15 +193,28 @@ _SELECT: tuple[tuple[str, str], ...] = (
     ("c.doc_type", "doc_type"),
     ("c.category", "category"),
     ("c.text", "text"),
+    # 🔴 2026-09-14 (0015) — **별표에 좌표를 세우려면 「몇 번 별표인가」가 있어야 한다.**
+    #    ⛔ 종전에는 상위 5건 중 4건이 별표였고 **전부 버려졌다** — 하필
+    #       013453 [별표 1]「부당한 표시 또는 광고의 내용」처럼 문구가 실제로 걸리는 자리다.
+    #    🚨 `d.annex_no` 에는 **원문 머리글에서 읽은 값만** 들어 있다. NULL 이면 인용을
+    #       세우지 않는다 — 파일명 일련번호로 짐작하지 않는다 (D-224 · D-72).
+    ("d.annex_no", "annex_no"),
+    #: 사람이 읽는 이름 — 「부당한 표시 또는 광고의 내용(제3조제1항 관련)」. 좌표가 아니다.
+    ("d.title", "doc_title"),
     ("s.attribution", "attribution"),
     ("s.url", "source_url"),
 )
 _COLS = ",\n       ".join(e for e, _ in _SELECT)
 _NAMES = tuple(n for _, n in _SELECT)
+# 🔴 2026-09-14 — 다섯째 조인. ⛔ **`JOIN` 이 아니라 `LEFT JOIN` 이다** — `document` 행이
+#    없는 청크가 있으면 `JOIN` 은 그 청크를 **검색 결과에서 통째로 지운다.** 거버넌스 조인 넷은
+#    「자격이 없으면 안 나간다」가 뜻이지만, 이것은 **이름을 붙이려고** 드는 것이다.
+#    ⛔ 없음을 배제로 바꾸면 *「없음이 성공으로 집계」* 의 거울상이 된다 — 조용히 줄어든다.
 _JOINS = """FROM v_current_chunk c
 JOIN fragment   f ON f.fragment_id = c.fragment_id
 JOIN source     s ON s.source_id   = f.source_id
-JOIN source_use u ON u.source_id   = s.source_id AND u.use_code = 'U2_rag'"""
+JOIN source_use u ON u.source_id   = s.source_id AND u.use_code = 'U2_rag'
+LEFT JOIN document d ON d.doc_id = c.doc_id"""
 
 SQL_LITERAL = f"""SELECT {_COLS}
 {_JOINS}
@@ -295,11 +313,71 @@ def encode(model_id: str, text: str) -> list[float]:
 _CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 
 
+#: 목의 글자 — 「가·나·다…」. 🚨 **`preprocess/law_norm.py` 의 `JO` 와 같은 값이다.**
+#:    ⛔ 합치지 않았다 — `app/` 이 `preprocess/` 를 import 하면 런타임이 전처리 층에 매인다.
+#:       그래서 D-99 의 나머지 절반을 쓴다: **양쪽에 서로를 가리키는 주석.**
+#:       ★ 한쪽을 고치면 다른 쪽도 고친다. 게이트가 두 값이 같은지 본다.
+_JO = "가나다라마바사아자차카타파하"
+
+#: 별표 계층을 옮기는 말 — 깊이마다 **모양이 다르다** (2026-09-14 실측 · 301행 전부).
+#:    깊이 0 `1`      → 제1호      (숫자)
+#:    깊이 1 `1.가`   → 가목        (가나다 한 글자)
+#:    깊이 2 `1.가.1` → 1)         (숫자)
+#: 🔴 깊이 3(`dots=3`)은 **2행뿐이고 모양을 안 봤다** — 옮기지 않는다 (D-188 · D-224).
+_ANNEX_DEPTH: tuple[tuple[str, str], ...] = (
+    ("digit", "제{}호"),
+    ("jo", "{}목"),
+    ("digit", "{})"),
+)
+#: 별표의 구역 이름 중 **원문이 준 낱말**. ⛔ `구역N` 은 우리가 붙인 이름이라 인용에 안 쓴다.
+_ANNEX_SECTIONS = {"본문": "", "비고": " 비고"}
+
+
+def _annex_citation(hit_like: dict) -> str | None:
+    """「[별표 1] 제2호가목1)」을 조립한다. 🔴 확신이 없으면 `None`.
+
+    🚨 **번호가 있어야 시작한다.** `document.annex_no` 는 원문 머리글에서 읽은 값만 담는다
+       (0015). ⛔ NULL 이면 포기한다 — 파일명 일련번호로 짐작하면 **다른 별표를 가리킬 수
+       있다.** 실측(2026-09-14): 013475 의 `2.가.1` 이 `_0003`·`_0004` **두 별표**에 있다.
+
+    🔴 **구역을 빠뜨리면 부분 인용이 된다.** 013453 [별표 1] 은 8호까지가 위법 유형이고 그
+       뒤 「비고」에 **적용 제외**가 1호부터 다시 온다 (D-153 · D-156). 구역 없이
+       「제1호」라 적으면 **위법 유형 1호와 적용제외 1호를 같은 좌표로** 가리킨다.
+       ⛔ 그래서 우리가 붙인 이름(`구역N`)이면 **포기한다** — 원문에 없는 말을 넣지 않는다.
+    """
+    no = hit_like.get("annex_no")
+    if not no:
+        return None
+    section = (hit_like.get("item") or "").strip()
+    if section not in _ANNEX_SECTIONS:
+        return None
+    out = f"[별표 {int(no)}]{_ANNEX_SECTIONS[section]}"
+
+    path = (hit_like.get("paragraph") or "").strip()
+    if not path:
+        return out
+    parts = path.split(".")
+    if len(parts) > len(_ANNEX_DEPTH):
+        return None  # 깊이 3 이상 — 아는 모양이 아니다
+    for token, (shape, fmt) in zip(parts, _ANNEX_DEPTH, strict=False):
+        if shape == "digit":
+            if not token.isdigit():
+                return None
+        elif len(token) != 1 or token not in _JO:
+            return None
+        out += fmt.format(token)
+    return out
+
+
 def citation(hit_like: dict) -> str | None:
     """「제8조제1항제1호」를 조립한다. 🔴 확신이 없으면 `None` 이다.
 
-    ⛔ **별표는 조립하지 않는다.** 계층 표기가 `2.가.10` 처럼 달라 같은 규칙이 안 먹는다.
-       모르는 모양을 그럴듯하게 옮기는 것이 D-224 이 막으려는 바로 그 일이다.
+    🔄 **2026-09-14 — 별표에도 좌표를 세운다** (0015 · 판정 A). 종전 주석은
+       *「⛔ 별표는 조립하지 않는다」* 였고, 그것은 **빠뜨린 것이 아니라 판정**이었다
+       (`preprocess/chunk.py` 가 그렇게 적어 두었다). 그 판정을 다시 열었다 —
+       실측으로 상위 5건 중 **4건이 별표**였고 전부 버려졌으며, 별표 301행(12.5%)이
+       구조적으로 근거가 될 수 없었다. **규칙은 여전히 「모르면 `None`」이다.**
+       ★ 별표 갈래는 `_annex_citation()` 에 따로 둔다 — 두 체계를 한 함수에 섞지 않는다.
     🚨 항·호가 예상 밖 표기면 **조까지만 내지 않고 통째로 포기한다** — 부분 인용은
        「제8조」라고 적어 놓고 실은 제3항인 근거를 가리킬 수 있다.
 
@@ -309,6 +387,9 @@ def citation(hit_like: dict) -> str | None:
        ⛔ 그러므로 이 함수가 값을 냈다고 「조문 전문을 인용했다」가 아니다 — 받는 쪽은
           `part_total` 을 **같이** 봐야 한다. 게이트가 세 질의 모두 그 칸을 싣는지 본다.
     """
+    # 🚨 **갈래를 먼저 가른다.** 별표는 조·항·호 규칙이 안 먹는다 — 다른 함수가 맡는다.
+    if hit_like.get("doc_type") == "별표":
+        return _annex_citation(hit_like)
     if hit_like.get("doc_type") != "법령":
         return None
     art = (hit_like.get("article") or "").strip()

@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from pathlib import Path
 
 import pytest
@@ -95,6 +96,10 @@ def _hit(cid: str = "c1", **kw: object) -> rt.Hit:
 
     ⛔ 종전에는 테스트가 인자를 손으로 나열했고, 0008 이 `paragraph_no`·`context` 를
        더했을 때 **`TypeError` 로 깨진 채** 남아 있었다 (게이트가 아니라 안 걸렸다).
+    🔄 **2026-09-14 — 같은 일이 또 났다.** 0015 가 `annex_no`·`doc_title` 을 더했는데
+       여기를 안 고쳐 네 게이트가 `TypeError` 로 죽었다. ★ **`Hit` 에 기본값을 주지
+       않은 것은 맞다** — 주면 `_rows_to_hits` 가 칸을 빠뜨려도 조용히 `None` 이 들어간다.
+       **깨지는 것이 설계가 작동한 것**이고, 고칠 곳은 늘 이 공장이다.
     """
     base: dict = {
         "chunk_id": cid,
@@ -107,6 +112,8 @@ def _hit(cid: str = "c1", **kw: object) -> rt.Hit:
         "part_no": None,
         "part_total": None,
         "doc_type": None,
+        "annex_no": None,
+        "doc_title": None,
         "category": [],
         "text": "…",
         "attribution": None,
@@ -136,6 +143,7 @@ def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
 
 
 # ── citation 조립 (2026-09-12) ────────────────────────────────────────────
+@pytest.mark.gate
 @pytest.mark.parametrize(
     ("row", "want"),
     [
@@ -149,11 +157,38 @@ def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
         ),
         ({"doc_type": "법령", "article": "제8조", "paragraph": "①", "item": ""}, "제8조제1항"),
         ({"doc_type": "법령", "article": "제18조", "paragraph": "", "item": ""}, "제18조"),
-        # ⛔ 별표는 계층 표기가 `2.가.10` 이라 같은 규칙이 안 먹는다 — 조립하지 않는다
+        # 🔄 2026-09-14 (0015) — **별표도 조립한다.** 단 번호가 없으면 여전히 `None` 이다.
+        #    ⛔ 이 행은 `annex_no` 가 없다(머리글에 번호가 없던 별표) → 포기한다.
         (
             {"doc_type": "별표", "article": "제19조제7항", "paragraph": "7.나.2", "item": "본문"},
             None,
         ),
+        # ── 별표 갈래 (0015 · 판정 A) ─────────────────────────────────────
+        ({"doc_type": "별표", "annex_no": 1, "item": "본문", "paragraph": "2"}, "[별표 1]제2호"),
+        (
+            {"doc_type": "별표", "annex_no": 1, "item": "본문", "paragraph": "1.나"},
+            "[별표 1]제1호나목",
+        ),
+        # ★ 깊이 3 — 실측 61행. `2.가.10` 이 이 모양이다
+        (
+            {"doc_type": "별표", "annex_no": 3, "item": "본문", "paragraph": "2.가.10"},
+            "[별표 3]제2호가목10)",
+        ),
+        # 🔴 「비고」는 구역이 다르다 — 013453 [별표 1] 은 비고에서 **호가 1부터 다시** 온다.
+        #    빠뜨리면 위법 유형 1호와 적용제외 1호가 **같은 좌표**가 된다 (D-153 · D-156).
+        (
+            {"doc_type": "별표", "annex_no": 1, "item": "비고", "paragraph": "1"},
+            "[별표 1] 비고제1호",
+        ),
+        # 경로가 없으면 별표까지만 — 조 청크가 「제18조」만 내는 것과 같은 자리
+        ({"doc_type": "별표", "annex_no": 1, "item": "본문", "paragraph": ""}, "[별표 1]"),
+        # ⛔ **우리가 붙인 구역 이름**은 인용에 안 쓴다 — 원문에 없는 말이다
+        ({"doc_type": "별표", "annex_no": 1, "item": "구역2", "paragraph": "1"}, None),
+        # ⛔ 깊이 4 — 실측 2행. **모양을 안 봤으므로 옮기지 않는다** (D-188)
+        ({"doc_type": "별표", "annex_no": 1, "item": "본문", "paragraph": "1.가.2.나"}, None),
+        # 🚨 깊이마다 모양이 정해져 있다 — 뒤바뀌면 포기한다
+        ({"doc_type": "별표", "annex_no": 1, "item": "본문", "paragraph": "가.1"}, None),
+        ({"doc_type": "별표", "annex_no": 1, "item": "본문", "paragraph": "1.AA"}, None),
         # ★ 0008 — 원문에 「①」가 없어도 **우리가 센 서수**가 있으면 인용이 선다
         (
             {
@@ -185,7 +220,13 @@ def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
     ],
 )
 def test_citation_조립(row: dict, want: str | None) -> None:
-    """🔴 부분 인용을 내지 않는다 — 「제8조」가 실은 제3항이면 틀린 근거다 (D-224)."""
+    """🔴 부분 인용을 내지 않는다 — 「제8조」가 실은 제3항이면 틀린 근거다 (D-224).
+
+    🔄 **2026-09-14 — `gate` 표를 붙였다.** 종전에는 이 검사가 **`-m gate` 밖**에 있었다.
+       ⛔ D-224 의 핵심 규율(「모르면 `None`」)을 재는 검사가 커밋 전 점검에서 빠져 있었다 —
+          「검사는 있는데 실행되지 않는다」는 **없는 것과 거의 같다** (D-170 의 어법).
+       ★ DB 가 필요 없고 결정론적이라 게이트 조건을 만족한다 (D-89 의 기준).
+    """
     assert rt.citation(row) == want
 
 
@@ -195,6 +236,41 @@ def test_모든_질의가_항과_호를_싣는다() -> None:
     for sql in QUERIES:
         assert "c.paragraph" in sql
         assert "c.item" in sql
+
+
+@pytest.mark.gate
+def test_모든_질의가_별표_번호를_싣는다() -> None:
+    """🔴 별표 인용은 **번호가 있어야** 선다 (0015 · 판정 A).
+
+    ⛔ 이 칸이 빠지면 `citation()` 의 별표 갈래가 **늘 `None`** 이 되고, 별표 301행이
+       조용히 근거에서 빠진다 — 「만들어 놓고 읽는 쪽이 없는 값」의 거울상이다.
+    🚨 `LEFT JOIN` 이어야 한다 — `document` 행이 없는 청크를 `JOIN` 이 **검색에서 지운다.**
+       없음을 배제로 바꾸면 결과가 조용히 줄어든다.
+    """
+    for sql in QUERIES:
+        assert "d.annex_no" in sql, "별표 번호를 안 싣는다 — 별표 인용이 늘 None 이 된다"
+        assert "d.title" in sql, "문서 이름을 안 싣는다 — 화면이 무슨 별표인지 못 말한다"
+        assert "LEFT JOIN document d" in sql, (
+            "🚨 `JOIN document` 는 document 행이 없는 청크를 검색에서 지운다 — LEFT JOIN 이다"
+        )
+
+
+@pytest.mark.gate
+def test_목_글자표가_두_벌인_채_갈리지_않는다() -> None:
+    """🔴 `app/retrieve.py` 의 `_JO` 와 `preprocess/law_norm.py` 의 `JO` 는 **같은 값**이다.
+
+    ⛔ 합치지 않았다 — `app/` 이 `preprocess/` 를 import 하면 런타임이 전처리 층에 매인다.
+       D-99 의 나머지 절반(**양쪽에 서로를 가리키는 주석**)을 썼고, 이 게이트가 그 둘을 잰다.
+    🚨 갈리면 **별표 인용과 별표 추출이 다른 글자를 목으로 본다** — 조용하다.
+    """
+    other = (ROOT / "preprocess" / "law_norm.py").read_text(encoding="utf-8")
+    m = re.search(r'^JO = "([^"]+)"', other, re.M)
+    assert m, "🚨 preprocess/law_norm.py 에서 JO 를 못 찾았다 — 이름이 바뀌었다"
+    assert m.group(1) == rt._JO, (  # noqa: SLF001 — 두 벌이 갈렸는지 재는 것이 이 게이트다
+        f"🚨 목 글자표가 갈렸다.\n   app/retrieve.py  {rt._JO!r}\n"  # noqa: SLF001
+        f"   preprocess/law_norm.py  {m.group(1)!r}\n"
+        "   ★ 한쪽을 고치면 다른 쪽도 고친다 — 양쪽 주석이 서로를 가리킨다 (D-99)."
+    )
 
 
 # ── 0008 자립 텍스트·입력 지문 ────────────────────────────────────────────
