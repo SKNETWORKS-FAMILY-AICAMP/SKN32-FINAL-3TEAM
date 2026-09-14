@@ -579,6 +579,28 @@ def db_drift(keep: bool = typer.Option(False, "--keep", help="임시 DB 둘을 �
     raise typer.Exit(run(*args))
 
 
+@app.command(name="db-reset")
+def db_reset(
+    yes: bool = typer.Option(False, "--yes", help="🔴 실제로 지운다 — 없으면 미리보기"),
+    data: bool = typer.Option(False, "--data", help="파생물 재추출 → 적재 → 임베딩까지"),
+) -> None:
+    """데이터베이스를 처음부터 다시 만든다 — **고치지 않고 다시 세운다**.
+
+    🔴 09-13·09-14 에 팀원 둘이 옛 DB 상태 때문에 막혔고, 둘 다 `docker compose down -v` 로
+       **자력으로** 풀었다. 처방은 있었는데 **절차가 아니어서 각자 따로 발견했다** (D-221).
+    ★ DB 를 **생성물**로 본다 — 원천은 마이그레이션 체인·`data/derived/**`·시드다 (D-90).
+    🚨 **콘솔 계정이 사라진다** — DB 에만 있고 파일에 없는 유일한 값이다 (D-66 · D-213).
+       지우기 전에 명단을 읽어 두고, 다시 세운 뒤 사람이 칠 명령을 찍는다.
+    ⛔ **기본은 미리보기다.** `--yes` 를 줘야 지운다 (D-220 fail-closed).
+    """
+    args = ["uv", "run", "python", "-m", "scripts.db_reset"]
+    if yes:
+        args.append("--yes")
+    if data:
+        args.append("--data")
+    raise typer.Exit(run(*args))
+
+
 # ══════════════════════════════════════════════════════════
 # 아직 대상이 없는 명령 — 메뉴에는 보이되 눌러도 안전하다
 # ══════════════════════════════════════════════════════════
@@ -1030,6 +1052,11 @@ ASK_FLAG: dict[str, list[tuple[str, str, str, str]]] = {
     "chunk": [("chunks.jsonl", "--dump", "보기만 한다", "파일로 쓴다")],
     "embed": [("범위", "--check", "전부 임베딩한다 (DB 필요)", "모델 차원만 잰다 (DB 불필요)")],
     "extract": [("파생물", "--dump", "보기만 한다", "쓴다 — 🚨 마스킹 정책이 있어야 한다")],
+    # 🔴 순서가 중요하다 — `--yes` 를 먼저 묻는다. 「미리보기」를 고르면 `--data` 는 뜻이 없다.
+    "db-reset": [
+        ("실행", "--yes", "미리보기만 — 아무것도 안 지운다", "🔴 볼륨을 지우고 다시 세운다"),
+        ("데이터", "--data", "스키마와 시드까지", "파생물 재추출 → 적재 → 임베딩까지"),
+    ],
 }
 
 #: 확인을 한 번 더 받는 동작 — **값은 이유다** (2026-09-11).
@@ -1050,6 +1077,11 @@ DANGER: dict[str, str] = {
     "dmap": "build/decision_map.md 를 덮어쓴다 — 생성물이다 (D-90)",
     "db-fresh": "임시 DB `copylane_freshcheck` 를 만들었다 지운다 — 진짜 DB 는 안 건드린다",
     "db-drift": "임시 DB **둘**을 만들었다 지운다 — 진짜 DB 는 안 건드린다",
+    # 🔴 이 저장소에서 **유일하게 되돌릴 수 없는** 명령이다. 이유를 두 줄로 적는다.
+    "db-reset": (
+        "🔴 볼륨을 지운다 — **콘솔 계정이 사라지고 비밀번호는 되살릴 수 없다** (D-66). "
+        "청크·임베딩은 파생물에서 되세운다 — **이 기기에 원문이 있는 경우만**"
+    ),
     "onboard": "패키지를 깔고 DB 컨테이너를 띄우고 마이그레이션을 돌린다 — 새 기기용 (D-221)",
 }
 
@@ -1083,6 +1115,7 @@ MENU: list[tuple[str, str, object]] = [
     ("9", "DB 마이그레이션", migrate),
     ("39", "빈 DB 에서 마이그레이션 검사", db_fresh),
     ("40", "스키마 선언 ↔ 실제 대조", db_drift),
+    ("41", "DB 를 처음부터 다시", db_reset),
     (GROUP, "거버넌스", None),
     ("10", "생성물 한 벌 다시", rebuild),
     ("11", "레지스트리만", registry),
