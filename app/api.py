@@ -88,7 +88,11 @@ _CSP_PAGE = (
 #: ⬜ **Swagger·ReDoc 은 CDN 에서 스크립트를 받는다** — 엄격한 CSP 를 걸면 `/docs` 가 안 뜨고,
 #:    그건 팀원이 계약을 보는 창구다. **면제하되 면제 사실을 여기 남긴다** (D-192).
 #:    🚨 배포 때는 `/docs` 자체를 닫는 판정이 필요하다 — 지금은 로컬뿐이라 연다.
-_CSP_EXEMPT = ("/docs", "/redoc", "/openapi.json")
+#: 🔄 2026-09-14 (psj) — `/static/mockup.html` 추가. 프론트 목업(Tailwind CDN + 인라인
+#:    스크립트)을 FastAPI 배관 테스트용으로 같은 origin 에서 열려고 면제했다. 같은 이유,
+#:    같은 패턴(D-192). ⬜ 목업이 실제 화면으로 전환되면 이 예외는 지운다 — 그때는 CSP
+#:    안에서 동작하게 다시 짜야 한다. 팀장 파일이라 여기 남기고 디코에도 알린다.
+_CSP_EXEMPT = ("/docs", "/redoc", "/openapi.json", "/static/mockup.html")
 
 
 @app.middleware("http")

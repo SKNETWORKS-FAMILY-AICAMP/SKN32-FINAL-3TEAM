@@ -50,10 +50,11 @@ def require_governor(request: Request) -> str:
     return initials
 
 
-@router.get("/", response_class=HTMLResponse)
-def index(request: Request) -> HTMLResponse:
-    """관리자 첫 화면. 🚨 **DB 가 없어도 뜬다** — 빈 표를 그리고 고치는 법을 낸다 (D-51)."""
-    actor = require_governor(request)
+def _table_counts() -> dict[str, int]:
+    """`_TABLES` 각각의 행 수. DB 가 없으면 **빈 dict** — 예외를 삼킨다 (D-51).
+
+    🚨 `index()` 와 `/api/counts` 가 **같은 함수**를 쓴다 — 로직을 두 벌 두지 않는다 (D-99).
+    """
     counts: dict[str, int] = {}
     try:
         import psycopg  # noqa: PLC0415 — DB 가 없어도 임포트는 서야 한다
@@ -67,6 +68,27 @@ def index(request: Request) -> HTMLResponse:
     except Exception as e:  # noqa: BLE001
         # 🔴 원인 문자열을 화면에 담지 않는다 — 호스트·포트·사용자명이 그 안에 있다.
         _log.warning("admin: DB 접속 실패 — %s", type(e).__name__)
+    return counts
+
+
+@router.get("/", response_class=HTMLResponse)
+def index(request: Request) -> HTMLResponse:
+    """관리자 첫 화면. 🚨 **DB 가 없어도 뜬다** — 빈 표를 그리고 고치는 법을 낸다 (D-51)."""
+    actor = require_governor(request)
     return templates.TemplateResponse(
-        request, "admin/index.html", {"counts": counts, "actor": actor}
+        request, "admin/index.html", {"counts": _table_counts(), "actor": actor}
     )
+
+
+@router.get("/api/counts")
+def api_counts(request: Request) -> dict[str, int]:
+    """🔌 **목업 프론트 연결 배관 테스트용** (2026-09-14).
+
+    ⬜ **진짜 대시보드 지표(검수 건수·생성 건수·매출)가 아니다.** 그건 사용자 행동 로그·매출
+       테이블이 따로 있어야 하고, 지금 DB 엔 없다 — 스키마 추가는 팀장 승인이 먼저다
+       (병렬작업 계약 §5 · `db/**` 등급 1).
+    🚨 이 라우트는 **"Postgres → FastAPI → 목업 화면" 배관이 실제로 뚫리는가**만 증명한다.
+       읽기도 로그인을 요구한다 — `index()` 와 같은 이유다 (D-76 · P2-10).
+    """
+    require_governor(request)
+    return _table_counts()
