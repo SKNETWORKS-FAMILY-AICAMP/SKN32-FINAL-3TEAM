@@ -1,21 +1,36 @@
-"""거버넌스·데이터 층 — `db/schema.sql` 을 그대로 적용한다.
+"""거버넌스·데이터 층 — **동결본** `db/schema_0001.sql` 을 그대로 적용한다.
 
 Revision ID: 0001_governance
 Revises:
 Create Date: 2026-09-09
 
 ──────────────────────────────────────────────────────────────
-🚨 **이 마이그레이션은 DDL 을 여기 적지 않는다.** `db/schema.sql` 을 읽어 실행한다.
+🔄 **2026-09-14 — 읽는 파일을 `db/schema.sql` 에서 `db/schema_0001.sql` 로 바꿨다 (동결).**
 
-    거버넌스·데이터 층 (19테이블·14타입·3뷰)   db/schema.sql   ← **원본**
-    런타임 층 (6테이블)                        app/models.py   ← ORM · autogenerate
+   ⛔ **종전이 왜 위험했나.** 이 파일은 DDL 을 안 적고 **실행 시점에** `db/schema.sql` 을
+      읽었다. 그런데 그 파일은 09-09 이후 여덟 번 바뀌었다. 그래서
+      **「3번 마이그레이션이 도는 DB 의 모양」이 사람마다 달라졌다** —
+      새로 클론한 사람은 오늘자 모양 위에서, 쓰던 사람은 그때 모양 위에서 돌았다.
+      09-13(이서은)·09-14(박수진) 이틀 연속 같은 자리에서 막힌 원인이 이것이다 (D-221).
+   🚨 **버전형 체인의 불변식은 「0번이 고정」이다.** 그게 깨지면 뒤의 열셋은 순서가 있을 뿐
+      전제가 없다. 아래 「이 파일을 고치지 않는다」를 **파일은 안 고치고 그 파일이 읽는
+      원본을 고쳐서** 어겼다 — 결과가 같았다.
+   ★ 바꾸기 전에 `uv run python launcher.py db-drift` 로 **구조 차이 0** 을 실측했다.
+     그래서 동결본은 `alembic head` 와 같은 모양이다.
+
+🚨 **이 마이그레이션은 DDL 을 여기 적지 않는다.** 파일을 읽어 실행한다.
+
+    0번의 입력 (동결 · 안 바뀜)            db/schema_0001.sql  ← **이 파일이 읽는 것**
+    거버넌스·데이터 층의 현재 선언           db/schema.sql       ← 사람이 읽는 정본
+    런타임 층 (6테이블)                     app/models.py       ← ORM · autogenerate
 
 ⛔ DDL 을 이 파일에 복사하면 같은 판정이 **세 곳**(설계 문서 · schema.sql · 마이그레이션)에
    생긴다. 그러면 한 곳만 고쳐지고, 고쳐지지 않은 쪽이 실제로 도는 쪽일 수 있다 (D-99).
    `docs/02_설계/거버넌스데이터층_DDL.md` 가 스스로 「저장소의 그 파일이 원본」이라 적었다.
 
-🚨 **스키마를 바꿀 때** — `db/schema.sql` 을 고치고 **새 마이그레이션**을 쓴다.
-   이 파일을 고치지 않는다. 이미 적용된 마이그레이션을 고치면 기기마다 스키마가 갈린다.
+🚨 **스키마를 바꿀 때 고치는 것은 둘이다** — `db/schema.sql`(현재 선언) **+ 새 마이그레이션**.
+   ⛔ 이 파일도, `db/schema_0001.sql` 도 고치지 않는다. 동결본은
+      `tests/test_db_schema.py` 의 sha256 핀이 막고, 두 벌이 갈렸는지는 `db-drift` 가 본다.
 
 🔴 **`%` 때문에 파라미터 경로로 보내지 않는다** (2026-09-09 실측).
 
@@ -45,14 +60,17 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-SCHEMA = pathlib.Path(__file__).resolve().parents[2] / "db" / "schema.sql"
+#: 🧊 **동결본.** ⛔ 여기를 `db/schema.sql` 로 되돌리지 않는다 — 그것이 09-13·14 의 원인이다.
+SCHEMA = pathlib.Path(__file__).resolve().parents[2] / "db" / "schema_0001.sql"
 
 
 def _sql() -> str:
     if not SCHEMA.exists():
         raise FileNotFoundError(
-            f"{SCHEMA} 가 없다 — 거버넌스 층의 원본이다.\n"
-            "  docs/02_설계/거버넌스데이터층_DDL.md 의 부록에서 뽑아 둔 파일이다."
+            f"{SCHEMA} 가 없다 — 0번 마이그레이션의 **동결된 입력**이다.\n"
+            "  ⛔ `db/schema.sql` 로 대신하지 않는다. 그 파일은 계속 바뀌므로,\n"
+            "     대신 쓰면 사람마다 다른 모양에서 0003 이 돌기 시작한다 (D-221).\n"
+            "  ★ git 에서 되살린다: git checkout -- db/schema_0001.sql"
         )
     return SCHEMA.read_text(encoding="utf-8")
 
@@ -78,7 +96,9 @@ def downgrade() -> None:
 
     ⛔ 그 한 줄은 런타임 층(`app/models.py`)까지 같이 지운다. 층이 둘인데
        한 층의 downgrade 가 다른 층을 지우면, 되돌리기가 사고가 된다.
-    ★ 목록은 `db/schema.sql` 에서 읽는다 — 손으로 유지하지 않는다 (D-99).
+    ★ 목록은 **동결본**에서 읽는다 — 손으로 유지하지 않는다 (D-99).
+      🔄 2026-09-14 — 동결 전에는 `db/schema.sql` 을 읽어서 **언제 되돌리느냐에 따라 지우는
+         것이 달랐다.** 지금은 「0번이 만든 것」과 「0번이 지우는 것」이 같은 파일이다.
     """
     sql = _sql()
     for view in reversed(re.findall(r"^CREATE VIEW\s+(\w+)", sql, re.M)):

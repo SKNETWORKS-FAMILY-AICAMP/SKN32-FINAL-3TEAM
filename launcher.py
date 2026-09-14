@@ -563,6 +563,22 @@ def db_fresh(keep: bool = typer.Option(False, "--keep", help="임시 DB 를 안 
     raise typer.Exit(run(*args))
 
 
+@app.command(name="db-drift")
+def db_drift(keep: bool = typer.Option(False, "--keep", help="임시 DB 둘을 안 지운다")) -> None:
+    """스키마 선언과 실제 DB 가 같은 모양인가 — **두 벌이 조용히 갈리는 것을 잡는다**.
+
+    🔴 `0001` 은 DDL 을 자기 안에 안 적고 **실행 시점에 `db/schema.sql` 을 읽는다.**
+       그 파일이 바뀌면 **「3번 마이그레이션이 도는 DB 의 모양」이 사람마다 달라진다** —
+       새로 클론한 사람은 오늘자 모양 위에서, 쓰던 사람은 그때 모양 위에서 돈다 (D-221).
+    🚨 **`db-fresh` 와 다른 물건이다** — 저쪽은 *돌았는가*, 이쪽은 *같은가*를 본다.
+    ⛔ **`0001` 동결의 선결이다.** 갈려 있는 채로 동결하면 그 차이가 영구히 굳는다.
+    """
+    args = ["uv", "run", "python", "-m", "scripts.schema_drift_check"]
+    if keep:
+        args.append("--keep")
+    raise typer.Exit(run(*args))
+
+
 # ══════════════════════════════════════════════════════════
 # 아직 대상이 없는 명령 — 메뉴에는 보이되 눌러도 안전하다
 # ══════════════════════════════════════════════════════════
@@ -1033,6 +1049,7 @@ DANGER: dict[str, str] = {
     "diagram": "도면 PNG 를 덮어쓴다 — 원천이 있는 것만 (D-217)",
     "dmap": "build/decision_map.md 를 덮어쓴다 — 생성물이다 (D-90)",
     "db-fresh": "임시 DB `copylane_freshcheck` 를 만들었다 지운다 — 진짜 DB 는 안 건드린다",
+    "db-drift": "임시 DB **둘**을 만들었다 지운다 — 진짜 DB 는 안 건드린다",
     "onboard": "패키지를 깔고 DB 컨테이너를 띄우고 마이그레이션을 돌린다 — 새 기기용 (D-221)",
 }
 
@@ -1065,6 +1082,7 @@ MENU: list[tuple[str, str, object]] = [
     ("8", "DB 중지", db_down),
     ("9", "DB 마이그레이션", migrate),
     ("39", "빈 DB 에서 마이그레이션 검사", db_fresh),
+    ("40", "스키마 선언 ↔ 실제 대조", db_drift),
     (GROUP, "거버넌스", None),
     ("10", "생성물 한 벌 다시", rebuild),
     ("11", "레지스트리만", registry),

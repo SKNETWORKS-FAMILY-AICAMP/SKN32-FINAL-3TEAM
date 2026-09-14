@@ -3,18 +3,25 @@
 🚨 **거버넌스 게이트다.** 층이 둘이라 어긋나는 자리가 셋 있다.
 
     설계 문서 부록   docs/02_설계/거버넌스데이터층_DDL.md
-    원본            db/schema.sql                       ← 이것이 실제로 도는 것
-    마이그레이션      alembic/versions/0001_*.py          ← 파일을 읽어 실행만 한다
+    현재 선언        db/schema.sql                       ← 사람이 읽는 정본
+    🧊 동결본        db/schema_0001.sql                  ← 0번 마이그레이션의 입력
+    마이그레이션      alembic/versions/0001_*.py          ← 동결본을 읽어 실행만 한다
 
 무엇을 지키나
   ① 문서 부록과 `db/schema.sql` 이 **한 글자도 다르지 않다**
   ② 마이그레이션이 DDL 을 **복사하지 않았다** (D-99)
   ③ `env.py` 의 `include_object` 가 거버넌스 객체를 **전부** 덮는다
      — 하나라도 빠지면 `--autogenerate` 가 그 테이블에 DROP 을 생성한다
+  ④ 🆕 **0번이 읽는 파일이 동결본이고, 그 동결본이 안 바뀌었다** (2026-09-14 · D-221)
+
+🚨 **여기서 안 보는 것** — 「선언과 실제가 같은가」는 정적으로 못 본다. 뷰 정의가 정규화되면
+   어떻게 되는지, 어느 제약이 어느 타입을 붙잡는지는 PostgreSQL 만 안다.
+   그것은 `uv run python launcher.py db-drift` 가 임시 DB 둘을 떠서 본다.
 """
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import re
 from pathlib import Path
@@ -23,9 +30,27 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "db" / "schema.sql"
+#: 🧊 0번 마이그레이션의 **동결된 입력** (2026-09-14).
+FROZEN = ROOT / "db" / "schema_0001.sql"
+#: 🔴 동결본의 sha256 — **줄 끝 공백과 파일 끝 줄바꿈을 고른 뒤**의 값이다 (`_pin()`).
+#:    ⛔ 이 수를 「게이트가 빨개졌으니」 갱신하지 않는다. 빨개졌다는 것은
+#:       **동결이 깨졌다**는 뜻이다. 파일을 되살린다: git checkout -- db/schema_0001.sql
+FROZEN_PIN = "63f32c85018cda6d2ccdc9088e4c1bf9e5f68ddbd0862be88af04a78ad1fe50a"
 DOC = ROOT / "docs" / "02_설계" / "거버넌스데이터층_DDL.md"
 ENV = ROOT / "alembic" / "env.py"
 MIGRATION = ROOT / "alembic" / "versions" / "0001_governance_layer.py"
+
+
+def _pin(text: str) -> str:
+    """핀용 해시 — 줄 끝 공백과 파일 끝 줄바꿈을 고른 뒤 센다.
+
+    🚨 **왜 정규화하나.** `.pre-commit-config.yaml` 의 `trim trailing whitespace`·
+       `fix end of files` 와 git 의 줄끝 변환이 파일을 만질 수 있다. 그 셋 때문에 핀이
+       어긋나면 「동결이 깨졌다」로 **거짓 경보**가 나고, 거짓 경보는 곧 안 읽힌다 (D-167).
+    ⛔ 그 밖의 변경은 전부 잡는다 — 한 글자만 달라도 어긋난다.
+    """
+    body = "\n".join(line.rstrip() for line in text.splitlines())
+    return hashlib.sha256((body + "\n").encode("utf-8")).hexdigest()
 
 
 def _objects(sql: str) -> set[str]:
@@ -176,7 +201,51 @@ def test_마이그레이션이_DDL_을_복사하지_않는다() -> None:
     assert not ddl, (
         f"🚨 마이그레이션 안에 DDL 이 있다 ({ddl[:2]}) — `db/schema.sql` 을 읽어 실행만 한다 (D-99)"
     )
-    assert "schema.sql" in src, "🚨 마이그레이션이 db/schema.sql 을 참조하지 않는다"
+    # 🔄 2026-09-14 — 읽는 파일이 **동결본**으로 바뀌었다. 참조 대상만 바뀌고 뜻은 같다:
+    #    「DDL 을 품지 않고 파일을 읽어 실행한다」. 어느 파일인지는 아래 게이트가 본다.
+    assert "schema_0001.sql" in src, "🚨 마이그레이션이 db/schema_0001.sql 을 참조하지 않는다"
+
+
+@pytest.mark.gate
+def test_0001_이_읽는_파일은_동결본이다() -> None:
+    """🔴 **0번의 입력이 고정되어야 뒤의 열셋이 전제를 갖는다** (2026-09-14 · D-221).
+
+    ⛔ 종전에는 0번이 **실행 시점에** `db/schema.sql` 을 읽었다. 그 파일이 여덟 번 바뀌면서
+       「0003 이 도는 DB 의 모양」이 사람마다 달라졌다 — 09-13(이서은)·09-14(박수진) 이틀
+       연속 같은 자리에서 막힌 원인이다. **버전형 체인의 불변식은 「0번이 고정」이다.**
+    🚨 **대입문만 본다.** docstring 에는 `db/schema.sql` 이 여러 번 나온다 — 무슨 일이
+       있었는지 적어 두었기 때문이다. 낱말을 세면 그 설명까지 위반으로 잡는다
+       (게이트 163 이 자기 자신을 오탐했던 것과 같은 함정).
+    """
+    src = MIGRATION.read_text(encoding="utf-8")
+    m = re.search(r"^SCHEMA\s*=\s*(.+)$", src, re.M)
+    assert m, "🚨 0001 에 SCHEMA 대입문이 없다"
+    target = m.group(1)
+    assert "schema_0001.sql" in target, (
+        f"🚨 0001 이 동결본을 안 읽는다 — 지금 `{target.strip()}`\n"
+        "   ⛔ `db/schema.sql` 로 되돌리면 09-13·14 의 증상이 그대로 돌아온다 (D-221)."
+    )
+    assert FROZEN.exists(), f"🚨 {FROZEN} 이 없다 — 0번의 입력이다"
+
+
+@pytest.mark.gate
+def test_동결본이_바뀌지_않았다() -> None:
+    """🧊 **동결본은 한 글자도 바뀌지 않는다** (2026-09-14 · D-221).
+
+    ⛔ 바뀌면 「이미 0번을 지난 DB」와 「지금 처음 지나는 DB」가 **다른 모양**이 된다.
+       그 어긋남은 조용하다 — 고친 사람의 기기에서는 안 나고, 새로 온 사람만 밟는다.
+    ★ 스키마를 바꿀 때 고치는 것은 `db/schema.sql` **+ 새 마이그레이션** 둘이다.
+      이 파일은 그 둘 중 어느 쪽도 아니다.
+    """
+    assert FROZEN.exists(), f"🚨 {FROZEN} 이 없다 — 0번의 입력이다"
+    got = _pin(FROZEN.read_text(encoding="utf-8"))
+    assert got == FROZEN_PIN, (
+        "🚨 **동결본이 바뀌었다.**\n"
+        f"   핀  {FROZEN_PIN}\n   지금 {got}\n"
+        "   ⛔ 핀을 갱신하지 않는다 — 파일을 되살린다:\n"
+        "      git checkout -- db/schema_0001.sql\n"
+        "   ★ 스키마를 바꾸려던 것이면 `db/schema.sql` 과 **새 마이그레이션**을 고친다."
+    )
 
 
 @pytest.mark.gate
