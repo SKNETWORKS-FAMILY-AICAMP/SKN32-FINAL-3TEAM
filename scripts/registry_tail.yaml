@@ -135,6 +135,31 @@ models:  # 모델 가중치도 G-게이트 대상이다 (D-23)
     license: Apache-2.0
     grade: G3
     use: {U1: allow, U2: deny, U3: deny, U4: allow}
+  koelectra_base_v3:
+    role: 인코더 (비교군 — 코퍼스 축)
+    license: Apache-2.0
+    grade: G3
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    note: >-
+      가중치 `monologg/koelectra-base-v3-discriminator` (0.1B — kcbert-base 와 동급).
+      🚨 D-45 (b) · D-70 (c) 에서 두 번 후보였는데 두 번 다 **기각 사유가 기록되지 않았다** —
+      D-21 이 말하는 「의도적 제외와 미인지는 다른 상태다」의 빈칸이었다. 등재로 채운다.
+      ✅ 라이선스 — D-70 이 KLUE 에 쓴 다섯 경로로 확인했다 (2026-09-14):
+      HF 모델 카드 apache-2.0 · API JSON 에 `license` 키 **있음**("apache-2.0") ·
+      cardData 에 license 항목 있음 · tags 에 `license:apache-2.0` 있음.
+      ⬜ GitHub README 에는 라이선스 절이 없다. KLUE 는 **다섯 경로 전부**가 비어서 배제였고,
+      이쪽은 HF 네 경로가 값을 갖는다 — 「부재」가 아니라 「GitHub 에 다시 안 적었다」다.
+      그래도 한 경로가 빈 것은 숨기지 않고 적는다.
+      ★ 왜 비교군인가 — **코퍼스 축**이다. 아키텍처 축(BERT↔ELECTRA)은 kcbert × KcELECTRA 가
+      이미 가른다. v3 는 v1/v2 코퍼스(뉴스·위키·나무위키 약 14G · 2.6B 토큰)에
+      **모두의 말뭉치 약 20G** 를 더했고 그 구성이 「신문, 문어, 구어, 메신저, 웹」이다 —
+      🔴 **문어 전용이 아니다.** 「구어체 사전학습은 kcbert 계열뿐」이라는 D-70 의 전제를
+      이 모델이 시험한다. 그 전제는 지금껏 한 번도 실측된 적이 없다.
+      ★ Max Seq Len **512**(원저장소 표에 명시) · Vocab 35,000. kcbert-base 는
+      `max_position_embeddings = 300` 이라 D-83 층 3(문서 수준) 경로에서 제약이 되는데
+      (D-70 이 남긴 ⚠️ 자리), 이쪽은 그 제약이 없다.
+      🚨 **아직 한 번도 안 돌렸다** — kcbert × KcELECTRA 비교부터가 미실행이다 (D-146).
+      주 백본 교체는 실측 전에 없다 (D-70 「성능차를 재지 않고 바꾸지는 않는다」).
   # 🚨 G0 가 아니라 G1 이다 (D-106). G0 는 「미표기·미확인」인데 이것은 네 경로로
   #    확인해서 「없다」를 알아낸 상태다 — 확인 결과가 「허락 없음」이면 배제다.
   #    비교군 유지(D-70 마지막 문장)는 D-106 으로 철회했다. 지우지 않고 사유와 함께 남긴다 (D-21).
