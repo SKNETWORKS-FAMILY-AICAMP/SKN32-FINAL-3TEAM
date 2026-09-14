@@ -293,3 +293,126 @@ def test_그래프_응답이_계약을_통과한다() -> None:
     r = to_response(out)  # type: ignore[arg-type]
     assert r.outcome is Outcome.hold
     assert r.timings
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  retrieve → judge 배선 (2026-09-14 · 구현계획 §2-1 C)
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _hit(**kw: object) -> object:
+    from app import retrieve as rt
+
+    d = dict(
+        chunk_id="c0",
+        law_id="013094",
+        article="제8조",
+        paragraph=None,
+        item="1.",
+        paragraph_no=1,
+        context="",
+        part_no=1,
+        part_total=3,
+        doc_type="법령",
+        category=["일반"],
+        text="…",
+        attribution=None,
+        source_url=None,
+        match=rt.MATCH_FUSED,
+        citation="제8조제1항제1호",
+    )
+    d.update(kw)
+    return rt.Hit(**d)  # type: ignore[arg-type]
+
+
+def _fake_search(hits: list[object], **state_kw: object):  # noqa: ANN202
+    from app import retrieve as rt
+
+    def inner(cur, q, category=rt.DEFAULT_CATEGORY, limit=None, pool=None):  # noqa: ANN001, ANN202
+        st = dict(
+            vector=rt.VECTOR_OK, lexical=rt.LEXICAL_OK, pool=50, pool_vector=1, pool_lexical=1
+        )
+        st.update(state_kw)
+        return hits, rt.SearchState(**st)  # type: ignore[arg-type]
+
+    return inner
+
+
+def _split_stub(sents: list[str]):  # noqa: ANN202
+    """문장 셋으로 갈라 주는 스텁. 🚨 `timed` 를 두른다 — `_judge_stub` 과 같은 이유다."""
+
+    def node(state: JudgeState) -> dict:
+        return {"sents": list(sents), "attempt": 0}
+
+    node.__name__ = "split"
+    return timed(node)
+
+
+@pytest.mark.gate
+def test_retrieve_가_config_를_받는_모양으로_보인다() -> None:
+    """🔴 **LangGraph 는 노드의 시그니처를 보고 `config` 를 넘긴다** (2026-09-14 실측).
+
+    ⛔ `timed` 가 `functools.wraps` 를 놓치면 밖에서 보이는 모양이 `(state, *rest, **kw)` 가
+       되고 **커서가 조용히 사라진다.** 오류는 안 난다 — 「DB 없음」 경로로 떨어지고
+       근거 없는 응답이 그럴듯하게 나온다. 실제로 한 번 그렇게 만들었다가 잡았다.
+    🚨 **주석을 달면 안 온다** — 실측: `RunnableConfig`(런타임 해석)만 통과하고
+       `Any`·`dict | None` 은 **config 가 안 온다.** 런타임 해석을 쓰려면 langchain_core 를
+       모듈 최상단에서 import 해야 하는데 그것이 D-124 ①(의존성 없이 도는 라우터)을 깬다.
+       그래서 **주석 없는 `config`** 가 답이다. 이 단언이 그 선택을 고정한다.
+    """
+    import inspect
+
+    params = inspect.signature(NODES["retrieve"]).parameters
+    assert "config" in params, "🚨 `config` 가 시그니처에서 사라졌다 — functools.wraps 를 본다"
+    assert params["config"].annotation is inspect.Parameter.empty, (
+        "🚨 `config` 에 주석이 붙었다 — 실측상 `Any`·`dict` 는 config 를 못 받는다 (2026-09-14)"
+    )
+
+
+@pytest.mark.gate
+def test_커서가_없으면_근거를_지어내지_않는다() -> None:
+    """🔴 DB 없이도 돈다 (D-124). 그렇다고 **빈 dict 로 삼키지 않는다** (D-220 fail-closed)."""
+    state, _ = run_stub("면역력 강화에 도움을 줍니다.")
+    ev = state["evidence"]
+    assert len(ev) == len(state["sents"]), "🚨 문장마다 한 벌이어야 한다"
+    assert not ev[0].vector and not ev[0].lexical, "🚨 안 돌았으면 False 다"
+    assert ev[0].articles == (), "🚨 근거를 지어냈다"
+    assert state["outcome"] is Outcome.hold, "🚨 근거 없이 통과로 집계됐다 (D-127)"
+
+
+@pytest.mark.gate
+def test_커서가_오면_문장마다_근거가_쌓이고_judge_가_짝짓는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """✅ 구현계획 §2-1 C 의 완료 판정 — `evidence` 가 `len(sents)` 개 · `timings` 에 `retrieve`.
+
+    🔴 **짝짓기가 어긋나도 오류가 안 난다** — `judge` 가 빈 근거를 낼 뿐이다. 그래서
+       `sent_id` 규칙을 한 곳(`graph.sent_id`)에 두고, 여기서 **실제로 붙는지** 본다.
+    """
+    from app import retrieve as rt
+
+    monkeypatch.setattr(rt, "search", _fake_search([_hit()]))
+    monkeypatch.setitem(NODES, "split", _split_stub(["가나다", "라마바", "사아자"]))
+    out = build_graph().invoke(_init(), config={"configurable": {"conn": "CUR"}})
+    assert [e.sent_id for e in out["evidence"]] == ["s0", "s1", "s2"]
+    assert [s.sent_id for s in out["sentences"]] == ["s0", "s1", "s2"]
+    assert all(len(s.evidence) == 1 for s in out["sentences"]), "🚨 judge 가 근거를 못 붙였다"
+    assert out["sentences"][0].evidence[0].article == "제8조제1항제1호"
+    assert any(t.node == "retrieve" for t in out["timings"])
+
+
+@pytest.mark.gate
+def test_좌표를_못_세운_근거는_안_나간다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 `citation` 이 `None` 이면 **버린다** (D-100). 별표는 계층 표기가 달라 조립이 안 된다.
+
+    ⛔ 「제18조」로 줄여 적으면 실은 제3항인 근거를 제1항처럼 읽게 만든다 —
+       **틀린 인용은 없는 인용보다 나쁘다.**
+    """
+    from app import retrieve as rt
+
+    monkeypatch.setattr(
+        rt, "search", _fake_search([_hit(), _hit(chunk_id="annex", doc_type="별표", citation=None)])
+    )
+    out = build_graph().invoke(_init(), config={"configurable": {"conn": "CUR"}})
+    assert len(out["evidence"][0].articles) == 1, "🚨 좌표 없는 근거가 나갔다"
+    assert out["evidence"][0].articles[0].chunk_id == "c0", "🚨 조각 여부가 따라가야 한다 (D-199)"

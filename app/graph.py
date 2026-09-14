@@ -21,12 +21,14 @@
 
 from __future__ import annotations
 
+import functools
 import operator
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, TypedDict
 
+from app import retrieve as rt
 from app.contracts import (
     AdaptedCopy,
     AdFormat,
@@ -48,6 +50,16 @@ from app.settings import PARAMS
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
 MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
+
+
+def sent_id(i: int) -> str:
+    """문장 하나의 id. 🔴 **규칙이 한 곳에만 있다** (D-99).
+
+    ⛔ 종전에는 `judge` 안에 `f"s{i}"` 가 박혀 있었고, `retrieve` 가 붙는 순간 **두 곳이
+       같은 규칙을 각자 적게 된다.** 짝이 어긋나도 오류가 안 난다 — `judge` 가 근거를
+       못 찾고 빈 목록을 낼 뿐이고, 응답은 그럴듯하다. 이 저장소가 사흘에 세 번 밟은 모양이다.
+    """
+    return f"s{i}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,21 +177,32 @@ ENTRYPOINT_KEYS = {
 # ══════════════════════════════════════════════════════════════════════
 
 
-def timed(fn: Callable[[JudgeState], dict[str, Any]]) -> Callable[[JudgeState], dict[str, Any]]:
+def timed(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
     """노드 진입·종료 시각을 상태에 적재한다.
 
     ⛔ 나중에 붙이면 그때까지의 측정치가 없다 — walking skeleton 에서 함께 넣는다.
+
+    🔄 **2026-09-14 — 뒤 인자를 그대로 넘긴다.** `retrieve` 가 LangGraph 의 `config` 를
+       받으면서 노드 인자가 하나가 아니게 됐다. ⛔ 여기서 `fn(state)` 로 고정하면
+       **커서가 조용히 사라지고** 검색이 안 붙은 채로 돈다 — 오류는 안 난다.
+
+    🔴 **`functools.wraps` 가 여기서는 장식이 아니라 배선이다** (2026-09-14 실측).
+       LangGraph 는 **노드의 시그니처를 보고** `config` 를 넘길지 정한다. 종전처럼
+       `__name__` 만 옮기면 밖에서 보이는 모양이 `(state, *rest)` 라 **config 를 안 준다.**
+       ⛔ 그래도 오류는 안 난다 — 커서가 `None` 이라 「DB 없음」 경로로 조용히 떨어지고,
+          응답은 그럴듯하다. **실제로 이 실수를 한 번 하고 실측으로 잡았다.**
+       ★ `wraps` 가 `__wrapped__` 를 달아 `inspect.signature` 가 원래 모양을 보게 한다.
     """
 
-    def wrapped(state: JudgeState) -> dict[str, Any]:
+    @functools.wraps(fn)
+    def wrapped(state: JudgeState, *rest: Any, **kw: Any) -> dict[str, Any]:
         t0 = time.perf_counter()
-        out = fn(state)
+        out = fn(state, *rest, **kw)
         ms = (time.perf_counter() - t0) * 1000
         out.setdefault("timings", [])
         out["timings"] = [*out["timings"], Timing(node=fn.__name__, ms=ms)]
         return out
 
-    wrapped.__name__ = fn.__name__
     return wrapped
 
 
@@ -203,9 +226,31 @@ def classify(state: JudgeState) -> dict[str, Any]:
     return {}
 
 
+def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
+    """`Hit` → 계약. 🔴 **확신이 없으면 안 옮긴다** (D-100).
+
+    ⛔ `citation()` 이 `None` 이면 좌표를 못 세운 것이다. 「제18조」로 줄여 적으면 실은
+       제3항인 근거를 가리킬 수 있다 — 그 함수가 막으려는 **부분 인용** 바로 그것이다.
+       지어내지 않고 **버린다.** 그래서 `articles` 가 `hits` 보다 짧을 수 있다.
+    ⛔ **`quote` 는 비운다.** 계약이 *「`quote` 는 `source_use.allowed` 가 `U3_cite` 인 것만」*
+       이라 적었는데 `search()` 는 `U2_rag` 로 거른다 — **다른 축이다.** 모르는 자격을
+       있다고 적지 않는다 (D-100). 🔜 U3 를 같이 읽게 되면 그때 채운다.
+    🔴 `part_total > 1` 이면 이 근거는 조문의 **일부**다 (0011 · D-199). 그 사실은
+       `chunk_id` 로 따라간다 — 조문 이름만 남기면 3분의 1을 전문으로 인용하는 것이다.
+    """
+    # 🚨 **`citation()` 을 다시 부르지 않는다** — `Hit` 이 생성 시점에 이미 들고 있다
+    #    (`retrieve.py` 의 `Hit(**d, match=…, citation=citation(d))`). 다시 부르면 같은
+    #    판단이 두 곳에서 돌고, 한쪽 규칙만 고쳐지는 날 조용히 갈린다 (D-99).
+    if not hit.citation or not hit.law_id:
+        return None
+    return EvidenceArticle(
+        law_id=hit.law_id, article=hit.citation, item=hit.item or "", chunk_id=hit.chunk_id
+    )
+
+
 @timed
-def retrieve(state: JudgeState) -> dict[str, Any]:
-    """조문 검색. 🔜 `app/retrieve.py` 의 `search()` 를 부른다 (+ bge-reranker).
+def retrieve(state: JudgeState, config=None) -> dict[str, Any]:  # noqa: ANN001
+    """조문 검색 — `app/retrieve.py` 의 `search()` 를 부른다 (✅ 2026-09-14 · 구현계획 §2-1 C).
 
     🔴 **검색을 여기서 새로 쓰지 않는다** — 코어는 `app/retrieve.py` 하나다 (D-99 · D-51).
        `/search` 가 이미 그것을 부르고 있고, 여기서 따로 쓰면 그 순간 두 벌이 된다.
@@ -229,16 +274,47 @@ def retrieve(state: JudgeState) -> dict[str, Any]:
     🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다. 근거 없이 판정하면 D-100 위반이라
        **`hold` 로 보내는 것**이 맞다 — 빈 근거로 `judge` 에 들어가지 않는다.
 
-    🆕 **놓을 칸이 생겼다** (2026-09-13) — 문장마다 `SentEvidence` 하나를 `evidence` 에 쌓는다:
+    🆕 **커서는 `config` 로 받는다** (구현계획 §2-1 C). ⛔ 노드가 스스로 `connect()` 하면
+       **문장마다 연결이 열린다.** ⛔ 상태에 담지도 않는다 — 커넥션은 직렬화가 안 되므로
+       체크포인터(D-129)가 붙는 순간 깨진다. LangGraph 는 두 번째 인자로 넣어 주고,
+       `run_stub` 은 안 넣는다 — **기본값이 그 경로다.**
 
-        return {"evidence": [SentEvidence(sent_id=sid, articles=tuple(arts),
-                                          vector=st.vector, lexical=st.lexical, pool=st.pool)
-                             for sid, arts, st in ...]}
+    🔴 **DB 가 없어도 이 노드는 돈다** (D-124 — *「화면은 DB 없이 떠야 한다」*). 그렇다고
+       빈 dict 로 삼키지 않는다 — 문장마다 「검색을 못 했다」를 **값으로** 남긴다.
+       ⛔ 없음이 성공으로 집계되면 안 된다 (D-220 fail-closed). 둘 다 `False` 면
+       `judge` 가 확정을 못 내고 `hold` 로 간다.
 
     ⛔ **리듀서 없는 새 칸을 만들지 않는다.** 문장이 여럿이면 마지막 하나만 남는데
        오류가 안 난다 (D-124 ③). ⛔ **`judge` 안에서 `search()` 를 다시 부르지 않는다** (D-99).
+
+    ⬜ **리랭커는 아직 없다** — 층 4 이고 모델 선정 실측(구현계획 ⑨)이 선행이다.
+       여기 자리를 비워 두는 것이 **빠뜨린 것이 아니라 순서**다.
+    ⬜ **`SearchState` 의 이유 문자열은 여기서 `bool` 로 접힌다.** `SentEvidence` 가
+       「돌았나」만 나르기 때문이고(2026-09-13 설계), **왜 못 돌았는지는 남지 않는다.**
+       `hold` 가 사유를 말하려면 그때 칸이 필요하다 — 지금 만들면 읽는 쪽이 없다.
     """
-    return {}
+    sents = state.get("sents", [])
+    if not sents:
+        return {}
+    cur = ((config or {}).get("configurable") or {}).get("conn")
+    if cur is None:
+        return {"evidence": [SentEvidence(sent_id=sent_id(i)) for i in range(len(sents))]}
+
+    product = state.get("product") or ProductContext()
+    found: list[SentEvidence] = []
+    for i, text in enumerate(sents):
+        # 🚨 코어가 결과도 상태도 짓는다 — 이 노드는 얇다 (D-51 · D-99). `api.py` 와 같은 문이다.
+        hits, st = rt.search(cur, text, product.category)
+        found.append(
+            SentEvidence(
+                sent_id=sent_id(i),
+                articles=tuple(a for h in hits if (a := _evidence_article(h)) is not None),
+                vector=st.vector == rt.VECTOR_OK,
+                lexical=st.lexical == rt.LEXICAL_OK,
+                pool=st.pool,
+            )
+        )
+    return {"evidence": found}
 
 
 @timed
@@ -254,9 +330,20 @@ def judge(state: JudgeState) -> dict[str, Any]:
        ⛔ 붙는 근거가 없으면 `confirmed` 를 못 낸다 — 계약이 거부한다 (D-100 · `_confirmed_needs_evidence`).
           그 경우의 상태는 `no_basis` 이고, `vector`·`lexical` 이 왜 그런지를 말해 준다.
     """
+    # 🆕 2026-09-14 — `retrieve` 가 쌓아 둔 것을 **sent_id 로 짝짓는다.** 값이 입구부터
+    #    출구까지 흐르는 최소 경로를 여기서 닫는다: retrieve → judge → SentenceJudgment.evidence
+    #    → to_response. ⛔ 만들어 놓고 읽는 쪽을 안 만들면 조용히 샌다 — 사흘에 세 번 밟았다.
+    # 🚨 근거가 붙어도 판정은 여전히 `unjudged` 다. **근거를 찾은 것과 판정한 것은 다르다** —
+    #    붙였다고 `confirmed` 로 올리면 D-127 이 막는 「미판정을 통과로 집계」가 된다.
+    by_sent = {e.sent_id: e for e in state.get("evidence", [])}
     return {
         "sentences": [
-            SentenceJudgment(sent_id=f"s{i}", text=t, verdict=Verdict.unjudged)
+            SentenceJudgment(
+                sent_id=(sid := sent_id(i)),
+                text=t,
+                verdict=Verdict.unjudged,
+                evidence=list(by_sent[sid].articles) if sid in by_sent else [],
+            )
             for i, t in enumerate(state.get("sents", []))
         ]
     }
@@ -317,7 +404,8 @@ def search_failed(state: JudgeState) -> dict[str, Any]:
     return {"outcome": Outcome.search_failed}
 
 
-NODES: dict[str, Callable[[JudgeState], dict[str, Any]]] = {
+#: 🔄 2026-09-14 — 인자가 하나가 아니다. `retrieve` 가 LangGraph 의 `config` 를 받는다.
+NODES: dict[str, Callable[..., dict[str, Any]]] = {
     f.__name__: f
     for f in (
         split,
