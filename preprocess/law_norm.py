@@ -45,6 +45,9 @@ ANNEX = ROOT / "data" / "raw" / "law" / "annex"
 
 # 계층 — 마커의 **모양**이 깊이를 정한다. 들여쓰기로 정하지 않는다:
 # 이어지는 줄의 들여쓰기가 마커 줄과 같아서 둘을 못 가른다 (실측).
+#: 🚨 **`app/retrieve.py` 의 `_JO` 와 같은 값이다** (2026-09-14 · 별표 인용).
+#:    ⛔ 합치지 않았다 — `app/` 이 `preprocess/` 를 import 하면 런타임이 전처리 층에 매인다.
+#:       D-99 의 나머지 절반을 쓴다: **양쪽에 서로를 가리키는 주석.** 한쪽을 고치면 둘 다 고친다.
 JO = "가나다라마바사아자차카타파하"
 LEVELS: tuple[tuple[int, re.Pattern[str]], ...] = (
     (1, re.compile(r"^(\d{1,2})\.\s")),
@@ -55,8 +58,29 @@ LEVELS: tuple[tuple[int, re.Pattern[str]], ...] = (
 )
 # 「■ 화장품법 시행규칙 [별표 5] <개정 …>」 — 머리글
 HEAD = re.compile(r"^■")
+# 🆕 머리글의 **별표 번호** (2026-09-14) — 위 예시의 `5`.
+#    🔴 `annex_no`(파일명 일련번호)와 **다른 값**이다. 실측으로 24건이 일치했지만
+#       머리글이 없는 파일이 34건 있고 그중 하나는 산문이다 — **일치는 보장이 아니다.**
+#       인용에 쓰는 것은 **원문에서 읽은 이 값**이고, 없으면 인용을 세우지 않는다 (D-224).
+ANNEX_NO = re.compile(r"\[별표\s*(\d{1,3})")
 # 제목의 「(제22조 관련)」 — 이 별표를 위임한 조문
 ARTICLE = re.compile(r"\(([^)]*제\d+조[^)]*)\s*관련\)")
+
+
+def annex_number(content: str) -> int | None:
+    """머리글에서 별표 번호를 읽는다. 🔴 못 읽으면 `None` — 파일명으로 짐작하지 않는다.
+
+    🚨 **첫 머리글 줄만 본다.** 본문에 「[별표 3]에 따른」 같은 **다른 별표를 가리키는 말**이
+       있으면, 문서 전체를 훑으면 그것을 이 별표의 번호로 읽는다.
+    ⛔ `annex_no`(파일명 일련번호)로 대신하지 않는다. 실측(2026-09-14) — 머리글이 있는 24건은
+       전부 일치했지만 **머리글이 없는 파일이 34건**이고 그중 하나는 산문이다. 없는 것을
+       「아마 같을 것」으로 채우는 것이 D-224 가 막으려는 바로 그 일이다.
+    """
+    for line in content.splitlines():
+        if HEAD.match(line.strip()):
+            m = ANNEX_NO.search(line)
+            return int(m.group(1)) if m else None
+    return None
 
 
 def _marker(line: str) -> tuple[int, str] | None:
@@ -124,6 +148,7 @@ def parse(content: str) -> list[dict]:
 def build(path: pathlib.Path) -> tuple[dict, list[dict]]:
     d = json.loads(path.read_text(encoding="utf-8"))
     art = ARTICLE.search(d["title"])
+    head_no = annex_number(d["content"])
     nodes = parse(d["content"])
     rows = []
     for n in nodes:
@@ -134,7 +159,11 @@ def build(path: pathlib.Path) -> tuple[dict, list[dict]]:
             store.stamp(
                 {
                     "law_id": d["law_id"],
+                    #: 🚨 파일명 일련번호 — **별표 번호가 아니다.** 인용에 쓰지 않는다.
                     "annex_no": d["annex_no"],
+                    #: 🆕 머리글에서 **읽은** 별표 번호. `None` = 머리글이 없다 (D-224 fail-closed).
+                    #:    ⛔ 읽는 쪽은 `document.annex_no` 다 — `load_db.load_documents()`.
+                    "annex_no_head": head_no,
                     "section": n["section"],
                     "annex_title": d["title"],
                     "article": art.group(1).strip() if art else "",
@@ -172,7 +201,11 @@ def main() -> int:
         _, rows = build(p)
         by_level = {lv: sum(1 for r in rows if r["level"] == lv) for lv in (1, 2, 3, 4, 5)}
         lv = " ".join(f"L{k}:{v}" for k, v in by_level.items() if v)
-        print(f"  [{key}] {d['title'][:38]:40} 노드 {len(rows):>3}  {lv}")
+        # 🔴 **머리글 번호를 매번 찍는다.** 없으면 그 별표는 인용이 안 선다 —
+        #    조용히 넘기면 검색에는 걸리는데 근거로는 못 가는 별표가 늘어난다 (D-199 의 어법).
+        no = rows[0]["annex_no_head"] if rows else None
+        tag = f"[별표 {no}]" if no else "🔴 머리글 번호 없음"
+        print(f"  [{key}] {tag:14} {d['title'][:34]:36} 노드 {len(rows):>3}  {lv}")
         total += len(rows)
 
         if args.dump:

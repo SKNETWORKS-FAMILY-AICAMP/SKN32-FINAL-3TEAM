@@ -196,7 +196,7 @@ class Settings(BaseModel):
         if v not in EDITIONS:
             raise ValueError(
                 f"COPYLANE_EDITION 이 {v!r} 이다 — 아는 것은 {list(EDITIONS)}.\n"
-                "  🚨 오타는 조용히 `local` 로 떨어지면 안 된다 (D-72) — 클라우드에서 "
+                "  🚨 오타는 조용히 `local` 로 떨어지면 안 된다 (D-220) — 클라우드에서 "
                 "관리자 화면이 열린 채로 뜬다"
             )
         return v

@@ -218,12 +218,24 @@ def onboard(
             raise typer.Exit(1)
         # 🔴 여기가 09-13 에 팀원이 막힌 자리다 (D-221). 이제 런처가 돌리고, 죽으면 멈춘다.
         if run("uv", "run", "alembic", "upgrade", "head") != 0:
+            # 🔄 **2026-09-14 — 안내가 엉뚱한 곳을 가리켰다.** 종전에는 `db-fresh` 만 가리켰는데
+            #    그것은 **빈 DB** 만 잰다. 09-14 에 팀원(psj)이 막힌 원인은 **옛 볼륨**이었고,
+            #    안내대로 돌렸으면 **초록이 떴을 것**이다. 같은 증상이 이틀 반복된 이유의 후보다.
+            #    ⛔ 두 갈래를 가른다 — 위 출력이 그것을 정한다.
+            console.print("  [red]🔴 마이그레이션이 실패했습니다.[/red]")
+            console.print("     [bold]① 위 오류 본문 전체를 그대로 팀에 주세요.[/bold]")
+            console.print("        🚨 본문 없이는 어느 리비전이 걸렸는지 아무도 못 가릅니다.")
+            console.print("     ② 지금 어디까지 왔는지: [bold]uv run alembic current[/bold]")
+            console.print("     ③ 갈래가 둘입니다 —")
             console.print(
-                "  [red]🔴 마이그레이션 실패[/red] — 빈 DB 에서만 나는 종류일 수 있습니다."
+                "        · [bold]새 DB[/bold](처음 세우는 중) → "
+                "[bold]launcher.py db-fresh[/bold] 의 출력을 같이 주세요 (D-221)"
             )
             console.print(
-                "     [bold]uv run python launcher.py db-fresh[/bold] 의 출력을 팀에 주세요 (D-221)."
+                "        · [bold]쓰던 DB[/bold](예전 상태가 남아 있다) → "
+                "[bold]launcher.py db-reset[/bold] 로 **먼저 미리보기**를 봅니다"
             )
+            console.print("          🔴 `--yes` 는 볼륨을 지웁니다 — 콘솔 계정이 사라집니다 (D-66)")
             raise typer.Exit(1)
 
     console.print("\n[bold]5. 판정[/bold] — 여기서 초록을 봅니다")
@@ -238,9 +250,19 @@ def onboard(
     console.print("     🔴 AI Hub 계열은 사람이 받아 [bold]launcher.py register[/bold] 로 올립니다")
 
     console.print("\n[bold]7. 원문을 받은 뒤[/bold]  파생물 → DB → 벡터")
+    # 🔄 **2026-09-14 — 여기에 「재추출」이 없었다.** 이 순서를 그대로 따른 사람은 **낡은
+    #    파생물로 DB 를 세운다.** 실측: `citation()` 커버리지가 38.1% 였고, 코드는 09-12 에
+    #    고쳤는데 `data/derived/law_article.jsonl` 이 09-10 판이었다. D-221 과 같은 모양이다 —
+    #    **런처가 손을 놓는 자리에서 사람이 막힌다.**
+    # ★ 한 명령으로 묶어 두었다. 절차를 두 벌로 적으면 한쪽만 갱신된다 (D-99).
     console.print(
-        "     [bold]launcher.py load[/bold] → [bold]chunk --dump[/bold] → "
-        "[bold]embed --check[/bold] → [bold]embed[/bold]"
+        "     [bold]uv run python launcher.py db-reset --yes --data[/bold]   ← 이 한 줄입니다"
+    )
+    console.print("     🚨 **재추출부터** 합니다 — 조문·별표를 다시 뽑고, 적재하고, 임베딩합니다.")
+    console.print("        ⛔ `load` → `chunk` → `embed` 만 돌리면 **낡은 파생물로 섭니다.**")
+    console.print("     🔴 볼륨을 지웁니다 — 새 기기에는 잃을 것이 없습니다. 쓰던 기기라면")
+    console.print(
+        "        먼저 [bold]launcher.py db-reset[/bold] (미리보기)으로 무엇이 사라지나 봅니다."
     )
     console.print("     ⚠️ KURE-v1 모델 2.27GB 를 처음 한 번 내려받습니다")
 
@@ -560,6 +582,44 @@ def db_fresh(keep: bool = typer.Option(False, "--keep", help="임시 DB 를 안 
     args = ["uv", "run", "python", "-m", "scripts.db_fresh_check"]
     if keep:
         args.append("--keep")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="db-drift")
+def db_drift(keep: bool = typer.Option(False, "--keep", help="임시 DB 둘을 안 지운다")) -> None:
+    """스키마 선언과 실제 DB 가 같은 모양인가 — **두 벌이 조용히 갈리는 것을 잡는다**.
+
+    🔴 `0001` 은 DDL 을 자기 안에 안 적고 **실행 시점에 `db/schema.sql` 을 읽는다.**
+       그 파일이 바뀌면 **「3번 마이그레이션이 도는 DB 의 모양」이 사람마다 달라진다** —
+       새로 클론한 사람은 오늘자 모양 위에서, 쓰던 사람은 그때 모양 위에서 돈다 (D-221).
+    🚨 **`db-fresh` 와 다른 물건이다** — 저쪽은 *돌았는가*, 이쪽은 *같은가*를 본다.
+    ⛔ **`0001` 동결의 선결이다.** 갈려 있는 채로 동결하면 그 차이가 영구히 굳는다.
+    """
+    args = ["uv", "run", "python", "-m", "scripts.schema_drift_check"]
+    if keep:
+        args.append("--keep")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="db-reset")
+def db_reset(
+    yes: bool = typer.Option(False, "--yes", help="🔴 실제로 지운다 — 없으면 미리보기"),
+    data: bool = typer.Option(False, "--data", help="파생물 재추출 → 적재 → 임베딩까지"),
+) -> None:
+    """데이터베이스를 처음부터 다시 만든다 — **고치지 않고 다시 세운다**.
+
+    🔴 09-13·09-14 에 팀원 둘이 옛 DB 상태 때문에 막혔고, 둘 다 `docker compose down -v` 로
+       **자력으로** 풀었다. 처방은 있었는데 **절차가 아니어서 각자 따로 발견했다** (D-221).
+    ★ DB 를 **생성물**로 본다 — 원천은 마이그레이션 체인·`data/derived/**`·시드다 (D-90).
+    🚨 **콘솔 계정이 사라진다** — DB 에만 있고 파일에 없는 유일한 값이다 (D-66 · D-213).
+       지우기 전에 명단을 읽어 두고, 다시 세운 뒤 사람이 칠 명령을 찍는다.
+    ⛔ **기본은 미리보기다.** `--yes` 를 줘야 지운다 (D-220 fail-closed).
+    """
+    args = ["uv", "run", "python", "-m", "scripts.db_reset"]
+    if yes:
+        args.append("--yes")
+    if data:
+        args.append("--data")
     raise typer.Exit(run(*args))
 
 
@@ -1014,6 +1074,11 @@ ASK_FLAG: dict[str, list[tuple[str, str, str, str]]] = {
     "chunk": [("chunks.jsonl", "--dump", "보기만 한다", "파일로 쓴다")],
     "embed": [("범위", "--check", "전부 임베딩한다 (DB 필요)", "모델 차원만 잰다 (DB 불필요)")],
     "extract": [("파생물", "--dump", "보기만 한다", "쓴다 — 🚨 마스킹 정책이 있어야 한다")],
+    # 🔴 순서가 중요하다 — `--yes` 를 먼저 묻는다. 「미리보기」를 고르면 `--data` 는 뜻이 없다.
+    "db-reset": [
+        ("실행", "--yes", "미리보기만 — 아무것도 안 지운다", "🔴 볼륨을 지우고 다시 세운다"),
+        ("데이터", "--data", "스키마와 시드까지", "파생물 재추출 → 적재 → 임베딩까지"),
+    ],
 }
 
 #: 확인을 한 번 더 받는 동작 — **값은 이유다** (2026-09-11).
@@ -1033,6 +1098,12 @@ DANGER: dict[str, str] = {
     "diagram": "도면 PNG 를 덮어쓴다 — 원천이 있는 것만 (D-217)",
     "dmap": "build/decision_map.md 를 덮어쓴다 — 생성물이다 (D-90)",
     "db-fresh": "임시 DB `copylane_freshcheck` 를 만들었다 지운다 — 진짜 DB 는 안 건드린다",
+    "db-drift": "임시 DB **둘**을 만들었다 지운다 — 진짜 DB 는 안 건드린다",
+    # 🔴 이 저장소에서 **유일하게 되돌릴 수 없는** 명령이다. 이유를 두 줄로 적는다.
+    "db-reset": (
+        "🔴 볼륨을 지운다 — **콘솔 계정이 사라지고 비밀번호는 되살릴 수 없다** (D-66). "
+        "청크·임베딩은 파생물에서 되세운다 — **이 기기에 원문이 있는 경우만**"
+    ),
     "onboard": "패키지를 깔고 DB 컨테이너를 띄우고 마이그레이션을 돌린다 — 새 기기용 (D-221)",
 }
 
@@ -1065,6 +1136,8 @@ MENU: list[tuple[str, str, object]] = [
     ("8", "DB 중지", db_down),
     ("9", "DB 마이그레이션", migrate),
     ("39", "빈 DB 에서 마이그레이션 검사", db_fresh),
+    ("40", "스키마 선언 ↔ 실제 대조", db_drift),
+    ("41", "DB 를 처음부터 다시", db_reset),
     (GROUP, "거버넌스", None),
     ("10", "생성물 한 벌 다시", rebuild),
     ("11", "레지스트리만", registry),

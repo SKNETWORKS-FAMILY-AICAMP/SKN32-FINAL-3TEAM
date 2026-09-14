@@ -1529,7 +1529,7 @@ def test_HTML_을_긁는_소스는_robots_확인_기록이_있다() -> None:
 # 🚨 **완전 차단은 불가능하다.** `app` 을 안 거치고 langchain 을 직접 쓰면 그만이다.
 #    그래서 「막았다」고 적지 않는다. 여기서 하는 일은 둘이다 —
 #      ① 저장소의 기본값이 꺼짐인지 본다   ② 지금 이 환경에서 꺼져 있는지 본다
-#    실행 경로에서 멈추는 것은 `app.graph.build_graph()` 가 맡는다 (D-72 fail-closed).
+#    실행 경로에서 멈추는 것은 `app.graph.build_graph()` 가 맡는다 (D-220 fail-closed).
 
 TRACING_VARS = ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING")
 
@@ -1563,4 +1563,98 @@ def test_지금_환경에서_추적이_꺼져_있다() -> None:
         f"🚨 추적이 켜져 있다 — {on} (D-43 이 배제했다)\n"
         "   켜면 광고 문구 원문이 외부로 나간다. 온프레미스는 서사가 아니라 제품 요구사항이다.\n"
         "   끄는 법: 그 변수를 지우거나 false 로 둔다."
+    )
+
+
+# ── 미채택 판정이 되살아나지 않는가 (D-90 ② 의 집행) ────────────────────────────
+#: 🚨 **새 판정이 아니다.** D-90 ② 가 `blocked`(협상 불가)와 `not_adopted`(안 쓰기로 했다)를
+#:    이미 갈랐고, 미채택은 `sources` 에 없다는 것이 그 판정의 귀결이다 (D-223 도 같은 말을
+#:    적재 쪽에서 한다 — *「정본이 미채택이면 사본에서도 없어야 한다」*).
+#:    ⛔ 그런데 **그 귀결을 지키는 검사가 없었다.**
+
+
+def _not_adopted_keys() -> set[str]:
+    return {
+        item.get("key")
+        for item in (_registry().get("not_adopted") or [])
+        if isinstance(item, dict) and item.get("key")
+    }
+
+
+def _review_ledger() -> dict:
+    return yaml.safe_load((ROOT / "scripts/registry_review.yaml").read_text(encoding="utf-8")) or {}
+
+
+@pytest.mark.gate
+def test_미채택_키가_등재에도_생성기_목록에도_없다() -> None:
+    """🔴 미채택을 내린 실제 수단이 **`ORDER` 의 주석 한 줄**이었다.
+
+    ⛔ `gen_registry.py` 의 `NOT_ADOPTED_IDS` 는 **생성을 막지 않는다** — 「미등재」 진단
+       출력을 계산할 때만 쓴다. 막는 것은 `ORDER` 에서 그 줄을 지우거나 주석 처리하는 것뿐이고,
+       주석을 되살리면 미채택 소스가 `sources` 로 되살아난다.
+    🚨 그리고 되살아나도 **2인 확인 게이트가 즉시 통과한다** — 서명이 검토표에 남아 있기
+       때문이다(아래 게이트가 그쪽을 본다). 2026-09-13 에 `source` 표에서 실제로
+       `foodsafety_admin_measure` 가 「2인 확인 완료」로 앉아 있는 것이 나왔다 (D-223).
+
+    ★ **주석은 게이트가 아니다.** 지운 사람이 알아채는 자리를 만든다.
+    """
+    na = _not_adopted_keys()
+    assert na, "not_adopted 가 비어 있다 — 이 게이트가 아무것도 안 보고 있다"
+
+    both = sorted(na & set(_sources()))
+    assert not both, (
+        f"🚨 미채택으로 내린 소스가 `sources` 에도 있다 — {both}\n"
+        "  ⛔ 정본이 두 말을 한다. `not_adopted` 에서 빼거나 등재를 내린다 (D-90 ②)."
+    )
+
+    # 🚨 생성기까지 본다 — `sources` 만 보면 「다시 생성하기 전」에는 초록이다.
+    tree = ast.parse((ROOT / "scripts/gen_registry.py").read_text(encoding="utf-8"))
+    order: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "ORDER" for t in node.targets):
+            continue
+        order = [e.value for e in node.value.elts if isinstance(e, ast.Constant)]
+    assert order, "🚨 `gen_registry.py` 에서 ORDER 를 못 읽었다 — 게이트가 눈을 잃었다"
+
+    revived = sorted(na & set(order))
+    assert not revived, (
+        f"🚨 미채택 소스가 생성기 `ORDER` 에 들어 있다 — {revived}\n"
+        "  ⛔ `rebuild` 를 돌리는 순간 `sources` 로 되살아난다.\n"
+        "  → 되살리려면 `not_adopted` 에서 먼저 내리고 사유를 남긴다 (D-90 ② · D-72)."
+    )
+
+
+@pytest.mark.gate
+def test_서명이_끝난_키가_정본에_없으면_미채택_기록이_있다() -> None:
+    """🔴 **검토표는 정본보다 길다** — 미채택·차단된 것의 서명이 남는다.
+
+    `test_레지스트리_서명은_2인확인_원장과_같다` 는 **`sources` 를 돌며 원장을 조회**한다.
+    ⛔ 반대 방향 — **원장에만 있는 키** — 는 그 게이트의 검사 밖이다(그쪽은 `continue` 한다).
+    🚨 그래서 **미채택 소스의 완료된 2인 서명이 아무 표시 없이 남아 있을 수 있고**,
+       그 키가 `ORDER` 로 되살아나면 `ck_source_four_eyes` 가 **처음부터 통과**한다.
+
+    ★ 서명을 지우라는 게이트가 아니다 — 서명은 이력이다.
+      **「왜 정본에 없는가」가 키로 적혀 있기만 하면 된다.**
+    ⛔ `blocked` 는 키를 `{name, grade, reason}` 로 **제한**하고 있어(같은 파일 위쪽 게이트)
+      id 로 대조할 수 없다. 그래서 이 게이트는 **서명이 끝난 것**만 본다 —
+      차단 목록의 것들은 서명이 없다(2026-09-13 실측).
+    """
+    ledger = _review_ledger()
+    signed = {
+        key
+        for key, entry in ledger.items()
+        if isinstance(entry, dict)
+        and entry.get("decided_by")
+        and entry.get("reviewed_by")
+        and entry.get("decided_by") != entry.get("reviewed_by")
+    }
+    assert signed, "🚨 검토표에 서명이 끝난 항목이 하나도 없다 — 원장을 못 읽었다"
+
+    orphan = sorted(signed - set(_sources()) - _not_adopted_keys())
+    assert not orphan, (
+        f"🚨 2인 서명이 끝났는데 정본에도 미채택 기록에도 없는 키 {len(orphan)}건 — {orphan}\n"
+        "  ⛔ 이 상태에서 그 키가 `ORDER` 로 들어가면 2인 확인이 **처음부터 통과**한다.\n"
+        "  → 등재하든 미채택으로 내리든, **판정을 키로 적는다** (D-90 ② · D-110)."
     )

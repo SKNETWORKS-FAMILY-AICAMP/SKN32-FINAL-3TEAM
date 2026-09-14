@@ -36,7 +36,7 @@ _MAX_BODY = PARAMS.max_text_len * 16
 async def _form_field(request: Request, name: str) -> str:
     """`application/x-www-form-urlencoded` 본문에서 필드 하나. **의존성을 안 늘린다.**
 
-    ⛔ 상한을 **자르지 않고 거부한다** — 자르면 사용자는 자기 문구가 잘린 줄 모른다 (D-72).
+    ⛔ 상한을 **자르지 않고 거부한다** — 자르면 사용자는 자기 문구가 잘린 줄 모른다 (D-220).
     """
     body = await request.body()
     if len(body) > _MAX_BODY:
