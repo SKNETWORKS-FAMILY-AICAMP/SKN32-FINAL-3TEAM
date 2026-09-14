@@ -185,13 +185,13 @@ def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
     ],
 )
 def test_citation_조립(row: dict, want: str | None) -> None:
-    """🔴 부분 인용을 내지 않는다 — 「제8조」가 실은 제3항이면 틀린 근거다 (D-100)."""
+    """🔴 부분 인용을 내지 않는다 — 「제8조」가 실은 제3항이면 틀린 근거다 (D-224)."""
     assert rt.citation(row) == want
 
 
 @pytest.mark.gate
 def test_모든_질의가_항과_호를_싣는다() -> None:
-    """⛔ 이 둘이 빠지면 화면이 **어느 호가 걸렸는지 말할 수 없다** (D-158 · D-100)."""
+    """⛔ 이 둘이 빠지면 화면이 **어느 호가 걸렸는지 말할 수 없다** (D-158 · D-224)."""
     for sql in QUERIES:
         assert "c.paragraph" in sql
         assert "c.item" in sql
