@@ -161,6 +161,47 @@ def dict_entries(request: Request) -> HTMLResponse:
     )
 
 
+def _list_admin_accounts() -> list[dict] | None:
+    """`app_account` 목록 — 이니셜·이름·마지막 로그인·활성 상태만. 읽기 전용.
+
+    ⛔ **해시는 절대 안 뽑는다** — `scripts/admin_account.py show()` 와 같은 이유
+       (해시가 곧 지문이다). 🚨 계정 추가는 이 화면에 없다 — D-66 이 "온프레미스는
+       회원가입 화면을 만들지 않는다"고 명시한다. `launcher.py admin-add` 로만 만든다.
+    """
+    try:
+        import psycopg  # noqa: PLC0415
+        from psycopg.rows import dict_row  # noqa: PLC0415
+
+        from app.settings import dsn  # noqa: PLC0415
+
+        with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT initials, display_name, last_login_at, disabled_at
+                FROM app_account
+                ORDER BY initials
+                """
+            )
+            return cur.fetchall()
+    except Exception as e:  # noqa: BLE001
+        _log.warning("admin: app_account 조회 실패 — %s", type(e).__name__)
+        return None
+
+
+@router.get("/admins", response_class=HTMLResponse)
+def admins(request: Request) -> HTMLResponse:
+    """관리자 계정 목록 — 읽기 전용, 끝까지 읽기 전용.
+
+    🚨 목업엔 계정 CRUD 화면이 있었지만 D-66("온프레미스는 회원가입 화면을 만들지
+       않는다")과 충돌해 스코프에서 뺐다 — 계정은 `launcher.py admin-add` 로만 만든다.
+    """
+    actor = require_governor(request)
+    rows = _list_admin_accounts()
+    return templates.TemplateResponse(
+        request, "admin/admins.html", {"accounts": rows, "actor": actor}
+    )
+
+
 @router.get("/api/counts")
 def api_counts(request: Request) -> dict[str, int]:
     """🔌 **목업 프론트 연결 배관 테스트용** (2026-09-14).

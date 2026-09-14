@@ -1,0 +1,34 @@
+{# app/templates/admin/admins.html — 관리자 계정 목록 · 소유자 **ssm · psj** (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이고, 앞으로도 그렇다.** D-66 이 "온프레미스는 회원가입 화면을 만들지
+     않는다"고 명시한다 — 계정은 `launcher.py admin-add`(셸 · getpass) 로만 만든다.
+     목업의 '관리자' 화면은 계정 CRUD 였지만, 그건 이 설계와 충돌해 스코프에서 뺐다.
+  ⛔ **비밀번호 해시는 여기 어디에도 없다** — `scripts/admin_account.py show()` 와
+     같은 이유(해시가 곧 지문이다).
+  ✅ `governor` 로그인을 지나야 뜬다 (index.html 과 같은 이유, D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 관리자 계정{% endblock %}
+{% block content %}
+<h1>관리자 계정</h1>
+<p><a href="/admin/">← 관리자 첫 화면</a></p>
+<p class="warn">🚨 <b>읽기 전용이다.</b> 계정 추가·비밀번호 변경은 화면에 없다 — 터미널에서
+  <code>uv run python launcher.py admin-add &lt;이니셜&gt;</code> 로만 한다 (D-66).</p>
+
+{% if accounts is none %}
+<p>DB 에 못 붙었다 — <code>launcher.py db-up</code> 을 먼저 돌린다.</p>
+{% elif not accounts %}
+<p>계정이 없다.</p>
+{% else %}
+<table>
+  <tr><th>이니셜</th><th>이름</th><th>마지막 로그인</th><th>상태</th></tr>
+  {% for a in accounts %}
+  <tr>
+    <td>{{ a.initials }}</td>
+    <td>{{ a.display_name }}</td>
+    <td>{{ a.last_login_at.strftime("%Y-%m-%d %H:%M") if a.last_login_at else "—" }}</td>
+    <td>{{ "꺼짐" if a.disabled_at else "켜짐" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}
