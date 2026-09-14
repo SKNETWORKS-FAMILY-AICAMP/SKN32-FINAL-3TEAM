@@ -218,12 +218,24 @@ def onboard(
             raise typer.Exit(1)
         # 🔴 여기가 09-13 에 팀원이 막힌 자리다 (D-221). 이제 런처가 돌리고, 죽으면 멈춘다.
         if run("uv", "run", "alembic", "upgrade", "head") != 0:
+            # 🔄 **2026-09-14 — 안내가 엉뚱한 곳을 가리켰다.** 종전에는 `db-fresh` 만 가리켰는데
+            #    그것은 **빈 DB** 만 잰다. 09-14 에 팀원(psj)이 막힌 원인은 **옛 볼륨**이었고,
+            #    안내대로 돌렸으면 **초록이 떴을 것**이다. 같은 증상이 이틀 반복된 이유의 후보다.
+            #    ⛔ 두 갈래를 가른다 — 위 출력이 그것을 정한다.
+            console.print("  [red]🔴 마이그레이션이 실패했습니다.[/red]")
+            console.print("     [bold]① 위 오류 본문 전체를 그대로 팀에 주세요.[/bold]")
+            console.print("        🚨 본문 없이는 어느 리비전이 걸렸는지 아무도 못 가릅니다.")
+            console.print("     ② 지금 어디까지 왔는지: [bold]uv run alembic current[/bold]")
+            console.print("     ③ 갈래가 둘입니다 —")
             console.print(
-                "  [red]🔴 마이그레이션 실패[/red] — 빈 DB 에서만 나는 종류일 수 있습니다."
+                "        · [bold]새 DB[/bold](처음 세우는 중) → "
+                "[bold]launcher.py db-fresh[/bold] 의 출력을 같이 주세요 (D-221)"
             )
             console.print(
-                "     [bold]uv run python launcher.py db-fresh[/bold] 의 출력을 팀에 주세요 (D-221)."
+                "        · [bold]쓰던 DB[/bold](예전 상태가 남아 있다) → "
+                "[bold]launcher.py db-reset[/bold] 로 **먼저 미리보기**를 봅니다"
             )
+            console.print("          🔴 `--yes` 는 볼륨을 지웁니다 — 콘솔 계정이 사라집니다 (D-66)")
             raise typer.Exit(1)
 
     console.print("\n[bold]5. 판정[/bold] — 여기서 초록을 봅니다")
@@ -238,9 +250,19 @@ def onboard(
     console.print("     🔴 AI Hub 계열은 사람이 받아 [bold]launcher.py register[/bold] 로 올립니다")
 
     console.print("\n[bold]7. 원문을 받은 뒤[/bold]  파생물 → DB → 벡터")
+    # 🔄 **2026-09-14 — 여기에 「재추출」이 없었다.** 이 순서를 그대로 따른 사람은 **낡은
+    #    파생물로 DB 를 세운다.** 실측: `citation()` 커버리지가 38.1% 였고, 코드는 09-12 에
+    #    고쳤는데 `data/derived/law_article.jsonl` 이 09-10 판이었다. D-221 과 같은 모양이다 —
+    #    **런처가 손을 놓는 자리에서 사람이 막힌다.**
+    # ★ 한 명령으로 묶어 두었다. 절차를 두 벌로 적으면 한쪽만 갱신된다 (D-99).
     console.print(
-        "     [bold]launcher.py load[/bold] → [bold]chunk --dump[/bold] → "
-        "[bold]embed --check[/bold] → [bold]embed[/bold]"
+        "     [bold]uv run python launcher.py db-reset --yes --data[/bold]   ← 이 한 줄입니다"
+    )
+    console.print("     🚨 **재추출부터** 합니다 — 조문·별표를 다시 뽑고, 적재하고, 임베딩합니다.")
+    console.print("        ⛔ `load` → `chunk` → `embed` 만 돌리면 **낡은 파생물로 섭니다.**")
+    console.print("     🔴 볼륨을 지웁니다 — 새 기기에는 잃을 것이 없습니다. 쓰던 기기라면")
+    console.print(
+        "        먼저 [bold]launcher.py db-reset[/bold] (미리보기)으로 무엇이 사라지나 봅니다."
     )
     console.print("     ⚠️ KURE-v1 모델 2.27GB 를 처음 한 번 내려받습니다")
 
