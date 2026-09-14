@@ -403,7 +403,7 @@ def test_커서가_오면_문장마다_근거가_쌓이고_judge_가_짝짓는�
 
 @pytest.mark.gate
 def test_좌표를_못_세운_근거는_안_나간다(monkeypatch: pytest.MonkeyPatch) -> None:
-    """🔴 `citation` 이 `None` 이면 **버린다** (D-100). 별표는 계층 표기가 달라 조립이 안 된다.
+    """🔴 `citation` 이 `None` 이면 **버린다** (D-224). 별표는 계층 표기가 달라 조립이 안 된다.
 
     ⛔ 「제18조」로 줄여 적으면 실은 제3항인 근거를 제1항처럼 읽게 만든다 —
        **틀린 인용은 없는 인용보다 나쁘다.**

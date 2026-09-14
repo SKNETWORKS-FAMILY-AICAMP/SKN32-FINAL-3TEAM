@@ -171,7 +171,7 @@ class Span(BaseModel):
 
 
 class EvidenceArticle(BaseModel):
-    """근거 조문. **판정에는 반드시 붙는다** (D-100 · 기획서 5-8 원칙 ②).
+    """근거 조문. **판정에는 반드시 붙는다** (D-224 · 기획서 5-8 원칙 ②).
 
     🚨 `quote` 는 인용이므로 `source_use.allowed` 가 `U3_cite` 인 것만 담는다.
 
@@ -244,10 +244,10 @@ class SentenceJudgment(BaseModel):
 
     @model_validator(mode="after")
     def _confirmed_needs_evidence(self) -> SentenceJudgment:
-        # D-100 — 위반을 확정했으면 근거 조문이 붙는다. 「근거 없음」은 별도 상태다
+        # D-224 — 위반을 확정했으면 근거 조문이 붙는다. 「근거 없음」은 별도 상태다
         if self.verdict is Verdict.confirmed and self.violations and not self.evidence:
             raise ValueError(
-                "위반을 확정했는데 근거 조문이 없다 (D-100) — "
+                "위반을 확정했는데 근거 조문이 없다 (D-224) — "
                 "근거를 못 찾은 경우의 상태는 `no_basis` 다"
             )
         return self

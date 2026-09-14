@@ -87,7 +87,7 @@ class SentEvidence:
     #: 🔴 `part_total > 1` 인 조각은 조문의 **일부**다 (0011 · D-199) — 그 사실은
     #:    `EvidenceArticle.chunk_id` 로 따라간다. 여기서 조문 이름만 남기지 않는다.
     articles: tuple[EvidenceArticle, ...] = ()
-    #: 두 갈래가 각각 돌았는가. ⛔ **둘 다 False 면 근거 없이 판정하는 것**이다 (D-100) — `hold`
+    #: 두 갈래가 각각 돌았는가. ⛔ **둘 다 False 면 근거 없이 판정하는 것**이다 (D-224) — `hold`
     vector: bool = False
     lexical: bool = False
     #: 후보 풀 크기. 🚨 0 은 「안 겹쳤다」이고, `lexical=False` 는 「검색어를 못 만들었다」다.
@@ -227,14 +227,14 @@ def classify(state: JudgeState) -> dict[str, Any]:
 
 
 def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
-    """`Hit` → 계약. 🔴 **확신이 없으면 안 옮긴다** (D-100).
+    """`Hit` → 계약. 🔴 **확신이 없으면 안 옮긴다** (D-224).
 
     ⛔ `citation()` 이 `None` 이면 좌표를 못 세운 것이다. 「제18조」로 줄여 적으면 실은
        제3항인 근거를 가리킬 수 있다 — 그 함수가 막으려는 **부분 인용** 바로 그것이다.
        지어내지 않고 **버린다.** 그래서 `articles` 가 `hits` 보다 짧을 수 있다.
     ⛔ **`quote` 는 비운다.** 계약이 *「`quote` 는 `source_use.allowed` 가 `U3_cite` 인 것만」*
        이라 적었는데 `search()` 는 `U2_rag` 로 거른다 — **다른 축이다.** 모르는 자격을
-       있다고 적지 않는다 (D-100). 🔜 U3 를 같이 읽게 되면 그때 채운다.
+       있다고 적지 않는다 (D-224). 🔜 U3 를 같이 읽게 되면 그때 채운다.
     🔴 `part_total > 1` 이면 이 근거는 조문의 **일부**다 (0011 · D-199). 그 사실은
        `chunk_id` 로 따라간다 — 조문 이름만 남기면 3분의 1을 전문으로 인용하는 것이다.
     """
@@ -271,7 +271,7 @@ def retrieve(state: JudgeState, config=None) -> dict[str, Any]:  # noqa: ANN001
     🔴 **`part_total > 1` 인 근거는 조문의 일부다** (0011 · D-199). `EvidenceArticle` 로 옮길 때
        그 사실을 같이 옮긴다 — 「제18조」라고만 적으면 3분의 1을 전문으로 인용하는 것이다.
        기획서 5-6 의 인용 검증(「존재」가 아니라 「일치」)이 이 칸을 본다.
-    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다. 근거 없이 판정하면 D-100 위반이라
+    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다. 근거 없이 판정하면 D-224 위반이라
        **`hold` 로 보내는 것**이 맞다 — 빈 근거로 `judge` 에 들어가지 않는다.
 
     🆕 **커서는 `config` 로 받는다** (구현계획 §2-1 C). ⛔ 노드가 스스로 `connect()` 하면
@@ -327,7 +327,7 @@ def judge(state: JudgeState) -> dict[str, Any]:
     🔴 **근거는 `state["evidence"]` 에서 온다** (2026-09-13) — `retrieve` 가 문장별로 쌓아 둔
        `SentEvidence` 다. `sent_id` 로 맞춰 `SentenceJudgment.evidence` 에 옮긴다.
        ⛔ **여기서 검색을 다시 부르지 않는다** — 코어는 `app/retrieve.py` 하나다 (D-99).
-       ⛔ 붙는 근거가 없으면 `confirmed` 를 못 낸다 — 계약이 거부한다 (D-100 · `_confirmed_needs_evidence`).
+       ⛔ 붙는 근거가 없으면 `confirmed` 를 못 낸다 — 계약이 거부한다 (D-224 · `_confirmed_needs_evidence`).
           그 경우의 상태는 `no_basis` 이고, `vector`·`lexical` 이 왜 그런지를 말해 준다.
     """
     # 🆕 2026-09-14 — `retrieve` 가 쌓아 둔 것을 **sent_id 로 짝짓는다.** 값이 입구부터
