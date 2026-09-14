@@ -370,10 +370,27 @@ def load_documents(cur, dry: bool) -> int:
             continue
         doc_id = f"annex:{p.stem}"
         if not dry:
+            # 🔴 **`DO NOTHING` 이 아니라 `DO UPDATE` 다** (2026-09-14 · 0015).
+            #    ⛔ `DO NOTHING` 이면 `annex_no` 칸을 새로 만들고 `load` 를 다시 돌려도
+            #       **기존 행이 NULL 로 남는다.** 「코드는 고쳤는데 값이 안 들어온다」가 되고,
+            #       그것이 오늘 오전 파생물 재추출에서 겪은 것과 **같은 모양**이다.
+            #    🚨 적재는 **선언한 상태로 만드는 것**이다 — 값의 정본은 파생물이다 (D-187).
             cur.execute(
-                "INSERT INTO document (doc_id, fragment_id, doc_type, title, law_id) "
-                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (doc_id) DO NOTHING",
-                (doc_id, "law_go_kr:annex", "별표", rows[0]["annex_title"], rows[0]["law_id"]),
+                "INSERT INTO document (doc_id, fragment_id, doc_type, title, law_id, annex_no) "
+                "VALUES (%s,%s,%s,%s,%s,%s) "
+                "ON CONFLICT (doc_id) DO UPDATE SET title = EXCLUDED.title, "
+                "law_id = EXCLUDED.law_id, annex_no = EXCLUDED.annex_no",
+                (
+                    doc_id,
+                    "law_go_kr:annex",
+                    "별표",
+                    rows[0]["annex_title"],
+                    rows[0]["law_id"],
+                    # 🔴 **머리글에서 읽은 번호만.** 파일명 일련번호로 대신하지 않는다 —
+                    #    없으면 `None` 이고, 읽는 쪽이 인용을 세우지 않는다 (D-224 · D-72).
+                    #    ⚠️ `.get()` 이다 — 09-14 이전 판 파생물에는 이 키가 없다.
+                    rows[0].get("annex_no_head"),
+                ),
             )
         n += 1
     return n

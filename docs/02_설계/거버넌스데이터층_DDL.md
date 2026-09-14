@@ -424,6 +424,11 @@ CREATE TABLE document (
     doc_type        TEXT NOT NULL,          -- 법률/시행령/시행규칙/고시/지침/의결서/처분/보도자료
     title           TEXT,
     law_id          TEXT,
+    -- 🆕 0015 — 별표 번호. **머리글(「■ … [별표 5] …」)에서 읽은 값만** 들어간다.
+    --    🔴 NULL = 「원문 머리글에 번호가 없다」. 파일명 일련번호로 채우지 않는다 (D-224).
+    --       채워 두면 인용이 「[별표 3]」이라 적히고 실은 다른 별표일 수 있다.
+    --    ⛔ 법령 문서(doc_type='법령')는 늘 NULL 이다 — 별표에만 뜻이 있다.
+    annex_no        SMALLINT,
     source_ref      TEXT,                   -- 사건번호 · 법령ID · 인정번호
     effective_date  DATE,
     superseded_at   DATE                    -- 🚨 NULL 이 아니면 현행이 아니다
