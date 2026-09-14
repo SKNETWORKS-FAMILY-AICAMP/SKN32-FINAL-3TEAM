@@ -5,7 +5,15 @@
 
 ★ **무엇을 답하나** — 구현계획 §2-1 C 의 완료 판정 마지막 칸이다:
   ① `evidence` 가 문장 수만큼 쌓이는가  ② **`vector` 가 실제로 돌았는가**
-  ③ `retrieve` 가 몇 ms 인가 (D-77 예산 <500ms · 구현계획 ⑨ 리랭커 선정의 입력)
+  ③ `retrieve` 가 몇 ms 인가 — D-77 L3 예산 **「BM25 + 벡터 검색 < 300ms」**
+     (구현계획 ⑨ 리랭커 선정의 입력)
+
+🔄 **2026-09-14 정정 — 종전에 「D-77 예산 판정 전체 <500ms」라 적혀 있었다. 그런 수는 없다.**
+   ⛔ D-77 L3 의 표는 **단계별** 예산이고, **500ms 는 리랭커 한 단계**의 몫이다(최적화 1순위).
+      판정은 **소계 ≈1.1초 · 목표 p95 < 3초**다. 「전체 500ms」로 읽으면 **아직 없는 리랭커의
+      예산을 이미 다 쓴 것처럼** 보여, 통과해야 할 것이 초과로 읽힌다 (실제로 그렇게 읽혔다).
+   🚨 이 오기는 이 파일이 만들어질 때(09-14) 같이 들어와 보고 넷에 인용되었다.
+      **D 번호를 인용하기 전에 원장 본문을 읽는다** — D-224 가 적은 규율 그대로다.
 
 🔴 **왜 파일인가** — 같은 것을 PowerShell 한 줄로 넣으면 **한글 식별자가 `???` 로 깨진다**
    (2026-09-14 실측 · `Category.건기식` → `Category.???`). stdin 이 콘솔 인코딩을 타기
@@ -25,10 +33,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import graph as g  # noqa: E402
+from app import retrieve as rt  # noqa: E402 — 모델이 **이번 실행에서** 로드됐는지 보려고 든다
 from app.contracts import Category, ProductContext  # noqa: E402
 from app.settings import dsn  # noqa: E402
 
 DEFAULT_TEXT = "면역력 강화에 도움을 줍니다."
+
+#: D-77 L3 「단계별 응답시간 예산」에서 **이 도구가 지나는 노드만** 옮겼다.
+#: 🔴 **정본은 원장이다** — 여기는 읽는 자리다 (D-54). 표를 고칠 때는 원장을 고친다.
+#: ⛔ 여기에 「판정 전체」 칸을 만들지 않는다. D-77 에 그런 칸이 없다 (위 정정 참조).
+BUDGET_MS: dict[str, int] = {"split": 50, "classify": 100, "retrieve": 300}
+#: 판정 **소계** — D-77 L3. 목표는 `p95 < 3초`이고 이 소계는 그 안의 배분 합계다.
+JUDGE_SUBTOTAL_MS = 1_100
 
 
 def main(argv: list[str]) -> int:
@@ -41,6 +57,13 @@ def main(argv: list[str]) -> int:
         return 1
 
     import psycopg  # noqa: PLC0415 — DB 가 없어도 임포트는 서야 한다 (api.py 와 같은 어법)
+
+    # 🔴 **모델 로드가 이번 실행에 들어갔는지 센다.** 들어갔으면 `retrieve` 를 예산으로
+    #    판정하지 않는다 — 첫 실행은 **늘** 초과이고, 늘 빨간 표시는 아무도 안 본다.
+    #    ⛔ 「모델 로드 포함이니 감안해서 보라」를 사람에게 시키지 않는다. 도구가 안다.
+    #    🚨 `_model_cache` 는 `app/retrieve.py` 의 사유물이다 — 저쪽이 이름을 바꾸면
+    #       여기가 조용히 `False` 로 굳는다. 그래서 아래에서 **비어 있는지도 같이 본다.**
+    before = len(rt._model_cache)  # noqa: SLF001
 
     try:
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
@@ -72,12 +95,36 @@ def main(argv: list[str]) -> int:
         for a in e.articles:
             print(f"      {a.law_id}  {a.article}      chunk={a.chunk_id}")
 
+    after = len(rt._model_cache)  # noqa: SLF001
+    # 🚨 **셋을 가른다.** ① 이번에 로드됐다 — 예산 판정 안 함 ② 이미 떠 있었다 — 판정한다
+    #    ③ 끝까지 비어 있다 — 벡터가 안 돈 것이라 **애초에 잴 것이 없다** (D-202 의 어법).
+    #    ⛔ ①과 ③을 한 값으로 합치지 않는다. 「느린 것」과 「안 돈 것」은 다른 사건이다.
+    skip = "모델 로드 포함" if after > before else ("" if after else "벡터 미실행")
+
     print(f"\n  종착  {out['outcome'].value}   (🚨 judge 가 스텁이라 hold 가 정상이다 · D-127)")
     print("  계측")
     for t in out["timings"]:
-        print(f"      {t.node:12s} {t.ms:8.1f} ms")
+        # 🚨 예산이 **있는 노드만** 판정한다. 없는 노드에 초록·빨강을 찍으면
+        #    원장에 없는 수를 지어낸 것이 된다 (D-224 의 어법).
+        b = BUDGET_MS.get(t.node)
+        if b is None:
+            note = ""
+        elif t.node == "retrieve" and skip:
+            note = f"   ⬜ {skip} — 예산(<{b}ms) 판정 안 함"
+        else:
+            note = f"   {'✅' if t.ms < b else '🔴'} 예산 <{b}ms"
+        print(f"      {t.node:12s} {t.ms:8.1f} ms{note}")
     total = sum(t.ms for t in out["timings"])
-    print(f"      {'합계':12s} {total:8.1f} ms   (D-77 예산 판정 전체 <500ms)")
+    print(
+        f"      {'합계':12s} {total:8.1f} ms   "
+        f"(D-77 L3 판정 소계 ≈{JUDGE_SUBTOTAL_MS}ms · 목표 p95 < 3초)"
+    )
+    if skip == "모델 로드 포함":
+        print("      🚨 이 실행에서 **모델을 로드했다** — 프로세스당 한 번이다 (`_model_cache`).")
+        print("         `retrieve` 의 진짜 수는 **같은 프로세스에서 두 번째 검색부터**다.")
+        print("         한 프로세스에서 여러 번 재는 것은 원장에 있다 (D-19 · D-178).")
+    print("      ⬜ `retrieve` 는 아직 **문장 하나**만 돈다 — `split` 이 스텁이다 (D-127).")
+    print("         문장 분할이 서면 이 수에 문장 수가 곱해진다. 같은 작업에서 배치로 묶는다.")
     print("\n🚨 이 수는 **이 기기**의 수다 — `data/**` 는 미커밋이다 (D-19 · D-178).\n")
     return 0
 
