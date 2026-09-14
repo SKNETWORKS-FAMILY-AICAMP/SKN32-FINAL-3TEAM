@@ -122,6 +122,45 @@ def sources(request: Request) -> HTMLResponse:
     )
 
 
+def _list_dict_entries() -> list[dict] | None:
+    """`dict_entry` 목록 — 금지표현·적법표현 등 판정용 사전. 읽기 전용.
+
+    🚨 `_list_sources()` 와 같은 패턴 — DB 접속 실패 시 None (D-51).
+    """
+    try:
+        import psycopg  # noqa: PLC0415
+        from psycopg.rows import dict_row  # noqa: PLC0415
+
+        from app.settings import dsn  # noqa: PLC0415
+
+        with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT term, dict_kind, violation_type, law_ref, exact_match, confidence
+                FROM dict_entry
+                ORDER BY dict_kind, term
+                """
+            )
+            return cur.fetchall()
+    except Exception as e:  # noqa: BLE001
+        _log.warning("admin: dict_entry 조회 실패 — %s", type(e).__name__)
+        return None
+
+
+@router.get("/dict-entries", response_class=HTMLResponse)
+def dict_entries(request: Request) -> HTMLResponse:
+    """표현 사전(판정 근거) 목록 — 읽기 전용.
+
+    🚨 `dict_entry` 는 원문(source/fragment)에서 뽑아낸 판정용 사전이다 — 목업의
+       "판정 근거 관리"(법률·고시 원문)와는 다른 개념이라 라우트를 분리했다.
+    """
+    actor = require_governor(request)
+    rows = _list_dict_entries()
+    return templates.TemplateResponse(
+        request, "admin/dict_entries.html", {"entries": rows, "actor": actor}
+    )
+
+
 @router.get("/api/counts")
 def api_counts(request: Request) -> dict[str, int]:
     """🔌 **목업 프론트 연결 배관 테스트용** (2026-09-14).
