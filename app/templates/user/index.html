@@ -5,7 +5,10 @@
   ★ 이 파일은 **자리를 잡아 둔 것**이다. 내용은 2W 산출물의 화면설계서를 옮긴다 (§8 ⑥).
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 문구 검수{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
 {% block content %}
+<div class="user-shell">
+{% include "user/_nav.html" %}
 <h1>문구 검수</h1>
 
 <p>광고 문구를 넣으면 <b>어느 조문에 걸리는지</b>와 <b>왜 걸리는지</b>를 돌려준다.</p>
@@ -29,4 +32,5 @@
   {% endfor %}
   </ul>
 </section>
+</div>
 {% endblock %}
