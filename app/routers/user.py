@@ -34,6 +34,72 @@ router = APIRouter(prefix="/u", tags=["user"])
 #:       413(본문)으로 먼저 걸려 「문구가 너무 길다」라는 **정확한 이유가 안 나온다.**
 _MAX_BODY = PARAMS.max_text_len * 16
 
+# ══════════════════════════════════════════════════════════════════════
+#  상단 nav — 구역 넷 + 사이드바 (2026-09-16, 발표자료 v7.2 SECTIONS 를 서버 렌더로)
+# ══════════════════════════════════════════════════════════════════════
+#: 🚨 **경로 → 구역.** 여기 없는 경로(홈·마이페이지·고객센터)는 구역이 없다 —
+#:    상단 pill 이 안 켜지고 사이드바도 안 뜬다. 디자인의 `SCREEN_SECTION` 그대로다.
+_SCREEN_SECTION: dict[str, str] = {
+    "/u/": "work",
+    "/u/generate": "work",
+    "/u/segments": "work",
+    "/u/history": "work",
+    "/u/draft-setup": "adgen",
+    "/u/draft-editor": "adgen",
+    "/u/help": "about",
+    "/u/matching": "matching",
+}
+
+_SECTION_LABELS: dict[str, str] = {
+    "about": "copylane 소개",
+    "work": "검수 및 카피생성",
+    "adgen": "AI 광고 생성",
+    "matching": "매칭",
+}
+
+#: 🔴 구역별 사이드바 항목 (key, label, href). **matching 은 없다** — 하위 화면 넷이
+#:    홀딩이라 있지도 않은 화면에 링크를 걸지 않는다 (2026-09-16 판단).
+_SECTION_SUBS: dict[str, tuple[tuple[str, str, str], ...]] = {
+    "work": (
+        ("review", "검수", "/u/"),
+        ("gen", "카피생성", "/u/generate"),
+        ("history", "이력", "/u/history"),
+    ),
+    "about": (
+        ("guide", "사용방법", "/u/help?tab=guide"),
+        ("faq", "자주 묻는 질문", "/u/help?tab=faq"),
+    ),
+    "adgen": (("make", "광고 만들기", "/u/draft-setup"),),
+}
+
+#: 경로 → 사이드바 활성 항목 key. `/u/help` 는 tab 쿼리로 갈리니 라우터에서 직접 넘긴다.
+_SECTION_ACTIVE_SUB: dict[str, str] = {
+    "/u/": "review",
+    "/u/generate": "gen",
+    "/u/segments": "gen",
+    "/u/history": "history",
+    "/u/draft-setup": "make",
+    "/u/draft-editor": "make",
+}
+
+
+def _render(
+    request: Request, template: str, ctx: dict | None = None, *, active_sub: str | None = None
+) -> HTMLResponse:
+    """모든 사용자 화면이 여기를 거친다 — 구역·사이드바 계산을 **한 곳에만** 둔다.
+
+    ⛔ 화면마다 `active_section` 을 손으로 채우면, 화면이 늘 때마다 빠뜨리는 자리가
+       생긴다 (D-147 의 정신과 같다 — 계산이 갈리면 둘 다 못 믿는다).
+    """
+    ctx = dict(ctx or {})
+    path = request.url.path
+    section = _SCREEN_SECTION.get(path)
+    ctx.setdefault("active_section", section)
+    ctx.setdefault("section_label", _SECTION_LABELS.get(section) if section else None)
+    ctx.setdefault("section_subs", _SECTION_SUBS.get(section) if section else None)
+    ctx.setdefault("active_sub", active_sub if active_sub is not None else _SECTION_ACTIVE_SUB.get(path))
+    return templates.TemplateResponse(request, template, ctx)
+
 
 async def _form_field(request: Request, name: str) -> str:
     """`application/x-www-form-urlencoded` 본문에서 필드 하나. **의존성을 안 늘린다.**
@@ -89,7 +155,7 @@ def home(request: Request, session: Session = Depends(get_session)) -> HTMLRespo
         .scalars()
         .all()
     )
-    return templates.TemplateResponse(
+    return _render(
         request,
         "user/home.html",
         {
@@ -107,7 +173,7 @@ def index(request: Request) -> HTMLResponse:
     from app.api import FIXTURE_ROOT  # noqa: PLC0415 — 순환 import 를 피한다
 
     names = sorted(p.stem for p in (FIXTURE_ROOT / "judge").glob("*.json"))
-    return templates.TemplateResponse(
+    return _render(
         request,
         "user/index.html",
         {"fixtures": names, "max_text_len": PARAMS.max_text_len},
@@ -136,7 +202,7 @@ async def judge(request: Request) -> HTMLResponse:
     _text = await _form_field(request, "text")
 
     names = sorted(p.stem for p in (FIXTURE_ROOT / "judge").glob("*.json"))
-    return templates.TemplateResponse(
+    return _render(
         request,
         "user/index.html",
         # ⛔ `text` 를 되돌려 그리지 않는다 — 지금은 그릴 자리가 없고,
@@ -155,7 +221,7 @@ def generate_page(request: Request) -> HTMLResponse:
     from app.api import FIXTURE_ROOT  # noqa: PLC0415
 
     names = sorted(p.stem for p in (FIXTURE_ROOT / "generate").glob("*.json"))
-    return templates.TemplateResponse(request, "user/generate.html", {"fixtures": names})
+    return _render(request, "user/generate.html", {"fixtures": names})
 
 
 #: D-127 — 판정 상태 4종. history 필터가 받는 값은 이 넷뿐이다.
@@ -207,7 +273,7 @@ def history(
         .all()
     )
     opened = next((j for j in rows if str(j.id) == open_id), None) if open_id else None
-    return templates.TemplateResponse(
+    return _render(
         request,
         "user/history.html",
         {
@@ -225,41 +291,45 @@ def history(
 
 @router.get("/segments", response_class=HTMLResponse)
 def segments(request: Request) -> HTMLResponse:
-    """대상고객 탐색 — ★ **골격만**. `/u/generate` 카드에서만 들어온다 (nav 밖)."""
-    return templates.TemplateResponse(request, "user/segments.html", {})
+    """대상고객 탐색 — ★ **골격만**. `/u/generate` 카드에서만 들어온다 (사이드바 밖)."""
+    return _render(request, "user/segments.html")
 
 
 @router.get("/draft-setup", response_class=HTMLResponse)
 def draft_setup(request: Request) -> HTMLResponse:
     """AI 광고 생성 · 포맷 선택 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나."""
-    return templates.TemplateResponse(request, "user/draft-setup.html", {})
+    return _render(request, "user/draft-setup.html")
 
 
 @router.get("/draft-editor", response_class=HTMLResponse)
 def draft_editor(request: Request) -> HTMLResponse:
-    """AI 광고 생성 · 섹션 에디터 — ★ **골격만**. `draft-setup` 에서만 들어온다 (nav 밖)."""
-    return templates.TemplateResponse(request, "user/draft-editor.html", {})
+    """AI 광고 생성 · 섹션 에디터 — ★ **골격만**. `draft-setup` 에서만 들어온다 (사이드바 밖)."""
+    return _render(request, "user/draft-editor.html")
 
 
 @router.get("/mypage", response_class=HTMLResponse)
 def mypage(request: Request) -> HTMLResponse:
-    """마이페이지 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나."""
-    return templates.TemplateResponse(request, "user/mypage.html", {})
+    """마이페이지 — ★ **골격만**. 상단 오른쪽 아바타 버튼으로 들어온다 (구역 밖)."""
+    return _render(request, "user/mypage.html")
 
 
 @router.get("/help", response_class=HTMLResponse)
-def help_page(request: Request) -> HTMLResponse:
-    """도움말 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나."""
-    return templates.TemplateResponse(request, "user/help.html", {})
+def help_page(request: Request, tab: str = "guide") -> HTMLResponse:
+    """copylane 소개 — ★ **골격만**. `tab`(guide·faq)이 "사용방법"·"자주 묻는 질문"
+    사이드바 두 항목을 가른다 — 디자인은 이 둘을 같은 화면의 JS 탭으로 뒀다.
+    """
+    if tab not in ("guide", "faq"):
+        tab = "guide"
+    return _render(request, "user/help.html", {"tab": tab}, active_sub=tab)
 
 
 @router.get("/matching", response_class=HTMLResponse)
 def matching(request: Request) -> HTMLResponse:
-    """매칭 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나 — 하위 화면 넷은 다음 차례."""
-    return templates.TemplateResponse(request, "user/matching.html", {})
+    """매칭 — ★ **골격만**. 하위 화면 넷은 홀딩이라 이 구역은 아직 사이드바가 없다."""
+    return _render(request, "user/matching.html")
 
 
 @router.get("/cs", response_class=HTMLResponse)
 def cs(request: Request) -> HTMLResponse:
-    """고객센터 문의 — ★ **골격만**. 티켓 테이블(관리자 콘솔과 짝)이 없어 폼은 다음 차례."""
-    return templates.TemplateResponse(request, "user/cs.html", {})
+    """고객센터 문의 — ★ **골격만**. 각 구역 사이드바 하단 버튼으로만 들어온다 (구역 밖)."""
+    return _render(request, "user/cs.html")

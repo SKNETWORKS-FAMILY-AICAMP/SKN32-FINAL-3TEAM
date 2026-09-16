@@ -4,14 +4,11 @@
     군집화 결과(원 크기=인원수)와 세그먼트 상세는 발표자료 프로토타입(v7.2)의
     `data-screen="segments"` 절을 옮겨서 채운다.
   🚨 `/u/generate`(대상고객 카드)에서 "이 대상고객은 어떻게 만들어졌나요?" 링크로 들어온다 —
-     nav 에는 안 올린다 (설계상 카피생성 화면의 하위 화면).
+     사이드바에는 안 올린다 (설계상 카피생성 화면의 하위 화면).
   ⛔ 군집화 엔진이 없다 — 지금은 숫자·원을 그리지 않는다 (D-147 의 정신과 같다).
-#}{% extends "base.html" %}
+#}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 대상고객 탐색{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
-{% block content %}
-<div class="user-shell">
-{% include "user/_nav.html" %}
+{% block user_content %}
 <a href="/u/generate">← 카피 생성으로 돌아가기</a>
 <h1>대상고객 탐색</h1>
 
@@ -19,5 +16,4 @@
 모든 항목은 코퍼스로 소급해 확인할 수 있게 만들 예정이다.</p>
 
 <p>⬜ 군집화 결과(대상고객 카드·근거 리뷰)가 아직 없다 — 군집화 엔진이 붙으면 여기 채운다.</p>
-</div>
 {% endblock %}

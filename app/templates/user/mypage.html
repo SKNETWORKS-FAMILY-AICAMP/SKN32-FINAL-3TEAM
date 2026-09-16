@@ -3,16 +3,14 @@
   ★ 이 파일은 **골격만** 잡아 둔 것 — generate.html 과 같은 요령이다. 탭 6종(프로필·
     포트폴리오·기본값·멤버·결제·계정)의 내용은 발표자료 프로토타입(v7.2)의
     `data-screen="mypage"` 절을 옮겨서 채운다.
+  🚨 디자인에서 마이페이지는 **상단 오른쪽 아바타 버튼**으로 들어온다 — 구역(section)이
+     아니라서 사이드바가 없다 (`_topnav.html` 참고).
   ⬜ 회원·결제 모델이 아직 없다 — 탭마다 실데이터를 채울 수 있는 자리가 정해지면 붙인다.
-#}{% extends "base.html" %}
+#}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 마이페이지{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
-{% block content %}
-<div class="user-shell">
-{% include "user/_nav.html" %}
+{% block user_content %}
 <h1>마이페이지</h1>
 
 <p>⬜ 프로필 · 포트폴리오 · 기본값 · 멤버 · 결제 · 계정 탭이 아직 없다 —
 회원·결제 모델이 붙으면 여기 채운다.</p>
-</div>
 {% endblock %}

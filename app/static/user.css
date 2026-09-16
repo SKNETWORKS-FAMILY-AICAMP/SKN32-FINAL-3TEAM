@@ -25,35 +25,78 @@
   }
 }
 
-.user-nav {
+/* 상단 4-pill 메뉴 — copylane 소개 · 검수 및 카피생성 · AI 광고 생성 · 매칭 (구역 넷뿐이다) */
+.user-topnav {
   display: flex;
   align-items: center;
   gap: .25rem;
   padding: .75rem 1rem;
-  margin: -1.5rem -1rem 1.5rem;
+  margin: -1.5rem -1rem 0;
   background: var(--u-surface);
   border-bottom: 1px solid var(--u-line);
   color: var(--u-ink);
 }
-.user-nav .user-nav-brand {
+.user-topnav-brand {
   font-weight: 700;
   margin-right: 1rem;
   color: var(--u-ink);
   text-decoration: none;
 }
-.user-nav .user-nav-link {
-  padding: .4rem .7rem;
-  border-radius: .5rem;
+.user-topnav-pill {
+  padding: .45rem .9rem;
+  border-radius: .7rem;
   color: var(--u-clay);
   text-decoration: none;
   font-size: .9rem;
+  font-weight: 500;
 }
-.user-nav .user-nav-link:hover { background: var(--u-surface2); color: var(--u-ink); }
-.user-nav .user-nav-link[aria-current="page"] {
-  color: var(--u-signal-ink);
-  background: var(--u-signal-soft);
-  font-weight: 600;
+.user-topnav-pill:hover { background: var(--u-surface2); color: var(--u-ink); }
+.user-topnav-pill-active { color: var(--u-signal-ink); background: var(--u-signal-soft); font-weight: 600; }
+.user-topnav-spacer { flex: 1; }
+.user-topnav-mypage {
+  padding: .45rem .9rem;
+  border-radius: .7rem;
+  color: var(--u-ink);
+  text-decoration: none;
+  font-size: .85rem;
+  font-weight: 500;
 }
+.user-topnav-mypage:hover { background: var(--u-surface2); }
+
+/* 구역 본문 — 왼쪽 사이드바(있으면) + 메인 */
+.user-body { display: flex; margin: 0 -1rem; align-items: flex-start; }
+.user-sidebar {
+  width: 11rem;
+  flex-shrink: 0;
+  padding: 1.25rem .75rem;
+  border-right: 1px solid var(--u-line);
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  min-height: calc(100vh - 7.5rem);
+}
+.user-sidebar-label { font-size: .72rem; color: var(--u-clay); text-transform: uppercase; margin: 0 .6rem .6rem; }
+.user-sidebar-item {
+  padding: .5rem .6rem;
+  border-radius: .6rem;
+  color: var(--u-ink);
+  text-decoration: none;
+  font-size: .88rem;
+}
+.user-sidebar-item:hover { background: var(--u-surface2); }
+.user-sidebar-item-active { color: var(--u-signal-ink); background: var(--u-signal-soft); font-weight: 600; }
+.user-sidebar-cs {
+  margin-top: auto;
+  padding: .55rem .7rem;
+  border: 1px solid var(--u-line);
+  border-radius: .6rem;
+  color: var(--u-clay);
+  text-decoration: none;
+  font-size: .82rem;
+  text-align: center;
+}
+.user-sidebar-cs:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+.user-main { flex: 1; min-width: 0; padding: 1.5rem 1.75rem; }
 
 /* 목록 화면 공통 — 필터 칩·페이지네이션. history 가 먼저 쓰고, 다음 목록 화면이 이어 쓴다. */
 .filter-chips {

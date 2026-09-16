@@ -5,12 +5,9 @@
   🔄 디자인(발표자료 프로토타입 v7.2)은 클릭 → 옆에 JS 드로어인데, 이 프로젝트는 CSP 가
      인라인 스크립트를 막고 HTMX 도 아직 안 붙었다. `?open_id=` 링크로 같은 흐름을
      서버 렌더만으로 낸다 (2026-09-16). 근거·QnA 는 뺐다 — 결론·위험도·법령 버전만.
-#}{% extends "base.html" %}
+#}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 검수 이력{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
-{% block content %}
-<div class="user-shell">
-{% include "user/_nav.html" %}
+{% block user_content %}
 <h1>검수 이력</h1>
 
 <div class="filter-chips">
@@ -59,5 +56,4 @@
 </div>
 
 {% include "user/_pagination.html" %}
-</div>
 {% endblock %}

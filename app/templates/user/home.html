@@ -3,12 +3,11 @@
   🚨 통계 카드 3개는 **진짜 DB 집계**다 (history 와 같은 요령) — 판정 엔진이 없어 지금은
      0건/— 로 뜨는 게 정상이다. 그럴듯한 수치를 지어 넣지 않는다 (D-147).
   ★ 바로가기 3개는 이미 실제로 존재하는 화면(검수·카피생성·매칭)으로 가는 순수 네비게이션이다.
-#}{% extends "base.html" %}
+  🚨 디자인에서 홈은 **구역이 아니다** — 로고를 누르면 오는 자리라 상단 pill 도
+     사이드바도 없다 (`_topnav.html` 참고).
+#}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 홈{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
-{% block content %}
-<div class="user-shell">
-{% include "user/_nav.html" %}
+{% block user_content %}
 <h1>안녕하세요</h1>
 <p class="home-sub">오늘도 안전한 광고 문구를 만들어보세요.</p>
 
@@ -62,5 +61,4 @@
 {% else %}
 <p>아직 판정 기록이 없다 — 판정 엔진이 붙으면 여기 쌓인다.</p>
 {% endif %}
-</div>
 {% endblock %}

@@ -1,0 +1,20 @@
+{# app/templates/user/_topnav.html — 상단 4-pill 메뉴 · 소유자 lse (병렬작업 계약 §5)
+
+  🚨 딱 4개다 (about·work·adgen·matching) — 화면이 늘어도 여기는 안 늘어난다.
+     새 화면은 어느 구역의 사이드바에 들어갈지를 정하는 것이지, 새 pill 이 아니다.
+  ⬜ "관리자" pill 은 여기 없다 — 관리자 화면은 app/routers/admin.py 소관(ssm·psj)이고
+     별도 로그인(D-66)을 지난다. 사용자 nav 에 admin 을 섞지 않는다.
+#}
+<nav class="user-topnav" aria-label="주요 메뉴">
+  <a class="user-topnav-brand" href="/u/home">CopyLane</a>
+  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'about' }}"
+     href="/u/help?tab=guide">copylane 소개</a>
+  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'work' }}"
+     href="/u/">검수 및 카피생성</a>
+  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'adgen' }}"
+     href="/u/draft-setup">AI 광고 생성</a>
+  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'matching' }}"
+     href="/u/matching">매칭</a>
+  <span class="user-topnav-spacer"></span>
+  <a class="user-topnav-mypage" href="/u/mypage">마이페이지</a>
+</nav>
