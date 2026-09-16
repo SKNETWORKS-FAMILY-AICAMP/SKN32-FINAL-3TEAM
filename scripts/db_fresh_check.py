@@ -20,10 +20,16 @@
    ⛔ 이름이 진짜 DB 와 같으면 **아무것도 안 하고 멈춘다** — 지우는 명령에 오타가 나면
       되돌릴 수 없다 (D-220 fail-closed).
 
+🔄 **2026-09-14 — 임시 DB 를 세우는 넷(`guard_real_db`·`make_db`·`drop_db`·`alembic_head`)을
+   이 파일에 **공용으로** 뺐다. `scripts/schema_drift_check.py` 가 그대로 쓴다 (D-99).
+   ⛔ 저쪽에 복사해 두지 않는다 — 지우는 명령이 두 벌이 되는 것이 가장 위험하다.
+
 ⬜ **여기서 안 보는 것** (D-188) —
    ① **downgrade.** 되돌리기는 안 돌려 본다.
    ② **데이터.** 빈 표만 만든다 — 적재는 `load` 가 본다.
    ③ **런타임 층의 내용.** 표가 서는 것만 본다.
+   ④ 🆕 **`db/schema.sql` 과 `alembic head` 가 같은 모양인가.** 여기는 *돌았는가*만 본다 —
+      **같은가**는 `uv run python launcher.py db-drift` 가 본다 (`schema_drift_check.py`).
 """
 
 from __future__ import annotations
@@ -70,6 +76,53 @@ def _admin_conn(url: str):
     return _connect(_with_db(url, "postgres"))
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  임시 DB 를 만들고·지우고·마이그레이션을 거는 넷
+#  🚨 **여기 하나만 둔다** — `scripts/schema_drift_check.py` 가 그대로 쓴다 (D-99).
+#     ⛔ 복사해 가지 않는다. 고칠 일이 생기면 이 자리를 고친다.
+# ══════════════════════════════════════════════════════════════════════
+def guard_real_db(url: str, *names: str) -> str:
+    """🔴 fail-closed — 진짜 DB 를 지울 수 있는 상황이면 **아무것도 안 한다** (D-220).
+
+    ⛔ 임시 DB 이름 중 **하나라도** 진짜 DB 와 같으면 멈춘다. 이름을 늘릴 때마다
+       이 자리를 지나게 한다 — 지우는 명령에 오타가 나면 되돌릴 수 없다.
+    """
+    real = _dbname(url)
+    for n in names:
+        if real == n:
+            raise SystemExit(
+                f"🔴 진짜 DB 이름이 `{n}` 다 — 이 검사가 그것을 지우게 된다.\n"
+                "   .env 의 DATABASE_URL 을 다른 이름으로 바꾼다."
+            )
+    return real
+
+
+def make_db(url: str, name: str) -> None:
+    """임시 DB 를 **새로** 만든다 — 있으면 지우고 다시. `vector` 확장까지 건다."""
+    with _admin_conn(url) as conn, conn.cursor() as cur:
+        cur.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        cur.execute(f'CREATE DATABASE "{name}"')
+    with _connect(_with_db(url, name)) as conn:
+        conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
+
+def drop_db(url: str, name: str) -> None:
+    with _admin_conn(url) as conn, conn.cursor() as cur:
+        cur.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+
+
+def alembic_head(url: str, name: str) -> int:
+    """`alembic upgrade head` 를 그 DB 에만 건다. 종료코드를 그대로 낸다.
+
+    🚨 **자식 프로세스로** 돌린다 — alembic 을 이 프로세스에 import 하면 `env.py` 가
+       읽는 DATABASE_URL 을 되돌릴 수 없고, 그다음에 도는 것이 **진짜 DB 를 볼 수 있다.**
+    """
+    env = {**os.environ, "DATABASE_URL": _with_db(url, name)}
+    return subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "alembic", "upgrade", "head"], cwd=ROOT, env=env, check=False
+    ).returncode
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="빈 DB 에서 alembic upgrade head (D-221)")
     ap.add_argument("--keep", action="store_true", help="임시 DB 를 안 지운다")
@@ -79,32 +132,14 @@ def main() -> int:
     from app.settings import sqlalchemy_url  # noqa: PLC0415
 
     url = sqlalchemy_url()
-    real = _dbname(url)
-
-    # 🔴 fail-closed — 진짜 DB 를 지울 수 있는 상황이면 아무것도 안 한다 (D-220)
-    if real == SCRATCH:
-        raise SystemExit(
-            f"🔴 진짜 DB 이름이 `{SCRATCH}` 다 — 이 검사가 그것을 지우게 된다.\n"
-            "   .env 의 DATABASE_URL 을 다른 이름으로 바꾼다."
-        )
+    real = guard_real_db(url, SCRATCH)
 
     print(f"🚨 임시 DB `{SCRATCH}` 를 만든다 — 진짜 DB `{real}` 은 건드리지 않는다.")
-    with _admin_conn(url) as conn, conn.cursor() as cur:
-        cur.execute(f'DROP DATABASE IF EXISTS "{SCRATCH}" WITH (FORCE)')
-        cur.execute(f'CREATE DATABASE "{SCRATCH}"')
-    with _connect(_with_db(url, SCRATCH)) as conn:
-        conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-
-    # 🚨 자식 프로세스로 돌린다 — alembic 을 이 프로세스에 import 하면 `env.py` 가
-    #    읽는 DATABASE_URL 을 되돌릴 수 없고, 그다음에 도는 것이 진짜 DB 를 볼 수 있다.
-    env = {**os.environ, "DATABASE_URL": _with_db(url, SCRATCH)}
-    code = subprocess.run(  # noqa: S603
-        [sys.executable, "-m", "alembic", "upgrade", "head"], cwd=ROOT, env=env, check=False
-    ).returncode
+    make_db(url, SCRATCH)
+    code = alembic_head(url, SCRATCH)
 
     if not args.keep:
-        with _admin_conn(url) as conn, conn.cursor() as cur:
-            cur.execute(f'DROP DATABASE IF EXISTS "{SCRATCH}" WITH (FORCE)')
+        drop_db(url, SCRATCH)
         print(f"🚨 임시 DB `{SCRATCH}` 를 지웠다.")
     else:
         print(f"⬜ 임시 DB `{SCRATCH}` 를 남겼다 — 다 보고 나면 직접 지운다.")

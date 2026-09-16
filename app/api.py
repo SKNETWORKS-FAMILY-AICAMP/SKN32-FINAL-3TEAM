@@ -158,11 +158,18 @@ class SearchHit(BaseModel):
     #:    🚨 `null` 은 「아직 재적재 안 됨」이지 「안 쪼갰다」가 아니다. 안 쪼갰으면 1/1 이다.
     part_no: int | None = None
     part_total: int | None = None
-    #: 「제8조제1항제1호」. 🚨 `null` 이면 **조립을 못 한 것**이지 근거가 없는 게 아니다 —
-    #:    별표는 계층 표기가 달라 조립하지 않는다. 그때는 `article`·`paragraph` 를 쓴다.
+    #: 「제8조제1항제1호」 또는 「[별표 1]제2호가목1)」. 🚨 `null` 이면 **조립을 못 한 것**이지
+    #:    근거가 없는 게 아니다. 그때는 `article`·`paragraph`·`doc_title` 을 쓴다.
     #:    🔴 값이 있다고 「조문 전문」이 아니다 — `part_total` 을 **같이** 본다 (D-199).
+    #:    🔄 2026-09-14 (0015) — 종전 주석은 *「별표는 조립하지 않는다」* 였다. 이제 조립한다.
     citation: str | None = None
     doc_type: str | None = None
+    #: 🆕 별표 번호 (0015) — **원문 머리글에서 읽은 값만.** `null` 이면 인용이 안 선다.
+    #:    ⛔ 파일명 일련번호가 아니다 — 짐작해 채우면 다른 별표를 가리킬 수 있다 (D-224).
+    annex_no: int | None = None
+    #: 🆕 문서 이름 — 「부당한 표시 또는 광고의 내용(제3조제1항 관련)」. 🚨 **좌표가 아니다.**
+    #:    화면이 무슨 별표인지 말할 때 쓴다. 좌표는 `citation` 이다.
+    doc_title: str | None = None
     category: list[str] = Field(default_factory=list)
     text: str
     # 🚨 출처표시는 조립해서 낸다 — `attribution` 은 기관명·자료명뿐이고

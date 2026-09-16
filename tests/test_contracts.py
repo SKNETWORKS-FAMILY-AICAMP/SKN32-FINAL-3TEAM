@@ -146,7 +146,7 @@ def test_보류와_사유는_함께_있거나_함께_없다() -> None:
 
 @pytest.mark.gate
 def test_위반을_확정하면_근거_조문이_붙는다() -> None:
-    """D-100 — 근거를 못 찾은 경우의 상태는 `no_basis` 이지 `confirmed` 가 아니다."""
+    """D-224 — 근거를 못 찾은 경우의 상태는 `no_basis` 이지 `confirmed` 가 아니다."""
     with pytest.raises(ValidationError):
         SentenceJudgment(
             sent_id="s", text="t", verdict=Verdict.confirmed, violations=[Violation.거짓_과장]
