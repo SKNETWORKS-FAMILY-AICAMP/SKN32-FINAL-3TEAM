@@ -257,3 +257,9 @@ def help_page(request: Request) -> HTMLResponse:
 def matching(request: Request) -> HTMLResponse:
     """매칭 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나 — 하위 화면 넷은 다음 차례."""
     return templates.TemplateResponse(request, "user/matching.html", {})
+
+
+@router.get("/cs", response_class=HTMLResponse)
+def cs(request: Request) -> HTMLResponse:
+    """고객센터 문의 — ★ **골격만**. 티켓 테이블(관리자 콘솔과 짝)이 없어 폼은 다음 차례."""
+    return templates.TemplateResponse(request, "user/cs.html", {})
