@@ -8,9 +8,11 @@
      쪽이고, 이 화면은 그 원문에서 뽑아낸 **판정용 사전**을 보여준다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 표현 사전{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
 {% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
 <h1>표현 사전 (판정 근거)</h1>
-<p><a href="/admin/">← 관리자 첫 화면</a> · <a href="/admin/sources">판정 근거 원문(소스)</a></p>
 <p class="warn">🚨 <b>읽기 전용이다.</b> 사전 등록·수정은 별도 절차가 정해진 뒤에 연다.</p>
 
 {% if entries is none %}
@@ -35,4 +37,5 @@
   {% endfor %}
 </table>
 {% endif %}
+</div>
 {% endblock %}

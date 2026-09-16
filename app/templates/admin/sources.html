@@ -5,9 +5,11 @@
   ✅ `governor` 로그인을 지나야 뜬다 (index.html 과 같은 이유, D-66 · D-213).
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 판정 근거{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
 {% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
 <h1>판정 근거 관리</h1>
-<p><a href="/admin/">← 관리자 첫 화면</a></p>
 <p class="warn">🚨 <b>읽기 전용이다.</b> 등급 판정·2인 확인은 별도 절차가 정해진 뒤에 연다.</p>
 
 {% if sources is none %}
@@ -34,4 +36,5 @@
   {% endfor %}
 </table>
 {% endif %}
+</div>
 {% endblock %}

@@ -1,0 +1,55 @@
+/* app/static/admin.css — 관리자 화면 공통 스타일 · 소유자 ssm · psj (병렬작업 계약 §5)
+   화면 셸(공통 nav)만 여기 둔다. 화면 하나짜리 스타일은 각 화면 파일에 인라인 <style> 로 둔다.
+   app/static/user.css 와 같은 패턴 — `.admin-shell` 로 감싸 다른 화면의 토큰과 안 겹치게 한다. */
+.admin-shell {
+  --a-surface: #ffffff;
+  --a-surface2: #f5f5f7;
+  --a-ink: #1c1c1f;
+  --a-clay: #86848c;
+  --a-line: #e3e3e6;
+  --a-signal: #2563eb;
+  --a-signal-ink: #1d4ed8;
+  --a-signal-soft: #eaf1fe;
+}
+@media (prefers-color-scheme: dark) {
+  .admin-shell {
+    --a-surface: #1f1f22;
+    --a-surface2: #28282b;
+    --a-ink: #f1f0f2;
+    --a-clay: #918f94;
+    --a-line: #37373a;
+    --a-signal: #60a5fa;
+    --a-signal-ink: #93c5fd;
+    --a-signal-soft: #1e2b40;
+  }
+}
+
+.admin-nav {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .75rem 1rem;
+  margin: -1.5rem -1rem 1.5rem;
+  background: var(--a-surface);
+  border-bottom: 1px solid var(--a-line);
+  color: var(--a-ink);
+}
+.admin-nav .admin-nav-brand {
+  font-weight: 700;
+  margin-right: 1rem;
+  color: var(--a-ink);
+  text-decoration: none;
+}
+.admin-nav .admin-nav-link {
+  padding: .4rem .7rem;
+  border-radius: .5rem;
+  color: var(--a-clay);
+  text-decoration: none;
+  font-size: .9rem;
+}
+.admin-nav .admin-nav-link:hover { background: var(--a-surface2); color: var(--a-ink); }
+.admin-nav .admin-nav-link[aria-current="page"] {
+  color: var(--a-signal-ink);
+  background: var(--a-signal-soft);
+  font-weight: 600;
+}
