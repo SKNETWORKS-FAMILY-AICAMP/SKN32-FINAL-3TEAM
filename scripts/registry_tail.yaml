@@ -135,6 +135,56 @@ models:  # 모델 가중치도 G-게이트 대상이다 (D-23)
     license: Apache-2.0
     grade: G3
     use: {U1: allow, U2: deny, U3: deny, U4: allow}
+  kcelectra_base:
+    role: 인코더 (비교군 — 아키텍처 축 · D-84 ③)
+    license: MIT
+    grade: G3
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    note: >-
+      가중치 `beomi/KcELECTRA-base` (0.1B — kcbert-base 와 같은 저자·같은 도메인·같은 크기).
+      🚨 **D-84 ③(2026-08-30)이 비교군으로 넣고 D-106 이 「백본 선택 근거는 kcbert-base ×
+      KcELECTRA-base 로 충분하다」고 못박았는데 `models:` 에 등재되지 않은 채였다** —
+      D-23 이 「모델 가중치도 G-게이트 대상」이라고 정한 것을 이 모델만 지나쳤고,
+      그동안 게이트가 이 모델을 보지 못했다. 발표 자료(도면·기술 스택)는 이미 이름을 싣고 있다.
+      ✅ 라이선스 — D-70 의 다섯 경로로 확인했다 (2026-09-14): HF 모델 카드 사이드바 `mit` ·
+      cardData 에 `"license":"mit"` · tags 에 `license:mit` · GitHub README 에
+      「논문을 통한 사용 외에는 MIT 라이센스를 표기해주세요」.
+      ⬜ HF API JSON 의 **최상위** `license` 키는 없다(cardData 안에 있다) — KLUE 와 달리
+      나머지 네 경로가 값을 가지므로 「부재」가 아니다. 그래도 그대로 적는다.
+      ★ 왜 비교군인가 — **아키텍처 축**(BERT↔ELECTRA)이다. 코퍼스는 kcbert 와 같은 댓글이라
+      코퍼스 축은 고정되고 아키텍처만 갈린다. 공개 벤치마크가 전 과제 우세다
+      (PAWS 66.95→76.50 · KorNLI 74.85→82.12 · KorSTS 75.57→83.67 · NER 84.34→87.35).
+      ★ **D-70 이 남긴 ⚠️「KcELECTRA 의 길이는 미확인(512 로 추정)」을 닫는다** —
+      `config.json` 실측: `max_position_embeddings` **512** · `vocab_size` 30,000 ·
+      `hidden_size` 768 · `num_hidden_layers` 12 · `model_type` electra.
+      추정이 맞았고, 이제 추정이 아니다. kcbert-base 의 300 제약(D-83 층 3)이 여기엔 없다.
+      사전학습 — 네이버 뉴스 댓글·대댓글(2019-01-01~2021-03-09) 약 17.3GB · 1억 8천만 문장 이상.
+      🚨 **아직 한 번도 안 돌렸다** — kcbert × KcELECTRA 비교가 미실행이다 (D-146 · D-70 선결조건).
+  koelectra_base_v3:
+    role: 인코더 (비교군 — 코퍼스 축)
+    license: Apache-2.0
+    grade: G3
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    note: >-
+      가중치 `monologg/koelectra-base-v3-discriminator` (0.1B — kcbert-base 와 동급).
+      🚨 D-45 (b) · D-70 (c) 에서 두 번 후보였는데 두 번 다 **기각 사유가 기록되지 않았다** —
+      D-21 이 말하는 「의도적 제외와 미인지는 다른 상태다」의 빈칸이었다. 등재로 채운다.
+      ✅ 라이선스 — D-70 이 KLUE 에 쓴 다섯 경로로 확인했다 (2026-09-14):
+      HF 모델 카드 apache-2.0 · API JSON 에 `license` 키 **있음**("apache-2.0") ·
+      cardData 에 license 항목 있음 · tags 에 `license:apache-2.0` 있음.
+      ⬜ GitHub README 에는 라이선스 절이 없다. KLUE 는 **다섯 경로 전부**가 비어서 배제였고,
+      이쪽은 HF 네 경로가 값을 갖는다 — 「부재」가 아니라 「GitHub 에 다시 안 적었다」다.
+      그래도 한 경로가 빈 것은 숨기지 않고 적는다.
+      ★ 왜 비교군인가 — **코퍼스 축**이다. 아키텍처 축(BERT↔ELECTRA)은 kcbert × KcELECTRA 가
+      이미 가른다. v3 는 v1/v2 코퍼스(뉴스·위키·나무위키 약 14G · 2.6B 토큰)에
+      **모두의 말뭉치 약 20G** 를 더했고 그 구성이 「신문, 문어, 구어, 메신저, 웹」이다 —
+      🔴 **문어 전용이 아니다.** 「구어체 사전학습은 kcbert 계열뿐」이라는 D-70 의 전제를
+      이 모델이 시험한다. 그 전제는 지금껏 한 번도 실측된 적이 없다.
+      ★ Max Seq Len **512**(원저장소 표에 명시) · Vocab 35,000. kcbert-base 는
+      `max_position_embeddings = 300` 이라 D-83 층 3(문서 수준) 경로에서 제약이 되는데
+      (D-70 이 남긴 ⚠️ 자리), 이쪽은 그 제약이 없다.
+      🚨 **아직 한 번도 안 돌렸다** — kcbert × KcELECTRA 비교부터가 미실행이다 (D-146).
+      주 백본 교체는 실측 전에 없다 (D-70 「성능차를 재지 않고 바꾸지는 않는다」).
   # 🚨 G0 가 아니라 G1 이다 (D-106). G0 는 「미표기·미확인」인데 이것은 네 경로로
   #    확인해서 「없다」를 알아낸 상태다 — 확인 결과가 「허락 없음」이면 배제다.
   #    비교군 유지(D-70 마지막 문장)는 D-106 으로 철회했다. 지우지 않고 사유와 함께 남긴다 (D-21).

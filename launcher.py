@@ -22,6 +22,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import typer
@@ -529,11 +530,49 @@ def admin_list() -> None:
     raise typer.Exit(run("uv", "run", "python", "-m", "scripts.admin_account", "list"))
 
 
+#: 컨테이너 안에서 psql·pg_isready 에 넘기는 접속 인자.
+#: 🚨 두 번째로 쓰게 되어 상수로 뺐다 (D-99) — `_db_ready()` 와 `db_up()` 이 같은 값을 본다.
+#: ⛔ `docker-compose.yml` 은 `POSTGRES_USER:-copylane` 로 **덮어쓸 수 있게** 되어 있는데
+#:    여기는 고정이다. 종전 psql 호출도 그랬다 — 범위 밖이라 안 고쳤다 (D-192).
+_PG_CONN = ("-U", "copylane", "-d", "copylane")
+
+#: 🚨 `docker compose up -d` 는 **컨테이너가 연결을 받기 전에 돌아온다.**
+#:    compose 의 healthcheck 는 5초 간격이라 첫 판정 전에는 `starting` 이다.
+#: ⛔ **2026-09-16 · 여기서 기다리지 않아 사고가 났다** — `CREATE EXTENSION` 이
+#:    「소켓 없음」으로 실패했는데 바로 아래 줄이 **「DB 준비 완료 (pgvector 확장 포함)」**
+#:    을 찍었다. 거짓 성공이다 (D-162). 확장이 없었다면 `0001` 이 터지고, 그 사람은
+#:    「준비 완료」 화면을 보고 딴 데를 판다 — 09-13·14 에 팀원 둘이 잃은 하루가 그 모양이다.
+#: `[임의]` — 로컬 도커 기동 시간을 잰 적이 없다. 🚨 **넘치면 멈춘다**(아래).
+#:    값이 틀려도 조용히 지나가지 않는다는 것이 이 값을 `[임의]` 로 둘 수 있는 이유다.
+DB_READY_TIMEOUT_S = 60
+DB_READY_POLL_S = 1.0
+
+
+def _db_ready(timeout_s: int = DB_READY_TIMEOUT_S) -> bool:
+    """컨테이너의 postgres 가 연결을 받을 때까지 기다린다. 화면은 조용하다.
+
+    🚨 `docker compose ps` 의 상태 문자열을 파싱하지 않는다 — compose 판마다 다르다.
+       **실제로 접속이 되는가**를 본다 (`pg_isready`).
+    """
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        probe = subprocess.run(
+            ["docker", "compose", "exec", "-T", "postgres", "pg_isready", *_PG_CONN],
+            cwd=ROOT,
+            capture_output=True,
+        )
+        if probe.returncode == 0:
+            return True
+        time.sleep(DB_READY_POLL_S)
+    return False
+
+
 @app.command(name="db-up")
 def db_up() -> None:
     """로컬 데이터베이스를 켠다 (Docker Desktop 필요).
 
     postgres + pgvector 컨테이너. `127.0.0.1` 에만 열린다 (P3-14).
+    🚨 **연결이 서고 확장까지 붙은 뒤에만 「준비 완료」라고 적는다** (D-162).
     """
     if run("docker", "compose", "up", "-d") != 0:
         console.print(
@@ -547,21 +586,47 @@ def db_up() -> None:
         )
         raise typer.Exit(1)
 
+    console.print(f"  [dim]연결을 받을 때까지 기다린다 (최대 {DB_READY_TIMEOUT_S}초) …[/dim]")
+    if not _db_ready():
+        console.print(
+            Panel(
+                f"{DB_READY_TIMEOUT_S}초 안에 postgres 가 연결을 받지 않았다.\n\n"
+                "  docker compose ps\n"
+                "  docker compose logs postgres --tail 50\n\n"
+                "⛔ 여기서 멈춘다 — 확장을 못 만든 채 「준비 완료」라고 적지 않는다 (D-162).",
+                title="DB 기동 실패 — 기다려도 안 선다",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
     # 🚨 init 스크립트는 볼륨이 비어 있을 때만 돈다. 기존 볼륨에는 여기서 붙인다.
-    run(
-        "docker",
-        "compose",
-        "exec",
-        "-T",
-        "postgres",
-        "psql",
-        "-U",
-        "copylane",
-        "-d",
-        "copylane",
-        "-c",
-        "CREATE EXTENSION IF NOT EXISTS vector;",
-    )
+    # ⛔ **반환값을 버리지 않는다.** 종전에는 버리고 아래 「준비 완료」를 무조건 찍었다.
+    if (
+        run(
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "postgres",
+            "psql",
+            *_PG_CONN,
+            "-c",
+            "CREATE EXTENSION IF NOT EXISTS vector;",
+        )
+        != 0
+    ):
+        console.print(
+            Panel(
+                "`CREATE EXTENSION vector` 가 실패했다. 위 psql 출력이 원인이다.\n\n"
+                "⛔ 이 상태로 `migrate` 를 돌리면 `0001` 이 벡터 열에서 터진다.\n"
+                "   증상이 원인과 다른 자리에서 나오므로 여기서 멈춘다 (D-162).",
+                title="pgvector 확장 실패",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
     console.print("  [green]DB 준비 완료[/green]  127.0.0.1:5432  (pgvector 확장 포함)")
 
 
