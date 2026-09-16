@@ -6,13 +6,13 @@
      별도 로그인(D-66)을 지난다. 사용자 nav 에 admin 을 섞지 않는다.
 #}
 <nav class="user-topnav" aria-label="주요 메뉴">
-  <a class="user-topnav-brand" href="/u/home">CopyLane</a>
+  <a class="user-topnav-brand" href="/u/">CopyLane</a>
   <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'about' }}"
      href="/u/help?tab=guide">copylane 소개</a>
   <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'work' }}"
-     href="/u/">검수 및 카피생성</a>
+     href="/u/review">검수 및 카피생성</a>
   <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'adgen' }}"
-     href="/u/draft-setup">AI 광고 생성</a>
+     href="/u/compose">AI 광고 생성</a>
   <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'matching' }}"
      href="/u/matching">매칭</a>
   <span class="user-topnav-spacer"></span>

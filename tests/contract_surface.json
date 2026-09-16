@@ -268,25 +268,43 @@
       ]
     ],
     [
+      "/u/compose",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/compose",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/u/compose/preview/{name}",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/u/cs",
       [
         "GET"
       ]
     ],
     [
-      "/u/draft-editor",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/u/draft-setup",
+      "/u/generate",
       [
         "GET"
       ]
     ],
     [
       "/u/generate",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/u/generate/preview/{name}",
       [
         "GET"
       ]
@@ -304,15 +322,15 @@
       ]
     ],
     [
-      "/u/home",
-      [
-        "GET"
-      ]
-    ],
-    [
       "/u/judge",
       [
         "POST"
+      ]
+    ],
+    [
+      "/u/landing",
+      [
+        "GET"
       ]
     ],
     [
@@ -329,6 +347,24 @@
     ],
     [
       "/u/mypage",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/mypage",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/u/preview/{name}",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/review",
       [
         "GET"
       ]

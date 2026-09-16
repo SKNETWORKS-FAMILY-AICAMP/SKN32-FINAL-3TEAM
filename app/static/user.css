@@ -25,17 +25,25 @@
   }
 }
 
+/* 🔴 `base.css` 의 `body { max-width: 52rem }` 이 데스크톱에서도 사용자 화면을 휴대폰처럼
+   좁게 만든다 — 프로토타입은 전폭이다. `base.css` 는 팀장 소유라 안 고치고(§5),
+   `.user-shell` 이 있는 페이지에서만 여기서 되돌린다. 한 곳(user.css)에만 두고
+   화면마다 반복하지 않는다 (2026-09-16 — ksr 화면 이식 중 발견). */
+body:has(.user-shell) { max-width: none; padding: 1.5rem 2rem; }
+@media (max-width: 44rem) { body:has(.user-shell) { padding: 1.5rem 1rem; } }
+
 /* 상단 4-pill 메뉴 — copylane 소개 · 검수 및 카피생성 · AI 광고 생성 · 매칭 (구역 넷뿐이다) */
 .user-topnav {
   display: flex;
   align-items: center;
   gap: .25rem;
   padding: .75rem 1rem;
-  margin: -1.5rem -1rem 0;
+  margin: -1.5rem -2rem 0;
   background: var(--u-surface);
   border-bottom: 1px solid var(--u-line);
   color: var(--u-ink);
 }
+@media (max-width: 44rem) { .user-topnav { margin-left: -1rem; margin-right: -1rem; } }
 .user-topnav-brand {
   font-weight: 700;
   margin-right: 1rem;
@@ -64,7 +72,8 @@
 .user-topnav-mypage:hover { background: var(--u-surface2); }
 
 /* 구역 본문 — 왼쪽 사이드바(있으면) + 메인 */
-.user-body { display: flex; margin: 0 -1rem; align-items: flex-start; }
+.user-body { display: flex; margin: 0 -2rem; align-items: flex-start; }
+@media (max-width: 44rem) { .user-body { margin: 0 -1rem; flex-direction: column; } }
 .user-sidebar {
   width: 11rem;
   flex-shrink: 0;
@@ -160,7 +169,7 @@
 .history-row:hover { background: var(--u-surface2); }
 .history-row-open { background: var(--u-signal-soft); }
 .history-row-date { font-size: .8rem; color: var(--u-clay); width: 9rem; flex-shrink: 0; }
-.history-row-verdict { flex: 1; }
+.history-row-verdict { width: 5.5rem; flex-shrink: 0; }
 .history-row-risk { color: var(--u-clay); width: 2rem; text-align: center; }
 .history-row-chevron { color: var(--u-clay); width: 1rem; text-align: center; }
 
@@ -178,6 +187,7 @@
   font-weight: 600;
 }
 .history-detail-head a { color: var(--u-clay); text-decoration: none; }
+.history-detail-text { font-size: .9rem; line-height: 1.6; margin: 0 0 .75rem; }
 .history-detail dl { margin: 0; }
 .history-detail dt { font-size: .75rem; color: var(--u-clay); margin-top: .5rem; }
 .history-detail dd { margin: 0; }
