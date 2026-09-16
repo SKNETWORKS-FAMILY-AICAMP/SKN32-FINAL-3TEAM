@@ -10,10 +10,14 @@
      {% if request.url.path == "/admin/" %}aria-current="page"{% endif %}>대시보드</a>
   <a class="admin-nav-link" href="/admin/sources"
      {% if request.url.path == "/admin/sources" %}aria-current="page"{% endif %}>판정 근거</a>
-  <a class="admin-nav-link" href="/admin/dict-entries"
-     {% if request.url.path == "/admin/dict-entries" %}aria-current="page"{% endif %}>표현 사전</a>
   <a class="admin-nav-link" href="/admin/admins"
      {% if request.url.path == "/admin/admins" %}aria-current="page"{% endif %}>관리자 계정</a>
+  <a class="admin-nav-link" href="/admin/board/notices"
+     {% if request.url.path == "/admin/board/notices" %}aria-current="page"{% endif %}>공지사항</a>
+  <a class="admin-nav-link" href="/admin/board/faq"
+     {% if request.url.path == "/admin/board/faq" %}aria-current="page"{% endif %}>FAQ 관리</a>
+  <a class="admin-nav-link" href="/admin/cs/tickets"
+     {% if request.url.path == "/admin/cs/tickets" %}aria-current="page"{% endif %}>CS문의</a>
   <a class="admin-nav-link" href="/admin/errors"
      {% if request.url.path == "/admin/errors" %}aria-current="page"{% endif %}>오류 로그</a>
 </nav>

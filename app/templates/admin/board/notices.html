@@ -1,0 +1,66 @@
+{# app/templates/admin/board/notices.html — 공지사항 목록 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** "새 공지 작성" 버튼은 자리만 잡은 뼈대다 — action 없음.
+  🔴 `notice` 테이블이 아직 없다 — 전부 더미다 (admin_board.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 공지사항{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<h1>공지사항 관리</h1>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>notice</code> 테이블이 아직 없어요 — 팀장 승인 전이라 DB 조회 자체를 안 합니다.</p>
+
+<form class="filter-bar" method="get" action="/admin/board/notices">
+  <label>분류
+    <select name="category">
+      <option value="" {% if not category %}selected{% endif %}>전체</option>
+      {% for c in categories %}
+      <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">적용</button>
+  {% if category %}
+  <a class="reset-link" href="/admin/board/notices">초기화</a>
+  {% endif %}
+  <button type="button" class="new-btn" disabled title="⬜ 아직 못 쓴다 — 테이블 승인 대기 중">+ 새 공지 작성</button>
+</form>
+
+{% if not rows %}
+<p>조건에 맞는 공지가 없다.</p>
+{% else %}
+<table>
+  <tr>
+    <th>고정</th><th>제목</th><th>분류</th><th>작성자</th><th>게시일</th><th>게시 기간</th><th>상태</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ "📌" if r.pinned else "" }}</td>
+    <td><a href="/admin/board/notices/{{ r.id }}">{{ r.title }}</a></td>
+    <td>{{ r.category }}</td>
+    <td>{{ r.author }}</td>
+    <td>{{ r.date }}</td>
+    <td>{{ r.period }}</td>
+    <td>{{ r.status }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if pages > 1 %}
+<nav class="pager" aria-label="페이지">
+  {% set qs = "category=" ~ (category or "") %}
+  <a href="/admin/board/notices?{{ qs }}&page={{ page - 1 }}" {% if page <= 1 %}class="disabled"{% endif %}>← 이전</a>
+  <span>{{ page }} / {{ pages }} 쪽 (전체 {{ total }}건)</span>
+  <a href="/admin/board/notices?{{ qs }}&page={{ page + 1 }}" {% if page >= pages %}class="disabled"{% endif %}>다음 →</a>
+</nav>
+{% endif %}
+{% endif %}
+
+<style>
+.admin-shell .new-btn { margin-left: auto; padding: .5rem 1rem; border-radius: .5rem; border: none; background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed; opacity: .6; }
+</style>
+</div>
+{% endblock %}

@@ -1,0 +1,78 @@
+{# app/templates/admin/cs/ticket_detail.html — CS 티켓 상세 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 상태 변경·답변 작성·담당자 배정 폼은 disabled 뼈대다.
+  🔴 `ticket` 테이블이 아직 없다 — 더미다.
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 티켓 상세{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+
+<p><a href="/admin/cs/tickets">← CS문의 티켓 목록</a></p>
+
+<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>ticket</code> 테이블이 아직 없어요 — 사용자 쪽 접수 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
+
+<h1>{{ row.title }}</h1>
+<table class="kv">
+  <tr><th>티켓 ID</th><td>{{ row.id }}</td></tr>
+  <tr><th>접수일</th><td>{{ row.at }}</td></tr>
+  <tr><th>문의자</th><td>{{ row.who }}</td></tr>
+  <tr><th>유형</th><td>{{ row.type }}</td></tr>
+  <tr><th>우선순위</th><td><span class="cs-pri cs-pri-{{ row.priority }}">{{ row.priority }}</span></td></tr>
+  <tr><th>상태</th><td><span class="cs-status cs-status-{{ row.status }}">{{ row.status }}</span></td></tr>
+  <tr><th>담당자</th><td>{{ row.owner }}</td></tr>
+</table>
+
+<h2>문의 내용</h2>
+<pre class="board-content">{{ row.content }}</pre>
+
+<h2>답변 작성 <small class="hint">(승인 대기 · 비활성)</small></h2>
+<fieldset class="board-disabled-form" disabled>
+  <label>상태 변경
+    <select>
+      {% for s in statuses %}
+      <option {% if row.status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>담당자 배정
+    <input type="text" placeholder="담당자 이름">
+  </label>
+  <label>답변
+    <textarea rows="4" placeholder="답변 내용을 입력한다"></textarea>
+  </label>
+  <button type="button">저장</button>
+</fieldset>
+<p class="hint">⬜ ticket 테이블 승인 뒤 실제 쓰기 라우트를 붙인다.</p>
+
+<style>
+.admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
+.admin-shell table.kv th { text-align: left; padding: .3rem .8rem .3rem 0; color: var(--a-clay); font-weight: 500; white-space: nowrap; }
+.admin-shell table.kv td { padding: .3rem 0; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
+.admin-shell .board-content { white-space: pre-wrap; font-family: inherit; background: var(--a-surface2); border: 1px solid var(--a-line); border-radius: .5rem; padding: 1rem; max-width: 40rem; }
+.admin-shell .board-disabled-form { display: flex; flex-direction: column; gap: .5rem; max-width: 28rem; border: none; padding: 0; opacity: .6; }
+.admin-shell .board-disabled-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; }
+.admin-shell .board-disabled-form select,
+.admin-shell .board-disabled-form input,
+.admin-shell .board-disabled-form textarea {
+  padding: .4rem .5rem; border: 1px solid var(--a-line); border-radius: .4rem;
+  background: var(--a-surface2); color: var(--a-ink);
+}
+.admin-shell .board-disabled-form button {
+  align-self: flex-start; padding: .5rem 1rem; border-radius: .5rem; border: none;
+  background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed;
+}
+.admin-shell .cs-pri, .admin-shell .cs-status { display: inline-block; padding: .1rem .5rem; border-radius: .4rem; font-size: .8rem; }
+.admin-shell .cs-pri-긴급 { background: #fde2e2; color: #b42318; }
+.admin-shell .cs-pri-보통 { background: #fef3c7; color: #92400e; }
+.admin-shell .cs-pri-낮음 { background: #e5e7eb; color: #374151; }
+.admin-shell .cs-status-미처리 { background: #fde2e2; color: #b42318; }
+.admin-shell .cs-status-처리중 { background: #dbeafe; color: #1d4ed8; }
+.admin-shell .cs-status-완료 { background: #dcfce7; color: #15803d; }
+</style>
+</div>
+{% endblock %}
