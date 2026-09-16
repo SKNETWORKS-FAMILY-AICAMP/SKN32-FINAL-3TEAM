@@ -1,4 +1,4 @@
-{# app/templates/admin/stats/quality.html — 품질 통계(전체 요약) (뼈대) · 소유자 **psj**
+{# app/templates/admin/stats/quality.html — 검수 통계(전체 요약) (뼈대) · 소유자 **psj**
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다(목업 `mockDownload`).
@@ -7,19 +7,14 @@
      (목업 `qualityCombinedViewV2()` 를 패널 단위로 나눈 것과 같은 이유)
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "base.html" %}
-{% block title %}CopyLane — 품질 통계{% endblock %}
+{% block title %}CopyLane — 검수 통계{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
 {% block content %}
 <div class="admin-shell">
 {% include "admin/_nav.html" %}
-<h1>품질 통계</h1>
+<div class="admin-main">
+<h1>검수 통계</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> <code>judge_stat</code>/<code>generation_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
-
-<nav class="period-tabs" aria-label="세부 통계">
-  <a href="/admin/stats/quality" class="active" aria-current="page">전체</a>
-  <a href="/admin/stats/quality/judge">판정 통계</a>
-  <a href="/admin/stats/quality/generation">생성 통계</a>
-</nav>
 
 <div class="stat-kpis">
   <div class="stat-kpi"><span>평균 정확도</span><b>{{ kpi.avg_accuracy }}</b></div>
@@ -66,5 +61,6 @@
 .admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
 </style>
+</div>
 </div>
 {% endblock %}

@@ -10,6 +10,7 @@
 {% block content %}
 <div class="admin-shell">
 {% include "admin/_nav.html" %}
+<div class="admin-main">
 <h1>공지사항 관리</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> <code>notice</code> 테이블이 아직 없어요 — 팀장 승인 전이라 DB 조회 자체를 안 합니다.</p>
 
@@ -62,5 +63,6 @@
 <style>
 .admin-shell .new-btn { margin-left: auto; padding: .5rem 1rem; border-radius: .5rem; border: none; background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed; opacity: .6; }
 </style>
+</div>
 </div>
 {% endblock %}

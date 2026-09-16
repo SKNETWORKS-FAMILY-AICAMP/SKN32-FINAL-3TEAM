@@ -11,6 +11,7 @@
 {% block content %}
 <div class="admin-shell">
 {% include "admin/_nav.html" %}
+<div class="admin-main">
 <h1>판정 통계</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> <code>judge_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
 
@@ -62,5 +63,6 @@
 .admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
 </style>
+</div>
 </div>
 {% endblock %}

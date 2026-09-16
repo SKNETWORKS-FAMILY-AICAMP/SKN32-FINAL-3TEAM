@@ -12,6 +12,7 @@
 {% block content %}
 <div class="admin-shell">
 {% include "admin/_nav.html" %}
+<div class="admin-main">
 <h1>관리자 목록</h1>
 <p class="warn">🚨 <b>읽기 전용이다.</b> 계정 추가·비밀번호 변경은 화면에 없다 — 터미널에서
   <code>uv run python launcher.py admin-add &lt;이니셜&gt;</code> 로만 한다 (D-66).</p>
@@ -33,5 +34,6 @@
   {% endfor %}
 </table>
 {% endif %}
+</div>
 </div>
 {% endblock %}

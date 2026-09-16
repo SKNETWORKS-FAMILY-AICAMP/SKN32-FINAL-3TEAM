@@ -14,6 +14,7 @@
 {% block content %}
 <div class="admin-shell">
 {% include "admin/_nav.html" %}
+<div class="admin-main">
 <p class="dash-sub">CopyLane Admin</p>
 <h1>대시보드</h1>
 <p class="page-desc">검수 · 생성 · 매출의 핵심 운영 현황을 확인하세요.</p>
@@ -116,5 +117,6 @@
 .admin-shell .dash-sales-table td { padding: .45rem 0; border-bottom: 1px solid var(--a-line); font-size: .85rem; }
 .admin-shell .dash-sales-table td:last-child { text-align: right; }
 </style>
+</div>
 </div>
 {% endblock %}
