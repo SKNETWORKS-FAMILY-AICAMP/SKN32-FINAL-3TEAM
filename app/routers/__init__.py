@@ -35,7 +35,7 @@ from app.routers.admin_terms import router as admin_terms_router
 from app.routers.auth import router as auth_router
 from app.routers.user import router as user_router
 
-# 🚨 게시판관리(공지사항·FAQ)·CS문의(티켓) 화면(psj)도 `admin.py` 와 파일을 가르고
+# 🚨 게시판관리(공지사항)·CS문의(티켓) 화면(psj)도 `admin.py` 와 파일을 가르고
 #    관리자 라우터 아래에 매단다 — `/admin/board/...`, `/admin/cs/...` 가 된다.
 admin_router.include_router(admin_board_router)
 admin_router.include_router(admin_cs_router)
