@@ -25,6 +25,7 @@ from __future__ import annotations
 from app.routers.admin import router as admin_router
 from app.routers.admin_board import router as admin_board_router
 from app.routers.admin_cs import router as admin_cs_router
+from app.routers.admin_enterprise import router as admin_enterprise_router
 from app.routers.admin_errors import router as admin_errors_router
 from app.routers.admin_members import router as admin_members_router
 from app.routers.admin_signup_review import router as admin_signup_review_router
@@ -35,6 +36,7 @@ from app.routers.user import router as user_router
 #    관리자 라우터 아래에 매단다 — `/admin/board/...`, `/admin/cs/...` 가 된다.
 admin_router.include_router(admin_board_router)
 admin_router.include_router(admin_cs_router)
+admin_router.include_router(admin_enterprise_router)
 admin_router.include_router(admin_members_router)
 admin_router.include_router(admin_signup_review_router)
 

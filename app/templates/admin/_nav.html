@@ -27,11 +27,13 @@
     </div>
   </details>
 
-  <details class="admin-nav-cat" {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") or request.url.path == "/admin/admins" or request.url.path == "/admin/signup-review" or request.url.path.startswith("/admin/signup-review/") %}open{% endif %}>
+  <details class="admin-nav-cat" {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") or request.url.path == "/admin/enterprise" or request.url.path.startswith("/admin/enterprise/") or request.url.path == "/admin/admins" or request.url.path == "/admin/signup-review" or request.url.path.startswith("/admin/signup-review/") %}open{% endif %}>
     <summary>회원관리</summary>
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/members"
          {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") %}aria-current="page"{% endif %}>회원 목록</a>
+      <a class="admin-nav-sub" href="/admin/enterprise"
+         {% if request.url.path == "/admin/enterprise" or request.url.path.startswith("/admin/enterprise/") %}aria-current="page"{% endif %}>기업 회원</a>
       <a class="admin-nav-sub" href="/admin/signup-review"
          {% if request.url.path == "/admin/signup-review" or request.url.path.startswith("/admin/signup-review/") %}aria-current="page"{% endif %}>승인 심사</a>
       <a class="admin-nav-sub" href="/admin/admins"
