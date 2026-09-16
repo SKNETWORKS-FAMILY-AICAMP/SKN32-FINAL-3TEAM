@@ -4,7 +4,7 @@
      (app/templates/user/_nav.html 과 같은 패턴).
   ⬜ 실제로 존재하는 라우트만 링크한다 — 없는 기능을 있는 것처럼 보이지 않는다 (D-147).
   🚨 목업(app/static/mockup.html)의 NAV 배열·사이드바 구조를 그대로 따른다 — 카테고리별
-     아코디언(통계·회원관리·게시판관리·문서관리·CS문의).
+     아코디언(통계·문서관리·회원관리·소식·문의).
   🔴 **스크립트 없음** (CSP `script-src 'self'`, app/api.py — 팀장 단독 소유, 함부로 못 연다).
      목업은 JS(`renderSidebar()`)로 아코디언을 열고 닫지만, 여기서는 `<details>/<summary>`
      로 자바스크립트 없이 같은 걸 구현한다.
@@ -61,19 +61,13 @@
     </div>
   </details>
 
-  <details class="admin-nav-cat" {% if request.url.path.startswith("/admin/board/") %}open{% endif %}>
-    <summary>게시판관리</summary>
+  <details class="admin-nav-cat" {% if request.url.path.startswith("/admin/board/") or request.url.path.startswith("/admin/cs/") %}open{% endif %}>
+    <summary>소식·문의</summary>
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/board/notices"
          {% if request.url.path == "/admin/board/notices" or request.url.path.startswith("/admin/board/notices/") %}aria-current="page"{% endif %}>공지사항</a>
-    </div>
-  </details>
-
-  <details class="admin-nav-cat" {% if request.url.path.startswith("/admin/cs/") %}open{% endif %}>
-    <summary>CS문의</summary>
-    <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/cs/tickets"
-         {% if request.url.path == "/admin/cs/tickets" or request.url.path.startswith("/admin/cs/tickets/") %}aria-current="page"{% endif %}>티켓 목록</a>
+         {% if request.url.path == "/admin/cs/tickets" or request.url.path.startswith("/admin/cs/tickets/") %}aria-current="page"{% endif %}>문의 관리</a>
     </div>
   </details>
 
