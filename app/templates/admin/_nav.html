@@ -1,23 +1,60 @@
-{# app/templates/admin/_nav.html — 관리자 화면 공통 nav · 소유자 ssm · psj (병렬작업 계약 §5)
+{# app/templates/admin/_nav.html — 관리자 화면 공통 사이드바 · 소유자 ssm · psj (병렬작업 계약 §5)
 
-  🚨 화면이 늘 때 이 파일에 링크를 추가한다 — 화면마다 nav 를 새로 그리지 않는다
+  🚨 화면이 늘 때 이 파일에 링크를 추가한다 — 화면마다 사이드바를 새로 그리지 않는다
      (app/templates/user/_nav.html 과 같은 패턴).
   ⬜ 실제로 존재하는 라우트만 링크한다 — 없는 기능을 있는 것처럼 보이지 않는다 (D-147).
+  🚨 목업(app/static/mockup.html)의 NAV 배열·사이드바 구조를 그대로 따른다 — 카테고리별
+     아코디언(통계·회원관리·게시판관리·문서관리·CS문의).
+  🔴 **스크립트 없음** (CSP `script-src 'self'`, app/api.py — 팀장 단독 소유, 함부로 못 연다).
+     목업은 JS(`renderSidebar()`)로 아코디언을 열고 닫지만, 여기서는 `<details>/<summary>`
+     로 자바스크립트 없이 같은 걸 구현한다.
+  ⬜ 자바스크립트 아코디언(목업과 동일한 애니메이션)을 붙이는 건 팀 상의 후로 미뤘다
+     (2026-09-16 psj·사용자 합의) — `/static/*.js` 파일이면 CSP `'self'` 를 어기지 않지만,
+     관리자 화면 전체가 지금까지 "스크립트 없음"으로 일관되어 왔어서 선례를 만들기 전에
+     ssm·팀장과 맞추기로 했다.
 #}
-<nav class="admin-nav" aria-label="관리자 메뉴">
-  <a class="admin-nav-brand" href="/admin/">CopyLane 관리자</a>
-  <a class="admin-nav-link" href="/admin/"
+<aside class="admin-sidebar" aria-label="관리자 메뉴">
+  <a class="admin-sidebar-brand" href="/admin/">CopyLane 관리자</a>
+
+  <a class="admin-sidebar-top" href="/admin/"
      {% if request.url.path == "/admin/" %}aria-current="page"{% endif %}>대시보드</a>
-  <a class="admin-nav-link" href="/admin/sources"
-     {% if request.url.path == "/admin/sources" %}aria-current="page"{% endif %}>판정 근거</a>
-  <a class="admin-nav-link" href="/admin/admins"
-     {% if request.url.path == "/admin/admins" %}aria-current="page"{% endif %}>관리자 계정</a>
-  <a class="admin-nav-link" href="/admin/board/notices"
-     {% if request.url.path == "/admin/board/notices" %}aria-current="page"{% endif %}>공지사항</a>
-  <a class="admin-nav-link" href="/admin/board/faq"
-     {% if request.url.path == "/admin/board/faq" %}aria-current="page"{% endif %}>FAQ 관리</a>
-  <a class="admin-nav-link" href="/admin/cs/tickets"
-     {% if request.url.path == "/admin/cs/tickets" %}aria-current="page"{% endif %}>CS문의</a>
-  <a class="admin-nav-link" href="/admin/errors"
-     {% if request.url.path == "/admin/errors" %}aria-current="page"{% endif %}>오류 로그</a>
-</nav>
+
+  <details class="admin-nav-cat" {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") %}open{% endif %}>
+    <summary>문서관리</summary>
+    <div class="admin-nav-sub-list">
+      <a class="admin-nav-sub" href="/admin/sources"
+         {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") %}aria-current="page"{% endif %}>판정 근거</a>
+    </div>
+  </details>
+
+  <details class="admin-nav-cat" {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") or request.url.path == "/admin/admins" %}open{% endif %}>
+    <summary>회원관리</summary>
+    <div class="admin-nav-sub-list">
+      <a class="admin-nav-sub" href="/admin/members"
+         {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") %}aria-current="page"{% endif %}>회원 목록</a>
+      <a class="admin-nav-sub" href="/admin/admins"
+         {% if request.url.path == "/admin/admins" %}aria-current="page"{% endif %}>관리자 계정</a>
+    </div>
+  </details>
+
+  <details class="admin-nav-cat" {% if request.url.path.startswith("/admin/board/") %}open{% endif %}>
+    <summary>게시판관리</summary>
+    <div class="admin-nav-sub-list">
+      <a class="admin-nav-sub" href="/admin/board/notices"
+         {% if request.url.path == "/admin/board/notices" or request.url.path.startswith("/admin/board/notices/") %}aria-current="page"{% endif %}>공지사항</a>
+      <a class="admin-nav-sub" href="/admin/board/faq"
+         {% if request.url.path == "/admin/board/faq" or request.url.path.startswith("/admin/board/faq/") %}aria-current="page"{% endif %}>FAQ 관리</a>
+    </div>
+  </details>
+
+  <details class="admin-nav-cat" {% if request.url.path.startswith("/admin/cs/") %}open{% endif %}>
+    <summary>CS문의</summary>
+    <div class="admin-nav-sub-list">
+      <a class="admin-nav-sub" href="/admin/cs/tickets"
+         {% if request.url.path == "/admin/cs/tickets" or request.url.path.startswith("/admin/cs/tickets/") %}aria-current="page"{% endif %}>티켓 목록</a>
+    </div>
+  </details>
+
+  <a class="admin-sidebar-top" href="/admin/errors"
+     {% if request.url.path == "/admin/errors" or request.url.path.startswith("/admin/errors/") %}aria-current="page"{% endif %}>오류 로그</a>
+</aside>

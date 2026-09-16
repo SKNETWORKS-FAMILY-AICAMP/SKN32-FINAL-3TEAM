@@ -1,0 +1,84 @@
+{# app/templates/admin/members/list.html — 회원 목록 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 상태 변경·비활성화 등은 화면에 없다(목업에도 없음).
+  🔴 회원(개인·인플루언서·기업) 테이블이 아직 없다 — 전부 더미다 (admin_members.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 회원 목록{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<h1>회원 목록</h1>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 회원 테이블이 아직 없어요 — 서비스 쪽 회원가입 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
+
+<form class="filter-bar" method="get" action="/admin/members">
+  <label>검색
+    <input type="text" name="q" value="{{ q }}" maxlength="80" placeholder="이름, 이메일, 기업명">
+  </label>
+  <label>유형
+    <select name="type">
+      <option value="" {% if not member_type %}selected{% endif %}>전체</option>
+      {% for t in types %}
+      <option value="{{ t }}" {% if member_type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>플랜
+    <select name="plan">
+      <option value="" {% if not plan %}selected{% endif %}>전체</option>
+      {% for p in plans %}
+      <option value="{{ p }}" {% if plan == p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>상태
+    <select name="status">
+      <option value="" {% if not status %}selected{% endif %}>전체</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ status_label[s] }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">적용</button>
+  {% if q or member_type or plan or status %}
+  <a class="reset-link" href="/admin/members">초기화</a>
+  {% endif %}
+</form>
+
+<p class="er-muted">조건에 맞는 회원 <b>{{ total }}</b>명</p>
+
+{% if not rows %}
+<p>조건에 맞는 회원이 없다.</p>
+{% else %}
+<table>
+  <tr>
+    <th>이름</th><th>이메일</th><th>회원 유형</th><th>기업</th><th>플랜</th><th>가입일</th><th>최근 접속</th><th>상태</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="/admin/members/{{ r.id }}">{{ r.name }}</a></td>
+    <td>{{ r.email }}</td>
+    <td>{{ r.type }}</td>
+    <td>{{ r.company or "-" }}</td>
+    <td>{{ r.plan }}</td>
+    <td>{{ r.joined }}</td>
+    <td>{{ r.last_seen }}</td>
+    <td>{{ status_label[r.status] }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if pages > 1 %}
+<nav class="pager" aria-label="페이지">
+  {% set qs = "q=" ~ (q or "") ~ "&type=" ~ (member_type or "") ~ "&plan=" ~ (plan or "") ~ "&status=" ~ (status or "") %}
+  <a href="/admin/members?{{ qs }}&page={{ page - 1 }}" {% if page <= 1 %}class="disabled"{% endif %}>← 이전</a>
+  <span>{{ page }} / {{ pages }} 쪽 (전체 {{ total }}명)</span>
+  <a href="/admin/members?{{ qs }}&page={{ page + 1 }}" {% if page >= pages %}class="disabled"{% endif %}>다음 →</a>
+</nav>
+{% endif %}
+{% endif %}
+
+</div>
+{% endblock %}

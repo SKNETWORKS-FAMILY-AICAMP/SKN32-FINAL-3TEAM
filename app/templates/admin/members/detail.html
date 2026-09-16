@@ -1,0 +1,62 @@
+{# app/templates/admin/members/detail.html — 회원 상세 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 이용 내역·결제 이력은 예시 수치다 — 담는 테이블이 아직 없다.
+  🔴 회원 테이블이 아직 없다 — 더미다 (admin_members.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 회원 상세{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+
+<p><a href="/admin/members">← 회원 목록</a></p>
+
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 회원 테이블이 아직 없어요 — 이용 내역·결제 이력도 예시 수치입니다.</p>
+
+<h1>{{ row.name }} <small class="hint">{{ row.type }}</small></h1>
+<table class="kv">
+  <tr><th>이메일</th><td>{{ row.email }}</td></tr>
+  <tr><th>가입일</th><td>{{ row.joined }}</td></tr>
+  <tr><th>최근 접속</th><td>{{ row.last_seen }}</td></tr>
+  <tr><th>플랜</th><td>{{ row.plan }}</td></tr>
+  <tr><th>상태</th><td>{{ status_label[row.status] }}</td></tr>
+</table>
+
+{% if row.type in ("기업 대표자", "기업 구성원") %}
+<h2>기업 소속 정보</h2>
+<table class="kv">
+  <tr><th>기업명</th><td>{{ row.company }}</td></tr>
+  <tr><th>소속 역할</th><td>{{ row.role }}</td></tr>
+  <tr><th>기업 플랜</th><td>{{ row.plan }}</td></tr>
+</table>
+{% elif row.type == "인플루언서" %}
+<h2>인플루언서 정보</h2>
+<table class="kv">
+  <tr><th>대표 채널</th><td>{{ row.channel }}</td></tr>
+  <tr><th>팔로워</th><td>{{ row.followers }}</td></tr>
+  <tr><th>인증 상태</th><td>인증 완료</td></tr>
+</table>
+{% endif %}
+
+<h2>이용 내역 <small class="hint">(예시 수치 — 집계 테이블 없음)</small></h2>
+<table class="kv">
+  <tr><th>이번 달 검수</th><td>48건</td></tr>
+  <tr><th>이번 달 생성</th><td>31건</td></tr>
+</table>
+
+<h2>결제 이력 <small class="hint">(예시 — 결제 테이블 없음)</small></h2>
+<table>
+  <tr><th>결제일</th><th>상품</th><th>금액</th><th>결제 수단</th><th>상태</th></tr>
+  <tr><td>2026.08.12</td><td>{{ row.plan }} 월간</td><td>{{ price }}</td><td>법인/신용카드</td><td>결제 완료</td></tr>
+</table>
+
+<style>
+.admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
+.admin-shell table.kv th { text-align: left; padding: .3rem .8rem .3rem 0; color: var(--a-clay); font-weight: 500; white-space: nowrap; }
+.admin-shell table.kv td { padding: .3rem 0; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; font-weight: 400; }
+</style>
+</div>
+{% endblock %}
