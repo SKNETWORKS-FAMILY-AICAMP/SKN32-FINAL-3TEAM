@@ -202,6 +202,48 @@
       ]
     ],
     [
+      "/admin/admins",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/admin/api/counts",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/admin/dict-entries",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/admin/errors",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/admin/errors/{error_id}",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/admin/sources",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/admin/sources/{source_id}",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/compose",
       [
         "POST"
