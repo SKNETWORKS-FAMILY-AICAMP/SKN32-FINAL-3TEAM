@@ -1,32 +1,291 @@
 {# app/templates/user/generate.html — 카피 생성 화면 · 소유자 ksr (병렬작업 계약 §5)
 
-  ★ 이 파일은 **골격만** 잡아 둔 것 — index.html 과 같은 요령이다. 세그먼트·키워드
-    선택 폼과 프론티어 결과(리스크–소구력)는 2W 산출물의 `gen-input`·`gen-result`
-    화면설계서를 옮겨서 채운다 (§8 ⑥).
-  🚨 `GenerateRequest` 는 `segment` 가 필수다 (app/contracts.py) — 폼 필드가 하나가
-     아니라서 `judge` 처럼 `_form_field` 로 안 끝난다. 여러 필드를 받게 되면
-     `python-multipart` 없이 `urllib.parse.parse_qs` 로 계속 갈지 판단이 필요하다.
-  ⛔ `POST /generate` 코어는 아직 501 이다 (D-181) — 진짜로 부르지 않는다.
-     지금은 `judge` 화면처럼 골든 픽스처 목록만 보여준다.
-#}{% extends "base.html" %}
+  ★ 프로토타입의 `data-screen="gen-input"` · `gen-result` 를 한 파일에 옮긴 것이다
+    (ksr, 2026-09-13 — 2026-09-16 lse 셸(4-pill+사이드바)로 이식).
+  🚨 프론티어 산점도는 **차트 라이브러리를 못 쓴다.** 좌표는 `app/routers/user.py` 의
+     `_frontier()` 가 파이썬에서 계산하고, 여기서는 **인라인 SVG 로 점만 찍는다.**
+     ⛔ 점을 클릭해서 카드를 강조하는 프로토타입 동작은 JS 라 뺐다 — 세 안을 전부 펼쳐 둔다.
+  🚨 y 축은 **전환율·판매 성과가 아니라 원문 대비 정보량 보존율**이다 (contracts.py).
+  ⛔ `POST /generate` 코어는 아직 501 이다 (D-181) — 부르지 않는다. 결과는 골든 픽스처로만.
+#}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 카피 생성{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
-{% block content %}
-<div class="user-shell">
-{% include "user/_nav.html" %}
-<h1>카피 생성</h1>
+{% block screen_css %}
+<style>
+.gn-head { margin-bottom: 1.25rem; }
+.gn-head h1 { margin: 0 0 .25rem; }
+.gn-head p { margin: 0; color: var(--u-clay); font-size: .875rem; }
 
-<p>세그먼트와 키워드를 넣으면 리스크–소구력 프론티어(파레토 최적 3안)를 돌려준다.</p>
+.gn-card {
+  border: 1px solid var(--u-line); border-radius: 1rem;
+  background: var(--u-surface); padding: 1.1rem 1.15rem; margin-bottom: 1rem;
+}
+.gn-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
+.gn-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
 
-<section>
-  <h2>지금 붙일 수 있는 것</h2>
-  {# ⛔ 엔진이 없다. 화면은 **픽스처로 모든 분기를 그린다** (D-124).
-     가짜 200 을 만들지 않는다 — 진짜가 오면 두 번 고친다 (D-147). #}
-  <ul>
+.gn-pick { display: flex; flex-wrap: wrap; gap: .45rem; margin: .2rem 0 1rem; }
+.gn-pick input { position: absolute; opacity: 0; width: 0; height: 0; }
+.gn-pick label {
+  display: inline-block; margin: 0; padding: .4rem .85rem; border-radius: 999px;
+  border: 1px solid var(--u-line); background: var(--u-surface);
+  font-size: .84rem; font-weight: 500; cursor: pointer;
+}
+.gn-pick input:checked + label {
+  background: var(--u-signal); border-color: var(--u-signal); color: #fff; font-weight: 600;
+}
+.gn-pick input:focus-visible + label { outline: 2px solid var(--u-signal-ink); outline-offset: 2px; }
+
+.gn-segs { display: grid; gap: .55rem; margin: .2rem 0 1rem; }
+@media (min-width: 40rem) { .gn-segs { grid-template-columns: repeat(3, 1fr); } }
+.gn-segs input { position: absolute; opacity: 0; width: 0; height: 0; }
+.gn-segs label {
+  display: block; margin: 0; padding: .7rem .8rem; border-radius: .75rem;
+  border: 1px solid var(--u-line); background: var(--u-surface); cursor: pointer; font-weight: 400;
+}
+.gn-segs input:checked + label { border-color: var(--u-signal); background: var(--u-signal-soft); }
+.gn-segs label b { display: block; font-size: .84rem; margin-bottom: .15rem; }
+.gn-segs label span { font-size: .75rem; color: var(--u-clay); }
+
+.gn-submit {
+  background: var(--u-signal); border-color: var(--u-signal);
+  color: #fff; font-weight: 600; margin-top: .75rem;
+}
+
+.gn-frontier { display: grid; gap: 1rem; }
+@media (min-width: 48rem) { .gn-frontier { grid-template-columns: 340px 1fr; align-items: stretch; } }
+.gn-plot { border: 1px solid var(--u-line); border-radius: 1rem; padding: 1rem; background: var(--u-surface); }
+.gn-plot svg { width: 100%; height: auto; display: block; }
+.gn-axis { stroke: var(--u-line); stroke-width: 1; }
+.gn-tick { fill: var(--u-clay); font-size: 9px; }
+.gn-line { fill: none; stroke: var(--u-clay); stroke-width: 1; stroke-dasharray: 3 3; }
+.gn-dot { stroke: var(--u-surface); stroke-width: 1.5; }
+.gn-dot.c-r0, .gn-dot.c-r1 { fill: #15803d; }
+.gn-dot.c-r2 { fill: #b45309; }
+.gn-dot.c-r3, .gn-dot.c-r4 { fill: #b91c1c; }
+.gn-dotlabel { fill: var(--u-ink); font-size: 10px; text-anchor: middle; }
+.gn-explain {
+  border: 1px solid var(--u-line); border-radius: 1rem; padding: 1rem 1.1rem;
+  background: var(--u-surface2); font-size: .85rem; line-height: 1.7;
+}
+
+.gn-cands { display: grid; gap: .7rem; }
+@media (min-width: 48rem) { .gn-cands { grid-template-columns: repeat(3, 1fr); } }
+.gn-cand { border: 1px solid var(--u-line); border-radius: .75rem; padding: .8rem .85rem;
+           background: var(--u-surface2); }
+.gn-cand h3 { margin: 0 0 .35rem; font-size: .88rem; }
+.gn-cand p { margin: .15rem 0; font-size: .85rem; }
+.gn-cand .gn-meta { color: var(--u-clay); font-size: .74rem; }
+
+.gn-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .5rem 0 0; }
+.gn-chip { display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+           font-size: .74rem; border: 1px solid var(--u-line);
+           color: var(--u-clay); background: var(--u-surface2); }
+.gn-chip.c-r0, .gn-chip.c-r1 { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.gn-chip.c-r2 { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.gn-chip.c-r3, .gn-chip.c-r4 { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.gn-chip.c-ok { background: var(--u-signal-soft); color: var(--u-signal-ink); border-color: var(--u-signal-soft); }
+.gn-chip.c-block { background: var(--u-surface2); color: var(--u-clay); text-decoration: line-through; }
+
+.gn-kw { border-top: 1px solid var(--u-line); padding: .6rem 0; font-size: .82rem; }
+.gn-kw:first-of-type { border-top: 0; }
+.gn-kw .gn-reason { color: var(--u-clay); font-size: .78rem; margin: .2rem 0 0; }
+.gn-law { border-left: 2px solid var(--u-signal); padding: .1rem 0 .1rem .6rem;
+          margin: .4rem 0 0; font-size: .78rem; }
+.gn-law .gn-lawid { color: var(--u-clay); font-size: .72rem; }
+.gn-law blockquote { margin: .2rem 0 0; color: var(--u-clay); font-size: .76rem; }
+
+.gn-ch { border: 1px solid var(--u-line); border-radius: .75rem; padding: .8rem .85rem;
+         margin-bottom: .6rem; background: var(--u-surface2); }
+.gn-ch h3 { margin: 0 0 .3rem; font-size: .86rem; }
+.gn-ch p { margin: .15rem 0; font-size: .85rem; }
+
+.gn-pending { border: 1px dashed var(--u-line); border-radius: .75rem;
+              padding: .8rem .9rem; color: var(--u-clay); font-size: .85rem; }
+.gn-fixtures { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; padding: 0; margin: .5rem 0 0; }
+.gn-fixtures a { display: inline-block; padding: .2rem .6rem; border: 1px solid var(--u-line);
+                 border-radius: 999px; font-size: .76rem; text-decoration: none; color: var(--u-clay); }
+.gn-fixtures a:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+</style>
+{% endblock %}
+{% block user_content %}
+<div class="gn-head">
+  <h1>카피 생성</h1>
+  <p>제품과 대상고객을 고르면, 판정 코어가 먼저 걸러낸 <b>합법 어휘 안에서만</b> 카피를 만들어요.</p>
+</div>
+
+<form class="gn-card" method="post" action="/u/generate">
+  <h2>제품</h2>
+  <div class="gn-pick">
+    <input type="radio" id="p-lutein" name="product" value="루테인 건강기능식품" checked>
+    <label for="p-lutein">루테인 건강기능식품</label>
+    <input type="radio" id="p-calcium" name="product" value="PGA 함유 칼슘 영양제">
+    <label for="p-calcium">PGA 함유 칼슘 영양제</label>
+    <input type="radio" id="p-cosmetic" name="product" value="보습 화장품">
+    <label for="p-cosmetic">보습 화장품</label>
+  </div>
+
+  <h2>대상고객</h2>
+  <div class="gn-segs">
+    <input type="radio" id="s-a" name="segment" value="장시간 모니터 업무 · 30대" checked>
+    <label for="s-a"><b>장시간 모니터 업무 · 30대</b><span>비슷한 리뷰 214건에서 모인 고객군</span></label>
+    <input type="radio" id="s-b" name="segment" value="출산 후 체력 회복 · 30대 여성">
+    <label for="s-b"><b>출산 후 체력 회복 · 30대 여성</b><span>비슷한 리뷰 176건에서 모인 고객군</span></label>
+    <input type="radio" id="s-c" name="segment" value="활동적인 라이프스타일 · 20대">
+    <label for="s-c"><b>활동적인 라이프스타일 · 20대</b><span>비슷한 리뷰 302건에서 모인 고객군</span></label>
+  </div>
+
+  <label for="keyword">지향 키워드 <span class="gn-note">(쉼표 없이 한 줄에 하나씩)</span></label>
+  <textarea id="keyword" name="keyword" rows="3" maxlength="{{ max_text_len }}"
+            placeholder="예: 촉촉한"></textarea>
+  <p class="gn-note" style="margin-top:.4rem">
+    🚨 넣은 키워드는 <b>판정 코어가 먼저 거릅니다.</b> 막힌 키워드는 결과 화면에 회색으로,
+    <b>사유와 함께</b> 표시돼요 — 계약상 차단에는 사유가 반드시 붙어요.
+  </p>
+
+  <button class="gn-submit" type="submit">선택한 조건으로 카피 생성</button>
+</form>
+
+{% if engine_pending %}
+<div class="gn-card">
+  <h2>생성 결과</h2>
+  <p class="gn-pending">
+    생성 코어가 아직 501 이에요 (D-181). <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
+    고르신 조건 — 제품 <b>{{ picked.product }}</b> · 대상고객 <b>{{ picked.segment }}</b>
+    {%- if picked.keywords %} · 키워드 {{ picked.keywords|join(", ") }}{% endif %}<br>
+    지금은 아래 골든 픽스처로 결과 화면의 모든 분기를 볼 수 있어요.
+  </p>
+</div>
+{% endif %}
+
+{% if result %}
+<div class="gn-card">
+  <h2>생성된 카피 {{ result.candidates|length }}종{% if fixture_name %} <span class="gn-note">— {{ fixture_name }}</span>{% endif %}</h2>
+
+  {% if points %}
+  <div class="gn-frontier">
+    <div class="gn-plot">
+      <p class="gn-note" style="margin:0 0 .5rem">리스크–소구력 프론티어</p>
+      <svg viewBox="0 0 340 260" role="img"
+           aria-label="잔여 리스크를 가로축, 소구력 보존율을 세로축으로 한 후보 산점도">
+        <line class="gn-axis" x1="40" y1="14" x2="40" y2="216"/>
+        <line class="gn-axis" x1="40" y1="216" x2="326" y2="216"/>
+        <text class="gn-tick" x="36" y="230">R0</text>
+        <text class="gn-tick" x="312" y="230">R4</text>
+        <text class="gn-tick" x="183" y="248" text-anchor="middle">잔여 리스크 →</text>
+        <text class="gn-tick" x="10" y="18">100</text>
+        <text class="gn-tick" x="14" y="220">0</text>
+        <text class="gn-tick" x="-115" y="14" transform="rotate(-90)" text-anchor="middle">소구력 보존 % →</text>
+        <polyline class="gn-line" points="{% for p in points %}{{ p.cx }},{{ p.cy }} {% endfor %}"/>
+        {% for p in points %}
+        <circle class="gn-dot c-{{ p.risk|lower }}" cx="{{ p.cx }}" cy="{{ p.cy }}" r="7"/>
+        <text class="gn-dotlabel" x="{{ p.cx }}" y="{{ p.cy + 20 }}">{{ p.label }}</text>
+        {% endfor %}
+      </svg>
+      <p class="gn-note" style="margin:.4rem 0 0">
+        ※ 파레토 최적 후보만 표시돼요 — 지배당하는 후보는 계약 단계에서 빠져요.
+      </p>
+    </div>
+    <div class="gn-explain">
+      <p style="margin-top:0">
+        가로축은 판정 코어가 산정한 <b>잔여 리스크</b>, 세로축은 원문 대비 주장의 강도·구체성이
+        얼마나 보존됐는지예요.
+      </p>
+      <p>
+        <b>전환율이나 실제 판매 성과가 아니라</b>, 원문 대비 <b>정보량 보존율</b>이에요.
+        아래 세 안 모두 이미 판정 코어의 자체 스크리닝을 통과한 후보예요.
+      </p>
+      <p class="gn-note" style="margin-bottom:0">
+        ⬜ 점을 눌러 카드를 강조하는 동작은 스크립트가 필요해서 뺐어요 (CSP · 공급망 P0-3).
+        세 안을 아래에 전부 펼쳐 둡니다.
+      </p>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if result.candidates %}
+<div class="gn-card">
+  <h2>후보</h2>
+  <div class="gn-cands">
+    {% for c in result.candidates %}
+    <div class="gn-cand">
+      <h3>{{ c.label }}</h3>
+      <p>{{ c.rewrite.body }}</p>
+      {% if c.rewrite.mandatory_note %}<p class="gn-meta">필수 병기 · {{ c.rewrite.mandatory_note }}</p>{% endif %}
+      {% if c.rewrite.placement %}<p class="gn-meta">배치 · {{ c.rewrite.placement }}</p>{% endif %}
+      <div class="gn-chips">
+        <span class="gn-chip c-{{ c.residual_risk.value|lower }}">잔여 리스크 {{ c.residual_risk.value }}</span>
+        <span class="gn-chip">소구력 보존 {{ (c.appeal_retention * 100)|round|int }}%</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if result.keywords %}
+<div class="gn-card">
+  <h2>지향 키워드</h2>
+  <div class="gn-chips" style="margin-bottom:.6rem">
+    {% for k in result.keywords %}
+    <span class="gn-chip {% if k.allowed %}c-ok{% else %}c-block{% endif %}">{{ k.term }}</span>
+    {% endfor %}
+  </div>
+  <p class="gn-note">회색에 줄이 그어진 것은 판정 코어가 막은 키워드예요. 사유는 아래에 있어요.</p>
+
+  {% for k in result.keywords if not k.allowed %}
+  <div class="gn-kw">
+    <b>{{ k.term }}</b>
+    <p class="gn-reason">{{ k.reason }}</p>
+    {% for e in k.evidence %}
+    <div class="gn-law">
+      <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
+      <div class="gn-lawid">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
+      {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if result.adapted %}
+<div class="gn-card">
+  <h2>채널별 각색</h2>
+  <p class="gn-note" style="margin-bottom:.6rem">
+    코드가 매체별 표시 위치에 <b>광고 표시 문구를 먼저</b> 넣고, 본문만 매체 형식에 맞게 다시 쓴 뒤,
+    판정 코어가 각 결과를 <b>다시 검증</b>해요.
+  </p>
+  {% for a in result.adapted %}
+  <div class="gn-ch">
+    <h3>{{ a.channel.value }}</h3>
+    <p>{{ a.rewrite.body }}</p>
+    <p class="gn-meta">표시 · <b>{{ a.disclosure }}</b> — {{ a.disclosure_placement }}</p>
+    <div class="gn-chips">
+      <span class="gn-chip">재검증
+        {%- if a.recheck.verdict.value == "confirmed" %} 확정
+        {%- elif a.recheck.verdict.value == "hold" %} 보류
+        {%- elif a.recheck.verdict.value == "no_basis" %} 근거 없음
+        {%- else %} 미판정{% endif -%}
+      </span>
+      {% if a.recheck.risk.final %}
+      <span class="gn-chip c-{{ a.recheck.risk.final.value|lower }}">위험도 {{ a.recheck.risk.final.value }}</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+<div class="gn-card">
+  <h2>골든 픽스처로 분기 보기</h2>
+  <p class="gn-note">
+    ⛔ 엔진이 없어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).
+  </p>
+  <ul class="gn-fixtures">
   {% for name in fixtures %}
-    <li><a href="/fixtures/generate/{{ name }}">{{ name }}</a></li>
+    <li><a href="/u/generate/preview/{{ name }}">{{ name }}</a></li>
   {% endfor %}
   </ul>
-</section>
 </div>
 {% endblock %}

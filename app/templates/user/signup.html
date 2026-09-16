@@ -1,0 +1,43 @@
+{# app/templates/user/signup.html — 일반 회원 가입 · 소유자 lse (병렬작업 계약 §5)
+
+  ★ 이 파일은 **골격만** 잡아 둔 것 — generate.html 과 같은 요령이다. 발표자료
+    프로토타입(v7.2)의 `data-screen="signup"` 절을 옮겨서 채운다.
+  🚨 D-66 — **온프레미스는 가입 화면을 만들지 않는다.** 이 화면은 D-66이 열어 둔
+     **클라우드 에디션용** 가입이다 (이메일 인증만, 역할은 안 고른다 — "행동이 역할을 정한다").
+  🔴 **계정 테이블이 없다** (2026-09-16 판단) — `AppAccount`는 governor 전용이고,
+     일반 사용자 테이블은 진입점 B 엔진과 함께 새로 생긴다. 그래서 "가입하기" 버튼이 없다.
+  ⛔ 구역 셸 밖이다 — 가입 전 화면이라 사이드바가 없다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 회원가입{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block content %}
+<div class="user-shell">
+<div class="auth-card">
+  <h1>회원가입</h1>
+  <p class="auth-sub">소속 조직으로 가입하면 팀원과 검수 결과를 공유할 수 있어요.</p>
+
+  <label for="signup-name">이름</label>
+  <input id="signup-name" placeholder="이서은" disabled>
+
+  <label for="signup-email">이메일</label>
+  <input id="signup-email" type="email" placeholder="you@company.com" disabled>
+
+  <label for="signup-pw">비밀번호</label>
+  <input id="signup-pw" type="password" placeholder="8자 이상" disabled>
+
+  <label for="signup-pw2">비밀번호 확인</label>
+  <input id="signup-pw2" type="password" disabled>
+
+  <div class="auth-consent">
+    <label><input type="checkbox" disabled> 이용약관 및 개인정보처리방침에 동의합니다.</label>
+    <label><input type="checkbox" disabled> CopyLane의 진단은 법적 확정 판단이 아닌 심의 통과 가능성
+      진단이며, 최종 판단은 전문가 검토를 따라야 함을 이해했습니다.</label>
+  </div>
+
+  <p class="auth-note">⬜ 계정 시스템이 아직 없다 — 진입점 B 엔진(이력·카피생성)과 함께 온다.
+  가입은 이메일 인증만 받는다 — 가입 시 역할을 고르지 않는다 (D-66).</p>
+
+  <p class="auth-switch">이미 계정이 있으신가요? <a href="/u/login">로그인</a></p>
+</div>
+</div>
+{% endblock %}
