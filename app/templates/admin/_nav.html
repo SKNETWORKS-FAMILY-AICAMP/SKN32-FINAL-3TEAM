@@ -1,0 +1,19 @@
+{# app/templates/admin/_nav.html — 관리자 화면 공통 nav · 소유자 ssm · psj (병렬작업 계약 §5)
+
+  🚨 화면이 늘 때 이 파일에 링크를 추가한다 — 화면마다 nav 를 새로 그리지 않는다
+     (app/templates/user/_nav.html 과 같은 패턴).
+  ⬜ 실제로 존재하는 라우트만 링크한다 — 없는 기능을 있는 것처럼 보이지 않는다 (D-147).
+#}
+<nav class="admin-nav" aria-label="관리자 메뉴">
+  <a class="admin-nav-brand" href="/admin/">CopyLane 관리자</a>
+  <a class="admin-nav-link" href="/admin/"
+     {% if request.url.path == "/admin/" %}aria-current="page"{% endif %}>대시보드</a>
+  <a class="admin-nav-link" href="/admin/sources"
+     {% if request.url.path == "/admin/sources" %}aria-current="page"{% endif %}>판정 근거</a>
+  <a class="admin-nav-link" href="/admin/dict-entries"
+     {% if request.url.path == "/admin/dict-entries" %}aria-current="page"{% endif %}>표현 사전</a>
+  <a class="admin-nav-link" href="/admin/admins"
+     {% if request.url.path == "/admin/admins" %}aria-current="page"{% endif %}>관리자 계정</a>
+  <a class="admin-nav-link" href="/admin/errors"
+     {% if request.url.path == "/admin/errors" %}aria-current="page"{% endif %}>오류 로그</a>
+</nav>
