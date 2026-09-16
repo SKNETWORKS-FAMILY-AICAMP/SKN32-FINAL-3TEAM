@@ -27,13 +27,15 @@
     </div>
   </details>
 
-  <details class="admin-nav-cat" {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") or request.url.path == "/admin/admins" %}open{% endif %}>
+  <details class="admin-nav-cat" {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") or request.url.path == "/admin/admins" or request.url.path == "/admin/signup-review" or request.url.path.startswith("/admin/signup-review/") %}open{% endif %}>
     <summary>회원관리</summary>
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/members"
          {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") %}aria-current="page"{% endif %}>회원 목록</a>
+      <a class="admin-nav-sub" href="/admin/signup-review"
+         {% if request.url.path == "/admin/signup-review" or request.url.path.startswith("/admin/signup-review/") %}aria-current="page"{% endif %}>승인 심사</a>
       <a class="admin-nav-sub" href="/admin/admins"
-         {% if request.url.path == "/admin/admins" %}aria-current="page"{% endif %}>관리자 계정</a>
+         {% if request.url.path == "/admin/admins" %}aria-current="page"{% endif %}>관리자 목록</a>
     </div>
   </details>
 

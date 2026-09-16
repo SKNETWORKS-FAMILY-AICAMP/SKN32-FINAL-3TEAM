@@ -7,12 +7,12 @@
      같은 이유(해시가 곧 지문이다).
   ✅ `governor` 로그인을 지나야 뜬다 (index.html 과 같은 이유, D-66 · D-213).
 #}{% extends "base.html" %}
-{% block title %}CopyLane — 관리자 계정{% endblock %}
+{% block title %}CopyLane — 관리자 목록{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
 {% block content %}
 <div class="admin-shell">
 {% include "admin/_nav.html" %}
-<h1>관리자 계정</h1>
+<h1>관리자 목록</h1>
 <p class="warn">🚨 <b>읽기 전용이다.</b> 계정 추가·비밀번호 변경은 화면에 없다 — 터미널에서
   <code>uv run python launcher.py admin-add &lt;이니셜&gt;</code> 로만 한다 (D-66).</p>
 
