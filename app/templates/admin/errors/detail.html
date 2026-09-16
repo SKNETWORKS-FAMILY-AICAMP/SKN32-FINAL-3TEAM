@@ -1,0 +1,67 @@
+{# app/templates/admin/errors/detail.html — 오류 로그 상세 (뼈대) · 소유자 **ssm** (병렬작업 계약 §5)
+
+  ✅ 읽기 전용. 「처리 상태」 섹션은 **자리만 잡았다** — 폼은 전부 disabled 이고 action 이 없다.
+     ⬜ 확인 여부·메모를 저장할 칸은 `app_error_log` 초안에 없다. 필요하면 테이블 요청에 더한다.
+  🔴 트레이스백 전문은 **저장하지 않는다** — 마스킹 필터를 안 지나기 때문이다 (요청 메모 §2).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 오류 로그 상세{% endblock %}
+{% block content %}
+{% include "admin/errors/_nav.html" %}
+
+<p><a href="/admin/errors">← 오류 로그 목록</a></p>
+<h1><span class="er-lv er-lv-{{ row.level | lower }}">{{ row.level }}</span> {{ row.exc_type or row.logger_name }}</h1>
+<p class="warn">🚨 <b>읽기 전용이다.</b> 아래 처리 상태 기록은 팀장 승인 전까지 비활성 상태다.</p>
+{% include "admin/errors/_notice.html" %}
+
+<h2>기본 정보</h2>
+<table class="er-kv">
+  <tr><th>로그 ID</th><td>{{ row.id }}</td></tr>
+  <tr><th>발생 시각</th><td>{{ row.occurred_at.strftime("%Y-%m-%d %H:%M:%S %Z") }}</td></tr>
+  <tr><th>레벨</th><td><b>{{ row.level }}</b></td></tr>
+  <tr><th>기록한 곳</th><td><code>{{ row.logger_name }}</code></td></tr>
+  <tr><th>오류 종류</th><td>{{ row.exc_type or "-" }}</td></tr>
+  <tr><th>파일</th><td>{{ row.module or "-" }}</td></tr>
+  <tr><th>함수</th><td>{{ row.func_name or "-" }}</td></tr>
+  <tr><th>줄 번호</th><td>{{ row.lineno or "-" }}</td></tr>
+</table>
+
+<h2>내용</h2>
+<pre class="er-msg">{{ row.message }}</pre>
+<p class="er-muted">광고 문구는 <code>&lt;가림 N자·sha256:…&gt;</code> 모양으로 가려져 저장된다. 트레이스백 전문은 저장하지 않는다.</p>
+
+<h2>같은 위치에서 난 최근 기록</h2>
+{% if not same %}
+<p class="er-muted">같은 위치(파일·함수·줄)에서 난 다른 기록이 없다.</p>
+{% else %}
+<table class="er-tbl">
+  <tr><th>발생 시각</th><th>레벨</th><th>내용</th></tr>
+  {% for r in same %}
+  <tr>
+    <td class="er-nowrap"><a href="/admin/errors/{{ r.id }}">{{ r.occurred_at.strftime("%Y-%m-%d %H:%M:%S") }}</a></td>
+    <td><span class="er-lv er-lv-{{ r.level | lower }}">{{ r.level }}</span></td>
+    <td>{{ r.message }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>처리 상태 <small class="er-muted">(승인 대기 · 비활성)</small></h2>
+<fieldset class="er-disabled" disabled>
+  <label>상태
+    <select name="status">
+      <option>미확인</option><option>확인함</option><option>해결됨</option>
+    </select>
+  </label>
+  <label>메모
+    <textarea name="note" rows="3" placeholder="원인·조치 메모 (문구 원문을 적지 않는다)"></textarea>
+  </label>
+  <button type="button">저장</button>
+</fieldset>
+<p class="er-muted">⬜ 저장할 칸(상태·메모·확인자·확인 시각)이 테이블 초안에 없다 — 필요하면 팀장 요청에 더한다.</p>
+
+<h2>보관 정책 <small class="er-muted">(판정 대기)</small></h2>
+<table class="er-kv">
+  <tr><th>보관 기간</th><td>⬜ 팀장 판정 대기</td></tr>
+  <tr><th>자동 삭제</th><td>⬜ 보관 기간이 정해진 뒤에 붙인다</td></tr>
+</table>
+{% endblock %}

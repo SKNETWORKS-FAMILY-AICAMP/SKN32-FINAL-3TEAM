@@ -23,7 +23,12 @@
 from __future__ import annotations
 
 from app.routers.admin import router as admin_router
+from app.routers.admin_errors import router as admin_errors_router
 from app.routers.auth import router as auth_router
 from app.routers.user import router as user_router
+
+# 🚨 오류 로그 화면(ssm)은 `admin.py` 와 파일을 가르고 **관리자 라우터 아래에 매단다** —
+#    그래서 `/admin/errors` 가 되고, 관리자 에디션에서만 붙는다 (D-213). `api.py` 는 안 고친다.
+admin_router.include_router(admin_errors_router)
 
 __all__ = ["admin_router", "auth_router", "user_router"]
