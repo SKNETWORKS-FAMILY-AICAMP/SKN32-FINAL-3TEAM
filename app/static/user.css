@@ -139,3 +139,46 @@
 .history-detail dt { font-size: .75rem; color: var(--u-clay); margin-top: .5rem; }
 .history-detail dd { margin: 0; }
 .history-detail-note { font-size: .8rem; color: var(--u-clay); margin-top: .75rem; }
+
+/* home — 대시보드 */
+.home-sub { color: var(--u-clay); margin-top: -.5rem; margin-bottom: 1.5rem; }
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--u-line);
+  border: 1px solid var(--u-line);
+  border-radius: .75rem;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+.home-stat { background: var(--u-surface); padding: 1rem; }
+.home-stat-label { font-size: .75rem; color: var(--u-clay); margin: 0 0 .3rem; }
+.home-stat-value { font-size: 1.4rem; margin: 0; }
+
+.home-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .75rem;
+  margin-bottom: 1.75rem;
+}
+.home-shortcut {
+  display: block;
+  border: 1px solid var(--u-line);
+  border-radius: .9rem;
+  padding: 1.1rem;
+  color: var(--u-ink);
+  text-decoration: none;
+}
+.home-shortcut:hover { border-color: var(--u-signal); }
+.home-shortcut-title { font-weight: 600; margin: 0 0 .3rem; }
+.home-shortcut-desc { font-size: .8rem; color: var(--u-clay); margin: 0; }
+
+.home-recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .5rem;
+}
+.home-recent-head p { font-size: .75rem; color: var(--u-clay); margin: 0; text-transform: uppercase; }
+.home-recent-head a { font-size: .8rem; color: var(--u-signal-ink); text-decoration: none; }

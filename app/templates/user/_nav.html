@@ -5,7 +5,9 @@
      정신과 같다: 없는 기능을 있는 것처럼 보이지 않는다).
 #}
 <nav class="user-nav" aria-label="사용자 메뉴">
-  <a class="user-nav-brand" href="/u/">CopyLane</a>
+  <a class="user-nav-brand" href="/u/home">CopyLane</a>
+  <a class="user-nav-link" href="/u/home"
+     {% if request.url.path == "/u/home" %}aria-current="page"{% endif %}>홈</a>
   <a class="user-nav-link" href="/u/"
      {% if request.url.path == "/u/" %}aria-current="page"{% endif %}>검수</a>
   <a class="user-nav-link" href="/u/generate"

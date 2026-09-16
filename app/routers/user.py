@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -20,6 +21,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.contracts import PASS_RISK_MAX_PROVISIONAL
 from app.db import get_session
 from app.models import Judgment
 from app.settings import PARAMS
@@ -45,6 +47,58 @@ async def _form_field(request: Request, name: str) -> str:
     if len(value) > PARAMS.max_text_len:
         raise HTTPException(422, f"문구가 너무 길다 — {PARAMS.max_text_len}자까지 받는다")
     return value
+
+
+@router.get("/home", response_class=HTMLResponse)
+def home(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    """대시보드 — 🚨 history 와 같은 요령으로 **진짜 DB 집계**다. 판정 엔진이 없어 지금은
+    통계가 전부 0/— 로 뜬다 — 정상이다 (D-147 의 정신과 같다. 가짜 수치를 안 그린다).
+
+    ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX_PROVISIONAL`
+      (D-125 통과 조건의 잠정 위험도 임계값)을 그대로 쓴다 — 그 상수 자체가 주석에
+      "⛔ 화면 표기에만 쓴다"고 허가해 둔 값이라 여기 쓰는 게 정확히 그 용도다.
+      R2·R3 순서가 검증 ②로 확정되면 이 화면도 자동으로 따라간다.
+    """
+    month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month = select(Judgment).where(Judgment.judged_at >= month_start)
+    pass_level = PASS_RISK_MAX_PROVISIONAL.level
+
+    total_month = session.scalar(select(func.count()).select_from(month.subquery())) or 0
+    violation_count = (
+        session.scalar(
+            select(func.count()).select_from(
+                month.where(Judgment.verdict == "confirmed", Judgment.risk_final > pass_level)
+                .subquery()
+            )
+        )
+        or 0
+    )
+    pass_count = (
+        session.scalar(
+            select(func.count()).select_from(
+                month.where(Judgment.verdict == "confirmed", Judgment.risk_final <= pass_level)
+                .subquery()
+            )
+        )
+        or 0
+    )
+    pass_rate = round(pass_count / total_month * 100) if total_month else None
+
+    recent = (
+        session.execute(select(Judgment).order_by(Judgment.judged_at.desc()).limit(3))
+        .scalars()
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "user/home.html",
+        {
+            "total_month": total_month,
+            "violation_count": violation_count,
+            "pass_rate": pass_rate,
+            "recent": recent,
+        },
+    )
 
 
 @router.get("/", response_class=HTMLResponse)
