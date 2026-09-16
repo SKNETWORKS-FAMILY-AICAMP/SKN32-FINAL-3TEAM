@@ -15,12 +15,6 @@
 <h1>판정 통계</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> <code>judge_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
 
-<nav class="period-tabs" aria-label="세부 통계">
-  <a href="/admin/stats/quality">전체</a>
-  <a href="/admin/stats/quality/judge" class="active" aria-current="page">판정 통계</a>
-  <a href="/admin/stats/quality/generation">생성 통계</a>
-</nav>
-
 <div class="stat-kpis">
   <div class="stat-kpi"><span>판정 정확도</span><b>{{ kpi.accuracy }}</b></div>
   <div class="stat-kpi"><span>총 판정 건수</span><b>{{ kpi.total_cases }}</b></div>
@@ -58,9 +52,6 @@
 .admin-shell .usage-label { width: 6rem; font-size: .8rem; color: var(--a-clay); }
 .admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
 .admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
-.admin-shell .period-tabs { display: flex; gap: .4rem; margin-bottom: .8rem; }
-.admin-shell .period-tabs a { padding: .3rem .8rem; border: 1px solid var(--a-line); border-radius: .4rem; text-decoration: none; color: var(--a-ink); font-size: .85rem; }
-.admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
 </style>
 </div>
