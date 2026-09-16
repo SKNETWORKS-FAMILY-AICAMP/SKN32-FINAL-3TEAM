@@ -117,3 +117,39 @@ def history(request: Request, session: Session = Depends(get_session)) -> HTMLRe
         .all()
     )
     return templates.TemplateResponse(request, "user/history.html", {"judgments": rows})
+
+
+@router.get("/segments", response_class=HTMLResponse)
+def segments(request: Request) -> HTMLResponse:
+    """대상고객 탐색 — ★ **골격만**. `/u/generate` 카드에서만 들어온다 (nav 밖)."""
+    return templates.TemplateResponse(request, "user/segments.html", {})
+
+
+@router.get("/draft-setup", response_class=HTMLResponse)
+def draft_setup(request: Request) -> HTMLResponse:
+    """AI 광고 생성 · 포맷 선택 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나."""
+    return templates.TemplateResponse(request, "user/draft-setup.html", {})
+
+
+@router.get("/draft-editor", response_class=HTMLResponse)
+def draft_editor(request: Request) -> HTMLResponse:
+    """AI 광고 생성 · 섹션 에디터 — ★ **골격만**. `draft-setup` 에서만 들어온다 (nav 밖)."""
+    return templates.TemplateResponse(request, "user/draft-editor.html", {})
+
+
+@router.get("/mypage", response_class=HTMLResponse)
+def mypage(request: Request) -> HTMLResponse:
+    """마이페이지 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나."""
+    return templates.TemplateResponse(request, "user/mypage.html", {})
+
+
+@router.get("/help", response_class=HTMLResponse)
+def help_page(request: Request) -> HTMLResponse:
+    """도움말 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나."""
+    return templates.TemplateResponse(request, "user/help.html", {})
+
+
+@router.get("/matching", response_class=HTMLResponse)
+def matching(request: Request) -> HTMLResponse:
+    """매칭 — ★ **골격만**. 남은 화면 4종(계약 §8 ⑥) 중 하나 — 하위 화면 넷은 다음 차례."""
+    return templates.TemplateResponse(request, "user/matching.html", {})

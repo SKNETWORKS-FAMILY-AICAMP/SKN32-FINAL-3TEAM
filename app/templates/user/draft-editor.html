@@ -1,0 +1,20 @@
+{# app/templates/user/draft-editor.html — AI 광고 생성 · 섹션 에디터 · 소유자 lse (병렬작업 계약 §5)
+
+  ★ 이 파일은 **골격만** 잡아 둔 것 — generate.html 과 같은 요령이다. 섹션 목록·아트보드·
+    인스펙터 3단 편집 레이아웃은 발표자료 프로토타입(v7.2)의
+    `data-screen="draft-editor"` 절을 옮겨서 채운다.
+  🚨 `draft-setup`에서 "템플릿 만들기"로 들어온다 — nav 에는 안 올린다 (설계상
+     AI 광고 생성 화면의 하위 화면).
+  ⛔ 에디터 엔진(섹션 추가·이미지 배치·다운로드)이 없다 — 지금은 편집할 수 없다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 초안 편집{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block content %}
+<div class="user-shell">
+{% include "user/_nav.html" %}
+<a href="/u/draft-setup">← 뒤로가기</a>
+<h1>초안 편집</h1>
+
+<p>⬜ 섹션 목록·아트보드·인스펙터가 아직 없다 — 에디터 엔진이 붙으면 여기 채운다.</p>
+</div>
+{% endblock %}

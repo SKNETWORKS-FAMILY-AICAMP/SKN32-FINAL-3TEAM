@@ -1,0 +1,15 @@
+{# app/templates/user/help.html — 도움말 · 소유자 lse (병렬작업 계약 §5)
+
+  ★ 이 파일은 **골격만** 잡아 둔 것 — generate.html 과 같은 요령이다. 가이드·FAQ 탭 내용은
+    발표자료 프로토타입(v7.2)의 `data-screen="help"` 절을 옮겨서 채운다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 도움말{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block content %}
+<div class="user-shell">
+{% include "user/_nav.html" %}
+<h1>도움말</h1>
+
+<p>⬜ 가이드 · FAQ 탭이 아직 없다 — 내용 초안이 오면 여기 채운다.</p>
+</div>
+{% endblock %}

@@ -12,4 +12,12 @@
      {% if request.url.path == "/u/generate" %}aria-current="page"{% endif %}>카피생성</a>
   <a class="user-nav-link" href="/u/history"
      {% if request.url.path == "/u/history" %}aria-current="page"{% endif %}>이력</a>
+  <a class="user-nav-link" href="/u/draft-setup"
+     {% if request.url.path == "/u/draft-setup" %}aria-current="page"{% endif %}>AI 광고 생성</a>
+  <a class="user-nav-link" href="/u/matching"
+     {% if request.url.path == "/u/matching" %}aria-current="page"{% endif %}>매칭</a>
+  <a class="user-nav-link" href="/u/mypage"
+     {% if request.url.path == "/u/mypage" %}aria-current="page"{% endif %}>마이페이지</a>
+  <a class="user-nav-link" href="/u/help"
+     {% if request.url.path == "/u/help" %}aria-current="page"{% endif %}>도움말</a>
 </nav>

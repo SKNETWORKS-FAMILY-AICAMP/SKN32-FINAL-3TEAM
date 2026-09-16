@@ -196,6 +196,12 @@
       ]
     ],
     [
+      "/admin/",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/compose",
       [
         "POST"
@@ -232,9 +238,87 @@
       ]
     ],
     [
+      "/login",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/login",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/logout",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/search",
       [
         "POST"
+      ]
+    ],
+    [
+      "/u/",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/draft-editor",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/draft-setup",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/generate",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/help",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/history",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/judge",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/u/matching",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/mypage",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/segments",
+      [
+        "GET"
       ]
     ]
   ]
