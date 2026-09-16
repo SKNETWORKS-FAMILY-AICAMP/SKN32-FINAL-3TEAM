@@ -14,4 +14,6 @@
      {% if request.url.path == "/admin/dict-entries" %}aria-current="page"{% endif %}>표현 사전</a>
   <a class="admin-nav-link" href="/admin/admins"
      {% if request.url.path == "/admin/admins" %}aria-current="page"{% endif %}>관리자 계정</a>
+  <a class="admin-nav-link" href="/admin/errors"
+     {% if request.url.path == "/admin/errors" %}aria-current="page"{% endif %}>오류 로그</a>
 </nav>

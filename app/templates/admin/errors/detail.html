@@ -6,7 +6,8 @@
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 오류 로그 상세{% endblock %}
 {% block content %}
-{% include "admin/errors/_nav.html" %}
+<link rel="stylesheet" href="/static/admin_errors.css">
+{% include "admin/_nav.html" %}
 
 <p><a href="/admin/errors">← 오류 로그 목록</a></p>
 <h1><span class="er-lv er-lv-{{ row.level | lower }}">{{ row.level }}</span> {{ row.exc_type or row.logger_name }}</h1>

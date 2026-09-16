@@ -6,7 +6,8 @@
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 오류 로그{% endblock %}
 {% block content %}
-{% include "admin/errors/_nav.html" %}
+<link rel="stylesheet" href="/static/admin_errors.css">
+{% include "admin/_nav.html" %}
 
 <h1>오류 로그</h1>
 <p class="warn">🚨 <b>읽기 전용이다.</b> 로그 삭제·보관 기간 설정은 팀장 승인 전까지 없다.</p>
