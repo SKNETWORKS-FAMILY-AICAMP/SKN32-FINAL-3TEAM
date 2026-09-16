@@ -333,3 +333,19 @@ def matching(request: Request) -> HTMLResponse:
 def cs(request: Request) -> HTMLResponse:
     """고객센터 문의 — ★ **골격만**. 각 구역 사이드바 하단 버튼으로만 들어온다 (구역 밖)."""
     return _render(request, "user/cs.html")
+
+
+@router.get("/login", response_class=HTMLResponse)
+def user_login(request: Request) -> HTMLResponse:
+    """일반 회원 로그인 — ★ **골격만, 제출 버튼 없음**. `/login`(팀장 소유, governor 전용)과
+    다른 화면이다 — 계정 테이블이 없어 입력만 보여준다 (2026-09-16 판단).
+    """
+    return templates.TemplateResponse(request, "user/login.html", {})
+
+
+@router.get("/signup", response_class=HTMLResponse)
+def user_signup(request: Request) -> HTMLResponse:
+    """일반 회원 가입 — ★ **골격만, 제출 버튼 없음**. D-66이 클라우드 에디션에 열어 둔
+    가입 화면이지만, 계정 테이블이 진입점 B 엔진과 함께 오기 전까지는 폼만 보여준다.
+    """
+    return templates.TemplateResponse(request, "user/signup.html", {})

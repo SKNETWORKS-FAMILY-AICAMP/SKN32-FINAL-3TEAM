@@ -225,3 +225,52 @@
 }
 .home-recent-head p { font-size: .75rem; color: var(--u-clay); margin: 0; text-transform: uppercase; }
 .home-recent-head a { font-size: .8rem; color: var(--u-signal-ink); text-decoration: none; }
+
+/* login·signup — 계정 시스템 붙기 전 골격. 입력은 disabled, 제출 버튼은 없다 */
+.auth-card {
+  max-width: 22rem;
+  margin: 2.5rem auto;
+  padding: 0 1rem;
+}
+.auth-card h1 { margin-bottom: .25rem; }
+.auth-sub { color: var(--u-clay); margin-top: 0; margin-bottom: 1.5rem; }
+.auth-card label { display: block; font-size: .82rem; font-weight: 600; margin: 1rem 0 .35rem; }
+.auth-card input[type="email"],
+.auth-card input[type="password"],
+.auth-card input[type="text"],
+.auth-card input:not([type]) {
+  width: 100%;
+  padding: .55rem .7rem;
+  border: 1px solid var(--u-line);
+  border-radius: .6rem;
+  background: var(--u-surface2);
+  color: var(--u-clay);
+  font: inherit;
+}
+.auth-consent {
+  margin-top: 1.25rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--u-line);
+  border-radius: .7rem;
+  background: var(--u-surface2);
+}
+.auth-consent label {
+  display: flex;
+  gap: .5rem;
+  align-items: flex-start;
+  font-size: .78rem;
+  font-weight: 400;
+  color: var(--u-clay);
+  margin: 0 0 .6rem;
+}
+.auth-consent label:last-child { margin-bottom: 0; }
+.auth-note {
+  font-size: .8rem;
+  color: var(--u-clay);
+  background: var(--u-signal-soft);
+  border-radius: .6rem;
+  padding: .7rem .9rem;
+  margin-top: 1.25rem;
+}
+.auth-switch { text-align: center; font-size: .85rem; color: var(--u-clay); margin-top: 1.25rem; }
+.auth-switch a { color: var(--u-signal-ink); }

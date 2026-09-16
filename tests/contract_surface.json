@@ -316,6 +316,12 @@
       ]
     ],
     [
+      "/u/login",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/u/matching",
       [
         "GET"
@@ -329,6 +335,12 @@
     ],
     [
       "/u/segments",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/u/signup",
       [
         "GET"
       ]
