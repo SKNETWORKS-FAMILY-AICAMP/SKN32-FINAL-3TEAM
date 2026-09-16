@@ -20,7 +20,8 @@
      하나의 이용조건을 공유하므로 law_go_kr 1건으로 묶고 covers 로 편다.
   2. 미채택 판정은 blocked(협상 불가 · G1)와 분리해 not_adopted 로 둔다.
      가치가 없다는 이유로 G2 자료에 G1을 찍으면 등급 축 자체가 오염된다.
-  3. cond/unknown 은 fail-closed. 등급이 허용하는 상한을 넘지 않게 자른다.
+  3. cond/unknown 은 fail-closed — **등급과 무관하게 닫는다** (2026-09-16 · D-72).
+     그 뒤 등급이 허용하는 상한을 넘지 않게 한 번 더 자른다.
 """
 
 import json
@@ -103,11 +104,22 @@ AXIS = {"U1": "train", "U2": "raw", "U3": "cite", "U4": "deploy"}
 
 
 def use_vector(s):
-    """매트릭스 u → use. cond/unknown 은 등급 상한에 걸어 fail-closed."""
+    """매트릭스 u → use. `ok` 만 연다 — `cond`·`unknown` 은 fail-closed (D-72).
+
+    ⛔ **2026-09-16 이전에는 `cond` 가 `grade == "G2"` 일 때만 열렸다.** 그래서
+       **가장 허용적인 G3 의 `cond` 가 G2 의 `cond` 보다 더 세게 닫히는 역전**이 있었고,
+       G2 쪽 8축(5원천)은 **조건이 코드에 안 닿는 채로 열려 있었다** — docstring 은
+       fail-closed 라 적고 실제로는 fail-open 이었다.
+    🚨 `cond` 는 세 가지를 지고 있었다 — ① 법적 조건부(G2 쪽) ② **U 축에 「평가」가 없어서**
+       (`mfds_casebook` 의 note 가 직접 적었다) ③ 품질. 등급으로 가른 것은 ①②③ 이 등급과
+       상관되어 있어 **우연히** 맞아떨어진 것이지 설계가 아니었다.
+    ⬜ ②를 빼내려면 U 축에 `eval` 을 더해야 한다 — 읽는 쪽(홀드아웃 분리 게이트)과 같은
+       작업이어야 한다 (D-99). 그때까지 `cond` 는 전부 닫힌다.
+    """
     out = {}
     for u, key in AXIS.items():
         v = (s.get("u") or {}).get(key, "unknown")
-        allow = 1 if v == "ok" else (1 if v == "cond" and s["grade"] == "G2" else 0)
+        allow = 1 if v == "ok" else 0
         allow &= GRADE_CAP[s["grade"]][u]
         out[u] = "allow" if allow else "deny"
     return out
@@ -750,6 +762,13 @@ STATUS = {
     # 🔄 2026-09-07 D-64 — 혐오표현 데이터셋군은 Phase 3 이후 안건이다. aihub_558(비윤리 251,064문장·
     #    어휘단위 77,978·강도축)이 같은 자리를 더 넓게 덮어 K-MHaS 는 보조로 내린다. deploy·cite 는 UN.
     "k_mhas": "hold",
+    # 🔴 2026-09-16 — `cond` 규칙을 fail-closed 로 바로잡자 **전 용도가 deny** 가 되어
+    #    게이트 22 가 걸렸다(`status: collect` 인데 열린 용도가 0). 게이트가 지시한 대로 내린다.
+    #    ★ 이 원천의 쓸모는 「집계 수치(사실)」인데 `cite: ok` 가 **G2 상한(U3=0)에 잘린다.**
+    #      그리고 실제 용도는 「페르소나 **검증용 앵커**」(6층)라 train·cite 어느 쪽도 아니다 —
+    #      `mfds_casebook` 과 같은 **U 축 부재**다. `eval` 축이 서면 여기를 다시 본다.
+    #    🚨 caution 이 「표 전재는 협회 문의 필요」라 **확인이 선행**이다. 수집 0건이라 손실 없다.
+    "khff_survey": "hold",
     # D-108 — G0 는 확인이 선행이다. 확인 전에 자동으로 가져오면 fail-closed 가 수집 단계에서 뚫린다
     # D-108 — ★사용자제공. 자동 수집이 약관 위반이라는 사실을 caution 문장이 아니라 기계가 읽는 자리에 둔다
     # 🔄 2026-09-07 D-136 — nedrug.mfds.go.kr robots 가 「User-agent: * / Disallow: /」 전면 차단이다.

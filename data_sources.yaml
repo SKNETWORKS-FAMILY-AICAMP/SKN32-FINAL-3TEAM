@@ -195,7 +195,7 @@ sources:
     url: "https://www.mfds.go.kr/brd/m_99/list.do"
     layer: "1층 판정라벨"
     grade: G3
-    use: {U1: deny, U2: deny, U3: allow, U4: allow}
+    use: {U1: deny, U2: allow, U3: allow, U4: allow}
     constraints: [BY]
     redistributable: true
     value: B
@@ -233,7 +233,7 @@ sources:
     url: "https://www.mfds.go.kr/brd/m_218/view.do?seq=33711"
     layer: "1층 판정라벨"
     grade: G3
-    use: {U1: deny, U2: deny, U3: allow, U4: allow}
+    use: {U1: deny, U2: allow, U3: allow, U4: allow}
     constraints: [BY]
     redistributable: true
     value: A
@@ -471,7 +471,7 @@ sources:
     url: "https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039"
     layer: "2층 적법라벨"
     grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
     constraints: [BY]
     redistributable: true
     value: A
@@ -1034,12 +1034,12 @@ sources:
     url: "https://khff.or.kr/user/info/InfoBoardUserView.do?_menuNo=369&boardSeqno=10035&postsSeqno=119567"
     layer: "6층 세그먼트·페르소나"
     grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
     constraints: [BY]
     redistributable: true
     value: A
     cost: free
-    status: collect
+    status: hold
     access: "보도자료 웹 공개"
     scale: "소비자실태 3,050명 (서울+5대광역시, 만20~79세)"
     license: "🔴 이용조건 문구 없음. 집계 통계는 **사실**이라 인용 가능하나 보도자료 문장·표 전재는 별개다 (2026-09-02 판정)"
@@ -1250,7 +1250,7 @@ sources:
     url: "https://developers.google.com/youtube/terms/developer-policies"
     layer: "플랫폼 API"
     grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
     constraints: [TOS]
     redistributable: true
     value: C
@@ -1272,7 +1272,7 @@ sources:
     url: "https://developers.google.com/search/blog/2025/07/trends-api"
     layer: "플랫폼 API"
     grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: deny}
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
     constraints: [GATED, TOS]
     redistributable: true
     value: C
