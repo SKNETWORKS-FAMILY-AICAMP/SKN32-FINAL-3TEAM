@@ -1,0 +1,40 @@
+{# app/templates/admin/docs/terms_list.html — 약관 버전 목록 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** "새 버전 등록" 버튼은 자리만 잡은 뼈대다 — action 없음.
+  🔴 약관 버전 테이블이 아직 없다 — 전부 더미다 (admin_terms.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 약관 버전 관리{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<h1>약관 버전 관리</h1>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 약관 버전 테이블이 아직 없어요 — 법무·정책 쪽 관리 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
+
+<form class="filter-bar" style="justify-content:flex-end;">
+  <button type="button" class="new-btn" disabled title="⬜ 아직 못 쓴다 — 테이블 승인 대기 중">+ 새 버전 등록</button>
+</form>
+
+<table>
+  <tr>
+    <th>약관명</th><th>현재 버전</th><th>시행일</th><th>이전 버전</th><th>변경 사유</th><th>상태</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="/admin/terms/{{ r.id }}">{{ r.name }}</a></td>
+    <td>{{ r.version }}</td>
+    <td>{{ r.effective_date }}</td>
+    <td>{{ r.prev_version }}</td>
+    <td>{{ r.reason }}</td>
+    <td>{{ r.status }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<style>
+.admin-shell .new-btn { margin-left: auto; padding: .5rem 1rem; border-radius: .5rem; border: none; background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed; opacity: .6; }
+</style>
+</div>
+{% endblock %}

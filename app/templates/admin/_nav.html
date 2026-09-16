@@ -19,11 +19,15 @@
   <a class="admin-sidebar-top" href="/admin/"
      {% if request.url.path == "/admin/" %}aria-current="page"{% endif %}>대시보드</a>
 
-  <details class="admin-nav-cat" {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") %}open{% endif %}>
+  <details class="admin-nav-cat" {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") or request.url.path == "/admin/review-docs" or request.url.path.startswith("/admin/review-docs/") or request.url.path == "/admin/terms" or request.url.path.startswith("/admin/terms/") %}open{% endif %}>
     <summary>문서관리</summary>
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/sources"
          {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") %}aria-current="page"{% endif %}>판정 근거</a>
+      <a class="admin-nav-sub" href="/admin/review-docs"
+         {% if request.url.path == "/admin/review-docs" or request.url.path.startswith("/admin/review-docs/") %}aria-current="page"{% endif %}>심사 서류</a>
+      <a class="admin-nav-sub" href="/admin/terms"
+         {% if request.url.path == "/admin/terms" or request.url.path.startswith("/admin/terms/") %}aria-current="page"{% endif %}>약관 관리</a>
     </div>
   </details>
 
