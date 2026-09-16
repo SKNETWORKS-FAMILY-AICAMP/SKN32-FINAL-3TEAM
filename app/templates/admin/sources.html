@@ -12,15 +12,45 @@
 <h1>판정 근거 관리</h1>
 <p class="warn">🚨 <b>읽기 전용이다.</b> 등급 판정·2인 확인은 별도 절차가 정해진 뒤에 연다.</p>
 
+<form class="filter-bar" method="get" action="/admin/sources">
+  <label>등급
+    <select name="grade">
+      <option value="" {% if not grade %}selected{% endif %}>전체</option>
+      {% for g in grades %}
+      <option value="{{ g }}" {% if grade == g %}selected{% endif %}>{{ g }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>검증
+    <select name="verified">
+      <option value="" {% if not verified %}selected{% endif %}>전체</option>
+      <option value="true" {% if verified == "true" %}selected{% endif %}>검증 완료</option>
+      <option value="false" {% if verified == "false" %}selected{% endif %}>미검증</option>
+    </select>
+  </label>
+  <label>정렬
+    <select name="sort">
+      <option value="grade_decided_at_desc" {% if sort == "grade_decided_at_desc" %}selected{% endif %}>판정일 최신순</option>
+      <option value="grade_decided_at_asc" {% if sort == "grade_decided_at_asc" %}selected{% endif %}>판정일 오래된순</option>
+      <option value="name_asc" {% if sort == "name_asc" %}selected{% endif %}>소스명순</option>
+      <option value="grade_asc" {% if sort == "grade_asc" %}selected{% endif %}>등급순</option>
+    </select>
+  </label>
+  <button type="submit">적용</button>
+  {% if grade or verified or sort != "grade_decided_at_desc" %}
+  <a class="reset-link" href="/admin/sources">초기화</a>
+  {% endif %}
+</form>
+
 {% if sources is none %}
 <p>DB 에 못 붙었다 — <code>launcher.py db-up</code> 을 먼저 돌린다.</p>
 {% elif not sources %}
-<p>등록된 소스가 없다.</p>
+<p>조건에 맞는 소스가 없다.</p>
 {% else %}
 <table>
   <tr>
     <th>소스명</th><th>발행처</th><th>층</th><th>등급</th>
-    <th>검증</th><th>판정일</th><th>판정자</th><th>확인자</th>
+    <th>검증</th><th>판정일</th><th>1차 확인자</th><th>2차 확인자</th>
   </tr>
   {% for s in sources %}
   <tr>
@@ -35,6 +65,16 @@
   </tr>
   {% endfor %}
 </table>
+
+{% if total_pages > 1 %}
+<nav class="pager" aria-label="페이지">
+  {% set qs = "grade=" ~ (grade or "") ~ "&verified=" ~ (verified or "") ~ "&sort=" ~ sort %}
+  <a href="/admin/sources?{{ qs }}&page={{ page - 1 }}" {% if page <= 1 %}class="disabled"{% endif %}>← 이전</a>
+  <span>{{ page }} / {{ total_pages }} 쪽 (전체 {{ total }}건)</span>
+  <a href="/admin/sources?{{ qs }}&page={{ page + 1 }}" {% if page >= total_pages %}class="disabled"{% endif %}>다음 →</a>
+</nav>
 {% endif %}
+{% endif %}
+
 </div>
 {% endblock %}

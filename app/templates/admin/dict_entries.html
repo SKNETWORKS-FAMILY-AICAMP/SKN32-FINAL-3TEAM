@@ -15,10 +15,35 @@
 <h1>표현 사전 (판정 근거)</h1>
 <p class="warn">🚨 <b>읽기 전용이다.</b> 사전 등록·수정은 별도 절차가 정해진 뒤에 연다.</p>
 
+<form class="filter-bar" method="get" action="/admin/dict-entries">
+  <label>종류
+    <select name="dict_kind">
+      <option value="" {% if not dict_kind %}selected{% endif %}>전체</option>
+      {% for k in dict_kinds %}
+      <option value="{{ k }}" {% if dict_kind == k %}selected{% endif %}>{{ k }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>용어 검색
+    <input type="text" name="q" value="{{ q }}" placeholder="용어 일부 입력">
+  </label>
+  <label>정렬
+    <select name="sort">
+      <option value="dict_kind_term" {% if sort == "dict_kind_term" %}selected{% endif %}>종류·용어순</option>
+      <option value="term_asc" {% if sort == "term_asc" %}selected{% endif %}>용어순</option>
+      <option value="confidence_desc" {% if sort == "confidence_desc" %}selected{% endif %}>신뢰도 높은순</option>
+    </select>
+  </label>
+  <button type="submit">적용</button>
+  {% if dict_kind or q or sort != "dict_kind_term" %}
+  <a class="reset-link" href="/admin/dict-entries">초기화</a>
+  {% endif %}
+</form>
+
 {% if entries is none %}
 <p>DB 에 못 붙었다 — <code>launcher.py db-up</code> 을 먼저 돌린다.</p>
 {% elif not entries %}
-<p>등록된 표현이 없다.</p>
+<p>조건에 맞는 표현이 없다.</p>
 {% else %}
 <table>
   <tr>
@@ -36,6 +61,15 @@
   </tr>
   {% endfor %}
 </table>
+
+{% if total_pages > 1 %}
+<nav class="pager" aria-label="페이지">
+  {% set qs = "dict_kind=" ~ (dict_kind or "") ~ "&q=" ~ (q or "") ~ "&sort=" ~ sort %}
+  <a href="/admin/dict-entries?{{ qs }}&page={{ page - 1 }}" {% if page <= 1 %}class="disabled"{% endif %}>← 이전</a>
+  <span>{{ page }} / {{ total_pages }} 쪽 (전체 {{ total }}건)</span>
+  <a href="/admin/dict-entries?{{ qs }}&page={{ page + 1 }}" {% if page >= total_pages %}class="disabled"{% endif %}>다음 →</a>
+</nav>
+{% endif %}
 {% endif %}
 </div>
 {% endblock %}

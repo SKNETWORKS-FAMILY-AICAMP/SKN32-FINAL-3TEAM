@@ -45,8 +45,8 @@
   <h2>현재 판정 근거</h2>
   <table class="kv">
     <tr><th>판정일</th><td>{{ source.grade_decided_at.strftime("%Y-%m-%d %H:%M") if source.grade_decided_at else "-" }}</td></tr>
-    <tr><th>판정자</th><td>{{ source.grade_decided_by }}</td></tr>
-    <tr><th>확인자</th><td>{{ source.grade_reviewed_by }}</td></tr>
+    <tr><th>1차 확인자</th><td>{{ source.grade_decided_by }}</td></tr>
+    <tr><th>2차 확인자</th><td>{{ source.grade_reviewed_by }}</td></tr>
     <tr><th>근거 URL</th><td>{% if source.grade_evidence_url %}<a href="{{ source.grade_evidence_url }}" target="_blank" rel="noopener">{{ source.grade_evidence_url }}</a>{% else %}-{% endif %}</td></tr>
     <tr><th>이전 소스(supersedes)</th><td>{{ source.supersedes or "-" }}</td></tr>
   </table>
@@ -54,7 +54,7 @@
 
 <section>
   <h2>등급 판단 기준 (참고)</h2>
-  <p class="hint">판정자·확인자가 참고하는 기준표 — 자세한 건
+  <p class="hint">1차·2차 확인자가 참고하는 기준표 — 자세한 건
     <code>docs/psj/판정근거_등급기준_초안.md</code> 참고 (아직 팀 논의 전 초안).</p>
   <table class="kv small">
     <tr><th>L1 법적 기준</th><td>국가법령정보센터에 조문으로 특정 가능한 법률·시행령·시행규칙</td></tr>

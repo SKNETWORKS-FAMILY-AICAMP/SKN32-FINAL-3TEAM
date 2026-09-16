@@ -80,13 +80,46 @@ def index(request: Request) -> HTMLResponse:
     )
 
 
-def _list_sources() -> list[dict] | None:
+_SOURCE_GRADES = ("G0", "G1", "G2", "G3")
+_SOURCE_SORTS = {
+    "grade_decided_at_desc": "grade_decided_at DESC",
+    "grade_decided_at_asc": "grade_decided_at ASC",
+    "name_asc": "name ASC",
+    "grade_asc": "grade ASC",
+}
+_PAGE_SIZE = 20
+
+
+def _list_sources(
+    *,
+    grade: str | None = None,
+    verified: bool | None = None,
+    sort: str = "grade_decided_at_desc",
+    page: int = 1,
+) -> tuple[list[dict] | None, int]:
     """`source` 테이블 목록 — 목업 `sources` 화면 컬럼에 맞춰 낸다.
 
     🚨 읽기 전용이다 — D-66 2인 확인 절차가 쓰기 경로를 아직 안 열었다.
-    ⬜ DB 접속 실패 시 **None** 을 낸다 (`_table_counts()` 의 빈 dict 와 같은 정신 —
+    ⬜ DB 접속 실패 시 **(None, 0)** 을 낸다 (`_table_counts()` 의 빈 dict 와 같은 정신 —
        화면이 죽지 않고 "DB 없음" 상태를 그린다, D-51).
+    🆕 등급·검증여부 필터, 정렬, 페이지네이션 — 전부 쿼리 파라미터다. DB 스키마는
+       안 건드린다 (병렬작업 계약 §5 `db/**` 등급 1 승인 필요 없음).
     """
+    order_by = _SOURCE_SORTS.get(sort, _SOURCE_SORTS["grade_decided_at_desc"])
+    where = []
+    params: dict = {}
+    if grade in _SOURCE_GRADES:
+        where.append("grade = %(grade)s")
+        params["grade"] = grade
+    if verified is not None:
+        where.append("verified = %(verified)s")
+        params["verified"] = verified
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+
+    offset = max(page - 1, 0) * _PAGE_SIZE
+    params["limit"] = _PAGE_SIZE
+    params["offset"] = offset
+
     try:
         import psycopg  # noqa: PLC0415
         from psycopg.rows import dict_row  # noqa: PLC0415
@@ -94,39 +127,114 @@ def _list_sources() -> list[dict] | None:
         from app.settings import dsn  # noqa: PLC0415
 
         with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT count(*) AS n FROM source {where_sql}", params)  # noqa: S608
+            total = cur.fetchone()["n"]
+
             cur.execute(
-                """
+                f"""
                 SELECT source_id, name, publisher, grade, layer, verified,
                        grade_decided_at, grade_decided_by, grade_reviewed_by
                 FROM source
-                ORDER BY grade_decided_at DESC
-                """
+                {where_sql}
+                ORDER BY {order_by}
+                LIMIT %(limit)s OFFSET %(offset)s
+                """,  # noqa: S608 — order_by 는 화이트리스트(_SOURCE_SORTS)에서만 온다
+                params,
             )
-            return cur.fetchall()
+            return cur.fetchall(), total
     except Exception as e:  # noqa: BLE001
         _log.warning("admin: source 조회 실패 — %s", type(e).__name__)
-        return None
+        return None, 0
 
 
 @router.get("/sources", response_class=HTMLResponse)
-def sources(request: Request) -> HTMLResponse:
+def sources(
+    request: Request,
+    grade: str | None = None,
+    verified: str | None = None,
+    sort: str = "grade_decided_at_desc",
+    page: int = 1,
+) -> HTMLResponse:
     """판정 근거(소스 레지스트리) 목록 — 읽기 전용.
 
     🚨 목업 `sources` 화면의 백엔드다. 쓰기(등급 판정·2인 확인)는 아직 안 연다 —
        그 절차(§8 ⑬)가 정해지기 전까지 이 화면은 **보여 주기만** 한다 (D-90).
+    🆕 `?grade=G1&verified=true&sort=name_asc&page=2` — 필터·정렬·페이지네이션.
     """
     actor = require_governor(request)
-    rows = _list_sources()
+    verified_bool = {"true": True, "false": False}.get(verified) if verified else None
+    page = max(page, 1)
+    rows, total = _list_sources(grade=grade, verified=verified_bool, sort=sort, page=page)
+    total_pages = max((total + _PAGE_SIZE - 1) // _PAGE_SIZE, 1)
     return templates.TemplateResponse(
-        request, "admin/sources.html", {"sources": rows, "actor": actor}
+        request,
+        "admin/sources.html",
+        {
+            "sources": rows,
+            "actor": actor,
+            "grade": grade,
+            "verified": verified,
+            "sort": sort,
+            "page": page,
+            "total": total,
+            "total_pages": total_pages,
+            "grades": _SOURCE_GRADES,
+        },
     )
 
 
-def _list_dict_entries() -> list[dict] | None:
+_DICT_SORTS = {
+    "dict_kind_term": "dict_kind, term",
+    "term_asc": "term ASC",
+    "confidence_desc": "confidence DESC NULLS LAST",
+}
+
+
+def _list_dict_kinds() -> list[str]:
+    """`dict_entry.dict_kind` 실제 값 목록 — ENUM 이 아니라 TEXT 라 화이트리스트 대신
+    DB 에 실제로 있는 값으로 드롭다운을 채운다 (D-99 주석 참고 — 표기가 갈릴 수 있음).
+    DB 접속 실패 시 빈 리스트.
+    """
+    try:
+        import psycopg  # noqa: PLC0415
+
+        from app.settings import dsn  # noqa: PLC0415
+
+        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT dict_kind FROM dict_entry ORDER BY dict_kind")
+            return [r[0] for r in cur.fetchall()]
+    except Exception as e:  # noqa: BLE001
+        _log.warning("admin: dict_kind 조회 실패 — %s", type(e).__name__)
+        return []
+
+
+def _list_dict_entries(
+    *,
+    dict_kind: str | None = None,
+    q: str | None = None,
+    sort: str = "dict_kind_term",
+    page: int = 1,
+) -> tuple[list[dict] | None, int]:
     """`dict_entry` 목록 — 금지표현·적법표현 등 판정용 사전. 읽기 전용.
 
-    🚨 `_list_sources()` 와 같은 패턴 — DB 접속 실패 시 None (D-51).
+    🚨 `_list_sources()` 와 같은 패턴 — DB 접속 실패 시 (None, 0) (D-51).
+    🆕 종류 필터, 용어 검색(ILIKE), 정렬, 페이지네이션.
     """
+    order_by = _DICT_SORTS.get(sort, _DICT_SORTS["dict_kind_term"])
+    where = []
+    params: dict = {}
+    if dict_kind:
+        where.append("dict_kind = %(dict_kind)s")
+        params["dict_kind"] = dict_kind
+    if q:
+        where.append("term ILIKE %(q)s")
+        params["q"] = f"%{q}%"
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+
+    offset = max(page - 1, 0) * _PAGE_SIZE
+    params["limit"] = _PAGE_SIZE
+    params["offset"] = offset
+
     try:
         import psycopg  # noqa: PLC0415
         from psycopg.rows import dict_row  # noqa: PLC0415
@@ -134,30 +242,57 @@ def _list_dict_entries() -> list[dict] | None:
         from app.settings import dsn  # noqa: PLC0415
 
         with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT count(*) AS n FROM dict_entry {where_sql}", params)  # noqa: S608
+            total = cur.fetchone()["n"]
+
             cur.execute(
-                """
+                f"""
                 SELECT term, dict_kind, violation_type, law_ref, exact_match, confidence
                 FROM dict_entry
-                ORDER BY dict_kind, term
-                """
+                {where_sql}
+                ORDER BY {order_by}
+                LIMIT %(limit)s OFFSET %(offset)s
+                """,  # noqa: S608 — order_by 는 화이트리스트(_DICT_SORTS)에서만 온다
+                params,
             )
-            return cur.fetchall()
+            return cur.fetchall(), total
     except Exception as e:  # noqa: BLE001
         _log.warning("admin: dict_entry 조회 실패 — %s", type(e).__name__)
-        return None
+        return None, 0
 
 
 @router.get("/dict-entries", response_class=HTMLResponse)
-def dict_entries(request: Request) -> HTMLResponse:
+def dict_entries(
+    request: Request,
+    dict_kind: str | None = None,
+    q: str | None = None,
+    sort: str = "dict_kind_term",
+    page: int = 1,
+) -> HTMLResponse:
     """표현 사전(판정 근거) 목록 — 읽기 전용.
 
     🚨 `dict_entry` 는 원문(source/fragment)에서 뽑아낸 판정용 사전이다 — 목업의
        "판정 근거 관리"(법률·고시 원문)와는 다른 개념이라 라우트를 분리했다.
+    🆕 `?dict_kind=금지표현&q=효능&sort=term_asc&page=2` — 필터·검색·정렬·페이지네이션.
     """
     actor = require_governor(request)
-    rows = _list_dict_entries()
+    page = max(page, 1)
+    rows, total = _list_dict_entries(dict_kind=dict_kind, q=q, sort=sort, page=page)
+    total_pages = max((total + _PAGE_SIZE - 1) // _PAGE_SIZE, 1)
     return templates.TemplateResponse(
-        request, "admin/dict_entries.html", {"entries": rows, "actor": actor}
+        request,
+        "admin/dict_entries.html",
+        {
+            "entries": rows,
+            "actor": actor,
+            "dict_kind": dict_kind,
+            "q": q or "",
+            "sort": sort,
+            "page": page,
+            "total": total,
+            "total_pages": total_pages,
+            "dict_kinds": _list_dict_kinds(),
+        },
     )
 
 
