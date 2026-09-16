@@ -19,6 +19,22 @@
   <a class="admin-sidebar-top" href="/admin/"
      {% if request.url.path == "/admin/" %}aria-current="page"{% endif %}>대시보드</a>
 
+  <details class="admin-nav-cat" {% if request.url.path.startswith("/admin/stats/") %}open{% endif %}>
+    <summary>통계</summary>
+    <div class="admin-nav-sub-list">
+      <a class="admin-nav-sub" href="/admin/stats/dashboard"
+         {% if request.url.path == "/admin/stats/dashboard" %}aria-current="page"{% endif %}>대시보드</a>
+      <a class="admin-nav-sub" href="/admin/stats/quality"
+         {% if request.url.path == "/admin/stats/quality" or request.url.path == "/admin/stats/quality/judge" %}aria-current="page"{% endif %}>검수 통계</a>
+      <a class="admin-nav-sub" href="/admin/stats/quality/generation"
+         {% if request.url.path == "/admin/stats/quality/generation" %}aria-current="page"{% endif %}>생성 통계</a>
+      <a class="admin-nav-sub" href="/admin/stats/member"
+         {% if request.url.path == "/admin/stats/member" %}aria-current="page"{% endif %}>이용자 통계</a>
+      <a class="admin-nav-sub" href="/admin/stats/revenue"
+         {% if request.url.path == "/admin/stats/revenue" %}aria-current="page"{% endif %}>매출 통계</a>
+    </div>
+  </details>
+
   <details class="admin-nav-cat" {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") or request.url.path == "/admin/review-docs" or request.url.path.startswith("/admin/review-docs/") or request.url.path == "/admin/terms" or request.url.path.startswith("/admin/terms/") %}open{% endif %}>
     <summary>문서관리</summary>
     <div class="admin-nav-sub-list">

@@ -30,6 +30,7 @@ from app.routers.admin_errors import router as admin_errors_router
 from app.routers.admin_members import router as admin_members_router
 from app.routers.admin_review_docs import router as admin_review_docs_router
 from app.routers.admin_signup_review import router as admin_signup_review_router
+from app.routers.admin_stats import router as admin_stats_router
 from app.routers.admin_terms import router as admin_terms_router
 from app.routers.auth import router as auth_router
 from app.routers.user import router as user_router
@@ -42,6 +43,7 @@ admin_router.include_router(admin_enterprise_router)
 admin_router.include_router(admin_members_router)
 admin_router.include_router(admin_review_docs_router)
 admin_router.include_router(admin_signup_review_router)
+admin_router.include_router(admin_stats_router)
 admin_router.include_router(admin_terms_router)
 
 # 🚨 오류 로그 화면(ssm)은 `admin.py` 와 파일을 가르고 **관리자 라우터 아래에 매단다** —

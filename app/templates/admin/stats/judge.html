@@ -1,0 +1,66 @@
+{# app/templates/admin/stats/judge.html — 판정 통계 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다(목업 `mockDownload`).
+  🔴 `judge_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
+  🚨 품질 통계 원본(목업 `qualityCombinedViewV2()`)의 `qp-judge` 패널에 해당한다.
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 판정 통계{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<h1>판정 통계</h1>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>judge_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
+
+<nav class="period-tabs" aria-label="세부 통계">
+  <a href="/admin/stats/quality">전체</a>
+  <a href="/admin/stats/quality/judge" class="active" aria-current="page">판정 통계</a>
+  <a href="/admin/stats/quality/generation">생성 통계</a>
+</nav>
+
+<div class="stat-kpis">
+  <div class="stat-kpi"><span>판정 정확도</span><b>{{ kpi.accuracy }}</b></div>
+  <div class="stat-kpi"><span>총 판정 건수</span><b>{{ kpi.total_cases }}</b></div>
+  <div class="stat-kpi"><span>평균 판정 시간</span><b>{{ kpi.avg_time }}</b></div>
+  <div class="stat-kpi"><span>이의제기 승인율</span><b>{{ kpi.appeal_approval_rate }}</b></div>
+</div>
+
+<h2>판정 엔진 구성</h2>
+<div class="usage-trend">
+  {% for row in engine_mix %}
+  <div class="usage-row">
+    <span class="usage-label">{{ row.label }}</span>
+    <div class="usage-bar" style="width: {{ row.pct }}%;"></div>
+    <span class="usage-value">{{ row.pct }}%</span>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>오판정 사례</h2>
+<table>
+  <tr><th>사례 ID</th><th>카테고리</th><th>예측</th><th>실제</th><th>발생일</th></tr>
+  {% for c in miscases %}
+  <tr><td>{{ c.id }}</td><td>{{ c.category }}</td><td>{{ c.predicted }}</td><td>{{ c.actual }}</td><td>{{ c.date }}</td></tr>
+  {% endfor %}
+</table>
+<p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
+
+<style>
+.admin-shell .stat-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
+.admin-shell .stat-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 8rem; }
+.admin-shell .stat-kpi span { font-size: .8rem; color: var(--a-clay); }
+.admin-shell .stat-kpi b { font-size: 1.2rem; }
+.admin-shell .usage-trend { display: flex; flex-direction: column; gap: .5rem; max-width: 30rem; margin-bottom: 1.5rem; }
+.admin-shell .usage-row { display: flex; align-items: center; gap: .6rem; }
+.admin-shell .usage-label { width: 6rem; font-size: .8rem; color: var(--a-clay); }
+.admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
+.admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
+.admin-shell .period-tabs { display: flex; gap: .4rem; margin-bottom: .8rem; }
+.admin-shell .period-tabs a { padding: .3rem .8rem; border: 1px solid var(--a-line); border-radius: .4rem; text-decoration: none; color: var(--a-ink); font-size: .85rem; }
+.admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
+</style>
+</div>
+{% endblock %}
