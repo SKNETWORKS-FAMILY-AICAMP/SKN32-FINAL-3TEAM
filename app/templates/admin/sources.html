@@ -24,7 +24,7 @@
   </tr>
   {% for s in sources %}
   <tr>
-    <td>{{ s.name }}</td>
+    <td><a href="/admin/sources/{{ s.source_id }}">{{ s.name }}</a></td>
     <td>{{ s.publisher }}</td>
     <td>{{ s.layer }}</td>
     <td>{{ s.grade }}</td>

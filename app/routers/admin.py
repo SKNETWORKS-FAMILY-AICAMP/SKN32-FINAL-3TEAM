@@ -202,6 +202,52 @@ def admins(request: Request) -> HTMLResponse:
     )
 
 
+def _get_source(source_id: str) -> dict | None:
+    """`source` 단건 조회 — 상세(등급 판정 제안) 화면용. 읽기 전용.
+
+    🚨 `_list_sources()` 와 같은 패턴 — DB 접속 실패·행 없음 모두 None (D-51).
+       (있음/없음/DB 없음을 구분하지 않는다 — 화면이 "찾을 수 없다"로 셋 다 받는다.)
+    """
+    try:
+        import psycopg  # noqa: PLC0415
+        from psycopg.rows import dict_row  # noqa: PLC0415
+
+        from app.settings import dsn  # noqa: PLC0415
+
+        with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT source_id, name, publisher, url, layer, grade, cost, value,
+                       access, license, attribution, collector, refresh,
+                       grade_decided_by, grade_reviewed_by, grade_decided_at,
+                       grade_evidence_url, supersedes, verified, note
+                FROM source
+                WHERE source_id = %s
+                """,
+                (source_id,),
+            )
+            return cur.fetchone()
+    except Exception as e:  # noqa: BLE001
+        _log.warning("admin: source 단건 조회 실패 — %s", type(e).__name__)
+        return None
+
+
+@router.get("/sources/{source_id}", response_class=HTMLResponse)
+def source_detail(request: Request, source_id: str) -> HTMLResponse:
+    """소스 상세 — 등급 판정 제안 · 2인 확인 화면.
+
+    ⬜ **쓰기는 아직 안 연다.** 제안·확인 버튼은 화면엔 있지만 비활성(disabled) 이다 —
+       `source_grade_proposal`/`source_grade_history` 테이블 팀장 승인이 먼저다
+       (docs/psj/소스등급_판정흐름_스키마초안.md, 병렬작업 계약 §5 `db/**` 등급 1).
+       승인 나오면 이 화면에 POST 라우트만 붙이면 된다 — 뼈대는 미리 만들어 둔다.
+    """
+    actor = require_governor(request)
+    row = _get_source(source_id)
+    return templates.TemplateResponse(
+        request, "admin/source_detail.html", {"source": row, "actor": actor}
+    )
+
+
 @router.get("/api/counts")
 def api_counts(request: Request) -> dict[str, int]:
     """🔌 **목업 프론트 연결 배관 테스트용** (2026-09-14).
