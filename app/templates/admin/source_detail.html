@@ -54,13 +54,13 @@
 
 <section>
   <h2>등급 판단 기준 (참고)</h2>
-  <p class="hint">1차·2차 확인자가 참고하는 기준표 — 자세한 건
+  <p class="hint">1차·2차 확인자가 참고하는 기준표(D-15·D-16·D-106) — 자세한 건
     <code>docs/psj/판정근거_등급기준_초안.md</code> 참고 (아직 팀 논의 전 초안).</p>
   <table class="kv small">
-    <tr><th>L1 법적 기준</th><td>국가법령정보센터에 조문으로 특정 가능한 법률·시행령·시행규칙</td></tr>
-    <tr><th>L2 행정 기준</th><td>관보 고시번호가 있는 행정규칙·고시·지침</td></tr>
-    <tr><th>L3 공식 참고</th><td>정부·공공기관 명의로 발행된 안내서·가이드라인(고시번호 없음)</td></tr>
-    <tr><th>L4 내부 검증</th><td>L1~L3 을 근거로 팀이 재정리, 원출처 역추적 가능</td></tr>
+    <tr><th>G0 미확인</th><td>이용조건 미확인 — fail-closed, 전 용도(U1~U4) 닫힘. 2인 판정으로만 승격</td></tr>
+    <tr><th>G1 배제</th><td>확인 결과 "허락 없음"으로 판명 — 비교군으로도 쓰지 않음 (D-106)</td></tr>
+    <tr><th>G2 사실만</th><td>원문·해설 문장은 취하지 않고 사실만 취함 — U2 원문색인·U3 화면인용 deny (D-16)</td></tr>
+    <tr><th>G3 원문 자유</th><td>원문 그대로 보관·색인·인용·배포 가능</td></tr>
   </table>
 </section>
 
@@ -70,7 +70,7 @@
   <form class="proposal-form">
     <label>새 등급
       <select disabled>
-        <option>L1</option><option>L2</option><option>L3</option><option>L4</option>
+        <option>G0</option><option>G1</option><option>G2</option><option>G3</option>
       </select>
     </label>
     <label>근거 URL
