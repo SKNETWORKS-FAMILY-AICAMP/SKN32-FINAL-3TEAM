@@ -54,3 +54,88 @@
   background: var(--u-signal-soft);
   font-weight: 600;
 }
+
+/* 목록 화면 공통 — 필터 칩·페이지네이션. history 가 먼저 쓰고, 다음 목록 화면이 이어 쓴다. */
+.filter-chips {
+  display: flex;
+  gap: .4rem;
+  margin-bottom: 1rem;
+}
+.filter-chips .filter-chip {
+  padding: .3rem .8rem;
+  border-radius: 999px;
+  border: 1px solid var(--u-line);
+  color: var(--u-clay);
+  text-decoration: none;
+  font-size: .85rem;
+}
+.filter-chips .filter-chip:hover { background: var(--u-surface2); color: var(--u-ink); }
+.filter-chips .filter-chip-active {
+  color: var(--u-signal-ink);
+  background: var(--u-signal-soft);
+  border-color: var(--u-signal);
+  font-weight: 600;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-top: 1rem;
+  font-size: .85rem;
+}
+.pagination a { color: var(--u-signal-ink); text-decoration: none; }
+.pagination a:hover { text-decoration: underline; }
+.pagination-edge { color: var(--u-clay); }
+.pagination-page { color: var(--u-clay); }
+
+/* history — 클릭하면 옆에 상세가 펼쳐지는 목록 (서버 렌더 토글, JS 없음) */
+.history-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.history-layout:has(.history-detail) { grid-template-columns: 1fr 320px; }
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--u-line);
+  border-radius: .75rem;
+  overflow: hidden;
+}
+.history-list li + li { border-top: 1px solid var(--u-line); }
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .65rem 1rem;
+  color: var(--u-ink);
+  text-decoration: none;
+}
+.history-row:hover { background: var(--u-surface2); }
+.history-row-open { background: var(--u-signal-soft); }
+.history-row-date { font-size: .8rem; color: var(--u-clay); width: 9rem; flex-shrink: 0; }
+.history-row-verdict { flex: 1; }
+.history-row-risk { color: var(--u-clay); width: 2rem; text-align: center; }
+.history-row-chevron { color: var(--u-clay); width: 1rem; text-align: center; }
+
+.history-detail {
+  border: 1px solid var(--u-line);
+  border-radius: .75rem;
+  padding: 1rem;
+  background: var(--u-surface2);
+}
+.history-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .75rem;
+  font-weight: 600;
+}
+.history-detail-head a { color: var(--u-clay); text-decoration: none; }
+.history-detail dl { margin: 0; }
+.history-detail dt { font-size: .75rem; color: var(--u-clay); margin-top: .5rem; }
+.history-detail dd { margin: 0; }
+.history-detail-note { font-size: .8rem; color: var(--u-clay); margin-top: .75rem; }

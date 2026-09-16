@@ -2,6 +2,9 @@
 
   🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인). `judgment` 표를 그대로 읽는다.
   ⬜ 판정 엔진이 아직 없어 지금은 항상 빈 목록이다 — 정상이다.
+  🔄 디자인(발표자료 프로토타입 v7.2)은 클릭 → 옆에 JS 드로어인데, 이 프로젝트는 CSP 가
+     인라인 스크립트를 막고 HTMX 도 아직 안 붙었다. `?open_id=` 링크로 같은 흐름을
+     서버 렌더만으로 낸다 (2026-09-16). 근거·QnA 는 뺐다 — 결론·위험도·법령 버전만.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 검수 이력{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
@@ -10,20 +13,51 @@
 {% include "user/_nav.html" %}
 <h1>검수 이력</h1>
 
-{% if judgments %}
-<table>
-  <tr><th>판정 시각</th><th>결론</th><th>위험도</th><th>법령 버전</th></tr>
-  {% for j in judgments %}
-  <tr>
-    <td>{{ j.judged_at }}</td>
-    <td>{{ j.verdict }}</td>
-    <td>{{ j.risk_final if j.risk_final is not none else "—" }}</td>
-    <td>{{ j.law_version }}</td>
-  </tr>
+<div class="filter-chips">
+  <a class="filter-chip{{ ' filter-chip-active' if not verdict }}" href="?page=1">전체</a>
+  {% for v in verdicts %}
+  <a class="filter-chip{{ ' filter-chip-active' if verdict == v }}" href="?page=1&verdict={{ v }}">{{ v }}</a>
   {% endfor %}
-</table>
-{% else %}
-<p>아직 판정 기록이 없다 — 판정 엔진이 붙으면 여기 쌓인다.</p>
-{% endif %}
+</div>
+
+<div class="history-layout">
+  {% if judgments %}
+  <ul class="history-list">
+    {% for j in judgments %}
+    {% set is_open = opened and opened.id == j.id %}
+    <li>
+      <a class="history-row{{ ' history-row-open' if is_open }}"
+         href="?page={{ page }}{{ base_qs }}{{ '' if is_open else '&open_id=' ~ j.id }}">
+        <span class="history-row-date">{{ j.judged_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        <span class="history-row-verdict">{{ j.verdict }}</span>
+        <span class="history-row-risk">{{ j.risk_final if j.risk_final is not none else "—" }}</span>
+        <span class="history-row-chevron">{{ '‹' if is_open else '›' }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>아직 판정 기록이 없다 — 판정 엔진이 붙으면 여기 쌓인다.</p>
+  {% endif %}
+
+  {% if opened %}
+  <aside class="history-detail">
+    <div class="history-detail-head">
+      <p>검수 상세</p>
+      <a href="?page={{ page }}{{ base_qs }}" title="접기">✕</a>
+    </div>
+    <dl>
+      <dt>결론</dt><dd>{{ opened.verdict }}</dd>
+      {% if opened.hold_reason %}<dt>보류 사유</dt><dd>{{ opened.hold_reason }}</dd>{% endif %}
+      <dt>위험도</dt><dd>{{ opened.risk_final if opened.risk_final is not none else "—" }}</dd>
+      <dt>법령 버전</dt><dd>{{ opened.law_version }}</dd>
+      <dt>판정 시각</dt><dd>{{ opened.judged_at.strftime('%Y-%m-%d %H:%M') }}</dd>
+    </dl>
+    <p class="history-detail-note">⬜ 근거·질의응답은 아직 없다 — 붙으면 여기 채운다.</p>
+  </aside>
+  {% endif %}
+</div>
+
+{% include "user/_pagination.html" %}
 </div>
 {% endblock %}

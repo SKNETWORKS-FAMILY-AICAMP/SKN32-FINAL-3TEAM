@@ -17,7 +17,7 @@ from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -104,19 +104,69 @@ def generate_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "user/generate.html", {"fixtures": names})
 
 
+#: D-127 — 판정 상태 4종. history 필터가 받는 값은 이 넷뿐이다.
+_VERDICTS = ("confirmed", "hold", "no_basis", "unjudged")
+_PAGE_SIZE = 20
+
+
 @router.get("/history", response_class=HTMLResponse)
-def history(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+def history(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+    verdict: str | None = None,
+    page: int = 1,
+    open_id: str | None = None,
+) -> HTMLResponse:
     """검수 이력 — 🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인).
 
     ⬜ 판정 엔진이 아직 없어 `judgment` 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
        가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
+
+    ★ 필터(`verdict`)·페이지네이션(`page`)은 목록 화면 공통 패턴이다 — segments 등
+      다음 목록 화면이 생기면 `user/_pagination.html` 을 그대로 include 한다.
+    ⛔ **`page`·`verdict` 는 사용자가 URL 을 손으로 바꿀 수 있다** — 잘못된 값으로
+       500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.
+
+    🔄 **상세는 서버 렌더 토글이다** (2026-09-16 판단) — 디자인 프로토타입(v7.2)은
+       클릭하면 옆에 드로어가 JS 로 열리는데, 이 프로젝트는 CSP 가 인라인 스크립트를
+       막고 HTMX 도 아직 안 붙었다 (`base.html` 참고). `?open_id=<judgment.id>` 링크로
+       같은 효과(항목 클릭 → 상세 펼침)를 서버 렌더만으로 낸다.
+    ⬜ 근거(evidence)·질의응답은 디자인엔 있지만 이번엔 뺐다 — QnA 를 저장할 테이블이
+       아직 없다. 결론·위험도·법령 버전만 보여준다.
     """
+    page = max(page, 1)
+    if verdict not in (None, *_VERDICTS):
+        verdict = None
+
+    stmt = select(Judgment)
+    if verdict:
+        stmt = stmt.where(Judgment.verdict == verdict)
+
+    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = (
-        session.execute(select(Judgment).order_by(Judgment.judged_at.desc()).limit(50))
+        session.execute(
+            stmt.order_by(Judgment.judged_at.desc())
+            .limit(_PAGE_SIZE)
+            .offset((page - 1) * _PAGE_SIZE)
+        )
         .scalars()
         .all()
     )
-    return templates.TemplateResponse(request, "user/history.html", {"judgments": rows})
+    opened = next((j for j in rows if str(j.id) == open_id), None) if open_id else None
+    return templates.TemplateResponse(
+        request,
+        "user/history.html",
+        {
+            "judgments": rows,
+            "verdicts": _VERDICTS,
+            "verdict": verdict,
+            "page": page,
+            "has_prev": page > 1,
+            "has_next": page * _PAGE_SIZE < total,
+            "base_qs": f"&verdict={verdict}" if verdict else "",
+            "opened": opened,
+        },
+    )
 
 
 @router.get("/segments", response_class=HTMLResponse)
