@@ -58,6 +58,14 @@ SCAN_DIRS = ("preprocess", "scripts", "collect")
 #: 부류 — 경로 패턴으로 판정한다. 위에서부터 먼저 맞는 것.
 #: 🚨 이 셋만 손으로 적는다. 「만든 명령」은 코드에서 나온다.
 KIND_RULES: tuple[tuple[str, str, str], ...] = (
+    # 🔴 **원문 캐시가 `data/derived` 안에 섞여 있다** (2026-09-17 실측 · 내 층 구분 오류).
+    #    `preprocess/mfds_press.py:165` 의 `CACHE` 는 「PDF 의 표들. 캐시가 PDF 보다 새로우면
+    #    그것을 쓴다」다 — **마스킹 전 원문**이고, 마스킹은 그 뒤 `--dump` 경로에서
+    #    `mfds_press_labels.jsonl` 에 적용된다(그 파일은 잔여 0).
+    #    ⛔ 그래서 「derived 는 마스킹을 지난 층」이 **캐시에는 참이 아니다.**
+    #    ★ 캐시는 raw 와 같은 자리다 — **묶음에 넣지 않는다.** raw 가 없는 기기는
+    #      어차피 `extract` 를 못 돌리므로 캐시가 없어도 잃는 것이 없다.
+    ("원문캐시", "mfds_press_pdf/", "마스킹 전 원문 캐시 — raw 와 같은 자리다. 묶음에서 뺀다"),
     ("원천", "labels/", "사람의 판정 — 어떤 명령으로도 다시 안 나온다"),
     ("표본", "_labelsheet.jsonl", "다시 뽑으면 그 표본이 아니다 — 라벨과 κ 가 갈린다"),
     ("표본", "golden/split_manifest.json", "다시 나누면 평가 누수 방어와 수치 비교가 무너진다"),
@@ -99,9 +107,15 @@ LEAK_ALLOW: dict[str, str] = {
 }
 
 
-def leaks() -> list[tuple[str, int]]:
-    """[(경로, 법인표기 수)] — 허용 목록 밖에서 남아 있는 것만. 빈 리스트가 정상이다."""
+def leaks() -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
+    """(파생물 잔여, 원문캐시 잔여) — 둘은 **다른 문제**다.
+
+    파생물에 남으면 **마스킹이 안 된 것**이고 추출기를 다시 돌려야 한다.
+    캐시에 남는 것은 **정상**이다 — 마스킹 전 원문이니까. 대신 **묶음에서 뺀다.**
+    🚨 한 목록에 섞으면 「고쳐야 할 것」과 「빼야 할 것」이 구별되지 않는다 (D-160).
+    """
     got: list[tuple[str, int]] = []
+    cache: list[tuple[str, int]] = []
     for f in sorted(DERIVED.rglob("*")):
         if not f.is_file() or f.name == ".gitkeep" or f.suffix not in {".json", ".jsonl"}:
             continue
@@ -110,8 +124,8 @@ def leaks() -> list[tuple[str, int]]:
             continue
         n = len(LEAK_PAT.findall(f.read_text(encoding="utf-8", errors="ignore")))
         if n:
-            got.append((rel, n))
-    return got
+            (cache if kind_of(rel)[0] == "원문캐시" else got).append((rel, n))
+    return got, cache
 
 
 def kind_of(rel: str) -> tuple[str, str]:
@@ -332,7 +346,7 @@ def report(got: list[dict[str, object]]) -> None:
     total = sum(size.values())
     print(f"파생물 {len(got)}개 · 합계 {total / 1024 / 1024:,.1f} MB")
     print(f"\n  {'부류':<8}{'개':>5}{'크기':>12}   {'비중':>7}")
-    for name in ("원천", "표본", "생성물"):
+    for name in ("원천", "표본", "생성물", "원문캐시"):
         if by[name]:
             pct = size[name] / total * 100 if total else 0
             print(f"  {name:<8}{by[name]:>5}{size[name] / 1024:>10,.0f} KB{pct:>7.2f}%")
@@ -356,12 +370,20 @@ def main() -> int:
     got = rows()
 
     if a.export_check:
-        bad = leaks()
+        bad, cache = leaks()
+        pack = [r for r in got if r["부류"] != "원문캐시"]
+        nc = len(got) - len(pack)
+        if cache:
+            print(
+                f"⬜ **원문캐시 {len(cache)}개에 법인 표기가 있다 — 정상이다.** 마스킹 전 원문이다."
+            )
+            print(f"   → 묶음에서 뺀다. 캐시 {nc}개는 raw 와 같은 자리다(부류 원문캐시).")
+            print(f"   예: {cache[0][0]}  {cache[0][1]:,}건\n")
         if not bad:
-            print(f"반출 가능 — 파생물 {len(got)}개에 마스킹 잔여 0")
+            print(f"반출 가능 — 묶음 대상 {len(pack)}개에 마스킹 잔여 0 (캐시 {nc}개 제외)")
             print(f"  ⬜ 허용 목록 {len(LEAK_ALLOW)}개는 세지 않았다: {', '.join(LEAK_ALLOW)}")
             return 0
-        print("🔴 **마스킹 잔여가 있다 — 이대로 묶으면 업체명이 같이 나간다** (D-17)")
+        print("🔴 **묶음 대상에 마스킹 잔여가 있다 — 이대로 묶으면 업체명이 나간다** (D-17)")
         for rel, n in bad:
             print(f"     {rel}  법인 표기 {n:,}건")
         print("\n  🚨 만든 추출기를 다시 돌린다 — 코드는 고쳐졌어도 **산출물이 낡았을 수 있다.**")

@@ -76,8 +76,32 @@ def test_모든_파생물이_부류를_가진다() -> None:
         pytest.skip("이 기기에 data/derived 가 없다 — 기기 축이다 (D-19)")
     rows = dm.rows()  # 미분류가 있으면 SystemExit 으로 멈춘다
     assert rows, "파생물이 0개다 — 원장을 만들 것이 없다"
+    # 🔄 2026-09-17 — **부류 이름을 여기 적지 않는다** (D-99). 손으로 박아 두었다가
+    #    「원문캐시」를 더하는 순간 이 게이트가 걸렸다 — 같은 사실을 두 곳에 두면 갈린다.
+    #    ★ 표에서 끌어오면 부류가 늘어도 안 깨지고, **표에 없는 값**은 그대로 잡는다.
+    known = {name for name, _, _ in dm.KIND_RULES} | {dm.DEFAULT_KIND}
     kinds = {str(r["부류"]) for r in rows}
-    assert kinds <= {"원천", "표본", "생성물"}, f"모르는 부류가 있다: {kinds}"
+    assert kinds <= known, f"KIND_RULES 에 없는 부류가 있다: {sorted(kinds - known)}"
+
+
+@pytest.mark.gate
+def test_원문캐시는_묶음에_들어가지_않는다() -> None:
+    """🔴 **마스킹 전 원문이 묶음에 섞이는 것**을 막는다 (D-17 · D-78 ③ · 2026-09-17).
+
+    ⛔ `data/derived/mfds_press_pdf/tables/` 는 파생물이 아니라 **PDF 표 캐시**다
+       (`preprocess/mfds_press.py:165` — 「캐시가 PDF 보다 새로우면 그것을 쓴다」).
+       마스킹은 그 **뒤** `--dump` 경로에서 `mfds_press_labels.jsonl` 에 적용되므로
+       캐시에는 법인 표기가 그대로 있다 — 실측 105개 중 11개에 76건.
+    🚨 그래서 「derived 는 마스킹을 지난 층」이 **캐시에는 참이 아니다.** 그 사실을
+       부류로 박고, 캐시가 gitignore 예외에 들어오지 않는 것으로 집행한다.
+    """
+    cache_pats = [pat for name, pat, _ in dm.KIND_RULES if name == "원문캐시"]
+    assert cache_pats, "KIND_RULES 에 원문캐시 규칙이 없다 — 캐시가 생성물로 섞인다"
+    lines = _ignore_lines()
+    opened = [x for x in lines if x.startswith("!") and any(p in x for p in cache_pats)]
+    assert not opened, (
+        f"원문캐시가 gitignore 예외로 열려 있다 — 마스킹 전 원문이 커밋된다: {opened}"
+    )
 
 
 @pytest.mark.gate
