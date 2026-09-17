@@ -318,7 +318,7 @@
   "u": {
    "train": "cond",
    "commercial": "ok",
-   "raw": "cond",
+   "raw": "ok",
    "cite": "ok",
    "deploy": "ok"
   },
@@ -353,7 +353,7 @@
   "u": {
    "train": "cond",
    "commercial": "ok",
-   "raw": "cond",
+   "raw": "ok",
    "cite": "ok",
    "deploy": "ok"
   },
