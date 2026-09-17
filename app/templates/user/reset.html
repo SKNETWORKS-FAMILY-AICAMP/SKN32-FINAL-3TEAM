@@ -1,0 +1,26 @@
+{# app/templates/user/reset.html — 비밀번호 재설정 · 소유자 lse (병렬작업 계약 §5)
+
+  ★ login.html·signup.html과 같은 요령 — 발표자료 프로토타입(v7.2)의
+    `data-screen="reset"` 절을 옮겼다. login 화면의 "비밀번호를 잊으셨나요?"
+    링크가 여기로 온다.
+  🔴 **계정 테이블·인증 로직이 없다** (login.html과 같은 이유) — 재설정 링크를
+     보낼 이메일 발송 대상 자체가 없다. 그래서 폼은 뜨지만 **제출 버튼이 없다.**
+  ⛔ 구역 셸 밖이다 — 로그인 전 화면이라 사이드바가 없다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 비밀번호 재설정{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block content %}
+<div class="user-shell">
+<div class="auth-card">
+  <h1>비밀번호 재설정</h1>
+  <p class="auth-sub">가입하신 이메일로 재설정 링크를 보내드려요.</p>
+
+  <label for="reset-email">이메일</label>
+  <input id="reset-email" type="email" placeholder="you@company.com" disabled>
+
+  <p class="auth-note">⬜ 계정 시스템이 아직 없다 — 진입점 B 엔진(이력·카피생성)과 함께 온다.</p>
+
+  <p class="auth-switch"><a href="/u/login">← 로그인으로 돌아가기</a></p>
+</div>
+</div>
+{% endblock %}
