@@ -71,6 +71,11 @@ MANUAL_SOURCES = {
     "khff_survey",
     "kcc_media",
     "kosis",
+    # 🔄 2026-09-17 — 식품안전나라 게시판(menu_no=4806)의 PDF 다. `mfds_board` 는
+    #    mfds.go.kr 전용이라 이 사이트를 못 받는다 — 사람이 내려받아 register 로 올린다.
+    #    🚨 그래서 SCRAPERS 를 안 지난다 = robots 검사 대상이 아니다. 우리가 HTML 을
+    #       긁지 않기 때문이고, 자동 수집을 열면 그때 robots 를 재고 COLLECTORS 로 옮긴다.
+    "mfds_casebook_2021",
     "mfds_production",
     "ftc_decisions",
     "self_sanction_stat",
