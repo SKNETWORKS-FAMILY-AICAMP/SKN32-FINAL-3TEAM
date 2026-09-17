@@ -70,10 +70,49 @@ def md_to_html(md_text):
     )
 
 
+#: 🔴 **문서 안의 그림** — 상대 경로를 data URI 로 박는다 (2026-09-17).
+#:    ⛔ 임시 HTML 은 `dist/` 에 쓰고 원본은 `docs/**` 에 있다. 상대 경로를 그대로 두면
+#:       브라우저가 `dist/` 기준으로 찾아 **그림이 조용히 빈칸으로 나온다** — 에러도 안 난다.
+#:       ★ 도면이 든 첫 문서(`docs/03_데이터/전처리_결과서.md` · 2026-09-17)에서 드러났다.
+#:    🚨 `assets/brand` 로고와 **같은 방법**이다(base64 인라인) — 두 번째라 함수로 올렸다 (D-99).
+_IMG_SRC = re.compile(r'<img([^>]*?)src="(?!data:|https?:)([^"]+)"')
+_IMG_MIME = {
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def inline_images(html: str, src: str) -> str:
+    """상대 경로 그림을 문서 위치 기준으로 찾아 data URI 로 바꾼다.
+
+    🔴 **없으면 멈춘다** (D-72 fail-closed). 빠진 그림을 「완료」로 찍지 않는다 —
+       조용히 빈칸이 되는 실패가 이 함수를 만든 이유다.
+    """
+    base = pathlib.Path(src).resolve().parent
+
+    def sub(m: re.Match) -> str:
+        rel = m.group(2)
+        path = (base / rel).resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"🔴 그림이 없다 — {rel}  (문서 기준 {path})")
+        mime = _IMG_MIME.get(path.suffix.lower())
+        if mime is None:
+            raise ValueError(f"🔴 넣을 줄 모르는 그림 형식 — {path.suffix} ({rel})")
+        data = base64.b64encode(path.read_bytes()).decode()
+        return f'<img{m.group(1)}src="data:{mime};base64,{data}"'
+
+    return _IMG_SRC.sub(sub, html)
+
+
 def build_html(src, logo_png, title, subtitle, meta_html, footer, cover_skip_lines=4):
     md_text = pathlib.Path(src).read_text(encoding="utf-8")
     body_md = "\n".join(md_text.split("\n")[cover_skip_lines:])
     html_body = md_to_html(body_md)
+    html_body = inline_images(html_body, src)
 
     toc = []
 
