@@ -179,14 +179,22 @@ def ftc_docs() -> list[dict]:
     got = []
     for r in json.loads(FTC_PHRASES.read_text(encoding="utf-8")):
         labels = sorted({u["label"] for u in (r.get("유형") or [])})
-        if not labels or not r.get("문구"):
+        # 🔄 **2026-09-17 — 「이유」 문구를 들고 나온다** (D-232 (A) · D-234).
+        #    ⛔ 종전 조건은 `not r.get("문구")` 라 **주문에 문구가 없으면 문서를 통째로 버렸다.**
+        #       그래서 이유만 있는 **502건이 train 에도 못 들어갔다** — 회수를 켜도 여기서 막혔다.
+        #    🔴 **둘을 따로 들고 나간다.** 봉인(평가)은 주문 문구만 보고, 학습에만 이유가 들어간다
+        #       — 평가 라벨은 조문이나 사람이 붙여야 한다 (D-172).
+        order = [str(x) for x in (r.get("문구") or [])]
+        reason = [str(x) for x in (r.get("문구_이유") or [])]
+        if not labels or not (order or reason):
             continue
         got.append(
             {
                 "doc_id": f"ftc:{r['seq']}",
                 "원천": "ftc_decisions_body",
                 "유형": labels,
-                "문구": [str(x) for x in r["문구"]],
+                "문구": order,
+                "문구_이유": reason,  # 🆕 학습 전용 — 봉인 대상이 아니다
                 "단위": "문장",
             }
         )
@@ -250,7 +258,13 @@ def plan(seed: int = 20260909) -> dict:
     single = [d for d in ftc if len(d["유형"]) == 1]
     multi = [d for d in ftc if len(d["유형"]) > 1]
 
-    have = collections.Counter(d["유형"][0] for d in single)
+    # 🔄 **봉인 후보는 「주문 문구가 있는 문서」뿐이다** (2026-09-17 · D-234).
+    #    🚨 이유 문구는 **문서 라벨을 내려 붙인 것**이고 전수 채택률이 39.7% 다 —
+    #       평가에 쓰면 자를 자기가 만든 잡음으로 삼는 꼴이다 (D-172).
+    #    ★ 이 한 줄이 「평가셋 구성 규칙은 안 바꾼다」를 집행한다.
+    sealable = [d for d in single if d["문구"]]
+
+    have = collections.Counter(d["유형"][0] for d in sealable)
     order = sorted(have, key=lambda x: have[x])
     need = {t: min(have[t], EVAL_TARGET) for t in have}
 
@@ -262,7 +276,7 @@ def plan(seed: int = 20260909) -> dict:
     #    ★ 축을 나누면 pool 을 21개까지 흔들어도 봉인 60개가 고정된다 (실측 확인).
     rnd_pool = random.Random(seed)
     rnd_neg = random.Random(seed)
-    pool = sorted(single, key=lambda d: d["doc_id"])
+    pool = sorted(sealable, key=lambda d: d["doc_id"])
     rnd_pool.shuffle(pool)
 
     sealed: dict[str, dict] = {}
@@ -282,7 +296,9 @@ def plan(seed: int = 20260909) -> dict:
 
     # 🔴 사례집은 **사전 쪽**이다 (D-155) — 낱말 시험지를 만들지 않는다. 위 ① 참조.
     term = casebook_docs()
-    train = [d for d in pool if d["doc_id"] not in sealed] + multi + neg_train + term
+    # 🔴 **train 은 `single` 전체에서 봉인분만 뺀다** — `pool`(봉인 후보)이 아니다.
+    #    ⛔ `pool` 로 두면 「이유만 있는 문서」가 train 에서도 빠진다. 그것이 회수분이다.
+    train = [d for d in single if d["doc_id"] not in sealed] + multi + neg_train + term
     sent = list(sealed.values()) + neg_eval
 
     def tally(rows: list[dict]) -> dict[str, int]:
@@ -294,6 +310,10 @@ def plan(seed: int = 20260909) -> dict:
 
     def phrases(rows: list[dict]) -> int:
         return sum(len(d["문구"]) for d in rows)
+
+    def phrases_reason(rows: list[dict]) -> int:
+        """🆕 이유 문구 — **주문과 섞어 세지 않는다** (D-172 · 한 숫자가 두 과제를 평균한다)."""
+        return sum(len(d.get("문구_이유") or []) for d in rows)
 
     sent_pos = tally(sent)
     term_pos = tally(term)
