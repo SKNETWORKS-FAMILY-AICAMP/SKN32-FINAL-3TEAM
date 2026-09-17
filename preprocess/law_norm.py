@@ -213,7 +213,7 @@ def main() -> int:
                 print(f"       {r['path']:>10}  {r['text'][:64]}")
         if args.write and rows:
             out = store.derived_dir("law_norm") / f"{key}.jsonl"
-            with out.open("w", encoding="utf-8") as f:
+            with out.open("w", encoding="utf-8", newline="\n") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
 

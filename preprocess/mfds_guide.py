@@ -288,7 +288,7 @@ def main() -> int:
             return 1
         out, changed = masked(rows)
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        with OUT.open("w", encoding="utf-8") as fh:
+        with OUT.open("w", encoding="utf-8", newline="\n") as fh:
             for rec in out:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(f"\n  🔴 마스킹 — 바뀐 필드 {dict(changed) or '없음'}")

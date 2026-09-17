@@ -808,7 +808,7 @@ for key in ORDER:
     out.append(block(key, s, EXTRA.get(key), covers, st))
 
 (ROOT / "build").mkdir(exist_ok=True)
-with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8") as _out:
+with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8", newline="\n") as _out:
     _out.write("\n\n".join(out) + "\n")
 print("등재", len(ORDER), "건 · 법제처 covers", len(LAW_COVERS), "종 흡수")
 # 🔄 미채택으로 내린 것은 매트릭스에 판정 근거로 남지만 레지스트리 sources 에는 없다.
@@ -833,6 +833,6 @@ for m in missing:
 body = (ROOT / "build/registry_body.yaml").read_text(encoding="utf-8")
 head = (ROOT / "scripts/registry_head.yaml").read_text(encoding="utf-8")
 tail = (ROOT / "scripts/registry_tail.yaml").read_text(encoding="utf-8")
-(ROOT / "data_sources.yaml").write_text(head + body + tail, encoding="utf-8")
+(ROOT / "data_sources.yaml").write_text(head + body + tail, encoding="utf-8", newline="\n")
 print("data_sources.yaml 생성 완료 —", len(head + body + tail), "문자")
 print("🚨 이어서 반드시: uv run pytest -m gate")

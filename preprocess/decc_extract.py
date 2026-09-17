@@ -269,7 +269,7 @@ def main(path: str = "data/derived/law_decc.jsonl") -> int:
 
     if args.dump:
         out = pathlib.Path("data/derived/decc_phrases.jsonl")
-        with out.open("w", encoding="utf-8") as f:
+        with out.open("w", encoding="utf-8", newline="\n") as f:
             for r in both:
                 for q in r["문구"]:
                     f.write(

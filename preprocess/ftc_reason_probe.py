@@ -531,7 +531,7 @@ def main() -> int:
         out = pathlib.Path(a.dump)
         out.parent.mkdir(parents=True, exist_ok=True)
         body = "\n".join(json.dumps(x, ensure_ascii=False) for x in dump_rows) + "\n"
-        out.write_text(body, encoding="utf-8")
+        out.write_text(body, encoding="utf-8", newline="\n")
         #: 🔴 **쓰기 응답을 증거로 쓰지 않는다** — 되읽어 대조한다 (D-149)
         back = out.read_text(encoding="utf-8")
         if back != body:

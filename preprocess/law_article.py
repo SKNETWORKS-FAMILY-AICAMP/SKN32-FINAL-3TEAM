@@ -246,7 +246,7 @@ def main() -> int:
     print(f"\n조문 노드 {len(all_rows)}개 · 법령 {len(files)}건")
     if args.dump:
         out = store.derived_dir(".") / "law_article.jsonl"
-        with out.open("w", encoding="utf-8") as f:
+        with out.open("w", encoding="utf-8", newline="\n") as f:
             for r in all_rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         print(f"💾 → {out.relative_to(ROOT)}")

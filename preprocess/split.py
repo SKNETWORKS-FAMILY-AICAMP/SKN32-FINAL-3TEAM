@@ -421,7 +421,7 @@ def main() -> int:
 
     if a.write:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
+        OUT.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
         print(f"\n  → {OUT}")
         print("  🚨 **사전과 주입은 이 파일을 읽어 train 만 쓴다** — 안 그러면 누수다.")
     else:

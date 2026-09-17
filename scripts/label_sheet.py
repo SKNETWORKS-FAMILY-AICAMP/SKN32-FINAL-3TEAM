@@ -180,7 +180,7 @@ def import_(csv_path: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
     who = (filled[0].get("붙인이") or "이름없음").strip()
     out = ROOT / "data" / "derived" / "labels" / f"{who}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("w", encoding="utf-8") as f:
+    with out.open("w", encoding="utf-8", newline="\n") as f:
         for r in out_rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     print(f"  → {out.relative_to(ROOT)}  ({n}건 · 빈칸 {len(filled) - n}건)")

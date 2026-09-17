@@ -329,7 +329,7 @@ def main():
     if a.compact:
         # 🚨 목차가 없으니 2차 렌더도 없다 — 1차가 곧 최종이다
         tmp = pathlib.Path(out).with_suffix(".pass1.html")
-        tmp.write_text(html, encoding="utf-8")
+        tmp.write_text(html, encoding="utf-8", newline="\n")
         render(str(tmp), out, a.doc_title, a.org)
         tmp.unlink(missing_ok=True)
         _need("pdfplumber")
@@ -339,13 +339,13 @@ def main():
             print(f"O {out}  ({len(pdf.pages)}쪽, 목차 없음 — compact)")
         return
     tmp = pathlib.Path(out).with_suffix(".pass1.html")
-    tmp.write_text(html, encoding="utf-8")
+    tmp.write_text(html, encoding="utf-8", newline="\n")
     p1 = str(pathlib.Path(out).with_suffix(".pass1.pdf"))
     render(str(tmp), p1, a.doc_title, a.org)
 
     html2, miss, npages = inject_page_numbers(html, p1)
     tmp2 = pathlib.Path(out).with_suffix(".pass2.html")
-    tmp2.write_text(html2, encoding="utf-8")
+    tmp2.write_text(html2, encoding="utf-8", newline="\n")
     render(str(tmp2), out, a.doc_title, a.org)
 
     for f in (tmp, tmp2, pathlib.Path(p1)):

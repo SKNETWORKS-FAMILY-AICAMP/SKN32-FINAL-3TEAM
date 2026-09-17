@@ -242,7 +242,7 @@ def main() -> int:
     print(f"  🚨 판정지위 = {JUDGMENT_STATUS!r} — 행정처분·판결 확정이 아니다 (D-240 초안)")
 
     if args.dump:
-        with DST.open("w", encoding="utf-8") as f:
+        with DST.open("w", encoding="utf-8", newline="\n") as f:
             for r in out:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         print(f"  💾 {len(out):,}행 → {DST.relative_to(ROOT)}")
@@ -268,7 +268,7 @@ def main() -> int:
                     "후보밖": sorted(set(types) - cand) if cand else [],
                 }
             )
-        with DST_ANCHOR.open("w", encoding="utf-8") as f:
+        with DST_ANCHOR.open("w", encoding="utf-8", newline="\n") as f:
             for r in anc:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         t = collections.Counter(x for r in anc for x in r["앵커유형"])

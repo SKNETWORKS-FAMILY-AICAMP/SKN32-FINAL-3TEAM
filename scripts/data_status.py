@@ -246,7 +246,7 @@ def main() -> int:
     text = build()
     if args.write:
         out = ROOT / "docs" / "03_데이터" / "데이터현황판.md"
-        out.write_text(text, encoding="utf-8")
+        out.write_text(text, encoding="utf-8", newline="\n")
         print(f"💾 {out.relative_to(ROOT)} ({len(text):,}자)")
     else:
         print(text)

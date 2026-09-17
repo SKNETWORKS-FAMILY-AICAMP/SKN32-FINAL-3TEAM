@@ -1388,7 +1388,9 @@ def survey(target: str, limit: int | None, dump: bool) -> int:
 
     if dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+        OUT.write_text(
+            json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+        )
         print(f"\n  → {OUT} ({len(rows):,}행)")
         print("     🚨 data/ 는 커밋되지 않는다 (D-19). 이 스크립트가 원본이다.")
     return 0
@@ -1485,7 +1487,7 @@ def apply(target: str, limit: int | None) -> int:
     path = out / f"{target}.jsonl"
     left: collections.Counter[str] = collections.Counter()
     n = 0
-    with path.open("w", encoding="utf-8") as f:
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         for doc, _raw, bare, body, _pronoun in ITER[target](limit):
             masked = apply_policy(body, bare, target)
             left.update(residual_orgs(masked))

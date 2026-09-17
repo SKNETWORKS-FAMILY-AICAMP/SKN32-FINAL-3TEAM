@@ -271,7 +271,7 @@ def main() -> int:
 
     if args.dump:
         out = DERIVED / "chunks.jsonl"
-        with out.open("w", encoding="utf-8") as f:
+        with out.open("w", encoding="utf-8", newline="\n") as f:
             for r in rows:
                 f.write(json.dumps(store.stamp(r, "law_go_kr"), ensure_ascii=False) + "\n")
         print(f"  💾 → {out.relative_to(ROOT)}")
