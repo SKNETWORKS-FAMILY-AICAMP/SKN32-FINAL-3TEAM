@@ -4,11 +4,54 @@
   uv run python -m preprocess.ftc_reason_probe --peek 30   # 마스킹 지난 문구를 화면에만
   uv run python -m preprocess.ftc_reason_probe --docs 30   # 문서 통째로 (문서 기준 회수율)
   uv run python -m preprocess.ftc_reason_probe --dump      # 전수를 파생물로 (D-68 확인 필요)
+  uv run python -m preprocess.ftc_reason_probe --labels    # 🆕 6판 — 조문 라벨이 이유에 있는가
 
 🔴 **이 파일은 판정이 아니라 재료다** (D-232 ⬜). `preprocess/ftc_extract.py` 의
    `phrases_in(raw["주문"])` 이 **주문만 본다**는 것이 D-232 에서 드러났고, 회수안 (A)의
    상한(283 → 854)은 **「이유에 문구가 인용돼 있다」를 전제한 수**다. 그 전제를 아무도 안 쟀다.
    이 탐침이 그 수를 낸다 — 그 수가 작으면 (A)의 순위가 (B) 아래로 내려간다.
+
+🔄 **2026-09-17 9판 — 로마자 표가 `mask.py` 로 갔다.** 8판이 여기 들고 있던 표를 `mask.py` 가
+   **치환에** 쓰게 되면서 두 벌이 됐다 — 세는 쪽과 지우는 쪽이 같은 표를 본다 (D-99).
+   🔴 그래서 이제 `--anchor` 의 「로마자」 칸은 **0 이 나와야 정상이다** — 치환이 먼저
+      가져가므로 셀 것이 안 남는다. 0 이 아니면 표에 없는 대응이 있다는 뜻이다.
+
+🔄 **2026-09-17 8판 — `--anchor` · 「남은 상호가 피심인인가」를 이름을 찍지 않고 판정한다.**
+   🔴 7판 표본에서 「옥시」·「舊에스케이케미칼」·「삼성전자」가 **이유 문구**에 그대로 나왔다.
+      D-233 상 피심인은 **대상 안**이므로 이건 결함이다. 그런데 「그 이름이 피심인인가」는
+      사건명을 봐야 알고, 사건명을 찍으면 그게 바로 실명 노출이다 (D-17).
+   ★ 그래서 **비교만 하고 결과만 낸다** — `anchor_ftc` 가 낸 앵커와 남은 이름을 맞춰 보고
+      「앵커의 부분이다 / 로마자 대응이다 / 무관하다」 **세 칸의 건수**만 찍는다.
+   ⛔ **원인 후보 둘을 같이 잰다.**
+      ① **다중 피심인** — `anchor_ftc` 는 `^(.+?)의\s` 로 사건명을 **한 덩어리**로 자른다.
+         「A 및 B의 …」면 앵커가 「A 및 B」가 되어 **본문 어디에도 안 맞는다.**
+         CORE 854 중 나열형 사건명이 **35건(4.1%)**이고, 샌 19건 중 6건이 그것이다.
+      ② **다른 표기** — 「SK」·「에스케이」·「舊…」 같은 단축·구명칭. 앵커는 한 표기뿐이다.
+   🚨 **고치는 것은 이 파일이 아니다.** 여기는 판정 근거를 내는 자리이고, 고칠 곳은
+      `mask.py` 다. 켜기 전에 D-143 판 대조로 「주문이 안 바뀌는가」를 확인한다 (D-157).
+
+🔄 **2026-09-17 7판 — 6판의 라벨 수가 틀렸다. `types_in` 에 정규화문을 안 넘겼다.**
+   ⛔ `ftc_extract` 는 `sep_norm` 을 지난 주문을 넘기는데 6판은 원문을 넘겼다. 그래서
+      「거짓ㆍ과장」의 `ㆍ`(U+318D)가 TYPES 의 `·`(U+00B7)와 안 맞아 **점이 든 유형어 둘이
+      통째로 빠졌다.** 6판 출력의 「붙을 유형 — 소비자_기만 85 · 비방광고 12 · 부당_비교광고 2 ·
+      거짓_과장 0」은 **그 비대칭 자체가 버그의 자국**이었다.
+   🚨 **문구 축(627 · 8,327 · 502)은 안 틀렸다** — `phrases_in` 은 `ftc_extract` 와 똑같이
+      원문 기반 `masked_raw` 를 본다. 틀린 것은 라벨 축뿐이다 (D-178 — 어느 축의 수인가).
+
+🔄 **2026-09-17 6판 — `--labels` · 이번엔 문구가 아니라 *라벨*이 주문에만 걸려 있다.**
+   ⛔ D-234 로 문구는 이유까지 보게 고쳤는데, **`ftc_extract.py` L293 의
+      `ts = types_in(masked)` 는 아직 마스킹된 *주문*만 본다.** 유형이 안 붙은 문서는
+      `split.py` 의 `if not labels: continue` 가 통째로 버린다.
+   🔴 **실측(되받아 잰 것 · 2026-09-17)** — 라벨 없는 문서 **221건**이 이유 문구 **2,292개**를
+      들고 버려진다. 그중 **193건이 회수분(③)**이고 문구 **1,765개**다. 회수를 켜서 얻은
+      4,935개의 **35.8%가 라벨이 없어 못 쓰인다.**
+   🚨 **사건명·근거절·이유 문구를 합쳐 유형어를 찾아 봤더니 221건 중 1건뿐이었다.**
+      유형어는 **이유 전문**에 있고 그 전문은 `ftc_stage.jsonl` 에 안 담긴다 — 그래서
+      이 탐침이 필요하다. 원본 XML 을 읽는 경로가 여기뿐이다.
+   ⛔ **이 수가 「붙일 수 있다」는 뜻은 아니다.** 주문의 유형어는 **처분의 서술어**이고,
+      이유의 유형어는 「피심인은 … 거짓·과장이 아니라고 주장하나」처럼 **부정·인용 문맥**일
+      수 있다. 그래서 `--labels-peek N` 이 **유형어 앞뒤를 눈으로 보여 준다** — 이것을 안
+      보고 켜면 D-232 가 잡은 것과 같은 실수를 라벨 축에서 되풀이한다 (D-05 · D-191).
 
 🔄 **2026-09-17 5판 — `--dump` 로 파생물을 낸다. 표본 30개로 판정하는 것을 끝낸다.**
    ⛔ 4판까지는 화면 출력뿐이라 **표본이 30개에 묶여 있었다.** 그 30개로 오늘 두 번 틀렸다 —
@@ -78,9 +121,15 @@ import sys
 import xml.etree.ElementTree as ET
 
 from collect import store
-from preprocess.ftc_extract import NOISE, QUOTE, content_len, phrases_in
+from preprocess.ftc_extract import NOISE, QUOTE, content_len, phrases_in, types_in
 from preprocess.ftc_triage import CORE, _text, classify
-from preprocess.mask import anchor_ftc, apply_policy
+from preprocess.mask import (
+    ROMAN,
+    anchor_ftc,
+    apply_policy,
+    residual_bare_orgs,
+    strip_legal,
+)
 from preprocess.text import sep_norm
 
 RAW = pathlib.Path("data/raw/ftc")
@@ -105,6 +154,35 @@ CAND_KEEP = 300
 #: 🔄 **5판 — 파생물 자리** (D-143 단계 물질화 · D-92 「등급 밖 raw 를 읽어 derived 로」).
 #:    🚨 `.gitignore` 의 `data/**` 가 덮는다 — 커밋되지 않는다 (D-19 · D-92).
 DUMP = pathlib.Path("data/derived/ftc_reason_sample.jsonl")
+
+#: ⛔ **로마자 대응표를 여기서 다시 쓰지 않는다** (D-99 · 2026-09-17 9판).
+#:    8판은 이 파일에 표를 들고 있었는데, `mask.py` 가 **치환에 쓰는 같은 표**를 갖게 되면서
+#:    두 벌이 됐다. 세는 쪽과 지우는 쪽이 같은 표를 봐야 한다 — `mask.ROMAN` 하나다.
+
+#: 🚨 앞에 붙는 군더더기. 「舊에스케이케미칼」이 앵커 「에스케이케미칼」과 안 맞는 자리다.
+_PRE = re.compile(r"^(?:舊|구\s|전\s|㈜|\(주\)|주식회사)\s*")
+
+
+def same_org(name: str, anchor: str) -> str:
+    """남은 이름이 앵커와 같은 법인인가. 🔴 **이름은 돌려주지 않는다 — 판정만** (D-17).
+
+    돌려주는 값은 `"부분"` · `"로마자"` · `"무관"` 셋 중 하나다.
+    """
+    a = _PRE.sub("", strip_legal(anchor)).replace(" ", "")
+    n = _PRE.sub("", strip_legal(name)).replace(" ", "")
+    if not a or not n:
+        return "무관"
+    if n in a or a in n:
+        return "부분"
+    for x, y in ROMAN:
+        # 🚨 한쪽을 상대 표기로 바꿔 다시 본다. 양방향으로 본다 — 어느 쪽이 로마자인지 모른다
+        for u, v in ((x, y), (y, x)):
+            if u in n and (n.replace(u, v) in a or a in n.replace(u, v)):
+                return "로마자"
+            if u in a and (a.replace(u, v) in n or n in a.replace(u, v)):
+                return "로마자"
+    return "무관"
+
 
 #: 🔴 **재현의 근거는 seed 가 아니라 입력이다** (D-176). 여기는 저장하는 물건이 아니라
 #:    화면 표본이므로 seed 만 고정한다 — 같은 `data/raw/ftc` 에 대해 같은 표본이 나온다.
@@ -147,6 +225,23 @@ def main() -> int:
         metavar="경로",
         help=f"🔴 마스킹을 지난 문구 전수를 JSONL 로 낸다 (기본 {DUMP}) — D-68 확인 뒤에 쓴다",
     )
+    ap.add_argument(
+        "--labels",
+        action="store_true",
+        help="🆕 6판 — 조문 라벨(`types_in`)을 주문과 이유에서 각각 캐 비교한다",
+    )
+    ap.add_argument(
+        "--labels-peek",
+        type=int,
+        default=0,
+        metavar="N",
+        help="🔴 라벨이 주문에 없고 이유에만 있는 문서 N 개의 **유형어 앞뒤**를 화면에만 찍는다",
+    )
+    ap.add_argument(
+        "--anchor",
+        action="store_true",
+        help="🆕 8판 — 이유 문구에 남은 맨몸 상호가 **피심인인가**를 판정한다 (이름은 안 찍는다)",
+    )
     ap.add_argument("--seed", type=int, default=SEED, help=f"표본 seed (기본 {SEED})")
     a = ap.parse_args()
 
@@ -179,6 +274,22 @@ def main() -> int:
     cand_hit: collections.Counter[str] = collections.Counter()
     cand_ex: dict[str, list[str]] = {k: [] for k, _ in CAND}
     cand_any = 0
+    #: 🔄 6판 — 라벨 축. `--labels` 없이는 한 번도 안 돈다(기본 실행의 수가 안 바뀌게)
+    lbox: collections.Counter[str] = collections.Counter()
+    lgain_docs = 0  # 주문에 유형어 없고 이유에 있는 문서
+    lgain_ph = 0  # 그 문서가 들고 있는 이유 문구 (지금 통째로 버려진다)
+    lgain_lab: collections.Counter[str] = collections.Counter()
+    ladd_docs = 0  # 주문에도 있는데 이유가 **다른** 유형을 더 주는 문서
+    ladd_pairs = 0
+    lpos: list[int] = []  # 이유 안 유형어의 위치(%)
+    lpeek: list[tuple[str, str, str]] = []  # (seq, label, 앞뒤 발췌 — 마스킹 지난 것)
+    rnd_lab = random.Random(a.seed)
+    #: 🔄 8판 — 앵커 실태. `--anchor` 없이는 한 번도 안 돈다
+    abox: collections.Counter[str] = collections.Counter()
+    averdict: collections.Counter[str] = collections.Counter()
+    aph: collections.Counter[str] = collections.Counter()
+    adocs: collections.Counter[str] = collections.Counter()
+    a_list = re.compile(r"(?:및|과|와|,)|등\s*\d+\s*개")
 
     for p in store.current_files(RAW, "*.xml"):
         r = ET.parse(p).getroot()
@@ -252,6 +363,78 @@ def main() -> int:
                     if len(cand_ex[key]) < CAND_KEEP:
                         cand_ex[key].append(q)
             cand_any += struck
+
+        # 🔄 6판 — 라벨이 어디에 있는가. ⛔ **`ftc_extract` 와 같은 입력을 준다** —
+        #    주문은 마스킹된 주문, 이유는 마스킹된 이유. 다른 것을 넣으면 수가 안 맞는다 (D-99).
+        if a.labels:
+            # ⛔ **정규화문을 넘긴다** (D-117 · 2026-09-17 6판이 여기서 틀렸다).
+            #    `ftc_extract` L240 은 `masked = apply_policy(order, ...)` 이고 `order` 는
+            #    `sep_norm` 을 지난 것이다. 6판은 `raw["주문"]` 을 넘겨 **「거짓ㆍ과장」의
+            #    `ㆍ`(U+318D)가 TYPES 의 `·`(U+00B7)와 안 맞았다** — 점이 든 유형어 둘
+            #    (거짓·과장 · 허위·과장)이 통째로 안 잡히고 「기만적」·「비방」만 잡혀,
+            #    「붙을 유형」이 소비자_기만 쪽으로 쏠린 것처럼 보였다 (D-191 · D-146).
+            masked_order = apply_policy(order, bare, "ftc")
+            masked_reason_n = apply_policy(reason, bare, "ftc")
+            lo = {t["label"] for t in types_in(masked_order)}
+            lr_all = types_in(masked_reason_n)
+            lr = {t["label"] for t in lr_all}
+            lbox[
+                ("주문라벨O" if lo else "주문라벨X") + " · " + ("이유라벨O" if lr else "이유라벨X")
+            ] += 1
+            if not lo and lr:
+                lgain_docs += 1
+                lgain_ph += len(r_ps)
+                lgain_lab.update(lr)
+                for t in lr_all:
+                    i = masked_reason_n.find(t["word"])
+                    if i >= 0:
+                        lpos.append(_pct(i, len(masked_reason_n)))
+                # 🔴 **유형어 앞뒤를 담아 둔다** — 「…가 아니라고 주장하나」를 눈으로 잡는 자리
+                t0 = lr_all[0]
+                i0 = masked_reason_n.find(t0["word"])
+                if i0 >= 0:
+                    lpeek.append(
+                        (
+                            _text(r, "결정문일련번호"),
+                            t0["label"],
+                            masked_reason_n[max(0, i0 - 60) : i0 + 60].replace("\n", " "),
+                        )
+                    )
+            elif lo and (lr - lo):
+                ladd_docs += 1
+                ladd_pairs += len(lr - lo)
+
+        # 🔄 8판 — 앵커가 무엇을 잡고 무엇을 놓치나
+        #    🚨 **이유 「문구」로만 센다** — 골든셋에 실제로 들어가는 것이 이것이다.
+        #       이유 전문에 남은 것은 배포물이 아니다 (D-165 의 「배포물과 자료구조」).
+        rs_for_anchor = r_ps
+        if a.anchor:
+            orig, anc = anchor_ftc(r)
+            if not anc:
+                abox["앵커를 못 만들었다"] += 1
+            else:
+                if a_list.search(orig):
+                    abox["🔴 앵커에 나열어가 들었다 (및·와·등 N개)"] += 1
+                # 🚨 **마스킹 전 원문**에서 센다 — 마스킹 뒤엔 앵커가 이미 지워져 0 이 된다.
+                #    이 수는 화면에 안 나가고 칸을 세는 데만 쓴다 (D-17).
+                if raw["이유"].count(anc) == 0:
+                    abox["🔴 앵커가 이유 본문에 0회 — 무력하다"] += 1
+                else:
+                    abox["앵커가 이유 본문에 1회 이상 맞는다"] += 1
+
+            # 🔴 남은 맨몸 상호가 피심인인가 — **판정만 담는다**
+            left: set[str] = set()
+            for q in rs_for_anchor:
+                left.update(residual_bare_orgs(q))
+            if left:
+                seen_doc: set[str] = set()
+                for nm in left:
+                    v = same_org(nm, anc) if anc else "앵커없음"
+                    averdict[v] += 1
+                    aph[v] += sum(1 for q in rs_for_anchor if nm in q)
+                    seen_doc.add(v)
+                for v in seen_doc:
+                    adocs[v] += 1
 
         # 🚨 이유에서 `NOISE` 가 무엇을 버렸는지 — 필터를 이유에 그대로 쓰면 안 될 수 있다
         for q in QUOTE.findall(masked_reason):
@@ -357,6 +540,78 @@ def main() -> int:
         print(f"\n  ✅ {out}  {out.stat().st_size:,}B · {len(dump_rows):,}줄")
         print("     🔴 제3자 상호는 마스킹을 안 지난다 — 이 파일을 옮기는 것은 공개 범위다 (D-68)")
         print("     ⛔ 생성물이다 — 손으로 고치지 않는다 (D-90)")
+
+    if a.anchor:
+        print("\n" + "─" * 72)
+        print("  🆕 앵커 실태 — `anchor_ftc` 가 무엇을 잡고 무엇을 놓치나 (CORE 기준)")
+        for k in sorted(abox, key=lambda x: -abox[x]):
+            print(f"     {k:40s} {abox[k]:>5}건 ({abox[k] / core:>5.1%})")
+
+        print("\n  🔴 **이유 문구에 남은 맨몸 상호** — 그것이 피심인인가 (D-233)")
+        if averdict:
+            names = {
+                "부분": "✅ 앵커의 부분/변형 — **피심인이다. 대상 안**",
+                "로마자": "✅ 로마자↔한글 대응 — **피심인이다. 대상 안**",
+                "무관": "⬜ 앵커와 무관 — 제3자 후보. **대상 밖** (D-233)",
+                "앵커없음": "🚨 앵커가 없어 판정 불가 — 「안 봤다」다 (D-110)",
+            }
+            print(f"     {'판정':34s} {'이름':>5} {'문구':>6} {'문서':>6}")
+            for k in ("부분", "로마자", "무관", "앵커없음"):
+                if averdict.get(k):
+                    print(f"     {names[k]:38s} {averdict[k]:>5} {aph[k]:>6} {adocs[k]:>6}")
+            hit = averdict.get("부분", 0) + averdict.get("로마자", 0)
+            ph = aph.get("부분", 0) + aph.get("로마자", 0)
+            print(f"\n     🔴 **대상 안인데 안 지워진 이름 {hit}개 · 문구 {ph}개**")
+            print("        이 문구들은 오늘 골든셋 「이유」 4,732행에 들어가 있다 (D-233 위반)")
+        else:
+            print("     ⬜ 남은 것이 없다 (D-110 — 「없다」도 사실이다)")
+
+        print("\n     ⛔ **이름은 한 개도 안 찍었다** (D-17). 판정만 냈다.")
+        print("        🚨 로마자 대응표가 짧아 「무관」에 피심인이 섞일 수 있다 — **하한이다**")
+
+    if a.labels:
+        print("\n" + "─" * 72)
+        print("  🆕 라벨 축 — `types_in` 이 주문과 이유에서 각각 무엇을 잡는가")
+        for k in sorted(lbox):
+            print(f"     {k:26s} {lbox[k]:>5}건 ({lbox[k] / core:>5.1%})")
+        print(
+            f"\n     🔴 **주문에 유형어가 없고 이유에 있는 문서 {lgain_docs:,}건**"
+            f" — 그 문서가 들고 있는 이유 문구 {lgain_ph:,}개"
+        )
+        print("        이 문구들은 지금 `split.py` 의 `if not labels: continue` 가 통째로 버린다")
+        if lgain_lab:
+            print(
+                "        붙을 유형 — " + " · ".join(f"{k} {v}" for k, v in lgain_lab.most_common())
+            )
+        if lpos:
+            qq = statistics.quantiles(lpos, n=4) if len(lpos) >= 4 else []
+            print(
+                f"        이유 안에서의 위치 — 중앙 {statistics.median(lpos):.0f}%"
+                + (f" (1사분 {qq[0]:.0f}% · 3사분 {qq[2]:.0f}%)" if qq else "")
+            )
+        print(
+            f"\n     🚨 주문에도 유형어가 있는데 이유가 **다른** 유형을 더 주는 문서"
+            f" {ladd_docs:,}건 · 늘 라벨 {ladd_pairs:,}개"
+        )
+        print(
+            "        ⛔ 이쪽을 켜면 **다중 라벨이 는다** — 얻는 것이 아니라 바꾸는 것이다 (D-172)"
+        )
+
+        if a.labels_peek and lpeek:
+            rnd_lab.shuffle(lpeek)
+            show = lpeek[: a.labels_peek]
+            print(f"\n     🔴 유형어 앞뒤 {len(show)}개 — 서로 다른 {len(show)}개 사건 · 화면에만")
+            print("        (seed 고정 · 마스킹을 지난 문자열 · 저장 경로 없음)")
+            for seq, lab, ctx in show:
+                print(f"        [{seq}] {lab}")
+                print(f"              …{ctx}…")
+            print("        🚨 **여기서 볼 것** — 「…라고 주장하나」·「…에 해당하지 아니한다」 같은")
+            print("           부정·인용 문맥이면 그 유형어는 라벨의 근거가 아니다. 몇 개인지 센다.")
+        elif a.labels_peek:
+            print("\n     ⬜ 찍을 것이 없다 — 주문라벨X · 이유라벨O 인 문서가 0건이다 (D-110)")
+
+        print("\n     ⛔ **이 수는 「붙일 수 있다」가 아니다.** 주문의 유형어는 처분의 서술어이고")
+        print("        이유의 유형어는 주장·인용일 수 있다. `--labels-peek 30` 을 보고 정한다.")
 
     print(
         "\n  ⛔ **이 수는 판정이 아니다** — 「이유에 인용이 있다」이지 「그 인용이 광고 문구다」가"
