@@ -399,6 +399,83 @@ def _note(log: list[dict] | None, rule: str, src: str, dst: str) -> None:
         log.append(rec)
 
 
+#: 🔴 **사건명의 나열어** (2026-09-17 · D-235). 「A 및 B의 …」·「A, B의 …」 꼴에서
+#:    `anchor_ftc` 의 `^(.+?)의\s` 가 **「A 및 B」를 한 덩어리로** 잡는다. 그 문자열은
+#:    본문 어디에도 없어 **앵커가 아무것도 못 지운다.**
+#:    ⛔ **「과」·「와」는 넣지 않는다** — 조사로도 쓰여 「…행위와」 같은 자리를 쪼갠다.
+#:       탐침 8판이 그것까지 넣어 CORE 854 중 96건(11.2%)을 셌는데, 마스킹된 사건명으로
+#:       재면 35건(4.1%)이다. **넓게 쪼개면 앵커가 짧아지고, 짧은 앵커는 판정 어휘를 먹는다**
+#:       — `anchor_ftc` ②가 「불공정약관조항」을 지키려고 단 조건과 같은 이유다.
+#:    ⛔ **「·」·「ㆍ」도 넣지 않는다** — 상호 안에 들어간다(「에스케이ㆍ케미칼」류).
+_ANCHOR_AND = re.compile(r"\s*(?:및|,)\s*")
+
+#: 「A **등 3개 가습기살균제 제조ㆍ판매 사업자**」 — 뒤를 통째로 잘라 A 만 남긴다.
+#: 🚨 `\d+` 을 요구한다. 「등」만으로 자르면 「…등급」·「…등기부」가 걸린다.
+_ANCHOR_ETC = re.compile(r"\s*등\s*\d+\s*개.*$")
+
+
+#: 🔴 **로마자 ↔ 한글 표기** `[관행]` (2026-09-17 · D-235). 의결서는 같은 법인을 「에스케이
+#:    케미칼 주식회사」로 사건명에 적고 본문에서는 「제조원: SK케미칼」로 쓴다. 앵커는 표기
+#:    하나뿐이라 그 자리를 못 잡는다.
+#:    ★ **새 판단이 아니다** — `mask_paren_alias` 의 주석과 같은 논리다:
+#:      *「이미 지우기로 판정된 그 법인의 다른 표기다.」* 앵커가 근거이므로 이 표는
+#:      **앵커에 그 토막이 든 문서 안에서만** 쓰인다 — 「SKYEDU」는 안 건드린다.
+#:    ⛔ **전역 회사명 목록이 아니다.** 2026-09-17 오전에 그것을 켰다가 「2015년 가장 많이
+#:       검색한 화학강사」가 「검색[업체]학강사」가 되어 되돌렸다 (D-157).
+#:    🚨 목록이 짧다 — 없는 대응은 안 잡힌다. **하한이다** (D-110).
+ROMAN: tuple[tuple[str, str], ...] = (
+    ("SK", "에스케이"),
+    ("GS", "지에스"),
+    ("LG", "엘지"),
+    ("KT", "케이티"),
+    ("CJ", "씨제이"),
+    ("LS", "엘에스"),
+    ("KCC", "케이씨씨"),
+    ("POSCO", "포스코"),
+    ("HDC", "에이치디씨"),
+)
+
+
+def roman_variants(name: str) -> list[str]:
+    """앵커 알맹이의 **로마자/한글 맞바꾼 표기**. 🚨 앵커가 있는 문서에서만 쓴다.
+
+    ⛔ 바꾼 결과가 어디에도 없으면 `mask()` 가 그냥 지나간다 — 없는 것을 만들지 않는다.
+    """
+    out: list[str] = []
+    for x, y in ROMAN:
+        for u, v in ((x, y), (y, x)):
+            if u in name and (alt := name.replace(u, v)) != name:
+                out.append(alt)
+    return out
+
+
+def anchor_names(bare: str) -> list[str]:
+    """앵커 알맹이를 **피심인 단위로** 쪼갠다. 긴 것부터 돌려준다 (2026-09-17 · D-235).
+
+    🚨 **쪼갠 조각도 `usable`·`is_short` 를 그대로 지난다** — `mask()` 가 하던 판단을
+       여기서 되풀이하지 않는다 (D-99). 이 함수는 **자르기만** 한다.
+
+    🔄 **2026-09-17 — 로마자 변형을 붙인다** (`roman_variants`). 사건명은 「에스케이케미칼
+       주식회사」인데 본문은 「제조원: SK케미칼」이라 앵커가 못 닿던 자리를 닫는다.
+
+    ⛔ 나열어도 로마자 대응도 없으면 `[bare]` 를 그대로 돌려준다 — 기존 동작이 한 글자도
+       안 바뀐다.
+       그것이 D-143 판 대조에서 「주문 문구 627 · 치환 418 불변」으로 확인되는 지점이다.
+
+    ★ **왜 이것이 필요한가** (2026-09-17 실측 · `ftc_reason_probe --anchor`) —
+      회수한 이유 문구에 피심인 실명이 **이름 6개 · 문구 12개** 남았고, 그중 4개가
+      앵커의 부분/변형이었다. D-233 상 피심인은 **대상 안**이라 이건 결함이다.
+    """
+    head = _ANCHOR_ETC.sub("", bare)
+    out = [x.strip() for x in _ANCHOR_AND.split(head) if x.strip()]
+    # 🔴 **표기 변형을 조각마다 붙인다** — 「에스케이케미칼」이면 「SK케미칼」도 앵커다.
+    #    ⛔ 통째로 맞아야 한다. 「SK」만 지우면 「[업체]케미칼」이 되어 **가림 효과는 0인데
+    #       문구만 망가진다** — 2026-09-17 실측에서 눈으로 본 그 꼴이다 (D-157).
+    out += [v for x in list(out) for v in roman_variants(x)]
+    # 🚨 긴 것부터 — `variants` 와 같은 이유다. 짧은 조각이 먼저 돌면 긴 이름이 토막 난다
+    return sorted(dict.fromkeys(out), key=len, reverse=True) or ([bare] if bare else [])
+
+
 def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
     """자유 텍스트에서 **앵커의 변형만** `[업체]` 로 바꾼다.
 
@@ -406,9 +483,15 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
 
     🚨 짧은 앵커는 **법인격이 붙은 형태만** 지운다 — 「㈜대상」은 지우고 「대상」은 남긴다.
        남긴 것은 `residue()` 가 센다. 지우지 못한 것을 **세지도 않는 것**이 제일 나쁘다.
+
+    🔄 **2026-09-17 (D-235) — 앵커가 하나라는 가정을 뺐다.** 다중 피심인 사건에서
+       `anchor_ftc` 가 「A 및 B」를 한 덩어리로 주면 여기서 쪼개 각각 지운다.
+       ⛔ 쪼개는 규칙은 `anchor_names()` 하나다 — 부르는 쪽마다 쪼개면 갈린다 (D-99).
     """
-    if usable(bare):
-        for v in variants(bare, with_bare=not is_short(bare)):
+    for b in anchor_names(bare):
+        if not usable(b):
+            continue
+        for v in variants(b, with_bare=not is_short(b)):
             if v in text:
                 _note(log, "앵커", v, MASK_ORG)
             text = text.replace(v, MASK_ORG)

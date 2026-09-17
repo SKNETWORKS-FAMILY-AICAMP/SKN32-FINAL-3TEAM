@@ -11,6 +11,25 @@
    상한(283 → 854)은 **「이유에 문구가 인용돼 있다」를 전제한 수**다. 그 전제를 아무도 안 쟀다.
    이 탐침이 그 수를 낸다 — 그 수가 작으면 (A)의 순위가 (B) 아래로 내려간다.
 
+🔄 **2026-09-17 9판 — 로마자 표가 `mask.py` 로 갔다.** 8판이 여기 들고 있던 표를 `mask.py` 가
+   **치환에** 쓰게 되면서 두 벌이 됐다 — 세는 쪽과 지우는 쪽이 같은 표를 본다 (D-99).
+   🔴 그래서 이제 `--anchor` 의 「로마자」 칸은 **0 이 나와야 정상이다** — 치환이 먼저
+      가져가므로 셀 것이 안 남는다. 0 이 아니면 표에 없는 대응이 있다는 뜻이다.
+
+🔄 **2026-09-17 8판 — `--anchor` · 「남은 상호가 피심인인가」를 이름을 찍지 않고 판정한다.**
+   🔴 7판 표본에서 「옥시」·「舊에스케이케미칼」·「삼성전자」가 **이유 문구**에 그대로 나왔다.
+      D-233 상 피심인은 **대상 안**이므로 이건 결함이다. 그런데 「그 이름이 피심인인가」는
+      사건명을 봐야 알고, 사건명을 찍으면 그게 바로 실명 노출이다 (D-17).
+   ★ 그래서 **비교만 하고 결과만 낸다** — `anchor_ftc` 가 낸 앵커와 남은 이름을 맞춰 보고
+      「앵커의 부분이다 / 로마자 대응이다 / 무관하다」 **세 칸의 건수**만 찍는다.
+   ⛔ **원인 후보 둘을 같이 잰다.**
+      ① **다중 피심인** — `anchor_ftc` 는 `^(.+?)의\s` 로 사건명을 **한 덩어리**로 자른다.
+         「A 및 B의 …」면 앵커가 「A 및 B」가 되어 **본문 어디에도 안 맞는다.**
+         CORE 854 중 나열형 사건명이 **35건(4.1%)**이고, 샌 19건 중 6건이 그것이다.
+      ② **다른 표기** — 「SK」·「에스케이」·「舊…」 같은 단축·구명칭. 앵커는 한 표기뿐이다.
+   🚨 **고치는 것은 이 파일이 아니다.** 여기는 판정 근거를 내는 자리이고, 고칠 곳은
+      `mask.py` 다. 켜기 전에 D-143 판 대조로 「주문이 안 바뀌는가」를 확인한다 (D-157).
+
 🔄 **2026-09-17 7판 — 6판의 라벨 수가 틀렸다. `types_in` 에 정규화문을 안 넘겼다.**
    ⛔ `ftc_extract` 는 `sep_norm` 을 지난 주문을 넘기는데 6판은 원문을 넘겼다. 그래서
       「거짓ㆍ과장」의 `ㆍ`(U+318D)가 TYPES 의 `·`(U+00B7)와 안 맞아 **점이 든 유형어 둘이
@@ -104,7 +123,13 @@ import xml.etree.ElementTree as ET
 from collect import store
 from preprocess.ftc_extract import NOISE, QUOTE, content_len, phrases_in, types_in
 from preprocess.ftc_triage import CORE, _text, classify
-from preprocess.mask import anchor_ftc, apply_policy
+from preprocess.mask import (
+    ROMAN,
+    anchor_ftc,
+    apply_policy,
+    residual_bare_orgs,
+    strip_legal,
+)
 from preprocess.text import sep_norm
 
 RAW = pathlib.Path("data/raw/ftc")
@@ -129,6 +154,35 @@ CAND_KEEP = 300
 #: 🔄 **5판 — 파생물 자리** (D-143 단계 물질화 · D-92 「등급 밖 raw 를 읽어 derived 로」).
 #:    🚨 `.gitignore` 의 `data/**` 가 덮는다 — 커밋되지 않는다 (D-19 · D-92).
 DUMP = pathlib.Path("data/derived/ftc_reason_sample.jsonl")
+
+#: ⛔ **로마자 대응표를 여기서 다시 쓰지 않는다** (D-99 · 2026-09-17 9판).
+#:    8판은 이 파일에 표를 들고 있었는데, `mask.py` 가 **치환에 쓰는 같은 표**를 갖게 되면서
+#:    두 벌이 됐다. 세는 쪽과 지우는 쪽이 같은 표를 봐야 한다 — `mask.ROMAN` 하나다.
+
+#: 🚨 앞에 붙는 군더더기. 「舊에스케이케미칼」이 앵커 「에스케이케미칼」과 안 맞는 자리다.
+_PRE = re.compile(r"^(?:舊|구\s|전\s|㈜|\(주\)|주식회사)\s*")
+
+
+def same_org(name: str, anchor: str) -> str:
+    """남은 이름이 앵커와 같은 법인인가. 🔴 **이름은 돌려주지 않는다 — 판정만** (D-17).
+
+    돌려주는 값은 `"부분"` · `"로마자"` · `"무관"` 셋 중 하나다.
+    """
+    a = _PRE.sub("", strip_legal(anchor)).replace(" ", "")
+    n = _PRE.sub("", strip_legal(name)).replace(" ", "")
+    if not a or not n:
+        return "무관"
+    if n in a or a in n:
+        return "부분"
+    for x, y in ROMAN:
+        # 🚨 한쪽을 상대 표기로 바꿔 다시 본다. 양방향으로 본다 — 어느 쪽이 로마자인지 모른다
+        for u, v in ((x, y), (y, x)):
+            if u in n and (n.replace(u, v) in a or a in n.replace(u, v)):
+                return "로마자"
+            if u in a and (a.replace(u, v) in n or n in a.replace(u, v)):
+                return "로마자"
+    return "무관"
+
 
 #: 🔴 **재현의 근거는 seed 가 아니라 입력이다** (D-176). 여기는 저장하는 물건이 아니라
 #:    화면 표본이므로 seed 만 고정한다 — 같은 `data/raw/ftc` 에 대해 같은 표본이 나온다.
@@ -183,6 +237,11 @@ def main() -> int:
         metavar="N",
         help="🔴 라벨이 주문에 없고 이유에만 있는 문서 N 개의 **유형어 앞뒤**를 화면에만 찍는다",
     )
+    ap.add_argument(
+        "--anchor",
+        action="store_true",
+        help="🆕 8판 — 이유 문구에 남은 맨몸 상호가 **피심인인가**를 판정한다 (이름은 안 찍는다)",
+    )
     ap.add_argument("--seed", type=int, default=SEED, help=f"표본 seed (기본 {SEED})")
     a = ap.parse_args()
 
@@ -225,6 +284,12 @@ def main() -> int:
     lpos: list[int] = []  # 이유 안 유형어의 위치(%)
     lpeek: list[tuple[str, str, str]] = []  # (seq, label, 앞뒤 발췌 — 마스킹 지난 것)
     rnd_lab = random.Random(a.seed)
+    #: 🔄 8판 — 앵커 실태. `--anchor` 없이는 한 번도 안 돈다
+    abox: collections.Counter[str] = collections.Counter()
+    averdict: collections.Counter[str] = collections.Counter()
+    aph: collections.Counter[str] = collections.Counter()
+    adocs: collections.Counter[str] = collections.Counter()
+    a_list = re.compile(r"(?:및|과|와|,)|등\s*\d+\s*개")
 
     for p in store.current_files(RAW, "*.xml"):
         r = ET.parse(p).getroot()
@@ -339,6 +404,38 @@ def main() -> int:
                 ladd_docs += 1
                 ladd_pairs += len(lr - lo)
 
+        # 🔄 8판 — 앵커가 무엇을 잡고 무엇을 놓치나
+        #    🚨 **이유 「문구」로만 센다** — 골든셋에 실제로 들어가는 것이 이것이다.
+        #       이유 전문에 남은 것은 배포물이 아니다 (D-165 의 「배포물과 자료구조」).
+        rs_for_anchor = r_ps
+        if a.anchor:
+            orig, anc = anchor_ftc(r)
+            if not anc:
+                abox["앵커를 못 만들었다"] += 1
+            else:
+                if a_list.search(orig):
+                    abox["🔴 앵커에 나열어가 들었다 (및·와·등 N개)"] += 1
+                # 🚨 **마스킹 전 원문**에서 센다 — 마스킹 뒤엔 앵커가 이미 지워져 0 이 된다.
+                #    이 수는 화면에 안 나가고 칸을 세는 데만 쓴다 (D-17).
+                if raw["이유"].count(anc) == 0:
+                    abox["🔴 앵커가 이유 본문에 0회 — 무력하다"] += 1
+                else:
+                    abox["앵커가 이유 본문에 1회 이상 맞는다"] += 1
+
+            # 🔴 남은 맨몸 상호가 피심인인가 — **판정만 담는다**
+            left: set[str] = set()
+            for q in rs_for_anchor:
+                left.update(residual_bare_orgs(q))
+            if left:
+                seen_doc: set[str] = set()
+                for nm in left:
+                    v = same_org(nm, anc) if anc else "앵커없음"
+                    averdict[v] += 1
+                    aph[v] += sum(1 for q in rs_for_anchor if nm in q)
+                    seen_doc.add(v)
+                for v in seen_doc:
+                    adocs[v] += 1
+
         # 🚨 이유에서 `NOISE` 가 무엇을 버렸는지 — 필터를 이유에 그대로 쓰면 안 될 수 있다
         for q in QUOTE.findall(masked_reason):
             q = q.strip()
@@ -443,6 +540,34 @@ def main() -> int:
         print(f"\n  ✅ {out}  {out.stat().st_size:,}B · {len(dump_rows):,}줄")
         print("     🔴 제3자 상호는 마스킹을 안 지난다 — 이 파일을 옮기는 것은 공개 범위다 (D-68)")
         print("     ⛔ 생성물이다 — 손으로 고치지 않는다 (D-90)")
+
+    if a.anchor:
+        print("\n" + "─" * 72)
+        print("  🆕 앵커 실태 — `anchor_ftc` 가 무엇을 잡고 무엇을 놓치나 (CORE 기준)")
+        for k in sorted(abox, key=lambda x: -abox[x]):
+            print(f"     {k:40s} {abox[k]:>5}건 ({abox[k] / core:>5.1%})")
+
+        print("\n  🔴 **이유 문구에 남은 맨몸 상호** — 그것이 피심인인가 (D-233)")
+        if averdict:
+            names = {
+                "부분": "✅ 앵커의 부분/변형 — **피심인이다. 대상 안**",
+                "로마자": "✅ 로마자↔한글 대응 — **피심인이다. 대상 안**",
+                "무관": "⬜ 앵커와 무관 — 제3자 후보. **대상 밖** (D-233)",
+                "앵커없음": "🚨 앵커가 없어 판정 불가 — 「안 봤다」다 (D-110)",
+            }
+            print(f"     {'판정':34s} {'이름':>5} {'문구':>6} {'문서':>6}")
+            for k in ("부분", "로마자", "무관", "앵커없음"):
+                if averdict.get(k):
+                    print(f"     {names[k]:38s} {averdict[k]:>5} {aph[k]:>6} {adocs[k]:>6}")
+            hit = averdict.get("부분", 0) + averdict.get("로마자", 0)
+            ph = aph.get("부분", 0) + aph.get("로마자", 0)
+            print(f"\n     🔴 **대상 안인데 안 지워진 이름 {hit}개 · 문구 {ph}개**")
+            print("        이 문구들은 오늘 골든셋 「이유」 4,732행에 들어가 있다 (D-233 위반)")
+        else:
+            print("     ⬜ 남은 것이 없다 (D-110 — 「없다」도 사실이다)")
+
+        print("\n     ⛔ **이름은 한 개도 안 찍었다** (D-17). 판정만 냈다.")
+        print("        🚨 로마자 대응표가 짧아 「무관」에 피심인이 섞일 수 있다 — **하한이다**")
 
     if a.labels:
         print("\n" + "─" * 72)
