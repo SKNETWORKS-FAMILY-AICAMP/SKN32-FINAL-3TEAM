@@ -844,6 +844,26 @@ def inventory() -> None:
 
 
 @app.command()
+def derived_manifest(
+    write: bool = typer.Option(False, "--write", help="data/derived_manifest.jsonl 을 씁니다"),
+    check: bool = typer.Option(False, "--check", help="원장 ↔ 디스크 대조. 다르면 종료코드 1"),
+) -> None:
+    """**파생물 원장** — 기기 사이에 파생물을 옮길 때 같은지 확인합니다.
+
+    🚨 `data/manifest.jsonl` 은 **raw 전용**입니다(20,395행 · derived 0행). 그래서
+       「네가 받은 파생물이 내 것과 같은가」를 물을 수 없었습니다 — 이것이 그 짝입니다.
+    🔴 부류를 셋으로 가릅니다 — **원천**(다시 안 나온다) · **표본**(다시 뽑으면 갈린다) ·
+       **생성물**. 앞의 둘만 git 으로 따라갑니다 (`.gitignore` 예외).
+    """
+    args = ["uv", "run", "python", "scripts/derived_manifest.py"]
+    if write:
+        args.append("--write")
+    if check:
+        args.append("--check")
+    raise typer.Exit(run(*args))
+
+
+@app.command()
 def status() -> None:
     """데이터 현황판을 다시 만듭니다 — 무엇을 쓰기로 했고 무엇을 안 쓰기로 했나.
 
@@ -1191,6 +1211,8 @@ MENU: list[tuple[str, str, object]] = [
     ("2", "새 기기 안내", onboard),
     ("3", "환경 진단", doctor),
     ("4", "이 기기 재고", inventory),
+    # 🚨 번호는 뒤에서 받는다 (D-162) — 「환경」 무리에 있지만 번호는 42 다
+    ("42", "파생물 원장", derived_manifest),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)
