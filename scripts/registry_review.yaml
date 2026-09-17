@@ -128,7 +128,7 @@ mfds_casebook_2021:
   # 🚨 robots — mfds_casebook 과 같은 자료실 PDF 다운로드 패턴이나 도메인이 다르다
   #    (foodsafetykorea.go.kr). 아직 안 쟀다 — 수집 전에 재야 한다.
   robots_checked_at: null
-  collected_at: null
+  collected_at: 2026-09-18
 mfds_online_guideline:
   # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
