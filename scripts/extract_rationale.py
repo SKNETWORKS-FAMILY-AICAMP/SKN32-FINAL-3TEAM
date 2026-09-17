@@ -138,6 +138,7 @@ def main() -> None:
         "# 🚨 손으로 고치지 마십시오. 근거를 바꾸려면 판정매트릭스를 고치고 다시 뽑습니다.\n"
         + yaml.safe_dump(out, allow_unicode=True, sort_keys=True, width=10**6),
         encoding="utf-8",
+        newline="\n",
     )
     with_why = sum(1 for v in out.values() if v.get("why"))
     with_note = sum(1 for v in out.values() if v.get("note"))

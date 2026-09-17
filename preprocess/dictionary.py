@@ -254,7 +254,7 @@ def main() -> int:
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        with OUT.open("w", encoding="utf-8") as f:
+        with OUT.open("w", encoding="utf-8", newline="\n") as f:
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         print(f"\n  → {OUT}  ({len(rows):,}줄)")

@@ -374,7 +374,7 @@ def collect_annex(law_id: str, *, dry_run: bool = False, forms: bool = False) ->
 
     if parsed_rows and not dry_run:
         out = store.derived_dir("law_annex") / f"{law_id}.jsonl"
-        with out.open("w", encoding="utf-8") as f:
+        with out.open("w", encoding="utf-8", newline="\n") as f:
             for r in parsed_rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         print(f"\n  💾 파싱 {len(parsed_rows)}행 → {out.relative_to(store.ROOT)}")

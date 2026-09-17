@@ -75,6 +75,7 @@ def last_commit(rel: str) -> tuple[str, str]:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        newline="\n",
     ).stdout.strip()
     return tuple(out.split("|", 1)) if "|" in out else ("미커밋", "—")
 
@@ -196,7 +197,7 @@ def main() -> None:
                 f"<!-- 레포 사본 · {ver} · 갱신 {date} · 커밋 {sha} · 원본 {rel} "
                 f"- 여기서 고치지 마십시오 -->\n"
             )
-        (OUT / Path(dst).name).write_text(stamp + text, encoding="utf-8")
+        (OUT / Path(dst).name).write_text(stamp + text, encoding="utf-8", newline="\n")
         rows.append((Path(dst).name, ver, sha, date))
 
     # 🔄 레지스트리 스냅샷 — MAP 과 달리 원본 파일이 아니라 **생성물**이다.
@@ -209,6 +210,7 @@ def main() -> None:
         f"> 🚨 여기서 고치지 마십시오 — `_matrix/data.js` 가 원본이고 그것조차 생성물입니다.\n\n"
         + registry_snapshot(),
         encoding="utf-8",
+        newline="\n",
     )
     rows.append((snap, "생성물", sha, date))
 

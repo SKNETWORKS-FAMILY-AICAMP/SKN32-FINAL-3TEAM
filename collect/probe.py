@@ -290,10 +290,12 @@ def main(argv: list[str]) -> int:
             merged = {}
     for r in rows:
         merged[r["id"]] = r
-    CACHE.write_text(json.dumps(merged, ensure_ascii=False, indent=1), encoding="utf-8")
+    CACHE.write_text(
+        json.dumps(merged, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+    )
 
     out = OUT / f"실측_{date.today().isoformat()}.md"
-    out.write_text(render(list(merged.values())), encoding="utf-8")
+    out.write_text(render(list(merged.values())), encoding="utf-8", newline="\n")
     print(f"탐침 {len(rows)}건 · 게이트가 막은 것 {len(skipped)}건 · 리포트 누적 {len(merged)}건")
     for s in skipped:
         print(f"  ⏸ {s}")

@@ -165,7 +165,7 @@ def main() -> int:
         base = files[0]
         n = 0
         out.parent.mkdir(parents=True, exist_ok=True)
-        with out.open("w", encoding="utf-8") as f:
+        with out.open("w", encoding="utf-8", newline="\n") as f:
             for line in base.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
                     continue

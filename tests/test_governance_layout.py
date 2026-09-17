@@ -1460,6 +1460,91 @@ def test_생성물이_훅의_고정점이다() -> None:
     )
 
 
+#: 텍스트를 쓰는 곳을 훑는 자리. 🚨 `wb`(바이너리)와 `newline=""`(csv 모듈이 요구한다)는 제외한다.
+_TEXT_WRITE_MODES = {"w", "wt", "a", "at", "x", "xt", "w+", "r+", "a+"}
+
+
+def _text_writers(path: Path) -> list[tuple[int, str]]:
+    """`(줄번호, 호출이름)` — 개행을 고정하지 않은 텍스트 쓰기 자리."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:  # pragma: no cover — 문법이 깨졌으면 다른 게이트가 잡는다
+        return []
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+        if name == "write_text":
+            pass
+        elif name == "open":
+            mode = next(
+                (
+                    a.value
+                    for a in node.args[1:2] + [k.value for k in node.keywords if k.arg == "mode"]
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str)
+                ),
+                "r",
+            )
+            if mode not in _TEXT_WRITE_MODES:
+                continue
+        else:
+            continue
+        kw = {k.arg for k in node.keywords}
+        if "encoding" in kw and "newline" not in kw:
+            out.append((node.lineno, name))
+    return out
+
+
+@pytest.mark.gate
+def test_텍스트를_쓰는_곳은_개행을_고정한다() -> None:
+    """🔴 **파이썬은 Windows 에서 `\n` 을 `\r\n` 으로 바꿔 쓴다** (2026-09-17 실측).
+
+    ⛔ `.gitattributes` 가 `* text=auto eol=lf` 인데 생성기가 CRLF 로 써서 —
+       · 추적되는 생성물은 `git add` 마다 **「CRLF will be replaced by LF」 경고**가 나고
+         재생성할 때마다 **내용이 같은데도 modified 로 뜬다**
+       · 추적 안 되는 `data/**` 는 **클론마다 바이트가 다르다.**
+         `evalset_by_statute.jsonl` 이 클론 B 에서 **869,426 B**, 리눅스에서 **867,592 B**
+         (차이 1,834 = 줄 수). **되받아 바이트로 대조하는 절차(D-149)가 통째로 무의미해진다.**
+
+    ★ 그래서 텍스트를 쓰는 모든 자리가 `newline=` 을 **명시**한다.
+      🚨 `newline=""` 도 명시다 — csv 모듈이 그것을 요구한다. 여기서 막는 것은 **안 적은 것**이다.
+    """
+    bad = [
+        f"{p.relative_to(ROOT).as_posix()}:{line} — {name}(…) 에 newline= 이 없다"
+        for d in ("scripts", "preprocess", "collect", "app", "db")
+        if (ROOT / d).is_dir()
+        for p in sorted((ROOT / d).rglob("*.py"))
+        for line, name in _text_writers(p)
+    ]
+    assert not bad, (
+        "생성물의 개행이 기기마다 갈린다 — Windows 에서 CRLF 로 쓰인다.\n"
+        '  ★ 고치는 법: `encoding="utf-8"` 옆에 `newline="\\n"` 을 붙인다.\n  ' + "\n  ".join(bad)
+    )
+
+
+@pytest.mark.gate
+def test_생성물이_CRLF_로_쓰여_있지_않다() -> None:
+    """🚨 **바이트로 읽는다.** `read_text()` 는 universal newlines 라 CRLF 를 못 본다 —
+
+    앞 게이트(`test_생성물이_훅의_고정점이다`)가 CRLF 를 지나보낸 이유가 그것이다.
+    """
+    crlf = b"\r\n"
+    bad = []
+    for rel in GENERATED:
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        n = path.read_bytes().count(crlf)
+        if n:
+            bad.append(f"{rel}: CRLF {n:,}줄")
+    assert not bad, (
+        '생성물이 CRLF 로 쓰여 있다 — 생성기가 newline="\\n" 을 안 걸었거나, '
+        "손으로 고친 뒤 편집기가 바꿨다 (D-90 · D-92).\n  " + "\n  ".join(bad)
+    )
+
+
 # ══════════════════════════════════════════════════════════
 # 🔴 **수집기 디스패치** — 산문이 아니라 표가 판정한다 (2026-09-10 · D-179)
 # ══════════════════════════════════════════════════════════

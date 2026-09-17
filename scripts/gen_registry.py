@@ -190,6 +190,12 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         "출처: 식품의약품안전처 「식품 등 온라인 부당광고 사례집」(사이버조사팀, 2026-04) "
         "(저작권법 제24조의2 제1항 · 제37조)",
     ),
+    # 🔄 2026-09-17 — 식품안전나라 게시물이라 D-132 **준용**이다(mfds.go.kr 본청이 아니다).
+    "mfds_casebook_2021": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「온라인 식품·건강기능식품·의약외품·화장품 분야 부당광고 사례집」"
+        "(사이버조사팀, 2021) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
     "krei_food": (
         "공공누리 제1유형(출처표시) — 원시자료 배지 실측 2026-09-02. "
         "🚨 「공공누리」가 조건이 아니라 **유형**이 조건이다 (D-110)",
@@ -409,6 +415,16 @@ def block(key, s, extra=None, covers=None, status="collect"):
 EXTRA = {
     # ── 마스킹 정책 3종 (2026-09-08) — `docs/ohb/검토요청_2026-09-08_마스킹정책_3종.md` §4
     #    🚨 각 축을 **실제로 걸어 보고** 정했다. 수치는 그 문서와 사실원장에 있다.
+    # 🔄 2026-09-17 — mfds_casebook 과 같은 축을 켜되 **실측이 아직 표본 2쪽뿐**이다.
+    "mfds_casebook_2021": [
+        "masking: >-",
+        "  업체명·대표자명·상표·주소 즉시 마스킹, 원문 미보관 (D-17).",
+        "  🚨 **원천이 이미 가렸다** — 스크린샷의 제품명·판매자명이 흰 박스 처리돼 있다.",
+        "  ⛔ 다만 **전수 확인은 안 했다**(2026-09-17 표본 2쪽). D-157 로 재기 전까지 방어로 켠다 —",
+        "  mfds_casebook 에서 대표자명 1건이 진짜였던 자리다.",
+        "  🚨 적발 광고 캡처는 광고주 저작물이라 **이미지는 G1 미추출**이다 (D-18).",
+        "  ★ 그러나 **문구 추출은 다른 축**이다 — 문구만 취해 G2+NOREDIST·40자 상한으로 다룬다 (D-133 ①②③).",
+    ],
     "mfds_casebook": [
         "masking: >-",
         "  업체명·대표자명·상표·주소 즉시 마스킹, 원문 미보관 (D-17). 2026-09-08 판정 · 2인 확인.",
@@ -673,6 +689,9 @@ ORDER = [
     "mfds_sanctions",
     "mfds_press",
     "mfds_casebook",
+    # 🔄 2026-09-17 신규 — 2021 판 사례집. mfds_casebook 과 중복 아님(OCR 84쪽 전량 대조).
+    #    9호·10호·화장품법 유형이 우리 원천 중 여기에만 있고, 사전 새 어휘 103종이 나온다.
+    "mfds_casebook_2021",
     # 🔄 2026-09-07 신규 — 2인 확인 판정 A(A-1)·B·E 로 열렸다
     # ⛔ 2026-09-09 내렸다 — `NOT_ADOPTED_IDS` 와 `registry_tail.yaml` 의 not_adopted 로 간다.
     #    🚨 ORDER 에 남겨 두면 미채택으로 적어 놓고도 sources 에 그대로 생성된다.
@@ -789,7 +808,7 @@ for key in ORDER:
     out.append(block(key, s, EXTRA.get(key), covers, st))
 
 (ROOT / "build").mkdir(exist_ok=True)
-with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8") as _out:
+with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8", newline="\n") as _out:
     _out.write("\n\n".join(out) + "\n")
 print("등재", len(ORDER), "건 · 법제처 covers", len(LAW_COVERS), "종 흡수")
 # 🔄 미채택으로 내린 것은 매트릭스에 판정 근거로 남지만 레지스트리 sources 에는 없다.
@@ -814,6 +833,6 @@ for m in missing:
 body = (ROOT / "build/registry_body.yaml").read_text(encoding="utf-8")
 head = (ROOT / "scripts/registry_head.yaml").read_text(encoding="utf-8")
 tail = (ROOT / "scripts/registry_tail.yaml").read_text(encoding="utf-8")
-(ROOT / "data_sources.yaml").write_text(head + body + tail, encoding="utf-8")
+(ROOT / "data_sources.yaml").write_text(head + body + tail, encoding="utf-8", newline="\n")
 print("data_sources.yaml 생성 완료 —", len(head + body + tail), "문자")
 print("🚨 이어서 반드시: uv run pytest -m gate")

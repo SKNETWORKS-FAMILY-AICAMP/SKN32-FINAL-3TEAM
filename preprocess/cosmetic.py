@@ -110,7 +110,7 @@ def main() -> int:
             print(f"        규제 구분: {kinds}")
         if args.dump:
             out = store.derived_dir(".") / f"{source}.jsonl"
-            with out.open("w", encoding="utf-8") as f:
+            with out.open("w", encoding="utf-8", newline="\n") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
             print(f"        💾 → {out.relative_to(ROOT)}")

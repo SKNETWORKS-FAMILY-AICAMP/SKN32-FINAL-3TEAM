@@ -571,7 +571,7 @@ def main() -> None:
     ]
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text("\n".join(L), encoding="utf-8")
+    OUT.write_text("\n".join(L), encoding="utf-8", newline="\n")
     print(f"검토 대상 {len(pending)}건 — A 자세히 {len(a)} · B 확인 {len(b)} · C 자명 {len(c)}")
     print(f"집합: 용도열림 {len(targets)} · status collect {len(planned)} · 겹침 {len(both)}")
     if need:
