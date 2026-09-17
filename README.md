@@ -14,9 +14,9 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![tests](https://img.shields.io/badge/tests-733_(gate_326)-0F7B4F?style=flat-square)
-![decisions](https://img.shields.io/badge/설계결정-D--232-2B5BD7?style=flat-square)
+![decisions](https://img.shields.io/badge/설계결정-D--233-2B5BD7?style=flat-square)
 
-**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 232건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
+**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 233건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
 
 </div>
 
@@ -202,7 +202,7 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 ```
 게이트 테스트   pytest -m gate   326건
 전체 테스트     pytest           733건
-설계 결정       D-01 ~ D-232     빠진 번호 0
+설계 결정       D-01 ~ D-233     빠진 번호 0
 ```
 
 ---
@@ -291,7 +291,7 @@ uv run python launcher.py serve      # FastAPI
 | 문서 | 무엇인가 |
 |---|---|
 | [`docs/00_사실원장.md`](docs/00_사실원장.md) | ★ **수치 · 일정 · 파라미터의 단일 출처.** 전부 실측이고, 어느 기기에서 쟀는지까지 적습니다 |
-| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 232건.** 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
+| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 233건.** 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
 | [`docs/00_거버넌스_집행계약.md`](docs/00_거버넌스_집행계약.md) | 게이트가 무엇을 어떻게 막는지 |
 | [`docs/00_산출물현황.md`](docs/00_산출물현황.md) | 산출물 현황 — 제출본은 여기서 빌드합니다 |
 | [`docs/01_기획/`](docs/01_기획/) · [`02_설계/`](docs/02_설계/) · [`03_데이터/`](docs/03_데이터/) | 기획서 · DB 스키마 · 청킹 · LangGraph 상태 · 전처리 사양 |
