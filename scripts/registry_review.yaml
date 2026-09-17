@@ -52,7 +52,7 @@ ftc_decisions_body:
   #   확인 근거 정리: docs/ohb/검토요청_2026-09-02_ftc_decisions_body.md
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-07
+  collected_at: 2026-09-17
 
 mfds_sanctions:
   decided_by: 오한빈
@@ -60,7 +60,7 @@ mfds_sanctions:
   # 확인 2026-09-02 — data.go.kr 이용허락범위 = 제한 없음
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-14
+  collected_at: 2026-09-17
 
 mfds_press:
   decided_by: 오한빈
@@ -86,7 +86,7 @@ mfds_press:
   #      종전 표기로는 registry.require 의 CRAWL_ACCESS 검사를 그냥 지나가
   #      **robots 확인 없이 크롤링이 시작될 수 있었다.**
   robots_checked_at: 2026-09-03
-  collected_at: 2026-09-09
+  collected_at: 2026-09-17
 
 # ── 🔄 2026-09-03 D-132 신규 등재 3건 — 판정 근거는 data.js `why`. reviewed_by 는 다른 팀원이
 #    저작권법 제24조의2 제1항 조문 + 식약처 자료실 게시 화면을 열어 재현한 뒤 기입한다 (권소라 외).
@@ -115,7 +115,7 @@ mfds_casebook:
   #      바꾸자마자 게이트가 잡았다. 측정은 이미 있었고 **기록만 안 옮겨져 있었다.**
   #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 — 그 축은 D-132 준용으로 별도다.
   robots_checked_at: 2026-09-07
-  collected_at: 2026-09-09
+  collected_at: 2026-09-17
 mfds_online_guideline:
   # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
@@ -133,7 +133,7 @@ mfds_online_guideline:
   #      바꾸자마자 게이트가 잡았다. 측정은 이미 있었고 **기록만 안 옮겨져 있었다.**
   #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 — 그 축은 D-132 준용으로 별도다.
   robots_checked_at: 2026-09-07
-  collected_at: 2026-09-10
+  collected_at: 2026-09-17
 foodsafety_faq:
   decided_by: 오한빈
   decided_at: 2026-09-03
@@ -233,7 +233,7 @@ law_go_kr:
   #      위 「법적효력/저작권」 페이지로 교체가 남아 있다 (data.js 에서).
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-07
+  collected_at: 2026-09-17
 
 platform_guide:
   decided_by: 오한빈
@@ -289,7 +289,7 @@ cosmetic_ingredient:
   #    why(이용허락범위 제한 없음 · G3 전 용도 개방이 근거로 뒷받침된다)와 정면으로 모순 (역검토 v1.4 문제 5)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-07
+  collected_at: 2026-09-17
 
 cosmetic_restricted:
   decided_by: 오한빈
@@ -298,7 +298,7 @@ cosmetic_restricted:
   # 🔧 정정 요청 — caution 이 09-02 실측 이전 문장이다 (역검토 v1.4 문제 5)
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-07
+  collected_at: 2026-09-17
 
 aihub_71486:
   # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
@@ -640,4 +640,4 @@ mfds_special_use_guide:
   #      바꾸자마자 게이트가 잡았다. 측정은 이미 있었고 **기록만 안 옮겨져 있었다.**
   #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 — 그 축은 D-132 준용으로 별도다.
   robots_checked_at: 2026-09-07
-  collected_at: 2026-09-09
+  collected_at: 2026-09-17
