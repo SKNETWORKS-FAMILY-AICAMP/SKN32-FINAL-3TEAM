@@ -333,6 +333,11 @@ RAW_EXCEPTIONS = {
     Path("tests/test_sanctions_scan.py"),
     Path("tests/test_store_edition.py"),
     Path("tests/test_store_read_editions.py"),
+    # 🔄 2026-09-18 — 판 채택은 `data/raw` 안에서 판을 원본 자리로 올리는 일 **그 자체**라
+    #    그 경로를 들지 않고는 검사할 수 없다 (`test_store_edition.py` 와 같은 자리).
+    #    ⛔ 이 검사를 약하게 하지 않는다 — 경로를 안 드는 꼴로 테스트를 고치면
+    #       2026-09-18 사고(소스 id 폴더에 넣어 334노드 소실)를 막는 검사가 사라진다 (D-162).
+    Path("tests/test_adopt.py"),
 }
 
 

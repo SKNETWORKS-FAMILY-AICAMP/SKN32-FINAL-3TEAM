@@ -778,6 +778,22 @@ def register(
 
 
 @app.command()
+def adopt(
+    source: str = typer.Argument(..., help="레지스트리 소스 id"),
+    stem: str = typer.Argument(..., help="판을 뺀 원본 이름 (확장자 없이)"),
+) -> None:
+    """판(`__c…`)을 **원본 자리로 올린다** — `collect` 가 만들고 `current_files` 가 멈추는 그 다음 칸.
+
+    🔴 이 자리가 비어 있었습니다 (2026-09-18). 수집기는 원본을 덮지 않고 판으로 저장하고
+       (규약 2), 추출기는 판이 있으면 멈춥니다(D-143 — 어느 것을 쓸지는 사람이 정한다).
+       **채택하는 명령이 없어서** 손으로 옮기다가 원장이 깨졌습니다.
+    🚨 원장에 원본 경로의 새 행을 붙입니다 — 그래야 `doctor --hash` 가 훼손으로 안 봅니다.
+    🚨 2인 확인은 요구하지 않습니다 (팀장 판정) — 채택 자체가 사람의 판정입니다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "collect.ingest", "adopt", source, stem))
+
+
+@app.command()
 def collect(
     source: str = typer.Argument(..., help="레지스트리 소스 id"),
     use: str = typer.Option("U1", "--use", help="U1~U4"),
@@ -1118,6 +1134,7 @@ ASK_ARG: dict[str, list[tuple[str, bool, str]]] = {
     "diagram": [("어느 도면인가 (엔터 = 전부)", False, "text")],
     "probe": [("어떤 소스를 열어 볼까", False, "collect")],
     "collect": [("어떤 소스를 받을까", True, "collect")],
+    "adopt": [("어떤 소스인가", True, "collect"), ("원본 이름 (확장자 없이)", True, "text")],
     "count": [("받아 온 파일이나 폴더 경로", True, "path")],
     "register": [("어떤 소스인가", True, "manual"), ("받아 온 파일이나 폴더 경로", True, "path")],
     "extract": [("어떤 원천을 추출할까", False, "extract")],
@@ -1213,6 +1230,7 @@ MENU: list[tuple[str, str, object]] = [
     ("4", "이 기기 재고", inventory),
     # 🚨 번호는 뒤에서 받는다 (D-162) — 「환경」 무리에 있지만 번호는 42 다
     ("42", "파생물 원장", derived_manifest),
+    ("43", "판 채택", adopt),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)

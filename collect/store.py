@@ -166,6 +166,32 @@ def current_files(
     return [base[k] for k in sorted(base)]
 
 
+#: 🔴 **소스 id ≠ 원문 폴더 이름.** 수집기마다 `FAMILY` 를 들고 있어서 흩어져 있었다.
+#:    ⛔ 2026-09-18 사고 — `ingest.cmd_register()` 가 `raw_dir(source_id)` 를 불러
+#:       `law_go_kr` 파일을 **`data/raw/law_go_kr/`** 에 넣었다. 추출기는 `data/raw/law/` 를
+#:       보므로 화장품법 334노드가 코퍼스에서 **조용히 사라졌다** (law_article 2,207 → 1,873).
+#:    ★ 그래서 매핑을 **원문 경로를 정하는 이 모듈**이 든다. `preprocess/inventory.py` 가
+#:      같은 표를 갖고 있었는데(D-99), 그쪽이 이것을 쓴다.
+FAMILY_OF: dict[str, tuple[str, ...]] = {
+    "mfds_hf_ingredient_board": ("mfds_hf_board",),
+    "ftc_decisions_body": ("ftc",),
+    "ftc_decisions_api": ("ftc",),
+    "ftc_decisions": ("ftc",),
+    "law_go_kr": ("law",),
+    "mfds_press": ("mfds_press", "mfds_press_pdf"),
+}
+
+
+def families(source_id: str) -> tuple[str, ...]:
+    """이 소스의 원문 폴더 이름들. 표에 없으면 소스 id 그대로다."""
+    return FAMILY_OF.get(source_id, (source_id,))
+
+
+def raw_dir_of(source_id: str) -> Path:
+    """소스가 **글을 쓰는** 원문 폴더. 🚨 여럿이면 첫 번째가 정본이다 (mfds_press 의 pdf 는 부속)."""
+    return raw_dir(families(source_id)[0])
+
+
 def raw_dir(family: str) -> Path:
     """data/raw/<계열>/ — 없으면 만든다.
 
