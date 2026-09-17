@@ -131,6 +131,7 @@ def test_어휘_기호_갈래는_거리가_없다() -> None:
     assert _hit(match=rt.MATCH_VECTOR, distance=0.6).lexical is None
 
 
+@pytest.mark.gate
 def test_Hit_가_SearchHit_과_같은_칸을_든다() -> None:
     """`api.search` 가 `SearchHit(**asdict(hit))` 로 넘긴다 — 칸이 어긋나면 500 이다.
 

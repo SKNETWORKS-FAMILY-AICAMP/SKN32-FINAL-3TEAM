@@ -46,7 +46,7 @@ from app.contracts import (
     Timing,
     Verdict,
 )
-from app.settings import PARAMS
+from app.settings import DEFAULT_CATEGORY, PARAMS
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
 MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
@@ -304,7 +304,13 @@ def retrieve(state: JudgeState, config=None) -> dict[str, Any]:  # noqa: ANN001
     found: list[SentEvidence] = []
     for i, text in enumerate(sents):
         # 🚨 코어가 결과도 상태도 짓는다 — 이 노드는 얇다 (D-51 · D-99). `api.py` 와 같은 문이다.
-        hits, st = rt.search(cur, text, product.category)
+        # 🔴 **`category` 가 `None` 이면 미확정이다** (2026-09-16 · 계약 주석 참조).
+        #    ⬜ 미확정이면 **분기마다 따로 검색**해야 한다 (D-61 · D-127 `cat_unknown`) —
+        #       `SQL_*` 이 `%s = ANY(c.category)` 로 **한 값만** 받아서 아직 못 한다.
+        #    ⛔ 지금은 `DEFAULT_CATEGORY` 로 한 번만 돈다. 그래서 **미확정 문장은 건기식·화장품
+        #       전용 조문을 못 본다** — `hold` 로 가야 하는 이유가 하나 더 있는 것이지,
+        #       이 한 줄이 미확정을 「일반」으로 **판정**한 것이 아니다 (D-188).
+        hits, st = rt.search(cur, text, product.category or DEFAULT_CATEGORY)
         found.append(
             SentEvidence(
                 sent_id=sent_id(i),

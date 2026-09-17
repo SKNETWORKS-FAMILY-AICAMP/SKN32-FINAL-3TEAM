@@ -22,7 +22,7 @@ Create Date: 2026-09-09
 
     0번의 입력 (동결 · 안 바뀜)            db/schema_0001.sql  ← **이 파일이 읽는 것**
     거버넌스·데이터 층의 현재 선언           db/schema.sql       ← 사람이 읽는 정본
-    런타임 층 (6테이블)                     app/models.py       ← ORM · autogenerate
+    런타임 층 (7테이블)                     app/models.py       ← ORM · autogenerate
 
 ⛔ DDL 을 이 파일에 복사하면 같은 판정이 **세 곳**(설계 문서 · schema.sql · 마이그레이션)에
    생긴다. 그러면 한 곳만 고쳐지고, 고쳐지지 않은 쪽이 실제로 도는 쪽일 수 있다 (D-99).

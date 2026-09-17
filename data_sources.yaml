@@ -182,7 +182,7 @@ sources:
     masking: 업체명·대표자명 즉시 마스킹, 원문 미보관 (D-17)
     fragment_note: 행정처분 레코드에 처분 대상 업체가 들어온다
     caution: "★★ 2026-09-02 식품안전나라 서비스 목록 확인(오한빈) — 「행정처분결과」가 다섯으로 나뉜다: I0470 행정처분결과 · I0480 식품제조가공업 · I0481 식품판매업 · I0482 수입식품업 · I2630 식품접객업. 🚨 serviceId 에 하이픈이 없다 — I-0040·I-0050 과 형식이 다르다. 화면 그대로 적는다. 🚨🚨 다섯 전부 「식품」이다 — 화장품 행정처분이 이 경로에 없다. 우리 도메인은 화장품·건기식 둘인데 제재 데이터가 식품 쪽만 잡힌다. 1층 판정라벨의 절반이 빌 수 있다 — 화장품 행정처분의 별도 경로를 찾아야 한다(식약처 의약품안전나라 계열 또는 별도 API). 이것이 확인되기 전에는 「1층이 채워졌다」고 말할 수 없다. / 위반내용 필드가 자연어인지 코드인지 1W 확인. 업체명 마스킹 필수."
-    collected_at: 2026-09-11
+    collected_at: 2026-09-14
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -195,7 +195,7 @@ sources:
     url: "https://www.mfds.go.kr/brd/m_99/list.do"
     layer: "1층 판정라벨"
     grade: G3
-    use: {U1: deny, U2: deny, U3: allow, U4: allow}
+    use: {U1: deny, U2: allow, U3: allow, U4: allow}
     constraints: [BY]
     redistributable: true
     value: B
@@ -233,7 +233,7 @@ sources:
     url: "https://www.mfds.go.kr/brd/m_218/view.do?seq=33711"
     layer: "1층 판정라벨"
     grade: G3
-    use: {U1: deny, U2: deny, U3: allow, U4: allow}
+    use: {U1: deny, U2: allow, U3: allow, U4: allow}
     constraints: [BY]
     redistributable: true
     value: A
@@ -426,7 +426,7 @@ sources:
       **주소는 사업장 소재지**라 더욱 그렇다. 판정 단위는 FRAGMENT 다 (D-18).
       ★ 게시판(mfds_hf_ingredient_board)이 주던 것과 **같은 필드**다 — 조건이 깨끗한 경로로 대체된다.
     caution: "🔄 2026-09-11 — 아래 마지막 줄의 「1W 에 셋을 대조해 정본을 정한다」가 오늘 닫혔다 (D-185). 정본은 I-0050 + 게시판이고, 이 원천은 보조로 내리는 대신 다른 층(표시 문구 관측)으로 옮겼다 — 인정 문구가 아니므로 「보조 적법라벨」이 될 수 없다. / ★★ 2026-09-02 — 요청주소가 확정됐다. data.go.kr 상세에 API 유형: LINK 라고 적혀 있다 — 자체 엔드포인트 없이 원 기관 API 로 연결한다는 뜻이고, 그 원 기관이 식품안전나라다: <code>http://openapi.foodsafetykorea.go.kr/api/{keyId}/{serviceId}/{dataType}/{startIdx}/{endIdx}</code> · 서비스 I-0040 「건강기능식품 기능성 원료인정현황」. 🚨 2026-09-02 — data.go.kr 에 활용신청 버튼 자체가 없다(오한빈). LINK 유형이라 신청도 원 기관에서 받는다: 식품안전나라 회원가입 + 인증키 신청(<code>.env FOODSAFETY_KEY</code>). 🚨 그래서 2인 확인이 덮는 경로와 실제 이용 경로가 갈린다 — 검토자가 본 「이용허락범위 제한 없음」은 data.go.kr 화면의 표시이고, 실제 호출은 식품안전나라에서 하며 가입 시 그쪽 약관에 동의하게 된다. 가입 화면의 이용약관에 추가 제약이 있으면 재판정 대상이다 — 오늘 반복해서 나온 형태다(조건은 늘 실제로 이용하는 화면에 있었다). / 🚨 포털 페이지가 엔드포인트가 아니라는 것이 두 겹이었다 — 소개 페이지도 아니고, 중계 주소도 아니고, 원 기관 주소다. / 속성정보 9개: 인정번호 · 인정일자 · 업체명 · 업종 · 주소 · 신청원료명 · 기능성 내용 · 1일 섭취량 · 섭취시 주의사항. ★ 「기능성 내용」이 구조화 필드로 나온다 — 2층이 찾던 것이다. 🚨 API 호출제한 500 (단위 불명) · 데이터 포맷 JSON+XML. / 15074311(개별인정형)·식품안전나라 게시판과 3중으로 겹칠 수 있다. 1W에 셋을 대조해 하나를 정본으로 정하고 나머지는 보조로 내린다."
-    collected_at: 2026-09-10
+    collected_at: 2026-09-14
     decided_at: 2026-09-11
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -458,7 +458,7 @@ sources:
       🔄 2026-09-02 탐침 확인 — 「이용허락범위 제한 없음」 · 운영단계 심의승인.
       🚨 ftc_decisions_api 와 같은 조건이다 (아래 cosmetic 2건도 같다).
     caution: "★★ 2026-09-02 출력항목 확인(오한빈) — 식품안전나라 I-0050 · 샘플 <code>/api/sample/I-0050/xml/1/5</code>. 🚨 serviceId 는 하이픈 포함이다. 출력 7항목: HF_FNCLTY_MTRAL_RCOGN_NO(원료인정번호) · DAY_INTK_HIGHLIMIT/LOWLIMIT(1일 섭취량 상·하한) · WT_UNIT(중량단위) · RAWMTRL_NM(원재료명) · IFTKN_ATNT_MATR_CN(섭취시 주의사항) · PRIMARY_FNCLTY(주된 기능성). ★ PRIMARY_FNCLTY 가 2층이 찾던 승인 문구다. ★★ 업체명·업종·주소가 아예 오지 않는다 — I-0040(9항목)과 달리 마스킹 대상이 없다. 구조가 우리 용도에 더 맞는다. 🚨 15074311 의 API 유형이 LINK 인지는 확인이 남는다 — LINK 가 아니면 data.go.kr 에 별도 엔드포인트가 있고, 그때는 2인 확인이 덮는 경로가 어느 쪽인지가 갈린다(같은 데이터라도 다른 접근 경로다). / 「미인정 기능성 집합」은 이 목록의 여집합으로 계산 — 제품별로 동적."
-    collected_at: 2026-09-10
+    collected_at: 2026-09-14
     decided_at: 2026-08-20
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -471,7 +471,7 @@ sources:
     url: "https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039"
     layer: "2층 적법라벨"
     grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
     constraints: [BY]
     redistributable: true
     value: A
@@ -1034,12 +1034,12 @@ sources:
     url: "https://khff.or.kr/user/info/InfoBoardUserView.do?_menuNo=369&boardSeqno=10035&postsSeqno=119567"
     layer: "6층 세그먼트·페르소나"
     grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
     constraints: [BY]
     redistributable: true
     value: A
     cost: free
-    status: collect
+    status: hold
     access: "보도자료 웹 공개"
     scale: "소비자실태 3,050명 (서울+5대광역시, 만20~79세)"
     license: "🔴 이용조건 문구 없음. 집계 통계는 **사실**이라 인용 가능하나 보도자료 문장·표 전재는 별개다 (2026-09-02 판정)"
@@ -1250,7 +1250,7 @@ sources:
     url: "https://developers.google.com/youtube/terms/developer-policies"
     layer: "플랫폼 API"
     grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
     constraints: [TOS]
     redistributable: true
     value: C
@@ -1272,7 +1272,7 @@ sources:
     url: "https://developers.google.com/search/blog/2025/07/trends-api"
     layer: "플랫폼 API"
     grade: G2
-    use: {U1: allow, U2: deny, U3: deny, U4: deny}
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
     constraints: [GATED, TOS]
     redistributable: true
     value: C
@@ -1476,6 +1476,56 @@ models:  # 모델 가중치도 G-게이트 대상이다 (D-23)
     license: Apache-2.0
     grade: G3
     use: {U1: allow, U2: deny, U3: deny, U4: allow}
+  kcelectra_base:
+    role: 인코더 (비교군 — 아키텍처 축 · D-84 ③)
+    license: MIT
+    grade: G3
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    note: >-
+      가중치 `beomi/KcELECTRA-base` (0.1B — kcbert-base 와 같은 저자·같은 도메인·같은 크기).
+      🚨 **D-84 ③(2026-08-30)이 비교군으로 넣고 D-106 이 「백본 선택 근거는 kcbert-base ×
+      KcELECTRA-base 로 충분하다」고 못박았는데 `models:` 에 등재되지 않은 채였다** —
+      D-23 이 「모델 가중치도 G-게이트 대상」이라고 정한 것을 이 모델만 지나쳤고,
+      그동안 게이트가 이 모델을 보지 못했다. 발표 자료(도면·기술 스택)는 이미 이름을 싣고 있다.
+      ✅ 라이선스 — D-70 의 다섯 경로로 확인했다 (2026-09-14): HF 모델 카드 사이드바 `mit` ·
+      cardData 에 `"license":"mit"` · tags 에 `license:mit` · GitHub README 에
+      「논문을 통한 사용 외에는 MIT 라이센스를 표기해주세요」.
+      ⬜ HF API JSON 의 **최상위** `license` 키는 없다(cardData 안에 있다) — KLUE 와 달리
+      나머지 네 경로가 값을 가지므로 「부재」가 아니다. 그래도 그대로 적는다.
+      ★ 왜 비교군인가 — **아키텍처 축**(BERT↔ELECTRA)이다. 코퍼스는 kcbert 와 같은 댓글이라
+      코퍼스 축은 고정되고 아키텍처만 갈린다. 공개 벤치마크가 전 과제 우세다
+      (PAWS 66.95→76.50 · KorNLI 74.85→82.12 · KorSTS 75.57→83.67 · NER 84.34→87.35).
+      ★ **D-70 이 남긴 ⚠️「KcELECTRA 의 길이는 미확인(512 로 추정)」을 닫는다** —
+      `config.json` 실측: `max_position_embeddings` **512** · `vocab_size` 30,000 ·
+      `hidden_size` 768 · `num_hidden_layers` 12 · `model_type` electra.
+      추정이 맞았고, 이제 추정이 아니다. kcbert-base 의 300 제약(D-83 층 3)이 여기엔 없다.
+      사전학습 — 네이버 뉴스 댓글·대댓글(2019-01-01~2021-03-09) 약 17.3GB · 1억 8천만 문장 이상.
+      🚨 **아직 한 번도 안 돌렸다** — kcbert × KcELECTRA 비교가 미실행이다 (D-146 · D-70 선결조건).
+  koelectra_base_v3:
+    role: 인코더 (비교군 — 코퍼스 축)
+    license: Apache-2.0
+    grade: G3
+    use: {U1: allow, U2: deny, U3: deny, U4: allow}
+    note: >-
+      가중치 `monologg/koelectra-base-v3-discriminator` (0.1B — kcbert-base 와 동급).
+      🚨 D-45 (b) · D-70 (c) 에서 두 번 후보였는데 두 번 다 **기각 사유가 기록되지 않았다** —
+      D-21 이 말하는 「의도적 제외와 미인지는 다른 상태다」의 빈칸이었다. 등재로 채운다.
+      ✅ 라이선스 — D-70 이 KLUE 에 쓴 다섯 경로로 확인했다 (2026-09-14):
+      HF 모델 카드 apache-2.0 · API JSON 에 `license` 키 **있음**("apache-2.0") ·
+      cardData 에 license 항목 있음 · tags 에 `license:apache-2.0` 있음.
+      ⬜ GitHub README 에는 라이선스 절이 없다. KLUE 는 **다섯 경로 전부**가 비어서 배제였고,
+      이쪽은 HF 네 경로가 값을 갖는다 — 「부재」가 아니라 「GitHub 에 다시 안 적었다」다.
+      그래도 한 경로가 빈 것은 숨기지 않고 적는다.
+      ★ 왜 비교군인가 — **코퍼스 축**이다. 아키텍처 축(BERT↔ELECTRA)은 kcbert × KcELECTRA 가
+      이미 가른다. v3 는 v1/v2 코퍼스(뉴스·위키·나무위키 약 14G · 2.6B 토큰)에
+      **모두의 말뭉치 약 20G** 를 더했고 그 구성이 「신문, 문어, 구어, 메신저, 웹」이다 —
+      🔴 **문어 전용이 아니다.** 「구어체 사전학습은 kcbert 계열뿐」이라는 D-70 의 전제를
+      이 모델이 시험한다. 그 전제는 지금껏 한 번도 실측된 적이 없다.
+      ★ Max Seq Len **512**(원저장소 표에 명시) · Vocab 35,000. kcbert-base 는
+      `max_position_embeddings = 300` 이라 D-83 층 3(문서 수준) 경로에서 제약이 되는데
+      (D-70 이 남긴 ⚠️ 자리), 이쪽은 그 제약이 없다.
+      🚨 **아직 한 번도 안 돌렸다** — kcbert × KcELECTRA 비교부터가 미실행이다 (D-146).
+      주 백본 교체는 실측 전에 없다 (D-70 「성능차를 재지 않고 바꾸지는 않는다」).
   # 🚨 G0 가 아니라 G1 이다 (D-106). G0 는 「미표기·미확인」인데 이것은 네 경로로
   #    확인해서 「없다」를 알아낸 상태다 — 확인 결과가 「허락 없음」이면 배제다.
   #    비교군 유지(D-70 마지막 문장)는 D-106 으로 철회했다. 지우지 않고 사유와 함께 남긴다 (D-21).
