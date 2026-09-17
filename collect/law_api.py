@@ -618,7 +618,7 @@ def _search_hits(oc: str, target: str, query: str, *, section: str) -> list[tupl
 
 
 def collect_cases(
-    target: str, *, dry_run: bool = False, limit: int | None = None
+    target: str, *, dry_run: bool = False, limit: int | None = None, all_cases: bool = False
 ) -> tuple[int, int]:
     """판례·재결례를 질의로 모아 본문을 받는다. 돌려주는 값은 (새로 저장, 실패).
 
@@ -641,9 +641,19 @@ def collect_cases(
     seen: set[str] = set()
     order: list[str] = []
     rows: list[tuple[str, int, int, int, int]] = []
-    for query in QUERIES:
+    # 🔴 2026-09-17 — 전량 규모를 쟀다 (규칙 ①). `decc` 35,213 중 `_in_domain` 을
+    #    지나는 것이 **392**(1.1%) 였고, 본문 272건이 약 2.3분이다.
+    #    ★ 그래서 **규칙 ② 이 성립한다** — 질의로 좁히지 않고 전량을 받고
+    #    선별은 `preprocess/` 가 한다 (D-92). 4.9시간이라는 전제는 사건명을
+    #    공짜로 받을 수 있다는 사실(`_in_domain` docstring)로 깨졌다.
+    #
+    # 🚨 질의 경로를 지우지 않는다 — `prec` 은 아직 전량 규모를 안 쟀다.
+    # 🚨 빈 질의는 사건명·본문 검색이 **같은 전량**을 준다. 두 번 부르면
+    #    페이징 353장을 두 번 도는 것이라 서버만 더 두드린다 (규약 5).
+    queries = ("",) if all_cases else QUERIES
+    for query in queries:
         by_name = _search_hits(oc, target, query, section=SEARCH_NAME)
-        by_body = _search_hits(oc, target, query, section=SEARCH_BODY)
+        by_body = [] if all_cases else _search_hits(oc, target, query, section=SEARCH_BODY)
         # 🚨 예외 없이 한 번에 건다. 두 경로 중 하나만 거르면 다른 쪽으로 샌다.
         kept = [hit for hit in by_name + by_body if _in_domain(hit[1])]
 
@@ -658,6 +668,7 @@ def collect_cases(
     print(f"\n  질의별 실측 ({target}) — 🚨 사실원장에 옮긴다 (D-54)")
     print(f"    {'질의':<18} {'사건명':>7} {'본문':>7} {'→필터':>7} {'순증':>7}")
     for query, n_name, n_body, n_kept, fresh_n in rows:
+        query = query or "(전량)"  # 🚨 빈 문자열은 표에서 안 보인다
         # 🚨 「순증」이 0 이면 그 질의는 다른 질의의 부분집합이다. 빼도 되는지 사람이 판단한다.
         print(f"    {query:<18} {n_name:>7,} {n_body:>7,} {n_kept:>7,} {fresh_n:>7,}")
     print(f"    {'합집합':<18} {'':>7} {'':>7} {'':>7} {len(order):>7,}")
@@ -832,6 +843,13 @@ def main() -> int:
     ap.add_argument("--limit", type=int, help="prec·decc 전용 — 앞 N 건만 받는다")
     # 🚨 네트워크를 쓰지 않는다. 어휘를 고친 뒤 **이미 받아 둔 것**에 다시 걸어 본다.
     ap.add_argument("--audit", action="store_true", help="받아 둔 원문에 현재 필터를 다시 건다")
+    # 🚨 질의 없이 전량을 받는다. 사건명 필터(`_in_domain`)만 걸린다 —
+    #    사람이 박는 것이 질의에서 **어휘 하나로** 줄어드는 자리다.
+    ap.add_argument(
+        "--all",
+        action="store_true",
+        help="prec·decc 전용 — 질의 없이 전량을 받아 사건명 필터만 건다",
+    )
     args = ap.parse_args()
 
     try:
@@ -845,7 +863,9 @@ def main() -> int:
             find_pending()
             return 0
         if args.target in CASE_TARGETS:
-            saved, failed = collect_cases(args.target, dry_run=args.dry_run, limit=args.limit)
+            saved, failed = collect_cases(
+                args.target, dry_run=args.dry_run, limit=args.limit, all_cases=args.all
+            )
         else:
             saved, failed = collect(args.target, dry_run=args.dry_run)
     except (registry.RegistryError, env.MissingKey) as e:
