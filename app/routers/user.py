@@ -595,3 +595,11 @@ def user_signup(request: Request) -> HTMLResponse:
     가입 화면이지만, 계정 테이블이 진입점 B 엔진과 함께 오기 전까지는 폼만 보여준다.
     """
     return templates.TemplateResponse(request, "user/signup.html", {})
+
+
+@router.get("/reset", response_class=HTMLResponse)
+def user_reset(request: Request) -> HTMLResponse:
+    """비밀번호 재설정 — ★ **골격만, 제출 버튼 없음**. login.html과 같은 이유로
+    계정 테이블이 없어 재설정 링크를 보낼 대상이 없다 — 입력만 보여준다.
+    """
+    return templates.TemplateResponse(request, "user/reset.html", {})

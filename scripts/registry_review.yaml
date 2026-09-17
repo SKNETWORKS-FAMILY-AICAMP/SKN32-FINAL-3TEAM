@@ -86,7 +86,7 @@ mfds_press:
   #      종전 표기로는 registry.require 의 CRAWL_ACCESS 검사를 그냥 지나가
   #      **robots 확인 없이 크롤링이 시작될 수 있었다.**
   robots_checked_at: 2026-09-03
-  collected_at: 2026-09-09
+  collected_at: 2026-09-17
 
 # ── 🔄 2026-09-03 D-132 신규 등재 3건 — 판정 근거는 data.js `why`. reviewed_by 는 다른 팀원이
 #    저작권법 제24조의2 제1항 조문 + 식약처 자료실 게시 화면을 열어 재현한 뒤 기입한다 (권소라 외).
@@ -115,7 +115,7 @@ mfds_casebook:
   #      바꾸자마자 게이트가 잡았다. 측정은 이미 있었고 **기록만 안 옮겨져 있었다.**
   #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 — 그 축은 D-132 준용으로 별도다.
   robots_checked_at: 2026-09-07
-  collected_at: 2026-09-09
+  collected_at: 2026-09-17
 mfds_online_guideline:
   # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
