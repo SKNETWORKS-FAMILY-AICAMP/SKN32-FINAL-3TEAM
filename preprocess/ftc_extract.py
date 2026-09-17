@@ -191,6 +191,8 @@ def main() -> int:
     norm_shift: collections.Counter[tuple[str, str]] = collections.Counter()
     stage_rows: list[dict] = []
     raw_ph = raw_docs = 0
+    #: 🆕 「이유」 회수 계측 (D-232 (A))
+    reason_ph = reason_docs = gained_docs = gained_ph = 0
     #: 🚨 **늘 우는 지표는 무시당한다.** 그래서 「줄었다」가 아니라 **버린 근거**로 가른다.
     #:
     #: ⛔ 첫 판은 사라진 문구를 **한 개씩 다시 마스킹**해서 알맹이가 남는지 봤다. 틀렸다 —
@@ -245,6 +247,25 @@ def main() -> int:
         raw_docs += bool(before)
 
         ps = phrases_in(masked_raw)
+
+        # 🆕 **「이유」 회수** (2026-09-17 · D-232 (A) · 팀장 판정 「켜고 측정」).
+        #    ⛔ 종전에는 **주문만** 봤다. 의결서는 「이유 → 인정사실」에 광고 원문을 싣고,
+        #       주문은 *「…것처럼 소비자를 속이는 광고행위를 다시 하여서는 아니 된다」* 같은
+        #       서술형이라 인용이 없다 — CORE 854건 중 **571건이 그래서 빠졌다**.
+        #    🔴 **주문 문구와 섞지 않는다.** 별도 필드로 담는다 — 이유에는 타사 광고·법문
+        #       재인용·매물 표시가 섞이고(실측 채택률 39.7%), 섞으면 **한 숫자가 두 과제를
+        #       평균한 수**가 된다 (D-172). 섞을지는 이 수를 보고 판정한다 (D-205).
+        #    🚨 치환 원장도 **따로 든다** — 합치면 「주문 치환 418건」 같은 기존 단계 수치가
+        #       움직여 D-143 의 판 대조가 어긋난다.
+        rlog = Trace() if a.trace else Ledger()
+        masked_reason = apply_policy(raw["이유"], bare, "ftc", rlog)
+        rs = phrases_in(masked_reason)
+        reason_ph += len(rs)
+        reason_docs += bool(rs)
+        if rs and not ps:
+            gained_docs += 1
+            gained_ph += len(rs)
+
         stage_rows.append(
             {
                 "seq": seq,
@@ -253,7 +274,9 @@ def main() -> int:
                 "사건명": apply_policy(raw["사건명"], bare, "ftc"),  # 🔴 원문 (D-152)
                 "주문_마스킹": masked_raw,
                 "문구": ps,
+                "문구_이유": rs,  # 🆕 D-232 (A)
                 "치환원장": mlog,
+                "치환원장_이유": rlog,  # 🆕
             }
         )
         for q in QUOTE.findall(masked_raw):
@@ -262,9 +285,11 @@ def main() -> int:
                 continue
             hit = NOISE.search(q)
             watch.append((hit.group(0) if hit else "🔴미분류", q))
-        if not ps:
+        # 🔴 **주문에 문구가 없어도 이유가 있으면 담는다** (2026-09-17 · D-232 (A)).
+        #    ⛔ 종전에는 여기서 `continue` 라 571건이 `rows` 에 못 들어갔다.
+        if not ps and not rs:
             continue
-        docs_with += 1
+        docs_with += bool(ps)
         ts = types_in(masked)
         for t in ts:
             lab[t["label"]] += 1
@@ -276,6 +301,7 @@ def main() -> int:
                 "분류": k,
                 "사건명": apply_policy(name, bare, "ftc"),
                 "문구": ps,
+                "문구_이유": rs,  # 🆕 D-232 (A) — 섞지 않는다
                 "유형": ts,
                 "근거절": grounds,
             }
@@ -286,6 +312,16 @@ def main() -> int:
     print(f"결정문 {sum(buck.values()):,}건 · 1층 후보 {total_core:,}건")
     print(f"  주문에 광고 문구가 있는 문서  {docs_with:,}건 ({docs_with * 100 // total_core}%)")
     print(f"  뽑은 문구                    {n_ph:,}개 (문서당 {n_ph / max(docs_with, 1):.1f})")
+    print()
+    # 🆕 **「이유」 회수 계측** (D-232 (A) · 2026-09-17)
+    n_rs = sum(len(x["문구_이유"]) for x in rows)
+    print("  🆕 「이유」 회수 (D-232 (A)) — 🔴 주문 문구와 **섞지 않았다**")
+    print(f"    이유에 문구가 있는 문서      {reason_docs:,}건 / {total_core:,}")
+    print(f"    이유에서 뽑은 문구          {reason_ph:,}개")
+    print(f"    🔴 **주문 X · 이유 O**      {gained_docs:,}건 · 문구 {gained_ph:,}개  ← 회수분")
+    print(f"    `rows` 에 담긴 이유 문구     {n_rs:,}개")
+    print("    🚨 이 수는 판정이 아니다 — 이유에는 타사 광고·법문 재인용·매물 표시가 섞인다")
+    print("       (표본 실측 채택률 39.7% · D-232). 섞을지는 이 수를 보고 판정한다 (D-205)")
     print()
     n_shift = sum(norm_shift.values())
     print("  🔵 정규화 계측 — **구분자를 펴지 않으면 분류가 달라지는 문서** (D-154)")
