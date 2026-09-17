@@ -465,7 +465,13 @@ def main() -> int:
 
     if a.write:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
+        # 🔴 **개행으로 끝낸다.** 안 그러면 커밋마다 `end-of-file-fixer` 훅이 이 파일을 고친다
+        #    (2026-09-17 실측 — 원장에 커밋되기 시작하면서 드러났다).
+        #    ⛔ `_matrix/README.md` 가 같은 사고를 이미 적어 두었다: *"JSON.stringify 가 개행으로
+        #       끝나지 않아 커밋마다 end-of-file-fixer 훅이 걸렸다."* 같은 실수를 다른 생성기에서 했다.
+        OUT.write_text(
+            json.dumps(m, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
         print(f"\n  → {OUT}")
         print("  🚨 **사전과 주입은 이 파일을 읽어 train 만 쓴다** — 안 그러면 누수다.")
     else:
