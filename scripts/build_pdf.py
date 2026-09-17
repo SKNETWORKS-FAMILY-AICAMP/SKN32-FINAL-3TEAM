@@ -108,7 +108,17 @@ def inline_images(html: str, src: str) -> str:
     return _IMG_SRC.sub(sub, html)
 
 
-def build_html(src, logo_png, title, subtitle, meta_html, footer, cover_skip_lines=4):
+def build_html(
+    src, logo_png, title, subtitle, meta_html, footer, cover_skip_lines=4, compact=False
+):
+    """🔄 **2026-09-17 — `compact`.** 표지와 목차를 뺀다.
+
+    ⛔ 한 장짜리 요약을 이 빌더로 뽑았더니 **표지 1쪽 + 목차 1쪽이 붙어 8쪽**이 됐다.
+       「한 장 요약」에 표지가 붙는 것은 우스운 일이고, 그렇다고 **두 번째 PDF 경로를
+       만들면 서체·판형이 갈린다** — 그 사고가 2026-09-13 에 이미 났다 (D-220).
+    ★ 그래서 경로를 하나로 두고 **껍데기만 끈다.** 본문 CSS·글꼴·여백은 그대로다.
+    🚨 목차를 끄면 쪽수 주입(`inject_page_numbers`)도 할 일이 없다 — 호출부가 건너뛴다.
+    """
     md_text = pathlib.Path(src).read_text(encoding="utf-8")
     body_md = "\n".join(md_text.split("\n")[cover_skip_lines:])
     html_body = md_to_html(body_md)
@@ -132,16 +142,26 @@ def build_html(src, logo_png, title, subtitle, meta_html, footer, cover_skip_lin
     )
 
     logo = base64.b64encode(pathlib.Path(logo_png).read_bytes()).decode()
+    if compact:
+        # 🚨 머리표만 남긴다 — 누가·언제·어느 상태의 문서인지는 한 장에도 있어야 한다
+        shell = (
+            f'<div class="brief"><div class="bt">{title}</div>'
+            f'<div class="bs">{subtitle}</div><div class="bm">{meta_html}</div></div>'
+        )
+    else:
+        shell = (
+            f'<div class="cover"><div class="in">'
+            f'<img src="data:image/png;base64,{logo}">'
+            f'<h1>{title}</h1><div class="sub">{subtitle}</div>'
+            f'<div class="meta">{meta_html}</div></div>'
+            f'<div class="foot">{footer}</div></div>'
+            f'<div class="tocpage"><h1 class="toch">목차</h1>{toc_html}</div>'
+            f'<div style="font-size:1pt;color:#fff">BODYSTARTMARK</div>'
+        )
     css = CSS.replace("__INK__", BRAND_INK).replace("__BLUE__", BRAND_BLUE)
     return f"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <title>{title}</title><style>{css}</style></head><body>
-<div class="cover"><div class="in">
-<img src="data:image/png;base64,{logo}">
-<h1>{title}</h1><div class="sub">{subtitle}</div>
-<div class="meta">{meta_html}</div></div>
-<div class="foot">{footer}</div></div>
-<div class="tocpage"><h1 class="toch">목차</h1>{toc_html}</div>
-<div style="font-size:1pt;color:#fff">BODYSTARTMARK</div>
+{shell}
 {html_body}</body></html>"""
 
 
@@ -159,6 +179,11 @@ body{font-family:'Noto Sans CJK KR','Noto Color Emoji',sans-serif;font-size:9.6p
 .cover .meta{font-size:10pt;color:#8FA6C4;line-height:2.0;border-top:1px solid #24384F;padding-top:8mm}
 .cover .meta b{color:#fff;font-weight:600}
 .cover .foot{position:absolute;bottom:22mm;left:26mm;font-size:9pt;color:#5E7591}
+.brief{border-bottom:2.5px solid __INK__;padding-bottom:4mm;margin-bottom:6mm;padding-top:6mm}  /* 🚨 머리말(러닝 헤더)과 겹치지 않게 — 실측으로 확인 */
+.brief .bt{font-size:19pt;font-weight:800;color:__INK__;letter-spacing:-.02em}
+.brief .bs{font-size:10.5pt;color:#5A6B7D;margin-top:1.5mm}
+.brief .bm{font-size:8.4pt;color:#5A6B7D;margin-top:3mm;line-height:1.7}
+.brief .bm b{color:__INK__}
 .tocpage{page-break-after:always}
 h1.toch{font-size:16pt;margin:0 0 8mm;color:__INK__}
 .toc-2 a,.toc-3 a{display:flex;text-decoration:none;color:#16212E;align-items:baseline}
@@ -280,6 +305,11 @@ def main():
     ap.add_argument("--org", default="SKN Final Project")
     ap.add_argument("--footer", default="팀 공유용")
     ap.add_argument("--meta", default=None, help="표지 메타 HTML — 생략하면 기본 크레딧")
+    ap.add_argument(
+        "--compact",
+        action="store_true",
+        help="🔴 표지·목차를 빼고 본문만 — 한 장짜리 요약용 (2026-09-17)",
+    )
     a = ap.parse_args()
 
     # 🚨 발행물 파일명에는 버전을 붙인다 — 원본은 계속 고쳐지므로 경로가 고정돼야 하고,
@@ -295,7 +325,19 @@ def main():
         "도메인 제안 &nbsp;<b>권소라</b>"
     )
 
-    html = build_html(a.src, a.logo, a.title, a.subtitle, meta, a.footer)
+    html = build_html(a.src, a.logo, a.title, a.subtitle, meta, a.footer, compact=a.compact)
+    if a.compact:
+        # 🚨 목차가 없으니 2차 렌더도 없다 — 1차가 곧 최종이다
+        tmp = pathlib.Path(out).with_suffix(".pass1.html")
+        tmp.write_text(html, encoding="utf-8")
+        render(str(tmp), out, a.doc_title, a.org)
+        tmp.unlink(missing_ok=True)
+        _need("pdfplumber")
+        import pdfplumber
+
+        with pdfplumber.open(out) as pdf:
+            print(f"O {out}  ({len(pdf.pages)}쪽, 목차 없음 — compact)")
+        return
     tmp = pathlib.Path(out).with_suffix(".pass1.html")
     tmp.write_text(html, encoding="utf-8")
     p1 = str(pathlib.Path(out).with_suffix(".pass1.pdf"))
