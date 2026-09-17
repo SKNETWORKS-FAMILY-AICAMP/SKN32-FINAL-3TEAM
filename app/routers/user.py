@@ -93,6 +93,24 @@ _SECTION_ACTIVE_SUB: dict[str, str] = {
 }
 
 
+#: 🔴 **결과 경로 → 그 화면의 입력 경로.** 검수 버튼(`POST /u/judge`)이나 픽스처 미리보기는
+#:    경로가 입력 화면과 달라서, 이게 없으면 구역을 못 찾아 **사이드바가 사라진다**
+#:    (2026-09-17 발견). 결과는 입력 화면과 같은 구역·같은 사이드바 항목에 속한다.
+_SCREEN_ALIAS: tuple[tuple[str, str], ...] = (
+    ("/u/judge", "/u/review"),
+    ("/u/preview/", "/u/review"),
+    ("/u/generate/preview/", "/u/generate"),
+    ("/u/compose/preview/", "/u/compose"),
+)
+
+
+def _screen_path(path: str) -> str:
+    for prefix, target in _SCREEN_ALIAS:
+        if path == prefix or (prefix.endswith("/") and path.startswith(prefix)):
+            return target
+    return path
+
+
 def _render(
     request: Request, template: str, ctx: dict | None = None, *, active_sub: str | None = None
 ) -> HTMLResponse:
@@ -102,12 +120,14 @@ def _render(
        생긴다 (D-147 의 정신과 같다 — 계산이 갈리면 둘 다 못 믿는다).
     """
     ctx = dict(ctx or {})
-    path = request.url.path
+    path = _screen_path(request.url.path)
     section = _SCREEN_SECTION.get(path)
     ctx.setdefault("active_section", section)
     ctx.setdefault("section_label", _SECTION_LABELS.get(section) if section else None)
     ctx.setdefault("section_subs", _SECTION_SUBS.get(section) if section else None)
-    ctx.setdefault("active_sub", active_sub if active_sub is not None else _SECTION_ACTIVE_SUB.get(path))
+    ctx.setdefault(
+        "active_sub", active_sub if active_sub is not None else _SECTION_ACTIVE_SUB.get(path)
+    )
     return templates.TemplateResponse(request, template, ctx)
 
 
@@ -173,8 +193,9 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     violation_count = (
         session.scalar(
             select(func.count()).select_from(
-                month.where(Judgment.verdict == "confirmed", Judgment.risk_final > pass_level)
-                .subquery()
+                month.where(
+                    Judgment.verdict == "confirmed", Judgment.risk_final > pass_level
+                ).subquery()
             )
         )
         or 0
@@ -182,8 +203,9 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     pass_count = (
         session.scalar(
             select(func.count()).select_from(
-                month.where(Judgment.verdict == "confirmed", Judgment.risk_final <= pass_level)
-                .subquery()
+                month.where(
+                    Judgment.verdict == "confirmed", Judgment.risk_final <= pass_level
+                ).subquery()
             )
         )
         or 0
@@ -485,9 +507,7 @@ def history(
 
     total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     raw_rows = session.execute(
-        stmt.order_by(Judgment.judged_at.desc())
-        .limit(_PAGE_SIZE)
-        .offset((page - 1) * _PAGE_SIZE)
+        stmt.order_by(Judgment.judged_at.desc()).limit(_PAGE_SIZE).offset((page - 1) * _PAGE_SIZE)
     ).all()
     rows = [
         SimpleNamespace(
@@ -554,13 +574,29 @@ _MYPAGE_FIELDS = {
 _MYPAGE_BLANK = dict.fromkeys(_MYPAGE_FIELDS, "")
 
 
+#: 마이페이지 가로 탭 (key, label). 프로토타입의 포트폴리오 · 구성원 관리 · 결제 탭은
+#: 매칭/과금 범위라 뺐다. ⛔ 탭 전환을 스크립트로 하지 않는다 (CSP) — `?tab=` 으로 고른다.
+_MYPAGE_TABS: tuple[tuple[str, str], ...] = (
+    ("profile", "프로필"),
+    ("defaults", "광고 기본값"),
+    ("account", "계정"),
+)
+_MYPAGE_SECTION_TAB = {"profile": "profile", "adprefs": "defaults"}
+
+
 @router.get("/mypage", response_class=HTMLResponse)
-def mypage(request: Request) -> HTMLResponse:
-    """마이페이지 — 프로필 · 광고 기본값 (ksr 2026-09-13).
+def mypage(request: Request, tab: str = "profile") -> HTMLResponse:
+    """마이페이지 — 프로필 · 광고 기본값 · 계정 탭 (ksr 2026-09-13).
 
     ⛔ 저장할 테이블이 없다 — 폼만 세운다. 상단 오른쪽 아바타 버튼으로 들어온다 (구역 밖).
     """
-    return _render(request, "user/mypage.html", {"picked": _MYPAGE_BLANK})
+    if tab not in dict(_MYPAGE_TABS):
+        tab = "profile"
+    return _render(
+        request,
+        "user/mypage.html",
+        {"picked": _MYPAGE_BLANK, "tab": tab, "tabs": _MYPAGE_TABS},
+    )
 
 
 @router.post("/mypage", response_class=HTMLResponse)
@@ -577,7 +613,12 @@ async def mypage_save(request: Request) -> HTMLResponse:
     return _render(
         request,
         "user/mypage.html",
-        {"picked": picked, "saved_attempt": True},
+        {
+            "picked": picked,
+            "saved_attempt": True,
+            "tab": _MYPAGE_SECTION_TAB.get(_one(form, "section", 16), "profile"),
+            "tabs": _MYPAGE_TABS,
+        },
     )
 
 
