@@ -220,7 +220,10 @@ class Judgment(Base):
         #    ⛔ 종전에는 여기·계약·라우터 셋이 각각 `2` 를 적고 있었다. K 를 올리면
         #       라우터만 따라가고 DB 가 거부한다 — **가장 늦게 터지는 자리**였다.
         CheckConstraint(f"attempt BETWEEN 0 AND {PARAMS.max_attempt}", name="ck_judgment_attempt"),
-        # D-130 — 5값 순서형 R0(특이사항 없음)~R4(형사 위험). R2·R3 순서는 검증 ② 에서 확정
+        # D-130 · 🔄 D-227 — 척도는 **R0~R3 네 단계**다 (R0 특이사항 없음 · R1 주의 ·
+        #   R2 업무정지 위험 · R3 영업 상실 위험). 🔴 `R4` 는 ENUM 에 남아 있으나 **도달 불가**다 —
+        #   형벌은 R 축에 얹지 않고 `penal_clause` 가 그 자리다 (D-182).
+        #   ⛔ CHECK 범위는 `0 AND 4` 로 **둔다** — ENUM 을 줄이지 않기로 했으므로 제약도 그대로다.
         CheckConstraint(
             "risk_floor IS NULL OR risk_floor BETWEEN 0 AND 4", name="ck_judgment_risk_floor"
         ),
