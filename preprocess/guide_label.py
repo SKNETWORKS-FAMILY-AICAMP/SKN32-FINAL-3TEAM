@@ -206,6 +206,9 @@ def build(viol: list[dict]) -> list[dict]:
                 "판정지위": JUDGMENT_STATUS,
                 **REGIME,
                 "표": r.get("표"),
+                # 🚨 제1호 가목 단서(특수의료용도식품이면 제외)를 사람이 보려면 **제품유형이 있어야 한다**.
+                #    옛 `mfds_guide_labels.jsonl` 에는 없다 — 추출기를 다시 돌리면 채워진다.
+                "제품유형": r.get("제품유형") or "미상",
                 "원천": r["원천"],
                 "붙인이": "",
                 "붙인날": "",
@@ -240,6 +243,18 @@ def main() -> int:
     rest = sorted(set(ARTICLE8_NAME) - covered)
     print(f"  제8조 덮은 호 {len(covered)}/8 — 미포함 {rest}: {[ARTICLE8_NAME[h] for h in rest]}")
     print(f"  🚨 판정지위 = {JUDGMENT_STATUS!r} — 행정처분·판결 확정이 아니다 (D-240 초안)")
+    unknown = sum(1 for r in out if r["제품유형"] == "미상")
+    if unknown:
+        print(
+            f"  🔴 제품유형이 「미상」인 행 {unknown:,} — 제1호 가목 단서(특수의료용도식품 제외)를 볼 수 없다.\n"
+            "     고치는 법: uv run python launcher.py extract mfds_special_use_guide --dump\n"
+            "     ⛔ `--sheet` 는 주지 않는다 — 라벨링 중에 표본이 갈린다 (지시서 09-10 §5)."
+        )
+    else:
+        by = collections.Counter(r["제품유형"] for r in out)
+        print("  제품유형별 —")
+        for k, v in by.most_common():
+            print(f"    {v:>5,}  {k}")
 
     if args.dump:
         with DST.open("w", encoding="utf-8", newline="\n") as f:
