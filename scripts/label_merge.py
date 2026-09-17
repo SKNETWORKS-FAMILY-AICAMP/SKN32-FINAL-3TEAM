@@ -29,35 +29,24 @@ import json
 import pathlib
 import sys
 
-KEY_FIELDS = ("원천", "원천라벨", "문구", "글", "쪽", "호")
-HUMAN = ("확정유형", "붙인이", "붙인날")
+# 🔄 **2026-09-17 — 읽기를 `preprocess/labels.py` 로 옮겼다** (D-99).
+#    ⛔ `preprocess/split.py` 가 같은 라벨을 읽게 되면서 키 만들기·라벨 꺼내기·파일 읽기가
+#       두 벌이 됐다. 두 번째로 쓰게 되면 멈추고 공통화한다 — 갈리면 **같은 라벨이 여기서는
+#       합의인데 저기서는 아닌** 상태가 되고, 그것은 수치로 안 보인다.
+#    ★ 이 파일은 여전히 **세고 보여 주는 쪽**이다. 라벨을 만들지 않는다.
+#    🚨 `python scripts/label_merge.py` 로 직접 돌므로 저장소 뿌리가 `sys.path` 에 없다 —
+#       `scripts/db_reset.py`·`schema_drift_check.py` 와 같은 꼴로 세운 뒤에 든다.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+from preprocess import labels as store  # noqa: E402 — 위에서 sys.path 를 세운 뒤라야 든다
 
-def _key(r: dict) -> str:
-    return "\x1f".join(" ".join(str(r.get(f, "")).split()) for f in KEY_FIELDS)
-
-
-def _label(r: dict) -> str | None:
-    v = r.get("확정유형")
-    if not v:
-        return None
-    return "|".join(sorted(v)) if isinstance(v, list) else str(v)
-
-
-def load(paths: list[pathlib.Path]) -> dict[str, dict[str, str]]:
-    """파일별로 {키: 라벨}. 🚨 **안 채운 행은 없는 것으로 본다** — 빈칸은 판단이 아니다."""
-    got: dict[str, dict[str, str]] = {}
-    for p in paths:
-        d: dict[str, str] = {}
-        for line in p.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            r = json.loads(line)
-            lab = _label(r)
-            if lab:
-                d[_key(r)] = lab
-        got[p.name] = d
-    return got
+# 🚨 **바깥에 보이는 이름은 그대로 둔다.** 구현만 옮겼고 이 모듈의 표면은 안 바꾼다 —
+#    `tests/test_label_merge.py` 가 `from scripts.label_merge import kappa, load` 로 들고
+#    `KEY_FIELDS` 도 본다. 옮기면서 표면을 깨면 「공통화」가 아니라 그냥 파괴다.
+#    ⛔ 실제로 한 번 깼다 (2026-09-17 · 클론 B 게이트가 collect 단계에서 죽었다).
+KEY_FIELDS = store.KEY_FIELDS
+HUMAN = store.HUMAN
+load = store.load
 
 
 def kappa(a: dict[str, str], b: dict[str, str]) -> tuple[float, int, int]:
@@ -100,7 +89,7 @@ def main() -> int:
         print(f"🔴 없는 파일: {[str(p) for p in missing]}", file=sys.stderr)
         return 1
 
-    data = load(files)
+    data = store.load(files)
     print("채운 건수 —")
     for name, d in data.items():
         print(f"  {name:44} {len(d):>5}건")
@@ -170,7 +159,7 @@ def main() -> int:
                 if not line.strip():
                     continue
                 r = json.loads(line)
-                if _key(r) in agreed and _label(r):
+                if store.key(r) in agreed and store.label(r):
                     f.write(line + "\n")
                     n += 1
         print(f"\n  → {out}  ({n}건 · **2인 이상이 채우고 답이 같은 것만**)")
