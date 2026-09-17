@@ -701,6 +701,10 @@ ORDER = [
     "foodsafety_penalty_std",
     "mfds_cosmetic_sanction",
     "mfds_special_use_guide",
+    # 🔄 2026-09-17 신규 — 화장품 축 적법 표현의 유일한 원천(별표 금지 44·허용 45·입증 7).
+    #    🚨 3층이 아니라 1층이다 — 문서 3쪽이 스스로 「대외적으로 법적 효력을 가지는 것이
+    #       아니」라고 적는다 (D-138 선례). 텍스트 층 0자라 status 는 manual.
+    "mfds_cosmetic_ad_guide_2013",
     "ftc_noviolation",
     # 2층 적법 라벨
     "mfds_hf_ingredient",
@@ -793,6 +797,10 @@ STATUS = {
     # 🔄 2026-09-07 D-136 — nedrug.mfds.go.kr robots 가 「User-agent: * / Disallow: /」 전면 차단이다.
     #    자동 수집기를 붙이지 않는다. 사이트가 제공하는 엑셀다운로드를 사람이 누르는 경로만 남는다.
     "mfds_cosmetic_sanction": "manual",
+    # 🔄 2026-09-17 — **PDF 에 텍스트 층이 없다**(pdftotext 0자 · mfds_online_guideline 과 같다).
+    #    자동 추출기를 붙일 수 없어 붙임2 별표 89행을 사람이 전사했다
+    #    (docs/ohb/화장품_별표2013_전사.py). 수집기가 실행할 것이 없으므로 manual 이다.
+    "mfds_cosmetic_ad_guide_2013": "manual",
     "meta_adlibrary": "manual",
     "google_atc": "manual",
 }

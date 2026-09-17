@@ -38,7 +38,7 @@ import re
 from app.settings import PARAMS
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
-from preprocess.split import approved_docs, casebook_docs, ftc_docs
+from preprocess.split import approved_docs, casebook_docs, ftc_docs, guide_docs
 
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
@@ -100,7 +100,8 @@ def build() -> tuple[list[dict], dict]:
     rows: list[dict] = []
     stat: dict = collections.Counter()
 
-    for d in ftc_docs() + casebook_docs() + approved_docs():
+    # 🆕 2026-09-17 — `guide_docs()` 가 넷째다. 없으면 사람이 붙인 248행이 여기서 사라진다.
+    for d in ftc_docs() + casebook_docs() + approved_docs() + guide_docs():
         split = assign.get(d["doc_id"])
         if not split:
             stat["미배정"] += 1

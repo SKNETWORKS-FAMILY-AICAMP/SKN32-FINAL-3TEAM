@@ -128,7 +128,7 @@ mfds_casebook_2021:
   # 🚨 robots — mfds_casebook 과 같은 자료실 PDF 다운로드 패턴이나 도메인이 다르다
   #    (foodsafetykorea.go.kr). 아직 안 쟀다 — 수집 전에 재야 한다.
   robots_checked_at: null
-  collected_at: null
+  collected_at: 2026-09-18
 mfds_online_guideline:
   # 🔄 2026-09-07 — 팀장(오한빈) 보고로 일괄 기입. 권소라 확인 완료.
   decided_by: 오한빈
@@ -246,7 +246,7 @@ law_go_kr:
   #      위 「법적효력/저작권」 페이지로 교체가 남아 있다 (data.js 에서).
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-17
+  collected_at: 2026-09-18
 
 platform_guide:
   decided_by: 오한빈
@@ -654,3 +654,23 @@ mfds_special_use_guide:
   #   🚨 robots 가 열린 것과 저작물을 써도 되는 것은 다르다 — 그 축은 D-132 준용으로 별도다.
   robots_checked_at: 2026-09-07
   collected_at: 2026-09-09
+
+mfds_cosmetic_ad_guide_2013:
+  decided_by: 오한빈
+  decided_at: 2026-09-17
+  # 🆕 2026-09-17 신규 등재 — 화장품 축 적법 표현의 유일한 원천.
+  #   서명 범위 — 붙임2 [별표] 전수(금지 44 · 허용 45 · [별첨] 입증대상 7) · 층 1층+2층 · ⛔3층 금지
+  #   근거: docs/ohb/결정요청_2026-09-17_화장품축.md
+  #   등급 G3 — D-132 준용. 식약처 명의 공무원지침서(지침서-0080-01 · 공무원지침서 게시판
+  #     board_id=data0010 · seq 12582)이므로 저작권법 제24조의2 제1항 · 제37조 출처표시.
+  #     공공누리 배지 없음(2026-09-17 화면 확인) — 요건이 아니다.
+  #   🚨 전사물(docs/ohb/화장품_별표2013_전사.jsonl 89행)의 원본 대조는 이 서명에 포함되지 않는다
+  #     — PDF 에 텍스트 층이 0자라 사람이 눈으로 옮긴 것이고, 대조는 별건이다.
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-17
+  # 🚨 크롤링형 — robots.txt 를 사람이 열어 본 날 (규약 6 · D-179)
+  #   2026-09-17 확인 — mfds_special_use_guide 와 같은 도메인(www.mfds.go.kr)이고
+  #   board_id 만 다르다(m_1059 vs m_512). 그 칸의 2026-09-07 실측은
+  #   「User-agent: * / Allow:/ — 명시적 전면 허용 · Disallow 한 줄도 없다」였다.
+  robots_checked_at: 2026-09-17
+  collected_at: null

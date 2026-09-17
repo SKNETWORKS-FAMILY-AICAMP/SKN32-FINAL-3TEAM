@@ -66,6 +66,12 @@ CANDIDATES: dict[str, list[str]] = {
     "부당한 비교ㆍ비방": ["부당_비교광고", "비방광고"],
 }
 
+#: 목차 줄 — `1. 영아용 조제식 19` 처럼 **이름 뒤에 쪽수**가 붙는다.
+TOC = re.compile(r"^(\d{1,2})[.．]\s*(.+?)\s+(\d{1,3})$")
+
+#: 구분자만 다른 같은 이름을 맞추기 위한 열쇠 — 목차는 `영․유아용`, 본문은 `영ㆍ유아용` 이다.
+_KEYDROP = re.compile(r"[\s.,·․ㆍ・]")
+
 #: 표 **앞의 본문 문단**이 블록을 말한다. 표 머리글만 보면 여러 블록이 똑같이 생겼다.
 BLOCKS = (
     ("삭제", r"'삭제'\s*판정"),
@@ -78,6 +84,51 @@ BLOCKS = (
 
 def _n(s: str) -> str:
     return " ".join(s.split())
+
+
+def _key(s: str) -> str:
+    return _KEYDROP.sub("", s)
+
+
+def toc_types(leads: list[list[str]]) -> dict[int, str]:
+    """목차에서 제품유형 10종. 🚨 **「V.」 절 뒤의 1~10 만** 받는다 —
+    앞쪽 「IV. …」 절에도 `1.`·`2.`·`3.` 이 있어 그걸 먼저 먹으면 이름이 통째로 어긋난다.
+    """
+    names: dict[int, str] = {}
+    after_v, want = False, 1
+    for lead in leads:
+        for raw in lead:
+            line = _n(raw)
+            if line.startswith("V."):
+                after_v = True
+                continue
+            if not after_v:
+                continue
+            m = TOC.match(line)
+            if m and int(m.group(1)) == want:
+                names[want] = m.group(2)
+                want += 1
+                if want > 10:
+                    return names
+    return names
+
+
+def type_of(lead: list[str], rev: dict[str, str], cur: str) -> str:
+    """이 표가 속한 제품유형. 🔴 **본문 제목에는 번호가 없다** (2026-09-17 실측).
+
+    목차는 `3. 영․유아용 곡류조제식 42` 인데 본문 제목은 **`영ㆍ유아용 특수조제식품`** 처럼
+    이름만 있다 — 1·2 만 번호를 타이핑했고 3~10 은 **한글의 자동 번호**라 텍스트에 안 들어온다.
+    ⛔ 그래서 `N.` 패턴으로 찾으면 **표 41 이후가 전부 「2. 성장기용 조제식」에 멈춘다.**
+    ★ 목차의 이름으로 맞춘다. 앞 표에서 본 값을 이어받는다 — 제목은 절마다 한 번만 나온다.
+    """
+    for raw in lead:
+        line = _n(raw)
+        if TOC.match(line):
+            continue  # 목차 줄 자체는 제목이 아니다
+        k = _key(re.sub(r"^\d{1,2}[.．]\s*", "", line))
+        if len(line) < 40 and k in rev:
+            cur = rev[k]
+    return cur
 
 
 def block_of(lead: list[str]) -> str:
@@ -108,7 +159,16 @@ def extract(path: pathlib.Path) -> list[dict]:
     # ★ 창을 넓히는 것은 안전하다 — `block_of` 가 **가장 가까운 것**을 고르기 때문이다.
     #   ⛔ 대신 「머리글이 부당한 표시면 삭제로 본다」로 메우려다 말았다. 그것은 추정이고,
     #      추정한 블록은 틀려도 티가 안 난다. 근거는 문서 안에 있어야 한다.
-    for idx, (t, lead) in enumerate(tables_with_lead(path, lead=12)):
+    # 🚨 창을 **전량**으로 받고 `block_of` 에만 마지막 12 줄을 준다 —
+    #    제품유형 제목은 표에서 수십 문단 앞에 있고, 블록 판정은 종전과 **바이트까지 같아야** 한다.
+    tw = tables_with_lead(path, lead=100_000)
+    names = toc_types([lead for _, lead in tw])
+    if len(names) != 10:
+        raise ValueError(f"목차에서 제품유형 10종을 못 읽었다 — {len(names)}종 {sorted(names)}")
+    rev = {_key(v): f"{k}. {v}" for k, v in names.items()}
+    cur = "미상"
+
+    for idx, (t, lead) in enumerate(tw):
         why = t.check()
         if why:
             raise ValueError(f"표 {idx} 가 원천의 선언과 어긋난다 — {why}")
@@ -116,8 +176,9 @@ def extract(path: pathlib.Path) -> list[dict]:
         if not g or not g[0]:
             continue
         head = " │ ".join(_n(x) for x in g[0])
-        blk = block_of(lead)
-        base = {"표": idx, "블록": blk, "원천": SOURCE_ID, **REGIME}
+        cur = type_of(lead, rev, cur)
+        blk = block_of(lead[-12:])
+        base = {"표": idx, "블록": blk, "제품유형": cur, "원천": SOURCE_ID, **REGIME}
 
         if head.startswith("부당한 표시") and "key" not in head:
             fill = _label_fill(t)
