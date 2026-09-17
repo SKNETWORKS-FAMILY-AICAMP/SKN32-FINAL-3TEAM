@@ -145,7 +145,7 @@
       "tone": "opt str | None"
     },
     "ProductContext": {
-      "category": "opt app.contracts.Category",
+      "category": "opt app.contracts.Category | None",
       "has_recognized_function": "opt builtins.bool",
       "recognition_no": "opt str | None"
     },
