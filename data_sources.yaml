@@ -451,6 +451,27 @@ sources:
     decided_by: 오한빈
     reviewed_by: null
 
+  mfds_cgm_expc:
+    name: "법제처 「중앙부처 1차 해석」 — 식품의약품안전처 (질의회신 · FAQ) ★신규등재"
+    org: "식품의약품안전처 (법제처 국가법령정보 경유)"
+    url: "https://www.law.go.kr/LSW/cgmExpcInfoP.do?cgmExpcDatSeq=422896&mode=2&ofiClsCd=350123"
+    layer: "1층 판정라벨"
+    grade: G0
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: hold
+    access: "OPEN API (법제처 DRF · 목록/본문 조회 · target 은 부처별 *CgmExpc 꼴 — 식약처 값 미확인)"
+    scale: "미확인 — 광고 관련 비율도 미확인 (수질검사·미생물시험법 등 광고 밖 항목이 섞여 있다)"
+    caution: "🚨 중복 후보 — 같은 식약처 FAQ 가 식품안전나라 FAQ 게시판(foodsafety_faq · hold)과 식약처 민원인안내서 자료실(m_1060)에도 있을 수 있다. 셋 다 미수집이라 수집 원장(manifest)과의 중복은 0 이지만 원천 사이 중복은 탐침 뒤 대조한다. 🚨 등재 단위 판정거리 — 키 · API 는 law_go_kr 와 같지만 저작물 주체가 법령(비보호저작물)이 아니라 식약처라 covers 로 접을지 따로 둘지 판정이 필요하다 (D-90). 🚨 질의 속 표현이 낱말 · 구 수준이면 문장 평가에 섞지 않는다 (D-171) — 사전(단독판정) 재료일 가능성이 더 크다. 🚨 질의에 제품명 · 업체명이 섞일 수 있다 — 수집 전 마스킹 선언 (D-17)."
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
   mfds_hf_ingredient:
     name: "건기식 기능성 원료인정 현황 API (15058359)"
     org: "식품의약품안전처"
