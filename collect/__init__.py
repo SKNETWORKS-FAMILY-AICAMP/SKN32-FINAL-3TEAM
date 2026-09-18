@@ -32,7 +32,8 @@
 #: 값 — `(모듈, 소스id 를 어떻게 넘기나)`
 #:    "arg"    → `python -m <모듈> <소스id> --use U1`   (여러 소스를 다루는 수집기)
 #:    "none"   → `python -m <모듈>`                     (한 소스 전용)
-#:    "target" → `python -m <모듈> --target <값>`        (법제처 API)
+#:    "target" → `python -m <모듈> --target law`        (법제처 API · 법령)
+#:    "target=<값>" → `python -m <모듈> --target <값>`   (법제처 API · 법령 밖 target)
 COLLECTORS: dict[str, tuple[str, str]] = {
     # 오픈 API — `collect/endpoints.yaml` 에 요청주소가 있다
     "mfds_hf_ingredient": ("collect.openapi", "arg"),
@@ -53,6 +54,9 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     "ftc_decisions_body": ("collect.ftc_body", "none"),
     # 법제처 — 한 모듈이 `--target` 으로 갈린다
     "law_go_kr": ("collect.law_api", "target"),
+    # 🆕 2026-09-18 — 중앙부처 1차 해석(식약처). 같은 모듈 · **다른 소스 id** (등재 단위는 이용조건 · D-90).
+    #    ⬜ G0 · hold — 2인 확인 전에는 `registry.require()` 가 첫 줄에서 막는다. 그것이 정상이다.
+    "mfds_cgm_expc": ("collect.law_api", "target=mfdsCgmExpc"),
 }
 
 #: 🚨 **수집기가 없는 것은 없다고 적는다** — 「빠진 것」인지 「사람이 받는 것」인지 갈린다 (D-110).

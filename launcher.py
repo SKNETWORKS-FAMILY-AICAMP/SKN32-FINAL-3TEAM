@@ -798,11 +798,17 @@ def collect(
     source: str = typer.Argument(..., help="레지스트리 소스 id"),
     use: str = typer.Option("U1", "--use", help="U1~U4"),
     pages: int = typer.Option(0, "--pages", help="🚨 첫 실행은 1 로 — 응답을 보고 전량을 받는다"),
+    limit: int = typer.Option(0, "--limit", help="법제처 목록형(판례·재결례·1차 해석) — 앞 N 건만"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="법제처 — 저장하지 않고 무엇을 받을지만"),
 ) -> None:
-    """공공데이터포털 오픈API 를 내려받는다 — 6개 소스 공용.
+    """원천에서 원문을 내려받는다 — 소스마다 맞는 수집기로 보냅니다.
 
     2인 확인이 안 끝난 소스는 게이트가 첫 줄에서 거부합니다 (D-15 · D-66).
-    요청주소는 `collect/endpoints.yaml` 에 있고, 비어 있으면 어디를 볼지 알려줍니다.
+    어느 수집기로 갈지는 `collect/__init__.py` 의 `COLLECTORS` 표가 정합니다 (D-179).
+
+    🆕 2026-09-18 — 법제처 목록형은 `--dry-run` · `--limit` 을 넘깁니다.
+       첫 실행은 `--dry-run` → `--limit 20` → 전량 순서로 봅니다.
+    🚨 **파생물은 클론 B 에서만 만듭니다** (D-226). 수집도 정본 기기에서 합니다.
     """
     from collect import COLLECTORS, MANUAL_SOURCES  # noqa: PLC0415 — 표는 collect 가 든다
 
@@ -825,10 +831,16 @@ def collect(
     args = ["uv", "run", "python", "-m", module]
     if shape == "arg":
         args += [source, "--use", use]
-    elif shape == "target":
-        args += ["--target", "law"]
+    elif shape.startswith("target"):
+        # 🚨 값은 표가 든다 — `target` 만 있으면 법령(`law`)이다. 런처가 target 을 추정하지 않는다.
+        args += ["--target", shape.partition("=")[2] or "law"]
     if pages and module == "collect.openapi":
         args += ["--pages", str(pages)]
+    if module == "collect.law_api":
+        if dry_run:
+            args.append("--dry-run")
+        if limit:
+            args += ["--limit", str(limit)]
     raise typer.Exit(run(*args))
 
 
