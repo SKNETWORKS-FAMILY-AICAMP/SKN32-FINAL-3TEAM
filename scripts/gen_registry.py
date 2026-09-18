@@ -706,6 +706,8 @@ ORDER = [
     #       아니」라고 적는다 (D-138 선례). 텍스트 층 0자라 status 는 manual.
     "mfds_cosmetic_ad_guide_2013",
     "ftc_noviolation",
+    # 🆕 2026-09-18 — 법제처 「중앙부처 1차 해석」 중 식약처분. G0 · hold 로 올려 탐침만 연다 (D-109).
+    "mfds_cgm_expc",
     # 2층 적법 라벨
     "mfds_hf_ingredient",
     "mfds_hf_individual",
@@ -773,6 +775,8 @@ STATUS = {
     "foodsafety_ad_monitor": "hold",
     "kcia_guideline": "hold",
     "ftc_noviolation": "hold",
+    # 🆕 2026-09-18 — G0 라 전 용도 deny · 게이트 22 상 collect 가 될 수 없다. 탐침(D-109) 뒤 2인 확인으로 정한다.
+    "mfds_cgm_expc": "hold",
     # D-132 — 등급은 G3 로 판정됐으나 크롤링형이라 robots_checked_at 과 「무단 복제」 문구 확인이 선행. use 는 UN(fail-closed)
     "foodsafety_faq": "hold",
     "google_trends": "hold",
