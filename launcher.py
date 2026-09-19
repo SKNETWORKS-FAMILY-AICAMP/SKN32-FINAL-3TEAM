@@ -229,6 +229,20 @@ def onboard(
     console.print("     [bold]uv run python launcher.py setkey LAW_OC_KEY[/bold]")
     console.print("     🚨 값을 인자로 주지 않습니다 — PowerShell 기록에 남습니다 (D-111)")
 
+    # 🆕 2026-09-20 (D-247 · D-249) — 파생물·라벨은 git 에 없다. 공유 저장소에서 받는다.
+    console.print(
+        "\n[bold]3-1. 파생물·라벨[/bold] — 🔴 git 에 없습니다. 팀 공유 저장소에서 받습니다"
+    )
+    console.print(
+        "     Google Drive for desktop 로그인 → 공유받은 `CopyLane_store` 를 내 드라이브에 바로가기 추가"
+    )
+    console.print(
+        "     [bold]uv run python launcher.py data-setup[/bold]   역할(replica) · 저장소를 적고 바로 받습니다"
+    )
+    console.print(
+        "     그 뒤로는 `load`·`chunk`·`embed`·`search-probe` 가 부족분을 스스로 받습니다"
+    )
+
     console.print("\n[bold]4. DB[/bold] — 거버넌스 19표 + 런타임 7표")
     if shutil.which("docker") is None:
         console.print("  [red]🔴 docker 가 없습니다[/red] — Docker Desktop 을 켜고 다시 부릅니다.")
@@ -943,6 +957,28 @@ def data_sync(
     raise typer.Exit(run(*args))
 
 
+@app.command(name="data-setup")
+def data_setup(
+    role: str = typer.Option("", "--role", help="canonical | replica (비우면 묻는다)"),
+    store: str = typer.Option("", "--store", help="저장소 폴더 (비우면 드라이브에서 찾는다)"),
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+) -> None:
+    """이 기기의 데이터 역할과 공유 저장소를 설정 파일에 적고, 받는 쪽이면 바로 받습니다.
+
+    🆕 2026-09-20 (D-247 · D-249) — `.env` 를 손으로 열지 않습니다. 저장소 폴더
+       `CopyLane_store` 를 Google Drive 가 붙은 드라이브에서 **찾아서** 적습니다.
+    🚨 정본(canonical)은 클론 B 한 곳입니다 — 고르면 한 번 더 묻습니다 (D-226).
+    """
+    args = [sys.executable, "-m", "scripts.data_store", "setup"]
+    if role:
+        args += ["--role", role]
+    if store:
+        args += ["--store", store]
+    if yes:
+        args.append("--yes")
+    raise typer.Exit(run(*args))
+
+
 @app.command(name="data-publish")
 def data_publish(
     yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
@@ -1322,6 +1358,7 @@ MENU: list[tuple[str, str, object]] = [
     #    ⛔ DANGER 에 또 올리면 같은 것을 두 번 묻는다 — 습관이 된 확인은 안 읽힌다.
     ("44", "데이터 받기", data_sync),
     ("45", "데이터 올리기", data_publish),
+    ("46", "데이터 역할·저장소 설정", data_setup),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)

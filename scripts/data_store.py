@@ -40,6 +40,7 @@ import pathlib
 import re
 import shutil
 import socket
+import string
 import subprocess
 import sys
 
@@ -395,6 +396,114 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
 
 
 # ══════════════════════════════════════════════════════════
+# 🆕 설정 — 새 기기가 명령 하나로 받는 쪽이 된다 (2026-09-20 · 팀장 요구)
+# ══════════════════════════════════════════════════════════
+#  팀장 — *「env 키도 런처 통해서 넣도록 · 팀원이나 클론 A 에서 데이터 받을 때 런처 이용해서 자동화」*
+#  ⛔ 종전에는 `.env` 를 편집기로 열어 두 줄을 손으로 적게 했다 — 드라이브 글자(G:/H:/J:)가 기기마다
+#     달라 틀리기 쉽고, 틀려도 「폴더가 없다」가 나올 때까지 모른다.
+#  ★ 저장소 폴더 이름은 하나로 정한다 — Drive for desktop 이 어느 글자에 붙든 **찾아서** 적는다.
+STORE_NAME = "CopyLane_store"
+#: Drive for desktop 의 최상위 폴더 이름 — 한국어 · 영어 설정
+DRIVE_DIRS = ("내 드라이브", "My Drive")
+
+
+def candidates(roots: list[pathlib.Path] | None = None) -> list[pathlib.Path]:
+    """이 기기에 붙은 공유 저장소 폴더 후보. 🚨 네트워크를 쓰지 않는다 — 붙은 드라이브만 본다."""
+    if roots is None:
+        if os.name == "nt":
+            roots = [pathlib.Path(f"{c}:\\") for c in string.ascii_uppercase if c not in "AB"]
+        else:
+            roots = [pathlib.Path.home(), pathlib.Path.home() / "Google Drive"]
+    out: list[pathlib.Path] = []
+    for r in roots:
+        for d in DRIVE_DIRS:
+            p = r / d / STORE_NAME
+            try:
+                if p.is_dir():
+                    out.append(p)
+            except OSError:  # 빈 카드 리더 같은 자리 — 없는 것으로 친다
+                continue
+    return out
+
+
+def setup(*, role: str | None = None, store: str | None = None, yes: bool = False) -> int:
+    """🆕 역할과 저장소를 `.env` 에 적고, 받는 쪽이면 **바로 받는다**.
+
+    🔴 정본(canonical)은 **클론 B 한 곳**이다 (D-226) — 고르면 한 번 더 묻는다.
+    🚨 쓰는 곳은 `collect.setkey.put_setting()` 하나다 — `.env` 를 여는 곳을 늘리지 않는다 (D-99).
+    """
+    from collect import env, setkey  # noqa: PLC0415
+
+    now_role, now_store = env.setting("DATA_ROLE"), env.setting("DATA_STORE")
+    if role is None:
+        dflt = now_role or "replica"
+        if yes:
+            role = dflt
+        else:
+            print(
+                "역할을 고른다 —\n"
+                "  replica    받는 쪽 — 클론 A · 팀원 · 서버 (대부분 이것)\n"
+                "  canonical  만드는 쪽 — 🔴 클론 B 한 곳만"
+            )
+            try:
+                role = input(f"역할 [{dflt}] > ").strip() or dflt
+            except EOFError:
+                role = dflt
+    if role not in dm.ROLES:
+        print(f"🔴 모르는 역할 {role!r} — 아는 것은 {list(dm.ROLES)} (D-220)")
+        return 1
+    first_canon = role == "canonical" and not yes and now_role != "canonical"
+    if first_canon and not _ask("🔴 정본은 클론 B 한 곳이다. 이 기기가 클론 B 인가"):
+        print("멈췄다 — .env 는 그대로다")
+        return 1
+
+    if store:
+        chosen = pathlib.Path(store).expanduser()
+    else:
+        found = candidates()
+        if not found:
+            print(
+                f"🔴 공유 저장소 폴더 `{STORE_NAME}` 를 못 찾았다 — .env 는 그대로다.\n"
+                "  ① Google Drive for desktop 을 설치하고 **초대받은 계정**으로 로그인한다\n"
+                f"  ② drive.google.com → 공유 문서함 → `{STORE_NAME}` 우클릭 → 바로가기 추가 → 내 드라이브\n"
+                "  ③ 탐색기에 `<글자>:\\내 드라이브\\CopyLane_store` 가 보이면 다시 실행한다\n"
+                "  (다른 곳이면 `--store <폴더>` 로 준다)"
+            )
+            return 1
+        if len(found) == 1 or yes:
+            chosen = found[0]
+        else:
+            for i, p in enumerate(found, 1):
+                print(f"  {i}. {p}")
+            try:
+                k = int(input("몇 번 > ").strip() or "1")
+                chosen = found[k - 1]
+            except (ValueError, IndexError, EOFError):
+                print("멈췄다 — .env 는 그대로다")
+                return 1
+    if not chosen.is_dir():
+        print(f"🔴 폴더가 없다 — {chosen}. .env 는 그대로다")
+        return 1
+
+    setkey.put_setting("DATA_ROLE", role)
+    setkey.put_setting("DATA_STORE", str(chosen))
+    print(f"  .env — DATA_ROLE={role} (전: {now_role or '없음'})")
+    print(f"  .env — DATA_STORE={chosen} (전: {now_store or '없음'})")
+
+    if role == "canonical":
+        print("  다음 — `launcher.py data-publish --dry-run` 으로 무엇이 올라갈지 본다")
+        return 0
+    if not (chosen / LAYOUT / "publish_log.jsonl").is_file():
+        print(
+            "  🟡 저장소에 아직 올라온 판이 없다 — 정본(클론 B)이 `data-publish` 를 한 뒤에 받는다.\n"
+            "     그 뒤로는 `load`·`chunk`·`embed`·`search-probe` 가 부족분을 **스스로 받는다** (D-247)"
+        )
+        return 0
+    print("  받는다 — 이 커밋의 원장대로 (D-247)")
+    return sync(yes=yes)
+
+
+# ══════════════════════════════════════════════════════════
 # 런처가 데이터 명령 앞에서 부르는 것 (판정 ③)
 # ══════════════════════════════════════════════════════════
 def ensure() -> int:
@@ -410,7 +519,9 @@ def ensure() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="부족한 파생물을 공유 저장소에서 받는다 (D-247)")
-    ap.add_argument("cmd", choices=["plan", "sync", "publish", "ensure"])
+    ap.add_argument("cmd", choices=["plan", "sync", "publish", "ensure", "setup"])
+    ap.add_argument("--role", default=None, help="setup — canonical | replica")
+    ap.add_argument("--store", default=None, help="setup — 저장소 폴더 (비우면 찾는다)")
     ap.add_argument("--yes", action="store_true", help="묻지 않는다")
     ap.add_argument("--dry-run", action="store_true", help="무엇을 할지만 보여 준다")
     a = ap.parse_args()
@@ -424,6 +535,8 @@ def main() -> int:
         return sync(yes=a.yes, dry_run=a.dry_run)
     if a.cmd == "publish":
         return publish(yes=a.yes, dry_run=a.dry_run)
+    if a.cmd == "setup":
+        return setup(role=a.role, store=a.store, yes=a.yes)
     return ensure()
 
 

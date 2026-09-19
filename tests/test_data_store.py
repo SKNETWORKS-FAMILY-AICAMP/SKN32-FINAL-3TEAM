@@ -249,3 +249,75 @@ def test_개인이_특정되면_올리지_않는다(world, monkeypatch: pytest.M
     _write_manifest()
     assert _publish(monkeypatch) == 1
     assert not (storage / ds.LAYOUT / "objects").exists(), "한 파일이라도 올라갔다"
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-20 — `data-setup` : 역할·저장소를 런처가 적고, 받는 쪽이면 바로 받는다
+# ══════════════════════════════════════════════════════════
+def _env_file(tmp: pathlib.Path, mp: pytest.MonkeyPatch) -> pathlib.Path:
+    """`.env` 를 임시 파일로 돌린다 — 진짜 `.env` 는 건드리지 않는다."""
+    from collect import setkey
+
+    env_path = tmp / "dotenv"
+    env_path.write_text("DATA_ROLE=\nDATA_STORE=\n", encoding="utf-8", newline="\n")
+    mp.setattr(setkey, "ENV_PATH", env_path)
+    # 🚨 `put_setting` 은 `os.environ` 에 직접 쓴다 — 먼저 setenv 로 **원래 값을 기록**해야 끝나고 되돌린다
+    for k in ("DATA_ROLE", "DATA_STORE"):
+        mp.setenv(k, "")
+        mp.delenv(k)
+    return env_path
+
+
+@pytest.mark.gate
+def test_드라이브_글자가_달라도_저장소_폴더를_찾는다(tmp_path: pathlib.Path) -> None:
+    """★ 기기마다 G: · H: · J: 로 다르다 — 폴더 이름으로 찾는다. 한국어·영어 설정 둘 다."""
+    j = tmp_path / "J"
+    (j / "내 드라이브" / ds.STORE_NAME).mkdir(parents=True)
+    k = tmp_path / "K"
+    (k / "My Drive" / ds.STORE_NAME).mkdir(parents=True)
+    (tmp_path / "H" / "내 드라이브").mkdir(parents=True)  # 드라이브는 있는데 폴더가 없다
+    got = ds.candidates([tmp_path / "H", j, k])
+    assert got == [j / "내 드라이브" / ds.STORE_NAME, k / "My Drive" / ds.STORE_NAME]
+
+
+@pytest.mark.gate
+def test_설정은_env_에_적고_받는_쪽이면_바로_받는다(world, monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 팀장 요구 — 클론 A · 팀원은 명령 하나로 역할·경로가 적히고 파생물이 채워진다."""
+    tmp, storage, canon = world
+    assert _publish(monkeypatch) == 0
+    manifest = dm.OUT.read_bytes()
+    a = _repo(tmp / "A", {SPLIT: b'{"assign":{}}\n'})
+    (a / "data" / "derived_manifest.jsonl").write_bytes(manifest)
+    _point(monkeypatch, a)
+    env_path = _env_file(tmp, monkeypatch)
+
+    assert ds.setup(role="replica", store=str(storage), yes=True) == 0
+    text = env_path.read_text(encoding="utf-8")
+    assert "DATA_ROLE=replica" in text and f"DATA_STORE={storage}" in text, text
+    assert (a / "data" / "derived" / GEN).read_bytes() == (
+        canon / "data" / "derived" / GEN
+    ).read_bytes()
+    assert (a / "data" / "derived" / LABEL).exists(), "라벨도 받아야 한다 (D-249)"
+
+
+@pytest.mark.gate
+def test_설정은_모르는_역할과_없는_폴더를_적지_않는다(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🚨 틀린 값이 `.env` 에 들어가면 다음 명령이 엉뚱한 곳을 본다 — 쓰기 전에 멈춘다 (D-220)."""
+    env_path = _env_file(tmp_path, monkeypatch)
+    before = env_path.read_bytes()
+    assert ds.setup(role="canonnical", store=str(tmp_path), yes=True) == 1
+    assert ds.setup(role="replica", store=str(tmp_path / "없다"), yes=True) == 1
+    monkeypatch.setattr(ds, "candidates", lambda roots=None: [])
+    assert ds.setup(role="replica", yes=True) == 1
+    assert env_path.read_bytes() == before, "실패했는데 .env 가 바뀌었다"
+
+
+@pytest.mark.gate
+def test_키는_설정_경로로_쓰지_않는다() -> None:
+    """🚨 비밀은 `setkey`(화면에 안 뜬다)로만 — 설정 쓰기가 키를 받으면 값이 화면·기록에 남는다 (D-111)."""
+    from collect import setkey
+
+    with pytest.raises(setkey.SetKeyError):
+        setkey.put_setting("LAW_OC_KEY", "x")
