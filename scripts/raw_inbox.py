@@ -3,6 +3,7 @@
   uv run python -m scripts.raw_inbox publish [--dry-run] [--yes]        # 수집 팀원 — 받은편지함에 올린다
   uv run python -m scripts.raw_inbox import --from <브랜치>               # 정본 — 병합 **전** 검사만
   uv run python -m scripts.raw_inbox import [--dry-run] [--yes]         # 정본 — 병합 뒤 제자리에 놓는다
+  uv run python -m scripts.raw_inbox pending                            # 정본 — 합치지 않은 팀원 원문이 있나
 
 팀장 — *「특정 팀원이 raw 데이터 수집작업을 하게 하려면」* · 흐름은 *「내 ohb 브랜치로 merge 후 검토한 뒤
 수정 및 흡수하여 나만 main 에 pr」*.
@@ -161,12 +162,52 @@ def _foreign(rows: list[dict]) -> list[dict]:
     for r in rows:
         who = r.get("device")
         p = _path_of(r)
-        if not who or who == me or p in seen:
+        if not who or who in (me, store.CANONICAL_DEVICE) or p in seen:
             continue
         seen.add(p)
         if not (ROOT / p).exists():
             out.append(r)
     return out
+
+
+def pending() -> list[dict]:
+    """🆕 정본에서 **합치지 않은 팀원 원문** — 원장(병합됨)에는 있고 디스크에는 없다.
+
+    팀장 — *「대처를 진행해줘」* (받는 쪽 점검 2026-09-20). ⛔ 원장은 git 병합으로 들어오고 원문은
+    `raw-import` 로 따로 온다 — 그 사이에 추출·재생성을 돌리면 추출기는 디스크만 읽으므로
+    **경고 없이 팀원 원문이 빠진 파생물**이 나온다. 그 자리를 막는다.
+    🚨 G2(추출 뒤 원문 삭제 · D-17)와 재배포 제약 원천(받은편지함으로 못 온다 · D-71)은 세지 않는다 —
+       디스크에 없는 것이 정상이거나, 합치기 검사(`--from`)가 이미 막는다.
+    """
+    from collect import registry  # noqa: PLC0415
+
+    if dm.role() != "canonical":
+        return []  # 사본은 원문을 안 갖는 것이 정상이다 (D-19)
+    out = []
+    for r in _foreign(_local_ledger()):
+        sid = str(r.get("source_id"))
+        try:
+            if registry.is_g2(sid) or _noredist(sid):
+                continue
+        except registry.RegistryError:
+            pass  # 모르는 원천은 센다 — 없음을 성공으로 세지 않는다 (D-72)
+        out.append(r)
+    return out
+
+
+def check_pending() -> int:
+    """런처 `extract`·`scan`, `data-publish` 가 앞에서 부른다. 🔴 있으면 1 — 그 명령을 멈춘다."""
+    rows = pending()
+    if not rows:
+        return 0
+    who = sorted({str(r.get("device")) for r in rows})
+    print(
+        f"🔴 합치지 않은 팀원 원문이 {len(rows)}개 있다 — 기기 {who} · 예: {[_path_of(r) for r in rows[:3]]}\n"
+        "  원장은 병합됐는데 파일이 없다. 이대로 만들면 **팀원 원문이 빠진 파생물**이 된다 (D-250).\n"
+        "  먼저: uv run python launcher.py raw-import\n"
+        "  (받은편지함에 없다고 나오면 팀원에게 `raw-publish` 를 다시 요청한다)"
+    )
+    return 1
 
 
 def publish(*, yes: bool = False, dry_run: bool = False) -> int:
@@ -327,7 +368,7 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
 def main() -> int:
     dm._utf8_out()  # noqa: SLF001 — 파이프로 나갈 때도 한글 (CI 실측 · 같은 함수를 쓴다)
     ap = argparse.ArgumentParser(description="팀원 수집 원문의 받은편지함 (D-250)")
-    ap.add_argument("cmd", choices=["publish", "import"])
+    ap.add_argument("cmd", choices=["publish", "import", "pending"])
     ap.add_argument(
         "--from", dest="branch", default=None, help="import — 병합 전 이 브랜치의 원장으로 검사만"
     )
@@ -336,6 +377,8 @@ def main() -> int:
     a = ap.parse_args()
     if a.cmd == "publish":
         return publish(yes=a.yes, dry_run=a.dry_run)
+    if a.cmd == "pending":
+        return check_pending()
     return import_(branch=a.branch, yes=a.yes, dry_run=a.dry_run)
 
 

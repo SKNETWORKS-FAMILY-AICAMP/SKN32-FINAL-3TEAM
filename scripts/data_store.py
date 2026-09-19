@@ -39,7 +39,6 @@ import os
 import pathlib
 import re
 import shutil
-import socket
 import string
 import subprocess
 import sys
@@ -320,10 +319,21 @@ def _commit() -> str:
         return "?"
 
 
+def store_device() -> str:
+    from collect import store  # noqa: PLC0415
+
+    return store.device_id()
+
+
 def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     """🔴 정본만 올린다. 올리기 전에 셋을 본다 — 원장 최신 · 마스킹 잔여 0 · 재배포 제약 0."""
     if dm.role() != "canonical":
         print("🔴 올리지 않는다 — 정본(DATA_ROLE=canonical)만 올린다 (D-226)")
+        return 1
+    # 🆕 D-250 — 합치지 않은 팀원 원문이 있으면 지금 파생물에 그것이 빠져 있다. 사본에 퍼뜨리지 않는다
+    from scripts import raw_inbox  # noqa: PLC0415 — raw_inbox 가 이 모듈을 부른다(순환 회피)
+
+    if raw_inbox.check_pending():
         return 1
     d = dm.diff("canonical")
     if dm.failed("canonical", d):
@@ -383,7 +393,8 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     entry = {
         "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "commit": _commit(),
-        "device": socket.gethostname(),
+        # 🔄 D-250 — PC 이름이 아니라 기기 별칭. 저장소는 팀원(뷰어)이 읽는다
+        "device": store_device(),
         "manifest_sha256": _sha(dm.OUT),
         "objects_new": len(new),
         "objects_listed": len(rows),
@@ -411,6 +422,20 @@ DRIVE_DIRS = ("내 드라이브", "My Drive")
 INBOX_NAME = "CopyLane_raw_inbox"
 
 
+def default_roots(home: pathlib.Path) -> list[pathlib.Path]:
+    """Windows 가 아닌 기기의 Drive 위치 후보.
+
+    🆕 2026-09-20 (받는 쪽 점검) — ⛔ 종전에는 `~` · `~/Google Drive` 만 봤다. 지금 Mac 의 Drive for desktop 은
+       `~/Library/CloudStorage/GoogleDrive-<계정>/` 아래에 `My Drive`(`내 드라이브`) 를 붙인다 — 계정마다 하나씩.
+    """
+    cloud = home / "Library" / "CloudStorage"
+    try:
+        drives = sorted(cloud.glob("GoogleDrive-*")) if cloud.is_dir() else []
+    except OSError:
+        drives = []
+    return [home, home / "Google Drive", *drives]
+
+
 def candidates(
     roots: list[pathlib.Path] | None = None, name: str = STORE_NAME
 ) -> list[pathlib.Path]:
@@ -419,7 +444,7 @@ def candidates(
         if os.name == "nt":
             roots = [pathlib.Path(f"{c}:\\") for c in string.ascii_uppercase if c not in "AB"]
         else:
-            roots = [pathlib.Path.home(), pathlib.Path.home() / "Google Drive"]
+            roots = default_roots(pathlib.Path.home())
     out: list[pathlib.Path] = []
     for r in roots:
         for d in DRIVE_DIRS:

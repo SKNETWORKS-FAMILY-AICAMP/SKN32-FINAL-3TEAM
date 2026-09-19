@@ -397,3 +397,56 @@ def test_기기_이름에_공백_한글은_안_받는다(tmp_path, monkeypatch) 
         == 1
     )
     assert p.read_bytes() == before
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 받는 쪽 점검 (2026-09-20) — `raw-import` 를 잊으면 만들기 전에 멈춘다
+# ══════════════════════════════════════════════════════════
+@pytest.mark.gate
+def test_합치지_않은_팀원_원문이_있으면_정본의_추출과_올리기가_멈춘다(
+    repo, inbox, monkeypatch
+) -> None:
+    """🔴 원장은 git 병합으로, 원문은 `raw-import` 로 따로 온다 — 그 사이 추출하면 **경고 없이** 빠진다."""
+    row = _uploaded(repo, inbox, monkeypatch, b'{"a":1}')  # 정본 · 원장만 병합된 상태
+    assert [r["path"] for r in ri.pending()] == [row["path"]]
+    assert ri.check_pending() == 1
+    assert ds.publish(yes=True) == 1, "합치지 않은 원문이 있는데 파생물을 올렸다"
+    assert ri.import_(yes=True) == 0
+    assert ri.pending() == [] and ri.check_pending() == 0
+
+
+@pytest.mark.gate
+def test_사본과_G2_는_합치지_않은_원문으로_세지_않는다(repo, inbox, monkeypatch) -> None:
+    """사본은 원문이 없는 것이 정상(D-19) · G2 는 추출 뒤 지운다(D-17) — 세면 영영 멈춘다."""
+    _uploaded(repo, inbox, monkeypatch, b'{"a":1}')
+    monkeypatch.setattr(ri, "_noredist", lambda s: False)
+    from collect import registry
+
+    monkeypatch.setattr(registry, "is_g2", lambda s: True)
+    assert ri.pending() == []
+    monkeypatch.setattr(registry, "is_g2", lambda s: False)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert ri.pending() == []
+
+
+@pytest.mark.gate
+def test_런처_추출은_합치지_않은_원문이_있으면_멈춘다(monkeypatch) -> None:
+    calls: list[tuple] = []
+
+    def fake_run(*a):
+        calls.append(a)
+        return 1 if "pending" in a else 0
+
+    monkeypatch.setattr(launcher, "run", fake_run)
+    r = CliRunner().invoke(launcher.app, ["extract"])
+    assert r.exit_code == 1, r.output
+    assert len(calls) == 1 and "pending" in calls[0], calls
+
+
+@pytest.mark.gate
+def test_Mac_의_Drive_위치에서도_저장소를_찾는다(tmp_path) -> None:
+    """🆕 Mac 의 Drive for desktop 은 `~/Library/CloudStorage/GoogleDrive-<계정>/` 아래에 붙는다."""
+    home = tmp_path / "home"
+    want = home / "Library" / "CloudStorage" / "GoogleDrive-team@x" / "My Drive" / ds.STORE_NAME
+    want.mkdir(parents=True)
+    assert ds.candidates(ds.default_roots(home)) == [want]

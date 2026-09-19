@@ -114,6 +114,24 @@ def needs_data(fn):
     return wrapper
 
 
+def needs_raw(fn):
+    """🆕 **원문을 읽어 파생물을 만드는 명령** — 정본에 합치지 않은 팀원 원문이 있으면 멈춘다 (D-250).
+
+    ⛔ 원장은 git 병합으로, 원문은 `raw-import` 로 따로 온다. 그 사이에 추출하면 **경고 없이**
+       팀원 원문이 빠진 파생물이 나온다. 로직은 `scripts.raw_inbox pending` 에 있다(얇은 껍데기 · D-51).
+       정본이 아니면 아무것도 안 한다.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if run(sys.executable, "-m", "scripts.raw_inbox", "pending") != 0:
+            raise typer.Exit(1)
+        return fn(*args, **kwargs)
+
+    wrapper._needs_raw = True
+    return wrapper
+
+
 def cli_name(fn) -> str:
     """함수 이름 -> CLI 명령 이름. `db_up` -> `db-up`, `eval_` -> `eval`."""
     return getattr(fn, "_cli", fn.__name__.rstrip("_").replace("_", "-"))
@@ -1181,6 +1199,7 @@ def serve(
 
 
 @app.command()
+@needs_raw
 def extract(
     source: str = typer.Argument("", help="원천 id (비우면 표를 보여준다)"),
     dump: bool = typer.Option(False, "--dump", help="파생물을 쓴다 — 🔴 마스킹 정책이 있어야 한다"),
