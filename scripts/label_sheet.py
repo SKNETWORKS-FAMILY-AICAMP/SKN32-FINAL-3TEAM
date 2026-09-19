@@ -200,6 +200,12 @@ def import_(csv_path: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
     )
     print("  🚨 빈칸은 **안 들어갔다.** 버린 것이 아니라 판단이 없는 것이다.")
     print("\n  취합 — uv run python scripts/label_merge.py data/derived/labels/*.jsonl")
+    # 🔄 2026-09-20 (D-249) — 라벨은 git 에 올리지 않는다(공개 저장소 · 인용 원문). 정본이 저장소에 올린다.
+    print(
+        "  🚨 git 에 커밋하지 않는다 (D-249). 정본(클론 B)에서 import 한 뒤 —\n"
+        "     launcher.py derived-manifest --write → 원장 커밋 · push → launcher.py data-publish\n"
+        "     팀원은 채운 CSV 를 팀장에게 넘긴다 (정본만 올린다 · D-226)"
+    )
     return 0
 
 

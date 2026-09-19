@@ -22,7 +22,8 @@
    Google Drive for desktop · NAS · USB 가 전부 폴더로 붙는다. 서비스가 정해져 폴더가 아니게 되면
    `_get`·`_put` 두 함수만 바뀐다.
 
-🚨 **옮기는 것은 생성물뿐이다.** 원천·표본은 git 이 옮기고(D-244), 원문캐시는 **옮기지 않는다**
+🔄 **옮기는 것은 원천·표본·생성물이다** (2026-09-20 · D-249 — 종전 「생성물뿐 · 원천·표본은 git」).
+   공개 git 에 인용 광고 문구가 올라가 있어 원천·표본을 저장소로 옮겼다. 원문캐시는 **옮기지 않는다**
    (마스킹 전 원문 · D-17). 올리기 전에 코드가 막는다 — 사람의 약속으로 두지 않는다 (D-117).
 🚨 저장소는 **제3자 계정**이다 (D-78 ③) — 재배포 제약 소스(`redistributable: false`)를 한 번이라도
    받은 기기에서는 **올리지 않는다.** 그 순간 파생물 어딘가에 그 행이 섞였을 수 있다 (D-71).
@@ -51,8 +52,9 @@ BACKUP = ROOT.parent / "CopyLane_backup"
 #: 🚨 `data/raw` 가 **있는지만** 본다 — 열지 않는다. `RAW_EXCEPTIONS` 에 이유와 함께 적었다.
 RAW_MARK = ROOT / "data" / "raw"
 #: 🚨 저장소가 옮기는 부류는 이것 하나다 — 이름의 정본은 dm.KIND_RULES / DEFAULT_KIND
-MOVED = "생성물"
-assert MOVED == dm.DEFAULT_KIND, "생성물 부류 이름이 derived_manifest 와 갈렸다 (D-99)"
+#: 🔄 2026-09-20 (D-249) — 생성물만이 아니다. **원천·표본도 옮긴다** — 공개 git 에서 인용 원문을 뺐다.
+#:    무엇을 옮기는지의 정본은 `dm.moved()` 하나다 (D-99).
+MOVED = dm.STORE_KINDS
 
 
 class StoreError(RuntimeError):
@@ -163,20 +165,20 @@ def _put(root: pathlib.Path, src: pathlib.Path, sha: str) -> bool:
 def plan() -> list[dict[str, object]]:
     """이 기기에 **없거나 원장과 다른 생성물** — 받아야 할 것. 네트워크를 쓰지 않는다.
 
-    🚨 원천·표본이 다르면 여기 넣지 않는다 — **git 이 옮기는 파일**이다. 저장소에서 받아 덮으면
-       git 과 두 벌이 된다. `diff` 가 그것을 따로 알려 준다(`git_side`).
+    🚨 **git 이 나르는 파일**(`dm.GIT_CARRIES`)이 다르면 여기 넣지 않는다 — 저장소에서 받아 덮으면
+       git 과 두 벌이 된다. `git_side` 가 그것을 따로 알려 준다.
+    🔄 2026-09-20 (D-249) — 원천·표본(라벨 · 라벨 시트)도 여기서 받는다. git 에서 뺐다.
     """
     led = dm.ledger()
     d = dm.diff("replica")
-    want = [p for p in d["missing"] + d["changed"] if led[p]["부류"] == MOVED]
+    want = [p for p in d["missing"] + d["changed"] if dm.moved(p, str(led[p]["부류"]))]
     return [led[p] for p in sorted(want)]
 
 
 def git_side() -> list[str]:
-    """원천·표본인데 이 기기와 다른 것 — `git pull`/`git status` 의 일이다."""
-    led = dm.ledger()
+    """git 이 나르는데 이 기기와 다른 것 — `git pull`/`git status` 의 일이다."""
     d = dm.diff("replica")
-    return [p for p in d["missing"] + d["changed"] if led[p]["부류"] in ("원천", "표본")]
+    return [p for p in d["missing"] + d["changed"] if p in dm.GIT_CARRIES]
 
 
 def _size(rows: list[dict[str, object]]) -> str:
@@ -350,7 +352,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
         return 1
 
     led = dm.ledger()
-    rows = [r for r in led.values() if r["부류"] == MOVED]
+    rows = [r for r in led.values() if dm.moved(str(r["경로"]), str(r["부류"]))]
     bad = unsafe(rows)
     if bad:
         print(f"🔴 원장에 올릴 수 없는 행이 있다: {bad[:5]}")
@@ -362,7 +364,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
         return 1
     new = [r for r in rows if not _obj(root, str(r["sha256"])).is_file()]
     print(
-        f"올릴 것 {len(new)}개 · {_size(new)} (생성물 {len(rows)}개 중 · 원천·표본은 git · 원문캐시는 안 올린다)\n"
+        f"올릴 것 {len(new)}개 · {_size(new)} (원천·표본·생성물 {len(rows)}개 중 · 원문캐시는 안 올린다)\n"
         f"  저장소 {root}"
     )
     if not new:

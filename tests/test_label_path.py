@@ -68,8 +68,15 @@ def test_붙인_라벨이_골든셋_평가에_들어가_있다() -> None:
         f"붙인 라벨 {len(docs)}건이 골든셋에 **한 행도 없다** — "
         "uv run python launcher.py golden --write 로 다시 꾸린다"
     )
-    assert len(rows) == len(docs), (
-        f"붙인 라벨 {len(docs)}건 중 골든셋에 {len(rows)}행만 있다 — 나머지가 버려졌다"
+    # 🔄 2026-09-20 (D-249) — 인용 문구 보관 상한을 넘는 라벨은 **버리는 것이 규칙**이다(자르지 않는다).
+    #    ⛔ 그것까지 「조용히 버려졌다」로 세면 규칙을 지킨 산출물이 빨강이 된다. 상한 안의 것만 센다 —
+    #       그 수가 다르면 여전히 **규칙 밖에서** 버려진 것이다.
+    cap = PARAMS.quote_max_chars
+    want = sum(1 for d in docs for t in d["문구"] if len(t) <= cap)
+    over = sum(1 for d in docs for t in d["문구"] if len(t) > cap)
+    assert len(rows) == want, (
+        f"붙인 라벨 {len(docs)}건(상한 {cap}자 초과 {over}건 제외 {want}건) 중 "
+        f"골든셋에 {len(rows)}행만 있다 — 나머지가 버려졌다"
     )
     bad = sorted({r["split"] for r in rows} - {"test_sentence"})
     assert not bad, (

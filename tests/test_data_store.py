@@ -26,7 +26,10 @@ from scripts import derived_manifest as dm
 
 GEN = "golden/golden.jsonl"  # 생성물
 CACHE = "mfds_press_pdf/tables/x.json"  # 원문캐시
-LABEL = "labels/누군가.jsonl"  # 원천 — git 이 옮긴다
+LABEL = "labels/누군가.jsonl"  # 원천 — 🔄 D-249 부터 저장소가 옮긴다 (종전 git)
+SPLIT = (
+    "golden/split_manifest.json"  # 표본 — git 이 나른다(dm.GIT_CARRIES) · 저장소에 올리지 않는다
+)
 
 
 def _repo(root: pathlib.Path, files: dict[str, bytes]) -> pathlib.Path:
@@ -70,7 +73,7 @@ def world(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
         tmp_path / "B",
         {GEN: b'{"text":"v2"}\n', CACHE: b'{"t":"(\xec\xa3\xbc)'},  # 캐시 내용은 무엇이든
     )
-    _repo(canon, {LABEL: b'{"l":1}\n'})
+    _repo(canon, {LABEL: b'{"l":1}\n', SPLIT: b'{"assign":{}}\n'})
     _point(monkeypatch, canon)
     _write_manifest()
     return tmp_path, storage, canon
@@ -82,17 +85,25 @@ def _publish(mp: pytest.MonkeyPatch) -> int:
 
 
 @pytest.mark.gate
-def test_올리는_것은_생성물뿐이다(world, monkeypatch: pytest.MonkeyPatch) -> None:
-    """🔴 원문캐시는 마스킹 전 원문이다 — 제3자 계정에 나가면 안 된다 (D-17 · D-78 ③)."""
+def test_올리는_것은_원천_표본_생성물이고_원문캐시와_git_몫은_아니다(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 원문캐시는 마스킹 전 원문이다 — 제3자 계정에 나가면 안 된다 (D-17 · D-78 ③).
+
+    🔄 2026-09-20 (D-249) — 라벨(원천)도 올린다. 공개 git 에서 인용 원문을 뺐기 때문이다.
+       git 이 나르는 `split_manifest.json` 은 올리지 않는다 — 두 길로 나르면 두 벌이 된다 (D-99).
+    """
     _tmp, storage, canon = world
     assert _publish(monkeypatch) == 0
     objs = {p.name for p in (storage / ds.LAYOUT / "objects").rglob("*") if p.is_file()}
-    gen_sha = hashlib.sha256((canon / "data" / "derived" / GEN).read_bytes()).hexdigest()
-    cache_sha = hashlib.sha256((canon / "data" / "derived" / CACHE).read_bytes()).hexdigest()
-    assert objs == {gen_sha}, f"생성물 하나만 올라가야 한다: {objs}"
-    assert cache_sha not in objs
+
+    def sha(rel: str) -> str:
+        return hashlib.sha256((canon / "data" / "derived" / rel).read_bytes()).hexdigest()
+
+    assert objs == {sha(GEN), sha(LABEL)}, f"생성물과 라벨만 올라가야 한다: {objs}"
+    assert sha(CACHE) not in objs and sha(SPLIT) not in objs
     log = (storage / ds.LAYOUT / "publish_log.jsonl").read_text(encoding="utf-8").splitlines()
-    assert json.loads(log[-1])["objects_new"] == 1
+    assert json.loads(log[-1])["objects_new"] == 2
 
 
 @pytest.mark.gate
@@ -102,18 +113,20 @@ def test_사본은_부족분만_받고_옛판은_백업한다(world, monkeypatch
     assert _publish(monkeypatch) == 0
     manifest = dm.OUT.read_bytes()
 
-    # 클론 A — git 이 원장과 라벨을 옮겼고, 생성물은 옛 판이고, 원문캐시는 없다
-    a = _repo(tmp / "A", {GEN: b'{"text":"v1"}\n', LABEL: b'{"l":1}\n'})
+    # 클론 A — git 이 원장과 분할표를 옮겼고, 생성물은 옛 판이고, 라벨·원문캐시는 없다
+    #    🔄 D-249 — 라벨은 이제 git 이 아니라 저장소에서 온다
+    a = _repo(tmp / "A", {GEN: b'{"text":"v1"}\n', SPLIT: b'{"assign":{}}\n'})
     (a / "data" / "derived_manifest.jsonl").write_bytes(manifest)
     _point(monkeypatch, a)
     monkeypatch.setenv("DATA_ROLE", "replica")
 
-    assert [r["경로"] for r in ds.plan()] == [f"data/derived/{GEN}"]
+    assert [r["경로"] for r in ds.plan()] == [f"data/derived/{GEN}", f"data/derived/{LABEL}"]
     assert ds.sync(yes=True) == 0
     assert (a / "data" / "derived" / GEN).read_bytes() == (
         canon / "data" / "derived" / GEN
     ).read_bytes()
     assert not (a / "data" / "derived" / CACHE).exists(), "원문캐시를 받으면 안 된다"
+    assert (a / "data" / "derived" / LABEL).read_bytes() == b'{"l":1}\n', "라벨을 못 받았다 (D-249)"
     backups = list((tmp / "A_backup").rglob("golden.jsonl"))
     assert backups and backups[0].read_bytes() == b'{"text":"v1"}\n', "옛 판이 백업되지 않았다"
     assert not dm.failed("replica", dm.diff("replica")), "받은 뒤에도 사본 --check 가 빨강이다"

@@ -50,6 +50,7 @@ import sys
 import yaml
 
 from app.settings import dsn
+from preprocess.lineage import GOLDEN_LINEAGE
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DERIVED = ROOT / "data" / "derived"
@@ -204,38 +205,43 @@ def load_sources(
     return ok, skipped, swept, kept
 
 
+#: 🔴 프래그먼트 표 (D-18). `load_fragments()` 가 만들고, 게이트가 `preprocess/lineage.py` 와 대조한다 —
+#:    G2(광고주 저작물 조각)면 재배포 불가여야 한다 (D-133 ① · D-249).
+FRAGMENTS: list[tuple[str, str, str, str]] = [
+    ("law_go_kr:article", "law_go_kr", "조문 본문", "G3"),
+    ("law_go_kr:annex", "law_go_kr", "별표", "G3"),
+    ("law_go_kr:prec", "law_go_kr", "판례", "G3"),
+    ("law_go_kr:decc", "law_go_kr", "재결례", "G3"),
+    ("mfds_hf_ingredient:api", "mfds_hf_ingredient", "기능성 원료인정", "G3"),
+    ("mfds_hf_individual:api", "mfds_hf_individual", "개별인정형", "G3"),
+    ("ftc_decisions_body:dict", "ftc_decisions_body", "금지표현 사전", "G2"),
+    # 🔴 골든셋의 판정 단위 (2026-09-10 · D-18). ⛔ 없어서 `golden_sample.fragment_id`
+    #    NOT NULL 을 채울 수 없었다 — 「막는 것 넷」 중 하나였다.
+    #    🚨 같은 소스라도 성격이 다르면 등급이 갈린다. 의결서 인용 광고 문구는 G2 다
+    #    (재배포 불가 조각 · 🔄 보관 상한 40 → 120자 · D-133 → D-249).
+    ("ftc_decisions_body:golden", "ftc_decisions_body", "의결서 인용 광고 문구", "G2"),
+    ("mfds_casebook:golden", "mfds_casebook", "사례집 인용표현", "G2"),
+    # 🆕 2026-09-19 — 해설서 인용표현에 **사람이 붙인 라벨**이 평가셋으로 들어왔다 (D-243 · 163행 test_sentence).
+    #    ⛔ 등재가 없어 `load` 가 골든셋 앞에서 멈췄다(fail-closed 가 제 일을 했다 · 트랜잭션이라 DB 는 그대로).
+    #    ★ 해설서가 인용한 **적발 광고 문구**라 사례집과 같은 판정이다 — 광고주 저작물 조각은 G2 (D-133 ①).
+    (
+        "mfds_special_use_guide:golden",
+        "mfds_special_use_guide",
+        "해설서 인용표현 (사람 라벨)",
+        "G2",
+    ),
+    ("mfds_hf_ingredient_board:approved", "mfds_hf_ingredient_board", "승인 기능성 문구", "G3"),
+    # 🚨 주입본은 **우리 생성물**이지만 원본이 승인 문구라 계보를 그쪽에 둔다 (D-71).
+    ("mfds_hf_ingredient_board:injected", "mfds_hf_ingredient_board", "규칙 주입 합성문", "G3"),
+]
+
+
 def load_fragments(cur, dry: bool) -> int:
     """파생물 단위로 프래그먼트를 만든다 (D-18 — 판정 단위는 FRAGMENT).
 
     🚨 소스마다 하나가 아니다. 같은 소스에서 나온 것도 성격이 다르면 등급이 갈린다.
     """
-    frags = [
-        ("law_go_kr:article", "law_go_kr", "조문 본문", "G3"),
-        ("law_go_kr:annex", "law_go_kr", "별표", "G3"),
-        ("law_go_kr:prec", "law_go_kr", "판례", "G3"),
-        ("law_go_kr:decc", "law_go_kr", "재결례", "G3"),
-        ("mfds_hf_ingredient:api", "mfds_hf_ingredient", "기능성 원료인정", "G3"),
-        ("mfds_hf_individual:api", "mfds_hf_individual", "개별인정형", "G3"),
-        ("ftc_decisions_body:dict", "ftc_decisions_body", "금지표현 사전", "G2"),
-        # 🔴 골든셋의 판정 단위 (2026-09-10 · D-18). ⛔ 없어서 `golden_sample.fragment_id`
-        #    NOT NULL 을 채울 수 없었다 — 「막는 것 넷」 중 하나였다.
-        #    🚨 같은 소스라도 성격이 다르면 등급이 갈린다. 의결서 인용 광고 문구는 G2 다
-        #    (40자 상한 · NOREDIST 로 다루는 조각 · D-133).
-        ("ftc_decisions_body:golden", "ftc_decisions_body", "의결서 인용 광고 문구", "G2"),
-        ("mfds_casebook:golden", "mfds_casebook", "사례집 인용표현", "G2"),
-        # 🆕 2026-09-19 — 해설서 인용표현에 **사람이 붙인 라벨**이 평가셋으로 들어왔다 (D-243 · 163행 test_sentence).
-        #    ⛔ 등재가 없어 `load` 가 골든셋 앞에서 멈췄다(fail-closed 가 제 일을 했다 · 트랜잭션이라 DB 는 그대로).
-        #    ★ 해설서가 인용한 **적발 광고 문구**라 사례집과 같은 판정이다 — 광고주 저작물 조각은 G2 (D-133 ①).
-        (
-            "mfds_special_use_guide:golden",
-            "mfds_special_use_guide",
-            "해설서 인용표현 (사람 라벨)",
-            "G2",
-        ),
-        ("mfds_hf_ingredient_board:approved", "mfds_hf_ingredient_board", "승인 기능성 문구", "G3"),
-        # 🚨 주입본은 **우리 생성물**이지만 원본이 승인 문구라 계보를 그쪽에 둔다 (D-71).
-        ("mfds_hf_ingredient_board:injected", "mfds_hf_ingredient_board", "규칙 주입 합성문", "G3"),
-    ]
+    frags = FRAGMENTS
     known = set(_sources())
     n = 0
     for fid, sid, kind, grade in frags:
@@ -536,13 +542,8 @@ def _retire_product_fact(cur, seen: dict[str, set[tuple[str, str]]]) -> int:
 
 
 #: 골든셋 행 → 프래그먼트. 🚨 `(provenance, origin)` 두 축으로 갈린다 (D-18).
-GOLDEN_FRAGMENT = {
-    ("ftc_decisions_body", "real"): "ftc_decisions_body:golden",
-    ("mfds_casebook", "real"): "mfds_casebook:golden",
-    ("mfds_special_use_guide", "real"): "mfds_special_use_guide:golden",  # 🆕 2026-09-19 · D-243
-    ("mfds_hf_ingredient_board", "approved"): "mfds_hf_ingredient_board:approved",
-    ("mfds_hf_ingredient_board", "injected"): "mfds_hf_ingredient_board:injected",
-}
+#: 🔄 2026-09-20 (D-249) — 계보 표는 `preprocess/lineage.py` 한 곳이다. 재배포 값과 같은 표에서 온다 (D-99).
+GOLDEN_FRAGMENT = {k: fid for k, (fid, _redist) in GOLDEN_LINEAGE.items()}
 
 
 def sweep_golden(cur, declared: set[str]) -> int:
