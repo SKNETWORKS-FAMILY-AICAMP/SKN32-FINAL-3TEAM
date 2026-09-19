@@ -23,6 +23,7 @@ import pytest
 
 from app.settings import PARAMS
 from preprocess import labels as label_store
+from scripts import derived_manifest as dm
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "data" / "derived" / "golden" / "golden.jsonl"
@@ -58,8 +59,7 @@ def test_분할과_물질화가_라벨을_입력으로_든다() -> None:
 @pytest.mark.gate
 def test_붙인_라벨이_골든셋_평가에_들어가_있다() -> None:
     """🔴 붙인 수와 골든셋의 수가 맞는가. **다르면 어딘가에서 조용히 버려진 것이다.**"""
-    if not GOLDEN.exists():
-        pytest.skip("이 기기에 골든셋이 없다 — 기기 축이다 (D-19)")
+    dm.gate_guard(GOLDEN)  # 🔄 2026-09-19 — 역할대로 fail/skip · 옛 판 위에서 돌지 않는다 (F1)
     docs = label_store.docs()
     if not docs:
         pytest.skip("아직 붙인 라벨이 없다")
@@ -81,8 +81,7 @@ def test_붙인_라벨이_골든셋_평가에_들어가_있다() -> None:
 @pytest.mark.gate
 def test_평가_문장이_학습에_그대로_있지_않다() -> None:
     """🔴 누수. 문서 단위로 갈라도 **문구는 겹친다** — golden.build() 의 2차 필터가 그 자리다."""
-    if not GOLDEN.exists():
-        pytest.skip("이 기기에 골든셋이 없다")
+    dm.gate_guard(GOLDEN)
     rows = _golden()
     train = {r["text"] for r in rows if r["split"] == "train"}
     leak = [
@@ -100,8 +99,7 @@ def test_측정_가능한_유형이_줄지_않았다() -> None:
     ⛔ 「종전보다 나아졌다」를 코드로 못 박지 않으면 다음 갱신에서 조용히 되돌아간다.
     ★ 수를 박지 않고 **목록**을 박는다 — 어느 유형이 섰는지가 사실이고, 수는 바뀐다.
     """
-    if not GOLDEN.exists():
-        pytest.skip("이 기기에 골든셋이 없다")
+    dm.gate_guard(GOLDEN)
     # 2026-09-17 실측으로 선 넷. 여기서 빠지면 퇴행이다.
     stood = {"거짓_과장", "소비자_기만", "건강기능식품_오인", "부당_비교광고"}
     rows = [r for r in _golden() if r["split"] == "test_sentence"]

@@ -20,7 +20,12 @@
 
     uv run python -m collect.ingest register <소스id> <경로> --use U1
         `registry.require()` 를 통과해야 한다 — 🚨 `reviewed_by` 가 비면 여기서 거부된다.
-        data/raw/<소스id>/ 로 복사하고 manifest 에 provenance 와 함께 1행 남긴다.
+        소스의 **원문 폴더**(`store.raw_dir_of`)로 복사하고 manifest 에 provenance 와 함께 1행 남긴다.
+        🔴 원문 폴더 ≠ 소스 id 인 소스가 넷이다 (D-245). 이 줄이 예전에 「data/raw/<소스id>/」라고
+           적혀 있었고, 그 설명대로 넣어서 화장품법 334노드가 사라졌다 (2026-09-18).
+        ⛔ **다른 기기에서 받은 raw 를 합치는 데 쓰지 않는다** — `walk()` 뒤 `p.name` 만 써서
+           하위 폴더(`law/annex/`)를 펴고, 첫 폴더로만 넣고(`mfds_press_pdf` → `mfds_press`),
+           원장에 행을 또 붙인다 (검토 2026-09-19 §3-d). 합류는 따로 만든다.
 
 🚨 **`register` 는 등급 디렉터리에 넣지 않는다.** 원문은 `data/raw/` 다 (D-92) —
    한 원문 파일 안에서 조각의 등급이 갈리면 어느 등급 디렉터리에도 놓을 수 없다 (D-18).
