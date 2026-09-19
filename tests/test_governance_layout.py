@@ -1492,10 +1492,14 @@ def _text_writers(path: Path) -> list[tuple[int, str]]:
         if name == "write_text":
             pass
         elif name == "open":
+            # 🔴 2026-09-19 — `open(path, mode)` 은 모드가 **둘째** 인자지만 `Path.open(mode)` 는 **첫째**다.
+            #    ⛔ 둘째만 봐서 `MANIFEST.open("a", encoding=…)` 가 「읽기」로 보였고, 수집 원장이
+            #       Windows 에서 CRLF 로 5,148줄 붙는 동안 이 게이트는 초록이었다.
+            pos = node.args[0:1] if isinstance(fn, ast.Attribute) else node.args[1:2]
             mode = next(
                 (
                     a.value
-                    for a in node.args[1:2] + [k.value for k in node.keywords if k.arg == "mode"]
+                    for a in pos + [k.value for k in node.keywords if k.arg == "mode"]
                     if isinstance(a, ast.Constant) and isinstance(a.value, str)
                 ),
                 "r",

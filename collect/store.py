@@ -341,7 +341,10 @@ def manifest_append(
         row["supersedes"] = supersedes
     if identity:
         row["identity_sha256"] = identity
-    with MANIFEST.open("a", encoding="utf-8") as f:
+    # 🔴 `newline="\n"` — 2026-09-19 실측: 이 줄이 없어 Windows 에서 원장 **5,148줄이 CRLF** 로 붙었다
+    #    (그날 수집한 mfds_cgm_expc 5,129 · ftc_decisions_body 19 전부). 게이트가 `Path.open("a")` 의
+    #    모드를 못 읽어 지나쳤다 — 검사기도 같이 고쳤다 (D-241).
+    with MANIFEST.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 

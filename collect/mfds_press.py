@@ -255,7 +255,7 @@ def build_index(*, restart: bool = False) -> int:
     added, page = 0, 1
     if seen:
         print(f"  이어받기 — 이미 {len(seen):,}건이 있다.\n")
-    fh = path.open("a", encoding="utf-8")
+    fh = path.open("a", encoding="utf-8", newline="\n")  # D-241
     try:
         while True:
             _, got = list_page(page, "")
@@ -556,7 +556,7 @@ def collect(
             continue
         saved += 1
         badge_log.parent.mkdir(parents=True, exist_ok=True)
-        with badge_log.open("a", encoding="utf-8") as fh:
+        with badge_log.open("a", encoding="utf-8", newline="\n") as fh:  # D-241
             fh.write(
                 json.dumps(
                     {"no": no, "kogl_badge": "present" if nuri else "none", "title": title},
