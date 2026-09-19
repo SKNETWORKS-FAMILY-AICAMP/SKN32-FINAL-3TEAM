@@ -448,8 +448,8 @@ def rebuild() -> None:
 
     🔴 **넷은 한 벌이다.** `_matrix/data.js`(사람이 쓴 판정) 하나에서 갈라진다 —
 
-        gen_registry.py      -> data_sources.yaml            집행 (게이트가 읽는다)
-        build_matrix.py      -> sources.json + 판정매트릭스   근거 (사람이 읽는다)
+        build_matrix.py      -> sources.json + 판정매트릭스   근거 (사람이 읽는다) · 🔴 먼저
+        gen_registry.py      -> data_sources.yaml            집행 (게이트가 읽는다) · sources.json 을 읽는다
         extract_rationale.py -> registry_rationale.yaml      판정 근거
         review_sheet.py      -> S0-14 검토표                  2인 확인
 
@@ -463,9 +463,13 @@ def rebuild() -> None:
 
     🚨 첫 실패에서 멈춘다. 중간이 실패했는데 끝까지 돈 것처럼 보이면 안 된다.
     """
+    # 🔴 2026-09-19 — **판정매트릭스가 먼저다** (클론A 인계 09-18 F4). `gen_registry.py` 는 `build_matrix.py` 가 만드는
+    #    `sources.json` 을 읽는다. ⛔ 거꾸로면 새 id 는 `KeyError` 이고, **기존 레코드를 고치면 에러 없이 옛 판정으로**
+    #    `data_sources.yaml` 을 만든다 — 한 번의 rebuild 가 두 벌을 만든다 (D-90). `_matrix/README.md` 순서와 같다.
+    #    ★ 이 날 `mfds_cgm_expc` 를 G0 → G3 로 고치며 그 자리를 밟을 참이었다. 순서 게이트가 지킨다.
     steps = (
-        (["scripts/gen_registry.py"], "레지스트리"),
         (["scripts/build_matrix.py"], "판정매트릭스"),
+        (["scripts/gen_registry.py"], "레지스트리"),
         (["scripts/extract_rationale.py"], "판정 근거"),
         (["scripts/review_sheet.py"], "S0-14 검토표"),
     )

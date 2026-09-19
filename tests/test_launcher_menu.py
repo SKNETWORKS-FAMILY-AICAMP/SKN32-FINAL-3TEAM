@@ -64,3 +64,14 @@ def test_tables_name_real_sources() -> None:
         if src.endswith("_pdf"):  # 🚨 첨부 PDF 는 원천 id 가 아니라 저장 자리다
             continue
         assert registry.spec(src), f"{src} 가 레지스트리에 없다"
+
+
+def test_rebuild_는_판정매트릭스를_레지스트리보다_먼저_만든다() -> None:
+    """🔴 `gen_registry.py` 는 `build_matrix.py` 가 만든 `sources.json` 을 읽는다 (클론A 인계 09-18 F4).
+
+    ⛔ 거꾸로면 기존 판정을 고칠 때 **에러 없이 옛 판정으로** 레지스트리가 나온다 (D-90).
+    """
+    import inspect
+
+    src = inspect.getsource(launcher.rebuild)
+    assert src.index("scripts/build_matrix.py") < src.index("scripts/gen_registry.py")

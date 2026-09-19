@@ -40,7 +40,8 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     "mfds_hf_individual": ("collect.openapi", "arg"),
     "mfds_sanctions": ("collect.openapi", "arg"),
     "foodsafety_penalty_std": ("collect.openapi", "arg"),
-    "foodsafety_ad_monitor": ("collect.openapi", "arg"),
+    # ⛔ 2026-09-19 미채택 — 원천이 서비스를 안 준다(ERROR-310 · 두 키). `registry_tail.yaml` not_adopted.
+    #    "foodsafety_ad_monitor": ("collect.openapi", "arg"),
     "cosmetic_ingredient": ("collect.openapi", "arg"),
     "cosmetic_restricted": ("collect.openapi", "arg"),
     "ftc_decisions_api": ("collect.openapi", "arg"),
