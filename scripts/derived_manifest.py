@@ -28,6 +28,9 @@
             → `mfds_press_pdf/`
 
 ★ **원천·표본은 git 으로, 생성물은 파일로 옮기고 원장만 git 으로** — raw 와 같은 구조다.
+🔄 **2026-09-20 (D-249) — 원천·표본도 공유 저장소로 옮긴다. git 은 `GIT_CARRIES` 만 나른다.**
+   ⛔ 이 저장소는 **공개**다. 라벨 시트와 사람 라벨에 **인용 광고 문구 원문**이 들어 있어 git 이 그것을 공개하고 있었다.
+   ★ 옮기는 길은 D-247 의 저장소(팀 비공개) 하나다 — 정본이 올리고 사본이 받는다. 이미 올라간 이력은 지우지 않는다(팀장 판정).
 
 ──────────────────────────────────────────────────────────────
 🚨 **만든 명령을 손으로 적지 않는다** (D-99).
@@ -81,10 +84,23 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
 )
 DEFAULT_KIND = "생성물"
 
+#: 🔄 2026-09-20 (D-249) — **git 이 나르는 파생물.** 🚨 공개 저장소다 — 인용 원문이 든 파일은 여기 두지 않는다.
+#:    `split_manifest.json` 은 문서 id · 분할 · 입력 sha 뿐이라 남긴다. `.gitignore` 예외와 같아야 한다(게이트가 대조).
+GIT_CARRIES: frozenset[str] = frozenset({"data/derived/golden/split_manifest.json"})
+
+#: 저장소가 옮기는 부류 — 원문캐시만 뺀다(마스킹 전 원문 · D-17 · D-244).
+STORE_KINDS: frozenset[str] = frozenset({"원천", "표본", "생성물"})
+
+
+def moved(path: str, kind: str) -> bool:
+    """공유 저장소가 옮기는가 (D-247 · D-249). git 이 나르는 것과 원문캐시는 아니다."""
+    return kind in STORE_KINDS and path not in GIT_CARRIES
+
+
 #: 🚨 **저장소 안에 만드는 코드가 없는 파생물.** 이름과 사유를 여기 적는다.
 #:    ⛔ 검사를 약하게 두지 않고 목록으로 둔다 — 게이트의 `RAW_EXCEPTIONS` 와 같은 자리.
 #:    ★ 만드는 코드가 없다는 것은 **다시 만들 수 없다**는 뜻이므로 부류는 자동으로 「원천」이다.
-#:      즉 이 목록에 오르는 순간 git 으로 따라가야 하는 것이 된다.
+#:      즉 이 목록에 오르는 순간 공유 저장소로 따라가야 하는 것이 된다 (🔄 D-249 — 종전 「git」).
 UNWRITTEN: dict[str, str] = {
     # 🔄 2026-09-17 — 비었다. `casebook2021_labelsheet.jsonl` 이 여기 있었는데
     #    전사기를 `scripts/casebook2021_sheet.py` 로 커밋해 **1차 대조로 넘어갔다**
@@ -578,8 +594,9 @@ ROLES: tuple[str, ...] = ("canonical", "replica")
 NEED: dict[str | None, dict[str, str]] = {
     "canonical": {"원천": "필수", "표본": "필수", "생성물": "필수", "원문캐시": "필수"},
     "replica": {"원천": "필수", "표본": "필수", "생성물": "필수", "원문캐시": "무시"},
-    # 역할 없음 = CI · `.env` 가 없는 기기. git 이 옮기는 것만 요구한다.
-    None: {"원천": "필수", "표본": "필수", "생성물": "있으면", "원문캐시": "무시"},
+    # 역할 없음 = CI · `.env` 가 없는 기기. 🔄 2026-09-20 (D-249) — 원천·표본도 git 에 없어서 「있으면」이다.
+    #    git 이 나르는 `GIT_CARRIES` 는 CI 에 늘 있으므로 「있으면」으로도 sha 대조가 돈다.
+    None: {"원천": "있으면", "표본": "있으면", "생성물": "있으면", "원문캐시": "무시"},
 }
 
 
@@ -733,9 +750,12 @@ def report(got: list[dict[str, object]]) -> None:
             pct = size[name] / total * 100 if total else 0
             print(f"  {name:<8}{by[name]:>5}{size[name] / 1024:>10,.0f} KB{pct:>7.2f}%")
     keep = [r for r in got if r["부류"] in ("원천", "표본")]
-    print(f"\n  🔴 git 으로 따라가야 하는 것 {len(keep)}개 — 다시 만들 수 없거나 갈린다")
+    # 🔄 2026-09-20 (D-249) — 「git 으로 따라가야 하는 것」이 아니다. git 은 `GIT_CARRIES` 만 나르고
+    #    나머지 원천·표본은 공유 저장소가 옮긴다(`data-publish`). ⛔ 옛 문구가 남아 사람을 git 으로 보냈다.
+    print(f"\n  🔴 다시 만들 수 없거나 갈리는 것 {len(keep)}개 — 잃으면 끝이다")
     for r in keep:
-        print(f"     {r['경로']}  ({r['행'] or '-'}행)  {r['부류']}")
+        how = "git" if r["경로"] in GIT_CARRIES else "공유 저장소 (data-publish)"
+        print(f"     {r['경로']}  ({r['행'] or '-'}행)  {r['부류']} → {how}")
 
 
 def _utf8_out() -> None:

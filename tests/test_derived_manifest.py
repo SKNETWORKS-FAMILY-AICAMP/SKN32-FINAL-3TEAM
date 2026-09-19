@@ -34,25 +34,42 @@ def _ignore_lines() -> list[str]:
 
 
 @pytest.mark.gate
-def test_원장과_사람의_판정은_gitignore_예외에_있다() -> None:
-    """🚨 `data/**` 가 통째로 막혀 있어서 **예외를 명시하지 않으면 안 따라온다** (D-19).
+def test_git_이_나르는_파생물은_원장과_GIT_CARRIES_뿐이다() -> None:
+    """🔴 `.gitignore` 의 `data/derived` 예외 = 원장 + `dm.GIT_CARRIES` (2026-09-20 · D-249).
 
-    ⛔ 2026-09-17 까지 예외가 `data/manifest.jsonl` 하나였다. 그래서 어제 붙인 라벨 248행이
-       git 에도 원장에도 없었다 — 그 기기가 죽으면 되돌릴 방법이 없는 상태였다.
-    ★ 여기서 「생성물」은 일부러 요구하지 않는다. 다시 만들 수 있는 것을 커밋하면
-      이력이 부풀고 D-90(생성물은 손대지 않는다)과 부딪힌다.
+    ⛔ 2026-09-17 ~ 09-20 에는 라벨·라벨 시트도 예외였다 — 그런데 이 저장소는 **공개**이고
+       그 파일들에 **인용 광고 문구 원문**이 있었다(D-133 ① 재배포 불가). 지금은 팀 비공개 저장소가 옮긴다.
+    ★ 「한 기기에만 남는다」(D-19)는 이제 `data-publish` 가 막는다 — 정본이 올리면 저장소에 남는다.
     """
-    need = [
-        "!data/derived_manifest.jsonl",
-        "!data/derived/labels/**",
-        "!data/derived/*_labelsheet.jsonl",
-        "!data/derived/golden/split_manifest.json",
-    ]
     lines = _ignore_lines()
-    missing = [p for p in need if p not in lines]
-    assert not missing, (
-        "다시 만들 수 없는 파생물이 .gitignore 에 갇혀 있다 — 한 기기에만 남는다 (D-19). "
-        f"예외를 추가한다: {missing}"
+    got = {x for x in lines if x.startswith("!data/derived")}
+    want = {"!data/derived_manifest.jsonl"} | {f"!{p}" for p in dm.GIT_CARRIES}
+    assert got == want, (
+        f".gitignore 예외가 GIT_CARRIES 와 다르다 — 있음 {sorted(got)} · 기대 {sorted(want)}"
+    )
+
+
+@pytest.mark.gate
+def test_git_추적_파일에_인용_원문이_없다() -> None:
+    """🔴 공개 저장소다 — `git ls-files data/derived` 에 라벨·라벨 시트가 **다시 들어오면** 안 된다 (D-249).
+
+    🚨 `.gitignore` 만으로는 이미 추적 중인 파일을 못 뺀다 — `git rm --cached` 가 필요하다. 그것을 잊으면 여기서 잡힌다.
+    """
+    out = subprocess.run(
+        ["git", "-C", str(ROOT), "-c", "core.quotepath=false", "ls-files", "data/derived"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if out.returncode != 0:
+        pytest.skip("git 저장소가 아니다")
+    tracked = {x.strip().strip('"') for x in out.stdout.splitlines() if x.strip()}
+    tracked = {x for x in tracked if not x.endswith(".gitkeep")}
+    extra = sorted(tracked - set(dm.GIT_CARRIES))
+    assert not extra, (
+        f"git 이 추적하는 파생물 {extra} — 공개 저장소에 인용 원문이 나간다 (D-249).\n"
+        "  git rm --cached <파일> 로 추적을 끊는다 (파일은 디스크에 남는다)"
     )
 
 
@@ -141,7 +158,9 @@ def test_원장이_디스크와_같다() -> None:
 @pytest.mark.parametrize(
     ("who", "kind", "rule"),
     [
-        (None, "생성물", "있으면"),  # CI — 5개만 요구한다
+        (None, "생성물", "있으면"),  # CI — git 이 나르는 것만 있다
+        (None, "원천", "있으면"),  # 🔄 D-249 — 라벨은 git 에 없다 · 저장소가 옮긴다
+        ("replica", "원천", "필수"),  # 사본은 저장소에서 받아 가진다
         (None, "원문캐시", "무시"),
         ("replica", "생성물", "필수"),  # 사본은 받은 뒤 전부 같아야 한다
         ("replica", "원문캐시", "무시"),  # 🔴 옮기지 않는 부류를 요구하면 사본이 영원히 빨강이다

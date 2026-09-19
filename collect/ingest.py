@@ -106,6 +106,7 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
     2인 확인을 면제하지 않는다** — 오히려 게이트가 유일하게 남은 자리다.
     """
     spec = registry.require(source_id, use=use)
+    store.device_id()  # 🆕 D-250 — 별칭이 없으면 **복사 전에** 멈춘다
     files = walk(target)
     if not files:
         print(f"🚨 {target} 에 파일이 없다")
@@ -173,6 +174,7 @@ def cmd_adopt(source_id: str, stem: str) -> int:
        대신 **등록된 소스인지**는 본다. 그리고 판이 둘 이상이면 **멈춘다** — 어느 것인지 사람이 정한다.
     """
     registry.spec(source_id)  # 미등록이면 거부
+    store.device_id()  # 🆕 D-250 — 별칭이 없으면 **옮기기 전에** 멈춘다
 
     d = store.raw_dir_of(source_id)
     eds = sorted(p for p in d.glob(f"{stem}{store.EDITION_MARK}*") if p.is_file())

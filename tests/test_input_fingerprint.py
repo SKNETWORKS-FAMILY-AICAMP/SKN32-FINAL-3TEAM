@@ -23,6 +23,7 @@ import pytest
 
 from preprocess import labels as label_store
 from preprocess import split
+from scripts import derived_manifest as dm
 
 pytestmark = pytest.mark.gate
 
@@ -76,12 +77,66 @@ def test_분할_산출물이_지문을_들고_있다() -> None:
     #    ⛔ 고정 셋과 대면 라벨이 늘 때마다 여기서 걸린다 — 라벨은 **의도된 넷째 입력**이다.
     #    ★ 그렇다고 헐거워지지 않는다: 이제 **「라벨 파일이 늘었는데 분할을 다시 안 돌렸다」**
     #      를 잡는다. 저장된 지문과 지금 입력 목록이 다르면 그 분할은 낡은 것이다 (D-176).
-    assert set(m["inputs"]) == {f.as_posix() for f in split.inputs()}, (
-        "분할 산출물의 지문이 지금 입력 목록과 다르다 — 라벨을 붙인 뒤 "
+    #    🔄 2026-09-20 (D-249) — 라벨은 이제 **git 에 없다**(공유 저장소가 옮긴다). CI · 받기 전 사본에는
+    #       라벨 파일이 없어 `inputs()` 가 짧다 → 종전 등식은 **CI 에서 원리적으로 실패**했다(실측 · b4bc3d4).
+    #    ★ 둘로 가른다 — ① 이 기기에 있는 라벨이 분할에 없다 = 낡은 분할(어디서든 🔴)
+    #                     ② 분할에 있는 입력이 이 기기에 없다 = **대조를 못 한 것**(정본이면 🔴 · 아니면 skip)
+    #    ⛔ ②를 조용히 통과시키지 않는다 — 없음을 성공으로 세지 않는다 (D-72).
+    saved = set(m["inputs"])
+    here = {f.as_posix() for f in split.inputs()}
+    assert not (here - saved), (
+        f"분할 산출물의 지문에 없는 입력이 있다 {sorted(here - saved)} — 라벨을 붙인 뒤 "
         "uv run python launcher.py golden --write 를 안 돌렸을 수 있다"
     )
     assert all(v["sha256"] for v in m["inputs"].values()), "입력이 비어 있다"
     assert "승인문구_종수" in m, "902 vs 908 을 가른 수다 — 산출물에 적어 둔다"
+    absent = sorted(saved - here)
+    if absent:
+        assert dm.role() != "canonical", f"정본에 분할 입력이 없다 {absent} — 라벨을 잃었다 (D-249)"
+        pytest.skip(
+            f"🔴 분할 입력 {len(absent)}개가 이 기기에 없어 **전체 대조는 못 했다** — {absent[:3]}. "
+            "라벨은 공유 저장소가 옮긴다 (D-249 · `launcher.py data-sync`)"
+        )
+
+
+def _fake_split(
+    tmp: pathlib.Path, mp: pytest.MonkeyPatch, saved: list[str], here: list[str]
+) -> None:
+    out = tmp / "split_manifest.json"
+    out.write_text(
+        json.dumps(
+            {"inputs": {k: {"sha256": "x", "bytes": 1} for k in saved}, "승인문구_종수": 1},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    mp.setattr(split, "OUT", out)
+    mp.setattr(split, "inputs", lambda: tuple(pathlib.PurePosixPath(x) for x in here))
+
+
+FIXED = ["data/derived/a.json"]
+LABEL = "data/derived/labels/누군가.jsonl"
+
+
+def test_라벨이_git_에_없는_기기는_대조를_못_했다고_남긴다(tmp_path, monkeypatch) -> None:
+    """🔴 CI 실측 (b4bc3d4) — 라벨이 공유 저장소로 옮겨 가(D-249) CI 에는 없다. 등식은 원리적으로 실패했다.
+
+    ⛔ 그렇다고 통과로 세지 않는다 — **skip** 으로 「못 했다」를 남기고, 정본이면 🔴.
+    """
+    _fake_split(tmp_path, monkeypatch, FIXED + [LABEL], FIXED)
+    monkeypatch.setenv("DATA_ROLE", "")
+    with pytest.raises(pytest.skip.Exception):
+        test_분할_산출물이_지문을_들고_있다()
+    monkeypatch.setenv("DATA_ROLE", "canonical")
+    with pytest.raises(AssertionError, match="라벨을 잃었다"):
+        test_분할_산출물이_지문을_들고_있다()
+
+
+def test_라벨이_늘었는데_분할을_안_돌리면_어디서든_멈춘다(tmp_path, monkeypatch) -> None:
+    _fake_split(tmp_path, monkeypatch, FIXED, FIXED + [LABEL])
+    monkeypatch.setenv("DATA_ROLE", "")
+    with pytest.raises(AssertionError, match="golden --write"):
+        test_분할_산출물이_지문을_들고_있다()
 
 
 def test_반대_대조_shuffle_축이_분리돼_있다() -> None:

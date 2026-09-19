@@ -342,6 +342,11 @@ RAW_EXCEPTIONS = {
     #    raw 가 있는 기기에서 덮어쓰면 그것이 클론 B(정본)일 수 있어 한 번 묻는다. 열지 않는다.
     #    ⛔ `store.RAW` 를 빌려 써서 이 검사를 조용히 지나가지 않는다 — 예외는 목록으로 둔다.
     Path("scripts/data_store.py"),
+    # 🆕 2026-09-20 (D-250) — 팀원이 받은 원문을 **옮기는** 일 그 자체다(받은편지함 ↔ `data/raw`).
+    #    내용을 해석하지 않는다 — 키 섞임만 바이트로 보고 sha 로 대조해 제자리에 놓는다. 소비 경로가 아니다.
+    #    ★ 원장 경로가 `data/raw` 밖이면 막는 것이 이 모듈의 검사다 — 경로를 안 들고는 그 검사를 못 쓴다.
+    Path("scripts/raw_inbox.py"),
+    Path("tests/test_raw_inbox.py"),
 }
 
 
@@ -1492,10 +1497,14 @@ def _text_writers(path: Path) -> list[tuple[int, str]]:
         if name == "write_text":
             pass
         elif name == "open":
+            # 🔴 2026-09-19 — `open(path, mode)` 은 모드가 **둘째** 인자지만 `Path.open(mode)` 는 **첫째**다.
+            #    ⛔ 둘째만 봐서 `MANIFEST.open("a", encoding=…)` 가 「읽기」로 보였고, 수집 원장이
+            #       Windows 에서 CRLF 로 5,148줄 붙는 동안 이 게이트는 초록이었다.
+            pos = node.args[0:1] if isinstance(fn, ast.Attribute) else node.args[1:2]
             mode = next(
                 (
                     a.value
-                    for a in node.args[1:2] + [k.value for k in node.keywords if k.arg == "mode"]
+                    for a in pos + [k.value for k in node.keywords if k.arg == "mode"]
                     if isinstance(a, ast.Constant) and isinstance(a.value, str)
                 ),
                 "r",

@@ -538,10 +538,48 @@ def test_골든셋_계보는_모두_프래그먼트로_등재돼_있다() -> Non
 
     ⛔ 한쪽만 등재하면 `golden_sample.fragment_id` 외래키가 적재 중에 깨진다 — 두 표가 한 쌍이다.
     """
+    from scripts import load_db
+
+    made = {f[0] for f in load_db.FRAGMENTS}
+    missing = [fid for fid in load_db.GOLDEN_FRAGMENT.values() if fid not in made]
+    assert not missing, f"load_fragments() 에 없는 프래그먼트: {missing}"
+
+
+@pytest.mark.gate
+def test_G2_조각은_재배포_불가로_적힌다() -> None:
+    """🔴 D-249 (D-133 ① 개정) — 광고주 저작물 조각(G2)이면 골든셋 행도 재배포 불가다.
+
+    ⛔ 2026-09-20 까지 적재기는 G2 로 만들고 골든셋은 `redistributable: True` 를 상수로 박았다 — 인용 문구 5,801행.
+    """
+    from preprocess.lineage import GOLDEN_LINEAGE
+    from scripts import load_db
+
+    grade = {f[0]: f[3] for f in load_db.FRAGMENTS}
+    bad = [
+        (k, fid, grade.get(fid), redist)
+        for k, (fid, redist) in GOLDEN_LINEAGE.items()
+        if redist != (grade.get(fid) != "G2")
+    ]
+    assert not bad, f"등급과 재배포 표시가 어긋난다 (D-249): {bad}"
+
+
+@pytest.mark.gate
+def test_골든셋_적재는_넣는_칸을_전부_갱신한다() -> None:
+    """🔴 upsert 가 일부 칸만 고치면 **파일과 DB 가 조용히 갈린다** (2026-09-20 · D-249).
+
+    ⛔ 재배포 표시를 false 로 고친 골든셋을 다시 넣었는데 `redistributable` 이 갱신 목록에 없어
+       DB 가 true 로 남았다 — 공개용 뷰 `v_publishable_golden` 이 인용 문구 5,799행을 냈다.
+    """
     import inspect
+    import re
 
     from scripts import load_db
 
-    src = inspect.getsource(load_db.load_fragments)
-    missing = [fid for fid in load_db.GOLDEN_FRAGMENT.values() if f'"{fid}"' not in src]
-    assert not missing, f"load_fragments() 에 없는 프래그먼트: {missing}"
+    src = inspect.getsource(load_db.load_golden)
+    cols = re.search(r"INSERT INTO golden_sample \"\s*\"\(([^)]*)\)", src)
+    assert cols, "INSERT 칸 목록을 못 찾았다 — 검사를 고친다"
+    inserted = {c.strip() for c in re.sub(r'"\s*"', "", cols.group(1)).split(",")} - {"sample_id"}
+    updated = set(re.findall(r"(\w+)\s*=\s*EXCLUDED\.\1", src))
+    assert inserted <= updated, (
+        f"갱신하지 않는 칸 {sorted(inserted - updated)} — 다시 넣어도 DB 가 옛 값이다"
+    )
