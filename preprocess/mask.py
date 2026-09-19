@@ -151,6 +151,14 @@ POLICY: dict[str, frozenset[str]] = {
     #    켜도 잃는 것이 없다. 그래서 넷 다 켠다 — 원천이 회차마다 필드를 바꿀 수 있다.
     "mfds_hf_ingredient": frozenset({"org", "brand", "addr", "person"}),
     "mfds_hf_individual": frozenset({"org", "brand", "addr", "person"}),
+    # ── 2026-09-19 판정 (검토요청_2026-09-19_마스킹정책_law_go_kr.md (가) · 2인 확인)
+    # 🔴 **사람 축만** 켠다 — 원천이 판례·재결례 당사자를 ○○ 로 가리지만 빠뜨린 자리가 있다
+    #    (반출 검사 실측 1건 · 「법인의 대표자 손○○」). 업체명·주소는 공표된 판단문의 일부다 —
+    #    처분청·당사자 법인이 지워지면 5층 반례(「누가 무엇을 뒤집었나」)의 값이 준다.
+    "law_go_kr": frozenset({"person"}),
+    # ── 2026-09-19 판정 (검토요청_2026-09-18_mfds_cgm_expc.md §6 · 2인 확인)
+    # 🚨 제품명(brand)은 가리지 않는다 — 제품명이 곧 판정 대상 표현일 수 있다(mfds_press 와 같은 이유).
+    "mfds_cgm_expc": frozenset({"org", "person"}),
 }
 
 #: 정책 키 ↔ 레지스트리 문언. 대조 테스트가 이걸 쓴다.
@@ -509,7 +517,9 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
        `anchor_ftc` 가 「A 및 B」를 한 덩어리로 주면 여기서 쪼개 각각 지운다.
        ⛔ 쪼개는 규칙은 `anchor_names()` 하나다 — 부르는 쪽마다 쪼개면 갈린다 (D-99).
     """
-    text = _mask_case_head(text, bare, log)
+    people = respondent_people_of(bare)
+    text = _mask_case_head(text, bare, log, people)
+    text = _mask_people(text, people, log)
     for b in anchor_names(bare):
         if not usable(b):
             continue
@@ -549,7 +559,9 @@ def _bare_norm(s: str) -> str:
     return re.sub(r"[^0-9A-Za-z가-힣]", "", s)
 
 
-def _mask_case_head(text: str, bare: str, log: list[dict] | None = None) -> str:
+def _mask_case_head(
+    text: str, bare: str, log: list[dict] | None = None, people: tuple[str, ...] = ()
+) -> str:
     """🔴 **사건명 머리 = 앵커가 나온 그 자리** — 짧아도 · 「의」가 들어 있어도 통째로 지운다 (2026-09-19 · D-233).
 
     ⛔ 반출 검사 실측 — 셋이 남았다:
@@ -571,8 +583,10 @@ def _mask_case_head(text: str, bare: str, log: list[dict] | None = None) -> str:
     nh = _bare_norm(strip_legal(m.group(1)))
     if not (nh and nh.startswith(nb)):
         return text
-    _note(log, "사건명 머리", m.group(1), MASK_ORG)
-    return _mask_case_more(MASK_ORG + text[m.end(1) :], log)
+    # 🔄 2026-09-19 (D-248) — 머리가 **개인 피심인**으로 시작하면 `[대표]` 다. 가림은 같고 자국이 뜻을 맞게 말한다.
+    mark = MASK_CEO if _starts_with_person(nh, people) else MASK_ORG
+    _note(log, "사건명 머리", m.group(1), mark)
+    return _mask_case_more(mark + text[m.end(1) :], log, people)
 
 
 #: 병합 사건명의 **뒤 사건** — 「A의 …에 대한 건 **및 B의** …에 대한 건」. B 도 피심인이다.
@@ -584,7 +598,7 @@ _CASE_MORE = re.compile(
 _CASE_DESCRIPTOR = re.compile(r"\d+\s*개|(?:^|\s)(?:등|외)(?:\s|$)|\d{4}\.\s*\d")
 
 
-def _mask_case_more(text: str, log: list[dict] | None = None) -> str:
+def _mask_case_more(text: str, log: list[dict] | None = None, people: tuple[str, ...] = ()) -> str:
     """🔴 병합 사건명의 뒤 피심인 (2026-09-19 · 반출 검사 실측 · D-233 · D-235 의 연장).
 
     ⛔ `anchor_ftc` 는 **첫 「의」 앞**만 앵커로 뽑는다 — 「[업체]의 부당한 공동행위에 대한 건 및
@@ -597,8 +611,9 @@ def _mask_case_more(text: str, log: list[dict] | None = None) -> str:
         head = m.group(2).strip()
         if not head or MARK_RE.fullmatch(head) or _CASE_DESCRIPTOR.search(head):
             return m.group(0)
-        _note(log, "사건명 뒤 피심인", head, MASK_ORG)
-        return m.group(0).replace(m.group(2), MASK_ORG, 1)
+        mark = MASK_CEO if _starts_with_person(_bare_norm(head), people) else MASK_ORG
+        _note(log, "사건명 뒤 피심인", head, mark)
+        return m.group(0).replace(m.group(2), mark, 1)
 
     return _CASE_MORE.sub(_sub, text)
 
@@ -719,6 +734,64 @@ def _t(root: ET.Element, tag: str) -> str:
     return (el.text or "").strip() if el is not None and el.text else ""
 
 
+#: 🔴 **개인 피심인의 자리** — 피심정보내용에서 이름 바로 뒤에 **가려진 주민등록번호**가 온다.
+#:    「1. 갑을병(******-*******, 상호출자제한기업집단 「가」의 전 동일인) 서울 …」 (2026-09-19 실측 · seq 1285)
+#: ★ 원천이 **사람에게만** 다는 표지다 — 법인은 주민등록번호가 없다. 이름 모양·성씨로 추측하지 않는다.
+#: ⛔ 이 표지가 없는 개인사업자(사업자등록번호만 적힌 경우)는 **못 가른다** — 그때는 `[업체]` 로 가려진다.
+#:    가림은 되고 자국만 덜 정확하다. 추측으로 넓히면 3자 상호(「오뚜기」)가 사람이 된다.
+_RRN_MASKED = re.compile(r"([가-힣]{2,4})\s*\(\s*\*{6}\s*-\s*\*{7}")
+
+
+def respondent_people(root: ET.Element) -> tuple[str, ...]:
+    """피심정보내용에서 **개인 피심인**의 이름들 (나온 순서 · 중복 없음)."""
+    txt = _t(root, "피심정보내용")
+    return tuple(dict.fromkeys(m.group(1) for m in _RRN_MASKED.finditer(txt)))
+
+
+class Anchor(str):
+    """앵커(알맹이) 문자열 + **그 사건의 개인 피심인 이름**.
+
+    🔴 `str` 을 잇는 이유 — `_, bare = anchor_ftc(r)` 로 받아 `apply_policy(…, bare, "ftc")` 로 넘기는
+       호출부가 여섯 곳이다(ftc_triage · ftc_extract · ftc_reason_probe · mask 안). 인자를 늘리면
+       **한 곳이라도 빠뜨린 곳에서 조용히 `[업체]`** 로 돌아간다 (D-99). 값에 실어 보내면 빠뜨릴 자리가 없다.
+    🚨 문자열 연산(`strip` · 슬라이스)을 거치면 `people` 이 떨어진다 — `mask()` 가 **받은 그대로** 읽는다.
+    """
+
+    people: tuple[str, ...] = ()
+
+    def __new__(cls, value: str, people: tuple[str, ...] = ()) -> Anchor:
+        obj = super().__new__(cls, value)
+        obj.people = tuple(people)
+        return obj
+
+
+def respondent_people_of(bare: str) -> tuple[str, ...]:
+    return getattr(bare, "people", ())
+
+
+def _starts_with_person(norm_head: str, people: tuple[str, ...]) -> bool:
+    return any(p and norm_head.startswith(_bare_norm(p)) for p in people)
+
+
+def _mask_people(text: str, people: tuple[str, ...], log: list[dict] | None = None) -> str:
+    """🔴 개인 피심인의 이름을 글 전체에서 `[대표]` 로 (2026-09-19 · D-248 · 팀장 판정).
+
+    ★ 이름은 원천이 「이 사람이 피심인이다」라고 적은 자리(가려진 주민등록번호 앞)에서만 온다 — 추측이 아니다.
+    🚨 **낱말 경계**를 본다 — 앞이 한글이 아니고, 뒤가 조사·기호·공백일 때만. 이름이 다른 낱말 **안에서**
+       지워지지 않게 한다(「교육이수증」의 「이수」).
+    ⚠️ 이름과 **같은 꼴의 보통명사**(「이수 과정」)는 가린다 — 그 문서에 한해 그 이름이 피심인이라
+       원천이 적었으므로, 덜 가리는 쪽보다 이쪽을 택했다(개인 식별 우선).
+    """
+    for name in people:
+        if len(name) < 2:
+            continue
+        pat = re.compile(rf"(?<![가-힣]){re.escape(name)}(?=[은는이가을를의에과와도께]|[^가-힣]|$)")
+        if pat.search(text):
+            _note(log, "피심인 개인", name, MASK_CEO)
+            text = pat.sub(MASK_CEO, text)
+    return text
+
+
 def anchor_ftc(root: ET.Element) -> tuple[str, str]:
     """공정위 결정문의 피심인 이름. 돌려주는 값은 `(원표기, 알맹이)`.
 
@@ -746,13 +819,15 @@ def anchor_ftc(root: ET.Element) -> tuple[str, str]:
     ⬜ 「대우웨딩홀」류는 이 규칙으로 못 잡는다. 그건 `residual_orgs()` 가 센다.
     """
     name = _t(root, "사건명")
+    # 🔄 2026-09-19 (D-248) — 알맹이에 **개인 피심인 이름**을 실어 보낸다(`Anchor`). 앵커 규칙은 그대로다.
+    people = respondent_people(root)
     m = re.match(r"^(.+?)의\s", name)
     if m:
-        return m.group(1), strip_legal(m.group(1))
+        return m.group(1), Anchor(strip_legal(m.group(1)), people)
     head = name.split()[0] if name.split() else ""
     if head and _LEGAL_RE.search(head):
-        return head, strip_legal(head)
-    return "", ""
+        return head, Anchor(strip_legal(head), people)
+    return "", Anchor("", people)
 
 
 #: 마스킹 뒤에 **법인격 표기를 달고 남아 있는 이름**을 찾는다.

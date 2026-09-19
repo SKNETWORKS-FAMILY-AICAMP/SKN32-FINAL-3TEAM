@@ -55,6 +55,8 @@ _REGISTRY_SOURCE = {
     "mfds_press": "mfds_press",
     "mfds_hf_ingredient": "mfds_hf_ingredient",
     "mfds_hf_individual": "mfds_hf_individual",
+    "law_go_kr": "law_go_kr",
+    "mfds_cgm_expc": "mfds_cgm_expc",
 }
 
 
@@ -707,3 +709,94 @@ def test_앵커_뒤로는_여전히_40칸까지만_먹는다() -> None:
 
     s = "가나 " + "제품은 여러 사정을 종합하면 판매된 " * 2 + "것의 위반행위에 대한 건"
     assert "종합하면" in mask(s, "가나")
+
+
+# ─────────────────────────────────────────────────────────────
+#  🆕 2026-09-19 (D-248) — 개인 피심인은 `[대표]` · law_go_kr 사람 축
+# ─────────────────────────────────────────────────────────────
+
+
+def _ftc_root(case: str, respondent: str):
+    import xml.etree.ElementTree as ET
+
+    root = ET.Element("PrecService")
+    ET.SubElement(root, "사건명").text = case
+    ET.SubElement(root, "피심정보내용").text = respondent
+    return root
+
+
+def test_개인_피심인은_대표로_찍힌다() -> None:
+    """🔴 팀장 판정 — 개인이 피심인이면 자국이 `[업체]` 가 아니라 `[대표]` 다 (이름·집단은 가짜).
+
+    ★ 사람인지는 원천이 정한다 — 피심정보내용의 **가려진 주민등록번호**가 붙은 이름만 사람이다.
+    """
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    case = (
+        "김가나(상호출자제한기업집단 「다라」의 전 동일인) 및 이마바(상호출자제한기업집단 「다라」의 특수관계인)"
+        "의 지정자료 허위제출행위에 대한 건"
+    )
+    who = (
+        "1. 김가나(******-*******, 상호출자제한기업집단 「다라」의 전 동일인) 서울 ** "
+        "2. 이마바(******-*******, 상호출자제한기업집단 「다라」의 특수관계인) 서울 **"
+    )
+    _, bare = anchor_ftc(_ftc_root(case, who))
+    assert bare.people == ("김가나", "이마바")
+    assert apply_policy(case, bare, "ftc") == "[대표]의 지정자료 허위제출행위에 대한 건"
+    # 본문의 맨몸 언급도 — 조사는 남는다
+    body = "피심인 이마바는 김가나의 혈족이다."
+    assert apply_policy(body, bare, "ftc") == "피심인 [대표]는 [대표]의 혈족이다."
+
+
+def test_법인_피심인은_그대로_업체다() -> None:
+    """반대 대조 — 주민등록번호 표지가 없으면 사람으로 보지 않는다 (추측하지 않는다)."""
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    case = "주식회사 가나다의 부당한 광고행위에 대한 건"
+    _, bare = anchor_ftc(_ftc_root(case, "주식회사 가나다 서울 ** 대표이사 ○○○"))
+    assert bare.people == ()
+    assert apply_policy(case, bare, "ftc").startswith("[업체]의 부당한 광고행위")
+
+
+def test_개인_이름은_낱말_안에서_지우지_않는다() -> None:
+    """🚨 두 글자 이름이 보통명사 안에서 지워지면 판정 어휘가 사라진다 (가짜 이름)."""
+    from preprocess.mask import Anchor, mask
+
+    out = mask("이수 과정을 마친 이수는 교육이수증을 받았다", Anchor("", ("이수",)))
+    assert out == "[대표] 과정을 마친 [대표]는 교육이수증을 받았다", out
+
+
+def test_앵커는_문자열처럼_쓰인다() -> None:
+    """`Anchor` 는 `str` 이다 — 기존 호출부(비교·포함·길이)가 그대로 돈다."""
+    from preprocess.mask import Anchor
+
+    a = Anchor("가나다", ("김가나",))
+    assert a == "가나다" and "나" in a and len(a) == 3 and isinstance(a, str)
+
+
+def test_law_go_kr_는_사람만_가리고_업체는_둔다() -> None:
+    """🔴 2026-09-19 반출 검사 실측 꼴 (이름·상호는 가짜) — 재결례의 「법인의 대표자 손○○」.
+
+    ★ 업체명·처분청은 공표된 판단문의 일부라 **남긴다** — 5층 반례의 값이다.
+    """
+    from preprocess.mask import apply_policy
+
+    s = "2015. 8. 7. 법인의 대표자 김가나에게 확인서를 징구한 주식회사 다라마 및 ○○시장"
+    out = apply_policy(s, "", "law_go_kr")
+    assert "김가나" not in out and "[대표]에게" in out, out
+    assert "주식회사 다라마" in out and "○○시장" in out, out
+
+
+def test_판례_재결례는_텍스트_칸만_마스킹한다(tmp_path) -> None:
+    """`law_case.parse` — 텍스트 칸만 `apply_policy` 를 지나고 식별 칸은 그대로다 (가짜 값)."""
+    from preprocess import law_case
+
+    xml = (
+        "<PrecService><행정심판례일련번호>1</행정심판례일련번호><사건명>영업정지처분 취소청구</사건명>"
+        "<처분청>가나시장</처분청><이유>법인의 대표자 김가나에게 확인서를 징구하였다</이유></PrecService>"
+    )
+    p = tmp_path / "decc_1.xml"
+    p.write_text(xml, encoding="utf-8")
+    row = law_case.parse(p, "decc")
+    assert "김가나" not in row["이유"] and "[대표]" in row["이유"], row["이유"]
+    assert row["처분청"] == "가나시장"
