@@ -738,7 +738,22 @@ def report(got: list[dict[str, object]]) -> None:
         print(f"     {r['경로']}  ({r['행'] or '-'}행)  {r['부류']}")
 
 
+def _utf8_out() -> None:
+    """🔴 화면이 아니라 **파이프·파일**로 나갈 때도 한글·기호를 쓸 수 있게 한다 (2026-09-19 · CI 실측).
+
+    ⛔ Windows 에서 출력이 파이프로 가면 파이썬은 ANSI 코드 페이지로 쓴다 — CI 러너는 cp1252 라
+       첫 줄 「역할 · …」에서 `UnicodeEncodeError` 로 죽었다. 한국어 Windows(cp949)는 한글은 되지만
+       🔴 같은 기호에서 같은 식으로 죽는다. 콘솔은 원래 UTF-8 이라 로컬 `check` 에서는 안 보였다.
+    ★ 콘솔(이미 UTF-8)은 건드리지 않는다. ⛔ `errors="replace"` 로 글자를 뭉개 죽음만 감추지 않는다 (D-162).
+    """
+    for s in (sys.stdout, sys.stderr):
+        enc = (getattr(s, "encoding", "") or "").lower().replace("-", "").replace("_", "")
+        if enc != "utf8" and hasattr(s, "reconfigure"):
+            s.reconfigure(encoding="utf-8")
+
+
 def main() -> int:
+    _utf8_out()
     ap = argparse.ArgumentParser(description="파생물 원장 (D-19 의 짝)")
     ap.add_argument("--write", action="store_true", help=f"{OUT.name} 을 쓴다")
     ap.add_argument("--check", action="store_true", help="원장 ↔ 디스크 대조. 다르면 1")

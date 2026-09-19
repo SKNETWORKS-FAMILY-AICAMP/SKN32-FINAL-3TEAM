@@ -258,6 +258,9 @@ def test_스크립트_경로로_실행해도_collect_를_찾는다() -> None:
     """
     env = {k: v for k, v in __import__("os").environ.items() if k != "DATA_ROLE"}
     env["DATA_ROLE"] = ""
+    # 🔴 CI 러너(Windows · cp1252)의 파이프를 **어느 기기에서나** 재현한다 — 로컬 콘솔은 UTF-8 이라
+    #    이 줄 없이는 초록이었고 CI 에서만 `UnicodeEncodeError` 로 죽었다 (2026-09-19 · 267efcd).
+    env["PYTHONIOENCODING"] = "cp1252"
     out = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "derived_manifest.py"), "--check"],
         cwd=ROOT,
