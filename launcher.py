@@ -888,6 +888,11 @@ def collect(
     if not dry_run:
         from collect import store  # noqa: PLC0415
 
+        try:
+            store.device_id()  # 🆕 D-250 — 별칭이 없으면 받기 **전에** 멈춘다
+        except store.StoreError as e:
+            typer.echo(f"🔴 {e}")
+            raise typer.Exit(1) from None
         others = store.recent_by_others(source)
         if others and not force:
             typer.echo(
@@ -1043,8 +1048,9 @@ def raw_publish(
 ) -> None:
     """수집 팀원 — 이 기기가 받은 원문을 원문 받은편지함에 올립니다.
 
-    🆕 2026-09-20 (D-250). 올리는 것은 **원장에 이 기기 이름으로 적힌 원문**뿐입니다.
-    🚨 막는 것 — 키가 섞인 원문 · 재배포 제약 원천 · `data/raw` 밖 경로.
+    🆕 2026-09-20 (D-250). 올리는 것은 **이 기기 디스크에 있고 원장에 있는 원문** 중 받은편지함에 없는 것입니다.
+       (기기 별칭이 바뀌어도 안 올린 원문이 빠지지 않습니다.) 정본은 쓰지 않습니다.
+    🚨 막는 것 — 키가 섞인 원문 · 원장과 바이트가 다른 원문 · 재배포 제약 원천 · `data/raw` 밖 경로.
     🚨 올린 뒤 `data/manifest.jsonl` 을 **자기 브랜치에** 커밋·push 하고 팀장에게 알립니다.
     """
     args = [sys.executable, "-m", "scripts.raw_inbox", "publish"]

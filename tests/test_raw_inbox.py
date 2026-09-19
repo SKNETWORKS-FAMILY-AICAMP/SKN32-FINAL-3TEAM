@@ -41,8 +41,9 @@ def repo(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Pat
     root = tmp_path / "repo"
     (root / "data" / "raw").mkdir(parents=True)
     monkeypatch.setattr(env, "_loaded", True)
-    for k in ("DATA_ROLE", "DATA_DEVICE", "RAW_INBOX"):
+    for k in ("DATA_ROLE", "RAW_INBOX"):
         monkeypatch.setenv(k, "")
+    monkeypatch.setenv("DATA_DEVICE", "collector-1")
     monkeypatch.setattr(store, "ROOT", root)
     monkeypatch.setattr(store, "RAW", root / "data" / "raw")
     monkeypatch.setattr(store, "MANIFEST", root / "data" / "manifest.jsonl")
@@ -119,17 +120,50 @@ def test_원장의_옛_판과_같아도_받지_않는다(repo) -> None:
 
 
 @pytest.mark.gate
-def test_원장에_받은_기기가_남고_호스트_이름은_안_남는다(repo, monkeypatch) -> None:
-    """🔴 원장은 **공개 저장소**다 — 호스트 이름(사람 이름이 든 경우가 많다)은 지문으로만."""
-    import socket
-
-    host = socket.gethostname()
+def test_원장에_팀원이_정한_별칭이_남는다(repo) -> None:
     _save(b'{"x":1}', "a.json")
-    who = _rows(repo)[-1]["device"]
-    assert who.startswith("h:") and host not in who, who
-    monkeypatch.setenv("DATA_DEVICE", "collector-1")
-    _save(b'{"x":2}', "b.json")
     assert _rows(repo)[-1]["device"] == "collector-1"
+
+
+@pytest.mark.gate
+def test_별칭이_없으면_팀원_기기는_쓰기_전에_멈춘다(repo, monkeypatch) -> None:
+    """🔴 팀장 판정 2026-09-20 — PC 이름 해시는 **대입으로 되돌려진다**(공개 원장). 별칭은 팀원이 정한다.
+
+    🚨 파일만 놓이고 원장 행이 없는 상태를 만들지 않는다 — 쓰기 **전에** 멈춘다 (D-72).
+    """
+    monkeypatch.setenv("DATA_DEVICE", "")
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    with pytest.raises(store.StoreError, match="data-setup --device"):
+        _save(b'{"x":1}', "a.json")
+    assert not (repo / "data" / "raw" / FAM / "a.json").exists()
+    assert not (repo / "data" / "manifest.jsonl").exists()
+
+
+@pytest.mark.gate
+def test_정본은_별칭이_없어도_받는다(repo, monkeypatch) -> None:
+    monkeypatch.setenv("DATA_DEVICE", "")
+    monkeypatch.setenv("DATA_ROLE", "canonical")
+    _save(b'{"x":1}', "a.json")
+    assert _rows(repo)[-1]["device"] == store.CANONICAL_DEVICE
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("bad", ["홍길동 노트북", "a b", "x" * 33])
+def test_별칭_모양이_틀리면_멈춘다(repo, monkeypatch, bad) -> None:
+    monkeypatch.setenv("DATA_DEVICE", bad)
+    with pytest.raises(store.StoreError):
+        _save(b'{"x":1}', "a.json")
+
+
+@pytest.mark.gate
+def test_런처_수집은_별칭이_없으면_받기_전에_멈춘다(monkeypatch) -> None:
+    ran: list[tuple] = []
+    monkeypatch.setattr(launcher, "run", lambda *a: ran.append(a) or 0)
+    monkeypatch.setattr(env, "_loaded", True)
+    monkeypatch.setenv("DATA_DEVICE", "")
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    r = CliRunner().invoke(launcher.app, ["collect", SRC])
+    assert r.exit_code == 1 and "data-setup --device" in r.output and not ran, r.output
 
 
 # ══════════════════════════════════════════════════════════
@@ -195,7 +229,8 @@ def _collected(repo: pathlib.Path, monkeypatch, body: bytes, name: str = "a.json
 
 
 @pytest.mark.gate
-def test_올리기는_내가_받은_원문만_올린다(repo, inbox, monkeypatch) -> None:
+def test_올리기는_이_기기_디스크에_있는_원문만_올린다(repo, inbox, monkeypatch) -> None:
+    """원장에 있어도 디스크에 없으면(정본·다른 팀원이 받은 것) 올리지 않는다."""
     sha = _collected(repo, monkeypatch, b'{"mine":1}')
     other = _row("data/raw/f/theirs.json", b"x", "clone-b")
     _ledger(repo, [*_rows(repo), other])
@@ -226,6 +261,33 @@ def test_재배포_제약_원천은_올리지_않는다(repo, inbox, monkeypatch
 def test_받은편지함이_없으면_멈춘다(repo, monkeypatch) -> None:
     _collected(repo, monkeypatch, b'{"a":1}')
     assert ri.publish(yes=True) == 1
+
+
+@pytest.mark.gate
+def test_별칭이_바뀌어도_안_올린_원문을_올린다(repo, inbox, monkeypatch) -> None:
+    """🔴 팀장 — *「.env 가 바뀌거나 새로 만들면 …」* · 올릴 대상은 기기 이름이 아니라 디스크로 고른다."""
+    sha = _collected(repo, monkeypatch, b'{"a":1}')
+    monkeypatch.setenv("DATA_DEVICE", "collector-9")
+    assert ri.publish(yes=True) == 0
+    assert (inbox / "objects" / sha[:2] / sha).is_file()
+
+
+@pytest.mark.gate
+def test_원장과_바이트가_다른_원문은_하나도_안_올린다(repo, inbox, monkeypatch) -> None:
+    """받은 뒤 고친 파일이 원장의 sha 이름으로 올라가면 정본이 합칠 때 멈춘다 — 올리기 전에 막는다."""
+    _collected(repo, monkeypatch, b'{"a":1}', "a.json")
+    _collected(repo, monkeypatch, b'{"b":1}', "b.json")
+    (repo / _rows(repo)[-1]["path"]).write_bytes(b'{"b":2}')
+    assert ri.publish(yes=True) == 1
+    assert not (inbox / "objects").exists()
+
+
+@pytest.mark.gate
+def test_정본은_원문을_올리지_않는다(repo, inbox, monkeypatch) -> None:
+    _collected(repo, monkeypatch, b'{"a":1}')
+    monkeypatch.setenv("DATA_ROLE", "canonical")
+    assert ri.publish(yes=True) == 1
+    assert not (inbox / "objects").exists()
 
 
 # ══════════════════════════════════════════════════════════

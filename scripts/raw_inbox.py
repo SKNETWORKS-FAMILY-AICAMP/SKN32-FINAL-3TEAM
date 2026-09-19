@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import pathlib
 import re
@@ -136,20 +137,19 @@ def _branch_ledger(branch: str) -> list[dict]:
 
 
 def _mine(rows: list[dict]) -> list[dict]:
-    """이 기기가 받은 행 중 **파일이 있는 것** — 올릴 후보."""
-    from collect import store  # noqa: PLC0415
+    """올릴 후보 — **이 기기 디스크에 있고 원장에 있는** 원문 (경로별 마지막 행).
 
-    me = store.device_id()
-    seen, out = set(), []
+    🔄 2026-09-20 (팀장 판정) — ⛔ 종전에는 「원장에 **내 기기 이름**으로 적힌 행」이었다. 그러면
+       `.env` 를 새로 만들어 별칭이 바뀌면 **안 올린 원문이 빠진다.** 기기 이름은 겹침 경고에만 쓴다.
+    ★ 팀원 PC 의 원문은 **자기가 받은 것뿐**이다 — 원문은 저장소로 동기화되지 않고, 정본에 이미 있는 것은
+       원장을 보고 받지 않는다(`save_raw`). 받은편지함에 이미 있는 것은 `publish` 가 거른다.
+    """
+    last: dict[str, dict] = {}
     for r in rows:
-        if r.get("device") != me:
-            continue
         p = _path_of(r)
-        if p in seen or not (ROOT / p).is_file():
-            continue
-        seen.add(p)
-        out.append(r)
-    return out
+        if p:
+            last[p] = r
+    return [r for p, r in last.items() if (ROOT / p).is_file()]
 
 
 def _foreign(rows: list[dict]) -> list[dict]:
@@ -173,6 +173,16 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     """수집 팀원 — 내가 받은 원문을 받은편지함에 올린다."""
     from collect import store  # noqa: PLC0415
 
+    if dm.role() == "canonical":
+        print(
+            "🔴 정본은 원문을 올리지 않는다 — 받은편지함은 팀원 → 정본 방향이다 (D-250). 파생물은 `data-publish`"
+        )
+        return 1
+    try:
+        store.device_id()  # 별칭 없는 기기는 여기까지 올 수 없지만(수집이 멈춘다) — 기록에 적을 이름을 먼저 본다
+    except store.StoreError as e:
+        print(f"🔴 {e}", file=sys.stderr)
+        return 1
     rows = _mine(_local_ledger())
     bad = unsafe(rows)
     if bad:
@@ -191,11 +201,21 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
         print(f"🔴 {e}", file=sys.stderr)
         return 1
     new = [r for r in rows if not _obj(root, str(r["sha256"])).is_file()]
-    leaked = []
+    leaked, changed = [], []
     for r in new:
-        why = secret_in((ROOT / _path_of(r)).read_bytes())
+        data = (ROOT / _path_of(r)).read_bytes()
+        if hashlib.sha256(data).hexdigest() != r["sha256"]:
+            changed.append(_path_of(r))  # 🚨 원장과 다른 바이트 — 받은 뒤 누가 고쳤다
+            continue
+        why = secret_in(data)
         if why:
             leaked.append(f"{_path_of(r)} ({why})")
+    if changed:
+        print(
+            f"🔴 **원장과 다른 원문**이 있다 — 아무것도 올리지 않았다 ({len(changed)}개): {changed[:5]}"
+        )
+        print("  🚨 원문은 고치지 않는다(규약 2). 그 파일을 원장대로 되돌리거나 지우고 다시 받는다")
+        return 1
     if leaked:
         print(f"🔴 **키가 섞인 원문**이 있다 — 아무것도 올리지 않았다 ({len(leaked)}개):")
         for x in leaked[:10]:

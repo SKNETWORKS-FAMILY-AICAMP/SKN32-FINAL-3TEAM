@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import socket
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -253,6 +252,7 @@ def save_raw(
        이 설계의 값이자 위험이다. 부르는 쪽은 자기가 넘긴 `filename` 을 찍으므로
        여기서 안 찍으면 아무도 모른다.
     """
+    device_id()  # 🆕 D-250 — 별칭이 없으면 **쓰기 전에** 멈춘다
     digest = sha256(payload)
     # 🔴 「같은가?」는 **판정용 해시**로 묻는다 (`VOLATILE`). 원문은 그대로 저장한다.
     ident = identity_sha256(source_id, payload)
@@ -385,15 +385,39 @@ def manifest_append(
 OVERLAP_DAYS = 7
 
 
-def device_id() -> str:
-    """이 기기의 이름 — `.env` 의 `DATA_DEVICE`, 없으면 **호스트 이름의 지문**.
+#: 기기 별칭의 모양 — 🚨 원장은 **공개 저장소**에 올라간다. 공백·한글을 받지 않는다(실명·「○○ 노트북」 꼴을 거른다).
+#:    실명 금지·중복 금지는 **팀 회의로 정한다**(팀장 판정 2026-09-20) — 코드는 모양만 본다.
+DEVICE_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
+#: 정본이 별칭 없이 수집하면 원장에 적는 이름. 🚨 팀원 별칭으로 쓰지 않는다 (`setup` 이 막는다)
+CANONICAL_DEVICE = "canonical"
 
-    🚨 원장은 **공개 저장소**에 올라간다 — 호스트 이름(사람 이름이 든 경우가 많다)을 그대로 적지 않는다.
+
+def device_id() -> str:
+    """이 기기의 별칭 — `.env` 의 `DATA_DEVICE`. 비었으면 정본만 `canonical`, 나머지는 **멈춘다**.
+
+    🔄 2026-09-20 (D-250 개정 · 팀장 판정) — ⛔ 종전에는 비면 **호스트 이름의 해시 8자**를 적었다.
+       되돌릴 수는 없어도 **대입**은 된다(`DESKTOP-` + 7자 ≈ 780억 가지 · GPU 수 시간) — 공개 원장에
+       PC 이름을 적는 것과 같았다. 무작위 별칭은 `.env` 를 새로 만들면 바뀐다. 그래서 **팀원이 정한다.**
+    🚨 쓰기 **전에** 부른다(`save_raw` 첫 줄 · `ingest`) — 파일만 놓이고 원장 행이 안 남는 일을 막는다 (D-72).
     """
     from collect import env  # noqa: PLC0415 — `.env` 를 여는 곳은 한 곳이다 (D-99)
 
     v = env.setting("DATA_DEVICE")
-    return v or "h:" + hashlib.sha256(socket.gethostname().encode("utf-8")).hexdigest()[:8]
+    if v:
+        if not DEVICE_RE.fullmatch(v):
+            raise StoreError(
+                "DATA_DEVICE 모양이 틀렸다 — 영문·숫자·`._-` 32자 이내 (예: collector-1).\n"
+                "  🚨 원장은 공개 저장소에 올라간다 — 실명을 쓰지 않는다.\n"
+                "  고치기: uv run python launcher.py data-setup --device <별칭>"
+            )
+        return v
+    if env.setting("DATA_ROLE") == "canonical":
+        return CANONICAL_DEVICE
+    raise StoreError(
+        "기기 별칭(DATA_DEVICE)이 비어 있다 — 누가 받았는지 원장에 못 적는다. 아무것도 저장하지 않았다.\n"
+        "  별칭은 팀 회의에서 겹치지 않게 정한다 (실명 금지 · 예: collector-1).\n"
+        "  넣기: uv run python launcher.py data-setup --device <별칭>"
+    )
 
 
 def _rel(path: Path) -> str:

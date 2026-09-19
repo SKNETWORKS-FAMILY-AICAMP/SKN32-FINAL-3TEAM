@@ -409,8 +409,6 @@ DRIVE_DIRS = ("내 드라이브", "My Drive")
 
 #: 🆕 D-250 — 수집 팀원의 원문 받은편지함. 저장소와 **다른 폴더**다(쓰는 사람이 다르다) · `scripts/raw_inbox.py` 와 같은 이름
 INBOX_NAME = "CopyLane_raw_inbox"
-#: `DATA_DEVICE` 의 모양 — 🚨 원장은 공개 저장소에 올라간다. 실명을 막을 수는 없지만 공백·한글은 받지 않는다
-_DEVICE = re.compile(r"[A-Za-z0-9._-]{1,32}")
 
 
 def candidates(
@@ -500,9 +498,14 @@ def setup(
         print(f"🔴 폴더가 없다 — {chosen}. .env 는 그대로다")
         return 1
 
-    if device is not None and not _DEVICE.fullmatch(device):
+    from collect import store as cstore  # noqa: PLC0415 — 모양의 정본은 store 한 곳 (D-99)
+
+    if device is not None and (
+        not cstore.DEVICE_RE.fullmatch(device) or device == cstore.CANONICAL_DEVICE
+    ):
         print(
-            f"🔴 기기 이름 {device!r} 은 못 쓴다 — 영문·숫자·`._-` 32자 이내 (예: collector-1).\n"
+            f"🔴 기기 이름 {device!r} 은 못 쓴다 — 영문·숫자·`._-` 32자 이내 (예: collector-1) · "
+            f"`{cstore.CANONICAL_DEVICE}` 는 정본 예약어.\n"
             "  🚨 원장은 공개 저장소에 올라간다 — **실명을 쓰지 않는다**. .env 는 그대로다"
         )
         return 1
