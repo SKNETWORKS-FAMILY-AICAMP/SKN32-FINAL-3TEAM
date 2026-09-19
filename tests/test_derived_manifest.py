@@ -17,6 +17,8 @@ raw 전용(20,395행 · derived 0행)이라 「네가 받은 파생물이 내 �
 from __future__ import annotations
 
 import pathlib
+import shutil
+import subprocess
 
 import pytest
 
@@ -117,6 +119,11 @@ def test_원장이_디스크와_같다() -> None:
     파생물을 다시 뽑으면 sha256 이 바뀌는 것이 정상이고, 그때마다 커밋이 막히면
     `--write` 를 습관적으로 눌러 원장이 뜻을 잃는다. 대신 **CI 전체 실행에서 걸린다** —
     `test_readme_drift.py` 와 같은 자리다 (D-89).
+
+    🔴 **CI 에서는 원리적으로 통과할 수 없다** (검토 2026-09-19 §1 · 판정 ① 대기).
+       git 이 옮기는 5개 때문에 CI 에도 `data/derived` 가 생겨 skip 이 안 걸리고,
+       나머지 146개(생성물 41 + 원문캐시 105)를 「없다」로 잡는다. 초록일 수 있는 기기는
+       클론 B 하나다. ⛔ skip 조건을 넓혀 조용히 초록으로 만들지 않는다 — 역할 규칙으로 고친다.
     """
     if not dm.DERIVED.exists() or not dm.OUT.exists():
         pytest.skip("파생물 또는 원장이 이 기기에 없다")
@@ -136,3 +143,88 @@ def test_원장이_디스크와_같다() -> None:
         "파생물 원장이 디스크와 다르다 — `uv run python launcher.py derived-manifest --write` "
         f"로 갱신한다. 원장에 없음 {added} · 이 기기에 없음 {gone} · sha256 다름 {changed}"
     )
+
+
+# ══════════════════════════════════════════════════════════
+# 수집 원장의 병합 규칙 (검토 2026-09-19 §3-a)
+# ══════════════════════════════════════════════════════════
+#  🚨 `data/manifest.jsonl` 은 git 이 따라가는 **append 전용** 원장이다. 클론 A·B 와 팀원이
+#     pull 사이에 각자 수집하면 셋 다 파일 끝에 줄을 붙이고, git 의 기본 병합은 그것을 충돌로 본다.
+#  ★ `merge=union` 은 양쪽 줄을 둘 다 남긴다. 원장 행은 서로 독립이라(한 행 = 한 파일 한 번) 순서가
+#     섞여도 뜻이 안 바뀐다. ⛔ 통째로 다시 쓰는 `derived_manifest.jsonl` 에 걸면 두 판이 섞인다.
+
+
+def _git() -> str:
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git 이 없다 — 병합 속성을 확인할 수 없다")
+    return git
+
+
+def _merge_attr(path: str) -> str:
+    out = subprocess.run(
+        [_git(), "-C", str(ROOT), "check-attr", "merge", "--", path],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if out.returncode != 0:
+        pytest.skip(f"이 폴더가 git 저장소가 아니다 — {out.stderr.strip()}")
+    return out.stdout.strip().rsplit(":", 1)[-1].strip()
+
+
+@pytest.mark.gate
+def test_수집_원장은_union_으로_병합된다() -> None:
+    """🔴 git 이 **실제로 읽는 값**을 본다 — `.gitattributes` 의 글자가 아니라 (D-117).
+
+    ⛔ 글자만 보면 경로 오타·순서 덮어쓰기(뒤 줄이 앞 줄을 이긴다)를 못 잡는다.
+    """
+    assert _merge_attr("data/manifest.jsonl") == "union", (
+        "수집 원장에 merge=union 이 안 걸려 있다 — 두 기기가 pull 사이에 각자 수집하면 "
+        "git 이 충돌로 멈춘다 (검토 2026-09-19 §3-a)"
+    )
+    assert _merge_attr("data/derived_manifest.jsonl") != "union", (
+        "파생물 원장에 union 이 걸렸다 — 통째로 다시 쓰는 파일이라 두 판의 줄이 섞인다"
+    )
+
+
+def test_반대_대조_union_이_없으면_충돌하고_있으면_둘_다_남는다(tmp_path: pathlib.Path) -> None:
+    """🚨 **게이트가 아니다** — 임시 저장소를 만들고 병합해 본다 (D-170 · 반대 대조).
+
+    위 게이트가 지키는 속성이 **정말로 그 일을 하는지**를 보인다. 속성이 없으면 충돌,
+    있으면 두 기기의 줄이 둘 다 남는다.
+    """
+    git = _git()
+
+    def g(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [git, "-C", str(tmp_path), *args], capture_output=True, text=True, encoding="utf-8"
+        )
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "t@example.invalid")
+    g("config", "user.name", "t")
+    g("config", "commit.gpgsign", "false")  # 전역 서명 설정이 있는 기기에서도 돈다
+    g("config", "core.autocrlf", "false")
+    ledger = tmp_path / "m.jsonl"
+    ledger.write_text('{"r":1}\n', encoding="utf-8", newline="\n")
+    g("add", ".")
+    g("commit", "-qm", "base")
+    g("checkout", "-qb", "clone_a")
+    with ledger.open("a", encoding="utf-8", newline="\n") as f:
+        f.write('{"r":"A"}\n')
+    g("commit", "-qam", "A")
+    g("checkout", "-q", "main")
+    with ledger.open("a", encoding="utf-8", newline="\n") as f:
+        f.write('{"r":"B"}\n')
+    g("commit", "-qam", "B")
+
+    assert g("merge", "-q", "clone_a", "-m", "m").returncode != 0, "속성 없이도 병합됐다"
+    g("merge", "--abort")
+
+    (tmp_path / ".gitattributes").write_text("m.jsonl merge=union\n", encoding="utf-8")
+    g("add", ".gitattributes")
+    g("commit", "-qm", "attr")
+    assert g("merge", "-q", "clone_a", "-m", "m").returncode == 0, "union 인데 충돌했다"
+    lines = ledger.read_text(encoding="utf-8").splitlines()
+    assert '{"r":"A"}' in lines and '{"r":"B"}' in lines, f"한쪽 줄이 사라졌다: {lines}"

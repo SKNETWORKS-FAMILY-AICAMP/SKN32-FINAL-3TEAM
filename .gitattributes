@@ -4,3 +4,8 @@
 *.xlsx binary
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+
+# 수집 원장은 append 전용이다 — 두 기기가 각자 끝에 붙인 줄을 둘 다 남긴다 (검토 2026-09-19 §3-a).
+# 없으면 A·B·팀원이 pull 사이에 각자 수집한 날 git 이 충돌로 멈춘다.
+# ⛔ derived_manifest.jsonl 에는 걸지 않는다 — 통째로 다시 쓰는 파일이라 union 이면 두 판이 섞인다.
+data/manifest.jsonl merge=union
