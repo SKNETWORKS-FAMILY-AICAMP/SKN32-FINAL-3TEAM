@@ -242,6 +242,13 @@ def onboard(
     console.print(
         "     그 뒤로는 `load`·`chunk`·`embed`·`search-probe` 가 부족분을 스스로 받습니다"
     )
+    console.print(
+        "     [dim]수집 팀원(D-250) — `CopyLane_raw_inbox` 도 바로가기 추가 → "
+        "`data-setup --device collector-1`(영문 · 실명 금지)[/dim]"
+    )
+    console.print(
+        "     [dim]받은 뒤 `raw-publish` → 원장을 **자기 브랜치**로 push → 팀장에게 알림[/dim]"
+    )
 
     console.print("\n[bold]4. DB[/bold] — 거버넌스 19표 + 런타임 7표")
     if shutil.which("docker") is None:
@@ -844,6 +851,9 @@ def collect(
     pages: int = typer.Option(0, "--pages", help="🚨 첫 실행은 1 로 — 응답을 보고 전량을 받는다"),
     limit: int = typer.Option(0, "--limit", help="법제처 목록형(판례·재결례·1차 해석) — 앞 N 건만"),
     dry_run: bool = typer.Option(False, "--dry-run", help="법제처 — 저장하지 않고 무엇을 받을지만"),
+    force: bool = typer.Option(
+        False, "--force", help="다른 기기가 최근에 받은 소스라도 받는다 (D-250 겹침 경고를 넘긴다)"
+    ),
 ) -> None:
     """원천에서 원문을 내려받는다 — 소스마다 맞는 수집기로 보냅니다.
 
@@ -852,7 +862,11 @@ def collect(
 
     🆕 2026-09-18 — 법제처 목록형은 `--dry-run` · `--limit` 을 넘깁니다.
        첫 실행은 `--dry-run` → `--limit 20` → 전량 순서로 봅니다.
-    🚨 **파생물은 클론 B 에서만 만듭니다** (D-226). 수집도 정본 기기에서 합니다.
+    🚨 **파생물은 클론 B 에서만 만듭니다** (D-226).
+    🔄 2026-09-20 (D-250) — 수집은 **지정 팀원도** 합니다. 받은 원문은 `raw-publish` 로 올리고
+       원장은 자기 브랜치로 올립니다 → 팀장이 검토·병합 → 정본이 `raw-import` 로 합칩니다.
+       다른 기기가 최근 7일 안에 받은 소스면 **먼저 멈추고 알립니다** — 알고 받으려면 `--force`.
+       (겹쳐 받아도 섞이지는 않습니다 — 원장의 sha 로 같으면 건너뛰고 다르면 새 판입니다.)
     """
     from collect import COLLECTORS, MANUAL_SOURCES  # noqa: PLC0415 — 표는 collect 가 든다
 
@@ -871,6 +885,18 @@ def collect(
             " 엉뚱한 오류가 납니다 (D-179)."
         )
         raise typer.Exit(1)
+    if not dry_run:
+        from collect import store  # noqa: PLC0415
+
+        others = store.recent_by_others(source)
+        if others and not force:
+            typer.echo(
+                f"🟡 `{source}` 는 다른 기기가 최근 {store.OVERLAP_DAYS}일 안에 받았습니다 — "
+                + " · ".join(f"{k} {v[:10]}" for k, v in sorted(others.items()))
+                + "\n   겹쳐 받는지 팀에 먼저 확인합니다. 원장이 최신인지도 봅니다 (`git pull`).\n"
+                f"   알고 받으려면: uv run python launcher.py collect {source} --force"
+            )
+            raise typer.Exit(1)
     module, shape = spec
     args = ["uv", "run", "python", "-m", module]
     if shape == "arg":
@@ -962,18 +988,29 @@ def data_setup(
     role: str = typer.Option("", "--role", help="canonical | replica (비우면 묻는다)"),
     store: str = typer.Option("", "--store", help="저장소 폴더 (비우면 드라이브에서 찾는다)"),
     yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    inbox: str = typer.Option(
+        "", "--inbox", help="원문 받은편지함 폴더 (비우면 찾는다 · 수집 팀원)"
+    ),
+    device: str = typer.Option(
+        "", "--device", help="이 기기 이름 — 영문 (예: collector-1 · 실명 금지)"
+    ),
 ) -> None:
     """이 기기의 데이터 역할과 공유 저장소를 설정 파일에 적고, 받는 쪽이면 바로 받습니다.
 
     🆕 2026-09-20 (D-247 · D-249) — `.env` 를 손으로 열지 않습니다. 저장소 폴더
        `CopyLane_store` 를 Google Drive 가 붙은 드라이브에서 **찾아서** 적습니다.
     🚨 정본(canonical)은 클론 B 한 곳입니다 — 고르면 한 번 더 묻습니다 (D-226).
+    🆕 D-250 — 수집 팀원은 `CopyLane_raw_inbox` 도 찾아 적고, `--device` 로 기기 이름을 적습니다.
     """
     args = [sys.executable, "-m", "scripts.data_store", "setup"]
     if role:
         args += ["--role", role]
     if store:
         args += ["--store", store]
+    if inbox:
+        args += ["--inbox", inbox]
+    if device:
+        args += ["--device", device]
     if yes:
         args.append("--yes")
     raise typer.Exit(run(*args))
@@ -992,6 +1029,47 @@ def data_publish(
     🚨 올린 뒤 `data/derived_manifest.jsonl` 을 커밋·push 해야 사본이 받습니다.
     """
     args = [sys.executable, "-m", "scripts.data_store", "publish"]
+    if yes:
+        args.append("--yes")
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="raw-publish")
+def raw_publish(
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 올릴지만 보여 준다"),
+) -> None:
+    """수집 팀원 — 이 기기가 받은 원문을 원문 받은편지함에 올립니다.
+
+    🆕 2026-09-20 (D-250). 올리는 것은 **원장에 이 기기 이름으로 적힌 원문**뿐입니다.
+    🚨 막는 것 — 키가 섞인 원문 · 재배포 제약 원천 · `data/raw` 밖 경로.
+    🚨 올린 뒤 `data/manifest.jsonl` 을 **자기 브랜치에** 커밋·push 하고 팀장에게 알립니다.
+    """
+    args = [sys.executable, "-m", "scripts.raw_inbox", "publish"]
+    if yes:
+        args.append("--yes")
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="raw-import")
+def raw_import(
+    branch: str = typer.Option("", "--from", help="병합 **전** — 이 브랜치 원장으로 검사만"),
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 놓을지만 보여 준다"),
+) -> None:
+    """정본 — 팀원이 받은 원문을 받은편지함에서 꺼내 제자리에 놓습니다.
+
+    🆕 2026-09-20 (D-250). 순서 — ① `git fetch` → `raw-import --from origin/<팀원 브랜치>` (검사)
+       ② 검토·병합 ③ `raw-import` (놓기) ④ 파생물 재생성 → `data-publish`.
+    🚨 바이트가 원장의 sha 와 안 맞거나 키가 섞였으면 **하나도 놓지 않습니다.** 덮어쓰지 않습니다.
+    """
+    args = [sys.executable, "-m", "scripts.raw_inbox", "import"]
+    if branch:
+        args += ["--from", branch]
     if yes:
         args.append("--yes")
     if dry_run:
@@ -1359,6 +1437,9 @@ MENU: list[tuple[str, str, object]] = [
     ("44", "데이터 받기", data_sync),
     ("45", "데이터 올리기", data_publish),
     ("46", "데이터 역할·저장소 설정", data_setup),
+    # 🆕 2026-09-20 (D-250) — 팀원 수집 원문. 올리기는 수집 팀원, 합치기는 정본
+    ("47", "원문 올리기 (수집 팀원)", raw_publish),
+    ("48", "원문 합치기 (정본)", raw_import),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)

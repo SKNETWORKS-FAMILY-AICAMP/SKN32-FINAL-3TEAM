@@ -15,8 +15,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import socket
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -258,6 +259,30 @@ def save_raw(
     path = raw_dir(family) / filename
     supersedes: str | None = None
 
+    # 🆕 2026-09-20 (D-250) — **이 기기에 파일이 없어도 원장(git)이 안다.** 팀원 PC 에는 클론 B 의 원문이 없다.
+    #    ⛔ 디스크만 보면 B 에 이미 있는 것을 **다시 받고**, 같은 경로·다른 바이트가 생겨 합칠 때 갈린다.
+    #    ★ 원장의 그 경로 행과 판정용 해시가 같으면 받지 않는다 · 다르면 새 판 이름으로 둔다 — 디스크 규칙과 같다.
+    if not path.exists():
+        known = ledger_row(path)
+        if known is not None:
+            if any(_ident_of(r) == ident for r in ledger_editions(path)):
+                return None  # 규약 4 가 기기를 넘어 선다 — 다른 기기가 같은 것(어느 판이든)을 이미 받았다
+            versioned = path.with_name(edition_name(filename, _today()))
+            vk = ledger_row(versioned)
+            if vk is not None and _ident_of(vk) == ident:
+                return None
+            if vk is not None or versioned.exists():
+                raise StoreError(
+                    f"{versioned.name} 가 원장에 이미 있고 **또 내용이 다르다** — 하루에 두 번 갈렸다.\n"
+                    "  자동으로 판을 더 만들지 않는다 (위 규칙과 같다)."
+                )
+            supersedes = _rel(path)
+            print(
+                f"  🔴 새 판 — {filename} 이(가) 원장(다른 기기)에 있고 내용이 다르다.\n"
+                f"     {versioned.name} 으로 저장한다. 합칠 때 정본에서 `adopt` 로 판을 고른다 (D-246)."
+            )
+            path = versioned
+
     if path.exists():
         if identity_sha256(source_id, path.read_bytes()) == ident:
             return None  # 규약 4 — 동일하면 스킵
@@ -341,11 +366,138 @@ def manifest_append(
         row["supersedes"] = supersedes
     if identity:
         row["identity_sha256"] = identity
+    # 🆕 2026-09-20 (D-250) — **어느 기기가 받았나.** 팀원도 수집한다. 새 행에만 붙인다(옛 행은 「기록 없음」).
+    row["device"] = device_id()
     # 🔴 `newline="\n"` — 2026-09-19 실측: 이 줄이 없어 Windows 에서 원장 **5,148줄이 CRLF** 로 붙었다
     #    (그날 수집한 mfds_cgm_expc 5,129 · ftc_decisions_body 19 전부). 게이트가 `Path.open("a")` 의
     #    모드를 못 읽어 지나쳤다 — 검사기도 같이 고쳤다 (D-241).
     with MANIFEST.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    _index_add(row)
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 원장을 읽는 쪽 — 기기를 넘는 규칙 (2026-09-20 · D-250)
+# ══════════════════════════════════════════════════════════
+#: `[임의]` 다른 기기가 이 기간 안에 같은 소스를 받았으면 수집 전에 **경고**한다(런처 `collect --force`).
+#:    **바꾸는 조건** — 원천 갱신 주기를 재서 소스별로 나눌 필요가 보이면. 주 단위면 공정위 결정문
+#:    (가장 자주 바뀌는 쪽)도 충분하다고 봤다. 막는 것이 아니라 알린다 — 겹쳐도 sha 대조로 섞이지 않는다.
+OVERLAP_DAYS = 7
+
+
+def device_id() -> str:
+    """이 기기의 이름 — `.env` 의 `DATA_DEVICE`, 없으면 **호스트 이름의 지문**.
+
+    🚨 원장은 **공개 저장소**에 올라간다 — 호스트 이름(사람 이름이 든 경우가 많다)을 그대로 적지 않는다.
+    """
+    from collect import env  # noqa: PLC0415 — `.env` 를 여는 곳은 한 곳이다 (D-99)
+
+    v = env.setting("DATA_DEVICE")
+    return v or "h:" + hashlib.sha256(socket.gethostname().encode("utf-8")).hexdigest()[:8]
+
+
+def _rel(path: Path) -> str:
+    return str(path.relative_to(ROOT))
+
+
+def _norm(p: str) -> str:
+    """원장의 경로는 기기마다 `\\`·`/` 가 섞여 있다 — 비교는 `/` 로 한다."""
+    return p.replace("\\", "/")
+
+
+#: (원장 경로, (크기, 수정 시각)) → 경로별 마지막 행. 🚨 수집 한 번에 수천 번 부르므로 한 번만 읽는다.
+#:    크기만 보면 `git pull` 이 같은 길이로 바꾼 원장을 못 알아챈다 — 수정 시각도 본다.
+_INDEX: tuple[str, tuple[int, int], dict[str, dict[str, Any]]] | None = None
+
+
+def _stamp() -> tuple[int, int]:
+    if not MANIFEST.exists():
+        return (-1, -1)
+    st = MANIFEST.stat()
+    return (st.st_size, st.st_mtime_ns)
+
+
+def _index() -> dict[str, dict[str, Any]]:
+    global _INDEX
+    size = _stamp()
+    if _INDEX is None or _INDEX[0] != str(MANIFEST) or _INDEX[1] != size:
+        idx: dict[str, dict[str, Any]] = {}
+        if MANIFEST.exists():
+            for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    r = json.loads(line)
+                    if r.get("path"):
+                        idx[_norm(str(r["path"]))] = r
+        _INDEX = (str(MANIFEST), size, idx)
+    return _INDEX[2]
+
+
+def _index_add(row: dict[str, Any]) -> None:
+    """방금 붙인 행을 색인에도 넣는다 — 다시 읽지 않게."""
+    global _INDEX
+    if _INDEX is not None and _INDEX[0] == str(MANIFEST) and row.get("path"):
+        _INDEX[2][_norm(str(row["path"]))] = row
+        _INDEX = (_INDEX[0], _stamp(), _INDEX[2])
+
+
+def ledger_row(path: Path) -> dict[str, Any] | None:
+    """원장에 적힌 이 경로의 **마지막** 행. 없으면 None."""
+    return _index().get(_norm(_rel(path)))
+
+
+def ledger_editions(path: Path) -> list[dict[str, Any]]:
+    """원장에 적힌 이 이름과 **그 판들**(`__c날짜`)의 마지막 행 — 판이 여럿이면 옛 판과 같을 수도 있다."""
+    rel = _norm(_rel(path))
+    parent, _, name = rel.rpartition("/")
+    p = Path(name)
+    stem = p.stem.split(EDITION_MARK, 1)[0]
+    head = f"{parent}/{stem}" if parent else stem
+    return [
+        r
+        for k, r in _index().items()
+        if k == rel or (k.startswith(head + EDITION_MARK) and k.endswith(p.suffix))
+    ]
+
+
+def _ident_of(row: dict[str, Any]) -> str:
+    return str(row.get("identity_sha256") or row.get("sha256"))
+
+
+def recent_by_others(
+    source_id: str, days: int = OVERLAP_DAYS, now: datetime | None = None
+) -> dict[str, str]:
+    """다른 기기가 `days` 안에 이 소스를 받은 기록 — `{기기: 마지막 시각}`.
+
+    🚨 기기 칸이 없는 옛 행(09-20 이전)은 **정본이 받은 것**이다 — 그때는 정본만 수집했다 (D-226).
+       그래서 정본 기기에서는 건너뛰고, 다른 기기에서는 「정본(기기 칸 이전)」으로 알린다.
+    """
+    from collect import env  # noqa: PLC0415
+
+    me = device_id()
+    canonical = env.setting("DATA_ROLE") == "canonical"
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=days)
+    out: dict[str, str] = {}
+    if not MANIFEST.exists():
+        return out
+    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        if r.get("source_id") != source_id:
+            continue
+        who = str(r.get("device") or "")
+        if who == me or (not who and canonical):
+            continue
+        who = who or "정본(기기 칸 이전)"
+        try:
+            at = datetime.fromisoformat(str(r.get("fetched_at")))
+        except ValueError:
+            continue
+        if at.tzinfo is None:  # 옛 행 — UTC 로 적었다 (`_now`)
+            at = at.replace(tzinfo=UTC)
+        if at >= cutoff:
+            out[who] = max(out.get(who, ""), str(r["fetched_at"]))
+    return out
 
 
 def stamp(row: dict[str, Any], source_id: str) -> dict[str, Any]:

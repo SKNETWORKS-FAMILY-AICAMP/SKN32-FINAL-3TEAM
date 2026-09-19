@@ -407,8 +407,16 @@ STORE_NAME = "CopyLane_store"
 DRIVE_DIRS = ("내 드라이브", "My Drive")
 
 
-def candidates(roots: list[pathlib.Path] | None = None) -> list[pathlib.Path]:
-    """이 기기에 붙은 공유 저장소 폴더 후보. 🚨 네트워크를 쓰지 않는다 — 붙은 드라이브만 본다."""
+#: 🆕 D-250 — 수집 팀원의 원문 받은편지함. 저장소와 **다른 폴더**다(쓰는 사람이 다르다) · `scripts/raw_inbox.py` 와 같은 이름
+INBOX_NAME = "CopyLane_raw_inbox"
+#: `DATA_DEVICE` 의 모양 — 🚨 원장은 공개 저장소에 올라간다. 실명을 막을 수는 없지만 공백·한글은 받지 않는다
+_DEVICE = re.compile(r"[A-Za-z0-9._-]{1,32}")
+
+
+def candidates(
+    roots: list[pathlib.Path] | None = None, name: str = STORE_NAME
+) -> list[pathlib.Path]:
+    """이 기기에 붙은 공유 폴더 후보. 🚨 네트워크를 쓰지 않는다 — 붙은 드라이브만 본다."""
     if roots is None:
         if os.name == "nt":
             roots = [pathlib.Path(f"{c}:\\") for c in string.ascii_uppercase if c not in "AB"]
@@ -417,7 +425,7 @@ def candidates(roots: list[pathlib.Path] | None = None) -> list[pathlib.Path]:
     out: list[pathlib.Path] = []
     for r in roots:
         for d in DRIVE_DIRS:
-            p = r / d / STORE_NAME
+            p = r / d / name
             try:
                 if p.is_dir():
                     out.append(p)
@@ -426,7 +434,14 @@ def candidates(roots: list[pathlib.Path] | None = None) -> list[pathlib.Path]:
     return out
 
 
-def setup(*, role: str | None = None, store: str | None = None, yes: bool = False) -> int:
+def setup(
+    *,
+    role: str | None = None,
+    store: str | None = None,
+    yes: bool = False,
+    inbox: str | None = None,
+    device: str | None = None,
+) -> int:
     """🆕 역할과 저장소를 `.env` 에 적고, 받는 쪽이면 **바로 받는다**.
 
     🔴 정본(canonical)은 **클론 B 한 곳**이다 (D-226) — 고르면 한 번 더 묻는다.
@@ -485,10 +500,31 @@ def setup(*, role: str | None = None, store: str | None = None, yes: bool = Fals
         print(f"🔴 폴더가 없다 — {chosen}. .env 는 그대로다")
         return 1
 
+    if device is not None and not _DEVICE.fullmatch(device):
+        print(
+            f"🔴 기기 이름 {device!r} 은 못 쓴다 — 영문·숫자·`._-` 32자 이내 (예: collector-1).\n"
+            "  🚨 원장은 공개 저장소에 올라간다 — **실명을 쓰지 않는다**. .env 는 그대로다"
+        )
+        return 1
+    # 🆕 D-250 — 받은편지함은 **수집 팀원·정본만** 붙인다. 뷰어는 공유받지 않았으니 못 찾는 것이 정상이다
+    box = pathlib.Path(inbox).expanduser() if inbox else None
+    if box is None:
+        found_box = candidates(name=INBOX_NAME)
+        box = found_box[0] if found_box else None
+    elif not box.is_dir():
+        print(f"🔴 받은편지함 폴더가 없다 — {box}. .env 는 그대로다")
+        return 1
+
     setkey.put_setting("DATA_ROLE", role)
     setkey.put_setting("DATA_STORE", str(chosen))
     print(f"  .env — DATA_ROLE={role} (전: {now_role or '없음'})")
     print(f"  .env — DATA_STORE={chosen} (전: {now_store or '없음'})")
+    if box is not None:
+        setkey.put_setting("RAW_INBOX", str(box))
+        print(f"  .env — RAW_INBOX={box} (원문 받은편지함 · D-250)")
+    if device:
+        setkey.put_setting("DATA_DEVICE", device)
+        print(f"  .env — DATA_DEVICE={device}")
 
     if role == "canonical":
         print("  다음 — `launcher.py data-publish --dry-run` 으로 무엇이 올라갈지 본다")
@@ -522,6 +558,8 @@ def main() -> int:
     ap.add_argument("cmd", choices=["plan", "sync", "publish", "ensure", "setup"])
     ap.add_argument("--role", default=None, help="setup — canonical | replica")
     ap.add_argument("--store", default=None, help="setup — 저장소 폴더 (비우면 찾는다)")
+    ap.add_argument("--inbox", default=None, help="setup — 원문 받은편지함 (비우면 찾는다 · D-250)")
+    ap.add_argument("--device", default=None, help="setup — 이 기기 이름 (실명 금지 · D-250)")
     ap.add_argument("--yes", action="store_true", help="묻지 않는다")
     ap.add_argument("--dry-run", action="store_true", help="무엇을 할지만 보여 준다")
     a = ap.parse_args()
@@ -536,7 +574,7 @@ def main() -> int:
     if a.cmd == "publish":
         return publish(yes=a.yes, dry_run=a.dry_run)
     if a.cmd == "setup":
-        return setup(role=a.role, store=a.store, yes=a.yes)
+        return setup(role=a.role, store=a.store, yes=a.yes, inbox=a.inbox, device=a.device)
     return ensure()
 
 

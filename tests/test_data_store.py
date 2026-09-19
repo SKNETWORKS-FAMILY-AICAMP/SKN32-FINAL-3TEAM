@@ -261,8 +261,10 @@ def _env_file(tmp: pathlib.Path, mp: pytest.MonkeyPatch) -> pathlib.Path:
     env_path = tmp / "dotenv"
     env_path.write_text("DATA_ROLE=\nDATA_STORE=\n", encoding="utf-8", newline="\n")
     mp.setattr(setkey, "ENV_PATH", env_path)
+    # 🚨 진짜 드라이브를 뒤지지 않는다 — 클론 B 에는 진짜 `CopyLane_raw_inbox` 가 붙어 있다 (D-250)
+    mp.setattr(ds, "candidates", lambda roots=None, name=ds.STORE_NAME: [])
     # 🚨 `put_setting` 은 `os.environ` 에 직접 쓴다 — 먼저 setenv 로 **원래 값을 기록**해야 끝나고 되돌린다
-    for k in ("DATA_ROLE", "DATA_STORE"):
+    for k in ("DATA_ROLE", "DATA_STORE", "RAW_INBOX", "DATA_DEVICE"):
         mp.setenv(k, "")
         mp.delenv(k)
     return env_path
@@ -309,7 +311,7 @@ def test_설정은_모르는_역할과_없는_폴더를_적지_않는다(
     before = env_path.read_bytes()
     assert ds.setup(role="canonnical", store=str(tmp_path), yes=True) == 1
     assert ds.setup(role="replica", store=str(tmp_path / "없다"), yes=True) == 1
-    monkeypatch.setattr(ds, "candidates", lambda roots=None: [])
+    monkeypatch.setattr(ds, "candidates", lambda roots=None, name=ds.STORE_NAME: [])
     assert ds.setup(role="replica", yes=True) == 1
     assert env_path.read_bytes() == before, "실패했는데 .env 가 바뀌었다"
 

@@ -77,6 +77,9 @@ KEYS = {
 SETTINGS = {
     "DATA_ROLE": "기기 역할 — canonical(클론 B 한 곳) · replica(클론 A · 팀원 · 서버) (D-247)",
     "DATA_STORE": "팀 비공개 공유 저장소 폴더 — 예: J:\\내 드라이브\\CopyLane_store (D-247 · D-249)",
+    # 🆕 2026-09-20 (D-250) — 팀원 수집
+    "RAW_INBOX": "원문 받은편지함 폴더 — 수집 팀원이 올리고 정본이 합친다. 예: …\\CopyLane_raw_inbox (D-250)",
+    "DATA_DEVICE": "수집 원장(공개 git)에 적을 이 기기 별칭(예: collector-1) · 실명 금지 — 비우면 호스트 이름의 지문 (D-250)",
 }
 
 
