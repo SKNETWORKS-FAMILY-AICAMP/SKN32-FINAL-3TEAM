@@ -223,6 +223,15 @@ def load_fragments(cur, dry: bool) -> int:
         #    (40자 상한 · NOREDIST 로 다루는 조각 · D-133).
         ("ftc_decisions_body:golden", "ftc_decisions_body", "의결서 인용 광고 문구", "G2"),
         ("mfds_casebook:golden", "mfds_casebook", "사례집 인용표현", "G2"),
+        # 🆕 2026-09-19 — 해설서 인용표현에 **사람이 붙인 라벨**이 평가셋으로 들어왔다 (D-243 · 163행 test_sentence).
+        #    ⛔ 등재가 없어 `load` 가 골든셋 앞에서 멈췄다(fail-closed 가 제 일을 했다 · 트랜잭션이라 DB 는 그대로).
+        #    ★ 해설서가 인용한 **적발 광고 문구**라 사례집과 같은 판정이다 — 광고주 저작물 조각은 G2 (D-133 ①).
+        (
+            "mfds_special_use_guide:golden",
+            "mfds_special_use_guide",
+            "해설서 인용표현 (사람 라벨)",
+            "G2",
+        ),
         ("mfds_hf_ingredient_board:approved", "mfds_hf_ingredient_board", "승인 기능성 문구", "G3"),
         # 🚨 주입본은 **우리 생성물**이지만 원본이 승인 문구라 계보를 그쪽에 둔다 (D-71).
         ("mfds_hf_ingredient_board:injected", "mfds_hf_ingredient_board", "규칙 주입 합성문", "G3"),
@@ -530,6 +539,7 @@ def _retire_product_fact(cur, seen: dict[str, set[tuple[str, str]]]) -> int:
 GOLDEN_FRAGMENT = {
     ("ftc_decisions_body", "real"): "ftc_decisions_body:golden",
     ("mfds_casebook", "real"): "mfds_casebook:golden",
+    ("mfds_special_use_guide", "real"): "mfds_special_use_guide:golden",  # 🆕 2026-09-19 · D-243
     ("mfds_hf_ingredient_board", "approved"): "mfds_hf_ingredient_board:approved",
     ("mfds_hf_ingredient_board", "injected"): "mfds_hf_ingredient_board:injected",
 }

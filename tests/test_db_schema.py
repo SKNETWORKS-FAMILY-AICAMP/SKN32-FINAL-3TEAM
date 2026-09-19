@@ -531,3 +531,17 @@ def test_타입을_바꾸는_마이그레이션은_뷰를_먼저_뗀다() -> Non
             assert sql.index(f"DROP VIEW IF EXISTS {name}") < sql.index(f"CREATE VIEW {name}"), (
                 f"🚨 {f.name}: `{name}` 을 떼기 전에 만든다 — 순서가 뒤집혔다"
             )
+
+
+def test_골든셋_계보는_모두_프래그먼트로_등재돼_있다() -> None:
+    """🔴 `GOLDEN_FRAGMENT` 가 가리키는 프래그먼트는 `load_fragments()` 가 만든다 (2026-09-19).
+
+    ⛔ 한쪽만 등재하면 `golden_sample.fragment_id` 외래키가 적재 중에 깨진다 — 두 표가 한 쌍이다.
+    """
+    import inspect
+
+    from scripts import load_db
+
+    src = inspect.getsource(load_db.load_fragments)
+    missing = [fid for fid in load_db.GOLDEN_FRAGMENT.values() if f'"{fid}"' not in src]
+    assert not missing, f"load_fragments() 에 없는 프래그먼트: {missing}"

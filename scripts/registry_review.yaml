@@ -52,7 +52,7 @@ ftc_decisions_body:
   #   확인 근거 정리: docs/ohb/검토요청_2026-09-02_ftc_decisions_body.md
   reviewed_by: 권소라
   reviewed_at: 2026-09-02
-  collected_at: 2026-09-07
+  collected_at: 2026-09-20
 
 mfds_sanctions:
   decided_by: 오한빈
@@ -692,4 +692,4 @@ mfds_cgm_expc:
   decided_at: 2026-09-19
   reviewed_by: 권소라
   reviewed_at: 2026-09-19
-  collected_at: null
+  collected_at: 2026-09-20
