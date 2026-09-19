@@ -46,6 +46,14 @@ data/**
 !data/**/
 !data/**/.gitkeep
 !data/manifest.jsonl
+#  🔄 2026-09-17 — 파생물 원장과 **사람의 판정**은 따라온다.
+#     D-19 는 「원문을 커밋하지 않는다」이지 「사람의 판정을 기기에 맡긴다」가 아니다.
+#     ★ 부류는 `scripts/derived_manifest.py` 가 판정한다 — 「원천」(다시 안 나온다) ·
+#       「표본」(다시 뽑으면 갈린다) 만 여기 예외로 둔다. 「생성물」은 두지 않는다.
+!data/derived_manifest.jsonl
+!data/derived/labels/**
+!data/derived/*_labelsheet.jsonl
+!data/derived/golden/split_manifest.json
 
 # models & experiments
 models/

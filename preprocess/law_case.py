@@ -103,7 +103,7 @@ def main() -> int:
     if args.dump:
         for kind, rows in out_rows.items():
             out = store.derived_dir(".") / f"law_{kind}.jsonl"
-            with out.open("w", encoding="utf-8") as f:
+            with out.open("w", encoding="utf-8", newline="\n") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
             print(f"  💾 {len(rows)}행 → {out.relative_to(ROOT)}")

@@ -47,6 +47,12 @@ MAP: dict[str, str] = {
     #    🚨 생성물이라 낡지 않는다 (D-54). 2026-09-03 판 현황판이 손으로 쓴 것이었다.
     "docs/03_데이터/데이터현황판.md": "claude/CopyLane_데이터현황판.md",
     "docs/03_데이터/S0-14_2인확인_검토표.md": "claude/CopyLane_S0-14_2인확인_검토표.md",
+    # 🔄 2026-09-17 신규 — 3W 제출물. 원문 → 문구 → 골든셋 변환 사슬.
+    #    🚨 **수는 사실원장 09-17 절이 정본**이고 이 문서는 옮겨 적은 것이다 (D-54).
+    #    ⬜ 4W 에 생성기를 붙이면 이 줄의 성격이 「원본」에서 「생성물」로 바뀐다 (D-90).
+    #    🔴 도면 `_그림/전처리_흐름.svg` 는 **여기 안 올린다** — 프로젝트 사본은 텍스트만
+    #       받고, 상대 경로 그림은 업로드 뒤 깨진다. PDF 가 그것을 나른다 (build_pdf).
+    "docs/03_데이터/전처리_결과서.md": "claude/CopyLane_전처리_결과서.md",
     "docs/03_데이터/판정매트릭스.html": "claude/CopyLane_데이터거버넌스_판정매트릭스.html",
     "docs/04_보안/보안점검.md": "claude/CopyLane_보안점검.md",
     "docs/05_배포/배포계획.md": "claude/CopyLane_배포계획.md",
@@ -69,6 +75,7 @@ def last_commit(rel: str) -> tuple[str, str]:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        newline="\n",
     ).stdout.strip()
     return tuple(out.split("|", 1)) if "|" in out else ("미커밋", "—")
 
@@ -190,7 +197,7 @@ def main() -> None:
                 f"<!-- 레포 사본 · {ver} · 갱신 {date} · 커밋 {sha} · 원본 {rel} "
                 f"- 여기서 고치지 마십시오 -->\n"
             )
-        (OUT / Path(dst).name).write_text(stamp + text, encoding="utf-8")
+        (OUT / Path(dst).name).write_text(stamp + text, encoding="utf-8", newline="\n")
         rows.append((Path(dst).name, ver, sha, date))
 
     # 🔄 레지스트리 스냅샷 — MAP 과 달리 원본 파일이 아니라 **생성물**이다.
@@ -203,6 +210,7 @@ def main() -> None:
         f"> 🚨 여기서 고치지 마십시오 — `_matrix/data.js` 가 원본이고 그것조차 생성물입니다.\n\n"
         + registry_snapshot(),
         encoding="utf-8",
+        newline="\n",
     )
     rows.append((snap, "생성물", sha, date))
 

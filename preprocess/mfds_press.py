@@ -179,7 +179,7 @@ def tables_of(path: pathlib.Path, *, refresh: bool = False) -> list[dict]:
                 if t and len(t) >= 2 and t[0] and len(t[0]) >= 3:
                     got.append({"쪽": pno, "표": t})
     c.parent.mkdir(parents=True, exist_ok=True)
-    c.write_text(json.dumps(got, ensure_ascii=False), encoding="utf-8")
+    c.write_text(json.dumps(got, ensure_ascii=False), encoding="utf-8", newline="\n")
     return got
 
 
@@ -354,7 +354,7 @@ def main() -> int:
                     rec[f] = m2
             out.append(rec)
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        with OUT.open("w", encoding="utf-8") as fh:
+        with OUT.open("w", encoding="utf-8", newline="\n") as fh:
             for rec in out:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(f"\n  🔴 마스킹 — 바뀐 필드 {dict(changed) or '없음'}")

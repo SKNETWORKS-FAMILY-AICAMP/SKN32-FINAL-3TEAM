@@ -93,6 +93,27 @@ def stub(when: str, needs: str):
     return deco
 
 
+def needs_data(fn):
+    """🆕 **파생물을 읽는 명령** — 사본이면 부족분을 먼저 받는다 (2026-09-19 · D-247 · 판정 ③).
+
+    ★ 판정 — 「데이터 명령 앞에서 자동」. 클론 A · 팀원이 `load` 를 누르면 부족한 생성물을
+      공유 저장소에서 먼저 받고, **받지 못하면 그 명령을 멈춘다** (D-220 — 옛 판 위에서 돌지 않는다).
+    🚨 로직은 여기 없다 — `scripts.data_store ensure` 에 위임한다 (얇은 껍데기 · D-51).
+       정본·역할 없음(CI)에서는 아무것도 안 한다.
+    🚨 **메뉴에 붙이지 않고 명령에 붙인다** — `launcher.py load` 처럼 메뉴를 안 거치는 호출이 있다.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if run(sys.executable, "-m", "scripts.data_store", "ensure") != 0:
+            console.print("[red]🔴 파생물을 받지 못해 멈췄다[/red] — 위 메시지를 본다 (D-247)")
+            raise typer.Exit(1)
+        return fn(*args, **kwargs)
+
+    wrapper._needs_data = True
+    return wrapper
+
+
 def cli_name(fn) -> str:
     """함수 이름 -> CLI 명령 이름. `db_up` -> `db-up`, `eval_` -> `eval`."""
     return getattr(fn, "_cli", fn.__name__.rstrip("_").replace("_", "-"))
@@ -730,6 +751,7 @@ def probe(source: str = typer.Argument("", help="소스 id 하나만 (비우면 
 
 
 @app.command(name="search-probe")
+@needs_data
 def search_probe(
     queries: str = typer.Option("", help="질의 JSONL 경로 (비우면 기본 경로)"),
     pool: int = typer.Option(0, help="후보 폭 (0 이면 기획서 5-6 의 50)"),
@@ -770,7 +792,11 @@ def register(
 
     AI Hub 처럼 신청·승인을 거쳐 사람이 내려받는 소스는 수집기가 가져오지 않습니다.
     그래서 원장에 안 남고, provenance 는 나중에 못 붙입니다 (D-71). 이 명령이 그 자리입니다.
-    data/raw/<소스id>/ 로 복사하고 manifest 에 1행 남깁니다 — 등급 디렉터리가 아닙니다 (D-92).
+    소스의 **원문 폴더**로 복사하고 manifest 에 1행 남깁니다 — 등급 디렉터리가 아닙니다 (D-92).
+    🔴 원문 폴더는 소스 id 와 이름이 다를 수 있습니다 (`store.raw_dir_of` · D-245) —
+       예전 설명(「소스 id 폴더로 복사」)을 믿고 넣었다가 화장품법 334노드가 사라졌습니다.
+    ⛔ 다른 기기에서 받은 raw 를 합치는 데 쓰지 않습니다 — 하위 폴더를 펴고, 첫 폴더로만
+       넣고, 원장에 행을 또 붙입니다 (검토 2026-09-19 §3-d).
     """
     raise typer.Exit(
         run("uv", "run", "python", "-m", "collect.ingest", "register", source, path, "--use", use)
@@ -778,15 +804,37 @@ def register(
 
 
 @app.command()
+def adopt(
+    source: str = typer.Argument(..., help="레지스트리 소스 id"),
+    stem: str = typer.Argument(..., help="판을 뺀 원본 이름 (확장자 없이)"),
+) -> None:
+    """판(`__c…`)을 **원본 자리로 올린다** — `collect` 가 만들고 `current_files` 가 멈추는 그 다음 칸.
+
+    🔴 이 자리가 비어 있었습니다 (2026-09-18). 수집기는 원본을 덮지 않고 판으로 저장하고
+       (규약 2), 추출기는 판이 있으면 멈춥니다(D-143 — 어느 것을 쓸지는 사람이 정한다).
+       **채택하는 명령이 없어서** 손으로 옮기다가 원장이 깨졌습니다.
+    🚨 원장에 원본 경로의 새 행을 붙입니다 — 그래야 `doctor --hash` 가 훼손으로 안 봅니다.
+    🚨 2인 확인은 요구하지 않습니다 (팀장 판정) — 채택 자체가 사람의 판정입니다.
+    """
+    raise typer.Exit(run("uv", "run", "python", "-m", "collect.ingest", "adopt", source, stem))
+
+
+@app.command()
 def collect(
     source: str = typer.Argument(..., help="레지스트리 소스 id"),
     use: str = typer.Option("U1", "--use", help="U1~U4"),
     pages: int = typer.Option(0, "--pages", help="🚨 첫 실행은 1 로 — 응답을 보고 전량을 받는다"),
+    limit: int = typer.Option(0, "--limit", help="법제처 목록형(판례·재결례·1차 해석) — 앞 N 건만"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="법제처 — 저장하지 않고 무엇을 받을지만"),
 ) -> None:
-    """공공데이터포털 오픈API 를 내려받는다 — 6개 소스 공용.
+    """원천에서 원문을 내려받는다 — 소스마다 맞는 수집기로 보냅니다.
 
     2인 확인이 안 끝난 소스는 게이트가 첫 줄에서 거부합니다 (D-15 · D-66).
-    요청주소는 `collect/endpoints.yaml` 에 있고, 비어 있으면 어디를 볼지 알려줍니다.
+    어느 수집기로 갈지는 `collect/__init__.py` 의 `COLLECTORS` 표가 정합니다 (D-179).
+
+    🆕 2026-09-18 — 법제처 목록형은 `--dry-run` · `--limit` 을 넘깁니다.
+       첫 실행은 `--dry-run` → `--limit 20` → 전량 순서로 봅니다.
+    🚨 **파생물은 클론 B 에서만 만듭니다** (D-226). 수집도 정본 기기에서 합니다.
     """
     from collect import COLLECTORS, MANUAL_SOURCES  # noqa: PLC0415 — 표는 collect 가 든다
 
@@ -809,10 +857,16 @@ def collect(
     args = ["uv", "run", "python", "-m", module]
     if shape == "arg":
         args += [source, "--use", use]
-    elif shape == "target":
-        args += ["--target", "law"]
+    elif shape.startswith("target"):
+        # 🚨 값은 표가 든다 — `target` 만 있으면 법령(`law`)이다. 런처가 target 을 추정하지 않는다.
+        args += ["--target", shape.partition("=")[2] or "law"]
     if pages and module == "collect.openapi":
         args += ["--pages", str(pages)]
+    if module == "collect.law_api":
+        if dry_run:
+            args.append("--dry-run")
+        if limit:
+            args += ["--limit", str(limit)]
     raise typer.Exit(run(*args))
 
 
@@ -844,6 +898,68 @@ def inventory() -> None:
 
 
 @app.command()
+def derived_manifest(
+    write: bool = typer.Option(False, "--write", help="data/derived_manifest.jsonl 을 씁니다"),
+    check: bool = typer.Option(False, "--check", help="원장 ↔ 디스크 대조. 다르면 종료코드 1"),
+) -> None:
+    """**파생물 원장** — 기기 사이에 파생물을 옮길 때 같은지 확인합니다.
+
+    🚨 `data/manifest.jsonl` 은 **raw 전용**입니다(20,395행 · derived 0행). 그래서
+       「네가 받은 파생물이 내 것과 같은가」를 물을 수 없었습니다 — 이것이 그 짝입니다.
+    🔴 부류를 넷으로 가릅니다 — **원천**(다시 안 나온다) · **표본**(다시 뽑으면 갈린다) ·
+       **생성물** · **원문캐시**(마스킹 전 원문 — 옮기지 않는다). 앞의 둘만 git 으로
+       따라갑니다 (`.gitignore` 예외). 부류 이름의 정본은 `KIND_RULES` 한 곳입니다.
+    🔄 `--check` 는 **기기 역할**(`.env` 의 `DATA_ROLE`)대로 봅니다 (D-247) — 정본은 전부,
+       사본은 원문캐시를 빼고, 역할이 없으면(CI) git 이 옮기는 것만 요구합니다.
+    """
+    args = ["uv", "run", "python", "scripts/derived_manifest.py"]
+    if write:
+        args.append("--write")
+    if check:
+        args.append("--check")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="data-sync")
+def data_sync(
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 받을지만 보여 준다"),
+) -> None:
+    """부족하거나 낡은 파생물을 공유 저장소에서 받습니다 — 사본(클론 A · 팀원 · 서버)용.
+
+    🆕 2026-09-19 (D-247). 무엇을 받을지는 **git 의 파생물 원장**이 정합니다 — 지금 체크아웃한
+       커밋의 판을 받습니다. 옛 파일은 레포 밖 `CopyLane_backup` 에 옮겨 둡니다.
+    🚨 `.env` 에 `DATA_ROLE=replica` 와 `DATA_STORE=<폴더>` 가 있어야 합니다. 정본은 받지 않습니다.
+    """
+    args = [sys.executable, "-m", "scripts.data_store", "sync"]
+    if yes:
+        args.append("--yes")
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="data-publish")
+def data_publish(
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 올릴지만 보여 준다"),
+) -> None:
+    """정본의 생성물을 공유 저장소에 올립니다 — 클론 B 전용.
+
+    🆕 2026-09-19 (D-247). 올리기 전에 셋을 봅니다 — 원장 최신 · 마스킹 잔여 0 ·
+       재배포 제약 소스 0. **원문캐시는 올리지 않습니다** (D-244 · D-17).
+    🚨 외부 전송입니다 (제3자 계정 · D-78 ③) — 한 번 묻습니다.
+    🚨 올린 뒤 `data/derived_manifest.jsonl` 을 커밋·push 해야 사본이 받습니다.
+    """
+    args = [sys.executable, "-m", "scripts.data_store", "publish"]
+    if yes:
+        args.append("--yes")
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command()
 def status() -> None:
     """데이터 현황판을 다시 만듭니다 — 무엇을 쓰기로 했고 무엇을 안 쓰기로 했나.
 
@@ -853,6 +969,7 @@ def status() -> None:
 
 
 @app.command()
+@needs_data
 def load(
     allow_missing: bool = typer.Option(
         False,
@@ -876,6 +993,7 @@ def load(
 
 
 @app.command()
+@needs_data
 def chunk(dump: bool = typer.Option(False, "--dump", help="chunks.jsonl 을 쓴다")) -> None:
     """[P5] 조문·별표를 RAG 청크로 자릅니다 — 🚨 조문 단위입니다."""
     args = ["uv", "run", "python", "-m", "preprocess.chunk"]
@@ -885,6 +1003,7 @@ def chunk(dump: bool = typer.Option(False, "--dump", help="chunks.jsonl 을 쓴�
 
 
 @app.command()
+@needs_data
 def embed(
     check: bool = typer.Option(False, "--check", help="모델 차원만 잽니다 (DB 불필요)"),
 ) -> None:
@@ -1098,6 +1217,7 @@ ASK_ARG: dict[str, list[tuple[str, bool, str]]] = {
     "diagram": [("어느 도면인가 (엔터 = 전부)", False, "text")],
     "probe": [("어떤 소스를 열어 볼까", False, "collect")],
     "collect": [("어떤 소스를 받을까", True, "collect")],
+    "adopt": [("어떤 소스인가", True, "collect"), ("원본 이름 (확장자 없이)", True, "text")],
     "count": [("받아 온 파일이나 폴더 경로", True, "path")],
     "register": [("어떤 소스인가", True, "manual"), ("받아 온 파일이나 폴더 경로", True, "path")],
     "extract": [("어떤 원천을 추출할까", False, "extract")],
@@ -1191,6 +1311,13 @@ MENU: list[tuple[str, str, object]] = [
     ("2", "새 기기 안내", onboard),
     ("3", "환경 진단", doctor),
     ("4", "이 기기 재고", inventory),
+    # 🚨 번호는 뒤에서 받는다 (D-162) — 「환경」 무리에 있지만 번호는 42 다
+    ("42", "파생물 원장", derived_manifest),
+    ("43", "판 채택", adopt),
+    # 🆕 2026-09-19 (D-247) — 확인은 **스크립트가 필요할 때만** 묻는다(외부 전송 · raw 있는 기기의 덮어쓰기).
+    #    ⛔ DANGER 에 또 올리면 같은 것을 두 번 묻는다 — 습관이 된 확인은 안 읽힌다.
+    ("44", "데이터 받기", data_sync),
+    ("45", "데이터 올리기", data_publish),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)

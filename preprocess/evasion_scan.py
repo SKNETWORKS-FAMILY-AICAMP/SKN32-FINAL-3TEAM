@@ -81,7 +81,7 @@ def pdf_text(path: pathlib.Path, cache: pathlib.Path, *, refresh: bool = False) 
             parts.append(page.extract_text() or "")
     text = "\n".join(parts)
     cache.mkdir(parents=True, exist_ok=True)
-    cached.write_text(text, encoding="utf-8")
+    cached.write_text(text, encoding="utf-8", newline="\n")
     return text
 
 
@@ -237,10 +237,13 @@ def main() -> int:
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+        OUT.write_text(
+            json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+        )
         QUOTES.write_text(
             json.dumps([{"doc": d, "quote": q} for d, q in quotes], ensure_ascii=False, indent=1),
             encoding="utf-8",
+            newline="\n",
         )
         print(f"\n→ {OUT} ({n}건)\n→ {QUOTES} ({len(quotes)}회 · 고유 {len(uniq)}종)")
     return 0

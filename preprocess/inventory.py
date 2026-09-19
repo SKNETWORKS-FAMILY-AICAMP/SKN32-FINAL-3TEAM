@@ -27,6 +27,8 @@ import json
 import os
 import pathlib
 
+from collect import store
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
 MANIFEST = ROOT / "data" / "manifest.jsonl"
@@ -36,18 +38,16 @@ MANIFEST = ROOT / "data" / "manifest.jsonl"
 #    `mfds_press` 의 첨부 PDF 107개가 `data/raw/mfds_press_pdf/` 에 따로 있는 것을
 #    통째로 못 봤다 — 원장 고유 214 인데 「이 기기 107」로 찍혀 **절반만 있는 것처럼** 보였다.
 #    실제로는 214/214 로 완전했다. 🚨 본문은 첨부 PDF 에만 있다 (D-118).
-ALIAS: dict[str, tuple[str, ...]] = {
-    "mfds_hf_ingredient_board": ("mfds_hf_board",),
-    "ftc_decisions_body": ("ftc",),
-    "ftc_decisions_api": ("ftc",),
-    "ftc_decisions": ("ftc",),
-    "law_go_kr": ("law",),
-    "mfds_press": ("mfds_press", "mfds_press_pdf"),
-}
+# 🔄 **2026-09-18 — 표를 `collect/store.py` 로 옮겼다** (D-99).
+#    ⛔ 같은 매핑이 두 곳에 있었고, `collect` 쪽이 그것을 안 써서 `register` 가
+#       `law_go_kr` 파일을 `data/raw/law_go_kr/` 에 넣었다 — 추출기는 `data/raw/law/` 를 본다.
+#    ★ 원문 경로를 정하는 것은 `store` 의 일이므로 그쪽이 정본이고, 여기서는 그것을 쓴다.
+#      이름(`ALIAS`·`folders`)은 그대로 둔다 — 바깥에 보이는 표면은 안 바꾼다.
+ALIAS = store.FAMILY_OF
 
 
 def folders(source_id: str) -> tuple[str, ...]:
-    return ALIAS.get(source_id, (source_id,))
+    return store.families(source_id)
 
 
 def ledger() -> dict[str, set[str]]:

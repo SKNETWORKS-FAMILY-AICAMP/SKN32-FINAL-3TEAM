@@ -4,6 +4,7 @@
   uv run python -m collect.law_api --target admrul   # 고시 3종
   uv run python -m collect.law_api --target prec     # 판례 — 질의로 모아 본문 수집
   uv run python -m collect.law_api --target decc     # 행정심판 재결례
+  uv run python -m collect.law_api --target mfdsCgmExpc   # 중앙부처 1차 해석 — 식약처 (소스 mfds_cgm_expc)
   uv run python -m collect.law_api --dry-run         # 저장하지 않고 무엇을 받을지만
 
 🚨 첫 줄이 registry.require() 다 (수집기 공통 규약 1). 게이트를 우회하는 경로를 만들지 않는다.
@@ -133,6 +134,8 @@ ID_FIELDS = (
     "판례정보일련번호",
     "행정심판재결례일련번호",
     "행정심판례일련번호",
+    # 🆕 2026-09-18 — 중앙부처 1차 해석. 검색·본문 둘 다 이 이름이다 (탐침 실측 · 458622).
+    "법령해석일련번호",
 )
 
 #: 🚨 본문 조회의 **ID 파라미터 이름이 target 마다 다르다** (2026-09-02 실측).
@@ -146,12 +149,12 @@ ID_FIELDS = (
 #: `law` 의 법령ID 와 같은 성질이다(항상 최신 시행본을 준다).
 #: 🚨 `prec`·`decc` 는 둘 다 `ID` 다 — `admrul` 의 `LID` 는 예외였다 (2026-09-06 실측).
 #:    `decc` 에 `LID` 를 보내면 144바이트 「일치하는 행정심판례가 없습니다」가 온다.
-ID_PARAM = {"law": "ID", "admrul": "LID", "prec": "ID", "decc": "ID"}
-NAME_FIELDS = ("법령명한글", "행정규칙명", "사건명")
+ID_PARAM = {"law": "ID", "admrul": "LID", "prec": "ID", "decc": "ID", "mfdsCgmExpc": "ID"}
+NAME_FIELDS = ("법령명한글", "행정규칙명", "사건명", "안건명")
 
 #: 🚨 `decc` 의 `처분일자` 는 **비어 있는 경우가 많다.** `_text()` 가 빈 값을 건너뛰므로
 #:    `의결일자` 로 넘어간다 — 순서가 곧 우선순위다.
-EFF_FIELDS = ("시행일자", "발령일자", "선고일자", "처분일자", "의결일자")
+EFF_FIELDS = ("시행일자", "발령일자", "선고일자", "처분일자", "의결일자", "해석일자")
 
 # ─────────────────────────────────────────────────────────────
 #  판례 · 재결례 — 검색으로 모으는 갈래 (2026-09-06 신설)
@@ -181,7 +184,8 @@ EFF_FIELDS = ("시행일자", "발령일자", "선고일자", "처분일자", "�
 #     **4일간 드러나지 않았다** — 안 받아본 것 중에 무엇이 있는지는 볼 방법이 없기 때문이다.
 #     ① 질의 없는 전체 건수를 먼저 잰다(호출 한 번) ② 감당 가능하면 전량을 받고 선별은
 #     `preprocess/` 가 한다(D-92) ③ 불가능하면 좁히되 **무엇을 놓치는지 함께 적는다.**
-#     🚨 `prec`·`decc` 는 아직 전량 규모를 재지 않았다 — 다음 사람이 할 일이다.
+#     🚨 `prec` 전량은 **172,343건**(2026-09-18 실측 · 사용자 실행). `decc` 는 2026-09-17 에 쟀다
+#        (35,213 · 전량 경로 — `collect_cases()` 주석).
 #
 #  ⬜ 2026-09-06 에 뺀 질의 — **다시 넣지 마라.**
 #     「식품등의 표시광고」 : 순증 0. `decc` 69건·`prec` 7건이 **전부 「표시광고」에 포함**된다.
@@ -200,15 +204,62 @@ EFF_FIELDS = ("시행일자", "발령일자", "선고일자", "처분일자", "�
 #     🚨 순증이 0 이 아니라고 넣는 것이 아니다. **순증이 무엇인지 보고 정한다.**
 #        단어 하나짜리 질의는 토큰 AND 에서 사실상 필터가 없는 것과 같아서,
 #        세무·민사의 '광고'(광고비·광고료)가 통째로 딸려 온다.
+#
+#  🆕 2026-09-18 — `prec` 후보 질의 실측 (사용자 실행 · 순증 = 기존 4질의 결과에 없는 건 · `_in_domain` 적용 뒤).
+#     넣은 것 —
+#       「의약품으로 오인」 : 순증 35 중 약 25건이 마약 사범(향정신성·습관성의약품관리법).
+#                             그 소음은 `EXCLUDE_STRONG` 「의약품관리법」이 뺀다 — 뺀 뒤 순증이 우리 것이다.
+#       「질병의 치료」     : 식품·건기식을 질병 치료 효능으로 광고한 사건. 순증 7.
+#       두 질의 합산 순증(제외 적용 뒤) **15건** —
+#         217515 · 206364 · 183188 · 178264 · 221427 · 85488 · 68903 · 80032 ·
+#         190359 · 224061 · 227281 · 213605 · 206398 · 165589 · 159450
+#       🚨 190359 · 224061(제약 허가) · 227281(동물용 의약품) · 159450 은 광고인지 애매하다.
+#          **애매하면 받는다** — 가르는 것은 `preprocess/` 다 (D-92).
+#     ⬜ 넣지 않은 것 — **다시 넣지 마라.**
+#       「광고문구」·「광고 문구」·「과대광고」·「허위광고」·「기만적인 광고」·「의약품으로 혼동」·
+#       「암 치료」 : 순증 **0**.
+#       「질병의 예방」·「효능」 : 「질병의 치료」의 **부분집합**이라 순증 0.
+#       「부당광고」 : 순증 1 — 233942 는 세무 사건이고 본문 미제공이다.
+#     🚨 `QUERIES` 는 두 target 공용이지만 `decc` 는 전량 경로(`all_cases`)로 받으면 질의를 안 쓴다.
+#        질의 경로로 `decc` 를 돌릴 때의 순증은 재지 않았다.
 QUERIES: tuple[str, ...] = (
     "표시광고",
     "부당한 광고",
     "건강기능식품",
     "화장품법",
+    "의약품으로 오인",
+    "질병의 치료",
 )
 
 #: 검색으로 모으는 target. 본문 조회 파라미터는 `ID_PARAM` 이 진다.
 CASE_TARGETS = ("prec", "decc")
+
+#: 🆕 2026-09-18 — **중앙부처 1차 해석** (target → 소스 id). 판례·재결례와 같은 「목록 → 본문」
+#:    두 단계라 `collect_cases()` 를 같이 쓰지만 **셋이 다르다** (API 탐침 실측 · 사용자 실행).
+#:
+#:    ① **소스 id 가 다르다.** 법령은 비보호저작물(저작권법 제7조)이라 `law_go_kr` 하나로 묶었는데
+#:       1차 해석은 **부처의 업무상 저작물**이라 이용조건이 달라 따로 등재했다 (D-90 · 등재 단위는 이용조건).
+#:       게이트(`registry.require`)도 원장 기록(`mark_collected`)도 그 id 로 간다.
+#:    ② **사건명 필터(`_in_domain`)를 걸지 않고 전량을 받는다.** 목록에 【분류】가 없어 받기 전에
+#:       가를 수단이 없고, 「항균」 해석(458622)처럼 **제목에 광고가 없는 광고 판정**이 있다.
+#:       거르기는 `preprocess/` 가 `회답` · `관련법령` 으로 한다 (D-92 · 규칙은 판정 대기).
+#:    ③ 🔴 **목록 응답을 저장하지 않는다 — 원래도 안 한다.** 목록의 `법령해석상세링크` 에
+#:       **서버가 OC 키 값을 그대로 넣어 돌려준다**(본문엔 없다). 그래서 본문 저장 직전에
+#:       키 값이 섞였는지 한 번 더 보고, 섞였으면 **저장하지 않고 실패로 센다** (D-220).
+#:
+#:    🚨 원문 폴더는 소스 id 그대로(`data/raw/mfds_cgm_expc/`)다 — `store.FAMILY_OF` 에 없으면
+#:       그렇게 된다. `data/raw/law/` 에 섞지 않는다 — 법령 추출기가 그 폴더를 훑는다 (D-245).
+#:    ⬜ 이 소스는 **G0 · hold** 다. 2인 확인 전에는 첫 줄의 게이트가 막는다 — 그것이 정상이다.
+INTERP_TARGETS: dict[str, str] = {"mfdsCgmExpc": "mfds_cgm_expc"}
+
+#: 목록 응답에서 한 건을 담는 요소 이름. `prec`·`decc` 는 target 과 같은데
+#: 1차 해석은 `<cgmExpc>` 다 (2026-09-18 실측). 표에 없으면 target 을 그대로 쓴다.
+ITEM_TAG: dict[str, str] = {"mfdsCgmExpc": "cgmExpc"}
+
+#: 1차 해석 본문이 성공이라고 볼 최소 조건 — **회답이 비지 않았다.** 🚨 `MIN_BODY`(1,000 B)를
+#:    쓰지 않는다 — 짧은 회답은 1 KB 아래일 수 있고, 크기로 가르면 멀쩡한 해석을 실패로 센다.
+#:    대신 자식 요소 검사(`_reject_reason`) + 이 필드로 가른다.
+INTERP_REQUIRED = "회답"
 
 #: 🚨 `search=2` 가 **본문 검색**이다. 기본값(`1`)은 사건명 검색인데, 사건명은
 #:    「식품등의표시·광고에관한법률위반」처럼 **법률명 나열**이라 서술 표현이 안 걸린다.
@@ -325,6 +376,15 @@ EXCLUDE_STRONG: tuple[str, ...] = (
     "현상광고",
     "사죄광고",
     "광고료",
+    # ── 형사 — 마약 사범 (2026-09-18 · 「의약품으로 오인」 순증에서 관측) ──
+    #    「향정신성의약품관리법위반」·「습관성의약품관리법위반」은 `의약품` 이 박혀 있어
+    #    ② 업종어로 통과한다 — ③ 에 두면 안 빠진다. 그래서 여기다.
+    #    원문 오타 「향정산성의약품관리법」도 이 한 단어로 덮인다.
+    #    ⛔ 「마약류」·「대마관리법」은 **넣지 않았다** — 시뮬레이션에서 우리 사건 3건을 떨궜다:
+    #       170437 · 170362 「사기·마약류관리에 관한 법률 위반(향정)·…·**건강기능식품에 관한 법률 위반**」
+    #       606509 「표준통관예정보고발급거부처분취소[칸나비디올(CBD)을 원료로 한 **화장품**이 …」
+    #       「가처분」(2026-09-06)과 같은 과잉 제외다. 「의약품관리법」 단독은 기존 통과 76건 중 0건을 떨궜다.
+    "의약품관리법",
 )
 
 
@@ -492,7 +552,7 @@ def search(oc: str, target: str, query: str) -> tuple[str, str, str] | None:
     return _text(first, *ID_FIELDS), _text(first, *NAME_FIELDS) or query, _text(first, *EFF_FIELDS)
 
 
-def _reject_reason(root: ET.Element | None, body: bytes) -> str:
+def _reject_reason(root: ET.Element | None, body: bytes, *, min_body: int = MIN_BODY) -> str:
     """성공 응답이 아니면 사유를, 맞으면 빈 문자열을 돌려준다.
 
     🚨 **「XML 로 파싱된다」는 성공이 아니다.** 법제처는 조회 실패도 XML 로 돌려준다:
@@ -512,7 +572,7 @@ def _reject_reason(root: ET.Element | None, body: bytes) -> str:
         return _parse_failure(body)
     if len(root) == 0:
         return f"본문이 없다 — 서버 응답: {(root.text or root.tag).strip()[:80]}"
-    if len(body) < MIN_BODY:
+    if len(body) < min_body:
         return f"본문이 너무 짧다 ({len(body):,} bytes) — 조회가 실패했을 수 있다"
     return ""
 
@@ -608,7 +668,9 @@ def _search_hits(oc: str, target: str, query: str, *, section: str) -> list[tupl
             print(f"     ⚠ {query} {page}장 — {_parse_failure(page_body)}")
             continue
         ids += [
-            (i, _text(e, "사건명")) for e in page_root.iter(target) if (i := _text(e, *ID_FIELDS))
+            (i, _text(e, "사건명", "안건명"))
+            for e in page_root.iter(ITEM_TAG.get(target, target))
+            if (i := _text(e, *ID_FIELDS))
         ]
 
     if len(ids) != total:
@@ -618,7 +680,7 @@ def _search_hits(oc: str, target: str, query: str, *, section: str) -> list[tupl
 
 
 def collect_cases(
-    target: str, *, dry_run: bool = False, limit: int | None = None
+    target: str, *, dry_run: bool = False, limit: int | None = None, all_cases: bool = False
 ) -> tuple[int, int]:
     """판례·재결례를 질의로 모아 본문을 받는다. 돌려주는 값은 (새로 저장, 실패).
 
@@ -635,17 +697,35 @@ def collect_cases(
           필터를 고쳐도 그 경로로 계속 샌다.
     """
     # ── 규약 1 — 게이트가 첫 줄이다 ──────────────────────────
-    registry.require(SOURCE_ID, use="U1")
+    # 🚨 1차 해석은 **자기 소스 id 로** 게이트를 지난다 — `law_go_kr` 의 서명을 빌려 쓰지 않는다.
+    source = INTERP_TARGETS.get(target, SOURCE_ID)
+    interp = target in INTERP_TARGETS
+    registry.require(source, use="U1")
     oc = env.get("LAW_OC_KEY")
+    family = store.families(source)[0] if interp else FAMILY
 
     seen: set[str] = set()
     order: list[str] = []
     rows: list[tuple[str, int, int, int, int]] = []
-    for query in QUERIES:
+    # 🔴 2026-09-17 — 전량 규모를 쟀다 (규칙 ①). `decc` 35,213 중 `_in_domain` 을
+    #    지나는 것이 **392**(1.1%) 였고, 본문 272건이 약 2.3분이다.
+    #    ★ 그래서 **규칙 ② 이 성립한다** — 질의로 좁히지 않고 전량을 받고
+    #    선별은 `preprocess/` 가 한다 (D-92). 4.9시간이라는 전제는 사건명을
+    #    공짜로 받을 수 있다는 사실(`_in_domain` docstring)로 깨졌다.
+    #
+    # 🚨 질의 경로를 지우지 않는다 — `prec` 은 아직 전량 규모를 안 쟀다.
+    # 🚨 빈 질의는 사건명·본문 검색이 **같은 전량**을 준다. 두 번 부르면
+    #    페이징 353장을 두 번 도는 것이라 서버만 더 두드린다 (규약 5).
+    # 🚨 1차 해석은 **늘 전량**이다 — `INTERP_TARGETS` ②. 질의로 좁히면 제목에 광고가 없는
+    #    광고 판정을 놓친다.
+    whole = all_cases or interp
+    queries = ("",) if whole else QUERIES
+    for query in queries:
         by_name = _search_hits(oc, target, query, section=SEARCH_NAME)
-        by_body = _search_hits(oc, target, query, section=SEARCH_BODY)
+        by_body = [] if whole else _search_hits(oc, target, query, section=SEARCH_BODY)
         # 🚨 예외 없이 한 번에 건다. 두 경로 중 하나만 거르면 다른 쪽으로 샌다.
-        kept = [hit for hit in by_name + by_body if _in_domain(hit[1])]
+        #    1차 해석만 거르지 않는다 — 사건명 어휘는 판례용이고 여기엔 맞지 않는다 (②).
+        kept = by_name + by_body if interp else [h for h in by_name + by_body if _in_domain(h[1])]
 
         fresh = 0
         for case_id, _name in kept:
@@ -658,6 +738,7 @@ def collect_cases(
     print(f"\n  질의별 실측 ({target}) — 🚨 사실원장에 옮긴다 (D-54)")
     print(f"    {'질의':<18} {'사건명':>7} {'본문':>7} {'→필터':>7} {'순증':>7}")
     for query, n_name, n_body, n_kept, fresh_n in rows:
+        query = query or "(전량)"  # 🚨 빈 문자열은 표에서 안 보인다
         # 🚨 「순증」이 0 이면 그 질의는 다른 질의의 부분집합이다. 빼도 되는지 사람이 판단한다.
         print(f"    {query:<18} {n_name:>7,} {n_body:>7,} {n_kept:>7,} {fresh_n:>7,}")
     print(f"    {'합집합':<18} {'':>7} {'':>7} {'':>7} {len(order):>7,}")
@@ -685,7 +766,16 @@ def collect_cases(
             missing.append(case_id)
             continue
 
-        reason = _reject_reason(root, body)
+        reason = _reject_reason(root, body, min_body=0 if interp else MIN_BODY)
+        if not reason and interp:
+            # 🔴 ③ — 키 값이 응답에 섞였으면 **저장하지 않는다.** 실측으로는 본문에 없지만
+            #    서버가 목록에는 넣어 보낸다. 형식이 바뀌는 날 raw 에 키가 박히는 것을 여기서 막는다.
+            if oc and oc.encode() in body:
+                reason = (
+                    "🔴 응답에 OC 키 값이 들어 있다 — 저장하지 않는다 (목록의 상세링크와 같은 반사)"
+                )
+            elif not _text(root, INTERP_REQUIRED):
+                reason = f"`{INTERP_REQUIRED}` 이 비었다 — 내용 없는 해석을 성공으로 세지 않는다"
         if reason:
             print(f"  ❌ [{n}/{len(todo)}] {target} ID={case_id} — {reason}")
             failed += 1
@@ -718,8 +808,8 @@ def collect_cases(
         #       저장을 거부당하면서 드러났다 — **관례는 그 근거가 적용될 때만 옮긴다.**
         filename = f"{target}_{case_id}.xml"
         path = store.save_raw(
-            SOURCE_ID,
-            FAMILY,
+            source,
+            family,
             filename,
             body,
             url=f"{BASE_SERVICE}?target={target}&ID={case_id}",
@@ -824,7 +914,9 @@ def audit_saved(target: str) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="법제처 OPEN API 수집기 (S1-01 · S1-02)")
-    ap.add_argument("--target", choices=sorted((*TARGETS, *CASE_TARGETS)), default="law")
+    ap.add_argument(
+        "--target", choices=sorted((*TARGETS, *CASE_TARGETS, *INTERP_TARGETS)), default="law"
+    )
     ap.add_argument("--dry-run", action="store_true", help="저장하지 않고 조회만")
     ap.add_argument("--find", action="store_true", help="미확보 항목의 ID 를 검색만 한다")
     # 🚨 사건명 필터 뒤에도 수백 건이고 0.5초 간격이라 여러 분이 걸린다.
@@ -832,6 +924,13 @@ def main() -> int:
     ap.add_argument("--limit", type=int, help="prec·decc 전용 — 앞 N 건만 받는다")
     # 🚨 네트워크를 쓰지 않는다. 어휘를 고친 뒤 **이미 받아 둔 것**에 다시 걸어 본다.
     ap.add_argument("--audit", action="store_true", help="받아 둔 원문에 현재 필터를 다시 건다")
+    # 🚨 질의 없이 전량을 받는다. 사건명 필터(`_in_domain`)만 걸린다 —
+    #    사람이 박는 것이 질의에서 **어휘 하나로** 줄어드는 자리다.
+    ap.add_argument(
+        "--all",
+        action="store_true",
+        help="prec·decc 전용 — 질의 없이 전량을 받아 사건명 필터만 건다",
+    )
     args = ap.parse_args()
 
     try:
@@ -844,8 +943,10 @@ def main() -> int:
         if args.find:
             find_pending()
             return 0
-        if args.target in CASE_TARGETS:
-            saved, failed = collect_cases(args.target, dry_run=args.dry_run, limit=args.limit)
+        if args.target in CASE_TARGETS or args.target in INTERP_TARGETS:
+            saved, failed = collect_cases(
+                args.target, dry_run=args.dry_run, limit=args.limit, all_cases=args.all
+            )
         else:
             saved, failed = collect(args.target, dry_run=args.dry_run)
     except (registry.RegistryError, env.MissingKey) as e:
@@ -859,7 +960,8 @@ def main() -> int:
 
     print(f"\n새로 저장 {saved}건" + (f" · 🚨 실패 {failed}건" if failed else ""))
     if saved:
-        registry.mark_collected(SOURCE_ID)
+        # 🚨 받은 소스의 원장에 찍는다 — 1차 해석을 `law_go_kr` 에 찍으면 서명과 기록이 갈린다.
+        registry.mark_collected(INTERP_TARGETS.get(args.target, SOURCE_ID))
         print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
     if failed:
         # 🚨 일부 실패를 0 으로 끝내지 않는다. 2026-09-02 에 admrul 3건이 전부 오류 응답이었는데

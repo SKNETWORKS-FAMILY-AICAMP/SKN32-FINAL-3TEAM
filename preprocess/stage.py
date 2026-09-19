@@ -56,7 +56,7 @@ def save(path: pathlib.Path, rows: list[dict]) -> None:
     """줄 하나에 문서 하나. 🚨 `seq` 순으로 적는다 — 순서가 흔들리면 diff 가 무의미하다."""
     path.parent.mkdir(parents=True, exist_ok=True)
     rule = rule_hash()
-    with path.open("w", encoding="utf-8") as f:
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         for r in sorted(rows, key=lambda x: str(x["seq"])):
             f.write(json.dumps({**r, "rule": rule}, ensure_ascii=False) + "\n")
 

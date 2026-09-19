@@ -238,7 +238,7 @@ def mark_collected(source_id: str) -> None:
         raise RegistryError(f"{source_id!r} 블록에 collected_at 이 없다")
 
     new_block = re.sub(r"collected_at:\s*\S+", f"collected_at: {today}", block, count=1)
-    LEDGER.write_text(text[:start] + new_block + text[end:], encoding="utf-8")
+    LEDGER.write_text(text[:start] + new_block + text[end:], encoding="utf-8", newline="\n")
 
     # 🚨 원장을 고쳤으면 생성물도 다시 만들어야 게이트가 같은 것을 본다.
     subprocess.run(

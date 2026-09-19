@@ -21,6 +21,7 @@ import pathlib
 
 import pytest
 
+from preprocess import labels as label_store
 from preprocess import split
 
 pytestmark = pytest.mark.gate
@@ -34,6 +35,10 @@ def inputs(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> list[path
         f.write_text(f"내용-{name}", encoding="utf-8")
         files.append(f)
     monkeypatch.setattr(split, "INPUTS", tuple(files))
+    # 🔄 2026-09-17 — 라벨 파일이 넷째 입력이 됐다(`split.inputs()`). 이 단위 테스트는
+    #    **실제 `data/derived/labels/` 를 보면 안 된다** — 붙인 사람이 늘 때마다 흔들린다.
+    #    그래서 라벨 디렉터리도 빈 tmp 로 돌린다 (밀폐).
+    monkeypatch.setattr(label_store, "DIR", tmp_path / "labels-없음")
     return files
 
 
@@ -67,7 +72,14 @@ def test_분할_산출물이_지문을_들고_있다() -> None:
         )
     m = json.loads(split.OUT.read_text(encoding="utf-8"))
     assert "inputs" in m, f"{split.OUT} 에 `inputs` 지문이 없다 — 분할을 다시 돌린다 (D-176)"
-    assert set(m["inputs"]) == {f.as_posix() for f in split.INPUTS}
+    # 🔄 2026-09-17 — `INPUTS`(고정 셋) 이 아니라 `inputs()`(고정 + 라벨 파일) 과 댄다.
+    #    ⛔ 고정 셋과 대면 라벨이 늘 때마다 여기서 걸린다 — 라벨은 **의도된 넷째 입력**이다.
+    #    ★ 그렇다고 헐거워지지 않는다: 이제 **「라벨 파일이 늘었는데 분할을 다시 안 돌렸다」**
+    #      를 잡는다. 저장된 지문과 지금 입력 목록이 다르면 그 분할은 낡은 것이다 (D-176).
+    assert set(m["inputs"]) == {f.as_posix() for f in split.inputs()}, (
+        "분할 산출물의 지문이 지금 입력 목록과 다르다 — 라벨을 붙인 뒤 "
+        "uv run python launcher.py golden --write 를 안 돌렸을 수 있다"
+    )
     assert all(v["sha256"] for v in m["inputs"].values()), "입력이 비어 있다"
     assert "승인문구_종수" in m, "902 vs 908 을 가른 수다 — 산출물에 적어 둔다"
 
