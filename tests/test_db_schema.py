@@ -363,10 +363,9 @@ def test_파이프라인이_배정하는_split_이_split_t_에_다_있다() -> N
 def test_골든셋_산출물의_값이_전부_스키마에_있다() -> None:
     """★ 상수가 아니라 **실제 산출물**로 대조한다 — 코드가 아니라 데이터가 진실이다."""
     golden = ROOT / "data" / "derived" / "golden" / "golden.jsonl"
-    if not golden.exists():
-        pytest.skip(
-            "🔴 골든셋이 없어 **확인하지 못했다** — uv run python launcher.py golden --write"
-        )
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    dm.gate_guard(golden)  # 🔄 2026-09-19 — 역할대로 fail/skip · 옛 판 위에서 돌지 않는다 (F1)
     import json  # noqa: PLC0415
 
     rows = [json.loads(x) for x in golden.read_text(encoding="utf-8").splitlines() if x.strip()]

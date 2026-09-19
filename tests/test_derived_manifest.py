@@ -120,29 +120,47 @@ def test_원장이_디스크와_같다() -> None:
     `--write` 를 습관적으로 눌러 원장이 뜻을 잃는다. 대신 **CI 전체 실행에서 걸린다** —
     `test_readme_drift.py` 와 같은 자리다 (D-89).
 
-    🔴 **CI 에서는 원리적으로 통과할 수 없다** (검토 2026-09-19 §1 · 판정 ① 대기).
-       git 이 옮기는 5개 때문에 CI 에도 `data/derived` 가 생겨 skip 이 안 걸리고,
-       나머지 146개(생성물 41 + 원문캐시 105)를 「없다」로 잡는다. 초록일 수 있는 기기는
-       클론 B 하나다. ⛔ skip 조건을 넓혀 조용히 초록으로 만들지 않는다 — 역할 규칙으로 고친다.
+    🔄 2026-09-19 (D-247) — **기기 역할의 표(`dm.NEED`)대로** 대조한다.
+       ⛔ 종전에는 모든 기기에 151개를 요구해 **CI 에서 원리적으로 통과할 수 없었다** —
+          git 이 옮기는 5개 때문에 `data/derived` 가 생겨 skip 이 안 걸리고 146개를 「없다」로 잡았다.
+       ★ CI(역할 없음)는 git 이 옮기는 원천·표본만 요구하고, 생성물은 있는 것만 본다.
     """
-    if not dm.DERIVED.exists() or not dm.OUT.exists():
-        pytest.skip("파생물 또는 원장이 이 기기에 없다")
-    import json
-
-    old = {
-        r["경로"]: r["sha256"]
-        for r in (
-            json.loads(x) for x in dm.OUT.read_text(encoding="utf-8").splitlines() if x.strip()
-        )
-    }
-    new = {str(r["경로"]): r["sha256"] for r in dm.rows()}
-    added = sorted(set(new) - set(old))
-    gone = sorted(set(old) - set(new))
-    changed = [k for k in sorted(set(old) & set(new)) if old[k] != new[k]]
-    assert not (added or gone or changed), (
-        "파생물 원장이 디스크와 다르다 — `uv run python launcher.py derived-manifest --write` "
-        f"로 갱신한다. 원장에 없음 {added} · 이 기기에 없음 {gone} · sha256 다름 {changed}"
+    if not dm.OUT.exists():
+        pytest.skip("파생물 원장이 이 기기에 없다")
+    who = dm.role()
+    d = dm.diff(who)
+    assert not dm.failed(who, d), (
+        f"파생물 원장이 디스크와 다르다 (역할 {who or '없음'}) — "
+        f"없음 {d['missing']} · sha256 다름 {d['changed']} · 원장에 없음 {d['added']}\n"
+        "  정본이면 `launcher.py derived-manifest --write` · 사본이면 `launcher.py data-sync`"
     )
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("who", "kind", "rule"),
+    [
+        (None, "생성물", "있으면"),  # CI — 5개만 요구한다
+        (None, "원문캐시", "무시"),
+        ("replica", "생성물", "필수"),  # 사본은 받은 뒤 전부 같아야 한다
+        ("replica", "원문캐시", "무시"),  # 🔴 옮기지 않는 부류를 요구하면 사본이 영원히 빨강이다
+        ("canonical", "원문캐시", "필수"),
+        ("canonical", "원천", "필수"),
+    ],
+)
+def test_역할의_표가_검토대로다(who: str | None, kind: str, rule: str) -> None:
+    """🔴 표가 바뀌면 CI · 사본 · 정본의 초록불이 **다른 뜻**이 된다 (검토 2026-09-19 §11-1)."""
+    assert dm.NEED[who][kind] == rule
+
+
+@pytest.mark.gate
+def test_모르는_역할이면_멈춘다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🚨 오타가 조용히 「역할 없음」이 되면 클론 B 가 사본처럼 군다 (D-220)."""
+    monkeypatch.setenv("DATA_ROLE", "canonnical")
+    with pytest.raises(SystemExit, match="DATA_ROLE"):
+        dm.role()
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert dm.role() == "replica"
 
 
 # ══════════════════════════════════════════════════════════

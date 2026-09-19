@@ -340,6 +340,167 @@ def rows() -> list[dict[str, object]]:
     return got
 
 
+# ══════════════════════════════════════════════════════════
+# 🆕 기기 역할 — 「이 기기가 무엇을 가져야 하나」 (2026-09-19 · D-247 · 검토 2026-09-19 §11-1)
+# ══════════════════════════════════════════════════════════
+#  ⛔ 종전 `--check` 는 **모든 기기에 클론 B 와 같은 151개**를 요구했다. 그래서 —
+#     · CI 는 git 이 옮기는 5개뿐이라 146개를 「없다」로 잡아 **원리적으로 빨강**이었고
+#     · 묶음을 완벽히 받은 사본도 원문캐시 105개(옮기지 않는 부류 · D-244)로 **영원히 빨강**이었고
+#     · 반대로 게이트 10개는 파일이 없으면 skip 해 **옛 판 위에서 초록**이었다 (클론A 인계 F1)
+#  ★ 셋 다 뿌리가 하나다 — 검사가 기기 역할을 몰랐다. 역할은 `.env` 의 `DATA_ROLE` 이다.
+#  🚨 **자동으로 추정하지 않는다** — 「raw 가 있으면 정본」은 클론 A(raw 있음)를 정본으로 오판한다.
+
+ROLES: tuple[str, ...] = ("canonical", "replica")
+
+#: (역할, 부류) → 요구. 🚨 **표가 정본이다** — `--check` · 게이트 · `data_store` 가 전부 이것을 읽는다 (D-99).
+#:    필수    없으면 실패 · sha 가 다르면 실패
+#:    있으면  있는 것만 sha 대조 · 없으면 「안 봤다」로 이름만 낸다 (CI)
+#:    무시    보지 않는다 — 옮기지 않는 부류다
+NEED: dict[str | None, dict[str, str]] = {
+    "canonical": {"원천": "필수", "표본": "필수", "생성물": "필수", "원문캐시": "필수"},
+    "replica": {"원천": "필수", "표본": "필수", "생성물": "필수", "원문캐시": "무시"},
+    # 역할 없음 = CI · `.env` 가 없는 기기. git 이 옮기는 것만 요구한다.
+    None: {"원천": "필수", "표본": "필수", "생성물": "있으면", "원문캐시": "무시"},
+}
+
+
+def role() -> str | None:
+    """이 기기의 역할. 비었으면 None. 🔴 **모르는 값이면 멈춘다** (D-220).
+
+    ⛔ 오타(`canonnical`)가 조용히 「역할 없음」이 되면 클론 B 가 사본처럼 굴어
+       방금 만든 생성물을 옛 판으로 되돌릴 수 있다. `COPYLANE_EDITION` 과 같은 규칙이다 (D-213).
+    """
+    from collect import env  # noqa: PLC0415 — `.env` 를 여는 곳은 한 곳이다 (D-99)
+
+    v = env.setting("DATA_ROLE")
+    if not v:
+        return None
+    if v not in ROLES:
+        raise SystemExit(
+            f"🔴 DATA_ROLE 이 {v!r} 이다 — 아는 것은 {list(ROLES)}.\n"
+            "  🚨 오타는 조용히 넘어가지 않는다 (D-220). 클론 B 만 canonical, 나머지는 replica."
+        )
+    return v
+
+
+def ledger() -> dict[str, dict[str, object]]:
+    """git 이 나른 원장 — 경로 → 행. 없으면 빈 dict."""
+    if not OUT.exists():
+        return {}
+    return {
+        str(r["경로"]): r
+        for r in (json.loads(x) for x in OUT.read_text(encoding="utf-8").splitlines() if x.strip())
+    }
+
+
+def diff(who: str | None) -> dict[str, list[str]]:
+    """원장 ↔ 디스크를 **역할의 표대로** 가른다.
+
+    반환 — `missing`(있어야 하는데 없다) · `changed`(sha 가 다르다) · `added`(원장에 없는 파일) ·
+    `unseen`(있으면 보는 부류가 없어서 안 봤다) · `ignored`(무시하는 부류).
+    🚨 `added` 는 **정본에서만 실패**다 — 사본에 남은 옛 파일은 지우지 않고 이름만 낸다.
+    """
+    need = NEED[who]
+    old = ledger()
+    new = {str(r["경로"]): r for r in rows()} if DERIVED.exists() else {}
+    out: dict[str, list[str]] = {
+        k: [] for k in ("missing", "changed", "added", "unseen", "ignored")
+    }
+    for path, r in sorted(old.items()):
+        rule = need.get(str(r["부류"]), "필수")  # 🚨 모르는 부류는 가장 엄하게 (fail-closed)
+        if rule == "무시":
+            out["ignored"].append(path)
+        elif path not in new:
+            out["missing" if rule == "필수" else "unseen"].append(path)
+        elif new[path]["sha256"] != r["sha256"]:
+            out["changed"].append(path)
+    for path in sorted(set(new) - set(old)):
+        if need.get(str(new[path]["부류"]), "필수") != "무시":
+            out["added"].append(path)
+    return out
+
+
+def failed(who: str | None, d: dict[str, list[str]]) -> bool:
+    """이 역할에서 `diff` 결과가 실패인가."""
+    return bool(d["missing"] or d["changed"] or (who == "canonical" and d["added"]))
+
+
+def gate_state(*paths: pathlib.Path) -> tuple[str, str]:
+    """파생물을 읽는 **게이트**가 돌아도 되는가 — `("run"|"skip"|"fail", 이유)`.
+
+    🔴 F1 (클론A 인계 §3) — 게이트 10개가 「파일이 있나」만 봐서, 옛 판을 든 기기(클론 A)에서는
+       **옛 판 위의 초록·빨강**이, 정본에서 파일이 사라지면 **skip 으로 초록**이 났다.
+    ★ 규칙 —
+      정본    없으면 **fail** (있어야 하는 기기다). 있으면 돈다 — 방금 다시 뽑아 원장보다 새 것은
+              정상이다(원장 갱신은 `--write` 의 일이고, 커밋을 막지 않는다 · `test_원장이_디스크와_같다`)
+      사본    없거나 **원장과 다르면(옛 판) skip** — 옛 판 위에서 돌지 않는다. `data-sync` 가 채운다
+      역할 없음  없으면 skip (CI)
+    """
+    who = role()
+    old = ledger()
+    for p in paths:
+        rel = p.resolve().relative_to(ROOT).as_posix()
+        if not p.exists():
+            why = f"{rel} 이 이 기기에 없다"
+            if who == "canonical":
+                return "fail", f"🔴 {why} — 정본(DATA_ROLE=canonical)에는 있어야 한다"
+            hint = (
+                " — `launcher.py data-sync` 로 받는다" if who == "replica" else " — 기기 축 (D-19)"
+            )
+            return "skip", why + hint
+        stale = (
+            who != "canonical"
+            and rel in old
+            and hashlib.sha256(p.read_bytes()).hexdigest() != old[rel]["sha256"]
+        )
+        if stale:
+            return "skip", (
+                f"🔴 {rel} 이 원장과 다르다(옛 판) — 그 위에서 돌지 않는다. "
+                "`launcher.py data-sync` 로 받는다"
+            )
+    return "run", ""
+
+
+def gate_guard(*paths: pathlib.Path) -> None:
+    """게이트 첫 줄 — `gate_state` 대로 **fail 이나 skip 을 던진다.** 규칙을 테스트마다 베끼지 않는다 (D-99).
+
+    인자가 없으면 **생성물 전부**를 본다 — 입력 목록을 모르는 게이트(`split.plan()`)용이다.
+    🚨 pytest 는 여기서만 늦게 import 한다 — 이 모듈은 런처·스크립트도 쓴다.
+    """
+    import pytest  # noqa: PLC0415
+
+    if paths:
+        act, why = gate_state(*paths)
+    elif role() == "replica":
+        d = diff("replica")
+        bad = [p for p in d["missing"] + d["changed"] if NEED["replica"].get(_kind(p)) == "필수"]
+        act, why = (
+            ("skip", f"🔴 파생물 {len(bad)}개가 없거나 옛 판이다 — `launcher.py data-sync`")
+            if bad
+            else ("run", "")
+        )
+    else:
+        act, why = "run", ""
+    if act == "fail":
+        pytest.fail(why)
+    if act == "skip":
+        pytest.skip(why)
+
+
+def gate_missing(why: str) -> None:
+    """입력이 없어 게이트가 **물리적으로 못 도는** 자리 — 정본이면 fail, 아니면 이름을 낸 skip."""
+    import pytest  # noqa: PLC0415
+
+    if role() == "canonical":
+        pytest.fail(f"🔴 정본(DATA_ROLE=canonical)인데 입력이 없다 — {why}")
+    pytest.skip(why)
+
+
+def _kind(path: str) -> str:
+    """원장 경로(`data/derived/…`)의 부류."""
+    return kind_of(path.removeprefix("data/derived/"))[0]
+
+
 def report(got: list[dict[str, object]]) -> None:
     by = collections.Counter(str(r["부류"]) for r in got)
     size = collections.Counter()
@@ -393,34 +554,36 @@ def main() -> int:
         return 1
 
     if a.check:
-        # 🔴 **알려진 구멍 — 부류를 가리지 않는다** (검토 2026-09-19 §2-1 · 판정 ① 대기).
-        #    원문캐시는 묶음에서 빠지는데(D-244 표) 여기서는 151개 전부를 요구한다.
-        #    그래서 묶음을 **완벽히** 받은 기기도 「⛔ 이 기기에 없다」 105개로 빨강이다.
-        #    ⛔ 원문캐시를 여기서 조용히 빼지 않는다 — 정본(클론 B)에서는 있어야 하는 파일이고,
-        #       「어느 기기가 무엇을 가져야 하나」는 기기 역할을 정한 뒤에 가른다.
+        # 🔄 2026-09-19 — **역할의 표대로** 가른다 (D-247). 종전의 「151개 전부」는 위 NEED 주석 참고.
+        who = role()
         if not OUT.exists():
             print(f"🔴 {OUT.name} 이 없다 — 먼저 --write", file=sys.stderr)
             return 1
-        old = {
-            r["경로"]: r
-            for r in (
-                json.loads(x) for x in OUT.read_text(encoding="utf-8").splitlines() if x.strip()
-            )
-        }
-        new = {str(r["경로"]): r for r in got}
-        added = sorted(set(new) - set(old))
-        gone = sorted(set(old) - set(new))
-        changed = [k for k in sorted(set(old) & set(new)) if old[k]["sha256"] != new[k]["sha256"]]
-        if not (added or gone or changed):
-            print(f"원장 최신 — 파생물 {len(got)}개")
-            return 0
-        for k in added:
-            print(f"  🆕 원장에 없다        {k}")
-        for k in gone:
+        d = diff(who)
+        need = NEED[who]
+        print(f"역할 — {who or '없음 (CI 와 같다)'} · 표: {need}")
+        for k in d["missing"]:
             print(f"  ⛔ 이 기기에 없다      {k}")
-        for k in changed:
+        for k in d["changed"]:
             print(f"  🔄 sha256 이 다르다   {k}")
-        print("\n🔴 원장이 디스크와 다르다 — 갱신하려면 --write", file=sys.stderr)
+        for k in d["added"]:
+            mark = "🆕 원장에 없다       " if who == "canonical" else "🟡 원장에 없는 파일  "
+            print(f"  {mark} {k}")
+        if d["unseen"]:
+            print(
+                f"  ⬜ 안 봤다 {len(d['unseen'])}개 — 이 기기에 없고, 이 역할에서는 요구하지 않는다"
+            )
+        if d["ignored"]:
+            print(f"  ⬜ 무시 {len(d['ignored'])}개 — 옮기지 않는 부류(원문캐시)")
+        if not failed(who, d):
+            print(f"원장 최신 — 이 역할이 요구하는 파일이 전부 같다 (원장 {len(ledger())}개)")
+            return 0
+        if who == "replica":
+            print(
+                "\n🔴 부족하거나 옛 판이다 — `uv run python launcher.py data-sync`", file=sys.stderr
+            )
+        else:
+            print("\n🔴 원장이 디스크와 다르다 — 갱신하려면 --write", file=sys.stderr)
         return 1
 
     report(got)
