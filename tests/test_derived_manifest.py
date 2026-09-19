@@ -19,6 +19,7 @@ from __future__ import annotations
 import pathlib
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -246,3 +247,165 @@ def test_반대_대조_union_이_없으면_충돌하고_있으면_둘_다_남는
     assert g("merge", "-q", "clone_a", "-m", "m").returncode == 0, "union 인데 충돌했다"
     lines = ledger.read_text(encoding="utf-8").splitlines()
     assert '{"r":"A"}' in lines and '{"r":"B"}' in lines, f"한쪽 줄이 사라졌다: {lines}"
+
+
+@pytest.mark.gate
+def test_스크립트_경로로_실행해도_collect_를_찾는다() -> None:
+    """🔴 런처 42번은 `python scripts/derived_manifest.py` 로 부른다 — pytest 와 import 경로가 다르다.
+
+    ⛔ 2026-09-19 실측 — 그 경로에서 `collect` 가 `scripts/collect.py` 로 풀려 `--check` 가
+       `ModuleNotFoundError: app` 로 죽었다. 테스트는 전부 초록이었다(`pythonpath=["."]`).
+    """
+    env = {k: v for k, v in __import__("os").environ.items() if k != "DATA_ROLE"}
+    env["DATA_ROLE"] = ""
+    out = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "derived_manifest.py"), "--check"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+    assert "Traceback" not in out.stderr, out.stderr[-800:]
+
+
+# ══════════════════════════════════════════════════════════
+# 🔴 개인 식별 — 반출 검사의 첫 번째 축 (2026-09-19 · D-17 · 팀장 지적)
+# ══════════════════════════════════════════════════════════
+@pytest.mark.gate
+def test_괄호_설명을_단_개인_피심인_나열에서_실명을_짚는다(tmp_path: pathlib.Path) -> None:
+    """🔴 2026-09-19 5차 실측 꼴 (이름은 가짜) — 「…) 및 을(기업집단 「가」의 특수관계인)의 …」.
+
+    ⛔ 3판은 「」 뒤의 기업집단 이름을 짚었다 — 걸리기는 했지만 **사람(을)은 가리키지 않았다.**
+       사람이 판정할 때 엉뚱한 곳을 보게 된다. 짚는 자리가 실명이어야 한다.
+    """
+    f = tmp_path / "x.json"
+    f.write_text(
+        '{"사건명":"[업체]의 전 동일인) 및 김가나(상호출자제한기업집단 「다라」의 특수관계인)'
+        '의 지정자료 허위제출행위에 대한 건"}\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    hints = [h for _, k, _, h in dm.people([f]) if k == "사건명 피심인"]
+    assert any(h.startswith("김○○") for h in hints), hints
+
+
+@pytest.mark.gate
+def test_앵커가_긴_병합_사건명도_본다(tmp_path: pathlib.Path) -> None:
+    """⛔ 머리 40자 한도 밖이던 실측 꼴 (47자 · 이름은 가짜)."""
+    head = "가나다라마바사아자차카타파하" * 3 + "협동조합"  # 46자 — 40 을 넘는다
+    f = tmp_path / "x.json"
+    f.write_text(
+        f'{{"사건명":"{head}의 부당한 공동행위에 대한 건"}}\n', encoding="utf-8", newline="\n"
+    )
+    assert "사건명 피심인" in {k for _, k, _, _ in dm.people([f])}
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ('{"t":"문의 900101-1234567"}', "주민등록번호"),
+        ('{"t":"연락처 010-1234-5678"}', "휴대전화"),
+        ('{"t":"담당 someone@example.com"}', "이메일"),
+        ('{"사건명":"가나의 전자상거래소비자보호법 위반행위에 대한 건"}', "사건명 피심인"),
+        (
+            '{"사건명":"[업체]의 부당한 공동행위에 대한 건 및 다라협회의 사업자단체 금지행위에 대한 건"}',
+            "사건명 피심인",
+        ),
+        ('{"사건명":"가나의 부당한 광고행위에 대한 건"}', "사건명 피심인"),
+        ('{"t":"법인의 대표자 홍길동에게 확인서를"}', "직함+실명"),
+        ('{"t":"대표이사 김철수는 광고를"}', "직함+실명"),
+        (
+            '{"사건명":"홍길동의 표시·광고의 공정화에 관한 법률 위반행위에 대한 건"}',
+            "사건명 피심인",
+        ),
+    ],
+)
+def test_개인이_특정되는_꼴을_잡는다(tmp_path: pathlib.Path, line: str, kind: str) -> None:
+    """🔴 하나라도 놓치면 반출이 초록으로 지나간다 — 법인 검사는 개인을 구조적으로 0 으로 셌다."""
+    f = tmp_path / "x.jsonl"
+    f.write_text(line + "\n", encoding="utf-8", newline="\n")
+    kinds = {k for _, k, _, _ in dm.people([f])}
+    assert kind in kinds, f"{kind} 를 못 잡았다 — {kinds}"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    "line",
+    [
+        '{"t":"대표이사 [대표]는 광고를"}',  # 마스킹을 지난 것
+        '{"t":"대표이사 000 · 대표이사 고ㅇㅇ"}',  # 원천이 가린 것
+        '{"t":"대표자 성명 란"}',  # 「성명」의 「성」이 성씨다 (mask._NOT_NAME)
+        '{"t":"마스크의 의약외품 오인광고"}',  # 2026-09-19 실측 오탐 — 보통명사
+        # 🔄 2026-09-19 클론 B 실측 오탐 (전량 173건의 대표형)
+        '{"t":"둘 이상의 위반행위가 적발된 경우"}',
+        '{"t":"그 법인 또는 개인에게도 해당 조문의 벌금형을"}',
+        '{"t":"다이사이클로펜타다이엔/t-부틸크레솔코폴리머"}',
+        '{"t":"이 사건 업소의 대표자이다."}',
+        '{"t":"영상을 CSCENTER@SHOP.COM 으로 발송"}',  # 창구 메일 — 사람이 아니다
+        '{"사건명":"[업체]의 전자상거래소비자보호법 위반행위에 대한 건"}',  # 이미 지워짐
+        '{"사건명":"[업체](유)의 전자상거래소비자보호법 위반행위에 대한 건"}',  # 법인격 토막만
+        '{"사건명":"[업체] 등 3개 사업자의 부당한 광고행위에 대한 건"}',  # 묶음 설명
+        '{"주문":"공정거래위원회 2023. 11. 7. 제1소회의 의결 \'[업체]의 부당한 고객유인행위에 대한 건\'"}',
+        '{"t":"과징금 1,000,000원 · 고객센터 1588-0000"}',  # 숫자·대표번호는 사람이 아니다
+    ],
+)
+def test_가려진_것과_보통명사는_개인으로_세지_않는다(tmp_path: pathlib.Path, line: str) -> None:
+    """오탐이 쌓이면 사람이 허용 목록을 습관적으로 채운다 — 그러면 검사가 뜻을 잃는다."""
+    f = tmp_path / "x.jsonl"
+    f.write_text(line + "\n", encoding="utf-8", newline="\n")
+    assert dm.people([f]) == []
+
+
+@pytest.mark.gate
+def test_걸린_이름은_가려서_보인다() -> None:
+    """🚨 출력이 대화·로그로 옮겨지면 그 자체가 반출이다."""
+    assert dm._hint("김철수") == "김○○"  # noqa: SLF001
+
+
+@pytest.mark.gate
+def test_공개_저장소로_가는_파생물에_개인_식별이_없다() -> None:
+    """🔴 원천·표본은 **git 으로 공개 저장소(origin)에 올라간다** — 저장소보다 더 넓게 나간다 (D-244).
+
+    ★ CI 에서도 돈다 — git 이 옮긴 그 파일들을 본다.
+    """
+    kept = [
+        dm.ROOT / str(r["경로"])
+        for r in dm.ledger().values()
+        if r["부류"] in ("원천", "표본") and (dm.ROOT / str(r["경로"])).exists()
+    ]
+    if not kept:
+        pytest.skip("git 이 옮기는 파생물이 이 기기에 없다")
+    found = dm.people(kept)
+    assert not found, (
+        f"공개 저장소로 가는 파생물에 개인이 특정될 수 있는 자리 {len(found)}건 — "
+        f"{sorted({(r, k) for r, k, _, _ in found})}"
+    )
+
+
+@pytest.mark.gate
+def test_원값_표는_레포_안에_쓰지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 `--pii-triage` 는 원값을 담는다 — 레포 안에 쓰면 `git add .` 한 번에 커밋된다."""
+    monkeypatch.setattr(sys, "argv", ["dm", "--pii-triage", str(ROOT / "pii.tsv")])
+    assert dm.main() == 1
+    assert not (ROOT / "pii.tsv").exists()
+
+
+def test_원값_표는_특징만_화면에_낸다(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """화면에는 누구인지 모르는 특징만 — 원값은 파일에만."""
+    d = tmp_path / "derived"
+    d.mkdir()
+    (d / "x.jsonl").write_text(
+        '{"t":"피심인대표이사김철수는 · hong@naver.com"}\n', encoding="utf-8", newline="\n"
+    )
+    monkeypatch.setattr(dm, "DERIVED", d)
+    out = tmp_path / "private" / "t.tsv"
+    assert dm.triage(out) == 0
+    screen = capsys.readouterr().out
+    assert "김철수" not in screen and "hong" not in screen
+    body = out.read_text(encoding="utf-8")
+    assert "김철수" in body and "낱말안쪽" in body and "무료메일" in body

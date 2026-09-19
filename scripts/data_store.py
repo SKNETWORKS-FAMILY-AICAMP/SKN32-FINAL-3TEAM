@@ -36,6 +36,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import socket
 import subprocess
@@ -81,8 +82,34 @@ def store_root() -> pathlib.Path:
     return root / LAYOUT
 
 
+_SHA = re.compile(r"[0-9a-f]{64}")
+
+
 def _obj(root: pathlib.Path, sha: str) -> pathlib.Path:
+    if not _SHA.fullmatch(sha):  # 🚨 이름이 곧 경로다 — 64자 16진이 아니면 경로로 쓰지 않는다
+        raise StoreError(f"sha256 모양이 아니다 — {sha[:40]!r}")
     return root / "objects" / sha[:2] / sha
+
+
+def unsafe(rows: list[dict[str, object]]) -> list[str]:
+    """🔴 원장 행 중 **파생물 폴더 밖을 가리키거나 sha 모양이 아닌 것** (2026-09-19 · 보안 점검).
+
+    ⛔ 받을 경로는 git 의 원장이 정한다. 원장은 팀원 누구나 push 할 수 있는 파일이라
+       `data/derived/../../.git/hooks/pre-commit` 같은 행 하나면 **레포 밖이나 훅 자리에 쓴다.**
+       sha 가 맞아야 놓이지만, 저장소에도 쓸 수 있는 사람이면 sha 도 맞출 수 있다.
+    ★ 그래서 쓰기 **전에** 전부 본다 — 하나라도 있으면 아무것도 받지 않는다.
+    """
+    base = (ROOT / "data" / "derived").resolve()
+    bad = []
+    for r in rows:
+        path, sha = str(r.get("경로", "")), str(r.get("sha256", ""))
+        target = (ROOT / path).resolve()
+        inside = target.is_relative_to(base) and target != base
+        if not (path.startswith("data/derived/") and ".." not in path.split("/") and inside):
+            bad.append(f"경로 {path!r}")
+        elif not _SHA.fullmatch(sha):
+            bad.append(f"sha {path!r}")
+    return bad
 
 
 def _sha(path: pathlib.Path) -> str:
@@ -178,6 +205,16 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
         )
         return 1
     todo = plan()
+    bad = unsafe(todo)
+    if bad:
+        print(
+            f"🔴 원장에 받을 수 없는 행이 있다 — 아무것도 받지 않았다: {bad[:5]}", file=sys.stderr
+        )
+        print(
+            "  🚨 파생물 폴더 밖을 가리키거나 sha 모양이 아니다. 원장 커밋을 확인한다",
+            file=sys.stderr,
+        )
+        return 1
     for p in git_side():
         print(f"  🟡 git 이 옮기는 파일인데 이 기기와 다르다 — {p}  (`git status` · `git pull`)")
     if not todo:
@@ -300,6 +337,11 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
             "     행 단위 `redistributable` 거름이 생기기 전까지 막는다"
         )
         return 1
+    # 🔴 **개인 식별이 먼저다** (2026-09-19 · 팀장 지적 · D-17). 법인 표기보다 앞에서 멈춘다.
+    found = dm.people()
+    if found:
+        dm._report_people(found)  # noqa: SLF001 — 같은 보고를 두 번 쓰지 않는다 (D-99)
+        return 1
     leaked, _cache = dm.leaks()
     if leaked:
         print(
@@ -309,6 +351,10 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
 
     led = dm.ledger()
     rows = [r for r in led.values() if r["부류"] == MOVED]
+    bad = unsafe(rows)
+    if bad:
+        print(f"🔴 원장에 올릴 수 없는 행이 있다: {bad[:5]}")
+        return 1
     try:
         root = store_root()
     except StoreError as e:

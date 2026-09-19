@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import functools
 import json
 import pathlib
 import re
@@ -226,7 +227,15 @@ _REDACTED_NAME = re.compile(r"(?<![0-9,.])(?:000+|[가-힣][ㅇo○●]{2,})(?![
 #: 🚨 성씨 목록을 쓰는 이유 — 직함만 보고 뒤 2~4자를 지우면 「대표자 **표시광고**」처럼
 #:    **판정 어휘를 지운다.** 성씨는 열린 추측이 아니라 **닫힌 집합**이라 근거가 된다.
 #:    ⬜ 흔한 30여 개만 넣었다. 드문 성씨는 못 잡는다 — `--survey` 가 잔여로 센다.
-_TITLES = r"(?:공동대표이사|대표이사|대표사원|대표자|담당변호사|소송대리인|변호사|사장|회장|이사)"
+#: 🔄 2026-09-19 — **짧은 직함 셋(사장·회장·이사)은 낱말 경계에서만** 직함이다.
+#:    ⛔ 반출 검사 실측(클론 B · 생성물 전량) — 「다**이사**이클로펜타다이엔」(성분명 38건)·
+#:       「검**사장**소까지」·「공**사장** 인부」가 「직함+이름」으로 걸렸다. 같은 규칙이 마스킹에서
+#:       돌면 성분명·문장이 `[대표]` 로 **훼손**된다. 긴 직함(대표이사·대표자·변호사…)은
+#:       「피심인대표이사홍길동」처럼 붙여 써도 잡아야 해서 경계를 요구하지 않는다.
+_TITLES = (
+    r"(?:공동대표이사|대표이사|대표사원|대표자|담당변호사|소송대리인|변호사"
+    r"|(?<![가-힣])(?:사장|회장|이사))"
+)
 #: 🔄 2026-09-08 확장 (D-165) — **말뭉치 전수 실측으로 넓혔다.** 흔한 30여 개만 두었더니
 #:    「대표이사 **원호봉**을」이 산출물에 남았고, 원문에는 「구상모」62회 · 「우오현」14 ·
 #:    「은성욱」10 처럼 목록 밖 성씨가 줄줄이 있었다. 추측이 아니라 **직함 뒤에 실제로 온 것**을
@@ -279,6 +288,18 @@ _NOT_NAME = frozenset(
         "또한",
         "과의",
         "와의",
+        # 🔄 2026-09-19 — 반출 검사 실측(재결례)에서 「직함+이름」으로 걸린 **서술형**.
+        #    「대표자**이다**」의 「이」가 성씨라 「이다」를 이름으로 읽었다 — 「성명」과 같은 함정이다.
+        "이다",
+        "이자",
+        "이고",
+        "이며",
+        "이기도",
+        "이었다",
+        "이지만",
+        "장들이다",
+        "하여",
+        "하고",
     }
 )
 
@@ -488,6 +509,7 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
        `anchor_ftc` 가 「A 및 B」를 한 덩어리로 주면 여기서 쪼개 각각 지운다.
        ⛔ 쪼개는 규칙은 `anchor_names()` 하나다 — 부르는 쪽마다 쪼개면 갈린다 (D-99).
     """
+    text = _mask_case_head(text, bare, log)
     for b in anchor_names(bare):
         if not usable(b):
             continue
@@ -495,7 +517,139 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
             if v in text:
                 _note(log, "앵커", v, MASK_ORG)
             text = text.replace(v, MASK_ORG)
-    return text
+    return mask_respondent_email(text, bare, log)
+
+
+#: 사건명 꼴 — 「<피심인>의 <법·행위> …행위에 대한 건」. 🚨 머리는 **40자까지** · 뒤는 **6어절 안**에서 끝난다.
+#:    ⛔ 본문(이유·주문)에서 멀리 떨어진 「…행위에 대한 건」까지 욕심껏 먹으면 문단이 통째로 `[업체]` 가 된다.
+#:    ★ 탐욕(`.{1,40}`)이라 **마지막 「의 」** 를 고른다 — 상호에 「의」가 든 피심인(「가나의 착한갈비」)을 한 덩이로 잡는다.
+#:    🚨 머리에 「에 대한 건」이 들면 안 된다 — 병합 사건명에서 첫 사건을 통째로 머리로 먹었다(반대 대조가 잡았다).
+#:    🔄 「…행위에 대한 건」만이 아니다 — 「천○의 지주회사 설립·전환신고 및 … 위반에 대한 건」(실측) · 뒤 8어절.
+_CASE_TITLE = re.compile(r"^((?:(?!에\s*대한\s*건).){1,40})의\s+(?:\S+\s+){0,7}?\S*에\s*대한\s*건")
+
+#: 🔄 2026-09-19 5차 — **괄호를 한 덩이로 · 한도는 앵커 뒤로 40** (반출 검사 실측 2건).
+#:    ⛔ ① 앵커가 47자인 병합 사건명 — 머리 40자 한도에 걸려 사건명 꼴 자체가 안 맞았다.
+#:          그래서 뒤 피심인(○○협회)을 지우는 `_mask_case_more` 까지 가지 못했다.
+#:    ⛔ ② 「갑(기업집단 「가」의 전 동일인) 및 을(… 특수관계인)의 …행위에 대한 건」 —
+#:          **괄호 안의 「의 」** 에서 머리를 끊어 을(개인 피심인의 실명)이 남았고 괄호 설명도 토막 났다.
+#:    ★ 괄호 한 쌍은 한 칸으로 센다 — 괄호 안 「의 」는 머리의 끝이 될 수 없다.
+#:    ★ 한도는 **앵커 길이 + 40칸**이다. 앵커 자리는 결정문이 피심인이라 적은 곳이라 길이가 위험이 아니다 —
+#:      본문을 먹는 위험은 앵커 **뒤로** 얼마나 가느냐에 있다(`test_본문의_먼_사건명_꼴까지_먹지_않는다`).
+_CASE_TAIL = r"의\s+(?:\S+\s+){0,7}?\S*에\s*대한\s*건"
+_CASE_UNIT = r"(?:(?!에\s*대한\s*건)[^()\n]|\([^()\n]{0,80}\))"
+
+
+@functools.lru_cache(maxsize=64)
+def _case_title_for(units: int) -> re.Pattern[str]:
+    return re.compile(rf"^({_CASE_UNIT}{{1,{units}}}){_CASE_TAIL}")
+
+
+def _bare_norm(s: str) -> str:
+    """비교용 — 글자·숫자만. 🚨 원천·정규화가 가운뎃점·마침표를 서로 바꾼다(「D.M.I」↔「D·M·I」)."""
+    return re.sub(r"[^0-9A-Za-z가-힣]", "", s)
+
+
+def _mask_case_head(text: str, bare: str, log: list[dict] | None = None) -> str:
+    """🔴 **사건명 머리 = 앵커가 나온 그 자리** — 짧아도 · 「의」가 들어 있어도 통째로 지운다 (2026-09-19 · D-233).
+
+    ⛔ 반출 검사 실측 — 셋이 남았다:
+       · 「주○의 전자상거래…」 — 앵커가 2자라 `is_short` 가 맨몸 치환을 막았다
+       · 「[업체]의 착한갈비의 가맹사업법…」 — 상호 안의 「의」에서 `anchor_ftc` 가 앵커를 끊었다
+       · 「D·M·I산업의 …」 — 사건명이 정규화(`sep_norm`)를 지나 가운뎃점이 바뀌어 앵커와 안 맞았다
+    ★ 그 자리는 `anchor_ftc` 가 앵커를 뽑은 **사건명의 머리**다 — 보통명사일 수 없다.
+      그래서 **글 머리에서 · 사건명 꼴일 때 · 머리가 앵커로 시작할 때만** 지운다. 본문의 「대상」은 안 건드린다.
+    """
+    nb = _bare_norm(bare)
+    if not nb:
+        return text
+    # ⛔ 「X의 」만 보는 느슨한 꼴은 쓰지 않는다 — 본문이 앵커로 시작하면 첫 「의 」까지 문장을 먹었다
+    #    (반대 대조 `test_본문의_먼_사건명_꼴까지_먹지_않는다` 가 잡았다). **사건명 꼴일 때만** 지운다.
+    # 🚨 괄호를 아는 꼴이 먼저다 — 안 맞으면(괄호 짝이 깨진 사건명) 예전 꼴로 한 번 더 본다
+    m = _case_title_for(len(bare) + 40).match(text) or _CASE_TITLE.match(text)
+    if not m:
+        return text
+    nh = _bare_norm(strip_legal(m.group(1)))
+    if not (nh and nh.startswith(nb)):
+        return text
+    _note(log, "사건명 머리", m.group(1), MASK_ORG)
+    return _mask_case_more(MASK_ORG + text[m.end(1) :], log)
+
+
+#: 병합 사건명의 **뒤 사건** — 「A의 …에 대한 건 **및 B의** …에 대한 건」. B 도 피심인이다.
+#: 🚨 사건명 한 줄 안에서만 쓴다(`_mask_case_head` 가 사건명 꼴을 확인한 뒤에만 부른다) — 본문에 걸지 않는다.
+_CASE_MORE = re.compile(
+    r"(건(?:\(병합\))?\s*(?:및|,|·|ㆍ)\s*)([^\[\]]{1,40}?)의\s+(?:\S+\s+){0,7}?\S*에\s*대한\s*건"
+)
+#: 피심인 이름이 아니라 **묶음 설명**인 머리 — 「2개 종계 판매사업자」·「[업체] 등」. 누구도 가리키지 않는다.
+_CASE_DESCRIPTOR = re.compile(r"\d+\s*개|(?:^|\s)(?:등|외)(?:\s|$)|\d{4}\.\s*\d")
+
+
+def _mask_case_more(text: str, log: list[dict] | None = None) -> str:
+    """🔴 병합 사건명의 뒤 피심인 (2026-09-19 · 반출 검사 실측 · D-233 · D-235 의 연장).
+
+    ⛔ `anchor_ftc` 는 **첫 「의」 앞**만 앵커로 뽑는다 — 「[업체]의 부당한 공동행위에 대한 건 및
+       ○○협회의 사업자단체 금지행위에 대한 건」의 **○○협회**(두 번째 피심인)는 남았다.
+    ★ 결정문이 「…에 대한 건 및 X의 …행위」라고 **스스로 X 를 피심인 자리에 둔다** — 추측이 아니다.
+      묶음 설명(「2개 사업자」·「등」)은 누구도 가리키지 않으므로 둔다.
+    """
+
+    def _sub(m: re.Match[str]) -> str:
+        head = m.group(2).strip()
+        if not head or MARK_RE.fullmatch(head) or _CASE_DESCRIPTOR.search(head):
+            return m.group(0)
+        _note(log, "사건명 뒤 피심인", head, MASK_ORG)
+        return m.group(0).replace(m.group(2), MASK_ORG, 1)
+
+    return _CASE_MORE.sub(_sub, text)
+
+
+#: 메일 주소 — 도메인 첫 마디가 피심인인지 본다.
+_EMAIL = re.compile(r"([A-Za-z0-9._%+-]+)@([A-Za-z0-9-]+)((?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})")
+
+#: 피심인이 **자기 것이라고 결정문이 밝힌** 판매처 — 「피심인은 자신이 운영하는 사이버몰인 'X'」.
+#: 🚨 추측이 아니라 원천의 문장이다. 이 자리에 든 로마자 토막만 피심인의 것으로 친다.
+_OWN_OUTLET = re.compile(
+    r"피심인(?:은|이|의)?\s*(?:자신이\s*)?(?:직접\s*)?운영하는\s*"
+    r"(?:사이버몰|쇼핑몰|온라인\s*쇼핑몰|인터넷\s*쇼핑몰|웹사이트|홈페이지|누리집|사이트)(?:인|이자)?\s*"
+    r"['‘\"“「]([^'’\"”」]{2,60})['’\"”」]"
+)
+_LATIN = re.compile(r"[A-Za-z0-9]{3,}")
+
+
+def respondent_latin(text: str, bare: str) -> set[str]:
+    """이 글에서 **피심인의 것**으로 확인되는 로마자 토막 (소문자). 🚨 추측하지 않는다 —
+
+    ① 앵커와 그 로마자 표기(`anchor_names` · `ROMAN`)  ② 결정문이 「피심인이 운영하는」이라 적은 판매처.
+    """
+    toks: set[str] = set()
+    for b in anchor_names(bare) if bare else []:
+        toks |= {x.lower() for x in _LATIN.findall(b)}
+    for m in _OWN_OUTLET.finditer(text):
+        toks |= {x.lower() for x in _LATIN.findall(m.group(1))}
+    return toks
+
+
+def mask_respondent_email(text: str, bare: str, log: list[dict] | None = None) -> str:
+    """🔴 **피심인의 메일일 때만** 도메인을 `[업체]` 로 (2026-09-19 · 팀장 판정 · D-233).
+
+    ★ 판정 — *「피심인일 때만 해당하도록」*. 광고 문구 속 `CSCENTER@<도메인>` 은 사람이 아니라 창구지만
+      **도메인이 업체를 가리킨다.** 그 업체가 피심인이면 D-17 업체명 마스킹의 대상이고, 제3자면 아니다.
+    🚨 계정 부분은 남긴다 — `CSCENTER` 는 누구도 가리키지 않고, 「메일로 보내라」는 광고 문맥이 판정 재료다.
+    ⛔ 도메인이 피심인 것인지 **모르면 지우지 않는다** — 제3자 상호는 대상이 아니다(D-233).
+       모르는 것은 반출 검사가 다시 본다.
+    """
+    toks = respondent_latin(text, bare)
+    if not toks:
+        return text
+
+    def _sub(m: re.Match[str]) -> str:
+        label = m.group(2).lower()
+        if label in toks or any(len(t) >= 4 and t in label for t in toks):
+            _note(log, "피심인 메일", m.group(2) + m.group(3), MASK_ORG)
+            return f"{m.group(1)}@{MASK_ORG}"
+        return m.group(0)
+
+    return _EMAIL.sub(_sub, text)
 
 
 def mask_person(text: str, log: list[dict] | None = None) -> str:

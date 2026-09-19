@@ -179,3 +179,60 @@ def test_마스킹_잔여가_있으면_올리지_않는다(world, monkeypatch: p
     _repo(canon, {"leak.jsonl": '{"t":"가나다라㈜ 광고"}\n'.encode()})
     _write_manifest()
     assert _publish(monkeypatch) == 1
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    "path",
+    [
+        "data/derived/../../evil.txt",  # 레포 밖
+        "data/derived/../.git/hooks/pre-commit",  # 훅 자리
+        "data/manifest.jsonl",  # 파생물 폴더 밖 · 레포 안
+    ],
+)
+def test_원장이_파생물_폴더_밖을_가리키면_아무것도_받지_않는다(
+    world, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    """🔴 보안 점검 (2026-09-19) — 받을 경로는 **git 원장이 정한다.** 원장은 누구나 push 할 수 있다.
+
+    🚨 저장소에 **sha 가 맞는 바이트를 미리 넣어 둔다** — 저장소에도 쓸 수 있는 사람을 가정한다.
+       그래야 경로 검사가 없을 때 실제로 밖에 써진다(반대 대조가 성립한다).
+    """
+    tmp, storage, _canon = world
+    payload = b"planted\n"
+    sha = hashlib.sha256(payload).hexdigest()
+    obj = storage / ds.LAYOUT / "objects" / sha[:2] / sha
+    obj.parent.mkdir(parents=True, exist_ok=True)
+    obj.write_bytes(payload)
+
+    a = _repo(tmp / "A", {LABEL: b'{"l":1}\n'})
+    row = {"경로": path, "부류": "생성물", "sha256": sha, "bytes": len(payload)}
+    (a / "data" / "derived_manifest.jsonl").write_text(
+        json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
+    _point(monkeypatch, a)
+    monkeypatch.setattr(ds, "plan", lambda: [row])  # 경로 해석을 건너뛰고 받기 단계만 본다
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    target = (a / path).resolve()
+    before = target.read_bytes() if target.exists() else None
+    assert ds.sync(yes=True) == 1
+    after = target.read_bytes() if target.exists() else None
+    assert after == before, f"원장이 가리킨 밖의 자리에 썼다: {target}"
+
+
+@pytest.mark.gate
+def test_sha_모양이_아니면_경로로_쓰지_않는다() -> None:
+    """sha 는 저장소 안의 파일 이름이다 — `../` 가 들어오면 저장소 밖을 읽는다."""
+    with pytest.raises(ds.StoreError):
+        ds._obj(pathlib.Path("store"), "../../etc/passwd" + "0" * 48)
+    assert ds.unsafe([{"경로": "data/derived/ok.jsonl", "sha256": "../x"}])
+
+
+@pytest.mark.gate
+def test_개인이_특정되면_올리지_않는다(world, monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 반출 검사의 첫 번째 축 (2026-09-19 · 팀장 지적) — 법인 표기보다 먼저 멈춘다."""
+    _tmp, storage, canon = world
+    _repo(canon, {"stage.jsonl": '{"사건명":"홍길동의 표시광고법 위반행위에 대한 건"}\n'.encode()})
+    _write_manifest()
+    assert _publish(monkeypatch) == 1
+    assert not (storage / ds.LAYOUT / "objects").exists(), "한 파일이라도 올라갔다"
