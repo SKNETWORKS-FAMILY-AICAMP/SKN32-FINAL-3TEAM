@@ -561,3 +561,25 @@ def test_G2_조각은_재배포_불가로_적힌다() -> None:
         if redist != (grade.get(fid) != "G2")
     ]
     assert not bad, f"등급과 재배포 표시가 어긋난다 (D-249): {bad}"
+
+
+@pytest.mark.gate
+def test_골든셋_적재는_넣는_칸을_전부_갱신한다() -> None:
+    """🔴 upsert 가 일부 칸만 고치면 **파일과 DB 가 조용히 갈린다** (2026-09-20 · D-249).
+
+    ⛔ 재배포 표시를 false 로 고친 골든셋을 다시 넣었는데 `redistributable` 이 갱신 목록에 없어
+       DB 가 true 로 남았다 — 공개용 뷰 `v_publishable_golden` 이 인용 문구 5,799행을 냈다.
+    """
+    import inspect
+    import re
+
+    from scripts import load_db
+
+    src = inspect.getsource(load_db.load_golden)
+    cols = re.search(r"INSERT INTO golden_sample \"\s*\"\(([^)]*)\)", src)
+    assert cols, "INSERT 칸 목록을 못 찾았다 — 검사를 고친다"
+    inserted = {c.strip() for c in re.sub(r'"\s*"', "", cols.group(1)).split(",")} - {"sample_id"}
+    updated = set(re.findall(r"(\w+)\s*=\s*EXCLUDED\.\1", src))
+    assert inserted <= updated, (
+        f"갱신하지 않는 칸 {sorted(inserted - updated)} — 다시 넣어도 DB 가 옛 값이다"
+    )

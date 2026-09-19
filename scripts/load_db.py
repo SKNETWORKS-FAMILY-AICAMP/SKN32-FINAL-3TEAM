@@ -249,8 +249,11 @@ def load_fragments(cur, dry: bool) -> int:
             raise SystemExit(f"🚨 {fid}: 원천 {sid!r} 가 레지스트리에 없다 (D-15)")
         if not dry:
             cur.execute(
+                # 🔄 2026-09-20 — `DO NOTHING` 이면 **등급을 고쳐도 DB 는 옛 등급**이다(골든셋 재배포와 같은 꼴).
+                #    🚨 `excluded` 는 **건드리지 않는다** — 사람이 DB 에서 내린 판정이다.
                 "INSERT INTO fragment (fragment_id, source_id, frag_type, grade) "
-                "VALUES (%s,%s,%s,%s) ON CONFLICT (fragment_id) DO NOTHING",
+                "VALUES (%s,%s,%s,%s) ON CONFLICT (fragment_id) DO UPDATE SET "
+                "frag_type = EXCLUDED.frag_type, grade = EXCLUDED.grade",
                 (fid, sid, kind, grade),
             )
         n += 1
@@ -639,9 +642,15 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
                 "(sample_id, fragment_id, text, unit, violations, origin, rule_id, "
                 " provenance, redistributable, split) "
                 "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                # 🔴 2026-09-20 (D-249) — **넣는 칸은 전부 갱신한다.** ⛔ 종전에는 text·unit·violations·split
+                #    만 고쳐, 재배포 표시를 false 로 바꾼 골든셋을 다시 넣어도 DB 는 true 로 남았다 —
+                #    `v_publishable_golden`(공개할 때 반드시 지나는 뷰 · D-71)이 인용 문구 5,799행을 「공개 가능」으로 냈다.
+                #    게이트 `test_골든셋_적재는_넣는_칸을_전부_갱신한다` 가 칸 목록을 대조한다.
                 "ON CONFLICT (sample_id) DO UPDATE SET "
-                "  text = EXCLUDED.text, unit = EXCLUDED.unit, "
-                "  violations = EXCLUDED.violations, split = EXCLUDED.split",
+                "  fragment_id = EXCLUDED.fragment_id, text = EXCLUDED.text, unit = EXCLUDED.unit, "
+                "  violations = EXCLUDED.violations, origin = EXCLUDED.origin, "
+                "  rule_id = EXCLUDED.rule_id, provenance = EXCLUDED.provenance, "
+                "  redistributable = EXCLUDED.redistributable, split = EXCLUDED.split",
                 (
                     r["id"],
                     fid,
