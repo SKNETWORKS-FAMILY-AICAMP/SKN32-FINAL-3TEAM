@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import functools
 import json
 import pathlib
 import re
@@ -150,6 +151,14 @@ POLICY: dict[str, frozenset[str]] = {
     #    켜도 잃는 것이 없다. 그래서 넷 다 켠다 — 원천이 회차마다 필드를 바꿀 수 있다.
     "mfds_hf_ingredient": frozenset({"org", "brand", "addr", "person"}),
     "mfds_hf_individual": frozenset({"org", "brand", "addr", "person"}),
+    # ── 2026-09-19 판정 (검토요청_2026-09-19_마스킹정책_law_go_kr.md (가) · 2인 확인)
+    # 🔴 **사람 축만** 켠다 — 원천이 판례·재결례 당사자를 ○○ 로 가리지만 빠뜨린 자리가 있다
+    #    (반출 검사 실측 1건 · 「법인의 대표자 손○○」). 업체명·주소는 공표된 판단문의 일부다 —
+    #    처분청·당사자 법인이 지워지면 5층 반례(「누가 무엇을 뒤집었나」)의 값이 준다.
+    "law_go_kr": frozenset({"person"}),
+    # ── 2026-09-19 판정 (검토요청_2026-09-18_mfds_cgm_expc.md §6 · 2인 확인)
+    # 🚨 제품명(brand)은 가리지 않는다 — 제품명이 곧 판정 대상 표현일 수 있다(mfds_press 와 같은 이유).
+    "mfds_cgm_expc": frozenset({"org", "person"}),
 }
 
 #: 정책 키 ↔ 레지스트리 문언. 대조 테스트가 이걸 쓴다.
@@ -226,7 +235,15 @@ _REDACTED_NAME = re.compile(r"(?<![0-9,.])(?:000+|[가-힣][ㅇo○●]{2,})(?![
 #: 🚨 성씨 목록을 쓰는 이유 — 직함만 보고 뒤 2~4자를 지우면 「대표자 **표시광고**」처럼
 #:    **판정 어휘를 지운다.** 성씨는 열린 추측이 아니라 **닫힌 집합**이라 근거가 된다.
 #:    ⬜ 흔한 30여 개만 넣었다. 드문 성씨는 못 잡는다 — `--survey` 가 잔여로 센다.
-_TITLES = r"(?:공동대표이사|대표이사|대표사원|대표자|담당변호사|소송대리인|변호사|사장|회장|이사)"
+#: 🔄 2026-09-19 — **짧은 직함 셋(사장·회장·이사)은 낱말 경계에서만** 직함이다.
+#:    ⛔ 반출 검사 실측(클론 B · 생성물 전량) — 「다**이사**이클로펜타다이엔」(성분명 38건)·
+#:       「검**사장**소까지」·「공**사장** 인부」가 「직함+이름」으로 걸렸다. 같은 규칙이 마스킹에서
+#:       돌면 성분명·문장이 `[대표]` 로 **훼손**된다. 긴 직함(대표이사·대표자·변호사…)은
+#:       「피심인대표이사홍길동」처럼 붙여 써도 잡아야 해서 경계를 요구하지 않는다.
+_TITLES = (
+    r"(?:공동대표이사|대표이사|대표사원|대표자|담당변호사|소송대리인|변호사"
+    r"|(?<![가-힣])(?:사장|회장|이사))"
+)
 #: 🔄 2026-09-08 확장 (D-165) — **말뭉치 전수 실측으로 넓혔다.** 흔한 30여 개만 두었더니
 #:    「대표이사 **원호봉**을」이 산출물에 남았고, 원문에는 「구상모」62회 · 「우오현」14 ·
 #:    「은성욱」10 처럼 목록 밖 성씨가 줄줄이 있었다. 추측이 아니라 **직함 뒤에 실제로 온 것**을
@@ -279,6 +296,18 @@ _NOT_NAME = frozenset(
         "또한",
         "과의",
         "와의",
+        # 🔄 2026-09-19 — 반출 검사 실측(재결례)에서 「직함+이름」으로 걸린 **서술형**.
+        #    「대표자**이다**」의 「이」가 성씨라 「이다」를 이름으로 읽었다 — 「성명」과 같은 함정이다.
+        "이다",
+        "이자",
+        "이고",
+        "이며",
+        "이기도",
+        "이었다",
+        "이지만",
+        "장들이다",
+        "하여",
+        "하고",
     }
 )
 
@@ -399,6 +428,83 @@ def _note(log: list[dict] | None, rule: str, src: str, dst: str) -> None:
         log.append(rec)
 
 
+#: 🔴 **사건명의 나열어** (2026-09-17 · D-235). 「A 및 B의 …」·「A, B의 …」 꼴에서
+#:    `anchor_ftc` 의 `^(.+?)의\s` 가 **「A 및 B」를 한 덩어리로** 잡는다. 그 문자열은
+#:    본문 어디에도 없어 **앵커가 아무것도 못 지운다.**
+#:    ⛔ **「과」·「와」는 넣지 않는다** — 조사로도 쓰여 「…행위와」 같은 자리를 쪼갠다.
+#:       탐침 8판이 그것까지 넣어 CORE 854 중 96건(11.2%)을 셌는데, 마스킹된 사건명으로
+#:       재면 35건(4.1%)이다. **넓게 쪼개면 앵커가 짧아지고, 짧은 앵커는 판정 어휘를 먹는다**
+#:       — `anchor_ftc` ②가 「불공정약관조항」을 지키려고 단 조건과 같은 이유다.
+#:    ⛔ **「·」·「ㆍ」도 넣지 않는다** — 상호 안에 들어간다(「에스케이ㆍ케미칼」류).
+_ANCHOR_AND = re.compile(r"\s*(?:및|,)\s*")
+
+#: 「A **등 3개 가습기살균제 제조ㆍ판매 사업자**」 — 뒤를 통째로 잘라 A 만 남긴다.
+#: 🚨 `\d+` 을 요구한다. 「등」만으로 자르면 「…등급」·「…등기부」가 걸린다.
+_ANCHOR_ETC = re.compile(r"\s*등\s*\d+\s*개.*$")
+
+
+#: 🔴 **로마자 ↔ 한글 표기** `[관행]` (2026-09-17 · D-235). 의결서는 같은 법인을 「에스케이
+#:    케미칼 주식회사」로 사건명에 적고 본문에서는 「제조원: SK케미칼」로 쓴다. 앵커는 표기
+#:    하나뿐이라 그 자리를 못 잡는다.
+#:    ★ **새 판단이 아니다** — `mask_paren_alias` 의 주석과 같은 논리다:
+#:      *「이미 지우기로 판정된 그 법인의 다른 표기다.」* 앵커가 근거이므로 이 표는
+#:      **앵커에 그 토막이 든 문서 안에서만** 쓰인다 — 「SKYEDU」는 안 건드린다.
+#:    ⛔ **전역 회사명 목록이 아니다.** 2026-09-17 오전에 그것을 켰다가 「2015년 가장 많이
+#:       검색한 화학강사」가 「검색[업체]학강사」가 되어 되돌렸다 (D-157).
+#:    🚨 목록이 짧다 — 없는 대응은 안 잡힌다. **하한이다** (D-110).
+ROMAN: tuple[tuple[str, str], ...] = (
+    ("SK", "에스케이"),
+    ("GS", "지에스"),
+    ("LG", "엘지"),
+    ("KT", "케이티"),
+    ("CJ", "씨제이"),
+    ("LS", "엘에스"),
+    ("KCC", "케이씨씨"),
+    ("POSCO", "포스코"),
+    ("HDC", "에이치디씨"),
+)
+
+
+def roman_variants(name: str) -> list[str]:
+    """앵커 알맹이의 **로마자/한글 맞바꾼 표기**. 🚨 앵커가 있는 문서에서만 쓴다.
+
+    ⛔ 바꾼 결과가 어디에도 없으면 `mask()` 가 그냥 지나간다 — 없는 것을 만들지 않는다.
+    """
+    out: list[str] = []
+    for x, y in ROMAN:
+        for u, v in ((x, y), (y, x)):
+            if u in name and (alt := name.replace(u, v)) != name:
+                out.append(alt)
+    return out
+
+
+def anchor_names(bare: str) -> list[str]:
+    """앵커 알맹이를 **피심인 단위로** 쪼갠다. 긴 것부터 돌려준다 (2026-09-17 · D-235).
+
+    🚨 **쪼갠 조각도 `usable`·`is_short` 를 그대로 지난다** — `mask()` 가 하던 판단을
+       여기서 되풀이하지 않는다 (D-99). 이 함수는 **자르기만** 한다.
+
+    🔄 **2026-09-17 — 로마자 변형을 붙인다** (`roman_variants`). 사건명은 「에스케이케미칼
+       주식회사」인데 본문은 「제조원: SK케미칼」이라 앵커가 못 닿던 자리를 닫는다.
+
+    ⛔ 나열어도 로마자 대응도 없으면 `[bare]` 를 그대로 돌려준다 — 기존 동작이 한 글자도
+       안 바뀐다.
+       그것이 D-143 판 대조에서 「주문 문구 627 · 치환 418 불변」으로 확인되는 지점이다.
+
+    ★ **왜 이것이 필요한가** (2026-09-17 실측 · `ftc_reason_probe --anchor`) —
+      회수한 이유 문구에 피심인 실명이 **이름 6개 · 문구 12개** 남았고, 그중 4개가
+      앵커의 부분/변형이었다. D-233 상 피심인은 **대상 안**이라 이건 결함이다.
+    """
+    head = _ANCHOR_ETC.sub("", bare)
+    out = [x.strip() for x in _ANCHOR_AND.split(head) if x.strip()]
+    # 🔴 **표기 변형을 조각마다 붙인다** — 「에스케이케미칼」이면 「SK케미칼」도 앵커다.
+    #    ⛔ 통째로 맞아야 한다. 「SK」만 지우면 「[업체]케미칼」이 되어 **가림 효과는 0인데
+    #       문구만 망가진다** — 2026-09-17 실측에서 눈으로 본 그 꼴이다 (D-157).
+    out += [v for x in list(out) for v in roman_variants(x)]
+    # 🚨 긴 것부터 — `variants` 와 같은 이유다. 짧은 조각이 먼저 돌면 긴 이름이 토막 난다
+    return sorted(dict.fromkeys(out), key=len, reverse=True) or ([bare] if bare else [])
+
+
 def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
     """자유 텍스트에서 **앵커의 변형만** `[업체]` 로 바꾼다.
 
@@ -406,13 +512,159 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
 
     🚨 짧은 앵커는 **법인격이 붙은 형태만** 지운다 — 「㈜대상」은 지우고 「대상」은 남긴다.
        남긴 것은 `residue()` 가 센다. 지우지 못한 것을 **세지도 않는 것**이 제일 나쁘다.
+
+    🔄 **2026-09-17 (D-235) — 앵커가 하나라는 가정을 뺐다.** 다중 피심인 사건에서
+       `anchor_ftc` 가 「A 및 B」를 한 덩어리로 주면 여기서 쪼개 각각 지운다.
+       ⛔ 쪼개는 규칙은 `anchor_names()` 하나다 — 부르는 쪽마다 쪼개면 갈린다 (D-99).
     """
-    if usable(bare):
-        for v in variants(bare, with_bare=not is_short(bare)):
+    people = respondent_people_of(bare)
+    text = _mask_case_head(text, bare, log, people)
+    text = _mask_people(text, people, log)
+    for b in anchor_names(bare):
+        if not usable(b):
+            continue
+        for v in variants(b, with_bare=not is_short(b)):
             if v in text:
                 _note(log, "앵커", v, MASK_ORG)
             text = text.replace(v, MASK_ORG)
-    return text
+    return mask_respondent_email(text, bare, log)
+
+
+#: 사건명 꼴 — 「<피심인>의 <법·행위> …행위에 대한 건」. 🚨 머리는 **40자까지** · 뒤는 **6어절 안**에서 끝난다.
+#:    ⛔ 본문(이유·주문)에서 멀리 떨어진 「…행위에 대한 건」까지 욕심껏 먹으면 문단이 통째로 `[업체]` 가 된다.
+#:    ★ 탐욕(`.{1,40}`)이라 **마지막 「의 」** 를 고른다 — 상호에 「의」가 든 피심인(「가나의 착한갈비」)을 한 덩이로 잡는다.
+#:    🚨 머리에 「에 대한 건」이 들면 안 된다 — 병합 사건명에서 첫 사건을 통째로 머리로 먹었다(반대 대조가 잡았다).
+#:    🔄 「…행위에 대한 건」만이 아니다 — 「천○의 지주회사 설립·전환신고 및 … 위반에 대한 건」(실측) · 뒤 8어절.
+_CASE_TITLE = re.compile(r"^((?:(?!에\s*대한\s*건).){1,40})의\s+(?:\S+\s+){0,7}?\S*에\s*대한\s*건")
+
+#: 🔄 2026-09-19 5차 — **괄호를 한 덩이로 · 한도는 앵커 뒤로 40** (반출 검사 실측 2건).
+#:    ⛔ ① 앵커가 47자인 병합 사건명 — 머리 40자 한도에 걸려 사건명 꼴 자체가 안 맞았다.
+#:          그래서 뒤 피심인(○○협회)을 지우는 `_mask_case_more` 까지 가지 못했다.
+#:    ⛔ ② 「갑(기업집단 「가」의 전 동일인) 및 을(… 특수관계인)의 …행위에 대한 건」 —
+#:          **괄호 안의 「의 」** 에서 머리를 끊어 을(개인 피심인의 실명)이 남았고 괄호 설명도 토막 났다.
+#:    ★ 괄호 한 쌍은 한 칸으로 센다 — 괄호 안 「의 」는 머리의 끝이 될 수 없다.
+#:    ★ 한도는 **앵커 길이 + 40칸**이다. 앵커 자리는 결정문이 피심인이라 적은 곳이라 길이가 위험이 아니다 —
+#:      본문을 먹는 위험은 앵커 **뒤로** 얼마나 가느냐에 있다(`test_본문의_먼_사건명_꼴까지_먹지_않는다`).
+_CASE_TAIL = r"의\s+(?:\S+\s+){0,7}?\S*에\s*대한\s*건"
+_CASE_UNIT = r"(?:(?!에\s*대한\s*건)[^()\n]|\([^()\n]{0,80}\))"
+
+
+@functools.lru_cache(maxsize=64)
+def _case_title_for(units: int) -> re.Pattern[str]:
+    return re.compile(rf"^({_CASE_UNIT}{{1,{units}}}){_CASE_TAIL}")
+
+
+def _bare_norm(s: str) -> str:
+    """비교용 — 글자·숫자만. 🚨 원천·정규화가 가운뎃점·마침표를 서로 바꾼다(「D.M.I」↔「D·M·I」)."""
+    return re.sub(r"[^0-9A-Za-z가-힣]", "", s)
+
+
+def _mask_case_head(
+    text: str, bare: str, log: list[dict] | None = None, people: tuple[str, ...] = ()
+) -> str:
+    """🔴 **사건명 머리 = 앵커가 나온 그 자리** — 짧아도 · 「의」가 들어 있어도 통째로 지운다 (2026-09-19 · D-233).
+
+    ⛔ 반출 검사 실측 — 셋이 남았다:
+       · 「주○의 전자상거래…」 — 앵커가 2자라 `is_short` 가 맨몸 치환을 막았다
+       · 「[업체]의 착한갈비의 가맹사업법…」 — 상호 안의 「의」에서 `anchor_ftc` 가 앵커를 끊었다
+       · 「D·M·I산업의 …」 — 사건명이 정규화(`sep_norm`)를 지나 가운뎃점이 바뀌어 앵커와 안 맞았다
+    ★ 그 자리는 `anchor_ftc` 가 앵커를 뽑은 **사건명의 머리**다 — 보통명사일 수 없다.
+      그래서 **글 머리에서 · 사건명 꼴일 때 · 머리가 앵커로 시작할 때만** 지운다. 본문의 「대상」은 안 건드린다.
+    """
+    nb = _bare_norm(bare)
+    if not nb:
+        return text
+    # ⛔ 「X의 」만 보는 느슨한 꼴은 쓰지 않는다 — 본문이 앵커로 시작하면 첫 「의 」까지 문장을 먹었다
+    #    (반대 대조 `test_본문의_먼_사건명_꼴까지_먹지_않는다` 가 잡았다). **사건명 꼴일 때만** 지운다.
+    # 🚨 괄호를 아는 꼴이 먼저다 — 안 맞으면(괄호 짝이 깨진 사건명) 예전 꼴로 한 번 더 본다
+    m = _case_title_for(len(bare) + 40).match(text) or _CASE_TITLE.match(text)
+    if not m:
+        return text
+    nh = _bare_norm(strip_legal(m.group(1)))
+    if not (nh and nh.startswith(nb)):
+        return text
+    # 🔄 2026-09-19 (D-248) — 머리가 **개인 피심인**으로 시작하면 `[대표]` 다. 가림은 같고 자국이 뜻을 맞게 말한다.
+    mark = MASK_CEO if _starts_with_person(nh, people) else MASK_ORG
+    _note(log, "사건명 머리", m.group(1), mark)
+    return _mask_case_more(mark + text[m.end(1) :], log, people)
+
+
+#: 병합 사건명의 **뒤 사건** — 「A의 …에 대한 건 **및 B의** …에 대한 건」. B 도 피심인이다.
+#: 🚨 사건명 한 줄 안에서만 쓴다(`_mask_case_head` 가 사건명 꼴을 확인한 뒤에만 부른다) — 본문에 걸지 않는다.
+_CASE_MORE = re.compile(
+    r"(건(?:\(병합\))?\s*(?:및|,|·|ㆍ)\s*)([^\[\]]{1,40}?)의\s+(?:\S+\s+){0,7}?\S*에\s*대한\s*건"
+)
+#: 피심인 이름이 아니라 **묶음 설명**인 머리 — 「2개 종계 판매사업자」·「[업체] 등」. 누구도 가리키지 않는다.
+_CASE_DESCRIPTOR = re.compile(r"\d+\s*개|(?:^|\s)(?:등|외)(?:\s|$)|\d{4}\.\s*\d")
+
+
+def _mask_case_more(text: str, log: list[dict] | None = None, people: tuple[str, ...] = ()) -> str:
+    """🔴 병합 사건명의 뒤 피심인 (2026-09-19 · 반출 검사 실측 · D-233 · D-235 의 연장).
+
+    ⛔ `anchor_ftc` 는 **첫 「의」 앞**만 앵커로 뽑는다 — 「[업체]의 부당한 공동행위에 대한 건 및
+       ○○협회의 사업자단체 금지행위에 대한 건」의 **○○협회**(두 번째 피심인)는 남았다.
+    ★ 결정문이 「…에 대한 건 및 X의 …행위」라고 **스스로 X 를 피심인 자리에 둔다** — 추측이 아니다.
+      묶음 설명(「2개 사업자」·「등」)은 누구도 가리키지 않으므로 둔다.
+    """
+
+    def _sub(m: re.Match[str]) -> str:
+        head = m.group(2).strip()
+        if not head or MARK_RE.fullmatch(head) or _CASE_DESCRIPTOR.search(head):
+            return m.group(0)
+        mark = MASK_CEO if _starts_with_person(_bare_norm(head), people) else MASK_ORG
+        _note(log, "사건명 뒤 피심인", head, mark)
+        return m.group(0).replace(m.group(2), mark, 1)
+
+    return _CASE_MORE.sub(_sub, text)
+
+
+#: 메일 주소 — 도메인 첫 마디가 피심인인지 본다.
+_EMAIL = re.compile(r"([A-Za-z0-9._%+-]+)@([A-Za-z0-9-]+)((?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})")
+
+#: 피심인이 **자기 것이라고 결정문이 밝힌** 판매처 — 「피심인은 자신이 운영하는 사이버몰인 'X'」.
+#: 🚨 추측이 아니라 원천의 문장이다. 이 자리에 든 로마자 토막만 피심인의 것으로 친다.
+_OWN_OUTLET = re.compile(
+    r"피심인(?:은|이|의)?\s*(?:자신이\s*)?(?:직접\s*)?운영하는\s*"
+    r"(?:사이버몰|쇼핑몰|온라인\s*쇼핑몰|인터넷\s*쇼핑몰|웹사이트|홈페이지|누리집|사이트)(?:인|이자)?\s*"
+    r"['‘\"“「]([^'’\"”」]{2,60})['’\"”」]"
+)
+_LATIN = re.compile(r"[A-Za-z0-9]{3,}")
+
+
+def respondent_latin(text: str, bare: str) -> set[str]:
+    """이 글에서 **피심인의 것**으로 확인되는 로마자 토막 (소문자). 🚨 추측하지 않는다 —
+
+    ① 앵커와 그 로마자 표기(`anchor_names` · `ROMAN`)  ② 결정문이 「피심인이 운영하는」이라 적은 판매처.
+    """
+    toks: set[str] = set()
+    for b in anchor_names(bare) if bare else []:
+        toks |= {x.lower() for x in _LATIN.findall(b)}
+    for m in _OWN_OUTLET.finditer(text):
+        toks |= {x.lower() for x in _LATIN.findall(m.group(1))}
+    return toks
+
+
+def mask_respondent_email(text: str, bare: str, log: list[dict] | None = None) -> str:
+    """🔴 **피심인의 메일일 때만** 도메인을 `[업체]` 로 (2026-09-19 · 팀장 판정 · D-233).
+
+    ★ 판정 — *「피심인일 때만 해당하도록」*. 광고 문구 속 `CSCENTER@<도메인>` 은 사람이 아니라 창구지만
+      **도메인이 업체를 가리킨다.** 그 업체가 피심인이면 D-17 업체명 마스킹의 대상이고, 제3자면 아니다.
+    🚨 계정 부분은 남긴다 — `CSCENTER` 는 누구도 가리키지 않고, 「메일로 보내라」는 광고 문맥이 판정 재료다.
+    ⛔ 도메인이 피심인 것인지 **모르면 지우지 않는다** — 제3자 상호는 대상이 아니다(D-233).
+       모르는 것은 반출 검사가 다시 본다.
+    """
+    toks = respondent_latin(text, bare)
+    if not toks:
+        return text
+
+    def _sub(m: re.Match[str]) -> str:
+        label = m.group(2).lower()
+        if label in toks or any(len(t) >= 4 and t in label for t in toks):
+            _note(log, "피심인 메일", m.group(2) + m.group(3), MASK_ORG)
+            return f"{m.group(1)}@{MASK_ORG}"
+        return m.group(0)
+
+    return _EMAIL.sub(_sub, text)
 
 
 def mask_person(text: str, log: list[dict] | None = None) -> str:
@@ -482,6 +734,64 @@ def _t(root: ET.Element, tag: str) -> str:
     return (el.text or "").strip() if el is not None and el.text else ""
 
 
+#: 🔴 **개인 피심인의 자리** — 피심정보내용에서 이름 바로 뒤에 **가려진 주민등록번호**가 온다.
+#:    「1. 갑을병(******-*******, 상호출자제한기업집단 「가」의 전 동일인) 서울 …」 (2026-09-19 실측 · seq 1285)
+#: ★ 원천이 **사람에게만** 다는 표지다 — 법인은 주민등록번호가 없다. 이름 모양·성씨로 추측하지 않는다.
+#: ⛔ 이 표지가 없는 개인사업자(사업자등록번호만 적힌 경우)는 **못 가른다** — 그때는 `[업체]` 로 가려진다.
+#:    가림은 되고 자국만 덜 정확하다. 추측으로 넓히면 3자 상호(「오뚜기」)가 사람이 된다.
+_RRN_MASKED = re.compile(r"([가-힣]{2,4})\s*\(\s*\*{6}\s*-\s*\*{7}")
+
+
+def respondent_people(root: ET.Element) -> tuple[str, ...]:
+    """피심정보내용에서 **개인 피심인**의 이름들 (나온 순서 · 중복 없음)."""
+    txt = _t(root, "피심정보내용")
+    return tuple(dict.fromkeys(m.group(1) for m in _RRN_MASKED.finditer(txt)))
+
+
+class Anchor(str):
+    """앵커(알맹이) 문자열 + **그 사건의 개인 피심인 이름**.
+
+    🔴 `str` 을 잇는 이유 — `_, bare = anchor_ftc(r)` 로 받아 `apply_policy(…, bare, "ftc")` 로 넘기는
+       호출부가 여섯 곳이다(ftc_triage · ftc_extract · ftc_reason_probe · mask 안). 인자를 늘리면
+       **한 곳이라도 빠뜨린 곳에서 조용히 `[업체]`** 로 돌아간다 (D-99). 값에 실어 보내면 빠뜨릴 자리가 없다.
+    🚨 문자열 연산(`strip` · 슬라이스)을 거치면 `people` 이 떨어진다 — `mask()` 가 **받은 그대로** 읽는다.
+    """
+
+    people: tuple[str, ...] = ()
+
+    def __new__(cls, value: str, people: tuple[str, ...] = ()) -> Anchor:
+        obj = super().__new__(cls, value)
+        obj.people = tuple(people)
+        return obj
+
+
+def respondent_people_of(bare: str) -> tuple[str, ...]:
+    return getattr(bare, "people", ())
+
+
+def _starts_with_person(norm_head: str, people: tuple[str, ...]) -> bool:
+    return any(p and norm_head.startswith(_bare_norm(p)) for p in people)
+
+
+def _mask_people(text: str, people: tuple[str, ...], log: list[dict] | None = None) -> str:
+    """🔴 개인 피심인의 이름을 글 전체에서 `[대표]` 로 (2026-09-19 · D-248 · 팀장 판정).
+
+    ★ 이름은 원천이 「이 사람이 피심인이다」라고 적은 자리(가려진 주민등록번호 앞)에서만 온다 — 추측이 아니다.
+    🚨 **낱말 경계**를 본다 — 앞이 한글이 아니고, 뒤가 조사·기호·공백일 때만. 이름이 다른 낱말 **안에서**
+       지워지지 않게 한다(「교육이수증」의 「이수」).
+    ⚠️ 이름과 **같은 꼴의 보통명사**(「이수 과정」)는 가린다 — 그 문서에 한해 그 이름이 피심인이라
+       원천이 적었으므로, 덜 가리는 쪽보다 이쪽을 택했다(개인 식별 우선).
+    """
+    for name in people:
+        if len(name) < 2:
+            continue
+        pat = re.compile(rf"(?<![가-힣]){re.escape(name)}(?=[은는이가을를의에과와도께]|[^가-힣]|$)")
+        if pat.search(text):
+            _note(log, "피심인 개인", name, MASK_CEO)
+            text = pat.sub(MASK_CEO, text)
+    return text
+
+
 def anchor_ftc(root: ET.Element) -> tuple[str, str]:
     """공정위 결정문의 피심인 이름. 돌려주는 값은 `(원표기, 알맹이)`.
 
@@ -509,13 +819,15 @@ def anchor_ftc(root: ET.Element) -> tuple[str, str]:
     ⬜ 「대우웨딩홀」류는 이 규칙으로 못 잡는다. 그건 `residual_orgs()` 가 센다.
     """
     name = _t(root, "사건명")
+    # 🔄 2026-09-19 (D-248) — 알맹이에 **개인 피심인 이름**을 실어 보낸다(`Anchor`). 앵커 규칙은 그대로다.
+    people = respondent_people(root)
     m = re.match(r"^(.+?)의\s", name)
     if m:
-        return m.group(1), strip_legal(m.group(1))
+        return m.group(1), Anchor(strip_legal(m.group(1)), people)
     head = name.split()[0] if name.split() else ""
     if head and _LEGAL_RE.search(head):
-        return head, strip_legal(head)
-    return "", ""
+        return head, Anchor(strip_legal(head), people)
+    return "", Anchor("", people)
 
 
 #: 마스킹 뒤에 **법인격 표기를 달고 남아 있는 이름**을 찾는다.
@@ -968,7 +1280,11 @@ _PUBLIC_KEEP = frozenset({"온나라부동산정보통합"})
 #:    🚨 이 목록은 **오탐을 막는 자리이지 사전이 아니다.** 진짜 사전은 [P6] 다.
 #:    🔄 2026-09-17 「최고층」 추가 (팀장 확인) — 「명품」과 같은 **광고 수식어**다.
 #:       가리면 최상급 표현이 사라지는데 **그것이 곧 거짓·과장 판정의 대상**이다.
-_GENERIC_HEAD = frozenset({"원룸", "명품", "홍보", "스카이", "시영", "최고층"})
+#:    🔄 2026-09-17 「분양」·「지역주택」·「주상복합」 추가 (팀장 확인) — 「원룸」과 같은 부류다.
+#:       「분양아파트」·「지역주택조합아파트」·「주상복합아파트」의 앞은 **건물·사업 유형**이다.
+_GENERIC_HEAD = frozenset(
+    {"원룸", "명품", "홍보", "스카이", "시영", "최고층", "분양", "지역주택", "주상복합"}
+)
 
 #: 🆕 문서가 **스스로 선언한** 고유명 — 「X(이하 "이 사건 Y"」 의 X.
 #: ★ `anchor_ftc` 가 사건명에서 하는 일과 같은 어법이다 — 문서가 「이것은 고유명이다」라고
@@ -1301,7 +1617,9 @@ def survey(target: str, limit: int | None, dump: bool) -> int:
 
     if dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+        OUT.write_text(
+            json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+        )
         print(f"\n  → {OUT} ({len(rows):,}행)")
         print("     🚨 data/ 는 커밋되지 않는다 (D-19). 이 스크립트가 원본이다.")
     return 0
@@ -1398,7 +1716,7 @@ def apply(target: str, limit: int | None) -> int:
     path = out / f"{target}.jsonl"
     left: collections.Counter[str] = collections.Counter()
     n = 0
-    with path.open("w", encoding="utf-8") as f:
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         for doc, _raw, bare, body, _pronoun in ITER[target](limit):
             masked = apply_policy(body, bare, target)
             left.update(residual_orgs(masked))

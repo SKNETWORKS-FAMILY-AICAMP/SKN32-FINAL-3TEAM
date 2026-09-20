@@ -232,6 +232,8 @@ OK_CODES = frozenset({"INFO-000", "00", "0"})
 def collect(source_id: str, use: str, max_pages: int | None) -> int:
     registry.require(source_id, use=use)  # 🚨 규약 1 — 첫 줄
     ep = spec_of(source_id)
+    # 쓰는 폴더 — 첫 계열 (store.raw_dir_of 와 같다 · 만들기는 save_raw 가)
+    dest = store.family_path(source_id)
     env.load()
     # 🚨 포털마다 키가 다르다. LINK 유형은 원 기관에서 따로 발급받는다 (2026-09-02).
     key = env.get("FOODSAFETY_KEY" if (ep.get("style") or "query") == "path" else "DATA_GO_KR_KEY")
@@ -258,7 +260,9 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
             return 1
         path = store.save_raw(
             source_id,
-            source_id,
+            # 🆕 D-254 — 폴더는 소스 id 가 아니라 계열이다(store.FAMILY_OF). ⛔ 종전에는 소스 id 를
+            #    그대로 넘겨 `ftc_decisions_api` 가 표(`ftc`)와 다른 `ftc_decisions_api/` 에 썼다 (감사 §1-7).
+            dest.name,
             f"page_{page:04d}.json",
             payload,
             url=ep["url"],
@@ -288,7 +292,7 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
         print(f"  🚨 --pages {max_pages} 로 일부만 받았다 — mark_collected 를 찍지 않는다")
     elif saved:
         registry.mark_collected(source_id)  # 규약 3 · 게이트 15
-    print(f"\n{source_id} — {saved}장 저장 → data/raw/{source_id}/")
+    print(f"\n{source_id} — {saved}장 저장 → {dest.relative_to(store.ROOT)}/")
     if n_rows:
         dup = n_rows - len(seen)
         print(

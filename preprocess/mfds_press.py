@@ -49,7 +49,8 @@ from collect import store
 from preprocess.text import quoted
 
 SOURCE_ID = "mfds_press"
-RAW_DIR = pathlib.Path("data/raw/mfds_press_pdf")  # 🚨 본문은 첨부 PDF 에만 있다 (D-118)
+#: 🚨 본문은 첨부 PDF 에만 있다 (D-118) — 계열의 둘째 폴더. 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
+RAW_DIR = store.family_path(SOURCE_ID, "mfds_press_pdf")
 OUT = pathlib.Path("data/derived/mfds_press_labels.jsonl")
 
 #: 열 이름 → 역할. 🚨 **머리글 전체가 아니라 열 하나씩** 본다 — 조합은 회차마다 다르다.
@@ -179,7 +180,7 @@ def tables_of(path: pathlib.Path, *, refresh: bool = False) -> list[dict]:
                 if t and len(t) >= 2 and t[0] and len(t[0]) >= 3:
                     got.append({"쪽": pno, "표": t})
     c.parent.mkdir(parents=True, exist_ok=True)
-    c.write_text(json.dumps(got, ensure_ascii=False), encoding="utf-8")
+    c.write_text(json.dumps(got, ensure_ascii=False), encoding="utf-8", newline="\n")
     return got
 
 
@@ -354,7 +355,7 @@ def main() -> int:
                     rec[f] = m2
             out.append(rec)
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        with OUT.open("w", encoding="utf-8") as fh:
+        with OUT.open("w", encoding="utf-8", newline="\n") as fh:
             for rec in out:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(f"\n  🔴 마스킹 — 바뀐 필드 {dict(changed) or '없음'}")

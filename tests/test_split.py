@@ -21,6 +21,7 @@ import pytest
 
 from preprocess.dictionary import norm
 from preprocess.split import MIN_MEASURABLE, plan
+from scripts import derived_manifest as dm
 
 DICT = pathlib.Path("data/derived/banned_terms.jsonl")
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
@@ -39,11 +40,15 @@ def m() -> dict:
       `plan()` 이 여는 것은 전부 `data/` 파생물이므로, 여기서 나는 FileNotFoundError 는
       **「산출물이 없다」 외의 뜻이 없다.**
     """
+    # 🔄 2026-09-19 (F1 · D-247) — 사본에서 생성물이 옛 판이면 **그 위에서 돌지 않는다.**
+    #    정본에서 입력이 없으면 skip 이 아니라 fail 이다 — 있어야 하는 기기다.
+    dm.gate_guard()
     try:
         return plan()
     except FileNotFoundError as e:
         # 🚨 skip 이지만 **무엇을 안 봤는지 이름으로 낸다** — 「초록불」로 읽히면 안 된다.
-        pytest.skip(f"🔴 [P12] 출처 분리 검사 다섯을 **안 돌렸다** — 산출물이 없다.\n   {e}")
+        dm.gate_missing(f"🔴 [P12] 출처 분리 검사 다섯을 **안 돌렸다** — 산출물이 없다.\n   {e}")
+        raise  # gate_missing 이 언제나 던진다 — 여기 오면 규칙이 깨진 것이다
 
 
 @pytest.mark.gate
@@ -67,14 +72,10 @@ def test_사전이_평가문구로_만들어지지_않았다() -> None:
        그 사전으로 매칭기를 재면 외운 것을 맞힌다. 지표가 아니라 착시다.
     ★ 순서를 지켰는지 묻지 않고 **산출물이 실제로 그 규칙을 지켰는지**를 본다.
     """
-    if not (DICT.exists() and GOLDEN.exists()):
-        # 🚨 skip 이지만 **무엇을 안 봤는지 이름으로 낸다.** 산출물이 없는 새 기기에서는
-        #    이 검사가 물리적으로 불가능하다 — 그러나 「초록불」로 읽히면 안 된다 (D-146).
-        #    ★ 산출물 없이도 도는 짝이 `tests/test_dictionary_leak.py` 에 있다 (D-175).
-        pytest.skip(
-            "🔴 누수 검사를 **안 돌렸다** — 산출물이 없다. 이 초록불은 D-174 를 확인하지 않았다.\n"
-            "   uv run python launcher.py golden --write 를 돌린 뒤 다시 본다."
-        )
+    # 🚨 skip 이면 **무엇을 안 봤는지 이름으로 낸다** — 「초록불」로 읽히면 안 된다 (D-146).
+    #    ★ 산출물 없이도 도는 짝이 `tests/test_dictionary_leak.py` 에 있다 (D-175).
+    #    🔄 2026-09-19 — 역할대로 fail/skip · 옛 판 위에서 돌지 않는다 (F1 · D-247)
+    dm.gate_guard(DICT, GOLDEN)
     lines = [x for x in DICT.read_text(encoding="utf-8").splitlines() if x.strip()]
     terms = {json.loads(x)["term"] for x in lines}
     ev = [
@@ -151,3 +152,33 @@ def test_주입본이_평가에_섞이지_않는다(m: dict) -> None:
         ]
         inj = [r for r in ev if r.get("origin") == "injected"]
         assert not inj, f"🚨 주입본 {len(inj)}행이 평가에 들어 있다"
+
+
+@pytest.mark.gate
+def test_골든셋의_인용_문구는_상한_안이고_재배포_불가다() -> None:
+    """🔴 D-249 (D-133 개정) — 산출물이 판정을 따르는가. 코드만 보면 「고쳤다」, 파일을 봐야 「따른다」.
+
+    ① 재배포 불가(인용 광고 문구) 행은 `PARAMS.quote_max_chars` 이하 — 넘으면 버렸어야 한다
+    ② 행의 `redistributable` 이 계보 표(`preprocess/lineage.py`)와 같다
+    """
+    from app.settings import PARAMS
+    from preprocess.lineage import GOLDEN_LINEAGE
+
+    dm.gate_guard(GOLDEN)
+    rows = [json.loads(x) for x in GOLDEN.read_text(encoding="utf-8").splitlines() if x.strip()]
+    over = [
+        r["id"]
+        for r in rows
+        if not r["redistributable"] and len(r["text"]) > PARAMS.quote_max_chars
+    ]
+    assert not over, (
+        f"보관 상한 {PARAMS.quote_max_chars}자를 넘는 인용 문구 {len(over)}행: {over[:5]}"
+    )
+    wrong = [
+        r["id"]
+        for r in rows
+        if GOLDEN_LINEAGE.get((r["provenance"], r["origin"]), ("", None))[1] != r["redistributable"]
+    ]
+    assert not wrong, (
+        f"재배포 표시가 계보 표와 다르다 {len(wrong)}행: {wrong[:5]} — `golden --write` 로 다시 만든다"
+    )

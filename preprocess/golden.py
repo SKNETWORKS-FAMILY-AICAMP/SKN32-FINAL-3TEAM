@@ -33,15 +33,61 @@ import argparse
 import collections
 import json
 import pathlib
+import re
 
 from app.settings import PARAMS
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
-from preprocess.split import approved_docs, casebook_docs, ftc_docs
+from preprocess.lineage import lineage
+from preprocess.split import approved_docs, casebook_docs, ftc_docs, guide_docs
 
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
 OUT = pathlib.Path("data/derived/golden/golden.jsonl")
+
+# ══ 「이유」 행 전용 필터 (2026-09-17 · D-234) ═══════════════════════════════
+#
+# 🚨 **`ftc_extract.NOISE` 와 합치지 않는다.** 그쪽은 **주문**용이고 이쪽은 **이유**용이다.
+#    합치면 주문 문구가 움직이고, D-143 의 판 대조가 증명한 **「문구 627 불변」이 깨진다.**
+#    ⛔ D-99(두 번째면 공통화)에 걸리는 것처럼 보이지만, **같은 로직이 아니라 같은 모양**이다 —
+#       거는 대상이 다르고, 합치는 순간 한쪽을 고칠 때마다 다른 쪽이 조용히 따라 움직인다.
+#
+# **왜 이유에만 거는가** — 이유의 인용 중 광고 카피는 **39.7%**(전수)다. 나머지는 법령 이름·
+# 문서 지시어·용어다. 라벨을 붙인 채 넣으면 모델이 「`정부조직법` = 거짓_과장」을 배운다.
+#
+# ★ **다섯 다 무엇을 버리는지 눈으로 확인하고 넣었다** (D-142 — 지나친 쪽 실패는 조용하다).
+_TAG = re.compile(r"<[^>]{1,24}>")
+#: ⛔ **ㄱ 은 버리지 않고 벗긴다.** 「던힐 파인 컷 1MG 멘톨<각주>3</각주>」은 담배 제품명
+#:    광고다 — 태그가 붙었다고 버리면 카피를 버린다.
+_REASON_DROP = (
+    # ㄴ 약칭 정의가 잘려 들어온 것 — 「라 한다)」·「…공정경쟁규약(이하」
+    re.compile(r"라\s*한다|\(이하\s*$"),
+    # ㄷ 중첩 인용부호에서 두 문구가 이어붙은 것 — 「숭인 한양 LEEPS(이하 "이 사건 분양물」
+    re.compile(r"[‘’“”「」『』]"),
+    # ㄹ 법령 약칭 — 🔴 **「방·요·용·수·기·주」를 제외한다.** 안 하면 「43℃의 **온열요법**」
+    #   「황토도포시트의 **제조방법**」 같은 **광고 카피를 먹는다**(실측 29건).
+    #   ⬜ 대가로 「목재**이용법**」 한 건을 놓친다 — 카피를 버리는 쪽이 더 나쁘다 (D-157).
+    re.compile(r"(?<![방요용수기주])법$|법\)|과태료|공정경쟁규약|규약$|시행규칙|부과기준"),
+    # ㅁ 문서 내부 지시어·서증 — 「이 사건 광고」·「소갑 제○호증」. 어느 광고인지도 안 알려 준다
+    re.compile(r"^이 ?사건|^본 ?건|^행위 ?\d|^소갑|심사보고서|^별지|호증$|^표 ?\d|^그림 ?\d"),
+)
+#: 태그를 벗기고 남은 알맹이가 이보다 짧으면 버린다 — `ftc_extract.phrases_in` 과 같은 하한
+_REASON_MIN = 4
+
+
+def reason_keep(text: str) -> tuple[str, str | None]:
+    """이유 문구를 학습에 넣을지. 돌려주는 값은 `(쓸 문자열, 버린 사유 or None)`.
+
+    ★ **버린 사유를 함께 돌려준다** — 세는 쪽과 거르는 쪽이 같은 함수를 봐야
+      「몇 개를 왜 버렸나」가 산출물 옆에 남는다 (D-142 · D-110).
+    """
+    s = _TAG.sub("", text).strip()  # ㄱ — 벗긴다
+    if len(s) < _REASON_MIN:
+        return s, "태그뿐"
+    for i, pat in enumerate(_REASON_DROP):
+        if pat.search(s):
+            return s, "ㄴㄷㄹㅁ"[i]
+    return s, None
 
 
 def build() -> tuple[list[dict], dict]:
@@ -55,7 +101,8 @@ def build() -> tuple[list[dict], dict]:
     rows: list[dict] = []
     stat: dict = collections.Counter()
 
-    for d in ftc_docs() + casebook_docs() + approved_docs():
+    # 🆕 2026-09-17 — `guide_docs()` 가 넷째다. 없으면 사람이 붙인 248행이 여기서 사라진다.
+    for d in ftc_docs() + casebook_docs() + approved_docs() + guide_docs():
         split = assign.get(d["doc_id"])
         if not split:
             stat["미배정"] += 1
@@ -69,11 +116,45 @@ def build() -> tuple[list[dict], dict]:
                     "unit": d["단위"],
                     "origin": "approved" if not d["유형"] else "real",
                     "provenance": d["원천"],
+                    "구역": "주문",  # 🆕 D-234 — 어디서 왔는지 남긴다
                     "redistributable": True,
                     "split": split,
                 }
             )
             stat[split] += 1
+
+        # 🆕 **「이유」 문구 — 학습에만 넣는다** (2026-09-17 · D-232 (A) · D-234).
+        #
+        # 🔴 **봉인 문서의 이유는 버린다.** 넣을 자리가 없다 —
+        #      · train 에 넣으면 **같은 문서가 양쪽에 서서** 문서 단위 분할이 무너진다
+        #      · test 에 넣으면 **채택률 39.7%짜리 라벨로 평가**하게 된다 (D-172)
+        #    ★ 143문서분을 버리는 대신 분할이 성립한다. 버리는 것도 적어 둔다 (D-110).
+        #
+        # 🚨 id 를 `#r{k}` 로 가른다 — 주문과 같은 번호대를 쓰면 대조가 무너진다.
+        # 🚨 `구역` 을 남긴다. 안 남기면 **나중에 주문분과 이유분을 못 가른다** —
+        #    그러면 「한 숫자가 두 과제를 평균한 수」가 되고, 그것이 D-172 가 경고한 자리다.
+        if split == "train":
+            for k, text in enumerate(d.get("문구_이유") or []):
+                text, why = reason_keep(text)
+                if why:
+                    stat[f"이유버림_{why}"] += 1
+                    continue
+                rows.append(
+                    {
+                        "id": f"{d['doc_id']}#r{k}",
+                        "text": text,
+                        "labels": d["유형"],
+                        "unit": d["단위"],
+                        "origin": "approved" if not d["유형"] else "real",
+                        "provenance": d["원천"],
+                        "구역": "이유",
+                        "redistributable": True,
+                        "split": split,
+                    }
+                )
+                stat["train(이유)"] += 1
+        elif d.get("문구_이유"):
+            stat["봉인문서_이유_버림"] += len(d["문구_이유"])
 
     # 🔴 **주입본이 없으면 멈춘다** (2026-09-10 · D-72 fail-closed).
     #    ⛔ 종전에는 `if INJECTED.exists():` 라 없으면 아무 말 없이 건너뛰고
@@ -115,6 +196,22 @@ def build() -> tuple[list[dict], dict]:
         )
         stat["train"] += 1
         stat["주입"] += 1
+
+    # 🔴 **계보가 재배포와 보관 상한을 정한다** (2026-09-20 · D-249).
+    #    ⛔ 종전에는 `"redistributable": True` 를 상수로 박았다 — 인용 광고 문구 5,801행이 「공개 가능」이었다.
+    #    ★ 값은 `preprocess/lineage.py` 한 표에서 온다(적재기의 프래그먼트와 같은 표 · D-99).
+    #    🚨 인용 문구가 상한을 넘으면 **버린다 — 자르지 않는다.** 자르면 문장이 끊겨 라벨이 안 맞는다.
+    #       이 필터는 문구 겹침 필터보다 **앞**이다 — 버린 행이 학습 문구 집합을 만들면 안 된다.
+    cap = PARAMS.quote_max_chars
+    capped: list[dict] = []
+    for r in rows:
+        _fid, redist = lineage(r["provenance"], r["origin"])
+        r["redistributable"] = redist
+        if not redist and len(r["text"]) > cap:
+            stat["인용상한초과"] += 1
+            continue
+        capped.append(r)
+    rows = capped
 
     # 🔴 문구 단위 2차 필터 — 평가는 **안 본 것**이어야 한다
     train_text = {norm(r["text"]) for r in rows if r["split"] == "train"}
@@ -162,6 +259,38 @@ def main() -> int:
             print(f"     {v:>5}  {k}  {mark}")
         units = collections.Counter(r["unit"] for r in sub)
         print(f"     단위 — {dict(units)}")
+    # 🆕 **「이유」 회수 계측** (2026-09-17 · D-234). 🚨 **버린 수가 안 보이면 계측이 반쪽이다** —
+    #    무엇을 왜 버렸는지가 산출물 옆에 없으면, 필터를 고쳤을 때 무엇이 달라졌는지 못 본다 (D-142).
+    drops = {k[len("이유버림_") :]: v for k, v in stat.items() if k.startswith("이유버림_")}
+    if stat.get("train(이유)") or drops:
+        kept = stat.get("train(이유)", 0)
+        tot = kept + sum(drops.values())
+        print("\n  🆕 **「이유」 행 (D-232 (A) · D-234)** — 학습에만 넣는다")
+        print(f"     담은 것  {kept:>5} / {tot:,}  ({kept / max(tot, 1):.1%})")
+        _why = {
+            "ㄴ": "약칭 정의가 잘려 들어온 것",
+            "ㄷ": "중첩 인용부호로 이어붙은 것",
+            "ㄹ": "법령 약칭",
+            "ㅁ": "문서 내부 지시어·서증",
+            "태그뿐": "태그를 벗기니 알맹이가 없는 것",
+        }
+        for k, v in sorted(drops.items(), key=lambda x: -x[1]):
+            print(f"     버림 {k:<5} {v:>5}  {_why.get(k, '')}")
+        if stat.get("봉인문서_이유_버림"):
+            print(
+                f"     🔴 봉인 문서의 이유 {stat['봉인문서_이유_버림']:,}개는 **버렸다** — "
+                "train 에 넣으면 같은 문서가 양쪽에 선다"
+            )
+        print("     🚨 이유 인용 중 광고 카피는 전수 39.7% 다 — 남은 것에도 잡음이 있다 (⬜ D-234)")
+
+    # 🆕 D-249 — 버린 수가 안 보이면 상한이 조용히 표본을 깎는다 (D-142)
+    print(
+        f"\n  🔴 **인용 문구 보관 상한 {PARAMS.quote_max_chars}자 초과로 버린 행 "
+        f"{stat.get('인용상한초과', 0)}개** (D-249 · 자르지 않는다)"
+    )
+    red = collections.Counter(bool(r["redistributable"]) for r in rows)
+    print(f"     재배포 가능 {red[True]:,} · 불가 {red[False]:,} — 인용 광고 문구는 불가 (D-249)")
+
     if stat.get("문구겹침제외"):
         print(
             f"\n  🔴 **문구가 train 과 겹쳐 평가에서 뺀 행 {stat['문구겹침제외']}개** — "
@@ -182,7 +311,7 @@ def main() -> int:
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        with OUT.open("w", encoding="utf-8") as f:
+        with OUT.open("w", encoding="utf-8", newline="\n") as f:
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         print(f"\n  → {OUT}  ({len(rows):,}줄)")

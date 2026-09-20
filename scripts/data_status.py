@@ -31,24 +31,57 @@ import pathlib
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-DERIVED = ROOT / "data" / "derived"
+MANIFEST = ROOT / "data" / "manifest.jsonl"
 
 
 def _registry() -> dict:
     return yaml.safe_load((ROOT / "data_sources.yaml").read_text(encoding="utf-8"))
 
 
-def _manifest() -> collections.Counter:
+def _manifest() -> tuple[collections.Counter, int]:
+    """소스별 원장 줄 수와 **깨진 줄 수**.
+
+    🆕 2026-09-20 (D-254 · 감사 §2 status) — ⛔ 종전에는 ① 원장 파일이 없으면 모든 소스가 「안 받음」으로,
+       ② 깨진 줄은 조용히 건너뛰어 그 소스가 **덜 받은 것처럼** 찍혔다. 둘 다 「없음」을 성공으로 센다.
+    🚨 파일이 없으면 **멈춘다** (D-220) — 「원장 없음」과 「안 받음」은 다른 말이다.
+       깨진 줄은 세어서 표에 올린다 — 건너뛰되 숨기지 않는다.
+    """
+    if not MANIFEST.exists():
+        raise SystemExit(
+            f"🔴 수집 원장이 없다 — {MANIFEST.relative_to(ROOT).as_posix()}\n"
+            "  git 이 나르는 파일이다. 없으면 「안 받음」이 아니라 **모름**이다 — 현황판을 쓰지 않는다 (D-220)."
+        )
     c: collections.Counter = collections.Counter()
-    p = ROOT / "data" / "manifest.jsonl"
-    if p.exists():
-        for line in p.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                try:
-                    c[json.loads(line).get("source_id", "")] += 1
-                except json.JSONDecodeError:
-                    continue
-    return c
+    broken = 0
+    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            try:
+                c[json.loads(line).get("source_id", "")] += 1
+            except (json.JSONDecodeError, AttributeError):
+                broken += 1
+    return c, broken
+
+
+def _derived() -> list[dict]:
+    """파생물 표 — **git 이 나르는 파생물 원장**(`data/derived_manifest.jsonl`)에서 읽는다.
+
+    🆕 2026-09-20 (D-254 · 감사 §2 status) — ⛔ 종전에는 **이 기기의** `data/derived` 를 훑었다.
+       「팀 축 — 두 기기가 같은 답」이라 적어 두고 크기가 기기마다 달랐고, 사본에서 줄어든 목록이
+       초록으로 커밋될 수 있었다. 원장은 정본이 쓰고 git 이 나르므로 두 기기가 같은 표를 낸다.
+    🚨 원장이 없거나 깨졌으면 **멈춘다** (D-220) — 빈 표를 「파생물 없음」으로 쓰지 않는다.
+    """
+    from scripts import derived_manifest as dm  # noqa: PLC0415 — 원장 경로·파서의 정본 (D-99)
+
+    if not dm.OUT.exists():
+        raise SystemExit(
+            f"🔴 파생물 원장이 없다 — {dm.OUT.relative_to(dm.ROOT).as_posix()}\n"
+            "  현황판의 파생물 절은 이 원장에서 읽는다 — 디스크를 훑지 않는다 (팀 축). 멈춘다 (D-220)."
+        )
+    try:
+        rows = list(dm.ledger().values())
+    except (json.JSONDecodeError, KeyError) as e:
+        raise SystemExit(f"🔴 파생물 원장이 깨졌다 — {type(e).__name__}: {e} (D-220)") from e
+    return sorted(rows, key=lambda r: str(r["경로"]))
 
 
 def _decisions_by_source(keys: set[str]) -> dict[str, list[str]]:
@@ -86,7 +119,8 @@ def _decisions_by_source(keys: set[str]) -> dict[str, list[str]]:
 def build() -> str:
     reg = _registry()
     src = {k: v for k, v in reg["sources"].items() if isinstance(v, dict)}
-    man = _manifest()
+    man, broken = _manifest()
+    derived = _derived()
     out: list[str] = []
     w = out.append
 
@@ -94,7 +128,9 @@ def build() -> str:
     w("")
     w("> 🚨 **생성물이다. 손으로 고치지 않는다** — `python -m scripts.data_status --write`.")
     w("> 값은 `data_sources.yaml`(레지스트리) · `data/manifest.jsonl`(수집 원장) ·")
-    w("> `data/derived`(파생물)에서 읽는다. 손으로 적으면 갈린다 (D-54 · D-90).")
+    w(
+        "> `data/derived_manifest.jsonl`(파생물 원장)에서 읽는다. 손으로 적으면 갈린다 (D-54 · D-90)."
+    )
     w("> 🚨 DB 적재 현황은 여기가 아니라 `launcher.py load` 와 `/health` 가 낸다 (D-89).")
     w("")
 
@@ -142,6 +178,11 @@ def build() -> str:
     w("")
     w(f"**원장에 오른 것 {len(done)} · 아직 안 받은 것 {len(todo)}**")
     w("")
+    if broken:
+        w(
+            f"🔴 **수집 원장에 깨진 줄 {broken}개** — 세지 못했다. 위 「원장」 수는 그만큼 모자랄 수 있다 (D-220)."
+        )
+        w("")
     w(
         "🚨 「원장에 있다」는 **팀 누군가가 받았다**는 뜻이지 **이 기기에 있다**는 뜻이 아니다. "
         "이 기기의 실물은 `launcher.py inventory` 가 낸다."
@@ -224,14 +265,19 @@ def build() -> str:
 
     w("## 파생물 — 원문이 무엇이 됐나")
     w("")
-    w("| 산출물 | 크기 |")
-    w("|---|--:|")
-    if DERIVED.exists():
-        for p in sorted(DERIVED.rglob("*.jsonl")) + sorted(DERIVED.rglob("*.json")):
-            # 🔴 **`as_posix()` 가 없으면 윈도우에서 `data\\derived\\…` 로 나온다** (2026-09-14 실측).
-            #    같은 명령이 기기마다 다른 생성물을 내면 diff 가 매번 뜨고, 그러면 아무도 안 본다
-            #    (D-19 — `data/` 는 기기마다 다르지만 **이 표는 파일 목록이라 같아야 한다**).
-            w(f"| `{p.relative_to(ROOT).as_posix()}` | {p.stat().st_size:,} B |")
+    w("> 파생물 원장(`data/derived_manifest.jsonl`) 기준 — 이 기기의 디스크가 아니다 (팀 축).")
+    w("")
+    w("| 산출물 | 부류 | 행 | 크기 |")
+    w("|---|---|--:|--:|")
+    for r in derived:
+        # 🔴 경로는 원장에 `/` 로 적혀 있다 — 기기마다 같은 표가 나온다 (2026-09-14 `as_posix` 사고와 같은 자리)
+        rows_ = r.get("행")
+        size = r.get("bytes")
+        w(
+            f"| `{r['경로']}` | {r.get('부류', '?')} "
+            f"| {f'{rows_:,}' if isinstance(rows_, int) else '—'} "
+            f"| {f'{size:,} B' if isinstance(size, int) else '—'} |"
+        )
     # 🚨 끝의 빈 줄을 턴다 — 안 그러면 `end-of-file-fixer` 가 **돌릴 때마다** 파일을 고쳐
     #    커밋이 중단된다(2026-09-09 실제로 걸렸다). 생성기가 훅과 싸우면 둘 중 하나를 끄게 된다.
     while out and not out[-1].strip():
@@ -246,7 +292,7 @@ def main() -> int:
     text = build()
     if args.write:
         out = ROOT / "docs" / "03_데이터" / "데이터현황판.md"
-        out.write_text(text, encoding="utf-8")
+        out.write_text(text, encoding="utf-8", newline="\n")
         print(f"💾 {out.relative_to(ROOT)} ({len(text):,}자)")
     else:
         print(text)

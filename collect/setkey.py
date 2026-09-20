@@ -147,6 +147,22 @@ def put(name: str, value: str) -> str:
     return fingerprint(value)
 
 
+def put_setting(name: str, value: str) -> None:
+    """🆕 2026-09-20 — **비밀이 아닌 설정**(`env.SETTINGS`)을 `.env` 에 쓴다. 쓰는 곳은 `put()` 하나다 (D-99).
+
+    🚨 키(`env.KEYS`)는 여기로 쓰지 않는다 — 키는 `prompt()` 로만 받는다(화면·셸 기록에 안 남게).
+    """
+    if name not in env.SETTINGS:
+        raise SetKeyError(
+            f"{name} 은 아는 설정이 아니다 — 아는 것: {list(env.SETTINGS)}.\n"
+            "  🚨 키라면 `launcher.py setkey <이름>` 으로 넣는다 (값이 화면에 안 뜬다)"
+        )
+    put(name, _clean(name, value))
+    os.environ[name] = (
+        value.strip()
+    )  # 같은 프로세스에서 바로 읽히게 — `env.load()` 는 한 번만 읽는다
+
+
 def prompt(name: str) -> str:
     """화면에 뜨지 않게 받는다. 지문을 돌려준다."""
     _check_name(name)

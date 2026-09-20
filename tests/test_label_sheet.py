@@ -40,11 +40,11 @@ def _csv(tmp_path: pathlib.Path, sheet: pathlib.Path, nos: list[str]) -> pathlib
     rows = ls._rows(sheet)
     p = tmp_path / "누구.csv"
     with p.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(ls.HEADER)
+        w = csv.DictWriter(f, fieldnames=ls.HEADER)
+        w.writeheader()
         for i, (r, no) in enumerate(zip(rows, nos, strict=True), 1):
             t = ls._text(r)
-            w.writerow([i, t, "", no, "권소라", "2026-09-10", ls._fp(t)])
+            w.writerow({"행": i, "문구": t, "유형번호": no, "붙인이": "권소라", "지문": ls._fp(t)})
     return p
 
 
@@ -53,7 +53,7 @@ def test_번호가_라벨로_바뀐다(tmp_path, sheet, monkeypatch) -> None:
     ls.import_(_csv(tmp_path, sheet, ["1", "6"]), sheet, "")
     got = [
         json.loads(x)
-        for x in (tmp_path / "data/derived/labels/권소라.jsonl")
+        for x in (tmp_path / "data/derived/labels/권소라__sheet.jsonl")
         .read_text(encoding="utf-8")
         .splitlines()
     ]
@@ -65,7 +65,11 @@ def test_빈칸은_안_들어간다(tmp_path, sheet, monkeypatch) -> None:
     """🚨 빈칸은 실패가 아니라 판단이다 — 억지로 채우지 않게 하려면 버려야 한다."""
     monkeypatch.setattr(ls, "ROOT", tmp_path)
     ls.import_(_csv(tmp_path, sheet, ["", "8"]), sheet, "")
-    got = (tmp_path / "data/derived/labels/권소라.jsonl").read_text(encoding="utf-8").splitlines()
+    got = (
+        (tmp_path / "data/derived/labels/권소라__sheet.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
     assert len(got) == 1
 
 
@@ -121,3 +125,37 @@ def test_번호표가_지시서와_같은_순서다() -> None:
         f"🚨 지시서 §3 의 판정 순서와 번호표가 다르다 — {ls.TYPES}\n"
         "   번호를 바꾸려면 지시서와 **같은 커밋에서** 바꾼다."
     )
+
+
+def test_0_은_범위밖이다(tmp_path, sheet, monkeypatch) -> None:
+    """🆕 2026-09-20 — 칸을 하나 더 두지 않는다. `0` 을 적으면 「여덟 유형 어디에도 없다」."""
+    monkeypatch.setattr(ls, "ROOT", tmp_path)
+    ls.import_(_csv(tmp_path, sheet, ["0", "8"]), sheet, "")
+    got = [
+        json.loads(x)
+        for x in (tmp_path / "data/derived/labels/권소라__sheet.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert got[0]["판단"] == "범위밖" and got[0]["확정유형"] == []
+
+
+def test_옛_판_CSV_도_읽는다(tmp_path, sheet, monkeypatch) -> None:
+    """이미 채워 둔 옛 판(`후보유형`·`붙인날` 칸) CSV 가 가져오기에서 막히지 않는다."""
+    monkeypatch.setattr(ls, "ROOT", tmp_path)
+    p = tmp_path / "옛.csv"
+    rows = ls._rows(sheet)
+    with p.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["행", "문구", "후보유형", "유형번호", "붙인이", "붙인날", "지문"])
+        for i, r in enumerate(rows, 1):
+            t = ls._text(r)
+            w.writerow([i, t, "", "8", "권소라", "2026-09-10", ls._fp(t)])
+    ls.import_(p, sheet, "")
+    assert (tmp_path / "data/derived/labels/권소라__sheet.jsonl").exists()
+
+
+def test_보기는_번호와_함께_보인다() -> None:
+    got = ls.choices({"후보유형": ["질병_예방치료_표방", "의약품_오인"]})
+    assert got.startswith("1 질병_예방치료_표방 · 2 의약품_오인")
+    assert "0=범위밖" in got

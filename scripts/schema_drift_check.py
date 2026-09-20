@@ -10,10 +10,10 @@
    다르다** — 새로 클론한 사람은 오늘자 모양 위에서, 쓰던 사람은 그때 모양 위에서 돈다.
    ⛔ **버전형 체인의 불변식은 「0번이 고정」이다.** 그게 깨지면 나머지는 순서가 있을 뿐이다.
 
-★ **이 검사가 `0001` 동결의 선결이다.** 동결(= 오늘자 `schema.sql` 스냅샷을 박는 것)은
-  두 벌이 **지금 같다**는 전제 위에 선다. 다르면 그 차이가 **영구히** 굳는다.
-  동결 뒤에는 이 검사가 **게이트**가 된다 — 「`schema.sql` 만 고치고 마이그레이션을 안 썼다」를
-  사람이 잊어도 여기서 잡는다.
+★ **`0001` 은 동결됐다** (2026-09-14 · `db/schema_0001.sql` 을 읽는다 — `alembic/versions/0001_governance_layer.py`).
+  그래서 이 검사는 이제 **게이트**다 — 「`schema.sql` 만 고치고 마이그레이션을 안 썼다」, 또는
+  「마이그레이션만 쓰고 `schema.sql` 을 안 고쳤다」를 사람이 잊어도 여기서 잡는다.
+  (위 🔴 의 「실행 시점에 `db/schema.sql` 을 읽는다」는 동결 **이전**의 이야기다.)
 
 🚨 **정적 검사로는 못 잡는다.** `tests/test_db_schema.py` 는 텍스트만 본다. 어느 제약이 어느
    타입을 붙잡는지, 뷰 정의가 정규화되면 어떻게 되는지는 **PostgreSQL 만 안다.**
@@ -23,8 +23,10 @@
    같으면 아무것도 안 하고 멈춘다 (D-220 fail-closed).
 
 ⬜ **여기서 안 보는 것** (D-188) —
-   ① **런타임 층.** `app/models.py` 가 만드는 표는 `schema.sql` 에 없다 — **선언에 없는 것은
-      차이가 아니다.** 이름만 참고로 낸다.
+   ① **런타임 층.** `app/models.py` 가 만드는 표(ORM `Base.metadata.tables`)는 `schema.sql` 에 없다 —
+      그 이름들만 면제하고 이름을 참고로 낸다.
+      🆕 2026-09-20 (D-254) — ⛔ 종전에는 **head 에만 있는 객체를 전부** 면제했다. 마이그레이션으로
+         만든 거버넌스 표를 `schema.sql` 에 안 적어도 초록이었다. 이제 ORM 밖의 것은 차이로 센다 (D-220).
    ② **데이터.** 빈 표만 만든다.
    ③ **downgrade.**
    ④ **성능.** 인덱스가 있는지는 보지만 쓰이는지는 안 본다.
@@ -45,6 +47,7 @@ from scripts.db_fresh_check import (  # noqa: E402 — 위에서 sys.path 를 �
     drop_db,
     guard_real_db,
     make_db,
+    reachable,
 )
 
 #: 🚨 진짜 DB 이름과 겹칠 수 없는 이름 둘. ⛔ 짧게 줄이지 않는다 — 지우는 대상이다.
@@ -131,11 +134,24 @@ def fingerprint(url: str, name: str) -> dict[str, dict[str, set[tuple[str, ...]]
     return out
 
 
-def compare(decl: dict[str, dict[str, set]], head: dict[str, dict[str, set]]) -> int:
-    """선언에 있는 객체만 대조한다. 🚨 **head 에만 있는 것은 차이가 아니다** — 런타임 층이다.
+def runtime_objects() -> frozenset[str]:
+    """런타임 층 — ORM(`app/models.py`)이 아는 표 이름. 🚨 **목록을 여기 다시 적지 않는다** (D-99)."""
+    from app.models import Base  # noqa: PLC0415 — sys.path 를 세운 뒤라야 든다
+
+    return frozenset(Base.metadata.tables)
+
+
+def compare(
+    decl: dict[str, dict[str, set]],
+    head: dict[str, dict[str, set]],
+    runtime: frozenset[str] | None = None,
+) -> int:
+    """두 벌을 대조한다. head 에만 있는 객체는 **런타임 층(ORM 표)만** 면제한다.
 
     반환 — 차이가 난 객체 수. 0 이면 두 벌이 같다.
     """
+    if runtime is None:
+        runtime = runtime_objects()
     diffs = 0
     for axis in FINGERPRINT:
         d, h = decl[axis], head[axis]
@@ -156,10 +172,16 @@ def compare(decl: dict[str, dict[str, set]], head: dict[str, dict[str, set]]) ->
                 print(f"     head 에만 {r[1:]}")
 
         extra = sorted(set(h) - set(d))
-        if extra:
-            print(f"\n  ⬜ [{axis}] head 에만 있는 객체 {len(extra)}개 — **차이가 아니다**")
-            print(f"     {', '.join(extra)}")
-            print("     ★ 런타임 층(`app/models.py`)과 마이그레이션이 새로 만든 것이다.")
+        known = [o for o in extra if o in runtime]
+        stray = [o for o in extra if o not in runtime]
+        if known:
+            print(f"\n  ⬜ [{axis}] head 에만 있는 런타임 층 {len(known)}개 — **차이가 아니다**")
+            print(f"     {', '.join(known)}")
+            print("     ★ ORM(`app/models.py`)이 아는 표다 — `schema.sql` 이 적지 않는 층이다.")
+        for obj in stray:
+            diffs += 1
+            print(f"\n  🔴 [{axis}] `{obj}` — **head 에만 있고 선언에도 ORM 에도 없다**")
+            print("     ★ 마이그레이션이 만들었는데 `db/schema.sql` 에 안 적었다.")
     return diffs
 
 
@@ -173,6 +195,8 @@ def main() -> int:
 
     url = sqlalchemy_url()
     real = guard_real_db(url, DECL, HEAD)
+    if not reachable(url):
+        return 1
     print(f"🚨 임시 DB 둘 `{DECL}`·`{HEAD}` 를 만든다 — 진짜 DB `{real}` 은 안 건드린다.\n")
 
     try:
@@ -204,14 +228,14 @@ def main() -> int:
     if diffs:
         print(
             f"\n🔴 **두 벌이 갈려 있다 — 객체 {diffs}개.**\n"
-            "   ⛔ 이 상태로 `0001` 을 동결하면 **위 차이가 영구히 굳는다.**\n"
+            "   ⛔ 새로 클론한 DB(`migrate`)와 선언(`schema.sql`)이 다른 모양이다.\n"
             "   ★ 고치는 법 — 차이마다 둘 중 하나다:\n"
             "     ① `schema.sql` 이 맞다 → 그 차이를 **새 마이그레이션**으로 쓴다\n"
             "     ② 마이그레이션이 맞다 → `schema.sql` 을 그 모양으로 맞춘다\n"
             "   🚨 어느 쪽이 맞는지는 **사람이 정한다.** 이 검사는 다르다는 것만 말한다."
         )
         return 1
-    print("\n✅ `db/schema.sql` 과 `alembic head` 가 같은 모양이다 — 동결해도 갈리지 않는다.")
+    print("\n✅ `db/schema.sql` 과 `alembic head` 가 같은 모양이다 (런타임 층 표만 면제).")
     return 0
 
 

@@ -69,7 +69,8 @@ import sys
 from collect import store
 
 SOURCE_ID = "mfds_hf_ingredient_board"
-RAW_DIR = pathlib.Path("data/raw/mfds_hf_board")  # 🚨 폴더 이름 ≠ 원천 id
+#: 🚨 폴더 이름 ≠ 원천 id (`mfds_hf_board`). 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
+RAW_DIR = store.family_path(SOURCE_ID)
 OUT = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
 
 #: ○ 키 : 값 본문을 가진 유일한 분류. 나머지 셋은 고시를 가리킬 뿐이다.
@@ -471,7 +472,7 @@ def main() -> int:
             return 1
 
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        with OUT.open("w", encoding="utf-8") as fh:
+        with OUT.open("w", encoding="utf-8", newline="\n") as fh:
             for rec in after:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(f"\n  🔴 마스킹 — 바뀐 필드 {dict(changed) or '없음'} · 치환 {len(log)}건")

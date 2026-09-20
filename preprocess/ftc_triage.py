@@ -168,7 +168,9 @@ def main() -> int:
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+        OUT.write_text(
+            json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+        )
         print(f"\n→ {OUT} ({n:,}행)")
         print("  🚨 data/ 는 .gitignore 대상이다 (D-19) — 커밋되지 않는다. 이 스크립트가 원본이다.")
     return 0

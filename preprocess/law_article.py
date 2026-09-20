@@ -25,8 +25,9 @@ import xml.etree.ElementTree as ET
 from collect import store
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-LAW = ROOT / "data" / "raw" / "law"
 SOURCE = "law_go_kr"
+# 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
+LAW = store.family_path(SOURCE)
 # 🚨 판례·재결례는 다른 모듈이 맡는다 — 여기서 섞으면 「조문」과 「사건」이 한 파일에 섞인다
 PREFIX = ("law_", "admrul_")
 
@@ -246,7 +247,7 @@ def main() -> int:
     print(f"\n조문 노드 {len(all_rows)}개 · 법령 {len(files)}건")
     if args.dump:
         out = store.derived_dir(".") / "law_article.jsonl"
-        with out.open("w", encoding="utf-8") as f:
+        with out.open("w", encoding="utf-8", newline="\n") as f:
             for r in all_rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         print(f"💾 → {out.relative_to(ROOT)}")

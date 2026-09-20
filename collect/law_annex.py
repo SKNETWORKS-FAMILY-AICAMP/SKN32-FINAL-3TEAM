@@ -24,6 +24,14 @@ from collect import env, law_api, registry, store
 
 SOURCE_ID = "law_go_kr"
 
+#: 🆕 D-253 — 이 수집기가 **기본으로 안 받는** 원장 경로(`data/raw/` 뒤 · glob). `collect/missing.py` 가 읽어
+#:    doctor·inventory 가 「정책 제외 — 재수집해도 안 돌아온다」로 센다.
+#:    ⛔ 선언이 없으면 09-02 에 받은 서식 34개가 「재수집하면 닫힌다」로 안내됐다(2026-09-20 실측 · 클론 B).
+#:    🚨 `--forms` 로 받으면 파일이 생기므로 결손이 아니다 — 이 선언은 **없을 때의 이유**만 말한다.
+NOT_KEPT: tuple[tuple[str, str], ...] = (
+    ("law/annex/*_form_*", "법령 서식 — 기본으로 받지 않는다 (`--forms` · D-220 · S2-04)"),
+)
+
 # 괘선 문자 — 표의 구조를 이것으로만 판단한다
 BORDER_TOP = "┌┬┐"
 BORDER_MID = "├┼┤"
@@ -374,7 +382,7 @@ def collect_annex(law_id: str, *, dry_run: bool = False, forms: bool = False) ->
 
     if parsed_rows and not dry_run:
         out = store.derived_dir("law_annex") / f"{law_id}.jsonl"
-        with out.open("w", encoding="utf-8") as f:
+        with out.open("w", encoding="utf-8", newline="\n") as f:
             for r in parsed_rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         print(f"\n  💾 파싱 {len(parsed_rows)}행 → {out.relative_to(store.ROOT)}")
