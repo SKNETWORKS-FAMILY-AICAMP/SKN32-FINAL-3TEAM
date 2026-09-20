@@ -370,7 +370,7 @@ def _check_intact(rows: list[dict], source: str) -> None:
 
 def _write(name: str, rows: list[dict]) -> pathlib.Path:
     out = store.derived_dir(".") / name
-    with out.open("w", encoding="utf-8") as f:
+    with out.open("w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(store.stamp(r, r["원천"]), ensure_ascii=False) + "\n")
     return out

@@ -190,6 +190,12 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         "출처: 식품의약품안전처 「식품 등 온라인 부당광고 사례집」(사이버조사팀, 2026-04) "
         "(저작권법 제24조의2 제1항 · 제37조)",
     ),
+    # 🔄 2026-09-17 — 식품안전나라 게시물이라 D-132 **준용**이다(mfds.go.kr 본청이 아니다).
+    "mfds_casebook_2021": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「온라인 식품·건강기능식품·의약외품·화장품 분야 부당광고 사례집」"
+        "(사이버조사팀, 2021) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
     "krei_food": (
         "공공누리 제1유형(출처표시) — 원시자료 배지 실측 2026-09-02. "
         "🚨 「공공누리」가 조건이 아니라 **유형**이 조건이다 (D-110)",
@@ -246,6 +252,13 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         _LIC_MFDS_APPLIED,
         "출처: 식품의약품안전처 「식품·의약품등의 온라인 자율관리 가이드라인"
         "(부당광고·불법유통)」(민원인안내서 1270-01·1271-01, 2023-02) "
+        "(저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    # 🆕 2026-09-19 — 2인 확인 완료. 같은 게시판(m_1060) 민원인안내서 `mfds_online_guideline` 과 같은 판정.
+    #    🚨 해석일자는 문서마다 다르다 — 여기 넣지 않는다(위 머리말 · D-18).
+    "mfds_cgm_expc": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 질의회신(법제처 국가법령정보 「중앙부처 1차 해석」) "
         "(저작권법 제24조의2 제1항 · 제37조)",
     ),
     "mfds_production": (
@@ -409,6 +422,16 @@ def block(key, s, extra=None, covers=None, status="collect"):
 EXTRA = {
     # ── 마스킹 정책 3종 (2026-09-08) — `docs/ohb/검토요청_2026-09-08_마스킹정책_3종.md` §4
     #    🚨 각 축을 **실제로 걸어 보고** 정했다. 수치는 그 문서와 사실원장에 있다.
+    # 🔄 2026-09-17 — mfds_casebook 과 같은 축을 켜되 **실측이 아직 표본 2쪽뿐**이다.
+    "mfds_casebook_2021": [
+        "masking: >-",
+        "  업체명·대표자명·상표·주소 즉시 마스킹, 원문 미보관 (D-17).",
+        "  🚨 **원천이 이미 가렸다** — 스크린샷의 제품명·판매자명이 흰 박스 처리돼 있다.",
+        "  ⛔ 다만 **전수 확인은 안 했다**(2026-09-17 표본 2쪽). D-157 로 재기 전까지 방어로 켠다 —",
+        "  mfds_casebook 에서 대표자명 1건이 진짜였던 자리다.",
+        "  🚨 적발 광고 캡처는 광고주 저작물이라 **이미지는 G1 미추출**이다 (D-18).",
+        "  ★ 그러나 **문구 추출은 다른 축**이다 — 문구만 취해 G2+NOREDIST·40자 상한으로 다룬다 (D-133 ①②③).",
+    ],
     "mfds_casebook": [
         "masking: >-",
         "  업체명·대표자명·상표·주소 즉시 마스킹, 원문 미보관 (D-17). 2026-09-08 판정 · 2인 확인.",
@@ -657,8 +680,23 @@ EXTRA = {
         "  ⚠️ ATC 추가 약관이 JS SPA 라 저장·재배포 조항을 아직 못 읽었다 — 미확인인 채로",
         "  자동 수집을 열어 두는 것이 가장 나쁘다.",
     ],
+    # 🆕 2026-09-19 — 2인 확인 완료 (`docs/ohb/검토요청_2026-09-18_mfds_cgm_expc.md` §6 제안 그대로).
+    "mfds_cgm_expc": [
+        "masking: >-",
+        "  업체명·대표자명 즉시 마스킹 (D-17). 질의요지에 질의자·특정 업체가 섞일 수 있다.",
+        "  🚨 D-233 의 「피심인」 개념이 없다(민원 질의) — 가리는 대상은 **질의자 · 질의 속 특정 업체**다.",
+        "  상표(brand)은 끈다 — 제품명이 곧 판정 대상 표현일 수 있다(mfds_press 와 같은 이유 · D-157).",
+        "  주소(addr)은 끈다 — 본문 2건 실측 0 · 민원 회답에 소재지가 올 자리가 없다.",
+        "  ⬜ 본문 2건만 봤다 — 수집 뒤 표본으로 다시 잰다.",
+    ],
     "law_go_kr": [
         "access: API (OC 키 필요 — .env LAW_OC_KEY · 2026-08-20 승인 완료)",
+        # 🆕 2026-09-19 — 판례·재결례에 **사람 축만** 켠다 (`docs/ohb/검토요청_2026-09-19_마스킹정책_law_go_kr.md` (가)).
+        "masking: >-",
+        "  대표자명 등 개인 실명 즉시 마스킹 (판례·재결례 텍스트 칸 · 2026-09-19 판정 · 2인 확인).",
+        "  원천이 당사자를 ○○ 로 가려 주지만 빠뜨린 자리가 있다(2026-09-19 실측 1건 · 재결례).",
+        "  업체명(org)은 끈다 — 공표된 판단문의 처분청·당사자 법인은 5층 반례의 값이다.",
+        "  주소(addr)은 끈다 · 상표(brand)은 끈다 — 같은 이유. 조문(법령)은 부르지 않는다(사람 이름이 없다).",
         "note: >-",
         "  🚨 [별표] 조회 가능 여부가 미확인이다. 조회되지 않으면 시행령 별표를",
         "  본문 HTML 파싱으로 받아야 하며 수집 경로가 갈린다 (수집리스트 S2-04).",
@@ -673,16 +711,27 @@ ORDER = [
     "mfds_sanctions",
     "mfds_press",
     "mfds_casebook",
+    # 🔄 2026-09-17 신규 — 2021 판 사례집. mfds_casebook 과 중복 아님(OCR 84쪽 전량 대조).
+    #    9호·10호·화장품법 유형이 우리 원천 중 여기에만 있고, 사전 새 어휘 103종이 나온다.
+    "mfds_casebook_2021",
     # 🔄 2026-09-07 신규 — 2인 확인 판정 A(A-1)·B·E 로 열렸다
     # ⛔ 2026-09-09 내렸다 — `NOT_ADOPTED_IDS` 와 `registry_tail.yaml` 의 not_adopted 로 간다.
     #    🚨 ORDER 에 남겨 두면 미채택으로 적어 놓고도 sources 에 그대로 생성된다.
     #    "foodsafety_admin_measure",
     # 🔄 2026-09-09 신규 — 식품안전나라 오픈API 2종. 근거는 판정 D + D-132 준용.
-    "foodsafety_ad_monitor",
+    # ⛔ 2026-09-19 내렸다 (팀장 판정) — `NOT_ADOPTED_IDS` 와 `registry_tail.yaml` 의 not_adopted 로 간다.
+    #    🚨 ORDER 에 남겨 두면 미채택으로 적어 놓고도 sources 에 그대로 생성된다 (foodsafety_admin_measure 선례).
+    #    "foodsafety_ad_monitor",
     "foodsafety_penalty_std",
     "mfds_cosmetic_sanction",
     "mfds_special_use_guide",
+    # 🔄 2026-09-17 신규 — 화장품 축 적법 표현의 유일한 원천(별표 금지 44·허용 45·입증 7).
+    #    🚨 3층이 아니라 1층이다 — 문서 3쪽이 스스로 「대외적으로 법적 효력을 가지는 것이
+    #       아니」라고 적는다 (D-138 선례). 텍스트 층 0자라 status 는 manual.
+    "mfds_cosmetic_ad_guide_2013",
     "ftc_noviolation",
+    # 🆕 2026-09-18 — 법제처 「중앙부처 1차 해석」 중 식약처분. G0 · hold 로 올려 탐침만 연다 (D-109).
+    "mfds_cgm_expc",
     # 2층 적법 라벨
     "mfds_hf_ingredient",
     "mfds_hf_individual",
@@ -747,9 +796,13 @@ STATUS = {
     #       알아듣고 **서비스만 못 찾는다.** 안내 페이지는 살아 있는데 API 가 안 돈다.
     #    ★ 배운 것 — **「안내 페이지가 있다」가 「서비스가 있다」가 아니다.**
     #      풀려면 sample 키로 다시 부르고, 그때도 310 이면 not_adopted 로 내린다.
-    "foodsafety_ad_monitor": "hold",
+    # 🔄 2026-09-19 — **내렸다.** sample 키도 310(2026-09-18 사용자 실행) → 위 조건 충족 · 팀장 판정.
+    #    "foodsafety_ad_monitor": "hold",
     "kcia_guideline": "hold",
     "ftc_noviolation": "hold",
+    # 🆕 2026-09-18 — G0 라 전 용도 deny · 게이트 22 상 collect 가 될 수 없다. 탐침(D-109) 뒤 2인 확인으로 정한다.
+    # 🔄 2026-09-19 — 2인 확인 완료(결정 오한빈 · 확인 권소라) · G3 (D-132 준용) → **collect** 로 연다.
+    #    "mfds_cgm_expc": "hold",
     # D-132 — 등급은 G3 로 판정됐으나 크롤링형이라 robots_checked_at 과 「무단 복제」 문구 확인이 선행. use 는 UN(fail-closed)
     "foodsafety_faq": "hold",
     "google_trends": "hold",
@@ -774,6 +827,10 @@ STATUS = {
     # 🔄 2026-09-07 D-136 — nedrug.mfds.go.kr robots 가 「User-agent: * / Disallow: /」 전면 차단이다.
     #    자동 수집기를 붙이지 않는다. 사이트가 제공하는 엑셀다운로드를 사람이 누르는 경로만 남는다.
     "mfds_cosmetic_sanction": "manual",
+    # 🔄 2026-09-17 — **PDF 에 텍스트 층이 없다**(pdftotext 0자 · mfds_online_guideline 과 같다).
+    #    자동 추출기를 붙일 수 없어 붙임2 별표 89행을 사람이 전사했다
+    #    (docs/ohb/화장품_별표2013_전사.py). 수집기가 실행할 것이 없으므로 manual 이다.
+    "mfds_cosmetic_ad_guide_2013": "manual",
     "meta_adlibrary": "manual",
     "google_atc": "manual",
 }
@@ -789,14 +846,21 @@ for key in ORDER:
     out.append(block(key, s, EXTRA.get(key), covers, st))
 
 (ROOT / "build").mkdir(exist_ok=True)
-with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8") as _out:
+with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8", newline="\n") as _out:
     _out.write("\n\n".join(out) + "\n")
 print("등재", len(ORDER), "건 · 법제처 covers", len(LAW_COVERS), "종 흡수")
 # 🔄 미채택으로 내린 것은 매트릭스에 판정 근거로 남지만 레지스트리 sources 에는 없다.
 #    registry_tail.yaml 의 not_adopted 가 그 자리다 (D-110).
 # 🔄 2026-09-09 — `foodsafety_admin_measure` 를 내렸다 (팀장 판정).
 #    오픈API 가 같은 축을 더 넓게, **개인정보 없이** 준다. 사유는 registry_tail.yaml 에 있다.
-NOT_ADOPTED_IDS = {"nasmedia_npr", "nasmedia_fb", "kfia_approved", "foodsafety_admin_measure"}
+# 🔄 2026-09-19 — `foodsafety_ad_monitor` 를 내렸다 (팀장 판정). 원천이 서비스를 안 준다(ERROR-310 · 두 키).
+NOT_ADOPTED_IDS = {
+    "nasmedia_npr",
+    "nasmedia_fb",
+    "kfia_approved",
+    "foodsafety_admin_measure",
+    "foodsafety_ad_monitor",
+}
 missing = [
     s["id"]
     for s in SRC
@@ -814,6 +878,6 @@ for m in missing:
 body = (ROOT / "build/registry_body.yaml").read_text(encoding="utf-8")
 head = (ROOT / "scripts/registry_head.yaml").read_text(encoding="utf-8")
 tail = (ROOT / "scripts/registry_tail.yaml").read_text(encoding="utf-8")
-(ROOT / "data_sources.yaml").write_text(head + body + tail, encoding="utf-8")
+(ROOT / "data_sources.yaml").write_text(head + body + tail, encoding="utf-8", newline="\n")
 print("data_sources.yaml 생성 완료 —", len(head + body + tail), "문자")
 print("🚨 이어서 반드시: uv run pytest -m gate")

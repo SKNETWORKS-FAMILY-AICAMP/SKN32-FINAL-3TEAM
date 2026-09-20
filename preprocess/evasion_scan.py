@@ -40,6 +40,8 @@ from preprocess.text import LEX, evasion, quoted
 
 #: 🚨 소스 이름이 곧 경로다 — `data/raw/<이름>/` 을 읽고 `data/derived/<이름>/` 에 쓴다.
 #:    수집기가 그렇게 저장하므로(store.raw_dir) 여기서 규칙을 다시 만들지 않는다.
+#: 🔗 넷째 값 `text/` 는 **마스킹 전 PDF 전문 캐시**다 — `scripts/derived_manifest.py` `KIND_RULES` 가 이 폴더 이름으로
+#:    원문캐시(저장소로 안 옮긴다)를 가른다. 이름을 바꾸면 양쪽을 같이 (D-99 · D-251).
 def paths(source: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
     raw = pathlib.Path("data/raw") / source
     der = pathlib.Path("data/derived") / source
@@ -81,7 +83,7 @@ def pdf_text(path: pathlib.Path, cache: pathlib.Path, *, refresh: bool = False) 
             parts.append(page.extract_text() or "")
     text = "\n".join(parts)
     cache.mkdir(parents=True, exist_ok=True)
-    cached.write_text(text, encoding="utf-8")
+    cached.write_text(text, encoding="utf-8", newline="\n")
     return text
 
 
@@ -237,10 +239,13 @@ def main() -> int:
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+        OUT.write_text(
+            json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+        )
         QUOTES.write_text(
             json.dumps([{"doc": d, "quote": q} for d, q in quotes], ensure_ascii=False, indent=1),
             encoding="utf-8",
+            newline="\n",
         )
         print(f"\n→ {OUT} ({n}건)\n→ {QUOTES} ({len(quotes)}회 · 고유 {len(uniq)}종)")
     return 0

@@ -48,6 +48,12 @@ TYPES: tuple[str, ...] = (
 )
 HEADER = ["행", "문구", "후보유형", "유형번호", "붙인이", "붙인날", "지문"]
 
+#: 🔴 **「범위 밖」은 빈칸이 아니다** (2026-09-17). 종전에는 `유형번호` 가 비면 그 행을 **버렸다** —
+#:    「판단이 안 선다(빈칸)」와 「별표1 여덟 유형에 자리가 없다」가 **같은 취급**을 받았다.
+#:    둘은 다른 정보이고, 뒤엣것은 **유형 체계에 구멍이 있다는 관측**이라 버리면 안 된다 (D-160).
+#: 🚨 `판단` 열은 **선택**이다 — 없으면 종전과 똑같이 돈다.
+OUT_OF_SCOPE = "범위밖"
+
 
 def _text(r: dict) -> str:
     """시트마다 문구 칸 이름이 다르다 — guide 는 `문구`, casebook 은 `글`."""
@@ -162,8 +168,13 @@ def import_(csv_path: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
             tampered.append(i)
             continue
         labs = parse_no(rec.get("유형번호") or "", i)
-        if not labs:
-            continue
+        scope = (rec.get("판단") or "").strip()
+        if scope == OUT_OF_SCOPE:
+            if labs:
+                raise SystemExit(f"🔴 {i}행이 「범위밖」인데 유형번호가 있다 — 둘 중 하나만 적는다")
+            base["판단"] = OUT_OF_SCOPE
+        elif not labs:
+            continue  # 빈칸 — 판단이 없는 것이다. 버린 것이 아니다
         base["확정유형"] = labs
         base["붙인이"] = (rec.get("붙인이") or "").strip()
         base["붙인날"] = (rec.get("붙인날") or "").strip() or day
@@ -180,12 +191,21 @@ def import_(csv_path: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
     who = (filled[0].get("붙인이") or "이름없음").strip()
     out = ROOT / "data" / "derived" / "labels" / f"{who}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("w", encoding="utf-8") as f:
+    with out.open("w", encoding="utf-8", newline="\n") as f:
         for r in out_rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    print(f"  → {out.relative_to(ROOT)}  ({n}건 · 빈칸 {len(filled) - n}건)")
+    scoped = sum(1 for r in out_rows if r.get("판단") == OUT_OF_SCOPE)
+    print(
+        f"  → {out.relative_to(ROOT)}  ({n}건 · 그중 범위밖 {scoped}건 · 빈칸 {len(filled) - n}건)"
+    )
     print("  🚨 빈칸은 **안 들어갔다.** 버린 것이 아니라 판단이 없는 것이다.")
     print("\n  취합 — uv run python scripts/label_merge.py data/derived/labels/*.jsonl")
+    # 🔄 2026-09-20 (D-249) — 라벨은 git 에 올리지 않는다(공개 저장소 · 인용 원문). 정본이 저장소에 올린다.
+    print(
+        "  🚨 git 에 커밋하지 않는다 (D-249). 정본(클론 B)에서 import 한 뒤 —\n"
+        "     launcher.py derived-manifest --write → 원장 커밋 · push → launcher.py data-publish\n"
+        "     팀원은 채운 CSV 를 팀장에게 넘긴다 (정본만 올린다 · D-226)"
+    )
     return 0
 
 
@@ -203,6 +223,17 @@ def main() -> int:
     a = ap.parse_args()
     if a.cmd == "export":
         return export(a.sheet, a.who, a.part)
+    # 🆕 2026-09-20 — 라벨(원천)은 **정본만** 쓴다 (D-226 · D-249). 팀원은 채운 CSV 를 팀장에게 넘긴다.
+    #    🚨 `python scripts/label_sheet.py` 로 불리면 sys.path[0] 이 `scripts/` 다 — 레포 루트를 앞에 둔다
+    #       (`derived_manifest.py` 가 같은 이유로 같은 일을 한다 · 런처가 이 경로로 부른다)
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    why = dm.not_canonical("labelsheet import")
+    if why:
+        print(why, file=sys.stderr)
+        return 1
     return import_(a.csv, a.sheet, a.day)
 
 

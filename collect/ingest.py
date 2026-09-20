@@ -20,7 +20,12 @@
 
     uv run python -m collect.ingest register <소스id> <경로> --use U1
         `registry.require()` 를 통과해야 한다 — 🚨 `reviewed_by` 가 비면 여기서 거부된다.
-        data/raw/<소스id>/ 로 복사하고 manifest 에 provenance 와 함께 1행 남긴다.
+        소스의 **원문 폴더**(`store.raw_dir_of`)로 복사하고 manifest 에 provenance 와 함께 1행 남긴다.
+        🔴 원문 폴더 ≠ 소스 id 인 소스가 넷이다 (D-245). 이 줄이 예전에 「data/raw/<소스id>/」라고
+           적혀 있었고, 그 설명대로 넣어서 화장품법 334노드가 사라졌다 (2026-09-18).
+        ⛔ **다른 기기에서 받은 raw 를 합치는 데 쓰지 않는다** — `walk()` 뒤 `p.name` 만 써서
+           하위 폴더(`law/annex/`)를 펴고, 첫 폴더로만 넣고(`mfds_press_pdf` → `mfds_press`),
+           원장에 행을 또 붙인다 (검토 2026-09-19 §3-d). 합류는 따로 만든다.
 
 🚨 **`register` 는 등급 디렉터리에 넣지 않는다.** 원문은 `data/raw/` 다 (D-92) —
    한 원문 파일 안에서 조각의 등급이 갈리면 어느 등급 디렉터리에도 놓을 수 없다 (D-18).
@@ -101,12 +106,17 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
     2인 확인을 면제하지 않는다** — 오히려 게이트가 유일하게 남은 자리다.
     """
     spec = registry.require(source_id, use=use)
+    store.device_id()  # 🆕 D-250 — 별칭이 없으면 **복사 전에** 멈춘다
     files = walk(target)
     if not files:
         print(f"🚨 {target} 에 파일이 없다")
         return 1
 
-    dest_dir = store.raw_dir(source_id)  # data/raw/<소스id>/ — 등급 디렉터리가 아니다
+    # 🔴 **소스 id 가 아니라 계열 폴더다** (2026-09-18 사고 · store.FAMILY_OF).
+    #    ⛔ 종전에는 `raw_dir(source_id)` 라 `law_go_kr` 파일이 `data/raw/law_go_kr/` 로 갔다.
+    #       추출기는 `data/raw/law/` 를 보므로 화장품법 334노드가 코퍼스에서 조용히 사라졌다
+    #       (law_article 2,207 → 1,873). 폴더 이름이 소스 id 와 다른 소스가 **넷**이다.
+    dest_dir = store.raw_dir_of(source_id)  # 등급 디렉터리가 아니다
     url = str(spec.get("url") or "")
     new = skipped = 0
 
@@ -148,6 +158,60 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
     return 0
 
 
+def cmd_adopt(source_id: str, stem: str) -> int:
+    """판(`__c…`)을 **원본 자리로 올린다** (D-143 의 마지막 한 칸 · 2026-09-18).
+
+    🔴 **비어 있던 자리다.** `collect` 는 판을 **만들고**(규약 2 — 원본은 덮어쓰지 않는다),
+       `store.current_files()` 는 판이 있으면 **멈춘다**(「어느 것을 쓸지는 사람이 정한다」).
+       그런데 **채택하는 쪽이 없었다** — 판을 만든 지 열흘이 넘도록 아무도 채택을 못 했다.
+
+    ⛔ 손으로 하면 원장이 깨진다. 이름만 바꾸면 원본 경로의 바이트가 **그 경로에 기록된
+       어느 sha 와도 다르므로** `doctor --hash` 가 🔴 훼손으로 찍는다. 그래서 여기서
+       **원장에 그 경로의 새 행을 붙인다.**
+
+    🚨 2인 확인을 요구하지 않는다 (팀장 판정 2026-09-18) — 채택은 이미 사람이 두 판을
+       보고 내리는 판정이고, `require()` 를 한 번 더 세우면 같은 사람에게 같은 것을 두 번 묻는다.
+       대신 **등록된 소스인지**는 본다. 그리고 판이 둘 이상이면 **멈춘다** — 어느 것인지 사람이 정한다.
+    """
+    registry.spec(source_id)  # 미등록이면 거부
+    store.device_id()  # 🆕 D-250 — 별칭이 없으면 **옮기기 전에** 멈춘다
+
+    d = store.raw_dir_of(source_id)
+    eds = sorted(p for p in d.glob(f"{stem}{store.EDITION_MARK}*") if p.is_file())
+    if not eds:
+        print(f"🚨 {d} 에 {stem}{store.EDITION_MARK}… 판이 없다 — 채택할 것이 없다")
+        return 1
+    if len(eds) > 1:
+        names = ", ".join(p.name for p in eds)
+        print(f"🔴 판이 {len(eds)}개다 — 어느 것을 올릴지 사람이 정한다 (D-143): {names}")
+        return 1
+
+    ed = eds[0]
+    base = d / f"{stem}{ed.suffix}"
+    digest, size = digest_of(ed)
+    if base.exists():
+        if digest_of(base)[0] == digest:
+            print(f"⬜ 원본과 판이 같다 — 판만 치운다: {ed.name}")
+            ed.unlink()
+            return 0
+        print(f"  ⛔ 원본을 버린다 — {base.name} ({base.stat().st_size:,} B)")
+        base.unlink()
+
+    ed.rename(base)
+    store.manifest_append(
+        source_id=source_id,
+        url=str(registry.spec(source_id).get("url") or ""),
+        sha256=digest,
+        bytes_=size,
+        rows=count_lines(base),
+        path=str(base.relative_to(ROOT)),
+    )
+    print(f"채택 — {ed.name} → {base.name}  ({size:,} B · sha {digest[:16]})")
+    print(f"  원장에 {base.relative_to(ROOT)} 의 새 행을 붙였다 — doctor 가 훼손으로 안 본다")
+    print("  🚨 무엇이 바뀌었는지는 사람이 원장에 적는다 (D-54)")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(
         prog="collect.ingest", description="사람이 받아 온 파일을 등록한다"
@@ -162,7 +226,14 @@ def main(argv: list[str]) -> int:
     r.add_argument("path", type=Path)
     r.add_argument("--use", required=True, choices=sorted(registry.VALID_USES))
 
+    d = sub.add_parser("adopt", help="판(__c…)을 원본 자리로 올린다 — 2인 확인은 요구하지 않는다")
+    d.add_argument("source_id")
+    d.add_argument("stem", help="판을 뺀 원본 이름 (확장자 없이) 예: law_002015_20260402")
+
     a = ap.parse_args(argv[1:])
+    if a.cmd == "adopt":
+        return cmd_adopt(a.source_id, a.stem)
+    # 🚨 `adopt` 는 경로가 아니라 이름을 받으므로 아래 존재 검사 앞을 지난다
     if not a.path.exists():
         print(f"🚨 {a.path} 가 없다")
         return 1

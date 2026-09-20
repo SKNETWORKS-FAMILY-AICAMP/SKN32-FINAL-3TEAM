@@ -292,7 +292,7 @@ def write_sheet(path, rows: list[dict], key_fields: tuple[str, ...]) -> tuple[in
 
     carried = 0
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             rec = {**r, "붙인이": "", "붙인날": ""}
             old = filled.get(_sheet_key(r, key_fields))

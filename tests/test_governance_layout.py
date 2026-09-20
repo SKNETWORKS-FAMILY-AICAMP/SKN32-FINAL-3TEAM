@@ -333,6 +333,20 @@ RAW_EXCEPTIONS = {
     Path("tests/test_sanctions_scan.py"),
     Path("tests/test_store_edition.py"),
     Path("tests/test_store_read_editions.py"),
+    # 🔄 2026-09-18 — 판 채택은 `data/raw` 안에서 판을 원본 자리로 올리는 일 **그 자체**라
+    #    그 경로를 들지 않고는 검사할 수 없다 (`test_store_edition.py` 와 같은 자리).
+    #    ⛔ 이 검사를 약하게 하지 않는다 — 경로를 안 드는 꼴로 테스트를 고치면
+    #       2026-09-18 사고(소스 id 폴더에 넣어 334노드 소실)를 막는 검사가 사라진다 (D-162).
+    Path("tests/test_adopt.py"),
+    # 🔄 2026-09-19 (D-247) — 사본 받기가 옛 판을 덮기 전에 **원문 폴더가 있는지만** 본다.
+    #    raw 가 있는 기기에서 덮어쓰면 그것이 클론 B(정본)일 수 있어 한 번 묻는다. 열지 않는다.
+    #    ⛔ `store.RAW` 를 빌려 써서 이 검사를 조용히 지나가지 않는다 — 예외는 목록으로 둔다.
+    Path("scripts/data_store.py"),
+    # 🆕 2026-09-20 (D-250) — 팀원이 받은 원문을 **옮기는** 일 그 자체다(받은편지함 ↔ `data/raw`).
+    #    내용을 해석하지 않는다 — 키 섞임만 바이트로 보고 sha 로 대조해 제자리에 놓는다. 소비 경로가 아니다.
+    #    ★ 원장 경로가 `data/raw` 밖이면 막는 것이 이 모듈의 검사다 — 경로를 안 들고는 그 검사를 못 쓴다.
+    Path("scripts/raw_inbox.py"),
+    Path("tests/test_raw_inbox.py"),
 }
 
 
@@ -969,6 +983,10 @@ EXAMPLE_DEFAULTS = {
     "LANGCHAIN_TRACING_V2",
     "LANGSMITH_TRACING",
     "COPYLANE_EDITION",
+    # 🔄 2026-09-19 (D-247) — 기기 역할. 비밀이 아니라 **이 기기가 받는 쪽인가**이고,
+    #    기본값 `replica` 가 보여야 새 기기(팀원)가 저절로 받는 쪽이 된다.
+    #    ⛔ `DATA_STORE` 는 **여기 없다** — 경로는 기기마다 달라 예제에 값이 있으면 안 된다.
+    "DATA_ROLE",
 }
 
 
@@ -1457,6 +1475,95 @@ def test_생성물이_훅의_고정점이다() -> None:
         "생성물이 pre-commit 훅과 싸운다 — 돌릴 때마다 훅이 고쳐 커밋이 중단된다.\n"
         "  🚨 훅을 끄지 말고 **생성기가 훅의 모양을 지키게** 고친다 (D-90 — 생성물을 "
         "손으로 고치지 않는다).\n  " + "\n  ".join(bad)
+    )
+
+
+#: 텍스트를 쓰는 곳을 훑는 자리. 🚨 `wb`(바이너리)와 `newline=""`(csv 모듈이 요구한다)는 제외한다.
+_TEXT_WRITE_MODES = {"w", "wt", "a", "at", "x", "xt", "w+", "r+", "a+"}
+
+
+def _text_writers(path: Path) -> list[tuple[int, str]]:
+    """`(줄번호, 호출이름)` — 개행을 고정하지 않은 텍스트 쓰기 자리."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:  # pragma: no cover — 문법이 깨졌으면 다른 게이트가 잡는다
+        return []
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+        if name == "write_text":
+            pass
+        elif name == "open":
+            # 🔴 2026-09-19 — `open(path, mode)` 은 모드가 **둘째** 인자지만 `Path.open(mode)` 는 **첫째**다.
+            #    ⛔ 둘째만 봐서 `MANIFEST.open("a", encoding=…)` 가 「읽기」로 보였고, 수집 원장이
+            #       Windows 에서 CRLF 로 5,148줄 붙는 동안 이 게이트는 초록이었다.
+            pos = node.args[0:1] if isinstance(fn, ast.Attribute) else node.args[1:2]
+            mode = next(
+                (
+                    a.value
+                    for a in pos + [k.value for k in node.keywords if k.arg == "mode"]
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str)
+                ),
+                "r",
+            )
+            if mode not in _TEXT_WRITE_MODES:
+                continue
+        else:
+            continue
+        kw = {k.arg for k in node.keywords}
+        if "encoding" in kw and "newline" not in kw:
+            out.append((node.lineno, name))
+    return out
+
+
+@pytest.mark.gate
+def test_텍스트를_쓰는_곳은_개행을_고정한다() -> None:
+    """🔴 **파이썬은 Windows 에서 `\n` 을 `\r\n` 으로 바꿔 쓴다** (2026-09-17 실측).
+
+    ⛔ `.gitattributes` 가 `* text=auto eol=lf` 인데 생성기가 CRLF 로 써서 —
+       · 추적되는 생성물은 `git add` 마다 **「CRLF will be replaced by LF」 경고**가 나고
+         재생성할 때마다 **내용이 같은데도 modified 로 뜬다**
+       · 추적 안 되는 `data/**` 는 **클론마다 바이트가 다르다.**
+         `evalset_by_statute.jsonl` 이 클론 B 에서 **869,426 B**, 리눅스에서 **867,592 B**
+         (차이 1,834 = 줄 수). **되받아 바이트로 대조하는 절차(D-149)가 통째로 무의미해진다.**
+
+    ★ 그래서 텍스트를 쓰는 모든 자리가 `newline=` 을 **명시**한다.
+      🚨 `newline=""` 도 명시다 — csv 모듈이 그것을 요구한다. 여기서 막는 것은 **안 적은 것**이다.
+    """
+    bad = [
+        f"{p.relative_to(ROOT).as_posix()}:{line} — {name}(…) 에 newline= 이 없다"
+        for d in ("scripts", "preprocess", "collect", "app", "db")
+        if (ROOT / d).is_dir()
+        for p in sorted((ROOT / d).rglob("*.py"))
+        for line, name in _text_writers(p)
+    ]
+    assert not bad, (
+        "생성물의 개행이 기기마다 갈린다 — Windows 에서 CRLF 로 쓰인다.\n"
+        '  ★ 고치는 법: `encoding="utf-8"` 옆에 `newline="\\n"` 을 붙인다.\n  ' + "\n  ".join(bad)
+    )
+
+
+@pytest.mark.gate
+def test_생성물이_CRLF_로_쓰여_있지_않다() -> None:
+    """🚨 **바이트로 읽는다.** `read_text()` 는 universal newlines 라 CRLF 를 못 본다 —
+
+    앞 게이트(`test_생성물이_훅의_고정점이다`)가 CRLF 를 지나보낸 이유가 그것이다.
+    """
+    crlf = b"\r\n"
+    bad = []
+    for rel in GENERATED:
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        n = path.read_bytes().count(crlf)
+        if n:
+            bad.append(f"{rel}: CRLF {n:,}줄")
+    assert not bad, (
+        '생성물이 CRLF 로 쓰여 있다 — 생성기가 newline="\\n" 을 안 걸었거나, '
+        "손으로 고친 뒤 편집기가 바꿨다 (D-90 · D-92).\n  " + "\n  ".join(bad)
     )
 
 

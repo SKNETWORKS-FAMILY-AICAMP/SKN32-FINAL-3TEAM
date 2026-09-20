@@ -227,7 +227,7 @@ def main() -> int:
         return 0
 
     for p, want in targets:
-        p.write_text(want, encoding="utf-8")
+        p.write_text(want, encoding="utf-8", newline="\n")
     print(f"판정 {len(rows)}건 →")
     for p, _ in targets:
         print(f"   {p.relative_to(ROOT)}")

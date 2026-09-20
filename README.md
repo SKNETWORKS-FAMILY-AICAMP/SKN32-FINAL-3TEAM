@@ -13,10 +13,10 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![tests](https://img.shields.io/badge/tests-720_(gate_301)-0F7B4F?style=flat-square)
-![decisions](https://img.shields.io/badge/설계결정-D--223-2B5BD7?style=flat-square)
+![tests](https://img.shields.io/badge/tests-733_(gate_326)-0F7B4F?style=flat-square)
+![decisions](https://img.shields.io/badge/설계결정-D--234-2B5BD7?style=flat-square)
 
-**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 226건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
+**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 234건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
 
 </div>
 
@@ -71,7 +71,7 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 | ③ | **보류에는 반드시 사유가 있다** | `CHECK (verdict='hold') = (hold_reason IS NOT NULL)` |
 | ④ | **위험도를 올리려면 근거 스팬이 있어야 한다** | `ck_judgment_raise_needs_evidence` |
 
-판정 결과는 통과/위반 둘이 아니라 **넷**입니다 — `confirmed` · `hold` · `no_basis` · `unjudged`. **미판정을 통과로 세지 않습니다** (D-125 · D-127). 위험도는 **R0~R4** 이고 한 번 올라가면 내려오지 않습니다(래칫 · D-09).
+판정 결과는 통과/위반 둘이 아니라 **넷**입니다 — `confirmed` · `hold` · `no_basis` · `unjudged`. **미판정을 통과로 세지 않습니다** (D-125 · D-127). 위험도는 **R0~R3** 이고(R4 는 도달 불가 · D-227) 한 번 올라가면 내려오지 않습니다(래칫 · D-09).
 
 <details>
 <summary><b>검수 workflow · 재검수 게이트 · 판정 1회의 읽기/쓰기</b></summary>
@@ -202,7 +202,7 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 ```
 게이트 테스트   pytest -m gate   326건
 전체 테스트     pytest           733건
-설계 결정       D-01 ~ D-226     빠진 번호 0
+설계 결정       D-01 ~ D-234     빠진 번호 0
 ```
 
 ---
@@ -239,9 +239,23 @@ uv run python launcher.py serve      # FastAPI
 > | 🟢 되는 것 | 게이트 테스트 · DB 스키마 · API 기동 · **고정 응답 14건**(`GET /fixtures`) · 문서 전부 |
 > | 🔴 안 되는 것 | 실제 판정 · 검색 · 학습 — 수집을 거쳐야 합니다 |
 >
-> 커밋되는 것은 **`data/manifest.jsonl`(수집 원장)** 뿐입니다. 무엇을 언제 어디서 받아 `sha256` 이 무엇이었는지가 거기 있습니다 — **내용 없이 이력만** 남깁니다.
+> 커밋되는 것은 **원장 둘**(`data/manifest.jsonl` 수집 원장 · `data/derived_manifest.jsonl` 파생물 원장)과 골든셋 분할표뿐입니다. 무엇을 언제 어디서 받아 `sha256` 이 무엇이었는지가 거기 있습니다 — **내용 없이 이력만** 남깁니다. 파생물 파일은 팀 비공개 저장소가 옮깁니다 (D-247 · D-249).
 >
 > 수집에는 각자 발급받은 API 키(`launcher.py setkey`)와 **2인 확인 서명**이 필요합니다. 🚨 키 값을 셸 인자로 넘기지 마십시오 — 셸 기록에 남습니다. `.env` 가 유일한 입구입니다.
+
+### 데이터 — 누가 무엇을 치나
+
+기기마다 **역할**이 하나입니다. 처음 한 번 `data-setup` 이 역할·폴더를 `.env` 에 적습니다(손으로 열지 않습니다).
+파생물을 **만드는** 명령은 정본에서만 돌고, 다른 기기에서는 이유와 할 일을 말하고 멈춥니다 (D-226).
+
+| 역할 | 누구 | 처음 한 번 | 평소 |
+|---|---|---|---|
+| **정본** | 클론 B 한 대 | `data-setup --role canonical` | `collect` → `data-refresh <원천>` → `data-publish` → 원장 커밋·push → `load` |
+| **사본** | 클론 A · 팀원 · 서버 | `data-setup` | `git pull` 뒤 그냥 쓴다 — `load`·`chunk`·`embed` 가 부족한 파생물을 **스스로 받는다** (`data-sync`) |
+| **수집 팀원** | 사본 + 수집 | `data-setup --device <별칭>` | `collect` → `raw-publish` → 수집 원장을 **자기 브랜치**에 push → 팀장이 `raw-import --from <브랜치>` 로 검사·병합·`raw-import` |
+
+🚨 별칭은 팀 회의로 겹치지 않게 정하고 **실명을 쓰지 않습니다** — 수집 원장은 이 공개 저장소에 올라갑니다.
+🚨 공유 폴더(Drive)는 초대받은 계정만 엽니다. 폴더 이름을 알아도 들어갈 수 없습니다. 키는 `.env` 에만 있고 원문에 키가 섞이면 올리기가 멈춥니다.
 
 ---
 
@@ -291,7 +305,7 @@ uv run python launcher.py serve      # FastAPI
 | 문서 | 무엇인가 |
 |---|---|
 | [`docs/00_사실원장.md`](docs/00_사실원장.md) | ★ **수치 · 일정 · 파라미터의 단일 출처.** 전부 실측이고, 어느 기기에서 쟀는지까지 적습니다 |
-| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 219건.** 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
+| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 234건.** 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
 | [`docs/00_거버넌스_집행계약.md`](docs/00_거버넌스_집행계약.md) | 게이트가 무엇을 어떻게 막는지 |
 | [`docs/00_산출물현황.md`](docs/00_산출물현황.md) | 산출물 현황 — 제출본은 여기서 빌드합니다 |
 | [`docs/01_기획/`](docs/01_기획/) · [`02_설계/`](docs/02_설계/) · [`03_데이터/`](docs/03_데이터/) | 기획서 · DB 스키마 · 청킹 · LangGraph 상태 · 전처리 사양 |
