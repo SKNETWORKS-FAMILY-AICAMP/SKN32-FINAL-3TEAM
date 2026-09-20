@@ -106,6 +106,27 @@ def make_db(url: str, name: str) -> None:
         conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
 
+def reachable(url: str) -> bool:
+    """관리 DB 에 붙어 보고, 못 붙으면 **고치는 법**을 찍는다 (D-254 · D-51).
+
+    ⛔ 종전에는 `make_db` 가 첫 접속에서 트레이스백으로 죽었다 — 원인이 「DB 가 안 떠 있다」인데
+       화면에는 psycopg 의 스택만 남았다. `db-drift` 도 이것을 먼저 부른다 (D-99).
+    """
+    import psycopg  # noqa: PLC0415
+
+    try:
+        with _admin_conn(url):
+            return True
+    except psycopg.OperationalError as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+        print(
+            f"🔴 DB 에 못 붙었다 — {first[:160]}\n"
+            "   ★ DB 가 안 떠 있으면: uv run python launcher.py db-up 먼저\n"
+            "   ★ 떠 있는데 거절하면: .env 의 DATABASE_URL(사용자·비밀번호)을 본다"
+        )
+        return False
+
+
 def drop_db(url: str, name: str) -> None:
     with _admin_conn(url) as conn, conn.cursor() as cur:
         cur.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
@@ -134,6 +155,8 @@ def main() -> int:
     url = sqlalchemy_url()
     real = guard_real_db(url, SCRATCH)
 
+    if not reachable(url):
+        return 1
     print(f"🚨 임시 DB `{SCRATCH}` 를 만든다 — 진짜 DB `{real}` 은 건드리지 않는다.")
     make_db(url, SCRATCH)
     code = alembic_head(url, SCRATCH)
@@ -149,8 +172,10 @@ def main() -> int:
             "\n🔴 **빈 DB 에서 마이그레이션이 안 돈다.**\n"
             "   ⛔ 지금 쓰는 DB 에서는 돌 수 있다 — 새로 클론한 사람만 밟는다.\n"
             "   ★ 위 오류의 마지막 마이그레이션을 연다. 대개 **새 DB 에는 이미 있는 것**을\n"
-            "     또 만들거나 지우려는 자리다 (0001 이 읽는 `db/schema.sql` 이 정본이므로\n"
-            "     새 DB 는 **끝난 모양에서 시작한다** — D-221)."
+            "     또 만들거나 지우려는 자리다. 🔄 0001 은 **동결본** `db/schema_0001.sql` 을 읽는다\n"
+            "     (2026-09-14) — 새 DB 는 그 모양에서 시작해 0002… 를 차례로 탄다 (D-221).\n"
+            "   🟡 오류가 `connection refused`·`could not connect` 면 DB 가 안 떠 있다 —\n"
+            "     uv run python launcher.py db-up 을 먼저 돌린다."
         )
         return 1
     print("\n✅ 빈 DB → `alembic upgrade head` 가 끝까지 돌았다.")

@@ -25,8 +25,9 @@ from collect import store
 from preprocess.mask import apply_policy
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-LAW = ROOT / "data" / "raw" / "law"
 SOURCE = "law_go_kr"
+# 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
+LAW = store.family_path(SOURCE)
 
 FIELDS = {
     "prec": (

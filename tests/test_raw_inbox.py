@@ -346,6 +346,7 @@ def test_병합_전_검사는_브랜치_원장으로_보고_아무것도_놓지_
     branch_rows = _rows(repo)
     _ledger(repo, [])  # 정본의 원장에는 아직 없다 — 병합 전이다
     monkeypatch.setattr(ri, "_branch_ledger", lambda b: branch_rows)
+    monkeypatch.setattr(ri, "_base_ledger", lambda b: [])  # 🆕 D-254 — 빈 원장에서 갈라졌다
     monkeypatch.setenv("DATA_ROLE", "replica")  # 검사는 역할을 안 묻는다
     assert ri.import_(branch="origin/collector") == 0
     assert not (repo / row["path"]).exists(), "검사가 파일을 놓았다"
@@ -450,3 +451,166 @@ def test_Mac_의_Drive_위치에서도_저장소를_찾는다(tmp_path) -> None:
     want = home / "Library" / "CloudStorage" / "GoogleDrive-team@x" / "My Drive" / ds.STORE_NAME
     want.mkdir(parents=True)
     assert ds.candidates(ds.default_roots(home)) == [want]
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 D-254 — 런처 전수 감사 (2026-09-20) 에서 나온 결함
+# ══════════════════════════════════════════════════════════
+def _canonical(monkeypatch) -> None:
+    monkeypatch.setenv("DATA_DEVICE", "clone-b")
+    monkeypatch.setenv("DATA_ROLE", "canonical")
+
+
+@pytest.mark.gate
+def test_채택한_팀원_판은_합치지_않은_원문으로_세지_않는다(repo, inbox, monkeypatch) -> None:
+    """🔴 §1-1 — 팀원 판(`__c`)을 정본이 `adopt` 로 원래 이름으로 옮기면 판 경로가 사라진다.
+
+    ⛔ 종전: `pending` 이 영영 1 → extract·data-publish 가 막히고, `raw-import` 가 판을 다시 놓는다 → 또 adopt …
+    ★ `collect.missing.classify` 가 `moved`(같은 sha 가 디스크의 다른 경로에) 로 가른다 (D-253 · D-99).
+    """
+    _canonical(monkeypatch)
+    body = b'{"a":2}'
+    ed = f"data/raw/{FAM}/page_0001__c20260919.json"
+    base = f"data/raw/{FAM}/page_0001.json"
+    # 팀원이 받은 판 → raw-import 로 놓임 → 정본이 adopt: 판 이름이 원래 이름으로 바뀌고 원장에 새 줄
+    (repo / base).parent.mkdir(parents=True, exist_ok=True)
+    (repo / base).write_bytes(body)
+    _ledger(repo, [_row(ed, body, "collector-1"), _row(base, body, "clone-b")])
+    obj = inbox / "objects" / _sha(body)[:2] / _sha(body)
+    obj.parent.mkdir(parents=True)
+    obj.write_bytes(body)  # 받은편지함에 판이 그대로 있어도
+    assert ri.pending() == [], "채택한 판을 합치지 않은 원문으로 셌다 — extract 가 영영 막힌다"
+    assert ri.check_pending() == 0
+    assert ri.import_(yes=True) == 0
+    assert not (repo / ed).exists(), (
+        "채택한 판을 raw-import 가 되살렸다 — 추출기가 판 때문에 멈춘다"
+    )
+
+
+@pytest.mark.gate
+def test_크기가_다르면_옮겨진_것으로_보지_않는다(repo, inbox, monkeypatch) -> None:
+    """`moved` 는 크기까지 맞아야 한다 — 같은 sha 라고 적힌 자리의 파일이 다르면 여전히 합칠 후보다."""
+    _canonical(monkeypatch)
+    body = b'{"a":2}'
+    ed = f"data/raw/{FAM}/page_0001__c20260919.json"
+    base = f"data/raw/{FAM}/page_0001.json"
+    (repo / base).parent.mkdir(parents=True, exist_ok=True)
+    (repo / base).write_bytes(body + b" ")
+    _ledger(repo, [_row(ed, body, "collector-1"), _row(base, body, "clone-b")])
+    assert [r["path"] for r in ri.pending()] == [ed]
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("why", ["g2", "noredist"])
+def test_합치기는_pending_과_같은_거름을_쓴다(repo, inbox, monkeypatch, why) -> None:
+    """🔴 §1-4 ① — G2·재배포 제약은 `pending` 이 안 센다. `import_` 가 따로 굴면 G2 를 되살리거나 전체를 거부했다."""
+    row = _uploaded(repo, inbox, monkeypatch, b'{"a":1}')
+    (inbox / "objects" / row["sha256"][:2] / row["sha256"]).unlink()  # 받은편지함에 없다
+    from collect import registry
+
+    monkeypatch.setattr(registry, "is_g2", lambda s: why == "g2")
+    monkeypatch.setattr(ri, "_noredist", lambda s: why == "noredist")
+    assert ri.pending() == []
+    assert ri.import_(yes=True) == 0, "pending 이 안 세는 것을 합치기가 「없음」으로 전체 거부했다"
+    assert not (repo / row["path"]).exists()
+
+
+@pytest.mark.gate
+def test_G2_는_받은편지함에_있어도_되살리지_않는다(repo, inbox, monkeypatch) -> None:
+    row = _uploaded(repo, inbox, monkeypatch, b'{"a":1}')
+    from collect import registry
+
+    monkeypatch.setattr(registry, "is_g2", lambda s: True)
+    assert ri.import_(yes=True) == 0
+    assert not (repo / row["path"]).exists(), "정본이 지운 G2 원문을 되살렸다 (D-17)"
+
+
+@pytest.mark.gate
+def test_모르는_원천은_합치지_않고_센다(repo, inbox, monkeypatch) -> None:
+    """🚨 레지스트리에 없는 원천 — 막는 쪽 (D-220). `pending` 은 세고 `import_` 는 거부한다."""
+    row = _uploaded(repo, inbox, monkeypatch, b'{"a":1}')
+    from collect import registry
+
+    def unknown(s):
+        raise registry.RegistryError(s)
+
+    monkeypatch.setattr(registry, "is_g2", unknown)
+    assert [r["path"] for r in ri.pending()] == [row["path"]]
+    assert ri.import_(yes=True) == 1
+    assert not (repo / row["path"]).exists()
+
+
+def _branch(monkeypatch, base: list[dict], rows: list[dict]) -> None:
+    monkeypatch.setattr(ri, "_branch_ledger", lambda b: rows)
+    monkeypatch.setattr(ri, "_base_ledger", lambda b: base)
+
+
+@pytest.mark.gate
+def test_병합_전_검사는_재배포_제약을_막고_안내가_맞다(repo, inbox, monkeypatch, capsys) -> None:
+    """재배포 제약은 `raw-publish` 가 **안 올린다** — 「raw-publish 다시」라고 하면 영영 안 끝난다."""
+    row = _uploaded(repo, inbox, monkeypatch, b'{"a":1}')
+    _ledger(repo, [])
+    _branch(monkeypatch, [], [row])
+    monkeypatch.setattr(ri, "_noredist", lambda s: True)
+    capsys.readouterr()
+    assert ri.import_(branch="origin/collector") == 1
+    out = capsys.readouterr().out
+    assert "재배포 제약" in out and "올리지 않는다" in out
+    assert "`raw-publish` 를 다시 요청" not in out, out
+
+
+@pytest.mark.gate
+def test_병합_전_검사는_같은_경로_다른_sha_를_막는다(repo, inbox, monkeypatch) -> None:
+    """🔴 §1-4 ② — 정본에 이미 있는 경로를 **다른 바이트**로 적은 브랜치가 「✅ 병합해도 된다」였다."""
+    _canonical(monkeypatch)
+    p = f"data/raw/{FAM}/page_0001.json"
+    (repo / p).parent.mkdir(parents=True)
+    (repo / p).write_bytes(b'{"a":1}')
+    local = [_row(p, b'{"a":1}', "clone-b")]
+    _ledger(repo, local)
+    _branch(monkeypatch, local, [*local, _row(p, b'{"a":2}', "collector-1")])
+    assert ri.import_(branch="origin/collector") == 1
+    # 원장에 없고 디스크에만 있는 경로도 같다
+    _ledger(repo, [])
+    _branch(monkeypatch, [], [_row(p, b'{"a":2}', "collector-1")])
+    assert ri.import_(branch="origin/collector") == 1
+    # 같은 sha 면 통과 (이미 합친 줄)
+    _branch(monkeypatch, [], [_row(p, b'{"a":1}', "collector-1")])
+    assert ri.import_(branch="origin/collector") == 0
+
+
+@pytest.mark.gate
+def test_병합_전_검사는_원장의_옛_줄을_고치거나_지운_브랜치를_막는다(
+    repo, inbox, monkeypatch
+) -> None:
+    """원장은 붙이기만 한다 — 갈래점 원장이 브랜치 원장의 앞머리가 아니면 🔴."""
+    _canonical(monkeypatch)
+    a = _row("data/raw/f/a.json", b"1", "clone-b")
+    b = _row("data/raw/f/b.json", b"2", "clone-b")
+    (repo / "data/raw/f").mkdir(parents=True)
+    (repo / "data/raw/f/a.json").write_bytes(b"1")
+    (repo / "data/raw/f/b.json").write_bytes(b"2")
+    _ledger(repo, [a, b])
+    _branch(monkeypatch, [a, b], [a])  # 지웠다
+    assert ri.import_(branch="origin/collector") == 1
+    _branch(monkeypatch, [a, b], [a, {**b, "bytes": 99}])  # 고쳤다
+    assert ri.import_(branch="origin/collector") == 1
+    _branch(monkeypatch, [a, b], [a, b])  # 그대로
+    assert ri.import_(branch="origin/collector") == 0
+    assert ri.rewritten([a, b], [b, a])
+
+
+@pytest.mark.gate
+def test_올리기는_정본의_옛_원문을_올리지_않는다(repo, inbox, monkeypatch, capsys) -> None:
+    """🟡 §2 raw-publish — 옛 원문이 있는 사본(클론 A)이 기기 칸 없는 과거분·`canonical` 줄을 올리지 않는다."""
+    sha = _collected(repo, monkeypatch, b'{"mine":1}')
+    for name, dev in (("legacy.json", None), ("canon.json", store.CANONICAL_DEVICE)):
+        f = repo / "data" / "raw" / FAM / name
+        f.write_bytes(name.encode())
+        _ledger(repo, [*_rows(repo), _row(f"data/raw/{FAM}/{name}", name.encode(), dev)])
+    capsys.readouterr()
+    assert ri.publish(yes=True) == 0
+    objs = sorted(p.name for p in (inbox / "objects").rglob("*") if p.is_file())
+    assert objs == [sha]
+    out = capsys.readouterr().out
+    assert "옛 행 1개" in out and "행 1개" in out, out

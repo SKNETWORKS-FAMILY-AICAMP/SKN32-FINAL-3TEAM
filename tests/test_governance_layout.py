@@ -347,6 +347,9 @@ RAW_EXCEPTIONS = {
     #    ★ 원장 경로가 `data/raw` 밖이면 막는 것이 이 모듈의 검사다 — 경로를 안 들고는 그 검사를 못 쓴다.
     Path("scripts/raw_inbox.py"),
     Path("tests/test_raw_inbox.py"),
+    # 🆕 2026-09-20 (D-253) — 결손 가르기의 테스트. 원장 경로 모양(`data\\raw\\…`)을 그대로 들어야
+    #    윈도우 구분자·선언 패턴(`law/annex/*_form_*`)이 맞는지 잰다. 임시 폴더만 쓴다 — 소비 경로가 아니다.
+    Path("tests/test_missing.py"),
 }
 
 

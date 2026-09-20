@@ -323,3 +323,80 @@ def test_키는_설정_경로로_쓰지_않는다() -> None:
 
     with pytest.raises(setkey.SetKeyError):
         setkey.put_setting("LAW_OC_KEY", "x")
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 D-254 — 런처 전수 감사 (2026-09-20)
+# ══════════════════════════════════════════════════════════
+@pytest.mark.gate
+def test_원문_확인은_gitkeep_만_있으면_묻지_않는다(tmp_path: pathlib.Path) -> None:
+    """🟡 §2 data-sync — `.gitkeep` 이 추적되므로 「폴더가 있다」는 모든 기기에서 참이었다(안 읽히는 확인)."""
+    mark = tmp_path / "raw"
+    assert ds.has_raw(mark) is False, "폴더가 없는데 원문이 있다고 봤다"
+    mark.mkdir()
+    (mark / ".gitkeep").write_bytes(b"")
+    assert ds.has_raw(mark) is False, ".gitkeep 만 있는데 원문이 있다고 봤다"
+    (mark / "src" / "fam").mkdir(parents=True)
+    assert ds.has_raw(mark) is False, "빈 하위 폴더를 원문으로 봤다"
+    (mark / "src" / "fam" / "a.json").write_bytes(b"{}")
+    assert ds.has_raw(mark) is True
+
+
+#: 수집 원장의 경로 — 🚨 이 파일은 원문 폴더 이름을 적지 않는다(게이트 `RAW_EXCEPTIONS` 밖). 검사는 경로만 본다
+RAWP = "원문_자리/x/"
+
+
+def _ledger_rows(rows: list[dict]) -> None:
+    store.MANIFEST.write_text(
+        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8", newline="\n"
+    )
+
+
+@pytest.mark.gate
+def test_팀원이_받은_재배포_제약_원천은_정본_publish_를_막지_않는다(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🟡 §2 data-publish — 원장은 git 으로 팀원 줄까지 합쳐진다. 기기 칸을 안 보면 정본이 **영영** 막혔다.
+
+    ★ 파생물은 정본 디스크의 원문으로만 만든다 — 이 기기가 받았는가(기기 칸 · 디스크)로 가른다.
+    """
+    _tmp, _storage, canon = world
+    monkeypatch.setenv("DATA_DEVICE", "clone-b")
+    _ledger_rows([{"source_id": "aihub_558", "path": RAWP + "a.json", "device": "collector-1"}])
+    assert _publish(monkeypatch) == 0, "다른 팀원이 받은 것으로 정본을 막았다"
+    # 같은 줄인데 그 파일이 이 기기 디스크에 있다 — 손으로 옮겼을 수 있다 → 막는다
+    f = canon / RAWP / "a.json"
+    f.parent.mkdir(parents=True)
+    f.write_bytes(b"{}")
+    assert _publish(monkeypatch) == 1
+    f.unlink()
+    # 이 기기 · canonical · 기기 칸 없음(정본의 과거분) — 막는다
+    for dev in ("clone-b", "canonical", None):
+        row = {"source_id": "aihub_558", "path": RAWP + "b.json"}
+        if dev:
+            row["device"] = dev
+        _ledger_rows([row])
+        assert _publish(monkeypatch) == 1, f"{dev} 가 받은 재배포 제약 원천을 못 봤다"
+
+
+@pytest.mark.gate
+def test_publish_기록은_원장_sha_와_커밋_여부를_남긴다(
+    world, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """🟡 §2 data-publish — 「커밋 X 의 원장과 같다」의 X 는 HEAD 였다. 안내 순서(올리고 커밋)에선 거짓이다."""
+    _tmp, storage, _canon = world
+    monkeypatch.setattr(ds, "manifest_in_head", lambda: False)
+    capsys.readouterr()
+    assert _publish(monkeypatch) == 0
+    out = capsys.readouterr().out
+    assert "원장 미커밋" in out and "의 원장과 같다" not in out, out
+    log = (storage / ds.LAYOUT / "publish_log.jsonl").read_text(encoding="utf-8").splitlines()
+    entry = json.loads(log[-1])
+    assert entry["manifest_in_head"] is False
+    assert entry["manifest_sha256"] == hashlib.sha256(dm.OUT.read_bytes()).hexdigest()
+
+
+@pytest.mark.gate
+def test_원장이_HEAD_에_없으면_미커밋으로_본다(world, monkeypatch: pytest.MonkeyPatch) -> None:
+    """가짜 레포는 git 이 아니다 — 모르는 것은 「같다」로 세지 않는다 (None)."""
+    assert ds.manifest_in_head() is None

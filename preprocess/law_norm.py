@@ -41,7 +41,8 @@ import sys
 from collect import store
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ANNEX = ROOT / "data" / "raw" / "law" / "annex"
+# 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
+ANNEX = store.family_path("law_go_kr") / "annex"
 
 # 계층 — 마커의 **모양**이 깊이를 정한다. 들여쓰기로 정하지 않는다:
 # 이어지는 줄의 들여쓰기가 마커 줄과 같아서 둘을 못 가른다 (실측).

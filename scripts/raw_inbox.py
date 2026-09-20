@@ -120,16 +120,24 @@ def _local_ledger() -> list[dict]:
     )
 
 
-def _branch_ledger(branch: str) -> list[dict]:
+def _branch_name(branch: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9._/\-]+", branch):
         raise InboxError(f"브랜치 이름이 이상하다 — {branch!r}")
-    out = subprocess.run(
-        ["git", "-C", str(ROOT), "show", f"{branch}:data/manifest.jsonl"],
+    return branch
+
+
+def _git(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(ROOT), *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
     )
+
+
+def _branch_ledger(branch: str) -> list[dict]:
+    out = _git("show", f"{_branch_name(branch)}:data/manifest.jsonl")
     if out.returncode != 0:
         raise InboxError(
             f"`{branch}` 의 원장을 못 읽었다 — `git fetch` 했는지 본다\n  {out.stderr.strip()[:300]}"
@@ -137,37 +145,149 @@ def _branch_ledger(branch: str) -> list[dict]:
     return _ledger_rows(out.stdout)
 
 
-def _mine(rows: list[dict]) -> list[dict]:
-    """올릴 후보 — **이 기기 디스크에 있고 원장에 있는** 원문 (경로별 마지막 행).
+def _base_ledger(branch: str) -> list[dict]:
+    """🆕 D-254 — 팀원 브랜치가 **갈라진 자리**(merge-base)의 원장. 브랜치는 이 뒤에 **붙이기만** 해야 한다.
 
-    🔄 2026-09-20 (팀장 판정) — ⛔ 종전에는 「원장에 **내 기기 이름**으로 적힌 행」이었다. 그러면
-       `.env` 를 새로 만들어 별칭이 바뀌면 **안 올린 원문이 빠진다.** 기기 이름은 겹침 경고에만 쓴다.
-    ★ 팀원 PC 의 원문은 **자기가 받은 것뿐**이다 — 원문은 저장소로 동기화되지 않고, 정본에 이미 있는 것은
-       원장을 보고 받지 않는다(`save_raw`). 받은편지함에 이미 있는 것은 `publish` 가 거른다.
+    🚨 못 읽으면 멈춘다 — 「비교할 것 없음」을 「붙이기만 했다」로 세지 않는다 (D-220).
     """
+    mb = _git("merge-base", "HEAD", _branch_name(branch))
+    if mb.returncode != 0 or not mb.stdout.strip():
+        raise InboxError(
+            f"`{branch}` 와 이 기기 HEAD 의 갈래점을 못 찾았다 — `git fetch` 했는지 본다\n"
+            f"  {mb.stderr.strip()[:300]}"
+        )
+    out = _git("show", f"{mb.stdout.strip()}:data/manifest.jsonl")
+    if out.returncode != 0:
+        raise InboxError(f"갈래점의 원장을 못 읽었다\n  {out.stderr.strip()[:300]}")
+    return _ledger_rows(out.stdout)
+
+
+def rewritten(base: list[dict], branch: list[dict]) -> list[str]:
+    """🔴 원장은 **붙이기만** 한다 — 갈래점 원장이 브랜치 원장의 앞머리가 아니면 무엇이 어긋났는지.
+
+    ⛔ D-254 전에는 새 줄만 봤다 — 팀원 브랜치가 옛 줄을 **지우거나 고쳐도** 「✅ 병합해도 된다」였다.
+       원장의 옛 줄은 이 기기 파일의 sha 근거다(doctor `--hash` · `save_raw` 의 「받은 적 있다」). 고치면 둘 다 틀린다.
+    """
+    head = branch[: len(base)]
+    if head == base:
+        return []
+    bad = [i for i, r in enumerate(base) if i >= len(head) or head[i] != r]
+    what = "줄 수가 줄었다" if len(branch) < len(base) else "옛 줄이 바뀌었거나 지워졌다"
+    return [
+        f"{what} — 갈래점 원장 {len(base)}줄 중 {len(bad)}줄이 다르다 · 첫 자리 {bad[0] + 1}번째 줄"
+    ]
+
+
+def conflicts(new: list[dict], local: list[dict]) -> list[str]:
+    """🔴 브랜치의 **새 줄**이 이 기기에 이미 있는 경로를 **다른 sha** 로 적었다.
+
+    ⛔ D-254 전에는 `_foreign` 이 이 기기에 있는 경로를 조용히 건너뛰어 「✅ 병합해도 된다」가 났다.
+       병합하면 한 경로에 두 sha 가 적히고 — 디스크는 한쪽뿐이라 `doctor --hash` 가 훼손으로 찍거나
+       `save_raw` 가 틀린 쪽을 「이미 받았다」로 본다. 새 내용은 판(`__c날짜`)으로 와야 한다 (D-250 결정 3).
+    """
+    known: dict[str, set[str]] = {}
+    for r in local:
+        known.setdefault(_path_of(r), set()).add(str(r.get("sha256")))
+    out = []
+    for r in new:
+        p, sha = _path_of(r), str(r.get("sha256"))
+        if p in known:
+            if sha not in known[p]:
+                out.append(f"{p} (원장에 다른 sha)")
+        elif (ROOT / p).is_file() and ds._sha(ROOT / p) != sha:  # noqa: SLF001
+            out.append(f"{p} (디스크에 다른 바이트)")
+    return out
+
+
+def _last(rows: list[dict]) -> dict[str, dict]:
+    """경로 → 그 경로의 **마지막** 원장 행."""
     last: dict[str, dict] = {}
     for r in rows:
         p = _path_of(r)
         if p:
             last[p] = r
-    return [r for p, r in last.items() if (ROOT / p).is_file()]
+    return last
+
+
+def _mine(rows: list[dict]) -> tuple[list[dict], dict[str, int]]:
+    """올릴 후보 — **이 기기 디스크에 있고 원장에 있는** 팀원 수집 원문 (경로별 마지막 행) · 뺀 것의 이유별 수.
+
+    🔄 2026-09-20 (팀장 판정) — ⛔ 종전에는 「원장에 **내 기기 이름**으로 적힌 행」이었다. 그러면
+       `.env` 를 새로 만들어 별칭이 바뀌면 **안 올린 원문이 빠진다.** 기기 이름은 겹침 경고에만 쓴다.
+    🔄 D-254 (런처 전수 감사 §2 raw-publish) — 그래도 **정본의 것**은 뺀다. 기기 칸 없는 옛 행은 정본이 받은 것이고
+       (D-250 결정 4) `canonical` 은 정본의 이름이다. ⛔ 빼지 않으면 옛 원문이 있는 사본(클론 A)은 정본의 과거분
+       수천 개를 받은편지함에 올린다. ★ 다른 팀원 별칭 행은 남긴다 — 내 옛 별칭과 가를 수 없다(위 판정).
+    ★ 팀원 PC 의 원문은 **자기가 받은 것뿐**이다 — 원문은 저장소로 동기화되지 않고, 정본에 이미 있는 것은
+       원장을 보고 받지 않는다(`save_raw`). 받은편지함에 이미 있는 것은 `publish` 가 거른다.
+    """
+    from collect import store  # noqa: PLC0415
+
+    out: list[dict] = []
+    skipped = {"legacy": 0, "canonical": 0}
+    for p, r in _last(rows).items():
+        if not (ROOT / p).is_file():
+            continue
+        who = str(r.get("device") or "")
+        if not who:
+            skipped["legacy"] += 1
+        elif who == store.CANONICAL_DEVICE:
+            skipped["canonical"] += 1
+        else:
+            out.append(r)
+    return out, skipped
+
+
+#: `collect.missing.classify` 가 「디스크에 없는 것이 정상」이라 가른 이유 중 **받은편지함에서 가져오면 안 되는 것**.
+#: 🚨 `other`(다른 기기 것)는 넣지 않는다 — 그것이 바로 합칠 후보다. `g2` 는 `_held_back` 이 가른다 (한 곳 · D-99).
+#:    moved    같은 내용이 디스크의 다른 경로에 있다 — 판을 채택(`adopt`)한 흔적. 다시 놓으면 판이 되살아난다
+#:    excluded 수집기가 안 받는다고 선언한 것 — 돌아오면 안 된다 (D-253)
+#:    cleared  오류 응답 판을 치웠고 정상 판이 있다
+SETTLED = frozenset({"moved", "excluded", "cleared"})
 
 
 def _foreign(rows: list[dict]) -> list[dict]:
-    """다른 기기가 받았고 **이 기기에 없는** 행 — 합칠 후보. 🚨 기기 칸 없는 옛 행은 보지 않는다(정본 자신의 과거다)."""
-    from collect import store  # noqa: PLC0415
+    """다른 기기가 받았고 **이 기기에 없는** 행 — 합칠 후보. 🚨 기기 칸 없는 옛 행은 보지 않는다(정본 자신의 과거다).
+
+    🔄 D-254 (런처 전수 감사 §1-1) — ⛔ 종전에는 「다른 기기 행 · 디스크에 없다」만 봤다. 팀원 판(`x__c날짜`)을
+       정본이 `adopt` 로 `x` 로 옮기면 판 경로가 사라져 **영영 합치지 않은 원문**으로 셌다 — `pending` 이
+       extract·data-refresh·data-publish 를 막고, `raw-import` 는 판을 다시 놓고, 추출기는 판 때문에 멈추고 …
+       ★ 없는 이유는 `collect.missing.classify` 가 가른다 — doctor·inventory 와 같은 함수 (D-253 · D-99).
+       그 함수는 **받은 원장 전부**를 봐야 `moved`(같은 sha 가 다른 경로에) 를 안다 — 걸러 낸 행만 주지 않는다.
+    🔄 D-254 — 경로마다 **마지막** 행을 본다(종전 첫 행). 같은 경로에 줄이 둘이면 뒤의 것이 지금의 sha 다.
+    """
+    from collect import missing, store  # noqa: PLC0415
 
     me = store.device_id()
-    seen, out = set(), []
-    for r in rows:
-        who = r.get("device")
-        p = _path_of(r)
-        if not who or who in (me, store.CANONICAL_DEVICE) or p in seen:
-            continue
-        seen.add(p)
-        if not (ROOT / p).exists():
-            out.append(r)
-    return out
+    cand = [
+        r
+        for p, r in _last(rows).items()
+        if r.get("device")
+        and r.get("device") not in (me, store.CANONICAL_DEVICE)
+        and not (ROOT / p).exists()
+    ]
+    if not cand:
+        return []
+    why = missing.classify(rows, root=ROOT, me=me)
+    return [r for r in cand if why.get(_path_of(r), ("",))[0] not in SETTLED]
+
+
+def _held_back(source_id: str) -> str | None:
+    """받은편지함으로 **오지 않는** 원천이면 그 이유 — `pending` 과 `import_` 가 같이 읽는다 (D-99 · D-254).
+
+    ⛔ D-254 전에는 `pending` 만 G2·재배포 제약을 뺐다 — `import_` 는 정본이 추출 뒤 지운 G2 원문을
+       되살리거나(받은편지함에 있으면) 「없음」으로 **전체를 거부**했다(없으면).
+      `g2`       사실을 뽑은 뒤 원문을 지운다(D-17) — 다시 할 때는 보관본이 아니라 **재수집**이다
+      `noredist` 재배포 제약(D-71) — `raw-publish` 가 올리지 않는다
+      `unknown`  레지스트리에 없다 — 🚨 모르는 것은 막는 쪽 (D-220)
+    """
+    from collect import registry  # noqa: PLC0415
+
+    try:
+        if registry.is_g2(source_id):
+            return "g2"
+    except registry.RegistryError:
+        return "unknown"
+    return "noredist" if _noredist(source_id) else None
 
 
 def summary(rows: list[dict]) -> list[str]:
@@ -197,22 +317,16 @@ def pending() -> list[dict]:
     `raw-import` 로 따로 온다 — 그 사이에 추출·재생성을 돌리면 추출기는 디스크만 읽으므로
     **경고 없이 팀원 원문이 빠진 파생물**이 나온다. 그 자리를 막는다.
     🚨 G2(추출 뒤 원문 삭제 · D-17)와 재배포 제약 원천(받은편지함으로 못 온다 · D-71)은 세지 않는다 —
-       디스크에 없는 것이 정상이거나, 합치기 검사(`--from`)가 이미 막는다.
+       디스크에 없는 것이 정상이거나, 합치기 검사(`--from`)가 이미 막는다. 거르는 곳은 `_held_back` 하나다.
     """
-    from collect import registry  # noqa: PLC0415
-
     if dm.role() != "canonical":
         return []  # 사본은 원문을 안 갖는 것이 정상이다 (D-19)
-    out = []
-    for r in _foreign(_local_ledger()):
-        sid = str(r.get("source_id"))
-        try:
-            if registry.is_g2(sid) or _noredist(sid):
-                continue
-        except registry.RegistryError:
-            pass  # 모르는 원천은 센다 — 없음을 성공으로 세지 않는다 (D-72)
-        out.append(r)
-    return out
+    # 🚨 모르는 원천(`unknown`)은 센다 — 없음을 성공으로 세지 않는다 (D-220)
+    return [
+        r
+        for r in _foreign(_local_ledger())
+        if _held_back(str(r.get("source_id"))) in (None, "unknown")
+    ]
 
 
 def check_pending() -> int:
@@ -225,7 +339,8 @@ def check_pending() -> int:
         f"🔴 합치지 않은 팀원 원문이 {len(rows)}개 있다 — 기기 {who} · 예: {[_path_of(r) for r in rows[:3]]}\n"
         "  원장은 병합됐는데 파일이 없다. 이대로 만들면 **팀원 원문이 빠진 파생물**이 된다 (D-250).\n"
         "  먼저: uv run python launcher.py raw-import\n"
-        "  (받은편지함에 없다고 나오면 팀원에게 `raw-publish` 를 다시 요청한다)"
+        "  (받은편지함에 없다고 나오면 팀원에게 `raw-publish` 를 다시 요청한다 · "
+        "레지스트리에 없는 원천이면 등재가 먼저다)"
     )
     return 1
 
@@ -244,7 +359,12 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     except store.StoreError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 1
-    rows = _mine(_local_ledger())
+    rows, skipped = _mine(_local_ledger())
+    if any(skipped.values()):
+        print(
+            f"⬜ 정본의 원문은 올리지 않는다 — 기기 칸 없는 옛 행 {skipped['legacy']}개(정본의 과거분 · D-250 결정 4) · "
+            f"`{store.CANONICAL_DEVICE}` 행 {skipped['canonical']}개. 이 기기 디스크에 있어도 정본에 이미 있다"
+        )
     bad = unsafe(rows)
     if bad:
         print(f"🔴 원장에 올릴 수 없는 행이 있다 — 아무것도 올리지 않았다: {bad[:5]}")
@@ -317,17 +437,29 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     return 0
 
 
+def _check_branch(branch: str, rows: list[dict]) -> list[str]:
+    """병합 전 검사의 앞 두 줄 — 원장이 붙이기만 했는가 · 새 줄이 있는 경로의 sha 를 바꾸는가 (D-254)."""
+    base = _base_ledger(branch)
+    out = [f"원장 고침 — {x}" for x in rewritten(base, rows)]
+    out += [f"같은 경로 다른 sha — {x}" for x in conflicts(rows[len(base) :], _local_ledger())]
+    return out
+
+
 def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = False) -> int:
     """정본 — 다른 기기가 받은 원문을 받은편지함에서 꺼내 원장 경로에 놓는다.
 
-    `branch` 를 주면 **병합 전 검사만** 한다 — 그 브랜치 원장의 새 줄마다 받은편지함에 맞는 바이트가 있는가.
+    `branch` 를 주면 **병합 전 검사만** 한다 — 그 브랜치 원장이 붙이기만 했는가 · 이미 있는 경로의 sha 를
+    바꾸지 않는가 · 새 줄마다 받은편지함에 맞는 바이트가 있는가.
+    🔄 D-254 — G2·재배포 제약은 `pending` 과 **같은 함수**(`_held_back`)로 거른다.
     """
     check_only = branch is not None
     if not check_only and dm.role() != "canonical":
         print("🔴 합치지 않는다 — 정본(DATA_ROLE=canonical)만 원문을 합친다 (D-226)")
         return 1
     try:
-        rows = _foreign(_branch_ledger(branch) if check_only else _local_ledger())
+        ledger = _branch_ledger(branch) if check_only else _local_ledger()
+        broken = _check_branch(branch, ledger) if check_only else []
+        rows = _foreign(ledger)
         root = inbox_root()
     except InboxError as e:
         print(f"🔴 {e}", file=sys.stderr)
@@ -336,11 +468,16 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
     if bad:
         print(f"🔴 원장에 받을 수 없는 행이 있다 — 아무것도 하지 않았다: {bad[:5]}")
         return 1
-    lack, leaked, noredist = [], [], []
+    held: dict[str, list[str]] = {"g2": [], "noredist": [], "unknown": []}
+    carry = []
     for r in rows:
-        if _noredist(str(r["source_id"])):
-            noredist.append(_path_of(r))
-            continue
+        why = _held_back(str(r["source_id"]))
+        if why:
+            held[why].append(_path_of(r))
+        else:
+            carry.append(r)
+    lack, leaked = [], []
+    for r in carry:
         src = _obj(root, str(r["sha256"]))
         if not src.is_file() or ds._sha(src) != r["sha256"]:  # noqa: SLF001
             lack.append(_path_of(r))
@@ -352,36 +489,70 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
     print(head)
     for line in summary(rows):
         print(line)
-    for name, xs in (
+    # 🚨 G2 는 받은편지함으로 가져오지 않는다 — 정본이 추출 뒤 지운 것을 되살리지 않는다(D-17). 막지도 않는다(`pending` 과 같다)
+    if held["g2"]:
+        print(
+            f"  🟡 G2 {len(held['g2'])}개는 가져오지 않는다 — 추출 뒤 원문을 지우는 원천이다 (D-17).\n"
+            f"     필요하면 정본이 직접 재수집한다 · 예: {held['g2'][:3]}"
+        )
+    # 🔄 D-254 — 재배포 제약은 **병합 전 검사에서만** 🔴 다. 병합 뒤 합치기에서 🔴 로 두면 영영 안 끝난다
+    #    (`raw-publish` 는 그 원천을 올리지 않으므로 받은편지함에 올 일이 없다) — `pending` 과 같이 건너뛴다.
+    noredist_bad = held["noredist"] if check_only else []
+    if held["noredist"] and not check_only:
+        print(
+            f"  🟡 재배포 제약 {len(held['noredist'])}개는 가져오지 않는다 — 받은편지함으로 오지 않는다 (D-71).\n"
+            f"     정본에 필요하면 정본이 직접 받는다 · 예: {held['noredist'][:3]}"
+        )
+    fails = (
+        ("원장 고침·같은 경로 다른 sha", broken),
         ("받은편지함에 없음·sha 불일치", lack),
         ("키 섞임", leaked),
-        ("재배포 제약", noredist),
-    ):
+        ("재배포 제약", noredist_bad),
+        ("레지스트리에 없는 원천", held["unknown"]),
+    )
+    for name, xs in fails:
         if xs:
             print(f"  🔴 {name} {len(xs)}개 — 예: {xs[:3]}")
-    if lack or leaked or noredist:
-        print("  🚨 하나라도 있으면 합치지 않는다 — 팀원에게 `raw-publish` 를 다시 요청한다")
+    if any(xs for _, xs in fails):
+        print("  🚨 하나라도 있으면 합치지 않는다 —")
+        if broken:
+            print(
+                "     · 원장은 붙이기만 한다. 팀원 브랜치에서 옛 줄을 되돌리고, 새 내용은 판(__c날짜)으로 받게 한다 (D-250 결정 3)"
+            )
+        if lack:
+            print("     · 받은편지함에 없음 — 팀원에게 `raw-publish` 를 다시 요청한다")
+        if leaked:
+            print(
+                "     · 키 섞임 — 팀원이 그 파일을 지우고 수집기를 고친 뒤 다시 받는다. 키 재발급은 팀장 판정"
+            )
+        if noredist_bad:
+            print(
+                "     · 재배포 제약 — `raw-publish` 는 이 원천을 **올리지 않는다**(D-71) · 다시 요청해도 안 온다.\n"
+                "       팀원 브랜치에서 그 원장 줄을 빼고, 정본에 필요하면 정본이 직접 받는다"
+            )
+        if held["unknown"]:
+            print("     · 모르는 원천 — 레지스트리에 등재한 뒤 다시 검사한다 (D-220)")
         return 1
     if check_only:
         print("  ✅ 병합해도 된다 — 병합 뒤 `launcher.py raw-import` 로 제자리에 놓는다")
         return 0
-    if not rows:
+    if not carry:
         print("합칠 것 없음")
         return 0
     if dry_run:
         print("🚨 --dry-run — 아무것도 놓지 않았다")
         return 0
-    if not yes and not ds._ask(f"{len(rows)}개를 data/raw 에 놓을까"):  # noqa: SLF001
+    if not yes and not ds._ask(f"{len(carry)}개를 data/raw 에 놓을까"):  # noqa: SLF001
         print("멈췄다")
         return 1
-    for r in rows:
+    for r in carry:
         dest = ROOT / _path_of(r)
         if dest.exists():  # 🚨 규약 2 — 덮어쓰지 않는다 (_foreign 이 거른 뒤 생긴 것)
             print(f"  🟡 이미 있다 — 건너뜀 {_path_of(r)}")
             continue
         ds._copy_verified(_obj(root, str(r["sha256"])), dest, str(r["sha256"]))  # noqa: SLF001
     print(
-        f"놓았다 {len(rows)}개. 판(__c날짜)이 생겼으면 `launcher.py adopt` 로 고른다 (D-246).\n"
+        f"놓았다 {len(carry)}개. 판(__c날짜)이 생겼으면 `launcher.py adopt` 로 고른다 (D-246).\n"
         "  다음 — 파생물 재생성 → `derived-manifest --write` → 커밋 → `data-publish`"
     )
     return 0

@@ -69,7 +69,8 @@ import sys
 from collect import store
 
 SOURCE_ID = "mfds_hf_ingredient_board"
-RAW_DIR = pathlib.Path("data/raw/mfds_hf_board")  # 🚨 폴더 이름 ≠ 원천 id
+#: 🚨 폴더 이름 ≠ 원천 id (`mfds_hf_board`). 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
+RAW_DIR = store.family_path(SOURCE_ID)
 OUT = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
 
 #: ○ 키 : 값 본문을 가진 유일한 분류. 나머지 셋은 고시를 가리킬 뿐이다.

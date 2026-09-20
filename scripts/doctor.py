@@ -64,6 +64,9 @@ TODO: 1~17·19 는 아직 자리표시자다. 지금 도는 것은 `--data` 뿐�
    ㄱ. G2 소스는 사실을 뽑은 뒤 원본을 **지우는 것이 규칙**이다 (D-17 · `drop_raw_for_g2`).
    ㄴ. 다른 클론에서 받은 것은 이 기기에 없는 것이 정상이다 (D-19).
    그래서 결손은 🔴 가 아니라 🟡 로 찍고, 어느 쪽인지 사람이 보게 한다.
+   🔄 2026-09-20 (D-253) — 갈래가 **여덟**이 됐다(옮겨짐 · 정책 제외 · G2 · 오류 판 치움 · 다른 기기 · 유실 ·
+      질의 필터 · 기기 칸 이전). 가르는 일은 `collect/missing.py` 가 하고 inventory 도 같은 것을 쓴다.
+      🔴 는 그중 **이 기기가 받았다고 적혔는데 없는 것**(`lost`) 하나다.
    🔴 는 **이 기기에서 답할 수 있는 것**만이다 — 해시 불일치 · 원장에 없는 파일 ·
    내용이 갈린 중복 · 미등록 source_id.
 """
@@ -96,6 +99,7 @@ RAW = ROOT / "data" / "raw"
 if sys.path and sys.path[0] != str(ROOT):
     sys.path.insert(0, str(ROOT))
 
+from collect import missing as missing_mod  # noqa: E402 — 결손 가르기의 정본 (D-253)
 from collect import registry  # noqa: E402 — 위 sys.path 조정 뒤여야 한다
 
 
@@ -146,6 +150,56 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _report_missing(rows: list[dict[str, Any]], n: int) -> int:
+    """원장에 있고 디스크에 없는 것을 **왜 없는지**로 가른다 (D-253 · `collect/missing.py`). 돌려주는 값은 🔴 개수.
+
+    🔄 2026-09-20 — ⛔ 종전에는 ㄱ(G2)·ㄴ(다른 클론)·ㄷ(질의 필터) 셋을 찍고 사람에게 넘겼다.
+       실측 `law_go_kr` 36개는 셋 다 아니었고(서식 34 · 옮긴 흔적 2), 「재수집하면 닫힌다」는 **틀린 안내**였다.
+    ★ 이제 정상으로 설명되는 것은 한 줄로 접고, **사람이 볼 것**만 목록을 편다.
+    🚨 🔴 는 `lost`(이 기기가 받았다고 적혔는데 없다) 하나다 — 이 기기에서 답할 수 있는 결손만 종료코드에 넣는다.
+       `legacy`·`query` 는 🟡 — 원장으로 못 가르는 것을 🔴 로 세면 다른 클론에서 늘 울어 아무도 안 본다.
+    """
+    got = missing_mod.classify(rows)
+    count = missing_mod.tally(got)
+    eyes = missing_mod.needs_eyes(got)
+    head = "🟡" if eyes else "✅"
+    print(f"  {head} 원장에 있고 디스크에 없는 것 {n:,}개 — 사람이 볼 것 **{eyes:,}개**")
+    for reason, (mark, normal, why) in missing_mod.REASONS.items():
+        if not count.get(reason):
+            continue
+        print(f"     {mark} {reason:9} {count[reason]:>6,}  {why}")
+        if normal:
+            continue
+        # 정상이 아닌 것만 원천별로 편다 — 🚨 원천마다 셋까지만 (전량은 화면을 덮는다)
+        by_sid: collections.Counter[str] = collections.Counter()
+        shown: collections.Counter[str] = collections.Counter()
+        index = {str(r.get("path") or "").replace("\\", "/"): r for r in rows}
+        for p, (rsn, extra) in sorted(got.items()):
+            if rsn != reason:
+                continue
+            sid = str(index.get(p, {}).get("source_id") or "<미상>")
+            by_sid[sid] += 1
+            if shown[sid] < 3:
+                shown[sid] += 1
+                print(f"          {p}" + (f"  ({extra})" if extra else ""))
+        print(f"        원천별 — {dict(by_sid.most_common())}")
+    if count.get("legacy"):
+        print("     🚨 `legacy` — 기기 칸(D-250) 이전 줄이라 원장만으로는 못 가른다.")
+        print("        이 기기에서 쓸 원천이면 다시 받는다 — 같으면 수집기가 스킵한다(규약 2).")
+        print(
+            "        ⛔ 안 돌아오면: 수집기가 안 받게 바뀐 것이다 → 그 수집기에 `NOT_KEPT` 를 선언한다."
+        )
+    if count.get("query"):
+        print("     🚨 `query` — `collect law_go_kr --dry-run` 의 「질의별 실측」 합집합과 맞대야")
+        print("        유실인지 필터인지 갈린다 (D-153). 필터가 뺀 것이면 **돌아오면 안 된다.**")
+    if count.get("lost"):
+        print("     🔴 `lost` — 되돌리려면 이 기기에서 다시 받는다. 일부러 지운 것이면")
+        print(
+            "        그 이유를 수집기 `NOT_KEPT` 에 선언한다 — 원장 줄은 지우지 않는다(참인 이력이다)."
+        )
+    return count.get("lost", 0)
 
 
 def check_data(*, verify_hash: bool) -> int:
@@ -222,7 +276,10 @@ def check_data(*, verify_hash: bool) -> int:
                 #    이웃한 두 판을 맞대는 것이라 길이가 같으면 오히려 틀린다.
                 for a, b in zip(ordered, ordered[1:], strict=False):
                     pa, pb = a.get("bytes") or 0, b.get("bytes") or 0
-                    if not (pa >= 1000 and pb < pa * 0.2):
+                    if not (
+                        pa >= missing_mod.COLLAPSE_MIN_BYTES
+                        and pb < pa * missing_mod.COLLAPSE_RATIO
+                    ):
                         continue
                     disk = _disk_path(k)
                     if disk.exists() and abs(disk.stat().st_size - pb) <= 2:
@@ -297,58 +354,7 @@ def check_data(*, verify_hash: bool) -> int:
     print(f"\n  이 기기에 있는 파일 {present:,} / {len(by_path):,}")
 
     if missing:
-        print(f"  🟡 원장에 있고 디스크에 없는 것 {len(missing):,}개")
-        print("     🚨 **셋**이 섞여 있고, 둘은 정상이다 —")
-        print("        ㄱ. G2 소스는 사실 추출 뒤 원본을 지우는 것이 규칙이다 (D-17)")
-        print("        ㄴ. 다른 클론에서 받은 것은 여기 없는 것이 정상이다 (D-19)")
-        # 🔄 2026-09-08 추가 — 이 설명이 없어서 `law_go_kr` 7건을 「유실」로 안내하고 있었다.
-        print("        ㄷ. 🔴 **질의 기반 원천(prec·decc)에서 판정 필터가 뺀 것** (D-153)")
-        print("           예전에 받았어도 필터를 강화하면 목록에서 빠진다 — **정상이고,**")
-        print("           **재수집해도 안 돌아온다. 돌아오면 안 된다.**")
-        # 🔄 **2026-09-08 — 「등급을 보고 판단한다」를 doctor 가 대신 한다.**
-        #    사람에게 넘기면 아무도 안 본다. 실제로 73건이 그렇게 남아 있었다.
-        #    ★ 등급을 적용하면 **설명 ㄱ이 배제되는 원천**이 드러나고, 거기는
-        #      「정상일 수도 있다」가 아니라 **재수집으로만 닫힌다.**
-        by_sid: collections.Counter[str] = collections.Counter()
-        for path_str in missing:
-            sid = by_path[path_str][0].get("source_id") or "<source_id 없음>"
-            by_sid[sid] += 1
-        g2, rest = [], []
-        for sid, n in by_sid.most_common():
-            try:
-                grade = str(registry.spec(sid).get("grade", "?"))
-            except Exception:  # noqa: BLE001 — 미등록 자체가 검사 결과다
-                grade = "🔴 미등록"
-            (g2 if grade.startswith("G2") else rest).append((sid, n, grade))
-        if g2:
-            print(
-                f"     ✅ ㄱ 으로 설명되는 것 {sum(n for _, n, _ in g2):,}개 (G2 — 지우는 것이 규칙)"
-            )
-            for sid, n, grade in g2:
-                print(f"       {sid:26} {n:>5,}  {grade}")
-        if rest:
-            print(
-                f"     🚨 ㄱ 이 **배제되는** 것 {sum(n for _, n, _ in rest):,}개 — 설명은 ㄴ 또는 ㄷ 다"
-            )
-            for sid, n, grade in rest:
-                print(f"       {sid:26} {n:>5,}  {grade}")
-            print("        ★ 「다른 클론에서 받았다」와 「유실됐다」는 원장으로 구분되지 않는다.")
-            print(
-                "          대개 **이 기기에서 재수집하면 닫힌다** — 동일하면 수집기가 스킵한다(규약 2)."
-            )
-            print("          🔴 **다만 ㄷ 이면 안 닫힌다.** 질의 기반 원천은 `--dry-run` 의")
-            print("             「질의별 실측」 합집합과 맞대야 유실인지 필터인지 갈린다 (D-153).")
-        # 🚨 디렉터리로 묶을 때 **문자열 앞자리로 세지 않는다.**
-        #    `data/raw/mfds_press` 는 `data/raw/mfds_press_pdf` 의 앞자리이기도 해서
-        #    startswith 로 세면 107개가 양쪽에 잡혀 합이 실제보다 커진다.
-        #    2026-09-06 첫 판이 그렇게 나왔다 — 같은 날 `가처분`⊂`허가처분` 으로 겪은
-        #    **부분문자열은 단위가 아니다**와 똑같은 실수를, 세는 쪽에서 한 번 더 했다.
-        groups: collections.Counter[str] = collections.Counter()
-        for path_str in missing:
-            parts = Path(path_str.replace("\\", "/")).parts
-            groups["/".join(parts[:3])] += 1
-        for head, n in groups.most_common():
-            print(f"       {head}/…  {n:,}개")
+        red += _report_missing(rows, len(missing))
 
     if verify_hash:
         print(f"\n  해시를 다시 계산한 파일 {checked:,}개")
@@ -491,6 +497,132 @@ def _report_sanction(stat: tuple[int, int] | None) -> None:
     print(f"✅ sanction_rule {total:,}행 · 2인 확인 전량 완료")
 
 
+def _alembic_heads() -> set[str]:
+    """`alembic/versions` 의 head 리비전 — **DB 없이** 읽는다 (alembic 의 ScriptDirectory)."""
+    from alembic.config import Config  # noqa: PLC0415
+    from alembic.script import ScriptDirectory  # noqa: PLC0415
+
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "alembic"))
+    return set(ScriptDirectory.from_config(cfg).get_heads())
+
+
+#: 「서버가 안 떠 있다」로 읽는 psycopg 메시지 조각 `[관행]` — 이것 밖의 접속 실패는 🔴(설정이 틀림)로 본다
+_NOT_UP = (
+    "connection refused",
+    "timeout expired",
+    "could not connect",
+    "no such file or directory",
+)
+
+
+def _check_db() -> int:
+    """DB 접속·리비전·pgvector. 🔴 반환값은 빨간 건수.
+
+    🆕 2026-09-20 (D-254 · 감사 §2 doctor) — ⛔ 종전에는 `alembic_version` 이 **있기만 하면** ✅ 였고,
+       실패는 이유를 가리지 않고 전부 「db-up 먼저」 🟡 였다. 고치는 법이 이유마다 다르다 (D-51):
+         드라이버 없음 → uv sync · DATABASE_URL 이 틀림 → .env · 접속 거부 → db-up
+    🚨 head 와 다른 리비전은 🔴 다 — `migrate` 안 한 DB 에서 서버가 없는 칸을 읽는다 (D-220).
+    """
+    try:
+        import psycopg  # noqa: PLC0415
+    except ImportError as e:
+        print(f"🔴 DB 드라이버(psycopg)가 없다 ({e}) — uv sync --frozen 을 먼저 돌린다.")
+        return 1
+    from pydantic import ValidationError  # noqa: PLC0415
+
+    from app.settings import dsn  # noqa: PLC0415
+
+    try:
+        url = dsn()
+    except ValidationError as e:
+        msg = "; ".join(str(err.get("msg", "")) for err in e.errors())
+        print(f"🔴 DATABASE_URL 이 틀렸다 — {msg}")
+        return 1
+    try:
+        with psycopg.connect(url, connect_timeout=5) as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+            has_vec = cur.fetchone() is not None
+            cur.execute("SELECT to_regclass('alembic_version')")
+            rev = None
+            if cur.fetchone()[0]:
+                cur.execute("SELECT version_num FROM alembic_version")
+                row = cur.fetchone()
+                rev = row[0] if row else None
+            sanction = _sanction_signatures(cur)
+    except psycopg.OperationalError as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else ""
+        if any(w in first.lower() for w in _NOT_UP):
+            print(f"🟡 DB 가 안 떠 있다 ({first[:120]}) — launcher.py db-up 을 먼저 돌린다.")
+            return 0
+        # 🚨 떠 있는데 거절했다 — 비밀번호·DB 이름이 틀렸다. db-up 으로는 안 닫힌다
+        print(f"🔴 DB 가 접속을 거절했다 ({first[:160]}) — .env 의 DATABASE_URL 을 본다.")
+        return 1
+    except psycopg.Error as e:
+        print(f"🔴 DB 에 붙었으나 조회가 실패했다 ({type(e).__name__}: {str(e)[:160]})")
+        return 1
+
+    red = 0
+    heads = _alembic_heads()
+    print("✅ DB 접속" + (f" · alembic {rev}" if rev else " · 🔴 alembic 미적용"))
+    if not has_vec:
+        print("🔴 pgvector 확장이 없다 — CREATE EXTENSION vector (db-up 이 해 준다).")
+        red += 1
+    if not rev:
+        print("🔴 테이블이 없다 — uv run python launcher.py migrate 를 먼저 돌린다.")
+        red += 1
+    elif rev not in heads:
+        print(
+            f"🔴 DB 리비전 {rev} 가 head({', '.join(sorted(heads))})가 아니다 — "
+            "uv run python launcher.py migrate 로 올린다."
+        )
+        red += 1
+    _report_sanction(sanction)
+    return red
+
+
+def _check_data_env() -> int:
+    """`DATA_ROLE` · `DATA_STORE` · `DATA_DEVICE` 의 **모양**을 본다 — 판정은 각 명령의 함수가 한다 (D-99).
+
+    🆕 2026-09-20 (D-254) — 같은 규칙을 여기 다시 적지 않는다. `derived_manifest.role()` ·
+       `data_store.store_root()` · `store.DEVICE_RE` 를 **그대로** 부른다.
+    """
+    from collect import env, store  # noqa: PLC0415
+    from scripts import data_store  # noqa: PLC0415
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    red = 0
+    try:
+        role = dm.role()
+        print(
+            f"✅ DATA_ROLE {role}"
+            if role
+            else "🟡 DATA_ROLE 이 비었다 — 역할 없음(CI)로 돈다 · data-setup"
+        )
+    except SystemExit as e:  # 🚨 role() 은 모르는 값이면 SystemExit 로 멈춘다 (D-220)
+        print(str(e.code))
+        red += 1
+    if env.setting("DATA_STORE"):
+        try:
+            print(f"✅ DATA_STORE {data_store.store_root().parent}")
+        except data_store.StoreError as e:
+            print(f"🔴 {e}")
+            red += 1
+    else:
+        print("🟡 DATA_STORE 가 비었다 — data-sync·data-publish 가 멈춘다 (data-setup)")
+    dev = env.setting("DATA_DEVICE")
+    if dev and not store.DEVICE_RE.fullmatch(dev):
+        print(
+            "🔴 DATA_DEVICE 모양이 틀렸다 — 영문·숫자·`._-` 32자 이내 (data-setup --device <별칭>)"
+        )
+        red += 1
+    elif dev:
+        print(f"✅ DATA_DEVICE {dev}")
+    else:
+        print("🟡 DATA_DEVICE 가 비었다 — 정본 밖에서는 수집·register 가 쓰기 전에 멈춘다 (D-250)")
+    return red
+
+
 def check_env() -> int:
     """환경·신원·DB 를 본다. 🔴 반환값은 **빨간 건수**다.
 
@@ -529,31 +661,10 @@ def check_env() -> int:
         print("✅ .env 있음  (값은 launcher.py keys 로 지문만 본다)")
 
     # ④ DB — 붙는가 · 리비전이 최신인가 · pgvector 가 있는가
-    try:
-        import psycopg  # noqa: PLC0415
+    red += _check_db()
 
-        from app.settings import dsn  # noqa: PLC0415
-
-        with psycopg.connect(dsn(), connect_timeout=5) as conn, conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
-            has_vec = cur.fetchone() is not None
-            cur.execute("SELECT to_regclass('alembic_version')")
-            rev = None
-            if cur.fetchone()[0]:
-                cur.execute("SELECT version_num FROM alembic_version")
-                row = cur.fetchone()
-                rev = row[0] if row else None
-            sanction = _sanction_signatures(cur)
-        print("✅ DB 접속" + (f" · alembic {rev}" if rev else " · 🔴 alembic 미적용"))
-        if not has_vec:
-            print("🔴 pgvector 확장이 없다 — CREATE EXTENSION vector (db-up 이 해 준다).")
-            red += 1
-        if not rev:
-            print("🔴 테이블이 없다 — uv run python launcher.py migrate 를 먼저 돌린다.")
-            red += 1
-        _report_sanction(sanction)
-    except Exception as e:  # noqa: BLE001
-        print(f"🟡 DB 에 못 붙었다 ({type(e).__name__}) — launcher.py db-up 을 먼저 돌린다.")
+    # ④-2 데이터 역할·저장소·기기 별칭 (D-226 · D-250) — 틀린 값은 데이터 명령이 **쓰는 중에** 드러난다
+    red += _check_data_env()
 
     # ⑤ 화면 골격 — 팀원이 첫날 여는 자리
     for rel in ("app/templates/base.html", "app/static/base.css"):
