@@ -64,6 +64,9 @@ TODO: 1~17·19 는 아직 자리표시자다. 지금 도는 것은 `--data` 뿐�
    ㄱ. G2 소스는 사실을 뽑은 뒤 원본을 **지우는 것이 규칙**이다 (D-17 · `drop_raw_for_g2`).
    ㄴ. 다른 클론에서 받은 것은 이 기기에 없는 것이 정상이다 (D-19).
    그래서 결손은 🔴 가 아니라 🟡 로 찍고, 어느 쪽인지 사람이 보게 한다.
+   🔄 2026-09-20 (D-253) — 갈래가 **여덟**이 됐다(옮겨짐 · 정책 제외 · G2 · 오류 판 치움 · 다른 기기 · 유실 ·
+      질의 필터 · 기기 칸 이전). 가르는 일은 `collect/missing.py` 가 하고 inventory 도 같은 것을 쓴다.
+      🔴 는 그중 **이 기기가 받았다고 적혔는데 없는 것**(`lost`) 하나다.
    🔴 는 **이 기기에서 답할 수 있는 것**만이다 — 해시 불일치 · 원장에 없는 파일 ·
    내용이 갈린 중복 · 미등록 source_id.
 """
@@ -96,6 +99,7 @@ RAW = ROOT / "data" / "raw"
 if sys.path and sys.path[0] != str(ROOT):
     sys.path.insert(0, str(ROOT))
 
+from collect import missing as missing_mod  # noqa: E402 — 결손 가르기의 정본 (D-253)
 from collect import registry  # noqa: E402 — 위 sys.path 조정 뒤여야 한다
 
 
@@ -146,6 +150,56 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _report_missing(rows: list[dict[str, Any]], n: int) -> int:
+    """원장에 있고 디스크에 없는 것을 **왜 없는지**로 가른다 (D-253 · `collect/missing.py`). 돌려주는 값은 🔴 개수.
+
+    🔄 2026-09-20 — ⛔ 종전에는 ㄱ(G2)·ㄴ(다른 클론)·ㄷ(질의 필터) 셋을 찍고 사람에게 넘겼다.
+       실측 `law_go_kr` 36개는 셋 다 아니었고(서식 34 · 옮긴 흔적 2), 「재수집하면 닫힌다」는 **틀린 안내**였다.
+    ★ 이제 정상으로 설명되는 것은 한 줄로 접고, **사람이 볼 것**만 목록을 편다.
+    🚨 🔴 는 `lost`(이 기기가 받았다고 적혔는데 없다) 하나다 — 이 기기에서 답할 수 있는 결손만 종료코드에 넣는다.
+       `legacy`·`query` 는 🟡 — 원장으로 못 가르는 것을 🔴 로 세면 다른 클론에서 늘 울어 아무도 안 본다.
+    """
+    got = missing_mod.classify(rows)
+    count = missing_mod.tally(got)
+    eyes = missing_mod.needs_eyes(got)
+    head = "🟡" if eyes else "✅"
+    print(f"  {head} 원장에 있고 디스크에 없는 것 {n:,}개 — 사람이 볼 것 **{eyes:,}개**")
+    for reason, (mark, normal, why) in missing_mod.REASONS.items():
+        if not count.get(reason):
+            continue
+        print(f"     {mark} {reason:9} {count[reason]:>6,}  {why}")
+        if normal:
+            continue
+        # 정상이 아닌 것만 원천별로 편다 — 🚨 원천마다 셋까지만 (전량은 화면을 덮는다)
+        by_sid: collections.Counter[str] = collections.Counter()
+        shown: collections.Counter[str] = collections.Counter()
+        index = {str(r.get("path") or "").replace("\\", "/"): r for r in rows}
+        for p, (rsn, extra) in sorted(got.items()):
+            if rsn != reason:
+                continue
+            sid = str(index.get(p, {}).get("source_id") or "<미상>")
+            by_sid[sid] += 1
+            if shown[sid] < 3:
+                shown[sid] += 1
+                print(f"          {p}" + (f"  ({extra})" if extra else ""))
+        print(f"        원천별 — {dict(by_sid.most_common())}")
+    if count.get("legacy"):
+        print("     🚨 `legacy` — 기기 칸(D-250) 이전 줄이라 원장만으로는 못 가른다.")
+        print("        이 기기에서 쓸 원천이면 다시 받는다 — 같으면 수집기가 스킵한다(규약 2).")
+        print(
+            "        ⛔ 안 돌아오면: 수집기가 안 받게 바뀐 것이다 → 그 수집기에 `NOT_KEPT` 를 선언한다."
+        )
+    if count.get("query"):
+        print("     🚨 `query` — `collect law_go_kr --dry-run` 의 「질의별 실측」 합집합과 맞대야")
+        print("        유실인지 필터인지 갈린다 (D-153). 필터가 뺀 것이면 **돌아오면 안 된다.**")
+    if count.get("lost"):
+        print("     🔴 `lost` — 되돌리려면 이 기기에서 다시 받는다. 일부러 지운 것이면")
+        print(
+            "        그 이유를 수집기 `NOT_KEPT` 에 선언한다 — 원장 줄은 지우지 않는다(참인 이력이다)."
+        )
+    return count.get("lost", 0)
 
 
 def check_data(*, verify_hash: bool) -> int:
@@ -222,7 +276,10 @@ def check_data(*, verify_hash: bool) -> int:
                 #    이웃한 두 판을 맞대는 것이라 길이가 같으면 오히려 틀린다.
                 for a, b in zip(ordered, ordered[1:], strict=False):
                     pa, pb = a.get("bytes") or 0, b.get("bytes") or 0
-                    if not (pa >= 1000 and pb < pa * 0.2):
+                    if not (
+                        pa >= missing_mod.COLLAPSE_MIN_BYTES
+                        and pb < pa * missing_mod.COLLAPSE_RATIO
+                    ):
                         continue
                     disk = _disk_path(k)
                     if disk.exists() and abs(disk.stat().st_size - pb) <= 2:
@@ -297,58 +354,7 @@ def check_data(*, verify_hash: bool) -> int:
     print(f"\n  이 기기에 있는 파일 {present:,} / {len(by_path):,}")
 
     if missing:
-        print(f"  🟡 원장에 있고 디스크에 없는 것 {len(missing):,}개")
-        print("     🚨 **셋**이 섞여 있고, 둘은 정상이다 —")
-        print("        ㄱ. G2 소스는 사실 추출 뒤 원본을 지우는 것이 규칙이다 (D-17)")
-        print("        ㄴ. 다른 클론에서 받은 것은 여기 없는 것이 정상이다 (D-19)")
-        # 🔄 2026-09-08 추가 — 이 설명이 없어서 `law_go_kr` 7건을 「유실」로 안내하고 있었다.
-        print("        ㄷ. 🔴 **질의 기반 원천(prec·decc)에서 판정 필터가 뺀 것** (D-153)")
-        print("           예전에 받았어도 필터를 강화하면 목록에서 빠진다 — **정상이고,**")
-        print("           **재수집해도 안 돌아온다. 돌아오면 안 된다.**")
-        # 🔄 **2026-09-08 — 「등급을 보고 판단한다」를 doctor 가 대신 한다.**
-        #    사람에게 넘기면 아무도 안 본다. 실제로 73건이 그렇게 남아 있었다.
-        #    ★ 등급을 적용하면 **설명 ㄱ이 배제되는 원천**이 드러나고, 거기는
-        #      「정상일 수도 있다」가 아니라 **재수집으로만 닫힌다.**
-        by_sid: collections.Counter[str] = collections.Counter()
-        for path_str in missing:
-            sid = by_path[path_str][0].get("source_id") or "<source_id 없음>"
-            by_sid[sid] += 1
-        g2, rest = [], []
-        for sid, n in by_sid.most_common():
-            try:
-                grade = str(registry.spec(sid).get("grade", "?"))
-            except Exception:  # noqa: BLE001 — 미등록 자체가 검사 결과다
-                grade = "🔴 미등록"
-            (g2 if grade.startswith("G2") else rest).append((sid, n, grade))
-        if g2:
-            print(
-                f"     ✅ ㄱ 으로 설명되는 것 {sum(n for _, n, _ in g2):,}개 (G2 — 지우는 것이 규칙)"
-            )
-            for sid, n, grade in g2:
-                print(f"       {sid:26} {n:>5,}  {grade}")
-        if rest:
-            print(
-                f"     🚨 ㄱ 이 **배제되는** 것 {sum(n for _, n, _ in rest):,}개 — 설명은 ㄴ 또는 ㄷ 다"
-            )
-            for sid, n, grade in rest:
-                print(f"       {sid:26} {n:>5,}  {grade}")
-            print("        ★ 「다른 클론에서 받았다」와 「유실됐다」는 원장으로 구분되지 않는다.")
-            print(
-                "          대개 **이 기기에서 재수집하면 닫힌다** — 동일하면 수집기가 스킵한다(규약 2)."
-            )
-            print("          🔴 **다만 ㄷ 이면 안 닫힌다.** 질의 기반 원천은 `--dry-run` 의")
-            print("             「질의별 실측」 합집합과 맞대야 유실인지 필터인지 갈린다 (D-153).")
-        # 🚨 디렉터리로 묶을 때 **문자열 앞자리로 세지 않는다.**
-        #    `data/raw/mfds_press` 는 `data/raw/mfds_press_pdf` 의 앞자리이기도 해서
-        #    startswith 로 세면 107개가 양쪽에 잡혀 합이 실제보다 커진다.
-        #    2026-09-06 첫 판이 그렇게 나왔다 — 같은 날 `가처분`⊂`허가처분` 으로 겪은
-        #    **부분문자열은 단위가 아니다**와 똑같은 실수를, 세는 쪽에서 한 번 더 했다.
-        groups: collections.Counter[str] = collections.Counter()
-        for path_str in missing:
-            parts = Path(path_str.replace("\\", "/")).parts
-            groups["/".join(parts[:3])] += 1
-        for head, n in groups.most_common():
-            print(f"       {head}/…  {n:,}개")
+        red += _report_missing(rows, len(missing))
 
     if verify_hash:
         print(f"\n  해시를 다시 계산한 파일 {checked:,}개")
