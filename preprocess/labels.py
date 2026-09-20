@@ -78,6 +78,19 @@ def load(paths: list[pathlib.Path]) -> dict[str, dict[str, str]]:
     return got
 
 
+def person(file_name: str, r: dict) -> str:
+    """누가 붙였나 — 🔄 2026-09-20 **레코드의 `붙인이`** 가 정한다(없으면 파일 이름).
+
+    ⛔ 종전에는 **파일 = 사람**이었다. 같은 사람이 시트 둘을 가져오면 파일이 둘이 되어
+       한 사람의 두 판단이 「두 사람의 합의」로 셀 수 있었다. 이름이 사람이다.
+    """
+    return str(r.get("붙인이") or "").strip() or file_name.split("__", 1)[0].removesuffix(".jsonl")
+
+
+#: 🆕 판정 레코드의 표시 — 갈린 행을 **판정자가 정한 것**. 합의보다 앞선다(아래 `consensus`)
+DECIDED = "판정"
+
+
 def _rows() -> list[tuple[str, dict]]:
     got: list[tuple[str, dict]] = []
     for p in files():
@@ -87,6 +100,20 @@ def _rows() -> list[tuple[str, dict]]:
     return got
 
 
+def by_person(paths: list[pathlib.Path] | None = None) -> dict[str, dict[str, str]]:
+    """사람별 {키: 라벨} — 일치도(κ)를 재는 단위. 🚨 판정 레코드는 **사람의 독립 판단이 아니라** 뺀다."""
+    got: dict[str, dict[str, str]] = collections.defaultdict(dict)
+    for p in paths if paths is not None else files():
+        for line in p.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            lab = label(r)
+            if lab and not r.get(DECIDED):
+                got[person(p.name, r)][key(r)] = lab
+    return dict(got)
+
+
 def consensus() -> tuple[dict[str, dict], dict[str, int]]:
     """{키: 레코드} — **2인 이상이 붙였으면 일치한 것만** 남긴다.
 
@@ -94,19 +121,31 @@ def consensus() -> tuple[dict[str, dict], dict[str, int]]:
        사실이고, 그 사실을 다수결로 지우면 평가셋이 조용히 쉬워진다 (D-172).
        갈린 것은 세어서 낸다 — 붙인 사람들이 다시 본다.
     """
-    by: dict[str, list[tuple[str, dict]]] = collections.defaultdict(list)
-    for who, r in _rows():
-        if label(r):
-            by[key(r)].append((who, r))
+    # 🔄 2026-09-20 — ① 사람은 **`붙인이`** 로 센다(한 사람의 두 파일이 둘로 세지 않게)
+    #                 ② **판정 레코드가 앞선다** — 갈린 행을 판정자(팀장)가 본 것이다. 다수결이 아니다
+    by: dict[str, dict[str, dict]] = collections.defaultdict(dict)
+    decided: dict[str, dict] = {}
+    for fname, r in _rows():
+        if not label(r):
+            continue
+        if r.get(DECIDED):
+            decided[key(r)] = r
+            continue
+        by[key(r)][person(fname, r)] = r  # 같은 사람이 두 번 붙였으면 나중 것
     got: dict[str, dict] = {}
     stat: collections.Counter = collections.Counter()
-    for k, items in by.items():
-        labs = {label(r) for _, r in items}
+    for k, r in decided.items():
+        got[k] = r
+        stat["판정"] += 1
+    for k, people in by.items():
+        if k in decided:
+            continue
+        labs = {label(r) for r in people.values()}
         if len(labs) > 1:
             stat["갈림"] += 1
             continue
-        stat["합의" if len(items) > 1 else "1인"] += 1
-        got[k] = items[0][1]
+        stat["합의" if len(people) > 1 else "1인"] += 1
+        got[k] = next(iter(people.values()))
     return got, dict(stat)
 
 
