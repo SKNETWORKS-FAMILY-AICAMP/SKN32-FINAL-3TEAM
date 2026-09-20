@@ -41,4 +41,6 @@ SCANNERS: dict[str, str] = {
     "mfds_press_pdf": "preprocess.evasion_scan",
     # 🆕 2026-09-20 — 1차 법령해석이 평가 라벨의 원천이 되는가 (부당광고 조항 · 문구 · 호). 후보는 build/ 에만
     "mfds_cgm_expc": "preprocess.interp_scan",
+    # 🆕 2026-09-20 (D-255 ⬜) — 공정위 추천·보증(인플루언서·후기) 사건이 평가 문구를 주는가. 후보는 build/ 에만
+    "ftc_decisions_body": "preprocess.endorse_scan",
 }
