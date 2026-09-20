@@ -363,6 +363,15 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
         return 1
 
     led = dm.ledger()
+    # 🆕 2026-09-20 — 개인 식별·마스킹 검사가 **못 읽는 형식**은 올리지 않는다 (0건으로 세지 않는다 · D-72).
+    #    ⛔ `.txt` 원문캐시가 「생성물」로 분류돼 이 검사 둘을 건너뛰고 올라갈 수 있었다(런처 자동화 검토 발견 2).
+    odd = dm.unscanned(list(led.values()))
+    if odd:
+        print(
+            f"🔴 검사가 못 읽는 형식이 올릴 목록에 있다 — 올리지 않는다 ({len(odd)}개): {odd[:5]}\n"
+            "  마스킹 전 원문이면 부류를 원문캐시로(`derived_manifest.KIND_RULES`), 아니면 json/jsonl 로 쓴다"
+        )
+        return 1
     rows = [r for r in led.values() if dm.moved(str(r["경로"]), str(r["부류"]))]
     bad = unsafe(rows)
     if bad:
