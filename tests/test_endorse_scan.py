@@ -34,3 +34,10 @@ def test_캡션과_고시명은_문구후보가_아니다() -> None:
         "'남자윤곽수술 2개월차 후기예요' 라고 적었다"
     )
     assert es.ad_quotes(why) == ["남자윤곽수술 2개월차 후기예요"]
+
+
+def test_마스킹_정책_키가_있다() -> None:
+    """⛔ 첫 판은 원천 id 로 정책을 찾아 `--candidates` 가 멈췄다 — 정책 키는 원문 폴더(계열)다."""
+    from preprocess.mask import POLICY
+
+    assert es.MASK_KEY in POLICY

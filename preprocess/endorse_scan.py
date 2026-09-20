@@ -35,6 +35,9 @@ from collect import store
 from preprocess.text import quoted
 
 SOURCE_ID = "ftc_decisions_body"
+#: 🔴 마스킹 정책의 키는 **원천 id 가 아니라 원문 폴더(계열)** 다 — `ftc_extract` 가 쓰는 `"ftc"` 와 같다.
+#:    ⛔ 첫 판은 `SOURCE_ID` 를 넘겨 `MaskPolicyError` 로 멈췄다(기기 실행 09-21). 표는 `store.FAMILY_OF` 한 곳 (D-99)
+MASK_KEY = store.families(SOURCE_ID)[0]
 
 #: 이 사건이 추천·보증 사건인가 — 🚨 그물이다. 주문·이유 어디에든 있으면 줍는다
 NET = re.compile(
@@ -137,7 +140,7 @@ def candidates(core: list[tuple[pathlib.Path, dict, dict]], out: pathlib.Path) -
     n = 0
     with out.open("w", encoding="utf-8", newline="\n") as w:
         for p, f, c in core:
-            qs = [apply_policy(q, "", SOURCE_ID) for q in ad_quotes(f.get("이유", ""))]
+            qs = [apply_policy(q, "", MASK_KEY) for q in ad_quotes(f.get("이유", ""))]
             rec = {"id": p.stem, "사건번호": f.get("사건번호", ""), **c, "문구": qs}
             w.write(json.dumps(rec, ensure_ascii=False) + "\n")
             n += 1
