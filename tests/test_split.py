@@ -152,3 +152,33 @@ def test_주입본이_평가에_섞이지_않는다(m: dict) -> None:
         ]
         inj = [r for r in ev if r.get("origin") == "injected"]
         assert not inj, f"🚨 주입본 {len(inj)}행이 평가에 들어 있다"
+
+
+@pytest.mark.gate
+def test_골든셋의_인용_문구는_상한_안이고_재배포_불가다() -> None:
+    """🔴 D-249 (D-133 개정) — 산출물이 판정을 따르는가. 코드만 보면 「고쳤다」, 파일을 봐야 「따른다」.
+
+    ① 재배포 불가(인용 광고 문구) 행은 `PARAMS.quote_max_chars` 이하 — 넘으면 버렸어야 한다
+    ② 행의 `redistributable` 이 계보 표(`preprocess/lineage.py`)와 같다
+    """
+    from app.settings import PARAMS
+    from preprocess.lineage import GOLDEN_LINEAGE
+
+    dm.gate_guard(GOLDEN)
+    rows = [json.loads(x) for x in GOLDEN.read_text(encoding="utf-8").splitlines() if x.strip()]
+    over = [
+        r["id"]
+        for r in rows
+        if not r["redistributable"] and len(r["text"]) > PARAMS.quote_max_chars
+    ]
+    assert not over, (
+        f"보관 상한 {PARAMS.quote_max_chars}자를 넘는 인용 문구 {len(over)}행: {over[:5]}"
+    )
+    wrong = [
+        r["id"]
+        for r in rows
+        if GOLDEN_LINEAGE.get((r["provenance"], r["origin"]), ("", None))[1] != r["redistributable"]
+    ]
+    assert not wrong, (
+        f"재배포 표시가 계보 표와 다르다 {len(wrong)}행: {wrong[:5]} — `golden --write` 로 다시 만든다"
+    )

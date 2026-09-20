@@ -73,6 +73,13 @@ def planned(name: str, when: str, needs: str) -> None:
     )
 
 
+#: 미구현 명령의 종료코드 — 🆕 D-254 · 「미구현」 패널 뒤 0 이면 CI·스크립트가 「돌았다」로 읽는다 (D-220).
+#: `[임의]` — 1(실패)·2(click 사용법 오류)와 겹치지 않는 수를 골랐을 뿐이다.
+STUB_EXIT = 3
+#: `--help` 첫 줄에 붙는 표. 🚨 메뉴 설명(`summary`)은 이것을 떼고 보인다 — 메뉴에는 따로 「미구현」 표가 있다.
+STUB_TAG = "[미구현]"
+
+
 def stub(when: str, needs: str):
     """아직 대상이 없는 명령을 감싼다.
 
@@ -86,7 +93,11 @@ def stub(when: str, needs: str):
         @functools.wraps(fn)
         def wrapper() -> None:
             planned(cli_name(fn), when, needs)
+            # 🆕 D-254 — ⛔ 종전에는 여기서 0 으로 끝났다. 없는 것은 성공이 아니다 (D-220).
+            raise typer.Exit(STUB_EXIT)
 
+        # 🆕 D-254 — `--help` 에서 정상 명령처럼 보이던 것. 표는 docstring 앞에 붙인다(한 곳).
+        wrapper.__doc__ = f"{STUB_TAG} {(fn.__doc__ or '').strip()}"
         wrapper._planned = True
         return wrapper
 
@@ -112,6 +123,44 @@ def needs_data(fn):
 
     wrapper._needs_data = True
     return wrapper
+
+
+def needs_raw(fn):
+    """🆕 **원문을 읽어 파생물을 만드는 명령** — 정본에 합치지 않은 팀원 원문이 있으면 멈춘다 (D-250).
+
+    ⛔ 원장은 git 병합으로, 원문은 `raw-import` 로 따로 온다. 그 사이에 추출하면 **경고 없이**
+       팀원 원문이 빠진 파생물이 나온다. 로직은 `scripts.raw_inbox pending` 에 있다(얇은 껍데기 · D-51).
+       정본이 아니면 아무것도 안 한다.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        _raw_pending_or_exit()
+        return fn(*args, **kwargs)
+
+    wrapper._needs_raw = True
+    return wrapper
+
+
+def _raw_pending_or_exit() -> None:
+    """`needs_raw` 의 몸통 — 🆕 D-254 · `scan` 처럼 **원문을 읽는 갈래에서만** 부르는 명령이 쓴다 (D-99)."""
+    if run(sys.executable, "-m", "scripts.raw_inbox", "pending") != 0:
+        raise typer.Exit(1)
+
+
+def only_canonical(what: str) -> None:
+    """🆕 파생물·원문을 **만들거나 바꾸는** 자리에서 부른다 — 정본(클론 B)이 아니면 이유와 할 일을 내고 멈춘다.
+
+    ⛔ D-226 1항이 규약뿐이었다 — 사본에서 원장을 거부 없이 썼다(런처 자동화 검토 2026-09-20 발견 1).
+    🚨 판단은 `derived_manifest.not_canonical` 한 곳이다 — 스크립트를 직접 불러도 같은 말이 나온다 (D-99).
+    ★ **보기만 하는 옵션**(`--write`·`--dump` 없이)은 막지 않는다 — 사본에서도 미리보기는 된다.
+    """
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    why = dm.not_canonical(what)
+    if why:
+        console.print(why, markup=False)
+        raise typer.Exit(1)
 
 
 def cli_name(fn) -> str:
@@ -195,8 +244,9 @@ def _install() -> int:
 def onboard(
     check: bool = typer.Option(False, "--check", help="아무것도 바꾸지 않고 진단만 한다"),
 ) -> None:
-    """새 기기에서 처음부터 — **세우고, 마지막에 판정한다** (D-51 · D-220).
+    """새 기기에서 처음부터 — **세우고, 마지막에 판정한다**.
 
+    근거 — D-51 · D-220.
     🔄 **2026-09-13 — 안내만 하던 것을 실행·판정으로 올렸다.**
        ⛔ 종전에는 DB 를 **화면에 명령어로 찍어 주고 끝**이었고, 종료코드는 **항상 0** 이었다.
           그래서 팀원은 초록을 한 번도 못 본 채 「됐겠지」로 넘어갔다 (D-170 의 친척 —
@@ -228,6 +278,27 @@ def onboard(
     console.print("     [bold]uv run python launcher.py keys[/bold]        현황(지문만)")
     console.print("     [bold]uv run python launcher.py setkey LAW_OC_KEY[/bold]")
     console.print("     🚨 값을 인자로 주지 않습니다 — PowerShell 기록에 남습니다 (D-111)")
+
+    # 🆕 2026-09-20 (D-247 · D-249) — 파생물·라벨은 git 에 없다. 공유 저장소에서 받는다.
+    console.print(
+        "\n[bold]3-1. 파생물·라벨[/bold] — 🔴 git 에 없습니다. 팀 공유 저장소에서 받습니다"
+    )
+    console.print(
+        "     Google Drive for desktop 로그인 → 공유받은 `CopyLane_store` 를 내 드라이브에 바로가기 추가"
+    )
+    console.print(
+        "     [bold]uv run python launcher.py data-setup[/bold]   역할(replica) · 저장소를 적고 바로 받습니다"
+    )
+    console.print(
+        "     그 뒤로는 `load`·`chunk`·`embed`·`search-probe` 가 부족분을 스스로 받습니다"
+    )
+    console.print(
+        "     [dim]수집 팀원(D-250) — `CopyLane_raw_inbox` 도 바로가기 추가 → "
+        "`data-setup --device collector-1`(영문 · 실명 금지)[/dim]"
+    )
+    console.print(
+        "     [dim]받은 뒤 `raw-publish` → 원장을 **자기 브랜치**로 push → 팀장에게 알림[/dim]"
+    )
 
     console.print("\n[bold]4. DB[/bold] — 거버넌스 19표 + 런타임 7표")
     if shutil.which("docker") is None:
@@ -263,30 +334,7 @@ def onboard(
     console.print("\n[bold]5. 판정[/bold] — 여기서 초록을 봅니다")
     code = run("uv", "run", "python", "scripts/doctor.py", "--env")
 
-    console.print("\n[bold]6. 이 기기에 없는 것[/bold] — 데이터는 git 으로 안 옵니다 (D-19)")
-    console.print("     [bold]uv run python launcher.py inventory[/bold]")
-    console.print("     🚨 「원장에 있다」는 「이 기기에 있다」가 아닙니다")
-    console.print(
-        "     그 목록대로 [bold]launcher.py collect <소스id> --use U1[/bold] 로 다시 받습니다"
-    )
-    console.print("     🔴 AI Hub 계열은 사람이 받아 [bold]launcher.py register[/bold] 로 올립니다")
-
-    console.print("\n[bold]7. 원문을 받은 뒤[/bold]  파생물 → DB → 벡터")
-    # 🔄 **2026-09-14 — 여기에 「재추출」이 없었다.** 이 순서를 그대로 따른 사람은 **낡은
-    #    파생물로 DB 를 세운다.** 실측: `citation()` 커버리지가 38.1% 였고, 코드는 09-12 에
-    #    고쳤는데 `data/derived/law_article.jsonl` 이 09-10 판이었다. D-221 과 같은 모양이다 —
-    #    **런처가 손을 놓는 자리에서 사람이 막힌다.**
-    # ★ 한 명령으로 묶어 두었다. 절차를 두 벌로 적으면 한쪽만 갱신된다 (D-99).
-    console.print(
-        "     [bold]uv run python launcher.py db-reset --yes --data[/bold]   ← 이 한 줄입니다"
-    )
-    console.print("     🚨 **재추출부터** 합니다 — 조문·별표를 다시 뽑고, 적재하고, 임베딩합니다.")
-    console.print("        ⛔ `load` → `chunk` → `embed` 만 돌리면 **낡은 파생물로 섭니다.**")
-    console.print("     🔴 볼륨을 지웁니다 — 새 기기에는 잃을 것이 없습니다. 쓰던 기기라면")
-    console.print(
-        "        먼저 [bold]launcher.py db-reset[/bold] (미리보기)으로 무엇이 사라지나 봅니다."
-    )
-    console.print("     ⚠️ KURE-v1 모델 2.27GB 를 처음 한 번 내려받습니다")
+    _onboard_data_steps()
 
     console.print("\n[bold]8. 콘솔 계정[/bold] — 가입 화면이 없습니다 (D-66 · D-213)")
     console.print("     [bold]uv run python launcher.py admin-add <이니셜>[/bold]")
@@ -309,6 +357,71 @@ def onboard(
     raise typer.Exit(code)
 
 
+def _onboard_data_steps() -> None:
+    """`onboard` 6·7단계 — 🆕 D-254 · **역할마다 다르다.**
+
+    ⛔ 종전에는 누구에게나 「`collect … --use U1` 로 원문을 다시 받는다」 → 「`db-reset --yes --data`」였다.
+       사본은 원문이 필요 없고(파생물을 `data-sync` 로 받는다), `db-reset --data` 는 원문을 다시 추출한다 —
+       사본에서 따르면 빈 DB 나 반쪽 DB 가 남는다(감사 2026-09-20 §1-5).
+    🚨 역할이 없으면 **사본 쪽 안내**를 낸다 — 정본은 클론 B 한 곳뿐이고, 모르는 것을 정본으로 치지 않는다 (D-220).
+    """
+    from scripts import derived_manifest as dm  # noqa: PLC0415 — 역할 판단은 한 곳 (D-99)
+
+    who = dm.role()
+    if who == "canonical":
+        console.print("\n[bold]6. 이 기기에 없는 것[/bold] — 데이터는 git 으로 안 옵니다 (D-19)")
+        console.print("     [bold]uv run python launcher.py inventory[/bold]")
+        console.print("     🚨 「원장에 있다」는 「이 기기에 있다」가 아닙니다")
+        console.print(
+            "     그 목록대로 [bold]launcher.py collect <소스id> --use U1[/bold] 로 다시 받습니다"
+        )
+        console.print(
+            "     🔴 AI Hub 계열은 사람이 받아 [bold]launcher.py register[/bold] 로 올립니다"
+        )
+
+        console.print("\n[bold]7. 원문을 받은 뒤[/bold]  파생물 → DB → 벡터 (정본)")
+        # 🔄 **2026-09-14 — 여기에 「재추출」이 없었다.** 이 순서를 그대로 따른 사람은 **낡은
+        #    파생물로 DB 를 세운다.** 실측: `citation()` 커버리지가 38.1% 였고, 코드는 09-12 에
+        #    고쳤는데 `data/derived/law_article.jsonl` 이 09-10 판이었다. D-221 과 같은 모양이다.
+        # ★ 한 명령으로 묶어 두었다. 절차를 두 벌로 적으면 한쪽만 갱신된다 (D-99).
+        console.print(
+            "     [bold]uv run python launcher.py db-reset --yes --data[/bold]   ← 이 한 줄입니다"
+        )
+        console.print(
+            "     🚨 **재추출부터** 합니다 — 조문·별표를 다시 뽑고, 적재하고, 임베딩합니다."
+        )
+        console.print("        ⛔ `load` → `chunk` → `embed` 만 돌리면 **낡은 파생물로 섭니다.**")
+        console.print("     🔴 볼륨을 지웁니다 — 쓰던 기기라면")
+        console.print(
+            "        먼저 [bold]launcher.py db-reset[/bold] (미리보기)으로 무엇이 사라지나 봅니다."
+        )
+    else:
+        console.print("\n[bold]6. 원문[/bold] — 🚨 사본은 원문이 필요 없습니다 (D-247)")
+        console.print(
+            "     파생물은 3-1 의 공유 저장소에서 받습니다 — 원문을 다시 수집하지 않습니다."
+        )
+        console.print(
+            "     [dim]수집을 맡은 팀원만(D-250) 지정받은 소스를 "
+            "`collect <소스id>` → `raw-publish` 로 올립니다[/dim]"
+        )
+        if who is None:
+            console.print(
+                "     🟡 이 기기의 역할이 아직 없습니다 — 3-1 의 "
+                "[bold]launcher.py data-setup[/bold] 을 먼저 합니다"
+            )
+
+        console.print("\n[bold]7. 파생물을 받은 뒤[/bold]  DB → 벡터 (사본)")
+        console.print(
+            "     [bold]uv run python launcher.py data-sync[/bold]   부족한 파생물을 받습니다"
+        )
+        console.print("     [bold]uv run python launcher.py load[/bold]        DB 에 적재합니다")
+        console.print("     [bold]uv run python launcher.py embed[/bold]       벡터를 넣습니다")
+        console.print(
+            "     ⛔ `db-reset --data` 는 쓰지 않습니다 — 원문을 다시 추출하는 정본 절차입니다"
+        )
+    console.print("     ⚠️ KURE-v1 모델 2.27GB 를 처음 한 번 내려받습니다")
+
+
 @app.command()
 def setkey(name: str = typer.Argument(..., help="키 이름 (예: FOODSAFETY_KEY)")) -> None:
     """API 키를 화면에 뜨지 않게 입력해 설정 파일에 넣는다.
@@ -317,7 +430,16 @@ def setkey(name: str = typer.Argument(..., help="키 이름 (예: FOODSAFETY_KEY
        인자로 주면 PowerShell 기록 파일(`ConsoleHost_history.txt`)에 그대로 남는다 —
        터미널을 닫아도 남고, 지운 줄 알아도 남아 있다.
        확인은 값이 아니라 **지문**으로 낸다. 지문은 붙여 넣어도 안전하다.
+    🆕 D-254 — **모르는 이름은 `run()` 앞에서 멈추고 되비추지 않는다.** `run()` 은 명령 줄을 화면에 찍는다 —
+       이름 자리에 **값**을 붙여 넣었다면 그 줄이 곧 유출이다(감사 2026-09-20 §1-2).
+       🔗 이름 목록은 `collect.env.KEYS` 한 곳 — `collect/setkey.py` 도 같은 표로 거부한다 (D-99).
     """
+    from collect import env  # noqa: PLC0415 — 키 이름의 정본
+
+    if name not in env.KEYS:
+        console.print("[red]🔴 모르는 키 이름이다[/red] — 입력은 화면에 다시 찍지 않는다.")
+        console.print("  아는 이름: " + " · ".join(env.KEYS), markup=False)
+        raise typer.Exit(1)
     raise typer.Exit(run("uv", "run", "python", "-m", "collect.setkey", name))
 
 
@@ -383,15 +505,34 @@ def gate() -> None:
     """다음 단계로 가도 되는지 검사한다.
 
     거버넌스 게이트만 골라 실행한다. **실패하면 진행하지 않는다** (D-51).
+    🆕 D-254 — `-rs` 로 **건너뛴 테스트의 이름·사유**를 끝에 낸다. ⛔ 종전 `-v` 는 pyproject 의 `-q` 와
+       상쇄돼 skip 이 숫자로만 보였다 — 사본에서 skip 만으로 초록이 떠도 무엇이 안 돌았는지 몰랐다.
+       ⬜ skip 은 실패로 치지 않는다 — pytest 의 종료코드를 그대로 낸다.
     """
-    raise typer.Exit(run("uv", "run", "pytest", "-m", "gate", "-v"))
+    raise typer.Exit(run(*GATE_CMD))
+
+
+#: 게이트 호출 — `gate` 와 `check` 가 **이 한 줄**을 쓴다 (D-99 · D-254).
+GATE_CMD = ("uv", "run", "pytest", "-m", "gate", "-rs")
+
+#: ruff 두 단계 — 🔴 **`.pre-commit-config.yaml` 과 같은 순서다** (`ruff --fix` → `ruff-format`) · D-254.
+#:    ⛔ 종전에는 거꾸로(format → fix)였다. `--fix` 가 import 를 고치면 서식이 다시 흐트러져
+#:       커밋 훅이 파일을 고치고 커밋을 멈춘다. `fmt` 와 `check` 가 이 표 하나를 돈다 (D-99).
+RUFF_STEPS = (
+    ("uv", "run", "ruff", "check", "--fix", "."),
+    ("uv", "run", "ruff", "format", "."),
+)
+
+
+def _ruff() -> int:
+    """ruff 두 단계를 다 돌고 **하나라도 실패하면 1** — ⛔ 종전에는 format 의 종료코드를 버렸다 (D-220)."""
+    return int(any([run(*cmd) != 0 for cmd in RUFF_STEPS]))
 
 
 @app.command()
 def fmt() -> None:
     """코드 서식과 import 순서를 자동으로 맞춘다."""
-    run("uv", "run", "ruff", "format", ".")
-    raise typer.Exit(run("uv", "run", "ruff", "check", "--fix", "."))
+    raise typer.Exit(_ruff())
 
 
 @app.command()
@@ -400,11 +541,11 @@ def check() -> None:
 
     🚨 순서가 핵심이다. `ruff check` 만 돌리고 커밋하면 `ruff-format` 훅이
        커밋 시점에 파일을 고치고 커밋이 중단된다. 고칠 것을 **먼저** 고친다.
+    ⬜ gitleaks·개행 훅·비게이트 테스트는 안 돈다 — 커밋 통과를 보장하지 않는다.
     """
-    run("uv", "run", "ruff", "format", ".")
-    if run("uv", "run", "ruff", "check", "--fix", ".") != 0:
+    if _ruff():
         raise typer.Exit(1)
-    raise typer.Exit(run("uv", "run", "pytest", "-m", "gate"))
+    raise typer.Exit(run(*GATE_CMD))
 
 
 # ══════════════════════════════════════════════════════════
@@ -416,8 +557,25 @@ def registry() -> None:
 
     🚨 `data_sources.yaml` 을 손으로 고치지 않는다. 생성물이다.
        판정·검토 기록은 `scripts/registry_review.yaml` 에 적는다.
+    🆕 D-254 — **판정매트릭스가 원본과 맞는지 먼저 본다.** `gen_registry.py` 는 `sources.json` 을 읽으므로
+       `data.js` 를 고치고 이것만 누르면 **에러 없이 옛 판정으로** 집행 파일이 나온다. 어긋나면 멈춘다.
     """
+    _matrix_fresh_or_exit()
     raise typer.Exit(run("uv", "run", "python", "scripts/gen_registry.py"))
+
+
+#: 판정매트릭스 대조 — 쓰지 않고 `data.js` ↔ `sources.json`·HTML 이 같은지만 본다 (D-254).
+MATRIX_CHECK = ("uv", "run", "python", "scripts/build_matrix.py", "--check")
+
+
+def _matrix_fresh_or_exit() -> None:
+    """🆕 D-254 — 생성물 넷 중 **하나만** 도는 메뉴(11·13) 앞에서 부른다. 한 벌은 `rebuild` 다."""
+    if run(*MATRIX_CHECK) != 0:
+        console.print(
+            "  [red]🔴 판정매트릭스가 원본(data.js)과 어긋나 멈췄다[/red] — "
+            "넷을 한 벌로: [bold]launcher.py rebuild[/bold]"
+        )
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -426,7 +584,10 @@ def review() -> None:
 
     판정 근거를 매트릭스에서 다시 뽑고 검토표를 낸다. 검토자는 A 구간을 자세히,
     B 를 확인, C 를 훑는다. 결과는 `scripts/registry_review.yaml` 에 적는다.
+    🆕 D-254 — `registry` 와 같이 판정매트릭스 대조를 먼저 한다.
+    ⬜ `data_sources.yaml` 이 `sources.json` 보다 낡았는지는 못 본다 — `gen_registry.py` 에 대조 모드가 없다.
     """
+    _matrix_fresh_or_exit()
     if run("uv", "run", "python", "scripts/extract_rationale.py") != 0:
         raise typer.Exit(1)
     raise typer.Exit(run("uv", "run", "python", "scripts/review_sheet.py"))
@@ -438,8 +599,15 @@ def matrix() -> None:
 
     소스마다 왜 그 등급인지를 정리한 HTML 이다.
     `_matrix/data.js` -> `sources.json` + `판정매트릭스.html` (D-87 · D-90).
+    🆕 D-254 — 이것만 돌면 레지스트리는 **옛 판정**이다. 끝에 그 사실과 할 일을 낸다.
     """
-    raise typer.Exit(run("uv", "run", "python", "scripts/build_matrix.py"))
+    rc = run("uv", "run", "python", "scripts/build_matrix.py")
+    if rc == 0:
+        console.print(
+            "  [yellow]🟡 레지스트리·근거·검토표는 아직 옛 판정이다[/yellow] — "
+            "[bold]launcher.py rebuild[/bold] 로 한 벌을 맞춘다"
+        )
+    raise typer.Exit(rc)
 
 
 @app.command()
@@ -448,8 +616,8 @@ def rebuild() -> None:
 
     🔴 **넷은 한 벌이다.** `_matrix/data.js`(사람이 쓴 판정) 하나에서 갈라진다 —
 
-        gen_registry.py      -> data_sources.yaml            집행 (게이트가 읽는다)
-        build_matrix.py      -> sources.json + 판정매트릭스   근거 (사람이 읽는다)
+        build_matrix.py      -> sources.json + 판정매트릭스   근거 (사람이 읽는다) · 🔴 먼저
+        gen_registry.py      -> data_sources.yaml            집행 (게이트가 읽는다) · sources.json 을 읽는다
         extract_rationale.py -> registry_rationale.yaml      판정 근거
         review_sheet.py      -> S0-14 검토표                  2인 확인
 
@@ -463,9 +631,13 @@ def rebuild() -> None:
 
     🚨 첫 실패에서 멈춘다. 중간이 실패했는데 끝까지 돈 것처럼 보이면 안 된다.
     """
+    # 🔴 2026-09-19 — **판정매트릭스가 먼저다** (클론A 인계 09-18 F4). `gen_registry.py` 는 `build_matrix.py` 가 만드는
+    #    `sources.json` 을 읽는다. ⛔ 거꾸로면 새 id 는 `KeyError` 이고, **기존 레코드를 고치면 에러 없이 옛 판정으로**
+    #    `data_sources.yaml` 을 만든다 — 한 번의 rebuild 가 두 벌을 만든다 (D-90). `_matrix/README.md` 순서와 같다.
+    #    ★ 이 날 `mfds_cgm_expc` 를 G0 → G3 로 고치며 그 자리를 밟을 참이었다. 순서 게이트가 지킨다.
     steps = (
-        (["scripts/gen_registry.py"], "레지스트리"),
         (["scripts/build_matrix.py"], "판정매트릭스"),
+        (["scripts/gen_registry.py"], "레지스트리"),
         (["scripts/extract_rationale.py"], "판정 근거"),
         (["scripts/review_sheet.py"], "S0-14 검토표"),
     )
@@ -507,8 +679,9 @@ def pdf(src: str) -> None:
 
 @app.command()
 def diagram(only: str = typer.Option("", "--only", help="원천 파일 이름(확장자 없이)")) -> None:
-    """도면 원천(HTML) → PNG. ⛔ PNG 는 손으로 고치지 않는다 (D-90 · D-217).
+    """도면 원천(HTML) → PNG. ⛔ PNG 는 손으로 고치지 않는다.
 
+    근거 — D-90 · D-217.
     🔴 원천이 있는 것만 뽑는다 — 21장 중 나머지는 원천이 저장소 밖에 있거나 없다 (D-188).
     🚨 `build_pdf.py` 와 **같은** playwright chromium 을 쓴다 — 스택이 안 는다.
     """
@@ -522,7 +695,9 @@ def diagram(only: str = typer.Option("", "--only", help="원천 파일 이름(�
 def dmap(
     open_only: bool = typer.Option(False, "--open", help="⬜ 열린 항목만 화면으로"),
 ) -> None:
-    """결정이 코드의 어디에 사는지 표로 뽑는다 — `build/decision_map.md` (D-90).
+    """결정이 코드의 어디에 사는지 표로 뽑는다.
+
+    산출 — `build/decision_map.md` (생성물 · D-90).
 
     ⛔ **「인용 0건」이 「미구현」은 아니다.** 세 갈래가 섞여 있고 **가르는 것은 사람이다** —
        ① 코드가 아직 없다 ② 코드에는 있는데 D 번호를 안 적었다 ③ 코드로 갈 결정이 아니다.
@@ -536,7 +711,9 @@ def dmap(
 
 @app.command(name="admin-add")
 def admin_add(initials: str = typer.Argument(..., help="docs/<이니셜>/ 과 같은 철자")) -> None:
-    """거버넌스 콘솔 계정을 만든다 — 가입 화면은 없다 (D-66 · D-213).
+    """거버넌스 콘솔 계정을 만든다 — 가입 화면은 없다.
+
+    근거 — D-66 · D-213.
 
     🚨 **비밀번호는 화면에 안 뜨고 셸 인자로도 안 받는다** (`getpass`). `setkey` 와 같은
        이유다 — PowerShell 기록 파일에 값이 그대로 남는다 (D-111).
@@ -659,7 +836,9 @@ def db_down() -> None:
 
 @app.command(name="db-fresh")
 def db_fresh(keep: bool = typer.Option(False, "--keep", help="임시 DB 를 안 지운다")) -> None:
-    """빈 DB 에서 `migrate` 가 끝까지 도는가 — **새로 클론한 사람이 밟는 자리** (D-221).
+    """빈 DB 에서 `migrate` 가 끝까지 도는가 — **새로 클론한 사람이 밟는 자리**.
+
+    근거 — D-221.
 
     🔴 2026-09-13 에 팀원이 새 기기에서 막혔다. 다들 쓰던 DB 에 이어 붙이기만 해서
        **빈 DB 에서 처음부터 돌린 적이 없었다** (D-146).
@@ -756,7 +935,9 @@ def search_probe(
     queries: str = typer.Option("", help="질의 JSONL 경로 (비우면 기본 경로)"),
     pool: int = typer.Option(0, help="후보 폭 (0 이면 기획서 5-6 의 50)"),
 ) -> None:
-    """검색 순위를 잰다 — 🚨 **원장에 올릴 수를 만드는 자리**다 (D-204).
+    """검색 순위를 잰다 — 🚨 **원장에 올릴 수를 만드는 자리**다.
+
+    근거 — D-204.
 
     범주 넷을 다 돌고 갈래별 순위와 RRF 순위를 낸다. 30건 미만이면 D-40 으로
     「측정 불가」를 찍고 **비율을 말하지 않는다.**
@@ -815,7 +996,10 @@ def adopt(
        **채택하는 명령이 없어서** 손으로 옮기다가 원장이 깨졌습니다.
     🚨 원장에 원본 경로의 새 행을 붙입니다 — 그래야 `doctor --hash` 가 훼손으로 안 봅니다.
     🚨 2인 확인은 요구하지 않습니다 (팀장 판정) — 채택 자체가 사람의 판정입니다.
+    🆕 2026-09-20 — **정본에서만** 합니다. 팀원 기기에서 채택하면 원본 경로의 바이트가 정본과 갈리고,
+       `raw-import` 는 덮어쓰지 않으므로 **영영 안 맞춰집니다** (D-250). 판은 그대로 올리면 정본이 고릅니다.
     """
+    only_canonical(f"adopt {source}")
     raise typer.Exit(run("uv", "run", "python", "-m", "collect.ingest", "adopt", source, stem))
 
 
@@ -826,6 +1010,9 @@ def collect(
     pages: int = typer.Option(0, "--pages", help="🚨 첫 실행은 1 로 — 응답을 보고 전량을 받는다"),
     limit: int = typer.Option(0, "--limit", help="법제처 목록형(판례·재결례·1차 해석) — 앞 N 건만"),
     dry_run: bool = typer.Option(False, "--dry-run", help="법제처 — 저장하지 않고 무엇을 받을지만"),
+    force: bool = typer.Option(
+        False, "--force", help="다른 기기가 최근에 받은 소스라도 받는다 (D-250 겹침 경고를 넘긴다)"
+    ),
 ) -> None:
     """원천에서 원문을 내려받는다 — 소스마다 맞는 수집기로 보냅니다.
 
@@ -834,7 +1021,11 @@ def collect(
 
     🆕 2026-09-18 — 법제처 목록형은 `--dry-run` · `--limit` 을 넘깁니다.
        첫 실행은 `--dry-run` → `--limit 20` → 전량 순서로 봅니다.
-    🚨 **파생물은 클론 B 에서만 만듭니다** (D-226). 수집도 정본 기기에서 합니다.
+    🚨 **파생물은 클론 B 에서만 만듭니다** (D-226).
+    🔄 2026-09-20 (D-250) — 수집은 **지정 팀원도** 합니다. 받은 원문은 `raw-publish` 로 올리고
+       원장은 자기 브랜치로 올립니다 → 팀장이 검토·병합 → 정본이 `raw-import` 로 합칩니다.
+       다른 기기가 최근 7일 안에 받은 소스면 **먼저 멈추고 알립니다** — 알고 받으려면 `--force`.
+       (겹쳐 받아도 섞이지는 않습니다 — 원장의 sha 로 같으면 건너뛰고 다르면 새 판입니다.)
     """
     from collect import COLLECTORS, MANUAL_SOURCES  # noqa: PLC0415 — 표는 collect 가 든다
 
@@ -853,6 +1044,23 @@ def collect(
             " 엉뚱한 오류가 납니다 (D-179)."
         )
         raise typer.Exit(1)
+    if not dry_run:
+        from collect import store  # noqa: PLC0415
+
+        try:
+            store.device_id()  # 🆕 D-250 — 별칭이 없으면 받기 **전에** 멈춘다
+        except store.StoreError as e:
+            typer.echo(f"🔴 {e}")
+            raise typer.Exit(1) from None
+        others = store.recent_by_others(source)
+        if others and not force:
+            typer.echo(
+                f"🟡 `{source}` 는 다른 기기가 최근 {store.OVERLAP_DAYS}일 안에 받았습니다 — "
+                + " · ".join(f"{k} {v[:10]}" for k, v in sorted(others.items()))
+                + "\n   겹쳐 받는지 팀에 먼저 확인합니다. 원장이 최신인지도 봅니다 (`git pull`).\n"
+                f"   알고 받으려면: uv run python launcher.py collect {source} --force"
+            )
+            raise typer.Exit(1)
     module, shape = spec
     args = ["uv", "run", "python", "-m", module]
     if shape == "arg":
@@ -867,7 +1075,65 @@ def collect(
             args.append("--dry-run")
         if limit:
             args += ["--limit", str(limit)]
-    raise typer.Exit(run(*args))
+    rc = run(*args)
+    if rc == 0 and not dry_run:
+        _after_collect(source)
+    raise typer.Exit(rc)
+
+
+def _refresh_ids(source: str) -> list[str]:
+    """`data-refresh` 가 받는 원천 id 중 **이 소스의 원문을 읽는 것** — 🆕 D-254.
+
+    같은 id 가 추출기 표에 있으면 그것, 없으면 원문 폴더(`store.families`)가 겹치는 추출기 id.
+    ⛔ 종전 안내는 어느 소스든 `data-refresh <원천>` 이었고, 15개 중 10개가 「모르는 원천」으로 거부됐다.
+    🔗 표는 `preprocess.EXTRACTORS`·`collect.store.FAMILY_OF` 가 든다 — 여기서 만들지 않는다 (D-99).
+    """
+    from collect import store  # noqa: PLC0415
+    from preprocess import EXTRACTORS  # noqa: PLC0415
+
+    if source in EXTRACTORS:
+        return [source]
+    mine = set(store.families(source))
+    return sorted(k for k in EXTRACTORS if mine & set(store.families(k)))
+
+
+def _after_collect(source: str) -> None:
+    """🆕 수집이 끝난 뒤 **다음에 칠 것** — 역할마다 다르다 (런처 자동화 검토 발견 5).
+
+    🚨 올리기는 자동으로 하지 않는다 — 외부 전송이라 사람이 본다(`raw-publish` 가 한 번 묻는다).
+    🔄 D-254 — 정본의 안내는 **`data-refresh` 가 실제로 받는 원천일 때만** 그 명령을 낸다.
+    """
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    if dm.role() == "canonical":
+        ids = _refresh_ids(source)
+        if ids:
+            console.print(
+                f"\n  다음 — 파생물: uv run python launcher.py data-refresh {' '.join(ids)}  "
+                "(판 `__c…` 이 생겼으면 먼저 `adopt`)",
+                markup=False,
+            )
+            return
+        # ⬜ 추출기 표에 없다 — `data-refresh` 는 거부한다. 지어서 안내하지 않는다 (D-220).
+        console.print(
+            f"\n  다음 — `{source}` 의 추출기는 preprocess/__init__.py EXTRACTORS 표에 없습니다.\n"
+            "    `data-refresh` 로는 다시 만들 수 없습니다 (표에 없는 원천은 거부합니다).\n"
+            "    법령(law_go_kr)의 조문·별표 추출 명령은 scripts/db_reset.py `reload_data` 의 표에 있습니다\n"
+            "    (🚨 `db-reset --yes --data` 는 볼륨을 지웁니다 — 추출만 하려면 그 표의 두 줄을 직접 돌립니다).\n"
+            "    그 밖의 원천은 이 원문을 읽는 preprocess 모듈이 있는지부터 봅니다.\n"
+            "    판 `__c…` 이 생겼으면 먼저 `adopt`.",
+            markup=False,
+        )
+        return
+    console.print(
+        "\n  다음 (수집 팀원) —\n"
+        "    uv run python launcher.py raw-publish          받은 원문을 받은편지함에 올린다\n"
+        "    git add data/manifest.jsonl\n"
+        '    git commit -m "수집 — <원천>"\n'
+        "    git push origin <내 브랜치>                    🚨 ohb 가 아니라 자기 브랜치\n"
+        "  그리고 팀장에게 브랜치 이름을 알린다 (D-250)",
+        markup=False,
+    )
 
 
 @app.command(
@@ -939,6 +1205,39 @@ def data_sync(
     raise typer.Exit(run(*args))
 
 
+@app.command(name="data-setup")
+def data_setup(
+    role: str = typer.Option("", "--role", help="canonical | replica (비우면 묻는다)"),
+    store: str = typer.Option("", "--store", help="저장소 폴더 (비우면 드라이브에서 찾는다)"),
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    inbox: str = typer.Option(
+        "", "--inbox", help="원문 받은편지함 폴더 (비우면 찾는다 · 수집 팀원)"
+    ),
+    device: str = typer.Option(
+        "", "--device", help="이 기기 이름 — 영문 (예: collector-1 · 실명 금지)"
+    ),
+) -> None:
+    """이 기기의 데이터 역할과 공유 저장소를 설정 파일에 적고, 받는 쪽이면 바로 받습니다.
+
+    🆕 2026-09-20 (D-247 · D-249) — `.env` 를 손으로 열지 않습니다. 저장소 폴더
+       `CopyLane_store` 를 Google Drive 가 붙은 드라이브에서 **찾아서** 적습니다.
+    🚨 정본(canonical)은 클론 B 한 곳입니다 — 고르면 한 번 더 묻습니다 (D-226).
+    🆕 D-250 — 수집 팀원은 `CopyLane_raw_inbox` 도 찾아 적고, `--device` 로 기기 이름을 적습니다.
+    """
+    args = [sys.executable, "-m", "scripts.data_store", "setup"]
+    if role:
+        args += ["--role", role]
+    if store:
+        args += ["--store", store]
+    if inbox:
+        args += ["--inbox", inbox]
+    if device:
+        args += ["--device", device]
+    if yes:
+        args.append("--yes")
+    raise typer.Exit(run(*args))
+
+
 @app.command(name="data-publish")
 def data_publish(
     yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
@@ -959,6 +1258,124 @@ def data_publish(
     raise typer.Exit(run(*args))
 
 
+@app.command(name="raw-publish")
+def raw_publish(
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 올릴지만 보여 준다"),
+) -> None:
+    """수집 팀원 — 이 기기가 받은 원문을 원문 받은편지함에 올립니다.
+
+    🆕 2026-09-20 (D-250). 올리는 것은 **이 기기 디스크에 있고 원장에 있는 원문** 중 받은편지함에 없는 것입니다.
+       (기기 별칭이 바뀌어도 안 올린 원문이 빠지지 않습니다.) 정본은 쓰지 않습니다.
+    🚨 막는 것 — 키가 섞인 원문 · 원장과 바이트가 다른 원문 · 재배포 제약 원천 · `data/raw` 밖 경로.
+    🚨 올린 뒤 `data/manifest.jsonl` 을 **자기 브랜치에** 커밋·push 하고 팀장에게 알립니다.
+    """
+    args = [sys.executable, "-m", "scripts.raw_inbox", "publish"]
+    if yes:
+        args.append("--yes")
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="raw-import")
+def raw_import(
+    branch: str = typer.Option("", "--from", help="병합 **전** — 이 브랜치 원장으로 검사만"),
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 놓을지만 보여 준다"),
+) -> None:
+    """정본 — 팀원이 받은 원문을 받은편지함에서 꺼내 제자리에 놓습니다.
+
+    🆕 2026-09-20 (D-250). 순서 — ① `git fetch` → `raw-import --from origin/<팀원 브랜치>` (검사)
+       ② 검토·병합 ③ `raw-import` (놓기) ④ 파생물 재생성 → `data-publish`.
+    🚨 바이트가 원장의 sha 와 안 맞거나 키가 섞였으면 **하나도 놓지 않습니다.** 덮어쓰지 않습니다.
+    """
+    args = [sys.executable, "-m", "scripts.raw_inbox", "import"]
+    if branch:
+        args += ["--from", branch]
+    if yes:
+        args.append("--yes")
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="data-refresh")
+def data_refresh(
+    sources: list[str] = typer.Argument(  # noqa: B008 — typer 의 선언 방식
+        None, help="다시 추출할 원천 id (여럿 가능 · 비우면 추출 없이 골든셋·원장만)"
+    ),
+    no_golden: bool = typer.Option(False, "--no-golden", help="골든셋을 다시 만들지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 할지만 보여 준다"),
+) -> None:
+    """정본 — 원문이 바뀐 뒤 파생물을 **한 번에 순서대로** 다시 만들고, 올리기 직전에서 멈춥니다.
+
+    🆕 2026-09-20 (런처 자동화 검토 발견 3) — 사람이 외우던 순서를 명령 하나로 묶습니다.
+
+        1 합치지 않은 팀원 원문이 없는가     raw_inbox pending   (있으면 `raw-import` 먼저)
+        2 원천별 추출                        extract <id> --dump (준 원천만)
+        3 골든셋                             분할 → 사전 → 주입 → 물질화
+        4 파생물 원장                        derived-manifest --write
+        5 올리기 전 검사 (올리지 않는다)     개인 식별 · 마스킹 잔여 · 검사 못 한 형식 · 재배포 제약
+
+    🚨 **외부 전송(`data-publish`)과 git 은 하지 않습니다** — 끝에 칠 명령을 순서대로 보여 줍니다.
+    🚨 첫 실패에서 멈추고 **몇 번째 단계인지** 말합니다. 정본(클론 B)에서만 돕니다 (D-226).
+    """
+    from preprocess import EXTRACTORS  # noqa: PLC0415
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    sources = list(sources or [])
+    unknown = [s for s in sources if s not in EXTRACTORS]
+    if unknown:
+        console.print(
+            f"  [red]모르는 원천 {unknown}[/red] — 아는 것: {', '.join(sorted(EXTRACTORS))}"
+        )
+        raise typer.Exit(1)
+    only_canonical("data-refresh")
+
+    py = ["uv", "run", "python"]
+    steps: list[tuple[str, list[str]]] = [
+        ("합치지 않은 팀원 원문 확인", [*py, "-m", "scripts.raw_inbox", "pending"])
+    ]
+    steps += [(f"추출 — {s}", [*py, "-m", EXTRACTORS[s], "--dump"]) for s in sources]
+    if not no_golden:
+        steps += [(f"골든셋 — {m[-1]}", [*py, *m, *extra]) for m, extra in GOLDEN_STEPS]
+    steps += [
+        ("파생물 원장 쓰기", [*py, "scripts/derived_manifest.py", "--write"]),
+        (
+            "올리기 전 검사 (올리지 않는다)",
+            [*py, "-m", "scripts.data_store", "publish", "--dry-run"],
+        ),
+    ]
+    if dry_run:
+        for i, (label, cmd) in enumerate(steps, 1):
+            console.print(f"  {i:>2}. {label}   [dim]{' '.join(cmd[3:])}[/dim]")
+        console.print("\n  [yellow]⬜ --dry-run — 아무것도 돌리지 않았다[/yellow]")
+        raise typer.Exit(0)
+    for i, (label, cmd) in enumerate(steps, 1):
+        console.print(f"\n[bold]{i}/{len(steps)}  {label}[/bold]")
+        if run(*cmd) != 0:
+            console.print(
+                f"  [red]{i}번째 단계({label})에서 멈췄다[/red] — 뒤 단계는 돌리지 않았다. 위 메시지를 본다"
+            )
+            raise typer.Exit(1)
+
+    carried = " ".join(["data/derived_manifest.jsonl", *dm.GIT_CARRIES])
+    console.print(
+        "\n  [green]파생물을 다시 만들었고 올리기 전 검사를 통과했다.[/green]\n"
+        "  다음은 **사람이** 순서대로 칩니다 (외부 전송·git 은 자동으로 하지 않습니다):\n\n"
+        "    uv run python launcher.py data-publish\n"
+        f"    git add {carried}\n"
+        '    git commit -m "파생물 재생성 — <무엇을 바꿨나>"\n'
+        "    git push origin ohb\n"
+        "    uv run python launcher.py load\n\n"
+        "  🚨 올리기가 먼저입니다 — 원장을 먼저 push 하면 사본이 「저장소에 없음」으로 멈춥니다.\n"
+        "  ★ `git status` 로 다른 변경(수집 원장 등)이 섞였는지 봅니다.",
+        markup=False,
+    )
+    raise typer.Exit(0)
+
+
 @app.command()
 def status() -> None:
     """데이터 현황판을 다시 만듭니다 — 무엇을 쓰기로 했고 무엇을 안 쓰기로 했나.
@@ -977,14 +1394,16 @@ def load(
         help="🚨 파생물이 없어도 0행으로 적재합니다 — **일부러** 비운 채 돌릴 때만",
     ),
 ) -> None:
-    """파생물을 거버넌스 DB 에 적재한다 (D-95).
+    """파생물을 거버넌스 DB 에 적재한다.
+
+    근거 — D-95.
 
     🚨 CHECK 둘을 못 지나는 소스는 **넣지 않고 이름을 냅니다** —
        2인 확인 미완 · attribution 없음. 조용히 건너뛰면 「다 들어갔다」로 읽힙니다.
     🔴 **입력이 없으면 멈춥니다** (2026-09-10 · D-72). 종전에는 빈 리스트로 삼켜서
        `document 0 · product_fact 0` 이 오류도 경고도 없이 「정상 완료」로 찍혔습니다.
-    🔴 골든셋은 아직 못 넣습니다 — `split_t` 에 `test_sentence` 가 없고
-       `violation_t`(V0~V8) 대응표가 미판정입니다 (결정요청 ⑤).
+    🔄 D-254 — 골든셋도 넣습니다(`golden_sample` · `scripts/load_db.py` `load_golden`).
+       ⛔ 종전 「골든셋은 아직 못 넣습니다」는 옛말이었다. 파일에서 사라진 행은 `sweep_golden` 이 거둡니다.
     """
     args = ["uv", "run", "python", "-m", "scripts.load_db"]
     if allow_missing:
@@ -998,6 +1417,7 @@ def chunk(dump: bool = typer.Option(False, "--dump", help="chunks.jsonl 을 쓴�
     """[P5] 조문·별표를 RAG 청크로 자릅니다 — 🚨 조문 단위입니다."""
     args = ["uv", "run", "python", "-m", "preprocess.chunk"]
     if dump:
+        only_canonical("chunk --dump")
         args.append("--dump")
     raise typer.Exit(run(*args))
 
@@ -1017,13 +1437,22 @@ def embed(
     raise typer.Exit(run(*args))
 
 
+#: 이 기기 안에서만 받는 주소 — 이 밖이면 `serve` 가 `--allow-remote` 를 요구한다 (D-254).
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
 @app.command()
 def serve(
     reload: bool = typer.Option(True, "--reload/--no-reload"),
     host: str = typer.Option("127.0.0.1", "--host", help="🚨 0.0.0.0 은 사내망에 연다"),
     port: int = typer.Option(8000, "--port", help="4명이 동시에 띄우면 겹친다"),
+    allow_remote: bool = typer.Option(
+        False, "--allow-remote", help="🔴 인증 없이 이 기기 밖에 연다 — 알고 할 때만"
+    ),
 ) -> None:
-    """FastAPI 를 띄웁니다 (D-42 · D-135 — Django 를 쓰지 않습니다).
+    """FastAPI 를 띄웁니다 — Django 를 쓰지 않습니다.
+
+    근거 — D-42 · D-135.
 
     🔄 2026-09-09 — `@stub("W2", "walking skeleton")` 자리를 대신합니다.
        ⛔ 새 명령을 더하면서 **같은 이름의 스텁이 이미 있는지 안 봤습니다.**
@@ -1047,9 +1476,13 @@ def serve(
     # 🔴 **`127.0.0.1` 이 기본이다** (보안점검 P2-10 · P1-7). 종전에는 `--host` 가 없어
     #    uvicorn 기본값에 기대고 있었고, **그것이 판정이라고 적힌 데가 없었다.**
     #    ⛔ 인증이 아직 0줄이라, `--host 0.0.0.0` 하나면 `/admin`·`/docs` 가 사내망에 열린다.
-    if host not in ("127.0.0.1", "localhost", "::1"):
+    # 🆕 D-254 — ⛔ 종전에는 경고만 하고 열었다. 이제 `--allow-remote` 없이는 **멈춘다** (D-220).
+    if host not in LOCAL_HOSTS:
         console.print(f"[red]🚨 --host {host} — 인증이 아직 없습니다 (보안점검 P1-5 · P1-7).[/red]")
         console.print("  관리자 화면과 /docs 가 그대로 열립니다. 배포는 SSH 터널로만 (P2-10).")
+        if not allow_remote:
+            console.print("  ⛔ 열지 않았습니다 — 알고 열려면 [bold]--allow-remote[/bold]")
+            raise typer.Exit(1)
     args = ["uv", "run", "uvicorn", "app.api:app", "--host", host, "--port", str(port)]
     if reload:
         args.append("--reload")
@@ -1057,6 +1490,7 @@ def serve(
 
 
 @app.command()
+@needs_raw
 def extract(
     source: str = typer.Argument("", help="원천 id (비우면 표를 보여준다)"),
     dump: bool = typer.Option(False, "--dump", help="파생물을 쓴다 — 🔴 마스킹 정책이 있어야 한다"),
@@ -1077,6 +1511,8 @@ def extract(
     if not source:
         console.print(_table("전처리 추출", EXTRACTORS))
         raise typer.Exit(0)
+    if dump or sheet:
+        only_canonical(f"extract {source} " + ("--dump" if dump else "--sheet"))
     module = EXTRACTORS.get(source)
     if module is None:
         console.print(
@@ -1101,6 +1537,7 @@ def scan(source: str = typer.Argument("", help="원천 id (비우면 표를 보�
 
     두 가지를 묻습니다 — **받은 것이 전부인가**(D-161) · **광고 문구가 실제로 실리는가**(D-40).
     🔴 유일 행이 원천 선언에 못 미치면 종료코드 1 로 끝납니다. 지금 `mfds_sanctions` 가 그렇습니다.
+    🆕 D-254 — 원천을 고르면 `extract` 처럼 합치지 않은 팀원 원문부터 봅니다(`needs_raw` 와 같은 검사).
     """
     from preprocess import SCANNERS  # noqa: PLC0415
 
@@ -1113,14 +1550,28 @@ def scan(source: str = typer.Argument("", help="원천 id (비우면 표를 보�
             f"  [red]{source} 의 계측 모듈이 없다[/red] — preprocess/__init__.py 의 표를 본다"
         )
         raise typer.Exit(1)
+    # 🆕 D-254 — 계측기는 전부 `data/raw` 를 읽는다. 합치지 않은 팀원 원문이 있으면 **센 수가 모자란다** (D-250).
+    #    ⬜ 표만 볼 때(위 두 갈래)는 원문을 안 읽으므로 묻지 않는다 — 그래서 데코레이터가 아니라 여기다.
+    _raw_pending_or_exit()
     raise typer.Exit(run("uv", "run", "python", "-m", module, source))
+
+
+#: 골든셋 네 단계 — (모듈, 쓸 때 붙이는 플래그). 🚨 `golden` 과 `data-refresh` 가 **이 표 하나**를 돈다 (D-99)
+GOLDEN_STEPS: tuple[tuple[list[str], list[str]], ...] = (
+    (["-m", "preprocess.split"], ["--write"]),
+    (["-m", "preprocess.dictionary"], ["--dump"]),
+    (["-m", "preprocess.inject"], ["--dump"]),
+    (["-m", "preprocess.golden"], ["--dump"]),
+)
 
 
 @app.command()
 def golden(
     write: bool = typer.Option(False, "--write", help="파생물을 실제로 쓴다 (기본은 보기만)"),
 ) -> None:
-    """골든셋을 꾸린다 — **사전 → 주입 → 분할** 세 단계 (2026-09-09).
+    """골든셋을 꾸린다 — **분할 → 사전 → 주입 → 물질화** 네 단계.
+
+    🔄 D-254 — 첫 줄이 「사전 → 주입 → 분할 세 단계」였다(2026-09-09 판). 순서의 정본은 `GOLDEN_STEPS` 다.
 
     🚨 **라벨을 사람도 모델도 붙이지 않는다.** 조문이 붙이거나(사전) 규칙이 붙인다(주입).
 
@@ -1136,13 +1587,9 @@ def golden(
     🔴 **주입본은 평가에 들어가지 않는다** ([P10] 규약 5). 합성으로 평가하면
        「규칙을 배웠는가」를 재게 된다. 분할 게이트가 그것을 막는다.
     """
-    steps = (
-        (["-m", "preprocess.split"], ["--write"]),
-        (["-m", "preprocess.dictionary"], ["--dump"]),
-        (["-m", "preprocess.inject"], ["--dump"]),
-        (["-m", "preprocess.golden"], ["--dump"]),
-    )
-    for mod, extra in steps:
+    if write:
+        only_canonical("golden --write")
+    for mod, extra in GOLDEN_STEPS:
         args = ["uv", "run", "python", *mod] + (extra if write else [])
         if run(*args) != 0:
             raise typer.Exit(1)
@@ -1200,28 +1647,45 @@ def demo() -> None:
 #    그래서 번호는 `_check_menu()` 가 중복을 검사한다 — 표를 손으로 고쳐도 안 어긋난다.
 
 
-def _invoke(fn, *extra: str) -> None:
+def _invoke(fn, *extra: str) -> int:
     """🔴 메뉴도 **CLI 를 거쳐** 부른다 — 경로를 하나로 (D-51 · D-99).
 
     `sys.executable` 을 쓰므로 이미 venv 안이고 `uv run` 을 한 번 더 타지 않는다.
+    🆕 D-254 — **자식의 종료코드를 버리지 않는다.** ⛔ 종전에는 실패해도 「⏎ 계속」뿐이라
+       메뉴에서는 초록과 빨강이 같아 보였다 (D-220). 메뉴로는 그대로 돌아간다.
+    ⬜ 미구현 명령은 패널이 이미 말했으므로 한 번 더 빨갛게 찍지 않는다.
     """
-    run(sys.executable, str(ROOT / "launcher.py"), cli_name(fn), *extra)
+    rc = run(sys.executable, str(ROOT / "launcher.py"), cli_name(fn), *extra)
+    if rc and not getattr(fn, "_planned", False):
+        console.print(
+            f"\n  [red]🔴 {cli_name(fn)} 가 실패했다 — 종료코드 {rc}[/red] · 위 메시지를 본다"
+        )
+    return rc
 
 
 #: 눌렀을 때 **위치 인자를 묻는다** — (물음, 필수인가, 보기 종류)
 #: 🚨 `register` 처럼 **둘 이상**을 받는 명령이 있다. 하나만 물으면 CLI 가 거부한다.
 #: 🔴 보기 종류가 있으면 **번호로 고르게 한다** — 소스 id 를 외워서 칠 이유가 없다.
+#: 🔴 `_check_menu` 가 이 표를 **명령의 실제 시그니처**와 대조한다 — 위치 인자 수·필수 여부 (D-254).
 ASK_ARG: dict[str, list[tuple[str, bool, str]]] = {
     "setkey": [("어떤 키를 넣을까", True, "key")],
     "admin-add": [("누구의 계정인가 (이니셜)", True, "text")],
-    "diagram": [("어느 도면인가 (엔터 = 전부)", False, "text")],
     "probe": [("어떤 소스를 열어 볼까", False, "collect")],
     "collect": [("어떤 소스를 받을까", True, "collect")],
     "adopt": [("어떤 소스인가", True, "collect"), ("원본 이름 (확장자 없이)", True, "text")],
     "count": [("받아 온 파일이나 폴더 경로", True, "path")],
     "register": [("어떤 소스인가", True, "manual"), ("받아 온 파일이나 폴더 경로", True, "path")],
     "extract": [("어떤 원천을 추출할까", False, "extract")],
+    "data-refresh": [
+        ("어떤 원천을 다시 추출할까 (엔터 = 추출 없이 골든셋·원장만)", False, "extract")
+    ],
     "scan": [("어떤 원천을 셀까", False, "scan")],
+}
+
+#: 값을 받는 옵션 중 **골라도 비워도 되는** 것 — (물음, 플래그, 보기 종류). 비우면 옵션을 안 붙인다.
+#: 🆕 D-254 — `diagram` 이 도면 이름을 **위치 인자**로 물었는데 명령은 `--only` 만 받는다 → 메뉴에서 넣으면 반드시 실패.
+ASK_OPT: dict[str, list[tuple[str, str, str]]] = {
+    "diagram": [("어느 도면인가 (엔터 = 전부)", "--only", "text")],
 }
 
 #: 값을 받는 옵션 중 **필수**인 것 — (물음, 플래그, 보기)
@@ -1259,6 +1723,10 @@ ASK_FLAG: dict[str, list[tuple[str, str, str, str]]] = {
     "chunk": [("chunks.jsonl", "--dump", "보기만 한다", "파일로 쓴다")],
     "embed": [("범위", "--check", "전부 임베딩한다 (DB 필요)", "모델 차원만 잰다 (DB 불필요)")],
     "extract": [("파생물", "--dump", "보기만 한다", "쓴다 — 🚨 마스킹 정책이 있어야 한다")],
+    "data-refresh": [
+        ("골든셋", "--no-golden", "다시 만든다 — 분할 포함", "건너뛴다 — 추출·원장만"),
+        ("미리보기", "--dry-run", "실제로 돌린다", "무엇을 할지만 본다"),
+    ],
     # 🔴 순서가 중요하다 — `--yes` 를 먼저 묻는다. 「미리보기」를 고르면 `--data` 는 뜻이 없다.
     "db-reset": [
         ("실행", "--yes", "미리보기만 — 아무것도 안 지운다", "🔴 볼륨을 지우고 다시 세운다"),
@@ -1275,6 +1743,8 @@ DANGER: dict[str, str] = {
     "db-down": "돌고 있는 작업이 끊긴다 — 저장된 데이터는 남는다",
     "setup": "환경을 다시 세운다 — 몇 분 걸린다. 결과는 여러 번 돌려도 같다",
     "load": "DB 내용이 바뀐다",
+    # 🆕 2026-09-20 — 골든셋을 다시 만들면 분할도 다시 쓴다(`golden --write` 와 같은 자리). 미리보기면 안 바뀐다
+    "data-refresh": "파생물을 덮어쓴다 — 골든셋을 고르면 분할까지 (미리보기를 골랐으면 아무것도 안 바뀐다)",
     # 🆕 2026-09-12 밤 — **덮어쓰거나 지우는데 확인이 없었다.**
     "status": "데이터 현황판을 덮어쓴다 — 보기만 하는 경로가 없다",
     "sync": "사본을 다시 만들고 **MAP 에 없는 낡은 사본은 지운다**",
@@ -1318,6 +1788,12 @@ MENU: list[tuple[str, str, object]] = [
     #    ⛔ DANGER 에 또 올리면 같은 것을 두 번 묻는다 — 습관이 된 확인은 안 읽힌다.
     ("44", "데이터 받기", data_sync),
     ("45", "데이터 올리기", data_publish),
+    ("46", "데이터 역할·저장소 설정", data_setup),
+    # 🆕 2026-09-20 (D-250) — 팀원 수집 원문. 올리기는 수집 팀원, 합치기는 정본
+    ("47", "원문 올리기 (수집 팀원)", raw_publish),
+    ("48", "원문 합치기 (정본)", raw_import),
+    # 🆕 2026-09-20 — 정본의 재생성 순서를 한 번에 (외부 전송·git 앞에서 멈춘다)
+    ("49", "파생물 다시 만들기 (정본)", data_refresh),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)
@@ -1381,6 +1857,8 @@ def summary(fn) -> str:
     """
     lines = (fn.__doc__ or "").strip().splitlines()
     first = (lines[0].strip() if lines else "").rstrip(".")
+    # 🆕 D-254 — `--help` 용 미구현 표는 떼어 낸다. 메뉴에는 「미구현」 표가 따로 있다(`_draw`).
+    first = first.removeprefix(STUB_TAG).strip()
     # 🚨 docstring 은 마크다운으로도 읽힌다(`--help`·문서). 화면에서는 `**` 가 글자로 보인다.
     return first.replace("**", "")
 
@@ -1396,10 +1874,58 @@ def _check_menu() -> None:
     if dup:
         raise SystemExit(f"🔴 메뉴 번호가 겹친다: {sorted(dup)}")
     names = {cli_name(fn) for _, _, fn in MENU if fn is not None}
-    asked = sorted(set(ASK_ARG) | set(ASK_VALUE) | set(ASK_FLAG) | set(DANGER) | set(DANGER_IF))
+    asked = sorted(
+        set(ASK_ARG) | set(ASK_OPT) | set(ASK_VALUE) | set(ASK_FLAG) | set(DANGER) | set(DANGER_IF)
+    )
     missing = [n for n in asked if n not in names]
     if missing:
         raise SystemExit(f"🔴 메뉴에 없는 명령을 묻고 있다: {missing}")
+    drift = _ask_drift()
+    if drift:
+        raise SystemExit("🔴 메뉴가 묻는 것과 명령이 받는 것이 다르다:\n  " + "\n  ".join(drift))
+
+
+def _ask_drift() -> list[str]:
+    """🆕 D-254 — 묻는 표(ASK_*)를 **명령의 실제 시그니처**와 대조한다. 어긋난 줄을 돌려준다.
+
+    ⛔ `diagram` 이 도면 이름을 위치 인자로 물었는데 명령은 `--only` 만 받았다 — 메뉴에서 넣으면
+       **위험 확인을 받은 뒤에** 반드시 실패했다. 표를 손으로 고쳐도 여기서 걸린다.
+    본다 — 위치 인자 수 · 필수 여부(메뉴가 비워도 되는데 명령이 필수면 어긋남) ·
+           옵션 이름 · 값을 받는 옵션인가 / 여부 플래그인가.
+    """
+    # 🚨 시그니처는 명령 객체에서 읽는다 — 여기서 다시 적지 않는다 (D-99).
+    #    ⛔ `isinstance(p, click.Argument)` 는 안 된다 — typer 0.27 은 click 을 안에 따로 들고 있다(`typer._click`).
+    cmds = typer.main.get_command(app).commands  # type: ignore[attr-defined]
+    out: list[str] = []
+    for name in sorted(set(ASK_ARG) | set(ASK_OPT) | set(ASK_VALUE) | set(ASK_FLAG)):
+        cmd = cmds.get(name)
+        if cmd is None:
+            out.append(f"{name}: 명령이 없다")
+            continue
+        args = [p for p in cmd.params if p.param_type_name == "argument"]
+        opts = {
+            o: p
+            for p in cmd.params
+            if p.param_type_name == "option"
+            for o in (*p.opts, *p.secondary_opts)
+        }
+        asked = ASK_ARG.get(name, [])
+        if len(asked) > len(args):
+            out.append(f"{name}: 위치 인자를 {len(asked)}개 묻는데 명령은 {len(args)}개 받는다")
+        for (question, required, _kind), p in zip(asked, args, strict=False):
+            if p.required and not required:
+                out.append(f"{name}: 「{question}」 를 비워도 된다는데 명령은 필수다")
+        valued = [(f, False) for _q, f, _k in ASK_OPT.get(name, [])]
+        valued += [(f, False) for _q, f, _o in ASK_VALUE.get(name, [])]
+        valued += [(f, True) for _t, f, _n, _y in ASK_FLAG.get(name, [])]
+        for flag, is_flag in valued:
+            p = opts.get(flag)
+            if p is None:
+                out.append(f"{name}: {flag} 옵션이 명령에 없다")
+            elif p.is_flag != is_flag:
+                what = "여부 플래그" if is_flag else "값을 받는 옵션"
+                out.append(f"{name}: {flag} 를 {what}로 묻는데 명령은 다르다")
+    return out
 
 
 def _draw() -> None:
@@ -1484,12 +2010,11 @@ def _choices(kind: str) -> list[tuple[str, str]]:
         table = preprocess.EXTRACTORS if kind == "extract" else preprocess.SCANNERS
         return [(k, v.replace("preprocess.", "")) for k, v in table.items()]
     if kind == "key":
-        import re  # noqa: PLC0415
+        # 🔄 D-254 — `.env.example` 을 정규식으로 긁던 것을 **키 이름의 정본** `collect.env.KEYS` 로 (D-99).
+        #    `setkey` 가 받는 이름이 정확히 이 표다 — 메뉴 보기와 명령이 받는 것이 갈리지 않는다.
+        from collect import env  # noqa: PLC0415
 
-        text = (ROOT / ".env.example").read_text(encoding="utf-8")
-        # 🚨 `DATABASE_URL`·`MLFLOW_TRACKING_URI` 같은 **설정값**은 키가 아니다.
-        #    이름이 `_KEY` 로 끝나는 것만 고른다 — `setkey` 는 비밀을 넣는 자리다.
-        return [(m.group(1), "") for m in re.finditer(r"^([A-Z][A-Z0-9_]*_KEY)=", text, re.M)]
+        return [(name, purpose) for name, (purpose, _where) in env.KEYS.items()]
     return []
 
 
@@ -1501,6 +2026,9 @@ def _choices(kind: str) -> list[tuple[str, str]]:
 #:      번호 대신 **값을 그대로 치면** 그것이 값으로 들어간다.
 BACK = object()
 
+#: 🆕 D-254 — **보기 밖의 입력을 받지 않는** 보기 종류. 입력이 비밀일 수 있는 자리다.
+CLOSED_KINDS = frozenset({"key"})
+
 
 def _foot(required: bool, skip_note: str = "") -> None:
     console.print("    [cyan] 0[/cyan]  [dim]← 뒤로[/dim]")
@@ -1508,27 +2036,40 @@ def _foot(required: bool, skip_note: str = "") -> None:
         console.print(f"    [dim] ⏎  {skip_note}[/dim]")
 
 
-def _pick(question: str, options: list[tuple[str, str]], *, required: bool, skip_note: str = ""):
+def _pick(
+    question: str,
+    options: list[tuple[str, str]],
+    *,
+    required: bool,
+    skip_note: str = "",
+    free: bool = True,
+):
     """번호로 고르게 한다. `0` 또는 (필수일 때) 빈 입력은 **뒤로**.
 
     🚨 Rich 는 대괄호를 마크업으로 읽는다 — 물음 줄에 `[y/N]` 같은 것을 쓰면 통째로 사라진다.
        실제로 2026-09-11 에 그렇게 사라져서 무엇을 쳐야 할지 안 보였다. 여기서는 대괄호를 안 쓴다.
+    🆕 D-254 — `free=False` 면 **보기 번호만** 받는다. 모르는 입력은 **되비추지 않고** 다시 묻는다.
+       ⛔ `setkey` 가 「값을 그대로」 받아서, 키 **값**을 붙여 넣으면 명령 줄로 화면에 찍혔다(감사 §1-2).
     """
     console.print(f"\n  [bold]{question}[/bold]")
     for i, (value, note) in enumerate(options, 1):
-        tail = f"  [dim]{note}[/dim]" if note else ""
+        tail = f"  [dim]{escape(note)}[/dim]" if note else ""
         console.print(f"    [cyan]{i:>2}[/cyan]  {value}{tail}")
     _foot(required, skip_note)
 
-    raw = console.input("  번호, 또는 값을 그대로 > ").strip()
-    if raw == "0":
-        return BACK
-    if not raw:
-        return BACK if required else ""
-    if raw.isdigit() and 1 <= int(raw) <= len(options):
-        return options[int(raw) - 1][0]
-    # 번호가 아니면 값으로 받는다 — 익숙해진 사람은 그냥 친다
-    return raw
+    while True:
+        raw = console.input("  번호, 또는 값을 그대로 > " if free else "  번호 > ").strip()
+        if raw == "0":
+            return BACK
+        if not raw:
+            return BACK if required else ""
+        if raw.isdigit() and 1 <= int(raw) <= len(options):
+            return options[int(raw) - 1][0]
+        if free:
+            # 번호가 아니면 값으로 받는다 — 익숙해진 사람은 그냥 친다
+            return raw
+        # ⛔ 입력을 찍지 않는다 — 비밀일 수 있다
+        console.print(f"  [yellow]보기 번호(1~{len(options)})만 받는다 — 다시 고른다[/yellow]")
 
 
 def _ask_path(question: str):
@@ -1567,6 +2108,7 @@ def _steps(name: str) -> list[tuple[str, tuple]]:
     """
     out: list[tuple[str, tuple]] = []
     out += [("arg", s) for s in ASK_ARG.get(name, [])]
+    out += [("opt", s) for s in ASK_OPT.get(name, [])]
     out += [("val", s) for s in ASK_VALUE.get(name, [])]
     out += [("flag", s) for s in ASK_FLAG.get(name, [])]
     return out
@@ -1590,8 +2132,21 @@ def _ask(fn) -> list[str] | None:
                     value = _ask_path(question)
                 else:
                     skip = "건너뛴다 — 전체를 보거나 표를 본다"
-                    value = _pick(question, _choices(source), required=required, skip_note=skip)
+                    # 🔴 비밀을 받는 자리(`key`)는 보기에서만 고른다 (D-254)
+                    value = _pick(
+                        question,
+                        _choices(source),
+                        required=required,
+                        skip_note=skip,
+                        free=source not in CLOSED_KINDS,
+                    )
                 out = [value] if value and value is not BACK else ([] if value == "" else value)
+            elif kind == "opt":
+                question, flag, source = spec
+                value = _pick(question, _choices(source), required=False, skip_note="건너뛴다")
+                out = (
+                    [flag, value] if value and value is not BACK else ([] if value == "" else value)
+                )
             elif kind == "val":
                 question, flag, options = spec
                 value = _pick(question, options, required=True)
@@ -1656,7 +2211,7 @@ def menu() -> None:
         extra = _ask(fn)
         if extra is None:
             continue
-        _invoke(fn, *extra)
+        _invoke(fn, *extra)  # 🆕 D-254 — 실패면 종료코드를 빨갛게 찍고 메뉴로 돌아온다
         # 🚨 결과를 읽기 전에 메뉴가 다시 그려지면 안 된다.
         with contextlib.suppress(KeyboardInterrupt, EOFError):
             console.input("\n  [dim]⏎ 계속[/dim]")

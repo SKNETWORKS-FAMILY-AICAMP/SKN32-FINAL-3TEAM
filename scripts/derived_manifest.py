@@ -4,6 +4,7 @@
   uv run python scripts/derived_manifest.py             # 표만 찍는다 (쓰지 않는다)
   uv run python scripts/derived_manifest.py --write     # data/derived_manifest.jsonl
   uv run python scripts/derived_manifest.py --check      # 원장 ↔ 디스크 대조 (종료코드)
+  uv run python scripts/derived_manifest.py --write --accept-loss <경로>   # 🚨 원천·표본을 버린 것이 사람의 판정일 때만
 
 ──────────────────────────────────────────────────────────────
 🚨 **왜 필요한가 — `data/manifest.jsonl` 은 raw 전용이다.**
@@ -28,6 +29,9 @@
             → `mfds_press_pdf/`
 
 ★ **원천·표본은 git 으로, 생성물은 파일로 옮기고 원장만 git 으로** — raw 와 같은 구조다.
+🔄 **2026-09-20 (D-249) — 원천·표본도 공유 저장소로 옮긴다. git 은 `GIT_CARRIES` 만 나른다.**
+   ⛔ 이 저장소는 **공개**다. 라벨 시트와 사람 라벨에 **인용 광고 문구 원문**이 들어 있어 git 이 그것을 공개하고 있었다.
+   ★ 옮기는 길은 D-247 의 저장소(팀 비공개) 하나다 — 정본이 올리고 사본이 받는다. 이미 올라간 이력은 지우지 않는다(팀장 판정).
 
 ──────────────────────────────────────────────────────────────
 🚨 **만든 명령을 손으로 적지 않는다** (D-99).
@@ -75,16 +79,37 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
     #    ★ 캐시는 raw 와 같은 자리다 — **묶음에 넣지 않는다.** raw 가 없는 기기는
     #      어차피 `extract` 를 못 돌리므로 캐시가 없어도 잃는 것이 없다.
     ("원문캐시", "mfds_press_pdf/", "마스킹 전 원문 캐시 — raw 와 같은 자리다. 묶음에서 뺀다"),
+    # 🆕 2026-09-20 (클론A 인계 09-18 F2 · 런처 자동화 검토 발견 2) — **PDF 전문 캐시**도 마스킹 전 원문이다.
+    #    `preprocess/evasion_scan.py` `paths()` 의 넷째 값 `data/derived/<원천>/text/` (마스킹은 `quotes.json` 에만).
+    #    ⛔ 이 규칙이 없을 때 `.txt` 는 「생성물」이 되어 **`data-publish` 대상**이었다(작업공간 재현).
+    #    🔗 폴더 이름을 바꾸면 양쪽을 같이 — `tests/test_derived_manifest.py` 가 둘을 잇는다 (D-99).
+    ("원문캐시", "/text/", "PDF 전문 캐시(마스킹 전) — raw 와 같은 자리다. 묶음에서 뺀다"),
     ("원천", "labels/", "사람의 판정 — 어떤 명령으로도 다시 안 나온다"),
     ("표본", "_labelsheet.jsonl", "다시 뽑으면 그 표본이 아니다 — 라벨과 κ 가 갈린다"),
     ("표본", "golden/split_manifest.json", "다시 나누면 평가 누수 방어와 수치 비교가 무너진다"),
 )
 DEFAULT_KIND = "생성물"
+#: 🆕 2026-09-20 — 개인 식별·마스킹 잔여 검사가 **읽을 수 있는 형식**. 이 밖의 파일은 검사를 못 했으므로
+#:    **올리지 않는다**(`unscanned` → `data-publish` 거부). ⛔ 검사가 형식을 건너뛰는 것을 「0건」으로 세지 않는다 (D-72).
+SCANNED = frozenset({".json", ".jsonl"})
+
+#: 🔄 2026-09-20 (D-249) — **git 이 나르는 파생물.** 🚨 공개 저장소다 — 인용 원문이 든 파일은 여기 두지 않는다.
+#:    `split_manifest.json` 은 문서 id · 분할 · 입력 sha 뿐이라 남긴다. `.gitignore` 예외와 같아야 한다(게이트가 대조).
+GIT_CARRIES: frozenset[str] = frozenset({"data/derived/golden/split_manifest.json"})
+
+#: 저장소가 옮기는 부류 — 원문캐시만 뺀다(마스킹 전 원문 · D-17 · D-244).
+STORE_KINDS: frozenset[str] = frozenset({"원천", "표본", "생성물"})
+
+
+def moved(path: str, kind: str) -> bool:
+    """공유 저장소가 옮기는가 (D-247 · D-249). git 이 나르는 것과 원문캐시는 아니다."""
+    return kind in STORE_KINDS and path not in GIT_CARRIES
+
 
 #: 🚨 **저장소 안에 만드는 코드가 없는 파생물.** 이름과 사유를 여기 적는다.
 #:    ⛔ 검사를 약하게 두지 않고 목록으로 둔다 — 게이트의 `RAW_EXCEPTIONS` 와 같은 자리.
 #:    ★ 만드는 코드가 없다는 것은 **다시 만들 수 없다**는 뜻이므로 부류는 자동으로 「원천」이다.
-#:      즉 이 목록에 오르는 순간 git 으로 따라가야 하는 것이 된다.
+#:      즉 이 목록에 오르는 순간 공유 저장소로 따라가야 하는 것이 된다 (🔄 D-249 — 종전 「git」).
 UNWRITTEN: dict[str, str] = {
     # 🔄 2026-09-17 — 비었다. `casebook2021_labelsheet.jsonl` 이 여기 있었는데
     #    전사기를 `scripts/casebook2021_sheet.py` 로 커밋해 **1차 대조로 넘어갔다**
@@ -126,7 +151,7 @@ def leaks() -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
     got: list[tuple[str, int]] = []
     cache: list[tuple[str, int]] = []
     for f in sorted(DERIVED.rglob("*")):
-        if not f.is_file() or f.name == ".gitkeep" or f.suffix not in {".json", ".jsonl"}:
+        if not f.is_file() or f.name == ".gitkeep" or f.suffix not in SCANNED:
             continue
         rel = f.relative_to(DERIVED).as_posix()
         if rel in LEAK_ALLOW or f.name in LEAK_ALLOW:
@@ -243,7 +268,7 @@ def _pii_scan(files: list[pathlib.Path] | None = None):
     descriptor = re.compile(r"\d+\s*개|(?:^|\s)(?:등|외)(?:\s|$)|\d{4}\.\s*\d")
     targets = files if files is not None else sorted(DERIVED.rglob("*"))
     for f in targets:
-        if not f.is_file() or f.suffix not in {".json", ".jsonl"}:
+        if not f.is_file() or f.suffix not in SCANNED:
             continue
         rel = f.relative_to(DERIVED).as_posix() if f.is_relative_to(DERIVED) else f.name
         if kind_of(rel)[0] == "원문캐시":
@@ -578,9 +603,39 @@ ROLES: tuple[str, ...] = ("canonical", "replica")
 NEED: dict[str | None, dict[str, str]] = {
     "canonical": {"원천": "필수", "표본": "필수", "생성물": "필수", "원문캐시": "필수"},
     "replica": {"원천": "필수", "표본": "필수", "생성물": "필수", "원문캐시": "무시"},
-    # 역할 없음 = CI · `.env` 가 없는 기기. git 이 옮기는 것만 요구한다.
-    None: {"원천": "필수", "표본": "필수", "생성물": "있으면", "원문캐시": "무시"},
+    # 역할 없음 = CI · `.env` 가 없는 기기. 🔄 2026-09-20 (D-249) — 원천·표본도 git 에 없어서 「있으면」이다.
+    #    git 이 나르는 `GIT_CARRIES` 는 CI 에 늘 있으므로 「있으면」으로도 sha 대조가 돈다.
+    None: {"원천": "있으면", "표본": "있으면", "생성물": "있으면", "원문캐시": "무시"},
 }
+
+
+def unscanned(rows: list[dict]) -> list[str]:
+    """옮길 행 중 **검사가 못 읽는 형식** — 개인 식별·마스킹 검사를 안 거쳤으니 내보내지 않는다."""
+    return sorted(
+        str(r["경로"])
+        for r in rows
+        if moved(str(r["경로"]), str(r["부류"]))
+        and pathlib.Path(str(r["경로"])).suffix not in SCANNED
+    )
+
+
+def not_canonical(what: str) -> str | None:
+    """🆕 파생물을 **만드는** 명령의 문지기 (D-226 1항 집행 · 런처 자동화 검토 발견 1).
+
+    ⛔ 종전에는 규약뿐이었다 — 사본에서 `derived-manifest --write` 가 거부 없이 원장을 썼다(작업공간 재현).
+       그 원장이 팀원 브랜치 → 병합으로 오면 정본 원장이 저장소와 어긋난다.
+    ★ 막을 이유를 **사람이 읽을 말**로 돌려준다. 정본이면 None.
+    """
+    who = role()
+    if who == "canonical":
+        return None
+    return (
+        f"🔴 `{what}` 는 파생물을 만든다 — **정본(클론 B)에서만** 돈다 (D-226).\n"
+        f"   이 기기 역할: {who or '설정 안 됨'}\n"
+        "   · 클론 A·팀원 — 만들지 않고 받는다: uv run python launcher.py data-sync\n"
+        "   · 라벨을 채웠다면 — CSV 를 팀장에게 넘긴다 (D-249)\n"
+        "   · 이 기기가 클론 B 라면 — uv run python launcher.py data-setup --role canonical"
+    )
 
 
 def role() -> str | None:
@@ -720,6 +775,45 @@ def _kind(path: str) -> str:
     return kind_of(path.removeprefix("data/derived/"))[0]
 
 
+#: 🆕 D-254 — `--write` 가 **빠지거나 바뀌면 멈추는** 부류. 잃으면 다시 안 나오는 것(원천)과 다시 뽑으면 그 표본이
+#:    아닌 것(표본)이다. 생성물·원문캐시는 명령이 다시 만든다 — 자유다.
+KEEP_KINDS: frozenset[str] = frozenset({"원천", "표본"})
+
+
+def losses(
+    old: dict[str, dict[str, object]], new: list[dict[str, object]]
+) -> list[tuple[str, str, str]]:
+    """옛 원장 대비 **원천·표본이 빠지거나 sha 가 바뀐** 자리 — `(경로, 부류, "없어짐"|"바뀜")`.
+
+    🔴 D-254 (런처 전수 감사 §1-3) — ⛔ `--write` 는 디스크로 원장을 **통째로 새로 썼다.** 라벨(원천) 파일이
+       지워지면 `--check` 가 「갱신하려면 --write」라 안내했고, 누르면 원장에서 **조용히 빠졌다** → publish 초록.
+       `data-refresh` 가 이 단계를 자동으로 돈다.
+    ★ **새로 생긴 것은 자유다** — 라벨 판(round 시트)은 정당하게 새로 생긴다. 막는 것은 빠짐·바뀜뿐이다.
+    🚨 부류는 옛 원장의 것을 먼저 본다. 모르는 부류(표에 없는 이름)는 막는 쪽이다 (D-220).
+    """
+    now = {str(r["경로"]): r for r in new}
+    known = set(NEED["canonical"])
+    out = []
+    for path, r in sorted(old.items()):
+        kind = str(r.get("부류"))
+        if kind not in KEEP_KINDS and kind in known:
+            continue
+        if path not in now:
+            out.append((path, kind, "없어짐"))
+        elif now[path]["sha256"] != r.get("sha256"):
+            out.append((path, kind, "바뀜"))
+    return out
+
+
+RESTORE_HINT = (
+    "  🚨 원천·표본은 명령으로 다시 안 나온다 — 원장을 디스크에 맞추지 말고 **파일을 되살린다**.\n"
+    "     · 공유 저장소에 올린 판이면 원장의 sha 로 찾는다: `<DATA_STORE>/copylane-derived/objects/<sha 앞 2자>/<sha>`\n"
+    "       (사본이면 `launcher.py data-sync` 가 받는다)\n"
+    "     · 올린 적 없으면 백업(`CopyLane_backup/`)이나 그 파일을 만든 사람에게서 찾는다\n"
+    "     · 정말로 버리거나 바꾼 것이면(사람의 판정) `scripts/derived_manifest.py --write --accept-loss <경로>`"
+)
+
+
 def report(got: list[dict[str, object]]) -> None:
     by = collections.Counter(str(r["부류"]) for r in got)
     size = collections.Counter()
@@ -733,9 +827,12 @@ def report(got: list[dict[str, object]]) -> None:
             pct = size[name] / total * 100 if total else 0
             print(f"  {name:<8}{by[name]:>5}{size[name] / 1024:>10,.0f} KB{pct:>7.2f}%")
     keep = [r for r in got if r["부류"] in ("원천", "표본")]
-    print(f"\n  🔴 git 으로 따라가야 하는 것 {len(keep)}개 — 다시 만들 수 없거나 갈린다")
+    # 🔄 2026-09-20 (D-249) — 「git 으로 따라가야 하는 것」이 아니다. git 은 `GIT_CARRIES` 만 나르고
+    #    나머지 원천·표본은 공유 저장소가 옮긴다(`data-publish`). ⛔ 옛 문구가 남아 사람을 git 으로 보냈다.
+    print(f"\n  🔴 다시 만들 수 없거나 갈리는 것 {len(keep)}개 — 잃으면 끝이다")
     for r in keep:
-        print(f"     {r['경로']}  ({r['행'] or '-'}행)  {r['부류']}")
+        how = "git" if r["경로"] in GIT_CARRIES else "공유 저장소 (data-publish)"
+        print(f"     {r['경로']}  ({r['행'] or '-'}행)  {r['부류']} → {how}")
 
 
 def _utf8_out() -> None:
@@ -745,6 +842,7 @@ def _utf8_out() -> None:
        첫 줄 「역할 · …」에서 `UnicodeEncodeError` 로 죽었다. 한국어 Windows(cp949)는 한글은 되지만
        🔴 같은 기호에서 같은 식으로 죽는다. 콘솔은 원래 UTF-8 이라 로컬 `check` 에서는 안 보였다.
     ★ 콘솔(이미 UTF-8)은 건드리지 않는다. ⛔ `errors="replace"` 로 글자를 뭉개 죽음만 감추지 않는다 (D-162).
+    🔄 같은 처방이 `scripts/gen_registry.py` 머리에도 있다(모듈 수준 스크립트라 옮겨 적음) — 고치면 둘 다 (D-99).
     """
     for s in (sys.stdout, sys.stderr):
         enc = (getattr(s, "encoding", "") or "").lower().replace("-", "").replace("_", "")
@@ -758,6 +856,13 @@ def main() -> int:
     ap.add_argument("--write", action="store_true", help=f"{OUT.name} 을 쓴다")
     ap.add_argument("--check", action="store_true", help="원장 ↔ 디스크 대조. 다르면 1")
     ap.add_argument(
+        "--accept-loss",
+        action="append",
+        default=[],
+        metavar="경로",
+        help="🚨 --write 와 함께 — 이 원천·표본이 빠지거나 바뀐 것을 받아들인다 (경로마다 한 번 · D-254)",
+    )
+    ap.add_argument(
         "--pii-triage",
         metavar="파일",
         help="개인 식별 후보의 원값 표를 레포 밖 파일로 쓴다 (화면에는 특징만)",
@@ -768,6 +873,9 @@ def main() -> int:
         help="🔴 묶음을 내보내기 전 검사 — 마스킹 잔여가 있으면 1 (D-17 · D-78 ③)",
     )
     a = ap.parse_args()
+    if a.accept_loss and not a.write:
+        print("🔴 --accept-loss 는 --write 와 함께만 쓴다", file=sys.stderr)
+        return 1
 
     if a.pii_triage:
         out = pathlib.Path(a.pii_triage).resolve()
@@ -775,6 +883,12 @@ def main() -> int:
             print(f"🔴 레포 안에 쓰지 않는다 — 원값이 커밋될 수 있다: {out}", file=sys.stderr)
             return 1
         return triage(out)
+
+    if a.write:
+        why = not_canonical("derived-manifest --write")
+        if why:
+            print(why, file=sys.stderr)
+            return 1
 
     got = rows()
 
@@ -796,6 +910,11 @@ def main() -> int:
             )
             print(f"   → 묶음에서 뺀다. 캐시 {nc}개는 raw 와 같은 자리다(부류 원문캐시).")
             print(f"   예: {cache[0][0]}  {cache[0][1]:,}건\n")
+        odd = unscanned(got)
+        if odd:
+            print(f"🔴 **검사가 못 읽는 형식**이 묶음에 있다 — 내보내지 않는다: {odd[:5]}")
+            print("   부류를 원문캐시로 두거나(마스킹 전이면) 검사가 읽는 형식으로 쓴다")
+            return 1
         if not bad:
             print(f"반출 가능 — 묶음 대상 {len(pack)}개에 마스킹 잔여 0 (캐시 {nc}개 제외)")
             print(f"  ⬜ 허용 목록 {len(LEAK_ALLOW)}개는 세지 않았다: {', '.join(LEAK_ALLOW)}")
@@ -837,11 +956,43 @@ def main() -> int:
                 "\n🔴 부족하거나 옛 판이다 — `uv run python launcher.py data-sync`", file=sys.stderr
             )
         else:
-            print("\n🔴 원장이 디스크와 다르다 — 갱신하려면 --write", file=sys.stderr)
+            # 🔄 D-254 — 원천·표본이 없거나 바뀐 것에 「--write」를 권하지 않는다. 그 길로 원장에서 조용히 빠졌다
+            keep = [k for k in d["missing"] + d["changed"] if _kind(k) in KEEP_KINDS]
+            if keep:
+                print(
+                    f"\n🔴 원천·표본 {len(keep)}개가 없거나 바뀌었다 — 예: {keep[:3]}\n{RESTORE_HINT}",
+                    file=sys.stderr,
+                )
+            rest = [k for k in d["missing"] + d["changed"] + d["added"] if k not in keep]
+            if rest or not keep:
+                print(
+                    "\n🔴 원장이 디스크와 다르다 — 생성물·새 파일이면 갱신하려면 --write",
+                    file=sys.stderr,
+                )
         return 1
 
     report(got)
     if a.write:
+        # 🔴 D-254 — 원천·표본이 빠지거나 바뀌면 **쓰지 않는다.** 받아들이는 것은 경로마다 사람이 적는다
+        lost = losses(ledger(), got)
+        accepted = {x.replace("\\", "/") for x in a.accept_loss}
+        left = [x for x in lost if x[0] not in accepted]
+        stray = sorted(accepted - {x[0] for x in lost})
+        if stray:
+            print(f"\n🟡 --accept-loss 에 적었지만 빠지거나 바뀌지 않은 경로: {stray}")
+        if left:
+            print(
+                f"\n🔴 원천·표본 {len(left)}개가 옛 원장보다 **빠지거나 바뀌었다** — 원장을 쓰지 않았다",
+                file=sys.stderr,
+            )
+            for path, kind, how in left[:20]:
+                print(f"     {how:<4} {kind}  {path}", file=sys.stderr)
+            if len(left) > 20:
+                print(f"     … 외 {len(left) - 20}개", file=sys.stderr)
+            print(RESTORE_HINT, file=sys.stderr)
+            return 1
+        for path, kind, how in lost:
+            print(f"  ⚠️ 받아들임(--accept-loss) — {how} {kind} {path}")
         OUT.write_text(
             "\n".join(json.dumps(r, ensure_ascii=False) for r in got) + "\n",
             encoding="utf-8",

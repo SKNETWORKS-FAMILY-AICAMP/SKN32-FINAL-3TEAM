@@ -2,6 +2,7 @@
 
   uv run python -m preprocess.split --dry-run   # 무엇이 어디로 가는지만 본다
   uv run python -m preprocess.split --write     # split_manifest.json 을 쓴다
+  uv run python -m preprocess.split --write --allow-shrink   # 🚨 봉인이 줄어드는 것을 **보고** 받아들일 때만
 
 ──────────────────────────────────────────────────────────────
 ★ **라벨의 출처는 셋이고, 이 파일은 ① 만 다룬다** (2026-09-09)
@@ -426,10 +427,40 @@ def plan(seed: int = 20260909) -> dict:
     }
 
 
+#: 봉인 평가셋의 배정값. `plan()` 의 `assign` 이 이 이름으로 적는다.
+SEALED = "test_sentence"
+
+
+def sealed_lost(old: dict, new: dict) -> list[str]:
+    """이전 판에서 봉인됐는데 **새 판에서 봉인이 아닌** id — 사라졌거나 train 으로 넘어간 것.
+
+    🔴 **봉인 평가셋은 줄면 안 된다** (2026-09-20 · D-254 · 감사 §2 golden).
+       ⛔ 종전 `--write` 는 옛 `split_manifest.json` 과 비교하지 않고 덮었다. 입력 한 줄이 빠지면
+          봉인 문서가 조용히 빠지고, 옛 판과 새 판의 지표가 **다른 시험지로 잰 수**가 된다.
+       🚨 수만 세지 않고 **id 를 본다** — 하나 빠지고 하나 들어오면 수는 같아도 시험지가 바뀐다.
+       ★ **더해지는 것은 막지 않는다** — 사람 라벨이 늘면 봉인이 는다.
+    """
+    before = {k for k, v in (old.get("assign") or {}).items() if v == SEALED}
+    after = {k for k, v in (new.get("assign") or {}).items() if v == SEALED}
+    return sorted(before - after)
+
+
+def _previous() -> dict | None:
+    """이전 판 분할. **없으면 `None`** — 첫 판이다. ⛔ 깨진 JSON 은 삼키지 않는다 (D-220)."""
+    if not OUT.exists():
+        return None
+    return json.loads(OUT.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="골든셋 분할 [P12] — 출처 분리 · 단위 분리")
     ap.add_argument("--write", action="store_true", help=f"{OUT} 로 쓴다")
     ap.add_argument("--seed", type=int, default=20260909, help="재현 조건 (D-54)")
+    ap.add_argument(
+        "--allow-shrink",
+        action="store_true",
+        help="🚨 봉인 평가셋에서 빠지는 id 가 있어도 쓴다 — 이유를 안 뒤에만",
+    )
     a = ap.parse_args()
 
     m = plan(a.seed)
@@ -462,6 +493,26 @@ def main() -> int:
     )
     print(f"  ★ 사전 쪽으로 간 사례집 — {m['sizes']['사전(사례집)']['문서']}문서")
     print("  🚨 ftc 슬라이스는 학습과 같은 기관이다 — 원천 편향은 못 잰다 (same_source).")
+
+    # 🔴 **봉인이 줄면 멈춘다** (2026-09-20 · D-254) — 쓰기 전에, 미리보기에서도 보인다.
+    #    🚨 비율 문턱이 없다 — 봉인은 **한 건이라도** 빠지면 멈춘다. 시험지는 고정이 약속이다.
+    prev = _previous()
+    lost = sealed_lost(prev, m) if prev is not None else []
+    if lost:
+        n_old = sum(1 for v in (prev or {}).get("assign", {}).values() if v == SEALED)
+        n_new = sum(1 for v in m["assign"].values() if v == SEALED)
+        print(f"\n  🔴 봉인 평가셋에서 빠지는 id {len(lost)}개 — 봉인 {n_old} → {n_new}")
+        for k in lost[:10]:
+            print(f"     {k}")
+        if len(lost) > 10:
+            print(f"     … 외 {len(lost) - 10}개")
+        print("     🚨 이대로 쓰면 이전 판과 **다른 시험지**로 잰 지표가 된다.")
+        print("     먼저 입력이 왜 바뀌었는지 본다 (라벨 파일 · 추출 판 · seed).")
+        print("     빠지는 것이 맞다고 판단했으면:")
+        print("       uv run python -m preprocess.split --write --allow-shrink")
+        if a.write and not a.allow_shrink:
+            print("     ⛔ 쓰지 않았다 — 이전 판이 그대로 남아 있다.")
+            return 1
 
     if a.write:
         OUT.parent.mkdir(parents=True, exist_ok=True)

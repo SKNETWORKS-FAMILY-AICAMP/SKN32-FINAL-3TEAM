@@ -38,6 +38,7 @@ import re
 from app.settings import PARAMS
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
+from preprocess.lineage import lineage
 from preprocess.split import approved_docs, casebook_docs, ftc_docs, guide_docs
 
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
@@ -196,6 +197,22 @@ def build() -> tuple[list[dict], dict]:
         stat["train"] += 1
         stat["주입"] += 1
 
+    # 🔴 **계보가 재배포와 보관 상한을 정한다** (2026-09-20 · D-249).
+    #    ⛔ 종전에는 `"redistributable": True` 를 상수로 박았다 — 인용 광고 문구 5,801행이 「공개 가능」이었다.
+    #    ★ 값은 `preprocess/lineage.py` 한 표에서 온다(적재기의 프래그먼트와 같은 표 · D-99).
+    #    🚨 인용 문구가 상한을 넘으면 **버린다 — 자르지 않는다.** 자르면 문장이 끊겨 라벨이 안 맞는다.
+    #       이 필터는 문구 겹침 필터보다 **앞**이다 — 버린 행이 학습 문구 집합을 만들면 안 된다.
+    cap = PARAMS.quote_max_chars
+    capped: list[dict] = []
+    for r in rows:
+        _fid, redist = lineage(r["provenance"], r["origin"])
+        r["redistributable"] = redist
+        if not redist and len(r["text"]) > cap:
+            stat["인용상한초과"] += 1
+            continue
+        capped.append(r)
+    rows = capped
+
     # 🔴 문구 단위 2차 필터 — 평가는 **안 본 것**이어야 한다
     train_text = {norm(r["text"]) for r in rows if r["split"] == "train"}
     kept, dropped = [], 0
@@ -265,6 +282,14 @@ def main() -> int:
                 "train 에 넣으면 같은 문서가 양쪽에 선다"
             )
         print("     🚨 이유 인용 중 광고 카피는 전수 39.7% 다 — 남은 것에도 잡음이 있다 (⬜ D-234)")
+
+    # 🆕 D-249 — 버린 수가 안 보이면 상한이 조용히 표본을 깎는다 (D-142)
+    print(
+        f"\n  🔴 **인용 문구 보관 상한 {PARAMS.quote_max_chars}자 초과로 버린 행 "
+        f"{stat.get('인용상한초과', 0)}개** (D-249 · 자르지 않는다)"
+    )
+    red = collections.Counter(bool(r["redistributable"]) for r in rows)
+    print(f"     재배포 가능 {red[True]:,} · 불가 {red[False]:,} — 인용 광고 문구는 불가 (D-249)")
 
     if stat.get("문구겹침제외"):
         print(

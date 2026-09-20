@@ -72,6 +72,17 @@ KEYS = {
 }
 
 
+#: 🆕 2026-09-20 — **비밀이 아닌 기기 설정** → 용도. `setting()` 이 읽고 `setkey.put_setting()` 이 쓴다.
+#:    🚨 `KEYS` 와 나눈다 — 키는 화면에 안 띄우고 지문만 내지만, 설정은 **값을 보여 줘야** 고칠 수 있다.
+SETTINGS = {
+    "DATA_ROLE": "기기 역할 — canonical(클론 B 한 곳) · replica(클론 A · 팀원 · 서버) (D-247)",
+    "DATA_STORE": "팀 비공개 공유 저장소 폴더 — 예: J:\\내 드라이브\\CopyLane_store (D-247 · D-249)",
+    # 🆕 2026-09-20 (D-250) — 팀원 수집
+    "RAW_INBOX": "원문 받은편지함 폴더 — 수집 팀원이 올리고 정본이 합친다. 예: …\\CopyLane_raw_inbox (D-250)",
+    "DATA_DEVICE": "수집 원장(공개 git)에 적을 이 기기 별칭(예: collector-1) · 실명 금지 · 팀 회의로 겹치지 않게 — 비우면 팀원 기기는 수집이 멈춘다 (D-250)",
+}
+
+
 def load() -> None:
     """`.env` 를 한 번만 읽는다. 이미 설정된 환경 변수는 덮어쓰지 않는다."""
     global _loaded

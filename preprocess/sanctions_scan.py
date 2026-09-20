@@ -83,9 +83,18 @@ def _key(r: dict) -> str:
     return json.dumps(r, sort_keys=True, ensure_ascii=False)
 
 
+def raw_of(source: str) -> pathlib.Path:
+    """원문 폴더 — 🆕 D-254 폴더 이름은 store.FAMILY_OF 에서 꺼낸다 (D-99).
+
+    🚨 **작업 폴더 기준 상대 경로**로 둔다 — 종전(`pathlib.Path("data/raw") / source`)과 같다.
+       절대 경로로 바꾸면 tmp 폴더에서 도는 계측 테스트가 저장소의 data/ 를 읽는다.
+    """
+    return store.family_path(source).relative_to(store.ROOT)
+
+
 def scan(source: str) -> dict:
     """계측만 한다. 🚨 판정 문구는 `main` 이 찍는다 — 세는 곳과 말하는 곳을 나눈다."""
-    raw = pathlib.Path("data/raw") / source
+    raw = raw_of(source)
     rows, total, per = _rows(raw)
     if not rows:
         raise FileNotFoundError(f"{raw} 에 page_*.json 이 없다 — 먼저 수집기를 돌린다")

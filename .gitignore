@@ -50,9 +50,10 @@ data/**
 #     D-19 는 「원문을 커밋하지 않는다」이지 「사람의 판정을 기기에 맡긴다」가 아니다.
 #     ★ 부류는 `scripts/derived_manifest.py` 가 판정한다 — 「원천」(다시 안 나온다) ·
 #       「표본」(다시 뽑으면 갈린다) 만 여기 예외로 둔다. 「생성물」은 두지 않는다.
+#  🔄 2026-09-20 (D-249) — **라벨·라벨 시트는 git 에서 뺐다.** 이 저장소는 공개이고 그 파일들에
+#     인용 광고 문구 원문이 있다. 팀 비공개 공유 저장소가 옮긴다(`launcher.py data-publish` / `data-sync`).
+#     🚨 이미 올라간 이력은 지우지 않는다(팀장 판정). 여기 예외는 `derived_manifest.GIT_CARRIES` 와 같아야 한다.
 !data/derived_manifest.jsonl
-!data/derived/labels/**
-!data/derived/*_labelsheet.jsonl
 !data/derived/golden/split_manifest.json
 
 # models & experiments
