@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -192,6 +192,24 @@ def raw_dir_of(source_id: str) -> Path:
     return raw_dir(families(source_id)[0])
 
 
+def family_path(source_id: str, family: str | None = None) -> Path:
+    """소스의 원문 폴더 **경로만** — 만들지 않는다. 🆕 2026-09-20 (D-254) 추출기가 읽는 자리다.
+
+    ⛔ 추출기마다 `data/raw/law` · `data/raw/mfds_press_pdf` 를 **따로 박아** 두었다 — 표(`FAMILY_OF`)와
+       추출기가 갈려도 아무도 몰랐다(09-18 `law_go_kr` 334노드 소실과 같은 모양 · 감사 §1-7).
+    ★ 폴더 이름을 이 표에서만 꺼낸다 (D-99). `family` 를 주면 **그 소스의 계열이어야 한다** — 아니면 멈춘다 (D-220).
+    🚨 `raw_dir` 과 달리 mkdir 하지 않는다 — 추출기는 import 할 때 부르고, 「없다」를 스스로 알려야 한다.
+    """
+    fams = families(source_id)
+    name = fams[0] if family is None else family
+    if name not in fams:
+        raise StoreError(
+            f"{family!r} 는 {source_id!r} 의 원문 폴더가 아니다 — store.FAMILY_OF 는 {fams} 다.\n"
+            "  추출기와 수집기가 다른 폴더를 보면 데이터가 **조용히** 빠진다 (2026-09-18). 표를 고쳐라."
+        )
+    return RAW / name
+
+
 def raw_dir(family: str) -> Path:
     """data/raw/<계열>/ — 없으면 만든다.
 
@@ -206,6 +224,82 @@ def derived_dir(name: str) -> Path:
     d = DERIVED / name
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def plan_raw(
+    family: str,
+    filename: str,
+    ident: str,
+    file_ident: Callable[[Path], str],
+) -> tuple[str, Path, str | None]:
+    """원문 한 개를 **어디에 둘지** 정한다 — `save_raw` 와 `ingest register` 가 같이 쓴다 (D-99 · D-254).
+
+    반환 — `(판정, 경로, supersedes)`
+        "write"  — 이 경로에 새로 쓴다 (🚨 이름이 넘긴 것과 다를 수 있다 — 새 판 `__c날짜`)
+        "skip"   — 같은 것이 이미 있다 (디스크든 원장이든 · 규약 4)
+        "ledger" — 디스크에 **같은 바이트**가 있는데 그 경로의 원장 행이 없다 — 쓰지 않고 행만 보탤 자리
+    `file_ident` — 디스크 파일의 판정용 해시를 내는 함수 (수집기는 바이트 · register 는 스트리밍).
+
+    ⛔ 2026-09-20 전까지 이 판정이 `save_raw` 에만 있었고 `register` 는 디스크만 봤다 —
+       원장(다른 기기)에 있는 것을 다시 넣고, 원장에 없는 같은 파일을 조용히 건너뛰었다 (감사 §2 register).
+    """
+    path = raw_dir(family) / filename
+    supersedes: str | None = None
+
+    # 🆕 2026-09-20 (D-250) — **이 기기에 파일이 없어도 원장(git)이 안다.** 팀원 PC 에는 클론 B 의 원문이 없다.
+    #    ⛔ 디스크만 보면 B 에 이미 있는 것을 **다시 받고**, 같은 경로·다른 바이트가 생겨 합칠 때 갈린다.
+    #    ★ 원장의 그 경로 행과 판정용 해시가 같으면 받지 않는다 · 다르면 새 판 이름으로 둔다 — 디스크 규칙과 같다.
+    if not path.exists():
+        known = ledger_row(path)
+        if known is not None:
+            if any(_ident_of(r) == ident for r in ledger_editions(path)):
+                # 규약 4 가 기기를 넘어 선다 — 다른 기기가 같은 것(어느 판이든)을 이미 받았다
+                return "skip", path, None
+            versioned = path.with_name(edition_name(filename, _today()))
+            vk = ledger_row(versioned)
+            if vk is not None and _ident_of(vk) == ident:
+                return "skip", versioned, None
+            if vk is not None or versioned.exists():
+                raise StoreError(
+                    f"{versioned.name} 가 원장에 이미 있고 **또 내용이 다르다** — 하루에 두 번 갈렸다.\n"
+                    "  자동으로 판을 더 만들지 않는다 (위 규칙과 같다)."
+                )
+            supersedes = _rel(path)
+            print(
+                f"  🔴 새 판 — {filename} 이(가) 원장(다른 기기)에 있고 내용이 다르다.\n"
+                f"     {versioned.name} 으로 저장한다. 합칠 때 정본에서 `adopt` 로 판을 고른다 (D-246)."
+            )
+            path = versioned
+
+    if path.exists():
+        if file_ident(path) == ident:
+            # 규약 4 — 동일하면 스킵. 원장 행이 없으면 부르는 쪽이 정한다 ("ledger")
+            return ("skip" if ledger_row(path) is not None else "ledger"), path, None
+
+        versioned = path.with_name(edition_name(filename, _today()))
+        if versioned.exists():
+            if file_ident(versioned) == ident:
+                # 오늘 판을 이미 받았다
+                return ("skip" if ledger_row(versioned) is not None else "ledger"), versioned, None
+            raise StoreError(
+                f"{versioned} 가 이미 있고 **또 내용이 다르다**.\n"
+                "  🚨 하루에 두 번 갈렸다 — 원천이 바뀐 것이 아니라 **응답이 호출마다\n"
+                "     다를** 수 있다 (레코드 순서 비결정 · 응답에 유동 필드 …).\n"
+                "  자동으로 판을 더 만들지 않는다 — 돌릴 때마다 파일이 불어난다.\n"
+                "  두 판을 비교해 무엇이 다른지 보고, 원천의 성질을 원장에 적어라."
+            )
+
+        supersedes = _rel(path)
+        # 🚨 라이브러리에서 화면에 찍는 것이 깔끔하지 않다는 건 안다. 그런데 이 한 줄이
+        #    없으면 파일 이름이 조용히 바뀐다 — 안 보이는 것보다 안 깔끔한 편이 낫다.
+        print(
+            f"  🔴 새 판 — {filename} 이(가) 이미 있고 내용이 다르다.\n"
+            f"     {versioned.name} 으로 저장한다. 원본은 그대로 둔다 (규약 2).\n"
+            f"     🚨 원천이 같은 이름으로 다른 것을 준다는 뜻이다 — 원장에 적어라 (D-54)."
+        )
+        path = versioned
+
+    return "write", path, supersedes
 
 
 def save_raw(
@@ -256,58 +350,16 @@ def save_raw(
     digest = sha256(payload)
     # 🔴 「같은가?」는 **판정용 해시**로 묻는다 (`VOLATILE`). 원문은 그대로 저장한다.
     ident = identity_sha256(source_id, payload)
-    path = raw_dir(family) / filename
-    supersedes: str | None = None
-
-    # 🆕 2026-09-20 (D-250) — **이 기기에 파일이 없어도 원장(git)이 안다.** 팀원 PC 에는 클론 B 의 원문이 없다.
-    #    ⛔ 디스크만 보면 B 에 이미 있는 것을 **다시 받고**, 같은 경로·다른 바이트가 생겨 합칠 때 갈린다.
-    #    ★ 원장의 그 경로 행과 판정용 해시가 같으면 받지 않는다 · 다르면 새 판 이름으로 둔다 — 디스크 규칙과 같다.
-    if not path.exists():
-        known = ledger_row(path)
-        if known is not None:
-            if any(_ident_of(r) == ident for r in ledger_editions(path)):
-                return None  # 규약 4 가 기기를 넘어 선다 — 다른 기기가 같은 것(어느 판이든)을 이미 받았다
-            versioned = path.with_name(edition_name(filename, _today()))
-            vk = ledger_row(versioned)
-            if vk is not None and _ident_of(vk) == ident:
-                return None
-            if vk is not None or versioned.exists():
-                raise StoreError(
-                    f"{versioned.name} 가 원장에 이미 있고 **또 내용이 다르다** — 하루에 두 번 갈렸다.\n"
-                    "  자동으로 판을 더 만들지 않는다 (위 규칙과 같다)."
-                )
-            supersedes = _rel(path)
-            print(
-                f"  🔴 새 판 — {filename} 이(가) 원장(다른 기기)에 있고 내용이 다르다.\n"
-                f"     {versioned.name} 으로 저장한다. 합칠 때 정본에서 `adopt` 로 판을 고른다 (D-246)."
-            )
-            path = versioned
-
-    if path.exists():
-        if identity_sha256(source_id, path.read_bytes()) == ident:
-            return None  # 규약 4 — 동일하면 스킵
-
-        versioned = path.with_name(edition_name(filename, _today()))
-        if versioned.exists():
-            if identity_sha256(source_id, versioned.read_bytes()) == ident:
-                return None  # 오늘 판을 이미 받았다
-            raise StoreError(
-                f"{versioned} 가 이미 있고 **또 내용이 다르다**.\n"
-                "  🚨 하루에 두 번 갈렸다 — 원천이 바뀐 것이 아니라 **응답이 호출마다\n"
-                "     다를** 수 있다 (레코드 순서 비결정 · 응답에 유동 필드 …).\n"
-                "  자동으로 판을 더 만들지 않는다 — 돌릴 때마다 파일이 불어난다.\n"
-                "  두 판을 비교해 무엇이 다른지 보고, 원천의 성질을 원장에 적어라."
-            )
-
-        supersedes = str(path.relative_to(ROOT))
-        # 🚨 라이브러리에서 화면에 찍는 것이 깔끔하지 않다는 건 안다. 그런데 이 한 줄이
-        #    없으면 파일 이름이 조용히 바뀐다 — 안 보이는 것보다 안 깔끔한 편이 낫다.
-        print(
-            f"  🔴 새 판 — {filename} 이(가) 이미 있고 내용이 다르다.\n"
-            f"     {versioned.name} 으로 저장한다. 원본은 그대로 둔다 (규약 2).\n"
-            f"     🚨 원천이 같은 이름으로 다른 것을 준다는 뜻이다 — 원장에 적어라 (D-54)."
-        )
-        path = versioned
+    verdict, path, supersedes = plan_raw(
+        family,
+        filename,
+        ident,
+        lambda q: identity_sha256(source_id, q.read_bytes()),
+    )
+    if verdict != "write":
+        # 규약 4 — 동일하면 스킵. 🚨 "ledger"(디스크엔 같은 것이 있는데 원장 행이 없다)도 여기선 스킵이다 —
+        #    수집기의 종전 동작 그대로다. 행을 보태는 것은 `ingest register` 만 한다 (D-254).
+        return None
 
     path.write_bytes(payload)
     manifest_append(

@@ -778,8 +778,42 @@ ORDER = [
 #    collect : 자동 수집기가 실행한다.  use 중 최소 하나가 allow 여야 한다 (게이트 22)
 #    manual  : 🚨 사람이 눈으로 보고 손으로 옮긴다. 자동 수집은 약관 위반이라 수집기가 거부한다
 #    hold    : 이번 범위 밖 — 판정 완료·착수 전이거나 선결 조건 대기
-#    여기 없는 키는 collect 다. blocked·not_adopted 는 status 값이 아니라 별도 섹션이다.
+#    blocked·not_adopted 는 status 값이 아니라 별도 섹션이다.
+#    🔄 2026-09-20 (D-254 · 감사 §2 rebuild) — ⛔ 종전에는 「여기 없는 키는 collect 다」였다 — **열리는 쪽이 기본값**.
+#       ORDER 에 새 키를 넣고 여기를 잊으면 수집 대상으로 조용히 열렸다. 이제 **모든 키를 적는다** —
+#       빠지면 아무것도 쓰지 않고 멈춘다 (D-220). 아래 collect 묶음은 종전 기본값을 그대로 옮긴 것이다(출력 불변).
 STATUS = {
+    "ftc_decisions": "collect",
+    "ftc_decisions_api": "collect",
+    "ftc_decisions_body": "collect",
+    "mfds_sanctions": "collect",
+    "mfds_press": "collect",
+    "mfds_casebook": "collect",
+    "mfds_casebook_2021": "collect",
+    "foodsafety_penalty_std": "collect",
+    "mfds_special_use_guide": "collect",
+    "mfds_cgm_expc": "collect",
+    "mfds_hf_ingredient": "collect",
+    "mfds_hf_individual": "collect",
+    "law_go_kr": "collect",
+    "mfds_online_guideline": "collect",
+    "mfds_hf_ingredient_board": "collect",
+    "cosmetic_ingredient": "collect",
+    "cosmetic_restricted": "collect",
+    "aihub_71486": "collect",
+    "aihub_71723": "collect",
+    "aihub_558": "collect",
+    "aihub_71694": "collect",
+    "bab2min_shopping": "collect",
+    "nsmc": "collect",
+    "klue_dataset": "collect",
+    "kobaco_mcr": "collect",
+    "krei_food": "collect",
+    "kcc_media": "collect",
+    "kosis": "collect",
+    "aihub_review_corpus": "collect",
+    "self_sanction_stat": "collect",
+    "mfds_production": "collect",
     # 🔴 2026-09-09 팀장 판정 — **거버넌스와 스스로 어긋나 있었다.**
     #    `license` 는 「이용조건 문구가 없다 · 표기 부재는 자유 이용이 아니다(저작권법 제10조
     #    무방식주의)」이고 `attribution` 은 「해설서를 인용하지 않는다 — 별표로 소급한다」인데,
@@ -837,13 +871,26 @@ STATUS = {
 
 REV = {v: k for k, v in RENAME.items()}
 
+#: status 가 받을 수 있는 값 — 위 주석의 셋.
+STATUS_VALUES = frozenset({"collect", "manual", "hold"})
+# 🆕 2026-09-20 (D-254) — **쓰기 전에** 표를 대조한다. 중간에 멈추면 생성물 넷이 두 벌이 된다 (D-90).
+_no_status = [k for k in ORDER if k not in STATUS]
+_stray = sorted(set(STATUS) - set(ORDER))
+_bad = sorted(k for k, v in STATUS.items() if v not in STATUS_VALUES)
+if _no_status or _stray or _bad:
+    raise SystemExit(
+        "🔴 STATUS 가 ORDER 와 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n"
+        + (f"  status 없음(기본값으로 열지 않는다): {_no_status}\n" if _no_status else "")
+        + (f"  ORDER 에 없는 키(오타?): {_stray}\n" if _stray else "")
+        + (f"  모르는 status 값: {_bad} — 아는 것 {sorted(STATUS_VALUES)}\n" if _bad else "")
+    )
+
 out = []
 for key in ORDER:
     mid = REV.get(key, key)
     s = BY_ID[mid]
     covers = LAW_COVERS if key == "law_go_kr" else None
-    st = STATUS.get(key, "collect")
-    out.append(block(key, s, EXTRA.get(key), covers, st))
+    out.append(block(key, s, EXTRA.get(key), covers, STATUS[key]))
 
 (ROOT / "build").mkdir(exist_ok=True)
 with open(ROOT / "build/registry_body.yaml", "w", encoding="utf-8", newline="\n") as _out:
@@ -869,9 +916,51 @@ missing = [
     and s["id"] not in NOT_ADOPTED_IDS
     and RENAME.get(s["id"], s["id"]) not in ORDER
 ]
-print("미등재", len(missing))
+#: 🆕 2026-09-20 (D-254) `[측정]` 이 날 생성기가 낸 「미등재」 18 그대로다 — **분류는 사람이 한다**(등재 · not_adopted).
+#:    ⛔ 종전에는 「미등재 N」을 찍고 rc 0 이었다 — 매트릭스에 새 소스가 들어와도 레지스트리에서 조용히 빠졌다.
+#:    ★ 이 목록 **밖의** 미등재가 나오면 멈춘다(rc 1). 목록은 줄기만 한다 — 분류가 끝난 id 를 여기서 지운다.
+#:    🚨 이 목록에 id 를 **보태지 않는다** — 보태면 이 검사가 다시 rc 0 이 된다. 새 id 는 ORDER 나 NOT_ADOPTED_IDS 로 간다.
+KNOWN_UNLISTED = frozenset(
+    {
+        "aihub_63",
+        "modu_web",
+        "kr3",
+        "unsmile",
+        "ecommerce_pages",
+        "mdis",
+        "platform_reviews",
+        "client_crm",
+        "meta_adlibrary_api",
+        "aisac",
+        "channelio_copy",
+        "naver_datalab",
+        "x_api",
+        "reddit_api",
+        "meta_graph",
+        "mnm_aidataset",
+        "klue_roberta",
+        "exaone",
+    }
+)
+new_missing = [m for m in missing if m not in KNOWN_UNLISTED]
+print(
+    "미등재",
+    len(missing),
+    f"(09-20 기준 목록 {len(missing) - len(new_missing)} · 새것 {len(new_missing)})",
+)
 for m in missing:
-    print("   ", m, BY_ID[m]["grade"], BY_ID[m]["value"], BY_ID[m]["name"][:40])
+    flag = "  🔴 새 미등재" if m in new_missing else ""
+    print("   ", m, BY_ID[m]["grade"], BY_ID[m]["value"], BY_ID[m]["name"][:40] + flag)
+if new_missing:
+    # 🚨 data_sources.yaml 을 **쓰기 전에** 멈춘다 — 위 `build/registry_body.yaml` 은 중간 산출물이다
+    raise SystemExit(
+        f"🔴 매트릭스에 있는데 레지스트리 어디에도 없는 소스 {len(new_missing)}건 — {new_missing}\n"
+        "  ORDER(등재) 또는 NOT_ADOPTED_IDS + registry_tail.yaml not_adopted(미채택)로 분류한다 (D-220).\n"
+        "  data_sources.yaml 은 쓰지 않았다."
+    )
+_gone = sorted(KNOWN_UNLISTED - set(missing))
+if _gone:
+    print(f"  ⬜ KNOWN_UNLISTED 에서 지울 것(이제 분류됨): {_gone}")
 
 
 # ── 머리말 + 본문 + 꼬리말을 이어 붙여 최종 파일을 만든다

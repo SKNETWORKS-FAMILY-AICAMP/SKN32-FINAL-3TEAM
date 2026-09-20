@@ -5,7 +5,8 @@
    **인식하지 못하고**, 매 마이그레이션마다 「알 수 없는 타입」으로 깨진다.
    알면 30분, 모르면 계속 깨진다 — 그래서 첫 파일부터 넣는다.
 
-🚨 접속 문자열은 `.env` 에서 온다. `collect.env` 가 `.env` 를 읽는 유일한 곳이다.
+🚨 접속 문자열은 `.env` 에서 온다. `collect.env` 가 `.env` 를 읽는 유일한 곳이고,
+   모양(검증·드라이버 접미사)은 `app.settings.sqlalchemy_url()` 이 정한다 — 여기서 다시 만들지 않는다.
    ⛔ `alembic.ini` 에 `sqlalchemy.url` 을 적으면 접속 문자열이 커밋된다 — gitleaks 가
       막으려는 것이 그것이다.
 
@@ -48,7 +49,7 @@ sys.path.insert(0, str(ROOT))
 postgresql.base.ischema_names["vector"] = Vector
 
 from app.models import Base  # noqa: E402  — ischema_names 등록 뒤에 온다
-from collect import env as dotenv  # noqa: E402  — .env 를 읽는 유일한 곳
+from app.settings import sqlalchemy_url  # noqa: E402  — 접속 문자열의 한 길
 
 config = context.config
 if config.config_file_name is not None:
@@ -74,7 +75,14 @@ def include_object(obj, name, type_, reflected, compare_to) -> bool:  # noqa: AN
 
 
 def _url() -> str:
-    return dotenv.get("DATABASE_URL")
+    """🆕 2026-09-20 (D-254 · 감사 §2 migrate) — 접속 문자열의 길은 **하나**다 (D-99 · D-209).
+
+    ⛔ 종전에는 `DATABASE_URL` 을 **원문 그대로** 넘겼다. `db-fresh`·`db-drift` 는
+       `app.settings.sqlalchemy_url()` 을 써서 — 검증(postgres 인가) · 드라이버 접미사(`+psycopg`) ·
+       빈 값의 기본값이 거기서만 붙었다. 그래서 `postgresql://…` 를 적으면 `db-fresh` 는 초록인데
+       `migrate` 는 psycopg2 를 찾다 죽었다.
+    """
+    return sqlalchemy_url()
 
 
 def run_migrations_offline() -> None:

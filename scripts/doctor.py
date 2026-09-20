@@ -497,6 +497,132 @@ def _report_sanction(stat: tuple[int, int] | None) -> None:
     print(f"✅ sanction_rule {total:,}행 · 2인 확인 전량 완료")
 
 
+def _alembic_heads() -> set[str]:
+    """`alembic/versions` 의 head 리비전 — **DB 없이** 읽는다 (alembic 의 ScriptDirectory)."""
+    from alembic.config import Config  # noqa: PLC0415
+    from alembic.script import ScriptDirectory  # noqa: PLC0415
+
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "alembic"))
+    return set(ScriptDirectory.from_config(cfg).get_heads())
+
+
+#: 「서버가 안 떠 있다」로 읽는 psycopg 메시지 조각 `[관행]` — 이것 밖의 접속 실패는 🔴(설정이 틀림)로 본다
+_NOT_UP = (
+    "connection refused",
+    "timeout expired",
+    "could not connect",
+    "no such file or directory",
+)
+
+
+def _check_db() -> int:
+    """DB 접속·리비전·pgvector. 🔴 반환값은 빨간 건수.
+
+    🆕 2026-09-20 (D-254 · 감사 §2 doctor) — ⛔ 종전에는 `alembic_version` 이 **있기만 하면** ✅ 였고,
+       실패는 이유를 가리지 않고 전부 「db-up 먼저」 🟡 였다. 고치는 법이 이유마다 다르다 (D-51):
+         드라이버 없음 → uv sync · DATABASE_URL 이 틀림 → .env · 접속 거부 → db-up
+    🚨 head 와 다른 리비전은 🔴 다 — `migrate` 안 한 DB 에서 서버가 없는 칸을 읽는다 (D-220).
+    """
+    try:
+        import psycopg  # noqa: PLC0415
+    except ImportError as e:
+        print(f"🔴 DB 드라이버(psycopg)가 없다 ({e}) — uv sync --frozen 을 먼저 돌린다.")
+        return 1
+    from pydantic import ValidationError  # noqa: PLC0415
+
+    from app.settings import dsn  # noqa: PLC0415
+
+    try:
+        url = dsn()
+    except ValidationError as e:
+        msg = "; ".join(str(err.get("msg", "")) for err in e.errors())
+        print(f"🔴 DATABASE_URL 이 틀렸다 — {msg}")
+        return 1
+    try:
+        with psycopg.connect(url, connect_timeout=5) as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+            has_vec = cur.fetchone() is not None
+            cur.execute("SELECT to_regclass('alembic_version')")
+            rev = None
+            if cur.fetchone()[0]:
+                cur.execute("SELECT version_num FROM alembic_version")
+                row = cur.fetchone()
+                rev = row[0] if row else None
+            sanction = _sanction_signatures(cur)
+    except psycopg.OperationalError as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else ""
+        if any(w in first.lower() for w in _NOT_UP):
+            print(f"🟡 DB 가 안 떠 있다 ({first[:120]}) — launcher.py db-up 을 먼저 돌린다.")
+            return 0
+        # 🚨 떠 있는데 거절했다 — 비밀번호·DB 이름이 틀렸다. db-up 으로는 안 닫힌다
+        print(f"🔴 DB 가 접속을 거절했다 ({first[:160]}) — .env 의 DATABASE_URL 을 본다.")
+        return 1
+    except psycopg.Error as e:
+        print(f"🔴 DB 에 붙었으나 조회가 실패했다 ({type(e).__name__}: {str(e)[:160]})")
+        return 1
+
+    red = 0
+    heads = _alembic_heads()
+    print("✅ DB 접속" + (f" · alembic {rev}" if rev else " · 🔴 alembic 미적용"))
+    if not has_vec:
+        print("🔴 pgvector 확장이 없다 — CREATE EXTENSION vector (db-up 이 해 준다).")
+        red += 1
+    if not rev:
+        print("🔴 테이블이 없다 — uv run python launcher.py migrate 를 먼저 돌린다.")
+        red += 1
+    elif rev not in heads:
+        print(
+            f"🔴 DB 리비전 {rev} 가 head({', '.join(sorted(heads))})가 아니다 — "
+            "uv run python launcher.py migrate 로 올린다."
+        )
+        red += 1
+    _report_sanction(sanction)
+    return red
+
+
+def _check_data_env() -> int:
+    """`DATA_ROLE` · `DATA_STORE` · `DATA_DEVICE` 의 **모양**을 본다 — 판정은 각 명령의 함수가 한다 (D-99).
+
+    🆕 2026-09-20 (D-254) — 같은 규칙을 여기 다시 적지 않는다. `derived_manifest.role()` ·
+       `data_store.store_root()` · `store.DEVICE_RE` 를 **그대로** 부른다.
+    """
+    from collect import env, store  # noqa: PLC0415
+    from scripts import data_store  # noqa: PLC0415
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    red = 0
+    try:
+        role = dm.role()
+        print(
+            f"✅ DATA_ROLE {role}"
+            if role
+            else "🟡 DATA_ROLE 이 비었다 — 역할 없음(CI)로 돈다 · data-setup"
+        )
+    except SystemExit as e:  # 🚨 role() 은 모르는 값이면 SystemExit 로 멈춘다 (D-220)
+        print(str(e.code))
+        red += 1
+    if env.setting("DATA_STORE"):
+        try:
+            print(f"✅ DATA_STORE {data_store.store_root().parent}")
+        except data_store.StoreError as e:
+            print(f"🔴 {e}")
+            red += 1
+    else:
+        print("🟡 DATA_STORE 가 비었다 — data-sync·data-publish 가 멈춘다 (data-setup)")
+    dev = env.setting("DATA_DEVICE")
+    if dev and not store.DEVICE_RE.fullmatch(dev):
+        print(
+            "🔴 DATA_DEVICE 모양이 틀렸다 — 영문·숫자·`._-` 32자 이내 (data-setup --device <별칭>)"
+        )
+        red += 1
+    elif dev:
+        print(f"✅ DATA_DEVICE {dev}")
+    else:
+        print("🟡 DATA_DEVICE 가 비었다 — 정본 밖에서는 수집·register 가 쓰기 전에 멈춘다 (D-250)")
+    return red
+
+
 def check_env() -> int:
     """환경·신원·DB 를 본다. 🔴 반환값은 **빨간 건수**다.
 
@@ -535,31 +661,10 @@ def check_env() -> int:
         print("✅ .env 있음  (값은 launcher.py keys 로 지문만 본다)")
 
     # ④ DB — 붙는가 · 리비전이 최신인가 · pgvector 가 있는가
-    try:
-        import psycopg  # noqa: PLC0415
+    red += _check_db()
 
-        from app.settings import dsn  # noqa: PLC0415
-
-        with psycopg.connect(dsn(), connect_timeout=5) as conn, conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
-            has_vec = cur.fetchone() is not None
-            cur.execute("SELECT to_regclass('alembic_version')")
-            rev = None
-            if cur.fetchone()[0]:
-                cur.execute("SELECT version_num FROM alembic_version")
-                row = cur.fetchone()
-                rev = row[0] if row else None
-            sanction = _sanction_signatures(cur)
-        print("✅ DB 접속" + (f" · alembic {rev}" if rev else " · 🔴 alembic 미적용"))
-        if not has_vec:
-            print("🔴 pgvector 확장이 없다 — CREATE EXTENSION vector (db-up 이 해 준다).")
-            red += 1
-        if not rev:
-            print("🔴 테이블이 없다 — uv run python launcher.py migrate 를 먼저 돌린다.")
-            red += 1
-        _report_sanction(sanction)
-    except Exception as e:  # noqa: BLE001
-        print(f"🟡 DB 에 못 붙었다 ({type(e).__name__}) — launcher.py db-up 을 먼저 돌린다.")
+    # ④-2 데이터 역할·저장소·기기 별칭 (D-226 · D-250) — 틀린 값은 데이터 명령이 **쓰는 중에** 드러난다
+    red += _check_data_env()
 
     # ⑤ 화면 골격 — 팀원이 첫날 여는 자리
     for rel in ("app/templates/base.html", "app/static/base.css"):

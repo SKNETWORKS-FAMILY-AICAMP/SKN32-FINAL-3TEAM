@@ -110,12 +110,32 @@ def missing_paths(paths: set[str]) -> list[str]:
     return sorted(p for p in paths if p and not (ROOT / p.replace("\\", "/")).exists())
 
 
+def listed(sources: dict, led: dict[str, set[str]]) -> dict[str, str]:
+    """표에 올릴 소스 → 상태. `collect` 소스 **+ 원장에 행이 있는 소스 전부**(상태 무관).
+
+    🆕 2026-09-20 (D-254 · 감사 §2 inventory) — ⛔ 종전에는 `status == collect` 만 봤다.
+       `manual`(AI Hub 를 사람이 받아 register)·`hold` 소스의 원장 행이 **표에서 통째로 빠졌다** —
+       받은 것이 있는데 안 보이는 것이 이 표가 막으려던 바로 그 모양이다.
+    🚨 원장에만 있고 레지스트리에 없는 id 는 `미등재` 로 올린다 — 숨기지 않는다 (D-220).
+    """
+    out = {
+        k: str(v.get("status"))
+        for k, v in sources.items()
+        if isinstance(v, dict) and v.get("status") == "collect"
+    }
+    for k, paths in led.items():
+        if k and paths and k not in out:
+            v = sources.get(k)
+            out[k] = str(v.get("status") or "상태없음") if isinstance(v, dict) else "미등재"
+    return out
+
+
 def main() -> int:
     import yaml  # noqa: PLC0415 — 레지스트리를 읽는 유일한 자리다
 
-    src = yaml.safe_load((ROOT / "data_sources.yaml").read_text(encoding="utf-8"))["sources"]
-    src = {k: v for k, v in src.items() if isinstance(v, dict) and v.get("status") == "collect"}
+    reg = yaml.safe_load((ROOT / "data_sources.yaml").read_text(encoding="utf-8"))["sources"]
     led = ledger()
+    src = listed(reg, led)
     # 🆕 D-253 — 없는 것을 **왜 없는지**로 가른다. doctor 와 같은 함수다 (D-99 · `collect/missing.py`).
     #    ⛔ 종전에는 없는 것을 전부 🔴 「일부만 받은 것」으로 찍었다 — 같은 53개를 doctor 는 🟡 로 찍어
     #       두 도구가 같은 결손에 다른 경보를 냈다. 실측 53개 중 36개는 정책 제외·옮긴 흔적이었다.
@@ -168,6 +188,8 @@ def main() -> int:
                 if any(shared[f] > 1 for f in folders(k))
                 else "  🔴 원장에 없는데 파일이 있다 — 원장을 확인한다"
             )
+        if src[k] != "collect":
+            mark += f"  [{src[k]}]"  # 수집기 밖(manual·hold·미등재) — 원장에 행이 있어 올렸다
         print(f"  {k:24}{n_led or '—':>11}{n_disk or '—':>8}{len(gone) or '—':>8}{mark}")
 
     print()

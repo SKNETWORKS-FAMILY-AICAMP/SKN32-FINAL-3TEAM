@@ -4,6 +4,7 @@
   uv run python scripts/derived_manifest.py             # 표만 찍는다 (쓰지 않는다)
   uv run python scripts/derived_manifest.py --write     # data/derived_manifest.jsonl
   uv run python scripts/derived_manifest.py --check      # 원장 ↔ 디스크 대조 (종료코드)
+  uv run python scripts/derived_manifest.py --write --accept-loss <경로>   # 🚨 원천·표본을 버린 것이 사람의 판정일 때만
 
 ──────────────────────────────────────────────────────────────
 🚨 **왜 필요한가 — `data/manifest.jsonl` 은 raw 전용이다.**
@@ -774,6 +775,45 @@ def _kind(path: str) -> str:
     return kind_of(path.removeprefix("data/derived/"))[0]
 
 
+#: 🆕 D-254 — `--write` 가 **빠지거나 바뀌면 멈추는** 부류. 잃으면 다시 안 나오는 것(원천)과 다시 뽑으면 그 표본이
+#:    아닌 것(표본)이다. 생성물·원문캐시는 명령이 다시 만든다 — 자유다.
+KEEP_KINDS: frozenset[str] = frozenset({"원천", "표본"})
+
+
+def losses(
+    old: dict[str, dict[str, object]], new: list[dict[str, object]]
+) -> list[tuple[str, str, str]]:
+    """옛 원장 대비 **원천·표본이 빠지거나 sha 가 바뀐** 자리 — `(경로, 부류, "없어짐"|"바뀜")`.
+
+    🔴 D-254 (런처 전수 감사 §1-3) — ⛔ `--write` 는 디스크로 원장을 **통째로 새로 썼다.** 라벨(원천) 파일이
+       지워지면 `--check` 가 「갱신하려면 --write」라 안내했고, 누르면 원장에서 **조용히 빠졌다** → publish 초록.
+       `data-refresh` 가 이 단계를 자동으로 돈다.
+    ★ **새로 생긴 것은 자유다** — 라벨 판(round 시트)은 정당하게 새로 생긴다. 막는 것은 빠짐·바뀜뿐이다.
+    🚨 부류는 옛 원장의 것을 먼저 본다. 모르는 부류(표에 없는 이름)는 막는 쪽이다 (D-220).
+    """
+    now = {str(r["경로"]): r for r in new}
+    known = set(NEED["canonical"])
+    out = []
+    for path, r in sorted(old.items()):
+        kind = str(r.get("부류"))
+        if kind not in KEEP_KINDS and kind in known:
+            continue
+        if path not in now:
+            out.append((path, kind, "없어짐"))
+        elif now[path]["sha256"] != r.get("sha256"):
+            out.append((path, kind, "바뀜"))
+    return out
+
+
+RESTORE_HINT = (
+    "  🚨 원천·표본은 명령으로 다시 안 나온다 — 원장을 디스크에 맞추지 말고 **파일을 되살린다**.\n"
+    "     · 공유 저장소에 올린 판이면 원장의 sha 로 찾는다: `<DATA_STORE>/copylane-derived/objects/<sha 앞 2자>/<sha>`\n"
+    "       (사본이면 `launcher.py data-sync` 가 받는다)\n"
+    "     · 올린 적 없으면 백업(`CopyLane_backup/`)이나 그 파일을 만든 사람에게서 찾는다\n"
+    "     · 정말로 버리거나 바꾼 것이면(사람의 판정) `scripts/derived_manifest.py --write --accept-loss <경로>`"
+)
+
+
 def report(got: list[dict[str, object]]) -> None:
     by = collections.Counter(str(r["부류"]) for r in got)
     size = collections.Counter()
@@ -815,6 +855,13 @@ def main() -> int:
     ap.add_argument("--write", action="store_true", help=f"{OUT.name} 을 쓴다")
     ap.add_argument("--check", action="store_true", help="원장 ↔ 디스크 대조. 다르면 1")
     ap.add_argument(
+        "--accept-loss",
+        action="append",
+        default=[],
+        metavar="경로",
+        help="🚨 --write 와 함께 — 이 원천·표본이 빠지거나 바뀐 것을 받아들인다 (경로마다 한 번 · D-254)",
+    )
+    ap.add_argument(
         "--pii-triage",
         metavar="파일",
         help="개인 식별 후보의 원값 표를 레포 밖 파일로 쓴다 (화면에는 특징만)",
@@ -825,6 +872,9 @@ def main() -> int:
         help="🔴 묶음을 내보내기 전 검사 — 마스킹 잔여가 있으면 1 (D-17 · D-78 ③)",
     )
     a = ap.parse_args()
+    if a.accept_loss and not a.write:
+        print("🔴 --accept-loss 는 --write 와 함께만 쓴다", file=sys.stderr)
+        return 1
 
     if a.pii_triage:
         out = pathlib.Path(a.pii_triage).resolve()
@@ -905,11 +955,43 @@ def main() -> int:
                 "\n🔴 부족하거나 옛 판이다 — `uv run python launcher.py data-sync`", file=sys.stderr
             )
         else:
-            print("\n🔴 원장이 디스크와 다르다 — 갱신하려면 --write", file=sys.stderr)
+            # 🔄 D-254 — 원천·표본이 없거나 바뀐 것에 「--write」를 권하지 않는다. 그 길로 원장에서 조용히 빠졌다
+            keep = [k for k in d["missing"] + d["changed"] if _kind(k) in KEEP_KINDS]
+            if keep:
+                print(
+                    f"\n🔴 원천·표본 {len(keep)}개가 없거나 바뀌었다 — 예: {keep[:3]}\n{RESTORE_HINT}",
+                    file=sys.stderr,
+                )
+            rest = [k for k in d["missing"] + d["changed"] + d["added"] if k not in keep]
+            if rest or not keep:
+                print(
+                    "\n🔴 원장이 디스크와 다르다 — 생성물·새 파일이면 갱신하려면 --write",
+                    file=sys.stderr,
+                )
         return 1
 
     report(got)
     if a.write:
+        # 🔴 D-254 — 원천·표본이 빠지거나 바뀌면 **쓰지 않는다.** 받아들이는 것은 경로마다 사람이 적는다
+        lost = losses(ledger(), got)
+        accepted = {x.replace("\\", "/") for x in a.accept_loss}
+        left = [x for x in lost if x[0] not in accepted]
+        stray = sorted(accepted - {x[0] for x in lost})
+        if stray:
+            print(f"\n🟡 --accept-loss 에 적었지만 빠지거나 바뀌지 않은 경로: {stray}")
+        if left:
+            print(
+                f"\n🔴 원천·표본 {len(left)}개가 옛 원장보다 **빠지거나 바뀌었다** — 원장을 쓰지 않았다",
+                file=sys.stderr,
+            )
+            for path, kind, how in left[:20]:
+                print(f"     {how:<4} {kind}  {path}", file=sys.stderr)
+            if len(left) > 20:
+                print(f"     … 외 {len(left) - 20}개", file=sys.stderr)
+            print(RESTORE_HINT, file=sys.stderr)
+            return 1
+        for path, kind, how in lost:
+            print(f"  ⚠️ 받아들임(--accept-loss) — {how} {kind} {path}")
         OUT.write_text(
             "\n".join(json.dumps(r, ensure_ascii=False) for r in got) + "\n",
             encoding="utf-8",

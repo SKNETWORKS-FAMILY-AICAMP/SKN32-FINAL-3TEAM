@@ -49,7 +49,7 @@ ROOT = dm.ROOT
 LAYOUT = "copylane-derived"
 #: 사본이 덮어쓸 때 옛 파일을 옮겨 두는 곳 — **레포 밖**이다 (git status 에 안 뜬다)
 BACKUP = ROOT.parent / "CopyLane_backup"
-#: 🚨 `data/raw` 가 **있는지만** 본다 — 열지 않는다. `RAW_EXCEPTIONS` 에 이유와 함께 적었다.
+#: 🚨 `data/raw` 에 **파일이 있는지만** 본다 — 열지 않는다. `RAW_EXCEPTIONS` 에 이유와 함께 적었다.
 RAW_MARK = ROOT / "data" / "raw"
 #: 🚨 저장소가 옮기는 부류는 이것 하나다 — 이름의 정본은 dm.KIND_RULES / DEFAULT_KIND
 #: 🔄 2026-09-20 (D-249) — 생성물만이 아니다. **원천·표본도 옮긴다** — 공개 git 에서 인용 원문을 뺐다.
@@ -186,6 +186,22 @@ def _size(rows: list[dict[str, object]]) -> str:
     return f"{n / 1024 / 1024:,.1f} MB"
 
 
+def has_raw(mark: pathlib.Path | None = None) -> bool:
+    """이 기기에 원문이 **있는가** — `.gitkeep` 말고 파일이 하나라도 있으면 참. 첫 파일에서 멈춘다.
+
+    🔄 D-254 (런처 전수 감사 §2 data-sync) — ⛔ 종전 조건은 `RAW_MARK.is_dir()` 였다. `data/raw/.gitkeep` 이
+       git 에 추적되므로 **모든 기기에서 참**이라, 사본마다 매번 뜨는 확인이 됐다 — 안 읽히는 확인은 없는 것과 같다.
+    🚨 이름만 훑는다 — 파일을 열지 않는다. 폴더를 못 읽으면 「있다」로 본다(묻는 쪽이 안전하다 · D-220).
+    """
+    mark = RAW_MARK if mark is None else mark
+    if not mark.is_dir():
+        return False
+    try:
+        return any(f.name != ".gitkeep" and f.is_file() for f in mark.rglob("*"))
+    except OSError:
+        return True
+
+
 def _ask(question: str) -> bool:
     try:
         return input(f"{question} [y/N] ").strip().lower() in {"y", "yes"}
@@ -251,7 +267,7 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
         return 1
 
     # 🚨 raw 가 있는 기기에서 덮어쓸 때는 **한 번 묻는다** — 클론 B 의 DATA_ROLE 이 틀렸을 수 있다.
-    if over and RAW_MARK.is_dir() and not yes:
+    if over and has_raw() and not yes:
         print(
             f"\n⚠️ 이 기기에는 원문(data/raw)이 있다. 옛 판 {len(over)}개를 저장소 판으로 바꾼다.\n"
             "   클론 A 라면 맞다. 🔴 **클론 B(정본)라면 DATA_ROLE 이 틀렸다** — 방금 만든 것이 옛 판으로 돌아간다."
@@ -287,20 +303,43 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
 # 올리기 — 정본
 # ══════════════════════════════════════════════════════════
 def _noredist_seen() -> list[str]:
-    """이 기기가 **받은 적 있는** 재배포 제약 소스 — 수집 원장(git)에서 본다. 원문은 열지 않는다."""
+    """이 기기가 **받은 적 있는** 재배포 제약 소스 — 수집 원장(git)에서 본다. 원문은 열지 않는다.
+
+    🔄 D-254 (런처 전수 감사 §2 data-publish) — ⛔ 종전에는 기기 칸을 안 봤다. 원장은 git 으로 팀원 줄까지 합쳐지므로
+       팀원 **한 명**이 재배포 제약 원천을 받으면 정본의 publish 가 「이 기기가 받았다」는 틀린 말로 **영영** 막혔다.
+    ★ 파생물은 정본 디스크의 원문으로만 만든다(D-226) — 그러니 볼 것은 「**이 기기 디스크에 그 원문이 있었던 적이
+       있는가**」다. 세는 줄 —
+         · 기기 칸이 이 기기이거나 `canonical` 이거나 **비었다**(D-250 이전 · 정본의 과거분 · D-250 결정 4)
+         · 기기 칸이 다른 팀원이어도 **파일이 이 기기 디스크에 있다**(손으로 옮겼을 수 있다)
+       다른 팀원 줄이고 파일도 없으면 세지 않는다 — `raw-publish`·`raw-import` 가 그 원천을 옮기지 않는다(D-71).
+    ⛔ 「파생물에 그 행이 실제로 섞였는가」로 가르는 것이 더 정확하지만, 파생물 행마다 원천을 적는 거름(`store.stamp`)이
+       전 파생물에 깔렸는지 확인하지 않았다 — 모르는 것으로 풀지 않고 **이 기기가 받았는가**로 막는다 (D-220).
+    🚨 이 기기 별칭을 모르면 전부 센다(막는 쪽).
+    """
     from collect import registry, store  # noqa: PLC0415
 
     if not store.MANIFEST.exists():
         return []
-    seen: set[str] = set()
+    try:
+        me: str | None = store.device_id()
+    except store.StoreError:
+        me = None
+    here = {"", store.CANONICAL_DEVICE, me}
+    seen: dict[str, set[str]] = {}
     for line in store.MANIFEST.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            seen.add(json.loads(line)["source_id"])
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        who = str(r.get("device") or "")
+        path = str(r.get("path") or "").replace("\\", "/")
+        on_disk = bool(path) and (ROOT / path).is_file()
+        if me is None or who in here or on_disk:
+            seen.setdefault(str(r["source_id"]), set()).add(who or "기기 칸 이전")
     bad = []
     for sid in sorted(seen):
         try:
             if not registry.redistributable(sid):
-                bad.append(sid)
+                bad.append(f"{sid} (받은 기기 {sorted(seen[sid])})")
         except registry.RegistryError:
             bad.append(f"{sid} (레지스트리에 없다)")  # 🚨 모르는 것은 막는 쪽 (D-220)
     return bad
@@ -317,6 +356,28 @@ def _commit() -> str:
         return out.stdout.strip() or "?"
     except OSError:
         return "?"
+
+
+def manifest_in_head() -> bool | None:
+    """작업 트리의 파생물 원장이 **HEAD 의 것과 바이트가 같은가**. 모르면 None.
+
+    🆕 D-254 (런처 전수 감사 §2 data-publish) — ⛔ 기록·화면이 「커밋 X 의 원장과 같다」고 말했는데 X 는 HEAD 이고,
+       안내 순서는 **publish 먼저 · 커밋 나중**이라 대개 거짓이었다. 원장 sha 를 적고, HEAD 와 같은지를 따로 말한다.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "show", f"HEAD:{dm.OUT.relative_to(ROOT).as_posix()}"],
+            capture_output=True,
+        )
+    except (OSError, ValueError):
+        return None
+    if out.returncode != 0:
+        # HEAD 에 그 파일이 없거나(처음 쓴 원장) git 이 아니다 — 앞의 것은 「커밋 안 됨」이다
+        probe = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--verify", "HEAD"], capture_output=True
+        )
+        return False if probe.returncode == 0 else None
+    return hashlib.sha256(out.stdout).hexdigest() == _sha(dm.OUT)
 
 
 def store_device() -> str:
@@ -337,6 +398,13 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
         return 1
     d = dm.diff("canonical")
     if dm.failed("canonical", d):
+        keep = [k for k in d["missing"] + d["changed"] if dm._kind(k) in dm.KEEP_KINDS]  # noqa: SLF001
+        if keep:
+            # 🔄 D-254 — 원천·표본이 없거나 바뀐 것에 「--write」를 권하지 않는다 (그 길로 원장에서 조용히 빠졌다)
+            print(
+                f"🔴 원천·표본 {len(keep)}개가 없거나 원장과 다르다 — 예: {keep[:3]}\n{dm.RESTORE_HINT}"
+            )
+            return 1
         print(
             "🔴 파생물 원장이 디스크와 다르다 — 먼저 `launcher.py derived-manifest --write` 후 커밋한다.\n"
             "  🚨 원장과 다른 바이트를 올리면 사본이 받을 수 없다 (sha 가 안 맞는다)"
@@ -345,7 +413,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     bad = _noredist_seen()
     if bad:
         print(
-            f"🔴 재배포 제약 소스를 받은 기기다 — {bad}\n"
+            f"🔴 이 기기(정본)가 재배포 제약 소스를 받았다 — {bad}\n"
             "  🚨 저장소는 제3자 계정이다 (D-78 ③). 파생물에 그 행이 섞였을 수 있어 올리지 않는다 (D-71).\n"
             "     행 단위 `redistributable` 거름이 생기기 전까지 막는다"
         )
@@ -399,19 +467,33 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
 
     for r in new:
         _put(root, ROOT / str(r["경로"]), str(r["sha256"]))
+    in_head = manifest_in_head()
     entry = {
         "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        # 🔄 D-254 — `commit` 은 올린 순간의 HEAD 일 뿐이다. 이 판의 정체는 `manifest_sha256` 이고,
+        #    그 원장이 HEAD 에 들어 있었는지는 `manifest_in_head` 가 말한다(None = 모름)
         "commit": _commit(),
         # 🔄 D-250 — PC 이름이 아니라 기기 별칭. 저장소는 팀원(뷰어)이 읽는다
         "device": store_device(),
         "manifest_sha256": _sha(dm.OUT),
+        "manifest_in_head": in_head,
         "objects_new": len(new),
         "objects_listed": len(rows),
     }
     with (root / "publish_log.jsonl").open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    print(f"올렸다 {len(new)}개 — 커밋 {entry['commit']} 의 원장과 같다")
-    print("  🚨 원장(`data/derived_manifest.jsonl`)을 **커밋·push 해야** 사본이 이 판을 받는다")
+    print(f"올렸다 {len(new)}개 — 원장 sha256 {entry['manifest_sha256'][:16]} 의 판")
+    if in_head:
+        print(f"  원장이 HEAD({entry['commit']}) 의 것과 같다 — push 하면 사본이 이 판을 받는다")
+    else:
+        state = (
+            "원장 미커밋 — HEAD 와 다르다"
+            if in_head is False
+            else "HEAD 와 같은지 모른다(git 을 못 읽었다)"
+        )
+        print(
+            f"  🚨 {state}. 원장(`data/derived_manifest.jsonl`)을 **커밋·push 해야** 사본이 이 판을 받는다"
+        )
     return 0
 
 
