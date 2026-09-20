@@ -223,6 +223,17 @@ def main() -> int:
     a = ap.parse_args()
     if a.cmd == "export":
         return export(a.sheet, a.who, a.part)
+    # 🆕 2026-09-20 — 라벨(원천)은 **정본만** 쓴다 (D-226 · D-249). 팀원은 채운 CSV 를 팀장에게 넘긴다.
+    #    🚨 `python scripts/label_sheet.py` 로 불리면 sys.path[0] 이 `scripts/` 다 — 레포 루트를 앞에 둔다
+    #       (`derived_manifest.py` 가 같은 이유로 같은 일을 한다 · 런처가 이 경로로 부른다)
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    why = dm.not_canonical("labelsheet import")
+    if why:
+        print(why, file=sys.stderr)
+        return 1
     return import_(a.csv, a.sheet, a.day)
 
 

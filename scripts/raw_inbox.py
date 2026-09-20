@@ -170,6 +170,26 @@ def _foreign(rows: list[dict]) -> list[dict]:
     return out
 
 
+def summary(rows: list[dict]) -> list[str]:
+    """🆕 병합 검토용 요약 — 원천 · 기기별 **파일 수 · 새 판 수 · 크기** (런처 자동화 검토 발견 6).
+
+    ⛔ 원장 diff 는 sha 나열이라 사람이 무엇이 오는지 못 읽는다. 🚨 파일 **내용**은 찍지 않는다.
+    """
+    from collect import store  # noqa: PLC0415
+
+    agg: dict[tuple[str, str], list[int]] = {}
+    for r in rows:
+        k = (str(r.get("source_id")), str(r.get("device")))
+        a = agg.setdefault(k, [0, 0, 0])
+        a[0] += 1
+        a[1] += store.EDITION_MARK in _path_of(r)
+        a[2] += int(r.get("bytes") or 0)
+    return [
+        f"    {sid:<28} {dev:<14} {n:>6}개 · 새 판 {ed:>4} · {b / 1024 / 1024:>7,.1f} MB"
+        for (sid, dev), (n, ed, b) in sorted(agg.items())
+    ]
+
+
 def pending() -> list[dict]:
     """🆕 정본에서 **합치지 않은 팀원 원문** — 원장(병합됨)에는 있고 디스크에는 없다.
 
@@ -330,6 +350,8 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
             leaked.append(f"{_path_of(r)} ({why})")
     head = f"{'검사 — ' + branch if check_only else '합치기'} · 다른 기기가 받은 원문 {len(rows)}개"
     print(head)
+    for line in summary(rows):
+        print(line)
     for name, xs in (
         ("받은편지함에 없음·sha 불일치", lack),
         ("키 섞임", leaked),

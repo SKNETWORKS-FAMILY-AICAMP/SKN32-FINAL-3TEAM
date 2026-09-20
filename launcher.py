@@ -132,6 +132,21 @@ def needs_raw(fn):
     return wrapper
 
 
+def only_canonical(what: str) -> None:
+    """🆕 파생물·원문을 **만들거나 바꾸는** 자리에서 부른다 — 정본(클론 B)이 아니면 이유와 할 일을 내고 멈춘다.
+
+    ⛔ D-226 1항이 규약뿐이었다 — 사본에서 원장을 거부 없이 썼다(런처 자동화 검토 2026-09-20 발견 1).
+    🚨 판단은 `derived_manifest.not_canonical` 한 곳이다 — 스크립트를 직접 불러도 같은 말이 나온다 (D-99).
+    ★ **보기만 하는 옵션**(`--write`·`--dump` 없이)은 막지 않는다 — 사본에서도 미리보기는 된다.
+    """
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    why = dm.not_canonical(what)
+    if why:
+        console.print(why, markup=False)
+        raise typer.Exit(1)
+
+
 def cli_name(fn) -> str:
     """함수 이름 -> CLI 명령 이름. `db_up` -> `db-up`, `eval_` -> `eval`."""
     return getattr(fn, "_cli", fn.__name__.rstrip("_").replace("_", "-"))
@@ -858,7 +873,10 @@ def adopt(
        **채택하는 명령이 없어서** 손으로 옮기다가 원장이 깨졌습니다.
     🚨 원장에 원본 경로의 새 행을 붙입니다 — 그래야 `doctor --hash` 가 훼손으로 안 봅니다.
     🚨 2인 확인은 요구하지 않습니다 (팀장 판정) — 채택 자체가 사람의 판정입니다.
+    🆕 2026-09-20 — **정본에서만** 합니다. 팀원 기기에서 채택하면 원본 경로의 바이트가 정본과 갈리고,
+       `raw-import` 는 덮어쓰지 않으므로 **영영 안 맞춰집니다** (D-250). 판은 그대로 올리면 정본이 고릅니다.
     """
+    only_canonical(f"adopt {source}")
     raise typer.Exit(run("uv", "run", "python", "-m", "collect.ingest", "adopt", source, stem))
 
 
@@ -934,7 +952,35 @@ def collect(
             args.append("--dry-run")
         if limit:
             args += ["--limit", str(limit)]
-    raise typer.Exit(run(*args))
+    rc = run(*args)
+    if rc == 0 and not dry_run:
+        _after_collect()
+    raise typer.Exit(rc)
+
+
+def _after_collect() -> None:
+    """🆕 수집이 끝난 뒤 **다음에 칠 것** — 역할마다 다르다 (런처 자동화 검토 발견 5).
+
+    🚨 올리기는 자동으로 하지 않는다 — 외부 전송이라 사람이 본다(`raw-publish` 가 한 번 묻는다).
+    """
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    if dm.role() == "canonical":
+        console.print(
+            "\n  다음 — 파생물: uv run python launcher.py data-refresh <원천>  "
+            "(판 `__c…` 이 생겼으면 먼저 `adopt`)",
+            markup=False,
+        )
+        return
+    console.print(
+        "\n  다음 (수집 팀원) —\n"
+        "    uv run python launcher.py raw-publish          받은 원문을 받은편지함에 올린다\n"
+        "    git add data/manifest.jsonl\n"
+        '    git commit -m "수집 — <원천>"\n'
+        "    git push origin <내 브랜치>                    🚨 ohb 가 아니라 자기 브랜치\n"
+        "  그리고 팀장에게 브랜치 이름을 알린다 (D-250)",
+        markup=False,
+    )
 
 
 @app.command(
@@ -1101,6 +1147,82 @@ def raw_import(
     raise typer.Exit(run(*args))
 
 
+@app.command(name="data-refresh")
+def data_refresh(
+    sources: list[str] = typer.Argument(  # noqa: B008 — typer 의 선언 방식
+        None, help="다시 추출할 원천 id (여럿 가능 · 비우면 추출 없이 골든셋·원장만)"
+    ),
+    no_golden: bool = typer.Option(False, "--no-golden", help="골든셋을 다시 만들지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 할지만 보여 준다"),
+) -> None:
+    """정본 — 원문이 바뀐 뒤 파생물을 **한 번에 순서대로** 다시 만들고, 올리기 직전에서 멈춥니다.
+
+    🆕 2026-09-20 (런처 자동화 검토 발견 3) — 사람이 외우던 순서를 명령 하나로 묶습니다.
+
+        1 합치지 않은 팀원 원문이 없는가     raw_inbox pending   (있으면 `raw-import` 먼저)
+        2 원천별 추출                        extract <id> --dump (준 원천만)
+        3 골든셋                             분할 → 사전 → 주입 → 물질화
+        4 파생물 원장                        derived-manifest --write
+        5 올리기 전 검사 (올리지 않는다)     개인 식별 · 마스킹 잔여 · 검사 못 한 형식 · 재배포 제약
+
+    🚨 **외부 전송(`data-publish`)과 git 은 하지 않습니다** — 끝에 칠 명령을 순서대로 보여 줍니다.
+    🚨 첫 실패에서 멈추고 **몇 번째 단계인지** 말합니다. 정본(클론 B)에서만 돕니다 (D-226).
+    """
+    from preprocess import EXTRACTORS  # noqa: PLC0415
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    sources = list(sources or [])
+    unknown = [s for s in sources if s not in EXTRACTORS]
+    if unknown:
+        console.print(
+            f"  [red]모르는 원천 {unknown}[/red] — 아는 것: {', '.join(sorted(EXTRACTORS))}"
+        )
+        raise typer.Exit(1)
+    only_canonical("data-refresh")
+
+    py = ["uv", "run", "python"]
+    steps: list[tuple[str, list[str]]] = [
+        ("합치지 않은 팀원 원문 확인", [*py, "-m", "scripts.raw_inbox", "pending"])
+    ]
+    steps += [(f"추출 — {s}", [*py, "-m", EXTRACTORS[s], "--dump"]) for s in sources]
+    if not no_golden:
+        steps += [(f"골든셋 — {m[-1]}", [*py, *m, *extra]) for m, extra in GOLDEN_STEPS]
+    steps += [
+        ("파생물 원장 쓰기", [*py, "scripts/derived_manifest.py", "--write"]),
+        (
+            "올리기 전 검사 (올리지 않는다)",
+            [*py, "-m", "scripts.data_store", "publish", "--dry-run"],
+        ),
+    ]
+    if dry_run:
+        for i, (label, cmd) in enumerate(steps, 1):
+            console.print(f"  {i:>2}. {label}   [dim]{' '.join(cmd[3:])}[/dim]")
+        console.print("\n  [yellow]⬜ --dry-run — 아무것도 돌리지 않았다[/yellow]")
+        raise typer.Exit(0)
+    for i, (label, cmd) in enumerate(steps, 1):
+        console.print(f"\n[bold]{i}/{len(steps)}  {label}[/bold]")
+        if run(*cmd) != 0:
+            console.print(
+                f"  [red]{i}번째 단계({label})에서 멈췄다[/red] — 뒤 단계는 돌리지 않았다. 위 메시지를 본다"
+            )
+            raise typer.Exit(1)
+
+    carried = " ".join(["data/derived_manifest.jsonl", *dm.GIT_CARRIES])
+    console.print(
+        "\n  [green]파생물을 다시 만들었고 올리기 전 검사를 통과했다.[/green]\n"
+        "  다음은 **사람이** 순서대로 칩니다 (외부 전송·git 은 자동으로 하지 않습니다):\n\n"
+        "    uv run python launcher.py data-publish\n"
+        f"    git add {carried}\n"
+        '    git commit -m "파생물 재생성 — <무엇을 바꿨나>"\n'
+        "    git push origin ohb\n"
+        "    uv run python launcher.py load\n\n"
+        "  🚨 올리기가 먼저입니다 — 원장을 먼저 push 하면 사본이 「저장소에 없음」으로 멈춥니다.\n"
+        "  ★ `git status` 로 다른 변경(수집 원장 등)이 섞였는지 봅니다.",
+        markup=False,
+    )
+    raise typer.Exit(0)
+
+
 @app.command()
 def status() -> None:
     """데이터 현황판을 다시 만듭니다 — 무엇을 쓰기로 했고 무엇을 안 쓰기로 했나.
@@ -1140,6 +1262,7 @@ def chunk(dump: bool = typer.Option(False, "--dump", help="chunks.jsonl 을 쓴�
     """[P5] 조문·별표를 RAG 청크로 자릅니다 — 🚨 조문 단위입니다."""
     args = ["uv", "run", "python", "-m", "preprocess.chunk"]
     if dump:
+        only_canonical("chunk --dump")
         args.append("--dump")
     raise typer.Exit(run(*args))
 
@@ -1220,6 +1343,8 @@ def extract(
     if not source:
         console.print(_table("전처리 추출", EXTRACTORS))
         raise typer.Exit(0)
+    if dump or sheet:
+        only_canonical(f"extract {source} " + ("--dump" if dump else "--sheet"))
     module = EXTRACTORS.get(source)
     if module is None:
         console.print(
@@ -1259,6 +1384,15 @@ def scan(source: str = typer.Argument("", help="원천 id (비우면 표를 보�
     raise typer.Exit(run("uv", "run", "python", "-m", module, source))
 
 
+#: 골든셋 네 단계 — (모듈, 쓸 때 붙이는 플래그). 🚨 `golden` 과 `data-refresh` 가 **이 표 하나**를 돈다 (D-99)
+GOLDEN_STEPS: tuple[tuple[list[str], list[str]], ...] = (
+    (["-m", "preprocess.split"], ["--write"]),
+    (["-m", "preprocess.dictionary"], ["--dump"]),
+    (["-m", "preprocess.inject"], ["--dump"]),
+    (["-m", "preprocess.golden"], ["--dump"]),
+)
+
+
 @app.command()
 def golden(
     write: bool = typer.Option(False, "--write", help="파생물을 실제로 쓴다 (기본은 보기만)"),
@@ -1279,13 +1413,9 @@ def golden(
     🔴 **주입본은 평가에 들어가지 않는다** ([P10] 규약 5). 합성으로 평가하면
        「규칙을 배웠는가」를 재게 된다. 분할 게이트가 그것을 막는다.
     """
-    steps = (
-        (["-m", "preprocess.split"], ["--write"]),
-        (["-m", "preprocess.dictionary"], ["--dump"]),
-        (["-m", "preprocess.inject"], ["--dump"]),
-        (["-m", "preprocess.golden"], ["--dump"]),
-    )
-    for mod, extra in steps:
+    if write:
+        only_canonical("golden --write")
+    for mod, extra in GOLDEN_STEPS:
         args = ["uv", "run", "python", *mod] + (extra if write else [])
         if run(*args) != 0:
             raise typer.Exit(1)
@@ -1364,6 +1494,9 @@ ASK_ARG: dict[str, list[tuple[str, bool, str]]] = {
     "count": [("받아 온 파일이나 폴더 경로", True, "path")],
     "register": [("어떤 소스인가", True, "manual"), ("받아 온 파일이나 폴더 경로", True, "path")],
     "extract": [("어떤 원천을 추출할까", False, "extract")],
+    "data-refresh": [
+        ("어떤 원천을 다시 추출할까 (엔터 = 추출 없이 골든셋·원장만)", False, "extract")
+    ],
     "scan": [("어떤 원천을 셀까", False, "scan")],
 }
 
@@ -1402,6 +1535,10 @@ ASK_FLAG: dict[str, list[tuple[str, str, str, str]]] = {
     "chunk": [("chunks.jsonl", "--dump", "보기만 한다", "파일로 쓴다")],
     "embed": [("범위", "--check", "전부 임베딩한다 (DB 필요)", "모델 차원만 잰다 (DB 불필요)")],
     "extract": [("파생물", "--dump", "보기만 한다", "쓴다 — 🚨 마스킹 정책이 있어야 한다")],
+    "data-refresh": [
+        ("골든셋", "--no-golden", "다시 만든다 — 분할 포함", "건너뛴다 — 추출·원장만"),
+        ("미리보기", "--dry-run", "실제로 돌린다", "무엇을 할지만 본다"),
+    ],
     # 🔴 순서가 중요하다 — `--yes` 를 먼저 묻는다. 「미리보기」를 고르면 `--data` 는 뜻이 없다.
     "db-reset": [
         ("실행", "--yes", "미리보기만 — 아무것도 안 지운다", "🔴 볼륨을 지우고 다시 세운다"),
@@ -1418,6 +1555,8 @@ DANGER: dict[str, str] = {
     "db-down": "돌고 있는 작업이 끊긴다 — 저장된 데이터는 남는다",
     "setup": "환경을 다시 세운다 — 몇 분 걸린다. 결과는 여러 번 돌려도 같다",
     "load": "DB 내용이 바뀐다",
+    # 🆕 2026-09-20 — 골든셋을 다시 만들면 분할도 다시 쓴다(`golden --write` 와 같은 자리). 미리보기면 안 바뀐다
+    "data-refresh": "파생물을 덮어쓴다 — 골든셋을 고르면 분할까지 (미리보기를 골랐으면 아무것도 안 바뀐다)",
     # 🆕 2026-09-12 밤 — **덮어쓰거나 지우는데 확인이 없었다.**
     "status": "데이터 현황판을 덮어쓴다 — 보기만 하는 경로가 없다",
     "sync": "사본을 다시 만들고 **MAP 에 없는 낡은 사본은 지운다**",
@@ -1465,6 +1604,8 @@ MENU: list[tuple[str, str, object]] = [
     # 🆕 2026-09-20 (D-250) — 팀원 수집 원문. 올리기는 수집 팀원, 합치기는 정본
     ("47", "원문 올리기 (수집 팀원)", raw_publish),
     ("48", "원문 합치기 (정본)", raw_import),
+    # 🆕 2026-09-20 — 정본의 재생성 순서를 한 번에 (외부 전송·git 앞에서 멈춘다)
+    ("49", "파생물 다시 만들기 (정본)", data_refresh),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)

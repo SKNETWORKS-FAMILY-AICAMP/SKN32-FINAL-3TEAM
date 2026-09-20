@@ -78,11 +78,19 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
     #    ★ 캐시는 raw 와 같은 자리다 — **묶음에 넣지 않는다.** raw 가 없는 기기는
     #      어차피 `extract` 를 못 돌리므로 캐시가 없어도 잃는 것이 없다.
     ("원문캐시", "mfds_press_pdf/", "마스킹 전 원문 캐시 — raw 와 같은 자리다. 묶음에서 뺀다"),
+    # 🆕 2026-09-20 (클론A 인계 09-18 F2 · 런처 자동화 검토 발견 2) — **PDF 전문 캐시**도 마스킹 전 원문이다.
+    #    `preprocess/evasion_scan.py` `paths()` 의 넷째 값 `data/derived/<원천>/text/` (마스킹은 `quotes.json` 에만).
+    #    ⛔ 이 규칙이 없을 때 `.txt` 는 「생성물」이 되어 **`data-publish` 대상**이었다(작업공간 재현).
+    #    🔗 폴더 이름을 바꾸면 양쪽을 같이 — `tests/test_derived_manifest.py` 가 둘을 잇는다 (D-99).
+    ("원문캐시", "/text/", "PDF 전문 캐시(마스킹 전) — raw 와 같은 자리다. 묶음에서 뺀다"),
     ("원천", "labels/", "사람의 판정 — 어떤 명령으로도 다시 안 나온다"),
     ("표본", "_labelsheet.jsonl", "다시 뽑으면 그 표본이 아니다 — 라벨과 κ 가 갈린다"),
     ("표본", "golden/split_manifest.json", "다시 나누면 평가 누수 방어와 수치 비교가 무너진다"),
 )
 DEFAULT_KIND = "생성물"
+#: 🆕 2026-09-20 — 개인 식별·마스킹 잔여 검사가 **읽을 수 있는 형식**. 이 밖의 파일은 검사를 못 했으므로
+#:    **올리지 않는다**(`unscanned` → `data-publish` 거부). ⛔ 검사가 형식을 건너뛰는 것을 「0건」으로 세지 않는다 (D-72).
+SCANNED = frozenset({".json", ".jsonl"})
 
 #: 🔄 2026-09-20 (D-249) — **git 이 나르는 파생물.** 🚨 공개 저장소다 — 인용 원문이 든 파일은 여기 두지 않는다.
 #:    `split_manifest.json` 은 문서 id · 분할 · 입력 sha 뿐이라 남긴다. `.gitignore` 예외와 같아야 한다(게이트가 대조).
@@ -142,7 +150,7 @@ def leaks() -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
     got: list[tuple[str, int]] = []
     cache: list[tuple[str, int]] = []
     for f in sorted(DERIVED.rglob("*")):
-        if not f.is_file() or f.name == ".gitkeep" or f.suffix not in {".json", ".jsonl"}:
+        if not f.is_file() or f.name == ".gitkeep" or f.suffix not in SCANNED:
             continue
         rel = f.relative_to(DERIVED).as_posix()
         if rel in LEAK_ALLOW or f.name in LEAK_ALLOW:
@@ -259,7 +267,7 @@ def _pii_scan(files: list[pathlib.Path] | None = None):
     descriptor = re.compile(r"\d+\s*개|(?:^|\s)(?:등|외)(?:\s|$)|\d{4}\.\s*\d")
     targets = files if files is not None else sorted(DERIVED.rglob("*"))
     for f in targets:
-        if not f.is_file() or f.suffix not in {".json", ".jsonl"}:
+        if not f.is_file() or f.suffix not in SCANNED:
             continue
         rel = f.relative_to(DERIVED).as_posix() if f.is_relative_to(DERIVED) else f.name
         if kind_of(rel)[0] == "원문캐시":
@@ -600,6 +608,35 @@ NEED: dict[str | None, dict[str, str]] = {
 }
 
 
+def unscanned(rows: list[dict]) -> list[str]:
+    """옮길 행 중 **검사가 못 읽는 형식** — 개인 식별·마스킹 검사를 안 거쳤으니 내보내지 않는다."""
+    return sorted(
+        str(r["경로"])
+        for r in rows
+        if moved(str(r["경로"]), str(r["부류"]))
+        and pathlib.Path(str(r["경로"])).suffix not in SCANNED
+    )
+
+
+def not_canonical(what: str) -> str | None:
+    """🆕 파생물을 **만드는** 명령의 문지기 (D-226 1항 집행 · 런처 자동화 검토 발견 1).
+
+    ⛔ 종전에는 규약뿐이었다 — 사본에서 `derived-manifest --write` 가 거부 없이 원장을 썼다(작업공간 재현).
+       그 원장이 팀원 브랜치 → 병합으로 오면 정본 원장이 저장소와 어긋난다.
+    ★ 막을 이유를 **사람이 읽을 말**로 돌려준다. 정본이면 None.
+    """
+    who = role()
+    if who == "canonical":
+        return None
+    return (
+        f"🔴 `{what}` 는 파생물을 만든다 — **정본(클론 B)에서만** 돈다 (D-226).\n"
+        f"   이 기기 역할: {who or '설정 안 됨'}\n"
+        "   · 클론 A·팀원 — 만들지 않고 받는다: uv run python launcher.py data-sync\n"
+        "   · 라벨을 채웠다면 — CSV 를 팀장에게 넘긴다 (D-249)\n"
+        "   · 이 기기가 클론 B 라면 — uv run python launcher.py data-setup --role canonical"
+    )
+
+
 def role() -> str | None:
     """이 기기의 역할. 비었으면 None. 🔴 **모르는 값이면 멈춘다** (D-220).
 
@@ -796,6 +833,12 @@ def main() -> int:
             return 1
         return triage(out)
 
+    if a.write:
+        why = not_canonical("derived-manifest --write")
+        if why:
+            print(why, file=sys.stderr)
+            return 1
+
     got = rows()
 
     if a.export_check:
@@ -816,6 +859,11 @@ def main() -> int:
             )
             print(f"   → 묶음에서 뺀다. 캐시 {nc}개는 raw 와 같은 자리다(부류 원문캐시).")
             print(f"   예: {cache[0][0]}  {cache[0][1]:,}건\n")
+        odd = unscanned(got)
+        if odd:
+            print(f"🔴 **검사가 못 읽는 형식**이 묶음에 있다 — 내보내지 않는다: {odd[:5]}")
+            print("   부류를 원문캐시로 두거나(마스킹 전이면) 검사가 읽는 형식으로 쓴다")
+            return 1
         if not bad:
             print(f"반출 가능 — 묶음 대상 {len(pack)}개에 마스킹 잔여 0 (캐시 {nc}개 제외)")
             print(f"  ⬜ 허용 목록 {len(LEAK_ALLOW)}개는 세지 않았다: {', '.join(LEAK_ALLOW)}")

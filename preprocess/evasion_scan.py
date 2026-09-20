@@ -40,6 +40,8 @@ from preprocess.text import LEX, evasion, quoted
 
 #: 🚨 소스 이름이 곧 경로다 — `data/raw/<이름>/` 을 읽고 `data/derived/<이름>/` 에 쓴다.
 #:    수집기가 그렇게 저장하므로(store.raw_dir) 여기서 규칙을 다시 만들지 않는다.
+#: 🔗 넷째 값 `text/` 는 **마스킹 전 PDF 전문 캐시**다 — `scripts/derived_manifest.py` `KIND_RULES` 가 이 폴더 이름으로
+#:    원문캐시(저장소로 안 옮긴다)를 가른다. 이름을 바꾸면 양쪽을 같이 (D-99 · D-251).
 def paths(source: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
     raw = pathlib.Path("data/raw") / source
     der = pathlib.Path("data/derived") / source
