@@ -15,8 +15,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Iterable
-from datetime import UTC, datetime
+from collections.abc import Callable, Iterable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -166,6 +166,50 @@ def current_files(
     return [base[k] for k in sorted(base)]
 
 
+#: 🔴 **소스 id ≠ 원문 폴더 이름.** 수집기마다 `FAMILY` 를 들고 있어서 흩어져 있었다.
+#:    ⛔ 2026-09-18 사고 — `ingest.cmd_register()` 가 `raw_dir(source_id)` 를 불러
+#:       `law_go_kr` 파일을 **`data/raw/law_go_kr/`** 에 넣었다. 추출기는 `data/raw/law/` 를
+#:       보므로 화장품법 334노드가 코퍼스에서 **조용히 사라졌다** (law_article 2,207 → 1,873).
+#:    ★ 그래서 매핑을 **원문 경로를 정하는 이 모듈**이 든다. `preprocess/inventory.py` 가
+#:      같은 표를 갖고 있었는데(D-99), 그쪽이 이것을 쓴다.
+FAMILY_OF: dict[str, tuple[str, ...]] = {
+    "mfds_hf_ingredient_board": ("mfds_hf_board",),
+    "ftc_decisions_body": ("ftc",),
+    "ftc_decisions_api": ("ftc",),
+    "ftc_decisions": ("ftc",),
+    "law_go_kr": ("law",),
+    "mfds_press": ("mfds_press", "mfds_press_pdf"),
+}
+
+
+def families(source_id: str) -> tuple[str, ...]:
+    """이 소스의 원문 폴더 이름들. 표에 없으면 소스 id 그대로다."""
+    return FAMILY_OF.get(source_id, (source_id,))
+
+
+def raw_dir_of(source_id: str) -> Path:
+    """소스가 **글을 쓰는** 원문 폴더. 🚨 여럿이면 첫 번째가 정본이다 (mfds_press 의 pdf 는 부속)."""
+    return raw_dir(families(source_id)[0])
+
+
+def family_path(source_id: str, family: str | None = None) -> Path:
+    """소스의 원문 폴더 **경로만** — 만들지 않는다. 🆕 2026-09-20 (D-254) 추출기가 읽는 자리다.
+
+    ⛔ 추출기마다 `data/raw/law` · `data/raw/mfds_press_pdf` 를 **따로 박아** 두었다 — 표(`FAMILY_OF`)와
+       추출기가 갈려도 아무도 몰랐다(09-18 `law_go_kr` 334노드 소실과 같은 모양 · 감사 §1-7).
+    ★ 폴더 이름을 이 표에서만 꺼낸다 (D-99). `family` 를 주면 **그 소스의 계열이어야 한다** — 아니면 멈춘다 (D-220).
+    🚨 `raw_dir` 과 달리 mkdir 하지 않는다 — 추출기는 import 할 때 부르고, 「없다」를 스스로 알려야 한다.
+    """
+    fams = families(source_id)
+    name = fams[0] if family is None else family
+    if name not in fams:
+        raise StoreError(
+            f"{family!r} 는 {source_id!r} 의 원문 폴더가 아니다 — store.FAMILY_OF 는 {fams} 다.\n"
+            "  추출기와 수집기가 다른 폴더를 보면 데이터가 **조용히** 빠진다 (2026-09-18). 표를 고쳐라."
+        )
+    return RAW / name
+
+
 def raw_dir(family: str) -> Path:
     """data/raw/<계열>/ — 없으면 만든다.
 
@@ -180,6 +224,82 @@ def derived_dir(name: str) -> Path:
     d = DERIVED / name
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def plan_raw(
+    family: str,
+    filename: str,
+    ident: str,
+    file_ident: Callable[[Path], str],
+) -> tuple[str, Path, str | None]:
+    """원문 한 개를 **어디에 둘지** 정한다 — `save_raw` 와 `ingest register` 가 같이 쓴다 (D-99 · D-254).
+
+    반환 — `(판정, 경로, supersedes)`
+        "write"  — 이 경로에 새로 쓴다 (🚨 이름이 넘긴 것과 다를 수 있다 — 새 판 `__c날짜`)
+        "skip"   — 같은 것이 이미 있다 (디스크든 원장이든 · 규약 4)
+        "ledger" — 디스크에 **같은 바이트**가 있는데 그 경로의 원장 행이 없다 — 쓰지 않고 행만 보탤 자리
+    `file_ident` — 디스크 파일의 판정용 해시를 내는 함수 (수집기는 바이트 · register 는 스트리밍).
+
+    ⛔ 2026-09-20 전까지 이 판정이 `save_raw` 에만 있었고 `register` 는 디스크만 봤다 —
+       원장(다른 기기)에 있는 것을 다시 넣고, 원장에 없는 같은 파일을 조용히 건너뛰었다 (감사 §2 register).
+    """
+    path = raw_dir(family) / filename
+    supersedes: str | None = None
+
+    # 🆕 2026-09-20 (D-250) — **이 기기에 파일이 없어도 원장(git)이 안다.** 팀원 PC 에는 클론 B 의 원문이 없다.
+    #    ⛔ 디스크만 보면 B 에 이미 있는 것을 **다시 받고**, 같은 경로·다른 바이트가 생겨 합칠 때 갈린다.
+    #    ★ 원장의 그 경로 행과 판정용 해시가 같으면 받지 않는다 · 다르면 새 판 이름으로 둔다 — 디스크 규칙과 같다.
+    if not path.exists():
+        known = ledger_row(path)
+        if known is not None:
+            if any(_ident_of(r) == ident for r in ledger_editions(path)):
+                # 규약 4 가 기기를 넘어 선다 — 다른 기기가 같은 것(어느 판이든)을 이미 받았다
+                return "skip", path, None
+            versioned = path.with_name(edition_name(filename, _today()))
+            vk = ledger_row(versioned)
+            if vk is not None and _ident_of(vk) == ident:
+                return "skip", versioned, None
+            if vk is not None or versioned.exists():
+                raise StoreError(
+                    f"{versioned.name} 가 원장에 이미 있고 **또 내용이 다르다** — 하루에 두 번 갈렸다.\n"
+                    "  자동으로 판을 더 만들지 않는다 (위 규칙과 같다)."
+                )
+            supersedes = _rel(path)
+            print(
+                f"  🔴 새 판 — {filename} 이(가) 원장(다른 기기)에 있고 내용이 다르다.\n"
+                f"     {versioned.name} 으로 저장한다. 합칠 때 정본에서 `adopt` 로 판을 고른다 (D-246)."
+            )
+            path = versioned
+
+    if path.exists():
+        if file_ident(path) == ident:
+            # 규약 4 — 동일하면 스킵. 원장 행이 없으면 부르는 쪽이 정한다 ("ledger")
+            return ("skip" if ledger_row(path) is not None else "ledger"), path, None
+
+        versioned = path.with_name(edition_name(filename, _today()))
+        if versioned.exists():
+            if file_ident(versioned) == ident:
+                # 오늘 판을 이미 받았다
+                return ("skip" if ledger_row(versioned) is not None else "ledger"), versioned, None
+            raise StoreError(
+                f"{versioned} 가 이미 있고 **또 내용이 다르다**.\n"
+                "  🚨 하루에 두 번 갈렸다 — 원천이 바뀐 것이 아니라 **응답이 호출마다\n"
+                "     다를** 수 있다 (레코드 순서 비결정 · 응답에 유동 필드 …).\n"
+                "  자동으로 판을 더 만들지 않는다 — 돌릴 때마다 파일이 불어난다.\n"
+                "  두 판을 비교해 무엇이 다른지 보고, 원천의 성질을 원장에 적어라."
+            )
+
+        supersedes = _rel(path)
+        # 🚨 라이브러리에서 화면에 찍는 것이 깔끔하지 않다는 건 안다. 그런데 이 한 줄이
+        #    없으면 파일 이름이 조용히 바뀐다 — 안 보이는 것보다 안 깔끔한 편이 낫다.
+        print(
+            f"  🔴 새 판 — {filename} 이(가) 이미 있고 내용이 다르다.\n"
+            f"     {versioned.name} 으로 저장한다. 원본은 그대로 둔다 (규약 2).\n"
+            f"     🚨 원천이 같은 이름으로 다른 것을 준다는 뜻이다 — 원장에 적어라 (D-54)."
+        )
+        path = versioned
+
+    return "write", path, supersedes
 
 
 def save_raw(
@@ -226,37 +346,20 @@ def save_raw(
        이 설계의 값이자 위험이다. 부르는 쪽은 자기가 넘긴 `filename` 을 찍으므로
        여기서 안 찍으면 아무도 모른다.
     """
+    device_id()  # 🆕 D-250 — 별칭이 없으면 **쓰기 전에** 멈춘다
     digest = sha256(payload)
     # 🔴 「같은가?」는 **판정용 해시**로 묻는다 (`VOLATILE`). 원문은 그대로 저장한다.
     ident = identity_sha256(source_id, payload)
-    path = raw_dir(family) / filename
-    supersedes: str | None = None
-
-    if path.exists():
-        if identity_sha256(source_id, path.read_bytes()) == ident:
-            return None  # 규약 4 — 동일하면 스킵
-
-        versioned = path.with_name(edition_name(filename, _today()))
-        if versioned.exists():
-            if identity_sha256(source_id, versioned.read_bytes()) == ident:
-                return None  # 오늘 판을 이미 받았다
-            raise StoreError(
-                f"{versioned} 가 이미 있고 **또 내용이 다르다**.\n"
-                "  🚨 하루에 두 번 갈렸다 — 원천이 바뀐 것이 아니라 **응답이 호출마다\n"
-                "     다를** 수 있다 (레코드 순서 비결정 · 응답에 유동 필드 …).\n"
-                "  자동으로 판을 더 만들지 않는다 — 돌릴 때마다 파일이 불어난다.\n"
-                "  두 판을 비교해 무엇이 다른지 보고, 원천의 성질을 원장에 적어라."
-            )
-
-        supersedes = str(path.relative_to(ROOT))
-        # 🚨 라이브러리에서 화면에 찍는 것이 깔끔하지 않다는 건 안다. 그런데 이 한 줄이
-        #    없으면 파일 이름이 조용히 바뀐다 — 안 보이는 것보다 안 깔끔한 편이 낫다.
-        print(
-            f"  🔴 새 판 — {filename} 이(가) 이미 있고 내용이 다르다.\n"
-            f"     {versioned.name} 으로 저장한다. 원본은 그대로 둔다 (규약 2).\n"
-            f"     🚨 원천이 같은 이름으로 다른 것을 준다는 뜻이다 — 원장에 적어라 (D-54)."
-        )
-        path = versioned
+    verdict, path, supersedes = plan_raw(
+        family,
+        filename,
+        ident,
+        lambda q: identity_sha256(source_id, q.read_bytes()),
+    )
+    if verdict != "write":
+        # 규약 4 — 동일하면 스킵. 🚨 "ledger"(디스크엔 같은 것이 있는데 원장 행이 없다)도 여기선 스킵이다 —
+        #    수집기의 종전 동작 그대로다. 행을 보태는 것은 `ingest register` 만 한다 (D-254).
+        return None
 
     path.write_bytes(payload)
     manifest_append(
@@ -315,8 +418,162 @@ def manifest_append(
         row["supersedes"] = supersedes
     if identity:
         row["identity_sha256"] = identity
-    with MANIFEST.open("a", encoding="utf-8") as f:
+    # 🆕 2026-09-20 (D-250) — **어느 기기가 받았나.** 팀원도 수집한다. 새 행에만 붙인다(옛 행은 「기록 없음」).
+    row["device"] = device_id()
+    # 🔴 `newline="\n"` — 2026-09-19 실측: 이 줄이 없어 Windows 에서 원장 **5,148줄이 CRLF** 로 붙었다
+    #    (그날 수집한 mfds_cgm_expc 5,129 · ftc_decisions_body 19 전부). 게이트가 `Path.open("a")` 의
+    #    모드를 못 읽어 지나쳤다 — 검사기도 같이 고쳤다 (D-241).
+    with MANIFEST.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    _index_add(row)
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 원장을 읽는 쪽 — 기기를 넘는 규칙 (2026-09-20 · D-250)
+# ══════════════════════════════════════════════════════════
+#: `[임의]` 다른 기기가 이 기간 안에 같은 소스를 받았으면 수집 전에 **경고**한다(런처 `collect --force`).
+#:    **바꾸는 조건** — 원천 갱신 주기를 재서 소스별로 나눌 필요가 보이면. 주 단위면 공정위 결정문
+#:    (가장 자주 바뀌는 쪽)도 충분하다고 봤다. 막는 것이 아니라 알린다 — 겹쳐도 sha 대조로 섞이지 않는다.
+OVERLAP_DAYS = 7
+
+
+#: 기기 별칭의 모양 — 🚨 원장은 **공개 저장소**에 올라간다. 공백·한글을 받지 않는다(실명·「○○ 노트북」 꼴을 거른다).
+#:    실명 금지·중복 금지는 **팀 회의로 정한다**(팀장 판정 2026-09-20) — 코드는 모양만 본다.
+DEVICE_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
+#: 정본이 별칭 없이 수집하면 원장에 적는 이름. 🚨 팀원 별칭으로 쓰지 않는다 (`setup` 이 막는다)
+CANONICAL_DEVICE = "canonical"
+
+
+def device_id() -> str:
+    """이 기기의 별칭 — `.env` 의 `DATA_DEVICE`. 비었으면 정본만 `canonical`, 나머지는 **멈춘다**.
+
+    🔄 2026-09-20 (D-250 개정 · 팀장 판정) — ⛔ 종전에는 비면 **호스트 이름의 해시 8자**를 적었다.
+       되돌릴 수는 없어도 **대입**은 된다(`DESKTOP-` + 7자 ≈ 780억 가지 · GPU 수 시간) — 공개 원장에
+       PC 이름을 적는 것과 같았다. 무작위 별칭은 `.env` 를 새로 만들면 바뀐다. 그래서 **팀원이 정한다.**
+    🚨 쓰기 **전에** 부른다(`save_raw` 첫 줄 · `ingest`) — 파일만 놓이고 원장 행이 안 남는 일을 막는다 (D-72).
+    """
+    from collect import env  # noqa: PLC0415 — `.env` 를 여는 곳은 한 곳이다 (D-99)
+
+    v = env.setting("DATA_DEVICE")
+    if v:
+        if not DEVICE_RE.fullmatch(v):
+            raise StoreError(
+                "DATA_DEVICE 모양이 틀렸다 — 영문·숫자·`._-` 32자 이내 (예: collector-1).\n"
+                "  🚨 원장은 공개 저장소에 올라간다 — 실명을 쓰지 않는다.\n"
+                "  고치기: uv run python launcher.py data-setup --device <별칭>"
+            )
+        return v
+    if env.setting("DATA_ROLE") == "canonical":
+        return CANONICAL_DEVICE
+    raise StoreError(
+        "기기 별칭(DATA_DEVICE)이 비어 있다 — 누가 받았는지 원장에 못 적는다. 아무것도 저장하지 않았다.\n"
+        "  별칭은 팀 회의에서 겹치지 않게 정한다 (실명 금지 · 예: collector-1).\n"
+        "  넣기: uv run python launcher.py data-setup --device <별칭>"
+    )
+
+
+def _rel(path: Path) -> str:
+    return str(path.relative_to(ROOT))
+
+
+def _norm(p: str) -> str:
+    """원장의 경로는 기기마다 `\\`·`/` 가 섞여 있다 — 비교는 `/` 로 한다."""
+    return p.replace("\\", "/")
+
+
+#: (원장 경로, (크기, 수정 시각)) → 경로별 마지막 행. 🚨 수집 한 번에 수천 번 부르므로 한 번만 읽는다.
+#:    크기만 보면 `git pull` 이 같은 길이로 바꾼 원장을 못 알아챈다 — 수정 시각도 본다.
+_INDEX: tuple[str, tuple[int, int], dict[str, dict[str, Any]]] | None = None
+
+
+def _stamp() -> tuple[int, int]:
+    if not MANIFEST.exists():
+        return (-1, -1)
+    st = MANIFEST.stat()
+    return (st.st_size, st.st_mtime_ns)
+
+
+def _index() -> dict[str, dict[str, Any]]:
+    global _INDEX
+    size = _stamp()
+    if _INDEX is None or _INDEX[0] != str(MANIFEST) or _INDEX[1] != size:
+        idx: dict[str, dict[str, Any]] = {}
+        if MANIFEST.exists():
+            for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    r = json.loads(line)
+                    if r.get("path"):
+                        idx[_norm(str(r["path"]))] = r
+        _INDEX = (str(MANIFEST), size, idx)
+    return _INDEX[2]
+
+
+def _index_add(row: dict[str, Any]) -> None:
+    """방금 붙인 행을 색인에도 넣는다 — 다시 읽지 않게."""
+    global _INDEX
+    if _INDEX is not None and _INDEX[0] == str(MANIFEST) and row.get("path"):
+        _INDEX[2][_norm(str(row["path"]))] = row
+        _INDEX = (_INDEX[0], _stamp(), _INDEX[2])
+
+
+def ledger_row(path: Path) -> dict[str, Any] | None:
+    """원장에 적힌 이 경로의 **마지막** 행. 없으면 None."""
+    return _index().get(_norm(_rel(path)))
+
+
+def ledger_editions(path: Path) -> list[dict[str, Any]]:
+    """원장에 적힌 이 이름과 **그 판들**(`__c날짜`)의 마지막 행 — 판이 여럿이면 옛 판과 같을 수도 있다."""
+    rel = _norm(_rel(path))
+    parent, _, name = rel.rpartition("/")
+    p = Path(name)
+    stem = p.stem.split(EDITION_MARK, 1)[0]
+    head = f"{parent}/{stem}" if parent else stem
+    return [
+        r
+        for k, r in _index().items()
+        if k == rel or (k.startswith(head + EDITION_MARK) and k.endswith(p.suffix))
+    ]
+
+
+def _ident_of(row: dict[str, Any]) -> str:
+    return str(row.get("identity_sha256") or row.get("sha256"))
+
+
+def recent_by_others(
+    source_id: str, days: int = OVERLAP_DAYS, now: datetime | None = None
+) -> dict[str, str]:
+    """다른 기기가 `days` 안에 이 소스를 받은 기록 — `{기기: 마지막 시각}`.
+
+    🚨 기기 칸이 없는 옛 행(09-20 이전)은 **정본이 받은 것**이다 — 그때는 정본만 수집했다 (D-226).
+       그래서 정본 기기에서는 건너뛰고, 다른 기기에서는 「정본(기기 칸 이전)」으로 알린다.
+    """
+    from collect import env  # noqa: PLC0415
+
+    me = device_id()
+    canonical = env.setting("DATA_ROLE") == "canonical"
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=days)
+    out: dict[str, str] = {}
+    if not MANIFEST.exists():
+        return out
+    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        if r.get("source_id") != source_id:
+            continue
+        who = str(r.get("device") or "")
+        if who == me or (not who and canonical):
+            continue
+        who = who or "정본(기기 칸 이전)"
+        try:
+            at = datetime.fromisoformat(str(r.get("fetched_at")))
+        except ValueError:
+            continue
+        if at.tzinfo is None:  # 옛 행 — UTC 로 적었다 (`_now`)
+            at = at.replace(tzinfo=UTC)
+        if at >= cutoff:
+            out[who] = max(out.get(who, ""), str(r["fetched_at"]))
+    return out
 
 
 def stamp(row: dict[str, Any], source_id: str) -> dict[str, Any]:

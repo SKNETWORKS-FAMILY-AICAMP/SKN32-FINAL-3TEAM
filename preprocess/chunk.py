@@ -2,6 +2,7 @@
 
   uv run python -m preprocess.chunk               # 센다
   uv run python -m preprocess.chunk --dump        # data/derived/chunks.jsonl
+  uv run python -m preprocess.chunk --dump --allow-shrink   # 🚨 줄어든 것을 **보고** 받아들일 때만
 
 왜 있는가 — 2026-09-09 확인: **[P5] 는 이름표만 있고 코드가 0줄이었다.** RAG 가 설계에만
 있고 코드에 없었다. `docs/02_설계/청크_스키마.md` 는 제목부터 「W1 확정 대상」이다.
@@ -30,6 +31,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import pathlib
 import re
@@ -51,6 +53,56 @@ CATEGORY = {
     "표시·광고의 공정화": "일반",
 }
 _SENT = re.compile(r"(?<=[.。])\s+|\n")
+
+#: 🔴 **하한 래칫** — 이전 판보다 이 비율을 넘게 줄면 멈춘다 (2026-09-20 · D-254 · 감사 §1-8).
+#:    ⛔ 09-18 조문 노드가 2,207 → 1,873 으로 **조용히** 줄었고 게이트는 전부 초록이었다.
+#:       그 판이 `chunks.jsonl` → `embed` 의 `sweep_orphans` 로 흘러 **DB 삭제까지** 초록으로 간다.
+#:    🚨 `[임의]` — 5% 는 근거 없는 첫 값이다. **판정 대기** — 팀이 정할 값이다.
+#:       (09-18 사고는 −15% 라 이 값이면 잡힌다. 그보다 작은 정상 변동이 있는지는 안 재 봤다.)
+#:    🔗 **한 곳이다** (D-209 · D-99) — `scripts/embed.py` 가 이 상수와 `shrinkage()` 를 들여 쓴다.
+#:       `app/settings.PARAMS` 로 옮기는 것이 원칙에 맞으나 이번 고침의 범위 밖이었다.
+SHRINK_LIMIT = 0.05
+
+
+def shrinkage(old: dict[str, int], new: dict[str, int], limit: float = SHRINK_LIMIT) -> list[str]:
+    """이전 판 대비 **`limit` 을 넘게 줄어든 층**을 사람이 읽을 줄로 낸다. 없으면 빈 리스트.
+
+    🔴 **늘어난 것·새로 생긴 층은 보지 않는다** — 막는 것은 「조용히 사라지는 것」뿐이다.
+    🚨 **층이 통째로 사라진 것**(새 판에 키가 없음)도 줄어든 것이다 — 0 으로 센다 (D-220).
+    ★ `chunk`(파일 대 파일)와 `embed`(DB 대 선언)가 **같은 함수**를 쓴다 (D-99).
+    """
+    out = []
+    for key, before in sorted(old.items()):
+        after = new.get(key, 0)
+        if before <= 0 or after >= before:
+            continue
+        drop = (before - after) / before
+        if drop > limit:
+            out.append(f"{key}: {before:,} → {after:,} (−{before - after:,} · −{drop:.1%})")
+    return out
+
+
+def layer_counts(rows: list[dict]) -> dict[str, int]:
+    """전체 + 층(`fragment_id`)별 청크 수. 🚨 층 키가 없는 옛 행은 「(층 없음)」으로 센다."""
+    c: collections.Counter[str] = collections.Counter()
+    for r in rows:
+        c["전체"] += 1
+        c[str(r.get("fragment_id") or "(층 없음)")] += 1
+    return dict(c)
+
+
+def previous_counts(path: pathlib.Path) -> dict[str, int] | None:
+    """이전 판 `chunks.jsonl` 의 수. **없으면 `None`** — 첫 판이라 비교할 것이 없다.
+
+    🚨 파일은 있는데 0행이면 `{}` 다 — 비교 기준이 0 이라 래칫은 아무것도 막지 않는다.
+       ⛔ 깨진 JSON 은 삼키지 않는다 — 예외 그대로 멈춘다 (D-220).
+    """
+    if not path.exists():
+        return None
+    return layer_counts(
+        [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    )
+
 
 #: 「제8조(부당한 표시 또는 광고행위의 금지)」처럼 **제목뿐인 조 머리 행**.
 #: 🔴 2026-09-12 오후 — 이런 청크를 **담지 않는다** (D-159 · D-195).
@@ -213,6 +265,11 @@ def from_annex() -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser(description="[P5] 조문·별표 → RAG 청크")
     ap.add_argument("--dump", action="store_true")
+    ap.add_argument(
+        "--allow-shrink",
+        action="store_true",
+        help=f"🚨 이전 판보다 {SHRINK_LIMIT * 100:.0f}%% 넘게 줄어도 쓴다 — 줄어든 이유를 안 뒤에만",
+    )
     args = ap.parse_args()
 
     # 🔴 **한쪽만 있어도 실패한다** (2026-09-10 · D-220).
@@ -269,9 +326,34 @@ def main() -> int:
     print("     🚨 DB 에 남은 옛 청크는 `scripts/embed.py` 가 거둔다 — 여기서는 안 지운다 (D-187)")
     print(f"  ⚠️ 토큰 수는 글자 상한({MAX_CHARS})으로 어림했다 — 실측은 W1 의 남은 일이다")
 
+    out = DERIVED / "chunks.jsonl"
+    # 🔴 **하한 래칫** (2026-09-20 · D-254) — 이전 판보다 크게 줄면 **쓰기 전에** 멈춘다.
+    #    ⛔ 종전 가드는 「두 층이 다 비었나」뿐이라 −15% 가 초록으로 지나갔다 (09-18 조문).
+    #    ★ 미리보기(`--dump` 없이)에서도 수는 찍는다 — 쓰기 전에 보이게.
+    prev = previous_counts(out)
+    shrunk = shrinkage(prev, layer_counts(rows)) if prev is not None else []
+    if shrunk:
+        print(
+            f"\n🔴 이전 판 대비 {SHRINK_LIMIT:.0%} 넘게 줄었다 — data/derived/{out.name}",
+            file=sys.stderr,
+        )
+        for line in shrunk:
+            print(f"   {line}", file=sys.stderr)
+        print(
+            "   🚨 이 판이 `embed` 로 가면 DB 의 청크가 그만큼 **지워진다** (sweep_orphans · D-187).\n"
+            "   먼저 왜 줄었는지 본다 — 추출기 입력(원문 판)·`_TITLE_ONLY`·파생물 동기화.\n"
+            "   줄어든 것이 맞다고 판단했으면:\n"
+            "     uv run python -m preprocess.chunk --dump --allow-shrink",
+            file=sys.stderr,
+        )
+        if args.dump and not args.allow_shrink:
+            print("   ⛔ 쓰지 않았다 — 이전 판이 그대로 남아 있다.", file=sys.stderr)
+            return 1
+        if args.dump:
+            print("   ⚠️ --allow-shrink — 줄어든 판을 쓴다 (위 수를 기록에 남긴다)", file=sys.stderr)
+
     if args.dump:
-        out = DERIVED / "chunks.jsonl"
-        with out.open("w", encoding="utf-8") as f:
+        with out.open("w", encoding="utf-8", newline="\n") as f:
             for r in rows:
                 f.write(json.dumps(store.stamp(r, "law_go_kr"), ensure_ascii=False) + "\n")
         print(f"  💾 → {out.relative_to(ROOT)}")

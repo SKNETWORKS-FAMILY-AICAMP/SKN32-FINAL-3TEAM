@@ -2,6 +2,7 @@
 
   uv run python -m preprocess.split --dry-run   # 무엇이 어디로 가는지만 본다
   uv run python -m preprocess.split --write     # split_manifest.json 을 쓴다
+  uv run python -m preprocess.split --write --allow-shrink   # 🚨 봉인이 줄어드는 것을 **보고** 받아들일 때만
 
 ──────────────────────────────────────────────────────────────
 ★ **라벨의 출처는 셋이고, 이 파일은 ① 만 다룬다** (2026-09-09)
@@ -92,6 +93,7 @@ import pathlib
 import random
 
 from app.settings import PARAMS
+from preprocess import labels as label_store
 
 FTC_PHRASES = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
@@ -115,8 +117,16 @@ def _jsonl(p: pathlib.Path) -> list[dict]:
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
-#: 🔴 분할이 읽는 입력 전부. 이 셋이 1바이트라도 다르면 뒤의 수가 전부 달라진다.
+#: 🔴 분할이 읽는 입력 전부. 이 넷이 1바이트라도 다르면 뒤의 수가 전부 달라진다.
+#: 🆕 2026-09-17 — **사람이 붙인 라벨**이 넷째다. 파일 수가 붙이는 사람마다 늘므로
+#:    목록을 고정하지 않고 `label_store.files()` 로 받는다 (이름 순으로 고정된다).
+#: 🚨 `labels` 가 아니라 `label_store` 로 들여온다 — `ftc_docs()` 등이 지역변수
+#:    `labels` 를 쓰고 있어 모듈 이름과 겹친다. 겹치면 조용히 가려진다.
 INPUTS = (FTC_PHRASES, CASEBOOK, HF)
+
+
+def inputs() -> tuple[pathlib.Path, ...]:
+    return INPUTS + tuple(label_store.files())
 
 
 def fingerprint() -> dict[str, dict]:
@@ -131,7 +141,7 @@ def fingerprint() -> dict[str, dict]:
       「같은 커밋이면 같은 결과」는 이 프로젝트에서 참이 아니다.
     """
     got: dict[str, dict] = {}
-    for f in INPUTS:
+    for f in inputs():
         b = f.read_bytes() if f.exists() else b""
         got[f.as_posix()] = {
             "sha256": hashlib.sha256(b).hexdigest() if b else None,
@@ -179,14 +189,22 @@ def ftc_docs() -> list[dict]:
     got = []
     for r in json.loads(FTC_PHRASES.read_text(encoding="utf-8")):
         labels = sorted({u["label"] for u in (r.get("유형") or [])})
-        if not labels or not r.get("문구"):
+        # 🔄 **2026-09-17 — 「이유」 문구를 들고 나온다** (D-232 (A) · D-234).
+        #    ⛔ 종전 조건은 `not r.get("문구")` 라 **주문에 문구가 없으면 문서를 통째로 버렸다.**
+        #       그래서 이유만 있는 **502건이 train 에도 못 들어갔다** — 회수를 켜도 여기서 막혔다.
+        #    🔴 **둘을 따로 들고 나간다.** 봉인(평가)은 주문 문구만 보고, 학습에만 이유가 들어간다
+        #       — 평가 라벨은 조문이나 사람이 붙여야 한다 (D-172).
+        order = [str(x) for x in (r.get("문구") or [])]
+        reason = [str(x) for x in (r.get("문구_이유") or [])]
+        if not labels or not (order or reason):
             continue
         got.append(
             {
                 "doc_id": f"ftc:{r['seq']}",
                 "원천": "ftc_decisions_body",
                 "유형": labels,
-                "문구": [str(x) for x in r["문구"]],
+                "문구": order,
+                "문구_이유": reason,  # 🆕 학습 전용 — 봉인 대상이 아니다
                 "단위": "문장",
             }
         )
@@ -216,6 +234,22 @@ def casebook_docs() -> list[dict]:
             }
         )
     return got
+
+
+def guide_docs() -> list[dict]:
+    """🆕 **사람이 붙인 해설서 라벨** (2026-09-17 · D-172).
+
+    ⛔ 이 문이 없어서 `labels/오한빈.jsonl` 248행이 파이프라인에 **한 번도 닿지 않았다.**
+       골든셋 provenance 에 해설서가 0행이었다 — 「남은것」 ①의 실체다.
+
+    🔴 **평가(test_sentence) 자리다.** D-172 가 「평가 라벨은 사람이나 조문이 붙인다」라
+       적었고 이것은 사람이 붙인 것이다. 학습으로 보내면 평가할 것이 다시 0 이 된다.
+    🚨 상한을 걸지 않는다 — `ftc` 는 pool 이 커서 `EVAL_TARGET` 이 상한처럼 쓰이지만
+       해설서 라벨은 **사람 손으로 만든 희소 자원**이라 전량 쓴다. 대신 아래 `tally` 가
+       원천별로 찍어 어느 수가 어디서 왔는지 보인다 (D-160).
+    🔴 「범위 밖」 85행은 **들어오지 않는다** — `preprocess/labels.py` 머리말의 이유다.
+    """
+    return label_store.docs()
 
 
 def approved_docs() -> list[dict]:
@@ -250,7 +284,13 @@ def plan(seed: int = 20260909) -> dict:
     single = [d for d in ftc if len(d["유형"]) == 1]
     multi = [d for d in ftc if len(d["유형"]) > 1]
 
-    have = collections.Counter(d["유형"][0] for d in single)
+    # 🔄 **봉인 후보는 「주문 문구가 있는 문서」뿐이다** (2026-09-17 · D-234).
+    #    🚨 이유 문구는 **문서 라벨을 내려 붙인 것**이고 전수 채택률이 39.7% 다 —
+    #       평가에 쓰면 자를 자기가 만든 잡음으로 삼는 꼴이다 (D-172).
+    #    ★ 이 한 줄이 「평가셋 구성 규칙은 안 바꾼다」를 집행한다.
+    sealable = [d for d in single if d["문구"]]
+
+    have = collections.Counter(d["유형"][0] for d in sealable)
     order = sorted(have, key=lambda x: have[x])
     need = {t: min(have[t], EVAL_TARGET) for t in have}
 
@@ -262,7 +302,7 @@ def plan(seed: int = 20260909) -> dict:
     #    ★ 축을 나누면 pool 을 21개까지 흔들어도 봉인 60개가 고정된다 (실측 확인).
     rnd_pool = random.Random(seed)
     rnd_neg = random.Random(seed)
-    pool = sorted(single, key=lambda d: d["doc_id"])
+    pool = sorted(sealable, key=lambda d: d["doc_id"])
     rnd_pool.shuffle(pool)
 
     sealed: dict[str, dict] = {}
@@ -282,8 +322,13 @@ def plan(seed: int = 20260909) -> dict:
 
     # 🔴 사례집은 **사전 쪽**이다 (D-155) — 낱말 시험지를 만들지 않는다. 위 ① 참조.
     term = casebook_docs()
-    train = [d for d in pool if d["doc_id"] not in sealed] + multi + neg_train + term
-    sent = list(sealed.values()) + neg_eval
+    # 🔴 **train 은 `single` 전체에서 봉인분만 뺀다** — `pool`(봉인 후보)이 아니다.
+    #    ⛔ `pool` 로 두면 「이유만 있는 문서」가 train 에서도 빠진다. 그것이 회수분이다.
+    train = [d for d in single if d["doc_id"] not in sealed] + multi + neg_train + term
+    # 🆕 **사람이 붙인 해설서 라벨은 전량 평가다** (2026-09-17 · D-172 · guide_docs 참조).
+    #    🚨 `sealed`(ftc 봉인)와 **따로 센다** — 한 수에 두 원천을 평균하지 않는다 (D-160).
+    guide = guide_docs()
+    sent = list(sealed.values()) + guide + neg_eval
 
     def tally(rows: list[dict]) -> dict[str, int]:
         c: collections.Counter = collections.Counter()
@@ -294,6 +339,10 @@ def plan(seed: int = 20260909) -> dict:
 
     def phrases(rows: list[dict]) -> int:
         return sum(len(d["문구"]) for d in rows)
+
+    def phrases_reason(rows: list[dict]) -> int:
+        """🆕 이유 문구 — **주문과 섞어 세지 않는다** (D-172 · 한 숫자가 두 과제를 평균한다)."""
+        return sum(len(d.get("문구_이유") or []) for d in rows)
 
     sent_pos = tally(sent)
     term_pos = tally(term)
@@ -324,11 +373,17 @@ def plan(seed: int = 20260909) -> dict:
         "sizes": {
             "train": {"문서": len(train), "문구": phrases(train)},
             "test_sentence": {"문서": len(sent), "문구": phrases(sent)},
+            # 🆕 원천별로 따로 센다 — 한 수에 두 원천을 평균하지 않는다 (D-160)
+            "test_sentence_ftc봉인": {"문서": len(sealed), "문구": phrases(list(sealed.values()))},
+            "test_sentence_해설서사람라벨": {"문서": len(guide), "문구": phrases(guide)},
             "사전(사례집)": {"문서": len(term), "문구": phrases(term)},
         },
         "counts": {
             "train": tally(train),
             "test_sentence": sent_pos,
+            # 🆕 유형별로도 원천을 가른다 — 어느 유형이 사람 라벨로 섰는지 보이게
+            "test_sentence_ftc봉인": tally(list(sealed.values())),
+            "test_sentence_해설서사람라벨": tally(guide),
             "사전(사례집)": term_pos,
         },
         "negatives": {
@@ -345,15 +400,25 @@ def plan(seed: int = 20260909) -> dict:
             "train": [
                 "ftc_decisions_body(비봉인·다중라벨)",
                 "mfds_hf_ingredient_board(비봉인)",
-                "mfds_special_use_guide",
                 "주입본[P10]",
             ],
-            "test_sentence": ["ftc_decisions_body(봉인)", "mfds_hf_ingredient_board(봉인·음성)"],
+            "test_sentence": [
+                "ftc_decisions_body(봉인)",
+                "mfds_hf_ingredient_board(봉인·음성)",
+                "mfds_special_use_guide(사람이 붙인 라벨 · D-172)",
+            ],
         },
         "same_source": ["ftc_decisions_body"],
         "excluded_from_eval": {
             "다중라벨_문서": len(multi),
             "이유": "의결서가 두 호를 함께 걸면 인용 문구가 어느 호인지 적혀 있지 않다",
+            # 🆕 「범위 밖」은 **적법이 아니다** — 음성으로 쓰면 Precision 이 낙관적으로 나온다
+            "범위밖_행": label_store.out_of_scope(),
+            "범위밖_이유": (
+                "붙인 사람이 「별표1 여덟 유형 밖」이라 찍은 것이지 「적법」이 아니다. "
+                "해설서는 심의에서 삭제 판정을 받은 문구라 광고물 단위로는 문제가 있었다. "
+                "음성 표본으로 넣을지는 판정 대기 (D-59 「범위 밖」 자리)"
+            ),
         },
         "assign": {
             **{d["doc_id"]: "train" for d in train},
@@ -362,10 +427,40 @@ def plan(seed: int = 20260909) -> dict:
     }
 
 
+#: 봉인 평가셋의 배정값. `plan()` 의 `assign` 이 이 이름으로 적는다.
+SEALED = "test_sentence"
+
+
+def sealed_lost(old: dict, new: dict) -> list[str]:
+    """이전 판에서 봉인됐는데 **새 판에서 봉인이 아닌** id — 사라졌거나 train 으로 넘어간 것.
+
+    🔴 **봉인 평가셋은 줄면 안 된다** (2026-09-20 · D-254 · 감사 §2 golden).
+       ⛔ 종전 `--write` 는 옛 `split_manifest.json` 과 비교하지 않고 덮었다. 입력 한 줄이 빠지면
+          봉인 문서가 조용히 빠지고, 옛 판과 새 판의 지표가 **다른 시험지로 잰 수**가 된다.
+       🚨 수만 세지 않고 **id 를 본다** — 하나 빠지고 하나 들어오면 수는 같아도 시험지가 바뀐다.
+       ★ **더해지는 것은 막지 않는다** — 사람 라벨이 늘면 봉인이 는다.
+    """
+    before = {k for k, v in (old.get("assign") or {}).items() if v == SEALED}
+    after = {k for k, v in (new.get("assign") or {}).items() if v == SEALED}
+    return sorted(before - after)
+
+
+def _previous() -> dict | None:
+    """이전 판 분할. **없으면 `None`** — 첫 판이다. ⛔ 깨진 JSON 은 삼키지 않는다 (D-220)."""
+    if not OUT.exists():
+        return None
+    return json.loads(OUT.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="골든셋 분할 [P12] — 출처 분리 · 단위 분리")
     ap.add_argument("--write", action="store_true", help=f"{OUT} 로 쓴다")
     ap.add_argument("--seed", type=int, default=20260909, help="재현 조건 (D-54)")
+    ap.add_argument(
+        "--allow-shrink",
+        action="store_true",
+        help="🚨 봉인 평가셋에서 빠지는 id 가 있어도 쓴다 — 이유를 안 뒤에만",
+    )
     a = ap.parse_args()
 
     m = plan(a.seed)
@@ -399,9 +494,35 @@ def main() -> int:
     print(f"  ★ 사전 쪽으로 간 사례집 — {m['sizes']['사전(사례집)']['문서']}문서")
     print("  🚨 ftc 슬라이스는 학습과 같은 기관이다 — 원천 편향은 못 잰다 (same_source).")
 
+    # 🔴 **봉인이 줄면 멈춘다** (2026-09-20 · D-254) — 쓰기 전에, 미리보기에서도 보인다.
+    #    🚨 비율 문턱이 없다 — 봉인은 **한 건이라도** 빠지면 멈춘다. 시험지는 고정이 약속이다.
+    prev = _previous()
+    lost = sealed_lost(prev, m) if prev is not None else []
+    if lost:
+        n_old = sum(1 for v in (prev or {}).get("assign", {}).values() if v == SEALED)
+        n_new = sum(1 for v in m["assign"].values() if v == SEALED)
+        print(f"\n  🔴 봉인 평가셋에서 빠지는 id {len(lost)}개 — 봉인 {n_old} → {n_new}")
+        for k in lost[:10]:
+            print(f"     {k}")
+        if len(lost) > 10:
+            print(f"     … 외 {len(lost) - 10}개")
+        print("     🚨 이대로 쓰면 이전 판과 **다른 시험지**로 잰 지표가 된다.")
+        print("     먼저 입력이 왜 바뀌었는지 본다 (라벨 파일 · 추출 판 · seed).")
+        print("     빠지는 것이 맞다고 판단했으면:")
+        print("       uv run python -m preprocess.split --write --allow-shrink")
+        if a.write and not a.allow_shrink:
+            print("     ⛔ 쓰지 않았다 — 이전 판이 그대로 남아 있다.")
+            return 1
+
     if a.write:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 🔴 **개행으로 끝낸다.** 안 그러면 커밋마다 `end-of-file-fixer` 훅이 이 파일을 고친다
+        #    (2026-09-17 실측 — 원장에 커밋되기 시작하면서 드러났다).
+        #    ⛔ `_matrix/README.md` 가 같은 사고를 이미 적어 두었다: *"JSON.stringify 가 개행으로
+        #       끝나지 않아 커밋마다 end-of-file-fixer 훅이 걸렸다."* 같은 실수를 다른 생성기에서 했다.
+        OUT.write_text(
+            json.dumps(m, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
         print(f"\n  → {OUT}")
         print("  🚨 **사전과 주입은 이 파일을 읽어 train 만 쓴다** — 안 그러면 누수다.")
     else:

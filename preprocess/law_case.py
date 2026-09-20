@@ -22,10 +22,12 @@ import sys
 import xml.etree.ElementTree as ET
 
 from collect import store
+from preprocess.mask import apply_policy
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-LAW = ROOT / "data" / "raw" / "law"
 SOURCE = "law_go_kr"
+# 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
+LAW = store.family_path(SOURCE)
 
 FIELDS = {
     "prec": (
@@ -58,6 +60,16 @@ FIELDS = {
 }
 KIND = {"prec": "판례", "decc": "재결례"}
 
+#: 🔴 사람 이름이 올 수 있는 **텍스트 칸** — 여기만 `apply_policy(…, "law_go_kr")` 를 지난다 (2026-09-19 · 2인 확인).
+#:    ⛔ 2026-09-19 반출 검사 — 재결례 「이유」에 「법인의 대표자 손○○」이 **원천이 안 가린 채** 있었다.
+#:    ★ 정책은 `POLICY["law_go_kr"]` = 사람 축만. 업체명·처분청은 공표된 판단문의 일부라 남긴다.
+#:    🚨 식별 칸(일련번호·사건번호·일자·기관명)과 참조조문은 부르지 않는다 — 사람 이름이 올 자리가 아니고,
+#:       직함 규칙이 「법원명」 같은 칸에서 오탐을 낼 이유만 생긴다.
+TEXT_FIELDS = {
+    "prec": ("판시사항", "판결요지"),
+    "decc": ("주문", "청구취지", "이유", "재결요지"),
+}
+
 
 def parse(path: pathlib.Path, kind: str) -> dict:
     root = ET.parse(path).getroot()
@@ -65,6 +77,8 @@ def parse(path: pathlib.Path, kind: str) -> dict:
     for f in FIELDS[kind]:
         el = root.find(f".//{f}")
         row[f] = (el.text or "").strip() if el is not None and el.text else ""
+        if f in TEXT_FIELDS[kind] and row[f]:
+            row[f] = apply_policy(row[f], "", SOURCE)
     return store.stamp(row, SOURCE)
 
 
@@ -103,7 +117,7 @@ def main() -> int:
     if args.dump:
         for kind, rows in out_rows.items():
             out = store.derived_dir(".") / f"law_{kind}.jsonl"
-            with out.open("w", encoding="utf-8") as f:
+            with out.open("w", encoding="utf-8", newline="\n") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
             print(f"  💾 {len(rows)}행 → {out.relative_to(ROOT)}")

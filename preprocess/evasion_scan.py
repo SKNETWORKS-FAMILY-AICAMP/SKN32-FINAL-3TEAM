@@ -20,6 +20,19 @@
   D-18 에서 **G1(미추출)** 이다. PDF 를 원본으로 보관하는 것과 이미지를 뽑아 쓰는 것은
   다르고, 그 경계가 여기다. `pdfplumber` 의 `extract_text()` 만 부른다.
 
+🔴 **무엇을 쓰는가 — 「산출물이 없다」가 아니다** (2026-09-20 · D-254 · 감사 §2 scan).
+   ⛔ 런처 `scan` 과 `preprocess.SCANNERS` 주석은 「라벨을 만들지 않는다 · 산출물이 없다」라 적는다.
+      **라벨은 안 만들지만 파일은 쓴다** —
+        늘      `data/derived/<폴더>/text/*.txt`  🚨 **마스킹 전** PDF 전문 캐시 (`pdf_text`).
+                원문캐시 부류라 저장소로 안 옮긴다 (`derived_manifest.KIND_RULES` · D-251)
+        --dump  `data/derived/<폴더>/evasion_scan.json` · `quotes.json` — 인용은 마스킹을 지난다
+   🚨 `--dump` 없이 돌려도 캐시는 생긴다 — 「세기만 한다」를 「아무것도 안 남는다」로 읽지 않는다.
+
+🔴 **인자는 원문 폴더 이름이고 마스킹 정책은 원천 id 로 찾는다** (2026-09-20 · D-254).
+   ⛔ 종전에는 폴더 이름(`mfds_press_pdf`)을 그대로 정책 키로 넘겨 `MaskPolicyError` 로 멈췄다 —
+      정책은 원천 id(`mfds_press`)에 걸려 있다. 폴더 → 원천은 `collect.store.FAMILY_OF` 가 정본이다
+      (`policy_source()`). ⛔ POLICY 에 폴더 이름을 더해 막지 않는다 — 판정 단위가 둘로 갈린다.
+
 🚨 **공정위와 같은 계수기를 쓴다** (`preprocess.text.evasion` · D-117).
   따로 두면 두 소스의 수를 비교할 수 없다 — 「공정위 0건 · 식약처 N건」이 결론인데
   계수기가 다르면 그 비교가 성립하지 않는다.
@@ -40,10 +53,32 @@ from preprocess.text import LEX, evasion, quoted
 
 #: 🚨 소스 이름이 곧 경로다 — `data/raw/<이름>/` 을 읽고 `data/derived/<이름>/` 에 쓴다.
 #:    수집기가 그렇게 저장하므로(store.raw_dir) 여기서 규칙을 다시 만들지 않는다.
+#: 🔗 넷째 값 `text/` 는 **마스킹 전 PDF 전문 캐시**다 — `scripts/derived_manifest.py` `KIND_RULES` 가 이 폴더 이름으로
+#:    원문캐시(저장소로 안 옮긴다)를 가른다. 이름을 바꾸면 양쪽을 같이 (D-99 · D-251).
 def paths(source: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
     raw = pathlib.Path("data/raw") / source
     der = pathlib.Path("data/derived") / source
     return raw, der / "evasion_scan.json", der / "quotes.json", der / "text"
+
+
+def policy_source(folder: str) -> str:
+    """원문 폴더 이름 → 마스킹 정책을 찾을 **원천 id** (D-254). 🔗 표는 `collect.store.FAMILY_OF` 한 곳 (D-99).
+
+        mfds_press_pdf  →  mfds_press      (부속 폴더 — FAMILY_OF 가 가리킨다)
+        mfds_casebook   →  mfds_casebook   (표에 없으면 폴더 = 원천)
+
+    🔴 **두 원천 이상이 같은 폴더를 쓰면 멈춘다** (예: `ftc`) — 어느 원천의 정책인지 고르는 것은 판정이다.
+       ⛔ 첫 번째를 조용히 고르지 않는다 (D-220).
+    """
+    owners = sorted(sid for sid, fams in store.FAMILY_OF.items() if folder in fams)
+    if not owners or folder in owners:
+        return folder
+    if len(owners) == 1:
+        return owners[0]
+    raise SystemExit(
+        f"🔴 원문 폴더 {folder!r} 를 원천 {owners} 가 함께 쓴다 — 어느 원천의 마스킹 정책인지 못 고른다.\n"
+        "  `collect/store.py` 의 FAMILY_OF 를 보고 원천을 하나로 정한다 (D-220)."
+    )
 
 
 #: 🚨 [P1] 파싱 산출물을 캐시한다. **PDF 를 매번 다시 열지 않는다** — 107건에 2분 넘게
@@ -81,7 +116,7 @@ def pdf_text(path: pathlib.Path, cache: pathlib.Path, *, refresh: bool = False) 
             parts.append(page.extract_text() or "")
     text = "\n".join(parts)
     cache.mkdir(parents=True, exist_ok=True)
-    cached.write_text(text, encoding="utf-8")
+    cached.write_text(text, encoding="utf-8", newline="\n")
     return text
 
 
@@ -155,6 +190,8 @@ def main() -> int:
     a = ap.parse_args()
 
     RAW, OUT, QUOTES, CACHE = paths(a.source)
+    # 🔴 **파일을 열기 전에** 정책 원천을 정한다 — 모르면 PDF 를 다 연 뒤가 아니라 여기서 멈춘다.
+    policy = policy_source(a.source)
     files = store.current_files(RAW, "*.pdf")[: a.limit]
     if not files:
         print(f"🚨 {RAW} 에 PDF 가 없다 — 먼저 수집기를 돌린다.")
@@ -186,7 +223,7 @@ def main() -> int:
                 #    인용된 광고 문구에는 업체명·제품명이 섞여 들어온다.
                 #    🚨 이 원천에 masking: 선언이 없으면 여기서 **멈춘다** (D-72 fail-closed).
                 #       조용히 통과시키면 「선언이 없다」와 「불필요하다」가 구분되지 않는다.
-                quotes.append((p.stem, apply_policy(q, "", a.source)))
+                quotes.append((p.stem, apply_policy(q, "", policy)))
         # 🚨 텍스트가 비면 **스캔 PDF**다 — 0건이 「없다」인지 「못 읽었다」인지 갈린다
         if len(text) < 200:
             empty += 1
@@ -237,10 +274,13 @@ def main() -> int:
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+        OUT.write_text(
+            json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+        )
         QUOTES.write_text(
             json.dumps([{"doc": d, "quote": q} for d, q in quotes], ensure_ascii=False, indent=1),
             encoding="utf-8",
+            newline="\n",
         )
         print(f"\n→ {OUT} ({n}건)\n→ {QUOTES} ({len(quotes)}회 · 고유 {len(uniq)}종)")
     return 0

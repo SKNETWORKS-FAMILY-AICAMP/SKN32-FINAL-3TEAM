@@ -2,7 +2,8 @@
 
     uv run python launcher.py db-reset                 # 미리보기 — 아무것도 안 지운다
     uv run python launcher.py db-reset --yes           # 볼륨을 지우고 스키마를 다시 세운다
-    uv run python launcher.py db-reset --yes --data    # 파생물 재추출 → 적재 → 임베딩까지
+    uv run python launcher.py db-reset --yes --data    # 역할별 — 정본: 재추출→적재→청킹→임베딩→원장
+                                                       #          사본: 받은 파생물로 적재→임베딩
 
 🔴 **왜 있나 — 09-13(이서은)·09-14(박수진) 이틀 연속 같은 자리에서 막혔다.**
    두 사람 다 `docker compose down -v` 로 **자력으로** 풀었다. 즉 처방은 이미 있었는데
@@ -24,6 +25,20 @@
    ★ 대신 **출력(파생물)이 비었는지**를 본다. 그게 더 나은 검사다 — 원천이 없을 때뿐 아니라
      추출이 조용히 0건을 낸 모든 경우를 잡는다 (D-149 의 「보낸 수가 아니라 들어간 수」).
 
+🔴 **역할을 지우기 전에 본다** (2026-09-20 · D-254 · 감사 §1-5).
+   ⛔ 종전 `--data` 는 **볼륨을 먼저 지우고** 추출 모듈을 직접 불러 `only_canonical`·`needs_raw` 를
+      우회했다. 사본은 원문이 없어 추출이 빈 것을 내고 **빈 DB** 가 남았고, 원문이 있는 사본은
+      파생물을 덮어쓴 뒤 `chunk --dump`(정본 전용)에서 멈춰 **반쪽 DB** 가 남았고, 정본은 파생물
+      원장(`derived_manifest.jsonl`)이 낡은 채로 남았다.
+   ★ 이제 —
+       정본(canonical)  지우기 전  합치지 않은 팀원 원문 확인(`raw_inbox.check_pending`)
+                        지운 뒤    조문·별표 재추출 → load → chunk --dump → embed
+                                   → `data-refresh --no-golden`(원장 쓰기 + 올리기 전 검사 · 같은 단계표)
+       사본(replica)    지우기 전  받은 파생물(조문·별표·청크)이 있는지 — 없으면 `data-sync` 안내 후 멈춤
+                        지운 뒤    load → embed 만. **재추출·청킹을 하지 않는다** (D-226 · 만들지 않고 받는다)
+       역할 없음        `--data` 를 거부한다 — 어느 쪽인지 모르면 만들지도 받지도 않는다 (D-220)
+   🚨 판단은 `derived_manifest.role()` 한 곳이다 — 여기서 다시 만들지 않는다 (D-99).
+
 ⬜ **여기서 다시 만들지 않는 것** (D-188) —
    ① **원문.** git 으로 안 온다 (D-19). `launcher.py inventory` 가 이 기기에 없는 것을 낸다.
    ② **골든셋·금지표현 사전 등 다른 파생물.** `--data` 는 법령·별표만 다시 뽑는다 —
@@ -43,6 +58,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scripts import derived_manifest as dm  # noqa: E402 — 위 sys.path 뒤에 들여온다
+
 LAUNCHER = ROOT / "launcher.py"
 DERIVED = ROOT / "data" / "derived"
 #: 🔴 재추출이 **정말 뭔가를 냈는지** 보는 자리. 비었으면 멈춘다 — 빈 파생물이 임베딩까지
@@ -52,14 +69,16 @@ DERIVED_CHECKS: tuple[tuple[str, str], ...] = (
     ("조문", "law_article.jsonl"),
     ("별표", "law_norm"),
 )
+#: 🔴 사본이 **받아 와야 하는** 것 — 재추출을 안 하므로 청크까지 받은 판이 있어야 한다 (D-247).
+REPLICA_CHECKS: tuple[tuple[str, str], ...] = (*DERIVED_CHECKS, ("청크", "chunks.jsonl"))
 #: 🚨 DB 를 **기다리지 않는다** — 아래 `accounts()` 참조. `[임의]` — 로컬 도커다.
 CONNECT_TIMEOUT_S = 3
 
 
-def _derived_empty() -> list[str]:
-    """재추출 결과가 빈 것들의 이름. 🚨 **파일이 있는지가 아니라 내용이 있는지**를 본다."""
+def _derived_empty(checks: tuple[tuple[str, str], ...] = DERIVED_CHECKS) -> list[str]:
+    """비어 있는 파생물 이름. 🚨 **파일이 있는지가 아니라 내용이 있는지**를 본다."""
     empty = []
-    for label, name in DERIVED_CHECKS:
+    for label, name in checks:
         p = DERIVED / name
         if p.is_dir():
             if not any(f.stat().st_size > 0 for f in p.glob("*.jsonl")):
@@ -146,34 +165,86 @@ def reset_schema() -> int:
     return 0
 
 
-def reload_data() -> int:
-    """파생물을 **다시 뽑아** 적재하고 임베딩한다.
+def preflight_data(who: str | None) -> int:
+    """🔴 `--data` 를 **지우기 전에** 역할별로 확인한다 (2026-09-20 · D-254). 0 이면 진행해도 된다.
 
-    🔴 **재추출이 앞에 온다.** `onboard` §7 은 `load` → `chunk` → `embed` 뿐이어서, 그 순서를
-       따른 사람은 **낡은 파생물로 DB 를 세운다.** 2026-09-14 에 `citation()` 커버리지가
-       38.1% 였던 원인이 정확히 그것이다 — 코드는 09-12 에 고쳤는데 파생물이 09-10 판이었다.
+    ⛔ 종전에는 볼륨을 지운 **뒤에야** 추출이 빈 것을 냈는지 알았다 — 멈춰도 DB 는 이미 비었다.
+    🚨 미리보기에서도 돈다 — 「지우면 어떻게 되는지」를 지우기 전에 보여 준다.
     """
-    extract: list[tuple[str, tuple[str, ...]]] = [
-        ("조문 재추출", (sys.executable, "-m", "preprocess.law_article", "--dump")),
-        # 🚨 `--write` 다. `law_norm.py` 의 docstring 은 `--dump` 라 적혀 있으나 쓰기 플래그는
-        #    이쪽이다 — 문서대로 돌린 사람은 별표가 통째로 빠진 채 다음 단계로 간다.
-        ("별표 재추출", (sys.executable, "-m", "preprocess.law_norm", "--write")),
-    ]
-    load: list[tuple[str, tuple[str, ...]]] = [
-        ("DB 적재", (sys.executable, str(LAUNCHER), "load")),
-        ("청킹", (sys.executable, str(LAUNCHER), "chunk", "--dump")),
-        ("임베딩", (sys.executable, str(LAUNCHER), "embed")),
-    ]
+    if who is None:
+        print(
+            "\n  🔴 `--data` — 이 기기 역할(DATA_ROLE)이 설정 안 됐다. 지우기 전에 멈춘다 (D-220)."
+        )
+        print("     역할을 모르면 파생물을 만들지도(정본) 받지도(사본) 않는다.")
+        print("     · 클론 A·팀원 — uv run python launcher.py data-setup --role replica")
+        print("     · 클론 B     — uv run python launcher.py data-setup --role canonical")
+        return 1
+    if who == "replica":
+        if missing := _derived_empty(REPLICA_CHECKS):
+            print(f"\n  🔴 받은 파생물이 없다 — {' · '.join(missing)}. 지우기 전에 멈춘다.")
+            print("     ⛔ 사본은 재추출하지 않는다 (D-226) — 정본이 올린 판을 받는다:")
+            print("       uv run python launcher.py data-sync")
+            print("     ⬜ 아무것도 안 지웠다.")
+            return 1
+        return 0
+    # 정본 — 🔴 합치지 않은 팀원 원문이 있으면 재추출이 **그 원문을 빼고** 파생물을 만든다 (D-250).
+    #    런처 `needs_raw` 가 부르는 것과 같은 함수다 (D-99).
+    from scripts import raw_inbox  # noqa: PLC0415 — 정본에서만 필요하다
 
-    step = 5
-    for label, args in extract:
+    if raw_inbox.check_pending():
+        print("     ⬜ 아무것도 안 지웠다 — `raw-import` 뒤에 다시 부른다.")
+        return 1
+    return 0
+
+
+def _steps(label_args: list[tuple[str, tuple[str, ...]]], step: int) -> tuple[int, int]:
+    """단계를 차례로 돈다. 🔴 한 단계가 죽으면 **거기서 멈춘다** (D-220). 반환 — (코드, 다음 번호)."""
+    for label, args in label_args:
         print(f"\n  {step}. {label}")
         step += 1
         if code := _run(*args):
-            # 🔴 한 단계가 죽으면 **거기서 멈춘다.** 뒤 단계가 「성공」으로 찍히면
-            #    무엇이 비었는지 모르는 DB 가 남는다 (D-72 fail-closed).
+            # 🔴 뒤 단계가 「성공」으로 찍히면 무엇이 비었는지 모르는 DB 가 남는다.
             print(f"  🔴 {label} 실패 — 여기서 멈춘다. 뒤 단계는 돌리지 않았다.")
-            return code
+            return code, step
+    return 0, step
+
+
+def reload_data(who: str | None) -> int:
+    """역할에 맞게 DB 를 다시 채운다. 🚨 `preflight_data()` 를 **지우기 전에** 통과한 뒤에만 부른다.
+
+    🔴 **정본은 재추출이 앞에 온다.** `onboard` §7 은 `load` → `chunk` → `embed` 뿐이어서, 그 순서를
+       따른 사람은 **낡은 파생물로 DB 를 세운다.** 2026-09-14 에 `citation()` 커버리지가
+       38.1% 였던 원인이 정확히 그것이다 — 코드는 09-12 에 고쳤는데 파생물이 09-10 판이었다.
+    🔴 **사본은 재추출·청킹을 하지 않는다** (D-226) — 받은 파생물로 load → embed 만 (D-254).
+    """
+    py = sys.executable
+    if who == "replica":
+        print("\n  ⬜ 사본 — 재추출·청킹을 하지 않는다. 받은 파생물로 적재한다 (D-226)")
+        code, _ = _steps(
+            [
+                ("DB 적재", (py, str(LAUNCHER), "load")),
+                ("임베딩", (py, str(LAUNCHER), "embed")),
+            ],
+            5,
+        )
+        return code
+    if who != "canonical":  # 🚨 preflight 가 먼저 막는다 — 여기 오면 호출 순서가 틀린 것이다
+        print("  🔴 역할을 모른다 — 적재하지 않는다 (D-220)")
+        return 1
+
+    # ⛔ 조문·별표는 `preprocess.EXTRACTORS` 에 없어 `data-refresh <원천>` 으로 못 부른다 —
+    #    그래서 추출만 직접 부르고, 앞(원문 확인)·뒤(원장)는 런처의 같은 단계표를 탄다 (D-99).
+    code, step = _steps(
+        [
+            ("조문 재추출", (py, "-m", "preprocess.law_article", "--dump")),
+            # 🚨 `--write` 다. `law_norm.py` 의 docstring 은 `--dump` 라 적혀 있으나 쓰기 플래그는
+            #    이쪽이다 — 문서대로 돌린 사람은 별표가 통째로 빠진 채 다음 단계로 간다.
+            ("별표 재추출", (py, "-m", "preprocess.law_norm", "--write")),
+        ],
+        5,
+    )
+    if code:
+        return code
 
     # 🔴 **추출이 0 을 냈는지 여기서 본다** — 종료코드 0 은 「돌았다」이고 「뭔가 나왔다」가
     #    아니다 (D-149). ⛔ 이 검사가 없으면 빈 파생물이 임베딩까지 흘러가고, `embed` 의
@@ -185,13 +256,23 @@ def reload_data() -> int:
         print("       uv run python launcher.py inventory")
         return 1
 
-    for label, args in load:
-        print(f"\n  {step}. {label}")
-        step += 1
-        if code := _run(*args):
-            print(f"  🔴 {label} 실패 — 여기서 멈춘다. 뒤 단계는 돌리지 않았다.")
-            return code
-    return 0
+    code, step = _steps(
+        [
+            ("DB 적재", (py, str(LAUNCHER), "load")),
+            ("청킹", (py, str(LAUNCHER), "chunk", "--dump")),
+            ("임베딩", (py, str(LAUNCHER), "embed")),
+            # 🔴 **파생물을 다시 만들었으니 원장도 다시 쓴다** (D-254). ⛔ 종전에는 여기서 끝나
+            #    `derived_manifest.jsonl` 이 낡은 채 남았다. 원문 확인 → 원장 쓰기 → 올리기 전 검사를
+            #    `launcher.py data-refresh` 의 **같은 단계표**로 돈다 — 베끼지 않는다 (D-99).
+            #    🚨 외부 전송(`data-publish`)·git 은 하지 않는다 — 끝에 칠 명령을 그쪽이 찍는다.
+            ("파생물 원장 · 올리기 전 검사", (py, str(LAUNCHER), "data-refresh", "--no-golden")),
+        ],
+        step,
+    )
+    if code:
+        print("     🚨 DB 는 섰을 수 있다 — 원장·올리기가 남았다:")
+        print("       uv run python launcher.py data-refresh --no-golden")
+    return code
 
 
 def main() -> int:
@@ -204,6 +285,10 @@ def main() -> int:
         print("🔴 docker 가 없다 — Docker Desktop 을 켜고 다시 부른다.")
         return 1
 
+    # 🔴 **역할을 지우기 전에 본다 — 미리보기에서도** (2026-09-20 · D-254 · 감사 §1-5).
+    #    🚨 `role()` 은 오타면 여기서 멈춘다 (D-220) — 지운 뒤에 멈추지 않게 맨 앞이다.
+    who = dm.role()
+
     # 🔴 **연결보다 출력이 먼저다** (2026-09-14 실측). 처음에는 `accounts()` 가 먼저였고,
     #    붙는 동안 화면이 비어서 **멈춘 것처럼 보였다** — 사람이 `Ctrl-C` 를 눌렀다.
     #    ⛔ 기다리게 만드는 도구는 무엇을 기다리는지 먼저 말한다.
@@ -213,8 +298,16 @@ def main() -> int:
     print("\n  무엇이 사라지나")
     _report_accounts(found)
     print("  ⬜ 청크·임베딩·거버넌스 표는 파생물에서 되세운다 — `--data` 가 그 일을 한다.")
-    print("  🔴 이 기기에 원문이 없으면 되세울 수 없다 — git 으로 안 온다 (D-19).")
-    print("     uv run python launcher.py inventory   로 없는 것을 본다")
+    print(f"  이 기기 역할: {who or '설정 안 됨'}")
+    if who == "canonical":
+        print("  🔴 정본 — `--data` 는 원문에서 다시 뽑는다. 원문이 없으면 되세울 수 없다 (D-19).")
+        print("     uv run python launcher.py inventory   로 없는 것을 본다")
+    elif who == "replica":
+        print("  ⬜ 사본 — `--data` 는 받은 파생물로만 채운다. 원문은 필요 없다 (D-226).")
+
+    # 🔴 `--data` 의 선결은 **지우기 전에** 본다 — 미리보기에서도 같은 답을 낸다.
+    if args.data and (code := preflight_data(who)):
+        return code
 
     if not args.yes:
         # 🔴 fail-closed — **기본이 미리보기다.** 지우는 것은 명시해야 돈다 (D-220).
@@ -228,7 +321,7 @@ def main() -> int:
     _seed_guide(found)
 
     if args.data:
-        if code := reload_data():
+        if code := reload_data(who):
             return code
     else:
         print("\n  ⬜ 데이터는 안 실었다 — 스키마와 시드까지다.")

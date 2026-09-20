@@ -207,7 +207,7 @@ def main() -> int:
         return 0
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(decisions, where, orphan), encoding="utf-8")
+    OUT.write_text(render(decisions, where, orphan), encoding="utf-8", newline="\n")
     print(
         f"✅ {OUT.relative_to(ROOT).as_posix()}  "
         f"({OUT.stat().st_size:,}B)\n"

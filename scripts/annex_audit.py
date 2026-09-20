@@ -191,6 +191,7 @@ def main() -> int:
         BASELINE.write_text(
             json.dumps(merged, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
         print(f"\n💾 기준선 {len(merged)}건 → {BASELINE.relative_to(ROOT)}")
         return 0
