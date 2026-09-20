@@ -25,11 +25,22 @@
 """
 
 import json
+import sys
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# 🔴 출력이 **파이프**로 나가도 한글·기호를 쓴다 (2026-09-20 · CI 실측 · D-254).
+#    ⛔ CI 러너(Windows · cp1252)에서 첫 print 「등재 …」가 `UnicodeEncodeError` 로 죽었다 —
+#       로컬 콘솔은 UTF-8 이라 `check` 는 초록이었다. `scripts/derived_manifest.py` `_utf8_out` 과 **같은 처방**이다
+#       (그쪽 09-19). 이 파일은 모듈 수준 스크립트라 import 해 쓰지 않고 옮겨 적었다 — 고치면 둘 다 (D-99).
+#    ★ 콘솔(이미 UTF-8)은 건드리지 않는다 · `errors="replace"` 로 뭉개 죽음만 감추지 않는다 (D-162).
+for _s in (sys.stdout, sys.stderr):
+    _enc = (getattr(_s, "encoding", "") or "").lower().replace("-", "").replace("_", "")
+    if _enc != "utf8" and hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8")
 with open(ROOT / "docs/03_데이터/_matrix/sources.json", encoding="utf-8") as _f:
     SRC = json.load(_f)
 BY_ID = {s["id"]: s for s in SRC}

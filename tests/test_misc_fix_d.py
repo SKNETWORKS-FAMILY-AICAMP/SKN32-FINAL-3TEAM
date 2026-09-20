@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -92,8 +93,20 @@ def _gen_copy(tmp: pathlib.Path) -> pathlib.Path:
 
 
 def _run(script: pathlib.Path) -> subprocess.CompletedProcess:
+    """🔴 CI 러너(Windows · cp1252)의 파이프를 **어느 기기에서나** 재현한다 (2026-09-20 · CI 실측).
+
+    ⛔ 이 줄 없이는 로컬(UTF-8 콘솔)에서 초록이고 CI 에서만 `UnicodeEncodeError` 로 죽었다 —
+       `test_derived_manifest.py` 의 09-19 처방과 같다.
+    """
+    env = dict(os.environ, PYTHONIOENCODING="cp1252")
     return subprocess.run(  # noqa: S603
-        [sys.executable, str(script)], capture_output=True, text=True, check=False
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        check=False,
     )
 
 

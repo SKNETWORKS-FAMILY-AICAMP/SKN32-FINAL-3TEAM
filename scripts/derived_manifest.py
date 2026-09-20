@@ -842,6 +842,7 @@ def _utf8_out() -> None:
        첫 줄 「역할 · …」에서 `UnicodeEncodeError` 로 죽었다. 한국어 Windows(cp949)는 한글은 되지만
        🔴 같은 기호에서 같은 식으로 죽는다. 콘솔은 원래 UTF-8 이라 로컬 `check` 에서는 안 보였다.
     ★ 콘솔(이미 UTF-8)은 건드리지 않는다. ⛔ `errors="replace"` 로 글자를 뭉개 죽음만 감추지 않는다 (D-162).
+    🔄 같은 처방이 `scripts/gen_registry.py` 머리에도 있다(모듈 수준 스크립트라 옮겨 적음) — 고치면 둘 다 (D-99).
     """
     for s in (sys.stdout, sys.stderr):
         enc = (getattr(s, "encoding", "") or "").lower().replace("-", "").replace("_", "")
