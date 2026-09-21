@@ -338,6 +338,9 @@ def triage(out: pathlib.Path) -> int:
        이메일  무료 메일 / 그 밖(기관·업체) — 계정은 안 본다
     """
     rows = list(_pii_scan())
+    # 🆕 2026-09-22 — 넓은 거름(🟡)과 잔여 꼴도 같은 원값 표에 싣는다. 화면에는 흔한 말이면 그 말, 아니면 글자 수만
+    rows += [(rel, "넓은 거름", no, v, line, s, e) for rel, no, v, line, s, e in _loose_scan()]
+    rows += list(_residual_scan())
     out.parent.mkdir(parents=True, exist_ok=True)
     feat: collections.Counter = collections.Counter()
     distinct: dict[tuple[str, str], set[str]] = collections.defaultdict(set)
@@ -350,6 +353,12 @@ def triage(out: pathlib.Path) -> int:
                 fx = f"이름{len(raw)}자"
             elif kind == "이메일":
                 fx = "무료메일" if raw.lower().split("@")[-1] in _FREE_MAIL else "기관·업체"
+            elif kind == "NFD 한글":
+                fx = f"자모{len(raw)}자"
+            elif kind == "부분 가림":
+                fx = "가림기호"
+            elif kind in ("넓은 거름", "붙여쓴 와·과", "드문 성씨"):
+                fx = _word_feature(raw)
             else:
                 fx = kind
             feat[(rel, kind, fx)] += 1
@@ -360,9 +369,20 @@ def triage(out: pathlib.Path) -> int:
             f.write(f"{rel}\t{kind}\t{no}\t{clean[0]}\t{clean[1]}\t{clean[2]}\t{fx}\n")
     print(f"후보 {len(rows):,}건 → {out}")
     print("  🚨 이 파일에는 **원값**이 있다 — 기기에서만 연다. 대화·커밋·저장소에 붙이지 않는다\n")
-    print(f"  {'파일':<28}{'유형':<12}{'특징':<10}{'건':>6}{'서로 다른 값':>12}")
+    print(f"  {'파일':<28}{'유형':<12}{'특징':<16}{'건':>6}{'서로 다른 값':>12}")
     for (rel, kind, fx), n in sorted(feat.items(), key=lambda x: (x[0][0], x[0][1], -x[1])):
-        print(f"  {rel:<28}{kind:<12}{fx:<10}{n:>6}{len(distinct[(rel, kind)]):>12}")
+        print(f"  {rel:<28}{kind:<12}{fx:<16}{n:>6}{len(distinct[(rel, kind)]):>12}")
+    # 🆕 2026-09-22 — 유형마다 「흔한 말 / 목록 밖」 합계. **목록 밖만 사람이 원값 표에서 본다**
+    tot: collections.Counter = collections.Counter()
+    for (_rel, kind, fx), n in feat.items():
+        tot[(kind, "흔한말" if fx.startswith("흔한말:") else "그 밖")] += n
+    print(
+        "\n  유형별 합계 — 흔한 말(값을 보여도 되는 보통명사 · `[임의]` 목록) / 그 밖(사람이 원값 표에서 본다)"
+    )
+    for kind in dict.fromkeys(k for k, _ in tot):
+        print(
+            f"    {kind:<12} 흔한 말 {tot[(kind, '흔한말')]:>6,} · 그 밖 {tot[(kind, '그 밖')]:>6,}"
+        )
     return 0
 
 
@@ -393,16 +413,11 @@ def _loose_rule() -> re.Pattern[str]:
     )
 
 
-def people_loose(files: list[pathlib.Path] | None = None) -> list[tuple[str, int, str]]:
-    """넓은 거름 후보 — `(상대경로, 줄, 가린 예)`. `people()` 이 이미 잡은 자리는 빼지 않는다(따로 센다).
+def _lines(files: list[pathlib.Path] | None):
+    """반출 대상 파생물의 줄 — `(상대경로, 줄 번호, 줄)`. 🚨 원문캐시는 안 본다(묶음 밖).
 
-    🚨 원문캐시는 안 본다(묶음 밖). 걸린 값은 첫 글자만 보인다(`_hint`).
+    🔗 `_pii_scan` 과 같은 거름이다 — 🆕 2026-09-22 넓은 거름·잔여 계측이 같이 쓰려고 떼어 냈다 (D-99).
     """
-    from preprocess.mask import _name_head as name_head  # noqa: PLC0415
-
-    rule = _loose_rule()
-    _t, not_name, _s = _mask_rules()
-    out: list[tuple[str, int, str]] = []
     targets = files if files is not None else sorted(DERIVED.rglob("*"))
     for f in targets:
         if not f.is_file() or f.suffix not in SCANNED:
@@ -411,13 +426,226 @@ def people_loose(files: list[pathlib.Path] | None = None) -> list[tuple[str, int
         if kind_of(rel)[0] == "원문캐시":
             continue
         for no, line in enumerate(f.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
-            for m in rule.finditer(line):
-                name = m.group(1)
-                head = name_head(name)
-                if {name, head} & (_LOOSE_SKIP | not_name):
+            yield rel, no, line
+
+
+def _loose_scan(files: list[pathlib.Path] | None = None):
+    """넓은 거름 후보를 **원문 그대로** — `(상대경로, 줄, 원값, 줄 전체, 시작, 끝)`. 🚨 화면에 그대로 내지 않는다."""
+    from preprocess.mask import _name_head as name_head  # noqa: PLC0415
+
+    rule = _loose_rule()
+    _t, not_name, _s = _mask_rules()
+    for rel, no, line in _lines(files):
+        for m in rule.finditer(line):
+            name = m.group(1)
+            if {name, name_head(name)} & (_LOOSE_SKIP | not_name):
+                continue
+            yield rel, no, name, line, m.start(1), m.end(1)
+
+
+def people_loose(files: list[pathlib.Path] | None = None) -> list[tuple[str, int, str]]:
+    """넓은 거름 후보 — `(상대경로, 줄, 가린 예)`. `people()` 이 이미 잡은 자리는 빼지 않는다(따로 센다).
+
+    🚨 원문캐시는 안 본다(묶음 밖). 걸린 값은 첫 글자만 보인다(`_hint`).
+    """
+    return [(rel, no, _hint(name)) for rel, no, name, _l, _s, _e in _loose_scan(files)]
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-22 — 마스킹 **잔여 계측** (재기만 한다 · 막지 않는다)
+# ══════════════════════════════════════════════════════════
+#  ⛔ `preprocess/mask.py` 의 주석 넷이 「드문 성씨 · 붙여 쓴 와·과 · 단독 직함은 `--survey` 가 잔여로 센다」고 적었는데
+#     `mask --survey` 는 **업체 앵커만** 잰다(2026-09-22 클론 B 실행 · 코드 판독). 약속한 계측이 없었다 (D-188).
+#     클론 A 인계 3판 §0 ⑦ 도 그 약속을 믿고 이 수를 기다렸다.
+#  ★ 여기서 잰다 — 반출 검사와 같은 대상(묶음으로 나가는 파생물)이라 「나가는 것에 무엇이 남았나」를 바로 센다.
+#  🚨 전부 `[임의]` 다 — 낱말 목록·꼴은 실측 전 추측이다. **계측에만 쓰고 막는 데 쓰지 않는다.**
+#     막을지(엄격으로 올릴지)는 이 수를 보고 팀장이 정한다 (클론 A 인계 3판 §1-6).
+#: 흔한 성씨 목록(`mask._SURNAMES`)에 없는 성씨 — 두 글자 성 먼저(한 글자에 먹히지 않게). 목록에 이미 있는 것은 실행 때 뺀다
+_RARE_SURNAMES = [
+    "제갈",
+    "남궁",
+    "황보",
+    "선우",
+    "독고",
+    "사공",
+    "서문",
+    "동방",
+    "편",
+    "방",
+    "왕",
+    "탁",
+    "국",
+    "봉",
+    "어",
+    "용",
+    "위",
+    "명",
+    "기",
+    "반",
+    "라",
+    "나",
+    "모",
+    "범",
+    "빈",
+    "피",
+    "함",
+    "현",
+    "호",
+    "감",
+    "견",
+    "계",
+    "당",
+    "두",
+    "맹",
+    "묵",
+    "부",
+    "빙",
+    "상",
+    "순",
+    "승",
+    "시",
+    "아",
+    "옥",
+    "온",
+    "요",
+    "운",
+    "웅",
+    "음",
+    "이",
+    "제",
+    "종",
+    "좌",
+    "주",
+    "지",
+    "창",
+    "추",
+    "팽",
+    "평",
+    "필",
+    "하",
+    "허",
+    "형",
+]
+#: 가림 기호 — 원천이 이름 **일부만** 가린 꼴(「김O수」·「김철○」). 전부 가린 「김○○」은 마스킹이 이미 지운다
+_MASK_GLYPHS = "○OＯ*＊△▲◯xX"
+#: 이름 뒤에 올 수 있는 것 — 경계 · 흔한 조사
+_NAME_END = r"(?=[\s,.)）」』'\"·]|[은는이가을를의에도와과]|$)"
+#: 계측 화면에서 **값을 보여 줘도 되는** 흔한 말 `[임의]` — 성씨 글자로 시작해 거름에 걸리는 보통명사.
+#:    ⛔ 거르는 데 쓰지 않는다(`_LOOSE_SKIP` 과 다르다) — 「목록 안 / 밖」을 가르는 데만 쓴다. 목록 밖만 사람이 본다.
+_COMMON_WORDS = frozenset(
+    [
+        "주장",
+        "문구",
+        "문의",
+        "지역",
+        "유의",
+        "유의점",
+        "전문",
+        "전문가",
+        "이의",
+        "주소",
+        "명의",
+        "소재",
+        "소재지",
+        "선임",
+        "신청",
+        "신고",
+        "조사",
+        "조치",
+        "진술",
+        "명칭",
+        "명단",
+        "표시",
+        "표기",
+        "고지",
+        "고객",
+        "고발",
+        "구매",
+        "공급",
+        "공정",
+        "공개",
+        "경우",
+        "경영",
+        "경쟁",
+        "정보",
+        "정정",
+        "정도",
+        "이용",
+        "이유",
+        "이번",
+        "지위",
+        "지정",
+        "지급",
+        "안내",
+        "인정",
+        "우려",
+        "유지",
+        "유형",
+        "양도",
+        "방법",
+        "방식",
+        "위반",
+        "용도",
+        "기간",
+        "기준",
+        "반면",
+        "명시",
+        "상품",
+        "성명",
+        "제공",
+        "제출",
+        "제조",
+        "판매",
+        "광고",
+        "원료",
+        "원고",
+        "피고",
+    ]
+)
+
+
+def _residual_rules() -> dict[str, re.Pattern[str]]:
+    _t, _n, surnames = _mask_rules()
+    rare = [s for s in _RARE_SURNAMES if s not in surnames]
+    head = rf"(?:{_LOOSE_ROLES})[\s:：(（,]{{1,3}}"
+    g = re.escape(_MASK_GLYPHS)
+    return {
+        # 「[대표]와 박영희」 — 마스킹이 앞 이름만 지우고 붙여 쓴 「와·과」 뒤를 남긴 꼴 (`mask._NAME_JOIN` ⬜)
+        "붙여쓴 와·과": re.compile(rf"\[대표\](?:와|과)\s*([{surnames}][가-힣]{{1,2}}){_NAME_END}"),
+        # 「대표이사 제갈공명」 — 성씨 목록 밖이라 마스킹도 넓은 거름도 못 본다
+        "드문 성씨": re.compile(rf"{head}((?:{'|'.join(rare)})[가-힣]{{1,2}}){_NAME_END}"),
+        # 「대표 김O수」 — 원천이 일부만 가렸다
+        "부분 가림": re.compile(
+            rf"{head}([{surnames}](?:[{g}][가-힣]|[가-힣][{g}]))(?![{g}]){_NAME_END}"
+        ),
+        # 한글 자모가 풀린 꼴(NFD) — `[가-힣]` 규칙이 **전부** 못 본다
+        "NFD 한글": re.compile(r"([\u1100-\u11ff]+)"),
+    }
+
+
+def _residual_scan(files: list[pathlib.Path] | None = None):
+    """잔여 꼴 — `(상대경로, 유형, 줄, 원값, 줄 전체, 시작, 끝)`. 🚨 원값이다 — 화면에 그대로 내지 않는다."""
+    from preprocess.mask import _name_head as name_head  # noqa: PLC0415
+
+    rules = _residual_rules()
+    _t, not_name, _s = _mask_rules()
+    for rel, no, line in _lines(files):
+        for kind, pat in rules.items():
+            for m in pat.finditer(line):
+                v = m.group(1)
+                if kind != "NFD 한글" and {v, name_head(v)} & (_LOOSE_SKIP | not_name):
                     continue
-                out.append((rel, no, _hint(name)))
-    return out
+                yield rel, kind, no, v, line, m.start(1), m.end(1)
+
+
+def _word_feature(value: str) -> str:
+    """계측 화면의 특징 — 흔한 말이면 **그 말**(사람이 아니다), 아니면 글자 수만."""
+    from preprocess.mask import _name_head as name_head  # noqa: PLC0415
+
+    for w in (value, name_head(value)):
+        if w in _COMMON_WORDS:
+            return f"흔한말:{w}"
+    return f"목록밖·{len(value)}자"
 
 
 def _report_loose(found: list[tuple[str, int, str]]) -> None:
