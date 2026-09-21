@@ -611,10 +611,10 @@ def _check_data_env() -> int:
     else:
         print("🟡 DATA_STORE 가 비었다 — data-sync·data-publish 가 멈춘다 (data-setup)")
     dev = env.setting("DATA_DEVICE")
-    if dev and not store.DEVICE_RE.fullmatch(dev):
-        print(
-            "🔴 DATA_DEVICE 모양이 틀렸다 — 영문·숫자·`._-` 32자 이내 (data-setup --device <별칭>)"
-        )
+    # 🔄 2026-09-21 — 모양만 보던 것을 `store.device_problem` 로 (예약어 `canonical` 도 잡는다 · D-99)
+    why = store.device_problem(dev, env.setting("DATA_ROLE")) if dev else None
+    if why:
+        print(f"🔴 DATA_DEVICE {why} (data-setup --device <별칭>)")
         red += 1
     elif dev:
         print(f"✅ DATA_DEVICE {dev}")

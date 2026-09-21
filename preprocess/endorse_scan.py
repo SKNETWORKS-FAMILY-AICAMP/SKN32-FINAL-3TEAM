@@ -140,14 +140,24 @@ def scan(source: str = SOURCE_ID) -> tuple[dict, list[tuple[pathlib.Path, dict, 
 
 
 def candidates(core: list[tuple[pathlib.Path, dict, dict]], out: pathlib.Path) -> int:
-    """🔴 사람이 볼 후보 — **마스킹을 지난 인용만** 쓴다. 사건명·피심정보는 쓰지 않는다. 쓰는 곳은 `build/`."""
-    from preprocess.mask import apply_policy  # noqa: PLC0415 — 쓸 때만 무겁다
+    """🔴 사람이 볼 후보 — **마스킹을 지난 인용만** 쓴다. 사건명·피심정보는 쓰지 않는다. 쓰는 곳은 `build/`.
+
+    🔄 2026-09-21 (D-248) — ⛔ 종전에는 인용을 **뽑은 뒤 한 개씩** `apply_policy(q, "", …)` 로 가렸다.
+       앵커가 `""` 라 **사건명 머리·개인 피심인(`[대표]`)·앵커 변형 축이 통째로 꺼졌고**, 2패스
+       (`doc_org_names`)도 문서가 아니라 인용 한 개만 봤다. 「A푸드 3개월 먹고 느꼈어요」의 상호와
+       개인 피심인 실명이 후보 파일에 그대로 실렸다. 이 모듈 머리말의 약속(「마스킹을 지난 뒤에만」)과 달랐다.
+    ★ 이제 `ftc_extract` 와 같은 순서다 (D-99) — **앵커를 만들고 → 이유 전체를 가리고 → 그다음 뽑는다.**
+    🚨 계측(`classify` 의 `문구후보`)은 여전히 **원문**에서 센다 — D-255 의 수가 움직이지 않게. 그래서 후보 파일의
+       문구 수는 계측의 수와 다를 수 있다(가림이 인용을 깨거나 길이를 바꾼 경우). 두 축이다.
+    """
+    from preprocess.mask import anchor_ftc, apply_policy  # noqa: PLC0415 — 쓸 때만 무겁다
 
     out.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with out.open("w", encoding="utf-8", newline="\n") as w:
         for p, f, c in core:
-            qs = [apply_policy(q, "", MASK_KEY) for q in ad_quotes(f.get("이유", ""))]
+            _, bare = anchor_ftc(ET.parse(p).getroot())
+            qs = ad_quotes(apply_policy(f.get("이유", ""), bare, MASK_KEY))
             rec = {"id": p.stem, "사건번호": f.get("사건번호", ""), **c, "문구": qs}
             w.write(json.dumps(rec, ensure_ascii=False) + "\n")
             n += 1

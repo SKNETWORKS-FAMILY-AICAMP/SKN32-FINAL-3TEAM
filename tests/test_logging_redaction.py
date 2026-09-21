@@ -27,6 +27,21 @@ _LEAKY = (
     "GET /search?q=%EB%A9%B4%EC%97%AD%EB%A0%A5%EC%9D%B4%20%EC%91%A5%EC%91%A5 HTTP/1.1",
     "text=면역력이 쑥쑥",
     "prompt: 이 제품은 암을 예방합니다",
+    # 🆕 2026-09-21 — ⛔ 위 넷에는 **쉼표도 괄호도 따옴표도 없었다.** 실제 광고 문구는 쉼표를 흔하게 쓰고,
+    #    그 모양에서 값이 끊겨 뒷부분이 그대로 남았다(실행 확인). 픽스처가 입력 분포를 안 닮으면
+    #    음성 대조(D-203)가 있어도 새는 모양을 못 본다.
+    "text=우리 제품은, 면역력이 쑥쑥",
+    "text=우리 제품은] 면역력이 쑥쑥",
+    "text={우리 제품은} 면역력이 쑥쑥",
+    'q="우리 제품은 면역력이 쑥쑥" 이라고 적혀 있었다',
+    "sentence='이 제품은 암을 예방합니다'",
+)
+
+#: 비밀 — 🆕 2026-09-21 ⛔ `\b` 경계가 `_` 를 낱말로 봐서 `api_key=`·`access_token=` 이 안 가려졌다.
+_SECRET = (
+    "api_key=SECRETVALUE123",
+    "access_token=SECRETVALUE123",
+    '"GET /x?api_key=SECRETVALUE123 HTTP/1.1" 200',
 )
 
 #: 지우면 안 되는 것 — **넘치게 지운다고 아무거나 지우면 로그가 쓸모없어진다.**
@@ -35,6 +50,7 @@ _KEEP = (
     '"GET /docs HTTP/1.1" 200',
     "DB 접속 실패 원인=OperationalError",
     "chunk_id=abc123 · part_no=2",
+    "token_count=512 · keyword_n=3",  # 🆕 열쇠말이 **낱말 안**에 있으면 안 건다 (경계를 넓힌 반대 대조)
 )
 
 
@@ -46,6 +62,14 @@ def test_문구가_로그에_안_남는다(line: str) -> None:
     for leak in ("면역력", "쑥쑥", "암을 예방", "%EB%A9%B4"):
         assert leak not in out, f"🔴 로그에 문구가 남았다: {out}"
     assert "가림" in out, f"🔴 가린 흔적이 없다 — 지워졌는지 알 수 없다: {out}"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("line", _SECRET)
+def test_비밀값이_로그에_안_남는다(line: str) -> None:
+    """🔴 열쇠말 앞에 `_` 가 붙어도 가린다 — `api_key`·`access_token` 은 흔한 이름이다."""
+    out = redact(line)
+    assert "SECRETVALUE123" not in out, f"🔴 비밀값이 남았다: {out}"
 
 
 @pytest.mark.gate

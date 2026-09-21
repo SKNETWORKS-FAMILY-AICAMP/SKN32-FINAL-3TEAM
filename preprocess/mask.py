@@ -261,6 +261,39 @@ _PERSON_NAME = rf"[{_SURNAMES}][가-힣]{{1,3}}"
 #: 이름 뒤에 붙는 한 글자 조사. 🚨 이름의 마지막 글자와 겹치므로 **4자일 때만** 뗀다.
 _NAME_PARTICLE = frozenset("을를은는이가의과와에도로")
 
+#: 🔴 **조사의 정본** (2026-09-21 · D-99) — 이름·상호 **뒤에 붙는 말**. 세는 쪽(`_PARTICLE` ·
+#:    `_ONLY_PARTICLE`)과 지우는 쪽(`_mask_people`)이 **이 한 표**에서 파생한다.
+#:    ⛔ 종전에는 세 벌이었다 — 세는 쪽 둘은 「로·만·까지·부터·에게·에서·으로·및」을 알았는데
+#:       `_mask_people` 의 목록은 `[은는이가을를의에과와도께]` 뿐이라, 「피심인 김가나**로부터**」·
+#:       「김가나**만**」의 실명이 **그대로 남았다.** 직함이 없으니 `_TITLED_PERSON` 도 못 잡고,
+#:       반출 검사(`derived_manifest` 개인식별)도 「직함+실명」·「사건명 피심인」만 봐서 못 잡았다.
+#:    🚨 `_NAME_PARTICLE`(위)은 축이 다르다 — **4자 이름의 끝 한 글자**를 뗄지 보는 글자 집합이라 여기 안 합친다.
+PARTICLES: tuple[str, ...] = (
+    "에게",
+    "에서",
+    "으로",
+    "부터",
+    "까지",
+    "과",
+    "와",
+    "은",
+    "는",
+    "이",
+    "가",
+    "을",
+    "를",
+    "의",
+    "도",
+    "만",
+    "로",
+    "및",
+    "에",
+)
+
+#: 사람 이름 뒤에만 붙는 말 — 호칭·존칭·인용. `_mask_people` 만 쓴다 (상호 뒤에는 안 붙는다).
+#: 🚨 뒤 글자로 **앞머리만** 본다 — 「께」가 「께서」를, 「로」가 「로부터」를 덮는다.
+PERSON_TAIL: tuple[str, ...] = ("께", "한테", "씨", "님", "라는", "라고", "랑", "보다", "처럼")
+
 _NOT_NAME = frozenset(
     {
         "성명",
@@ -752,9 +785,12 @@ class Anchor(str):
     """앵커(알맹이) 문자열 + **그 사건의 개인 피심인 이름**.
 
     🔴 `str` 을 잇는 이유 — `_, bare = anchor_ftc(r)` 로 받아 `apply_policy(…, bare, "ftc")` 로 넘기는
-       호출부가 여섯 곳이다(ftc_triage · ftc_extract · ftc_reason_probe · mask 안). 인자를 늘리면
+       호출부가 여럿이다(ftc_triage · ftc_extract · ftc_reason_probe · endorse_scan · mask 안). 인자를 늘리면
        **한 곳이라도 빠뜨린 곳에서 조용히 `[업체]`** 로 돌아간다 (D-99). 값에 실어 보내면 빠뜨릴 자리가 없다.
     🚨 문자열 연산(`strip` · 슬라이스)을 거치면 `people` 이 떨어진다 — `mask()` 가 **받은 그대로** 읽는다.
+    ⛔ 2026-09-21 — 이 설계가 막는 것은 「인자를 깜빡함」이지 「앵커를 **아예 안 뽑음**」이 아니었다.
+       `endorse_scan` 이 `apply_policy(q, "", "ftc")` 로 앵커 축을 통째로 끈 채 돌았다. 그래서 수를 적지 않고
+       게이트(`test_ftc_정책으로_가리는_호출부는_앵커를_싣는다`)가 호출부를 **세어** 본다.
     """
 
     people: tuple[str, ...] = ()
@@ -781,11 +817,12 @@ def _mask_people(text: str, people: tuple[str, ...], log: list[dict] | None = No
        지워지지 않게 한다(「교육이수증」의 「이수」).
     ⚠️ 이름과 **같은 꼴의 보통명사**(「이수 과정」)는 가린다 — 그 문서에 한해 그 이름이 피심인이라
        원천이 적었으므로, 덜 가리는 쪽보다 이쪽을 택했다(개인 식별 우선).
+    🔄 2026-09-21 — 뒤에 오는 조사는 `PARTICLES` + `PERSON_TAIL` 한 표에서 온다 (D-99 · 위 정본 주석).
     """
     for name in people:
         if len(name) < 2:
             continue
-        pat = re.compile(rf"(?<![가-힣]){re.escape(name)}(?=[은는이가을를의에과와도께]|[^가-힣]|$)")
+        pat = re.compile(rf"(?<![가-힣]){re.escape(name)}(?=(?:{_NAME_TAIL})|[^가-힣]|$)")
         if pat.search(text):
             _note(log, "피심인 개인", name, MASK_CEO)
             text = pat.sub(MASK_CEO, text)
@@ -964,14 +1001,18 @@ def residual_orgs(text: str) -> list[str]:
 #: 🚨 마스킹 자체는 이 함수를 쓰지 않는다 — 조사를 잘못 떼면 이름이 바뀌는데,
 #:    바뀐 이름으로 치환하면 원문이 망가진다. 세는 쪽에서만 감수한다.
 #: ⛔ 「에」가 빠져 있었다 — 「(주)대우건설**에** 대한 과징금」이 `대우건설에` 로 세어졌다.
-_PARTICLE = re.compile(r"(?:에게|에서|으로|부터|까지|과|와|은|는|이|가|을|를|의|도|만|로|및|에)$")
+#: 🔄 2026-09-21 — 목록은 `PARTICLES` 한 표에서 온다 (D-99). 뜻·순서는 종전 그대로다.
+_PARTICLE_ALT = "|".join(PARTICLES)
+_PARTICLE = re.compile(rf"(?:{_PARTICLE_ALT})$")
 
 #: 🚨 조사만 남은 후보를 버린다. 「석정개발(주)**에게**」에서 기호 뒤 캡처가 「에게」를 잡는다 —
 #:    기호(㈜·(주))는 공백 없이 이름이 붙는 것이 정상이라 공백을 요구할 수 없고,
 #:    그 대가로 조사가 걸린다. 세는 쪽에서 걷어낸다.
-_ONLY_PARTICLE = re.compile(
-    r"^(?:에게|에서|으로|부터|까지|과|와|은|는|이|가|을|를|의|도|만|로|및|에)$"
-)
+_ONLY_PARTICLE = re.compile(rf"^(?:{_PARTICLE_ALT})$")
+
+#: `_mask_people` 의 뒤 경계 — 세는 쪽이 아는 조사 ⊆ 지우는 쪽이 아는 조사 (지우는 쪽이 넓어야 한다).
+#: 🚨 정렬 키에 글자까지 넣는다 — `set` 순서는 프로세스마다 바뀌어 정규식 문자열이 판마다 달라진다.
+_NAME_TAIL = "|".join(sorted(set(PARTICLES) | set(PERSON_TAIL), key=lambda s: (-len(s), s)))
 
 
 def _drop_particle(name: str) -> str:

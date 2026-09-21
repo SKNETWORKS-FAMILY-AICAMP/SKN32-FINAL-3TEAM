@@ -123,6 +123,8 @@ mfds_casebook_2021:
   #     ① 게시 화면이 식약처 명의·사이버조사팀인가 (식품안전나라 게시판 menu_no=4806)
   #     ② 저작권법 제24조의2 제1항 단서 1~4호 해당 없음
   #     ③ 🚨 스크린샷 미취득 · 문구만 G2+NOREDIST·40자 상한 (D-133 ①②)
+  #     🔄 2026-09-21 — 위 ③ 은 **서명 당시 문언**이라 고치지 않는다. 상한은 D-249 로 120자다
+  #        (`app/settings.py` `PARAMS.quote_max_chars`). 게이트 `test_인용_상한을_적은_산문은_PARAMS_와_같다` 가 이 파일은 뺀다.
   reviewed_by: 권소라
   reviewed_at: 2026-09-17
   # 🚨 robots — mfds_casebook 과 같은 자료실 PDF 다운로드 패턴이나 도메인이 다르다

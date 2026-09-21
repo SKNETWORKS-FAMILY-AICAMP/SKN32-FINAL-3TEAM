@@ -275,6 +275,17 @@ def test_doctor_모르는_DATA_ROLE_과_틀린_DATA_DEVICE_는_빨강이다(
     assert doctor._check_data_env() == 2
 
 
+def test_doctor_팀원_기기의_예약어_별칭은_빨강이다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-09-21 — 모양은 맞아도 `canonical` 은 정본 예약어다. 정본이면 초록 (반대 대조)."""
+    from scripts import doctor
+
+    vals = {"DATA_ROLE": "replica", "DATA_STORE": "", "DATA_DEVICE": "canonical"}
+    monkeypatch.setattr("collect.env.setting", lambda k: vals.get(k, ""))
+    assert doctor._check_data_env() == 1
+    vals["DATA_ROLE"] = "canonical"
+    assert doctor._check_data_env() == 0
+
+
 def test_doctor_DATA_STORE_폴더가_없으면_빨강이다(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

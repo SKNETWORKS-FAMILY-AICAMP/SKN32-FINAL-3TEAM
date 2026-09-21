@@ -400,3 +400,55 @@ def test_publish_기록은_원장_sha_와_커밋_여부를_남긴다(
 def test_원장이_HEAD_에_없으면_미커밋으로_본다(world, monkeypatch: pytest.MonkeyPatch) -> None:
     """가짜 레포는 git 이 아니다 — 모르는 것은 「같다」로 세지 않는다 (None)."""
     assert ds.manifest_in_head() is None
+
+
+@pytest.mark.gate
+def test_중간_파일의_바이트가_틀리면_앞_파일도_안_바뀐다(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 2026-09-21 — ⛔ 종전에는 한 파일씩 「백업 → 받기」라, 두 번째 파일의 sha 가 틀리면 첫 파일은
+    이미 새 판으로 바뀐 **섞인 상태**로 멈췄다. 이제 전부 확인한 뒤에만 바꿔 끼운다."""
+    tmp, storage, canon = world
+    assert _publish(monkeypatch) == 0
+    sha_label = hashlib.sha256((canon / "data" / "derived" / LABEL).read_bytes()).hexdigest()
+    ds._obj(storage / ds.LAYOUT, sha_label).write_bytes(b"corrupted")  # 라벨 객체만 오염
+    manifest = dm.OUT.read_bytes()
+    a = _repo(tmp / "A", {GEN: b'{"text":"v1"}\n', LABEL: b"old-label\n"})
+    (a / "data" / "derived_manifest.jsonl").write_bytes(manifest)
+    _point(monkeypatch, a)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert [r["경로"] for r in ds.plan()] == [f"data/derived/{GEN}", f"data/derived/{LABEL}"]
+    assert ds.sync(yes=True) == 1
+    assert (a / "data" / "derived" / GEN).read_bytes() == b'{"text":"v1"}\n', (
+        "🔴 앞 파일만 바뀌었다"
+    )
+    assert (a / "data" / "derived" / LABEL).read_bytes() == b"old-label\n"
+    assert not list((a / "data" / "derived").rglob("*.part")), "임시 파일이 남았다"
+    assert not (tmp / "A_backup").exists(), "아무것도 안 바꿨는데 백업을 만들었다"
+
+
+@pytest.mark.gate
+def test_dry_run_도_저장소_준비를_본다(world, monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 2026-09-21 — ⛔ 종전 dry-run 은 저장소를 보기 전에 끝나 「받을 것 N개」만 말하고 0 을 냈다."""
+    tmp, _storage, _canon = world  # publish 를 안 했다 — 저장소가 비었다
+    manifest = dm.OUT.read_bytes()
+    a = _repo(tmp / "A", {})
+    (a / "data" / "derived").mkdir(parents=True)
+    (a / "data" / "derived_manifest.jsonl").write_bytes(manifest)
+    _point(monkeypatch, a)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert ds.sync(dry_run=True) == 1, "🔴 저장소에 없는데 dry-run 이 초록이다"
+    monkeypatch.setenv("DATA_STORE", "")
+    assert ds.sync(dry_run=True) == 1, "🔴 DATA_STORE 가 비었는데 dry-run 이 초록이다"
+    # 반대 대조 — 올린 뒤에는 dry-run 이 0 이고 아무것도 받지 않는다
+    monkeypatch.setenv("DATA_STORE", str(_storage))
+    _point(monkeypatch, _canon)
+    assert _publish(monkeypatch) == 0
+    _point(monkeypatch, a)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert ds.sync(dry_run=True) == 0
+    assert not (a / "data" / "derived" / GEN).exists()
+
+
+def test_크기_단위는_MiB_다() -> None:
+    assert ds._size([{"bytes": 1024 * 1024}]) == "1.0 MiB"
