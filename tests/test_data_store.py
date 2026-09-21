@@ -342,6 +342,20 @@ def test_설정은_모르는_역할과_없는_폴더를_적지_않는다(
 
 
 @pytest.mark.gate
+def test_설정은_env_와_프로세스에_같은_값으로_들어간다(tmp_path: pathlib.Path, monkeypatch) -> None:
+    """🔴 2026-09-21 (소성민 코드 리뷰 #7) — ⛔ 종전에는 `.env` 에 정리한 값, `os.environ` 에 따옴표째 원본을 넣었다.
+    같은 프로세스에서 `data-setup` → `sync` 가 이어지면 따옴표 붙은 경로로 폴더를 못 찾는다."""
+    import os
+
+    from collect import setkey
+
+    env_path = _env_file(tmp_path, monkeypatch)
+    setkey.put_setting("DATA_STORE", '"G:\\내 드라이브\\CopyLane_store"')
+    assert os.environ["DATA_STORE"] == "G:\\내 드라이브\\CopyLane_store"
+    assert "DATA_STORE=G:\\내 드라이브\\CopyLane_store" in env_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.gate
 def test_키는_설정_경로로_쓰지_않는다() -> None:
     """🚨 비밀은 `setkey`(화면에 안 뜬다)로만 — 설정 쓰기가 키를 받으면 값이 화면·기록에 남는다 (D-111)."""
     from collect import setkey
