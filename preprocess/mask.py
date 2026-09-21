@@ -1059,12 +1059,33 @@ def respondent_named(root: ET.Element) -> tuple[str, ...]:
     body = _t(root, "주문") + "\n" + _t(root, "이유")
     out: dict[str, None] = {}
     for m in _BODY_RESPONDENT.finditer(body):
-        x = _drop_particle(m.group(1))
-        if len(x) < 2 or x in out or x in _NOT_RESPONDENT or x in _NOT_NAME or _ADDR_TAIL.search(x):
-            continue
-        if re.search(rf"{_INFO_SLOT}\s*{re.escape(x)}(?=[\s(（,·]|$)", info):
-            out[x] = None
-    return tuple(out)
+        # 🔄 09-22 — 조사를 뗀 꼴과 **뗀 적 없는 꼴** 둘 다 본다. 이름 끝 글자가 조사와 겹친다(「…은」)
+        for x in dict.fromkeys((_drop_particle(m.group(1)), m.group(1))):
+            if (
+                len(x) < 2
+                or x in out
+                or x in _NOT_RESPONDENT
+                or x in _NOT_NAME
+                or _ADDR_TAIL.search(x)
+            ):
+                continue
+            in_slot = re.search(rf"{_INFO_SLOT}\s*{re.escape(x)}(?=[\s(（,·]|$)", info)
+            # 🔄 09-22 (클론 B · `--pii-triage` 재측정 · 사용자 확인) — 「피심인 [업체] 및 피심인 X」의 X 가 남았다.
+            #    X 는 피심정보내용에 있었지만 **이름 자리 밖**(「상호(대표 X)」 꼴로 추정)이었다.
+            #    ★ 이름 자리 밖은 **사람 꼴일 때만** 받는다 — 성씨로 시작하는 2~4자 · 앞이 「대표·대표자·대표이사·성명·괄호·쉼표」.
+            #      ⛔ 앞말을 안 보면 주소 낱말(「서울 **강남** 테헤란로」)이 피심인이 된다 — 반대 대조가 잡았다.
+            as_person = (
+                2 <= len(x) <= 4
+                and x[0] in _SURNAMES
+                and re.search(
+                    rf"(?:대표이사|대표자|대표|성명|[(（,])\s*[:：]?\s*{re.escape(x)}(?=[\s(（),·]|$)",
+                    info,
+                )
+            )
+            if in_slot or as_person:
+                out[x] = None
+    # 🚨 긴 것부터 — 「김가나」와 「김가나은」이 같이 있으면 긴 쪽이 먼저 지워져야 토막이 안 남는다
+    return tuple(sorted(out, key=len, reverse=True))
 
 
 def _starts_with_person(norm_head: str, people: tuple[str, ...]) -> bool:

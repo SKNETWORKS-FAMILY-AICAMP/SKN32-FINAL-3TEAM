@@ -1070,3 +1070,33 @@ def test_이름_직함_꼴은_보통명사를_건드리지_않는다(text: str) 
     from preprocess.mask import apply_policy
 
     assert apply_policy(text, "", "ftc") == text
+
+
+def test_이름_자리_밖의_피심인도_사람_꼴이면_가린다() -> None:
+    """🔴 09-22 재측정 — 「피심인 [업체] 및 피심인 X」의 X 가 남았다. 피심정보내용에는 이름 자리 밖에 있었다(이름은 가짜)."""
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    order = "1. 피심인 가나상사 및 피심인 김다은 판매하는 제품에 대하여"
+    root = _ftc_full(
+        "가나상사 외 1인의 부당한 광고행위에 대한 건",
+        "1. 가나상사 서울 중랑구\n2. 진주상회(대표 김다) 경기 수원시",
+        order,
+    )
+    _, bare = anchor_ftc(root)
+    assert "김다" in bare.named, bare.named
+    out = apply_policy(order, bare, "ftc")
+    assert "김다" not in out, out
+
+
+def test_이름_자리_밖의_말은_사람_꼴이_아니면_받지_않는다() -> None:
+    """반대 대조 — 정보칸 가운데의 보통명사(성씨로 시작하지 않거나 불용어)는 피심인으로 보지 않는다."""
+    from preprocess.mask import anchor_ftc
+
+    root = _ftc_full(
+        "주식회사 가나의 부당한 광고행위에 대한 건",
+        "주식회사 가나 서울 강남 테헤란로 1 회사 대표이사 ○○○",
+        "피심인 회사는 …",
+        "피심인 주장에 대하여 본다.",
+    )
+    _, bare = anchor_ftc(root)
+    assert bare.named == ()
