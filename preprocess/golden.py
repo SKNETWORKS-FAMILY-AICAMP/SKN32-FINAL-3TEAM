@@ -181,6 +181,16 @@ def build() -> tuple[list[dict], dict]:
                 "🔴 주입본에 `src`(원본 doc_id)가 없다 — 낡은 산출물이다.\n"
                 "  먼저: uv run python -m preprocess.inject --dump"
             )
+        # 🔄 2026-09-21 (전수 재검토 I12) — 🔴 **주입본의 원본이 지금 분할에서도 train 인가.**
+        #    ⛔ 있기만 보고 행마다 `split: train` 으로 박았다. 분할을 다시 쓴 뒤(`--allow-shrink` · 봉인 변경) 주입을
+        #       다시 안 돌리면, 이제 **봉인된 test 문서**에서 만든 변형 문장이 train 에 들어갔다(실측 재현) — 누수다.
+        #       `inject` 는 train 원본만 쓰므로(분할 대조도 한다) 여기서 어긋나면 주입본이 낡은 것이다.
+        if assign.get(r["src"]) != "train":
+            raise SystemExit(
+                f"🔴 주입본의 원본 {r['src']} 이 지금 분할에서 train 이 아니다({assign.get(r['src'])}) — 낡은 주입본이다.\n"
+                "  🚨 그대로 물질화하면 평가 문서에서 만든 문장이 학습에 들어간다.\n"
+                "  먼저: uv run python -m preprocess.inject --dump  (순서 전체는 launcher.py golden --write)"
+            )
         rows.append(
             {
                 "id": f"inj:{r['rule_id']}:{r['src']}",
