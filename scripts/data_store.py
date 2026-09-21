@@ -47,7 +47,7 @@ from scripts import derived_manifest as dm
 
 ROOT = dm.ROOT
 LAYOUT = "copylane-derived"
-#: 사본이 덮어쓸 때 옛 파일을 옮겨 두는 곳 — **레포 밖**이다 (git status 에 안 뜬다)
+#: 사본이 덮어쓸 때 옛 파일을 복사해 두는 곳 — **레포 밖**이다 (git status 에 안 뜬다)
 BACKUP = ROOT.parent / "CopyLane_backup"
 #: 🚨 `data/raw` 에 **파일이 있는지만** 본다 — 열지 않는다. `RAW_EXCEPTIONS` 에 이유와 함께 적었다.
 RAW_MARK = ROOT / "data" / "raw"
@@ -122,10 +122,10 @@ def _sha(path: pathlib.Path) -> str:
     return h.hexdigest()
 
 
-def _copy_verified(src: pathlib.Path, dest: pathlib.Path, sha: str) -> None:
-    """임시 이름으로 복사 → sha 확인 → 제자리로. 🚨 **반쯤 쓴 파일이 제자리에 남지 않는다.**
+def _stage(src: pathlib.Path, dest: pathlib.Path, sha: str) -> pathlib.Path:
+    """`dest` 옆 임시 이름(`.part`)에 복사하고 sha 를 확인한다 — **제자리에는 놓지 않는다.** 돌려주는 값은 임시 파일.
 
-    ⛔ 동기화 폴더는 「아직 다 안 내려온 파일」을 보여 줄 수 있다. sha 가 안 맞으면 놓지 않는다.
+    ⛔ 동기화 폴더는 「아직 다 안 내려온 파일」을 보여 줄 수 있다. sha 가 안 맞으면 임시 파일도 지우고 멈춘다.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
@@ -138,16 +138,12 @@ def _copy_verified(src: pathlib.Path, dest: pathlib.Path, sha: str) -> None:
             f"  원장 {sha[:16]} · 받은 것 {got[:16]}\n"
             "  🚨 동기화가 덜 끝났거나 저장소가 오염됐다. 놓지 않았다 (D-220)"
         )
-    os.replace(tmp, dest)
+    return tmp
 
 
-def _get(root: pathlib.Path, sha: str, dest: pathlib.Path) -> None:
-    src = _obj(root, sha)
-    if not src.is_file():
-        raise StoreError(
-            f"저장소에 {sha[:16]} 이 없다 — 정본에서 `data-publish` 를 안 했을 수 있다"
-        )
-    _copy_verified(src, dest, sha)
+def _copy_verified(src: pathlib.Path, dest: pathlib.Path, sha: str) -> None:
+    """임시 이름으로 복사 → sha 확인 → 제자리로. 🚨 **반쯤 쓴 파일이 제자리에 남지 않는다.**"""
+    os.replace(_stage(src, dest, sha), dest)
 
 
 def _put(root: pathlib.Path, src: pathlib.Path, sha: str) -> bool:
@@ -182,8 +178,9 @@ def git_side() -> list[str]:
 
 
 def _size(rows: list[dict[str, object]]) -> str:
+    """🔄 2026-09-21 — 1024² 로 나누므로 단위는 **MiB** 다. ⛔ 종전에는 「MB」라 적어 탐색기(10⁶)와 5% 갈렸다."""
     n = sum(int(r["bytes"]) for r in rows)  # type: ignore[arg-type]
-    return f"{n / 1024 / 1024:,.1f} MB"
+    return f"{n / 1024 / 1024:,.1f} MiB"
 
 
 def has_raw(mark: pathlib.Path | None = None) -> bool:
@@ -246,16 +243,18 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
         print(f"    {'🔄' if r in over else '⬇'} {r['경로']}")
     if len(todo) > 10:
         print(f"    … 외 {len(todo) - 10}개")
-    if dry_run:
-        print("🚨 --dry-run — 아무것도 받지 않았다")
-        return 0
-
+    # 🔄 2026-09-21 — 저장소 준비(폴더 · 객체가 다 있는가)를 **dry-run 에서도** 본다.
+    #    ⛔ 종전에는 dry-run 이 이 검사 전에 끝나, 「받을 것 42개」를 보고 실제로 돌리면
+    #       `DATA_STORE` 가 비었다거나 객체가 모자라다며 멈췄다 — 미리보기가 답을 못 줬다.
+    #    🚨 저장소 폴더를 **읽기만** 한다(이름·있음 확인). 아무것도 안 쓴다.
     try:
         root = store_root()
         # 🔴 **먼저 전부 있는지 본다** — 반만 받고 멈추면 파생물이 두 판으로 섞인다.
         lack = [r for r in todo if not _obj(root, str(r["sha256"])).is_file()]
     except StoreError as e:
         print(f"🔴 {e}", file=sys.stderr)
+        if dry_run:
+            print("🚨 --dry-run — 아무것도 받지 않았다. 이대로 받으면 여기서 멈춘다")
         return 1
     if lack:
         print(f"🔴 저장소에 없는 것 {len(lack)}개 — 아무것도 받지 않았다", file=sys.stderr)
@@ -265,6 +264,10 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
             "  🚨 정본(클론 B)에서 `launcher.py data-publish` 를 했는지 확인한다", file=sys.stderr
         )
         return 1
+    if dry_run:
+        print(f"✅ 저장소에 {len(todo)}개가 다 있다 — {root}")
+        print("🚨 --dry-run — 아무것도 받지 않았다")
+        return 0
 
     # 🚨 raw 가 있는 기기에서 덮어쓸 때는 **한 번 묻는다** — 클론 B 의 DATA_ROLE 이 틀렸을 수 있다.
     if over and has_raw() and not yes:
@@ -276,21 +279,32 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
             print("멈췄다 — 아무것도 바꾸지 않았다")
             return 1
 
+    # 🔄 2026-09-21 — **두 단계로 바꾼다.** ① 전부 임시 파일(`.part`)로 받아 sha 를 확인한다 —
+    #    하나라도 틀리면 임시 파일을 다 지우고 **아무것도 안 바꾼다.** ② 전부 맞을 때만 옛 판을
+    #    백업(복사)하고 제자리로 바꿔 끼운다.
+    #    ⛔ 종전에는 한 파일씩 「백업 → 받기」를 돌아, 중간 파일의 sha 가 틀리면 앞 파일들은 새 판 ·
+    #       뒤 파일들은 옛 판인 **섞인 상태**로 멈췄다(위 `lack` 검사는 「있는가」만 보고 「맞는가」는 안 본다).
+    staged: list[tuple[pathlib.Path, pathlib.Path]] = []
+    try:
+        for r in todo:
+            dest = ROOT / str(r["경로"])
+            staged.append((_stage(_obj(root, str(r["sha256"])), dest, str(r["sha256"])), dest))
+    except (StoreError, OSError) as e:
+        for tmp, _dest in staged:
+            tmp.unlink(missing_ok=True)
+        print(f"🔴 {e}", file=sys.stderr)
+        print("  ⬜ 아무것도 바꾸지 않았다 — 받은 임시 파일은 지웠다", file=sys.stderr)
+        return 1
+
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    for r in todo:
-        dest = ROOT / str(r["경로"])
+    for (tmp, dest), r in zip(staged, todo, strict=True):
         if dest.exists():
             keep = BACKUP / stamp / str(r["경로"])
             keep.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(dest, keep)
-        try:
-            _get(root, str(r["sha256"]), dest)
-        except StoreError as e:
-            print(f"🔴 {e}", file=sys.stderr)
-            print(f"  옛 파일은 {BACKUP / stamp} 에 있다", file=sys.stderr)
-            return 1
+        os.replace(tmp, dest)
     if over:
-        print(f"  옛 판 {len(over)}개는 {BACKUP / stamp} 로 옮겨 두었다 (되돌릴 수 있다)")
+        print(f"  옛 판 {len(over)}개는 {BACKUP / stamp} 에 복사해 두었다 (되돌릴 수 있다)")
     left = plan()
     if left:
         print(f"🔴 받은 뒤에도 {len(left)}개가 원장과 다르다", file=sys.stderr)
@@ -616,12 +630,11 @@ def setup(
 
     from collect import store as cstore  # noqa: PLC0415 — 모양의 정본은 store 한 곳 (D-99)
 
-    if device is not None and (
-        not cstore.DEVICE_RE.fullmatch(device) or device == cstore.CANONICAL_DEVICE
-    ):
+    # 🔄 2026-09-21 — 판정은 `store.device_problem` 한 곳 (D-99). 지금 쓰려는 `role` 로 잰다.
+    why = cstore.device_problem(device, role) if device is not None else None
+    if why:
         print(
-            f"🔴 기기 이름 {device!r} 은 못 쓴다 — 영문·숫자·`._-` 32자 이내 (예: collector-1) · "
-            f"`{cstore.CANONICAL_DEVICE}` 는 정본 예약어.\n"
+            f"🔴 기기 이름 {device!r} 은 못 쓴다 — {why}.\n"
             "  🚨 원장은 공개 저장소에 올라간다 — **실명을 쓰지 않는다**. .env 는 그대로다"
         )
         return 1

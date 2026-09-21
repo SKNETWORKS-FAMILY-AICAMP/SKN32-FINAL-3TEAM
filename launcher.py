@@ -1194,7 +1194,7 @@ def data_sync(
     """부족하거나 낡은 파생물을 공유 저장소에서 받습니다 — 사본(클론 A · 팀원 · 서버)용.
 
     🆕 2026-09-19 (D-247). 무엇을 받을지는 **git 의 파생물 원장**이 정합니다 — 지금 체크아웃한
-       커밋의 판을 받습니다. 옛 파일은 레포 밖 `CopyLane_backup` 에 옮겨 둡니다.
+       커밋의 판을 받습니다. 옛 파일은 레포 밖 `CopyLane_backup` 에 복사해 둡니다.
     🚨 `.env` 에 `DATA_ROLE=replica` 와 `DATA_STORE=<폴더>` 가 있어야 합니다. 정본은 받지 않습니다.
     """
     args = [sys.executable, "-m", "scripts.data_store", "sync"]
