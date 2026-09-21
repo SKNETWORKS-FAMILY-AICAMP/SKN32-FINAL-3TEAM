@@ -50,7 +50,9 @@ from preprocess.ftc_triage import CORE, _text, classify
 from preprocess.mask import MARK_RE, Ledger, Trace, anchor_ftc, apply_policy
 from preprocess.text import sep_norm
 
-RAW = pathlib.Path("data/raw/ftc")
+SOURCE_ID = "ftc_decisions_body"  # 수집기 `collect.ftc_body`
+# 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
+RAW = store.family_path(SOURCE_ID)
 OUT = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 #: 🔴 **단계 물질화** (D-143). `data/` 아래 — 배포되지 않는다.
 STAGE = pathlib.Path("data/derived/ftc_stage.jsonl")

@@ -35,6 +35,15 @@ DICT = pathlib.Path("data/derived/banned_terms.jsonl")
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
 MIN_MEASURABLE = PARAMS.min_measurable  # D-40
 
+#: 🆕 D-255 — **보고용 묶음 지표.** 클래스·라벨은 그대로 두고 **평가 보고에서만** 함께 잰다.
+#:    식품표시광고법 §8①**5호**(소비자를 기만하는 표시·광고) 안에 `소비자_기만` 과 `후기_체험기_기만` 이
+#:    같이 산다(시행령 [별표 1] 5호 · 체험기는 다목의 한 요소). 후기 단독은 실사례가 30건에 못 미쳐
+#:    「측정 불가」(D-40)로 남으므로, 조문이 묶은 단위로 **함께** 낸다 — D-231 이 열어 둔 (다)의 보고판.
+#:    ⛔ 라벨을 합치지 않는다(D-231 (라) 기각) — 묶음은 **보조 지표**이고 유형별 표를 대신하지 않는다.
+REPORT_GROUPS: dict[str, tuple[str, ...]] = {
+    "5호 묶음(소비자_기만∪후기)": ("소비자_기만", "후기_체험기_기만"),
+}
+
 
 def norm(s: str) -> str:
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s)))
@@ -66,6 +75,28 @@ def judge(text: str, rules: dict[str, str]) -> set[str]:
     return {lab for term, lab in rules.items() if term in n}
 
 
+def group_scores(
+    pairs: list[tuple[set[str], set[str]]], groups: dict[str, tuple[str, ...]] = REPORT_GROUPS
+) -> dict[str, tuple[int, int, int, int]]:
+    """(예측, 정답) 쌍 → 묶음마다 `(정답 행, TP, FP, FN)`. 🚨 행 단위다 — 묶음 안 어느 유형이든 맞으면 적중.
+
+    묶음 안에서 유형을 잘못 골라도(후기를 소비자_기만으로) 적중으로 센다 — 그것이 묶음 지표의 뜻이다.
+    유형을 가르는 능력은 위의 유형별 표가 잰다.
+    """
+    out = {}
+    for name, members in groups.items():
+        m = set(members)
+        g = tp = fp = fn = 0
+        for pred, true in pairs:
+            t, p = bool(true & m), bool(pred & m)
+            g += t
+            tp += t and p
+            fp += p and not t
+            fn += t and not p
+        out[name] = (g, tp, fp, fn)
+    return out
+
+
 def main() -> int:
     rules = load_rules()
     if not GOLDEN.exists():
@@ -84,8 +115,10 @@ def main() -> int:
     gold: collections.Counter = collections.Counter()
     neg_fired = 0
     neg_total = 0
+    pairs: list[tuple[set[str], set[str]]] = []
     for r in rows:
         pred, true = judge(r["text"], rules), set(r["labels"])
+        pairs.append((pred, true))
         if not true:
             neg_total += 1
             neg_fired += bool(pred)
@@ -115,6 +148,15 @@ def main() -> int:
         else:
             mark = ""
         print(f"  {t:22} {gold[t]:>5} {p:>7.3f} {rc:>7.3f} {f1:>7.3f}{mark}")
+
+    # 🆕 D-255 — 보고용 묶음 지표 (유형별 표를 대신하지 않는다)
+    print(f"\n  {'묶음 (보조 지표 · D-255)':22} {'정답':>5} {'P':>7} {'R':>7} {'F1':>7}")
+    for name, (g, t_, f_, _fn) in group_scores(pairs).items():
+        p = t_ / (t_ + f_) if t_ + f_ else 0.0
+        rc = t_ / g if g else 0.0
+        f1 = 2 * p * rc / (p + rc) if p + rc else 0.0
+        mark = "  🔴 측정 불가 (D-40)" if g < MIN_MEASURABLE else ""
+        print(f"  {name:22} {g:>5} {p:>7.3f} {rc:>7.3f} {f1:>7.3f}{mark}")
 
     print(f"\n  🔴 **적법 {neg_total}행 중 {neg_fired}행에서 사전이 울렸다**", end="")
     print(f" (오탐률 {neg_fired / neg_total:.1%})" if neg_total else "")

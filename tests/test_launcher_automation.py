@@ -189,7 +189,28 @@ def test_수집이_끝나면_역할에_맞는_다음_단계를_보여준다(role
     assert r.exit_code == 0 and "raw-publish" in r.output and "자기 브랜치" in r.output, r.output
     role("canonical")
     r = _cli("collect", "law_go_kr")
-    assert "data-refresh" in r.output and "raw-publish" not in r.output, r.output
+    assert "raw-publish" not in r.output, r.output
+    # 🔄 D-254 — `law_go_kr` 는 추출기 표에 없다. `data-refresh law_go_kr` 는 거부되므로 권하지 않는다
+    assert "launcher.py data-refresh" not in r.output and "EXTRACTORS" in r.output, r.output
+
+
+@pytest.mark.parametrize(
+    ("source", "want"),
+    [
+        ("mfds_press", "data-refresh mfds_press"),  # 같은 id 가 표에 있다
+        ("ftc_decisions_api", "data-refresh ftc_decisions_body"),  # 원문 폴더(ftc)가 겹친다
+    ],
+)
+def test_정본의_수집_뒤_안내는_data_refresh_가_받는_원천만_권한다(
+    role, calls, monkeypatch, source, want
+) -> None:
+    """🆕 D-254 — 종전 안내 `data-refresh <원천>` 은 15개 중 10개에서 「모르는 원천」으로 거부됐다."""
+    from collect import store
+
+    monkeypatch.setattr(store, "recent_by_others", lambda s, **k: {})
+    role("canonical")
+    r = _cli("collect", source)
+    assert r.exit_code == 0 and want in r.output, r.output
 
 
 def test_병합_전_요약은_원천_기기별로_센다() -> None:

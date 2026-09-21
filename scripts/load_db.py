@@ -311,17 +311,33 @@ def _jsonl(name: str, *, required: bool = True) -> list[dict]:
 
 
 def load_manifest(cur, dry: bool) -> int:
-    """수집 원장을 그대로 옮긴다 (규약 3). 같은 sha256 은 다시 넣지 않는다."""
+    """수집 원장을 그대로 옮긴다 (규약 3). 같은 sha256 은 다시 넣지 않는다.
+
+    🔴 2026-09-20 (D-254 · 감사 §2 load) —
+       ① **원장이 없으면 멈춘다** — `_jsonl()` 과 같은 계약이다 (D-220). ⛔ 종전에는 `return 0` 이라
+          `collect_manifest 0` 이 「정상 완료」로 찍혔다. `--allow-missing` 으로만 넘긴다.
+       ② **레지스트리에 없는 원천의 행은 세서 찍는다.** ⛔ 종전에는 조용히 건너뛰어
+          「원장 N줄 = DB N행」이 아니어도 아무도 몰랐다 (D-149). 넣지 않는 것은 그대로다 —
+          `collect_manifest.source_id` 가 `source` 를 가리키므로 넣을 수 없다.
+    """
     p = ROOT / "data" / "manifest.jsonl"
     if not p.exists():
+        if not ALLOW_MISSING:
+            raise SystemExit(
+                f"🔴 {p} 가 없다 — 이대로 적재하면 collect_manifest 가 **0행인 채 성공**한다.\n"
+                "  수집 원장은 git 이 나른다 — `git status` · `git log -- data/manifest.jsonl` 로 본다.\n"
+                "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
+            )
         return 0
     known = set(_sources())
     rows = 0
+    unknown: collections.Counter[str] = collections.Counter()
     for line in p.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         r = json.loads(line)
         if r.get("source_id") not in known:
+            unknown[str(r.get("source_id"))] += 1
             continue
         if not dry:
             cur.execute(
@@ -349,6 +365,12 @@ def load_manifest(cur, dry: bool) -> int:
             rows += cur.rowcount
         else:
             rows += 1
+    if unknown:
+        print(
+            f"    🟡 레지스트리에 없는 원천의 원장 {sum(unknown.values()):,}줄을 넣지 않았다 — "
+            + " · ".join(f"{k} {v:,}" for k, v in sorted(unknown.items()))
+        )
+        print("       원천을 등재하거나(레지스트리) 원장 줄이 틀렸는지 본다 (D-149)")
     return rows
 
 
@@ -424,7 +446,10 @@ def load_dict(cur, dry: bool) -> tuple[int, int]:
        **낱말이 라벨을 감당할 만큼 크지 않다는 뜻**이다 (D-155). 비워 두는 것이 사실에 맞다.
     """
     n = typed = 0
-    for r in _jsonl("banned_terms.jsonl"):
+    rows = _jsonl("banned_terms.jsonl")
+    declared: set[str] = set()
+    for r in rows:
+        declared.add(r["term"])
         kinds = r.get("유형") or []
         vt = kinds[0] if len(kinds) == 1 else None
         typed += vt is not None
@@ -437,8 +462,8 @@ def load_dict(cur, dry: bool) -> tuple[int, int]:
                 "  violation_type = EXCLUDED.violation_type, "
                 "  law_ref = EXCLUDED.law_ref, exact_match = EXCLUDED.exact_match",
                 (
-                    "ftc_decisions_body:dict",
-                    "금지표현",
+                    DICT_FRAGMENT,
+                    DICT_KIND,
                     r["term"],
                     "; ".join(r.get("근거") or []),
                     bool(r.get("단독판정")),
@@ -446,7 +471,55 @@ def load_dict(cur, dry: bool) -> tuple[int, int]:
                 ),
             )
         n += 1
+    if not dry:
+        # 🔴 **넣고 나서 거둔다** (D-187). 거둔 수는 `sweep_dict` 가 찍는다 — 보낸 수 `n` 에서 빼지 않는다
+        #    (거둔 것은 이번에 보낸 것이 아니다).
+        sweep_dict(cur, declared, missing_ok=not rows and ALLOW_MISSING)
     return n, typed
+
+
+#: 금지표현 사전이 쓰는 칸 값 — `load_dict` 가 넣고 `sweep_dict` 가 **그 안에서만** 거둔다.
+DICT_FRAGMENT, DICT_KIND = "ftc_decisions_body:dict", "금지표현"
+
+
+def sweep_dict(cur, declared: set[str], *, missing_ok: bool = False) -> int:  # noqa: ANN001
+    """사전에서 빠진 용어를 거둔다 (2026-09-20 · D-254 · **D-187 의 사전 판**).
+
+    ⛔ 종전 `load_dict` 는 `ON CONFLICT … DO UPDATE` 뿐이라 **넣기만 하고 지우지 않았다.**
+       사전에서 뺀 금지 표현이 DB 에 **영구히** 남아 계속 판정에 걸린다 — product_fact·골든셋·청크는
+       거두는데 여기만 안 거뒀다 (감사 §2 load).
+    🚨 거두는 범위는 **이 적재기가 넣는 칸**(`DICT_FRAGMENT` · `DICT_KIND`) 안뿐이다 —
+       다른 사전 종류(적법표현 등)를 손대지 않는다.
+    🔴 **선언이 비면 거두지 않는다** (D-220) — 0행 사전은 표를 비우는 자리다.
+       `--allow-missing` 으로 파일 없이 돌렸으면(`missing_ok`) 거두지 않고 넘어가고,
+       그 밖에는 **멈춘다.** `sweep_golden` 의 「선언이 비면」 가드와 같은 자리다.
+    """
+    if not declared:
+        if missing_ok:
+            print("  ⬜ 사전 선언이 비었다(--allow-missing) — **아무것도 거두지 않는다**")
+            return 0
+        raise SystemExit(
+            "🔴 banned_terms.jsonl 이 0행이다 — 이대로 거두면 금지표현 사전이 **통째로** 지워진다.\n"
+            "  먼저: uv run python launcher.py golden --write   (정본) · launcher.py data-sync (사본)"
+        )
+    cur.execute(
+        "SELECT term FROM dict_entry WHERE fragment_id = %s AND dict_kind = %s",
+        (DICT_FRAGMENT, DICT_KIND),
+    )
+    orphans = sorted({r[0] for r in cur.fetchall()} - declared)
+    if not orphans:
+        return 0
+    # 🚨 **몇 개를 왜 지우는지 먼저 찍는다** — 조용히 지우면 수가 줄어도 아무도 모른다 (D-149).
+    print(f"  🧹 사전에서 빠진 용어 {len(orphans):,}행을 거둔다 (D-187)")
+    for t in orphans[:5]:
+        print(f"     {t}")
+    if len(orphans) > 5:
+        print(f"     … 외 {len(orphans) - 5:,}행")
+    cur.execute(
+        "DELETE FROM dict_entry WHERE fragment_id = %s AND dict_kind = %s AND term = ANY(%s)",
+        (DICT_FRAGMENT, DICT_KIND, orphans),
+    )
+    return len(orphans)
 
 
 #: 🔴 **정본 축만 여기 들어온다** (2026-09-11 · D-185). `product_fact` 는 「**인정받은** 기능성

@@ -2,6 +2,7 @@
 
   uv run python -m scripts.embed --check      # 모델 차원만 확인한다 (DB 불필요)
   uv run python -m scripts.embed              # chunk + chunk_embedding 적재
+  uv run python -m scripts.embed --allow-shrink   # 🚨 DB 청크가 크게 줄어드는 것을 **보고** 받아들일 때만
 
 왜 있는가 — 2026-09-09 확인: 임베딩 코드가 **0줄**이었다. pgvector 확장과
 `chunk_embedding.embedding vector(1024)` 는 서 있는데 채우는 것이 없었다.
@@ -25,6 +26,7 @@ import pathlib
 import sys
 
 from app.settings import PARAMS, dsn, load_kwargs
+from preprocess.chunk import SHRINK_LIMIT, shrinkage
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CHUNKS = ROOT / "data" / "derived" / "chunks.jsonl"
@@ -140,7 +142,13 @@ def chunk_values(r: dict, model) -> tuple:  # noqa: ANN001 — model 은 지연 
     return tuple(v[c] for c in CHUNK_COLS)
 
 
-def sweep_orphans(cur, declared: set[str], *, partial: bool) -> int:  # noqa: ANN001
+def sweep_orphans(
+    cur,  # noqa: ANN001
+    declared: set[str],
+    *,
+    partial: bool,
+    allow_shrink: bool = False,
+) -> int:
     """선언에 없는 `chunk_id` 를 거둔다 — **적재는 선언한 상태로 만드는 것**이다 (D-187).
 
     🔴 2026-09-12 오후 — 제목뿐인 조 청크를 `preprocess/chunk.py` 가 빼면서 필요해졌다
@@ -151,15 +159,52 @@ def sweep_orphans(cur, declared: set[str], *, partial: bool) -> int:  # noqa: AN
     ⛔ **`--limit` 로 돌렸으면 거두지 않는다.** 앞의 N개만 선언이므로 나머지 전부가
        고아로 보인다 — **한 번의 연습 실행이 표를 비운다.**
        🚨 2026-09-12 오전 `mark_collected` 가 정확히 같은 함정이었다. 같은 가드를 건다.
+
+    🔴 **가드 둘 더** (2026-09-20 · D-254 · 감사 §1-8) — 둘 다 **지우기 전에** 멈춘다 (D-220).
+       ① **선언이 비면 거두지 않는다.** ⛔ 종전 `main` 은 파일 **유무**만 봐서, 0행 `chunks.jsonl`
+          이면 표 전체가 고아로 보여 **전부 지우고** 「✅ 선언과 같다」를 찍었다.
+          `load_db.sweep_golden` 의 「선언이 비면」 가드와 같은 자리다.
+       ② **DB 청크의 `SHRINK_LIMIT` 를 넘게 지우게 되면 멈춘다** — `--allow-shrink` 로만 넘긴다.
+          ⛔ 09-18 조문 −15% 가 오늘 코드에서도 초록으로 DB 삭제까지 갔다.
+          🚨 기준·함수는 `preprocess/chunk.py` 한 곳이다 (D-209 · D-99) — `[임의]` · 판정 대기.
+       ★ 멈추면 `SystemExit(1)` 을 던진다 — 호출자의 `with conn` 이 트랜잭션을 되돌린다.
     """
+    if not declared:
+        # 🔴 `partial` 이어도 멈춘다 — 빈 선언은 연습 실행이 아니라 **입력이 없는 것**이다.
+        print(
+            "🔴 선언(chunks.jsonl)이 0행이다 — **아무것도 거두지 않고 멈춘다** (D-220)\n"
+            "   ⛔ 이대로 거두면 DB 의 청크가 **전부** 지워진다.\n"
+            "   먼저: uv run python -m preprocess.chunk --dump   (정본) · launcher.py data-sync (사본)",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     cur.execute("SELECT chunk_id FROM chunk")
-    orphans = {r[0] for r in cur.fetchall()} - declared
+    existing = {r[0] for r in cur.fetchall()}
+    orphans = existing - declared
     if not orphans:
         return 0
     if partial:
         print(f"  ⬜ --limit 로 돌렸다 — 선언 밖 {len(orphans):,}행을 **거두지 않는다**")
         print("     🚨 전량으로 다시 돌려야 DB 가 선언과 같아진다")
         return 0
+    shrunk = shrinkage({"DB chunk": len(existing)}, {"DB chunk": len(existing) - len(orphans)})
+    if shrunk:
+        print(
+            f"🔴 DB 청크를 {SHRINK_LIMIT:.0%} 넘게 거두게 된다 — {shrunk[0]} (D-254)",
+            file=sys.stderr,
+        )
+        for cid in sorted(orphans)[:5]:
+            print(f"     {cid}", file=sys.stderr)
+        if not allow_shrink:
+            print(
+                "   ⛔ 지우지 않았다 — 이번 실행은 되돌린다.\n"
+                "   먼저 `chunks.jsonl` 이 왜 줄었는지 본다 (추출기 입력 · 파생물 동기화).\n"
+                "   줄어든 것이 맞다고 판단했으면:\n"
+                "     uv run python -m scripts.embed --allow-shrink",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        print("   ⚠️ --allow-shrink — 그대로 거둔다", file=sys.stderr)
     # 🚨 **몇 개를 왜 지우는지 먼저 찍는다** — 조용히 지우면 수가 줄어도 아무도 모른다 (D-149).
     print(f"  🧹 선언에 없는 청크 {len(orphans):,}행을 거둔다 (D-187)")
     for cid in sorted(orphans)[:5]:
@@ -205,6 +250,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="청크 임베딩 → pgvector")
     ap.add_argument("--check", action="store_true", help="모델 차원만 확인한다 (DB 불필요)")
     ap.add_argument("--limit", type=int, default=0, help="앞의 N개만 (연습용)")
+    ap.add_argument(
+        "--allow-shrink",
+        action="store_true",
+        help=f"🚨 DB 청크의 {SHRINK_LIMIT * 100:.0f}%% 넘게 거두어도 진행한다 — 이유를 안 뒤에만",
+    )
     args = ap.parse_args()
 
     model = load_model()
@@ -241,11 +291,20 @@ def main() -> int:
         print("   DB 없이 모델 차원만 재려면 — uv run python launcher.py embed --check")
         raise SystemExit(1) from e
     with conn, conn.cursor() as cur:
+        # 🔄 **거두기를 넣기 앞으로 옮겼다** (2026-09-20 · D-254).
+        #    ⛔ 종전에는 넣은 뒤에 거뒀다. 고아 집합(DB − 선언)은 순서와 무관하지만, 넣은 뒤에 재면
+        #       하한 래칫의 분모에 **방금 넣은 새 id** 가 섞여 줄어든 비율이 묽어진다.
+        #    ★ 앞에서 재면 분모가 「지금 DB 에 있던 것」이고, 멈출 때 **아무것도 안 쓴 채** 멈춘다.
+        #    🚨 한 트랜잭션 안이다 — 뒤에서 죽으면 거둔 것도 되돌려진다.
+        swept = sweep_orphans(
+            cur,
+            {r["chunk_id"] for r in rows},
+            partial=bool(args.limit),
+            allow_shrink=args.allow_shrink,
+        )
         # 🚨 청크를 먼저 넣는다 — chunk_embedding 이 chunk 를 가리킨다
         for r in rows:
             cur.execute(SQL_CHUNK_UPSERT, chunk_values(r, model))
-        # 🔴 **넣은 뒤에 거둔다** — 선언에 있는 것을 먼저 세워야 지울 것이 정해진다 (D-187).
-        swept = sweep_orphans(cur, {r["chunk_id"] for r in rows}, partial=bool(args.limit))
         done = 0
         for i in range(0, len(rows), BATCH):
             batch = rows[i : i + BATCH]

@@ -89,12 +89,13 @@ def main() -> int:
         print(f"🔴 없는 파일: {[str(p) for p in missing]}", file=sys.stderr)
         return 1
 
-    data = store.load(files)
+    # 🔄 2026-09-20 — **사람별**로 묶는다(파일별이 아니다). 한 사람이 시트 둘을 가져오면 파일이 둘이다
+    data = store.by_person(files)
     print("채운 건수 —")
     for name, d in data.items():
         print(f"  {name:44} {len(d):>5}건")
 
-    if len(files) < 2:
+    if len(data) < 2:
         print("\n  ⬜ 파일이 하나다 — 일치도를 잴 수 없다.")
         print("     🚨 **한 사람의 라벨은 신뢰도를 모른다.** 최소 두 사람이 겹쳐 붙여야")
         print("        「우리 라벨이 재현되는가」에 답할 수 있다 (기획문서 6-3).")

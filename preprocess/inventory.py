@@ -27,7 +27,7 @@ import json
 import os
 import pathlib
 
-from collect import store
+from collect import missing, store
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
@@ -87,6 +87,20 @@ def on_disk(source_id: str) -> int:
     return n
 
 
+def _rows() -> list[dict]:
+    """원장 행 전부 — 결손 가르기(`collect/missing.py`)가 기기 칸·sha·크기를 본다. 🚨 깨진 줄은 건너뛴다(`ledger` 와 같다)."""
+    out: list[dict] = []
+    if MANIFEST.exists():
+        for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return out
+
+
 def missing_paths(paths: set[str]) -> list[str]:
     """원장에 있는데 **이 기기 디스크에 없는** path. 🚨 소스 단위 0/비0 이 아니라 path 단위다.
 
@@ -96,12 +110,36 @@ def missing_paths(paths: set[str]) -> list[str]:
     return sorted(p for p in paths if p and not (ROOT / p.replace("\\", "/")).exists())
 
 
+def listed(sources: dict, led: dict[str, set[str]]) -> dict[str, str]:
+    """표에 올릴 소스 → 상태. `collect` 소스 **+ 원장에 행이 있는 소스 전부**(상태 무관).
+
+    🆕 2026-09-20 (D-254 · 감사 §2 inventory) — ⛔ 종전에는 `status == collect` 만 봤다.
+       `manual`(AI Hub 를 사람이 받아 register)·`hold` 소스의 원장 행이 **표에서 통째로 빠졌다** —
+       받은 것이 있는데 안 보이는 것이 이 표가 막으려던 바로 그 모양이다.
+    🚨 원장에만 있고 레지스트리에 없는 id 는 `미등재` 로 올린다 — 숨기지 않는다 (D-220).
+    """
+    out = {
+        k: str(v.get("status"))
+        for k, v in sources.items()
+        if isinstance(v, dict) and v.get("status") == "collect"
+    }
+    for k, paths in led.items():
+        if k and paths and k not in out:
+            v = sources.get(k)
+            out[k] = str(v.get("status") or "상태없음") if isinstance(v, dict) else "미등재"
+    return out
+
+
 def main() -> int:
     import yaml  # noqa: PLC0415 — 레지스트리를 읽는 유일한 자리다
 
-    src = yaml.safe_load((ROOT / "data_sources.yaml").read_text(encoding="utf-8"))["sources"]
-    src = {k: v for k, v in src.items() if isinstance(v, dict) and v.get("status") == "collect"}
+    reg = yaml.safe_load((ROOT / "data_sources.yaml").read_text(encoding="utf-8"))["sources"]
     led = ledger()
+    src = listed(reg, led)
+    # 🆕 D-253 — 없는 것을 **왜 없는지**로 가른다. doctor 와 같은 함수다 (D-99 · `collect/missing.py`).
+    #    ⛔ 종전에는 없는 것을 전부 🔴 「일부만 받은 것」으로 찍었다 — 같은 53개를 doctor 는 🟡 로 찍어
+    #       두 도구가 같은 결손에 다른 경보를 냈다. 실측 53개 중 36개는 정책 제외·옮긴 흔적이었다.
+    why = missing.classify(_rows())
 
     # 한 폴더를 여러 소스가 쓰는지 먼저 센다
     shared: collections.Counter = collections.Counter(f for k in src for f in folders(k))
@@ -129,8 +167,17 @@ def main() -> int:
             mark = "  🔴 **다른 기기에서 받았다 — 이 기기엔 없다**"
         elif gone:
             # 🔴 **일부만 없는 것**을 종전에는 「둘 다 있음」으로 삼켰다 (2026-09-10).
-            partial.append((k, len(gone), n_led))
-            mark = f"  🔴 **{len(gone)}/{n_led} 이 이 기기에 없다**"
+            # 🔄 D-253 — 정상으로 설명되는 것은 🔴 로 안 센다. 설명 안 되는 것만 남긴다.
+            reasons = collections.Counter(
+                why.get(p.replace("\\", "/"), ("legacy", ""))[0] for p in gone
+            )
+            eyes = sum(n for r, n in reasons.items() if not missing.REASONS[r][1])
+            told = " · ".join(f"{r} {n}" for r, n in reasons.most_common())
+            if eyes:
+                partial.append((k, eyes, n_led))
+                mark = f"  🔴 **{len(gone)}/{n_led} 이 없다** — 볼 것 {eyes} ({told})"
+            else:
+                mark = f"  ✅ {len(gone)}/{n_led} 없음 — 전부 설명됨 ({told})"
         elif n_disk and not n_led:
             # 🚨 **계열을 공유하는 소스는 오탐이다** (2026-09-09 실측).
             #    `ftc_decisions`·`ftc_decisions_api`·`ftc_decisions_body` 가 한 폴더(`ftc`)를
@@ -141,6 +188,8 @@ def main() -> int:
                 if any(shared[f] > 1 for f in folders(k))
                 else "  🔴 원장에 없는데 파일이 있다 — 원장을 확인한다"
             )
+        if src[k] != "collect":
+            mark += f"  [{src[k]}]"  # 수집기 밖(manual·hold·미등재) — 원장에 행이 있어 올렸다
         print(f"  {k:24}{n_led or '—':>11}{n_disk or '—':>8}{len(gone) or '—':>8}{mark}")
 
     print()
@@ -159,10 +208,11 @@ def main() -> int:
         for k in only_disk:
             print(f"   {k}")
     if partial:
-        print("\n🔴 **일부만 받은 것** — 소스 단위로는 「있다」로 보인다")
+        print("\n🔴 **일부만 받은 것 중 설명이 안 되는 것** — 소스 단위로는 「있다」로 보인다")
         for k, g, n in partial:
-            print(f"   {k:26} {g}/{n} 없음")
+            print(f"   {k:26} {g}/{n} 볼 것")
         print("   🚨 종전 분류는 파일이 하나라도 있으면 「둘 다 있음」이었다 (D-160).")
+        print("   → 이유와 경로: uv run python scripts/doctor.py --data   (D-253 · 같은 분류다)")
     if not only_ledger and not only_disk and not partial:
         print("  ✅ 원장과 이 기기가 일치한다")
 
