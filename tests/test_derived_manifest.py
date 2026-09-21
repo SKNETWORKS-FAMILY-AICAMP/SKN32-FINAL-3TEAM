@@ -520,3 +520,35 @@ def test_모르는_부류는_잃으면_멈춘다() -> None:
     assert dm.losses(old, []) == [("data/derived/x.jsonl", "새부류", "없어짐")]
     old["data/derived/x.jsonl"]["부류"] = "생성물"
     assert dm.losses(old, []) == []
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-21 (전수 재검토 C2 · 판정 (나)) — 마스킹과 **따로 선** 넓은 거름
+# ══════════════════════════════════════════════════════════
+def test_넓은_거름은_마스킹이_엉뚱한_말을_지운_자리를_본다(tmp_path: pathlib.Path) -> None:
+    """🔴 「소송대리인 [대표] 김철수」 — 옛 마스킹이 「변호사」를 이름으로 지우고 실명을 남긴 모양이다.
+    `people()`(마스킹과 같은 규칙)은 이것을 **원리상 못 본다.** 넓은 거름은 다른 규칙으로 본다."""
+    f = tmp_path / "x.jsonl"
+    f.write_text(
+        '{"t":"원고 소송대리인 [대표] 홍길동 외 1인"}\n{"t":"신고인 : 박가나"}\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert not dm.people([f]), "같은 규칙은 못 본다 — 그래서 넓은 거름이 필요하다"
+    got = dm.people_loose([f])
+    assert [(no, h) for _, no, h in got] == [(1, "홍○○"), (2, "박○○")], got
+
+
+def test_넓은_거름은_흔한_말과_지운_자리를_안_알린다(tmp_path: pathlib.Path) -> None:
+    """반대 대조 — 성씨로 시작하는 흔한 말 · 이미 지운 자리 · 판정 어휘."""
+    f = tmp_path / "x.jsonl"
+    f.write_text(
+        '{"t":"대표이사 [대표]는 광고를"}\n{"t":"대표 이미지와 대표 상품"}\n'
+        '{"t":"피심인 주식회사 가나"}\n{"t":"대표이사 이상의 책임"}\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert dm.people_loose([f]) == []
+    assert dm.people([f]) == [], (
+        "「이상의」는 판정 어휘다 — 엄격한 검사도 불용어를 조사 뗀 꼴로 본다"
+    )
