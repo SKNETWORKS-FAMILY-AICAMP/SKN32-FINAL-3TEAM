@@ -411,9 +411,11 @@ _TITLED_PERSON = re.compile(
 #: 🆕 2026-09-22 — 레지스트리가 사람 축을 **「대표자명 등 개인 실명」** 으로 선언한 원천 (문언 그대로 · D-54).
 #:    ★ 이 원천에서는 대표자가 아닌 사람(조리실장·점장 …)도 선언 범위 안이다 — 코드가 선언을 못 따라가던 자리다.
 #:    📏 실측(클론 B · `--pii-triage` 09-22) — 재결례에 「조리실장(실명)」 1 · 「○○개발 대표 조○우」(부분 가림) 1 이 남았다.
-#:    ⛔ `ftc_decisions_body` 는 넣지 않는다 — 그 원천의 선언은 「업체명·상표·피심인 주소」(+ 대표자명)이고,
-#:       제3자 개인(광고 속 의사 등)은 D-248 ⬜ 가 「대상 밖」으로 적었다. 넓히려면 레지스트리 문언 개정 + 2인 확인이 먼저다.
-PERSON_ALL_NAMES = frozenset({"law_go_kr"})
+#: 🔄 2026-09-22 D-258 — `ftc`(= `ftc_decisions_body`) 도 넣는다. 팀장 판정 (가) · 2인 확인(권소라) ·
+#:    레지스트리 문언 「개인 실명은 피심인이 아니어도 가린다」(`scripts/gen_registry.py`). ⛔ 종전 D-248 ⬜ 「제3자 개인은 대상 밖」을 뒤집는다.
+#:    📏 실측 — 의결서 이유가 인용한 광고 문구 속 「이름 + 원장」 의사 3명이 골든셋까지 들어갔다(`--pii-triage` 09-22).
+#:    🚨 키는 `POLICY` 의 원천 이름이다(`ftc` · `law_go_kr`) — 레지스트리 id 가 아니다.
+PERSON_ALL_NAMES = frozenset({"law_go_kr", "ftc"})
 #: 넓은 원천에서만 더 보는 직함 `[임의]` — 탐침(`build/probe_person_0922.py` C절)에 나온 것 중 보통명사와 덜 부딪히는 것.
 #:    ⛔ 「과장」은 뺀다 — 「거짓·과장 **성**능」처럼 판정 어휘 뒤에 성씨 글자가 온다. 「직원」·「대표」·「업주」도 뺀다(오탐 위주).
 _WIDE_TITLES = r"(?:조리실장|주방장|실장|점장|팀장|부장)"
@@ -425,8 +427,45 @@ _PART_ROLES = rf"(?:{_TITLES}|{_WIDE_TITLES}|대표|청구인|직원|종업원|�
 #:    붙여 쓴 「실장**이나** 직원」의 「이나」가 3개 문서에서 이름으로 걸렸다(「이」가 성씨). 긴 직함(대표이사…)과 달리
 #:    이 직함들은 「피심인대표이사홍길동」처럼 붙여 쓰는 등기 꼴이 없으므로 붙여 쓴 자리를 통째로 안 본다.
 _WIDE_SEP = r"(?:\s*[:：]\s*|\s*[(（]\s*|\s*,\s*|\s+)"
-_WIDE_PERSON = re.compile(
-    rf"({_WIDE_TITLES}{_WIDE_SEP})({_NOT_TITLE}{_PERSON_NAME}(?:{_NAME_JOIN}{_NOT_TITLE}{_PERSON_NAME})*)"
+#: 🔄 09-22 D-258 ftc 탐침(`probe_person_0922c` · 클론 B · 사용자 실행) — 넓은 직함 뒤 이름이 **427개 문서**에서 걸렸고
+#:    「부장 **진술조서**」 113 · 「진술서」 21 · 「진술내용」 14 · 「하부장」·「신발장」 30 · 목록(`_NAME_JOIN`)으로 이어 붙은 14자까지 나왔다.
+#:    의결서 증거 목록(「소갑 제5호증 부장 진술조서」)의 표준 꼴이다. ★ 그래서 넓은 규칙의 이름은 **세 글자 · 낱말 경계 · 목록 없음**이다
+#:    (아래 「이름 + 직함」과 같은 모양 — 실명 분포도 3자가 압도적이다).
+_NAME3 = rf"[{_SURNAMES}][가-힣](?![의는을를와과에로])[가-힣]"
+_NAME3_END = r"(?=[^가-힣]|$|님|[은는이가을를의에도와과께로])"
+_WIDE_PERSON = re.compile(rf"({_WIDE_TITLES}{_WIDE_SEP})({_NOT_TITLE}{_NAME3}){_NAME3_END}")
+#: 🆕 2026-09-22 D-258 — **이름이 직함 앞에 오는 꼴** 「홍길동 원장」. 광고·보도 문장의 표준 꼴이다.
+#:    📏 탐침 B절(클론 B · ftc 원문 · 사용자 실행) — 원장·교수·박사·약사·회장·사장·실장·팀장·변호사 앞 후보 수백.
+#:    ⛔ 「의사」는 뺀다 — 「이러한 **의사**」(뜻)가 432건. 「대표」·「직원」도 뺀다(「피심인 대표」 121건).
+#:    🚨 이름은 **세 글자만** 본다 — 두 글자 후보가 보통명사였다(「구매 팀장」 12 · 「소속 팀장」 10). 실명 분포도 3자가 압도적이다(위 `_sub` 주석).
+#:    🚨 셋째 글자가 조사(의·는·을·를·와·과·에)면 이름이 아니다 — 「지금의 사장」. 은·이·가·도는 이름 끝에 흔해 둔다.
+_TITLE_AFTER = r"(?:한의사|변호사|원장|교수|박사|약사|회장|사장|실장|팀장)"
+#: 넓은 규칙(두 방향)의 불용어 `[임의]` — 세 글자 보통명사. 🔄 09-22 ftc 탐침에서 여러 문서에 나온 것을 보탰다
+_NOT_NAME_WIDE = frozenset(
+    {
+        "진술서",
+        "진술인",
+        "진술자",
+        "하부장",
+        "신발장",
+        "권한이",
+        "임원은",
+        "임원이",
+        "한의원",
+        "유치원",
+        "연구소",
+        "연구원",
+        "백화점",
+        "이사회",
+        "홍보실",
+        "전략실",
+        "구매팀",
+        "마케팅",
+        "우리은",
+    }
+)
+_NAME_BEFORE_TITLE = re.compile(
+    rf"(?<![가-힣])({_NAME3})(?=\s?{_TITLE_AFTER}(?:[^가-힣]|$|님|[은는이가을를의에도와과께]))"
 )
 _PARTIAL_PERSON = re.compile(
     rf"({_PART_ROLES}{_TITLE_SEP})([{_SURNAMES}](?:[{_PART_GLYPH}](?![은는이가을를의에도와과께])[가-힣]|[가-힣][{_PART_GLYPH}]))"
@@ -847,8 +886,27 @@ def mask_person(text: str, log: list[dict] | None = None, *, wide: bool = False)
         return m.group(1) + MASK_CEO + tail
 
     text = _TITLED_PERSON.sub(_sub, text)
+    if not wide:
+        return text
+
     # 🆕 2026-09-22 — 넓은 원천은 직함을 더 본다. 이름·불용어·조사 판단은 위 `_sub` 한 벌 (D-99)
-    return _WIDE_PERSON.sub(_sub, text) if wide else text
+    def _wide(m: re.Match[str]) -> str:
+        name = m.group(2)
+        if name in _NOT_NAME or name in _NOT_NAME_WIDE:
+            return m.group(0)
+        _note(log, "직함+이름", name, MASK_CEO)
+        return m.group(1) + MASK_CEO
+
+    text = _WIDE_PERSON.sub(_wide, text)
+
+    def _before(m: re.Match[str]) -> str:
+        name = m.group(1)
+        if name in _NOT_NAME or name in _NOT_NAME_WIDE:
+            return name
+        _note(log, "이름+직함", name, MASK_CEO)
+        return MASK_CEO
+
+    return _NAME_BEFORE_TITLE.sub(_before, text)
 
 
 def residue(text: str, bare: str) -> int:
@@ -1681,7 +1739,8 @@ def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = Non
     if "org" in todo:
         text = mask(text, bare, log)  # 앵커만
         if "person" in todo:
-            text = mask_person(text, log)  # 앵커 바로 뒤 — 예전과 같은 자리
+            # 앵커 바로 뒤 — 예전과 같은 자리 · 🔄 D-258 선언이 「개인 실명」인 원천은 넓게
+            text = mask_person(text, log, wide=source in PERSON_ALL_NAMES)
         names = doc_org_names(text)  # 🚨 자리 치환 **전에** 캔다 — 치환 뒤엔 이름이 없다
         text = mask_org_slots(text, log)
         text = mask_org_foreign(text, log)  # 외국 법인격 — 여러 어절 상호까지 (2026-09-08)

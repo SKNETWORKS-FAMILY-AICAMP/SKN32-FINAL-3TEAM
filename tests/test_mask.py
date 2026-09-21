@@ -1028,9 +1028,45 @@ def test_넓은_규칙은_보통명사와_성만_남은_가림을_건드리지_�
 
 
 def test_넓은_규칙은_선언한_원천에만_건다() -> None:
-    """반대 대조 — `ftc` 의 선언은 「대표자명」까지다. 제3자로 넓히는 것은 레지스트리 개정·2인 확인 뒤다 (D-248 ⬜)."""
+    """반대 대조 — 선언이 「개인 실명」인 원천(law_go_kr · 🔄 D-258 ftc)에만 건다. 사람 축을 끈 원천·다른 원천은 그대로."""
     from preprocess.mask import PERSON_ALL_NAMES, apply_policy
 
-    assert sorted(PERSON_ALL_NAMES) == ["law_go_kr"]
-    text = "영업소 실장 김가나가 판매"
+    assert sorted(PERSON_ALL_NAMES) == ["ftc", "law_go_kr"]
+    text = "영업소 실장 김가나가 판매 · 허가나 원장"
+    assert apply_policy(text, "", "mfds_sanctions") == text
+    assert apply_policy(text, "", "mfds_press") == text  # 사람 축을 끈 원천 (09-09 판정)
+
+
+# ─────────────────────────────────────────────────────────────
+#  🆕 2026-09-22 D-258 — ftc 의 제3자 개인 · 이름이 직함 앞에 오는 꼴 (이름은 가짜)
+# ─────────────────────────────────────────────────────────────
+def test_광고_속_이름_직함_꼴을_가린다() -> None:
+    """🔴 09-22 반출 검사 실측 — 의결서가 인용한 광고 문구 속 의사 셋이 골든셋까지 들어갔다."""
+    from preprocess.mask import apply_policy
+
+    text = "다인치과 임플란트센터 허가나 원장, 전다라 원장, 임마바 원장은"
+    out = apply_policy(text, "", "ftc")
+    assert out == "다인치과 임플란트센터 [대표] 원장, [대표] 원장, [대표] 원장은", out
+    assert apply_policy("홍가나 교수님께 문의", "", "ftc") == "[대표] 교수님께 문의"
+    assert apply_policy("영업소 실장 김가나가", "", "ftc") == "영업소 실장 [대표]가"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "이러한 의사가 있었다",  # 「의사」 = 뜻 — 직함에서 뺐다
+        "구매 팀장이 지시",  # 두 글자는 보지 않는다
+        "한의원 원장이",  # 세 글자 보통명사 (불용어)
+        "지금의 사장은",  # 셋째 글자가 조사
+        "계정별 원장",  # 「계」는 성씨 목록 밖
+        "소갑 제5호증 부장 진술조서",  # 09-22 ftc 탐침 — 증거 목록의 표준 꼴 (113개 문서)
+        "팀장 진술서 및 실장 진술",
+        "점장 신발장 정리",
+        "결재 권한이 사장에게",
+        "그 임원은 회장의 지시로",
+    ],
+)
+def test_이름_직함_꼴은_보통명사를_건드리지_않는다(text: str) -> None:
+    from preprocess.mask import apply_policy
+
     assert apply_policy(text, "", "ftc") == text
