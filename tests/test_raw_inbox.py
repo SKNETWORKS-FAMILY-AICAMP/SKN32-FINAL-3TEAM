@@ -333,6 +333,72 @@ def test_런처_수집은_겹치면_멈추고_force_면_받는다(monkeypatch) -
 
 
 # ══════════════════════════════════════════════════════════
+# ③-2 한 사람 · 두 기기 — 별칭은 **기기마다** 하나 (2026-09-22)
+# ══════════════════════════════════════════════════════════
+#  팀장 — *「수집작업을 하는 팀원도 여러 기기를 쓰는데 여러 계정을 써야 하나」* → 계정은 사람 하나에 하나,
+#  별칭(`DATA_DEVICE`)은 기기 하나에 하나. 🚨 같은 별칭을 두 기기에 쓰면 원장만으로는 두 기기를 못 가른다 —
+#  `5b8cece`(코드 리뷰 #3 · 「이 기기가 받았는데 없으면 되살린다」) 뒤로는 **서로의 원문을 유실로 보고 다시 받는다.**
+#  D-250 「⬜ 고치지 못하는 것」의 별칭 줄이 이 두 테스트를 가리킨다.
+
+
+def _second_device(
+    tmp_path: pathlib.Path, monkeypatch, repo: pathlib.Path, alias: str
+) -> pathlib.Path:
+    """같은 사람의 두 번째 기기 — 원장만 pull 로 받았고(원문은 git 으로 안 온다 · D-19) 디스크는 비었다."""
+    other = tmp_path / "second"
+    (other / "data" / "raw").mkdir(parents=True)
+    (other / "data" / "manifest.jsonl").write_bytes((repo / "data" / "manifest.jsonl").read_bytes())
+    monkeypatch.setattr(store, "ROOT", other)
+    monkeypatch.setattr(store, "RAW", other / "data" / "raw")
+    monkeypatch.setattr(store, "MANIFEST", other / "data" / "manifest.jsonl")
+    monkeypatch.setattr(ri, "ROOT", other)
+    monkeypatch.setenv("DATA_DEVICE", alias)
+    return other
+
+
+def _seen_on(root: pathlib.Path, alias: str) -> dict[str, str]:
+    from collect import missing  # noqa: PLC0415
+
+    got = missing.classify(_rows(root), root=root, me=alias, grade_of=lambda s: "G3", rules={})
+    return {pathlib.PurePosixPath(p).name: why for p, (why, _) in got.items()}
+
+
+@pytest.mark.gate
+def test_한_사람이_두_기기를_쓰면_별칭도_둘이고_서로의_원문을_다시_받지_않는다(
+    repo, tmp_path, monkeypatch
+) -> None:
+    """🔴 별칭이 다르면 두 번째 기기는 첫 기기가 받은 것을 **다른 기기 것**으로 보고 건너뛰며, 겹침을 알린다."""
+    assert _save(b'{"v":1}', "p1.json") is not None  # 첫 기기 — `collector-1`
+    at = dt.datetime.fromisoformat(_rows(repo)[-1]["fetched_at"])
+    other = _second_device(tmp_path, monkeypatch, repo, "collector-1b")
+    target = other / "data" / "raw" / FAM / "p1.json"
+
+    assert store.already_have(target), "첫 기기가 받은 것을 다시 부른다"
+    assert list(store.recent_by_others(SRC, now=at)) == ["collector-1"], "겹침 경고가 안 뜬다"
+    assert _seen_on(other, "collector-1b") == {"p1.json": "other"}, "첫 기기 것을 유실로 본다"
+    assert _save(b'{"v":1}', "p1.json") is None, "같은 원문을 두 번째 기기에 또 저장했다"
+    assert not target.exists() and len(_rows(other)) == 1
+    assert ri._mine(_rows(other))[0] == [], "두 번째 기기가 남의 원문을 올릴 후보로 셌다"
+
+
+@pytest.mark.gate
+def test_같은_별칭을_두_기기에_쓰면_서로의_원문을_유실로_보고_다시_받는다(
+    repo, tmp_path, monkeypatch
+) -> None:
+    """반대 대조 — 위 테스트가 **별칭 때문에** 통과한다는 것을 보인다. 🚨 이 동작을 고치려는 테스트가 아니다 —
+    원장이 두 기기를 가를 칸은 별칭뿐이다. 막는 것은 사람의 약속(기기마다 별칭 하나 · README)이다."""
+    assert _save(b'{"v":1}', "p1.json") is not None
+    at = dt.datetime.fromisoformat(_rows(repo)[-1]["fetched_at"])
+    other = _second_device(tmp_path, monkeypatch, repo, "collector-1")  # 🚨 같은 별칭
+    target = other / "data" / "raw" / FAM / "p1.json"
+
+    assert not store.already_have(target)
+    assert store.recent_by_others(SRC, now=at) == {}, "같은 별칭인데 겹침을 알렸다"
+    assert _seen_on(other, "collector-1") == {"p1.json": "lost"}
+    assert _save(b'{"v":1}', "p1.json") is not None and target.exists(), "되살리기가 안 돌았다"
+
+
+# ══════════════════════════════════════════════════════════
 # ④ 올리기 (수집 팀원)
 # ══════════════════════════════════════════════════════════
 @pytest.fixture
