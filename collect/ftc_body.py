@@ -88,7 +88,14 @@ def list_page(
             "🚨 목록이 XML 이 아니다 — OC 가 승인되지 않았거나 값이 틀렸다.\n"
             "   uv run python scripts/law_api_smoke.py 로 먼저 확인하라 (S0-01)."
         )
-    total = int(_text(root, "totalCnt") or 0)
+    # 🔴 2026-09-21 (전수 재검토 · 페이지 가드) — ⛔ `totalCnt` 가 없으면 0 으로 읽어 「받을 것 없음」으로 끝났다.
+    #    0 건(정상 XML 에 `<totalCnt>0`)과 **못 읽음**은 다르다 — 못 읽으면 멈춘다 (D-220 fail-closed).
+    raw_total = _text(root, "totalCnt")
+    if not raw_total.isdigit():
+        raise SystemExit(
+            f"🚨 목록에 전체 건수(totalCnt)가 없다 — 응답 구조가 바뀌었다 ({raw_total!r})"
+        )
+    total = int(raw_total)
     rows = [
         (_text(e, "결정문일련번호"), _text(e, "사건명"), _text(e, "결정일자"))
         for e in root.findall("ftc")
@@ -137,8 +144,8 @@ def collect(
     limit: int | None,
     dry_run: bool,
     refetch: bool,
-) -> tuple[int, int, int, int]:
-    """돌려주는 값은 (새로 저장, 건너뜀, 실패, 날짜없음).
+) -> tuple[int, int, int, int, int]:
+    """돌려주는 값은 (새로 저장, 건너뜀, 실패, 날짜없음, 목록이 안 준 건수).
 
     🚨 「날짜없음」은 실패가 아니다 — 저장은 됐고 **연도 분포에서 빠질 뿐이다.**
        S0-17 연도 집계를 할 때 이 수를 모수에서 빼야 한다.
@@ -147,7 +154,7 @@ def collect(
     registry.require(SOURCE_ID, use="U1")
     oc = env.get("LAW_OC_KEY")
 
-    saved = skipped = failed = undated = seen = 0
+    saved = skipped = failed = undated = seen = listed = 0
     page, total = 1, None
     out_dir = store.raw_dir(FAMILY)
 
@@ -158,14 +165,15 @@ def collect(
             label = f"본문검색 「{query}」" if query else "전체"
             print(f"  목록: {label} — {total:,}건 (한 장 {ROWS}건)\n")
             if total == 0:
-                return 0, 0, 0, 0
+                return 0, 0, 0, 0, 0
         if not rows:
             break
+        listed += len(rows)
 
         for seq, list_name, list_day in rows:
             if limit and seen >= limit:
                 print(f"\n  ⏸ --limit {limit} 에서 멈춘다.")
-                return saved, skipped, failed, undated
+                return saved, skipped, failed, undated, 0
             seen += 1
 
             # 🚨 이어받기 — 8,255건이면 호출 간격 0.5초만으로 70분이다.
@@ -215,7 +223,14 @@ def collect(
             break
         page += 1
 
-    return saved, skipped, failed, undated
+    # 🔴 2026-09-21 (전수 재검토 · 페이지 가드) — ⛔ 중간에 빈 장이 오면 `break` 로 **조용히** 끝났다.
+    #    목록이 준 행이 신고보다 적으면 그 차이를 돌려준다 — 일부 장만 받은 것이라 완료로 찍지 않는다(main).
+    unlisted = total - listed if not dry_run and listed < total else 0
+    if unlisted:
+        print(
+            f"\n  🔴 목록이 준 행 {listed:,} < 원천 신고 {total:,} — {unlisted:,}건을 못 봤다 (빈 장에서 멈춤)"
+        )
+    return saved, skipped, failed, undated, unlisted
 
 
 def main() -> int:
@@ -247,7 +262,7 @@ def main() -> int:
     a = ap.parse_args()
 
     try:
-        saved, skipped, failed, undated = collect(
+        saved, skipped, failed, undated, unlisted = collect(
             query=a.query,
             search=a.search,
             sort=a.sort,
@@ -267,7 +282,10 @@ def main() -> int:
         # 🚨 실패가 아니다 — 저장은 됐다. 연도 분포의 모수에서만 빼면 된다.
         print(f"⚠️ 그중 {undated}건은 원천에 결정일자가 없다 — 파일명이 번호뿐이다.")
     if not a.dry_run:
-        registry.mark_if_complete(SOURCE_ID, saved=saved, partial=a.limit is not None)
+        # 🔄 2026-09-21 — 목록이 덜 줬으면 일부 장만 받은 것이다 (본문 실패는 종전대로 — 찍고 종료코드 1 · law_api 와 같다)
+        registry.mark_if_complete(
+            SOURCE_ID, saved=saved, partial=a.limit is not None or bool(unlisted)
+        )
     if failed:
         # 🚨 일부 실패를 0 으로 끝내지 않는다 (D-115).
         print(
@@ -276,7 +294,7 @@ def main() -> int:
         )
     print("🚨 업체명·피심인 주소가 원본에 그대로 있다. 마스킹은 전처리에서 한다 (D-17).")
     print("🚨 이어서 반드시:  uv run pytest -m gate")
-    return 1 if failed else 0
+    return 1 if failed or unlisted else 0
 
 
 if __name__ == "__main__":

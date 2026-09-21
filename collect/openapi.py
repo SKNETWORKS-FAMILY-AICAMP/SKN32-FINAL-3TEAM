@@ -46,6 +46,9 @@ from collect import env, http, registry, store
 ROOT = Path(__file__).resolve().parent.parent
 ENDPOINTS = Path(__file__).resolve().parent / "endpoints.yaml"
 ROWS = 100  # 한 장에 받을 건수. 🚨 크게 잡지 않는다 — 실패 시 재시도 비용이 커진다
+#: 끝 신호 없이 이만큼 넘기면 멈춘다 — 무한 반복 방지. [임의] 2026-09-21 — 200만 행. 잰 최대는 `--measure` 로
+#: 사실원장에 적힌 것을 본다. 넘는 원천이 나오면 올린다(조용히 끊지 않고 🔴 로 멈추므로 드러난다).
+MAX_PAGES = 20_000
 
 
 def spec_of(source_id: str) -> dict[str, Any]:
@@ -279,8 +282,16 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
             break
         if total is not None and page * ROWS >= total:
             break
-        if total is None and len(payload) < 200:  # 🚨 빈 장으로 본다
+        # 🔴 2026-09-21 (전수 재검토 · 페이지 가드) — 전체 건수를 못 읽으면 끝을 「빈 장」으로만 알았다.
+        #    ⛔ 범위 밖 페이지에 마지막 장을 되풀이하는 원천이면 **끝나지 않았다**. 행이 없는 장도 끝으로 본다.
+        if total is None and (len(payload) < 200 or not rows_of(payload)):  # 🚨 빈 장으로 본다
             break
+        if page >= MAX_PAGES:
+            print(
+                f"\n  🔴 {MAX_PAGES}장을 넘었다 — 끝을 알리는 신호가 오지 않는다. 멈추고 완료로 찍지 않는다"
+            )
+            registry.mark_if_complete(source_id, saved=saved, partial=True)
+            return 1
         page += 1
 
     # 🔴 **2026-09-08 — `--pages` 로 일부만 받고 「수집 완료」를 찍고 있었다.**
@@ -289,8 +300,19 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
     #    🚨 `mfds_hf_board.py` 는 같은 상황에서 안 찍는 규약을 지키고 있었다.
     #       **한쪽 수집기만 고쳐 둔 규약은 규약이 아니다** (오늘 `_ONLY_PARTICLE` 과 같은 자리).
     # 🔄 2026-09-21 — 규칙은 `registry.mark_if_complete` 한 곳 (D-99 · 규약 3 · 게이트 15)
-    registry.mark_if_complete(source_id, saved=saved, partial=bool(max_pages))
+    # 🔴 2026-09-21 (전수 재검토 · 페이지 가드) — **받은 행이 원천 신고보다 적어도 「완료」였다.**
+    #    ⛔ 멈춤 조건이 `page * ROWS >= total` 이라, 원천이 한 장에 ROWS 보다 적게 주면 뒤쪽을 안 받고 끝났다.
+    #    ★ 전체 건수를 못 읽었으면 다 받았는지 **알 수 없다** — 모르는 것을 완료로 찍지 않는다 (D-72 · D-220).
+    short = total is not None and not max_pages and n_rows < total
+    unknown = total is None and not max_pages
+    registry.mark_if_complete(source_id, saved=saved, partial=bool(max_pages) or short or unknown)
     print(f"\n{source_id} — {saved}장 저장 → {dest.relative_to(store.ROOT)}/")
+    if short:
+        print(
+            f"  🔴 **받은 행 {n_rows:,} < 원천 신고 {total:,}** — 다 받지 못했다. 한 장의 행 수(ROWS={ROWS})를 원천이 깎았을 수 있다"
+        )
+    if unknown:
+        print("  🟡 전체 건수를 읽지 못했다 — 다 받았는지 알 수 없어 collected_at 을 찍지 않는다")
     if n_rows:
         dup = n_rows - len(seen)
         print(
@@ -308,8 +330,8 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
                 "     그만큼 다른 행이 빠진다. **합계가 맞는 것은 「다 받았다」의 근거가 아니다** (D-149)."
             )
     if registry.is_g2(source_id):
-        print("🚨 G2 다 — 사실 추출 후 원본을 지운다 (D-17 · store.drop_raw_for_g2)")
-    return 0
+        print("🚨 G2 다 — 사실 추출 후 원본을 지운다 (D-92 · store.drop_raw_for_g2)")
+    return 1 if short else 0
 
 
 def main(argv: list[str]) -> int:
