@@ -185,7 +185,7 @@ def main() -> int:
                 head = missing.LEVEL_MARK["red" if lv["red"] else "eyes"]
                 mark = f"  {head} **{whole}** — 볼 것 {eyes} ({told})"
             elif who == "replica" and any(r in missing.REPLICA_FOLDS for r in reasons):
-                mark = f"  ✅ {whole} — 사본은 원문을 쓰지 않는다 ({told})"
+                mark = f"  ✅ {whole} — 사본은 원문으로 파생물을 만들지 않는다 ({told})"
             else:
                 mark = f"  ✅ {whole} — 전부 설명됨 ({told})"
         elif n_disk and not n_led:
@@ -211,12 +211,13 @@ def main() -> int:
     #    ⛔ 종전에는 여기서 따로 🔴 「이 기기에서 쓰려면 다시 받는다」를 찍었다(이유를 안 봤다).
     if only_ledger and who == "replica":
         print(
-            f"\n✅ **원장에만 있는 소스 {len(only_ledger)}개** — 사본은 원문을 쓰지 않는다 (D-226)"
+            f"\n✅ **원장에만 있는 소스 {len(only_ledger)}개** — 사본은 원문으로 파생물을 만들지 않는다 (D-226)"
         )
         print("   🚨 이 기기에서 수집하지 않는다 — 원문은 정본 한 곳에 모인다.")
         print(
             "      「원장에 있다」는 「이 기기에 있다」가 아니다 (D-19). 볼 사람은 정본(클론 B)이다."
         )
+        print(missing.mirror_hint())
     if only_disk:
         print("\n🔴 **원장에 없는데 파일이 있다** — 규약 3 이 지켜지지 않았거나 원장이 밀렸다")
         for k in only_disk:

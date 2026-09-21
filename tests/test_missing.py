@@ -134,7 +134,7 @@ def test_이유_표의_순서와_정상_여부() -> None:
 # 🆕 2026-09-21 — 경보 수준 한 곳 · 역할을 본다
 # ══════════════════════════════════════════════════════════
 def test_경보_수준은_역할을_본다() -> None:
-    """🔴 사본은 원문을 쓰지 않는다(D-226) — 원장으로 못 가르는 것(`legacy`·`query`)은 사본에서 볼 것이 아니다.
+    """🔴 사본은 원문으로 파생물을 만들지 않는다(D-226) — 원장으로 못 가르는 것(`legacy`·`query`)은 사본에서 볼 것이 아니다.
     ★ `lost` 는 어느 역할에서도 🔴 · 정본·역할 없음은 종전 그대로 🟡."""
     for who in ("canonical", "replica", None):
         assert missing.level("lost", who) == "red"
@@ -162,7 +162,7 @@ def test_doctor_는_사본에서_원문_결손을_접고_수집을_권하지_않
     rows = _legacy_rows()
     assert doctor._report_missing(rows, len(rows), who="replica") == 0
     out = capsys.readouterr().out
-    assert "사람이 볼 것 **0개**" in out and "사본은 원문을 쓰지 않는다" in out, out
+    assert "사람이 볼 것 **0개**" in out and "사본은 원문으로 파생물을 만들지 않는다" in out, out
     assert "다시 받는다" not in out, out
     assert doctor._report_missing(rows, len(rows), who="canonical") == 0
     out = capsys.readouterr().out
@@ -196,7 +196,7 @@ def test_inventory_는_사본에서_다시_받으라고_하지_않는다(tmp_pat
     body = out.splitlines()[1:]  # 첫 줄은 열 이름(「🔴없음」)이다
     assert not [x for x in body if "🔴" in x], out
     assert "다시 받는다" not in out, out
-    assert "사본은 원문을 쓰지 않는다" in out, out
+    assert "사본은 원문으로 파생물을 만들지 않는다" in out, out
 
 
 def test_inventory_와_doctor_는_같은_결손에_같은_색을_낸다(tmp_path, monkeypatch, capsys) -> None:

@@ -534,9 +534,16 @@ INBOX_LAYOUT = "copylane-raw"
 #:    클론 A 실측: `G:\내 드라이브` 의 폴더 목록에 `CopyLane_store` 가 없고, 내용은
 #:    `G:\.shortcut-targets-by-id\<폴더 id>\copylane-derived` 에 있었다. 그래서 `data-setup` 이 「못 찾았다」로 멈췄고
 #:    사람이 `--store` 로 id 경로를 손으로 줬다. 안내서 ②(바로가기 추가)를 따른 팀원이 전부 밟는 자리다.
+#: 🆕 2026-09-21 (D-256) — 정본 원문 **거울**. 팀장 계정에만 공유한다 — 원문은 마스킹 전이다. `scripts/raw_mirror.py` 가 읽는다
+MIRROR_NAME = "CopyLane_raw_mirror"
+MIRROR_LAYOUT = "copylane-raw-mirror"
 SHORTCUT_TARGETS = ".shortcut-targets-by-id"
 #: 이름 → 그 폴더 안에 있어야 하는 배치 폴더. id 폴더에는 원래 이름이 안 남으므로 **내용으로** 알아본다.
-SIGNATURE: dict[str, str] = {STORE_NAME: LAYOUT, INBOX_NAME: INBOX_LAYOUT}
+SIGNATURE: dict[str, str] = {
+    STORE_NAME: LAYOUT,
+    INBOX_NAME: INBOX_LAYOUT,
+    MIRROR_NAME: MIRROR_LAYOUT,
+}
 
 
 def default_roots(home: pathlib.Path) -> list[pathlib.Path]:
@@ -608,6 +615,7 @@ def setup(
     yes: bool = False,
     inbox: str | None = None,
     device: str | None = None,
+    mirror: str | None = None,
 ) -> int:
     """🆕 역할과 저장소를 `.env` 에 적고, 받는 쪽이면 **바로 받는다**.
 
@@ -687,6 +695,19 @@ def setup(
     elif not box.is_dir():
         print(f"🔴 받은편지함 폴더가 없다 — {box}. .env 는 그대로다")
         return 1
+    # 🆕 D-256 — 원문 거울은 **팀장 계정에만** 공유된다 — 다른 기기는 못 찾는 것이 정상이다
+    mir = pathlib.Path(mirror).expanduser() if mirror else None
+    if mir is None:
+        found_mir = candidates(name=MIRROR_NAME)
+        mir = found_mir[0] if found_mir else None
+    elif not mir.is_dir():
+        print(f"🔴 원문 거울 폴더가 없다 — {mir}. .env 는 그대로다")
+        return 1
+    if mir is not None and mir.resolve() in {chosen.resolve(), *([box.resolve()] if box else [])}:
+        print(
+            "🔴 원문 거울이 저장소·받은편지함과 같은 폴더다 — 마스킹 전 원문이 섞인다 (D-256). .env 는 그대로다"
+        )
+        return 1
 
     setkey.put_setting("DATA_ROLE", role)
     setkey.put_setting("DATA_STORE", str(chosen))
@@ -698,6 +719,9 @@ def setup(
     if device:
         setkey.put_setting("DATA_DEVICE", device)
         print(f"  .env — DATA_DEVICE={device}")
+    if mir is not None:
+        setkey.put_setting("RAW_MIRROR", str(mir))
+        print(f"  .env — RAW_MIRROR={mir} (정본 원문 거울 · 팀장 기기 · D-256)")
 
     if role == "canonical":
         print("  다음 — `launcher.py data-publish --dry-run` 으로 무엇이 올라갈지 본다")
@@ -733,6 +757,7 @@ def main() -> int:
     ap.add_argument("--store", default=None, help="setup — 저장소 폴더 (비우면 찾는다)")
     ap.add_argument("--inbox", default=None, help="setup — 원문 받은편지함 (비우면 찾는다 · D-250)")
     ap.add_argument("--device", default=None, help="setup — 이 기기 이름 (실명 금지 · D-250)")
+    ap.add_argument("--mirror", default=None, help="setup — 원문 거울 (비우면 찾는다 · D-256)")
     ap.add_argument("--yes", action="store_true", help="묻지 않는다")
     ap.add_argument("--dry-run", action="store_true", help="무엇을 할지만 보여 준다")
     a = ap.parse_args()
@@ -747,7 +772,9 @@ def main() -> int:
     if a.cmd == "publish":
         return publish(yes=a.yes, dry_run=a.dry_run)
     if a.cmd == "setup":
-        return setup(role=a.role, store=a.store, yes=a.yes, inbox=a.inbox, device=a.device)
+        return setup(
+            role=a.role, store=a.store, yes=a.yes, inbox=a.inbox, device=a.device, mirror=a.mirror
+        )
     return ensure()
 
 

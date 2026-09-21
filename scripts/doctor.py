@@ -160,7 +160,7 @@ def _report_missing(rows: list[dict[str, Any]], n: int, who: str | None = ...) -
     ★ 이제 정상으로 설명되는 것은 한 줄로 접고, **사람이 볼 것**만 목록을 편다.
     🚨 🔴 는 `lost`(이 기기가 받았다고 적혔는데 없다) 하나다 — 이 기기에서 답할 수 있는 결손만 종료코드에 넣는다.
     🔄 2026-09-21 — 수준은 `missing.level()` 한 곳이 정하고 **역할을 본다.** 사본은 `legacy`·`query` 를 접고
-       「다시 받는다」를 안 찍는다 — 사본은 원문을 쓰지 않는다 (D-226). ⛔ 종전에는 클론 A 에서 「사람이 볼 것
+       「다시 받는다」를 안 찍는다 — 사본은 원문으로 파생물을 만들지 않는다 (D-226). ⛔ 종전에는 클론 A 에서 「사람이 볼 것
        5,545개」와 재수집 안내가 찍혔다 (2026-09-21 사용자 실행).
     """
     if who is ...:
@@ -197,11 +197,12 @@ def _report_missing(rows: list[dict[str, Any]], n: int, who: str | None = ...) -
     if who == "replica" and folded:
         told = " · ".join(f"{r} {c:,}" for r, c in sorted(folded.items()))
         print(
-            f"     ✅ 사본    {sum(folded.values()):>6,}  원장으로 못 가르는 것({told}) — 사본은 원문을 쓰지 않는다 (D-226)"
+            f"     ✅ 사본    {sum(folded.values()):>6,}  원장으로 못 가르는 것({told}) — 사본은 원문으로 파생물을 만들지 않는다 (D-226)"
         )
         print(
             "        🚨 이 기기에서 수집하지 않는다 — 원문은 정본 한 곳에 모인다. 볼 사람은 정본(클론 B)이다."
         )
+        print(missing_mod.mirror_hint())
     elif who != "replica":
         if count.get("legacy"):
             print("     🚨 `legacy` — 기기 칸(D-250) 이전 줄이라 원장만으로는 못 가른다.")
