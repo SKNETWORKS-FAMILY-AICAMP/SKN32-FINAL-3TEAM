@@ -283,6 +283,31 @@ def test_드라이브_글자가_달라도_저장소_폴더를_찾는다(tmp_path
 
 
 @pytest.mark.gate
+def test_바로가기로_붙인_공유_폴더도_찾는다(tmp_path: pathlib.Path) -> None:
+    """🔴 2026-09-21 클론 A 실측 — `내 드라이브` 의 바로가기는 폴더가 아니고(`is_dir()` 거짓), 내용은
+    `G:\\.shortcut-targets-by-id\\<id>\\copylane-derived` 에 있었다 — `data-setup` 이 「못 찾았다」로 멈췄다.
+    ★ 두 모양 — id 폴더 안에 이름이 있는 것 · id 폴더 자체가 그것(내용으로 알아본다).
+    ★ 반대 대조 — 배치 폴더가 없는 남의 공유 폴더는 안 집는다 · 받은편지함과 저장소를 섞지 않는다.
+    """
+    g = tmp_path / "G"
+    (g / "내 드라이브").mkdir(parents=True)  # 바로가기 자리는 폴더가 아니다 — 목록에 없다
+    sc = g / ds.SHORTCUT_TARGETS
+    (sc / "1ZPf" / ds.LAYOUT).mkdir(parents=True)  # 클론 A 모양 — id 폴더가 곧 저장소
+    (sc / "2abc" / ds.STORE_NAME).mkdir(parents=True)  # 이름이 남는 모양
+    (sc / "3xyz" / "남의_폴더").mkdir(parents=True)  # 배치 폴더가 없다 — 안 집는다
+    (sc / "4box" / ds.INBOX_LAYOUT).mkdir(parents=True)  # 받은편지함 — 저장소로 안 집는다
+    assert ds.candidates([g]) == [sc / "1ZPf", sc / "2abc" / ds.STORE_NAME]
+    assert ds.candidates([g], name=ds.INBOX_NAME) == [sc / "4box"]
+
+
+def test_받은편지함_배치_폴더_이름은_한_곳이다() -> None:
+    from scripts import raw_inbox
+
+    assert raw_inbox.LAYOUT == ds.INBOX_LAYOUT == ds.SIGNATURE[ds.INBOX_NAME]
+    assert ds.SIGNATURE[ds.STORE_NAME] == ds.LAYOUT
+
+
+@pytest.mark.gate
 def test_설정은_env_에_적고_받는_쪽이면_바로_받는다(world, monkeypatch: pytest.MonkeyPatch) -> None:
     """🔴 팀장 요구 — 클론 A · 팀원은 명령 하나로 역할·경로가 적히고 파생물이 채워진다."""
     tmp, storage, canon = world

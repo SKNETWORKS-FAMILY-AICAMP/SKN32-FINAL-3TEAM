@@ -525,6 +525,18 @@ DRIVE_DIRS = ("내 드라이브", "My Drive")
 
 #: 🆕 D-250 — 수집 팀원의 원문 받은편지함. 저장소와 **다른 폴더**다(쓰는 사람이 다르다) · `scripts/raw_inbox.py` 와 같은 이름
 INBOX_NAME = "CopyLane_raw_inbox"
+#: 받은편지함 안의 배치 폴더 — 🔄 2026-09-21 `scripts/raw_inbox.py` 에서 이리 옮겼다(그쪽이 이것을 읽는다 · D-99).
+#:    `candidates()` 가 바로가기 대상 폴더를 **내용으로** 알아보는 데 쓴다.
+INBOX_LAYOUT = "copylane-raw"
+
+#: Drive for desktop 이 **다른 사람이 공유한 폴더의 바로가기** 대상을 실제로 두는 곳 (드라이브 최상위).
+#: 🆕 2026-09-21 — ⛔ `내 드라이브` 에 바로가기를 추가해도 그 자리의 항목은 **폴더가 아니다**(`is_dir()` 거짓) —
+#:    클론 A 실측: `G:\내 드라이브` 의 폴더 목록에 `CopyLane_store` 가 없고, 내용은
+#:    `G:\.shortcut-targets-by-id\<폴더 id>\copylane-derived` 에 있었다. 그래서 `data-setup` 이 「못 찾았다」로 멈췄고
+#:    사람이 `--store` 로 id 경로를 손으로 줬다. 안내서 ②(바로가기 추가)를 따른 팀원이 전부 밟는 자리다.
+SHORTCUT_TARGETS = ".shortcut-targets-by-id"
+#: 이름 → 그 폴더 안에 있어야 하는 배치 폴더. id 폴더에는 원래 이름이 안 남으므로 **내용으로** 알아본다.
+SIGNATURE: dict[str, str] = {STORE_NAME: LAYOUT, INBOX_NAME: INBOX_LAYOUT}
 
 
 def default_roots(home: pathlib.Path) -> list[pathlib.Path]:
@@ -559,7 +571,34 @@ def candidates(
                     out.append(p)
             except OSError:  # 빈 카드 리더 같은 자리 — 없는 것으로 친다
                 continue
+        out += _shortcut_targets(r, name)
     return out
+
+
+def _shortcut_targets(root: pathlib.Path, name: str) -> list[pathlib.Path]:
+    """🆕 2026-09-21 — 바로가기 대상 폴더(`<드라이브>/.shortcut-targets-by-id/<id>`) 중 `name` 인 것.
+
+    ★ 두 모양을 다 본다 — ① id 폴더 안에 `name` 폴더가 있다 ② id 폴더 **자체**가 그 폴더다(원래 이름이 안 남는다 —
+      클론 A 실측). ②는 이름으로 못 알아보므로 **안에 배치 폴더(`SIGNATURE`)가 있는지**로 본다.
+    🚨 그래서 한 번도 올린 적 없는 **빈** 저장소는 ②로 못 찾는다 — 그때는 안내대로 `--store` 로 준다.
+    ⛔ 파일을 열지 않는다 — 이름과 폴더인지만 본다. 드라이브 동기화 앱이 파일을 내려받게 만들지 않는다.
+    """
+    base = root / SHORTCUT_TARGETS
+    sig = SIGNATURE.get(name)
+    found: list[pathlib.Path] = []
+    try:
+        if not base.is_dir():
+            return []
+        for c in sorted(base.iterdir()):
+            if not c.is_dir():
+                continue
+            if (c / name).is_dir():
+                found.append(c / name)
+            elif sig and (c / sig).is_dir():
+                found.append(c)
+    except OSError:
+        return found
+    return found
 
 
 def setup(
@@ -610,6 +649,8 @@ def setup(
                 "  ① Google Drive for desktop 을 설치하고 **초대받은 계정**으로 로그인한다\n"
                 f"  ② drive.google.com → 공유 문서함 → `{STORE_NAME}` 우클릭 → 바로가기 추가 → 내 드라이브\n"
                 "  ③ 탐색기에 `<글자>:\\내 드라이브\\CopyLane_store` 가 보이면 다시 실행한다\n"
+                f"     🚨 바로가기 대상은 `<글자>:\\{SHORTCUT_TARGETS}\\<폴더 id>` 에 있다 — 여기도 찾아봤다.\n"
+                "        빈 저장소(한 번도 올린 적 없음)는 내용으로 못 알아본다 — 그 폴더를 `--store` 로 준다\n"
                 "  (다른 곳이면 `--store <폴더>` 로 준다)"
             )
             return 1
