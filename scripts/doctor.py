@@ -650,6 +650,20 @@ def _check_data_env() -> int:
         print(f"✅ DATA_DEVICE {dev}")
     else:
         print("🟡 DATA_DEVICE 가 비었다 — 정본 밖에서는 수집·register 가 쓰기 전에 멈춘다 (D-250)")
+    # 🆕 2026-09-21 (D-256) — 원문 거울. 판정은 `raw_mirror.mirror_root()` 한 곳 (D-99) —
+    #    폴더가 없거나 팀 저장소·받은편지함과 **같은 폴더**면 🔴 (마스킹 전 원문이 팀원이 읽는 곳에 놓인다)
+    if env.setting("RAW_MIRROR"):
+        from scripts import raw_mirror  # noqa: PLC0415
+
+        try:
+            print(f"✅ RAW_MIRROR {raw_mirror.mirror_root().parent}")
+        except raw_mirror.MirrorError as e:
+            print(f"🔴 {e}")
+            red += 1
+    else:
+        print(
+            "⬜ RAW_MIRROR 가 비었다 — 원문 거울 없음 (팀장 기기만 붙인다 · 팀원 기기는 비워 둔다 · D-256)"
+        )
     return red
 
 
