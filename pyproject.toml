@@ -97,6 +97,8 @@ select = [
     "UP",   # pyupgrade
     "B",    # bugbear
     "SIM",  # simplify
+    "W605", # 잘못된 이스케이프(`"\s"`) — 🆕 2026-09-21 docstring 한 곳이 테스트 중 DeprecationWarning 을 냈다.
+            #   3.12+ 는 SyntaxWarning, 앞으로 오류가 된다. `W` 전체가 아니라 이것만 켠다.
 ]
 ignore = [
     "E501",  # 줄 길이는 formatter 가 처리

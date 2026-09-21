@@ -1,4 +1,4 @@
-"""preprocess/ftc_reason_probe.py — 「이유」에 광고 문구가 인용돼 있는가를 **세기만** 한다.
+r"""preprocess/ftc_reason_probe.py — 「이유」에 광고 문구가 인용돼 있는가를 **세기만** 한다.
 
   uv run python -m preprocess.ftc_reason_probe
   uv run python -m preprocess.ftc_reason_probe --peek 30   # 마스킹 지난 문구를 화면에만
