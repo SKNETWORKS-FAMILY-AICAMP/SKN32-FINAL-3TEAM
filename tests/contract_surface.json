@@ -113,7 +113,7 @@
       "segment": "req app.contracts.Segment"
     },
     "GenerateResponse": {
-      "adapted": "opt ForwardRef('list[AdaptedCopy]')",
+      "adapted": "opt list[app.contracts.AdaptedCopy]",
       "candidates": "opt list[app.contracts.Candidate]",
       "keywords": "opt list[app.contracts.KeywordScreen]"
     },

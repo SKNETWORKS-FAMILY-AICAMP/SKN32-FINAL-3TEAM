@@ -52,7 +52,7 @@ class HoldReason(enum.StrEnum):
     low_conf = "low_conf"  # 확신 부족
     gap2 = "gap2"  # 1·2위 격차 부족
     cat_unknown = "cat_unknown"  # 카테고리 판별 실패 (D-82)
-    rd1 = "rd1"  # 라운드 1 미해소
+    rd1 = "rd1"  # 공존 규칙 발동 (D-127 · D-120) — 🔄 09-21 종전 주석 「라운드 1 미해소」는 D-127 과 달랐다
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -227,6 +227,12 @@ class RiskAssessment(BaseModel):
                 "최종 위험도를 적으려면 코드 하한이 있어야 한다 — "
                 "상향의 정의가 「하한보다 높다」인데 하한이 없으면 상향이 정의되지 않는다 (D-09)"
             )
+        # 🆕 2026-09-21 (전수 재검토) — ⛔ 위 docstring 이 「인코더는 내릴 수 없다」고 적었는데 `floor=R3 · final=R0` 이
+        #    검증을 지났다. 래칫(D-09 · max)의 뜻 그대로 — 최종은 하한보다 낮을 수 없다.
+        if self.final.level < self.floor.level:
+            raise ValueError(
+                f"최종 위험도가 코드 하한보다 낮다 — floor={self.floor.value} final={self.final.value} (D-09 래칫)"
+            )
         if self.final.level > self.floor.level and self.evidence_span is None:
             raise ValueError(
                 "하한 위로 올리려면 근거 스팬이 필요하다 (D-131) — "
@@ -377,6 +383,15 @@ class JudgeResponse(BaseModel):
             raise ValueError("B 가 K 를 소진한 것은 「표현 탐색 실패」다 — 증명서가 아니다 (D-125)")
         if self.outcome is not Outcome.passed and self.candidates:
             raise ValueError("프론티어는 통과했을 때만 낸다 (D-125)")
+        # 🆕 2026-09-21 (전수 재검토 I2) — **루프에 안 들어간 통과**(attempt 0)는 문장이 전부 통과여야 한다 (D-125 ·
+        #    「통과 = 확정 ∧ 위험도 ≤ 주의」). ⛔ 종전에는 미판정·R3 문장이 섞인 `pass` 도 계약을 지났다 — 라우터가
+        #    위험도를 안 봐도(I1) 여기서 못 잡았다. 🚨 attempt ≥ 1 의 `pass` 는 **대체 문구**의 통과라 원문 판정과 다르다.
+        if self.outcome is Outcome.passed and self.attempt == 0:
+            bad = [s.sent_id for s in self.sentences if not is_pass(s)]
+            if bad:
+                raise ValueError(
+                    f"outcome=pass 인데 통과가 아닌 문장이 있다 — {bad[:5]} (D-125 · 확정 ∧ 위험도 ≤ R1)"
+                )
         return self
 
     @model_validator(mode="after")

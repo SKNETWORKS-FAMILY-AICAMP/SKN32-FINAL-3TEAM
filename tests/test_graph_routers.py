@@ -58,6 +58,17 @@ def _s(
     )
 
 
+def _ok(sid: str = "s1") -> SentenceJudgment:
+    """통과 문장 — 확정 ∧ 위험도 ≤ 주의 (D-125). 🆕 2026-09-21 — 종전 `_s(confirmed)` 는 위반 + R2 인데
+    불가 사유가 없어 **통과**로 갔다(전수 재검토 I1). 그 테스트가 버그를 지키고 있었다."""
+    return SentenceJudgment(
+        sent_id=sid,
+        text="문구",
+        verdict=Verdict.confirmed,
+        risk=RiskAssessment(floor=Risk.R1, final=Risk.R1),
+    )
+
+
 # ── ① 라우터 단독 ────────────────────────────────────────────────────
 
 
@@ -72,7 +83,11 @@ def _s(
         ([_s(Verdict.confirmed, infeas=Infeasibility.A)], "certificate"),
         ([_s(Verdict.confirmed, infeas=Infeasibility.C)], "certificate"),
         ([_s(Verdict.confirmed, infeas=Infeasibility.B)], "generate"),
-        ([_s(Verdict.confirmed)], "frontier"),
+        ([_ok()], "frontier"),
+        # 🔴 전수 재검토 I1 — 확정이어도 위험도 > 주의 · 위험도 없음은 통과가 아니다 (D-125)
+        ([_s(Verdict.confirmed)], "hold"),
+        ([SentenceJudgment(sent_id="s1", text="문구", verdict=Verdict.confirmed)], "hold"),
+        ([_ok("s1"), _s(Verdict.confirmed, sid="s2")], "hold"),
     ],
 )
 def test_판정_직후_갈림(sents: list[SentenceJudgment], want: str) -> None:
@@ -103,6 +118,16 @@ def test_A_와_B_가_섞이면_증명서로_간다() -> None:
 )
 def test_재생성_루프_갈림(rejects: list[str], attempt: int, want: str) -> None:
     assert route_after_verify({"rejects": rejects, "attempt": attempt}) == want  # type: ignore[arg-type]
+
+
+@pytest.mark.gate
+def test_이번_시도가_통과면_앞의_거부가_남아도_프론티어다() -> None:
+    """🔴 전수 재검토 I3 — ⛔ 누적 `rejects` 가 비었는지로 「이번 시도」를 읽어, 한 번 거부되면 뒤 시도가
+    통과해도 `search_failed` 로 끝났다. 이번 시도의 판정은 `rejected` 칸이다."""
+    state = {"rejects": ["인용 검증"], "rejected": False, "attempt": 1}
+    assert route_after_verify(state) == "frontier"  # type: ignore[arg-type]
+    state = {"rejects": ["인용 검증"], "rejected": True, "attempt": 1}
+    assert route_after_verify(state) == "generate"  # type: ignore[arg-type]
 
 
 @pytest.mark.gate
@@ -241,7 +266,8 @@ def _init(text: str = "문구") -> JudgeState:
     ("sents", "tail"),
     [
         (None, "hold"),  # 스텁 판정(unjudged) → 보류
-        ([_s(Verdict.confirmed)], "frontier"),
+        ([_ok()], "frontier"),
+        ([_s(Verdict.confirmed)], "hold"),  # 🔴 I1 — 위반 + R2 · 불가 사유 없음은 통과가 아니다
         ([_s(Verdict.confirmed, infeas=Infeasibility.A)], "certificate"),
         ([_s(Verdict.confirmed, infeas=Infeasibility.C)], "certificate"),
         ([_s(Verdict.hold)], "hold"),
