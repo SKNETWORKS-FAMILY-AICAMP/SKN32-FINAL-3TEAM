@@ -13,7 +13,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![tests](https://img.shields.io/badge/tests-1154_(gate_609)-0F7B4F?style=flat-square)
+![tests](https://img.shields.io/badge/tests-1257_(gate_645)-0F7B4F?style=flat-square)
 ![decisions](https://img.shields.io/badge/설계결정-D--256-2B5BD7?style=flat-square)
 
 **[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 234건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
@@ -200,8 +200,8 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 | 파인튜닝 · 평가 | 🔴 **미착수** | 평가 홀드아웃 4유형 공백 |
 
 ```
-게이트 테스트   pytest -m gate   609건   ← 모은 수(--collect-only) · 2026-09-21
-전체 테스트     pytest           1,154건 ← 데이터 없는 기기는 일부가 건너뛴다
+게이트 테스트   pytest -m gate   645건   ← 모은 수(--collect-only) · 2026-09-21
+전체 테스트     pytest           1,257건 ← 데이터 없는 기기는 일부가 건너뛴다
 설계 결정       D-01 ~ D-256     빠진 번호 0
 ```
 
