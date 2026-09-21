@@ -444,6 +444,21 @@ DEVICE_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
 CANONICAL_DEVICE = "canonical"
 
 
+def device_problem(v: str, role: str | None) -> str | None:
+    """별칭 `v` 가 못 쓰는 이유 한 줄, 쓸 수 있으면 `None` — **판정의 정본은 여기 한 곳**이다 (D-99).
+
+    🆕 2026-09-21 — ⛔ 종전에는 `canonical` 예약어를 `data_store.setup` 만 막았다. `.env` 에 손으로
+       `DATA_DEVICE=canonical` 을 적은 팀원 기기는 `device_id()` 가 그대로 받아 원장에 `canonical` 로 적었고,
+       `raw_inbox` 는 그 행을 「정본에 이미 있다」로 보고 **raw-publish 에서 건너뛴다**(받은 원문이 정본에 안 간다).
+       `doctor` 도 모양만 봤다. 세 곳(`device_id` · `data_store.setup` · `doctor`)이 이 함수를 부른다.
+    """
+    if not DEVICE_RE.fullmatch(v):
+        return "모양이 틀렸다 — 영문·숫자·`._-` 32자 이내 (예: collector-1)"
+    if v == CANONICAL_DEVICE and role != "canonical":
+        return f"`{CANONICAL_DEVICE}` 는 정본 예약어다 — 정본(DATA_ROLE=canonical) 밖에서는 못 쓴다"
+    return None
+
+
 def device_id() -> str:
     """이 기기의 별칭 — `.env` 의 `DATA_DEVICE`. 비었으면 정본만 `canonical`, 나머지는 **멈춘다**.
 
@@ -455,15 +470,17 @@ def device_id() -> str:
     from collect import env  # noqa: PLC0415 — `.env` 를 여는 곳은 한 곳이다 (D-99)
 
     v = env.setting("DATA_DEVICE")
+    role = env.setting("DATA_ROLE")
     if v:
-        if not DEVICE_RE.fullmatch(v):
+        why = device_problem(v, role)
+        if why:
             raise StoreError(
-                "DATA_DEVICE 모양이 틀렸다 — 영문·숫자·`._-` 32자 이내 (예: collector-1).\n"
+                f"DATA_DEVICE {why}. 아무것도 저장하지 않았다.\n"
                 "  🚨 원장은 공개 저장소에 올라간다 — 실명을 쓰지 않는다.\n"
                 "  고치기: uv run python launcher.py data-setup --device <별칭>"
             )
         return v
-    if env.setting("DATA_ROLE") == "canonical":
+    if role == "canonical":
         return CANONICAL_DEVICE
     raise StoreError(
         "기기 별칭(DATA_DEVICE)이 비어 있다 — 누가 받았는지 원장에 못 적는다. 아무것도 저장하지 않았다.\n"

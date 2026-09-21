@@ -283,6 +283,31 @@ def test_드라이브_글자가_달라도_저장소_폴더를_찾는다(tmp_path
 
 
 @pytest.mark.gate
+def test_바로가기로_붙인_공유_폴더도_찾는다(tmp_path: pathlib.Path) -> None:
+    """🔴 2026-09-21 클론 A 실측 — `내 드라이브` 의 바로가기는 폴더가 아니고(`is_dir()` 거짓), 내용은
+    `G:\\.shortcut-targets-by-id\\<id>\\copylane-derived` 에 있었다 — `data-setup` 이 「못 찾았다」로 멈췄다.
+    ★ 두 모양 — id 폴더 안에 이름이 있는 것 · id 폴더 자체가 그것(내용으로 알아본다).
+    ★ 반대 대조 — 배치 폴더가 없는 남의 공유 폴더는 안 집는다 · 받은편지함과 저장소를 섞지 않는다.
+    """
+    g = tmp_path / "G"
+    (g / "내 드라이브").mkdir(parents=True)  # 바로가기 자리는 폴더가 아니다 — 목록에 없다
+    sc = g / ds.SHORTCUT_TARGETS
+    (sc / "1ZPf" / ds.LAYOUT).mkdir(parents=True)  # 클론 A 모양 — id 폴더가 곧 저장소
+    (sc / "2abc" / ds.STORE_NAME).mkdir(parents=True)  # 이름이 남는 모양
+    (sc / "3xyz" / "남의_폴더").mkdir(parents=True)  # 배치 폴더가 없다 — 안 집는다
+    (sc / "4box" / ds.INBOX_LAYOUT).mkdir(parents=True)  # 받은편지함 — 저장소로 안 집는다
+    assert ds.candidates([g]) == [sc / "1ZPf", sc / "2abc" / ds.STORE_NAME]
+    assert ds.candidates([g], name=ds.INBOX_NAME) == [sc / "4box"]
+
+
+def test_받은편지함_배치_폴더_이름은_한_곳이다() -> None:
+    from scripts import raw_inbox
+
+    assert raw_inbox.LAYOUT == ds.INBOX_LAYOUT == ds.SIGNATURE[ds.INBOX_NAME]
+    assert ds.SIGNATURE[ds.STORE_NAME] == ds.LAYOUT
+
+
+@pytest.mark.gate
 def test_설정은_env_에_적고_받는_쪽이면_바로_받는다(world, monkeypatch: pytest.MonkeyPatch) -> None:
     """🔴 팀장 요구 — 클론 A · 팀원은 명령 하나로 역할·경로가 적히고 파생물이 채워진다."""
     tmp, storage, canon = world
@@ -400,3 +425,55 @@ def test_publish_기록은_원장_sha_와_커밋_여부를_남긴다(
 def test_원장이_HEAD_에_없으면_미커밋으로_본다(world, monkeypatch: pytest.MonkeyPatch) -> None:
     """가짜 레포는 git 이 아니다 — 모르는 것은 「같다」로 세지 않는다 (None)."""
     assert ds.manifest_in_head() is None
+
+
+@pytest.mark.gate
+def test_중간_파일의_바이트가_틀리면_앞_파일도_안_바뀐다(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 2026-09-21 — ⛔ 종전에는 한 파일씩 「백업 → 받기」라, 두 번째 파일의 sha 가 틀리면 첫 파일은
+    이미 새 판으로 바뀐 **섞인 상태**로 멈췄다. 이제 전부 확인한 뒤에만 바꿔 끼운다."""
+    tmp, storage, canon = world
+    assert _publish(monkeypatch) == 0
+    sha_label = hashlib.sha256((canon / "data" / "derived" / LABEL).read_bytes()).hexdigest()
+    ds._obj(storage / ds.LAYOUT, sha_label).write_bytes(b"corrupted")  # 라벨 객체만 오염
+    manifest = dm.OUT.read_bytes()
+    a = _repo(tmp / "A", {GEN: b'{"text":"v1"}\n', LABEL: b"old-label\n"})
+    (a / "data" / "derived_manifest.jsonl").write_bytes(manifest)
+    _point(monkeypatch, a)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert [r["경로"] for r in ds.plan()] == [f"data/derived/{GEN}", f"data/derived/{LABEL}"]
+    assert ds.sync(yes=True) == 1
+    assert (a / "data" / "derived" / GEN).read_bytes() == b'{"text":"v1"}\n', (
+        "🔴 앞 파일만 바뀌었다"
+    )
+    assert (a / "data" / "derived" / LABEL).read_bytes() == b"old-label\n"
+    assert not list((a / "data" / "derived").rglob("*.part")), "임시 파일이 남았다"
+    assert not (tmp / "A_backup").exists(), "아무것도 안 바꿨는데 백업을 만들었다"
+
+
+@pytest.mark.gate
+def test_dry_run_도_저장소_준비를_본다(world, monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 2026-09-21 — ⛔ 종전 dry-run 은 저장소를 보기 전에 끝나 「받을 것 N개」만 말하고 0 을 냈다."""
+    tmp, _storage, _canon = world  # publish 를 안 했다 — 저장소가 비었다
+    manifest = dm.OUT.read_bytes()
+    a = _repo(tmp / "A", {})
+    (a / "data" / "derived").mkdir(parents=True)
+    (a / "data" / "derived_manifest.jsonl").write_bytes(manifest)
+    _point(monkeypatch, a)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert ds.sync(dry_run=True) == 1, "🔴 저장소에 없는데 dry-run 이 초록이다"
+    monkeypatch.setenv("DATA_STORE", "")
+    assert ds.sync(dry_run=True) == 1, "🔴 DATA_STORE 가 비었는데 dry-run 이 초록이다"
+    # 반대 대조 — 올린 뒤에는 dry-run 이 0 이고 아무것도 받지 않는다
+    monkeypatch.setenv("DATA_STORE", str(_storage))
+    _point(monkeypatch, _canon)
+    assert _publish(monkeypatch) == 0
+    _point(monkeypatch, a)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert ds.sync(dry_run=True) == 0
+    assert not (a / "data" / "derived" / GEN).exists()
+
+
+def test_크기_단위는_MiB_다() -> None:
+    assert ds._size([{"bytes": 1024 * 1024}]) == "1.0 MiB"

@@ -193,6 +193,57 @@ def test_판정_파라미터를_코드에_다시_적지_않는다() -> None:
     )
 
 
+#: 🆕 2026-09-21 — 인용 상한을 **산문으로** 적는 자리. 숫자는 코드가 아니라 문장 속에 있어 위 검사를 안 지난다.
+#:    ⛔ D-249 가 40 → 120 으로 고칠 때 `PARAMS` 한 곳만 바뀌고 **산문 다섯 벌**(레지스트리 생성기 ·
+#:       판정매트릭스 원천 · 수집기 docstring 과 출력문 · 전처리 사양)이 40 을 들고 남았다. 생성물
+#:       `data_sources.yaml` 까지 40 을 말했고 `rebuild` 를 돌려도 40 이 다시 나왔다 — 원장이 폐기된 수를 말했다.
+_QUOTE_CAP_PROSE = (
+    "scripts/gen_registry.py",
+    "docs/03_데이터/_matrix/data.js",
+    "data_sources.yaml",
+    "scripts/registry_rationale.yaml",
+    "docs/03_데이터/_matrix/sources.json",
+    "docs/03_데이터/판정매트릭스.html",
+    "docs/03_데이터/전처리_사양.md",
+)
+#: 🚨 일부러 빼는 것 — `scripts/registry_review.yaml` 은 2인 확인 **서명 당시 문언**이라 고치지 않는다
+#:    (그 자리에 🔄 줄을 붙였다). 결정기록·사실원장·인계는 그날의 기록이다.
+_QUOTE_CAP_LINE = re.compile(r"(\d+)\s*자\s*상한|상한\s*(\d+)\s*자")
+
+
+@pytest.mark.gate
+def test_인용_상한을_적은_산문은_PARAMS_와_같다() -> None:
+    """🔴 인용 광고 문구의 보관 상한을 문장으로 적은 자리가 `PARAMS.quote_max_chars` 와 같은가 (D-249 · D-99).
+
+    ★ 인용 문구 줄만 본다 — 같은 줄에 `NOREDIST` 나 `인용` 이 있을 때. 청크 700자 같은 다른 상한과 안 섞인다.
+    """
+    from app.settings import PARAMS
+
+    files = [ROOT / p for p in _QUOTE_CAP_PROSE] + sorted((ROOT / "collect").glob("*.py"))
+    bad: list[str] = []
+    for p in files:
+        if not p.exists():
+            continue
+        for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            if "NOREDIST" not in line and "인용" not in line:
+                continue
+            for m in _QUOTE_CAP_LINE.finditer(line):
+                n = int(m.group(1) or m.group(2))
+                if n != PARAMS.quote_max_chars:
+                    bad.append(f"{_rel(p)}:{i} — {n}자")
+    assert not bad, (
+        f"🔴 인용 상한이 PARAMS({PARAMS.quote_max_chars}자)와 다르다: {bad}\n"
+        "   고치는 법 — 원천(생성기·data.js·수집기)을 고치고 `launcher.py rebuild` (D-90)"
+    )
+
+
+def test_반대_대조_옛_40자_문언을_잡는다() -> None:
+    """위 게이트가 실제로 실패할 수 있는가 — D-249 이전 문언을 그대로 넣어 본다 (D-170)."""
+    line = "문구만 취해 G2+NOREDIST·40자 상한으로 다룬다 (D-133 ①②③)."
+    m = _QUOTE_CAP_LINE.search(line)
+    assert m and int(m.group(1)) == 40 and "NOREDIST" in line
+
+
 @pytest.mark.gate
 def test_파라미터에_출처_태그가_붙어_있다() -> None:
     """🚨 판정·게이트·적재에 걸리는 값에는 출처를 적는다 (D-201 → D-205).

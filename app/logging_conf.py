@@ -28,9 +28,22 @@ import re
 #: 🚨 이름을 늘릴 때는 `app/contracts.py` 의 사용자 입력 필드와 맞춘다.
 _SENSITIVE_KEYS = ("q", "text", "prompt", "copy", "sentence", "password", "token", "key")
 
-#: `?q=값` · `&text=값` · `q="값"` 을 잡는다. 값은 구분자(`&`, 공백, 따옴표) 전까지.
+#: 열쇠말의 앞뒤 경계 — **영숫자만** 경계가 아니다. 🔄 2026-09-21 ⛔ 종전의 `\b` 는 `_` 를 낱말로 봐서
+#:    `api_key=…` · `access_token=…` 의 `key`·`token` 을 못 잡았다(실행 확인). `token_count=…` 는
+#:    뒤가 `_` 라 `=` 가 바로 안 붙으므로 여전히 안 걸린다.
+_KEY_B = r"(?<![A-Za-z0-9])"
+_KEY_E = r"(?![A-Za-z0-9])"
+_KEYS_ALT = "|".join(_SENSITIVE_KEYS)
+
+#: `?q=값` · `&text=값` · `q="값"` · `prompt: 값` 을 잡는다.
+#: 🔄 2026-09-21 — 값의 끝을 **넘치게** 잡는다 (D-220 · 아래 `_QUERY` 와 같은 원칙).
+#:    ⛔ 종전에는 `,` `]` `}` 에서 끊었다. 한국어 광고 문구는 쉼표를 흔하게 쓴다 —
+#:       「text=면역력, 암을 예방합니다」가 `text=<가림 3자>, 암을 예방합니다` 로 **뒤가 그대로 남았다.**
+#:       그리고 값 클래스가 `"` 를 빼서 `q="값"` 은 **매치 자체가 안 섰다**(이 주석이 잡는다고 적었는데).
+#:    ★ 따옴표로 시작하면 **닫는 따옴표까지**(없으면 줄 끝까지), 아니면 `&`·줄바꿈·따옴표 전까지.
 _QS = re.compile(
-    r"(?P<key>\b(?:" + "|".join(_SENSITIVE_KEYS) + r")\b\s*[=:]\s*)(?P<val>[^&\"'}\],]+)",
+    r"(?P<key>" + _KEY_B + r"(?:" + _KEYS_ALT + r")" + _KEY_E + r"\s*[=:]\s*)"
+    r"(?P<val>\"[^\"\n]*\"?|'[^'\n]*'?|[^&\n\"']+)",
     re.IGNORECASE,
 )
 
@@ -59,7 +72,8 @@ def mask(text: str | None) -> str:
 #:    ⛔ 실측: `q=우리 제품은 면역력이 쑥쑥` 을 값 단위로 지우면 「우리」만 가려졌다.
 #: 🚨 **넘치게 지운다** — `?` 부터 요청 줄 끝까지. 덜 지우는 쪽으로 틀리면 문구가 샌다 (D-220).
 _QUERY = re.compile(r"\?(?P<qs>.*?)(?=\sHTTP/|[\"']|$)")
-_SENSITIVE_IN_QS = re.compile(r"\b(?:" + "|".join(_SENSITIVE_KEYS) + r")=", re.IGNORECASE)
+#: 🔄 2026-09-21 — 경계는 위 `_QS` 와 **같은 것**을 쓴다 (D-99). `\b` 였을 때 `?api_key=…` 가 안 걸렸다.
+_SENSITIVE_IN_QS = re.compile(_KEY_B + r"(?:" + _KEYS_ALT + r")=", re.IGNORECASE)
 
 
 def redact(line: str) -> str:

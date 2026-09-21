@@ -34,7 +34,9 @@ from scripts import data_store as ds
 from scripts import derived_manifest as dm
 
 ROOT = dm.ROOT
-LAYOUT = "copylane-raw"
+LAYOUT = (
+    ds.INBOX_LAYOUT
+)  # 🔄 2026-09-21 — 정본은 data_store (바로가기 대상을 내용으로 알아볼 때 쓴다 · D-99)
 INBOX_NAME = ds.INBOX_NAME  # 이름의 정본은 data_store 한 곳 (D-99) — setup 이 찾는 이름
 _SHA = re.compile(r"[0-9a-f]{64}")
 #: 목록 응답이 키를 되비춘 꼴 — 법제처 DRF 는 `OC=<키>` 로 돌려준다 (2026-09-18 실측)

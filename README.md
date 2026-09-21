@@ -13,8 +13,8 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![tests](https://img.shields.io/badge/tests-733_(gate_326)-0F7B4F?style=flat-square)
-![decisions](https://img.shields.io/badge/설계결정-D--234-2B5BD7?style=flat-square)
+![tests](https://img.shields.io/badge/tests-1154_(gate_609)-0F7B4F?style=flat-square)
+![decisions](https://img.shields.io/badge/설계결정-D--256-2B5BD7?style=flat-square)
 
 **[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 234건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
 
@@ -187,7 +187,7 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 
 | 구성요소 | 상태 | 실측 |
 |---|:-:|---|
-| 수집 · 거버넌스 게이트 | 🟢 **동작** | 소스 **47** 등재(수집 🔄 **29** · 보류 🔄 **15** · 수기 3) · 미채택 13 · 2인 서명 **37/47** · 수집 원장 약 20,000행 |
+| 수집 · 거버넌스 게이트 | 🟢 **동작** | 소스 **47** 등재(수집 **31** · 보류 **12** · 수기 4) + 검토 예정 2 · 미채택 14 · 2인 서명 **39/47** · 수집 원장 약 25,500행 |
 | 법령 별표 파싱 | 🟢 **동작** | 5법령 **12건 · 243행** · 감사 통과 |
 | 전처리 · 골든셋 | 🟢 **동작** | 금지 표현 사전 **536종** · 결함 주입 7규칙 |
 | DB — 데이터층 19표 + 런타임층 7표 | 🟢 **동작** | 마이그레이션 🔄 **0015** · `chunk` **2,400** = `chunk_embedding` **2,400** |
@@ -200,9 +200,9 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 | 파인튜닝 · 평가 | 🔴 **미착수** | 평가 홀드아웃 4유형 공백 |
 
 ```
-게이트 테스트   pytest -m gate   326건
-전체 테스트     pytest           733건
-설계 결정       D-01 ~ D-234     빠진 번호 0
+게이트 테스트   pytest -m gate   609건   ← 모은 수(--collect-only) · 2026-09-21
+전체 테스트     pytest           1,154건 ← 데이터 없는 기기는 일부가 건너뛴다
+설계 결정       D-01 ~ D-256     빠진 번호 0
 ```
 
 ---

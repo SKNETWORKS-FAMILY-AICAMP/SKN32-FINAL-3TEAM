@@ -1194,7 +1194,7 @@ def data_sync(
     """부족하거나 낡은 파생물을 공유 저장소에서 받습니다 — 사본(클론 A · 팀원 · 서버)용.
 
     🆕 2026-09-19 (D-247). 무엇을 받을지는 **git 의 파생물 원장**이 정합니다 — 지금 체크아웃한
-       커밋의 판을 받습니다. 옛 파일은 레포 밖 `CopyLane_backup` 에 옮겨 둡니다.
+       커밋의 판을 받습니다. 옛 파일은 레포 밖 `CopyLane_backup` 에 복사해 둡니다.
     🚨 `.env` 에 `DATA_ROLE=replica` 와 `DATA_STORE=<폴더>` 가 있어야 합니다. 정본은 받지 않습니다.
     """
     args = [sys.executable, "-m", "scripts.data_store", "sync"]
@@ -1216,6 +1216,9 @@ def data_setup(
     device: str = typer.Option(
         "", "--device", help="이 기기 이름 — 영문 (예: collector-1 · 실명 금지)"
     ),
+    mirror: str = typer.Option(
+        "", "--mirror", help="정본 원문 거울 폴더 (비우면 찾는다 · 팀장 기기 · D-256)"
+    ),
 ) -> None:
     """이 기기의 데이터 역할과 공유 저장소를 설정 파일에 적고, 받는 쪽이면 바로 받습니다.
 
@@ -1233,6 +1236,8 @@ def data_setup(
         args += ["--inbox", inbox]
     if device:
         args += ["--device", device]
+    if mirror:
+        args += ["--mirror", mirror]
     if yes:
         args.append("--yes")
     raise typer.Exit(run(*args))
@@ -1293,6 +1298,43 @@ def raw_import(
     args = [sys.executable, "-m", "scripts.raw_inbox", "import"]
     if branch:
         args += ["--from", branch]
+    if yes:
+        args.append("--yes")
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="raw-mirror-publish")
+def raw_mirror_publish(
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 올릴지만 보여 준다"),
+) -> None:
+    """정본 — 디스크의 원문을 팀장 전용 원문 거울에 올립니다 (읽기용).
+
+    🆕 2026-09-21 (D-256). 원장 경로 중 **디스크에 실제로 있는 원문**을 sha 이름으로 올리고, 그 순간의 목록을 새로 씁니다.
+    🚨 G2 · 재배포 제약(AI Hub 포함) · 레지스트리에 없는 원천은 올리지 않습니다. 키가 섞인 원문이 있으면 하나도 안 올립니다.
+    🚨 거울은 **팀장 계정에만** 공유합니다 — 원문은 마스킹 전입니다.
+    """
+    args = [sys.executable, "-m", "scripts.raw_mirror", "publish"]
+    if yes:
+        args.append("--yes")
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="raw-mirror-sync")
+def raw_mirror_sync(
+    yes: bool = typer.Option(False, "--yes", help="묻지 않는다"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 받을지만 보여 준다"),
+) -> None:
+    """사본(팀장 기기) — 원문 거울을 받아 이 기기의 원문을 정본과 같게 합니다.
+
+    🆕 2026-09-21 (D-256). 파생물은 안 바꿉니다 — 원문은 읽기와 `extract <원천> --preview` 에만 씁니다 (D-226).
+    🚨 이 기기의 옛 원문이 정본과 다르면 레포 밖 `CopyLane_backup/raw-<시각>` 에 복사해 두고 바꿉니다.
+    """
+    args = [sys.executable, "-m", "scripts.raw_mirror", "sync"]
     if yes:
         args.append("--yes")
     if dry_run:
@@ -1499,6 +1541,11 @@ def extract(
         0, "--min-len", help="검증셋 문구 길이 하한 — 낱말을 빼고 문장만 (0 = 안 건다)"
     ),
     verify: bool = typer.Option(False, "--verify", help="원천의 선언과 대조만 한다"),
+    preview: bool = typer.Option(
+        False,
+        "--preview",
+        help="임시 폴더에 뽑아 지금 파생물과 맞댄다 — 파생물은 안 바꾼다 (D-256)",
+    ),
 ) -> None:
     """받아 둔 원문에서 라벨을 뽑는다 — 원천별 전처리 모듈로 위임한다.
 
@@ -1511,6 +1558,12 @@ def extract(
     if not source:
         console.print(_table("전처리 추출", EXTRACTORS))
         raise typer.Exit(0)
+    if preview:
+        # 🆕 2026-09-21 (D-256) — 어느 역할에서든 돈다. 파생물은 임시 폴더에만 나온다 — 저장소를 건드리면 🔴 로 멈춘다
+        if dump or sheet:
+            console.print("  [red]--preview 는 --dump · --sheet 와 같이 쓰지 않는다[/red]")
+            raise typer.Exit(1)
+        raise typer.Exit(run(sys.executable, "-m", "preprocess.preview", source))
     if dump or sheet:
         only_canonical(f"extract {source} " + ("--dump" if dump else "--sheet"))
     module = EXTRACTORS.get(source)
@@ -1794,6 +1847,9 @@ MENU: list[tuple[str, str, object]] = [
     ("48", "원문 합치기 (정본)", raw_import),
     # 🆕 2026-09-20 — 정본의 재생성 순서를 한 번에 (외부 전송·git 앞에서 멈춘다)
     ("49", "파생물 다시 만들기 (정본)", data_refresh),
+    # 🆕 2026-09-21 (D-256) — 정본 원문 거울 (팀장 기기 읽기용)
+    ("50", "원문 거울 올리기 (정본)", raw_mirror_publish),
+    ("51", "원문 거울 받기 (팀장 사본)", raw_mirror_sync),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)

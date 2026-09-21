@@ -49,7 +49,9 @@ from collect import http, registry, store
 from preprocess.text import sep_norm
 
 SOURCE_ID = "mfds_press"
-FAMILY = "mfds_press"
+#: 🔄 2026-09-21 — 원문 폴더 이름은 `store.FAMILY_OF` 한 곳에서 꺼낸다 (D-99 · D-254).
+#:    ⛔ 종전에는 `"mfds_press"` 와 `f"{FAMILY}_pdf"` 를 여기 따로 박았다 — 표를 바꾸면 수집기만 옛 폴더에 썼다.
+FAMILY, PDF_FAMILY = store.families(SOURCE_ID)
 USE = "U3"  # 🚨 U1 이 아니다 — 위 머리말 참조
 
 LIST_URL = "https://www.mfds.go.kr/brd/m_99/list.do"
@@ -440,7 +442,7 @@ def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, 
         )
 
     saved = skipped = failed = seen = 0
-    out_dir = store.raw_dir(f"{FAMILY}_pdf")
+    out_dir = store.raw_dir(PDF_FAMILY)
     print(f"  게시물 {len(pages)}건에서 첨부를 찾는다\n")
 
     for page in pages:
@@ -477,7 +479,7 @@ def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, 
             print(f"  ✅ {page.stem:>9}  {name[:46]}  ({len(body):,} B)")
             if dry_run:
                 continue
-            if store.save_raw(SOURCE_ID, f"{FAMILY}_pdf", dest, body, url=url) is None:
+            if store.save_raw(SOURCE_ID, PDF_FAMILY, dest, body, url=url) is None:
                 skipped += 1
                 continue
             saved += 1
@@ -500,7 +502,9 @@ def collect(
     sizes: list[int] = []
     out_dir = store.raw_dir(FAMILY)
     # 🔄 D-132 — 격리 디렉터리는 더 이상 쓰지 않는다. 09-03 이전에 격리된 것이 있으면 규약 4 로 건너뛴다.
-    quarantine = store.raw_dir(f"{FAMILY}_격리")
+    #    🔄 2026-09-21 — 읽기만 한다. ⛔ 종전 `store.raw_dir()` 는 돌 때마다 **빈 폴더를 만들었다**
+    #       (`FAMILY_OF` 에 없는 계열이라 원장·`missing` 이 모르는 폴더가 생긴다).
+    quarantine = store.RAW / f"{FAMILY}_격리"
     badge_log = store.derived_dir(FAMILY) / "kogl_badge.jsonl"
 
     # 🚨 색인이 먼저다. 없으면 무엇을 받을지 모른다 — 게시판 검색이 무시되기 때문이다.

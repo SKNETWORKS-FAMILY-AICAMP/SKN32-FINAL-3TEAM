@@ -59,6 +59,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts import derived_manifest as dm  # noqa: E402 — 위 sys.path 뒤에 들여온다
+from scripts.load_db import LOAD_INPUTS  # noqa: E402 — 적재 입력의 정본 (D-99)
 
 LAUNCHER = ROOT / "launcher.py"
 DERIVED = ROOT / "data" / "derived"
@@ -69,8 +70,16 @@ DERIVED_CHECKS: tuple[tuple[str, str], ...] = (
     ("조문", "law_article.jsonl"),
     ("별표", "law_norm"),
 )
+#: 🔴 `load` 가 읽는 것 — `load_db.LOAD_INPUTS` 에서 꺼낸다 (D-99).
+#: 🔄 2026-09-21 — ⛔ 종전에는 조문·별표만 적어, 금지표현 사전·건기식 라벨·골든셋이 없으면
+#:    볼륨을 **지운 뒤에** `load` 가 멈췄다. 이제 지우기 전에 본다.
+LOAD_CHECKS: tuple[tuple[str, str], ...] = tuple((label, name) for label, name, _ in LOAD_INPUTS)
 #: 🔴 사본이 **받아 와야 하는** 것 — 재추출을 안 하므로 청크까지 받은 판이 있어야 한다 (D-247).
-REPLICA_CHECKS: tuple[tuple[str, str], ...] = (*DERIVED_CHECKS, ("청크", "chunks.jsonl"))
+REPLICA_CHECKS: tuple[tuple[str, str], ...] = (*LOAD_CHECKS, ("청크", "chunks.jsonl"))
+#: 🔴 정본이 **다시 만들지 않는** 적재 입력 — 재추출(조문·별표) 밖이라 지우기 전에 있어야 한다.
+CANONICAL_CHECKS: tuple[tuple[str, str], ...] = tuple(
+    c for c in LOAD_CHECKS if c[1] not in {n for _, n in DERIVED_CHECKS}
+)
 #: 🚨 DB 를 **기다리지 않는다** — 아래 `accounts()` 참조. `[임의]` — 로컬 도커다.
 CONNECT_TIMEOUT_S = 3
 
@@ -193,6 +202,14 @@ def preflight_data(who: str | None) -> int:
 
     if raw_inbox.check_pending():
         print("     ⬜ 아무것도 안 지웠다 — `raw-import` 뒤에 다시 부른다.")
+        return 1
+    if missing := _derived_empty(CANONICAL_CHECKS):
+        how = {name: cmd for _, name, cmd in LOAD_INPUTS}
+        print(f"\n  🔴 적재 입력이 없다 — {' · '.join(missing)}. 지우기 전에 멈춘다.")
+        print("     `--data` 는 조문·별표만 다시 뽑는다 — 나머지는 먼저 만들어 둔다:")
+        for _label, name in CANONICAL_CHECKS:
+            print(f"       {how[name]}")
+        print("     ⬜ 아무것도 안 지웠다.")
         return 1
     return 0
 

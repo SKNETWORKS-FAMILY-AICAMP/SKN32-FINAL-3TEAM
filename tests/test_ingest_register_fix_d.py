@@ -118,3 +118,23 @@ def test_별칭이_없으면_복사_전에_멈춘다(env: dict, monkeypatch: pyt
 def test_mfds_press_는_실제_표에서도_거부된다() -> None:
     """실제 표 — 계열이 둘이다. 이 표가 바뀌면 위 거부 규칙을 다시 본다."""
     assert len(store.families("mfds_press")) > 1
+
+
+def test_유동값만_다른_파일은_디스크_파일의_sha_로_행을_붙인다(
+    env: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 2026-09-21 — 판정 해시(유동 값 제외)는 같고 바이트는 다른 경우. 원장 행은 **그 경로의 실제 파일**을
+    적어야 한다. ⛔ 종전에는 들여온 파일의 sha 를 디스크 파일 경로에 적었다."""
+    import re
+
+    monkeypatch.setitem(store.VOLATILE, "가짜소스", (("sid", re.compile(rb"sid=\d+")),))
+    on_disk, incoming = b"body sid=1\n", b"body sid=2\n"
+    env["fam"].mkdir(parents=True)
+    (env["fam"] / "a.txt").write_bytes(on_disk)
+    (env["src"] / "a.txt").write_bytes(incoming)
+    assert ingest.cmd_register("가짜소스", env["src"], "U1") == 0
+    (row,) = _rows(env["ledger"])
+    assert (env["fam"] / "a.txt").read_bytes() == on_disk, "디스크 파일을 덮었다"
+    assert row["sha256"] == store.sha256(on_disk), "🔴 원장 sha 가 그 경로의 파일과 다르다"
+    assert row["bytes"] == len(on_disk)
+    assert store.sha256(incoming) != store.sha256(on_disk)  # 반대 대조 — 두 바이트는 정말 다르다
