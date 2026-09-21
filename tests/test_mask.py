@@ -1100,3 +1100,24 @@ def test_이름_자리_밖의_말은_사람_꼴이_아니면_받지_않는다() 
     )
     _, bare = anchor_ftc(root)
     assert bare.named == ()
+
+
+def test_앞자리가_드러난_가림과_띄어_쓴_이름도_사람_표지다() -> None:
+    """🔴 09-22 탐침(seq 7269 모양) — 「000000-0******」 가림 · 「가 나(…)」 띄어 쓴 이름. 둘째 피심인이 안 가려졌다 (이름·번호는 가짜)."""
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    info = "가나다(900101-1******, 라마 대표)\n서울 중랑구 1\n김 다(910202-2******)\n경기 수원시 2"
+    order = "1. 피심인 가나다 및 피심인 김다는 거짓으로"
+    root = _ftc_full("가나다 외 1인의 부당한 광고행위에 대한 건", info, order)
+    _, bare = anchor_ftc(root)
+    assert "가나다" in bare.people and "김다" in bare.people, bare.people
+    out = apply_policy(order, bare, "ftc")
+    assert out == "1. 피심인 [대표] 및 피심인 [대표]는 거짓으로", out
+
+
+def test_전부_숫자인_등록번호는_사람_표지가_아니다() -> None:
+    """반대 대조 — 법인등록번호(전부 숫자)는 가림 표지가 아니다. 이름 앞 낱말 경계도 본다."""
+    from preprocess.mask import respondent_people
+
+    root = _ftc_full("x", "주식회사 가나(110111-1234567)\n대표 김다라(******-*******)", "x")
+    assert respondent_people(root) == ("김다라",)
