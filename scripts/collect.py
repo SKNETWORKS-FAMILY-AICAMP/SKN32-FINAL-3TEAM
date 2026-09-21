@@ -241,7 +241,7 @@ def cmd_fetch(args):
       ftc_decisions  공정거래위원회 의결서   (표시광고법)
       mfds_action    식약처 행정처분         (식품표시광고법 · 화장품법)
 
-    🚨 업체명·상표·대표자명은 수집 직후 즉시 마스킹하고 원문을 보관하지 않는다 (D-17).
+    🚨 피심인 상호·대표자명·주소는 파생물을 만들 때 마스킹한다 — 원문은 raw/ 에만, 저장소·배포물에는 없다 (D-17 · D-257).
     """
     raise SystemExit("collect fetch: T1 구현 예정 — 위 docstring이 계약이다")
 
