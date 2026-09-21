@@ -16,6 +16,7 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.formbody import read_capped
 from app.settings import PARAMS
 from app.templating import templates
 
@@ -32,9 +33,10 @@ async def _form_field(request: Request, name: str) -> str:
 
     ⛔ 상한을 **자르지 않고 거부한다** — 자르면 사용자는 자기 문구가 잘린 줄 모른다 (D-220).
     """
-    body = await request.body()
-    if len(body) > _MAX_BODY:
-        raise HTTPException(413, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다")
+    # 🔄 09-21 — 다 읽고 재지 않는다. 넘는 순간 멈춘다 (app/formbody.py · P2-11)
+    body = await read_capped(
+        request, _MAX_BODY, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다"
+    )
     value = parse_qs(body.decode("utf-8", "replace")).get(name, [""])[0]
     if len(value) > PARAMS.max_text_len:
         raise HTTPException(422, f"문구가 너무 길다 — {PARAMS.max_text_len}자까지 받는다")

@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import auth
+from app.formbody import read_capped
 from app.templating import templates
 
 router = APIRouter(tags=["auth"])
@@ -55,9 +56,7 @@ async def login(request: Request) -> RedirectResponse:
     🚨 **시도 제한이 먼저다** (P2-11) — Argon2id 는 19 MiB 를 잡는다. 세는 것보다 **해시를
        돌리는 것이 비싸므로** 막는 판단이 해시 앞에 와야 한다.
     """
-    body = await request.body()
-    if len(body) > _MAX_BODY:
-        raise HTTPException(413, "본문이 너무 크다")
+    body = await read_capped(request, _MAX_BODY)  # 🔄 09-21 — 다 읽고 재지 않는다 (app/formbody.py)
     form = parse_qs(body.decode("utf-8", "replace"))
     initials = (form.get("initials", [""])[0] or "").strip()[:16]
     password = form.get("password", [""])[0] or ""
@@ -117,6 +116,15 @@ def _lookup(initials: str) -> str | None:
     except Exception:  # noqa: BLE001 — DB 없음·표 없음 모두 「로그인 불가」다 (D-220)
         return None
     return row[0] if row else None
+
+
+def account_active(initials: str) -> bool:
+    """세션의 이니셜이 **지금도** 살아 있는 계정인가. 🆕 2026-09-21 (전수 재검토).
+
+    ⛔ 세션은 서버에 없는 서명 쿠키라, 계정을 비활성(`disabled_at`)해도 **만료까지 그대로 들어왔다.**
+    ★ 로그인과 **같은 조회**를 쓴다(`_lookup` · D-99) — DB 가 없으면 False 다 (D-220).
+    """
+    return _lookup(initials) is not None
 
 
 def _store_hash(initials: str, pw_hash: str) -> None:
