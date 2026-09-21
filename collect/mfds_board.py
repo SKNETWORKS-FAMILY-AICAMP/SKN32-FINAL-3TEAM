@@ -135,7 +135,7 @@ def collect(source_id: str, *, use: str, dry_run: bool) -> tuple[int, int, int]:
     out_dir = store.raw_dir(source_id)
     for idx, (name, href) in enumerate(links, 1):
         dest = f"{idx:02d}_{_slug(name)}"
-        if (out_dir / dest).exists():
+        if store.already_have(out_dir / dest):  # 🔄 09-21 — 원장(다른 기기)도 본다
             skipped += 1
             continue
 
@@ -192,9 +192,7 @@ def main() -> int:
     print(
         f"\n새로 저장 {saved}건 · 건너뜀 {skipped}건" + (f" · 🚨 실패 {failed}건" if failed else "")
     )
-    if saved and not a.dry_run:
-        registry.mark_collected(a.source_id)
-        print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    if not a.dry_run and registry.mark_if_complete(a.source_id, saved=saved, partial=False):
         print(
             "🚨 **캡처는 뽑지 않는다** — 적발 광고 이미지는 광고주 저작물이라 G1 이다.\n"
             "   문구만 취하고 그 조각은 G2 · 120자 상한 · NOREDIST 로 다룬다 (D-249 · D-18)."

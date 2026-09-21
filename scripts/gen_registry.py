@@ -32,6 +32,15 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# 🆕 2026-09-21 (전수 재검토) — 인자를 주면 **쓰기 전에** 멈춘다(`--help`·`--check` 로 확인하려다 다시 쓰던 것).
+#    규칙은 `scripts/docmeta.py` `refuse_args` 와 같다 — 이 파일은 모듈 수준 스크립트이고 테스트가 **한 파일만**
+#    복사해 돌리므로 import 하지 않고 옮겨 적었다(위 utf-8 처방과 같은 이유). 고치면 둘 다 (D-99).
+if __name__ == "__main__" and len(sys.argv) > 1:
+    raise SystemExit(
+        f"🔴 gen_registry.py 는 인자를 받지 않는다 — 받은 것: {sys.argv[1:]}. 아무것도 쓰지 않았다.\n"
+        "  돌리면 생성물을 **다시 쓴다.** 대조만 하려면 `launcher.py check` (게이트)를 쓴다"
+    )
+
 # 🔴 출력이 **파이프**로 나가도 한글·기호를 쓴다 (2026-09-20 · CI 실측 · D-254).
 #    ⛔ CI 러너(Windows · cp1252)에서 첫 print 「등재 …」가 `UnicodeEncodeError` 로 죽었다 —
 #       로컬 콘솔은 UTF-8 이라 `check` 는 초록이었다. `scripts/derived_manifest.py` `_utf8_out` 과 **같은 처방**이다

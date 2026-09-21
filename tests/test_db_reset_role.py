@@ -38,6 +38,11 @@ def world(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(db_reset, "_run", run)
     monkeypatch.setattr(raw_inbox, "check_pending", pending)
     monkeypatch.setattr(db_reset, "DERIVED", tmp_path)
+    # 🔄 2026-09-21 — 사본은 지우기 전에 **원장과 같은지**도 본다(`data_store.plan`). 기본은 같다
+    from scripts import data_store
+
+    monkeypatch.setattr(data_store, "ledger_missing", lambda: state.get("no_ledger"))
+    monkeypatch.setattr(data_store, "plan", lambda: state.get("todo", []))
 
     def main(*argv: str) -> int:
         monkeypatch.setattr(sys, "argv", ["db_reset", *argv])
@@ -90,6 +95,20 @@ def test_사본에_받은_파생물이_없으면_지우기_전에_멈춘다(worl
     derived(*LOAD)  # 청크가 없다
     assert main("--yes", "--data") == 1
     assert not _destroyed(events), "🔴 멈춘다고 했는데 볼륨을 지웠다"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    "gap", [{"todo": [{"경로": "data/derived/x.jsonl"}]}, {"no_ledger": "원장 없음"}]
+)
+def test_사본의_파생물이_원장과_다르면_지우기_전에_멈춘다(world, gap) -> None:
+    """🔴 2026-09-21 (전수 재검토) — ⛔ 비어 있지 않은지만 봐서, 옛 판이 남고 저장소에 못 닿으면 볼륨을 지운 뒤
+    받기가 실패해 **빈 DB** 가 남았다. 원장과 같아야 저장소 없이도 다시 적재된다."""
+    main, derived, events, state = world
+    derived(*LOAD, "chunks.jsonl")
+    state.update(gap)
+    assert main("--yes", "--data") == 1
+    assert not _destroyed(events)
 
 
 @pytest.mark.gate

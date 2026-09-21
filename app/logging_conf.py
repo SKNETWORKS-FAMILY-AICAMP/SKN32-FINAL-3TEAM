@@ -41,8 +41,10 @@ _KEYS_ALT = "|".join(_SENSITIVE_KEYS)
 #:       「text=면역력, 암을 예방합니다」가 `text=<가림 3자>, 암을 예방합니다` 로 **뒤가 그대로 남았다.**
 #:       그리고 값 클래스가 `"` 를 빼서 `q="값"` 은 **매치 자체가 안 섰다**(이 주석이 잡는다고 적었는데).
 #:    ★ 따옴표로 시작하면 **닫는 따옴표까지**(없으면 줄 끝까지), 아니면 `&`·줄바꿈·따옴표 전까지.
+#: 🔄 2026-09-21 (전수 재검토) — 열쇠말이 **따옴표 안**이어도 잡는다. ⛔ `{"q": "…"}` · `{'text': '…'}`
+#:    (dict·JSON 모양)은 열쇠 뒤가 `"` 라 `[=:]` 가 바로 안 붙어 **통째로 지나갔다**(실행 확인).
 _QS = re.compile(
-    r"(?P<key>" + _KEY_B + r"(?:" + _KEYS_ALT + r")" + _KEY_E + r"\s*[=:]\s*)"
+    r"(?P<key>[\"']?" + _KEY_B + r"(?:" + _KEYS_ALT + r")" + _KEY_E + r"[\"']?\s*[=:]\s*)"
     r"(?P<val>\"[^\"\n]*\"?|'[^'\n]*'?|[^&\n\"']+)",
     re.IGNORECASE,
 )
@@ -100,14 +102,23 @@ class RedactFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str):
             record.msg = redact(record.msg)
+        else:
+            # 🔄 2026-09-21 — `logger.info(payload_dict)` 처럼 msg 자체가 객체면 문자열로 펴서 지운다
+            record.msg = redact(str(record.msg))
         if record.args:
             if isinstance(record.args, tuple):
-                record.args = tuple(redact(a) if isinstance(a, str) else a for a in record.args)
+                record.args = tuple(_scrub(a) for a in record.args)
             elif isinstance(record.args, dict):
-                record.args = {
-                    k: (redact(v) if isinstance(v, str) else v) for k, v in record.args.items()
-                }
+                record.args = {k: _scrub(v) for k, v in record.args.items()}
         return True
+
+
+def _scrub(a: object) -> object:
+    """로그 인자 하나. 🔄 2026-09-21 (전수 재검토) — ⛔ 문자열만 지웠다. `logger.info("req %s", body_dict)` 는
+    dict 가 **포맷 시점에** 문자열이 되므로 필터를 그대로 지나갔다. 수(%d·%f 자리)와 None 은 그대로 둔다."""
+    if a is None or isinstance(a, (bool, int, float)):
+        return a
+    return redact(a if isinstance(a, str) else str(a))
 
 
 #: 필터를 붙일 로거들. 🚨 **`uvicorn.access` 가 핵심**이다 — 경로가 거기로 나간다.

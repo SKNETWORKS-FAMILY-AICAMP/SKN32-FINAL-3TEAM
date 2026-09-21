@@ -278,7 +278,7 @@ def _held_back(source_id: str) -> str | None:
 
     ⛔ D-254 전에는 `pending` 만 G2·재배포 제약을 뺐다 — `import_` 는 정본이 추출 뒤 지운 G2 원문을
        되살리거나(받은편지함에 있으면) 「없음」으로 **전체를 거부**했다(없으면).
-      `g2`       사실을 뽑은 뒤 원문을 지운다(D-17) — 다시 할 때는 보관본이 아니라 **재수집**이다
+      `g2`       사실을 뽑은 뒤 원문을 지운다(D-92) — 다시 할 때는 보관본이 아니라 **재수집**이다
       `noredist` 재배포 제약(D-71) — `raw-publish` 가 올리지 않는다
       `unknown`  레지스트리에 없다 — 🚨 모르는 것은 막는 쪽 (D-220)
     """
@@ -318,7 +318,7 @@ def pending() -> list[dict]:
     팀장 — *「대처를 진행해줘」* (받는 쪽 점검 2026-09-20). ⛔ 원장은 git 병합으로 들어오고 원문은
     `raw-import` 로 따로 온다 — 그 사이에 추출·재생성을 돌리면 추출기는 디스크만 읽으므로
     **경고 없이 팀원 원문이 빠진 파생물**이 나온다. 그 자리를 막는다.
-    🚨 G2(추출 뒤 원문 삭제 · D-17)와 재배포 제약 원천(받은편지함으로 못 온다 · D-71)은 세지 않는다 —
+    🚨 G2(추출 뒤 원문 삭제 · D-92)와 재배포 제약 원천(받은편지함으로 못 온다 · D-71)은 세지 않는다 —
        디스크에 없는 것이 정상이거나, 합치기 검사(`--from`)가 이미 막는다. 거르는 곳은 `_held_back` 하나다.
     """
     if dm.role() != "canonical":
@@ -371,19 +371,23 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     if bad:
         print(f"🔴 원장에 올릴 수 없는 행이 있다 — 아무것도 올리지 않았다: {bad[:5]}")
         return 1
-    blocked = sorted({str(r["source_id"]) for r in rows if _noredist(str(r["source_id"]))})
-    if blocked:
+    # 🔄 2026-09-21 (전수 재검토 I5) — 거르는 규칙은 `_held_back` 하나다 (D-99 · `pending`·`import_`·거울과 같다).
+    #    ⛔ 여기만 재배포 제약을 **따로** 걸러 G2(추출 뒤 원문 삭제 · D-92)가 받은편지함에 올라갔다 — 정본의
+    #       `import_` 는 G2 를 안 가져가므로 그 원문은 팀 공유 폴더에 **남기만** 했다. 모르는 원천(`unknown`)도 막는다.
+    held = {s: why for s in {str(r["source_id"]) for r in rows} if (why := _held_back(s))}
+    if held:
         print(
-            f"🔴 재배포 제약 원천의 원문은 올리지 않는다 — {blocked} (D-71).\n"
-            "  🚨 약관상 팀원 사이에 넘겨도 되는지 모른다. 정본 기기에서 직접 받는다"
+            f"🔴 받은편지함으로 보내지 않는 원천이 있다 — {sorted(held.items())}\n"
+            "  g2 추출 뒤 원문을 지운다(D-92) · noredist 약관상 넘겨도 되는지 모른다(D-71) · unknown 레지스트리에 없다(D-220).\n"
+            "  🚨 그 원천은 정본 기기에서 직접 받는다"
         )
-        rows = [r for r in rows if str(r["source_id"]) not in blocked]
+        rows = [r for r in rows if str(r["source_id"]) not in held]
     try:
         root = inbox_root()
     except InboxError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 1
-    new = [r for r in rows if not _obj(root, str(r["sha256"])).is_file()]
+    new = [r for r in rows if not ds.object_ok(_obj(root, str(r["sha256"])), r.get("bytes"))]
     leaked, changed = [], []
     for r in new:
         data = (ROOT / _path_of(r)).read_bytes()
@@ -491,10 +495,10 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
     print(head)
     for line in summary(rows):
         print(line)
-    # 🚨 G2 는 받은편지함으로 가져오지 않는다 — 정본이 추출 뒤 지운 것을 되살리지 않는다(D-17). 막지도 않는다(`pending` 과 같다)
+    # 🚨 G2 는 받은편지함으로 가져오지 않는다 — 정본이 추출 뒤 지운 것을 되살리지 않는다(D-92). 막지도 않는다(`pending` 과 같다)
     if held["g2"]:
         print(
-            f"  🟡 G2 {len(held['g2'])}개는 가져오지 않는다 — 추출 뒤 원문을 지우는 원천이다 (D-17).\n"
+            f"  🟡 G2 {len(held['g2'])}개는 가져오지 않는다 — 추출 뒤 원문을 지우는 원천이다 (D-92).\n"
             f"     필요하면 정본이 직접 재수집한다 · 예: {held['g2'][:3]}"
         )
     # 🔄 D-254 — 재배포 제약은 **병합 전 검사에서만** 🔴 다. 병합 뒤 합치기에서 🔴 로 두면 영영 안 끝난다

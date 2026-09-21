@@ -75,7 +75,9 @@ def last_commit(rel: str) -> tuple[str, str]:
         capture_output=True,
         text=True,
         encoding="utf-8",
-        newline="\n",
+        # ⛔ 2026-09-21 (소성민 코드 리뷰 #1) — `newline="\n"` 이 여기 있었다. `subprocess.run` 은 그 인자를
+        #    받지 않아 **부를 때마다 TypeError** — 스크립트가 아무것도 쓰기 전에 죽었다. `write_text` 의 인자와
+        #    섞인 것이다. `text=True` 가 이미 줄바꿈을 `\n` 으로 맞춘다(universal newlines).
     ).stdout.strip()
     return tuple(out.split("|", 1)) if "|" in out else ("미커밋", "—")
 

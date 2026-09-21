@@ -42,3 +42,20 @@ def versioned_stem(stem: str, text: str) -> str:
     """
     ver = version_of(text)
     return f"{stem}_{ver}" if ver else stem
+
+
+def refuse_args(prog: str) -> None:
+    """🆕 2026-09-21 (전수 재검토) — **인자를 받지 않는 생성 스크립트**가 인자를 받으면 멈춘다.
+
+    ⛔ `gen_registry.py`·`extract_rationale.py`·`review_sheet.py` 는 argv 를 안 봤다 — `--help`·`--check` 를 줘도
+       **생성물을 다시 썼다**(검토 중 실제로 그랬다 · 바이트가 같아 다행이었다). 확인하려던 명령이 쓰기가 됐다.
+    ★ 셋이 같은 규칙이라 여기 하나 (D-99) — 🚨 `gen_registry.py` 만 옮겨 적었다(모듈 수준 스크립트 · 테스트가 한 파일만 복사한다). 고치면 둘 다.
+       대조 모드(`--check`)는 아직 없다 — 생기면 여기가 아니라 그 스크립트에 둔다.
+    """
+    import sys  # noqa: PLC0415
+
+    if len(sys.argv) > 1:
+        raise SystemExit(
+            f"🔴 {prog} 는 인자를 받지 않는다 — 받은 것: {sys.argv[1:]}. 아무것도 쓰지 않았다.\n"
+            "  돌리면 생성물을 **다시 쓴다.** 대조만 하려면 `launcher.py check` (게이트)를 쓴다"
+        )

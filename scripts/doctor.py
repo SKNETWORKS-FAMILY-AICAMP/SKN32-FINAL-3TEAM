@@ -102,6 +102,10 @@ if sys.path and sys.path[0] != str(ROOT):
 from collect import missing as missing_mod  # noqa: E402 — 결손 가르기의 정본 (D-253)
 from collect import registry  # noqa: E402 — 위 sys.path 조정 뒤여야 한다
 
+#: 🆕 2026-09-21 (전수 재검토) — 깨진 원장 줄 수. `check_data` 가 🔴 로 센다.
+#:    ⛔ 종전에는 🔴 로 찍기만 하고 개수에 안 넣어, 「🔴 없음」과 종료코드 0 으로 끝났다.
+_BROKEN = 0
+
 
 def _rows() -> list[dict[str, Any]]:
     """원장을 읽는다. 🚨 깨진 줄에서 멈추지 않는다 — 몇 번째 줄인지 찍고 넘어간다.
@@ -121,6 +125,8 @@ def _rows() -> list[dict[str, Any]]:
             print(f"  🔴 원장 {i}행이 JSON 이 아니다 — 그 줄만 손으로 봐라")
     if broken:
         print(f"  🔴 깨진 줄 {broken}개를 건너뛰고 검사했다. 아래 숫자는 그만큼 적다.")
+    global _BROKEN
+    _BROKEN = broken
     return out
 
 
@@ -237,7 +243,7 @@ def check_data(*, verify_hash: bool) -> int:
     for r in rows:
         by_path[r.get("path") or "<path 없음>"].append(r)
 
-    red = 0
+    red = 1 if _BROKEN else 0  # 🔄 09-21 — 깨진 원장은 🔴 다 (위 `_rows` 가 찍은 그것)
 
     # ── ① 원장 자체 ────────────────────────────────────────
     print(f"\n  원장 {len(rows):,}행 · 고유 path {len(by_path):,}개")
@@ -733,7 +739,10 @@ def main() -> int:
             print(f"🔴 {red}건 — 위 「고치는 법」을 먼저 읽어라.")
             return 1
         print("🔴 없음. ⬜ 다만 uv.lock 동기화·모델 캐시·GPU 는 **아직 안 본다** (D-188).")
-        return 0 if not args.data else 0
+        # 🔄 2026-09-21 (전수 재검토) — ⛔ `--env --data` 를 같이 주면 여기서 끝나 데이터 검사를 **건너뛰고 0** 이었다
+        #    (`return 0 if not args.data else 0`). 둘 다 줬으면 이어서 데이터를 본다.
+        if not args.data:
+            return 0
 
     if not args.data:
         print("doctor: 지금 도는 것은 --data · --env 다. 나머지는 docstring 의 자리표시자다.")

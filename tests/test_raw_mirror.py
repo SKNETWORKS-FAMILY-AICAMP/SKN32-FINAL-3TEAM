@@ -85,7 +85,7 @@ def test_정본은_G2_를_빼고_올리고_목록을_쓴다(world, monkeypatch) 
     assert [e["path"] for e in idx] == ["data/raw/law/a.xml", "data/raw/law/b.xml"]
     assert registry.is_g2(G2), "픽스처 전제 — G2 원천이어야 한다"
     objs = {p.name for p in (mirror / rm.LAYOUT / "objects").rglob("*") if p.is_file()}
-    assert _sha(b"%PDF g2") not in objs, "🔴 G2 원문이 거울로 나갔다 (D-17)"
+    assert _sha(b"%PDF g2") not in objs, "🔴 G2 원문이 거울로 나갔다 (D-92)"
 
 
 def test_키가_섞인_원문이_있으면_하나도_안_올린다(world, monkeypatch) -> None:
@@ -186,3 +186,48 @@ def test_거울은_내용으로_알아보고_저장소로_집지_않는다(tmp_p
     (sc / "m1" / ds.MIRROR_LAYOUT).mkdir(parents=True)
     assert ds.candidates([g], name=ds.MIRROR_NAME) == [sc / "m1"]
     assert ds.candidates([g], name=ds.STORE_NAME) == [], "거울을 저장소로 집었다"
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-21 (전수 재검토) — 거울의 깨진 객체 · 받은편지함의 G2
+# ══════════════════════════════════════════════════════════
+def test_거울의_깨진_객체는_다시_올린다(world, monkeypatch) -> None:
+    """🔴 I13 — ⛔ `is_file()` 로만 골라 0바이트 객체가 안 고쳐졌고 사본 받기가 sha 대조에서 영영 멈췄다."""
+    import hashlib
+
+    tmp, mirror, canon = world
+    sha = hashlib.sha256(b"<a>new</a>").hexdigest()
+    obj = mirror / rm.LAYOUT / "objects" / sha[:2] / sha
+    obj.parent.mkdir(parents=True)
+    obj.write_bytes(b"")
+    assert _publish(monkeypatch, canon) == 0
+    assert obj.read_bytes() == b"<a>new</a>"
+
+
+def test_받은편지함으로_G2_를_올리지_않는다(tmp_path, monkeypatch, capsys) -> None:
+    """🔴 I5 — ⛔ 재배포 제약만 따로 걸러 G2(추출 뒤 원문 삭제 · D-92)가 올라갔다. 거르는 규칙은 `_held_back` 하나다."""
+    import hashlib
+    import json
+
+    from collect import env
+
+    monkeypatch.setattr(env, "_loaded", True)
+    for k in ("DATA_STORE", "RAW_MIRROR"):
+        monkeypatch.setenv(k, "")
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    monkeypatch.setenv("RAW_INBOX", str(inbox))
+    rep = tmp_path / "M"
+    _repo(rep, {f"data/raw/{G2}/g.pdf": (G2, b"%PDF g2"), "data/raw/law/a.xml": (SRC, b"<a/>")})
+    led = rep / "data/manifest.jsonl"
+    rows = [json.loads(x) for x in led.read_text(encoding="utf-8").splitlines() if x.strip()]
+    for r in rows:
+        r["device"] = "member1"
+    led.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    _point(monkeypatch, rep, "replica")
+    monkeypatch.setenv("DATA_DEVICE", "member1")
+    assert ri.publish(yes=True) == 0
+    objs = {p.name for p in (inbox / ri.LAYOUT / "objects").rglob("*") if p.is_file()}
+    assert hashlib.sha256(b"%PDF g2").hexdigest() not in objs, "🔴 G2 원문이 받은편지함에 올라갔다"
+    assert hashlib.sha256(b"<a/>").hexdigest() in objs, "반대 대조 — G3 은 올라간다"
+    assert "g2" in capsys.readouterr().out

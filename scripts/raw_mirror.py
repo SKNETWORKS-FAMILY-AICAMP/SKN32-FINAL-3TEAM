@@ -14,7 +14,7 @@
 ★ **무엇을 하지 않는가**
   · 사본은 여전히 파생물을 만들지 않는다 (D-226). 원문은 **읽고 미리보기**(`extract <id> --preview`)에만 쓴다
   · 팀원 기기에는 주지 않는다 — 원문은 **마스킹 전**이다(공정위 의결서의 피심인 실명 등). 거울 폴더는 팀장 계정에만 공유한다
-  · G2(추출 뒤 원문을 지운다 · D-17) · 재배포 제약(D-71 · AI Hub 포함) · 레지스트리에 없는 원천은 **올리지 않는다**
+  · G2(추출 뒤 원문을 지운다 · D-92) · 재배포 제약(D-71 · AI Hub 포함) · 레지스트리에 없는 원천은 **올리지 않는다**
 🚨 거울 폴더는 **제3자 계정**이다 (D-78 ③) — 올리기는 외부 전송이라 한 번 묻는다. 키가 섞인 원문이 하나라도 있으면
    **하나도 올리지 않는다**(받은편지함과 같은 검사 · 같은 함수).
 🚨 받을 때 사본의 옛 원문이 정본과 다르면 **레포 밖에 복사해 두고** 바꾼다(`CopyLane_backup/raw-<시각>`).
@@ -133,7 +133,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
         print(f"🔴 원장에 올릴 수 없는 경로가 있다 — 아무것도 올리지 않았다: {bad[:5]}")
         return 1
     for name, label in (
-        ("g2", "G2 — 추출 뒤 원문을 지운다 (D-17)"),
+        ("g2", "G2 — 추출 뒤 원문을 지운다 (D-92)"),
         ("noredist", "재배포 제약 (D-71 · AI Hub 포함)"),
         ("unknown", "레지스트리에 없는 원천 (D-220)"),
     ):
@@ -144,7 +144,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
             f"  🟡 원장의 어느 sha 와도 다른 원문 {len(held['changed'])}개는 올리지 않는다 — 원본이 바뀌었다(규약 2)\n"
             f"     `uv run python scripts/doctor.py --data --hash` 로 본다 · 예: {held['changed'][:2]}"
         )
-    new = [r for r in rows if not ri._obj(root, r["sha256"]).is_file()]  # noqa: SLF001
+    new = [r for r in rows if not ds.object_ok(ri._obj(root, r["sha256"]), r["bytes"])]  # noqa: SLF001
     leaked = []
     for r in new:
         why = ri.secret_in((ROOT / r["path"]).read_bytes())
@@ -229,7 +229,7 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
         return 1
     missing, differ = plan(entries)
     todo = missing + differ
-    lack = [e for e in todo if not ri._obj(root, e["sha256"]).is_file()]  # noqa: SLF001
+    lack = [e for e in todo if not ds.object_ok(ri._obj(root, e["sha256"]), e["bytes"])]  # noqa: SLF001
     size = sum(int(e["bytes"]) for e in todo) / 1024 / 1024
     print(
         f"거울 목록 {len(entries):,}개 — 받을 것 {len(todo):,}개 · {size:,.1f} MiB "

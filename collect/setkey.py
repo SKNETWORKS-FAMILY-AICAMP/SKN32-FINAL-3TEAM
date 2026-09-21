@@ -157,10 +157,13 @@ def put_setting(name: str, value: str) -> None:
             f"{name} 은 아는 설정이 아니다 — 아는 것: {list(env.SETTINGS)}.\n"
             "  🚨 키라면 `launcher.py setkey <이름>` 으로 넣는다 (값이 화면에 안 뜬다)"
         )
-    put(name, _clean(name, value))
-    os.environ[name] = (
-        value.strip()
-    )  # 같은 프로세스에서 바로 읽히게 — `env.load()` 는 한 번만 읽는다
+    clean = _clean(name, value)
+    put(name, clean)
+    # 같은 프로세스에서 바로 읽히게 — `env.load()` 는 한 번만 읽는다.
+    # 🔄 2026-09-21 (소성민 코드 리뷰 #7) — ⛔ 종전에는 `.env` 에 **정리한 값**, 여기에 **정리 전 값**(`value.strip()`)을
+    #    넣었다. 따옴표째 붙여 넣은 경로면 `data-setup` 직후 같은 프로세스의 `sync` 가 따옴표 붙은 경로를 봤다.
+    #    지금 부르는 곳(`data_store.setup`)은 늘 깨끗한 경로를 넘겨 드러나지 않았다 — 두 값이 갈릴 자리를 없앤다.
+    os.environ[name] = clean
 
 
 def prompt(name: str) -> str:

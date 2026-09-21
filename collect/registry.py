@@ -23,6 +23,10 @@ LEDGER = ROOT / "scripts/registry_review.yaml"  # 2인 확인 원장 — 이쪽�
 
 VALID_USES = {"U1", "U2", "U3", "U4"}
 
+#: G2 원문 삭제(`store.drop_raw_for_g2`)를 부르는 곳 — `"모듈경로:함수명"`. 비어 있으면 G2 는 `require()` 에서 막힌다.
+#: 🚨 손으로 켜지 않는다 — 게이트 테스트가 적힌 함수 본문에 `drop_raw_for_g2(` 가 있는지 본다 (D-92 · 2026-09-21).
+G2_DROP_WIRED: tuple[str, ...] = ()
+
 # 🚨 크롤링형은 robots 확인 기록 없이는 돌지 않는다 (규약 6).
 # 🔴 **판단은 `collect.COLLECTORS` 표가 한다** (2026-09-10 · D-179).
 #    ⛔ 종전에는 `access` 산문에 아래 낱말이 있는지로 봤다. 「자료실 PDF 다운로드」·
@@ -126,6 +130,20 @@ def require(source_id: str, use: str) -> dict[str, Any]:
             "풀려면 판정 근거를 남기고 scripts/gen_registry.py 의 STATUS 에서 내린다."
         )
 
+    # 🔴 **G2 는 삭제 경로가 붙기 전에 받지 않는다** (2026-09-21 · 전수 재검토 G2 · 팀장 판정 (나)).
+    #    D-92 — 「G2 소스의 raw 는 사실 추출 후 삭제하고 sha256 만 남긴다」(D-17 원문 미보관의 집행).
+    #    ⛔ 삭제 함수(`store.drop_raw_for_g2`)는 있는데 **부르는 곳이 없다** — 받으면 원문이 영구히 남는다.
+    #       지금은 G2 10개가 전부 hold/manual · 용도 deny 라 위에서 먼저 막히지만, 그것은 **우연**이다.
+    #       판정이 풀리는 날 이 문이 없으면 「원문 없음」이 조용히 거짓이 된다 (D-72 — 적기만 하면 표시다).
+    #    🚨 여는 법: G2 추출기가 사실 파일을 쓴 **뒤** `drop_raw_for_g2` 를 부르게 붙이고, 그 호출부를
+    #       `G2_DROP_WIRED` 에 적는다. 게이트 테스트가 그 호출부가 실제로 있는지 본다 — 플래그만 켜면 실패한다.
+    if grade == "G2" and not G2_DROP_WIRED:
+        raise RegistryError(
+            f"{source_id!r} 는 G2 다 — 사실 추출 뒤 원문을 지우는 경로가 아직 없어 받지 않는다 (D-92).\n"
+            "  받으면 원문이 영구히 남아 「G2 는 원문 미보관」(D-17)이 거짓이 된다.\n"
+            "  → G2 추출기에 `store.drop_raw_for_g2` 호출을 붙이고 collect/registry.py 의 G2_DROP_WIRED 에 그 위치를 적는다."
+        )
+
     from collect import COLLECTORS, is_scraper  # noqa: PLC0415 — 순환 import 방지
 
     access = str(s.get("access") or "")
@@ -197,7 +215,7 @@ def probe(source_id: str) -> dict[str, Any]:
 
 
 def is_g2(source_id: str) -> bool:
-    """G2 여부 — raw 를 사실 추출 후 삭제해야 하는 소스인가 (D-17 · D-92)."""
+    """G2 여부 — raw 를 사실 추출 후 삭제해야 하는 소스인가 (D-92 · D-17 원문 미보관)."""
     return spec(source_id).get("grade") == "G2"
 
 
@@ -207,6 +225,25 @@ def redistributable(source_id: str) -> bool:
     AI Hub 6종이 그 함정이다 — 등급은 G3 인데 데이터셋 재배포는 막혀 있다.
     """
     return bool(spec(source_id).get("redistributable"))
+
+
+def mark_if_complete(source_id: str, *, saved: int, partial: bool) -> bool:
+    """수집이 끝난 뒤 `collected_at` 을 찍을지 — 찍었으면 True. 🆕 2026-09-21 (전수 재검토 I8).
+
+    ⛔ 같은 규칙(「저장 0 이면 안 찍는다 · `--limit` 이면 안 찍는다」)이 수집기마다 **손으로** 쓰여 있었고,
+       `mfds_hf_board` 만 `--limit` 을 막았다. `law_api`·`ftc_body`·`mfds_press` 는 앞 5건만 받아도 「수집함」으로 찍었다 —
+       **찍혔다 ≠ 받았다**(D-177 의 사촌). 같은 날 런처가 `--limit` 을 두 수집기에 더 넘기게 돼(코드 리뷰 #4) 드러났다.
+    ★ 규칙은 여기 하나 (D-99). `partial` 은 부르는 쪽이 안다 — `--limit`·일부 페이지만 받은 경우.
+    """
+    if partial:
+        print("🚨 일부만 받았다(--limit 등) — collected_at 을 찍지 않는다 (원장의 날짜는 그대로)")
+        return False
+    if not saved:
+        print("⬜ 새로 저장한 것이 없다 — collected_at 을 찍지 않는다 (원장의 날짜는 그대로)")
+        return False
+    mark_collected(source_id)
+    print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    return True
 
 
 def mark_collected(source_id: str) -> None:
@@ -237,7 +274,10 @@ def mark_collected(source_id: str) -> None:
     if "collected_at:" not in block:
         raise RegistryError(f"{source_id!r} 블록에 collected_at 이 없다")
 
-    new_block = re.sub(r"collected_at:\s*\S+", f"collected_at: {today}", block, count=1)
+    # 🔄 2026-09-21 (전수 재검토) — ⛔ `\s*\S+` 는 값이 **비었을 때 줄을 넘어** 다음 줄의 첫 낱말을 먹었다
+    #    (`collected_at:\n  reviewed_by: kim` → `collected_at: 2026-09-21 kim` — `reviewed_by` 가 사라진다).
+    #    지금 값이 전부 null·날짜라 안 터졌을 뿐이다. 한 줄 안에서만 바꾼다.
+    new_block = re.sub(r"collected_at:[ \t]*[^\n]*", f"collected_at: {today}", block, count=1)
     LEDGER.write_text(text[:start] + new_block + text[end:], encoding="utf-8", newline="\n")
 
     # 🚨 원장을 고쳤으면 생성물도 다시 만들어야 게이트가 같은 것을 본다.
