@@ -41,3 +41,31 @@ def test_마스킹_정책_키가_있다() -> None:
     from preprocess.mask import POLICY
 
     assert es.MASK_KEY in POLICY
+
+
+def test_후보_파일은_피심인의_상호와_실명을_가린다(tmp_path) -> None:
+    """🔴 2026-09-21 (D-248) — 인용을 뽑은 뒤 `apply_policy(q, "", …)` 로 가리던 때 **앵커가 없어**
+    피심인 상호·개인 실명이 `build/endorse_candidates.jsonl` 에 그대로 실렸다 (이름은 가짜).
+
+    ★ 반대 대조 — 앵커 없이 가리면(종전 방식) 이름이 남는다는 것도 같이 본다.
+    """
+    import json
+    import xml.etree.ElementTree as ET
+
+    from preprocess.mask import apply_policy
+
+    root = ET.Element("PrecService")
+    ET.SubElement(root, "사건명").text = "김가나의 부당한 표시ㆍ광고행위에 대한 건"
+    ET.SubElement(root, "피심정보내용").text = "1. 김가나(******-*******) 서울 **"
+    why = "피심인은 '김가나가 직접 3개월 먹어보고 확실히 느꼈어요' 라는 후기를 게시하였다"
+    ET.SubElement(root, "이유").text = why
+    p = tmp_path / "1.xml"
+    ET.ElementTree(root).write(p, encoding="utf-8")
+
+    out = tmp_path / "c.jsonl"
+    assert es.candidates([(p, {"이유": why, "사건번호": "x"}, {"갈래": ["거짓후기"]})], out) == 1
+    got = json.loads(out.read_text(encoding="utf-8"))["문구"]
+    assert got and all("김가나" not in q for q in got), got
+    assert any("[대표]" in q for q in got), got
+    # 반대 대조 — 종전 방식(앵커 없이 인용 한 개씩)은 실명을 못 가린다
+    assert any("김가나" in apply_policy(q, "", es.MASK_KEY) for q in es.ad_quotes(why))

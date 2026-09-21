@@ -207,8 +207,12 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
             shutil.copy2(p, dest)
             if supersedes:
                 editions += 1
-        else:  # "ledger" — 같은 바이트가 이미 있다. 복사하지 않고 행만 붙인다
+        else:  # "ledger" — 같은 것이 이미 있다. 복사하지 않고 행만 붙인다
             backfilled += 1
+            # 🔄 2026-09-21 — 행은 **디스크에 있는 파일**(`dest`)을 적는다. ⛔ 종전에는 들여온 파일 `p` 의
+            #    sha·크기를 `dest` 경로에 적었다. 유동 값이 있는 원천(`store.VOLATILE`)은 판정 해시만 같고
+            #    바이트는 다를 수 있어 — 원장 sha 가 그 경로의 실제 파일과 안 맞았다(`inventory`·`data-sync` 가 갈린다).
+            digest, size = digest_of(dest)
         store.manifest_append(
             source_id=source_id,
             url=url,

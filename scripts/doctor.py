@@ -152,27 +152,36 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _report_missing(rows: list[dict[str, Any]], n: int) -> int:
+def _report_missing(rows: list[dict[str, Any]], n: int, who: str | None = ...) -> int:  # type: ignore[assignment]
     """원장에 있고 디스크에 없는 것을 **왜 없는지**로 가른다 (D-253 · `collect/missing.py`). 돌려주는 값은 🔴 개수.
 
     🔄 2026-09-20 — ⛔ 종전에는 ㄱ(G2)·ㄴ(다른 클론)·ㄷ(질의 필터) 셋을 찍고 사람에게 넘겼다.
        실측 `law_go_kr` 36개는 셋 다 아니었고(서식 34 · 옮긴 흔적 2), 「재수집하면 닫힌다」는 **틀린 안내**였다.
     ★ 이제 정상으로 설명되는 것은 한 줄로 접고, **사람이 볼 것**만 목록을 편다.
     🚨 🔴 는 `lost`(이 기기가 받았다고 적혔는데 없다) 하나다 — 이 기기에서 답할 수 있는 결손만 종료코드에 넣는다.
-       `legacy`·`query` 는 🟡 — 원장으로 못 가르는 것을 🔴 로 세면 다른 클론에서 늘 울어 아무도 안 본다.
+    🔄 2026-09-21 — 수준은 `missing.level()` 한 곳이 정하고 **역할을 본다.** 사본은 `legacy`·`query` 를 접고
+       「다시 받는다」를 안 찍는다 — 사본은 원문으로 파생물을 만들지 않는다 (D-226). ⛔ 종전에는 클론 A 에서 「사람이 볼 것
+       5,545개」와 재수집 안내가 찍혔다 (2026-09-21 사용자 실행).
     """
+    if who is ...:
+        who = missing_mod.role()
     got = missing_mod.classify(rows)
     count = missing_mod.tally(got)
-    eyes = missing_mod.needs_eyes(got)
-    head = "🟡" if eyes else "✅"
+    lv = missing_mod.levels(got, who)
+    eyes = lv["red"] + lv["eyes"]
+    head = "🔴" if lv["red"] else "🟡" if eyes else "✅"
     print(f"  {head} 원장에 있고 디스크에 없는 것 {n:,}개 — 사람이 볼 것 **{eyes:,}개**")
-    for reason, (mark, normal, why) in missing_mod.REASONS.items():
+    folded = {r: c for r, c in count.items() if r in missing_mod.REPLICA_FOLDS}
+    for reason, (_mark, normal, why) in missing_mod.REASONS.items():
         if not count.get(reason):
             continue
-        print(f"     {mark} {reason:9} {count[reason]:>6,}  {why}")
-        if normal:
+        lvl = missing_mod.level(reason, who)
+        if lvl == "ok" and not normal:
+            continue  # 사본이 접은 것 — 아래 한 줄로 낸다
+        print(f"     {missing_mod.LEVEL_MARK[lvl]} {reason:9} {count[reason]:>6,}  {why}")
+        if lvl == "ok":
             continue
-        # 정상이 아닌 것만 원천별로 편다 — 🚨 원천마다 셋까지만 (전량은 화면을 덮는다)
+        # 볼 것만 원천별로 편다 — 🚨 원천마다 셋까지만 (전량은 화면을 덮는다)
         by_sid: collections.Counter[str] = collections.Counter()
         shown: collections.Counter[str] = collections.Counter()
         index = {str(r.get("path") or "").replace("\\", "/"): r for r in rows}
@@ -185,21 +194,35 @@ def _report_missing(rows: list[dict[str, Any]], n: int) -> int:
                 shown[sid] += 1
                 print(f"          {p}" + (f"  ({extra})" if extra else ""))
         print(f"        원천별 — {dict(by_sid.most_common())}")
-    if count.get("legacy"):
-        print("     🚨 `legacy` — 기기 칸(D-250) 이전 줄이라 원장만으로는 못 가른다.")
-        print("        이 기기에서 쓸 원천이면 다시 받는다 — 같으면 수집기가 스킵한다(규약 2).")
+    if who == "replica" and folded:
+        told = " · ".join(f"{r} {c:,}" for r, c in sorted(folded.items()))
         print(
-            "        ⛔ 안 돌아오면: 수집기가 안 받게 바뀐 것이다 → 그 수집기에 `NOT_KEPT` 를 선언한다."
+            f"     ✅ 사본    {sum(folded.values()):>6,}  원장으로 못 가르는 것({told}) — 사본은 원문으로 파생물을 만들지 않는다 (D-226)"
         )
-    if count.get("query"):
-        print("     🚨 `query` — `collect law_go_kr --dry-run` 의 「질의별 실측」 합집합과 맞대야")
-        print("        유실인지 필터인지 갈린다 (D-153). 필터가 뺀 것이면 **돌아오면 안 된다.**")
+        print(
+            "        🚨 이 기기에서 수집하지 않는다 — 원문은 정본 한 곳에 모인다. 볼 사람은 정본(클론 B)이다."
+        )
+        print(missing_mod.mirror_hint())
+    elif who != "replica":
+        if count.get("legacy"):
+            print("     🚨 `legacy` — 기기 칸(D-250) 이전 줄이라 원장만으로는 못 가른다.")
+            print("        이 기기에서 쓸 원천이면 다시 받는다 — 같으면 수집기가 스킵한다(규약 2).")
+            print(
+                "        ⛔ 안 돌아오면: 수집기가 안 받게 바뀐 것이다 → 그 수집기에 `NOT_KEPT` 를 선언한다."
+            )
+        if count.get("query"):
+            print(
+                "     🚨 `query` — `collect law_go_kr --dry-run` 의 「질의별 실측」 합집합과 맞대야"
+            )
+            print(
+                "        유실인지 필터인지 갈린다 (D-153). 필터가 뺀 것이면 **돌아오면 안 된다.**"
+            )
     if count.get("lost"):
         print("     🔴 `lost` — 되돌리려면 이 기기에서 다시 받는다. 일부러 지운 것이면")
         print(
             "        그 이유를 수집기 `NOT_KEPT` 에 선언한다 — 원장 줄은 지우지 않는다(참인 이력이다)."
         )
-    return count.get("lost", 0)
+    return lv["red"]
 
 
 def check_data(*, verify_hash: bool) -> int:
@@ -383,9 +406,16 @@ def check_data(*, verify_hash: bool) -> int:
                 )
             print("     🚨 이 기기에서 그 원천을 추출하면 **팀이 보는 것과 다른 수가 나온다** —")
             print("        실측: 승인문구 178 vs 177 이 골든셋 1,910 과 1,915 를 갈랐다 (D-176).")
-            print(
-                "     → 이 기기에서 다시 받는다: uv run python launcher.py collect <소스id> --use U1"
-            )
+            if missing_mod.role() == "replica":
+                # 🆕 2026-09-21 — 사본은 원문을 추출하지 않으므로 원문이 낡아도 쓰이지 않는다 (D-226).
+                #    ⛔ 종전에는 사본에도 「이 기기에서 다시 받는다」를 찍었다 — 수집하면 원문이 두 기기로 갈라진다.
+                print(
+                    "     ✅ 사본 — 원문을 추출하지 않으므로 낡아도 쓰이지 않는다 (D-226). 다시 받지 않는다."
+                )
+            else:
+                print(
+                    "     → 이 기기에서 다시 받는다: uv run python launcher.py collect <소스id> --use U1"
+                )
         if mismatched:
             red += len(mismatched)
             print(f"  🔴 원장과 해시가 다른 파일 {len(mismatched):,}개 — **원본이 바뀌었다**")
@@ -611,15 +641,29 @@ def _check_data_env() -> int:
     else:
         print("🟡 DATA_STORE 가 비었다 — data-sync·data-publish 가 멈춘다 (data-setup)")
     dev = env.setting("DATA_DEVICE")
-    if dev and not store.DEVICE_RE.fullmatch(dev):
-        print(
-            "🔴 DATA_DEVICE 모양이 틀렸다 — 영문·숫자·`._-` 32자 이내 (data-setup --device <별칭>)"
-        )
+    # 🔄 2026-09-21 — 모양만 보던 것을 `store.device_problem` 로 (예약어 `canonical` 도 잡는다 · D-99)
+    why = store.device_problem(dev, env.setting("DATA_ROLE")) if dev else None
+    if why:
+        print(f"🔴 DATA_DEVICE {why} (data-setup --device <별칭>)")
         red += 1
     elif dev:
         print(f"✅ DATA_DEVICE {dev}")
     else:
         print("🟡 DATA_DEVICE 가 비었다 — 정본 밖에서는 수집·register 가 쓰기 전에 멈춘다 (D-250)")
+    # 🆕 2026-09-21 (D-256) — 원문 거울. 판정은 `raw_mirror.mirror_root()` 한 곳 (D-99) —
+    #    폴더가 없거나 팀 저장소·받은편지함과 **같은 폴더**면 🔴 (마스킹 전 원문이 팀원이 읽는 곳에 놓인다)
+    if env.setting("RAW_MIRROR"):
+        from scripts import raw_mirror  # noqa: PLC0415
+
+        try:
+            print(f"✅ RAW_MIRROR {raw_mirror.mirror_root().parent}")
+        except raw_mirror.MirrorError as e:
+            print(f"🔴 {e}")
+            red += 1
+    else:
+        print(
+            "⬜ RAW_MIRROR 가 비었다 — 원문 거울 없음 (팀장 기기만 붙인다 · 팀원 기기는 비워 둔다 · D-256)"
+        )
     return red
 
 

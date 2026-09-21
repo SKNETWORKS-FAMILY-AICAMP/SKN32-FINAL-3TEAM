@@ -263,12 +263,21 @@ def load_fragments(cur, dry: bool) -> int:
 #: 🚨 `--allow-missing` 이 켜졌는가. 모듈 전역이라 `_jsonl` 이 인자 없이 본다.
 ALLOW_MISSING = False
 
-#: 🔴 없으면 **적재가 0행이 되는** 입력들. 이름을 여기 적어 두는 것이 계약이다.
-REQUIRED = {
-    "law_article.jsonl": "uv run python -m preprocess.law_article --dump",
-    "banned_terms.jsonl": "uv run python launcher.py golden --write",
-    "hf_api_labels.jsonl": "uv run python -m preprocess.hf_api --dump",
-}
+#: 🔴 적재가 `data/derived/` 에서 읽는 입력 전부 — (이름표, `DERIVED` 아래 경로, 만드는 명령).
+#:    없으면 그 테이블이 **0행인 채 성공**하거나 적재가 멈춘다. 이 표가 계약이다.
+#: 🔄 2026-09-21 — `scripts/db_reset.py` 가 **볼륨을 지우기 전에** 이 표로 본다 (D-99).
+#:    ⛔ 종전에는 db_reset 이 조문·별표·청크만 따로 적어 두어, 사본에 `banned_terms.jsonl` 이 없으면
+#:       DB 를 **지운 뒤에** `load` 가 멈췄다(빈 DB 가 남는다). 새 입력을 읽게 되면 여기에 한 줄 보탠다 —
+#:       `tests/test_db_reset_role.py` 가 이 파일의 `_jsonl("…")` 을 전부 이 표와 대조한다.
+LOAD_INPUTS: tuple[tuple[str, str, str], ...] = (
+    ("조문", "law_article.jsonl", "uv run python -m preprocess.law_article --dump"),
+    ("별표", "law_norm", "uv run python -m preprocess.law_norm --write   🚨 --dump 가 아니다"),
+    ("금지표현 사전", "banned_terms.jsonl", "uv run python launcher.py golden --write"),
+    ("건기식 라벨", "hf_api_labels.jsonl", "uv run python -m preprocess.hf_api --dump"),
+    ("골든셋", "golden/golden.jsonl", "uv run python launcher.py golden --write"),
+)
+#: 파일 입력의 「먼저 돌릴 명령」 — 위 표에서 꺼낸다.
+REQUIRED = {name: how for _label, name, how in LOAD_INPUTS if name.endswith(".jsonl")}
 
 
 def _jsonl_at(p: pathlib.Path, how: str) -> list[dict]:

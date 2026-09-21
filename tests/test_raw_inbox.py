@@ -156,6 +156,35 @@ def test_별칭_모양이_틀리면_멈춘다(repo, monkeypatch, bad) -> None:
 
 
 @pytest.mark.gate
+def test_팀원_기기는_예약어_canonical_을_별칭으로_못_쓴다(repo, monkeypatch) -> None:
+    """🔴 2026-09-21 — `.env` 에 손으로 `DATA_DEVICE=canonical` 을 적으면 원장에 `canonical` 로 남고,
+    `raw-publish` 는 그 행을 「정본에 이미 있다」로 건너뛴다 — **받은 원문이 정본에 안 간다.**
+    ⛔ 종전에는 `data-setup` 만 막았다. 쓰기 **전에** 멈추는지까지 본다 (D-72).
+    """
+    monkeypatch.setenv("DATA_DEVICE", store.CANONICAL_DEVICE)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    with pytest.raises(store.StoreError, match="예약어"):
+        _save(b'{"x":1}', "a.json")
+    assert not (repo / "data" / "raw" / FAM / "a.json").exists()
+    # 반대 대조 — 정본은 같은 이름을 적어도 받는다 (별칭 없이 받을 때 적는 이름과 같다)
+    monkeypatch.setenv("DATA_ROLE", "canonical")
+    _save(b'{"x":1}', "a.json")
+    assert _rows(repo)[-1]["device"] == store.CANONICAL_DEVICE
+
+
+def test_별칭_판정은_한_곳이다() -> None:
+    """🚨 `device_id` · `data_store.setup` · `doctor` 가 같은 함수를 부른다 (D-99) — 소스로 본다."""
+    import inspect
+
+    from scripts import doctor
+
+    for fn in (store.device_id, ds.setup, doctor._check_data_env):
+        src = inspect.getsource(fn)
+        assert "device_problem(" in src, f"🔴 {fn.__qualname__} 가 별칭 판정을 따로 한다"
+        assert "DEVICE_RE.fullmatch" not in src, f"🔴 {fn.__qualname__} 가 모양을 따로 잰다"
+
+
+@pytest.mark.gate
 def test_런처_수집은_별칭이_없으면_받기_전에_멈춘다(monkeypatch) -> None:
     ran: list[tuple] = []
     monkeypatch.setattr(launcher, "run", lambda *a: ran.append(a) or 0)

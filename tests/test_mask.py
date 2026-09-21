@@ -766,6 +766,42 @@ def test_개인_이름은_낱말_안에서_지우지_않는다() -> None:
     assert out == "[대표] 과정을 마친 [대표]는 교육이수증을 받았다", out
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        "피심인 김가나로부터 자료를 제출받았다",  # 로(부터)
+        "김가나만 이를 알고 있었다",  # 만
+        "김가나까지 포함하면",  # 까지
+        "김가나에게 통지하였다",  # 에게
+        "김가나씨는 대표이다",  # 씨
+        "김가나께서 답하였다",  # 께(서)
+        "김가나라는 사람이",  # 라는
+    ],
+)
+def test_개인_피심인_이름은_어떤_조사_앞에서도_남지_않는다(body: str) -> None:
+    """🔴 2026-09-21 — 조사 목록이 세 벌이던 때 「로·만·까지·에게·씨」 앞의 실명이 **그대로 남았다.**
+
+    ⛔ 직함이 없으니 `_TITLED_PERSON` 도, 반출 검사(개인식별)도 못 잡는 자리다. 여기서만 잡힌다.
+    """
+    from preprocess.mask import Anchor, mask
+
+    out = mask(body, Anchor("", ("김가나",)))
+    assert "김가나" not in out and "[대표]" in out, out
+
+
+def test_지우는_쪽_조사는_세는_쪽_조사를_모두_안다() -> None:
+    """🔴 D-99 — 세는 쪽(`_PARTICLE`)이 아는 조사를 지우는 쪽(`_mask_people`)이 모르면 실명이 샌다.
+
+    반대 방향(지우는 쪽이 더 넓음)은 허용한다 — 사람 뒤에만 붙는 호칭(`씨`·`님`)이 있다.
+    """
+    from preprocess import mask as m
+
+    tail = set(m._NAME_TAIL.split("|"))
+    assert set(m.PARTICLES) <= tail, sorted(set(m.PARTICLES) - tail)
+    for p in m.PARTICLES:
+        assert m._PARTICLE.search("가나다" + p), p  # 세는 쪽도 같은 표에서 온다
+
+
 def test_앵커는_문자열처럼_쓰인다() -> None:
     """`Anchor` 는 `str` 이다 — 기존 호출부(비교·포함·길이)가 그대로 돈다."""
     from preprocess.mask import Anchor
@@ -800,3 +836,55 @@ def test_판례_재결례는_텍스트_칸만_마스킹한다(tmp_path) -> None:
     row = law_case.parse(p, "decc")
     assert "김가나" not in row["이유"] and "[대표]" in row["이유"], row["이유"]
     assert row["처분청"] == "가나시장"
+
+
+def test_ftc_정책으로_가리는_호출부는_앵커를_싣는다() -> None:
+    """🔴 2026-09-21 (D-248) — `"ftc"` 정책은 앵커(`anchor_ftc` 의 알맹이)가 있어야 사건명 머리·개인 피심인
+    축이 돈다. `apply_policy(x, "", "ftc")` 는 **예외 없이 그 축을 끈다** — `endorse_scan` 이 그렇게 돌았다.
+
+    ★ 정책 키가 이름(`MASK_KEY`)으로 와도 모듈을 import 해 값을 읽는다 — 글자만 보면 못 잡는다.
+    """
+    import ast
+    import importlib
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    bad: list[str] = []
+    for path in sorted((root / "preprocess").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        mod = None
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and getattr(node.func, "id", getattr(node.func, "attr", None)) == "apply_policy"
+                and len(node.args) >= 3
+            ):
+                continue
+            bare, key = node.args[1], node.args[2]
+            if not (isinstance(bare, ast.Constant) and bare.value == ""):
+                continue
+            if isinstance(key, ast.Constant):
+                val = key.value
+            elif isinstance(key, ast.Name):
+                mod = mod or importlib.import_module(f"preprocess.{path.stem}")
+                val = getattr(mod, key.id, None)
+            else:
+                val = None  # 식으로 오는 키(`policy_source(…)`)는 그 함수가 ftc 를 거부한다 (evasion_scan)
+            if val == "ftc":
+                bad.append(f"{path.name}:{node.lineno}")
+    assert not bad, f"🔴 앵커 없이 ftc 정책으로 가린다 — 개인 피심인·사건명 축이 꺼진다: {bad}"
+
+
+def test_반대_대조_앵커_없는_ftc_호출을_잡는다() -> None:
+    """위 게이트가 실제로 실패할 수 있는가 — 종전 `endorse_scan` 모양을 가짜 모듈로 세워 본다 (D-170)."""
+    import ast
+
+    src = 'MASK_KEY = "ftc"\ndef f(q):\n    return apply_policy(q, "", MASK_KEY)\n'
+    tree = ast.parse(src)
+    calls = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "apply_policy"
+    ]
+    assert calls and isinstance(calls[0].args[1], ast.Constant) and calls[0].args[1].value == ""
+    assert isinstance(calls[0].args[2], ast.Name) and calls[0].args[2].id == "MASK_KEY"
