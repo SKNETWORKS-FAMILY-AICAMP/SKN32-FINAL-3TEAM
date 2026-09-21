@@ -104,7 +104,7 @@ def stub(when: str, needs: str):
     return deco
 
 
-def needs_data(fn):
+def needs_data(fn=None, *, unless: str | None = None):
     """🆕 **파생물을 읽는 명령** — 사본이면 부족분을 먼저 받는다 (2026-09-19 · D-247 · 판정 ③).
 
     ★ 판정 — 「데이터 명령 앞에서 자동」. 클론 A · 팀원이 `load` 를 누르면 부족한 생성물을
@@ -112,10 +112,17 @@ def needs_data(fn):
     🚨 로직은 여기 없다 — `scripts.data_store ensure` 에 위임한다 (얇은 껍데기 · D-51).
        정본·역할 없음(CI)에서는 아무것도 안 한다.
     🚨 **메뉴에 붙이지 않고 명령에 붙인다** — `launcher.py load` 처럼 메뉴를 안 거치는 호출이 있다.
+    🔄 2026-09-21 (소성민 코드 리뷰 #9) — `unless=<옵션 이름>` 이 켜져 있으면 받지 않는다.
+       ⛔ `embed --check` 는 모델 차원만 재고 파생물·DB 를 안 읽는데(명령 설명 「DB 불필요」), 명령 전체를 감싸서
+          저장소가 없는 기기에서는 동기화 실패로 막혔다.
     """
+    if fn is None:
+        return lambda f: needs_data(f, unless=unless)
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
+        if unless and kwargs.get(unless):
+            return fn(*args, **kwargs)  # 파생물을 안 읽는 갈래 — 받지 않는다
         if run(sys.executable, "-m", "scripts.data_store", "ensure") != 0:
             console.print("[red]🔴 파생물을 받지 못해 멈췄다[/red] — 위 메시지를 본다 (D-247)")
             raise typer.Exit(1)
@@ -1008,8 +1015,10 @@ def collect(
     source: str = typer.Argument(..., help="레지스트리 소스 id"),
     use: str = typer.Option("U1", "--use", help="U1~U4"),
     pages: int = typer.Option(0, "--pages", help="🚨 첫 실행은 1 로 — 응답을 보고 전량을 받는다"),
-    limit: int = typer.Option(0, "--limit", help="법제처 목록형(판례·재결례·1차 해석) — 앞 N 건만"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="법제처 — 저장하지 않고 무엇을 받을지만"),
+    limit: int = typer.Option(0, "--limit", help="앞 N 건만 — 받는 수집기만 (안 받으면 거부)"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="저장하지 않고 무엇을 받을지만 — 받는 수집기만 (안 받으면 거부)"
+    ),
     force: bool = typer.Option(
         False, "--force", help="다른 기기가 최근에 받은 소스라도 받는다 (D-250 겹침 경고를 넘긴다)"
     ),
@@ -1021,13 +1030,19 @@ def collect(
 
     🆕 2026-09-18 — 법제처 목록형은 `--dry-run` · `--limit` 을 넘깁니다.
        첫 실행은 `--dry-run` → `--limit 20` → 전량 순서로 봅니다.
+    🔄 2026-09-21 — `--dry-run` · `--limit` · `--pages` 는 **그 수집기가 받을 때만** 넘깁니다.
+       안 받는 수집기에 주면 받기 전에 멈춥니다 (표 — `collect/__init__.py` 의 `COLLECTOR_OPTIONS`).
     🚨 **파생물은 클론 B 에서만 만듭니다** (D-226).
     🔄 2026-09-20 (D-250) — 수집은 **지정 팀원도** 합니다. 받은 원문은 `raw-publish` 로 올리고
        원장은 자기 브랜치로 올립니다 → 팀장이 검토·병합 → 정본이 `raw-import` 로 합칩니다.
        다른 기기가 최근 7일 안에 받은 소스면 **먼저 멈추고 알립니다** — 알고 받으려면 `--force`.
        (겹쳐 받아도 섞이지는 않습니다 — 원장의 sha 로 같으면 건너뛰고 다르면 새 판입니다.)
     """
-    from collect import COLLECTORS, MANUAL_SOURCES  # noqa: PLC0415 — 표는 collect 가 든다
+    from collect import (  # noqa: PLC0415 — 표는 collect 가 든다
+        COLLECTOR_OPTIONS,
+        COLLECTORS,
+        MANUAL_SOURCES,
+    )
 
     if source in MANUAL_SOURCES:
         typer.echo(
@@ -1042,6 +1057,18 @@ def collect(
             "   표를 봅니다 — collect/__init__.py 의 COLLECTORS · MANUAL_SOURCES\n"
             "   🚨 **추정하지 않습니다.** 오픈API 가 아닌 소스를 openapi 로 보내면"
             " 엉뚱한 오류가 납니다 (D-179)."
+        )
+        raise typer.Exit(1)
+    module, shape = spec
+    # 🆕 2026-09-21 (코드 리뷰 #4) — 안 받는 인자는 **받기 전에** 거부한다. ⛔ 종전에는 말없이 버려서
+    #    `--dry-run` 이 실제 수집이 됐다 — 아래 `if not dry_run` 이 별칭·겹침 검사까지 건너뛴 채로.
+    offered = COLLECTOR_OPTIONS.get(module, frozenset())
+    asked = {"--dry-run": dry_run, "--limit": limit, "--pages": pages}
+    refused = [k for k, v in asked.items() if v and k not in offered]
+    if refused:
+        typer.echo(
+            f"🔴 `{source}` 의 수집기({module})는 {', '.join(refused)} 를 받지 않습니다 — 아무것도 받지 않았습니다.\n"
+            f"   받는 것: {', '.join(sorted(offered)) or '없음'}  (표 — collect/__init__.py 의 COLLECTOR_OPTIONS)"
         )
         raise typer.Exit(1)
     if not dry_run:
@@ -1061,20 +1088,19 @@ def collect(
                 f"   알고 받으려면: uv run python launcher.py collect {source} --force"
             )
             raise typer.Exit(1)
-    module, shape = spec
     args = ["uv", "run", "python", "-m", module]
     if shape == "arg":
         args += [source, "--use", use]
     elif shape.startswith("target"):
         # 🚨 값은 표가 든다 — `target` 만 있으면 법령(`law`)이다. 런처가 target 을 추정하지 않는다.
         args += ["--target", shape.partition("=")[2] or "law"]
-    if pages and module == "collect.openapi":
+    # 여기 오면 위 거부를 지났다 — 준 인자는 그 수집기가 받는 것이다
+    if pages:
         args += ["--pages", str(pages)]
-    if module == "collect.law_api":
-        if dry_run:
-            args.append("--dry-run")
-        if limit:
-            args += ["--limit", str(limit)]
+    if dry_run:
+        args.append("--dry-run")
+    if limit:
+        args += ["--limit", str(limit)]
     rc = run(*args)
     if rc == 0 and not dry_run:
         _after_collect(source)
@@ -1465,7 +1491,7 @@ def chunk(dump: bool = typer.Option(False, "--dump", help="chunks.jsonl 을 쓴�
 
 
 @app.command()
-@needs_data
+@needs_data(unless="check")
 def embed(
     check: bool = typer.Option(False, "--check", help="모델 차원만 잽니다 (DB 불필요)"),
 ) -> None:

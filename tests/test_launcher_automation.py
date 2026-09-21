@@ -234,3 +234,67 @@ def test_메뉴에서_부를_수_있다() -> None:
     names = {launcher.cli_name(f) for _, _, f in launcher.MENU if f}
     assert "data-refresh" in names
     assert "data-refresh" in launcher.ASK_ARG and "data-refresh" in launcher.ASK_FLAG
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-21 (소성민 코드 리뷰 #4) — `collect --dry-run` 이 실제 수집이던 것
+# ══════════════════════════════════════════════════════════
+def test_collect_는_수집기가_받는_인자만_넘긴다(calls) -> None:
+    """★ 표(`COLLECTOR_OPTIONS`)에 있는 인자는 그대로 간다 — ftc_body 는 `--dry-run` 을 받는다."""
+    r = _cli("collect", "ftc_decisions_body", "--dry-run", "--limit", "5")
+    assert r.exit_code == 0, r.output
+    assert calls == [
+        ("uv", "run", "python", "-m", "collect.ftc_body", "--dry-run", "--limit", "5")
+    ], calls
+
+
+@pytest.mark.parametrize(
+    ("args", "flag"),
+    [
+        (("mfds_sanctions", "--dry-run"), "--dry-run"),  # openapi 는 미리보기가 없다
+        (("mfds_casebook", "--limit", "3"), "--limit"),  # mfds_board 는 limit 이 없다
+        (("ftc_decisions_body", "--pages", "1"), "--pages"),  # pages 는 openapi 만
+    ],
+)
+def test_collect_는_안_받는_인자를_받기_전에_거부한다(calls, args, flag) -> None:
+    """🔴 ⛔ 종전에는 말없이 버렸다 — `--dry-run` 이 실제 수집이 됐고 별칭·겹침 검사(D-250)까지 건너뛰었다."""
+    r = _cli("collect", *args)
+    assert r.exit_code == 1, r.output
+    assert flag in r.output and "아무것도 받지 않았습니다" in r.output, r.output
+    assert calls == [], "🔴 거부했으면 수집기를 부르지 않아야 한다"
+
+
+def test_COLLECTOR_OPTIONS_가_수집기_argparse_와_같다() -> None:
+    """🚨 표와 수집기가 갈리면 멈춘다 (D-99) — 수집기가 받는데 표에 없으면 또 말없이 못 넘기고,
+    표에 있는데 수집기가 안 받으면 argparse 가 오류를 낸다."""
+    import pathlib
+
+    from collect import COLLECTOR_OPTIONS, COLLECTORS
+
+    root = pathlib.Path(launcher.__file__).resolve().parent
+    modules = {m for m, _ in COLLECTORS.values()}
+    assert modules <= set(COLLECTOR_OPTIONS), (
+        f"표에 없는 수집기 — {modules - set(COLLECTOR_OPTIONS)}"
+    )
+    for module, offered in COLLECTOR_OPTIONS.items():
+        src = (root / (module.replace(".", "/") + ".py")).read_text(encoding="utf-8")
+        for flag in ("--dry-run", "--limit", "--pages"):
+            has = f'"{flag}"' in src
+            assert has == (flag in offered), (
+                f"{module} {flag} — 수집기 {has} · 표 {flag in offered}"
+            )
+
+
+# 🆕 2026-09-21 (소성민 코드 리뷰 #9) — `embed --check` 가 데이터 동기화에 막히던 것
+def test_embed_check_는_동기화를_부르지_않는다(calls) -> None:
+    """⛔ 종전에는 `@needs_data` 가 명령 전체를 감싸 저장소가 없는 기기에서 `--check` 가 막혔다."""
+    r = _cli("embed", "--check")
+    assert r.exit_code == 0, r.output
+    assert all("scripts.data_store" not in a for a in calls), calls
+    assert calls[-1][-2:] == ("scripts.embed", "--check"), calls
+
+
+def test_embed_는_여전히_먼저_받는다(calls) -> None:
+    """🚨 반대 대조 — `--check` 가 아니면 파생물을 읽으므로 받는다 (D-247)."""
+    _cli("embed")
+    assert calls[0][-2:] == ("scripts.data_store", "ensure"), calls

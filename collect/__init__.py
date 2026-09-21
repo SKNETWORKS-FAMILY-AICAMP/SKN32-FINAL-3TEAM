@@ -60,6 +60,21 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     "mfds_cgm_expc": ("collect.law_api", "target=mfdsCgmExpc"),
 }
 
+#: 🆕 2026-09-21 (소성민 코드 리뷰 #4) — 수집기마다 **받는 선택 인자**. 런처가 이 표를 보고 넘기고,
+#:    그 수집기가 안 받는 인자를 주면 **받기 전에 거부한다.**
+#:    ⛔ 종전 런처는 `--dry-run`·`--limit` 을 `law_api` 에만, `--pages` 를 `openapi` 에만 넘기고 나머지는
+#:       **말없이 버렸다.** `collect ftc_decisions_body --dry-run` 은 미리보기가 아니라 **실제 수집**이었고,
+#:       `dry_run` 이라 기기 별칭·겹침 경고(D-250)까지 건너뛰었다. 수집기 다섯은 이미 `--dry-run` 을 받는데 못 받았다.
+#:    🚨 표와 수집기의 argparse 가 갈리면 `tests/test_collect_options.py` 가 멈춘다 (D-99).
+COLLECTOR_OPTIONS: dict[str, frozenset[str]] = {
+    "collect.openapi": frozenset({"--pages"}),
+    "collect.law_api": frozenset({"--dry-run", "--limit"}),
+    "collect.ftc_body": frozenset({"--dry-run", "--limit"}),
+    "collect.mfds_board": frozenset({"--dry-run"}),
+    "collect.mfds_hf_board": frozenset({"--dry-run", "--limit"}),
+    "collect.mfds_press": frozenset({"--dry-run", "--limit"}),
+}
+
 #: 🚨 **수집기가 없는 것은 없다고 적는다** — 「빠진 것」인지 「사람이 받는 것」인지 갈린다 (D-110).
 #:    AI Hub·설문·통계 계열은 신청·회원가입이 필요해 **사람이 받아 `launcher.py register` 로 올린다.**
 MANUAL_SOURCES = {
