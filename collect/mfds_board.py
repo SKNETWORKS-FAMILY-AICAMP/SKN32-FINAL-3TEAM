@@ -73,13 +73,32 @@ _TAG = re.compile(r"<[^>]+>")
 MIN_PDF = 20_000
 
 
+#: 파일 이름 길이 상한 `[관행]` — Windows 경로 260자 안에 레포 경로·폴더가 들어갈 여유
+SLUG_MAX = 120
+
+
 def _slug(name: str) -> str:
     """파일명을 안전하게. 🚨 원본 이름을 버리지 않는다 — manifest 가 URL 을 들고 있지만
-    사람이 디렉터리를 열었을 때 무엇인지 알아볼 수 있어야 한다."""
+    사람이 디렉터리를 열었을 때 무엇인지 알아볼 수 있어야 한다.
+
+    🔄 2026-09-22 (클론 A 재검토 2판 §3-4 · 3판 §0 ⑦ 실측 0건 뒤) — 두 가지를 고친다.
+      ⛔ 종전 `s[:120]` 은 **확장자째** 잘랐다 — 120자를 넘는 이름은 `.pdf` 를 잃어 추출기가 못 읽는다.
+         ★ 줄이는 것은 몸통이고 확장자는 남긴다.
+      ⛔ 공백·금지 문자를 `_` 로 바꾸면 `__` 가 생길 수 있다 — 「보도 _cover.pdf」 → `보도__cover.pdf` 는
+         판 표시(`store.EDITION_MARK` = `__c`)와 부딪혀 **판으로 오인된다**(`stem.split("__c")`).
+         ★ 밑줄은 하나로 접는다 — 우리 이름에는 `__` 가 생기지 않는다.
+    🚨 기존 파일 이름은 안 바뀐다 — B 디스크·수집 원장 모두 123자 이상 0 · 밑줄 둘 0 (2026-09-22 실측 · 사용자 실행 · 원장 대조).
+    """
     s = _TAG.sub("", html.unescape(name)).strip()
     s = re.sub(r"[\\/:*?\"<>|]+", "_", s)
     s = re.sub(r"\s+", "_", s)
-    return s[:120]
+    s = re.sub(r"_{2,}", "_", s)
+    if len(s) <= SLUG_MAX:
+        return s
+    stem, dot, ext = s.rpartition(".")
+    if not dot or not stem or len(ext) > 5:  # 확장자가 없거나 확장자로 볼 수 없는 꼬리
+        return s[:SLUG_MAX]
+    return stem[: SLUG_MAX - len(ext) - 1].rstrip("_") + "." + ext
 
 
 def attachments(page_html: str) -> list[tuple[str, str]]:
