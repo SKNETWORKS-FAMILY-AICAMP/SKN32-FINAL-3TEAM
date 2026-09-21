@@ -168,6 +168,51 @@ def test_G2_는_이_기기_것이어도_되살리지_않는다(repo, monkeypatch
 
 
 @pytest.mark.gate
+def test_바뀐_원천을_다시_받아도_같은_판을_또_만들지_않는다(repo, monkeypatch) -> None:
+    """🔴 2026-09-21 (전수 재검토 I6) — ⛔ 디스크 갈래가 **오늘 판만** 봐서, 한 번 바뀐 원천은 수집할 때마다
+    날짜만 다른 같은 판이 생겼다(`__c0907`·`__c0908`·`__c0909` 바이트 동일). 읽는 쪽은 판이 있으면 멈춘다."""
+    monkeypatch.setattr(store, "_today", lambda: "20260907")
+    _save(b'{"a":1}')
+    assert _save(b'{"a":2}').name == "page_0001__c20260907.json"
+    monkeypatch.setattr(store, "_today", lambda: "20260908")
+    assert _save(b'{"a":2}') is None, "🔴 같은 것을 새 판으로 또 썼다"
+    assert sorted(p.name for p in (repo / "data" / "raw" / FAM).iterdir()) == [
+        "page_0001.json",
+        "page_0001__c20260907.json",
+    ]
+
+
+@pytest.mark.gate
+def test_채택한_뒤_잃으면_원본_이름으로_되살린다(repo) -> None:
+    """🔴 전수 재검토 I7 — ⛔ `adopt` 로 치운 옛 판 이름을 되살렸다(색인 순서). 원본 이름이 먼저다."""
+    body = b'{"a":2}'
+    base, ed = f"data/raw/{FAM}/page_0001.json", f"data/raw/{FAM}/page_0001__c20260907.json"
+    _ledger(
+        repo,
+        [
+            _row(base, b'{"a":1}', "collector-1"),
+            _row(ed, body, "collector-1", at="2026-09-07T00:00:00+00:00"),
+            _row(base, body, "collector-1", at="2026-09-08T00:00:00+00:00"),  # adopt 가 붙인 행
+        ],
+    )
+    got = _save(body)
+    assert got is not None and got.name == "page_0001.json", got
+
+
+@pytest.mark.gate
+def test_되살릴_자리에_다른_바이트가_있으면_덮지_않는다(repo, monkeypatch) -> None:
+    """🚨 규약 2 — 원장과 다른 파일이 그 자리에 있으면 되살리지 않고 새 판으로 둔다."""
+    monkeypatch.setattr(store, "_today", lambda: "20260909")
+    rel = f"data/raw/{FAM}/page_0001.json"
+    _ledger(repo, [_row(rel, b'{"a":1}', "collector-1")])
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_bytes(b'{"local":1}')
+    got = _save(b'{"a":1}')
+    assert (repo / rel).read_bytes() == b'{"local":1}', "🔴 덮어썼다"
+    assert got is not None and got.name == "page_0001__c20260909.json", got
+
+
+@pytest.mark.gate
 def test_원장에_팀원이_정한_별칭이_남는다(repo) -> None:
     _save(b'{"x":1}', "a.json")
     assert _rows(repo)[-1]["device"] == "collector-1"
@@ -691,3 +736,19 @@ def test_올리기는_정본의_옛_원문을_올리지_않는다(repo, inbox, m
     assert objs == [sha]
     out = capsys.readouterr().out
     assert "옛 행 1개" in out and "행 1개" in out, out
+
+
+@pytest.mark.gate
+def test_수집기는_다른_기기가_받은_것을_다시_부르지_않는다(repo) -> None:
+    """🔴 2026-09-21 (전수 재검토) — ⛔ 수집기가 디스크만 봐서 팀원 기기가 정본이 받은 것을 다시 불렀고,
+    조회수처럼 부를 때마다 바뀌는 원천은 새 판으로 깔렸다. ★ 이 기기가 받은 기록만 있고 없으면 다시 부른다(유실)."""
+    rel = f"data/raw/{FAM}/hf_board_1.html"
+    p = repo / rel
+    _ledger(repo, [_row(rel, b"x", "canonical")])
+    assert store.already_have(p), "다른 기기 것은 부르지 않는다"
+    _ledger(repo, [_row(rel, b"x", "collector-1")])
+    store._INDEX = None  # noqa: SLF001
+    assert not store.already_have(p), "이 기기가 받았는데 없으면 다시 받는다 — 되살림"
+    _ledger(repo, [])
+    store._INDEX = None  # noqa: SLF001
+    assert not store.already_have(p)

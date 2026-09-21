@@ -209,6 +209,25 @@ def redistributable(source_id: str) -> bool:
     return bool(spec(source_id).get("redistributable"))
 
 
+def mark_if_complete(source_id: str, *, saved: int, partial: bool) -> bool:
+    """수집이 끝난 뒤 `collected_at` 을 찍을지 — 찍었으면 True. 🆕 2026-09-21 (전수 재검토 I8).
+
+    ⛔ 같은 규칙(「저장 0 이면 안 찍는다 · `--limit` 이면 안 찍는다」)이 수집기마다 **손으로** 쓰여 있었고,
+       `mfds_hf_board` 만 `--limit` 을 막았다. `law_api`·`ftc_body`·`mfds_press` 는 앞 5건만 받아도 「수집함」으로 찍었다 —
+       **찍혔다 ≠ 받았다**(D-177 의 사촌). 같은 날 런처가 `--limit` 을 두 수집기에 더 넘기게 돼(코드 리뷰 #4) 드러났다.
+    ★ 규칙은 여기 하나 (D-99). `partial` 은 부르는 쪽이 안다 — `--limit`·일부 페이지만 받은 경우.
+    """
+    if partial:
+        print("🚨 일부만 받았다(--limit 등) — collected_at 을 찍지 않는다 (원장의 날짜는 그대로)")
+        return False
+    if not saved:
+        print("⬜ 새로 저장한 것이 없다 — collected_at 을 찍지 않는다 (원장의 날짜는 그대로)")
+        return False
+    mark_collected(source_id)
+    print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    return True
+
+
 def mark_collected(source_id: str) -> None:
     """수집 시각을 원장에 찍는다 (규약 3 · 게이트 15).
 
@@ -237,7 +256,10 @@ def mark_collected(source_id: str) -> None:
     if "collected_at:" not in block:
         raise RegistryError(f"{source_id!r} 블록에 collected_at 이 없다")
 
-    new_block = re.sub(r"collected_at:\s*\S+", f"collected_at: {today}", block, count=1)
+    # 🔄 2026-09-21 (전수 재검토) — ⛔ `\s*\S+` 는 값이 **비었을 때 줄을 넘어** 다음 줄의 첫 낱말을 먹었다
+    #    (`collected_at:\n  reviewed_by: kim` → `collected_at: 2026-09-21 kim` — `reviewed_by` 가 사라진다).
+    #    지금 값이 전부 null·날짜라 안 터졌을 뿐이다. 한 줄 안에서만 바꾼다.
+    new_block = re.sub(r"collected_at:[ \t]*[^\n]*", f"collected_at: {today}", block, count=1)
     LEDGER.write_text(text[:start] + new_block + text[end:], encoding="utf-8", newline="\n")
 
     # 🚨 원장을 고쳤으면 생성물도 다시 만들어야 게이트가 같은 것을 본다.

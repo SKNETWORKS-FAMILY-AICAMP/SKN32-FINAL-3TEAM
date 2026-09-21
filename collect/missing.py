@@ -159,11 +159,13 @@ def classify(
         return {}
 
     # sha → 그 sha 를 기록한 (path, bytes) — `moved` 를 가른다
-    by_sha: dict[str, list[tuple[str, int]]] = collections.defaultdict(list)
+    by_sha: dict[str, list[tuple[str, int, str]]] = collections.defaultdict(list)
     for p, rs in by_path.items():
         for r in rs:
             if r.get("sha256"):
-                by_sha[r["sha256"]].append((p, int(r.get("bytes") or 0)))
+                by_sha[r["sha256"]].append(
+                    (p, int(r.get("bytes") or 0), str(r.get("source_id") or ""))
+                )
     # 판을 걷은 이름 → 그 이름을 쓰는 path 들 — `cleared` 를 가른다
     by_stem: dict[str, list[str]] = collections.defaultdict(list)
     for p in by_path:
@@ -180,13 +182,15 @@ def classify(
         #       `raw_inbox` 가 그것을 정리된 것(`SETTLED`)으로 여겨 팀원 원문이 `raw-import` 에서 **조용히 빠졌다.**
         #       doctor 도 ✅ 로 보고했다. ★ 실제로 알려진 옮김은 둘 — 판 채택(`x__c날짜` → `x` · D-246)과
         #       폴더 옮김(D-245 `law_go_kr/` → `law/`)이고, 둘 다 **판 표시를 뗀 파일 이름이 같다.**
+        #    🔄 같은 날 (전수 재검토 I9) — **같은 원천**도 요구한다. ⛔ 이름만 보면 `page_0001.json` 같은 흔한 이름이
+        #       **다른 원천끼리** 바이트가 같을 때 옮겨짐이 됐다(실측 재현: mfds_sanctions ↔ mfds_hf_individual).
         name = _name_key(p)
         where = next(
             (
                 q
                 for r in rs
-                for q, b in by_sha.get(str(r.get("sha256") or ""), ())
-                if q != p and _name_key(q) == name and size_on_disk(q) == b
+                for q, b, s in by_sha.get(str(r.get("sha256") or ""), ())
+                if q != p and s == sid and _name_key(q) == name and size_on_disk(q) == b
             ),
             None,
         )

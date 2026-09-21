@@ -288,10 +288,8 @@ def collect(source_id: str, use: str, max_pages: int | None) -> int:
     #    원장이 「다 받았다」고 거짓말한다 — 그리고 아무도 다시 안 본다.
     #    🚨 `mfds_hf_board.py` 는 같은 상황에서 안 찍는 규약을 지키고 있었다.
     #       **한쪽 수집기만 고쳐 둔 규약은 규약이 아니다** (오늘 `_ONLY_PARTICLE` 과 같은 자리).
-    if max_pages:
-        print(f"  🚨 --pages {max_pages} 로 일부만 받았다 — mark_collected 를 찍지 않는다")
-    elif saved:
-        registry.mark_collected(source_id)  # 규약 3 · 게이트 15
+    # 🔄 2026-09-21 — 규칙은 `registry.mark_if_complete` 한 곳 (D-99 · 규약 3 · 게이트 15)
+    registry.mark_if_complete(source_id, saved=saved, partial=bool(max_pages))
     print(f"\n{source_id} — {saved}장 저장 → {dest.relative_to(store.ROOT)}/")
     if n_rows:
         dup = n_rows - len(seen)

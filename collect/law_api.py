@@ -959,10 +959,10 @@ def main() -> int:
         return 1 if failed else 0
 
     print(f"\n새로 저장 {saved}건" + (f" · 🚨 실패 {failed}건" if failed else ""))
-    if saved:
-        # 🚨 받은 소스의 원장에 찍는다 — 1차 해석을 `law_go_kr` 에 찍으면 서명과 기록이 갈린다.
-        registry.mark_collected(INTERP_TARGETS.get(args.target, SOURCE_ID))
-        print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    # 🚨 받은 소스의 원장에 찍는다 — 1차 해석을 `law_go_kr` 에 찍으면 서명과 기록이 갈린다.
+    registry.mark_if_complete(
+        INTERP_TARGETS.get(args.target, SOURCE_ID), saved=saved, partial=bool(args.limit)
+    )
     if failed:
         # 🚨 일부 실패를 0 으로 끝내지 않는다. 2026-09-02 에 admrul 3건이 전부 오류 응답이었는데
         #    「새로 저장 3건」과 종료코드 0 이 나와, 3층이 채워진 것으로 보였다.

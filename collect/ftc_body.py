@@ -173,8 +173,9 @@ def collect(
             #    ⚠️ 대신 같은 번호·같은 날짜로 내용이 바뀐 개정본은 못 본다 — `--refetch` 로 강제한다.
             day = _norm_date(list_day)
             if not refetch and (
-                (day and (out_dir / f"{seq}_{day}.xml").exists())
-                or (out_dir / f"{seq}.xml").exists()
+                # 🔄 09-21 — 원장(다른 기기가 받은 것)도 본다 (`store.already_have`)
+                (day and store.already_have(out_dir / f"{seq}_{day}.xml"))
+                or store.already_have(out_dir / f"{seq}.xml")
             ):
                 skipped += 1
                 continue
@@ -265,9 +266,8 @@ def main() -> int:
     if undated:
         # 🚨 실패가 아니다 — 저장은 됐다. 연도 분포의 모수에서만 빼면 된다.
         print(f"⚠️ 그중 {undated}건은 원천에 결정일자가 없다 — 파일명이 번호뿐이다.")
-    if saved and not a.dry_run:
-        registry.mark_collected(SOURCE_ID)
-        print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    if not a.dry_run:
+        registry.mark_if_complete(SOURCE_ID, saved=saved, partial=a.limit is not None)
     if failed:
         # 🚨 일부 실패를 0 으로 끝내지 않는다 (D-115).
         print(

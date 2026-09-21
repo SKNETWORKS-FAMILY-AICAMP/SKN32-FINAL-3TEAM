@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import json
 import re
@@ -226,6 +227,70 @@ def derived_dir(name: str) -> Path:
     return d
 
 
+def already_have(path: Path) -> bool:
+    """수집기가 **부르기 전에** 건너뛸지 — 디스크에 있거나, 원장에 **다른 기기**가 받은 기록이 있다.
+
+    🆕 2026-09-21 (전수 재검토) — ⛔ 수집기 넷(`mfds_hf_board`·`mfds_press`·`ftc_body`·`mfds_board`)이 디스크만 봤다.
+       D-250 뒤로 팀원 기기는 원장은 있고 원문은 없다 — 그래서 정본이 받은 것을 **다시 불렀고**, 조회수처럼 부를 때마다
+       바뀌는 값이 든 원천(`hf_board_*.html`)은 `save_raw` 가 새 판으로 깔았다(실측 재현: 1건 → 새 판 + `mark_collected`).
+    ★ **이 기기가 받은** 기록만 있고 디스크에 없으면 건너뛰지 않는다 — 그것은 유실이고 다시 받아 되살린다(`restore`).
+       기기 칸 없는 옛 행(`legacy`)은 정본의 과거분이다(D-250 결정 4) — 정본이 아니면 건너뛴다.
+    """
+    if path.exists():
+        return True
+    rows = ledger_editions(path)
+    if not rows:
+        return False
+    try:
+        me = device_id()
+    except StoreError:
+        return True  # 별칭을 모르면(`--dry-run` 은 별칭 검사를 안 거친다) 누구 것인지 모른다 — 부르지 않는 쪽
+    return any(str(r.get("device") or "") != me for r in rows)
+
+
+def _same_elsewhere(
+    path: Path, ident: str, file_ident: Callable[[Path], str], *, source_id: str
+) -> tuple[str, Path, str | None] | None:
+    """`path` 의 이름과 그 판들(`__c날짜`) 중 **같은 것**(판정용 해시)이 있으면 그 판정 — 없으면 None.
+
+    순서 — ① 디스크에 있으면 `skip`(원장 행이 없으면 `ledger`) ② 원장에만 있고 **이 기기가 받은 것**이면 `restore`
+    ③ 원장에만 있고 다른 기기(또는 기기 칸 없는 옛 행)의 것이면 `skip`.
+    🚨 `path` 자신은 부르는 쪽이 이미 봤어도 다시 본다 — 비교가 한 곳에 있어야 두 갈래가 안 갈린다 (D-99).
+    """
+    stem = path.stem.split(EDITION_MARK, 1)[0]
+    siblings = sorted(
+        path.parent.glob(f"{glob.escape(stem)}{EDITION_MARK}*{glob.escape(path.suffix)}")
+    )
+    for q in ([path] if path.exists() else []) + siblings:
+        if q.is_file() and file_ident(q) == ident:
+            return ("skip" if ledger_row(q) is not None else "ledger"), q, None
+    same = [r for r in ledger_editions(path) if _ident_of(r) == ident]
+    if not same:
+        return None
+    # 🆕 2026-09-21 (소성민 코드 리뷰 #3) — ⛔ 종전에는 원장에 같은 것이 있으면 **누가 받았든** `skip` 이었다.
+    #    그래서 이 기기가 받은 원문을 잃으면(D-245 334노드 같은 사고) 다시 수집해도 조용히 건너뛰고 파일은 계속 없었다 —
+    #    doctor 의 `lost` 안내(「이 기기에서 다시 받는다」)와 모순이었다.
+    #    ★ `lost` 와 **같은 조건** (`collect/missing.py` ⑤ · D-253) — 기기 칸이 **이 기기**일 때만 되살린다.
+    #    🚨 G2 는 되살리지 않는다 — 사실을 뽑은 뒤 원문을 **일부러** 지우는 것이 규칙이고(D-17), doctor 도 `g2` 를
+    #       정상으로 가른다. 되살리면 평소 수집 한 번에 지운 원문이 전부 돌아온다.
+    me = device_id()
+    mine = [r for r in same if str(r.get("device") or "") == me]
+    if not mine or registry.is_g2(source_id):
+        return "skip", path, None  # 규약 4 가 기기를 넘어 선다 — 다른 기기가 같은 것을 이미 받았다
+    # 🔄 2026-09-21 (전수 재검토 I7) — **원본 이름을 먼저, 그다음 가장 늦은 행.** ⛔ 종전 `mine[-1]` 은 색인의
+    #    처음 넣은 순서라, `adopt` 로 치운 옛 판 경로를 되살렸다(실측 재현).
+    #    🚨 되살릴 자리에 **다른 바이트가 이미 있으면** 그 자리는 안 쓴다 — 덮어쓰지 않는다(규약 2).
+    #       위 디스크 대조가 같은 것을 못 찾았으니 그 파일은 원장과 다르다 — 새 판 규칙으로 넘긴다(None).
+    free = [r for r in mine if not (ROOT / _norm(str(r["path"]))).exists()]
+    if not free:
+        return None
+    base = _norm(_rel(path.with_name(stem + path.suffix)))
+    pick = next((r for r in free if _norm(str(r["path"])) == base), None) or max(
+        free, key=lambda r: str(r.get("fetched_at") or "")
+    )
+    return "restore", ROOT / _norm(str(pick["path"])), None
+
+
 def plan_raw(
     family: str,
     filename: str,
@@ -254,27 +319,17 @@ def plan_raw(
     # 🆕 2026-09-20 (D-250) — **이 기기에 파일이 없어도 원장(git)이 안다.** 팀원 PC 에는 클론 B 의 원문이 없다.
     #    ⛔ 디스크만 보면 B 에 이미 있는 것을 **다시 받고**, 같은 경로·다른 바이트가 생겨 합칠 때 갈린다.
     #    ★ 원장의 그 경로 행과 판정용 해시가 같으면 받지 않는다 · 다르면 새 판 이름으로 둔다 — 디스크 규칙과 같다.
+    # 🔄 2026-09-21 (전수 재검토 I6·I7) — **같은 것이 이미 어딘가에 있는가**를 먼저 한 곳에서 묻는다.
+    #    ⛔ 종전에는 두 갈래가 따로 물었다 — 원장 갈래는 옛 판까지 봤고, 디스크 갈래는 **오늘 판만** 봤다.
+    #       그래서 한 번 내용이 바뀐 원천은 수집할 때마다 날짜만 다른 **같은 판**이 또 생겼고(실측 재현:
+    #       `__c0907`·`__c0908`·`__c0909` 가 바이트 동일), 원본이 되살아난 뒤에는 옛 판을 되살리지 않고 새 판을 썼다.
+    found = _same_elsewhere(path, ident, file_ident, source_id=source_id)
+    if found is not None:
+        return found
+
     if not path.exists():
         known = ledger_row(path)
         if known is not None:
-            same = [r for r in ledger_editions(path) if _ident_of(r) == ident]
-            if same:
-                # 🆕 2026-09-21 (소성민 코드 리뷰 #3) — ⛔ 종전에는 여기서 **누가 받았든** `skip` 이었다.
-                #    그래서 이 기기가 받은 원문을 잃으면(D-245 334노드 같은 사고) 다시 수집해도 조용히 건너뛰고
-                #    파일은 계속 없었다. doctor 는 그 경우를 `lost` 로 보고 「이 기기에서 다시 받는다」고 안내한다 —
-                #    **안내대로 해도 안 풀리는 막다른 길**이었다.
-                #    ★ `lost` 와 **같은 조건**으로 가른다 (`collect/missing.py` ⑤ · D-253) — 기기 칸이 **이 기기**일 때만
-                #      되살린다. 기기 칸 없는 옛 행(`legacy`)은 누구 것인지 모르므로 종전처럼 건너뛴다.
-                if any((ROOT / _norm(str(r.get("path") or ""))).exists() for r in same):
-                    return "skip", path, None  # 같은 것의 다른 판이 디스크에 있다
-                #    🚨 G2 는 되살리지 않는다 — 사실을 뽑은 뒤 원문을 **일부러** 지우는 것이 규칙이고(D-17),
-                #       doctor 도 `g2` 를 정상으로 가른다(`lost` 보다 먼저). 되살리면 평소 수집 한 번에 지운 원문이 전부 돌아온다.
-                me = device_id()
-                mine = [r for r in same if str(r.get("device") or "") == me]
-                if mine and not registry.is_g2(source_id):
-                    return "restore", ROOT / _norm(str(mine[-1]["path"])), None
-                # 규약 4 가 기기를 넘어 선다 — 다른 기기가 같은 것(어느 판이든)을 이미 받았다
-                return "skip", path, None
             versioned = path.with_name(edition_name(filename, _today()))
             vk = ledger_row(versioned)
             if vk is not None and _ident_of(vk) == ident:
