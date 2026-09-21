@@ -15,7 +15,7 @@
 
   | 이유       | 정상 | 무엇                                                                   |
   |------------|:----:|------------------------------------------------------------------------|
-  | `moved`    |  ✅  | 같은 sha 의 기록이 **디스크의 다른 경로**에 있고 그 파일 크기가 기록과 같다 |
+  | `moved`    |  ✅  | 같은 sha·**같은 이름**(판 표시 뗀)의 기록이 **디스크의 다른 경로**에 있고 크기가 같다 |
   | `excluded` |  ✅  | 수집기가 **기본으로 안 받는다**고 선언한 경로 (`NOT_KEPT`)              |
   | `g2`       |  ✅  | G2 — 사실을 뽑은 뒤 원문을 지우는 것이 규칙 (D-17)                      |
   | `cleared`  |  ✅  | 크기가 급감한 판(오류 응답)이고, 같은 이름의 정상 판이 디스크에 있다 (D-147) |
@@ -43,7 +43,11 @@ ROOT = Path(__file__).resolve().parent.parent
 
 #: 이유 → (표시, 정상인가, 한 줄 설명). 🚨 순서가 **가르는 순서**다.
 REASONS: dict[str, tuple[str, bool, str]] = {
-    "moved": ("✅", True, "같은 내용이 디스크의 다른 경로에 있다 (옮기거나 판을 채택한 흔적)"),
+    "moved": (
+        "✅",
+        True,
+        "같은 이름·같은 내용이 디스크의 다른 경로에 있다 (옮기거나 판을 채택한 흔적)",
+    ),
     "excluded": ("✅", True, "수집기가 기본으로 안 받는다고 선언한 것 — 재수집해도 안 돌아온다"),
     "g2": ("✅", True, "G2 — 사실을 뽑은 뒤 원문을 지우는 것이 규칙이다 (D-17)"),
     "cleared": ("✅", True, "오류 응답 판을 치웠고 같은 이름의 정상 판이 있다 (D-147)"),
@@ -83,6 +87,11 @@ def _stem(p: str) -> str:
 
     q = PurePosixPath(_norm(p))
     return str(q.with_name(q.stem.split(EDITION_MARK, 1)[0] + q.suffix))
+
+
+def _name_key(p: str) -> str:
+    """판 표시를 걷은 **파일 이름만** — 폴더는 안 본다. `moved` 가 「같은 것을 옮겼다」를 가를 때 쓴다 (코드 리뷰 #5)."""
+    return PurePosixPath(_stem(p)).name
 
 
 def declared() -> dict[str, tuple[tuple[str, str], ...]]:
@@ -165,13 +174,19 @@ def classify(
         rs = by_path[p]
         sid = str(rs[0].get("source_id") or "")
 
-        # ① moved — 같은 sha 의 기록이 다른 경로에 있고, 그 파일의 크기가 그 기록과 같다
+        # ① moved — 같은 sha 의 기록이 다른 경로에 있고, 그 파일의 크기가 그 기록과 같고, **같은 이름**이다
+        #    🔄 2026-09-21 (소성민 코드 리뷰 #5) — ⛔ 종전에는 이름을 안 봤다. 바이트만 같은 **별개 파일**
+        #       (같은 첨부가 두 게시물에 붙은 것 · 같은 빈 페이지)이 있으면 없는 경로를 「옮겨짐」으로 봤고,
+        #       `raw_inbox` 가 그것을 정리된 것(`SETTLED`)으로 여겨 팀원 원문이 `raw-import` 에서 **조용히 빠졌다.**
+        #       doctor 도 ✅ 로 보고했다. ★ 실제로 알려진 옮김은 둘 — 판 채택(`x__c날짜` → `x` · D-246)과
+        #       폴더 옮김(D-245 `law_go_kr/` → `law/`)이고, 둘 다 **판 표시를 뗀 파일 이름이 같다.**
+        name = _name_key(p)
         where = next(
             (
                 q
                 for r in rs
                 for q, b in by_sha.get(str(r.get("sha256") or ""), ())
-                if q != p and size_on_disk(q) == b
+                if q != p and _name_key(q) == name and size_on_disk(q) == b
             ),
             None,
         )
