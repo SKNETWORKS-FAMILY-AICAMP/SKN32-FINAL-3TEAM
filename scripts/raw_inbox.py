@@ -371,19 +371,23 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     if bad:
         print(f"🔴 원장에 올릴 수 없는 행이 있다 — 아무것도 올리지 않았다: {bad[:5]}")
         return 1
-    blocked = sorted({str(r["source_id"]) for r in rows if _noredist(str(r["source_id"]))})
-    if blocked:
+    # 🔄 2026-09-21 (전수 재검토 I5) — 거르는 규칙은 `_held_back` 하나다 (D-99 · `pending`·`import_`·거울과 같다).
+    #    ⛔ 여기만 재배포 제약을 **따로** 걸러 G2(추출 뒤 원문 삭제 · D-17)가 받은편지함에 올라갔다 — 정본의
+    #       `import_` 는 G2 를 안 가져가므로 그 원문은 팀 공유 폴더에 **남기만** 했다. 모르는 원천(`unknown`)도 막는다.
+    held = {s: why for s in {str(r["source_id"]) for r in rows} if (why := _held_back(s))}
+    if held:
         print(
-            f"🔴 재배포 제약 원천의 원문은 올리지 않는다 — {blocked} (D-71).\n"
-            "  🚨 약관상 팀원 사이에 넘겨도 되는지 모른다. 정본 기기에서 직접 받는다"
+            f"🔴 받은편지함으로 보내지 않는 원천이 있다 — {sorted(held.items())}\n"
+            "  g2 추출 뒤 원문을 지운다(D-17) · noredist 약관상 넘겨도 되는지 모른다(D-71) · unknown 레지스트리에 없다(D-220).\n"
+            "  🚨 그 원천은 정본 기기에서 직접 받는다"
         )
-        rows = [r for r in rows if str(r["source_id"]) not in blocked]
+        rows = [r for r in rows if str(r["source_id"]) not in held]
     try:
         root = inbox_root()
     except InboxError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 1
-    new = [r for r in rows if not _obj(root, str(r["sha256"])).is_file()]
+    new = [r for r in rows if not ds.object_ok(_obj(root, str(r["sha256"])), r.get("bytes"))]
     leaked, changed = [], []
     for r in new:
         data = (ROOT / _path_of(r)).read_bytes()

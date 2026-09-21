@@ -187,7 +187,10 @@ def load_sources(
     kept: list[tuple[str, int, int, int]] = []
     if not dry and sent:  # ⛔ 선언이 비면 손대지 않는다 (D-220)
         cur.execute("SELECT source_id FROM source")
-        for sid in sorted({r[0] for r in cur.fetchall()} - sent):
+        # 🔄 2026-09-21 (전수 재검토) — 거두는 것은 **레지스트리에 없는** 소스다. ⛔ 종전에는 `- sent` 라
+        #    레지스트리에 있지만 이번에 2인 확인 미완으로 건너뛴 소스까지 지우고 「레지스트리에 없는 소스」라 적었다.
+        registered = set(_sources())
+        for sid in sorted({r[0] for r in cur.fetchall()} - sent - registered):
             cur.execute(
                 "SELECT (SELECT count(*) FROM fragment WHERE source_id = %s),"
                 "       (SELECT count(*) FROM collect_manifest WHERE source_id = %s),"
@@ -280,17 +283,25 @@ LOAD_INPUTS: tuple[tuple[str, str, str], ...] = (
 REQUIRED = {name: how for _label, name, how in LOAD_INPUTS if name.endswith(".jsonl")}
 
 
-def _jsonl_at(p: pathlib.Path, how: str) -> list[dict]:
-    """경로를 직접 받는 판. 🔴 없으면 멈춘다 — `_jsonl` 과 같은 계약이다."""
-    if not p.exists():
-        if not ALLOW_MISSING:
-            raise SystemExit(
-                f"🔴 {p} 가 없다 — 이대로 적재하면 그 테이블이 **0행인 채 성공**한다.\n"
-                f"  먼저: {how}\n"
-                "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
-            )
-        return []
-    return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+def _jsonl_at(p: pathlib.Path, how: str, *, required: bool = True) -> list[dict]:
+    """경로를 직접 받는 판 — `_jsonl` 도 이것을 부른다(판단은 한 곳 · D-99). 🔴 없거나 **비었으면** 멈춘다.
+
+    🔄 2026-09-21 (전수 재검토) — ⛔ 있기만 보고 0바이트·빈 줄뿐인 파일을 받아 들여 `documents 0 · golden 0` 이
+       「정상 완료」로 찍혔다 — 없을 때 막으려던 바로 그 결과다(있음 ≠ 채워짐 · D-177).
+    """
+    rows = (
+        [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+        if p.exists()
+        else []
+    )
+    if not rows and required and not ALLOW_MISSING:
+        state = "비었다(0행)" if p.exists() else "없다"
+        raise SystemExit(
+            f"🔴 {p} 가 {state} — 이대로 적재하면 그 테이블이 **0행인 채 성공**한다.\n"
+            f"  먼저: {how}\n"
+            "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
+        )
+    return rows
 
 
 def _jsonl(name: str, *, required: bool = True) -> list[dict]:
@@ -307,16 +318,7 @@ def _jsonl(name: str, *, required: bool = True) -> list[dict]:
        이 파일 docstring 의 fail-closed 원칙과 정면으로 어긋났다.
     ★ `--allow-missing` 은 **일부러** 비운 채 돌릴 때만 쓴다 (새 기기 첫 적재 등).
     """
-    p = DERIVED / name
-    if not p.exists():
-        if required and not ALLOW_MISSING:
-            raise SystemExit(
-                f"🔴 {p} 가 없다 — 이대로 적재하면 그 테이블이 **0행인 채 성공**한다.\n"
-                f"  먼저: {REQUIRED.get(name, '해당 전처리를 돌린다')}\n"
-                "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
-            )
-        return []
-    return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+    return _jsonl_at(DERIVED / name, REQUIRED.get(name, "해당 전처리를 돌린다"), required=required)
 
 
 def load_manifest(cur, dry: bool) -> int:

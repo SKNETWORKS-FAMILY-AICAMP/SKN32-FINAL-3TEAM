@@ -144,7 +144,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
             f"  🟡 원장의 어느 sha 와도 다른 원문 {len(held['changed'])}개는 올리지 않는다 — 원본이 바뀌었다(규약 2)\n"
             f"     `uv run python scripts/doctor.py --data --hash` 로 본다 · 예: {held['changed'][:2]}"
         )
-    new = [r for r in rows if not ri._obj(root, r["sha256"]).is_file()]  # noqa: SLF001
+    new = [r for r in rows if not ds.object_ok(ri._obj(root, r["sha256"]), r["bytes"])]  # noqa: SLF001
     leaked = []
     for r in new:
         why = ri.secret_in((ROOT / r["path"]).read_bytes())
@@ -229,7 +229,7 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
         return 1
     missing, differ = plan(entries)
     todo = missing + differ
-    lack = [e for e in todo if not ri._obj(root, e["sha256"]).is_file()]  # noqa: SLF001
+    lack = [e for e in todo if not ds.object_ok(ri._obj(root, e["sha256"]), e["bytes"])]  # noqa: SLF001
     size = sum(int(e["bytes"]) for e in todo) / 1024 / 1024
     print(
         f"거울 목록 {len(entries):,}개 — 받을 것 {len(todo):,}개 · {size:,.1f} MiB "

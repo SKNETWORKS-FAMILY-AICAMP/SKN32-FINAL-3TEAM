@@ -93,6 +93,21 @@ def _obj(root: pathlib.Path, sha: str) -> pathlib.Path:
     return root / "objects" / sha[:2] / sha
 
 
+def object_ok(path: pathlib.Path, nbytes: object) -> bool:
+    """저장소 객체가 **있고 크기가 원장과 같은가.** 🆕 2026-09-21 (전수 재검토 I13).
+
+    ⛔ 올리는 쪽 셋(`publish` · `raw_mirror` · `raw_inbox`)이 「새로 올릴 것」을 `is_file()` 로만 골랐다 —
+       0바이트·반쯤 쓴 객체가 「있다」로 세여 **영영 다시 안 올라갔고**, 사본은 sha 대조에서 계속 멈췄다.
+       그때 안내(「다시 올린다」)는 아무것도 못 했다 — 있음 ≠ 온전함 (D-177).
+    🚨 크기만 본다 — 드라이브 너머의 파일을 매번 통째로 읽으면 올리기가 받기만큼 무거워진다.
+       같은 크기로 오염된 것은 받는 쪽 sha 대조(`_stage`)가 잡는다.
+    """
+    try:
+        return path.is_file() and path.stat().st_size == int(nbytes)  # type: ignore[call-overload]
+    except (OSError, TypeError, ValueError):
+        return False
+
+
 def unsafe(rows: list[dict[str, object]]) -> list[str]:
     """🔴 원장 행 중 **파생물 폴더 밖을 가리키거나 sha 모양이 아닌 것** (2026-09-19 · 보안 점검).
 
@@ -129,7 +144,12 @@ def _stage(src: pathlib.Path, dest: pathlib.Path, sha: str) -> pathlib.Path:
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
-    shutil.copyfile(src, tmp)
+    try:
+        shutil.copyfile(src, tmp)
+    except BaseException:
+        # 🔄 2026-09-21 (전수 재검토) — ⛔ 복사가 중간에 끊기면 `.part` 가 남아 doctor 가 고아·추가 파일로 셌다
+        tmp.unlink(missing_ok=True)
+        raise
     got = _sha(tmp)
     if got != sha:
         tmp.unlink()
@@ -158,6 +178,17 @@ def _put(root: pathlib.Path, src: pathlib.Path, sha: str) -> bool:
 # ══════════════════════════════════════════════════════════
 # 무엇이 부족한가
 # ══════════════════════════════════════════════════════════
+def ledger_missing() -> str | None:
+    """파생물 원장이 없으면 그 이유 — 🆕 2026-09-21 (전수 재검토). ⛔ 종전에는 `dm.ledger()` 가 빈 dict 를 내서
+    사본이 「받을 것 없음 — 원장과 같다」로 통과했고, `load`·`embed` 가 디스크의 아무 판 위에서 돌았다 (D-72)."""
+    if dm.OUT.exists():
+        return None
+    return (
+        f"🔴 파생물 원장이 없다 — {dm.OUT.relative_to(ROOT).as_posix()}. 무엇을 받아야 하는지 모른다 (D-72).\n"
+        "  git pull 로 원장을 받는다 — 정본이 `derived-manifest --write` 뒤 커밋·push 한 파일이다"
+    )
+
+
 def plan() -> list[dict[str, object]]:
     """이 기기에 **없거나 원장과 다른 생성물** — 받아야 할 것. 네트워크를 쓰지 않는다.
 
@@ -219,6 +250,9 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
             "  🚨 정본(클론 B)은 받지 않고 `data-publish` 로 올린다 (D-226)"
         )
         return 1
+    if why := ledger_missing():
+        print(why, file=sys.stderr)
+        return 1
     todo = plan()
     bad = unsafe(todo)
     if bad:
@@ -250,7 +284,7 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
     try:
         root = store_root()
         # 🔴 **먼저 전부 있는지 본다** — 반만 받고 멈추면 파생물이 두 판으로 섞인다.
-        lack = [r for r in todo if not _obj(root, str(r["sha256"])).is_file()]
+        lack = [r for r in todo if not object_ok(_obj(root, str(r["sha256"])), r["bytes"])]
     except StoreError as e:
         print(f"🔴 {e}", file=sys.stderr)
         if dry_run:
@@ -454,6 +488,21 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
             "  마스킹 전 원문이면 부류를 원문캐시로(`derived_manifest.KIND_RULES`), 아니면 json/jsonl 로 쓴다"
         )
         return 1
+    # 🔄 2026-09-21 (전수 재검토 I4) — 🔴 **부류를 원장 칸에서 믿지 않고 지금 규칙으로 다시 센다.**
+    #    ⛔ 올릴 것을 원장의 「부류」 칸으로 골랐다. 부류 규칙(`KIND_RULES`)에 원문캐시 규칙을 더하고 `--write` 를
+    #       안 돌리면(09-20 `/text/` 규칙 때 실제로 그랬다) — 또는 원장 행을 손으로 고치면 — **마스킹 전 원문이 올라갔다.**
+    #       개인·법인 검사는 부류를 다시 세서 캐시를 건너뛰므로 그 파일을 아무도 안 봤다.
+    drift = [
+        f"{r['경로']} (원장 {r['부류']} · 지금 {dm.kind_of(str(r['경로']).removeprefix('data/derived/'))[0]})"
+        for r in led.values()
+        if str(r["부류"]) != dm.kind_of(str(r["경로"]).removeprefix("data/derived/"))[0]
+    ]
+    if drift:
+        print(
+            f"🔴 원장의 부류가 지금 규칙과 다르다 — 올리지 않는다 ({len(drift)}개): {drift[:3]}\n"
+            "  `launcher.py derived-manifest --write` 로 원장을 다시 쓰고 커밋한 뒤 올린다"
+        )
+        return 1
     rows = [r for r in led.values() if dm.moved(str(r["경로"]), str(r["부류"]))]
     bad = unsafe(rows)
     if bad:
@@ -464,7 +513,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     except StoreError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 1
-    new = [r for r in rows if not _obj(root, str(r["sha256"])).is_file()]
+    new = [r for r in rows if not object_ok(_obj(root, str(r["sha256"])), r["bytes"])]
     print(
         f"올릴 것 {len(new)}개 · {_size(new)} (원천·표본·생성물 {len(rows)}개 중 · 원문캐시는 안 올린다)\n"
         f"  저장소 {root}"
@@ -744,6 +793,9 @@ def ensure() -> int:
     who = dm.role()
     if who != "replica":
         return 0
+    if why := ledger_missing():
+        print(why, file=sys.stderr)
+        return 1
     if not plan():
         return 0
     print("🔄 이 명령이 읽는 파생물이 부족하거나 옛 판이다 — 먼저 받는다 (D-247)")
