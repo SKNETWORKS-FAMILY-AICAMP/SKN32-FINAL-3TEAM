@@ -128,3 +128,100 @@ def test_이유_표의_순서와_정상_여부() -> None:
     """🚨 순서가 가르는 순서다 — `moved` 가 맨 앞, 🔴 는 `lost` 하나."""
     assert list(missing.REASONS)[0] == "moved"
     assert [k for k, v in missing.REASONS.items() if v[0] == "🔴"] == ["lost"]
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-21 — 경보 수준 한 곳 · 역할을 본다
+# ══════════════════════════════════════════════════════════
+def test_경보_수준은_역할을_본다() -> None:
+    """🔴 사본은 원문으로 파생물을 만들지 않는다(D-226) — 원장으로 못 가르는 것(`legacy`·`query`)은 사본에서 볼 것이 아니다.
+    ★ `lost` 는 어느 역할에서도 🔴 · 정본·역할 없음은 종전 그대로 🟡."""
+    for who in ("canonical", "replica", None):
+        assert missing.level("lost", who) == "red"
+        for normal in ("moved", "excluded", "g2", "cleared", "other"):
+            assert missing.level(normal, who) == "ok"
+    for reason in ("legacy", "query"):
+        assert missing.level(reason, "replica") == "ok"
+        assert missing.level(reason, "canonical") == "eyes"
+        assert missing.level(reason, None) == "eyes"  # CI · 역할 모름 — 접는 쪽으로 틀리지 않는다
+
+
+def _legacy_rows() -> list[dict]:
+    """진짜 저장소에 **없는** 경로 — 기기 칸 없음(legacy) 하나 · 질의 기반(query) 하나."""
+    return [
+        _row("data/raw/mfds_sanctions/zz_pytest_absent.json", sid="mfds_sanctions"),
+        _row("data/raw/law/decc_zz_pytest_absent.xml", sid="law_go_kr"),
+    ]
+
+
+def test_doctor_는_사본에서_원문_결손을_접고_수집을_권하지_않는다(capsys) -> None:
+    """🔴 2026-09-21 사용자 실행(클론 A) — 「사람이 볼 것 5,545개」와 「이 기기에서 쓸 원천이면 다시 받는다」.
+    ★ 반대 대조 — 정본에서는 같은 줄이 🟡 로 펴지고 안내가 나온다."""
+    from scripts import doctor
+
+    rows = _legacy_rows()
+    assert doctor._report_missing(rows, len(rows), who="replica") == 0
+    out = capsys.readouterr().out
+    assert "사람이 볼 것 **0개**" in out and "사본은 원문으로 파생물을 만들지 않는다" in out, out
+    assert "다시 받는다" not in out, out
+    assert doctor._report_missing(rows, len(rows), who="canonical") == 0
+    out = capsys.readouterr().out
+    assert "사람이 볼 것 **2개**" in out and "다시 받는다" in out, out
+
+
+def _inventory_world(tmp_path, monkeypatch, role: str | None) -> None:
+    import json
+
+    from preprocess import inventory
+
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data_sources.yaml").write_text(
+        "sources:\n  mfds_sanctions: {status: collect, grade: G3}\n", encoding="utf-8"
+    )
+    ledger = tmp_path / "data" / "manifest.jsonl"
+    ledger.write_text("\n".join(json.dumps(r) for r in _legacy_rows()[:1]) + "\n", encoding="utf-8")
+    monkeypatch.setattr(inventory, "ROOT", tmp_path)
+    monkeypatch.setattr(inventory, "RAW", tmp_path / "data" / "raw")
+    monkeypatch.setattr(inventory, "MANIFEST", ledger)
+    monkeypatch.setattr(missing, "role", lambda: role)
+
+
+def test_inventory_는_사본에서_다시_받으라고_하지_않는다(tmp_path, monkeypatch, capsys) -> None:
+    """🔴 종전 — 하나도 없는 소스를 이유를 안 보고 🔴 「이 기기에서 쓰려면 다시 받는다」로 찍었다."""
+    from preprocess import inventory
+
+    _inventory_world(tmp_path, monkeypatch, "replica")
+    assert inventory.main() == 0
+    out = capsys.readouterr().out
+    body = out.splitlines()[1:]  # 첫 줄은 열 이름(「🔴없음」)이다
+    assert not [x for x in body if "🔴" in x], out
+    assert "다시 받는다" not in out, out
+    assert "사본은 원문으로 파생물을 만들지 않는다" in out, out
+
+
+def test_inventory_와_doctor_는_같은_결손에_같은_색을_낸다(tmp_path, monkeypatch, capsys) -> None:
+    """🔴 D-253 맥락 4 — 같은 결손을 inventory 는 🔴, doctor 는 🟡 로 찍었다. 정본에서 둘 다 🟡 여야 한다."""
+    from preprocess import inventory
+    from scripts import doctor
+
+    _inventory_world(tmp_path, monkeypatch, "canonical")
+    inventory.main()
+    inv = capsys.readouterr().out
+    doctor._report_missing(_legacy_rows()[:1], 1, who="canonical")
+    doc = capsys.readouterr().out
+    line = next(x for x in inv.splitlines() if x.strip().startswith("mfds_sanctions"))
+    assert "🟡" in line and "🔴" not in line, line
+    assert doc.lstrip().startswith("🟡"), doc
+
+
+def test_경보_수준을_정하는_자리는_한_곳이다() -> None:
+    """🚨 두 도구가 `REASONS[...][1]` 로 색을 따로 정하면 다시 갈린다 (D-99)."""
+    import inspect
+
+    from preprocess import inventory
+    from scripts import doctor
+
+    for mod in (inventory, doctor):
+        src = inspect.getsource(mod)
+        assert "missing.level(" in src or "missing_mod.level" in src or "levels(" in src, mod
+        assert "REASONS[r][1]" not in src, f"🔴 {mod.__name__} 가 수준을 따로 정한다"
