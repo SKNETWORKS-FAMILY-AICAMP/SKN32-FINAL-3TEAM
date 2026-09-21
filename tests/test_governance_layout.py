@@ -679,7 +679,7 @@ def test_탐침은_저장_경로를_부를_수_없다() -> None:
         "mark_collected": "수집 시각 기록 (규약 3 · 게이트 15)",
         "manifest_append": "수집 원장 append (규약 3)",
         "save_raw": "원본 파일 쓰기 (규약 2)",
-        "drop_raw_for_g2": "G2 raw 삭제 (D-17)",
+        "drop_raw_for_g2": "G2 raw 삭제 (D-92)",
         "require": "수집기 게이트 — 탐침은 registry.probe 를 쓴다",
         "write_bytes": "파일 쓰기",
     }
@@ -1784,4 +1784,54 @@ def test_서명이_끝난_키가_정본에_없으면_미채택_기록이_있다(
         f"🚨 2인 서명이 끝났는데 정본에도 미채택 기록에도 없는 키 {len(orphan)}건 — {orphan}\n"
         "  ⛔ 이 상태에서 그 키가 `ORDER` 로 들어가면 2인 확인이 **처음부터 통과**한다.\n"
         "  → 등재하든 미채택으로 내리든, **판정을 키로 적는다** (D-90 ② · D-110)."
+    )
+
+
+@pytest.mark.gate
+def test_G2_는_삭제_경로가_붙기_전에는_받지_않는다() -> None:
+    """🔴 D-92 — 「G2 의 raw 는 사실 추출 후 삭제하고 sha256 만 남긴다」. 2026-09-21 · 전수 재검토 G2 · 팀장 판정 (나).
+
+    ⛔ `store.drop_raw_for_g2` 는 있는데 **부르는 곳이 없었다** — G2 를 받으면 원문이 영구히 남는다.
+    ★ 이 게이트가 보는 것 두 가지:
+      ① `registry.G2_DROP_WIRED` 에 적힌 호출부마다 본문에 `drop_raw_for_g2(` 가 **실제로** 있다 — 플래그만 켜면 실패한다.
+      ② 반대로 `drop_raw_for_g2(` 를 부르는 함수가 생겼는데 목록에 없으면 실패한다 — 문이 열린 줄 모른 채 닫혀 있지 않게.
+    """
+    import importlib
+    import inspect
+
+    from collect import registry
+
+    for ref in registry.G2_DROP_WIRED:
+        mod, _, fn = ref.partition(":")
+        body = inspect.getsource(getattr(importlib.import_module(mod), fn))
+        assert "drop_raw_for_g2(" in body, (
+            f"🔴 {ref} 가 G2 원문을 지우지 않는데 G2_DROP_WIRED 에 올라 있다 (D-92)"
+        )
+
+    callers: set[str] = set()
+    for f in [
+        *(ROOT / "collect").glob("*.py"),
+        *(ROOT / "preprocess").glob("*.py"),
+        *(ROOT / "scripts").glob("*.py"),
+    ]:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if (
+                not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                or node.name == "drop_raw_for_g2"
+            ):
+                continue
+            for c in ast.walk(node):
+                if isinstance(c, ast.Call):
+                    name = (
+                        c.func.attr
+                        if isinstance(c.func, ast.Attribute)
+                        else getattr(c.func, "id", "")
+                    )
+                    if name == "drop_raw_for_g2":
+                        mod = ".".join(f.relative_to(ROOT).with_suffix("").parts)
+                        callers.add(f"{mod}:{node.name}")
+    missing = sorted(callers - set(registry.G2_DROP_WIRED))
+    assert not missing, (
+        f"🟡 G2 원문 삭제 호출부가 생겼는데 G2_DROP_WIRED 에 없다 — 적어야 G2 문이 열린다: {missing}"
     )

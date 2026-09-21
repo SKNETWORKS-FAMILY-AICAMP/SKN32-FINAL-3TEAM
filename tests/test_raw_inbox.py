@@ -157,7 +157,7 @@ def test_다른_기기나_옛_행이면_되살리지_않는다(repo) -> None:
 
 @pytest.mark.gate
 def test_G2_는_이_기기_것이어도_되살리지_않는다(repo, monkeypatch) -> None:
-    """🚨 G2 는 사실을 뽑은 뒤 원문을 **일부러** 지운다(D-17) — doctor 도 `g2` 를 정상으로 가른다.
+    """🚨 G2 는 사실을 뽑은 뒤 원문을 **일부러** 지운다(D-92) — doctor 도 `g2` 를 정상으로 가른다.
     되살리면 평소 수집 한 번에 지운 원문이 전부 돌아온다."""
     monkeypatch.setattr(store.registry, "is_g2", lambda sid: True)
     body = b'{"a":1}'
@@ -540,7 +540,7 @@ def test_합치지_않은_팀원_원문이_있으면_정본의_추출과_올리�
 
 @pytest.mark.gate
 def test_사본과_G2_는_합치지_않은_원문으로_세지_않는다(repo, inbox, monkeypatch) -> None:
-    """사본은 원문이 없는 것이 정상(D-19) · G2 는 추출 뒤 지운다(D-17) — 세면 영영 멈춘다."""
+    """사본은 원문이 없는 것이 정상(D-19) · G2 는 추출 뒤 지운다(D-92) — 세면 영영 멈춘다."""
     _uploaded(repo, inbox, monkeypatch, b'{"a":1}')
     monkeypatch.setattr(ri, "_noredist", lambda s: False)
     from collect import registry
@@ -644,7 +644,7 @@ def test_G2_는_받은편지함에_있어도_되살리지_않는다(repo, inbox,
 
     monkeypatch.setattr(registry, "is_g2", lambda s: True)
     assert ri.import_(yes=True) == 0
-    assert not (repo / row["path"]).exists(), "정본이 지운 G2 원문을 되살렸다 (D-17)"
+    assert not (repo / row["path"]).exists(), "정본이 지운 G2 원문을 되살렸다 (D-92)"
 
 
 @pytest.mark.gate

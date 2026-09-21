@@ -271,7 +271,7 @@ def _same_elsewhere(
     #    그래서 이 기기가 받은 원문을 잃으면(D-245 334노드 같은 사고) 다시 수집해도 조용히 건너뛰고 파일은 계속 없었다 —
     #    doctor 의 `lost` 안내(「이 기기에서 다시 받는다」)와 모순이었다.
     #    ★ `lost` 와 **같은 조건** (`collect/missing.py` ⑤ · D-253) — 기기 칸이 **이 기기**일 때만 되살린다.
-    #    🚨 G2 는 되살리지 않는다 — 사실을 뽑은 뒤 원문을 **일부러** 지우는 것이 규칙이고(D-17), doctor 도 `g2` 를
+    #    🚨 G2 는 되살리지 않는다 — 사실을 뽑은 뒤 원문을 **일부러** 지우는 것이 규칙이고(D-92), doctor 도 `g2` 를
     #       정상으로 가른다. 되살리면 평소 수집 한 번에 지운 원문이 전부 돌아온다.
     me = device_id()
     mine = [r for r in same if str(r.get("device") or "") == me]
@@ -710,7 +710,7 @@ def stamp(row: dict[str, Any], source_id: str) -> dict[str, Any]:
 
 
 def drop_raw_for_g2(source_id: str, family: str, filename: str, *, facts_path: Path) -> None:
-    """G2 소스의 원본을 삭제한다 (D-17 · D-92).
+    """G2 소스의 원본을 삭제한다 (D-92 · D-17 원문 미보관).
 
     🚨 「G2 = 추출된 사실만 · 원문 없음」과 「원본 무손상 저장」은 정면으로 부딪친다.
        화해는 이것이다 — 사실을 뽑은 뒤 원본을 지우고 manifest 의 sha256 만 남긴다.

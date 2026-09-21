@@ -23,6 +23,10 @@ LEDGER = ROOT / "scripts/registry_review.yaml"  # 2인 확인 원장 — 이쪽�
 
 VALID_USES = {"U1", "U2", "U3", "U4"}
 
+#: G2 원문 삭제(`store.drop_raw_for_g2`)를 부르는 곳 — `"모듈경로:함수명"`. 비어 있으면 G2 는 `require()` 에서 막힌다.
+#: 🚨 손으로 켜지 않는다 — 게이트 테스트가 적힌 함수 본문에 `drop_raw_for_g2(` 가 있는지 본다 (D-92 · 2026-09-21).
+G2_DROP_WIRED: tuple[str, ...] = ()
+
 # 🚨 크롤링형은 robots 확인 기록 없이는 돌지 않는다 (규약 6).
 # 🔴 **판단은 `collect.COLLECTORS` 표가 한다** (2026-09-10 · D-179).
 #    ⛔ 종전에는 `access` 산문에 아래 낱말이 있는지로 봤다. 「자료실 PDF 다운로드」·
@@ -126,6 +130,20 @@ def require(source_id: str, use: str) -> dict[str, Any]:
             "풀려면 판정 근거를 남기고 scripts/gen_registry.py 의 STATUS 에서 내린다."
         )
 
+    # 🔴 **G2 는 삭제 경로가 붙기 전에 받지 않는다** (2026-09-21 · 전수 재검토 G2 · 팀장 판정 (나)).
+    #    D-92 — 「G2 소스의 raw 는 사실 추출 후 삭제하고 sha256 만 남긴다」(D-17 원문 미보관의 집행).
+    #    ⛔ 삭제 함수(`store.drop_raw_for_g2`)는 있는데 **부르는 곳이 없다** — 받으면 원문이 영구히 남는다.
+    #       지금은 G2 10개가 전부 hold/manual · 용도 deny 라 위에서 먼저 막히지만, 그것은 **우연**이다.
+    #       판정이 풀리는 날 이 문이 없으면 「원문 없음」이 조용히 거짓이 된다 (D-72 — 적기만 하면 표시다).
+    #    🚨 여는 법: G2 추출기가 사실 파일을 쓴 **뒤** `drop_raw_for_g2` 를 부르게 붙이고, 그 호출부를
+    #       `G2_DROP_WIRED` 에 적는다. 게이트 테스트가 그 호출부가 실제로 있는지 본다 — 플래그만 켜면 실패한다.
+    if grade == "G2" and not G2_DROP_WIRED:
+        raise RegistryError(
+            f"{source_id!r} 는 G2 다 — 사실 추출 뒤 원문을 지우는 경로가 아직 없어 받지 않는다 (D-92).\n"
+            "  받으면 원문이 영구히 남아 「G2 는 원문 미보관」(D-17)이 거짓이 된다.\n"
+            "  → G2 추출기에 `store.drop_raw_for_g2` 호출을 붙이고 collect/registry.py 의 G2_DROP_WIRED 에 그 위치를 적는다."
+        )
+
     from collect import COLLECTORS, is_scraper  # noqa: PLC0415 — 순환 import 방지
 
     access = str(s.get("access") or "")
@@ -197,7 +215,7 @@ def probe(source_id: str) -> dict[str, Any]:
 
 
 def is_g2(source_id: str) -> bool:
-    """G2 여부 — raw 를 사실 추출 후 삭제해야 하는 소스인가 (D-17 · D-92)."""
+    """G2 여부 — raw 를 사실 추출 후 삭제해야 하는 소스인가 (D-92 · D-17 원문 미보관)."""
     return spec(source_id).get("grade") == "G2"
 
 

@@ -85,7 +85,7 @@ def test_정본은_G2_를_빼고_올리고_목록을_쓴다(world, monkeypatch) 
     assert [e["path"] for e in idx] == ["data/raw/law/a.xml", "data/raw/law/b.xml"]
     assert registry.is_g2(G2), "픽스처 전제 — G2 원천이어야 한다"
     objs = {p.name for p in (mirror / rm.LAYOUT / "objects").rglob("*") if p.is_file()}
-    assert _sha(b"%PDF g2") not in objs, "🔴 G2 원문이 거울로 나갔다 (D-17)"
+    assert _sha(b"%PDF g2") not in objs, "🔴 G2 원문이 거울로 나갔다 (D-92)"
 
 
 def test_키가_섞인_원문이_있으면_하나도_안_올린다(world, monkeypatch) -> None:
@@ -205,7 +205,7 @@ def test_거울의_깨진_객체는_다시_올린다(world, monkeypatch) -> None
 
 
 def test_받은편지함으로_G2_를_올리지_않는다(tmp_path, monkeypatch, capsys) -> None:
-    """🔴 I5 — ⛔ 재배포 제약만 따로 걸러 G2(추출 뒤 원문 삭제 · D-17)가 올라갔다. 거르는 규칙은 `_held_back` 하나다."""
+    """🔴 I5 — ⛔ 재배포 제약만 따로 걸러 G2(추출 뒤 원문 삭제 · D-92)가 올라갔다. 거르는 규칙은 `_held_back` 하나다."""
     import hashlib
     import json
 
