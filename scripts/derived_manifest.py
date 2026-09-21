@@ -248,6 +248,9 @@ def _pii_scan(files: list[pathlib.Path] | None = None):
        원값은 `triage()` 가 **레포 밖 파일**로만 쓴다.
     """
     titled, not_name, surnames = _mask_rules()
+    from preprocess.mask import (
+        _name_head as name_head,  # noqa: PLC0415 — 불용어 판단은 한 곳 (D-99)
+    )
     from preprocess.mask import strip_legal  # noqa: PLC0415
 
     # 🔄 2026-09-19 — **사건명 꼴 그 자체만** 본다: 「X의 … 위반행위에 대한 건」.
@@ -280,7 +283,8 @@ def _pii_scan(files: list[pathlib.Path] | None = None):
                         continue  # 창구 메일은 사람이 아니다 — 도메인(업체)은 `mask` 가 피심인일 때 지운다
                     yield rel, kind, no, m.group(0), line, m.start(), m.end()
             for m in titled.finditer(line):
-                if m.group(2) not in not_name:
+                # 🔄 2026-09-21 — 불용어는 **목록의 첫 이름**(조사 뗀 것)으로도 본다 — 마스킹(`mask._name_head`)과 같은 판단 (D-99)
+                if m.group(2) not in not_name and name_head(m.group(2)) not in not_name:
                     yield rel, "직함+실명", no, m.group(0), line, m.start(), m.end()
             for m in case_person.finditer(line):
                 # 🚨 법인격 토막만 남은 것(「[업체](유)의」)은 누구도 가리키지 않는다 (2026-09-19 실측)
@@ -360,6 +364,76 @@ def triage(out: pathlib.Path) -> int:
     for (rel, kind, fx), n in sorted(feat.items(), key=lambda x: (x[0][0], x[0][1], -x[1])):
         print(f"  {rel:<28}{kind:<12}{fx:<10}{n:>6}{len(distinct[(rel, kind)]):>12}")
     return 0
+
+
+#: 🆕 2026-09-21 (전수 재검토 C2 · 판정 (나)) — **마스킹과 따로 선 넓은 거름.**
+#:    ⛔ `people()` 의 「직함+실명」은 `mask._TITLED_PERSON` 을 빌려 쓴다(D-99). 지우는 쪽과 세는 쪽이 같은 표라
+#:       **마스킹이 놓친 꼴은 원리상 검사도 못 본다** — 합성 직함(09-19 회귀)·「소송대리인 변호사 김철수」·
+#:       「대표자 : 홍길동」이 전부 마스킹과 검사를 **함께** 지나갔다. 같은 규칙을 두 번 돌리는 것은 검사가 아니다.
+#:    ★ 이 거름은 **다른 모양**으로 본다 — 직함·호칭 낱말(마스킹보다 넓다) 뒤 **구분자 세 글자 안**에 성씨+1~2자가
+#:      낱말 경계로 끝나면 후보다. 오탐을 각오한 재현율 쪽 거름이다.
+#:    🚨 `[임의]` — 낱말 목록·창 크기는 재지 않은 값이다. **지금은 알리기만 한다(차단 아님)** — 클론 B 생성물에서
+#:       오탐 수를 잰 뒤(`--export-check` 출력의 🟡 줄) 차단으로 올릴지 정한다. 재기 전에 막으면 오탐만으로 반출이 선다.
+_LOOSE_ROLES = (
+    "대표자|대표이사|대표|사장|회장|이사|전무|상무|감사|변호사|대리인|부장|차장|과장|팀장|실장|원장|점장|직원|"
+    "신고인|피심인|청구인|원고|피고|성명"
+)
+#: 후보에서 뺄 낱말 — 성씨로 시작하는 흔한 말. 🚨 마스킹의 `_NOT_NAME` 과 **합치지 않는다** — 축이 다르다
+#:    (저쪽은 지우지 말 것, 이쪽은 알리지 말 것). 합치면 한쪽을 넓힐 때 다른 쪽이 조용히 바뀐다.
+_LOOSE_SKIP = frozenset(
+    {"주식회사", "주식", "이미지", "이상", "이하", "이외", "제품", "상품", "사업자", "사항"}
+)
+
+
+def _loose_rule() -> re.Pattern[str]:
+    _t, _n, surnames = _mask_rules()
+    return re.compile(
+        # 🚨 사이에 자국(`[대표]`)이 끼어도 본다 — 「소송대리인 [대표] 김철수」가 마스킹이 **엉뚱한 말을 지운** 모양이다
+        rf"(?:{_LOOSE_ROLES})[\s:：(（,]{{1,3}}(?:\[대표\]\s*)?([{surnames}][가-힣]{{1,2}})(?=[\s,.)）」』'\"·]|$)"
+    )
+
+
+def people_loose(files: list[pathlib.Path] | None = None) -> list[tuple[str, int, str]]:
+    """넓은 거름 후보 — `(상대경로, 줄, 가린 예)`. `people()` 이 이미 잡은 자리는 빼지 않는다(따로 센다).
+
+    🚨 원문캐시는 안 본다(묶음 밖). 걸린 값은 첫 글자만 보인다(`_hint`).
+    """
+    from preprocess.mask import _name_head as name_head  # noqa: PLC0415
+
+    rule = _loose_rule()
+    _t, not_name, _s = _mask_rules()
+    out: list[tuple[str, int, str]] = []
+    targets = files if files is not None else sorted(DERIVED.rglob("*"))
+    for f in targets:
+        if not f.is_file() or f.suffix not in SCANNED:
+            continue
+        rel = f.relative_to(DERIVED).as_posix() if f.is_relative_to(DERIVED) else f.name
+        if kind_of(rel)[0] == "원문캐시":
+            continue
+        for no, line in enumerate(f.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+            for m in rule.finditer(line):
+                name = m.group(1)
+                head = name_head(name)
+                if {name, head} & (_LOOSE_SKIP | not_name):
+                    continue
+                out.append((rel, no, _hint(name)))
+    return out
+
+
+def _report_loose(found: list[tuple[str, int, str]]) -> None:
+    if not found:
+        print("넓은 거름 후보 0 — 직함·호칭 뒤 구분자 세 글자 안 성씨+이름 꼴 (마스킹과 다른 규칙)")
+        return
+    by = collections.Counter(rel for rel, _, _ in found)
+    print(
+        f"🟡 **넓은 거름 후보 {len(found):,}건** — 마스킹과 다른 규칙으로 본 것이다. 차단하지 않는다([임의] · 오탐 측정 전)"
+    )
+    for rel, n in by.most_common(10):
+        eg = next(f"{no}행 {h}" for r, no, h in found if r == rel)
+        print(f"     {rel}  {n:,}건   예: {eg}")
+    print(
+        "  → 이 수와 예를 클로드에게 준다. 실명이 섞였으면 마스킹 규칙을 고치고, 오탐뿐이면 거름을 좁힌다."
+    )
 
 
 def _report_people(found: list[tuple[str, str, int, str]]) -> None:
@@ -901,6 +975,7 @@ def main() -> int:
         print(
             f"개인 식별 0 — 식별번호 · 직함+실명 · 사건명 피심인 (허용 {len(PERSON_ALLOW)}건 제외)"
         )
+        _report_loose(people_loose())
         bad, cache = leaks()
         pack = [r for r in got if r["부류"] != "원문캐시"]
         nc = len(got) - len(pack)

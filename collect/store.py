@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import json
 import re
@@ -226,11 +227,77 @@ def derived_dir(name: str) -> Path:
     return d
 
 
+def already_have(path: Path) -> bool:
+    """수집기가 **부르기 전에** 건너뛸지 — 디스크에 있거나, 원장에 **다른 기기**가 받은 기록이 있다.
+
+    🆕 2026-09-21 (전수 재검토) — ⛔ 수집기 넷(`mfds_hf_board`·`mfds_press`·`ftc_body`·`mfds_board`)이 디스크만 봤다.
+       D-250 뒤로 팀원 기기는 원장은 있고 원문은 없다 — 그래서 정본이 받은 것을 **다시 불렀고**, 조회수처럼 부를 때마다
+       바뀌는 값이 든 원천(`hf_board_*.html`)은 `save_raw` 가 새 판으로 깔았다(실측 재현: 1건 → 새 판 + `mark_collected`).
+    ★ **이 기기가 받은** 기록만 있고 디스크에 없으면 건너뛰지 않는다 — 그것은 유실이고 다시 받아 되살린다(`restore`).
+       기기 칸 없는 옛 행(`legacy`)은 정본의 과거분이다(D-250 결정 4) — 정본이 아니면 건너뛴다.
+    """
+    if path.exists():
+        return True
+    rows = ledger_editions(path)
+    if not rows:
+        return False
+    try:
+        me = device_id()
+    except StoreError:
+        return True  # 별칭을 모르면(`--dry-run` 은 별칭 검사를 안 거친다) 누구 것인지 모른다 — 부르지 않는 쪽
+    return any(str(r.get("device") or "") != me for r in rows)
+
+
+def _same_elsewhere(
+    path: Path, ident: str, file_ident: Callable[[Path], str], *, source_id: str
+) -> tuple[str, Path, str | None] | None:
+    """`path` 의 이름과 그 판들(`__c날짜`) 중 **같은 것**(판정용 해시)이 있으면 그 판정 — 없으면 None.
+
+    순서 — ① 디스크에 있으면 `skip`(원장 행이 없으면 `ledger`) ② 원장에만 있고 **이 기기가 받은 것**이면 `restore`
+    ③ 원장에만 있고 다른 기기(또는 기기 칸 없는 옛 행)의 것이면 `skip`.
+    🚨 `path` 자신은 부르는 쪽이 이미 봤어도 다시 본다 — 비교가 한 곳에 있어야 두 갈래가 안 갈린다 (D-99).
+    """
+    stem = path.stem.split(EDITION_MARK, 1)[0]
+    siblings = sorted(
+        path.parent.glob(f"{glob.escape(stem)}{EDITION_MARK}*{glob.escape(path.suffix)}")
+    )
+    for q in ([path] if path.exists() else []) + siblings:
+        if q.is_file() and file_ident(q) == ident:
+            return ("skip" if ledger_row(q) is not None else "ledger"), q, None
+    same = [r for r in ledger_editions(path) if _ident_of(r) == ident]
+    if not same:
+        return None
+    # 🆕 2026-09-21 (소성민 코드 리뷰 #3) — ⛔ 종전에는 원장에 같은 것이 있으면 **누가 받았든** `skip` 이었다.
+    #    그래서 이 기기가 받은 원문을 잃으면(D-245 334노드 같은 사고) 다시 수집해도 조용히 건너뛰고 파일은 계속 없었다 —
+    #    doctor 의 `lost` 안내(「이 기기에서 다시 받는다」)와 모순이었다.
+    #    ★ `lost` 와 **같은 조건** (`collect/missing.py` ⑤ · D-253) — 기기 칸이 **이 기기**일 때만 되살린다.
+    #    🚨 G2 는 되살리지 않는다 — 사실을 뽑은 뒤 원문을 **일부러** 지우는 것이 규칙이고(D-92), doctor 도 `g2` 를
+    #       정상으로 가른다. 되살리면 평소 수집 한 번에 지운 원문이 전부 돌아온다.
+    me = device_id()
+    mine = [r for r in same if str(r.get("device") or "") == me]
+    if not mine or registry.is_g2(source_id):
+        return "skip", path, None  # 규약 4 가 기기를 넘어 선다 — 다른 기기가 같은 것을 이미 받았다
+    # 🔄 2026-09-21 (전수 재검토 I7) — **원본 이름을 먼저, 그다음 가장 늦은 행.** ⛔ 종전 `mine[-1]` 은 색인의
+    #    처음 넣은 순서라, `adopt` 로 치운 옛 판 경로를 되살렸다(실측 재현).
+    #    🚨 되살릴 자리에 **다른 바이트가 이미 있으면** 그 자리는 안 쓴다 — 덮어쓰지 않는다(규약 2).
+    #       위 디스크 대조가 같은 것을 못 찾았으니 그 파일은 원장과 다르다 — 새 판 규칙으로 넘긴다(None).
+    free = [r for r in mine if not (ROOT / _norm(str(r["path"]))).exists()]
+    if not free:
+        return None
+    base = _norm(_rel(path.with_name(stem + path.suffix)))
+    pick = next((r for r in free if _norm(str(r["path"])) == base), None) or max(
+        free, key=lambda r: str(r.get("fetched_at") or "")
+    )
+    return "restore", ROOT / _norm(str(pick["path"])), None
+
+
 def plan_raw(
     family: str,
     filename: str,
     ident: str,
     file_ident: Callable[[Path], str],
+    *,
+    source_id: str,
 ) -> tuple[str, Path, str | None]:
     """원문 한 개를 **어디에 둘지** 정한다 — `save_raw` 와 `ingest register` 가 같이 쓴다 (D-99 · D-254).
 
@@ -238,7 +305,10 @@ def plan_raw(
         "write"  — 이 경로에 새로 쓴다 (🚨 이름이 넘긴 것과 다를 수 있다 — 새 판 `__c날짜`)
         "skip"   — 같은 것이 이미 있다 (디스크든 원장이든 · 규약 4)
         "ledger" — 디스크에 **같은 바이트**가 있는데 그 경로의 원장 행이 없다 — 쓰지 않고 행만 보탤 자리
+        "restore" — 🆕 **이 기기가 받았다고** 원장에 적힌 같은 것이 디스크에 없다 — 그 경로에 **다시 쓴다**
+                    (원장 행은 이미 있다 · 바이트가 행과 다를 때만 보탠다 — 부르는 쪽이 `restore_needs_row` 로 본다)
     `file_ident` — 디스크 파일의 판정용 해시를 내는 함수 (수집기는 바이트 · register 는 스트리밍).
+    `source_id` — G2 인지 본다(`restore` 를 안 낸다 · 아래).
 
     ⛔ 2026-09-20 전까지 이 판정이 `save_raw` 에만 있었고 `register` 는 디스크만 봤다 —
        원장(다른 기기)에 있는 것을 다시 넣고, 원장에 없는 같은 파일을 조용히 건너뛰었다 (감사 §2 register).
@@ -249,12 +319,17 @@ def plan_raw(
     # 🆕 2026-09-20 (D-250) — **이 기기에 파일이 없어도 원장(git)이 안다.** 팀원 PC 에는 클론 B 의 원문이 없다.
     #    ⛔ 디스크만 보면 B 에 이미 있는 것을 **다시 받고**, 같은 경로·다른 바이트가 생겨 합칠 때 갈린다.
     #    ★ 원장의 그 경로 행과 판정용 해시가 같으면 받지 않는다 · 다르면 새 판 이름으로 둔다 — 디스크 규칙과 같다.
+    # 🔄 2026-09-21 (전수 재검토 I6·I7) — **같은 것이 이미 어딘가에 있는가**를 먼저 한 곳에서 묻는다.
+    #    ⛔ 종전에는 두 갈래가 따로 물었다 — 원장 갈래는 옛 판까지 봤고, 디스크 갈래는 **오늘 판만** 봤다.
+    #       그래서 한 번 내용이 바뀐 원천은 수집할 때마다 날짜만 다른 **같은 판**이 또 생겼고(실측 재현:
+    #       `__c0907`·`__c0908`·`__c0909` 가 바이트 동일), 원본이 되살아난 뒤에는 옛 판을 되살리지 않고 새 판을 썼다.
+    found = _same_elsewhere(path, ident, file_ident, source_id=source_id)
+    if found is not None:
+        return found
+
     if not path.exists():
         known = ledger_row(path)
         if known is not None:
-            if any(_ident_of(r) == ident for r in ledger_editions(path)):
-                # 규약 4 가 기기를 넘어 선다 — 다른 기기가 같은 것(어느 판이든)을 이미 받았다
-                return "skip", path, None
             versioned = path.with_name(edition_name(filename, _today()))
             vk = ledger_row(versioned)
             if vk is not None and _ident_of(vk) == ident:
@@ -355,7 +430,25 @@ def save_raw(
         filename,
         ident,
         lambda q: identity_sha256(source_id, q.read_bytes()),
+        source_id=source_id,
     )
+    if verdict == "restore":
+        # 🆕 2026-09-21 (코드 리뷰 #3) — 이 기기가 받았다고 적혔는데 없던 원문. **그 경로에 다시 쓴다**(덮을 것이 없다).
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        print(f"  🔄 되살림 — {path.name} (원장에 이 기기가 받았다고 적혔는데 디스크에 없었다)")
+        if restore_needs_row(path, digest):
+            manifest_append(
+                source_id=source_id,
+                url=url,
+                sha256=digest,
+                bytes_=len(payload),
+                rows=rows,
+                path=str(path.relative_to(ROOT)),
+                supersedes=None,
+                identity=None if ident == digest else ident,
+            )
+        return path
     if verdict != "write":
         # 규약 4 — 동일하면 스킵. 🚨 "ledger"(디스크엔 같은 것이 있는데 원장 행이 없다)도 여기선 스킵이다 —
         #    수집기의 종전 동작 그대로다. 행을 보태는 것은 `ingest register` 만 한다 (D-254).
@@ -556,6 +649,17 @@ def _ident_of(row: dict[str, Any]) -> str:
     return str(row.get("identity_sha256") or row.get("sha256"))
 
 
+def restore_needs_row(path: Path, digest: str) -> bool:
+    """`plan_raw` 가 `restore` 를 낸 뒤 — 되살린 파일의 바이트가 그 경로의 원장 행과 **다르면** 행을 보탠다.
+
+    🚨 판정용 해시(`VOLATILE`)만 같고 바이트는 다를 수 있다 — 그대로 두면 원장 sha 가 실제 파일과 안 맞아
+       `doctor --hash` 가 훼손으로 찍는다. 같으면 보태지 않는다 — 같은 행을 두 번 적지 않는다.
+       🔗 `save_raw` · `ingest.cmd_register` 가 같이 쓴다 (D-99).
+    """
+    row = ledger_row(path)
+    return row is None or str(row.get("sha256")) != digest
+
+
 def recent_by_others(
     source_id: str, days: int = OVERLAP_DAYS, now: datetime | None = None
 ) -> dict[str, str]:
@@ -606,7 +710,7 @@ def stamp(row: dict[str, Any], source_id: str) -> dict[str, Any]:
 
 
 def drop_raw_for_g2(source_id: str, family: str, filename: str, *, facts_path: Path) -> None:
-    """G2 소스의 원본을 삭제한다 (D-17 · D-92).
+    """G2 소스의 원본을 삭제한다 (D-92 · D-17 원문 미보관).
 
     🚨 「G2 = 추출된 사실만 · 원문 없음」과 「원본 무손상 저장」은 정면으로 부딪친다.
        화해는 이것이다 — 사실을 뽑은 뒤 원본을 지우고 manifest 의 sha256 만 남긴다.

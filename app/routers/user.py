@@ -29,8 +29,9 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.contracts import PASS_RISK_MAX_PROVISIONAL
+from app.contracts import PASS_RISK_MAX
 from app.db import get_session
+from app.formbody import read_capped
 from app.models import CopySentence, Judgment
 from app.settings import PARAMS
 from app.templating import templates
@@ -139,9 +140,10 @@ async def _form(request: Request) -> dict[str, list[str]]:
       **파일 업로드(`multipart/form-data`)** 뿐이다.
     ⬜ 업로드를 붙일 때는 lock 을 만지는 판정이다 (§5). 그 판정 전까지 만들지 않는다.
     """
-    body = await request.body()
-    if len(body) > _MAX_BODY:
-        raise HTTPException(413, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다")
+    # 🔄 09-21 — 다 읽고 재지 않는다. 넘는 순간 멈춘다 (app/formbody.py · P2-11)
+    body = await read_capped(
+        request, _MAX_BODY, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다"
+    )
     return parse_qs(body.decode("utf-8", "replace"))
 
 
@@ -181,13 +183,12 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
 
     🔄 종전에는 여기가 문구 검수였다 — 검수는 `/u/review` 로 옮겼다 (2026-09-16, ksr 안).
     ⬜ 판정 엔진이 없어 지금은 통계가 0/— 로 뜬다 — 정상이다 (D-147, 가짜 수치를 안 그린다).
-    ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX_PROVISIONAL`
-      (D-125 통과 조건의 잠정 위험도 임계값)을 그대로 쓴다 — 그 상수 자체가
-      "⛔ 화면 표기에만 쓴다"고 허가해 둔 값이다. R2·R3 순서가 확정되면 자동으로 따라간다.
+    ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX`
+      (D-125 통과 조건의 위험도 문턱 = R1 · D-227)을 그대로 쓴다 — 문턱을 여기서 따로 두지 않는다.
     """
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month = select(Judgment).where(Judgment.judged_at >= month_start)
-    pass_level = PASS_RISK_MAX_PROVISIONAL.level
+    pass_level = PASS_RISK_MAX.level
 
     total_month = session.scalar(select(func.count()).select_from(month.subquery())) or 0
     violation_count = (

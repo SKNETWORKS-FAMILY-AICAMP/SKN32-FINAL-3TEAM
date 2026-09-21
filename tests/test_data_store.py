@@ -342,6 +342,20 @@ def test_설정은_모르는_역할과_없는_폴더를_적지_않는다(
 
 
 @pytest.mark.gate
+def test_설정은_env_와_프로세스에_같은_값으로_들어간다(tmp_path: pathlib.Path, monkeypatch) -> None:
+    """🔴 2026-09-21 (소성민 코드 리뷰 #7) — ⛔ 종전에는 `.env` 에 정리한 값, `os.environ` 에 따옴표째 원본을 넣었다.
+    같은 프로세스에서 `data-setup` → `sync` 가 이어지면 따옴표 붙은 경로로 폴더를 못 찾는다."""
+    import os
+
+    from collect import setkey
+
+    env_path = _env_file(tmp_path, monkeypatch)
+    setkey.put_setting("DATA_STORE", '"G:\\내 드라이브\\CopyLane_store"')
+    assert os.environ["DATA_STORE"] == "G:\\내 드라이브\\CopyLane_store"
+    assert "DATA_STORE=G:\\내 드라이브\\CopyLane_store" in env_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.gate
 def test_키는_설정_경로로_쓰지_않는다() -> None:
     """🚨 비밀은 `setkey`(화면에 안 뜬다)로만 — 설정 쓰기가 키를 받으면 값이 화면·기록에 남는다 (D-111)."""
     from collect import setkey
@@ -477,3 +491,70 @@ def test_dry_run_도_저장소_준비를_본다(world, monkeypatch: pytest.Monke
 
 def test_크기_단위는_MiB_다() -> None:
     assert ds._size([{"bytes": 1024 * 1024}]) == "1.0 MiB"
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-21 (전수 재검토) — 올리기·받기의 온전함
+# ══════════════════════════════════════════════════════════
+def _sha_b(b: bytes) -> str:
+    import hashlib
+
+    return hashlib.sha256(b).hexdigest()
+
+
+def test_저장소의_깨진_객체는_다시_올린다(world, monkeypatch) -> None:
+    """🔴 I13 — ⛔ 「새로 올릴 것」을 `is_file()` 로 골라 0바이트 객체가 영영 안 고쳐졌다."""
+    tmp, storage, canon = world
+    data = (canon / "data/derived" / GEN).read_bytes()
+    obj = storage / ds.LAYOUT / "objects" / _sha_b(data)[:2] / _sha_b(data)
+    obj.parent.mkdir(parents=True)
+    obj.write_bytes(b"")
+    assert _publish(monkeypatch) == 0
+    assert obj.read_bytes() == data, "🔴 깨진 객체가 그대로다"
+
+
+def test_원장의_부류가_지금_규칙과_다르면_올리지_않는다(world, monkeypatch, capsys) -> None:
+    """🔴 I4 — ⛔ 원장 칸의 부류로 올릴 것을 골라, 캐시 행을 「생성물」로 적으면 마스킹 전 원문이 올라갔다."""
+    import json
+
+    tmp, storage, canon = world
+    rows = [json.loads(x) for x in dm.OUT.read_text(encoding="utf-8").splitlines() if x.strip()]
+    for r in rows:
+        if r["경로"].endswith(CACHE):
+            r["부류"] = "생성물"
+    dm.OUT.write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8"
+    )
+    assert _publish(monkeypatch) == 1
+    cache_sha = _sha_b((canon / "data/derived" / CACHE).read_bytes())
+    objs = {p.name for p in (storage / ds.LAYOUT / "objects").rglob("*") if p.is_file()}
+    assert cache_sha not in objs, "🔴 원문캐시가 올라갔다"
+    assert "부류가 지금 규칙과 다르다" in capsys.readouterr().out
+
+
+def test_사본에_파생물_원장이_없으면_받은_것으로_치지_않는다(world, monkeypatch, capsys) -> None:
+    """🔴 ⛔ 원장이 없으면 빈 dict — 「받을 것 없음 — 원장과 같다」로 통과하고 `load` 가 아무 판 위에서 돌았다."""
+    tmp, storage, canon = world
+    a = _repo(tmp / "A", {GEN: b'{"text":"v1"}\n'})
+    _point(monkeypatch, a)
+    monkeypatch.setenv("DATA_ROLE", "replica")
+    assert ds.ensure() == 1
+    assert ds.sync(yes=True) == 1
+    assert "파생물 원장이 없다" in capsys.readouterr().err
+
+
+def test_복사가_끊기면_part_를_남기지_않는다(monkeypatch, tmp_path: pathlib.Path) -> None:
+    import shutil
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"x" * 100)
+    dest = tmp_path / "out" / "f.jsonl"
+
+    def boom(s, d):  # noqa: ANN001
+        pathlib.Path(d).write_bytes(b"x" * 10)
+        raise OSError("drive read error")
+
+    monkeypatch.setattr(shutil, "copyfile", boom)
+    with pytest.raises(OSError):
+        ds._stage(src, dest, _sha_b(b"x" * 100))  # noqa: SLF001
+    assert list(dest.parent.iterdir()) == [], "🔴 반쯤 쓴 .part 가 남았다"

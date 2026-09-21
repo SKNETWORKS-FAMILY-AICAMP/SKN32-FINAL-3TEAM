@@ -72,6 +72,13 @@ jobs:
 
       - run: uv run ruff check .
 
+      # 2026-09-21 (전수 재검토) — 판정매트릭스 생성물이 원본과 맞는가 (D-90). 데이터 없이 돈다.
+      #    PYTHONUTF8 — windows runner 표준출력은 cp1252 라 이모지에서 죽는다.
+      - name: 판정매트릭스 대조
+        run: uv run python scripts/build_matrix.py --check
+        env:
+          PYTHONUTF8: "1"
+
       # 🔴 게이트 먼저 — 실패하면 여기서 멈춘다 (D-51)
       - name: 거버넌스 게이트
         run: uv run pytest -q -m gate -rs

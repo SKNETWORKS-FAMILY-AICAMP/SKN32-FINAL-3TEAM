@@ -152,17 +152,22 @@ def main() -> int:
             if sum(1 for d in data.values() if k in d) >= 2
             and len({d[k] for d in data.values() if k in d}) == 1
         }
-        base = files[0]
+        # 🔄 2026-09-21 (전수 재검토 I10) — ⛔ 합의 목록은 모두에게서 모으고 **첫 파일의 줄만** 썼다.
+        #    첫 파일에 없는 합의(둘째·셋째 사람이 같이 붙인 것)가 경고 없이 빠졌다. 파일 전부를 돌며 키마다 한 줄.
         n = 0
+        written: set[str] = set()
         out.parent.mkdir(parents=True, exist_ok=True)
         with out.open("w", encoding="utf-8", newline="\n") as f:
-            for line in base.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                r = json.loads(line)
-                if store.key(r) in agreed and store.label(r):
-                    f.write(line + "\n")
-                    n += 1
+            for src in files:
+                for line in src.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    r = json.loads(line)
+                    k = store.key(r)
+                    if k in agreed and k not in written and store.verdict(r):
+                        f.write(line + "\n")
+                        written.add(k)
+                        n += 1
         print(f"\n  → {out}  ({n}건 · **2인 이상이 채우고 답이 같은 것만**)")
         print(f"  🚨 갈린 {len(split_rows)}건은 **안 들어갔다.** 버린 것이 아니라 보류다.")
         if solo:

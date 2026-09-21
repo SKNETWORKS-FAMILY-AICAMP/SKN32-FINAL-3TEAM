@@ -60,6 +60,11 @@ def surface() -> dict[str, Any]:
             and obj is not BaseModel
             and obj.__module__ == contracts.__name__
         ):
+            # 🔄 2026-09-21 (전수 재검토 곁가지) — **앞으로 참조를 먼저 푼다.** ⛔ 풀기 전에는 `adapted` 가
+            #    `ForwardRef('list[AdaptedCopy]')` 로 찍히고, 앞의 테스트가 모델을 한 번 쓰면(pydantic 이 스스로 풀면)
+            #    `list[AdaptedCopy]` 로 찍혔다 — `test_contracts.py` 다음에 이 파일만 돌리면 빨갛고 전량으로는 초록이었다.
+            #    계약이 아니라 **실행 순서**가 결과를 정하던 것이다.
+            obj.model_rebuild()
             models[name] = {
                 f: f"{'req' if info.is_required() else 'opt'} {_type_name(info.annotation)}"
                 for f, info in sorted(obj.model_fields.items())

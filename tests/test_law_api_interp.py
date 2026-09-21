@@ -156,9 +156,9 @@ def test_런처_collect_가_target_과_옵션을_넘긴다(monkeypatch: pytest.M
     got: list[tuple[str, ...]] = []
     monkeypatch.setattr(launcher, "run", lambda *a: got.append(a) or 0)
     with pytest.raises(typer.Exit):
-        launcher.collect("mfds_cgm_expc", use="U1", pages=0, limit=20, dry_run=True)
+        launcher.collect("mfds_cgm_expc", use=None, pages=0, limit=20, dry_run=True)
     with pytest.raises(typer.Exit):
-        launcher.collect("law_go_kr", use="U1", pages=0, limit=0, dry_run=False)
+        launcher.collect("law_go_kr", use=None, pages=0, limit=0, dry_run=False)
     head = ("uv", "run", "python", "-m", "collect.law_api", "--target")
     assert got[0] == (*head, "mfdsCgmExpc", "--dry-run", "--limit", "20")
     assert got[1] == (*head, "law")

@@ -42,10 +42,13 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import re
 from typing import Any
 
 from app.settings import DEFAULT_CATEGORY, PARAMS, load_kwargs
+
+_log = logging.getLogger("copylane.retrieve")
 
 #: 🚨 코사인이라야 한다. `scripts/embed.py` 는 `model.encode(...)` 를 그대로 쓰므로
 #:    저장된 벡터가 **정규화돼 있지 않다.** `<->`(L2)는 길이에 끌려가 뜻이 달라진다.
@@ -93,6 +96,12 @@ class RetrieveError(RuntimeError):
     ⛔ 빈 목록으로 떨어지면 「의미 검색을 했는데 0건」과 「의미 검색을 못 했다」가
        구별되지 않는다. 2026-09-12 에 `mark_collected` 가 같은 모양으로 틀렸다.
     """
+
+
+def public_reason(e: RetrieveError) -> str:
+    """응답에 실어도 되는 이유 — 클래스 설명의 첫 줄(우리가 쓴 고정 문장). 예외 본문은 싣지 않는다."""
+    doc = (type(e).__doc__ or "").strip().splitlines()
+    return doc[0] if doc else "의미 검색을 할 수 없다"
 
 
 class EmbeddingsMissing(RetrieveError):
@@ -686,7 +695,11 @@ def search(
     try:
         vector_hits = by_vector(cur, q, category, pool)
     except RetrieveError as e:
-        vector_state = f"{type(e).__name__}: {e}"
+        # 🔴 2026-09-21 (전수 재검토) — ⛔ 예외 문장을 그대로 담아 `/search` 응답으로 냈다. 그 안에는
+        #    하위 예외(`{e}` · 모델 로드 실패의 경로·URL)가 섞인다. 응답에는 **우리가 쓴 고정 문장**(클래스
+        #    설명 첫 줄)만, 원문은 서버 로그로 (로그는 `RedactFilter` 를 지난다 · D-76).
+        _log.warning("벡터 검색 불가 — %s: %s", type(e).__name__, e)
+        vector_state = f"{type(e).__name__}: {public_reason(e)}"
     lexical_hits = by_lexical(cur, q, category, pool)
     # 🚨 `terms()` 를 다시 부른다 — 판단을 복사하는 것이 아니라 **같은 함수**를 쓴다 (D-99).
     state = SearchState(

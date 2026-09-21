@@ -530,7 +530,8 @@ def collect(
         seen += 1
 
         # 규약 4 — 격리 쪽도 함께 본다. 안 그러면 미부착 건을 매번 다시 받는다.
-        if (out_dir / f"{no}.html").exists() or (quarantine / f"{no}.html").exists():
+        #    🔄 09-21 — 원장(다른 기기가 받은 것)도 본다 (`store.already_have`)
+        if store.already_have(out_dir / f"{no}.html") or (quarantine / f"{no}.html").exists():
             skipped += 1
             continue
 
@@ -647,9 +648,8 @@ def main() -> int:
             f"🔄 공공누리 미부착 {nonuri}건 — 제24조의2 제1항으로 수집 · kogl_badge=none 기록 "
             f"(data/derived/{FAMILY}/kogl_badge.jsonl · D-132)."
         )
-    if saved and not a.dry_run:
-        registry.mark_collected(SOURCE_ID)
-        print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    if not a.dry_run:
+        registry.mark_if_complete(SOURCE_ID, saved=saved, partial=a.limit is not None)
     if failed:
         print("🚨 실패한 항목이 있다 — 위 사유를 먼저 해결하고 다시 돌린다.", file=sys.stderr)
     print("🚨 이 소스는 U1(학습) deny 다 — **test_holdout 전용**이다. train 에 넣지 않는다.")

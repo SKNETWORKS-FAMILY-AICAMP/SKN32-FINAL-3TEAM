@@ -635,8 +635,13 @@ def collect(target: str, *, dry_run: bool = False) -> tuple[int, int]:
     return saved, failed
 
 
-def _search_hits(oc: str, target: str, query: str, *, section: str) -> list[tuple[str, str]]:
-    """질의 하나가 내는 (ID, 사건명) 전부. 순서는 **서버가 준 그대로** 둔다 (D-118 ①).
+def _search_hits(
+    oc: str, target: str, query: str, *, section: str
+) -> tuple[list[tuple[str, str]], int]:
+    """질의 하나가 내는 (ID, 사건명) 전부와 **못 받은 건수**. 순서는 **서버가 준 그대로** 둔다 (D-118 ①).
+
+    🔄 2026-09-21 (전수 재검토 · 페이지 가드) — 못 받은 건수를 돌려준다. ⛔ 종전에는 ⚠ 한 줄만 찍고
+       부르는 쪽은 몰랐다 — 깨진 장만큼 조용히 적게 받고 「실패 0」으로 끝났다. 부르는 쪽이 실패로 센다.
 
     `section` 은 `SEARCH_NAME`(사건명) 또는 `SEARCH_BODY`(본문).
 
@@ -650,7 +655,13 @@ def _search_hits(oc: str, target: str, query: str, *, section: str) -> list[tupl
         raise SystemExit(
             f"🚨 검색 응답을 읽지 못했다 (target={target} query={query!r})\n   {_parse_failure(body)}"
         )
-    total = int(root.findtext("totalCnt") or 0)
+    # 🔴 2026-09-21 — ⛔ `totalCnt` 가 없으면 0 으로 읽어 「검색 결과 없음」이 됐다. 0 과 못 읽음은 다르다 (D-220).
+    raw_total = (root.findtext("totalCnt") or "").strip()
+    if not raw_total.isdigit():
+        raise SystemExit(
+            f"🚨 검색 응답에 전체 건수(totalCnt)가 없다 (target={target} query={query!r}) — 응답 구조가 바뀌었다"
+        )
+    total = int(raw_total)
 
     ids: list[tuple[str, str]] = []
     for page in range(1, -(-total // SEARCH_ROWS) + 1):
@@ -676,7 +687,7 @@ def _search_hits(oc: str, target: str, query: str, *, section: str) -> list[tupl
     if len(ids) != total:
         # 🚨 조용히 줄어드는 것을 막는다. 서버가 말한 수와 손에 든 수가 다르면 그대로 찍는다.
         print(f"     ⚠ {query} — 서버 총계 {total:,} · 실제 수신 {len(ids):,}")
-    return ids
+    return ids, max(total - len(ids), 0)
 
 
 def collect_cases(
@@ -720,9 +731,13 @@ def collect_cases(
     #    광고 판정을 놓친다.
     whole = all_cases or interp
     queries = ("",) if whole else QUERIES
+    unlisted = 0
     for query in queries:
-        by_name = _search_hits(oc, target, query, section=SEARCH_NAME)
-        by_body = [] if whole else _search_hits(oc, target, query, section=SEARCH_BODY)
+        by_name, short_name = _search_hits(oc, target, query, section=SEARCH_NAME)
+        by_body, short_body = (
+            ([], 0) if whole else _search_hits(oc, target, query, section=SEARCH_BODY)
+        )
+        unlisted += short_name + short_body
         # 🚨 예외 없이 한 번에 건다. 두 경로 중 하나만 거르면 다른 쪽으로 샌다.
         #    1차 해석만 거르지 않는다 — 사건명 어휘는 판례용이고 여기엔 맞지 않는다 (②).
         kept = by_name + by_body if interp else [h for h in by_name + by_body if _in_domain(h[1])]
@@ -747,7 +762,11 @@ def collect_cases(
     if limit:
         print(f"  ⚠ --limit {limit} — 합집합 {len(order):,}건 중 앞 {len(todo):,}건만 받는다\n")
 
-    saved = failed = 0
+    # 🔴 2026-09-21 — 목록이 덜 준 만큼은 **실패로 센다** — 본문을 부를 기회조차 없었던 건이다.
+    #    (본문 실패와 같은 취급 — main 이 종료코드 1 과 「그 항목은 받지 못했다」를 찍는다)
+    saved, failed = 0, unlisted
+    if unlisted:
+        print(f"  🔴 목록 단계에서 {unlisted:,}건을 못 받았다 — 실패로 센다 (깨진 장 · 위 ⚠ 줄)")
     missing: list[str] = []
     for n, case_id in enumerate(todo, 1):
         body = _call(BASE_SERVICE, oc, target=target, ID=case_id)
@@ -959,10 +978,10 @@ def main() -> int:
         return 1 if failed else 0
 
     print(f"\n새로 저장 {saved}건" + (f" · 🚨 실패 {failed}건" if failed else ""))
-    if saved:
-        # 🚨 받은 소스의 원장에 찍는다 — 1차 해석을 `law_go_kr` 에 찍으면 서명과 기록이 갈린다.
-        registry.mark_collected(INTERP_TARGETS.get(args.target, SOURCE_ID))
-        print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    # 🚨 받은 소스의 원장에 찍는다 — 1차 해석을 `law_go_kr` 에 찍으면 서명과 기록이 갈린다.
+    registry.mark_if_complete(
+        INTERP_TARGETS.get(args.target, SOURCE_ID), saved=saved, partial=bool(args.limit)
+    )
     if failed:
         # 🚨 일부 실패를 0 으로 끝내지 않는다. 2026-09-02 에 admrul 3건이 전부 오류 응답이었는데
         #    「새로 저장 3건」과 종료코드 0 이 나와, 3층이 채워진 것으로 보였다.
