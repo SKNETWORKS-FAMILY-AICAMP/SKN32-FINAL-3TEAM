@@ -619,6 +619,8 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
     people = respondent_people_of(bare)
     text = _mask_case_head(text, bare, log, people)
     text = _mask_people(text, people, log)
+    # 🆕 2026-09-22 — 앵커가 놓친 피심인. 사람인지 모르므로 `[업체]` (D-248 트레이드오프) · 경계·조사 규칙은 위와 한 벌 (D-99)
+    text = _mask_people(text, respondent_named_of(bare), log, MASK_ORG, "피심인 이름자리")
     for b in anchor_names(bare):
         if not usable(b):
             continue
@@ -860,10 +862,15 @@ class Anchor(str):
     """
 
     people: tuple[str, ...] = ()
+    #: 🆕 2026-09-22 — 본문이 「피심인 X」라 부르고 피심정보내용의 **이름 자리**에도 적힌 X (`respondent_named`)
+    named: tuple[str, ...] = ()
 
-    def __new__(cls, value: str, people: tuple[str, ...] = ()) -> Anchor:
+    def __new__(
+        cls, value: str, people: tuple[str, ...] = (), named: tuple[str, ...] = ()
+    ) -> Anchor:
         obj = super().__new__(cls, value)
         obj.people = tuple(people)
+        obj.named = tuple(named)
         return obj
 
 
@@ -871,11 +878,113 @@ def respondent_people_of(bare: str) -> tuple[str, ...]:
     return getattr(bare, "people", ())
 
 
+def respondent_named_of(bare: str) -> tuple[str, ...]:
+    return getattr(bare, "named", ())
+
+
+# ══ 앵커가 못 뽑은 피심인 — 원천이 두 번 적은 이름 (2026-09-22) ═════════════════════
+#  ⛔ 반출 검사 실측(클론 B · `--pii-triage` 09-22) — `ftc_stage` 주문에 「피심인 X 및 피심인 Y」의 **개인 실명 셋**이 남았다.
+#     주민번호 표지가 없어 `respondent_people` 이 사람으로 못 봤고(D-248 ⬜ 「표지 없는 개인 피심인」),
+#     사건명이 「X 외 1인의 …」 꼴이 아니라 앵커도 못 뽑았다.
+#  ★ 근거는 **원천이 두 번 적은 것**이다 — 본문이 「피심인 X」라 부르고, 피심정보내용의 **이름 자리**(칸 머리 · 번호 뒤 ·
+#    법인격 뒤)에도 X 가 있다. 이름 모양·성씨로 추측하지 않는다(D-248 이 버린 (b)).
+#  🚨 사람인지 업체인지는 여전히 모른다 — 주민번호 표지가 없으면 `[업체]` 로 가린다(D-248 트레이드오프와 같다).
+#  📏 탐침 실측(클론 B · `build/probe_person_0922.py` · 사용자 실행) — 마스킹 뒤 「피심인 + 성씨로 시작하는 말」 10,692자리 중
+#     그 말이 피심정보내용에 **있는** 자리 3,755 · 그중 정보칸에서 뒤가 공백·괄호 1,995. 나머지는 「주장」 884 · 「소속」 375 같은 보통명사다.
+_BODY_RESPONDENT = re.compile(r"피심인\s*[:：]?\s*([가-힣A-Za-z0-9]{2,12})")
+#: 피심정보내용에서 **이름이 오는 자리** — 칸 머리 · 줄 머리 · 번호(「1. 」「2)」) 뒤 · 법인격 뒤
+_INFO_SLOT = r"(?:^|\n|\d+\s*[.)]\s*|(?:주식회사|유한회사|㈜|\(주\))\s*)"
+#: 이름 자리여도 이름이 아닌 말 `[임의]` — 주소의 머리 · 법인격 · 탐침에서 여러 문서에 나온 보통명사
+_NOT_RESPONDENT = frozenset(
+    {
+        *[
+            "서울",
+            "부산",
+            "대구",
+            "인천",
+            "광주",
+            "대전",
+            "울산",
+            "세종",
+            "경기",
+            "강원",
+            "충북",
+            "충남",
+            "전북",
+            "전남",
+            "경북",
+            "경남",
+            "제주",
+            "경기도",
+            "서울시",
+            "서울특별시",
+        ],
+        *[
+            "주식회사",
+            "유한회사",
+            "합자회사",
+            "합명회사",
+            "사단법인",
+            "재단법인",
+            "협동조합",
+            "대표이사",
+            "대표자",
+            "대표",
+            "회사",
+        ],
+        *[
+            "주장",
+            "소속",
+            "정보공개",
+            "소명자료",
+            "지위",
+            "진술조서",
+            "모두",
+            "현황",
+            "이외",
+            "감사보고",
+            "임직원",
+            "진술",
+            "명의",
+            "전체",
+            "조합",
+            "전부",
+            "임원",
+            "지역",
+            "소유",
+        ],
+    }
+)
+_ADDR_TAIL = re.compile(r"(?:시|도|군|구|동|읍|면|리|로|길)$")
+
+
+def respondent_named(root: ET.Element) -> tuple[str, ...]:
+    """본문(주문·이유)이 「피심인 X」라 부르고, 피심정보내용의 **이름 자리**에도 X 가 있는 이름들."""
+    info = _t(root, "피심정보내용")
+    if not info:
+        return ()
+    body = _t(root, "주문") + "\n" + _t(root, "이유")
+    out: dict[str, None] = {}
+    for m in _BODY_RESPONDENT.finditer(body):
+        x = _drop_particle(m.group(1))
+        if len(x) < 2 or x in out or x in _NOT_RESPONDENT or x in _NOT_NAME or _ADDR_TAIL.search(x):
+            continue
+        if re.search(rf"{_INFO_SLOT}\s*{re.escape(x)}(?=[\s(（,·]|$)", info):
+            out[x] = None
+    return tuple(out)
+
+
 def _starts_with_person(norm_head: str, people: tuple[str, ...]) -> bool:
     return any(p and norm_head.startswith(_bare_norm(p)) for p in people)
 
 
-def _mask_people(text: str, people: tuple[str, ...], log: list[dict] | None = None) -> str:
+def _mask_people(
+    text: str,
+    people: tuple[str, ...],
+    log: list[dict] | None = None,
+    mark: str = MASK_CEO,
+    rule: str = "피심인 개인",
+) -> str:
     """🔴 개인 피심인의 이름을 글 전체에서 `[대표]` 로 (2026-09-19 · D-248 · 팀장 판정).
 
     ★ 이름은 원천이 「이 사람이 피심인이다」라고 적은 자리(가려진 주민등록번호 앞)에서만 온다 — 추측이 아니다.
@@ -890,8 +999,8 @@ def _mask_people(text: str, people: tuple[str, ...], log: list[dict] | None = No
             continue
         pat = re.compile(rf"(?<![가-힣]){re.escape(name)}(?=(?:{_NAME_TAIL})|[^가-힣]|$)")
         if pat.search(text):
-            _note(log, "피심인 개인", name, MASK_CEO)
-            text = pat.sub(MASK_CEO, text)
+            _note(log, rule, name, mark)
+            text = pat.sub(mark, text)
     return text
 
 
@@ -924,13 +1033,15 @@ def anchor_ftc(root: ET.Element) -> tuple[str, str]:
     name = _t(root, "사건명")
     # 🔄 2026-09-19 (D-248) — 알맹이에 **개인 피심인 이름**을 실어 보낸다(`Anchor`). 앵커 규칙은 그대로다.
     people = respondent_people(root)
+    # 🆕 2026-09-22 — 앵커가 놓친 피심인(원천이 두 번 적은 이름). 사람은 `people` 이 먼저 잡으므로 뺀다
+    named = tuple(x for x in respondent_named(root) if x not in people)
     m = re.match(r"^(.+?)의\s", name)
     if m:
-        return m.group(1), Anchor(strip_legal(m.group(1)), people)
+        return m.group(1), Anchor(strip_legal(m.group(1)), people, named)
     head = name.split()[0] if name.split() else ""
     if head and _LEGAL_RE.search(head):
-        return head, Anchor(strip_legal(head), people)
-    return "", Anchor("", people)
+        return head, Anchor(strip_legal(head), people, named)
+    return "", Anchor("", people, named)
 
 
 #: 마스킹 뒤에 **법인격 표기를 달고 남아 있는 이름**을 찾는다.
