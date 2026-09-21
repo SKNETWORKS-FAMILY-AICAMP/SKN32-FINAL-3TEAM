@@ -408,6 +408,32 @@ _TITLED_PERSON = re.compile(
 )
 
 
+#: 🆕 2026-09-22 — 레지스트리가 사람 축을 **「대표자명 등 개인 실명」** 으로 선언한 원천 (문언 그대로 · D-54).
+#:    ★ 이 원천에서는 대표자가 아닌 사람(조리실장·점장 …)도 선언 범위 안이다 — 코드가 선언을 못 따라가던 자리다.
+#:    📏 실측(클론 B · `--pii-triage` 09-22) — 재결례에 「조리실장(실명)」 1 · 「○○개발 대표 조○우」(부분 가림) 1 이 남았다.
+#:    ⛔ `ftc_decisions_body` 는 넣지 않는다 — 그 원천의 선언은 「업체명·상표·피심인 주소」(+ 대표자명)이고,
+#:       제3자 개인(광고 속 의사 등)은 D-248 ⬜ 가 「대상 밖」으로 적었다. 넓히려면 레지스트리 문언 개정 + 2인 확인이 먼저다.
+PERSON_ALL_NAMES = frozenset({"law_go_kr"})
+#: 넓은 원천에서만 더 보는 직함 `[임의]` — 탐침(`build/probe_person_0922.py` C절)에 나온 것 중 보통명사와 덜 부딪히는 것.
+#:    ⛔ 「과장」은 뺀다 — 「거짓·과장 **성**능」처럼 판정 어휘 뒤에 성씨 글자가 온다. 「직원」·「대표」·「업주」도 뺀다(오탐 위주).
+_WIDE_TITLES = r"(?:조리실장|주방장|실장|점장|팀장|부장)"
+#: 원천이 이름 **일부만** 가린 꼴 — 「조○우」·「김철○」. 전부 가린 「김○○」은 `_REDACTED_NAME` 이 이미 지운다.
+#:    🚨 「이○의」처럼 가림 뒤가 **조사**면 성만 남은 것이다(특정 불가) — 조사를 이름으로 먹지 않게 뺀다
+_PART_GLYPH = "○ㅇOＯ*＊△"
+_PART_ROLES = rf"(?:{_TITLES}|{_WIDE_TITLES}|대표|청구인|직원|종업원|업주|영업자)"
+#: 넓은 직함 뒤에는 **구분자가 하나 이상** 와야 한다 — 🔄 09-22 실측(클론 B · 탐침 `probe_person_0922b` · 사용자 실행):
+#:    붙여 쓴 「실장**이나** 직원」의 「이나」가 3개 문서에서 이름으로 걸렸다(「이」가 성씨). 긴 직함(대표이사…)과 달리
+#:    이 직함들은 「피심인대표이사홍길동」처럼 붙여 쓰는 등기 꼴이 없으므로 붙여 쓴 자리를 통째로 안 본다.
+_WIDE_SEP = r"(?:\s*[:：]\s*|\s*[(（]\s*|\s*,\s*|\s+)"
+_WIDE_PERSON = re.compile(
+    rf"({_WIDE_TITLES}{_WIDE_SEP})({_NOT_TITLE}{_PERSON_NAME}(?:{_NAME_JOIN}{_NOT_TITLE}{_PERSON_NAME})*)"
+)
+_PARTIAL_PERSON = re.compile(
+    rf"({_PART_ROLES}{_TITLE_SEP})([{_SURNAMES}](?:[{_PART_GLYPH}](?![은는이가을를의에도와과께])[가-힣]|[가-힣][{_PART_GLYPH}]))"
+    rf"(?![{_PART_GLYPH}])(?=[^가-힣]|$|[은는이가을를의에도와과께])"
+)
+
+
 def _name_head(names: str) -> str:
     """목록의 첫 이름 — 불용어 대조용. 4자 이름 끝의 조사(`_NAME_PARTICLE`)는 뗀다."""
     head = re.split(r"\s*[,·]\s*|\s+및\s+", names, maxsplit=1)[0]
@@ -768,7 +794,7 @@ def mask_respondent_email(text: str, bare: str, log: list[dict] | None = None) -
     return _EMAIL.sub(_sub, text)
 
 
-def mask_person(text: str, log: list[dict] | None = None) -> str:
+def mask_person(text: str, log: list[dict] | None = None, *, wide: bool = False) -> str:
     """가려진 이름과 「직함+이름」을 `[대표]` 로.
 
     🔄 **2026-09-08 — `mask()` 에서 떼어냈다 (D-157).**
@@ -793,6 +819,13 @@ def mask_person(text: str, log: list[dict] | None = None) -> str:
         lambda m: _note(log, "가려진이름", m.group(0), MASK_CEO) or MASK_CEO, text
     )
 
+    if wide:
+        # 🆕 2026-09-22 — 선언이 「개인 실명」인 원천만 (`PERSON_ALL_NAMES`). 부분 가림을 **먼저** —
+        #    「대표 조○우」의 「조○」가 뒤 규칙의 이름 자리와 겹치지 않게.
+        text = _PARTIAL_PERSON.sub(
+            lambda m: _note(log, "부분가림", m.group(2), MASK_CEO) or m.group(1) + MASK_CEO, text
+        )
+
     # 🚨 직함을 남기고 이름만 지운다 — 「대표이사 [대표]」.
     #    직함까지 지우면 그 자리가 사람이었다는 사실이 사라져, 다음 사람이
     #    「여기 이름이 있었나」를 못 본다. 지운 자국은 남긴다.
@@ -813,7 +846,9 @@ def mask_person(text: str, log: list[dict] | None = None) -> str:
         _note(log, "직함+이름", name, MASK_CEO)
         return m.group(1) + MASK_CEO + tail
 
-    return _TITLED_PERSON.sub(_sub, text)
+    text = _TITLED_PERSON.sub(_sub, text)
+    # 🆕 2026-09-22 — 넓은 원천은 직함을 더 본다. 이름·불용어·조사 판단은 위 `_sub` 한 벌 (D-99)
+    return _WIDE_PERSON.sub(_sub, text) if wide else text
 
 
 def residue(text: str, bare: str) -> int:
@@ -1661,7 +1696,7 @@ def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = Non
         #      `residual_bare_orgs()` 를 게이트가 쓴다 (D-216 의 ⬜ ① · D-230 의 연장).
         #    ⬜ 뜻을 바꾸려면 레지스트리 `masking:` 문언부터 고치고 2인 확인을 거친다 (게이트 15).
     elif "person" in todo:
-        text = mask_person(text, log)
+        text = mask_person(text, log, wide=source in PERSON_ALL_NAMES)
     if "addr" in todo:
         text = mask_address(text, log)
     if "brand" in todo:

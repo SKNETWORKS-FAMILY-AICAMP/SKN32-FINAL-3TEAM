@@ -988,3 +988,49 @@ def test_사람_표지가_있으면_대표로_남는다() -> None:
     _, bare = anchor_ftc(root)
     assert bare.people == ("김가나",) and bare.named == ()
     assert apply_policy("피심인 김가나는 …", bare, "ftc") == "피심인 [대표]는 …"
+
+
+# ─────────────────────────────────────────────────────────────
+#  🆕 2026-09-22 — 선언이 「개인 실명」인 원천(law_go_kr)은 대표자 밖의 사람도 가린다 (이름은 가짜)
+# ─────────────────────────────────────────────────────────────
+@pytest.mark.parametrize(
+    ("text", "want"),
+    [
+        ("전전 조리실장(홍가나)은 이를", "전전 조리실장([대표])은 이를"),
+        ("영업소 실장 김가나가 판매", "영업소 실장 [대표]가 판매"),
+        ("○○개발 대표 조○나는", "○○개발 대표 [대표]는"),  # 부분 가림 — 두 글자가 드러났다
+        ("청구인 김가○의 처는", "청구인 [대표]의 처는"),
+    ],
+)
+def test_개인_실명_원천은_대표자_밖의_사람도_가린다(text: str, want: str) -> None:
+    """🔴 09-22 반출 검사 실측 — 재결례에 「조리실장(실명)」·「대표 조○우」가 남았다. 레지스트리는 「개인 실명」이라 선언했다."""
+    from preprocess.mask import apply_policy
+
+    assert apply_policy(text, "", "law_go_kr") == want
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "팀장 지시로 판매하였다",  # 판정·서술 어휘
+        "실장 이하 직원이",
+        "부장 이상의 책임",
+        "점장이나 실장이나 직원이",  # 09-22 탐침 실측 — 붙여 쓴 「이나」가 이름으로 걸렸다
+        "대표 이○의 주장",  # 성만 드러난 가림 + 조사 — 특정 불가 · 조사를 먹지 않는다
+        "대표 김○○는",  # 전부 가림은 원래 규칙(가려진이름)이 맡는다 — 결과만 본다
+    ],
+)
+def test_넓은_규칙은_보통명사와_성만_남은_가림을_건드리지_않는다(text: str) -> None:
+    from preprocess.mask import apply_policy
+
+    out = apply_policy(text, "", "law_go_kr")
+    assert out == text or out == text.replace("김○○", "[대표]"), out
+
+
+def test_넓은_규칙은_선언한_원천에만_건다() -> None:
+    """반대 대조 — `ftc` 의 선언은 「대표자명」까지다. 제3자로 넓히는 것은 레지스트리 개정·2인 확인 뒤다 (D-248 ⬜)."""
+    from preprocess.mask import PERSON_ALL_NAMES, apply_policy
+
+    assert sorted(PERSON_ALL_NAMES) == ["law_go_kr"]
+    text = "영업소 실장 김가나가 판매"
+    assert apply_policy(text, "", "ftc") == text
