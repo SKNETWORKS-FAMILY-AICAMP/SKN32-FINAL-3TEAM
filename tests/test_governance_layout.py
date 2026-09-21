@@ -1053,9 +1053,22 @@ def test_키_입력_경로가_값을_인자로_받지_않는다() -> None:
     )
     assert fn is not None, "launcher.py 에 setkey 명령이 없다"
     params = [a.arg for a in fn.args.args]
-    assert params == ["name"], (
-        f"🚨 launcher.setkey 의 인자가 {params} 다 — 이름 하나여야 한다.\n"
+    # 🔄 2026-09-21 (전수 재검토) — `extra` 는 **받아서 버리는 자리**다. ⛔ 없으면 이름 뒤에 붙여 넣은 값을 Click 이
+    #    「Got unexpected extra argument(s) (sk-…)」로 **되비췄다.** 그래서 받되 — 어디에도 넘기지 않는지 본다.
+    assert params in (["name"], ["name", "extra"]), (
+        f"🚨 launcher.setkey 의 인자가 {params} 다 — 이름 하나여야 한다(뒤에 붙은 것을 버리는 `extra` 만 허용).\n"
         "   값을 받는 인자가 생기면 PowerShell 기록에 키가 남는다."
+    )
+    passed_on = [
+        n
+        for c in ast.walk(fn)
+        if isinstance(c, ast.Call)
+        for a in [*c.args, *(k.value for k in c.keywords)]
+        for n in ast.walk(a)
+        if isinstance(n, ast.Name) and n.id == "extra"
+    ]
+    assert not passed_on, (
+        "🚨 setkey 가 `extra`(붙여 넣은 값일 수 있다)를 어딘가에 넘긴다 — 버려야 한다"
     )
 
 

@@ -46,7 +46,9 @@ app = typer.Typer(
 # ══════════════════════════════════════════════════════════
 def run(*args: str) -> int:
     """subprocess 로 위임한다. 여기서 로직을 처리하지 않는다."""
-    console.print(f"[dim]$ {' '.join(args)}[/dim]")
+    # 🔄 2026-09-21 (전수 재검토) — ⛔ 인자를 Rich 표기로 해석했다. `docs/[draft]/a.md` 가 `docs//a.md` 로 찍히고
+    #    `[/tmp]` 가 든 인자는 **실행 전에** MarkupError 로 죽었다. 명령 줄은 글자 그대로 찍는다.
+    console.print(f"$ {' '.join(args)}", style="dim", markup=False)
     return subprocess.run(args, cwd=ROOT).returncode
 
 
@@ -430,7 +432,10 @@ def _onboard_data_steps() -> None:
 
 
 @app.command()
-def setkey(name: str = typer.Argument(..., help="키 이름 (예: FOODSAFETY_KEY)")) -> None:
+def setkey(
+    name: str = typer.Argument(..., help="키 이름 (예: FOODSAFETY_KEY)"),
+    extra: list[str] = typer.Argument(None, hidden=True, show_default=False),  # noqa: B008
+) -> None:
     """API 키를 화면에 뜨지 않게 입력해 설정 파일에 넣는다.
 
     🚨 값을 **인자로 주지 않는다.** 이름만 주면 물어보고, 입력은 화면에 표시되지 않는다.
@@ -443,6 +448,17 @@ def setkey(name: str = typer.Argument(..., help="키 이름 (예: FOODSAFETY_KEY
     """
     from collect import env  # noqa: PLC0415 — 키 이름의 정본
 
+    if extra:
+        # 🔄 2026-09-21 (전수 재검토) — ⛔ 인자를 더 주면 Click 이 「Got unexpected extra argument(s) (sk-…)」로
+        #    **값을 그대로 되비췄다.** 이름 뒤에 키를 붙여 넣는 실수가 정확히 그 모양이다. 받아서 버리고 안 찍는다.
+        console.print(
+            "[red]🔴 인자를 하나만 준다 — 이름만.[/red] 값은 인자로 받지 않는다(셸 기록에 남는다). "
+            "뒤에 준 것은 **읽지도 찍지도 않았다.**"
+        )
+        console.print(
+            "  🚨 값을 붙여 넣었다면 셸 기록에 남았다 — 그 키는 재발급을 검토한다 (팀장 판정)"
+        )
+        raise typer.Exit(1)
     if name not in env.KEYS:
         console.print("[red]🔴 모르는 키 이름이다[/red] — 입력은 화면에 다시 찍지 않는다.")
         console.print("  아는 이름: " + " · ".join(env.KEYS), markup=False)
@@ -492,6 +508,10 @@ def doctor(
         #    ⛔ 종전에는 「환경 진단」이 원장↔디스크 대조 **하나만** 봤다. 팀원이 초록을 보고도
         #       파이썬 버전·git 신원·DB 리비전은 **아무도 안 본 상태**였다 (D-170).
         args.append("--env")
+        if hash_check:
+            # 🔄 2026-09-21 (전수 재검토) — ⛔ `--env --hash` 는 `--hash` 를 **말없이 버렸다**(메뉴가 둘 다 묻고 보냈다).
+            #    해시는 데이터 검사의 옵션이다 — 둘 다 줬으면 환경 다음에 데이터까지 본다(`doctor.py` 가 이어서 돈다).
+            args += ["--data", "--hash"]
     else:
         args.append("--data")
         if hash_check:
@@ -717,7 +737,10 @@ def dmap(
 
 
 @app.command(name="admin-add")
-def admin_add(initials: str = typer.Argument(..., help="docs/<이니셜>/ 과 같은 철자")) -> None:
+def admin_add(
+    initials: str = typer.Argument(..., help="docs/<이니셜>/ 과 같은 철자"),
+    extra: list[str] = typer.Argument(None, hidden=True, show_default=False),  # noqa: B008
+) -> None:
     """거버넌스 콘솔 계정을 만든다 — 가입 화면은 없다.
 
     근거 — D-66 · D-213.
@@ -726,6 +749,12 @@ def admin_add(initials: str = typer.Argument(..., help="docs/<이니셜>/ 과 �
        이유다 — PowerShell 기록 파일에 값이 그대로 남는다 (D-111).
     🔴 명단의 정본은 **디스크**다 — `docs/<이니셜>/` 이 없으면 거부한다 (D-99).
     """
+    if extra:
+        # 🔄 2026-09-21 (전수 재검토) — ⛔ 비밀번호를 뒤에 붙이면 Click 이 그대로 되비췄다 (`setkey` 와 같은 자리)
+        console.print(
+            "[red]🔴 이니셜만 준다.[/red] 비밀번호는 묻는다 — 뒤에 준 것은 읽지도 찍지도 않았다."
+        )
+        raise typer.Exit(1)
     raise typer.Exit(run("uv", "run", "python", "-m", "scripts.admin_account", "add", initials))
 
 
@@ -1013,7 +1042,11 @@ def adopt(
 @app.command()
 def collect(
     source: str = typer.Argument(..., help="레지스트리 소스 id"),
-    use: str = typer.Option("U1", "--use", help="U1~U4"),
+    use: str | None = typer.Option(
+        None,
+        "--use",
+        help="U1~U4 — 소스 id 를 받는 수집기만(비우면 U1). 안 받는 수집기에 주면 거부",
+    ),
     pages: int = typer.Option(0, "--pages", help="🚨 첫 실행은 1 로 — 응답을 보고 전량을 받는다"),
     limit: int = typer.Option(0, "--limit", help="앞 N 건만 — 받는 수집기만 (안 받으면 거부)"),
     dry_run: bool = typer.Option(
@@ -1047,7 +1080,7 @@ def collect(
     if source in MANUAL_SOURCES:
         typer.echo(
             f"⬜ `{source}` 는 **사람이 받는 소스**입니다 — 신청·회원가입이 필요합니다.\n"
-            f"   받은 뒤: uv run python launcher.py register {source} <경로> --use {use}"
+            f"   받은 뒤: uv run python launcher.py register {source} <경로> --use {use or 'U1'}"
         )
         raise typer.Exit(1)
     spec = COLLECTORS.get(source)
@@ -1063,7 +1096,11 @@ def collect(
     # 🆕 2026-09-21 (코드 리뷰 #4) — 안 받는 인자는 **받기 전에** 거부한다. ⛔ 종전에는 말없이 버려서
     #    `--dry-run` 이 실제 수집이 됐다 — 아래 `if not dry_run` 이 별칭·겹침 검사까지 건너뛴 채로.
     offered = COLLECTOR_OPTIONS.get(module, frozenset())
-    asked = {"--dry-run": dry_run, "--limit": limit, "--pages": pages}
+    # 🔄 2026-09-21 (전수 재검토) — `--use` 도 같은 규칙이다. ⛔ 소스 id 를 받는 수집기(`arg`)에만 넘기고 나머지(넷)는
+    #    **말없이 버렸다** — 그 수집기들은 용도를 코드에 박아 두어, 사용자가 적은 용도가 레지스트리와 대조되지 않았다.
+    if shape == "arg":
+        offered = offered | {"--use"}
+    asked = {"--dry-run": dry_run, "--limit": limit, "--pages": pages, "--use": use}
     refused = [k for k, v in asked.items() if v and k not in offered]
     if refused:
         typer.echo(
@@ -1090,7 +1127,7 @@ def collect(
             raise typer.Exit(1)
     args = ["uv", "run", "python", "-m", module]
     if shape == "arg":
-        args += [source, "--use", use]
+        args += [source, "--use", use or "U1"]
     elif shape.startswith("target"):
         # 🚨 값은 표가 든다 — `target` 만 있으면 법령(`law`)이다. 런처가 target 을 추정하지 않는다.
         args += ["--target", shape.partition("=")[2] or "law"]
@@ -1399,7 +1436,6 @@ def data_refresh(
             f"  [red]모르는 원천 {unknown}[/red] — 아는 것: {', '.join(sorted(EXTRACTORS))}"
         )
         raise typer.Exit(1)
-    only_canonical("data-refresh")
 
     py = ["uv", "run", "python"]
     steps: list[tuple[str, list[str]]] = [
@@ -1416,10 +1452,13 @@ def data_refresh(
         ),
     ]
     if dry_run:
+        # 🔄 2026-09-21 (전수 재검토) — ⛔ 정본 검사가 이 앞에 있어 **사본에서 미리보기도 거부**했다 —
+        #    `only_canonical` 의 docstring(「보기만 하는 옵션은 막지 않는다」)과 반대였다. 미리보기는 아무것도 안 돌린다.
         for i, (label, cmd) in enumerate(steps, 1):
-            console.print(f"  {i:>2}. {label}   [dim]{' '.join(cmd[3:])}[/dim]")
+            console.print(f"  {i:>2}. {label}   {' '.join(cmd[3:])}", markup=False)
         console.print("\n  [yellow]⬜ --dry-run — 아무것도 돌리지 않았다[/yellow]")
         raise typer.Exit(0)
+    only_canonical("data-refresh")
     for i, (label, cmd) in enumerate(steps, 1):
         console.print(f"\n[bold]{i}/{len(steps)}  {label}[/bold]")
         if run(*cmd) != 0:
@@ -1480,7 +1519,9 @@ def load(
 
 
 @app.command()
-@needs_data
+@needs_data(
+    unless="dump"
+)  # 🔄 09-21 — `--dump` 는 정본 전용이라 사본에서 먼저 받을 이유가 없다(받고 나서 거부했다)
 def chunk(dump: bool = typer.Option(False, "--dump", help="chunks.jsonl 을 쓴다")) -> None:
     """[P5] 조문·별표를 RAG 청크로 자릅니다 — 🚨 조문 단위입니다."""
     args = ["uv", "run", "python", "-m", "preprocess.chunk"]
@@ -1582,12 +1623,20 @@ def extract(
     from preprocess import EXTRACTORS  # noqa: PLC0415 — 표는 로직 쪽에 있다 (D-99)
 
     if not source:
+        if dump or sheet or verify or preview or min_len:
+            # 🔄 2026-09-21 (전수 재검토) — ⛔ 원천 없이 옵션을 주면 표만 보이고 **0** 으로 끝났다(옵션은 버려졌다)
+            console.print("  [red]원천 id 가 없다[/red] — 옵션을 주려면 원천을 적는다. 표:")
+            console.print(_table("전처리 추출", EXTRACTORS))
+            raise typer.Exit(1)
         console.print(_table("전처리 추출", EXTRACTORS))
         raise typer.Exit(0)
     if preview:
         # 🆕 2026-09-21 (D-256) — 어느 역할에서든 돈다. 파생물은 임시 폴더에만 나온다 — 저장소를 건드리면 🔴 로 멈춘다
-        if dump or sheet:
-            console.print("  [red]--preview 는 --dump · --sheet 와 같이 쓰지 않는다[/red]")
+        # 🔄 같은 날 (전수 재검토) — `--verify` · `--min-len` 도 **말없이 버렸다** — 같이 주면 거부한다
+        if dump or sheet or verify or min_len:
+            console.print(
+                "  [red]--preview 는 --dump · --sheet · --verify · --min-len 과 같이 쓰지 않는다[/red]"
+            )
             raise typer.Exit(1)
         raise typer.Exit(run(sys.executable, "-m", "preprocess.preview", source))
     if dump or sheet:
@@ -1787,6 +1836,11 @@ ASK_VALUE: dict[str, list[tuple[str, str, list[tuple[str, str]]]]] = {
 #: 🚨 **1번이 언제나 「안 하는 쪽」**이고 기본이다. 엔터만 치면 안 붙는다.
 #:    ⛔ 종전에는 메뉴가 이 플래그들을 **늘 켠 채로** 돌렸다 (Typer 인자 객체가 참이라).
 ASK_FLAG: dict[str, list[tuple[str, str, str, str]]] = {
+    # 🆕 2026-09-21 (전수 재검토) — ⛔ 메뉴의 수집은 미리보기 단계 없이 곧장 네트워크 수집을 돌렸다(명령 설명은
+    #    「첫 실행은 --dry-run」). 묻는다 — 1번(기본)은 종전처럼 받는다. 미리보기를 못 하는 수집기는 런처가 거부한다.
+    "collect": [
+        ("먼저 미리보기로 볼까", "--dry-run", "받는다 — 저장한다", "미리보기 — 저장하지 않는다")
+    ],
     "doctor": [
         (
             "무엇을 볼까",
@@ -2306,5 +2360,27 @@ def main(ctx: typer.Context) -> None:
         menu()
 
 
+def _utf8_console() -> None:
+    """🆕 2026-09-21 (전수 재검토) — 콘솔이 cp949 여도 죽지 않게 한다.
+
+    ⛔ 이 파일과 스크립트들은 `—`·`🔴`·`🚨` 를 찍는데, cp949 콘솔에서는 `UnicodeEncodeError` 로 **명령이 죽었다**
+       (`launcher.py --help` · `setkey 모르는이름` · `build_matrix --check` — 마지막 것은 「판정매트릭스가 어긋났다」는
+       엉뚱한 안내로 나왔다). `setup.ps1` 의 `PYTHONUTF8` 가 있는 기기에서만 괜찮았다.
+    ★ 이 프로세스는 utf-8 로 다시 열고, 자식 프로세스에는 `PYTHONIOENCODING` 을 물려준다
+      (`scripts/gen_registry.py` · `derived_manifest._utf8_out` 과 같은 처방 — 스크립트를 직접 부를 때는 그쪽이 맡는다).
+    """
+    import os  # noqa: PLC0415 — 이 함수만 쓴다
+
+    for stream in (sys.stdout, sys.stderr):
+        enc = (getattr(stream, "encoding", "") or "").lower().replace("-", "")
+        if enc != "utf8" and hasattr(stream, "reconfigure"):
+            stream.reconfigure(
+                encoding="utf-8"
+            )  # utf-8 은 못 찍는 글자가 없다 — 뭉개 감추지 않는다 (D-162)
+    if os.environ.get("PYTHONIOENCODING", "").lower().replace("-", "") != "utf8":
+        os.environ["PYTHONIOENCODING"] = "utf-8"
+
+
 if __name__ == "__main__":
+    _utf8_console()
     sys.exit(app())

@@ -298,3 +298,31 @@ def test_embed_는_여전히_먼저_받는다(calls) -> None:
     """🚨 반대 대조 — `--check` 가 아니면 파생물을 읽으므로 받는다 (D-247)."""
     _cli("embed")
     assert calls[0][-2:] == ("scripts.data_store", "ensure"), calls
+
+
+# 🆕 2026-09-21 (전수 재검토) — `--use` 도 받는 수집기에만 · `setkey` 뒤 인자를 되비추지 않는다 · 명령 줄 표기
+def test_collect_use_는_소스_id_를_받는_수집기에만_넘긴다(calls) -> None:
+    r = _cli("collect", "mfds_press", "--use", "U4")
+    assert r.exit_code == 1 and "--use" in r.output and calls == [], r.output
+    r = _cli("collect", "mfds_casebook", "--use", "U3", "--dry-run")
+    assert r.exit_code == 0, r.output
+    assert calls[-1][-4:] == ("mfds_casebook", "--use", "U3", "--dry-run"), calls
+
+
+def test_setkey_는_뒤에_붙인_값을_되비추지_않는다(calls) -> None:
+    """🔴 ⛔ Click 이 「Got unexpected extra argument(s) (sk-…)」로 붙여 넣은 키를 그대로 찍었다."""
+    secret = "sk-THIS-IS-A-FAKE-VALUE-123456"
+    r = _cli("setkey", "LAW_OC_KEY", secret)
+    assert r.exit_code == 1
+    assert secret not in r.output, "🔴 값이 화면에 나왔다"
+    assert calls == []
+
+
+def test_명령_줄은_대괄호가_있어도_글자_그대로_찍는다(capsys, monkeypatch) -> None:
+    """⛔ Rich 표기로 해석해 `docs/[draft]/a.md` 가 `docs//a.md` 로 찍히고 `[/tmp]` 는 실행 전에 죽었다."""
+    import subprocess
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0))
+    assert launcher.run("echo", "docs/[draft]/a.md", "[/tmp]") == 0
+    out = capsys.readouterr().out
+    assert "docs/[draft]/a.md" in out and "[/tmp]" in out, out

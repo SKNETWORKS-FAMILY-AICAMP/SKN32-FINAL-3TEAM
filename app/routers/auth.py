@@ -73,7 +73,8 @@ async def login(request: Request) -> RedirectResponse:
         raise HTTPException(429, f"시도가 많다 — {auth.LOCKOUT_SEC // 60}분 뒤에 다시")
 
     stored = _lookup(initials)
-    if stored is None or not auth.verify_password(stored, password):
+    # 🔄 2026-09-21 (전수 재검토) — 없는 계정도 해시를 한 번 돈다 — 걸린 시간이 존재를 알리지 않게 (P1-5)
+    if not auth.verify_account(stored, password):
         auth.throttle.fail(initials)
         auth.audit("login", initials or None, ok=False)
         raise HTTPException(401, "이니셜이나 비밀번호가 맞지 않는다")
