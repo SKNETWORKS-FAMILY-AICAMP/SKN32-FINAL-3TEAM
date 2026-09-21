@@ -140,12 +140,14 @@ def main() -> int:
     #    ⛔ 종전에는 없는 것을 전부 🔴 「일부만 받은 것」으로 찍었다 — 같은 53개를 doctor 는 🟡 로 찍어
     #       두 도구가 같은 결손에 다른 경보를 냈다. 실측 53개 중 36개는 정책 제외·옮긴 흔적이었다.
     why = missing.classify(_rows())
+    # 🆕 2026-09-21 — 경보 수준은 `missing.level()` 한 곳이 정하고 역할을 본다 (doctor 와 같은 색 · D-99).
+    who = missing.role()
 
     # 한 폴더를 여러 소스가 쓰는지 먼저 센다
     shared: collections.Counter = collections.Counter(f for k in src for f in folders(k))
 
     both, only_ledger, only_disk, neither = [], [], [], []
-    partial: list[tuple[str, int, int]] = []
+    partial: list[tuple[str, int, int, bool]] = []
     print(f"{'소스':26}{'원장(고유)':>11}{'이 기기':>8}{'🔴없음':>8}")
     for k in sorted(src):
         paths = led.get(k, set())
@@ -163,21 +165,29 @@ def main() -> int:
         )
         bucket.append(k)
         mark = ""
-        if n_led and not n_disk:
-            mark = "  🔴 **다른 기기에서 받았다 — 이 기기엔 없다**"
-        elif gone:
+        if gone:
             # 🔴 **일부만 없는 것**을 종전에는 「둘 다 있음」으로 삼켰다 (2026-09-10).
             # 🔄 D-253 — 정상으로 설명되는 것은 🔴 로 안 센다. 설명 안 되는 것만 남긴다.
+            # 🔄 2026-09-21 — 수준을 `missing.level()` 에서 받는다. ⛔ 종전에는 「정상이 아니면 🔴」로 여기서 따로 정해
+            #    doctor(🟡)와 색이 갈렸고, **하나도 없는 소스**는 이유를 안 보고 「다른 기기에서 받았다 — 다시 받는다」로
+            #    🔴 를 찍었다 — 사본(클론 A)에서 수집을 권하는 안내였다 (D-226).
             reasons = collections.Counter(
                 why.get(p.replace("\\", "/"), ("legacy", ""))[0] for p in gone
             )
-            eyes = sum(n for r, n in reasons.items() if not missing.REASONS[r][1])
+            lv = collections.Counter()
+            for r, n in reasons.items():
+                lv[missing.level(r, who)] += n
+            eyes = lv["red"] + lv["eyes"]
             told = " · ".join(f"{r} {n}" for r, n in reasons.most_common())
+            whole = "하나도 없다" if not n_disk else f"{len(gone)}/{n_led} 이 없다"
             if eyes:
-                partial.append((k, eyes, n_led))
-                mark = f"  🔴 **{len(gone)}/{n_led} 이 없다** — 볼 것 {eyes} ({told})"
+                partial.append((k, eyes, n_led, bool(lv["red"])))
+                head = missing.LEVEL_MARK["red" if lv["red"] else "eyes"]
+                mark = f"  {head} **{whole}** — 볼 것 {eyes} ({told})"
+            elif who == "replica" and any(r in missing.REPLICA_FOLDS for r in reasons):
+                mark = f"  ✅ {whole} — 사본은 원문을 쓰지 않는다 ({told})"
             else:
-                mark = f"  ✅ {len(gone)}/{n_led} 없음 — 전부 설명됨 ({told})"
+                mark = f"  ✅ {whole} — 전부 설명됨 ({told})"
         elif n_disk and not n_led:
             # 🚨 **계열을 공유하는 소스는 오탐이다** (2026-09-09 실측).
             #    `ftc_decisions`·`ftc_decisions_api`·`ftc_decisions_body` 가 한 폴더(`ftc`)를
@@ -197,24 +207,29 @@ def main() -> int:
         f"  둘 다 있음 {len(both)} · 원장만 {len(only_ledger)} · 파일만 {len(only_disk)} "
         f"· 둘 다 없음 {len(neither)}"
     )
-    if only_ledger:
-        print("\n🔴 **다른 기기에서 받은 것 — 이 기기에서 쓰려면 다시 받는다**")
-        for k in only_ledger:
-            print(f"   {k}")
-        print("   🚨 원장은 git 으로 공유되지만 원문은 `.gitignore` 다 (D-19).")
-        print("      「원장에 있다」는 「이 기기에 있다」가 아니다.")
+    # 🔄 2026-09-21 — 「원장에만 있는 소스」도 이유로 가른다 — 아래 「볼 것」 목록에 함께 든다.
+    #    ⛔ 종전에는 여기서 따로 🔴 「이 기기에서 쓰려면 다시 받는다」를 찍었다(이유를 안 봤다).
+    if only_ledger and who == "replica":
+        print(
+            f"\n✅ **원장에만 있는 소스 {len(only_ledger)}개** — 사본은 원문을 쓰지 않는다 (D-226)"
+        )
+        print("   🚨 이 기기에서 수집하지 않는다 — 원문은 정본 한 곳에 모인다.")
+        print(
+            "      「원장에 있다」는 「이 기기에 있다」가 아니다 (D-19). 볼 사람은 정본(클론 B)이다."
+        )
     if only_disk:
         print("\n🔴 **원장에 없는데 파일이 있다** — 규약 3 이 지켜지지 않았거나 원장이 밀렸다")
         for k in only_disk:
             print(f"   {k}")
     if partial:
-        print("\n🔴 **일부만 받은 것 중 설명이 안 되는 것** — 소스 단위로는 「있다」로 보인다")
-        for k, g, n in partial:
-            print(f"   {k:26} {g}/{n} 볼 것")
+        head = missing.LEVEL_MARK["red" if any(r for *_, r in partial) else "eyes"]
+        print(f"\n{head} **없는 것 중 설명이 안 되는 것** — 소스 단위로는 「있다」로 보일 수 있다")
+        for k, g, n, red in partial:
+            print(f"   {k:26} {g}/{n} 볼 것" + ("  🔴 이 기기가 받았는데 없다" if red else ""))
         print("   🚨 종전 분류는 파일이 하나라도 있으면 「둘 다 있음」이었다 (D-160).")
-        print("   → 이유와 경로: uv run python scripts/doctor.py --data   (D-253 · 같은 분류다)")
-    if not only_ledger and not only_disk and not partial:
-        print("  ✅ 원장과 이 기기가 일치한다")
+        print("   → 이유와 경로: uv run python launcher.py doctor   (D-253 · 같은 분류 · 같은 색)")
+    if not only_disk and not partial:
+        print("  ✅ 원장과 이 기기 사이에 볼 것이 없다")
 
     # 🚨 **세 번째 축은 여기서 안 잰다** — 「있다」는 「최신이다」가 아니다 (D-177).
     #    ⛔ 실측 — `mfds_hf_ingredient_board` 672개 중 **662개가 팀 최신판이 아닌데**

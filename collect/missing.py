@@ -1,6 +1,7 @@
 """collect/missing.py — 원장에 있는데 **이 기기 디스크에 없는** 원문을 「왜 없는지」로 가른다 (D-253).
 
   doctor --data 와 inventory 가 같이 쓴다 — 같은 결손을 두 도구가 다르게 부르지 않게 (D-99).
+  🔄 2026-09-21 — **경보 수준(`level`)도 여기서 정한다.** 사본은 `legacy`·`query` 를 접는다 (아래 `REPLICA_FOLDS`).
 
 팀장 — *「doctor 은 제 기능을 충분히 하고 있나?」* (2026-09-20). ⛔ 종전 doctor 는 없는 이유를 셋(ㄱ G2 · ㄴ 다른 클론 ·
 ㄷ 질의 필터)으로만 나눴다. 실측(클론 B · 2026-09-20) `law_go_kr` 36개는 **셋 다 아니었다** —
@@ -223,6 +224,55 @@ def tally(got: dict[str, tuple[str, str]]) -> collections.Counter[str]:
     return collections.Counter(reason for reason, _ in got.values())
 
 
-def needs_eyes(got: dict[str, tuple[str, str]]) -> int:
-    """사람이 볼 것 — 정상이 아닌 이유의 개수."""
-    return sum(1 for reason, _ in got.values() if not REASONS[reason][1])
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-21 — 경보 수준은 **여기 한 곳**에서 정한다 · 역할을 본다
+# ══════════════════════════════════════════════════════════
+#: 사본(replica)에서는 볼 것이 아닌 이유. 🚨 사본은 원문을 쓰지 않는다 — 받은 파생물로만 돈다 (D-226).
+#:    ⛔ 종전에는 역할을 안 봐서, 클론 A 에서 「사람이 볼 것 5,545개」(legacy 5,266 · query 279)가 찍히고
+#:       `inventory` 는 같은 줄을 🔴 로 세며 「이 기기에서 쓰려면 다시 받는다」고 안내했다(2026-09-21 사용자 실행).
+#:       사본이 수집하면 원문이 두 기기로 갈라진다 — 안내가 D-226 과 정면으로 어긋났다.
+#:    ★ `lost` 는 접지 않는다 — **이 기기가 받았다**고 적힌 것이 없으면 역할과 무관하게 유실이다.
+#:    ★ 정본(canonical)·역할 없음(CI)은 종전 그대로 — 거기서는 이 목록이 진짜 볼 것이다.
+REPLICA_FOLDS: frozenset[str] = frozenset({"legacy", "query"})
+
+#: 수준 → 표시. 🔴 는 종료코드에 든다 · 🟡 는 사람이 본다 · ✅ 는 한 줄로 접는다.
+LEVEL_MARK: dict[str, str] = {"red": "🔴", "eyes": "🟡", "ok": "✅"}
+
+
+def role() -> str | None:
+    """이 기기 역할 — `derived_manifest.role()` 한 곳에서 읽는다 (D-99).
+
+    🚨 모르는 값(`canonnical`)이면 `role()` 이 멈추는데, **진단은 멈추지 않는다** — 역할 없음(더 많이 보이는 쪽)으로
+       돌고, 역할 오타는 `doctor --env` 가 🔴 로 따로 센다. 접는 쪽으로 틀리지 않는다 (D-220).
+    """
+    from scripts import derived_manifest as dm  # noqa: PLC0415 — 역할의 정본
+
+    try:
+        return dm.role()
+    except SystemExit:
+        return None
+
+
+def level(reason: str, who: str | None) -> str:
+    """이유 하나의 경보 수준 — `"red"` · `"eyes"` · `"ok"`. 🔴 doctor 와 inventory 가 **이 함수만** 읽는다.
+
+    ⛔ 종전에는 수준을 두 도구가 따로 정했다 — 같은 `legacy` 줄을 doctor 는 🟡, inventory 는 🔴 로 찍었다.
+       D-253 맥락 4 가 고칠 이유로 든 그 불일치가, 분류만 한 벌이 되고 **색은 두 벌**로 남아 있었다.
+    """
+    if reason == "lost":
+        return "red"
+    if REASONS[reason][1]:
+        return "ok"
+    if who == "replica" and reason in REPLICA_FOLDS:
+        return "ok"
+    return "eyes"
+
+
+def levels(got: dict[str, tuple[str, str]], who: str | None) -> collections.Counter[str]:
+    """`classify` 결과 → 수준별 개수 (`red`·`eyes`·`ok`)."""
+    return collections.Counter(level(reason, who) for reason, _ in got.values())
+
+
+def needs_eyes(got: dict[str, tuple[str, str]], who: str | None = None) -> int:
+    """사람이 볼 것 — 🟡·🔴 인 것의 개수. `who` 를 주면 역할대로 접는다."""
+    return sum(1 for reason, _ in got.values() if level(reason, who) != "ok")
