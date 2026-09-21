@@ -120,6 +120,54 @@ def test_원장의_옛_판과_같아도_받지_않는다(repo) -> None:
 
 
 @pytest.mark.gate
+def test_이_기기가_받았는데_없는_원문은_되살린다(repo) -> None:
+    """🔴 2026-09-21 (소성민 코드 리뷰 #3) — ⛔ 종전에는 원장에 같은 sha 가 있으면 **누가 받았든** 건너뛰어,
+    이 기기가 받은 원문을 잃으면 다시 수집해도 조용히 안 돌아왔다. doctor 의 `lost` 안내(「이 기기에서 다시 받는다」)와
+    모순이었다. ★ `lost` 와 같은 조건 — 기기 칸이 **이 기기**일 때만 되살린다."""
+    body = b'{"a":1}'
+    rel = f"data/raw/{FAM}/page_0001.json"
+    _ledger(repo, [_row(rel, body, "collector-1")])
+    got = _save(body)
+    assert got is not None and (repo / rel).read_bytes() == body, "🔴 잃은 원문이 안 돌아왔다"
+    assert len(_rows(repo)) == 1, "같은 바이트면 원장 행을 또 적지 않는다"
+
+
+@pytest.mark.gate
+def test_되살린_판은_그_판의_경로로_돌아간다(repo) -> None:
+    """판(`__c날짜`)으로 받았던 것을 잃으면 **그 판 이름**으로 돌아가야 한다 — 원본 이름에 쓰면 판이 섞인다."""
+    old, new = b'{"a":1}', b'{"a":2}'
+    base, ed = f"data/raw/{FAM}/page_0001.json", f"data/raw/{FAM}/page_0001__c20260901.json"
+    _ledger(repo, [_row(base, new, "other-2"), _row(ed, old, "collector-1")])
+    got = _save(old)
+    assert got is not None and got.name == "page_0001__c20260901.json", got
+    assert not (repo / base).exists()
+
+
+@pytest.mark.gate
+def test_다른_기기나_옛_행이면_되살리지_않는다(repo) -> None:
+    """🚨 반대 대조 — 다른 기기 것은 그 기기(정본)에 있다(D-250). 기기 칸 없는 옛 행은 누구 것인지 모른다(`legacy`)."""
+    body = b'{"a":1}'
+    rel = f"data/raw/{FAM}/page_0001.json"
+    for who in ("other-2", None):
+        _ledger(repo, [_row(rel, body, who)])
+        store._INDEX = None  # noqa: SLF001 — 원장을 바꿔 끼웠다
+        assert _save(body) is None, who
+        assert not (repo / rel).exists(), who
+
+
+@pytest.mark.gate
+def test_G2_는_이_기기_것이어도_되살리지_않는다(repo, monkeypatch) -> None:
+    """🚨 G2 는 사실을 뽑은 뒤 원문을 **일부러** 지운다(D-17) — doctor 도 `g2` 를 정상으로 가른다.
+    되살리면 평소 수집 한 번에 지운 원문이 전부 돌아온다."""
+    monkeypatch.setattr(store.registry, "is_g2", lambda sid: True)
+    body = b'{"a":1}'
+    rel = f"data/raw/{FAM}/page_0001.json"
+    _ledger(repo, [_row(rel, body, "collector-1")])
+    assert _save(body) is None
+    assert not (repo / rel).exists()
+
+
+@pytest.mark.gate
 def test_원장에_팀원이_정한_별칭이_남는다(repo) -> None:
     _save(b'{"x":1}', "a.json")
     assert _rows(repo)[-1]["device"] == "collector-1"
