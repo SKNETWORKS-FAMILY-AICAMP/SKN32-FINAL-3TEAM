@@ -63,11 +63,9 @@ def _table_counts() -> dict[str, int]:
     """
     counts: dict[str, int] = {}
     try:
-        import psycopg  # noqa: PLC0415 — DB 가 없어도 임포트는 서야 한다
+        from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
-        from app.settings import dsn  # noqa: PLC0415
-
-        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        with pg_connect() as conn, conn.cursor() as cur:
             for table in _TABLES:
                 cur.execute(f"SELECT count(*) FROM {table}")  # noqa: S608 — 고정 목록이다
                 counts[table] = cur.fetchone()[0]
@@ -127,12 +125,11 @@ def _list_sources(
     params["offset"] = offset
 
     try:
-        import psycopg  # noqa: PLC0415
         from psycopg.rows import dict_row  # noqa: PLC0415
 
-        from app.settings import dsn  # noqa: PLC0415
+        from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
-        with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+        with pg_connect(row_factory=dict_row) as conn, conn.cursor() as cur:
             cur.execute(f"SELECT count(*) AS n FROM source {where_sql}", params)  # noqa: S608
             total = cur.fetchone()["n"]
 
@@ -197,12 +194,11 @@ def _list_admin_accounts() -> list[dict] | None:
        회원가입 화면을 만들지 않는다"고 명시한다. `launcher.py admin-add` 로만 만든다.
     """
     try:
-        import psycopg  # noqa: PLC0415
         from psycopg.rows import dict_row  # noqa: PLC0415
 
-        from app.settings import dsn  # noqa: PLC0415
+        from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
-        with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+        with pg_connect(row_factory=dict_row) as conn, conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT initials, display_name, last_login_at, disabled_at
@@ -237,12 +233,11 @@ def _get_source(source_id: str) -> dict | None:
        (있음/없음/DB 없음을 구분하지 않는다 — 화면이 "찾을 수 없다"로 셋 다 받는다.)
     """
     try:
-        import psycopg  # noqa: PLC0415
         from psycopg.rows import dict_row  # noqa: PLC0415
 
-        from app.settings import dsn  # noqa: PLC0415
+        from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
-        with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
+        with pg_connect(row_factory=dict_row) as conn, conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT source_id, name, publisher, url, layer, grade, cost, value,

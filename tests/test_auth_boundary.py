@@ -4,7 +4,7 @@
    였고, 지금은 **「인증이 섰으니 그것이 실제로 막는가」**다.
 
 ★ 여기서 재는 것 일곱 —
-  ① 관리자 쓰기 경로가 아직 없다 (남은 이유는 **2인 확인의 쓰기 절차**이지 인증이 아니다)
+  ① 관리자 쓰기는 **허용 목록에 있는 운영 표(공지·약관·문의)만** — 🔄 D-260 ⑦. 거버넌스 쓰기는 여전히 없다
   ② 🚨 **막는 이유가 낡지 않았다** — 게이트의 수명을 게이트가 지킨다 (D-170)
   ③ 로그인 없이 관리자 화면이 안 뜬다 — **읽기도 막는다**
   ④ CSRF 없는 로그인이 거부된다 (주 방어는 `SameSite=Lax`, 토큰은 이중 방어)
@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -26,34 +27,97 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 #: 상태를 바꾸는 HTTP 메서드. 🚨 `GET` 은 바꾸면 안 되고, 나머지는 이름부터 바꾸는 쪽이다.
-_WRITE = re.compile(r"@router\.(post|put|patch|delete)\s*\(", re.IGNORECASE)
+_WRITE_METHODS = {"post", "put", "patch", "delete"}
+
+#: 🔄 **D-260 ⑦ — 관리자 쓰기 허용 목록.** 파일 → 허용하는 (메서드, 라우터 안 경로).
+#:    ★ 운영 표(공지 · 약관 · 문의)만 연다. 🚨 **여기 없는 파일·경로의 쓰기는 🔴** — `admin.py`(거버넌스)는 목록에 없다.
+#:    ⛔ 종전 게이트는 `admin.py` **한 파일**만 읽었다. 09-22 병합으로 관리자 라우터가 열 개가 되어 나머지 아홉에 POST 가
+#:       생겨도 못 봤다(D-260 맥락). 이제 `app/routers/admin*.py` 전부를 구문 트리로 읽는다.
+ADMIN_WRITES: dict[str, set[tuple[str, str]]] = {
+    "admin_board.py": {("POST", "/notices"), ("POST", "/notices/{notice_id}")},
+    "admin_terms.py": {("POST", "")},
+    "admin_cs.py": {("POST", "/tickets/{ticket_id}")},
+}
+
+#: 허용된 쓰기 핸들러가 **본문에서 반드시 부르는 것** — 로그인 · CSRF 대조 · 쓰기 기록 (D-260 ⑦).
+REQUIRED_CALLS = frozenset({"require_governor", "csrf_ok", "audit"})
+
+#: 🔴 **거버넌스 쓰기를 아직 막는 이유.** 🔄 D-260 ⑦ — 운영 표 쓰기는 열었고, 남은 것은 판정 근거를 바꾸는 쓰기다.
+#:    ⛔ `reviewed_by` 를 채우는 것과 **등급을 바꾸는 것**은 다른 권한이다. 누가 무엇을 언제 되돌릴 수 있는지가 안 정해졌다.
+WRITE_CLOSED_REASON = (
+    "거버넌스 쓰기(등급 변경 · 2인 확인 서명)의 절차가 미판정이다 (D-66 · D-260 ⑦)"
+)
 
 
-#: 🔴 **쓰기를 아직 막는 이유.** 인증은 섰다 — 남은 것은 **2인 확인의 쓰기 절차**다 (D-66).
-#:    ⛔ `reviewed_by` 를 채우는 것과 **등급을 바꾸는 것**은 다른 권한이다. 누가 무엇을
-#:       언제 되돌릴 수 있는지가 안 정해졌다. 정해지면 이 상수와 아래 게이트를 **같이 지운다.**
-WRITE_CLOSED_REASON = "2인 확인의 쓰기 절차가 미판정이다 (D-66 · 병렬작업 계약 §8 ⑬ 의 남은 절반)"
+def _called(node: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Call):
+            f = n.func
+            names.add(f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", ""))
+    return names
+
+
+def admin_writes(src: str) -> list[tuple[str, str, str, int, set[str]]]:
+    """라우터 소스의 쓰기 핸들러 — (메서드, 경로, 함수 이름, 줄, 본문이 부르는 이름들).
+
+    🚨 문자열이 아니라 **데코레이터를 구문 트리로** 읽는다 — 주석·문서 안의 `@router.post` 에 속지 않는다.
+    """
+    out = []
+    for fn in ast.walk(ast.parse(src)):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for dec in fn.decorator_list:
+            if not (isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute)):
+                continue
+            method = dec.func.attr.lower()
+            if method not in _WRITE_METHODS:
+                continue
+            path = dec.args[0].value if dec.args and isinstance(dec.args[0], ast.Constant) else "?"
+            out.append((method.upper(), path, fn.name, fn.lineno, _called(fn)))
+    return out
+
+
+def write_violations(files: dict[str, str]) -> list[str]:
+    """파일 이름 → 소스. 허용 목록 밖의 쓰기 · 필수 호출을 빠뜨린 쓰기를 적는다."""
+    bad = []
+    for name, src in sorted(files.items()):
+        allowed = ADMIN_WRITES.get(name, set())
+        for method, path, fn, line, calls in admin_writes(src):
+            if (method, path) not in allowed:
+                bad.append(f"{name}:{line} {method} {path!r} ({fn}) — 허용 목록 밖")
+            elif missing := sorted(REQUIRED_CALLS - calls):
+                bad.append(f"{name}:{line} {method} {path!r} ({fn}) — 부르지 않는다: {missing}")
+    return bad
 
 
 @pytest.mark.gate
-def test_판정_전에는_관리자_쓰기_경로를_만들_수_없다() -> None:
-    """🔴 관리자 라우터에 상태를 바꾸는 메서드가 없어야 한다.
+def test_관리자_쓰기는_허용_목록과_필수_호출_안에서만_생긴다() -> None:
+    """🔴 관리자 라우터 **전부**에서 쓰기를 찾는다 (D-260 ⑦).
 
-    🔄 **막는 이유가 바뀌었다** — 종전에는 「인증이 0줄」이었고 지금은 「쓰기 절차 미판정」이다.
-       ⛔ 이유가 낡은 채로 게이트가 남으면, 다음 사람이 **이미 해결된 것을 막고 있다고 읽는다.**
-    ⛔ 사용자 라우터는 다르다 — `POST /u/judge` 는 **아무것도 저장하지 않는다.**
-    ★ 절차가 정해지면 이 게이트를 **지운다.** 남겨 두면 통과만 하는 장식이 된다 (D-170).
+    ★ 허용 목록(공지·약관·문의) 밖의 쓰기는 🔴 — 거버넌스 쓰기가 조용히 생기는 길을 막는다.
+    ★ 허용된 쓰기도 `require_governor` · `csrf_ok` · `audit` 셋을 **본문에서** 불러야 한다.
+    ⛔ 사용자 라우터는 다르다 — 사용자 쓰기(가입·마이페이지·문의 접수)는 `app/routers/user.py` 에 있고 이 게이트 밖이다.
     """
-    src = (ROOT / "app" / "routers" / "admin.py").read_text(encoding="utf-8")
-    found = [
-        f"{m.group(1).upper()} (줄 {src[: m.start()].count(chr(10)) + 1})"
-        for m in _WRITE.finditer(src)
-    ]
-    assert not found, (
-        f"🔴 관리자 라우터에 쓰기 경로가 있다 — {found}\n"
-        f"   {WRITE_CLOSED_REASON}\n"
-        "   고치는 법 — 절차를 먼저 정하고, 정해지면 이 게이트를 지운다"
+    files = {
+        p.name: p.read_text(encoding="utf-8")
+        for p in sorted((ROOT / "app" / "routers").glob("admin*.py"))
+    }
+    assert "admin.py" in files and len(files) > 1, f"🔴 관리자 라우터를 못 찾았다 — {sorted(files)}"
+    bad = write_violations(files)
+    assert not bad, (
+        "🔴 관리자 쓰기 경로가 규칙 밖이다 —\n   "
+        + "\n   ".join(bad)
+        + f"\n   {WRITE_CLOSED_REASON}\n"
+        "   고치는 법 — 운영 표 쓰기면 ADMIN_WRITES 에 한 줄을 더하고 필수 호출 셋을 부른다. 거버넌스 쓰기면 판정이 먼저다"
     )
+
+
+@pytest.mark.gate
+def test_허용_목록의_파일은_실제로_있다() -> None:
+    """🚨 목록이 낡으면 이름이 바뀐 파일의 쓰기가 「목록 밖」이 아니라 「목록에 없는 파일」로 빠져나간다 — 둘 다 🔴 지만 원인을 가른다."""
+    missing = [n for n in ADMIN_WRITES if not (ROOT / "app" / "routers" / n).exists()]
+    assert not missing, f"🔴 허용 목록의 파일이 없다 — {missing}"
 
 
 @pytest.mark.gate
@@ -209,6 +273,24 @@ def test_모든_응답에_보안_헤더가_붙는다() -> None:
 
 def test_음성_픽스처_쓰기_검사가_실제로_잡는다() -> None:
     """🚨 게이트가 아니다 — **게이트가 잡는다는 것을 잰다** (D-203)."""
-    assert _WRITE.search('@router.post("/approve")'), "🔴 POST 를 못 잡는다"
-    assert _WRITE.search("@router.delete('/x')"), "🔴 DELETE 를 못 잡는다"
-    assert not _WRITE.search('@router.get("/x")'), "🔴 GET 을 잘못 잡는다"
+    ok = (
+        '@router.post("/notices")\n'
+        "def create(request):\n"
+        "    require_governor(request)\n"
+        "    csrf_ok(a, b)\n"
+        "    audit('notice_create', 'x', ok=True)\n"
+    )
+    assert write_violations({"admin_board.py": ok}) == [], "🔴 규칙대로 쓴 핸들러를 잡았다"
+    # 허용 목록 밖 경로
+    assert write_violations({"admin_board.py": ok.replace("/notices", "/approve")}), (
+        "🔴 목록 밖 경로를 못 잡는다"
+    )
+    # 거버넌스 파일의 쓰기
+    assert write_violations({"admin.py": ok}), "🔴 admin.py 의 쓰기를 못 잡는다"
+    # 필수 호출 하나 빠짐
+    assert write_violations({"admin_board.py": ok.replace("    csrf_ok(a, b)\n", "")}), (
+        "🔴 CSRF 누락을 못 잡는다"
+    )
+    # DELETE 도 쓰기다 · 주석 안의 데코레이터는 쓰기가 아니다
+    assert write_violations({"admin_cs.py": '@router.delete("/x")\ndef d():\n    pass\n'})
+    assert write_violations({"admin_cs.py": '# @router.post("/x")\n'}) == []

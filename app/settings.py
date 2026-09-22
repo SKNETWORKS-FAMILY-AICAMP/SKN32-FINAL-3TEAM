@@ -59,6 +59,29 @@ SQLALCHEMY_DRIVER = "psycopg"
 #:    ⬜ `scripts/doctor.py` 의 DB 검사는 5초를 따로 적는다 — 진단은 조금 더 기다린다. 합치지 않았다.
 DB_CONNECT_TIMEOUT_S = 3
 
+# ── 오류 로그 표 (`app_error_log` · 2026-09-22 · ssm 요청) — 운영 값이다. 판정 파라미터(`PARAMS`)가 아니다 ──
+#: 🚨 **보관 기간** — **D-261 (나)**. 오류 로그는 법이 보관을 요구하는 대상이 아니다(고시 제8조 1년은 **접속기록** · D-213 ③).
+#:    근거 — 남은 프로젝트 기간(~10-26)과 발표를 덮는 **가장 짧은 값**. 법정 기한이 아니라 필요 기간에서 나온 수다.
+#:    **바꾸는 조건** — 배포에서 실제 오류를 되짚는 주기를 재면. 줄이는 쪽이 P1-6(보관량 × 기간)에 맞다.
+ERROR_LOG_RETENTION_DAYS = 90
+#: `[임의]` 한 줄의 상한. 🚨 넘치면 **자른다**(거부하지 않는다) — 오류를 잃는 것보다 꼬리를 잃는 쪽이 낫다.
+ERROR_LOG_MESSAGE_MAX = 2000
+#: `[임의]` 쓰기 대기열 크기. 🚨 **가득 차면 버리고 센다** — 로그가 요청을 기다리게 하지 않는다 (D-72 · 버린 수는 stderr 로).
+ERROR_LOG_QUEUE_MAX = 1000
+#: `[임의]` DB 쓰기가 실패한 뒤 다시 시도하기까지 쉬는 초 — 죽은 DB 에 줄마다 붙지 않는다.
+ERROR_LOG_BACKOFF_S = 30
+#: `COPYLANE_ERROR_LOG` 가 받는 값. `auto` = **관리자 화면을 실제로 여는 판**(`onprem`·`demo`)에서만 켠다.
+ERROR_LOG_MODES = ("auto", "on", "off")
+#: `auto` 일 때 켜는 에디션. 🚨 `local`(개발 기기 · 테스트)은 끈다 — 테스트가 `app.api` 를 import 하면 DB 에 쓰려 든다.
+ERROR_LOG_AUTO_EDITIONS = frozenset({"onprem", "demo"})
+
+# ── 운영 표 (D-260 · `ticket`) — 운영 값이다. 판정 파라미터가 아니다 ──
+#: `[임의]` 문의(`ticket`) 본문·답변 상한 — D-260 ③. 판정 경로가 아니라 운영 값이다.
+#:    **바꾸는 조건** — 실제 문의 길이를 재면. 🚨 넘치면 **거부한다**(자르지 않는다 — 사용자가 쓴 글을 몰래 줄이지 않는다).
+TICKET_TEXT_MAX = 2000
+#: `[임의]` 닫힌 문의의 보관 기간(일) — D-260 ③ · D-129 파기. **바꾸는 조건** — 법정 보관 기한을 확인하면.
+TICKET_RETENTION_DAYS = 180
+
 #: `postgresql://` · `postgres://` · `postgresql+psycopg://` 를 다 받는다.
 #: ⛔ 아무 드라이버나 받지는 않는다 — `+asyncpg` 를 적으면 psycopg 경로가 죽는다.
 _SCHEME = re.compile(rf"^postgres(?:ql)?(?:\+{SQLALCHEMY_DRIVER})?://")
@@ -201,6 +224,19 @@ class Settings(BaseModel):
     #:    ⛔ 그것이 맞다. 기본 키를 코드에 박으면 그 키가 곧 모두의 키가 된다.
     session_secret: str = Field("")
 
+    #: 🆕 2026-09-22 — 오류 로그를 DB(`app_error_log`)에도 쌓는가. `auto` · `on` · `off` (`error_log_enabled()`).
+    error_log: str = Field("auto")
+
+    @field_validator("error_log")
+    @classmethod
+    def _known_error_log(cls, v: str) -> str:
+        if v not in ERROR_LOG_MODES:
+            raise ValueError(
+                f"COPYLANE_ERROR_LOG 가 {v!r} 이다 — 아는 것은 {list(ERROR_LOG_MODES)}.\n"
+                "  🚨 오타가 조용히 켜짐·꺼짐으로 떨어지지 않게 멈춘다 (D-220)"
+            )
+        return v
+
     @field_validator("edition")
     @classmethod
     def _known_edition(cls, v: str) -> str:
@@ -251,6 +287,7 @@ def settings() -> Settings:
         database_url=os.environ.get("DATABASE_URL") or DEFAULT_DATABASE_URL,
         edition=os.environ.get("COPYLANE_EDITION") or "local",
         session_secret=os.environ.get("COPYLANE_SESSION_SECRET") or "",
+        error_log=os.environ.get("COPYLANE_ERROR_LOG") or "auto",
     )
 
 
@@ -261,6 +298,18 @@ def admin_is_mounted() -> bool:
        그것이 맞다. **없는 것과 막힌 것은 다르다.**
     """
     return settings().edition not in ADMIN_CLOSED_EDITIONS
+
+
+def error_log_enabled(s: Settings | None = None) -> bool:
+    """오류 로그를 DB 에도 쌓는가 — 🚨 **판단은 여기 한 곳**이다 (D-99).
+
+    ★ 관리자 화면이 없는 판(`cloud`)은 **`on` 이어도 끈다** — 쌓아도 볼 화면이 없다(요청 §1 ⑤ · D-213).
+    ★ `auto` 는 `onprem`·`demo` 만 켠다. `local` 은 끈다 — 개발 기기와 테스트가 여기 해당한다.
+    """
+    s = s or settings()
+    if s.edition in ADMIN_CLOSED_EDITIONS or s.error_log == "off":
+        return False
+    return s.error_log == "on" or s.edition in ERROR_LOG_AUTO_EDITIONS
 
 
 def dsn() -> str:
