@@ -37,20 +37,40 @@ router = APIRouter(prefix="/terms")
 # ─────────────────────────────────────────────────────────────
 _DUMMY_TERMS: list[dict] = [
     {
-        "id": 1, "name": "서비스 이용약관", "version": "v3.2", "effective_date": "2026.08.01",
-        "prev_version": "v3.1", "reason": "AI 판정 면책 조항 추가", "status": "시행 중",
+        "id": 1,
+        "name": "서비스 이용약관",
+        "version": "v3.2",
+        "effective_date": "2026.08.01",
+        "prev_version": "v3.1",
+        "reason": "AI 판정 면책 조항 추가",
+        "status": "시행 중",
     },
     {
-        "id": 2, "name": "개인정보처리방침", "version": "v4.0", "effective_date": "2026.08.10",
-        "prev_version": "v3.5", "reason": "개정 개인정보보호법 반영", "status": "시행 중",
+        "id": 2,
+        "name": "개인정보처리방침",
+        "version": "v4.0",
+        "effective_date": "2026.08.10",
+        "prev_version": "v3.5",
+        "reason": "개정 개인정보보호법 반영",
+        "status": "시행 중",
     },
     {
-        "id": 3, "name": "광고 검수 서비스 SLA", "version": "v2.1", "effective_date": "2026.07.15",
-        "prev_version": "v2.0", "reason": "응답시간 보증 기준 변경", "status": "시행 중",
+        "id": 3,
+        "name": "광고 검수 서비스 SLA",
+        "version": "v2.1",
+        "effective_date": "2026.07.15",
+        "prev_version": "v2.0",
+        "reason": "응답시간 보증 기준 변경",
+        "status": "시행 중",
     },
     {
-        "id": 4, "name": "기업 이용 계약서", "version": "v2.3", "effective_date": "2026.09.01",
-        "prev_version": "v2.2", "reason": "기업 데이터 보호 조항 강화", "status": "예정",
+        "id": 4,
+        "name": "기업 이용 계약서",
+        "version": "v2.3",
+        "effective_date": "2026.09.01",
+        "prev_version": "v2.2",
+        "reason": "기업 데이터 보호 조항 강화",
+        "status": "예정",
     },
 ]
 

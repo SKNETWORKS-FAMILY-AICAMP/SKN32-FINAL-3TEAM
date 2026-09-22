@@ -41,28 +41,54 @@ ENTERPRISE_PLANS = ("Basic", "Pro", "Enterprise")
 # ─────────────────────────────────────────────────────────────
 _DUMMY_ENTERPRISES: list[dict] = [
     {
-        "id": "e1", "name": "(주)미래광고", "biz": "120-88-12345", "rep": "김민아",
-        "members": 24, "plan": "Enterprise", "joined": "2025.11.05", "status": "활성",
+        "id": "e1",
+        "name": "(주)미래광고",
+        "biz": "120-88-12345",
+        "rep": "김민아",
+        "members": 24,
+        "plan": "Enterprise",
+        "joined": "2025.11.05",
+        "status": "활성",
     },
     {
-        "id": "e2", "name": "브랜드원", "biz": "211-09-45678", "rep": "윤하람",
-        "members": 12, "plan": "Enterprise", "joined": "2026.01.20", "status": "활성",
+        "id": "e2",
+        "name": "브랜드원",
+        "biz": "211-09-45678",
+        "rep": "윤하람",
+        "members": 12,
+        "plan": "Enterprise",
+        "joined": "2026.01.20",
+        "status": "활성",
     },
     {
-        "id": "e3", "name": "푸드마켓", "biz": "314-81-90876", "rep": "장우진",
-        "members": 8, "plan": "Pro", "joined": "2026.03.17", "status": "활성",
+        "id": "e3",
+        "name": "푸드마켓",
+        "biz": "314-81-90876",
+        "rep": "장우진",
+        "members": 8,
+        "plan": "Pro",
+        "joined": "2026.03.17",
+        "status": "활성",
     },
     {
-        "id": "e4", "name": "헬스뷰티랩", "biz": "501-22-33445", "rep": "서민지",
-        "members": 5, "plan": "Basic", "joined": "2026.06.02", "status": "검토중",
+        "id": "e4",
+        "name": "헬스뷰티랩",
+        "biz": "501-22-33445",
+        "rep": "서민지",
+        "members": 5,
+        "plan": "Basic",
+        "joined": "2026.06.02",
+        "status": "검토중",
     },
 ]
 
 # 목업 enterprise-detail 에 하드코딩된 예시 수치 — 담는 집계·결제 테이블이 아직 없다.
 _USAGE_TREND = [("4월", 820), ("5월", 940), ("6월", 1010), ("7월", 1130), ("8월", 1248)]
 _FEATURE_USAGE = [
-    ("문구 판정", "1,248건"), ("카피 생성", "864건"),
-    ("문서 저장", "326건"), ("API 호출", "2,410회"),
+    ("문구 판정", "1,248건"),
+    ("카피 생성", "864건"),
+    ("문서 저장", "326건"),
+    ("API 호출", "2,410회"),
 ]
 
 
