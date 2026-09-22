@@ -552,3 +552,63 @@ def test_넓은_거름은_흔한_말과_지운_자리를_안_알린다(tmp_path:
     assert dm.people([f]) == [], (
         "「이상의」는 판정 어휘다 — 엄격한 검사도 불용어를 조사 뗀 꼴로 본다"
     )
+
+
+# ══════════════════════════════════════════════════════════
+# 🆕 2026-09-22 — 마스킹 잔여 계측 (`--pii-triage` 에 넓은 거름·잔여 꼴을 싣는다)
+# ══════════════════════════════════════════════════════════
+#  ⛔ `mask.py` 주석이 「드문 성씨·붙여 쓴 와·과는 `--survey` 가 센다」고 했는데 `--survey` 는 업체 앵커만 잰다.
+#  ★ 반출 대상(파생물)에서 잰다. 막지 않는다 — 수를 보고 팀장이 정한다(클론 A 인계 3판 §1-6).
+_RESIDUAL_LINES = (
+    '{"t":"대표이사 [대표]와 박가나는"}',  # 붙여쓴 와·과
+    '{"t":"대표이사 제갈가나는"}',  # 드문 성씨
+    '{"t":"대표 김O나는"}',  # 부분 가림
+    '{"t":"대표이사 각 테스트"}',  # NFD
+)
+
+
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    list(zip(_RESIDUAL_LINES, ("붙여쓴 와·과", "드문 성씨", "부분 가림", "NFD 한글"), strict=True)),
+)
+def test_잔여_꼴을_센다(tmp_path: pathlib.Path, line: str, kind: str) -> None:
+    f = tmp_path / "x.jsonl"
+    f.write_text(line + "\n", encoding="utf-8", newline="\n")
+    got = [k for _r, k, *_ in dm._residual_scan([f])]
+    assert got == [kind], got
+    assert not dm.people([f]), "마스킹과 같은 규칙이 이미 보는 꼴이면 잔여 계측이 필요 없다"
+
+
+def test_잔여_계측은_지운_자리와_흔한_말을_세지_않는다(tmp_path: pathlib.Path) -> None:
+    """반대 대조 — 전부 가린 이름 · 마스킹 자국만 · 판정 어휘."""
+    f = tmp_path / "x.jsonl"
+    f.write_text(
+        '{"t":"대표이사 홍○○는"}\n{"t":"대표이사 [대표]는"}\n{"t":"대표이사 이상의 책임"}\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert list(dm._residual_scan([f])) == []
+
+
+@pytest.mark.gate
+def test_잔여_계측도_화면에는_원값을_안_낸다(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """🔴 넓은 거름·잔여 꼴도 원값은 **레포 밖 파일에만**. 화면에는 흔한 말이면 그 말, 아니면 글자 수만."""
+    d = tmp_path / "derived"
+    d.mkdir()
+    (d / "x.jsonl").write_text(
+        "\n".join((*_RESIDUAL_LINES, '{"t":"피청구인 주장 가."}', '{"t":"신고인 : 박가다"}'))
+        + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    monkeypatch.setattr(dm, "DERIVED", d)
+    out = tmp_path / "private" / "t.tsv"
+    assert dm.triage(out) == 0
+    screen = capsys.readouterr().out
+    for name in ("박가나", "제갈가나", "김O나", "박가다"):
+        assert name not in screen, f"화면에 원값 {name[0]}… 이 나왔다"
+    assert "흔한말:주장" in screen, "흔한 말은 값을 보여야 오탐을 가른다"
+    body = out.read_text(encoding="utf-8")
+    assert all(n in body for n in ("박가나", "제갈가나", "김O나", "박가다"))

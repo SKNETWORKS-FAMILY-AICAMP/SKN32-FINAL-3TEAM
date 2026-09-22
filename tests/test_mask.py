@@ -924,3 +924,200 @@ def test_반대_대조_앵커_없는_ftc_호출을_잡는다() -> None:
     ]
     assert calls and isinstance(calls[0].args[1], ast.Constant) and calls[0].args[1].value == ""
     assert isinstance(calls[0].args[2], ast.Name) and calls[0].args[2].id == "MASK_KEY"
+
+
+# ─────────────────────────────────────────────────────────────
+#  🆕 2026-09-22 — 앵커가 놓친 피심인: 본문이 「피심인 X」라 부르고 피심정보내용의 이름 자리에도 X (이름은 가짜)
+# ─────────────────────────────────────────────────────────────
+def _ftc_full(case: str, info: str, order: str, reason: str = ""):
+    import xml.etree.ElementTree as ET
+
+    root = ET.Element("PrecService")
+    for tag, text in (("사건명", case), ("피심정보내용", info), ("주문", order), ("이유", reason)):
+        ET.SubElement(root, tag).text = text
+    return root
+
+
+def test_표지_없는_피심인도_원천이_두_번_적었으면_가린다() -> None:
+    """🔴 09-22 반출 검사 실측 — 주민번호 표지 없는 개인 피심인 나열이 주문에 그대로 남았다."""
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    order = "1. 피심인 안가나 및 피심인 김다라는 거짓으로 표시ㆍ광고하는 행위를 하여서는 아니된다."
+    root = _ftc_full(
+        "가나 외 1인의 부당한 표시ㆍ광고행위에 대한 건",
+        "1. 안가나\n서울 중랑구 용마산로 1\n2. 김다라 경기 수원시",
+        order,
+        "피심인 김다라에게 통지하였다.",
+    )
+    _, bare = anchor_ftc(root)
+    assert bare.named == ("안가나", "김다라")
+    out = apply_policy(order, bare, "ftc")
+    assert "안가나" not in out and "김다라" not in out, out
+    assert out.startswith("1. 피심인 [업체] 및 피심인 [업체]는 거짓으로"), out
+    assert (
+        apply_policy("피심인 김다라에게 통지하였다.", bare, "ftc")
+        == "피심인 [업체]에게 통지하였다."
+    )
+
+
+def test_이름_자리에_없는_말은_피심인으로_보지_않는다() -> None:
+    """반대 대조 — 보통명사 · 주소 머리 · 정보칸 **가운데**에만 있는 말은 가리지 않는다."""
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    reason = "피심인 주장에 대하여 본다. 피심인 서울 사무소와 피심인 강남 지점은"
+    root = _ftc_full(
+        "주식회사 가나의 부당한 광고행위에 대한 건",
+        "주식회사 가나\n서울 강남 테헤란로 1\n대표이사 ○○○",
+        "피심인은 …",
+        reason,
+    )
+    _, bare = anchor_ftc(root)
+    assert bare.named == ()
+    assert apply_policy(reason, bare, "ftc") == reason
+
+
+def test_사람_표지가_있으면_대표로_남는다() -> None:
+    """주민번호 표지가 있는 이름은 `people`(`[대표]`)이 맡는다 — 이름자리 규칙이 `[업체]` 로 덮지 않는다."""
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    root = _ftc_full(
+        "김가나의 지정자료 허위제출행위에 대한 건",
+        "1. 김가나(******-*******) 서울 **",
+        "피심인 김가나는 …",
+    )
+    _, bare = anchor_ftc(root)
+    assert bare.people == ("김가나",) and bare.named == ()
+    assert apply_policy("피심인 김가나는 …", bare, "ftc") == "피심인 [대표]는 …"
+
+
+# ─────────────────────────────────────────────────────────────
+#  🆕 2026-09-22 — 선언이 「개인 실명」인 원천(law_go_kr)은 대표자 밖의 사람도 가린다 (이름은 가짜)
+# ─────────────────────────────────────────────────────────────
+@pytest.mark.parametrize(
+    ("text", "want"),
+    [
+        ("전전 조리실장(홍가나)은 이를", "전전 조리실장([대표])은 이를"),
+        ("영업소 실장 김가나가 판매", "영업소 실장 [대표]가 판매"),
+        ("○○개발 대표 조○나는", "○○개발 대표 [대표]는"),  # 부분 가림 — 두 글자가 드러났다
+        ("청구인 김가○의 처는", "청구인 [대표]의 처는"),
+    ],
+)
+def test_개인_실명_원천은_대표자_밖의_사람도_가린다(text: str, want: str) -> None:
+    """🔴 09-22 반출 검사 실측 — 재결례에 「조리실장(실명)」·「대표 조○우」가 남았다. 레지스트리는 「개인 실명」이라 선언했다."""
+    from preprocess.mask import apply_policy
+
+    assert apply_policy(text, "", "law_go_kr") == want
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "팀장 지시로 판매하였다",  # 판정·서술 어휘
+        "실장 이하 직원이",
+        "부장 이상의 책임",
+        "점장이나 실장이나 직원이",  # 09-22 탐침 실측 — 붙여 쓴 「이나」가 이름으로 걸렸다
+        "대표 이○의 주장",  # 성만 드러난 가림 + 조사 — 특정 불가 · 조사를 먹지 않는다
+        "대표 김○○는",  # 전부 가림은 원래 규칙(가려진이름)이 맡는다 — 결과만 본다
+    ],
+)
+def test_넓은_규칙은_보통명사와_성만_남은_가림을_건드리지_않는다(text: str) -> None:
+    from preprocess.mask import apply_policy
+
+    out = apply_policy(text, "", "law_go_kr")
+    assert out == text or out == text.replace("김○○", "[대표]"), out
+
+
+def test_넓은_규칙은_선언한_원천에만_건다() -> None:
+    """반대 대조 — 선언이 「개인 실명」인 원천(law_go_kr · 🔄 D-258 ftc)에만 건다. 사람 축을 끈 원천·다른 원천은 그대로."""
+    from preprocess.mask import PERSON_ALL_NAMES, apply_policy
+
+    assert sorted(PERSON_ALL_NAMES) == ["ftc", "law_go_kr"]
+    text = "영업소 실장 김가나가 판매 · 허가나 원장"
+    assert apply_policy(text, "", "mfds_sanctions") == text
+    assert apply_policy(text, "", "mfds_press") == text  # 사람 축을 끈 원천 (09-09 판정)
+
+
+# ─────────────────────────────────────────────────────────────
+#  🆕 2026-09-22 D-258 — ftc 의 제3자 개인 · 이름이 직함 앞에 오는 꼴 (이름은 가짜)
+# ─────────────────────────────────────────────────────────────
+def test_광고_속_이름_직함_꼴을_가린다() -> None:
+    """🔴 09-22 반출 검사 실측 — 의결서가 인용한 광고 문구 속 의사 셋이 골든셋까지 들어갔다."""
+    from preprocess.mask import apply_policy
+
+    text = "다인치과 임플란트센터 허가나 원장, 전다라 원장, 임마바 원장은"
+    out = apply_policy(text, "", "ftc")
+    assert out == "다인치과 임플란트센터 [대표] 원장, [대표] 원장, [대표] 원장은", out
+    assert apply_policy("홍가나 교수님께 문의", "", "ftc") == "[대표] 교수님께 문의"
+    assert apply_policy("영업소 실장 김가나가", "", "ftc") == "영업소 실장 [대표]가"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "이러한 의사가 있었다",  # 「의사」 = 뜻 — 직함에서 뺐다
+        "구매 팀장이 지시",  # 두 글자는 보지 않는다
+        "한의원 원장이",  # 세 글자 보통명사 (불용어)
+        "지금의 사장은",  # 셋째 글자가 조사
+        "계정별 원장",  # 「계」는 성씨 목록 밖
+        "소갑 제5호증 부장 진술조서",  # 09-22 ftc 탐침 — 증거 목록의 표준 꼴 (113개 문서)
+        "팀장 진술서 및 실장 진술",
+        "점장 신발장 정리",
+        "결재 권한이 사장에게",
+        "그 임원은 회장의 지시로",
+    ],
+)
+def test_이름_직함_꼴은_보통명사를_건드리지_않는다(text: str) -> None:
+    from preprocess.mask import apply_policy
+
+    assert apply_policy(text, "", "ftc") == text
+
+
+def test_이름_자리_밖의_피심인도_사람_꼴이면_가린다() -> None:
+    """🔴 09-22 재측정 — 「피심인 [업체] 및 피심인 X」의 X 가 남았다. 피심정보내용에는 이름 자리 밖에 있었다(이름은 가짜)."""
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    order = "1. 피심인 가나상사 및 피심인 김다은 판매하는 제품에 대하여"
+    root = _ftc_full(
+        "가나상사 외 1인의 부당한 광고행위에 대한 건",
+        "1. 가나상사 서울 중랑구\n2. 진주상회(대표 김다) 경기 수원시",
+        order,
+    )
+    _, bare = anchor_ftc(root)
+    assert "김다" in bare.named, bare.named
+    out = apply_policy(order, bare, "ftc")
+    assert "김다" not in out, out
+
+
+def test_이름_자리_밖의_말은_사람_꼴이_아니면_받지_않는다() -> None:
+    """반대 대조 — 정보칸 가운데의 보통명사(성씨로 시작하지 않거나 불용어)는 피심인으로 보지 않는다."""
+    from preprocess.mask import anchor_ftc
+
+    root = _ftc_full(
+        "주식회사 가나의 부당한 광고행위에 대한 건",
+        "주식회사 가나 서울 강남 테헤란로 1 회사 대표이사 ○○○",
+        "피심인 회사는 …",
+        "피심인 주장에 대하여 본다.",
+    )
+    _, bare = anchor_ftc(root)
+    assert bare.named == ()
+
+
+def test_앞자리가_드러난_가림과_띄어_쓴_이름도_사람_표지다() -> None:
+    """🔴 09-22 탐침(seq 7269 모양) — 「000000-0******」 가림 · 「가 나(…)」 띄어 쓴 이름. 둘째 피심인이 안 가려졌다 (이름·번호는 가짜)."""
+    from preprocess.mask import anchor_ftc, apply_policy
+
+    info = "가나다(900101-1******, 라마 대표)\n서울 중랑구 1\n김 다(910202-2******)\n경기 수원시 2"
+    order = "1. 피심인 가나다 및 피심인 김다는 거짓으로"
+    root = _ftc_full("가나다 외 1인의 부당한 광고행위에 대한 건", info, order)
+    _, bare = anchor_ftc(root)
+    assert "가나다" in bare.people and "김다" in bare.people, bare.people
+    out = apply_policy(order, bare, "ftc")
+    assert out == "1. 피심인 [대표] 및 피심인 [대표]는 거짓으로", out
+
+
+def test_전부_숫자인_등록번호는_사람_표지가_아니다() -> None:
+    """반대 대조 — 법인등록번호(전부 숫자)는 가림 표지가 아니다. 이름 앞 낱말 경계도 본다."""
+    from preprocess.mask import respondent_people
+
+    root = _ftc_full("x", "주식회사 가나(110111-1234567)\n대표 김다라(******-*******)", "x")
+    assert respondent_people(root) == ("김다라",)
