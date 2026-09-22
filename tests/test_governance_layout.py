@@ -347,6 +347,10 @@ RAW_EXCEPTIONS = {
     #    ★ 원장 경로가 `data/raw` 밖이면 막는 것이 이 모듈의 검사다 — 경로를 안 들고는 그 검사를 못 쓴다.
     Path("scripts/raw_inbox.py"),
     Path("tests/test_raw_inbox.py"),
+    # 🆕 2026-09-21 (D-256) — 정본 원문을 팀장 기기로 **옮기는** 일 그 자체다(`data/raw` ↔ 원문 거울).
+    #    받은편지함과 같은 꼴 — 키 섞임만 바이트로 보고 sha 로 대조해 제자리에 놓는다. 해석하지 않는다.
+    Path("scripts/raw_mirror.py"),
+    Path("tests/test_raw_mirror.py"),
     # 🆕 2026-09-20 (D-253) — 결손 가르기의 테스트. 원장 경로 모양(`data\\raw\\…`)을 그대로 들어야
     #    윈도우 구분자·선언 패턴(`law/annex/*_form_*`)이 맞는지 잰다. 임시 폴더만 쓴다 — 소비 경로가 아니다.
     Path("tests/test_missing.py"),
@@ -675,7 +679,7 @@ def test_탐침은_저장_경로를_부를_수_없다() -> None:
         "mark_collected": "수집 시각 기록 (규약 3 · 게이트 15)",
         "manifest_append": "수집 원장 append (규약 3)",
         "save_raw": "원본 파일 쓰기 (규약 2)",
-        "drop_raw_for_g2": "G2 raw 삭제 (D-17)",
+        "drop_raw_for_g2": "G2 raw 삭제 (D-92)",
         "require": "수집기 게이트 — 탐침은 registry.probe 를 쓴다",
         "write_bytes": "파일 쓰기",
     }
@@ -1049,9 +1053,22 @@ def test_키_입력_경로가_값을_인자로_받지_않는다() -> None:
     )
     assert fn is not None, "launcher.py 에 setkey 명령이 없다"
     params = [a.arg for a in fn.args.args]
-    assert params == ["name"], (
-        f"🚨 launcher.setkey 의 인자가 {params} 다 — 이름 하나여야 한다.\n"
+    # 🔄 2026-09-21 (전수 재검토) — `extra` 는 **받아서 버리는 자리**다. ⛔ 없으면 이름 뒤에 붙여 넣은 값을 Click 이
+    #    「Got unexpected extra argument(s) (sk-…)」로 **되비췄다.** 그래서 받되 — 어디에도 넘기지 않는지 본다.
+    assert params in (["name"], ["name", "extra"]), (
+        f"🚨 launcher.setkey 의 인자가 {params} 다 — 이름 하나여야 한다(뒤에 붙은 것을 버리는 `extra` 만 허용).\n"
         "   값을 받는 인자가 생기면 PowerShell 기록에 키가 남는다."
+    )
+    passed_on = [
+        n
+        for c in ast.walk(fn)
+        if isinstance(c, ast.Call)
+        for a in [*c.args, *(k.value for k in c.keywords)]
+        for n in ast.walk(a)
+        if isinstance(n, ast.Name) and n.id == "extra"
+    ]
+    assert not passed_on, (
+        "🚨 setkey 가 `extra`(붙여 넣은 값일 수 있다)를 어딘가에 넘긴다 — 버려야 한다"
     )
 
 
@@ -1419,6 +1436,86 @@ def test_hold_과_manual_은_수집이_막힌다() -> None:
     )
 
 
+@pytest.mark.gate
+def test_manual_은_register_경로로만_올린다() -> None:
+    """🆕 2026-09-22 (권소라 보고) — 거부 메시지가 안내하는 길이 실제로 열려 있는가.
+
+    ⛔ `require()` 의 manual 분기가 경로를 안 봐서, 「`launcher.py register` 로 올린다」는 안내대로
+       `register` 를 치면 **같은 분기에서 같은 이유로** 막혔다 — 사람이 받아 온 파일을 올릴 길이 없었다.
+    🚨 반대 대조 셋 — 수집기 경로는 그대로 막히고 · hold 는 register 로도 막히고 · 모르는 경로는 거부된다.
+    """
+    from collect import registry
+
+    sources = _registry().get("sources") or {}
+    opened = held = 0
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue
+        st = spec.get("status")
+        for use, verdict in (spec.get("use") or {}).items():
+            if verdict != "allow":
+                continue
+            if st == "manual":
+                try:
+                    registry.require(key, use=use, via="register")
+                except registry.RegistryError as e:
+                    # 다른 이유(G2 · GATED …)로 막히는 것은 정상이다 — manual 로 막히면 안 된다
+                    assert "status: manual" not in str(e), (
+                        f"🔴 {key}: register 경로가 manual 로 막힌다"
+                    )
+                    continue
+                opened += 1
+            elif st == "hold":
+                with pytest.raises(registry.RegistryError):
+                    registry.require(key, use=use, via="register")
+                held += 1
+    # 🚨 셀 것이 없으면 아무것도 안 잰 것이다 (D-170) — 실측 manual 통과 2건
+    #    (`mfds_cosmetic_sanction` 엑셀 · `mfds_cosmetic_ad_guide_2013` PDF — 둘 다 사람이 받는 G3)
+    assert opened, "🔴 register 로 올라가는 manual 소스가 하나도 없다 — 표본을 다시 본다"
+    assert held, "🔴 hold 표본이 없다 — register 가 hold 를 막는지 못 잰다"
+    with pytest.raises(registry.RegistryError, match="via="):
+        registry.require("mfds_cosmetic_sanction", use="U1", via="collector")
+
+
+@pytest.mark.gate
+def test_register_경로를_주장하는_곳은_ingest_하나다() -> None:
+    """🚨 `via` 는 **부르는 쪽이 스스로 대는 값**이다 — 수집기가 `via="register"` 를 대면 manual 문이 열린다.
+
+    그래서 그 값을 대는 자리를 코드로 하나에 묶는다. 사람이 받아 온 파일을 올리는 곳은
+    `collect/ingest.py` 의 `cmd_register` 뿐이다 (D-108 · 집행계약 게이트 28).
+    """
+
+    def claims(src: str) -> bool:
+        """호출 인자 `via=` 에 register 를 대는가 — 🚨 문자열이 아니라 **구문 트리**로 본다(주석·docstring 제외)."""
+        for node in ast.walk(ast.parse(src)):
+            if not isinstance(node, ast.Call):
+                continue
+            for kw in node.keywords:
+                v = kw.value
+                if kw.arg == "via" and (
+                    (isinstance(v, ast.Constant) and v.value == "register")
+                    or (isinstance(v, ast.Attribute) and v.attr == "VIA_REGISTER")
+                    or (isinstance(v, ast.Name) and v.id == "VIA_REGISTER")
+                ):
+                    return True
+        return False
+
+    files = [ROOT / "launcher.py"] + [
+        p for d in ("collect", "preprocess", "scripts", "app") for p in (ROOT / d).rglob("*.py")
+    ]
+    hits = sorted(
+        str(p.relative_to(ROOT)).replace("\\", "/")
+        for p in files
+        if claims(p.read_text(encoding="utf-8"))
+    )
+    assert hits == ["collect/ingest.py"], f"🔴 register 경로를 대는 곳이 ingest 밖에 있다 — {hits}"
+    # 반대 대조 — 이 검사가 실제로 잡는 모양인가
+    assert claims('registry.require(s, use=u, via="register")')
+    assert claims("registry.require(s, use=u, via=registry.VIA_REGISTER)")
+    assert not claims('registry.require(s, use=u, via="collect")')
+    assert not claims('"""예: `via="register"` 로 부른다"""')
+
+
 # ══════════════════════════════════════════════════════════
 # 🔴 생성기가 pre-commit 훅과 싸우지 않는가 (2026-09-09)
 #
@@ -1767,4 +1864,54 @@ def test_서명이_끝난_키가_정본에_없으면_미채택_기록이_있다(
         f"🚨 2인 서명이 끝났는데 정본에도 미채택 기록에도 없는 키 {len(orphan)}건 — {orphan}\n"
         "  ⛔ 이 상태에서 그 키가 `ORDER` 로 들어가면 2인 확인이 **처음부터 통과**한다.\n"
         "  → 등재하든 미채택으로 내리든, **판정을 키로 적는다** (D-90 ② · D-110)."
+    )
+
+
+@pytest.mark.gate
+def test_G2_는_삭제_경로가_붙기_전에는_받지_않는다() -> None:
+    """🔴 D-92 — 「G2 의 raw 는 사실 추출 후 삭제하고 sha256 만 남긴다」. 2026-09-21 · 전수 재검토 G2 · 팀장 판정 (나).
+
+    ⛔ `store.drop_raw_for_g2` 는 있는데 **부르는 곳이 없었다** — G2 를 받으면 원문이 영구히 남는다.
+    ★ 이 게이트가 보는 것 두 가지:
+      ① `registry.G2_DROP_WIRED` 에 적힌 호출부마다 본문에 `drop_raw_for_g2(` 가 **실제로** 있다 — 플래그만 켜면 실패한다.
+      ② 반대로 `drop_raw_for_g2(` 를 부르는 함수가 생겼는데 목록에 없으면 실패한다 — 문이 열린 줄 모른 채 닫혀 있지 않게.
+    """
+    import importlib
+    import inspect
+
+    from collect import registry
+
+    for ref in registry.G2_DROP_WIRED:
+        mod, _, fn = ref.partition(":")
+        body = inspect.getsource(getattr(importlib.import_module(mod), fn))
+        assert "drop_raw_for_g2(" in body, (
+            f"🔴 {ref} 가 G2 원문을 지우지 않는데 G2_DROP_WIRED 에 올라 있다 (D-92)"
+        )
+
+    callers: set[str] = set()
+    for f in [
+        *(ROOT / "collect").glob("*.py"),
+        *(ROOT / "preprocess").glob("*.py"),
+        *(ROOT / "scripts").glob("*.py"),
+    ]:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if (
+                not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                or node.name == "drop_raw_for_g2"
+            ):
+                continue
+            for c in ast.walk(node):
+                if isinstance(c, ast.Call):
+                    name = (
+                        c.func.attr
+                        if isinstance(c.func, ast.Attribute)
+                        else getattr(c.func, "id", "")
+                    )
+                    if name == "drop_raw_for_g2":
+                        mod = ".".join(f.relative_to(ROOT).with_suffix("").parts)
+                        callers.add(f"{mod}:{node.name}")
+    missing = sorted(callers - set(registry.G2_DROP_WIRED))
+    assert not missing, (
+        f"🟡 G2 원문 삭제 호출부가 생겼는데 G2_DROP_WIRED 에 없다 — 적어야 G2 문이 열린다: {missing}"
     )

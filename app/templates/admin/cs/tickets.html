@@ -1,0 +1,103 @@
+{# app/templates/admin/cs/tickets.html — CS 티켓 목록 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 상태 변경·담당자 배정 폼은 disabled 뼈대다.
+  🔴 `ticket` 테이블이 아직 없다 — 전부 더미다 (admin_cs.py 참고). 사용자 쪽 티켓 접수
+     기능(ksr·lse)이 먼저 생겨야 실데이터가 흐른다.
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 문의 관리{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<div class="admin-main">
+<h1>문의 관리</h1>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>ticket</code> 테이블이 아직 없어요 — 사용자 쪽 접수 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
+
+<div class="cs-kpis">
+  <div class="cs-kpi"><span>전체</span><b>{{ counts["전체"] }}</b></div>
+  <div class="cs-kpi"><span>미처리</span><b>{{ counts["미처리"] }}</b></div>
+  <div class="cs-kpi"><span>처리중</span><b>{{ counts["처리중"] }}</b></div>
+  <div class="cs-kpi"><span>긴급(미완료)</span><b>{{ counts["긴급"] }}</b></div>
+</div>
+
+<form class="filter-bar" method="get" action="/admin/cs/tickets">
+  <label>유형
+    <select name="type">
+      <option value="" {% if not ticket_type %}selected{% endif %}>전체</option>
+      {% for t in types %}
+      <option value="{{ t }}" {% if ticket_type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>우선순위
+    <select name="priority">
+      <option value="" {% if not priority %}selected{% endif %}>전체</option>
+      {% for p in priorities %}
+      <option value="{{ p }}" {% if priority == p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>상태
+    <select name="status">
+      <option value="" {% if not status %}selected{% endif %}>전체</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">적용</button>
+  {% if ticket_type or priority or status %}
+  <a class="reset-link" href="/admin/cs/tickets">초기화</a>
+  {% endif %}
+</form>
+
+{% if not rows %}
+<p>조건에 맞는 티켓이 없다.</p>
+{% else %}
+<table>
+  <tr>
+    <th>접수일</th><th>티켓 ID</th><th>문의자</th><th>유형</th><th>제목</th><th>우선순위</th><th>상태</th><th>담당자</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td class="nowrap">{{ r.at }}</td>
+    <td><a href="/admin/cs/tickets/{{ r.id }}">{{ r.id }}</a></td>
+    <td>{{ r.who }}</td>
+    <td>{{ r.type }}</td>
+    <td>{{ r.title }}</td>
+    <td><span class="cs-pri cs-pri-{{ r.priority }}">{{ r.priority }}</span></td>
+    <td><span class="cs-status cs-status-{{ r.status }}">{{ r.status }}</span></td>
+    <td>{{ r.owner }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if pages > 1 %}
+<nav class="pager" aria-label="페이지">
+  {% set qs = "type=" ~ (ticket_type or "") ~ "&priority=" ~ (priority or "") ~ "&status=" ~ (status or "") %}
+  <a href="/admin/cs/tickets?{{ qs }}&page={{ page - 1 }}" {% if page <= 1 %}class="disabled"{% endif %}>← 이전</a>
+  <span>{{ page }} / {{ pages }} 쪽 (전체 {{ total }}건)</span>
+  <a href="/admin/cs/tickets?{{ qs }}&page={{ page + 1 }}" {% if page >= pages %}class="disabled"{% endif %}>다음 →</a>
+</nav>
+{% endif %}
+{% endif %}
+
+<style>
+.admin-shell .cs-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
+.admin-shell .cs-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 6rem; }
+.admin-shell .cs-kpi span { font-size: .8rem; color: var(--a-clay); }
+.admin-shell .cs-kpi b { font-size: 1.3rem; }
+.admin-shell td.nowrap { white-space: nowrap; }
+.admin-shell .cs-pri, .admin-shell .cs-status { display: inline-block; padding: .1rem .5rem; border-radius: .4rem; font-size: .8rem; }
+.admin-shell .cs-pri-긴급 { background: #fde2e2; color: #b42318; }
+.admin-shell .cs-pri-보통 { background: #fef3c7; color: #92400e; }
+.admin-shell .cs-pri-낮음 { background: #e5e7eb; color: #374151; }
+.admin-shell .cs-status-미처리 { background: #fde2e2; color: #b42318; }
+.admin-shell .cs-status-처리중 { background: #dbeafe; color: #1d4ed8; }
+.admin-shell .cs-status-완료 { background: #dcfce7; color: #15803d; }
+</style>
+</div>
+</div>
+{% endblock %}

@@ -9,10 +9,24 @@
   ⛔ 구역 셸 밖이다 — 가입 전 화면이라 사이드바가 없다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 회원가입{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+<style>
+/* 회원가입 전용 — 프로토타입 max-w-[480px]. 화면 하나짜리 스타일이라 user.css 가 아니라 여기 둔다 */
+.auth-card.auth-card-wide { max-width: 30rem; }
+.auth-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+@media (max-width: 30rem) { .auth-row { grid-template-columns: 1fr; } }
+
+/* 🔴 base.css 의 `input { width:100% }` 가 체크박스까지 늘려 글자를 오른쪽으로 밀어낸다.
+   체크박스는 제 크기로, 글자는 그 바로 옆에서 왼쪽 정렬로 시작한다. */
+.auth-consent label { display: flex; justify-content: flex-start; align-items: flex-start;
+                      gap: .5rem; text-align: left; }
+.auth-consent input[type="checkbox"] { flex: 0 0 auto; width: 1rem; height: 1rem;
+                                       margin: .2rem 0 0; padding: 0; }
+.auth-consent label > span { flex: 1 1 auto; min-width: 0; text-align: left; }
+</style>{% endblock %}
 {% block content %}
 <div class="user-shell">
-<div class="auth-card">
+<div class="auth-card auth-card-wide">
   <h1>회원가입</h1>
   <p class="auth-sub">소속 조직으로 가입하면 팀원과 검수 결과를 공유할 수 있어요.</p>
 
@@ -22,16 +36,21 @@
   <label for="signup-email">이메일</label>
   <input id="signup-email" type="email" placeholder="you@company.com" disabled>
 
-  <label for="signup-pw">비밀번호</label>
-  <input id="signup-pw" type="password" placeholder="8자 이상" disabled>
-
-  <label for="signup-pw2">비밀번호 확인</label>
-  <input id="signup-pw2" type="password" disabled>
+  <div class="auth-row">
+    <div>
+      <label for="signup-pw">비밀번호</label>
+      <input id="signup-pw" type="password" placeholder="8자 이상" disabled>
+    </div>
+    <div>
+      <label for="signup-pw2">비밀번호 확인</label>
+      <input id="signup-pw2" type="password" disabled>
+    </div>
+  </div>
 
   <div class="auth-consent">
-    <label><input type="checkbox" disabled> 이용약관 및 개인정보처리방침에 동의합니다.</label>
-    <label><input type="checkbox" disabled> CopyLane의 진단은 법적 확정 판단이 아닌 심의 통과 가능성
-      진단이며, 최종 판단은 전문가 검토를 따라야 함을 이해했습니다.</label>
+    <label><input type="checkbox" disabled><span>이용약관 및 개인정보처리방침에 동의합니다.</span></label>
+    <label><input type="checkbox" disabled><span>CopyLane의 진단은 <b>법적 확정 판단이 아닌 심의 통과 가능성
+      진단</b>이며, 최종 판단은 전문가 검토를 따라야 함을 이해했습니다.</span></label>
   </div>
 
   <p class="auth-note">⬜ 계정 시스템이 아직 없다 — 진입점 B 엔진(이력·카피생성)과 함께 온다.

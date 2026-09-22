@@ -1,0 +1,164 @@
+코드 리뷰 결과 (2026-09-21 · 브랜치 ssm · main 최신화 이후)
+==============================================================
+
+[기본 점검]
+- pytest : 전부 통과. 예상 실패(xfail) 9건은 모두 사유가 명시된 알려진 한계.
+- ruff   : 통과.
+- doctor : 코드 결함이 아니라 수집 데이터 상태 보고.
+           (원장 중복줄 9,972개 / 같은 이름에 내용이 갈린 것 827개 / 크기가 급감한 판 1개)
+- Drive 연동 : 정상. 이 PC는 replica 역할, data-sync 로 부족했던 1개
+               (data/derived/label_rounds/round2_labelsheet.jsonl)를 받아 부족 0개.
+
+
+[리뷰 범위와 한계]
+- 프로젝트 전체가 아니라 최근 병합 diff 기준으로 검토함.
+- derived_manifest 는 훑기만 했고, 아래 파일은 검토하지 않음.
+  casebook2021_sheet, label_round, decc_extract, guide_label, endorse_scan, interp_scan
+- 발견된 코드는 모두 main 에 있는 것이며 ssm 고유 문제가 아님.
+  수정은 오한빈 담당 영역(수집·전처리·런처)이라 버그 리포트로 올리는 편이 충돌이 없음.
+- 기존 pytest 는 모두 통과했으므로, 아래 1~10번은 기존 테스트가 잡지 못하는 결함임.
+
+
+[재현 확인 — 실행해서 확인한 것]
+
+1. scripts/sync_project.py:78
+   last_commit() 이 subprocess.run 에 없는 newline= 인자를 넘겨 호출할 때마다 TypeError.
+   MAP 의 모든 문서가 이 함수를 거치므로 스크립트가 아무것도 쓰기 전에 죽는다.
+
+2. preprocess/mask.py:243
+   새 lookbehind 때문에 부사장 / 부회장 / 사내이사 / 이사장 + 이름 에서 이름이 마스킹되지 않는다.
+   (대표이사, 이사 는 정상)
+   인명이 파생물과 Drive 공유 저장소로 나갈 수 있어 개인정보 측면에서 가장 무겁다.
+   관련 테스트 없음.
+
+
+[코드 판독 — 읽고 판단한 것 (재현은 안 함)]
+
+3. collect/store.py:255
+   원장에 같은 sha 가 있으면 디스크에서 파일이 사라져도 skip 으로 끝난다.
+   잃어버린 원문을 다시 수집할 수 없다. (doctor 의 "다시 수집하라" 안내와 어긋남)
+   skip 은 기록한 기기가 다른 기기일 때만 적용해야 한다.
+
+4. launcher.py:1073
+   collect --dry-run 이 collect.law_api 에만 전달된다.
+   다른 수집기(openapi, ftc_body, mfds_* 등)는 실제로 수집하고 mark_collected 까지 한다.
+   기기 별칭·중복 수집 경고도 건너뛰고 수집 뒤 안내도 나오지 않는다.
+
+5. collect/missing.py:177
+   바이트가 같은 다른 파일이 있으면 없는 경로를 moved 로 분류한다.
+   raw_inbox 가 moved 를 정리된 것으로 보므로, 팀원의 별개 파일(예: 동일한 빈 페이지)이
+   raw-import 에서 조용히 빠진다. doctor 도 정상으로 보고한다.
+
+6. app/routers/admin_errors.py:123   (ssm 담당 관리자 화면)
+   _clean_page 가 매우 큰 정수를 그대로 받는다.
+   ?page=99999999999999999999999 이면 OFFSET 이 bigint 범위를 넘어 예외가 나고,
+   except Exception 이 이를 DB 장애로 보고 하드코딩된 더미 오류 5건을 보여 준다.
+   페이지 번호를 실제 페이지 수로 제한하지도 않는다.
+
+7. collect/setkey.py:161
+   put_setting 이 .env 에는 정리된 값을, os.environ 에는 정리 전 원본을 넣는다.
+   data-setup 직후 data-sync 를 이어서 실행하면 따옴표가 붙은 경로로 is_dir() 가 실패할 수 있다.
+   또 _clean 이 빈 값을 거부해서 RAW_INBOX 같은 설정은 이 경로로 지울 수 없다.
+
+8. app/contracts.py:96
+   PASS_RISK_MAX_PROVISIONAL 이 Risk.R2 로 남아 있다.
+   같은 파일의 주석은 D-130 에 따라 R1 이어야 한다고 적고 있다.
+   현재 is_pass() 호출처가 없어 당장 영향은 없으나, 코드 하한이 서면 실제로 작동한다.
+
+9. launcher.py:1427
+   @needs_data 가 embed 명령 전체를 감싸서, embed --check 가 데이터 동기화 실패에 막힌다.
+   embed --check 는 DB·파생물이 필요 없다고 문서에 적혀 있다.
+   데코레이터를 --check 가 아닌 경로에만 적용해야 한다.
+
+10. launcher.py:2013
+   setkey 메뉴가 env.KEYS 전부를 보여 준다. DATABASE_URL, MLFLOW_TRACKING_URI 도 포함된다.
+   이전 코드는 이 둘을 키가 아니라고 일부러 뺐다.
+   가려진 입력창으로 받기 때문에 사용자가 입력값을 확인할 수 없다.
+
+
+[에러 코드·메시지 상세]
+(환경: Windows 11 · Python 3.11.9 · 2026-09-21 이 PC에서 실행)
+표기: [실측] 직접 실행해서 확인 / [코드 확인] 코드를 읽어 확인 / [추정] 재현 못 함
+
+1. sync_project.py — [실측]
+   실행   : uv run python -m scripts.sync_project
+   에러   : TypeError: Popen.__init__() got an unexpected keyword argument 'newline'
+   위치   : scripts/sync_project.py, line 72, in last_commit  →  subprocess.run(...)
+            subprocess.py line 548, in run  →  with Popen(*popenargs, **kwargs) as process
+   최소 재현 : subprocess.run(['git','log','-1'], capture_output=True, text=True,
+                              encoding='utf-8', newline='\n')  → 같은 TypeError
+   종료   : 처리되지 않은 예외로 종료 (파이썬 기본 종료 코드 1 — 값은 따로 재지 않음)
+   원인   : subprocess.run 은 newline 인자를 받지 않는다. write_text·open 의 newline 과 혼동.
+   조치   : newline='\n' 삭제. text=True 로 받은 뒤 필요하면 결과 문자열에서 처리.
+
+2. mask.py — [실측]  에러 없음, 오출력
+   입력 → 출력
+     '부사장 김철수는'   → '부사장 김철수는'     (마스킹 안 됨)
+     '사내이사 김철수가' → '사내이사 김철수가'   (마스킹 안 됨)
+     '부회장 김철수'     → '부회장 김철수'       (마스킹 안 됨)
+     '이사장 김철수'     → '이사장 김철수'       (마스킹 안 됨)
+     '대표이사 김철수'   → '대표이사 [대표]'     (정상)
+     '이사 김철수가'     → '이사 [대표]가'       (정상)
+   원인   : preprocess/mask.py:243 의 사장/회장/이사 앞 lookbehind 가 합성 직함을 통과시키지 않음.
+   조치   : 합성 직함(부사장·부회장·사내이사·이사장 등)을 별도 alternation 으로 추가하고 테스트 추가.
+
+3. store.py plan_raw — [코드 확인]  에러 없음, 조용한 누락
+   흐름   : 파일 없음 → ledger_row 있음 → 동일 sha → return "skip" → save_raw 가 None → 아무것도 안 씀
+   증상   : 실패 메시지·종료 코드 없이 수집이 끝나고, 파일은 계속 없다.
+
+4. launcher.py collect --dry-run — [코드 확인]  에러 없음, 실제 수집 실행
+   조건   : law_api 이외 수집기 (예: collect ftc_decisions_api --dry-run)
+   증상   : --dry-run 이 args 에 전달되지 않아 다운로드·저장·mark_collected 가 실제로 일어남.
+            device_id()·recent_by_others() 도 건너뜀. 안전 확인 차원에서 이 PC 에서는 실행하지 않음.
+
+5. missing.py classify — [코드 확인]  에러 없음, 조용한 누락
+   증상   : 동일 sha·크기의 다른 경로가 있으면 moved 로 분류 → raw_inbox 가 정리된 것으로 봄
+            → raw-import 에서 빠지고 doctor 도 정상으로 보고.
+
+6. admin_errors.py _clean_page — [코드 확인] + [추정]
+   코드   : int(value or 1) 에 상한이 없다 (line 125). OFFSET = (page-1)*50 (line 185).
+            except Exception (line 188) → _is_undefined_table 이 아니면 source='dummy_no_db',
+            _log.warning('admin.errors: 조회 실패 — %s', type(e).__name__) 한 줄만 남김.
+   요청   : GET /admin/errors?page=99999999999999999999999
+   예상   : PostgreSQL OFFSET 은 bigint 라 범위 초과. SQLSTATE 22003 (numeric_value_out_of_range)
+            계열 오류가 날 것으로 추정 — DB 가 없어 실제 메시지는 못 봄.
+   증상   : DB 가 정상인데도 화면에는 더미 오류 5건이 나오고, 로그에는 예외 클래스 이름만 남는다.
+   참고   : 파이썬 int() 는 4300자리를 넘으면 ValueError 지만 line 126 에서 잡혀 1 이 된다. 문제는 그 이하 자릿수.
+   조치   : page 를 int8 최대값 이하로 제한(예: min(page, 총 페이지 수)) 하고 오류 종류를 구분해 표시.
+
+7. setkey.py put_setting — [코드 확인]  에러 없음, 값 불일치
+   증상   : .env 에는 _clean 된 값, os.environ 에는 value.strip() 원본이 들어감.
+            같은 프로세스에서 data-setup → data-sync 가 이어지면 따옴표 붙은 경로로 is_dir() 가 False
+            → StoreError: "DATA_STORE 폴더가 없다 — <경로>" (scripts/data_store.py 의 메시지)
+   추가   : _clean 이 빈 값을 거부해서 RAW_INBOX 같은 설정은 이 경로로 지울 수 없다.
+
+8. contracts.py PASS_RISK_MAX_PROVISIONAL — [코드 확인]  에러 없음, 판정 기준 오류
+   현재   : PASS_RISK_MAX_PROVISIONAL = Risk.R2  (line 96, 주석에도 "🔴 → Risk.R1 (D-227)")
+            is_pass(): s.risk.final.level <= PASS_RISK_MAX_PROVISIONAL.level  (line 402)
+   증상   : R2(업무정지 위험)가 통과로 판정된다. D-130 은 위험도 ≤ R1 이다.
+   영향   : 지금은 is_pass() 호출처가 0 이라 발현하지 않음. 코드 하한이 들어오면 활성화.
+
+9. launcher.py embed --check — [실측] 이 PC 에서는 재현되지 않음
+   실행   : uv run python launcher.py embed --check
+   결과   : "모델 nlpai-lab/KURE-v1 / 차원 1024 vs 스키마 vector(1024) / ✅ 맞다" — 정상 통과.
+   이유   : 이 PC 는 data-sync 가 끝나 부족 0개라 @needs_data 가 통과함.
+   미재현 조건 : DATA_STORE 미설정이거나 파생물이 부족한 기기에서
+                 "could not fetch derived data" 로 종료 코드 1 이 난다는 것이 리뷰의 판단 (코드 확인, 미실행).
+   HF 경고 : "You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN ..." 는
+             결함이 아니라 안내 경고.
+
+10. launcher.py setkey 메뉴 — [코드 확인]  에러 없음, 동작 회귀
+   증상   : _choices('key') 가 env.KEYS 전체를 반환 → DATABASE_URL, MLFLOW_TRACKING_URI 가 메뉴에 나옴.
+            가려진 입력창으로 받아 입력값을 확인할 수 없음.
+
+요약
+- 실제 에러(예외)가 나는 것 : 1번뿐 (TypeError). 6번은 DB 오류가 추정으로 발생.
+- 에러 없이 조용히 틀리는 것 : 2, 3, 4, 5, 8, 10 — 로그·종료 코드에 흔적이 없어 더 위험.
+- 이 PC 에서 재현되지 않은 것  : 9.
+
+
+[다음 단계 후보]
+- 버그 리포트 위치(저장소에서는 찾지 못함)를 확인해 항목별 재현 방법과 함께 올린다.
+  외부에 올리는 작업은 확인 후에 진행.
+- 6번(관리자 오류 화면)은 ssm 담당이므로 직접 수정 가능.
+- 검토하지 않은 파일(위 [리뷰 범위와 한계] 참고)에 대한 추가 리뷰.

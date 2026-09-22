@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app import auth
+from app.routers.auth import account_active
 from app.templating import templates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -44,6 +45,11 @@ def require_governor(request: Request) -> str:
        읽기 전용이어도 공개 표면에 놓일 것이 아니다 (D-76 · P2-10).
     """
     initials = auth.read_session(request.cookies.get(auth.SESSION_COOKIE))
+    # 🔴 2026-09-21 (전수 재검토) — 서명이 맞아도 **비활성 계정이면 막는다.** ⛔ 종전에는 `disabled_at` 을
+    #    로그인에서만 봐서, 막은 계정의 쿠키가 만료까지 관리자 화면을 열었다.
+    if initials and not account_active(initials):
+        auth.audit("session_disabled", initials, ok=False)
+        initials = None
     if not initials:
         # 🚨 401 이 아니라 **303 리다이렉트**다 — 사람이 보는 화면이라 로그인 폼으로 보낸다.
         raise HTTPException(status_code=303, headers={"Location": "/login"})
@@ -179,119 +185,6 @@ def sources(
             "total": total,
             "total_pages": total_pages,
             "grades": _SOURCE_GRADES,
-        },
-    )
-
-
-_DICT_SORTS = {
-    "dict_kind_term": "dict_kind, term",
-    "term_asc": "term ASC",
-    "confidence_desc": "confidence DESC NULLS LAST",
-}
-
-
-def _list_dict_kinds() -> list[str]:
-    """`dict_entry.dict_kind` 실제 값 목록 — ENUM 이 아니라 TEXT 라 화이트리스트 대신
-    DB 에 실제로 있는 값으로 드롭다운을 채운다 (D-99 주석 참고 — 표기가 갈릴 수 있음).
-    DB 접속 실패 시 빈 리스트.
-    """
-    try:
-        import psycopg  # noqa: PLC0415
-
-        from app.settings import dsn  # noqa: PLC0415
-
-        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
-            cur.execute("SELECT DISTINCT dict_kind FROM dict_entry ORDER BY dict_kind")
-            return [r[0] for r in cur.fetchall()]
-    except Exception as e:  # noqa: BLE001
-        _log.warning("admin: dict_kind 조회 실패 — %s", type(e).__name__)
-        return []
-
-
-def _list_dict_entries(
-    *,
-    dict_kind: str | None = None,
-    q: str | None = None,
-    sort: str = "dict_kind_term",
-    page: int = 1,
-) -> tuple[list[dict] | None, int]:
-    """`dict_entry` 목록 — 금지표현·적법표현 등 판정용 사전. 읽기 전용.
-
-    🚨 `_list_sources()` 와 같은 패턴 — DB 접속 실패 시 (None, 0) (D-51).
-    🆕 종류 필터, 용어 검색(ILIKE), 정렬, 페이지네이션.
-    """
-    order_by = _DICT_SORTS.get(sort, _DICT_SORTS["dict_kind_term"])
-    where = []
-    params: dict = {}
-    if dict_kind:
-        where.append("dict_kind = %(dict_kind)s")
-        params["dict_kind"] = dict_kind
-    if q:
-        where.append("term ILIKE %(q)s")
-        params["q"] = f"%{q}%"
-    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
-
-    offset = max(page - 1, 0) * _PAGE_SIZE
-    params["limit"] = _PAGE_SIZE
-    params["offset"] = offset
-
-    try:
-        import psycopg  # noqa: PLC0415
-        from psycopg.rows import dict_row  # noqa: PLC0415
-
-        from app.settings import dsn  # noqa: PLC0415
-
-        with psycopg.connect(dsn(), row_factory=dict_row) as conn, conn.cursor() as cur:
-            cur.execute(f"SELECT count(*) AS n FROM dict_entry {where_sql}", params)  # noqa: S608
-            total = cur.fetchone()["n"]
-
-            cur.execute(
-                f"""
-                SELECT term, dict_kind, violation_type, law_ref, exact_match, confidence
-                FROM dict_entry
-                {where_sql}
-                ORDER BY {order_by}
-                LIMIT %(limit)s OFFSET %(offset)s
-                """,  # noqa: S608 — order_by 는 화이트리스트(_DICT_SORTS)에서만 온다
-                params,
-            )
-            return cur.fetchall(), total
-    except Exception as e:  # noqa: BLE001
-        _log.warning("admin: dict_entry 조회 실패 — %s", type(e).__name__)
-        return None, 0
-
-
-@router.get("/dict-entries", response_class=HTMLResponse)
-def dict_entries(
-    request: Request,
-    dict_kind: str | None = None,
-    q: str | None = None,
-    sort: str = "dict_kind_term",
-    page: int = 1,
-) -> HTMLResponse:
-    """표현 사전(판정 근거) 목록 — 읽기 전용.
-
-    🚨 `dict_entry` 는 원문(source/fragment)에서 뽑아낸 판정용 사전이다 — 목업의
-       "판정 근거 관리"(법률·고시 원문)와는 다른 개념이라 라우트를 분리했다.
-    🆕 `?dict_kind=금지표현&q=효능&sort=term_asc&page=2` — 필터·검색·정렬·페이지네이션.
-    """
-    actor = require_governor(request)
-    page = max(page, 1)
-    rows, total = _list_dict_entries(dict_kind=dict_kind, q=q, sort=sort, page=page)
-    total_pages = max((total + _PAGE_SIZE - 1) // _PAGE_SIZE, 1)
-    return templates.TemplateResponse(
-        request,
-        "admin/dict_entries.html",
-        {
-            "entries": rows,
-            "actor": actor,
-            "dict_kind": dict_kind,
-            "q": q or "",
-            "sort": sort,
-            "page": page,
-            "total": total,
-            "total_pages": total_pages,
-            "dict_kinds": _list_dict_kinds(),
         },
     )
 

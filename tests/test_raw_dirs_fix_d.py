@@ -76,3 +76,15 @@ def test_openapi_수집은_계열_폴더에_쓴다() -> None:
     )
     assert "store.family_path(source_id)" in src
     assert "source_id,\n            source_id," not in src, "save_raw 에 소스 id 를 폴더로 넘긴다"
+
+
+@pytest.mark.gate
+def test_보도자료_수집기는_폴더_이름을_표에서_꺼낸다() -> None:
+    """🆕 2026-09-21 — 수집기 쪽도 같은 대조다. ⛔ `collect/mfds_press.py` 가 `"mfds_press"` 와
+    `f"{FAMILY}_pdf"` 를 따로 박았고, 옛 격리 폴더를 `store.raw_dir()` 로 불러 **돌 때마다 만들었다**.
+    """
+    m = importlib.import_module("collect.mfds_press")
+    assert store.families("mfds_press") == (m.FAMILY, m.PDF_FAMILY)
+    src = pathlib.Path(m.__file__).read_text(encoding="utf-8")
+    assert 'raw_dir(f"{FAMILY}_' not in src, "계열 이름을 문자열로 조립해 폴더를 만든다"
+    assert 'FAMILY = "' not in src, "계열 이름을 손으로 적었다 — store.FAMILY_OF 를 쓴다"

@@ -1,0 +1,66 @@
+{# app/templates/admin/members/signup_review.html — 승인 심사 목록 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 승인·반려는 상세 화면에서도 disabled 뼈대다.
+  🔴 가입 신청(인플루언서·기업) 테이블이 아직 없다 — 전부 더미다 (admin_signup_review.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 승인 심사{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<div class="admin-main">
+<h1>승인 심사</h1>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 가입 신청 테이블이 아직 없어요 — 서비스 쪽 가입 신청 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
+
+<div class="cs-kpis">
+  <div class="cs-kpi"><span>전체 대기</span><b>{{ total }}</b></div>
+  <div class="cs-kpi"><span>승인</span><b>{{ approved }}</b></div>
+  <div class="cs-kpi"><span>반려</span><b>{{ rejected }}</b></div>
+  <div class="cs-kpi"><span>평균 처리</span><b>1.4일</b></div>
+</div>
+
+<form class="filter-bar" method="get" action="/admin/signup-review">
+  <label>신청 유형
+    <select name="type">
+      <option value="" {% if not review_type %}selected{% endif %}>전체</option>
+      {% for t in types %}
+      <option value="{{ t }}" {% if review_type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">적용</button>
+  {% if review_type %}
+  <a class="reset-link" href="/admin/signup-review">초기화</a>
+  {% endif %}
+</form>
+
+{% if not rows %}
+<p>조건에 맞는 신청이 없다.</p>
+{% else %}
+<table>
+  <tr>
+    <th>신청자/기업</th><th>신청 유형</th><th>이메일</th><th>신청일시</th><th>검토 상태</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="/admin/signup-review/{{ r.id }}">{{ r.name }}</a></td>
+    <td>{{ r.type }}</td>
+    <td>{{ r.email }}</td>
+    <td>{{ r.date }}</td>
+    <td>{{ status_label[r.status] }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<style>
+.admin-shell .cs-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
+.admin-shell .cs-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 6rem; }
+.admin-shell .cs-kpi span { font-size: .8rem; color: var(--a-clay); }
+.admin-shell .cs-kpi b { font-size: 1.3rem; }
+</style>
+</div>
+</div>
+{% endblock %}

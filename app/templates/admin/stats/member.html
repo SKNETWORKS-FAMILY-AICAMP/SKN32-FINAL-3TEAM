@@ -1,0 +1,83 @@
+{# app/templates/admin/stats/member.html — 이용자 통계 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다(목업 `mockDownload`).
+  🔴 `member_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
+  🔴 일/주/월 토글은 목업에서 JS 지만 여기는 GET 쿼리(`?period=`)로 전환한다.
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 이용자 통계{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<div class="admin-main">
+<h1>이용자 통계</h1>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>member_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
+
+<div class="stat-kpis">
+  <div class="stat-kpi"><span>전체 회원수</span><b>{{ "{:,}".format(kpi.total) }}</b></div>
+  <div class="stat-kpi"><span>일반 계정수</span><b>{{ "{:,}".format(kpi.general) }}</b></div>
+  <div class="stat-kpi"><span>인플루언서 계정수</span><b>{{ "{:,}".format(kpi.influencer) }}</b></div>
+  <div class="stat-kpi"><span>기업수</span><b>{{ "{:,}".format(kpi.enterprise) }}</b></div>
+</div>
+
+<h2>유료 계정 분포</h2>
+<div class="usage-trend">
+  {% for row in paid_plans %}
+  <div class="usage-row">
+    <span class="usage-label">{{ row.label }}</span>
+    <div class="usage-bar" style="width: {{ (row.value / row.max * 100) | round(1) }}%;"></div>
+    <span class="usage-value">{{ "{:,}".format(row.value) }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>회원 유형</h2>
+<div class="stat-type-cards">
+  {% for c in type_cards %}
+  <div class="stat-type-card">
+    <h3>{{ c.type }}</h3>
+    <p>{{ c.desc }}</p>
+    <b>{{ "{:,}".format(c.count) }}명</b>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>가입 · 탈퇴 추이</h2>
+<nav class="period-tabs" aria-label="기간">
+  {% for p in periods %}
+  <a href="/admin/stats/member?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>
+  {% endfor %}
+</nav>
+<table>
+  <tr><th>구간</th><th>가입</th><th>탈퇴</th></tr>
+  {% for t in trend %}
+  <tr><td>{{ t.label }}</td><td>{{ t.join }}</td><td>{{ t.leave }}</td></tr>
+  {% endfor %}
+</table>
+<p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
+
+<style>
+.admin-shell .stat-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
+.admin-shell .stat-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 8rem; }
+.admin-shell .stat-kpi span { font-size: .8rem; color: var(--a-clay); }
+.admin-shell .stat-kpi b { font-size: 1.3rem; }
+.admin-shell .usage-trend { display: flex; flex-direction: column; gap: .5rem; max-width: 30rem; margin-bottom: 1.5rem; }
+.admin-shell .usage-row { display: flex; align-items: center; gap: .6rem; }
+.admin-shell .usage-label { width: 5rem; font-size: .8rem; color: var(--a-clay); }
+.admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
+.admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
+.admin-shell .stat-type-cards { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.admin-shell .stat-type-card { border: 1px solid var(--a-line); border-radius: .6rem; padding: .8rem 1rem; background: var(--a-surface2); max-width: 16rem; }
+.admin-shell .stat-type-card h3 { margin: 0 0 .3rem; font-size: 1rem; }
+.admin-shell .stat-type-card p { margin: 0 0 .5rem; font-size: .85rem; color: var(--a-clay); }
+.admin-shell .stat-type-card b { font-size: 1.1rem; }
+.admin-shell .period-tabs { display: flex; gap: .4rem; margin-bottom: .8rem; }
+.admin-shell .period-tabs a { padding: .3rem .8rem; border: 1px solid var(--a-line); border-radius: .4rem; text-decoration: none; color: var(--a-ink); font-size: .85rem; }
+.admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
+</style>
+</div>
+</div>
+{% endblock %}

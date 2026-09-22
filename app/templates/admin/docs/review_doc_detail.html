@@ -1,0 +1,58 @@
+{# app/templates/admin/docs/review_doc_detail.html — 심사 서류 상세 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 승인·반려는 disabled 뼈대다. 파일을 직접 여는 기능도 아직 없다.
+  🔴 심사 서류 테이블이 아직 없다 — 더미다 (admin_review_docs.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 심사 서류 상세{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<div class="admin-main">
+
+<p><a href="/admin/review-docs">← 심사 서류 목록</a></p>
+
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 심사 서류 테이블이 아직 없어요 — 승인·반려 처리는 실제로 동작하지 않습니다.</p>
+
+<h1>{{ row.name }} <small class="hint">{{ status_label[row.status] }}</small></h1>
+<table class="kv">
+  <tr><th>제출자</th><td>{{ row.who }}</td></tr>
+  <tr><th>유형</th><td>{{ row.type }}</td></tr>
+  <tr><th>제출일</th><td>{{ row.date }}</td></tr>
+  <tr><th>파일명</th><td>{{ row.file }}</td></tr>
+  <tr><th>용량</th><td>{{ row.size }}</td></tr>
+</table>
+
+<p class="hint">⬜ 파일 원본을 직접 여는 기능은 아직 없다 — 파일명만 표시한다.</p>
+
+<h2>심사 처리 <small class="hint">(승인 대기 · 비활성)</small></h2>
+<fieldset class="review-disabled-form" disabled>
+  <div class="review-decision-btns">
+    <button type="button">✓ 승인</button>
+    <button type="button">× 반려</button>
+  </div>
+  <button type="button" class="review-submit">처리 저장</button>
+</fieldset>
+<p class="hint">⬜ 심사 서류 테이블 승인 뒤 실제 쓰기 라우트를 붙인다.</p>
+
+<style>
+.admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
+.admin-shell table.kv th { text-align: left; padding: .3rem .8rem .3rem 0; color: var(--a-clay); font-weight: 500; white-space: nowrap; }
+.admin-shell table.kv td { padding: .3rem 0; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; font-weight: 400; }
+.admin-shell .review-disabled-form { display: flex; flex-direction: column; gap: .75rem; max-width: 20rem; border: none; padding: 0; opacity: .6; margin-top: .5rem; }
+.admin-shell .review-decision-btns { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.admin-shell .review-decision-btns button {
+  padding: .9rem; border-radius: .6rem; border: 1px solid var(--a-line);
+  background: var(--a-surface2); color: var(--a-ink); font-weight: 700; cursor: not-allowed;
+}
+.admin-shell .review-submit {
+  align-self: flex-start; padding: .5rem 1.2rem; border-radius: .5rem; border: none;
+  background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed;
+}
+</style>
+</div>
+</div>
+{% endblock %}

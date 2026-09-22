@@ -94,6 +94,26 @@ def verify_password(stored: str, password: str) -> bool:
         return False
 
 
+#: 없는 계정에도 해시를 한 번 돌리기 위한 값 — 처음 쓸 때 만든다(무작위 비밀번호의 해시 · 누구의 것도 아니다).
+_DUMMY_HASH: str | None = None
+
+
+def verify_account(stored: str | None, password: str) -> bool:
+    """계정이 없어도 **같은 시간**이 걸리게 확인한다. 🆕 2026-09-21 (전수 재검토).
+
+    ⛔ 없는 계정은 Argon2 를 건너뛰어 **4 ms**, 있는 계정의 틀린 비밀번호는 **40 ms** 였다(실측) — 답은 같아도
+       걸린 시간이 계정의 존재를 알렸다. 로그인 docstring 의 「없는 계정과 틀린 비밀번호를 같은 답으로」(P1-5)가
+       시간 축에서 깨져 있었다.
+    """
+    global _DUMMY_HASH
+    if stored is None:
+        if _DUMMY_HASH is None:
+            _DUMMY_HASH = hash_password(secrets.token_hex(16))
+        verify_password(_DUMMY_HASH, password)
+        return False
+    return verify_password(stored, password)
+
+
 def needs_rehash(stored: str) -> bool:
     """파라미터가 낡았나. 🚨 **로그인 성공 시점에 조용히 올린다** — 사용자는 모른다."""
     return bool(_hasher().check_needs_rehash(stored))

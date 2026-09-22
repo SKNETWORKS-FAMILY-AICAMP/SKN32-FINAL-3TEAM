@@ -111,3 +111,48 @@ def test_KEY_FIELDS_에_사례집_문구_필드가_있다() -> None:
     from scripts.label_merge import KEY_FIELDS  # noqa: PLC0415
 
     assert "글" in KEY_FIELDS and "문구" in KEY_FIELDS
+
+
+# 🆕 2026-09-21 (전수 재검토 I10)
+def _line(person: str, text: str, types: list[str] | None, scope: str = "") -> str:
+    import json as _j
+
+    r = {"원천": "g", "원천라벨": "", "문구": text, "글": "", "쪽": "", "호": "", "붙인이": person}
+    if types:
+        r["확정유형"] = types
+    if scope:
+        r["판단"] = scope
+    return _j.dumps(r, ensure_ascii=False)
+
+
+def test_합의는_첫_파일에_없어도_쓴다(tmp_path, monkeypatch) -> None:
+    """⛔ 합의 목록은 모두에게서 모으고 **첫 파일의 줄만** 써서, 첫 파일에 없는 합의가 빠졌다."""
+    import sys
+
+    from scripts import label_merge
+
+    a = tmp_path / "A__s1.jsonl"
+    a.write_text(_line("A", "다른 문구", ["거짓_과장"]) + "\n", encoding="utf-8")
+    b = tmp_path / "B__s2.jsonl"
+    b.write_text(_line("B", "y1", ["의약품_오인"]) + "\n", encoding="utf-8")
+    c = tmp_path / "C__s2.jsonl"
+    c.write_text(_line("C", "y1", ["의약품_오인"]) + "\n", encoding="utf-8")
+    out = tmp_path / "out.jsonl"
+    monkeypatch.setattr(sys, "argv", ["label_merge", str(a), str(b), str(c), "--merge", str(out)])
+    assert label_merge.main() == 0
+    got = [x for x in out.read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert len(got) == 1 and "y1" in got[0], got
+
+
+def test_범위밖과_유형이_갈리면_갈림이다(tmp_path, monkeypatch) -> None:
+    """⛔ 범위밖 행은 `확정유형` 이 비어 「한 사람만 채움」으로 세였고, `consensus` 가 그 1인 라벨을 분할로 냈다."""
+    from preprocess import labels
+
+    d = tmp_path / "labels"
+    d.mkdir()
+    (d / "A.jsonl").write_text(_line("A", "y3", None, "범위밖") + "\n", encoding="utf-8")
+    (d / "B.jsonl").write_text(_line("B", "y3", ["의약품_오인"]) + "\n", encoding="utf-8")
+    monkeypatch.setattr(labels, "DIR", d)
+    picked, stat = labels.consensus()
+    assert stat.get("갈림") == 1 and not picked, (picked, stat)
+    assert labels.docs() == []

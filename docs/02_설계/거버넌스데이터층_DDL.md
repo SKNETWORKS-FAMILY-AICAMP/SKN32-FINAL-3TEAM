@@ -9,7 +9,7 @@
 > 수치의 단일 출처는 [`사실원장 (SSOT)`](../00_사실원장.md) (D-54).
 >
 > 🚨 **v1.1 (2026-08-31) — 이 문서의 범위를 좁혔다.** 제목이 「데이터베이스·저장소 설계」였는데 실제로 담은 것은
-> **거버넌스·데이터 층 18테이블**이고, **인증(USER·SESSION·`org_id`) · 판정/생성 런타임 · 셀러 프로필은 들어 있지 않다**
+> **거버넌스·데이터 층 18테이블**(🔄 지금 **19** — 0003 `violation_article` · 2026-09-21 대조)이고, **인증(USER·SESSION·`org_id`) · 판정/생성 런타임 · 셀러 프로필은 들어 있지 않다**
 > (D-66 · D-67 · D-68). 전체 엔티티 목록과 W1 체크리스트는 레포 [`docs/02_설계/DB_스키마.md`](../02_설계/DB_스키마.md) 가 갖고 있고,
 > **이 문서는 그 아래를 채우는 DDL 실물**이다. 공식 WBS 산출물 「데이터베이스/저장소 설계 문서」는 **둘을 합쳐야 완성**된다.
 >
@@ -102,7 +102,7 @@ transform_pair    1  ->  0
 
 **읽는 법** — 세로 화살표는 전부 `ON DELETE CASCADE` 입니다. **위에서 하나를 지우면 아래가 통째로 사라집니다.**
 
-`segment` 와 `dataset_manifest` 는 집계·메타 테이블이라 `fragment` 에 매달리지 않습니다.
+`segment` 와 `dataset_manifest` 는 집계·메타 테이블이라 `fragment` 에 매달리지 않습니다. 🔄 `violation_article`(0003 · 라벨↔조문 대응 데이터)도 그렇습니다.
 
 ---
 
@@ -130,8 +130,8 @@ transform_pair    1  ->  0
 
 | 테이블 | 역할 | 주의 |
 |---|---|---|
-| `chunk` | 조·항 단위 청크 | 🚨 `token_count <= 512` — 리랭커 상한 |
-| `chunk_embedding` | pgvector | `vector(1024)` — **KURE-v1 실제 차원은 1W 확인 후 확정** |
+| `chunk` | 조·항 단위 청크 | 🚨 `token_count <= 512` — 🔄 **인용 단위(`text`)** 상한. 리랭커에 들어가는 것은 `input_token_count`(상한 CHECK 없음 · D-200) |
+| `chunk_embedding` | pgvector | `vector(1024)` — 🔄 ✅ **KURE-v1 = 1024 실측 확인** (2026-09-09 밤 · 사실원장 · 아래 §9-4) |
 
 ### 3-4. 🚨 위험도 — RAG가 아니라 관계형 (3)
 
@@ -139,7 +139,7 @@ transform_pair    1  ->  0
 |---|---|
 | **`sanction_rule`** | 행정처분 기준 [별표] — `위반유형 × 차수 → 처분종류·값` |
 | `penalty_rule` | 과징금 고시 — 부과기준율·정액·가중·감경 (2026.7.1 개정) |
-| `penal_clause` | 벌칙 — 징역·벌금 상한 (R4 근거) |
+| `penal_clause` | 벌칙 — 징역·벌금 상한 · 🔄 **R 축과 별도 축**(D-182 · D-227 — 척도는 R0~R3, R4 는 도달 불가) |
 
 **왜 벡터가 아닌가.** 별표를 평문화해 임베딩하면 ① 표 구조가 깨져 「차수」와 「일수」의 대응이 사라지고 ② 검색 결과가 확률적이라 **같은 입력에 다른 위험도**가 나올 수 있으며 ③ 그러면 *"블랙박스 점수는 검수 도구로서 실격"*(기획서 3-4)에 정면으로 걸립니다.
 
@@ -154,6 +154,12 @@ transform_pair    1  ->  0
 | `dict_entry` | 금지·허용·질병인접·완화금지 사전 | 🚨 `exact_match` — **정확매칭만 위험도 하한 자격**. 근사매칭은 인코더와 동등 취급 (기획서 3-5 ④) |
 | **`product_fact`** | 인정 기능성 문구 | **A 자격형 판정(D-59)의 근거.** `recognition_no` 가 D-61의 대조 키 |
 
+### 🆕 3-5-2. 라벨 ↔ 조문 (1) <sub>(2026-09-21 대조 · 0003)</sub>
+
+| 테이블 | 역할 | 주의 |
+|---|---|---|
+| `violation_article` | 위법 유형 ↔ 조문 대응 — **타입이 아니라 데이터**(D-158) | `adopted=false` 가 「뺐다」는 기록이다. `fragment` 에 매달리지 않는다(`segment`·`dataset_manifest` 와 같다) |
+
 ### 3-6. 골든셋 · 학습 (2)
 
 **`golden_sample` 이 이 스키마에서 열이 가장 많은 테이블입니다.** 라벨 축이 넷이고 측정 축이 셋이며 출처 추적이 둘입니다.
@@ -163,11 +169,11 @@ transform_pair    1  ->  0
 | 위법 유형 (다중) | `violations violation_t[]` | 4-6 ① |
 | 3요소 | `three_elem JSONB` | 4-6 ② |
 | 불가 사유 | `infeasibility` A/B/C | **D-59** |
-| 위험도 순서형 | `risk` R0~R4 | 4-6 ④ |
+| 위험도 순서형 | `risk` R0~R4 · 🔄 **R0~R3**(D-227 · ENUM 에 R4 잔존) · NULL 허용(D-178) | 4-6 ④ |
 | 🔄 **측정 축** | `certainty` · `tense` · `sent_type` | **D-74** |
 | 주장 스팬 | `claim_spans JSONB` | **D-30** — 주입 좌표에서 자동 생성 |
 | 🚨 **출처 추적** | `provenance` · `redistributable` | **D-71** |
-| 🔄 **동의** | `consent` (사용자 입력 유래 행) | **D-96** |
+| 🔄 **동의** | `consent` (사용자 입력 유래 행) · ⬜ SQL 에 칸이 없다 — 아래 주석 | **D-96** |
 
 > 🔄 **`consent` 는 사용자 입력에서 온 행에만 의미가 있습니다** (D-96). 결함 주입(D-25)·시정 페어(D-26) 유래는
 > 우리가 만든 것이라 해당되지 않습니다. 🔄 **D-128** — 사용자 유래 행은 `provenance = 'user'` · `fragment_id NULL` 허용(`CHECK (fragment_id IS NOT NULL OR provenance = 'user')`) · `consent_train` 을 `work_doc` 에서 행으로 복사(D-71 형태). 🚨 아래 SQL 에는 아직 `consent` 열과 이 CHECK 가 **없다** — 다음 DDL 개정에서 `golden_sample` 에 넣는다. **학습 데이터 구성 시 `provenance` 가 사용자 입력이면 `consent=true` 를 요구**하고,
@@ -192,7 +198,7 @@ transform_pair    1  ->  0
 |---|---|
 | **`v_current_chunk`** | 🚨 `superseded_at` 필터를 잊는 것. **가장 흔한 사고**이고, 구판 조문으로 판정하면 결과가 통째로 틀립니다 |
 | **`v_publishable_golden`** | 🚨 AI Hub 유래가 섞인 골든셋을 공개 배포하는 것 (D-71) |
-| `v_risk_lookup` | 위험도를 벡터 검색으로 구하는 것 |
+| `v_risk_lookup` | 위험도를 벡터 검색으로 구하는 것 · 🔄 **2인 확인이 안 끝난 `sanction_rule` 행**(0013 · D-66 — 읽히지 않는다) |
 
 **데이터셋을 공개할 때는 반드시 `v_publishable_golden` 을 통합니다.** 테이블을 직접 SELECT 하면 `redistributable = false` 행이 섞입니다.
 
@@ -225,6 +231,7 @@ data/manifest.jsonl          →  collect_manifest
 | `ix_golden_viol` **GIN** | `violations` 배열 검색 — 유형별 Recall 집계 |
 | `ix_golden_redis` | 공개 배포 필터 |
 | `ix_fragment_grade` (부분) | `WHERE excluded = false` |
+| 🔄 `ix_chunk_tsv` **GIN** | 어휘 검색(`tsv @@`) · 0010 · D-193 |
 
 🚨 **벡터 인덱스(HNSW/IVFFlat)는 지금 만들지 않습니다.** 청크가 수천 규모라 순차 스캔으로 충분하고, **데이터가 다 들어온 뒤에 만드는 것이 품질이 좋습니다.** 4W에 적재가 끝나면 그때 판단합니다.
 
@@ -242,7 +249,7 @@ data/manifest.jsonl          →  collect_manifest
 
 | # | 항목 | 왜 지금 못 정하나 | 시점 |
 |:-:|---|---|:-:|
-| 1 | 🚨 **`vector(N)` 차원** | KURE-v1 실제 출력 차원 미확인 | 1W |
+| 1 | ~~🚨 **`vector(N)` 차원**~~ | ✅ **1024 확정** — KURE-v1 실측 (2026-09-09 밤 · 사실원장) | ✅ |
 | 2 | 🚨 **`K_MIN` 값** | 사실원장 미정 항목. 현재 `20` 은 **임시값** | 1W |
 | 3 | **`sanction_rule` 세분화** | 별표 조회가 API로 되는지에 달림 — 스모크 테스트 결과 | 1W |
 | 4 | `three_elem` JSONB vs 3열 | 의결서에서 셋이 항상 함께 나오는지 확인 후 | 2W |
@@ -259,10 +266,11 @@ data/manifest.jsonl          →  collect_manifest
 | 1 | DDL 문법 | `psql -v ON_ERROR_STOP=1 -f schema.sql` | ✅ **통과** |
 | 2 | 제약 5종 거부 | 위반 INSERT 5건 | ✅ **통과** |
 | 3 | 캐스케이드 삭제 | `DELETE FROM source` → 9개 테이블 0건 | ✅ **통과** |
-| 4 | **pgvector 실환경 검증** | `CREATE EXTENSION vector` + 실제 임베딩 삽입·삭제 | 🚨 **미완** |
-| 5 | Alembic head 일치 | `doctor` | 미착수 |
+| 4 | **pgvector 실환경 검증** | `CREATE EXTENSION vector` + 실제 임베딩 삽입·삭제 | ✅ **해소** (2026-09-09 밤 · `chunk_embedding` 적재 · 사실원장) |
+| 5 | Alembic head 일치 | `doctor` | ✅ **구현** — `scripts/doctor.py` `_alembic_heads()` ↔ DB 리비전 (2026-09-21 대조) |
 | 6 | `v_publishable_golden` 필터 | `redistributable=false` 행이 새지 않는지 | 미착수 |
 
+> 🔄 **2026-09-21 — 4번도 닫혔습니다(위 표).** 아래는 그때의 기록입니다.
 > 🚨 **4번이 남았습니다.** 이 컨테이너에 pgvector가 없어 `vector` 타입을 스텁으로 대체해 검증했습니다. **나머지 스키마는 전부 실검증됐지만 벡터 컬럼만은 실환경에서 다시 확인**해야 합니다 — `chunk_embedding` 의 CASCADE는 FK로 걸려 있어 타입과 무관하지만, **차원 불일치는 적재 시점에 터집니다.**
 
 ---
@@ -277,6 +285,7 @@ data/manifest.jsonl          →  collect_manifest
 >
 > 🔴 스키마를 바꿀 때는 `db/schema.sql` 을 고치고 **새 마이그레이션**을 씁니다.
 > `alembic/versions/0001_governance_layer.py` 는 그 파일을 읽어 실행만 하며, 고치지 않습니다.
+> 🔄 **2026-09-14 부터 0001 은 `db/schema.sql` 이 아니라 동결본 `db/schema_0001.sql` 을 읽는다** (D-225). 바꿀 때는 `db/schema.sql`(현재 선언) + 새 마이그레이션 둘이다.
 
 ```sql
 -- ═══════════════════════════════════════════════════════════════════

@@ -3,22 +3,34 @@
 ★ **여기서 하는 일** — `app/models.py` 런타임 층(judgment 등 6+1 테이블)을 읽고 쓰는
   세션 하나를 FastAPI 의존성으로 낸다. 거버넌스 층(`db/schema.sql`)은 건드리지 않는다.
 
-⬜ **아직 어떤 라우터도 이걸 쓰지 않는다.** `app/routers/user.py`·`admin.py` 는
-   지금 의도적으로 DB에 안 붙어 있다 (D-124 — 엔진 없이도 화면이 뜬다). 화면 하나를
-   실제로 이 세션에 연결하는 건 팀 논의 후에 한다 — 이 파일은 그 전에 필요한 배선(연결
-   자체가 되는지)만 미리 만들어 둔 것이다.
+🔄 2026-09-22 (ohb 흡수) — ⛔ 종전 docstring 은 「아직 어떤 라우터도 이걸 쓰지 않는다」였다.
+   09-16 부터 `app/routers/user.py` 의 `/u/`(홈)·`/u/history` 가 이 세션에 붙는다.
+   🚨 **그 두 화면도 DB 없이 떠야 한다** — 게이트 `test_모든_응답에_보안_헤더가_붙는다` 가 `/u/` 200 을
+      요구하고, CI(`gate.yml`)에는 Postgres 가 없다. 병합 직후 DB 없는 기기에서 이 게이트가 🔴 였다(재현).
+   ★ 그래서 쿼리 전에 `reachable()` 로 **연결만** 물어본다. 못 붙으면 화면은 「DB 없음」을 그리고
+     **0건으로 그리지 않는다** — 셀 수 없는 것을 0 으로 적으면 없음이 사실로 둔갑한다 (D-72 · D-147).
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.settings import sqlalchemy_url
+from app.settings import DB_CONNECT_TIMEOUT_S, sqlalchemy_url
 
-_engine = create_engine(sqlalchemy_url(), pool_pre_ping=True)
+_log = logging.getLogger("copylane.db")
+
+#: 🚨 엔진을 만드는 것은 **붙는 것이 아니다** — 첫 쿼리 때 붙는다. 그래서 import 는 DB 없이도 선다.
+#: 🆕 `connect_timeout` — 없으면 응답 없는 주소를 끝없이 기다린다 (`app.settings.DB_CONNECT_TIMEOUT_S`).
+_engine = create_engine(
+    sqlalchemy_url(),
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": DB_CONNECT_TIMEOUT_S},
+)
 _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
 
 
@@ -29,3 +41,19 @@ def get_session() -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+def reachable(session: Session) -> bool:
+    """이 세션이 DB 에 **붙을 수 있으면** True.
+
+    🚨 **연결 단계의 실패만** 받아 준다 — `session.connection()` 이 여는 그 한 번이다.
+       쿼리가 틀린 것(없는 테이블·문법)은 여기서 안 걸리고 **그대로 올라간다** — 증상을 삼키지 않는다 (D-162).
+    🔴 원인 문자열은 화면·로그에 담지 않는다 — 호스트·포트·사용자명이 그 안에 있다
+       (`admin._table_counts` 와 같은 이유). 예외의 **종류 이름**만 남긴다.
+    """
+    try:
+        session.connection()
+    except OperationalError as e:
+        _log.warning("db: 접속 실패 — %s", type(e.orig).__name__ if e.orig else type(e).__name__)
+        return False
+    return True

@@ -4,7 +4,7 @@
 
 | 파일 | 무엇 | 손으로 고치나 |
 |---|---|:-:|
-| `data.js` | 소스 🔄 **83**종의 판정 레코드 — 등급·제약·비용·가치·용도·근거 | ✅ **여기를 고친다** |
+| `data.js` | 소스 🔄 **85**종(2026-09-21 · `build_matrix.py --check` 「판정 85건」)의 판정 레코드 — 등급·제약·비용·가치·용도·근거 | ✅ **여기를 고친다** |
 | `shell.html` | 화면 골격 — 스타일·필터·행 펼침 | ✅ |
 | `sources.json` | `data.js` 의 `SOURCES` 배열만 뽑은 것 — `gen_registry.py` 의 입력 | ❌ 생성물 |
 
@@ -22,6 +22,8 @@ uv run pytest -m gate                   # 🚨 여기까지 해야 끝이다
 ```bash
 python scripts/build_matrix.py --check   # 어긋나면 종료코드 1
 ```
+
+🆕 **2026-09-21 — CI(`.github/workflows/gate.yml` 「판정매트릭스 대조」)도 이 검사를 돈다.** `data.js` 만 고치고 다시 만들지 않은 커밋은 CI 에서 멈춘다.
 
 ## 🚨 판정을 고칠 때는 `data.js` 를 고친다
 

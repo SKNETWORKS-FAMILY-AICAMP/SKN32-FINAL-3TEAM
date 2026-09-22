@@ -178,7 +178,7 @@ def collect(*, limit: int | None, dry_run: bool, refetch: bool) -> int:
         #    내용이 반드시 달라지고 `save_raw` 가 새 판을 만든다. 규약 4(같으면 스킵)가
         #    이 소스에서는 작동하지 않는다 — 그래서 요청 자체를 막는다.
         #    ★ 공공기관 서버를 덜 두드리는 효과도 같이 온다 (규약 6 의 정신).
-        if dest.exists() and not refetch:
+        if store.already_have(dest) and not refetch:  # 🔄 09-21 — 원장(다른 기기)도 본다
             skipped += 1
             continue
         url = _url(DETAIL_URL, ntctxt_no=no)
@@ -199,20 +199,9 @@ def collect(*, limit: int | None, dry_run: bool, refetch: bool) -> int:
         return 0
 
     print(f"\n저장 {saved} · 이미 있어 건너뜀 {skipped}")
-    if limit:
-        print("🚨 --limit 로 일부만 받았다 — mark_collected 를 찍지 않는다")
-        return 0
-    # 🔴 2026-09-12 — **저장이 0 이면 찍지 않는다.**
-    #    ⛔ 종전에는 가드가 없었다. 09-12 에 655건 전량 스킵(저장 0)으로 끝났는데도
-    #       `collected_at` 이 09-09 → 09-12 로 올라갔고, 생성 체인을 타고
-    #       `data_sources.yaml` 까지 갔다. **찍혔다 ≠ 받았다** (D-177 의 사촌).
-    #    🚨 같은 규칙이 수집기 일곱 곳에 **손으로** 쓰여 있고 여기 하나만 빠져 있었다 —
-    #       `openapi:135` · `ingest:135` · `ftc_body:268` · `law_api:700` ·
-    #       `mfds_board:195` · `mfds_press:646` 는 모두 `if saved:` 다. D-99 의 실물.
-    if not saved:
-        print("⬜ 새로 저장한 것이 없다 — mark_collected 를 찍지 않는다 (원장의 날짜는 그대로)")
-        return 0
-    registry.mark_collected(SOURCE_ID)
+    # 🔴 2026-09-12 — 저장 0 이면 안 찍는다(09-12 655건 전량 스킵에 날짜가 올라갔다) · `--limit` 이면 안 찍는다.
+    #    🔄 2026-09-21 — 그 규칙을 `registry.mark_if_complete` 한 곳으로 옮겼다 (D-99). 이 수집기만 지키고 있었다.
+    registry.mark_if_complete(SOURCE_ID, saved=saved, partial=bool(limit))
     return 0
 
 

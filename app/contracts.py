@@ -52,7 +52,7 @@ class HoldReason(enum.StrEnum):
     low_conf = "low_conf"  # 확신 부족
     gap2 = "gap2"  # 1·2위 격차 부족
     cat_unknown = "cat_unknown"  # 카테고리 판별 실패 (D-82)
-    rd1 = "rd1"  # 라운드 1 미해소
+    rd1 = "rd1"  # 공존 규칙 발동 (D-127 · D-120) — 🔄 09-21 종전 주석 「라운드 1 미해소」는 D-127 과 달랐다
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -86,14 +86,15 @@ class Risk(enum.StrEnum):
         return int(self.value[1])
 
 
-#: 🔴 **이 값은 D-130 본문과 어긋난다 — 고쳐야 한다 (D-227 정정 항목 · ⬜ 판정 「라」 대기).**
-#:    D-130 은 *"통과(D-125) = 상태 == 확정 ∧ 위험도 ≤ **R1**"* 이라 적었고 표에서 **R1 = 주의가
-#:    확정**이다. 미확정이었던 것은 **R2 ↔ R3 의 상대 순서**이지 「어느 것이 주의인가」가 아닌데,
-#:    종전 주석이 그렇게 읽고 문턱을 **한 등급 느슨하게** 잡았다 — 「업무정지 위험」이 통과가 된다.
-#:    ★ D-227 이 R2·R3 순서 문제 자체를 없앴으므로 「잠정」이라는 말도 함께 사라진다.
-#: 🚨 **지금은 잠겨 있다** — `is_pass()` 를 부르는 곳이 0 이다(`route_after_judge` 가 verdict 만
-#:    본다). **코드 하한이 들어오는 순간 살아난다.** 그 작업과 같은 커밋에서 `Risk.R1` 로 고친다.
-PASS_RISK_MAX_PROVISIONAL = Risk.R2  # 🔴 → Risk.R1 (D-227)
+#: 통과(D-125)의 위험도 문턱 — **R1(주의)까지** (D-130 · D-227).
+#: 🔄 2026-09-21 (소성민 코드 리뷰 #8) — 종전 값은 `PASS_RISK_MAX_PROVISIONAL = Risk.R2` 였다.
+#:    D-130 은 *"통과 = 상태 == 확정 ∧ 위험도 ≤ **R1**"* 이라 적었고 표에서 **R1 = 주의가 확정**이다.
+#:    미확정이었던 것은 **R2 ↔ R3 의 상대 순서**이지 「어느 것이 주의인가」가 아닌데, 종전 주석이 그렇게 읽고
+#:    문턱을 **한 등급 느슨하게** 잡았다 — 「업무정지 위험」이 통과가 됐다. D-227 이 R2·R3 순서 문제를 없애며
+#:    R1 로 고친다고 정했고, 이름의 「잠정(PROVISIONAL)」도 같이 뺀다.
+#: ⛔ 종전에는 「코드 하한이 들어오는 커밋에서 같이 고친다」고 미뤘다. 부르는 곳이 0 이라 **지금 고쳐도 무해**하고,
+#:    묶어 두면 그 커밋에서 잊는 쪽이 위험이다 — 하한이 서는 순간 틀린 문턱이 조용히 살아난다.
+PASS_RISK_MAX = Risk.R1
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -225,6 +226,12 @@ class RiskAssessment(BaseModel):
             raise ValueError(
                 "최종 위험도를 적으려면 코드 하한이 있어야 한다 — "
                 "상향의 정의가 「하한보다 높다」인데 하한이 없으면 상향이 정의되지 않는다 (D-09)"
+            )
+        # 🆕 2026-09-21 (전수 재검토) — ⛔ 위 docstring 이 「인코더는 내릴 수 없다」고 적었는데 `floor=R3 · final=R0` 이
+        #    검증을 지났다. 래칫(D-09 · max)의 뜻 그대로 — 최종은 하한보다 낮을 수 없다.
+        if self.final.level < self.floor.level:
+            raise ValueError(
+                f"최종 위험도가 코드 하한보다 낮다 — floor={self.floor.value} final={self.final.value} (D-09 래칫)"
             )
         if self.final.level > self.floor.level and self.evidence_span is None:
             raise ValueError(
@@ -376,6 +383,15 @@ class JudgeResponse(BaseModel):
             raise ValueError("B 가 K 를 소진한 것은 「표현 탐색 실패」다 — 증명서가 아니다 (D-125)")
         if self.outcome is not Outcome.passed and self.candidates:
             raise ValueError("프론티어는 통과했을 때만 낸다 (D-125)")
+        # 🆕 2026-09-21 (전수 재검토 I2) — **루프에 안 들어간 통과**(attempt 0)는 문장이 전부 통과여야 한다 (D-125 ·
+        #    「통과 = 확정 ∧ 위험도 ≤ 주의」). ⛔ 종전에는 미판정·R3 문장이 섞인 `pass` 도 계약을 지났다 — 라우터가
+        #    위험도를 안 봐도(I1) 여기서 못 잡았다. 🚨 attempt ≥ 1 의 `pass` 는 **대체 문구**의 통과라 원문 판정과 다르다.
+        if self.outcome is Outcome.passed and self.attempt == 0:
+            bad = [s.sent_id for s in self.sentences if not is_pass(s)]
+            if bad:
+                raise ValueError(
+                    f"outcome=pass 인데 통과가 아닌 문장이 있다 — {bad[:5]} (D-125 · 확정 ∧ 위험도 ≤ R1)"
+                )
         return self
 
     @model_validator(mode="after")
@@ -390,16 +406,15 @@ class JudgeResponse(BaseModel):
 
 
 def is_pass(s: SentenceJudgment) -> bool:
-    """D-125 통과 조건 — 확정 ∧ 위험도 ≤ 주의.
+    """D-125 통과 조건 — 확정 ∧ 위험도 ≤ 주의(R1) (D-130 · D-227 · `PASS_RISK_MAX`).
 
-    🚨 임계값이 **잠정**이다 (`PASS_RISK_MAX_PROVISIONAL`). 검증 ② 가 R2·R3 순서를
-       정하기 전까지 이 함수를 판정 로직의 근거로 삼지 않는다.
+    🚨 위험도가 없으면(`final is None`) 통과가 아니다 — 없음을 통과로 세지 않는다 (D-72).
     """
     if s.verdict is not Verdict.confirmed:
         return False
     if s.risk.final is None:
         return False
-    return s.risk.final.level <= PASS_RISK_MAX_PROVISIONAL.level
+    return s.risk.final.level <= PASS_RISK_MAX.level
 
 
 # ══════════════════════════════════════════════════════════════════════

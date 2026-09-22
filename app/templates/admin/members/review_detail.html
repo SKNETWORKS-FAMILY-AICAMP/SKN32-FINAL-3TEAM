@@ -1,0 +1,102 @@
+{# app/templates/admin/members/review_detail.html — 승인 심사 상세 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 제출 서류 확인 체크박스·처리 사유·승인/반려 버튼 전부 disabled 뼈대다.
+  🔴 가입 신청 테이블이 아직 없다 — 더미다 (admin_signup_review.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 승인 심사 상세{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<div class="admin-main">
+
+<p><a href="/admin/signup-review">← 승인 심사 목록</a></p>
+
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 가입 신청 테이블이 아직 없어요 — 승인·반려 처리는 실제로 동작하지 않습니다.</p>
+
+<h1>{{ row.type }} 승인 심사 <small class="hint">{{ status_label[row.status] }}</small></h1>
+
+{% if row.type == "인플루언서" %}
+<h2>인플루언서 심사 정보</h2>
+<table class="kv">
+  <tr><th>신청자</th><td>{{ row.name }}</td></tr>
+  <tr><th>이메일</th><td>{{ row.email }}</td></tr>
+  <tr><th>대표 채널</th><td>{{ row.channel }}</td></tr>
+  <tr><th>팔로워</th><td>{{ row.followers }}</td></tr>
+  <tr><th>활동 카테고리</th><td>{{ row.category }}</td></tr>
+  <tr><th>신청일시</th><td>{{ row.date }}</td></tr>
+</table>
+{% else %}
+<h2>기업 심사 정보</h2>
+<table class="kv">
+  <tr><th>기업명</th><td>{{ row.name }}</td></tr>
+  <tr><th>이메일</th><td>{{ row.email }}</td></tr>
+  <tr><th>사업자등록번호</th><td>{{ row.biz }}</td></tr>
+  <tr><th>대표자</th><td>{{ row.rep }}</td></tr>
+  <tr><th>구성원 규모</th><td>{{ row.employees }}</td></tr>
+  <tr><th>신청일시</th><td>{{ row.date }}</td></tr>
+</table>
+{% endif %}
+
+<h2>제출 서류 확인</h2>
+<p class="hint">파일을 직접 열어 확인한 후 확인란을 선택한다 — ⬜ 지금은 파일 원본을 여는 기능이 없어 disabled 뼈대만 둔다.</p>
+<table>
+  <tr><th style="width:3rem;">확인</th><th>파일명</th><th>확인 항목</th><th>제출일</th></tr>
+  {% for d in row.docs %}
+  <tr>
+    <td><input type="checkbox" disabled></td>
+    <td>{{ d.name }}</td>
+    <td>{{ d.kind }}</td>
+    <td>{{ d.submitted }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>심사 처리 <small class="hint">(승인 대기 · 비활성)</small></h2>
+<fieldset class="review-disabled-form" disabled>
+  <div class="review-decision-btns">
+    <button type="button">✓ 승인</button>
+    <button type="button">× 반려</button>
+  </div>
+  <label>반려 사유
+    <select>
+      <option value="">반려 사유를 선택하세요</option>
+      {% for reason in reject_reasons %}
+      <option>{{ reason }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>반려 상세 사유 (선택)
+    <textarea rows="3" placeholder="반려 상세 사유를 입력하세요"></textarea>
+  </label>
+  <button type="button" class="review-submit">심사 완료</button>
+</fieldset>
+<p class="hint">⬜ 가입 신청 테이블 승인 뒤 실제 쓰기 라우트를 붙인다.</p>
+
+<style>
+.admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
+.admin-shell table.kv th { text-align: left; padding: .3rem .8rem .3rem 0; color: var(--a-clay); font-weight: 500; white-space: nowrap; }
+.admin-shell table.kv td { padding: .3rem 0; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; font-weight: 400; }
+.admin-shell .review-disabled-form { display: flex; flex-direction: column; gap: .75rem; max-width: 28rem; border: none; padding: 0; opacity: .6; margin-top: .5rem; }
+.admin-shell .review-disabled-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; }
+.admin-shell .review-disabled-form select,
+.admin-shell .review-disabled-form textarea {
+  padding: .4rem .5rem; border: 1px solid var(--a-line); border-radius: .4rem;
+  background: var(--a-surface2); color: var(--a-ink);
+}
+.admin-shell .review-decision-btns { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.admin-shell .review-decision-btns button {
+  padding: .9rem; border-radius: .6rem; border: 1px solid var(--a-line);
+  background: var(--a-surface2); color: var(--a-ink); font-weight: 700; cursor: not-allowed;
+}
+.admin-shell .review-submit {
+  align-self: flex-start; padding: .5rem 1.2rem; border-radius: .5rem; border: none;
+  background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed;
+}
+</style>
+</div>
+</div>
+{% endblock %}

@@ -21,7 +21,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from app.settings import PARAMS
+# 🔄 2026-09-21 (전수 재검토) — ⛔ 안내대로 `python scripts/<이 파일>.py` 로 돌리면 `scripts/` 가 경로 맨 앞이라
+#    `app` 을 못 찾았다(ModuleNotFoundError). `scripts/label_merge.py` 와 같은 꼴로 저장소 뿌리를 세운다.
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
+
+from app.settings import PARAMS  # noqa: E402
 
 # ── 거버넌스 (D-19) — 위치가 곧 게이트. G3 자료만 여기서 읽는다.
 DATA_DIR = Path("data/g3/cases")
@@ -78,8 +82,17 @@ CANDIDATE_TYPES = [
 MIN_SAMPLES = PARAMS.min_measurable  # D-40 — 유형별 최소 표본. 미달은 「측정 불가」
 
 
+#: 🆕 2026-09-21 (전수 재검토) — 판정에서 **빼는** 후보. ⛔ `CANDIDATE_TYPES` 주석은 「30건을 넘겨도 편입하지 않는다」
+#:    (D-255)인데 `report` 는 30건이면 「편입 가능」을 찍었다 — 주석과 출력이 반대였다.
+OUT_OF_SCOPE_TYPES = frozenset({"추천_보증_뒷광고"})
+
+#: 🆕 2026-09-21 — `load_cases` 가 건너뛴 깨진 줄 수. `validate` 가 오류로 센다.
+_BROKEN: list[str] = []
+
+
 def load_cases(path: Path = DATA_DIR):
     """data/g3/cases/*.jsonl 을 읽는다. 한 줄에 레코드 하나."""
+    _BROKEN.clear()
     if not path.exists():
         return []
     rows = []
@@ -92,6 +105,7 @@ def load_cases(path: Path = DATA_DIR):
                 rows.append(json.loads(line))
             except json.JSONDecodeError as e:
                 print(f"X {f.name}:{i}  JSON 파싱 실패 — {e}")
+                _BROKEN.append(f"{f.name}:{i}")
     return rows
 
 
@@ -115,7 +129,8 @@ def cmd_validate(_):
         return 1
     required = list(CASE_FIELDS)
     known = set(VIOLATION_TYPES) | set(CANDIDATE_TYPES)
-    bad = 0
+    # 🔄 2026-09-21 (전수 재검토) — ⛔ 깨진 줄을 X 로 찍고도 「오류 0건」·종료코드 0 이었다
+    bad = len(_BROKEN)
     for i, c in enumerate(cases, 1):
         miss = [k for k in required if k not in c]
         if miss:
@@ -180,6 +195,9 @@ def cmd_report(_):
     admit, defer = [], []
     for t in CANDIDATE_TYPES:
         tot, e = by_type.get(t, 0), eff.get(t, 0)
+        if t in OUT_OF_SCOPE_TYPES:
+            print(f"    {t:<24}{tot:>6}{e:>7}   ⬜ 범위 밖 (D-255 · 건수와 무관)")
+            continue
         (admit if e >= MIN_SAMPLES else defer).append((t, tot, e))
         print(f"    {t:<24}{tot:>6}{e:>7}   {'O 편입 가능' if e >= MIN_SAMPLES else 'X 표본 부족'}")
 
@@ -223,7 +241,7 @@ def cmd_fetch(args):
       ftc_decisions  공정거래위원회 의결서   (표시광고법)
       mfds_action    식약처 행정처분         (식품표시광고법 · 화장품법)
 
-    🚨 업체명·상표·대표자명은 수집 직후 즉시 마스킹하고 원문을 보관하지 않는다 (D-17).
+    🚨 피심인 상호·대표자명·주소는 파생물을 만들 때 마스킹한다 — 원문은 raw/ 에만, 저장소·배포물에는 없다 (D-17 · D-257).
     """
     raise SystemExit("collect fetch: T1 구현 예정 — 위 docstring이 계약이다")
 

@@ -39,6 +39,10 @@ PAGE_SIZE = 50
 
 _MAX_LOGGER_LEN = 80
 
+#: 쪽 번호 상한 — `OFFSET` 이 bigint 를 넘어 「DB 가 죽었다」로 읽히는 것을 막는 안전장치다.
+#: 실제 쪽 수는 건수를 센 뒤 다시 자른다 (`_load_list`).
+_MAX_PAGE = 100_000
+
 _COLUMNS = (
     "id::text AS id, occurred_at, level, logger_name, message, exc_type, module, func_name, lineno"
 )
@@ -122,9 +126,13 @@ def _clean_logger(value: str | None) -> str | None:
 
 def _clean_page(value: str | None) -> int:
     try:
-        return max(1, int(value or 1))
+        return min(max(1, int(value or 1)), _MAX_PAGE)
     except ValueError:
         return 1
+
+
+def _page_count(total: int) -> int:
+    return max(1, -(-total // PAGE_SIZE))
 
 
 def _dummy_query(level: str | None, logger_name: str | None) -> list[dict]:
@@ -157,6 +165,8 @@ def _is_undefined_table(e: Exception) -> bool:
 def _load_list(level: str | None, logger_name: str | None, page: int) -> dict:
     """목록 + 조건에 맞는 건수. `source` 는 ``db`` · ``dummy_no_table`` · ``dummy_no_db``.
 
+    `page` 는 **실제 쪽 수로 자른 값**을 돌려준다 — 넘치는 쪽 번호는 마지막 쪽으로 본다.
+
     🔴 원인 문자열을 화면·로그에 담지 않는다 — 호스트·포트·사용자명이 그 안에 있다.
     ⛔ 여기서 난 오류를 ERROR 로 남기지 않는다 — DB 저장 핸들러가 붙으면
        「저장 실패 → 로그 → 저장 실패」가 돈다. WARNING 한 줄, 이름만 남긴다.
@@ -179,12 +189,13 @@ def _load_list(level: str | None, logger_name: str | None, page: int) -> dict:
             # where_sql 은 위의 고정 조각만 이어 붙인다 — 값은 전부 파라미터로 간다
             cur.execute(f"SELECT count(*) AS n FROM app_error_log {where_sql}", params)  # noqa: S608
             total = cur.fetchone()["n"]
+            page = min(page, _page_count(total))
             cur.execute(
                 f"SELECT {_COLUMNS} FROM app_error_log {where_sql} "  # noqa: S608
                 "ORDER BY occurred_at DESC LIMIT %s OFFSET %s",
                 [*params, PAGE_SIZE, (page - 1) * PAGE_SIZE],
             )
-            return {"source": "db", "rows": cur.fetchall(), "total": total}
+            return {"source": "db", "rows": cur.fetchall(), "total": total, "page": page}
     except Exception as e:  # noqa: BLE001
         if _is_undefined_table(e):
             source = "dummy_no_table"
@@ -193,7 +204,7 @@ def _load_list(level: str | None, logger_name: str | None, page: int) -> dict:
             _log.warning("admin.errors: 조회 실패 — %s", type(e).__name__)
 
     rows = _dummy_query(level, logger_name)
-    return {"source": source, "rows": rows, "total": len(rows)}
+    return {"source": source, "rows": rows, "total": len(rows), "page": 1}
 
 
 def _load_one(error_id: str) -> dict:
@@ -241,8 +252,8 @@ def error_list(request: Request) -> HTMLResponse:
     logger_name = _clean_logger(qp.get("logger"))
     page = _clean_page(qp.get("page"))
 
-    data = _load_list(level, logger_name, page)
-    pages = max(1, -(-data["total"] // PAGE_SIZE))
+    data = _load_list(level, logger_name, page)  # `data["page"]` 가 자른 값이다
+    pages = _page_count(data["total"])
     return templates.TemplateResponse(
         request,
         "admin/errors/list.html",
@@ -251,7 +262,6 @@ def error_list(request: Request) -> HTMLResponse:
             "levels": LEVELS,
             "level": level,
             "logger": logger_name or "",
-            "page": page,
             "pages": pages,
             **data,
         },
