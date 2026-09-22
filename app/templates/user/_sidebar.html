@@ -1,0 +1,13 @@
+{# app/templates/user/_sidebar.html — 구역별 왼쪽 사이드바 · 소유자 lse (병렬작업 계약 §5)
+
+  🚨 `section_subs`(key·label·href 튜플 목록)·`active_sub` 는 라우터의 `_render()` 가 채운다.
+  🔴 맨 아래 "CS 문의" 버튼은 디자인 그대로 **사이드바가 있는 구역에만** 붙는다.
+#}
+<aside class="user-sidebar">
+  <p class="user-sidebar-label">{{ section_label }}</p>
+  {% for key, label, href in section_subs %}
+  <a class="user-sidebar-item{{ ' user-sidebar-item-active' if key == active_sub }}"
+     href="{{ href }}">{{ label }}</a>
+  {% endfor %}
+  <a class="user-sidebar-cs" href="/u/cs">CS 문의</a>
+</aside>

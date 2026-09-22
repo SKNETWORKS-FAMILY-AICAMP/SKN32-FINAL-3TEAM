@@ -1,0 +1,170 @@
+{# app/templates/user/mypage.html — 마이페이지 · 소유자 ksr (병렬작업 계약 §5)
+
+  ★ 프로토타입의 `data-screen="mypage"` 중 **프로필 · 광고 기본값 · 계정** 셋을 옮겼다
+    (ksr, 2026-09-13 — 2026-09-16 lse 셸로 이식).
+    ⛔ 포트폴리오 · 구성원 관리 · 결제는 매칭/과금 범위라 뺐다.
+  🚨 **저장할 자리가 없다.** 사용자 계정과 광고 기본값 테이블이 스키마에 없다 —
+     `app/models.py` 의 `app_account` 는 거버넌스 운영자용(`role` 기본값 `governor`)이다.
+     ⛔ 그래서 **저장됐다고 말하지 않는다** (D-147) — 폼은 세우고, 저장이 아직 없다고 적는다.
+  🔄 2026-09-16 — "계정" 섹션의 로그아웃 버튼이 `/logout`(governor 전용, 팀장 소유)으로
+     가던 걸 지웠다. 일반 사용자는 그 세션과 무관하다 — 계정 시스템이 서면 같이 온다.
+  ⬜ 프로필 이미지 업로드는 `multipart/form-data` 가 필요해 **팀장 판정 전까지 만들지 않는다**
+     (D-87 · §5) — 파일 입력을 두지 않는다.
+#}{% extends "user/_base.html" %}
+{% block title %}CopyLane — 마이페이지{% endblock %}
+{% block screen_css %}
+<style>
+.mp-head { margin-bottom: 1.1rem; }
+.mp-head h1 { margin: 0 0 .25rem; }
+.mp-head p { margin: 0; color: var(--u-clay); font-size: .875rem; }
+
+/* 가로 탭 — 프로토타입 `mypage-tab-*` (아래 테두리 + 활성 탭 밑줄) */
+.mp-tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--u-line);
+           margin-bottom: 1.75rem; }
+.mp-tab { padding: .65rem .75rem; margin-bottom: -1px; border-bottom: 2px solid transparent;
+          color: var(--u-clay); text-decoration: none; font-size: .82rem; font-weight: 500; }
+.mp-tab:hover { color: var(--u-ink); }
+.mp-tab-active { color: var(--u-signal); border-bottom-color: var(--u-signal); }
+.mp-panel { max-width: 32rem; }
+
+.mp-card { border: 1px solid var(--u-line); border-radius: 1rem;
+           background: var(--u-surface); padding: 1.1rem 1.15rem; margin-bottom: 1rem; }
+.mp-card > h2 { margin: 0 0 .2rem; font-size: .95rem; }
+.mp-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+
+.mp-avatar { display: flex; align-items: center; gap: .8rem; margin: .7rem 0 1rem; }
+.mp-avatar .mp-circle { width: 3rem; height: 3rem; border-radius: 999px;
+                        background: var(--u-signal-soft); color: var(--u-signal-ink);
+                        display: flex; align-items: center; justify-content: center;
+                        font-weight: 700; font-size: .95rem; }
+
+.mp-pick { display: flex; flex-wrap: wrap; gap: .4rem; margin: .2rem 0 1rem; }
+.mp-pick input { position: absolute; opacity: 0; width: 0; height: 0; }
+.mp-pick label { display: inline-block; margin: 0; padding: .35rem .8rem; border-radius: 999px;
+                 border: 1px solid var(--u-line); background: var(--u-surface);
+                 font-size: .82rem; font-weight: 500; cursor: pointer; }
+.mp-pick input:checked + label { background: var(--u-signal); border-color: var(--u-signal);
+                                 color: #fff; font-weight: 600; }
+.mp-pick input:focus-visible + label { outline: 2px solid var(--u-signal-ink); outline-offset: 2px; }
+
+.mp-save { background: var(--u-signal); border-color: var(--u-signal);
+           color: #fff; font-weight: 600; margin-top: .75rem; }
+.mp-hold { border: 1px dashed var(--u-line); border-radius: .75rem;
+           padding: .8rem .9rem; color: var(--u-clay); font-size: .85rem; line-height: 1.7; }
+.mp-danger { color: #991b1b; border-color: #fecaca; background: #fef2f2; }
+</style>
+{% endblock %}
+{% block user_content %}
+<div class="mp-head">
+  <h1>마이페이지</h1>
+  <p>프로필과 광고 기본값을 여기서 관리해요.</p>
+</div>
+
+<nav class="mp-tabs" aria-label="마이페이지 메뉴">
+  {% for key, label in tabs %}
+  <a class="mp-tab{% if tab == key %} mp-tab-active{% endif %}" href="/u/mypage?tab={{ key }}"
+     {% if tab == key %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+
+<div class="mp-panel">
+
+{% if saved_attempt %}
+<div class="mp-card">
+  <p class="mp-hold">
+    🚨 <b>아직 저장되지 않았어요.</b> 사용자 계정과 광고 기본값을 담을 테이블이 없어서,
+    받은 값을 되돌려 보여드릴 뿐 어디에도 기록하지 않아요.
+    <b>저장됐다고 말하지 않으려고</b> 이렇게 알려드려요.
+  </p>
+</div>
+{% endif %}
+
+{% if tab == "profile" %}
+<form class="mp-card" method="post" action="/u/mypage">
+  <h2>프로필</h2>
+  <p class="mp-note">이름과 소속은 검수 결과를 팀원과 나눌 때 표시돼요.</p>
+
+  <div class="mp-avatar">
+    <span class="mp-circle">{{ (picked.name or "?")[:1] }}</span>
+    <span class="mp-note">
+      프로필 이미지 등록은 파일 업로드가 필요해서 아직 없어요.<br>
+      지금은 이름 첫 글자로 표시돼요.
+    </span>
+  </div>
+
+  <label for="name">이름</label>
+  <input id="name" name="name" maxlength="40" value="{{ picked.name }}" placeholder="예: 권소라">
+
+  <label for="email">이메일</label>
+  <input id="email" name="email" type="email" maxlength="120" value="{{ picked.email }}"
+         placeholder="예: sora@example.com">
+
+  <label for="org">소속 조직</label>
+  <input id="org" name="org" maxlength="60" value="{{ picked.org }}" placeholder="예: 마케팅팀">
+
+  <button class="mp-save" type="submit" name="section" value="profile">저장</button>
+</form>
+{% endif %}
+
+{% if tab == "defaults" %}
+<form class="mp-card" method="post" action="/u/mypage">
+  <h2>광고 기본값</h2>
+  <p class="mp-note">
+    검수·카피생성 때 매번 입력하지 않아도 되도록 저장해두는 조건이에요.
+    이번 한 번만 다르게 하고 싶으면 그 화면에서 바꾸면 되고, 여기 저장한 값은 그대로 남아요.
+  </p>
+
+  <label>나이대</label>
+  <div class="mp-pick">
+    {% for v in ["10대", "20대", "30대", "40대", "50대 이상", "전연령"] %}
+    <input type="radio" id="age-{{ loop.index }}" name="age" value="{{ v }}"
+           {% if picked.age == v or (not picked.age and loop.last) %}checked{% endif %}>
+    <label for="age-{{ loop.index }}">{{ v }}</label>
+    {% endfor %}
+  </div>
+
+  <label>성별</label>
+  <div class="mp-pick">
+    {% for v in ["여성", "남성", "무관"] %}
+    <input type="radio" id="sex-{{ loop.index }}" name="sex" value="{{ v }}"
+           {% if picked.sex == v or (not picked.sex and loop.last) %}checked{% endif %}>
+    <label for="sex-{{ loop.index }}">{{ v }}</label>
+    {% endfor %}
+  </div>
+
+  <label>홍보 매체</label>
+  <div class="mp-pick">
+    {% for v in ["상세페이지", "인스타", "기사형", "유튜브"] %}
+    <input type="radio" id="ch-{{ loop.index }}" name="channel" value="{{ v }}"
+           {% if picked.channel == v or (not picked.channel and loop.first) %}checked{% endif %}>
+    <label for="ch-{{ loop.index }}">{{ v }}</label>
+    {% endfor %}
+  </div>
+  <p class="mp-note" style="margin:-.6rem 0 1rem">
+    🚨 매체가 바꾸는 것은 <b>표시의 방법</b>이지 표시 의무의 내용이 아니에요 — 판정 기준은 매체와 무관하게 같아요.
+  </p>
+
+  <label>광고 물품</label>
+  <div class="mp-pick">
+    {% for v in ["일반", "식품", "건기식", "화장품"] %}
+    <input type="radio" id="cat-{{ loop.index }}" name="category" value="{{ v }}"
+           {% if picked.category == v or (not picked.category and loop.first) %}checked{% endif %}>
+    <label for="cat-{{ loop.index }}">{{ v }}</label>
+    {% endfor %}
+  </div>
+  <p class="mp-note" style="margin:-.6rem 0 1rem">
+    ⬜ 이건 <b>기본값</b>일 뿐이에요. 실제 판정 카테고리는 <b>우리가 판별해요</b> — 사용자에게 묻지 않아요 (D-82).
+  </p>
+
+  <button class="mp-save" type="submit" name="section" value="adprefs">저장</button>
+</form>
+{% endif %}
+
+{% if tab == "account" %}
+<div class="mp-card">
+  <h2>계정</h2>
+  <p class="mp-note">⬜ 로그인·로그아웃은 계정 시스템(진입점 B 엔진과 함께 옴)이 서면 여기 붙어요.</p>
+</div>
+{% endif %}
+</div>{# /.mp-panel #}
+{% endblock %}

@@ -1,0 +1,29 @@
+/* app/static/admin_errors.css — 오류 로그 화면 · 소유자 ssm (병렬작업 계약 §5)
+   🚨 클래스는 전부 `er-` 접두어 — base.css 와 다른 사람의 화면 스타일을 건드리지 않는다.
+   ★ 모양은 base.css 의 단순한 표 스타일을 따른다 — 뼈대 단계라 꾸미지 않는다. */
+.er-nav { display:flex; flex-wrap:wrap; gap:.25rem 1.5rem; align-items:baseline;
+  padding:.5rem 0 1rem; margin-bottom:1.5rem; border-bottom:1px solid var(--line); }
+.er-nav a { color:var(--mut); text-decoration:none; }
+.er-nav a:hover, .er-nav a.is-active { color:var(--fg); text-decoration:underline; }
+.er-nav b { margin-right:.5rem; }
+.er-muted { color:var(--mut); font-size:.9rem; }
+.er-nowrap { white-space:nowrap; }
+.er-dummy { background:#fff7e6; border:1px solid #f0dd9e; border-radius:.375rem; padding:.5rem .75rem; }
+.er-filter { display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-end; margin:1rem 0; }
+.er-filter label { margin-top:0; font-weight:400; font-size:.9rem; }
+.er-filter select, .er-filter input { display:block; margin-top:.25rem; font:inherit; padding:.4rem .5rem;
+  border:1px solid var(--line); border-radius:.375rem; }
+.er-filter input { width:16rem; }
+.er-filter button { margin-top:0; }
+.er-tbl { font-size:.9rem; }
+.er-tbl th { color:var(--mut); font-weight:600; }
+.er-tbl td { vertical-align:top; }
+.er-kv th { width:30%; color:var(--mut); font-weight:400; }
+.er-lv { display:inline-block; padding:0 .45rem; border-radius:.25rem; font-size:.75rem; font-weight:700; vertical-align:middle; }
+.er-lv-warning { background:#fff6df; color:#9a6a08; }
+.er-lv-error, .er-lv-critical { background:#fdecec; color:var(--bad); }
+.er-lv-critical { outline:1px solid var(--bad); }
+.er-msg { white-space:pre-wrap; word-break:break-word; background:#f4f4f5; padding:.75rem; border-radius:.375rem; }
+.er-pager { display:flex; gap:1rem; justify-content:center; }
+.er-disabled { border:1px dashed var(--line); border-radius:.375rem; padding:.5rem 1rem 1rem; opacity:.6; }
+.er-disabled label { font-weight:400; }

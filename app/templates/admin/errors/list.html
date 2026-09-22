@@ -1,0 +1,60 @@
+{# app/templates/admin/errors/list.html — 오류 로그 목록 (뼈대) · 소유자 **ssm** (병렬작업 계약 §5)
+
+  ✅ 읽기 전용 · `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+  🔴 스크립트 없음 (CSP `script-src 'self'`) — 필터는 GET 폼이다.
+  🔴 `|safe` 를 쓰지 않는다 — `message` 는 마스킹을 지났어도 자동 이스케이프로 그린다 (P2-9).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 오류 로그{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/admin_errors.css">
+{% include "admin/_nav.html" %}
+
+<h1>오류 로그</h1>
+<p class="warn">🚨 <b>읽기 전용이다.</b> 로그 삭제·보관 기간 설정은 팀장 승인 전까지 없다.</p>
+{% include "admin/errors/_notice.html" %}
+
+<form method="get" action="/admin/errors" class="er-filter">
+  <label>레벨
+    <select name="level">
+      <option value="">전체</option>
+      {% for lv in levels %}
+      <option value="{{ lv }}"{% if level == lv %} selected{% endif %}>{{ lv }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>기록한 곳 (앞부분)
+    <input type="text" name="logger" value="{{ logger }}" maxlength="80" placeholder="예: copylane.admin">
+  </label>
+  <button type="submit">적용</button>
+  <a href="/admin/errors">초기화</a>
+</form>
+
+<p class="er-muted">조건에 맞는 기록 <b>{{ total }}</b>건 · 최신순</p>
+
+{% if not rows %}
+<p>조건에 맞는 기록이 없다.</p>
+{% else %}
+<table class="er-tbl">
+  <tr>
+    <th>발생 시각</th><th>레벨</th><th>기록한 곳</th><th>내용</th><th>오류 종류</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td class="er-nowrap"><a href="/admin/errors/{{ r.id }}">{{ r.occurred_at.strftime("%Y-%m-%d %H:%M:%S") }}</a></td>
+    <td><span class="er-lv er-lv-{{ r.level | lower }}">{{ r.level }}</span></td>
+    <td><code>{{ r.logger_name }}</code></td>
+    <td>{{ r.message }}</td>
+    <td>{{ r.exc_type or "-" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if pages > 1 %}
+<p class="er-pager">
+  {% if page > 1 %}<a href="?{{ {'level': level or '', 'logger': logger, 'page': page - 1} | urlencode }}">← 이전</a>{% endif %}
+  <span>{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a href="?{{ {'level': level or '', 'logger': logger, 'page': page + 1} | urlencode }}">다음 →</a>{% endif %}
+</p>
+{% endif %}
+{% endif %}
+{% endblock %}

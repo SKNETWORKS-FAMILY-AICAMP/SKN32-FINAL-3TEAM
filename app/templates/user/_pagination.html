@@ -1,0 +1,20 @@
+{# app/templates/user/_pagination.html — 공통 페이지네이션 · 소유자 lse (병렬작업 계약 §5)
+
+  🚨 목록 화면이 늘 때(segments 등) 여기를 include 해서 재사용한다 — 새로 안 그린다.
+  ★ 호출 전 context 에 넣어 둘 값 넷 — `page`(1-base) · `has_prev` · `has_next` ·
+    `base_qs`(필터 등 유지할 쿼리스트링, 없으면 "" — 예: "&verdict=hold").
+  ⛔ 필터가 바뀌면 1 페이지로 돌아간다 — 필터 링크가 `page` 를 안 실으면 자동으로 그렇게 된다.
+#}
+<nav class="pagination" aria-label="페이지">
+  {% if has_prev %}
+  <a href="?page={{ page - 1 }}{{ base_qs }}">← 이전</a>
+  {% else %}
+  <span class="pagination-edge" aria-disabled="true">← 이전</span>
+  {% endif %}
+  <span class="pagination-page">{{ page }} 페이지</span>
+  {% if has_next %}
+  <a href="?page={{ page + 1 }}{{ base_qs }}">다음 →</a>
+  {% else %}
+  <span class="pagination-edge" aria-disabled="true">다음 →</span>
+  {% endif %}
+</nav>

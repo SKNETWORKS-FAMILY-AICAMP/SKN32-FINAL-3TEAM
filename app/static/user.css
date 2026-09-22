@@ -1,0 +1,286 @@
+/* app/static/user.css — 사용자 화면 공통 스타일 · 소유자 lse (병렬작업 계약 §5)
+   화면 셸(공통 nav)만 여기 둔다. 화면 하나짜리 스타일은 각 화면 파일에 인라인 <style> 로 둔다.
+   색 토큰은 팀원 mockup(02_프로토타입_v7.2.html) 의 :root 값을 그대로 옮겼다 — 화면이 늘어도
+   색이 갈리지 않게 하나로 묶는다. `.user-shell` 로 감싸 base.css 의 전역 토큰과 겹치지 않는다. */
+.user-shell {
+  --u-surface: #ffffff;
+  --u-surface2: #f7f6f9;
+  --u-ink: #1c1c1f;
+  --u-clay: #86848c;
+  --u-line: #e6e5e9;
+  --u-signal: #8b5cf6;
+  --u-signal-ink: #7c3aed;
+  --u-signal-soft: #f5eefc;
+}
+@media (prefers-color-scheme: dark) {
+  .user-shell {
+    --u-surface: #201f22;
+    --u-surface2: #29282c;
+    --u-ink: #f1f0f2;
+    --u-clay: #918f94;
+    --u-line: #38373b;
+    --u-signal: #a78bfa;
+    --u-signal-ink: #c4b5fd;
+    --u-signal-soft: #2a2140;
+  }
+}
+
+/* 🔴 `base.css` 의 `body { max-width: 52rem }` 이 데스크톱에서도 사용자 화면을 휴대폰처럼
+   좁게 만든다 — 프로토타입은 전폭이다. `base.css` 는 팀장 소유라 안 고치고(§5),
+   `.user-shell` 이 있는 페이지에서만 여기서 되돌린다. 한 곳(user.css)에만 두고
+   화면마다 반복하지 않는다 (2026-09-16 — ksr 화면 이식 중 발견). */
+body:has(.user-shell) { max-width: none; padding: 1.5rem 2rem; }
+@media (max-width: 44rem) { body:has(.user-shell) { padding: 1.5rem 1rem; } }
+
+/* 상단 4-pill 메뉴 — copylane 소개 · 검수 및 카피생성 · AI 광고 생성 · 매칭 (구역 넷뿐이다) */
+.user-topnav {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .75rem 1rem;
+  margin: -1.5rem -2rem 0;
+  background: var(--u-surface);
+  border-bottom: 1px solid var(--u-line);
+  color: var(--u-ink);
+}
+@media (max-width: 44rem) { .user-topnav { margin-left: -1rem; margin-right: -1rem; } }
+.user-topnav-brand {
+  font-weight: 700;
+  margin-right: 1rem;
+  color: var(--u-ink);
+  text-decoration: none;
+}
+.user-topnav-pill {
+  padding: .45rem .9rem;
+  border-radius: .7rem;
+  color: var(--u-clay);
+  text-decoration: none;
+  font-size: .9rem;
+  font-weight: 500;
+}
+.user-topnav-pill:hover { background: var(--u-surface2); color: var(--u-ink); }
+.user-topnav-pill-active { color: var(--u-signal-ink); background: var(--u-signal-soft); font-weight: 600; }
+.user-topnav-spacer { flex: 1; }
+.user-topnav-mypage {
+  padding: .45rem .9rem;
+  border-radius: .7rem;
+  color: var(--u-ink);
+  text-decoration: none;
+  font-size: .85rem;
+  font-weight: 500;
+}
+.user-topnav-mypage:hover { background: var(--u-surface2); }
+
+/* 구역 본문 — 왼쪽 사이드바(있으면) + 메인 */
+.user-body { display: flex; margin: 0 -2rem; align-items: flex-start; }
+@media (max-width: 44rem) { .user-body { margin: 0 -1rem; flex-direction: column; } }
+.user-sidebar {
+  width: 11rem;
+  flex-shrink: 0;
+  padding: 1.25rem .75rem;
+  border-right: 1px solid var(--u-line);
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  min-height: calc(100vh - 7.5rem);
+}
+.user-sidebar-label { font-size: .72rem; color: var(--u-clay); text-transform: uppercase; margin: 0 .6rem .6rem; }
+.user-sidebar-item {
+  padding: .5rem .6rem;
+  border-radius: .6rem;
+  color: var(--u-ink);
+  text-decoration: none;
+  font-size: .88rem;
+}
+.user-sidebar-item:hover { background: var(--u-surface2); }
+.user-sidebar-item-active { color: var(--u-signal-ink); background: var(--u-signal-soft); font-weight: 600; }
+.user-sidebar-cs {
+  margin-top: auto;
+  padding: .55rem .7rem;
+  border: 1px solid var(--u-line);
+  border-radius: .6rem;
+  color: var(--u-clay);
+  text-decoration: none;
+  font-size: .82rem;
+  text-align: center;
+}
+.user-sidebar-cs:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+.user-main { flex: 1; min-width: 0; padding: 1.5rem 1.75rem; }
+
+/* 목록 화면 공통 — 필터 칩·페이지네이션. history 가 먼저 쓰고, 다음 목록 화면이 이어 쓴다. */
+.filter-chips {
+  display: flex;
+  gap: .4rem;
+  margin-bottom: 1rem;
+}
+.filter-chips .filter-chip {
+  padding: .3rem .8rem;
+  border-radius: 999px;
+  border: 1px solid var(--u-line);
+  color: var(--u-clay);
+  text-decoration: none;
+  font-size: .85rem;
+}
+.filter-chips .filter-chip:hover { background: var(--u-surface2); color: var(--u-ink); }
+.filter-chips .filter-chip-active {
+  color: var(--u-signal-ink);
+  background: var(--u-signal-soft);
+  border-color: var(--u-signal);
+  font-weight: 600;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-top: 1rem;
+  font-size: .85rem;
+}
+.pagination a { color: var(--u-signal-ink); text-decoration: none; }
+.pagination a:hover { text-decoration: underline; }
+.pagination-edge { color: var(--u-clay); }
+.pagination-page { color: var(--u-clay); }
+
+/* history — 클릭하면 옆에 상세가 펼쳐지는 목록 (서버 렌더 토글, JS 없음) */
+.history-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.history-layout:has(.history-detail) { grid-template-columns: 1fr 320px; }
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--u-line);
+  border-radius: .75rem;
+  overflow: hidden;
+}
+.history-list li + li { border-top: 1px solid var(--u-line); }
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .65rem 1rem;
+  color: var(--u-ink);
+  text-decoration: none;
+}
+.history-row:hover { background: var(--u-surface2); }
+.history-row-open { background: var(--u-signal-soft); }
+.history-row-date { font-size: .8rem; color: var(--u-clay); width: 9rem; flex-shrink: 0; }
+.history-row-verdict { width: 5.5rem; flex-shrink: 0; }
+.history-row-risk { color: var(--u-clay); width: 2rem; text-align: center; }
+.history-row-chevron { color: var(--u-clay); width: 1rem; text-align: center; }
+
+.history-detail {
+  border: 1px solid var(--u-line);
+  border-radius: .75rem;
+  padding: 1rem;
+  background: var(--u-surface2);
+}
+.history-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .75rem;
+  font-weight: 600;
+}
+.history-detail-head a { color: var(--u-clay); text-decoration: none; }
+.history-detail-text { font-size: .9rem; line-height: 1.6; margin: 0 0 .75rem; }
+.history-detail dl { margin: 0; }
+.history-detail dt { font-size: .75rem; color: var(--u-clay); margin-top: .5rem; }
+.history-detail dd { margin: 0; }
+.history-detail-note { font-size: .8rem; color: var(--u-clay); margin-top: .75rem; }
+
+/* home — 대시보드 */
+.home-sub { color: var(--u-clay); margin-top: -.5rem; margin-bottom: 1.5rem; }
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--u-line);
+  border: 1px solid var(--u-line);
+  border-radius: .75rem;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+.home-stat { background: var(--u-surface); padding: 1rem; }
+.home-stat-label { font-size: .75rem; color: var(--u-clay); margin: 0 0 .3rem; }
+.home-stat-value { font-size: 1.4rem; margin: 0; }
+
+.home-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .75rem;
+  margin-bottom: 1.75rem;
+}
+.home-shortcut {
+  display: block;
+  border: 1px solid var(--u-line);
+  border-radius: .9rem;
+  padding: 1.1rem;
+  color: var(--u-ink);
+  text-decoration: none;
+}
+.home-shortcut:hover { border-color: var(--u-signal); }
+.home-shortcut-title { font-weight: 600; margin: 0 0 .3rem; }
+.home-shortcut-desc { font-size: .8rem; color: var(--u-clay); margin: 0; }
+
+.home-recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .5rem;
+}
+.home-recent-head p { font-size: .75rem; color: var(--u-clay); margin: 0; text-transform: uppercase; }
+.home-recent-head a { font-size: .8rem; color: var(--u-signal-ink); text-decoration: none; }
+
+/* login·signup — 계정 시스템 붙기 전 골격. 입력은 disabled, 제출 버튼은 없다 */
+.auth-card {
+  max-width: 22rem;
+  margin: 2.5rem auto;
+  padding: 0 1rem;
+}
+.auth-card h1 { margin-bottom: .25rem; }
+.auth-sub { color: var(--u-clay); margin-top: 0; margin-bottom: 1.5rem; }
+.auth-card label { display: block; font-size: .82rem; font-weight: 600; margin: 1rem 0 .35rem; }
+.auth-card input[type="email"],
+.auth-card input[type="password"],
+.auth-card input[type="text"],
+.auth-card input:not([type]) {
+  width: 100%;
+  padding: .55rem .7rem;
+  border: 1px solid var(--u-line);
+  border-radius: .6rem;
+  background: var(--u-surface2);
+  color: var(--u-clay);
+  font: inherit;
+}
+.auth-consent {
+  margin-top: 1.25rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--u-line);
+  border-radius: .7rem;
+  background: var(--u-surface2);
+}
+.auth-consent label {
+  display: flex;
+  gap: .5rem;
+  align-items: flex-start;
+  font-size: .78rem;
+  font-weight: 400;
+  color: var(--u-clay);
+  margin: 0 0 .6rem;
+}
+.auth-consent label:last-child { margin-bottom: 0; }
+.auth-note {
+  font-size: .8rem;
+  color: var(--u-clay);
+  background: var(--u-signal-soft);
+  border-radius: .6rem;
+  padding: .7rem .9rem;
+  margin-top: 1.25rem;
+}
+.auth-switch { text-align: center; font-size: .85rem; color: var(--u-clay); margin-top: 1.25rem; }
+.auth-switch a { color: var(--u-signal-ink); }
