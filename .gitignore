@@ -91,3 +91,11 @@ Claude outputs/
 #    🚨 절차로 「add 를 먼저 돌리지 마라」고 적어 두었는데 그 절차를 내가 어겼다.
 #    **사람이 지키는 순서보다 무시 규칙 한 줄이 세다.**
 .commitmsg
+
+# 🆕 모델 가중치 — 대용량 바이너리는 저장소에 두지 않는다 (2026-09-21)
+#  model.safetensors 등 431MB급 파일은 GitHub 100MB 제한에 걸려 push가 실패한다.
+#  압축본(zip)과 압축 해제본(폴더)이 중복으로 남지 않도록 함께 막는다.
+docs/psj/e2e_prototype/copylane-encoder-koelectra-final/
+docs/psj/e2e_prototype/copylane-encoder-koelectra-final*.zip
+copylane-encoder-koelectra-final*.zip
+*.safetensors
