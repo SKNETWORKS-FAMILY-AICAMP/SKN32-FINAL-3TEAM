@@ -1,0 +1,80 @@
+{# app/templates/admin/members/enterprise_detail.html — 기업 회원 상세 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 구성원 명단·사용량 추이·결제 이력 전부 예시 수치다 — 담는
+     집계·결제 테이블이 아직 없다 (회원 상세와 같은 이유, admin_members.py 참고).
+  🔴 기업 회원 테이블 자체도 없다 — 더미다 (admin_enterprise.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+  🚨 목업은 탭(구성원·사용량 분석·결제 이력)을 JS 로 전환하지만, 여기는 스크립트
+     없이(CSP script-src 'self') 세 섹션을 순서대로 모두 보여준다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 기업 상세{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<div class="admin-main">
+
+<p><a href="/admin/enterprise">← 기업 회원 목록</a></p>
+
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 기업 회원 테이블이 아직 없어요 — 사용량·결제 이력도 예시 수치입니다.</p>
+
+<h1>{{ row.name }} <small class="hint">{{ row.plan }}</small></h1>
+<table class="kv">
+  <tr><th>사업자등록번호</th><td>{{ row.biz }}</td></tr>
+  <tr><th>대표자</th><td>{{ row.rep }}</td></tr>
+  <tr><th>가입일</th><td>{{ row.joined }}</td></tr>
+  <tr><th>상태</th><td>{{ row.status }}</td></tr>
+</table>
+
+<h2>이용 현황 <small class="hint">(예시 수치 — 집계 테이블 없음)</small></h2>
+<table class="kv">
+  <tr><th>전체 구성원</th><td>{{ row.members }}명</td></tr>
+  <tr><th>이번 달 판정</th><td>1,248건</td></tr>
+  <tr><th>이번 달 생성</th><td>864건</td></tr>
+  <tr><th>계약 만료</th><td>2027.03.11</td></tr>
+</table>
+
+<h2>구성원 <small class="hint">(예시 — 구성원 명단 테이블 없음)</small></h2>
+<table>
+  <tr><th>이름</th><th>이메일</th><th>역할</th><th>가입일</th><th>최근 접속</th><th>상태</th></tr>
+  <tr><td>{{ row.rep }}</td><td>owner@company.co.kr</td><td>대표자</td><td>{{ row.joined }}</td><td>오늘 10:32</td><td>활성</td></tr>
+  <tr><td>박서윤</td><td>member@company.co.kr</td><td>구성원</td><td>2026.01.20</td><td>오늘 10:08</td><td>활성</td></tr>
+</table>
+
+<h2>사용량 분석 <small class="hint">(예시 수치)</small></h2>
+<div class="usage-trend">
+  {% for label, value in usage_trend %}
+  <div class="usage-row">
+    <span class="usage-label">{{ label }}</span>
+    <div class="usage-bar" style="width: {{ (value / max_usage * 100) | round(1) }}%;"></div>
+    <strong class="usage-value">{{ value }}</strong>
+  </div>
+  {% endfor %}
+</div>
+<table class="kv" style="margin-top: 1rem;">
+  {% for name, value in feature_usage %}
+  <tr><th>{{ name }}</th><td>{{ value }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>결제 이력 <small class="hint">(예시 — 결제 테이블 없음)</small></h2>
+<table>
+  <tr><th>결제일</th><th>상품</th><th>금액</th><th>세금계산서</th><th>상태</th></tr>
+  <tr><td>2026.08.05</td><td>{{ row.plan }} 월간</td><td>990,000원</td><td>발행 완료</td><td>결제 완료</td></tr>
+</table>
+
+<style>
+.admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
+.admin-shell table.kv th { text-align: left; padding: .3rem .8rem .3rem 0; color: var(--a-clay); font-weight: 500; white-space: nowrap; }
+.admin-shell table.kv td { padding: .3rem 0; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; font-weight: 400; }
+.admin-shell .usage-trend { display: flex; flex-direction: column; gap: .5rem; max-width: 30rem; }
+.admin-shell .usage-row { display: flex; align-items: center; gap: .6rem; }
+.admin-shell .usage-label { width: 2.2rem; font-size: .8rem; color: var(--a-clay); }
+.admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
+.admin-shell .usage-value { font-size: .8rem; }
+</style>
+</div>
+</div>
+{% endblock %}

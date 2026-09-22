@@ -1,0 +1,51 @@
+{# app/templates/admin/board/notice_detail.html — 공지사항 상세 (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 수정·삭제 버튼은 disabled 뼈대다.
+  🔴 `notice` 테이블이 아직 없다 — 더미다.
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 공지사항 상세{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<div class="admin-main">
+
+<p><a href="/admin/board/notices">← 공지사항 목록</a></p>
+
+<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>notice</code> 테이블이 아직 없어요 — 팀장 승인 전이라 DB 조회 자체를 안 합니다.</p>
+
+<h1>{{ "📌 " if row.pinned else "" }}{{ row.title }}</h1>
+<table class="kv">
+  <tr><th>분류</th><td>{{ row.category }}</td></tr>
+  <tr><th>작성자</th><td>{{ row.author }}</td></tr>
+  <tr><th>게시일</th><td>{{ row.date }}</td></tr>
+  <tr><th>게시 기간</th><td>{{ row.period }}</td></tr>
+  <tr><th>상태</th><td>{{ row.status }}</td></tr>
+  <tr><th>고정</th><td>{{ "고정됨" if row.pinned else "-" }}</td></tr>
+</table>
+
+<h2>내용</h2>
+<pre class="board-content">{{ row.content }}</pre>
+
+<h2>관리 <small class="hint">(승인 대기 · 비활성)</small></h2>
+<fieldset class="board-disabled" disabled>
+  <button type="button">수정</button>
+  <button type="button">삭제</button>
+  <button type="button">고정 {{ "해제" if row.pinned else "" }}</button>
+</fieldset>
+<p class="hint">⬜ notice 테이블 승인 뒤 실제 쓰기 라우트를 붙인다.</p>
+
+<style>
+.admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
+.admin-shell table.kv th { text-align: left; padding: .3rem .8rem .3rem 0; color: var(--a-clay); font-weight: 500; white-space: nowrap; }
+.admin-shell table.kv td { padding: .3rem 0; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
+.admin-shell .board-content { white-space: pre-wrap; font-family: inherit; background: var(--a-surface2); border: 1px solid var(--a-line); border-radius: .5rem; padding: 1rem; max-width: 40rem; }
+.admin-shell .board-disabled { display: flex; gap: .5rem; border: none; padding: 0; }
+.admin-shell .board-disabled button { padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--a-line); background: var(--a-surface2); color: var(--a-ink); cursor: not-allowed; opacity: .6; }
+</style>
+</div>
+</div>
+{% endblock %}

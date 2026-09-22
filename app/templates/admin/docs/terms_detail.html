@@ -1,0 +1,69 @@
+{# app/templates/admin/docs/terms_detail.html — 약관 버전 상세(이력) (뼈대) · 소유자 **psj**
+   (병렬작업 계약 §5)
+
+  🚨 **읽기 전용이다.** 새 버전 등록은 disabled 뼈대다.
+  🔴 약관 버전 테이블이 아직 없다 — 더미다 (admin_terms.py 참고).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 약관 버전 상세{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+<div class="admin-main">
+
+<p><a href="/admin/terms">← 약관 버전 목록</a></p>
+
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 약관 버전 테이블이 아직 없어요.</p>
+
+<h1>{{ row.name }} <small class="hint">{{ row.version }}</small></h1>
+<table class="kv">
+  <tr><th>현재 버전</th><td>{{ row.version }}</td></tr>
+  <tr><th>시행일</th><td>{{ row.effective_date }}</td></tr>
+  <tr><th>이전 버전</th><td>{{ row.prev_version }}</td></tr>
+  <tr><th>변경 사유</th><td>{{ row.reason }}</td></tr>
+  <tr><th>상태</th><td>{{ row.status }}</td></tr>
+</table>
+
+<h2>버전 이력 <small class="hint">(예시 — 이력 테이블 없음)</small></h2>
+<table>
+  <tr><th>버전</th><th>시행일</th><th>변경 사유</th></tr>
+  <tr><td>{{ row.version }}</td><td>{{ row.effective_date }}</td><td>{{ row.reason }}</td></tr>
+  <tr><td>{{ row.prev_version }}</td><td>-</td><td>-</td></tr>
+</table>
+
+<h2>새 버전 등록 <small class="hint">(승인 대기 · 비활성)</small></h2>
+<fieldset class="terms-disabled-form" disabled>
+  <label>새 버전
+    <input type="text" placeholder="예: v3.3">
+  </label>
+  <label>시행일
+    <input type="date">
+  </label>
+  <label>변경 사유
+    <textarea rows="3" placeholder="변경 사유를 입력하세요"></textarea>
+  </label>
+  <button type="button">등록</button>
+</fieldset>
+<p class="hint">⬜ 약관 버전 테이블 승인 뒤 실제 쓰기 라우트를 붙인다.</p>
+
+<style>
+.admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
+.admin-shell table.kv th { text-align: left; padding: .3rem .8rem .3rem 0; color: var(--a-clay); font-weight: 500; white-space: nowrap; }
+.admin-shell table.kv td { padding: .3rem 0; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; font-weight: 400; }
+.admin-shell .terms-disabled-form { display: flex; flex-direction: column; gap: .5rem; max-width: 28rem; border: none; padding: 0; opacity: .6; margin-top: .5rem; }
+.admin-shell .terms-disabled-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; }
+.admin-shell .terms-disabled-form input,
+.admin-shell .terms-disabled-form textarea {
+  padding: .4rem .5rem; border: 1px solid var(--a-line); border-radius: .4rem;
+  background: var(--a-surface2); color: var(--a-ink);
+}
+.admin-shell .terms-disabled-form button {
+  align-self: flex-start; padding: .5rem 1.2rem; border-radius: .5rem; border: none;
+  background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed;
+}
+</style>
+</div>
+</div>
+{% endblock %}
