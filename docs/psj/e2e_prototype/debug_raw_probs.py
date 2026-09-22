@@ -17,8 +17,8 @@ model = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR)
 model.eval()
 
 samples = [
-    "이 제품을 드시면 당뇨가 완치됩니다",
-    "맛있게 즐기실 수 있는 건강한 간식입니다",
+    "이 크림 하나면 주름이 싹 사라지고 피부가 20대로 돌아갑니다",
+    "매일 아침 상쾌하게 즐기는 오렌지 주스입니다",
 ]
 
 for text in samples:
