@@ -419,6 +419,18 @@ def attach_links(html_text: str) -> list[tuple[str, str]]:
     return out
 
 
+def attach_dest(page_stem: str, idx: int) -> str:
+    """게시물 `45732` 의 idx 번째 첨부 → `45732_1.pdf`.
+
+    🔄 2026-09-22 (클론 A 재검토 2판 §3-4 · 3판 §0 ⑦ 실측 0건 뒤) — ⛔ 게시물 HTML 이 **판**
+       (`45732__c20260909.html` · 원천이 같은 번호로 다른 내용을 줬을 때)이면 종전 이름은
+       `45732__c20260909_1.pdf` 였다. 판 표시가 이름 **가운데** 들어가 `store` 는 이것을
+       `45732.pdf` 의 판으로 읽는다 — 다른 첨부와 섞인다.
+       ★ 첨부 이름은 **판을 뗀 게시물 번호**로 짓는다. 첨부 내용이 달라지면 `save_raw` 가 첨부 쪽에 판을 붙인다(규약 2).
+    """
+    return f"{page_stem.split(store.EDITION_MARK, 1)[0]}_{idx}.pdf"
+
+
 def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, int]:
     """받아 둔 게시물 HTML 에서 첨부 PDF 를 받는다. 돌려주는 값은 (저장, 건너뜀, 실패).
 
@@ -457,7 +469,7 @@ def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, 
                 print(f"\n  ⏸ --limit {limit} 에서 멈춘다.")
                 return saved, skipped, failed
             seen += 1
-            dest = f"{page.stem}_{idx}.pdf"
+            dest = attach_dest(page.stem, idx)
             if (out_dir / dest).exists():
                 skipped += 1
                 continue

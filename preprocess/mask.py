@@ -234,7 +234,8 @@ _REDACTED_NAME = re.compile(r"(?<![0-9,.])(?:000+|[가-힣][ㅇo○●]{2,})(?![
 #:
 #: 🚨 성씨 목록을 쓰는 이유 — 직함만 보고 뒤 2~4자를 지우면 「대표자 **표시광고**」처럼
 #:    **판정 어휘를 지운다.** 성씨는 열린 추측이 아니라 **닫힌 집합**이라 근거가 된다.
-#:    ⬜ 흔한 30여 개만 넣었다. 드문 성씨는 못 잡는다 — `--survey` 가 잔여로 센다.
+#:    ⬜ 흔한 30여 개만 넣었다. 드문 성씨는 못 잡는다 — 🔄 09-22 잔여는 `scripts/derived_manifest.py --pii-triage` 가 센다
+#:       (⛔ 종전 「`--survey` 가 센다」는 틀렸다 — `--survey` 는 업체 앵커만 잰다).
 #: 🔄 2026-09-19 — **짧은 직함 셋(사장·회장·이사)은 낱말 경계에서만** 직함이다.
 #:    ⛔ 반출 검사 실측(클론 B · 생성물 전량) — 「다**이사**이클로펜타다이엔」(성분명 38건)·
 #:       「검**사장**소까지」·「공**사장** 인부」가 「직함+이름」으로 걸렸다. 같은 규칙이 마스킹에서
@@ -249,7 +250,7 @@ _REDACTED_NAME = re.compile(r"(?<![0-9,.])(?:000+|[가-힣][ㅇo○●]{2,})(?![
 #:      한 글자·흔한 앞붙이(부·명예)는 짧은 직함과 같이 **경계에서만** — 「정부사장」 같은 낱말 안쪽을 피한다.
 #:      「공사장」·「검사장」의 「공」·「검」은 목록에 없으니 종전처럼 안 걸린다. 「이사장」은 「이사」보다 먼저 둔다.
 #:    ⛔ 「전무」·「상무」·「감사」 **단독**은 넣지 않는다 — 09-19 전에도 없었고(회귀가 아니다) 「감사 결과」처럼
-#:       보통명사로 흔하다. 넣을지는 `--survey` 잔여를 보고 따로 정한다.
+#:       보통명사로 흔하다. 넣을지는 잔여(🔄 09-22 `derived_manifest.py --pii-triage` 의 넓은 거름)를 보고 따로 정한다.
 #: 🔄 2026-09-21 (전수 재검토) — 「전무」「상무」 단독을 더한다. ⛔ 「이사 전무 김철수」에서 「전」이 성씨라
 #:    「전무」를 이름으로 지우고 실명이 남았다. 두 말은 「감사」와 달리 보통명사로 거의 안 쓴다(「전무후무」의 「후」는 성씨가 아니다).
 _SHORT_TITLE = r"(?:사장|회장|이사장|이사|전무|상무)"
@@ -396,6 +397,7 @@ _NOT_NAME = frozenset(
 _TITLE_SEP = r"(?:\s*[:：]\s*|\s*[(（]\s*|\s*,\s*|\s*)"
 #: 이름 목록을 잇는 말 — `,`·`·` 에 🆕 「및」(띄어 쓴 것만). ⛔ 「대표이사 김철수 및 박영희」의 뒤 이름이 남았다.
 #:    ⬜ 「김철수와 박영희」(붙여 쓴 「와·과」)는 이름 끝 글자와 겹쳐 가를 수 없다 — 못 잡는다.
+#:       🔄 09-22 그 잔여는 `derived_manifest.py --pii-triage` 의 「붙여쓴 와·과」가 센다.
 _NAME_JOIN = r"(?:\s*[,·]\s*|\s+및\s+)"
 #: 🔴 이름 자리가 **또 직함**이면 이름이 아니다 (전수 재검토 C1).
 #:    ⛔ 「소송대리인 변호사 김철수」 → 「소송대리인 [대표] 김철수」 — 「변」이 성씨라 「변호사」를 이름으로 지우고
@@ -403,6 +405,71 @@ _NAME_JOIN = r"(?:\s*[,·]\s*|\s+및\s+)"
 _NOT_TITLE = rf"(?!{_TITLES})"
 _TITLED_PERSON = re.compile(
     rf"({_TITLES}{_TITLE_SEP})({_NOT_TITLE}{_PERSON_NAME}(?:{_NAME_JOIN}{_NOT_TITLE}{_PERSON_NAME})*)"
+)
+
+
+#: 🆕 2026-09-22 — 레지스트리가 사람 축을 **「대표자명 등 개인 실명」** 으로 선언한 원천 (문언 그대로 · D-54).
+#:    ★ 이 원천에서는 대표자가 아닌 사람(조리실장·점장 …)도 선언 범위 안이다 — 코드가 선언을 못 따라가던 자리다.
+#:    📏 실측(클론 B · `--pii-triage` 09-22) — 재결례에 「조리실장(실명)」 1 · 「○○개발 대표 조○우」(부분 가림) 1 이 남았다.
+#: 🔄 2026-09-22 D-258 — `ftc`(= `ftc_decisions_body`) 도 넣는다. 팀장 판정 (가) · 2인 확인(권소라) ·
+#:    레지스트리 문언 「개인 실명은 피심인이 아니어도 가린다」(`scripts/gen_registry.py`). ⛔ 종전 D-248 ⬜ 「제3자 개인은 대상 밖」을 뒤집는다.
+#:    📏 실측 — 의결서 이유가 인용한 광고 문구 속 「이름 + 원장」 의사 3명이 골든셋까지 들어갔다(`--pii-triage` 09-22).
+#:    🚨 키는 `POLICY` 의 원천 이름이다(`ftc` · `law_go_kr`) — 레지스트리 id 가 아니다.
+PERSON_ALL_NAMES = frozenset({"law_go_kr", "ftc"})
+#: 넓은 원천에서만 더 보는 직함 `[임의]` — 탐침(`build/probe_person_0922.py` C절)에 나온 것 중 보통명사와 덜 부딪히는 것.
+#:    ⛔ 「과장」은 뺀다 — 「거짓·과장 **성**능」처럼 판정 어휘 뒤에 성씨 글자가 온다. 「직원」·「대표」·「업주」도 뺀다(오탐 위주).
+_WIDE_TITLES = r"(?:조리실장|주방장|실장|점장|팀장|부장)"
+#: 원천이 이름 **일부만** 가린 꼴 — 「조○우」·「김철○」. 전부 가린 「김○○」은 `_REDACTED_NAME` 이 이미 지운다.
+#:    🚨 「이○의」처럼 가림 뒤가 **조사**면 성만 남은 것이다(특정 불가) — 조사를 이름으로 먹지 않게 뺀다
+_PART_GLYPH = "○ㅇOＯ*＊△"
+_PART_ROLES = rf"(?:{_TITLES}|{_WIDE_TITLES}|대표|청구인|직원|종업원|업주|영업자)"
+#: 넓은 직함 뒤에는 **구분자가 하나 이상** 와야 한다 — 🔄 09-22 실측(클론 B · 탐침 `probe_person_0922b` · 사용자 실행):
+#:    붙여 쓴 「실장**이나** 직원」의 「이나」가 3개 문서에서 이름으로 걸렸다(「이」가 성씨). 긴 직함(대표이사…)과 달리
+#:    이 직함들은 「피심인대표이사홍길동」처럼 붙여 쓰는 등기 꼴이 없으므로 붙여 쓴 자리를 통째로 안 본다.
+_WIDE_SEP = r"(?:\s*[:：]\s*|\s*[(（]\s*|\s*,\s*|\s+)"
+#: 🔄 09-22 D-258 ftc 탐침(`probe_person_0922c` · 클론 B · 사용자 실행) — 넓은 직함 뒤 이름이 **427개 문서**에서 걸렸고
+#:    「부장 **진술조서**」 113 · 「진술서」 21 · 「진술내용」 14 · 「하부장」·「신발장」 30 · 목록(`_NAME_JOIN`)으로 이어 붙은 14자까지 나왔다.
+#:    의결서 증거 목록(「소갑 제5호증 부장 진술조서」)의 표준 꼴이다. ★ 그래서 넓은 규칙의 이름은 **세 글자 · 낱말 경계 · 목록 없음**이다
+#:    (아래 「이름 + 직함」과 같은 모양 — 실명 분포도 3자가 압도적이다).
+_NAME3 = rf"[{_SURNAMES}][가-힣](?![의는을를와과에로])[가-힣]"
+_NAME3_END = r"(?=[^가-힣]|$|님|[은는이가을를의에도와과께로])"
+_WIDE_PERSON = re.compile(rf"({_WIDE_TITLES}{_WIDE_SEP})({_NOT_TITLE}{_NAME3}){_NAME3_END}")
+#: 🆕 2026-09-22 D-258 — **이름이 직함 앞에 오는 꼴** 「홍길동 원장」. 광고·보도 문장의 표준 꼴이다.
+#:    📏 탐침 B절(클론 B · ftc 원문 · 사용자 실행) — 원장·교수·박사·약사·회장·사장·실장·팀장·변호사 앞 후보 수백.
+#:    ⛔ 「의사」는 뺀다 — 「이러한 **의사**」(뜻)가 432건. 「대표」·「직원」도 뺀다(「피심인 대표」 121건).
+#:    🚨 이름은 **세 글자만** 본다 — 두 글자 후보가 보통명사였다(「구매 팀장」 12 · 「소속 팀장」 10). 실명 분포도 3자가 압도적이다(위 `_sub` 주석).
+#:    🚨 셋째 글자가 조사(의·는·을·를·와·과·에)면 이름이 아니다 — 「지금의 사장」. 은·이·가·도는 이름 끝에 흔해 둔다.
+_TITLE_AFTER = r"(?:한의사|변호사|원장|교수|박사|약사|회장|사장|실장|팀장)"
+#: 넓은 규칙(두 방향)의 불용어 `[임의]` — 세 글자 보통명사. 🔄 09-22 ftc 탐침에서 여러 문서에 나온 것을 보탰다
+_NOT_NAME_WIDE = frozenset(
+    {
+        "진술서",
+        "진술인",
+        "진술자",
+        "하부장",
+        "신발장",
+        "권한이",
+        "임원은",
+        "임원이",
+        "한의원",
+        "유치원",
+        "연구소",
+        "연구원",
+        "백화점",
+        "이사회",
+        "홍보실",
+        "전략실",
+        "구매팀",
+        "마케팅",
+        "우리은",
+    }
+)
+_NAME_BEFORE_TITLE = re.compile(
+    rf"(?<![가-힣])({_NAME3})(?=\s?{_TITLE_AFTER}(?:[^가-힣]|$|님|[은는이가을를의에도와과께]))"
+)
+_PARTIAL_PERSON = re.compile(
+    rf"({_PART_ROLES}{_TITLE_SEP})([{_SURNAMES}](?:[{_PART_GLYPH}](?![은는이가을를의에도와과께])[가-힣]|[가-힣][{_PART_GLYPH}]))"
+    rf"(?![{_PART_GLYPH}])(?=[^가-힣]|$|[은는이가을를의에도와과께])"
 )
 
 
@@ -617,6 +684,8 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
     people = respondent_people_of(bare)
     text = _mask_case_head(text, bare, log, people)
     text = _mask_people(text, people, log)
+    # 🆕 2026-09-22 — 앵커가 놓친 피심인. 사람인지 모르므로 `[업체]` (D-248 트레이드오프) · 경계·조사 규칙은 위와 한 벌 (D-99)
+    text = _mask_people(text, respondent_named_of(bare), log, MASK_ORG, "피심인 이름자리")
     for b in anchor_names(bare):
         if not usable(b):
             continue
@@ -764,7 +833,7 @@ def mask_respondent_email(text: str, bare: str, log: list[dict] | None = None) -
     return _EMAIL.sub(_sub, text)
 
 
-def mask_person(text: str, log: list[dict] | None = None) -> str:
+def mask_person(text: str, log: list[dict] | None = None, *, wide: bool = False) -> str:
     """가려진 이름과 「직함+이름」을 `[대표]` 로.
 
     🔄 **2026-09-08 — `mask()` 에서 떼어냈다 (D-157).**
@@ -789,6 +858,13 @@ def mask_person(text: str, log: list[dict] | None = None) -> str:
         lambda m: _note(log, "가려진이름", m.group(0), MASK_CEO) or MASK_CEO, text
     )
 
+    if wide:
+        # 🆕 2026-09-22 — 선언이 「개인 실명」인 원천만 (`PERSON_ALL_NAMES`). 부분 가림을 **먼저** —
+        #    「대표 조○우」의 「조○」가 뒤 규칙의 이름 자리와 겹치지 않게.
+        text = _PARTIAL_PERSON.sub(
+            lambda m: _note(log, "부분가림", m.group(2), MASK_CEO) or m.group(1) + MASK_CEO, text
+        )
+
     # 🚨 직함을 남기고 이름만 지운다 — 「대표이사 [대표]」.
     #    직함까지 지우면 그 자리가 사람이었다는 사실이 사라져, 다음 사람이
     #    「여기 이름이 있었나」를 못 본다. 지운 자국은 남긴다.
@@ -809,7 +885,28 @@ def mask_person(text: str, log: list[dict] | None = None) -> str:
         _note(log, "직함+이름", name, MASK_CEO)
         return m.group(1) + MASK_CEO + tail
 
-    return _TITLED_PERSON.sub(_sub, text)
+    text = _TITLED_PERSON.sub(_sub, text)
+    if not wide:
+        return text
+
+    # 🆕 2026-09-22 — 넓은 원천은 직함을 더 본다. 이름·불용어·조사 판단은 위 `_sub` 한 벌 (D-99)
+    def _wide(m: re.Match[str]) -> str:
+        name = m.group(2)
+        if name in _NOT_NAME or name in _NOT_NAME_WIDE:
+            return m.group(0)
+        _note(log, "직함+이름", name, MASK_CEO)
+        return m.group(1) + MASK_CEO
+
+    text = _WIDE_PERSON.sub(_wide, text)
+
+    def _before(m: re.Match[str]) -> str:
+        name = m.group(1)
+        if name in _NOT_NAME or name in _NOT_NAME_WIDE:
+            return name
+        _note(log, "이름+직함", name, MASK_CEO)
+        return MASK_CEO
+
+    return _NAME_BEFORE_TITLE.sub(_before, text)
 
 
 def residue(text: str, bare: str) -> int:
@@ -836,13 +933,28 @@ def _t(root: ET.Element, tag: str) -> str:
 #: ★ 원천이 **사람에게만** 다는 표지다 — 법인은 주민등록번호가 없다. 이름 모양·성씨로 추측하지 않는다.
 #: ⛔ 이 표지가 없는 개인사업자(사업자등록번호만 적힌 경우)는 **못 가른다** — 그때는 `[업체]` 로 가려진다.
 #:    가림은 되고 자국만 덜 정확하다. 추측으로 넓히면 3자 상호(「오뚜기」)가 사람이 된다.
-_RRN_MASKED = re.compile(r"([가-힣]{2,4})\s*\(\s*\*{6}\s*-\s*\*{7}")
+#: 🔄 2026-09-22 — 표지의 꼴이 둘 더 있었다(클론 B · 탐침 `probe_person_0922d` · seq 7269 · 사용자 실행):
+#:    ① **앞자리가 드러난 가림** 「000000-0******」(생년월일·성별 자리는 두고 뒤만 가림) — 종전 꼴(전부 `*`)만 봐서 사람 표지 0 이었다
+#:    ② **이름 가운데 공백** 「가 나(…)」 — 본문은 「가나」로 붙여 쓴다. 두 글자 이름이 원천에서 띄어 적혀 있었다
+#:    그래서 개인 피심인 둘이 `[업체]`(앞 사람) · **안 가림**(둘째)으로 나갔다. ★ 가림 표지는 **`*` 가 하나라도 있는** 13자리로 본다 —
+#:    법인등록번호는 전부 숫자라 표지가 아니다(가려지지 않는다). 이름 앞은 낱말 경계 — 「대표 김가나(」의 「표 김가나」를 막는다.
+_RRN_MASKED = re.compile(
+    r"(?<![가-힣])([가-힣]{2,4}|[가-힣] [가-힣]{1,2})\s*\(\s*([\d*]{6}\s*-\s*[\d*]{7})"
+)
 
 
 def respondent_people(root: ET.Element) -> tuple[str, ...]:
-    """피심정보내용에서 **개인 피심인**의 이름들 (나온 순서 · 중복 없음)."""
+    """피심정보내용에서 **개인 피심인**의 이름들 (나온 순서 · 중복 없음). 띄어 적힌 이름은 붙인 꼴도 함께 낸다."""
     txt = _t(root, "피심정보내용")
-    return tuple(dict.fromkeys(m.group(1) for m in _RRN_MASKED.finditer(txt)))
+    out: dict[str, None] = {}
+    for m in _RRN_MASKED.finditer(txt):
+        if "*" not in m.group(2):
+            continue  # 전부 숫자 — 법인등록번호 등. 사람 표지가 아니다
+        name = m.group(1)
+        out[name.replace(" ", "")] = None
+        if " " in name:
+            out[name] = None  # 🚨 원천이 띄어 적은 꼴도 본문에 나올 수 있다
+    return tuple(out)
 
 
 class Anchor(str):
@@ -858,10 +970,15 @@ class Anchor(str):
     """
 
     people: tuple[str, ...] = ()
+    #: 🆕 2026-09-22 — 본문이 「피심인 X」라 부르고 피심정보내용의 **이름 자리**에도 적힌 X (`respondent_named`)
+    named: tuple[str, ...] = ()
 
-    def __new__(cls, value: str, people: tuple[str, ...] = ()) -> Anchor:
+    def __new__(
+        cls, value: str, people: tuple[str, ...] = (), named: tuple[str, ...] = ()
+    ) -> Anchor:
         obj = super().__new__(cls, value)
         obj.people = tuple(people)
+        obj.named = tuple(named)
         return obj
 
 
@@ -869,11 +986,134 @@ def respondent_people_of(bare: str) -> tuple[str, ...]:
     return getattr(bare, "people", ())
 
 
+def respondent_named_of(bare: str) -> tuple[str, ...]:
+    return getattr(bare, "named", ())
+
+
+# ══ 앵커가 못 뽑은 피심인 — 원천이 두 번 적은 이름 (2026-09-22) ═════════════════════
+#  ⛔ 반출 검사 실측(클론 B · `--pii-triage` 09-22) — `ftc_stage` 주문에 「피심인 X 및 피심인 Y」의 **개인 실명 셋**이 남았다.
+#     주민번호 표지가 없어 `respondent_people` 이 사람으로 못 봤고(D-248 ⬜ 「표지 없는 개인 피심인」),
+#     사건명이 「X 외 1인의 …」 꼴이 아니라 앵커도 못 뽑았다.
+#  ★ 근거는 **원천이 두 번 적은 것**이다 — 본문이 「피심인 X」라 부르고, 피심정보내용의 **이름 자리**(칸 머리 · 번호 뒤 ·
+#    법인격 뒤)에도 X 가 있다. 이름 모양·성씨로 추측하지 않는다(D-248 이 버린 (b)).
+#  🚨 사람인지 업체인지는 여전히 모른다 — 주민번호 표지가 없으면 `[업체]` 로 가린다(D-248 트레이드오프와 같다).
+#  📏 탐침 실측(클론 B · `build/probe_person_0922.py` · 사용자 실행) — 마스킹 뒤 「피심인 + 성씨로 시작하는 말」 10,692자리 중
+#     그 말이 피심정보내용에 **있는** 자리 3,755 · 그중 정보칸에서 뒤가 공백·괄호 1,995. 나머지는 「주장」 884 · 「소속」 375 같은 보통명사다.
+_BODY_RESPONDENT = re.compile(r"피심인\s*[:：]?\s*([가-힣A-Za-z0-9]{2,12})")
+#: 피심정보내용에서 **이름이 오는 자리** — 칸 머리 · 줄 머리 · 번호(「1. 」「2)」) 뒤 · 법인격 뒤
+_INFO_SLOT = r"(?:^|\n|\d+\s*[.)]\s*|(?:주식회사|유한회사|㈜|\(주\))\s*)"
+#: 이름 자리여도 이름이 아닌 말 `[임의]` — 주소의 머리 · 법인격 · 탐침에서 여러 문서에 나온 보통명사
+_NOT_RESPONDENT = frozenset(
+    {
+        *[
+            "서울",
+            "부산",
+            "대구",
+            "인천",
+            "광주",
+            "대전",
+            "울산",
+            "세종",
+            "경기",
+            "강원",
+            "충북",
+            "충남",
+            "전북",
+            "전남",
+            "경북",
+            "경남",
+            "제주",
+            "경기도",
+            "서울시",
+            "서울특별시",
+        ],
+        *[
+            "주식회사",
+            "유한회사",
+            "합자회사",
+            "합명회사",
+            "사단법인",
+            "재단법인",
+            "협동조합",
+            "대표이사",
+            "대표자",
+            "대표",
+            "회사",
+        ],
+        *[
+            "주장",
+            "소속",
+            "정보공개",
+            "소명자료",
+            "지위",
+            "진술조서",
+            "모두",
+            "현황",
+            "이외",
+            "감사보고",
+            "임직원",
+            "진술",
+            "명의",
+            "전체",
+            "조합",
+            "전부",
+            "임원",
+            "지역",
+            "소유",
+        ],
+    }
+)
+_ADDR_TAIL = re.compile(r"(?:시|도|군|구|동|읍|면|리|로|길)$")
+
+
+def respondent_named(root: ET.Element) -> tuple[str, ...]:
+    """본문(주문·이유)이 「피심인 X」라 부르고, 피심정보내용의 **이름 자리**에도 X 가 있는 이름들."""
+    info = _t(root, "피심정보내용")
+    if not info:
+        return ()
+    body = _t(root, "주문") + "\n" + _t(root, "이유")
+    out: dict[str, None] = {}
+    for m in _BODY_RESPONDENT.finditer(body):
+        # 🔄 09-22 — 조사를 뗀 꼴과 **뗀 적 없는 꼴** 둘 다 본다. 이름 끝 글자가 조사와 겹친다(「…은」)
+        for x in dict.fromkeys((_drop_particle(m.group(1)), m.group(1))):
+            if (
+                len(x) < 2
+                or x in out
+                or x in _NOT_RESPONDENT
+                or x in _NOT_NAME
+                or _ADDR_TAIL.search(x)
+            ):
+                continue
+            in_slot = re.search(rf"{_INFO_SLOT}\s*{re.escape(x)}(?=[\s(（,·]|$)", info)
+            # 🔄 09-22 (클론 B · `--pii-triage` 재측정 · 사용자 확인) — 「피심인 [업체] 및 피심인 X」의 X 가 남았다.
+            #    X 는 피심정보내용에 있었지만 **이름 자리 밖**(「상호(대표 X)」 꼴로 추정)이었다.
+            #    ★ 이름 자리 밖은 **사람 꼴일 때만** 받는다 — 성씨로 시작하는 2~4자 · 앞이 「대표·대표자·대표이사·성명·괄호·쉼표」.
+            #      ⛔ 앞말을 안 보면 주소 낱말(「서울 **강남** 테헤란로」)이 피심인이 된다 — 반대 대조가 잡았다.
+            as_person = (
+                2 <= len(x) <= 4
+                and x[0] in _SURNAMES
+                and re.search(
+                    rf"(?:대표이사|대표자|대표|성명|[(（,])\s*[:：]?\s*{re.escape(x)}(?=[\s(（),·]|$)",
+                    info,
+                )
+            )
+            if in_slot or as_person:
+                out[x] = None
+    # 🚨 긴 것부터 — 「김가나」와 「김가나은」이 같이 있으면 긴 쪽이 먼저 지워져야 토막이 안 남는다
+    return tuple(sorted(out, key=len, reverse=True))
+
+
 def _starts_with_person(norm_head: str, people: tuple[str, ...]) -> bool:
     return any(p and norm_head.startswith(_bare_norm(p)) for p in people)
 
 
-def _mask_people(text: str, people: tuple[str, ...], log: list[dict] | None = None) -> str:
+def _mask_people(
+    text: str,
+    people: tuple[str, ...],
+    log: list[dict] | None = None,
+    mark: str = MASK_CEO,
+    rule: str = "피심인 개인",
+) -> str:
     """🔴 개인 피심인의 이름을 글 전체에서 `[대표]` 로 (2026-09-19 · D-248 · 팀장 판정).
 
     ★ 이름은 원천이 「이 사람이 피심인이다」라고 적은 자리(가려진 주민등록번호 앞)에서만 온다 — 추측이 아니다.
@@ -888,8 +1128,8 @@ def _mask_people(text: str, people: tuple[str, ...], log: list[dict] | None = No
             continue
         pat = re.compile(rf"(?<![가-힣]){re.escape(name)}(?=(?:{_NAME_TAIL})|[^가-힣]|$)")
         if pat.search(text):
-            _note(log, "피심인 개인", name, MASK_CEO)
-            text = pat.sub(MASK_CEO, text)
+            _note(log, rule, name, mark)
+            text = pat.sub(mark, text)
     return text
 
 
@@ -922,13 +1162,15 @@ def anchor_ftc(root: ET.Element) -> tuple[str, str]:
     name = _t(root, "사건명")
     # 🔄 2026-09-19 (D-248) — 알맹이에 **개인 피심인 이름**을 실어 보낸다(`Anchor`). 앵커 규칙은 그대로다.
     people = respondent_people(root)
+    # 🆕 2026-09-22 — 앵커가 놓친 피심인(원천이 두 번 적은 이름). 사람은 `people` 이 먼저 잡으므로 뺀다
+    named = tuple(x for x in respondent_named(root) if x not in people)
     m = re.match(r"^(.+?)의\s", name)
     if m:
-        return m.group(1), Anchor(strip_legal(m.group(1)), people)
+        return m.group(1), Anchor(strip_legal(m.group(1)), people, named)
     head = name.split()[0] if name.split() else ""
     if head and _LEGAL_RE.search(head):
-        return head, Anchor(strip_legal(head), people)
-    return "", Anchor("", people)
+        return head, Anchor(strip_legal(head), people, named)
+    return "", Anchor("", people, named)
 
 
 #: 마스킹 뒤에 **법인격 표기를 달고 남아 있는 이름**을 찾는다.
@@ -1533,7 +1775,8 @@ def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = Non
     if "org" in todo:
         text = mask(text, bare, log)  # 앵커만
         if "person" in todo:
-            text = mask_person(text, log)  # 앵커 바로 뒤 — 예전과 같은 자리
+            # 앵커 바로 뒤 — 예전과 같은 자리 · 🔄 D-258 선언이 「개인 실명」인 원천은 넓게
+            text = mask_person(text, log, wide=source in PERSON_ALL_NAMES)
         names = doc_org_names(text)  # 🚨 자리 치환 **전에** 캔다 — 치환 뒤엔 이름이 없다
         text = mask_org_slots(text, log)
         text = mask_org_foreign(text, log)  # 외국 법인격 — 여러 어절 상호까지 (2026-09-08)
@@ -1548,7 +1791,7 @@ def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = Non
         #      `residual_bare_orgs()` 를 게이트가 쓴다 (D-216 의 ⬜ ① · D-230 의 연장).
         #    ⬜ 뜻을 바꾸려면 레지스트리 `masking:` 문언부터 고치고 2인 확인을 거친다 (게이트 15).
     elif "person" in todo:
-        text = mask_person(text, log)
+        text = mask_person(text, log, wide=source in PERSON_ALL_NAMES)
     if "addr" in todo:
         text = mask_address(text, log)
     if "brand" in todo:
