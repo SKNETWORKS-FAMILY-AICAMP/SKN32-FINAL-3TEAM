@@ -29,7 +29,11 @@ import re
 import sys
 import unicodedata
 
-from app.settings import PARAMS
+# 🔄 2026-09-21 (전수 재검토) — ⛔ 안내대로 `python scripts/<이 파일>.py` 로 돌리면 `scripts/` 가 경로 맨 앞이라
+#    `app` 을 못 찾았다(ModuleNotFoundError). `scripts/label_merge.py` 와 같은 꼴로 저장소 뿌리를 세운다.
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
+
+from app.settings import PARAMS  # noqa: E402
 
 DICT = pathlib.Path("data/derived/banned_terms.jsonl")
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")

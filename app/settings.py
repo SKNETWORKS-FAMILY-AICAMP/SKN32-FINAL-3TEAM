@@ -276,6 +276,10 @@ def sqlalchemy_url() -> str:
     url = settings().database_url
     if f"+{SQLALCHEMY_DRIVER}://" in url:
         return url
+    # 🔄 2026-09-21 (전수 재검토) — ⛔ 검증이 받아 주는 `postgres://` 가 `postgres+psycopg://` 가 되어 SQLAlchemy 가
+    #    `NoSuchModuleError … postgres.psycopg` 로 죽었다(방언 이름은 `postgresql` 이다). 앞머리를 먼저 맞춘다.
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
     return url.replace("://", f"+{SQLALCHEMY_DRIVER}://", 1)
 
 

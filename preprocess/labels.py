@@ -63,6 +63,21 @@ def label(r: dict) -> str | None:
     return "|".join(sorted(v)) if isinstance(v, list) else str(v)
 
 
+def verdict(r: dict) -> str | None:
+    """사람의 **판단** — 유형 라벨이거나 「범위밖」. 🆕 2026-09-21 (전수 재검토 I10).
+
+    ⛔ 「범위밖」 행은 `확정유형` 이 비어 `label()` 이 None 을 낸다. 그래서 한 사람은 범위밖, 다른 사람은
+       `의약품_오인` 인 문구가 **갈림이 아니라 「한 사람만 채움」**으로 세였고, `consensus()` 는 그 1인 라벨을
+       분할로 내보냈다 — 붙인 사람들이 갈린 문구가 평가셋에 들어갔다. `label_round.compare` 는 같은 경우를
+       갈림(`0`)으로 셌다 — 두 도구가 달랐다 (D-99).
+    ★ 비교·일치도는 이것으로 한다. 분할로 나가는 것은 여전히 **유형이 있는 것만**이다(`docs`) — 범위밖은 안 나간다.
+    """
+    lab = label(r)
+    if lab:
+        return lab
+    return OUT_OF_SCOPE if (r.get("판단") or "").strip() == OUT_OF_SCOPE else None
+
+
 def load(paths: list[pathlib.Path]) -> dict[str, dict[str, str]]:
     """파일별로 {키: 라벨}. 빈칸은 없는 것으로 본다."""
     got: dict[str, dict[str, str]] = {}
@@ -108,7 +123,7 @@ def by_person(paths: list[pathlib.Path] | None = None) -> dict[str, dict[str, st
             if not line.strip():
                 continue
             r = json.loads(line)
-            lab = label(r)
+            lab = verdict(r)  # 🔄 09-21 — 범위밖도 판단이다 (갈림을 1인으로 세지 않게)
             if lab and not r.get(DECIDED):
                 got[person(p.name, r)][key(r)] = lab
     return dict(got)
@@ -126,7 +141,9 @@ def consensus() -> tuple[dict[str, dict], dict[str, int]]:
     by: dict[str, dict[str, dict]] = collections.defaultdict(dict)
     decided: dict[str, dict] = {}
     for fname, r in _rows():
-        if not label(r):
+        if not verdict(
+            r
+        ):  # 🔄 09-21 — 범위밖도 판단이다. 넣고 비교해야 「범위밖 ↔ 유형」이 갈림으로 선다
             continue
         if r.get(DECIDED):
             decided[key(r)] = r
@@ -140,7 +157,7 @@ def consensus() -> tuple[dict[str, dict], dict[str, int]]:
     for k, people in by.items():
         if k in decided:
             continue
-        labs = {label(r) for r in people.values()}
+        labs = {verdict(r) for r in people.values()}
         if len(labs) > 1:
             stat["갈림"] += 1
             continue
@@ -188,7 +205,9 @@ def main() -> int:
     picked, stat = consensus()
     d = docs()
     print(f"라벨 파일 {len(fs)}개 — {', '.join(p.name for p in fs)}")
-    print(f"  전체 행 {len(_rows()):,} · 유형 붙은 것 {len(picked):,} · 상태 {stat}")
+    typed = sum(1 for r in picked.values() if r.get("확정유형"))
+    # 🔄 09-21 — `picked` 에 합의된 「범위밖」도 들어간다(`verdict`) — 유형 붙은 것만 따로 센다
+    print(f"  전체 행 {len(_rows()):,} · 유형 붙은 것 {typed:,} · 상태 {stat}")
     print(f"  🔴 「{OUT_OF_SCOPE}」 {out_of_scope()}행 — **넣지 않는다** (머리말 참조)")
     by: collections.Counter = collections.Counter(t for x in d for t in x["유형"])
     print(f"\n  분할로 나가는 문서 {len(d):,}개 · 유형별 —")

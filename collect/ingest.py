@@ -190,7 +190,7 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
     family = dest_dir.name
     url = str(spec.get("url") or "")
     volatile = source_id in store.VOLATILE
-    new = skipped = backfilled = editions = 0
+    new = skipped = backfilled = editions = restored = 0
 
     def ident_of(q: Path) -> str:
         # 🚨 판정용 해시 — 유동 값이 있는 원천만 통째로 읽는다(그 외는 스트리밍 · 수백 MB)
@@ -199,11 +199,20 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
     for p in files:
         digest, size = digest_of(p)
         ident = ident_of(p)
-        verdict, dest, supersedes = store.plan_raw(family, p.name, ident, ident_of)
+        verdict, dest, supersedes = store.plan_raw(
+            family, p.name, ident, ident_of, source_id=source_id
+        )
         if verdict == "skip":
             skipped += 1  # 규약 4 — 디스크든 원장이든 같은 것이 있다
             continue
-        if verdict == "write":
+        if verdict == "restore":
+            # 🆕 2026-09-21 (코드 리뷰 #3) — 이 기기가 받았다고 적혔는데 없던 것. 그 경로에 되살린다 (`store.plan_raw`)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, dest)
+            restored += 1
+            if not store.restore_needs_row(dest, digest):
+                continue  # 원장 행이 이미 이 바이트를 말한다 — 같은 행을 두 번 적지 않는다
+        elif verdict == "write":
             shutil.copy2(p, dest)
             if supersedes:
                 editions += 1
@@ -226,10 +235,10 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
         if verdict == "write":
             new += 1
 
-    if new or backfilled:
+    if new or backfilled or restored:
         registry.mark_collected(source_id)  # 규약 3 · 게이트 15
     print(
-        f"등록 {new}개(판 {editions}) · 원장 행만 보탬 {backfilled}개 · 동일해 스킵 {skipped}개"
+        f"등록 {new}개(판 {editions}) · 원장 행만 보탬 {backfilled}개 · 되살림 {restored}개 · 동일해 스킵 {skipped}개"
         f" → {dest_dir.relative_to(ROOT)}"
     )
     if backfilled:

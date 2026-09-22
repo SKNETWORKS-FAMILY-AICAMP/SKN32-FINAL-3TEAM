@@ -47,6 +47,43 @@ def test_같은_내용이_다른_경로에_있으면_옮겨짐이다(tmp_path) -
     assert got == {"data/raw/law/law_1__c20260917.xml": ("moved", "data/raw/law/law_1.xml")}
 
 
+def test_폴더를_옮긴_같은_이름은_옮겨짐이다(tmp_path) -> None:
+    """D-245 모양 — `data/raw/law_go_kr/` 에 잘못 넣었다가 `data/raw/law/` 로 옮긴 것."""
+    _put(tmp_path, "data/raw/law/law_2.xml", 900)
+    rows = [
+        _row("data/raw/law_go_kr/law_2.xml", "b1", 900, "law_go_kr"),
+        _row("data/raw/law/law_2.xml", "b1", 900, "law_go_kr"),
+    ]
+    got = missing.classify(rows, root=tmp_path, me="clone-b", grade_of=G3, rules={})
+    assert got["data/raw/law_go_kr/law_2.xml"] == ("moved", "data/raw/law/law_2.xml")
+
+
+def test_바이트만_같은_다른_이름은_옮겨짐이_아니다(tmp_path) -> None:
+    """🔴 2026-09-21 (소성민 코드 리뷰 #5) — 같은 첨부가 두 게시물에 붙은 것처럼 **별개 파일**이다.
+    ⛔ 종전에는 「옮겨짐」(✅)으로 보고 `raw_inbox` 가 정리된 것으로 여겨 팀원 원문이 `raw-import` 에서 조용히 빠졌다."""
+    _put(tmp_path, "data/raw/press/att_100.pdf", 777)
+    rows = [
+        # 팀원이 받았다 · 정본 디스크에 없다
+        _row("data/raw/press/att_200.pdf", "same", 777, device="collector-1"),
+        _row("data/raw/press/att_100.pdf", "same", 777, device="clone-b"),
+    ]
+    got = missing.classify(rows, root=tmp_path, me="clone-b", grade_of=G3, rules={})
+    assert got["data/raw/press/att_200.pdf"][0] == "other", got
+
+
+def test_다른_원천의_같은_이름은_옮겨짐이_아니다(tmp_path) -> None:
+    """🔴 전수 재검토 I9 — `page_0001.json` 같은 흔한 이름이 **다른 원천끼리** 바이트가 같으면 옮겨짐이 됐다."""
+    _put(tmp_path, "data/raw/mfds_hf_individual/page_0001.json", 300)
+    rows = [
+        _row(
+            "data/raw/mfds_sanctions/page_0001.json", "z", 300, "mfds_sanctions", device="clone-b"
+        ),
+        _row("data/raw/mfds_hf_individual/page_0001.json", "z", 300, "mfds_hf_individual"),
+    ]
+    got = missing.classify(rows, root=tmp_path, me="clone-b", grade_of=G3, rules={})
+    assert got["data/raw/mfds_sanctions/page_0001.json"][0] == "lost", got
+
+
 def test_크기가_다른_옛_파일은_옮긴_곳으로_믿지_않는다(tmp_path) -> None:
     """원장은 `page_7.json` 에 새 sha 를 적었지만 디스크의 `page_7.json` 은 옛 판이다(09-14 실측 모양)."""
     _put(tmp_path, "data/raw/hf/page_7.json", 50083)  # 옛 판 크기

@@ -195,6 +195,20 @@ def preflight_data(who: str | None) -> int:
             print("       uv run python launcher.py data-sync")
             print("     ⬜ 아무것도 안 지웠다.")
             return 1
+        # 🔄 2026-09-21 (전수 재검토) — ⛔ 파일이 **비어 있지 않은지만** 봤다. 옛 판이 남아 있고 저장소에 못 닿으면
+        #    볼륨을 지운 뒤 `load` 의 받기가 실패해 **빈 DB** 가 남았다 — 이 검사가 막으려던 바로 그 결과다.
+        #    ★ 지우기 전에 원장과 같은지 본다 — 같으면 저장소 없이도 다시 적재할 수 있다.
+        from scripts import data_store as ds  # noqa: PLC0415 — 사본 갈래에서만 필요하다
+
+        why = ds.ledger_missing()
+        todo = [] if why else ds.plan()
+        if why or todo:
+            print(
+                f"\n  🔴 받은 파생물이 원장과 다르다 — {why or f'{len(todo)}개 부족·옛 판'}. 지우기 전에 멈춘다."
+            )
+            print("       uv run python launcher.py data-sync")
+            print("     ⬜ 아무것도 안 지웠다.")
+            return 1
         return 0
     # 정본 — 🔴 합치지 않은 팀원 원문이 있으면 재추출이 **그 원문을 빼고** 파생물을 만든다 (D-250).
     #    런처 `needs_raw` 가 부르는 것과 같은 함수다 (D-99).
