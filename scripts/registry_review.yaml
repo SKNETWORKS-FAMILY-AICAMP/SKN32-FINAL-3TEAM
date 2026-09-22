@@ -641,6 +641,20 @@ mfds_cosmetic_sanction:
   reviewed_at: 2026-09-07
   collected_at: 2026-09-22
 
+kca_ad_survey:
+  decided_by: 오한빈
+  decided_at: 2026-09-22
+  # 🆕 2026-09-22 신규 등재 — 팀장 결정(구두 · 「바로 진행」) · 권소라 확인.
+  #   서명 범위 — 등급 G3 · 제약 BY · status manual · 층 1층 · 공공누리 제1유형 게시물만
+  #   근거: KCA보고서 상세 화면 「공공누리 제1유형(출처표시)」 실측 (evidence_url)
+  #   🚨 공공누리 유형은 게시물마다 확인한다 — 제1유형이 아닌 게시물은 등록하지 않는다 (D-110).
+  #   🚨 웹진 「소비자시대」 · ciss.go.kr 판은 조건이 달라 받지 않는다.
+  #   ✅ 2026-09-22 권소라 — 등록한 PDF 23건 전부 게시 화면에서 「공공누리 제1유형(출처표시)」 확인.
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-22
+  # 🚨 robots — kca.go.kr 「User-agent: * / Disallow: /」 전면 차단 (2026-09-22 확인) → manual
+  robots_checked_at: 2026-09-22
+  collected_at: 2026-09-22
 mfds_special_use_guide:
   decided_by: 오한빈
   decided_at: 2026-09-07

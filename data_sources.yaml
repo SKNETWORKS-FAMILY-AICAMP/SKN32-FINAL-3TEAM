@@ -345,6 +345,35 @@ sources:
     reviewed_at: 2026-09-07
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
+  kca_ad_survey:
+    name: "한국소비자원 표시·광고 실태조사 보고서·보도자료 (식품·건기식·화장품 · 2019~2026) ★신규등재 2026-09-22"
+    org: "한국소비자원"
+    url: "https://www.kca.go.kr/smartconsumer/sub.do?menukey=7301"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: manual
+    access: "🚨 수기 — kca.go.kr robots 가 「User-agent: * / Disallow: /」 전면 차단이다. 사람이 게시물의 다운로드 버튼을 눌러 받고 `register` 로 올린다"
+    scale: "PDF 23개 (2026-09-22 권소라 수기 수집) — KCA보고서(실태조사 결과보고) + 보도자료. 분야 — 화장품(기능성화장품·미백·자외선차단제·각질제거제·허브테라피·지식재산권 허위표시) · 식품·건기식(모발 건강 표방·글루타치온·콜라겐·로열젤리·효소·아보카도오일·식용불가 원료·케토) · 온라인 광고 전반(SNS 부당광고·추천보증·라이브커머스·쇼핑몰·2025 1분기 모니터링). 1차 집계(키워드) — 인용 문구 약 130개 중 부족 라벨행 약 60개"
+    license: "공공누리 제1유형(출처표시) — KCA보고서 상세 화면 실측 2026-09-22. 🚨 게시물마다 확인한다 — 제1유형만 받는다 (D-110)"
+    attribution: "본 저작물은 한국소비자원에서 공공누리 제1유형으로 개방한 「표시·광고 실태조사」 보고서·보도자료를 이용하였습니다."
+    masking: 제품명·판매 사업자명 즉시 마스킹 (D-17)
+    fragment_note: >-
+      보고서가 인용한 광고 문구만 사실로 취한다 (D-18) · 광고 캡처 이미지는 취하지 않는다 (D-133).
+      🚨 스캔 쪽 OCR 문구는 후보 제시용이다 — 확정은 원본 대조로 한다.
+    caution: "🚨 공공누리 유형은 게시물마다 다를 수 있다 — 제1유형만 채택하고 제3·4유형(변경·상업 금지)이나 배지 없는 게시물은 받지 않는다. 등록 전 게시 화면 확인이 선행이다. / 🚨 같은 보도자료라도 받은 곳이 다르면 조건이 다르다 — 웹진 「소비자시대」(배지 없음)와 소비자위해감시시스템 ciss.go.kr(저작권 정책 「수익 목적은 사전 협의·서면 허락」)의 판은 쓰지 않는다. 각질제거제는 kca.go.kr 보도자료(200625) 판을 쓴다. / 🚨 광고 캡처 이미지는 광고주 저작물이라 취하지 않는다 — 문구만 사실로 취한다(D-18 · D-133). / 🚨 보고서에 제품명·판매 사업자명이 평문이다 — D-17 마스킹. / ⚠️ 스캔 쪽은 OCR 로 읽었다(Windows OCR ko) — OCR 문구는 후보 제시용이고 확정은 사람이 원본 대조로 한다(D-133 ⚠️)."
+    collected_at: 2026-09-22
+    decided_at: 2026-09-22
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-22
+    robots_checked_at: 2026-09-22
+    evidence_url: "https://www.kca.go.kr/smartconsumer/sub.do?menukey=7301&mode=view&no=1003261313"
+
   mfds_special_use_guide:
     name: "식약처 「특수용도식품 표시·광고 해설서」 (표시·광고 심의 사례 포함 · 2017-03) ★신규등재 2026-09-07"
     org: "식품의약품안전처"
