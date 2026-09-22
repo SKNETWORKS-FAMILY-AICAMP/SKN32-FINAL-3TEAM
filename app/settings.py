@@ -53,6 +53,12 @@ DEFAULT_DATABASE_URL = "postgresql://copylane:copylane@localhost:5432/copylane"
 #: SQLAlchemy(alembic·ORM)가 요구하는 드라이버. psycopg 직결은 이것을 **못 읽는다.**
 SQLALCHEMY_DRIVER = "psycopg"
 
+#: 🆕 2026-09-22 — DB 에 **붙을 때 기다리는 최대 초**. `[임의]` — 로컬 도커(`127.0.0.1`)라 붙을 수 있으면 곧바로 붙는다.
+#:    ⛔ 이 값이 없으면 psycopg 는 응답 없는 주소를 **끝없이** 기다린다 — 화면·도구가 멈춘 것처럼 보인다.
+#:    🔗 쓰는 곳 — `app/db.py`(화면의 ORM 엔진) · `scripts/db_reset.py`(지우기 전 콘솔 계정 명단). 둘이 따로 3 을 적던 것을 여기로 모았다 (D-99).
+#:    ⬜ `scripts/doctor.py` 의 DB 검사는 5초를 따로 적는다 — 진단은 조금 더 기다린다. 합치지 않았다.
+DB_CONNECT_TIMEOUT_S = 3
+
 #: `postgresql://` · `postgres://` · `postgresql+psycopg://` 를 다 받는다.
 #: ⛔ 아무 드라이버나 받지는 않는다 — `+asyncpg` 를 적으면 psycopg 경로가 죽는다.
 _SCHEME = re.compile(rf"^postgres(?:ql)?(?:\+{SQLALCHEMY_DRIVER})?://")

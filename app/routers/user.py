@@ -6,6 +6,8 @@
 🚨 **엔진이 필요한 화면은 DB 없이도 떠야 한다** (D-124) — `review`·`generate`·`compose` 는
    골든 픽스처로 모든 분기를 그린다. ⬜ **`history`·`/`(홈) 은 예외다** — 실제 DB(`app/db.py`,
    `Judgment`)에 붙는다. 판정 엔진이 아직 없어 지금은 빈 목록/0 건으로 뜬다.
+   🔄 2026-09-22 (ohb 흡수) — **DB 가 없어도 뜬다.** 붙지 못하면 「DB 없음」을 그리고 수를 0 으로 적지 않는다
+      (`app.db.reachable` · D-72). 게이트가 `/u/` 200 을 요구하고 CI 에는 Postgres 가 없다.
 
 🔄 2026-09-16 — ksr(`skn32/ksr`, 2026-09-13~14)와 lse 가 독립적으로 만든 사용자 화면
    구현을 합쳤다 (`docs/lse/ksr_lse_화면중복_비교_2026-09-16.md` 참고). `review`·`generate`·
@@ -29,8 +31,8 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.contracts import PASS_RISK_MAX
-from app.db import get_session
+from app.contracts import PASS_RISK_MAX, Risk
+from app.db import get_session, reachable
 from app.formbody import read_capped
 from app.models import CopySentence, Judgment
 from app.settings import PARAMS
@@ -186,6 +188,19 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX`
       (D-125 통과 조건의 위험도 문턱 = R1 · D-227)을 그대로 쓴다 — 문턱을 여기서 따로 두지 않는다.
     """
+    if not reachable(session):
+        # 🚨 수를 **None** 으로 넘긴다 — 템플릿이 0건이 아니라 「—」와 안내를 그린다 (D-72).
+        return _render(
+            request,
+            "user/index.html",
+            {
+                "db_down": True,
+                "total_month": None,
+                "violation_count": None,
+                "pass_rate": None,
+                "recent": [],
+            },
+        )
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month = select(Judgment).where(Judgment.judged_at >= month_start)
     pass_level = PASS_RISK_MAX.level
@@ -307,16 +322,28 @@ def judge_preview(request: Request, name: str) -> HTMLResponse:
 #:    CSP 가 스크립트를 막아 차트 라이브러리를 못 쓰고, 템플릿은 인라인 SVG 로 점만 찍는다.
 _PLOT = {"x0": 40.0, "x1": 326.0, "y0": 216.0, "y1": 14.0}
 
+#: 🔴 프론티어 가로축의 **오른쪽 끝** — 도달할 수 있는 가장 높은 위험도. 척도는 R0~R3 네 단계다 (D-227).
+#: 🔄 2026-09-22 (ohb 흡수) — ⛔ 종전 `level / 4.0` 은 R4 까지 있는 척도로 그렸다. R4 는 ENUM 에 남아 있으나
+#:    도달 불가다 (D-182 · `contracts.Risk`). 그래서 가장 높은 R3 가 축의 **3/4 지점**에 찍혔다.
+#:    ★ 템플릿의 오른쪽 눈금도 이 값을 받는다 — 좌표와 눈금이 한 벌이다 (D-99).
+_RISK_AXIS_MAX = Risk.R3
+
 
 def _frontier(candidates: list) -> list[dict]:  # noqa: ANN401
     """후보를 산점도 좌표로 옮긴다.
 
-    x = 잔여 위험도(R0~R4 를 0~1 로), y = 소구력 보존율(원문 대비 정보량 보존율).
+    x = 잔여 위험도(R0~R3 를 0~1 로 · `_RISK_AXIS_MAX`), y = 소구력 보존율(원문 대비 정보량 보존율).
+    🚨 축 밖의 위험도(R4)는 **축 끝에 눌러 그리지 않고 멈춘다** — 도달 불가 값이 왔다는 것은
+       코어 쪽 사고이고, 끝에 찍으면 R3 로 보인다 (D-72).
     🚨 y 축은 **전환율·판매 성과가 아니다** (contracts.py `Candidate` docstring).
     """
     points: list[dict] = []
     for c in candidates:
-        rx = c.residual_risk.level / 4.0
+        if c.residual_risk.level > _RISK_AXIS_MAX.level:
+            raise ValueError(
+                f"프론티어 축 밖의 위험도 {c.residual_risk.value} — 척도는 R0~{_RISK_AXIS_MAX.value} (D-227 · D-182)"
+            )
+        rx = c.residual_risk.level / _RISK_AXIS_MAX.level
         ry = float(c.appeal_retention)
         points.append(
             {
@@ -389,6 +416,7 @@ def generate_preview(request: Request, name: str) -> HTMLResponse:
             "max_text_len": PARAMS.max_text_len,
             "result": result,
             "points": _frontier(result.candidates),
+            "risk_axis_max": _RISK_AXIS_MAX.value,
             "fixture_name": name,
         },
     )
@@ -475,29 +503,8 @@ _VERDICTS = ("confirmed", "hold", "no_basis", "unjudged")
 _PAGE_SIZE = 20
 
 
-@router.get("/history", response_class=HTMLResponse)
-def history(
-    request: Request,
-    session: Session = Depends(get_session),  # noqa: B008
-    verdict: str | None = None,
-    page: int = 1,
-    open_id: str | None = None,
-) -> HTMLResponse:
-    """검수 이력 — 🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인).
-
-    🔄 2026-09-16 — `Judgment` × `CopySentence` 조인(ksr)으로 **판정 원문**까지 보여준다.
-       필터(`verdict`)·페이지네이션(`page`)·상세 토글(`?open_id=`)은 lse 것을 그대로 쓴다.
-    ⬜ 판정 엔진이 아직 없어 `judgment` 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
-       가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
-    ⛔ **`page`·`verdict` 는 사용자가 URL 을 손으로 바꿀 수 있다** — 잘못된 값으로
-       500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.
-    ⬜ 근거(evidence)·질의응답은 디자인엔 있지만 이번엔 뺐다 — QnA 를 저장할 테이블이
-       아직 없다. 원문·결론·위험도·법령 버전만 보여준다.
-    """
-    page = max(page, 1)
-    if verdict not in (None, *_VERDICTS):
-        verdict = None
-
+def _history_rows(session: Session, verdict: str | None, page: int) -> tuple[list, int]:
+    """이력 한 쪽의 행과 전체 건수. `judgment` × `copy_sentence` 조인 (ksr 원문 조인 · lse 필터·페이지)."""
     stmt = (
         select(Judgment, CopySentence.raw)
         .join(CopySentence, CopySentence.id == Judgment.subject_id)
@@ -522,11 +529,40 @@ def history(
         )
         for j, raw in raw_rows
     ]
+    return rows, total
+
+
+@router.get("/history", response_class=HTMLResponse)
+def history(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+    verdict: str | None = None,
+    page: int = 1,
+    open_id: str | None = None,
+) -> HTMLResponse:
+    """검수 이력 — 🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인).
+
+    🔄 2026-09-16 — `Judgment` × `CopySentence` 조인(ksr)으로 **판정 원문**까지 보여준다.
+       필터(`verdict`)·페이지네이션(`page`)·상세 토글(`?open_id=`)은 lse 것을 그대로 쓴다.
+    ⬜ 판정 엔진이 아직 없어 `judgment` 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
+       가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
+    ⛔ **`page`·`verdict` 는 사용자가 URL 을 손으로 바꿀 수 있다** — 잘못된 값으로
+       500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.
+    ⬜ 근거(evidence)·질의응답은 디자인엔 있지만 이번엔 뺐다 — QnA 를 저장할 테이블이
+       아직 없다. 원문·결론·위험도·법령 버전만 보여준다.
+    """
+    page = max(page, 1)
+    if verdict not in (None, *_VERDICTS):
+        verdict = None
+    db_down = not reachable(session)
+    rows, total = ([], 0) if db_down else _history_rows(session, verdict, page)
     opened = next((r for r in rows if str(r.id) == open_id), None) if open_id else None
     return _render(
         request,
         "user/history.html",
         {
+            # 🚨 못 붙었으면 빈 목록을 「기록 없음」으로 그리지 않는다 — 못 읽은 것이다 (D-72).
+            "db_down": db_down,
             "judgments": rows,
             "verdicts": _VERDICTS,
             "verdict": verdict,
