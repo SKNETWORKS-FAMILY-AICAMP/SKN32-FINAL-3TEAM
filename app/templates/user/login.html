@@ -1,0 +1,32 @@
+{# app/templates/user/login.html — 일반 회원 로그인 · 소유자 lse (병렬작업 계약 §5)
+
+  ★ 이 파일은 **골격만** 잡아 둔 것 — generate.html 과 같은 요령이다. 발표자료
+    프로토타입(v7.2)의 `data-screen="login"` 절을 옮겨서 채운다.
+  🚨 **`app/routers/auth.py`(팀장 소유)의 `/login`과는 다른 화면이다.** 그건 거버넌스
+     콘솔 `governor` 전용이고(D-66·D-213), 이건 **일반 사용자**(셀러·마케터) 로그인이다.
+  🔴 **계정 테이블·인증 로직이 없다** (2026-09-16 판단). `AppAccount` 주석이 이미
+     "일반 사용자 가입은 진입점 B 엔진과 함께 온다"고 적어 뒀다 — `work_doc.owner_id`가
+     가리킬 테이블이 아직 없다. 그래서 폼은 뜨지만 **제출 버튼이 없다.**
+  ⛔ 구역(work·about·adgen·matching) 셸 밖이다 — 로그인 전 화면이라 사이드바가 없다.
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 로그인{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block content %}
+<div class="user-shell">
+<div class="auth-card">
+  <h1>로그인</h1>
+  <p class="auth-sub">조직 계정으로 로그인하세요.</p>
+
+  <label for="login-email">이메일</label>
+  <input id="login-email" type="email" placeholder="you@company.com" disabled>
+
+  <label for="login-pw">비밀번호</label>
+  <input id="login-pw" type="password" placeholder="••••••••" disabled>
+  <p class="auth-switch" style="text-align:right;margin-top:.4rem"><a href="/u/reset">비밀번호를 잊으셨나요?</a></p>
+
+  <p class="auth-note">⬜ 계정 시스템이 아직 없다 — 진입점 B 엔진(이력·카피생성)과 함께 온다.</p>
+
+  <p class="auth-switch">계정이 없으신가요? <a href="/u/signup">회원가입</a></p>
+</div>
+</div>
+{% endblock %}

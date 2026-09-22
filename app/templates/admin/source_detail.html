@@ -1,0 +1,126 @@
+{# app/templates/admin/source_detail.html — 소스 상세(근거 등급 L1~L4 판정 제안 · 2인 확인)
+   소유자 **psj** (병렬작업 계약 §5)
+
+  🚨 **관리 대상은 `evidence_tier`(L1~L4, 근거 신뢰도)다.** `source.grade`(G0~G3)는
+     카피레인 데이터 수집 파이프라인이 이미 매긴 이용조건 게이트값이라 이 화면은
+     **표시만** 하고 재판정하지 않는다 (2026-09-16 확정 · 판정근거_등급기준_초안.md).
+  ⬜ **쓰기는 아직 안 연다.** 아래 "등급 변경 제안"·"2인 확인" 영역은 화면 뼈대만 미리
+     만들어 둔 것이다 — 버튼이 전부 `disabled` 다. `source_evidence_tier_proposal` ·
+     `source_evidence_tier_history` 테이블 팀장 승인(db/** 등급 1)이 먼저다.
+     승인 나오면 여기에 POST 라우트만 붙인다 (docs/psj/소스등급_판정흐름_스키마초안.md).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "base.html" %}
+{% block title %}CopyLane — 소스 상세{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block content %}
+<div class="admin-shell">
+{% include "admin/_nav.html" %}
+
+<p><a href="/admin/sources">← 판정 근거 목록</a></p>
+
+{% if source is none %}
+<h1>소스를 찾을 수 없다</h1>
+<p>DB 에 못 붙었거나, 해당 source_id 가 없다.</p>
+{% else %}
+<h1>{{ source.name }}</h1>
+<p class="warn">🚨 <b>읽기 전용이다.</b> 아래 등급 변경 제안·2인 확인은 팀장 승인
+  전까지 비활성 상태다.</p>
+
+<section>
+  <h2>기본 정보</h2>
+  <table class="kv">
+    <tr><th>소스 ID</th><td>{{ source.source_id }}</td></tr>
+    <tr><th>발행처</th><td>{{ source.publisher }}</td></tr>
+    <tr><th>URL</th><td>{% if source.url %}<a href="{{ source.url }}" target="_blank" rel="noopener">{{ source.url }}</a>{% else %}-{% endif %}</td></tr>
+    <tr><th>층(layer)</th><td>{{ source.layer }}</td></tr>
+    <tr><th>등급(G, 이용조건 — 표시 전용)</th><td><b>{{ source.grade }}</b> <span class="hint">데이터 수집 파이프라인이 판정, 이 화면에서 재판정하지 않음</span></td></tr>
+    <tr><th>비용</th><td>{{ source.cost }}</td></tr>
+    <tr><th>가치</th><td>{{ source.value }}</td></tr>
+    <tr><th>접근</th><td>{{ source.access or "-" }}</td></tr>
+    <tr><th>라이선스</th><td>{{ source.license or "-" }}</td></tr>
+    <tr><th>출처표시</th><td>{{ source.attribution or "-" }}</td></tr>
+    <tr><th>검증</th><td>{{ "검증 완료" if source.verified else "미검증" }}</td></tr>
+    <tr><th>비고</th><td>{{ source.note or "-" }}</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>현재 근거 등급 (L, evidence_tier)</h2>
+  <p class="hint">⬜ <code>evidence_tier</code> 컬럼 팀장 승인 전이라 아직 값이 없다.
+    승인 나오면 아래 표에 현재 L등급·판정일·1차/2차 확인자가 뜬다.</p>
+  <table class="kv">
+    <tr><th>근거 등급</th><td><i>미승인 — 컬럼 없음</i></td></tr>
+    <tr><th>판정일</th><td>-</td></tr>
+    <tr><th>1차 확인자</th><td>-</td></tr>
+    <tr><th>2차 확인자</th><td>-</td></tr>
+    <tr><th>근거 URL</th><td>-</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>등급 판단 기준 (참고)</h2>
+  <p class="hint">1차·2차 확인자가 참고하는 기준표 — 자세한 건
+    <code>docs/psj/판정근거_등급기준_초안.md</code> 참고.</p>
+  <table class="kv small">
+    <tr><th>L1 법적 기준</th><td>국가법령정보센터에 조문으로 특정 가능한 법률·시행령·시행규칙</td></tr>
+    <tr><th>L2 행정 기준</th><td>관보 고시번호가 있는 행정규칙·고시·지침</td></tr>
+    <tr><th>L3 공식 참고</th><td>정부·공공기관 명의로 발행된 안내서·가이드라인(고시번호 없음)</td></tr>
+    <tr><th>L4 내부 검증</th><td>L1~L3 을 근거로 팀이 재정리, 원출처 역추적 가능</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>근거 등급 변경 제안</h2>
+  <p class="hint">⬜ 아직 못 쓴다 — 팀장 승인 대기 중인 테이블(<code>source_evidence_tier_proposal</code>)이 연결되면 여기서 제안을 올린다.</p>
+  <form class="proposal-form">
+    <label>새 근거 등급
+      <select disabled>
+        <option>L1</option><option>L2</option><option>L3</option><option>L4</option>
+      </select>
+    </label>
+    <label>근거 URL
+      <input type="url" placeholder="https://..." disabled>
+    </label>
+    <label>메모
+      <textarea rows="2" placeholder="판단 근거를 남긴다" disabled></textarea>
+    </label>
+    <button type="submit" disabled title="승인 대기 중 — 아직 못 쓴다">근거 등급 변경 제안</button>
+  </form>
+</section>
+
+<section>
+  <h2>2인 확인</h2>
+  <p class="hint">⬜ 제안이 하나라도 올라오면 여기 목록에 뜨고, 제안자와 다른 관리자만
+    확인 버튼을 누를 수 있게 될 예정이다 (<code>ck_tier_proposal_four_eyes</code> 와 같은 원칙).</p>
+  <p><i>대기 중인 제안 없음</i></p>
+</section>
+
+<section>
+  <h2>이력</h2>
+  <p class="hint">⬜ 승인된 근거 등급 변경 · 롤백 기록이 여기 쌓일 예정이다
+    (<code>source_evidence_tier_history</code>, 삭제 없이 계속 이어 붙이는 방식).</p>
+  <p><i>이력 없음</i></p>
+</section>
+{% endif %}
+
+<style>
+.admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
+.admin-shell table.kv th { text-align: left; padding: .3rem .8rem .3rem 0; color: var(--a-clay); font-weight: 500; white-space: nowrap; }
+.admin-shell table.kv td { padding: .3rem 0; }
+.admin-shell table.kv.small th, .admin-shell table.kv.small td { font-size: .85rem; padding: .25rem .6rem .25rem 0; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
+.admin-shell .proposal-form { display: flex; flex-direction: column; gap: .5rem; max-width: 28rem; }
+.admin-shell .proposal-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; }
+.admin-shell .proposal-form select,
+.admin-shell .proposal-form input,
+.admin-shell .proposal-form textarea {
+  padding: .4rem .5rem; border: 1px solid var(--a-line); border-radius: .4rem;
+  background: var(--a-surface2); color: var(--a-ink);
+}
+.admin-shell .proposal-form button {
+  align-self: flex-start; padding: .5rem 1rem; border-radius: .5rem; border: none;
+  background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed; opacity: .6;
+}
+</style>
+</div>
+{% endblock %}

@@ -18,6 +18,8 @@
    🚨 정책 내용은 `_CSP_PAGE` 하나가 든다. 게이트가 **응답 헤더를 실제로 받아** 확인한다 #}
 <title>{% block title %}CopyLane{% endblock %}</title>
 <link rel="stylesheet" href="/static/base.css">
+{# 화면 갈래별(사용자/관리자) 공통 스타일을 여기서 얹는다 — base.css 에는 화면별 스타일을 안 쓴다 (위 주석) #}
+{% block extra_css %}{% endblock %}
 {# ⬜ **HTMX 는 아직 안 받았다.** 저장소에 넣지 않았고 CDN 도 안 쓴다 (P0-3 — 공급망).
    받는 법과 무결성 확인은 `app/static/vendor/README.md` 에 있다.
    ★ 그때까지도 **화면은 돈다** — 아래 폼은 HTMX 없이 서버 렌더로 동작한다.

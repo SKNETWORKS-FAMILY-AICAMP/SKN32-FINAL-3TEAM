@@ -1,32 +1,92 @@
-{# app/templates/user/index.html — 사용자 화면 · 소유자 **ksr · lse** (병렬작업 계약 §5)
+{# app/templates/user/index.html — 사용자 홈(첫 화면) · 소유자 ksr · lse (병렬작업 계약 §5)
 
-  🚨 **파일을 사람별로 가른다** — 같은 파일을 두 사람이 고치지 않는다.
-     화면이 늘면 `user/<이름>.html` 로 새 파일을 만든다.
-  ★ 이 파일은 **자리를 잡아 둔 것**이다. 내용은 2W 산출물의 화면설계서를 옮긴다 (§8 ⑥).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 문구 검수{% endblock %}
-{% block content %}
-<h1>문구 검수</h1>
+  🔄 `/u/` 가 드는 화면이다 (2026-09-16 — 검수는 `user/review.html`·`/u/review`로 옮겼다).
+  ★ 프로토타입의 `data-screen="home"` 을 옮긴 것이다 — 레이아웃·CSS 는 ksr(2026-09-13),
+    통계·최근 이력은 lse 가 만든 **진짜 DB 집계**(history 와 같은 요령)를 그대로 쓴다.
+    판정 엔진이 없어 지금은 0건/— 으로 뜨는 게 정상이다 (D-147).
+#}{% extends "user/_base.html" %}
+{% block title %}CopyLane — 홈{% endblock %}
+{% block screen_css %}
+<style>
+.hm-head { display: flex; flex-wrap: wrap; gap: .5rem 1rem;
+           align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem; }
+.hm-head h1 { margin: 0 0 .2rem; }
+.hm-head p { margin: 0; color: var(--u-clay); font-size: .875rem; }
 
-<p>광고 문구를 넣으면 <b>어느 조문에 걸리는지</b>와 <b>왜 걸리는지</b>를 돌려준다.</p>
+.hm-stats { display: grid; gap: 1px; background: var(--u-line);
+            border: 1px solid var(--u-line); border-radius: .75rem;
+            overflow: hidden; margin-bottom: 1.5rem; }
+@media (min-width: 34rem) { .hm-stats { grid-template-columns: repeat(3, 1fr); } }
+.hm-stat { background: var(--u-surface); padding: .9rem 1rem; }
+.hm-stat .hm-k { font-size: .72rem; color: var(--u-clay); letter-spacing: .04em; }
+.hm-stat .hm-v { font-size: 1.4rem; margin-top: .2rem; }
 
-{# 🔴 **POST 다.** 문구를 URL 에 싣지 않는다 (보안점검 P1-4) —
-   GET 이면 접근 로그·브라우저 히스토리·Referer 가 전부 문구를 나른다. #}
-<form method="post" action="/u/judge">
-  <label for="text">광고 문구</label>
-  <textarea id="text" name="text" rows="4" maxlength="{{ max_text_len }}"
-            placeholder="예: 이 제품은 면역력을 높여 줍니다" required></textarea>
-  <button type="submit">검수</button>
-</form>
+.hm-cards { display: grid; gap: .7rem; margin-bottom: 1.5rem; }
+@media (min-width: 40rem) { .hm-cards { grid-template-columns: repeat(3, 1fr); } }
+.hm-card { display: block; border: 1px solid var(--u-line); border-radius: 1rem;
+           padding: 1.1rem 1.15rem; text-decoration: none; color: inherit;
+           background: var(--u-surface); }
+.hm-card:hover { border-color: var(--u-signal); }
+.hm-card b { display: block; font-size: 1rem; margin-bottom: .35rem; }
+.hm-card span { font-size: .82rem; color: var(--u-clay); line-height: 1.6; }
 
-<section>
-  <h2>지금 붙일 수 있는 것</h2>
-  {# ⛔ 엔진이 없다. 화면은 **픽스처로 모든 분기를 그린다** (D-124).
-     가짜 200 을 만들지 않는다 — 진짜가 오면 두 번 고친다 (D-147). #}
-  <ul>
-  {% for name in fixtures %}
-    <li><a href="/fixtures/judge/{{ name }}">{{ name }}</a></li>
-  {% endfor %}
+.hm-sect { border: 1px solid var(--u-line); border-radius: 1rem;
+           background: var(--u-surface); padding: 1.1rem 1.15rem; margin-bottom: 1rem; }
+.hm-sect h2 { margin: 0 0 .6rem; font-size: .95rem; }
+.hm-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+.hm-empty { border: 1px dashed var(--u-line); border-radius: .75rem;
+            padding: .8rem .9rem; color: var(--u-clay); font-size: .85rem; }
+</style>
+{% endblock %}
+{% block user_content %}
+<div class="hm-head">
+  <div>
+    <h1>CopyLane</h1>
+    <p>오늘도 안전한 광고 문구를 만들어보세요.</p>
+  </div>
+</div>
+
+<div class="hm-stats">
+  <div class="hm-stat"><div class="hm-k">이번 달 검수</div><div class="hm-v">{{ total_month }}건</div></div>
+  <div class="hm-stat"><div class="hm-k">위법 소지 발견</div><div class="hm-v">{{ violation_count }}건</div></div>
+  <div class="hm-stat"><div class="hm-k">재검수 통과율</div><div class="hm-v">{{ (pass_rate ~ "%") if pass_rate is not none else "—" }}</div></div>
+</div>
+
+<div class="hm-cards">
+  <a class="hm-card" href="/u/review">
+    <b>문구를 검수해보세요</b>
+    <span>이미 쓴 문구의 위법 소지를 확인해요</span>
+  </a>
+  <a class="hm-card" href="/u/generate">
+    <b>카피 생성하기</b>
+    <span>합법 어휘 안에서 새 카피를 만들어요</span>
+  </a>
+  <a class="hm-card" href="/u/compose">
+    <b>AI 광고 생성</b>
+    <span>고른 카피를 지면 규격에 얹어요</span>
+  </a>
+</div>
+
+<div class="hm-sect">
+  <h2>최근 검수 이력</h2>
+  {% if recent %}
+  <ul class="history-list">
+    {% for j in recent %}
+    <li>
+      <a class="history-row" href="/u/history?open_id={{ j.id }}">
+        <span class="history-row-date">{{ j.judged_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        <span class="history-row-verdict">{{ j.verdict }}</span>
+        <span class="history-row-risk">{{ j.risk_final if j.risk_final is not none else "—" }}</span>
+        <span class="history-row-chevron">›</span>
+      </a>
+    </li>
+    {% endfor %}
   </ul>
-</section>
+  {% else %}
+  <p class="hm-empty">
+    아직 없어요. 판정 엔진이 붙어 <b>판정 이력</b>이 쌓이면 여기에 최근 검수가 나와요.<br>
+    <span class="hm-note">지금은 각 화면 아래의 <b>골든 픽스처</b>로 결과 화면을 볼 수 있어요.</span>
+  </p>
+  {% endif %}
+</div>
 {% endblock %}
