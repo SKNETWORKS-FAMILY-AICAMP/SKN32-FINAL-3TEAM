@@ -23,6 +23,12 @@ LEDGER = ROOT / "scripts/registry_review.yaml"  # 2인 확인 원장 — 이쪽�
 
 VALID_USES = {"U1", "U2", "U3", "U4"}
 
+#: `require()` 를 부르는 **경로** — 🆕 2026-09-22 (권소라 보고). `register` 만 `status: manual` 을 받는다.
+#:    🚨 둘 밖의 값은 거부한다 — 오타가 조용히 수집기 경로(더 엄격한 쪽)로 떨어지지 않게 (D-72).
+VIA_COLLECT = "collect"
+VIA_REGISTER = "register"
+VALID_VIA = frozenset({VIA_COLLECT, VIA_REGISTER})
+
 #: G2 원문 삭제(`store.drop_raw_for_g2`)를 부르는 곳 — `"모듈경로:함수명"`. 비어 있으면 G2 는 `require()` 에서 막힌다.
 #: 🚨 손으로 켜지 않는다 — 게이트 테스트가 적힌 함수 본문에 `drop_raw_for_g2(` 가 있는지 본다 (D-92 · 2026-09-21).
 G2_DROP_WIRED: tuple[str, ...] = ()
@@ -69,13 +75,20 @@ def spec(source_id: str) -> dict[str, Any]:
     return entry
 
 
-def require(source_id: str, use: str) -> dict[str, Any]:
+def require(source_id: str, use: str, *, via: str = VIA_COLLECT) -> dict[str, Any]:
     """수집기의 첫 줄. 통과하면 소스 정의를, 아니면 RegistryError 를 던진다.
 
     검사 순서는 되돌릴 수 없는 것부터다 — G1 은 받는 순간 끝이다.
+
+    `via` — 부르는 경로. 기본은 자동 수집기(`collect`). 사람이 받아 온 파일을 올리는
+    `ingest register` 만 `via="register"` 로 부른다 — 그 경로에서만 `status: manual` 을 통과시킨다 (D-108).
+    🚨 나머지 검사(G1 · 용도 · 2인 확인 · GATED · hold · G2 · 규약 6)는 **경로와 무관하게 같다** —
+       사람이 손으로 받아 왔다는 사실이 판정을 면제하지 않는다.
     """
     if use not in VALID_USES:
         raise RegistryError(f"use={use!r} 는 U1~U4 가 아니다")
+    if via not in VALID_VIA:
+        raise RegistryError(f"via={via!r} 는 {sorted(VALID_VIA)} 가 아니다")
 
     s = spec(source_id)
     grade = s.get("grade")
@@ -116,8 +129,12 @@ def require(source_id: str, use: str) -> dict[str, Any]:
     #    🚨 적어 두기만 하고 아무것도 안 막으면 그건 보류가 아니라 **표시**다 (D-72).
     #    🚨 순서는 **되돌릴 수 없는 것부터**다(이 함수의 규칙) — G1 · 용도 · 2인 확인 ·
     #       GATED(외부 조건 위반) 다음이 우리 쪽 판정 상태다.
+    # 🔄 2026-09-22 (권소라 보고 · mfds_cosmetic_sanction 엑셀 186건) — ⛔ 이 분기가 **경로를 안 봤다.**
+    #    `ingest register` 도 첫 줄에서 여기를 부르므로, 거부 메시지가 안내하는 그 길(`register`)이 **같은 이유로 막혔다.**
+    #    D-108 의 `manual` 은 「수집기가 절대 돌면 안 된다」이지 「받지 않는다」가 아니다 — 사람이 받은 파일은 올린다.
+    #    ★ `register` 경로에서만 통과시킨다. 자동 수집기(기본 `via`)는 그대로 막는다.
     status = s.get("status")
-    if status == "manual":
+    if status == "manual" and via != VIA_REGISTER:
         raise RegistryError(
             f"{source_id!r} 는 status: manual 이다 — 자동 접근이 약관 위반이라 "
             "사람이 수기로만 받는다 (D-108). 받아 온 파일은 `launcher.py register` 로 올린다."

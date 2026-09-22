@@ -23,13 +23,19 @@ def env(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     monkeypatch.setattr(store, "_INDEX", None)
     monkeypatch.setattr(ingest, "ROOT", tmp_path)
     monkeypatch.setattr(store, "FAMILY_OF", {"가짜소스": ("가짜계열",), "두폴더": ("가", "가_pdf")})
-    monkeypatch.setattr(ingest.registry, "require", lambda sid, use: {"url": "http://x"})
+    calls: list[dict] = []
+
+    def _require(sid: str, use: str, **kw: str) -> dict:
+        calls.append({"sid": sid, "use": use, **kw})
+        return {"url": "http://x"}
+
+    monkeypatch.setattr(ingest.registry, "require", _require)
     monkeypatch.setattr(ingest.registry, "spec", lambda sid: {"url": "http://x"})
     monkeypatch.setattr(ingest.registry, "mark_collected", lambda sid: None)
     monkeypatch.setattr(ingest.registry, "is_g2", lambda sid: False)
     src = tmp_path / "inbox"
     src.mkdir()
-    return {"raw": raw, "ledger": ledger, "src": src, "fam": raw / "가짜계열"}
+    return {"raw": raw, "ledger": ledger, "src": src, "fam": raw / "가짜계열", "calls": calls}
 
 
 def _rows(ledger: pathlib.Path) -> list[dict]:
@@ -41,6 +47,8 @@ def _rows(ledger: pathlib.Path) -> list[dict]:
 def test_새_파일은_복사하고_행을_붙인다(env: dict) -> None:
     (env["src"] / "a.txt").write_bytes(b"one\n")
     assert ingest.cmd_register("가짜소스", env["src"], "U1") == 0
+    # 🆕 2026-09-22 — register 는 **사람이 받아 온 파일의 경로**로 문을 부른다 (manual 허용 · D-108)
+    assert env["calls"] == [{"sid": "가짜소스", "use": "U1", "via": "register"}]
     assert (env["fam"] / "a.txt").read_bytes() == b"one\n"
     rows = _rows(env["ledger"])
     assert len(rows) == 1 and rows[0]["path"].replace("\\", "/").endswith("가짜계열/a.txt")

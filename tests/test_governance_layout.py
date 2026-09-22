@@ -1436,6 +1436,86 @@ def test_hold_과_manual_은_수집이_막힌다() -> None:
     )
 
 
+@pytest.mark.gate
+def test_manual_은_register_경로로만_올린다() -> None:
+    """🆕 2026-09-22 (권소라 보고) — 거부 메시지가 안내하는 길이 실제로 열려 있는가.
+
+    ⛔ `require()` 의 manual 분기가 경로를 안 봐서, 「`launcher.py register` 로 올린다」는 안내대로
+       `register` 를 치면 **같은 분기에서 같은 이유로** 막혔다 — 사람이 받아 온 파일을 올릴 길이 없었다.
+    🚨 반대 대조 셋 — 수집기 경로는 그대로 막히고 · hold 는 register 로도 막히고 · 모르는 경로는 거부된다.
+    """
+    from collect import registry
+
+    sources = _registry().get("sources") or {}
+    opened = held = 0
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue
+        st = spec.get("status")
+        for use, verdict in (spec.get("use") or {}).items():
+            if verdict != "allow":
+                continue
+            if st == "manual":
+                try:
+                    registry.require(key, use=use, via="register")
+                except registry.RegistryError as e:
+                    # 다른 이유(G2 · GATED …)로 막히는 것은 정상이다 — manual 로 막히면 안 된다
+                    assert "status: manual" not in str(e), (
+                        f"🔴 {key}: register 경로가 manual 로 막힌다"
+                    )
+                    continue
+                opened += 1
+            elif st == "hold":
+                with pytest.raises(registry.RegistryError):
+                    registry.require(key, use=use, via="register")
+                held += 1
+    # 🚨 셀 것이 없으면 아무것도 안 잰 것이다 (D-170) — 실측 manual 통과 2건
+    #    (`mfds_cosmetic_sanction` 엑셀 · `mfds_cosmetic_ad_guide_2013` PDF — 둘 다 사람이 받는 G3)
+    assert opened, "🔴 register 로 올라가는 manual 소스가 하나도 없다 — 표본을 다시 본다"
+    assert held, "🔴 hold 표본이 없다 — register 가 hold 를 막는지 못 잰다"
+    with pytest.raises(registry.RegistryError, match="via="):
+        registry.require("mfds_cosmetic_sanction", use="U1", via="collector")
+
+
+@pytest.mark.gate
+def test_register_경로를_주장하는_곳은_ingest_하나다() -> None:
+    """🚨 `via` 는 **부르는 쪽이 스스로 대는 값**이다 — 수집기가 `via="register"` 를 대면 manual 문이 열린다.
+
+    그래서 그 값을 대는 자리를 코드로 하나에 묶는다. 사람이 받아 온 파일을 올리는 곳은
+    `collect/ingest.py` 의 `cmd_register` 뿐이다 (D-108 · 집행계약 게이트 28).
+    """
+
+    def claims(src: str) -> bool:
+        """호출 인자 `via=` 에 register 를 대는가 — 🚨 문자열이 아니라 **구문 트리**로 본다(주석·docstring 제외)."""
+        for node in ast.walk(ast.parse(src)):
+            if not isinstance(node, ast.Call):
+                continue
+            for kw in node.keywords:
+                v = kw.value
+                if kw.arg == "via" and (
+                    (isinstance(v, ast.Constant) and v.value == "register")
+                    or (isinstance(v, ast.Attribute) and v.attr == "VIA_REGISTER")
+                    or (isinstance(v, ast.Name) and v.id == "VIA_REGISTER")
+                ):
+                    return True
+        return False
+
+    files = [ROOT / "launcher.py"] + [
+        p for d in ("collect", "preprocess", "scripts", "app") for p in (ROOT / d).rglob("*.py")
+    ]
+    hits = sorted(
+        str(p.relative_to(ROOT)).replace("\\", "/")
+        for p in files
+        if claims(p.read_text(encoding="utf-8"))
+    )
+    assert hits == ["collect/ingest.py"], f"🔴 register 경로를 대는 곳이 ingest 밖에 있다 — {hits}"
+    # 반대 대조 — 이 검사가 실제로 잡는 모양인가
+    assert claims('registry.require(s, use=u, via="register")')
+    assert claims("registry.require(s, use=u, via=registry.VIA_REGISTER)")
+    assert not claims('registry.require(s, use=u, via="collect")')
+    assert not claims('"""예: `via="register"` 로 부른다"""')
+
+
 # ══════════════════════════════════════════════════════════
 # 🔴 생성기가 pre-commit 훅과 싸우지 않는가 (2026-09-09)
 #
