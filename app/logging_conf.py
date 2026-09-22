@@ -28,9 +28,24 @@ import re
 #: 🚨 이름을 늘릴 때는 `app/contracts.py` 의 사용자 입력 필드와 맞춘다.
 _SENSITIVE_KEYS = ("q", "text", "prompt", "copy", "sentence", "password", "token", "key")
 
-#: `?q=값` · `&text=값` · `q="값"` 을 잡는다. 값은 구분자(`&`, 공백, 따옴표) 전까지.
+#: 열쇠말의 앞뒤 경계 — **영숫자만** 경계가 아니다. 🔄 2026-09-21 ⛔ 종전의 `\b` 는 `_` 를 낱말로 봐서
+#:    `api_key=…` · `access_token=…` 의 `key`·`token` 을 못 잡았다(실행 확인). `token_count=…` 는
+#:    뒤가 `_` 라 `=` 가 바로 안 붙으므로 여전히 안 걸린다.
+_KEY_B = r"(?<![A-Za-z0-9])"
+_KEY_E = r"(?![A-Za-z0-9])"
+_KEYS_ALT = "|".join(_SENSITIVE_KEYS)
+
+#: `?q=값` · `&text=값` · `q="값"` · `prompt: 값` 을 잡는다.
+#: 🔄 2026-09-21 — 값의 끝을 **넘치게** 잡는다 (D-220 · 아래 `_QUERY` 와 같은 원칙).
+#:    ⛔ 종전에는 `,` `]` `}` 에서 끊었다. 한국어 광고 문구는 쉼표를 흔하게 쓴다 —
+#:       「text=면역력, 암을 예방합니다」가 `text=<가림 3자>, 암을 예방합니다` 로 **뒤가 그대로 남았다.**
+#:       그리고 값 클래스가 `"` 를 빼서 `q="값"` 은 **매치 자체가 안 섰다**(이 주석이 잡는다고 적었는데).
+#:    ★ 따옴표로 시작하면 **닫는 따옴표까지**(없으면 줄 끝까지), 아니면 `&`·줄바꿈·따옴표 전까지.
+#: 🔄 2026-09-21 (전수 재검토) — 열쇠말이 **따옴표 안**이어도 잡는다. ⛔ `{"q": "…"}` · `{'text': '…'}`
+#:    (dict·JSON 모양)은 열쇠 뒤가 `"` 라 `[=:]` 가 바로 안 붙어 **통째로 지나갔다**(실행 확인).
 _QS = re.compile(
-    r"(?P<key>\b(?:" + "|".join(_SENSITIVE_KEYS) + r")\b\s*[=:]\s*)(?P<val>[^&\"'}\],]+)",
+    r"(?P<key>[\"']?" + _KEY_B + r"(?:" + _KEYS_ALT + r")" + _KEY_E + r"[\"']?\s*[=:]\s*)"
+    r"(?P<val>\"[^\"\n]*\"?|'[^'\n]*'?|[^&\n\"']+)",
     re.IGNORECASE,
 )
 
@@ -59,7 +74,8 @@ def mask(text: str | None) -> str:
 #:    ⛔ 실측: `q=우리 제품은 면역력이 쑥쑥` 을 값 단위로 지우면 「우리」만 가려졌다.
 #: 🚨 **넘치게 지운다** — `?` 부터 요청 줄 끝까지. 덜 지우는 쪽으로 틀리면 문구가 샌다 (D-220).
 _QUERY = re.compile(r"\?(?P<qs>.*?)(?=\sHTTP/|[\"']|$)")
-_SENSITIVE_IN_QS = re.compile(r"\b(?:" + "|".join(_SENSITIVE_KEYS) + r")=", re.IGNORECASE)
+#: 🔄 2026-09-21 — 경계는 위 `_QS` 와 **같은 것**을 쓴다 (D-99). `\b` 였을 때 `?api_key=…` 가 안 걸렸다.
+_SENSITIVE_IN_QS = re.compile(_KEY_B + r"(?:" + _KEYS_ALT + r")=", re.IGNORECASE)
 
 
 def redact(line: str) -> str:
@@ -86,14 +102,23 @@ class RedactFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str):
             record.msg = redact(record.msg)
+        else:
+            # 🔄 2026-09-21 — `logger.info(payload_dict)` 처럼 msg 자체가 객체면 문자열로 펴서 지운다
+            record.msg = redact(str(record.msg))
         if record.args:
             if isinstance(record.args, tuple):
-                record.args = tuple(redact(a) if isinstance(a, str) else a for a in record.args)
+                record.args = tuple(_scrub(a) for a in record.args)
             elif isinstance(record.args, dict):
-                record.args = {
-                    k: (redact(v) if isinstance(v, str) else v) for k, v in record.args.items()
-                }
+                record.args = {k: _scrub(v) for k, v in record.args.items()}
         return True
+
+
+def _scrub(a: object) -> object:
+    """로그 인자 하나. 🔄 2026-09-21 (전수 재검토) — ⛔ 문자열만 지웠다. `logger.info("req %s", body_dict)` 는
+    dict 가 **포맷 시점에** 문자열이 되므로 필터를 그대로 지나갔다. 수(%d·%f 자리)와 None 은 그대로 둔다."""
+    if a is None or isinstance(a, (bool, int, float)):
+        return a
+    return redact(a if isinstance(a, str) else str(a))
 
 
 #: 필터를 붙일 로거들. 🚨 **`uvicorn.access` 가 핵심**이다 — 경로가 거기로 나간다.

@@ -56,10 +56,10 @@ KEYS = {
         "docker-compose 기본값 그대로 쓰면 된다. setup.bat 이 컨테이너를 띄운다",
     ),
     # 3. 학습·실험 (T2·T3 · 3W~)
-    "MLFLOW_TRACKING_URI": (
-        "실험 기록 — 🚨 LangSmith·W&B 는 쓰지 않는다 (D-43)",
-        "기본값 file:./mlruns 그대로",
-    ),
+    # 🔄 2026-09-21 (소성민 코드 리뷰 #10) — `MLFLOW_TRACKING_URI` 는 아래 `SETTINGS` 로 옮겼다. 비밀이 아니다.
+    #    ⛔ 여기 있으면 ① `setkey` 메뉴가 **가린 입력창**으로 받아 고친 값을 못 보고 ② 원문 키 섞임 검사
+    #       (`raw_inbox.secret_in`)가 기본값 `file:./mlruns` 를 **키로** 찾는다. `DATABASE_URL` 은 비밀번호가 들어
+    #       있어 여기 남긴다 — 가려서 받는 것이 맞다.
     "RUNPOD_API_KEY": (
         "학습 전용 (D-78) — 🚨 계정이 팀당 1개다. 슬롯 규칙을 먼저 정한다 (D-94)",
         "발급 담당 소성민",
@@ -80,6 +80,10 @@ SETTINGS = {
     # 🆕 2026-09-20 (D-250) — 팀원 수집
     "RAW_INBOX": "원문 받은편지함 폴더 — 수집 팀원이 올리고 정본이 합친다. 예: …\\CopyLane_raw_inbox (D-250)",
     "DATA_DEVICE": "수집 원장(공개 git)에 적을 이 기기 별칭(예: collector-1) · 실명 금지 · 팀 회의로 겹치지 않게 — 비우면 팀원 기기는 수집이 멈춘다 (D-250)",
+    # 🆕 2026-09-21 (D-256) — 정본 원문 거울 (팀장 기기만)
+    "RAW_MIRROR": "정본 원문 거울 폴더 — 팀장 계정에만 공유 · 마스킹 전 원문. 예: …\\CopyLane_raw_mirror (D-256)",
+    # 🔄 2026-09-21 (코드 리뷰 #10) — `KEYS` 에서 옮겼다. 비밀이 아니다 — 기본값 file:./mlruns 그대로 (D-43)
+    "MLFLOW_TRACKING_URI": "실험 기록 — 🚨 LangSmith·W&B 는 쓰지 않는다 (D-43) · 기본값 file:./mlruns 그대로",
 }
 
 

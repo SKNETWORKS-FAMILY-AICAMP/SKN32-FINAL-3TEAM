@@ -275,6 +275,33 @@ def test_doctor_모르는_DATA_ROLE_과_틀린_DATA_DEVICE_는_빨강이다(
     assert doctor._check_data_env() == 2
 
 
+def test_doctor_팀원_기기의_예약어_별칭은_빨강이다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-09-21 — 모양은 맞아도 `canonical` 은 정본 예약어다. 정본이면 초록 (반대 대조)."""
+    from scripts import doctor
+
+    vals = {"DATA_ROLE": "replica", "DATA_STORE": "", "DATA_DEVICE": "canonical"}
+    monkeypatch.setattr("collect.env.setting", lambda k: vals.get(k, ""))
+    assert doctor._check_data_env() == 1
+    vals["DATA_ROLE"] = "canonical"
+    assert doctor._check_data_env() == 0
+
+
+def test_doctor_원문_거울을_본다(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-09-21 (D-256) — 거울 폴더가 없거나 팀 저장소와 같은 폴더면 🔴 · 비면 빨강이 아니다 (팀원 기기)."""
+    from scripts import doctor
+
+    box = tmp_path / "거울"
+    vals = {"DATA_ROLE": "replica", "DATA_STORE": "", "DATA_DEVICE": "", "RAW_MIRROR": ""}
+    monkeypatch.setattr("collect.env.setting", lambda k: vals.get(k, ""))
+    assert doctor._check_data_env() == 0
+    vals["RAW_MIRROR"] = str(box)  # 폴더가 없다
+    assert doctor._check_data_env() == 1
+    box.mkdir()
+    assert doctor._check_data_env() == 0
+    vals["DATA_STORE"] = str(box)  # 🔴 팀 저장소와 같은 폴더
+    assert doctor._check_data_env() == 1  # 저장소 폴더 자체는 있다(초록) · 거울 겹침만 🔴
+
+
 def test_doctor_DATA_STORE_폴더가_없으면_빨강이다(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

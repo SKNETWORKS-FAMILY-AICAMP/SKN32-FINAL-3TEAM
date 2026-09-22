@@ -1,7 +1,7 @@
 # DB 스키마 초안 — W1 확정 대상
 
 > **작성자** 오한빈 (팀장)
-> **작성** 2026-08-16 *(추정)* · **최종 갱신** 2026-09-02 KST
+> **작성** 2026-08-16 *(추정)* · **최종 갱신** 2026-09-02 KST · 🔄 2026-09-21 실물 대조 (표·체크리스트 상태만 · 설계 판단은 그대로)
 
 > 담당: 데이터·거버넌스 트랙 · 기획서 4-5절 참조. PostgreSQL 16 + pgvector · SQLAlchemy 2.0 + Alembic.
 > 🚨 엔진 선택 근거는 **D-95** — MySQL 이 아닌 이유는 취향이 아니라 **D-20 캐스케이드 삭제**에서 도출된다.
@@ -9,6 +9,7 @@
 ## 엔티티 목록 (기획서 4-5)
 
 - **거버넌스**: SOURCE(등급·제약·용도·이력) · FRAGMENT(추출단위·등급·마스킹) · SOURCE_GRADE(판정 이력: decided_by/reviewed_by/evidence_url)
+  - 🔄 실물(2026-09-21) — 별도 표가 아니라 `source` 의 칸 `grade_decided_by`·`grade_reviewed_by`·`grade_evidence_url` + CHECK `ck_source_four_eyes` 다 (`db/schema.sql`)
 - **판정(진입점 A)**: 광고문구 · 문장 · 제품카테고리 · 적용법령 · 위법유형 · 판정이력 · 위험도 · 대체문구 · 재판정이력
 - **생성(진입점 B)**: 세그먼트(군집id·인원수·`source_set_version`) · 페르소나 · 지향키워드(선별 판정 결과) · 생성후보(프롬프트 버전·시도 회차·스크리닝 결과) · 주장원장(문장fk·주장스팬·출처)
 - 🔄 ★ **런타임 층 — 사용자 작업 (D-103)**: WORK_DOC(제품 1개 기준 · `consent` 에 따라 서버/세션) ·
@@ -25,6 +26,7 @@
   - 🚨 **`org_id`는 지금 넣는다.** 지금은 org가 하나여도, 나중에 클라우드 에디션(D-67)에서 붙이려면 **전 테이블을 소급 마이그레이션**해야 한다.
   - 🚨 **인구통계(성별·연령대)는 넣지 않는다 (D-68).** 세그먼트는 회원 속성이 아니라 **입력 파라미터**다.
   - **역할은 `governor` 하나만 강제한다.** 셀러/마케터는 **행동으로 정해지므로** 컬럼으로 두지 않는다 (D-66).
+  - 🔄 실물(2026-09-21) — `app_account`(이니셜 · 표시명 · PHC 해시 · `role` 은 `governor` 만 · `disabled_at`) · 세션은 표가 아니라 **서명 쿠키**(`app/auth.py`). ⬜ `org_id`·이메일 칸은 아직 없다 — 위 「지금 넣는다」는 판정이 남아 있다
 - ★ **프로필 (D-68 · 10주 범위 밖 · 컬럼만 예약)**: SELLER_PROFILE(닉네임 · **카테고리 태그** · 원하는 광고 유형 ·
   **`visibility`** `private`/`link`/`members` · 소유 증명 상태) — 🚨 **메시지·평판·계약 테이블은 만들지 않는다.**
 
@@ -32,11 +34,14 @@
 
 | 층 | 무엇 | 상태 |
 |---|---|---|
-| **거버넌스·수집·학습** | `source` `fragment` `document` `sentence` `chunk` `golden_sample` … **18 테이블** | ✅ **DDL v1.0 에 있고 PostgreSQL 16.13 으로 실측 검증됨** |
-| **런타임 — 사용자 작업** | `work_doc` `copy_sentence` `judgment` `slot_assignment` 🔄 `upload_blob`(D-128·D-129) · `work_doc` 에 수명 키 `owner_id`·`session_id`·`expires_at` · `judgment.doc_id FK CASCADE` · `verdict` 4종 CHECK(D-127) · `is_public`·`screened_at` | 🚨 **없다. Phase 0 walking skeleton 이 필요로 하는 것이 이쪽이다** |
+| **거버넌스·수집·학습** | `source` `fragment` `document` `sentence` `chunk` `golden_sample` … 🔄 **19 테이블** (0003 `violation_article` · 2026-09-21 `db/schema.sql` 실측) | ✅ **DDL v1.0 에 있고 PostgreSQL 16.13 으로 실측 검증됨** |
+| **런타임 — 사용자 작업** | `work_doc` `copy_sentence` `judgment` `slot_assignment` 🔄 `upload_blob`(D-128·D-129) · `work_doc` 에 수명 키 `owner_id`·`session_id`·`expires_at` · `judgment.doc_id FK CASCADE` · `verdict` 4종 CHECK(D-127) · `is_public`·`screened_at` | 🔄 ✅ **있다** — `app/models.py` · alembic `6c1f5f12e174`(09-09 · 여섯 표) · `0012`(`app_account`) = **7표**. 🚨 **쓰는 코드는 아직 없다** — 화면은 픽스처로 돈다 (구현계획 ②) |
 
 > 그래서 **초기 마이그레이션은 런타임 층부터** 만든다. 거버넌스 층은 수집이 열릴 때(S0-14 통과 후)
 > DDL v1.0 을 그대로 옮긴다. 오늘 둘을 한꺼번에 넣으면 **검증할 수 없는 마이그레이션**이 된다.
+>
+> 🔄 **실제 순서는 반대가 됐다** (2026-09-21 대조) — 거버넌스 `0001_governance`(동결본 `db/schema_0001.sql` · D-225)가 먼저이고
+> 런타임 `6c1f5f12e174` 가 그 위다. 머리는 `0015_document_annex_no`.
 
 ## 🔄 ★ 판정은 다형 참조로 저장한다 <sub>(2026-09-02 · D-103)</sub>
 
@@ -88,24 +93,24 @@ JUDGMENT
 
 ## 🚨 W1에 반드시 (D-20)
 
-- [ ] 모든 청크·학습샘플·사전 항목에 `fragment_id` FK 필수
+- [x] 모든 청크·학습샘플·사전 항목에 `fragment_id` FK 필수 *(🔄 09-21 확인 — `db/schema.sql` `NOT NULL REFERENCES fragment … ON DELETE CASCADE`)*
 - [ ] 소스 단위 캐스케이드 삭제 스크립트 + **테스트까지** (`DELETE source → fragment → 청크/학습샘플/벡터`)
-- [ ] Alembic 초기 마이그레이션 + `upgrade → downgrade → upgrade` 롤백 검증
+- [ ] Alembic 초기 마이그레이션 + `upgrade → downgrade → upgrade` 롤백 검증 *(🔄 09-21 — 마이그레이션은 섰다(0001~0015). ⬜ 롤백 왕복 검증은 기록을 못 찾았다)*
 - [ ] 세그먼트 `source_set_version` → 데이터셋 버전 변경 시 재학습 트리거
 - [ ] k-익명성 `K_MIN` 값 확정 (00_사실원장.md에 기록)
-- [ ] ★ **판정이력에 `is_public` · `screened_at` 컬럼** (D-68) — 공개 프로필은 10주 범위 밖이지만,
+- [x] ★ **판정이력에 `is_public` · `screened_at` 컬럼** (D-68) *(🔄 09-21 — `judgment` 에 있다)* — 공개 프로필은 10주 범위 밖이지만,
       나중에 붙이려면 판정 이력 전체를 마이그레이션해야 하므로 **컬럼만 지금 잡아둔다**
-- [ ] ★ **`SOURCE_GRADE`에 `decided_by != reviewed_by` 제약** (D-66) — 2인 확인을 코드로 강제
-- [ ] ★ **골든셋에 `surface_variant`(S0~S5) · `surface_of`(FK)** (D-91) — 회피 표기는 위법 유형과
+- [x] ★ **`SOURCE_GRADE`에 `decided_by != reviewed_by` 제약** (D-66) — 2인 확인을 코드로 강제 *(🔄 09-21 — `source` 의 `ck_source_four_eyes`)*
+- [x] ★ **골든셋에 `surface_variant`(S0~S5) · `surface_of`(FK)** (D-91) *(🔄 09-21 확인)* — 회피 표기는 위법 유형과
       **직교하는 축**이다. `rule_id` 에 섞으면 유형별 Recall 이 오염된다. 나중에 붙이려면 골든셋 전체를 재생성해야 한다
-- [ ] ★ **골든셋·학습샘플 행에 `provenance` · `redistributable`** (D-71) — 🚨 상속값을 **행 단위로 복사**한다.
+- [x] ★ **골든셋·학습샘플 행에 `provenance` · `redistributable`** (D-71) *(🔄 09-21 — `golden_sample` 확인)* — 🚨 상속값을 **행 단위로 복사**한다.
       조인으로 매번 계산하면 소스가 캐스케이드로 지워진 뒤(D-20) 공개 판정의 답이 달라진다
-- [ ] 🔄 ★ **JUDGMENT 에 `subject_type` · `law_version`** (D-103) — 🚨 **주장 계층 도입을
+- [x] 🔄 ★ **JUDGMENT 에 `subject_type` · `law_version`** (D-103) *(🔄 09-21 확인)* — 🚨 **주장 계층 도입을
       마이그레이션이 아니라 데이터 추가로 만드는 유일한 장치다.** 나중에 붙이면 판정 행 전체를 옮겨야 한다
-- [ ] 🔄 ★ **COPY_SENTENCE 에 `image_description`** (D-104) — 이미지 설명 생성 보조를 나중에 얹기 위한 자리.
+- [x] 🔄 ★ **COPY_SENTENCE 에 `image_description`** (D-104) *(🔄 09-21 확인)* — 이미지 설명 생성 보조를 나중에 얹기 위한 자리.
       🚨 **자리를 비워 두는 것이 D-104 가 「지금 넣지 않는다」를 고를 수 있게 한 조건이다**
-- [ ] 🔄 ★ **사용자 입력 유래 행에 `consent`** (D-96) — 🚨 `provenance`·`redistributable` 과 **같은 층**이다.
+- [ ] 🔄 ★ **사용자 입력 유래 행에 `consent`** (D-96) *(🔄 09-21 — 문서 단위 `work_doc.consent_store`·`consent_train` 으로 섰다(D-128). 행 단위 `consent` 칸은 없다)* — 🚨 `provenance`·`redistributable` 과 **같은 층**이다.
       기본값은 **미보관**이고, 학습 데이터 구성은 `consent=true` 만 통과시킨다. **나중에 붙이려면
       「동의를 받았는지 알 수 없는 과거 행」이 남고, 그 행들은 영구히 학습에 못 쓴다**
-- [ ] ★ **문장·청크에 `raw` / `norm` / `offset_map`** (D-84 ① · D-91) — 매칭은 정규화문에서,
+- [ ] ★ **문장·청크에 `raw` / `norm` / `offset_map`** (D-84 ① · D-91) *(🔄 09-21 — 문장(`sentence`·`copy_sentence`)은 있다. 청크는 `text`(인용 단위)/`context`(검색 문맥)로 갈랐다 · 0008 · D-158)* — 매칭은 정규화문에서,
       보고는 원문 좌표로. 보안 P2-9 가 요구하는 `(offset, length)` 구조가 여기 걸려 있다

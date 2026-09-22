@@ -59,6 +59,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts import derived_manifest as dm  # noqa: E402 — 위 sys.path 뒤에 들여온다
+from scripts.load_db import LOAD_INPUTS  # noqa: E402 — 적재 입력의 정본 (D-99)
 
 LAUNCHER = ROOT / "launcher.py"
 DERIVED = ROOT / "data" / "derived"
@@ -69,8 +70,16 @@ DERIVED_CHECKS: tuple[tuple[str, str], ...] = (
     ("조문", "law_article.jsonl"),
     ("별표", "law_norm"),
 )
+#: 🔴 `load` 가 읽는 것 — `load_db.LOAD_INPUTS` 에서 꺼낸다 (D-99).
+#: 🔄 2026-09-21 — ⛔ 종전에는 조문·별표만 적어, 금지표현 사전·건기식 라벨·골든셋이 없으면
+#:    볼륨을 **지운 뒤에** `load` 가 멈췄다. 이제 지우기 전에 본다.
+LOAD_CHECKS: tuple[tuple[str, str], ...] = tuple((label, name) for label, name, _ in LOAD_INPUTS)
 #: 🔴 사본이 **받아 와야 하는** 것 — 재추출을 안 하므로 청크까지 받은 판이 있어야 한다 (D-247).
-REPLICA_CHECKS: tuple[tuple[str, str], ...] = (*DERIVED_CHECKS, ("청크", "chunks.jsonl"))
+REPLICA_CHECKS: tuple[tuple[str, str], ...] = (*LOAD_CHECKS, ("청크", "chunks.jsonl"))
+#: 🔴 정본이 **다시 만들지 않는** 적재 입력 — 재추출(조문·별표) 밖이라 지우기 전에 있어야 한다.
+CANONICAL_CHECKS: tuple[tuple[str, str], ...] = tuple(
+    c for c in LOAD_CHECKS if c[1] not in {n for _, n in DERIVED_CHECKS}
+)
 #: 🚨 DB 를 **기다리지 않는다** — 아래 `accounts()` 참조. `[임의]` — 로컬 도커다.
 CONNECT_TIMEOUT_S = 3
 
@@ -186,6 +195,20 @@ def preflight_data(who: str | None) -> int:
             print("       uv run python launcher.py data-sync")
             print("     ⬜ 아무것도 안 지웠다.")
             return 1
+        # 🔄 2026-09-21 (전수 재검토) — ⛔ 파일이 **비어 있지 않은지만** 봤다. 옛 판이 남아 있고 저장소에 못 닿으면
+        #    볼륨을 지운 뒤 `load` 의 받기가 실패해 **빈 DB** 가 남았다 — 이 검사가 막으려던 바로 그 결과다.
+        #    ★ 지우기 전에 원장과 같은지 본다 — 같으면 저장소 없이도 다시 적재할 수 있다.
+        from scripts import data_store as ds  # noqa: PLC0415 — 사본 갈래에서만 필요하다
+
+        why = ds.ledger_missing()
+        todo = [] if why else ds.plan()
+        if why or todo:
+            print(
+                f"\n  🔴 받은 파생물이 원장과 다르다 — {why or f'{len(todo)}개 부족·옛 판'}. 지우기 전에 멈춘다."
+            )
+            print("       uv run python launcher.py data-sync")
+            print("     ⬜ 아무것도 안 지웠다.")
+            return 1
         return 0
     # 정본 — 🔴 합치지 않은 팀원 원문이 있으면 재추출이 **그 원문을 빼고** 파생물을 만든다 (D-250).
     #    런처 `needs_raw` 가 부르는 것과 같은 함수다 (D-99).
@@ -193,6 +216,14 @@ def preflight_data(who: str | None) -> int:
 
     if raw_inbox.check_pending():
         print("     ⬜ 아무것도 안 지웠다 — `raw-import` 뒤에 다시 부른다.")
+        return 1
+    if missing := _derived_empty(CANONICAL_CHECKS):
+        how = {name: cmd for _, name, cmd in LOAD_INPUTS}
+        print(f"\n  🔴 적재 입력이 없다 — {' · '.join(missing)}. 지우기 전에 멈춘다.")
+        print("     `--data` 는 조문·별표만 다시 뽑는다 — 나머지는 먼저 만들어 둔다:")
+        for _label, name in CANONICAL_CHECKS:
+            print(f"       {how[name]}")
+        print("     ⬜ 아무것도 안 지웠다.")
         return 1
     return 0
 

@@ -190,7 +190,7 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
     family = dest_dir.name
     url = str(spec.get("url") or "")
     volatile = source_id in store.VOLATILE
-    new = skipped = backfilled = editions = 0
+    new = skipped = backfilled = editions = restored = 0
 
     def ident_of(q: Path) -> str:
         # 🚨 판정용 해시 — 유동 값이 있는 원천만 통째로 읽는다(그 외는 스트리밍 · 수백 MB)
@@ -199,16 +199,29 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
     for p in files:
         digest, size = digest_of(p)
         ident = ident_of(p)
-        verdict, dest, supersedes = store.plan_raw(family, p.name, ident, ident_of)
+        verdict, dest, supersedes = store.plan_raw(
+            family, p.name, ident, ident_of, source_id=source_id
+        )
         if verdict == "skip":
             skipped += 1  # 규약 4 — 디스크든 원장이든 같은 것이 있다
             continue
-        if verdict == "write":
+        if verdict == "restore":
+            # 🆕 2026-09-21 (코드 리뷰 #3) — 이 기기가 받았다고 적혔는데 없던 것. 그 경로에 되살린다 (`store.plan_raw`)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, dest)
+            restored += 1
+            if not store.restore_needs_row(dest, digest):
+                continue  # 원장 행이 이미 이 바이트를 말한다 — 같은 행을 두 번 적지 않는다
+        elif verdict == "write":
             shutil.copy2(p, dest)
             if supersedes:
                 editions += 1
-        else:  # "ledger" — 같은 바이트가 이미 있다. 복사하지 않고 행만 붙인다
+        else:  # "ledger" — 같은 것이 이미 있다. 복사하지 않고 행만 붙인다
             backfilled += 1
+            # 🔄 2026-09-21 — 행은 **디스크에 있는 파일**(`dest`)을 적는다. ⛔ 종전에는 들여온 파일 `p` 의
+            #    sha·크기를 `dest` 경로에 적었다. 유동 값이 있는 원천(`store.VOLATILE`)은 판정 해시만 같고
+            #    바이트는 다를 수 있어 — 원장 sha 가 그 경로의 실제 파일과 안 맞았다(`inventory`·`data-sync` 가 갈린다).
+            digest, size = digest_of(dest)
         store.manifest_append(
             source_id=source_id,
             url=url,
@@ -222,10 +235,10 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
         if verdict == "write":
             new += 1
 
-    if new or backfilled:
+    if new or backfilled or restored:
         registry.mark_collected(source_id)  # 규약 3 · 게이트 15
     print(
-        f"등록 {new}개(판 {editions}) · 원장 행만 보탬 {backfilled}개 · 동일해 스킵 {skipped}개"
+        f"등록 {new}개(판 {editions}) · 원장 행만 보탬 {backfilled}개 · 되살림 {restored}개 · 동일해 스킵 {skipped}개"
         f" → {dest_dir.relative_to(ROOT)}"
     )
     if backfilled:

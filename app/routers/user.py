@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from app.contracts import PASS_RISK_MAX_PROVISIONAL
 from app.db import get_session
+from app.formbody import read_capped
 from app.models import CopySentence, Judgment
 from app.settings import PARAMS
 from app.templating import templates
@@ -107,7 +108,9 @@ def _render(
     ctx.setdefault("active_section", section)
     ctx.setdefault("section_label", _SECTION_LABELS.get(section) if section else None)
     ctx.setdefault("section_subs", _SECTION_SUBS.get(section) if section else None)
-    ctx.setdefault("active_sub", active_sub if active_sub is not None else _SECTION_ACTIVE_SUB.get(path))
+    ctx.setdefault(
+        "active_sub", active_sub if active_sub is not None else _SECTION_ACTIVE_SUB.get(path)
+    )
     return templates.TemplateResponse(request, template, ctx)
 
 
@@ -119,9 +122,10 @@ async def _form(request: Request) -> dict[str, list[str]]:
       **파일 업로드(`multipart/form-data`)** 뿐이다.
     ⬜ 업로드를 붙일 때는 lock 을 만지는 판정이다 (§5). 그 판정 전까지 만들지 않는다.
     """
-    body = await request.body()
-    if len(body) > _MAX_BODY:
-        raise HTTPException(413, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다")
+    # 🔄 09-21 — 다 읽고 재지 않는다. 넘는 순간 멈춘다 (app/formbody.py · P2-11)
+    body = await read_capped(
+        request, _MAX_BODY, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다"
+    )
     return parse_qs(body.decode("utf-8", "replace"))
 
 
@@ -173,8 +177,9 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     violation_count = (
         session.scalar(
             select(func.count()).select_from(
-                month.where(Judgment.verdict == "confirmed", Judgment.risk_final > pass_level)
-                .subquery()
+                month.where(
+                    Judgment.verdict == "confirmed", Judgment.risk_final > pass_level
+                ).subquery()
             )
         )
         or 0
@@ -182,8 +187,9 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     pass_count = (
         session.scalar(
             select(func.count()).select_from(
-                month.where(Judgment.verdict == "confirmed", Judgment.risk_final <= pass_level)
-                .subquery()
+                month.where(
+                    Judgment.verdict == "confirmed", Judgment.risk_final <= pass_level
+                ).subquery()
             )
         )
         or 0
@@ -485,9 +491,7 @@ def history(
 
     total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     raw_rows = session.execute(
-        stmt.order_by(Judgment.judged_at.desc())
-        .limit(_PAGE_SIZE)
-        .offset((page - 1) * _PAGE_SIZE)
+        stmt.order_by(Judgment.judged_at.desc()).limit(_PAGE_SIZE).offset((page - 1) * _PAGE_SIZE)
     ).all()
     rows = [
         SimpleNamespace(

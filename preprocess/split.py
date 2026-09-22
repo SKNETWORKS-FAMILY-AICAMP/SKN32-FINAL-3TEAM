@@ -165,9 +165,13 @@ def verify_inputs(manifest: dict, *, who: str) -> None:
         )
     now = fingerprint()
     bad = [k for k, v in want.items() if now.get(k, {}).get("sha256") != v.get("sha256")]
+    # 🔄 2026-09-21 (전수 재검토 I12) — ⛔ 분할이 본 파일만 대조해, 분할 **뒤에 새로 생긴** 라벨 파일은 통과했다.
+    #    새 파일이 판정 레코드를 들고 오면 봉인된 test 문서의 라벨이 **id 는 그대로인 채** 바뀌었다(실측 재현).
+    #    ★ 지금 입력에 있는데 분할이 못 본 것(내용이 있는 것)도 다름이다.
+    bad += sorted(k for k, v in now.items() if k not in want and v.get("sha256"))
     if bad:
         lines = "\n".join(
-            f"    {k}\n      분할이 본 것 {want[k]['sha256']!s:.12}… ({want[k]['bytes']:,} B)"
+            f"    {k}\n      분할이 본 것 {want.get(k, {}).get('sha256')!s:.12}… ({want.get(k, {}).get('bytes', 0):,} B)"
             f"\n      지금 있는 것 {now.get(k, {}).get('sha256')!s:.12}…"
             f" ({now.get(k, {}).get('bytes', 0):,} B)"
             for k in bad

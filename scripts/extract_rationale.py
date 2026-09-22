@@ -147,4 +147,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    from docmeta import (
+        refuse_args,  # noqa: PLC0415 — 스크립트로 돌 때만 (scripts/ 가 경로 맨 앞이다)
+    )
+
+    refuse_args("extract_rationale.py")
     main()

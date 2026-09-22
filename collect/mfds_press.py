@@ -49,7 +49,9 @@ from collect import http, registry, store
 from preprocess.text import sep_norm
 
 SOURCE_ID = "mfds_press"
-FAMILY = "mfds_press"
+#: 🔄 2026-09-21 — 원문 폴더 이름은 `store.FAMILY_OF` 한 곳에서 꺼낸다 (D-99 · D-254).
+#:    ⛔ 종전에는 `"mfds_press"` 와 `f"{FAMILY}_pdf"` 를 여기 따로 박았다 — 표를 바꾸면 수집기만 옛 폴더에 썼다.
+FAMILY, PDF_FAMILY = store.families(SOURCE_ID)
 USE = "U3"  # 🚨 U1 이 아니다 — 위 머리말 참조
 
 LIST_URL = "https://www.mfds.go.kr/brd/m_99/list.do"
@@ -417,6 +419,18 @@ def attach_links(html_text: str) -> list[tuple[str, str]]:
     return out
 
 
+def attach_dest(page_stem: str, idx: int) -> str:
+    """게시물 `45732` 의 idx 번째 첨부 → `45732_1.pdf`.
+
+    🔄 2026-09-22 (클론 A 재검토 2판 §3-4 · 3판 §0 ⑦ 실측 0건 뒤) — ⛔ 게시물 HTML 이 **판**
+       (`45732__c20260909.html` · 원천이 같은 번호로 다른 내용을 줬을 때)이면 종전 이름은
+       `45732__c20260909_1.pdf` 였다. 판 표시가 이름 **가운데** 들어가 `store` 는 이것을
+       `45732.pdf` 의 판으로 읽는다 — 다른 첨부와 섞인다.
+       ★ 첨부 이름은 **판을 뗀 게시물 번호**로 짓는다. 첨부 내용이 달라지면 `save_raw` 가 첨부 쪽에 판을 붙인다(규약 2).
+    """
+    return f"{page_stem.split(store.EDITION_MARK, 1)[0]}_{idx}.pdf"
+
+
 def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, int]:
     """받아 둔 게시물 HTML 에서 첨부 PDF 를 받는다. 돌려주는 값은 (저장, 건너뜀, 실패).
 
@@ -440,7 +454,7 @@ def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, 
         )
 
     saved = skipped = failed = seen = 0
-    out_dir = store.raw_dir(f"{FAMILY}_pdf")
+    out_dir = store.raw_dir(PDF_FAMILY)
     print(f"  게시물 {len(pages)}건에서 첨부를 찾는다\n")
 
     for page in pages:
@@ -455,7 +469,7 @@ def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, 
                 print(f"\n  ⏸ --limit {limit} 에서 멈춘다.")
                 return saved, skipped, failed
             seen += 1
-            dest = f"{page.stem}_{idx}.pdf"
+            dest = attach_dest(page.stem, idx)
             if (out_dir / dest).exists():
                 skipped += 1
                 continue
@@ -477,7 +491,7 @@ def collect_attachments(*, limit: int | None, dry_run: bool) -> tuple[int, int, 
             print(f"  ✅ {page.stem:>9}  {name[:46]}  ({len(body):,} B)")
             if dry_run:
                 continue
-            if store.save_raw(SOURCE_ID, f"{FAMILY}_pdf", dest, body, url=url) is None:
+            if store.save_raw(SOURCE_ID, PDF_FAMILY, dest, body, url=url) is None:
                 skipped += 1
                 continue
             saved += 1
@@ -500,7 +514,9 @@ def collect(
     sizes: list[int] = []
     out_dir = store.raw_dir(FAMILY)
     # 🔄 D-132 — 격리 디렉터리는 더 이상 쓰지 않는다. 09-03 이전에 격리된 것이 있으면 규약 4 로 건너뛴다.
-    quarantine = store.raw_dir(f"{FAMILY}_격리")
+    #    🔄 2026-09-21 — 읽기만 한다. ⛔ 종전 `store.raw_dir()` 는 돌 때마다 **빈 폴더를 만들었다**
+    #       (`FAMILY_OF` 에 없는 계열이라 원장·`missing` 이 모르는 폴더가 생긴다).
+    quarantine = store.RAW / f"{FAMILY}_격리"
     badge_log = store.derived_dir(FAMILY) / "kogl_badge.jsonl"
 
     # 🚨 색인이 먼저다. 없으면 무엇을 받을지 모른다 — 게시판 검색이 무시되기 때문이다.
@@ -526,7 +542,8 @@ def collect(
         seen += 1
 
         # 규약 4 — 격리 쪽도 함께 본다. 안 그러면 미부착 건을 매번 다시 받는다.
-        if (out_dir / f"{no}.html").exists() or (quarantine / f"{no}.html").exists():
+        #    🔄 09-21 — 원장(다른 기기가 받은 것)도 본다 (`store.already_have`)
+        if store.already_have(out_dir / f"{no}.html") or (quarantine / f"{no}.html").exists():
             skipped += 1
             continue
 
@@ -643,9 +660,8 @@ def main() -> int:
             f"🔄 공공누리 미부착 {nonuri}건 — 제24조의2 제1항으로 수집 · kogl_badge=none 기록 "
             f"(data/derived/{FAMILY}/kogl_badge.jsonl · D-132)."
         )
-    if saved and not a.dry_run:
-        registry.mark_collected(SOURCE_ID)
-        print("collected_at 을 원장에 기록하고 data_sources.yaml 을 재생성했다.")
+    if not a.dry_run:
+        registry.mark_if_complete(SOURCE_ID, saved=saved, partial=a.limit is not None)
     if failed:
         print("🚨 실패한 항목이 있다 — 위 사유를 먼저 해결하고 다시 돌린다.", file=sys.stderr)
     print("🚨 이 소스는 U1(학습) deny 다 — **test_holdout 전용**이다. train 에 넣지 않는다.")

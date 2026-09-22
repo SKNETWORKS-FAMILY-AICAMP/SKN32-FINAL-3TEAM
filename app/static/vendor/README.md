@@ -1,7 +1,7 @@
 # `app/static/vendor/` — 외부 스크립트는 **받아서 커밋한다**
 
 🚨 **CDN 을 쓰지 않는다.** 보안점검 **P0-3**(공급망)과 같은 이유다 — 남의 서버가 언제
-바뀌었는지 우리는 모른다. 그리고 `base.html` 의 CSP 가 `script-src 'self'` 라 **CDN 은 막힌다.**
+바뀌었는지 우리는 모른다. 그리고 `app/api.py` 의 CSP 헤더(`_CSP_PAGE` · 모든 응답에 미들웨어가 붙인다)가 `script-src 'self'` 라 **CDN 은 막힌다.** *(🔄 2026-09-21 — 종전엔 `base.html` 의 `<meta>` 였다 · D-212)*
 
 ## HTMX 받는 법
 

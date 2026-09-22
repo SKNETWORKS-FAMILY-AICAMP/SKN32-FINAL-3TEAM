@@ -32,6 +32,8 @@ from pydantic import BaseModel
 from app import contracts
 
 SNAPSHOT = Path(__file__).resolve().parent / "contract_surface.json"
+#: 계약 스냅샷이 재는 라우트의 모듈 — 판정 코어 API 한 곳.
+_CORE = "app.api"
 
 
 def _type_name(t: Any) -> str:
@@ -58,20 +60,34 @@ def surface() -> dict[str, Any]:
             and obj is not BaseModel
             and obj.__module__ == contracts.__name__
         ):
+            # 🔄 2026-09-21 (전수 재검토 곁가지) — **앞으로 참조를 먼저 푼다.** ⛔ 풀기 전에는 `adapted` 가
+            #    `ForwardRef('list[AdaptedCopy]')` 로 찍히고, 앞의 테스트가 모델을 한 번 쓰면(pydantic 이 스스로 풀면)
+            #    `list[AdaptedCopy]` 로 찍혔다 — `test_contracts.py` 다음에 이 파일만 돌리면 빨갛고 전량으로는 초록이었다.
+            #    계약이 아니라 **실행 순서**가 결과를 정하던 것이다.
+            obj.model_rebuild()
             models[name] = {
                 f: f"{'req' if info.is_required() else 'opt'} {_type_name(info.annotation)}"
                 for f, info in sorted(obj.model_fields.items())
             }
+
+    from fastapi.routing import APIRoute  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415 — fastapi 는 이 검사에서만 든다
 
     # 🚨 FastAPI 가 스스로 붙이는 문서 라우트는 **뺀다.** 우리가 안 고쳐도 판이 올라가면
     #    바뀔 수 있는 자리라, 넣어 두면 **버전 잡음이 계약 변경으로 읽힌다** — 게이트가 죽는다.
     _BUILTIN = {"/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"}
+    # 🔄 2026-09-21 — **판정 코어 API(`app/api.py`)의 라우트만** 뜬다고 명시한다.
+    #    ⛔ 종전 조건 `getattr(r, "methods", None)` 은 화면 라우터(`app/routers/` — `/u/**` · `/admin/**` ·
+    #       로그인)를 **우연히** 뺐다: 이 판의 FastAPI 는 `include_router` 를 `_IncludedRouter` 한 개로
+    #       붙여 `methods` 가 없다. 옛 판(라우트를 풀어 붙임)으로 돌면 화면 라우트가 스냅샷에 섞여
+    #       게이트가 빨개지고, 새 판이 또 바꾸면 조용히 빠진다 — 무엇을 재는지가 판 버전에 달려 있었다.
+    #    ★ 화면 라우트를 빼는 것은 **의도다** — 집행계약 §1-2 「계약만 잠근다」(D-192). 여기서는 그 의도를
+    #      FastAPI 판에 안 기대게 코드로 적었을 뿐, 범위를 바꾸지 않았다.
     routes = sorted(
         [r.path, sorted(m for m in r.methods if m != "HEAD")]
         for r in app.routes
-        if getattr(r, "methods", None) and r.path not in _BUILTIN
+        if isinstance(r, APIRoute) and r.endpoint.__module__ == _CORE and r.path not in _BUILTIN
     )
     return {"enums": enums, "models": models, "routes": routes}
 
@@ -157,3 +173,15 @@ def test_이_게이트가_실제로_변경을_잡는다() -> None:
     m = copy.deepcopy(base)
     m["routes"].append(["/새경로", ["POST"]])
     assert differs(m), "🔴 라우트 추가를 못 잡는다"
+
+
+@pytest.mark.gate
+def test_라우트_표면은_코어만_재고_코어는_빠짐없이_잰다() -> None:
+    """🆕 2026-09-21 — FastAPI 판이 `include_router` 를 어떻게 붙이든 같은 답이어야 한다.
+
+    ★ 반대 대조 두 쪽 — 코어 라우트가 **실제로 뜨는가**(비어 있으면 아무것도 안 잰다) ·
+      화면 라우트가 **안 섞이는가**.
+    """
+    got = {path for path, _m in surface()["routes"]}
+    assert {"/health", "/judge", "/search"} <= got, f"🔴 코어 라우트가 빠졌다: {sorted(got)}"
+    assert not any(p.startswith(("/u/", "/admin")) for p in got), f"🔴 화면 라우트가 섞였다: {got}"

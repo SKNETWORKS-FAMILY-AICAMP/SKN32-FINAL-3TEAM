@@ -47,7 +47,7 @@ from scripts import derived_manifest as dm
 
 ROOT = dm.ROOT
 LAYOUT = "copylane-derived"
-#: 사본이 덮어쓸 때 옛 파일을 옮겨 두는 곳 — **레포 밖**이다 (git status 에 안 뜬다)
+#: 사본이 덮어쓸 때 옛 파일을 복사해 두는 곳 — **레포 밖**이다 (git status 에 안 뜬다)
 BACKUP = ROOT.parent / "CopyLane_backup"
 #: 🚨 `data/raw` 에 **파일이 있는지만** 본다 — 열지 않는다. `RAW_EXCEPTIONS` 에 이유와 함께 적었다.
 RAW_MARK = ROOT / "data" / "raw"
@@ -93,6 +93,21 @@ def _obj(root: pathlib.Path, sha: str) -> pathlib.Path:
     return root / "objects" / sha[:2] / sha
 
 
+def object_ok(path: pathlib.Path, nbytes: object) -> bool:
+    """저장소 객체가 **있고 크기가 원장과 같은가.** 🆕 2026-09-21 (전수 재검토 I13).
+
+    ⛔ 올리는 쪽 셋(`publish` · `raw_mirror` · `raw_inbox`)이 「새로 올릴 것」을 `is_file()` 로만 골랐다 —
+       0바이트·반쯤 쓴 객체가 「있다」로 세여 **영영 다시 안 올라갔고**, 사본은 sha 대조에서 계속 멈췄다.
+       그때 안내(「다시 올린다」)는 아무것도 못 했다 — 있음 ≠ 온전함 (D-177).
+    🚨 크기만 본다 — 드라이브 너머의 파일을 매번 통째로 읽으면 올리기가 받기만큼 무거워진다.
+       같은 크기로 오염된 것은 받는 쪽 sha 대조(`_stage`)가 잡는다.
+    """
+    try:
+        return path.is_file() and path.stat().st_size == int(nbytes)  # type: ignore[call-overload]
+    except (OSError, TypeError, ValueError):
+        return False
+
+
 def unsafe(rows: list[dict[str, object]]) -> list[str]:
     """🔴 원장 행 중 **파생물 폴더 밖을 가리키거나 sha 모양이 아닌 것** (2026-09-19 · 보안 점검).
 
@@ -122,14 +137,19 @@ def _sha(path: pathlib.Path) -> str:
     return h.hexdigest()
 
 
-def _copy_verified(src: pathlib.Path, dest: pathlib.Path, sha: str) -> None:
-    """임시 이름으로 복사 → sha 확인 → 제자리로. 🚨 **반쯤 쓴 파일이 제자리에 남지 않는다.**
+def _stage(src: pathlib.Path, dest: pathlib.Path, sha: str) -> pathlib.Path:
+    """`dest` 옆 임시 이름(`.part`)에 복사하고 sha 를 확인한다 — **제자리에는 놓지 않는다.** 돌려주는 값은 임시 파일.
 
-    ⛔ 동기화 폴더는 「아직 다 안 내려온 파일」을 보여 줄 수 있다. sha 가 안 맞으면 놓지 않는다.
+    ⛔ 동기화 폴더는 「아직 다 안 내려온 파일」을 보여 줄 수 있다. sha 가 안 맞으면 임시 파일도 지우고 멈춘다.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
-    shutil.copyfile(src, tmp)
+    try:
+        shutil.copyfile(src, tmp)
+    except BaseException:
+        # 🔄 2026-09-21 (전수 재검토) — ⛔ 복사가 중간에 끊기면 `.part` 가 남아 doctor 가 고아·추가 파일로 셌다
+        tmp.unlink(missing_ok=True)
+        raise
     got = _sha(tmp)
     if got != sha:
         tmp.unlink()
@@ -138,16 +158,12 @@ def _copy_verified(src: pathlib.Path, dest: pathlib.Path, sha: str) -> None:
             f"  원장 {sha[:16]} · 받은 것 {got[:16]}\n"
             "  🚨 동기화가 덜 끝났거나 저장소가 오염됐다. 놓지 않았다 (D-220)"
         )
-    os.replace(tmp, dest)
+    return tmp
 
 
-def _get(root: pathlib.Path, sha: str, dest: pathlib.Path) -> None:
-    src = _obj(root, sha)
-    if not src.is_file():
-        raise StoreError(
-            f"저장소에 {sha[:16]} 이 없다 — 정본에서 `data-publish` 를 안 했을 수 있다"
-        )
-    _copy_verified(src, dest, sha)
+def _copy_verified(src: pathlib.Path, dest: pathlib.Path, sha: str) -> None:
+    """임시 이름으로 복사 → sha 확인 → 제자리로. 🚨 **반쯤 쓴 파일이 제자리에 남지 않는다.**"""
+    os.replace(_stage(src, dest, sha), dest)
 
 
 def _put(root: pathlib.Path, src: pathlib.Path, sha: str) -> bool:
@@ -162,6 +178,17 @@ def _put(root: pathlib.Path, src: pathlib.Path, sha: str) -> bool:
 # ══════════════════════════════════════════════════════════
 # 무엇이 부족한가
 # ══════════════════════════════════════════════════════════
+def ledger_missing() -> str | None:
+    """파생물 원장이 없으면 그 이유 — 🆕 2026-09-21 (전수 재검토). ⛔ 종전에는 `dm.ledger()` 가 빈 dict 를 내서
+    사본이 「받을 것 없음 — 원장과 같다」로 통과했고, `load`·`embed` 가 디스크의 아무 판 위에서 돌았다 (D-72)."""
+    if dm.OUT.exists():
+        return None
+    return (
+        f"🔴 파생물 원장이 없다 — {dm.OUT.relative_to(ROOT).as_posix()}. 무엇을 받아야 하는지 모른다 (D-72).\n"
+        "  git pull 로 원장을 받는다 — 정본이 `derived-manifest --write` 뒤 커밋·push 한 파일이다"
+    )
+
+
 def plan() -> list[dict[str, object]]:
     """이 기기에 **없거나 원장과 다른 생성물** — 받아야 할 것. 네트워크를 쓰지 않는다.
 
@@ -182,8 +209,9 @@ def git_side() -> list[str]:
 
 
 def _size(rows: list[dict[str, object]]) -> str:
+    """🔄 2026-09-21 — 1024² 로 나누므로 단위는 **MiB** 다. ⛔ 종전에는 「MB」라 적어 탐색기(10⁶)와 5% 갈렸다."""
     n = sum(int(r["bytes"]) for r in rows)  # type: ignore[arg-type]
-    return f"{n / 1024 / 1024:,.1f} MB"
+    return f"{n / 1024 / 1024:,.1f} MiB"
 
 
 def has_raw(mark: pathlib.Path | None = None) -> bool:
@@ -222,6 +250,9 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
             "  🚨 정본(클론 B)은 받지 않고 `data-publish` 로 올린다 (D-226)"
         )
         return 1
+    if why := ledger_missing():
+        print(why, file=sys.stderr)
+        return 1
     todo = plan()
     bad = unsafe(todo)
     if bad:
@@ -246,16 +277,18 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
         print(f"    {'🔄' if r in over else '⬇'} {r['경로']}")
     if len(todo) > 10:
         print(f"    … 외 {len(todo) - 10}개")
-    if dry_run:
-        print("🚨 --dry-run — 아무것도 받지 않았다")
-        return 0
-
+    # 🔄 2026-09-21 — 저장소 준비(폴더 · 객체가 다 있는가)를 **dry-run 에서도** 본다.
+    #    ⛔ 종전에는 dry-run 이 이 검사 전에 끝나, 「받을 것 42개」를 보고 실제로 돌리면
+    #       `DATA_STORE` 가 비었다거나 객체가 모자라다며 멈췄다 — 미리보기가 답을 못 줬다.
+    #    🚨 저장소 폴더를 **읽기만** 한다(이름·있음 확인). 아무것도 안 쓴다.
     try:
         root = store_root()
         # 🔴 **먼저 전부 있는지 본다** — 반만 받고 멈추면 파생물이 두 판으로 섞인다.
-        lack = [r for r in todo if not _obj(root, str(r["sha256"])).is_file()]
+        lack = [r for r in todo if not object_ok(_obj(root, str(r["sha256"])), r["bytes"])]
     except StoreError as e:
         print(f"🔴 {e}", file=sys.stderr)
+        if dry_run:
+            print("🚨 --dry-run — 아무것도 받지 않았다. 이대로 받으면 여기서 멈춘다")
         return 1
     if lack:
         print(f"🔴 저장소에 없는 것 {len(lack)}개 — 아무것도 받지 않았다", file=sys.stderr)
@@ -265,6 +298,10 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
             "  🚨 정본(클론 B)에서 `launcher.py data-publish` 를 했는지 확인한다", file=sys.stderr
         )
         return 1
+    if dry_run:
+        print(f"✅ 저장소에 {len(todo)}개가 다 있다 — {root}")
+        print("🚨 --dry-run — 아무것도 받지 않았다")
+        return 0
 
     # 🚨 raw 가 있는 기기에서 덮어쓸 때는 **한 번 묻는다** — 클론 B 의 DATA_ROLE 이 틀렸을 수 있다.
     if over and has_raw() and not yes:
@@ -276,21 +313,32 @@ def sync(*, yes: bool = False, dry_run: bool = False) -> int:
             print("멈췄다 — 아무것도 바꾸지 않았다")
             return 1
 
+    # 🔄 2026-09-21 — **두 단계로 바꾼다.** ① 전부 임시 파일(`.part`)로 받아 sha 를 확인한다 —
+    #    하나라도 틀리면 임시 파일을 다 지우고 **아무것도 안 바꾼다.** ② 전부 맞을 때만 옛 판을
+    #    백업(복사)하고 제자리로 바꿔 끼운다.
+    #    ⛔ 종전에는 한 파일씩 「백업 → 받기」를 돌아, 중간 파일의 sha 가 틀리면 앞 파일들은 새 판 ·
+    #       뒤 파일들은 옛 판인 **섞인 상태**로 멈췄다(위 `lack` 검사는 「있는가」만 보고 「맞는가」는 안 본다).
+    staged: list[tuple[pathlib.Path, pathlib.Path]] = []
+    try:
+        for r in todo:
+            dest = ROOT / str(r["경로"])
+            staged.append((_stage(_obj(root, str(r["sha256"])), dest, str(r["sha256"])), dest))
+    except (StoreError, OSError) as e:
+        for tmp, _dest in staged:
+            tmp.unlink(missing_ok=True)
+        print(f"🔴 {e}", file=sys.stderr)
+        print("  ⬜ 아무것도 바꾸지 않았다 — 받은 임시 파일은 지웠다", file=sys.stderr)
+        return 1
+
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    for r in todo:
-        dest = ROOT / str(r["경로"])
+    for (tmp, dest), r in zip(staged, todo, strict=True):
         if dest.exists():
             keep = BACKUP / stamp / str(r["경로"])
             keep.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(dest, keep)
-        try:
-            _get(root, str(r["sha256"]), dest)
-        except StoreError as e:
-            print(f"🔴 {e}", file=sys.stderr)
-            print(f"  옛 파일은 {BACKUP / stamp} 에 있다", file=sys.stderr)
-            return 1
+        os.replace(tmp, dest)
     if over:
-        print(f"  옛 판 {len(over)}개는 {BACKUP / stamp} 로 옮겨 두었다 (되돌릴 수 있다)")
+        print(f"  옛 판 {len(over)}개는 {BACKUP / stamp} 에 복사해 두었다 (되돌릴 수 있다)")
     left = plan()
     if left:
         print(f"🔴 받은 뒤에도 {len(left)}개가 원장과 다르다", file=sys.stderr)
@@ -440,6 +488,21 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
             "  마스킹 전 원문이면 부류를 원문캐시로(`derived_manifest.KIND_RULES`), 아니면 json/jsonl 로 쓴다"
         )
         return 1
+    # 🔄 2026-09-21 (전수 재검토 I4) — 🔴 **부류를 원장 칸에서 믿지 않고 지금 규칙으로 다시 센다.**
+    #    ⛔ 올릴 것을 원장의 「부류」 칸으로 골랐다. 부류 규칙(`KIND_RULES`)에 원문캐시 규칙을 더하고 `--write` 를
+    #       안 돌리면(09-20 `/text/` 규칙 때 실제로 그랬다) — 또는 원장 행을 손으로 고치면 — **마스킹 전 원문이 올라갔다.**
+    #       개인·법인 검사는 부류를 다시 세서 캐시를 건너뛰므로 그 파일을 아무도 안 봤다.
+    drift = [
+        f"{r['경로']} (원장 {r['부류']} · 지금 {dm.kind_of(str(r['경로']).removeprefix('data/derived/'))[0]})"
+        for r in led.values()
+        if str(r["부류"]) != dm.kind_of(str(r["경로"]).removeprefix("data/derived/"))[0]
+    ]
+    if drift:
+        print(
+            f"🔴 원장의 부류가 지금 규칙과 다르다 — 올리지 않는다 ({len(drift)}개): {drift[:3]}\n"
+            "  `launcher.py derived-manifest --write` 로 원장을 다시 쓰고 커밋한 뒤 올린다"
+        )
+        return 1
     rows = [r for r in led.values() if dm.moved(str(r["경로"]), str(r["부류"]))]
     bad = unsafe(rows)
     if bad:
@@ -450,7 +513,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     except StoreError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 1
-    new = [r for r in rows if not _obj(root, str(r["sha256"])).is_file()]
+    new = [r for r in rows if not object_ok(_obj(root, str(r["sha256"])), r["bytes"])]
     print(
         f"올릴 것 {len(new)}개 · {_size(new)} (원천·표본·생성물 {len(rows)}개 중 · 원문캐시는 안 올린다)\n"
         f"  저장소 {root}"
@@ -511,6 +574,25 @@ DRIVE_DIRS = ("내 드라이브", "My Drive")
 
 #: 🆕 D-250 — 수집 팀원의 원문 받은편지함. 저장소와 **다른 폴더**다(쓰는 사람이 다르다) · `scripts/raw_inbox.py` 와 같은 이름
 INBOX_NAME = "CopyLane_raw_inbox"
+#: 받은편지함 안의 배치 폴더 — 🔄 2026-09-21 `scripts/raw_inbox.py` 에서 이리 옮겼다(그쪽이 이것을 읽는다 · D-99).
+#:    `candidates()` 가 바로가기 대상 폴더를 **내용으로** 알아보는 데 쓴다.
+INBOX_LAYOUT = "copylane-raw"
+
+#: Drive for desktop 이 **다른 사람이 공유한 폴더의 바로가기** 대상을 실제로 두는 곳 (드라이브 최상위).
+#: 🆕 2026-09-21 — ⛔ `내 드라이브` 에 바로가기를 추가해도 그 자리의 항목은 **폴더가 아니다**(`is_dir()` 거짓) —
+#:    클론 A 실측: `G:\내 드라이브` 의 폴더 목록에 `CopyLane_store` 가 없고, 내용은
+#:    `G:\.shortcut-targets-by-id\<폴더 id>\copylane-derived` 에 있었다. 그래서 `data-setup` 이 「못 찾았다」로 멈췄고
+#:    사람이 `--store` 로 id 경로를 손으로 줬다. 안내서 ②(바로가기 추가)를 따른 팀원이 전부 밟는 자리다.
+#: 🆕 2026-09-21 (D-256) — 정본 원문 **거울**. 팀장 계정에만 공유한다 — 원문은 마스킹 전이다. `scripts/raw_mirror.py` 가 읽는다
+MIRROR_NAME = "CopyLane_raw_mirror"
+MIRROR_LAYOUT = "copylane-raw-mirror"
+SHORTCUT_TARGETS = ".shortcut-targets-by-id"
+#: 이름 → 그 폴더 안에 있어야 하는 배치 폴더. id 폴더에는 원래 이름이 안 남으므로 **내용으로** 알아본다.
+SIGNATURE: dict[str, str] = {
+    STORE_NAME: LAYOUT,
+    INBOX_NAME: INBOX_LAYOUT,
+    MIRROR_NAME: MIRROR_LAYOUT,
+}
 
 
 def default_roots(home: pathlib.Path) -> list[pathlib.Path]:
@@ -545,7 +627,34 @@ def candidates(
                     out.append(p)
             except OSError:  # 빈 카드 리더 같은 자리 — 없는 것으로 친다
                 continue
+        out += _shortcut_targets(r, name)
     return out
+
+
+def _shortcut_targets(root: pathlib.Path, name: str) -> list[pathlib.Path]:
+    """🆕 2026-09-21 — 바로가기 대상 폴더(`<드라이브>/.shortcut-targets-by-id/<id>`) 중 `name` 인 것.
+
+    ★ 두 모양을 다 본다 — ① id 폴더 안에 `name` 폴더가 있다 ② id 폴더 **자체**가 그 폴더다(원래 이름이 안 남는다 —
+      클론 A 실측). ②는 이름으로 못 알아보므로 **안에 배치 폴더(`SIGNATURE`)가 있는지**로 본다.
+    🚨 그래서 한 번도 올린 적 없는 **빈** 저장소는 ②로 못 찾는다 — 그때는 안내대로 `--store` 로 준다.
+    ⛔ 파일을 열지 않는다 — 이름과 폴더인지만 본다. 드라이브 동기화 앱이 파일을 내려받게 만들지 않는다.
+    """
+    base = root / SHORTCUT_TARGETS
+    sig = SIGNATURE.get(name)
+    found: list[pathlib.Path] = []
+    try:
+        if not base.is_dir():
+            return []
+        for c in sorted(base.iterdir()):
+            if not c.is_dir():
+                continue
+            if (c / name).is_dir():
+                found.append(c / name)
+            elif sig and (c / sig).is_dir():
+                found.append(c)
+    except OSError:
+        return found
+    return found
 
 
 def setup(
@@ -555,6 +664,7 @@ def setup(
     yes: bool = False,
     inbox: str | None = None,
     device: str | None = None,
+    mirror: str | None = None,
 ) -> int:
     """🆕 역할과 저장소를 `.env` 에 적고, 받는 쪽이면 **바로 받는다**.
 
@@ -596,6 +706,8 @@ def setup(
                 "  ① Google Drive for desktop 을 설치하고 **초대받은 계정**으로 로그인한다\n"
                 f"  ② drive.google.com → 공유 문서함 → `{STORE_NAME}` 우클릭 → 바로가기 추가 → 내 드라이브\n"
                 "  ③ 탐색기에 `<글자>:\\내 드라이브\\CopyLane_store` 가 보이면 다시 실행한다\n"
+                f"     🚨 바로가기 대상은 `<글자>:\\{SHORTCUT_TARGETS}\\<폴더 id>` 에 있다 — 여기도 찾아봤다.\n"
+                "        빈 저장소(한 번도 올린 적 없음)는 내용으로 못 알아본다 — 그 폴더를 `--store` 로 준다\n"
                 "  (다른 곳이면 `--store <폴더>` 로 준다)"
             )
             return 1
@@ -616,12 +728,11 @@ def setup(
 
     from collect import store as cstore  # noqa: PLC0415 — 모양의 정본은 store 한 곳 (D-99)
 
-    if device is not None and (
-        not cstore.DEVICE_RE.fullmatch(device) or device == cstore.CANONICAL_DEVICE
-    ):
+    # 🔄 2026-09-21 — 판정은 `store.device_problem` 한 곳 (D-99). 지금 쓰려는 `role` 로 잰다.
+    why = cstore.device_problem(device, role) if device is not None else None
+    if why:
         print(
-            f"🔴 기기 이름 {device!r} 은 못 쓴다 — 영문·숫자·`._-` 32자 이내 (예: collector-1) · "
-            f"`{cstore.CANONICAL_DEVICE}` 는 정본 예약어.\n"
+            f"🔴 기기 이름 {device!r} 은 못 쓴다 — {why}.\n"
             "  🚨 원장은 공개 저장소에 올라간다 — **실명을 쓰지 않는다**. .env 는 그대로다"
         )
         return 1
@@ -632,6 +743,19 @@ def setup(
         box = found_box[0] if found_box else None
     elif not box.is_dir():
         print(f"🔴 받은편지함 폴더가 없다 — {box}. .env 는 그대로다")
+        return 1
+    # 🆕 D-256 — 원문 거울은 **팀장 계정에만** 공유된다 — 다른 기기는 못 찾는 것이 정상이다
+    mir = pathlib.Path(mirror).expanduser() if mirror else None
+    if mir is None:
+        found_mir = candidates(name=MIRROR_NAME)
+        mir = found_mir[0] if found_mir else None
+    elif not mir.is_dir():
+        print(f"🔴 원문 거울 폴더가 없다 — {mir}. .env 는 그대로다")
+        return 1
+    if mir is not None and mir.resolve() in {chosen.resolve(), *([box.resolve()] if box else [])}:
+        print(
+            "🔴 원문 거울이 저장소·받은편지함과 같은 폴더다 — 마스킹 전 원문이 섞인다 (D-256). .env 는 그대로다"
+        )
         return 1
 
     setkey.put_setting("DATA_ROLE", role)
@@ -644,6 +768,9 @@ def setup(
     if device:
         setkey.put_setting("DATA_DEVICE", device)
         print(f"  .env — DATA_DEVICE={device}")
+    if mir is not None:
+        setkey.put_setting("RAW_MIRROR", str(mir))
+        print(f"  .env — RAW_MIRROR={mir} (정본 원문 거울 · 팀장 기기 · D-256)")
 
     if role == "canonical":
         print("  다음 — `launcher.py data-publish --dry-run` 으로 무엇이 올라갈지 본다")
@@ -666,6 +793,9 @@ def ensure() -> int:
     who = dm.role()
     if who != "replica":
         return 0
+    if why := ledger_missing():
+        print(why, file=sys.stderr)
+        return 1
     if not plan():
         return 0
     print("🔄 이 명령이 읽는 파생물이 부족하거나 옛 판이다 — 먼저 받는다 (D-247)")
@@ -679,6 +809,7 @@ def main() -> int:
     ap.add_argument("--store", default=None, help="setup — 저장소 폴더 (비우면 찾는다)")
     ap.add_argument("--inbox", default=None, help="setup — 원문 받은편지함 (비우면 찾는다 · D-250)")
     ap.add_argument("--device", default=None, help="setup — 이 기기 이름 (실명 금지 · D-250)")
+    ap.add_argument("--mirror", default=None, help="setup — 원문 거울 (비우면 찾는다 · D-256)")
     ap.add_argument("--yes", action="store_true", help="묻지 않는다")
     ap.add_argument("--dry-run", action="store_true", help="무엇을 할지만 보여 준다")
     a = ap.parse_args()
@@ -693,7 +824,9 @@ def main() -> int:
     if a.cmd == "publish":
         return publish(yes=a.yes, dry_run=a.dry_run)
     if a.cmd == "setup":
-        return setup(role=a.role, store=a.store, yes=a.yes, inbox=a.inbox, device=a.device)
+        return setup(
+            role=a.role, store=a.store, yes=a.yes, inbox=a.inbox, device=a.device, mirror=a.mirror
+        )
     return ensure()
 
 

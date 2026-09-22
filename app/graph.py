@@ -45,6 +45,7 @@ from app.contracts import (
     SentenceJudgment,
     Timing,
     Verdict,
+    is_pass,
 )
 from app.settings import DEFAULT_CATEGORY, PARAMS
 
@@ -90,7 +91,7 @@ class SentEvidence:
     #: 두 갈래가 각각 돌았는가. ⛔ **둘 다 False 면 근거 없이 판정하는 것**이다 (D-224) — `hold`
     vector: bool = False
     lexical: bool = False
-    #: 후보 풀 크기. 🚨 0 은 「안 겹쳤다」이고, `lexical=False` 는 「검색어를 못 만들었다」다.
+    #: 두 갈래 **후보 수의 합**(겹친 것은 두 번 센다 · 폭 50 이 아니다). 🚨 0 은 「안 겹쳤다」이고, `lexical=False` 는 「검색어를 못 만들었다」다.
     #:    ★ 둘은 다른 사건이다 — 한 칸으로 접으면 왜 못 찾았는지가 사라진다 (D-202).
     pool: int = 0
 
@@ -117,7 +118,11 @@ class JudgeState(TypedDict, total=False):
     # ── 재생성 루프 (D-126) ──────────────────────────────────────
     #: 0-base. 거부 3종(주장 원장·인용 검증·사후 대조)은 **한 카운터**를 쓴다
     attempt: int
-    rejects: Annotated[list[str], operator.add]  # 🔴 누적 키 — 실패 사유
+    rejects: Annotated[list[str], operator.add]  # 🔴 누적 키 — 실패 사유 (보고용 · 모든 시도)
+    #: 🆕 2026-09-21 (전수 재검토 I3) — **이번 시도**가 거부됐는가. 시도마다 `verify` 가 덮어쓴다 — 그래서 리듀서가 없다.
+    #:    ⛔ 라우터가 누적 키 `rejects` 가 비었는지로 「이번 시도」를 읽어, 한 번 거부되면 뒤 시도가 통과해도
+    #:       `search_failed` 로 끝났다(실측 재현). 두 뜻(이력 · 이번)을 한 칸에 담았던 것이다.
+    rejected: bool
     # ── 진입점 B — 카피 생성 (2026-09-12 밤 · D-181 · 상태 스키마 §개정) ────────
     #  🔴 **넷이 빠져 있었다.** 상태 스키마 문서가 09-10 에 지목했는데 상태에는 안 왔다 —
     #     `페르소나 목록(팬아웃)` · `키워드 선별 결과` · `후보 N=3` · `프론티어 점수`.
@@ -317,7 +322,9 @@ def retrieve(state: JudgeState, config=None) -> dict[str, Any]:  # noqa: ANN001
                 articles=tuple(a for h in hits if (a := _evidence_article(h)) is not None),
                 vector=st.vector == rt.VECTOR_OK,
                 lexical=st.lexical == rt.LEXICAL_OK,
-                pool=st.pool,
+                # 🔄 2026-09-21 (전수 재검토) — ⛔ `st.pool` 은 후보 **폭**(늘 50)이라 「0 = 안 겹쳤다」가 나올 수 없었다.
+                #    갈래별 **후보 수**의 합을 넣는다 — 0 이면 어느 갈래에서도 후보가 없다 (겹친 것은 두 번 센다).
+                pool=st.pool_vector + st.pool_lexical,
             )
         )
     return {"evidence": found}
@@ -455,7 +462,12 @@ def route_after_judge(state: JudgeState) -> str:
         return "certificate"
     if Infeasibility.B in reasons:
         return "generate"
-    return "frontier"
+    # 🔄 2026-09-21 (전수 재검토 I1) — 🔴 **통과는 D-125 의 정의대로만**: 확정 ∧ 위험도 ≤ 주의 (`is_pass`).
+    #    ⛔ 종전에는 여기까지 오면 무조건 `frontier`(= pass)였다 — 확정 + 위반 + R3 인데 불가 사유가 안 붙은 문장,
+    #       위험도가 없는 문장이 **통과**로 끝났다. 판정 노드가 스텁이라 가려져 있었을 뿐이다.
+    if all(is_pass(s) for s in sents):
+        return "frontier"
+    return "hold"
 
 
 def route_after_verify(state: JudgeState) -> str:
@@ -464,7 +476,12 @@ def route_after_verify(state: JudgeState) -> str:
     🚨 K 를 소진한 B 는 **증명서가 아니라** 「표현 탐색 실패」다 — D-59 가 금지한
        「B 를 C 처럼 답하기」를 막는 자리가 여기다.
     """
-    if not state.get("rejects"):
+    # 🔄 2026-09-21 (전수 재검토 I3) — **이번 시도**의 판정(`rejected`)을 본다. `verify` 가 그 칸을 안 적었으면
+    #    종전처럼 누적 `rejects` 로 판단한다 — 모르면 거부 쪽이다(재시도 · 소진이면 `search_failed`).
+    rejected = state.get("rejected")
+    if rejected is None:
+        rejected = bool(state.get("rejects"))
+    if not rejected:
         return "frontier"
     if state.get("attempt", 0) >= MAX_ATTEMPT:
         return "search_failed"

@@ -50,6 +50,31 @@ def test_새_파일은_복사하고_행을_붙인다(env: dict) -> None:
 def test_원장에_같은_것이_있으면_복사하지_않는다(env: dict) -> None:
     """🔴 D-250 — 다른 기기가 받은 것(이 기기 디스크엔 없다)을 다시 넣지 않는다."""
     payload = b"same\n"
+    # 🔄 2026-09-21 — 행의 기기를 **다른 기기**로 적는다. `manifest_append` 는 이 기기(`pytest`)를 적는데,
+    #    이 기기가 받았는데 없는 것은 이제 되살린다(코드 리뷰 #3 · 아래 테스트). 이 테스트의 뜻은 「다른 기기 것」이다.
+    env["ledger"].write_text(
+        json.dumps(
+            {
+                "source_id": "가짜소스",
+                "path": str((env["fam"] / "a.txt").relative_to(store.ROOT)),
+                "sha256": store.sha256(payload),
+                "bytes": len(payload),
+                "device": "other-2",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (env["src"] / "a.txt").write_bytes(payload)
+    assert ingest.cmd_register("가짜소스", env["src"], "U1") == 0
+    assert not (env["fam"] / "a.txt").exists(), "원장에 있는 것을 다시 복사했다"
+    assert len(_rows(env["ledger"])) == 1
+
+
+def test_이_기기가_받았는데_없는_것은_되살린다(env: dict, capsys: pytest.CaptureFixture) -> None:
+    """🔴 2026-09-21 (소성민 코드 리뷰 #3) — `register` 도 `save_raw` 와 같은 판정(`plan_raw`)을 쓴다."""
+    payload = b"mine\n"
     store.manifest_append(
         source_id="가짜소스",
         url="",
@@ -59,8 +84,9 @@ def test_원장에_같은_것이_있으면_복사하지_않는다(env: dict) -> 
     )
     (env["src"] / "a.txt").write_bytes(payload)
     assert ingest.cmd_register("가짜소스", env["src"], "U1") == 0
-    assert not (env["fam"] / "a.txt").exists(), "원장에 있는 것을 다시 복사했다"
-    assert len(_rows(env["ledger"])) == 1
+    assert (env["fam"] / "a.txt").read_bytes() == payload, "🔴 잃은 원문이 안 돌아왔다"
+    assert len(_rows(env["ledger"])) == 1, "같은 바이트면 원장 행을 또 적지 않는다"
+    assert "되살림 1개" in capsys.readouterr().out
 
 
 def test_디스크에_같은_파일이_있고_원장_행이_없으면_행을_붙인다(env: dict) -> None:
@@ -118,3 +144,23 @@ def test_별칭이_없으면_복사_전에_멈춘다(env: dict, monkeypatch: pyt
 def test_mfds_press_는_실제_표에서도_거부된다() -> None:
     """실제 표 — 계열이 둘이다. 이 표가 바뀌면 위 거부 규칙을 다시 본다."""
     assert len(store.families("mfds_press")) > 1
+
+
+def test_유동값만_다른_파일은_디스크_파일의_sha_로_행을_붙인다(
+    env: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 2026-09-21 — 판정 해시(유동 값 제외)는 같고 바이트는 다른 경우. 원장 행은 **그 경로의 실제 파일**을
+    적어야 한다. ⛔ 종전에는 들여온 파일의 sha 를 디스크 파일 경로에 적었다."""
+    import re
+
+    monkeypatch.setitem(store.VOLATILE, "가짜소스", (("sid", re.compile(rb"sid=\d+")),))
+    on_disk, incoming = b"body sid=1\n", b"body sid=2\n"
+    env["fam"].mkdir(parents=True)
+    (env["fam"] / "a.txt").write_bytes(on_disk)
+    (env["src"] / "a.txt").write_bytes(incoming)
+    assert ingest.cmd_register("가짜소스", env["src"], "U1") == 0
+    (row,) = _rows(env["ledger"])
+    assert (env["fam"] / "a.txt").read_bytes() == on_disk, "디스크 파일을 덮었다"
+    assert row["sha256"] == store.sha256(on_disk), "🔴 원장 sha 가 그 경로의 파일과 다르다"
+    assert row["bytes"] == len(on_disk)
+    assert store.sha256(incoming) != store.sha256(on_disk)  # 반대 대조 — 두 바이트는 정말 다르다

@@ -343,3 +343,28 @@ def test_매체_프로파일은_판정을_못_바꾼다() -> None:
         "tone",
         "disclosure_placement",
     }
+
+
+# 🆕 2026-09-21 (전수 재검토 I2) — 루프에 안 들어간 `pass` 는 문장이 전부 통과여야 한다 (D-125)
+def test_통과_종착은_통과가_아닌_문장을_받지_않는다() -> None:
+    import pytest as _pt
+
+    bad = SentenceJudgment(
+        sent_id="s1",
+        text="t",
+        verdict=Verdict.confirmed,
+        risk=RiskAssessment(floor=Risk.R3, final=Risk.R3),
+    )
+    with _pt.raises(ValueError, match="통과가 아닌 문장"):
+        JudgeResponse(outcome=Outcome.passed, sentences=[bad])
+    un = SentenceJudgment(sent_id="s2", text="t", verdict=Verdict.unjudged)
+    with _pt.raises(ValueError, match="통과가 아닌 문장"):
+        JudgeResponse(outcome=Outcome.passed, sentences=[un])
+
+
+def test_래칫은_하한_아래로_내려가지_않는다() -> None:
+    """⛔ docstring 은 「인코더는 내릴 수 없다」인데 `floor=R3 · final=R0` 이 지났다."""
+    import pytest as _pt
+
+    with _pt.raises(ValueError, match="하한보다 낮다"):
+        RiskAssessment(floor=Risk.R3, final=Risk.R0)

@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app import auth
+from app.routers.auth import account_active
 from app.templating import templates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -44,6 +45,11 @@ def require_governor(request: Request) -> str:
        읽기 전용이어도 공개 표면에 놓일 것이 아니다 (D-76 · P2-10).
     """
     initials = auth.read_session(request.cookies.get(auth.SESSION_COOKIE))
+    # 🔴 2026-09-21 (전수 재검토) — 서명이 맞아도 **비활성 계정이면 막는다.** ⛔ 종전에는 `disabled_at` 을
+    #    로그인에서만 봐서, 막은 계정의 쿠키가 만료까지 관리자 화면을 열었다.
+    if initials and not account_active(initials):
+        auth.audit("session_disabled", initials, ok=False)
+        initials = None
     if not initials:
         # 🚨 401 이 아니라 **303 리다이렉트**다 — 사람이 보는 화면이라 로그인 폼으로 보낸다.
         raise HTTPException(status_code=303, headers={"Location": "/login"})
