@@ -13,10 +13,10 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![tests](https://img.shields.io/badge/tests-1257_(gate_645)-0F7B4F?style=flat-square)
+![tests](https://img.shields.io/badge/tests-1259_(gate_647)-0F7B4F?style=flat-square)
 ![decisions](https://img.shields.io/badge/설계결정-D--257-2B5BD7?style=flat-square)
 
-**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 257건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
+**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 259건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
 
 </div>
 
@@ -200,9 +200,9 @@ B ↔ C 는 왕복입니다. C 가 매체 프로파일을 B 에 넘기고, B 의
 | 파인튜닝 · 평가 | 🔴 **미착수** | 평가 홀드아웃 4유형 공백 |
 
 ```
-게이트 테스트   pytest -m gate   645건   ← 모은 수(--collect-only) · 2026-09-21
-전체 테스트     pytest           1,257건 ← 데이터 없는 기기는 일부가 건너뛴다
-설계 결정       D-01 ~ D-257     빠진 번호 0
+게이트 테스트   pytest -m gate   647건   ← 모은 수(--collect-only) · 2026-09-22
+전체 테스트     pytest           1,259건 ← 데이터 없는 기기는 일부가 건너뛴다
+설계 결정       D-01 ~ D-259     빠진 번호 0
 ```
 
 ---
@@ -255,6 +255,7 @@ uv run python launcher.py serve      # FastAPI
 | **수집 팀원** | 사본 + 수집 | `data-setup --device <별칭>` | `collect` → `raw-publish` → 수집 원장을 **자기 브랜치**에 push → 팀장이 `raw-import --from <브랜치>` 로 검사·병합·`raw-import` |
 
 🚨 별칭은 팀 회의로 겹치지 않게 정하고 **실명을 쓰지 않습니다** — 수집 원장은 이 공개 저장소에 올라갑니다.
+🚨 별칭은 **기기마다 하나**입니다 — 한 사람이 기기 두 대로 수집하면 계정은 그대로, 별칭만 둘(`collector-1a` · `collector-1b`). 같은 별칭을 두 기기에 쓰면 서로 받은 원문을 잃어버린 것으로 보고 **다시 받습니다** (D-250). `raw-publish` 는 기기마다 따로 칩니다.
 🚨 공유 폴더(Drive)는 초대받은 계정만 엽니다. 폴더 이름을 알아도 들어갈 수 없습니다. 키는 `.env` 에만 있고 원문에 키가 섞이면 올리기가 멈춥니다.
 
 ---
@@ -305,7 +306,7 @@ uv run python launcher.py serve      # FastAPI
 | 문서 | 무엇인가 |
 |---|---|
 | [`docs/00_사실원장.md`](docs/00_사실원장.md) | ★ **수치 · 일정 · 파라미터의 단일 출처.** 전부 실측이고, 어느 기기에서 쟀는지까지 적습니다 |
-| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 257건**(D-01~D-257 · 빠진 번호 0). 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
+| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 259건**(D-01~D-259 · 빠진 번호 0). 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
 | [`docs/00_거버넌스_집행계약.md`](docs/00_거버넌스_집행계약.md) | 게이트가 무엇을 어떻게 막는지 |
 | [`docs/00_산출물현황.md`](docs/00_산출물현황.md) | 산출물 현황 — 제출본은 여기서 빌드합니다 |
 | [`docs/01_기획/`](docs/01_기획/) · [`02_설계/`](docs/02_설계/) · [`03_데이터/`](docs/03_데이터/) | 기획서 · DB 스키마 · 청킹 · LangGraph 상태 · 전처리 사양 |

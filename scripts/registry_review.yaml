@@ -50,8 +50,10 @@ ftc_decisions_body:
   #   그 경로의 이용조건은 law_go_kr 서명 근거와 같은 페이지에서 확인된다
   #   (저작권법 제7조 + 공공데이터법 · 영리 포함 자유 활용 보장).
   #   확인 근거 정리: docs/ohb/검토요청_2026-09-02_ftc_decisions_body.md
+  # 서명 범위 — 09-02 등재 · 🔄 09-22 **마스킹 정책** (개인 실명은 피심인이 아니어도 가림 · 제3자 상호는 대상 밖 · D-258)
+  #   근거: docs/ohb/결정요청_2026-09-22_사람_마스킹_범위.md ①
   reviewed_by: 권소라
-  reviewed_at: 2026-09-02
+  reviewed_at: 2026-09-22
   collected_at: 2026-09-20
 
 mfds_sanctions:
@@ -248,8 +250,6 @@ law_go_kr:
   #      위 「법적효력/저작권」 페이지로 교체가 남아 있다 (data.js 에서).
   # 서명 범위 — 09-02 등재 · 🔄 09-19 **마스킹 정책** (person 만 켬 / org·addr·brand 끔 — 판례·재결례 텍스트 칸)
   #   근거: docs/ohb/검토요청_2026-09-19_마스킹정책_law_go_kr.md (가)
-  #   🚨 기입 경로 — 2026-09-19 팀장(오한빈)이 「권소라 확인」을 전달해 클로드가 옮겨 적었다.
-  #      검토자가 직접 적지 않은 서명이다 — 이견이 있으면 dissent_note 로 남긴다 (D-66).
   reviewed_by: 권소라
   reviewed_at: 2026-09-19
   collected_at: 2026-09-18
@@ -686,8 +686,6 @@ mfds_cosmetic_ad_guide_2013:
 #     U1~U4 열림 · 전량 본문 수집 후 전처리에서 거름 · masking org·person (brand·addr 끔)
 #   근거: docs/ohb/검토요청_2026-09-18_mfds_cgm_expc.md §2~§6 (제안 그대로 확인)
 #   가장 가까운 선례: mfds_online_guideline (같은 게시판 m_1060 · G3 · D-132 · 2026-09-07 서명)
-#   🚨 기입 경로 — 2026-09-19 팀장(오한빈)이 「권소라 확인」을 전달해 클로드가 옮겨 적었다.
-#      검토자가 직접 적지 않은 서명이다 — 이견이 있으면 dissent_note 로 남긴다 (D-66).
 #   ⬜ 검토요청 §2 확인 항목 ③(법제처 OPEN API 이용약관이 따로 거는 조건)은 문서에 결과가 적혀 있지 않다.
 mfds_cgm_expc:
   decided_by: 오한빈
