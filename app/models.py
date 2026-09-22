@@ -24,10 +24,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -39,7 +41,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from app.settings import ERROR_LOG_MESSAGE_MAX, PARAMS
+from app.settings import ERROR_LOG_MESSAGE_MAX, PARAMS, TICKET_TEXT_MAX
 
 
 class Base(DeclarativeBase):
@@ -74,7 +76,10 @@ class WorkDoc(Base):
     #    관리자 「원문 조회」 열람을 **같이** 연다. 열람용 플래그를 따로 두지 않는다. 기본 미동의.
     consent_train: Mapped[bool] = mapped_column(default=False, nullable=False)
     # 🚨 D-129 — 수명 키. 비회원(D-66 「A 는 가입 없음」)은 owner_id NULL · session_id + expires_at 로 지운다
-    owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    # 🔄 D-260 ② — `user_account.id` 를 가리킨다(0017). ON DELETE 없음 — 계정은 지우지 않고 끈다
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_account.id"), index=True
+    )
     session_id: Mapped[str | None] = mapped_column(String(64), index=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -311,10 +316,8 @@ class AppAccount(Base):
     🚨 **역할은 `governor` 하나다** (D-66 — *"행동이 역할을 정한다"*). 역할을 늘리면
        「마케터라고 주장하는 사람이 진짜인가」라는 검증 문제가 생긴다.
 
-    ⬜ **`work_doc.owner_id` 는 아직 이 테이블을 안 가리킨다.** 그 열은 **일반 사용자**의
-       수명 키이고(D-129), 일반 사용자 가입은 진입점 B 엔진과 함께 온다. FK 를 지금 걸면
-       비회원(`owner_id IS NULL`)만 있는 상태에서 **가리킬 곳 없는 제약**이 된다.
-       그때 같이 판정한다 — 계정을 하나로 볼지 둘로 볼지 (D-66 은 에디션별로 갈랐다).
+    🔄 **`work_doc.owner_id` 는 이 테이블이 아니라 `UserAccount` 를 가리킨다** (D-260 ② · 0017).
+       관리자 계정과 일반 사용자 계정은 **둘이다** — 세션 쿠키도 따로다(D-260 6-3 (가) · `auth.USER_SESSION_COOKIE`).
     """
 
     __tablename__ = "app_account"
@@ -382,4 +385,164 @@ class AppErrorLog(Base):
         ),
         Index("ix_app_error_log_occurred", occurred_at.desc()),
         Index("ix_app_error_log_level_occurred", "level", occurred_at.desc()),
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  운영 표 — D-260 (관리자 콘솔과 사용자 계정을 실제 데이터로 돌린다) · 마이그레이션 0017
+#  🚨 만들지 않는 것 — `enterprise` · `signup_review` · `signup_review_doc` · 결제 (D-260 ④⑤⑥)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class UserAccount(Base):
+    """일반 사용자 계정 — 가입·로그인·마이페이지 · 관리자 회원 목록 (D-260 ② · D-66).
+
+    ★ lse 안(`docs/lse/일반사용자_계정테이블_초안_2026-09-16.md`)을 뼈대로 psj `member` 를 합쳤다 — 같은 대상의 두 벌 금지 (D-99).
+    🚨 **넣지 않는 칸** — 회원 유형·역할(D-66 「행동이 역할을 정한다」) · 채널·팔로워(D-68 · D-180) · 요금제(D-69) ·
+       상태(`active`·`dormant` — `disabled_at`·`last_login_at` 에서 **계산**한다. 따로 두면 두 벌이다).
+    🚨 **이메일은 소문자로 정규화해 저장한다** — `CHECK` 가 강제한다(대소문자만 다른 두 계정 방지).
+    🚨 `email_verified_at` 은 **늘 NULL** 이다 — 인증 메일을 보내지 않는다(D-260 ⑧). 화면은 「미인증」.
+    🚨 동의는 **시각**으로 둔다 — NULL = 미동의(기본). 선택 동의 ①②(D-96)는 기능의 대가가 아니다.
+    🚨 지우지 않고 **끈다**(`disabled_at`) — `work_doc.owner_id` 가 가리킬 행이 남아야 한다.
+    """
+
+    __tablename__ = "user_account"
+
+    id: Mapped[uuid.UUID] = _pk()
+    email: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    pw_hash: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(40))
+    #: 소속(자유 기재). 🚨 FK 아님 — `enterprise` 를 만들지 않는다(D-260 ④)
+    org: Mapped[str | None] = mapped_column(String(60))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: 동의한 약관 버전 문자열. 🚨 `terms` 에 FK 로 묶지 않는다 — 약관이 바뀌어도 **무엇에 동의했는지**가 남아야 한다
+    terms_version: Mapped[str] = mapped_column(String(20))
+    terms_agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    #: 「진단은 법적 확정 판단이 아니다」 동의 (필수)
+    disclaimer_agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    #: D-96 선택 동의 ① 검수 이력 보관 · ② 품질 개선 활용. NULL = 미동의
+    consent_history_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consent_improve_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("pw_hash LIKE '$argon2id$%'", name="ck_user_account_phc"),
+        CheckConstraint("email = lower(email)", name="ck_user_account_email_lower"),
+        CheckConstraint("position('@' in email) > 1", name="ck_user_account_email_at"),
+    )
+
+
+#: 공지 분류 — 🚨 표의 `CHECK` 와 화면이 이 한 벌을 쓴다 (D-99). 값은 저장 코드, 뜻은 화면 이름.
+NOTICE_CATEGORIES = {"rule_change": "규정 변경", "system": "시스템", "update": "업데이트"}
+#: 약관 종류 — 서비스 이용약관 · 개인정보 처리방침 · 진단 면책
+TERMS_KINDS = {
+    "service": "서비스 이용약관",
+    "privacy": "개인정보 처리방침",
+    "disclaimer": "진단 면책",
+}
+#: 문의 분류. 🚨 「결제」·「매칭」은 **없다** — 결제 없음(D-69) · 인플루언서 매칭은 범위 밖(D-68 · D-180)
+TICKET_CATEGORIES = {"judge": "검수", "generate": "카피 생성", "account": "계정", "other": "기타"}
+TICKET_PRIORITIES = {"urgent": "긴급", "normal": "보통", "low": "낮음"}
+TICKET_STATUSES = {"open": "미처리", "in_progress": "처리중", "closed": "완료"}
+
+
+def _in(col: str, values: dict[str, str]) -> str:
+    """`CHECK (col in (…))` 조각 — 목록이 한 벌이게 (마이그레이션은 같은 값을 직접 적고 게이트가 맞댄다)."""
+    return f"{col} in ({','.join(repr(v) for v in values)})"
+
+
+class Notice(Base):
+    """공지 (D-260 ①). 🚨 본문은 템플릿이 자동 이스케이프한다(`|safe` 금지 · `test_templates`).
+
+    psj 안의 `status`(게시중·숨김)는 `hidden_at` 으로 — 상태를 시각으로 둔다. `author` 문자열 대신 계정 FK.
+    """
+
+    __tablename__ = "notice"
+
+    id: Mapped[uuid.UUID] = _pk()
+    title: Mapped[str] = mapped_column(String(200))
+    category: Mapped[str] = mapped_column(String(20))
+    body: Mapped[str] = mapped_column(Text)
+    author_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("app_account.id"))
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    starts_on: Mapped[date | None] = mapped_column(Date)
+    ends_on: Mapped[date | None] = mapped_column(Date)
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(_in("category", NOTICE_CATEGORIES), name="ck_notice_category"),
+        CheckConstraint(
+            "ends_on IS NULL OR starts_on IS NULL OR starts_on <= ends_on", name="ck_notice_period"
+        ),
+    )
+
+
+class Terms(Base):
+    """약관 버전 (D-260 ①). 🚨 **본문을 고치지 않는다 — 새 버전을 쌓는다.** 이미 동의한 사람이 무엇에 동의했는지가 남아야 한다.
+
+    psj 안의 `status`(시행 중·예정·만료) · `prev_version` 은 두지 않는다 — `effective_on` 과 같은 `kind` 의 순서에서 계산된다.
+    ⬜ 약관 **문구**는 법률 검토 대상이다(D-96) — 이 표는 그릇이다.
+    """
+
+    __tablename__ = "terms"
+
+    id: Mapped[uuid.UUID] = _pk()
+    kind: Mapped[str] = mapped_column(String(20))
+    version: Mapped[str] = mapped_column(String(20))
+    effective_on: Mapped[date] = mapped_column(Date)
+    body: Mapped[str] = mapped_column(Text)
+    change_reason: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("app_account.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(_in("kind", TERMS_KINDS), name="ck_terms_kind"),
+        Index("uq_terms_kind_version", "kind", "version", unique=True),
+    )
+
+
+class Ticket(Base):
+    """문의 (D-260 ③ — 자유 텍스트를 받되 상한·보관 기한·안내문).
+
+    🔴 **판정 원문을 붙이거나 판정 id 를 링크하는 칸이 없다** — 관리자가 문의를 통해 사용자 문구를 보는 길이 생기면
+       D-76 열람 경계가 뚫린다. 화면은 「광고 문구 원문을 붙여 넣지 마세요」를 안내한다.
+    🚨 로그인한 사용자만 접수한다(`requester_id` NOT NULL) — 비회원 문의는 연락처를 따로 받게 되어 범위 밖이다.
+    🚨 닫히면 `expires_at = closed_at + TICKET_RETENTION_DAYS` — 파기 키다(D-129). `CHECK` 가 닫힘과 기한을 묶는다.
+    표시 번호(`TK-…`)는 저장하지 않는다 — 화면이 `created_at` 으로 만든다.
+    """
+
+    __tablename__ = "ticket"
+
+    id: Mapped[uuid.UUID] = _pk()
+    requester_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_account.id"), index=True
+    )
+    category: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(100))
+    body: Mapped[str] = mapped_column(String(TICKET_TEXT_MAX))
+    #: 관리자가 매긴다 — 사용자는 고르지 않는다
+    priority: Mapped[str] = mapped_column(String(10), default="normal", server_default="normal")
+    status: Mapped[str] = mapped_column(String(12), default="open", server_default="open")
+    assignee_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("app_account.id")
+    )
+    #: 관리자 답변 — 한 번 답하는 모양(스레드는 범위 밖)
+    reply: Mapped[str | None] = mapped_column(String(TICKET_TEXT_MAX))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+    __table_args__ = (
+        CheckConstraint(_in("category", TICKET_CATEGORIES), name="ck_ticket_category"),
+        CheckConstraint(_in("priority", TICKET_PRIORITIES), name="ck_ticket_priority"),
+        CheckConstraint(_in("status", TICKET_STATUSES), name="ck_ticket_status"),
+        # 🔴 닫힌 문의는 파기 기한이 있다 — 「닫았는데 영원히 남는」 행을 DB 가 막는다 (D-129)
+        CheckConstraint(
+            "(status = 'closed') = (closed_at IS NOT NULL AND expires_at IS NOT NULL)",
+            name="ck_ticket_closed_expiry",
+        ),
     )

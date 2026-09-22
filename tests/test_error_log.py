@@ -9,7 +9,7 @@
   ⑥ `app/` 에서 `psycopg.connect` 를 바로 부르는 곳은 `app/db.py` 하나다 (대기 상한 한 곳 · D-99)
   ⑦ (DB 있을 때만) 실제 표에 쓰고, 보관 기간이 지난 행을 지운다
 
-🚨 ①~⑥ 은 DB 없이 돈다 — 가짜 연결로 잰다. ⑦ 은 `COPYLANE_ERROR_LOG_IT=1` 일 때만 돈다 —
+🚨 ①~⑥ 은 DB 없이 돈다 — 가짜 연결로 잰다. ⑦ 은 `COPYLANE_DB_IT=1` 일 때만 돈다 —
    테스트가 개발 DB 에 행을 남기지 않게(기본 꺼짐 · `tests/conftest.py`).
 """
 
@@ -330,8 +330,8 @@ def test_psycopg_connect_를_바로_부르는_곳은_db_py_하나다() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("COPYLANE_ERROR_LOG_IT") != "1",
-    reason="실제 DB 에 행을 쓴다 — COPYLANE_ERROR_LOG_IT=1 일 때만",
+    os.environ.get("COPYLANE_DB_IT") != "1",
+    reason="실제 DB 에 행을 쓴다 — COPYLANE_DB_IT=1 일 때만",
 )
 def test_실제_표에_쓰고_지난_행을_지운다() -> None:
     from app.db import pg_connect  # noqa: PLC0415
