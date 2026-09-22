@@ -11,7 +11,7 @@
 {% include "admin/_nav.html" %}
 
 <h1>오류 로그</h1>
-<p class="warn">🚨 <b>읽기 전용이다.</b> 로그 삭제·보관 기간 설정은 팀장 승인 전까지 없다.</p>
+<p class="warn">🚨 <b>읽기 전용이다.</b> 화면에서 지우는 길은 없다 — 보관 기간({{ retention_days }}일)이 지난 기록은 기록기가 지운다.</p>
 {% include "admin/errors/_notice.html" %}
 
 <form method="get" action="/admin/errors" class="er-filter">
@@ -30,9 +30,15 @@
   <a href="/admin/errors">초기화</a>
 </form>
 
+{% if total is none %}
+<p class="er-muted">건수를 모른다 — 기록을 못 읽었다(위 안내).</p>
+{% else %}
 <p class="er-muted">조건에 맞는 기록 <b>{{ total }}</b>건 · 최신순</p>
+{% endif %}
 
-{% if not rows %}
+{% if total is none %}
+{# 🚨 못 읽은 것을 「기록이 없다」로 적지 않는다 (D-72) #}
+{% elif not rows %}
 <p>조건에 맞는 기록이 없다.</p>
 {% else %}
 <table class="er-tbl">

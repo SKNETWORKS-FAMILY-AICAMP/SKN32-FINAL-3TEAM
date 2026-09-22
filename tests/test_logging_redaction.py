@@ -127,3 +127,66 @@ def test_음성_픽스처_필터를_빼면_샌다() -> None:
     leaky = '127.0.0.1 - "GET /search?q=면역력이 쑥쑥 HTTP/1.1" 200'
     assert "면역력" in leaky, "🔴 음성 픽스처가 애초에 안 샌다 — 검사가 무의미하다"
     assert "면역력" not in redact(leaky)
+
+
+# ── 🆕 2026-09-22 — 트레이스백 · 두 번 가리기 ─────────────────────────────
+
+
+#: 🚨 입력은 **변수로** 넘긴다 — 트레이스백은 소스 줄을 찍는다. 문구를 `raise` 줄에 적으면 그것은 「우리 코드」라
+#:    가려지지 않는 것이 맞고, 검사가 소스 줄을 새는 것으로 오인한다. 실제 입력은 변수로 들어온다.
+_INNER = "text=면역력이 쑥쑥"
+_OUTER = "input_value='이 제품은 암을 예방합니다'"
+
+
+def _raise_chain() -> tuple:
+    import sys  # noqa: PLC0415
+
+    try:
+        try:
+            raise KeyError(_INNER)
+        except KeyError as inner:
+            raise ValueError(_OUTER) from inner
+    except ValueError:
+        return sys.exc_info()
+
+
+@pytest.mark.gate
+def test_트레이스백의_예외_메시지가_가려진다() -> None:
+    """🔴 P1-4 「예외 트레이스백에 request body 가 통째로」 — ⛔ 종전 필터는 `msg`·`args` 만 봤다."""
+    rec = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Exception in ASGI application",
+        None,
+        _raise_chain(),
+    )
+    RedactFilter().filter(rec)
+    out = logging.Formatter().format(rec)
+    for leak in ("면역력", "쑥쑥", "암을 예방"):
+        assert leak not in out, f"🔴 트레이스백에 문구가 남았다:\n{out}"
+    # ★ 위치는 남는다 — 장애를 쫓을 수 있어야 한다
+    assert "_raise_chain" in out and "KeyError" in out and "ValueError" in out
+    assert "The above exception was the direct cause" in out, "🔴 원인 연쇄의 구분 문장이 틀렸다"
+
+
+def test_음성_대조_필터를_빼면_트레이스백이_샌다() -> None:
+    """🚨 게이트가 아니다 — 위 검사가 「원래 안 새는 트레이스백」이라 통과한 것이 아님을 잰다 (D-203)."""
+    rec = logging.LogRecord("uvicorn.error", logging.ERROR, __file__, 1, "x", None, _raise_chain())
+    assert "면역력" in logging.Formatter().format(rec)
+
+
+@pytest.mark.gate
+def test_같은_레코드를_두_번_지나도_한_번만_가린다() -> None:
+    """🔴 `redact()` 는 멱등이 아니다 — 로거와 핸들러 양쪽의 필터를 지나면 표식을 또 가려 지문이 바뀐다."""
+    once = redact("text=우리 제품은, 면역력이 쑥쑥")
+    assert redact(once) != once, "🔴 음성 대조 — redact 가 멱등이면 이 검사가 무의미하다"
+    rec = logging.LogRecord(
+        "copylane.x", logging.WARNING, __file__, 1, "text=우리 제품은, 면역력이 쑥쑥", None, None
+    )
+    f = RedactFilter()
+    f.filter(rec)
+    f.filter(rec)
+    RedactFilter().filter(rec)
+    assert rec.getMessage() == once, f"🔴 두 번 가렸다: {rec.getMessage()}"

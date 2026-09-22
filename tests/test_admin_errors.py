@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from app.routers import admin_errors as ae
@@ -116,7 +118,9 @@ def test_건수가_0이어도_1쪽이다(monkeypatch: pytest.MonkeyPatch) -> Non
     assert log[-1][1][-1] == 0
 
 
-def test_DB_가_없으면_더미_1쪽으로_그린다(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_DB_가_없으면_빈_1쪽과_모름으로_그린다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔄 2026-09-22 — 더미 5건을 지웠다(D-147). 못 읽었으면 행 없음 · 건수 **None**(0 이 아니다 · D-72)."""
+
     def _boom() -> None:
         raise ConnectionError("no db")
 
@@ -124,5 +128,24 @@ def test_DB_가_없으면_더미_1쪽으로_그린다(monkeypatch: pytest.Monkey
 
     data = ae._load_list(None, None, 5)
 
-    assert data["source"] == "dummy_no_db"
+    assert data["source"] == "no_db"
     assert data["page"] == 1
+    assert data["rows"] == []
+    assert data["total"] is None, "🔴 못 읽은 건수를 수로 적었다"
+
+
+def test_DB_가_없으면_단건도_없음이_아니라_모름이다(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom() -> None:
+        raise ConnectionError("no db")
+
+    monkeypatch.setattr(ae, "_connect", _boom)
+
+    data = ae._load_one("00000000-0000-0000-0000-000000000000")
+
+    assert data == {"source": "no_db", "row": None, "same": []}
+
+
+def test_더미_행이_코드에_남아_있지_않다() -> None:
+    """🔴 가짜 오류를 그리면 「오류가 있다」가 거짓이 된다 (D-147) — 되살아나는 것을 막는다."""
+    src = Path(ae.__file__).read_text(encoding="utf-8")
+    assert "_DUMMY" not in src and "dummy_no_" not in src

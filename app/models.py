@@ -39,7 +39,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from app.settings import PARAMS
+from app.settings import ERROR_LOG_MESSAGE_MAX, PARAMS
 
 
 class Base(DeclarativeBase):
@@ -334,4 +334,52 @@ class AppAccount(Base):
         CheckConstraint("role in ('governor')", name="ck_app_account_role"),
         # 🔴 PHC 접두어 강제 — 약한 해시가 들어오는 길을 **DB 가** 막는다 (D-220 · P1-7)
         CheckConstraint("pw_hash LIKE '$argon2id$%'", name="ck_app_account_phc"),
+    )
+
+
+#: 오류 로그가 받는 레벨. 🚨 표의 `CHECK` · 핸들러의 문턱 · 관리자 화면 필터가 이 한 벌을 쓴다 (D-99).
+ERROR_LOG_LEVELS = ("WARNING", "ERROR", "CRITICAL")
+
+
+class AppErrorLog(Base):
+    """앱 오류 로그 — **WARNING 이상**만 · 🆕 2026-09-22 (ssm 요청 `docs/ssm/요청_2026-09-16_app_error_log.md` · 보안점검 P1-4).
+
+    ★ 쓰는 곳은 하나 — `app/error_log.py` 의 백그라운드 기록기. 읽는 곳도 하나 — `/admin/errors`(관리자 에디션만 · D-213).
+
+    🔴 **마스킹 필터(`RedactFilter`)를 지난 문장만** 들어온다 — 핸들러가 필터를 **직접** 단다(자식 로거 레코드는
+       부모 로거의 필터를 안 지난다).
+    🔴 **트레이스백 전문을 두지 않는다** — `exc_type`(클래스 이름)과 위치(`module`·`func_name`·`lineno`)만.
+       트레이스백은 필터 밖이었다(P1-4 표 첫 줄). 요청 경로·쿼리스트링·사용자 이니셜·IP 도 두지 않는다 —
+       뒤의 둘은 **접속기록**(P1-8 · 고시 제8조)이고 보관 기준이 다르다.
+    🚨 **보관 90일** `[임의]` (`settings.ERROR_LOG_RETENTION_DAYS`) — 기록기가 뜰 때와 6시간마다 지난 행을 지운다.
+    🚨 id 는 **DB 가** 만든다(`gen_random_uuid()`) — 기록기가 ORM 없이 psycopg 로 넣기 때문이다. 순차 정수는 안 쓴다(P1-5).
+    """
+
+    __tablename__ = "app_error_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    level: Mapped[str] = mapped_column(String(8))
+    logger_name: Mapped[str] = mapped_column(String(80))
+    message: Mapped[str] = mapped_column(Text)
+    exc_type: Mapped[str | None] = mapped_column(String(120))
+    module: Mapped[str | None] = mapped_column(String(120))
+    func_name: Mapped[str | None] = mapped_column(String(120))
+    lineno: Mapped[int | None] = mapped_column(Integer)
+
+    __table_args__ = (
+        CheckConstraint(
+            "level in (" + ",".join(f"'{lv}'" for lv in ERROR_LOG_LEVELS) + ")",
+            name="ck_app_error_log_level",
+        ),
+        # 🚨 상한은 **자르는 쪽**(기록기)과 **막는 쪽**(DB) 둘에 둔다 — 한쪽만 고치면 갈린다
+        CheckConstraint(
+            f"char_length(message) <= {ERROR_LOG_MESSAGE_MAX}", name="ck_app_error_log_message_len"
+        ),
+        Index("ix_app_error_log_occurred", occurred_at.desc()),
+        Index("ix_app_error_log_level_occurred", "level", occurred_at.desc()),
     )
