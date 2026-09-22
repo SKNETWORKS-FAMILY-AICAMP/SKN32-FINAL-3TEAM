@@ -260,13 +260,22 @@ def plan(name: str, who: list[str], overlap: float, gold: int, seed: int) -> int
 
 
 def _norm(raw: str) -> str:
-    raw = (raw or "").replace(" ", "")
+    raw = (raw or "").replace(" ", "").replace(";", ",")
     if raw == ls.OUT_OF_SCOPE_NO:
         return "0"
     return ",".join(sorted({x for x in raw.split(",") if x}))
 
 
-PANEL = ["행", "문구", "참고", "보기", "사람들 답", "참고 답", "최종번호", "메모", "판정자", "지문"]
+#: 🔄 2026-09-22 (D-262) — 「합의 유형」·「갈린 유형」 칸. 판정자는 **갈린 유형만** 보고 `최종번호` 에 전체를 적는다.
+PANEL = [
+    "행", "문구", "참고", "보기", "사람들 답", "합의 유형", "갈린 유형", "참고 답", "최종번호", "메모", "판정자", "지문",
+]  # fmt: skip
+
+
+def _names(nums: frozenset[str]) -> str:
+    return " · ".join(
+        "0 범위밖" if n == "0" else f"{n} {ls.TYPES[int(n) - 1]}" for n in sorted(nums, key=int)
+    )
 
 
 def compare(sheet: pathlib.Path, csvs: list[pathlib.Path], refs: list[pathlib.Path]) -> int:
@@ -278,7 +287,7 @@ def compare(sheet: pathlib.Path, csvs: list[pathlib.Path], refs: list[pathlib.Pa
         for p in paths:
             for rec in ls.load_csv(p):
                 i = int(rec["행"])
-                if not (ls._fp(ls._text(rows[i - 1])) == rec["지문"] == ls._fp(rec["문구"])):  # noqa: SLF001
+                if not ls.row_matches(rows[i - 1], rec)[0]:
                     raise SystemExit(
                         f"🔴 {p.name} {i}행의 `문구` 가 바뀌었다 — 되돌린 뒤 다시 한다"
                     )
@@ -301,15 +310,22 @@ def compare(sheet: pathlib.Path, csvs: list[pathlib.Path], refs: list[pathlib.Pa
             ans[i][who] = ",".join(
                 sorted(str(ls.TYPES.index(t) + 1) for t in r["확정유형"] if t in ls.TYPES)
             )
-    split, solo = [], 0
+    split, solo, partial = [], 0, 0
+    rel_of: dict[int, tuple[str, frozenset[str], frozenset[str]]] = {}
     for i in sorted(ans):
         if "검증정답" in rows[i - 1]:
             continue
-        human = set(ans[i].values())
+        sets = [frozenset(v.split(",")) for v in ans[i].values()]
         refs_i = set(ref.get(i, {}).values())
         if len(ans[i]) < 2:
             solo += 1
-        if len(human) > 1 or (refs_i and human and refs_i != human):
+        rel_of[i] = store.agreement(sets, "0")
+        rel = rel_of[i][0]
+        partial += rel == store.PARTIAL
+        # 🔄 D-262 — 부분합의도 판정표로 간다(갈린 유형만 정하면 된다). 참고 답과 다르면 여전히 싣는다
+        if (len(ans[i]) >= 2 and rel != store.AGREED) or (
+            refs_i and ans[i] and refs_i != set(ans[i].values())
+        ):
             split.append(i)
     out = ls.OUT_DIR / f"판정__{sheet.stem}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -321,11 +337,19 @@ def compare(sheet: pathlib.Path, csvs: list[pathlib.Path], refs: list[pathlib.Pa
             t = ls._text(r)  # noqa: SLF001
             show = " · ".join(f"{k}:{v}" for k, v in sorted(ans[i].items()))
             show_ref = " · ".join(f"{k}:{v}" for k, v in sorted(ref.get(i, {}).items()))
-            w.writerow([i, t, ls.note(r), ls.choices(r), show, show_ref, "", "", "", ls._fp(t)])  # noqa: SLF001
+            _, agreed, contested = rel_of.get(i, ("", frozenset(), frozenset()))
+            w.writerow(
+                [i, t, ls.note(r), ls.choices(r), show, _names(agreed), _names(contested), show_ref,
+                 "", "", "", ls.csv_fp(t)]
+            )  # fmt: skip
     both = [i for i in ans if len(ans[i]) >= 2 and "검증정답" not in rows[i - 1]]
-    agree = sum(1 for i in both if len(set(ans[i].values())) == 1)
+    agree = sum(1 for i in both if rel_of[i][0] == store.AGREED)
     print(
-        f"답이 있는 행 {len(ans)} · 두 사람 이상 {len(both)} (그중 일치 {agree}) · 한 사람만 {solo}"
+        f"답이 있는 행 {len(ans)} · 두 사람 이상 {len(both)} "
+        f"(합의 {agree} · 부분합의 {partial} · 갈림 {len(both) - agree - partial}) · 한 사람만 {solo}"
+    )
+    print(
+        "  ★ 부분합의 = 공유한 유형은 합의, 일부 유형만 갈림 (D-262) — 판정표의 「갈린 유형」만 본다"
     )
     print(f"  → {out.relative_to(ROOT)}  갈린 행 {len(split)}개 — 판정자가 `최종번호` 를 채운다")
     print("  🚨 다수결로 채우지 않는다. 헷갈리면 0(범위밖)이나 빈칸도 판정이다")
@@ -348,7 +372,7 @@ def decide(panel: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
     for rec in got:
         i = int(rec["행"])
         base = dict(rows[i - 1])
-        if not (ls._fp(ls._text(base)) == rec["지문"] == ls._fp(rec["문구"])):  # noqa: SLF001
+        if not ls.row_matches(base, rec)[0]:
             raise SystemExit(f"🔴 판정표 {i}행의 `문구` 가 바뀌었다 — 되돌린 뒤 다시 한다")
         raw = (rec.get("최종번호") or "").strip()
         if not raw:

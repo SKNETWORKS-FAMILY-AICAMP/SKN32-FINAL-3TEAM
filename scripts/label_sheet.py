@@ -80,6 +80,30 @@ def _fp(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
+#: 🆕 2026-09-22 — CSV 에 쓰는 지문 앞에 붙인다. ⛔ 지문이 숫자로만 되면(`769761699773`) 엑셀이 **지수 표기**
+#:    (`7.69762E+11`)로 바꿔 저장한다 — 2차 판에서 실제로 났다(권소라 371행). 글자가 앞에 있으면 숫자로 안 읽는다.
+FP_PREFIX = "fp:"
+#: `유형번호` 구분자 — 🆕 2026-09-22 `;` 도 받는다(2차 판 박수진 127행). 뜻은 같고, 받지 않으면 가져오기가 멈춘다.
+SEPARATORS = (",", ";")
+
+
+def csv_fp(text: str) -> str:
+    return FP_PREFIX + _fp(text)
+
+
+def row_matches(base: dict, rec: dict) -> tuple[bool, bool]:
+    """(맞는가, 지문이 깨졌는가). 🚨 **세 개를 맞춘다** — 시트 문구 · CSV 문구 · 지문 (가져오기·비교·판정 공통 · D-99).
+
+    🆕 2026-09-22 — 지문이 표 계산기에서 깨졌어도 **CSV 문구가 시트 문구와 정확히 같으면** 받는다.
+       지문은 문구가 바뀌었는지 보려는 장치인데, 문구가 그대로라면 바뀐 것이 없다. 깨진 수는 세어서 알린다.
+    """
+    text = _text(base)
+    fp = str(rec.get("지문") or "").strip().removeprefix(FP_PREFIX)
+    if _fp(text) == fp == _fp(str(rec.get("문구") or "")):
+        return True, False
+    return (str(rec.get("문구") or "") == text), True
+
+
 def _rows(sheet: pathlib.Path) -> list[dict]:
     if not sheet.exists():
         raise SystemExit(
@@ -159,7 +183,7 @@ def export(
         for i in idx:
             r = rows[i - 1]
             t = _text(r)
-            w.writerow([i, t, note(r), choices(r), "", "", who, _fp(t)])
+            w.writerow([i, t, note(r), choices(r), "", "", who, csv_fp(t)])
     guide = write_guide()
     if quiet:
         return out
@@ -211,7 +235,7 @@ def load_csv(path: pathlib.Path) -> list[dict]:
 def parse_no(raw: str, line: int) -> list[str]:
     """`1,5` → 라벨 둘. 🚨 못 읽는 값은 **멈춘다** — 조용히 버리면 그 사람의 판단이 사라진다."""
     got = []
-    for tok in str(raw).replace(" ", "").split(","):
+    for tok in str(raw).replace(" ", "").replace(";", ",").split(","):
         if not tok:
             continue
         if not tok.isdigit() or not 1 <= int(tok) <= len(TYPES):
@@ -228,7 +252,7 @@ def parse_no(raw: str, line: int) -> list[str]:
 def import_(csv_path: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
     rows = _rows(sheet)
     filled = load_csv(csv_path)
-    tampered, out_rows, n = [], [], 0
+    tampered, out_rows, n, fp_broken = [], [], 0, 0
     gold_seen: list[tuple[int, list[str], list[str]]] = []
     for rec in filled:
         i = int(rec["행"])
@@ -237,9 +261,11 @@ def import_(csv_path: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
         #    ⛔ 처음에 시트↔지문만 봤다. 그러면 사람이 CSV 의 `문구` 칸을 고쳐도
         #       지문이 그대로라 **그냥 통과한다** — 정확히 막으려던 것을 못 막았다.
         #       반대 대조로 잡았다: 문구를 고쳐 넣었는데 4건이 그대로 들어갔다.
-        if not (_fp(_text(base)) == rec["지문"] == _fp(rec["문구"])):
+        ok, broken = row_matches(base, rec)
+        if not ok:
             tampered.append(i)
             continue
+        fp_broken += broken
         raw_no = (rec.get("유형번호") or "").strip()
         scope = (rec.get("판단") or "").strip()
         if raw_no == OUT_OF_SCOPE_NO:
@@ -280,6 +306,10 @@ def import_(csv_path: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
         for r in out_rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     scoped = sum(1 for r in out_rows if r.get("판단") == OUT_OF_SCOPE)
+    if fp_broken:
+        print(
+            f"  🟡 지문이 깨진 행 {fp_broken}개 — 문구가 시트와 같아 받았다 (표 계산기가 지문을 숫자로 바꿨을 수 있다)"
+        )
     print(
         f"  → {out.relative_to(ROOT)}  ({n}건 · 그중 범위밖 {scoped}건 · 빈칸 {len(filled) - n}건)"
     )
