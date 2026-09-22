@@ -40,7 +40,7 @@ from app.contracts import (
 )
 from app.logging_conf import mask, setup_logging
 from app.routers import admin_router, auth_router, user_router
-from app.settings import DEFAULT_CATEGORY, PARAMS, admin_is_mounted, dsn
+from app.settings import DEFAULT_CATEGORY, PARAMS, admin_is_mounted
 from app.templating import STATIC_ROOT
 
 # 🔴 **로거를 여기서 세운다** (보안점검 P1-4). import 시점이라 잊을 자리가 없다 —
@@ -285,9 +285,9 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
 def health() -> Health:
     """DB 가 붙는지와 층별 행 수를 낸다. 팀원이 처음 여는 자리다."""
     try:
-        import psycopg
+        from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
-        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        with pg_connect() as conn, conn.cursor() as cur:
             counts: dict[str, int] = {}
             for table in (
                 "source",
@@ -346,8 +346,10 @@ def search(req: SearchRequest) -> SearchResult:
     """
     import psycopg  # noqa: PLC0415 — DB 가 없어도 임포트는 서야 한다
 
+    from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
+
     try:
-        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        with pg_connect() as conn, conn.cursor() as cur:
             # 🚨 합치는 것도 상태를 짓는 것도 코어가 한다 — 여기는 얇다 (D-51 · D-99).
             hits, state = rt.search(cur, req.q, req.category, req.limit)
     except psycopg.Error as e:

@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import traceback
 
 #: 로그 문자열 안에서 **값을 지울 열쇠말.** `?q=…` · `text=…` · `prompt=…` 형태를 잡는다.
 #: 🚨 이름을 늘릴 때는 `app/contracts.py` 의 사용자 입력 필드와 맞춘다.
@@ -91,6 +92,48 @@ def redact(line: str) -> str:
     return _QS.sub(_sub, _QUERY.sub(_sub_qs, line))
 
 
+def safe_exception_text(exc_info: tuple) -> str:
+    """트레이스백을 **예외 메시지만 가리고** 다시 짠다. 🆕 2026-09-22 (보안점검 P1-4 「예외 트레이스백에 request body 가 통째로」).
+
+    ⛔ 종전 `RedactFilter` 는 `msg`·`args` 만 지웠다 — 트레이스백(`exc_info`)은 필터 밖이라 **stdout 에 그대로** 찍혔다.
+       처리되지 않은 예외는 `uvicorn.error` 가 트레이스백과 함께 남기고, 예외 메시지에는 입력 값이 실릴 수 있다
+       (pydantic 검증 오류의 `input_value=` · 우리 코드의 `ValueError(f"...{text}")` · psycopg 의 호스트·사용자명).
+    ★ **위치는 남기고 메시지만 가린다** — 파일·줄·함수·소스 줄은 우리 코드이고 입력이 아니다. 지역 변수는 원래 안 찍힌다.
+       메시지는 **통째로** `mask()` 한다 — 열쇠말만 지우면 `input_value=` 같은 모르는 모양이 샌다(넘치게 지운다 · D-220).
+    🚨 원인 연쇄(`__cause__`·`__context__`)도 같은 방식으로 — 표준 트레이스백과 같은 순서·구분 문장.
+    """
+    etype, value, tb = exc_info
+    if value is None:
+        return "" if etype is None else etype.__name__
+    chain: list[BaseException] = []
+    seen: set[int] = set()
+    cur: BaseException | None = value
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        chain.append(cur)
+        cur = cur.__cause__ or (None if cur.__suppress_context__ else cur.__context__)
+    parts: list[str] = []
+    for i, exc in enumerate(reversed(chain)):
+        if i:
+            parts.append(
+                "\nThe above exception was the direct cause of the following exception:\n\n"
+                if exc.__cause__ is chain[len(chain) - i]
+                else "\nDuring handling of the above exception, another exception occurred:\n\n"
+            )
+        frames = traceback.format_tb(exc.__traceback__) if exc.__traceback__ else []
+        if frames:
+            parts.append("Traceback (most recent call last):\n" + "".join(frames))
+        text = str(exc)
+        parts.append(
+            f"{type(exc).__qualname__}: {mask(text)}\n" if text else f"{type(exc).__qualname__}\n"
+        )
+    return "".join(parts).rstrip("\n")
+
+
+#: 레코드에 「이미 가렸다」를 적는 속성 이름 — `RedactFilter.filter` 가 두 번 가리지 않게.
+_REDACTED = "_copylane_redacted"
+
+
 class RedactFilter(logging.Filter):
     """모든 로그 레코드를 지나며 값을 지운다.
 
@@ -100,6 +143,13 @@ class RedactFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        # 🆕 2026-09-22 — **한 레코드에 한 번만.** ⛔ `redact()` 는 멱등이 아니다 — 가린 자리
+        #    `text=<가림 15자·sha256:…>` 를 다시 지나면 그 표식을 또 가려 **길이·지문이 바뀐다**(실측 15자 → 24자).
+        #    필터는 로거와 핸들러 양쪽에 붙어 있어(자식 로거 → root 핸들러 · `app_error_log` 핸들러) 같은 레코드를
+        #    두세 번 지난다 — stdout 과 DB 의 지문이 어긋나 「같은 문구였는가」를 못 묻게 된다.
+        if getattr(record, _REDACTED, False):
+            return True
+        setattr(record, _REDACTED, True)
         if isinstance(record.msg, str):
             record.msg = redact(record.msg)
         else:
@@ -110,6 +160,11 @@ class RedactFilter(logging.Filter):
                 record.args = tuple(_scrub(a) for a in record.args)
             elif isinstance(record.args, dict):
                 record.args = {k: _scrub(v) for k, v in record.args.items()}
+        # 🆕 2026-09-22 — 트레이스백도 가린다. ★ `exc_text` 를 **먼저 채워 두면** 모든 Formatter 가 그것을 쓴다
+        #    (`logging.Formatter.format` 은 `exc_text` 가 비었을 때만 `formatException` 을 부른다) —
+        #    uvicorn 의 포매터를 갈아 끼우지 않고도 모든 출력이 가린 판을 낸다.
+        if record.exc_info and record.exc_info[0] is not None:
+            record.exc_text = safe_exception_text(record.exc_info)
         return True
 
 
@@ -145,3 +200,11 @@ def setup_logging(level: int = logging.INFO) -> None:
                 handler.addFilter(f)
     # 🚨 엔진 로그는 기본으로 누른다 — 켜더라도 위 필터를 지난다
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    # 🆕 2026-09-22 — 오류 로그 표(`app_error_log`). 🚨 켜는 조건은 `settings.error_log_enabled()` 한 곳이다 (D-99) —
+    #    `onprem`·`demo` 만(`auto`). 개발 기기(`local`)·테스트·`cloud` 는 붙지 않는다. 핸들러는 백그라운드로 쓴다.
+    from app.settings import error_log_enabled  # noqa: PLC0415 — 부를 때만 `.env` 를 읽는다
+
+    if error_log_enabled():
+        from app import error_log  # noqa: PLC0415
+
+        error_log.install()

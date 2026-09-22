@@ -1,6 +1,7 @@
-{# 데이터 출처 안내 — 더미로 그릴 때는 반드시 크게 알린다. #}
-{% if source == "dummy_no_table" %}
-<p class="er-dummy">🧪 <b>더미 데이터입니다.</b> <code>app_error_log</code> 테이블이 아직 없어요 (팀장 승인 대기 — <code>docs/ssm/요청_2026-09-16_app_error_log.md</code>).</p>
-{% elif source == "dummy_no_db" %}
-<p class="er-dummy">🧪 <b>더미 데이터입니다.</b> DB 에 못 붙었어요 — <code>launcher.py db-up</code> 을 먼저 돌린다.</p>
+{# 데이터 출처 안내 — 못 읽었을 때는 반드시 크게 알린다.
+   🔄 2026-09-22 — 더미 5건을 지웠다. 못 읽은 화면은 **빈 화면 + 이 안내**다 — 0건과 다르다 (D-72 · D-147). #}
+{% if source == "no_table" %}
+<p class="er-dummy">⚠️ <b>기록을 못 읽었다.</b> <code>app_error_log</code> 테이블이 아직 없다 — <code>launcher.py migrate</code>(alembic <code>0016_app_error_log</code>)를 먼저 돌린다.</p>
+{% elif source == "no_db" %}
+<p class="er-dummy">⚠️ <b>기록을 못 읽었다.</b> DB 에 못 붙었다 — <code>launcher.py db-up</code> 을 먼저 돌린다.</p>
 {% endif %}
