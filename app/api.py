@@ -5,10 +5,8 @@
 🚨 **FastAPI 단독이다.** Django 를 쓰지 않는다 (D-135 확정 · D-134 되돌림).
    화면은 Jinja2 + HTMX 로 같은 앱이 낸다 (D-56) — 별도 프론트를 두지 않는다.
 
-🚨 **이 파일은 계약이지 구현이 아니다.** 판정 엔진(LangGraph)은 아직 없다.
-   그래서 판정 라우트는 **`501 Not Implemented` 를 낸다** — 200 에 가짜 응답을 넣지 않는다.
-   가짜 응답을 넣으면 프론트가 그 모양에 맞춰 붙고, 진짜가 오면 두 번 고친다.
-   D-147 이 같은 말을 데이터 쪽에서 한다 — **오류 응답은 데이터가 아니다.**
+🚨 판정 라우트는 LangGraph를 지나되, 2026-09-22 현재 인코더 신호는 확정 판정이 아니라
+   `hold(low_conf)` 후보로만 낸다. 근거 기반 확정·위험도·생성은 아직 열지 않는다.
 
 🔴 **거버넌스가 API 에도 걸린다** — `/search` 는 `source_use.allowed` 가 `U2_rag` 인
    프래그먼트만 돌려준다. 화면 인용은 `U3_cite`. 게이트가 아니라 **질의**로 건다.
@@ -374,23 +372,19 @@ def search(req: SearchRequest) -> SearchResult:
     )
 
 
-@app.post("/judge", response_model=JudgeResponse, responses={501: {"description": "엔진 미착수"}})
+@app.post("/judge", response_model=JudgeResponse)
 def judge(req: JudgeRequest) -> JudgeResponse:
-    """판정 — 🚨 **엔진은 아직 없다.** 가짜 200 을 내지 않는다.
+    """판정 그래프를 실행해 인코더의 위반 후보를 보류 상태로 반환한다.
 
-    🔄 2026-09-10 (D-124 ②) — `response_model` 을 붙였다. FastAPI 가 `/docs` 와
-       `openapi.json` 에 **완전한 응답 스키마**를 싣는다. 팀원은 그것으로 붙는다.
-       ★ 껍데기가 곧 목 서버라는 D-124 의 뜻이 이것이다 — **200 을 지어내지 않고도**
-         계약이 기계가 읽는 형태로 나간다.
-    🚨 고정 응답은 `/judge/fixtures/{name}` 이 낸다. **이 라우트는 501 을 지킨다** —
-       임의 입력에 픽스처를 돌려주면 그건 계약이 아니라 거짓말이다.
+    인코더가 threshold를 넘긴 라벨은 후보 신호일 뿐이다. 법령 근거와 위험도 매핑이
+    확정되기 전에는 `confirmed`를 만들지 않고 `hold(low_conf)`로만 낸다.
     """
-    raise HTTPException(
-        501,
-        "판정 엔진이 아직 없다. 계약은 정해져 있다 — GET /judge/fixtures 로 분기별 "
-        "고정 응답을 받고, 스키마는 /docs 에서 본다. 가짜 200 을 내면 프론트가 "
-        "그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.",
+    from app.graph import build_graph, to_response  # noqa: PLC0415 — API 기동 때 모델을 올리지 않는다
+
+    state = build_graph().invoke(
+        {"text": req.text, "product": req.product, "encoder_enabled": True}
     )
+    return to_response(state)
 
 
 #: 골든 픽스처 (D-124 ③) — 화면·BFF 가 모든 분기를 그리는 재료

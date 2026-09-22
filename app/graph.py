@@ -35,6 +35,7 @@ from app.contracts import (
     AdSection,
     Candidate,
     EvidenceArticle,
+    HoldReason,
     Infeasibility,
     JudgeResponse,
     KeywordScreen,
@@ -47,6 +48,7 @@ from app.contracts import (
     Verdict,
     is_pass,
 )
+from app.encoder import EncoderUnavailable, predict as encoder_predict
 from app.settings import DEFAULT_CATEGORY, PARAMS
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
@@ -109,6 +111,10 @@ class JudgeState(TypedDict, total=False):
     product: ProductContext
     # ── 분할 ──────────────────────────────────────────────────────
     sents: list[str]
+    #: 로컬 스텁·CI는 모델을 올리지 않는다. 실제 판정 요청만 명시적으로 인코더 신호를 읽는다.
+    encoder_enabled: bool
+    #: 이번 판정에서 실제 KC-BERT 신호를 읽었는가. 응답의 `judged_by`를 사실대로 적는 데 쓴다.
+    encoder_used: bool
     # ── 근거 검색 🔴 누적 키 (2026-09-13) ────────────────────────
     #: `retrieve` 가 넣고 `judge` 가 읽는다. 🚨 **문장마다 한 벌**이라 누적이다 —
     #: 리듀서가 없으면 마지막 문장의 근거만 남고, 그 상태로도 응답은 그럴듯하다.
@@ -332,10 +338,11 @@ def retrieve(state: JudgeState, config=None) -> dict[str, Any]:  # noqa: ANN001
 
 @timed
 def judge(state: JudgeState) -> dict[str, Any]:
-    """판정. 🔜 룰(사전 536행) + 인코더.
+    """판정. 인코더는 후보 신호만 내고, 확정 판정은 아직 만들지 않는다.
 
-    🚨 스텁은 `unjudged` 를 낸다 — **통과로 집계 금지** (D-127). 비어 있음을 비어 있다고
-       말하는 값이고, 그럴듯한 `confirmed` 를 지어내지 않는다.
+    🔄 2026-09-22 — KC-BERT의 라벨별 threshold 통과값을 `violations` 후보로 옮긴다.
+    모델 신호는 법령 근거나 위험도 매핑이 아니므로 **항상** `hold(low_conf)`다.
+    모델이 없거나 로컬 스텁으로 실행하면 종전처럼 `unjudged`를 낸다 — 둘 다 통과가 아니다.
 
     🔴 **근거는 `state["evidence"]` 에서 온다** (2026-09-13) — `retrieve` 가 문장별로 쌓아 둔
        `SentEvidence` 다. `sent_id` 로 맞춰 `SentenceJudgment.evidence` 에 옮긴다.
@@ -346,19 +353,40 @@ def judge(state: JudgeState) -> dict[str, Any]:
     # 🆕 2026-09-14 — `retrieve` 가 쌓아 둔 것을 **sent_id 로 짝짓는다.** 값이 입구부터
     #    출구까지 흐르는 최소 경로를 여기서 닫는다: retrieve → judge → SentenceJudgment.evidence
     #    → to_response. ⛔ 만들어 놓고 읽는 쪽을 안 만들면 조용히 샌다 — 사흘에 세 번 밟았다.
-    # 🚨 근거가 붙어도 판정은 여전히 `unjudged` 다. **근거를 찾은 것과 판정한 것은 다르다** —
-    #    붙였다고 `confirmed` 로 올리면 D-127 이 막는 「미판정을 통과로 집계」가 된다.
+    # 🚨 근거가 붙거나 인코더 후보가 있어도 `confirmed` 로 올리지 않는다. 법령 근거와
+    #    후보 신호는 서로 다른 축이고, 최종 매핑은 아직 합의되지 않았다.
     by_sent = {e.sent_id: e for e in state.get("evidence", [])}
-    return {
-        "sentences": [
+    # 모델 파일이 있는 개발 기기라고 해서 모든 그래프 테스트·배치가 435MB 가중치를 올리면
+    # 안 된다. 실제 판정 진입점이 `encoder_enabled=True`를 명시할 때만 쓴다.
+    enabled = state.get("encoder_enabled", False)
+    sentences: list[SentenceJudgment] = []
+    used = False
+    for i, text in enumerate(state.get("sents", [])):
+        sid = sent_id(i)
+        evidence = list(by_sent[sid].articles) if sid in by_sent else []
+        if not enabled:
+            sentences.append(SentenceJudgment(sent_id=sid, text=text, verdict=Verdict.unjudged, evidence=evidence))
+            continue
+        try:
+            prediction = encoder_predict(text)
+        except EncoderUnavailable:
+            # 모델 미배포 환경은 거짓 후보를 만들지 않는다. `unjudged`는 안전한 기존 계약이다.
+            sentences.append(SentenceJudgment(sent_id=sid, text=text, verdict=Verdict.unjudged, evidence=evidence))
+            continue
+        used = True
+        sentences.append(
             SentenceJudgment(
-                sent_id=(sid := sent_id(i)),
-                text=t,
-                verdict=Verdict.unjudged,
-                evidence=list(by_sent[sid].articles) if sid in by_sent else [],
+                sent_id=sid,
+                text=text,
+                verdict=Verdict.hold,
+                hold_reason=HoldReason.low_conf,
+                violations=[candidate.violation for candidate in prediction.candidates],
+                evidence=evidence,
             )
-            for i, t in enumerate(state.get("sents", []))
-        ]
+        )
+    return {
+        "sentences": sentences,
+        "encoder_used": used,
     }
 
 
@@ -510,6 +538,7 @@ def run_stub(text: str, product: ProductContext | None = None) -> tuple[JudgeSta
         "rejects": [],
         "timings": [],
         "attempt": 0,
+        "encoder_enabled": False,
     }
     visited: list[str] = []
 
@@ -547,7 +576,7 @@ def to_response(state: JudgeState) -> JudgeResponse:
         attempt=state.get("attempt", 0),
         timings=state.get("timings", []),
         law_version="2026-09-10",
-        judged_by="stub-0.1.0",
+        judged_by="kcbert-encoder-2026-09-22" if state.get("encoder_used") else "stub-0.1.0",
     )
 
 
