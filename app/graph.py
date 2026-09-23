@@ -49,6 +49,7 @@ from app.contracts import (
     Candidate,
     Category,
     EvidenceArticle,
+    GenerateOutcome,
     Infeasibility,
     JudgeResponse,
     KeywordScreen,
@@ -182,7 +183,8 @@ class GenerateState(TypedDict, total=False):
     profile: MediaProfile
     #: 채널별 각색. 🚨 각 결과가 **판정 코어를 다시 지난다** (D-119 · D-63)
     adapted: Annotated[list[AdaptedCopy], operator.add]
-    outcome: Outcome
+    #: 🔄 D-274 — 생성 종착은 검수와 **다른 목록**이다 (프론티어 · 탐색 실패 · 보류)
+    outcome: GenerateOutcome
     timings: Annotated[list[Timing], operator.add]
 
 
@@ -238,8 +240,8 @@ def timed(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
 # ══════════════════════════════════════════════════════════════════════
 
 #: 법별 노드가 받는 품목. `None` = **모든 품목** (표시광고법은 품목과 무관하게 걸린다).
-#: 🔄 **D-271 — `Category.일반` 은 「일반 상품」이다**(기획서 2-4) → **표시광고법만**. D-229 ② 의 「일반식품」은 폐기됐다.
-#:    🔜 W3 — 계약에서 값 이름이 `일반상품` 으로 바뀌고 `전용법_미수록` 이 선다(표시광고법 판정 + 통과 금지).
+#: 🔄 **D-271 — 「일반」은 없다.** `일반상품`(기획서 2-4 「일반 상품」)과 `전용법_미수록` 은 **표시광고법만** 탄다 —
+#:    두 품목 모두 아래 어느 법의 범위에도 없어서 `law_ftc` 하나로 떨어진다. 전용법 품목은 통과 금지 · 미검수 고지다 (D-277).
 #:    ⛔ **청크의 `category` 와 섞지 않는다** — 청크 쪽 「일반」은 법 이름 낱말이 안 걸린 기본값이었다(D-271 맥락 2).
 #:       🔜 W6 — 칸 이름이 `law` 로 바뀌고 법별 노드가 자기 법 근거만 거른다.
 #: 🚨 **순서가 곧 팬아웃 순서다** — 스텁과 컴파일본이 같은 순서를 낸다(`Send` 목록 순서 · 2026-09-23 실측).
@@ -310,6 +312,24 @@ def classify(state: CoreState) -> dict[str, Any]:
     return {"laws": laws_for(product.category)}
 
 
+#: 🔜 **W6 에서 지운다** — 품목(계약 `Category`)을 청크 범주로 넘기는 **임시 다리**다 (D-271 ③ · D-192).
+#: 🔄 2026-09-23 (W3) — 계약에서 「일반」이 `일반상품` · `전용법_미수록` 으로 갈렸는데 **청크 값은 아직 「일반」이다**
+#:    (정본 B 재생성 · 0019 전). 품목 이름을 그대로 넘기면 `ANY(c.category)` 가 **0건**이 된다 — 오류 없이 근거가 빈다.
+#:    두 품목 모두 표시광고법만 타므로(D-277) 청크의 「일반」(= 법 이름 낱말이 안 걸린 기본값 · 사실상 표시광고법 쪽)으로 보낸다.
+#: ⛔ W6 — 검색은 **법으로** 거르고 품목을 청크 필터로 넘기지 않는다(D-271 ③). 그때 이 표와 `DEFAULT_CATEGORY` 가 같이 사라진다.
+_CHUNK_CATEGORY: dict[Category, str] = {
+    Category.일반상품: DEFAULT_CATEGORY,
+    Category.전용법_미수록: DEFAULT_CATEGORY,
+}
+
+
+def _chunk_category(category: Category | None) -> str:
+    """품목 → 청크 범주 (W6 전 임시). 미확정이면 `DEFAULT_CATEGORY` 로 한 번 — 종전과 같다."""
+    if category is None:
+        return DEFAULT_CATEGORY
+    return _CHUNK_CATEGORY.get(category, category.value)
+
+
 def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
     """`Hit` → 계약. 🔴 **확신이 없으면 안 옮긴다** (D-224).
 
@@ -345,9 +365,10 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
         return {"evidence": [SentEvidence(sent_id=sent_id(i)) for i in range(len(sents))]}
 
     product = state.get("product") or ProductContext()
+    chunk_category = _chunk_category(product.category)
     found: list[SentEvidence] = []
     for i, text in enumerate(sents):
-        hits, st = rt.search(cur, text, product.category or DEFAULT_CATEGORY)
+        hits, st = rt.search(cur, text, chunk_category)
         found.append(
             SentEvidence(
                 sent_id=sent_id(i),
@@ -488,11 +509,12 @@ def certificate(state: ReviewState) -> dict[str, Any]:
 def guidance(state: ReviewState) -> dict[str, Any]:
     """「지시」 — 확정된 **실증형** 위반: 뺄 구간 · 실증 자료의 종류 · 내려갈 수 있는 등급 (D-268).
 
-    🔴 **계약에 `Outcome.guidance` 가 아직 없다** — 🔜 W3(계약 · 마이그레이션 0018)에서 선다.
-       그 전까지는 **보류로 끝낸다.** ⛔ 통과로 보내지 않는다 — 확정 위반이다. 증명서도 아니다 — 실증형이다 (D-59).
-       ★ 스텁 `judge` 는 `unjudged` 만 내므로 **지금 이 노드에 오는 길은 없다** — 판정(W4)보다 계약(W3)이 먼저다.
+    🔄 2026-09-23 (W3) — 계약에 `Outcome.guidance` 가 섰다 (D-274). 종전에는 보류로 끝냈다.
+    ⛔ 통과로 보내지 않는다 — 확정 위반이다. 증명서도 아니다 — 실증형이다 (D-59).
+    🚨 계약은 지시 문장마다 **실증 분기와 뺄 구간**을 요구한다(`_guidance_payload`) — 판정 노드(W4)가 그것을 내야
+       이 종착이 계약을 지난다. ★ 스텁 `judge` 는 `unjudged` 만 내므로 **지금 이 노드에 오는 길은 없다.**
     """
-    return {"outcome": Outcome.hold}
+    return {"outcome": Outcome.guidance}
 
 
 @timed
@@ -586,8 +608,11 @@ def rejudge(state: GenerateState) -> dict[str, Any]:
 
 @timed
 def frontier(state: GenerateState) -> dict[str, Any]:
-    """리스크–소구력 프론티어 (D-31) — **같은 전제의 후보끼리**만 (D-264). 단일 답을 주지 않는다."""
-    return {"outcome": Outcome.passed}
+    """리스크–소구력 프론티어 (D-31) — **같은 전제의 후보끼리**만 (D-264). 단일 답을 주지 않는다.
+
+    🔄 D-274 — 생성 종착 `frontier`. ⛔ 종전에는 검수의 `pass` 를 빌려 썼다 — 「통과」가 아니다(후보에 잔여 위험도가 붙는다).
+    """
+    return {"outcome": GenerateOutcome.frontier}
 
 
 @timed
@@ -596,7 +621,7 @@ def search_failed(state: GenerateState) -> dict[str, Any]:
 
     🔄 D-265 · D-266 — **생성에서만** 난다. 검수에서는 실증 분기가 대신한다.
     """
-    return {"outcome": Outcome.search_failed}
+    return {"outcome": GenerateOutcome.search_failed}
 
 
 GENERATE_NODES: dict[str, Callable[..., dict[str, Any]]] = {
@@ -688,6 +713,8 @@ def to_response(state: ReviewState) -> JudgeResponse:
     """검수 상태를 계약으로 옮긴다. 🚨 계약이 거부하면 여기서 터진다 — 화면보다 먼저다.
 
     🔄 D-265 — `attempt` 를 넘기지 않는다. 검수에서는 **항상 0** 이다(재검수 횟수와 다른 축).
+    ⬜ `category` · `not_reviewed` · `branches` (D-276 · D-277) 는 **넘기지 않는다** — 받은 품목은 판별 결과가 아니고(D-82),
+       분기는 `merge_laws` 가 만든다. 🔜 W4 — `classify` 가 판별하고 `merge_laws` 가 분기를 낼 때 같이 옮긴다 (D-192).
     """
     return JudgeResponse(
         outcome=state.get("outcome", Outcome.hold),

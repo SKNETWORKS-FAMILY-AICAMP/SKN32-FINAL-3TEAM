@@ -49,7 +49,8 @@ JUDGE_SUBTOTAL_MS = 1_100
 
 def main(argv: list[str]) -> int:
     text = argv[1] if len(argv) > 1 else DEFAULT_TEXT
-    raw = argv[2] if len(argv) > 2 else Category.일반.value
+    # 🔄 2026-09-23 (W3 · D-271) — 「일반」은 없다. 일반 상품은 `일반상품` 이다
+    raw = argv[2] if len(argv) > 2 else Category.일반상품.value
     try:
         category = Category(raw)
     except ValueError:

@@ -1,4 +1,5 @@
 {
+  "outcome": "frontier",
   "candidates": [
     {
       "label": "보수안",
@@ -95,12 +96,15 @@
         "infeasibility": null,
         "evidence": [],
         "risk": {
-          "floor": "R1",
+          "floor": "R0",
           "encoder": null,
-          "final": "R1",
+          "final": "R0",
           "evidence_span": null
         },
-        "evidence_mismatch": false
+        "evidence_mismatch": false,
+        "not_claim": false,
+        "spans": [],
+        "substantiation": null
       }
     },
     {
@@ -121,12 +125,15 @@
         "infeasibility": null,
         "evidence": [],
         "risk": {
-          "floor": "R1",
+          "floor": "R0",
           "encoder": null,
-          "final": "R1",
+          "final": "R0",
           "evidence_span": null
         },
-        "evidence_mismatch": false
+        "evidence_mismatch": false,
+        "not_claim": false,
+        "spans": [],
+        "substantiation": null
       }
     }
   ]

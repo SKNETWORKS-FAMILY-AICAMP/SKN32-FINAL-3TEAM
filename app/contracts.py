@@ -18,7 +18,7 @@
    ① `verdict`        판정 상태 (D-127) — 그래프가 정한다
    ② `risk`           위험도 순서형 **R0~R3** (D-130 · D-227 개정) — `max()` 가 정의되는 전순서
    ③ `infeasibility`  불가 사유 A/B/C (D-59) — **주장의 성질**
-   ④ `outcome`        종착 넷 (D-125) — **루프의 결과**
+   ④ `outcome`        종착 — 🔄 **진입점마다 목록이 다르다** (D-274) — 검수 `Outcome` 넷 · 생성 `GenerateOutcome` 셋
    ⛔ ①과 ②를 섞으면 D-09 래칫이 깨진다. 보류·근거없음은 서로 비교할 수 없어
       `max()` 가 정의되지 않는다. 화면 배지만 둘을 섞고 있었다 (상태 스키마 문서).
    ⛔ ③과 ④도 다른 축이다. A/B/C 는 왜 안 되는가, outcome 은 그래서 어떻게 끝났는가다.
@@ -47,12 +47,23 @@ class Verdict(enum.StrEnum):
 
 
 class HoldReason(enum.StrEnum):
-    """`hold` 일 때만. `app/models.py` ck_judgment_hold_reason_values 와 같은 넷."""
+    """`hold` 일 때만. `app/models.py` ck_judgment_hold_reason_values 와 **같은 여섯** (마이그레이션 0018).
 
-    low_conf = "low_conf"  # 확신 부족
-    gap2 = "gap2"  # 1·2위 격차 부족
+    🔄 2026-09-23 — `premise_unknown` · `law_uncovered` 를 더했다 (D-263 ② · D-277).
+       `cat_unknown` 은 **품목을 못 가림**, `premise_unknown` 은 **품목은 가렸으나 인정 여부로 등급이 갈림**이다.
+    """
+
+    low_conf = "low_conf"  # 확신 부족 — 조건 M(맥락)도 여기로 (D-268)
+    #: 🔄 2026-09-23 — 원장 D-127 의 뜻은 **코드 하한 ↔ 모델 예측 2등급 차**(3-5 ③)다.
+    #:    ⛔ 종전 주석 「1·2위 격차 부족」은 원장과 달랐다 — 화면 라벨·`KNOWN_GAPS` 에도 같은 오기가 번졌다.
+    gap2 = "gap2"  # 코드↔모델 2등급 차
     cat_unknown = "cat_unknown"  # 카테고리 판별 실패 (D-82)
     rd1 = "rd1"  # 공존 규칙 발동 (D-127 · D-120) — 🔄 09-21 종전 주석 「라운드 1 미해소」는 D-127 과 달랐다
+    premise_unknown = (
+        "premise_unknown"  # 품목은 가렸으나 인정 여부로 등급이 갈림 — 분기를 낸다 (D-263 ② · D-276)
+    )
+    #: 전용법 품목(의료기기 · 의약외품 등)에서 표시광고법으로 걸린 것이 없는 문장 — 안 본 법이 있다 (D-271 ⑤ · D-277)
+    law_uncovered = "law_uncovered"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -61,7 +72,10 @@ class HoldReason(enum.StrEnum):
 
 
 class Risk(enum.StrEnum):
-    """R0(특이사항 없음) · R1(주의) · R2(업무정지 위험) · R3(영업 상실 위험).
+    """R0(특이사항 없음) · R1(시정명령 위험) · R2(업무정지 위험) · R3(영업 상실 위험).
+
+    🔄 **D-280 — R1 의 이름은 「시정명령 위험」이다.** 옛 이름 「주의」는 D-130 의 옛 뜻(실증·맥락으로 갈림)에서 왔고,
+       그 문장들은 분기 · 지시 · 보류로 옮겨 갔다 (D-263 · D-268). 네 단계 이름이 모두 그 등급을 만든 처분이다.
 
     🔄 **D-227 — 척도는 네 단계다.** 경계는 전부 조문이 그었다 —
        R1 제14조(시정명령) · R2 제16조①③(정지 · 제19조 갈음 과징금 포함) · R3 제16조②④(취소·폐쇄).
@@ -86,15 +100,12 @@ class Risk(enum.StrEnum):
         return int(self.value[1])
 
 
-#: 통과(D-125)의 위험도 문턱 — **R1(주의)까지** (D-130 · D-227).
-#: 🔄 2026-09-21 (소성민 코드 리뷰 #8) — 종전 값은 `PASS_RISK_MAX_PROVISIONAL = Risk.R2` 였다.
-#:    D-130 은 *"통과 = 상태 == 확정 ∧ 위험도 ≤ **R1**"* 이라 적었고 표에서 **R1 = 주의가 확정**이다.
-#:    미확정이었던 것은 **R2 ↔ R3 의 상대 순서**이지 「어느 것이 주의인가」가 아닌데, 종전 주석이 그렇게 읽고
-#:    문턱을 **한 등급 느슨하게** 잡았다 — 「업무정지 위험」이 통과가 됐다. D-227 이 R2·R3 순서 문제를 없애며
-#:    R1 로 고친다고 정했고, 이름의 「잠정(PROVISIONAL)」도 같이 뺀다.
-#: ⛔ 종전에는 「코드 하한이 들어오는 커밋에서 같이 고친다」고 미뤘다. 부르는 곳이 0 이라 **지금 고쳐도 무해**하고,
-#:    묶어 두면 그 커밋에서 잊는 쪽이 위험이다 — 하한이 서는 순간 틀린 문턱이 조용히 살아난다.
-PASS_RISK_MAX = Risk.R1
+#: 통과의 위험도 문턱 — 🔄 **R0** (D-273). 통과 = **확정 ∧ R0** = 확정 ∧ 위반 없음.
+#: ⛔ 종전 값 R1 은 D-130 의 옛 R1(「실증 자료가 필요하거나 맥락에 따라 갈림」 — 조건을 달면 쓸 수 있음)에 맞춘 문턱이었다.
+#:    D-227 이 R1 에 **시정명령 수준의 확정 위반**을 얹은 뒤로는 그 문턱이 확정 위반을 통과로 흘렸다 —
+#:    표시광고법은 구조적으로 R1 이 상한이라(D-272) 일반상품 광고의 확정 위반이 전부 통과였다.
+#: 🚨 홈 화면 집계(`app/routers/user.py`)가 이 상수를 그대로 쓴다 — 고치면 그쪽 수의 뜻도 같이 바뀐다.
+PASS_RISK_MAX = Risk.R0
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -123,11 +134,24 @@ class Infeasibility(enum.StrEnum):
 
 
 class Outcome(enum.StrEnum):
-    """**통과 = `confirmed` ∧ 위험도 ≤ 주의.** 보류·근거없음·미판정은 통과가 아니다."""
+    """**검수(진입점 A)의 종착** — 🔄 D-274 · D-268. **통과 = 확정 ∧ R0** (D-273).
 
-    passed = "pass"  # 프론티어 / 3종 세트
-    certificate = "certificate"  # A·C — 판정 직후, 루프 미진입 (D-32)
-    search_failed = "search_failed"  # B 가 K 소진 — 원문 유지 + 실증 자료 안내
+    우선순위 **보류 > 증명서 > 지시 > 통과**. 보류·근거없음·미판정은 통과가 아니다.
+    ⛔ `search_failed` 는 여기 없다 — 검수는 재생성 루프를 돌지 않는다 (D-265). 생성 종착(`GenerateOutcome`)의 것이다.
+    """
+
+    passed = "pass"  # 통과 — 🔄 검수는 프론티어를 내지 않는다 (D-265)
+    certificate = "certificate"  # A·C — 합법화 불가 증명서 (D-32)
+    #: 확정된 **B 실증형** 위반 — 뺄 구간 · 필요한 실증 자료 종류 · 실증하면 내려갈 수 있는 등급 (D-268)
+    guidance = "guidance"
+    hold = "hold"  # 전문가 검토
+
+
+class GenerateOutcome(enum.StrEnum):
+    """**생성(진입점 B)의 종착** — 🆕 D-274. 검수 종착과 목록이 다르다."""
+
+    frontier = "frontier"  # 프론티어 — 자기 전제로 재판정한 후보 (D-31 · D-264)
+    search_failed = "search_failed"  # B 가 K 소진 — 원문 유지 + 실증 자료 안내 (D-125 · D-126)
     hold = "hold"  # 전문가 검토
 
 
@@ -154,12 +178,34 @@ class Violation(enum.StrEnum):
 
 
 class Category(enum.StrEnum):
-    """🚨 사용자에게 묻지 않는다 — 우리가 판별한다 (D-82). 판정 결과에 속한다."""
+    """**품목 축** — 제품이 무엇인가 (D-271 ④). 판정 결과에 속한다 (D-82).
 
-    일반 = "일반"
+    🔄 **D-271 — 「일반」은 없다.** 「일반」이 품목(일반 상품) · 판별 결과(일반식품) · 청크의 「분류 못 함」 세 뜻을 지고 있었다.
+       `식품` 이 일반식품을 포함한다 · `일반상품` 은 **표시광고법만** 탄다 · `전용법_미수록` 은 우리가 안 가진 법이 걸린다.
+    🔄 **D-276 — 첫 검수는 묻지 않고 판별한다. 재검수 때는 늘 묻는다**(판별 결과를 기본 선택으로).
+    ⛔ 법 축(`표시광고법` · `식품표시광고법` · `화장품법`)과 섞지 않는다 — 청크의 법은 법 ID 로 정한다 (D-271 ①).
+    """
+
     식품 = "식품"
     건기식 = "건기식"
     화장품 = "화장품"
+    일반상품 = "일반상품"
+    #: 의료기기 · 의약외품 · 의약품 · 의료 서비스 등 — 🚨 **통과를 내지 않는다** · 「○○법 미검수」 고지 (D-271 ⑤ · D-277)
+    전용법_미수록 = "전용법_미수록"
+
+
+class Premise(enum.StrEnum):
+    """**품목 분기의 전제** — 분기 하나 = 전제 하나 (🆕 D-276 · D-263).
+
+    🚨 실증 여부는 여기 없다 — 실증은 문장 단위 실증 분기(`SubstBranch`)다. 곱하지 않는다 (D-263 ④).
+    ⛔ `전용법_미수록` 은 전제가 아니다 — 판정할 법이 없다 (D-277).
+    """
+
+    식품 = "식품"
+    건기식_인정 = "건기식_인정"
+    건기식_비인정 = "건기식_비인정"
+    화장품 = "화장품"
+    일반상품 = "일반상품"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -241,6 +287,22 @@ class RiskAssessment(BaseModel):
         return self
 
 
+class SubstBranch(BaseModel):
+    """**실증 분기** — 문장 하나의 주석 (🆕 D-263 ④ · D-268 「지시」의 내용).
+
+    기록되는 판정은 **실증을 못 한 경우**다 (D-263 ①). 이것은 「실증하면 **여기까지** 내려갈 수 있다」는 **상한**이다.
+    🚨 「적법」이라 쓰지 않는다 (D-05 · D-130) — 내려갈 수 있는 등급과 인정되는 자료 종류만 적는다.
+    ⛔ 특허 · 수상 · 인증은 실증 자료가 아니다 (D-228) — `accepted_evidence` 에 넣지 않는다.
+    """
+
+    #: 실증하면 내려갈 수 있는 등급의 **상한** — 실증 전 위험도보다 높을 수 없다 (문장 검증기 `_subst_is_for_B`)
+    substantiated_max: Risk
+    #: 인정되는 실증 자료의 종류 — 시험·조사 결과 · 전문가 견해 · 학술문헌 (식품 시행규칙 제9조① · D-228)
+    accepted_evidence: list[str] = Field(..., min_length=1)
+    #: 기준 문안 — 조문을 인용한 설명 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
+    criteria: str = Field(..., min_length=1)
+
+
 class SentenceJudgment(BaseModel):
     """문장 하나의 판정. 상태 스키마 「판정 누적」이 그대로 이 모양이다."""
 
@@ -254,12 +316,78 @@ class SentenceJudgment(BaseModel):
     risk: RiskAssessment = Field(default_factory=RiskAssessment)
     #: 🔄 근거 불일치는 상태가 아니라 **재생성 이벤트**다 (D-127)
     evidence_mismatch: bool = False
+    #: 🆕 **판정 대상 아님** — 주장이 아닌 문장(섭취 대상 · 사업자 정보 · 의무 표기 · 구호 …) (D-275 · D-242 조건 D).
+    #:    「특이사항 없음(R0)」과 가른다 — 안 본 것을 본 것처럼 말하지 않는다 (D-63).
+    not_claim: bool = False
+    #: 🆕 **뺄 구간** — 원문(raw) 좌표 · `label` 에 위반 유형 (D-278 · D-265). ⛔ 상향 근거 구간(`risk.evidence_span`)과 다른 칸이다
+    spans: list[Span] = Field(default_factory=list)
+    #: 🆕 **실증 분기** — B 실증형에만 (D-263 ④ · D-268)
+    substantiation: SubstBranch | None = None
 
     @model_validator(mode="after")
     def _hold_reason_iff_hold(self) -> SentenceJudgment:
         # `app/models.py` ck_judgment_hold_reason 과 **같은 규칙**이다
         if (self.verdict is Verdict.hold) != (self.hold_reason is not None):
             raise ValueError("hold 일 때만, 그리고 hold 이면 반드시 hold_reason 이 있다 (D-127)")
+        return self
+
+    @model_validator(mode="after")
+    def _confirmed_risk_invariant(self) -> SentenceJudgment:
+        # 🆕 D-273 결정 2 — 확정 문장은 **위반이 없으면 R0, 있으면 R1 이상**이다. 계약과 DB(0018)가 같은 규칙을 든다 (D-99).
+        #    ⛔ 이 규칙이 있어야 「통과 = 확정 ∧ R0」이 「확정 ∧ 위반 없음」과 같은 뜻이 된다 — 화면·집계가 위험도 한 칸만 봐도 맞다.
+        #    위험도를 안 적은 확정(`final is None`)은 여기서 보지 않는다 — 통과가 아니다 (`is_pass`).
+        if self.verdict is Verdict.confirmed and self.risk.final is not None:
+            if not self.violations and self.risk.final is not Risk.R0:
+                raise ValueError(
+                    f"위반이 없는 확정 문장인데 위험도가 {self.risk.final.value} 다 — 위반이 없으면 R0 이다 (D-273)"
+                )
+            if self.violations and self.risk.final is Risk.R0:
+                raise ValueError(
+                    "위반을 확정했는데 위험도가 R0 이다 — 위반이 있으면 R1 이상이다 (D-273)"
+                )
+        # 🆕 D-275 — 판정 대상 아님은 **확정 · 위반 없음 · R0 · 뺄 구간 없음 · 실증 분기 없음**이다
+        if self.not_claim and (
+            self.verdict is not Verdict.confirmed
+            or self.violations
+            or self.spans
+            or self.substantiation is not None
+            or self.risk.final not in (None, Risk.R0)
+        ):
+            raise ValueError(
+                "판정 대상 아님인데 확정 · 위반 없음 · R0 · 구간 없음이 아니다 (D-275) — "
+                "주장이 아닌 문장에는 걸린 것이 없다"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _confirmed_violation_has_reason(self) -> SentenceJudgment:
+        # 🆕 D-273 결정 3 — 확정 위반에는 **불가 사유(A/B/C)가 반드시 붙는다** (D-59 · D-242 「없음·C」).
+        #    ⛔ 사유가 비면 라우터가 증명서·지시로 못 보내고, 종전 문턱(≤R1)에서는 **통과로 새던** 모양이다.
+        #    🚨 사유를 못 정하면 확정이 아니라 **보류**다 — 사유 없는 확정을 내지 않는다 (D-72).
+        if self.verdict is Verdict.confirmed and self.violations and self.infeasibility is None:
+            raise ValueError(
+                f"위반을 확정했는데 불가 사유(A/B/C)가 없다 — {[v.value for v in self.violations]} (D-273 · D-59)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _subst_is_for_B(self) -> SentenceJudgment:
+        # 🆕 D-263 ④ · D-61 — 실증 분기는 **B 실증형에만** 붙는다. C 절대형은 선택지가 없다 (D-263 ⑤).
+        #    ★ 2판의 `condition=B ⇔ substantiation` 을 불가 사유로 대신한다 — 조건 칸은 응답에 싣지 않는다 (D-275).
+        if self.substantiation is None:
+            return self
+        if self.infeasibility is not Infeasibility.B:
+            raise ValueError(
+                f"실증 분기는 B 실증형에만 붙는다 — 불가 사유 {self.infeasibility} (D-263 ④ · D-61)"
+            )
+        # 🚨 실증은 **내리기만** 한다. 실증 전 위험도가 없으면 상한을 잴 수 없다 — 없음을 낮음으로 세지 않는다 (D-72)
+        if self.risk.final is None:
+            raise ValueError("실증 분기가 있는데 실증 전 위험도가 없다 (D-72)")
+        if self.substantiation.substantiated_max.level > self.risk.final.level:
+            raise ValueError(
+                f"실증했을 때의 상한({self.substantiation.substantiated_max.value})이 실증 전 위험도"
+                f"({self.risk.final.value})보다 높다 — 실증은 등급을 올리지 않는다 (D-263)"
+            )
         return self
 
     @model_validator(mode="after")
@@ -298,7 +426,7 @@ class Certificate(BaseModel):
     """합법화 불가 증명서 (D-32). **A 자격형 · C 절대형에만 낸다** (D-125).
 
     ⛔ B 실증형이 K 를 소진한 경우에 이것을 내면 D-59 가 금지한
-       「B 를 C 처럼 답하기」가 된다. 그때는 `outcome=search_failed` 다.
+       「B 를 C 처럼 답하기」가 된다. 🔄 검수에서는 그때 `outcome=guidance`(지시)이고, 탐색 실패는 생성 종착이다 (D-268 · D-274).
     """
 
     reason: Infeasibility
@@ -318,7 +446,7 @@ class ProductContext(BaseModel):
        ⛔ 건기식인데 인정 범위를 넘겨 표방하면 `건기식 ∧ 자격 없음` 이다 — 한 필드로 못 담는다.
     """
 
-    #: 🔴 **`None` 은 「미확정」이고 `일반` 은 「판별 결과 일반식품」이다** (2026-09-16 · D-72).
+    #: 🔴 **`None` 은 「미확정」이다** (2026-09-16 · D-72). 🔄 D-271 — 「`일반` = 판별 결과 일반식품」은 폐기됐다.
     #:    ⛔ 종전 기본값이 `Category.일반` 이라 **「안 줬다」와 「일반이라고 줬다」가 같은 값**이었다.
     #:       없음이 성공으로 집계되는 자리였다.
     #:    🚨 미확정이면 `classify` 가 판별하고, **못 정하면 `hold(cat_unknown)`** 으로 간다
@@ -354,14 +482,43 @@ class JudgeRequest(BaseModel):
     product: ProductContext = Field(default_factory=ProductContext)
 
 
-class JudgeResponse(BaseModel):
+class Branch(BaseModel):
+    """**품목 분기** — 전제 하나에서 계산한 문서 판정 (🆕 D-263 · D-267 · D-276).
+
+    🚨 **분기는 판정이 아니다.** 기록되는 판정은 응답의 `sentences` 다 — 가장 보수적인 전제의 것 (D-263 ①).
+       분기는 「이 제품이 ○○라면」의 결과이고 화면은 **전제 문구와 함께만** 그린다 (D-263 ③).
+       ★ 전제가 필수 칸이라 「전제 없는 통과」가 타입으로 나올 수 없다 (2판 `_no_premise_pass_badge` 를 타입이 대신한다).
+    """
+
+    premise: Premise
+    #: 인정번호를 대조해 확인된 전제인가 (D-263 ⑥). 대조가 되면 기록되는 판정이 이 분기를 따른다
+    verified: bool = False
     outcome: Outcome
     sentences: list[SentenceJudgment] = Field(default_factory=list)
-    #: `outcome=pass` 일 때만 채운다 (D-31 · D-34)
+    #: 기준 문안 — 조문을 인용한 설명 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
+    criteria: str = Field(..., min_length=1)
+    evidence: list[EvidenceArticle] = Field(default_factory=list)
+
+
+class JudgeResponse(BaseModel):
+    """**검수(진입점 A) 응답.** 🚨 검수는 대체 문구를 내지 않는다 — `candidates` 는 늘 빈 목록 (D-265).
+
+    🔄 2026-09-23 (D-274 ~ D-278) — 품목 · 미검수 법 · 분기 칸이 섰다. 기록되는 판정은 `sentences` 다 (D-263 ①).
+    """
+
+    outcome: Outcome
+    #: 🆕 **판별된 품목** — 판정 결과에 속한다 (D-82 · D-277). `None` = 미확정 → 세 법 + 분기 (D-229 ⑥)
+    category: Category | None = None
+    #: 🆕 **미검수 법** — 「○○법 미검수」. 품목이 `전용법_미수록` 이면 비지 않는다 · 제거할 수 없다 (D-271 ⑤ · D-277)
+    not_reviewed: list[str] = Field(default_factory=list)
+    sentences: list[SentenceJudgment] = Field(default_factory=list)
+    #: 🆕 **품목 분기** — 처음에 전부 계산해 담고 화면이 고른다 · 다시 판정하지 않는다 (D-263 ⑦ · D-276)
+    branches: list[Branch] = Field(default_factory=list)
+    #: ⛔ **검수에서는 늘 빈 목록** (D-265). 칸과 검증기 둘은 D-265 문언대로 둔다 — 프론티어는 생성의 것이다
     candidates: list[Candidate] = Field(default_factory=list)
     #: `outcome=certificate` 일 때만 (D-32 · D-125)
     certificate: Certificate | None = None
-    #: 🔴 **0-base.** 총 라운드 K+1=3 이므로 0·1·2 만 (D-126 · ck_judgment_attempt)
+    #: 🔴 **0-base.** 총 라운드 K+1=3 이므로 0·1·2 만 (D-126 · ck_judgment_attempt). 🔄 검수에서는 늘 0 (D-265)
     attempt: int = Field(0, ge=0, le=PARAMS.max_attempt)
     timings: list[Timing] = Field(default_factory=list)
     #: 🚨 개정되면 「재검증 대기」의 판단 근거가 된다 (D-103 ③)
@@ -375,23 +532,106 @@ class JudgeResponse(BaseModel):
                 raise ValueError("outcome=certificate 인데 증명서가 없다 (D-32)")
             if self.certificate.reason is Infeasibility.B:
                 raise ValueError(
-                    "B 실증형에는 증명서를 내지 않는다 — outcome=search_failed 다 (D-59 · D-125)"
+                    "B 실증형에는 증명서를 내지 않는다 — 검수에서는 outcome=guidance(지시)다 (D-59 · D-268)"
                 )
             if self.candidates:
                 raise ValueError("증명서를 내면서 대체 문구를 함께 내지 않는다 (D-59)")
-        if self.outcome is Outcome.search_failed and self.certificate is not None:
-            raise ValueError("B 가 K 를 소진한 것은 「표현 탐색 실패」다 — 증명서가 아니다 (D-125)")
+        if self.outcome is not Outcome.certificate and self.certificate is not None:
+            # 🔄 2026-09-23 — 종전 규칙 「탐색 실패에는 증명서가 없다」를 넓혔다. 탐색 실패는 생성 종착으로 갔다 (D-274)
+            raise ValueError("증명서는 outcome=certificate 일 때만 낸다 (D-32 · D-125)")
         if self.outcome is not Outcome.passed and self.candidates:
             raise ValueError("프론티어는 통과했을 때만 낸다 (D-125)")
         # 🆕 2026-09-21 (전수 재검토 I2) — **루프에 안 들어간 통과**(attempt 0)는 문장이 전부 통과여야 한다 (D-125 ·
-        #    「통과 = 확정 ∧ 위험도 ≤ 주의」). ⛔ 종전에는 미판정·R3 문장이 섞인 `pass` 도 계약을 지났다 — 라우터가
+        #    🔄 D-273 「통과 = 확정 ∧ R0」). ⛔ 종전에는 미판정·R3 문장이 섞인 `pass` 도 계약을 지났다 — 라우터가
         #    위험도를 안 봐도(I1) 여기서 못 잡았다. 🚨 attempt ≥ 1 의 `pass` 는 **대체 문구**의 통과라 원문 판정과 다르다.
         if self.outcome is Outcome.passed and self.attempt == 0:
             bad = [s.sent_id for s in self.sentences if not is_pass(s)]
             if bad:
                 raise ValueError(
-                    f"outcome=pass 인데 통과가 아닌 문장이 있다 — {bad[:5]} (D-125 · 확정 ∧ 위험도 ≤ R1)"
+                    f"outcome=pass 인데 통과가 아닌 문장이 있다 — {bad[:5]} (D-125 · D-273 · 확정 ∧ R0)"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _guidance_payload(self) -> JudgeResponse:
+        # 🆕 D-268 — 「지시」는 확정된 **B 실증형** 위반의 종착이다. 우선순위 보류 > 증명서 > 지시 > 통과 대로 —
+        #    하나라도 확정이 아니면 보류 · A·C 가 섞이면 증명서다.
+        #    사용자가 받는 것 = **뺄 구간 · 실증 자료 종류 · 내려갈 수 있는 등급** (D-265 표) — 없으면 지시가 빈 카드다.
+        if self.outcome is not Outcome.guidance:
+            return self
+        if not self.sentences or any(s.verdict is not Verdict.confirmed for s in self.sentences):
+            raise ValueError(
+                "outcome=guidance 인데 확정이 아닌 문장이 있거나 문장이 없다 — 보류다 (D-268)"
+            )
+        reasons = {s.infeasibility for s in self.sentences if s.infeasibility}
+        if reasons & {Infeasibility.A, Infeasibility.C}:
+            raise ValueError("outcome=guidance 인데 A·C 가 섞였다 — 증명서다 (D-268 우선순위)")
+        subst = [s for s in self.sentences if s.infeasibility is Infeasibility.B and s.violations]
+        if not subst:
+            raise ValueError("outcome=guidance 인데 확정된 B 실증형 위반이 없다 (D-268)")
+        thin = [s.sent_id for s in subst if s.substantiation is None or not s.spans]
+        if thin:
+            raise ValueError(
+                f"지시 문장에 실증 분기나 뺄 구간이 없다 — {thin[:5]} (D-268 · D-265 · D-278)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _recorded_is_conservative(self) -> JudgeResponse:
+        # 🆕 D-263 ① · D-276 결정 2 — **기록되는 판정은 가장 보수적인 경우다.** 검증 안 된 분기가 기록을 낮추지 못한다.
+        #    검증된(인정번호 대조) 분기는 많아야 하나 — 그때는 기록이 그 분기를 따른다 (D-263 ⑥).
+        verified = [b for b in self.branches if b.verified]
+        if len(verified) > 1:
+            raise ValueError(f"검증된 분기가 {len(verified)}개다 — 제품은 하나다 (D-263 ⑥)")
+        if verified:
+            return self
+        recorded = {s.sent_id: s for s in self.sentences}
+        for b in self.branches:
+            for bs in b.sentences:
+                if bs.risk.final is None:
+                    continue
+                r = recorded.get(bs.sent_id)
+                # 🚨 기록에 위험도가 없는데 분기에 있으면 거부 — 없음을 낮음으로 세지 않는다 (D-72)
+                if r is None or r.risk.final is None or r.risk.final.level < bs.risk.final.level:
+                    got = "없음" if r is None or r.risk.final is None else r.risk.final.value
+                    raise ValueError(
+                        f"검증 안 된 분기 {b.premise.value} 의 {bs.sent_id} 가 {bs.risk.final.value} 인데 "
+                        f"기록은 {got} 다 — 기록은 가장 보수적인 경우여야 한다 (D-263 ①)"
+                    )
+        return self
+
+    @model_validator(mode="after")
+    def _branch_hold_has_branches(self) -> JudgeResponse:
+        # 🆕 D-263 ② · D-229 ⑥ — 전제를 몰라 멈췄으면 **선택지(분기)를 준다.**
+        #    ⬜ D-229 ⑥ 의 넓은 규칙 「품목 미확정이면 분기는 언제나」는 **W4(`merge_laws`)가 분기를 만드는 커밋**에서
+        #       검증기로 올린다 — 지금 걸면 분기를 못 만드는 스텁 그래프 응답이 깨진다 (D-192).
+        premise_holds = {HoldReason.cat_unknown, HoldReason.premise_unknown}
+        if any(s.hold_reason in premise_holds for s in self.sentences) and not self.branches:
+            raise ValueError(
+                "전제를 몰라 보류했는데 분기가 없다 — 선택지를 주지 않았다 (D-263 ② · D-229 ⑥)"
+            )
+        premises = [b.premise for b in self.branches]
+        if len(premises) != len(set(premises)):
+            raise ValueError(f"분기 전제가 겹친다 — {[p.value for p in premises]} (D-276)")
+        ids = {s.sent_id for s in self.sentences}
+        stray = sorted({bs.sent_id for b in self.branches for bs in b.sentences} - ids)
+        if stray:
+            raise ValueError(f"분기에 응답에 없는 문장이 있다 — {stray[:5]}")
+        return self
+
+    @model_validator(mode="after")
+    def _uncovered_law_notice(self) -> JudgeResponse:
+        # 🆕 D-271 ⑤ · D-277 — 전용법 품목은 **통과를 내지 않고 미검수 고지를 단다.** 고지는 제거할 수 없다.
+        uncovered = self.category is Category.전용법_미수록
+        if uncovered != bool(self.not_reviewed):
+            raise ValueError(
+                "품목이 전용법_미수록 이면 미검수 법이 있고, 아니면 없다 (D-271 ⑤ · D-277) — "
+                f"category={self.category} not_reviewed={self.not_reviewed}"
+            )
+        if uncovered and self.outcome is Outcome.passed:
+            raise ValueError("전용법 품목에 통과를 냈다 — 안 본 법이 있다 (D-271 ⑤ · D-63)")
+        if not uncovered and any(s.hold_reason is HoldReason.law_uncovered for s in self.sentences):
+            raise ValueError("law_uncovered 보류는 전용법 품목에서만 난다 (D-277)")
         return self
 
     @model_validator(mode="after")
@@ -406,7 +646,7 @@ class JudgeResponse(BaseModel):
 
 
 def is_pass(s: SentenceJudgment) -> bool:
-    """D-125 통과 조건 — 확정 ∧ 위험도 ≤ 주의(R1) (D-130 · D-227 · `PASS_RISK_MAX`).
+    """통과 조건 — 🔄 **확정 ∧ R0** (D-273 · D-125 개정 · `PASS_RISK_MAX`). = 확정 ∧ 위반 없음 (불변식 `_confirmed_risk_invariant`).
 
     🚨 위험도가 없으면(`final is None`) 통과가 아니다 — 없음을 통과로 세지 않는다 (D-72).
     """
@@ -512,16 +752,28 @@ class GenerateRequest(BaseModel):
 
 
 class GenerateResponse(BaseModel):
-    """B 출력 — 프론티어 (D-31 · D-34 N=3).
+    """B 출력 — 프론티어 (D-31 · D-34 N=3). 🔄 D-274 — **종착 칸이 있다**(프론티어 · 탐색 실패 · 보류).
 
     🚨 화면이 축의 뜻을 이미 적어 뒀다 — y 축은 **전환율이나 판매 성과가 아니라**
        원문 대비 정보량 보존율이다. 지어낸 성과 지표를 여기 담지 않는다.
     """
 
+    #: 🆕 생성 종착 (D-274) — 🚨 필수다. 없음을 프론티어로 읽지 않는다 (D-72)
+    outcome: GenerateOutcome
     candidates: list[Candidate] = Field(default_factory=list)
     keywords: list[KeywordScreen] = Field(default_factory=list)
     #: 각색본 — 프로파일이 주어졌을 때만. 🚨 각 결과가 **판정 코어를 다시 지난다** (D-119)
     adapted: list[AdaptedCopy] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _outcome_matches_candidates(self) -> GenerateResponse:
+        # 🆕 D-274 — 프론티어는 후보가 있을 때만, 탐색 실패·보류는 후보 없이 (원문 유지 + 실증 안내 · D-125)
+        if (self.outcome is GenerateOutcome.frontier) != bool(self.candidates):
+            raise ValueError(
+                f"생성 종착 {self.outcome.value} 와 후보 {len(self.candidates)}개가 맞지 않다 — "
+                "프론티어는 후보가 있을 때만이다 (D-274)"
+            )
+        return self
 
     @model_validator(mode="after")
     def _pareto_only(self) -> GenerateResponse:

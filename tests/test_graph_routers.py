@@ -22,6 +22,7 @@ import pytest
 from app.contracts import (
     Category,
     EvidenceArticle,
+    GenerateOutcome,
     HoldReason,
     Infeasibility,
     Outcome,
@@ -74,12 +75,34 @@ def _s(
 
 
 def _ok(sid: str = "s1") -> SentenceJudgment:
-    """통과 문장 — 확정 ∧ 위험도 ≤ 주의 (D-125). ⛔ 위반 + R2 는 불가 사유가 없어도 통과가 아니다(전수 재검토 I1)."""
+    """통과 문장 — 🔄 **확정 ∧ R0** (D-273). ⛔ 위반 + R2 는 불가 사유가 없어도 통과가 아니다(전수 재검토 I1)."""
     return SentenceJudgment(
         sent_id=sid,
         text="문구",
         verdict=Verdict.confirmed,
-        risk=RiskAssessment(floor=Risk.R1, final=Risk.R1),
+        risk=RiskAssessment(floor=Risk.R0, final=Risk.R0),
+    )
+
+
+def _no_reason(sid: str = "s1") -> SentenceJudgment:
+    """🆕 2026-09-23 — **계약이 막는 모양**: 확정 위반인데 불가 사유가 없다 (D-273 결정 3).
+
+    ⛔ 계약 검증을 **건너뛰고**(`model_construct`) 만든다 — 라우터가 계약 밖의 값을 받아도 **보류로 떨어지는지**
+       (fail-closed · D-72) 보려는 것이다. 계약이 막는다고 라우터의 방어를 지우지 않는다.
+    """
+    return SentenceJudgment.model_construct(
+        sent_id=sid,
+        text="문구",
+        verdict=Verdict.confirmed,
+        hold_reason=None,
+        violations=[Violation.거짓_과장],
+        infeasibility=None,
+        evidence=[법],
+        risk=RiskAssessment(floor=Risk.R2, final=Risk.R2),
+        evidence_mismatch=False,
+        not_claim=False,
+        spans=[],
+        substantiation=None,
     )
 
 
@@ -102,9 +125,9 @@ def _ok(sid: str = "s1") -> SentenceJudgment:
         ([_s(Verdict.confirmed, infeas=Infeasibility.B)], "guidance"),
         ([_ok()], "passed"),
         # 🔴 전수 재검토 I1 — 확정이어도 위험도 > 주의 · 위험도 없음은 통과가 아니다 (D-125)
-        ([_s(Verdict.confirmed)], "hold"),
+        ([_no_reason()], "hold"),
         ([SentenceJudgment(sent_id="s1", text="문구", verdict=Verdict.confirmed)], "hold"),
-        ([_ok("s1"), _s(Verdict.confirmed, sid="s2")], "hold"),
+        ([_ok("s1"), _no_reason("s2")], "hold"),
         # 우선순위 — 보류 > 증명서 > 지시 > 통과
         ([_s(Verdict.confirmed, infeas=Infeasibility.B), _s(Verdict.hold, sid="s2")], "hold"),
         ([_s(Verdict.confirmed, infeas=Infeasibility.B), _ok("s2")], "guidance"),
@@ -175,7 +198,7 @@ def test_라우터가_선언한_갈래만_낸다() -> None:
         [_s(Verdict.hold)],
         [_s(Verdict.confirmed, infeas=Infeasibility.A)],
         [_s(Verdict.confirmed, infeas=Infeasibility.B)],
-        [_s(Verdict.confirmed)],
+        [_no_reason()],
         [_ok()],
     ):
         assert route_review({"sentences": sents}) in ROUTES_REVIEW  # type: ignore[arg-type]
@@ -191,7 +214,11 @@ def test_라우터가_선언한_갈래만_낸다() -> None:
     ("category", "want"),
     [
         (None, ("law_ftc", "law_food", "law_cosmetic")),  # 🚨 미확정이면 언제나 전부 (D-229 ⑥)
-        (Category.일반, ("law_ftc",)),  # 🔄 D-271 — 일반 상품 → 표시광고법만 (D-229 ② 개정)
+        (Category.일반상품, ("law_ftc",)),  # 🔄 D-271 — 일반 상품 → 표시광고법만 (D-229 ② 개정)
+        (
+            Category.전용법_미수록,
+            ("law_ftc",),
+        ),  # 🆕 D-277 — 우리가 가진 법은 표시광고법뿐 · 통과 금지는 계약이 본다
         (Category.식품, ("law_ftc", "law_food")),
         (Category.건기식, ("law_ftc", "law_food")),
         (Category.화장품, ("law_ftc", "law_cosmetic")),
@@ -199,6 +226,21 @@ def test_라우터가_선언한_갈래만_낸다() -> None:
 )
 def test_품목이_법을_고른다(category: Category | None, want: tuple[str, ...]) -> None:
     assert laws_for(category) == want
+
+
+@pytest.mark.gate
+def test_품목을_청크_범주로_넘기는_다리는_W6_전까지_일반으로_보낸다() -> None:
+    """🔜 W6 에서 지운다 (D-271 ③). 🔄 W3 — 계약의 새 품목 이름을 청크 필터로 그대로 넘기면 **0건**이 된다.
+
+    ⛔ 청크 값은 정본 B 재생성(0019) 전까지 「일반」이다. 오류 없이 근거가 비는 자리라 게이트로 박는다.
+    """
+    from app.graph import _chunk_category  # noqa: PLC0415
+    from app.settings import DEFAULT_CATEGORY  # noqa: PLC0415
+
+    assert _chunk_category(None) == DEFAULT_CATEGORY
+    assert _chunk_category(Category.일반상품) == DEFAULT_CATEGORY
+    assert _chunk_category(Category.전용법_미수록) == DEFAULT_CATEGORY
+    assert _chunk_category(Category.식품) == "식품"
 
 
 @pytest.mark.gate
@@ -270,11 +312,9 @@ def test_노드마다_계측이_남는다() -> None:
 
 
 @pytest.mark.gate
-def test_지시는_W3_전까지_보류로_끝난다() -> None:
-    """🔜 D-268 — `Outcome.guidance` 는 계약(W3)에서 선다. 그 전까지 **보류**다 — 통과도 증명서도 아니다.
-    🚨 계약에 값이 서면 이 테스트가 빨간불을 낸다 — 그때 노드와 이 테스트를 같이 고친다."""
-    assert "guidance" not in {o.value for o in Outcome}, "🔜 계약에 지시가 섰다 — 노드를 고친다"
-    assert REVIEW_TERMINALS["guidance"]({})["outcome"] is Outcome.hold  # type: ignore[arg-type]
+def test_지시_종착은_계약의_지시를_낸다() -> None:
+    """🔄 2026-09-23 (W3) — `Outcome.guidance` 가 섰다 (D-268 · D-274). 종전에는 보류로 끝냈다."""
+    assert REVIEW_TERMINALS["guidance"]({})["outcome"] is Outcome.guidance  # type: ignore[arg-type]
 
 
 @pytest.mark.gate
@@ -283,7 +323,7 @@ def test_생성_스텁이_한_바퀴_돈다() -> None:
     state, visited = run_generate_stub()
     assert visited == ["keyword_screen", "assemble", "claim_ledger", "rejudge", "frontier"]
     assert state["attempt"] == 0
-    assert state["outcome"] is Outcome.passed
+    assert state["outcome"] is GenerateOutcome.frontier  # 🔄 D-274 — 생성 종착
 
 
 def _always_reject():  # noqa: ANN202
@@ -304,7 +344,7 @@ def test_재생성은_K_더하기_1_라운드에서_멈춘다(monkeypatch: pytes
     assert visited.count("assemble") == MAX_ATTEMPT + 1
     assert state["attempt"] == MAX_ATTEMPT
     assert visited[-1] == "search_failed"
-    assert state["outcome"] is Outcome.search_failed
+    assert state["outcome"] is GenerateOutcome.search_failed  # 🔄 D-274 — 생성 종착
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -409,7 +449,7 @@ def _init(text: str = "문구", category: Category | None = None) -> dict:
         (None, None, "hold"),  # 스텁 판정(unjudged) → 보류
         (None, Category.화장품, "hold"),  # 🆕 법 둘만 — 팬아웃 폭이 달라도 모음은 한 번
         ([_ok()], None, "passed"),
-        ([_s(Verdict.confirmed)], None, "hold"),  # 🔴 I1
+        ([_no_reason()], None, "hold"),  # 🔴 I1 · 🔄 계약이 막는 모양도 보류로 (D-273)
         ([_s(Verdict.confirmed, infeas=Infeasibility.A)], None, "certificate"),
         ([_s(Verdict.confirmed, infeas=Infeasibility.C)], Category.식품, "certificate"),
         ([_s(Verdict.confirmed, infeas=Infeasibility.B)], None, "guidance"),
@@ -448,7 +488,7 @@ def test_모든_종착이_outcome_을_적는다() -> None:
 @pytest.mark.gate
 def test_컴파일본에서_문장이_실제로_쌓인다(monkeypatch: pytest.MonkeyPatch) -> None:
     """🚨 리듀서 **실증**이다 (D-124 ③). 선언이 맞아도 실제로 append 하는지는 돌려 봐야 안다."""
-    three = [_s(Verdict.confirmed, sid=f"s{i}") for i in range(3)]
+    three = [_s(Verdict.confirmed, infeas=Infeasibility.B, sid=f"s{i}") for i in range(3)]
     monkeypatch.setitem(NODES, "judge", _judge_stub(three))
     out = build_review().invoke(_init())
     assert len(out["sentences"]) == 3, "🚨 문장이 덮어써졌다 — `sentences` 리듀서를 본다"

@@ -1,26 +1,24 @@
 {
-  "outcome": "hold",
-  "category": null,
+  "outcome": "pass",
+  "category": "일반상품",
   "not_reviewed": [],
   "sentences": [
     {
       "sent_id": "s1",
-      "text": "원료 수급이 어려워 한정 수량만 준비했습니다.",
-      "verdict": "no_basis",
+      "text": "결혼을 앞둔 분들이나 바쁜 직장인을 위한 제품입니다.",
+      "verdict": "confirmed",
       "hold_reason": null,
-      "violations": [
-        "거짓_과장"
-      ],
+      "violations": [],
       "infeasibility": null,
       "evidence": [],
       "risk": {
-        "floor": "R1",
+        "floor": "R0",
         "encoder": null,
-        "final": "R1",
+        "final": "R0",
         "evidence_span": null
       },
       "evidence_mismatch": false,
-      "not_claim": false,
+      "not_claim": true,
       "spans": [],
       "substantiation": null
     }

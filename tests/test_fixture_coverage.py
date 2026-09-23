@@ -20,7 +20,16 @@ from pathlib import Path
 
 import pytest
 
-from app.contracts import HoldReason, Infeasibility, Outcome, Risk, Verdict
+from app.contracts import (
+    Category,
+    GenerateOutcome,
+    HoldReason,
+    Infeasibility,
+    Outcome,
+    Premise,
+    Risk,
+    Verdict,
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -31,7 +40,12 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 #: ⛔ 값 문자열만 훑지도 않는다 — `Outcome.hold` 와 `Verdict.hold` 가 같은 글자라
 #:    한쪽만 덮여도 둘 다 덮인 것으로 읽힌다. **축은 키로 가른다** (D-167).
 _AXES: tuple[tuple[type, tuple[str, ...]], ...] = (
-    (Outcome, ("outcome",)),
+    #: 🔄 2026-09-23 — 종착이 진입점마다 갈렸다 (D-274). 두 목록이 **같은 키 `outcome`** 에 실리고 `hold` 가 겹쳐서,
+    #:    키만으로 가르면 생성 보류가 검수 보류로 덮인 것으로 읽혔다(실측). **`진입점:키`** 로 픽스처 폴더까지 가른다.
+    (Outcome, ("judge:outcome",)),
+    (GenerateOutcome, ("generate:outcome",)),
+    (Category, ("category",)),  # 🆕 D-271 · D-277 — 품목 (「일반」 없음)
+    (Premise, ("premise",)),  # 🆕 D-276 — 분기 전제
     (Verdict, ("verdict",)),
     (HoldReason, ("hold_reason",)),
     (Infeasibility, ("infeasibility", "reason")),
@@ -41,32 +55,41 @@ _AXES: tuple[tuple[type, tuple[str, ...]], ...] = (
 #: 🚨 **덮지 못한 값과 그 사유.** 사유 없는 예외는 두지 않는다.
 KNOWN_GAPS: dict[str, str] = {
     "HoldReason.gap2": (
-        "1·2위 격차 부족 — **인코더가 있어야 나오는 상태**다. 스텁으로는 만들 수 없고, "
-        "지어내면 화면이 가짜 모양에 붙는다 (D-147). T2 인코더 뒤에 픽스처를 만든다"
+        "코드 하한 ↔ 모델 예측 **2등급 차**(D-127 · 3-5 ③) — **인코더가 있어야 나오는 상태**다. 스텁으로는 만들 수 없고, "
+        "지어내면 화면이 가짜 모양에 붙는다 (D-147). T2 인코더 뒤에 픽스처를 만든다. "
+        "🔄 2026-09-23 — 종전 사유 「1·2위 격차 부족」은 원장과 달랐다"
     ),
-    "Risk.R0": (
-        "특이사항 없음 — 위반 문장이 **하나도 없는** 응답이라 판정 픽스처의 대상이 아니다. "
-        "⬜ 화면에 「위반 없음」 화면이 있다면 그때 픽스처가 하나 필요하다 (SCR 미정)"
+    "Risk.R4": (
+        "도달 불가 — 형벌은 R 축에 얹지 않는다(`penal_clause` · D-182 · D-227). "
+        "🔄 2026-09-23 — R4 를 쓰던 픽스처 둘(06 · compose/14)을 R3 로 고쳤다. 되살리려면 D-182 개정이 먼저다"
+    ),
+    "GenerateOutcome.hold": (
+        "생성 보류 — 생성 그래프에 보류 종착 노드가 아직 없다(W9 · D-266 표에만 있다). "
+        "지어내면 화면이 가짜 모양에 붙는다 (D-147). 노드가 서는 커밋에서 픽스처를 만든다"
     ),
 }
 
 
 def _seen() -> dict[str, set[str]]:
-    """픽스처 전부에서 키별로 등장한 문자열 값. 🚨 중첩을 끝까지 훑는다."""
+    """픽스처 전부에서 키별로 등장한 문자열 값. 🚨 중첩을 끝까지 훑는다.
+
+    🆕 2026-09-23 — 키를 **두 벌**로 적는다: `키` 와 `진입점:키`(픽스처 폴더 이름). 같은 키가 진입점마다 다른 축일 때 쓴다.
+    """
     out: dict[str, set[str]] = {}
 
-    def walk(o: object) -> None:
+    def walk(o: object, kind: str) -> None:
         if isinstance(o, dict):
             for k, v in o.items():
                 if isinstance(v, str):
                     out.setdefault(k, set()).add(v)
-                walk(v)
+                    out.setdefault(f"{kind}:{k}", set()).add(v)
+                walk(v, kind)
         elif isinstance(o, list):
             for v in o:
-                walk(v)
+                walk(v, kind)
 
     for p in sorted(FIXTURES.rglob("*.json")):
-        walk(json.loads(p.read_text(encoding="utf-8")))
+        walk(json.loads(p.read_text(encoding="utf-8")), p.parent.name)
     return out
 
 
