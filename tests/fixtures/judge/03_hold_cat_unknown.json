@@ -1,21 +1,186 @@
 {
   "outcome": "hold",
+  "category": null,
+  "not_reviewed": [],
   "sentences": [
     {
       "sent_id": "s1",
-      "text": "매일 한 포씩 챙기세요.",
+      "text": "면역력 강화에 도움을 줍니다.",
       "verdict": "hold",
       "hold_reason": "cat_unknown",
-      "violations": [],
-      "infeasibility": null,
-      "evidence": [],
+      "violations": [
+        "건강기능식품_오인"
+      ],
+      "infeasibility": "A",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": null
+        }
+      ],
       "risk": {
-        "floor": "R1",
+        "floor": "R2",
         "encoder": null,
-        "final": "R1",
+        "final": "R2",
         "evidence_span": null
       },
-      "evidence_mismatch": false
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
+    }
+  ],
+  "branches": [
+    {
+      "premise": "식품",
+      "verified": false,
+      "outcome": "certificate",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "면역력 강화에 도움을 줍니다.",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [
+            "건강기능식품_오인"
+          ],
+          "infeasibility": "A",
+          "evidence": [
+            {
+              "law_id": "013094",
+              "article": "제8조",
+              "item": "제1항제3호",
+              "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+              "chunk_id": null
+            }
+          ],
+          "risk": {
+            "floor": "R2",
+            "encoder": null,
+            "final": "R2",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 일반식품이 기능성을 표방하면 건강기능식품으로 오인하게 하는 광고입니다 — 식품표시광고법 제8조제1항제3호. 원료를 함유했다는 것만으로 제품이 인정을 받은 것은 아닙니다.",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": null,
+          "chunk_id": null
+        }
+      ]
+    },
+    {
+      "premise": "건기식_인정",
+      "verified": false,
+      "outcome": "pass",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "면역력 강화에 도움을 줍니다.",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [],
+          "infeasibility": null,
+          "evidence": [],
+          "risk": {
+            "floor": "R0",
+            "encoder": null,
+            "final": "R0",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 이 기능성으로 인정받은 건강기능식품이라면 인정받은 문구의 범위에서 표시할 수 있습니다 — 인정번호가 대조되면 「검증됨」으로 바뀝니다.",
+      "evidence": []
+    },
+    {
+      "premise": "화장품",
+      "verified": false,
+      "outcome": "certificate",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "면역력 강화에 도움을 줍니다.",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [
+            "의약품_오인"
+          ],
+          "infeasibility": "C",
+          "evidence": [
+            {
+              "law_id": "008741",
+              "article": "제22조",
+              "item": "별표5 제2호가목",
+              "quote": null,
+              "chunk_id": null
+            }
+          ],
+          "risk": {
+            "floor": "R2",
+            "encoder": null,
+            "final": "R2",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 화장품이라면 질병을 예방·치료하는 효능으로 읽히는 표현은 의약품으로 오인하게 하는 광고입니다 — 화장품법 시행규칙 별표5. 표현을 바꿔도 같은 주장이면 같은 위반입니다.",
+      "evidence": [
+        {
+          "law_id": "008741",
+          "article": "제22조",
+          "item": "별표5 제2호가목",
+          "quote": null,
+          "chunk_id": null
+        }
+      ]
+    },
+    {
+      "premise": "일반상품",
+      "verified": false,
+      "outcome": "hold",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "면역력 강화에 도움을 줍니다.",
+          "verdict": "hold",
+          "hold_reason": "low_conf",
+          "violations": [],
+          "infeasibility": null,
+          "evidence": [],
+          "risk": {
+            "floor": "R1",
+            "encoder": null,
+            "final": "R1",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 식품·화장품이 아닌 일반 상품이라면 표시광고법만 적용됩니다 — 효능 주장의 사실 여부를 알 수 없어 보류합니다.",
+      "evidence": []
     }
   ],
   "candidates": [],
@@ -33,12 +198,8 @@
     {
       "node": "판정",
       "ms": 91.3
-    },
-    {
-      "node": "생성",
-      "ms": 0.0
     }
   ],
   "law_version": "2026-09-10",
-  "judged_by": "stub-0.1.0"
+  "judged_by": "stub-0.2.0"
 }

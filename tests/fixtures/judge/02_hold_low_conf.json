@@ -1,5 +1,7 @@
 {
   "outcome": "hold",
+  "category": null,
+  "not_reviewed": [],
   "sentences": [
     {
       "sent_id": "s1",
@@ -25,9 +27,13 @@
         "final": "R2",
         "evidence_span": null
       },
-      "evidence_mismatch": false
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
     }
   ],
+  "branches": [],
   "candidates": [],
   "certificate": null,
   "attempt": 0,
@@ -43,12 +49,8 @@
     {
       "node": "판정",
       "ms": 91.3
-    },
-    {
-      "node": "생성",
-      "ms": 0.0
     }
   ],
   "law_version": "2026-09-10",
-  "judged_by": "stub-0.1.0"
+  "judged_by": "stub-0.2.0"
 }

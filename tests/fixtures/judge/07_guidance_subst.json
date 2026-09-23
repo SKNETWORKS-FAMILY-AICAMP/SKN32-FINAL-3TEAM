@@ -1,0 +1,70 @@
+{
+  "outcome": "guidance",
+  "category": "식품",
+  "not_reviewed": [],
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "소비자 선호도 11년 연속 1위",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [
+        "거짓_과장"
+      ],
+      "infeasibility": "B",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제4호",
+          "quote": "거짓·과장된 표시 또는 광고",
+          "chunk_id": null
+        }
+      ],
+      "risk": {
+        "floor": "R2",
+        "encoder": null,
+        "final": "R2",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [
+        {
+          "start": 0,
+          "end": 17,
+          "label": "거짓_과장"
+        }
+      ],
+      "substantiation": {
+        "substantiated_max": "R1",
+        "accepted_evidence": [
+          "시험 또는 조사 결과",
+          "전문가 견해",
+          "학술문헌"
+        ],
+        "criteria": "(초안) 「11년 연속 1위」는 조사 기관 · 조사 기간 · 표본을 밝힌 객관적 근거가 있어야 합니다. 수상 · 인증 · 특허는 실증 자료가 아닙니다 (식품 시행규칙 제9조①)."
+      }
+    }
+  ],
+  "branches": [],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.2.0"
+}
