@@ -129,12 +129,48 @@ def by_person(paths: list[pathlib.Path] | None = None) -> dict[str, dict[str, st
     return dict(got)
 
 
+#: 🆕 D-262 — 여러 사람 답의 관계. `labels.consensus()` 와 `label_round.compare` 가 **같은 규칙**을 쓴다 (D-99).
+AGREED, PARTIAL, SPLIT = "합의", "부분합의", "갈림"
+
+
+def agreement(
+    answers: list[frozenset[str]], out_token: str
+) -> tuple[str, frozenset[str], frozenset[str]]:
+    """답 여럿 → (관계, 합의된 유형, 갈린 유형). 🆕 2026-09-22 (D-262 · D-252 개정).
+
+    ★ **다중 라벨은 유형마다 따로 본다** — {8} 과 {5,8} 은 8 에서 합의했고 5 에서만 갈렸다.
+       ⛔ 종전에는 라벨 **묶음 전체**가 같아야 합의였다. 공유한 유형까지 갈림으로 버려져 평가에서 빠졌다.
+    🚨 **범위밖(`out_token`)은 유형과 섞이지 않는다** — 한 사람은 범위밖, 다른 사람은 유형이면 갈림이다.
+       범위밖은 「유형이 하나 적다」가 아니라 **다른 판단**이다 (D-242).
+    🚨 다수결은 없다 — 한 사람이라도 다르면 그 유형은 갈린다(판정자가 본다).
+    """
+    if not answers:
+        return SPLIT, frozenset(), frozenset()
+    outs = [out_token in a for a in answers]
+    if any(outs):
+        if all(a == frozenset({out_token}) for a in answers):
+            return AGREED, frozenset({out_token}), frozenset()
+        return SPLIT, frozenset(), frozenset().union(*answers)
+    union = frozenset().union(*answers)
+    inter = frozenset.intersection(*answers)
+    if inter == union:
+        return AGREED, inter, frozenset()
+    return (PARTIAL if inter else SPLIT), inter, union - inter
+
+
+def _types(v: str) -> frozenset[str]:
+    return frozenset(x for x in v.split("|") if x)
+
+
 def consensus() -> tuple[dict[str, dict], dict[str, int]]:
-    """{키: 레코드} — **2인 이상이 붙였으면 일치한 것만** 남긴다.
+    """{키: 레코드} — **2인 이상이 붙였으면 합의한 것만** 남긴다.
 
     🚨 갈린 것을 다수결로 정하지 않는다. 라벨이 갈렸다는 것은 **문구가 애매하다**는
-       사실이고, 그 사실을 다수결로 지우면 평가셋이 조용히 쉬워진다 (D-172).
-       갈린 것은 세어서 낸다 — 붙인 사람들이 다시 본다.
+       사실이고, 그 사실을 다수결로 지우면 평가셋이 조용히 쉬워진다.
+       갈린 것은 세어서 낸다 — 판정자가 본다.
+    🔄 2026-09-22 (D-262) — **유형별로 합의를 본다.** 부분합의(공유한 유형이 있고 일부 유형만 갈림)는
+       `stat["부분합의"]` 로 세고 **아직 내보내지 않는다** — 갈린 유형을 음성으로 두면 모델이 그 유형을 맞혀도
+       오탐으로 채점된다. 판정표에서 갈린 유형만 정하면 판정 레코드로 들어온다.
     """
     # 🔄 2026-09-20 — ① 사람은 **`붙인이`** 로 센다(한 사람의 두 파일이 둘로 세지 않게)
     #                 ② **판정 레코드가 앞선다** — 갈린 행을 판정자(팀장)가 본 것이다. 다수결이 아니다
@@ -157,12 +193,14 @@ def consensus() -> tuple[dict[str, dict], dict[str, int]]:
     for k, people in by.items():
         if k in decided:
             continue
-        labs = {verdict(r) for r in people.values()}
-        if len(labs) > 1:
-            stat["갈림"] += 1
+        if len(people) < 2:
+            stat["1인"] += 1
+            got[k] = next(iter(people.values()))
             continue
-        stat["합의" if len(people) > 1 else "1인"] += 1
-        got[k] = next(iter(people.values()))
+        rel, _, _ = agreement([_types(verdict(r) or "") for r in people.values()], OUT_OF_SCOPE)
+        stat[rel] += 1
+        if rel == AGREED:
+            got[k] = next(iter(people.values()))
     return got, dict(stat)
 
 

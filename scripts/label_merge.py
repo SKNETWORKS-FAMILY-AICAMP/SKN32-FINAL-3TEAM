@@ -77,6 +77,37 @@ def kappa(a: dict[str, str], b: dict[str, str]) -> tuple[float, int, int]:
     return k, n, agree
 
 
+def kappa_by_type(data: dict[str, dict[str, str]]) -> dict[str, tuple[float, int]]:
+    """유형마다 「붙었나/안 붙었나」 이진 κ — 모든 사람 쌍을 모아서. 🆕 2026-09-22 (D-262).
+
+    ★ **다중 라벨의 일치도는 유형별로 잰다.** 묶음 κ(`kappa`)는 {8} 과 {5,8} 을 **다른 범주**로 세어
+       8 에서 합의한 사실까지 지운다 — 어느 유형의 경계가 흔들리는지도 안 보인다.
+    🚨 범위밖이 낀 쌍은 뺀다 — 범위밖은 유형이 없는 게 아니라 **다른 판단**이다(묶음 κ 가 센다).
+    반환 — {유형: (κ, 쌍 수)}. κ 가 정의되지 않으면 nan.
+    """
+    pairs: dict[str, list[tuple[bool, bool]]] = collections.defaultdict(list)
+    types = sorted(
+        {t for d in data.values() for v in d.values() for t in v.split("|")}
+        - {store.OUT_OF_SCOPE, ""}
+    )
+    for x, y in itertools.combinations(data, 2):
+        for k in set(data[x]) & set(data[y]):
+            a, b = data[x][k], data[y][k]
+            if store.OUT_OF_SCOPE in (a, b):
+                continue
+            sa, sb = set(a.split("|")), set(b.split("|"))
+            for t in types:
+                pairs[t].append((t in sa, t in sb))
+    got = {}
+    for t, pr in pairs.items():
+        n = len(pr)
+        po = sum(a == b for a, b in pr) / n
+        p1, p2 = sum(a for a, _ in pr) / n, sum(b for _, b in pr) / n
+        pe = p1 * p2 + (1 - p1) * (1 - p2)
+        got[t] = (float("nan") if pe >= 1 else (po - pe) / (1 - pe), n)
+    return got
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="라벨 취합 · 일치도 (κ)")
     ap.add_argument("paths", nargs="+", help="사람마다 채운 labelsheet 파일들")
@@ -111,6 +142,13 @@ def main() -> int:
         worst = min(worst, k)
         mark = "✅" if k >= 0.8 else ("🟡" if k >= 0.6 else "🔴")
         print(f"  {x} ↔ {y}: κ={k:.3f} {mark}  (겹침 {n} · 일치 {agree})")
+    print("     ⚠ 위는 **묶음 κ** 다 — {8} 과 {5,8} 을 다른 범주로 센다(참고).")
+    print("\n일치도 — **유형별** 이진 κ (D-262 · 모든 쌍 · 범위밖 쌍 제외) —")
+    for t, (k, n) in sorted(
+        kappa_by_type(data).items(), key=lambda kv: -(kv[1][0] if kv[1][0] == kv[1][0] else -9)
+    ):
+        mark = "✅" if k >= 0.8 else ("🟡" if k >= 0.6 else "🔴")
+        print(f"  {t:14} κ={k:.2f} {mark}  (쌍 {n})")
     print("     ★ 0.8 이상이면 「우리 라벨은 재현된다」고 말할 수 있다.")
     print("     🔴 0.6 미만이면 라벨이 아니라 **지시서를 고친다** — 사람 탓이 아니다.")
 
