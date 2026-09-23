@@ -1736,7 +1736,7 @@ def test_HTML_을_긁는_소스는_robots_확인_기록이_있다() -> None:
 # 🚨 **완전 차단은 불가능하다.** `app` 을 안 거치고 langchain 을 직접 쓰면 그만이다.
 #    그래서 「막았다」고 적지 않는다. 여기서 하는 일은 둘이다 —
 #      ① 저장소의 기본값이 꺼짐인지 본다   ② 지금 이 환경에서 꺼져 있는지 본다
-#    실행 경로에서 멈추는 것은 `app.graph.build_graph()` 가 맡는다 (D-220 fail-closed).
+#    실행 경로에서 멈추는 것은 `app.graph._require_tracing_off()` 가 맡는다 — 모든 `build_*` 가 부른다 (D-220 fail-closed · D-266).
 
 TRACING_VARS = ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING")
 

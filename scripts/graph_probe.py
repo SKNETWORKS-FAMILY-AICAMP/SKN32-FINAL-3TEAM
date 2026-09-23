@@ -67,15 +67,9 @@ def main(argv: list[str]) -> int:
 
     try:
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
-            out = g.build_graph().invoke(
-                {
-                    "text": text,
-                    "product": ProductContext(category=category),
-                    "sentences": [],
-                    "rejects": [],
-                    "timings": [],
-                    "attempt": 0,
-                },
+            # 🔄 2026-09-23 — 검수 그래프(코어 서브그래프 + 종착 넷 · D-266). 입력은 `CORE_IN` 둘뿐이다.
+            out = g.build_review().invoke(
+                {"text": text, "product": ProductContext(category=category)},
                 # 🚨 커서를 여기로 넣는다. 노드가 스스로 connect() 하면 문장마다 연결이 열린다.
                 config={"configurable": {"conn": cur}},
             )
@@ -85,7 +79,7 @@ def main(argv: list[str]) -> int:
         print("   uv run python launcher.py db-up")
         return 1
 
-    print(f"\n문구  {text}   ·   카테고리  {category.value}\n")
+    print(f"\n문구  {text}   ·   카테고리  {category.value}   ·   법  {', '.join(out['laws'])}\n")
     for e in out["evidence"]:
         # 🚨 `vector`·`lexical` 은 「돌았나」다. `pool` 0 은 「안 겹쳤다」이고
         #    `lexical=False` 는 「검색어를 못 만들었다」다 — 다른 사건이다 (D-202).
