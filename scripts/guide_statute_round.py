@@ -166,21 +166,29 @@ def agree(a: dict, b: dict) -> tuple[dict | None, str]:
             None,
             "원천결손",
         )  # 🔄 09-24 밤 — 둘 다 D 면 채택(아래) · 갈리면 시트 (지시서 §5 · ④′)
+    cond, dissent = a["조건"], []
     if a["조건"] != b["조건"]:
-        return None, f"조건 {a['조건']}≠{b['조건']}"
+        # 🔄 2026-09-25 (D-285 개정) — **보수 합성**: C 와 A·B 가 갈리면 더 엄격한 C 로 · 이견을 남긴다.
+        #    제외목은 교집합(③)이고 기록되는 판정은 가장 보수적인 전제다(D-263 ①) — 같은 논리다.
+        #    A↔B 는 엄격함의 순서가 없어 시트로 · 기대 응답이 갈리는 쌍(M·D)은 시트로.
+        if {a["조건"], b["조건"]} not in ({"A", "C"}, {"B", "C"}):
+            return None, f"조건 {a['조건']}≠{b['조건']}"
+        cond, dissent = "C", sorted((a["조건"], b["조건"]))
     base = {
-        "조건": a["조건"],
-        "제외목": sorted(set(a["제외목"]) & set(b["제외목"])),
+        "조건": cond,
+        # 합성된 C 는 예외 경로가 없다는 뜻이라 제외목을 싣지 않는다 — 이견은 `조건_이견` 과 원자료에 남는다
+        "제외목": [] if dissent else sorted(set(a["제외목"]) & set(b["제외목"])),
         "원천결손": gap,
+        "조건_이견": dissent,
     }
-    if a["조건"] == "D":
+    if cond == "D":
         return {**base, "근거": [], "제외목": []}, ""
     ha = {statute.ho_key(c): statute.parse(c)[4] for c in a["근거"]}
     hb = {statute.ho_key(c): statute.parse(c)[4] for c in b["근거"]}
-    if a["조건"] == "M" and (not ha or not hb or set(ha) != set(hb)):
+    if cond == "M" and (not ha or not hb or set(ha) != set(hb)):
         return {**base, "근거": []}, ""  # 🔄 D-285 개정 — M 은 호를 추측으로 채우지 않는다
     if not ha or not hb:
-        return None, f"조건 {a['조건']} 인데 근거가 없다"
+        return None, f"조건 {cond} 인데 근거가 없다"
     common = set(ha) & set(hb)
     if not common:
         return None, "호 " + ",".join(sorted(ha)) + " ≠ " + ",".join(sorted(hb))
@@ -190,6 +198,42 @@ def agree(a: dict, b: dict) -> tuple[dict | None, str]:
         mok = ha[h] if ha[h] == hb[h] else None
         cites.append(statute.cite(law, jo, hang, ho, mok))
     return {**base, "근거": cites}, ""
+
+
+#: 🆕 2026-09-25 (D-289) — **표시요건**: 같은 광고 안에 밝혀야 적법해지는 것. 조문이 무엇을 밝히라는지 정한다 →
+#: 부류별 규칙으로 붙인다(판독 메모 「표시요건」 + 문구 부류). 🚨 부류를 못 가리면 「미분류」로 **보이게** 남긴다 (D-220)
+DISCLOSURE: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (r"1위|1등|No\.? ?1|넘버원|순위", ("조사대상", "조사기관", "조사기간")),  # 고시 69549 4.나
+    (
+        r"논문|연구|학회|임상|저널|인체시험|인체적용|발표",
+        ("연구자", "문헌명", "발표 연월일"),
+    ),  # [별표 1] 5.가 단서
+    (
+        r"성적서|검사|검증된|불검출|검출되지|기준에 적합",
+        ("시험·검사성적서 전문",),
+    ),  # 고시 69549 3.아
+    (r"100 ?%", ("첨가물 명칭 괄호 병기",)),  # 고시 69549 3.카
+)
+
+
+#: 3.나(기능성 고시)는 **법이 표시를 함께 요구한다** — 고시 75449 제6조(기능성 원재료·함량·1일 섭취기준량 ·
+#: 「본 제품은 건강기능식품이 아닙니다」). 판독 메모와 무관하게 붙는다 (A + 표시 · D-289 표 4번)
+FUNC_DISCLOSURE = ("기능성 고시 제6조 필수 표시",)
+
+
+def disclosure_of(text: str, a: dict, b: dict, exc: list[str] | None = None) -> list[str]:
+    """두 판독 중 하나라도 메모에 「표시요건」을 적었으면 문구 부류로 무엇을 밝혀야 하는지 붙인다.
+
+    합집합이다 — 밝혀야 할 것을 빠뜨리면 분기가 「입증하면 된다」로 틀리게 안내한다(D-289 맥락 3).
+    """
+    if exc and "3.나" in exc:
+        return list(FUNC_DISCLOSURE)
+    if "표시요건" not in a["메모"] + b["메모"]:
+        return []
+    for rx, need in DISCLOSURE:
+        if re.search(rx, text):
+            return list(need)
+    return ["미분류"]
 
 
 #: 3.나(기능성 고시)를 적을 수 있는 원천 제품유형 — 지시서 §3 ⑦ · D-288. 고시 제3조② 가 나머지를 뺀다
@@ -259,7 +303,15 @@ def merge(
             sheet.append({**head, "_우선": _priority(a[k], b[k])})
             continue
         adopted.append(
-            {**head, **got, "labels": statute.types_of(got["근거"]), "판독": "독립판독_합의"}
+            {
+                **head,
+                **got,
+                "표시요건": disclosure_of(s["문구"], a[k], b[k], got["제외목"])
+                if got["조건"] in "ABC"
+                else [],
+                "labels": statute.types_of(got["근거"]),
+                "판독": "독립판독_합의",
+            }
         )
     with ADOPTED.open("w", encoding="utf-8", newline="\n") as f:
         for r in adopted:

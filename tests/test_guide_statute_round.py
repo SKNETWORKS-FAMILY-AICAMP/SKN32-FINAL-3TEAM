@@ -34,6 +34,7 @@ def test_목이_다르면_호까지만() -> None:
 @pytest.mark.gate
 def test_조건이나_호가_다르면_시트로() -> None:
     assert g.agree(_r(cond="B"), _r(cond="M"))[0] is None
+    assert g.agree(_r(cond="A"), _r(cond="B"))[0] is None  # A↔B 는 엄격함의 순서가 없다
     assert g.agree(_r("4.라"), _r("3"))[0] is None
     assert g.agree(_r("4", "5"), _r("6"))[0] is None  # 전혀 안 겹치면 시트
 
@@ -98,3 +99,29 @@ def test_원천결손은_둘_다_D_면_채택한다() -> None:
     """🔄 09-24 밤 — 블록 제목은 D · 원천결손으로 남는다. 판정 대상 아님이지 적법이 아니다 (지시서 §7 선행 게이트)."""
     got, _ = g.agree(_r("-", cond="D", gap="Y"), _r("-", cond="D"))
     assert got["조건"] == "D" and got["원천결손"] is True and got["근거"] == []
+
+
+@pytest.mark.gate
+def test_C_와_A_B_가_갈리면_보수_합성() -> None:
+    """🔄 09-25 (D-285 개정) — 더 엄격한 C · 이견을 남긴다 · 제외목은 교집합이라 비는 것이 보통이다."""
+    got, _ = g.agree(_r("3", cond="A", exc="3.나"), _r("3", cond="C"))
+    assert got["조건"] == "C" and got["조건_이견"] == ["A", "C"] and got["제외목"] == []
+    got, _ = g.agree(_r("6", cond="B"), _r("6", cond="C"))
+    assert got["조건"] == "C" and got["조건_이견"] == ["B", "C"]
+    assert g.agree(_r("4", cond="B"), _r("5", cond="C"))[0] is None  # 호가 안 겹치면 여전히 시트
+    got, _ = g.agree(_r("3"), _r("3"))
+    assert got["조건_이견"] == []
+
+
+@pytest.mark.gate
+def test_표시요건은_조문이_정한_목록으로() -> None:
+    """🆕 09-25 (D-289) — 메모에 표시요건이 있으면 부류로 무엇을 밝혀야 하는지 · 못 가리면 미분류."""
+    a = g.parse_line("gs:x\t6\t-\tB\t-\tN\t표시요건")
+    b = g.parse_line("gs:x\t6\t-\tB\t-\tN\t입증")
+    assert g.disclosure_of("판매 1위", a, b) == ["조사대상", "조사기관", "조사기간"]
+    assert g.disclosure_of("저널에 발표된", a, b) == ["연구자", "문헌명", "발표 연월일"]
+    assert g.disclosure_of("어떤 문구", a, b) == ["미분류"]
+    assert g.disclosure_of("판매 1위", b, b) == []
+    assert g.disclosure_of("체지방 감소에 도움", b, b, ["3.나"]) == list(
+        g.FUNC_DISCLOSURE
+    )  # 법이 요구
