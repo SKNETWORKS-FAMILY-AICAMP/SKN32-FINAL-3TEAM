@@ -175,8 +175,32 @@ def group_scores(
     return out
 
 
+def covered(rules: dict[str, str], pairs: dict[str, list[str]]) -> set[str]:
+    """🆕 2026-09-25 — 사전에 단독판정 항목이 **하나라도 있는** 유형·호. 여기 없는 칸의 R 0 은 「시도하고 틀렸다」가 아니라 **구조적 0** 이다.
+
+    ⛔ 종전 표는 두 0 을 같은 「0.000」으로 찍었다 — 실측(사실원장 09-25 ⑰): 식품 6 · 7 · 8호, 표시광고법 2 · 3 · 4호는
+       항목이 0 인데 정답 151 · 68 · 61행이 「못 맞혔다」로 읽혔다. 「안 잰 것」과 「0 인 것」을 가른다 (D-188).
+    🚨 유형과 호를 한 집합에 담는다 — 두 이름은 겹치지 않는다(유형은 한국어 이름 · 호는 `법:제N조…` 인용).
+       묶음 표(D-255)에는 쓰지 않는다 — 묶음 이름은 여기 없어 전부 「구조적 0」으로 찍힌다.
+    """
+    return set(rules.values()) | {c for cs in pairs.values() for c in cs}
+
+
+def _mark(gold: int, fp: int, key: str, have: set[str]) -> str:
+    """표 한 줄의 경고 — 유형 표와 호 표가 **같은 규칙**을 쓴다 (D-99 · 종전에는 두 벌이었다). 앞의 것이 이긴다."""
+    if gold == 0:
+        return f"  🚨 정답 0인데 오탐 {fp}건 — 시험지에 없는 유형이다"
+    if key not in have:
+        return "  🔴 사전에 항목 0 — 구조적으로 못 맞힌다 (R 0 은 성능이 아니다)"
+    if gold < MIN_MEASURABLE:
+        return "  🔴 측정 불가 (D-40)"
+    return ""
+
+
 def report(rows: list[dict], rules: dict[str, str]) -> None:
     """유형 · 묶음 · 호 표와 적법 오탐률 — 한 원천(과 공통 적법 표본)에 대해."""
+    ho_pairs = load_pairs()
+    have = covered(rules, ho_pairs)
     tp: collections.Counter = collections.Counter()
     fp: collections.Counter = collections.Counter()
     fn: collections.Counter = collections.Counter()
@@ -210,12 +234,7 @@ def report(rows: list[dict], rules: dict[str, str]) -> None:
         p = tp[t] / (tp[t] + fp[t]) if tp[t] + fp[t] else 0.0
         rc = tp[t] / gold[t] if gold[t] else 0.0
         f1 = 2 * p * rc / (p + rc) if p + rc else 0.0
-        if gold[t] == 0:
-            mark = f"  🚨 정답 0인데 오탐 {fp[t]}건 — 시험지에 없는 유형이다"
-        elif gold[t] < MIN_MEASURABLE:
-            mark = "  🔴 측정 불가 (D-40)"
-        else:
-            mark = ""
+        mark = _mark(gold[t], fp[t], t, have)
         print(f"  {t:22} {gold[t]:>5} {p:>7.3f} {rc:>7.3f} {f1:>7.3f}{mark}")
 
     # 🆕 D-255 — 보고용 묶음 지표 (유형별 표를 대신하지 않는다)
@@ -229,16 +248,11 @@ def report(rows: list[dict], rules: dict[str, str]) -> None:
 
     # 🆕 D-282 — **정본 단위(호)** 표. 위 유형 표는 파생값이다
     print(f"\n  {'호 (정본 · D-282)':26} {'정답':>5} {'P':>7} {'R':>7} {'F1':>7}")
-    for c, (g, t_, f_) in ho_scores(rows, load_pairs()).items():
+    for c, (g, t_, f_) in ho_scores(rows, ho_pairs).items():
         p = t_ / (t_ + f_) if t_ + f_ else 0.0
         rc = t_ / g if g else 0.0
         f1 = 2 * p * rc / (p + rc) if p + rc else 0.0
-        if g == 0:
-            mark = f"  🚨 정답 0인데 오탐 {f_}건"
-        elif g < MIN_MEASURABLE:
-            mark = "  🔴 측정 불가 (D-40)"
-        else:
-            mark = ""
+        mark = _mark(g, f_, c, have)
         print(f"  {c:26} {g:>5} {p:>7.3f} {rc:>7.3f} {f1:>7.3f}{mark}")
 
     print(f"\n  🔴 **적법 {neg_total}행 중 {neg_fired}행에서 사전이 울렸다**", end="")
