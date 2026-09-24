@@ -74,13 +74,22 @@ def test_사전의_근거는_전부_법이_정해진다() -> None:
         pytest.skip(
             "banned_terms.jsonl 이 이 기기에 없다 — 기기 축 (D-19) · 대응표 자체는 위 게이트가 본다"
         )
+    # 🔄 2026-09-24 (D-282) — 사전 근거는 조문 인용(`collect.statute.cite` 꼴)이다. 법은 인용의 법 ID 로 정한다.
+    from collect import statute
+
+    def law(b: str) -> str | None:
+        try:
+            return lm.LAW_OF_ID.get(statute.parse(b)[0])
+        except ValueError:
+            return None
+
     bad = sorted(
         {
             b
             for line in BANNED.read_text(encoding="utf-8").splitlines()
             if line.strip()
             for b in json.loads(line).get("근거") or []
-            if lm.law_of_basis(b) is None
+            if law(b) is None
         }
     )
     assert not bad, f"🔴 법을 못 정한 사전 근거 {len(bad)}종: {bad[:5]}"

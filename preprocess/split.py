@@ -93,7 +93,7 @@ import pathlib
 import random
 
 from app.settings import PARAMS
-from preprocess import labels as label_store
+from collect import statute
 
 FTC_PHRASES = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
@@ -117,16 +117,16 @@ def _jsonl(p: pathlib.Path) -> list[dict]:
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
-#: 🔴 분할이 읽는 입력 전부. 이 넷이 1바이트라도 다르면 뒤의 수가 전부 달라진다.
-#: 🆕 2026-09-17 — **사람이 붙인 라벨**이 넷째다. 파일 수가 붙이는 사람마다 늘므로
-#:    목록을 고정하지 않고 `label_store.files()` 로 받는다 (이름 순으로 고정된다).
-#: 🚨 `labels` 가 아니라 `label_store` 로 들여온다 — `ftc_docs()` 등이 지역변수
-#:    `labels` 를 쓰고 있어 모듈 이름과 겹친다. 겹치면 조용히 가려진다.
+#: 🔴 분할이 읽는 입력 전부. 이 셋이 1바이트라도 다르면 뒤의 수가 전부 달라진다.
+#: 🔄 2026-09-24 (D-283) — **사람이 붙인 8유형 라벨(`labels/*.jsonl`)은 더 이상 입력이 아니다.**
+#:    ⛔ 09-17 부터 넷째 입력이었다(D-243). 그 라벨은 라벨링 지시서의 자체 8유형으로 붙인 것이라 조문 근거가 없고
+#:       (지시서 6·7번이 법 제8조①6·7호와 반대 · 5호의 목 11개가 한 줄) 사람끼리 일치가 α 0.32 였다.
+#:    ★ 평가 라벨은 조문이 붙이거나(D-171 ①) 조문 원문을 기준으로 사람이 붙인다 — 해설서 행의 호는 아직 없다(D-283 ⬜).
 INPUTS = (FTC_PHRASES, CASEBOOK, HF)
 
 
 def inputs() -> tuple[pathlib.Path, ...]:
-    return INPUTS + tuple(label_store.files())
+    return INPUTS
 
 
 def fingerprint() -> dict[str, dict]:
@@ -192,7 +192,16 @@ def ftc_docs() -> list[dict]:
         )
     got = []
     for r in json.loads(FTC_PHRASES.read_text(encoding="utf-8")):
-        labels = sorted({u["label"] for u in (r.get("유형") or [])})
+        # 🆕 2026-09-24 (D-282) — **근거 조문이 정본이다.** 유형은 인용에서 계산하고, 추출기가 적은 유형과 대조한다.
+        #    ⛔ 종전에는 유형만 넘기고 `article` 을 여기서 버렸다 — 골든셋 6,741행 중 조문 칸이 있는 행이 0 이었다.
+        units = r.get("유형") or []
+        basis = sorted({statute.cite(*statute.FAIR, ho_of(u["article"])) for u in units})
+        labels = statute.types_of(basis)
+        if labels != sorted({u["label"] for u in units}):
+            raise SystemExit(
+                f"🔴 ftc:{r['seq']} — 추출기의 유형 {sorted({u['label'] for u in units})} 과 "
+                f"조문에서 계산한 유형 {labels} 이 다르다 (D-282 · D-99). `ftc_extract.TYPES` 를 본다."
+            )
         # 🔄 **2026-09-17 — 「이유」 문구를 들고 나온다** (D-232 (A) · D-234).
         #    ⛔ 종전 조건은 `not r.get("문구")` 라 **주문에 문구가 없으면 문서를 통째로 버렸다.**
         #       그래서 이유만 있는 **502건이 train 에도 못 들어갔다** — 회수를 켜도 여기서 막혔다.
@@ -206,6 +215,7 @@ def ftc_docs() -> list[dict]:
             {
                 "doc_id": f"ftc:{r['seq']}",
                 "원천": "ftc_decisions_body",
+                "근거": basis,
                 "유형": labels,
                 "문구": order,
                 "문구_이유": reason,  # 🆕 학습 전용 — 봉인 대상이 아니다
@@ -225,13 +235,18 @@ def casebook_docs() -> list[dict]:
     """
     got = []
     for i, r in enumerate(_jsonl(CASEBOOK)):
-        labels = sorted(r.get("확정유형") or [])
+        # 🔄 2026-09-24 (D-282) — 원천이 적은 **호와 [별표 1] 목**으로 인용을 만들고 유형은 거기서 계산한다.
+        #    ⛔ 종전에는 추출기의 `확정유형` 을 읽었고, 5호는 「뭉친 호」라 비어 있어 **5호 사례 25건(인용 36문구)이 통째로 빠졌다**(D-158).
+        #    ★ 5호는 호 단위로 `소비자_기만` 이고, 원천이 「5-다」(체험기) 목을 적었으면 `후기_체험기_기만` 이다 (D-282 · D-255 ① 개정).
+        basis = casebook_basis(r)
+        labels = statute.types_of(basis)
         if not labels or not r.get("인용표현"):
             continue
         got.append(
             {
                 "doc_id": f"casebook:{r.get('쪽')}:{i}",
                 "원천": "mfds_casebook",
+                "근거": basis,
                 "유형": labels,
                 "문구": [str(x) for x in r["인용표현"]],
                 "단위": "낱말",
@@ -240,20 +255,61 @@ def casebook_docs() -> list[dict]:
     return got
 
 
-def guide_docs() -> list[dict]:
-    """🆕 **사람이 붙인 해설서 라벨** (2026-09-17 · D-172).
+def ho_of(article: str) -> int:
+    """「제3조제1항제2호」 → 2. 🔴 못 읽으면 멈춘다 — 조용히 버리지 않는다 (D-220)."""
+    import re  # noqa: PLC0415
 
-    ⛔ 이 문이 없어서 `labels/오한빈.jsonl` 248행이 파이프라인에 **한 번도 닿지 않았다.**
-       골든셋 provenance 에 해설서가 0행이었다 — 「남은것」 ①의 실체다.
+    m = re.search(r"제(\d+)호", article)
+    if not m:
+        raise SystemExit(f"🔴 조문 호를 못 읽는다: {article!r}")
+    return int(m.group(1))
 
-    🔴 **평가(test_sentence) 자리다.** D-172 가 「평가 라벨은 사람이나 조문이 붙인다」라
-       적었고 이것은 사람이 붙인 것이다. 학습으로 보내면 평가할 것이 다시 0 이 된다.
-    🚨 상한을 걸지 않는다 — `ftc` 는 pool 이 커서 `EVAL_TARGET` 이 상한처럼 쓰이지만
-       해설서 라벨은 **사람 손으로 만든 희소 자원**이라 전량 쓴다. 대신 아래 `tally` 가
-       원천별로 찍어 어느 수가 어디서 왔는지 보인다 (D-160).
-    🔴 「범위 밖」 85행은 **들어오지 않는다** — `preprocess/labels.py` 머리말의 이유다.
+
+def casebook_basis(r: dict) -> list[str]:
+    """사례집 행 → 식품표시광고법 §8① 인용 목록. 🆕 2026-09-24 (D-282).
+
+    ★ 원천이 적은 것만 옮긴다 — `호`(정수 또는 목록)와 `별표목`(「5-다」 꼴).
+       목은 **같은 호의 목이 하나뿐일 때만** 붙인다. 둘 이상이면 어느 문구가 어느 목인지 원천이 안 적었다 — 호까지만.
     """
-    return label_store.docs()
+    ho = r.get("호")
+    hos = ho if isinstance(ho, list) else ([ho] if ho else [])
+    moks: dict[int, list[str]] = collections.defaultdict(list)
+    for x in r.get("별표목") or []:
+        a, _, b = str(x).partition("-")
+        if a.isdigit() and b:
+            moks[int(a)].append(b)
+    got = set()
+    for h in hos:
+        m = moks.get(int(h)) or []
+        got.add(statute.food(int(h), m[0] if len(set(m)) == 1 else None))
+    return sorted(got)
+
+
+def guide_docs() -> list[dict]:
+    """해설서 행의 평가 라벨 — 🔄 2026-09-24 (D-283) **비어 있다.**
+
+    ⛔ 09-17(D-243)부터 여기로 **사람이 붙인 8유형 라벨**(`preprocess.labels.docs()`)이 들어와 평가셋의 식품 유형을
+       거의 전부 채웠다. 그 라벨은 조문 근거가 없는 지시서 8유형으로 붙인 것이라 쓰지 않는다 (D-283 · D-237).
+    🔴 **원천 3분류를 호 묶음으로 옮겨 쓰는 것도 하지 않는다.** 현행 조문으로 다시 읽으면 묶음 밖으로 가는 문구가
+       14~34% 다(「거짓ㆍ과장ㆍ기만」 묶음은 안에 드는 것이 37~39% · 원장 09-24). 호를 모르는데 호가 있는 척하지 않는다 (D-220).
+    ★ 해설서 문구가 **위반이라는 것**은 원천이 정했다(D-237). 호는 조문 원문을 기준으로 판단해 붙인다 — 그 전까지 평가에 안 넣는다.
+       기다리는 수는 `pending_guide()` 가 센다.
+    """
+    return []
+
+
+GUIDE = pathlib.Path("data/derived/mfds_guide_labels.jsonl")
+
+
+def pending_guide() -> dict[str, int]:
+    """호가 정해지길 기다리는 해설서 **위반문구** 수 — 원천 3분류별. 🚨 없는 파일은 0 이 아니라 None 으로 보인다."""
+    if not GUIDE.exists():
+        return {}
+    c: collections.Counter = collections.Counter()
+    for r in _jsonl(GUIDE):
+        if r.get("종류") == "위반문구":
+            c[str(r.get("원천라벨"))] += 1
+    return dict(c)
 
 
 def approved_docs() -> list[dict]:
@@ -348,8 +404,17 @@ def plan(seed: int = 20260909) -> dict:
         """🆕 이유 문구 — **주문과 섞어 세지 않는다** (D-172 · 한 숫자가 두 과제를 평균한다)."""
         return sum(len(d.get("문구_이유") or []) for d in rows)
 
+    def tally_ho(rows: list[dict]) -> dict[str, int]:
+        """🆕 D-282 — **호 단위** 셈. D-40 의 30 은 이 단위에 건다 (유형 셈은 표시용 파생값)."""
+        c: collections.Counter = collections.Counter()
+        for d in rows:
+            for k in {statute.ho_key(x) for x in d.get("근거") or []}:
+                c[k] += 1
+        return dict(sorted(c.items()))
+
     sent_pos = tally(sent)
     term_pos = tally(term)
+    sent_ho = tally_ho(sent)
     AXIS = (
         "질병_예방치료_표방",
         "의약품_오인",
@@ -374,6 +439,16 @@ def plan(seed: int = 20260909) -> dict:
             "섞지 않는다 — 한 숫자로 보고하면 두 과제를 평균한 수가 된다. "
             "ftc 슬라이스는 학습과 같은 기관이라 원천 편향을 재지 못한다 (same_source)."
         ),
+        # 🆕 D-282 — 정본 셈. 키는 `collect.statute.cite` 꼴(법ID:제N조제N항제N호)
+        "counts_by_citation": {
+            "train": tally_ho(train),
+            "test_sentence": sent_ho,
+        },
+        "unmeasurable_by_citation": {
+            "test_sentence": sorted(k for k, v in sent_ho.items() if v < MIN_MEASURABLE),
+        },
+        # 🆕 D-283 — 호가 안 정해져 평가에 못 넣은 해설서 위반문구 (원천 3분류별)
+        "pending_guide": pending_guide(),
         "sizes": {
             "train": {"문서": len(train), "문구": phrases(train)},
             "test_sentence": {"문서": len(sent), "문구": phrases(sent)},
@@ -409,19 +484,17 @@ def plan(seed: int = 20260909) -> dict:
             "test_sentence": [
                 "ftc_decisions_body(봉인)",
                 "mfds_hf_ingredient_board(봉인·음성)",
-                "mfds_special_use_guide(사람이 붙인 라벨 · D-172)",
+                # 🔄 D-283 — 해설서는 호가 정해질 때까지 없다 (`pending_guide`)
             ],
         },
         "same_source": ["ftc_decisions_body"],
         "excluded_from_eval": {
             "다중라벨_문서": len(multi),
             "이유": "의결서가 두 호를 함께 걸면 인용 문구가 어느 호인지 적혀 있지 않다",
-            # 🆕 「범위 밖」은 **적법이 아니다** — 음성으로 쓰면 Precision 이 낙관적으로 나온다
-            "범위밖_행": label_store.out_of_scope(),
-            "범위밖_이유": (
-                "붙인 사람이 「별표1 여덟 유형 밖」이라 찍은 것이지 「적법」이 아니다. "
-                "해설서는 심의에서 삭제 판정을 받은 문구라 광고물 단위로는 문제가 있었다. "
-                "음성 표본으로 넣을지는 판정 대기 (D-59 「범위 밖」 자리)"
+            # 🔄 D-283 — 사람 8유형 라벨(범위밖 포함)은 평가 입력이 아니다. 해설서는 `pending_guide` 로 센다.
+            "해설서_이유": (
+                "원천 3분류는 위반임을 말하지만(D-237) 호를 말하지 않는다 — 현행 조문으로 읽으면 묶음 밖으로 가는 문구가 있다. "
+                "호를 조문 원문 기준으로 붙이기 전까지 평가에 넣지 않는다 (D-283)"
             ),
         },
         "assign": {
@@ -489,6 +562,19 @@ def main() -> int:
             print(f"    {t:22} {n:>4}   {'✅' if n >= MIN_MEASURABLE else '🔴 측정 불가'}")
         if m["unmeasurable"][name]:
             print(f"    🔴 측정 불가 — {m['unmeasurable'][name]}")
+
+    # 🆕 D-282 — 정본 셈(호 단위). D-40 의 30 은 여기에 건다
+    print("\n  ── test_sentence · 호 단위 (정본 · D-282) ──")
+    for k, n in m["counts_by_citation"]["test_sentence"].items():
+        t = statute.type_of(k) or "(유형 없음)"
+        print(f"    {k:26} {t:14} {n:>4}   {'✅' if n >= MIN_MEASURABLE else '🔴 측정 불가'}")
+    if m["pending_guide"]:
+        tot = sum(m["pending_guide"].values())
+        print(
+            f"\n  ⬜ **호를 기다리는 해설서 위반문구 {tot:,}행** (원천 3분류별 · D-283) — 평가에 안 넣었다"
+        )
+        for k, n in m["pending_guide"].items():
+            print(f"     {n:>5}  {k}")
 
     print(f"\n  🔴 **어느 단위로도 평가 데이터가 없는 유형 {len(m['no_eval_at_all'])}종**")
     print(f"     {m['no_eval_at_all']}")

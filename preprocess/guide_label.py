@@ -36,6 +36,7 @@ import json
 import pathlib
 import re
 
+from collect import statute
 from preprocess.mfds_guide import CANDIDATES, REGIME
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -132,15 +133,10 @@ _DISCLAIM = re.compile(
 #: 🚨 D-99 — `scripts/label_sheet.py` 의 `TYPES` 와 **집합이 다르다.**
 #:    여기는 `사행심_음란`, 저기는 `후기_체험기_기만` 이 8번째다. 어느 쪽이 정본인지는 **미판정**이고
 #:    `CANDIDATES`(원천 축)는 `후기_체험기_기만` 쪽을 쓴다. 합치는 것은 유형 체계 판정이라 사람 몫이다.
-TYPE_OF = {
-    "1": "질병_예방치료_표방",
-    "2": "의약품_오인",
-    "3": "건강기능식품_오인",
-    "4": "거짓_과장",
-    "5": "소비자_기만",
-    "6": "비방광고",
-    "7": "부당_비교광고",
-    "8": "사행심_음란",
+#: 🔄 2026-09-24 (D-282) — 1~7호는 `collect/statute.py` 에서 **계산한다**(D-99). 8호는 계약 열거형에 자리가 없어
+#:    `statute` 가 None 을 준다 — 앵커 **후보 표시용** 이름만 여기 남긴다(골든셋·판정으로 가지 않는다).
+TYPE_OF = {str(h): str(statute.type_of(statute.food(h))) for h in range(1, 8)} | {
+    "8": "사행심_음란"
 }
 
 

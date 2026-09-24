@@ -9,9 +9,13 @@
 
 스키마 (수집전처리_기획 4-6)
 
-    {"id":…, "text":…, "labels":[…], "unit":"문장|낱말",
+    {"id":…, "text":…, "근거":[…], "labels":[…], "unit":"문장|낱말",
      "origin":"real|injected|approved", "provenance":…, "redistributable":…,
      "split":"train|test_sentence"}
+
+🆕 **`근거` 가 라벨의 정본이다** (2026-09-24 · D-282 · D-237 집행) — `collect.statute.cite` 꼴의 조문 인용 목록.
+   `labels` 는 거기서 계산한 파생 유형이다. 둘이 어긋난 행이 하나라도 있으면 **쓰지 않고 멈춘다** (`check_basis`).
+   D-40 의 셈은 호 단위(`근거`)로 한다 — 유형 셈은 표시용이다.
 
 🔴 **`labels` 가 빈 리스트인 행은 적법이다** — 없는 것이 라벨이다. 지우지 않는다.
    그것이 없으면 「전부 위반」이라 답해도 Recall 100% 가 된다.
@@ -36,6 +40,7 @@ import pathlib
 import re
 
 from app.settings import PARAMS
+from collect import statute
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
 from preprocess.lineage import lineage
@@ -90,6 +95,24 @@ def reason_keep(text: str) -> tuple[str, str | None]:
     return s, None
 
 
+def check_basis(rows: list[dict]) -> None:
+    """🔴 **라벨은 근거에서 계산된 것이어야 한다** (D-282). 어긋난 행이 있으면 멈춘다 — 쓰지 않는다.
+
+    ⛔ 유형과 조문이 따로 적혀 따로 움직이면, 조문은 4호인데 유형은 비방인 행이 조용히 생긴다.
+    🚨 위반 행에 근거가 없는 것도 멈춘다 — 근거 없는 위반 라벨은 이 판에서 없다(해설서 사람 라벨이 빠졌다 · D-283).
+    """
+    bad = []
+    for r in rows:
+        want = statute.types_of(r["근거"])
+        if sorted(r["labels"]) != want or (r["labels"] and not r["근거"]):
+            bad.append(f"{r['id']}  labels={r['labels']}  근거={r['근거']}  계산={want}")
+    if bad:
+        raise SystemExit(
+            f"🔴 라벨과 근거 조문이 어긋난 행 {len(bad)}개 (D-282) — 쓰지 않는다\n  "
+            + "\n  ".join(bad[:10])
+        )
+
+
 def build() -> tuple[list[dict], dict]:
     if not SPLIT.exists():
         raise FileNotFoundError(
@@ -101,7 +124,8 @@ def build() -> tuple[list[dict], dict]:
     rows: list[dict] = []
     stat: dict = collections.Counter()
 
-    # 🆕 2026-09-17 — `guide_docs()` 가 넷째다. 없으면 사람이 붙인 248행이 여기서 사라진다.
+    # 🔄 2026-09-24 (D-283) — `guide_docs()` 는 비어 있다(해설서 호가 정해지기 전). 부르는 자리는 남긴다 —
+    #    호가 붙으면 이 한 줄로 들어온다.
     for d in ftc_docs() + casebook_docs() + approved_docs() + guide_docs():
         split = assign.get(d["doc_id"])
         if not split:
@@ -112,6 +136,7 @@ def build() -> tuple[list[dict], dict]:
                 {
                     "id": f"{d['doc_id']}#{k}",
                     "text": text,
+                    "근거": d.get("근거") or [],
                     "labels": d["유형"],
                     "unit": d["단위"],
                     "origin": "approved" if not d["유형"] else "real",
@@ -143,6 +168,7 @@ def build() -> tuple[list[dict], dict]:
                     {
                         "id": f"{d['doc_id']}#r{k}",
                         "text": text,
+                        "근거": d.get("근거") or [],
                         "labels": d["유형"],
                         "unit": d["단위"],
                         "origin": "approved" if not d["유형"] else "real",
@@ -191,10 +217,13 @@ def build() -> tuple[list[dict], dict]:
                 "  🚨 그대로 물질화하면 평가 문서에서 만든 문장이 학습에 들어간다.\n"
                 "  먼저: uv run python -m preprocess.inject --dump  (순서 전체는 launcher.py golden --write)"
             )
+        # 🆕 D-282 — 주입 규칙의 근거 조문을 버리지 않는다(종전에는 `rule_id` 만 남았다). 적법 원본(V0)은 근거가 없다.
+        basis = [statute.from_korean(r["근거"])] if r["라벨"] else []
         rows.append(
             {
                 "id": f"inj:{r['rule_id']}:{r['src']}",
                 "text": r["문구"],
+                "근거": basis,
                 "labels": r["라벨"],
                 "unit": "문장",
                 "origin": r["origin"],
@@ -245,6 +274,8 @@ def build() -> tuple[list[dict], dict]:
     kept = [r for r in kept if not (r["split"] == "train" and norm(r["text"]) in test_neg)]
     stat["음성겹침_학습제외"] = before - len(kept)
 
+    check_basis(kept)
+
     # 🔴 **id 유일성 게이트** — `chunk.py:165` 와 같은 이유다 (D-149).
     #    ⛔ 겹치면 뒤엣것이 앞엣것을 조용히 덮고, 행 수만 보면 아무 일도 없어 보인다.
     dup = [k for k, v in collections.Counter(r["id"] for r in kept).items() if v > 1]
@@ -281,6 +312,15 @@ def main() -> int:
             print(f"     {v:>5}  {k}  {mark}")
         units = collections.Counter(r["unit"] for r in sub)
         print(f"     단위 — {dict(units)}")
+        # 🆕 D-282 — 정본 셈(호 단위). D-40 의 30 은 이 단위에 건다
+        hc: collections.Counter = collections.Counter()
+        for r in pos:
+            for k in {statute.ho_key(x) for x in r["근거"]}:
+                hc[k] += 1
+        print("     ── 호 단위 (정본 · D-282) ──")
+        for k, v in sorted(hc.items()):
+            mark = "✅" if s == "train" or v >= PARAMS.min_measurable else "🔴 측정 불가"
+            print(f"     {v:>5}  {k:26} {statute.type_of(k) or '(유형 없음)'}  {mark}")
     # 🆕 **「이유」 회수 계측** (2026-09-17 · D-234). 🚨 **버린 수가 안 보이면 계측이 반쪽이다** —
     #    무엇을 왜 버렸는지가 산출물 옆에 없으면, 필터를 고쳤을 때 무엇이 달라졌는지 못 본다 (D-142).
     drops = {k[len("이유버림_") :]: v for k, v in stat.items() if k.startswith("이유버림_")}
