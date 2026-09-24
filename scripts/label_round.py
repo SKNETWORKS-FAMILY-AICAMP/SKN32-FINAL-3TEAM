@@ -206,6 +206,33 @@ def assign(
     return {w: sorted(v) for w, v in got.items()}
 
 
+def _first_by_key(rows: list[dict]) -> list[int]:
+    """행 번호(1부터) → 같은 키의 **첫 행** 번호. 🆕 2026-09-24.
+
+    🔴 라벨은 **키**(`labels.key` — 원천 · 원천라벨 · 문구 …)로 쌓인다. 시트에 키가 같은 행이 둘이면
+       사람에게는 두 행이지만 라벨 저장소에는 **한 자리**다. 2차 시트(round2)에 이런 쌍이 셋 있었다
+       (해설서 표 47·48 의 같은 문구 · 같은 행정심판 사건 · 같은 검증 문구) —
+       ⛔ `compare` 는 앞 행의 라벨을 뒤 행에 **한 번 더** 붙여 판정표에 같은 문구를 두 번 올렸고,
+       ⛔ `decide` 는 두 판정을 다 써서 `consensus` 가 **나중 것으로 조용히 덮었다**.
+    ★ 같은 키는 첫 행 하나로 모은다 — 키에 `표` 가 없는 것은 설계다(같은 문구는 같은 라벨).
+    """
+    first: dict[str, int] = {}
+    return [first.setdefault(store.key(r), i) for i, r in enumerate(rows, 1)]
+
+
+def _dedup_keys(rows: list[dict]) -> tuple[list[dict], int]:
+    """🆕 2026-09-24 — 판을 짤 때 **같은 키의 행을 한 번만** 담는다(`_first_by_key` 참조)."""
+    seen: set[str] = set()
+    kept = []
+    for r in rows:
+        k = store.key(r)
+        if k in seen:
+            continue
+        seen.add(k)
+        kept.append(r)
+    return kept, len(rows) - len(kept)
+
+
 def plan(name: str, who: list[str], overlap: float, gold: int, seed: int) -> int:
     from scripts import derived_manifest as dm  # noqa: PLC0415
 
@@ -232,7 +259,7 @@ def plan(name: str, who: list[str], overlap: float, gold: int, seed: int) -> int
         "재검(기존 시트)": pool_recheck(),
         "검증": pool_gold(gold, rng),
     }
-    rows = [r for v in parts.values() for r in v]
+    rows, n_dup = _dedup_keys([r for v in parts.values() for r in v])
     rng.shuffle(rows)  # 🚨 섞는다 — 검증 행이 끝에 몰리면 행 번호로 드러난다
     table = assign(rows, who, overlap, rng)
 
@@ -243,6 +270,10 @@ def plan(name: str, who: list[str], overlap: float, gold: int, seed: int) -> int
     print(f"시트 {sheet.relative_to(ROOT)} — {len(rows)}행 (seed {seed})")
     for k, v in parts.items():
         print(f"    {k:<14} {len(v):>4}")
+    if n_dup:
+        print(
+            f"    🟡 같은 키(원천·원천라벨·문구)라 한 번만 담은 행 {n_dup}개 — 라벨은 키로 쌓인다"
+        )
     print(f"\n배정 — 전원 겹침 {round(overlap * 100)}% · 검증 {gold}행은 전원(라벨로 안 들어간다)")
     for w, idx in table.items():
         out = ls.export(sheet, w, None, idx=idx, quiet=True)
@@ -281,6 +312,9 @@ def _names(nums: frozenset[str]) -> str:
 def compare(sheet: pathlib.Path, csvs: list[pathlib.Path], refs: list[pathlib.Path]) -> int:
     """갈린 행 → 판정표 한 장. 🚨 **세기만 한다** — 라벨을 쓰지 않는다."""
     rows = ls._rows(sheet)  # noqa: SLF001
+    canon = _first_by_key(rows)  # 🆕 2026-09-24 — 같은 키의 행은 첫 행으로 모은다
+    dup_rows = sum(1 for i, c in enumerate(canon, 1) if c != i)
+    clash: list[str] = []
     ans: dict[int, dict[str, str]] = collections.defaultdict(dict)
     ref: dict[int, dict[str, str]] = collections.defaultdict(dict)
     for group, paths in ((ans, csvs), (ref, refs)):
@@ -293,10 +327,18 @@ def compare(sheet: pathlib.Path, csvs: list[pathlib.Path], refs: list[pathlib.Pa
                     )
                 v = _norm(rec.get("유형번호") or "")
                 if v:
-                    group[i][(rec.get("붙인이") or p.stem).strip()] = v
+                    i, who = canon[i - 1], (rec.get("붙인이") or p.stem).strip()
+                    if group[i].get(who, v) != v:
+                        # 🔴 한 사람이 같은 문구(두 행)에 다른 답을 냈다 — 어느 쪽인지 고르지 않는다 (D-220)
+                        clash.append(f"{i}행 {who}: {group[i][who]} ↔ {v}")
+                        v = ",".join(sorted(set(group[i][who].split(",")) | set(v.split(","))))
+                    group[i][who] = v
     # 🔴 **이미 들어온 라벨도 답이다** — 재검 행은 앞사람의 답이 CSV 가 아니라 `labels/` 에 있다.
     #    ⛔ CSV 만 보면 「오한빈 1 · 권소라 2」가 갈린 줄을 모르고 지나간다(테스트로 잡았다)
-    by_key = {store.key(r): i for i, r in enumerate(rows, 1)}
+    #    🔄 2026-09-24 — 같은 키면 **첫** 행이다. ⛔ 종전 dict 는 마지막 행을 골라 앞 행의 답을 뒤 행에 한 번 더 붙였다
+    by_key: dict[str, int] = {}
+    for i, r in enumerate(rows, 1):
+        by_key.setdefault(store.key(r), i)
     for fname, r in store._rows():  # noqa: SLF001
         i = by_key.get(store.key(r))
         if i is None or r.get(store.DECIDED):
@@ -352,6 +394,14 @@ def compare(sheet: pathlib.Path, csvs: list[pathlib.Path], refs: list[pathlib.Pa
         "  ★ 부분합의 = 공유한 유형은 합의, 일부 유형만 갈림 (D-262) — 판정표의 「갈린 유형」만 본다"
     )
     print(f"  → {out.relative_to(ROOT)}  갈린 행 {len(split)}개 — 판정자가 `최종번호` 를 채운다")
+    if dup_rows:
+        print(
+            f"  🟡 시트에 같은 키의 행 {dup_rows}개 — 첫 행으로 모아 셌다(판정표에는 한 번만 오른다)"
+        )
+    if clash:
+        print(
+            f"  🔴 같은 문구에 한 사람이 다른 답 {len(clash)}건 — 두 답을 합쳐 갈림으로 올렸다: {clash[:5]}"
+        )
     print("  🚨 다수결로 채우지 않는다. 헷갈리면 0(범위밖)이나 빈칸도 판정이다")
     print("  일치도(κ) — uv run python scripts/label_merge.py data/derived/labels/*.jsonl")
     return 0
@@ -369,6 +419,7 @@ def decide(panel: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
     with panel.open(encoding="utf-8-sig", newline="") as f:
         got = list(csv.DictReader(f))
     out_rows = []
+    decided_at: dict[str, tuple[int, str]] = {}
     for rec in got:
         i = int(rec["행"])
         base = dict(rows[i - 1])
@@ -377,6 +428,17 @@ def decide(panel: pathlib.Path, sheet: pathlib.Path, day: str) -> int:
         raw = (rec.get("최종번호") or "").strip()
         if not raw:
             continue  # 판정하지 않은 행 — 보류다
+        # 🆕 2026-09-24 — 같은 키(같은 문구)의 판정이 둘이면 `consensus` 가 나중 것으로 **조용히** 덮는다.
+        #    다르면 멈추고, 같으면 한 번만 쓴다 (D-220 · `_first_by_key`)
+        k = store.key(base)
+        if k in decided_at:
+            j, prev = decided_at[k]
+            if _norm(prev) != _norm(raw):
+                raise SystemExit(
+                    f"🔴 판정표 {j}행과 {i}행은 같은 문구인데 `최종번호` 가 다르다({prev} ↔ {raw}) — 하나로 맞춘다"
+                )
+            continue
+        decided_at[k] = (i, raw)
         judge = (rec.get("판정자") or "").strip()
         if not judge:
             raise SystemExit(f"🔴 판정표 {i}행에 `판정자` 가 없다 — 누가 정했는지가 판정의 일부다")

@@ -229,21 +229,6 @@ def test_품목이_법을_고른다(category: Category | None, want: tuple[str, 
 
 
 @pytest.mark.gate
-def test_품목을_청크_범주로_넘기는_다리는_W6_전까지_일반으로_보낸다() -> None:
-    """🔜 W6 에서 지운다 (D-271 ③). 🔄 W3 — 계약의 새 품목 이름을 청크 필터로 그대로 넘기면 **0건**이 된다.
-
-    ⛔ 청크 값은 정본 B 재생성(0019) 전까지 「일반」이다. 오류 없이 근거가 비는 자리라 게이트로 박는다.
-    """
-    from app.graph import _chunk_category  # noqa: PLC0415
-    from app.settings import DEFAULT_CATEGORY  # noqa: PLC0415
-
-    assert _chunk_category(None) == DEFAULT_CATEGORY
-    assert _chunk_category(Category.일반상품) == DEFAULT_CATEGORY
-    assert _chunk_category(Category.전용법_미수록) == DEFAULT_CATEGORY
-    assert _chunk_category(Category.식품) == "식품"
-
-
-@pytest.mark.gate
 def test_모든_품목에_표시광고법이_들어간다() -> None:
     """🔴 빈 팬아웃이 나올 수 없게 하는 자리다 — 표시광고법은 품목과 무관하게 걸린다 (D-267)."""
     for c in [None, *Category]:
@@ -577,7 +562,7 @@ def _hit(**kw: object) -> object:
         doc_type="법령",
         annex_no=None,
         doc_title=None,
-        category=["일반"],
+        law="식품표시광고법",
         text="…",
         attribution=None,
         source_url=None,
@@ -591,13 +576,16 @@ def _hit(**kw: object) -> object:
 def _fake_search(hits: list[object], **state_kw: object):  # noqa: ANN202
     from app import retrieve as rt
 
-    def inner(cur, q, category=rt.DEFAULT_CATEGORY, limit=None, pool=None):  # noqa: ANN001, ANN202
+    def inner(cur, q, laws=(), limit=None, pool=None):  # noqa: ANN001, ANN202
+        calls.append(tuple(laws))
         st = dict(
             vector=rt.VECTOR_OK, lexical=rt.LEXICAL_OK, pool=50, pool_vector=1, pool_lexical=1
         )
         st.update(state_kw)
         return hits, rt.SearchState(**st)  # type: ignore[arg-type]
 
+    calls: list[tuple[str, ...]] = []
+    inner.calls = calls  # type: ignore[attr-defined] — 🆕 W6 — 법 필터를 무엇으로 넘겼는지 본다
     return inner
 
 
@@ -608,6 +596,27 @@ def _split_stub(sents: list[str]):  # noqa: ANN202
         return {"sents": list(sents)}
 
     return timed(split)
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    "category", [None, Category.식품, Category.화장품, Category.일반상품, Category.전용법_미수록]
+)
+def test_검색은_품목을_필터로_넘기지_않고_넓게_한_번_찾는다(
+    category: Category | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔄 2026-09-24 (W6 · D-271 ③) — 품목 → 청크 범주 **임시 다리**를 지웠다. 이 게이트가 그 자리를 잇는다.
+
+    ⛔ 종전에는 품목을 청크 범주로 넘겨 식품 광고가 식품표시광고법 [별표 1](「일반」에 있었다)을 못 봤고,
+       미확정이면 「일반」만 봤다. ★ 이제 **법 필터 없이** 넓게 한 번 — 법별 노드가 자기 법 근거만 거른다(D-267).
+    """
+    from app import retrieve as rt  # noqa: PLC0415
+
+    fake = _fake_search([_hit()])
+    monkeypatch.setattr(rt, "search", fake)
+    build_review().invoke(_init(category=category), config={"configurable": {"conn": "CUR"}})
+    assert fake.calls, "🚨 검색이 안 불렸다"
+    assert all(c == () for c in fake.calls), f"🚨 품목이 검색 필터로 넘어갔다: {fake.calls}"
 
 
 @pytest.mark.gate

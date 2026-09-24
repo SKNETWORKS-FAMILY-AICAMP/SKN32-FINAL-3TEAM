@@ -114,7 +114,7 @@ def _hit(cid: str = "c1", **kw: object) -> rt.Hit:
         "doc_type": None,
         "annex_no": None,
         "doc_title": None,
-        "category": [],
+        "law": "표시광고법",
         "text": "…",
         "attribution": None,
         "source_url": None,

@@ -34,6 +34,7 @@ import unicodedata
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
 from app.settings import PARAMS  # noqa: E402
+from collect import statute  # noqa: E402
 
 DICT = pathlib.Path("data/derived/banned_terms.jsonl")
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
@@ -47,6 +48,51 @@ MIN_MEASURABLE = PARAMS.min_measurable  # D-40
 REPORT_GROUPS: dict[str, tuple[str, ...]] = {
     "5호 묶음(소비자_기만∪후기)": ("소비자_기만", "후기_체험기_기만"),
 }
+
+
+def load_pairs() -> dict[str, list[str]]:
+    """🆕 D-282 — 사전 항목 → 근거 조문(호 단위). `단독판정` 항목만. 🔴 `짝` 이 없는 낡은 사전이면 멈춘다."""
+    got: dict[str, list[str]] = {}
+    for line in DICT.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        if "짝" not in r:
+            raise SystemExit(
+                f"🔴 {DICT} 에 `짝` 이 없다 — 낡은 사전이다. uv run python launcher.py golden --write"
+            )
+        if r["단독판정"]:
+            got[r["term"]] = sorted({statute.ho_key(c) for _t, c in r["짝"]})
+    return got
+
+
+def judge_ho(text: str, pairs: dict[str, list[str]]) -> set[str]:
+    """사전이 울린 **호** — `judge()` 와 같은 매칭(부분문자열)이고 답만 조문이다 (D-282)."""
+    n = norm(text)
+    return {c for term, cs in pairs.items() if term in n for c in cs}
+
+
+def ho_scores(rows: list[dict], pairs: dict[str, list[str]]) -> dict[str, tuple[int, int, int]]:
+    """호마다 `(정답, TP, FP)`. 🆕 D-282 — D-40 의 30 은 이 단위에 건다.
+
+    🚨 **오탐은 정답의 법 안에서만 센다.** 사전 항목 하나가 두 법의 호(표시광고법 제3조①1 · 식품 제8조①4)를 함께
+       들고 있어, 법을 가리지 않으면 모든 적중이 다른 법의 오탐을 하나씩 낳는다. 판정 코어는 법별로 판정한다(D-267).
+       ★ 적법 행에서 울린 것은 법과 상관없이 오탐이다.
+    """
+    gold: collections.Counter = collections.Counter()
+    tp: collections.Counter = collections.Counter()
+    fp: collections.Counter = collections.Counter()
+    for r in rows:
+        true = {statute.ho_key(c) for c in r.get("근거") or []}
+        laws = {statute.parse(c)[0] for c in true}
+        pred = judge_ho(r["text"], pairs)
+        for c in true:
+            gold[c] += 1
+            tp[c] += c in pred
+        for c in pred - true:
+            if not true or statute.parse(c)[0] in laws:
+                fp[c] += 1
+    return {c: (gold[c], tp[c], fp[c]) for c in sorted(set(gold) | set(fp))}
 
 
 def norm(s: str) -> str:
@@ -161,6 +207,20 @@ def main() -> int:
         f1 = 2 * p * rc / (p + rc) if p + rc else 0.0
         mark = "  🔴 측정 불가 (D-40)" if g < MIN_MEASURABLE else ""
         print(f"  {name:22} {g:>5} {p:>7.3f} {rc:>7.3f} {f1:>7.3f}{mark}")
+
+    # 🆕 D-282 — **정본 단위(호)** 표. 위 유형 표는 파생값이다
+    print(f"\n  {'호 (정본 · D-282)':26} {'정답':>5} {'P':>7} {'R':>7} {'F1':>7}")
+    for c, (g, t_, f_) in ho_scores(rows, load_pairs()).items():
+        p = t_ / (t_ + f_) if t_ + f_ else 0.0
+        rc = t_ / g if g else 0.0
+        f1 = 2 * p * rc / (p + rc) if p + rc else 0.0
+        if g == 0:
+            mark = f"  🚨 정답 0인데 오탐 {f_}건"
+        elif g < MIN_MEASURABLE:
+            mark = "  🔴 측정 불가 (D-40)"
+        else:
+            mark = ""
+        print(f"  {c:26} {g:>5} {p:>7.3f} {rc:>7.3f} {f1:>7.3f}{mark}")
 
     print(f"\n  🔴 **적법 {neg_total}행 중 {neg_fired}행에서 사전이 울렸다**", end="")
     print(f" (오탐률 {neg_fired / neg_total:.1%})" if neg_total else "")

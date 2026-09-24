@@ -44,9 +44,11 @@ from __future__ import annotations
 import dataclasses
 import logging
 import re
+from collections.abc import Sequence
 from typing import Any
 
-from app.settings import DEFAULT_CATEGORY, PARAMS, load_kwargs
+from app.settings import PARAMS, load_kwargs
+from collect.law_map import LAWS
 
 _log = logging.getLogger("copylane.retrieve")
 
@@ -147,7 +149,9 @@ class Hit:
     annex_no: int | None
     #: 🆕 문서 이름 — 사람이 읽는 자리. 🚨 **좌표가 아니다** (좌표는 `citation`).
     doc_title: str | None
-    category: list[str]
+    #: 🔄 2026-09-24 (0019 · W6) — **법 축**(표시광고법 · 식품표시광고법 · 화장품법 · 건강기능식품법).
+    #:    ⛔ 종전 `category: list[str]`(낱말 범주). 법 ID 로 정한 값이라 하나다 (D-271 ①).
+    law: str
     text: str
     attribution: str | None
     source_url: str | None
@@ -200,7 +204,7 @@ _SELECT: tuple[tuple[str, str], ...] = (
     ("c.part_no", "part_no"),
     ("c.part_total", "part_total"),
     ("c.doc_type", "doc_type"),
-    ("c.category", "category"),
+    ("c.law", "law"),
     ("c.text", "text"),
     # 🔴 2026-09-14 (0015) — **별표에 좌표를 세우려면 「몇 번 별표인가」가 있어야 한다.**
     #    ⛔ 종전에는 상위 5건 중 4건이 별표였고 **전부 버려졌다** — 하필
@@ -225,9 +229,15 @@ JOIN source     s ON s.source_id   = f.source_id
 JOIN source_use u ON u.source_id   = s.source_id AND u.use_code = 'U2_rag'
 LEFT JOIN document d ON d.doc_id = c.doc_id"""
 
+#: 🔄 2026-09-24 (W6 · D-271 ③) — **법으로 거른다. 비우면 전부.** 자리표시자 둘에 **같은 배열**을 넣는다(`_law_args`).
+#:    ⛔ 종전에는 `%s = ANY(c.category)` 로 **범주 하나**를 받았고 기본값이 「일반」이었다 — 품목을 청크 필터로 넘겨
+#:       식품 광고가 식품표시광고법 [별표 1] 을 못 보고, 표시광고법 청크도 못 봤다(D-271 맥락 2).
+#:    🚨 `::text[]` 를 박는다 — 빈 리스트는 타입을 모른다.
+_LAW_FILTER = "(cardinality(%s::text[]) = 0 OR c.law = ANY(%s::text[]))"
+
 SQL_LITERAL = f"""SELECT {_COLS}
 {_JOINS}
-WHERE u.allowed AND c.text ILIKE %s AND %s = ANY(c.category)
+WHERE u.allowed AND c.text ILIKE %s AND {_LAW_FILTER}
 -- 🚨 정렬이 없으면 `LIMIT` 결과가 비결정적이다 — 같은 질의가 다른 답을 낸다.
 ORDER BY c.law_id, c.article NULLS LAST, c.chunk_id
 LIMIT %s"""
@@ -242,7 +252,7 @@ SQL_LEXICAL = f"""SELECT {_COLS},
        ts_rank_cd(c.tsv, query, 32) AS lexical
 {_JOINS},
      to_tsquery('simple', %s) AS query
-WHERE u.allowed AND %s = ANY(c.category) AND c.tsv @@ query
+WHERE u.allowed AND {_LAW_FILTER} AND c.tsv @@ query
 -- 동점일 때도 같은 답을 내야 한다 — chunk_id 로 가른다 (D-176 의 결정성).
 ORDER BY lexical DESC, c.chunk_id
 LIMIT %s"""
@@ -253,7 +263,7 @@ SQL_VECTOR = f"""SELECT {_COLS},
 JOIN chunk_embedding e ON e.chunk_id = c.chunk_id
 -- 🔴 `model_id` 대조 — 저장한 벡터와 **같은 모델**로 만든 질의만 비교한다.
 --    ⛔ 이 줄이 없으면 `embed.py` 가 행마다 적어 둔 `model_id` 를 아무도 안 읽는다.
-WHERE u.allowed AND %s = ANY(c.category) AND e.model_id = %s
+WHERE u.allowed AND {_LAW_FILTER} AND e.model_id = %s
 -- 거리 동점일 때도 같은 답을 내야 한다 — chunk_id 로 가른다.
 ORDER BY distance, c.chunk_id
 LIMIT %s"""
@@ -444,7 +454,6 @@ def _rows_to_hits(rows: list[tuple], match: str, *, score: str | None = None) ->
     out = []
     for r in rows:
         d = dict(zip(_NAMES, r, strict=False))
-        d["category"] = list(d.get("category") or [])
         extra = {score: float(r[len(_NAMES)])} if score else {}
         out.append(Hit(**d, match=match, citation=citation(d), **extra))
     return out
@@ -549,16 +558,34 @@ def tsquery(q: str) -> str:
     return " | ".join(f"{t}:*" for t in terms(q))
 
 
-def by_literal(
-    cur: Any, q: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
-) -> list[Hit]:
+def law_filter(laws: Sequence[str] = ()) -> list[str]:
+    """법 필터를 검사해 리스트로 낸다. **비우면 전부**다 (D-271 ③).
+
+    🔴 **모르는 법이면 멈춘다** (D-220). ⛔ 오타·옛 범주(「일반」·「식품」)를 그대로 넘기면 SQL 은 **0건**을 낸다 —
+       오류 없이 근거가 빈다. 그 모양이 W3 의 임시 다리가 막으려던 자리였다.
+    🚨 품목(`Category`)을 넘기지 않는다 — 품목과 법은 다른 축이다(D-271 ④).
+    """
+    got = list(laws)
+    bad = sorted(set(got) - set(LAWS))
+    if bad:
+        raise ValueError(f"모르는 법 {bad} — 법 축은 {list(LAWS)} 넷이다 (D-271 ①)")
+    return got
+
+
+def _law_args(laws: Sequence[str]) -> tuple[list[str], list[str]]:
+    """`_LAW_FILTER` 의 자리표시자 둘에 넣을 값 — 같은 배열 두 번."""
+    f = law_filter(laws)
+    return f, f
+
+
+def by_literal(cur: Any, q: str, laws: Sequence[str] = (), limit: int = PARAMS.top_k) -> list[Hit]:
     """글자가 그대로 들어 있는 것. 「제5호 아목」처럼 **기호**로 찾을 때 이쪽이다.
 
     🔴 **어휘 갈래로 대체하지 않는다** (D-167). `simple` 파서는 「제5호」를 어떻게
        자를지 보장하지 않고, 기호 검색은 **부분 일치가 아니라 정확히 그 글자**를 원한다.
        두 가지는 이름만 비슷하고 뜻이 다르다 — 한쪽으로 합치면 둘 다 나빠진다.
     """
-    cur.execute(SQL_LITERAL, (f"%{q}%", category, limit))
+    cur.execute(SQL_LITERAL, (f"%{q}%", *_law_args(laws), limit))
     return _rows_to_hits(cur.fetchall(), MATCH_LITERAL)
 
 
@@ -566,33 +593,33 @@ def by_literal(
 by_text = by_literal
 
 
-def by_lexical(
-    cur: Any, q: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
-) -> list[Hit]:
+def by_lexical(cur: Any, q: str, laws: Sequence[str] = (), limit: int = PARAMS.top_k) -> list[Hit]:
     """어휘가 겹치는 것. 🔴 검색어가 하나도 안 남으면 **빈 목록**이다 — 오류가 아니다.
 
     ⛔ 빈 `to_tsquery` 를 그대로 넣으면 PostgreSQL 이 경고를 내고 0건을 준다. 같은 0건이라도
        「질의에 검색어가 없다」와 「겹치는 조문이 없다」는 다른 사실이라, 여기서 가른다.
     """
+    f = _law_args(laws)  # 🚨 검색어가 없어도 법 검사는 먼저 — 오타가 「검색어 없음」 뒤에 숨지 않게
     tq = tsquery(q)
     if not tq:
         return []
-    cur.execute(SQL_LEXICAL, (tq, category, limit))
+    cur.execute(SQL_LEXICAL, (tq, *f, limit))
     return _rows_to_hits(cur.fetchall(), MATCH_LEXICAL, score="lexical")
 
 
 def by_vector(
-    cur: Any, text: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
+    cur: Any, text: str, laws: Sequence[str] = (), limit: int = PARAMS.top_k
 ) -> list[Hit]:
     """뜻이 가까운 것. 「면역력 쑥!」처럼 **글자가 안 겹치는** 광고 문구가 이쪽이다.
 
     🔴 못 하면 `RetrieveError` 를 던진다 — **빈 목록으로 떨어지지 않는다.**
     """
+    f = _law_args(laws)
     model_id = stored_model_id(cur)
     check_inputs(cur)
     vec = encode(model_id, text)
     literal = "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
-    cur.execute(SQL_VECTOR, (literal, category, model_id, limit))
+    cur.execute(SQL_VECTOR, (literal, *f, model_id, limit))
     return _rows_to_hits(cur.fetchall(), MATCH_VECTOR, score="distance")
 
 
@@ -679,7 +706,7 @@ class SearchState:
 def search(
     cur: Any,
     q: str,
-    category: str = DEFAULT_CATEGORY,
+    laws: Sequence[str] = (),
     limit: int = PARAMS.top_k,
     pool: int = POOL,
 ) -> tuple[list[Hit], SearchState]:
@@ -689,18 +716,23 @@ def search(
        ⛔ 예외를 위로 던지면 화면이 통째로 500 이 되고, 삼키면 「의미 검색을 했는데 0건」과
           「의미 검색을 못 했다」가 구별되지 않는다. **둘 다 아니게** 상태를 같이 낸다.
     🚨 상태를 만드는 자리는 여기 하나다 — `app/api.py` 가 같은 문장을 또 짓지 않는다.
+    🔄 2026-09-24 (W6 · D-271 ③) — `laws` 로 거른다. **비우면 전부** — 판정 그래프는 넓게 한 번 찾고
+       법별 노드가 자기 법 근거만 거른다(D-267). ⛔ 종전 `category` 는 기본값이 「일반」이었다.
     """
+    law_filter(
+        laws
+    )  # 🔴 모르는 법은 벡터 갈래를 돌기 **전에** 멈춘다 — 오류가 「벡터 불가」로 삼켜지지 않게
     vector_state = VECTOR_OK
     vector_hits: list[Hit] = []
     try:
-        vector_hits = by_vector(cur, q, category, pool)
+        vector_hits = by_vector(cur, q, laws, pool)
     except RetrieveError as e:
         # 🔴 2026-09-21 (전수 재검토) — ⛔ 예외 문장을 그대로 담아 `/search` 응답으로 냈다. 그 안에는
         #    하위 예외(`{e}` · 모델 로드 실패의 경로·URL)가 섞인다. 응답에는 **우리가 쓴 고정 문장**(클래스
         #    설명 첫 줄)만, 원문은 서버 로그로 (로그는 `RedactFilter` 를 지난다 · D-76).
         _log.warning("벡터 검색 불가 — %s: %s", type(e).__name__, e)
         vector_state = f"{type(e).__name__}: {public_reason(e)}"
-    lexical_hits = by_lexical(cur, q, category, pool)
+    lexical_hits = by_lexical(cur, q, laws, pool)
     # 🚨 `terms()` 를 다시 부른다 — 판단을 복사하는 것이 아니라 **같은 함수**를 쓴다 (D-99).
     state = SearchState(
         vector=vector_state,

@@ -21,10 +21,12 @@
 
 질의 파일 — JSONL 한 줄에 하나. `data/` 는 커밋되지 않으므로 **기기마다 다르다**(D-19).
 
-    {"q": "이 제품은 암 예방에 좋습니다", "want": "제8조제1항제1호"}
+    {"q": "이 제품은 암 예방에 좋습니다", "want": ["013094:제8조제1항제1호", "013453:[별표 1]제1호*"]}
 
-`want` 는 `retrieve.citation()` 이 내는 모양 그대로다. 🚨 별표는 `citation()` 이
-조립하지 않으므로(`None`) 골든셋에 넣지 않는다 — 넣으면 영영 「못 찾음」으로 나온다.
+`want` 는 `retrieve.citation()` 이 내는 모양 그대로이고, 🔄 2026-09-24 부터 **법 ID 를 앞에 붙이고(`법ID:`)
+목록으로 여럿**을 줄 수 있다 — 법률 조문과 그 세부 기준([별표 1] 항목)을 둘 다 정답으로 둔다(팀장 판정).
+끝의 `*` 는 하위 항목까지 맞힌다. 법 ID 없는 옛 모양(인용만)도 받지만 **다른 법의 같은 인용까지 맞힌 것으로 센다.**
+🔄 별표 인용은 0015 부터 조립된다 — 종전 「별표는 `citation()` 이 조립하지 않는다」는 낡은 문장이다.
 """
 
 from __future__ import annotations
@@ -36,41 +38,70 @@ import sys
 
 from app import retrieve as rt
 from app.settings import PARAMS, dsn
+from collect.law_map import LAWS
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 QUERIES = ROOT / "data" / "derived" / "search_golden.jsonl"
 
-#: 범주 넷을 **다 돈다.** 🚨 09-12 오후에 `건기식` 을 박고 돌렸는데 정답은 `식품` 에 있었다.
+#: **전체 + 법 넷을 다 돈다.** 🚨 09-12 오후에 `건기식` 을 박고 돌렸는데 정답은 `식품` 에 있었다.
 #:    ⛔ 사람이 헷갈리지 않게 하는 대신 **틀릴 수 있는 자리를 없앤다** (D-51).
-CATEGORIES = ("일반", "식품", "건기식", "화장품")
+#: 🔄 2026-09-24 (W6 · D-271 ③ ⑦) — 종전 범주 넷(일반 · 식품 · 건기식 · 화장품)을 **법 축**으로 바꿨다.
+#:    「전체」(필터 없음)가 판정 그래프가 실제로 도는 모양이다 — 넓게 한 번 찾는다(D-267).
+#:    🚨 W6 전에 잰 수(원장 09-12 · 09-16)는 **범주 필터 상태의 수**다 — 이 표와 나란히 놓을 때 조건을 붙인다 (D-178).
+SCOPES: tuple[tuple[str, tuple[str, ...]], ...] = (("전체", ()),) + tuple(
+    (law, (law,)) for law in LAWS
+)
 
 #: D-40 — 이 아래면 「측정 불가」다. 순위는 찍되 **비율을 말하지 않는다.**
 MIN_MEASURABLE = PARAMS.min_measurable
 
 
-def rank_of(hits: list[rt.Hit], want: str) -> int | None:
-    """`want` 조문이 몇 위인가. 🔴 **없으면 `None` 이다 — 후보 폭+1 이 아니다** (D-188).
+def _matches(h: rt.Hit, want: str) -> bool:
+    """정답 한 개와 맞는가. 🆕 2026-09-24 (W6 재측정) — **법 ID 를 같이 본다** · 끝이 `*` 면 하위 항목까지.
+
+        "제8조제1항제1호"                  인용만 (옛 모양 — 🚨 다른 법의 같은 「제8조제1항제1호」도 맞힌 것으로 센다)
+        "013094:제8조제1항제1호"           법 ID + 인용
+        "013453:[별표 1]제1호*"            [별표 1]제1호 와 그 아래(제1호가목 · 제1호다목 …)
+
+    ⛔ 종전에는 인용 글자만 댔다. 「[별표 1]제1호가목」은 식품표시광고법 시행령에도(질병 예방 표방) 시행규칙에도(「제품명」)
+       있다 — 법 ID 없이 대면 **목록 청크를 정답으로 셀 수 있다**(2026-09-24 실측 상위 10 에 둘 다 있었다).
+    """
+    law_id, _, cite = want.rpartition(":")
+    if law_id and h.law_id != law_id:
+        return False
+    if cite.endswith("*"):
+        base, got = cite[:-1], h.citation or ""
+        # 🚨 「제1호*」가 「제10호」를 맞히지 않게 — 바로 뒤가 숫자면 다른 항목이다
+        return got.startswith(base) and not got[len(base) : len(base) + 1].isdigit()
+    return h.citation == cite
+
+
+def rank_of(hits: list[rt.Hit], want: str | list[str]) -> int | None:
+    """정답 조문이 몇 위인가 — 정답이 여럿이면 **가장 앞선 것**. 🔴 **없으면 `None` 이다 — 후보 폭+1 이 아니다** (D-188).
 
     ⛔ 「51위」라고 적으면 「후보 밖」이 「간신히 밖」처럼 읽힌다. 모르는 것은 모른다.
+    🆕 2026-09-24 — `want` 가 목록일 수 있다. 법률 조문과 그 세부 기준([별표 1] 항목)을 **둘 다 정답**으로 둔다
+       (팀장 판정 2026-09-24 — 세부 기준 우선 · 법률 조문도 인정). W6 전에는 [별표 1] 이 「일반」에 있어 법률 조문만 보였다.
     """
+    wants = [want] if isinstance(want, str) else list(want)
     for i, h in enumerate(hits, start=1):
-        if h.citation == want:
+        if any(_matches(h, w) for w in wants):
             return i
     return None
 
 
 def probe_one(cur, q: str, want: str, pool: int) -> dict:  # noqa: ANN001
-    """질의 하나를 범주 넷에 다 넣고, 갈래별 순위와 RRF 순위를 낸다."""
-    out: dict = {"q": q, "want": want, "by_category": {}}
-    for cat in CATEGORIES:
+    """질의 하나를 전체 + 법 넷에 다 넣고, 갈래별 순위와 RRF 순위를 낸다."""
+    out: dict = {"q": q, "want": want, "by_scope": {}}
+    for name, laws in SCOPES:
         try:
-            vec = rt.by_vector(cur, q, cat, pool)
+            vec = rt.by_vector(cur, q, laws, pool)
             vector_state = "ok"
         except rt.RetrieveError as e:
             vec, vector_state = [], f"{type(e).__name__}: {e}"
-        lex = rt.by_lexical(cur, q, cat, pool)
+        lex = rt.by_lexical(cur, q, laws, pool)
         fused = rt.fuse(vec, lex, limit=pool)
-        out["by_category"][cat] = {
+        out["by_scope"][name] = {
             "vector_state": vector_state,
             "pool_vector": len(vec),
             "pool_lexical": len(lex),
@@ -112,7 +143,7 @@ def main() -> int:
         return 1
 
     # 🚨 **잰 조건을 먼저 찍는다** — 표만 옮겨 적으면 분모가 떨어져 나간다 (D-178).
-    print(f"  질의 {len(rows)}건 · 후보 폭 {args.pool} · 범주 {len(CATEGORIES)}개를 다 돈다")
+    print(f"  질의 {len(rows)}건 · 후보 폭 {args.pool} · 전체 + 법 {len(LAWS)}개를 다 돈다")
     if args.pool != rt.POOL:
         print(
             f"  ⚠️ **후보 폭 {args.pool} — 기본값 {rt.POOL} 밖이다.** 분모가 다르므로 "
@@ -131,22 +162,20 @@ def main() -> int:
         for r in rows:
             results.append(probe_one(cur, r["q"], r["want"], args.pool))
 
-    print(f"\n  {'질의':<28} {'범주':<5} {'후보(어휘)':>9} {'벡터':>5} {'어휘':>5} {'RRF':>5}")
+    print(f"\n  {'질의':<28} {'범위':<8} {'후보(어휘)':>9} {'벡터':>5} {'어휘':>5} {'RRF':>5}")
     for res in results:
-        for cat, m in res["by_category"].items():
-            # 🚨 어느 갈래도 못 찾은 범주는 **찍지 않는다** — 넷을 다 찍으면 표가 4배가 되고
-            #    「정답이 있는 범주」가 안 보인다. 다만 전부 못 찾으면 아래에서 따로 알린다.
+        for cat, m in res["by_scope"].items():
+            # 🚨 어느 갈래도 못 찾은 범위는 **찍지 않는다** — 다 찍으면 표가 다섯 배가 되고
+            #    「정답이 있는 법」이 안 보인다. 다만 전부 못 찾으면 아래에서 따로 알린다.
             if m["rank_vector"] is m["rank_lexical"] is m["rank_rrf"] is None:
                 continue
             print(
-                f"  {res['q'][:26]:<28} {cat:<5} {m['pool_lexical']:>9} "
+                f"  {res['q'][:26]:<28} {cat:<8} {m['pool_lexical']:>9} "
                 f"{_fmt(m['rank_vector']):>5} {_fmt(m['rank_lexical']):>5} {_fmt(m['rank_rrf']):>5}"
             )
-    lost = [
-        r["q"] for r in results if all(m["rank_rrf"] is None for m in r["by_category"].values())
-    ]
+    lost = [r["q"] for r in results if all(m["rank_rrf"] is None for m in r["by_scope"].values())]
     if lost:
-        print(f"\n  🔴 후보 {args.pool} 안에서 **어느 범주에서도 못 찾은 질의 {len(lost)}건**")
+        print(f"\n  🔴 후보 {args.pool} 안에서 **어느 범위에서도 못 찾은 질의 {len(lost)}건**")
         for q in lost[:5]:
             print(f"     {q}")
         print("     🚨 이것이 리랭커로 못 고치는 몫이다 — 후보에 없는 것은 순서를 못 바꾼다")
@@ -154,11 +183,11 @@ def main() -> int:
     states = {
         m["vector_state"]
         for r in results
-        for m in r["by_category"].values()
+        for m in r["by_scope"].values()
         if m["vector_state"] != "ok"
     }
     if states:
-        print(f"\n  ⛔ 벡터 갈래가 안 돈 범주가 있다 — {sorted(states)}")
+        print(f"\n  ⛔ 벡터 갈래가 안 돈 범위가 있다 — {sorted(states)}")
         print("     🚨 그 줄의 「—」는 「후보에 없다」가 아니라 **「못 쟀다」**다 (D-188)")
 
     if args.json:

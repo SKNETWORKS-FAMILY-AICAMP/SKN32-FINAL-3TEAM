@@ -186,7 +186,7 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     🔄 종전에는 여기가 문구 검수였다 — 검수는 `/u/review` 로 옮겼다 (2026-09-16, ksr 안).
     ⬜ 판정 엔진이 없어 지금은 통계가 0/— 로 뜬다 — 정상이다 (D-147, 가짜 수치를 안 그린다).
     ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX`
-      (D-125 통과 조건의 위험도 문턱 = R1 · D-227)을 그대로 쓴다 — 문턱을 여기서 따로 두지 않는다.
+      (D-125 통과 조건의 위험도 문턱 = 🔄 **R0** · D-273)을 그대로 쓴다 — 문턱을 여기서 따로 두지 않는다.
     """
     if not reachable(session):
         # 🚨 수를 **None** 으로 넘긴다 — 템플릿이 0건이 아니라 「—」와 안내를 그린다 (D-72).

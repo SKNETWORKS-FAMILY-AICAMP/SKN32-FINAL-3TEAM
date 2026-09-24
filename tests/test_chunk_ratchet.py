@@ -20,7 +20,7 @@ def _row(i: int, frag: str) -> dict:
     return {
         "chunk_id": f"{frag}#{i}",
         "fragment_id": frag,
-        "category": ["일반"],
+        "law": "표시광고법",
         "text": f"본문 {i}",
         "part_total": 1,
     }
@@ -108,3 +108,49 @@ def test_층이_통째로_사라지면_줄어든_것이다() -> None:
     assert chunk.shrinkage({"전체": 10, "a": 5, "b": 5}, {"전체": 10, "a": 10})
     assert chunk.shrinkage({"a": 100}, {"a": 95}) == []  # 정확히 5% 는 문턱 안
     assert chunk.shrinkage({"a": 100}, {"a": 94})
+
+
+@pytest.mark.gate
+def test_법을_못_정한_청크가_있으면_쓰지_않고_멈춘다(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🆕 W6 (2026-09-24 · D-271 ①) — ⛔ 종전 `category_of()` 는 모르면 「일반」을 줬다. 기본값으로 떨어뜨리지 않는다."""
+    run, seed = world
+    out = seed(10, 2)
+    before = out.read_bytes()
+    orig_rows = (
+        _rows  # 🚨 `world.run` 은 부를 때마다 이 모듈의 `_rows` 를 찾는다 — 그것을 바꿔 끼운다
+    )
+
+    def rows_with_unknown(n_art: int, n_annex: int) -> list[dict]:
+        rs = orig_rows(n_art, n_annex)
+        rs[0] = {**rs[0], "law": None, "law_id": "999999"}
+        return rs
+
+    monkeypatch.setattr(sys.modules[__name__], "_rows", rows_with_unknown)
+    assert run(10, 2, "--dump") == 1
+    assert out.read_bytes() == before, "🔴 멈췄는데 이전 판이 덮였다"
+
+
+@pytest.mark.gate
+def test_별표_청크는_별표_제목과_상위_항목을_문맥으로_든다() -> None:
+    """🆕 2026-09-24 (W6 재측정) — 「제품명」 같은 목록 청크가 벡터 상위를 점령했다. 조문(0008)과 같은 처방이다.
+
+    🚨 `text` 는 그대로 · 상위 항목은 **같은 구역**에서만 찾는다 · 못 찾으면 있는 것만 붙인다(지어내지 않는다).
+    """
+    by_path = {
+        ("본문", "1"): "수입 식품등",
+        ("본문", "1.가"): "가 항목",
+        ("비고", "1"): "비고 본문",
+    }
+    base = {"annex_no_head": 1, "annex_title": "식품등의 일부 표시사항", "section": "본문"}
+    assert chunk._annex_context({**base, "path": "1"}, by_path) == "[별표 1] 식품등의 일부 표시사항"
+    assert chunk._annex_context({**base, "path": "1.가.3"}, by_path) == (
+        "[별표 1] 식품등의 일부 표시사항\n수입 식품등\n가 항목"
+    )
+    assert chunk._annex_context({**base, "section": "비고", "path": "1.가"}, by_path) == (
+        "[별표 1] 식품등의 일부 표시사항 · 비고\n비고 본문"
+    ), "🔴 다른 구역(본문)의 항목을 끌어왔다"
+    assert (
+        chunk._annex_context({**base, "path": "9.가"}, by_path) == "[별표 1] 식품등의 일부 표시사항"
+    )
