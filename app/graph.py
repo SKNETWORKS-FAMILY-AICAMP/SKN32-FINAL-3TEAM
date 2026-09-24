@@ -62,7 +62,7 @@ from app.contracts import (
     Verdict,
     is_pass,
 )
-from app.settings import DEFAULT_CATEGORY, PARAMS
+from app.settings import PARAMS
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
 MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
@@ -242,8 +242,8 @@ def timed(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
 #: 법별 노드가 받는 품목. `None` = **모든 품목** (표시광고법은 품목과 무관하게 걸린다).
 #: 🔄 **D-271 — 「일반」은 없다.** `일반상품`(기획서 2-4 「일반 상품」)과 `전용법_미수록` 은 **표시광고법만** 탄다 —
 #:    두 품목 모두 아래 어느 법의 범위에도 없어서 `law_ftc` 하나로 떨어진다. 전용법 품목은 통과 금지 · 미검수 고지다 (D-277).
-#:    ⛔ **청크의 `category` 와 섞지 않는다** — 청크 쪽 「일반」은 법 이름 낱말이 안 걸린 기본값이었다(D-271 맥락 2).
-#:       🔜 W6 — 칸 이름이 `law` 로 바뀌고 법별 노드가 자기 법 근거만 거른다.
+#:    ⛔ **청크의 `law`(법 축)와 섞지 않는다** — 🔄 W6(0019)로 청크 칸이 `category` → `law` 가 됐다(D-271 ①).
+#:       🔜 W4 — 법별 노드가 `collect/law_map` 으로 자기 법 근거만 거른다(노드 이름 ↔ 법 축 대응도 그때).
 #: 🚨 **순서가 곧 팬아웃 순서다** — 스텁과 컴파일본이 같은 순서를 낸다(`Send` 목록 순서 · 2026-09-23 실측).
 LAW_SCOPE: dict[str, frozenset[Category] | None] = {
     "law_ftc": None,
@@ -312,22 +312,9 @@ def classify(state: CoreState) -> dict[str, Any]:
     return {"laws": laws_for(product.category)}
 
 
-#: 🔜 **W6 에서 지운다** — 품목(계약 `Category`)을 청크 범주로 넘기는 **임시 다리**다 (D-271 ③ · D-192).
-#: 🔄 2026-09-23 (W3) — 계약에서 「일반」이 `일반상품` · `전용법_미수록` 으로 갈렸는데 **청크 값은 아직 「일반」이다**
-#:    (정본 B 재생성 · 0019 전). 품목 이름을 그대로 넘기면 `ANY(c.category)` 가 **0건**이 된다 — 오류 없이 근거가 빈다.
-#:    두 품목 모두 표시광고법만 타므로(D-277) 청크의 「일반」(= 법 이름 낱말이 안 걸린 기본값 · 사실상 표시광고법 쪽)으로 보낸다.
-#: ⛔ W6 — 검색은 **법으로** 거르고 품목을 청크 필터로 넘기지 않는다(D-271 ③). 그때 이 표와 `DEFAULT_CATEGORY` 가 같이 사라진다.
-_CHUNK_CATEGORY: dict[Category, str] = {
-    Category.일반상품: DEFAULT_CATEGORY,
-    Category.전용법_미수록: DEFAULT_CATEGORY,
-}
-
-
-def _chunk_category(category: Category | None) -> str:
-    """품목 → 청크 범주 (W6 전 임시). 미확정이면 `DEFAULT_CATEGORY` 로 한 번 — 종전과 같다."""
-    if category is None:
-        return DEFAULT_CATEGORY
-    return _CHUNK_CATEGORY.get(category, category.value)
+#: ⛔ 🔄 2026-09-24 (W6 · D-271 ③) — 품목을 청크 범주로 넘기던 **임시 다리**(`_CHUNK_CATEGORY` · `_chunk_category`)를 지웠다.
+#:    검색은 **법으로** 거르고 판정 그래프는 **넓게 한 번**(법 필터 없음) 찾는다 — 법별 노드가 자기 법 근거만 거른다(D-267).
+#:    🚨 품목을 검색 필터로 넘기지 않는다 — 품목과 법은 다른 축이다(D-271 ④). 게이트가 `retrieve` 의 호출을 본다.
 
 
 def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
@@ -353,8 +340,9 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
        ⛔ 노드가 스스로 `connect()` 하면 문장마다 연결이 열린다 · 상태에 담으면 체크포인터(D-129)가 깨진다.
     🔴 **DB 가 없어도 돈다** (D-124). 빈 dict 로 삼키지 않고 문장마다 「검색을 못 했다」를 값으로 남긴다 (D-220).
     🔴 **팬아웃 앞에서 한 번** 돈다 (D-267) — 법마다 다시 부르면 검색이 3~4배다.
-       ⬜ 지금은 `category` 하나로 거른다(`%s = ANY(c.category)`). 미확정이면 `DEFAULT_CATEGORY`(청크 `일반` =
-       표시광고법)로만 돈다 — **식품·화장품 전용 조문을 못 본다.** 🔜 W6 — 넓게 한 번 · 법별 노드가 거른다 (D-229 ⬜).
+       🔄 2026-09-24 (W6 · D-271 ③) — **법 필터 없이 넓게 한 번** 찾는다. ⛔ 종전에는 품목을 청크 범주로 넘겨
+       미확정이면 「일반」만 봤다 — 식품·화장품 전용 조문을 못 봤다. 🔜 W4 — 법별 노드가 `law` 로 자기 근거만 거른다.
+       ⬜ 결과 폭은 `PARAMS.top_k` 그대로다 — 세 법이 한 순위를 나눠 쓰므로 법마다 근거가 모자랄 수 있다. W4 에서 잰다.
     🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 근거 없이 판정하면 D-224 위반이다.
     """
     sents = state.get("sents", [])
@@ -364,11 +352,9 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     if cur is None:
         return {"evidence": [SentEvidence(sent_id=sent_id(i)) for i in range(len(sents))]}
 
-    product = state.get("product") or ProductContext()
-    chunk_category = _chunk_category(product.category)
     found: list[SentEvidence] = []
     for i, text in enumerate(sents):
-        hits, st = rt.search(cur, text, chunk_category)
+        hits, st = rt.search(cur, text)
         found.append(
             SentEvidence(
                 sent_id=sent_id(i),

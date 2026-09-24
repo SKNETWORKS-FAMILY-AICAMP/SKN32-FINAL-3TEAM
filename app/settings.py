@@ -178,9 +178,8 @@ ALLOWED_MODELS: frozenset[str] = frozenset({"nlpai-lab/KURE-v1"})
 #:    게이트 `test_판정_파라미터를_코드에_다시_적지_않는다` 가 그것을 본다 (D-117).
 PARAMS = Params()
 
-#: 🚨 **범주 어휘의 정본은 `app/contracts.py` 의 `Category` 다** — 여기 다시 적지 않는다.
-#:    기본값만 둔다. `retrieve`·`api` 가 `str` 로 받고 있어 오타가 조용히 0건이 됐다.
-DEFAULT_CATEGORY = "일반"
+#: ⛔ 🔄 2026-09-24 (W6 · D-271 ③) — `DEFAULT_CATEGORY = "일반"` 을 지웠다. 검색은 **법으로** 거르고 비우면 전부다
+#:    (`app/retrieve.law_filter`). 법 어휘의 정본은 `collect/law_map.LAWS` 다 — 여기 다시 적지 않는다.
 
 
 # ══════════════════════════════════════════════════════════════════════
