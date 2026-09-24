@@ -12,10 +12,6 @@
     "data/derived/mfds_hf_labels.jsonl": {
       "sha256": "2f5e9ae6a4c9b2c60b56c29390a79ca97c67f6dd255365bc7f3b4abde9f1b161",
       "bytes": 405806
-    },
-    "data/derived/labels/오한빈.jsonl": {
-      "sha256": "63d4bd7b19eba6e29d053badea0314cf383fe103ab461ca76e8b3599d724aa87",
-      "bytes": 125569
     }
   },
   "승인문구_종수": 178,
@@ -24,32 +20,62 @@
   "min_measurable": 30,
   "split_key": "doc_id",
   "note": "평가셋은 조문 라벨 원천으로만 만든다. 🔴 낱말(test_term)과 문장(test_sentence)을 섞지 않는다 — 한 숫자로 보고하면 두 과제를 평균한 수가 된다. ftc 슬라이스는 학습과 같은 기관이라 원천 편향을 재지 못한다 (same_source).",
-  "sizes": {
+  "counts_by_citation": {
     "train": {
-      "문서": 741,
-      "문구": 808
+      "002011:제3조제1항제1호": 426,
+      "002011:제3조제1항제2호": 137,
+      "002011:제3조제1항제3호": 4,
+      "002011:제3조제1항제4호": 16,
+      "013094:제8조제1항제1호": 41,
+      "013094:제8조제1항제2호": 38,
+      "013094:제8조제1항제3호": 32,
+      "013094:제8조제1항제4호": 32,
+      "013094:제8조제1항제5호": 25
     },
     "test_sentence": {
-      "문서": 306,
-      "문구": 371
+      "002011:제3조제1항제1호": 40,
+      "002011:제3조제1항제2호": 40,
+      "002011:제3조제1항제3호": 2,
+      "002011:제3조제1항제4호": 1
+    }
+  },
+  "unmeasurable_by_citation": {
+    "test_sentence": [
+      "002011:제3조제1항제3호",
+      "002011:제3조제1항제4호"
+    ]
+  },
+  "pending_guide": {
+    "질병의 예방 치료, 의약품 혼동, 건강기능식품 혼동": 558,
+    "거짓ㆍ과장ㆍ기만": 1145,
+    "부당한 비교ㆍ비방": 131
+  },
+  "sizes": {
+    "train": {
+      "문서": 766,
+      "문구": 844
+    },
+    "test_sentence": {
+      "문서": 143,
+      "문구": 208
     },
     "test_sentence_ftc봉인": {
       "문서": 83,
       "문구": 148
     },
     "test_sentence_해설서사람라벨": {
-      "문서": 163,
-      "문구": 163
+      "문서": 0,
+      "문구": 0
     },
     "사전(사례집)": {
-      "문서": 140,
-      "문구": 313
+      "문서": 165,
+      "문구": 349
     }
   },
   "counts": {
     "train": {
       "거짓_과장": 458,
-      "소비자_기만": 137,
+      "소비자_기만": 162,
       "질병_예방치료_표방": 41,
       "의약품_오인": 38,
       "건강기능식품_오인": 32,
@@ -57,14 +83,10 @@
       "부당_비교광고": 4
     },
     "test_sentence": {
-      "거짓_과장": 85,
-      "건강기능식품_오인": 53,
-      "소비자_기만": 49,
-      "부당_비교광고": 33,
-      "비방광고": 12,
-      "의약품_오인": 8,
-      "질병_예방치료_표방": 6,
-      "후기_체험기_기만": 1
+      "소비자_기만": 40,
+      "거짓_과장": 40,
+      "부당_비교광고": 2,
+      "비방광고": 1
     },
     "test_sentence_ftc봉인": {
       "소비자_기만": 40,
@@ -72,21 +94,13 @@
       "부당_비교광고": 2,
       "비방광고": 1
     },
-    "test_sentence_해설서사람라벨": {
-      "건강기능식품_오인": 53,
-      "거짓_과장": 45,
-      "부당_비교광고": 31,
-      "비방광고": 11,
-      "소비자_기만": 9,
-      "의약품_오인": 8,
-      "질병_예방치료_표방": 6,
-      "후기_체험기_기만": 1
-    },
+    "test_sentence_해설서사람라벨": {},
     "사전(사례집)": {
       "질병_예방치료_표방": 41,
       "의약품_오인": 38,
       "건강기능식품_오인": 32,
-      "거짓_과장": 32
+      "거짓_과장": 32,
+      "소비자_기만": 25
     }
   },
   "negatives": {
@@ -98,13 +112,20 @@
   },
   "unmeasurable": {
     "test_sentence": [
+      "건강기능식품_오인",
+      "부당_비교광고",
       "비방광고",
       "의약품_오인",
       "질병_예방치료_표방",
       "후기_체험기_기만"
     ]
   },
-  "no_eval_at_all": [],
+  "no_eval_at_all": [
+    "건강기능식품_오인",
+    "의약품_오인",
+    "질병_예방치료_표방",
+    "후기_체험기_기만"
+  ],
   "source_sets": {
     "train": [
       "ftc_decisions_body(비봉인·다중라벨)",
@@ -113,8 +134,7 @@
     ],
     "test_sentence": [
       "ftc_decisions_body(봉인)",
-      "mfds_hf_ingredient_board(봉인·음성)",
-      "mfds_special_use_guide(사람이 붙인 라벨 · D-172)"
+      "mfds_hf_ingredient_board(봉인·음성)"
     ]
   },
   "same_source": [
@@ -123,8 +143,7 @@
   "excluded_from_eval": {
     "다중라벨_문서": 98,
     "이유": "의결서가 두 호를 함께 걸면 인용 문구가 어느 호인지 적혀 있지 않다",
-    "범위밖_행": 85,
-    "범위밖_이유": "붙인 사람이 「별표1 여덟 유형 밖」이라 찍은 것이지 「적법」이 아니다. 해설서는 심의에서 삭제 판정을 받은 문구라 광고물 단위로는 문제가 있었다. 음성 표본으로 넣을지는 판정 대기 (D-59 「범위 밖」 자리)"
+    "해설서_이유": "원천 3분류는 위반임을 말하지만(D-237) 호를 말하지 않는다 — 현행 조문으로 읽으면 묶음 밖으로 가는 문구가 있다. 호를 조문 원문 기준으로 붙이기 전까지 평가에 넣지 않는다 (D-283)"
   },
   "assign": {
     "ftc:10001": "train",
@@ -864,6 +883,31 @@
     "casebook:43:136": "train",
     "casebook:43:137": "train",
     "casebook:43:138": "train",
+    "casebook:44:139": "train",
+    "casebook:44:140": "train",
+    "casebook:44:141": "train",
+    "casebook:44:142": "train",
+    "casebook:44:143": "train",
+    "casebook:44:147": "train",
+    "casebook:44:149": "train",
+    "casebook:44:151": "train",
+    "casebook:45:152": "train",
+    "casebook:45:153": "train",
+    "casebook:45:154": "train",
+    "casebook:45:155": "train",
+    "casebook:45:156": "train",
+    "casebook:46:157": "train",
+    "casebook:46:158": "train",
+    "casebook:47:159": "train",
+    "casebook:47:160": "train",
+    "casebook:47:161": "train",
+    "casebook:48:162": "train",
+    "casebook:48:163": "train",
+    "casebook:48:164": "train",
+    "casebook:49:165": "train",
+    "casebook:49:166": "train",
+    "casebook:49:167": "train",
+    "casebook:49:168": "train",
     "casebook:50:169": "train",
     "casebook:57:176": "train",
     "casebook:63:182": "train",
@@ -951,169 +995,6 @@
     "ftc:7399": "test_sentence",
     "ftc:4475": "test_sentence",
     "ftc:11327": "test_sentence",
-    "guide:cae9bd9a72b1": "test_sentence",
-    "guide:4e080f02d430": "test_sentence",
-    "guide:f5477e248c66": "test_sentence",
-    "guide:6090d0ccf228": "test_sentence",
-    "guide:7745d2b4adac": "test_sentence",
-    "guide:fa9975b11073": "test_sentence",
-    "guide:d7a412e06f1f": "test_sentence",
-    "guide:759500df8b7b": "test_sentence",
-    "guide:54655b276c9d": "test_sentence",
-    "guide:e549d15e56e7": "test_sentence",
-    "guide:4b2ed64d0c04": "test_sentence",
-    "guide:1702728c94d4": "test_sentence",
-    "guide:5a27c271cfae": "test_sentence",
-    "guide:80a3ae5d3102": "test_sentence",
-    "guide:05ac23b6e2a3": "test_sentence",
-    "guide:2133f8048396": "test_sentence",
-    "guide:344f445876be": "test_sentence",
-    "guide:fb49e7c20e5b": "test_sentence",
-    "guide:f5b4511e4aa7": "test_sentence",
-    "guide:08da98f6b22c": "test_sentence",
-    "guide:643fe32e7726": "test_sentence",
-    "guide:696c053de081": "test_sentence",
-    "guide:762d41cc98c8": "test_sentence",
-    "guide:d5bf430e3080": "test_sentence",
-    "guide:3929f7681eff": "test_sentence",
-    "guide:7ee54c48a2a0": "test_sentence",
-    "guide:d1febec381ec": "test_sentence",
-    "guide:bfd4b14bba85": "test_sentence",
-    "guide:f66fb81c04c5": "test_sentence",
-    "guide:55764ef6a735": "test_sentence",
-    "guide:71d32741163d": "test_sentence",
-    "guide:b8deac6c951c": "test_sentence",
-    "guide:c5de782f9635": "test_sentence",
-    "guide:78eda433f8cd": "test_sentence",
-    "guide:50cbac39d595": "test_sentence",
-    "guide:139e0097b2d7": "test_sentence",
-    "guide:3b8b78c09513": "test_sentence",
-    "guide:156f8a9c452c": "test_sentence",
-    "guide:a649d4aa99e9": "test_sentence",
-    "guide:5de0bc95c095": "test_sentence",
-    "guide:2ee560eb1895": "test_sentence",
-    "guide:85488a3196dc": "test_sentence",
-    "guide:19fa53a9334a": "test_sentence",
-    "guide:34f6d9195b25": "test_sentence",
-    "guide:7747207ded17": "test_sentence",
-    "guide:a65a3a1ebcb1": "test_sentence",
-    "guide:20b34b5432ac": "test_sentence",
-    "guide:cfa891a43667": "test_sentence",
-    "guide:d34c902d7f53": "test_sentence",
-    "guide:cbd5001d42b5": "test_sentence",
-    "guide:55656f923d27": "test_sentence",
-    "guide:66eff285243b": "test_sentence",
-    "guide:948e34aebaf6": "test_sentence",
-    "guide:7171a1a22a7f": "test_sentence",
-    "guide:ed656cfe643e": "test_sentence",
-    "guide:b7341fee578f": "test_sentence",
-    "guide:66b9ce750c28": "test_sentence",
-    "guide:1db979187e1a": "test_sentence",
-    "guide:d5eb03fcc5bf": "test_sentence",
-    "guide:a8b3b5102f27": "test_sentence",
-    "guide:980b6b99f54f": "test_sentence",
-    "guide:20eac88f70fb": "test_sentence",
-    "guide:6614ae7847cd": "test_sentence",
-    "guide:4d7aa27fc7e6": "test_sentence",
-    "guide:3bafa7884f0a": "test_sentence",
-    "guide:3f7ba3d752ea": "test_sentence",
-    "guide:8c80b11a5532": "test_sentence",
-    "guide:633f5f4b01ea": "test_sentence",
-    "guide:b1f5b427038b": "test_sentence",
-    "guide:186bfbe7fb6e": "test_sentence",
-    "guide:8e0494e1834d": "test_sentence",
-    "guide:d70c85df1d50": "test_sentence",
-    "guide:f9eb135dc6e4": "test_sentence",
-    "guide:9f21c8a00c8f": "test_sentence",
-    "guide:5c4877a0df1e": "test_sentence",
-    "guide:96771d6ab59c": "test_sentence",
-    "guide:9b8429dc59f0": "test_sentence",
-    "guide:e766dcd77536": "test_sentence",
-    "guide:6750d28a1a32": "test_sentence",
-    "guide:02f0d03e7e76": "test_sentence",
-    "guide:1ae473629012": "test_sentence",
-    "guide:5891bbb85083": "test_sentence",
-    "guide:1b7dd359b1e0": "test_sentence",
-    "guide:9858cf76729f": "test_sentence",
-    "guide:ca61641b7c7e": "test_sentence",
-    "guide:c5bca2846e16": "test_sentence",
-    "guide:f545b5104b4e": "test_sentence",
-    "guide:67da8975565e": "test_sentence",
-    "guide:84aae0f9242c": "test_sentence",
-    "guide:861d161d57cd": "test_sentence",
-    "guide:290ec74a9932": "test_sentence",
-    "guide:06c15ed92a5e": "test_sentence",
-    "guide:4a0f5e1ca131": "test_sentence",
-    "guide:39de69d0e119": "test_sentence",
-    "guide:7fce0c55edce": "test_sentence",
-    "guide:4f982c5c4abc": "test_sentence",
-    "guide:ba20a7cb63f8": "test_sentence",
-    "guide:9cb158e3356b": "test_sentence",
-    "guide:fbed3da1edfd": "test_sentence",
-    "guide:1888254b5fc7": "test_sentence",
-    "guide:ff540d9da2d5": "test_sentence",
-    "guide:0c7aa7e4f65e": "test_sentence",
-    "guide:99473b05f2f3": "test_sentence",
-    "guide:5a5f29314f7d": "test_sentence",
-    "guide:3065b3742d13": "test_sentence",
-    "guide:9fe370038ae6": "test_sentence",
-    "guide:d99b610cb177": "test_sentence",
-    "guide:a60b74b5e50c": "test_sentence",
-    "guide:a24a3e67fd5b": "test_sentence",
-    "guide:e7f94b274eaf": "test_sentence",
-    "guide:236f346eba9a": "test_sentence",
-    "guide:eed7b270117c": "test_sentence",
-    "guide:a105b6e207ce": "test_sentence",
-    "guide:d075a27db2f5": "test_sentence",
-    "guide:6f9a76afd337": "test_sentence",
-    "guide:b424c4e1b31f": "test_sentence",
-    "guide:95e73765e017": "test_sentence",
-    "guide:dbb21d16422d": "test_sentence",
-    "guide:ddd4389de01a": "test_sentence",
-    "guide:837a9c55fe05": "test_sentence",
-    "guide:b350974c1a7a": "test_sentence",
-    "guide:474ea47b9f19": "test_sentence",
-    "guide:bd80a4dcea49": "test_sentence",
-    "guide:375975015f3e": "test_sentence",
-    "guide:b16f278367eb": "test_sentence",
-    "guide:390305a0ea02": "test_sentence",
-    "guide:afbebdb6b28c": "test_sentence",
-    "guide:5ee4830f25fa": "test_sentence",
-    "guide:ba1d450fc3d9": "test_sentence",
-    "guide:52c14bd66968": "test_sentence",
-    "guide:bc55dd392c15": "test_sentence",
-    "guide:fae51c920c05": "test_sentence",
-    "guide:d6506c8d4987": "test_sentence",
-    "guide:fd2053e34182": "test_sentence",
-    "guide:bb6a6d5b6aa2": "test_sentence",
-    "guide:f1fe39700d79": "test_sentence",
-    "guide:5d50d6252b53": "test_sentence",
-    "guide:6af5a85eccc8": "test_sentence",
-    "guide:a19fe1bc7424": "test_sentence",
-    "guide:be4a951a5ded": "test_sentence",
-    "guide:935c0239e8ce": "test_sentence",
-    "guide:af3e32a47e2a": "test_sentence",
-    "guide:6001e4ab1660": "test_sentence",
-    "guide:bd8b4ec15317": "test_sentence",
-    "guide:3fae5c439fff": "test_sentence",
-    "guide:51d1073886d8": "test_sentence",
-    "guide:0a77b388b879": "test_sentence",
-    "guide:b32bb9ebae6a": "test_sentence",
-    "guide:931aae96ca58": "test_sentence",
-    "guide:82483c7f49e9": "test_sentence",
-    "guide:72b8b64deae2": "test_sentence",
-    "guide:3fcb71850a8d": "test_sentence",
-    "guide:54857669eeec": "test_sentence",
-    "guide:8441380b19eb": "test_sentence",
-    "guide:6fd337f68d5c": "test_sentence",
-    "guide:4e1b47273f9a": "test_sentence",
-    "guide:6c970291a8c3": "test_sentence",
-    "guide:56dbe3af30a5": "test_sentence",
-    "guide:10c8e6297bfa": "test_sentence",
-    "guide:6acce89b2660": "test_sentence",
-    "guide:31e33ef14f21": "test_sentence",
-    "guide:5ca15c5e96ff": "test_sentence",
-    "guide:ace7a2ddff32": "test_sentence",
     "hf:145:0": "test_sentence",
     "hf:157:0": "test_sentence",
     "hf:22:0": "test_sentence",
