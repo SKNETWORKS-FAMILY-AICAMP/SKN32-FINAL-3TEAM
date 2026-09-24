@@ -756,6 +756,12 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
             )
         if r["labels"] and not r["근거"]:
             raise SystemExit(f"🔴 위반 라벨에 근거 조문이 없다 — {r['id']} (D-282)")
+        # 🆕 2026-09-25 (D-285 개정 4 · 팀장 판정 (ㄴ)) — `golden_sample` 에는 **조건 칸이 없다.**
+        #    ⛔ 조건 M(보류) · D(판정 대상 아님) 행과 근거가 후보로만 있는 행을 넣으면 `violations` 가 빈 채 들어가
+        #       **적법으로 읽힌다.** 넣지 않고 수를 보인다(`DB미적재_조건칸없음`). 칸은 W1 평가 도구와 함께 정한다.
+        if r.get("조건") in ("M", "D") or (r.get("조건") and not r["근거"]):
+            stat["DB미적재_조건칸없음"] += 1
+            continue
         evidence = [_evidence(c) for c in r["근거"]]
         stat[r["split"]] += 1
         stat[f"unit:{r['unit']}"] += 1

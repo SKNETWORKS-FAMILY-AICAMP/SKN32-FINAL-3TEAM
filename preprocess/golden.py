@@ -19,6 +19,9 @@
 
 🔴 **`labels` 가 빈 리스트인 행은 적법이다** — 없는 것이 라벨이다. 지우지 않는다.
    그것이 없으면 「전부 위반」이라 답해도 Recall 100% 가 된다.
+   🔄 2026-09-25 (D-285 개정 4 · 지시서 §7 선행 게이트) — **단, `조건` 칸이 있는 행은 조건이 먼저다.**
+      해설서 행은 원천이 위반이라 했고(D-237) `조건` 이 기대 응답을 정한다 — C·A·B 위반 · M 보류 · D 판정 대상 아님.
+      M · D 행과 `근거_후보` 행은 `labels` 가 비어도 **적법이 아니다.** 판별은 `is_negative()` 한 곳에서 한다 (D-99).
 
 🚨 **문서 라벨을 문구에 전파한다.** 의결서 한 건에 문구가 여럿이면 모두 같은 라벨을 받는다.
    다중 라벨 문서는 `split.py` 가 평가에서 이미 뺐다 — 학습에만 이 잡음이 남는다.
@@ -95,6 +98,19 @@ def reason_keep(text: str) -> tuple[str, str | None]:
     return s, None
 
 
+def is_negative(r: dict) -> bool:
+    """적법(음성) 표본인가. 🔴 `조건` 칸이 있으면 **음성이 아니다** — 해설서 행은 원천이 위반이라 했다 (D-237 · 지시서 §7).
+
+    ★ `eval_rule` 도 이것을 쓴다 — 음성 판별을 두 곳에 두면 한쪽만 고쳐진다 (D-99).
+    """
+    return not r["labels"] and "조건" not in r
+
+
+def is_positive(r: dict) -> bool:
+    """위반(양성) 평가 표본인가 — 유형이 있거나, 조건이 C·A·B 인 행(근거가 후보로만 있는 행 포함)."""
+    return bool(r["labels"]) or r.get("조건") in ("C", "A", "B")
+
+
 def check_basis(rows: list[dict]) -> None:
     """🔴 **라벨은 근거에서 계산된 것이어야 한다** (D-282). 어긋난 행이 있으면 멈춘다 — 쓰지 않는다.
 
@@ -106,6 +122,16 @@ def check_basis(rows: list[dict]) -> None:
         want = statute.types_of(r["근거"])
         if sorted(r["labels"]) != want or (r["labels"] and not r["근거"]):
             bad.append(f"{r['id']}  labels={r['labels']}  근거={r['근거']}  계산={want}")
+        # 🆕 D-285 개정 4 — 조건 칸이 있는 행의 꼴. ⛔ C·A·B 인데 근거도 후보도 없으면 채점할 정답이 없다
+        cond = r.get("조건")
+        if cond is None:
+            continue
+        if cond not in ("C", "A", "B", "M", "D"):
+            bad.append(f"{r['id']}  모르는 조건 {cond!r}")
+        elif cond in ("C", "A", "B") and not (r["근거"] or r.get("근거_후보")):
+            bad.append(f"{r['id']}  조건 {cond} 인데 근거도 후보도 없다")
+        elif cond == "D" and r["근거"]:
+            bad.append(f"{r['id']}  조건 D 인데 근거가 있다")
     if bad:
         raise SystemExit(
             f"🔴 라벨과 근거 조문이 어긋난 행 {len(bad)}개 (D-282) — 쓰지 않는다\n  "
@@ -132,20 +158,23 @@ def build() -> tuple[list[dict], dict]:
             stat["미배정"] += 1
             continue
         for k, text in enumerate(d["문구"]):
-            rows.append(
-                {
-                    "id": f"{d['doc_id']}#{k}",
-                    "text": text,
-                    "근거": d.get("근거") or [],
-                    "labels": d["유형"],
-                    "unit": d["단위"],
-                    "origin": "approved" if not d["유형"] else "real",
-                    "provenance": d["원천"],
-                    "구역": "주문",  # 🆕 D-234 — 어디서 왔는지 남긴다
-                    "redistributable": True,
-                    "split": split,
-                }
-            )
+            row = {
+                "id": f"{d['doc_id']}#{k}",
+                "text": text,
+                "근거": d.get("근거") or [],
+                "labels": d["유형"],
+                "unit": d["단위"],
+                # 🔄 D-285 개정 4 — 조건 칸이 있는 행(해설서)은 유형이 비어도 **승인 문구가 아니다**
+                "origin": "real" if d["유형"] or "조건" in d else "approved",
+                "provenance": d["원천"],
+                "구역": "주문",  # 🆕 D-234 — 어디서 왔는지 남긴다
+                "redistributable": True,
+                "split": split,
+            }
+            if "조건" in d:  # 🆕 D-285 개정 4 — 읽는 쪽이 조건을 먼저 본다 (`is_negative`)
+                for f in ("조건", "근거_후보", "판독", "원천결손"):
+                    row[f] = d[f]
+            rows.append(row)
             stat[split] += 1
 
         # 🆕 **「이유」 문구 — 학습에만 넣는다** (2026-09-17 · D-232 (A) · D-234).
@@ -256,7 +285,7 @@ def build() -> tuple[list[dict], dict]:
     train_text = {norm(r["text"]) for r in rows if r["split"] == "train"}
     kept, dropped = [], 0
     for r in rows:
-        if r["split"] == "test_sentence" and r["labels"] and norm(r["text"]) in train_text:
+        if r["split"] == "test_sentence" and is_positive(r) and norm(r["text"]) in train_text:
             dropped += 1
             continue
         kept.append(r)
@@ -269,7 +298,7 @@ def build() -> tuple[list[dict], dict]:
     #      평가셋이 그대로라 이전 측정과 같은 시험지로 비교된다. 학습 행의 라벨이 있어도 뺀다 — 같은 문구가
     #      학습에선 위반 · 평가에선 적법이면 **서로 모순된 표본**이다.
     #    🚨 위 위반 문장 규칙(평가 쪽을 뺀다)과 방향이 다르다 — 통일할지는 이 수(`음성겹침_학습제외`)를 본 뒤 정한다.
-    test_neg = {norm(r["text"]) for r in kept if r["split"] == "test_sentence" and not r["labels"]}
+    test_neg = {norm(r["text"]) for r in kept if r["split"] == "test_sentence" and is_negative(r)}
     before = len(kept)
     kept = [r for r in kept if not (r["split"] == "train" and norm(r["text"]) in test_neg)]
     stat["음성겹침_학습제외"] = before - len(kept)
@@ -302,7 +331,18 @@ def main() -> int:
     for s in ("train", "test_sentence"):
         sub = [r for r in rows if r["split"] == s]
         pos = [r for r in sub if r["labels"]]
-        print(f"\n  ── {s} — {len(sub):,}행 (위반 {len(pos):,} · 적법 {len(sub) - len(pos):,})")
+        neg = [r for r in sub if is_negative(r)]
+        # 🔄 D-285 개정 4 — 「적법」은 `is_negative` 로만 센다. 조건 칸이 있는 행은 따로 낸다(보류·대상 아님은 적법이 아니다)
+        print(
+            f"\n  ── {s} — {len(sub):,}행 (유형 있음 {len(pos):,} · 적법 {len(neg):,}"
+            f" · 조건 칸 {len(sub) - len(pos) - len(neg):,})"
+        )
+        cond = collections.Counter(r["조건"] for r in sub if "조건" in r)
+        if cond:
+            print(
+                f"     조건 칸이 있는 행(해설서) — {dict(sorted(cond.items()))}"
+                f" · 근거_후보 {sum(1 for r in sub if r.get('근거_후보'))}"
+            )
         c: collections.Counter = collections.Counter()
         for r in pos:
             for t in r["labels"]:

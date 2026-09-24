@@ -3,6 +3,7 @@
   uv run python -m scripts.guide_statute_round input  --out build/labels/guide_statute__입력.tsv
   uv run python -m scripts.guide_statute_round merge  --r1 <판독1.tsv> --r2 <판독2.tsv> [--rr1 <재판독1.tsv> --rr2 <재판독2.tsv>]
   uv run python -m scripts.guide_statute_round rebuild   # 판독 원자료만으로 채택·시트 (🆕 09-25 · TSV 없는 기기에서도)
+  uv run python -m scripts.guide_statute_round import-decisions --csv <채운 팀장판정표.csv>   # 🆕 09-25 (D-285 개정 4) → rebuild
 
 🚨 `-m` 으로 돌린다 — 스크립트로 돌리면 `scripts/collect.py` 가 `collect` 패키지를 가린다.
 
@@ -11,7 +12,10 @@
   2 (판독)  독립 판독 둘이 각자 TSV 를 낸다 — 서로의 결과를 보지 않는다
   3 merge   둘이 **같으면** 채택(`판독` = `독립판독_합의`) · 다르면 사람 2인 시트로
             🔄 09-25 (D-285 개정 2) — 기대 응답이 같은 갈림(D↔M · 호만 안 겹침)은 규칙으로 채택 · 시트는 기대 응답이 갈리는 행
-  4 (사람)  2인이 각자 시트를 채운다 → 팀장 판정표 ⬜ (다음 판) · 경계 묶음은 팀장이 묶음 단위로 판정(지시서 §6)
+  4 (사람)  2인이 각자 시트를 채운다 → 팀장 판정표 · 경계 묶음은 팀장이 묶음 단위로 판정(지시서 §6)
+            🔄 09-25 (D-285 개정 4) — `build/labels/guide_statute__팀장판정표.csv`(두 판독 나란히 · 빈 판정 칸)를 사람이 채우고
+            `import-decisions` 가 `decisions.jsonl`(원천 · 판정자는 사람이 적는다)로 옮긴다 → `rebuild` 가 판독을 덮는다(`팀장판정`)
+  5 평가    대기(시트 · 거래 조건)가 0 이 되면 `preprocess.split.guide_docs()` 가 채택본을 낸다 — 그 전에는 빈 목록
 
 🔄 `scripts/label_round.py` 머리말의 「참고 답은 라벨이 아니다」는 **8유형 라운드**의 규칙이다.
    해설서 **조문 인용**은 D-285 가 독립 판독 둘의 합의를 채택한다 — 행마다 `판독` 칸으로 사람 판정과 가른다.
@@ -53,6 +57,30 @@ from collect import statute  # noqa: E402
 READINGS = ROOT / "data" / "derived" / "labels" / "guide_statute" / "readings.jsonl"
 ADOPTED = ROOT / "data" / "derived" / "labels" / "guide_statute" / "adopted.jsonl"
 SHEET = ROOT / "build" / "labels" / "guide_statute__판정시트.csv"
+#: 🆕 2026-09-25 (D-285 개정 4) — **팀장 판정**. 사람이 채운 CSV 를 `import-decisions` 가 옮긴다 — 부류 「원천」(사람의 판정 · `labels/`)
+DECISIONS = ROOT / "data" / "derived" / "labels" / "guide_statute" / "decisions.jsonl"
+#: 팀장 판정표 — 두 판독을 나란히 싣는다(지시서 §6 「팀장 판정표」). ⛔ 2인 시트(`SHEET`)는 판독을 싣지 않는다 — 둘은 다른 표다
+TEAM_SHEET = ROOT / "build" / "labels" / "guide_statute__팀장판정표.csv"
+TEAM_COLS = (
+    "지문",
+    "문구",
+    "제품유형",
+    "원천라벨",
+    "대기사유",
+    "판독1",
+    "판독2",
+    "주근거",
+    "부근거",
+    "조건",
+    "제외목",
+    "원천결손",
+    "메모",
+    "판정자",
+)
+#: 🆕 2026-09-25 (D-272 개정) — **사항이 거래 조건인 문구**는 합의만으로 채택하지 않는다. 식품표시광고법 제8조① 은
+#: 시행령 제2조의 사항(명칭 · 성분 · 품질 …)에 관하여 걸리는데 가격 · 할인 · 환불은 그 목록에 없다 → 인용을 팀장이 정한다.
+#: 🚨 [임의] 낱말 근사다(사실원장 09-25 ⑮ · 채택 12행) — 「특가」 · 「1+1」 · 「매출」 은 넣지 않았다(판정 전 범위를 넓히지 않는다)
+TRADE = re.compile(r"가격|할인|환불|\d[\d,]*\s*원")
 
 CONDITIONS = ("C", "A", "B", "M", "D")
 #: [별표 1] 적용 제외 — 지시서 §1 표와 같은 목록. 🔴 `근거` 에 오면 안 된다 (D-238)
@@ -312,7 +340,7 @@ def merge(
                 "판독2": b[k],
             }
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    return {"재판독": len(redo), **decide(src, a, b)}
+    return {"재판독": len(redo), **decide(src, a, b, load_decisions(src))}
 
 
 def rebuild() -> dict:
@@ -339,7 +367,7 @@ def rebuild() -> dict:
         a[k], b[k] = rec["판독1"], rec["판독2"]
         redo += rec.get("판") == "재판독"
     _whole(src, a, b)
-    return {"재판독": redo, **decide(src, a, b)}
+    return {"재판독": redo, **decide(src, a, b, load_decisions(src))}
 
 
 def _whole(src: dict, a: dict, b: dict) -> None:
@@ -352,10 +380,45 @@ def _whole(src: dict, a: dict, b: dict) -> None:
             )
 
 
-def decide(src: dict, a: dict, b: dict) -> dict:
-    """두 판독 → 채택본(`adopted.jsonl` · 생성물) · 판정 시트. `merge` 와 `rebuild` 가 **같은 함수**를 쓴다 (D-99)."""
+def decide(src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -> dict:
+    """두 판독 → 채택본(`adopted.jsonl` · 생성물) · 판정 시트. `merge` 와 `rebuild` 가 **같은 함수**를 쓴다 (D-99).
+
+    🔄 2026-09-25 (D-285 개정 4) — `dec`(팀장 판정 · `decisions.jsonl`)가 있는 행은 **판정이 판독을 덮는다**(`판독` = `팀장판정`).
+       판정이 없는 행은 합의 규칙대로 · 거래 조건 사항은 합의여도 대기(D-272 개정).
+    """
+    dec = dec or {}
     adopted, sheet, why = [], [], collections.Counter()
     for k, s in src.items():
+        head = {
+            "지문": k,
+            "표": s["표"],
+            "제품유형": s["제품유형"],
+            "원천라벨": s["원천라벨"],
+            "문구": s["문구"],
+            "원천": s["원천"],
+        }
+        if k in dec:
+            d = dec[k]["판정"]
+            got = {
+                "조건": d["조건"],
+                "근거": d["근거"],
+                "근거_후보": [],
+                "제외목": d["제외목"],
+                "원천결손": d["원천결손"],
+                "조건_이견": [],
+            }
+            adopted.append(
+                {
+                    **head,
+                    **got,
+                    "표시요건": disclosure_of(s["문구"], d, d, d["제외목"])
+                    if d["조건"] in "ABC"
+                    else [],
+                    "labels": statute.types_of(d["근거"]),
+                    "판독": "팀장판정",
+                }
+            )
+            continue
         got, reason = agree(a[k], b[k])
         if (
             got is not None
@@ -368,17 +431,13 @@ def decide(src: dict, a: dict, b: dict) -> dict:
             for c in got["근거"] + [x for cand in got["근거_후보"] for x in cand]
         ):  # 후보도 본다 — 한쪽 후보가 조제유류 목이면 그 후보를 정답으로 둘 수 없다
             got, reason = None, "조제유류 목 (5.바·5.사) — 원천 제품유형은 조제유류가 아니다"
-        head = {
-            "지문": k,
-            "표": s["표"],
-            "제품유형": s["제품유형"],
-            "원천라벨": s["원천라벨"],
-            "문구": s["문구"],
-            "원천": s["원천"],
-        }
+        if got is not None and TRADE.search(s["문구"]):
+            got, reason = None, "거래조건 사항 (D-272 개정) — 인용을 팀장이 정한다"
         if got is None:
             why[reason.split(" ")[0]] += 1
-            sheet.append({**head, "_우선": _priority(a[k], b[k])})
+            sheet.append(
+                {**head, "_우선": _priority(a[k], b[k]), "_이유": reason, "_a": a[k], "_b": b[k]}
+            )
             continue
         adopted.append(
             {
@@ -395,22 +454,151 @@ def decide(src: dict, a: dict, b: dict) -> dict:
         for r in adopted:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     SHEET.parent.mkdir(parents=True, exist_ok=True)
+    order = sorted(sheet, key=lambda h: h["_우선"])
     cols = ["지문", "문구", "묶음", "제품유형", "근거", "조건", "제외목", "원천결손", "메모"]
     with SHEET.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
-        for h in sorted(sheet, key=lambda h: h["_우선"]):
+        for h in order:
             w.writerow([h["지문"], h["문구"], h["원천라벨"], h["제품유형"], "", "", "", "", ""])
+    with TEAM_SHEET.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(TEAM_COLS)
+        for h in order:
+            w.writerow(
+                [
+                    h["지문"],
+                    h["문구"],
+                    h["제품유형"],
+                    h["원천라벨"],
+                    h["_이유"],
+                    _brief(h["_a"]),
+                    _brief(h["_b"]),
+                ]
+                + [""] * 7
+            )
     return {
         "전체": len(src),
         "채택": len(adopted),
         "채택_조건": dict(collections.Counter(r["조건"] for r in adopted)),
+        "채택_판독": dict(collections.Counter(r["판독"] for r in adopted)),
         "채택_근거후보": sum(1 for r in adopted if r["근거_후보"]),
         "채택_조건이견": dict(
             collections.Counter("·".join(r["조건_이견"]) for r in adopted if r["조건_이견"])
         ),
         "시트": len(sheet),
         "시트_이유": dict(why),
+    }
+
+
+def _brief(r: dict) -> str:
+    """판정표에 싣는 판독 한 줄 — 조건 · 근거(호.목) · 제외목 · 원천결손 · 메모."""
+    cites = [
+        f"{h}{'.' + m if m else ''}"
+        for _law, _jo, _hang, h, m in (statute.parse(c) for c in r["근거"])
+    ]
+    parts = [r["조건"], ",".join(cites) or "-"]
+    if r["제외목"]:
+        parts.append("제외 " + ",".join(r["제외목"]))
+    if r["원천결손"]:
+        parts.append("원천결손")
+    if r["메모"] not in ("", "-"):
+        parts.append(r["메모"])
+    return " · ".join(parts)
+
+
+def load_decisions(src: dict | None = None) -> dict[str, dict]:
+    """팀장 판정(원천). 없으면 빈 것. 🔴 모르는 지문이 있으면 멈춘다 — 조용히 버리지 않는다 (D-220)."""
+    if not DECISIONS.exists():
+        return {}
+    got: dict[str, dict] = {}
+    for line in DECISIONS.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            got[r["지문"]] = r
+    if src is not None and set(got) - set(src):
+        raise ValueError(f"팀장 판정에 모르는 지문 {len(set(got) - set(src))} — 원천이 바뀌었나")
+    return got
+
+
+def check_decision(rec: dict, kind: str) -> list[str]:
+    """판정 한 행의 문제 — 합의 채택과 **같은 게이트**를 사람 판정에도 건다 (D-238 · D-288 · 지시서 §1)."""
+    bad = list(rec["문제"])
+    if rec["조건"] in ("C", "A", "B") and not rec["근거"]:
+        bad.append(f"조건 {rec['조건']} 인데 근거가 없다")
+    if rec["조건"] == "D" and rec["근거"]:
+        bad.append("조건 D 는 근거가 빈다")
+    if "3.나" in rec["제외목"] and not kind.startswith(NA_TYPES):
+        bad.append("3.나 는 제품유형 9 만 (D-288)")
+    if any(statute.parse(c)[3:5] in FORMULA_MOK for c in rec["근거"]):
+        bad.append("조제유류 목(5.바·5.사) — 원천 제품유형은 조제유류가 아니다")
+    return bad
+
+
+def import_decisions(path: pathlib.Path) -> dict:
+    """사람이 채운 팀장 판정표 CSV → `decisions.jsonl`. 🔴 `판정자` 는 사람이 적는다 — 비면 그 행을 받지 않는다.
+
+    ★ 칸의 꼴은 판독 TSV 와 같다(`parse_line` 을 그대로 쓴다 · D-99) — 주근거 `5.다` · `3` · `법8-9` / 조건 C·A·B·M·D /
+      제외목 `3.라,1.가.1` / 원천결손 Y·N. 조건이 빈 행은 아직 판정하지 않은 행이라 건너뛴다.
+    🔴 한 행이라도 문제가 있으면 **아무것도 쓰지 않는다** — 반쯤 들어간 판정은 되돌리기 어렵다 (D-220).
+    """
+    src = {
+        json.loads(x)["지문"]
+        for x in READINGS.read_text(encoding="utf-8").splitlines()
+        if x.strip()
+    }
+    kinds = {}
+    for x in ADOPTED.read_text(encoding="utf-8").splitlines() if ADOPTED.exists() else []:
+        r = json.loads(x)
+        kinds[r["지문"]] = r["제품유형"]
+    got, bad, skipped = {}, [], 0
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        for no, row in enumerate(csv.DictReader(f), 2):
+            k = (row.get("지문") or "").strip()
+            if not (row.get("조건") or "").strip():
+                skipped += 1
+                continue
+            if k not in src:
+                bad.append(f"{no}행 모르는 지문 {k!r}")
+                continue
+            who = (row.get("판정자") or "").strip()
+            if not who:
+                bad.append(f"{no}행 {k} 판정자가 비었다 — 사람이 적는 칸이다")
+                continue
+            line = "\t".join(
+                [
+                    k,
+                    (row.get("주근거") or "-").strip() or "-",
+                    (row.get("부근거") or "-").strip() or "-",
+                    row["조건"].strip(),
+                    (row.get("제외목") or "-").strip() or "-",
+                    (row.get("원천결손") or "N").strip() or "N",
+                    (row.get("메모") or "").strip(),
+                ]
+            )
+            rec = parse_line(line)
+            probs = check_decision(rec, kinds.get(k) or row.get("제품유형") or "")
+            if probs:
+                bad.append(f"{no}행 {k} — " + " / ".join(probs))
+                continue
+            rec.pop("문제")
+            got[k] = {"지문": k, "판정": rec, "판정자": who}
+    if bad:
+        raise SystemExit(
+            "🔴 팀장 판정표에 문제가 있다 — **아무것도 쓰지 않았다**\n  " + "\n  ".join(bad[:30])
+        )
+    old = load_decisions()
+    replaced = sorted(set(old) & set(got))
+    merged = {**old, **got}
+    DECISIONS.parent.mkdir(parents=True, exist_ok=True)
+    with DECISIONS.open("w", encoding="utf-8", newline="\n") as f:
+        for k in sorted(merged):
+            f.write(json.dumps(merged[k], ensure_ascii=False) + "\n")
+    return {
+        "받음": len(got),
+        "바꿈": len(replaced),
+        "건너뜀(조건 빈 행)": skipped,
+        "판정 합계": len(merged),
     }
 
 
@@ -448,13 +636,25 @@ def main() -> int:
     p_m.add_argument("--rr1", type=pathlib.Path)
     p_m.add_argument("--rr2", type=pathlib.Path)
     sub.add_parser("rebuild", help="판독 원자료만으로 채택·시트를 다시 계산한다 (생성물)")
+    p_d = sub.add_parser(
+        "import-decisions", help="사람이 채운 팀장 판정표 CSV → decisions.jsonl (그다음 rebuild)"
+    )
+    p_d.add_argument("--csv", type=pathlib.Path, required=True)
     a = ap.parse_args()
     if a.cmd == "input":
         print(f"판독 입력 {write_input(a.out):,}행 → {a.out}")
         return 0
+    if a.cmd == "import-decisions":
+        print(json.dumps(import_decisions(a.csv), ensure_ascii=False, indent=1))
+        print(
+            f"팀장 판정 → {DECISIONS}\n다음 — uv run python -m scripts.guide_statute_round rebuild"
+        )
+        return 0
     got = rebuild() if a.cmd == "rebuild" else merge(a.r1, a.r2, a.rr1, a.rr2)
     print(json.dumps(got, ensure_ascii=False, indent=1))
-    print(f"채택 → {ADOPTED}\n판정 시트(사람 2인) → {SHEET}\n두 판독 원자료 → {READINGS}")
+    print(
+        f"채택 → {ADOPTED}\n판정 시트(사람 2인) → {SHEET}\n팀장 판정표(두 판독 나란히) → {TEAM_SHEET}\n두 판독 원자료 → {READINGS}"
+    )
     return 0
 
 

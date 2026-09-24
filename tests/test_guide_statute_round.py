@@ -179,6 +179,9 @@ def test_원자료에서_다시_계산해도_채택이_같다(tmp_path, monkeypa
 
     monkeypatch.setattr(g, "ADOPTED", tmp_path / "adopted.jsonl")
     monkeypatch.setattr(g, "SHEET", tmp_path / "sheet.csv")
+    monkeypatch.setattr(
+        g, "TEAM_SHEET", tmp_path / "team.csv"
+    )  # 🔄 09-25 — 실제 팀장 판정표를 덮지 않는다
     src = {
         f"gs:{c * 12}": {
             "표": i,
