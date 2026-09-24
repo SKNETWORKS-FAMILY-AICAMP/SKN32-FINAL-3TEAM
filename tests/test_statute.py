@@ -170,8 +170,13 @@ def test_사람_8유형_라벨은_분할의_입력이_아니다() -> None:
     """
     from preprocess import split
 
-    assert not any("/labels/" in p.as_posix() for p in split.inputs())
-    assert split.guide_docs() == []
+    # 🔄 2026-09-25 (D-285 개정 4) — 해설서 **조문·조건 판**(`labels/guide_statute/`)은 대기가 0 이 되면 입력이 된다.
+    #    그 밖의 `labels/`(사람 8유형)는 여전히 입력이 아니다
+    assert not any(
+        "/labels/" in p.as_posix() and "/labels/guide_statute/" not in p.as_posix()
+        for p in split.inputs()
+    )
+    assert all("조건" in d and "판독" in d for d in split.guide_docs())
     import ast
 
     tree = ast.parse(inspect.getsource(split))

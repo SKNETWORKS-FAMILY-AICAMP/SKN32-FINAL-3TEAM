@@ -126,7 +126,13 @@ INPUTS = (FTC_PHRASES, CASEBOOK, HF)
 
 
 def inputs() -> tuple[pathlib.Path, ...]:
-    return INPUTS
+    """🔄 2026-09-25 (D-285 개정 4) — 해설서 채택본은 **평가에 들어갈 때만** 입력이다(`guide_state()` 의 대기 0).
+
+    ★ 대기 중에는 분할이 채택본을 안 보므로 지문에 넣지 않는다 — 넣으면 분할 결과는 그대로인데 봉인 파일이 바뀐다.
+    🚨 대기가 0 이 되는 순간 입력이 늘어 `verify_inputs` 가 멈춘다 → 분할을 다시 쓴다(한 번). 그것이 전환이다.
+    """
+    st = guide_state()
+    return INPUTS + ((GUIDE_ADOPTED,) if st and not st["대기"] else ())
 
 
 def fingerprint() -> dict[str, dict]:
@@ -285,17 +291,60 @@ def casebook_basis(r: dict) -> list[str]:
     return sorted(got)
 
 
-def guide_docs() -> list[dict]:
-    """해설서 행의 평가 라벨 — 🔄 2026-09-24 (D-283) **비어 있다.**
+#: 🆕 2026-09-25 (D-285 개정 4) — 해설서 조문·조건 판의 산출물. 🚨 경로의 정본은 `scripts/guide_statute_round.py`
+#:    `READINGS` · `ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99). `preprocess` 가 `scripts` 를 부르지 않으려고 여기 한 번 더 적는다
+GUIDE_READINGS = pathlib.Path("data/derived/labels/guide_statute/readings.jsonl")
+GUIDE_ADOPTED = pathlib.Path("data/derived/labels/guide_statute/adopted.jsonl")
 
-    ⛔ 09-17(D-243)부터 여기로 **사람이 붙인 8유형 라벨**(`preprocess.labels.docs()`)이 들어와 평가셋의 식품 유형을
-       거의 전부 채웠다. 그 라벨은 조문 근거가 없는 지시서 8유형으로 붙인 것이라 쓰지 않는다 (D-283 · D-237).
-    🔴 **원천 3분류를 호 묶음으로 옮겨 쓰는 것도 하지 않는다.** 현행 조문으로 다시 읽으면 묶음 밖으로 가는 문구가
-       14~34% 다(「거짓ㆍ과장ㆍ기만」 묶음은 안에 드는 것이 37~39% · 원장 09-24). 호를 모르는데 호가 있는 척하지 않는다 (D-220).
-    ★ 해설서 문구가 **위반이라는 것**은 원천이 정했다(D-237). 호는 조문 원문을 기준으로 판단해 붙인다 — 그 전까지 평가에 안 넣는다.
-       기다리는 수는 `pending_guide()` 가 센다.
+
+def guide_state() -> dict[str, int] | None:
+    """해설서 행의 상태 — `{"전체", "채택", "대기"}`. 판독 원자료가 없으면 `None`(이 기기는 모른다 · 0 이 아니다).
+
+    🔴 대기 = 원자료에 있는데 채택본에 없는 행(판정 시트 · 거래 조건 사항). 채택본에 원자료에 없는 행이 있으면 멈춘다.
     """
-    return []
+    if not GUIDE_READINGS.exists():
+        return None
+    if not GUIDE_ADOPTED.exists():
+        raise FileNotFoundError(
+            f"{GUIDE_ADOPTED} 가 없다 — 먼저: uv run python -m scripts.guide_statute_round rebuild"
+        )
+    every = {r["지문"] for r in _jsonl(GUIDE_READINGS)}
+    took = {r["지문"] for r in _jsonl(GUIDE_ADOPTED)}
+    if took - every:
+        raise ValueError(
+            f"해설서 채택본에 원자료에 없는 행 {len(took - every)} — 채택본이 낡았다 (rebuild)"
+        )
+    return {"전체": len(every), "채택": len(took), "대기": len(every - took)}
+
+
+def guide_docs() -> list[dict]:
+    """해설서 행의 평가 라벨 — 🔄 2026-09-25 (D-285 개정 4) **대기가 0 일 때만** 채택본에서 낸다.
+
+    ⛔ 09-17(D-243)부터 여기로 **사람이 붙인 8유형 라벨**이 들어왔고 D-283 이 뺐다 — 조문 근거가 없었다.
+    ★ 지금 원천은 해설서 조문·조건 판(D-285)이다 — 독립 판독 둘의 합의 · 팀장 판정. 행마다 `조건` 이 있다.
+    🔴 **대기 행이 하나라도 있으면 빈 목록이다** — 가장 어려운 행(판정 시트)이 빠진 평가셋을 만들지 않고,
+       평가셋이 두 번 바뀌지 않게 한다(D-285 「판정 시트가 끝난 뒤」). 기다리는 수는 `guide_state()` 가 낸다.
+    🔴 **`유형` 이 빈 행이 적법이라는 뜻이 아니다** — `조건` M · D 행과 `근거_후보` 행은 유형이 비어 있다.
+       읽는 쪽(`golden` · `eval_rule` · `load_db`)이 `조건` 을 먼저 본다 (지시서 §7 선행 게이트).
+    """
+    st = guide_state()
+    if not st or st["대기"]:
+        return []
+    return [
+        {
+            "doc_id": r["지문"],
+            "원천": "mfds_special_use_guide",
+            "유형": r["labels"],
+            "근거": r["근거"],
+            "근거_후보": r["근거_후보"],
+            "조건": r["조건"],
+            "판독": r["판독"],
+            "원천결손": r["원천결손"],
+            "문구": [r["문구"]],
+            "단위": "문장",
+        }
+        for r in _jsonl(GUIDE_ADOPTED)
+    ]
 
 
 GUIDE = pathlib.Path("data/derived/mfds_guide_labels.jsonl")
@@ -305,6 +354,9 @@ def pending_guide() -> dict[str, int]:
     """호가 정해지길 기다리는 해설서 **위반문구** 수 — 원천 3분류별. 🚨 없는 파일은 0 이 아니라 None 으로 보인다."""
     if not GUIDE.exists():
         return {}
+    st = guide_state()
+    if st and not st["대기"]:
+        return {}  # 🔄 D-285 개정 4 — 전환된 뒤에는 기다리는 행이 없다 (대기 중에는 종전 값 그대로 — 봉인 파일이 안 바뀐다)
     c: collections.Counter = collections.Counter()
     for r in _jsonl(GUIDE):
         if r.get("종류") == "위반문구":
@@ -568,6 +620,16 @@ def main() -> int:
     for k, n in m["counts_by_citation"]["test_sentence"].items():
         t = statute.type_of(k) or "(유형 없음)"
         print(f"    {k:26} {t:14} {n:>4}   {'✅' if n >= MIN_MEASURABLE else '🔴 측정 불가'}")
+    st = guide_state()
+    if st:
+        print(
+            f"\n  해설서 조문·조건 판 — 전체 {st['전체']:,} · 채택 {st['채택']:,} · **대기 {st['대기']:,}**"
+            + (
+                "  → 대기가 0 이 되면 평가에 들어간다 (D-285 개정 4)"
+                if st["대기"]
+                else "  → 평가에 들어갔다"
+            )
+        )
     if m["pending_guide"]:
         tot = sum(m["pending_guide"].values())
         print(
