@@ -159,3 +159,44 @@ def test_D_와_M_이_갈리면_M_으로_합성() -> None:
     assert got["근거"] == [] and got["원천결손"] is False
     got, _ = g.agree(_r("3", cond="M"), _r("-", cond="D"))
     assert got["근거"] == []  # M 쪽이 호를 적었어도 추측으로 채우지 않는다
+
+
+@pytest.mark.gate
+def test_지문은_base32_라_식별번호_꼴이_생기지_않는다() -> None:
+    """🔄 09-25 — 16진 지문 `gs:ab0175558118` 이 반출 검사의 휴대전화 꼴로 잡혔다. 0·1·8·9 가 없는 알파벳으로 막는다."""
+    from scripts import derived_manifest as dm
+
+    keys = [g.key_of({"표": i, "원천라벨": "x", "문구": f"문구{i}"}) for i in range(3000)]
+    assert all(g.KEY_RE.match(k) for k in keys)
+    assert not any(set(k[3:]) & set("0189") for k in keys)
+    assert not any(p.search(k) for k in keys for p in dm.PERSON_IDS.values())
+
+
+@pytest.mark.gate
+def test_원자료에서_다시_계산해도_채택이_같다(tmp_path, monkeypatch) -> None:
+    """🆕 09-25 (D-285 개정 3) — 채택본은 생성물이다. 판독 원자료(JSON)를 거쳐 다시 계산해도 바이트까지 같아야 한다."""
+    import json
+
+    monkeypatch.setattr(g, "ADOPTED", tmp_path / "adopted.jsonl")
+    monkeypatch.setattr(g, "SHEET", tmp_path / "sheet.csv")
+    src = {
+        f"gs:{c * 12}": {
+            "표": i,
+            "제품유형": "9. 체중조절용",
+            "원천라벨": "x",
+            "문구": f"판매 1위 {i}",
+            "원천": "t",
+        }
+        for i, c in enumerate("abc")
+    }
+    a = {k: {**_r(prim), "지문": k} for k, prim in zip(src, ("5.다", "4", "3"), strict=True)}
+    b = {
+        k: {**_r(prim, cond=c), "지문": k}
+        for k, prim, c in zip(src, ("5.다", "5", "3"), "CCM", strict=True)
+    }
+    g.decide(src, a, b)
+    first = (g.ADOPTED.read_bytes(), g.SHEET.read_bytes())
+    back = lambda d: {k: json.loads(json.dumps(v, ensure_ascii=False)) for k, v in d.items()}  # noqa: E731
+    g.decide(src, back(a), back(b))
+    assert (g.ADOPTED.read_bytes(), g.SHEET.read_bytes()) == first
+    assert len(first[0].splitlines()) == 2  # 5.다 합의 · 4↔5 후보 — C↔M 은 시트

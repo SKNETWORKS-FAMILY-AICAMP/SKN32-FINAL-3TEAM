@@ -84,6 +84,21 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
     #    ⛔ 이 규칙이 없을 때 `.txt` 는 「생성물」이 되어 **`data-publish` 대상**이었다(작업공간 재현).
     #    🔗 폴더 이름을 바꾸면 양쪽을 같이 — `tests/test_derived_manifest.py` 가 둘을 잇는다 (D-99).
     ("원문캐시", "/text/", "PDF 전문 캐시(마스킹 전) — raw 와 같은 자리다. 묶음에서 뺀다"),
+    # 🔄 2026-09-25 (D-285 개정 3 · 팀장 판정) — 해설서 **채택본은 계산 결과**다(판독 원자료 + 채택 규칙).
+    #    ⛔ `labels/` 규칙에 걸려 「원천」이던 동안, 채택 규칙을 고칠 때마다(이틀에 다섯 번) 원천 손실 경보가 울려
+    #       원장이 09-24 판(1,425행)에서 멈췄다 — 경보가 뜻을 잃는 자리다. 원천은 `readings.jsonl` 하나다.
+    #    ★ 다시 만드는 명령: `uv run python -m scripts.guide_statute_round rebuild` (원자료에서 바이트까지 같다 · 2026-09-25 실측)
+    #    🚨 `labels/` 보다 **먼저** 와야 한다 — 규칙은 앞에서부터 맞는다
+    (
+        "생성물",
+        "labels/guide_statute/adopted.jsonl",
+        "판독 원자료 + 채택 규칙의 계산 — `guide_statute_round rebuild`",
+    ),
+    (
+        "원천",
+        "labels/guide_statute/readings.jsonl",
+        "독립 판독 둘의 원자료 — 다시 돌려도 같은 판독이 아니다",
+    ),
     ("원천", "labels/", "사람의 판정 — 어떤 명령으로도 다시 안 나온다"),
     ("표본", "_labelsheet.jsonl", "다시 뽑으면 그 표본이 아니다 — 라벨과 κ 가 갈린다"),
     ("표본", "golden/split_manifest.json", "다시 나누면 평가 누수 방어와 수치 비교가 무너진다"),

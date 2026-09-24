@@ -2,6 +2,7 @@
 
   uv run python -m scripts.guide_statute_round input  --out build/labels/guide_statute__입력.tsv
   uv run python -m scripts.guide_statute_round merge  --r1 <판독1.tsv> --r2 <판독2.tsv> [--rr1 <재판독1.tsv> --rr2 <재판독2.tsv>]
+  uv run python -m scripts.guide_statute_round rebuild   # 판독 원자료만으로 채택·시트 (🆕 09-25 · TSV 없는 기기에서도)
 
 🚨 `-m` 으로 돌린다 — 스크립트로 돌리면 `scripts/collect.py` 가 `collect` 패키지를 가린다.
 
@@ -19,7 +20,8 @@
   · 조건 M 은 둘 다 M 이면 같다 — 근거는 두 판독의 호 집합이 같을 때만 남기고 아니면 빈 목록
   · `--rr1/--rr2` — 지시서 개정 뒤 **다시 읽은 행**(유형 9 의 3호·4.라 행)이 첫 판독을 **통째로** 갈아 끼운다. 원자료에 `판` 으로 남는다
   · 3.나 는 원천 제품유형 9 에서만 — 다른 유형에 적힌 판독은 채택하지 않고 시트로 (D-288)
-  · 🔴 산출물은 `data/derived/labels/guide_statute/` — 부류 「원천」(다시 돌려도 같은 판독이 아니다). `labels/*.jsonl` 을 읽는
+  · 🔴 산출물은 `data/derived/labels/guide_statute/` — `readings.jsonl` 은 「원천」(다시 돌려도 같은 판독이 아니다) ·
+    🔄 09-25 `adopted.jsonl` 은 「생성물」(`rebuild` 가 원자료에서 다시 낸다 · D-285 개정 3). `labels/*.jsonl` 을 읽는
     `preprocess.labels` 는 하위 폴더를 안 읽는다
 
 판독 TSV 한 줄 — `지문 \\t 주근거 \\t 부근거 \\t 조건 \\t 제외목 \\t 원천결손 \\t 메모`
@@ -33,6 +35,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import collections
 import csv
 import hashlib
@@ -73,9 +76,21 @@ _LAW = {"법8-9": 9, "법8-10": 10}
 
 
 def key_of(r: dict) -> str:
-    """행 지문 — 표 · 원천 묶음 · 문구. 🚨 같은 문구가 한 제품의 다른 표(환자용 세부 품목)에 또 나온다 → 표까지 넣는다."""
+    """행 지문 — 표 · 원천 묶음 · 문구. 🚨 같은 문구가 한 제품의 다른 표(환자용 세부 품목)에 또 나온다 → 표까지 넣는다.
+
+    🔄 2026-09-25 — **base32 소문자**(a–z · 2–7) 12자. 16진이던 때 `gs:ab0175558118` 의 숫자 꼬리가
+       반출 검사의 휴대전화 꼴(`01[016789]…`)로 잡혔다. base32 에는 0 · 1 · 8 · 9 가 없어 휴대전화 ·
+       주민등록번호 꼴이 **구조적으로 생기지 않는다** — 검사를 느슨하게 하지 않는다 (`scripts/derived_manifest.py`
+       머리말 「재현율 쪽」 · D-133 ⑤). 옛 지문 → 새 지문은 같은 sha256 의 표기만 바꾼 것이다.
+    """
     raw = f"{r['표']}|{r['원천라벨']}|{r['문구']}"
-    return "gs:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+    return (
+        "gs:" + base64.b32encode(hashlib.sha256(raw.encode("utf-8")).digest()).decode()[:12].lower()
+    )
+
+
+#: 지문 꼴 — 게이트가 대조한다 (`tests/test_guide_statute_round.py`)
+KEY_RE = re.compile(r"^gs:[a-z2-7]{12}$")
 
 
 def rows() -> list[dict]:
@@ -271,6 +286,7 @@ def merge(
     rr1: pathlib.Path | None = None,
     rr2: pathlib.Path | None = None,
 ) -> dict:
+    """판독 TSV 둘 → **판독 원자료**(`readings.jsonl` · 원천)를 쓰고 채택·시트를 계산한다."""
     src = {r["지문"]: r for r in rows()}
     a, b = read(r1), read(r2)
     redo: set[str] = set()
@@ -285,13 +301,7 @@ def merge(
         a.update(x)
         b.update(y)
         redo = set(x)
-    for name, got in (("판독1", a), ("판독2", b)):
-        miss, extra = set(src) - set(got), set(got) - set(src)
-        if miss or extra:
-            raise ValueError(
-                f"{name}: 빠진 행 {len(miss)} · 모르는 행 {len(extra)} — 전량이 아니면 합치지 않는다"
-            )
-    adopted, sheet, why = [], [], collections.Counter()
+    _whole(src, a, b)
     READINGS.parent.mkdir(parents=True, exist_ok=True)
     with READINGS.open("w", encoding="utf-8", newline="\n") as f:
         for k in src:
@@ -302,6 +312,49 @@ def merge(
                 "판독2": b[k],
             }
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return {"재판독": len(redo), **decide(src, a, b)}
+
+
+def rebuild() -> dict:
+    """🆕 2026-09-25 (D-285 개정 3) — **판독 원자료만으로** 채택·시트를 다시 계산한다.
+
+    ★ 채택본은 「판독 원자료 + 채택 규칙」의 계산 결과다 — 규칙을 고칠 때마다 원천 손실 경보가 울리지 않게
+       `data/derived/labels/guide_statute/adopted.jsonl` 을 **생성물**로 둔다(`scripts/derived_manifest.py` `KIND_RULES`).
+       판독 TSV(판독자의 작업 파일)가 없는 기기에서도 이 명령으로 같은 채택본이 나온다.
+    🔴 원자료가 없거나 원천 행과 어긋나면 멈춘다 — 빈 채택본을 쓰지 않는다 (D-220).
+    """
+    if not READINGS.exists():
+        raise SystemExit(
+            f"🔴 {READINGS} 가 없다 — 판독 원자료(원천)는 명령으로 다시 안 나온다. 공유 저장소에서 받는다"
+        )
+    src = {r["지문"]: r for r in rows()}
+    a: dict[str, dict] = {}
+    b: dict[str, dict] = {}
+    redo = 0
+    for line in READINGS.read_text(encoding="utf-8").splitlines():
+        rec = json.loads(line)
+        k = rec["지문"]
+        if k in a:
+            raise ValueError(f"판독 원자료에 지문이 두 번 — {k}")
+        a[k], b[k] = rec["판독1"], rec["판독2"]
+        redo += rec.get("판") == "재판독"
+    _whole(src, a, b)
+    return {"재판독": redo, **decide(src, a, b)}
+
+
+def _whole(src: dict, a: dict, b: dict) -> None:
+    """🔴 전량이 아니면 합치지 않는다 — 빠진 행이 「채택 안 됨」으로 조용히 사라지지 않게 (D-220)."""
+    for name, got in (("판독1", a), ("판독2", b)):
+        miss, extra = set(src) - set(got), set(got) - set(src)
+        if miss or extra:
+            raise ValueError(
+                f"{name}: 빠진 행 {len(miss)} · 모르는 행 {len(extra)} — 전량이 아니면 합치지 않는다"
+            )
+
+
+def decide(src: dict, a: dict, b: dict) -> dict:
+    """두 판독 → 채택본(`adopted.jsonl` · 생성물) · 판정 시트. `merge` 와 `rebuild` 가 **같은 함수**를 쓴다 (D-99)."""
+    adopted, sheet, why = [], [], collections.Counter()
     for k, s in src.items():
         got, reason = agree(a[k], b[k])
         if (
@@ -350,7 +403,6 @@ def merge(
             w.writerow([h["지문"], h["문구"], h["원천라벨"], h["제품유형"], "", "", "", "", ""])
     return {
         "전체": len(src),
-        "재판독": len(redo),
         "채택": len(adopted),
         "채택_조건": dict(collections.Counter(r["조건"] for r in adopted)),
         "채택_근거후보": sum(1 for r in adopted if r["근거_후보"]),
@@ -395,11 +447,12 @@ def main() -> int:
     p_m.add_argument("--r2", type=pathlib.Path, required=True)
     p_m.add_argument("--rr1", type=pathlib.Path)
     p_m.add_argument("--rr2", type=pathlib.Path)
+    sub.add_parser("rebuild", help="판독 원자료만으로 채택·시트를 다시 계산한다 (생성물)")
     a = ap.parse_args()
     if a.cmd == "input":
         print(f"판독 입력 {write_input(a.out):,}행 → {a.out}")
         return 0
-    got = merge(a.r1, a.r2, a.rr1, a.rr2)
+    got = rebuild() if a.cmd == "rebuild" else merge(a.r1, a.r2, a.rr1, a.rr2)
     print(json.dumps(got, ensure_ascii=False, indent=1))
     print(f"채택 → {ADOPTED}\n판정 시트(사람 2인) → {SHEET}\n두 판독 원자료 → {READINGS}")
     return 0
