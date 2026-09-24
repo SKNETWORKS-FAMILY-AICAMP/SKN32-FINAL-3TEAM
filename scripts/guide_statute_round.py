@@ -9,7 +9,8 @@
   1 input   1,834행을 판독 입력으로 낸다 — `지문` · 문구 · 원천 묶음 · 제품유형
   2 (판독)  독립 판독 둘이 각자 TSV 를 낸다 — 서로의 결과를 보지 않는다
   3 merge   둘이 **같으면** 채택(`판독` = `독립판독_합의`) · 다르면 사람 2인 시트로
-  4 (사람)  2인이 각자 시트를 채운다 → 팀장 판정표 ⬜ (다음 판)
+            🔄 09-25 (D-285 개정 2) — 기대 응답이 같은 갈림(D↔M · 호만 안 겹침)은 규칙으로 채택 · 시트는 기대 응답이 갈리는 행
+  4 (사람)  2인이 각자 시트를 채운다 → 팀장 판정표 ⬜ (다음 판) · 경계 묶음은 팀장이 묶음 단위로 판정(지시서 §6)
 
 🔄 `scripts/label_round.py` 머리말의 「참고 답은 라벨이 아니다」는 **8유형 라운드**의 규칙이다.
    해설서 **조문 인용**은 D-285 가 독립 판독 둘의 합의를 채택한다 — 행마다 `판독` 칸으로 사람 판정과 가른다.
@@ -157,9 +158,25 @@ def read(path: pathlib.Path) -> dict[str, dict]:
 
 
 def agree(a: dict, b: dict) -> tuple[dict | None, str]:
-    """두 판독이 **같은가** (지시서 §5 · D-285). 같으면 (채택값, "") · 다르면 (None, 이유)."""
+    """두 판독이 **같은가** (지시서 §5 · D-285). 같으면 (채택값, "") · 다르면 (None, 이유).
+
+    🔄 D-285 개정 2 (09-25) — 기대 응답이 같은 갈림은 규칙으로 닫는다: D↔M → M · 호만 안 겹침 → `근거_후보`.
+    시트에 남는 것은 **기대 응답이 갈리는 것**(위반 ↔ 보류·대상 아님)과 판독 문제 · 원천결손 · A↔B 다.
+    """
     if a["문제"] or b["문제"]:
         return None, "판독 문제 — " + " / ".join(a["문제"] + b["문제"])
+    if {a["조건"], b["조건"]} == {"D", "M"}:
+        # 🔄 2026-09-25 (D-285 개정 2) — **D↔M 은 M 으로 보수 합성**. 둘 다 위반이 아니고, M(low_conf)은 통과로
+        #    새지 않는다 · D(판정 대상 아님)는 새는 쪽이다 (D-273). 원천결손은 **둘 다** 적었을 때만 — M 이 한쪽이면
+        #    평가에 남긴다(빼는 쪽이 보수적이지 않다)
+        return {
+            "조건": "M",
+            "근거": [],
+            "근거_후보": [],
+            "제외목": [],
+            "원천결손": a["원천결손"] and b["원천결손"],
+            "조건_이견": ["D", "M"],
+        }, ""
     gap = a["원천결손"] or b["원천결손"]
     if gap and not (a["조건"] == b["조건"] == "D"):
         return (
@@ -180,6 +197,7 @@ def agree(a: dict, b: dict) -> tuple[dict | None, str]:
         "제외목": [] if dissent else sorted(set(a["제외목"]) & set(b["제외목"])),
         "원천결손": gap,
         "조건_이견": dissent,
+        "근거_후보": [],
     }
     if cond == "D":
         return {**base, "근거": [], "제외목": []}, ""
@@ -191,7 +209,11 @@ def agree(a: dict, b: dict) -> tuple[dict | None, str]:
         return None, f"조건 {cond} 인데 근거가 없다"
     common = set(ha) & set(hb)
     if not common:
-        return None, "호 " + ",".join(sorted(ha)) + " ≠ " + ",".join(sorted(hb))
+        # 🔄 2026-09-25 (D-285 개정 2) — 조건(C·A·B)은 같고 호만 안 겹치면 **조건은 채택 · 근거는 후보 둘**.
+        #    기대 응답(위반)이 같다 · 합집합은 「둘 다 걸린다」는 뜻이라 쓰지 않는다 — **어느 쪽을 인용해도 정답**.
+        #    🔴 `근거` 가 비고 `labels` 도 빈다 → 조건 칸 없이 골든에 들어가면 적법으로 센다 (지시서 §7 선행 게이트)
+        return {**base, "근거": [], "근거_후보": [sorted(a["근거"]), sorted(b["근거"])]}, ""
+    cites = []
     cites = []
     for h in sorted(common):  # 🔄 09-24 밤 — 겹치면 둘 다 적은 호만 남긴다 (목과 같은 원리)
         law, jo, hang, ho, _ = statute.parse(h)
@@ -288,7 +310,10 @@ def merge(
             and ("3.나" in a[k]["제외목"] + b[k]["제외목"])
         ):
             got, reason = None, "3.나 유형 밖 (D-288)"
-        if got is not None and any(statute.parse(c)[3:5] in FORMULA_MOK for c in got["근거"]):
+        if got is not None and any(
+            statute.parse(c)[3:5] in FORMULA_MOK
+            for c in got["근거"] + [x for cand in got["근거_후보"] for x in cand]
+        ):  # 후보도 본다 — 한쪽 후보가 조제유류 목이면 그 후보를 정답으로 둘 수 없다
             got, reason = None, "조제유류 목 (5.바·5.사) — 원천 제품유형은 조제유류가 아니다"
         head = {
             "지문": k,
@@ -328,6 +353,10 @@ def merge(
         "재판독": len(redo),
         "채택": len(adopted),
         "채택_조건": dict(collections.Counter(r["조건"] for r in adopted)),
+        "채택_근거후보": sum(1 for r in adopted if r["근거_후보"]),
+        "채택_조건이견": dict(
+            collections.Counter("·".join(r["조건_이견"]) for r in adopted if r["조건_이견"])
+        ),
         "시트": len(sheet),
         "시트_이유": dict(why),
     }

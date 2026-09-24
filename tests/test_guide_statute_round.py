@@ -1,7 +1,7 @@
 """해설서 조문·조건 판의 채택 규칙 (D-285 · 지시서 09-24 §5).
 
 🔴 무엇을 막나
-   ① 두 판독이 다른데 채택되는 것 — 조건 · 호 집합 중 하나라도 다르면 사람 시트로
+   ① 두 판독의 **기대 응답**이 다른데 채택되는 것 — 🔄 개정 2: 기대 응답이 같은 갈림(D↔M · 호만)만 규칙으로 닫는다
    ② 적용 제외 목이 근거로 들어오는 것 (D-238)
    ③ 한쪽만 본 예외가 실리는 것 — 제외목은 교집합
    ④ 모르는 꼴이 조용히 버려지는 것 (D-220)
@@ -33,10 +33,10 @@ def test_목이_다르면_호까지만() -> None:
 
 @pytest.mark.gate
 def test_조건이나_호가_다르면_시트로() -> None:
+    """🔄 D-285 개정 2 — 시트는 **기대 응답이 갈리는** 행이다. 호만 갈리면 후보로 채택(아래 테스트)."""
     assert g.agree(_r(cond="B"), _r(cond="M"))[0] is None
+    assert g.agree(_r(cond="C"), _r("-", cond="D"))[0] is None
     assert g.agree(_r(cond="A"), _r(cond="B"))[0] is None  # A↔B 는 엄격함의 순서가 없다
-    assert g.agree(_r("4.라"), _r("3"))[0] is None
-    assert g.agree(_r("4", "5"), _r("6"))[0] is None  # 전혀 안 겹치면 시트
 
 
 @pytest.mark.gate
@@ -108,7 +108,16 @@ def test_C_와_A_B_가_갈리면_보수_합성() -> None:
     assert got["조건"] == "C" and got["조건_이견"] == ["A", "C"] and got["제외목"] == []
     got, _ = g.agree(_r("6", cond="B"), _r("6", cond="C"))
     assert got["조건"] == "C" and got["조건_이견"] == ["B", "C"]
-    assert g.agree(_r("4", cond="B"), _r("5", cond="C"))[0] is None  # 호가 안 겹치면 여전히 시트
+    got, _ = g.agree(_r("4", cond="B"), _r("5", cond="C"))  # 🔄 개정 2 — 호가 안 겹치면 후보
+    assert (
+        got["조건"] == "C"
+        and got["근거"] == []
+        and got["근거_후보"]
+        == [
+            [statute.food(4)],
+            [statute.food(5)],
+        ]
+    )
     got, _ = g.agree(_r("3"), _r("3"))
     assert got["조건_이견"] == []
 
@@ -125,3 +134,28 @@ def test_표시요건은_조문이_정한_목록으로() -> None:
     assert g.disclosure_of("체지방 감소에 도움", b, b, ["3.나"]) == list(
         g.FUNC_DISCLOSURE
     )  # 법이 요구
+
+
+@pytest.mark.gate
+def test_호만_안_겹치면_조건은_채택하고_근거는_후보() -> None:
+    """🔄 09-25 (D-285 개정 2) — 합집합이 아니다(「둘 다 걸린다」가 된다) · 어느 쪽이든 정답인 후보 둘."""
+    got, why = g.agree(_r("4.라"), _r("3"))
+    assert why == "" and got["조건"] == "C" and got["근거"] == []
+    assert got["근거_후보"] == [[statute.food(4, "라")], [statute.food(3)]]
+    got, _ = g.agree(_r("4", "5"), _r("6"))
+    assert got["근거_후보"] == [sorted([statute.food(4), statute.food(5)]), [statute.food(6)]]
+    got, _ = g.agree(_r("3"), _r("3"))
+    assert got["근거_후보"] == []  # 겹치면 후보를 두지 않는다
+    assert (
+        g.agree(_r("-", cond="C"), _r("5", cond="C"))[0] is None
+    )  # 한쪽이 근거를 안 적었으면 시트
+
+
+@pytest.mark.gate
+def test_D_와_M_이_갈리면_M_으로_합성() -> None:
+    """🔄 09-25 (D-285 개정 2) — M(보류)은 통과로 새지 않는다 · 원천결손은 둘 다 적었을 때만."""
+    got, _ = g.agree(_r("-", cond="D", gap="Y"), _r("-", cond="M"))
+    assert got["조건"] == "M" and got["조건_이견"] == ["D", "M"]
+    assert got["근거"] == [] and got["원천결손"] is False
+    got, _ = g.agree(_r("3", cond="M"), _r("-", cond="D"))
+    assert got["근거"] == []  # M 쪽이 호를 적었어도 추측으로 채우지 않는다
