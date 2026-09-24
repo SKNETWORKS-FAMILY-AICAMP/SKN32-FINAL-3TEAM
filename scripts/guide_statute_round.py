@@ -160,14 +160,18 @@ def agree(a: dict, b: dict) -> tuple[dict | None, str]:
     """두 판독이 **같은가** (지시서 §5 · D-285). 같으면 (채택값, "") · 다르면 (None, 이유)."""
     if a["문제"] or b["문제"]:
         return None, "판독 문제 — " + " / ".join(a["문제"] + b["문제"])
-    if a["원천결손"] or b["원천결손"]:
-        return None, "원천결손"
+    gap = a["원천결손"] or b["원천결손"]
+    if gap and not (a["조건"] == b["조건"] == "D"):
+        return (
+            None,
+            "원천결손",
+        )  # 🔄 09-24 밤 — 둘 다 D 면 채택(아래) · 갈리면 시트 (지시서 §5 · ④′)
     if a["조건"] != b["조건"]:
         return None, f"조건 {a['조건']}≠{b['조건']}"
     base = {
         "조건": a["조건"],
         "제외목": sorted(set(a["제외목"]) & set(b["제외목"])),
-        "원천결손": False,
+        "원천결손": gap,
     }
     if a["조건"] == "D":
         return {**base, "근거": [], "제외목": []}, ""
@@ -177,10 +181,11 @@ def agree(a: dict, b: dict) -> tuple[dict | None, str]:
         return {**base, "근거": []}, ""  # 🔄 D-285 개정 — M 은 호를 추측으로 채우지 않는다
     if not ha or not hb:
         return None, f"조건 {a['조건']} 인데 근거가 없다"
-    if set(ha) != set(hb):
+    common = set(ha) & set(hb)
+    if not common:
         return None, "호 " + ",".join(sorted(ha)) + " ≠ " + ",".join(sorted(hb))
     cites = []
-    for h in sorted(ha):
+    for h in sorted(common):  # 🔄 09-24 밤 — 겹치면 둘 다 적은 호만 남긴다 (목과 같은 원리)
         law, jo, hang, ho, _ = statute.parse(h)
         mok = ha[h] if ha[h] == hb[h] else None
         cites.append(statute.cite(law, jo, hang, ho, mok))

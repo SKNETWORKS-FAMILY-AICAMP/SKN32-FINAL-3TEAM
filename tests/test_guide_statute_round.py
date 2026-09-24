@@ -35,7 +35,7 @@ def test_목이_다르면_호까지만() -> None:
 def test_조건이나_호가_다르면_시트로() -> None:
     assert g.agree(_r(cond="B"), _r(cond="M"))[0] is None
     assert g.agree(_r("4.라"), _r("3"))[0] is None
-    assert g.agree(_r("3", "4.라"), _r("3"))[0] is None
+    assert g.agree(_r("4", "5"), _r("6"))[0] is None  # 전혀 안 겹치면 시트
 
 
 @pytest.mark.gate
@@ -52,7 +52,7 @@ def test_주장_아님은_근거가_빈다() -> None:
 
 @pytest.mark.gate
 def test_원천결손이나_판독_문제는_시트로() -> None:
-    assert g.agree(_r("-", cond="D", gap="Y"), _r("-", cond="D"))[0] is None
+    assert g.agree(_r("-", cond="D", gap="Y"), _r("5.다", cond="C"))[0] is None  # 갈리면 시트 (④′)
     assert (
         g.agree(_r("3.라", cond="A"), _r("3", cond="A"))[0] is None
     )  # 적용 제외 목이 근거 (D-238)
@@ -84,3 +84,17 @@ def test_조제유류_목과_3나_유형_게이트가_있다() -> None:
     """🔴 제품유형에 달린 목은 합의만으로 채택하지 않는다 — 3.나 는 유형 9 만 (D-288) · 5.바·5.사 는 조제유류만."""
     assert g.NA_TYPES == ("9.",)
     assert (5, "사") in g.FORMULA_MOK and (5, "바") in g.FORMULA_MOK
+
+
+@pytest.mark.gate
+def test_겹치는_호만_남긴다() -> None:
+    """🔄 09-24 밤 — 한쪽이 부근거를 더 적었으면 둘 다 적은 호만 (지시서 §5)."""
+    got, _ = g.agree(_r("3", "4.라"), _r("3"))
+    assert got["근거"] == [statute.food(3)]
+
+
+@pytest.mark.gate
+def test_원천결손은_둘_다_D_면_채택한다() -> None:
+    """🔄 09-24 밤 — 블록 제목은 D · 원천결손으로 남는다. 판정 대상 아님이지 적법이 아니다 (지시서 §7 선행 게이트)."""
+    got, _ = g.agree(_r("-", cond="D", gap="Y"), _r("-", cond="D"))
+    assert got["조건"] == "D" and got["원천결손"] is True and got["근거"] == []
