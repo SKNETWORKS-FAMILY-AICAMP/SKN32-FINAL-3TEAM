@@ -112,8 +112,8 @@ class SentEvidence:
 class LawResult:
     """법별 노드 하나가 낸 것 (D-267). `merge_laws` 가 모은다.
 
-    🔜 **W3 에서 칸이 는다** — 전제(`Premise`) · 문장별 유형 · 근거 · 하한. 계약에 `Premise` 가 서기 전에는
-       여기 적을 값이 없다. ⛔ 문자열로 전제를 미리 지어 두면 계약이 선 날 **두 벌**이 된다 (D-99).
+    🔜 **W4 에서 칸이 는다** — 전제(`Premise`) · 문장별 유형 · 근거 · 하한. 🔄 2026-09-24 — W3 로 계약에 `Premise` 가
+       섰다(`app/contracts.py`). 칸을 늘릴 때 **그 타입을 쓴다** — ⛔ 문자열로 전제를 따로 지으면 **두 벌**이 된다 (D-99).
     ★ 지금은 **「이 법이 이 문장들을 봤다」** 만 나른다 — `merge_laws` 의 fail-closed 대조가 읽는 값이다.
     """
 
@@ -419,7 +419,7 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
 
 @timed
 def merge_laws(state: CoreState) -> dict[str, Any]:
-    """법별 결과를 모은다 (D-267 팬인). 🔜 W3 — 전제별로 묶어 `branches` · `premise_basis`(D-263 ①).
+    """법별 결과를 모은다 (D-267 팬인). 🔜 W4 — 전제별로 묶어 `branches` · `premise_basis`(D-263 ①).
 
     🔴 **보낸 법이 전부, 한 번씩, 문장을 다 보고 돌아왔는가**를 여기서 대조한다 (D-220 fail-closed).
        ⛔ 병렬 노드 하나가 빠지거나 두 번 쌓여도 LangGraph 는 오류를 안 낸다 — 판정이 한 법만큼 가벼워진 채
@@ -529,7 +529,7 @@ def hold(state: ReviewState) -> dict[str, Any]:
 
 @timed
 def passed(state: ReviewState) -> dict[str, Any]:
-    """통과 — 전부 확정 ∧ 위험도 ≤ 주의 (D-125). 🚨 「적법」이라 부르지 않는다 (D-130).
+    """통과 — 전부 확정 ∧ R0 (D-125 · 🔄 D-273). 🚨 「적법」이라 부르지 않는다 (D-130).
 
     🔄 D-265 — 검수의 통과는 **프론티어를 내지 않는다.** 프론티어는 생성(B)의 것이다.
     """
@@ -559,7 +559,7 @@ def route_review(state: ReviewState) -> str:
         return "certificate"
     if Infeasibility.B in reasons:
         return "guidance"
-    # 🔴 통과는 D-125 의 정의대로만 — 확정 ∧ 위험도 ≤ 주의 (`is_pass`) · 위험도가 없으면 통과가 아니다
+    # 🔴 통과는 D-125 의 정의대로만 — 확정 ∧ R0 (🔄 D-273 · `is_pass`) · 위험도가 없으면 통과가 아니다
     if all(is_pass(s) for s in sents):
         return "passed"
     return "hold"
