@@ -695,6 +695,43 @@ mfds_cosmetic_ad_guide_2013:
   robots_checked_at: 2026-09-17
   collected_at: null
 
+# 🆕 2026-09-25 — 민원인안내서 4건(m_1060) 신규 등재
+#   결정: 오한빈 2026-09-25 (「질의응답집과 판단안내서 중복 안 되면 등재해도 됩니다」 — B 판정 요청 5건 전체에 대한 답)
+#   서명 범위 — 등급 G3(D-132 준용) · 제약 BY · status collect(collect.mfds_board) · 층은 각 항목 · ⛔3층 금지(D-138)
+#   근거: 게시물 화면 공공누리 배지 없음 · PDF 저작권 문구 0건 · 외부 집필 표기 없음 · 단서 1~4호 해당 없음 (2026-09-25 권소라 확인)
+#   중복: 레지스트리 같은 문서 없음 · 게시판 최신판 · 파생물 15자 조각 대조 겹침은 조문 인용뿐 (2026-09-25)
+#   ⛔ B 의 다섯째 「식품 등 부당한 광고 판단 안내서」(식품안전나라)는 등재하지 않는다 —
+#      게시물 실물이 2021-02-25판이고 사실원장 ⑤ 에서 「고시 admrul_69549_20251204 가 더 최신 · 안 받는다」로 이미 닫혔다.
+#   🚨 robots — www.mfds.go.kr 「User-agent: * / Allow:/」 (2026-09-25 권소라 실측 · Googlebot 만 /search/search.do 차단)
+mfds_cosmetic_ad_qa:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: 2026-09-25
+mfds_hf_trial_ad_guide:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: 2026-09-25
+mfds_cosmetic_claim_test_guide:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: 2026-09-25
+mfds_quasi_drug_ad_guide:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: 2026-09-25
+
 # 🆕 2026-09-19 — 법제처 「중앙부처 1차 해석」 중 식약처분 (질의회신)
 #   서명 범위 — 등급 G3(D-132 준용) · 별도 등재(law_go_kr covers 로 접지 않는다 · D-90) ·
 #     U1~U4 열림 · 전량 본문 수집 후 전처리에서 거름 · masking org·person (brand·addr 끔)

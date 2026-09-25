@@ -297,6 +297,23 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         "출처: 식품의약품안전처 「특수용도식품 표시·광고 해설서」(2017-03) "
         "(저작권법 제24조의2 제1항 · 제37조)",
     ),
+    # 🆕 2026-09-25 — 민원인안내서 4건(m_1060). mfds_online_guideline 과 같은 판정(D-132 준용).
+    "mfds_cosmetic_ad_qa": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「화장품·의료기기·의약외품 허위과대광고 질의응답집」(민원인안내서 1009-02, 2021-01) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_hf_trial_ad_guide": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「한눈에 보는 건강기능식품 인체적용시험 표시·광고 가이드라인」(민원인안내서 1223-01, 2022-09) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_cosmetic_claim_test_guide": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「화장품 표시·광고 실증을 위한 시험방법 가이드라인」(민원인안내서, 2024-12) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_quasi_drug_ad_guide": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「의약외품 표시 광고 가이드라인」(민원인안내서 1179-05, 2025-04) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
     # ③ 공공데이터포털 「이용허락범위 제한없음」 — 출처표시 의무가 없다
     "cosmetic_ingredient": (
         _LIC_OPEN,
@@ -508,6 +525,39 @@ EXTRA = {
         "  🔄 D-139 — 해설서 3분류가 VIOLATION_TYPES 를 뭉친다.",
         "  질병예방치료·의약품혼동·건강기능식품혼동 → 3종 / 거짓·과장·기만 → 2종 / 부당한 비교·비방 → 부당_비교광고.",
         "  🚨 `후기_체험기_기만` 이 해설서에 없다 — 「엄마들의 경험담을 직접 확인하세요!」가 거짓·과장·기만이다.",
+    ],
+    # 🆕 2026-09-25 — 민원인안내서 4건
+    "mfds_cosmetic_ad_qa": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).",
+    ],
+    "mfds_hf_trial_ad_guide": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).",
+    ],
+    "mfds_cosmetic_claim_test_guide": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).",
+    ],
+    "mfds_quasi_drug_ad_guide": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).",
     ],
     "ftc_decisions": [
         "masking: 업체명·상표·대표자명·🔄 **주소** 즉시 마스킹, 원문 미보관 (D-17)",
@@ -767,6 +817,11 @@ ORDER = [
     #    🚨 3층이 아니라 1층이다 — 문서 3쪽이 스스로 「대외적으로 법적 효력을 가지는 것이
     #       아니」라고 적는다 (D-138 선례). 텍스트 층 0자라 status 는 manual.
     "mfds_cosmetic_ad_guide_2013",
+    # 🆕 2026-09-25 — 민원인안내서(m_1060) 3건. 결정 오한빈(「중복 안 되면 등재」) · 확인 권소라.
+    #    🚨 3층이 아니다 — 스스로 법적 효력이 없다고 적는다 (D-138 선례).
+    "mfds_cosmetic_ad_qa",
+    "mfds_hf_trial_ad_guide",
+    "mfds_quasi_drug_ad_guide",
     "ftc_noviolation",
     # 🆕 2026-09-18 — 법제처 「중앙부처 1차 해석」 중 식약처분. G0 · hold 로 올려 탐침만 연다 (D-109).
     "mfds_cgm_expc",
@@ -774,6 +829,8 @@ ORDER = [
     "mfds_hf_ingredient",
     "mfds_hf_individual",
     "kcia_guideline",
+    # 🆕 2026-09-25 — 화장품 실증 시험방법 가이드라인 (D-59 B 실증형 조건 근거)
+    "mfds_cosmetic_claim_test_guide",
     # 3층 판단 규범
     "law_go_kr",
     "mfds_online_guideline",
@@ -835,6 +892,11 @@ STATUS = {
     "mfds_hf_individual": "collect",
     "law_go_kr": "collect",
     "mfds_online_guideline": "collect",
+    # 🆕 2026-09-25 — 게시물 첨부 1개 · collect.mfds_board (mfds_online_guideline 과 같은 경로)
+    "mfds_cosmetic_ad_qa": "collect",
+    "mfds_hf_trial_ad_guide": "collect",
+    "mfds_cosmetic_claim_test_guide": "collect",
+    "mfds_quasi_drug_ad_guide": "collect",
     "mfds_hf_ingredient_board": "collect",
     "cosmetic_ingredient": "collect",
     "cosmetic_restricted": "collect",

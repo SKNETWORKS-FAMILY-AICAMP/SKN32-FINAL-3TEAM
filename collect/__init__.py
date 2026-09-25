@@ -49,6 +49,11 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     "mfds_casebook": ("collect.mfds_board", "arg"),
     "mfds_special_use_guide": ("collect.mfds_board", "arg"),
     "mfds_online_guideline": ("collect.mfds_board", "arg"),
+    # 🆕 2026-09-25 — 민원인안내서 4건(m_1060) · 게시물 하나에 PDF 첨부 하나
+    "mfds_cosmetic_ad_qa": ("collect.mfds_board", "arg"),
+    "mfds_hf_trial_ad_guide": ("collect.mfds_board", "arg"),
+    "mfds_cosmetic_claim_test_guide": ("collect.mfds_board", "arg"),
+    "mfds_quasi_drug_ad_guide": ("collect.mfds_board", "arg"),
     # 한 소스 전용 수집기
     "mfds_press": ("collect.mfds_press", "none"),
     "mfds_hf_ingredient_board": ("collect.mfds_hf_board", "none"),
