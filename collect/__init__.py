@@ -56,7 +56,7 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     "mfds_quasi_drug_ad_guide": ("collect.mfds_board", "arg"),
     # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침 (3층 해설 · D-290)
     "mfds_cosmetic_ad_guideline": ("collect.mfds_board", "arg"),
-    # 🆕 2026-09-25 — 2025 화장품 자주하는 질문집 (첨부 형식 미확인 — e-book 이면 이 수집기로 안 받힐 수 있다)
+    # 🆕 2026-09-25 — 2025 화장품 자주하는 질문집 (첨부 PDF 1개 · 게시 화면 확인)
     "mfds_cosmetic_faq_2025": ("collect.mfds_board", "arg"),
     # 한 소스 전용 수집기
     "mfds_press": ("collect.mfds_press", "none"),
