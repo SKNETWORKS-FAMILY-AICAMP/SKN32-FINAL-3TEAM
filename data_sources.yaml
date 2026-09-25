@@ -338,12 +338,41 @@ sources:
       🔄 D-137 — `공개종료일자`를 필수 필드로 받고 **만료분도 보존한다**.
       법령(화장품법 제28조의2·시행령 제13조)에 공개 종료 규정이 없어 단서 3호가 아니다(판정 E).
     caution: "🚨 robots.txt 가 「User-agent: * / Disallow: /」 전면 차단이다(2026-09-07 실측 · D-136). 자동 수집기를 붙이지 않는다 — status: manual 이 유일한 경로이고, 사이트가 스스로 제공하는 엑셀다운로드 버튼을 사람이 누른다. 같은 기관 본청(mfds.go.kr)은 「User-agent: * / Allow:/」로 정반대다. / 🚨 data_sources.yaml:176 의 09-02 질문에 절반만 답한다 — 「화장품 행정처분이 어디 있나」의 답은 여기가 맞으나 문구 원문은 안 준다. 화장품 문구 원문은 ftc 의결서(화장품 건 실재 — 의결 제2000-99호)에서 와야 한다. / 🚨 소재지가 번지까지 나오고 업종·업체명이 평문이다 — D-17 마스킹 필수. / 🔄 공개종료일자를 필수 필드로 받고 만료분도 보존한다(D-137)."
-    collected_at: null
+    collected_at: 2026-09-22
     decided_at: 2026-09-07
     decided_by: 오한빈
     reviewed_by: 권소라
     reviewed_at: 2026-09-07
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  kca_ad_survey:
+    name: "한국소비자원 표시·광고 실태조사 보고서·보도자료 (식품·건기식·화장품 · 2019~2026) ★신규등재 2026-09-22"
+    org: "한국소비자원"
+    url: "https://www.kca.go.kr/smartconsumer/sub.do?menukey=7301"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: manual
+    access: "🚨 수기 — kca.go.kr robots 가 「User-agent: * / Disallow: /」 전면 차단이다. 사람이 게시물의 다운로드 버튼을 눌러 받고 `register` 로 올린다"
+    scale: "PDF 23개 (2026-09-22 권소라 수기 수집) — KCA보고서(실태조사 결과보고) + 보도자료. 분야 — 화장품(기능성화장품·미백·자외선차단제·각질제거제·허브테라피·지식재산권 허위표시) · 식품·건기식(모발 건강 표방·글루타치온·콜라겐·로열젤리·효소·아보카도오일·식용불가 원료·케토) · 온라인 광고 전반(SNS 부당광고·추천보증·라이브커머스·쇼핑몰·2025 1분기 모니터링). 1차 집계(키워드) — 인용 문구 약 130개 중 부족 라벨행 약 60개"
+    license: "공공누리 제1유형(출처표시) — KCA보고서 상세 화면 실측 2026-09-22. 🚨 게시물마다 확인한다 — 제1유형만 받는다 (D-110)"
+    attribution: "본 저작물은 한국소비자원에서 공공누리 제1유형으로 개방한 「표시·광고 실태조사」 보고서·보도자료를 이용하였습니다."
+    masking: 제품명·판매 사업자명 즉시 마스킹 (D-17)
+    fragment_note: >-
+      보고서가 인용한 광고 문구만 사실로 취한다 (D-18) · 광고 캡처 이미지는 취하지 않는다 (D-133).
+      🚨 스캔 쪽 OCR 문구는 후보 제시용이다 — 확정은 원본 대조로 한다.
+    caution: "🚨 공공누리 유형은 게시물마다 다를 수 있다 — 제1유형만 채택하고 제3·4유형(변경·상업 금지)이나 배지 없는 게시물은 받지 않는다. 등록 전 게시 화면 확인이 선행이다. / 🚨 같은 보도자료라도 받은 곳이 다르면 조건이 다르다 — 웹진 「소비자시대」(배지 없음)와 소비자위해감시시스템 ciss.go.kr(저작권 정책 「수익 목적은 사전 협의·서면 허락」)의 판은 쓰지 않는다. 각질제거제는 kca.go.kr 보도자료(200625) 판을 쓴다. / 🚨 광고 캡처 이미지는 광고주 저작물이라 취하지 않는다 — 문구만 사실로 취한다(D-18 · D-133). / 🚨 보고서에 제품명·판매 사업자명이 평문이다 — D-17 마스킹. / ⚠️ 스캔 쪽은 OCR 로 읽었다(Windows OCR ko) — OCR 문구는 후보 제시용이고 확정은 사람이 원본 대조로 한다(D-133 ⚠️)."
+    collected_at: 2026-09-22
+    decided_at: 2026-09-22
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-22
+    robots_checked_at: 2026-09-22
+    evidence_url: "https://www.kca.go.kr/smartconsumer/sub.do?menukey=7301&mode=view&no=1003261313"
 
   mfds_special_use_guide:
     name: "식약처 「특수용도식품 표시·광고 해설서」 (표시·광고 심의 사례 포함 · 2017-03) ★신규등재 2026-09-07"
@@ -407,6 +436,99 @@ sources:
     reviewed_by: 권소라
     reviewed_at: 2026-09-17
     robots_checked_at: 2026-09-17
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_cosmetic_ad_qa:
+    name: "식약처 「화장품·의료기기·의약외품 허위과대광고 질의응답집」 민원인안내서 (안내서-1009-02 · 2021-01) ★신규등재 2026-09-25"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_1060/view.do?seq=14785"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (민원인안내서 게시물 첨부 1개)"
+    scale: "PDF 116쪽 · 본문 약 11만 자(텍스트 층 있음) · Q&A 약 114문항 — 화장품 Q1~Q88(의약품 오인 · 기능성화장품 오인 · 천연/유기농 오인 · 소비자 오인) + 의료기기 + 의약외품"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「화장품·의료기기·의약외품 허위과대광고 질의응답집」(민원인안내서 1009-02, 2021-01) (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).
+    caution: "🚨 2020-12 기준 판단이다 — 이후 화장품법 시행규칙·「화장품 표시·광고 관리 지침」(안내서-0086-07 · 2025-08)이 우선하고, 이 문서는 판단 사례로만 쓴다. / 🚨 의료기기 분야 Q&A 는 범위 밖(3법 밖) — 받지만 라벨에 넣지 않는다. 의약외품 분야는 대조군(T3). / 광고 캡처·예시 이미지는 광고주 저작물이라 취하지 않는다(D-18 · D-133)."
+    collected_at: 2026-09-25
+    decided_at: 2026-09-25
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-25
+    robots_checked_at: 2026-09-25
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_hf_trial_ad_guide:
+    name: "식약처 「한눈에 보는 건강기능식품 인체적용시험 표시·광고 가이드라인」 민원인안내서 (안내서-1223-01 · 2022-09) ★신규등재 2026-09-25"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_1060/view.do?seq=15075"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (민원인안내서 게시물 첨부 1개)"
+    scale: "PDF 43쪽 · 본문 약 3만 자(텍스트 층 있음) · 부적합 표시·광고 9유형(질병 예방·치료 · 의약품 인식 · 대상자 오류 · 기능성 범위 밖 지표 · 무관 이미지 · 미인정 원료 · 제품 시험결과처럼 표현 · 기타원료 · 전문가 보증)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「한눈에 보는 건강기능식품 인체적용시험 표시·광고 가이드라인」(민원인안내서 1223-01, 2022-09) (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).
+    caution: "🚨 문서가 스스로 「대외적으로 법적 효력을 가지는 것이 아니」며 「2022년 9월 현재」 기준이라고 적는다 — 3층(판단규범)에 넣지 않는다(D-138 선례). / 🚨 인체적용시험 결과 서술(「○주 섭취 결과 … 유의적으로 개선」)을 적법 문구로 학습시키지 않는다 — mfds_hf_ingredient_board fragment_note 와 같은 이유(생성 모델이 그 문장을 광고에 뱉는다). 부적합 예시만 1층 라벨로 취한다. / 본문 약 23%가 법령·고시 인용이다(조문 상용구 · law_go_kr 에 이미 있다)."
+    collected_at: 2026-09-25
+    decided_at: 2026-09-25
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-25
+    robots_checked_at: 2026-09-25
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_quasi_drug_ad_guide:
+    name: "식약처 「의약외품 표시 광고 가이드라인」 민원인안내서 (안내서-1179-05 · 2025-04) ★신규등재 2026-09-25"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_1060/view.do?seq=15647"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: C
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (민원인안내서 게시물 첨부 1개)"
+    scale: "PDF 52쪽 · 본문 약 6만 자(텍스트 층 있음) · 표시사항 + 광고 부적합 사례"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「의약외품 표시 광고 가이드라인」(민원인안내서 1179-05, 2025-04) (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).
+    caution: "🚨 약사법(의약외품) 기준이다 — 우리 3법 판정의 정답으로 쓰지 않는다. 대조군(T3) 전용. / 🚨 문서가 스스로 「대외적으로 법적 효력을 가지는 것이 아니」라고 적는다 — 3층에 넣지 않는다(D-138 선례). / 이전판 4개(2021-12 ~ 2023-07)는 받지 않는다 — 최신판 -05 만."
+    collected_at: 2026-09-25
+    decided_at: 2026-09-25
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-25
+    robots_checked_at: 2026-09-25
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   ftc_noviolation:
@@ -557,6 +679,37 @@ sources:
     dissent_note: "판정 근거의 「저작권은 대한화장품협회에 귀속」을 재현하지 못함 — 공지 본문에 해당 문구가 없고, 첨부 해설서 PDF 전문(35p·28,233자)에도 저작권·귀속·무단·전재·복제·배포·Copyright 이 0건. 등급 G2 자체는 유지 가능하나 근거 문장의 출처(어느 페이지 어느 문장인지)를 특정해 주십시오"
     evidence_url: "https://kcia.or.kr/ad/cs/notice.php?type=view&no=17039"
     evidence_is_access: true
+
+  mfds_cosmetic_claim_test_guide:
+    name: "식약처 「화장품 표시·광고 실증을 위한 시험방법 가이드라인」 민원인안내서 (2024-12 개정) ★신규등재 2026-09-25"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_1060/view.do?seq=15567"
+    layer: "2층 적법라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: C
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (민원인안내서 게시물 첨부 1개)"
+    scale: "PDF 103쪽 · 본문 약 10만 자(텍스트 층 있음) · 실증 대상 표현별 시험방법 — 이전판 2018-04"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「화장품 표시·광고 실증을 위한 시험방법 가이드라인」(민원인안내서, 2024-12) (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).
+    caution: "🚨 문서가 스스로 「대외적으로 법적 효력을 가지는 것이 아니」라고 적는다 — 3층에 넣지 않는다(D-138 선례). 고시 「화장품 표시·광고 실증에 관한 규정」은 law_go_kr 에 이미 있고 이 문서는 그 시험방법 해설이라 중복이 아니다. / 🚨 등록번호가 게시판에 비어 있다 — 판본은 게시일(2024-12-02)과 이전 이력(2018-04-04)으로 가린다."
+    collected_at: 2026-09-25
+    decided_at: 2026-09-25
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-25
+    robots_checked_at: 2026-09-25
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
   law_go_kr:
     name: "법제처 국가법령정보 OPEN API (법령·시행령·시행규칙·행정규칙/고시·재결례·판례)"
