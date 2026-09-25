@@ -104,12 +104,21 @@ _CHECK = re.compile(r"ck_chunk_law\s+CHECK\s*\(law IN \(([^)]*)\)\)", re.S)
 
 
 def test_0019_의_대응표가_law_map_과_같다() -> None:
-    """🔴 마이그레이션은 그날의 값을 SQL 로 든다(모듈을 부르지 않는다) — 그래서 **글자까지** 댄다 (D-99)."""
+    """🔴 마이그레이션은 그날의 값을 SQL 로 든다(모듈을 부르지 않는다) — 그래서 **글자까지** 댄다 (D-99).
+
+    🔄 2026-09-25 — 「같다」를 「0019 가 든 ID 는 전부 같은 법으로 남아 있다」로 고친다. ⛔ 종전 `==` 는
+       `TARGETS` 에 법 ID 를 더할 때마다 돈 마이그레이션을 고치라고 요구했다(0007 규칙 위반).
+       0019 는 **그날 있던 청크**만 채우고, 뒤에 들어오는 청크의 `law` 는 `chunks.jsonl` → `scripts/embed.py`
+       가 `LAW_OF_ID` 로 싣는다 — 그래서 새 ID 는 0019 에 없어도 된다. 🔴 0019 의 값이 바뀌거나 빠지는 것은 막는다.
+    """
     sql = MIG_0019.read_text(encoding="utf-8")
     body = sql[
         sql.index("INSERT INTO _law_of_id") : sql.index(";", sql.index("INSERT INTO _law_of_id"))
     ]
-    assert dict(_PAIR.findall(body)) == lm.LAW_OF_ID
+    snap = dict(_PAIR.findall(body))
+    assert snap, "🔴 0019 대응표를 읽지 못했다"
+    moved = {k: (v, lm.LAW_OF_ID.get(k)) for k, v in snap.items() if lm.LAW_OF_ID.get(k) != v}
+    assert not moved, f"🔴 0019 이후 법이 바뀌었거나 빠진 ID: {moved}"
 
 
 @pytest.mark.parametrize("path", [MIG_0019, SCHEMA], ids=["0019", "schema.sql"])

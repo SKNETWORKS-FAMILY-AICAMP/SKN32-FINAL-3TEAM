@@ -89,12 +89,19 @@ TARGETS: dict[str, list[tuple[str, str, str]]] = {
         ("20207", "비교표시·광고에 관한 심사지침", "S1-02"),
         # 🚨 ID 자릿수가 다르다(7자리). 다른 것과 형식이 달라도 화면 그대로 적는다
         ("2052445", "인터넷 광고에 관한 심사지침", "S1-02"),
+        # ── 공정위 고시·지침 3 더 (2026-09-25 · covers 확장 · `--find` 후보를 이름으로 확인) ──
+        ("38124", "기만적인 표시·광고 심사지침", "S1-02"),  # 시행일 20251030 (검색)
+        #  🚨 이름이 우리가 부르던 「표시·광고 실증에 관한 운영고시」와 다르다 — 원문 이름을 적는다
+        ("20246", "표시ㆍ광고 내용의 실증에 관한 운영 고시", "S1-02"),  # 시행일 20260903 (검색)
+        ("35034", "수상·인증 등의 표시·광고에 관한 심사지침", "S1-02"),  # 시행일 20161223 (검색)
         # ── 화장품 고시 2 ─────────────────────────────────────
         #  🚨 기획문서의 「화장품 지침 3종」 중 **「화장품 표시·광고 관리 지침」은 없다** —
         #     행정규칙이 아니라 **민원인 안내서**라 법제처에 등재되지 않는다.
         #     식약처에서 따로 받아야 하고, 그것은 별도 소스 등재 대상이다 (D-15).
         ("41277", "화장품 표시·광고 실증에 관한 규정", "S1-02"),
         ("36122", "기능성화장품 심사에 관한 규정", "S1-02"),
+        # 2026-09-25 covers 확장 — 배합금지 · 사용한도 원료(「무(無) OO」 판정의 기준)
+        ("37098", "화장품 안전기준 등에 관한 규정", "S1-02"),  # 시행일 20260318 (검색)
         # ── 건강기능식품 고시 1 (2026-09-05 확보) ──────────────
         #  🚨 위 37971(「기능성 원료 및 기준·규격 **인정에 관한 규정**」)과 다른 문서다.
         #     이름이 닮았지만 37971 은 원료를 **인정하는 절차**이고, 이것은 기준·규격 **본문**이다.
@@ -124,12 +131,12 @@ TARGETS: dict[str, list[tuple[str, str, str]]] = {
 #:    09-05 에 이름이 닮은 다른 고시(37971)가 1번으로 온 적이 있다. 이름 · 소관부처 · 시행일을 눈으로 본다.
 #:    ⛔ 넣지 않는 것 — 「천연화장품 및 유기농화장품의 기준에 관한 규정」(폐지 제2025-49호) ·
 #:       「화장품 표시·광고를 위한 인증·보증기관의 신뢰성 인정에 관한 규정」(폐지 제2024-34호) — 현행이 아니다(D-290 ③).
+#: ✅ 2026-09-25 넷 해소 — 37098 · 38124 · 20246 · 35034 를 위 TARGETS 로 옮겼다(이름 대조).
+#:    🚨 **「식품등의 표시기준」은 C1 이 또 막았다** — `--find` 1번 후보가 **이미 TARGETS 에 있는 69549**
+#:       (「식품등의 부당한 표시 또는 광고의 내용 기준」)였다. 09-05 37971 과 같은 모양이다.
+#:       그래서 `--find` 가 후보 전부를 내고 이미 가진 ID 를 표시하게 고쳤다(`find_pending`).
 PENDING: list[tuple[str, str, str]] = [
     ("admrul", "식품등의 표시기준", "S1-02"),
-    ("admrul", "화장품 안전기준 등에 관한 규정", "S1-02"),
-    ("admrul", "기만적인 표시·광고 심사지침", "S1-02"),
-    ("admrul", "표시·광고 실증에 관한 운영고시", "S1-02"),
-    ("admrul", "수상·인증 등의 표시·광고에 관한 심사지침", "S1-02"),
 ]
 
 #: 🚨 검색 응답과 본문 응답의 **필드 이름이 다르다** (2026-09-06 실측).
@@ -546,8 +553,20 @@ def _parse_failure(body: bytes) -> str:
 
 
 def search(oc: str, target: str, query: str) -> tuple[str, str, str] | None:
-    """검색해서 (ID, 이름, 시행일) 을 돌려준다. 못 찾으면 None."""
-    body = _call(BASE_SEARCH, oc, target=target, query=query, display="3")
+    """검색해서 (ID, 이름, 시행일) 을 돌려준다. 못 찾으면 None. 🚨 첫 후보만 — 사람 확인용은 `candidates()`."""
+    hits = candidates(oc, target, query, display=3)
+    return hits[0] if hits else None
+
+
+def candidates(
+    oc: str, target: str, query: str, *, display: int = 10
+) -> list[tuple[str, str, str]]:
+    """검색 후보 (ID, 이름, 시행일) 을 **서버가 준 순서대로 전부** 돌려준다. 없으면 빈 목록.
+
+    🚨 2026-09-25 — 「식품등의 표시기준」의 1번 후보가 이미 가진 69549 였다. 첫 후보만 보면
+       사람이 확인할 거리가 없다 — 후보를 다 보여 주는 것이 C1 의 전제다.
+    """
+    body = _call(BASE_SEARCH, oc, target=target, query=query, display=str(display))
     root = _parse(body)
     if root is None:
         # 🚨 target·query 를 같이 찍는다. 이 실패는 **질의 하나 때문에** 나기도 한다 —
@@ -557,10 +576,9 @@ def search(oc: str, target: str, query: str) -> tuple[str, str, str] | None:
             f"   {_parse_failure(body)}"
         )
     hits = root.findall(".//law") + root.findall(".//admrul")
-    if not hits:
-        return None
-    first = hits[0]
-    return _text(first, *ID_FIELDS), _text(first, *NAME_FIELDS) or query, _text(first, *EFF_FIELDS)
+    return [
+        (_text(h, *ID_FIELDS), _text(h, *NAME_FIELDS) or query, _text(h, *EFF_FIELDS)) for h in hits
+    ]
 
 
 def _reject_reason(root: ET.Element | None, body: bytes, *, min_body: int = MIN_BODY) -> str:
@@ -876,15 +894,19 @@ def find_pending() -> None:
     registry.require(SOURCE_ID, use="U1")
     oc = env.get("LAW_OC_KEY")
 
-    print("미확보 항목 ID 검색 — 확인 후 TARGETS 에 직접 옮기십시오\n")
+    print("미확보 항목 ID 검색 — 후보를 보고 맞는 것을 TARGETS 에 직접 옮기십시오\n")
+    have = {law_id for rows in TARGETS.values() for law_id, _, _ in rows}
     for target, query, sid in PENDING:
-        hit = search(oc, target, query)
-        if hit is None:
-            print(f"  ❌ [{sid}] {query} — 검색어를 바꿔 재시도")
+        hits = candidates(oc, target, query)
+        if not hits:
+            print(f"  ❌ [{sid}] {query} — 후보 없음 · 검색어를 바꿔 재시도")
             continue
-        law_id, name, eff = hit
-        print(f"  ✅ [{sid}] {name}")
-        print(f'        ("{law_id}", "{name}", "{sid}"),   # 시행일 {eff}')
+        exact = [h for h in hits if h[1] == query]
+        print(f"  [{sid}] 「{query}」 후보 {len(hits)}건 · 이름 완전일치 {len(exact)}건")
+        for law_id, name, eff in hits:
+            # 🚨 이미 가진 ID 를 표시한다 — 1번 후보가 가진 것일 때 새것인 양 옮기지 않게 (C1)
+            mark = "이미 TARGETS" if law_id in have else ("이름 일치" if name == query else "")
+            print(f'        ("{law_id}", "{name}", "{sid}"),   # 시행일 {eff}  {mark}')
 
 
 #: 🚨 필터를 **통과했지만** 눈으로 한 번 더 볼 사건명의 표지 (`--audit` 전용).
