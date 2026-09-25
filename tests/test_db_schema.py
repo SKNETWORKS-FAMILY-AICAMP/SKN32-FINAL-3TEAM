@@ -589,3 +589,17 @@ def test_골든셋_적재는_넣는_칸을_전부_갱신한다() -> None:
     assert inserted <= updated, (
         f"갱신하지 않는 칸 {sorted(inserted - updated)} — 다시 넣어도 DB 가 옛 값이다"
     )
+
+
+@pytest.mark.gate
+def test_마이그레이션_SQL_은_alembic_이_부른다() -> None:
+    """🔴 `db/migrations/*.sql` 은 본문일 뿐이다 — 부르는 `alembic/versions/*.py` 가 없으면 `migrate` 가 돌리지 않는다.
+
+    ⛔ 2026-09-25 — `0020_flag_nd.sql` 만 넣고 alembic 판을 빠뜨렸다. 위 게이트(끝난 뒤의 모양)는 SQL 파일을
+       직접 접어서 **통과**했고, 실제 DB 는 0019 에 멈췄다 — `db-drift` 가 기기에서 잡았다(클론 B).
+    """
+    versions = "\n".join(
+        p.read_text(encoding="utf-8") for p in (ROOT / "alembic" / "versions").glob("*.py")
+    )
+    orphan = [f.name for f in sorted(MIG_DIR.glob("*.sql")) if f.name not in versions]
+    assert not orphan, f"🔴 alembic 판이 부르지 않는 마이그레이션 SQL: {orphan}"
