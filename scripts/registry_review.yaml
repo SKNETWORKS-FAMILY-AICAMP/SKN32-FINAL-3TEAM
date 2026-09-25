@@ -717,6 +717,10 @@ mfds_hf_trial_ad_guide:
   reviewed_at: 2026-09-25
   robots_checked_at: 2026-09-25
   collected_at: 2026-09-25
+# 🔄 2026-09-25 D-290 재확인 — 층 2층 → 3층 해설(authority 해설) · 이유 문구 D-138 → D-290 (수정안_2026-09-25_레지스트리_층_D-290.md).
+#   확인 권소라 (2026-09-25).
+#   같은 재확인이 덮는 이유 문구 — mfds_cosmetic_ad_qa · mfds_hf_trial_ad_guide · mfds_quasi_drug_ad_guide · mfds_cosmetic_ad_guide_2013 · mfds_cgm_expc
+#   · 3층 authority — law_go_kr 법령 · mfds_online_guideline 해설 · foodsafety_faq 해설 · platform_guide ⬜(재판정)
 mfds_cosmetic_claim_test_guide:
   decided_by: 오한빈
   decided_at: 2026-09-25
@@ -731,6 +735,18 @@ mfds_quasi_drug_ad_guide:
   reviewed_at: 2026-09-25
   robots_checked_at: 2026-09-25
   collected_at: 2026-09-25
+# 🆕 2026-09-25 — 「화장품 표시·광고 관리 지침」 민원인안내서 0086-07 (2025-08-14) · m_1060 seq=15700
+#   서명 범위 — 등급 G3(D-132 준용) · 제약 BY · status collect(collect.mfds_board) · 층 3층 판단규범 · authority 해설(D-290 ②)
+#   근거: PDF 17쪽 본문에 공공누리·저작권 문구 없음 · 3쪽 「2025년 8월 현재」(기준 시점 현행 · D-290 ③) (2026-09-25 PDF 확인 · 사실원장 ⑳ 뒤)
+#   결정 오한빈(「바로 등재」) · 확인 권소라 (2026-09-25).
+#   robots — 같은 호스트 www.mfds.go.kr 의 위 09-25 권소라 실측을 쓴다.
+mfds_cosmetic_ad_guideline:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: null
 
 # 🆕 2026-09-19 — 법제처 「중앙부처 1차 해석」 중 식약처분 (질의회신)
 #   서명 범위 — 등급 G3(D-132 준용) · 별도 등재(law_go_kr covers 로 접지 않는다 · D-90) ·

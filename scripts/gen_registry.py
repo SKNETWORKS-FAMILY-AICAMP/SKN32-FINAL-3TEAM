@@ -99,6 +99,7 @@ MODEL_IDS = {"qwen3", "kure", "bge_reranker", "kcbert"}
 BY_ID["law_go_kr"] = {
     "id": "law_go_kr",
     "layer": "3층 판단규범 · 4층 위험도 · 5층 반례",
+    "authority": "법령",  # 🆕 2026-09-25 D-290 ② — 3층 소스는 구속력 칸이 필수다
     "name": "법제처 국가법령정보 OPEN API (법령·시행령·시행규칙·행정규칙/고시·재결례·판례)",
     "org": "법제처",
     "grade": "G3",
@@ -310,6 +311,11 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         _LIC_MFDS_APPLIED,
         "출처: 식품의약품안전처 「화장품 표시·광고 실증을 위한 시험방법 가이드라인」(민원인안내서, 2024-12) (저작권법 제24조의2 제1항 · 제37조)",
     ),
+    # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침(현행 · 3층 해설 · D-290)
+    "mfds_cosmetic_ad_guideline": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「화장품 표시·광고 관리 지침」(민원인안내서 0086-07, 2025-08-14) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
     "mfds_quasi_drug_ad_guide": (
         _LIC_MFDS_APPLIED,
         "출처: 식품의약품안전처 「의약외품 표시 광고 가이드라인」(민원인안내서 1179-05, 2025-04) (저작권법 제24조의2 제1항 · 제37조)",
@@ -392,6 +398,11 @@ def block(key, s, extra=None, covers=None, status="collect"):
     if s.get("url"):
         L.append(f"    url: {esc(s['url'])}")
     L.append(f"    layer: {esc(s['layer'])}")
+    # 🆕 2026-09-25 D-290 ② — 구속력 칸. 층(담긴 것)과 따로 적는다. 값 검사는 아래 `_authority_errors` 가 쓰기 전에 한다
+    if s.get("authority"):
+        L.append(f"    authority: {esc(s['authority'])}")
+    elif key in AUTHORITY_PENDING:
+        L.append(f"    authority_note: {esc(AUTHORITY_PENDING[key])}")
     L.append(f"    grade: {g}")
     L.append("    use: {" + ", ".join(f"{k}: {v}" for k, v in uses.items()) + "}")
     L.append(f"    constraints: [{', '.join(cons)}]")
@@ -533,7 +544,7 @@ EXTRA = {
         "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
         "fragment_note: >-",
         "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
-        "  🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).",
+        "  🚨 1층 사례로 쓴다 — 2020-12 기준이라 3층 해설로 두지 않는다 (D-290 ③ 기준 시점 · 2025 지침 mfds_cosmetic_ad_guideline 우선).",
     ],
     "mfds_hf_trial_ad_guide": [
         "masking: >-",
@@ -541,7 +552,7 @@ EXTRA = {
         "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
         "fragment_note: >-",
         "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
-        "  🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).",
+        "  🚨 가치가 부적합 사례라 1층에 둔다 (D-290 · 한 층만). 근거 조문으로 인용하지 않는다.",
     ],
     "mfds_cosmetic_claim_test_guide": [
         "masking: >-",
@@ -549,7 +560,15 @@ EXTRA = {
         "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
         "fragment_note: >-",
         "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
-        "  🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).",
+        "  🚨 3층 해설로 둔다 (D-290 ②) — 검색·설명에 쓰고 근거 조문으로 인용하지 않는다. 고시가 우선한다.",
+    ],
+    # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침 (3층 해설 · D-290)
+    "mfds_cosmetic_ad_guideline": [
+        "masking: >-",
+        "  2쪽 점검표의 담당자·부서장 성명 · 부서 전화·팩스 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "fragment_note: >-",
+        "  금지표현·예외 조건·실증 대상 문언을 사실로 취한다 (D-18). 문서에 광고 캡처 없음(2026-09-25 PDF 확인).",
+        "  🚨 3층 해설 (D-290 ②) — 검색·설명에 쓰고 근거 조문으로 인용하지 않는다. 금지표현의 「단, …는 제외」를 떼어 쓰지 않는다 — 조건부다(D-290 ④).",
     ],
     "mfds_quasi_drug_ad_guide": [
         "masking: >-",
@@ -557,7 +576,7 @@ EXTRA = {
         "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
         "fragment_note: >-",
         "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
-        "  🚨 3층(판단규범)에 넣지 않는다 — 민원인안내서는 법적 효력이 없다고 스스로 적는다 (D-138 선례).",
+        "  🚨 약사법 기준 · 3법 밖 대조군이라 1층 (D-290). 근거 조문으로 인용하지 않는다.",
     ],
     "ftc_decisions": [
         "masking: 업체명·상표·대표자명·🔄 **주소** 즉시 마스킹, 원문 미보관 (D-17)",
@@ -818,7 +837,7 @@ ORDER = [
     #       아니」라고 적는다 (D-138 선례). 텍스트 층 0자라 status 는 manual.
     "mfds_cosmetic_ad_guide_2013",
     # 🆕 2026-09-25 — 민원인안내서(m_1060) 3건. 결정 오한빈(「중복 안 되면 등재」) · 확인 권소라.
-    #    🚨 3층이 아니다 — 스스로 법적 효력이 없다고 적는다 (D-138 선례).
+    #    🔄 2026-09-25 D-290 — 1층인 이유는 「효력 없음」 문구가 아니라 가치가 사례라서다(질의응답집은 기준 시점도 ③).
     "mfds_cosmetic_ad_qa",
     "mfds_hf_trial_ad_guide",
     "mfds_quasi_drug_ad_guide",
@@ -829,11 +848,13 @@ ORDER = [
     "mfds_hf_ingredient",
     "mfds_hf_individual",
     "kcia_guideline",
-    # 🆕 2026-09-25 — 화장품 실증 시험방법 가이드라인 (D-59 B 실증형 조건 근거)
-    "mfds_cosmetic_claim_test_guide",
-    # 3층 판단 규범
+    # 3층 판단 규범 — 🆕 2026-09-25 D-290 ② 구속력 칸(`authority: 법령 | 해설`) 필수 · 해설은 근거 조문으로 인용하지 않는다
     "law_go_kr",
     "mfds_online_guideline",
+    # 🔄 2026-09-25 D-290 — 2층 → 3층 해설. 실증 **조건**의 기준이라 조건 없이 쓰는 표현(2층 ④)이 아니다
+    "mfds_cosmetic_claim_test_guide",
+    # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침(안내서-0086-07 · 2025-08) · 현행 공식 해설
+    "mfds_cosmetic_ad_guideline",
     "foodsafety_faq",
     "platform_guide",
     "mfds_hf_ingredient_board",
@@ -897,6 +918,7 @@ STATUS = {
     "mfds_hf_trial_ad_guide": "collect",
     "mfds_cosmetic_claim_test_guide": "collect",
     "mfds_quasi_drug_ad_guide": "collect",
+    "mfds_cosmetic_ad_guideline": "collect",
     "mfds_hf_ingredient_board": "collect",
     "cosmetic_ingredient": "collect",
     "cosmetic_restricted": "collect",
@@ -974,6 +996,15 @@ STATUS = {
 
 REV = {v: k for k, v in RENAME.items()}
 
+# 🆕 2026-09-25 D-290 ② — **구속력 칸.** 3층 소스는 `authority` 가 필수다 · 값은 둘뿐이다.
+#    해설은 검색·설명에 쓰고 근거 조문으로 인용하지 않는다 — 🔴 그 인용 금지 게이트는 3층 해설을 RAG 에
+#    처음 적재하는 커밋에서 올린다(D-290 집행 · D-192). 여기서는 칸이 비지 않게만 막는다.
+AUTHORITY_VALUES = frozenset({"법령", "해설"})
+#: 3층인데 칸을 아직 못 정한 소스 — **사유를 생성물에 싣는다**(`authority_note`). 빈 칸이 조용히 나가지 않게.
+AUTHORITY_PENDING = {
+    "platform_guide": "⬜ D-290 — 민간 기준은 공식 해설이 아니라 3층 밖 후보다. 재판정 때 정한다(전 용도 차단 · hold)",
+}
+
 #: status 가 받을 수 있는 값 — 위 주석의 셋.
 STATUS_VALUES = frozenset({"collect", "manual", "hold"})
 # 🆕 2026-09-20 (D-254) — **쓰기 전에** 표를 대조한다. 중간에 멈추면 생성물 넷이 두 벌이 된다 (D-90).
@@ -986,6 +1017,36 @@ if _no_status or _stray or _bad:
         + (f"  status 없음(기본값으로 열지 않는다): {_no_status}\n" if _no_status else "")
         + (f"  ORDER 에 없는 키(오타?): {_stray}\n" if _stray else "")
         + (f"  모르는 status 값: {_bad} — 아는 것 {sorted(STATUS_VALUES)}\n" if _bad else "")
+    )
+
+
+# 🆕 2026-09-25 D-290 ② — 쓰기 **전에** 본다. 중간에 멈추면 생성물 넷이 두 벌이 된다 (D-90 · D-220).
+def _authority_errors() -> list[str]:
+    bad: list[str] = []
+    for key in ORDER:
+        s = BY_ID[REV.get(key, key)]
+        third = "3층" in (s.get("layer") or "")
+        auth = s.get("authority")
+        if auth is not None and auth not in AUTHORITY_VALUES:
+            bad.append(f"{key}: authority {auth!r} — 아는 값 {sorted(AUTHORITY_VALUES)}")
+        elif third and auth is None and key not in AUTHORITY_PENDING:
+            bad.append(f"{key}: 3층인데 authority 가 없다")
+        elif not third and auth is not None:
+            bad.append(
+                f"{key}: 3층이 아닌데 authority {auth!r} 가 있다 — 구속력 칸은 3층 소스의 칸이다"
+            )
+        elif key in AUTHORITY_PENDING and (auth is not None or not third):
+            bad.append(
+                f"{key}: AUTHORITY_PENDING 에 있는데 칸이 정해졌거나 3층이 아니다 — 목록에서 뺀다"
+            )
+    return bad
+
+
+_auth_bad = _authority_errors()
+if _auth_bad:
+    raise SystemExit(
+        "🔴 구속력 칸(D-290 ②)이 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n  "
+        + "\n  ".join(_auth_bad)
     )
 
 out = []
