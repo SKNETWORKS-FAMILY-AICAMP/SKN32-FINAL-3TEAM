@@ -31,6 +31,8 @@ EXTRACTORS: dict[str, str] = {
     "mfds_special_use_guide": "preprocess.mfds_guide",
     "ftc_decisions_body": "preprocess.ftc_extract",
     "mfds_press": "preprocess.mfds_press",
+    # 🆕 2026-09-25 — 질의응답집 → 질의회신 레코드(문항 단위 · 라벨은 만들지 않는다)
+    "mfds_cosmetic_ad_qa": "preprocess.mfds_cosmetic_qa",
 }
 
 #: 원천 id → 계측 모듈. 🔴 **라벨을 만들지 않고 세기만 한다** — 산출물이 없다.
