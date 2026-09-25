@@ -230,6 +230,44 @@ def parse(path: pathlib.Path) -> list[dict]:
 
 _EFF = re.compile(r"_(\d{8})$")
 
+#: 🆕 2026-09-25 팀장 판정 (나) — **시행 전 판인데 싣는 파일**. 사람이 부칙 · 제개정이유를 읽고 적는다.
+#:    `근거` — 왜 실어도 되는가 · `시행예정` — 시행 전인 조항을 찾는 원문 글귀(그 조항 노드에 표시를 붙인다)
+#:    🔴 글귀가 어느 노드에도 없으면 **멈춘다** — 판이 바뀌어 표시가 조용히 빠지는 것을 막는다 (D-220).
+#:    ⬜ D 번호 없음 — 초안 `docs/ohb/D초안_2026-09-25_시행_전_판.md`. ⛔ D-290 ③ 이 아니다(③ 은 옛 판이다).
+PENDING_ALLOWED: dict[str, dict] = {
+    "admrul_36814_20280101.xml": {
+        "근거": (
+            "식품등의 표시기준 제2026-37호(2026-05-12 발령) — 부칙 제1조 2028-01-01 시행 · 제2조 미리 적용 가능 · "
+            "제개정이유 주요내용 2(커피 탈카페인 · 주류협업제품) — 그 밖 조항은 종전과 같은 글"
+        ),
+        "표시": (
+            "2028-01-01 시행 예정(식품등의 표시기준 제2026-37호) · 부칙 제2조로 미리 적용할 수 있고, "
+            "그 전에 종전 기준으로 만든 제품은 소비기한까지 판매할 수 있다(부칙 제3조)"
+        ),
+        "시행예정": (
+            "카페인을 제거한 커피원두를 원료로 사용하고",  # Ⅲ. 1. 자. 2) 거) (2) (나)
+            "주류를 주류가 아닌 식품의 상호",  # Ⅲ. 1. 거. 2) 하) (16)
+        ),
+    },
+}
+
+
+def mark_pending(rows: list[dict], name: str) -> int:
+    """허용된 시행 전 판의 노드 중 시행 전 조항이 든 것에 `시행예정` 표시를 붙인다. 붙인 노드 수를 돌려준다."""
+    spec = PENDING_ALLOWED[name]
+    n = 0
+    for needle in spec["시행예정"]:
+        hit = [r for r in rows if needle in (r.get("본문") or "")]
+        if not hit:
+            raise SystemExit(
+                f"🔴 {name}: 시행 전 조항 글귀 {needle!r} 가 어느 노드에도 없다 — 판이 바뀌었다. "
+                "PENDING_ALLOWED 를 사람이 다시 본다 (D-220)"
+            )
+        for r in hit:
+            r["시행예정"] = spec["표시"]
+            n += 1
+    return n
+
 
 def split_in_force(
     files: list[pathlib.Path], today: str
@@ -237,8 +275,9 @@ def split_in_force(
     """파일명의 시행일(`{target}_{ID}_{시행일}.xml`)로 (시행 중, 시행 전) 을 가른다.
 
     🔴 2026-09-25 — 법제처 본문 조회가 「식품등의 표시기준」(36814)에 **시행 전 판(20280101)** 을 줬다.
-       조문 노드로 풀면 2028 기준이 지금 기준으로 검색·판정에 들어간다 → 시행 전 판은 **싣지 않고 이름을 찍는다**
-       (D-290 ③ 기준 시점 · D-220 — 조용히 넣지도 조용히 버리지도 않는다). 원문은 그대로 남는다(규약 2).
+       부칙을 읽지 않은 시행 전 판은 **싣지 않고 이름을 찍는다** (D-220 — 조용히 넣지도 조용히 버리지도 않는다).
+       사람이 부칙을 읽고 `PENDING_ALLOWED` 에 적은 파일만 시행 중 쪽으로 간다(팀장 판정 (나)). 원문은 그대로 남는다(규약 2).
+       🔄 같은 날 정정 — 종전 이 자리는 「D-290 ③」을 적었다. ③ 은 **옛 판**(제도가 바뀐 뒤)이고 시행 전 판을 다룬 D 는 없다.
     🔴 시행일을 못 읽는 이름은 **멈춘다** — `collect.law_api` 는 시행일 없는 응답을 저장하지 않으므로(09-25 원장
        실측 20건 전부 날짜가 있다) 그런 이름은 손으로 넣은 파일이다. 시행 중으로 치면 fail-open 이다 (D-220).
     """
@@ -250,7 +289,8 @@ def split_in_force(
             raise SystemExit(
                 f"🔴 파일명에서 시행일을 못 읽었다: {p.name} — `{{target}}_{{ID}}_{{시행일}}.xml` 이어야 한다"
             )
-        (later if m.group(1) > today else now).append(p)
+        future = m.group(1) > today
+        (later if future and p.name not in PENDING_ALLOWED else now).append(p)
     return now, later
 
 
@@ -262,7 +302,9 @@ def main() -> int:
     files = [p for p in store.current_files(LAW, "*.xml") if p.name.startswith(PREFIX)]
     files, later = split_in_force(files, date.today().strftime("%Y%m%d"))
     for p in later:
-        print(f"  🚨 시행 전 판 — 싣지 않는다: {p.name} (사람이 부칙을 보고 정한다 · D-290 ③)")
+        print(
+            f"  🚨 시행 전 판 — 싣지 않는다: {p.name} (사람이 부칙을 보고 `PENDING_ALLOWED` 에 적는다)"
+        )
     if not files:
         print("조문 원문이 없다 — collect.law_api 를 먼저 돌린다")
         return 1
@@ -270,6 +312,11 @@ def main() -> int:
     all_rows: list[dict] = []
     for p in files:
         rows = parse(p)
+        if p.name in PENDING_ALLOWED:
+            k = mark_pending(rows, p.name)
+            print(
+                f"  ⚠ 시행 전 판을 싣는다 — {p.name} · 시행 전 조항 노드 {k}개에 표시 (팀장 판정 (나))"
+            )
         all_rows += rows
         flag = " 🔴 원천에 본문이 없다(첨부만)" if rows and rows[0].get("본문없음") else ""
         print(f"  {p.name:32} {len(rows):>4}행  {rows[0]['법령'][:34] if rows else ''}{flag}")

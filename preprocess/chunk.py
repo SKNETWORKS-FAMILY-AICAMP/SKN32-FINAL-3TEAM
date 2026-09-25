@@ -124,11 +124,16 @@ def _context(r: dict) -> str:
        「사람이 본 문맥」이 갈린다 (D-99).
     🚨 빈 문자열은 「붙일 문맥이 없음」이고 NULL(미적재)과 다르다.
     """
+    # 🆕 2026-09-25 (팀장 판정 (나)) — 시행 전 조항 표시(`law_article.PENDING_ALLOWED` → 노드 `시행예정`)를
+    #    **문맥 맨 앞에** 둔다. 검색이 보는 값과 화면이 보여 주는 값이 같아야 한다(D-99) — 칸을 새로 만들지 않고
+    #    이미 DB · 화면까지 가는 `context` 에 싣는다. 🚨 이 표시가 없는 조항은 지금 시행 중인 글이다.
+    note = (r.get("시행예정") or "").strip()
+    pre = [f"[{note}]"] if note else []
     if not r.get("키"):  # 조 행 — `키` 가 없는 것이 조다 (chunk_id 도 article 을 쓴다)
-        return ""
+        return "\n".join(pre)
     head = (r.get("제목") or "").strip()
     hang = (r.get("항본문") or "").strip()
-    return "\n".join(p for p in (head, hang) if p)
+    return "\n".join(p for p in (*pre, head, hang) if p)
 
 
 def _annex_context(r: dict, by_path: dict[tuple[str, str], str]) -> str:
