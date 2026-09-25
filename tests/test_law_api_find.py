@@ -52,3 +52,25 @@ def test_find_는_이미_가진_ID_와_이름_일치를_표시한다(
     assert "이미 TARGETS" in line_have
     assert "이름 일치" in line_new and "이미 TARGETS" not in line_new
     assert "후보 2건 · 이름 완전일치 1건" in out
+
+
+def test_시행_전_판이면_알린다(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """🚨 09-25 「식품등의 표시기준」 검색 시행일이 20280101 이었다 — 본문도 시행 전 판이면 사람이 봐야 한다."""
+    body = (
+        "<AdmRulService><행정규칙기본정보><행정규칙명>식품등의 표시기준</행정규칙명>"
+        "<시행일자>{eff}</시행일자></행정규칙기본정보></AdmRulService>"
+    )
+    effs = iter(["20990101", "20200101"])  # 2099 — 시계가 지나도 시행 전으로 남게
+    monkeypatch.setattr(L, "_call", lambda base, oc, **p: body.format(eff=next(effs)).encode())
+    monkeypatch.setattr(L, "_reject_reason", lambda root, body, **kw: "")
+    monkeypatch.setattr(L.env, "get", lambda name: "k")
+    monkeypatch.setattr(L.registry, "require", lambda sid, use: None)
+    monkeypatch.setitem(
+        L.TARGETS, "admrul", [("36814", "식품등의 표시기준", "S1-02"), ("1", "옛 고시", "S1-02")]
+    )
+    L.collect("admrul", dry_run=True)
+    lines = capsys.readouterr().out.splitlines()
+    warn = [i for i, ln in enumerate(lines) if "시행 전 판" in ln]
+    assert len(warn) == 1 and "20990101" in lines[warn[0]]

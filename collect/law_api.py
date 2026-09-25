@@ -21,6 +21,7 @@ import re
 import sys
 import urllib.parse
 import xml.etree.ElementTree as ET
+from datetime import date
 from pathlib import Path
 
 from collect import env, http, registry, store
@@ -77,6 +78,10 @@ TARGETS: dict[str, list[tuple[str, str, str]]] = {
             "S1-02",
         ),
         ("37971", "건강기능식품 기능성 원료 및 기준·규격 인정에 관한 규정", "S1-04 원출처"),
+        # 2026-09-25 covers 확장 — 영양강조 표시기준이 든 고시. `--find` 후보 6 중 이름 완전일치 1(클론 B).
+        #  🚨 검색 목록의 시행일이 **20280101(시행 전)** 이다 — 본문이 현행판을 주는지 시행 전 판을 주는지는
+        #     `--dry-run` 의 본문 시행일로 본다. 시행 전 판이면 지금 판정 기준이 아니다 (D-290 ③ 기준 시점).
+        ("36814", "식품등의 표시기준", "S1-02"),
         # ── 공정위 고시·지침 5 (2026-09-02 확보) ───────────────
         #  🚨 「부당한 표시·광고의 유형 및 기준」은 **시행령 [별표]가 아니라 고시**다.
         #     기획문서 3층 표가 「시행령 [별표]」로 적어 둔 것이 절반만 맞았다 —
@@ -135,9 +140,8 @@ TARGETS: dict[str, list[tuple[str, str, str]]] = {
 #:    🚨 **「식품등의 표시기준」은 C1 이 또 막았다** — `--find` 1번 후보가 **이미 TARGETS 에 있는 69549**
 #:       (「식품등의 부당한 표시 또는 광고의 내용 기준」)였다. 09-05 37971 과 같은 모양이다.
 #:       그래서 `--find` 가 후보 전부를 내고 이미 가진 ID 를 표시하게 고쳤다(`find_pending`).
-PENDING: list[tuple[str, str, str]] = [
-    ("admrul", "식품등의 표시기준", "S1-02"),
-]
+#:    ✅ 같은 날 해소 — 고친 `--find` 가 후보 6건을 냈고 이름 완전일치 `36814` 를 TARGETS 로 옮겼다.
+PENDING: list[tuple[str, str, str]] = []
 
 #: 🚨 검색 응답과 본문 응답의 **필드 이름이 다르다** (2026-09-06 실측).
 #:    prec  검색 `판례일련번호`          → 본문 `판례정보일련번호`
@@ -638,6 +642,10 @@ def collect(target: str, *, dry_run: bool = False) -> tuple[int, int]:
             continue
 
         print(f"  ✅ [{sid}] {got}  {id_param}={law_id}  시행일={eff}")
+        # 🚨 시행 전 판이면 알린다 — 멈추지는 않는다(원문 보관은 규약 2 · 파일명에 시행일이 있다).
+        #    지금의 판정 기준으로 쓸지는 사람이 정한다 (D-290 ③ 기준 시점 · 2026-09-25 36814 검색 시행일 20280101).
+        if eff.isdigit() and eff > date.today().strftime("%Y%m%d"):
+            print(f"     🚨 시행 전 판이다 (시행일 {eff}) — 현행 기준으로 쓰기 전에 사람이 본다")
         if dry_run:
             continue
 
