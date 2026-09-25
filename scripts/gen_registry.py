@@ -69,10 +69,16 @@ def _scalar(v):
 LAW_COVERS = [
     ("law_acts", "표시광고법 · 식품표시광고법 · 화장품법 (+시행령·시행규칙)"),
     ("law_annex", "시행령 [별표] 부당한 표시·광고의 유형 및 기준"),
-    ("mfds_notice", "식약처 고시 「식품등의 부당한 표시 또는 광고의 내용 기준」"),
+    (
+        "mfds_notice",
+        "식약처 고시 2종 「식품등의 부당한 표시 또는 광고의 내용 기준」 · 「식품등의 표시기준」",
+    ),
     ("func_claim_rule", "「부당한 표시·광고로 보지 아니하는 식품등의 기능성 표시·광고 규정」"),
-    ("ftc_guidelines", "공정위 고시·지침 5종 (유형기준 · 추천보증 · 환경 · 비교 · 인터넷)"),
-    ("cosmetic_guides", "화장품 지침 3종 (관리지침 · 실증규정 · 기능성심사규정)"),
+    (
+        "ftc_guidelines",
+        "공정위 고시·지침 8종 (유형기준 · 추천보증 · 환경 · 비교 · 인터넷 · 기만 · 실증 운영고시 · 수상·인증)",
+    ),
+    ("cosmetic_guides", "화장품 고시 3종 (실증규정 · 기능성심사규정 · 안전기준)"),
     ("sanction_annex", "행정처분 기준 [별표] (화장품법 · 식품표시광고법)"),
     ("penalty_notice", "과징금 부과 세부기준 고시 (2026.7.1 개정)"),
     ("penal_clause", "각 법 벌칙 조항 (징역 · 벌금 상한)"),
@@ -302,6 +308,10 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
     "mfds_cosmetic_ad_qa": (
         _LIC_MFDS_APPLIED,
         "출처: 식품의약품안전처 「화장품·의료기기·의약외품 허위과대광고 질의응답집」(민원인안내서 1009-02, 2021-01) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_cosmetic_faq_2025": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「2025 자주하는 질문집(화장품분야)」(민원인안내서, 2025) (저작권법 제24조의2 제1항 · 제37조)",
     ),
     "mfds_hf_trial_ad_guide": (
         _LIC_MFDS_APPLIED,
@@ -545,6 +555,14 @@ EXTRA = {
         "fragment_note: >-",
         "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
         "  🚨 1층 사례로 쓴다 — 2020-12 기준이라 3층 해설로 두지 않는다 (D-290 ③ 기준 시점 · 2025 지침 mfds_cosmetic_ad_guideline 우선).",
+    ],
+    # 🆕 2026-09-25 — 2025 화장품 자주하는 질문집 (등재 초안 · 게시 화면 확인 전)
+    "mfds_cosmetic_faq_2025": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 1층 사례로 쓴다 — 질의 한 건마다의 답이다 (D-290). 근거 조문으로 인용하지 않는다.",
     ],
     "mfds_hf_trial_ad_guide": [
         "masking: >-",
@@ -839,6 +857,8 @@ ORDER = [
     # 🆕 2026-09-25 — 민원인안내서(m_1060) 3건. 결정 오한빈(「중복 안 되면 등재」) · 확인 권소라.
     #    🔄 2026-09-25 D-290 — 1층인 이유는 「효력 없음」 문구가 아니라 가치가 사례라서다(질의응답집은 기준 시점도 ③).
     "mfds_cosmetic_ad_qa",
+    # 🆕 2026-09-25 — 2025 화장품 자주하는 질문집(현행판) · 게시 화면 확인 · 2인 확인 전
+    "mfds_cosmetic_faq_2025",
     "mfds_hf_trial_ad_guide",
     "mfds_quasi_drug_ad_guide",
     "ftc_noviolation",
@@ -919,6 +939,7 @@ STATUS = {
     "mfds_cosmetic_claim_test_guide": "collect",
     "mfds_quasi_drug_ad_guide": "collect",
     "mfds_cosmetic_ad_guideline": "collect",
+    "mfds_cosmetic_faq_2025": "collect",
     "mfds_hf_ingredient_board": "collect",
     "cosmetic_ingredient": "collect",
     "cosmetic_restricted": "collect",
