@@ -502,6 +502,40 @@ def test_정본은_sha_가_맞는_원문을_제자리에_놓는다(repo, inbox, 
 
 
 @pytest.mark.gate
+def test_받은편지함_사본에_확장자가_붙어도_sha_가_맞으면_놓는다(repo, inbox, monkeypatch) -> None:
+    """🆕 2026-09-25 — 팀원 PDF 25개가 받은편지함에 `<sha>.pdf` 로 있었다(사실원장 ⑲). 이름이 아니라 sha 로 찾는다."""
+    body = b"%PDF-1.4 probe"
+    row = _uploaded(repo, inbox, monkeypatch, body)
+    obj = inbox / "objects" / row["sha256"][:2] / row["sha256"]
+    obj.rename(obj.with_name(obj.name + ".pdf"))
+    assert ri.import_(yes=True) == 0
+    assert (repo / row["path"]).read_bytes() == body
+
+
+@pytest.mark.gate
+def test_확장자가_붙은_사본도_sha_가_안_맞으면_하나도_놓지_않는다(repo, inbox, monkeypatch) -> None:
+    """확장자를 받아 준다고 느슨해지지 않는다 — 바이트가 원장 sha 와 다르면 「없음」이다 (D-220)."""
+    row = _uploaded(repo, inbox, monkeypatch, b"%PDF-1.4 probe")
+    obj = inbox / "objects" / row["sha256"][:2] / row["sha256"]
+    obj.unlink()
+    obj.with_name(obj.name + ".pdf").write_bytes(b"%PDF-1.4 tampered")
+    assert ri.import_(yes=True) == 1
+    assert not (repo / row["path"]).exists()
+
+
+@pytest.mark.gate
+def test_확장자가_붙은_사본이_있으면_다시_올리지_않는다(repo, inbox, monkeypatch) -> None:
+    """팀원이 다시 `raw-publish` 해도 같은 바이트를 또 올리지 않는다 — 읽는 자리와 올릴지 보는 자리가 같다 (D-99)."""
+    _collected(repo, monkeypatch, b"%PDF-1.4 probe", "a.pdf")
+    assert ri.publish(yes=True) == 0
+    sha = _rows(repo)[-1]["sha256"]
+    obj = inbox / "objects" / sha[:2] / sha
+    obj.rename(obj.with_name(obj.name + ".pdf"))
+    assert ri.publish(yes=True) == 0
+    assert not obj.exists(), "확장자 붙은 사본이 있는데 확장자 없는 사본을 또 올렸다"
+
+
+@pytest.mark.gate
 def test_정본이_아니면_합치지_않는다(repo, inbox, monkeypatch) -> None:
     row = _uploaded(repo, inbox, monkeypatch, b'{"a":1}')
     monkeypatch.setenv("DATA_ROLE", "replica")
