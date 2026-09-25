@@ -639,8 +639,22 @@ mfds_cosmetic_sanction:
   decided_at: 2026-09-07
   reviewed_by: 권소라
   reviewed_at: 2026-09-07
-  collected_at: null
+  collected_at: 2026-09-22
 
+kca_ad_survey:
+  decided_by: 오한빈
+  decided_at: 2026-09-22
+  # 🆕 2026-09-22 신규 등재 — 팀장 결정(구두 · 「바로 진행」) · 권소라 확인.
+  #   서명 범위 — 등급 G3 · 제약 BY · status manual · 층 1층 · 공공누리 제1유형 게시물만
+  #   근거: KCA보고서 상세 화면 「공공누리 제1유형(출처표시)」 실측 (evidence_url)
+  #   🚨 공공누리 유형은 게시물마다 확인한다 — 제1유형이 아닌 게시물은 등록하지 않는다 (D-110).
+  #   🚨 웹진 「소비자시대」 · ciss.go.kr 판은 조건이 달라 받지 않는다.
+  #   ✅ 2026-09-22 권소라 — 등록한 PDF 23건 전부 게시 화면에서 「공공누리 제1유형(출처표시)」 확인.
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-22
+  # 🚨 robots — kca.go.kr 「User-agent: * / Disallow: /」 전면 차단 (2026-09-22 확인) → manual
+  robots_checked_at: 2026-09-22
+  collected_at: 2026-09-22
 mfds_special_use_guide:
   decided_by: 오한빈
   decided_at: 2026-09-07
@@ -680,6 +694,43 @@ mfds_cosmetic_ad_guide_2013:
   #   「User-agent: * / Allow:/ — 명시적 전면 허용 · Disallow 한 줄도 없다」였다.
   robots_checked_at: 2026-09-17
   collected_at: null
+
+# 🆕 2026-09-25 — 민원인안내서 4건(m_1060) 신규 등재
+#   결정: 오한빈 2026-09-25 (「질의응답집과 판단안내서 중복 안 되면 등재해도 됩니다」 — B 판정 요청 5건 전체에 대한 답)
+#   서명 범위 — 등급 G3(D-132 준용) · 제약 BY · status collect(collect.mfds_board) · 층은 각 항목 · ⛔3층 금지(D-138)
+#   근거: 게시물 화면 공공누리 배지 없음 · PDF 저작권 문구 0건 · 외부 집필 표기 없음 · 단서 1~4호 해당 없음 (2026-09-25 권소라 확인)
+#   중복: 레지스트리 같은 문서 없음 · 게시판 최신판 · 파생물 15자 조각 대조 겹침은 조문 인용뿐 (2026-09-25)
+#   ⛔ B 의 다섯째 「식품 등 부당한 광고 판단 안내서」(식품안전나라)는 등재하지 않는다 —
+#      게시물 실물이 2021-02-25판이고 사실원장 ⑤ 에서 「고시 admrul_69549_20251204 가 더 최신 · 안 받는다」로 이미 닫혔다.
+#   🚨 robots — www.mfds.go.kr 「User-agent: * / Allow:/」 (2026-09-25 권소라 실측 · Googlebot 만 /search/search.do 차단)
+mfds_cosmetic_ad_qa:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: 2026-09-25
+mfds_hf_trial_ad_guide:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: 2026-09-25
+mfds_cosmetic_claim_test_guide:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: 2026-09-25
+mfds_quasi_drug_ad_guide:
+  decided_by: 오한빈
+  decided_at: 2026-09-25
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-25
+  robots_checked_at: 2026-09-25
+  collected_at: 2026-09-25
 
 # 🆕 2026-09-19 — 법제처 「중앙부처 1차 해석」 중 식약처분 (질의회신)
 #   서명 범위 — 등급 G3(D-132 준용) · 별도 등재(law_go_kr covers 로 접지 않는다 · D-90) ·
