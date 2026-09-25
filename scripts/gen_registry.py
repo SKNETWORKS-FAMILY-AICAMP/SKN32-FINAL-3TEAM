@@ -1071,6 +1071,27 @@ if _auth_bad:
         + "\n  ".join(_auth_bad)
     )
 
+
+def _nd_errors() -> list[str]:
+    """🆕 2026-09-25 — `ND`(변경금지) 소스는 학습(U1)이 열릴 수 없다. 파생 데이터셋 금지의 가장 좁은 꼴이다.
+
+    🚨 거꾸로(`U1` 이 닫혔으니 ND)는 아니다 — `U1: deny` 는 「평가 전용」 뜻으로도 쓰였다(D-155 사례집).
+    """
+    bad: list[str] = []
+    for key in ORDER:
+        s = BY_ID[REV.get(key, key)]
+        if "ND" in (s.get("constraints") or []) and (s.get("u") or {}).get("train") == "ok":
+            bad.append(f"{key}: ND(변경금지)인데 학습(train)이 ok 다")
+    return bad
+
+
+_nd_bad = _nd_errors()
+if _nd_bad:
+    raise SystemExit(
+        "🔴 변경금지(ND) 소스의 용도가 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n  "
+        + "\n  ".join(_nd_bad)
+    )
+
 out = []
 for key in ORDER:
     mid = REV.get(key, key)

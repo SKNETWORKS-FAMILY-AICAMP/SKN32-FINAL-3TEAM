@@ -420,7 +420,13 @@ def test_마이그레이션이_만드는_모양이_schema_sql_과_같다() -> No
     assert files, f"🚨 {MIG_DIR} 에 마이그레이션 SQL 이 없다"
 
     # 마이그레이션을 순서대로 적용한 뒤의 ENUM 모양
-    m_enum: dict[str, list[str]] = {}
+    # 🔄 2026-09-25 — **출발점은 동결된 `db/schema_0001.sql`** 이다(0001 은 그 파일만 읽는다 · 0015 머리말).
+    #    ⛔ 종전에는 빈 표에서 출발해, 0001 이 만든 타입(`flag_t` 등)에 값을 더하는 마이그레이션(0020 · `ND`)을
+    #       「만든 적 없는 타입」으로 막았다. 그 타입들은 0001 이 만들었다.
+    m_enum: dict[str, list[str]] = {
+        n: re.findall(r"'([^']+)'", b)
+        for n, b in _ENUM.findall((ROOT / "db" / "schema_0001.sql").read_text(encoding="utf-8"))
+    }
     for f in files:
         sql = f.read_text(encoding="utf-8")
         for name, body in _ENUM.findall(sql):

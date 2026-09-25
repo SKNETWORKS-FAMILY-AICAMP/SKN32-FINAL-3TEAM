@@ -70,6 +70,7 @@ FLAGS = {
     "QUERYLOG",
     "PREAPPROVAL",
     "NOTRAIN",
+    "ND",  # 🆕 2026-09-25 · 0020 — 변경금지 (파생 데이터셋 금지 · `collect.registry.assert_derivable`)
 }
 
 

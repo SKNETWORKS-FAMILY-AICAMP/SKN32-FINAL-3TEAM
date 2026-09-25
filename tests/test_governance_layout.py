@@ -38,6 +38,7 @@ VALID_FLAGS = {
     "NOSTORE",
     "QUERYLOG",
     "PREAPPROVAL",  # D-73
+    "ND",  # 🆕 2026-09-25 변경금지 — 공공누리 제3·4유형 (파생 데이터셋 금지)
 }
 
 # 🚨 등급이 허용하는 용도 상한 (data_sources.yaml 머리말과 같은 표다)

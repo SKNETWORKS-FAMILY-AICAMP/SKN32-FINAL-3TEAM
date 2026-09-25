@@ -1641,6 +1641,17 @@ def extract(
         raise typer.Exit(run(sys.executable, "-m", "preprocess.preview", source))
     if dump or sheet:
         only_canonical(f"extract {source} " + ("--dump" if dump else "--sheet"))
+    if sheet:
+        # 🔴 2026-09-25 — 변경금지(ND) 소스는 라벨 시트를 만들지 않는다. 원문 그대로의 레코드(`--dump`)만 된다.
+        #    ⬜ 이 자리는 런처 경로만 막는다 — 모듈을 직접 부르는 길은 파생 쪽 `registry.assert_derivable` 이 받는다.
+        from collect import registry as reg  # noqa: PLC0415 — 이 파일에 `registry` 명령이 있다
+
+        if reg.no_derivatives(source):
+            console.print(
+                f"  [red]{source} 는 변경금지(ND)다[/red] — 라벨 시트는 파생 데이터셋이라 만들지 않는다. "
+                "원문 그대로 색인 · 인용만 된다 (D-110 · 2026-09-25 팀장 판정 (가))."
+            )
+            raise typer.Exit(1)
     module = EXTRACTORS.get(source)
     if module is None:
         console.print(

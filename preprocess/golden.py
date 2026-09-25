@@ -43,7 +43,7 @@ import pathlib
 import re
 
 from app.settings import PARAMS
-from collect import statute
+from collect import registry, statute
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
 from preprocess.lineage import lineage
@@ -416,6 +416,8 @@ def main() -> int:
     print("\n  🔴 적법 행(`labels` 빈 리스트)이 없으면 「전부 위반」이라 답해도 100% 다.")
     print("  🚨 평가 행은 **문장 단위뿐**이다 — 사례집은 사전 쪽이다 (D-155).")
 
+    # 🔴 변경금지(ND) 게이트 — 파생 데이터셋에 ND 소스의 행이 들어오면 여기서 멈춘다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(rows, who="preprocess.golden")
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
         with OUT.open("w", encoding="utf-8", newline="\n") as f:

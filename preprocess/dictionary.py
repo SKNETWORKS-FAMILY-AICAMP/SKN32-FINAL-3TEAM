@@ -49,7 +49,7 @@ import pathlib
 import re
 import unicodedata
 
-from collect import statute
+from collect import registry, statute
 
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
@@ -265,6 +265,8 @@ def main() -> int:
         f"\n  길이 — 중앙 {lens[len(lens) // 2]}자 · 10자 이상 {sum(1 for x in lens if x >= 10)}종"
     )
 
+    # 🔴 변경금지(ND) 게이트 — 파생 데이터셋에 ND 소스의 행이 들어오면 여기서 멈춘다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(rows, who="preprocess.dictionary")
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
         with OUT.open("w", encoding="utf-8", newline="\n") as f:

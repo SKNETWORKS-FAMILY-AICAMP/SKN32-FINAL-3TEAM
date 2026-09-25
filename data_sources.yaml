@@ -17,6 +17,9 @@
 #                 + NOSTORE (저장·별도DB 금지) / QUERYLOG (요청이 제공자에 보관됨) /
 #                   PREAPPROVAL (결과물 공개 전 사전승인)  — D-73
 #                 + NOTRAIN (사용자 업로드물 — 학습·색인 금지 · D-122)
+#                 + ND (변경금지 — 공공누리 제3·4유형 · CC ND. 원문 그대로 색인·인용만 · 라벨·사전·학습·평가셋 등
+#                   파생 데이터셋 금지. `collect.registry.assert_derivable` 이 파생 산출물 쓰기 직전에 막는다 · 2026-09-25)
+#                 🚨 ND 와 `U1: deny` 는 다르다 — U1 deny 는 「평가 전용」 뜻으로도 쓰였다(D-155 사례집). 법적 금지는 ND 로 적는다
 #                 🚨 NOREDIST는 U4(모델 배포)를 막지 않는다. 축이 다르다 (D-71)
 #                 🚨 NOTRAIN은 등급이 아니라 「막는 지점」 축이다 — 수집은 열리고 학습만 닫힌다 (D-73·D-122)
 #
@@ -823,7 +826,7 @@ sources:
     authority: "해설"
     grade: G3
     use: {U1: deny, U2: allow, U3: allow, U4: allow}
-    constraints: [BY]
+    constraints: [BY, ND]
     redistributable: true
     value: A
     cost: free
@@ -841,7 +844,8 @@ sources:
     collected_at: null
     decided_at: 2026-09-25
     decided_by: 오한빈
-    reviewed_by: null
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-25
     robots_checked_at: 2026-09-25
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 

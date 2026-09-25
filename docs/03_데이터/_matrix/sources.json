@@ -694,7 +694,8 @@
   "org": "식품의약품안전처",
   "grade": "G3",
   "constraints": [
-   "BY"
+   "BY",
+   "ND"
   ],
   "access": "자료실 PDF 다운로드 (민원인안내서 m_1060 · seq=15772 · 첨부 PDF 1개 + e-book 보기 링크)",
   "verified": true,

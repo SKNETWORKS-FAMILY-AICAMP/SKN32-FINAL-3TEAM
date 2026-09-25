@@ -28,7 +28,8 @@ CREATE TYPE grade_t       AS ENUM ('G0','G1','G2','G3');
 CREATE TYPE use_t         AS ENUM ('U1_train','U2_rag','U3_cite','U4_deploy');
 CREATE TYPE flag_t        AS ENUM ('BY','NC','SA','PII','TOS','GATED',
                                    'NOREDIST','NOSTORE','QUERYLOG','PREAPPROVAL',
-                                   'NOTRAIN');   -- 🔄 D-122 · 사용자 업로드물은 학습·색인 금지
+                                   'NOTRAIN',    -- 🔄 D-122 · 사용자 업로드물은 학습·색인 금지
+                                   'ND');        -- 🆕 0020 · 변경금지(공공누리 제3·4유형) — 파생 데이터셋 금지
 CREATE TYPE cost_t        AS ENUM ('free','gated','paid','unknown');
 CREATE TYPE value_t       AS ENUM ('A','B','C','D','X');
 -- 🔴 위법 유형 — **우리 라벨이 곧 타입이다** (2026-09-10 · D-178).

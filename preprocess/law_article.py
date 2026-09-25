@@ -21,6 +21,7 @@ import json
 import pathlib
 import re
 import xml.etree.ElementTree as ET
+from datetime import date
 
 from collect import store
 
@@ -227,12 +228,41 @@ def parse(path: pathlib.Path) -> list[dict]:
     return out
 
 
+_EFF = re.compile(r"_(\d{8})$")
+
+
+def split_in_force(
+    files: list[pathlib.Path], today: str
+) -> tuple[list[pathlib.Path], list[pathlib.Path]]:
+    """파일명의 시행일(`{target}_{ID}_{시행일}.xml`)로 (시행 중, 시행 전) 을 가른다.
+
+    🔴 2026-09-25 — 법제처 본문 조회가 「식품등의 표시기준」(36814)에 **시행 전 판(20280101)** 을 줬다.
+       조문 노드로 풀면 2028 기준이 지금 기준으로 검색·판정에 들어간다 → 시행 전 판은 **싣지 않고 이름을 찍는다**
+       (D-290 ③ 기준 시점 · D-220 — 조용히 넣지도 조용히 버리지도 않는다). 원문은 그대로 남는다(규약 2).
+    🔴 시행일을 못 읽는 이름은 **멈춘다** — `collect.law_api` 는 시행일 없는 응답을 저장하지 않으므로(09-25 원장
+       실측 20건 전부 날짜가 있다) 그런 이름은 손으로 넣은 파일이다. 시행 중으로 치면 fail-open 이다 (D-220).
+    """
+    now: list[pathlib.Path] = []
+    later: list[pathlib.Path] = []
+    for p in files:
+        m = _EFF.search(p.stem)
+        if m is None:
+            raise SystemExit(
+                f"🔴 파일명에서 시행일을 못 읽었다: {p.name} — `{{target}}_{{ID}}_{{시행일}}.xml` 이어야 한다"
+            )
+        (later if m.group(1) > today else now).append(p)
+    return now, later
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="법령·행정규칙 조문 본문 → 3층")
     ap.add_argument("--dump", action="store_true")
     args = ap.parse_args()
 
     files = [p for p in store.current_files(LAW, "*.xml") if p.name.startswith(PREFIX)]
+    files, later = split_in_force(files, date.today().strftime("%Y%m%d"))
+    for p in later:
+        print(f"  🚨 시행 전 판 — 싣지 않는다: {p.name} (사람이 부칙을 보고 정한다 · D-290 ③)")
     if not files:
         print("조문 원문이 없다 — collect.law_api 를 먼저 돌린다")
         return 1

@@ -33,6 +33,13 @@ import argparse
 import collections
 import json
 import pathlib
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from collect import registry  # noqa: E402
 
 OUT = pathlib.Path("data/derived/casebook2021_labelsheet.jsonl")
 
@@ -1742,6 +1749,8 @@ def main() -> int:
     a = ap.parse_args()
 
     got = rows()
+    # 🔴 변경금지(ND) 게이트 — 전사도 파생 데이터셋이다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(got, who="casebook2021_sheet")
     print(f"전사 {len(got)}행")
     for field in ("부", "블록", "근거법", "층"):
         c = collections.Counter(str(r.get(field, "")) for r in got)
