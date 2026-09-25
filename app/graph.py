@@ -1,21 +1,34 @@
-"""app/graph.py — walking skeleton (D-124 · Phase 0 게이트).
+"""app/graph.py — 판정 코어 서브그래프 + 진입점 그래프 (D-266 · D-124 walking skeleton).
 
-  uv run python -m app.graph            # 스텁 한 바퀴를 돌려 방문 순서를 찍는다
+  uv run python -m app.graph            # 스텁 한 바퀴(검수 · 생성)를 돌려 방문 순서를 찍는다
 
-🚨 **모델도 판정 로직도 없이 end-to-end 한 바퀴가 돈다** — 그것이 Phase 0 게이트의
-   정의(*"문구 하나가 end-to-end 한 바퀴"*)와 정확히 같다 (D-124).
+🔄 **2026-09-23 — 그래프를 갈랐다 (D-266).** 종전에는 상태 하나(`JudgeState`)·그래프 하나 안에서
+   판정 뒤 B 실증형을 재생성 루프로 보냈다. D-265 로 **검수는 문구를 만들지 않으므로** 그 루프는
+   검수 경로에 있으면 안 되는 가지가 됐다.
 
-★ D-124 가 검사 항목 셋을 정해 뒀다 —
-   ① **라우터 함수는 그래프 없이 단독 테스트한다** → 그래서 이 파일은 langgraph 를
-      **모듈 최상단에서 import 하지 않는다.** 라우터는 순수 함수이고, 의존성 없이 돈다.
-   ② **스텁 노드로 컴파일해 방문 순서만** 본다 → `run_stub()` 이 langgraph 없이도
-      같은 순서를 내므로, 의존성이 붙기 전에도 순서를 고정할 수 있다.
-   ③ **리듀서 키를 따로 확인한다** → 잘못된 annotation 이 append 대신 **조용히 덮어쓴다.**
-      🚨 목록은 `REDUCER_KEYS` **한 곳**이다 (D-99) — 여기 또 적으면 늘 때 낡는다.
-      게이트가 그 표를 돌며 `Annotated[..., operator.add]` 를 확인한다.
+       core     (서브그래프)  split → classify → retrieve → match_dict → encode
+                              → 법별 팬아웃(D-267) → merge_laws → judge → assess_risk → doc_rules
+       review   (진입점 A)   core → route_review → certificate · guidance · hold · passed   ← 루프 없음
+       generate (진입점 B)   keyword_screen → assemble → claim_ledger → rejudge → 루프(D-126)
+       compose  (진입점 C)   상태만 — 이번 범위 밖 (계약만 · D-266)
 
-🔴 **스텁은 비어 있는 것이지 틀린 것이 아니다.** 각 노드는 자기 자리에 무엇이 올지
-   적어 두고 상태를 그대로 넘긴다. ⛔ 그럴듯한 값을 지어 넣으면 그 값이 화면으로 흘러가고,
+🚨 **모델도 판정 로직도 없이 end-to-end 한 바퀴가 돈다** — Phase 0 게이트의 정의(D-124)는 그대로다.
+
+★ D-124 가 정한 검사 셋도 그대로다 —
+   ① **라우터 함수는 그래프 없이 단독 테스트한다** → langgraph 를 **모듈 최상단에서 import 하지 않는다.**
+   ② **스텁 노드로 컴파일해 방문 순서를 본다** → `run_review_stub` · `run_generate_stub` 이 langgraph 없이
+      같은 순서를 낸다. 컴파일본이 그 순서와 같은지 게이트가 본다.
+   ③ **리듀서 키를 따로 확인한다** → 누적 키 표는 `STATE_REDUCERS` **한 곳**이다 (D-99).
+
+🔴 **코어 서브그래프를 그대로 노드로 끼우지 않는다 — 함수 노드가 부른다** (2026-09-23 실측 · 리눅스 컨테이너 ·
+   langgraph 1.2.11). ⛔ 컴파일한 서브그래프를 `add_node("core", core)` 로 끼우면 **부모에 이미 있던 누적 키 값이
+   두 번 쌓였다** — 부모 `timings=[pre]` 를 넣었더니 `[pre, pre, …]` 가 나왔다. 서브그래프가 받은 값을 **자기 최종
+   상태째** 돌려주고, 부모가 그것을 리듀서로 **또** 더하기 때문이다. 오류는 안 난다.
+   ★ 그래서 `CORE_IN` 만 넣고 `CORE_OUT` 만 꺼내는 함수 노드로 부른다. 입출력이 표로 보인다.
+   🚨 D-206 — 이 실측은 **리눅스**다. Windows 판은 게이트(`test_코어를_지나도_누적_키가_두_번_쌓이지_않는다`)가 잰다.
+
+🔴 **스텁은 비어 있는 것이지 틀린 것이 아니다.** 각 노드는 자기 자리에 무엇이 올지 적어 두고
+   상태를 그대로 넘긴다. ⛔ 그럴듯한 값을 지어 넣으면 그 값이 화면으로 흘러가고,
    진짜가 붙을 때 무엇이 바뀌었는지 아무도 모른다 (D-147 의 그래프 판).
 """
 
@@ -34,7 +47,9 @@ from app.contracts import (
     AdFormat,
     AdSection,
     Candidate,
+    Category,
     EvidenceArticle,
+    GenerateOutcome,
     Infeasibility,
     JudgeResponse,
     KeywordScreen,
@@ -47,7 +62,7 @@ from app.contracts import (
     Verdict,
     is_pass,
 )
-from app.settings import DEFAULT_CATEGORY, PARAMS
+from app.settings import PARAMS
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
 MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
@@ -63,118 +78,136 @@ def sent_id(i: int) -> str:
     return f"s{i}"
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  그래프 내부 운반체 — 계약(`app/contracts.py`)에 두지 않는다
+# ══════════════════════════════════════════════════════════════════════
+#
+# ⛔ 저기는 밖과 맺은 계약이고 `tests/contract_surface.json` 이 지문을 잡는다 — 4인이 그 모양을 보고
+#    화면을 붙인다. 아래 둘은 그래프 **내부 배선**이라 밖에서 볼 것이 아니다 (구현계획 §2-1 A · G).
+
+
 @dataclass(frozen=True, slots=True)
 class SentEvidence:
     """`retrieve` 가 문장 하나에 붙인 근거 — **노드 사이 운반체**다 (2026-09-13 · D-124 ③).
 
     🔴 **왜 생겼나** — 종전에는 `retrieve` 가 찾아 온 것을 놓을 칸이 상태에 **없었다.**
-       ⛔ 그러면 붙이는 사람의 선택지가 둘뿐이고 둘 다 나쁘다 —
-          ① 리듀서 없는 칸에 넣는다 → 문장이 여럿일 때 **마지막 하나만 남는다.** 오류는 안 난다.
-          ② `judge` 안에서 검색을 다시 부른다 → **코어가 두 벌이 된다** (D-99).
-       ★ **키가 있으면 계약이 선다.** 09-12 밤에 진입점 B 의 넷을 같은 이유로 세웠다.
-
-    ⛔ **`app/contracts.py` 에 두지 않는다.** 저기는 밖과 맺은 계약이고
-       `tests/contract_surface.json` 이 지문을 잡는다 — 4인이 그 모양을 보고 화면을 붙인다.
-       이건 그래프 **내부 배선**이라 밖에서 볼 것이 아니다. 계약을 늘리면 사람이 묶인다.
-       🚨 문장 판정에 실려 나가는 것은 `SentenceJudgment.evidence`(= `EvidenceArticle` 목록)다.
-          **밖으로 나가는 모양은 안 바뀐다.**
-
-    🚨 `vector`·`lexical` 을 같이 나른다 — `retrieve` 주석이 *「`search()` 가 내는 state 를
-       버리지 않는다」* 고 적어 둔 그 값이다. **벡터가 죽은 채 어휘 결과만으로 판정하면
-       근거가 반쪽인데 응답은 그럴듯하다.** `hold` 로 보내는 근거가 이 둘이다 (D-202).
+       ① 리듀서 없는 칸에 넣으면 문장이 여럿일 때 **마지막 하나만 남는다** ② `judge` 안에서 검색을
+       다시 부르면 **코어가 두 벌이 된다** (D-99). 키가 있으면 계약이 선다.
+    🚨 `vector`·`lexical` 을 같이 나른다 — **벡터가 죽은 채 어휘 결과만으로 판정하면 근거가 반쪽인데
+       응답은 그럴듯하다.** `hold` 로 보내는 근거가 이 둘이다 (D-202).
     """
 
     sent_id: str
-    #: 🔴 `part_total > 1` 인 조각은 조문의 **일부**다 (0011 · D-199) — 그 사실은
-    #:    `EvidenceArticle.chunk_id` 로 따라간다. 여기서 조문 이름만 남기지 않는다.
+    #: 🔴 `part_total > 1` 인 조각은 조문의 **일부**다 (0011 · D-199) — `EvidenceArticle.chunk_id` 로 따라간다.
     articles: tuple[EvidenceArticle, ...] = ()
     #: 두 갈래가 각각 돌았는가. ⛔ **둘 다 False 면 근거 없이 판정하는 것**이다 (D-224) — `hold`
     vector: bool = False
     lexical: bool = False
-    #: 두 갈래 **후보 수의 합**(겹친 것은 두 번 센다 · 폭 50 이 아니다). 🚨 0 은 「안 겹쳤다」이고, `lexical=False` 는 「검색어를 못 만들었다」다.
-    #:    ★ 둘은 다른 사건이다 — 한 칸으로 접으면 왜 못 찾았는지가 사라진다 (D-202).
+    #: 두 갈래 **후보 수의 합**(겹친 것은 두 번 센다). 🚨 0 은 「안 겹쳤다」이고, `lexical=False` 는
+    #: 「검색어를 못 만들었다」다 — 다른 사건이다 (D-202).
     pool: int = 0
 
 
-class JudgeState(TypedDict, total=False):
-    """상태 스키마 문서 「상태에 반드시 담을 것」이 그대로 이 모양이다.
+@dataclass(frozen=True, slots=True)
+class LawResult:
+    """법별 노드 하나가 낸 것 (D-267). `merge_laws` 가 모은다.
 
-    🚨 **누적 키에는 반드시 리듀서가 붙는다.** `Annotated[..., operator.add]` 가 없으면
-       LangGraph 는 **마지막 노드의 값으로 조용히 덮어쓴다.** 문장이 여럿인데 마지막
-       문장만 남는 사고가 여기서 난다 — 오류가 안 나서 발견이 늦다 (D-124 ③).
+    🔜 **W4 에서 칸이 는다** — 전제(`Premise`) · 문장별 유형 · 근거 · 하한. 🔄 2026-09-24 — W3 로 계약에 `Premise` 가
+       섰다(`app/contracts.py`). 칸을 늘릴 때 **그 타입을 쓴다** — ⛔ 문자열로 전제를 따로 지으면 **두 벌**이 된다 (D-99).
+    ★ 지금은 **「이 법이 이 문장들을 봤다」** 만 나른다 — `merge_laws` 의 fail-closed 대조가 읽는 값이다.
     """
 
-    # ── 입력 ──────────────────────────────────────────────────────
+    law: str
+    sent_ids: tuple[str, ...] = ()
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  상태 넷 (D-266) — 🚨 누적 키에는 반드시 리듀서가 붙는다
+# ══════════════════════════════════════════════════════════════════════
+#
+# ⛔ `Annotated[..., operator.add]` 가 없으면 LangGraph 는 **마지막 노드의 값으로 조용히 덮어쓴다.**
+#    문장이 여럿인데 마지막 문장만 남는 사고가 여기서 난다 — 오류가 안 나서 발견이 늦다 (D-124 ③).
+
+
+class CoreState(TypedDict, total=False):
+    """판정 코어 (D-266). 상태 스키마 문서 「상태에 반드시 담을 것」의 판정 쪽이 이 모양이다."""
+
+    # ── 입력 (`CORE_IN`) ────────────────────────────────────────────
     text: str
     product: ProductContext
-    # ── 분할 ──────────────────────────────────────────────────────
+    # ── 분할 · 라우팅 ────────────────────────────────────────────────
     sents: list[str]
-    # ── 근거 검색 🔴 누적 키 (2026-09-13) ────────────────────────
-    #: `retrieve` 가 넣고 `judge` 가 읽는다. 🚨 **문장마다 한 벌**이라 누적이다 —
-    #: 리듀서가 없으면 마지막 문장의 근거만 남고, 그 상태로도 응답은 그럴듯하다.
+    #: 🆕 D-267 — `classify` 가 정한 **이번에 적용할 법**. `route_laws` 가 이것으로 팬아웃하고
+    #:    `merge_laws` 가 **보낸 법이 전부 돌아왔는지** 이것으로 대조한다. 덮어쓰는 칸이다(리듀서 없음).
+    laws: tuple[str, ...]
+    # ── 근거 검색 🔴 누적 (2026-09-13) ─────────────────────────────
     evidence: Annotated[list[SentEvidence], operator.add]
-    # ── 판정 누적 🔴 누적 키 ─────────────────────────────────────
+    # ── 법별 팬아웃 🔴 누적 (D-267) — 법 노드가 **병렬로** 쓴다. 리듀서가 없으면 하나만 남는다
+    law_results: Annotated[list[LawResult], operator.add]
+    # ── 판정 누적 🔴 누적 ─────────────────────────────────────────────
     sentences: Annotated[list[SentenceJudgment], operator.add]
-    # ── 재생성 루프 (D-126) ──────────────────────────────────────
-    #: 0-base. 거부 3종(주장 원장·인용 검증·사후 대조)은 **한 카운터**를 쓴다
-    attempt: int
-    rejects: Annotated[list[str], operator.add]  # 🔴 누적 키 — 실패 사유 (보고용 · 모든 시도)
-    #: 🆕 2026-09-21 (전수 재검토 I3) — **이번 시도**가 거부됐는가. 시도마다 `verify` 가 덮어쓴다 — 그래서 리듀서가 없다.
-    #:    ⛔ 라우터가 누적 키 `rejects` 가 비었는지로 「이번 시도」를 읽어, 한 번 거부되면 뒤 시도가 통과해도
-    #:       `search_failed` 로 끝났다(실측 재현). 두 뜻(이력 · 이번)을 한 칸에 담았던 것이다.
-    rejected: bool
-    # ── 진입점 B — 카피 생성 (2026-09-12 밤 · D-181 · 상태 스키마 §개정) ────────
-    #  🔴 **넷이 빠져 있었다.** 상태 스키마 문서가 09-10 에 지목했는데 상태에는 안 왔다 —
-    #     `페르소나 목록(팬아웃)` · `키워드 선별 결과` · `후보 N=3` · `프론티어 점수`.
-    #  ⛔ 그래서 **ksr·lse 의 「AI 광고 생성」 BFF 가 붙을 자리가 없었다.** 값은 아직 스텁이지만
-    #     **키가 있으면 계약이 선다** — 뒤에 더하는 필드는 읽는 쪽을 낡게 만든다 (0008→0009).
-    #  ⬜ **계약과 어긋나는 자리 하나** — 상태 스키마 문서는 「페르소나 **목록**(팬아웃)」이라
-    #     적었는데 `GenerateRequest` 는 `segment` **하나**를 받는다. 둘 중 하나가 낡았다.
-    #     여기서는 **계약을 따른다**(하나) — 지어내지 않는다. 판정은 팀장 몫이다 (D-181).
-    segment: Segment
-    #: 허용/차단 + **사유**. 🔴 누적 키 — 키워드마다 노드가 갈릴 수 있다
-    keywords: Annotated[list[KeywordScreen], operator.add]
-    #: 프론티어 후보 N=3 (D-31 · D-34). 점수는 `Candidate.appeal_retention`·`residual_risk` 다 —
-    #: 🚨 「프론티어 점수」를 따로 두지 않는다. 두면 후보와 두 벌이 된다 (D-99)
-    candidates: Annotated[list[Candidate], operator.add]
-    #: 매체 프로파일 — **B 의 후단**에 산다 (D-181). 비면 각색 없이 후보만 낸다
-    profile: MediaProfile
-    #: 채널별 각색 (팬아웃). 🚨 각 결과가 **판정 코어를 다시 지난다** (D-119 · D-63)
-    adapted: Annotated[list[AdaptedCopy], operator.add]
-    # ── 진입점 C — AI 광고 생성 (D-164 · D-181) ──────────────────────────────
-    #  🚨 C 는 진입점이면서 종착이다 — B 에서 받기도 하고 독립 진입도 받는다
-    ad_format: AdFormat
-    #: 지면 섹션. 🔴 누적 키 — 섹션마다 판정이 붙는다
-    sections: Annotated[list[AdSection], operator.add]
-    # ── 종료 ─────────────────────────────────────────────────────
-    outcome: Outcome
-    # ── 계측 (D-77 · D-43 이 LangSmith 를 배제해 이것이 유일한 경로) 🔴 누적 키 ──
+    # ── 계측 (D-77 · D-43 이 LangSmith 를 배제해 이것이 유일한 경로) 🔴 누적 ──
     timings: Annotated[list[Timing], operator.add]
 
 
-#: 누적 키 목록 — 게이트가 여기 붙은 키 전부에 리듀서가 있는지 본다.
-#: 🚨 **키를 늘리면 여기 한 줄만 늘린다** — 게이트가 이 표를 돈다 (D-99).
-REDUCER_KEYS = (
-    "sentences",
-    "rejects",
-    "timings",
-    # 🆕 2026-09-13 — `retrieve` → `judge` 배선 (D-124 ③)
-    "evidence",
-    # 🆕 2026-09-12 밤 — 진입점 B·C (D-181)
-    "keywords",
-    "candidates",
-    "adapted",
-    "sections",
-)
+class ReviewState(CoreState, total=False):
+    """검수 (진입점 A · D-266). 코어 출력 + 종착.
 
-#: 진입점 셋이 상태에 다 있는가 — 게이트가 본다.
-#: ⛔ `JudgeState` 라는 **이름**은 아직 판정 전용으로 읽힌다. `PipelineState` 로 고치는 것은
-#:    게이트·문서가 같이 움직이는 일이라 **따로 판정한다** (병렬작업 계약 §8 ⑤).
-ENTRYPOINT_KEYS = {
-    "A_judge": ("text", "sents", "evidence", "sentences", "attempt", "outcome"),
-    "B_generate": ("segment", "keywords", "candidates", "profile", "adapted"),
-    "C_compose": ("ad_format", "sections"),
+    🔴 **재생성 키가 없다** — `attempt`·`rejects`·`rejected` 는 생성 상태로 옮겼다 (D-265 · D-266).
+       검수에서는 늘 0 인 칸이었고, 칸이 있으면 누군가 쓴다.
+    """
+
+    outcome: Outcome
+
+
+class GenerateState(TypedDict, total=False):
+    """카피 생성 (진입점 B · D-181 · D-264 · D-266).
+
+    ⬜ 상태 스키마 문서는 「페르소나 **목록**(팬아웃)」이라 적었고 계약 `GenerateRequest` 는 `segment` **하나**다.
+       **계약을 따른다** — 페르소나 팬아웃은 D-270 으로 **설계만**이다.
+    """
+
+    segment: Segment
+    product: ProductContext
+    #: 허용/차단 + **사유**. 🔴 누적 — 키워드마다 노드가 갈릴 수 있다
+    keywords: Annotated[list[KeywordScreen], operator.add]
+    #: 프론티어 후보 N=3 (D-31 · D-34). 🚨 「프론티어 점수」를 따로 두지 않는다 — `Candidate` 의 칸이다 (D-99)
+    candidates: Annotated[list[Candidate], operator.add]
+    # ── 재생성 루프 (D-126) — 🔄 D-266 으로 검수에서 이리로 왔다 ──────────
+    #: 0-base · **첫 조립이 0 이다.** 거부 3종(주장 원장·인용 검증·사후 대조)은 **한 카운터**를 쓴다
+    attempt: int
+    rejects: Annotated[list[str], operator.add]  # 🔴 누적 — 실패 사유 (보고용 · 모든 시도)
+    #: **이번 시도**가 거부됐는가. 시도마다 덮어쓴다 — 그래서 리듀서가 없다 (전수 재검토 I3)
+    rejected: bool
+    #: 매체 프로파일 — **B 의 후단**에 산다 (D-181). 🔜 각색은 D-270 으로 설계만
+    profile: MediaProfile
+    #: 채널별 각색. 🚨 각 결과가 **판정 코어를 다시 지난다** (D-119 · D-63)
+    adapted: Annotated[list[AdaptedCopy], operator.add]
+    #: 🔄 D-274 — 생성 종착은 검수와 **다른 목록**이다 (프론티어 · 탐색 실패 · 보류)
+    outcome: GenerateOutcome
+    timings: Annotated[list[Timing], operator.add]
+
+
+class ComposeState(TypedDict, total=False):
+    """AI 광고 생성 (진입점 C · D-164 · D-181). 🔜 **그래프가 없다** — 이번 범위 밖 (D-266)."""
+
+    ad_format: AdFormat
+    #: 지면 섹션. 🔴 누적 — 섹션마다 판정이 붙는다
+    sections: Annotated[list[AdSection], operator.add]
+
+
+#: 상태별 누적 키 — 게이트가 **양쪽으로** 본다: 여기 적힌 키에 리듀서가 있는가 · 리듀서가 붙은 키가 여기 다 있는가.
+#: 🚨 **키를 늘리면 여기 한 줄만 늘린다** (D-99).
+STATE_REDUCERS: dict[str, tuple[type, tuple[str, ...]]] = {
+    "core": (CoreState, ("evidence", "law_results", "sentences", "timings")),
+    "review": (ReviewState, ("evidence", "law_results", "sentences", "timings")),
+    "generate": (GenerateState, ("keywords", "candidates", "rejects", "adapted", "timings")),
+    "compose": (ComposeState, ("sections",)),
 }
+
+#: 코어 입출력 — 함수 노드가 **이것만** 넣고 **이것만** 꺼낸다 (모듈 docstring 의 실측 참조).
+CORE_IN = ("text", "product")
+CORE_OUT = ("sents", "laws", "evidence", "law_results", "sentences", "timings")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -185,22 +218,13 @@ ENTRYPOINT_KEYS = {
 def timed(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
     """노드 진입·종료 시각을 상태에 적재한다.
 
-    ⛔ 나중에 붙이면 그때까지의 측정치가 없다 — walking skeleton 에서 함께 넣는다.
-
-    🔄 **2026-09-14 — 뒤 인자를 그대로 넘긴다.** `retrieve` 가 LangGraph 의 `config` 를
-       받으면서 노드 인자가 하나가 아니게 됐다. ⛔ 여기서 `fn(state)` 로 고정하면
-       **커서가 조용히 사라지고** 검색이 안 붙은 채로 돈다 — 오류는 안 난다.
-
     🔴 **`functools.wraps` 가 여기서는 장식이 아니라 배선이다** (2026-09-14 실측).
-       LangGraph 는 **노드의 시그니처를 보고** `config` 를 넘길지 정한다. 종전처럼
-       `__name__` 만 옮기면 밖에서 보이는 모양이 `(state, *rest)` 라 **config 를 안 준다.**
-       ⛔ 그래도 오류는 안 난다 — 커서가 `None` 이라 「DB 없음」 경로로 조용히 떨어지고,
-          응답은 그럴듯하다. **실제로 이 실수를 한 번 하고 실측으로 잡았다.**
-       ★ `wraps` 가 `__wrapped__` 를 달아 `inspect.signature` 가 원래 모양을 보게 한다.
+       LangGraph 는 **노드의 시그니처를 보고** `config` 를 넘길지 정한다. `wraps` 가 `__wrapped__` 를 달아
+       원래 모양이 보이게 한다. ⛔ 빠지면 커서가 조용히 `None` 이 되고 「DB 없음」 경로로 떨어진다.
     """
 
     @functools.wraps(fn)
-    def wrapped(state: JudgeState, *rest: Any, **kw: Any) -> dict[str, Any]:
+    def wrapped(state: dict[str, Any], *rest: Any, **kw: Any) -> dict[str, Any]:
         t0 = time.perf_counter()
         out = fn(state, *rest, **kw)
         ms = (time.perf_counter() - t0) * 1000
@@ -212,40 +236,94 @@ def timed(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  스텁 노드 — 자리와 계약만 있고 판정은 없다
+#  법별 라우팅 (D-267) — 순수 함수. 🚨 그래프 없이 단독으로 테스트한다 (D-124 ①)
+# ══════════════════════════════════════════════════════════════════════
+
+#: 법별 노드가 받는 품목. `None` = **모든 품목** (표시광고법은 품목과 무관하게 걸린다).
+#: 🔄 **D-271 — 「일반」은 없다.** `일반상품`(기획서 2-4 「일반 상품」)과 `전용법_미수록` 은 **표시광고법만** 탄다 —
+#:    두 품목 모두 아래 어느 법의 범위에도 없어서 `law_ftc` 하나로 떨어진다. 전용법 품목은 통과 금지 · 미검수 고지다 (D-277).
+#:    ⛔ **청크의 `law`(법 축)와 섞지 않는다** — 🔄 W6(0019)로 청크 칸이 `category` → `law` 가 됐다(D-271 ①).
+#:       🔜 W4 — 법별 노드가 `collect/law_map` 으로 자기 법 근거만 거른다(노드 이름 ↔ 법 축 대응도 그때).
+#: 🚨 **순서가 곧 팬아웃 순서다** — 스텁과 컴파일본이 같은 순서를 낸다(`Send` 목록 순서 · 2026-09-23 실측).
+LAW_SCOPE: dict[str, frozenset[Category] | None] = {
+    "law_ftc": None,
+    "law_food": frozenset({Category.식품, Category.건기식}),
+    "law_cosmetic": frozenset({Category.화장품}),
+}
+LAW_NODES = tuple(LAW_SCOPE)
+
+
+def laws_for(category: Category | None) -> tuple[str, ...]:
+    """이번에 적용할 법. **품목을 모르면(`None`) 전부** — 분기는 미확정이면 언제나 (D-229 ⑥).
+
+    🚨 **빈 결과가 나올 수 없다** — 표시광고법(`scope=None`)이 늘 들어간다. 빈 팬아웃은 LangGraph 가
+       **오류 없이 그래프를 끝낸다**(2026-09-23 실측 — `Send` 가 0개면 뒤 노드를 건너뛰고 END).
+       그래서 `route_laws` 가 한 번 더 막는다.
+    """
+    return tuple(
+        name
+        for name, scope in LAW_SCOPE.items()
+        if category is None or scope is None or category in scope
+    )
+
+
+def law_payload(state: CoreState) -> dict[str, Any]:
+    """법별 노드에 보내는 것. 🔴 **컴파일본(`Send`)과 스텁이 같은 함수를 쓴다** (D-99).
+
+    ⛔ `Send` 로 보낸 노드는 **이 dict 만** 본다 — 부모 상태 전체가 아니다. 여기 없는 키를 노드가 읽으면
+       스텁에서는 돌고 컴파일본에서는 빈 값이 된다. 오류는 안 난다. 그래서 스텁도 이것만 넘긴다.
+    """
+    return {"sents": list(state.get("sents", [])), "product": state.get("product")}
+
+
+def route_laws(state: CoreState) -> tuple[str, ...]:
+    """팬아웃할 법 이름. 🚨 **비거나 모르는 이름이면 멈춘다** (D-220) — 빈 팬아웃은 조용히 그래프를 끝낸다."""
+    laws = tuple(state.get("laws") or ())
+    if not laws:
+        raise RuntimeError(
+            "🔴 적용할 법이 없다 — `classify` 가 `laws` 를 안 적었다. "
+            "빈 팬아웃은 LangGraph 가 오류 없이 끝낸다 (D-267 · D-220)"
+        )
+    unknown = set(laws) - set(LAW_NODES)
+    if unknown:
+        raise RuntimeError(f"🔴 법별 노드에 없는 이름 — {sorted(unknown)} (D-267)")
+    return laws
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  코어 노드 — 자리와 계약만 있고 판정은 없다
 # ══════════════════════════════════════════════════════════════════════
 
 
 @timed
-def split(state: JudgeState) -> dict[str, Any]:
-    """문장 분할. 🔜 `preprocess/text.py` 의 분할기가 온다."""
-    return {"sents": [state["text"]], "attempt": 0}
+def split(state: CoreState) -> dict[str, Any]:
+    """문장 분할. 🔜 W4 — `preprocess/text.py` 의 분할기가 온다."""
+    return {"sents": [state["text"]]}
 
 
 @timed
-def classify(state: JudgeState) -> dict[str, Any]:
-    """카테고리 판별. 🚨 사용자에게 묻지 않는다 — 우리가 판별한다 (D-82).
+def classify(state: CoreState) -> dict[str, Any]:
+    """품목 판별 → **적용할 법**. 🚨 사용자에게 묻지 않는다 — 우리가 판별한다 (D-82).
 
-    🔜 `product_fact` 대조 + 분류기. 못 정하면 `hold(cat_unknown)` 으로 간다.
+    ★ 지금은 **받은 품목**으로만 법을 고른다 — 받은 것이 없으면(`None`) 세 법 전부다 (D-229 ⑥ · D-267).
+       판별해서 지어내지 않는다. 🔜 W4 — `product_fact` 인정번호 대조 + 규칙으로 `None` 을 좁힌다.
     """
-    return {}
+    product = state.get("product") or ProductContext()
+    return {"laws": laws_for(product.category)}
+
+
+#: ⛔ 🔄 2026-09-24 (W6 · D-271 ③) — 품목을 청크 범주로 넘기던 **임시 다리**(`_CHUNK_CATEGORY` · `_chunk_category`)를 지웠다.
+#:    검색은 **법으로** 거르고 판정 그래프는 **넓게 한 번**(법 필터 없음) 찾는다 — 법별 노드가 자기 법 근거만 거른다(D-267).
+#:    🚨 품목을 검색 필터로 넘기지 않는다 — 품목과 법은 다른 축이다(D-271 ④). 게이트가 `retrieve` 의 호출을 본다.
 
 
 def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
     """`Hit` → 계약. 🔴 **확신이 없으면 안 옮긴다** (D-224).
 
-    ⛔ `citation()` 이 `None` 이면 좌표를 못 세운 것이다. 「제18조」로 줄여 적으면 실은
-       제3항인 근거를 가리킬 수 있다 — 그 함수가 막으려는 **부분 인용** 바로 그것이다.
-       지어내지 않고 **버린다.** 그래서 `articles` 가 `hits` 보다 짧을 수 있다.
-    ⛔ **`quote` 는 비운다.** 계약이 *「`quote` 는 `source_use.allowed` 가 `U3_cite` 인 것만」*
-       이라 적었는데 `search()` 는 `U2_rag` 로 거른다 — **다른 축이다.** 모르는 자격을
-       있다고 적지 않는다 (D-224). 🔜 U3 를 같이 읽게 되면 그때 채운다.
-    🔴 `part_total > 1` 이면 이 근거는 조문의 **일부**다 (0011 · D-199). 그 사실은
-       `chunk_id` 로 따라간다 — 조문 이름만 남기면 3분의 1을 전문으로 인용하는 것이다.
+    ⛔ `citation` 이 `None` 이면 좌표를 못 세운 것이다 — 「제18조」로 줄여 적으면 실은 제3항인 근거를 가리킨다.
+       지어내지 않고 **버린다.** ⛔ **`quote` 는 비운다** — `search()` 는 `U2_rag` 로 거르고 인용 자격은 `U3_cite` 다.
+    🚨 `citation()` 을 다시 부르지 않는다 — `Hit` 이 생성 시점에 이미 들고 있다 (D-99).
     """
-    # 🚨 **`citation()` 을 다시 부르지 않는다** — `Hit` 이 생성 시점에 이미 들고 있다
-    #    (`retrieve.py` 의 `Hit(**d, match=…, citation=citation(d))`). 다시 부르면 같은
-    #    판단이 두 곳에서 돌고, 한쪽 규칙만 고쳐지는 날 조용히 갈린다 (D-99).
     if not hit.citation or not hit.law_id:
         return None
     return EvidenceArticle(
@@ -254,49 +332,18 @@ def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
 
 
 @timed
-def retrieve(state: JudgeState, config=None) -> dict[str, Any]:  # noqa: ANN001
+def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     """조문 검색 — `app/retrieve.py` 의 `search()` 를 부른다 (✅ 2026-09-14 · 구현계획 §2-1 C).
 
-    🔴 **검색을 여기서 새로 쓰지 않는다** — 코어는 `app/retrieve.py` 하나다 (D-99 · D-51).
-       `/search` 가 이미 그것을 부르고 있고, 여기서 따로 쓰면 그 순간 두 벌이 된다.
-
-           from app import retrieve as rt
-           hits, state = rt.search(cur, sentence_text, category, limit)   # state: rt.SearchState
-
-    🔄 2026-09-12 오후 — 종전 주석은 「여기서는 `by_vector` 만 부른다. `by_text` 를 섞으면
-       순위 합산 가중치([임의])가 필요해진다」였다. RRF 는 가중치가 없어 그 이유가
-       사라졌다 (D-193). **광고 문구야말로 두 갈래가 다 필요하다** — 2026-09-12 실측에서
-       벡터 단독은 정답 조문을 6위·19위·50위 밖에 두었다. `/search` 와 **같은 것**을 부른다.
-    ⬜ 기호 검색(`by_literal`)은 여기서 안 부른다 — 입력이 광고 문구라 「제5호 아목」이
-       올 일이 없다. 빠뜨린 것이 아니라 판정이다 (D-167 — 열의 뜻으로 가른다).
-    🚨 `search()` 가 내는 `state` 를 **버리지 않는다.** 벡터가 죽은 채 어휘 결과만으로
-       판정하면 근거가 반쪽인데 응답은 그럴듯하다 — `hold` 로 보내는 근거가 `state.vector` 다.
-       🔄 2026-09-12 밤 (D-202) — 반환이 문자열 하나에서 `SearchState` 로 바뀌었다.
-          `state.lexical` 도 같이 본다: 「검색어를 못 만들었다」는 「안 겹쳤다」와 다르다.
-    🔴 **`part_total > 1` 인 근거는 조문의 일부다** (0011 · D-199). `EvidenceArticle` 로 옮길 때
-       그 사실을 같이 옮긴다 — 「제18조」라고만 적으면 3분의 1을 전문으로 인용하는 것이다.
-       기획서 5-6 의 인용 검증(「존재」가 아니라 「일치」)이 이 칸을 본다.
-    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다. 근거 없이 판정하면 D-224 위반이라
-       **`hold` 로 보내는 것**이 맞다 — 빈 근거로 `judge` 에 들어가지 않는다.
-
-    🆕 **커서는 `config` 로 받는다** (구현계획 §2-1 C). ⛔ 노드가 스스로 `connect()` 하면
-       **문장마다 연결이 열린다.** ⛔ 상태에 담지도 않는다 — 커넥션은 직렬화가 안 되므로
-       체크포인터(D-129)가 붙는 순간 깨진다. LangGraph 는 두 번째 인자로 넣어 주고,
-       `run_stub` 은 안 넣는다 — **기본값이 그 경로다.**
-
-    🔴 **DB 가 없어도 이 노드는 돈다** (D-124 — *「화면은 DB 없이 떠야 한다」*). 그렇다고
-       빈 dict 로 삼키지 않는다 — 문장마다 「검색을 못 했다」를 **값으로** 남긴다.
-       ⛔ 없음이 성공으로 집계되면 안 된다 (D-220 fail-closed). 둘 다 `False` 면
-       `judge` 가 확정을 못 내고 `hold` 로 간다.
-
-    ⛔ **리듀서 없는 새 칸을 만들지 않는다.** 문장이 여럿이면 마지막 하나만 남는데
-       오류가 안 난다 (D-124 ③). ⛔ **`judge` 안에서 `search()` 를 다시 부르지 않는다** (D-99).
-
-    ⬜ **리랭커는 아직 없다** — 층 4 이고 모델 선정 실측(구현계획 ⑨)이 선행이다.
-       여기 자리를 비워 두는 것이 **빠뜨린 것이 아니라 순서**다.
-    ⬜ **`SearchState` 의 이유 문자열은 여기서 `bool` 로 접힌다.** `SentEvidence` 가
-       「돌았나」만 나르기 때문이고(2026-09-13 설계), **왜 못 돌았는지는 남지 않는다.**
-       `hold` 가 사유를 말하려면 그때 칸이 필요하다 — 지금 만들면 읽는 쪽이 없다.
+    🔴 검색을 여기서 새로 쓰지 않는다 — 코어는 `app/retrieve.py` 하나다 (D-99 · D-51).
+    🆕 **커서는 `config` 로 받는다** — 주석 없는 `config` 여야 LangGraph 가 넘긴다(2026-09-14 실측).
+       ⛔ 노드가 스스로 `connect()` 하면 문장마다 연결이 열린다 · 상태에 담으면 체크포인터(D-129)가 깨진다.
+    🔴 **DB 가 없어도 돈다** (D-124). 빈 dict 로 삼키지 않고 문장마다 「검색을 못 했다」를 값으로 남긴다 (D-220).
+    🔴 **팬아웃 앞에서 한 번** 돈다 (D-267) — 법마다 다시 부르면 검색이 3~4배다.
+       🔄 2026-09-24 (W6 · D-271 ③) — **법 필터 없이 넓게 한 번** 찾는다. ⛔ 종전에는 품목을 청크 범주로 넘겨
+       미확정이면 「일반」만 봤다 — 식품·화장품 전용 조문을 못 봤다. 🔜 W4 — 법별 노드가 `law` 로 자기 근거만 거른다.
+       ⬜ 결과 폭은 `PARAMS.top_k` 그대로다 — 세 법이 한 순위를 나눠 쓰므로 법마다 근거가 모자랄 수 있다. W4 에서 잰다.
+    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 근거 없이 판정하면 D-224 위반이다.
     """
     sents = state.get("sents", [])
     if not sents:
@@ -305,25 +352,16 @@ def retrieve(state: JudgeState, config=None) -> dict[str, Any]:  # noqa: ANN001
     if cur is None:
         return {"evidence": [SentEvidence(sent_id=sent_id(i)) for i in range(len(sents))]}
 
-    product = state.get("product") or ProductContext()
     found: list[SentEvidence] = []
     for i, text in enumerate(sents):
-        # 🚨 코어가 결과도 상태도 짓는다 — 이 노드는 얇다 (D-51 · D-99). `api.py` 와 같은 문이다.
-        # 🔴 **`category` 가 `None` 이면 미확정이다** (2026-09-16 · 계약 주석 참조).
-        #    ⬜ 미확정이면 **분기마다 따로 검색**해야 한다 (D-61 · D-127 `cat_unknown`) —
-        #       `SQL_*` 이 `%s = ANY(c.category)` 로 **한 값만** 받아서 아직 못 한다.
-        #    ⛔ 지금은 `DEFAULT_CATEGORY` 로 한 번만 돈다. 그래서 **미확정 문장은 건기식·화장품
-        #       전용 조문을 못 본다** — `hold` 로 가야 하는 이유가 하나 더 있는 것이지,
-        #       이 한 줄이 미확정을 「일반」으로 **판정**한 것이 아니다 (D-188).
-        hits, st = rt.search(cur, text, product.category or DEFAULT_CATEGORY)
+        hits, st = rt.search(cur, text)
         found.append(
             SentEvidence(
                 sent_id=sent_id(i),
                 articles=tuple(a for h in hits if (a := _evidence_article(h)) is not None),
                 vector=st.vector == rt.VECTOR_OK,
                 lexical=st.lexical == rt.LEXICAL_OK,
-                # 🔄 2026-09-21 (전수 재검토) — ⛔ `st.pool` 은 후보 **폭**(늘 50)이라 「0 = 안 겹쳤다」가 나올 수 없었다.
-                #    갈래별 **후보 수**의 합을 넣는다 — 0 이면 어느 갈래에서도 후보가 없다 (겹친 것은 두 번 센다).
+                # 🔄 2026-09-21 — `st.pool` 은 후보 **폭**(늘 50)이라 갈래별 후보 수의 합을 넣는다
                 pool=st.pool_vector + st.pool_lexical,
             )
         )
@@ -331,23 +369,71 @@ def retrieve(state: JudgeState, config=None) -> dict[str, Any]:  # noqa: ANN001
 
 
 @timed
-def judge(state: JudgeState) -> dict[str, Any]:
-    """판정. 🔜 룰(사전 536행) + 인코더.
+def match_dict(state: CoreState) -> dict[str, Any]:
+    """금지 표현 사전 매칭 — **위험도 하한만** 건다 (구현계획 F · D-09).
 
-    🚨 스텁은 `unjudged` 를 낸다 — **통과로 집계 금지** (D-127). 비어 있음을 비어 있다고
-       말하는 값이고, 그럴듯한 `confirmed` 를 지어내지 않는다.
-
-    🔴 **근거는 `state["evidence"]` 에서 온다** (2026-09-13) — `retrieve` 가 문장별로 쌓아 둔
-       `SentEvidence` 다. `sent_id` 로 맞춰 `SentenceJudgment.evidence` 에 옮긴다.
-       ⛔ **여기서 검색을 다시 부르지 않는다** — 코어는 `app/retrieve.py` 하나다 (D-99).
-       ⛔ 붙는 근거가 없으면 `confirmed` 를 못 낸다 — 계약이 거부한다 (D-224 · `_confirmed_needs_evidence`).
-          그 경우의 상태는 `no_basis` 이고, `vector`·`lexical` 이 왜 그런지를 말해 준다.
+    🔜 W4 — `dict_entry` 의 단독판정 항목. `exact_match=false` 는 하한을 못 건다.
+    🚨 사전의 **침묵은 「특이사항 없음」이 아니다** — 인코더 전에는 안 걸린 문장이 보류다 (D-269).
     """
-    # 🆕 2026-09-14 — `retrieve` 가 쌓아 둔 것을 **sent_id 로 짝짓는다.** 값이 입구부터
-    #    출구까지 흐르는 최소 경로를 여기서 닫는다: retrieve → judge → SentenceJudgment.evidence
-    #    → to_response. ⛔ 만들어 놓고 읽는 쪽을 안 만들면 조용히 샌다 — 사흘에 세 번 밟았다.
-    # 🚨 근거가 붙어도 판정은 여전히 `unjudged` 다. **근거를 찾은 것과 판정한 것은 다르다** —
-    #    붙였다고 `confirmed` 로 올리면 D-127 이 막는 「미판정을 통과로 집계」가 된다.
+    return {}
+
+
+@timed
+def encode(state: CoreState) -> dict[str, Any]:
+    """인코더 — 유형 · 근거 스팬 · 확신 (D-131). **팬아웃 앞에서 한 번** 돈다 (D-267).
+
+    🔜 W7 — harness(D-94) 뒤. ⛔ 법별 노드가 인코더를 부르면 판정기가 세 벌이다 (D-99).
+    """
+    return {}
+
+
+def _law_node(name: str) -> Callable[..., dict[str, Any]]:
+    """법별 노드 하나 (D-267). 🔜 W4 — 자기 법의 조문 적용(유형 유효성 · 단서) · 근거 거름 · 하한 조회.
+
+    ★ 지금은 **「이 법이 이 문장들을 봤다」** 만 적는다 — 판정을 지어내지 않는다.
+    🚨 읽는 것은 `law_payload()` 가 보낸 키뿐이다 — 컴파일본에서는 그것만 온다.
+    """
+
+    def node(state: dict[str, Any]) -> dict[str, Any]:
+        n = len(state.get("sents", []))
+        return {"law_results": [LawResult(law=name, sent_ids=tuple(sent_id(i) for i in range(n)))]}
+
+    node.__name__ = name
+    node.__qualname__ = name
+    return timed(node)
+
+
+@timed
+def merge_laws(state: CoreState) -> dict[str, Any]:
+    """법별 결과를 모은다 (D-267 팬인). 🔜 W4 — 전제별로 묶어 `branches` · `premise_basis`(D-263 ①).
+
+    🔴 **보낸 법이 전부, 한 번씩, 문장을 다 보고 돌아왔는가**를 여기서 대조한다 (D-220 fail-closed).
+       ⛔ 병렬 노드 하나가 빠지거나 두 번 쌓여도 LangGraph 는 오류를 안 낸다 — 판정이 한 법만큼 가벼워진 채
+       응답은 그럴듯하다. 리듀서가 빠진 경우(마지막 법만 남는다)도 여기서 걸린다.
+    """
+    laws = tuple(state.get("laws") or ())
+    results = state.get("law_results", [])
+    got = [r.law for r in results]
+    if sorted(got) != sorted(laws):
+        raise RuntimeError(
+            f"🔴 법별 결과가 보낸 법과 다르다 — 보냄 {list(laws)} · 돌아옴 {got} (D-267 · D-220)"
+        )
+    want = tuple(sent_id(i) for i in range(len(state.get("sents", []))))
+    short = [r.law for r in results if r.sent_ids != want]
+    if short:
+        raise RuntimeError(f"🔴 문장을 다 보지 않은 법이 있다 — {short} (D-267 · D-220)")
+    return {}
+
+
+@timed
+def judge(state: CoreState) -> dict[str, Any]:
+    """판정. 🔜 W4 — 상태 4종 · 조건(없음·C/A/B/M/D · D-242) · 불가 사유 · 실증 분기 주석(D-263 ④).
+
+    🚨 스텁은 `unjudged` 를 낸다 — **통과로 집계 금지** (D-127). 그럴듯한 `confirmed` 를 지어내지 않는다.
+    🔴 근거는 `state["evidence"]` 에서 `sent_id` 로 짝지어 옮긴다. ⛔ 여기서 검색을 다시 부르지 않는다 (D-99).
+       ⛔ 붙는 근거가 없으면 `confirmed` 를 못 낸다 — 계약이 거부한다 (D-224 · `_confirmed_needs_evidence`).
+    🚨 **근거를 찾은 것과 판정한 것은 다르다** — 붙였다고 `confirmed` 로 올리지 않는다 (D-127).
+    """
     by_sent = {e.sent_id: e for e in state.get("evidence", [])}
     return {
         "sentences": [
@@ -363,8 +449,8 @@ def judge(state: JudgeState) -> dict[str, Any]:
 
 
 @timed
-def assess_risk(state: JudgeState) -> dict[str, Any]:
-    """위험도. 🔜 D-09 래칫 `max(코드 하한, 인코더 예측)`.
+def assess_risk(state: CoreState) -> dict[str, Any]:
+    """위험도. 🔜 W5 — D-09 래칫 `max(코드 하한, 인코더 예측)` · 초기 판정과 분기마다.
 
     🔴 코드 하한은 `sanction_rule` · `v_risk_lookup` 에서 온다 — **지금 0행이라 스텁이다.**
        ⛔ 하한 없이 최종만 적으면 계약이 거부한다. 그래서 아무것도 적지 않는다.
@@ -373,111 +459,173 @@ def assess_risk(state: JudgeState) -> dict[str, Any]:
 
 
 @timed
-def certificate(state: JudgeState) -> dict[str, Any]:
-    """합법화 불가 증명서 (D-32). **A 자격형 · C 절대형에만** (D-125)."""
+def doc_rules(state: CoreState) -> dict[str, Any]:
+    """층 3 문서 규칙 — R-D1 최소판 → 문서 경고 + `hold(rd1)` (D-83). 🔜 W8.
+
+    ⛔ 「문맥을 이해한다」고 말하지 않는다 (D-83 ④) — 문장별 판정 결과의 **집합 연산**이다.
+    """
+    return {}
+
+
+#: 코어 순서 — 팬아웃 앞 · 법별 노드(`LAW_NODES` · 병렬) · 팬아웃 뒤. 컴파일본과 스텁이 **이 표 하나**를 쓴다 (D-99).
+CORE_BEFORE_LAWS = ("split", "classify", "retrieve", "match_dict", "encode")
+CORE_AFTER_LAWS = ("merge_laws", "judge", "assess_risk", "doc_rules")
+NODES: dict[str, Callable[..., dict[str, Any]]] = {
+    **{f.__name__: f for f in (split, classify, retrieve, match_dict, encode)},
+    **{name: _law_node(name) for name in LAW_NODES},
+    **{f.__name__: f for f in (merge_laws, judge, assess_risk, doc_rules)},
+}
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  검수 (진입점 A) — 종착 넷 · 루프 없음 (D-265 · D-268)
+# ══════════════════════════════════════════════════════════════════════
+
+
+@timed
+def certificate(state: ReviewState) -> dict[str, Any]:
+    """합법화 불가 증명서 (D-32). **A 자격형 · C 절대형에만** (D-125).
+
+    ⬜ 계약은 `outcome=certificate` 에 `Certificate` 를 요구한다 — 🔜 W4 (판정이 불가 사유를 낼 때 같이).
+    """
     return {"outcome": Outcome.certificate}
 
 
 @timed
-def generate(state: JudgeState) -> dict[str, Any]:
-    """대체 문구 생성. 🔜 N=3 (D-34) · 3종 세트 (D-33)."""
-    return {"attempt": state.get("attempt", 0) + 1}
+def guidance(state: ReviewState) -> dict[str, Any]:
+    """「지시」 — 확정된 **실증형** 위반: 뺄 구간 · 실증 자료의 종류 · 내려갈 수 있는 등급 (D-268).
+
+    🔄 2026-09-23 (W3) — 계약에 `Outcome.guidance` 가 섰다 (D-274). 종전에는 보류로 끝냈다.
+    ⛔ 통과로 보내지 않는다 — 확정 위반이다. 증명서도 아니다 — 실증형이다 (D-59).
+    🚨 계약은 지시 문장마다 **실증 분기와 뺄 구간**을 요구한다(`_guidance_payload`) — 판정 노드(W4)가 그것을 내야
+       이 종착이 계약을 지난다. ★ 스텁 `judge` 는 `unjudged` 만 내므로 **지금 이 노드에 오는 길은 없다.**
+    """
+    return {"outcome": Outcome.guidance}
 
 
 @timed
-def verify(state: JudgeState) -> dict[str, Any]:
-    """거부 3종 — 주장 원장 · 인용 검증 · 사후 대조. **한 카운터를 쓴다** (D-126)."""
-    return {}
-
-
-@timed
-def frontier(state: JudgeState) -> dict[str, Any]:
-    """리스크–소구력 프론티어 (D-31). 단일 답을 주지 않는다."""
-    return {"outcome": Outcome.passed}
-
-
-@timed
-def hold(state: JudgeState) -> dict[str, Any]:
+def hold(state: ReviewState) -> dict[str, Any]:
     """전문가 검토 종착 (D-125).
 
-    🔴 **종착에도 노드가 있어야 한다** (2026-09-10 실측). ⛔ 처음에는 라우터가 `hold` 를
-       내면 곧장 `END` 로 보냈다. 그랬더니 컴파일본은 `outcome` 이 **None 인 채로 끝났고**,
-       같은 입력에서 스텁은 `hold` 를 냈다. 방문 순서는 같은데 결과가 달랐다 —
-       라우터 단독 테스트로는 안 잡히는 자리다. D-124 ② 가 「컴파일해서 본다」고 한 이유다.
+    🔴 **종착에도 노드가 있어야 한다** (2026-09-10 실측) — 라우터가 곧장 `END` 로 보내면 컴파일본만 `outcome` 이
+       None 으로 끝났다. 라우터 단독 테스트로는 안 잡히는 자리다.
     """
     return {"outcome": Outcome.hold}
 
 
 @timed
-def search_failed(state: JudgeState) -> dict[str, Any]:
-    """표현 탐색 실패 — B 가 K 를 소진했다 (D-125).
+def passed(state: ReviewState) -> dict[str, Any]:
+    """통과 — 전부 확정 ∧ R0 (D-125 · 🔄 D-273). 🚨 「적법」이라 부르지 않는다 (D-130).
 
-    🚨 증명서를 내지 않는다. D-59 가 금지한 「B 를 C 처럼 답하기」다.
+    🔄 D-265 — 검수의 통과는 **프론티어를 내지 않는다.** 프론티어는 생성(B)의 것이다.
     """
-    return {"outcome": Outcome.search_failed}
+    return {"outcome": Outcome.passed}
 
 
-#: 🔄 2026-09-14 — 인자가 하나가 아니다. `retrieve` 가 LangGraph 의 `config` 를 받는다.
-NODES: dict[str, Callable[..., dict[str, Any]]] = {
-    f.__name__: f
-    for f in (
-        split,
-        classify,
-        retrieve,
-        judge,
-        assess_risk,
-        certificate,
-        generate,
-        verify,
-        frontier,
-        hold,
-        search_failed,
-    )
+REVIEW_TERMINALS: dict[str, Callable[..., dict[str, Any]]] = {
+    f.__name__: f for f in (certificate, guidance, hold, passed)
 }
+ROUTES_REVIEW = tuple(REVIEW_TERMINALS)
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  라우터 — 순수 함수. 🚨 그래프 없이 단독으로 테스트한다 (D-124)
-# ══════════════════════════════════════════════════════════════════════
+def route_review(state: ReviewState) -> str:
+    """검수 종착 (D-125 · D-265 · D-268). 우선순위 **보류 > 증명서 > 지시 > 통과**.
 
-
-def route_after_judge(state: JudgeState) -> str:
-    """판정 직후의 갈림. **A·C 는 루프에 들어가지 않는다** (D-125).
-
-    ⛔ A 자격형을 생성 노드로 보내면 재생성이 같은 위반을 반복한다 — 기획서 2-3
-       시나리오 A 가 실제로 그렇게 적혀 있었다 (D-59).
+    🔴 **하나라도 확정이 아니면 보류다** — 스텁이 내는 `unjudged` 가 통과로 흘러 종착이 `pass` 로 찍힌 적이 있다
+       (2026-09-10 · 미판정을 통과로 집계). ⛔ A 자격형이 섞이면 증명서 — 재생성하지 않는다 (D-59).
+    🆕 D-268 — 확정된 **B 실증형**은 「지시」다. 종전에는 재생성 루프(`generate`)로 갔다 — 검수는 문구를 안 만든다 (D-265).
     """
     sents = state.get("sentences", [])
     if not sents:
         return "hold"
-    # 🔴 **통과 후보는 전부 `confirmed` 일 때만이다** (D-125).
-    #    ⛔ 처음에 `hold` 만 걸러 냈더니, 스텁이 내는 `unjudged` 가 프론티어로 흘러가
-    #       종착이 `pass` 로 찍혔다. **미판정을 통과로 집계**한 것이고, 상태 스키마가
-    #       「🚨 통과로 집계 금지」라고 적어 둔 바로 그 사고다. 한 바퀴를 돌려 보고 잡혔다.
-    #    ★ 보류·근거없음·미판정 셋 다 통과가 아니다. 갈 곳은 전문가 검토다.
     if any(s.verdict is not Verdict.confirmed for s in sents):
         return "hold"
     reasons = {s.infeasibility for s in sents if s.infeasibility}
     if reasons & {Infeasibility.A, Infeasibility.C}:
         return "certificate"
     if Infeasibility.B in reasons:
-        return "generate"
-    # 🔄 2026-09-21 (전수 재검토 I1) — 🔴 **통과는 D-125 의 정의대로만**: 확정 ∧ 위험도 ≤ 주의 (`is_pass`).
-    #    ⛔ 종전에는 여기까지 오면 무조건 `frontier`(= pass)였다 — 확정 + 위반 + R3 인데 불가 사유가 안 붙은 문장,
-    #       위험도가 없는 문장이 **통과**로 끝났다. 판정 노드가 스텁이라 가려져 있었을 뿐이다.
+        return "guidance"
+    # 🔴 통과는 D-125 의 정의대로만 — 확정 ∧ R0 (🔄 D-273 · `is_pass`) · 위험도가 없으면 통과가 아니다
     if all(is_pass(s) for s in sents):
-        return "frontier"
+        return "passed"
     return "hold"
 
 
-def route_after_verify(state: JudgeState) -> str:
+# ══════════════════════════════════════════════════════════════════════
+#  생성 (진입점 B) — 규칙 조립 · 주장 원장 · 재판정 루프 (D-264 · D-30 · D-126)
+# ══════════════════════════════════════════════════════════════════════
+
+
+@timed
+def keyword_screen(state: GenerateState) -> dict[str, Any]:
+    """지향 키워드 선별 — 코어를 **어휘 모드**로 부른다 (기획서 3-3). 🔜 차단에는 사유가 붙는다."""
+    return {}
+
+
+@timed
+def assemble(state: GenerateState) -> dict[str, Any]:
+    """규칙 조립 4종 — 삭제안 · 사실 진술 치환 · 인정 문구 슬롯 · 실증 유지 (D-264). 🔜 W9.
+
+    🔴 **첫 조립이 `attempt=0` 이다** (D-126 · 0-base · 총 라운드 K+1=3). ⛔ 종전(검수 그래프 안)에는 원문 판정이
+       0 을 차지해 **조립이 두 번뿐**이었다 — 최악 호출 N×(K+1)=9 가 6 이 되던 자리다.
+    ⬜ sLLM 은 같은 전제 안의 **다듬기**로만 뒤에 붙는다 — D-270 으로 설계만.
+    """
+    attempt = state.get("attempt")
+    return {"attempt": 0 if attempt is None else attempt + 1}
+
+
+@timed
+def claim_ledger(state: GenerateState) -> dict[str, Any]:
+    """주장 원장 — `신규주장 = 생성주장 − (제품사실 ∪ 입력주장)` ≠ ∅ 이면 거부 (D-30). 🔜 W9.
+
+    🔜 거부하면 `rejected=True` · `rejects` 에 사유 — 세 거부는 **한 카운터**다 (D-126).
+    """
+    return {}
+
+
+@timed
+def rejudge(state: GenerateState) -> dict[str, Any]:
+    """후보를 **자기 전제로** 코어에 다시 넣는다 (D-264 · D-119). 🔜 W9 — `build_core()` 를 문장 모드로 부른다.
+
+    🚨 판정 코어는 하나다 — 여기서 판정을 새로 쓰지 않는다 (D-119 · D-266).
+    """
+    return {}
+
+
+@timed
+def frontier(state: GenerateState) -> dict[str, Any]:
+    """리스크–소구력 프론티어 (D-31) — **같은 전제의 후보끼리**만 (D-264). 단일 답을 주지 않는다.
+
+    🔄 D-274 — 생성 종착 `frontier`. ⛔ 종전에는 검수의 `pass` 를 빌려 썼다 — 「통과」가 아니다(후보에 잔여 위험도가 붙는다).
+    """
+    return {"outcome": GenerateOutcome.frontier}
+
+
+@timed
+def search_failed(state: GenerateState) -> dict[str, Any]:
+    """표현 탐색 실패 — K 를 소진했다 (D-125). 🚨 증명서를 내지 않는다 — 「B 를 C 처럼 답하기」다 (D-59).
+
+    🔄 D-265 · D-266 — **생성에서만** 난다. 검수에서는 실증 분기가 대신한다.
+    """
+    return {"outcome": GenerateOutcome.search_failed}
+
+
+GENERATE_NODES: dict[str, Callable[..., dict[str, Any]]] = {
+    f.__name__: f
+    for f in (keyword_screen, assemble, claim_ledger, rejudge, frontier, search_failed)
+}
+GENERATE_ROUND = ("assemble", "claim_ledger", "rejudge")
+ROUTES_AFTER_REJUDGE = ("frontier", "assemble", "search_failed")
+
+
+def route_after_rejudge(state: GenerateState) -> str:
     """재생성 루프의 갈림 (D-126 · D-125).
 
-    🚨 K 를 소진한 B 는 **증명서가 아니라** 「표현 탐색 실패」다 — D-59 가 금지한
-       「B 를 C 처럼 답하기」를 막는 자리가 여기다.
+    🔴 **이번 시도**의 판정(`rejected`)을 본다 — 누적 `rejects` 가 비었는지로 읽으면 한 번 거부된 뒤 통과해도
+       탐색 실패로 끝난다(전수 재검토 I3). `rejected` 를 안 적었으면 누적으로 판단한다 — 모르면 거부 쪽이다.
+    🚨 K 를 소진한 것은 **증명서가 아니라** 「표현 탐색 실패」다 (D-59).
+    ⬜ 재판정이 보류·근거없음을 남기는 경우의 `hold` 종착 — 🔜 `rejudge` 가 판정을 낼 때 같이 (D-266 표).
     """
-    # 🔄 2026-09-21 (전수 재검토 I3) — **이번 시도**의 판정(`rejected`)을 본다. `verify` 가 그 칸을 안 적었으면
-    #    종전처럼 누적 `rejects` 로 판단한다 — 모르면 거부 쪽이다(재시도 · 소진이면 `search_failed`).
     rejected = state.get("rejected")
     if rejected is None:
         rejected = bool(state.get("rejects"))
@@ -485,85 +633,95 @@ def route_after_verify(state: JudgeState) -> str:
         return "frontier"
     if state.get("attempt", 0) >= MAX_ATTEMPT:
         return "search_failed"
-    return "generate"
-
-
-ROUTES_AFTER_JUDGE = ("hold", "certificate", "generate", "frontier")
-ROUTES_AFTER_VERIFY = ("frontier", "generate", "search_failed")
+    return "assemble"
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  한 바퀴 — langgraph 없이도 같은 순서를 낸다
+#  한 바퀴 — langgraph 없이도 컴파일본과 같은 순서를 낸다 (D-124 ②)
 # ══════════════════════════════════════════════════════════════════════
 
 
-def run_stub(text: str, product: ProductContext | None = None) -> tuple[JudgeState, list[str]]:
-    """스텁 한 바퀴. 상태와 **방문 순서**를 돌려준다.
+def _apply(state: dict[str, Any], out: dict[str, Any], reducers: tuple[str, ...]) -> None:
+    for k, v in out.items():
+        state[k] = [*state.get(k, []), *v] if k in reducers else v
 
-    🚨 이것이 langgraph 컴파일본과 같은 순서를 내야 한다 (D-124 ②). 의존성이 붙기 전에
-       순서를 고정해 두면, 붙인 뒤에 순서가 바뀐 것을 게이트가 잡는다.
-    """
-    state: JudgeState = {
-        "text": text,
-        "product": product or ProductContext(),
-        "sentences": [],
-        "rejects": [],
-        "timings": [],
-        "attempt": 0,
-    }
+
+def _run_core(state: dict[str, Any], visited: list[str]) -> None:
+    """코어 한 바퀴 (스텁). 🚨 법별 노드는 **`law_payload()` 만** 받는다 — 컴파일본의 `Send` 와 같다."""
+    reducers = STATE_REDUCERS["core"][1]
+
+    def step(name: str, arg: dict[str, Any]) -> None:
+        visited.append(name)
+        _apply(state, NODES[name](arg), reducers)
+
+    for name in CORE_BEFORE_LAWS:
+        step(name, state)
+    for name in route_laws(state):  # type: ignore[arg-type]
+        step(name, law_payload(state))  # type: ignore[arg-type]
+    for name in CORE_AFTER_LAWS:
+        step(name, state)
+
+
+def run_review_stub(
+    text: str, product: ProductContext | None = None
+) -> tuple[ReviewState, list[str]]:
+    """검수 스텁 한 바퀴. 상태와 **방문 순서**를 돌려준다 — 컴파일본(`build_review`)과 같아야 한다."""
+    state: dict[str, Any] = {"text": text, "product": product or ProductContext()}
+    visited: list[str] = []
+    _run_core(state, visited)
+    nxt = route_review(state)  # type: ignore[arg-type]
+    visited.append(nxt)
+    _apply(state, REVIEW_TERMINALS[nxt](state), STATE_REDUCERS["review"][1])
+    return state, visited  # type: ignore[return-value]
+
+
+def run_generate_stub(init: GenerateState | None = None) -> tuple[GenerateState, list[str]]:
+    """생성 스텁 한 바퀴. 🚨 루프가 끝나는지(K+1 라운드 안) 이 함수로 단독 확인한다."""
+    state: dict[str, Any] = dict(init or {})
+    reducers = STATE_REDUCERS["generate"][1]
     visited: list[str] = []
 
     def step(name: str) -> None:
         visited.append(name)
-        out = NODES[name](state)
-        for k, v in out.items():
-            if k in REDUCER_KEYS:
-                state[k] = [*state.get(k, []), *v]  # type: ignore[literal-required]
-            else:
-                state[k] = v  # type: ignore[literal-required]
+        _apply(state, GENERATE_NODES[name](state), reducers)
 
-    for name in ("split", "classify", "retrieve", "judge", "assess_risk"):
-        step(name)
-
-    nxt = route_after_judge(state)
-    if nxt != "generate":
-        step(nxt)  # hold · certificate · frontier — 전부 노드다
-        return state, visited
-
-    while True:  # B 실증형 — 재생성 루프
-        step("generate")
-        step("verify")
-        nxt = route_after_verify(state)
-        if nxt != "generate":
-            step(nxt)  # frontier · search_failed
-            return state, visited
+    step("keyword_screen")
+    while True:
+        for name in GENERATE_ROUND:
+            step(name)
+        nxt = route_after_rejudge(state)  # type: ignore[arg-type]
+        if nxt != "assemble":
+            step(nxt)
+            return state, visited  # type: ignore[return-value]
 
 
-def to_response(state: JudgeState) -> JudgeResponse:
-    """상태를 계약으로 옮긴다. 🚨 계약이 거부하면 여기서 터진다 — 화면보다 먼저다."""
+def to_response(state: ReviewState) -> JudgeResponse:
+    """검수 상태를 계약으로 옮긴다. 🚨 계약이 거부하면 여기서 터진다 — 화면보다 먼저다.
+
+    🔄 D-265 — `attempt` 를 넘기지 않는다. 검수에서는 **항상 0** 이다(재검수 횟수와 다른 축).
+    ⬜ `category` · `not_reviewed` · `branches` (D-276 · D-277) 는 **넘기지 않는다** — 받은 품목은 판별 결과가 아니고(D-82),
+       분기는 `merge_laws` 가 만든다. 🔜 W4 — `classify` 가 판별하고 `merge_laws` 가 분기를 낼 때 같이 옮긴다 (D-192).
+    """
     return JudgeResponse(
         outcome=state.get("outcome", Outcome.hold),
         sentences=state.get("sentences", []),
-        attempt=state.get("attempt", 0),
         timings=state.get("timings", []),
         law_version="2026-09-10",
-        judged_by="stub-0.1.0",
+        judged_by="stub-0.2.0",
     )
 
 
-def build_graph():  # noqa: ANN201 — langgraph 타입은 지연 import 라 여기서 못 적는다
-    """LangGraph 컴파일본. 🔜 의존성이 붙으면 돈다.
+# ══════════════════════════════════════════════════════════════════════
+#  컴파일본 — 🚨 지연 import. langgraph 가 없어도 위(라우터·스텁)는 돈다 (D-124 ①)
+# ══════════════════════════════════════════════════════════════════════
 
-    🚨 **지연 import 다.** langgraph 가 없어도 이 모듈의 나머지(라우터·스텁 한 바퀴)는
-       돌아야 한다 — D-124 가 「라우터 함수는 그래프 없이 단독 테스트」라고 정했다.
+
+def _require_tracing_off() -> None:
+    """🔴 **추적이 켜져 있으면 멈춘다** (D-43 · D-220). 모든 `build_*` 가 부른다 — 한 곳이다 (D-99).
+
+    ⛔ `langgraph` → `langchain-core` → `langsmith` 가 전이 의존이라 패키지를 못 뺀다. 켜지면 광고 문구 원문이
+       밖으로 나간다. ⛔ **조용히 끄지 않는다** — 켠 사람이 자기가 켠 것이 무시된 줄 모른다 (D-146).
     """
-    # 🔴 **추적이 켜져 있으면 멈춘다** (D-43 · D-220 fail-closed · 2026-09-10).
-    #    ⛔ `langgraph` → `langchain-core` → `langsmith` 가 전이 의존이라 패키지를 못 뺀다.
-    #       켜지면 광고 문구 원문이 밖으로 나간다 — 온프레미스는 서사가 아니라 제품 요구사항이다.
-    #    ⛔ **조용히 끄지 않는다.** `os.environ` 을 덮어쓰면 켠 사람이 자기가 켠 것이
-    #       무시된 줄 모른다. 그리고 `app` 을 안 거치는 경로가 남아 「막은 척」이 된다 (D-146).
-    #    ★ 여기가 langgraph 를 실제로 쓰는 유일한 자리다. import 부작용이 아니라 함수 실행이라
-    #      멈추는 지점이 분명하다.
     from langsmith.utils import tracing_is_enabled  # noqa: PLC0415
 
     if tracing_is_enabled():
@@ -573,48 +731,93 @@ def build_graph():  # noqa: ANN201 — langgraph 타입은 지연 import 라 여
             "   끄는 법: LANGCHAIN_TRACING_V2 · LANGSMITH_TRACING 을 지우거나 false 로 둔다."
         )
 
-    from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
 
-    g = StateGraph(JudgeState)
+def _chain(g: Any, names: tuple[str, ...]) -> None:
+    for a, b in zip(names, names[1:], strict=False):
+        g.add_edge(a, b)
+
+
+def build_core():  # noqa: ANN201 — langgraph 타입은 지연 import 라 여기서 못 적는다
+    """판정 코어 서브그래프 (D-266 · D-267). 🚨 **부를 때마다 새로 컴파일한다** — 게이트가 `NODES` 를 바꿔 끼운다."""
+    _require_tracing_off()
+    from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
+    from langgraph.types import Send  # noqa: PLC0415
+
+    g = StateGraph(CoreState)
     for name, fn in NODES.items():
         g.add_node(name, fn)
-    g.add_edge(START, "split")
-    for a, b in (
-        ("split", "classify"),
-        ("classify", "retrieve"),
-        ("retrieve", "judge"),
-        ("judge", "assess_risk"),
-        ("generate", "verify"),
-    ):
-        g.add_edge(a, b)
+    g.add_edge(START, CORE_BEFORE_LAWS[0])
+    _chain(g, CORE_BEFORE_LAWS)
+
+    def fan_out(state: CoreState) -> list[Any]:
+        return [Send(name, law_payload(state)) for name in route_laws(state)]
+
+    g.add_conditional_edges(CORE_BEFORE_LAWS[-1], fan_out, list(LAW_NODES))
+    for name in LAW_NODES:
+        g.add_edge(name, CORE_AFTER_LAWS[0])
+    _chain(g, CORE_AFTER_LAWS)
+    g.add_edge(CORE_AFTER_LAWS[-1], END)
+    return g.compile()
+
+
+def _core_node(core_graph: Any) -> Callable[..., dict[str, Any]]:
+    """코어를 부르는 함수 노드. `CORE_IN` 만 넣고 `CORE_OUT` 만 꺼낸다 (모듈 docstring 의 실측).
+
+    ⛔ **`timed` 를 두르지 않는다** — 안의 노드가 각자 잰다. 두르면 코어 시간이 두 번 셈해진다.
+    🔴 `config` 는 **주석 없이** 받아 그대로 넘긴다 — 커서가 코어의 `retrieve` 까지 가야 한다 (2026-09-14 실측).
+    """
+
+    def core(state: dict[str, Any], config=None) -> dict[str, Any]:  # noqa: ANN001
+        out = core_graph.invoke({k: state[k] for k in CORE_IN if k in state}, config=config)
+        return {k: out[k] for k in CORE_OUT if k in out}
+
+    return core
+
+
+def build_review():  # noqa: ANN201
+    """검수 그래프 (진입점 A · D-266). 코어 → 종착 넷. **루프가 없다** (D-265)."""
+    _require_tracing_off()
+    from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
+
+    g = StateGraph(ReviewState)
+    g.add_node("core", _core_node(build_core()))
+    for name, fn in REVIEW_TERMINALS.items():
+        g.add_node(name, fn)
+        g.add_edge(name, END)
+    g.add_edge(START, "core")
+    g.add_conditional_edges("core", route_review, {n: n for n in ROUTES_REVIEW})
+    return g.compile()
+
+
+def build_generate():  # noqa: ANN201
+    """생성 그래프 (진입점 B · D-266). 🔜 W9 — `rejudge` 가 코어를 부르는 배선."""
+    _require_tracing_off()
+    from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
+
+    g = StateGraph(GenerateState)
+    for name, fn in GENERATE_NODES.items():
+        g.add_node(name, fn)
+    g.add_edge(START, "keyword_screen")
+    _chain(g, ("keyword_screen", *GENERATE_ROUND))
     g.add_conditional_edges(
-        "assess_risk",
-        route_after_judge,
-        {
-            "hold": "hold",
-            "certificate": "certificate",
-            "generate": "generate",
-            "frontier": "frontier",
-        },
+        GENERATE_ROUND[-1], route_after_rejudge, {n: n for n in ROUTES_AFTER_REJUDGE}
     )
-    g.add_conditional_edges(
-        "verify",
-        route_after_verify,
-        {"frontier": "frontier", "generate": "generate", "search_failed": "search_failed"},
-    )
-    for terminal in ("certificate", "frontier", "hold", "search_failed"):
+    for terminal in ("frontier", "search_failed"):
         g.add_edge(terminal, END)
     return g.compile()
 
 
 def main() -> int:
-    state, visited = run_stub("면역력 강화에 도움을 줍니다.")
-    print("방문 순서 —", " → ".join(visited))
+    state, visited = run_review_stub("면역력 강화에 도움을 줍니다.")
+    print("검수 방문 순서 —", " → ".join(visited))
     r = to_response(state)
-    print(f"종착 {r.outcome.value} · 문장 {len(r.sentences)} · attempt {r.attempt}")
+    print(f"   종착 {r.outcome.value} · 문장 {len(r.sentences)} · 법 {', '.join(state['laws'])}")
     for t in r.timings:
         print(f"    {t.node:12s} {t.ms:7.3f} ms")
-    print("\n🚨 스텁이다 — 판정도 모델도 없다. 한 바퀴가 돈다는 것만 보인다 (D-124).")
+    gstate, gvisited = run_generate_stub()
+    print("\n생성 방문 순서 —", " → ".join(gvisited))
+    print(f"   종착 {gstate['outcome'].value} · attempt {gstate['attempt']}")
+    print("\n🚨 스텁이다 — 판정도 모델도 없다. 한 바퀴가 돈다는 것만 보인다 (D-124 · D-266).")
     return 0
 
 

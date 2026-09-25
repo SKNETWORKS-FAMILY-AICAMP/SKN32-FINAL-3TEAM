@@ -36,12 +36,15 @@
       "infeasibility": null,
       "evidence": [],
       "risk": {
-        "floor": "R1",
+        "floor": "R0",
         "encoder": null,
-        "final": "R1",
+        "final": "R0",
         "evidence_span": null
       },
-      "evidence_mismatch": false
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
     }
   ],
   "disclosure_section_order": 0

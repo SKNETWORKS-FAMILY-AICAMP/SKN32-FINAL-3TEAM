@@ -1,0 +1,46 @@
+{
+  "outcome": "pass",
+  "category": "일반상품",
+  "not_reviewed": [],
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "결혼을 앞둔 분들이나 바쁜 직장인을 위한 제품입니다.",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [],
+      "infeasibility": null,
+      "evidence": [],
+      "risk": {
+        "floor": "R0",
+        "encoder": null,
+        "final": "R0",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false,
+      "not_claim": true,
+      "spans": [],
+      "substantiation": null
+    }
+  ],
+  "branches": [],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.2.0"
+}

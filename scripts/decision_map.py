@@ -57,7 +57,17 @@ _OPEN = re.compile(r"⬜|미착수|미구현|아직 없다|아직 아니|안 만
 #: 🚨 **폐기·대체된 결정이 인용 0건인 것은 정상이다.** 섞어 세면 「안 쓰이는 결정」 수가 부풀고,
 #:    부푼 수는 아무도 안 본다 (D-167). 색인 표의 **상태** 칸으로 가른다.
 #:    ⛔ 제목의 취소선(`~~`)으로 가르지 않는다 — 실측: 상태가 「대체됨」인 7건 중 **2건은 취소선이 없다**.
-_DEAD = re.compile(r"폐기|대체됨")
+#: 🔄 2026-09-23 — **상태 칸의 첫 낱말만 본다.** ⛔ 종전에는 칸 **어디에든** 「폐기」가 있으면 폐기로 셌다.
+#:    D-229 상태에 개정 메모 「② 는 D-271 로 개정(「일반」 폐기)」를 붙이자 **살아 있는 결정이 폐기로 세어졌다**
+#:    (폐기·대체 8 → 9 · 살아 있는 것 264 → 263). 상태 칸은 「확정 · … 개정 메모」처럼 **첫 낱말이 상태이고
+#:    뒤는 이력**이다 — 이력의 낱말이 상태를 바꾸면 안 된다. 「부분 대체됨」(D-201)은 종전대로 폐기·대체로 센다.
+_DEAD = re.compile(r"^(?:부분\s*)?(?:폐기|대체됨)")
+
+
+def is_dead(status: str) -> bool:
+    """폐기·대체된 결정인가. `status` 는 `_clean()` 을 지난 색인 상태 칸이다. 🚨 판정은 여기 한 곳이다 (D-99)."""
+    return bool(_DEAD.match(status.strip()))
+
 
 _DREF = re.compile(r"\bD-(\d{1,3})\b")
 _HEAD = re.compile(r"^### (D-\d+) · (.+?)$", re.M)
@@ -119,7 +129,7 @@ def render(decisions: dict[str, dict], where: dict[str, list[str]], orphan: list
     def key(d: str) -> int:
         return int(d[2:])
 
-    dead = {d for d in decisions if _DEAD.search(decisions[d]["status"])}
+    dead = {d for d in decisions if is_dead(decisions[d]["status"])}
     live = {d for d in decisions if d not in dead}
     cited = {d for d in live if where.get(f"D-{key(d):02d}")}
     opened = {d for d in decisions if decisions[d]["open"]}
@@ -192,7 +202,7 @@ def main() -> int:
 
     decisions, orphan = load_ledger()
     where = scan_code()
-    dead = [d for d in decisions if _DEAD.search(decisions[d]["status"])]
+    dead = [d for d in decisions if is_dead(decisions[d]["status"])]
     live = [d for d in decisions if d not in dead]
     cited = sum(1 for d in live if where.get(f"D-{int(d[2:]):02d}"))
     opened = [d for d in decisions if decisions[d]["open"]]

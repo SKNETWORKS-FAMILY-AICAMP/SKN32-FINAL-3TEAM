@@ -187,10 +187,15 @@ class Judgment(Base):
     #   confirmed 확정 · hold 보류(hold_reason 필수) · no_basis 근거없음(위험도·유형 유지) ·
     #   unjudged 미판정(오류·타임아웃 — 🚨 통과로 집계 금지)
     verdict: Mapped[str] = mapped_column(String(24))
-    # hold 일 때만: low_conf | gap2 | cat_unknown | rd1
+    # hold 일 때만: low_conf | gap2 | cat_unknown | rd1 | premise_unknown | law_uncovered
+    #   🔄 2026-09-23 — 뒤 둘을 더했다 (D-263 ② · D-277 · 마이그레이션 0018). 🚨 16자 칸이다 — 새 사유 이름은 16자 이하
     hold_reason: Mapped[str | None] = mapped_column(String(16))
-    # D-82 — 사용자에게 묻지 않고 우리가 판별한다. 그래서 판정 결과에 속한다
+    # D-82 — 첫 검수는 묻지 않고 우리가 판별한다. 그래서 판정 결과에 속한다
+    #   🔄 D-271 — 「일반」은 없다(`일반상품` · `전용법_미수록`). 0018 GUARD 가 옛 값 「일반」 행을 멈춰 세운다
     product_category: Mapped[str | None] = mapped_column(String(40))
+    # 🆕 D-276 — 품목이 **어디서 왔나**: `classified`(판별) · `user_selected`(재검수 때 사용자가 고름).
+    #   🚨 고른 품목이 판별과 다르면 통과 배지 없이 「선택 전제 결과」다 — 이 칸이 없으면 이력이 둘을 못 가른다
+    product_category_source: Mapped[str | None] = mapped_column(String(16))
     violation_type: Mapped[str | None] = mapped_column(String(40))
     evidence: Mapped[dict | None] = mapped_column(JSONB)  # 근거 조문 집합
     # D-131 — 인코더가 하한 위로 올릴 때 반드시 붙는 근거 스팬 (raw 좌표 · D-30 주장 BIO)
@@ -218,8 +223,26 @@ class Judgment(Base):
             "(verdict = 'hold') = (hold_reason IS NOT NULL)", name="ck_judgment_hold_reason"
         ),
         CheckConstraint(
-            "hold_reason IS NULL OR hold_reason in ('low_conf','gap2','cat_unknown','rd1')",
+            # 🚨 한 문자열로 둔다 — 게이트 `test_계약의_판정축이_런타임층_제약과_같다` 가 이 글자에서 값을 읽는다
+            "hold_reason IS NULL OR hold_reason in ('low_conf','gap2','cat_unknown','rd1','premise_unknown','law_uncovered')",
             name="ck_judgment_hold_reason_values",
+        ),
+        # 🆕 D-276 — 출처는 두 값뿐이고, **품목이 있으면 출처가 있고 없으면 없다** (짝이 어긋나면 이력이 거짓을 말한다)
+        CheckConstraint(
+            "product_category_source IS NULL OR product_category_source in"
+            " ('classified','user_selected')",
+            name="ck_judgment_category_source_values",
+        ),
+        CheckConstraint(
+            "(product_category IS NULL) = (product_category_source IS NULL)",
+            name="ck_judgment_category_source_pair",
+        ),
+        # 🆕 D-273 결정 2 — 확정 행은 **위반이 없으면 R0, 있으면 R1 이상**이다. 계약 `_confirmed_risk_invariant` 와
+        #   **같은 규칙**이다 (D-99) — 이것이 있어야 홈 집계가 `risk_final` 한 칸으로 「통과 = 확정 ∧ 위반 없음」을 센다.
+        CheckConstraint(
+            "verdict <> 'confirmed' OR risk_final IS NULL"
+            " OR ((violation_type IS NULL) = (risk_final = 0))",
+            name="ck_judgment_confirmed_risk",
         ),
         # 🔄 상한은 `app/settings.py` 의 `PARAMS.max_attempt` 하나가 든다 (D-99 · D-126).
         #    ⛔ 종전에는 여기·계약·라우터 셋이 각각 `2` 를 적고 있었다. K 를 올리면

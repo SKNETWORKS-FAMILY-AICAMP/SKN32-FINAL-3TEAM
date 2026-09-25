@@ -1,0 +1,48 @@
+{
+  "outcome": "hold",
+  "category": "전용법_미수록",
+  "not_reviewed": [
+    "의료기기법"
+  ],
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "하루 15분, 저주파 마사지기로 뭉친 어깨를 풀어 보세요.",
+      "verdict": "hold",
+      "hold_reason": "law_uncovered",
+      "violations": [],
+      "infeasibility": null,
+      "evidence": [],
+      "risk": {
+        "floor": "R0",
+        "encoder": null,
+        "final": "R0",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
+    }
+  ],
+  "branches": [],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.2.0"
+}

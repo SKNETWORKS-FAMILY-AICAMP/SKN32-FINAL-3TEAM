@@ -1,7 +1,7 @@
 """collect/law_api.py — 법제처 OPEN API 수집기 (S1-01 · S1-02 · D-92).
 
-  uv run python -m collect.law_api --target law      # 법률 3 + 시행령·시행규칙 4
-  uv run python -m collect.law_api --target admrul   # 고시 3종
+  uv run python -m collect.law_api --target law      # 법률 4 + 시행령·시행규칙 5 (`TARGETS["law"]`)
+  uv run python -m collect.law_api --target admrul   # 고시·지침 11 (`TARGETS["admrul"]`)
   uv run python -m collect.law_api --target prec     # 판례 — 질의로 모아 본문 수집
   uv run python -m collect.law_api --target decc     # 행정심판 재결례
   uv run python -m collect.law_api --target mfdsCgmExpc   # 중앙부처 1차 해석 — 식약처 (소스 mfds_cgm_expc)
@@ -51,7 +51,7 @@ TARGETS: dict[str, list[tuple[str, str, str]]] = {
         ("002011", "표시ㆍ광고의 공정화에 관한 법률", "S1-01"),
         ("013094", "식품 등의 표시ㆍ광고에 관한 법률", "S1-01"),
         ("002015", "화장품법", "S1-01"),
-        # ── 시행령·시행규칙 4 (2026-09-02 확보) ────────────────
+        # ── 시행령·시행규칙 5 (2026-09-02 확보) ────────────────
         #  🚨 새 소스가 아니다 — `law_go_kr` 의 covers 가 이미 「3법 (+시행령·시행규칙)」과
         #     「시행령 [별표] 부당한 표시·광고의 유형 및 기준」·「행정처분 기준 [별표]」를
         #     적고 있다. 서명이 덮는 범위 안이므로 D-15 에 걸리지 않는다.

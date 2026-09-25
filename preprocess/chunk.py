@@ -39,19 +39,17 @@ import sys
 
 from app.settings import PARAMS
 from collect import store
+from collect.law_map import LAW_OF_ID
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DERIVED = ROOT / "data" / "derived"
 
 # 🚨 512 토큰 한계에 대한 **보수적** 글자 상한. 넘게 잡는 쪽이다 (위 docstring).
 MAX_CHARS = PARAMS.chunk_max_chars
-CATEGORY = {
-    "화장품": "화장품",
-    "건강기능식품": "건기식",
-    "식품 등의 표시": "식품",
-    "표시ㆍ광고의 공정화": "일반",
-    "표시·광고의 공정화": "일반",
-}
+#: ⛔ 🔄 2026-09-24 (W6 · D-271 ①) — 종전 `CATEGORY` 표와 `category_of()` 를 지웠다.
+#:    법령 이름·별표 제목의 **낱말**로 범주를 정했고, 안 걸리면 「일반」이었다 — 별표 제목에는 법 이름이 없어
+#:    식품표시광고법 시행령 [별표 1] 50청크를 포함해 265개(11%)가 「일반」으로 떨어졌다(D-271 맥락 2).
+#:    ★ 청크의 법은 **법 ID 로** 정한다 — 대응표는 `collect/law_map.py` 한 곳이다.
 _SENT = re.compile(r"(?<=[.。])\s+|\n")
 
 #: 🔴 **하한 래칫** — 이전 판보다 이 비율을 넘게 줄면 멈춘다 (2026-09-20 · D-254 · 감사 §1-8).
@@ -115,13 +113,6 @@ def previous_counts(path: pathlib.Path) -> dict[str, int] | None:
 _TITLE_ONLY = re.compile(r"^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*$")
 
 
-def category_of(title: str) -> str:
-    for key, val in CATEGORY.items():
-        if key in title:
-            return val
-    return "일반"
-
-
 def _context(r: dict) -> str:
     """자립 텍스트를 조립한다 — **검색이 보는 것**이자 **화면이 보여 줄 문맥**이다 (0008).
 
@@ -138,6 +129,30 @@ def _context(r: dict) -> str:
     head = (r.get("제목") or "").strip()
     hang = (r.get("항본문") or "").strip()
     return "\n".join(p for p in (head, hang) if p)
+
+
+def _annex_context(r: dict, by_path: dict[tuple[str, str], str]) -> str:
+    """별표 청크의 자립 텍스트 — **별표 제목 + 상위 항목** (🆕 2026-09-24 · W6 재측정).
+
+        「제품명」 → 「[별표 1] 식품등의 일부 표시사항(제2조 관련)
+                      자사(自社)에서 제조ㆍ가공할 목적으로 수입하는 식품등」
+
+    🔴 **왜** — W6 로 시행규칙 별표 131청크가 「일반」에서 식품표시광고법으로 옮겨 오자, 「제품명」·「면류」·「식염」
+       같은 **글자 몇 개짜리 목록 청크가 벡터 상위 1~6위를 점령했다**(2026-09-24 B 실측 · 질의 넷 전부). 짧은 청크는
+       임베딩 공간 중앙에 앉아 **어떤 질의에나 중간 거리**로 걸린다 — 09-12 에 조문 쪽에서 겪은 병(D-195)이고,
+       조문은 0008 이 문맥을 붙여 고쳤다. 별표는 「계층 표기가 달라 범위 밖」으로 비워 두었다(0008).
+    ★ **같은 처방을 별표에 쓴다** — 조문 `_context()` 와 뜻이 같다(검색이 보고 화면이 보여 주는 한 값 · D-99).
+       상위 항목은 **같은 별표 · 같은 구역**(`본문`/`비고`)에서 경로(`1.가.10` → `1` · `1.가`)로 찾는다.
+    🚨 `text` 는 바꾸지 않는다 — 인용 단위와 `chunk_id` 가 그대로다(D-158). 바뀌는 것은 임베딩 입력뿐이라 **재임베딩**이 필요하다.
+    🚨 상위 항목을 못 찾으면 **있는 것만** 붙인다 — 지어내지 않는다. 비고 구역은 「비고」를 붙인다.
+    """
+    no = r.get("annex_no_head")
+    head = f"[별표 {no}] {r['annex_title']}" if no else str(r["annex_title"])
+    if r["section"] != "본문":
+        head = f"{head} · {r['section']}"
+    parts = str(r["path"]).split(".")
+    anc = [by_path.get((r["section"], ".".join(parts[:k]))) for k in range(1, len(parts))]
+    return "\n".join([head, *(a for a in anc if a)])
 
 
 def _split_long(text: str) -> list[str]:
@@ -212,7 +227,8 @@ def from_articles() -> tuple[list[dict], int]:
                     #: 🔴 **자립 텍스트** — 검색이 보는 것과 인용하는 것을 가른다 (0008).
                     "context": _context(r),
                     "doc_type": "법령",
-                    "category": [category_of(law)],
+                    #: 🔄 W6 — 법 축(D-271 ①). 모르는 법 ID 면 `None` 으로 두고 `main()` 이 **쓰기 전에** 멈춘다
+                    "law": LAW_OF_ID.get(r["파일"].split("_")[1]),
                     "text": text,
                     # 🔴 **쪼갠 조각이라는 사실** (D-199 · 0011). 안 쪼갰으면 1/1 이다 —
                     #    빈 문자열이 아니다. 「모른다」는 적재 전 DB 의 NULL 이 맡는다.
@@ -230,7 +246,10 @@ def from_annex() -> list[dict]:
     if not d.exists():
         return rows
     for p in sorted(d.glob("*.jsonl")):
-        for r in (json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()):
+        src = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+        #: 같은 별표 안에서 상위 항목을 찾는 표 — (구역, 경로) → 본문 (`_annex_context`)
+        by_path = {(r["section"], str(r["path"])): (r.get("text") or "").strip() for r in src}
+        for r in src:
             text = (r.get("text") or "").strip()
             if not text:
                 continue
@@ -246,13 +265,13 @@ def from_annex() -> list[dict]:
                         "article": r.get("article") or "",
                         "paragraph": r["path"],
                         "item": r["section"],
-                        #: ⬜ **별표는 이번 범위 밖이다** (0008). 계층 표기가 `2.가.10` 이라
-                        #:    법령의 조·항·호 규칙이 안 먹는다. 빠뜨린 것이 아니라 판정이다 —
-                        #:    빈 문자열은 「붙일 문맥이 없음」, NULL 은 「아직 안 채움」이다.
+                        #: ⬜ 항 서수는 별표에 없다 — 계층 표기가 `2.가.10` 이라 법령의 조·항·호 규칙이 안 먹는다.
                         "paragraph_no": None,
-                        "context": "",
+                        #: 🔄 2026-09-24 — 종전에는 「별표는 범위 밖」(0008)으로 **빈 문자열**이었다.
+                        #:    짧은 목록 청크가 벡터 상위를 점령해(W6 재측정) 별표 제목 + 상위 항목을 붙인다.
+                        "context": _annex_context(r, by_path),
                         "doc_type": "별표",
-                        "category": [category_of(r["annex_title"])],
+                        "law": LAW_OF_ID.get(r["law_id"]),
                         "text": chunk,
                         "part_no": i + 1,
                         "part_total": len(parts),
@@ -314,12 +333,22 @@ def main() -> int:
         print("               유일하게 집는지 본다. 덮어쓰기로 넘기지 않는다.")
         return 1
 
+    # 🔴 **법을 못 정한 청크가 있으면 멈춘다** (W6 · D-271 ① · D-220).
+    #    ⛔ 종전 `category_of()` 는 모르면 「일반」을 줬다 — 그 기본값이 265청크를 틀린 법에 앉혔다.
+    #    ★ 법 ID 가 대응표에 없으면 `collect/law_map.py` 에 한 줄 더한다 (게이트가 `TARGETS` 와 양방향으로 댄다).
+    unknown = collections.Counter(str(r.get("law_id")) for r in rows if r.get("law") is None)
+    if unknown:
+        print(
+            f"🔴 법을 못 정한 청크 {sum(unknown.values())}개 — 법 ID {dict(unknown)}\n"
+            "   `collect/law_map.py` `LAW_OF_ID` 에 없다. 기본값으로 떨어뜨리지 않는다 (D-271 ①).",
+            file=sys.stderr,
+        )
+        return 1
+
     long_ = sum(1 for r in rows if r["part_total"] > 1)
-    cats: dict[str, int] = {}
-    for r in rows:
-        cats[r["category"][0]] = cats.get(r["category"][0], 0) + 1
+    laws = collections.Counter(r["law"] for r in rows)
     print(f"  청크 {len(rows)}개 · 최장 {max(len(r['text']) for r in rows)}자")
-    print(f"  범주 {cats}")
+    print(f"  법 {dict(laws.most_common())}")
     print(f"  🚨 길어서 쪼갠 청크 {long_}개 — `part_no`/`part_total` 이 원 조문을 가리킨다")
     # 🔴 **뺀 수를 매번 찍는다** — 조용히 줄면 다음 사람이 원장과 어긋나는 수를 보고 헤맨다.
     print(f"  ⬜ 제목뿐인 조 머리 행 {dropped}개를 담지 않았다 (D-159 · D-195)")

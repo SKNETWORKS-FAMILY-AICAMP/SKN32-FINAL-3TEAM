@@ -30,7 +30,7 @@ import pathlib
 import re
 import xml.etree.ElementTree as ET
 
-from collect import store
+from collect import statute, store
 from preprocess.text import quoted
 
 #: 부당 표시·광고 **조항**의 그물 — 관련법령 문자열에 이것이 있으면 센다. 🚨 판정이 아니다.
@@ -45,16 +45,9 @@ AD_ARTICLES: tuple[tuple[str, str], ...] = (
 #: 관련법령이 비었거나 다른 조를 달았어도 **질의가 광고 문구를 묻는** 경우를 줍는 둘째 그물
 AD_WORDS = re.compile(r"광고|표시\s*[ㆍ·]?\s*광고|문구|표현|문안")
 
-#: 식품표시광고법 제8조제1항 각 호 → 우리 유형 (D-155 표와 같다 · 1:1)
-HO_TYPE: dict[str, str] = {
-    "1": "질병_예방치료_표방",
-    "2": "의약품_오인",
-    "3": "건강기능식품_오인",
-    "4": "거짓_과장",
-    "5": "소비자_기만",
-    "6": "비방광고",
-    "7": "부당_비교광고",
-}
+#: 식품표시광고법 제8조제1항 각 호 → 우리 유형 (1:1 · 호 단위)
+#: 🔄 2026-09-24 (D-282) — `collect/statute.py` 에서 **계산한다**(D-99 · 종전에는 이 파일이 따로 적었다).
+HO_TYPE: dict[str, str] = {str(h): str(statute.type_of(statute.food(h))) for h in range(1, 8)}
 HO = re.compile(r"제8조\s*제1항\s*제(\d)호")
 
 #: 유형 **단서**(판정 아님) — 호가 안 적힌 해석을 사람이 볼 때 순서를 정하는 데만 쓴다

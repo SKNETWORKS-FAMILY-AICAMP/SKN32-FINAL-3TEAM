@@ -34,12 +34,15 @@
         }
       ],
       "risk": {
-        "floor": "R4",
+        "floor": "R3",
         "encoder": null,
-        "final": "R4",
+        "final": "R3",
         "evidence_span": null
       },
-      "evidence_mismatch": false
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
     }
   ],
   "disclosure_section_order": 0

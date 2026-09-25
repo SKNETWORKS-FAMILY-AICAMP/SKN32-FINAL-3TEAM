@@ -1,0 +1,46 @@
+{
+  "outcome": "pass",
+  "category": "화장품",
+  "not_reviewed": [],
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "피부 보습에 도움을 줄 수 있습니다.",
+      "verdict": "confirmed",
+      "hold_reason": null,
+      "violations": [],
+      "infeasibility": null,
+      "evidence": [],
+      "risk": {
+        "floor": "R0",
+        "encoder": "R0",
+        "final": "R0",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
+    }
+  ],
+  "branches": [],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.2.0"
+}
