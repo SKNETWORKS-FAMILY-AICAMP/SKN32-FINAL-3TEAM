@@ -729,8 +729,11 @@ mfds_hf_trial_ad_guide:
 mfds_cosmetic_claim_test_guide:
   decided_by: 오한빈
   decided_at: 2026-09-25
+  # 🔄 2026-09-26 재확인 (권소라) — D-290 수정안(docs/ohb/수정안_2026-09-25_레지스트리_층_D-290.md) 동의.
+  #    2층 적법라벨 → 3층 판단규범 · authority 해설. 입증 조건부 표현의 기준이라 2층(조건 없는 표현)이 아니다(D-290 ④).
+  #    근거 조문으로 인용하지 않는다(D-290 ②).
   reviewed_by: 권소라
-  reviewed_at: 2026-09-25
+  reviewed_at: 2026-09-26
   robots_checked_at: 2026-09-25
   collected_at: 2026-09-25
 mfds_quasi_drug_ad_guide:
