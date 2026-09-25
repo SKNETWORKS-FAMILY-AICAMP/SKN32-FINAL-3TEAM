@@ -70,6 +70,7 @@ FLAGS = {
     "QUERYLOG",
     "PREAPPROVAL",
     "NOTRAIN",
+    "ND",  # 🆕 2026-09-25 · 0020 — 변경금지 (파생 데이터셋 금지 · `collect.registry.assert_derivable`)
 }
 
 
@@ -331,6 +332,10 @@ def load_manifest(cur, dry: bool) -> int:
        ② **레지스트리에 없는 원천의 행은 세서 찍는다.** ⛔ 종전에는 조용히 건너뛰어
           「원장 N줄 = DB N행」이 아니어도 아무도 몰랐다 (D-149). 넣지 않는 것은 그대로다 —
           `collect_manifest.source_id` 가 `source` 를 가리키므로 넣을 수 없다.
+    🔴 2026-09-26 (클론 B 실측) — ③ **레지스트리에는 있는데 `source` 에 못 들어간 원천**도 같다.
+       ⛔ 종전에는 「레지스트리에 있나」만 봐서, `load_sources()` 가 CHECK(2인 확인 · attribution)로 **건너뛴**
+          `mfds_cosmetic_sanction` 의 원장 줄을 넣으려다 FK 로 죽었다 — 적재 전체가 멈추고 뒤 표(document …)가 비었다.
+       ★ 기준을 **DB 의 `source` 에 실제로 있는 것**으로 바꾼다. 못 넣은 줄은 원천별로 세서 찍는다 (D-149 · D-220).
     """
     p = ROOT / "data" / "manifest.jsonl"
     if not p.exists():
@@ -341,15 +346,25 @@ def load_manifest(cur, dry: bool) -> int:
                 "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
             )
         return 0
-    known = set(_sources())
+    registered = set(_sources())
+    if dry:
+        loaded = registered
+    else:
+        cur.execute("SELECT source_id FROM source")
+        loaded = {row[0] for row in cur.fetchall()}
     rows = 0
     unknown: collections.Counter[str] = collections.Counter()
+    held: collections.Counter[str] = collections.Counter()
     for line in p.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         r = json.loads(line)
-        if r.get("source_id") not in known:
-            unknown[str(r.get("source_id"))] += 1
+        sid = str(r.get("source_id"))
+        if sid not in registered:
+            unknown[sid] += 1
+            continue
+        if sid not in loaded:
+            held[sid] += 1
             continue
         if not dry:
             cur.execute(
@@ -383,6 +398,11 @@ def load_manifest(cur, dry: bool) -> int:
             + " · ".join(f"{k} {v:,}" for k, v in sorted(unknown.items()))
         )
         print("       원천을 등재하거나(레지스트리) 원장 줄이 틀렸는지 본다 (D-149)")
+    if held:
+        print(
+            f"    🟡 `source` 에 못 들어간 원천(위 ⛔ — 2인 확인 · attribution 미완)의 원장 {sum(held.values()):,}줄을 "
+            "넣지 않았다 — " + " · ".join(f"{k} {v:,}" for k, v in sorted(held.items()))
+        )
     return rows
 
 

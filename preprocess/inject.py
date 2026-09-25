@@ -41,6 +41,7 @@ import pathlib
 import random
 import re
 
+from collect import registry
 from preprocess import split as split_mod
 from preprocess.split import approved_docs as split_approved
 
@@ -290,6 +291,8 @@ def main() -> int:
     print("  🚨 학습만 채운다 — `후기_체험기_기만`·`부당_비교광고`·`비방광고` 의")
     print("     **평가는 여전히 비어 있다.** 메우는 척하지 않는다.")
 
+    # 🔴 변경금지(ND) 게이트 — 파생 데이터셋에 ND 소스의 행이 들어오면 여기서 멈춘다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(rows, who="preprocess.inject")
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
         with OUT.open("w", encoding="utf-8", newline="\n") as f:

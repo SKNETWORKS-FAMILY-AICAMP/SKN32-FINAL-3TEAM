@@ -420,7 +420,13 @@ def test_마이그레이션이_만드는_모양이_schema_sql_과_같다() -> No
     assert files, f"🚨 {MIG_DIR} 에 마이그레이션 SQL 이 없다"
 
     # 마이그레이션을 순서대로 적용한 뒤의 ENUM 모양
-    m_enum: dict[str, list[str]] = {}
+    # 🔄 2026-09-25 — **출발점은 동결된 `db/schema_0001.sql`** 이다(0001 은 그 파일만 읽는다 · 0015 머리말).
+    #    ⛔ 종전에는 빈 표에서 출발해, 0001 이 만든 타입(`flag_t` 등)에 값을 더하는 마이그레이션(0020 · `ND`)을
+    #       「만든 적 없는 타입」으로 막았다. 그 타입들은 0001 이 만들었다.
+    m_enum: dict[str, list[str]] = {
+        n: re.findall(r"'([^']+)'", b)
+        for n, b in _ENUM.findall((ROOT / "db" / "schema_0001.sql").read_text(encoding="utf-8"))
+    }
     for f in files:
         sql = f.read_text(encoding="utf-8")
         for name, body in _ENUM.findall(sql):
@@ -583,3 +589,17 @@ def test_골든셋_적재는_넣는_칸을_전부_갱신한다() -> None:
     assert inserted <= updated, (
         f"갱신하지 않는 칸 {sorted(inserted - updated)} — 다시 넣어도 DB 가 옛 값이다"
     )
+
+
+@pytest.mark.gate
+def test_마이그레이션_SQL_은_alembic_이_부른다() -> None:
+    """🔴 `db/migrations/*.sql` 은 본문일 뿐이다 — 부르는 `alembic/versions/*.py` 가 없으면 `migrate` 가 돌리지 않는다.
+
+    ⛔ 2026-09-25 — `0020_flag_nd.sql` 만 넣고 alembic 판을 빠뜨렸다. 위 게이트(끝난 뒤의 모양)는 SQL 파일을
+       직접 접어서 **통과**했고, 실제 DB 는 0019 에 멈췄다 — `db-drift` 가 기기에서 잡았다(클론 B).
+    """
+    versions = "\n".join(
+        p.read_text(encoding="utf-8") for p in (ROOT / "alembic" / "versions").glob("*.py")
+    )
+    orphan = [f.name for f in sorted(MIG_DIR.glob("*.sql")) if f.name not in versions]
+    assert not orphan, f"🔴 alembic 판이 부르지 않는 마이그레이션 SQL: {orphan}"

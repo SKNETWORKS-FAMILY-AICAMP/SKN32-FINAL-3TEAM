@@ -231,6 +231,68 @@ def probe(source_id: str) -> dict[str, Any]:
     return s
 
 
+#: 파생 행이 원천을 적는 칸 — 추출기는 `원천`, `store.stamp` 는 `provenance`, 사전은 `출처`(목록).
+#: 🚨 셋 다 본다. 하나만 보면 다른 칸을 쓰는 산출물이 검사를 조용히 지나간다.
+SOURCE_KEYS = ("provenance", "원천", "출처")
+
+
+def sources_of(row: dict[str, Any]) -> set[str]:
+    """행이 적은 원천 소스 id 들. 🚨 목록 칸(`출처`)과 글자 칸을 함께 편다."""
+    got: set[str] = set()
+    for k in SOURCE_KEYS:
+        v = row.get(k)
+        if isinstance(v, str) and v.strip():
+            got.add(v.strip())
+        elif isinstance(v, (list, tuple)):
+            got |= {str(x).strip() for x in v if str(x).strip()}
+    return got
+
+
+def no_derivatives(source_id: str) -> bool:
+    """`ND`(변경금지)가 붙은 소스인가 — 원문 그대로 색인 · 인용만 되고 파생 데이터셋은 안 된다."""
+    return "ND" in set(spec(source_id).get("constraints") or [])
+
+
+def assert_derivable(rows: Any, *, who: str, default: str | None = None) -> int:
+    """🔴 **파생 데이터셋을 쓰기 직전의 게이트** (2026-09-25 · 팀장 판정 (가) · D-110).
+
+    라벨 · 사전 · 학습 · 평가셋처럼 원문을 바꿔 만든 산출물은 `ND` 소스의 행을 담을 수 없다.
+    ⛔ `U1: deny` 를 보지 않는다 — 그 칸은 「평가 전용」 뜻으로도 쓰였다(D-155 사례집이 deny 인데 사전으로 학습에 든다).
+       법적 금지는 `ND` 가 진다.
+    🔴 원천을 못 읽는 행은 **멈춘다** (D-220) — 모르는 행을 통과로 세면 이 게이트가 fail-open 이 된다.
+       원천 칸이 없는 입력(예: 판독 원장)은 부르는 쪽이 `default` 로 원천을 적는다.
+    🔴 레지스트리에 없는 원천도 멈춘다(`spec()` 이 거부한다).
+
+    돌려주는 값은 검사한 행 수다 — 0 건 검사를 「통과」로 읽지 않게 부르는 쪽이 볼 수 있다.
+    """
+    n = 0
+    blind = 0
+    bad: dict[str, int] = {}
+    for r in rows:
+        n += 1
+        srcs = sources_of(r) if isinstance(r, dict) else set()
+        if not srcs and default:
+            srcs = {default}
+        if not srcs:
+            blind += 1
+            continue
+        for sid in srcs:
+            if no_derivatives(sid):
+                bad[sid] = bad.get(sid, 0) + 1
+    if blind:
+        raise RegistryError(
+            f"🔴 {who}: 원천을 적지 않은 행이 {blind}건 있다({'/'.join(SOURCE_KEYS)} 칸 없음). "
+            "파생 데이터셋에는 원천을 모르는 행을 싣지 않는다 (D-220 · 변경금지 게이트)."
+        )
+    if bad:
+        listed = ", ".join(f"{k} {v}행" for k, v in sorted(bad.items()))
+        raise RegistryError(
+            f"🔴 {who}: 변경금지(ND) 소스의 행이 파생 데이터셋에 들어오려 한다 — {listed}. "
+            "ND 소스는 원문 그대로 색인 · 인용만 된다 (공공누리 제3·4유형 · D-110 · 2026-09-25 팀장 판정 (가))."
+        )
+    return n
+
+
 def is_g2(source_id: str) -> bool:
     """G2 여부 — raw 를 사실 추출 후 삭제해야 하는 소스인가 (D-92 · D-17 원문 미보관)."""
     return spec(source_id).get("grade") == "G2"

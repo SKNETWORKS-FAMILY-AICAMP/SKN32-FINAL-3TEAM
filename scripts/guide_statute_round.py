@@ -52,7 +52,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from collect import statute  # noqa: E402
+from collect import registry, statute  # noqa: E402
 
 READINGS = ROOT / "data" / "derived" / "labels" / "guide_statute" / "readings.jsonl"
 ADOPTED = ROOT / "data" / "derived" / "labels" / "guide_statute" / "adopted.jsonl"
@@ -129,6 +129,8 @@ def rows() -> list[dict]:
         raise SystemExit(1)
     got, _ = mg.masked([r for r in mg.extract(mg._hwp()) if r["종류"] == "위반문구"])
     out = [{**r, "지문": key_of(r)} for r in got]
+    # 🔴 변경금지(ND) 게이트 — 판독 시트도 파생 데이터셋이다 — ND 소스의 행이 들어오면 여기서 멈춘다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(out, who="guide_statute_round.rows")
     dup = [k for k, v in collections.Counter(r["지문"] for r in out).items() if v > 1]
     if dup:
         raise ValueError(f"지문이 겹친다 {len(dup)} — 예 {dup[:3]}")

@@ -37,6 +37,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from collect import registry  # noqa: E402
 from preprocess import labels as store  # noqa: E402
 from scripts import label_sheet as ls  # noqa: E402
 
@@ -66,10 +67,17 @@ DISEASE_CUE = re.compile(r"치료|예방|질환|질병|증상|병|약|처방|특
 MIN_LEN = 10
 
 
+#: 원천 칸이 없는 입력의 원천 — 🚨 `decc_phrases.jsonl` 은 행에 원천을 적지 않는다(재결례는 법제처 OPEN API · `law_go_kr`).
+_SOURCE_OF = {"decc_phrases.jsonl": "law_go_kr"}
+
+
 def _jl(p: pathlib.Path) -> list[dict]:
     if not p.exists():
         raise SystemExit(f"🔴 {p.relative_to(ROOT)} 가 없다 — 정본에서 파생물을 먼저 만든다 (D-72)")
-    return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+    rows = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+    # 🔴 변경금지(ND) 게이트 — 라벨 시트도 파생 데이터셋이다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(rows, who=f"label_round:{p.name}", default=_SOURCE_OF.get(p.name))
+    return rows
 
 
 def _cap() -> int:

@@ -57,6 +57,7 @@ _REGISTRY_SOURCE = {
     "mfds_hf_individual": "mfds_hf_individual",
     "law_go_kr": "law_go_kr",
     "mfds_cgm_expc": "mfds_cgm_expc",
+    "mfds_cosmetic_ad_qa": "mfds_cosmetic_ad_qa",
 }
 
 

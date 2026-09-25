@@ -36,7 +36,7 @@ import json
 import pathlib
 import re
 
-from collect import statute
+from collect import registry, statute
 from preprocess.mfds_guide import CANDIDATES, REGIME
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -227,6 +227,8 @@ def main() -> int:
 
     rows = [json.loads(x) for x in SRC.read_text(encoding="utf-8").splitlines() if x.strip()]
     viol = [r for r in rows if r.get("블록") == "삭제"]
+    # 🔴 변경금지(ND) 게이트 — 평가셋 · 앵커 둘 다 이 입력에서 나온다 — ND 소스의 행이 들어오면 여기서 멈춘다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(viol, who="preprocess.guide_label")
     out = build(viol)
 
     print(f"  위반문구 {len(viol):,}행 · 원천라벨 결측 0 (fail-closed 통과)")
