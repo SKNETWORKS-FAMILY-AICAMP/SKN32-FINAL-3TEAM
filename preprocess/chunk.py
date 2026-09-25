@@ -160,6 +160,26 @@ def _annex_context(r: dict, by_path: dict[tuple[str, str], str]) -> str:
     return "\n".join([head, *(a for a in anc if a)])
 
 
+#: 🆕 2026-09-26 — 별표 청크의 **임베딩 입력(문맥 + 본문) 글자 상한** `[측정]`.
+#:    09-26 까지 법령 · 별표 청크는 입력 900자 이하였고 모델 입력은 최대 465토큰(0 행이 512 초과 · 클론 B embed 출력).
+#:    행정규칙 별표를 싣자 **상위 항목 본문이 긴 노드**(36122 [별표 4] 「4」 1,364자 · [별표 3] 「11」 1,007자)가 문맥에 통째로
+#:    붙어 **24행이 512토큰을 넘었다**(최대 1,201) — 모델은 넘는 부분을 **말없이 자른다**(본문 뒤쪽이 임베딩에서 빠진다).
+#:    ★ 본문은 자르지 않는다(인용 단위 · D-158). **문맥의 상위 항목만** 줄여 이 상한에 맞춘다 — 별표 제목 줄은 남긴다.
+#:    ⬜ 글자는 토큰의 어림이다 — 실측은 `scripts/embed.py` 가 찍는 「512 초과」다.
+ANNEX_INPUT_MAX = 900
+
+
+def _fit_context(ctx: str, n_text: int) -> str:
+    """문맥 + 본문이 `ANNEX_INPUT_MAX` 를 넘으면 **상위 항목 부분만** 뒤에서 잘라 `…` 을 붙인다. 첫 줄(별표 제목)은 남긴다."""
+    if len(ctx) + n_text <= ANNEX_INPUT_MAX:
+        return ctx
+    head, _, rest = ctx.partition("\n")
+    room = ANNEX_INPUT_MAX - n_text - len(head) - 2
+    if room <= 0 or not rest:
+        return head
+    return f"{head}\n{rest[:room]}…"
+
+
 def _split_long(text: str) -> list[str]:
     """길면 문장 경계로 자른다. 🚨 자른 사실은 호출자가 `part` 로 남긴다."""
     if len(text) <= MAX_CHARS:
@@ -274,7 +294,8 @@ def from_annex() -> list[dict]:
                         "paragraph_no": None,
                         #: 🔄 2026-09-24 — 종전에는 「별표는 범위 밖」(0008)으로 **빈 문자열**이었다.
                         #:    짧은 목록 청크가 벡터 상위를 점령해(W6 재측정) 별표 제목 + 상위 항목을 붙인다.
-                        "context": _annex_context(r, by_path),
+                        # 🔄 2026-09-26 — 입력 상한에 맞춘다(`_fit_context` · 09-26 까지의 청크는 모두 상한 안이라 그대로다)
+                        "context": _fit_context(_annex_context(r, by_path), len(chunk)),
                         "doc_type": "별표",
                         "law": LAW_OF_ID.get(r["law_id"]),
                         "text": chunk,

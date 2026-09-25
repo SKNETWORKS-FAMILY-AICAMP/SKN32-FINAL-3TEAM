@@ -109,3 +109,16 @@ def test_겹친_경로는_전부_가르고_표시한다(units: list[dict]) -> No
     assert len(keys) == len(set(keys))
     marked = [r["path"] for r in rows if r.get("경로중복")]
     assert marked == ["1.①~1", "1.①~2"]
+
+
+def test_별표_청크_문맥은_입력_상한에_맞춰_상위_항목만_줄인다() -> None:
+    """🔴 2026-09-26 — 긴 상위 항목이 문맥에 통째로 붙어 24행이 512토큰을 넘었다(모델이 말없이 자른다)."""
+    from preprocess import chunk
+
+    head = "[별표 4] 자료제출이 생략되는 기능성화장품의 종류"
+    ctx = f"{head}\n" + "상위항목" * 400
+    fit = chunk._fit_context(ctx, 700)
+    assert fit.startswith(head + "\n") and fit.endswith("…")
+    assert len(fit) + 700 <= chunk.ANNEX_INPUT_MAX
+    short = f"{head}\n짧은 상위 항목"
+    assert chunk._fit_context(short, 300) == short  # 상한 안이면 그대로
