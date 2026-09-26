@@ -52,13 +52,23 @@ ANNEX = store.family_path("law_go_kr") / "annex"
 #:    ⛔ 합치지 않았다 — `app/` 이 `preprocess/` 를 import 하면 런타임이 전처리 층에 매인다.
 #:       D-99 의 나머지 절반을 쓴다: **양쪽에 서로를 가리키는 주석.** 한쪽을 고치면 둘 다 고친다.
 JO = "가나다라마바사아자차카타파하"
+#: `level` 은 **모양의 이름표**다(깊이가 아니다) — 법령 별표 노드의 값이 바뀌지 않게 종전 번호를 그대로 둔다.
+#: 🆕 2026-09-26 — 괄호 번호 `(1)` · `(가)`(6 · 7). 행정규칙(고시) 별표가 쓴다 — 36122 [별표 4] 제4호 아래
+#:    `(1)~(6)` · `(1)~(7)` · `(1)~(5)` 목록 셋을 모르고 **제4호 본문에 통째로 붙였다**(1,324자 · 사실원장 ㉜).
 LEVELS: tuple[tuple[int, re.Pattern[str]], ...] = (
     (1, re.compile(r"^(\d{1,2})\.\s")),
     (2, re.compile(rf"^([{JO}])\.\s")),
     (3, re.compile(r"^(\d{1,2})\)\s")),
     (4, re.compile(rf"^([{JO}])\)\s")),
+    (6, re.compile(r"^(\(\d{1,2}\))\s?")),
+    (7, re.compile(rf"^(\([{JO}]\))\s?")),
     (5, re.compile(r"^([①-⑳])\s?")),
 )
+#: 표준 순서(얕은 것 → 깊은 것) — `1.` > `가.` > `1)` > `가)` > `(1)` > `(가)` > `①`. 🚨 비교는 이 순위로 한다(`level` 값이 아니다)
+RANK: dict[int, int] = {lv: i for i, (lv, _) in enumerate(LEVELS)}
+#: 🆕 2026-09-26 — 별표 안의 **부표** 머리글. 🚨 **줄 전체**가 「[부표 N]」일 때만 구역 경계다 —
+#:    본문이 부표를 부르는 줄(「[부표 1]의 설문을 통하여」)까지 경계로 읽으면 글이 빈 구역으로 사라진다
+SUBTABLE = re.compile(r"^\[부표\s*\d+\]$")
 # 「■ 화장품법 시행규칙 [별표 5] <개정 …>」 — 머리글
 HEAD = re.compile(r"^■")
 # 🆕 머리글의 **별표 번호** (2026-09-14) — 위 예시의 `5`.
@@ -95,8 +105,8 @@ def _marker(line: str) -> tuple[int, str] | None:
     return None
 
 
-def parse(content: str) -> list[dict]:
-    """`1. → 가. → 1)` 계층을 노드로 자른다. 노드는 마커 줄에서 시작한다.
+def parse(content: str, *, reverse_child: bool = False) -> list[dict]:
+    """`1. → 가. → 1) → 가) → (1) → (가) → ①` 계층을 노드로 자른다. 노드는 마커 줄에서 시작한다.
 
     🔴 **구역을 갈라야 한다** (2026-09-09 실측). 013453 [별표 1] 은 8호까지가 위법 유형이고
        그 뒤에 「비고」가 붙어 **「부당한 표시·광고로 보지 않는다」는 적용 제외 2호**가 온다.
@@ -105,47 +115,72 @@ def parse(content: str) -> list[dict]:
 
     🚨 구역 전환은 **낱말이 아니라 구조**로 잡는다 — 이미 1호가 나온 뒤에 다시 1호가 오면
        그 자리가 새 구역이다. 「비고」라는 낱말은 **이름을 붙이는 데만** 쓴다 (없으면 번호로 부른다).
+    🆕 2026-09-26 — 줄 전체가 「[부표 N]」이면 그 자리부터 구역 `[부표 N]` 이다. 부표 머리의 글(첫 마커 앞)은
+       노드 `머리` 로 남긴다 — 버리지 않는다. ⛔ 종전에는 36122 [별표 3] [부표 1](피험자 선정기준 · 설문)이
+       앞 호 제11호 본문과 **하위 항목**(`11.1~11.8`)으로 붙었다(사실원장 ㉜).
+
+    ``reverse_child`` — 🆕 2026-09-26 · **행정규칙 별표만** 켠다(`build_admrul`).
+       표준 순서로 **얕은** 모양이 스택에 없는 채로 나오면 — 법령은 그 자리까지 올라가고(종전 · 013475 [별표 4]
+       머리 목록 「가. 나.」 뒤의 「1.」은 형제다), 고시는 **자식으로 둔다**. 고시가 순서를 거꾸로 쓴다 —
+       「(3) 최고용량 :」 아래 「1) 2)」(36122 [별표 1] 3곳) · 「① …다음 각호」 · 「② …다음 각 호와 같다」 아래
+       「1.」(36122 [별표 2] 2곳) · 「나) 기체크로마토그래프법」 아래 「1)」(37098 [별표 4]). 09-26 전수 6곳 모두
+       원문을 읽어 보니 자식이었다.
+       🚨 뒤집은 노드는 `역순` 을 단다 — 원문 판독 없이 규칙으로 정한 자리다. 호출자가 세어 찍는다(D-200 의 어법).
     """
     nodes: list[dict] = []
-    stack: dict[int, str] = {}
+    stack: list[tuple[int, str]] = []  # (level, 마커) — 바깥에서 안으로
     cur: dict | None = None
     section, section_no, seen_l1 = "본문", 1, False
     label: str | None = None  # 직전에 지나간 마커 없는 짧은 줄 — 구역 이름 후보
 
     for raw in content.split("\n"):
-        if not raw.strip() or HEAD.match(raw.strip()):
+        s = raw.strip()
+        if not s or HEAD.match(s):
+            continue
+        if SUBTABLE.match(s):
+            section, stack, seen_l1, label = s, [], False, None
+            cur = {"section": section, "level": 0, "marker": "", "path": "머리", "lines": []}
+            nodes.append(cur)
             continue
         hit = _marker(raw)
         if hit is None:
             if cur is not None:
                 cur["lines"].append(raw.rstrip())
-            s = raw.strip()
             # 🚨 「고」를 거르면 안 된다 — **「비고」가 걸린다**(2026-09-09에 실제로 걸렸다).
             #    「…표시ㆍ광고」로 끝나는 줄을 거르려던 것인데 구역 이름을 먹었다.
             if len(s) <= 12 and not s.endswith((".", "다")):
                 label = s
             continue
         level, mark = hit
-        if level == 1:
+        levels = [lv for lv, _ in stack]
+        reversed_ = False
+        if level in levels:  # 같은 모양 — 그 자리의 형제
+            stack = stack[: levels.index(level)]
+        elif stack and RANK[level] < RANK[stack[-1][0]]:
+            if reverse_child:
+                reversed_ = True  # 거꾸로 쓴 순서 — 자식으로 둔다
+            else:
+                stack = [x for x in stack if RANK[x[0]] < RANK[level]]
+        if level == 1 and not stack:
             if mark == "1" and seen_l1:
                 section_no += 1
                 section = label or f"구역{section_no}"
-                stack.clear()
                 cur = None
             seen_l1 = True
             label = None
-        stack[level] = mark
-        for deeper in [k for k in stack if k > level]:
-            del stack[deeper]
+        stack.append((level, mark))
         cur = {
             "section": section,
             "level": level,
             "marker": mark,
-            "path": ".".join(stack[k] for k in sorted(stack)),
+            "path": ".".join(m for _, m in stack),
             "lines": [raw.rstrip()],
         }
+        if reversed_:
+            cur["역순"] = True
         nodes.append(cur)
-    return nodes
+    # 부표 머리에 글이 없으면(머리글 바로 뒤에 마커) 노드가 아니다
+    return [n for n in nodes if n["lines"]]
 
 
 def build(path: pathlib.Path) -> tuple[dict, list[dict]]:
@@ -347,7 +382,7 @@ def build_admrul(u: dict) -> list[dict]:
                 "text": "".join(x.strip() for x in lead),
             }
         )
-    for n in parse(prose):
+    for n in parse(prose, reverse_child=True):
         joined = "".join(x.strip() for x in n["lines"])
         body = re.sub(r"^[\dA-Za-z①-⑳" + JO + r"]{1,2}[.)]\s*", "", joined, count=1)
         # 🚨 괘선 윗줄이 글과 한 줄에 붙은 것(69549 「가. …유사명칭┌──┬──┐」)은 표로 안 잡힌다 — 괘선 문자만 지운다
@@ -376,6 +411,9 @@ def build_admrul(u: dict) -> list[dict]:
             "chars": len(n["text"]),
             "원문파일": u["file"],
         }
+        # 🆕 2026-09-26 — 거꾸로 쓴 번호를 자식으로 둔 자리(`parse(reverse_child=True)`)
+        if n.get("역순"):
+            row["역순"] = True
         # 🚨 시행 전 판을 싣는 파일이면 같은 글귀 규칙으로 표시한다 — 별표에는 글귀가 없을 수 있다(멈추지 않는다)
         if pend and any(k in n["text"] for k in pend["시행예정"]):
             row["시행예정"] = pend["표시"]
@@ -388,24 +426,42 @@ def unique_paths(rows: list[dict]) -> int:
     """같은 (구역, 경로)가 둘 이상이면 **전부** `~1` · `~2` … 를 붙인다. 붙인 행 수를 돌려준다.
 
     🔴 청크 ID 가 `{문서}#{구역}#{경로}#{조각}` 이라 겹치면 **적재에서 뒤엣것이 앞엣것을 덮는다**(조용히 사라진다).
-       실측(2026-09-26) — 36122 [별표 4] 「4.①」이 셋(사이의 「(7)」 같은 마커를 `parse` 가 모른다) ·
-       37098 [별표 2] 표마다 붙은 「※ 유의사항 1 · 2」.
+       실측(2026-09-26) — 36122 [별표 4] 「4.①」이 셋 · 37098 [별표 2] 표마다 붙은 「※ 유의사항 1 · 2」.
+       🔄 2026-09-26 오후 — 앞의 것은 **파서가 `(1)` 계층을 몰라서** 생긴 겹침이었다(고쳤다 · 사실원장 ㉜).
+       지금 남는 겹침은 원문이 **같은 번호 목록을 되풀이**하는 자리다 — 36122 [별표 4] 제4호의
+       `(1)~(6)` 효능 · `(1)~(7)` 용법 · `(1)~(5)` 원료가 번호 없는 소제목만 사이에 두고 한 호 아래 있다.
     🚨 첫째 것도 붙인다 — 경로가 여러 자리를 가리키면 어느 것도 그 좌표로 인용할 수 없다. `~` 가 붙은 경로는
        `app/retrieve.py` `_annex_citation` 이 모르는 꼴이라 인용이 서지 않는다(fail-closed · D-224).
+    🆕 2026-09-26 오후 — **자손도 따라간다.** 부모가 `4.(1)~3` 이 되면 그 아래 `4.(1).①` 은 `4.(1)~3.①` 이다.
+       ⛔ 따라가지 않으면 자손이 **없는 부모 경로**를 가리켜 문맥(`chunk._annex_context`)에서 부모가 빠지고,
+          다른 목록의 같은 번호 자손과 다시 겹친다. 얕은 겹침부터 풀고 다시 센다 — 자손끼리의 겹침은 부모를 가른 뒤에 판단한다.
     """
     import collections  # noqa: PLC0415
 
-    seen = collections.Counter((r["section"], str(r["path"])) for r in rows)
-    k: collections.Counter = collections.Counter()
     n = 0
-    for r in rows:
-        key = (r["section"], str(r["path"]))
-        if seen[key] > 1:
-            k[key] += 1
-            r["path"] = f"{r['path']}~{k[key]}"
-            r["경로중복"] = True
-            n += 1
-    return n
+    for _ in range(32):  # 깊이마다 한 바퀴 — 별표 계층은 7단을 넘지 않는다
+        seen = collections.Counter((r["section"], str(r["path"])) for r in rows)
+        dups = {key for key, v in seen.items() if v > 1}
+        if not dups:
+            return n
+        depth = min(p.count(".") for _, p in dups)
+        top = {key for key in dups if key[1].count(".") == depth}
+        k: collections.Counter = collections.Counter()
+        open_: dict[str, tuple[str, str]] = {}  # 구역 → (옛 경로, 새 경로) — 지금 자손을 받는 부모
+        for r in rows:
+            sec, path = r["section"], str(r["path"])
+            if (sec, path) in top:
+                k[(sec, path)] += 1
+                r["path"] = f"{path}~{k[(sec, path)]}"
+                r["경로중복"] = True
+                n += 1
+                open_[sec] = (path, r["path"])
+            elif sec in open_ and path.startswith(open_[sec][0] + "."):
+                old, new = open_[sec]
+                r["path"] = new + path[len(old) :]
+            else:
+                open_.pop(sec, None)  # 🚨 자손은 부모 바로 뒤에 이어 온다 — 끊기면 닫는다
+    raise SystemExit("🔴 unique_paths — 겹친 경로가 32바퀴 뒤에도 남았다. 원문 모양을 본다 (D-220)")
 
 
 def admrul_key(u: dict) -> str:
@@ -437,7 +493,7 @@ def main() -> int:
         if args.annex and args.annex != key:
             continue
         _, rows = build(p)
-        by_level = {lv: sum(1 for r in rows if r["level"] == lv) for lv in (1, 2, 3, 4, 5)}
+        by_level = {lv: sum(1 for r in rows if r["level"] == lv) for lv in (1, 2, 3, 4, 6, 7, 5)}
         lv = " ".join(f"L{k}:{v}" for k, v in by_level.items() if v)
         # 🔴 **머리글 번호를 매번 찍는다.** 없으면 그 별표는 인용이 안 선다 —
         #    조용히 넘기면 검색에는 걸리는데 근거로는 못 가는 별표가 늘어난다 (D-199 의 어법).
@@ -478,7 +534,14 @@ def main() -> int:
                 if no
                 else ("🔴 머리글 번호 없음" if u["kind"] == "별표" else u["kind"])
             )
-            print(f"  [{key}] {tag:14} {u['title'][:34]:36} 노드 {len(rows):>4}  (표 행 {n_tab})")
+            n_rev = sum(1 for r in rows if r.get("역순"))
+            n_sub = len({r["section"] for r in rows if str(r["section"]).startswith("[부표")})
+            extra = (f" · 부표 {n_sub}" if n_sub else "") + (
+                f" · 🚨 역순 중첩 {n_rev}(자식으로 둠 — 원문 확인)" if n_rev else ""
+            )
+            print(
+                f"  [{key}] {tag:14} {u['title'][:34]:36} 노드 {len(rows):>4}  (표 행 {n_tab}){extra}"
+            )
             total += len(rows)
             if args.dump:
                 for r in rows[:6]:
