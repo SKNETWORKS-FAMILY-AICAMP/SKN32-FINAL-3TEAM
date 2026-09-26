@@ -503,6 +503,78 @@ sources:
     robots_checked_at: 2026-09-25
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
+  ftc_press:
+    name: "공정거래위원회 보도자료 게시판 (보도자료 본문 · 첨부 안내서) ★등재제안 2026-09-26"
+    org: "공정거래위원회"
+    url: "https://www.ftc.go.kr/www/selectBbsNttList.do?bordCd=3&key=12"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: hold
+    access: "게시판 목록·본문 + 첨부(hwp·pdf) 다운로드 (bordCd=3 · key=12)"
+    scale: "게시판 검색 실측(조사 2026-09-26) — 「비교광고」 19 · 「부당한 비교」 10 · 「비방광고」 20 · 「비방」 60(무관 글 포함) → 비교·비방 사건 약 30~40 추정 · SNS 뒷광고 모니터링 결과 4개년(nttSn 42753 · 43291 · 45909 등) · 「경제적 이해관계 표시 안내서」 2025 개정본 + Q&A 별첨(nttSn 46709)"
+    license: "공공누리 제1유형(출처표시) — 보도자료 상세 화면 하단 「공정거래위원회 보도자료 저작물은 공공누리 제1유형(출처표시) 조건에 따라 누구나 이용할 수 있습니다」"
+    attribution: "출처: 공정거래위원회 보도자료 (공공누리 제1유형)"
+    caution: "🚨 결정문과 같은 사건이면 같은 문서 계보로 묶는다 — 보도자료 문구가 결정문 봉인 평가 문구와 겹치면 평가가 오염된다(split.py 문구 단위 거름). / 2000년대 글은 본문이 짧고 hwp 첨부에 내용이 있다(파싱 필요). / 캡처 이미지 속 광고·SNS 계정명은 취하지 않는다(D-18 · D-133 · PII)."
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+    robots_checked_at: 2026-09-26
+    evidence_url: "https://www.ftc.go.kr/www/selectBbsNttView.do?key=12&bordCd=3&nttSn=46709"
+
+  gg_press:
+    name: "경기도 보도자료 (경기도뉴스포털 · 특별사법경찰단 식품·건기식 부당광고 수사 결과) ★등재제안 2026-09-26"
+    org: "경기도"
+    url: "https://gnews.gg.go.kr/briefing/brief_gongbo.do?BS_CODE=s017"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: hold
+    access: "게시판 본문 + 첨부(hwpx·JPG) (gnews.gg.go.kr/briefing · BS_CODE=s017)"
+    scale: "미실측 — 식품·건기식 광고 적발 보도가 연 몇 건 수준 · 1·2호 문장 합계 수십 추정(조사 2026-09-26 · 제목 검색이 서지 않아 실측 못 함)"
+    license: "공공누리 제1유형(출처표시) — 기사 하단 「위 기사는 공공누리 제1유형:출처표시 조건에 따라 이용할 수 있습니다」"
+    attribution: "출처: 경기도 보도자료 (경기도뉴스포털 · 공공누리 제1유형)"
+    caution: "🚨 반복 요청 시 「보안 정책에 의해 차단」 화면이 떴다(조사 2026-09-26) — 저속 수집 필수. / 서울시(제4유형) · 부산시(제4유형) 보도자료는 같은 성격이지만 불가다 — 지자체마다 유형이 다르다(D-110). / 사진 첨부(JPG)는 취하지 않는다."
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+    robots_checked_at: 2026-09-26
+    evidence_url: "https://gnews.gg.go.kr/briefing/brief_gongbo_view.do?BS_CODE=s017&number=63679"
+
+  scourt_major:
+    name: "대법원 누리집 「전국법원 주요판결」 게시판 ★등재제안 2026-09-26"
+    org: "법원행정처"
+    url: "https://www.scourt.go.kr/portal/dcboard/DcNewsListAction.work?gubun=44"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY, PII]
+    redistributable: true
+    value: C
+    cost: free
+    status: hold
+    access: "게시판 목록·본문 + 첨부 (www.scourt.go.kr/portal/dcboard · gubun=44 · EUC-KR)"
+    scale: "게시판 검색 실측(조사 2026-09-26) — 「비방」 48(대부분 명예훼손·형사) · 「표시광고」 2 · 「비교광고」 0 → 관련 0~3건"
+    license: "저작권법 제24조의2 — 법원 저작권보호정책 「별도의 이용허락 없이 자유이용이 가능」 · 판결은 제7조 비보호"
+    attribution: "출처: 대법원 「전국법원 주요판결」 (저작권법 제24조의2 · 제37조)"
+    caution: "🚨 판결 속 당사자·증인 성명은 즉시 마스킹(PII · D-17). / 판결서 인터넷열람(로그인 · 건당 수수료)은 이 원천이 아니며 쓰지 않는다. / 수량이 적어 우선순위 낮음."
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+    robots_checked_at: 2026-09-26
+    evidence_url: "https://www.scourt.go.kr/portal/popup/jeojak_pop.html"
+
   mfds_quasi_drug_ad_guide:
     name: "식약처 「의약외품 표시 광고 가이드라인」 민원인안내서 (안내서-1179-05 · 2025-04) ★신규등재 2026-09-25"
     org: "식품의약품안전처"
@@ -650,6 +722,52 @@ sources:
     reviewed_by: 권소라
     reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15074311/openapi.do"
+
+  mfds_cosmetic_func_report:
+    name: "식약처 기능성화장품 보고품목정보 API (15095680) ★등재제안 2026-09-26"
+    org: "식품의약품안전처"
+    url: "https://www.data.go.kr/data/15095680/openapi.do"
+    layer: "표시 문구 관측"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: []
+    redistributable: true
+    value: A
+    cost: free
+    status: hold
+    access: "오픈API (공공데이터포털 활용신청 · 인증키 · apis.data.go.kr/1471000/FtnltCosmRptPrdlstInfoService01)"
+    scale: "의약품안전나라 보고 목록 총 182,489건(조사 2026-09-26) · 응답 필드(swagger) — EE_DOC_DATA(효능효과) · EE_NAME · EFFECT_YN1~3(미백·주름·자외선) · SPF · PA · ITEM_NAME · ENTP_NAME · 효능 문구는 고시 정형문이라 서로 다른 문장은 수십~수백 종 추정"
+    license: "이용허락범위: 제한없음 (공공데이터포털) — 출처표시 의무 없음"
+    attribution: "출처: 식품의약품안전처 기능성화장품 보고품목정보 (공공데이터포털 15095680)"
+    caution: "🚨 EE_DOC_DATA 값의 실제 형식(평문/XML/빈 값)은 키가 없어 미확인 — 첫 호출로 본다. / 업체명·제품명은 마스킹 대상(D-17 · org · brand). / 🚨 이 문구는 그 제품이 기능성으로 보고됐을 때만 적법이다 — 일반 화장품이 같은 문구를 쓰면 2호 위반이다(음성 예시로 쓸 때 조건을 같이 싣는다)."
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+    evidence_url: "https://www.data.go.kr/data/15095680/openapi.do"
+
+  mfds_cosmetic_func_review:
+    name: "식약처(평가원) 기능성화장품 심사품목 정보 API (15056939) ★등재제안 2026-09-26"
+    org: "식품의약품안전처"
+    url: "https://www.data.go.kr/data/15056939/openapi.do"
+    layer: "표시 문구 관측"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: []
+    redistributable: true
+    value: B
+    cost: free
+    status: hold
+    access: "오픈API (공공데이터포털 활용신청 · 인증키 · 1471057/FtnltCosmSrngPrdlstInfoService05)"
+    scale: "의약품안전나라 심사 목록 총 20,706건(조사 2026-09-26) · 응답 필드 — EE_DOC_DATA(효능효과) · UD_DOC_DATA · NB_DOC_DATA · ITEM_NAME · ENTP_NAME"
+    license: "이용허락범위: 제한없음 (공공데이터포털) — 출처표시 의무 없음"
+    attribution: "출처: 식품의약품안전평가원 기능성화장품 심사품목 정보 (공공데이터포털 15056939)"
+    caution: "EE_DOC_DATA 형식 미확인 · 업체명·제품명 마스킹 · 보고품목 API 와 품목이 겹치는지 대조한다."
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+    evidence_url: "https://www.data.go.kr/data/15056939/openapi.do"
 
   kcia_guideline:
     name: "대한화장품협회 광고자문 기준 해설서 2025 ★2025판"
@@ -817,6 +935,30 @@ sources:
     reviewed_at: 2026-09-25
     robots_checked_at: 2026-09-25
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  easylaw_ad:
+    name: "법제처 「찾기쉬운 생활법령정보」 — 인터넷 개인방송 › 뒷광고 규제 항목 ★등재제안 2026-09-26"
+    org: "법제처"
+    url: "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=1575&ccfNo=2&cciNo=3&cnpClsNo=1"
+    layer: "3층 판단규범"
+    authority: "해설"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: C
+    cost: free
+    status: hold
+    access: "웹 본문 (easylaw.go.kr/CSP · csmSeq=1575)"
+    scale: "해설 위주 · 위반 예시 문구 10개 미만(조사 2026-09-26)"
+    license: "법제처 생활법령정보 저작권정책 — 「영리 목적의 이용을 포함하여 자유로운 활용이 보장」 (제3자 저작물·사진·이미지 제외)"
+    attribution: "출처: 법제처 찾기쉬운 생활법령정보"
+    caution: "🚨 텍스트만 취한다 — 사진·이미지·제3자 저작물은 정책상 제외. / 공정위 추천·보증 심사지침(law_go_kr 행정규칙)의 해설이라 내용이 겹친다 — 보조."
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+    evidence_url: "https://www.easylaw.go.kr/CSP/InfoCopyright.laf"
 
   mfds_cosmetic_faq_2025:
     name: "식약처 「2025 자주하는 질문집(화장품)」 민원인안내서 (안내서-1463-01 · 2025-11) ★신규등재 2026-09-25"
@@ -1711,6 +1853,22 @@ sources:
     cost: free
     status: hold
     note: "📧 2026-09-22 자료 이용 문의 메일(권소라 → hihi@kocsc.or.kr) — 식품·건강기능식품·화장품 판매방송·광고 심의분만 · 용도: 검색 색인 · 인용 표시 · 학습·평가 · 상용화 가능성도 적었다 · 누리집 저작권보호정책은 영리·DB·정보서비스 이용에 허가가 필요하다 → ⏳ 회신 대기. 회신이 오면 — 의약품_오인 · 식품표시광고법 2호 · 화장품법 제13조① 2호 · 후기_체험기 평가 보충 · 다른 기관의 실사례. 🚨 근거가 방송심의 규정 조항이라 4법 조문으로 옮기는 판독이 따로 든다 · 회의록 속 성명은 마스킹(PII)"
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
+  karb_ad_review:
+    name: 한국광고자율심의기구 심의결정자료 (기사형광고·인쇄매체광고 심의결정자료 및 통계 · 심의정보지)
+    layer: "1층 판정라벨"
+    grade: G0
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [TOS, NOREDIST]
+    redistributable: false
+    value: A
+    cost: free
+    status: hold
+    note: "📧 2026-09-26 자료 이용 문의 메일(권소라 → karb1@karb.or.kr · 누리집 하단 대표 메일) — 식품·건강기능식품·화장품 광고 심의분만 · 용도: 검색 색인 · 인용 표시 · 학습·평가 · 상용화 가능성도 적었다 · 누리집에는 「COPYRIGHT … ALL RIGHTS RESERVED」만 있고 이용조건이 없다 → ⏳ 회신 대기. 회신이 오면 — 후기·체험기(체험담) · 부당 비교·비방 · 의약품 오인 · 화장품 기능성 오인 사례(기사형 건강식품·화장품 광고 심의결정 PDF 2015~ · 수백 건 추정 · 미실측). 🚨 광고주·매체 업체명은 마스킹"
     collected_at: null
     decided_at: null
     decided_by: null

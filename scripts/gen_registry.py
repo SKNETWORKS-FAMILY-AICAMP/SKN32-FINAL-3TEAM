@@ -340,6 +340,31 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         _LIC_OPEN,
         "출처: 식품의약품안전처 화장품 사용제한 원료정보 (공공데이터포털 15111772)",
     ),
+    # 🆕 2026-09-26 — 등재 제안 6건(2인 확인 전 · hold). 라이선스 문구는 각 화면에서 직접 확인한 것
+    "mfds_cosmetic_func_report": (
+        _LIC_OPEN,
+        "출처: 식품의약품안전처 기능성화장품 보고품목정보 (공공데이터포털 15095680)",
+    ),
+    "mfds_cosmetic_func_review": (
+        _LIC_OPEN,
+        "출처: 식품의약품안전평가원 기능성화장품 심사품목 정보 (공공데이터포털 15056939)",
+    ),
+    "ftc_press": (
+        "공공누리 제1유형(출처표시) — 보도자료 상세 화면 하단 「공정거래위원회 보도자료 저작물은 공공누리 제1유형(출처표시) 조건에 따라 누구나 이용할 수 있습니다」",
+        "출처: 공정거래위원회 보도자료 (공공누리 제1유형)",
+    ),
+    "gg_press": (
+        "공공누리 제1유형(출처표시) — 기사 하단 「위 기사는 공공누리 제1유형:출처표시 조건에 따라 이용할 수 있습니다」",
+        "출처: 경기도 보도자료 (경기도뉴스포털 · 공공누리 제1유형)",
+    ),
+    "scourt_major": (
+        "저작권법 제24조의2 — 법원 저작권보호정책 「별도의 이용허락 없이 자유이용이 가능」 · 판결은 제7조 비보호",
+        "출처: 대법원 「전국법원 주요판결」 (저작권법 제24조의2 · 제37조)",
+    ),
+    "easylaw_ad": (
+        "법제처 생활법령정보 저작권정책 — 「영리 목적의 이용을 포함하여 자유로운 활용이 보장」 (제3자 저작물·사진·이미지 제외)",
+        "출처: 법제처 찾기쉬운 생활법령정보",
+    ),
     "ftc_decisions": (
         _LIC_OPEN,
         "출처: 공정거래위원회 결정문 (공공데이터포털 15103301)",
@@ -859,6 +884,10 @@ ORDER = [
     #    🔄 2026-09-25 D-290 — 1층인 이유는 「효력 없음」 문구가 아니라 가치가 사례라서다(질의응답집은 기준 시점도 ③).
     "mfds_cosmetic_ad_qa",
     "mfds_hf_trial_ad_guide",
+    # 🆕 2026-09-26 — 부족 유형 보충 원천 · 등재 제안 · 2인 확인 전(hold) — docs/ksr/판정요청_2026-09-26_부족유형_새원천6.md
+    "ftc_press",
+    "gg_press",
+    "scourt_major",
     "mfds_quasi_drug_ad_guide",
     "ftc_noviolation",
     # 🆕 2026-09-18 — 법제처 「중앙부처 1차 해석」 중 식약처분. G0 · hold 로 올려 탐침만 연다 (D-109).
@@ -866,6 +895,9 @@ ORDER = [
     # 2층 적법 라벨
     "mfds_hf_ingredient",
     "mfds_hf_individual",
+    # 🆕 2026-09-26 — 화장품 적법 문구(기능성 효능효과) · 등재 제안 · hold
+    "mfds_cosmetic_func_report",
+    "mfds_cosmetic_func_review",
     "kcia_guideline",
     # 3층 판단 규범 — 🆕 2026-09-25 D-290 ② 구속력 칸(`authority: 법령 | 해설`) 필수 · 해설은 근거 조문으로 인용하지 않는다
     "law_go_kr",
@@ -874,6 +906,8 @@ ORDER = [
     "mfds_cosmetic_claim_test_guide",
     # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침(안내서-0086-07 · 2025-08) · 현행 공식 해설
     "mfds_cosmetic_ad_guideline",
+    # 🆕 2026-09-26 — 생활법령 뒷광고 해설 · 등재 제안 · hold
+    "easylaw_ad",
     # 🆕 2026-09-25 — 2025 화장품 자주하는 질문집 · 팀장 판정 (가) 로 3층 해설(공공누리 제3유형 — 학습 금지)
     "mfds_cosmetic_faq_2025",
     "foodsafety_faq",
@@ -944,6 +978,13 @@ STATUS = {
     "mfds_hf_ingredient_board": "collect",
     "cosmetic_ingredient": "collect",
     "cosmetic_restricted": "collect",
+    # 🆕 2026-09-26 — 등재 제안 6건 · 🚨 2인 확인 전이라 hold. 서명 뒤 collect 로 연다(수집기 경로는 판정요청서 §4)
+    "ftc_press": "hold",
+    "gg_press": "hold",
+    "scourt_major": "hold",
+    "easylaw_ad": "hold",
+    "mfds_cosmetic_func_report": "hold",
+    "mfds_cosmetic_func_review": "hold",
     "aihub_71486": "collect",
     "aihub_71723": "collect",
     "aihub_558": "collect",

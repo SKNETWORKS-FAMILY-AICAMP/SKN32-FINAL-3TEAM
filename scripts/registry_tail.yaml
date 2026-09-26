@@ -86,6 +86,22 @@
     decided_by: null
     reviewed_by: null
 
+  karb_ad_review:
+    name: 한국광고자율심의기구 심의결정자료 (기사형광고·인쇄매체광고 심의결정자료 및 통계 · 심의정보지)
+    layer: "1층 판정라벨"
+    grade: G0
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [TOS, NOREDIST]
+    redistributable: false
+    value: A
+    cost: free
+    status: hold
+    note: "📧 2026-09-26 자료 이용 문의 메일(권소라 → karb1@karb.or.kr · 누리집 하단 대표 메일) — 식품·건강기능식품·화장품 광고 심의분만 · 용도: 검색 색인 · 인용 표시 · 학습·평가 · 상용화 가능성도 적었다 · 누리집에는 「COPYRIGHT … ALL RIGHTS RESERVED」만 있고 이용조건이 없다 → ⏳ 회신 대기. 회신이 오면 — 후기·체험기(체험담) · 부당 비교·비방 · 의약품 오인 · 화장품 기능성 오인 사례(기사형 건강식품·화장품 광고 심의결정 PDF 2015~ · 수백 건 추정 · 미실측). 🚨 광고주·매체 업체명은 마스킹"
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
   # 🚨 협상 불가 — 어떤 사정에서도 편입하지 않는다 (기획서 4-2)
   #    여기 있는 것은 「가치가 없어서」가 아니라 「법적·윤리적으로 막혀서」다.
   #    가치 판정으로 내린 것은 아래 not_adopted 에 둔다 — 등급 축을 오염시키지 않기 위해서다.
