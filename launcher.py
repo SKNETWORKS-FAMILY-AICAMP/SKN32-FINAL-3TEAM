@@ -970,6 +970,9 @@ def probe(source: str = typer.Argument("", help="소스 id 하나만 (비우면 
 def search_probe(
     queries: str = typer.Option("", help="질의 JSONL 경로 (비우면 기본 경로)"),
     pool: int = typer.Option(0, help="후보 폭 (0 이면 기획서 5-6 의 50)"),
+    top: int = typer.Option(
+        0, help="질의 · 범위마다 상위 N 건을 찍는다 (정답은 ★ · 0 이면 안 찍는다)"
+    ),
 ) -> None:
     """검색 순위를 잰다 — 🚨 **원장에 올릴 수를 만드는 자리**다.
 
@@ -984,6 +987,8 @@ def search_probe(
         a += ["--queries", queries]
     if pool:
         a += ["--pool", str(pool)]
+    if top:
+        a += ["--top", str(top)]
     raise typer.Exit(run(*a))
 
 

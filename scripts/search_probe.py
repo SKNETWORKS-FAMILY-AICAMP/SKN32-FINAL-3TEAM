@@ -120,6 +120,8 @@ def probe_one(cur, q: str, want: str, pool: int) -> dict:  # noqa: ANN001
             "rank_vector": rank_of(vec, want),
             "rank_lexical": rank_of(lex, want),
             "rank_rrf": rank_of(fused, want),
+            # 🆕 2026-09-27 — 판정 그래프가 실제로 보는 순서(규범당 상한 · `rt.diversify`)
+            "rank_rrf_cap": rank_of(rt.diversify(fused), want),
         }
     return out
 
@@ -151,6 +153,14 @@ def check_rows(rows: list[dict]) -> list[str]:
     return bad
 
 
+def _wants_law(want: str | list[str], laws: tuple[str, ...]) -> bool:
+    """정답이 이 법 범위에 있는가 — `--top` 이 정답이 없는 법 범위까지 찍지 않게 한다."""
+    from collect.law_map import LAW_OF_ID  # noqa: PLC0415
+
+    ids = {w.rpartition(":")[0] for w in ([want] if isinstance(want, str) else want)}
+    return any(LAW_OF_ID.get(i) in laws for i in ids if i)
+
+
 def _fmt(v: int | None) -> str:
     return "—" if v is None else str(v)
 
@@ -165,6 +175,12 @@ def main() -> int:
         help=f"후보 폭 (기본 {rt.POOL} — 기획서 5-6 이 고정한 수)",
     )
     ap.add_argument("--json", action="store_true", help="원시 결과를 JSON 으로도 찍는다")
+    ap.add_argument(
+        "--top",
+        type=int,
+        default=0,
+        help="질의 · 범위마다 판정 그래프가 받는 순서(규범당 상한 뒤)로 상위 N 건을 찍는다 — 정답은 ★",
+    )
     args = ap.parse_args()
 
     p = pathlib.Path(args.queries)
@@ -207,7 +223,9 @@ def main() -> int:
         for r in rows:
             results.append(probe_one(cur, r["q"], r["want"], args.pool))
 
-    print(f"\n  {'질의':<28} {'범위':<8} {'후보(어휘)':>9} {'벡터':>5} {'어휘':>5} {'RRF':>5}")
+    print(
+        f"\n  {'질의':<28} {'범위':<8} {'후보(어휘)':>9} {'벡터':>5} {'어휘':>5} {'RRF':>5} {'상한':>5}"
+    )
     for res in results:
         for cat, m in res["by_scope"].items():
             # 🚨 어느 갈래도 못 찾은 범위는 **찍지 않는다** — 다 찍으면 표가 다섯 배가 되고
@@ -216,7 +234,8 @@ def main() -> int:
                 continue
             print(
                 f"  {res['q'][:26]:<28} {cat:<8} {m['pool_lexical']:>9} "
-                f"{_fmt(m['rank_vector']):>5} {_fmt(m['rank_lexical']):>5} {_fmt(m['rank_rrf']):>5}"
+                f"{_fmt(m['rank_vector']):>5} {_fmt(m['rank_lexical']):>5} {_fmt(m['rank_rrf']):>5} "
+                f"{_fmt(m['rank_rrf_cap']):>5}"
             )
     lost = [r["q"] for r in results if all(m["rank_rrf"] is None for m in r["by_scope"].values())]
     if lost:
@@ -234,6 +253,24 @@ def main() -> int:
     if states:
         print(f"\n  ⛔ 벡터 갈래가 안 돈 범위가 있다 — {sorted(states)}")
         print("     🚨 그 줄의 「—」는 「후보에 없다」가 아니라 **「못 쟀다」**다 (D-188)")
+
+    if args.top:
+        # 🆕 2026-09-27 — 09-24 `build/w6_top.py`(git 밖)가 하던 일을 여기로 옮겼다. 상위가 **무엇인지** 봐야
+        #    「잡음이 올라왔나 · 관련 규범이 올라왔나」가 갈린다(사실원장 ㉟). 🚨 `rt.search` 그대로다 — 새 검색을 짓지 않는다
+        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+            for r in rows:
+                for name, laws in SCOPES[:1] + tuple(
+                    x for x in SCOPES[1:] if _wants_law(r["want"], x[1])
+                ):
+                    hits, st = rt.search(cur, r["q"], laws, limit=args.top, pool=args.pool)
+                    print(f"\n  ■ {r['q'][:30]} · {name} · 벡터 {st.vector}")
+                    for i, h in enumerate(hits, 1):
+                        mark = "★" if rank_of([h], r["want"]) else " "
+                        print(
+                            f"   {mark}{i:>2}. {h.law:<8} {h.law_id:<8} {(h.citation or '(인용 없음)'):<22} "
+                            f"v{h.rank_vector or '-':>4} l{h.rank_lexical or '-':>4}  "
+                            f"{(h.text or '').replace(chr(10), ' ')[:40]}"
+                        )
 
     if args.json:
         print("\n" + json.dumps(results, ensure_ascii=False, indent=2))
