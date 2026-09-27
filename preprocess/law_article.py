@@ -33,20 +33,31 @@ LAW = store.family_path(SOURCE)
 PREFIX = ("law_", "admrul_")
 
 
-# 조문 형식이 아닌 행정규칙의 마커 — 「Ⅰ. → 1. → 가. → (1)」
-_JO = "가나다라마바사아자차카타파하"
-_PROSE = (
-    ("장", re.compile(r"^([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+)\.\s*(.*)$")),
-    ("절", re.compile(r"^(\d{1,2})\.\s*(.*)$")),
-    ("목", re.compile(rf"^([{_JO}])\.\s*(.*)$")),
-    ("세목", re.compile(r"^\((\d{1,2})\)\s*(.*)$")),
-)
+# 조문 형식이 아닌 행정규칙의 마커 — 「Ⅰ.」 아래는 별표와 **같은 표**를 쓴다(`law_norm.LEVELS` · D-99)
+#: 🔄 2026-09-27 — 종전에는 「Ⅰ. → 1. → 가. → (1)」 넷만 알았다. 식품등의 표시기준(36814)은
+#:    「가. 조미식품 → 1) 유형 → 가) 식초류 · 2) 표시사항 → (1) 제품명」 으로 `1)` `가)` 를 쓴다 —
+#:    그 둘을 몰라 **계층이 납작해졌고**(본문에 `1)` `가)` 가 묻힌 청크 103), 표시사항 목록 「(1) 제품명」 이
+#:    식품 유형마다 부모 없이 되풀이되어 **본문이 같은 청크가 91**(「(1) 부정ㆍ불량식품신고표시」 22)이 됐다 —
+#:    짧고 같은 청크가 벡터 상위를 차지했다(사실원장 ㉟ · D-195 와 같은 병). 별표 파서가 09-26 에 겪고 고친 병이다.
+_ROMAN = re.compile(r"^([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+)\.\s*(.*)$")
+#: 장(Ⅰ.)의 순위 — `law_norm.RANK` 의 어느 모양보다 얕다
+_TOP = -1
 
 
 def _prose(text: str) -> list[dict]:
-    """마커로 절을 자른다. 고정폭이 아니라 `\n` 으로 접힌 산문이다."""
+    """마커로 절을 자른다. 고정폭이 아니라 `\n` 으로 접힌 산문이다.
+
+    🔄 2026-09-27 — 「Ⅰ.」 아래 계층은 `law_norm` 의 모양 표 · 순위 · 역순 규칙을 그대로 쓴다(`reverse_child` —
+       고시는 번호 순서를 거꾸로 쓴다 · 09-26 전수 6곳이 모두 자식이었다). 뒤집은 노드는 `역순` 을 단다.
+    🆕 각 행에 **상위 항목의 본문**(`상위`)을 싣는다 — 「(1) 제품명」 은 「파. 조미식품 › 2) 표시사항」 이 있어야 읽힌다.
+       `chunk._context` 가 문맥으로 쓴다(별표 `_annex_context` 와 같은 처방 · 검색이 보고 화면이 보여 주는 한 값 · D-99).
+       ⛔ 종전 문맥은 「제목 = 자기 본문 앞 40자」라 **자기 본문을 되풀이**했다(36814 107청크).
+    """
+    # law_norm 이 이 모듈을 늦게 부른다(순환 회피)
+    from preprocess import law_norm as ln  # noqa: PLC0415
+
     rows: list[dict] = []
-    stack: dict[str, str] = {}
+    stack: list[tuple[int, str, int]] = []  # (순위, 마커, rows 의 자리) — 바깥에서 안으로
     cur: dict | None = None
     # 🔴 **최상위 마커가 문서 안에서 다시 쓰인다** (2026-09-09 실측).
     #    「부당한 표시·광고행위의 유형 및 기준 지정고시」는 본문이 Ⅰ~Ⅲ 으로 가고
@@ -59,32 +70,143 @@ def _prose(text: str) -> list[dict]:
         s = line.strip()
         if not s:
             continue
-        hit = next(((k, p.match(s)) for k, p in _PROSE if p.match(s)), None)
-        if hit is None:
-            if cur is not None:
-                cur["본문"] += " " + s
-            continue
-        kind, m = hit
-        order = ["장", "절", "목", "세목"]
-        if kind == "장":
-            if m.group(1) in seen_top:
+        m = _ROMAN.match(s)
+        if m:
+            rank, mark, reversed_ = _TOP, m.group(1), False
+            if mark in seen_top:
                 section += 1
-                stack.clear()
-            seen_top.add(m.group(1))
-        stack[kind] = m.group(1)
-        for deeper in order[order.index(kind) + 1 :]:
-            stack.pop(deeper, None)
+            seen_top.add(mark)
+            stack = []
+        else:
+            hit = ln._marker(s)  # noqa: SLF001 — 모양 표의 정본은 law_norm 하나다 (D-99)
+            if hit is None:
+                if cur is not None:
+                    cur["본문"] += " " + s
+                continue
+            level, mark = hit
+            rank, reversed_ = ln.RANK[level], False
+            ranks = [x[0] for x in stack]
+            if rank in ranks:  # 같은 모양 — 그 자리의 형제
+                stack = stack[: ranks.index(rank)]
+            elif stack and rank < stack[-1][0]:
+                reversed_ = True  # 거꾸로 쓴 순서 — 자식으로 둔다 (`law_norm.parse(reverse_child=True)` 와 같다)
+        parents = [rows[i] for _, _, i in stack]
+        stack.append((rank, mark, len(rows)))
+        top = parents[0] if parents and stack[0][0] == _TOP else None
         cur = {
             "키": f"prose-{len(rows)}",
-            "조": stack.get("장", ""),
+            "조": stack[0][1] if stack[0][0] == _TOP else "",
             "가지": "",
-            "제목": m.group(2)[:40],
-            "항": (f"{section}:" if section > 1 else "")
-            + ".".join(stack[k] for k in order if k in stack),
+            # 🔄 제목은 **장(Ⅰ.) 머리 줄**이다 — 종전 「자기 본문 앞 40자」는 문맥에서 자기를 되풀이했다
+            "제목": (top["본문"] if top else "")[:40],
+            "항": (f"{section}:" if section > 1 else "") + ".".join(x[1] for x in stack),
             "본문": s,
+            "_상위": [i for _, _, i in stack[:-1] if rows[i] is not top],
         }
+        if reversed_:
+            cur["역순"] = True
         rows.append(cur)
+    for r in rows:
+        # 상위 항목 본문 — 장 머리 줄은 `제목` 이 이미 들고 있다
+        r["항본문"] = "\n".join(rows[i]["본문"] for i in r.pop("_상위"))
     return rows
+
+
+def _ho_number(ho: ET.Element) -> str:
+    """호 번호 — 「3.」 · 가지번호가 있으면 「3의2.」 (🆕 2026-09-28 · 사실원장 ㊴).
+
+    ⛔ 종전에는 `<호번호>` 만 읽었다. 법제처 XML 은 「3의2」를 `<호번호>3.</호번호>` + `<호가지번호>2</호가지번호>` 로
+       준다 — 가지번호를 버리면 **「3의2. 맞춤형화장품」이 「제3호」로 인용된다**(화장품법 제2조 · 4의2 등 법령 4건 63곳).
+       키는 원천의 `조문키` + 순번이라 겹치지 않았고, 그래서 아무 게이트에도 안 걸렸다.
+    """
+    no = _text(ho.find("호번호"))
+    branch = _text(ho.find("호가지번호"))
+    if not branch:
+        return no
+    return f"{no.rstrip('.')}의{branch}."
+
+
+def _ho_body(ho: ET.Element) -> str:
+    """호 본문 + **그 아래 목 전부** (🆕 2026-09-28 · 사실원장 ㊴).
+
+    ⛔ 종전에는 `<호내용>` 만 읽어 `<목>` 이 **통째로 빠졌다** — 법령 9건 목 159개가 청크 어디에도 없었다
+       (화장품법 제2조제2호 기능성화장품의 범위 가~목 · 식품표시광고법 21 · 시행규칙 83 …).
+       「다음 각 목의 화장품을 말한다」만 남고 각 목이 없는 호는 **근거가 되지 못한다.**
+    ★ 목은 **호 본문에 잇는다** — 따로 청크로 두지 않는다. 목은 대개 짧은 목록이라 따로 두면 짧은 청크(D-195)가 되고,
+       인용은 호까지 선다(목 좌표를 세우려면 `chunk` 칸과 `citation()` 을 같이 넓혀야 한다 — 이번에 안 했다).
+    🚨 호가 「삭제」면 목도 잇지 않는다 — 삭제 표지는 청킹에서 빠진다(`chunk.skip_reason`).
+    """
+    body = _text(ho.find("호내용"))
+    moks = [_text(m.find("목내용")) for m in ho.iter("목")]
+    moks = [m for m in moks if m]
+    if not body or not moks:
+        return body
+    return "\n".join([body, *moks])
+
+
+#: 🆕 2026-09-28 — 조문형식 행정규칙의 조 본문 안 마커(사실원장 ㊴). 줄 머리만 본다 — 줄 중간의 「1.」은 인용 글이다
+_ADM_HANG = re.compile(r"^([①-⑳])\s*")
+_ADM_HO = re.compile(r"^([0-9]+)(?:의([0-9]+))?\.\s")
+
+
+def _adm_article(body: str, base: dict, key: str) -> list[dict]:
+    """조문형식 행정규칙의 조 하나 → 조 · 항 · 호 행 (🆕 2026-09-28 · 사실원장 ㊴).
+
+    ⛔ 종전에는 조 본문 **통째로 한 행**이었다. 69549 「식품등의 부당한 표시 또는 광고의 내용 기준」 제2조(호 6 · 목 25 ·
+       예시)는 700자로 잘려 11조각이 되고 **11조각 모두 「제2조」로 인용됐다** — 「무보존료」 광고의 근거가 제2조제3호나목인지
+       알 수 없다. 법령은 XML 이 항 · 호를 주지만 행정규칙은 조 본문 한 덩이로 준다.
+    ★ 법령 갈래와 **같은 모양의 행**을 낸다 — 항(`항` · `항서수`) · 호(`호` · `항본문`) · 목과 (예시) 줄은 **호 본문에 잇는다**
+       (법령 갈래의 `_ho_body` 와 같은 판단). 인용은 `retrieve.citation()` 이 그대로 조립한다.
+    🚨 줄 머리의 마커만 본다 — 원문에 줄바꿈이 없으면 나누지 않는다(종전과 같은 한 행). 조 행의 키는 종전 그대로(`adm-N`).
+    🚨 호가 항 없이 조 바로 아래에 오면 **항서수 1** 이다 — 법령 갈래와 같은 규칙(항이 하나뿐인 조 · `retrieve.citation`).
+    """
+    lines = [x.strip() for x in body.split("\n")]
+    first = lines[0] if lines else ""
+    # 머리 줄 안의 「①」 — 「제2조(정의) ① 이 고시에서 …」
+    mt = re.match(r"(제[0-9]+조(?:의[0-9]+)?\s*\([^)]*\))\s*([①-⑳].*)$", first)
+    head = [mt[1]] if mt else [first]
+    rest = ([mt[2]] if mt else []) + lines[1:]
+    hangs: list[dict] = []  # {"항": 마커, "lines": [...], "호": [{"호": 번호, "lines": [...]}]}
+    for ln in rest:
+        if not ln:
+            continue
+        mh = _ADM_HANG.match(ln)
+        mo = _ADM_HO.match(ln)
+        if mh:
+            hangs.append({"항": mh[1], "lines": [ln], "호": []})
+        elif mo:
+            if not hangs:
+                hangs.append({"항": "", "lines": [], "호": []})  # 번호 없는 제1항 — 본문은 머리 줄
+            no = f"{mo[1]}의{mo[2]}." if mo[2] else f"{mo[1]}."
+            hangs[-1]["호"].append({"호": no, "lines": [ln]})
+        elif hangs and hangs[-1]["호"]:
+            hangs[-1]["호"][-1]["lines"].append(ln)
+        elif hangs:
+            hangs[-1]["lines"].append(ln)
+        else:
+            head.append(ln)
+    if not hangs:  # 나눌 마커가 없다 — 종전과 같은 한 행
+        return [{"키": key, **base, "항": "", "본문": body}]
+    out = [{"키": key, **base, "항": "", "본문": "\n".join(head)}]
+    for hi, h in enumerate(hangs):
+        hbody = "\n".join(h["lines"]) if h["lines"] else "\n".join(head)
+        if h["lines"]:
+            out.append(
+                {"키": f"{key}-{hi}", **base, "항": h["항"], "항서수": hi + 1, "본문": hbody}
+            )
+        for oi, ho in enumerate(h["호"]):
+            out.append(
+                {
+                    "키": f"{key}-{hi}-{oi}",
+                    **base,
+                    "항": h["항"],
+                    "호": ho["호"],
+                    "항서수": hi + 1,
+                    "항본문": hbody,
+                    "본문": "\n".join(ho["lines"]),
+                }
+            )
+    return out
 
 
 def _text(el: ET.Element | None) -> str:
@@ -153,8 +275,8 @@ def parse(path: pathlib.Path) -> list[dict]:
                         }
                     )
                 for oi, ho in enumerate(hang.iter("호")):
-                    hono = _text(ho.find("호번호"))
-                    hobody = _text(ho.find("호내용"))
+                    hono = _ho_number(ho)
+                    hobody = _ho_body(ho)
                     if hobody:
                         rows.append(
                             {
@@ -193,6 +315,7 @@ def parse(path: pathlib.Path) -> list[dict]:
             for c in chunks:
                 rows += _prose(c)
         else:
+            ai = 0  # 조 행의 순번 — 🚨 키가 이것이다. 항 · 호 행을 더해도 조 행의 키가 밀리지 않게 따로 센다
             for body in chunks:
                 # 🔴 **편장절 제목은 조문이 아니다** (2026-09-09 실측).
                 #    「제1장  총칙」이 조문 정규식에 안 맞아 조 번호가 빈 문자열이 되고,
@@ -200,16 +323,13 @@ def parse(path: pathlib.Path) -> list[dict]:
                 if re.match(r"^제\s*\d+\s*[장절관편]\s", body):
                     continue
                 m = re.match(r"제(\d+)조(?:의(\d+))?\s*\(([^)]*)\)", body)
-                rows.append(
-                    {
-                        "키": f"adm-{len(rows)}",
-                        "조": m.group(1) if m else "",
-                        "가지": m.group(2) if m and m.group(2) else "",
-                        "제목": m.group(3) if m else "",
-                        "항": "",
-                        "본문": body,
-                    }
-                )
+                base = {
+                    "조": m.group(1) if m else "",
+                    "가지": m.group(2) if m and m.group(2) else "",
+                    "제목": m.group(3) if m else "",
+                }
+                rows += _adm_article(body, base, f"adm-{ai}")
+                ai += 1
 
     # 🔴 **원천이 본문을 안 주는 것이 있다** (2026-09-09 실측).
     #    `admrul_34650` 「건강기능식품의 기준 및 규격」의 `<조문내용>` 은 73자다 —

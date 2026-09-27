@@ -113,6 +113,42 @@ def previous_counts(path: pathlib.Path) -> dict[str, int] | None:
 _TITLE_ONLY = re.compile(r"^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*$")
 
 
+#: 🆕 2026-09-27 — 청크로 **싣지 않는** 줄. 3층 노드(`law_article.jsonl` · `law_norm/`)는 그대로 두고 청킹 정책으로만 뺀다(D-195 와 같은 자리).
+#:    ⛔ 짧거나 뜻이 없는 청크는 벡터 공간 한가운데 앉아 **어떤 질의에나 중간 거리로 걸린다**(D-195) — 09-27 탐침에서
+#:       숫자 조각 「+1.0 +0」 · 인삼 유래 기본문안 영문이 「면역력」 질의 상위 10 에 들었다(사실원장 ㉟).
+#:    🚨 뺀 수는 사유별로 매번 찍는다(`main`) — 조용히 줄지 않게.
+SKIPPED: collections.Counter = collections.Counter()
+
+#: 「3. 삭제<2018.3.13>」 · 「제21조 <삭제>(2016.12.21.)」 · 표 행 「연번: 1 · 성분명: <삭 제> · 최대함량: <삭 제>」 — 규범이 없다
+_DELETED = re.compile(r"삭\s*제")
+_LABEL = re.compile(r"[^·:]{1,20}:\s*")
+_MARK = re.compile(r"^\s*(?:제\s*\d+\s*조(?:의\s*\d+)?|[①-⑳]|\d{1,3}(?:의\d+)?\.)")
+#: 낱말(한글 · 로마자)이 비공백 글자의 이만큼도 안 되면 **수치 조각**이다 `[측정]` — 09-27 전수(6,352청크)에서
+#:    0.25 밑은 삭제 표지 · 영양섭취기준 숫자 표 · t 값 표 · 번역문(일 · 중)뿐이었고 규범 문장은 없었다
+_LETTER_MIN = 0.25
+#: 싣지 않는 **외국어 문안** — (별표 파일 이름) → (사유, 줄 머리 언어 이름표들). 🚨 이름표가 하나도 안 걸리면 멈춘다(원문 판이 바뀐 것이다)
+FOREIGN: dict[str, tuple[str, tuple[str, ...]]] = {
+    "36814_0001": (
+        "인삼 유래 기본문안의 영어 · 일본어 · 중국어 번역문 — 한국어 원문은 싣는다. 번역문은 원문 인코딩이 깨져(`?`) 인용할 수 없다",
+        ("영어", "일본어", "중국어"),
+    ),
+}
+
+
+def skip_reason(text: str) -> str | None:
+    """이 청크를 싣지 않을 사유 — 없으면 `None`."""
+    t = text.strip()
+    if _DELETED.search(t):
+        rest = _LABEL.sub("", t) if ":" in t else _MARK.sub("", t)
+        rest = _DELETED.sub("", rest)
+        if not re.sub(r"[\s<>()\[\]〈〉.·\d]", "", rest):
+            return "삭제 표지"
+    body = re.sub(r"\s", "", t)
+    if body and len(re.findall(r"[가-힣A-Za-z]", body)) / len(body) < _LETTER_MIN:
+        return "수치 조각"
+    return None
+
+
 def _context(r: dict) -> str:
     """자립 텍스트를 조립한다 — **검색이 보는 것**이자 **화면이 보여 줄 문맥**이다 (0008).
 
@@ -186,6 +222,49 @@ def _split_long(text: str) -> list[str]:
     return final
 
 
+#: `[임의]` 🆕 2026-09-27 — 행정규칙 산문 조문에서 **이 글자 수 이하의 끝 항목은 부모 청크에 묶는다**(`_fold_short_leaves`).
+#:    ⛔ 식품등의 표시기준(36814) 표시사항 목록 「(1) 제품명」 「(2) 식품유형」 이 식품 유형마다 되풀이된다 — 따로 두면
+#:       문맥을 붙여도 **거의 같은 짧은 청크 수백 개**가 되어 벡터 공간 한가운데를 채운다(D-195 · 사실원장 ㉟).
+#:    ★ 목록은 목록째 읽혀야 뜻이 있다 — 「2) 표시사항 (1) 제품명 (2) 식품유형 …」. 인용 좌표는 행정규칙 조문에 서지 않으므로 잃는 것이 없다.
+#:    🚨 `law_article.jsonl` 의 노드는 그대로다 — 청킹 정책이다. **바꾸는 조건** — 질의 30건 탐침(D-40).
+FOLD_MAX = 30
+
+
+def _fold_short_leaves(rows: list[dict]) -> tuple[dict[int, list[str]], set[int]]:
+    """행정규칙 산문 행(`키` 가 `prose-`) 중 짧은 끝 항목을 부모에 묶는다 → (부모 자리 → 묶인 본문들, 묶여 빠지는 자리).
+
+    부모는 **바로 앞쪽에서 가장 가까운** 부모 경로 행이다 — 같은 경로가 목록마다 되풀이되므로(36814 · 319) 경로 표로 찾지 않는다.
+    """
+    folded: dict[int, list[str]] = {}
+    gone: set[int] = set()
+    for i, r in enumerate(rows):
+        if not str(r.get("키", "")).startswith("prose-"):
+            continue
+        path = str(r.get("항") or "")
+        body = (r.get("본문") or "").strip()
+        if "." not in path or len(body) > FOLD_MAX:
+            continue
+        nxt = rows[i + 1] if i + 1 < len(rows) else None
+        if (
+            nxt is not None
+            and nxt.get("파일") == r.get("파일")
+            and str(nxt.get("항") or "").startswith(path + ".")
+        ):
+            continue  # 자식이 있다 — 끝 항목이 아니다
+        parent = path.rsplit(".", 1)[0]
+        for j in range(i - 1, -1, -1):
+            q = rows[j]
+            if q.get("파일") != r.get("파일"):
+                break
+            if str(q.get("항") or "") == parent:
+                if j in gone:
+                    break  # 부모도 묶였다 — 이 줄은 그대로 둔다
+                folded.setdefault(j, []).append(body)
+                gone.add(i)
+                break
+    return folded, gone
+
+
 def from_articles() -> tuple[list[dict], int]:
     """조문 노드 → 청크. **버린 수를 같이 낸다** — 0 이 아닌 수는 보여야 한다 (D-149).
 
@@ -198,9 +277,27 @@ def from_articles() -> tuple[list[dict], int]:
     p = DERIVED / "law_article.jsonl"
     if not p.exists():
         return rows, dropped
-    for r in (json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()):
-        body = (r.get("본문") or "").strip()
+    src = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+    folded, gone = _fold_short_leaves(src)
+    heads = {
+        i
+        for i, r in enumerate(src[:-1])
+        if str(r.get("키", "")).startswith("prose-")
+        and len((r.get("본문") or "").strip()) <= FOLD_MAX
+        and src[i + 1].get("파일") == r.get("파일")
+        and str(src[i + 1].get("항") or "").startswith(str(r.get("항") or "") + ".")
+    }
+    for idx, r in enumerate(src):
+        if idx in gone:
+            SKIPPED["부모에 묶은 짧은 항목"] += 1
+            continue
+        body = " ".join([(r.get("본문") or "").strip(), *folded.get(idx, [])]).strip()
         if not body or r.get("본문없음"):
+            continue
+        if idx in heads and idx not in folded:
+            # 🆕 2026-09-27 — 자식이 있는 짧은 머리 줄(「2) 표시사항」 「1) 유형」)은 자식의 문맥에 이미 있다(`law_article._prose` 의 `상위`).
+            #    ⛔ 따로 두면 제목뿐인 조(D-195)와 같은 짧은 청크가 된다
+            SKIPPED["자식이 있는 짧은 머리 줄"] += 1
             continue
         # 🔴 제목뿐인 조 머리 행은 담지 않는다 (D-159 · D-195) — 위 `_TITLE_ONLY` 주석 참조.
         #    🚨 **3층 노드에서 지우는 것이 아니다.** `law_article.jsonl` 은 그대로 두고
@@ -213,6 +310,10 @@ def from_articles() -> tuple[list[dict], int]:
         doc_id = f"law:{r['파일'].replace('.xml', '')}"
         parts = _split_long(body)
         for i, text in enumerate(parts):
+            why = skip_reason(text)
+            if why:
+                SKIPPED[why] += 1
+                continue
             rows.append(
                 {
                     # 🚨 원천이 주는 유일 키를 쓴다 — 조립하면 겹친다(law_article.py 참조)
@@ -254,13 +355,23 @@ def from_annex() -> list[dict]:
         src = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
         #: 같은 별표 안에서 상위 항목을 찾는 표 — (구역, 경로) → 본문 (`_annex_context`)
         by_path = {(r["section"], str(r["path"])): (r.get("text") or "").strip() for r in src}
+        foreign = FOREIGN.get(p.stem)
+        hit_foreign = 0
         for r in src:
             text = (r.get("text") or "").strip()
             if not text:
                 continue
+            if foreign and text.startswith(foreign[1]):
+                hit_foreign += 1
+                SKIPPED["외국어 문안"] += 1
+                continue
             doc_id = f"annex:{p.stem}"
             parts = _split_long(text)
             for i, chunk in enumerate(parts):
+                why = skip_reason(chunk)
+                if why:
+                    SKIPPED[why] += 1
+                    continue
                 rows.append(
                     {
                         "chunk_id": f"{doc_id}#{r['section']}#{r['path']}#{i}",
@@ -274,6 +385,10 @@ def from_annex() -> list[dict]:
                         "paragraph_no": None,
                         #: 🔄 2026-09-24 — 종전에는 「별표는 범위 밖」(0008)으로 **빈 문자열**이었다.
                         #:    짧은 목록 청크가 벡터 상위를 점령해(W6 재측정) 별표 제목 + 상위 항목을 붙인다.
+                        # ⛔ 2026-09-26 — 한때 문맥을 글자 상한(900)에 맞춰 잘랐다(`_fit_context`). 근거가 틀렸다 —
+                        #    KURE-v1 은 8192토큰까지 받아 임베딩은 잘리지 않았고(512 는 리랭커 축 · D-200), 긴 문맥은
+                        #    `law_norm` 이 `(1)` 계층 · [부표] 를 놓쳐 만든 거대 상위 노드였다. 파서를 고치고 자르기를 걷었다(사실원장 ㉜).
+                        #    🚨 되살리지 않는다 — 상위 항목이 길면 먼저 **파서가 계층을 놓쳤는지** 본다.
                         "context": _annex_context(r, by_path),
                         "doc_type": "별표",
                         "law": LAW_OF_ID.get(r["law_id"]),
@@ -283,6 +398,11 @@ def from_annex() -> list[dict]:
                         "법령": r["annex_title"],
                     }
                 )
+        if foreign and not hit_foreign:
+            # 🔴 이름표가 하나도 안 걸렸다 — 원문 판이 바뀌었다. 번역문이 조용히 실리지 않게 멈춘다 (D-220)
+            raise SystemExit(
+                f"🔴 {p.stem} — 외국어 문안 이름표 {foreign[1]} 가 한 줄도 없다. `FOREIGN` 을 원문과 다시 맞춘다"
+            )
     return rows
 
 
@@ -357,6 +477,10 @@ def main() -> int:
     print(f"  🚨 길어서 쪼갠 청크 {long_}개 — `part_no`/`part_total` 이 원 조문을 가리킨다")
     # 🔴 **뺀 수를 매번 찍는다** — 조용히 줄면 다음 사람이 원장과 어긋나는 수를 보고 헤맨다.
     print(f"  ⬜ 제목뿐인 조 머리 행 {dropped}개를 담지 않았다 (D-159 · D-195)")
+    if SKIPPED:
+        print(
+            f"  ⬜ 규범이 없는 줄 {sum(SKIPPED.values())}개를 담지 않았다 — {dict(SKIPPED)} (`skip_reason` · `FOREIGN`)"
+        )
     print("     🚨 DB 에 남은 옛 청크는 `scripts/embed.py` 가 거둔다 — 여기서는 안 지운다 (D-187)")
     print(f"  ⚠️ 토큰 수는 글자 상한({MAX_CHARS})으로 어림했다 — 실측은 W1 의 남은 일이다")
 
