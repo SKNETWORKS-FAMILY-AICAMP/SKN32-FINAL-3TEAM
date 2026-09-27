@@ -381,6 +381,8 @@ _ANNEX_DEPTH: tuple[tuple[str, str], ...] = (
 )
 #: 별표의 구역 이름 중 **원문이 준 낱말**. ⛔ `구역N` 은 우리가 붙인 이름이라 인용에 안 쓴다.
 _ANNEX_SECTIONS = {"본문": "", "비고": " 비고"}
+#: 🆕 2026-09-28 — 호 번호 · 가지번호(「3의2」). ASCII 숫자만 받는다 — `str.isdigit()` 은 「①」 도 숫자로 본다(사실원장 ㊴)
+_HO = re.compile(r"([0-9]+)(?:의([0-9]+))?")
 
 
 def _annex_citation(hit_like: dict) -> str | None:
@@ -404,14 +406,16 @@ def _annex_citation(hit_like: dict) -> str | None:
     out = f"[별표 {int(no)}]{_ANNEX_SECTIONS[section]}"
 
     path = (hit_like.get("paragraph") or "").strip()
-    if not path:
+    if not path or path == "머리":
+        # 🆕 2026-09-28 — 구역 머리 글(「비고」 다음 첫 번호 앞의 문장)은 **구역까지만** 선다 — 「[별표 1] 비고」 (㊴)
         return out
     parts = path.split(".")
     if len(parts) > len(_ANNEX_DEPTH):
         return None  # 깊이 3 이상 — 아는 모양이 아니다
     for token, (shape, fmt) in zip(parts, _ANNEX_DEPTH, strict=False):
         if shape == "digit":
-            if not token.isdigit():
+            # 🔄 2026-09-28 — ASCII 숫자만. ⛔ `'①'.isdigit()` 이 참이라 36122 [별표 2] 가 「제①호」로 인용됐다 (㊴)
+            if not (token.isascii() and token.isdigit()):
                 return None
         elif len(token) != 1 or token not in _JO:
             return None
@@ -469,9 +473,12 @@ def citation(hit_like: dict) -> str | None:
         return None
     ho = ho_raw.rstrip(".")
     if ho:
-        if not ho.isdigit():
+        # 🆕 2026-09-28 — 가지번호 호 「3의2」 → 「제3호의2」(사실원장 ㊴). ⛔ 종전에는 `law_article` 이 가지번호를 버려
+        #    「3의2. 맞춤형화장품」이 「제3호」로 인용됐다. 🚨 ASCII 숫자만 — `'①'.isdigit()` 은 참이다
+        m = _HO.fullmatch(ho)
+        if m is None:
             return None
-        out += f"제{ho}호"
+        out += f"제{m[1]}호" + (f"의{m[2]}" if m[2] else "")
     return out
 
 

@@ -66,6 +66,10 @@ LEVELS: tuple[tuple[int, re.Pattern[str]], ...] = (
 )
 #: 표준 순서(얕은 것 → 깊은 것) — `1.` > `가.` > `1)` > `가)` > `(1)` > `(가)` > `①`. 🚨 비교는 이 순위로 한다(`level` 값이 아니다)
 RANK: dict[int, int] = {lv: i for i, (lv, _) in enumerate(LEVELS)}
+#: 🆕 2026-09-28 — 줄 전체가 「비고」면 그 자리부터 구역 「비고」다(사실원장 ㊴). ⛔ 종전에는 「비고」를 **다음 구역의 이름**으로만
+#:    받아서, 「비고」와 첫 번호 사이의 문장(013453 [별표 1] 「제1호 및 제3호에도 불구하고 … 부당한 표시 또는 광고행위로
+#:    보지 않는다」 — 적용 제외의 **뜻 전체**)이 앞 호 제8호나목 본문에 붙었다. 위법 유형에 적용 제외 문장이 섞였다.
+NOTE = re.compile(r"^비\s*고$")
 #: 🆕 2026-09-26 — 별표 안의 **부표** 머리글. 🚨 **줄 전체**가 「[부표 N]」일 때만 구역 경계다 —
 #:    본문이 부표를 부르는 줄(「[부표 1]의 설문을 통하여」)까지 경계로 읽으면 글이 빈 구역으로 사라진다
 SUBTABLE = re.compile(r"^\[부표\s*\d+\]$")
@@ -137,8 +141,8 @@ def parse(content: str, *, reverse_child: bool = False) -> list[dict]:
         s = raw.strip()
         if not s or HEAD.match(s):
             continue
-        if SUBTABLE.match(s):
-            section, stack, seen_l1, label = s, [], False, None
+        if SUBTABLE.match(s) or NOTE.match(s):
+            section, stack, seen_l1, label = ("비고" if NOTE.match(s) else s), [], False, None
             cur = {"section": section, "level": 0, "marker": "", "path": "머리", "lines": []}
             nodes.append(cur)
             continue
