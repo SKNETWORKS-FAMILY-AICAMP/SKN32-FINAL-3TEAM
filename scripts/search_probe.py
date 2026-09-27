@@ -19,9 +19,19 @@
 🔴 **정확도를 말하지 않는다.** 30건 미만이면 D-40 으로 「측정 불가」를 찍고 순위표만 낸다.
    ⛔ 3건으로 「개선됐다」고 말한 것이 09-12 오후에 실제로 있었다 (D-190 · D-198).
 
-질의 파일 — JSONL 한 줄에 하나. `data/` 는 커밋되지 않으므로 **기기마다 다르다**(D-19).
+질의 파일 — JSONL 한 줄에 하나. 🔄 2026-09-27 — 기본 경로를 `data/derived/labels/search_probe/queries.jsonl` 로 옮겼다.
+    ⛔ 09-24 W6 재측정은 `build/search_probe_w6.jsonl`(git · 원장 밖)로 돌았고, 기본 경로(`search_golden.jsonl`)는
+       만든 적이 없어 「질의 파일이 없다」로 읽혔다(사실원장 ㉛ · ㉜). 사람이 정답을 정한 파일이 한 기기에만 있었다.
+    ★ `labels/` 아래라 원장 부류가 **원천**이다 — 잃으면 `derived-manifest --write` 가 멈추고, `data-publish` 가
+       팀 공유 저장소로 옮긴다(D-247 · D-249). 🚨 **공개 git 에 두지 않는다** — 팀 자산인 평가셋이다(2026-09-27 팀장 판정).
+    🚨 `labels/` **바로 아래가 아니라 하위 폴더**다 — `preprocess/labels.py` 가 `labels/*.jsonl` 을 사람 라벨로 읽는다.
 
-    {"q": "이 제품은 암 예방에 좋습니다", "want": ["013094:제8조제1항제1호", "013453:[별표 1]제1호*"]}
+    {"q": "이 제품은 암 예방에 좋습니다", "want": ["013094:제8조제1항제1호", "013453:[별표 1]제1호*"], "provenance": "자작"}
+
+`provenance` — 🆕 2026-09-27 · **줄마다 필수**. `자작`(팀이 지어낸 문구) 또는 레지스트리 원천 ID.
+    원천 ID 는 **재배포 가능 · 변경금지(ND) 아님**이어야 한다 — 이 파일은 제3자 계정 저장소로 나가고(D-78 ③ · D-71),
+    평가셋은 파생 데이터셋이다(ND 게이트 · D-110). 어기면 **돌지 않는다**(`check_rows`).
+    ⛔ 실제 광고 문구 · 실명을 넣지 않는다(D-216 · D-249) — 이 검사는 실명을 못 잡는다. 사람이 본다.
 
 `want` 는 `retrieve.citation()` 이 내는 모양 그대로이고, 🔄 2026-09-24 부터 **법 ID 를 앞에 붙이고(`법ID:`)
 목록으로 여럿**을 줄 수 있다 — 법률 조문과 그 세부 기준([별표 1] 항목)을 둘 다 정답으로 둔다(팀장 판정).
@@ -41,7 +51,9 @@ from app.settings import PARAMS, dsn
 from collect.law_map import LAWS
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-QUERIES = ROOT / "data" / "derived" / "search_golden.jsonl"
+QUERIES = ROOT / "data" / "derived" / "labels" / "search_probe" / "queries.jsonl"
+#: 출처 칸의 허용값 — 레지스트리 원천 ID 밖에서 받는 것은 이것뿐이다
+SELF_MADE = "자작"
 
 #: **전체 + 법 넷을 다 돈다.** 🚨 09-12 오후에 `건기식` 을 박고 돌렸는데 정답은 `식품` 에 있었다.
 #:    ⛔ 사람이 헷갈리지 않게 하는 대신 **틀릴 수 있는 자리를 없앤다** (D-51).
@@ -112,6 +124,33 @@ def probe_one(cur, q: str, want: str, pool: int) -> dict:  # noqa: ANN001
     return out
 
 
+def check_rows(rows: list[dict]) -> list[str]:
+    """질의 줄 검사 — 문제 목록(빈 목록이면 통과). 🆕 2026-09-27.
+
+    🔴 모르는 것은 막는다 (D-220) — 출처가 없거나 레지스트리에 없는 원천이면 문제로 센다.
+    """
+    from collect import registry  # noqa: PLC0415
+
+    bad: list[str] = []
+    for i, r in enumerate(rows, start=1):
+        if not str(r.get("q") or "").strip() or not r.get("want"):
+            bad.append(f"{i}행: q · want 가 비었다")
+        src = str(r.get("provenance") or "").strip()
+        if not src:
+            bad.append(f"{i}행: provenance 가 없다 — `{SELF_MADE}` 또는 레지스트리 원천 ID")
+            continue
+        if src == SELF_MADE:
+            continue
+        try:
+            if registry.no_derivatives(src):
+                bad.append(f"{i}행: {src} 는 변경금지(ND) — 평가셋에 싣지 않는다 (D-110)")
+            elif not registry.redistributable(src):
+                bad.append(f"{i}행: {src} 는 재배포 제약 — 공유 저장소로 나갈 수 없다 (D-71)")
+        except registry.RegistryError as e:
+            bad.append(f"{i}행: {src} — {e}")
+    return bad
+
+
 def _fmt(v: int | None) -> str:
     return "—" if v is None else str(v)
 
@@ -132,14 +171,20 @@ def main() -> int:
     if not p.exists():
         print(
             f"🔴 질의 파일이 없다 — {p}\n"
-            '   JSONL 한 줄에 하나: {"q": "…", "want": "제8조제1항제1호"}\n'
-            "   🚨 `want` 는 retrieve.citation() 이 내는 모양 그대로다 (별표는 넣지 않는다).",
+            '   JSONL 한 줄에 하나: {"q": "…", "want": ["법ID:인용"], "provenance": "자작"}\n'
+            "   🚨 `want` 는 retrieve.citation() 이 내는 모양 그대로다. 사본 기기는 `launcher.py data-sync` 로 받는다",
             file=sys.stderr,
         )
         return 1
     rows = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
     if not rows:
         print(f"🔴 질의가 0건이다 — {p}", file=sys.stderr)
+        return 1
+    bad = check_rows(rows)
+    if bad:
+        print(f"🔴 질의 파일을 쓰지 않는다 — {p}", file=sys.stderr)
+        for b in bad[:10]:
+            print(f"   {b}", file=sys.stderr)
         return 1
 
     # 🚨 **잰 조건을 먼저 찍는다** — 표만 옮겨 적으면 분모가 떨어져 나간다 (D-178).
