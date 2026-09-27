@@ -42,9 +42,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import pathlib
 import sys
+import time
 
 from app import retrieve as rt
 from app.settings import PARAMS, dsn
@@ -103,8 +105,14 @@ def rank_of(hits: list[rt.Hit], want: str | list[str]) -> int | None:
 
 
 def probe_one(cur, q: str, want: str, pool: int) -> dict:  # noqa: ANN001
-    """질의 하나를 전체 + 법 넷에 다 넣고, 갈래별 순위와 RRF 순위를 낸다."""
+    """질의 하나를 전체 + 법 넷에 다 넣고, 갈래별 순위와 RRF 순위를 낸다.
+
+    🆕 2026-09-28 — 설계대로의 넓은 검색(`rt.wide` · 법마다 `pool` 개)을 한 번 더 돌려
+       ① 법별로 거른 순위(`rank_wide_law`) ② 거른 후보가 **법 필터로 따로 찾은 후보와 같은가**(`same_as_law`)
+       ③ 조회 시간(전역 상위 N 과 나란히 · 둘 다 인코딩 포함)을 낸다 (사실원장 ㊳).
+    """
     out: dict = {"q": q, "want": want, "by_scope": {}}
+    per_scope = []
     for name, laws in SCOPES:
         try:
             vec = rt.by_vector(cur, q, laws, pool)
@@ -112,7 +120,26 @@ def probe_one(cur, q: str, want: str, pool: int) -> dict:  # noqa: ANN001
         except rt.RetrieveError as e:
             vec, vector_state = [], f"{type(e).__name__}: {e}"
         lex = rt.by_lexical(cur, q, laws, pool)
+        per_scope.append((name, laws, vec, lex, vector_state))
+    # 🚨 시간은 위 반복 **뒤에** 잰다 — 첫 질의의 모델 적재가 한쪽에만 얹히지 않게. 둘 다 인코딩을 포함한다
+    t0 = time.perf_counter()
+    with contextlib.suppress(rt.RetrieveError):  # 벡터가 못 돌면 위 표가 이미 「못 쟀다」를 말한다
+        rt.by_vector(cur, q, (), pool)
+    rt.by_lexical(cur, q, (), pool)
+    t1 = time.perf_counter()
+    wvec, wlex, _wst = rt.wide(cur, q, pool)
+    t2 = time.perf_counter()
+    out["ms_global"] = round((t1 - t0) * 1000, 1)
+    out["ms_wide"] = round((t2 - t1) * 1000, 1)
+    for name, laws, vec, lex, vector_state in per_scope:
         fused = rt.fuse(vec, lex, limit=pool)
+        law = laws[0] if len(laws) == 1 else None
+        view = None if law is None else rt.law_view(wvec, wlex, law)
+        same = None
+        if law is not None and vector_state == "ok":
+            same = _ids([h for h in wvec if h.law == law]) == _ids(vec) and _ids(
+                [h for h in wlex if h.law == law]
+            ) == _ids(lex)
         out["by_scope"][name] = {
             "vector_state": vector_state,
             "pool_vector": len(vec),
@@ -122,8 +149,17 @@ def probe_one(cur, q: str, want: str, pool: int) -> dict:  # noqa: ANN001
             "rank_rrf": rank_of(fused, want),
             # 🆕 2026-09-27 — 판정 그래프가 실제로 보는 순서(규범당 상한 · `rt.diversify`)
             "rank_rrf_cap": rank_of(rt.diversify(fused), want),
+            # 🆕 2026-09-28 — **설계대로의 순위**: 넓게 한 번(법마다 `pool` 개) 찾고 이 법의 근거만 거른 순서(D-267). 분모는 `wide_law`
+            "wide_law": None if view is None else len(view),
+            "rank_wide_law": None if view is None else rank_of(view, want),
+            # 🆕 2026-09-28 — 거른 두 갈래 후보가 이 법으로 따로 찾은 두 갈래와 **같은 줄 · 같은 순서**인가 (㊳ 의 등가)
+            "same_as_law": same,
         }
     return out
+
+
+def _ids(hits: list[rt.Hit]) -> list[str]:
+    return [h.chunk_id for h in hits]
 
 
 def check_rows(rows: list[dict]) -> list[str]:
@@ -225,18 +261,45 @@ def main() -> int:
 
     print(
         f"\n  {'질의':<28} {'범위':<8} {'후보(어휘)':>9} {'벡터':>5} {'어휘':>5} {'RRF':>5} {'상한':>5}"
+        f" {'넓게→거름':>9}"
+    )
+    print(
+        "  🚨 「넓게→거름」 이 판정 그래프 설계(D-267)의 순위다 — 법 필터 없이 한 번 찾은 두 갈래 후보에서 갈래마다 이 법 것만"
+        " 골라 섞고 규범당 상한을 건 순서 · 괄호는 그 법의 후보 수(분모)\n"
+        "     넓은 검색은 **법마다 폭만큼** 받는다(`rt.wide`) · 「=」 은 거른 두 갈래 후보가 그 법으로 따로 찾은 것과 같다 · 「≠」 는 다르다\n"
+        "     「=」 여도 상한 칸과 순위가 다를 수 있다 — 규범당 상한을 넘친 줄의 자리다(상한 칸은 폭에서 자른 뒤 밀고 · 넓게→거름은 자르지 않고 민다)\n"
+        "     법 범위 줄의 벡터 · 어휘 · RRF · 상한은 **법마다 따로 검색**한 수다 — 설계가 비용 때문에 택하지 않은 모양이다"
     )
     for res in results:
         for cat, m in res["by_scope"].items():
             # 🚨 어느 갈래도 못 찾은 범위는 **찍지 않는다** — 다 찍으면 표가 다섯 배가 되고
             #    「정답이 있는 법」이 안 보인다. 다만 전부 못 찾으면 아래에서 따로 알린다.
-            if m["rank_vector"] is m["rank_lexical"] is m["rank_rrf"] is None:
+            if m["rank_vector"] is m["rank_lexical"] is m["rank_rrf"] is m["rank_wide_law"] is None:
                 continue
+            mark = {True: "=", False: "≠", None: ""}[m["same_as_law"]]
+            wide_col = (
+                "·"
+                if m["wide_law"] is None
+                else f"{mark}{_fmt(m['rank_wide_law'])}({m['wide_law']})"
+            )
             print(
                 f"  {res['q'][:26]:<28} {cat:<8} {m['pool_lexical']:>9} "
                 f"{_fmt(m['rank_vector']):>5} {_fmt(m['rank_lexical']):>5} {_fmt(m['rank_rrf']):>5} "
-                f"{_fmt(m['rank_rrf_cap']):>5}"
+                f"{_fmt(m['rank_rrf_cap']):>5} {wide_col:>9}"
             )
+    sames = [m["same_as_law"] for r in results for m in r["by_scope"].values()]
+    checked = [x for x in sames if x is not None]
+    print(
+        f"\n  🔎 법 범위 {len(checked)}개 중 {sum(checked)}개 — 넓게→거름 후보가 따로 검색한 후보와 같다"
+        + ("" if all(checked) else "  🔴 **다른 범위가 있다 — 등가가 깨졌다 (㊳)**")
+    )
+    ms_g = sorted(r["ms_global"] for r in results)
+    ms_w = sorted(r["ms_wide"] for r in results)
+    if ms_g:
+        print(
+            f"  ⏱ 조회 시간(인코딩 포함 · 질의 {len(ms_g)}건) — 전역 상위 {args.pool}: 중앙 {ms_g[len(ms_g) // 2]} ms · 최대 {ms_g[-1]} ms"
+            f" / 법마다 {args.pool}: 중앙 {ms_w[len(ms_w) // 2]} ms · 최대 {ms_w[-1]} ms"
+        )
     lost = [r["q"] for r in results if all(m["rank_rrf"] is None for m in r["by_scope"].values())]
     if lost:
         print(f"\n  🔴 후보 {args.pool} 안에서 **어느 범위에서도 못 찾은 질의 {len(lost)}건**")
@@ -259,10 +322,15 @@ def main() -> int:
         #    「잡음이 올라왔나 · 관련 규범이 올라왔나」가 갈린다(사실원장 ㉟). 🚨 `rt.search` 그대로다 — 새 검색을 짓지 않는다
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
             for r in rows:
-                for name, laws in SCOPES[:1] + tuple(
-                    x for x in SCOPES[1:] if _wants_law(r["want"], x[1])
-                ):
+                own = tuple(x for x in SCOPES[1:] if _wants_law(r["want"], x[1]))
+                views = [(name, laws, None) for name, laws in SCOPES[:1] + own]
+                # 🆕 2026-09-28 — 설계대로(D-267): 넓게 한 번(법마다 폭만큼 · `rt.wide`) 찾은 후보에서 이 법 것만
+                views += [(f"{name}(넓게→거름)", (), name) for name, _ in own]
+                for name, laws, law in views:
                     hits, st = rt.search(cur, r["q"], laws, limit=args.top, pool=args.pool)
+                    if law is not None:
+                        vec, lex, _ = rt.wide(cur, r["q"], args.pool)
+                        hits = rt.law_view(vec, lex, law)[: args.top]
                     print(f"\n  ■ {r['q'][:30]} · {name} · 벡터 {st.vector}")
                     for i, h in enumerate(hits, 1):
                         mark = "★" if rank_of([h], r["want"]) else " "
