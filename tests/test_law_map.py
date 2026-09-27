@@ -137,7 +137,13 @@ def test_검색의_법_필터는_모르는_법을_멈춘다() -> None:
     for bad in (["일반"], ["식품"], ["표시광고법", "화장품"]):
         with pytest.raises(ValueError, match="모르는 법"):
             rt.law_filter(bad)
-    for sql in (rt.SQL_LITERAL, rt.SQL_LEXICAL, rt.SQL_VECTOR):
+    for sql in (
+        rt.SQL_LITERAL,
+        rt.SQL_LEXICAL,
+        rt.SQL_VECTOR,
+        rt.SQL_LEXICAL_PER_LAW,
+        rt.SQL_VECTOR_PER_LAW,
+    ):
         assert "c.law = ANY(" in sql and "category" not in sql
 
 

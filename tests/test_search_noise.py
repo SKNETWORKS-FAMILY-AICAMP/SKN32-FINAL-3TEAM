@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 
 import pytest
@@ -172,3 +173,82 @@ def test_거른_뒤_섞은_순서는_법마다_따로_검색한_순서와_같다
     assert own == alone == ["w", "p"]
     fused_first = [h.chunk_id for h in rt.fuse(vec, lex, limit=400) if h.law == F]
     assert fused_first == ["p", "w"]  # 옛 방식이 뒤집던 모양 — 이 테스트가 무엇을 막는지 남긴다
+
+
+# ── 넓은 검색 — 법마다 폭만큼 (🆕 2026-09-28 · 사실원장 ㊳) ─────────────────────────
+PER_LAW = (
+    (rt.SQL_VECTOR, rt.SQL_VECTOR_PER_LAW, "distance, chunk_id"),
+    (rt.SQL_LEXICAL, rt.SQL_LEXICAL_PER_LAW, "lexical DESC, chunk_id"),
+)
+
+
+@pytest.mark.parametrize(("base", "per_law", "order"), PER_LAW)
+def test_법별_할당_질의가_원_질의를_감싸고_같은_순서로_자른다(
+    base: str, per_law: str, order: str
+) -> None:
+    """🔴 원 질의를 다시 쓰지 않는다 — 감싼다(D-99). 순서가 원 질의와 다르면 「따로 찾은 것과 같다」가 깨진다."""
+    inner, _, tail = base.rpartition("\nORDER BY ")
+    assert inner in per_law  # 거버넌스 조인 · model_id · 법 필터가 글자 그대로 따라온다
+    assert tail.split("\n")[0].replace("c.", "") == order  # 원 질의의 정렬 = 법 안 순번 · 바깥 정렬
+    assert f"PARTITION BY w.law ORDER BY {order})" in per_law
+    assert per_law.rstrip().endswith(f"ORDER BY {order}")
+    assert "p.law_rank <= %s" in per_law
+    assert per_law.count("%s") == base.count(
+        "%s"
+    )  # 자리표시자 순서가 같다 — LIMIT 자리가 순번 상한이 된다
+    for needle in ("source_use", "'U2_rag'", "u.allowed", "v_current_chunk"):
+        assert needle in per_law
+
+
+def test_감싼_질의의_바깥_칸_이름이_겹치지_않는다() -> None:
+    """⛔ 겹치면 `w.*` 가 모호해져 질의가 멈춘다 — `_SELECT` 에 칸을 더할 때 여기서 먼저 걸린다."""
+    names = [e.rpartition(".")[2] for e, _ in rt._SELECT]
+    assert len(names) == len(set(names)), names
+    assert "law" in names  # 법 안 순번의 기준 칸
+
+
+class _Cur:
+    """실행한 SQL 만 적는 가짜 커서."""
+
+    def __init__(self) -> None:
+        self.sqls: list[str] = []
+
+    def execute(self, sql: str, params: tuple = ()) -> None:  # noqa: ARG002
+        self.sqls.append(sql)
+
+    def fetchall(self) -> list:
+        return []
+
+
+def test_search_는_전역_상위를_wide_는_법별_할당을_쓴다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🚨 `search()`(API · 지금의 그래프)는 그대로다 — 법별 할당은 `wide()` 로만 들어온다 (㊳)."""
+    monkeypatch.setattr(rt, "stored_model_id", lambda cur: "M")
+    monkeypatch.setattr(rt, "check_inputs", lambda cur: None)
+    monkeypatch.setattr(rt, "encode", lambda model_id, text: [0.0, 1.0])
+    cur = _Cur()
+    rt.search(cur, "면역력 강화")
+    assert cur.sqls == [rt.SQL_VECTOR, rt.SQL_LEXICAL]
+    cur = _Cur()
+    vec, lex, st = rt.wide(cur, "면역력 강화", 7)
+    assert cur.sqls == [rt.SQL_VECTOR_PER_LAW, rt.SQL_LEXICAL_PER_LAW]
+    assert (vec, lex, st.pool) == ([], [], 7)
+
+
+@pytest.mark.skipif(
+    os.environ.get("COPYLANE_DB_IT") != "1",
+    reason="실제 DB 를 읽는다 — COPYLANE_DB_IT=1 일 때만",
+)
+def test_실제_DB_에서_법별_할당_어휘_후보가_법_필터와_같다() -> None:
+    """㊳ 의 등가를 실제 청크로 — 어휘 갈래만(인코더 없이 돈다). 벡터 갈래는 탐침의 「=」 표지가 본다."""
+    from app.db import pg_connect  # noqa: PLC0415
+    from collect.law_map import LAWS  # noqa: PLC0415
+
+    with pg_connect() as conn, conn.cursor() as cur:
+        for q in ("면역력 강화에 도움", "타사 제품보다 3배", "피부 미백 주름 개선", "제품"):
+            wide = rt.by_lexical(cur, q, (), 50, per_law=True)
+            for law in LAWS:
+                own = rt.by_lexical(cur, q, (law,), 50)
+                assert [h.chunk_id for h in wide if h.law == law] == [h.chunk_id for h in own], (
+                    q,
+                    law,
+                )

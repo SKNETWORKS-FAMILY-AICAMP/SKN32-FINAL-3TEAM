@@ -268,6 +268,37 @@ WHERE u.allowed AND {_LAW_FILTER} AND e.model_id = %s
 ORDER BY distance, c.chunk_id
 LIMIT %s"""
 
+
+def _per_law(sql: str, *, score: str, order: str) -> str:
+    """갈래 질의를 **법마다 `LIMIT` 개씩** 받는 질의로 감싼다 (🆕 2026-09-28 · 사실원장 ㊳ · D-267 · D-271 ③).
+
+    ★ 넓은 검색(법 필터 없음)은 전역 상위 N 을 자르면 청크가 많은 법이 자리를 먼저 차지한다
+       (화장품법 53% · 고시 37098 하나가 33%). 법마다 N 개를 받으면 **법 필터로 따로 찾은 결과와 같다** —
+       법 필터는 `WHERE` 뿐이고 거리 · `ts_rank_cd` 는 행과 질의로만 정해지기 때문이다. 쿼리는 한 번이다.
+    🔴 **원 질의를 다시 쓰지 않는다 — 감싼다** (D-99). 거버넌스 조인 · `model_id` 대조 · 법 필터가 그대로 따라온다.
+       `ORDER BY … LIMIT %s` 꼬리만 떼고, 같은 순서로 법 안 순번을 매겨 `LIMIT` 자리표시자를 순번 상한으로 쓴다
+       — 자리표시자 순서가 원 질의와 같다.
+    🚨 `order` 는 원 질의의 정렬과 **같은 열 · 같은 방향**이어야 한다 — 다르면 「따로 찾은 것과 같다」가 깨진다.
+       게이트 `test_법별_할당_질의가_원_질의를_감싸고_같은_순서로_자른다` 가 대조한다.
+    """
+    inner, sep, tail = sql.rpartition("\nORDER BY ")
+    if not sep or not tail.rstrip().endswith("LIMIT %s"):
+        raise ValueError("원 질의가 `ORDER BY … LIMIT %s` 로 끝나지 않는다 — 감쌀 자리가 없다")
+    cols = ", ".join(e.rpartition(".")[2] for e, _ in _SELECT)
+    return f"""SELECT {cols}, {score} FROM (
+SELECT w.*, row_number() OVER (PARTITION BY w.law ORDER BY {order}) AS law_rank
+FROM (
+{inner}
+) w
+) p
+WHERE p.law_rank <= %s
+ORDER BY {order}"""
+
+
+#: 🆕 2026-09-28 — 법마다 `LIMIT` 개씩 (`wide()` 가 쓴다). 순서는 원 질의 그대로(`chunk_id` 로 동점을 가른다).
+SQL_VECTOR_PER_LAW = _per_law(SQL_VECTOR, score="distance", order="distance, chunk_id")
+SQL_LEXICAL_PER_LAW = _per_law(SQL_LEXICAL, score="lexical", order="lexical DESC, chunk_id")
+
 _model_cache: dict[str, Any] = {}
 
 
@@ -593,8 +624,17 @@ def by_literal(cur: Any, q: str, laws: Sequence[str] = (), limit: int = PARAMS.t
 by_text = by_literal
 
 
-def by_lexical(cur: Any, q: str, laws: Sequence[str] = (), limit: int = PARAMS.top_k) -> list[Hit]:
+def by_lexical(
+    cur: Any,
+    q: str,
+    laws: Sequence[str] = (),
+    limit: int = PARAMS.top_k,
+    *,
+    per_law: bool = False,
+) -> list[Hit]:
     """어휘가 겹치는 것. 🔴 검색어가 하나도 안 남으면 **빈 목록**이다 — 오류가 아니다.
+
+    🆕 `per_law` — `limit` 을 **법마다** 건다(`SQL_LEXICAL_PER_LAW` · `wide()`).
 
     ⛔ 빈 `to_tsquery` 를 그대로 넣으면 PostgreSQL 이 경고를 내고 0건을 준다. 같은 0건이라도
        「질의에 검색어가 없다」와 「겹치는 조문이 없다」는 다른 사실이라, 여기서 가른다.
@@ -603,23 +643,29 @@ def by_lexical(cur: Any, q: str, laws: Sequence[str] = (), limit: int = PARAMS.t
     tq = tsquery(q)
     if not tq:
         return []
-    cur.execute(SQL_LEXICAL, (tq, *f, limit))
+    cur.execute(SQL_LEXICAL_PER_LAW if per_law else SQL_LEXICAL, (tq, *f, limit))
     return _rows_to_hits(cur.fetchall(), MATCH_LEXICAL, score="lexical")
 
 
 def by_vector(
-    cur: Any, text: str, laws: Sequence[str] = (), limit: int = PARAMS.top_k
+    cur: Any,
+    text: str,
+    laws: Sequence[str] = (),
+    limit: int = PARAMS.top_k,
+    *,
+    per_law: bool = False,
 ) -> list[Hit]:
     """뜻이 가까운 것. 「면역력 쑥!」처럼 **글자가 안 겹치는** 광고 문구가 이쪽이다.
 
     🔴 못 하면 `RetrieveError` 를 던진다 — **빈 목록으로 떨어지지 않는다.**
+    🆕 `per_law` — `limit` 을 **법마다** 건다(`SQL_VECTOR_PER_LAW` · `wide()`).
     """
     f = _law_args(laws)
     model_id = stored_model_id(cur)
     check_inputs(cur)
     vec = encode(model_id, text)
     literal = "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
-    cur.execute(SQL_VECTOR, (literal, *f, model_id, limit))
+    cur.execute(SQL_VECTOR_PER_LAW if per_law else SQL_VECTOR, (literal, *f, model_id, limit))
     return _rows_to_hits(cur.fetchall(), MATCH_VECTOR, score="distance")
 
 
@@ -700,7 +746,8 @@ def law_view(
        🚨 거른 순서는 **법마다 따로 검색한 순서의 앞부분과 같다** — 법 필터는 `WHERE` 뿐이고 거리 · `ts_rank_cd` 는
           행과 질의로만 정해진다(`SQL_VECTOR` · `SQL_LEXICAL`). 그 법 후보가 `pool` 개 이상이면 결과가 같다.
     🚨 재료는 **후보 전체**여야 한다 — `top_k` 5 로 자른 뒤 거르면 법 셋이 다섯 자리를 나눠 쓴다.
-    🔜 W4 — 법별 노드가 이 함수로 자기 근거를 받는다. 받을 개수(k) · 넓은 후보 폭은 정하지 않았다.
+    ★ 재료는 `wide()` 다(법마다 폭만큼) — 전역 상위 N 을 넣으면 청크가 많은 법이 자리를 먼저 차지한다(㊳).
+    🔜 W4 — 법별 노드가 이 함수로 자기 근거를 받는다. 받을 개수(k)는 정하지 않았다.
     """
     vec = [h for h in vector_hits if h.law == law]
     lex = [h for h in lexical_hits if h.law == law]
@@ -757,20 +804,46 @@ def search(
     🔄 2026-09-24 (W6 · D-271 ③) — `laws` 로 거른다. **비우면 전부** — 판정 그래프는 넓게 한 번 찾고
        법별 노드가 자기 법 근거만 거른다(D-267). ⛔ 종전 `category` 는 기본값이 「일반」이었다.
     """
+    vector_hits, lexical_hits, state = _candidates(cur, q, laws, pool, per_law=False)
+    # 🔄 2026-09-27 — 후보 폭 전체를 합친 뒤 규범당 상한(`diversify`)을 걸고 자른다. ⛔ 자른 뒤에 걸면 밀려난 자리를 못 채운다
+    return diversify(fuse(vector_hits, lexical_hits, limit=pool))[:limit], state
+
+
+def wide(cur: Any, q: str, pool: int = POOL) -> tuple[list[Hit], list[Hit], SearchState]:
+    """판정 그래프의 **넓은 검색** — 법 필터 없이 한 번, 두 갈래를 **법마다 `pool` 개씩** 낸다 (🆕 2026-09-28 · 사실원장 ㊳).
+
+    ★ D-267 · D-271 ③ — 검색은 팬아웃 앞에서 한 번(인코더 한 번 · 갈래당 쿼리 한 번), 법별 노드는
+       `law_view(벡터, 어휘, 법)` 으로 자기 근거만 거른다. 법마다 `pool` 개를 받으므로 거른 결과가
+       **법 필터로 따로 찾은 결과와 같다** — 전역 상위 N 을 자르면 청크가 많은 법이 자리를 먼저 차지했다
+       (09-28 기기 탐침 · 폭 50 에서 식품 후보 17~30).
+    🚨 섞지 않고 **두 갈래를 따로** 낸다 — 섞은 뒤 거르면 다른 법 청크가 순위를 부풀린다(㊲).
+    🚨 `state.pool` 은 **법마다의 폭**이고 `pool_*` 는 법을 합친 행 수다(최대 법 수 × `pool`) — 한 칸에 두 분모를 섞지 않는다 (D-178).
+    🔜 W4 — `app/graph.py` `retrieve` 가 이것을 부르고 법별 노드가 `law_view` 로 받는다. 지금 부르는 쪽은 `scripts/search_probe.py` 다.
+    """
+    return _candidates(cur, q, (), pool, per_law=True)
+
+
+def _candidates(
+    cur: Any, q: str, laws: Sequence[str], pool: int, *, per_law: bool
+) -> tuple[list[Hit], list[Hit], SearchState]:
+    """두 갈래 후보와 상태 — `search()` 와 `wide()` 가 **같은 것**을 쓴다 (D-99).
+
+    🔴 **벡터가 안 돼도 어휘 결과는 낸다 — 대신 왜 안 됐는지를 같이 낸다** (D-220 · D-162).
+    """
     law_filter(
         laws
     )  # 🔴 모르는 법은 벡터 갈래를 돌기 **전에** 멈춘다 — 오류가 「벡터 불가」로 삼켜지지 않게
     vector_state = VECTOR_OK
     vector_hits: list[Hit] = []
     try:
-        vector_hits = by_vector(cur, q, laws, pool)
+        vector_hits = by_vector(cur, q, laws, pool, per_law=per_law)
     except RetrieveError as e:
         # 🔴 2026-09-21 (전수 재검토) — ⛔ 예외 문장을 그대로 담아 `/search` 응답으로 냈다. 그 안에는
         #    하위 예외(`{e}` · 모델 로드 실패의 경로·URL)가 섞인다. 응답에는 **우리가 쓴 고정 문장**(클래스
         #    설명 첫 줄)만, 원문은 서버 로그로 (로그는 `RedactFilter` 를 지난다 · D-76).
         _log.warning("벡터 검색 불가 — %s: %s", type(e).__name__, e)
         vector_state = f"{type(e).__name__}: {public_reason(e)}"
-    lexical_hits = by_lexical(cur, q, laws, pool)
+    lexical_hits = by_lexical(cur, q, laws, pool, per_law=per_law)
     # 🚨 `terms()` 를 다시 부른다 — 판단을 복사하는 것이 아니라 **같은 함수**를 쓴다 (D-99).
     state = SearchState(
         vector=vector_state,
@@ -779,5 +852,4 @@ def search(
         pool_vector=len(vector_hits),
         pool_lexical=len(lexical_hits),
     )
-    # 🔄 2026-09-27 — 후보 폭 전체를 합친 뒤 규범당 상한(`diversify`)을 걸고 자른다. ⛔ 자른 뒤에 걸면 밀려난 자리를 못 채운다
-    return diversify(fuse(vector_hits, lexical_hits, limit=pool))[:limit], state
+    return vector_hits, lexical_hits, state
