@@ -884,7 +884,7 @@ ORDER = [
     #    🔄 2026-09-25 D-290 — 1층인 이유는 「효력 없음」 문구가 아니라 가치가 사례라서다(질의응답집은 기준 시점도 ③).
     "mfds_cosmetic_ad_qa",
     "mfds_hf_trial_ad_guide",
-    # 🆕 2026-09-26 — 부족 유형 보충 원천 · 등재 제안 · 2인 확인 전(hold) — docs/ksr/판정요청_2026-09-26_부족유형_새원천6.md
+    # 🆕 2026-09-26 — 부족 유형 보충 원천 · 🔄 2026-09-28 2인 확인 — docs/ksr/판정요청_2026-09-26_부족유형_새원천6.md
     "ftc_press",
     "gg_press",
     "scourt_major",
@@ -978,13 +978,15 @@ STATUS = {
     "mfds_hf_ingredient_board": "collect",
     "cosmetic_ingredient": "collect",
     "cosmetic_restricted": "collect",
-    # 🆕 2026-09-26 — 등재 제안 6건 · 🚨 2인 확인 전이라 hold. 서명 뒤 collect 로 연다(수집기 경로는 판정요청서 §4)
+    # 🆕 2026-09-26 등재 · 🔄 2026-09-28 2인 확인(결정 오한빈 · 확인 권소라 · 팀장 동의는 「6건 전부」 — 수집 방식은 미정)
+    #    API 2종은 기존 collect.openapi 로 받는다 → collect.
+    #    게시판 4종은 수집 방식(판정요청서 §4 (가) 새 수집기 / (나) 골라 받아 register)이 정해지지 않아 hold 그대로.
     "ftc_press": "hold",
     "gg_press": "hold",
     "scourt_major": "hold",
     "easylaw_ad": "hold",
-    "mfds_cosmetic_func_report": "hold",
-    "mfds_cosmetic_func_review": "hold",
+    "mfds_cosmetic_func_report": "collect",
+    "mfds_cosmetic_func_review": "collect",
     "aihub_71486": "collect",
     "aihub_71723": "collect",
     "aihub_558": "collect",

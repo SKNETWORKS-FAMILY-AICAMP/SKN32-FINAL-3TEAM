@@ -44,6 +44,9 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     #    "foodsafety_ad_monitor": ("collect.openapi", "arg"),
     "cosmetic_ingredient": ("collect.openapi", "arg"),
     "cosmetic_restricted": ("collect.openapi", "arg"),
+    # 🆕 2026-09-28 — 기능성화장품 보고·심사 품목 API (2인 확인 09-28 · 결정 오한빈 · 확인 권소라)
+    "mfds_cosmetic_func_report": ("collect.openapi", "arg"),
+    "mfds_cosmetic_func_review": ("collect.openapi", "arg"),
     "ftc_decisions_api": ("collect.openapi", "arg"),
     # 게시물 첨부 — 자료실·안내서·사례집. 🚨 게시물 HTML 을 파싱하는 **스크래퍼**다
     "mfds_casebook": ("collect.mfds_board", "arg"),

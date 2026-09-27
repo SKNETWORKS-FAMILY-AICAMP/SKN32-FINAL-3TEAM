@@ -782,15 +782,56 @@ mfds_cgm_expc:
   collected_at: 2026-09-20
 
 # 🆕 2026-09-26 — 부족 유형 보충 원천 등재 제안 6건 (권소라 요청 · 조사·확인 Claude 세션)
-#   🚨 **2인 확인 전이다** — decided_by · reviewed_by 를 비워 둔다. 수집기는 require() 에서 거부한다(정상).
+#   🔄 **2026-09-28 2인 확인** — 결정 오한빈 · 확인 권소라. 팀장 동의는 권소라가 전달(「6건 전부」 · 앞선 서명들과 같은 「팀장 전달」 형태).
+#      🚨 동의 범위는 **등급·용도(판정요청서 §2)** 까지다 — 게시판형 4종의 수집 방식(§4 (가)/(나))은 미정이라 STATUS 는 hold 로 둔다.
 #      팀장 판정 요청서: docs/ksr/판정요청_2026-09-26_부족유형_새원천6.md
 #   robots — 2026-09-26 각 호스트 robots.txt 를 열어 확인한 결과(크롤링형 3건만 필요 · API 2건 · 웹 1건은 참고)
 #     www.ftc.go.kr      「User-agent: * / Disallow: /www/search.do*」 → 게시판 경로 허용
 #     gnews.gg.go.kr     「User-agent: *」 아래 「Allow: /briefing/」 (특정 SEO 봇만 전체 금지)
 #     www.scourt.go.kr   「User-agent: *」 금지 목록에 /portal/ 없음 · 🚨 각급법원 도메인은 /portal/ 금지 — www 만
+
 ftc_press:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
   robots_checked_at: 2026-09-26
+  collected_at: null
+
 gg_press:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
   robots_checked_at: 2026-09-26
+  collected_at: null
+
 scourt_major:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
   robots_checked_at: 2026-09-26
+  collected_at: null
+
+easylaw_ad:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  collected_at: null
+
+# 🆕 2026-09-28 — API 2종(웹 크롤링 아님 · robots 는 nedrug 웹 「Disallow: /」라 API 로만 받는다)
+mfds_cosmetic_func_report:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  collected_at: 2026-09-28
+
+mfds_cosmetic_func_review:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  collected_at: 2026-09-28
