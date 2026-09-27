@@ -669,6 +669,24 @@ def fuse(
     return scored[:limit]
 
 
+def diversify(hits: list[Hit], *, cap: int = PARAMS.per_law_cap) -> list[Hit]:
+    """한 규범(`law_id`)이 앞자리를 다 차지하지 못하게 **넘친 것을 뒤로 민다** (🆕 2026-09-27 · 사실원장 ㉟).
+
+    🚨 버리지 않는다 — 순서만 바꾼다. 같은 규범 안의 순서와 규범 사이의 순서는 그대로다(안정 정렬).
+    ⛔ 상한이 없을 때 75449 한 고시가 「면역력」 질의 상위 10 을 다 차지했다 — 예외 조항(기능성 표시 식품)이
+       금지 조항(식품표시광고법 제8조 · 시행령 [별표 1])을 밀어냈다. 둘은 **함께** 나와야 한다.
+    🚨 단위는 `law_id`(법령 · 고시 하나)다 — 법 축(`law`)이 아니다. 법 축이면 한 법의 금지 조항과 예외 조항이 한 자리를 다툰다.
+    """
+    seen: dict[str, int] = {}
+    head: list[Hit] = []
+    tail: list[Hit] = []
+    for h in hits:
+        n = seen.get(h.law_id, 0)
+        (head if n < cap else tail).append(h)
+        seen[h.law_id] = n + 1
+    return head + tail
+
+
 #: 벡터 갈래가 돌았다. 🚨 `LEXICAL_OK` 와 **값이 같아도 축이 다르다** — 한 상수로 합치지
 #:    않는다. 합치면 「어휘가 ok 다」와 「벡터가 ok 다」를 같은 이름으로 부르게 된다 (D-167).
 #:    ⛔ 부르는 쪽이 `"ok"` 를 손으로 적지 않게 이름을 준다 — 판정 경로의 매직 문자열이다 (D-99).
@@ -741,4 +759,5 @@ def search(
         pool_vector=len(vector_hits),
         pool_lexical=len(lexical_hits),
     )
-    return fuse(vector_hits, lexical_hits, limit=limit), state
+    # 🔄 2026-09-27 — 후보 폭 전체를 합친 뒤 규범당 상한(`diversify`)을 걸고 자른다. ⛔ 자른 뒤에 걸면 밀려난 자리를 못 채운다
+    return diversify(fuse(vector_hits, lexical_hits, limit=pool))[:limit], state

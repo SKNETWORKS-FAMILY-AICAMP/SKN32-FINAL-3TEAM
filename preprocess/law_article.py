@@ -33,20 +33,31 @@ LAW = store.family_path(SOURCE)
 PREFIX = ("law_", "admrul_")
 
 
-# 조문 형식이 아닌 행정규칙의 마커 — 「Ⅰ. → 1. → 가. → (1)」
-_JO = "가나다라마바사아자차카타파하"
-_PROSE = (
-    ("장", re.compile(r"^([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+)\.\s*(.*)$")),
-    ("절", re.compile(r"^(\d{1,2})\.\s*(.*)$")),
-    ("목", re.compile(rf"^([{_JO}])\.\s*(.*)$")),
-    ("세목", re.compile(r"^\((\d{1,2})\)\s*(.*)$")),
-)
+# 조문 형식이 아닌 행정규칙의 마커 — 「Ⅰ.」 아래는 별표와 **같은 표**를 쓴다(`law_norm.LEVELS` · D-99)
+#: 🔄 2026-09-27 — 종전에는 「Ⅰ. → 1. → 가. → (1)」 넷만 알았다. 식품등의 표시기준(36814)은
+#:    「가. 조미식품 → 1) 유형 → 가) 식초류 · 2) 표시사항 → (1) 제품명」 으로 `1)` `가)` 를 쓴다 —
+#:    그 둘을 몰라 **계층이 납작해졌고**(본문에 `1)` `가)` 가 묻힌 청크 103), 표시사항 목록 「(1) 제품명」 이
+#:    식품 유형마다 부모 없이 되풀이되어 **본문이 같은 청크가 91**(「(1) 부정ㆍ불량식품신고표시」 22)이 됐다 —
+#:    짧고 같은 청크가 벡터 상위를 차지했다(사실원장 ㉟ · D-195 와 같은 병). 별표 파서가 09-26 에 겪고 고친 병이다.
+_ROMAN = re.compile(r"^([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+)\.\s*(.*)$")
+#: 장(Ⅰ.)의 순위 — `law_norm.RANK` 의 어느 모양보다 얕다
+_TOP = -1
 
 
 def _prose(text: str) -> list[dict]:
-    """마커로 절을 자른다. 고정폭이 아니라 `\n` 으로 접힌 산문이다."""
+    """마커로 절을 자른다. 고정폭이 아니라 `\n` 으로 접힌 산문이다.
+
+    🔄 2026-09-27 — 「Ⅰ.」 아래 계층은 `law_norm` 의 모양 표 · 순위 · 역순 규칙을 그대로 쓴다(`reverse_child` —
+       고시는 번호 순서를 거꾸로 쓴다 · 09-26 전수 6곳이 모두 자식이었다). 뒤집은 노드는 `역순` 을 단다.
+    🆕 각 행에 **상위 항목의 본문**(`상위`)을 싣는다 — 「(1) 제품명」 은 「파. 조미식품 › 2) 표시사항」 이 있어야 읽힌다.
+       `chunk._context` 가 문맥으로 쓴다(별표 `_annex_context` 와 같은 처방 · 검색이 보고 화면이 보여 주는 한 값 · D-99).
+       ⛔ 종전 문맥은 「제목 = 자기 본문 앞 40자」라 **자기 본문을 되풀이**했다(36814 107청크).
+    """
+    # law_norm 이 이 모듈을 늦게 부른다(순환 회피)
+    from preprocess import law_norm as ln  # noqa: PLC0415
+
     rows: list[dict] = []
-    stack: dict[str, str] = {}
+    stack: list[tuple[int, str, int]] = []  # (순위, 마커, rows 의 자리) — 바깥에서 안으로
     cur: dict | None = None
     # 🔴 **최상위 마커가 문서 안에서 다시 쓰인다** (2026-09-09 실측).
     #    「부당한 표시·광고행위의 유형 및 기준 지정고시」는 본문이 Ⅰ~Ⅲ 으로 가고
@@ -59,31 +70,45 @@ def _prose(text: str) -> list[dict]:
         s = line.strip()
         if not s:
             continue
-        hit = next(((k, p.match(s)) for k, p in _PROSE if p.match(s)), None)
-        if hit is None:
-            if cur is not None:
-                cur["본문"] += " " + s
-            continue
-        kind, m = hit
-        order = ["장", "절", "목", "세목"]
-        if kind == "장":
-            if m.group(1) in seen_top:
+        m = _ROMAN.match(s)
+        if m:
+            rank, mark, reversed_ = _TOP, m.group(1), False
+            if mark in seen_top:
                 section += 1
-                stack.clear()
-            seen_top.add(m.group(1))
-        stack[kind] = m.group(1)
-        for deeper in order[order.index(kind) + 1 :]:
-            stack.pop(deeper, None)
+            seen_top.add(mark)
+            stack = []
+        else:
+            hit = ln._marker(s)  # noqa: SLF001 — 모양 표의 정본은 law_norm 하나다 (D-99)
+            if hit is None:
+                if cur is not None:
+                    cur["본문"] += " " + s
+                continue
+            level, mark = hit
+            rank, reversed_ = ln.RANK[level], False
+            ranks = [x[0] for x in stack]
+            if rank in ranks:  # 같은 모양 — 그 자리의 형제
+                stack = stack[: ranks.index(rank)]
+            elif stack and rank < stack[-1][0]:
+                reversed_ = True  # 거꾸로 쓴 순서 — 자식으로 둔다 (`law_norm.parse(reverse_child=True)` 와 같다)
+        parents = [rows[i] for _, _, i in stack]
+        stack.append((rank, mark, len(rows)))
+        top = parents[0] if parents and stack[0][0] == _TOP else None
         cur = {
             "키": f"prose-{len(rows)}",
-            "조": stack.get("장", ""),
+            "조": stack[0][1] if stack[0][0] == _TOP else "",
             "가지": "",
-            "제목": m.group(2)[:40],
-            "항": (f"{section}:" if section > 1 else "")
-            + ".".join(stack[k] for k in order if k in stack),
+            # 🔄 제목은 **장(Ⅰ.) 머리 줄**이다 — 종전 「자기 본문 앞 40자」는 문맥에서 자기를 되풀이했다
+            "제목": (top["본문"] if top else "")[:40],
+            "항": (f"{section}:" if section > 1 else "") + ".".join(x[1] for x in stack),
             "본문": s,
+            "_상위": [i for _, _, i in stack[:-1] if rows[i] is not top],
         }
+        if reversed_:
+            cur["역순"] = True
         rows.append(cur)
+    for r in rows:
+        # 상위 항목 본문 — 장 머리 줄은 `제목` 이 이미 들고 있다
+        r["항본문"] = "\n".join(rows[i]["본문"] for i in r.pop("_상위"))
     return rows
 
 

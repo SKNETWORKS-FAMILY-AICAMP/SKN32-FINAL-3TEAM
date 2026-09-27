@@ -40,7 +40,7 @@ import re
 import sys
 
 from collect import store
-from collect.law_annex import parse_table
+from collect.law_annex import ROW_START, parse_table
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 # 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
@@ -249,9 +249,14 @@ HEAD_LINE = re.compile(r"^[\[『]\s*(?:별표|표|별지)\s*\d*\s*[\]』]")
 #: 🚨 **굵은 괘선을 가는 괘선으로 바꾼 뒤** 푼다 — 식약처 고시는 `┏━┯━┓ ┃ │ ┃ ┠─┼─┨ ┗━┷━┛` 를 쓴다(36814 · 37971 실측).
 #:    `law_annex.parse_table` 은 가는 괘선(`┌├└ │`)만 안다 — 바꾸지 않으면 표가 통째로 0행이다.
 HEAVY_TO_LIGHT = str.maketrans("━┃┏┓┗┛┣┫┳┻╋┠┨┯┷┿╂┝┥┰┸", "─│┌┐└┘├┤┬┴┼├┤┬┴┼┼├┤┬┴")
+#: 🆕 2026-09-27 — **굵은 괘선 표가 있는 별표만** 바꾼다. 굵은 선 문자 가운데 `┃` 는 뺀 것으로 가른다 —
+#:    37098 [별표 2] 는 가는 괘선 표 안에서 `┐ ┃ ┘` 를 **「합계량」 묶음 괄호**로 쓴다(4줄 · 09-27 전수).
+#:    ⛔ 무조건 바꾸면 그 `┃` 가 세로선이 되어 칸이 하나 늘고 값이 옆 칸으로 밀린다(사실원장 ㉝).
+HEAVY_BORDER = re.compile("[━┏┓┗┛┣┫┳┻╋┠┨┯┷┿╂┝┥┰┸]")
 #: 괘선 문자 — 표 줄인지 가르고, 셀 값에서 지운다(칸 안에 걸린 부분 구분선 `├──┼──┤` 조각)
 BOX = "─│┌┐└┘├┤┬┴┼"
-_BOX_RE = re.compile(f"[{BOX}]+")
+#: 🆕 2026-09-27 — 값에서는 묶음 괄호 `┃` 도 지운다(위 `HEAVY_BORDER` — 바꾸지 않은 별표에만 남는다)
+_BOX_RE = re.compile(f"[{BOX}┃]+")
 
 
 def admrul_units(path: pathlib.Path) -> list[dict]:
@@ -270,9 +275,11 @@ def admrul_units(path: pathlib.Path) -> list[dict]:
             g("별표번호"),
             g("별표제목"),
             # 🚨 원문에 **두 번 이스케이프된 문자**가 있다(41277 「&#9656;」 — 화면에는 ▸) → 푼다.
-            #    굵은 괘선은 가는 괘선으로 바꾼다(`HEAVY_TO_LIGHT`).
-            html.unescape(u.findtext("별표내용") or "").translate(HEAVY_TO_LIGHT),
+            #    굵은 괘선 표가 있으면 가는 괘선으로 바꾼다(아래 · `HEAVY_BORDER`).
+            html.unescape(u.findtext("별표내용") or ""),
         )
+        if HEAVY_BORDER.search(content):
+            content = content.translate(HEAVY_TO_LIGHT)
         if not content.strip() or title.startswith("삭제"):
             continue
         if kind != "별표" and (law_id, kind, no) not in ADMRUL_EXTRA:
@@ -314,41 +321,180 @@ def split_tables(content: str) -> tuple[str, list[tuple[str, list[str]]]]:
     return "\n".join(prose), tables
 
 
+#: 🆕 2026-09-27 — 칸을 가르는 선. **`│` 만이 아니다** — 칸 중간에서 시작하는 가로선(`│    ├───┼───┤`)의
+#:    `├ ┼ ┤` 는 세로선 자리에 놓인다. `│` 로만 쪼개면 그 줄의 칸 수가 모자라 글이 옆 칸으로 밀린다(사실원장 ㉝).
+_COL_SEP = re.compile("[│├┼┤]")
+#: 칸 하나가 가로선뿐이면 그 칸의 **하위 행 경계**다
+_RULE = re.compile(r"^[─┬┴\s]*─[─┬┴\s]*$")
+#: 논리 행 경계 — 줄 머리가 괘선 모서리 · 교차면 행이 끝난다(`law_annex.parse_table` 과 같은 규칙)
+_ROW_EDGE = "┌┬┐├┼┤└┴┘"
+
+
+def _segments(line: str) -> list[str]:
+    """한 줄을 칸으로 — 바깥 테두리 양쪽은 뗀다(오른쪽 테두리가 없는 줄도 있다 · 36122 [별표 3] 부표)."""
+    s = line.strip()
+    parts = _COL_SEP.split(s)
+    if s[:1] in "│├":
+        parts = parts[1:]
+    if s[-1:] in "│┤" and parts:
+        parts = parts[:-1]
+    return parts
+
+
+def _join(frags: list[str]) -> str:
+    """한 칸의 물리 줄 조각을 잇는다 — **공백 없이**(`parse_table` 과 같다 · 한글은 음절 사이에서 접힌다).
+    🆕 2026-09-27 — 숫자와 숫자가 맞닿으면 **띄운다.** 한 칸에 한 줄씩 적은 값 목록(36122 [별표 3] 부표 처방
+    「8.00 / 2.50 / 4.00」 · 37098 CAS 여럿)이 「8.002.504.00」 이 됐다. 09-27 전수 18곳 모두 따로 적힌 값이었다 —
+    숫자 하나가 두 줄로 접힌 자리는 없었다."""
+    out = ""
+    for f in frags:
+        if out and out[-1].isdigit() and f[:1].isdigit():
+            out += " "
+        out += f
+    return out
+
+
+def parse_grid(text: str) -> list[dict]:
+    """괘선 표 → 논리 행. 행마다 칸별 **하위 칸**(칸 안의 가로선으로 나뉜 조각)을 든다 (🆕 2026-09-27 · 사실원장 ㉝).
+
+        {"subs": [[조각, …], …] 칸마다 하위 칸 목록, "irregular": bool, "fragments": 칸별 조각(화면용)}
+
+    🔴 **왜** — 원문 표는 한 칸이 여러 줄에 걸치고 옆 칸만 가로선으로 나뉜다(한 칸 병합). `parse_table` 은 줄 머리의
+       가로선만 행 경계로 알아 **하위 행이 한 행에 붙었다** — 36122 [별표 4] 염모제 성분 30개와 농도 30개가 각각 한 칸에
+       공백 없이(「1.50.51.01.0…」), 37098 [별표 1] 원료 하나의 CAS 셋이 한 칸에(「55-65-276487-49-5」).
+       짝(성분 ↔ 농도)을 잃으면 **틀린 수치를 인용**하게 된다.
+    ★ 칸 수는 **바로 앞 경계선**에서 읽는다(`┬ ┼` 수 + 1) — 행마다 칸 수가 달라지는 표가 있다(머리글이 두 층인 표).
+    🚨 칸 수가 맞지 않는 줄이 있으면 그 행은 `irregular` — 하위 칸을 가르지 않는다(호출자가 종전 방식으로 두고 표시한다).
+    """
+    rows: list[dict] = []
+    buf: list[str] = []
+    ncols: int | None = None
+
+    def flush() -> None:
+        if not buf:
+            return
+        n = ncols or max(len(_segments(x)) for x in buf)
+        subs: list[list[list[str]]] = [[[]] for _ in range(n)]
+        irregular = False
+        for line in buf:
+            seg = _segments(line)
+            if len(seg) != n:
+                irregular = True
+                break
+            for j, x in enumerate(seg):
+                if _RULE.match(x):
+                    subs[j].append([])
+                elif x.strip():
+                    subs[j][-1].append(x.strip())
+        rows.append(
+            {
+                "subs": [[c for c in col if c] or [[]] for col in subs],
+                "irregular": irregular,
+                "raw": list(buf),
+            }
+        )
+        buf.clear()
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        head = line.lstrip()[:1]
+        if not line.strip():
+            continue
+        if head in _ROW_EDGE:
+            flush()
+            ncols = 1 + sum(line.count(c) for c in "┬┼") if head not in "└┴┘" else None
+            continue
+        if "│" in line:
+            seg = _segments(line)
+            # 구분선 없는 표의 행 경계 — 첫 칸이 항목 마커로 시작하면 새 행이다(`parse_table` 과 같다)
+            if seg and ROW_START.match(seg[0].strip()):
+                flush()
+            buf.append(line)
+    flush()
+    return rows
+
+
+def _row_values(row: dict) -> list[tuple[list[str], list[str], int | None]]:
+    """논리 행 → [(칸 값들, 칸 화면 글, 하위 번호)]. 하위 칸 수가 한 가지면 하위 행으로 풀고 걸친 칸은 되풀이한다.
+
+    값은 `_join`(매칭용) · 화면 글은 조각을 공백으로 잇는다(`lines` — 종전과 같다).
+    🚨 하위 칸 수가 칸마다 다르면(다단 계층 표 · 36814 1회 섭취참고량) **풀지 않는다** — 하위 칸을 ` / ` 로 잇고 번호 0.
+       ⛔ 공백 없이 붙이지 않는다. 짝을 지어 줄 수 없으면 짝이 없다고 보이게 둔다.
+    """
+    subs = row["subs"]
+    counts = [len(c) for c in subs]
+    multi = {c for c in counts if c > 1}
+
+    def pick(i: int, k: int) -> list[list[str]]:
+        return [c[i] if len(c) == k else c[0] for c in subs]
+
+    if not multi:
+        cells = [c[0] for c in subs]
+        return [([_join(x) for x in cells], [" ".join(x) for x in cells], None)]
+    if len(multi) == 1:
+        k = multi.pop()
+        return [
+            ([_join(x) for x in pick(i, k)], [" ".join(x) for x in pick(i, k)], i + 1)
+            for i in range(k)
+        ]
+    return [
+        (
+            [" / ".join(_join(x) for x in c) for c in subs],
+            [" / ".join(" ".join(x) for x in c) for c in subs],
+            0,
+        )
+    ]
+
+
 def table_nodes(label: str, lines: list[str], t: int) -> list[dict]:
     """표 하나를 행 노드로 — 첫 논리 행을 머리글로, 나머지 행마다 「머리글: 값」.
 
-    🚨 값은 조각을 **공백 없이** 잇는다(`parse_table` 과 같다 · 매칭용) — 화면은 `lines`(칸별 조각)를 쓴다.
-    🚨 칸 안의 부분 구분선 조각(`├──┼──┤`)은 지운다 — 한 행에 하위 행이 붙은 표(원료 하나에 CAS 여럿)에서 생긴다.
-       ⬜ 그 하위 행들은 한 칸에 이어 붙는다(「55-65-276487-49-5」) — 원료명 칸은 하위 행이 없어 온전하다.
+    🚨 값은 조각을 **공백 없이** 잇는다(`parse_table` 과 같다 · 매칭용 · 숫자끼리만 띄운다 `_join`) — 화면은 `lines` 를 쓴다.
+    🔄 2026-09-27 — `parse_grid` 로 푼다. 칸 안의 가로선으로 나뉜 **하위 행은 노드 하나씩**(경로 `표{t}.{i}.{k}`) —
+       여러 줄에 걸친 칸(「구분: I」 · 원료명)은 하위 행마다 되풀이한다. 하위 행이 없는 행의 경로는 종전 그대로 `표{t}.{i}`.
+       칸 수가 안 맞는 행은 종전 방식(`parse_table`)으로 두고 `표불규칙` 을 단다. 하위 칸 수가 칸마다 다르면 ` / ` 로 잇고 `표불규칙`.
     """
-    rows = parse_table("\n".join(lines))
-    if not rows:
+    grid = parse_grid("\n".join(lines))
+    if not grid:
         return []
-    head = [_BOX_RE.sub("", c).replace(" ", "") for c in rows[0]["cells"]]
+    old = parse_table("\n".join(lines))
+    # 🚨 머리글은 **종전 파서로** 읽는다 — 머리글이 두 층인 표(`├──┬──┤` 로 한 칸이 여러 칸으로 갈린다 · 37971 [별표 1] ·
+    #    [별표 5] · 36122 [별표 4] 표61)는 첫 줄의 칸 수보다 아래 칸이 많다. 격자로 읽으면 머리글이 모자라 **값 칸이 버려진다**(09-27 작업공간 재현)
+    head = [_BOX_RE.sub("", c).replace(" ", "") for c in (old[0]["cells"] if old else [])]
     out = []
-    for i, r in enumerate(rows[1:], start=1):
-        vals = [_BOX_RE.sub("", c).strip() for c in r["cells"]]
-        if [v.replace(" ", "") for v in vals] == head:
-            continue  # 쪽이 넘어가며 다시 나온 머리글
-        pairs = [
-            (h or f"칸{k + 1}", v) for k, (h, v) in enumerate(zip(head, vals, strict=False)) if v
-        ]
-        if not pairs:
-            continue
-        out.append(
-            {
+    for i, r in enumerate(grid[1:], start=1):
+        if r["irregular"]:
+            # 칸 수가 안 맞는다 — 종전 행(같은 경계 · 같은 순서)을 쓴다. 🚨 짝이 틀렸을 수 있다 → 표시
+            legacy = old[i] if len(old) == len(grid) else None
+            if legacy:
+                disp = [" ".join(x for x in f) for f in legacy["fragments"]]
+                variants = [(legacy["cells"], disp, 0)]
+            else:
+                variants = [(["".join(r["raw"])], [" ".join(r["raw"])], 0)]
+        else:
+            variants = _row_values(r)
+        for vals, disp, sub in variants:
+            vals = [_BOX_RE.sub("", v).strip() for v in vals]
+            if [v.replace(" ", "") for v in vals] == head:
+                continue  # 쪽이 넘어가며 다시 나온 머리글
+            pairs = [
+                (h or f"칸{k + 1}", v)
+                for k, (h, v) in enumerate(zip(head, vals, strict=False))
+                if v
+            ]
+            if not pairs:
+                continue
+            node = {
                 # 🚨 이름표가 없으면 「본문」 — 경로(`표{t}.{i}`)가 표를 가른다. 인용은 서지 않는다(경로가 숫자로 시작하지 않는다)
                 "section": label or "본문",
                 "level": 0,
-                "path": f"표{t}.{i}",
+                "path": f"표{t}.{i}" if not sub else f"표{t}.{i}.{sub}",
                 "text": " · ".join(f"{h}: {v}" for h, v in pairs),
-                "lines": [
-                    " │ ".join(
-                        " ".join(_BOX_RE.sub("", x).strip() for x in f) for f in r["fragments"]
-                    )
-                ],
+                "lines": [" │ ".join(_BOX_RE.sub("", d).strip() for d in disp)],
             }
-        )
+            if sub == 0:
+                node["표불규칙"] = True
+            out.append(node)
     return out
 
 
@@ -414,6 +560,9 @@ def build_admrul(u: dict) -> list[dict]:
         # 🆕 2026-09-26 — 거꾸로 쓴 번호를 자식으로 둔 자리(`parse(reverse_child=True)`)
         if n.get("역순"):
             row["역순"] = True
+        # 🆕 2026-09-27 — 칸 짝을 확신할 수 없는 표 행(`table_nodes`)
+        if n.get("표불규칙"):
+            row["표불규칙"] = True
         # 🚨 시행 전 판을 싣는 파일이면 같은 글귀 규칙으로 표시한다 — 별표에는 글귀가 없을 수 있다(멈추지 않는다)
         if pend and any(k in n["text"] for k in pend["시행예정"]):
             row["시행예정"] = pend["표시"]
