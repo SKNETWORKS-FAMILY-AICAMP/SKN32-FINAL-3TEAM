@@ -137,26 +137,38 @@ def test_규범당_상한은_넘친_것을_버리지_않고_뒤로_민다() -> N
     assert len(got) == len(hits)
 
 
-def test_법별_보기는_넓은_후보에서_자기_법만_거르고_상한을_걸되_자르지_않는다() -> None:
+def _ranked(ids: list[tuple[str, str, str]]) -> list[rt.Hit]:
+    return [_hit(cid, law_id, law) for cid, law_id, law in ids]
+
+
+def test_법별_보기는_갈래마다_자기_법만_거른_뒤_섞고_상한을_걸되_자르지_않는다() -> None:
     """D-267 — 검색은 한 번 넓게, 법별 노드는 자기 법의 근거만 거른다 (🆕 2026-09-28 · 사실원장 ㊲)."""
-    hits = (
-        [_hit(f"p{i}", "000001", "표시광고법") for i in range(3)]
-        + [_hit(f"f{i}", "75449") for i in range(3)]
-        + [_hit("g", "013094"), _hit("c", "001999", "화장품법")]
-    )
-    got = [h.chunk_id for h in rt.law_view(hits, "식품표시광고법", cap=2)]
-    assert got == ["f0", "f1", "g", "f2"]  # 다른 법은 빠지고 · 넘친 것은 뒤로 · 버리지 않는다
+    F, C = "식품표시광고법", "화장품법"
+    vec = _ranked([("c1", "C1", C), ("c2", "C2", C), ("f1", "75449", F), ("f2", "75449", F)])
+    lex = _ranked([("c3", "C3", C), ("f3", "75449", F), ("f4", "013094", F)])
+    got = [h.chunk_id for h in rt.law_view(vec, lex, F, cap=2)]
+    assert sorted(got) == ["f1", "f2", "f3", "f4"]  # 다른 법은 빠지고 · 자르지 않는다
+    assert got.index("f2") > got.index("f4")  # 75449 셋째는 뒤로 민다(버리지 않는다)
     assert (
-        rt.law_view(hits, "건강기능식품법") == []
+        rt.law_view(vec, lex, "건강기능식품법") == []
     )  # 없는 법은 빈 목록 — 다른 법으로 채우지 않는다
 
 
-def test_탐침의_넓은_후보는_두_갈래_합집합_전체다() -> None:
-    """법별 노드의 재료는 `top_k` 로 자른 목록이 아니라 후보 전체다 — 자르면 법 셋이 다섯 자리를 나눠 쓴다."""
-    from scripts import search_probe as sp  # noqa: PLC0415
-
-    vec = [_hit(f"v{i}", f"L{i}") for i in range(40)]
-    lex = [_hit(f"x{i}", f"M{i}") for i in range(40)] + [_hit("v3", "L3")]
-    got = sp._union(vec, lex)
-    assert len(got) == 80  # 겹친 하나는 한 번만
-    assert {h.chunk_id for h in got} == {h.chunk_id for h in vec + lex}
+def test_거른_뒤_섞은_순서는_법마다_따로_검색한_순서와_같다() -> None:
+    """⛔ 섞은 뒤 거르면 다른 법 청크가 순위를 부풀려 두 갈래에 다 걸린 정답이 한 갈래 1 위에 밀린다 (09-28 기기 탐침 6 위 · 따로 검색 2 위)."""
+    F, C = "식품표시광고법", "화장품법"
+    # 넓은 목록 — 정답 w 는 두 갈래 다 걸렸지만 앞에 화장품 청크가 많다 · p 는 벡터 한 갈래 1 위
+    vec = _ranked(
+        [("p", "013094", F)] + [(f"c{i}", f"C{i}", C) for i in range(150)] + [("w", "013453", F)]
+    )
+    lex = _ranked([(f"d{i}", f"D{i}", C) for i in range(150)] + [("w", "013453", F)])
+    own = [h.chunk_id for h in rt.law_view(vec, lex, F)]
+    alone = [
+        h.chunk_id
+        for h in rt.diversify(
+            rt.fuse([h for h in vec if h.law == F], [h for h in lex if h.law == F], limit=10)
+        )
+    ]
+    assert own == alone == ["w", "p"]
+    fused_first = [h.chunk_id for h in rt.fuse(vec, lex, limit=400) if h.law == F]
+    assert fused_first == ["p", "w"]  # 옛 방식이 뒤집던 모양 — 이 테스트가 무엇을 막는지 남긴다

@@ -687,16 +687,24 @@ def diversify(hits: list[Hit], *, cap: int = PARAMS.per_law_cap) -> list[Hit]:
     return head + tail
 
 
-def law_view(hits: list[Hit], law: str, *, cap: int = PARAMS.per_law_cap) -> list[Hit]:
-    """넓은 검색(법 필터 없음) 결과에서 **한 법의 근거만** 골라 규범당 상한을 건 순서 (🆕 2026-09-28 · 사실원장 ㊲).
+def law_view(
+    vector_hits: list[Hit], lexical_hits: list[Hit], law: str, *, cap: int = PARAMS.per_law_cap
+) -> list[Hit]:
+    """넓은 검색(법 필터 없음)의 **두 갈래 후보**에서 한 법의 근거만 골라 섞고 규범당 상한을 건 순서 (🆕 2026-09-28 · 사실원장 ㊲).
 
     ★ D-267 의 모양 그대로다 — 검색은 팬아웃 앞에서 **한 번**, 법별 노드는 **자기 법의 근거만 거른다.**
        법마다 검색을 다시 돌리지 않는다(검색 3~4배를 피한 것이 D-267 의 이유다).
-    🚨 거르는 재료는 **후보 전체**여야 한다 — `top_k` 5 로 자른 뒤 거르면 법 셋이 다섯 자리를 나눠 쓴다
-       (`app/graph.py` `retrieve` 의 ⬜ 주석 · 09-27 탐침 「전체 범위 상위 5 정답 0/4」 가 그 모양의 수다).
-    🔜 W4 — 법별 노드가 이 함수로 자기 근거를 받는다. 법별 노드가 받을 개수(k)는 정하지 않았다 — 탐침이 순위를 낸다.
+    🔴 **거른 뒤에 섞는다 — 섞은 뒤에 거르지 않는다** (2026-09-28 기기 탐침으로 고침).
+       ⛔ 첫 판은 전체를 RRF 로 섞은 뒤 걸렀다. RRF 는 **순위**를 쓰는데 넓은 목록의 순위에는 다른 법 청크가 끼어
+          있어, 두 갈래에 다 걸린 정답(법 안 벡터 30 · 어휘 43 → RRF 2)이 한 갈래 1 위 목적 조항에 밀렸다(6 위).
+       🚨 거른 순서는 **법마다 따로 검색한 순서의 앞부분과 같다** — 법 필터는 `WHERE` 뿐이고 거리 · `ts_rank_cd` 는
+          행과 질의로만 정해진다(`SQL_VECTOR` · `SQL_LEXICAL`). 그 법 후보가 `pool` 개 이상이면 결과가 같다.
+    🚨 재료는 **후보 전체**여야 한다 — `top_k` 5 로 자른 뒤 거르면 법 셋이 다섯 자리를 나눠 쓴다.
+    🔜 W4 — 법별 노드가 이 함수로 자기 근거를 받는다. 받을 개수(k) · 넓은 후보 폭은 정하지 않았다.
     """
-    return diversify([h for h in hits if h.law == law], cap=cap)
+    vec = [h for h in vector_hits if h.law == law]
+    lex = [h for h in lexical_hits if h.law == law]
+    return diversify(fuse(vec, lex, limit=len(vec) + len(lex)), cap=cap)
 
 
 #: 벡터 갈래가 돌았다. 🚨 `LEXICAL_OK` 와 **값이 같아도 축이 다르다** — 한 상수로 합치지

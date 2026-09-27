@@ -102,15 +102,10 @@ def rank_of(hits: list[rt.Hit], want: str | list[str]) -> int | None:
     return None
 
 
-def _union(vec: list[rt.Hit], lex: list[rt.Hit]) -> list[rt.Hit]:
-    """두 갈래 후보의 합집합을 RRF 순서로 — 넓은 검색이 가져온 것을 **자르지 않는다**(법별 노드의 재료)."""
-    return rt.fuse(vec, lex, limit=len(vec) + len(lex))
-
-
 def probe_one(cur, q: str, want: str, pool: int) -> dict:  # noqa: ANN001
     """질의 하나를 전체 + 법 넷에 다 넣고, 갈래별 순위와 RRF 순위를 낸다."""
     out: dict = {"q": q, "want": want, "by_scope": {}}
-    wide: list[rt.Hit] = []
+    wide: tuple[list[rt.Hit], list[rt.Hit]] = ([], [])
     for name, laws in SCOPES:
         try:
             vec = rt.by_vector(cur, q, laws, pool)
@@ -120,9 +115,9 @@ def probe_one(cur, q: str, want: str, pool: int) -> dict:  # noqa: ANN001
         lex = rt.by_lexical(cur, q, laws, pool)
         fused = rt.fuse(vec, lex, limit=pool)
         if not laws:
-            # 🆕 2026-09-28 — 넓은 검색의 **후보 전체**(두 갈래 합집합). 법별 노드가 여기서 거른다 (D-267 · `rt.law_view`)
-            wide = _union(vec, lex)
-        view = rt.law_view(wide, laws[0]) if len(laws) == 1 else None
+            # 🆕 2026-09-28 — 넓은 검색의 **두 갈래 후보 전체**. 법별 노드가 갈래마다 거른 뒤 섞는다 (D-267 · `rt.law_view`)
+            wide = (vec, lex)
+        view = rt.law_view(*wide, laws[0]) if len(laws) == 1 else None
         out["by_scope"][name] = {
             "vector_state": vector_state,
             "pool_vector": len(vec),
@@ -241,8 +236,8 @@ def main() -> int:
         f" {'넓게→거름':>9}"
     )
     print(
-        "  🚨 「넓게→거름」 이 판정 그래프 설계(D-267)의 순위다 — 법 필터 없이 한 번 찾은 후보 전체에서 이 법 것만 골라"
-        " 규범당 상한을 건 순서 · 괄호는 그 법의 후보 수(분모)\n"
+        "  🚨 「넓게→거름」 이 판정 그래프 설계(D-267)의 순위다 — 법 필터 없이 한 번 찾은 두 갈래 후보에서 갈래마다 이 법 것만"
+        " 골라 섞고 규범당 상한을 건 순서 · 괄호는 그 법의 후보 수(분모)\n"
         "     법 범위 줄의 벡터 · 어휘 · RRF · 상한은 **법마다 따로 검색**한 수다 — 설계가 비용 때문에 택하지 않은 모양이다"
     )
     for res in results:
@@ -290,7 +285,7 @@ def main() -> int:
                     if law is not None:
                         vec = rt.by_vector(cur, r["q"], (), args.pool)
                         lex = rt.by_lexical(cur, r["q"], (), args.pool)
-                        hits = rt.law_view(_union(vec, lex), law)[: args.top]
+                        hits = rt.law_view(vec, lex, law)[: args.top]
                     print(f"\n  ■ {r['q'][:30]} · {name} · 벡터 {st.vector}")
                     for i, h in enumerate(hits, 1):
                         mark = "★" if rank_of([h], r["want"]) else " "
