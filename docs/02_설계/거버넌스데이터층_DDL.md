@@ -501,6 +501,11 @@ CREATE TABLE chunk (
     --       「안 쪼갰다」고 **거짓말**한다 (0008 의 context 와 같은 규칙).
     part_no         SMALLINT,
     part_total      SMALLINT,
+    -- 🆕 2026-09-28 (0021 · D-238 개정 (나)) — **적용 제외 목이면 부모(단서를 든 목)의 경로**, 아니면 빈 문자열.
+    --    「다만 … 제외한다」의 하위 목은 해당하면 위반이 **아닌** 경우다. 검색은 그대로 찾고, 위반 근거 좌표는
+    --    부모로 올린다(`app/retrieve.py` `basis_citation`). 제외 목 자체는 단서 조건으로 따로 나른다.
+    --    🚨 NULL 은 「아직 재적재 안 됨」이고 빈 문자열은 「제외 목이 아니다」다 — 둘을 한 값으로 만들지 않는다.
+    exempt_of       TEXT,
     -- 🚨 NOT NULL 이라야 `ck_chunk_tokens` 가 실제로 막는다 (0006). 널이면 CHECK 가 통과한다
     --    🔴 이것이 재는 것은 **인용 단위(`text`)** 다. 모델·리랭커에 들어가는 것은 아래
     --       `input_token_count` 이고 **둘은 0008 이후로 다른 문자열**이다 (D-200).
@@ -533,7 +538,9 @@ CREATE TABLE chunk (
     CONSTRAINT ck_chunk_part CHECK (
         (part_no IS NULL AND part_total IS NULL)
         OR (part_no >= 1 AND part_total >= 1 AND part_no <= part_total)
-    )
+    ),
+    -- 🆕 2026-09-28 (0021) — 부모 경로는 **별표 청크만** 든다. 조문 쪽 단서는 아직 안 가른다(⬜ · D-238 개정).
+    CONSTRAINT ck_chunk_exempt CHECK (exempt_of IS NULL OR exempt_of = '' OR doc_type = '별표')
 );
 COMMENT ON CONSTRAINT ck_chunk_tokens ON chunk IS
   '인용 단위(text)의 토큰 상한 512. 🔴 리랭커에 들어가는 것은 input_token_count 이고 '
@@ -545,6 +552,9 @@ COMMENT ON COLUMN chunk.part_no IS
 COMMENT ON COLUMN chunk.part_total IS
   '쪼갠 조각의 총수. part_total > 1 이면 이 청크는 조문의 일부다 — citation() 이 내는 '
   '「제18조」는 좌표로는 맞지만 전문이 아니다. 화면·인용 검증은 이 칸을 보고 말한다 (D-199).';
+COMMENT ON COLUMN chunk.exempt_of IS
+  '적용 제외 목이면 그 목을 제외로 만든 단서 목의 경로(같은 별표 · 본문 구역), 아니면 빈 문자열 (0021 · D-238 개정 (나)). '
+  '🚨 NULL 은 「아직 재적재 안 됨」이다 — 「제외 목이 아니다」로 읽지 않는다. 위반 근거 좌표는 이 경로로 올린다.';
 COMMENT ON COLUMN chunk.input_token_count IS
   '임베딩·리랭커에 실제로 들어가는 문자열(embed_input = context + text)의 토큰 수 (0011). '
   '🚨 상한 CHECK 이 없다 — 리랭커 미선정이라 상한이 아직 수가 아니다. 재고 원장에 올린다 (D-200).';

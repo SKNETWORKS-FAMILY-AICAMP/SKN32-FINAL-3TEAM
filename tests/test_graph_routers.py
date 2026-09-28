@@ -559,6 +559,7 @@ def _hit(**kw: object) -> object:
         context="",
         part_no=1,
         part_total=3,
+        exempt_of="",
         doc_type="법령",
         annex_no=None,
         doc_title=None,
@@ -570,6 +571,8 @@ def _hit(**kw: object) -> object:
         citation="제8조제1항제1호",
     )
     d.update(kw)
+    # 🆕 2026-09-28 (D-238 개정 (나)) — 위반 근거 좌표. 따로 안 주면 청크 자신의 좌표와 같다(제외 목이 아닌 줄)
+    d.setdefault("basis_citation", d["citation"])
     return rt.Hit(**d)  # type: ignore[arg-type]
 
 

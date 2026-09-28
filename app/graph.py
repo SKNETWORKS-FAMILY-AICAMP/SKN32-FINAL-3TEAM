@@ -143,6 +143,23 @@ class DictScan:
 
 
 @dataclass(frozen=True, slots=True)
+class Proviso:
+    """적용 제외 목 하나 — **해당하면 위반이 아닌 경우** (🆕 2026-09-28 · 팀장 판정 (나) · D-238 개정).
+
+    검색이 제외 목 청크를 찾으면 위반 근거 좌표는 부모 목으로 올리고(`rt.basis_citation`), 제외 목 자신은 이것으로 따로 나른다.
+    🔴 판정은 이것을 **단서 조건**으로 읽는다 — 광고가 제외 요건(예: 특수의료용도식품)에 들면 부모 목 위반이 서지 않는다.
+    🚨 제품 사실을 모르면 요건 충족 여부를 모른다 — 그 판단은 `judge` 몫이고 여기는 사실만 나른다 (D-127).
+    """
+
+    #: 제외 목 자신의 좌표 — 「[별표 1]제1호가목1)」
+    citation: str
+    #: 위반 근거로 올린 부모 목의 좌표 — 「[별표 1]제1호가목」
+    parent: str
+    law_id: str
+    chunk_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class LawResult:
     """법별 노드 하나가 낸 것 (D-267). `merge_laws` 가 모은다.
 
@@ -158,6 +175,8 @@ class LawResult:
     articles: tuple[tuple[str, tuple[EvidenceArticle, ...]], ...] = ()
     #: 🆕 2026-09-28 (W4) — 문장별로 **이 법의 근거를 가진 사전 적중**(`sent_id`, 적중들). 근거는 이 법 인용만 남는다.
     dict_hits: tuple[tuple[str, tuple[DictHit, ...]], ...] = ()
+    #: 🆕 2026-09-28 (D-238 개정 (나)) — 문장별로 **근거에 딸린 적용 제외 목**(`sent_id`, 단서들). 부모 좌표가 `articles` 에 있다.
+    provisos: tuple[tuple[str, tuple[Proviso, ...]], ...] = ()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -389,15 +408,59 @@ def classify(state: CoreState) -> dict[str, Any]:
 def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
     """`Hit` → 계약. 🔴 **확신이 없으면 안 옮긴다** (D-224).
 
-    ⛔ `citation` 이 `None` 이면 좌표를 못 세운 것이다 — 「제18조」로 줄여 적으면 실은 제3항인 근거를 가리킨다.
-       지어내지 않고 **버린다.** ⛔ **`quote` 는 비운다** — `search()` 는 `U2_rag` 로 거르고 인용 자격은 `U3_cite` 다.
+    ⛔ 위반 근거 좌표(`basis_citation`)가 `None` 이면 좌표를 못 세운 것이다 — 「제18조」로 줄여 적으면 실은 제3항인 근거를
+       가리킨다. 지어내지 않고 **버린다.** ⛔ **`quote` 는 비운다** — `search()` 는 `U2_rag` 로 거르고 인용 자격은 `U3_cite` 다.
+    🔄 2026-09-28 (D-238 개정 (나)) — `citation` 이 아니라 `basis_citation` 을 옮긴다. 적용 제외 목이면 **부모 목의 좌표**가
+       오고, 그 좌표를 가진 청크는 이 청크가 아니므로 `chunk_id` 를 비운다 — 제외 목의 글이 위반 근거 자리에 보이지 않게.
+       제외 목 자신은 `_proviso()` 가 따로 나른다.
     🚨 `citation()` 을 다시 부르지 않는다 — `Hit` 이 생성 시점에 이미 들고 있다 (D-99).
     """
-    if not hit.citation or not hit.law_id:
+    if not hit.basis_citation or not hit.law_id:
         return None
     return EvidenceArticle(
-        law_id=hit.law_id, article=hit.citation, item=hit.item or "", chunk_id=hit.chunk_id
+        law_id=hit.law_id,
+        article=hit.basis_citation,
+        item=hit.item or "",
+        chunk_id=None if hit.exempt_of else hit.chunk_id,
     )
+
+
+def _proviso(hit: rt.Hit) -> Proviso | None:
+    """적용 제외 목 청크 → 단서 (D-238 개정 (나)). 제외 목이 아니거나 좌표가 안 서면 `None`."""
+    if not hit.exempt_of or not hit.citation or not hit.basis_citation or not hit.law_id:
+        return None
+    return Proviso(
+        citation=hit.citation, parent=hit.basis_citation, law_id=hit.law_id, chunk_id=hit.chunk_id
+    )
+
+
+def _pick(hits: list[rt.Hit]) -> tuple[tuple[EvidenceArticle, ...], tuple[Proviso, ...]]:
+    """법별 노드 하나가 문장 하나에 고르는 근거와 단서 (D-238 개정 (나)).
+
+    🔴 **같은 위반 좌표는 한 번만** — 제외 목 여럿(1.가.1 · 1.가.2)이 같은 부모로 올라오거나 부모 청크 자신도 걸리면
+       좌표가 겹친다. 먼저 나온 순서를 지키고, 부모 청크 자신이 있으면 그 줄(청크가 있는 줄)을 남긴다.
+    🚨 자르는 개수는 **겹침을 걷어 낸 뒤** `LAW_TOP_K` 다 — 걷기 전에 자르면 같은 좌표가 자리를 먹는다.
+    """
+    arts: list[EvidenceArticle] = []
+    where: dict[tuple[str, str], int] = {}
+    provisos: list[Proviso] = []
+    for h in hits:
+        a = _evidence_article(h)
+        if a is None:
+            continue
+        key = (a.law_id, a.article)
+        if key in where:
+            i = where[key]
+            if a.chunk_id is not None and arts[i].chunk_id is None:
+                arts[i] = a  # 부모 청크 자신이 뒤에 나왔다 — 청크가 있는 줄로 바꾼다
+        else:
+            if len(arts) >= LAW_TOP_K:
+                continue
+            where[key] = len(arts)
+            arts.append(a)
+        if (p := _proviso(h)) is not None:
+            provisos.append(p)
+    return tuple(arts), tuple(provisos)
 
 
 @timed
@@ -530,13 +593,16 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
         by_sent = {e.sent_id: e for e in state.get("evidence", [])}
         scans = {s.sent_id: s for s in state.get("dict_scans", [])}
         picked: list[tuple[str, tuple[EvidenceArticle, ...]]] = []
+        proviso_picked: list[tuple[str, tuple[Proviso, ...]]] = []
         dict_picked: list[tuple[str, tuple[DictHit, ...]]] = []
         for i in range(n):
             sid = sent_id(i)
             e = by_sent.get(sid)
             hits = rt.law_view(e.vector_hits, e.lexical_hits, law) if e else []
-            arts = tuple(a for h in hits if (a := _evidence_article(h)) is not None)
-            picked.append((sid, arts[:LAW_TOP_K]))
+            # 🔄 2026-09-28 (D-238 개정 (나)) — 적용 제외 목은 부모 좌표로 올리고 단서로 따로 나른다(`_pick`)
+            arts, provs = _pick(hits)
+            picked.append((sid, arts))
+            proviso_picked.append((sid, provs))
             # 🆕 W4 — 사전 적중 중 **이 법의 인용**을 가진 것만, 인용도 이 법 것만 남긴다. 법을 못 정한 인용은 버린다 (D-220)
             mine = []
             for h in scans[sid].hits if sid in scans else ():
@@ -551,6 +617,7 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
                     sent_ids=tuple(sent_id(i) for i in range(n)),
                     articles=tuple(picked),
                     dict_hits=tuple(dict_picked),
+                    provisos=tuple(proviso_picked),
                 )
             ]
         }
@@ -594,13 +661,16 @@ def judge(state: CoreState) -> dict[str, Any]:
     """
     order = {name: k for k, name in enumerate(LAW_NODES)}
     per_sent: dict[str, list[EvidenceArticle]] = {}
-    seen: dict[str, set[str | None]] = {}
+    seen: dict[str, set[tuple[str, str, str | None]]] = {}
     for r in sorted(state.get("law_results", []), key=lambda r: order.get(r.law, len(order))):
         for sid, arts in r.articles:
             for a in arts:
-                if a.chunk_id in seen.setdefault(sid, set()):
+                # 🔄 2026-09-28 — 같은 청크 · 같은 좌표는 한 번. ⛔ 종전 열쇠 `chunk_id` 는 부모로 올린 줄(`chunk_id=None`)을
+                #    서로 다른 좌표여도 하나로 뭉갰다 (D-238 개정 (나))
+                key = (a.law_id, a.article, a.chunk_id)
+                if key in seen.setdefault(sid, set()):
                     continue
-                seen[sid].add(a.chunk_id)
+                seen[sid].add(key)
                 per_sent.setdefault(sid, []).append(a)
     return {
         "sentences": [

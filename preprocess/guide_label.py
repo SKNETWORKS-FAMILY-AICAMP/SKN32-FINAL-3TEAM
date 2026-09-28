@@ -37,6 +37,7 @@ import pathlib
 import re
 
 from collect import registry, statute
+from preprocess import law_norm
 from preprocess.mfds_guide import CANDIDATES, REGIME
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -76,7 +77,8 @@ ARTICLE8_NAME: dict[str, str] = {
 JUDGMENT_STATUS = "심의지적"
 
 #: 🚨 「다만 … 제외한다」 — 이 단서를 든 노드의 **하위 목**이 적용 제외다 (D-238).
-EXC = re.compile(r"다만[,\s].{0,80}?제외한다")
+#: 🔄 2026-09-28 (D-238 개정 (나)) — 정본은 `preprocess/law_norm.py` 다. 청크 표시가 같은 함수를 쓴다 (D-99).
+EXC = law_norm.EXC
 
 # ──────────────────────────────────────────────────────────────
 # 아래는 **참고 앵커**다. `--anchors` 로만 나가고 평가셋에 들어가지 않는다.
@@ -141,10 +143,11 @@ TYPE_OF = {str(h): str(statute.type_of(statute.food(h))) for h in range(1, 8)} |
 
 
 def excluded_paths(nodes: list[dict]) -> set[str]:
-    """「다만 … 제외한다」를 든 노드의 하위 목. 🚨 손으로 적지 않는다 (D-238)."""
-    body = [d for d in nodes if d["section"] == "본문"]
-    parents = {d["path"] for d in body if EXC.search(d["text"].replace("\n", ""))}
-    return {d["path"] for d in body if any(d["path"].startswith(p + ".") for p in parents)}
+    """「다만 … 제외한다」를 든 노드의 하위 목. 🚨 손으로 적지 않는다 (D-238).
+
+    🔄 2026-09-28 — 계산은 `law_norm.exemption_parents()` 한 곳이다. 여기는 경로 집합만 꺼낸다 (D-99).
+    """
+    return set(law_norm.exemption_parents(nodes))
 
 
 def anchor_label(text: str) -> list[tuple[str, str]]:

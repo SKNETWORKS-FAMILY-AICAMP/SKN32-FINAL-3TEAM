@@ -110,7 +110,12 @@ def main(argv: list[str]) -> int:
                     "      ⬜ 좌표를 세운 근거가 없다 — 이 법 후보가 비었거나 좌표가 안 선다 (D-224)"
                 )
             for a in arts:
+                # 🆕 2026-09-28 (D-238 개정 (나)) — `chunk=None` 은 적용 제외 목에서 **부모 목으로 올린 좌표**다
                 print(f"      {a.law_id}  {a.article}      chunk={a.chunk_id}")
+            for p in dict(r.provisos).get(e.sent_id, ()):
+                print(
+                    f"      ⚖️ 단서  {p.citation} → 위반 근거는 {p.parent}      chunk={p.chunk_id}"
+                )
 
     after = len(rt._model_cache)  # noqa: SLF001
     # 🚨 **셋을 가른다.** ① 이번에 로드됐다 — 예산 판정 안 함 ② 이미 떠 있었다 — 판정한다
