@@ -796,7 +796,7 @@ ftc_press:
   reviewed_by: 권소라
   reviewed_at: 2026-09-28
   robots_checked_at: 2026-09-26
-  collected_at: null
+  collected_at: 2026-09-28
 
 gg_press:
   decided_by: 오한빈
@@ -804,7 +804,7 @@ gg_press:
   reviewed_by: 권소라
   reviewed_at: 2026-09-28
   robots_checked_at: 2026-09-26
-  collected_at: null
+  collected_at: 2026-09-28
 
 scourt_major:
   decided_by: 오한빈
@@ -812,14 +812,14 @@ scourt_major:
   reviewed_by: 권소라
   reviewed_at: 2026-09-28
   robots_checked_at: 2026-09-26
-  collected_at: null
+  collected_at: 2026-09-28
 
 easylaw_ad:
   decided_by: 오한빈
   decided_at: 2026-09-28
   reviewed_by: 권소라
   reviewed_at: 2026-09-28
-  collected_at: null
+  collected_at: 2026-09-28
 
 # 🆕 2026-09-28 — API 2종(웹 크롤링 아님 · robots 는 nedrug 웹 「Disallow: /」라 API 로만 받는다)
 mfds_cosmetic_func_report:

@@ -514,13 +514,13 @@ sources:
     redistributable: true
     value: A
     cost: free
-    status: hold
+    status: manual
     access: "게시판 목록·본문 + 첨부(hwp·pdf) 다운로드 (bordCd=3 · key=12)"
     scale: "게시판 검색 실측(조사 2026-09-26) — 「비교광고」 19 · 「부당한 비교」 10 · 「비방광고」 20 · 「비방」 60(무관 글 포함) → 비교·비방 사건 약 30~40 추정 · SNS 뒷광고 모니터링 결과 4개년(nttSn 42753 · 43291 · 45909 등) · 「경제적 이해관계 표시 안내서」 2025 개정본 + Q&A 별첨(nttSn 46709)"
     license: "공공누리 제1유형(출처표시) — 보도자료 상세 화면 하단 「공정거래위원회 보도자료 저작물은 공공누리 제1유형(출처표시) 조건에 따라 누구나 이용할 수 있습니다」"
     attribution: "출처: 공정거래위원회 보도자료 (공공누리 제1유형)"
     caution: "🚨 결정문과 같은 사건이면 같은 문서 계보로 묶는다 — 보도자료 문구가 결정문 봉인 평가 문구와 겹치면 평가가 오염된다(split.py 문구 단위 거름). / 2000년대 글은 본문이 짧고 hwp 첨부에 내용이 있다(파싱 필요). / 캡처 이미지 속 광고·SNS 계정명은 취하지 않는다(D-18 · D-133 · PII)."
-    collected_at: null
+    collected_at: 2026-09-28
     decided_at: 2026-09-28
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -539,13 +539,13 @@ sources:
     redistributable: true
     value: B
     cost: free
-    status: hold
+    status: manual
     access: "게시판 본문 + 첨부(hwpx·JPG) (gnews.gg.go.kr/briefing · BS_CODE=s017)"
     scale: "미실측 — 식품·건기식 광고 적발 보도가 연 몇 건 수준 · 1·2호 문장 합계 수십 추정(조사 2026-09-26 · 제목 검색이 서지 않아 실측 못 함)"
     license: "공공누리 제1유형(출처표시) — 기사 하단 「위 기사는 공공누리 제1유형:출처표시 조건에 따라 이용할 수 있습니다」"
     attribution: "출처: 경기도 보도자료 (경기도뉴스포털 · 공공누리 제1유형)"
     caution: "🚨 반복 요청 시 「보안 정책에 의해 차단」 화면이 떴다(조사 2026-09-26) — 저속 수집 필수. / 서울시(제4유형) · 부산시(제4유형) 보도자료는 같은 성격이지만 불가다 — 지자체마다 유형이 다르다(D-110). / 사진 첨부(JPG)는 취하지 않는다."
-    collected_at: null
+    collected_at: 2026-09-28
     decided_at: 2026-09-28
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -564,13 +564,13 @@ sources:
     redistributable: true
     value: C
     cost: free
-    status: hold
+    status: manual
     access: "게시판 목록·본문 + 첨부 (www.scourt.go.kr/portal/dcboard · gubun=44 · EUC-KR)"
     scale: "게시판 검색 실측(조사 2026-09-26) — 「비방」 48(대부분 명예훼손·형사) · 「표시광고」 2 · 「비교광고」 0 → 관련 0~3건"
     license: "저작권법 제24조의2 — 법원 저작권보호정책 「별도의 이용허락 없이 자유이용이 가능」 · 판결은 제7조 비보호"
     attribution: "출처: 대법원 「전국법원 주요판결」 (저작권법 제24조의2 · 제37조)"
     caution: "🚨 판결 속 당사자·증인 성명은 즉시 마스킹(PII · D-17). / 판결서 인터넷열람(로그인 · 건당 수수료)은 이 원천이 아니며 쓰지 않는다. / 수량이 적어 우선순위 낮음."
-    collected_at: null
+    collected_at: 2026-09-28
     decided_at: 2026-09-28
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -953,13 +953,13 @@ sources:
     redistributable: true
     value: C
     cost: free
-    status: hold
+    status: manual
     access: "웹 본문 (easylaw.go.kr/CSP · csmSeq=1575)"
     scale: "해설 위주 · 위반 예시 문구 10개 미만(조사 2026-09-26)"
     license: "법제처 생활법령정보 저작권정책 — 「영리 목적의 이용을 포함하여 자유로운 활용이 보장」 (제3자 저작물·사진·이미지 제외)"
     attribution: "출처: 법제처 찾기쉬운 생활법령정보"
     caution: "🚨 텍스트만 취한다 — 사진·이미지·제3자 저작물은 정책상 제외. / 공정위 추천·보증 심사지침(law_go_kr 행정규칙)의 해설이라 내용이 겹친다 — 보조."
-    collected_at: null
+    collected_at: 2026-09-28
     decided_at: 2026-09-28
     decided_by: 오한빈
     reviewed_by: 권소라
@@ -1875,6 +1875,22 @@ sources:
     cost: free
     status: hold
     note: "📧 2026-09-26 자료 이용 문의 메일(권소라 → karb1@karb.or.kr · 누리집 하단 대표 메일) — 식품·건강기능식품·화장품 광고 심의분만 · 용도: 검색 색인 · 인용 표시 · 학습·평가 · 상용화 가능성도 적었다 · 누리집에는 「COPYRIGHT … ALL RIGHTS RESERVED」만 있고 이용조건이 없다 → ⏳ 회신 대기. 회신이 오면 — 후기·체험기(체험담) · 부당 비교·비방 · 의약품 오인 · 화장품 기능성 오인 사례(기사형 건강식품·화장품 광고 심의결정 PDF 2015~ · 수백 건 추정 · 미실측). 🚨 광고주·매체 업체명은 마스킹"
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
+  ftc_press_pre2005:
+    name: "공정거래위원회 보도자료 1997~2004 — 공공누리 표시 없는 31건 (ftc_press 에서 뺐다 · 저작권 확인 필요)"
+    layer: "1층 판정라벨"
+    grade: G0
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [PREAPPROVAL, NOREDIST]
+    redistributable: false
+    value: A
+    cost: free
+    status: hold
+    note: "🚨 저작권 확인 필요 · 문의 대기 (2026-09-28 · 권소라). ftc_press 77건을 받아 보니 2005년 전 게시물 31건(nttSn 33548~35185)에는 본문 아래 「공공누리 제1유형」 표시가 없다. 공정위 저작권정책(www.ftc.go.kr/www/contents.do?key=520)이 「공공누리가 부착되지 않은 자료들을 이용하고자 할 경우에는 공공저작물 관리책임관 및 실무담당자와 사전에 협의」라 적으므로 ftc_press(G3) 로 올리지 않았다. 표시가 있는 46건만 ftc_press 로 register. 공개 메일 없음 → 📞 1670-0007 전화 문의 예정(담당 부서·메일 확인 후 서면 요청 · 국민신문고 민원도 가능). 대상 목록은 docs/ksr/수집대상_목록_2026-09-27.md 「ftc_press 보류 31건」 · 받은 파일(본문 HTML 31 + hwp 13)은 레포 밖 임시 폴더에만 둔다. 회신이 오면 — 허락이면 ftc_press 로 register(같은 소스) 하고 이 줄을 지운다 · 거절이면 blocked 로 옮긴다. 가치 — 부당 비교·비방 사건(대한항공 · 수신오가피 · 두산·진로 · 남양유업 · 샘표 · 백세주 등)이 이 31건에 몰려 있다"
     collected_at: null
     decided_at: null
     decided_by: null

@@ -980,11 +980,12 @@ STATUS = {
     "cosmetic_restricted": "collect",
     # 🆕 2026-09-26 등재 · 🔄 2026-09-28 2인 확인(결정 오한빈 · 확인 권소라 · 팀장 동의는 「6건 전부」 — 수집 방식은 미정)
     #    API 2종은 기존 collect.openapi 로 받는다 → collect.
-    #    게시판 4종은 수집 방식(판정요청서 §4 (가) 새 수집기 / (나) 골라 받아 register)이 정해지지 않아 hold 그대로.
-    "ftc_press": "hold",
-    "gg_press": "hold",
-    "scourt_major": "hold",
-    "easylaw_ad": "hold",
+    #    🔄 2026-09-28 게시판 4종 수집 방식 — 팀장 협의 (나): 수집기를 새로 쓰지 않고
+    #    docs/ksr/수집대상_목록_2026-09-27.md 의 글만 골라 받아 register 로 올린다 → manual.
+    "ftc_press": "manual",
+    "gg_press": "manual",
+    "scourt_major": "manual",
+    "easylaw_ad": "manual",
     "mfds_cosmetic_func_report": "collect",
     "mfds_cosmetic_func_review": "collect",
     "aihub_71486": "collect",
