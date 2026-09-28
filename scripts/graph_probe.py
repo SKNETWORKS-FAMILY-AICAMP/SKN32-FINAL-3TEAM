@@ -85,10 +85,16 @@ def main(argv: list[str]) -> int:
         # 🚨 `vector`·`lexical` 은 「돌았나」다. `pool` 0 은 「안 겹쳤다」이고
         #    `lexical=False` 는 「검색어를 못 만들었다」다 — 다른 사건이다 (D-202).
         print(f"  {e.sent_id}  vector={e.vector}  lexical={e.lexical}  pool={e.pool}")
-        if not e.articles:
-            print("      ⬜ 좌표를 세운 근거가 없다 — 별표뿐이거나 후보가 비었다 (D-224)")
-        for a in e.articles:
-            print(f"      {a.law_id}  {a.article}      chunk={a.chunk_id}")
+        # 🔄 2026-09-28 (W4 · D-291) — 근거는 **법별 노드가 고른 것**이다. 후보(`e.*_hits`)는 법을 합친 넓은 검색이다
+        for r in out["law_results"]:
+            arts = dict(r.articles).get(e.sent_id, ())
+            print(f"    {r.law} ({g.LAW_OF_NODE[r.law]})  근거 {len(arts)}")
+            if not arts:
+                print(
+                    "      ⬜ 좌표를 세운 근거가 없다 — 이 법 후보가 비었거나 좌표가 안 선다 (D-224)"
+                )
+            for a in arts:
+                print(f"      {a.law_id}  {a.article}      chunk={a.chunk_id}")
 
     after = len(rt._model_cache)  # noqa: SLF001
     # 🚨 **셋을 가른다.** ① 이번에 로드됐다 — 예산 판정 안 함 ② 이미 떠 있었다 — 판정한다

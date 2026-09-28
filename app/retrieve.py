@@ -754,7 +754,7 @@ def law_view(
           행과 질의로만 정해진다(`SQL_VECTOR` · `SQL_LEXICAL`). 그 법 후보가 `pool` 개 이상이면 결과가 같다.
     🚨 재료는 **후보 전체**여야 한다 — `top_k` 5 로 자른 뒤 거르면 법 셋이 다섯 자리를 나눠 쓴다.
     ★ 재료는 `wide()` 다(법마다 폭만큼) — 전역 상위 N 을 넣으면 청크가 많은 법이 자리를 먼저 차지한다(㊳).
-    🔜 W4 — 법별 노드가 이 함수로 자기 근거를 받는다. 받을 개수(k)는 정하지 않았다.
+    🔄 2026-09-28 (W4) — 법별 노드(`app/graph.py` `_law_node`)가 이 함수로 자기 근거를 받는다. 받을 개수(k)는 `LAW_TOP_K` `[임의]` (D-291 ⬜).
     """
     vec = [h for h in vector_hits if h.law == law]
     lex = [h for h in lexical_hits if h.law == law]
@@ -825,7 +825,7 @@ def wide(cur: Any, q: str, pool: int = POOL) -> tuple[list[Hit], list[Hit], Sear
        (09-28 기기 탐침 · 폭 50 에서 식품 후보 17~30).
     🚨 섞지 않고 **두 갈래를 따로** 낸다 — 섞은 뒤 거르면 다른 법 청크가 순위를 부풀린다(㊲).
     🚨 `state.pool` 은 **법마다의 폭**이고 `pool_*` 는 법을 합친 행 수다(최대 법 수 × `pool`) — 한 칸에 두 분모를 섞지 않는다 (D-178).
-    🔜 W4 — `app/graph.py` `retrieve` 가 이것을 부르고 법별 노드가 `law_view` 로 받는다. 지금 부르는 쪽은 `scripts/search_probe.py` 다.
+    🔄 2026-09-28 (W4 · D-291) — `app/graph.py` `retrieve` 가 이것을 부르고 법별 노드가 `law_view` 로 받는다 · `scripts/search_probe.py` 도 부른다.
     """
     return _candidates(cur, q, (), pool, per_law=True)
 

@@ -63,6 +63,7 @@ from app.contracts import (
     is_pass,
 )
 from app.settings import PARAMS
+from collect.law_map import LAWS, REFERENCE_ONLY
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
 MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
@@ -98,13 +99,17 @@ class SentEvidence:
     """
 
     sent_id: str
-    #: 🔴 `part_total > 1` 인 조각은 조문의 **일부**다 (0011 · D-199) — `EvidenceArticle.chunk_id` 로 따라간다.
-    articles: tuple[EvidenceArticle, ...] = ()
+    #: 🔄 2026-09-28 (W4 · D-291) — **넓은 검색의 두 갈래 후보**(법마다 폭만큼 · `rt.wide`)를 섞지 않고 나른다.
+    #:    법별 노드가 `rt.law_view()` 로 **자기 법 것만 골라 섞는다** — 섞은 뒤 거르면 순위가 뒤집힌다(사실원장 ㊲).
+    #:    ⛔ 종전에는 여기 `articles`(전역 상위 `top_k` 5 를 좌표로 옮긴 것)가 있었다 — 세 법이 다섯 자리를 나눠 썼다.
+    #:       좌표로 옮기는 일은 이제 법별 노드가 한다(`LawResult.articles`).
+    vector_hits: tuple[rt.Hit, ...] = ()
+    lexical_hits: tuple[rt.Hit, ...] = ()
     #: 두 갈래가 각각 돌았는가. ⛔ **둘 다 False 면 근거 없이 판정하는 것**이다 (D-224) — `hold`
     vector: bool = False
     lexical: bool = False
-    #: 두 갈래 **후보 수의 합**(겹친 것은 두 번 센다). 🚨 0 은 「안 겹쳤다」이고, `lexical=False` 는
-    #: 「검색어를 못 만들었다」다 — 다른 사건이다 (D-202).
+    #: 두 갈래 **후보 수의 합**(겹친 것은 두 번 센다 · 법을 합친 행 수 — 법마다 폭은 `rt.POOL`). 🚨 0 은 「안 겹쳤다」이고,
+    #: `lexical=False` 는 「검색어를 못 만들었다」다 — 다른 사건이다 (D-202).
     pool: int = 0
 
 
@@ -114,11 +119,14 @@ class LawResult:
 
     🔜 **W4 에서 칸이 는다** — 전제(`Premise`) · 문장별 유형 · 근거 · 하한. 🔄 2026-09-24 — W3 로 계약에 `Premise` 가
        섰다(`app/contracts.py`). 칸을 늘릴 때 **그 타입을 쓴다** — ⛔ 문자열로 전제를 따로 지으면 **두 벌**이 된다 (D-99).
-    ★ 지금은 **「이 법이 이 문장들을 봤다」** 만 나른다 — `merge_laws` 의 fail-closed 대조가 읽는 값이다.
+    ★ 「이 법이 이 문장들을 봤다」(`sent_ids` — `merge_laws` 의 fail-closed 대조가 읽는다)와 🆕 **이 법이 고른 근거**(`articles` · W4)를 나른다.
     """
 
     law: str
     sent_ids: tuple[str, ...] = ()
+    #: 🆕 2026-09-28 (W4 · D-291) — 문장별로 **이 법이 고른 근거**(`sent_id`, 근거들). 좌표를 못 세운 것은 없다(D-224).
+    #:    🔴 `judge` 가 이것을 모아 문장의 근거로 붙인다 — 검색을 다시 부르지 않는다 (D-99).
+    articles: tuple[tuple[str, tuple[EvidenceArticle, ...]], ...] = ()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -243,7 +251,7 @@ def timed(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
 #: 🔄 **D-271 — 「일반」은 없다.** `일반상품`(기획서 2-4 「일반 상품」)과 `전용법_미수록` 은 **표시광고법만** 탄다 —
 #:    두 품목 모두 아래 어느 법의 범위에도 없어서 `law_ftc` 하나로 떨어진다. 전용법 품목은 통과 금지 · 미검수 고지다 (D-277).
 #:    ⛔ **청크의 `law`(법 축)와 섞지 않는다** — 🔄 W6(0019)로 청크 칸이 `category` → `law` 가 됐다(D-271 ①).
-#:       🔜 W4 — 법별 노드가 `collect/law_map` 으로 자기 법 근거만 거른다(노드 이름 ↔ 법 축 대응도 그때).
+#:       🔄 2026-09-28 (W4) — 법별 노드가 자기 법 근거만 거른다 · 노드 이름 ↔ 법 축은 아래 `LAW_OF_NODE`.
 #: 🚨 **순서가 곧 팬아웃 순서다** — 스텁과 컴파일본이 같은 순서를 낸다(`Send` 목록 순서 · 2026-09-23 실측).
 LAW_SCOPE: dict[str, frozenset[Category] | None] = {
     "law_ftc": None,
@@ -251,6 +259,27 @@ LAW_SCOPE: dict[str, frozenset[Category] | None] = {
     "law_cosmetic": frozenset({Category.화장품}),
 }
 LAW_NODES = tuple(LAW_SCOPE)
+
+#: 🆕 2026-09-28 (W4) — 법별 노드 ↔ **법 축**(`collect/law_map.LAWS` · 청크의 `law` 칸). 노드는 이 법의 근거만 거른다.
+#: 🔴 **건강기능식품법은 노드가 없다** — 참고 전용이라 위반 근거로 보내지 않는다 (D-271 ⑥ · `REFERENCE_ONLY`).
+#:    ⛔ 종전에는 `REFERENCE_ONLY` 를 읽는 곳이 없었고 `judge` 가 전역 검색 결과를 전부 근거로 옮겨 건강기능식품법
+#:       청크가 근거로 나갈 길이 열려 있었다(판정이 `unjudged` 라 해가 없었을 뿐). 게이트가 이 표를 두 방향으로 본다.
+LAW_OF_NODE: dict[str, str] = {
+    "law_ftc": "표시광고법",
+    "law_food": "식품표시광고법",
+    "law_cosmetic": "화장품법",
+}
+
+#: 법별 노드 하나가 문장마다 받는 근거 수. 🚨 **`[임의]`** — `top_k`(5)를 법마다 쓴다. 받을 개수(k)는 판정 대기다
+#:    (D-291 ⬜ · 사실원장 ㊳). 값을 바꾸면 판정 근거가 바뀐다 — 보고에 올린다.
+LAW_TOP_K = PARAMS.top_k
+
+# 🔴 표가 어긋나면 **import 에서 멈춘다** (D-220) — 법 축이 늘거나 노드가 늘었는데 한쪽만 고치면 그 법은 근거 없이 판정된다.
+if set(LAW_OF_NODE) != set(LAW_NODES) or set(LAW_OF_NODE.values()) != set(LAWS) - REFERENCE_ONLY:
+    raise RuntimeError(
+        f"🔴 법별 노드 ↔ 법 축 표가 어긋났다 — 노드 {sorted(LAW_OF_NODE)} · 법 {sorted(LAW_OF_NODE.values())} · "
+        f"위반 근거 법 {sorted(set(LAWS) - REFERENCE_ONLY)} (D-267 · D-271 ⑥)"
+    )
 
 
 def laws_for(category: Category | None) -> tuple[str, ...]:
@@ -273,7 +302,12 @@ def law_payload(state: CoreState) -> dict[str, Any]:
     ⛔ `Send` 로 보낸 노드는 **이 dict 만** 본다 — 부모 상태 전체가 아니다. 여기 없는 키를 노드가 읽으면
        스텁에서는 돌고 컴파일본에서는 빈 값이 된다. 오류는 안 난다. 그래서 스텁도 이것만 넘긴다.
     """
-    return {"sents": list(state.get("sents", [])), "product": state.get("product")}
+    return {
+        "sents": list(state.get("sents", [])),
+        "product": state.get("product"),
+        # 🆕 2026-09-28 (W4) — 법별 노드가 자기 법 근거를 거를 재료. ⛔ 빠지면 컴파일본의 노드는 빈 근거를 본다(오류 없음)
+        "evidence": list(state.get("evidence", [])),
+    }
 
 
 def route_laws(state: CoreState) -> tuple[str, ...]:
@@ -342,9 +376,9 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     🔴 **팬아웃 앞에서 한 번** 돈다 (D-267) — 법마다 다시 부르면 검색이 3~4배다.
        🔄 2026-09-24 (W6 · D-271 ③) — **법 필터 없이 넓게 한 번** 찾는다. ⛔ 종전에는 품목을 청크 범주로 넘겨
        미확정이면 「일반」만 봤다 — 식품·화장품 전용 조문을 못 봤다. 🔜 W4 — 법별 노드가 `law` 로 자기 근거만 거른다.
-       ⬜ 결과 폭은 `PARAMS.top_k` 그대로다 — 세 법이 한 순위를 나눠 쓰므로 법마다 근거가 모자랄 수 있다. W4 에서 잰다.
-       🔜 W4 — 법별 노드의 재료는 `rt.wide()`(법마다 폭만큼 · 두 갈래 따로) + `rt.law_view()` 다. 법 필터로 따로 찾은 것과
-          후보가 같다(사실원장 ㊲ · ㊳ · 09-28 기기 탐침). ⛔ 이 `search()` 결과(세 법이 다섯 자리를 나눠 쓴다)를 법별로 거르지 않는다.
+       🔄 2026-09-28 (W4 · D-291) — `rt.wide()` 를 부른다(법마다 폭만큼 · 두 갈래 따로). 법별 노드가 `rt.law_view()` 로
+          자기 법 것만 골라 섞는다 — 법 필터로 따로 찾은 것과 후보가 같다(사실원장 ㊲ · ㊳ · ㊵ 124/124).
+          ⛔ 종전에는 `search()`(전역 상위 `top_k` 5)를 불러 세 법이 다섯 자리를 나눠 썼다.
     🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 근거 없이 판정하면 D-224 위반이다.
     """
     sents = state.get("sents", [])
@@ -356,11 +390,12 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
 
     found: list[SentEvidence] = []
     for i, text in enumerate(sents):
-        hits, st = rt.search(cur, text)
+        vec, lex, st = rt.wide(cur, text)
         found.append(
             SentEvidence(
                 sent_id=sent_id(i),
-                articles=tuple(a for h in hits if (a := _evidence_article(h)) is not None),
+                vector_hits=tuple(vec),
+                lexical_hits=tuple(lex),
                 vector=st.vector == rt.VECTOR_OK,
                 lexical=st.lexical == rt.LEXICAL_OK,
                 # 🔄 2026-09-21 — `st.pool` 은 후보 **폭**(늘 50)이라 갈래별 후보 수의 합을 넣는다
@@ -390,15 +425,38 @@ def encode(state: CoreState) -> dict[str, Any]:
 
 
 def _law_node(name: str) -> Callable[..., dict[str, Any]]:
-    """법별 노드 하나 (D-267). 🔜 W4 — 자기 법의 조문 적용(유형 유효성 · 단서) · 근거 거름 · 하한 조회.
+    """법별 노드 하나 (D-267). 🔜 W4 다음 — 자기 법의 조문 적용(유형 유효성 · 단서) · 하한 조회.
 
-    ★ 지금은 **「이 법이 이 문장들을 봤다」** 만 적는다 — 판정을 지어내지 않는다.
+    🆕 2026-09-28 (W4 · D-291) — **자기 법의 근거를 거른다.** 넓은 검색의 두 갈래 후보에서 이 법 것만 골라 섞고
+       (`rt.law_view` — 거른 뒤 섞는다 · ㊲) 앞의 `LAW_TOP_K` 개를 좌표로 옮긴다. 좌표를 못 세운 것은 버린다 (D-224).
+    ★ 판정은 여전히 없다 — 「이 법이 이 문장들을 봤다 + 이 근거를 골랐다」까지다. 판정을 지어내지 않는다.
     🚨 읽는 것은 `law_payload()` 가 보낸 키뿐이다 — 컴파일본에서는 그것만 온다.
+    🔴 참고 전용 법(건강기능식품법)은 노드가 될 수 없다 — 여기서 한 번 더 막는다 (D-271 ⑥ · D-220).
     """
+    law = LAW_OF_NODE[name]
+    if law in REFERENCE_ONLY:
+        raise RuntimeError(
+            f"🔴 참고 전용 법 {law!r} 은 위반 근거를 거르는 노드가 될 수 없다 (D-271 ⑥)"
+        )
 
     def node(state: dict[str, Any]) -> dict[str, Any]:
         n = len(state.get("sents", []))
-        return {"law_results": [LawResult(law=name, sent_ids=tuple(sent_id(i) for i in range(n)))]}
+        by_sent = {e.sent_id: e for e in state.get("evidence", [])}
+        picked: list[tuple[str, tuple[EvidenceArticle, ...]]] = []
+        for i in range(n):
+            e = by_sent.get(sent_id(i))
+            hits = rt.law_view(e.vector_hits, e.lexical_hits, law) if e else []
+            arts = tuple(a for h in hits if (a := _evidence_article(h)) is not None)
+            picked.append((sent_id(i), arts[:LAW_TOP_K]))
+        return {
+            "law_results": [
+                LawResult(
+                    law=name,
+                    sent_ids=tuple(sent_id(i) for i in range(n)),
+                    articles=tuple(picked),
+                )
+            ]
+        }
 
     node.__name__ = name
     node.__qualname__ = name
@@ -432,18 +490,28 @@ def judge(state: CoreState) -> dict[str, Any]:
     """판정. 🔜 W4 — 상태 4종 · 조건(없음·C/A/B/M/D · D-242) · 불가 사유 · 실증 분기 주석(D-263 ④).
 
     🚨 스텁은 `unjudged` 를 낸다 — **통과로 집계 금지** (D-127). 그럴듯한 `confirmed` 를 지어내지 않는다.
-    🔴 근거는 `state["evidence"]` 에서 `sent_id` 로 짝지어 옮긴다. ⛔ 여기서 검색을 다시 부르지 않는다 (D-99).
+    🔴 근거는 **법별 노드가 고른 것**(`law_results[*].articles`)을 `sent_id` 로 짝지어 옮긴다 — 🔄 2026-09-28 (W4 · D-291).
+       법 순서는 `LAW_NODES` 순서이고 같은 청크는 한 번만 싣는다. ⛔ 여기서 검색을 다시 부르지 않는다 (D-99).
        ⛔ 붙는 근거가 없으면 `confirmed` 를 못 낸다 — 계약이 거부한다 (D-224 · `_confirmed_needs_evidence`).
     🚨 **근거를 찾은 것과 판정한 것은 다르다** — 붙였다고 `confirmed` 로 올리지 않는다 (D-127).
     """
-    by_sent = {e.sent_id: e for e in state.get("evidence", [])}
+    order = {name: k for k, name in enumerate(LAW_NODES)}
+    per_sent: dict[str, list[EvidenceArticle]] = {}
+    seen: dict[str, set[str | None]] = {}
+    for r in sorted(state.get("law_results", []), key=lambda r: order.get(r.law, len(order))):
+        for sid, arts in r.articles:
+            for a in arts:
+                if a.chunk_id in seen.setdefault(sid, set()):
+                    continue
+                seen[sid].add(a.chunk_id)
+                per_sent.setdefault(sid, []).append(a)
     return {
         "sentences": [
             SentenceJudgment(
                 sent_id=(sid := sent_id(i)),
                 text=t,
                 verdict=Verdict.unjudged,
-                evidence=list(by_sent[sid].articles) if sid in by_sent else [],
+                evidence=per_sent.get(sid, []),
             )
             for i, t in enumerate(state.get("sents", []))
         ]
