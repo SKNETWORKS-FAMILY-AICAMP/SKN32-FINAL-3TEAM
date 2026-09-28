@@ -863,3 +863,34 @@ mfds_food_func_claim_qa_2021:
   reviewed_at: 2026-09-28
   robots_checked_at: 2026-09-28
   collected_at: 2026-09-28
+
+# 🆕 2026-09-28 — 판정요청서 §5 남은 판정 — 거버넌스 점검 통과 3건 등재
+#   결정: 오한빈 2026-09-28 — 「거버넌스에 문제없으면 사용해도 된다」 (팀장 결정 · 권소라 전달)
+#   점검 (2026-09-28 권소라 · PDF 전 쪽 저장 없이 탐침): 공공누리 · 저작권 제한 문구 0 · 외부 용역·집필 없음 · 단서 1~4호 해당 없음 · 중복 0~6.3%
+#   서명 범위 — 등급 G3(D-132 준용) · 제약 BY · status collect(collect.mfds_board) · 층 1층 판정라벨(기준 시점 지난 자료 · D-290)
+#   ⛔ 같은 점검에서 뺀 것 — 「건강기능식품 기능성 표시·광고 가이드라인」 2009: 5쪽 「표현가능사례 등은 2008년도 용역연구과제 결과로 작성」
+#      → 외부 용역 결과물이라 D-132(저작재산권 전부 보유) · D-140(사전 협의 = 제3자 저작물 방어) 에 걸린다 · 등재 안 함
+#   ⛔ 공정거래백서 2025 — 저작권은 통과(공공누리 없음 · 집필자는 공정위 직원)하나 표시·광고 언급 14쪽 · 인용 18개라 가치가 낮아 등재 안 함
+#   🚨 mfds_daegu_ad_cases_2013 — 텍스트 층이 거의 없어 OCR 필요 · 원문만 먼저 받는다(사용자 지시) · 광고 캡처 이미지는 G1 미추출(D-18)
+#   🚨 robots — www.mfds.go.kr 「User-agent: * / Allow:/」 (2026-09-28 권소라 실측)
+mfds_ad_judge_manual_2015:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+mfds_cosmetic_faq_2020:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+mfds_daegu_ad_cases_2013:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
