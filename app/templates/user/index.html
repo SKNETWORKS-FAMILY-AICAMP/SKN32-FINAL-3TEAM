@@ -4,6 +4,8 @@
   ★ 프로토타입의 `data-screen="home"` 을 옮긴 것이다 — 레이아웃·CSS 는 ksr(2026-09-13),
     통계·최근 이력은 lse 가 만든 **진짜 DB 집계**(history 와 같은 요령)를 그대로 쓴다.
     판정 엔진이 없어 지금은 0건/— 으로 뜨는 게 정상이다 (D-147).
+  🔄 2026-09-22 (ohb 흡수) — `db_down` 이면 DB 에 못 붙은 것이다. 수는 **0건이 아니라 「—」** 로 그린다 —
+     셀 수 없는 것을 0 으로 적으면 없음이 사실로 둔갑한다 (D-72). 라우터 `app/routers/user.py` `index()`.
 #}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 홈{% endblock %}
 {% block screen_css %}
@@ -46,9 +48,16 @@
   </div>
 </div>
 
+{% if db_down %}
+<p class="hm-empty" role="status">
+  <b>DB 에 붙지 못해 통계를 셀 수 없어요.</b> 아래 「—」는 0건이 아니라 모르는 값이에요.<br>
+  <span class="hm-note">개발 기기라면 <code>launcher.py db-up</code> 으로 DB 를 켠 뒤 새로고침하세요.</span>
+</p>
+{% endif %}
+
 <div class="hm-stats">
-  <div class="hm-stat"><div class="hm-k">이번 달 검수</div><div class="hm-v">{{ total_month }}건</div></div>
-  <div class="hm-stat"><div class="hm-k">위법 소지 발견</div><div class="hm-v">{{ violation_count }}건</div></div>
+  <div class="hm-stat"><div class="hm-k">이번 달 검수</div><div class="hm-v">{{ (total_month ~ "건") if total_month is not none else "—" }}</div></div>
+  <div class="hm-stat"><div class="hm-k">위법 소지 발견</div><div class="hm-v">{{ (violation_count ~ "건") if violation_count is not none else "—" }}</div></div>
   <div class="hm-stat"><div class="hm-k">재검수 통과율</div><div class="hm-v">{{ (pass_rate ~ "%") if pass_rate is not none else "—" }}</div></div>
 </div>
 
@@ -82,6 +91,8 @@
     </li>
     {% endfor %}
   </ul>
+  {% elif db_down %}
+  <p class="hm-empty">DB 에 붙지 못해 이력을 읽지 못했어요 — 기록이 없다는 뜻이 아니에요.</p>
   {% else %}
   <p class="hm-empty">
     아직 없어요. 판정 엔진이 붙어 <b>판정 이력</b>이 쌓이면 여기에 최근 검수가 나와요.<br>

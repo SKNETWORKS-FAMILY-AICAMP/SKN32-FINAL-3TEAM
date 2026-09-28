@@ -119,6 +119,7 @@ _DUMMY_NOTICES: list[dict] = [
     },
 ]
 
+
 def _clean_page(value: str | None) -> int:
     try:
         return max(1, int(value or 1))

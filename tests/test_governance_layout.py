@@ -38,6 +38,7 @@ VALID_FLAGS = {
     "NOSTORE",
     "QUERYLOG",
     "PREAPPROVAL",  # D-73
+    "ND",  # 🆕 2026-09-25 변경금지 — 공공누리 제3·4유형 (파생 데이터셋 금지)
 }
 
 # 🚨 등급이 허용하는 용도 상한 (data_sources.yaml 머리말과 같은 표다)
@@ -1388,6 +1389,29 @@ def test_생성물에만_있는_문언이_없다() -> None:
     )
 
 
+@pytest.mark.gate
+def test_3층_소스는_구속력_칸이_있다() -> None:
+    """🆕 2026-09-25 D-290 ② — 층은 「담긴 것」이고 구속력은 칸(`authority: 법령 | 해설`)으로 따로 적는다.
+
+    🚨 3층에 법령과 공식 해설이 함께 있다. 칸이 비면 해설이 **근거 조문 자리로 인용될 때** 막을 값이 없다
+       (인용 금지 게이트는 3층 해설을 RAG 에 처음 적재하는 커밋에서 이 칸을 읽는다 · D-192).
+    ★ 칸을 아직 못 정한 소스는 빈 칸이 아니라 **사유**(`authority_note`)를 싣는다 — 「없음」이 통과로 새지 않게 (D-220).
+    ⛔ 3층이 아닌 소스에 칸이 있으면 막는다 — 2층 → 3층 을 되돌리며 칸만 남으면 다시 한 소스에 두 판단이다.
+    생성기(`gen_registry.py` `_authority_errors`)가 쓰기 전에 같은 규칙으로 멈춘다 — 여기는 생성물을 손으로 고친 것을 잡는다.
+    """
+    bad: list[str] = []
+    for key, spec in _sources().items():
+        third = "3층" in str(spec.get("layer") or "")
+        auth = spec.get("authority")
+        if auth is not None and auth not in {"법령", "해설"}:
+            bad.append(f"{key}: authority {auth!r} 는 법령 · 해설 이 아니다")
+        elif third and auth is None and not spec.get("authority_note"):
+            bad.append(f"{key}: 3층인데 authority 도 authority_note 도 없다")
+        elif not third and (auth is not None or spec.get("authority_note")):
+            bad.append(f"{key}: 3층이 아닌데 구속력 칸이 있다")
+    assert not bad, "구속력 칸(D-290 ②)이 안 맞는다\n  " + "\n  ".join(bad)
+
+
 # ══════════════════════════════════════════════════════════
 # 🔴 「지금은 안 받는다」를 코드가 지키는가 (2026-09-09 · D-72)
 #
@@ -1434,6 +1458,86 @@ def test_hold_과_manual_은_수집이_막힌다() -> None:
         "`require()` 의 그 분기가 사라졌다. 합산으로 가리지 않는다 (D-170).\n"
         f"  실제로 센 것 — {dict(checked)}"
     )
+
+
+@pytest.mark.gate
+def test_manual_은_register_경로로만_올린다() -> None:
+    """🆕 2026-09-22 (권소라 보고) — 거부 메시지가 안내하는 길이 실제로 열려 있는가.
+
+    ⛔ `require()` 의 manual 분기가 경로를 안 봐서, 「`launcher.py register` 로 올린다」는 안내대로
+       `register` 를 치면 **같은 분기에서 같은 이유로** 막혔다 — 사람이 받아 온 파일을 올릴 길이 없었다.
+    🚨 반대 대조 셋 — 수집기 경로는 그대로 막히고 · hold 는 register 로도 막히고 · 모르는 경로는 거부된다.
+    """
+    from collect import registry
+
+    sources = _registry().get("sources") or {}
+    opened = held = 0
+    for key, spec in sources.items():
+        if not isinstance(spec, dict):
+            continue
+        st = spec.get("status")
+        for use, verdict in (spec.get("use") or {}).items():
+            if verdict != "allow":
+                continue
+            if st == "manual":
+                try:
+                    registry.require(key, use=use, via="register")
+                except registry.RegistryError as e:
+                    # 다른 이유(G2 · GATED …)로 막히는 것은 정상이다 — manual 로 막히면 안 된다
+                    assert "status: manual" not in str(e), (
+                        f"🔴 {key}: register 경로가 manual 로 막힌다"
+                    )
+                    continue
+                opened += 1
+            elif st == "hold":
+                with pytest.raises(registry.RegistryError):
+                    registry.require(key, use=use, via="register")
+                held += 1
+    # 🚨 셀 것이 없으면 아무것도 안 잰 것이다 (D-170) — 실측 manual 통과 2건
+    #    (`mfds_cosmetic_sanction` 엑셀 · `mfds_cosmetic_ad_guide_2013` PDF — 둘 다 사람이 받는 G3)
+    assert opened, "🔴 register 로 올라가는 manual 소스가 하나도 없다 — 표본을 다시 본다"
+    assert held, "🔴 hold 표본이 없다 — register 가 hold 를 막는지 못 잰다"
+    with pytest.raises(registry.RegistryError, match="via="):
+        registry.require("mfds_cosmetic_sanction", use="U1", via="collector")
+
+
+@pytest.mark.gate
+def test_register_경로를_주장하는_곳은_ingest_하나다() -> None:
+    """🚨 `via` 는 **부르는 쪽이 스스로 대는 값**이다 — 수집기가 `via="register"` 를 대면 manual 문이 열린다.
+
+    그래서 그 값을 대는 자리를 코드로 하나에 묶는다. 사람이 받아 온 파일을 올리는 곳은
+    `collect/ingest.py` 의 `cmd_register` 뿐이다 (D-108 · 집행계약 게이트 28).
+    """
+
+    def claims(src: str) -> bool:
+        """호출 인자 `via=` 에 register 를 대는가 — 🚨 문자열이 아니라 **구문 트리**로 본다(주석·docstring 제외)."""
+        for node in ast.walk(ast.parse(src)):
+            if not isinstance(node, ast.Call):
+                continue
+            for kw in node.keywords:
+                v = kw.value
+                if kw.arg == "via" and (
+                    (isinstance(v, ast.Constant) and v.value == "register")
+                    or (isinstance(v, ast.Attribute) and v.attr == "VIA_REGISTER")
+                    or (isinstance(v, ast.Name) and v.id == "VIA_REGISTER")
+                ):
+                    return True
+        return False
+
+    files = [ROOT / "launcher.py"] + [
+        p for d in ("collect", "preprocess", "scripts", "app") for p in (ROOT / d).rglob("*.py")
+    ]
+    hits = sorted(
+        str(p.relative_to(ROOT)).replace("\\", "/")
+        for p in files
+        if claims(p.read_text(encoding="utf-8"))
+    )
+    assert hits == ["collect/ingest.py"], f"🔴 register 경로를 대는 곳이 ingest 밖에 있다 — {hits}"
+    # 반대 대조 — 이 검사가 실제로 잡는 모양인가
+    assert claims('registry.require(s, use=u, via="register")')
+    assert claims("registry.require(s, use=u, via=registry.VIA_REGISTER)")
+    assert not claims('registry.require(s, use=u, via="collect")')
+    assert not claims('"""예: `via="register"` 로 부른다"""')
 
 
 # ══════════════════════════════════════════════════════════
@@ -1656,7 +1760,7 @@ def test_HTML_을_긁는_소스는_robots_확인_기록이_있다() -> None:
 # 🚨 **완전 차단은 불가능하다.** `app` 을 안 거치고 langchain 을 직접 쓰면 그만이다.
 #    그래서 「막았다」고 적지 않는다. 여기서 하는 일은 둘이다 —
 #      ① 저장소의 기본값이 꺼짐인지 본다   ② 지금 이 환경에서 꺼져 있는지 본다
-#    실행 경로에서 멈추는 것은 `app.graph.build_graph()` 가 맡는다 (D-220 fail-closed).
+#    실행 경로에서 멈추는 것은 `app.graph._require_tracing_off()` 가 맡는다 — 모든 `build_*` 가 부른다 (D-220 fail-closed · D-266).
 
 TRACING_VARS = ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING")
 

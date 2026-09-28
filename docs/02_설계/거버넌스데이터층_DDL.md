@@ -318,7 +318,8 @@ CREATE TYPE grade_t       AS ENUM ('G0','G1','G2','G3');
 CREATE TYPE use_t         AS ENUM ('U1_train','U2_rag','U3_cite','U4_deploy');
 CREATE TYPE flag_t        AS ENUM ('BY','NC','SA','PII','TOS','GATED',
                                    'NOREDIST','NOSTORE','QUERYLOG','PREAPPROVAL',
-                                   'NOTRAIN');   -- 🔄 D-122 · 사용자 업로드물은 학습·색인 금지
+                                   'NOTRAIN',    -- 🔄 D-122 · 사용자 업로드물은 학습·색인 금지
+                                   'ND');        -- 🆕 0020 · 변경금지(공공누리 제3·4유형) — 파생 데이터셋 금지
 CREATE TYPE cost_t        AS ENUM ('free','gated','paid','unknown');
 CREATE TYPE value_t       AS ENUM ('A','B','C','D','X');
 -- 🔴 위법 유형 — **우리 라벨이 곧 타입이다** (2026-09-10 · D-178).
@@ -477,7 +478,10 @@ CREATE TABLE chunk (
     paragraph       TEXT,
     item            TEXT,
     doc_type        TEXT,
-    category        TEXT[] NOT NULL DEFAULT '{}',
+    -- 🔄 2026-09-24 (0019 · W6 · D-271 ①) — 종전 `category TEXT[]`(법령 이름·별표 제목 낱말 · 기본값 「일반」).
+    --    ⛔ 별표 제목에 법 이름이 없어 265청크가 「일반」으로 떨어졌다. **법 ID 로** 정한다 — 대응표 `collect/law_map.py`.
+    --    🚨 품목과 다른 축이다 — 제품 품목을 이 칸의 필터로 넘기지 않는다 (D-271 ③).
+    law             TEXT NOT NULL,
     text            TEXT NOT NULL,
     -- 🔴 2026-09-12 (0008) — **검색이 보는 텍스트와 인용하는 텍스트를 가른다.**
     --    호 한 줄(「1. 마약」)은 문맥이 없어 아무 질의에나 붙었다. 청크를 다시 자르는 대신
@@ -522,6 +526,8 @@ CREATE TABLE chunk (
     effective_date  DATE,
     superseded_at   DATE,
     CONSTRAINT ck_chunk_tokens CHECK (token_count <= 512),
+    -- 🔄 2026-09-24 (0019) — 법 축 넷 (D-271 ①). 게이트가 `collect/law_map.LAWS` 와 댄다.
+    CONSTRAINT ck_chunk_law CHECK (law IN ('표시광고법', '식품표시광고법', '화장품법', '건강기능식품법')),
     -- 🔴 둘 다 NULL(미적재)이거나 둘 다 서고, 서면 1 ≤ part_no ≤ part_total 이라야 한다 (0011).
     --    ⛔ 한쪽만 서면 「3분의 몇인지 모르는 조각」이 되어 화면이 아무 말도 못 한다.
     CONSTRAINT ck_chunk_part CHECK (

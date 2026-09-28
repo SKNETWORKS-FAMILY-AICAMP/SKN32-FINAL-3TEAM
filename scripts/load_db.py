@@ -50,6 +50,7 @@ import sys
 import yaml
 
 from app.settings import dsn
+from collect import statute
 from preprocess.lineage import GOLDEN_LINEAGE
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -69,6 +70,7 @@ FLAGS = {
     "QUERYLOG",
     "PREAPPROVAL",
     "NOTRAIN",
+    "ND",  # 🆕 2026-09-25 · 0020 — 변경금지 (파생 데이터셋 금지 · `collect.registry.assert_derivable`)
 }
 
 
@@ -330,6 +332,10 @@ def load_manifest(cur, dry: bool) -> int:
        ② **레지스트리에 없는 원천의 행은 세서 찍는다.** ⛔ 종전에는 조용히 건너뛰어
           「원장 N줄 = DB N행」이 아니어도 아무도 몰랐다 (D-149). 넣지 않는 것은 그대로다 —
           `collect_manifest.source_id` 가 `source` 를 가리키므로 넣을 수 없다.
+    🔴 2026-09-26 (클론 B 실측) — ③ **레지스트리에는 있는데 `source` 에 못 들어간 원천**도 같다.
+       ⛔ 종전에는 「레지스트리에 있나」만 봐서, `load_sources()` 가 CHECK(2인 확인 · attribution)로 **건너뛴**
+          `mfds_cosmetic_sanction` 의 원장 줄을 넣으려다 FK 로 죽었다 — 적재 전체가 멈추고 뒤 표(document …)가 비었다.
+       ★ 기준을 **DB 의 `source` 에 실제로 있는 것**으로 바꾼다. 못 넣은 줄은 원천별로 세서 찍는다 (D-149 · D-220).
     """
     p = ROOT / "data" / "manifest.jsonl"
     if not p.exists():
@@ -340,15 +346,25 @@ def load_manifest(cur, dry: bool) -> int:
                 "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
             )
         return 0
-    known = set(_sources())
+    registered = set(_sources())
+    if dry:
+        loaded = registered
+    else:
+        cur.execute("SELECT source_id FROM source")
+        loaded = {row[0] for row in cur.fetchall()}
     rows = 0
     unknown: collections.Counter[str] = collections.Counter()
+    held: collections.Counter[str] = collections.Counter()
     for line in p.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         r = json.loads(line)
-        if r.get("source_id") not in known:
-            unknown[str(r.get("source_id"))] += 1
+        sid = str(r.get("source_id"))
+        if sid not in registered:
+            unknown[sid] += 1
+            continue
+        if sid not in loaded:
+            held[sid] += 1
             continue
         if not dry:
             cur.execute(
@@ -382,6 +398,11 @@ def load_manifest(cur, dry: bool) -> int:
             + " · ".join(f"{k} {v:,}" for k, v in sorted(unknown.items()))
         )
         print("       원천을 등재하거나(레지스트리) 원장 줄이 틀렸는지 본다 (D-149)")
+    if held:
+        print(
+            f"    🟡 `source` 에 못 들어간 원천(위 ⛔ — 2인 확인 · attribution 미완)의 원장 {sum(held.values()):,}줄을 "
+            "넣지 않았다 — " + " · ".join(f"{k} {v:,}" for k, v in sorted(held.items()))
+        )
     return rows
 
 
@@ -693,6 +714,35 @@ def sweep_golden(cur, declared: set[str]) -> int:
     return gone
 
 
+def _evidence(c: str) -> dict:
+    """인용 → `golden_sample.evidence` 한 칸 `{law_id, article, item}` (스키마 주석의 꼴 · D-282)."""
+    law, jo, hang, ho, mok = statute.parse(c)
+    return {
+        "law_id": law,
+        "article": f"제{jo}조제{hang}항",
+        "item": f"{ho}|{mok}" if mok else str(ho),
+    }
+
+
+def load_violation_article(cur, dry: bool) -> int:  # noqa: ANN001
+    """🆕 2026-09-24 (D-282) — `violation_article`(파생 유형 ↔ 조문)을 `collect.statute` 표로 채운다.
+
+    ⛔ 종전에는 비어 있었다(「별표1 파싱에서 채운다」) — 대응표가 코드 네 벌에 흩어져 있었다(D-99).
+    ★ 표는 **데이터로 옮기기만** 한다. 정본은 `collect/statute.py` 이고 이 표는 그 사본이다 — 다시 넣으면 같아진다.
+    """
+    rows = statute.table()
+    if not dry:
+        cur.execute("DELETE FROM violation_article")
+        for c, t in rows:
+            e = _evidence(c)
+            cur.execute(
+                "INSERT INTO violation_article (violation, law_id, article, item, adopted, note) "
+                "VALUES (%s,%s,%s,%s,true,%s)",
+                (t, e["law_id"], e["article"], e["item"], "collect/statute.py (D-282)"),
+            )
+    return len(rows)
+
+
 def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
     """골든셋을 적재한다 (2026-09-10 · D-178).
 
@@ -717,22 +767,40 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
                 "  🚨 등급·재배포 판정 단위가 없는 행은 넣지 않는다 (D-18).\n"
                 "     `GOLDEN_FRAGMENT` 와 `load_fragments()` 에 함께 등재한다."
             )
+        # 🆕 2026-09-24 (D-282) — **근거 조문이 라벨의 정본이다.** 종전에는 `evidence` 칸이 있는데 넣지 않아 비어 있었다.
+        #    🔴 `근거` 칸이 없는 골든셋은 낡은 판이다 — 넣지 않고 멈춘다 (D-220). 위반 행에 근거가 없어도 멈춘다.
+        if "근거" not in r:
+            raise SystemExit(
+                "🔴 골든셋 행에 `근거` 가 없다 — 낡은 골든셋이다 (D-282).\n"
+                "  먼저: uv run python launcher.py golden --write"
+            )
+        if r["labels"] and not r["근거"]:
+            raise SystemExit(f"🔴 위반 라벨에 근거 조문이 없다 — {r['id']} (D-282)")
+        # 🆕 2026-09-25 (D-285 개정 4 · 팀장 판정 (ㄴ)) — `golden_sample` 에는 **조건 칸이 없다.**
+        #    ⛔ 조건 M(보류) · D(판정 대상 아님) 행과 근거가 후보로만 있는 행을 넣으면 `violations` 가 빈 채 들어가
+        #       **적법으로 읽힌다.** 넣지 않고 수를 보인다(`DB미적재_조건칸없음`). 칸은 W1 평가 도구와 함께 정한다.
+        if r.get("조건") in ("M", "D") or (r.get("조건") and not r["근거"]):
+            stat["DB미적재_조건칸없음"] += 1
+            continue
+        evidence = [_evidence(c) for c in r["근거"]]
         stat[r["split"]] += 1
         stat[f"unit:{r['unit']}"] += 1
+        stat["근거있음"] += bool(evidence)
         declared.add(r["id"])
         if not dry:
             cur.execute(
                 "INSERT INTO golden_sample "
-                "(sample_id, fragment_id, text, unit, violations, origin, rule_id, "
+                "(sample_id, fragment_id, text, unit, violations, evidence, origin, rule_id, "
                 " provenance, redistributable, split) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                "VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s) "
                 # 🔴 2026-09-20 (D-249) — **넣는 칸은 전부 갱신한다.** ⛔ 종전에는 text·unit·violations·split
                 #    만 고쳐, 재배포 표시를 false 로 바꾼 골든셋을 다시 넣어도 DB 는 true 로 남았다 —
                 #    `v_publishable_golden`(공개할 때 반드시 지나는 뷰 · D-71)이 인용 문구 5,799행을 「공개 가능」으로 냈다.
                 #    게이트 `test_골든셋_적재는_넣는_칸을_전부_갱신한다` 가 칸 목록을 대조한다.
                 "ON CONFLICT (sample_id) DO UPDATE SET "
                 "  fragment_id = EXCLUDED.fragment_id, text = EXCLUDED.text, unit = EXCLUDED.unit, "
-                "  violations = EXCLUDED.violations, origin = EXCLUDED.origin, "
+                "  violations = EXCLUDED.violations, evidence = EXCLUDED.evidence, "
+                "  origin = EXCLUDED.origin, "
                 "  rule_id = EXCLUDED.rule_id, provenance = EXCLUDED.provenance, "
                 "  redistributable = EXCLUDED.redistributable, split = EXCLUDED.split",
                 (
@@ -741,6 +809,7 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
                     r["text"],
                     r["unit"],
                     r["labels"],
+                    json.dumps(evidence, ensure_ascii=False) if evidence else None,
                     r["origin"],
                     r.get("rule_id"),
                     r["provenance"],
@@ -787,6 +856,9 @@ def main() -> int:
         n_dict, n_typed = load_dict(cur, True)
         print(f"  dict_entry        {n_dict:>6}  (유형 붙은 것 {n_typed})")
         print(f"  product_fact      {load_product_fact(cur, True):>6}")
+        print(
+            f"  violation_article {load_violation_article(cur, True):>6}  (collect/statute.py · D-282)"
+        )
         n_gold, gstat, _ = load_golden(cur, True)
         print(f"  golden_sample     {n_gold:>6}  (⬜ DB 를 안 봐서 거둘 수는 모른다)")
         for k in sorted(gstat):
@@ -828,13 +900,16 @@ def main() -> int:
         n_dict, n_typed = load_dict(cur, False)
         print(f"  dict_entry        {n_dict:>6}  (유형 붙은 것 {n_typed})")
         print(f"  product_fact      {load_product_fact(cur, False):>6}")
+        print(
+            f"  violation_article {load_violation_article(cur, False):>6}  (collect/statute.py · D-282)"
+        )
         n_gold, gstat, swept = load_golden(cur, False)
         print(f"  golden_sample     {n_gold:>6}" + (f"  (거둠 {swept:,})" if swept else ""))
         for k in sorted(gstat):
             print(f"      {k:18} {gstat[k]:>6}")
     print("\n★ 골든셋이 들어갔다 (D-178). 🚨 `risk` 는 비워 둔다 — 시험지는 위험도를 담는 곳이")
     print("   아니다. 판정 시 sanction_rule · v_risk_lookup 으로 계산한다 (D-09 래칫).")
-    print("⬜ `violation_article`(라벨 ↔ 조문 대응)은 아직 비어 있다 — 별표1 파싱에서 채운다.")
+    print("★ `violation_article`(파생 유형 ↔ 조문)은 `collect/statute.py` 에서 채웠다 (D-282).")
     return 0
 
 

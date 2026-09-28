@@ -114,3 +114,24 @@ def test_모르는_원천_행은_세서_찍는다(
     assert load_db.load_manifest(_Cur([]), dry=True) == 1
     out = capsys.readouterr().out
     assert "모르는것 2" in out
+
+
+def test_source_에_못_들어간_원천의_원장_줄은_넣지_않고_센다(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """🔴 2026-09-26 — 레지스트리에는 있지만 CHECK 로 건너뛴 원천(`mfds_cosmetic_sanction`)의 줄이 FK 로 적재를 멈췄다."""
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "manifest.jsonl").write_text(
+        "".join(
+            json.dumps({"source_id": s, "sha256": f"{i}"}) + "\n"
+            for i, s in enumerate(["들어간것", "건너뛴것", "건너뛴것"])
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(load_db, "ROOT", tmp_path)
+    monkeypatch.setattr(load_db, "_sources", lambda: {"들어간것": {}, "건너뛴것": {}})
+    cur = _Cur(["들어간것"])  # DB `source` 에 있는 것
+    assert load_db.load_manifest(cur, dry=False) == 1
+    inserted = [p for sql, p in cur.calls if sql.startswith("INSERT INTO collect_manifest")]
+    assert [p[0] for p in inserted] == ["들어간것"]
+    assert "건너뛴것 2" in capsys.readouterr().out

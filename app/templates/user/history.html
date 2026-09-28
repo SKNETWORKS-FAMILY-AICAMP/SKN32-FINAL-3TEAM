@@ -7,6 +7,7 @@
   🔄 디자인(발표자료 프로토타입 v7.2)은 클릭 → 옆에 JS 드로어인데, 이 프로젝트는 CSP 가
      인라인 스크립트를 막고 HTMX 도 아직 안 붙었다. `?open_id=` 링크로 같은 흐름을
      서버 렌더만으로 낸다. 근거·QnA 는 뺐다 — 원문·결론·위험도·법령 버전만.
+  🔄 2026-09-22 (ohb 흡수) — `db_down` 이면 DB 에 못 붙은 것이다. 「기록이 없다」로 그리지 않는다 (D-72).
 #}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 검수 이력{% endblock %}
 {% block screen_css %}
@@ -41,6 +42,9 @@
     </li>
     {% endfor %}
   </ul>
+  {% elif db_down %}
+  <p role="status"><b>DB 에 붙지 못해 이력을 읽지 못했다</b> — 기록이 없다는 뜻이 아니다.
+    개발 기기라면 <code>launcher.py db-up</code> 으로 DB 를 켠 뒤 새로고침한다.</p>
   {% else %}
   <p>아직 판정 기록이 없다 — 판정 엔진이 붙으면 여기 쌓인다.</p>
   {% endif %}

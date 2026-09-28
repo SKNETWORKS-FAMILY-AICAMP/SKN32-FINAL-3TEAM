@@ -171,7 +171,9 @@ def cmd_register(source_id: str, target: Path, use: str) -> int:
        ② 디스크에 같은 바이트가 있는데 원장 행이 없으면 **행을 붙인다** — 조용히 건너뛰지 않는다
        ③ 같은 이름·다른 바이트면 **판**(`__c날짜`)으로 둔다 — 고르는 것은 `adopt` 다
     """
-    spec = registry.require(source_id, use=use)
+    # 🔄 2026-09-22 — `via="register"` · 사람이 받아 온 파일의 경로다. `status: manual` 은 **여기서만** 통과한다 (D-108).
+    #    ⛔ 종전에는 수집기와 같은 문을 그대로 불러, manual 소스를 올릴 길이 없었다(권소라 보고).
+    spec = registry.require(source_id, use=use, via=registry.VIA_REGISTER)
     store.device_id()  # 🆕 D-250 — 별칭이 없으면 **복사 전에** 멈춘다
     files = walk(target)
     if not files:

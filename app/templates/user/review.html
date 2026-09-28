@@ -38,7 +38,7 @@
 }
 .rv-outcome.o-pass { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
 .rv-outcome.o-certificate { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-.rv-outcome.o-search_failed { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.rv-outcome.o-guidance { background: #fffbeb; color: #92400e; border-color: #fde68a; }
 .rv-outcome.o-hold { background: var(--u-signal-soft); color: var(--u-signal-ink); }
 
 .rv-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .55rem 0 0; }
@@ -138,8 +138,11 @@
         <span class="rv-outcome o-{{ result.outcome.value }}">
           {%- if result.outcome.value == "pass" %}통과
           {%- elif result.outcome.value == "certificate" %}합법화 불가
-          {%- elif result.outcome.value == "search_failed" %}실증 자료 필요
-          {%- else %}전문가 검토{% endif -%}
+          {#- 🔄 2026-09-23 (D-279) — 지시(D-268)를 더하고 탐색 실패(생성 종착 · D-274)를 뺐다.
+              ⛔ 모르는 값은 「알 수 없는 값」으로 그린다 — 종전에는 전부 「전문가 검토」로 읽혔다 #}
+          {%- elif result.outcome.value == "guidance" %}지시 — 실증 자료 필요
+          {%- elif result.outcome.value == "hold" %}전문가 검토
+          {%- else %}알 수 없는 값 ({{ result.outcome.value }}){% endif -%}
         </span>
       </h2>
 
@@ -162,10 +165,15 @@
           </span>
           {% if s.hold_reason %}
           <span class="rv-chip">
+            {#- 🔄 2026-09-23 (D-279) — gap2 · rd1 을 원장 D-127 뜻으로 고치고 새 사유 둘(D-263 · D-277)을 더했다.
+                ⛔ 모르는 값은 「알 수 없는 값」으로 — 종전에는 전부 「라운드 1 미해소」로 읽혔다 #}
             {%- if s.hold_reason.value == "low_conf" %}확신 부족
-            {%- elif s.hold_reason.value == "gap2" %}1·2위 격차 부족
+            {%- elif s.hold_reason.value == "gap2" %}코드·모델 2등급 차
             {%- elif s.hold_reason.value == "cat_unknown" %}카테고리 판별 실패
-            {%- else %}라운드 1 미해소{% endif -%}
+            {%- elif s.hold_reason.value == "rd1" %}공존 규칙 발동
+            {%- elif s.hold_reason.value == "premise_unknown" %}전제 선택 필요 — 인정 여부
+            {%- elif s.hold_reason.value == "law_uncovered" %}전용법 미검수
+            {%- else %}알 수 없는 값 ({{ s.hold_reason.value }}){% endif -%}
           </span>
           {% endif %}
           {% if s.risk.final %}

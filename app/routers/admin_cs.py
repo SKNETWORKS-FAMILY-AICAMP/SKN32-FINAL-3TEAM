@@ -136,9 +136,7 @@ def ticket_list(request: Request) -> HTMLResponse:
         "전체": len(_DUMMY_TICKETS),
         "미처리": sum(1 for r in _DUMMY_TICKETS if r["status"] == "미처리"),
         "처리중": sum(1 for r in _DUMMY_TICKETS if r["status"] == "처리중"),
-        "긴급": sum(
-            1 for r in _DUMMY_TICKETS if r["priority"] == "긴급" and r["status"] != "완료"
-        ),
+        "긴급": sum(1 for r in _DUMMY_TICKETS if r["priority"] == "긴급" and r["status"] != "완료"),
     }
 
     return templates.TemplateResponse(

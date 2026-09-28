@@ -58,6 +58,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.settings import DB_CONNECT_TIMEOUT_S  # noqa: E402 — 접속 대기의 정본 (D-99)
 from scripts import derived_manifest as dm  # noqa: E402 — 위 sys.path 뒤에 들여온다
 from scripts.load_db import LOAD_INPUTS  # noqa: E402 — 적재 입력의 정본 (D-99)
 
@@ -80,8 +81,9 @@ REPLICA_CHECKS: tuple[tuple[str, str], ...] = (*LOAD_CHECKS, ("청크", "chunks.
 CANONICAL_CHECKS: tuple[tuple[str, str], ...] = tuple(
     c for c in LOAD_CHECKS if c[1] not in {n for _, n in DERIVED_CHECKS}
 )
-#: 🚨 DB 를 **기다리지 않는다** — 아래 `accounts()` 참조. `[임의]` — 로컬 도커다.
-CONNECT_TIMEOUT_S = 3
+#: 🚨 DB 를 **기다리지 않는다** — 아래 `accounts()` 참조.
+#: 🔄 2026-09-22 — 값의 정본은 `app.settings.DB_CONNECT_TIMEOUT_S` 다(`[임의]` · 화면 엔진과 같은 값 · D-99).
+CONNECT_TIMEOUT_S = DB_CONNECT_TIMEOUT_S
 
 
 def _derived_empty(checks: tuple[tuple[str, str], ...] = DERIVED_CHECKS) -> list[str]:

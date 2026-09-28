@@ -59,7 +59,8 @@ CHUNK_COLS = (
     "part_no",
     "part_total",
     "doc_type",
-    "category",
+    # 🔄 2026-09-24 (0019 · W6 · D-271 ①) — 종전 `category`(낱말 범주 배열). 법 ID 로 정한 **법 축 하나**다.
+    "law",
     "text",
     "token_count",
     # 🔴 2026-09-12 밤 (0011 · D-200) — 모델에 **실제로 들어가는** 문자열의 토큰 수.
@@ -275,6 +276,16 @@ def main() -> int:
         print("청크가 없다 — `python -m preprocess.chunk --dump` 를 먼저 돌린다", file=sys.stderr)
         return 1
     rows = [json.loads(x) for x in CHUNKS.read_text(encoding="utf-8").splitlines() if x.strip()]
+    # 🔴 **W6 전 판이면 멈춘다** (2026-09-24 · 0019). ⛔ 옛 판은 `law` 대신 `category` 를 들고 있어
+    #    `chunk_values` 가 `KeyError` 로 **DB 에 반쯤 쓴 뒤** 죽는다 — 원인에서 먼 자리다 (D-220).
+    old = sum(1 for r in rows if "law" not in r)
+    if old:
+        print(
+            f"🔴 chunks.jsonl 이 W6 전 판이다 — `law` 칸이 없는 행 {old:,}개 (0019 · D-271 ①).\n"
+            "   정본: uv run python launcher.py chunk --dump   ·   사본: uv run python launcher.py data-sync",
+            file=sys.stderr,
+        )
+        return 1
     if args.limit:
         rows = rows[: args.limit]
 

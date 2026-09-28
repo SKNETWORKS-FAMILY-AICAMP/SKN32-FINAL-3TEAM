@@ -103,11 +103,9 @@ def _lookup(initials: str) -> str | None:
     if not initials:
         return None
     try:
-        import psycopg  # noqa: PLC0415
+        from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
-        from app.settings import dsn  # noqa: PLC0415
-
-        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        with pg_connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT pw_hash FROM app_account WHERE initials = %s AND disabled_at IS NULL",
                 (initials,),
@@ -130,11 +128,9 @@ def account_active(initials: str) -> bool:
 def _store_hash(initials: str, pw_hash: str) -> None:
     """재해시 결과를 쓴다. 🚨 실패해도 로그인은 성공시킨다 — 다음 로그인에 다시 시도한다."""
     try:
-        import psycopg  # noqa: PLC0415
+        from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
-        from app.settings import dsn  # noqa: PLC0415
-
-        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        with pg_connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "UPDATE app_account SET pw_hash = %s, last_login_at = now() WHERE initials = %s",
                 (pw_hash, initials),
