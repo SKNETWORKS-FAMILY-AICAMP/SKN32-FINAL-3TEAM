@@ -835,3 +835,31 @@ mfds_cosmetic_func_review:
   reviewed_by: 권소라
   reviewed_at: 2026-09-28
   collected_at: 2026-09-28
+
+# 🆕 2026-09-28 — 식약처 질의응답집 3건 신규 등재 (판정요청서 docs/ksr/판정요청_2026-09-26_부족유형_새원천6.md §5)
+#   결정: 오한빈 2026-09-28 — 09-25 「질의응답집과 판단안내서 중복 안 되면 등재해도 됩니다」 기준을 이 3건에 적용 (팀장 확인 · 권소라 전달)
+#   서명 범위 — 등급 G3(D-132 준용) · 제약 BY · status collect(collect.mfds_board) · 층 1층 판정라벨(질의응답집 · mfds_cosmetic_ad_qa 선례)
+#   근거: 게시 화면 공공누리 배지 없음 · PDF 저작권 문구 0건 · 외부 집필 표기 없음 · 단서 1~4호 해당 없음 (2026-09-28 권소라 확인 · 저장 없이 탐침)
+#   중복: 레지스트리 같은 문서 없음 · 기존 파생물 15자 조각 대조 0~3.9% — 겹치는 문항은 전처리에서 제외(사용자 지시 2026-09-28)
+#   🚨 robots — www.mfds.go.kr 「User-agent: * / Allow:/」 (2026-09-28 권소라 실측)
+mfds_cosmetic_ad_qa_2012:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+mfds_cosmetic_func_qa_2023:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+mfds_food_func_claim_qa_2021:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28

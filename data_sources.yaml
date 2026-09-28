@@ -503,6 +503,99 @@ sources:
     robots_checked_at: 2026-09-25
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
+  mfds_cosmetic_ad_qa_2012:
+    name: "식약처 「2012년 화장품·의약외품 표시·광고 등 질의·응답집」 ★신규등재 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_641/view.do?seq=12518"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_641 · seq=12518 · 첨부 PDF 1개)"
+    scale: "PDF 166쪽 · 본문 약 9만 자(텍스트 층 있음 · 빈 쪽 9)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「화장품·의약외품 표시·광고 등 질의·응답집(2012-02)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 질의응답집은 가치가 사례이고 기준 시점이 지난다(D-290 · mfds_cosmetic_ad_qa 선례). 근거 조문으로 인용하지 않는다. / 광고 캡처·예시 이미지는 광고주 저작물이라 취하지 않는다(D-18 · D-133) / 🚨 2012-02 기준 — 2021 질의응답집(mfds_cosmetic_ad_qa) · 2025 지침(mfds_cosmetic_ad_guideline)이 우선한다. 판단 사례로만 쓴다(D-290 ③). / 🚨 중복 문항 제외 — 2021 질의응답집(mfds_cosmetic_ad_qa)과 15자 조각 겹침 3.9%(2026-09-28 · 권소라) — 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선)."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_cosmetic_func_qa_2023:
+    name: "식약처 「기능성화장품 심사를 위한 질의응답집」 민원인안내서 (안내서-1342-01 · 2023-12) ★신규등재 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_641/view.do?seq=32464"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_641 · seq=32464 · 첨부 PDF 1개)"
+    scale: "PDF 35쪽 · 본문 약 2.4만 자(텍스트 층 있음)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「기능성화장품 심사를 위한 질의응답집(민원인안내서 1342-01, 2023-12)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 질의응답집은 가치가 사례이고 기준 시점이 지난다(D-290 · mfds_cosmetic_ad_qa 선례). 근거 조문으로 인용하지 않는다. / 광고 캡처·예시 이미지는 광고주 저작물이라 취하지 않는다(D-18 · D-133) / 🚨 중복 문항 제외 — 2021 질의응답집(mfds_cosmetic_ad_qa)과 15자 조각 겹침 1.5% · 청크 6.7%(조문 인용)(2026-09-28 · 권소라) — 같은 질의·답은 전처리에서 문구 단위로 뺀다 / 심사 절차(자료 제출 · 시험법) 문항은 광고 판단 범위 밖 — 받지만 라벨에 넣지 않는다."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_food_func_claim_qa_2021:
+    name: "식약처 「일반식품의 기능성 표시제도 질의응답집」 민원인안내서 (안내서-1098-01 · 2021-01) ★신규등재 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_1060/view.do?seq=14784"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_1060 · seq=14784 · 첨부 PDF 1개)"
+    scale: "PDF 24쪽 · 본문 약 2만 자(텍스트 층 있음)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「일반식품의 기능성 표시제도 질의응답집(민원인안내서 1098-01, 2021-01)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 질의응답집은 가치가 사례이고 기준 시점이 지난다(D-290 · mfds_cosmetic_ad_qa 선례). 근거 조문으로 인용하지 않는다. / 광고 캡처·예시 이미지는 광고주 저작물이라 취하지 않는다(D-18 · D-133) / 🚨 중복 문항 제외 — 기존 파생물과 15자 조각 겹침 0% · 청크 11.8%는 고시 문언 인용(2026-09-28 · 권소라) — 고시 원문과 같은 문장은 전처리에서 뺀다(D-171 상용구) / 2021-01 기준 — 이후 고시 개정분이 우선한다(D-290 ③)."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
   ftc_press:
     name: "공정거래위원회 보도자료 게시판 (보도자료 본문 · 첨부 안내서) ★신규등재 2026-09-26 · 2인 확인 2026-09-28"
     org: "공정거래위원회"

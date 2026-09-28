@@ -55,6 +55,10 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     # 🆕 2026-09-25 — 민원인안내서 4건(m_1060) · 게시물 하나에 PDF 첨부 하나
     "mfds_cosmetic_ad_qa": ("collect.mfds_board", "arg"),
     "mfds_hf_trial_ad_guide": ("collect.mfds_board", "arg"),
+    # 🆕 2026-09-28 — 식약처 질의응답집 3건 · 게시물 하나에 PDF 첨부 하나
+    "mfds_cosmetic_ad_qa_2012": ("collect.mfds_board", "arg"),
+    "mfds_cosmetic_func_qa_2023": ("collect.mfds_board", "arg"),
+    "mfds_food_func_claim_qa_2021": ("collect.mfds_board", "arg"),
     "mfds_cosmetic_claim_test_guide": ("collect.mfds_board", "arg"),
     "mfds_quasi_drug_ad_guide": ("collect.mfds_board", "arg"),
     # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침 (3층 해설 · D-290)
