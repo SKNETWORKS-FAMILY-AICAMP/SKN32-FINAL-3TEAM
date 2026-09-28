@@ -256,3 +256,70 @@ def test_청크의_제외_목이_라벨_게이트의_경로와_같다() -> None:
     }
     assert got == {"1.가.1", "1.가.2", "1.라.1", "1.라.2", "3.가", "3.나", "3.다", "3.라"}
     assert all(r["doc_type"] == "별표" for r in rows if r["exempt_of"])
+
+
+class _Cur:
+    """`exempt_map` 이 쓰는 커서 면만 흉내 낸다 — 칸 이름은 `SQL_EXEMPT` 에서 읽는다."""
+
+    def __init__(self, rows: list[tuple]) -> None:
+        self._rows = rows
+        self.sql = ""
+
+    def execute(self, sql: str) -> None:
+        self.sql = sql
+
+    @property
+    def description(self) -> list:
+        from scripts import search_probe as sp  # noqa: PLC0415
+
+        head = sp.SQL_EXEMPT.split("FROM")[0].removeprefix("SELECT")
+        names = [x.strip().split(".")[-1] for x in head.split(",")]
+        return [type("Col", (), {"name": n}) for n in names]
+
+    def fetchall(self) -> list[tuple]:
+        return self._rows
+
+
+@pytest.mark.gate
+def test_탐침_제외_목_지도는_검색과_같은_함수로_좌표를_세운다() -> None:
+    """🔴 좌표를 여기서 다시 조립하면 규칙이 두 벌이 된다 (D-99) — `rt.citation` · `rt.basis_citation` 이 낸 값이어야 한다."""
+    from scripts import search_probe as sp  # noqa: PLC0415
+
+    #        law_id    doc_type article      paragraph item    paragraph_no exempt_of annex_no
+    rows = [
+        ("013453", "별표", "제3조제1항", "3.나", "본문", None, "3", 1),
+        ("013453", "별표", "제3조제1항", "1.가.1", "본문", None, "1.가", 1),
+        # 별표 번호 없음 → 좌표가 안 선다 (D-224)
+        ("013453", "별표", "제3조제1항", "3.나", "본문", None, "3", None),
+    ]
+    cur = _Cur(rows)
+    got = sp.exempt_map(cur)
+    assert "exempt_of <> ''" in cur.sql
+    assert got == {
+        ("013453", "[별표 1]제3호나목"): "[별표 1]제3호",
+        ("013453", "[별표 1]제1호가목1)"): "[별표 1]제1호가목",
+    }
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("want", "blocked"),
+    [
+        ("013453:[별표 1]제3호나목", True),  # 2026-09-29 실물 — 제외 목을 위반 근거로 적었다
+        ("013453:[별표 1]제3호나목*", True),  # 와일드카드여도 부모 좌표로 영영 안 맞는다
+        ("[별표 1]제3호나목", True),  # 법 ID 없는 옛 모양도 막는다
+        ("013453:[별표 1]제3호*", False),  # 부모 — 정정한 모양
+        ("013453:[별표 1]제3호", False),
+        ("013475:[별표 1]제3호나목", False),  # 다른 법의 같은 글자 좌표는 제외 목이 아니다
+        ("013094:제8조제1항제3호", False),
+    ],
+)
+def test_탐침_정답이_제외_목을_가리키면_멈춘다(want: str, blocked: bool) -> None:
+    """🔴 D-238 ① 의 탐침 판 (2026-09-29 · 팀장 판정 (가)) — 라벨에만 걸려 있던 게이트가 탐침 정답에는 없었다."""
+    from scripts import search_probe as sp  # noqa: PLC0415
+
+    exempt = {("013453", "[별표 1]제3호나목"): "[별표 1]제3호"}
+    bad = sp.exempt_wants([{"q": "면역력 강화에 도움을 줍니다.", "want": [want]}], exempt)
+    assert bool(bad) is blocked
+    if blocked:
+        assert "[별표 1]제3호`" in bad[0] and "D-238" in bad[0]

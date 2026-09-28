@@ -60,6 +60,15 @@ SELF_MADE = "자작"
 #: 🆕 2026-09-28 (0021) — 적용 제외 표시가 **아직 안 실린** 현행 청크 수. 0 이어야 잰다(`main`)
 SQL_UNMARKED = "SELECT count(*) FROM v_current_chunk WHERE exempt_of IS NULL"
 
+#: 🆕 2026-09-29 (D-238 ① 의 탐침 판 · 팀장 판정 (가)) — 적용 제외 목 청크의 **좌표 칸만**.
+#:    좌표는 여기서 조립하지 않는다 — `rt.citation` · `rt.basis_citation` 이 한다 (D-99). 칸 이름은 그 둘이 읽는 이름이다.
+#:    🚨 `<> ''` 는 NULL 도 거른다 — NULL(표시 전 판)은 `SQL_UNMARKED` 가 먼저 멈춘다
+SQL_EXEMPT = """SELECT c.law_id, c.doc_type, c.article, c.paragraph, c.item, c.paragraph_no,
+       c.exempt_of, d.annex_no
+FROM v_current_chunk c
+LEFT JOIN document d ON d.doc_id = c.doc_id
+WHERE c.exempt_of <> ''"""
+
 #: **전체 + 법 넷을 다 돈다.** 🚨 09-12 오후에 `건기식` 을 박고 돌렸는데 정답은 `식품` 에 있었다.
 #:    ⛔ 사람이 헷갈리지 않게 하는 대신 **틀릴 수 있는 자리를 없앤다** (D-51).
 #: 🔄 2026-09-24 (W6 · D-271 ③ ⑦) — 종전 범주 넷(일반 · 식품 · 건기식 · 화장품)을 **법 축**으로 바꿨다.
@@ -196,6 +205,44 @@ def check_rows(rows: list[dict]) -> list[str]:
     return bad
 
 
+def exempt_map(cur) -> dict[tuple[str, str], str]:  # noqa: ANN001
+    """DB 의 적용 제외 목 → `{(법 ID, 제외 목 좌표): 부모 좌표}`. 좌표가 안 서는 행은 뺀다 (D-224)."""
+    cur.execute(SQL_EXEMPT)
+    names = [c.name for c in cur.description]
+    out: dict[tuple[str, str], str] = {}
+    for row in cur.fetchall():
+        d = dict(zip(names, row, strict=True))
+        cite, basis = rt.citation(d), rt.basis_citation(d)
+        if cite and basis:
+            out[(str(d["law_id"]), cite)] = basis
+    return out
+
+
+def exempt_wants(rows: list[dict], exempt: dict[tuple[str, str], str]) -> list[str]:
+    """정답이 **적용 제외 목**을 가리키는가 — 문제 목록 (🆕 2026-09-29 · D-238 ① 의 탐침 판 · 팀장 판정 (가)).
+
+    🔴 적용 제외 목은 해당하면 위반이 **아닌** 경우다 — 위반 근거 정답이 될 수 없다. D-238 ① 은 라벨(`guide_label`)에만
+       걸려 있었고 이 파일에는 없었다. 「면역력 강화에 도움을 줍니다.」의 `[별표 1]제3호나목` 이 그렇게 들어왔고,
+       채점이 위반 근거 좌표로 바뀌자(D-238 개정 (나)) **조용히 0** 이 됐다(후보 50 안 12 → 11/31 · 2026-09-29 클론 B).
+    ★ 와일드카드도 본다 — `제3호나목*` 은 위반 근거 좌표(`제3호`)로 영영 안 맞는다. `제3호*` 는 제외 목이 아니므로 통과.
+    ⬜ 같은 법 · 같은 좌표에 제외 목과 아닌 청크가 함께 있으면 여기서 막는다(오탐 쪽 · fail-closed) — 실측으로 본 적은 없다.
+    """
+    bad: list[str] = []
+    for i, r in enumerate(rows, start=1):
+        for w in [r["want"]] if isinstance(r["want"], str) else r["want"]:
+            law_id, _, cite = w.rpartition(":")
+            base = cite.removesuffix("*")
+            parents = sorted(
+                {p for (lid, c), p in exempt.items() if c == base and (not law_id or lid == law_id)}
+            )
+            if parents:
+                to = " · ".join(f"{law_id + ':' if law_id else ''}{p}" for p in parents)
+                bad.append(
+                    f"{i}행: `{w}` 는 적용 제외 목이다 — 위반 근거가 아니다. 부모 `{to}` 로 적는다 (D-238 ①)"
+                )
+    return bad
+
+
 def _wants_law(want: str | list[str], laws: tuple[str, ...]) -> bool:
     """정답이 이 법 범위에 있는가 — `--top` 이 정답이 없는 법 범위까지 찍지 않게 한다."""
     from collect.law_map import LAW_OF_ID  # noqa: PLC0415
@@ -273,6 +320,13 @@ def main() -> int:
                 "   정본: uv run python launcher.py chunk --dump → embed   ·   사본: data-sync → migrate → embed",
                 file=sys.stderr,
             )
+            return 1
+        # 🔴 정답이 적용 제외 목을 가리키면 멈춘다 (2026-09-29 · D-238 ①) — 그 정답은 위반 근거 좌표로 영영 안 맞는다
+        bad = exempt_wants(rows, exempt_map(cur))
+        if bad:
+            print(f"🔴 질의 파일을 쓰지 않는다 — {p}", file=sys.stderr)
+            for b in bad[:10]:
+                print(f"   {b}", file=sys.stderr)
             return 1
         for r in rows:
             results.append(probe_one(cur, r["q"], r["want"], args.pool))
