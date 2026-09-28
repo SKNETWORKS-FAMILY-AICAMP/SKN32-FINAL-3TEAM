@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import re
 
-from collect.law_map import STATUTE_ID, law_of_basis
+from collect.law_map import LAW_OF_ID, STATUTE_ID, law_of_basis
 
 #: 위반 근거가 되는 법률 조항 — (법률 ID, 조, 항). 🚨 이 셋 밖의 조문은 유형을 주지 않는다.
 FOOD = (STATUTE_ID["식품표시광고법"], 8, 1)  # 식품 등의 표시·광고에 관한 법률 제8조 제1항
@@ -79,6 +79,18 @@ def parse(c: str) -> tuple[str, int, int, int, str | None]:
     if not m:
         raise ValueError(f"인용 꼴이 아니다: {c!r} — `법ID:제N조제N항제N호[|가목]`")
     return m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4)), m.group(5)
+
+
+def law_of(c: str) -> str | None:
+    """인용 → **법 축**(`collect/law_map.LAWS`). 꼴이 틀리거나 모르는 법 ID 면 **None** — 기본 법으로 떨어지지 않는다 (D-220).
+
+    🆕 2026-09-28 (W4) — 판정 그래프의 법별 노드가 사전 적중의 근거를 제 법 것만 고를 때 쓴다.
+    ⛔ 종전에는 `tests/test_law_map.py` 안의 지역 함수로만 있었다 — 그래프가 따로 적으면 두 번째 사본이다 (D-99).
+    """
+    try:
+        return LAW_OF_ID.get(parse(c)[0])
+    except ValueError:
+        return None
 
 
 def ho_key(c: str) -> str:

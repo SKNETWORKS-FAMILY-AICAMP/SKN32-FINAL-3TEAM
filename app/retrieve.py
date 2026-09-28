@@ -143,6 +143,9 @@ class Hit:
     #:    🚨 `None` 은 「아직 재적재 안 됨」이다. 1/1 로 채우지 않는다 (D-199).
     part_no: int | None
     part_total: int | None
+    #: 🆕 2026-09-28 (0021 · D-238 개정 (나)) — **적용 제외 목이면 부모(단서를 든 목)의 경로**, 아니면 빈 문자열.
+    #:    🚨 `None` 은 「아직 재적재 안 됨」이다 — 「제외 목이 아니다」가 아니다. 그때 별표 근거는 좌표를 세우지 않는다.
+    exempt_of: str | None
     doc_type: str | None
     #: 🆕 별표 번호 — **원문 머리글에서 읽은 값만** (0015). `None` = 머리글에 번호가 없다.
     #:    ⛔ 파일명 일련번호가 아니다. `None` 이면 별표 인용을 세우지 않는다 (D-224).
@@ -159,6 +162,10 @@ class Hit:
     #: 「제8조제1항제1호」. 🔴 조립할 수 없으면 `None` — **부분 인용을 내지 않는다.**
     #:    「제8조」만 내면 실은 제3항인 근거가 제1항처럼 읽힌다. 틀린 인용은 없는 인용보다 나쁘다.
     citation: str | None = None
+    #: 🆕 2026-09-28 (D-238 개정 (나)) — **위반 근거로 쓸 좌표.** 적용 제외 목이면 부모 목의 좌표로 올린다(`basis_citation`).
+    #:    🔴 `citation` 은 이 청크 자신의 좌표로 그대로 둔다 — 화면은 「이 글이 어디 있나」를, 판정은 「무엇을 어겼나」를 본다.
+    #:    🚨 `None` 이면 **위반 근거로 못 쓴다** — 좌표를 못 세웠거나, 별표인데 제외 표시가 아직 안 실렸다 (D-224 · D-220).
+    basis_citation: str | None = None
     #: 코사인 거리. 🚨 어휘·기호 갈래는 `None` 이다 — **0.0 으로 채우지 않는다.**
     #:    0.0 은 「완전히 같다」는 뜻이라, 없는 값을 가장 좋은 값으로 만든다.
     distance: float | None = None
@@ -203,6 +210,8 @@ _SELECT: tuple[tuple[str, str], ...] = (
     #       「안 쪼갰다」가 아니다 — 안 쪼갰으면 1/1 이다.
     ("c.part_no", "part_no"),
     ("c.part_total", "part_total"),
+    # 🆕 2026-09-28 (0021 · D-238 개정 (나)) — 적용 제외 목의 부모 경로. ⛔ 없으면 제외 목이 위반 근거 좌표로 나간다(사실원장 ㊷).
+    ("c.exempt_of", "exempt_of"),
     ("c.doc_type", "doc_type"),
     ("c.law", "law"),
     ("c.text", "text"),
@@ -482,6 +491,30 @@ def citation(hit_like: dict) -> str | None:
     return out
 
 
+def basis_citation(hit_like: dict) -> str | None:
+    """**위반 근거로 쓸 좌표** (🆕 2026-09-28 · 팀장 판정 (나) · D-238 개정).
+
+        일반 청크              → `citation()` 그대로
+        적용 제외 목 청크       → 부모(단서를 든 목)의 좌표 — `[별표 1]제1호가목1)` → `[별표 1]제1호가목`
+        제외 표시가 안 실린 별표 → `None` — 제외 목인지 모른다
+
+    🔴 「다만 … 제외한다」의 하위 목은 **해당하면 위반이 아닌** 경우다 — 그 좌표를 위반 근거로 내면 D-238 이 라벨에서 막은
+       오류가 판정으로 들어간다. 검색이 제외 목을 찾은 것은 버리지 않는다: 부모의 금지 문장을 문맥으로 들고 있어 **맞는 규범**을
+       찾은 것이고, 제외 목 자신은 판정이 확인할 단서 조건이다(`app/graph.py` `Proviso`).
+    🚨 부모 좌표도 `citation()` 이 조립한다 — 규칙이 두 벌이 되지 않게 경로만 바꿔 부른다 (D-99). 모르면 `None` (D-224).
+    ⛔ `exempt_of` 가 `None`(재적재 전)인 별표는 좌표를 세우지 않는다 — 없음이 「제외 목이 아니다」로 집계되지 않게 (D-220).
+    ⬜ 조문 · 산문 행정규칙 안의 「다만」 단서는 아직 안 가른다 — 법령 청크는 `citation()` 그대로다.
+    """
+    if hit_like.get("doc_type") != "별표":
+        return citation(hit_like)
+    parent = hit_like.get("exempt_of")
+    if parent is None:
+        return None
+    if parent == "":
+        return citation(hit_like)
+    return citation({**hit_like, "paragraph": parent})
+
+
 def _rows_to_hits(rows: list[tuple], match: str, *, score: str | None = None) -> list[Hit]:
     """🚨 자리번호가 아니라 **이름으로** 꺼낸다 — 칸이 늘어도 조용히 밀리지 않는다.
 
@@ -493,7 +526,9 @@ def _rows_to_hits(rows: list[tuple], match: str, *, score: str | None = None) ->
     for r in rows:
         d = dict(zip(_NAMES, r, strict=False))
         extra = {score: float(r[len(_NAMES)])} if score else {}
-        out.append(Hit(**d, match=match, citation=citation(d), **extra))
+        out.append(
+            Hit(**d, match=match, citation=citation(d), basis_citation=basis_citation(d), **extra)
+        )
     return out
 
 
@@ -754,7 +789,7 @@ def law_view(
           행과 질의로만 정해진다(`SQL_VECTOR` · `SQL_LEXICAL`). 그 법 후보가 `pool` 개 이상이면 결과가 같다.
     🚨 재료는 **후보 전체**여야 한다 — `top_k` 5 로 자른 뒤 거르면 법 셋이 다섯 자리를 나눠 쓴다.
     ★ 재료는 `wide()` 다(법마다 폭만큼) — 전역 상위 N 을 넣으면 청크가 많은 법이 자리를 먼저 차지한다(㊳).
-    🔜 W4 — 법별 노드가 이 함수로 자기 근거를 받는다. 받을 개수(k)는 정하지 않았다.
+    🔄 2026-09-28 (W4) — 법별 노드(`app/graph.py` `_law_node`)가 이 함수로 자기 근거를 받는다. 받을 개수(k)는 `LAW_TOP_K` `[임의]` (D-291 ⬜).
     """
     vec = [h for h in vector_hits if h.law == law]
     lex = [h for h in lexical_hits if h.law == law]
@@ -825,7 +860,7 @@ def wide(cur: Any, q: str, pool: int = POOL) -> tuple[list[Hit], list[Hit], Sear
        (09-28 기기 탐침 · 폭 50 에서 식품 후보 17~30).
     🚨 섞지 않고 **두 갈래를 따로** 낸다 — 섞은 뒤 거르면 다른 법 청크가 순위를 부풀린다(㊲).
     🚨 `state.pool` 은 **법마다의 폭**이고 `pool_*` 는 법을 합친 행 수다(최대 법 수 × `pool`) — 한 칸에 두 분모를 섞지 않는다 (D-178).
-    🔜 W4 — `app/graph.py` `retrieve` 가 이것을 부르고 법별 노드가 `law_view` 로 받는다. 지금 부르는 쪽은 `scripts/search_probe.py` 다.
+    🔄 2026-09-28 (W4 · D-291) — `app/graph.py` `retrieve` 가 이것을 부르고 법별 노드가 `law_view` 로 받는다 · `scripts/search_probe.py` 도 부른다.
     """
     return _candidates(cur, q, (), pool, per_law=True)
 

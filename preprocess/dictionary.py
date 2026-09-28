@@ -46,9 +46,8 @@ import argparse
 import collections
 import json
 import pathlib
-import re
-import unicodedata
 
+from app.dictmatch import norm as _norm
 from collect import registry, statute
 
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
@@ -67,9 +66,9 @@ OUT = pathlib.Path("data/derived/banned_terms.jsonl")
 MIN_TERM = 2
 
 
-def norm(s: str) -> str:
-    """매칭용 정규화. 🚨 **보관은 원문으로 한다** (D-117)."""
-    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s)))
+#: 🔄 2026-09-28 — 정규화는 `app/dictmatch.py` 한 곳이다 (D-99). ⛔ 종전에는 여기와 `scripts/eval_rule.py` 에 같은 글자로 있었다.
+#:    `preprocess.golden` 이 이 이름으로 부르므로 이름을 남긴다.
+norm = _norm
 
 
 def _jsonl(p: pathlib.Path) -> list[dict]:

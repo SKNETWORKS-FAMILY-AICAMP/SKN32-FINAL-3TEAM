@@ -61,6 +61,8 @@ CHUNK_COLS = (
     "doc_type",
     # 🔄 2026-09-24 (0019 · W6 · D-271 ①) — 종전 `category`(낱말 범주 배열). 법 ID 로 정한 **법 축 하나**다.
     "law",
+    # 🆕 2026-09-28 (0021 · D-238 개정 (나)) — 적용 제외 목이면 부모 경로 · 아니면 빈 문자열. 임베딩 입력에 안 든다
+    "exempt_of",
     "text",
     "token_count",
     # 🔴 2026-09-12 밤 (0011 · D-200) — 모델에 **실제로 들어가는** 문자열의 토큰 수.
@@ -282,6 +284,16 @@ def main() -> int:
     if old:
         print(
             f"🔴 chunks.jsonl 이 W6 전 판이다 — `law` 칸이 없는 행 {old:,}개 (0019 · D-271 ①).\n"
+            "   정본: uv run python launcher.py chunk --dump   ·   사본: uv run python launcher.py data-sync",
+            file=sys.stderr,
+        )
+        return 1
+    # 🔴 **적용 제외 표시 전 판이면 멈춘다** (2026-09-28 · 0021 · D-238 개정 (나)). ⛔ 칸 없이 실으면 `chunk_values` 가
+    #    반쯤 쓴 뒤 죽고, 칸을 비워 실으면 제외 목이 「제외 목이 아니다」로 읽힌다 — 없음이 성공으로 집계된다 (D-220).
+    old = sum(1 for r in rows if "exempt_of" not in r)
+    if old:
+        print(
+            f"🔴 chunks.jsonl 이 적용 제외 표시 전 판이다 — `exempt_of` 칸이 없는 행 {old:,}개 (0021 · D-238).\n"
             "   정본: uv run python launcher.py chunk --dump   ·   사본: uv run python launcher.py data-sync",
             file=sys.stderr,
         )

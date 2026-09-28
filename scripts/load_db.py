@@ -511,6 +511,7 @@ def load_dict(cur, dry: bool) -> tuple[int, int]:
 
 
 #: 금지표현 사전이 쓰는 칸 값 — `load_dict` 가 넣고 `sweep_dict` 가 **그 안에서만** 거둔다.
+#: 🚨 `DICT_KIND` 는 판정 그래프(`app/graph.py` `DICT_KIND`)가 **같은 값**으로 읽는다 — 게이트가 대조한다 (D-99).
 DICT_FRAGMENT, DICT_KIND = "ftc_decisions_body:dict", "금지표현"
 
 

@@ -57,6 +57,9 @@ QUERIES = ROOT / "data" / "derived" / "labels" / "search_probe" / "queries.jsonl
 #: 출처 칸의 허용값 — 레지스트리 원천 ID 밖에서 받는 것은 이것뿐이다
 SELF_MADE = "자작"
 
+#: 🆕 2026-09-28 (0021) — 적용 제외 표시가 **아직 안 실린** 현행 청크 수. 0 이어야 잰다(`main`)
+SQL_UNMARKED = "SELECT count(*) FROM v_current_chunk WHERE exempt_of IS NULL"
+
 #: **전체 + 법 넷을 다 돈다.** 🚨 09-12 오후에 `건기식` 을 박고 돌렸는데 정답은 `식품` 에 있었다.
 #:    ⛔ 사람이 헷갈리지 않게 하는 대신 **틀릴 수 있는 자리를 없앤다** (D-51).
 #: 🔄 2026-09-24 (W6 · D-271 ③ ⑦) — 종전 범주 넷(일반 · 식품 · 건기식 · 화장품)을 **법 축**으로 바꿨다.
@@ -83,11 +86,15 @@ def _matches(h: rt.Hit, want: str) -> bool:
     law_id, _, cite = want.rpartition(":")
     if law_id and h.law_id != law_id:
         return False
+    # 🔄 2026-09-28 (팀장 판정 (나) · D-238 개정) — **위반 근거 좌표**(`basis_citation`)로 채점한다. 적용 제외 목은 부모 목의
+    #    좌표로 올라온다. ⛔ 종전에는 청크 자신의 좌표(`citation`)로 채점해 와일드카드가 제외 목을 정답으로 셌다(사실원장 ㊷ ·
+    #    31건 중 12건이 제외 목을 덮었다). 🚨 별표인데 제외 표시가 안 실린 판이면 `None` 이라 맞지 않는다 — `main` 이 먼저 멈춘다
+    got = h.basis_citation or ""
     if cite.endswith("*"):
-        base, got = cite[:-1], h.citation or ""
+        base = cite[:-1]
         # 🚨 「제1호*」가 「제10호」를 맞히지 않게 — 바로 뒤가 숫자면 다른 항목이다
         return got.startswith(base) and not got[len(base) : len(base) + 1].isdigit()
-    return h.citation == cite
+    return got == cite
 
 
 def rank_of(hits: list[rt.Hit], want: str | list[str]) -> int | None:
@@ -256,6 +263,17 @@ def main() -> int:
 
     results = []
     with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        # 🔴 **적용 제외 표시가 안 실린 청크가 있으면 멈춘다** (2026-09-28 · 0021 · D-238 개정 (나)).
+        #    ⛔ 그 판으로 재면 별표 근거가 전부 `basis_citation=None` 이라 정답이 조용히 0 이 된다 — 「검색이 나빠졌다」로 읽힌다
+        cur.execute(SQL_UNMARKED)
+        unmarked = cur.fetchone()[0]
+        if unmarked:
+            print(
+                f"🔴 적용 제외 표시(`exempt_of`)가 안 실린 청크 {unmarked:,}개 — 재지 않는다 (0021 · D-220).\n"
+                "   정본: uv run python launcher.py chunk --dump → embed   ·   사본: data-sync → migrate → embed",
+                file=sys.stderr,
+            )
+            return 1
         for r in rows:
             results.append(probe_one(cur, r["q"], r["want"], args.pool))
 
@@ -334,10 +352,12 @@ def main() -> int:
                     print(f"\n  ■ {r['q'][:30]} · {name} · 벡터 {st.vector}")
                     for i, h in enumerate(hits, 1):
                         mark = "★" if rank_of([h], r["want"]) else " "
+                        # 🆕 2026-09-28 (D-238 개정 (나)) — 적용 제외 목은 「↑부모」 를 붙인다. ★ 는 부모 좌표로 맞은 것이다
+                        up = f" ↑{h.basis_citation}" if h.exempt_of else ""
                         print(
                             f"   {mark}{i:>2}. {h.law:<8} {h.law_id:<8} {(h.citation or '(인용 없음)'):<22} "
                             f"v{h.rank_vector or '-':>4} l{h.rank_lexical or '-':>4}  "
-                            f"{(h.text or '').replace(chr(10), ' ')[:40]}"
+                            f"{(h.text or '').replace(chr(10), ' ')[:40]}{up}"
                         )
 
     if args.json:

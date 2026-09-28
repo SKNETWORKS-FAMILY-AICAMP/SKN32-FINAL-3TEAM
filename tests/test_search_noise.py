@@ -120,6 +120,7 @@ def _hit(cid: str, law_id: str, law: str = "식품표시광고법") -> rt.Hit:
         context=None,
         part_no=None,
         part_total=None,
+        exempt_of="",
         doc_type="별표",
         annex_no=None,
         doc_title=None,
