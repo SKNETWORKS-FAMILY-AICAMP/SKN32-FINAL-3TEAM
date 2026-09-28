@@ -6,9 +6,11 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 import pytest
 
-from scripts.decision_map import _clean, is_dead
+from scripts.decision_map import PENDING_DAYS, _clean, is_dead, pending_age
 
 pytestmark = pytest.mark.gate
 
@@ -40,3 +42,39 @@ def test_폐기_대체는_폐기로_센다(status: str) -> None:
 )
 def test_이력에_낱말이_있어도_살아_있는_결정이다(status: str) -> None:
     assert not is_dead(_clean(status))
+
+
+# ── 판정 대기 (2026-09-28) — 초안 · 제안 · 조건부가 판정 없이 쌓이던 것을 센다 ─────────────
+_TODAY = dt.date(2026, 9, 28)
+
+
+@pytest.mark.parametrize(
+    ("status", "want"),
+    [
+        ("⬜ 초안 (09-17) · D-153·D-156 확장", ("초안", 11)),
+        ("제안 (09-07) · 팀장 확정 대기", ("제안", 21)),
+        ("조건부 (2026-08-30 · W2 실측 후 확정)", ("조건부", 29)),
+        (
+            "조건부 (W1 결단)",
+            ("조건부", None),
+        ),  # 🚨 날짜를 못 읽으면 「모른다」 — 0 일로 바꾸지 않는다
+    ],
+)
+def test_판정_대기를_상태_첫_낱말로_가르고_날을_센다(status: str, want: tuple) -> None:
+    assert pending_age(_clean(status), _TODAY) == want
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "확정 (09-28 · 집행으로 채택 · 초안 09-17) · 팀장 판정 (a)",  # 🔴 이력의 「초안」 은 상태가 아니다
+        "폐기 (→ D-283 · 09-24) · 초안 09-18",
+        "확정 · 🔄 조건부였던 것을 닫았다",
+    ],
+)
+def test_이력에_초안이_있어도_판정_대기가_아니다(status: str) -> None:
+    assert pending_age(_clean(status), _TODAY) is None
+
+
+def test_대기_기준일은_임의값이고_양수다() -> None:
+    assert PENDING_DAYS > 0

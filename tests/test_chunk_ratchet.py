@@ -23,6 +23,8 @@ def _row(i: int, frag: str) -> dict:
         "law": "표시광고법",
         "text": f"본문 {i}",
         "part_total": 1,
+        # 🆕 2026-09-28 (D-238 개정 (나)) — 생산자가 늘 채우는 칸이다(빈 문자열 = 제외 목이 아니다)
+        "exempt_of": "",
     }
 
 

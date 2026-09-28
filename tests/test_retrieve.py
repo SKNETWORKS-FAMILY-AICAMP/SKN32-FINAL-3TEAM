@@ -111,6 +111,7 @@ def _hit(cid: str = "c1", **kw: object) -> rt.Hit:
         "context": None,
         "part_no": None,
         "part_total": None,
+        "exempt_of": None,
         "doc_type": None,
         "annex_no": None,
         "doc_title": None,

@@ -65,6 +65,42 @@ _ADD_CHUNK_COL = re.compile(r"ALTER\s+TABLE\s+chunk\s+ADD\s+COLUMN", re.I)
 _REFRESH_VIEW = re.compile(r"(?:CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+VIEW[^;]*v_current_chunk", re.I)
 
 
+_CHUNK_TABLE = re.compile(r"CREATE TABLE chunk \((.*?)\n\);", re.S)
+#: 열 줄 — 들여쓰기 **네 칸**에 이름이 온다. 이어지는 줄(생성열 식 · 제약 몸통)은 더 깊다
+_COL_LINE = re.compile(r"^    ([a-z_]+)\s+\S", re.M)
+_ADDED_COL = re.compile(
+    r"ALTER\s+TABLE\s+chunk\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.I
+)
+
+
+def _chunk_cols(sql: str) -> list[str]:
+    m = _CHUNK_TABLE.search(sql)
+    assert m, "🚨 `CREATE TABLE chunk` 를 못 찾았다"
+    return [c for c in _COL_LINE.findall(m.group(1)) if c != "CONSTRAINT"]
+
+
+@pytest.mark.gate
+def test_chunk_에_더한_열은_끝에_둔다() -> None:
+    """🔴 옮긴 DB 는 `ADD COLUMN` 으로 열이 **끝에** 붙는다 — `schema.sql` 이 가운데 두면 `SELECT c.*` 뷰의 열 순서가 갈린다.
+
+    ⛔ 2026-09-28 — 0021 의 `exempt_of` 를 `schema.sql` 에서 `part_total` 뒤에 두었다. 정적 게이트(뷰 **본문** 대조)는
+       `SELECT c.*` 글자만 봐서 통과했고, A 의 `db-drift` 가 두 DB 의 뷰 열 순서가 다르다고 잡았다.
+    ★ 동결본(`db/schema_0001.sql`) 뒤에 마이그레이션이 **새로** 더한 열은 `schema.sql` 의 열 목록 **끝에, 더한 순서대로** 있어야 한다.
+    """
+    base = _chunk_cols((ROOT / "db" / "schema_0001.sql").read_text(encoding="utf-8"))
+    added: list[str] = []
+    for f in sorted(MIGRATIONS.glob("*.sql")):
+        for c in _ADDED_COL.findall(f.read_text(encoding="utf-8")):
+            if c not in base and c not in added:
+                added.append(c)
+    now = _chunk_cols(SCHEMA.read_text(encoding="utf-8"))
+    assert added, "🚨 동결본 뒤에 더한 열이 없다 — 검사 대상이 사라졌다 (D-170)"
+    assert now[-len(added) :] == added, (
+        f"🔴 `schema.sql` 의 chunk 열 끝이 마이그레이션이 더한 순서와 다르다 — 끝 {now[-len(added) :]} · 더한 것 {added}\n"
+        "   옮긴 DB 와 새 DB 의 뷰 열 순서가 갈린다. 새 열은 `CREATE TABLE chunk` 의 열 목록 맨 끝에 둔다."
+    )
+
+
 @pytest.mark.gate
 def test_chunk_에_열을_더하면_뷰도_다시_만든다() -> None:
     """⛔ **뷰가 낡으면 검색이 통째로 죽는다.** 그리고 그것은 실제 질의에서만 드러난다.

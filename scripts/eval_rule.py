@@ -25,14 +25,13 @@ from __future__ import annotations
 import collections
 import json
 import pathlib
-import re
 import sys
-import unicodedata
 
 # 🔄 2026-09-21 (전수 재검토) — ⛔ 안내대로 `python scripts/<이 파일>.py` 로 돌리면 `scripts/` 가 경로 맨 앞이라
 #    `app` 을 못 찾았다(ModuleNotFoundError). `scripts/label_merge.py` 와 같은 꼴로 저장소 뿌리를 세운다.
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
+from app.dictmatch import terms_in  # noqa: E402 — 정규화 · 매칭은 한 곳 (D-99 · 2026-09-28)
 from app.settings import PARAMS  # noqa: E402
 from collect import statute  # noqa: E402
 from preprocess.golden import is_negative  # noqa: E402 — 음성 판별은 한 곳 (D-99)
@@ -69,8 +68,8 @@ def load_pairs() -> dict[str, list[str]]:
 
 def judge_ho(text: str, pairs: dict[str, list[str]]) -> set[str]:
     """사전이 울린 **호** — `judge()` 와 같은 매칭(부분문자열)이고 답만 조문이다 (D-282)."""
-    n = norm(text)
-    return {c for term, cs in pairs.items() if term in n for c in cs}
+    hit = terms_in(text, pairs)
+    return {c for term in hit for c in pairs[term]}
 
 
 def ho_scores(rows: list[dict], pairs: dict[str, list[str]]) -> dict[str, tuple[int, int, int]]:
@@ -123,10 +122,6 @@ def truth_ho(r: dict, pred: set[str]) -> set[str]:
     return {statute.ho_key(c) for c in r.get("근거") or []}
 
 
-def norm(s: str) -> str:
-    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s)))
-
-
 def load_rules() -> dict[str, str]:
     """`단독판정` 자격이 있는 항목만. 🔴 적법중첩·모호는 **단독으로 쓰지 않는다** (D-156)."""
     if not DICT.exists():
@@ -149,8 +144,7 @@ def judge(text: str, rules: dict[str, str]) -> set[str]:
     🚨 부분문자열이라 짧은 낱말이 위험하다. 그래서 앞에서 `단독판정` 자격
        (적법중첩·모호 제외)이 거른다 — 자격 심사가 이 매칭의 안전장치다 (D-156).
     """
-    n = norm(text)
-    return {lab for term, lab in rules.items() if term in n}
+    return {rules[term] for term in terms_in(text, rules)}
 
 
 def group_scores(

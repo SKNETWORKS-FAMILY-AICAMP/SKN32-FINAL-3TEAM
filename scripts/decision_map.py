@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import datetime as dt
 import re
 import sys
 from pathlib import Path
@@ -67,6 +68,32 @@ _DEAD = re.compile(r"^(?:부분\s*)?(?:폐기|대체됨)")
 def is_dead(status: str) -> bool:
     """폐기·대체된 결정인가. `status` 는 `_clean()` 을 지난 색인 상태 칸이다. 🚨 판정은 여기 한 곳이다 (D-99)."""
     return bool(_DEAD.match(status.strip()))
+
+
+#: 🆕 2026-09-28 — **판정을 기다리는 상태.** 첫 낱말이 초안 · 제안 · 조건부면 아직 팀장 판정이 기록되지 않았다.
+#:    🔴 이것을 세는 자리가 없어 초안 · 제안 11건 · 기한이 지난 조건부 2건이 한 주 넘게 쌓였다(설계결정기록 머리말 09-28).
+#:    상태 칸 규칙은 `is_dead()` 와 같다 — **첫 낱말이 상태이고 뒤는 이력**이다.
+_PENDING = re.compile(r"^(?:⬜\s*)?(초안|제안|조건부)")
+#: 상태 칸의 날짜 — 「(09-17)」 · 「(2026-09-17)」 · 「(09-17 · …)」. 연도가 없으면 오늘의 연도로 읽는다.
+_STATUS_DATE = re.compile(r"\((?:(20\d\d)-)?(\d{2})-(\d{2})")
+#: 며칠이면 빨갛게 하나 — 🚨 `[임의]` 7일. 인계 주기(하루~사흘)의 두 배 남짓으로 잡았다.
+PENDING_DAYS = 7
+
+
+def pending_age(status: str, today: dt.date) -> tuple[str, int | None] | None:
+    """판정 대기면 (상태, 경과 일수)를 낸다. 날짜를 못 읽으면 일수는 `None` — 「모른다」를 0 으로 바꾸지 않는다 (D-188)."""
+    m = _PENDING.match(status.strip())
+    if not m:
+        return None
+    d = _STATUS_DATE.search(status)
+    if not d:
+        return m.group(1), None
+    year = int(d.group(1)) if d.group(1) else today.year
+    try:
+        since = dt.date(year, int(d.group(2)), int(d.group(3)))
+    except ValueError:
+        return m.group(1), None
+    return m.group(1), (today - since).days
 
 
 _DREF = re.compile(r"\bD-(\d{1,3})\b")
@@ -125,9 +152,21 @@ def scan_code() -> dict[str, list[str]]:
     return where
 
 
-def render(decisions: dict[str, dict], where: dict[str, list[str]], orphan: list[str]) -> str:
+def render(
+    decisions: dict[str, dict],
+    where: dict[str, list[str]],
+    orphan: list[str],
+    today: dt.date | None = None,
+) -> str:
     def key(d: str) -> int:
         return int(d[2:])
+
+    today = today or dt.date.today()
+    waiting = {d: pending_age(decisions[d]["status"], today) for d in decisions}
+    waiting = {d: v for d, v in waiting.items() if v is not None}
+    stale = sorted(
+        (d for d, (_, age) in waiting.items() if age is None or age > PENDING_DAYS), key=key
+    )
 
     dead = {d for d in decisions if is_dead(decisions[d]["status"])}
     live = {d for d in decisions if d not in dead}
@@ -155,9 +194,26 @@ def render(decisions: dict[str, dict], where: dict[str, list[str]], orphan: list
     a(f"| 🔴 **살아 있는데 인용 0건** | **{len(live) - len(cited)}** |")
     a(f"| 본문에 ⬜ 열린 항목이 있는 것 | **{len(opened)}** |")
     a(f"| ⬜ 줄 총량 | **{sum(len(decisions[d]['open']) for d in opened)}** |")
+    a(f"| 판정 대기(초안 · 제안 · 조건부) | **{len(waiting)}** |")
+    a(f"| 🔴 **그중 {PENDING_DAYS}일 넘었거나 날짜를 못 읽은 것** `[임의]` | **{len(stale)}** |")
     if orphan:
         a(f"| 🔴 색인에만 있고 본문이 없는 것 | **{len(orphan)}** — {' '.join(orphan)} |")
     a("")
+
+    if waiting:
+        a(f"## 0-1. 판정 대기 — 기준일 {today.isoformat()}\n")
+        a(
+            "🚨 **집행됐으면 쓰기로 결정한 것이다** — 확정으로 기록한다. 안 됐으면 인계의 「판정 대기 D」 칸에 올린다 (원장 머리말 09-28).\n"
+        )
+        a("| D | 상태 | 경과 | 제목 |")
+        a("|---|---|---:|---|")
+        for d in sorted(waiting, key=key):
+            kind, age = waiting[d]
+            mark = "🔴 " if d in stale else ""
+            a(
+                f"| {mark}{d} | {kind} | {'날짜 없음' if age is None else f'{age}일'} | {decisions[d]['title'][:52]} |"
+            )
+        a("")
 
     a("## 1. ⬜ 열린 항목 — 원장이 스스로 「아직」이라 적은 것\n")
     a("🚨 **여기 있는 문장은 전부 원장 본문에서 그대로 가져온 것입니다.** 지어낸 것이 없습니다.\n")
@@ -226,6 +282,14 @@ def main() -> int:
     )
     if orphan:
         print(f"🔴 색인에만 있고 본문이 없는 결정: {' '.join(orphan)} — 인용하면 안 된다 (D-100)")
+    today = dt.date.today()
+    stale = []
+    for d in sorted(decisions, key=lambda x: int(x[2:])):
+        w = pending_age(decisions[d]["status"], today)
+        if w and (w[1] is None or w[1] > PENDING_DAYS):
+            stale.append(f"{d}({w[0]} · {'날짜 없음' if w[1] is None else f'{w[1]}일'})")
+    if stale:
+        print(f"🔴 판정 대기가 {PENDING_DAYS}일 넘은 결정 {len(stale)} — {' '.join(stale)}")
     return 0
 
 
