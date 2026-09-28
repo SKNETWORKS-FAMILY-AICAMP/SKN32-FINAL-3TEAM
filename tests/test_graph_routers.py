@@ -573,6 +573,14 @@ def _hit(**kw: object) -> object:
     return rt.Hit(**d)  # type: ignore[arg-type]
 
 
+@pytest.fixture(autouse=True)
+def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-09-28 (W4) — 커서 자리에 문자열(`"CUR"`)을 넣는 게이트가 많다. 사전 적재는 대역으로 비운다 — 사전을 보는 게이트가 덮어쓴다."""
+    import app.graph as g
+
+    monkeypatch.setattr(g, "load_dict_entries", lambda cur: [])
+
+
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202
     """`rt.wide` 대역 — 🔄 2026-09-28 (W4 · D-291). 두 갈래를 **따로** 낸다(섞지 않는다 · ㊲).
 
@@ -765,3 +773,92 @@ def test_법별_노드_재료는_보내는_짐에_실린다() -> None:
 
     ev = [SentEvidence(sent_id="s0")]
     assert law_payload({"sents": ["가"], "evidence": ev})["evidence"] == ev
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  🆕 W4 사전 매칭 (2026-09-28) — `match_dict` 가 `app/dictmatch.py` 로 울리고 법별 노드가 제 법 인용만 남긴다
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _entries(*rows: tuple[str, str | None, tuple[str, ...]]):  # noqa: ANN202
+    from app import dictmatch as dm
+
+    return lambda cur: [dm.Entry(term=t, violation_type=v, basis=b) for t, v, b in rows]
+
+
+@pytest.mark.gate
+def test_사전이_울리면_법별_노드가_제_법_인용만_남긴다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 한 항목이 두 법의 인용을 들고 있으면(표시광고법 §3①1 · 식품 §8①4) 법별 노드가 각자 제 것만 든다 (D-267 · D-282)."""
+    import app.graph as g
+    from app import retrieve as rt
+
+    monkeypatch.setattr(rt, "wide", _fake_wide([]))
+    monkeypatch.setattr(
+        g,
+        "load_dict_entries",
+        _entries(
+            ("암예방", "질병_예방치료_표방", ("013094:제8조제1항제1호", "002011:제3조제1항제1호"))
+        ),
+    )
+    out = build_review().invoke(
+        _init("이 제품은 암 예방에 좋습니다"), config={"configurable": {"conn": "CUR"}}
+    )
+    scan = out["dict_scans"][0]
+    assert scan.ran and [h.term for h in scan.hits] == ["암예방"]
+    s, e = scan.hits[0].span
+    assert "이 제품은 암 예방에 좋습니다"[s:e] == "암 예방", (
+        "🚨 원문 좌표 — 공백을 포함한 원문 구간이어야 한다"
+    )
+    got = {
+        r.law: [b for _, hs in r.dict_hits for h in hs for b in h.basis] for r in out["law_results"]
+    }
+    assert got == {
+        "law_ftc": ["002011:제3조제1항제1호"],
+        "law_food": ["013094:제8조제1항제1호"],
+        "law_cosmetic": [],
+    }
+    assert all(s.verdict is Verdict.unjudged for s in out["sentences"]), (
+        "🚨 사전 적중은 판정이 아니다 (D-127)"
+    )
+
+
+@pytest.mark.gate
+def test_사전을_못_훑으면_안_돌았다고_남긴다() -> None:
+    """🔴 DB 가 없으면 `ran=False` — 「안 걸렸다」와 가른다 (D-220 · D-269)."""
+    state, _ = run_review_stub("면역력 강화")
+    assert [s.ran for s in state["dict_scans"]] == [False]
+    assert state["dict_scans"][0].hits == ()
+
+
+@pytest.mark.gate
+def test_건강기능식품법_인용만_가진_사전_적중은_어느_노드에도_안_남는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """🔴 D-271 ⑥ — 참고 전용 법의 인용은 위반 근거로 가지 않는다. 적중 자체(`dict_scans`)는 남는다 — 사실이므로."""
+    import app.graph as g
+    from app import retrieve as rt
+
+    monkeypatch.setattr(rt, "wide", _fake_wide([]))
+    monkeypatch.setattr(
+        g, "load_dict_entries", _entries(("면역력", None, ("009353:제18조제1항제1호",)))
+    )
+    out = build_review().invoke(_init("면역력 강화"), config={"configurable": {"conn": "CUR"}})
+    assert out["dict_scans"][0].hits, "🚨 적중 사실은 남아야 한다"
+    assert all(hs == () for r in out["law_results"] for _, hs in r.dict_hits)
+
+
+@pytest.mark.gate
+def test_사전_종류가_적재기와_같다() -> None:
+    """🔴 `app/graph.py` `DICT_KIND` ↔ `scripts/load_db.py` `DICT_KIND` (D-99 — 두 곳 · 서로 가리키는 주석 · 이 게이트)."""
+    import app.graph as g
+    from scripts import load_db
+
+    assert g.DICT_KIND == load_db.DICT_KIND
+
+
+@pytest.mark.gate
+def test_법별_노드에_사전_적중이_실린다() -> None:
+    from app.graph import DictScan, law_payload
+
+    sc = [DictScan(sent_id="s0", ran=True)]
+    assert law_payload({"sents": ["가"], "dict_scans": sc})["dict_scans"] == sc

@@ -85,10 +85,26 @@ def main(argv: list[str]) -> int:
         # 🚨 `vector`·`lexical` 은 「돌았나」다. `pool` 0 은 「안 겹쳤다」이고
         #    `lexical=False` 는 「검색어를 못 만들었다」다 — 다른 사건이다 (D-202).
         print(f"  {e.sent_id}  vector={e.vector}  lexical={e.lexical}  pool={e.pool}")
+        # 🆕 2026-09-28 (W4) — 사전 적중(단독판정 항목). 🚨 판정이 아니다 — 하한의 재료다 (D-127)
+        scan = next((s for s in out.get("dict_scans", []) if s.sent_id == e.sent_id), None)
+        if scan is None or not scan.ran:
+            print("    사전  ⬜ 못 훑었다")
+        else:
+            print(
+                f"    사전  적중 {len(scan.hits)}"
+                + ("" if scan.hits else "  — 🚨 침묵은 「특이사항 없음」이 아니다 (D-269)")
+            )
+            for h in scan.hits:
+                print(
+                    f"      「{h.term}」 {h.violation_type or '(유형 여럿)'}  {' · '.join(h.basis)}  자리={h.span}"
+                )
         # 🔄 2026-09-28 (W4 · D-291) — 근거는 **법별 노드가 고른 것**이다. 후보(`e.*_hits`)는 법을 합친 넓은 검색이다
         for r in out["law_results"]:
             arts = dict(r.articles).get(e.sent_id, ())
-            print(f"    {r.law} ({g.LAW_OF_NODE[r.law]})  근거 {len(arts)}")
+            dh = dict(r.dict_hits).get(e.sent_id, ())
+            print(
+                f"    {r.law} ({g.LAW_OF_NODE[r.law]})  근거 {len(arts)} · 이 법 인용을 가진 사전 적중 {len(dh)}"
+            )
             if not arts:
                 print(
                     "      ⬜ 좌표를 세운 근거가 없다 — 이 법 후보가 비었거나 좌표가 안 선다 (D-224)"

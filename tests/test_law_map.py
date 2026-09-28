@@ -77,11 +77,7 @@ def test_사전의_근거는_전부_법이_정해진다() -> None:
     # 🔄 2026-09-24 (D-282) — 사전 근거는 조문 인용(`collect.statute.cite` 꼴)이다. 법은 인용의 법 ID 로 정한다.
     from collect import statute
 
-    def law(b: str) -> str | None:
-        try:
-            return lm.LAW_OF_ID.get(statute.parse(b)[0])
-        except ValueError:
-            return None
+    law = statute.law_of  # 🔄 2026-09-28 — 지역 함수를 `collect/statute.law_of` 로 올렸다 (D-99)
 
     bad = sorted(
         {
