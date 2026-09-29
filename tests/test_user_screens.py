@@ -18,7 +18,6 @@ import pytest
         "/u/generate",
         "/u/compose",
         "/u/segments",
-        "/u/mypage",
         "/u/help",
         "/u/matching",
         "/u/cs",
@@ -67,7 +66,7 @@ def test_구역_없는_화면은_사이드바가_없다() -> None:
     from app.api import app  # noqa: PLC0415
 
     client = TestClient(app)
-    for path in ("/u/", "/u/mypage", "/u/cs"):
+    for path in ("/u/", "/u/cs"):
         body = client.get(path).text
         assert 'class="user-sidebar"' not in body, f"🔴 {path} 에 사이드바가 붙었다 — 구역 밖이어야 한다"
 
@@ -154,15 +153,24 @@ def test_이력이_판정_원문을_보여준다() -> None:
     assert "history-row-text" in r.text
 
 
-def test_마이페이지_저장은_저장하지_않는다() -> None:
-    """🚨 계정 테이블이 없다 — 저장했다고 말하지 않는다 (D-147)."""
+def test_마이페이지는_로그인_안하면_로그인으로_보낸다() -> None:
+    """🔴 2026-09-29 — `user_account` 표가 서면서 프로필을 채우려면 로그인이 필요해졌다 (cs_detail 과 같은 문)."""
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
 
-    r = TestClient(app).post("/u/mypage", content=b"name=%EA%B6%8C%EC%86%8C%EB%9D%BC")
-    assert r.status_code == 200
-    assert "아직 저장되지 않았어요" in r.text
+    client = TestClient(app)
+    r = client.get("/u/mypage", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/u/login"
+
+    r = client.post("/u/mypage", content=b"section=profile&name=%EA%B6%8C%EC%86%8C%EB%9D%BC", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/u/login"
+
+    r = client.post("/u/mypage/disable", content=b"confirm=%EB%81%84%EA%B8%B0", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/u/login"
 
 
 def test_고객센터_상세는_로그인_안하면_로그인으로_보낸다() -> None:

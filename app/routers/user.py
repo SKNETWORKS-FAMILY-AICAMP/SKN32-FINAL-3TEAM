@@ -1041,9 +1041,9 @@ def cs_detail(request: Request, ticket_id: str, session: Session = Depends(get_s
 
 
 #: 마이페이지가 받는 필드와 글자 상한. 🚨 **상한을 자르지 않고 거부한다** (D-72).
+#: 🚨 이메일은 여기 없다 — 계정 이메일 변경은 범위 밖이다(설계초안 09-22 · 권소라).
 _MYPAGE_FIELDS = {
     "name": 40,
-    "email": 120,
     "org": 60,
     "age": 16,
     "sex": 8,
@@ -1060,45 +1060,147 @@ _MYPAGE_TABS: tuple[tuple[str, str], ...] = (
     ("defaults", "광고 기본값"),
     ("account", "계정"),
 )
-_MYPAGE_SECTION_TAB = {"profile": "profile", "adprefs": "defaults"}
+_MYPAGE_SECTION_TAB = {"profile": "profile", "adprefs": "defaults", "consent": "account"}
+#: 계정을 끌 때 정확히 이렇게 입력해야 한다 — 실수로 끄는 것을 막는 확인 문구다.
+_MYPAGE_DISABLE_CONFIRM = "끄기"
+
+
+def _mypage_picked(user: UserAccount) -> dict[str, str]:
+    return {**_MYPAGE_BLANK, "name": user.name, "org": user.org or ""}
+
+
+def _mypage_ctx(user: UserAccount, tab: str, **extra: object) -> dict[str, object]:
+    return {
+        "tab": tab,
+        "tabs": _MYPAGE_TABS,
+        "picked": _mypage_picked(user),
+        "email": user.email,
+        "consent_history": user.consent_history_at is not None,
+        "consent_improve": user.consent_improve_at is not None,
+        **extra,
+    }
 
 
 @router.get("/mypage", response_class=HTMLResponse)
-def mypage(request: Request, tab: str = "profile") -> HTMLResponse:
-    """마이페이지 — 프로필 · 광고 기본값 · 계정 탭 (ksr 2026-09-13).
+def mypage(
+    request: Request, tab: str = "profile", session: Session = Depends(get_session)
+) -> HTMLResponse:  # noqa: B008
+    """마이페이지 — 프로필 · 광고 기본값 · 계정 탭 (ksr 2026-09-13 · lse 2026-09-29 저장 배선).
 
-    ⛔ 저장할 테이블이 없다 — 폼만 세운다. 상단 오른쪽 아바타 버튼으로 들어온다 (구역 밖).
+    🔴 로그인해야 들어온다 — 채울 계정이 없으면 프로필도 없다 (cs_detail 과 같은 문).
+    ⛔ 광고 기본값(나이·성별·매체·물품)은 아직 저장하지 않는다 — `user_ad_preference` 표가
+       없다 (팀장 승인 요청 #7, 2026-09-29). 프로필 · 동의 · 계정 끄기는 `user_account`
+       에 이미 있는 칸(D-96 · disabled_at)이라 바로 저장한다.
     """
+    user = current_user(request, session)
+    if user is None:
+        return RedirectResponse("/u/login", status_code=303)
     if tab not in dict(_MYPAGE_TABS):
         tab = "profile"
-    return _render(
-        request,
-        "user/mypage.html",
-        {"picked": _MYPAGE_BLANK, "tab": tab, "tabs": _MYPAGE_TABS},
-    )
+    return _render_form(request, "user/mypage.html", _mypage_ctx(user, tab))
 
 
 @router.post("/mypage", response_class=HTMLResponse)
-async def mypage_save(request: Request) -> HTMLResponse:
-    """마이페이지 저장 — 🚨 **저장하지 않는다.**
+async def mypage_save(
+    request: Request, session: Session = Depends(get_session)
+) -> HTMLResponse:  # noqa: B008
+    """마이페이지 저장 — 섹션마다 갈린다 (2026-09-29).
 
-    ⛔ 사용자 계정·광고 기본값 테이블이 스키마에 없다. `app_account` 는 거버넌스
-       운영자용이라 여기에 쓰지 않는다. **가짜 성공을 그리지 않는다** (D-147) —
-       받은 값을 되돌려 그리고 저장되지 않았다고 화면이 말한다.
-    ⬜ 스키마가 서면 여기서 쓰고 「저장했습니다」로 바꾼다.
+    🔴 `profile` · `consent` 는 `user_account` 에 실제로 쓴다. `adprefs`(광고 기본값)는
+       아직 **저장하지 않는다** — 담을 표가 없다(팀장 승인 요청 #7). 가짜 성공을 그리지
+       않는다(D-147) — 그 섹션만 「아직 저장되지 않았어요」로 되돌린다.
     """
+    user = current_user(request, session)
+    if user is None:
+        return RedirectResponse("/u/login", status_code=303)
     form = await _form(request)
-    picked = {k: _one(form, k, limit) for k, limit in _MYPAGE_FIELDS.items()}
-    return _render(
-        request,
-        "user/mypage.html",
-        {
-            "picked": picked,
-            "saved_attempt": True,
-            "tab": _MYPAGE_SECTION_TAB.get(_one(form, "section", 16), "profile"),
-            "tabs": _MYPAGE_TABS,
-        },
+    section = _one(form, "section", 16) or "profile"
+    tab = _MYPAGE_SECTION_TAB.get(section, "profile")
+
+    if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
+        return _render_form(
+            request,
+            "user/mypage.html",
+            _mypage_ctx(user, tab, error="화면이 오래돼서 다시 불러왔어요. 한 번 더 저장해 주세요."),
+            403,
+        )
+
+    if section == "profile":
+        name = _one(form, "name", _MYPAGE_FIELDS["name"]).strip()
+        org = _one(form, "org", _MYPAGE_FIELDS["org"]).strip()
+        if not name:
+            return _render_form(
+                request,
+                "user/mypage.html",
+                {**_mypage_ctx(user, tab), "picked": {**_mypage_picked(user), "name": name, "org": org}, "error": "이름을 입력해 주세요."},
+                422,
+            )
+        user.name = name
+        user.org = org or None
+        session.commit()
+        auth.audit("user_profile_save", _actor(user.id), ok=True)
+        return _render_form(request, "user/mypage.html", _mypage_ctx(user, tab, saved=True))
+
+    if section == "consent":
+        c1 = bool(_one(form, "consent_history", 8))
+        c2 = bool(_one(form, "consent_improve", 8))
+        if c2 and not c1:
+            return _render_form(
+                request,
+                "user/mypage.html",
+                _mypage_ctx(user, tab, error="②는 ①에 동의해야 고를 수 있어요."),
+                422,
+            )
+        now = datetime.now(UTC)
+        user.consent_history_at = now if c1 else None
+        user.consent_improve_at = now if c2 else None
+        session.commit()
+        auth.audit("user_consent_save", _actor(user.id), ok=True)
+        return _render_form(request, "user/mypage.html", _mypage_ctx(user, tab, saved=True))
+
+    # adprefs — 나머지는 아직 담을 표가 없다 (승인 요청 #7)
+    picked = {**_mypage_picked(user)}
+    for k in ("age", "sex", "channel", "category"):
+        picked[k] = _one(form, k, _MYPAGE_FIELDS[k])
+    return _render_form(
+        request, "user/mypage.html", {**_mypage_ctx(user, tab), "picked": picked, "saved_attempt": True}
     )
+
+
+@router.post("/mypage/disable", response_class=HTMLResponse)
+async def mypage_disable(request: Request, session: Session = Depends(get_session)):  # noqa: B008
+    """계정 끄기 — 지우지 않고 켠다/끈다(`disabled_at`, D-260). 확인 문구를 정확히 입력해야 한다.
+
+    🔴 삭제가 아니다 — `work_doc.owner_id` 등 이 계정을 가리키는 행이 남아야 한다(모델 docstring).
+       끈 뒤에는 로그아웃도 같이 한다 — 쿠키만 지운다(D-213), 서버 세션은 원래 없다.
+    """
+    user = current_user(request, session)
+    if user is None:
+        return RedirectResponse("/u/login", status_code=303)
+    form = await _form(request)
+    if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
+        return _render_form(
+            request,
+            "user/mypage.html",
+            _mypage_ctx(user, "account", error="화면이 오래돼서 다시 불러왔어요. 한 번 더 해 주세요."),
+            403,
+        )
+    confirm = _one(form, "confirm", 20)
+    if confirm != _MYPAGE_DISABLE_CONFIRM:
+        return _render_form(
+            request,
+            "user/mypage.html",
+            _mypage_ctx(
+                user, "account", error=f"확인 문구가 맞지 않아요. 「{_MYPAGE_DISABLE_CONFIRM}」라고 정확히 입력해 주세요."
+            ),
+            422,
+        )
+    user.disabled_at = datetime.now(UTC)
+    session.commit()
+    auth.audit("user_account_disable", _actor(user.id), ok=True)
+    resp = RedirectResponse("/u/landing", status_code=303)
+    resp.delete_cookie(auth.USER_SESSION_COOKIE, path="/")
+    return resp
 
 
 # ══════════════════════════════════════════════════════════════════════
