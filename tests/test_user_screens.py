@@ -116,7 +116,7 @@ def test_검수_픽스처_미리보기가_결과_화면을_그린다() -> None:
 
     from app.api import app  # noqa: PLC0415
 
-    r = TestClient(app).get("/u/preview/01_pass_frontier")
+    r = TestClient(app).get("/u/preview/01_pass")
     assert r.status_code == 200
     assert "위험도" in r.text
 
