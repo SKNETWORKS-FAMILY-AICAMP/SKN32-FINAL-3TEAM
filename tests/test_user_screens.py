@@ -165,6 +165,17 @@ def test_마이페이지_저장은_저장하지_않는다() -> None:
     assert "아직 저장되지 않았어요" in r.text
 
 
+def test_고객센터_상세는_로그인_안하면_로그인으로_보낸다() -> None:
+    """🔴 `/u/cs/{ticket_id}` — 내 문의가 아니면 없는 것과 같은 404 지만, 로그인부터 막힌다 (P1-5)."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    r = TestClient(app).get("/u/cs/00000000-0000-0000-0000-000000000000", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/u/login"
+
+
 def test_랜딩은_governor_로그인이_아니라_일반_회원_로그인으로_보낸다() -> None:
     """🔴 `/login`(governor 전용)으로 잘못 보내던 걸 `/u/login`·`/u/signup`으로 고쳤다."""
     from fastapi.testclient import TestClient  # noqa: PLC0415
