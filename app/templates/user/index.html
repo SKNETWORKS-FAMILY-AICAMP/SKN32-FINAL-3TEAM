@@ -94,6 +94,11 @@
     </li>
     {% endfor %}
   </ul>
+  {% elif need_login %}
+  {# 🔴 2026-09-29 — 통계·최근 이력은 **내 판정만** 센다 (P1-5). 로그아웃이면 셀 대상이 없어 「—」다 #}
+  <p class="hm-empty">
+    <a href="/u/login">로그인</a>하면 <b>내가 검수한 기록</b>과 통계가 여기에 나와요.
+  </p>
   {% elif db_down %}
   <p class="hm-empty">DB 에 붙지 못해 이력을 읽지 못했어요 — 기록이 없다는 뜻이 아니에요.</p>
   {% else %}
