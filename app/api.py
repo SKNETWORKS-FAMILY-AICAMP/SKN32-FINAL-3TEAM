@@ -5,8 +5,11 @@
 🚨 **FastAPI 단독이다.** Django 를 쓰지 않는다 (D-135 확정 · D-134 되돌림).
    화면은 Jinja2 + HTMX 로 같은 앱이 낸다 (D-56) — 별도 프론트를 두지 않는다.
 
-🚨 판정 라우트는 LangGraph를 지나되, 2026-09-22 현재 인코더 신호는 확정 판정이 아니라
-   `hold(low_conf)` 후보로만 낸다. 근거 기반 확정·위험도·생성은 아직 열지 않는다.
+🚨 **이 파일은 계약이지 구현이 아니다.** 🔄 2026-09-29 — `/judge` 는 검수 그래프를 실제 DB 로 돌린다.
+   판정 노드는 아직 스텁이라 종착은 `hold` 다 — **정직한 보류**이지 가짜 200 이 아니다(근거 · 사전 적중은 실제 데이터).
+   `/generate` · `/compose` 는 여전히 **`501 Not Implemented`** — 200 에 가짜 응답을 넣지 않는다.
+   가짜 응답을 넣으면 프론트가 그 모양에 맞춰 붙고, 진짜가 오면 두 번 고친다.
+   D-147 이 같은 말을 데이터 쪽에서 한다 — **오류 응답은 데이터가 아니다.**
 
 🔴 **거버넌스가 API 에도 걸린다** — `/search` 는 `source_use.allowed` 가 `U2_rag` 인
    프래그먼트만 돌려준다. 화면 인용은 `U3_cite`. 게이트가 아니라 **질의**로 건다.
@@ -264,8 +267,10 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
 </ul>
 <h2>아직 없는 것</h2>
 <ul>
-  <li class=no><code>POST /judge</code> · <code>/generate</code> · <code>/compose</code>
-      — 진입점 셋의 엔진이 없다. <b>501</b> 을 낸다 (D-119 — 판정 코어는 하나).
+  <li class=no><code>POST /judge</code> — 🔄 검수 그래프가 실제 DB 로 돈다. <b>판정 노드가 스텁이라 늘 보류</b>다
+      (근거 조문 · 사전 적중은 실제 데이터 · D-269).</li>
+  <li class=no><code>/generate</code> · <code>/compose</code>
+      — 엔진이 없다. <b>501</b> 을 낸다 (D-119 — 판정 코어는 하나).
       가짜 200 을 내면 프론트가 그 모양에 맞춰 붙고 진짜가 오면 두 번 고친다.</li>
   <li class=no>화면(Jinja2 + HTMX) — D-56 이 정해 뒀고 아직 안 지었다.</li>
   <li class=no>벡터 <b>인덱스</b> — 지금 규모(청크 수천)에서는 순차 스캔이 빠르고,
@@ -390,17 +395,56 @@ def search(req: SearchRequest) -> SearchResult:
     )
 
 
-@app.post("/judge", response_model=JudgeResponse)
+@app.post(
+    "/judge",
+    response_model=JudgeResponse,
+    responses={503: {"description": "DB · 판정 그래프 의존성이 없다"}},
+)
 def judge(req: JudgeRequest) -> JudgeResponse:
-    """판정 그래프를 실행해 인코더의 위반 후보를 보류 상태로 반환한다.
+    """판정 — **검수 그래프**(진입점 A · D-266)를 실제 DB 로 한 바퀴 돌린다 (🔄 2026-09-29).
 
-    인코더가 threshold를 넘긴 라벨은 후보 신호일 뿐이다. 법령 근거와 위험도 매핑이
-    확정되기 전에는 `confirmed`를 만들지 않고 `hold(low_conf)`로만 낸다.
+    ⛔ 종전에는 501 이었다 — 엔진이 없어 가짜 200 을 안 내려고 막아 둔 자리다(D-124 ②).
+    🔄 이제 코어(분할 · 품목 · **넓은 검색** · 사전 매칭 · 법별 노드 · 판정 · 위험도)가 선다. 🚨 **판정 노드는 아직 스텁이다** —
+       모든 문장이 `unjudged` 이고 종착은 `hold` 다(D-127 · D-269). 그래도 **근거 조문 · 사전 적중 · 단서는 실제 데이터**다.
+       가짜 200 이 아니라 **정직한 보류**다 — `judged_by` 가 스텁 판을 말한다(`app/graph.py` `to_response`).
+    ★ 그래프를 여기서 새로 짓지 않는다 — `app/graph.py` 한 곳이다 (D-99 · D-51). 커서는 `config` 로 넣는다(노드가 스스로 연결하지 않는다).
+    🚨 첫 호출은 인코더 로드가 들어가 느리다(기기 실측 약 20 초 · 사실원장 ㊷). 예열은 아직 없다 ⬜
     """
-    from app.graph import build_review, to_response  # noqa: PLC0415 — API 기동 때 모델을 올리지 않는다
+    import psycopg  # noqa: PLC0415 — DB 가 없어도 임포트는 서야 한다
 
-    state = build_review().invoke({"text": req.text, "product": req.product})
-    return to_response(state)
+    from app import graph as g  # noqa: PLC0415 — langgraph 는 판정 경로에서만 든다
+    from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
+
+    try:
+        review = _review_graph()
+    except ImportError as e:
+        # 🔴 의존성이 없으면 **가짜 보류**를 만들지 않는다 — 돌지 않은 것을 돈 것처럼 말하지 않는다 (D-146)
+        _log.warning("판정 그래프를 못 지었다 · 원인=%s", type(e).__name__)
+        raise HTTPException(503, "판정 그래프 의존성이 없다 — 서버 로그를 본다") from e
+    try:
+        with pg_connect() as conn, conn.cursor() as cur:
+            state = review.invoke(
+                {"text": req.text, "product": req.product},
+                config={"configurable": {"conn": cur}},
+            )
+    except psycopg.Error as e:
+        # 🔴 원인을 응답에 담지 않는다 — `/search` 와 같은 규칙 (P1-4). 문구는 `mask()` 를 지난다
+        _log.warning("DB 접속 실패 · 문구=%s · 원인=%s", mask(req.text), type(e).__name__)
+        raise HTTPException(503, "DB 에 못 붙었다 — 서버 로그를 본다") from e
+    # 🚨 계약이 거부하면 여기서 터진다 — 화면보다 먼저다 (`to_response`)
+    return g.to_response(state)
+
+
+_REVIEW: list[Any] = []
+
+
+def _review_graph() -> Any:  # noqa: ANN401 — 컴파일본 타입은 langgraph 의 것이다
+    """검수 그래프 컴파일본 — 프로세스당 **한 번** 짓는다. 요청마다 짓지 않는다."""
+    if not _REVIEW:
+        from app import graph as g  # noqa: PLC0415
+
+        _REVIEW.append(g.build_review())
+    return _REVIEW[0]
 
 
 #: 골든 픽스처 (D-124 ③) — 화면·BFF 가 모든 분기를 그리는 재료

@@ -50,14 +50,16 @@ class HoldReason(enum.StrEnum):
     """`hold` 일 때만. `app/models.py` ck_judgment_hold_reason_values 와 **같은 여섯** (마이그레이션 0018).
 
     🔄 2026-09-23 — `premise_unknown` · `law_uncovered` 를 더했다 (D-263 ② · D-277).
-       `cat_unknown` 은 **품목을 못 가림**, `premise_unknown` 은 **품목은 가렸으나 인정 여부로 등급이 갈림**이다.
+       `cat_unknown` 은 **품목을 못 가림 ∧ 등급이 갈림**(D-229), `premise_unknown` 은 **품목은 가렸으나 인정 여부로 등급이 갈림**이다.
     """
 
     low_conf = "low_conf"  # 확신 부족 — 조건 M(맥락)도 여기로 (D-268)
     #: 🔄 2026-09-23 — 원장 D-127 의 뜻은 **코드 하한 ↔ 모델 예측 2등급 차**(3-5 ③)다.
     #:    ⛔ 종전 주석 「1·2위 격차 부족」은 원장과 달랐다 — 화면 라벨·`KNOWN_GAPS` 에도 같은 오기가 번졌다.
     gap2 = "gap2"  # 코드↔모델 2등급 차
-    cat_unknown = "cat_unknown"  # 카테고리 판별 실패 (D-82)
+    cat_unknown = (
+        "cat_unknown"  # 품목 미확정 ∧ 등급이 갈림 (D-229 · D-82) — 등급이 안 갈리면 분기만
+    )
     rd1 = "rd1"  # 공존 규칙 발동 (D-127 · D-120) — 🔄 09-21 종전 주석 「라운드 1 미해소」는 D-127 과 달랐다
     premise_unknown = (
         "premise_unknown"  # 품목은 가렸으나 인정 여부로 등급이 갈림 — 분기를 낸다 (D-263 ② · D-276)
@@ -119,6 +121,9 @@ class Infeasibility(enum.StrEnum):
     🚨 사유별로 대체 문구 정책이 갈린다 (D-59) —
        A 는 **제안 금지**(표현이 아니라 자격의 문제라 재생성이 같은 위반을 반복한다)
        B 는 조건부 제안 · C 는 제안 없음.
+    🔄 D-265 — 검수는 대체 문구를 내지 않는다: B 는 요건 안내만, 문구 생성은 진입점 B.
+       D-264 — A 에서 막는 것은 같은 주장의 대체안(삭제안 · 사실 진술안은 생성에서 허용).
+       D-289 ② — 표시로 풀리는 금지는 C 가 아니라 B · 표시요건.
     ⛔ 이 구분이 없어서 기획서 2-3 시나리오 A 가 자격 미충족 문구를 고쳐 놓고
        「재판정 통과」로 적었다 — 대표 데모가 우리 미탐을 시연하고 있었다.
     """
@@ -161,7 +166,7 @@ class Violation(enum.StrEnum):
     🔴 뒤 다섯은 **편입 후보**다 (D-65) — 인코더가 예측하는 확정 클래스는
        `scripts/collect.py` 의 `VIOLATION_TYPES` 6종이고 승격 판정일은 2026-09-17 이다.
     🔄 D-255 — `추천_보증_뒷광고` 는 후보가 아니라 **범위 밖**이다(문구로 판정할 수 없다 · 대가 표시 **누락**이 위반).
-       `후기_체험기_기만` 은 **형식** 라벨이다 — 내용 라벨(`의약품_오인` 등)과 함께 붙을 수 있다.
+       🔄 D-282 ④ (D-255 ① 개정) — `후기_체험기_기만` 은 형식 라벨이 아니라 **[별표 1] 5호 다목의 파생 유형**이다. 목이 없는 5호는 `소비자_기만`.
     """
 
     질병_예방치료_표방 = "질병_예방치료_표방"
@@ -259,7 +264,7 @@ class RiskAssessment(BaseModel):
           계약도 같은 조건을 건다. 두 곳이 다르면 늦게 터진다.
     """
 
-    floor: Risk | None = None  # 코드 하한 (D-84 ③)
+    floor: Risk | None = None  # 코드 하한 (D-09 · D-130)
     encoder: Risk | None = None  # 인코더 예측
     final: Risk | None = None
     evidence_span: Span | None = None
@@ -452,7 +457,8 @@ class ProductContext(BaseModel):
     #: 🔴 **`None` 은 「미확정」이다** (2026-09-16 · D-72). 🔄 D-271 — 「`일반` = 판별 결과 일반식품」은 폐기됐다.
     #:    ⛔ 종전 기본값이 `Category.일반` 이라 **「안 줬다」와 「일반이라고 줬다」가 같은 값**이었다.
     #:       없음이 성공으로 집계되는 자리였다.
-    #:    🚨 미확정이면 `classify` 가 판별하고, **못 정하면 `hold(cat_unknown)`** 으로 간다
+    #:    🚨 미확정이면 `classify` 가 판별하고, 못 정하면 **분기는 언제나** 낸다 — `hold(cat_unknown)` 은
+    #:       **미확정 ∧ 등급이 갈릴 때만**이다 (D-229 ⑥ · D-127 개정)
     #:       (D-127 의 사유코드 — 그 괄호가 「**D-61 분기 병렬 출력**」이라고 적어 두었다).
     #:    ⛔ **`max` 로 접지 않는다.** 접으면 분기가 사라진다 — `max` 는 **축 자체가 없어서 물어볼
     #:       수도 없는 것**(업종: 제조·판매·음식점)에만 쓴다 (D-227).
@@ -544,15 +550,27 @@ class JudgeResponse(BaseModel):
             raise ValueError("증명서는 outcome=certificate 일 때만 낸다 (D-32 · D-125)")
         if self.outcome is not Outcome.passed and self.candidates:
             raise ValueError("프론티어는 통과했을 때만 낸다 (D-125)")
-        # 🆕 2026-09-21 (전수 재검토 I2) — **루프에 안 들어간 통과**(attempt 0)는 문장이 전부 통과여야 한다 (D-125 ·
+        # 🆕 2026-09-21 (전수 재검토 I2) — 검수의 통과는 문장이 전부 통과여야 한다 (D-125 ·
         #    🔄 D-273 「통과 = 확정 ∧ R0」). ⛔ 종전에는 미판정·R3 문장이 섞인 `pass` 도 계약을 지났다 — 라우터가
-        #    위험도를 안 봐도(I1) 여기서 못 잡았다. 🚨 attempt ≥ 1 의 `pass` 는 **대체 문구**의 통과라 원문 판정과 다르다.
-        if self.outcome is Outcome.passed and self.attempt == 0:
+        #    위험도를 안 봐도(I1) 여기서 못 잡았다.
+        #    🔄 2026-09-29 — 종전 조건 `attempt == 0` 을 걷었다. 검수에는 라운드가 없어(D-265 · `_review_has_no_rounds`)
+        #    `attempt ≥ 1` 의 `pass` 가 이 검사를 건너뛰는 구멍이었다(미판정 문장 + attempt=1 → pass 가 계약을 지났다).
+        if self.outcome is Outcome.passed:
             bad = [s.sent_id for s in self.sentences if not is_pass(s)]
             if bad:
                 raise ValueError(
                     f"outcome=pass 인데 통과가 아닌 문장이 있다 — {bad[:5]} (D-125 · D-273 · 확정 ∧ R0)"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _review_has_no_rounds(self) -> JudgeResponse:
+        # 🆕 2026-09-29 (D-265 집행) — **검수는 한 번 판정하고 끝난다.** 재생성 루프는 생성(진입점 B)의 것이다 (D-266).
+        #    ⛔ 칸은 0~K 를 받고 있었다 — 화면(`review.html` 「라운드」)이 읽는 칸이라 지우지 않고 0 으로 묶는다.
+        if self.attempt != 0:
+            raise ValueError(
+                f"검수 응답의 attempt 가 {self.attempt} 다 — 검수에는 재생성 라운드가 없다 (D-265 · D-266)"
+            )
         return self
 
     @model_validator(mode="after")
