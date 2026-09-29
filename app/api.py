@@ -397,11 +397,9 @@ def judge(req: JudgeRequest) -> JudgeResponse:
     인코더가 threshold를 넘긴 라벨은 후보 신호일 뿐이다. 법령 근거와 위험도 매핑이
     확정되기 전에는 `confirmed`를 만들지 않고 `hold(low_conf)`로만 낸다.
     """
-    from app.graph import build_graph, to_response  # noqa: PLC0415 — API 기동 때 모델을 올리지 않는다
+    from app.graph import build_review, to_response  # noqa: PLC0415 — API 기동 때 모델을 올리지 않는다
 
-    state = build_graph().invoke(
-        {"text": req.text, "product": req.product, "encoder_enabled": True}
-    )
+    state = build_review().invoke({"text": req.text, "product": req.product})
     return to_response(state)
 
 
