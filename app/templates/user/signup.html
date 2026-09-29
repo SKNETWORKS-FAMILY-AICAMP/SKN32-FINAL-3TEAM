@@ -1,11 +1,15 @@
 {# app/templates/user/signup.html — 일반 회원 가입 · 소유자 lse (병렬작업 계약 §5)
 
-  ★ 이 파일은 **골격만** 잡아 둔 것 — generate.html 과 같은 요령이다. 발표자료
-    프로토타입(v7.2)의 `data-screen="signup"` 절을 옮겨서 채운다.
-  🚨 D-66 — **온프레미스는 가입 화면을 만들지 않는다.** 이 화면은 D-66이 열어 둔
-     **클라우드 에디션용** 가입이다 (이메일 인증만, 역할은 안 고른다 — "행동이 역할을 정한다").
-  🔴 **계정 테이블이 없다** (2026-09-16 판단) — `AppAccount`는 governor 전용이고,
-     일반 사용자 테이블은 진입점 B 엔진과 함께 새로 생긴다. 그래서 "가입하기" 버튼이 없다.
+  ★ 발표자료 프로토타입(v7.2)의 `data-screen="signup"` 절을 옮긴 것이다.
+  🚨 D-66 — 가입 시 **역할을 고르지 않는다** ("행동이 역할을 정한다").
+  🔄 2026-09-29 (ksr) — `user_account`(D-260 ②)가 생겨 폼을 연결했다(`POST /u/signup`).
+     🚨 **인증 메일을 보내지 않는다** (D-260 ⑧) — 종전 「이메일 인증만 받는다」 문구는 뒤집혔다.
+     🚨 필수 동의 둘(약관 · 진단 면책)만 여기서 받는다. ⛔ 선택 동의 ①②(검수 이력 보관 · 품질 개선 활용)는
+        **가입 흐름에 넣지 않는다 — 마이페이지에서만** (D-96 2차 개정). 프로토타입의 「내부 데이터 활용 동의」
+        스위치(기본 켜짐)는 그래서 옮기지 않았다.
+     ⛔ 프로토타입 안내 「소속 조직으로 가입하면 팀원과 검수 결과를 공유할 수 있어요」는 지금 사실이 아니다 —
+        팀(기업 회원)이 없다 (D-260 ④). 문구를 바꿨다.
+  ⬜ 온프레미스 에디션에서 이 화면을 닫을지는 D-79 로 미뤄져 있다(설계초안 09-22 운영테이블 §8).
   ⛔ 구역 셸 밖이다 — 가입 전 화면이라 사이드바가 없다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 회원가입{% endblock %}
@@ -26,37 +30,47 @@
 </style>{% endblock %}
 {% block content %}
 <div class="user-shell">
-<div class="auth-card auth-card-wide">
+<form class="auth-card auth-card-wide" method="post" action="/u/signup">
   <h1>회원가입</h1>
-  <p class="auth-sub">소속 조직으로 가입하면 팀원과 검수 결과를 공유할 수 있어요.</p>
+  <p class="auth-sub">가입하면 검수·카피생성 기록을 내 계정으로 모아 볼 수 있어요.</p>
+  {% if error %}<p class="auth-err" role="alert">{{ error }}</p>{% endif %}
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
 
   <label for="signup-name">이름</label>
-  <input id="signup-name" placeholder="이서은" disabled>
+  <input id="signup-name" name="name" type="text" value="{{ form.name or '' }}"
+         maxlength="40" autocomplete="name" required>
 
   <label for="signup-email">이메일</label>
-  <input id="signup-email" type="email" placeholder="you@company.com" disabled>
+  <input id="signup-email" name="email" type="email" placeholder="you@company.com"
+         value="{{ form.email or '' }}" maxlength="120" autocomplete="email" required>
 
   <div class="auth-row">
     <div>
       <label for="signup-pw">비밀번호</label>
-      <input id="signup-pw" type="password" placeholder="8자 이상" disabled>
+      <input id="signup-pw" name="password" type="password" placeholder="8자 이상"
+             minlength="8" maxlength="128" autocomplete="new-password" required>
     </div>
     <div>
       <label for="signup-pw2">비밀번호 확인</label>
-      <input id="signup-pw2" type="password" disabled>
+      <input id="signup-pw2" name="password2" type="password"
+             minlength="8" maxlength="128" autocomplete="new-password" required>
     </div>
   </div>
 
   <div class="auth-consent">
-    <label><input type="checkbox" disabled><span>이용약관 및 개인정보처리방침에 동의합니다.</span></label>
-    <label><input type="checkbox" disabled><span>CopyLane의 진단은 <b>법적 확정 판단이 아닌 심의 통과 가능성
+    <label><input type="checkbox" name="agree_terms" {% if form.agree_terms %}checked{% endif %} required>
+      <span>(필수) 이용약관 및 개인정보처리방침에 동의합니다.</span></label>
+    <label><input type="checkbox" name="agree_disclaimer" {% if form.agree_disclaimer %}checked{% endif %} required>
+      <span>(필수) CopyLane의 진단은 <b>법적 확정 판단이 아닌 심의 통과 가능성
       진단</b>이며, 최종 판단은 전문가 검토를 따라야 함을 이해했습니다.</span></label>
   </div>
 
-  <p class="auth-note">⬜ 계정 시스템이 아직 없다 — 진입점 B 엔진(이력·카피생성)과 함께 온다.
-  가입은 이메일 인증만 받는다 — 가입 시 역할을 고르지 않는다 (D-66).</p>
+  <p class="auth-note">가입 확인 메일은 보내지 않아요 — 계정은 <b>미인증</b>으로 표시돼요.
+  검수 이력 보관 · 품질 개선 활용 동의(선택)는 가입 후 <b>마이페이지</b>에서 정할 수 있어요.</p>
+
+  <button class="auth-submit" type="submit">가입하기</button>
 
   <p class="auth-switch">이미 계정이 있으신가요? <a href="/u/login">로그인</a></p>
-</div>
+</form>
 </div>
 {% endblock %}

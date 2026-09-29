@@ -44,6 +44,9 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     #    "foodsafety_ad_monitor": ("collect.openapi", "arg"),
     "cosmetic_ingredient": ("collect.openapi", "arg"),
     "cosmetic_restricted": ("collect.openapi", "arg"),
+    # 🆕 2026-09-28 — 기능성화장품 보고·심사 품목 API (2인 확인 09-28 · 결정 오한빈 · 확인 권소라)
+    "mfds_cosmetic_func_report": ("collect.openapi", "arg"),
+    "mfds_cosmetic_func_review": ("collect.openapi", "arg"),
     "ftc_decisions_api": ("collect.openapi", "arg"),
     # 게시물 첨부 — 자료실·안내서·사례집. 🚨 게시물 HTML 을 파싱하는 **스크래퍼**다
     "mfds_casebook": ("collect.mfds_board", "arg"),
@@ -52,6 +55,14 @@ COLLECTORS: dict[str, tuple[str, str]] = {
     # 🆕 2026-09-25 — 민원인안내서 4건(m_1060) · 게시물 하나에 PDF 첨부 하나
     "mfds_cosmetic_ad_qa": ("collect.mfds_board", "arg"),
     "mfds_hf_trial_ad_guide": ("collect.mfds_board", "arg"),
+    # 🆕 2026-09-28 — 식약처 질의응답집 3건 · 게시물 하나에 PDF 첨부 하나
+    "mfds_cosmetic_ad_qa_2012": ("collect.mfds_board", "arg"),
+    "mfds_cosmetic_func_qa_2023": ("collect.mfds_board", "arg"),
+    "mfds_food_func_claim_qa_2021": ("collect.mfds_board", "arg"),
+    # 🆕 2026-09-28 — §5 거버넌스 점검 통과 3건
+    "mfds_ad_judge_manual_2015": ("collect.mfds_board", "arg"),
+    "mfds_cosmetic_faq_2020": ("collect.mfds_board", "arg"),
+    "mfds_daegu_ad_cases_2013": ("collect.mfds_board", "arg"),
     "mfds_cosmetic_claim_test_guide": ("collect.mfds_board", "arg"),
     "mfds_quasi_drug_ad_guide": ("collect.mfds_board", "arg"),
     # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침 (3층 해설 · D-290)
