@@ -353,6 +353,8 @@ def cosmetic_docs() -> list[dict]:
 #: 🆕 2026-09-30 (동결 전 판정 ⑤-1·3 (나)) — 공정위 보도자료 1997~2007 문구 판. 🚨 경로의 정본은
 #:    `scripts/guide_statute_round.py` `FP_READINGS` · `FP_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99)
 FTC_PRESS_READINGS = pathlib.Path("data/derived/labels/ftc_press_old/readings.jsonl")
+#: 🆕 분할 입력이 될 수 있는 `labels/` 아래 판 — 조문·조건 판(독립 판독 · 팀장 판정)만. 사람 8유형 라벨은 아니다 (D-283)
+ROUND_LABEL_DIRS = ("labels/guide_statute/", "labels/cosmetic_qa/", "labels/ftc_press_old/")
 FTC_PRESS_ADOPTED = pathlib.Path("data/derived/labels/ftc_press_old/adopted.jsonl")
 
 
@@ -613,7 +615,11 @@ def plan(seed: int = 20260909) -> dict:
         },
         "unit": {"test_sentence": "문장"},
         "unmeasurable": {
-            "test_sentence": sorted(t for t in AXIS if sent_pos.get(t, 0) < MIN_MEASURABLE),
+            # 🔄 2026-09-30 — AXIS(식품 · 공정위 8유형) 밖의 유형도 센다. ⛔ 화장품 판이 들어오며 `기능성화장품_오인` 13 이
+            #    측정 불가인데 목록에 없었다(기기 게이트 `test_측정_불가를_숨기지_않는다` 실측) — 축 목록만 보면 새 유형이 숨는다
+            "test_sentence": sorted(
+                t for t in set(AXIS) | set(sent_pos) if sent_pos.get(t, 0) < MIN_MEASURABLE
+            ),
         },
         # 🔴 어느 단위로도 평가 데이터가 없는 유형 — 열린 항목 A 의 실제 크기다
         "no_eval_at_all": sorted(t for t in AXIS if sent_pos.get(t, 0) == 0),
