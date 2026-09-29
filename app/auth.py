@@ -33,6 +33,7 @@ import logging
 import secrets
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 
 from app.settings import settings
@@ -175,25 +176,65 @@ def _sign(payload: str) -> str:
     return base64.urlsafe_b64encode(mac).decode("ascii").rstrip("=")
 
 
-def issue_session(initials: str) -> str:
-    """`<이니셜>.<만료>.<서명>`. 🚨 상태를 서버에 안 둔다 — 재시작이 곧 전원 로그아웃이다."""
-    payload = f"{initials}.{int(time.time()) + SESSION_TTL_SEC}"
+#: 🆕 D-260 6-3 (가) — **일반 사용자 세션은 쿠키가 따로다.** 서명·만료 함수는 같이 쓴다(D-99).
+#:    ★ 값에 접두어 `u:` 를 붙인다 — 관리자 쿠키 자리에 사용자 값을 옮겨 넣어도 `read_session` 이 거절한다.
+#:    ⛔ 쿠키 하나에 역할 칸을 두는 안(나)은 기각 — 역할 칸을 읽는 곳 하나가 빠지면 사용자 세션이 관리자 문을 연다.
+USER_SESSION_COOKIE = "copylane_user"
+USER_PREFIX = "u:"
+
+
+def _issue(subject: str) -> str:
+    payload = f"{subject}.{int(time.time()) + SESSION_TTL_SEC}"
     return f"{payload}.{_sign(payload)}"
 
 
-def read_session(cookie: str | None) -> str | None:
-    """쿠키에서 이니셜. 틀리거나 만료면 `None`. ⛔ **왜 틀렸는지 안 알려 준다.**"""
+def _read(cookie: str | None) -> str | None:
+    """서명·만료를 본 뒤 주체 문자열. 틀리거나 만료면 `None`. ⛔ **왜 틀렸는지 안 알려 준다.**"""
     if not cookie or cookie.count(".") != 2:
         return None
-    initials, exp, sig = cookie.split(".")
-    if not hmac.compare_digest(sig, _sign(f"{initials}.{exp}")):
+    subject, exp, sig = cookie.split(".")
+    if not hmac.compare_digest(sig, _sign(f"{subject}.{exp}")):
         return None
     try:
         if int(exp) < int(time.time()):
             return None
     except ValueError:
         return None
-    return initials
+    return subject
+
+
+def issue_session(initials: str) -> str:
+    """`<이니셜>.<만료>.<서명>`. 🚨 상태를 서버에 안 둔다 — 재시작이 곧 전원 로그아웃이다."""
+    if initials.startswith(USER_PREFIX):
+        raise ValueError("관리자 이니셜이 사용자 접두어로 시작한다 — 두 세션이 섞인다 (D-260 6-3)")
+    return _issue(initials)
+
+
+def read_session(cookie: str | None) -> str | None:
+    """관리자 쿠키에서 이니셜. 틀리거나 만료면 `None`.
+
+    🔴 **사용자 세션 값은 거절한다** (D-260 6-3) — 서명이 맞아도 `u:` 로 시작하면 관리자가 아니다.
+    """
+    subject = _read(cookie)
+    if subject is None or subject.startswith(USER_PREFIX):
+        return None
+    return subject
+
+
+def issue_user_session(user_id: uuid.UUID) -> str:
+    """`u:<uuid>.<만료>.<서명>` — `USER_SESSION_COOKIE` 에 담는다."""
+    return _issue(f"{USER_PREFIX}{user_id}")
+
+
+def read_user_session(cookie: str | None) -> uuid.UUID | None:
+    """사용자 쿠키에서 계정 id. 🚨 접두어가 없으면(= 관리자 값) `None` — 반대 방향도 섞이지 않는다."""
+    subject = _read(cookie)
+    if subject is None or not subject.startswith(USER_PREFIX):
+        return None
+    try:
+        return uuid.UUID(subject[len(USER_PREFIX) :])
+    except ValueError:
+        return None
 
 
 def new_csrf() -> str:

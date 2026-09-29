@@ -65,6 +65,42 @@ _ADD_CHUNK_COL = re.compile(r"ALTER\s+TABLE\s+chunk\s+ADD\s+COLUMN", re.I)
 _REFRESH_VIEW = re.compile(r"(?:CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+VIEW[^;]*v_current_chunk", re.I)
 
 
+_CHUNK_TABLE = re.compile(r"CREATE TABLE chunk \((.*?)\n\);", re.S)
+#: 열 줄 — 들여쓰기 **네 칸**에 이름이 온다. 이어지는 줄(생성열 식 · 제약 몸통)은 더 깊다
+_COL_LINE = re.compile(r"^    ([a-z_]+)\s+\S", re.M)
+_ADDED_COL = re.compile(
+    r"ALTER\s+TABLE\s+chunk\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.I
+)
+
+
+def _chunk_cols(sql: str) -> list[str]:
+    m = _CHUNK_TABLE.search(sql)
+    assert m, "🚨 `CREATE TABLE chunk` 를 못 찾았다"
+    return [c for c in _COL_LINE.findall(m.group(1)) if c != "CONSTRAINT"]
+
+
+@pytest.mark.gate
+def test_chunk_에_더한_열은_끝에_둔다() -> None:
+    """🔴 옮긴 DB 는 `ADD COLUMN` 으로 열이 **끝에** 붙는다 — `schema.sql` 이 가운데 두면 `SELECT c.*` 뷰의 열 순서가 갈린다.
+
+    ⛔ 2026-09-28 — 0021 의 `exempt_of` 를 `schema.sql` 에서 `part_total` 뒤에 두었다. 정적 게이트(뷰 **본문** 대조)는
+       `SELECT c.*` 글자만 봐서 통과했고, A 의 `db-drift` 가 두 DB 의 뷰 열 순서가 다르다고 잡았다.
+    ★ 동결본(`db/schema_0001.sql`) 뒤에 마이그레이션이 **새로** 더한 열은 `schema.sql` 의 열 목록 **끝에, 더한 순서대로** 있어야 한다.
+    """
+    base = _chunk_cols((ROOT / "db" / "schema_0001.sql").read_text(encoding="utf-8"))
+    added: list[str] = []
+    for f in sorted(MIGRATIONS.glob("*.sql")):
+        for c in _ADDED_COL.findall(f.read_text(encoding="utf-8")):
+            if c not in base and c not in added:
+                added.append(c)
+    now = _chunk_cols(SCHEMA.read_text(encoding="utf-8"))
+    assert added, "🚨 동결본 뒤에 더한 열이 없다 — 검사 대상이 사라졌다 (D-170)"
+    assert now[-len(added) :] == added, (
+        f"🔴 `schema.sql` 의 chunk 열 끝이 마이그레이션이 더한 순서와 다르다 — 끝 {now[-len(added) :]} · 더한 것 {added}\n"
+        "   옮긴 DB 와 새 DB 의 뷰 열 순서가 갈린다. 새 열은 `CREATE TABLE chunk` 의 열 목록 맨 끝에 둔다."
+    )
+
+
 @pytest.mark.gate
 def test_chunk_에_열을_더하면_뷰도_다시_만든다() -> None:
     """⛔ **뷰가 낡으면 검색이 통째로 죽는다.** 그리고 그것은 실제 질의에서만 드러난다.
@@ -420,7 +456,13 @@ def test_마이그레이션이_만드는_모양이_schema_sql_과_같다() -> No
     assert files, f"🚨 {MIG_DIR} 에 마이그레이션 SQL 이 없다"
 
     # 마이그레이션을 순서대로 적용한 뒤의 ENUM 모양
-    m_enum: dict[str, list[str]] = {}
+    # 🔄 2026-09-25 — **출발점은 동결된 `db/schema_0001.sql`** 이다(0001 은 그 파일만 읽는다 · 0015 머리말).
+    #    ⛔ 종전에는 빈 표에서 출발해, 0001 이 만든 타입(`flag_t` 등)에 값을 더하는 마이그레이션(0020 · `ND`)을
+    #       「만든 적 없는 타입」으로 막았다. 그 타입들은 0001 이 만들었다.
+    m_enum: dict[str, list[str]] = {
+        n: re.findall(r"'([^']+)'", b)
+        for n, b in _ENUM.findall((ROOT / "db" / "schema_0001.sql").read_text(encoding="utf-8"))
+    }
     for f in files:
         sql = f.read_text(encoding="utf-8")
         for name, body in _ENUM.findall(sql):
@@ -583,3 +625,17 @@ def test_골든셋_적재는_넣는_칸을_전부_갱신한다() -> None:
     assert inserted <= updated, (
         f"갱신하지 않는 칸 {sorted(inserted - updated)} — 다시 넣어도 DB 가 옛 값이다"
     )
+
+
+@pytest.mark.gate
+def test_마이그레이션_SQL_은_alembic_이_부른다() -> None:
+    """🔴 `db/migrations/*.sql` 은 본문일 뿐이다 — 부르는 `alembic/versions/*.py` 가 없으면 `migrate` 가 돌리지 않는다.
+
+    ⛔ 2026-09-25 — `0020_flag_nd.sql` 만 넣고 alembic 판을 빠뜨렸다. 위 게이트(끝난 뒤의 모양)는 SQL 파일을
+       직접 접어서 **통과**했고, 실제 DB 는 0019 에 멈췄다 — `db-drift` 가 기기에서 잡았다(클론 B).
+    """
+    versions = "\n".join(
+        p.read_text(encoding="utf-8") for p in (ROOT / "alembic" / "versions").glob("*.py")
+    )
+    orphan = [f.name for f in sorted(MIG_DIR.glob("*.sql")) if f.name not in versions]
+    assert not orphan, f"🔴 alembic 판이 부르지 않는 마이그레이션 SQL: {orphan}"

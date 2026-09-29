@@ -63,9 +63,32 @@ def inbox_root() -> pathlib.Path:
 
 
 def _obj(root: pathlib.Path, sha: str) -> pathlib.Path:
+    """🚨 **쓰는** 자리 — 이름 = sha (확장자 없음). 읽는 쪽은 `_found` 를 쓴다."""
     if not _SHA.fullmatch(sha):
         raise InboxError(f"sha256 모양이 아니다 — {sha[:40]!r}")
     return root / "objects" / sha[:2] / sha
+
+
+#: 받은편지함에 확장자가 붙어 온 사본 — `<sha>.pdf` 꼴. 확장자는 짧은 영숫자만 [관행]
+_EXT = re.compile(r"\.[A-Za-z0-9]{1,8}")
+
+
+def _found(root: pathlib.Path, sha: str) -> pathlib.Path:
+    """받은편지함에서 이 sha 의 바이트를 **읽을** 자리 — `<sha>` 가 없으면 `<sha>.<확장자>` 중 **sha 가 맞는 것**.
+
+    🆕 2026-09-25 — 팀원이 올린 PDF 25개가 받은편지함에 `<sha>.pdf` 로 있었다(엑셀 1개는 이름 그대로 · 사실원장 ⑲).
+       올리는 코드(`_obj` · `data_store._copy_verified`)는 확장자를 붙이지 않는다 — 어디서 붙었는지는 모른다.
+    ★ 안전장치는 **이름이 아니라 sha 대조**다 — 확장자를 받아도 느슨해지지 않는다. 바이트가 원장 sha 와 다르면
+       고르지 않고, 부르는 쪽(`import_` 의 대조 · `_copy_verified`)이 한 번 더 본다.
+    🔴 못 찾으면 **확장자 없는 자리**를 돌려준다 — 부르는 쪽의 `is_file()` 이 「없음」으로 센다 (D-220 · 없음을 있음으로 세지 않는다).
+    """
+    exact = _obj(root, sha)
+    if exact.is_file():
+        return exact
+    for p in sorted(exact.parent.glob(sha + ".*")):
+        if p.is_file() and _EXT.fullmatch(p.name[len(sha) :]) and ds._sha(p) == sha:  # noqa: SLF001
+            return p
+    return exact
 
 
 def _path_of(row: dict) -> str:
@@ -387,7 +410,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     except InboxError as e:
         print(f"🔴 {e}", file=sys.stderr)
         return 1
-    new = [r for r in rows if not ds.object_ok(_obj(root, str(r["sha256"])), r.get("bytes"))]
+    new = [r for r in rows if not ds.object_ok(_found(root, str(r["sha256"])), r.get("bytes"))]
     leaked, changed = [], []
     for r in new:
         data = (ROOT / _path_of(r)).read_bytes()
@@ -484,7 +507,7 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
             carry.append(r)
     lack, leaked = [], []
     for r in carry:
-        src = _obj(root, str(r["sha256"]))
+        src = _found(root, str(r["sha256"]))
         if not src.is_file() or ds._sha(src) != r["sha256"]:  # noqa: SLF001
             lack.append(_path_of(r))
             continue
@@ -556,7 +579,7 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
         if dest.exists():  # 🚨 규약 2 — 덮어쓰지 않는다 (_foreign 이 거른 뒤 생긴 것)
             print(f"  🟡 이미 있다 — 건너뜀 {_path_of(r)}")
             continue
-        ds._copy_verified(_obj(root, str(r["sha256"])), dest, str(r["sha256"]))  # noqa: SLF001
+        ds._copy_verified(_found(root, str(r["sha256"])), dest, str(r["sha256"]))  # noqa: SLF001
     print(
         f"놓았다 {len(carry)}개. 판(__c날짜)이 생겼으면 `launcher.py adopt` 로 고른다 (D-246).\n"
         "  다음 — 파생물 재생성 → `derived-manifest --write` → 커밋 → `data-publish`"

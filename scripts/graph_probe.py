@@ -49,7 +49,8 @@ JUDGE_SUBTOTAL_MS = 1_100
 
 def main(argv: list[str]) -> int:
     text = argv[1] if len(argv) > 1 else DEFAULT_TEXT
-    raw = argv[2] if len(argv) > 2 else Category.일반.value
+    # 🔄 2026-09-23 (W3 · D-271) — 「일반」은 없다. 일반 상품은 `일반상품` 이다
+    raw = argv[2] if len(argv) > 2 else Category.일반상품.value
     try:
         category = Category(raw)
     except ValueError:
@@ -67,15 +68,9 @@ def main(argv: list[str]) -> int:
 
     try:
         with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
-            out = g.build_graph().invoke(
-                {
-                    "text": text,
-                    "product": ProductContext(category=category),
-                    "sentences": [],
-                    "rejects": [],
-                    "timings": [],
-                    "attempt": 0,
-                },
+            # 🔄 2026-09-23 — 검수 그래프(코어 서브그래프 + 종착 넷 · D-266). 입력은 `CORE_IN` 둘뿐이다.
+            out = g.build_review().invoke(
+                {"text": text, "product": ProductContext(category=category)},
                 # 🚨 커서를 여기로 넣는다. 노드가 스스로 connect() 하면 문장마다 연결이 열린다.
                 config={"configurable": {"conn": cur}},
             )
@@ -85,15 +80,42 @@ def main(argv: list[str]) -> int:
         print("   uv run python launcher.py db-up")
         return 1
 
-    print(f"\n문구  {text}   ·   카테고리  {category.value}\n")
+    print(f"\n문구  {text}   ·   카테고리  {category.value}   ·   법  {', '.join(out['laws'])}\n")
     for e in out["evidence"]:
         # 🚨 `vector`·`lexical` 은 「돌았나」다. `pool` 0 은 「안 겹쳤다」이고
         #    `lexical=False` 는 「검색어를 못 만들었다」다 — 다른 사건이다 (D-202).
         print(f"  {e.sent_id}  vector={e.vector}  lexical={e.lexical}  pool={e.pool}")
-        if not e.articles:
-            print("      ⬜ 좌표를 세운 근거가 없다 — 별표뿐이거나 후보가 비었다 (D-224)")
-        for a in e.articles:
-            print(f"      {a.law_id}  {a.article}      chunk={a.chunk_id}")
+        # 🆕 2026-09-28 (W4) — 사전 적중(단독판정 항목). 🚨 판정이 아니다 — 하한의 재료다 (D-127)
+        scan = next((s for s in out.get("dict_scans", []) if s.sent_id == e.sent_id), None)
+        if scan is None or not scan.ran:
+            print("    사전  ⬜ 못 훑었다")
+        else:
+            print(
+                f"    사전  적중 {len(scan.hits)}"
+                + ("" if scan.hits else "  — 🚨 침묵은 「특이사항 없음」이 아니다 (D-269)")
+            )
+            for h in scan.hits:
+                print(
+                    f"      「{h.term}」 {h.violation_type or '(유형 여럿)'}  {' · '.join(h.basis)}  자리={h.span}"
+                )
+        # 🔄 2026-09-28 (W4 · D-291) — 근거는 **법별 노드가 고른 것**이다. 후보(`e.*_hits`)는 법을 합친 넓은 검색이다
+        for r in out["law_results"]:
+            arts = dict(r.articles).get(e.sent_id, ())
+            dh = dict(r.dict_hits).get(e.sent_id, ())
+            print(
+                f"    {r.law} ({g.LAW_OF_NODE[r.law]})  근거 {len(arts)} · 이 법 인용을 가진 사전 적중 {len(dh)}"
+            )
+            if not arts:
+                print(
+                    "      ⬜ 좌표를 세운 근거가 없다 — 이 법 후보가 비었거나 좌표가 안 선다 (D-224)"
+                )
+            for a in arts:
+                # 🆕 2026-09-28 (D-238 개정 (나)) — `chunk=None` 은 적용 제외 목에서 **부모 목으로 올린 좌표**다
+                print(f"      {a.law_id}  {a.article}      chunk={a.chunk_id}")
+            for p in dict(r.provisos).get(e.sent_id, ()):
+                print(
+                    f"      ⚖️ 단서  {p.citation} → 위반 근거는 {p.parent}      chunk={p.chunk_id}"
+                )
 
     after = len(rt._model_cache)  # noqa: SLF001
     # 🚨 **셋을 가른다.** ① 이번에 로드됐다 — 예산 판정 안 함 ② 이미 떠 있었다 — 판정한다

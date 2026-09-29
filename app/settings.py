@@ -59,6 +59,29 @@ SQLALCHEMY_DRIVER = "psycopg"
 #:    ⬜ `scripts/doctor.py` 의 DB 검사는 5초를 따로 적는다 — 진단은 조금 더 기다린다. 합치지 않았다.
 DB_CONNECT_TIMEOUT_S = 3
 
+# ── 오류 로그 표 (`app_error_log` · 2026-09-22 · ssm 요청) — 운영 값이다. 판정 파라미터(`PARAMS`)가 아니다 ──
+#: 🚨 **보관 기간** — **D-261 (나)**. 오류 로그는 법이 보관을 요구하는 대상이 아니다(고시 제8조 1년은 **접속기록** · D-213 ③).
+#:    근거 — 남은 프로젝트 기간(~10-26)과 발표를 덮는 **가장 짧은 값**. 법정 기한이 아니라 필요 기간에서 나온 수다.
+#:    **바꾸는 조건** — 배포에서 실제 오류를 되짚는 주기를 재면. 줄이는 쪽이 P1-6(보관량 × 기간)에 맞다.
+ERROR_LOG_RETENTION_DAYS = 90
+#: `[임의]` 한 줄의 상한. 🚨 넘치면 **자른다**(거부하지 않는다) — 오류를 잃는 것보다 꼬리를 잃는 쪽이 낫다.
+ERROR_LOG_MESSAGE_MAX = 2000
+#: `[임의]` 쓰기 대기열 크기. 🚨 **가득 차면 버리고 센다** — 로그가 요청을 기다리게 하지 않는다 (D-72 · 버린 수는 stderr 로).
+ERROR_LOG_QUEUE_MAX = 1000
+#: `[임의]` DB 쓰기가 실패한 뒤 다시 시도하기까지 쉬는 초 — 죽은 DB 에 줄마다 붙지 않는다.
+ERROR_LOG_BACKOFF_S = 30
+#: `COPYLANE_ERROR_LOG` 가 받는 값. `auto` = **관리자 화면을 실제로 여는 판**(`onprem`·`demo`)에서만 켠다.
+ERROR_LOG_MODES = ("auto", "on", "off")
+#: `auto` 일 때 켜는 에디션. 🚨 `local`(개발 기기 · 테스트)은 끈다 — 테스트가 `app.api` 를 import 하면 DB 에 쓰려 든다.
+ERROR_LOG_AUTO_EDITIONS = frozenset({"onprem", "demo"})
+
+# ── 운영 표 (D-260 · `ticket`) — 운영 값이다. 판정 파라미터가 아니다 ──
+#: `[임의]` 문의(`ticket`) 본문·답변 상한 — D-260 ③. 판정 경로가 아니라 운영 값이다.
+#:    **바꾸는 조건** — 실제 문의 길이를 재면. 🚨 넘치면 **거부한다**(자르지 않는다 — 사용자가 쓴 글을 몰래 줄이지 않는다).
+TICKET_TEXT_MAX = 2000
+#: `[임의]` 닫힌 문의의 보관 기간(일) — D-260 ③ · D-129 파기. **바꾸는 조건** — 법정 보관 기한을 확인하면.
+TICKET_RETENTION_DAYS = 180
+
 #: `postgresql://` · `postgres://` · `postgresql+psycopg://` 를 다 받는다.
 #: ⛔ 아무 드라이버나 받지는 않는다 — `+asyncpg` 를 적으면 psycopg 경로가 죽는다.
 _SCHEME = re.compile(rf"^postgres(?:ql)?(?:\+{SQLALCHEMY_DRIVER})?://")
@@ -88,6 +111,12 @@ class Params(BaseModel):
     top_k: int = Field(5, ge=1)
     #: `[문헌]` RRF (Cormack et al., SIGIR 2009). 🚨 **가중치가 아니다** — 순위 완만도다.
     rrf_k: int = Field(60, ge=1)
+    #: `[임의]` 🆕 2026-09-27 — **한 규범(법령 · 고시 ID)이 상위에 차지할 수 있는 자리 수**(`retrieve.diversify`).
+    #: ⛔ 상한이 없을 때 75449(기능성 표시 식품 고시) 한 규범이 「면역력」 질의 상위 10 을 다 차지했다 —
+    #:    금지 조항(식품표시광고법 제8조 · 시행령 [별표 1])이 예외 조항에 밀려 `top_k` 5 밖으로 나갔다(사실원장 ㉟).
+    #: 2 면 `top_k` 5 안에 규범이 셋 이상이다. 🚨 넘친 것은 **버리지 않고 뒤로 민다** — 후보 폭 안에서 순서만 바뀐다.
+    #: **바꾸는 조건** — 질의 30건 탐침(D-40)에서 `search_probe` 의 「RRF 상한」 칸과 「RRF」 칸을 나란히 잰다.
+    per_law_cap: int = Field(2, ge=1)
     #: `[관행]` 조사를 깎고 남는 어간의 최소 길이. 1글자는 아무 데나 걸린다.
     min_stem: int = Field(2, ge=1)
 
@@ -155,9 +184,8 @@ ALLOWED_MODELS: frozenset[str] = frozenset({"nlpai-lab/KURE-v1"})
 #:    게이트 `test_판정_파라미터를_코드에_다시_적지_않는다` 가 그것을 본다 (D-117).
 PARAMS = Params()
 
-#: 🚨 **범주 어휘의 정본은 `app/contracts.py` 의 `Category` 다** — 여기 다시 적지 않는다.
-#:    기본값만 둔다. `retrieve`·`api` 가 `str` 로 받고 있어 오타가 조용히 0건이 됐다.
-DEFAULT_CATEGORY = "일반"
+#: ⛔ 🔄 2026-09-24 (W6 · D-271 ③) — `DEFAULT_CATEGORY = "일반"` 을 지웠다. 검색은 **법으로** 거르고 비우면 전부다
+#:    (`app/retrieve.law_filter`). 법 어휘의 정본은 `collect/law_map.LAWS` 다 — 여기 다시 적지 않는다.
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -200,6 +228,19 @@ class Settings(BaseModel):
     #: 🚨 세션 쿠키 서명 키. 비어 있으면 **프로세스마다 새로 만든다** — 재시작하면 로그아웃된다.
     #:    ⛔ 그것이 맞다. 기본 키를 코드에 박으면 그 키가 곧 모두의 키가 된다.
     session_secret: str = Field("")
+
+    #: 🆕 2026-09-22 — 오류 로그를 DB(`app_error_log`)에도 쌓는가. `auto` · `on` · `off` (`error_log_enabled()`).
+    error_log: str = Field("auto")
+
+    @field_validator("error_log")
+    @classmethod
+    def _known_error_log(cls, v: str) -> str:
+        if v not in ERROR_LOG_MODES:
+            raise ValueError(
+                f"COPYLANE_ERROR_LOG 가 {v!r} 이다 — 아는 것은 {list(ERROR_LOG_MODES)}.\n"
+                "  🚨 오타가 조용히 켜짐·꺼짐으로 떨어지지 않게 멈춘다 (D-220)"
+            )
+        return v
 
     @field_validator("edition")
     @classmethod
@@ -251,6 +292,7 @@ def settings() -> Settings:
         database_url=os.environ.get("DATABASE_URL") or DEFAULT_DATABASE_URL,
         edition=os.environ.get("COPYLANE_EDITION") or "local",
         session_secret=os.environ.get("COPYLANE_SESSION_SECRET") or "",
+        error_log=os.environ.get("COPYLANE_ERROR_LOG") or "auto",
     )
 
 
@@ -261,6 +303,18 @@ def admin_is_mounted() -> bool:
        그것이 맞다. **없는 것과 막힌 것은 다르다.**
     """
     return settings().edition not in ADMIN_CLOSED_EDITIONS
+
+
+def error_log_enabled(s: Settings | None = None) -> bool:
+    """오류 로그를 DB 에도 쌓는가 — 🚨 **판단은 여기 한 곳**이다 (D-99).
+
+    ★ 관리자 화면이 없는 판(`cloud`)은 **`on` 이어도 끈다** — 쌓아도 볼 화면이 없다(요청 §1 ⑤ · D-213).
+    ★ `auto` 는 `onprem`·`demo` 만 켠다. `local` 은 끈다 — 개발 기기와 테스트가 여기 해당한다.
+    """
+    s = s or settings()
+    if s.edition in ADMIN_CLOSED_EDITIONS or s.error_log == "off":
+        return False
+    return s.error_log == "on" or s.edition in ERROR_LOG_AUTO_EDITIONS
 
 
 def dsn() -> str:

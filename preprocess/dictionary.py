@@ -46,8 +46,9 @@ import argparse
 import collections
 import json
 import pathlib
-import re
-import unicodedata
+
+from app.dictmatch import norm as _norm
+from collect import registry, statute
 
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
@@ -55,19 +56,19 @@ FTC = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 HF = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
 OUT = pathlib.Path("data/derived/banned_terms.jsonl")
 
-#: 사례집의 호 → 근거 조문. 🚨 사례집은 **식품표시광고법**이고 의결서는 **표시광고법**이다.
-#:    같은 이름의 유형이라도 근거 법이 다르므로 사전에 조문을 함께 적는다.
-CASEBOOK_ARTICLE = "식품표시광고법 제8조제1항제{호}호"
-FTC_LAW = "표시광고법"
+#: 🔄 2026-09-24 (D-282) — 근거는 `collect.statute.cite` 꼴의 **조문 인용**이고 유형은 거기서 계산한다.
+#:    🚨 사례집은 **식품표시광고법**이고 의결서는 **표시광고법**이다 — 같은 이름의 유형이라도 근거 법이 다르다.
+#:    ⛔ 종전에는 한국어 근거 문자열(「식품표시광고법 제8조제1항제{호}호」)을 여기서 따로 만들었고, 유형과 근거를 **각각**
+#:       집합으로 합쳐 어느 근거가 어느 유형인지 짝이 사라졌다. 이제 `짝` 칸이 그 짝을 든다.
 
 #: 🔴 이보다 짧으면 사전에 넣지 않는다. 2자 낱말은 아무 문장에나 걸린다 —
 #:    실측에서 「변비」·「당뇨」는 유용했지만 1자 조각은 전부 오탐이었다.
 MIN_TERM = 2
 
 
-def norm(s: str) -> str:
-    """매칭용 정규화. 🚨 **보관은 원문으로 한다** (D-117)."""
-    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s)))
+#: 🔄 2026-09-28 — 정규화는 `app/dictmatch.py` 한 곳이다 (D-99). ⛔ 종전에는 여기와 `scripts/eval_rule.py` 에 같은 글자로 있었다.
+#:    `preprocess.golden` 이 이 이름으로 부르므로 이름을 남긴다.
+norm = _norm
 
 
 def _jsonl(p: pathlib.Path) -> list[dict]:
@@ -119,11 +120,18 @@ def train_only() -> set[str]:
     return {k for k, v in assign_map().items() if v == "train"}
 
 
-def _add(entries: dict, n: str, raw: str, types: set[str], arts: set[str], src: str) -> None:
-    e = entries.setdefault(n, {"term": n, "원문": [], "유형": set(), "근거": set(), "출처": set()})
+def _add(entries: dict, n: str, raw: str, basis: list[str], src: str) -> None:
+    """🔄 D-282 — 근거(조문 인용)만 받는다. 유형은 인용에서 계산하고 **(유형, 근거) 짝**을 남긴다."""
+    e = entries.setdefault(
+        n, {"term": n, "원문": [], "유형": set(), "근거": set(), "짝": set(), "출처": set()}
+    )
     e["원문"].append(raw)
-    e["유형"] |= types
-    e["근거"] |= arts
+    for c in basis:
+        t = statute.type_of(c)
+        e["근거"].add(c)
+        if t:
+            e["유형"].add(t)
+            e["짝"].add((t, c))
     e["출처"].add(src)
 
 
@@ -132,6 +140,11 @@ def build() -> tuple[list[dict], dict]:
 
     🔴 **`train` 문서만 본다.** 평가로 봉인된 문구가 들어가면 매칭기가 외운 것을 맞힌다.
     """
+    from preprocess.split import (  # noqa: PLC0415 — 모듈 최상단이면 순환 import
+        casebook_basis,
+        ho_of,
+    )
+
     entries: dict[str, dict] = {}
     stat: dict = {
         "사례집": 0,
@@ -153,17 +166,15 @@ def build() -> tuple[list[dict], dict]:
         if did not in train:
             stat["봉인제외" if did in assign else "미배정"] += 1
             continue
-        types = set(r.get("확정유형") or [])
-        if not types:
+        # 🔄 D-282 — 분할과 **같은 함수**로 인용을 만든다(D-99). 5호는 이제 들어온다(호 단위 `소비자_기만` · 다목 `후기`).
+        basis = casebook_basis(r)
+        if not statute.types_of(basis):
             continue
-        ho = r.get("호")
-        hos = ho if isinstance(ho, list) else ([ho] if ho else [])
-        art = {CASEBOOK_ARTICLE.format(호=h) for h in hos} or {"식품표시광고법 제8조제1항"}
         for q in r.get("인용표현") or []:
             n = norm(q)
             if len(n) < MIN_TERM:
                 continue
-            _add(entries, n, str(q), types, art, "mfds_casebook")
+            _add(entries, n, str(q), basis, "mfds_casebook")
             stat["사례집"] += 1
 
     for r in json.loads(FTC.read_text(encoding="utf-8")):
@@ -174,13 +185,12 @@ def build() -> tuple[list[dict], dict]:
         if did not in train:
             stat["봉인제외" if did in assign else "미배정"] += 1
             continue
-        types = {u["label"] for u in units}
-        arts = {f"{FTC_LAW} {u['article']}" for u in units}
+        basis = sorted({statute.fair(ho_of(u["article"])) for u in units})
         for q in r.get("문구") or []:
             n = norm(q)
             if len(n) < MIN_TERM:
                 continue
-            _add(entries, n, str(q), types, arts, "ftc_decisions_body")
+            _add(entries, n, str(q), basis, "ftc_decisions_body")
             stat["의결서"] += 1
 
     # 🔴 D-156 — 승인 문장에 그대로 들어 있는 항목을 표시한다
@@ -197,6 +207,8 @@ def build() -> tuple[list[dict], dict]:
                 "원문": sorted(set(e["원문"]))[:5],
                 "유형": types,
                 "근거": sorted(e["근거"]),
+                # 🆕 D-282 — 어느 근거가 어느 유형인지. 판정기 B 의 호 단위 채점이 읽는다
+                "짝": sorted([t, c] for t, c in e["짝"]),
                 "출처": sorted(e["출처"]),
                 # 🚨 신뢰도는 「얼마나 확실한가」가 아니라 **「단독으로 써도 되는가」**다.
                 "신뢰도": ("적법중첩" if overlap else ("모호" if len(types) > 1 else "단일")),
@@ -252,6 +264,8 @@ def main() -> int:
         f"\n  길이 — 중앙 {lens[len(lens) // 2]}자 · 10자 이상 {sum(1 for x in lens if x >= 10)}종"
     )
 
+    # 🔴 변경금지(ND) 게이트 — 파생 데이터셋에 ND 소스의 행이 들어오면 여기서 멈춘다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(rows, who="preprocess.dictionary")
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
         with OUT.open("w", encoding="utf-8", newline="\n") as f:

@@ -28,7 +28,8 @@ CREATE TYPE grade_t       AS ENUM ('G0','G1','G2','G3');
 CREATE TYPE use_t         AS ENUM ('U1_train','U2_rag','U3_cite','U4_deploy');
 CREATE TYPE flag_t        AS ENUM ('BY','NC','SA','PII','TOS','GATED',
                                    'NOREDIST','NOSTORE','QUERYLOG','PREAPPROVAL',
-                                   'NOTRAIN');   -- 🔄 D-122 · 사용자 업로드물은 학습·색인 금지
+                                   'NOTRAIN',    -- 🔄 D-122 · 사용자 업로드물은 학습·색인 금지
+                                   'ND');        -- 🆕 0020 · 변경금지(공공누리 제3·4유형) — 파생 데이터셋 금지
 CREATE TYPE cost_t        AS ENUM ('free','gated','paid','unknown');
 CREATE TYPE value_t       AS ENUM ('A','B','C','D','X');
 -- 🔴 위법 유형 — **우리 라벨이 곧 타입이다** (2026-09-10 · D-178).
@@ -187,7 +188,10 @@ CREATE TABLE chunk (
     paragraph       TEXT,
     item            TEXT,
     doc_type        TEXT,
-    category        TEXT[] NOT NULL DEFAULT '{}',
+    -- 🔄 2026-09-24 (0019 · W6 · D-271 ①) — 종전 `category TEXT[]`(법령 이름·별표 제목 낱말 · 기본값 「일반」).
+    --    ⛔ 별표 제목에 법 이름이 없어 265청크가 「일반」으로 떨어졌다. **법 ID 로** 정한다 — 대응표 `collect/law_map.py`.
+    --    🚨 품목과 다른 축이다 — 제품 품목을 이 칸의 필터로 넘기지 않는다 (D-271 ③).
+    law             TEXT NOT NULL,
     text            TEXT NOT NULL,
     -- 🔴 2026-09-12 (0008) — **검색이 보는 텍스트와 인용하는 텍스트를 가른다.**
     --    호 한 줄(「1. 마약」)은 문맥이 없어 아무 질의에나 붙었다. 청크를 다시 자르는 대신
@@ -231,13 +235,24 @@ CREATE TABLE chunk (
                       (to_tsvector('simple', coalesce(context, '') || ' ' || text)) STORED,
     effective_date  DATE,
     superseded_at   DATE,
+    -- 🆕 2026-09-28 (0021 · D-238 개정 (나)) — **적용 제외 목이면 부모(단서를 든 목)의 경로**, 아니면 빈 문자열.
+    --    「다만 … 제외한다」의 하위 목은 해당하면 위반이 **아닌** 경우다. 검색은 그대로 찾고, 위반 근거 좌표는
+    --    부모로 올린다(`app/retrieve.py` `basis_citation`). 제외 목 자체는 단서 조건으로 따로 나른다.
+    --    🚨 NULL 은 「아직 재적재 안 됨」이고 빈 문자열은 「제외 목이 아니다」다 — 둘을 한 값으로 만들지 않는다.
+    --    🔴 **맨 끝에 둔다** — 옮긴 DB 는 0021 의 `ADD COLUMN` 으로 열이 **끝에** 붙는다. 가운데 두면 `SELECT c.*` 뷰의
+    --       열 순서가 새 DB 와 갈린다(2026-09-28 · A 의 `db-drift` 가 잡았다 · 게이트 `test_chunk_에_더한_열은_끝에_둔다`).
+    exempt_of       TEXT,
     CONSTRAINT ck_chunk_tokens CHECK (token_count <= 512),
+    -- 🔄 2026-09-24 (0019) — 법 축 넷 (D-271 ①). 게이트가 `collect/law_map.LAWS` 와 댄다.
+    CONSTRAINT ck_chunk_law CHECK (law IN ('표시광고법', '식품표시광고법', '화장품법', '건강기능식품법')),
     -- 🔴 둘 다 NULL(미적재)이거나 둘 다 서고, 서면 1 ≤ part_no ≤ part_total 이라야 한다 (0011).
     --    ⛔ 한쪽만 서면 「3분의 몇인지 모르는 조각」이 되어 화면이 아무 말도 못 한다.
     CONSTRAINT ck_chunk_part CHECK (
         (part_no IS NULL AND part_total IS NULL)
         OR (part_no >= 1 AND part_total >= 1 AND part_no <= part_total)
-    )
+    ),
+    -- 🆕 2026-09-28 (0021) — 부모 경로는 **별표 청크만** 든다. 조문 쪽 단서는 아직 안 가른다(⬜ · D-238 개정).
+    CONSTRAINT ck_chunk_exempt CHECK (exempt_of IS NULL OR exempt_of = '' OR doc_type = '별표')
 );
 COMMENT ON CONSTRAINT ck_chunk_tokens ON chunk IS
   '인용 단위(text)의 토큰 상한 512. 🔴 리랭커에 들어가는 것은 input_token_count 이고 '
@@ -249,6 +264,9 @@ COMMENT ON COLUMN chunk.part_no IS
 COMMENT ON COLUMN chunk.part_total IS
   '쪼갠 조각의 총수. part_total > 1 이면 이 청크는 조문의 일부다 — citation() 이 내는 '
   '「제18조」는 좌표로는 맞지만 전문이 아니다. 화면·인용 검증은 이 칸을 보고 말한다 (D-199).';
+COMMENT ON COLUMN chunk.exempt_of IS
+  '적용 제외 목이면 그 목을 제외로 만든 단서 목의 경로(같은 별표 · 본문 구역), 아니면 빈 문자열 (0021 · D-238 개정 (나)). '
+  '🚨 NULL 은 「아직 재적재 안 됨」이다 — 「제외 목이 아니다」로 읽지 않는다. 위반 근거 좌표는 이 경로로 올린다.';
 COMMENT ON COLUMN chunk.input_token_count IS
   '임베딩·리랭커에 실제로 들어가는 문자열(embed_input = context + text)의 토큰 수 (0011). '
   '🚨 상한 CHECK 이 없다 — 리랭커 미선정이라 상한이 아직 수가 아니다. 재고 원장에 올린다 (D-200).';

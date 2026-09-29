@@ -1,0 +1,131 @@
+{
+  "outcome": "hold",
+  "category": "건기식",
+  "not_reviewed": [],
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "면역력 증진에 도움을 줄 수 있습니다.",
+      "verdict": "hold",
+      "hold_reason": "premise_unknown",
+      "violations": [
+        "건강기능식품_오인"
+      ],
+      "infeasibility": "A",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": null
+        }
+      ],
+      "risk": {
+        "floor": "R2",
+        "encoder": null,
+        "final": "R2",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
+    }
+  ],
+  "branches": [
+    {
+      "premise": "건기식_인정",
+      "verified": false,
+      "outcome": "pass",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "면역력 증진에 도움을 줄 수 있습니다.",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [],
+          "infeasibility": null,
+          "evidence": [],
+          "risk": {
+            "floor": "R0",
+            "encoder": null,
+            "final": "R0",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 면역 기능성으로 인정받은 원료를 쓴 건강기능식품이라면 인정받은 문구 「면역력 증진에 도움을 줄 수 있음」을 그대로 쓸 수 있습니다. 원료 함유 ≠ 제품 인정 — 인정번호가 대조되면 「검증됨」입니다.",
+      "evidence": []
+    },
+    {
+      "premise": "건기식_비인정",
+      "verified": false,
+      "outcome": "certificate",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "면역력 증진에 도움을 줄 수 있습니다.",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [
+            "건강기능식품_오인"
+          ],
+          "infeasibility": "A",
+          "evidence": [
+            {
+              "law_id": "013094",
+              "article": "제8조",
+              "item": "제1항제3호",
+              "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+              "chunk_id": null
+            }
+          ],
+          "risk": {
+            "floor": "R2",
+            "encoder": null,
+            "final": "R2",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 이 기능성으로 인정받지 않았다면 기능성 표방 자체가 자격의 문제입니다 — 표현을 바꿔도 같은 위반입니다. 특허 · 수상 · 논문은 자격이 되지 않습니다.",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": null
+        }
+      ]
+    }
+  ],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.2.0"
+}

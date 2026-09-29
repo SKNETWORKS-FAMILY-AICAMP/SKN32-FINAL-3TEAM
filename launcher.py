@@ -936,7 +936,7 @@ def migrate() -> None:
     🔴 **층이 둘이고 관리 방식이 다르다** (2026-09-09) —
 
         거버넌스·데이터 층 18테이블   `db/schema.sql`   손으로 쓴 DDL · 0001 이 읽어 실행
-        런타임 층 6테이블            `app/models.py`   ORM · `migrate-new` 로 autogenerate
+        런타임 층 12테이블           `app/models.py`   ORM · `migrate-new` 로 autogenerate (🔄 09-22 — 0016·0017)
 
     🚨 거버넌스 층은 `--autogenerate` 대상이 아니다. `alembic/env.py` 의 `include_object`
        가 시야에서 뺀다 — 안 그러면 **DROP 을 생성한다.**
@@ -970,12 +970,15 @@ def probe(source: str = typer.Argument("", help="소스 id 하나만 (비우면 
 def search_probe(
     queries: str = typer.Option("", help="질의 JSONL 경로 (비우면 기본 경로)"),
     pool: int = typer.Option(0, help="후보 폭 (0 이면 기획서 5-6 의 50)"),
+    top: int = typer.Option(
+        0, help="질의 · 범위마다 상위 N 건을 찍는다 (정답은 ★ · 0 이면 안 찍는다)"
+    ),
 ) -> None:
     """검색 순위를 잰다 — 🚨 **원장에 올릴 수를 만드는 자리**다.
 
     근거 — D-204.
 
-    범주 넷을 다 돌고 갈래별 순위와 RRF 순위를 낸다. 30건 미만이면 D-40 으로
+    전체(필터 없음) + 법 넷을 다 돌고 갈래별 순위와 RRF 순위를 낸다(🔄 W6 · D-271 ③). 30건 미만이면 D-40 으로
     「측정 불가」를 찍고 **비율을 말하지 않는다.**
     ⛔ `collect.probe`(소스 탐침 · D-109)와 다른 물건이다 — 이름을 가른 이유가 그것이다.
     """
@@ -984,6 +987,8 @@ def search_probe(
         a += ["--queries", queries]
     if pool:
         a += ["--pool", str(pool)]
+    if top:
+        a += ["--top", str(top)]
     raise typer.Exit(run(*a))
 
 
@@ -1641,6 +1646,17 @@ def extract(
         raise typer.Exit(run(sys.executable, "-m", "preprocess.preview", source))
     if dump or sheet:
         only_canonical(f"extract {source} " + ("--dump" if dump else "--sheet"))
+    if sheet:
+        # 🔴 2026-09-25 — 변경금지(ND) 소스는 라벨 시트를 만들지 않는다. 원문 그대로의 레코드(`--dump`)만 된다.
+        #    ⬜ 이 자리는 런처 경로만 막는다 — 모듈을 직접 부르는 길은 파생 쪽 `registry.assert_derivable` 이 받는다.
+        from collect import registry as reg  # noqa: PLC0415 — 이 파일에 `registry` 명령이 있다
+
+        if reg.no_derivatives(source):
+            console.print(
+                f"  [red]{source} 는 변경금지(ND)다[/red] — 라벨 시트는 파생 데이터셋이라 만들지 않는다. "
+                "원문 그대로 색인 · 인용만 된다 (D-110 · 2026-09-25 팀장 판정 (가))."
+            )
+            raise typer.Exit(1)
     module = EXTRACTORS.get(source)
     if module is None:
         console.print(
