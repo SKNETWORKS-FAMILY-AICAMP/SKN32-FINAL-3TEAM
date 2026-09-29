@@ -1,19 +1,159 @@
 {# app/templates/user/cs.html — 고객센터 문의 · 소유자 lse (병렬작업 계약 §5)
 
-  ★ 이 파일은 **골격만** 잡아 둔 것 — generate.html 과 같은 요령이다. 문의 작성 폼·
-    내역 목록·통계는 발표자료 프로토타입(v7.2)의 `data-screen="cs"` 절을 옮겨서 채운다.
-  🔴 문의는 **관리자 콘솔 · CS문의 티켓 목록**과 짝이다 (ssm·psj 담당) — 티켓 테이블이
-     아직 없어 폼을 먼저 만들면 접수해도 어디에도 안 쌓인다. 테이블이 먼저다.
+  ★ 발표자료 프로토타입(v7.2)의 `data-screen="cs"` 절을 옮긴 것이다.
   🚨 디자인에서 이 화면은 **구역이 아니다** — 각 구역 사이드바 맨 아래 "CS 문의" 버튼
      으로만 들어온다 (`_sidebar.html`). 그래서 상단 pill 도, 사이드바도 없다.
-  ⬜ 상세 화면(cs-detail)은 목록이 생긴 다음 차례다 — matching-home 과 같은 순서.
+  🔄 2026-09-29 (ksr) — `ticket`(D-260 ③)이 생겨 접수 · 내 문의 목록을 연결했다. 상세는 `cs_detail.html`.
+     🚨 로그인한 사용자만 · **내 문의만** 보인다 (P1-5). 유형은 DB 4종(결제 · 매칭 없음 — D-69 · D-68).
+     ⬜ 비활성 + 사유 — 우선순위 선택(관리자가 매긴다) · 첨부파일(파일 보관 안 함 · 새 의존성).
+     ⛔ 프로토타입의 「관리자 콘솔 티켓 목록 열기」 안내는 옮기지 않는다 — 사용자 화면에 관리자 길을 섞지 않는다(`_topnav.html` 과 같은 이유).
+     ⛔ 새 문의 폼 열고 닫기는 스크립트 대신 `<details>` (CSP).
 #}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 고객센터{% endblock %}
+{% block screen_css %}
+<style>
+.cs-wrap { max-width: 56rem; }
+.cs-head h1 { margin: 0 0 .25rem; }
+.cs-head p { margin: 0 0 1.25rem; color: var(--u-clay); font-size: .875rem; }
+.cs-stats { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--u-line);
+            border-radius: 1rem; overflow: hidden; margin-bottom: 1rem; background: var(--u-surface); }
+.cs-stats > div { padding: .9rem 1.1rem; border-left: 1px solid var(--u-line); }
+.cs-stats > div:first-child { border-left: 0; }
+.cs-stats p { margin: 0; font-size: .72rem; color: var(--u-clay); letter-spacing: .04em; }
+.cs-stats b { font-size: 1.4rem; font-weight: 500; }
+.cs-new { border: 1px solid var(--u-line); border-radius: 1rem; background: var(--u-surface); margin-bottom: 1.5rem; }
+.cs-new > summary { list-style: none; cursor: pointer; padding: .8rem 1.1rem; font-weight: 600;
+                    color: var(--u-signal-ink); font-size: .9rem; }
+.cs-new > summary::-webkit-details-marker { display: none; }
+.cs-new[open] > summary { border-bottom: 1px solid var(--u-line); }
+.cs-form { padding: 1rem 1.1rem 1.2rem; }
+.cs-form label.cs-l { display: block; font-size: .8rem; font-weight: 600; margin: .9rem 0 .35rem; }
+.cs-form label.cs-l:first-of-type { margin-top: 0; }
+.cs-grid2 { display: grid; gap: 1rem; }
+@media (min-width: 44rem) { .cs-grid2 { grid-template-columns: 1fr 1fr; } }
+.cs-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.cs-chip { position: relative; }
+.cs-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.cs-chip span { display: inline-block; padding: .3rem .8rem; border: 1px solid var(--u-line); border-radius: 999px;
+                font-size: .8rem; cursor: pointer; background: var(--u-surface); }
+.cs-chip input:checked + span { border-color: var(--u-signal); background: var(--u-signal-soft); color: var(--u-signal-ink); font-weight: 600; }
+.cs-chip input:focus-visible + span { outline: 2px solid var(--u-signal); }
+.cs-chip.off span { color: var(--u-clay); background: var(--u-surface2); cursor: not-allowed; }
+.cs-hint { font-size: .74rem; color: var(--u-clay); margin: .35rem 0 0; }
+.cs-form input[type="text"], .cs-form textarea { margin: 0; }
+.cs-warn { font-size: .78rem; color: #92400e; background: #fffbeb; border: 1px solid #fde68a;
+           border-radius: .6rem; padding: .5rem .75rem; margin: .5rem 0 0; }
+.cs-attach { border: 1px dashed var(--u-line); border-radius: .75rem; padding: .8rem; text-align: center;
+             font-size: .8rem; color: var(--u-clay); background: var(--u-surface2); }
+.cs-actions { display: flex; gap: .5rem; margin-top: 1rem; }
+.cs-submit { margin: 0; background: var(--u-signal); border-color: var(--u-signal); color: #fff; font-weight: 600; }
+.cs-err { font-size: .82rem; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca;
+          border-radius: .6rem; padding: .5rem .75rem; margin: 0 0 .8rem; }
+.cs-list-h { font-size: .72rem; color: var(--u-clay); letter-spacing: .06em; margin: 0 0 .5rem; }
+.cs-list { border: 1px solid var(--u-line); border-radius: 1rem; overflow: hidden; background: var(--u-surface); }
+.cs-row { display: flex; align-items: center; gap: 1rem; padding: .85rem 1.1rem; border-top: 1px solid var(--u-line);
+          color: var(--u-ink); text-decoration: none; }
+.cs-row:first-child { border-top: 0; }
+.cs-row:hover { background: var(--u-surface2); }
+.cs-no { font-family: ui-monospace, monospace; font-size: .72rem; color: var(--u-clay); width: 7.5rem; flex-shrink: 0; }
+.cs-main { flex: 1; min-width: 0; }
+.cs-main p { margin: 0; }
+.cs-title { font-size: .88rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-sub { font-size: .75rem; color: var(--u-clay); }
+.cs-badge { flex-shrink: 0; padding: .1rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 600;
+            background: var(--u-surface2); color: var(--u-clay); }
+.cs-badge.p-urgent { background: #fef2f2; color: #991b1b; }
+.cs-badge.s-open { background: #fffbeb; color: #92400e; }
+.cs-badge.s-in_progress { background: var(--u-signal-soft); color: var(--u-signal-ink); }
+.cs-badge.s-closed { background: #ecfdf5; color: #065f46; }
+.cs-empty { padding: 1.5rem; text-align: center; color: var(--u-clay); font-size: .85rem; margin: 0; }
+.cs-login { border: 1px dashed var(--u-line); border-radius: 1rem; padding: 1.5rem; text-align: center; }
+.cs-login a { color: var(--u-signal-ink); font-weight: 600; }
+</style>
+{% endblock %}
 {% block user_content %}
-<h1>고객센터 문의</h1>
+<div class="cs-wrap">
+<div class="cs-head">
+  <h1>고객센터 문의</h1>
+  <p>서비스 이용 중 생긴 문제를 접수하면 담당자가 확인해 답변드려요. 답변은 영업일 기준 1일 이내에 드립니다.</p>
+</div>
 
-<p>서비스 이용 중 생긴 문제를 접수하면 담당자가 확인해 답변한다.
-답변은 영업일 기준 1일 이내.</p>
+{% if need_login %}
+<div class="cs-login">
+  <p>문의는 <b>로그인한 회원</b>만 접수할 수 있어요.</p>
+  <p><a href="/u/login">로그인</a> · <a href="/u/signup">회원가입</a></p>
+</div>
+{% else %}
 
-<p>⬜ 문의 작성·내역 목록이 아직 없다 — 문의 티켓 테이블이 붙으면 여기 채운다.</p>
+<div class="cs-stats">
+  <div><p>전체 문의</p><b>{{ stat_total }}</b></div>
+  <div><p>처리 중</p><b>{{ stat_open }}</b></div>
+  <div><p>완료</p><b>{{ stat_done }}</b></div>
+</div>
+
+<details class="cs-new"{% if open_form %} open{% endif %}>
+  <summary>+ 새 문의 작성</summary>
+  <form class="cs-form" method="post" action="/u/cs">
+    {% if error %}<p class="cs-err" role="alert">{{ error }}</p>{% endif %}
+    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+    <div class="cs-grid2">
+      <div>
+        <label class="cs-l">문의 유형</label>
+        <div class="cs-chips" role="radiogroup" aria-label="문의 유형">
+          {% for code, label in categories.items() %}
+          <label class="cs-chip"><input type="radio" name="category" value="{{ code }}"
+            {% if form.category == code %}checked{% endif %} required><span>{{ label }}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <label class="cs-l">우선순위</label>
+        {# ⬜ `ticket.priority` 는 관리자가 매긴다 — 사용자는 고르지 않는다 (D-260 ③ · 설계초안 §4) #}
+        <div class="cs-chips" aria-disabled="true">
+          <span class="cs-chip off"><span>긴급</span></span>
+          <span class="cs-chip off"><span>보통</span></span>
+          <span class="cs-chip off"><span>낮음</span></span>
+        </div>
+        <p class="cs-hint">우선순위는 담당자가 확인하고 정해요.</p>
+      </div>
+    </div>
+
+    <label class="cs-l" for="cs-title">제목</label>
+    <input id="cs-title" name="title" type="text" maxlength="{{ title_max }}" value="{{ form.title or '' }}"
+           placeholder="예: 검수 결과 화면이 안 떠요" required>
+
+    <label class="cs-l" for="cs-body">문의 내용 <span class="cs-hint" style="font-weight:400">최대 {{ "{:,}".format(body_max) }}자</span></label>
+    <textarea id="cs-body" name="body" rows="6" maxlength="{{ body_max }}" required
+              placeholder="언제, 어떤 화면에서, 어떤 문제가 있었는지 적어주세요.&#10;오류 메시지가 있다면 그대로 옮겨 적어주시면 확인이 빨라져요.">{{ form.body or '' }}</textarea>
+    {# 🔴 D-76 열람 경계 — 관리자가 문의를 통해 사용자 문구를 보는 길을 만들지 않는다 (D-260 ③) #}
+    <p class="cs-warn">검수하신 <b>광고 문구 원문은 붙여 넣지 마세요.</b> 문의는 담당자가 읽어요 — 어떤 화면에서 무슨 일이 있었는지만 적어 주세요.</p>
+
+    <label class="cs-l">첨부파일 <span class="cs-hint" style="font-weight:400">스크린샷 등 최대 3개, 선택</span></label>
+    {# ⬜ 파일을 받지 않는다 — 보관·파기 책임 · `python-multipart` 새 의존성 (팀장 승인 요청 3 · 5) #}
+    <div class="cs-attach" aria-disabled="true">파일 첨부는 아직 준비 중이에요.</div>
+
+    <div class="cs-actions">
+      <button class="cs-submit" type="submit">문의 접수</button>
+    </div>
+  </form>
+</details>
+
+<p class="cs-list-h">내 문의 내역</p>
+<div class="cs-list">
+  {% for t in tickets %}
+  <a class="cs-row" href="/u/cs/{{ t.id }}">
+    <span class="cs-no">{{ t.no }}</span>
+    <div class="cs-main">
+      <p class="cs-title">{{ t.title }}</p>
+      <p class="cs-sub">{{ t.category }} · 접수 {{ t.at }}{% if t.replied %} · 답변 있음{% endif %}</p>
+    </div>
+    <span class="cs-badge p-{{ t.priority }}">{{ t.priority_label }}</span>
+    <span class="cs-badge s-{{ t.status }}">{{ t.status_label }}</span>
+  </a>
+  {% else %}
+  <p class="cs-empty">접수한 문의가 없어요.</p>
+  {% endfor %}
+</div>
+{% endif %}
+</div>
 {% endblock %}

@@ -1,0 +1,90 @@
+{# app/templates/user/cs_detail.html — 고객센터 문의 상세 · 소유자 ksr · lse (병렬작업 계약 §5)
+
+  ★ 발표자료 프로토타입(v7.2)의 `data-screen="cs-detail"` 절을 옮긴 것이다 (ksr 2026-09-29 · D-260 ③).
+  🔴 라우터가 **내 문의만** 넘긴다 — 남의 문의는 404 (P1-5).
+  🚨 답변은 **한 번**이다(`ticket.reply` · 스레드는 범위 밖). 그래서 프로토타입의 「추가 문의 작성 · 전송」과
+     「문의 종료하기」는 비활성 + 사유다 (팀장 승인 요청 5번). 상담원 이름 칸은 없다 — 담당자 배정 여부만 보인다.
+#}{% extends "user/_base.html" %}
+{% block title %}CopyLane — 문의 {{ no }}{% endblock %}
+{% block screen_css %}
+<style>
+.cd-back { font-size: .82rem; color: var(--u-clay); text-decoration: none; }
+.cd-back:hover { color: var(--u-ink); }
+.cd-head { display: flex; align-items: center; gap: .6rem; margin: .8rem 0 .2rem; flex-wrap: wrap; }
+.cd-head h1 { margin: 0; font-family: ui-monospace, monospace; font-size: 1.3rem; }
+.cd-title { margin: 0 0 1.25rem; font-size: 1rem; }
+.cd-grid { display: grid; gap: 1rem; }
+@media (min-width: 52rem) { .cd-grid { grid-template-columns: 1fr 18rem; align-items: start; } }
+.cd-card { border: 1px solid var(--u-line); border-radius: 1rem; padding: 1.2rem 1.3rem; background: var(--u-surface); margin-bottom: 1rem; }
+.cd-card > p.cd-label { margin: 0 0 .6rem; font-size: .8rem; font-weight: 600; color: var(--u-clay); }
+.cd-body { margin: 0; white-space: pre-line; line-height: 1.7; font-size: .9rem; }
+.cd-reply { border-color: var(--u-signal); background: var(--u-signal-soft); }
+.cd-reply > p.cd-label { color: var(--u-signal-ink); }
+.cd-wait { border-style: dashed; color: var(--u-clay); font-size: .85rem; }
+.cd-meta div { display: flex; justify-content: space-between; gap: .75rem; font-size: .82rem; padding: .25rem 0; }
+.cd-meta span:first-child { color: var(--u-clay); }
+.cd-meta span:last-child { font-weight: 500; text-align: right; }
+.cd-badge { padding: .1rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 600;
+            background: var(--u-surface2); color: var(--u-clay); }
+.cd-badge.p-urgent { background: #fef2f2; color: #991b1b; }
+.cd-badge.s-open { background: #fffbeb; color: #92400e; }
+.cd-badge.s-in_progress { background: var(--u-signal-soft); color: var(--u-signal-ink); }
+.cd-badge.s-closed { background: #ecfdf5; color: #065f46; }
+.cd-off textarea { margin: 0; background: var(--u-surface2); cursor: not-allowed; }
+.cd-off button, .cd-close { margin-top: .6rem; }
+.cd-note { font-size: .74rem; color: var(--u-clay); margin: .5rem 0 0; line-height: 1.6; }
+</style>
+{% endblock %}
+{% block user_content %}
+<a class="cd-back" href="/u/cs">← 문의 목록</a>
+<div class="cd-head">
+  <h1>{{ no }}</h1>
+  <span class="cd-badge p-{{ t.priority }}">{{ priority_label }}</span>
+  <span class="cd-badge s-{{ t.status }}">{{ status_label }}</span>
+</div>
+<p class="cd-title">{{ t.title }}</p>
+
+<div class="cd-grid">
+  <div>
+    <div class="cd-card">
+      <p class="cd-label">문의 내용</p>
+      <p class="cd-body">{{ t.body }}</p>
+    </div>
+
+    {% if t.reply %}
+    <div class="cd-card cd-reply">
+      <p class="cd-label">상담원 답변</p>
+      <p class="cd-body">{{ t.reply }}</p>
+    </div>
+    {% else %}
+    <div class="cd-card cd-wait">아직 답변이 없어요. 담당자가 확인하면 여기에 답변이 달려요.</div>
+    {% endif %}
+
+    {# ⬜ 추가 문의(스레드) — `ticket.reply` 는 한 번 답하는 모양이다 (D-260 ③ · 팀장 승인 요청 5번) #}
+    <div class="cd-card cd-off" aria-disabled="true">
+      <p class="cd-label">추가 문의 작성</p>
+      <textarea rows="3" disabled placeholder="답변에 이어서 물어보는 기능은 아직 준비 중이에요."></textarea>
+      <button type="button" disabled>전송</button>
+      <p class="cd-note">이어서 물어볼 내용이 있으면 새 문의로 접수해 주세요.</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="cd-card cd-meta">
+      <p class="cd-label">문의 정보</p>
+      <div><span>접수일</span><span>{{ at }}</span></div>
+      <div><span>회원</span><span>{{ requester }}</span></div>
+      <div><span>유형</span><span>{{ category }}</span></div>
+      <div><span>우선순위</span><span>{{ priority_label }}</span></div>
+      <div><span>담당자</span><span>{{ "배정됨" if t.assignee_id else "배정 전" }}</span></div>
+      {% if closed_at %}<div><span>완료일</span><span>{{ closed_at }}</span></div>{% endif %}
+    </div>
+    <div class="cd-card">
+      <p class="cd-label">문의 관리</p>
+      {# ⬜ 사용자가 직접 닫아도 되는지 정해지지 않았다 (팀장 승인 요청 5번) #}
+      <button class="cd-close" type="button" disabled>문의 종료하기</button>
+      <p class="cd-note">문의 종료는 아직 담당자만 할 수 있어요. 완료된 문의는 {{ retention_days }}일 동안 보관한 뒤 지워져요.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
