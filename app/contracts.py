@@ -318,6 +318,9 @@ class SentenceJudgment(BaseModel):
     evidence_mismatch: bool = False
     #: 🆕 **판정 대상 아님** — 주장이 아닌 문장(섭취 대상 · 사업자 정보 · 의무 표기 · 구호 …) (D-275 · D-242 조건 D).
     #:    「특이사항 없음(R0)」과 가른다 — 안 본 것을 본 것처럼 말하지 않는다 (D-63).
+    #:    🚨 **거래 조건(가격 · 할인 · 환불) 문장은 여기에 싣지 않는다** — 라벨의 조건 D 는 「식품표시광고법 판정 대상 아님」일 뿐
+    #:       표시광고법의 대상이다(D-272 개정 ② · 2026-09-28 팀장 판정 (가)). W4 사항 판별이 그 문장을 표시광고법 노드로
+    #:       보내기 전에는 `not_claim` 으로 내보내면 통과 쪽으로 샌다 (D-192 · 들어올 자리에 적는다)
     not_claim: bool = False
     #: 🆕 **뺄 구간** — 원문(raw) 좌표 · `label` 에 위반 유형 (D-278 · D-265). ⛔ 상향 근거 구간(`risk.evidence_span`)과 다른 칸이다
     spans: list[Span] = Field(default_factory=list)

@@ -40,6 +40,7 @@ import sys
 from app.settings import PARAMS
 from collect import store
 from collect.law_map import LAW_OF_ID
+from preprocess.law_norm import exemption_parents
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DERIVED = ROOT / "data" / "derived"
@@ -340,10 +341,18 @@ def from_articles() -> tuple[list[dict], int]:
                     #    빈 문자열이 아니다. 「모른다」는 적재 전 DB 의 NULL 이 맡는다.
                     "part_no": i + 1,
                     "part_total": len(parts),
+                    #: 🆕 2026-09-28 (D-238 개정 (나)) — 적용 제외 목의 **부모 경로**. 조문 쪽은 빈 문자열 = 「제외 목이 아니다」.
+                    #:    ⬜ 조문 · 산문 행정규칙 안의 「다만」 단서(69549 제2조제1항제3호 등)는 아직 안 가른다 — 별표 목만이다.
+                    "exempt_of": "",
                     "법령": law,
                 }
             )
     return rows, dropped
+
+
+#: 🆕 2026-09-28 (D-238 개정 (나)) — **적용 제외 목이 반드시 있어야 하는 별표.** `[측정]` 013453 [별표 1] 8경로(D-238 표).
+#:    ⛔ 여기 없는 별표는 0 이어도 멈추지 않는다 — 단서가 없는 별표가 대부분이다.
+MUST_HAVE_EXEMPTION = frozenset({"013453_0001"})
 
 
 def from_annex() -> list[dict]:
@@ -355,6 +364,13 @@ def from_annex() -> list[dict]:
         src = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
         #: 같은 별표 안에서 상위 항목을 찾는 표 — (구역, 경로) → 본문 (`_annex_context`)
         by_path = {(r["section"], str(r["path"])): (r.get("text") or "").strip() for r in src}
+        #: 🆕 2026-09-28 (D-238 개정 (나)) — 본문 경로 → 적용 제외로 만든 단서 노드의 경로. 라벨 게이트와 **같은 함수**다 (D-99)
+        exempt = exemption_parents(src)
+        if p.stem in MUST_HAVE_EXEMPTION and not exempt:
+            # 🔴 단서 글귀가 한 곳도 안 걸렸다 — 원문 판이 바뀌었거나 줄 잇기가 달라졌다. 표시 없이 조용히 실리지 않게 멈춘다 (D-220)
+            raise SystemExit(
+                f"🔴 {p.stem} — 「다만 … 제외한다」 단서가 한 곳도 안 걸렸다. `law_norm.EXC` 를 원문과 다시 맞춘다 (D-238)"
+            )
         foreign = FOREIGN.get(p.stem)
         hit_foreign = 0
         for r in src:
@@ -395,6 +411,13 @@ def from_annex() -> list[dict]:
                         "text": chunk,
                         "part_no": i + 1,
                         "part_total": len(parts),
+                        #: 🆕 2026-09-28 (D-238 개정 (나)) — **적용 제외 목이면 부모(단서를 든 목)의 경로**, 아니면 빈 문자열.
+                        #:    🔴 `text` · `context` · `chunk_id` 는 그대로다 — 임베딩 입력이 안 바뀌어 **재임베딩이 없다.**
+                        #:    검색은 이 청크를 그대로 찾고, 위반 근거 좌표는 부모로 올린다(`app/retrieve.py` `basis_citation`).
+                        #:    🚨 빈 문자열 = 「제외 목이 아니다」 · DB 의 NULL = 「아직 재적재 안 됨」 — 둘을 한 값으로 만들지 않는다
+                        "exempt_of": exempt.get(str(r["path"]), "")
+                        if r["section"] == "본문"
+                        else "",
                         "법령": r["annex_title"],
                     }
                 )
@@ -475,6 +498,11 @@ def main() -> int:
     print(f"  청크 {len(rows)}개 · 최장 {max(len(r['text']) for r in rows)}자")
     print(f"  법 {dict(laws.most_common())}")
     print(f"  🚨 길어서 쪼갠 청크 {long_}개 — `part_no`/`part_total` 이 원 조문을 가리킨다")
+    # 🆕 2026-09-28 (D-238 개정 (나)) — 적용 제외 목 청크의 수를 문서별로 찍는다. 0 이면 단서 글귀가 사라진 것일 수 있다
+    ex = collections.Counter(r["law_id"] for r in rows if r["exempt_of"])
+    print(
+        f"  ⚖️ 적용 제외 목 청크 {sum(ex.values())}개 {dict(ex)} — 위반 근거 좌표는 부모 목으로 올린다 (D-238)"
+    )
     # 🔴 **뺀 수를 매번 찍는다** — 조용히 줄면 다음 사람이 원장과 어긋나는 수를 보고 헤맨다.
     print(f"  ⬜ 제목뿐인 조 머리 행 {dropped}개를 담지 않았다 (D-159 · D-195)")
     if SKIPPED:

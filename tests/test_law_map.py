@@ -77,11 +77,7 @@ def test_사전의_근거는_전부_법이_정해진다() -> None:
     # 🔄 2026-09-24 (D-282) — 사전 근거는 조문 인용(`collect.statute.cite` 꼴)이다. 법은 인용의 법 ID 로 정한다.
     from collect import statute
 
-    def law(b: str) -> str | None:
-        try:
-            return lm.LAW_OF_ID.get(statute.parse(b)[0])
-        except ValueError:
-            return None
+    law = statute.law_of  # 🔄 2026-09-28 — 지역 함수를 `collect/statute.law_of` 로 올렸다 (D-99)
 
     bad = sorted(
         {
@@ -180,7 +176,8 @@ def test_검색_탐침의_정답은_법_ID_로_댄다() -> None:
 
     class H:
         def __init__(self, law_id: str, citation: str) -> None:
-            self.law_id, self.citation = law_id, citation
+            # 🔄 2026-09-28 (D-238 개정 (나)) — 탐침은 위반 근거 좌표로 채점한다. 여기는 제외 목이 아닌 줄이라 둘이 같다
+            self.law_id, self.citation, self.basis_citation = law_id, citation, citation
 
     want = ["013094:제8조제1항제1호", "013453:[별표 1]제1호*"]
     assert (

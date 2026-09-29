@@ -57,6 +57,18 @@ QUERIES = ROOT / "data" / "derived" / "labels" / "search_probe" / "queries.jsonl
 #: 출처 칸의 허용값 — 레지스트리 원천 ID 밖에서 받는 것은 이것뿐이다
 SELF_MADE = "자작"
 
+#: 🆕 2026-09-28 (0021) — 적용 제외 표시가 **아직 안 실린** 현행 청크 수. 0 이어야 잰다(`main`)
+SQL_UNMARKED = "SELECT count(*) FROM v_current_chunk WHERE exempt_of IS NULL"
+
+#: 🆕 2026-09-29 (D-238 ① 의 탐침 판 · 팀장 판정 (가)) — 적용 제외 목 청크의 **좌표 칸만**.
+#:    좌표는 여기서 조립하지 않는다 — `rt.citation` · `rt.basis_citation` 이 한다 (D-99). 칸 이름은 그 둘이 읽는 이름이다.
+#:    🚨 `<> ''` 는 NULL 도 거른다 — NULL(표시 전 판)은 `SQL_UNMARKED` 가 먼저 멈춘다
+SQL_EXEMPT = """SELECT c.law_id, c.doc_type, c.article, c.paragraph, c.item, c.paragraph_no,
+       c.exempt_of, d.annex_no
+FROM v_current_chunk c
+LEFT JOIN document d ON d.doc_id = c.doc_id
+WHERE c.exempt_of <> ''"""
+
 #: **전체 + 법 넷을 다 돈다.** 🚨 09-12 오후에 `건기식` 을 박고 돌렸는데 정답은 `식품` 에 있었다.
 #:    ⛔ 사람이 헷갈리지 않게 하는 대신 **틀릴 수 있는 자리를 없앤다** (D-51).
 #: 🔄 2026-09-24 (W6 · D-271 ③ ⑦) — 종전 범주 넷(일반 · 식품 · 건기식 · 화장품)을 **법 축**으로 바꿨다.
@@ -83,11 +95,15 @@ def _matches(h: rt.Hit, want: str) -> bool:
     law_id, _, cite = want.rpartition(":")
     if law_id and h.law_id != law_id:
         return False
+    # 🔄 2026-09-28 (팀장 판정 (나) · D-238 개정) — **위반 근거 좌표**(`basis_citation`)로 채점한다. 적용 제외 목은 부모 목의
+    #    좌표로 올라온다. ⛔ 종전에는 청크 자신의 좌표(`citation`)로 채점해 와일드카드가 제외 목을 정답으로 셌다(사실원장 ㊷ ·
+    #    31건 중 12건이 제외 목을 덮었다). 🚨 별표인데 제외 표시가 안 실린 판이면 `None` 이라 맞지 않는다 — `main` 이 먼저 멈춘다
+    got = h.basis_citation or ""
     if cite.endswith("*"):
-        base, got = cite[:-1], h.citation or ""
+        base = cite[:-1]
         # 🚨 「제1호*」가 「제10호」를 맞히지 않게 — 바로 뒤가 숫자면 다른 항목이다
         return got.startswith(base) and not got[len(base) : len(base) + 1].isdigit()
-    return h.citation == cite
+    return got == cite
 
 
 def rank_of(hits: list[rt.Hit], want: str | list[str]) -> int | None:
@@ -189,6 +205,44 @@ def check_rows(rows: list[dict]) -> list[str]:
     return bad
 
 
+def exempt_map(cur) -> dict[tuple[str, str], str]:  # noqa: ANN001
+    """DB 의 적용 제외 목 → `{(법 ID, 제외 목 좌표): 부모 좌표}`. 좌표가 안 서는 행은 뺀다 (D-224)."""
+    cur.execute(SQL_EXEMPT)
+    names = [c.name for c in cur.description]
+    out: dict[tuple[str, str], str] = {}
+    for row in cur.fetchall():
+        d = dict(zip(names, row, strict=True))
+        cite, basis = rt.citation(d), rt.basis_citation(d)
+        if cite and basis:
+            out[(str(d["law_id"]), cite)] = basis
+    return out
+
+
+def exempt_wants(rows: list[dict], exempt: dict[tuple[str, str], str]) -> list[str]:
+    """정답이 **적용 제외 목**을 가리키는가 — 문제 목록 (🆕 2026-09-29 · D-238 ① 의 탐침 판 · 팀장 판정 (가)).
+
+    🔴 적용 제외 목은 해당하면 위반이 **아닌** 경우다 — 위반 근거 정답이 될 수 없다. D-238 ① 은 라벨(`guide_label`)에만
+       걸려 있었고 이 파일에는 없었다. 「면역력 강화에 도움을 줍니다.」의 `[별표 1]제3호나목` 이 그렇게 들어왔고,
+       채점이 위반 근거 좌표로 바뀌자(D-238 개정 (나)) **조용히 0** 이 됐다(후보 50 안 12 → 11/31 · 2026-09-29 클론 B).
+    ★ 와일드카드도 본다 — `제3호나목*` 은 위반 근거 좌표(`제3호`)로 영영 안 맞는다. `제3호*` 는 제외 목이 아니므로 통과.
+    ⬜ 같은 법 · 같은 좌표에 제외 목과 아닌 청크가 함께 있으면 여기서 막는다(오탐 쪽 · fail-closed) — 실측으로 본 적은 없다.
+    """
+    bad: list[str] = []
+    for i, r in enumerate(rows, start=1):
+        for w in [r["want"]] if isinstance(r["want"], str) else r["want"]:
+            law_id, _, cite = w.rpartition(":")
+            base = cite.removesuffix("*")
+            parents = sorted(
+                {p for (lid, c), p in exempt.items() if c == base and (not law_id or lid == law_id)}
+            )
+            if parents:
+                to = " · ".join(f"{law_id + ':' if law_id else ''}{p}" for p in parents)
+                bad.append(
+                    f"{i}행: `{w}` 는 적용 제외 목이다 — 위반 근거가 아니다. 부모 `{to}` 로 적는다 (D-238 ①)"
+                )
+    return bad
+
+
 def _wants_law(want: str | list[str], laws: tuple[str, ...]) -> bool:
     """정답이 이 법 범위에 있는가 — `--top` 이 정답이 없는 법 범위까지 찍지 않게 한다."""
     from collect.law_map import LAW_OF_ID  # noqa: PLC0415
@@ -256,6 +310,24 @@ def main() -> int:
 
     results = []
     with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        # 🔴 **적용 제외 표시가 안 실린 청크가 있으면 멈춘다** (2026-09-28 · 0021 · D-238 개정 (나)).
+        #    ⛔ 그 판으로 재면 별표 근거가 전부 `basis_citation=None` 이라 정답이 조용히 0 이 된다 — 「검색이 나빠졌다」로 읽힌다
+        cur.execute(SQL_UNMARKED)
+        unmarked = cur.fetchone()[0]
+        if unmarked:
+            print(
+                f"🔴 적용 제외 표시(`exempt_of`)가 안 실린 청크 {unmarked:,}개 — 재지 않는다 (0021 · D-220).\n"
+                "   정본: uv run python launcher.py chunk --dump → embed   ·   사본: data-sync → migrate → embed",
+                file=sys.stderr,
+            )
+            return 1
+        # 🔴 정답이 적용 제외 목을 가리키면 멈춘다 (2026-09-29 · D-238 ①) — 그 정답은 위반 근거 좌표로 영영 안 맞는다
+        bad = exempt_wants(rows, exempt_map(cur))
+        if bad:
+            print(f"🔴 질의 파일을 쓰지 않는다 — {p}", file=sys.stderr)
+            for b in bad[:10]:
+                print(f"   {b}", file=sys.stderr)
+            return 1
         for r in rows:
             results.append(probe_one(cur, r["q"], r["want"], args.pool))
 
@@ -334,10 +406,12 @@ def main() -> int:
                     print(f"\n  ■ {r['q'][:30]} · {name} · 벡터 {st.vector}")
                     for i, h in enumerate(hits, 1):
                         mark = "★" if rank_of([h], r["want"]) else " "
+                        # 🆕 2026-09-28 (D-238 개정 (나)) — 적용 제외 목은 「↑부모」 를 붙인다. ★ 는 부모 좌표로 맞은 것이다
+                        up = f" ↑{h.basis_citation}" if h.exempt_of else ""
                         print(
                             f"   {mark}{i:>2}. {h.law:<8} {h.law_id:<8} {(h.citation or '(인용 없음)'):<22} "
                             f"v{h.rank_vector or '-':>4} l{h.rank_lexical or '-':>4}  "
-                            f"{(h.text or '').replace(chr(10), ' ')[:40]}"
+                            f"{(h.text or '').replace(chr(10), ' ')[:40]}{up}"
                         )
 
     if args.json:
