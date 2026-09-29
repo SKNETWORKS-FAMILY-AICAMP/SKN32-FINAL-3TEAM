@@ -11,6 +11,11 @@
   --u-signal: #8b5cf6;
   --u-signal-ink: #7c3aed;
   --u-signal-soft: #f5eefc;
+  /* 🆕 상태색(통과·주의·위험) — 칩·배지·안내 상자가 같이 쓴다. 어두운 화면에서 연한 바탕이 튀지 않게 토큰으로 묶었다 */
+  --u-ok-bg: #ecfdf5; --u-ok-ink: #065f46; --u-ok-line: #a7f3d0; --u-ok-dot: #15803d;
+  --u-warn-bg: #fffbeb; --u-warn-ink: #92400e; --u-warn-line: #fde68a; --u-warn-dot: #b45309;
+  --u-bad-bg: #fef2f2; --u-bad-ink: #991b1b; --u-bad-line: #fecaca; --u-bad-dot: #b91c1c;
+  --u-hit: #fde68a;
 }
 @media (prefers-color-scheme: dark) {
   .user-shell {
@@ -22,6 +27,10 @@
     --u-signal: #a78bfa;
     --u-signal-ink: #c4b5fd;
     --u-signal-soft: #2a2140;
+    --u-ok-bg: #0f2a20; --u-ok-ink: #6ee7b7; --u-ok-line: #1f5b43; --u-ok-dot: #4ade80;
+    --u-warn-bg: #2b2210; --u-warn-ink: #fcd34d; --u-warn-line: #6b4f14; --u-warn-dot: #fbbf24;
+    --u-bad-bg: #2d1616; --u-bad-ink: #fca5a5; --u-bad-line: #6e2a2a; --u-bad-dot: #f87171;
+    --u-hit: #5c4a12;
   }
 }
 
@@ -70,6 +79,137 @@ body:has(.user-shell) { max-width: none; padding: 1.5rem 2rem; }
   font-weight: 500;
 }
 .user-topnav-mypage:hover { background: var(--u-surface2); }
+
+/* 🆕 2026-09-29 (ksr) — 상단바 오른쪽(프로토타입 v7.2). 값은 로그인한 사람의 실제 정보 */
+/* 좁은 화면에서 메뉴 글자가 한 글자씩 세로로 쪼개졌다 — 글자는 안 쪼개고 줄 단위로 넘긴다.
+   ⛔ 가로 스크롤(overflow)로 두면 알림 팝업이 잘린다 */
+.user-topnav { flex-wrap: wrap; row-gap: .35rem; }
+.user-topnav > * { flex-shrink: 0; }
+.user-topnav-pill, .user-topnav-mypage, .user-topnav-brand { white-space: nowrap; }
+.user-topnav-org {
+  margin: 0 .75rem 0 -.5rem; padding: .2rem .6rem; border-radius: 999px;
+  background: var(--u-surface2); border: 1px solid var(--u-line);
+  font-size: .75rem; font-weight: 600; color: var(--u-ink); white-space: nowrap;
+}
+.user-topnav-form { display: inline; margin: 0; }
+.user-topnav-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.1rem; height: 2.1rem; margin: 0; padding: 0;
+  border: 0; border-radius: .6rem; background: none; color: var(--u-clay); cursor: pointer;
+}
+.user-topnav-icon:hover { background: var(--u-surface2); color: var(--u-ink); }
+.user-topnav-me {
+  display: inline-flex; align-items: center; gap: .45rem; padding: .3rem .6rem .3rem .35rem;
+  border-radius: .7rem; color: var(--u-ink); text-decoration: none; font-size: .85rem; font-weight: 500;
+}
+.user-topnav-me:hover { background: var(--u-surface2); }
+.user-topnav-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem; border-radius: 999px;
+  background: linear-gradient(135deg, var(--u-signal), #ec4899); color: #fff;
+  font-size: .68rem; font-weight: 700;
+}
+.user-topnav-join {
+  padding: .4rem .85rem; border-radius: .7rem; background: var(--u-signal); color: #fff;
+  text-decoration: none; font-size: .85rem; font-weight: 600;
+}
+.user-topnav-join:hover { background: var(--u-signal-ink); }
+
+/* 🆕 2026-09-29 알림 벨 팝업 — `<details>` + 라디오 탭. 패널은 벨 바로 아래 오른쪽 정렬(벨을 덮지 않는다 — 다시 눌러 닫는다) */
+.nt { position: relative; }
+.nt > summary { list-style: none; position: relative; }
+.nt > summary::-webkit-details-marker { display: none; }
+/* 바깥을 누르면 닫힌다 — 열려 있는 동안 벨(summary)이 화면 전체를 덮는 투명 막을 가진다.
+   막을 누르면 곧 벨을 누른 것이라 닫힌다. 패널은 막보다 위(z-index)라 안쪽 클릭은 그대로다. ⛔ 스크립트 없음(CSP) */
+.nt[open] > summary::before { content: ""; position: fixed; inset: 0; z-index: 40; cursor: default; }
+.nt-dot { position: absolute; top: .35rem; right: .4rem; width: .45rem; height: .45rem; border-radius: 999px;
+          background: #dc2626; box-shadow: 0 0 0 2px var(--u-surface); }
+.nt-panel { position: absolute; top: calc(100% + .5rem); right: -4rem; z-index: 50; width: min(26rem, calc(100vw - 2rem));
+            max-height: 70vh; display: flex; flex-direction: column; background: var(--u-surface); color: var(--u-ink);
+            border: 1px solid var(--u-line); border-radius: 1rem; box-shadow: 0 12px 32px rgba(0,0,0,.14); }
+.nt-head { display: flex; justify-content: space-between; align-items: baseline; padding: .9rem 1.1rem .5rem; }
+.nt-head b { font-size: 1rem; }
+.nt-head span { font-size: .7rem; color: var(--u-clay); }
+.nt-radio { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.nt-tabs { display: flex; gap: .35rem; padding: 0 1.1rem .7rem; border-bottom: 1px solid var(--u-line); }
+.nt-tabs label { margin: 0; padding: .3rem .8rem; border: 1px solid var(--u-line); border-radius: 999px;
+                 font-size: .78rem; font-weight: 500; cursor: pointer; color: var(--u-clay); }
+#nt-all:checked ~ .nt-tabs label[for="nt-all"],
+#nt-notice:checked ~ .nt-tabs label[for="nt-notice"],
+#nt-alert:checked ~ .nt-tabs label[for="nt-alert"] { border-color: var(--u-signal); background: var(--u-signal-soft); color: var(--u-signal-ink); }
+.nt-list { overflow-y: auto; flex: 1; min-height: 0; }
+#nt-notice:checked ~ .nt-list .nt-alert, #nt-alert:checked ~ .nt-list .nt-notice { display: none; }
+.nt-empty { margin: 0; padding: 2rem 1rem; text-align: center; font-size: .82rem; color: var(--u-clay); display: none; }
+#nt-all:checked ~ .nt-list .nt-empty-all:not([hidden]),
+#nt-notice:checked ~ .nt-list .nt-empty-notice:not([hidden]),
+#nt-alert:checked ~ .nt-list .nt-empty-alert:not([hidden]) { display: block; }
+.nt-item { display: flex; gap: .7rem; padding: .8rem 1.1rem; border-top: 1px solid var(--u-line);
+           color: var(--u-ink); text-decoration: none; }
+.nt-item:first-child { border-top: 0; }
+a.nt-item:hover { background: var(--u-surface2); }
+.nt-mark { width: .45rem; height: .45rem; border-radius: 999px; margin-top: .45rem; flex-shrink: 0; background: var(--u-line); }
+.nt-unread .nt-mark { background: var(--u-signal); }
+.nt-body { flex: 1; min-width: 0; display: block; }
+.nt-top { display: flex; align-items: baseline; gap: .4rem; }
+.nt-kind { font-family: ui-monospace, monospace; font-size: .64rem; color: var(--u-clay); flex-shrink: 0; }
+.nt-notice .nt-kind { color: var(--u-signal-ink); }
+.nt-title { flex: 1; min-width: 0; font-size: .85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-unread .nt-title { font-weight: 700; }
+.nt-when { font-family: ui-monospace, monospace; font-size: .68rem; color: var(--u-clay); flex-shrink: 0; }
+.nt-text { display: block; font-size: .78rem; color: var(--u-clay); margin-top: .15rem; }
+.nt-foot { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 0;
+           padding: .7rem 1.1rem; border-top: 1px solid var(--u-line); font-size: .72rem; color: var(--u-clay); }
+.nt-foot button { margin: 0; padding: .35rem .8rem; font-size: .78rem; border: 1px solid var(--u-line);
+                  border-radius: .7rem; background: var(--u-surface); color: var(--u-ink); }
+.nt-foot button[disabled] { color: var(--u-clay); cursor: default; }
+.user-sidebar-dot { display: inline-block; width: .4rem; height: .4rem; border-radius: 999px; background: #dc2626;
+                    vertical-align: middle; margin-left: .25rem; }
+
+/* 🆕 테마 쿠키가 운영체제 설정보다 앞선다(`data-theme`). 속성 선택자가 붙어 미디어 쿼리 규칙보다 우선한다 */
+.user-shell[data-theme="dark"] {
+  --u-surface: #201f22;
+  --u-surface2: #29282c;
+  --u-ink: #f1f0f2;
+  --u-clay: #918f94;
+  --u-line: #38373b;
+  --u-signal: #a78bfa;
+  --u-signal-ink: #c4b5fd;
+  --u-signal-soft: #2a2140;
+  --u-ok-bg: #0f2a20; --u-ok-ink: #6ee7b7; --u-ok-line: #1f5b43; --u-ok-dot: #4ade80;
+  --u-warn-bg: #2b2210; --u-warn-ink: #fcd34d; --u-warn-line: #6b4f14; --u-warn-dot: #fbbf24;
+  --u-bad-bg: #2d1616; --u-bad-ink: #fca5a5; --u-bad-line: #6e2a2a; --u-bad-dot: #f87171;
+  --u-hit: #5c4a12;
+}
+.user-shell[data-theme="light"] {
+  --u-surface: #ffffff;
+  --u-surface2: #f7f6f9;
+  --u-ink: #1c1c1f;
+  --u-clay: #86848c;
+  --u-line: #e6e5e9;
+  --u-signal: #8b5cf6;
+  --u-signal-ink: #7c3aed;
+  --u-signal-soft: #f5eefc;
+  /* 🆕 상태색(통과·주의·위험) — 칩·배지·안내 상자가 같이 쓴다. 어두운 화면에서 연한 바탕이 튀지 않게 토큰으로 묶었다 */
+  --u-ok-bg: #ecfdf5; --u-ok-ink: #065f46; --u-ok-line: #a7f3d0; --u-ok-dot: #15803d;
+  --u-warn-bg: #fffbeb; --u-warn-ink: #92400e; --u-warn-line: #fde68a; --u-warn-dot: #b45309;
+  --u-bad-bg: #fef2f2; --u-bad-ink: #991b1b; --u-bad-line: #fecaca; --u-bad-dot: #b91c1c;
+  --u-hit: #fde68a;
+}
+/* 🔴 `base.css`(팀장) 의 body 는 흰 바탕 · 검은 글자로 고정이다 — 고치지 않고 사용자 화면에서만 덮는다(위 `body:has` 와 같은 요령) */
+body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; }
+.user-shell[data-theme="dark"] { color: var(--u-ink); }
+.user-shell[data-theme="dark"] textarea,
+.user-shell[data-theme="dark"] input,
+.user-shell[data-theme="dark"] select { background: var(--u-surface); color: var(--u-ink); border-color: var(--u-line); }
+/* 🔴 2026-09-29 — 테마 쿠키 없이 **운영체제가 어두운 화면**일 때도 같다. 종전엔 쿠키 다크만 덮어서
+   카드·칩은 어두워지는데 글자는 base.css 의 검정(#18181b)으로 남아 안 보였다. 라이트를 직접 고른 사람은 뺀다 */
+@media (prefers-color-scheme: dark) {
+  body:has(.user-shell:not([data-theme="light"])) { background: #1a191c; color: #f1f0f2; }
+  .user-shell:not([data-theme="light"]) { color: var(--u-ink); }
+  .user-shell:not([data-theme="light"]) textarea,
+  .user-shell:not([data-theme="light"]) input,
+  .user-shell:not([data-theme="light"]) select { background: var(--u-surface); color: var(--u-ink); border-color: var(--u-line); }
+}
 
 /* 구역 본문 — 왼쪽 사이드바(있으면) + 메인 */
 .user-body { display: flex; margin: 0 -2rem; align-items: flex-start; }
@@ -236,7 +376,7 @@ body:has(.user-shell) { max-width: none; padding: 1.5rem 2rem; }
 .home-recent-head p { font-size: .75rem; color: var(--u-clay); margin: 0; text-transform: uppercase; }
 .home-recent-head a { font-size: .8rem; color: var(--u-signal-ink); text-decoration: none; }
 
-/* login·signup — 계정 시스템 붙기 전 골격. 입력은 disabled, 제출 버튼은 없다 */
+/* login·signup·reset — 🔄 2026-09-29 폼 연결(아래 「계정 폼 연결」). reset 은 메일 발송이 없어 입력이 없다 */
 .auth-card {
   max-width: 22rem;
   margin: 2.5rem auto;
@@ -284,3 +424,17 @@ body:has(.user-shell) { max-width: none; padding: 1.5rem 2rem; }
 }
 .auth-switch { text-align: center; font-size: .85rem; color: var(--u-clay); margin-top: 1.25rem; }
 .auth-switch a { color: var(--u-signal-ink); }
+
+/* 🆕 2026-09-29 (ksr) — 계정 폼 연결(D-260). 켜진 입력은 본문색, 꺼진 입력만 흐리게 */
+.auth-card input:not([type="checkbox"]):not(:disabled) { color: var(--u-ink); background: var(--u-surface); }
+.auth-card input:focus { outline: none; border-color: var(--u-signal); }
+.auth-submit {
+  display: block; width: 100%; margin-top: 1.25rem; padding: .7rem;
+  border: 0; border-radius: .7rem; background: var(--u-signal); color: #fff;
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.auth-submit:hover { background: var(--u-signal-ink); }
+.auth-err {
+  font-size: .82rem; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca;
+  border-radius: .6rem; padding: .55rem .8rem; margin: 0 0 .5rem;
+}

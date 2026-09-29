@@ -31,6 +31,8 @@ def _manifest(test_ids: list[str], train_ids: list[str] = ()) -> dict:  # type: 
         "excluded_from_eval": {"다중라벨_문서": 0},
         "unit": {"test_sentence": "문장"},
         "counts": {"test_sentence": {}},
+        "counts_by_citation": {"train": {}, "test_sentence": {}},  # 🆕 D-282 — 정본 셈(호 단위)
+        "pending_guide": {},  # 🆕 D-283 — 호를 기다리는 해설서 위반문구
         "unmeasurable": {"test_sentence": []},
         "no_eval_at_all": [],
         "assign": assign,

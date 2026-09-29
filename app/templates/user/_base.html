@@ -11,7 +11,7 @@
 #}{% extends "base.html" %}
 {% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% block screen_css %}{% endblock %}{% endblock %}
 {% block content %}
-<div class="user-shell">
+<div class="user-shell"{% if theme %} data-theme="{{ theme }}"{% endif %}>
 {% include "user/_topnav.html" %}
 <div class="user-body">
   {% if section_subs %}{% include "user/_sidebar.html" %}{% endif %}

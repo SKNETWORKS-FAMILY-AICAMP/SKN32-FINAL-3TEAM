@@ -940,10 +940,10 @@
                   </div>
                 </div>
 
-                <!-- 오른쪽 · 위험도 · 근거보기 · 질의응답 -->
-                <div class="w-[44%] min-w-[380px] shrink-0 border-l border-line overflow-y-auto bg-paper p-5">
+                <!-- 오른쪽 · 위험도 · 근거보기 -->
+                <div class="w-[44%] min-w-[380px] shrink-0 border-l border-line overflow-y-auto bg-paper p-5 flex flex-col">
 
-                  <div class="border border-line rounded-2xl bg-surface p-5">
+                  <div class="border border-line rounded-2xl bg-surface p-5 flex-1 flex flex-col min-h-0">
                     <div class="flex items-center justify-between mb-3">
                       <div class="flex items-baseline gap-2 min-w-0">
                         <p class="text-[14px] font-semibold">위험도</p>
@@ -953,30 +953,12 @@
                     </div>
                     <div id="rv-risk-body"></div>
 
-                    <div class="border-t border-line mt-4 pt-3.5">
+                    <div class="border-t border-line mt-4 pt-3.5 flex-1 flex flex-col min-h-0">
                       <div class="flex items-center justify-between mb-2">
                         <p class="text-[13px] font-semibold">근거 보기</p>
                         <span class="font-mono text-[10px] text-clay">조문 · 제재 사례 · 산출 내역</span>
                       </div>
-                      <div id="rv-evidence-list" class="space-y-2"></div>
-                    </div>
-                  </div>
-
-                  <!-- 질의응답 — 위험도 카드 바로 아래 -->
-                  <div class="border border-line rounded-2xl bg-surface mt-3 flex flex-col">
-                    <div class="px-5 py-2.5 border-b border-line">
-                      <p class="text-[13.5px] font-semibold">질의응답</p>
-                    </div>
-                    <div class="px-5 py-4 max-h-[300px] overflow-y-auto">
-                      <div id="qna-thread" class="space-y-3"></div>
-                    </div>
-                    <div class="border-t border-line p-3">
-                      <div class="flex items-center gap-2 border border-line rounded-xl bg-surface px-3 py-1.5 focus-within:border-signal transition-colors">
-                        <input id="qna-input" placeholder="이 문구에 대해 물어보세요" class="flex-1 min-w-0 bg-transparent text-[13.5px] py-1.5 outline-none" onkeydown="if(event.key==='Enter')sendQna()">
-                        <button onclick="sendQna()" title="보내기" class="w-8 h-8 shrink-0 rounded-full bg-signal hover:bg-signalink text-white flex items-center justify-center transition-colors">
-                          <svg viewBox="0 0 24 24" class="w-[16px] h-[16px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
-                        </button>
-                      </div>
+                      <div id="rv-evidence-list" class="space-y-2 flex-1 overflow-y-auto"></div>
                     </div>
                   </div>
 
@@ -1553,18 +1535,6 @@
                 <input id="preset-name" class="w-full border border-line rounded-xl px-3 py-2.5 text-[13.5px] bg-surface mb-5">
 
                 <div class="mb-5">
-                  <label class="block text-[12.5px] font-medium mb-2">나이</label>
-                  <div data-chip-group="age" class="flex flex-wrap gap-2">
-                    <button type="button" class="chip-pick h-9 px-4 rounded-full text-[13px] font-medium border border-line bg-surface hover:bg-surface2 transition-colors" onclick="selectChip(this)">10대</button>
-                    <button type="button" class="chip-pick h-9 px-4 rounded-full text-[13px] font-medium border border-line bg-surface hover:bg-surface2 transition-colors" onclick="selectChip(this)">20대</button>
-                    <button type="button" class="chip-pick h-9 px-4 rounded-full text-[13px] font-semibold bg-signal text-white" onclick="selectChip(this)">30대</button>
-                    <button type="button" class="chip-pick h-9 px-4 rounded-full text-[13px] font-medium border border-line bg-surface hover:bg-surface2 transition-colors" onclick="selectChip(this)">40대</button>
-                    <button type="button" class="chip-pick h-9 px-4 rounded-full text-[13px] font-medium border border-line bg-surface hover:bg-surface2 transition-colors" onclick="selectChip(this)">50대</button>
-                    <button type="button" class="chip-pick h-9 px-4 rounded-full text-[13px] font-medium border border-line bg-surface hover:bg-surface2 transition-colors" onclick="selectChip(this)">60대 이상</button>
-                  </div>
-                </div>
-
-                <div class="mb-5">
                   <label class="block text-[12.5px] font-medium mb-2">성별</label>
                   <div data-chip-group="gender" class="flex flex-wrap gap-2">
                     <button type="button" class="chip-pick h-9 px-4 rounded-full text-[13px] font-semibold bg-signal text-white" onclick="selectChip(this)">무관</button>
@@ -1679,7 +1649,7 @@
                       <span class="font-mono text-[11px] text-signal shrink-0">STEP 1</span>
                       <p class="text-[14.5px] font-semibold">가입하고 광고 기본값을 저장해요</p>
                     </div>
-                    <p class="text-[13px] text-inksoft leading-relaxed pl-[62px]">마이페이지 → <b>광고 기본값</b>에서 나이·성별·매체·광고물품을 한 번 저장해두면, 검수와 카피생성 화면에 자동으로 채워져요. 이번 건만 다르게 하고 싶으면 그 화면에서 바로 바꾸면 되고, 저장해둔 기본값은 그대로 남습니다.</p>
+                    <p class="text-[13px] text-inksoft leading-relaxed pl-[62px]">마이페이지 → <b>광고 기본값</b>에서 성별·매체·광고물품을 한 번 저장해두면, 검수와 카피생성 화면에 자동으로 채워져요. 이번 건만 다르게 하고 싶으면 그 화면에서 바로 바꾸면 되고, 저장해둔 기본값은 그대로 남습니다.</p>
                   </div>
                   <div class="p-5">
                     <div class="flex items-baseline gap-2.5 mb-2">
@@ -2723,7 +2693,7 @@
     avatarImage: null,            // 업로드한 프로필 이미지 (data URL)
     // 광고 기본값 프로필 — 최대 3개까지 만들어 두고 검수·카피생성에서 골라 쓴다
     presets: [
-      { name: '기본값 1', age: '30대', gender: '무관', media: '인터넷 상세페이지', product: '루테인 건강기능식품' },
+      { name: '기본값 1', gender: '무관', media: '인터넷 상세페이지', product: '루테인 건강기능식품' },
     ],
     presetIndex: 0,
     invite: null,                 // 조직 초대 코드 (회사 인증 승인 시 발급 · 관리자만 보유)
@@ -3226,7 +3196,6 @@
       name.value = ps.name;
       name.placeholder = '예: ' + presetLabel(ps, STATE.presetIndex) + ' · 루테인 30대 상세페이지';
     }
-    setChipValue('age', ps.age);
     setChipValue('gender', ps.gender);
     setChipValue('media', ps.media);
     const prod = document.getElementById('mp-product');
@@ -3244,7 +3213,6 @@
     if (STATE.presets.length >= MAX_PRESETS) { showToast('기본값 프로필은 최대 3개까지 만들 수 있어요'); return; }
     STATE.presets.push({
       name: '',                      // 이름은 비워두고 예시만 보여준다
-      age: '10대',                   // 각 항목의 첫 번째 선택지
       gender: '무관',
       media: '인터넷 상세페이지',
       product: '',                   // 광고물품도 비워둔다
@@ -3269,7 +3237,6 @@
     const ps = curPreset();
     const nameEl = document.getElementById('preset-name');
     ps.name = nameEl ? nameEl.value.trim() : ps.name;
-    ps.age = chipValue('age') || ps.age;
     ps.gender = chipValue('gender') || ps.gender;
     ps.media = chipValue('media') || ps.media;
     ps.product = document.getElementById('mp-product').value.trim() || ps.product;
@@ -3334,8 +3301,6 @@
 
   function applyDefaultsToReview() {
     const ps = curPreset();
-    const age = document.getElementById('ri-age');
-    if (age) age.value = ps.age;
     const prod = document.getElementById('ri-product');
     if (prod) prod.value = ps.product;
     setChipValue('ri-gender', ps.gender);
@@ -3661,10 +3626,7 @@
         ${r.law ? `<p class="text-[11.5px] text-clay leading-relaxed mb-1">${r.law}</p>` : ''}
         ${extra.length ? `<p class="text-[11px] text-clay leading-relaxed mb-1">함께 걸린 항목 ${extra.length}건 · ${extra.map(h => h.law.split('·')[0].trim()).join(' / ')}</p>` : ''}
         ${r.alt ? `<p class="text-[12px] text-inksoft leading-relaxed mb-2">고치는 방향 · ${r.alt}</p>` : ''}
-        ${r.level !== 'safe' ? `<div class="flex items-center gap-3">
-          <button onclick="toggleEvidence(${i}, true)" class="text-[11.5px] text-signal hover:text-signalink font-medium">근거 보기 →</button>
-          <button onclick="askAbout('${(r.text || '').replace(/'/g, "\\'")}')" class="text-[11.5px] text-clay hover:text-ink">이 문구로 질문하기</button>
-        </div>` : ''}
+        ${r.level !== 'safe' ? `<button onclick="toggleEvidence(${i}, true)" class="text-[11.5px] text-signal hover:text-signalink font-medium">근거 보기 →</button>` : ''}
       </div>`;
     }).join('');
 
@@ -7447,7 +7409,7 @@
   const OPERATOR_PROFILE = {
     name: '김민수', email: 'admin@copylane.co.kr',
     role: 'company', plan: 'free', card: null, avatarImage: null,
-    presets: [{ name: '기본값 1', age: '30대', gender: '무관', media: '인터넷 상세페이지', product: '루테인 건강기능식품' }],
+    presets: [{ name: '기본값 1', gender: '무관', media: '인터넷 상세페이지', product: '루테인 건강기능식품' }],
     presetIndex: 0, invite: null, orgRole: 'admin', orgName: 'CopyLane 운영팀',
     joinedWith: null, portfolio: { influencer: false, company: false },
     product: 'lutein', segment: 'a', keywords: [], channels: [],

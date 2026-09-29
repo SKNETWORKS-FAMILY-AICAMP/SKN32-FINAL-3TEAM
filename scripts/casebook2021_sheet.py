@@ -33,6 +33,13 @@ import argparse
 import collections
 import json
 import pathlib
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from collect import registry  # noqa: E402
 
 OUT = pathlib.Path("data/derived/casebook2021_labelsheet.jsonl")
 
@@ -44,6 +51,8 @@ def _batch1() -> list[dict]:
     D_AK = "약사법 제68조"  # 의약외품 광고
     C = "화장품법 제13조 제1항"
 
+    # 🔗 1~7호는 `collect/statute.py` 와 같아야 한다 — 게이트 `tests/test_statute.py` 가 소스로 대조한다 (D-99 · D-282).
+    #    8~10호 이름은 계약 열거형에 없다(statute 는 None) — 시트 표시용이고 적재되지 않는다.
     TYPE = {
         1: ["질병_예방치료_표방"],
         2: ["의약품_오인"],
@@ -1740,6 +1749,8 @@ def main() -> int:
     a = ap.parse_args()
 
     got = rows()
+    # 🔴 변경금지(ND) 게이트 — 전사도 파생 데이터셋이다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(got, who="casebook2021_sheet")
     print(f"전사 {len(got)}행")
     for field in ("부", "블록", "근거법", "층"):
         c = collections.Counter(str(r.get(field, "")) for r in got)

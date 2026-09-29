@@ -612,3 +612,11 @@ def test_잔여_계측도_화면에는_원값을_안_낸다(
     assert "흔한말:주장" in screen, "흔한 말은 값을 보여야 오탐을 가른다"
     body = out.read_text(encoding="utf-8")
     assert all(n in body for n in ("박가나", "제갈가나", "김O나", "박가다"))
+
+
+@pytest.mark.gate
+def test_해설서_채택본은_생성물이고_판독_원자료는_원천이다() -> None:
+    """🔄 2026-09-25 (D-285 개정 3) — 채택본은 `guide_statute_round rebuild` 가 다시 낸다. 원천은 판독 원자료 하나다."""
+    assert dm.kind_of("labels/guide_statute/adopted.jsonl")[0] == "생성물"
+    assert dm.kind_of("labels/guide_statute/readings.jsonl")[0] == "원천"
+    assert dm.kind_of("labels/오한빈.jsonl")[0] == "원천"  # 예외가 `labels/` 전체를 풀지 않는다

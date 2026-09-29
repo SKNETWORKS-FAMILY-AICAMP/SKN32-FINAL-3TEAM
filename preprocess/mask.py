@@ -159,6 +159,10 @@ POLICY: dict[str, frozenset[str]] = {
     # ── 2026-09-19 판정 (검토요청_2026-09-18_mfds_cgm_expc.md §6 · 2인 확인)
     # 🚨 제품명(brand)은 가리지 않는다 — 제품명이 곧 판정 대상 표현일 수 있다(mfds_press 와 같은 이유).
     "mfds_cgm_expc": frozenset({"org", "person"}),
+    # ── 2026-09-25 등재 (결정 오한빈 · 확인 권소라) — 레지스트리 masking 「판권면의 담당 공무원 성명·전화번호 ·
+    #    본문 속 업체명·상표 즉시 마스킹」. 🚨 「성명」은 `person`(대표자명)이 아니다 — 판권면은 추출기가 **담지 않아**
+    #    지킨다(`preprocess/mfds_cosmetic_qa.py` 머리말 · D-159). 축은 문언 그대로 org · brand 다
+    "mfds_cosmetic_ad_qa": frozenset({"org", "brand"}),
 }
 
 #: 정책 키 ↔ 레지스트리 문언. 대조 테스트가 이걸 쓴다.

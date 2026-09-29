@@ -8,7 +8,8 @@
     "Category": [
       "건기식",
       "식품",
-      "일반",
+      "일반상품",
+      "전용법_미수록",
       "화장품"
     ],
     "Channel": [
@@ -17,10 +18,17 @@
       "유튜브",
       "인스타"
     ],
+    "GenerateOutcome": [
+      "frontier",
+      "hold",
+      "search_failed"
+    ],
     "HoldReason": [
       "cat_unknown",
       "gap2",
+      "law_uncovered",
       "low_conf",
+      "premise_unknown",
       "rd1"
     ],
     "Infeasibility": [
@@ -30,9 +38,16 @@
     ],
     "Outcome": [
       "certificate",
+      "guidance",
       "hold",
-      "pass",
-      "search_failed"
+      "pass"
+    ],
+    "Premise": [
+      "건기식_비인정",
+      "건기식_인정",
+      "식품",
+      "일반상품",
+      "화장품"
     ],
     "Risk": [
       "R0",
@@ -75,6 +90,14 @@
       "recheck": "req app.contracts.SentenceJudgment",
       "rewrite": "req app.contracts.RewriteSet"
     },
+    "Branch": {
+      "criteria": "req builtins.str",
+      "evidence": "opt list[app.contracts.EvidenceArticle]",
+      "outcome": "req app.contracts.Outcome",
+      "premise": "req app.contracts.Premise",
+      "sentences": "opt list[app.contracts.SentenceJudgment]",
+      "verified": "opt builtins.bool"
+    },
     "Candidate": {
       "appeal_retention": "req builtins.float",
       "label": "req builtins.str",
@@ -115,7 +138,8 @@
     "GenerateResponse": {
       "adapted": "opt list[app.contracts.AdaptedCopy]",
       "candidates": "opt list[app.contracts.Candidate]",
-      "keywords": "opt list[app.contracts.KeywordScreen]"
+      "keywords": "opt list[app.contracts.KeywordScreen]",
+      "outcome": "req app.contracts.GenerateOutcome"
     },
     "JudgeRequest": {
       "product": "opt app.contracts.ProductContext",
@@ -123,10 +147,13 @@
     },
     "JudgeResponse": {
       "attempt": "opt builtins.int",
+      "branches": "opt list[app.contracts.Branch]",
       "candidates": "opt list[app.contracts.Candidate]",
+      "category": "opt app.contracts.Category | None",
       "certificate": "opt app.contracts.Certificate | None",
       "judged_by": "opt builtins.str",
       "law_version": "opt builtins.str",
+      "not_reviewed": "opt list[str]",
       "outcome": "req app.contracts.Outcome",
       "sentences": "opt list[app.contracts.SentenceJudgment]",
       "timings": "opt list[app.contracts.Timing]"
@@ -172,8 +199,11 @@
       "evidence_mismatch": "opt builtins.bool",
       "hold_reason": "opt app.contracts.HoldReason | None",
       "infeasibility": "opt app.contracts.Infeasibility | None",
+      "not_claim": "opt builtins.bool",
       "risk": "opt app.contracts.RiskAssessment",
       "sent_id": "req builtins.str",
+      "spans": "opt list[app.contracts.Span]",
+      "substantiation": "opt app.contracts.SubstBranch | None",
       "text": "req builtins.str",
       "verdict": "req app.contracts.Verdict",
       "violations": "opt list[app.contracts.Violation]"
@@ -182,6 +212,11 @@
       "end": "req builtins.int",
       "label": "opt str | None",
       "start": "req builtins.int"
+    },
+    "SubstBranch": {
+      "accepted_evidence": "req list[str]",
+      "criteria": "req builtins.str",
+      "substantiated_max": "req app.contracts.Risk"
     },
     "Timing": {
       "ms": "req builtins.float",

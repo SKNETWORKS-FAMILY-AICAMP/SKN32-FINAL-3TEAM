@@ -76,3 +76,17 @@ def test_깊이는_마커_모양이_정한다() -> None:
     levels = {n["marker"]: n["level"] for n in parse(BIGO)}
     assert levels["1"] == 1
     assert levels["가"] == 2
+
+
+@pytest.mark.gate
+def test_비고_머리_문장은_앞_호에_붙지_않고_비고_구역의_머리다() -> None:
+    """🆕 2026-09-28 (사실원장 ㊴) — 「비고」와 첫 번호 사이의 문장이 **적용 제외의 뜻 전체**다.
+
+    ⛔ 종전에는 「비고」를 다음 구역의 이름으로만 받아 이 문장이 앞 호(위법 유형 제2호) 본문에 붙었다 —
+       013453 [별표 1] 제8호나목 청크에 「…부당한 표시 또는 광고행위로 보지 않는다」가 섞였다.
+    """
+    nodes = parse(BIGO)
+    second = next(n for n in nodes if n["section"] == "본문" and n["marker"] == "2")
+    assert "불구하고" not in "".join(second["lines"]) and "비고" not in "".join(second["lines"])
+    head = [n for n in nodes if n["section"] == "비고" and n["path"] == "머리"]
+    assert len(head) == 1 and "불구하고" in "".join(head[0]["lines"])

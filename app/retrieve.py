@@ -44,9 +44,11 @@ from __future__ import annotations
 import dataclasses
 import logging
 import re
+from collections.abc import Sequence
 from typing import Any
 
-from app.settings import DEFAULT_CATEGORY, PARAMS, load_kwargs
+from app.settings import PARAMS, load_kwargs
+from collect.law_map import LAWS
 
 _log = logging.getLogger("copylane.retrieve")
 
@@ -141,13 +143,18 @@ class Hit:
     #:    🚨 `None` 은 「아직 재적재 안 됨」이다. 1/1 로 채우지 않는다 (D-199).
     part_no: int | None
     part_total: int | None
+    #: 🆕 2026-09-28 (0021 · D-238 개정 (나)) — **적용 제외 목이면 부모(단서를 든 목)의 경로**, 아니면 빈 문자열.
+    #:    🚨 `None` 은 「아직 재적재 안 됨」이다 — 「제외 목이 아니다」가 아니다. 그때 별표 근거는 좌표를 세우지 않는다.
+    exempt_of: str | None
     doc_type: str | None
     #: 🆕 별표 번호 — **원문 머리글에서 읽은 값만** (0015). `None` = 머리글에 번호가 없다.
     #:    ⛔ 파일명 일련번호가 아니다. `None` 이면 별표 인용을 세우지 않는다 (D-224).
     annex_no: int | None
     #: 🆕 문서 이름 — 사람이 읽는 자리. 🚨 **좌표가 아니다** (좌표는 `citation`).
     doc_title: str | None
-    category: list[str]
+    #: 🔄 2026-09-24 (0019 · W6) — **법 축**(표시광고법 · 식품표시광고법 · 화장품법 · 건강기능식품법).
+    #:    ⛔ 종전 `category: list[str]`(낱말 범주). 법 ID 로 정한 값이라 하나다 (D-271 ①).
+    law: str
     text: str
     attribution: str | None
     source_url: str | None
@@ -155,6 +162,10 @@ class Hit:
     #: 「제8조제1항제1호」. 🔴 조립할 수 없으면 `None` — **부분 인용을 내지 않는다.**
     #:    「제8조」만 내면 실은 제3항인 근거가 제1항처럼 읽힌다. 틀린 인용은 없는 인용보다 나쁘다.
     citation: str | None = None
+    #: 🆕 2026-09-28 (D-238 개정 (나)) — **위반 근거로 쓸 좌표.** 적용 제외 목이면 부모 목의 좌표로 올린다(`basis_citation`).
+    #:    🔴 `citation` 은 이 청크 자신의 좌표로 그대로 둔다 — 화면은 「이 글이 어디 있나」를, 판정은 「무엇을 어겼나」를 본다.
+    #:    🚨 `None` 이면 **위반 근거로 못 쓴다** — 좌표를 못 세웠거나, 별표인데 제외 표시가 아직 안 실렸다 (D-224 · D-220).
+    basis_citation: str | None = None
     #: 코사인 거리. 🚨 어휘·기호 갈래는 `None` 이다 — **0.0 으로 채우지 않는다.**
     #:    0.0 은 「완전히 같다」는 뜻이라, 없는 값을 가장 좋은 값으로 만든다.
     distance: float | None = None
@@ -199,8 +210,10 @@ _SELECT: tuple[tuple[str, str], ...] = (
     #       「안 쪼갰다」가 아니다 — 안 쪼갰으면 1/1 이다.
     ("c.part_no", "part_no"),
     ("c.part_total", "part_total"),
+    # 🆕 2026-09-28 (0021 · D-238 개정 (나)) — 적용 제외 목의 부모 경로. ⛔ 없으면 제외 목이 위반 근거 좌표로 나간다(사실원장 ㊷).
+    ("c.exempt_of", "exempt_of"),
     ("c.doc_type", "doc_type"),
-    ("c.category", "category"),
+    ("c.law", "law"),
     ("c.text", "text"),
     # 🔴 2026-09-14 (0015) — **별표에 좌표를 세우려면 「몇 번 별표인가」가 있어야 한다.**
     #    ⛔ 종전에는 상위 5건 중 4건이 별표였고 **전부 버려졌다** — 하필
@@ -225,9 +238,15 @@ JOIN source     s ON s.source_id   = f.source_id
 JOIN source_use u ON u.source_id   = s.source_id AND u.use_code = 'U2_rag'
 LEFT JOIN document d ON d.doc_id = c.doc_id"""
 
+#: 🔄 2026-09-24 (W6 · D-271 ③) — **법으로 거른다. 비우면 전부.** 자리표시자 둘에 **같은 배열**을 넣는다(`_law_args`).
+#:    ⛔ 종전에는 `%s = ANY(c.category)` 로 **범주 하나**를 받았고 기본값이 「일반」이었다 — 품목을 청크 필터로 넘겨
+#:       식품 광고가 식품표시광고법 [별표 1] 을 못 보고, 표시광고법 청크도 못 봤다(D-271 맥락 2).
+#:    🚨 `::text[]` 를 박는다 — 빈 리스트는 타입을 모른다.
+_LAW_FILTER = "(cardinality(%s::text[]) = 0 OR c.law = ANY(%s::text[]))"
+
 SQL_LITERAL = f"""SELECT {_COLS}
 {_JOINS}
-WHERE u.allowed AND c.text ILIKE %s AND %s = ANY(c.category)
+WHERE u.allowed AND c.text ILIKE %s AND {_LAW_FILTER}
 -- 🚨 정렬이 없으면 `LIMIT` 결과가 비결정적이다 — 같은 질의가 다른 답을 낸다.
 ORDER BY c.law_id, c.article NULLS LAST, c.chunk_id
 LIMIT %s"""
@@ -242,7 +261,7 @@ SQL_LEXICAL = f"""SELECT {_COLS},
        ts_rank_cd(c.tsv, query, 32) AS lexical
 {_JOINS},
      to_tsquery('simple', %s) AS query
-WHERE u.allowed AND %s = ANY(c.category) AND c.tsv @@ query
+WHERE u.allowed AND {_LAW_FILTER} AND c.tsv @@ query
 -- 동점일 때도 같은 답을 내야 한다 — chunk_id 로 가른다 (D-176 의 결정성).
 ORDER BY lexical DESC, c.chunk_id
 LIMIT %s"""
@@ -253,10 +272,41 @@ SQL_VECTOR = f"""SELECT {_COLS},
 JOIN chunk_embedding e ON e.chunk_id = c.chunk_id
 -- 🔴 `model_id` 대조 — 저장한 벡터와 **같은 모델**로 만든 질의만 비교한다.
 --    ⛔ 이 줄이 없으면 `embed.py` 가 행마다 적어 둔 `model_id` 를 아무도 안 읽는다.
-WHERE u.allowed AND %s = ANY(c.category) AND e.model_id = %s
+WHERE u.allowed AND {_LAW_FILTER} AND e.model_id = %s
 -- 거리 동점일 때도 같은 답을 내야 한다 — chunk_id 로 가른다.
 ORDER BY distance, c.chunk_id
 LIMIT %s"""
+
+
+def _per_law(sql: str, *, score: str, order: str) -> str:
+    """갈래 질의를 **법마다 `LIMIT` 개씩** 받는 질의로 감싼다 (🆕 2026-09-28 · 사실원장 ㊳ · D-267 · D-271 ③).
+
+    ★ 넓은 검색(법 필터 없음)은 전역 상위 N 을 자르면 청크가 많은 법이 자리를 먼저 차지한다
+       (화장품법 53% · 고시 37098 하나가 33%). 법마다 N 개를 받으면 **법 필터로 따로 찾은 결과와 같다** —
+       법 필터는 `WHERE` 뿐이고 거리 · `ts_rank_cd` 는 행과 질의로만 정해지기 때문이다. 쿼리는 한 번이다.
+    🔴 **원 질의를 다시 쓰지 않는다 — 감싼다** (D-99). 거버넌스 조인 · `model_id` 대조 · 법 필터가 그대로 따라온다.
+       `ORDER BY … LIMIT %s` 꼬리만 떼고, 같은 순서로 법 안 순번을 매겨 `LIMIT` 자리표시자를 순번 상한으로 쓴다
+       — 자리표시자 순서가 원 질의와 같다.
+    🚨 `order` 는 원 질의의 정렬과 **같은 열 · 같은 방향**이어야 한다 — 다르면 「따로 찾은 것과 같다」가 깨진다.
+       게이트 `test_법별_할당_질의가_원_질의를_감싸고_같은_순서로_자른다` 가 대조한다.
+    """
+    inner, sep, tail = sql.rpartition("\nORDER BY ")
+    if not sep or not tail.rstrip().endswith("LIMIT %s"):
+        raise ValueError("원 질의가 `ORDER BY … LIMIT %s` 로 끝나지 않는다 — 감쌀 자리가 없다")
+    cols = ", ".join(e.rpartition(".")[2] for e, _ in _SELECT)
+    return f"""SELECT {cols}, {score} FROM (
+SELECT w.*, row_number() OVER (PARTITION BY w.law ORDER BY {order}) AS law_rank
+FROM (
+{inner}
+) w
+) p
+WHERE p.law_rank <= %s
+ORDER BY {order}"""
+
+
+#: 🆕 2026-09-28 — 법마다 `LIMIT` 개씩 (`wide()` 가 쓴다). 순서는 원 질의 그대로(`chunk_id` 로 동점을 가른다).
+SQL_VECTOR_PER_LAW = _per_law(SQL_VECTOR, score="distance", order="distance, chunk_id")
+SQL_LEXICAL_PER_LAW = _per_law(SQL_LEXICAL, score="lexical", order="lexical DESC, chunk_id")
 
 _model_cache: dict[str, Any] = {}
 
@@ -340,6 +390,8 @@ _ANNEX_DEPTH: tuple[tuple[str, str], ...] = (
 )
 #: 별표의 구역 이름 중 **원문이 준 낱말**. ⛔ `구역N` 은 우리가 붙인 이름이라 인용에 안 쓴다.
 _ANNEX_SECTIONS = {"본문": "", "비고": " 비고"}
+#: 🆕 2026-09-28 — 호 번호 · 가지번호(「3의2」). ASCII 숫자만 받는다 — `str.isdigit()` 은 「①」 도 숫자로 본다(사실원장 ㊴)
+_HO = re.compile(r"([0-9]+)(?:의([0-9]+))?")
 
 
 def _annex_citation(hit_like: dict) -> str | None:
@@ -363,14 +415,16 @@ def _annex_citation(hit_like: dict) -> str | None:
     out = f"[별표 {int(no)}]{_ANNEX_SECTIONS[section]}"
 
     path = (hit_like.get("paragraph") or "").strip()
-    if not path:
+    if not path or path == "머리":
+        # 🆕 2026-09-28 — 구역 머리 글(「비고」 다음 첫 번호 앞의 문장)은 **구역까지만** 선다 — 「[별표 1] 비고」 (㊴)
         return out
     parts = path.split(".")
     if len(parts) > len(_ANNEX_DEPTH):
         return None  # 깊이 3 이상 — 아는 모양이 아니다
     for token, (shape, fmt) in zip(parts, _ANNEX_DEPTH, strict=False):
         if shape == "digit":
-            if not token.isdigit():
+            # 🔄 2026-09-28 — ASCII 숫자만. ⛔ `'①'.isdigit()` 이 참이라 36122 [별표 2] 가 「제①호」로 인용됐다 (㊴)
+            if not (token.isascii() and token.isdigit()):
                 return None
         elif len(token) != 1 or token not in _JO:
             return None
@@ -428,10 +482,37 @@ def citation(hit_like: dict) -> str | None:
         return None
     ho = ho_raw.rstrip(".")
     if ho:
-        if not ho.isdigit():
+        # 🆕 2026-09-28 — 가지번호 호 「3의2」 → 「제3호의2」(사실원장 ㊴). ⛔ 종전에는 `law_article` 이 가지번호를 버려
+        #    「3의2. 맞춤형화장품」이 「제3호」로 인용됐다. 🚨 ASCII 숫자만 — `'①'.isdigit()` 은 참이다
+        m = _HO.fullmatch(ho)
+        if m is None:
             return None
-        out += f"제{ho}호"
+        out += f"제{m[1]}호" + (f"의{m[2]}" if m[2] else "")
     return out
+
+
+def basis_citation(hit_like: dict) -> str | None:
+    """**위반 근거로 쓸 좌표** (🆕 2026-09-28 · 팀장 판정 (나) · D-238 개정).
+
+        일반 청크              → `citation()` 그대로
+        적용 제외 목 청크       → 부모(단서를 든 목)의 좌표 — `[별표 1]제1호가목1)` → `[별표 1]제1호가목`
+        제외 표시가 안 실린 별표 → `None` — 제외 목인지 모른다
+
+    🔴 「다만 … 제외한다」의 하위 목은 **해당하면 위반이 아닌** 경우다 — 그 좌표를 위반 근거로 내면 D-238 이 라벨에서 막은
+       오류가 판정으로 들어간다. 검색이 제외 목을 찾은 것은 버리지 않는다: 부모의 금지 문장을 문맥으로 들고 있어 **맞는 규범**을
+       찾은 것이고, 제외 목 자신은 판정이 확인할 단서 조건이다(`app/graph.py` `Proviso`).
+    🚨 부모 좌표도 `citation()` 이 조립한다 — 규칙이 두 벌이 되지 않게 경로만 바꿔 부른다 (D-99). 모르면 `None` (D-224).
+    ⛔ `exempt_of` 가 `None`(재적재 전)인 별표는 좌표를 세우지 않는다 — 없음이 「제외 목이 아니다」로 집계되지 않게 (D-220).
+    ⬜ 조문 · 산문 행정규칙 안의 「다만」 단서는 아직 안 가른다 — 법령 청크는 `citation()` 그대로다.
+    """
+    if hit_like.get("doc_type") != "별표":
+        return citation(hit_like)
+    parent = hit_like.get("exempt_of")
+    if parent is None:
+        return None
+    if parent == "":
+        return citation(hit_like)
+    return citation({**hit_like, "paragraph": parent})
 
 
 def _rows_to_hits(rows: list[tuple], match: str, *, score: str | None = None) -> list[Hit]:
@@ -444,9 +525,10 @@ def _rows_to_hits(rows: list[tuple], match: str, *, score: str | None = None) ->
     out = []
     for r in rows:
         d = dict(zip(_NAMES, r, strict=False))
-        d["category"] = list(d.get("category") or [])
         extra = {score: float(r[len(_NAMES)])} if score else {}
-        out.append(Hit(**d, match=match, citation=citation(d), **extra))
+        out.append(
+            Hit(**d, match=match, citation=citation(d), basis_citation=basis_citation(d), **extra)
+        )
     return out
 
 
@@ -549,16 +631,34 @@ def tsquery(q: str) -> str:
     return " | ".join(f"{t}:*" for t in terms(q))
 
 
-def by_literal(
-    cur: Any, q: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
-) -> list[Hit]:
+def law_filter(laws: Sequence[str] = ()) -> list[str]:
+    """법 필터를 검사해 리스트로 낸다. **비우면 전부**다 (D-271 ③).
+
+    🔴 **모르는 법이면 멈춘다** (D-220). ⛔ 오타·옛 범주(「일반」·「식품」)를 그대로 넘기면 SQL 은 **0건**을 낸다 —
+       오류 없이 근거가 빈다. 그 모양이 W3 의 임시 다리가 막으려던 자리였다.
+    🚨 품목(`Category`)을 넘기지 않는다 — 품목과 법은 다른 축이다(D-271 ④).
+    """
+    got = list(laws)
+    bad = sorted(set(got) - set(LAWS))
+    if bad:
+        raise ValueError(f"모르는 법 {bad} — 법 축은 {list(LAWS)} 넷이다 (D-271 ①)")
+    return got
+
+
+def _law_args(laws: Sequence[str]) -> tuple[list[str], list[str]]:
+    """`_LAW_FILTER` 의 자리표시자 둘에 넣을 값 — 같은 배열 두 번."""
+    f = law_filter(laws)
+    return f, f
+
+
+def by_literal(cur: Any, q: str, laws: Sequence[str] = (), limit: int = PARAMS.top_k) -> list[Hit]:
     """글자가 그대로 들어 있는 것. 「제5호 아목」처럼 **기호**로 찾을 때 이쪽이다.
 
     🔴 **어휘 갈래로 대체하지 않는다** (D-167). `simple` 파서는 「제5호」를 어떻게
        자를지 보장하지 않고, 기호 검색은 **부분 일치가 아니라 정확히 그 글자**를 원한다.
        두 가지는 이름만 비슷하고 뜻이 다르다 — 한쪽으로 합치면 둘 다 나빠진다.
     """
-    cur.execute(SQL_LITERAL, (f"%{q}%", category, limit))
+    cur.execute(SQL_LITERAL, (f"%{q}%", *_law_args(laws), limit))
     return _rows_to_hits(cur.fetchall(), MATCH_LITERAL)
 
 
@@ -567,32 +667,47 @@ by_text = by_literal
 
 
 def by_lexical(
-    cur: Any, q: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
+    cur: Any,
+    q: str,
+    laws: Sequence[str] = (),
+    limit: int = PARAMS.top_k,
+    *,
+    per_law: bool = False,
 ) -> list[Hit]:
     """어휘가 겹치는 것. 🔴 검색어가 하나도 안 남으면 **빈 목록**이다 — 오류가 아니다.
+
+    🆕 `per_law` — `limit` 을 **법마다** 건다(`SQL_LEXICAL_PER_LAW` · `wide()`).
 
     ⛔ 빈 `to_tsquery` 를 그대로 넣으면 PostgreSQL 이 경고를 내고 0건을 준다. 같은 0건이라도
        「질의에 검색어가 없다」와 「겹치는 조문이 없다」는 다른 사실이라, 여기서 가른다.
     """
+    f = _law_args(laws)  # 🚨 검색어가 없어도 법 검사는 먼저 — 오타가 「검색어 없음」 뒤에 숨지 않게
     tq = tsquery(q)
     if not tq:
         return []
-    cur.execute(SQL_LEXICAL, (tq, category, limit))
+    cur.execute(SQL_LEXICAL_PER_LAW if per_law else SQL_LEXICAL, (tq, *f, limit))
     return _rows_to_hits(cur.fetchall(), MATCH_LEXICAL, score="lexical")
 
 
 def by_vector(
-    cur: Any, text: str, category: str = DEFAULT_CATEGORY, limit: int = PARAMS.top_k
+    cur: Any,
+    text: str,
+    laws: Sequence[str] = (),
+    limit: int = PARAMS.top_k,
+    *,
+    per_law: bool = False,
 ) -> list[Hit]:
     """뜻이 가까운 것. 「면역력 쑥!」처럼 **글자가 안 겹치는** 광고 문구가 이쪽이다.
 
     🔴 못 하면 `RetrieveError` 를 던진다 — **빈 목록으로 떨어지지 않는다.**
+    🆕 `per_law` — `limit` 을 **법마다** 건다(`SQL_VECTOR_PER_LAW` · `wide()`).
     """
+    f = _law_args(laws)
     model_id = stored_model_id(cur)
     check_inputs(cur)
     vec = encode(model_id, text)
     literal = "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
-    cur.execute(SQL_VECTOR, (literal, category, model_id, limit))
+    cur.execute(SQL_VECTOR_PER_LAW if per_law else SQL_VECTOR, (literal, *f, model_id, limit))
     return _rows_to_hits(cur.fetchall(), MATCH_VECTOR, score="distance")
 
 
@@ -642,6 +757,45 @@ def fuse(
     return scored[:limit]
 
 
+def diversify(hits: list[Hit], *, cap: int = PARAMS.per_law_cap) -> list[Hit]:
+    """한 규범(`law_id`)이 앞자리를 다 차지하지 못하게 **넘친 것을 뒤로 민다** (🆕 2026-09-27 · 사실원장 ㉟).
+
+    🚨 버리지 않는다 — 순서만 바꾼다. 같은 규범 안의 순서와 규범 사이의 순서는 그대로다(안정 정렬).
+    ⛔ 상한이 없을 때 75449 한 고시가 「면역력」 질의 상위 10 을 다 차지했다 — 예외 조항(기능성 표시 식품)이
+       금지 조항(식품표시광고법 제8조 · 시행령 [별표 1])을 밀어냈다. 둘은 **함께** 나와야 한다.
+    🚨 단위는 `law_id`(법령 · 고시 하나)다 — 법 축(`law`)이 아니다. 법 축이면 한 법의 금지 조항과 예외 조항이 한 자리를 다툰다.
+    """
+    seen: dict[str, int] = {}
+    head: list[Hit] = []
+    tail: list[Hit] = []
+    for h in hits:
+        n = seen.get(h.law_id, 0)
+        (head if n < cap else tail).append(h)
+        seen[h.law_id] = n + 1
+    return head + tail
+
+
+def law_view(
+    vector_hits: list[Hit], lexical_hits: list[Hit], law: str, *, cap: int = PARAMS.per_law_cap
+) -> list[Hit]:
+    """넓은 검색(법 필터 없음)의 **두 갈래 후보**에서 한 법의 근거만 골라 섞고 규범당 상한을 건 순서 (🆕 2026-09-28 · 사실원장 ㊲).
+
+    ★ D-267 의 모양 그대로다 — 검색은 팬아웃 앞에서 **한 번**, 법별 노드는 **자기 법의 근거만 거른다.**
+       법마다 검색을 다시 돌리지 않는다(검색 3~4배를 피한 것이 D-267 의 이유다).
+    🔴 **거른 뒤에 섞는다 — 섞은 뒤에 거르지 않는다** (2026-09-28 기기 탐침으로 고침).
+       ⛔ 첫 판은 전체를 RRF 로 섞은 뒤 걸렀다. RRF 는 **순위**를 쓰는데 넓은 목록의 순위에는 다른 법 청크가 끼어
+          있어, 두 갈래에 다 걸린 정답(법 안 벡터 30 · 어휘 43 → RRF 2)이 한 갈래 1 위 목적 조항에 밀렸다(6 위).
+       🚨 거른 순서는 **법마다 따로 검색한 순서의 앞부분과 같다** — 법 필터는 `WHERE` 뿐이고 거리 · `ts_rank_cd` 는
+          행과 질의로만 정해진다(`SQL_VECTOR` · `SQL_LEXICAL`). 그 법 후보가 `pool` 개 이상이면 결과가 같다.
+    🚨 재료는 **후보 전체**여야 한다 — `top_k` 5 로 자른 뒤 거르면 법 셋이 다섯 자리를 나눠 쓴다.
+    ★ 재료는 `wide()` 다(법마다 폭만큼) — 전역 상위 N 을 넣으면 청크가 많은 법이 자리를 먼저 차지한다(㊳).
+    🔄 2026-09-28 (W4) — 법별 노드(`app/graph.py` `_law_node`)가 이 함수로 자기 근거를 받는다. 받을 개수(k)는 `LAW_TOP_K` `[임의]` (D-291 ⬜).
+    """
+    vec = [h for h in vector_hits if h.law == law]
+    lex = [h for h in lexical_hits if h.law == law]
+    return diversify(fuse(vec, lex, limit=len(vec) + len(lex)), cap=cap)
+
+
 #: 벡터 갈래가 돌았다. 🚨 `LEXICAL_OK` 와 **값이 같아도 축이 다르다** — 한 상수로 합치지
 #:    않는다. 합치면 「어휘가 ok 다」와 「벡터가 ok 다」를 같은 이름으로 부르게 된다 (D-167).
 #:    ⛔ 부르는 쪽이 `"ok"` 를 손으로 적지 않게 이름을 준다 — 판정 경로의 매직 문자열이다 (D-99).
@@ -679,7 +833,7 @@ class SearchState:
 def search(
     cur: Any,
     q: str,
-    category: str = DEFAULT_CATEGORY,
+    laws: Sequence[str] = (),
     limit: int = PARAMS.top_k,
     pool: int = POOL,
 ) -> tuple[list[Hit], SearchState]:
@@ -689,18 +843,49 @@ def search(
        ⛔ 예외를 위로 던지면 화면이 통째로 500 이 되고, 삼키면 「의미 검색을 했는데 0건」과
           「의미 검색을 못 했다」가 구별되지 않는다. **둘 다 아니게** 상태를 같이 낸다.
     🚨 상태를 만드는 자리는 여기 하나다 — `app/api.py` 가 같은 문장을 또 짓지 않는다.
+    🔄 2026-09-24 (W6 · D-271 ③) — `laws` 로 거른다. **비우면 전부** — 판정 그래프는 넓게 한 번 찾고
+       법별 노드가 자기 법 근거만 거른다(D-267). ⛔ 종전 `category` 는 기본값이 「일반」이었다.
     """
+    vector_hits, lexical_hits, state = _candidates(cur, q, laws, pool, per_law=False)
+    # 🔄 2026-09-27 — 후보 폭 전체를 합친 뒤 규범당 상한(`diversify`)을 걸고 자른다. ⛔ 자른 뒤에 걸면 밀려난 자리를 못 채운다
+    return diversify(fuse(vector_hits, lexical_hits, limit=pool))[:limit], state
+
+
+def wide(cur: Any, q: str, pool: int = POOL) -> tuple[list[Hit], list[Hit], SearchState]:
+    """판정 그래프의 **넓은 검색** — 법 필터 없이 한 번, 두 갈래를 **법마다 `pool` 개씩** 낸다 (🆕 2026-09-28 · 사실원장 ㊳).
+
+    ★ D-267 · D-271 ③ — 검색은 팬아웃 앞에서 한 번(인코더 한 번 · 갈래당 쿼리 한 번), 법별 노드는
+       `law_view(벡터, 어휘, 법)` 으로 자기 근거만 거른다. 법마다 `pool` 개를 받으므로 거른 결과가
+       **법 필터로 따로 찾은 결과와 같다** — 전역 상위 N 을 자르면 청크가 많은 법이 자리를 먼저 차지했다
+       (09-28 기기 탐침 · 폭 50 에서 식품 후보 17~30).
+    🚨 섞지 않고 **두 갈래를 따로** 낸다 — 섞은 뒤 거르면 다른 법 청크가 순위를 부풀린다(㊲).
+    🚨 `state.pool` 은 **법마다의 폭**이고 `pool_*` 는 법을 합친 행 수다(최대 법 수 × `pool`) — 한 칸에 두 분모를 섞지 않는다 (D-178).
+    🔄 2026-09-28 (W4 · D-291) — `app/graph.py` `retrieve` 가 이것을 부르고 법별 노드가 `law_view` 로 받는다 · `scripts/search_probe.py` 도 부른다.
+    """
+    return _candidates(cur, q, (), pool, per_law=True)
+
+
+def _candidates(
+    cur: Any, q: str, laws: Sequence[str], pool: int, *, per_law: bool
+) -> tuple[list[Hit], list[Hit], SearchState]:
+    """두 갈래 후보와 상태 — `search()` 와 `wide()` 가 **같은 것**을 쓴다 (D-99).
+
+    🔴 **벡터가 안 돼도 어휘 결과는 낸다 — 대신 왜 안 됐는지를 같이 낸다** (D-220 · D-162).
+    """
+    law_filter(
+        laws
+    )  # 🔴 모르는 법은 벡터 갈래를 돌기 **전에** 멈춘다 — 오류가 「벡터 불가」로 삼켜지지 않게
     vector_state = VECTOR_OK
     vector_hits: list[Hit] = []
     try:
-        vector_hits = by_vector(cur, q, category, pool)
+        vector_hits = by_vector(cur, q, laws, pool, per_law=per_law)
     except RetrieveError as e:
         # 🔴 2026-09-21 (전수 재검토) — ⛔ 예외 문장을 그대로 담아 `/search` 응답으로 냈다. 그 안에는
         #    하위 예외(`{e}` · 모델 로드 실패의 경로·URL)가 섞인다. 응답에는 **우리가 쓴 고정 문장**(클래스
         #    설명 첫 줄)만, 원문은 서버 로그로 (로그는 `RedactFilter` 를 지난다 · D-76).
         _log.warning("벡터 검색 불가 — %s: %s", type(e).__name__, e)
         vector_state = f"{type(e).__name__}: {public_reason(e)}"
-    lexical_hits = by_lexical(cur, q, category, pool)
+    lexical_hits = by_lexical(cur, q, laws, pool, per_law=per_law)
     # 🚨 `terms()` 를 다시 부른다 — 판단을 복사하는 것이 아니라 **같은 함수**를 쓴다 (D-99).
     state = SearchState(
         vector=vector_state,
@@ -709,4 +894,4 @@ def search(
         pool_vector=len(vector_hits),
         pool_lexical=len(lexical_hits),
     )
-    return fuse(vector_hits, lexical_hits, limit=limit), state
+    return vector_hits, lexical_hits, state

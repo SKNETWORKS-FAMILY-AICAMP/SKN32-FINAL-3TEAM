@@ -8,9 +8,10 @@
 ✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 화면의 「처리 상태」 폼은 전부 `disabled` 뼈대다.
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **`app_error_log` 테이블은 아직 승인 전이다** (`docs/ssm/요청_2026-09-16_app_error_log.md`).
-   테이블이 없거나 DB 에 못 붙으면 **더미 5건**으로 화면을 그리고, 화면 맨 위에 그 사실을 크게 적는다.
-   ⬜ 테이블이 승인·적재되면 `_DUMMY` 와 더미 분기를 지운다.
+🔄 2026-09-22 — **`app_error_log` 가 섰다** (마이그레이션 `0016_app_error_log` · 쓰는 쪽 `app/error_log.py`).
+   ⛔ 종전에는 표가 없거나 DB 에 못 붙으면 **더미 5건**을 그렸다 — 지웠다. 가짜 오류를 그리면 「오류가 있다」가 거짓이 된다 (D-147).
+   ★ 이제 상태는 셋이다 — `db`(읽었다) · `no_table`(표가 아직 없다 — 마이그레이션 전) · `no_db`(DB 에 못 붙었다).
+     뒤의 둘은 **0건이 아니라 「못 읽었다」**로 그린다 (D-72 — `/u/` 의 `reachable()` 과 같은 원칙).
 
 🚨 **필터 이름에 `q` · `text` 를 쓰지 않는다** — `RedactFilter` 가 그 이름의 값을 가린다.
    여기 필터는 레벨·로거·쪽번호뿐이고, 문구가 실릴 자리가 없다 (보안점검 P1-4).
@@ -19,20 +20,22 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.error_log import PURGE_EVERY_S
+from app.models import ERROR_LOG_LEVELS
 from app.routers.admin import require_governor
+from app.settings import ERROR_LOG_RETENTION_DAYS
 from app.templating import templates
 
 #: 🚨 prefix 는 `/errors` 다 — `admin_router`(prefix `/admin`) 아래에 매달려 `/admin/errors` 가 된다.
 router = APIRouter(prefix="/errors")
 _log = logging.getLogger("copylane.admin.errors")
 
-#: 화면이 받는 레벨. 🚨 요청 메모 §2 의 `CHECK` 와 같은 목록이라야 한다.
-LEVELS = ("WARNING", "ERROR", "CRITICAL")
+#: 화면이 받는 레벨. 🔄 2026-09-22 — 정본은 `app.models.ERROR_LOG_LEVELS`(표의 CHECK 와 같은 목록 · D-99).
+LEVELS = ERROR_LOG_LEVELS
 
 #: 한 쪽에 보여 줄 행 수. 화면 모양의 값이지 판정 파라미터가 아니다 (settings.py 대상 아님).
 PAGE_SIZE = 50
@@ -43,73 +46,15 @@ _MAX_LOGGER_LEN = 80
 #: 실제 쪽 수는 건수를 센 뒤 다시 자른다 (`_load_list`).
 _MAX_PAGE = 100_000
 
+#: 화면에 적는 보관 정책 — 🚨 값은 설정·기록기에서 읽는다(화면에 수를 따로 적지 않는다 · D-99).
+_POLICY = {
+    "retention_days": ERROR_LOG_RETENTION_DAYS,
+    "purge_every_h": PURGE_EVERY_S // 3600,
+}
+
 _COLUMNS = (
     "id::text AS id, occurred_at, level, logger_name, message, exc_type, module, func_name, lineno"
 )
-
-# ─────────────────────────────────────────────────────────────
-# 더미 — 테이블 승인 전 화면 확인용. ⬜ 승인·적재 뒤 지운다.
-# 🚨 message 는 **마스킹을 지난 모양**으로 적는다 — 실제로 들어올 모양과 같아야 확인이 뜻이 있다.
-# ─────────────────────────────────────────────────────────────
-_KST = timezone(timedelta(hours=9))
-_T0 = datetime(2026, 9, 16, 11, 5, 12, tzinfo=_KST)
-_DUMMY: list[dict] = [
-    {
-        "id": "DUMMY-ERR-001",
-        "occurred_at": _T0,
-        "level": "ERROR",
-        "logger_name": "copylane.api",
-        "message": "judge: 판정 실패 — text=<가림 18자·sha256:9a1c3e7f>",
-        "exc_type": "TimeoutError",
-        "module": "api",
-        "func_name": "judge",
-        "lineno": 214,
-    },
-    {
-        "id": "DUMMY-ERR-002",
-        "occurred_at": _T0 - timedelta(minutes=7),
-        "level": "WARNING",
-        "logger_name": "copylane.admin",
-        "message": "admin: source 조회 실패 — OperationalError",
-        "exc_type": None,
-        "module": "admin",
-        "func_name": "_list_sources",
-        "lineno": 128,
-    },
-    {
-        "id": "DUMMY-ERR-003",
-        "occurred_at": _T0 - timedelta(minutes=31),
-        "level": "CRITICAL",
-        "logger_name": "uvicorn.error",
-        "message": "Exception in ASGI application",
-        "exc_type": "RuntimeError",
-        "module": "h11_impl",
-        "func_name": "run_asgi",
-        "lineno": 403,
-    },
-    {
-        "id": "DUMMY-ERR-004",
-        "occurred_at": _T0 - timedelta(hours=2),
-        "level": "ERROR",
-        "logger_name": "copylane.api",
-        "message": "judge: 판정 실패 — text=<가림 31자·sha256:44be0c19>",
-        "exc_type": "TimeoutError",
-        "module": "api",
-        "func_name": "judge",
-        "lineno": 214,
-    },
-    {
-        "id": "DUMMY-ERR-005",
-        "occurred_at": _T0 - timedelta(hours=9),
-        "level": "WARNING",
-        "logger_name": "copylane.auth",
-        "message": "auth: 로그인 시도 제한 도달",
-        "exc_type": None,
-        "module": "auth",
-        "func_name": "login",
-        "lineno": 141,
-    },
-]
 
 
 def _clean_level(value: str | None) -> str | None:
@@ -135,23 +80,17 @@ def _page_count(total: int) -> int:
     return max(1, -(-total // PAGE_SIZE))
 
 
-def _dummy_query(level: str | None, logger_name: str | None) -> list[dict]:
-    return [
-        r
-        for r in _DUMMY
-        if (not level or r["level"] == level)
-        and (not logger_name or r["logger_name"].startswith(logger_name))
-    ]
-
-
 def _connect():
-    """DB 연결. 🚨 import 를 함수 안에 둔다 — DB 가 없어도 화면 모듈은 서야 한다 (D-51)."""
-    import psycopg  # noqa: PLC0415
+    """DB 연결. 🚨 import 를 함수 안에 둔다 — DB 가 없어도 화면 모듈은 서야 한다 (D-51).
+
+    🔄 2026-09-22 — `app.db.pg_connect` 를 쓴다(연결 대기 상한 한 곳 · D-99). ⛔ 종전 `psycopg.connect(dsn())` 은
+       `connect_timeout` 이 없어 응답 없는 DB 에 **화면이 매달렸다.**
+    """
     from psycopg.rows import dict_row  # noqa: PLC0415
 
-    from app.settings import dsn  # noqa: PLC0415
+    from app.db import pg_connect  # noqa: PLC0415
 
-    return psycopg.connect(dsn(), row_factory=dict_row)
+    return pg_connect(row_factory=dict_row)
 
 
 def _is_undefined_table(e: Exception) -> bool:
@@ -163,7 +102,7 @@ def _is_undefined_table(e: Exception) -> bool:
 
 
 def _load_list(level: str | None, logger_name: str | None, page: int) -> dict:
-    """목록 + 조건에 맞는 건수. `source` 는 ``db`` · ``dummy_no_table`` · ``dummy_no_db``.
+    """목록 + 조건에 맞는 건수. `source` 는 ``db`` · ``no_table`` · ``no_db``.
 
     `page` 는 **실제 쪽 수로 자른 값**을 돌려준다 — 넘치는 쪽 번호는 마지막 쪽으로 본다.
 
@@ -198,13 +137,13 @@ def _load_list(level: str | None, logger_name: str | None, page: int) -> dict:
             return {"source": "db", "rows": cur.fetchall(), "total": total, "page": page}
     except Exception as e:  # noqa: BLE001
         if _is_undefined_table(e):
-            source = "dummy_no_table"
+            source = "no_table"
         else:
-            source = "dummy_no_db"
+            source = "no_db"
             _log.warning("admin.errors: 조회 실패 — %s", type(e).__name__)
 
-    rows = _dummy_query(level, logger_name)
-    return {"source": source, "rows": rows, "total": len(rows), "page": 1}
+    # 🚨 못 읽었으면 **빈 목록 + 상태** — 0건이라고 말하지 않는다(화면이 상태로 가른다 · D-72)
+    return {"source": source, "rows": [], "total": None, "page": 1}
 
 
 def _load_one(error_id: str) -> dict:
@@ -226,21 +165,13 @@ def _load_one(error_id: str) -> dict:
             return {"source": "db", "row": row, "same": same}
     except Exception as e:  # noqa: BLE001
         if _is_undefined_table(e):
-            source = "dummy_no_table"
+            source = "no_table"
         else:
-            source = "dummy_no_db"
+            source = "no_db"
             _log.warning("admin.errors: 단건 조회 실패 — %s", type(e).__name__)
 
-    row = next((r for r in _DUMMY if r["id"] == error_id), None)
-    same = [
-        r
-        for r in _DUMMY
-        if row
-        and r["id"] != row["id"]
-        and (r["module"], r["func_name"], r["lineno"])
-        == (row["module"], row["func_name"], row["lineno"])
-    ]
-    return {"source": source, "row": row, "same": same}
+    # 🚨 못 읽었으면 **행 없음 + 상태** — 404(「그런 기록은 없다」)로 그리지 않는다 (D-72)
+    return {"source": source, "row": None, "same": []}
 
 
 @router.get("", response_class=HTMLResponse)
@@ -253,7 +184,7 @@ def error_list(request: Request) -> HTMLResponse:
     page = _clean_page(qp.get("page"))
 
     data = _load_list(level, logger_name, page)  # `data["page"]` 가 자른 값이다
-    pages = _page_count(data["total"])
+    pages = _page_count(data["total"]) if data["total"] is not None else 1
     return templates.TemplateResponse(
         request,
         "admin/errors/list.html",
@@ -263,6 +194,7 @@ def error_list(request: Request) -> HTMLResponse:
             "level": level,
             "logger": logger_name or "",
             "pages": pages,
+            **_POLICY,
             **data,
         },
     )
@@ -273,6 +205,9 @@ def error_detail(request: Request, error_id: str) -> HTMLResponse:
     """오류 로그 한 건 — 읽기 전용. 처리 상태·메모는 **뼈대만** 있다."""
     actor = require_governor(request)
     data = _load_one(error_id[:64])
-    if data["row"] is None:
+    # ★ 404 는 **읽었는데 없을 때만**. 못 읽었으면 상태 안내를 그린다 — 「없다」와 「모른다」를 가른다 (D-188)
+    if data["source"] == "db" and data["row"] is None:
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse(request, "admin/errors/detail.html", {"actor": actor, **data})
+    return templates.TemplateResponse(
+        request, "admin/errors/detail.html", {"actor": actor, **_POLICY, **data}
+    )

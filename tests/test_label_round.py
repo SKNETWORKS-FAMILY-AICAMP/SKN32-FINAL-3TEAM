@@ -231,3 +231,71 @@ def test_같은_이름의_판은_다시_뽑지_않는다(world) -> None:
     before = _sheet(world).read_bytes()
     assert lr.plan("r2", ["권소라", "소성민"], 0.3, 3, 2) == 1
     assert _sheet(world).read_bytes() == before
+
+
+# ── 🆕 2026-09-24 — 같은 키(같은 문구)의 행이 시트에 둘일 때 ─────────────────────────
+#    round2 실측 — 해설서 표 47·48 의 「의인의 마음을 담아 만듭니다」 · 같은 행정심판 사건 · 같은 검증 문구가
+#    두 번씩 들어가 있었다. 라벨은 키로 쌓이므로 두 행은 저장소에서 **한 자리**다.
+#    ⛔ compare 가 같은 문구를 판정표에 두 번 올렸고(213 → 214), decide 는 다른 두 판정 중 나중 것을 조용히 남겼다.
+def _dup_sheet(world: pathlib.Path) -> pathlib.Path:
+    row = {
+        "원천": "mfds_special_use_guide",
+        "원천라벨": DISEASE,
+        "문구": "같은 문구가 두 표에 있습니다",
+        "확정유형": [],
+        "후보유형": ["질병_예방치료_표방", "의약품_오인"],
+    }
+    other = dict(row, 문구="다른 문구입니다 하나 더")
+    sheet = _sheet(world)
+    _w(sheet, [dict(row, 표=47), other, dict(row, 표=48)])
+    return sheet
+
+
+def test_판은_같은_키의_행을_한_번만_담는다(world) -> None:
+    der = world / "data" / "derived"
+    guide = [
+        json.loads(x)
+        for x in (der / "mfds_guide_labels.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    _w(der / "mfds_guide_labels.jsonl", guide + [dict(guide[0], 표=99)])
+    assert lr.plan("r2", ["권소라", "소성민"], 0.5, 3, 1) == 0
+    keys = [store.key(r) for r in ls._rows(_sheet(world))]
+    assert len(keys) == len(set(keys)), "🔴 같은 키의 행이 한 판에 둘 들어갔다"
+
+
+def test_같은_키의_두_행은_판정표에_한_번만_오른다(world) -> None:
+    sheet = _dup_sheet(world)
+    paths = []
+    for who, no in (("권소라", "1"), ("소성민", "2")):
+        p = ls.export(sheet, who, None, idx=[1, 2, 3], quiet=True)
+        _fill(p, lambda r, no=no: no if r["행"] == "1" else "")
+        ls.import_(p, sheet, "")
+        paths.append(p)
+    assert lr.compare(sheet, paths, []) == 0
+    panel = _csv_rows(world / "build/labels/판정__r2_labelsheet.csv")
+    assert [r["행"] for r in panel] == ["1"], "🔴 같은 문구가 판정표에 두 번 올랐다"
+
+
+def test_같은_문구에_다른_최종번호면_판정을_멈춘다(world) -> None:
+    sheet = _dup_sheet(world)
+    panel = world / "build/labels/판정__r2_labelsheet.csv"
+    panel.parent.mkdir(parents=True, exist_ok=True)
+    rows = ls._rows(sheet)
+
+    def write(nos: tuple[str, str]) -> None:
+        with panel.open("w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=lr.PANEL)
+            w.writeheader()
+            for i, no in zip((1, 3), nos, strict=True):
+                t = ls._text(rows[i - 1])
+                w.writerow(
+                    {"행": i, "문구": t, "최종번호": no, "판정자": "오한빈", "지문": ls.csv_fp(t)}
+                )
+
+    write(("1", "2"))
+    with pytest.raises(SystemExit, match="같은 문구인데"):
+        lr.decide(panel, sheet, "")
+    write(("1", "1"))
+    assert lr.decide(panel, sheet, "") == 0
+    got = (world / "data/derived/labels/_판정__r2_labelsheet.jsonl").read_text(encoding="utf-8")
+    assert len(got.splitlines()) == 1, "같은 판정은 한 번만 쓴다"

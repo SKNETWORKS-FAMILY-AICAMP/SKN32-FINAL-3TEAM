@@ -41,6 +41,7 @@ import pathlib
 import random
 import re
 
+from collect import registry
 from preprocess import split as split_mod
 from preprocess.split import approved_docs as split_approved
 
@@ -107,7 +108,9 @@ RULES: tuple[tuple[str, str, str, str], ...] = (
         "T6",
         "후기·체험기 형식 + 대가성 미표시",
         "후기_체험기_기만",
-        "식품표시광고법 제8조제1항제5호",
+        # 🔄 2026-09-24 (D-282) — 목까지 적는다. 호(5)만 적으면 조문에서 계산한 유형은 `소비자_기만` 이다 —
+        #    체험기는 시행령 [별표 1] 5호 **다목**이다(「각종 감사장 또는 체험기 등을 이용하거나 …」).
+        "식품표시광고법 제8조제1항제5호(시행령 [별표 1] 제5호다목)",
     ),
     ("T7a", "경쟁사 부당 비교", "부당_비교광고", "표시광고법 제3조제1항제3호"),
     ("T7b", "경쟁사 비방", "비방광고", "표시광고법 제3조제1항제4호"),
@@ -288,6 +291,8 @@ def main() -> int:
     print("  🚨 학습만 채운다 — `후기_체험기_기만`·`부당_비교광고`·`비방광고` 의")
     print("     **평가는 여전히 비어 있다.** 메우는 척하지 않는다.")
 
+    # 🔴 변경금지(ND) 게이트 — 파생 데이터셋에 ND 소스의 행이 들어오면 여기서 멈춘다 (2026-09-25 · `registry.assert_derivable`)
+    registry.assert_derivable(rows, who="preprocess.inject")
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)
         with OUT.open("w", encoding="utf-8", newline="\n") as f:

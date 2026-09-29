@@ -23,7 +23,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # 🚨 계약은 `app/contracts.py` 하나가 원본이다 (D-124). 여기서 다시 정의하지 않는다 —
 #    두 곳에 있으면 화면이 보는 모양과 우리가 내는 모양이 조용히 갈린다.
@@ -38,8 +38,9 @@ from app.contracts import (
 )
 from app.logging_conf import mask, setup_logging
 from app.routers import admin_router, auth_router, user_router
-from app.settings import DEFAULT_CATEGORY, PARAMS, admin_is_mounted, dsn
+from app.settings import PARAMS, admin_is_mounted
 from app.templating import STATIC_ROOT
+from collect.law_map import LAWS
 
 # 🔴 **로거를 여기서 세운다** (보안점검 P1-4). import 시점이라 잊을 자리가 없다 —
 #    `uvicorn app.api:app` 이든 `TestClient` 든 이 모듈을 지나야 앱이 생긴다.
@@ -156,11 +157,17 @@ class SearchHit(BaseModel):
     #:    🚨 `null` 은 「아직 재적재 안 됨」이지 「안 쪼갰다」가 아니다. 안 쪼갰으면 1/1 이다.
     part_no: int | None = None
     part_total: int | None = None
+    #: 🆕 2026-09-28 (0021 · D-238 개정 (나)) — **적용 제외 목이면 부모 목의 경로**, 아니면 빈 문자열.
+    #:    「다만 … 제외한다」의 하위 목은 해당하면 위반이 **아닌** 경우다. 🚨 `null` 은 「아직 재적재 안 됨」이다.
+    exempt_of: str | None = None
     #: 「제8조제1항제1호」 또는 「[별표 1]제2호가목1)」. 🚨 `null` 이면 **조립을 못 한 것**이지
     #:    근거가 없는 게 아니다. 그때는 `article`·`paragraph`·`doc_title` 을 쓴다.
     #:    🔴 값이 있다고 「조문 전문」이 아니다 — `part_total` 을 **같이** 본다 (D-199).
     #:    🔄 2026-09-14 (0015) — 종전 주석은 *「별표는 조립하지 않는다」* 였다. 이제 조립한다.
     citation: str | None = None
+    #: 🆕 2026-09-28 (D-238 개정 (나)) — **위반 근거로 쓸 좌표.** 적용 제외 목이면 부모 목의 좌표다.
+    #:    `citation` 은 이 글이 있는 자리 · `basis_citation` 은 어긴 규범의 자리. 🚨 `null` 이면 위반 근거로 못 쓴다.
+    basis_citation: str | None = None
     doc_type: str | None = None
     #: 🆕 별표 번호 (0015) — **원문 머리글에서 읽은 값만.** `null` 이면 인용이 안 선다.
     #:    ⛔ 파일명 일련번호가 아니다 — 짐작해 채우면 다른 별표를 가리킬 수 있다 (D-224).
@@ -168,7 +175,9 @@ class SearchHit(BaseModel):
     #: 🆕 문서 이름 — 「부당한 표시 또는 광고의 내용(제3조제1항 관련)」. 🚨 **좌표가 아니다.**
     #:    화면이 무슨 별표인지 말할 때 쓴다. 좌표는 `citation` 이다.
     doc_title: str | None = None
-    category: list[str] = Field(default_factory=list)
+    #: 🔄 2026-09-24 (0019 · W6) — **법 축 하나**(표시광고법 · 식품표시광고법 · 화장품법 · 건강기능식품법).
+    #:    ⛔ 종전 `category: list[str]`(낱말 범주 · 「일반」 기본값). 법 ID 로 정한 값이다 (D-271 ①).
+    law: str
     text: str
     # 🚨 출처표시는 조립해서 낸다 — `attribution` 은 기관명·자료명뿐이고
     #    URL·게시일은 `source`·`document` 가 들고 있다 (D-132 · 결정요청 ③)
@@ -283,9 +292,9 @@ code{background:#f4f4f5;padding:.1rem .35rem;border-radius:.25rem}
 def health() -> Health:
     """DB 가 붙는지와 층별 행 수를 낸다. 팀원이 처음 여는 자리다."""
     try:
-        import psycopg
+        from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
-        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        with pg_connect() as conn, conn.cursor() as cur:
             counts: dict[str, int] = {}
             for table in (
                 "source",
@@ -320,8 +329,15 @@ class SearchRequest(BaseModel):
     """
 
     q: str = Field(..., min_length=1, max_length=PARAMS.max_text_len)
-    category: str = DEFAULT_CATEGORY
+    #: 🔄 2026-09-24 (W6 · D-271 ③) — **법으로 거른다. 비우면 전부.** ⛔ 종전 `category: str = "일반"`.
+    #:    🔴 모르는 법은 **422** 다 — 조용히 0건이 되지 않는다(`_known_laws`). 품목을 넣지 않는다(D-271 ④).
+    law: list[str] = Field(default_factory=list, max_length=len(LAWS))
     limit: int = Field(PARAMS.top_k, ge=1, le=PARAMS.max_limit)
+
+    @field_validator("law")
+    @classmethod
+    def _known_laws(cls, v: list[str]) -> list[str]:
+        return rt.law_filter(v)
 
 
 @app.post("/search", response_model=SearchResult)
@@ -344,10 +360,12 @@ def search(req: SearchRequest) -> SearchResult:
     """
     import psycopg  # noqa: PLC0415 — DB 가 없어도 임포트는 서야 한다
 
+    from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
+
     try:
-        with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
+        with pg_connect() as conn, conn.cursor() as cur:
             # 🚨 합치는 것도 상태를 짓는 것도 코어가 한다 — 여기는 얇다 (D-51 · D-99).
-            hits, state = rt.search(cur, req.q, req.category, req.limit)
+            hits, state = rt.search(cur, req.q, req.law, req.limit)
     except psycopg.Error as e:
         # 🔴 **원인을 응답에 담지 않는다** (2026-09-12 밤). psycopg 의 OperationalError 는
         #    호스트·포트·사용자명을 문자열에 담고, 배포 후에는 RDS 엔드포인트가 여기서 샌다.
@@ -379,11 +397,9 @@ def judge(req: JudgeRequest) -> JudgeResponse:
     인코더가 threshold를 넘긴 라벨은 후보 신호일 뿐이다. 법령 근거와 위험도 매핑이
     확정되기 전에는 `confirmed`를 만들지 않고 `hold(low_conf)`로만 낸다.
     """
-    from app.graph import build_graph, to_response  # noqa: PLC0415 — API 기동 때 모델을 올리지 않는다
+    from app.graph import build_review, to_response  # noqa: PLC0415 — API 기동 때 모델을 올리지 않는다
 
-    state = build_graph().invoke(
-        {"text": req.text, "product": req.product, "encoder_enabled": True}
-    )
+    state = build_review().invoke({"text": req.text, "product": req.product})
     return to_response(state)
 
 

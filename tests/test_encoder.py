@@ -6,8 +6,6 @@ import pytest
 
 from app.contracts import Violation
 from app.encoder import (
-    EncoderCandidate,
-    EncoderPrediction,
     EncoderUnavailable,
     LabelScheme,
     load_label_scheme,
@@ -54,19 +52,8 @@ def test_candidates_use_each_labels_threshold() -> None:
     assert [(c.violation, c.threshold) for c in candidates] == [(Violation.의약품_오인, 0.1)]
 
 
-def test_graph_treats_encoder_candidates_as_hold(monkeypatch) -> None:
-    from app import graph
-
-    prediction = EncoderPrediction(
-        scores={Violation.거짓_과장: 0.9},
-        candidates=(EncoderCandidate(Violation.거짓_과장, 0.9, 0.65),),
-    )
-    monkeypatch.setattr(graph, "encoder_predict", lambda _: prediction)
-
-    result = graph.judge({"sents": ["근거 없는 과장 문구"], "encoder_enabled": True})
-    sentence = result["sentences"][0]
-
-    assert sentence.verdict.value == "hold"
-    assert sentence.hold_reason.value == "low_conf"
-    assert sentence.violations == [Violation.거짓_과장]
-    assert result["encoder_used"] is True
+# 🔄 2026-09-29 — main 병합(D-266)으로 `judge()`가 법령별 팬아웃 구조로 다시 짜이면서
+#    `encoder_enabled` 상태 칸과 `judge()` 안의 직접 `encoder_predict` 호출이 없어졌다.
+#    인코더 연결은 이제 `encode()` 노드(app/graph.py, 현재 스텁) 자리다 — 거기 배선할 때
+#    이 자리에 새 그래프 통합 테스트를 다시 쓴다. `EncoderCandidate`/`EncoderPrediction`은
+#    위 테스트들이 이미 이 모듈 자체(라벨 스킴 · 후보 선별)를 커버한다.

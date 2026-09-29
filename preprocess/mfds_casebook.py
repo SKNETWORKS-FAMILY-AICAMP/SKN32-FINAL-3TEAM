@@ -54,7 +54,7 @@ import random
 import re
 import sys
 
-from collect import store
+from collect import statute, store
 from preprocess.text import SheetOverwriteError, quoted, sheet_lengths, write_sheet
 
 SOURCE_ID = "mfds_casebook"
@@ -70,15 +70,15 @@ REGIME = {
 }
 
 #: 식품표시광고법 §8① 각 호 → 우리 유형. **원천이 호를 적어 주므로 옮겨 적는 것이다.**
-#: 🚨 5호만 둘이다 — 뭉친 것은 `확정유형` 에 넣지 않는다 (D-151 과 같은 규칙).
+#: 🔄 2026-09-24 (D-282) — 값은 `collect/statute.py` 에서 **계산한다**(D-99 · 종전에는 이 파일이 따로 적었다).
+#: 🚨 5호만 둘이다 — 이 추출기는 목을 안 읽은 행의 5호를 `확정유형` 에 넣지 않는다(D-151 규칙 · 추출기 산출물 보존).
+#:    ★ 분할·사전은 이 칸을 읽지 않는다 — `split.casebook_basis` 가 호와 [별표 1] 목으로 인용을 만들고 유형을 계산한다.
 HO_TYPES: dict[int, tuple[str, ...]] = {
-    1: ("질병_예방치료_표방",),
-    2: ("의약품_오인",),
-    3: ("건강기능식품_오인",),
-    4: ("거짓_과장",),
-    5: ("소비자_기만", "후기_체험기_기만"),
-    6: ("비방광고",),
-    7: ("부당_비교광고",),
+    h: tuple(
+        str(statute.type_of(c))
+        for c in ([statute.food(5), statute.food(5, "다")] if h == 5 else [statute.food(h)])
+    )
+    for h in range(1, 8)
 }
 
 #: Ⅱ부의 호 제목 머리말. 🚨 Ⅰ부(법령 전재)에도 같은 번호가 있어 **말끝으로 가른다** —

@@ -69,10 +69,16 @@ def _scalar(v):
 LAW_COVERS = [
     ("law_acts", "표시광고법 · 식품표시광고법 · 화장품법 (+시행령·시행규칙)"),
     ("law_annex", "시행령 [별표] 부당한 표시·광고의 유형 및 기준"),
-    ("mfds_notice", "식약처 고시 「식품등의 부당한 표시 또는 광고의 내용 기준」"),
+    (
+        "mfds_notice",
+        "식약처 고시 2종 「식품등의 부당한 표시 또는 광고의 내용 기준」 · 「식품등의 표시기준」",
+    ),
     ("func_claim_rule", "「부당한 표시·광고로 보지 아니하는 식품등의 기능성 표시·광고 규정」"),
-    ("ftc_guidelines", "공정위 고시·지침 5종 (유형기준 · 추천보증 · 환경 · 비교 · 인터넷)"),
-    ("cosmetic_guides", "화장품 지침 3종 (관리지침 · 실증규정 · 기능성심사규정)"),
+    (
+        "ftc_guidelines",
+        "공정위 고시·지침 8종 (유형기준 · 추천보증 · 환경 · 비교 · 인터넷 · 기만 · 실증 운영고시 · 수상·인증)",
+    ),
+    ("cosmetic_guides", "화장품 고시 3종 (실증규정 · 기능성심사규정 · 안전기준)"),
     ("sanction_annex", "행정처분 기준 [별표] (화장품법 · 식품표시광고법)"),
     ("penalty_notice", "과징금 부과 세부기준 고시 (2026.7.1 개정)"),
     ("penal_clause", "각 법 벌칙 조항 (징역 · 벌금 상한)"),
@@ -99,6 +105,7 @@ MODEL_IDS = {"qwen3", "kure", "bge_reranker", "kcbert"}
 BY_ID["law_go_kr"] = {
     "id": "law_go_kr",
     "layer": "3층 판단규범 · 4층 위험도 · 5층 반례",
+    "authority": "법령",  # 🆕 2026-09-25 D-290 ② — 3층 소스는 구속력 칸이 필수다
     "name": "법제처 국가법령정보 OPEN API (법령·시행령·시행규칙·행정규칙/고시·재결례·판례)",
     "org": "법제처",
     "grade": "G3",
@@ -222,6 +229,13 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         "본 저작물은 한국농촌경제연구원에서 공공누리 제1유형으로 개방한 "
         "「식품소비행태조사」를 이용하였습니다.",
     ),
+    # 🆕 2026-09-22 — 공공기관이라 제24조의2 밖이다. 근거는 **게시물의 공공누리 유형**이다 (D-110).
+    "kca_ad_survey": (
+        "공공누리 제1유형(출처표시) — KCA보고서 상세 화면 실측 2026-09-22. "
+        "🚨 게시물마다 확인한다 — 제1유형만 받는다 (D-110)",
+        "본 저작물은 한국소비자원에서 공공누리 제1유형으로 개방한 "
+        "「표시·광고 실태조사」 보고서·보도자료를 이용하였습니다.",
+    ),
     "kcc_media": (
         "공공누리 제1유형(출처표시) — data.go.kr 상세 실측 2026-09-02",
         "본 저작물은 방송미디어통신위원회에서 공공누리 제1유형으로 개방한 "
@@ -290,6 +304,59 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
         "출처: 식품의약품안전처 「특수용도식품 표시·광고 해설서」(2017-03) "
         "(저작권법 제24조의2 제1항 · 제37조)",
     ),
+    # 🆕 2026-09-25 — 민원인안내서 4건(m_1060). mfds_online_guideline 과 같은 판정(D-132 준용).
+    "mfds_cosmetic_ad_qa": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「화장품·의료기기·의약외품 허위과대광고 질의응답집」(민원인안내서 1009-02, 2021-01) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    # 🆕 2026-09-28 — 판정요청서 §5 거버넌스 점검 통과 3건 · D-132 준용 · 팀장 결정 「거버넌스에 문제없으면 사용」
+    "mfds_ad_judge_manual_2015": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「허위·과대광고 판별 매뉴얼(2015-03)」 (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_cosmetic_faq_2020": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「화장품 분야 자주하는 질문집(민원인안내서 1079, 2020)」 (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_daegu_ad_cases_2013": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「대구지방식품의약품안전청 「식품 등 허위과대광고 사례」(2013-09)」 (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    # 🆕 2026-09-28 — 식약처 질의응답집 3건 · D-132 준용 · 09-25 「질의응답집 중복 안 되면 등재」 기준 · 팀장 확인(권소라 전달)
+    "mfds_cosmetic_ad_qa_2012": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「화장품·의약외품 표시·광고 등 질의·응답집(2012-02)」 (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_cosmetic_func_qa_2023": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「기능성화장품 심사를 위한 질의응답집(민원인안내서 1342-01, 2023-12)」 (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_food_func_claim_qa_2021": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「일반식품의 기능성 표시제도 질의응답집(민원인안내서 1098-01, 2021-01)」 (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    # 🔄 2026-09-25 팀장 판정 (가) — PDF 표지에 공공누리 제3유형 마크 → D-132 가 아니라 D-110(배지 유형이 조건)
+    "mfds_cosmetic_faq_2025": (
+        "공공누리 제3유형(출처표시 · 변경금지) — PDF 표지 마크 · 게시 화면 미표시 (D-110 · 2026-09-25 팀장 판정 (가))",
+        "출처: 식품의약품안전처 「2025 자주하는 질문집(화장품)」(민원인안내서 1463-01, 2025-11) (공공누리 제3유형)",
+    ),
+    "mfds_hf_trial_ad_guide": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「한눈에 보는 건강기능식품 인체적용시험 표시·광고 가이드라인」(민원인안내서 1223-01, 2022-09) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_cosmetic_claim_test_guide": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「화장품 표시·광고 실증을 위한 시험방법 가이드라인」(민원인안내서, 2024-12) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침(현행 · 3층 해설 · D-290)
+    "mfds_cosmetic_ad_guideline": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「화장품 표시·광고 관리 지침」(민원인안내서 0086-07, 2025-08-14) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "mfds_quasi_drug_ad_guide": (
+        _LIC_MFDS_APPLIED,
+        "출처: 식품의약품안전처 「의약외품 표시 광고 가이드라인」(민원인안내서 1179-05, 2025-04) (저작권법 제24조의2 제1항 · 제37조)",
+    ),
     # ③ 공공데이터포털 「이용허락범위 제한없음」 — 출처표시 의무가 없다
     "cosmetic_ingredient": (
         _LIC_OPEN,
@@ -298,6 +365,32 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
     "cosmetic_restricted": (
         _LIC_OPEN,
         "출처: 식품의약품안전처 화장품 사용제한 원료정보 (공공데이터포털 15111772)",
+    ),
+    # 🆕 2026-09-26 — 등재 제안 6건(2인 확인 전 · hold). 라이선스 문구는 각 화면에서 직접 확인한 것
+    "mfds_cosmetic_func_report": (
+        _LIC_OPEN,
+        "출처: 식품의약품안전처 기능성화장품 보고품목정보 (공공데이터포털 15095680)",
+    ),
+    "mfds_cosmetic_func_review": (
+        _LIC_OPEN,
+        "출처: 식품의약품안전평가원 기능성화장품 심사품목 정보 (공공데이터포털 15056939)",
+    ),
+    "ftc_press": (
+        "공공누리 제1유형(출처표시) — 보도자료 상세 화면 하단 「공정거래위원회 보도자료 저작물은 공공누리 제1유형(출처표시) 조건에 따라 누구나 이용할 수 있습니다」"
+        " · 🔄 2026-09-28 — 2005년 전 게시물 31건(nttSn 33548~35185)은 표시가 없다(kogl_badge: none) → 저작권법 제24조의2 제1항 (D-132 · D-140 — 국가기관 자기 저작물 · 「사전 협의」 안내는 허락 요건이 아니다)",
+        "출처: 공정거래위원회 보도자료 (공공누리 제1유형 · 2005년 전 게시물은 저작권법 제24조의2 제1항 · 제37조)",
+    ),
+    "gg_press": (
+        "공공누리 제1유형(출처표시) — 기사 하단 「위 기사는 공공누리 제1유형:출처표시 조건에 따라 이용할 수 있습니다」",
+        "출처: 경기도 보도자료 (경기도뉴스포털 · 공공누리 제1유형)",
+    ),
+    "scourt_major": (
+        "저작권법 제24조의2 — 법원 저작권보호정책 「별도의 이용허락 없이 자유이용이 가능」 · 판결은 제7조 비보호",
+        "출처: 대법원 「전국법원 주요판결」 (저작권법 제24조의2 · 제37조)",
+    ),
+    "easylaw_ad": (
+        "법제처 생활법령정보 저작권정책 — 「영리 목적의 이용을 포함하여 자유로운 활용이 보장」 (제3자 저작물·사진·이미지 제외)",
+        "출처: 법제처 찾기쉬운 생활법령정보",
     ),
     "ftc_decisions": (
         _LIC_OPEN,
@@ -368,6 +461,11 @@ def block(key, s, extra=None, covers=None, status="collect"):
     if s.get("url"):
         L.append(f"    url: {esc(s['url'])}")
     L.append(f"    layer: {esc(s['layer'])}")
+    # 🆕 2026-09-25 D-290 ② — 구속력 칸. 층(담긴 것)과 따로 적는다. 값 검사는 아래 `_authority_errors` 가 쓰기 전에 한다
+    if s.get("authority"):
+        L.append(f"    authority: {esc(s['authority'])}")
+    elif key in AUTHORITY_PENDING:
+        L.append(f"    authority_note: {esc(AUTHORITY_PENDING[key])}")
     L.append(f"    grade: {g}")
     L.append("    use: {" + ", ".join(f"{k}: {v}" for k, v in uses.items()) + "}")
     L.append(f"    constraints: [{', '.join(cons)}]")
@@ -468,6 +566,13 @@ EXTRA = {
         "  **개인정보가 구조적으로 빠진다** — 증분 갱신은 RSS 를 쓴다.",
         "fragment_note: 위반내용 안의 인용 문구는 광고주 표현이나 처분서가 인용한 것이라 사실로 취한다 (D-18)",
     ],
+    # 🆕 2026-09-22 — 보고서 표에 제품명·판매 사업자명이 평문이다. 광고 캡처는 광고주 저작물이다.
+    "kca_ad_survey": [
+        "masking: 제품명·판매 사업자명 즉시 마스킹 (D-17)",
+        "fragment_note: >-",
+        "  보고서가 인용한 광고 문구만 사실로 취한다 (D-18) · 광고 캡처 이미지는 취하지 않는다 (D-133).",
+        "  🚨 스캔 쪽 OCR 문구는 후보 제시용이다 — 확정은 원본 대조로 한다.",
+    ],
     "mfds_cosmetic_sanction": [
         "masking: 업체명·소재지(번지)·품목명 즉시 마스킹, 원문 미보관 (D-17)",
         "fragment_note: >-",
@@ -494,6 +599,105 @@ EXTRA = {
         "  🔄 D-139 — 해설서 3분류가 VIOLATION_TYPES 를 뭉친다.",
         "  질병예방치료·의약품혼동·건강기능식품혼동 → 3종 / 거짓·과장·기만 → 2종 / 부당한 비교·비방 → 부당_비교광고.",
         "  🚨 `후기_체험기_기만` 이 해설서에 없다 — 「엄마들의 경험담을 직접 확인하세요!」가 거짓·과장·기만이다.",
+    ],
+    # 🆕 2026-09-25 — 민원인안내서 4건
+    "mfds_cosmetic_ad_qa": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 1층 사례로 쓴다 — 2020-12 기준이라 3층 해설로 두지 않는다 (D-290 ③ 기준 시점 · 2025 지침 mfds_cosmetic_ad_guideline 우선).",
+    ],
+    # 🆕 2026-09-28 — §5 거버넌스 점검 통과 3건
+    "mfds_ad_judge_manual_2015": [
+        "masking: >-",
+        "  본문 속 광고 문구의 인물 실명(전문의 등) · 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 중복 문항 제외 — 기존 원천과 같은 질의·답·문구는 전처리에서 빼고 한 번만 쓴다(최신판 우선).",
+    ],
+    "mfds_cosmetic_faq_2020": [
+        "masking: >-",
+        "  3쪽 · 117쪽 담당 부서 전화번호 · 139쪽 업체명(㈜) 등 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 중복 문항 제외 — 기존 원천과 같은 질의·답·문구는 전처리에서 빼고 한 번만 쓴다(최신판 우선).",
+    ],
+    "mfds_daegu_ad_cases_2013": [
+        "masking: >-",
+        "  광고 캡처 속 업체명·상표·인물 · 판권면 담당자 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 중복 문항 제외 — 기존 원천과 같은 질의·답·문구는 전처리에서 빼고 한 번만 쓴다(최신판 우선).",
+    ],
+    # 🆕 2026-09-28 — 식약처 질의응답집 3건
+    "mfds_cosmetic_ad_qa_2012": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).",
+    ],
+    "mfds_cosmetic_func_qa_2023": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).",
+    ],
+    "mfds_food_func_claim_qa_2021": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).",
+    ],
+    # 🆕 2026-09-25 — 2025 화장품 자주하는 질문집 · 🔄 같은 날 팀장 판정 (가) — 공공누리 제3유형(변경금지)
+    "mfds_cosmetic_faq_2025": [
+        "masking: >-",
+        "  판권면·점검표의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "fragment_note: >-",
+        "  🚨 변경금지 — 질의·답 글자를 원문 그대로 둔다 · 요약·치환·라벨·학습 데이터로 옮기지 않는다 (D-110 · 팀장 판정 (가)).",
+        "  3층 해설 — 검색·설명과 2020 질의응답집 대조에 쓰고 근거 조문으로 인용하지 않는다 (D-290 ②).",
+    ],
+    "mfds_hf_trial_ad_guide": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 가치가 부적합 사례라 1층에 둔다 (D-290 · 한 층만). 근거 조문으로 인용하지 않는다.",
+    ],
+    "mfds_cosmetic_claim_test_guide": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 3층 해설로 둔다 (D-290 ②) — 검색·설명에 쓰고 근거 조문으로 인용하지 않는다. 고시가 우선한다.",
+    ],
+    # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침 (3층 해설 · D-290)
+    "mfds_cosmetic_ad_guideline": [
+        "masking: >-",
+        "  2쪽 점검표의 담당자·부서장 성명 · 부서 전화·팩스 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "fragment_note: >-",
+        "  금지표현·예외 조건·실증 대상 문언을 사실로 취한다 (D-18). 문서에 광고 캡처 없음(2026-09-25 PDF 확인).",
+        "  🚨 3층 해설 (D-290 ②) — 검색·설명에 쓰고 근거 조문으로 인용하지 않는다. 금지표현의 「단, …는 제외」를 떼어 쓰지 않는다 — 조건부다(D-290 ④).",
+    ],
+    "mfds_quasi_drug_ad_guide": [
+        "masking: >-",
+        "  판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).",
+        "  🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.",
+        "fragment_note: >-",
+        "  문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).",
+        "  🚨 약사법 기준 · 3법 밖 대조군이라 1층 (D-290). 근거 조문으로 인용하지 않는다.",
     ],
     "ftc_decisions": [
         "masking: 업체명·상표·대표자명·🔄 **주소** 즉시 마스킹, 원문 미보관 (D-17)",
@@ -746,21 +950,51 @@ ORDER = [
     #    "foodsafety_ad_monitor",
     "foodsafety_penalty_std",
     "mfds_cosmetic_sanction",
+    # 🆕 2026-09-22 — 한국소비자원 실태조사. 공공누리 제1유형 · robots 전면 차단이라 manual.
+    "kca_ad_survey",
     "mfds_special_use_guide",
     # 🔄 2026-09-17 신규 — 화장품 축 적법 표현의 유일한 원천(별표 금지 44·허용 45·입증 7).
     #    🚨 3층이 아니라 1층이다 — 문서 3쪽이 스스로 「대외적으로 법적 효력을 가지는 것이
     #       아니」라고 적는다 (D-138 선례). 텍스트 층 0자라 status 는 manual.
     "mfds_cosmetic_ad_guide_2013",
+    # 🆕 2026-09-25 — 민원인안내서(m_1060) 3건. 결정 오한빈(「중복 안 되면 등재」) · 확인 권소라.
+    #    🔄 2026-09-25 D-290 — 1층인 이유는 「효력 없음」 문구가 아니라 가치가 사례라서다(질의응답집은 기준 시점도 ③).
+    "mfds_cosmetic_ad_qa",
+    "mfds_hf_trial_ad_guide",
+    # 🆕 2026-09-28 — 식약처 질의응답집 3건 · D-132 준용 · 09-25 기준 · 팀장 확인(권소라 전달)
+    "mfds_cosmetic_ad_qa_2012",
+    "mfds_cosmetic_func_qa_2023",
+    "mfds_food_func_claim_qa_2021",
+    # 🆕 2026-09-28 — §5 거버넌스 점검 통과 3건 (판별 매뉴얼 2015 · 화장품 질문집 2020 · 대구청 사례 2013)
+    "mfds_ad_judge_manual_2015",
+    "mfds_cosmetic_faq_2020",
+    "mfds_daegu_ad_cases_2013",
+    # 🆕 2026-09-26 — 부족 유형 보충 원천 · 🔄 2026-09-28 2인 확인 — docs/ksr/판정요청_2026-09-26_부족유형_새원천6.md
+    "ftc_press",
+    "gg_press",
+    "scourt_major",
+    "mfds_quasi_drug_ad_guide",
     "ftc_noviolation",
     # 🆕 2026-09-18 — 법제처 「중앙부처 1차 해석」 중 식약처분. G0 · hold 로 올려 탐침만 연다 (D-109).
     "mfds_cgm_expc",
     # 2층 적법 라벨
     "mfds_hf_ingredient",
     "mfds_hf_individual",
+    # 🆕 2026-09-26 — 화장품 적법 문구(기능성 효능효과) · 등재 제안 · hold
+    "mfds_cosmetic_func_report",
+    "mfds_cosmetic_func_review",
     "kcia_guideline",
-    # 3층 판단 규범
+    # 3층 판단 규범 — 🆕 2026-09-25 D-290 ② 구속력 칸(`authority: 법령 | 해설`) 필수 · 해설은 근거 조문으로 인용하지 않는다
     "law_go_kr",
     "mfds_online_guideline",
+    # 🔄 2026-09-25 D-290 — 2층 → 3층 해설. 실증 **조건**의 기준이라 조건 없이 쓰는 표현(2층 ④)이 아니다
+    "mfds_cosmetic_claim_test_guide",
+    # 🆕 2026-09-25 — 화장품 표시·광고 관리 지침(안내서-0086-07 · 2025-08) · 현행 공식 해설
+    "mfds_cosmetic_ad_guideline",
+    # 🆕 2026-09-26 — 생활법령 뒷광고 해설 · 등재 제안 · hold
+    "easylaw_ad",
+    # 🆕 2026-09-25 — 2025 화장품 자주하는 질문집 · 팀장 판정 (가) 로 3층 해설(공공누리 제3유형 — 학습 금지)
+    "mfds_cosmetic_faq_2025",
     "foodsafety_faq",
     "platform_guide",
     "mfds_hf_ingredient_board",
@@ -819,9 +1053,34 @@ STATUS = {
     "mfds_hf_individual": "collect",
     "law_go_kr": "collect",
     "mfds_online_guideline": "collect",
+    # 🆕 2026-09-25 — 게시물 첨부 1개 · collect.mfds_board (mfds_online_guideline 과 같은 경로)
+    "mfds_cosmetic_ad_qa": "collect",
+    "mfds_hf_trial_ad_guide": "collect",
+    # 🆕 2026-09-28 — 식약처 질의응답집 3건 · 게시물 첨부 PDF 1개 · collect.mfds_board
+    "mfds_cosmetic_ad_qa_2012": "collect",
+    "mfds_cosmetic_func_qa_2023": "collect",
+    "mfds_food_func_claim_qa_2021": "collect",
+    # 🆕 2026-09-28 — §5 거버넌스 점검 통과 3건 · collect.mfds_board (대구청 사례는 OCR 전 원문만)
+    "mfds_ad_judge_manual_2015": "collect",
+    "mfds_cosmetic_faq_2020": "collect",
+    "mfds_daegu_ad_cases_2013": "collect",
+    "mfds_cosmetic_claim_test_guide": "collect",
+    "mfds_quasi_drug_ad_guide": "collect",
+    "mfds_cosmetic_ad_guideline": "collect",
+    "mfds_cosmetic_faq_2025": "collect",
     "mfds_hf_ingredient_board": "collect",
     "cosmetic_ingredient": "collect",
     "cosmetic_restricted": "collect",
+    # 🆕 2026-09-26 등재 · 🔄 2026-09-28 2인 확인(결정 오한빈 · 확인 권소라 · 팀장 동의는 「6건 전부」 — 수집 방식은 미정)
+    #    API 2종은 기존 collect.openapi 로 받는다 → collect.
+    #    🔄 2026-09-28 게시판 4종 수집 방식 — 팀장 협의 (나): 수집기를 새로 쓰지 않고
+    #    docs/ksr/수집대상_목록_2026-09-27.md 의 글만 골라 받아 register 로 올린다 → manual.
+    "ftc_press": "manual",
+    "gg_press": "manual",
+    "scourt_major": "manual",
+    "easylaw_ad": "manual",
+    "mfds_cosmetic_func_report": "collect",
+    "mfds_cosmetic_func_review": "collect",
     "aihub_71486": "collect",
     "aihub_71723": "collect",
     "aihub_558": "collect",
@@ -883,6 +1142,9 @@ STATUS = {
     # 🔄 2026-09-07 D-136 — nedrug.mfds.go.kr robots 가 「User-agent: * / Disallow: /」 전면 차단이다.
     #    자동 수집기를 붙이지 않는다. 사이트가 제공하는 엑셀다운로드를 사람이 누르는 경로만 남는다.
     "mfds_cosmetic_sanction": "manual",
+    # 🆕 2026-09-22 — kca.go.kr robots 가 「User-agent: * / Disallow: /」 전면 차단이다 (D-136 과 같은 모양).
+    #    사람이 게시물의 다운로드 버튼을 눌러 받고 register 로 올린다.
+    "kca_ad_survey": "manual",
     # 🔄 2026-09-17 — **PDF 에 텍스트 층이 없다**(pdftotext 0자 · mfds_online_guideline 과 같다).
     #    자동 추출기를 붙일 수 없어 붙임2 별표 89행을 사람이 전사했다
     #    (docs/ohb/화장품_별표2013_전사.py). 수집기가 실행할 것이 없으므로 manual 이다.
@@ -892,6 +1154,15 @@ STATUS = {
 }
 
 REV = {v: k for k, v in RENAME.items()}
+
+# 🆕 2026-09-25 D-290 ② — **구속력 칸.** 3층 소스는 `authority` 가 필수다 · 값은 둘뿐이다.
+#    해설은 검색·설명에 쓰고 근거 조문으로 인용하지 않는다 — 🔴 그 인용 금지 게이트는 3층 해설을 RAG 에
+#    처음 적재하는 커밋에서 올린다(D-290 집행 · D-192). 여기서는 칸이 비지 않게만 막는다.
+AUTHORITY_VALUES = frozenset({"법령", "해설"})
+#: 3층인데 칸을 아직 못 정한 소스 — **사유를 생성물에 싣는다**(`authority_note`). 빈 칸이 조용히 나가지 않게.
+AUTHORITY_PENDING = {
+    "platform_guide": "⬜ D-290 — 민간 기준은 공식 해설이 아니라 3층 밖 후보다. 재판정 때 정한다(전 용도 차단 · hold)",
+}
 
 #: status 가 받을 수 있는 값 — 위 주석의 셋.
 STATUS_VALUES = frozenset({"collect", "manual", "hold"})
@@ -905,6 +1176,57 @@ if _no_status or _stray or _bad:
         + (f"  status 없음(기본값으로 열지 않는다): {_no_status}\n" if _no_status else "")
         + (f"  ORDER 에 없는 키(오타?): {_stray}\n" if _stray else "")
         + (f"  모르는 status 값: {_bad} — 아는 것 {sorted(STATUS_VALUES)}\n" if _bad else "")
+    )
+
+
+# 🆕 2026-09-25 D-290 ② — 쓰기 **전에** 본다. 중간에 멈추면 생성물 넷이 두 벌이 된다 (D-90 · D-220).
+def _authority_errors() -> list[str]:
+    bad: list[str] = []
+    for key in ORDER:
+        s = BY_ID[REV.get(key, key)]
+        third = "3층" in (s.get("layer") or "")
+        auth = s.get("authority")
+        if auth is not None and auth not in AUTHORITY_VALUES:
+            bad.append(f"{key}: authority {auth!r} — 아는 값 {sorted(AUTHORITY_VALUES)}")
+        elif third and auth is None and key not in AUTHORITY_PENDING:
+            bad.append(f"{key}: 3층인데 authority 가 없다")
+        elif not third and auth is not None:
+            bad.append(
+                f"{key}: 3층이 아닌데 authority {auth!r} 가 있다 — 구속력 칸은 3층 소스의 칸이다"
+            )
+        elif key in AUTHORITY_PENDING and (auth is not None or not third):
+            bad.append(
+                f"{key}: AUTHORITY_PENDING 에 있는데 칸이 정해졌거나 3층이 아니다 — 목록에서 뺀다"
+            )
+    return bad
+
+
+_auth_bad = _authority_errors()
+if _auth_bad:
+    raise SystemExit(
+        "🔴 구속력 칸(D-290 ②)이 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n  "
+        + "\n  ".join(_auth_bad)
+    )
+
+
+def _nd_errors() -> list[str]:
+    """🆕 2026-09-25 — `ND`(변경금지) 소스는 학습(U1)이 열릴 수 없다. 파생 데이터셋 금지의 가장 좁은 꼴이다.
+
+    🚨 거꾸로(`U1` 이 닫혔으니 ND)는 아니다 — `U1: deny` 는 「평가 전용」 뜻으로도 쓰였다(D-155 사례집).
+    """
+    bad: list[str] = []
+    for key in ORDER:
+        s = BY_ID[REV.get(key, key)]
+        if "ND" in (s.get("constraints") or []) and (s.get("u") or {}).get("train") == "ok":
+            bad.append(f"{key}: ND(변경금지)인데 학습(train)이 ok 다")
+    return bad
+
+
+_nd_bad = _nd_errors()
+if _nd_bad:
+    raise SystemExit(
+        "🔴 변경금지(ND) 소스의 용도가 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n  "
+        + "\n  ".join(_nd_bad)
     )
 
 out = []

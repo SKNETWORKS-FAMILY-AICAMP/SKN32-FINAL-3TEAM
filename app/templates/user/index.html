@@ -14,6 +14,7 @@
            align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem; }
 .hm-head h1 { margin: 0 0 .2rem; }
 .hm-head p { margin: 0; color: var(--u-clay); font-size: .875rem; }
+.hm-head .hm-date { margin-left: auto; font-family: ui-monospace, monospace; font-size: .75rem; }
 
 .hm-stats { display: grid; gap: 1px; background: var(--u-line);
             border: 1px solid var(--u-line); border-radius: .75rem;
@@ -43,9 +44,11 @@
 {% block user_content %}
 <div class="hm-head">
   <div>
-    <h1>CopyLane</h1>
+    {# 🔄 2026-09-29 (ksr) — 프로토타입 `home-greeting` · 이름은 **로그인한 사람의 계정**에서 온다(`me` · 상단바와 같은 값) #}
+    <h1>{% if me %}안녕하세요, {{ me.name }} 님{% else %}CopyLane{% endif %}</h1>
     <p>오늘도 안전한 광고 문구를 만들어보세요.</p>
   </div>
+  <p class="hm-date">{{ today }}</p>
 </div>
 
 {% if db_down %}
@@ -91,6 +94,11 @@
     </li>
     {% endfor %}
   </ul>
+  {% elif need_login %}
+  {# 🔴 2026-09-29 — 통계·최근 이력은 **내 판정만** 센다 (P1-5). 로그아웃이면 셀 대상이 없어 「—」다 #}
+  <p class="hm-empty">
+    <a href="/u/login">로그인</a>하면 <b>내가 검수한 기록</b>과 통계가 여기에 나와요.
+  </p>
   {% elif db_down %}
   <p class="hm-empty">DB 에 붙지 못해 이력을 읽지 못했어요 — 기록이 없다는 뜻이 아니에요.</p>
   {% else %}

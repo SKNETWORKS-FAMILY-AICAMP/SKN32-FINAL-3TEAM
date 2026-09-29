@@ -57,3 +57,18 @@ def reachable(session: Session) -> bool:
         _log.warning("db: 접속 실패 — %s", type(e.orig).__name__ if e.orig else type(e).__name__)
         return False
     return True
+
+
+def pg_connect(**kwargs: object):  # noqa: ANN201 — psycopg 는 지연 import 라 반환 타입을 여기서 못 적는다
+    """**psycopg 직결** 연결 — 관리자 화면·오류 로그 핸들러가 쓴다. 🆕 2026-09-22.
+
+    ⛔ 종전에는 `admin.py` 여섯 곳과 `admin_errors.py` 가 `psycopg.connect(dsn())` 을 **각자** 불렀고
+       어느 곳도 `connect_timeout` 을 안 줬다 — 응답 없는 주소면 **끝없이 기다린다**(`/u/` 에서 09-22 에 고친 것과 같은 자리).
+    ★ 대기 상한은 `settings.DB_CONNECT_TIMEOUT_S` 한 곳이다 (D-99). 🚨 import 를 안에 둔다 — DB 가 없어도 모듈은 서야 한다 (D-51).
+    """
+    import psycopg  # noqa: PLC0415
+
+    from app.settings import dsn  # noqa: PLC0415
+
+    kwargs.setdefault("connect_timeout", DB_CONNECT_TIMEOUT_S)
+    return psycopg.connect(dsn(), **kwargs)

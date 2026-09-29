@@ -38,6 +38,7 @@ VALID_FLAGS = {
     "NOSTORE",
     "QUERYLOG",
     "PREAPPROVAL",  # D-73
+    "ND",  # 🆕 2026-09-25 변경금지 — 공공누리 제3·4유형 (파생 데이터셋 금지)
 }
 
 # 🚨 등급이 허용하는 용도 상한 (data_sources.yaml 머리말과 같은 표다)
@@ -1388,6 +1389,29 @@ def test_생성물에만_있는_문언이_없다() -> None:
     )
 
 
+@pytest.mark.gate
+def test_3층_소스는_구속력_칸이_있다() -> None:
+    """🆕 2026-09-25 D-290 ② — 층은 「담긴 것」이고 구속력은 칸(`authority: 법령 | 해설`)으로 따로 적는다.
+
+    🚨 3층에 법령과 공식 해설이 함께 있다. 칸이 비면 해설이 **근거 조문 자리로 인용될 때** 막을 값이 없다
+       (인용 금지 게이트는 3층 해설을 RAG 에 처음 적재하는 커밋에서 이 칸을 읽는다 · D-192).
+    ★ 칸을 아직 못 정한 소스는 빈 칸이 아니라 **사유**(`authority_note`)를 싣는다 — 「없음」이 통과로 새지 않게 (D-220).
+    ⛔ 3층이 아닌 소스에 칸이 있으면 막는다 — 2층 → 3층 을 되돌리며 칸만 남으면 다시 한 소스에 두 판단이다.
+    생성기(`gen_registry.py` `_authority_errors`)가 쓰기 전에 같은 규칙으로 멈춘다 — 여기는 생성물을 손으로 고친 것을 잡는다.
+    """
+    bad: list[str] = []
+    for key, spec in _sources().items():
+        third = "3층" in str(spec.get("layer") or "")
+        auth = spec.get("authority")
+        if auth is not None and auth not in {"법령", "해설"}:
+            bad.append(f"{key}: authority {auth!r} 는 법령 · 해설 이 아니다")
+        elif third and auth is None and not spec.get("authority_note"):
+            bad.append(f"{key}: 3층인데 authority 도 authority_note 도 없다")
+        elif not third and (auth is not None or spec.get("authority_note")):
+            bad.append(f"{key}: 3층이 아닌데 구속력 칸이 있다")
+    assert not bad, "구속력 칸(D-290 ②)이 안 맞는다\n  " + "\n  ".join(bad)
+
+
 # ══════════════════════════════════════════════════════════
 # 🔴 「지금은 안 받는다」를 코드가 지키는가 (2026-09-09 · D-72)
 #
@@ -1736,7 +1760,7 @@ def test_HTML_을_긁는_소스는_robots_확인_기록이_있다() -> None:
 # 🚨 **완전 차단은 불가능하다.** `app` 을 안 거치고 langchain 을 직접 쓰면 그만이다.
 #    그래서 「막았다」고 적지 않는다. 여기서 하는 일은 둘이다 —
 #      ① 저장소의 기본값이 꺼짐인지 본다   ② 지금 이 환경에서 꺼져 있는지 본다
-#    실행 경로에서 멈추는 것은 `app.graph.build_graph()` 가 맡는다 (D-220 fail-closed).
+#    실행 경로에서 멈추는 것은 `app.graph._require_tracing_off()` 가 맡는다 — 모든 `build_*` 가 부른다 (D-220 fail-closed · D-266).
 
 TRACING_VARS = ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING")
 
