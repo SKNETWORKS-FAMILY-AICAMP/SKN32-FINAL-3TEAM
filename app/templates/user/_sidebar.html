@@ -9,5 +9,6 @@
   <a class="user-sidebar-item{{ ' user-sidebar-item-active' if key == active_sub }}"
      href="{{ href }}">{{ label }}</a>
   {% endfor %}
-  <a class="user-sidebar-cs" href="/u/cs">CS 문의</a>
+  {# 🆕 2026-09-29 — 안 읽은 문의 답변 · 완료가 있으면 점을 켠다 (프로토타입 `cs-badge`) #}
+  <a class="user-sidebar-cs" href="/u/cs">CS 문의{% if me and me.cs_unread %} <span class="user-sidebar-dot" aria-label="새 답변"></span>{% endif %}</a>
 </aside>

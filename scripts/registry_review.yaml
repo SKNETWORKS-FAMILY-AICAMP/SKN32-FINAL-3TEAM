@@ -729,8 +729,11 @@ mfds_hf_trial_ad_guide:
 mfds_cosmetic_claim_test_guide:
   decided_by: 오한빈
   decided_at: 2026-09-25
+  # 🔄 2026-09-26 재확인 (권소라) — D-290 수정안(docs/ohb/수정안_2026-09-25_레지스트리_층_D-290.md) 동의.
+  #    2층 적법라벨 → 3층 판단규범 · authority 해설. 입증 조건부 표현의 기준이라 2층(조건 없는 표현)이 아니다(D-290 ④).
+  #    근거 조문으로 인용하지 않는다(D-290 ②).
   reviewed_by: 권소라
-  reviewed_at: 2026-09-25
+  reviewed_at: 2026-09-26
   robots_checked_at: 2026-09-25
   collected_at: 2026-09-25
 mfds_quasi_drug_ad_guide:
@@ -777,3 +780,117 @@ mfds_cgm_expc:
   reviewed_by: 권소라
   reviewed_at: 2026-09-19
   collected_at: 2026-09-20
+
+# 🆕 2026-09-26 — 부족 유형 보충 원천 등재 제안 6건 (권소라 요청 · 조사·확인 Claude 세션)
+#   🔄 **2026-09-28 2인 확인** — 결정 오한빈 · 확인 권소라. 팀장 동의는 권소라가 전달(「6건 전부」 · 앞선 서명들과 같은 「팀장 전달」 형태).
+#      🚨 동의 범위는 **등급·용도(판정요청서 §2)** 까지다 — 게시판형 4종의 수집 방식(§4 (가)/(나))은 미정이라 STATUS 는 hold 로 둔다.
+#      팀장 판정 요청서: docs/ksr/판정요청_2026-09-26_부족유형_새원천6.md
+#   robots — 2026-09-26 각 호스트 robots.txt 를 열어 확인한 결과(크롤링형 3건만 필요 · API 2건 · 웹 1건은 참고)
+#     www.ftc.go.kr      「User-agent: * / Disallow: /www/search.do*」 → 게시판 경로 허용
+#     gnews.gg.go.kr     「User-agent: *」 아래 「Allow: /briefing/」 (특정 SEO 봇만 전체 금지)
+#     www.scourt.go.kr   「User-agent: *」 금지 목록에 /portal/ 없음 · 🚨 각급법원 도메인은 /portal/ 금지 — www 만
+
+ftc_press:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-26
+  collected_at: 2026-09-28
+
+gg_press:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-26
+  collected_at: 2026-09-28
+
+scourt_major:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-26
+  collected_at: 2026-09-28
+
+easylaw_ad:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  collected_at: 2026-09-28
+
+# 🆕 2026-09-28 — API 2종(웹 크롤링 아님 · robots 는 nedrug 웹 「Disallow: /」라 API 로만 받는다)
+mfds_cosmetic_func_report:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  collected_at: 2026-09-28
+
+mfds_cosmetic_func_review:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  collected_at: 2026-09-28
+
+# 🆕 2026-09-28 — 식약처 질의응답집 3건 신규 등재 (판정요청서 docs/ksr/판정요청_2026-09-26_부족유형_새원천6.md §5)
+#   결정: 오한빈 2026-09-28 — 09-25 「질의응답집과 판단안내서 중복 안 되면 등재해도 됩니다」 기준을 이 3건에 적용 (팀장 확인 · 권소라 전달)
+#   서명 범위 — 등급 G3(D-132 준용) · 제약 BY · status collect(collect.mfds_board) · 층 1층 판정라벨(질의응답집 · mfds_cosmetic_ad_qa 선례)
+#   근거: 게시 화면 공공누리 배지 없음 · PDF 저작권 문구 0건 · 외부 집필 표기 없음 · 단서 1~4호 해당 없음 (2026-09-28 권소라 확인 · 저장 없이 탐침)
+#   중복: 레지스트리 같은 문서 없음 · 기존 파생물 15자 조각 대조 0~3.9% — 겹치는 문항은 전처리에서 제외(사용자 지시 2026-09-28)
+#   🚨 robots — www.mfds.go.kr 「User-agent: * / Allow:/」 (2026-09-28 권소라 실측)
+mfds_cosmetic_ad_qa_2012:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+mfds_cosmetic_func_qa_2023:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+mfds_food_func_claim_qa_2021:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+
+# 🆕 2026-09-28 — 판정요청서 §5 남은 판정 — 거버넌스 점검 통과 3건 등재
+#   결정: 오한빈 2026-09-28 — 「거버넌스에 문제없으면 사용해도 된다」 (팀장 결정 · 권소라 전달)
+#   점검 (2026-09-28 권소라 · PDF 전 쪽 저장 없이 탐침): 공공누리 · 저작권 제한 문구 0 · 외부 용역·집필 없음 · 단서 1~4호 해당 없음 · 중복 0~6.3%
+#   서명 범위 — 등급 G3(D-132 준용) · 제약 BY · status collect(collect.mfds_board) · 층 1층 판정라벨(기준 시점 지난 자료 · D-290)
+#   ⛔ 같은 점검에서 뺀 것 — 「건강기능식품 기능성 표시·광고 가이드라인」 2009: 5쪽 「표현가능사례 등은 2008년도 용역연구과제 결과로 작성」
+#      → 외부 용역 결과물이라 D-132(저작재산권 전부 보유) · D-140(사전 협의 = 제3자 저작물 방어) 에 걸린다 · 등재 안 함
+#   ⛔ 공정거래백서 2025 — 저작권은 통과(공공누리 없음 · 집필자는 공정위 직원)하나 표시·광고 언급 14쪽 · 인용 18개라 가치가 낮아 등재 안 함
+#   🚨 mfds_daegu_ad_cases_2013 — 텍스트 층이 거의 없어 OCR 필요 · 원문만 먼저 받는다(사용자 지시) · 광고 캡처 이미지는 G1 미추출(D-18)
+#   🚨 robots — www.mfds.go.kr 「User-agent: * / Allow:/」 (2026-09-28 권소라 실측)
+mfds_ad_judge_manual_2015:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+mfds_cosmetic_faq_2020:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
+mfds_daegu_ad_cases_2013:
+  decided_by: 오한빈
+  decided_at: 2026-09-28
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-28
+  robots_checked_at: 2026-09-28
+  collected_at: 2026-09-28
