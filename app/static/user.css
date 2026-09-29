@@ -11,6 +11,11 @@
   --u-signal: #8b5cf6;
   --u-signal-ink: #7c3aed;
   --u-signal-soft: #f5eefc;
+  /* 🆕 상태색(통과·주의·위험) — 칩·배지·안내 상자가 같이 쓴다. 어두운 화면에서 연한 바탕이 튀지 않게 토큰으로 묶었다 */
+  --u-ok-bg: #ecfdf5; --u-ok-ink: #065f46; --u-ok-line: #a7f3d0; --u-ok-dot: #15803d;
+  --u-warn-bg: #fffbeb; --u-warn-ink: #92400e; --u-warn-line: #fde68a; --u-warn-dot: #b45309;
+  --u-bad-bg: #fef2f2; --u-bad-ink: #991b1b; --u-bad-line: #fecaca; --u-bad-dot: #b91c1c;
+  --u-hit: #fde68a;
 }
 @media (prefers-color-scheme: dark) {
   .user-shell {
@@ -22,6 +27,10 @@
     --u-signal: #a78bfa;
     --u-signal-ink: #c4b5fd;
     --u-signal-soft: #2a2140;
+    --u-ok-bg: #0f2a20; --u-ok-ink: #6ee7b7; --u-ok-line: #1f5b43; --u-ok-dot: #4ade80;
+    --u-warn-bg: #2b2210; --u-warn-ink: #fcd34d; --u-warn-line: #6b4f14; --u-warn-dot: #fbbf24;
+    --u-bad-bg: #2d1616; --u-bad-ink: #fca5a5; --u-bad-line: #6e2a2a; --u-bad-dot: #f87171;
+    --u-hit: #5c4a12;
   }
 }
 
@@ -166,6 +175,10 @@ a.nt-item:hover { background: var(--u-surface2); }
   --u-signal: #a78bfa;
   --u-signal-ink: #c4b5fd;
   --u-signal-soft: #2a2140;
+  --u-ok-bg: #0f2a20; --u-ok-ink: #6ee7b7; --u-ok-line: #1f5b43; --u-ok-dot: #4ade80;
+  --u-warn-bg: #2b2210; --u-warn-ink: #fcd34d; --u-warn-line: #6b4f14; --u-warn-dot: #fbbf24;
+  --u-bad-bg: #2d1616; --u-bad-ink: #fca5a5; --u-bad-line: #6e2a2a; --u-bad-dot: #f87171;
+  --u-hit: #5c4a12;
 }
 .user-shell[data-theme="light"] {
   --u-surface: #ffffff;
@@ -176,6 +189,11 @@ a.nt-item:hover { background: var(--u-surface2); }
   --u-signal: #8b5cf6;
   --u-signal-ink: #7c3aed;
   --u-signal-soft: #f5eefc;
+  /* 🆕 상태색(통과·주의·위험) — 칩·배지·안내 상자가 같이 쓴다. 어두운 화면에서 연한 바탕이 튀지 않게 토큰으로 묶었다 */
+  --u-ok-bg: #ecfdf5; --u-ok-ink: #065f46; --u-ok-line: #a7f3d0; --u-ok-dot: #15803d;
+  --u-warn-bg: #fffbeb; --u-warn-ink: #92400e; --u-warn-line: #fde68a; --u-warn-dot: #b45309;
+  --u-bad-bg: #fef2f2; --u-bad-ink: #991b1b; --u-bad-line: #fecaca; --u-bad-dot: #b91c1c;
+  --u-hit: #fde68a;
 }
 /* 🔴 `base.css`(팀장) 의 body 는 흰 바탕 · 검은 글자로 고정이다 — 고치지 않고 사용자 화면에서만 덮는다(위 `body:has` 와 같은 요령) */
 body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; }
@@ -183,6 +201,15 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
 .user-shell[data-theme="dark"] textarea,
 .user-shell[data-theme="dark"] input,
 .user-shell[data-theme="dark"] select { background: var(--u-surface); color: var(--u-ink); border-color: var(--u-line); }
+/* 🔴 2026-09-29 — 테마 쿠키 없이 **운영체제가 어두운 화면**일 때도 같다. 종전엔 쿠키 다크만 덮어서
+   카드·칩은 어두워지는데 글자는 base.css 의 검정(#18181b)으로 남아 안 보였다. 라이트를 직접 고른 사람은 뺀다 */
+@media (prefers-color-scheme: dark) {
+  body:has(.user-shell:not([data-theme="light"])) { background: #1a191c; color: #f1f0f2; }
+  .user-shell:not([data-theme="light"]) { color: var(--u-ink); }
+  .user-shell:not([data-theme="light"]) textarea,
+  .user-shell:not([data-theme="light"]) input,
+  .user-shell:not([data-theme="light"]) select { background: var(--u-surface); color: var(--u-ink); border-color: var(--u-line); }
+}
 
 /* 구역 본문 — 왼쪽 사이드바(있으면) + 메인 */
 .user-body { display: flex; margin: 0 -2rem; align-items: flex-start; }

@@ -18,6 +18,12 @@
 {% block user_content %}
 <h1>검수 이력</h1>
 
+{% if need_login %}
+{# 🔴 2026-09-29 — 이력은 **로그인한 사람 것만** 보인다 (P1-5). 로그인 벽 대신 안내만 그린다 — `/u/cs` 와 같다 (D-66) #}
+<p>검수 이력은 <b>로그인한 회원</b>만 볼 수 있어요. 내가 검수한 기록만 나와요.</p>
+<p><a href="/u/login">로그인</a> · <a href="/u/signup">회원가입</a></p>
+{% else %}
+
 <div class="filter-chips">
   <a class="filter-chip{{ ' filter-chip-active' if not verdict }}" href="?page=1">전체</a>
   {% for v in verdicts %}
@@ -69,4 +75,5 @@
 </div>
 
 {% include "user/_pagination.html" %}
+{% endif %}
 {% endblock %}

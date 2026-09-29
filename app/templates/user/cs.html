@@ -41,13 +41,13 @@
 .cs-chip.off span { color: var(--u-clay); background: var(--u-surface2); cursor: not-allowed; }
 .cs-hint { font-size: .74rem; color: var(--u-clay); margin: .35rem 0 0; }
 .cs-form input[type="text"], .cs-form textarea { margin: 0; }
-.cs-warn { font-size: .78rem; color: #92400e; background: #fffbeb; border: 1px solid #fde68a;
+.cs-warn { font-size: .78rem; color: var(--u-warn-ink); background: var(--u-warn-bg); border: 1px solid var(--u-warn-line);
            border-radius: .6rem; padding: .5rem .75rem; margin: .5rem 0 0; }
 .cs-attach { border: 1px dashed var(--u-line); border-radius: .75rem; padding: .8rem; text-align: center;
              font-size: .8rem; color: var(--u-clay); background: var(--u-surface2); }
 .cs-actions { display: flex; gap: .5rem; margin-top: 1rem; }
 .cs-submit { margin: 0; background: var(--u-signal); border-color: var(--u-signal); color: #fff; font-weight: 600; }
-.cs-err { font-size: .82rem; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca;
+.cs-err { font-size: .82rem; color: var(--u-bad-ink); background: var(--u-bad-bg); border: 1px solid var(--u-bad-line);
           border-radius: .6rem; padding: .5rem .75rem; margin: 0 0 .8rem; }
 .cs-list-h { font-size: .72rem; color: var(--u-clay); letter-spacing: .06em; margin: 0 0 .5rem; }
 .cs-list { border: 1px solid var(--u-line); border-radius: 1rem; overflow: hidden; background: var(--u-surface); }
@@ -62,10 +62,10 @@
 .cs-sub { font-size: .75rem; color: var(--u-clay); }
 .cs-badge { flex-shrink: 0; padding: .1rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 600;
             background: var(--u-surface2); color: var(--u-clay); }
-.cs-badge.p-urgent { background: #fef2f2; color: #991b1b; }
-.cs-badge.s-open { background: #fffbeb; color: #92400e; }
+.cs-badge.p-urgent { background: var(--u-bad-bg); color: var(--u-bad-ink); }
+.cs-badge.s-open { background: var(--u-warn-bg); color: var(--u-warn-ink); }
 .cs-badge.s-in_progress { background: var(--u-signal-soft); color: var(--u-signal-ink); }
-.cs-badge.s-closed { background: #ecfdf5; color: #065f46; }
+.cs-badge.s-closed { background: var(--u-ok-bg); color: var(--u-ok-ink); }
 .cs-empty { padding: 1.5rem; text-align: center; color: var(--u-clay); font-size: .85rem; margin: 0; }
 .cs-login { border: 1px dashed var(--u-line); border-radius: 1rem; padding: 1.5rem; text-align: center; }
 .cs-login a { color: var(--u-signal-ink); font-weight: 600; }

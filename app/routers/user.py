@@ -30,7 +30,7 @@ from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -49,6 +49,7 @@ from app.models import (
     Terms,
     Ticket,
     UserAccount,
+    WorkDoc,
 )
 from app.settings import PARAMS, TICKET_RETENTION_DAYS, TICKET_TEXT_MAX
 from app.templating import templates
@@ -386,8 +387,23 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
                 "recent": [],
             },
         )
+    # 🔴 2026-09-29 — 통계·최근 이력은 **내 판정만** 센다 (P1-5 · `_owned_judgments`). 로그아웃이면 셀 대상이 없다.
+    user = current_user(request, session)
+    if user is None:
+        return _render(
+            request,
+            "user/index.html",
+            {
+                "need_login": True,
+                "total_month": None,
+                "violation_count": None,
+                "pass_rate": None,
+                "recent": [],
+            },
+        )
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    month = select(Judgment).where(Judgment.judged_at >= month_start)
+    mine = _owned_judgments(user.id)
+    month = mine.where(Judgment.judged_at >= month_start)
     pass_level = PASS_RISK_MAX.level
 
     total_month = session.scalar(select(func.count()).select_from(month.subquery())) or 0
@@ -413,11 +429,7 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     )
     pass_rate = round(pass_count / total_month * 100) if total_month else None
 
-    recent = (
-        session.execute(select(Judgment).order_by(Judgment.judged_at.desc()).limit(3))
-        .scalars()
-        .all()
-    )
+    recent = session.execute(mine.order_by(Judgment.judged_at.desc()).limit(3)).scalars().all()
     return _render(
         request,
         "user/index.html",
@@ -786,10 +798,26 @@ _VERDICTS = ("confirmed", "hold", "no_basis", "unjudged")
 _PAGE_SIZE = 20
 
 
-def _history_rows(session: Session, verdict: str | None, page: int) -> tuple[list, int]:
+def _owned_judgments(owner_id: uuid.UUID) -> Select:
+    """🔴 **내 판정만** (P1-5) — `judgment.doc_id` → `work_doc.owner_id` 로 거른다.
+
+    홈 집계·최근 이력·이력 목록이 모두 이것에서 출발한다 — 소유자 조건을 화면마다 따로 적지 않는다.
+    ⬜ 비회원 문서(`owner_id` NULL · `session_id` 로만 묶임, D-129)는 여기 안 걸린다 — 로그인 전에는 이력을 안 보여 준다.
+    """
+    return (
+        select(Judgment)
+        .join(WorkDoc, WorkDoc.id == Judgment.doc_id)
+        .where(WorkDoc.owner_id == owner_id)
+    )
+
+
+def _history_rows(
+    session: Session, owner_id: uuid.UUID, verdict: str | None, page: int
+) -> tuple[list, int]:
     """이력 한 쪽의 행과 전체 건수. `judgment` × `copy_sentence` 조인 (ksr 원문 조인 · lse 필터·페이지)."""
     stmt = (
-        select(Judgment, CopySentence.raw)
+        _owned_judgments(owner_id)
+        .add_columns(CopySentence.raw)
         .join(CopySentence, CopySentence.id == Judgment.subject_id)
         .where(Judgment.subject_type == "copy_sentence")
     )
@@ -833,12 +861,18 @@ def history(
        500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.
     ⬜ 근거(evidence)·질의응답은 디자인엔 있지만 이번엔 뺐다 — QnA 를 저장할 테이블이
        아직 없다. 원문·결론·위험도·법령 버전만 보여준다.
+    🔴 2026-09-29 — **로그인한 사람 것만** 보여 준다 (보안점검 P1-5 · `_owned_judgments`).
+       로그아웃이면 리다이렉트하지 않고 로그인 안내를 그린다(200) — `/u/cs` 와 같다(D-66).
+       DB 가 없으면 로그인 여부를 알 수 없으니 「DB 없음」 안내가 먼저다 (D-72).
     """
     page = max(page, 1)
     if verdict not in (None, *_VERDICTS):
         verdict = None
     db_down = not reachable(session)
-    rows, total = ([], 0) if db_down else _history_rows(session, verdict, page)
+    user = None if db_down else current_user(request, session)
+    if not db_down and user is None:
+        return _render(request, "user/history.html", {"need_login": True})
+    rows, total = ([], 0) if user is None else _history_rows(session, user.id, verdict, page)
     opened = next((r for r in rows if str(r.id) == open_id), None) if open_id else None
     return _render(
         request,
