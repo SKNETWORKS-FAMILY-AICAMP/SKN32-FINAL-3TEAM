@@ -1792,7 +1792,8 @@ def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = Non
         #    **선언 범위 밖**이고, 여기에 치환을 걸면 코드가 원장을 넘어선다 (D-54 — 원장이
         #    원본이고 코드가 사본이다).
         #    ★ 그 이름들은 **지우는 문제가 아니라 공개 문서에 들어오는 문제**다 —
-        #      `residual_bare_orgs()` 를 게이트가 쓴다 (D-216 의 ⬜ ① · D-230 의 연장).
+        #      `residual_bare_orgs()` 가 센다 — 지금 호출부는 탐침(`preprocess/ftc_reason_probe.py`)뿐이고 게이트는 없다
+        #      (D-216 의 ⬜ ① · D-230 은 폐기 → D-233).
         #    ⬜ 뜻을 바꾸려면 레지스트리 `masking:` 문언부터 고치고 2인 확인을 거친다 (게이트 15).
     elif "person" in todo:
         text = mask_person(text, log, wide=source in PERSON_ALL_NAMES)
