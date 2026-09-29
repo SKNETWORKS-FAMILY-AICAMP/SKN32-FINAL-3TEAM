@@ -47,7 +47,7 @@ from collect import registry, statute
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
 from preprocess.lineage import lineage
-from preprocess.split import approved_docs, casebook_docs, ftc_docs, guide_docs
+from preprocess.split import approved_docs, casebook_docs, cosmetic_docs, ftc_docs, guide_docs
 
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
@@ -101,9 +101,11 @@ def reason_keep(text: str) -> tuple[str, str | None]:
 def is_negative(r: dict) -> bool:
     """적법(음성) 표본인가. 🔴 `조건` 칸이 있으면 **음성이 아니다** — 해설서 행은 원천이 위반이라 했다 (D-237 · 지시서 §7).
 
+    🔄 2026-09-30 (D-285 개정 5 · 화장품 지시서 §2 · §7) — **단, 조건 `L`(조건 없이 적법)은 음성이다.**
+       ⛔ 이 한 줄이 없으면 L 행은 위반(`is_positive`)으로도 적법으로도 안 세진다 — 조용히 빠진다 (D-220).
     ★ `eval_rule` 도 이것을 쓴다 — 음성 판별을 두 곳에 두면 한쪽만 고쳐진다 (D-99).
     """
-    return not r["labels"] and "조건" not in r
+    return not r["labels"] and r.get("조건", "L") == "L"
 
 
 def is_positive(r: dict) -> bool:
@@ -126,8 +128,10 @@ def check_basis(rows: list[dict]) -> None:
         cond = r.get("조건")
         if cond is None:
             continue
-        if cond not in ("C", "A", "B", "M", "D"):
+        if cond not in ("C", "A", "B", "M", "D", "L"):  # 🔄 09-30 — L(적법 · 화장품 지시서 §2)
             bad.append(f"{r['id']}  모르는 조건 {cond!r}")
+        elif cond == "L" and (r["근거"] or r.get("근거_후보")):
+            bad.append(f"{r['id']}  조건 L(적법) 인데 근거가 있다")
         elif cond in ("C", "A", "B") and not (r["근거"] or r.get("근거_후보")):
             bad.append(f"{r['id']}  조건 {cond} 인데 근거도 후보도 없다")
         elif cond == "D" and r["근거"]:
@@ -152,7 +156,8 @@ def build() -> tuple[list[dict], dict]:
 
     # 🔄 2026-09-24 (D-283) · 🔄 2026-09-25 (D-285 개정 4) — `guide_docs()` 는 해설서 대기가 0 일 때만 채택본을 낸다
     #    (대기 중에는 빈 목록 · `split.guide_state()`). 전환됐다(원장 09-25 ⑰) — 해설서 행이 이 한 줄로 들어온다.
-    for d in ftc_docs() + casebook_docs() + approved_docs() + guide_docs():
+    # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집도 같은 길이다(`cosmetic_docs()` 도 대기 0 일 때만 낸다)
+    for d in ftc_docs() + casebook_docs() + approved_docs() + guide_docs() + cosmetic_docs():
         split = assign.get(d["doc_id"])
         if not split:
             stat["미배정"] += 1
@@ -174,6 +179,9 @@ def build() -> tuple[list[dict], dict]:
             if "조건" in d:  # 🆕 D-285 개정 4 — 읽는 쪽이 조건을 먼저 본다 (`is_negative`)
                 for f in ("조건", "근거_후보", "판독", "원천결손"):
                     row[f] = d[f]
+                # 🆕 09-30 — 화장품 [별표 5] 목은 인용 꼴 밖의 칸이다(지시서 §7 🔶)
+                if d.get("별표5목"):
+                    row["별표5목"] = d["별표5목"]
             rows.append(row)
             stat[split] += 1
 
@@ -340,7 +348,7 @@ def main() -> int:
         cond = collections.Counter(r["조건"] for r in sub if "조건" in r)
         if cond:
             print(
-                f"     조건 칸이 있는 행(해설서) — {dict(sorted(cond.items()))}"
+                f"     조건 칸이 있는 행(해설서 · 화장품) — {dict(sorted(cond.items()))}"
                 f" · 근거_후보 {sum(1 for r in sub if r.get('근거_후보'))}"
             )
         c: collections.Counter = collections.Counter()

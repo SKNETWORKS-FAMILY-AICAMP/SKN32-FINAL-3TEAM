@@ -276,10 +276,12 @@ def main() -> int:
 
     # 🆕 D-285 개정 4 — **원천별로 따로 낸다** (D-160 · 한 수에 두 원천을 평균하지 않는다).
     #    적법 표본(승인 문구)은 두 원천에 **함께** 붙인다 — Precision 을 정의하는 공통 음성이다.
-    neg = [r for r in rows if is_negative(r)]
+    #    🔄 2026-09-30 — 공통 적법은 **조건 칸이 없는** 적법(승인 문구)뿐이다. 조건 L(화장품 질의응답 · 적법)은
+    #       그 원천의 행이다 — 공통에 넣으면 다른 원천의 오탐률에 섞인다 (D-160).
+    neg = [r for r in rows if is_negative(r) and "조건" not in r]
     by_src = collections.defaultdict(list)
     for r in rows:
-        if not is_negative(r):
+        if not (is_negative(r) and "조건" not in r):
             by_src[r["provenance"]].append(r)
     if len(by_src) <= 1:
         report(rows, rules)

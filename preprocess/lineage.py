@@ -20,6 +20,8 @@ GOLDEN_LINEAGE: dict[tuple[str, str], tuple[str, bool]] = {
     ("ftc_decisions_body", "real"): ("ftc_decisions_body:golden", False),
     ("mfds_casebook", "real"): ("mfds_casebook:golden", False),
     ("mfds_special_use_guide", "real"): ("mfds_special_use_guide:golden", False),
+    # 🆕 2026-09-30 (D-285 개정 5) — 질의응답집 화장품 인용 표현도 광고 문구 인용이다
+    ("mfds_cosmetic_ad_qa", "real"): ("mfds_cosmetic_ad_qa:golden", False),
     # 식약처 승인 문구와 우리 합성문
     ("mfds_hf_ingredient_board", "approved"): ("mfds_hf_ingredient_board:approved", True),
     ("mfds_hf_ingredient_board", "injected"): ("mfds_hf_ingredient_board:injected", True),

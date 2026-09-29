@@ -132,7 +132,10 @@ def inputs() -> tuple[pathlib.Path, ...]:
     🚨 대기가 0 이 되는 순간 입력이 늘어 `verify_inputs` 가 멈춘다 → 분할을 다시 쓴다(한 번). 그것이 전환이다.
     """
     st = guide_state()
-    return INPUTS + ((GUIDE_ADOPTED,) if st and not st["대기"] else ())
+    got = INPUTS + ((GUIDE_ADOPTED,) if st and not st["대기"] else ())
+    # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집도 같은 규칙이다(대기 0 일 때만 입력)
+    cq = cosmetic_state()
+    return got + ((COSMETIC_ADOPTED,) if cq and not cq["대기"] else ())
 
 
 def fingerprint() -> dict[str, dict]:
@@ -302,19 +305,65 @@ def guide_state() -> dict[str, int] | None:
 
     🔴 대기 = 원자료에 있는데 채택본에 없는 행(판정 시트 · 거래 조건 사항). 채택본에 원자료에 없는 행이 있으면 멈춘다.
     """
-    if not GUIDE_READINGS.exists():
+    return _round_state(GUIDE_READINGS, GUIDE_ADOPTED, "rebuild")
+
+
+def _round_state(readings: pathlib.Path, adopted: pathlib.Path, cmd: str) -> dict[str, int] | None:
+    """🆕 2026-09-30 (D-99) — 판독 판 하나의 상태. 해설서 · 화장품이 같은 함수를 쓴다(대기 규칙이 둘로 갈리지 않게)."""
+    if not readings.exists():
         return None
-    if not GUIDE_ADOPTED.exists():
+    if not adopted.exists():
         raise FileNotFoundError(
-            f"{GUIDE_ADOPTED} 가 없다 — 먼저: uv run python -m scripts.guide_statute_round rebuild"
+            f"{adopted} 가 없다 — 먼저: uv run python -m scripts.guide_statute_round {cmd}"
         )
-    every = {r["지문"] for r in _jsonl(GUIDE_READINGS)}
-    took = {r["지문"] for r in _jsonl(GUIDE_ADOPTED)}
+    every = {r["지문"] for r in _jsonl(readings)}
+    took = {r["지문"] for r in _jsonl(adopted)}
     if took - every:
         raise ValueError(
-            f"해설서 채택본에 원자료에 없는 행 {len(took - every)} — 채택본이 낡았다 (rebuild)"
+            f"{adopted.parent.name} 채택본에 원자료에 없는 행 {len(took - every)} — 채택본이 낡았다 ({cmd})"
         )
     return {"전체": len(every), "채택": len(took), "대기": len(every - took)}
+
+
+#: 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집 조문·조건 판의 산출물. 🚨 경로의 정본은
+#:    `scripts/guide_statute_round.py` `CQ_READINGS` · `CQ_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99 · 위 GUIDE_* 와 같은 이유)
+COSMETIC_READINGS = pathlib.Path("data/derived/labels/cosmetic_qa/readings.jsonl")
+COSMETIC_ADOPTED = pathlib.Path("data/derived/labels/cosmetic_qa/adopted.jsonl")
+
+
+def cosmetic_state() -> dict[str, int] | None:
+    """화장품 질의응답집 행의 상태 — 해설서와 같은 규칙. 🔴 `대상 N` 행은 채택본에 있으므로 대기가 아니다."""
+    return _round_state(COSMETIC_READINGS, COSMETIC_ADOPTED, "cq-rebuild")
+
+
+def cosmetic_docs() -> list[dict]:
+    """화장품 질의응답집의 평가 라벨 — **대기가 0 일 때만** 낸다(해설서 `guide_docs` 와 같은 규칙 · D-285 개정 5).
+
+    ★ 전량 평가다(2026-09-30 팀장 판정 ⑤-4 (나) — 2025 판은 평가 전용 · 학습은 2012 · FAQ 2020). 그래서 문항 단위 분할
+      (지시서 §7)은 저절로 지켜진다 — 한 문항의 문구가 학습 · 평가로 갈리지 않는다.
+    🔴 `대상 N`(광고 표현이 아님) 행은 평가에 안 넣는다 — 수는 `cosmetic_state()` 와 채택본이 들고 있다.
+    🔴 조건 `L` 행은 유형이 비고 **적법**이다(`golden.is_negative`) · M · D 는 적법이 아니다(해설서와 같다).
+    """
+    st = cosmetic_state()
+    if not st or st["대기"]:
+        return []
+    return [
+        {
+            "doc_id": r["지문"],
+            "원천": "mfds_cosmetic_ad_qa",
+            "유형": r["labels"],
+            "근거": r["근거"],
+            "근거_후보": r["근거_후보"],
+            "조건": r["조건"],
+            "판독": r["판독"],
+            "원천결손": r["원천결손"],
+            "별표5목": r["별표5목"],
+            "문구": [r["문구"]],
+            "단위": "문장",
+        }
+        for r in _jsonl(COSMETIC_ADOPTED)
+        if r["대상"] == "Y"
+    ]
 
 
 def guide_docs() -> list[dict]:
@@ -440,7 +489,9 @@ def plan(seed: int = 20260909) -> dict:
     # 🆕 **사람이 붙인 해설서 라벨은 전량 평가다** (2026-09-17 · D-172 · guide_docs 참조).
     #    🚨 `sealed`(ftc 봉인)와 **따로 센다** — 한 수에 두 원천을 평균하지 않는다 (D-160).
     guide = guide_docs()
-    sent = list(sealed.values()) + guide + neg_eval
+    # 🆕 2026-09-30 (D-285 개정 5 · 팀장 판정 ⑤-4 (나)) — 화장품 질의응답집 2025 는 전량 평가다. 해설서와 따로 센다 (D-160)
+    cosmetic = cosmetic_docs()
+    sent = list(sealed.values()) + guide + cosmetic + neg_eval
 
     def tally(rows: list[dict]) -> dict[str, int]:
         c: collections.Counter = collections.Counter()
@@ -507,6 +558,7 @@ def plan(seed: int = 20260909) -> dict:
             # 🆕 원천별로 따로 센다 — 한 수에 두 원천을 평균하지 않는다 (D-160)
             "test_sentence_ftc봉인": {"문서": len(sealed), "문구": phrases(list(sealed.values()))},
             "test_sentence_해설서사람라벨": {"문서": len(guide), "문구": phrases(guide)},
+            "test_sentence_화장품질의응답": {"문서": len(cosmetic), "문구": phrases(cosmetic)},
             "사전(사례집)": {"문서": len(term), "문구": phrases(term)},
         },
         "counts": {
@@ -515,6 +567,7 @@ def plan(seed: int = 20260909) -> dict:
             # 🆕 유형별로도 원천을 가른다 — 어느 유형이 사람 라벨로 섰는지 보이게
             "test_sentence_ftc봉인": tally(list(sealed.values())),
             "test_sentence_해설서사람라벨": tally(guide),
+            "test_sentence_화장품질의응답": tally(cosmetic),
             "사전(사례집)": term_pos,
         },
         "negatives": {
@@ -628,6 +681,16 @@ def main() -> int:
                 "  → 대기가 0 이 되면 평가에 들어간다 (D-285 개정 4)"
                 if st["대기"]
                 else "  → 평가에 들어갔다"
+            )
+        )
+    cq = cosmetic_state()
+    if cq:
+        print(
+            f"  화장품 질의응답집 조문·조건 판 — 전체 {cq['전체']:,} · 채택 {cq['채택']:,}(대상 N 포함) · **대기 {cq['대기']:,}**"
+            + (
+                "  → 대기가 0 이 되면 평가에 들어간다 (D-285 개정 5)"
+                if cq["대기"]
+                else f"  → 평가에 들어갔다 ({m['sizes']['test_sentence_화장품질의응답']['문구']}문구)"
             )
         )
     if m["pending_guide"]:
