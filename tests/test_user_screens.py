@@ -68,7 +68,9 @@ def test_구역_없는_화면은_사이드바가_없다() -> None:
     client = TestClient(app)
     for path in ("/u/", "/u/cs"):
         body = client.get(path).text
-        assert 'class="user-sidebar"' not in body, f"🔴 {path} 에 사이드바가 붙었다 — 구역 밖이어야 한다"
+        assert 'class="user-sidebar"' not in body, (
+            f"🔴 {path} 에 사이드바가 붙었다 — 구역 밖이어야 한다"
+        )
 
 
 def test_활성_pill과_사이드바_항목에_활성_표시가_붙는다() -> None:
@@ -78,7 +80,9 @@ def test_활성_pill과_사이드바_항목에_활성_표시가_붙는다() -> N
     from app.api import app  # noqa: PLC0415
 
     body = TestClient(app).get("/u/matching").text
-    assert "user-topnav-pill user-topnav-pill-active" in body, "🔴 매칭 pill 에 활성 표시가 안 붙는다"
+    assert "user-topnav-pill user-topnav-pill-active" in body, (
+        "🔴 매칭 pill 에 활성 표시가 안 붙는다"
+    )
     assert 'href="/u/matching">' in body, "🔴 매칭 pill 링크가 없다"
 
 
@@ -164,11 +168,17 @@ def test_마이페이지는_로그인_안하면_로그인으로_보낸다() -> N
     assert r.status_code == 303
     assert r.headers["location"] == "/u/login"
 
-    r = client.post("/u/mypage", content=b"section=profile&name=%EA%B6%8C%EC%86%8C%EB%9D%BC", follow_redirects=False)
+    r = client.post(
+        "/u/mypage",
+        content=b"section=profile&name=%EA%B6%8C%EC%86%8C%EB%9D%BC",
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     assert r.headers["location"] == "/u/login"
 
-    r = client.post("/u/mypage/disable", content=b"confirm=%EB%81%84%EA%B8%B0", follow_redirects=False)
+    r = client.post(
+        "/u/mypage/disable", content=b"confirm=%EB%81%84%EA%B8%B0", follow_redirects=False
+    )
     assert r.status_code == 303
     assert r.headers["location"] == "/u/login"
 
