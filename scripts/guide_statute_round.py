@@ -943,12 +943,11 @@ _WS = re.compile(r"\s+")
 def fp_units(units: list[dict]) -> dict[str, dict]:
     """보도자료 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 문구가 그 사건의 **마스킹된** 본문에 공백만 다르게 있어야 한다.
 
-    🚨 단위 표(`단위.json`)의 문구는 마스킹 전 글자다 → 여기서 원천과 **같은 정책**으로 마스킹해 싣는다(D-72 ·
-       `preprocess.mask.apply_policy`). 판독 원자료에 들어가는 순간부터 마스킹된 글자다. 이미 마스킹된 문구(원자료에서
-       다시 계산할 때)를 다시 걸어도 같다(자국 `[업체]` 는 다시 걸리지 않는다) — 게이트가 대조한다.
+    🔴 **마스킹된 문구만 받는다** (`마스킹: true` · D-72). 문구 마스킹은 원문을 읽는 추출기가 **본문 안에서** 건다
+       (`python -m preprocess.ftc_press_old --dump --units <단위.json>` → `data/derived/ftc_press_old_units.jsonl`).
+       ⛔ 여기서 문구만 따로 마스킹했더니 본문에서는 지워진 상호가 문구에 남았다(34657 · 2026-09-30 실측) — `scripts/` 는
+          원문을 못 읽으므로(D-116) 문맥 마스킹을 여기서 할 수 없다.
     """
-    from preprocess.mask import apply_policy  # noqa: PLC0415
-
     if not FP_CASES.exists():
         raise SystemExit(
             f"🔴 {FP_CASES} 가 없다 — 먼저: uv run python -m preprocess.ftc_press_old --dump"
@@ -964,16 +963,21 @@ def fp_units(units: list[dict]) -> dict[str, dict]:
         k = u["지문"]
         if not _key_ok(FP_KEY_RE, k, src, bad):
             continue
-        text = apply_policy(_WS.sub(" ", u["문구"]).strip(), "", FP_SOURCE, [])
+        if u.get("마스킹") is not True:
+            bad.append(
+                f"{k} 마스킹 전 문구다 — `preprocess.ftc_press_old --dump --units` 가 낸 파일을 넘긴다"
+            )
+            continue
         body = cases.get(str(u["사건"]))
-        if body is None or _WS.sub("", text) not in body:
-            bad.append(f"{k} 사건 {u['사건']} 본문에 없는 문구 {text[:30]!r}")
+        if body is None or _WS.sub("", u["문구"]) not in body:
+            bad.append(f"{k} 사건 {u['사건']} 본문에 없는 문구 {u['문구'][:30]!r}")
             continue
         src[k] = {
             "지문": k,
             "사건": str(u["사건"]),
             "원천판단": u["원천판단"],
-            "문구": text,
+            "문구": u["문구"],
+            "마스킹": True,
             "원천": FP_SOURCE,
         }
     _units_fail("보도자료", bad)
@@ -997,7 +1001,7 @@ FP = Round(
     cite_of=fp_cite_of,
     exceptions=FP_EXCEPTIONS,
     mok_ho={},
-    head=("사건", "원천판단"),
+    head=("사건", "원천판단", "마스킹"),
     sheet_head=("사건", "원천판단"),
     units=lambda us: fp_units(us),
 )
@@ -1005,7 +1009,14 @@ FP = Round(
 
 def _merge(R: Round, units: pathlib.Path, r1: pathlib.Path, r2: pathlib.Path) -> dict:
     """단위 표(JSON 목록) + 판독 TSV 둘 → **판독 원자료**(원천)를 쓰고 채택·시트를 계산한다."""
-    src = R.units(json.loads(units.read_text(encoding="utf-8")))
+    txt = units.read_text(encoding="utf-8")
+    # 단위 표는 JSON 목록(화장품 `단위.json`) 또는 JSON Lines(보도자료 — 추출기가 낸 `ftc_press_old_units.jsonl`)
+    got = (
+        [json.loads(x) for x in txt.splitlines() if x.strip()]
+        if units.suffix == ".jsonl"
+        else json.loads(txt)
+    )
+    src = R.units(got)
     parse = lambda line: _parse(R, line)  # noqa: E731
     a, b = read(r1, parse), read(r2, parse)
     _whole(src, a, b)

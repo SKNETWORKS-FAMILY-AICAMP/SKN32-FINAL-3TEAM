@@ -18,9 +18,10 @@
 
 ★ **첨부**
   · 한글 5.x — `preprocess.hwp` 로 문단 글자를 읽는다
-  · 🔴 한글 3.0(`HWP Document File` 머리 · 2002~2004 12 개) — `soffice`(LibreOffice)가 있으면 텍스트로 바꾼다.
-    🚨 글상자 안 글은 빠진다(원장 09-30 ④). LibreOffice 가 없으면 **읽지 못한 첨부로 적고** 본문만 둔다 —
-       그 첨부에서 뽑은 문구는 `fp_units` 대조에서 멈춘다(조용히 빠지지 않는다 · D-220)
+  · 🔴 한글 3.0(`HWP Document File` 머리 · 2001~2004 12 개) — `preprocess.hwp3` 가 조합형 글자를 훑는다.
+    ⛔ 처음에는 LibreOffice 로 바꿨다 — 본문을 거의 다 잃었다(34743 · 34745 의 광고 문구 0 · 2026-09-30 실측).
+    🚨 훑기라 못 읽는 자리가 남는다(34811 · 35185 법 위반 내용) — 글이 안 나온 첨부는 **읽지 못한 첨부로 적는다**
+  · 🆕 괘선 표(1997~2000 본문) — 칸 글을 이어 붙여 본문 끝에 싣는다(`box_cells`)
   · PDF 첨부는 이 범위에 없다(2008 년부터)
 
 🔴 **마스킹 없이는 파생을 내보내지 않는다** (D-72 fail-closed · `preprocess.mask.apply_policy`).
@@ -37,10 +38,7 @@ import html
 import json
 import pathlib
 import re
-import shutil
-import subprocess
 import sys
-import tempfile
 
 from collect import registry
 
@@ -51,7 +49,6 @@ OUT = pathlib.Path("data/derived/ftc_press_old.jsonl")
 UNTIL = "2007-12-31"
 _DATE = re.compile(r"<em>등록</em>\s*:\s*(\d{4}-\d{2}-\d{2})")
 _TITLE = re.compile(r'class="p-table__subject_text">\s*(.*?)\s*(?:<!--|</div>)', re.S)
-_HWP3 = b"HWP Document File"
 
 
 def html_text(raw: bytes) -> str:
@@ -82,28 +79,36 @@ def _hwp5(path: pathlib.Path) -> str:
     return "\n".join(out)
 
 
-def _hwp3(path: pathlib.Path) -> str | None:
-    """한글 3.0 → 글(LibreOffice). 없거나 실패하면 None — 읽지 못한 것으로 적는다."""
-    exe = shutil.which("soffice") or shutil.which("libreoffice")
-    if not exe:
-        return None
-    with tempfile.TemporaryDirectory() as d:
-        subprocess.run(
-            [
-                exe,
-                "--headless",
-                "--convert-to",
-                "txt:Text (encoded):UTF8",
-                "--outdir",
-                d,
-                str(path),
-            ],
-            capture_output=True,
-            timeout=180,
-            check=False,
-        )
-        got = pathlib.Path(d) / (path.stem + ".txt")
-        return got.read_text(encoding="utf-8", errors="ignore") if got.exists() else None
+#: 표 괘선 — 세로선과 가로 구분선. 🚨 옛 보도자료(1997~2000)는 표를 괘선 글자로 그렸다 — 칸 글이 줄마다 다른 칸과 섞인다
+_VBAR = re.compile(r"[│┃]")
+_RULE = re.compile(r"[─━]{3,}")
+
+
+def box_cells(text: str) -> list[str]:
+    """괘선 표 → **칸마다 이어 붙인 글**. 줄마다 세로선으로 칸을 나누고, 같은 열의 조각을 가로 구분선까지 잇는다.
+
+    ★ 칸 안의 글이 여러 줄에 걸치면 원문에서는 다른 칸과 번갈아 나온다(34128 「어떠한 조건에서도 │ … 환경 │ … 호르몬이」) —
+       이것이 없으면 그 문구가 원천에 「없는」 것으로 보인다. 🚨 줄바꿈 자리에 공백이 하나 들어간다(대조는 공백을 보지 않는다).
+    """
+    out: list[str] = []
+    cols: dict[int, list[str]] = {}
+
+    def flush() -> None:
+        for k in sorted(cols):
+            cell = re.sub(r"\s+", " ", " ".join(cols[k])).strip()
+            if cell:
+                out.append(cell)
+        cols.clear()
+
+    for line in text.splitlines():
+        if _RULE.search(line) or not _VBAR.search(line):
+            flush()
+            continue
+        for i, part in enumerate(_VBAR.split(line)):
+            if part.strip():
+                cols.setdefault(i, []).append(part.strip())
+    flush()
+    return out
 
 
 def attachments(nid: str) -> tuple[list[str], list[str]]:
@@ -113,11 +118,13 @@ def attachments(nid: str) -> tuple[list[str], list[str]]:
         if p.suffix.lower() != ".hwp":
             unread.append(p.name)
             continue
-        t = _hwp3(p) if p.read_bytes()[: len(_HWP3)] == _HWP3 else _hwp5(p)
-        if t is None:
-            unread.append(p.name)
-        else:
+        from preprocess import hwp3  # noqa: PLC0415
+
+        t = hwp3.text(p) if hwp3.is_hwp3(p) else _hwp5(p)
+        if t.strip():
             texts.append(t)
+        else:
+            unread.append(p.name)
     return texts, unread
 
 
@@ -137,12 +144,16 @@ def extract() -> list[dict]:
         t = _TITLE.search(s)
         att, unread = attachments(nid)
         body = html_text(raw)
+        # 🆕 괘선 표의 칸 글 — 본문 뒤에 붙인다(원문 줄은 그대로 두고 · 대조가 둘 다 본다)
+        cells = box_cells(body)
         rows.append(
             {
                 "사건": nid,
                 "등록": m.group(1),
                 "제목": re.sub(r"\s+", " ", t.group(1)).strip() if t else "",
-                "본문": "\n\n".join([body, *att]),
+                "본문": "\n\n".join(
+                    [body, *att, *(["[괘선 표 칸]\n" + "\n".join(cells)] if cells else [])]
+                ),
                 "첨부_못읽음": unread,
                 "원천": SOURCE_ID,
             }
@@ -170,9 +181,51 @@ def masked(rows: list[dict]) -> tuple[list[dict], collections.Counter, list[dict
     return out, changed, log
 
 
+#: 🆕 마스킹된 문구 단위 — `guide_statute_round fp-merge --units` 가 읽는다
+OUT_UNITS = pathlib.Path("data/derived/ftc_press_old_units.jsonl")
+#: 문구 자리 표시 — 마스킹을 **본문 안에서** 건 뒤 이 사이를 꺼낸다(사용자 영역 글자 · 원문에 나오지 않는다)
+_OPEN, _CLOSE = "\ue000", "\ue001"
+_WS = re.compile(r"\s+")
+
+
+def mask_units(rows: list[dict], units: list[dict]) -> tuple[list[dict], list[str]]:
+    """문구 단위(마스킹 전 · 사람 · 판독자가 뽑은 것) → **본문 안에서 마스킹한** 문구.
+
+    🔴 문구만 따로 마스킹하면 안 된다 — 마스킹은 문서가 스스로 밝힌 상호를 문서 전체에서 지운다(`mask.doc_org_names`).
+       따로 걸면 본문에서는 `[업체]` 인 이름이 문구에는 그대로 남는다(34657 「… 대한항공이 더욱 편리합니다」 · 2026-09-30 실측).
+       ★ 그래서 원문 본문에서 문구 자리를 찾아 표시를 끼우고 **본문 전체를 마스킹한 뒤** 표시 사이를 꺼낸다.
+    🔴 원문에서 못 찾은 문구 · 표시가 깨진 문구는 돌려주지 않고 `bad` 로 모은다 — 부르는 쪽이 멈춘다 (D-220).
+    """
+    from preprocess.mask import apply_policy  # noqa: PLC0415
+
+    by = {r["사건"]: r for r in rows}
+    out, bad = [], []
+    for u in units:
+        r = by.get(str(u["사건"]))
+        pat = r"\s*".join(re.escape(c) for c in re.sub(r"\s+", "", u["문구"]))
+        m = re.search(pat, r["본문"]) if r else None
+        if not m:
+            bad.append(f"{u['지문']} 사건 {u['사건']} 원문에 없는 문구 {u['문구'][:30]!r}")
+            continue
+        body = r["본문"]
+        marked = body[: m.start()] + _OPEN + body[m.start() : m.end()] + _CLOSE + body[m.end() :]
+        got = apply_policy(marked, "", SOURCE_ID, [])
+        seg = re.search(re.escape(_OPEN) + "(.*?)" + re.escape(_CLOSE), got, re.S)
+        if not seg:
+            bad.append(f"{u['지문']} 마스킹이 문구 경계를 먹었다 {u['문구'][:30]!r}")
+            continue
+        out.append({**u, "문구": re.sub(r"\s+", " ", seg.group(1)).strip(), "마스킹": True})
+    return out, bad
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="공정위 보도자료 1997~2007 → 사건 레코드")
     ap.add_argument("--dump", action="store_true", help=f"{OUT} 로 쓴다 (마스킹 정책 필요)")
+    ap.add_argument(
+        "--units",
+        type=pathlib.Path,
+        help=f"문구 단위 JSON(마스킹 전) — `--dump` 와 함께 주면 본문 안에서 마스킹해 {OUT_UNITS} 로 쓴다",
+    )
     a = ap.parse_args()
     rows = extract()
     unread = [x for r in rows for x in r["첨부_못읽음"]]
@@ -190,6 +243,25 @@ def main() -> int:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(f"  🔴 마스킹 — 바뀐 필드 {dict(changed)} · 치환 {len(log)}건")
         print(f"  → {OUT}  ({len(out)}줄)")
+        if a.units:
+            got, bad = mask_units(rows, json.loads(a.units.read_text(encoding="utf-8")))
+            if bad:
+                print(
+                    f"🔴 문구 단위 {len(bad)}개를 원문에서 못 찾았다 — 쓰지 않았다", file=sys.stderr
+                )
+                for b in bad[:10]:
+                    print(f"  · {b}", file=sys.stderr)
+                return 1
+            with OUT_UNITS.open("w", encoding="utf-8", newline="\n") as fh:
+                for u in got:
+                    fh.write(json.dumps(u, ensure_ascii=False) + "\n")
+            before = {
+                x["지문"]: _WS.sub("", x["문구"])
+                for x in json.loads(a.units.read_text(encoding="utf-8"))
+            }
+            # 공백은 원문 자리의 것으로 바뀐다 — 마스킹으로 **글자가** 바뀐 것만 센다
+            moved = sum(1 for u in got if before[u["지문"]] != _WS.sub("", u["문구"]))
+            print(f"  → {OUT_UNITS}  (문구 {len(got)} · 마스킹으로 바뀐 것 {moved})")
     return 0
 
 

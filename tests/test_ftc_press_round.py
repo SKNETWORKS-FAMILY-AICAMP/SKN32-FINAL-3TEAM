@@ -1,7 +1,7 @@
 """공정위 보도자료 1997~2007 문구 판 — 사건 레코드 → 판독 → 채택 → 평가 (2026-09-30 · 동결 전 판정 ⑤-1·3 (나)).
 
 🔴 무엇을 막나
-   ① 마스킹 정책 없이 보도자료 문구가 판독 원자료 · 골든셋으로 가는 것 (D-72 fail-closed)
+   ① 마스킹 정책 없이 · 또는 문구만 따로 마스킹해(문맥의 상호가 남는다) 보도자료 문구가 판독 원자료로 가는 것 (D-72)
    ② 원천 본문에 없는 문구(뽑은 이가 고쳐 쓴 것 · 원천이 바뀐 것)가 채택되는 것 (D-220)
    ③ 화장품 코드(1 · 2 · 4 · 별표5목)가 보도자료 판독에 섞이는 것
    ④ 판정 대기가 남았는데 평가에 들어가는 것 · 대상 N 이 평가에 들어가는 것
@@ -16,7 +16,7 @@ import pathlib
 import pytest
 
 from collect import statute
-from preprocess import mask, split
+from preprocess import ftc_press_old, hwp3, mask, split
 from scripts import guide_statute_round as g
 
 HEAD = "지문\t대상\t주근거\t부근거\t별표5목\t조건\t제외목\t메모\n"
@@ -58,8 +58,9 @@ def fp(tmp_path, monkeypatch):
             "사건": "1",
             "문구": "듀라셀은 2배, 3배 최고 5배 오래갑니다",
             "원천판단": "부당한 비교광고",
+            "마스킹": True,
         },
-        {"지문": k2, "사건": "2", "문구": "부도덕한 기업", "원천판단": "비방광고"},
+        {"지문": k2, "사건": "2", "문구": "부도덕한 기업", "원천판단": "비방광고", "마스킹": True},
     ]
     up = tmp_path / "units.json"
     up.write_text(json.dumps(units, ensure_ascii=False), encoding="utf-8")
@@ -93,12 +94,65 @@ def test_지문은_사건과_공백을_접은_문구로_정해진다() -> None:
 
 
 @pytest.mark.gate
-def test_마스킹_정책이_없으면_멈춘다(fp, monkeypatch) -> None:
-    up, r1, r2, *_ = fp
-    monkeypatch.delitem(mask.POLICY, "ftc_press")
+def test_마스킹_전_문구는_받지_않는다(fp) -> None:
+    *_, k1, _k2 = fp
+    u = {"지문": k1, "사건": "1", "문구": "듀라셀은 2배, 3배 최고 5배 오래갑니다", "원천판단": "x"}
+    with pytest.raises(SystemExit, match="마스킹 전 문구"):
+        g.fp_units([u])
+
+
+@pytest.mark.gate
+def test_문구는_본문_안에서_마스킹된다(monkeypatch) -> None:
+    """🔴 문구만 따로 걸면 문서가 밝힌 상호가 문구에 남는다(34657 실측) — 본문 안에서 걸어 꺼낸다."""
+    monkeypatch.setitem(mask.POLICY, "ftc_press", mask.POLICY["ftc"])
+    body = "(주)대한항공은 광고에서\n동경 여행은 따져 볼수록 대한항공이 더욱 편리합니다\n라는 제목"
+    phrase = "동경 여행은 따져 볼수록 대한항공이 더욱 편리합니다"
+    assert "대한항공" in mask.apply_policy(phrase, "", "ftc_press", [])  # 따로 걸면 남는다
+    got, bad = ftc_press_old.mask_units(
+        [{"사건": "9", "본문": body}], [{"지문": "fp:x", "사건": "9", "문구": phrase}]
+    )
+    assert not bad and "대한항공" not in got[0]["문구"] and got[0]["마스킹"] is True
+    assert got[0]["문구"] in mask.apply_policy(body, "", "ftc_press", [])
+    _, bad = ftc_press_old.mask_units(
+        [{"사건": "9", "본문": body}], [{"지문": "fp:y", "사건": "9", "문구": "없는 문구"}]
+    )
+    assert bad
+
+
+@pytest.mark.gate
+def test_마스킹_정책이_없으면_멈춘다() -> None:
+    assert "ftc_press" not in mask.POLICY or pytest.skip(
+        "정책이 등재됐다 — 이 게이트는 등재 전 판을 지킨다"
+    )
     with pytest.raises(mask.MaskPolicyError):
-        g.fp_merge(up, r1, r2)
-    assert not g.FP_READINGS.exists()
+        ftc_press_old.mask_units(
+            [{"사건": "9", "본문": "광고 문구"}],
+            [{"지문": "fp:x", "사건": "9", "문구": "광고 문구"}],
+        )
+
+
+@pytest.mark.gate
+def test_괘선_표는_칸마다_이어_붙인다() -> None:
+    table = (
+        "┌───┬──────┐\n"
+        "│허위 │·어떠한 조건에서도 │\n"
+        "│·과장│ 환경 │\n"
+        "│ │ 호르몬이 검출되지 │\n"
+        "├───┼──────┤\n"
+        "│비방 │·왜 아기에게 │\n"
+        "└───┴──────┘"
+    )
+    cells = ftc_press_old.box_cells(table)
+    assert "·어떠한 조건에서도 환경 호르몬이 검출되지" in cells
+    assert "허위 ·과장" in cells and "·왜 아기에게" in cells
+
+
+@pytest.mark.gate
+def test_한글3_조합형_글자와_잡음_조각() -> None:
+    assert hwp3.char_of(0x8861) == "가"  # 조합형 「가」
+    assert hwp3.char_of(ord("A")) == "A" and hwp3.char_of(13) == "\n" and hwp3.char_of(5) == "\x00"
+    assert hwp3._junk("몔뭉") and hwp3._junk("잆딬몔뭉")  # 이진 값이 만든 짧은 덩어리
+    assert not hwp3._junk("국산 태양초 100%") and not hwp3._junk("헛똑똑이 엄마는 되지 않겠다!")
 
 
 @pytest.mark.gate
