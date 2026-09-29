@@ -135,7 +135,10 @@ def inputs() -> tuple[pathlib.Path, ...]:
     got = INPUTS + ((GUIDE_ADOPTED,) if st and not st["대기"] else ())
     # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집도 같은 규칙이다(대기 0 일 때만 입력)
     cq = cosmetic_state()
-    return got + ((COSMETIC_ADOPTED,) if cq and not cq["대기"] else ())
+    got += (COSMETIC_ADOPTED,) if cq and not cq["대기"] else ()
+    # 🆕 2026-09-30 (동결 전 판정 ⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 같은 규칙
+    fp = ftc_press_state()
+    return got + ((FTC_PRESS_ADOPTED,) if fp and not fp["대기"] else ())
 
 
 def fingerprint() -> dict[str, dict]:
@@ -344,13 +347,37 @@ def cosmetic_docs() -> list[dict]:
     🔴 `대상 N`(광고 표현이 아님) 행은 평가에 안 넣는다 — 수는 `cosmetic_state()` 와 채택본이 들고 있다.
     🔴 조건 `L` 행은 유형이 비고 **적법**이다(`golden.is_negative`) · M · D 는 적법이 아니다(해설서와 같다).
     """
-    st = cosmetic_state()
+    return _round_docs(cosmetic_state(), COSMETIC_ADOPTED, "mfds_cosmetic_ad_qa")
+
+
+#: 🆕 2026-09-30 (동결 전 판정 ⑤-1·3 (나)) — 공정위 보도자료 1997~2007 문구 판. 🚨 경로의 정본은
+#:    `scripts/guide_statute_round.py` `FP_READINGS` · `FP_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99)
+FTC_PRESS_READINGS = pathlib.Path("data/derived/labels/ftc_press_old/readings.jsonl")
+FTC_PRESS_ADOPTED = pathlib.Path("data/derived/labels/ftc_press_old/adopted.jsonl")
+
+
+def ftc_press_state() -> dict[str, int] | None:
+    """보도자료 문구 판의 상태 — 해설서 · 화장품과 같은 규칙."""
+    return _round_state(FTC_PRESS_READINGS, FTC_PRESS_ADOPTED, "fp-rebuild")
+
+
+def ftc_press_docs() -> list[dict]:
+    """공정위 보도자료 1997~2007 의 평가 라벨 — 전량 평가 · **대기가 0 일 때만**(화장품과 같다).
+
+    ★ 결정문(`ftc_decisions_body`)의 비교 · 비방 사건은 2008 년 이후만 있다 — 이 범위는 학습과 사건이 겹치지 않는다
+      (원장 09-30 ④). 문구가 학습과 겹치면 `golden` 의 문구 단위 거름이 평가 쪽을 뺀다.
+    """
+    return _round_docs(ftc_press_state(), FTC_PRESS_ADOPTED, "ftc_press")
+
+
+def _round_docs(st: dict[str, int] | None, adopted: pathlib.Path, source: str) -> list[dict]:
+    """문구 판 채택본 → 분할 문서(행 하나 = 문서 하나). 🔴 대기가 남으면 빈 목록 · 대상 N 은 뺀다 (D-99 — 두 판이 같은 함수)."""
     if not st or st["대기"]:
         return []
     return [
         {
             "doc_id": r["지문"],
-            "원천": "mfds_cosmetic_ad_qa",
+            "원천": source,
             "유형": r["labels"],
             "근거": r["근거"],
             "근거_후보": r["근거_후보"],
@@ -361,7 +388,7 @@ def cosmetic_docs() -> list[dict]:
             "문구": [r["문구"]],
             "단위": "문장",
         }
-        for r in _jsonl(COSMETIC_ADOPTED)
+        for r in _jsonl(adopted)
         if r["대상"] == "Y"
     ]
 
@@ -491,7 +518,9 @@ def plan(seed: int = 20260909) -> dict:
     guide = guide_docs()
     # 🆕 2026-09-30 (D-285 개정 5 · 팀장 판정 ⑤-4 (나)) — 화장품 질의응답집 2025 는 전량 평가다. 해설서와 따로 센다 (D-160)
     cosmetic = cosmetic_docs()
-    sent = list(sealed.values()) + guide + cosmetic + neg_eval
+    # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 전량 평가다. 따로 센다 (D-160)
+    press = ftc_press_docs()
+    sent = list(sealed.values()) + guide + cosmetic + press + neg_eval
 
     def tally(rows: list[dict]) -> dict[str, int]:
         c: collections.Counter = collections.Counter()
@@ -508,9 +537,15 @@ def plan(seed: int = 20260909) -> dict:
         return sum(len(d.get("문구_이유") or []) for d in rows)
 
     def tally_ho(rows: list[dict]) -> dict[str, int]:
-        """🆕 D-282 — **호 단위** 셈. D-40 의 30 은 이 단위에 건다 (유형 셈은 표시용 파생값)."""
+        """🆕 D-282 — **호 단위** 셈. D-40 의 30 은 이 단위에 건다 (유형 셈은 표시용 파생값).
+
+        🔄 2026-09-30 — 🔴 **조건 M · D · L 행은 세지 않는다.** 그 행은 호로 채점되지 않는다(`eval_rule.scored` · L 은 적법).
+           ⛔ 세면 보류(M) 행의 근거가 D-40 의 30 을 채운 것처럼 보인다 — 보도자료 3호가 채점 28 인데 31 ✅ 로 찍혔다(작업공간 실측).
+        """
         c: collections.Counter = collections.Counter()
         for d in rows:
+            if d.get("조건") in ("M", "D", "L"):
+                continue
             for k in {statute.ho_key(x) for x in d.get("근거") or []}:
                 c[k] += 1
         return dict(sorted(c.items()))
@@ -559,6 +594,7 @@ def plan(seed: int = 20260909) -> dict:
             "test_sentence_ftc봉인": {"문서": len(sealed), "문구": phrases(list(sealed.values()))},
             "test_sentence_해설서사람라벨": {"문서": len(guide), "문구": phrases(guide)},
             "test_sentence_화장품질의응답": {"문서": len(cosmetic), "문구": phrases(cosmetic)},
+            "test_sentence_공정위보도자료": {"문서": len(press), "문구": phrases(press)},
             "사전(사례집)": {"문서": len(term), "문구": phrases(term)},
         },
         "counts": {
@@ -568,6 +604,7 @@ def plan(seed: int = 20260909) -> dict:
             "test_sentence_ftc봉인": tally(list(sealed.values())),
             "test_sentence_해설서사람라벨": tally(guide),
             "test_sentence_화장품질의응답": tally(cosmetic),
+            "test_sentence_공정위보도자료": tally(press),
             "사전(사례집)": term_pos,
         },
         "negatives": {
@@ -690,7 +727,17 @@ def main() -> int:
             + (
                 "  → 대기가 0 이 되면 평가에 들어간다 (D-285 개정 5)"
                 if cq["대기"]
-                else f"  → 평가에 들어갔다 ({m['sizes']['test_sentence_화장품질의응답']['문구']}문구)"
+                else f"  → 평가에 들어갔다 ({m['sizes'].get('test_sentence_화장품질의응답', {}).get('문구', '?')}문구)"
+            )
+        )
+    fp = ftc_press_state()
+    if fp:
+        print(
+            f"  공정위 보도자료 1997~2007 조문·조건 판 — 전체 {fp['전체']:,} · 채택 {fp['채택']:,} · **대기 {fp['대기']:,}**"
+            + (
+                "  → 대기가 0 이 되면 평가에 들어간다"
+                if fp["대기"]
+                else f"  → 평가에 들어갔다 ({m['sizes'].get('test_sentence_공정위보도자료', {}).get('문구', '?')}문구)"
             )
         )
     if m["pending_guide"]:

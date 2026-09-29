@@ -665,21 +665,27 @@ def write_input(out: pathlib.Path) -> int:
     return len(rs)
 
 
-# ══ 화장품 질의응답집 (2026-09-30 · D-285 개정 5 · 지시서 `라벨링_지시서_2026-09-25_질의응답집_화장품_조문·조건.md`) ══
+# ══ 문구 판 — 화장품 질의응답집 · 공정위 보도자료 (2026-09-30 · D-285 개정 5 · D-99) ══════════════════
 #
-# ★ 해설서 판과 **같은 함수**를 쓴다(D-99 · 지시서 §7 「사본을 만들지 않는다」) — `read` · `_whole` · `agree`(보수 합성 ·
-#   D↔M → M · 호만 안 겹침 → 후보) · `load_decisions` · `_import_sheet`. 화장품만의 것은 아래 넷이다.
+# ★ 해설서 판과 **같은 함수**를 쓴다(D-99 · 화장품 지시서 §7 「사본을 만들지 않는다」) — `read` · `_whole` · `agree`(보수 합성 ·
+#   D↔M → M · 호만 안 겹침 → 후보) · `load_decisions` · `_import_sheet`. 원천이 둘(화장품 `cq` · 보도자료 `fp`)이라
+#   원천마다 다른 것은 `Round` 한 벌에 모았다 — 나머지 함수는 원천을 모른다. 원천만의 것은 아래 넷이다.
 #     ① 판독 한 줄의 꼴 — `지문 \t 대상 \t 주근거 \t 부근거 \t 별표5목 \t 조건 \t 제외목 \t 메모` (원천결손 칸이 없다)
+#        근거 코드 · 제외목 값 · 별표5목 표가 원천마다 다르다(`Round.cite_of` · `exceptions` · `mok_ho`)
 #     ② `대상` — 둘 다 N 이면 평가에서 뺀다(채택본에 `대상: N` 으로 남긴다 · 대기 아님) · 하나만 N 이면 시트 (지시서 §5)
 #     ③ 조건 `L`(적법) — **합성하지 않는다**: 둘 다 L 일 때만 채택 · L ↔ 그 밖은 전부 시트 (지시서 §5 · 기대 응답이 정반대)
-#     ④ `별표5목` — 둘이 같을 때만 남긴다 · 한 판독 안에서 목 ↔ 주근거가 §1-1 표와 어긋나면 그 판독은 문제(시트로)
+#     ④ `별표5목` — 둘이 같을 때만 남긴다 · 한 판독 안에서 목 ↔ 주근거가 §1-1 표와 어긋나면 그 판독은 문제(시트로) · 화장품만
 # 🚨 해설서 쪽 규칙(3.나 유형 · 조제유류 목 · 거래 조건 · 표시요건 부류)은 **식품 [별표 1] 규칙**이라 여기 걸지 않는다.
 #    화장품 표시요건은 판독 `메모` 에만 있다 — ⬜ 부류 규칙은 화장품 지침 [별표 2] 로 따로 정할 때 (지금은 싣지 않는다).
 #
-# 🔴 **단위(지문 ↔ 문구) 표는 판독 원자료가 들고 있다.** 09-25 시험 판독 때 단위를 뽑은 스크립트가 저장소에 없고
-#    (지시서 §4 「만든 스크립트는 아직 저장소에 없다」) 지문 규칙도 되살리지 못했다(2026-09-30 실측 — 필드 조합 대입 불일치).
-#    ⛔ 그래서 지문을 다시 계산하지 않는다. 대신 **원천 대조**를 건다 — 단위마다 그 문항의 `인용표현` 에 문구가 그대로
-#    있어야 한다(`cq_units`). 원천(`mfds_cosmetic_ad_qa.jsonl`)이 바뀌어 문구가 사라지면 멈춘다 (D-220).
+# 🔴 **단위(지문 ↔ 문구) 표는 판독 원자료가 들고 있다.** 두 원천 다 원천 대조를 건다 — 원천이 바뀌어 문구가 사라지면 멈춘다 (D-220).
+#    · 화장품 — 09-25 시험 판독 때 단위를 뽑은 스크립트가 저장소에 없고 지문 규칙도 되살리지 못했다(2026-09-30 실측).
+#      ⛔ 그래서 지문을 다시 계산하지 않는다. 단위마다 그 문항의 `인용표현` 에 문구가 그대로 있어야 한다(`cq_units`).
+#    · 보도자료 — 지문은 `fp_key_of`(사건 · 마스킹 전 문구의 sha256) · 문구는 **마스킹된** 사건 본문에 공백만 다르게 있어야
+#      한다(`fp_units`). 원천 레코드는 `preprocess.ftc_press_old` 가 낸다.
+
+import dataclasses  # noqa: E402
+from collections.abc import Callable  # noqa: E402
 
 CQ_SOURCE = "mfds_cosmetic_ad_qa"
 CQ_QA = ROOT / "data" / "derived" / "mfds_cosmetic_ad_qa.jsonl"
@@ -693,10 +699,30 @@ CQ_DECISIONS = CQ_DIR / "decisions.jsonl"
 CQ_AUDIT = CQ_DIR / "audit.jsonl"
 #: 🚨 `build/labels/cosmetic_qa/팀장판정표.csv`(09-25 · 사람이 채우는 중일 수 있다)를 **덮지 않는다** — 계산된 시트는 다른 이름
 CQ_TEAM_SHEET = ROOT / "build" / "labels" / "cosmetic_qa__팀장판정표.csv"
-CQ_TEAM_COLS = (
-    "지문",
-    "문항",
-    "문구",
+CQ_KEY_RE = re.compile(r"^cq:[a-z2-7]{12}$")
+#: 지시서 §2 — L(조건 없이 적법)을 더한다
+CQ_CONDITIONS = (*CONDITIONS, "L")
+#: 지시서 §3-3 — 이 문구를 적법하게 만들 수 있는 예외. 🔴 `근거` 에 오지 않는다 (D-238)
+CQ_EXCEPTIONS = frozenset(
+    ("기능성심사", "실증", "보습일시", "색조연출", "문헌인용", "천연유기농안내서")
+)
+#: 지시서 §1-1 — 시행규칙 [별표 5] 제2호의 목 → 화장품법 제13조제1항 호. 🔶 다~카 → 4 는 해석이다(팀장 확인 대상)
+CQ_MOK_HO = {"가": 1, "나": 2, **{m: 4 for m in "다라마바사아자차카"}}
+
+#: 🆕 2026-09-30 (동결 전 판정 ⑤-1·3 (나)) — 공정위 보도자료 1997~2007 · 지시서 `라벨링_지시서_2026-09-30_공정위보도자료_…`
+FP_SOURCE = "ftc_press"
+FP_CASES = ROOT / "data" / "derived" / "ftc_press_old.jsonl"
+FP_DIR = ROOT / "data" / "derived" / "labels" / "ftc_press_old"
+FP_READINGS = FP_DIR / "readings.jsonl"
+FP_ADOPTED = FP_DIR / "adopted.jsonl"
+FP_DECISIONS = FP_DIR / "decisions.jsonl"
+FP_AUDIT = FP_DIR / "audit.jsonl"
+FP_TEAM_SHEET = ROOT / "build" / "labels" / "ftc_press_old__팀장판정표.csv"
+FP_KEY_RE = re.compile(r"^fp:[a-z2-7]{12}$")
+#: 지시서 §1 — `실증`(표시광고법 제5조)만
+FP_EXCEPTIONS = frozenset(("실증",))
+
+TEAM_TAIL = (
     "대기사유",
     "판독1",
     "판독2",
@@ -709,15 +735,6 @@ CQ_TEAM_COLS = (
     "메모",
     "판정자",
 )
-CQ_KEY_RE = re.compile(r"^cq:[a-z2-7]{12}$")
-#: 지시서 §2 — L(조건 없이 적법)을 더한다
-CQ_CONDITIONS = (*CONDITIONS, "L")
-#: 지시서 §3-3 — 이 문구를 적법하게 만들 수 있는 예외. 🔴 `근거` 에 오지 않는다 (D-238)
-CQ_EXCEPTIONS = frozenset(
-    ("기능성심사", "실증", "보습일시", "색조연출", "문헌인용", "천연유기농안내서")
-)
-#: 지시서 §1-1 — 시행규칙 [별표 5] 제2호의 목 → 화장품법 제13조제1항 호. 🔶 다~카 → 4 는 해석이다(팀장 확인 대상)
-CQ_MOK_HO = {"가": 1, "나": 2, **{m: 4 for m in "다라마바사아자차카"}}
 
 
 def cq_cite_of(code: str) -> str:
@@ -734,14 +751,46 @@ def cq_cite_of(code: str) -> str:
         )
     if code in ("1", "2", "4"):
         return statute.cite(*statute.COSM, int(code))
-    m = re.fullmatch(r"공([1-4])", code)
-    if m:
-        return statute.fair(int(m.group(1)))
-    raise ValueError(f"근거 코드 꼴이 아니다: {code!r}")
+    return fp_cite_of(code)
 
 
-def cq_parse_line(line: str) -> dict:
-    """화장품 판독 TSV 한 줄 → 레코드. 해설서 `parse_line` 과 같은 칸 이름을 쓴다(`agree` 가 그대로 읽는다 · D-99)."""
+def fp_cite_of(code: str) -> str:
+    """보도자료 판독 코드 → 인용. `공1`~`공4` = 표시광고법 §3① 호만 (지시서 §1). 모르는 꼴은 멈춘다 (D-220)."""
+    m = re.fullmatch(r"공([1-4])", code.strip())
+    if not m:
+        raise ValueError(f"근거 코드 꼴이 아니다: {code!r}")
+    return statute.fair(int(m.group(1)))
+
+
+def fp_key_of(case: str, phrase: str) -> str:
+    """보도자료 문구의 지문 — 사건 번호 · 공백을 하나로 접은 **마스킹 전** 문구. base32 소문자 12자(`key_of` 와 같은 이유)."""
+    raw = f"{case}|" + re.sub(r"\s+", " ", phrase).strip()
+    return (
+        "fp:" + base64.b32encode(hashlib.sha256(raw.encode("utf-8")).digest()).decode()[:12].lower()
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class Round:
+    """원천 하나의 문구 판 설정. 🚨 경로는 **모듈 전역 이름**으로 든다(`{prefix}_READINGS` …) — 게이트가 임시 폴더로 갈아 끼운다."""
+
+    prefix: str
+    cmd: str
+    cite_of: Callable[[str], str]
+    exceptions: frozenset[str]
+    mok_ho: dict[str, int]
+    #: 단위 표에서 채택본 · 판정표로 옮겨 싣는 칸(지문 · 문구 · 원천 말고)
+    head: tuple[str, ...]
+    #: 판정표에 싣는 칸(지문 · 문구 말고) — 정렬도 이 순서
+    sheet_head: tuple[str, ...]
+    units: Callable[[list[dict]], dict[str, dict]]
+
+    def path(self, name: str) -> pathlib.Path:
+        return globals()[f"{self.prefix}_{name}"]
+
+
+def _parse(R: Round, line: str) -> dict:
+    """문구 판 판독 TSV 한 줄 → 레코드. 해설서 `parse_line` 과 같은 칸 이름을 쓴다(`agree` 가 그대로 읽는다 · D-99)."""
     p = line.rstrip("\n").split("\t")
     if len(p) < 7:
         raise ValueError(f"칸이 모자란다({len(p)}): {line[:80]!r}")
@@ -754,7 +803,7 @@ def cq_parse_line(line: str) -> dict:
         "근거": [],
         "별표5목": "",
         "제외목": [],
-        "원천결손": False,  # 화장품 판독에는 이 칸이 없다 — `agree` 가 읽으므로 거짓으로 둔다
+        "원천결손": False,  # 이 판독에는 이 칸이 없다 — `agree` 가 읽으므로 거짓으로 둔다
         "메모": memo,
         "문제": [],
     }
@@ -776,22 +825,25 @@ def cq_parse_line(line: str) -> dict:
         if c.startswith("기타:"):
             rec["문제"].append(f"인용 꼴 밖 {c}")
             continue
+        if c in R.exceptions:
+            rec["문제"].append(f"예외(제외목)는 근거가 아니다: {c!r}")
+            continue
         try:
-            rec["근거"].append(cq_cite_of(c))
+            rec["근거"].append(R.cite_of(c))
         except ValueError as e:
             rec["문제"].append(str(e))
     if mok not in ("", "-"):
-        if mok not in CQ_MOK_HO:
+        if mok not in R.mok_ho:
             rec["문제"].append(f"모르는 별표5목 {mok!r}")
-        elif prim != str(CQ_MOK_HO[mok]):
+        elif prim != str(R.mok_ho[mok]):
             # 지시서 §1-1 · §5 — 목과 주근거가 표와 어긋나면 합의여도 시트
-            rec["문제"].append(f"별표5목 {mok} 는 {CQ_MOK_HO[mok]}호인데 주근거가 {prim!r}")
+            rec["문제"].append(f"별표5목 {mok} 는 {R.mok_ho[mok]}호인데 주근거가 {prim!r}")
         else:
             rec["별표5목"] = mok
     for e in (x.strip() for x in exc.split(",")):
         if e in ("", "-"):
             continue
-        if e in CQ_EXCEPTIONS:
+        if e in R.exceptions:
             rec["제외목"].append(e)
         else:
             rec["문제"].append(f"모르는 제외목 {e!r}")
@@ -800,8 +852,8 @@ def cq_parse_line(line: str) -> dict:
     return rec
 
 
-def cq_agree(a: dict, b: dict) -> tuple[dict | None, str]:
-    """두 화장품 판독이 같은가 (지시서 §5). 해설서 `agree` 앞에 대상 · L 을 걸고, 뒤에 별표5목을 붙인다."""
+def _agree(R: Round, a: dict, b: dict) -> tuple[dict | None, str]:
+    """두 판독이 같은가 (지시서 §5). 해설서 `agree` 앞에 대상 · L 을 걸고, 뒤에 별표5목을 붙인다."""
     if a["문제"] or b["문제"]:
         return None, "판독 문제 — " + " / ".join(a["문제"] + b["문제"])
     if a["대상"] != b["대상"]:
@@ -826,11 +878,29 @@ def cq_agree(a: dict, b: dict) -> tuple[dict | None, str]:
         return None, why
     mok = a["별표5목"] if a["별표5목"] == b["별표5목"] else ""
     # 목은 그 호가 채택 근거에 남았을 때만 싣는다 — M 으로 근거가 비었거나 후보로 갈렸으면 뗀다
-    if mok and statute.cite(*statute.COSM, CQ_MOK_HO[mok]) not in {
+    if mok and statute.cite(*statute.COSM, R.mok_ho[mok]) not in {
         statute.ho_key(c) for c in got["근거"]
     }:
         mok = ""
     return {"대상": "Y", **got, "별표5목": mok}, ""
+
+
+def _units_fail(what: str, bad: list[str]) -> None:
+    if bad:
+        raise SystemExit(
+            f"🔴 {what} 단위 표가 원천과 어긋난다 {len(bad)} — 쓰지 않는다\n  "
+            + "\n  ".join(bad[:10])
+        )
+
+
+def _key_ok(re_: re.Pattern, k: str, seen: dict, bad: list[str]) -> bool:
+    if not re_.match(k):
+        bad.append(f"지문 꼴 {k!r}")
+        return False
+    if k in seen:
+        bad.append(f"지문이 두 번 {k}")
+        return False
+    return True
 
 
 def cq_units(units: list[dict]) -> dict[str, dict]:
@@ -846,14 +916,10 @@ def cq_units(units: list[dict]) -> dict[str, dict]:
             if r.get("분야") == "화장품":
                 qa[int(r["문항"])] = r
     src: dict[str, dict] = {}
-    bad = []
+    bad: list[str] = []
     for u in units:
         k = u["지문"]
-        if not CQ_KEY_RE.match(k):
-            bad.append(f"지문 꼴 {k!r}")
-            continue
-        if k in src:
-            bad.append(f"지문이 두 번 {k}")
+        if not _key_ok(CQ_KEY_RE, k, src, bad):
             continue
         q = qa.get(int(u["문항"]))
         if q is None or u["문구"] not in q["인용표현"]:
@@ -866,52 +932,108 @@ def cq_units(units: list[dict]) -> dict[str, dict]:
             "문구": u["문구"],
             "원천": CQ_SOURCE,
         }
-    if bad:
-        raise SystemExit(
-            f"🔴 화장품 단위 표가 원천과 어긋난다 {len(bad)} — 쓰지 않는다\n  "
-            + "\n  ".join(bad[:10])
-        )
+    _units_fail("화장품", bad)
     registry.assert_derivable(list(src.values()), who="guide_statute_round.cq_units")
     return src
 
 
-def cq_merge(units: pathlib.Path, r1: pathlib.Path, r2: pathlib.Path) -> dict:
-    """단위 표(JSON 목록) + 판독 TSV 둘 → **판독 원자료**(`CQ_READINGS` · 원천)를 쓰고 채택·시트를 계산한다."""
-    src = cq_units(json.loads(units.read_text(encoding="utf-8")))
-    a, b = read(r1, cq_parse_line), read(r2, cq_parse_line)
-    _whole(src, a, b)
-    CQ_READINGS.parent.mkdir(parents=True, exist_ok=True)
-    with CQ_READINGS.open("w", encoding="utf-8", newline="\n") as f:
-        for k, s in src.items():
-            rec = {
-                "지문": k,
-                "문항": s["문항"],
-                "자리": s["자리"],
-                "문구": s["문구"],
-                "판독1": a[k],
-                "판독2": b[k],
-            }
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    return cq_decide(src, a, b, load_decisions(src, CQ_DECISIONS))
+_WS = re.compile(r"\s+")
 
 
-def cq_rebuild() -> dict:
-    """판독 원자료만으로 채택·시트를 다시 계산한다 — 해설서 `rebuild` 와 같은 자리 (D-285 개정 3)."""
-    if not CQ_READINGS.exists():
+def fp_units(units: list[dict]) -> dict[str, dict]:
+    """보도자료 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 문구가 그 사건의 **마스킹된** 본문에 공백만 다르게 있어야 한다.
+
+    🚨 단위 표(`단위.json`)의 문구는 마스킹 전 글자다 → 여기서 원천과 **같은 정책**으로 마스킹해 싣는다(D-72 ·
+       `preprocess.mask.apply_policy`). 판독 원자료에 들어가는 순간부터 마스킹된 글자다. 이미 마스킹된 문구(원자료에서
+       다시 계산할 때)를 다시 걸어도 같다(자국 `[업체]` 는 다시 걸리지 않는다) — 게이트가 대조한다.
+    """
+    from preprocess.mask import apply_policy  # noqa: PLC0415
+
+    if not FP_CASES.exists():
         raise SystemExit(
-            f"🔴 {CQ_READINGS} 가 없다 — 판독 원자료(원천)는 명령으로 다시 안 나온다. 공유 저장소에서 받는다"
+            f"🔴 {FP_CASES} 가 없다 — 먼저: uv run python -m preprocess.ftc_press_old --dump"
         )
-    recs = [
-        json.loads(x) for x in CQ_READINGS.read_text(encoding="utf-8").splitlines() if x.strip()
-    ]
-    src = cq_units(recs)
+    cases = {}
+    for x in FP_CASES.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            r = json.loads(x)
+            cases[r["사건"]] = _WS.sub("", r["본문"])
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(FP_KEY_RE, k, src, bad):
+            continue
+        text = apply_policy(_WS.sub(" ", u["문구"]).strip(), "", FP_SOURCE, [])
+        body = cases.get(str(u["사건"]))
+        if body is None or _WS.sub("", text) not in body:
+            bad.append(f"{k} 사건 {u['사건']} 본문에 없는 문구 {text[:30]!r}")
+            continue
+        src[k] = {
+            "지문": k,
+            "사건": str(u["사건"]),
+            "원천판단": u["원천판단"],
+            "문구": text,
+            "원천": FP_SOURCE,
+        }
+    _units_fail("보도자료", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.fp_units")
+    return src
+
+
+CQ = Round(
+    prefix="CQ",
+    cmd="cq",
+    cite_of=cq_cite_of,
+    exceptions=CQ_EXCEPTIONS,
+    mok_ho=CQ_MOK_HO,
+    head=("문항", "자리"),
+    sheet_head=("문항",),
+    units=lambda us: cq_units(us),
+)
+FP = Round(
+    prefix="FP",
+    cmd="fp",
+    cite_of=fp_cite_of,
+    exceptions=FP_EXCEPTIONS,
+    mok_ho={},
+    head=("사건", "원천판단"),
+    sheet_head=("사건", "원천판단"),
+    units=lambda us: fp_units(us),
+)
+
+
+def _merge(R: Round, units: pathlib.Path, r1: pathlib.Path, r2: pathlib.Path) -> dict:
+    """단위 표(JSON 목록) + 판독 TSV 둘 → **판독 원자료**(원천)를 쓰고 채택·시트를 계산한다."""
+    src = R.units(json.loads(units.read_text(encoding="utf-8")))
+    parse = lambda line: _parse(R, line)  # noqa: E731
+    a, b = read(r1, parse), read(r2, parse)
+    _whole(src, a, b)
+    out = R.path("READINGS")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8", newline="\n") as f:
+        for k, s in src.items():
+            rec = {"지문": k, **{h: s[h] for h in R.head}, "문구": s["문구"]}
+            f.write(json.dumps({**rec, "판독1": a[k], "판독2": b[k]}, ensure_ascii=False) + "\n")
+    return _decide(R, src, a, b, load_decisions(src, R.path("DECISIONS")))
+
+
+def _rebuild(R: Round) -> dict:
+    """판독 원자료만으로 채택·시트를 다시 계산한다 — 해설서 `rebuild` 와 같은 자리 (D-285 개정 3)."""
+    p = R.path("READINGS")
+    if not p.exists():
+        raise SystemExit(
+            f"🔴 {p} 가 없다 — 판독 원자료(원천)는 명령으로 다시 안 나온다. 공유 저장소에서 받는다"
+        )
+    recs = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+    src = R.units(recs)
     a = {r["지문"]: r["판독1"] for r in recs}
     b = {r["지문"]: r["판독2"] for r in recs}
     _whole(src, a, b)
-    return cq_decide(src, a, b, load_decisions(src, CQ_DECISIONS))
+    return _decide(R, src, a, b, load_decisions(src, R.path("DECISIONS")))
 
 
-def cq_decide(src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -> dict:
+def _decide(R: Round, src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -> dict:
     """두 판독 → 채택본(생성물) · 팀장 판정표. 🔴 대상 N 행도 채택본에 남긴다(`대상: N`) — 대기와 가르려고.
 
     팀장 판정(`dec`)이 있는 행은 판정이 판독을 덮는다(`판독` = `팀장판정`) — 해설서 `decide` 와 같다.
@@ -919,13 +1041,7 @@ def cq_decide(src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -
     dec = dec or {}
     adopted, sheet, why = [], [], collections.Counter()
     for k, s in src.items():
-        head = {
-            "지문": k,
-            "문항": s["문항"],
-            "자리": s["자리"],
-            "문구": s["문구"],
-            "원천": s["원천"],
-        }
+        head = {"지문": k, **{h: s[h] for h in R.head}, "문구": s["문구"], "원천": s["원천"]}
         if k in dec:
             d = dec[k]["판정"]
             got = {"대상": d["대상"]}
@@ -941,7 +1057,7 @@ def cq_decide(src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -
                 }
             how = "팀장판정"
         else:
-            got, reason = cq_agree(a[k], b[k])
+            got, reason = _agree(R, a[k], b[k])
             if got is None:
                 why[reason.split(" ")[0]] += 1
                 sheet.append({**head, "_이유": reason, "_a": a[k], "_b": b[k]})
@@ -951,17 +1067,20 @@ def cq_decide(src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -
         if got["대상"] == "Y":
             row["labels"] = statute.types_of(got["근거"])
         adopted.append(row)
-    CQ_ADOPTED.parent.mkdir(parents=True, exist_ok=True)
-    with CQ_ADOPTED.open("w", encoding="utf-8", newline="\n") as f:
+    out = R.path("ADOPTED")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8", newline="\n") as f:
         for r in adopted:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    CQ_TEAM_SHEET.parent.mkdir(parents=True, exist_ok=True)
-    with CQ_TEAM_SHEET.open("w", encoding="utf-8-sig", newline="") as f:
+    team = R.path("TEAM_SHEET")
+    team.parent.mkdir(parents=True, exist_ok=True)
+    with team.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
-        w.writerow(CQ_TEAM_COLS)
-        for h in sorted(sheet, key=lambda h: (h["문항"], h["지문"])):
+        w.writerow(("지문", *R.sheet_head, "문구", *TEAM_TAIL))
+        for h in sorted(sheet, key=lambda h: (*(h[x] for x in R.sheet_head), h["지문"])):
             w.writerow(
-                [h["지문"], h["문항"], h["문구"], h["_이유"], cq_brief(h["_a"]), cq_brief(h["_b"])]
+                [h["지문"], *(h[x] for x in R.sheet_head), h["문구"], h["_이유"]]
+                + [_brief_line(h["_a"]), _brief_line(h["_b"])]
                 + [""] * 8
             )
     ys = [r for r in adopted if r["대상"] == "Y"]
@@ -980,8 +1099,8 @@ def cq_decide(src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -
     }
 
 
-def cq_brief(r: dict) -> str:
-    """판정표에 싣는 화장품 판독 한 줄 — 대상 · 조건 · 호 · 목 · 제외목 · 메모."""
+def _brief_line(r: dict) -> str:
+    """판정표에 싣는 판독 한 줄 — 대상 · 조건 · 호 · 목 · 제외목 · 메모."""
     if r["대상"] == "N":
         return "N" + (f" — {r['메모']}" if r["메모"] not in ("", "-") else "")
     cites = [
@@ -998,8 +1117,8 @@ def cq_brief(r: dict) -> str:
     return " · ".join(parts)
 
 
-def _cq_to_line(k: str, row: dict) -> str | None:
-    """팀장 판정표(또는 감사표) 한 행 → 화장품 판독 TSV 한 줄. 대상 · 조건이 둘 다 비면 판정 안 한 행(None)."""
+def _to_line(k: str, row: dict) -> str | None:
+    """팀장 판정표(또는 감사표) 한 행 → 판독 TSV 한 줄. 대상 · 조건이 둘 다 비면 판정 안 한 행(None)."""
     target = (row.get("대상") or "").strip()
     cond = (row.get("조건") or "").strip()
     if not (target or cond):
@@ -1019,27 +1138,26 @@ def _cq_to_line(k: str, row: dict) -> str | None:
     )
 
 
-def cq_check_decision(rec: dict) -> list[str]:
-    """화장품 판정 한 행의 문제 — 판독 해석기가 잡은 것 + C·A·B 인데 근거가 없는 것."""
+def _check_decision(rec: dict) -> list[str]:
+    """문구 판 판정 한 행의 문제 — 판독 해석기가 잡은 것 + C·A·B 인데 근거가 없는 것."""
     bad = list(rec["문제"])
     if rec["대상"] == "Y" and rec["조건"] in ("C", "A", "B") and not rec["근거"]:
         bad.append(f"조건 {rec['조건']} 인데 근거가 없다")
     return bad
 
 
-def cq_import_decisions(path: pathlib.Path) -> dict:
-    """사람이 채운 화장품 팀장 판정표 CSV → `CQ_DECISIONS`. 해설서와 같은 함수(`_import_sheet`)다 (D-99).
+def _import(R: Round, path: pathlib.Path) -> dict:
+    """사람이 채운 팀장 판정표 CSV → 판정(원천). 해설서와 같은 함수(`_import_sheet`)다 (D-99).
 
-    ★ 09-25 판정표(`build/labels/cosmetic_qa/팀장판정표.csv` · 「검토의견(클로드 · 참고)」 칸 포함)도, `cq-rebuild` 가 내는
-      `CQ_TEAM_SHEET` 도 그대로 받는다 — 읽는 칸은 지문 · 대상 · 주근거 · 부근거 · 별표5목 · 조건 · 제외목 · 메모 · 판정자다.
+    ★ 읽는 칸은 지문 · 대상 · 주근거 · 부근거 · 별표5목 · 조건 · 제외목 · 메모 · 판정자다 — 다른 칸(검토의견 등)은 보지 않는다.
     """
     return _import_sheet(
         path,
-        readings=CQ_READINGS,
-        decisions=CQ_DECISIONS,
-        to_line=_cq_to_line,
-        parse=cq_parse_line,
-        check=lambda rec, k, row: cq_check_decision(rec),
+        readings=R.path("READINGS"),
+        decisions=R.path("DECISIONS"),
+        to_line=_to_line,
+        parse=lambda line: _parse(R, line),
+        check=lambda rec, k, row: _check_decision(rec),
     )
 
 
@@ -1054,22 +1172,23 @@ def cq_same(x: dict, y: dict) -> bool:
     return x["조건"] == y["조건"] and hx == hy
 
 
-def cq_audit(path: pathlib.Path) -> dict:
-    """합의 감사(지시서 §6 · D-285 개정 5) — 팀장이 판독을 **보지 않고** 붙인 감사표 → `CQ_AUDIT`(원천) · 합의 정확도.
+def _audit(R: Round, path: pathlib.Path) -> dict:
+    """합의 감사(지시서 §6 · D-285 개정 5) — 판독을 **보지 않고** 붙인 감사표 → 감사(원천) · 합의 정확도.
 
     🔴 감사 행은 **합의로 채택된 행**이어야 한다(팀장 판정 행 · 시트 행을 감사하면 그 수는 합의 정확도가 아니다).
     🔴 판정자가 빈 행 · 판독 문제가 있는 행이 하나라도 있으면 아무것도 쓰지 않는다 (D-220).
     ⬜ 정확도가 몇 이하면 전체를 다시 볼지는 정하지 않았다 — 수만 낸다(판정은 팀장).
     """
+    ad = R.path("ADOPTED")
     took = {}
-    for x in CQ_ADOPTED.read_text(encoding="utf-8").splitlines() if CQ_ADOPTED.exists() else []:
+    for x in ad.read_text(encoding="utf-8").splitlines() if ad.exists() else []:
         r = json.loads(x)
         took[r["지문"]] = r
     got, bad = [], []
     with path.open(encoding="utf-8-sig", newline="") as f:
         for no, row in enumerate(csv.DictReader(f), 2):
             k = (row.get("지문") or "").strip()
-            line = _cq_to_line(k, row)
+            line = _to_line(k, row)
             if line is None:
                 continue
             who = (row.get("판정자") or "").strip()
@@ -1080,7 +1199,7 @@ def cq_audit(path: pathlib.Path) -> dict:
             if r is None or r["판독"] != "독립판독_합의":
                 bad.append(f"{no}행 {k} 합의 채택 행이 아니다({r and r['판독']})")
                 continue
-            rec = cq_parse_line(line)
+            rec = _parse(R, line)
             if rec["문제"]:
                 bad.append(f"{no}행 {k} — " + " / ".join(rec["문제"]))
                 continue
@@ -1091,8 +1210,9 @@ def cq_audit(path: pathlib.Path) -> dict:
         raise SystemExit(
             "🔴 감사표에 문제가 있다 — **아무것도 쓰지 않았다**\n  " + "\n  ".join(bad[:30])
         )
-    CQ_AUDIT.parent.mkdir(parents=True, exist_ok=True)
-    with CQ_AUDIT.open("w", encoding="utf-8", newline="\n") as f:
+    out = R.path("AUDIT")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8", newline="\n") as f:
         for r in sorted(got, key=lambda r: r["지문"]):
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     hit = sum(r["일치"] for r in got)
@@ -1104,8 +1224,62 @@ def cq_audit(path: pathlib.Path) -> dict:
     }
 
 
+# ── 원천별 이름 — 게이트 · 명령이 부르는 자리 (본체는 위 `_*` 하나 · D-99) ──────────────────────────────────
+def cq_parse_line(line: str) -> dict:
+    return _parse(CQ, line)
+
+
+def cq_agree(a: dict, b: dict) -> tuple[dict | None, str]:
+    return _agree(CQ, a, b)
+
+
+def cq_merge(units: pathlib.Path, r1: pathlib.Path, r2: pathlib.Path) -> dict:
+    return _merge(CQ, units, r1, r2)
+
+
+def cq_rebuild() -> dict:
+    return _rebuild(CQ)
+
+
+def cq_decide(src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -> dict:
+    return _decide(CQ, src, a, b, dec)
+
+
+def cq_import_decisions(path: pathlib.Path) -> dict:
+    return _import(CQ, path)
+
+
+def cq_audit(path: pathlib.Path) -> dict:
+    return _audit(CQ, path)
+
+
+def fp_parse_line(line: str) -> dict:
+    return _parse(FP, line)
+
+
+def fp_merge(units: pathlib.Path, r1: pathlib.Path, r2: pathlib.Path) -> dict:
+    return _merge(FP, units, r1, r2)
+
+
+def fp_rebuild() -> dict:
+    return _rebuild(FP)
+
+
+def fp_import_decisions(path: pathlib.Path) -> dict:
+    return _import(FP, path)
+
+
+def fp_audit(path: pathlib.Path) -> dict:
+    return _audit(FP, path)
+
+
+ROUNDS = {"cq": (CQ, "화장품"), "fp": (FP, "공정위 보도자료 1997~2007")}
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="해설서 위반문구 조문·조건 판 (D-285)")
+    ap = argparse.ArgumentParser(
+        description="해설서 · 화장품 · 공정위 보도자료 조문·조건 판 (D-285)"
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
     p_in = sub.add_parser("input")
     p_in.add_argument(
@@ -1121,29 +1295,30 @@ def main() -> int:
         "import-decisions", help="사람이 채운 팀장 판정표 CSV → decisions.jsonl (그다음 rebuild)"
     )
     p_d.add_argument("--csv", type=pathlib.Path, required=True)
-    # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집. 같은 채택 함수 · 산출물은 `data/derived/labels/cosmetic_qa/`
-    p_cm = sub.add_parser(
-        "cq-merge", help="화장품 — 단위 표 + 판독 TSV 둘 → 판독 원자료 · 채택 · 팀장 판정표"
-    )
-    p_cm.add_argument(
-        "--units", type=pathlib.Path, required=True, help="단위 표 JSON (지문 · 문항 · 자리 · 문구)"
-    )
-    p_cm.add_argument("--r1", type=pathlib.Path, required=True)
-    p_cm.add_argument("--r2", type=pathlib.Path, required=True)
-    sub.add_parser(
-        "cq-rebuild", help="화장품 — 판독 원자료 + 팀장 판정으로 채택·시트를 다시 계산한다"
-    )
-    p_cd = sub.add_parser(
-        "cq-import-decisions", help="화장품 — 채운 팀장 판정표 CSV → decisions.jsonl"
-    )
-    p_cd.add_argument("--csv", type=pathlib.Path, required=True)
-    p_ca = sub.add_parser(
-        "cq-audit", help="화장품 — 채운 합의 감사표 CSV → audit.jsonl · 합의 정확도"
-    )
-    p_ca.add_argument("--csv", type=pathlib.Path, required=True)
+    # 🆕 2026-09-30 (D-285 개정 5) — 문구 판(화장품 `cq-*` · 보도자료 `fp-*`). 같은 채택 함수 · 산출물은 원천마다 `data/derived/labels/<판>/`
+    for tag, (_R, name) in ROUNDS.items():
+        pm = sub.add_parser(
+            f"{tag}-merge",
+            help=f"{name} — 단위 표 + 판독 TSV 둘 → 판독 원자료 · 채택 · 팀장 판정표",
+        )
+        pm.add_argument("--units", type=pathlib.Path, required=True, help="단위 표 JSON")
+        pm.add_argument("--r1", type=pathlib.Path, required=True)
+        pm.add_argument("--r2", type=pathlib.Path, required=True)
+        sub.add_parser(
+            f"{tag}-rebuild", help=f"{name} — 판독 원자료 + 팀장 판정으로 채택·시트를 다시 계산한다"
+        )
+        pd = sub.add_parser(
+            f"{tag}-import-decisions", help=f"{name} — 채운 팀장 판정표 CSV → decisions.jsonl"
+        )
+        pd.add_argument("--csv", type=pathlib.Path, required=True)
+        pa = sub.add_parser(
+            f"{tag}-audit", help=f"{name} — 채운 합의 감사표 CSV → audit.jsonl · 합의 정확도"
+        )
+        pa.add_argument("--csv", type=pathlib.Path, required=True)
     a = ap.parse_args()
-    if a.cmd.startswith("cq-"):
-        return _cq_main(a)
+    tag = a.cmd.split("-", 1)[0]
+    if tag in ROUNDS:
+        return _round_main(ROUNDS[tag][0], a.cmd.split("-", 1)[1], a)
     if a.cmd == "input":
         print(f"판독 입력 {write_input(a.out):,}행 → {a.out}")
         return 0
@@ -1161,21 +1336,21 @@ def main() -> int:
     return 0
 
 
-def _cq_main(a) -> int:
-    if a.cmd == "cq-import-decisions":
-        print(json.dumps(cq_import_decisions(a.csv), ensure_ascii=False, indent=1))
+def _round_main(R: Round, verb: str, a) -> int:
+    if verb == "import-decisions":
+        print(json.dumps(_import(R, a.csv), ensure_ascii=False, indent=1))
         print(
-            f"팀장 판정 → {CQ_DECISIONS}\n다음 — uv run python -m scripts.guide_statute_round cq-rebuild"
+            f"팀장 판정 → {R.path('DECISIONS')}\n다음 — uv run python -m scripts.guide_statute_round {R.cmd}-rebuild"
         )
         return 0
-    if a.cmd == "cq-audit":
-        print(json.dumps(cq_audit(a.csv), ensure_ascii=False, indent=1))
-        print(f"감사 → {CQ_AUDIT}")
+    if verb == "audit":
+        print(json.dumps(_audit(R, a.csv), ensure_ascii=False, indent=1))
+        print(f"감사 → {R.path('AUDIT')}")
         return 0
-    got = cq_rebuild() if a.cmd == "cq-rebuild" else cq_merge(a.units, a.r1, a.r2)
+    got = _rebuild(R) if verb == "rebuild" else _merge(R, a.units, a.r1, a.r2)
     print(json.dumps(got, ensure_ascii=False, indent=1))
     print(
-        f"채택 → {CQ_ADOPTED}\n팀장 판정표(두 판독 나란히) → {CQ_TEAM_SHEET}\n두 판독 원자료 → {CQ_READINGS}"
+        f"채택 → {R.path('ADOPTED')}\n팀장 판정표(두 판독 나란히) → {R.path('TEAM_SHEET')}\n두 판독 원자료 → {R.path('READINGS')}"
     )
     return 0
 

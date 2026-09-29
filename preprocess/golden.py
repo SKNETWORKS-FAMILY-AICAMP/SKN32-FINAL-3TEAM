@@ -47,7 +47,14 @@ from collect import registry, statute
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
 from preprocess.lineage import lineage
-from preprocess.split import approved_docs, casebook_docs, cosmetic_docs, ftc_docs, guide_docs
+from preprocess.split import (
+    approved_docs,
+    casebook_docs,
+    cosmetic_docs,
+    ftc_docs,
+    ftc_press_docs,
+    guide_docs,
+)
 
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
@@ -157,7 +164,9 @@ def build() -> tuple[list[dict], dict]:
     # 🔄 2026-09-24 (D-283) · 🔄 2026-09-25 (D-285 개정 4) — `guide_docs()` 는 해설서 대기가 0 일 때만 채택본을 낸다
     #    (대기 중에는 빈 목록 · `split.guide_state()`). 전환됐다(원장 09-25 ⑰) — 해설서 행이 이 한 줄로 들어온다.
     # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집도 같은 길이다(`cosmetic_docs()` 도 대기 0 일 때만 낸다)
-    for d in ftc_docs() + casebook_docs() + approved_docs() + guide_docs() + cosmetic_docs():
+    #    🆕 09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 같은 길(`ftc_press_docs()`)
+    docs = ftc_docs() + casebook_docs() + approved_docs() + guide_docs()
+    for d in docs + cosmetic_docs() + ftc_press_docs():
         split = assign.get(d["doc_id"])
         if not split:
             stat["미배정"] += 1
@@ -361,8 +370,9 @@ def main() -> int:
         units = collections.Counter(r["unit"] for r in sub)
         print(f"     단위 — {dict(units)}")
         # 🆕 D-282 — 정본 셈(호 단위). D-40 의 30 은 이 단위에 건다
+        #    🔄 2026-09-30 — 위반 행(`is_positive`)으로 센다. ⛔ `labels` 로 세면 유형이 없는 호(화장품 4호 · 식품 8~10호)가 빠진다
         hc: collections.Counter = collections.Counter()
-        for r in pos:
+        for r in (x for x in sub if is_positive(x)):
             for k in {statute.ho_key(x) for x in r["근거"]}:
                 hc[k] += 1
         print("     ── 호 단위 (정본 · D-282) ──")

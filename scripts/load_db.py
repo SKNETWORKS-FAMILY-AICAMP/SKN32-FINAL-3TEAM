@@ -242,6 +242,8 @@ FRAGMENTS: list[tuple[str, str, str, str]] = [
         "질의응답집 화장품 인용표현 (독립 판독 · 팀장 판정)",
         "G2",
     ),
+    # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 이 인용한 광고 문구. 광고주 저작물 조각이라 G2
+    ("ftc_press:golden", "ftc_press", "보도자료 인용 광고 문구 (독립 판독)", "G2"),
     ("mfds_hf_ingredient_board:approved", "mfds_hf_ingredient_board", "승인 기능성 문구", "G3"),
     # 🚨 주입본은 **우리 생성물**이지만 원본이 승인 문구라 계보를 그쪽에 둔다 (D-71).
     ("mfds_hf_ingredient_board:injected", "mfds_hf_ingredient_board", "규칙 주입 합성문", "G3"),
