@@ -200,7 +200,7 @@ class Judgment(Base):
     evidence: Mapped[dict | None] = mapped_column(JSONB)  # 근거 조문 집합
     # D-131 — 인코더가 하한 위로 올릴 때 반드시 붙는 근거 스팬 (raw 좌표 · D-30 주장 BIO)
     evidence_span: Mapped[dict | None] = mapped_column(JSONB)
-    risk_floor: Mapped[int | None] = mapped_column(Integer)  # 코드 하한 (D-84 ③)
+    risk_floor: Mapped[int | None] = mapped_column(Integer)  # 코드 하한 (D-09 · D-130)
     risk_final: Mapped[int | None] = mapped_column(Integer)
     # 🚨 D-103 ③ — 개정되면 「재검증 대기」의 판단 근거가 된다
     law_version: Mapped[str] = mapped_column(String(40))
@@ -248,7 +248,7 @@ class Judgment(Base):
         #    ⛔ 종전에는 여기·계약·라우터 셋이 각각 `2` 를 적고 있었다. K 를 올리면
         #       라우터만 따라가고 DB 가 거부한다 — **가장 늦게 터지는 자리**였다.
         CheckConstraint(f"attempt BETWEEN 0 AND {PARAMS.max_attempt}", name="ck_judgment_attempt"),
-        # D-130 · 🔄 D-227 — 척도는 **R0~R3 네 단계**다 (R0 특이사항 없음 · R1 주의 ·
+        # D-130 · 🔄 D-227 — 척도는 **R0~R3 네 단계**다 (R0 특이사항 없음 · R1 시정명령 위험(D-280 · 옛 이름 주의) ·
         #   R2 업무정지 위험 · R3 영업 상실 위험). 🔴 `R4` 는 ENUM 에 남아 있으나 **도달 불가**다 —
         #   형벌은 R 축에 얹지 않고 `penal_clause` 가 그 자리다 (D-182).
         #   ⛔ CHECK 범위는 `0 AND 4` 로 **둔다** — ENUM 을 줄이지 않기로 했으므로 제약도 그대로다.
@@ -269,6 +269,13 @@ class Judgment(Base):
             " OR (risk_floor IS NOT NULL"
             "     AND (risk_final <= risk_floor OR evidence_span IS NOT NULL))",
             name="ck_judgment_raise_needs_evidence",
+        ),
+        # 🆕 2026-09-29 (D-09 래칫 · 계약 `RiskAssessment` 와 같은 규칙 · D-99) — 최종은 하한보다 낮을 수 없다.
+        #   ⛔ 위 제약은 「하한보다 **높으면** 근거」만 보고, 하한 R3 · 최종 R0 을 받았다 — 인코더가 내린 것이다.
+        #   🔴 글자는 마이그레이션 0022 의 `_CHECKS` 와 같아야 한다 (게이트 `test_0018_의_제약_글자가_모델과_같다`).
+        CheckConstraint(
+            "risk_final IS NULL OR risk_floor IS NULL OR risk_final >= risk_floor",
+            name="ck_judgment_final_not_below_floor",
         ),
         Index("ix_judgment_subject", "subject_type", "subject_id"),
     )
