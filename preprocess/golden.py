@@ -50,6 +50,7 @@ from preprocess.lineage import lineage
 from preprocess.split import (
     approved_docs,
     casebook_docs,
+    caution_docs,
     cosmetic_docs,
     ftc_docs,
     ftc_press_docs,
@@ -58,6 +59,8 @@ from preprocess.split import (
 from preprocess.text import FOOTNOTE
 
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
+#: 🆕 2026-09-30 (판정 J1) — 식약처 인정서가 원천인 행(승인 문구 · 섭취 주의사항). origin 이 `approved` 다 — 계보가 G3 · 재배포 가능
+HF_SOURCES = ("mfds_hf_ingredient_board", "mfds_hf_individual")
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
 OUT = pathlib.Path("data/derived/golden/golden.jsonl")
 
@@ -86,12 +89,36 @@ _REASON_DROP = (
     re.compile(r"(?<![방요용수기주])법$|법\)|과태료|공정경쟁규약|규약$|시행규칙|부과기준"),
     # ㅁ 문서 내부 지시어·서증 — 「이 사건 광고」·「소갑 제○호증」. 어느 광고인지도 안 알려 준다
     re.compile(r"^이 ?사건|^본 ?건|^행위 ?\d|^소갑|심사보고서|^별지|호증$|^표 ?\d|^그림 ?\d"),
+    # ㅂ 법 · 절차 문언 — 조문 · 판단 기준 · 과징금 산정 말 (2026-09-30 · 판정 J3 (가) · 원장 09-30 ⑦)
+    #   ⛔ 「공정거래위원회」 「위원회」 「대법원」은 넣지 않는다 — 「…공정거래위원회 인정」(기관 사칭 광고)을 먹는다(표본으로 확인)
+    re.compile(
+        r"제\s?\d+\s?조|시행령|대통령령|위반행위|과징금|시정명령|심사지침|피심인|해당한다|사업자\s?등"
+        r"|표시ㆍ광고|소비자로 하여금|의결서|사건절차"
+        # 🆕 09-30 (원장 ⑫) — 법리 상용구 「보통의 주의력을 가진 일반 소비자가 … 전체적ㆍ궁극적 인상」(학습 12행 중 6 이 새었다)
+        r"|보통의\s?주의력|궁극적\s?인상"
+    ),
 )
+#: 원천이 가린 기호 — 걷어내고 남는 알맹이가 하한보다 짧으면 버린다(ㅅ) · 「▩▩▩▩▩」 「○○○○」
+_REASON_REDACT = re.compile(r"[▩▨▧▦▤▣◈◎○◯□■♧]|\*{2,}|OO|ㅇㅇ")
+#: 🆕 2026-09-30 (판정 J3 (가)) — **같은 글자가 이만큼 많은 문서의 이유에 나오면** 용어 · 정의 · 산정 말이다(ㅇ) `[임의]`.
+#:    ⛔ 셋(같은 사건의 여러 피심인 의결서 · 7023 · 7025 · 7029)은 광고 문구라 넷부터 · 🚨 한 사건 가족이 넷을 넘으면 카피도 빠진다
+_REASON_REPEAT_DOCS = 4
 #: 태그를 벗기고 남은 알맹이가 이보다 짧으면 버린다 — `ftc_extract.phrases_in` 과 같은 하한
 _REASON_MIN = 4
 
 
-def reason_keep(text: str) -> tuple[str, str | None]:
+def reason_repeats(docs: list[dict]) -> set[str]:
+    """이유 문구 중 `_REASON_REPEAT_DOCS` 개 이상의 문서에 같은 글자로 나오는 것(`overlap_key` 기준)."""
+    seen: dict[str, set[str]] = collections.defaultdict(set)
+    for d in docs:
+        for t in d.get("문구_이유") or []:
+            seen[overlap_key(_TAG.sub("", FOOTNOTE.sub("", t)))].add(d["doc_id"])
+    return {k for k, v in seen.items() if len(v) >= _REASON_REPEAT_DOCS}
+
+
+def reason_keep(
+    text: str, repeats: set[str] | frozenset[str] = frozenset()
+) -> tuple[str, str | None]:
     """이유 문구를 학습에 넣을지. 돌려주는 값은 `(쓸 문자열, 버린 사유 or None)`.
 
     ★ **버린 사유를 함께 돌려준다** — 세는 쪽과 거르는 쪽이 같은 함수를 봐야
@@ -103,7 +130,11 @@ def reason_keep(text: str) -> tuple[str, str | None]:
         return s, "태그뿐"
     for i, pat in enumerate(_REASON_DROP):
         if pat.search(s):
-            return s, "ㄴㄷㄹㅁ"[i]
+            return s, "ㄴㄷㄹㅁㅂ"[i]
+    if len(_REASON_REDACT.sub("", s).strip()) < _REASON_MIN:
+        return s, "ㅅ"  # 🆕 원천이 가린 기호뿐
+    if overlap_key(s) in repeats:
+        return s, "ㅇ"  # 🆕 여러 문서에 되풀이되는 용어 · 정의
     return s, None
 
 
@@ -182,7 +213,9 @@ def build() -> tuple[list[dict], dict]:
     # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집도 같은 길이다(`cosmetic_docs()` 도 대기 0 일 때만 낸다)
     #    🆕 09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 같은 길(`ftc_press_docs()`)
     docs = ftc_docs() + casebook_docs() + approved_docs() + guide_docs()
-    for d in docs + cosmetic_docs() + ftc_press_docs():
+    repeats = reason_repeats(docs)  # 🆕 2026-09-30 (판정 J3 (가)) — 이유 거름 ㅇ
+    # 🆕 2026-09-30 (판정 J1 (가-2′)) — 인정 조건문(조건 D · 전량 train). 이유 되풀이(ㅇ)의 입력은 아니다
+    for d in docs + cosmetic_docs() + ftc_press_docs() + caution_docs():
         split = assign.get(d["doc_id"])
         if not split:
             stat["미배정"] += 1
@@ -195,7 +228,9 @@ def build() -> tuple[list[dict], dict]:
                 "labels": d["유형"],
                 "unit": d["단위"],
                 # 🔄 D-285 개정 4 — 조건 칸이 있는 행(해설서)은 유형이 비어도 **승인 문구가 아니다**
-                "origin": "real" if d["유형"] or "조건" in d else "approved",
+                # 🔄 2026-09-30 (판정 J1) — origin 은 **원천이 누구 글인가**다(식약처 인정서 = approved · 광고 인용 = real).
+                #    ⛔ 종전 「유형이 없으면 approved」 — 승인 문구가 조건 A 3호로 가면 real 로 바뀌어 계보(재배포 · G3)가 틀어진다
+                "origin": "approved" if d["원천"] in HF_SOURCES else "real",
                 "provenance": d["원천"],
                 "구역": "주문",  # 🆕 D-234 — 어디서 왔는지 남긴다
                 "redistributable": True,
@@ -247,7 +282,7 @@ def build() -> tuple[list[dict], dict]:
         #    그러면 「한 숫자가 두 과제를 평균한 수」가 되고, 그것이 D-172 가 경고한 자리다.
         if split == "train":
             for k, text in enumerate(d.get("문구_이유") or []):
-                text, why = reason_keep(text)
+                text, why = reason_keep(text, repeats)
                 if why:
                     stat[f"이유버림_{why}"] += 1
                     continue
@@ -258,7 +293,9 @@ def build() -> tuple[list[dict], dict]:
                         "근거": d.get("근거") or [],
                         "labels": d["유형"],
                         "unit": d["단위"],
-                        "origin": "approved" if not d["유형"] else "real",
+                        # 🔄 09-30 — 이유 문구는 결정문에서만 온다 → 광고 인용(real). ⛔ 종전 「유형 없으면 approved」는
+                        #    유형 없는 결정문(무혐의)의 이유 행에 없는 계보 (ftc, approved) 를 붙일 뻔했다
+                        "origin": "real",
                         "provenance": d["원천"],
                         "구역": "이유",
                         "redistributable": True,
@@ -268,7 +305,7 @@ def build() -> tuple[list[dict], dict]:
                 stat["train(이유)"] += 1
             # 🆕 2026-09-30 (D-237) — 이유의 적법 문구(주문 적법 문구와 같은 글자 · 무혐의 문서의 인용)
             for k, text in enumerate(d.get("문구_이유_적법") or []):
-                text, why = reason_keep(text)
+                text, why = reason_keep(text, repeats)
                 if why:
                     stat[f"이유버림_{why}"] += 1
                     continue
@@ -384,7 +421,9 @@ def build() -> tuple[list[dict], dict]:
     # 🆕 2026-09-21 (전수 재검토 I11 · 팀장 판정 (나)) — 🔴 **적법(음성) 평가 문장과 겹치는 학습 행은 학습에서 뺀다.**
     #    ⛔ 위 거름은 라벨이 **있는** 평가 행에만 걸려, 적법 문장은 train·test 양쪽에 그대로 남았다 — 학습에서
     #       「적법」으로 본 문장이 평가에 또 나오면 모델은 판단이 아니라 기억으로 맞히고 **Precision 이 부풀었다.**
-    #    ★ 이쪽은 **학습을 깎는다**(평가를 안 깎는다) — 모자란 것은 평가 음성이고(D-40) 학습 음성(승인 문구)은 넉넉하다.
+    #    ★ 이쪽은 **학습을 깎는다**(평가를 안 깎는다) — 모자란 것은 평가 음성이다(D-40).
+    #    🔄 2026-09-30 (판정 J1) — 승인 문구는 이제 조건 A 양성이라 이 규칙 밖이고 위 양성 규칙(평가 쪽을 뺀다)을 탄다.
+    #       이 규칙은 조건 L 문구(결정문 무혐의 · 보도자료 · 화장품)에만 걸린다. ⛔ 종전 주석 「학습 음성(승인 문구)은 넉넉하다」
     #      평가셋이 그대로라 이전 측정과 같은 시험지로 비교된다. 학습 행의 라벨이 있어도 뺀다 — 같은 문구가
     #      학습에선 위반 · 평가에선 적법이면 **서로 모순된 표본**이다.
     #    🚨 위 위반 문장 규칙(평가 쪽을 뺀다)과 방향이 다르다 — 통일할지는 이 수(`음성겹침_학습제외`)를 본 뒤 정한다.

@@ -244,7 +244,15 @@ FRAGMENTS: list[tuple[str, str, str, str]] = [
     ),
     # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 이 인용한 광고 문구. 광고주 저작물 조각이라 G2
     ("ftc_press:golden", "ftc_press", "보도자료 인용 광고 문구 (독립 판독)", "G2"),
-    ("mfds_hf_ingredient_board:approved", "mfds_hf_ingredient_board", "승인 기능성 문구", "G3"),
+    # 🔄 2026-09-30 (판정 J1) — 섭취 주의사항(인정 조건문)도 이 조각이다 · 이름만 넓혔다(등급 그대로)
+    (
+        "mfds_hf_ingredient_board:approved",
+        "mfds_hf_ingredient_board",
+        "인정서 문구 (승인 기능성 · 섭취 주의)",
+        "G3",
+    ),
+    # 🆕 2026-09-30 (판정 J1 (가-2′)) — 개별인정형 원료 대장 I-0050 의 섭취 주의사항. 식약처 문서라 G3 (API 조각과 같은 원천)
+    ("mfds_hf_individual:approved", "mfds_hf_individual", "인정서 문구 (섭취 주의)", "G3"),
     # 🚨 주입본은 **우리 생성물**이지만 원본이 승인 문구라 계보를 그쪽에 둔다 (D-71).
     ("mfds_hf_ingredient_board:injected", "mfds_hf_ingredient_board", "규칙 주입 합성문", "G3"),
 ]

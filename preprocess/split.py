@@ -76,6 +76,8 @@
   ③ 🔴 **적법(음성) 표본을 평가에 넣는다.**
      종전 시험지는 전부 위반이었다 — **「전부 위반」이라 답해도 Recall 100%** 다.
      2층 승인 문구 일부를 봉인해 음성으로 쓴다. 없으면 Precision 이 정의되지 않는다.
+     🔄 2026-09-30 (판정 J1 (가)) — 승인 문구는 **조건 A 의 3호 양성**으로 옮겼다(「인정 제품」 전제에서만 적법 · D-263 ①).
+        평가 음성은 이제 조건 L 문구(결정문 무혐의 · 보도자료 · 화장품 · 판독 뒤 해설서 수정문구)다 — 그때까지 특이도는 「음성 부족」.
 
   ④ 🔴 **분할이 사전·주입보다 먼저다.**
      종전 순서(사전 → 주입 → 분할)에서는 사전이 **평가 문구로 만들어졌다** —
@@ -91,6 +93,7 @@ import hashlib
 import json
 import pathlib
 import random
+import re
 
 from app.settings import PARAMS
 from collect import statute
@@ -98,6 +101,9 @@ from collect import statute
 FTC_PHRASES = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
 HF = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
+#: 🆕 2026-09-30 (판정 J1 (가-2′) · 원장 09-30 ⑫) — 개별인정형 원료 대장 I-0050(`mfds_hf_individual` · 정본 축 · D-185).
+#:    섭취 주의사항(인정 조건문)만 읽는다. 🚨 I-0040(`mfds_hf_ingredient` · 업체 신고 · 관측 축)이 아니다 — 그쪽은 `hf_display_claims.jsonl`
+HF_API = pathlib.Path("data/derived/hf_api_labels.jsonl")
 OUT = pathlib.Path("data/derived/golden/split_manifest.json")
 SPLIT_NAME = OUT.as_posix()
 
@@ -106,8 +112,11 @@ SPLIT_NAME = OUT.as_posix()
 EVAL_TARGET = 40
 MIN_MEASURABLE = PARAMS.min_measurable  # D-40
 
-#: 🔴 음성(적법) 표본 목표. Precision 을 정의하려면 **위반이 아닌 것**이 있어야 한다.
-#:    ⛔ 종전 시험지는 전부 위반이라 「전부 위반」이라 답해도 Recall 100% 였다.
+#: 승인 문구 평가 봉인 수. 🔄 2026-09-30 (판정 J1 (가) · (가-2′)) — **음성이 아니다.** 조건 A(지위에 달림)의 3호 양성이다.
+#:    ⛔ 종전에는 「음성(적법) 표본 목표」였다 — 승인 문구를 「인정받은 제품」 전제로 적법에 두었는데, 게이트는 가장 보수적인
+#:       전제(인정 없음)로 잰다(D-263 ①) · 해설서 판독은 같은 꼴(「…에 도움을 주는」)을 3호 C · A 로 읽었다(원장 09-30 ⑫).
+#:    ★ 이름을 안 바꾼 것은 봉인 추첨(`rnd_neg`)이 이 수에 매여 있어서다 — 60 이 그대로여야 시험지가 그대로다.
+#:    🚨 평가 음성은 이제 **조건 L 행**이다(결정문 무혐의 · 보도자료 · 화장품 · 판독 뒤 해설서 수정문구) — `plan()` 의 `negatives`.
 NEG_TARGET = 60
 
 
@@ -122,7 +131,7 @@ def _jsonl(p: pathlib.Path) -> list[dict]:
 #:    ⛔ 09-17 부터 넷째 입력이었다(D-243). 그 라벨은 라벨링 지시서의 자체 8유형으로 붙인 것이라 조문 근거가 없고
 #:       (지시서 6·7번이 법 제8조①6·7호와 반대 · 5호의 목 11개가 한 줄) 사람끼리 일치가 α 0.32 였다.
 #:    ★ 평가 라벨은 조문이 붙이거나(D-171 ①) 조문 원문을 기준으로 사람이 붙인다 — 해설서 행의 호는 아직 없다(D-283 ⬜).
-INPUTS = (FTC_PHRASES, CASEBOOK, HF)
+INPUTS = (FTC_PHRASES, CASEBOOK, HF, HF_API)  # 🆕 09-30 HF_API — 인정 조건문(판정 J1 (가-2′))
 
 
 def inputs() -> tuple[pathlib.Path, ...]:
@@ -259,17 +268,51 @@ def casebook_docs() -> list[dict]:
         labels = statute.types_of(basis)
         if not labels or not r.get("인용표현"):
             continue
+        # 🆕 2026-09-30 (판정 J4) — 광고 표현이 아닌 인용은 뺀다(원천은 그대로 · 빼는 이유는 `casebook_not_ad`)
+        quotes = [str(x) for x in r["인용표현"] if not casebook_not_ad(str(x), r)]
+        if not quotes:
+            continue
         got.append(
             {
                 "doc_id": f"casebook:{r.get('쪽')}:{i}",
                 "원천": "mfds_casebook",
                 "근거": basis,
                 "유형": labels,
-                "문구": [str(x) for x in r["인용표현"]],
+                "문구": quotes,
                 "단위": "낱말",
             }
         )
     return got
+
+
+#: 「‘글루타치온’의 효능·효과 표방」 — 인용이 **원료 이름**이다. 위반은 원료 효능을 제품 효능처럼 쓴 것이지 이름이 아니다
+_CASEBOOK_INGREDIENT = re.compile(
+    r"^[‘'][^’']+[’'](?:\s*,\s*[‘'][^’']+[’'])*\s*의\s*효능·효과\s*표방"
+)
+
+
+def casebook_not_ad(quote: str, rec: dict) -> str | None:
+    """사례집 인용이 **광고 표현이 아닌** 이유. 광고 표현이면 `None` (2026-09-30 · 판정 J4 · 원장 09-30 ⑦).
+
+    ★ 원천의 문장 꼴로만 가린다 — 이름 모양으로 추측하지 않는다.
+      · 원료명 — 「‘X’의 효능·효과 표방」(45 · 46쪽 12개)
+      · 체험기 주제어 — 글에 「체험기」가 있고 인용이 네 글자 이하(「다이어트」 「코로나」 · 47 · 48쪽 9개)
+      · 사진 설명 — 「… 전·후 사진」
+      · 한 글자 의약품 어휘 — 「집중력 높이는 ‘약’」의 「약」(2호). 🚨 1호 「암」은 남긴다 — 원천이 질병명으로 적었다
+    🚨 `[임의]` 규칙이다 — 판독 없이 원천 꼴로 가른 것이라, 사례집 판이 바뀌면 다시 본다.
+    """
+    text = rec.get("글") or rec.get("문구") or ""
+    core = quote.replace(" ", "")
+    if re.search(r"사진|이미지", quote):
+        return "사진 설명"
+    # 🔄 09-30 (원장 ⑭) — 「특허출원원료」는 원료 이름이 아니라 **특허 주장**이다(D-228 「특허 ≠ 실증」) — 원료명으로 빼지 않는다
+    if _CASEBOOK_INGREDIENT.search(text) and not re.search(r"특허|인증|수상|임상", quote):
+        return "원료명"
+    if "체험기" in text and len(core) <= 4:
+        return "체험기 주제어"
+    if len(core) < 2 and rec.get("호") in (2, [2]):
+        return "한 글자 의약품 어휘"
+    return None
 
 
 def ho_of(article: str) -> int:
@@ -447,8 +490,19 @@ def pending_guide() -> dict[str, int]:
     return dict(c)
 
 
+#: 🆕 2026-09-30 (판정 J1 (가)) — 승인 문구의 조건 · 근거. 식품표시광고법 제8조제1항제3호(건강기능식품이 아닌 것을 건강기능식품으로 인식)
+#:    ★ 조건 A — 인정받은 건강기능식품이거나 일반식품 기능성 표시 요건(고시 「부당한 표시 또는 광고로 보지 아니하는 식품등의
+#:      기능성 표시 또는 광고에 관한 규정」 제4조①2호 · 제5조)을 채우면 적법이고, 아니면 위반이다. 기록은 보수 전제(D-263 ①)
+#:    🚨 판독 없이 규칙으로 붙인다 — 465 전부 개별인정원료 · 461 이 「…에 도움을 줄 수 있음」(원장 09-30 ⑫)
+APPROVED_BASIS = (statute.food(3),)
+APPROVED_READING = "규칙_승인문구_A"
+
+
 def approved_docs() -> list[dict]:
-    """2층 **승인** 문구 — 음성 표본. 🚨 위반이 아니라 적법이다 (`유형` 이 빈 리스트)."""
+    """2층 **승인** 문구. 🔄 2026-09-30 (판정 J1 (가)) — **조건 A 의 3호 양성**이다(종전: 음성).
+
+    ⛔ 종전 docstring 은 「음성 표본 · 위반이 아니라 적법이다」였다 — 「인정받은 제품」 전제에서만 참이다(D-156 ③ 전제 정정).
+    """
     import re
 
     got, seen = [], set()
@@ -464,12 +518,71 @@ def approved_docs() -> list[dict]:
                 {
                     "doc_id": f"hf:{i}:{j}",
                     "원천": "mfds_hf_ingredient_board",
-                    "유형": [],  # 🔴 적법 — 라벨이 없는 것이 라벨이다
+                    "근거": list(APPROVED_BASIS),
+                    "유형": statute.types_of(list(APPROVED_BASIS)),
                     "문구": [s],
                     "단위": "문장",
+                    "조건": "A",
+                    "근거_후보": [],
+                    "판독": APPROVED_READING,
+                    "원천결손": False,
                 }
             )
     return got
+
+
+#: 인정 조건문을 문장으로 자르는 곳 — 줄바꿈 · 「…다.」 · 「…것,」 뒤. 원천이 한 칸에 여러 문장을 적는다
+_CAUTION_SPLIT = re.compile(r"[\n]|(?<=다\.)\s+|(?<=것)\s*[,.]\s*")
+#: 문장 앞뒤에서 떼는 것 — 번호 · 괄호 · 따옴표
+_CAUTION_STRIP = ' -·①②③④⑤⑥()0123456789.“”"\t'
+#: 인정 조건문이 되려면 이만큼은 돼야 한다 `[임의]` — 「주의」 한 낱말 같은 조각을 뺀다
+_CAUTION_MIN = 8
+
+
+def caution_docs() -> list[dict]:
+    """🆕 2026-09-30 (판정 J1 (가-2′) · 원장 09-30 ⑫) — 인정 원료의 **섭취 주의사항**. 조건 D(주장 없음) 학습 행이다.
+
+    ★ 왜 — 승인 문구가 조건 A(3호 양성)로 가면 학습에 위반 라벨이 없는 행이 거의 안 남는다(결정문 무혐의 문구 약 16).
+      모델이 「전부 위법」으로 무너지지 않게, **주장이 없는 문장**을 라벨 없는 행으로 준다.
+    ★ 왜 D 인가(L 이 아니라) — 해설서 채택 판독이 같은 꼴(「섭취에 주의하시기 바랍니다」 · 「섭취를 중단하십시오」)을
+      D 로 읽었다(D-286 ③ · 원장 09-30 ⑫). 주장이 없으니 위반도 적법도 아니고 **판정 대상이 아니다.**
+    🚨 평가에 넣지 않는다 — 전량 train. D 는 채점에서 빠지고(`eval_rule.scored`) 음성으로도 세지 않는다(`golden.is_negative`).
+    🚨 `[임의]` 규칙이다 — 판독 없이 원천 칸으로 붙였다. 약 · 질환 낱말이 든 문장(231)도 D 로 둔 것은 D-286 ③ 을
+       경고문까지 넓힌 해석이다 → 팀장 블라인드 감사 30 (판정 J6).
+    ⛔ 광고 꼴 적법 문구가 아니다 — 광고 문구의 특이도는 이것으로 못 가르친다(「음성 부족」 · 판정 J1).
+    """
+    got: dict[str, dict] = {}
+    for path, col, want in (
+        (HF, "섭취주의사항", "mfds_hf_ingredient_board"),
+        (HF_API, "IFTKN_ATNT_MATR_CN", "mfds_hf_individual"),
+    ):
+        for r in _jsonl(path):
+            # 🔴 원천은 행이 적은 값을 쓴다 — 코드가 이름을 붙이지 않는다(09-30 · 첫 판이 I-0050 을 I-0040 이름으로 붙였다)
+            src = r.get("원천") or want
+            if src != want:
+                raise SystemExit(
+                    f"🔴 {path} 의 원천이 {src!r} 다 — {want!r} 를 기대했다 (D-185 · D-220)"
+                )
+            for piece in _CAUTION_SPLIT.split(str(r.get(col) or "")):
+                s = piece.strip(_CAUTION_STRIP)
+                if len(s) < _CAUTION_MIN:
+                    continue
+                key = hashlib.sha256(re.sub(r"\s", "", s).encode("utf-8")).hexdigest()[:12]
+                if key in got:  # 두 원천에 같은 문장 — 먼저 읽은 원천(게시판)을 남긴다
+                    continue
+                got[key] = {
+                    "doc_id": f"hfcau:{key}",  # 🚨 줄 번호가 아니라 글자로 — 원천이 한 줄 늘어도 id 가 안 밀린다
+                    "원천": src,
+                    "근거": [],
+                    "유형": [],
+                    "문구": [s],
+                    "단위": "문장",
+                    "조건": "D",
+                    "근거_후보": [],
+                    "판독": "규칙_인정조건문_D",
+                    "원천결손": False,
+                }
+    return [got[k] for k in sorted(got)]
 
 
 def _prev_sealed() -> set[str]:
@@ -543,7 +656,15 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
     term = casebook_docs()
     # 🔴 **train 은 `single` 전체에서 봉인분만 뺀다** — `pool`(봉인 후보)이 아니다.
     #    ⛔ `pool` 로 두면 「이유만 있는 문서」가 train 에서도 빠진다. 그것이 회수분이다.
-    train = [d for d in single + lawful if d["doc_id"] not in sealed] + multi + neg_train + term
+    # 🆕 2026-09-30 (판정 J1 (가-2′)) — 인정 조건문(조건 D)은 전량 학습이다
+    caution = caution_docs()
+    train = (
+        [d for d in single + lawful if d["doc_id"] not in sealed]
+        + multi
+        + neg_train
+        + term
+        + caution
+    )
     # 🆕 **사람이 붙인 해설서 라벨은 전량 평가다** (2026-09-17 · D-172 · guide_docs 참조).
     #    🚨 `sealed`(ftc 봉인)와 **따로 센다** — 한 수에 두 원천을 평균하지 않는다 (D-160).
     guide = guide_docs()
@@ -552,6 +673,13 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
     # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 전량 평가다. 따로 센다 (D-160)
     press = ftc_press_docs()
     sent = list(sealed.values()) + guide + cosmetic + press + neg_eval
+
+    def lawful_units(rows: list[dict]) -> int:
+        """🆕 2026-09-30 (판정 J1) — **조건 L 문구 수**(적법 · 음성). 결정문 적법 문구 + 조건 L 행의 문구."""
+        return sum(
+            len(d.get("문구_적법") or []) + (len(d["문구"]) if d.get("조건") == "L" else 0)
+            for d in rows
+        )
 
     def tally(rows: list[dict]) -> dict[str, int]:
         c: collections.Counter = collections.Counter()
@@ -638,9 +766,13 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
             "test_sentence_공정위보도자료": tally(press),
             "사전(사례집)": term_pos,
         },
+        # 🔄 2026-09-30 (판정 J1 (가) · (가-2′)) — 음성은 **조건 L 문구**다. 승인 문구는 조건 A 양성으로 옮겼다.
+        #    ⛔ 종전 `test_sentence` · `train` 은 승인 문구 문서 수(60 · 118)였다
         "negatives": {
-            "test_sentence": len(neg_eval),
-            "train": len(neg_train),
+            "test_sentence": lawful_units(sent),
+            "train": lawful_units(train),
+            "train_주장없음_D": sum(len(d["문구"]) for d in caution),
+            "test_sentence_승인문구A": len(neg_eval),
             # 🆕 2026-09-30 (D-237) — 결정문의 적법 문구(조건 L). 승인 문구와 **따로** 센다 (D-160)
             "test_sentence_ftc적법": sum(len(d.get("문구_적법") or []) for d in sealed.values()),
         },
@@ -657,12 +789,13 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
         "source_sets": {
             "train": [
                 "ftc_decisions_body(비봉인·다중라벨)",
-                "mfds_hf_ingredient_board(비봉인)",
+                "mfds_hf_ingredient_board(비봉인 · 조건 A)",
+                "mfds_hf_ingredient_board · mfds_hf_individual 섭취 주의사항(조건 D)",
                 "주입본[P10]",
             ],
             "test_sentence": [
                 "ftc_decisions_body(봉인)",
-                "mfds_hf_ingredient_board(봉인·음성)",
+                "mfds_hf_ingredient_board(봉인·조건 A 3호 — 09-30 판정 J1 · 종전 음성)",
                 # 🔄 D-283 — 해설서는 호가 정해질 때까지 없다 (`pending_guide`)
             ],
         },
@@ -727,7 +860,9 @@ def main() -> int:
         f"test_sentence {s['test_sentence']['문서']}/{s['test_sentence']['문구']}"
     )
     print(
-        f"  🔴 음성(적법) — 평가 {m['negatives']['test_sentence']} · 학습 {m['negatives']['train']}"
+        f"  🔴 음성(적법 · 조건 L 문구) — 평가 {m['negatives']['test_sentence']} · 학습 {m['negatives']['train']}"
+        f"  · 학습 주장 없음(D · 인정 조건문) {m['negatives'].get('train_주장없음_D', '—')}"
+        f"  · 평가 승인 문구(A · 3호) {m['negatives'].get('test_sentence_승인문구A', '—')}"
     )
     print(
         f"  🔴 평가에서 뺀 다중 라벨 문서 {m['excluded_from_eval']['다중라벨_문서']} — "

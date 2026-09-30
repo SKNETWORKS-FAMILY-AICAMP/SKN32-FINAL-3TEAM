@@ -279,6 +279,12 @@ def main() -> int:
     #    🔄 2026-09-30 — 공통 적법은 **조건 칸이 없는** 적법(승인 문구)뿐이다. 조건 L(화장품 질의응답 · 적법)은
     #       그 원천의 행이다 — 공통에 넣으면 다른 원천의 오탐률에 섞인다 (D-160).
     neg = [r for r in rows if is_negative(r) and "조건" not in r]
+    # 🔄 2026-09-30 (판정 J1 (가)) — 승인 문구가 조건 A 3호 양성으로 가서 **공통 적법이 0 이 된다.**
+    #    원천별 조건 L 행(결정문 무혐의 · 보도자료 · 화장품)이 각 원천의 음성이다. 🚨 0 을 「오탐 없음」으로 읽지 않는다 (D-220)
+    if not neg:
+        print(
+            "  🟡 공통 적법 0 — 특이도 · 정밀도는 원천별 조건 L 행으로만 잰다 · 적으면 「음성 부족」 (판정 J1)"
+        )
     by_src = collections.defaultdict(list)
     for r in rows:
         if not (is_negative(r) and "조건" not in r):

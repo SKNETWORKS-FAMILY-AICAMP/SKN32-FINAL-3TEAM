@@ -178,7 +178,7 @@ def test_주입본의_원본이_train_이_아니면_물질화하지_않는다(tm
     monkeypatch.setattr(golden, "SPLIT", sp)
     monkeypatch.setattr(golden, "INJECTED", inj)
     monkeypatch.setattr(golden.split_mod, "verify_inputs", lambda m, who: None)
-    for name in ("ftc_docs", "casebook_docs", "approved_docs", "guide_docs"):
+    for name in ("ftc_docs", "casebook_docs", "approved_docs", "guide_docs", "caution_docs"):
         monkeypatch.setattr(golden, name, lambda: [])
     with pytest.raises(SystemExit, match="train 이 아니다"):
         golden.build()
@@ -210,7 +210,7 @@ def test_적법_평가_문장과_겹치는_학습_행은_학습에서_뺀다(tmp
     monkeypatch.setattr(golden, "INJECTED", inj)
     monkeypatch.setattr(golden.split_mod, "verify_inputs", lambda m, who: None)
     monkeypatch.setattr(golden, "approved_docs", lambda: docs)
-    for name in ("ftc_docs", "casebook_docs", "guide_docs"):
+    for name in ("ftc_docs", "casebook_docs", "guide_docs", "caution_docs"):
         monkeypatch.setattr(golden, name, lambda: [])
     monkeypatch.setattr(golden, "lineage", lambda prov, origin: ("f", True))
     rows, stat = golden.build()
