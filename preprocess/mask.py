@@ -651,17 +651,123 @@ ROMAN: tuple[tuple[str, str], ...] = (
 )
 
 
+#: 🆕 2026-09-30 (판정 J8 (나′) · 원장 09-30 ⑮) — 라틴 **글자 이름**. 앵커 머리가 이 이름들로만 이어지면
+#:    그 머리의 라틴 약자가 같은 법인의 표기다(「비엠더블유코리아」 → 「BMW코리아」 · 「케이티앤지」 → 「KT&G」).
+#:    ★ `ROMAN` 표를 넓힌 것이다 — 표는 손으로 적은 대응이라 BMW · KT&G · JYP · CPLB 가 빠져 있었다 `[관행]`.
+LETTER_NAMES: tuple[tuple[str, str], ...] = (
+    ("에이치", "H"),
+    ("더블유", "W"),
+    ("에이", "A"),
+    ("에프", "F"),
+    ("아이", "I"),
+    ("제이", "J"),
+    ("케이", "K"),
+    ("에스", "S"),
+    ("브이", "V"),
+    ("엑스", "X"),
+    ("와이", "Y"),
+    ("제트", "Z"),
+    ("비", "B"),
+    ("씨", "C"),
+    ("디", "D"),
+    ("이", "E"),
+    ("지", "G"),
+    ("엘", "L"),
+    ("엠", "M"),
+    ("엔", "N"),
+    ("오", "O"),
+    ("피", "P"),
+    ("큐", "Q"),
+    ("알", "R"),
+    ("티", "T"),
+    ("유", "U"),
+    ("앤", "&"),
+)
+
+
+def letter_acronyms(name: str) -> list[tuple[str, str]]:
+    """앵커 머리를 라틴 글자 이름으로 읽은 **모든** 갈래 `(약자, 나머지)` — 글자 둘 이상만.
+
+    ★ 갈래를 다 낸다 — 「에스케이디스커버리」는 SK+디스커버리 와 SKD+스커버리 둘로 읽힌다. 없는 표기는
+      `mask()` 가 그냥 지나가므로(글에 없으면 안 바뀐다) 틀린 갈래는 해가 없다.
+    """
+    out: list[tuple[str, str]] = []
+
+    def walk(pos: int, acro: str) -> None:
+        letters = len(acro.replace("&", ""))
+        if letters >= 2 and not acro.endswith("&"):
+            out.append((acro, name[pos:]))
+        for ko, la in LETTER_NAMES:
+            if name.startswith(ko, pos):
+                walk(pos + len(ko), acro + la)
+
+    walk(0, "")
+    return out
+
+
 def roman_variants(name: str) -> list[str]:
     """앵커 알맹이의 **로마자/한글 맞바꾼 표기**. 🚨 앵커가 있는 문서에서만 쓴다.
 
     ⛔ 바꾼 결과가 어디에도 없으면 `mask()` 가 그냥 지나간다 — 없는 것을 만들지 않는다.
+    🔄 2026-09-30 (판정 J8 (나′)) — 글자 이름 약자 + 나머지(「BMW코리아」 · 「SK텔레콤」)도 낸다.
+       🚨 나머지가 없으면(「케이티앤지」 → 「KT&G」) 약자만 남는데, 그것은 `bare_acronyms` 가 낱말 경계로 다룬다.
     """
     out: list[str] = []
     for x, y in ROMAN:
         for u, v in ((x, y), (y, x)):
             if u in name and (alt := name.replace(u, v)) != name:
                 out.append(alt)
+    out += [acro + rest for acro, rest in letter_acronyms(name) if rest]
     return out
+
+
+#: 🆕 2026-09-30 (판정 J8 (나′)) — 약자만 쓰인 자리(「LG 건조기」 · 「BMW의 경우」)를 지울 때 뒤에 붙어도 되는 조사.
+#:    ⛔ 한글이 조사 아닌 글자로 이어지면 **다른 이름의 머리**다(「SK브로드밴드」 · 「SK온」 · 「LG유플러스」) — 지우지 않는다(D-236)
+_ACRO_PARTICLE = r"(?:와의|과의|에서|에게|으로|이다|이며|보다|처럼|까지|부터|의|는|은|이|가|를|을|와|과|에|로|도|만)"
+#: 약자만으로 지워도 되는 글자 수. 둘짜리는 `ROMAN` 표(손으로 적은 대응)에 있는 것만 — 「TV」 · 「IT」 · 「AI」 같은
+#: 일반어가 둘짜리 약자와 부딪힌다 `[임의]`. 셋 이상(BMW · KT&G · JYP · CPLB)은 글자 이름에서 만든다
+_ACRO_MIN = 3
+
+
+def bare_acronyms(name: str) -> list[str]:
+    """이 앵커의 **약자만의 표기** — 낱말 경계로만 지운다. 긴 것부터.
+
+    ★ 만든 약자는 **끝까지 읽은 갈래**만 쓴다 — 나머지가 글자 이름으로 시작하지 않는 것(「CPLB」 ○ · 「CPL」 ✕).
+    🚨 표의 둘짜리 약자는 이름 전체가 더 긴 약자이면 쓰지 않는다 — 「케이티앤지」(KT&G)에서 「KT」는 **다른 회사**(케이티)다.
+    """
+    maximal = [
+        (a, rest)
+        for a, rest in letter_acronyms(name)
+        if not any(rest.startswith(ko) for ko, _la in LETTER_NAMES)
+    ]
+    whole = {a for a, rest in maximal if not rest}
+    table = {
+        x
+        for x, y in ROMAN
+        if name.startswith(y) and not any(w.startswith(x) and w != x for w in whole)
+    }
+    made = {a for a, _rest in maximal if len(a.replace("&", "")) >= _ACRO_MIN}
+    return sorted(table | made, key=len, reverse=True)
+
+
+def _mask_bare_acronym(text: str, name: str, log: list[dict] | None = None) -> str:
+    """🆕 2026-09-30 (판정 J8 (나′) · 원장 09-30 ⑮) — 피심인의 **라틴 약자만** 쓰인 자리를 `[업체]` 로.
+
+    ★ 앵커에서 만든 약자만 쓴다(D-235) — 전역 목록이 아니다. 낱말 경계로만 지운다 — 앞은 라틴 · 숫자가 아니고,
+      뒤는 끝 · 문장부호 · 공백이거나 조사 하나 뒤 끝이다. 그래서 「[업체]케미칼」 같은 토막이 생기지 않는다(D-236).
+    """
+    # 띄어 쓴 꼴(「SK 텔레콤」)은 약자보다 먼저 — 안 하면 「[업체] 텔레콤」이 남는다(16881 실측).
+    # 🚨 부분 문자열로 바꾸지 않는다 — 「LG 전자제품 판매장」이 「[업체]제품 판매장」이 된다(1701 실측) · 경계는 약자와 한 벌
+    spaced = [f"{a} {rest}" for a, rest in letter_acronyms(name) if rest]
+    for acro in sorted(spaced, key=len, reverse=True) + bare_acronyms(name):
+        pat = re.compile(
+            # 🚨 뒤에 「-」 도 막는다 — 모델 번호 「LG-SH150A」 를 「[업체]-SH150A」 로 토막 내지 않는다(15715 실측)
+            rf"(?<![A-Za-z0-9&.\-]){re.escape(acro)}(?={_ACRO_PARTICLE}?(?![가-힣A-Za-z0-9&\-]))"
+        )
+        if pat.search(text):
+            _note(log, "라틴 약자", acro, MASK_ORG)
+            text = pat.sub(MASK_ORG, text)
+    return text
 
 
 def anchor_names(bare: str) -> list[str]:
@@ -722,6 +828,7 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
                 _note(log, "앵커", v, MASK_ORG)
             text = text.replace(v, MASK_ORG)
         text = _mask_spaced_anchor(text, b, log)
+        text = _mask_bare_acronym(text, b, log)  # 🆕 09-30 (판정 J8 (나′)) — 약자만 쓰인 자리
     return mask_respondent_email(text, bare, log)
 
 

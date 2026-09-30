@@ -211,3 +211,79 @@ def test_인정_조건문_원천이_관측_축이면_멈춘다(tmp_path, monkeyp
     monkeypatch.setattr(split, "HF_API", api)
     with pytest.raises(SystemExit, match="mfds_hf_individual"):
         split.caution_docs()
+
+
+# ── 판정 J8 (나′) · J9 (가) — 라틴 약자 앵커 · 이유 적법 (D-297 · D-298) ────────────
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("name", "text", "want"),
+    [
+        (
+            "비엠더블유코리아",
+            "BMW와 MINI 전 차종 · BMW의 경우",
+            "[업체]와 MINI 전 차종 · [업체]의 경우",
+        ),
+        ("엘지전자", "LG 건조기는 자동세척", "[업체] 건조기는 자동세척"),
+        (
+            "케이티앤지",
+            "KT&G와의 PMS · KT의 시즌",
+            "[업체]와의 PMS · KT의 시즌",
+        ),  # 🔴 KT 는 다른 회사
+        (
+            "에스케이텔레콤",
+            "SK 텔레콤 가입 고객 · SK브로드밴드 · SK온",
+            "[업체] 가입 고객 · SK브로드밴드 · SK온",
+        ),
+        (
+            "엘지전자",
+            "모델 LG-SH150A · LG 전자제품 판매장",
+            "모델 LG-SH150A · [업체] 전자제품 판매장",
+        ),
+        ("에스케이텔레콤", "SKYEDU 강사", "SKYEDU 강사"),
+        (
+            "와이지플러스",
+            "YG 소속",
+            "YG 소속",
+        ),  # 둘짜리 약자는 손으로 적은 표에 있는 것만 — 세기만 한다
+    ],
+)
+def test_피심인_라틴_약자는_낱말_경계로만_가린다(name: str, text: str, want: str) -> None:
+    """🔴 앵커에서 만든 약자만 · 낱말 경계로만 (D-297 · D-235 · D-236) — 원장 09-30 ⑮ ⑯ 실측 사례."""
+    from preprocess import mask
+
+    assert mask.mask(text, name) == want
+
+
+@pytest.mark.gate
+def test_이유_적법은_주문_적법과_같은_글자만_남긴다(tmp_path, monkeypatch) -> None:
+    """🔴 이유 인용의 조각(「IMT-2020」 · 「World」)이 적법(L) 학습 행이 되지 않는다 (D-298 · 판정 J9)."""
+    import json
+
+    sp = tmp_path / "split_manifest.json"
+    sp.write_text(json.dumps({"assign": {"ftc:277": "train"}, "inputs": {}}), encoding="utf-8")
+    inj = tmp_path / "injected.jsonl"
+    inj.write_text("", encoding="utf-8")
+    doc = {
+        "doc_id": "ftc:277",
+        "원천": "ftc_decisions_body",
+        "근거": [],
+        "유형": [],
+        "문구": [],
+        "문구_이유": [],
+        "문구_적법": ["대한민국 누구나"],
+        "문구_이유_적법": ["대한민국 누구나", "IMT-2020", "5G 상용화 로드맵"],
+        "단위": "문장",
+    }
+    monkeypatch.setattr(golden, "SPLIT", sp)
+    monkeypatch.setattr(golden, "INJECTED", inj)
+    monkeypatch.setattr(golden.split_mod, "verify_inputs", lambda m, who: None)
+    monkeypatch.setattr(golden, "ftc_docs", lambda: [doc])
+    for name in ("approved_docs", "casebook_docs", "guide_docs", "caution_docs"):
+        monkeypatch.setattr(golden, name, lambda: [])
+    monkeypatch.setattr(golden, "lineage", lambda prov, origin: ("f", True))
+    rows, stat = golden.build()
+    reason_lawful = [r["text"] for r in rows if "#ra" in r["id"]]
+    assert reason_lawful == ["대한민국 누구나"]
+    assert stat["이유적법_주문밖"] == 2
