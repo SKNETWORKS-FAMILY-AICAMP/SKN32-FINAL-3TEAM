@@ -221,7 +221,10 @@ def ftc_docs() -> list[dict]:
         #       — 평가 라벨은 조문이나 사람이 붙여야 한다 (D-172).
         order = [str(x) for x in (r.get("문구") or [])]
         reason = [str(x) for x in (r.get("문구_이유") or [])]
-        if not labels or not (order or reason):
+        # 🆕 2026-09-30 (D-237) — 원천이 **위반 아님**이라 한 문구. 유형이 없는 문서(16095 · 무혐의 주문)도 이것으로 선다
+        order_ok = [str(x) for x in (r.get("문구_적법") or [])]
+        reason_ok = [str(x) for x in (r.get("문구_이유_적법") or [])]
+        if not (labels and (order or reason)) and not (order_ok or reason_ok):
             continue
         got.append(
             {
@@ -229,8 +232,10 @@ def ftc_docs() -> list[dict]:
                 "원천": "ftc_decisions_body",
                 "근거": basis,
                 "유형": labels,
-                "문구": order,
-                "문구_이유": reason,  # 🆕 학습 전용 — 봉인 대상이 아니다
+                "문구": order if labels else [],
+                "문구_이유": reason if labels else [],  # 🆕 학습 전용 — 봉인 대상이 아니다
+                "문구_적법": order_ok,  # 🆕 조건 L — `golden` 이 적법 행으로 낸다
+                "문구_이유_적법": reason_ok,
                 "단위": "문장",
             }
         )
@@ -467,12 +472,25 @@ def approved_docs() -> list[dict]:
     return got
 
 
-def plan(seed: int = 20260909) -> dict:
-    """🚨 **희소한 유형부터 채운다.** 흔한 유형이 먼저 가져가면 희소한 것이 못 선다."""
+def _prev_sealed() -> set[str]:
+    """이전 판에서 봉인된 문서 id. 이전 판이 없으면 빈 집합(첫 판 · 종전과 같은 추첨)."""
+    prev = _previous()
+    return {k for k, v in ((prev or {}).get("assign") or {}).items() if v == SEALED}
+
+
+def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
+    """🚨 **희소한 유형부터 채운다.** 흔한 유형이 먼저 가져가면 희소한 것이 못 선다.
+
+    🆕 2026-09-30 — `prev_sealed` 가 주어지면(없으면 이전 판 파일에서 읽는다) 그 봉인을 먼저 지킨다.
+    """
+    if prev_sealed is None:
+        prev_sealed = _prev_sealed()
     ftc = ftc_docs()
     # 🔴 ② 다중 라벨 문서는 평가에서 뺀다 — 문구가 어느 호인지 안 적혀 있다
     single = [d for d in ftc if len(d["유형"]) == 1]
     multi = [d for d in ftc if len(d["유형"]) > 1]
+    # 🆕 2026-09-30 (D-237) — 유형이 없고 **적법 문구만** 있는 문서(무혐의 주문 · 16081 · 16089 · 16095)
+    lawful = [d for d in ftc if not d["유형"]]
 
     # 🔄 **봉인 후보는 「주문 문구가 있는 문서」뿐이다** (2026-09-17 · D-234).
     #    🚨 이유 문구는 **문서 라벨을 내려 붙인 것**이고 전수 채택률이 39.7% 다 —
@@ -497,6 +515,17 @@ def plan(seed: int = 20260909) -> dict:
 
     sealed: dict[str, dict] = {}
     got: collections.Counter = collections.Counter()
+    # 🆕 2026-09-30 — 🔴 **이전 판의 봉인을 먼저 지킨다** (D-254 「시험지는 고정이 약속이다」).
+    #    ⛔ 종전에는 매번 섞어 다시 뽑았다 — 추첨이 **후보 목록 전체의 섞인 순서**에 달려, 후보가 한 문서만 바뀌어도
+    #       봉인이 갈릴 수 있다. 뒷광고 문서를 빼고(D-255 ③) 무혐의 문구를 적법으로 옮기면(D-237) 후보가 바뀐다.
+    #       🚨 얼마나 갈렸을지는 재지 않았다 — 갈리지 않게 막았다.
+    #    ★ 이전 판에서 봉인된 문서가 **지금도 설 수 있으면**(단일 유형 · 위반 문구 있음, 또는 적법 문구 있음) 그대로 둔다.
+    #      빠지는 것만 빠지고(`sealed_lost` 가 멈춘다 · `--allow-shrink`), 모자란 유형만 아래에서 채운다.
+    for d in sorted(single + lawful, key=lambda x: x["doc_id"]):
+        if d["doc_id"] in prev_sealed and (d["문구"] or d["문구_적법"]):
+            sealed[d["doc_id"]] = d
+            if d["문구"]:
+                got[d["유형"][0]] += 1
     for t in order:
         for d in pool:
             if d["doc_id"] in sealed or d["유형"][0] != t or got[t] >= need[t]:
@@ -514,7 +543,7 @@ def plan(seed: int = 20260909) -> dict:
     term = casebook_docs()
     # 🔴 **train 은 `single` 전체에서 봉인분만 뺀다** — `pool`(봉인 후보)이 아니다.
     #    ⛔ `pool` 로 두면 「이유만 있는 문서」가 train 에서도 빠진다. 그것이 회수분이다.
-    train = [d for d in single if d["doc_id"] not in sealed] + multi + neg_train + term
+    train = [d for d in single + lawful if d["doc_id"] not in sealed] + multi + neg_train + term
     # 🆕 **사람이 붙인 해설서 라벨은 전량 평가다** (2026-09-17 · D-172 · guide_docs 참조).
     #    🚨 `sealed`(ftc 봉인)와 **따로 센다** — 한 수에 두 원천을 평균하지 않는다 (D-160).
     guide = guide_docs()
@@ -532,7 +561,7 @@ def plan(seed: int = 20260909) -> dict:
         return dict(sorted(c.items(), key=lambda x: -x[1]))
 
     def phrases(rows: list[dict]) -> int:
-        return sum(len(d["문구"]) for d in rows)
+        return sum(len(d["문구"]) + len(d.get("문구_적법") or []) for d in rows)
 
     def phrases_reason(rows: list[dict]) -> int:
         """🆕 이유 문구 — **주문과 섞어 세지 않는다** (D-172 · 한 숫자가 두 과제를 평균한다)."""
@@ -594,7 +623,7 @@ def plan(seed: int = 20260909) -> dict:
             "test_sentence": {"문서": len(sent), "문구": phrases(sent)},
             # 🆕 원천별로 따로 센다 — 한 수에 두 원천을 평균하지 않는다 (D-160)
             "test_sentence_ftc봉인": {"문서": len(sealed), "문구": phrases(list(sealed.values()))},
-            "test_sentence_해설서사람라벨": {"문서": len(guide), "문구": phrases(guide)},
+            "test_sentence_해설서": {"문서": len(guide), "문구": phrases(guide)},
             "test_sentence_화장품질의응답": {"문서": len(cosmetic), "문구": phrases(cosmetic)},
             "test_sentence_공정위보도자료": {"문서": len(press), "문구": phrases(press)},
             "사전(사례집)": {"문서": len(term), "문구": phrases(term)},
@@ -604,7 +633,7 @@ def plan(seed: int = 20260909) -> dict:
             "test_sentence": sent_pos,
             # 🆕 유형별로도 원천을 가른다 — 어느 유형이 사람 라벨로 섰는지 보이게
             "test_sentence_ftc봉인": tally(list(sealed.values())),
-            "test_sentence_해설서사람라벨": tally(guide),
+            "test_sentence_해설서": tally(guide),
             "test_sentence_화장품질의응답": tally(cosmetic),
             "test_sentence_공정위보도자료": tally(press),
             "사전(사례집)": term_pos,
@@ -612,6 +641,8 @@ def plan(seed: int = 20260909) -> dict:
         "negatives": {
             "test_sentence": len(neg_eval),
             "train": len(neg_train),
+            # 🆕 2026-09-30 (D-237) — 결정문의 적법 문구(조건 L). 승인 문구와 **따로** 센다 (D-160)
+            "test_sentence_ftc적법": sum(len(d.get("문구_적법") or []) for d in sealed.values()),
         },
         "unit": {"test_sentence": "문장"},
         "unmeasurable": {

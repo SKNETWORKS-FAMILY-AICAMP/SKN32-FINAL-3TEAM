@@ -690,6 +690,8 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
     text = _mask_people(text, people, log)
     # 🆕 2026-09-22 — 앵커가 놓친 피심인. 사람인지 모르므로 `[업체]` (D-248 트레이드오프) · 경계·조사 규칙은 위와 한 벌 (D-99)
     text = _mask_people(text, respondent_named_of(bare), log, MASK_ORG, "피심인 이름자리")
+    # 🆕 2026-09-30 (D-258 집행) — 대표자 실명. 경계·조사 규칙은 위와 한 벌 (D-99)
+    text = _mask_people(text, respondent_ceos_of(bare), log, MASK_CEO, "대표자명")
     for b in anchor_names(bare):
         if not usable(b):
             continue
@@ -697,7 +699,36 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
             if v in text:
                 _note(log, "앵커", v, MASK_ORG)
             text = text.replace(v, MASK_ORG)
+        text = _mask_spaced_anchor(text, b, log)
     return mask_respondent_email(text, bare, log)
+
+
+def _mask_spaced_anchor(text: str, b: str, log: list[dict] | None = None) -> str:
+    """🆕 2026-09-30 — 앵커를 **띄어 쓴 꼴**(「신기한비누」 ↔ 「신기한 비누」 · 9859 봉인 평가 실측).
+
+    🚨 짧은 앵커(`is_short`)와 한글만이 아닌 앵커는 하지 않는다 — 띄어쓰기를 풀면 보통 낱말과 부딪힌다(D-236).
+    🚨 공백은 **한 자리**만 허용한다 — 앵커 글자 사이 어디든 공백이 하나 끼어도 같다고 본다(두 칸 이상은 문장이다).
+    """
+    if is_short(b) or not re.fullmatch(r"[가-힣]+", b) or len(b) < 4:
+        return text
+    # 법인격이 붙어 있으면 함께 가린다 — 안 그러면 「(주)[업체]」가 다음 규칙에서 「[업체][업체]」가 된다(11897 실측)
+    legal = r"(?:주식회사\s?|㈜\s?|\(주\)\s?)?"
+    pat = re.compile(
+        r"(?<![가-힣])"
+        + legal
+        + "".join(re.escape(ch) + (r"(?: ?)" if i < len(b) - 1 else "") for i, ch in enumerate(b))
+        + r"(?:\s?주식회사|\s?㈜|\s?\(주\))?"
+    )
+    core = re.compile(
+        "".join(re.escape(ch) + (r" ?" if i < len(b) - 1 else "") for i, ch in enumerate(b))
+    )
+    hits = [
+        m.group(0) for m in pat.finditer(text) if " " in (core.search(m.group(0)) or m).group(0)
+    ]
+    for v in dict.fromkeys(hits):
+        _note(log, "앵커(띄어 씀)", v, MASK_ORG)
+        text = text.replace(v, MASK_ORG)
+    return text
 
 
 #: 사건명 꼴 — 「<피심인>의 <법·행위> …행위에 대한 건」. 🚨 머리는 **40자까지** · 뒤는 **6어절 안**에서 끝난다.
@@ -976,13 +1007,20 @@ class Anchor(str):
     people: tuple[str, ...] = ()
     #: 🆕 2026-09-22 — 본문이 「피심인 X」라 부르고 피심정보내용의 **이름 자리**에도 적힌 X (`respondent_named`)
     named: tuple[str, ...] = ()
+    #: 🆕 2026-09-30 — 피심정보내용이 **직함과 함께** 적은 대표자 실명 (`respondent_ceos` · D-258 집행)
+    ceos: tuple[str, ...] = ()
 
     def __new__(
-        cls, value: str, people: tuple[str, ...] = (), named: tuple[str, ...] = ()
+        cls,
+        value: str,
+        people: tuple[str, ...] = (),
+        named: tuple[str, ...] = (),
+        ceos: tuple[str, ...] = (),
     ) -> Anchor:
         obj = super().__new__(cls, value)
         obj.people = tuple(people)
         obj.named = tuple(named)
+        obj.ceos = tuple(ceos)
         return obj
 
 
@@ -992,6 +1030,41 @@ def respondent_people_of(bare: str) -> tuple[str, ...]:
 
 def respondent_named_of(bare: str) -> tuple[str, ...]:
     return getattr(bare, "named", ())
+
+
+def respondent_ceos_of(bare: str) -> tuple[str, ...]:
+    return getattr(bare, "ceos", ())
+
+
+# ══ 대표자 실명 — 피심정보내용이 직함과 함께 적은 이름 (2026-09-30 · D-258 집행) ══════════════
+#  ⛔ 검토(2026-09-30 §1-5) — 봉인 평가 9859 「나만의 S라인 비밀 … **김석호**의 신기한 비누」에 대표이사 실명이 남았다.
+#     피심정보내용은 「대표이사 김석호」라 적었지만 주민번호 표지가 없어 `respondent_people` 이 못 봤고,
+#     본문이 「피심인 김석호」라 부르지 않아 `respondent_named` 도 못 봤다. 광고 문구 안의 이름은 직함이 없다.
+#  ★ D-258 이 ftc 의 「개인 실명」을 대표자 밖까지 가리게 정했다 — 대표자는 그 안쪽이다. **원천이 직함과 함께
+#    이름 자리에 적은 것**만 받는다(성씨로 시작하는 2~4자 · 가림 기호 없음). 이름 모양으로 추측하지 않는다(D-248 (b)).
+_CEO_TITLE = re.compile(
+    r"(?:공동\s*대표이사|대표이사|대표자|대표|이사장|회장|사장)\s*[:：]?\s*([^\n]{2,40})"
+)
+_CEO_NAME = re.compile(r"^[가-힣](?:\s?[가-힣]){1,3}$")
+_CEO_GLYPH = re.compile(r"[○◯OＯ0０*＊ㅇ△×X◁◀▷▶♤♠]")
+
+
+def respondent_ceos(root: ET.Element) -> tuple[str, ...]:
+    """피심정보내용의 「대표이사 X」 · 「대표 X, Y」의 X · Y (붙인 꼴 · 띄어 적은 꼴 둘 다). 긴 것부터."""
+    info = _t(root, "피심정보내용")
+    out: dict[str, None] = {}
+    for m in _CEO_TITLE.finditer(info):
+        for part in re.split(r"[,，、ㆍ·]|\s외\s|\(|\)", m.group(1)):
+            part = part.strip()
+            if not _CEO_NAME.match(part) or _CEO_GLYPH.search(part):
+                continue
+            joined = part.replace(" ", "")
+            if joined[0] not in _SURNAMES or joined in _NOT_RESPONDENT or joined in _NOT_NAME:
+                continue
+            out[joined] = None
+            if " " in part:
+                out[part] = None  # 원천이 띄어 적은 꼴(「김 정 배」)도 본문에 나올 수 있다
+    return tuple(sorted(out, key=len, reverse=True))
 
 
 # ══ 앵커가 못 뽑은 피심인 — 원천이 두 번 적은 이름 (2026-09-22) ═════════════════════
@@ -1168,13 +1241,15 @@ def anchor_ftc(root: ET.Element) -> tuple[str, str]:
     people = respondent_people(root)
     # 🆕 2026-09-22 — 앵커가 놓친 피심인(원천이 두 번 적은 이름). 사람은 `people` 이 먼저 잡으므로 뺀다
     named = tuple(x for x in respondent_named(root) if x not in people)
+    # 🆕 2026-09-30 (D-258 집행) — 직함과 함께 적힌 대표자 실명. 앞의 둘이 잡은 이름은 뺀다
+    ceos = tuple(x for x in respondent_ceos(root) if x not in people and x not in named)
     m = re.match(r"^(.+?)의\s", name)
     if m:
-        return m.group(1), Anchor(strip_legal(m.group(1)), people, named)
+        return m.group(1), Anchor(strip_legal(m.group(1)), people, named, ceos)
     head = name.split()[0] if name.split() else ""
     if head and _LEGAL_RE.search(head):
-        return head, Anchor(strip_legal(head), people, named)
-    return "", Anchor("", people, named)
+        return head, Anchor(strip_legal(head), people, named, ceos)
+    return "", Anchor("", people, named, ceos)
 
 
 #: 마스킹 뒤에 **법인격 표기를 달고 남아 있는 이름**을 찾는다.

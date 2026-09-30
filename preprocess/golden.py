@@ -105,6 +105,20 @@ def reason_keep(text: str) -> tuple[str, str | None]:
     return s, None
 
 
+#: 항목 번호 머리 — 「1) 」 「(2) 」 「③ 」 「가) 」 「1. 」. 🚨 뒤에 공백이 있어야 한다 — 「1.5배」 · 「2중」을 먹지 않는다
+_ENUM_HEAD = re.compile(r"^\s*(?:\(?\d{1,2}\)|\d{1,2}\.(?=\s)|[①-⑳]|[가-하]\)|\([가-하]\))\s*")
+
+
+def overlap_key(text: str) -> str:
+    """🆕 2026-09-30 — 학습 · 평가 겹침을 가르는 열쇠. `norm`(공백 · NFKC) **앞에 항목 번호 머리를 뗀다.**
+
+    ⛔ 종전 열쇠는 `norm` 뿐이라 원천이 붙인 「1) 」 「2) 」 가 다른 글자로 읽혔다 — 평가 음성 60 중 **4** 가
+       학습과 같은 문장인데 빠지지 않았다(검토 2026-09-30 §4 · D-292 집행 정정).
+    🚨 매칭용 `app.dictmatch.norm` 은 건드리지 않는다 — 판정기 사전과 런타임이 쓴다(D-99 는 **같은 일**에만).
+    """
+    return norm(_ENUM_HEAD.sub("", text))
+
+
 def is_negative(r: dict) -> bool:
     """적법(음성) 표본인가. 🔴 `조건` 칸이 있으면 **음성이 아니다** — 해설서 행은 원천이 위반이라 했다 (D-237 · 지시서 §7).
 
@@ -194,6 +208,31 @@ def build() -> tuple[list[dict], dict]:
             rows.append(row)
             stat[split] += 1
 
+        # 🆕 2026-09-30 (D-237) — **원천이 위반 아님이라 한 문구는 적법(조건 L) 행이다.**
+        #    ⛔ 종전에는 주문 전체의 유형이 붙어 **무혐의 문구가 위반 양성**이었다(봉인 4 · 학습 7 — 검토 2026-09-30 §1-2).
+        #    🚨 id 를 `#a{k}` 로 가른다 — 위반 문구(`#{k}`)와 번호대를 나눈다. 봉인 문서의 적법 문구는 평가 음성이다.
+        for k, text in enumerate(d.get("문구_적법") or []):
+            rows.append(
+                {
+                    "id": f"{d['doc_id']}#a{k}",
+                    "text": text,
+                    "근거": [],
+                    "labels": [],
+                    "unit": d["단위"],
+                    "origin": "real",
+                    "provenance": d["원천"],
+                    "구역": "주문",
+                    "redistributable": True,
+                    "split": split,
+                    "조건": "L",
+                    "근거_후보": [],
+                    "판독": "원천_무혐의",
+                    "원천결손": False,
+                }
+            )
+            stat[split] += 1
+            stat["적법(무혐의)"] += 1
+
         # 🆕 **「이유」 문구 — 학습에만 넣는다** (2026-09-17 · D-232 (A) · D-234).
         #
         # 🔴 **봉인 문서의 이유는 버린다.** 넣을 자리가 없다 —
@@ -225,8 +264,35 @@ def build() -> tuple[list[dict], dict]:
                     }
                 )
                 stat["train(이유)"] += 1
-        elif d.get("문구_이유"):
-            stat["봉인문서_이유_버림"] += len(d["문구_이유"])
+            # 🆕 2026-09-30 (D-237) — 이유의 적법 문구(주문 적법 문구와 같은 글자 · 무혐의 문서의 인용)
+            for k, text in enumerate(d.get("문구_이유_적법") or []):
+                text, why = reason_keep(text)
+                if why:
+                    stat[f"이유버림_{why}"] += 1
+                    continue
+                rows.append(
+                    {
+                        "id": f"{d['doc_id']}#ra{k}",
+                        "text": text,
+                        "근거": [],
+                        "labels": [],
+                        "unit": d["단위"],
+                        "origin": "real",
+                        "provenance": d["원천"],
+                        "구역": "이유",
+                        "redistributable": True,
+                        "split": split,
+                        "조건": "L",
+                        "근거_후보": [],
+                        "판독": "원천_무혐의",
+                        "원천결손": False,
+                    }
+                )
+                stat["train(이유·적법)"] += 1
+        elif d.get("문구_이유") or d.get("문구_이유_적법"):
+            stat["봉인문서_이유_버림"] += len(d.get("문구_이유") or []) + len(
+                d.get("문구_이유_적법") or []
+            )
 
     # 🔴 **주입본이 없으면 멈춘다** (2026-09-10 · D-72 fail-closed).
     #    ⛔ 종전에는 `if INJECTED.exists():` 라 없으면 아무 말 없이 건너뛰고
@@ -299,10 +365,15 @@ def build() -> tuple[list[dict], dict]:
     rows = capped
 
     # 🔴 문구 단위 2차 필터 — 평가는 **안 본 것**이어야 한다
-    train_text = {norm(r["text"]) for r in rows if r["split"] == "train"}
+    #    🔄 2026-09-30 — 대조 열쇠는 `overlap_key`(항목 번호 머리를 뗀다 · D-292 집행 정정)
+    train_text = {overlap_key(r["text"]) for r in rows if r["split"] == "train"}
     kept, dropped = [], 0
     for r in rows:
-        if r["split"] == "test_sentence" and is_positive(r) and norm(r["text"]) in train_text:
+        if (
+            r["split"] == "test_sentence"
+            and is_positive(r)
+            and overlap_key(r["text"]) in train_text
+        ):
             dropped += 1
             continue
         kept.append(r)
@@ -315,9 +386,11 @@ def build() -> tuple[list[dict], dict]:
     #      평가셋이 그대로라 이전 측정과 같은 시험지로 비교된다. 학습 행의 라벨이 있어도 뺀다 — 같은 문구가
     #      학습에선 위반 · 평가에선 적법이면 **서로 모순된 표본**이다.
     #    🚨 위 위반 문장 규칙(평가 쪽을 뺀다)과 방향이 다르다 — 통일할지는 이 수(`음성겹침_학습제외`)를 본 뒤 정한다.
-    test_neg = {norm(r["text"]) for r in kept if r["split"] == "test_sentence" and is_negative(r)}
+    test_neg = {
+        overlap_key(r["text"]) for r in kept if r["split"] == "test_sentence" and is_negative(r)
+    }
     before = len(kept)
-    kept = [r for r in kept if not (r["split"] == "train" and norm(r["text"]) in test_neg)]
+    kept = [r for r in kept if not (r["split"] == "train" and overlap_key(r["text"]) in test_neg)]
     stat["음성겹침_학습제외"] = before - len(kept)
 
     check_basis(kept)
