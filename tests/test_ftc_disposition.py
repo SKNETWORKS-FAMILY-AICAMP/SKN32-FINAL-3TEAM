@@ -173,3 +173,31 @@ def test_이전_판의_봉인을_지키고_빠진_것만_빠진다(monkeypatch) 
     assert m["negatives"]["test_sentence_ftc적법"] == 1
     assert "ftc:gone" not in m["assign"]
     assert json.dumps(m, ensure_ascii=False)  # 직렬화된다
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("name", "text", "gone"),
+    [
+        (
+            "(사)한국진주양식협회의 부당한 표시행위에 대한 건",
+            "피심인 사단법인 한국진주양식협회는",
+            "한국진주양식협회",
+        ),
+        (
+            "학교법인 경동대학교의 부당한 광고행위에 대한 건",
+            "피심인이 운영하는 경동대학교의 신입생",
+            "경동대학교",
+        ),
+        (
+            "케이제이아이대부금융(유)[구 케이제이아이파이낸스인터내셔널(유)]의 부당한 광고행위 관련 과징금 재산정의 건",
+            "케이제이아이파이낸스인터내셔널이 광고하였다",
+            "케이제이아이파이낸스인터내셔널",
+        ),
+    ],
+)
+def test_비영리_법인격과_옛_이름도_앵커다(name: str, text: str, gone: str) -> None:
+    """🔴 전수 탐침(8,272 문서) 실측 — 법인격이 앵커에 붙은 채 남아 본문의 맨 이름이 새었다(6611 · 8361 · 8405 · 8009)."""
+    _, bare = mask.anchor_ftc(_root("", name))
+    got = mask.apply_policy(text, bare, "ftc")
+    assert gone not in got and mask.MASK_ORG in got
