@@ -23,6 +23,7 @@ from preprocess import golden, split
         ("피심인은 이 사건 광고를 게재하였다", "ㅂ"),
         ("▩▩▩▩ ○○", "ㅅ"),
         ("<각주>3</각주>", "태그뿐"),
+        ("table_image_17(1).png", "ㅁ"),  # 원천이 표를 그림으로 넣은 파일 이름 (원장 09-30 ⑮)
     ],
 )
 def test_이유_문구_중_법조문_절차_가림기호는_버린다(text: str, why: str) -> None:
