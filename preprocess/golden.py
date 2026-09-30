@@ -55,6 +55,7 @@ from preprocess.split import (
     ftc_press_docs,
     guide_docs,
 )
+from preprocess.text import FOOTNOTE
 
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
@@ -96,7 +97,8 @@ def reason_keep(text: str) -> tuple[str, str | None]:
     ★ **버린 사유를 함께 돌려준다** — 세는 쪽과 거르는 쪽이 같은 함수를 봐야
       「몇 개를 왜 버렸나」가 산출물 옆에 남는다 (D-142 · D-110).
     """
-    s = _TAG.sub("", text).strip()  # ㄱ — 벗긴다
+    # ㄱ — 벗긴다 · 🔄 2026-09-30 각주는 번호까지(종전에는 「개별소비세<각주>3</각주>인하」가 「개별소비세3인하」로 남았다)
+    s = _TAG.sub("", FOOTNOTE.sub("", text)).strip()
     if len(s) < _REASON_MIN:
         return s, "태그뿐"
     for i, pat in enumerate(_REASON_DROP):
