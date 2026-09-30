@@ -45,6 +45,7 @@ import csv
 import hashlib
 import json
 import pathlib
+import random
 import re
 import sys
 
@@ -315,6 +316,28 @@ NA_TYPES = ("9.",)
 FORMULA_MOK = {(5, "바"), (5, "사")}
 
 
+def food_guard(s: dict, a: dict, b: dict, got: dict) -> str | None:
+    """합의여도 **시트로 보내는** 식품 규칙 — 해설서 위반문구(`decide`)와 수정문구 판(`GF`)이 같은 함수를 쓴다 (D-99).
+
+    ① 3.나 가 원천 제품유형 9 밖에 적혔다 (D-288) ② 조제유류 목(5.바·5.사)이 근거·후보에 남았다 ③ 사항이 거래 조건이다 (D-272 개정).
+    대상 N · 조건 L 행은 근거가 없으므로 ② 는 걸리지 않는다 — ① · ③ 은 판독 · 문구로 건다.
+    """
+    if not s["제품유형"].startswith(NA_TYPES) and ("3.나" in a["제외목"] + b["제외목"]):
+        return "3.나 유형 밖 (D-288)"
+    cites = (got.get("근거") or []) + [x for cand in got.get("근거_후보") or [] for x in cand]
+    if any(statute.parse(c)[3:5] in FORMULA_MOK for c in cites):
+        # 후보도 본다 — 한쪽 후보가 조제유류 목이면 그 후보를 정답으로 둘 수 없다
+        return "조제유류 목 (5.바·5.사) — 원천 제품유형은 조제유류가 아니다"
+    if TRADE.search(s["문구"]):
+        return "거래조건 사항 (D-272 개정) — 인용을 팀장이 정한다"
+    return None
+
+
+def _food_hold(s: dict, a: dict, b: dict, got: dict) -> tuple[dict | None, str]:
+    why = food_guard(s, a, b, got)
+    return (None, why) if why else (got, "")
+
+
 def merge(
     r1: pathlib.Path,
     r2: pathlib.Path,
@@ -427,19 +450,8 @@ def decide(src: dict, a: dict, b: dict, dec: dict[str, dict] | None = None) -> d
             )
             continue
         got, reason = agree(a[k], b[k])
-        if (
-            got is not None
-            and not s["제품유형"].startswith(NA_TYPES)
-            and ("3.나" in a[k]["제외목"] + b[k]["제외목"])
-        ):
-            got, reason = None, "3.나 유형 밖 (D-288)"
-        if got is not None and any(
-            statute.parse(c)[3:5] in FORMULA_MOK
-            for c in got["근거"] + [x for cand in got["근거_후보"] for x in cand]
-        ):  # 후보도 본다 — 한쪽 후보가 조제유류 목이면 그 후보를 정답으로 둘 수 없다
-            got, reason = None, "조제유류 목 (5.바·5.사) — 원천 제품유형은 조제유류가 아니다"
-        if got is not None and TRADE.search(s["문구"]):
-            got, reason = None, "거래조건 사항 (D-272 개정) — 인용을 팀장이 정한다"
+        if got is not None:
+            got, reason = _food_hold(s, a[k], b[k], got)
         if got is None:
             why[reason.split(" ")[0]] += 1
             sheet.append(
@@ -784,6 +796,8 @@ class Round:
     #: 판정표에 싣는 칸(지문 · 문구 말고) — 정렬도 이 순서
     sheet_head: tuple[str, ...]
     units: Callable[[list[dict]], dict[str, dict]]
+    #: 🆕 2026-09-30 (판정 J1 (b)) — 합의여도 시트로 보내는 원천 규칙(없으면 None). 식품 수정문구 판은 `food_guard`
+    guard: Callable[[dict, dict, dict, dict], str | None] | None = None
 
     def path(self, name: str) -> pathlib.Path:
         return globals()[f"{self.prefix}_{name}"]
@@ -1007,6 +1021,277 @@ FP = Round(
 )
 
 
+# ── 🆕 2026-09-30 (판정 J1 (b)) 해설서 **수정문구** 판 — 지시서 `라벨링_지시서_2026-09-30_해설서_수정문구_조문·조건.md` ──
+#: 해설서 「표시(안) → 수정」 표의 오른쪽 칸(`preprocess/mfds_guide.py` 의 `수정쌍`). 🚨 위반문구 1,834 와 **다른 행**이다 —
+#:    원래 문구(왼쪽 칸)는 위반문구 표에 없다(0/245 · 작업공간 실측). 이 판은 **수정문구**만 읽는다
+GF_SOURCE = "mfds_special_use_guide"
+GF_GUIDE = ROOT / "data" / "derived" / "mfds_guide_labels.jsonl"
+GF_DIR = ROOT / "data" / "derived" / "labels" / "guide_fix"
+GF_READINGS = GF_DIR / "readings.jsonl"
+GF_ADOPTED = GF_DIR / "adopted.jsonl"
+GF_DECISIONS = GF_DIR / "decisions.jsonl"
+GF_AUDIT = GF_DIR / "audit.jsonl"
+GF_TEAM_SHEET = ROOT / "build" / "labels" / "guide_fix__팀장판정표.csv"
+GF_KEY_RE = re.compile(r"^gf:[a-z2-7]{12}$")
+
+
+def gf_key_of(table: int, orig: str, fix: str) -> str:
+    """수정문구의 지문 — 표 · 원래 문구 · 수정문구. 🚨 같은 수정문구(「~ 환자」)가 여러 표 · 여러 원래 문구에 나온다 → 셋을 다 넣는다."""
+    raw = f"{table}|{orig}|{fix}"
+    return (
+        "gf:" + base64.b32encode(hashlib.sha256(raw.encode("utf-8")).digest()).decode()[:12].lower()
+    )
+
+
+def _gf_source() -> dict[str, dict]:
+    """해설서 파생물(마스킹을 지난 `--dump` 사본 · D-159)의 수정쌍 → 지문별 행. 같은 셋이 두 번이면 한 번만(수를 센다)."""
+    if not GF_GUIDE.exists():
+        raise SystemExit(
+            f"🔴 {GF_GUIDE} 가 없다 — 먼저: uv run python -m preprocess.mfds_guide --dump"
+        )
+    got: dict[str, dict] = {}
+    for x in GF_GUIDE.read_text(encoding="utf-8").splitlines():
+        if not x.strip():
+            continue
+        r = json.loads(x)
+        if r.get("종류") != "수정쌍":
+            continue
+        k = gf_key_of(r["표"], r["문구"], r["수정문구"])
+        got.setdefault(
+            k,
+            {
+                "지문": k,
+                "표": r["표"],
+                "제품유형": r["제품유형"],
+                "원래문구": r["문구"],
+                "문구": r["수정문구"],
+                "원천": r["원천"],
+            },
+        )
+    return got
+
+
+def gf_rows() -> list[dict]:
+    """판독 단위 — 수정쌍 전량(지문 중복 제거). `gf-input` 이 `단위.json` 으로 낸다."""
+    rows = list(_gf_source().values())
+    registry.assert_derivable(rows, who="guide_statute_round.gf_rows")
+    return rows
+
+
+def gf_units(units: list[dict]) -> dict[str, dict]:
+    """단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 지문 · 표 · 원래 문구 · 수정문구가 해설서 파생물의 수정쌍과 같아야 한다."""
+    have = _gf_source()
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(GF_KEY_RE, k, src, bad):
+            continue
+        h = have.get(k)
+        if h is None or any(u.get(f) != h[f] for f in ("표", "원래문구", "문구")):
+            bad.append(f"{k} 표 {u.get('표')} 해설서 수정쌍에 없는 행 {str(u.get('문구'))[:30]!r}")
+            continue
+        if h["원천"] != GF_SOURCE:
+            bad.append(f"{k} 원천 {h['원천']!r} ≠ {GF_SOURCE}")
+            continue
+        src[k] = h
+    _units_fail("해설서 수정문구", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.gf_units")
+    return src
+
+
+GF = Round(
+    prefix="GF",
+    cmd="gf",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=("표", "제품유형", "원래문구"),
+    sheet_head=("표", "제품유형"),
+    units=lambda us: gf_units(us),
+    guard=food_guard,
+)
+
+# ── 🆕 2026-09-30 (판정 J2) 결정문 **봉인 문구** 판 — 지시서 `라벨링_지시서_2026-09-30_결정문봉인문구_대상·조건.md` ──
+#: 봉인 평가셋(`split_manifest` 의 `test_sentence`)에 든 결정문 **주문 문구**. 원천(의결서)이 위반이라 했다(D-237) —
+#:    판독은 **호를 새로 붙이지 않고** ① 광고 문구인가(대상) ② 문장만으로 판정되는가(조건)만 붙인다
+FS_SOURCE = "ftc_decisions_body"
+FS_MANIFEST = ROOT / "data" / "derived" / "golden" / "split_manifest.json"
+FS_DIR = ROOT / "data" / "derived" / "labels" / "ftc_sealed"
+FS_READINGS = FS_DIR / "readings.jsonl"
+FS_ADOPTED = FS_DIR / "adopted.jsonl"
+FS_DECISIONS = FS_DIR / "decisions.jsonl"
+FS_AUDIT = FS_DIR / "audit.jsonl"
+FS_TEAM_SHEET = ROOT / "build" / "labels" / "ftc_sealed__팀장판정표.csv"
+FS_KEY_RE = re.compile(r"^fs:[a-z2-7]{12}$")
+
+
+def _fs_source() -> dict[str, dict]:
+    """봉인 문서의 주문 문구 → 지문별 행. 🔴 분할 기록이 없으면 멈춘다 · 한 문서에 같은 문구가 두 번이면 멈춘다 (D-220)."""
+    from preprocess import split as sp  # noqa: PLC0415
+
+    if not FS_MANIFEST.exists():
+        raise SystemExit(f"🔴 {FS_MANIFEST} 가 없다 — 봉인이 무엇인지 모른다")
+    assign = json.loads(FS_MANIFEST.read_text(encoding="utf-8"))["assign"]
+    got: dict[str, dict] = {}
+    for d in sp.ftc_docs():
+        if assign.get(d["doc_id"]) != sp.SEALED:
+            continue
+        for text in d["문구"]:
+            k = sp.sealed_key(d["doc_id"], text)
+            if k in got:
+                raise SystemExit(f"🔴 {d['doc_id']} 에 같은 주문 문구가 두 번 — {text[:30]!r}")
+            got[k] = {
+                "지문": k,
+                "doc_id": d["doc_id"],
+                "근거_원천": d["근거"],
+                "문구": text,
+                "원천": d["원천"],
+            }
+    return got
+
+
+def fs_rows() -> list[dict]:
+    rows = list(_fs_source().values())
+    registry.assert_derivable(rows, who="guide_statute_round.fs_rows")
+    return rows
+
+
+def fs_units(units: list[dict]) -> dict[str, dict]:
+    """단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 지금 봉인된 문서의 주문 문구와 같아야 한다(봉인이 바뀌었으면 멈춘다)."""
+    have = _fs_source()
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(FS_KEY_RE, k, src, bad):
+            continue
+        h = have.get(k)
+        if h is None or u.get("doc_id") != h["doc_id"] or u.get("문구") != h["문구"]:
+            bad.append(f"{k} {u.get('doc_id')} 봉인 주문 문구에 없다 {str(u.get('문구'))[:30]!r}")
+            continue
+        src[k] = h
+    miss = set(have) - set(src)
+    if miss:
+        bad.append(f"봉인 주문 문구 중 단위 표에 없는 것 {len(miss)} — 전량이 아니면 합치지 않는다")
+    _units_fail("결정문 봉인 문구", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.fs_units")
+    return src
+
+
+def fs_guard(s: dict, a: dict, b: dict, got: dict) -> str | None:
+    """합의여도 팀장에게 — ① 조건 L(원천은 위반이다 · D-237) ② C·A·B 인데 판독의 호가 **원천의 호**와 다르다(호는 원천이 정한다)."""
+    if got["대상"] != "Y":
+        return None
+    if got["조건"] == "L":
+        return "조건 L — 원천(의결서)은 위반이라 했다 (D-237)"
+    if got["조건"] in ("C", "A", "B"):
+        mine = {statute.ho_key(c) for c in got.get("근거") or []}
+        if mine != {statute.ho_key(c) for c in s["근거_원천"]}:
+            return "원천 호와 다름 — 호는 의결서가 정한다"
+    return None
+
+
+FS = Round(
+    prefix="FS",
+    cmd="fs",
+    cite_of=fp_cite_of,
+    exceptions=FP_EXCEPTIONS,
+    mok_ho={},
+    head=("doc_id", "근거_원천"),
+    sheet_head=("doc_id",),
+    units=lambda us: fs_units(us),
+    guard=fs_guard,
+)
+
+
+def fs_input(out_dir: pathlib.Path) -> dict:
+    """판독 재료 — `단위.json` · `입력.md`(문서 id · 원천 호 · 문구)."""
+    rows = fs_rows()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    units = [{h: r[h] for h in ("지문", "doc_id", "문구")} for r in rows]
+    (out_dir / "단위.json").write_text(
+        json.dumps(units, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
+    )
+    ho = lambda r: ",".join(f"공{statute.parse(c)[3]}" for c in r["근거_원천"])  # noqa: E731
+    lines = ["# 판독 입력 — 결정문 봉인 문구", "", "지문 | 문서 | 원천 호 | **문구**", ""]
+    lines += [f"{r['지문']} | {r['doc_id']} | {ho(r)} | **{r['문구']}**" for r in rows]
+    (out_dir / "입력.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    return {"단위": len(units), "문서": len({r["doc_id"] for r in rows})}
+
+
+#: 식품 판독에 주는 기준 원문 — 현행 조문 · [별표] · 고시(지시서 §4). 🔴 하나라도 없으면 멈춘다(빈 묶음을 주지 않는다 · D-220)
+LAW_ARTICLE = ROOT / "data" / "derived" / "law_article.jsonl"
+LAW_NORM = ROOT / "data" / "derived" / "law_norm"
+FOOD_ARTICLES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("식품 등의 표시ㆍ광고에 관한 법률", ("7", "8", "9")),
+    ("식품 등의 표시ㆍ광고에 관한 법률 시행령", ("2", "3")),
+    ("식품등의 부당한 표시 또는 광고의 내용 기준", ("2",)),
+    (
+        "부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정",
+        ("2", "3", "4", "5", "6"),
+    ),
+)
+FOOD_ANNEXES = ("013453_0001", "69549_0001", "75449_0001", "75449_0002")
+
+
+def food_criteria() -> str:
+    """🆕 2026-09-30 — 식품 판독의 기준 원문 묶음(마크다운). 종전에는 판독 때마다 손으로 모았다(화장품 지시서 §4 「스크립트는 아직 없다」)."""
+    miss = [
+        str(p)
+        for p in (LAW_ARTICLE, *(LAW_NORM / f"{a}.jsonl" for a in FOOD_ANNEXES))
+        if not p.exists()
+    ]
+    if miss:
+        raise SystemExit("🔴 기준 원문이 없다 — 묶음을 내지 않는다\n  " + "\n  ".join(miss))
+    arts = [
+        json.loads(x) for x in LAW_ARTICLE.read_text(encoding="utf-8").splitlines() if x.strip()
+    ]
+    out = ["# 기준 원문 — 식품 (현행 · 코퍼스에서 뽑음)", ""]
+    for law, jos in FOOD_ARTICLES:
+        got = [r for r in arts if r["법령"] == law and r["조"] in jos and not r["가지"]]
+        if {r["조"] for r in got} != set(jos):
+            raise SystemExit(
+                f"🔴 {law} 제{','.join(jos)}조 중 코퍼스에 없는 조 — 묶음을 내지 않는다"
+            )
+        out += [f"## {law}", ""]
+        out += [
+            r["본문"] for r in sorted(got, key=lambda r: jos.index(r["조"]))
+        ]  # 파일 순서 유지(안정 정렬)
+        out.append("")
+    for a in FOOD_ANNEXES:
+        rs = [
+            json.loads(x)
+            for x in (LAW_NORM / f"{a}.jsonl").read_text(encoding="utf-8").splitlines()
+            if x.strip()
+        ]
+        out += [f"## [별표] {rs[0]['annex_title']} ({a})", ""]
+        for r in rs:
+            out.append("  " * max(int(r.get("level") or 0) - 1, 0) + f"{r['path']} {r['text']}")
+        out.append("")
+    return "\n".join(out).rstrip("\n") + "\n"
+
+
+def gf_input(out_dir: pathlib.Path) -> dict:
+    """판독 재료 셋 — `단위.json`(병합이 읽는다) · `입력.md`(판독자가 읽는다 · 원래 문구를 함께) · `기준원문.md`."""
+    rows = gf_rows()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    units = [{h: r[h] for h in ("지문", "표", "제품유형", "원래문구", "문구")} for r in rows]
+    (out_dir / "단위.json").write_text(
+        json.dumps(units, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
+    )
+    lines = [
+        "# 판독 입력 — 해설서 수정문구",
+        "",
+        "지문 | 제품유형 | 원래 문구(심의에서 고치라 한 것) | **수정문구(판독 대상)**",
+        "",
+    ]
+    lines += [f"{u['지문']} | {u['제품유형']} | {u['원래문구']} | **{u['문구']}**" for u in units]
+    (out_dir / "입력.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    (out_dir / "기준원문.md").write_text(food_criteria(), encoding="utf-8", newline="\n")
+    return {"단위": len(units), "제품유형": dict(collections.Counter(u["제품유형"] for u in units))}
+
+
 def _merge(R: Round, units: pathlib.Path, r1: pathlib.Path, r2: pathlib.Path) -> dict:
     """단위 표(JSON 목록) + 판독 TSV 둘 → **판독 원자료**(원천)를 쓰고 채택·시트를 계산한다."""
     txt = units.read_text(encoding="utf-8")
@@ -1069,6 +1354,10 @@ def _decide(R: Round, src: dict, a: dict, b: dict, dec: dict[str, dict] | None =
             how = "팀장판정"
         else:
             got, reason = _agree(R, a[k], b[k])
+            if got is not None and R.guard is not None:
+                hold = R.guard(s, a[k], b[k], got)
+                if hold:
+                    got, reason = None, hold
             if got is None:
                 why[reason.split(" ")[0]] += 1
                 sheet.append({**head, "_이유": reason, "_a": a[k], "_b": b[k]})
@@ -1183,7 +1472,7 @@ def cq_same(x: dict, y: dict) -> bool:
     return x["조건"] == y["조건"] and hx == hy
 
 
-def _audit(R: Round, path: pathlib.Path) -> dict:
+def _audit(R: Round, path: pathlib.Path, out: pathlib.Path | None = None) -> dict:
     """합의 감사(지시서 §6 · D-285 개정 5) — 판독을 **보지 않고** 붙인 감사표 → 감사(원천) · 합의 정확도.
 
     🔴 감사 행은 **합의로 채택된 행**이어야 한다(팀장 판정 행 · 시트 행을 감사하면 그 수는 합의 정확도가 아니다).
@@ -1221,7 +1510,13 @@ def _audit(R: Round, path: pathlib.Path) -> dict:
         raise SystemExit(
             "🔴 감사표에 문제가 있다 — **아무것도 쓰지 않았다**\n  " + "\n  ".join(bad[:30])
         )
-    out = R.path("AUDIT")
+    if out is None:
+        out = R.path("AUDIT")
+        if out.exists():
+            # 🆕 2026-09-30 (판정 J6) — 앞 감사(예: 화장품 모델 감사 · 원장 09-30)를 **덮지 않는다** — 감사는 원천이다
+            raise SystemExit(
+                f"🔴 {out} 가 이미 있다 — 덮지 않는다. 새 감사는 --out 으로 다른 이름에(예: audit__팀장.jsonl)"
+            )
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8", newline="\n") as f:
         for r in sorted(got, key=lambda r: r["지문"]):
@@ -1233,6 +1528,112 @@ def _audit(R: Round, path: pathlib.Path) -> dict:
         "합의정확도": f"{hit / len(got):.1%}" if got else None,
         "불일치": [r["지문"] for r in got if not r["일치"]],
     }
+
+
+#: 🆕 2026-09-30 (판정 J6) — 블라인드 감사표의 칸. 🔴 판독 · 채택 값을 싣지 않는다(보고 붙이면 그쪽으로 끌린다 · 지시서 §6)
+AUDIT_TAIL = ("대상", "주근거", "부근거", "별표5목", "조건", "제외목", "메모", "판정자")
+AUDIT_SEED = 20260930
+
+
+def audit_pick(keys: list[str], n: int, seed: int) -> list[str]:
+    """정렬한 지문에서 seed 로 n 개 — 같은 seed · 같은 채택본이면 같은 표본이다 (D-54)."""
+    keys = sorted(keys)
+    return sorted(random.Random(seed).sample(keys, min(n, len(keys))))
+
+
+def _cell(v) -> str:
+    return ",".join(map(str, v)) if isinstance(v, list) else str(v)
+
+
+def audit_sheet(
+    R: Round, out: pathlib.Path, n: int = 30, seed: int = AUDIT_SEED, keys: list[str] | None = None
+) -> dict:
+    """합의 채택 행에서 무작위 n 을 뽑아 **판독을 가린** 감사표를 쓴다 → 팀장이 채워 `{cmd}-audit --csv … --out …`.
+
+    `keys` 를 주면 그 행으로(앞 감사와 같은 표본을 사람이 다시 볼 때 · 화장품 모델 감사 30). 🔴 합의 채택 행이 아니면 멈춘다.
+    """
+    ad = R.path("ADOPTED")
+    if not ad.exists():
+        raise SystemExit(f"🔴 {ad} 가 없다 — 먼저 {R.cmd}-rebuild")
+    took = {}
+    for x in ad.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            r = json.loads(x)
+            if r["판독"] == "독립판독_합의":
+                took[r["지문"]] = r
+    pick = sorted(keys) if keys is not None else audit_pick(list(took), n, seed)
+    bad = [k for k in pick if k not in took]
+    if bad:
+        raise SystemExit(f"🔴 합의 채택 행이 아닌 지문 {len(bad)} — 예 {bad[:3]}")
+    shown = [h for h in R.head if h not in ("마스킹",)]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(("지문", *shown, "문구", *AUDIT_TAIL))
+        for k in pick:
+            r = took[k]
+            w.writerow(
+                [k, *(_cell(r.get(h, "")) for h in shown), r["문구"]] + [""] * len(AUDIT_TAIL)
+            )
+    return {"판": R.cmd, "합의채택": len(took), "표본": len(pick), "seed": None if keys else seed}
+
+
+def guide_audit_sheet(out: pathlib.Path, n: int = 30, seed: int = AUDIT_SEED) -> dict:
+    """해설서 위반문구 판(`gs`) 블라인드 감사표 — 칸은 이 판의 판독 꼴(근거 · 조건 · 제외목 · 원천결손).
+
+    ⬜ 채운 표를 읽는 명령은 아직 없다(화장품 · 수정문구 판의 `*-audit` 와 달리 이 판은 `Round` 가 아니다) — 대조는 채운 뒤 만든다.
+    """
+    took = {}
+    for x in ADOPTED.read_text(encoding="utf-8").splitlines() if ADOPTED.exists() else []:
+        r = json.loads(x)
+        if r["판독"] == "독립판독_합의":
+            took[r["지문"]] = r
+    if not took:
+        raise SystemExit(f"🔴 {ADOPTED} 에 합의 채택 행이 없다 — 먼저 rebuild")
+    pick = audit_pick(list(took), n, seed)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(
+            (
+                "지문",
+                "표",
+                "제품유형",
+                "문구",
+                "주근거",
+                "부근거",
+                "조건",
+                "제외목",
+                "원천결손",
+                "메모",
+                "판정자",
+            )
+        )
+        for k in pick:
+            r = took[k]
+            w.writerow([k, r["표"], r["제품유형"], r["문구"]] + [""] * 7)
+    return {"판": "gs", "합의채택": len(took), "표본": len(pick), "seed": seed}
+
+
+def caution_audit_sheet(out: pathlib.Path, n: int = 30, seed: int = AUDIT_SEED) -> dict:
+    """인정 조건문(섭취 주의사항 · 조건 D · 판정 J1 (가-2′)) 블라인드 감사표 — 규칙이 붙인 D 를 사람이 본다.
+
+    칸 — 조건(C·A·B·M·D·L) · 메모 · 판정자. 🔴 규칙의 값(D)을 싣지 않는다. ⬜ 채운 표를 읽는 명령은 아직 없다.
+    """
+    from preprocess import split as sp  # noqa: PLC0415
+
+    docs = {d["doc_id"]: d for d in sp.caution_docs()}
+    if not docs:
+        raise SystemExit("🔴 인정 조건문이 0 — 원천(mfds_hf_labels · hf_api_labels)을 본다")
+    pick = audit_pick(list(docs), n, seed)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(("지문", "원천", "문구", "조건", "메모", "판정자"))
+        for k in pick:
+            d = docs[k]
+            w.writerow([k, d["원천"], d["문구"][0], "", "", ""])
+    return {"판": "인정조건문", "전체": len(docs), "표본": len(pick), "seed": seed}
 
 
 # ── 원천별 이름 — 게이트 · 명령이 부르는 자리 (본체는 위 `_*` 하나 · D-99) ──────────────────────────────────
@@ -1284,7 +1685,24 @@ def fp_audit(path: pathlib.Path) -> dict:
     return _audit(FP, path)
 
 
-ROUNDS = {"cq": (CQ, "화장품"), "fp": (FP, "공정위 보도자료 1997~2007")}
+def gf_parse_line(line: str) -> dict:
+    return _parse(GF, line)
+
+
+def gf_merge(units: pathlib.Path, r1: pathlib.Path, r2: pathlib.Path) -> dict:
+    return _merge(GF, units, r1, r2)
+
+
+def gf_rebuild() -> dict:
+    return _rebuild(GF)
+
+
+ROUNDS = {
+    "cq": (CQ, "화장품"),
+    "fp": (FP, "공정위 보도자료 1997~2007"),
+    "gf": (GF, "해설서 수정문구"),
+    "fs": (FS, "결정문 봉인 문구"),
+}
 
 
 def main() -> int:
@@ -1326,7 +1744,47 @@ def main() -> int:
             f"{tag}-audit", help=f"{name} — 채운 합의 감사표 CSV → audit.jsonl · 합의 정확도"
         )
         pa.add_argument("--csv", type=pathlib.Path, required=True)
+        pa.add_argument(
+            "--out", type=pathlib.Path, help="감사 원자료를 쓸 곳(기본 audit.jsonl · 있으면 멈춘다)"
+        )
+        ps = sub.add_parser(
+            f"{tag}-audit-sheet", help=f"{name} — 합의 채택 무작위 n 블라인드 감사표 CSV"
+        )
+        ps.add_argument("--out", type=pathlib.Path, required=True)
+        ps.add_argument("--n", type=int, default=30)
+        ps.add_argument("--seed", type=int, default=AUDIT_SEED)
+        ps.add_argument(
+            "--keys-from",
+            type=pathlib.Path,
+            dest="keys_from",
+            help="이 감사 jsonl 과 같은 표본으로",
+        )
+    p_gi = sub.add_parser("gf-input", help="해설서 수정문구 — 단위.json · 입력.md · 기준원문.md")
+    p_gi.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "guide_fix")
+    for name, hlp in (
+        ("audit-sheet", "해설서 위반문구 판"),
+        ("caution-audit-sheet", "인정 조건문"),
+    ):
+        pz = sub.add_parser(name, help=f"{hlp} — 블라인드 감사표 CSV (판정 J6)")
+        pz.add_argument("--out", type=pathlib.Path, required=True)
+        pz.add_argument("--n", type=int, default=30)
+        pz.add_argument("--seed", type=int, default=AUDIT_SEED)
+    p_fi = sub.add_parser("fs-input", help="결정문 봉인 문구 — 단위.json · 입력.md")
+    p_fi.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_sealed")
     a = ap.parse_args()
+    if a.cmd in ("audit-sheet", "caution-audit-sheet"):
+        fn = guide_audit_sheet if a.cmd == "audit-sheet" else caution_audit_sheet
+        print(json.dumps(fn(a.out, a.n, a.seed), ensure_ascii=False, indent=1))
+        print(f"감사표 → {a.out} (판정자 칸은 사람이 채운다)")
+        return 0
+    if a.cmd == "fs-input":
+        print(json.dumps(fs_input(a.out), ensure_ascii=False, indent=1))
+        print(f"판독 재료 → {a.out}")
+        return 0
+    if a.cmd == "gf-input":
+        print(json.dumps(gf_input(a.out), ensure_ascii=False, indent=1))
+        print(f"판독 재료 → {a.out}")
+        return 0
     tag = a.cmd.split("-", 1)[0]
     if tag in ROUNDS:
         return _round_main(ROUNDS[tag][0], a.cmd.split("-", 1)[1], a)
@@ -1355,8 +1813,19 @@ def _round_main(R: Round, verb: str, a) -> int:
         )
         return 0
     if verb == "audit":
-        print(json.dumps(_audit(R, a.csv), ensure_ascii=False, indent=1))
-        print(f"감사 → {R.path('AUDIT')}")
+        print(json.dumps(_audit(R, a.csv, a.out), ensure_ascii=False, indent=1))
+        print(f"감사 → {a.out or R.path('AUDIT')}")
+        return 0
+    if verb == "audit-sheet":
+        keys = None
+        if a.keys_from:
+            keys = [
+                json.loads(x)["지문"]
+                for x in a.keys_from.read_text(encoding="utf-8").splitlines()
+                if x.strip()
+            ]
+        print(json.dumps(audit_sheet(R, a.out, a.n, a.seed, keys), ensure_ascii=False, indent=1))
+        print(f"감사표 → {a.out} (판독 값은 싣지 않았다 · 판정자 칸은 사람이 채운다)")
         return 0
     got = _rebuild(R) if verb == "rebuild" else _merge(R, a.units, a.r1, a.r2)
     print(json.dumps(got, ensure_ascii=False, indent=1))

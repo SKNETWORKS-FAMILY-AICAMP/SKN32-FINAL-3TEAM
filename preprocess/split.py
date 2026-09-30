@@ -88,6 +88,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import collections
 import hashlib
 import json
@@ -147,7 +148,12 @@ def inputs() -> tuple[pathlib.Path, ...]:
     got += (COSMETIC_ADOPTED,) if cq and not cq["대기"] else ()
     # 🆕 2026-09-30 (동결 전 판정 ⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 같은 규칙
     fp = ftc_press_state()
-    return got + ((FTC_PRESS_ADOPTED,) if fp and not fp["대기"] else ())
+    got += (FTC_PRESS_ADOPTED,) if fp and not fp["대기"] else ()
+    # 🆕 2026-09-30 (판정 J1 (b) · J2) — 해설서 수정문구 · 결정문 봉인 문구 판도 같은 규칙
+    gf = guide_fix_state()
+    got += (GUIDE_FIX_ADOPTED,) if gf and not gf["대기"] else ()
+    fs = ftc_sealed_state()
+    return got + ((FTC_SEALED_ADOPTED,) if fs and not fs["대기"] else ())
 
 
 def fingerprint() -> dict[str, dict]:
@@ -402,7 +408,13 @@ def cosmetic_docs() -> list[dict]:
 #:    `scripts/guide_statute_round.py` `FP_READINGS` · `FP_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99)
 FTC_PRESS_READINGS = pathlib.Path("data/derived/labels/ftc_press_old/readings.jsonl")
 #: 🆕 분할 입력이 될 수 있는 `labels/` 아래 판 — 조문·조건 판(독립 판독 · 팀장 판정)만. 사람 8유형 라벨은 아니다 (D-283)
-ROUND_LABEL_DIRS = ("labels/guide_statute/", "labels/cosmetic_qa/", "labels/ftc_press_old/")
+ROUND_LABEL_DIRS = (
+    "labels/guide_statute/",
+    "labels/cosmetic_qa/",
+    "labels/ftc_press_old/",
+    "labels/guide_fix/",  # 🆕 09-30 판정 J1 (b)
+    "labels/ftc_sealed/",  # 🆕 09-30 판정 J2
+)
 FTC_PRESS_ADOPTED = pathlib.Path("data/derived/labels/ftc_press_old/adopted.jsonl")
 
 
@@ -418,6 +430,60 @@ def ftc_press_docs() -> list[dict]:
       (원장 09-30 ④). 문구가 학습과 겹치면 `golden` 의 문구 단위 거름이 평가 쪽을 뺀다.
     """
     return _round_docs(ftc_press_state(), FTC_PRESS_ADOPTED, "ftc_press")
+
+
+#: 🆕 2026-09-30 (판정 J1 (b)) — 해설서 **수정문구** 판. 🚨 경로의 정본은 `scripts/guide_statute_round.py` `GF_READINGS` ·
+#:    `GF_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99)
+GUIDE_FIX_READINGS = pathlib.Path("data/derived/labels/guide_fix/readings.jsonl")
+GUIDE_FIX_ADOPTED = pathlib.Path("data/derived/labels/guide_fix/adopted.jsonl")
+
+
+def guide_fix_state() -> dict[str, int] | None:
+    """해설서 수정문구 판의 상태 — 다른 판과 같은 규칙."""
+    return _round_state(GUIDE_FIX_READINGS, GUIDE_FIX_ADOPTED, "gf-rebuild")
+
+
+def guide_fix_docs() -> list[dict]:
+    """해설서 수정문구의 평가 라벨 — **전량 평가 · 대기가 0 일 때만** (판정 J1 (b) · 지시서 2026-09-30 수정문구 §7).
+
+    ★ 조건 L 행이 평가 음성이다(`golden.is_negative`) — 결정문 무혐의 4 뿐이던 평가 음성을 늘리려는 판이다(원장 09-30 ⑭ 「음성 부족」).
+    🔴 원천 id 는 해설서와 같다(`mfds_special_use_guide`) — 수는 `test_sentence_해설서수정문구` 로 **따로** 센다 (D-160).
+    """
+    return _round_docs(guide_fix_state(), GUIDE_FIX_ADOPTED, "mfds_special_use_guide")
+
+
+#: 🆕 2026-09-30 (판정 J2) — 결정문 **봉인 문구**에 대상 · 조건을 붙이는 판. 🚨 경로의 정본은
+#:    `scripts/guide_statute_round.py` `FS_READINGS` · `FS_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99)
+FTC_SEALED_READINGS = pathlib.Path("data/derived/labels/ftc_sealed/readings.jsonl")
+FTC_SEALED_ADOPTED = pathlib.Path("data/derived/labels/ftc_sealed/adopted.jsonl")
+
+
+def sealed_key(doc_id: str, text: str) -> str:
+    """봉인 문구의 지문 — 문서 id · 문구. base32 소문자 12자(`guide_statute_round.key_of` 와 같은 이유 — 휴대전화 꼴이 안 생긴다).
+
+    🚨 `scripts/guide_statute_round.py` 의 FS 판이 **이 함수를 부른다** — `preprocess` 가 `scripts` 를 부르지 않으려고 여기 둔다 (D-99).
+    """
+    raw = f"{doc_id}|{text}"
+    return (
+        "fs:" + base64.b32encode(hashlib.sha256(raw.encode("utf-8")).digest()).decode()[:12].lower()
+    )
+
+
+def ftc_sealed_state() -> dict[str, int] | None:
+    """결정문 봉인 문구 판의 상태 — 다른 판과 같은 규칙."""
+    return _round_state(FTC_SEALED_READINGS, FTC_SEALED_ADOPTED, "fs-rebuild")
+
+
+def ftc_sealed_marks() -> dict[str, dict] | None:
+    """봉인 문구 지문 → 채택 행(대상 · 조건). **대기가 0 일 때만** — 아니면 None(골든은 종전대로 조건 없이 낸다).
+
+    ★ 문서 단위 분할은 그대로다 — 이 판은 **문구 단위로** 대상 N 을 빼고 조건을 붙인다(`golden.build`).
+    🚨 그래서 `plan()` 의 봉인 셈(문서 · 호)은 이 판을 모른다 — 문구 셈의 정본은 골든 · `eval_rule` 이다.
+    """
+    st = ftc_sealed_state()
+    if not st or st["대기"]:
+        return None
+    return {r["지문"]: r for r in _jsonl(FTC_SEALED_ADOPTED)}
 
 
 def _round_docs(st: dict[str, int] | None, adopted: pathlib.Path, source: str) -> list[dict]:
@@ -672,7 +738,9 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
     cosmetic = cosmetic_docs()
     # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 전량 평가다. 따로 센다 (D-160)
     press = ftc_press_docs()
-    sent = list(sealed.values()) + guide + cosmetic + press + neg_eval
+    # 🆕 2026-09-30 (판정 J1 (b)) — 해설서 수정문구도 전량 평가다. 따로 센다 (D-160)
+    guide_fix = guide_fix_docs()
+    sent = list(sealed.values()) + guide + cosmetic + press + guide_fix + neg_eval
 
     def lawful_units(rows: list[dict]) -> int:
         """🆕 2026-09-30 (판정 J1) — **조건 L 문구 수**(적법 · 음성). 결정문 적법 문구 + 조건 L 행의 문구."""
@@ -754,6 +822,7 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
             "test_sentence_해설서": {"문서": len(guide), "문구": phrases(guide)},
             "test_sentence_화장품질의응답": {"문서": len(cosmetic), "문구": phrases(cosmetic)},
             "test_sentence_공정위보도자료": {"문서": len(press), "문구": phrases(press)},
+            "test_sentence_해설서수정문구": {"문서": len(guide_fix), "문구": phrases(guide_fix)},
             "사전(사례집)": {"문서": len(term), "문구": phrases(term)},
         },
         "counts": {
@@ -912,6 +981,24 @@ def main() -> int:
                 else f"  → 평가에 들어갔다 ({m['sizes'].get('test_sentence_공정위보도자료', {}).get('문구', '?')}문구)"
             )
         )
+    for name, st, key in (
+        ("해설서 수정문구", guide_fix_state(), "test_sentence_해설서수정문구"),
+        ("결정문 봉인 문구(대상 · 조건)", ftc_sealed_state(), None),
+    ):
+        if st:
+            print(
+                f"  {name} 판 — 전체 {st['전체']:,} · 채택 {st['채택']:,} · **대기 {st['대기']:,}**"
+                + (
+                    "  → 대기가 0 이 되면 들어간다"
+                    if st["대기"]
+                    else "  → 들어갔다"
+                    + (
+                        f" ({m['sizes'].get(key, {}).get('문구', '?')}문구)"
+                        if key
+                        else " (골든 문구 단위)"
+                    )
+                )
+            )
     if m["pending_guide"]:
         tot = sum(m["pending_guide"].values())
         print(

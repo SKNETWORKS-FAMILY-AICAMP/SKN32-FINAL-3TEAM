@@ -55,6 +55,7 @@ from preprocess.split import (
     ftc_docs,
     ftc_press_docs,
     guide_docs,
+    guide_fix_docs,
 )
 from preprocess.text import FOOTNOTE
 
@@ -219,12 +220,30 @@ def build() -> tuple[list[dict], dict]:
     docs = ftc_docs() + casebook_docs() + approved_docs() + guide_docs()
     repeats = reason_repeats(docs)  # 🆕 2026-09-30 (판정 J3 (가)) — 이유 거름 ㅇ
     # 🆕 2026-09-30 (판정 J1 (가-2′)) — 인정 조건문(조건 D · 전량 train). 이유 되풀이(ㅇ)의 입력은 아니다
-    for d in docs + cosmetic_docs() + ftc_press_docs() + caution_docs():
+    # 🆕 2026-09-30 (판정 J2) — 봉인 결정문 주문 문구의 대상 · 조건(판독 둘 · 팀장). 대기가 남으면 None — 종전대로 낸다
+    marks = split_mod.ftc_sealed_marks()
+    for d in docs + cosmetic_docs() + ftc_press_docs() + guide_fix_docs() + caution_docs():
         split = assign.get(d["doc_id"])
         if not split:
             stat["미배정"] += 1
             continue
+        sealed_ftc = (
+            marks is not None and d["원천"] == "ftc_decisions_body" and split == split_mod.SEALED
+        )
         for k, text in enumerate(d["문구"]):
+            mark = None
+            if sealed_ftc:
+                mark = marks.get(split_mod.sealed_key(d["doc_id"], text))
+                if mark is None:
+                    # 🔴 판이 봉인 문구 전량을 들고 있어야 한다 — 빠진 문구를 조건 없이 내면 판정 없는 행이 섞인다 (D-220)
+                    raise SystemExit(
+                        f"🔴 {d['doc_id']} 봉인 문구가 판독 판에 없다 {text[:30]!r} — 봉인이 바뀌었다. "
+                        "`guide_statute_round fs-input` 부터 다시"
+                    )
+                if mark["대상"] == "N":
+                    # 광고 문구가 아니다 — 평가에서 뺀다 (지시서 결정문봉인문구 §4)
+                    stat["봉인_대상아님(N)"] += 1
+                    continue
             row = {
                 "id": f"{d['doc_id']}#{k}",
                 "text": text,
@@ -246,6 +265,15 @@ def build() -> tuple[list[dict], dict]:
                 # 🆕 09-30 — 화장품 [별표 5] 목은 인용 꼴 밖의 칸이다(지시서 §7 🔶)
                 if d.get("별표5목"):
                     row["별표5목"] = d["별표5목"]
+            if mark is not None:
+                # 호 · 유형은 원천(의결서) 그대로 — 판독은 대상 · 조건만 붙인다 (D-237)
+                row |= {
+                    "조건": mark["조건"],
+                    "근거_후보": [],
+                    "판독": mark["판독"],
+                    "원천결손": False,
+                }
+                stat[f"봉인_조건_{mark['조건']}"] += 1
             rows.append(row)
             stat[split] += 1
 
