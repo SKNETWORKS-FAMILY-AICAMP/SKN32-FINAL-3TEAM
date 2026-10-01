@@ -99,21 +99,29 @@ def test_사유가_여럿이면_더_막힌_쪽이다() -> None:
 
 
 @pytest.mark.gate
+def test_불가_사유가_없는_유형은_확정하지_않는다() -> None:
+    """🔄 2026-10-01 (D-308 ⑨) — 표에 없는 유형은 보류다(D-273). 남은 하나는 뒷광고 — D-255 범위 밖이라 일부러 뺐다."""
+    assert set(Violation) - set(INFEASIBILITY_OF) == {Violation.추천_보증_뒷광고}
+    # 인용이 유형을 못 주면(식품 9호) 사전 칸의 유형을 쓴다 — 뒷광고는 인용으로 갈 호가 없다(D-255 범위 밖)
+    h = DictHit("체험", "추천_보증_뒷광고", ("013094:제8조제1항제9호",), (0, 2))
+    s = _one(_state("체험 후기", [h]))
+    assert s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf
+    assert s.violations == [Violation.추천_보증_뒷광고]
+
+
+@pytest.mark.gate
 @pytest.mark.parametrize(
-    ("vt", "cite"),
+    ("cite", "vt", "want"),
     [
-        ("후기_체험기_기만", "013094:제8조제1항제5호|다목"),
-        ("기능성화장품_오인", "002015:제13조제1항제2호"),
-        # 인용이 유형을 못 주면(식품 9호) 사전 칸의 유형을 쓴다 — 뒷광고는 인용으로 갈 호가 없다(D-255 범위 밖)
-        ("추천_보증_뒷광고", "013094:제8조제1항제9호"),
+        ("013094:제8조제1항제5호|다목", "후기_체험기_기만", Infeasibility.C),
+        ("002015:제13조제1항제2호", "기능성화장품_오인", Infeasibility.A),
     ],
 )
-def test_불가_사유를_못_정한_유형은_확정하지_않는다(vt: str, cite: str) -> None:
-    """⬜ D-273 의 ⬜ 둘과 표에 없는 유형 — 판정이 내려오면 `INFEASIBILITY_OF` 에 들어온다. 비방은 D-304 로 B."""
-    assert Violation(vt) not in INFEASIBILITY_OF
-    s = _one(_state("체험 후기", [DictHit("체험", vt, (cite,), (0, 2))]))
-    assert s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf
-    assert s.violations == [Violation(vt)]
+def test_후기는_절대형_기능성화장품은_자격형이다(cite: str, vt: str, want: Infeasibility) -> None:
+    """🆕 2026-10-01 (D-308 ⑨)."""
+    s = _one(_state("체험 후기", [DictHit("체험", None, (cite,), (0, 2))]))
+    assert s.verdict is Verdict.confirmed and s.violations == [Violation(vt)]
+    assert s.infeasibility is want
 
 
 @pytest.mark.gate
