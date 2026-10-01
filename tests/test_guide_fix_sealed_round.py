@@ -4,6 +4,7 @@
    ① 해설서 수정쌍에 없는 행(고쳐 쓴 문구 · 표가 다른 행)이 수정문구 판에 채택되는 것 (D-220)
    ② 식품 규칙(3.나 유형 · 조제유류 목 · 거래 조건)이 수정문구 판에서만 빠지는 것 — 위반문구 판과 같은 함수 (D-99)
    ③ 판정 대기가 남았는데 수정문구가 평가에 들어가는 것 · 대상 N 이 평가에 들어가는 것
+     🔄 2026-10-01 (D-299 · D-301) — 수정문구는 **조건 D 행만** 평가에 든다(적법 문장 · 주장 없음). C · A · B · M · L 은 안 든다
    ④ 결정문 봉인 문구에 판독이 L(적법)을 붙이거나 원천 호를 바꾸는데 합의로 채택되는 것 (D-237)
    ⑤ 봉인 문구 판이 끝났는데 골든에 대상 N 문구가 남거나 · 판에 없는 봉인 문구가 조건 없이 섞이는 것
 """
@@ -135,7 +136,8 @@ def test_수정문구_판도_식품_규칙으로_시트에_보낸다(gf) -> None
 
 
 @pytest.mark.gate
-def test_수정문구는_대기가_0_일_때만_평가에_들고_대상_N_은_빠진다(gf) -> None:
+def test_수정문구는_대기가_0_일_때만_조건_D_행만_평가에_든다(gf) -> None:
+    """🔄 2026-10-01 (판정 K1 (나) · D-299 · D-301) — 종전에는 채택 Y 전량이 평가에 들었다(판정 J1 (b))."""
     tmp, _ = gf
     k1, k2, k3 = (r["지문"] for r in g.gf_rows())
     r1 = tmp / "r1.tsv"
@@ -152,22 +154,56 @@ def test_수정문구는_대기가_0_일_때만_평가에_들고_대상_N_은_�
     assert got["시트"] == 1  # L ↔ A 는 합성하지 않는다
     assert split.guide_fix_state()["대기"] == 1
     assert split.guide_fix_docs() == []  # 🔴 대기가 남으면 빈 목록
-    r1.write_text(
-        HEAD + f"{k1}\tY\t-\t-\t-\tL\t-\t\n{k2}\tY\t-\t-\t-\tD\t-\t\n{k3}\tN\t-\t-\t-\t-\t-\t\n",
-        encoding="utf-8",
-    )
-    r2.write_text(r1.read_text(encoding="utf-8"), encoding="utf-8")
-    g.gf_merge(_units(tmp), r1, r2)
-    docs = split.guide_fix_docs()
-    assert {d["doc_id"] for d in docs} == {k1, k2}  # N 은 빠진다
-    lawful = next(d for d in docs if d["doc_id"] == k1)
-    assert (
-        lawful["조건"] == "L"
-        and lawful["유형"] == []
-        and lawful["원천"] == "mfds_special_use_guide"
-    )
-    assert golden.is_negative({"labels": lawful["유형"], "조건": lawful["조건"]})
+    for cond in ("L", "A", "B", "C", "M"):
+        # 🔴 대기 0 이어도 D 가 아닌 수정문구는 들지 않는다 — 원천이 승인한 문구를 모델이 위반 · 적법으로 읽은 것이다 (D-237)
+        same = (
+            HEAD
+            + f"{k1}\tY\t{'4' if cond in 'ABC' else '-'}\t-\t-\t{cond}\t-\t\n"
+            + f"{k2}\tY\t-\t-\t-\tD\t-\t\n{k3}\tN\t-\t-\t-\t-\t-\t\n"
+        )
+        r1.write_text(same, encoding="utf-8")
+        r2.write_text(same, encoding="utf-8")
+        g.gf_merge(_units(tmp), r1, r2)
+        assert split.guide_fix_state()["대기"] == 0
+        docs = split.guide_fix_docs()
+        assert [d["doc_id"] for d in docs] == [k2], cond  # N 도 빠진다
+    d = docs[0]
+    assert d["조건"] == "D" and d["유형"] == [] and d["원천"] == "mfds_special_use_guide"
+    assert not golden.is_negative({"labels": d["유형"], "조건": d["조건"]})  # D 는 L 이 아니다
+    assert golden.lawful_kind({"id": f"{k2}#0", "labels": [], "조건": "D"}) == "주장없음"
     assert "labels/guide_fix/" in split.ROUND_LABEL_DIRS
+
+
+@pytest.mark.gate
+def test_적법_문장은_원천이_선언했거나_원천이_승인한_주장없음뿐이다() -> None:
+    """🆕 2026-10-01 (D-301) — 「위반이라 하지 않았다」는 「적법이라 확인했다」가 아니다."""
+    lk = golden.lawful_kind
+    assert lk({"id": "ftc:1#a0", "labels": [], "조건": "L"}) == "주장"  # 원천 무혐의
+    assert (
+        lk({"id": "gf:abcdefghijkl#0", "labels": [], "조건": "D"}) == "주장없음"
+    )  # 원천 승인 · 주장 없음
+    # ⛔ 해설서 위반문구의 D — 원천이 삭제를 지시했다
+    assert lk({"id": "guide:1#0", "labels": [], "조건": "D"}) is None
+    assert (
+        lk({"id": "gf:abcdefghijkl#0", "labels": [], "조건": "M"}) is None
+    )  # 문장만으로 안 정해진다
+    assert lk({"id": "x#0", "labels": [], "조건": "A"}) is None
+    assert lk({"id": "ftc:1#0", "labels": ["거짓_과장"]}) is None
+
+
+@pytest.mark.gate
+def test_적법_문장_오탐률은_내역과_합계를_따로_낸다() -> None:
+    from scripts import eval_rule
+
+    rows = [
+        {"id": "ftc:1#a0", "text": "울림", "labels": [], "조건": "L"},
+        {"id": "ftc:2#a0", "text": "조용", "labels": [], "조건": "L"},
+        {"id": "gf:abcdefghijkl#0", "text": "울림", "labels": [], "조건": "D"},
+        {"id": "guide:1#0", "text": "울림", "labels": [], "조건": "D"},  # 세지 않는다
+        {"id": "ftc:3#0", "text": "울림", "labels": ["거짓_과장"]},  # 위반 — 세지 않는다
+    ]
+    got = eval_rule.lawful_report(rows, lambda t: t == "울림")
+    assert got == {"주장": (2, 1), "주장없음": (1, 1), "합계": (3, 2)}
 
 
 # ── 결정문 봉인 문구 ──────────────────────────────────────────────────────────────────────

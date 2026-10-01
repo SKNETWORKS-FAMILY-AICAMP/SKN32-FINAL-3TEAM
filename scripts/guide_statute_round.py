@@ -1032,6 +1032,7 @@ GF_ADOPTED = GF_DIR / "adopted.jsonl"
 GF_DECISIONS = GF_DIR / "decisions.jsonl"
 GF_AUDIT = GF_DIR / "audit.jsonl"
 GF_TEAM_SHEET = ROOT / "build" / "labels" / "guide_fix__팀장판정표.csv"
+#: 🚨 머리 `gf:` 를 `preprocess/golden.py` `LAWFUL_NOCLAIM_PREFIX` 가 읽는다(적법 문장 · 주장 없음 · D-301) — 바꾸면 양쪽을 같이 (D-99)
 GF_KEY_RE = re.compile(r"^gf:[a-z2-7]{12}$")
 
 

@@ -34,7 +34,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]
 from app.dictmatch import terms_in  # noqa: E402 — 정규화 · 매칭은 한 곳 (D-99 · 2026-09-28)
 from app.settings import PARAMS  # noqa: E402
 from collect import statute  # noqa: E402
-from preprocess.golden import is_negative  # noqa: E402 — 음성 판별은 한 곳 (D-99)
+from preprocess.golden import is_negative, lawful_kind  # noqa: E402 — 음성 판별은 한 곳 (D-99)
 
 DICT = pathlib.Path("data/derived/banned_terms.jsonl")
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
@@ -254,6 +254,44 @@ def report(rows: list[dict], rules: dict[str, str]) -> None:
     print("     🚨 적법 문구가 위반으로 잡히는 비율이다 — 이것이 없으면 Precision 은 착시다.")
 
 
+def lawful_report(rows: list[dict], fired) -> dict[str, tuple[int, int]]:
+    """🆕 2026-10-01 (D-301) — **적법 문장 오탐률** · 내역(`주장` · `주장없음`)마다 `(행, 울린 행)` 과 합계.
+
+    ★ 두 칸을 **합친 수는 대표 지표가 아니다** — 주장 있는 적법(L)이 30 미만인 동안 합계는 주장 없는 문장의 오탐률과
+       거의 같다(쉬운 음성이 수를 쥔다). 그래서 합계는 내역과 함께만 낸다. 「특이도」 라는 이름은 `주장` 칸에만 쓴다.
+    🔴 `주장없음` 칸은 채점(`scored`)에서 빠진 조건 D 행에서 온다 — 원천이 승인한 형태만(`lawful_kind`).
+    `fired(text) -> bool` — 판정기가 무엇이든 위반을 냈는가. 판정기 B 는 사전 적중 · 인코더는 후보 하나 이상.
+    """
+    got: dict[str, list[int]] = {"주장": [0, 0], "주장없음": [0, 0]}
+    for r in rows:
+        k = lawful_kind(r)
+        if k:
+            got[k][0] += 1
+            got[k][1] += bool(fired(r["text"]))
+    out = {k: (n, f) for k, (n, f) in got.items()}
+    out["합계"] = (sum(n for n, _ in out.values()), sum(f for _, f in out.values()))
+    return out
+
+
+def print_lawful(stat: dict[str, tuple[int, int]]) -> None:
+    """`lawful_report` 의 표. 30 미만은 「측정 불가」(D-40) — 0 을 「오탐 없음」으로 읽지 않는다 (D-220)."""
+    print(f"\n  {'적법 문장 오탐률 (D-301)':26} {'행':>5} {'울림':>5} {'오탐률':>8}")
+    names = {
+        "주장": "주장 있음 — 특이도 칸",
+        "주장없음": "주장 없음",
+        "합계": "합계 (대표 지표 아님)",
+    }
+    for k in ("주장", "주장없음", "합계"):
+        n, f = stat[k]
+        rate = f"{f / n:.1%}" if n else "-"
+        mark = "  🔴 측정 불가 (D-40)" if n < MIN_MEASURABLE else ""
+        print(f"  {names[k]:26} {n:>5} {f:>5} {rate:>8}{mark}")
+    if stat["주장"][0] < MIN_MEASURABLE:
+        print(
+            "     🚨 주장 있는 적법이 30 미만이다 — 합계는 사실상 「주장 없음」 오탐률이다. 합계만 떼어 쓰지 않는다"
+        )
+
+
 def main() -> int:
     rules = load_rules()
     if not GOLDEN.exists():
@@ -295,6 +333,9 @@ def main() -> int:
         for src, sub in sorted(by_src.items()):
             print(f"\n  ━━ 원천 {src} — {len(sub)}행 + 공통 적법 {len(neg)}행")
             report(sub + neg, rules)
+
+    # 🆕 2026-10-01 (D-301) — 원천을 가로질러 **적법 문장** 전체에서 한 번 · 내역과 함께 (채점에서 뺀 D 행도 여기서는 본다)
+    print_lawful(lawful_report(every, lambda t: bool(judge(t, rules))))
 
     print("\n  🚨 **이 점수를 제품 성능으로 읽지 않는다.** 판정기 B 는 인코더의 **대조군**이다.")
     print("     둘이 갈리는 지점이 보류·재생성 신호가 된다 (기획문서 6-2 ①).")

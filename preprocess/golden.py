@@ -167,6 +167,29 @@ def is_negative(r: dict) -> bool:
     return not r["labels"] and r.get("조건", "L") == "L"
 
 
+#: 🆕 2026-10-01 (D-301) — 「적법 문장(주장 없음)」의 원천이 되는 판의 지문 머리. 🚨 정본은 `scripts/guide_statute_round.py`
+#:    `GF_KEY_RE`(`gf:`) 다 — 바꾸면 양쪽을 같이 (D-99)
+LAWFUL_NOCLAIM_PREFIX = "gf:"
+
+
+def lawful_kind(r: dict) -> str | None:
+    """🆕 2026-10-01 (D-301) — **적법 문장**인가, 그렇다면 어느 쪽인가. `"주장"` · `"주장없음"` · `None`.
+
+    ★ 법적으로 문장은 위반이거나 적법이다 — 주장 없는 문장(조건 D)도 적법이다. 그러나 **「위반이라 하지 않았다」는
+       「적법이라 확인했다」가 아니다.** 그래서 적법 문장은 둘뿐이다:
+       - `"주장"` — 원천이 위반 아님을 선언한 문구(조건 L · `is_negative`). 이 칸만 특이도 · 정밀도라 부른다
+       - `"주장없음"` — 원천이 **승인한 형태**이면서 주장이 없는 문구(해설서 수정문구 판의 조건 D · `gf:`)
+    ⛔ 평가 D 의 해설서 위반문구 행(`mfds_special_use_guide` · 지문 `gf:` 아님)은 **원천이 삭제를 지시한** 문구다
+       (「날씬한 몸매를 원하시는 분」) — 문장만 보면 주장이 없어도 위반을 내는 것을 오답이라 할 수 없다. 넣지 않는다.
+    ⛔ 라벨 없는 행 · 조건 M 은 적법이 아니다 — 판정받지 않았거나 문장만으로 안 정해진다 (D-220).
+    """
+    if is_negative(r):
+        return "주장"
+    if r.get("조건") == "D" and str(r.get("id", "")).startswith(LAWFUL_NOCLAIM_PREFIX):
+        return "주장없음"
+    return None
+
+
 def is_positive(r: dict) -> bool:
     """위반(양성) 평가 표본인가 — 유형이 있거나, 조건이 C·A·B 인 행(근거가 후보로만 있는 행 포함)."""
     return bool(r["labels"]) or r.get("조건") in ("C", "A", "B")
