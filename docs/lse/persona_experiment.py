@@ -41,6 +41,9 @@ ADAPTER = ROOT / "models" / "copylane_sllm_lora_adapter"
 OUT = ROOT / "docs" / "lse" / "_private" / "persona_experiment_results.jsonl"
 N_REAL = 30
 SEED = 20261001
+# 🆕 10-02 — 평가 입력 고정. `data-sync` 가 golden.jsonl 을 새 판으로 바꾸자 같은 SEED 로도 31개 중 6개가 바뀌었다
+#    (정답표 `real_answer_key.jsonl` 과 어긋나고 v6·v7 평가와 시험지가 달라진다). 있으면 이 파일을 그대로 쓴다.
+FROZEN = ROOT / "docs" / "lse" / "_private" / "real_inputs_frozen.jsonl"
 
 # 🚨 D-27 — pain point 축은 넣지 않는다. 인구통계 · 라이프스타일 · 목표만.
 PERSONAS = [
@@ -79,7 +82,9 @@ def norm(s: str) -> str:
 
 
 def load_inputs() -> list[dict]:
-    rows = [json.loads(line) for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")]
+    if FROZEN.exists():
+        return [json.loads(line) for line in FROZEN.open(encoding="utf-8") if line.strip()]
+    rows =[json.loads(line) for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")]
     pool = [r for r in rows if r["provenance"] == "mfds_casebook" and r["split"] == "train"
             and len(norm(r["text"])) >= 6 and r["labels"]]
     random.Random(SEED).shuffle(pool)
