@@ -1,0 +1,140 @@
+{"id": "x001", "group": "질병", "input": "먹기만 해도 위염이 싹 낫는 양배추즙", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x002", "group": "질병", "input": "아토피 피부염 완화에 탁월한 수제 비누", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x003", "group": "질병", "input": "통풍 걱정 끝! 요산 수치 잡는 체리 농축액", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x004", "group": "질병", "input": "갑상선 기능 저하증에 좋은 다시마 환", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x005", "group": "질병", "input": "역류성 식도염 잡아주는 마 가루", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x006", "group": "질병", "input": "치매 예방을 위한 매일 한 잔 녹차", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x007", "group": "질병", "input": "편두통이 사라지는 허브티", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x008", "group": "질병", "input": "고지혈증 환자에게 추천하는 들기름", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x009", "group": "질병", "input": "방광염 재발 막아주는 크랜베리 주스", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x010", "group": "질병", "input": "비염 증상 완화 도라지 배즙", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x011", "group": "질병", "input": "골다공증 치료에 도움 되는 멸치 칼슘 스낵", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x012", "group": "질병", "input": "숙면 유도, 불면증 해결 캐모마일", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x013", "group": "질병", "input": "간경화 진행을 늦추는 헛개 추출액", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x014", "group": "질병", "input": "우울증 극복을 돕는 해바라기씨 간식", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x015", "group": "질병", "input": "변비약 없이도 쾌변, 차전자피 젤리", "violation_types": ["질병_예방치료_표방", "의약품_오인"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x016", "group": "질병", "input": "암세포 억제 성분이 들어간 버섯 수프", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x017", "group": "질병", "input": "구내염 빨리 낫게 하는 프로폴리스 캔디", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x018", "group": "질병", "input": "탈모 방지 효과 검은콩 두유", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x019", "group": "질병", "input": "생리통 완화 쑥차", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x020", "group": "질병", "input": "독감 예방엔 생강청 한 스푼", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x021", "group": "질병", "input": "지방간 개선 브로콜리 착즙", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x022", "group": "질병", "input": "안구건조증 치료 결명자차", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x023", "group": "질병", "input": "손발 저림 해소, 혈액순환 장애 개선 은행잎 차", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x024", "group": "질병", "input": "충치 예방 자일리톨 100% 사탕", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x025", "group": "질병", "input": "여드름 흉터까지 치료하는 알로에 젤", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x026", "group": "질병", "input": "관절염 통증이 줄어드는 우슬 진액", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x027", "group": "질병", "input": "빈혈 해결 철분 가득 비트즙", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x028", "group": "질병", "input": "숙취해소를 넘어 간 해독까지, 간질환 걱정 없는 음료", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x029", "group": "질병", "input": "피부염 진정 시카 크림", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x030", "group": "질병", "input": "감기 기운 있을 때 바로 낫는 유자차", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x031", "group": "질병", "input": "당뇨 환자 혈당 정상화 여주 환", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x032", "group": "질병", "input": "고혈압 약 대신 마시는 양파즙", "violation_types": ["질병_예방치료_표방", "의약품_오인"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x033", "group": "질병", "input": "잇몸 출혈 멈추게 하는 죽염 치약", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x034", "group": "질병", "input": "갱년기 장애 극복 석류 젤리", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x035", "group": "질병", "input": "만성 위장질환 다스리는 매실청", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x036", "group": "질병", "input": "천식 기침 멎게 하는 배도라지청", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x037", "group": "질병", "input": "디스크 통증 잡는 홍화씨 분말", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x038", "group": "질병", "input": "대상포진 회복을 앞당기는 영양 수프", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x039", "group": "질병", "input": "통증 없는 하루, 근육통 치료 파스 대신 마그네슘", "violation_types": ["질병_예방치료_표방", "의약품_오인"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x040", "group": "질병", "input": "소화불량 즉시 해결 양배추 환", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "x041", "group": "의약품", "input": "먹는 보톡스, 콜라겐 젤리", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x042", "group": "의약품", "input": "천연 수면제로 불리는 상추 추출물", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x043", "group": "의약품", "input": "항생제 대신 먹는 마누카 꿀", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x044", "group": "의약품", "input": "천연 소화제 매실 원액", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x045", "group": "의약품", "input": "식욕억제제처럼 작용하는 다이어트 차", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x046", "group": "의약품", "input": "약사가 추천하는 처방급 비타민", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x047", "group": "의약품", "input": "진통제 없이 버티는 생강 캡슐", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x048", "group": "의약품", "input": "주사 맞은 듯 탱탱해지는 앰플", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x049", "group": "의약품", "input": "천연 해열제 칡차", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x050", "group": "의약품", "input": "호르몬 치료제 수준의 갱년기 두유", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x051", "group": "의약품", "input": "먹는 선크림, 자외선 차단 캡슐", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x052", "group": "의약품", "input": "의사들이 처방하는 장 청소 주스", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x053", "group": "의약품", "input": "천연 항우울제 세인트존스워트 차", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x054", "group": "의약품", "input": "발모제 성분 함유 샴푸 바", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x055", "group": "의약품", "input": "혈압약 끊게 해준 기적의 식초", "violation_types": ["의약품_오인", "질병_예방치료_표방"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x056", "group": "의약품", "input": "인슐린처럼 혈당을 낮추는 바나바잎", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x057", "group": "의약품", "input": "링거 맞은 것처럼 회복되는 수액 음료", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x058", "group": "의약품", "input": "천연 스테로이드 연고 대체 밤", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x059", "group": "의약품", "input": "공부 잘하는 약, 집중력 캔디", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x060", "group": "의약품", "input": "비아그라 부럽지 않은 마카 환", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "x061", "group": "체험기", "input": "엄마가 이거 드시고 무릎 통증이 싹 없어졌대요", "violation_types": ["후기_체험기_기만", "질병_예방치료_표방"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x062", "group": "체험기", "input": "한 달 마셨더니 뱃살이 쏙 빠졌어요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x063", "group": "체험기", "input": "아이가 먹고 나서 감기에 안 걸려요", "violation_types": ["후기_체험기_기만", "질병_예방치료_표방"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x064", "group": "체험기", "input": "써 보니 기미가 옅어졌다는 후기가 쏟아져요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x065", "group": "체험기", "input": "남편이 먹고 아침에 거뜬하게 일어나요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x066", "group": "체험기", "input": "저도 반신반의했는데 일주일 만에 머리숱이 늘었어요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x067", "group": "체험기", "input": "구매자 98%가 효과를 봤다고 답했어요", "violation_types": ["후기_체험기_기만", "거짓_과장"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x068", "group": "체험기", "input": "먹은 지 사흘 만에 피부가 달라졌다는 고객 후기", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x069", "group": "체험기", "input": "할머니 혈압이 정상으로 돌아왔어요", "violation_types": ["후기_체험기_기만", "질병_예방치료_표방"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x070", "group": "체험기", "input": "딸이 먹이니까 키가 한 학기 만에 쑥 컸어요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x071", "group": "체험기", "input": "이거 바르고 흉터가 사라졌다는 분들이 많아요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x072", "group": "체험기", "input": "밤에 깨는 일이 없어졌다는 리뷰가 1위예요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x073", "group": "체험기", "input": "회사 동료들이 요즘 얼굴 좋아졌다고 해요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x074", "group": "체험기", "input": "먹자마자 속이 편해지는 게 느껴졌어요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x075", "group": "체험기", "input": "운동 안 했는데 2주 만에 옷 사이즈가 줄었다는 후기", "violation_types": ["후기_체험기_기만", "거짓_과장"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x076", "group": "체험기", "input": "우리 아버지 당 수치가 확 내려갔어요", "violation_types": ["후기_체험기_기만", "질병_예방치료_표방"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x077", "group": "체험기", "input": "마셔 본 사람은 다 재구매한다는 그 즙", "violation_types": ["후기_체험기_기만", "거짓_과장"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x078", "group": "체험기", "input": "임상 참여자 전원이 만족했다는 후기", "violation_types": ["후기_체험기_기만", "거짓_과장"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x079", "group": "체험기", "input": "써 본 엄마들이 아기 태열이 가라앉았다고 해요", "violation_types": ["후기_체험기_기만", "질병_예방치료_표방"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x080", "group": "체험기", "input": "먹고 나서 생리 주기가 규칙적으로 바뀌었어요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "x081", "group": "신체변화", "input": "바르기만 하면 흰머리가 검게 돌아오는 오일", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x082", "group": "신체변화", "input": "성장판을 자극해 키가 크는 우유", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x083", "group": "신체변화", "input": "일주일에 3kg씩 빠지는 마법의 차", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x084", "group": "신체변화", "input": "잃어버린 시력을 되찾아 주는 블루베리", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x085", "group": "신체변화", "input": "세포 나이를 10년 되돌리는 앰플", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x086", "group": "신체변화", "input": "가슴 사이즈가 커지는 석류 젤리", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x087", "group": "신체변화", "input": "체질 자체를 바꿔 다시 살찌지 않는 몸으로", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x088", "group": "신체변화", "input": "IQ가 올라가는 어린이 영양 젤리", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x089", "group": "신체변화", "input": "혈관 나이 20대로 되돌리는 오메가 오일", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x090", "group": "신체변화", "input": "독소가 빠져나가며 피부가 새로 태어나는 디톡스 주스", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x091", "group": "신체변화", "input": "뼈 나이를 거꾸로 돌리는 칼슘 스틱", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x092", "group": "신체변화", "input": "자는 동안 지방만 골라 태우는 야간 차", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x093", "group": "신체변화", "input": "주름이 펴지고 다시는 생기지 않는 크림", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x094", "group": "신체변화", "input": "머리카락이 두 배 굵어지는 앰플", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x095", "group": "신체변화", "input": "평생 요요 없는 다이어트 쉐이크", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x096", "group": "신체변화", "input": "면역세포 수가 3배 늘어나는 버섯 차", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x097", "group": "신체변화", "input": "숙취가 1시간 만에 완전히 사라지는 젤리", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x098", "group": "신체변화", "input": "기억력이 20대 수준으로 돌아오는 호두 바", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x099", "group": "신체변화", "input": "다리가 길어 보이는 게 아니라 진짜 길어지는 스트레칭 보조제", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x100", "group": "신체변화", "input": "바르면 모공이 영구적으로 사라지는 세럼", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "x101", "group": "사실만", "input": "100% 천연 원료, 부작용 제로 녹용 진액", "violation_types": ["거짓_과장"], "output": {"body": "녹용 진액", "mandatory_note": null, "placement": null}}
+{"id": "x102", "group": "사실만", "input": "세계 최고급 뉴질랜드산 프로폴리스", "violation_types": ["거짓_과장"], "output": {"body": "뉴질랜드산 프로폴리스", "mandatory_note": null, "placement": null}}
+{"id": "x103", "group": "사실만", "input": "국내 유일 무농약 인증 유기농 쌀로 만든 누룽지", "violation_types": ["거짓_과장"], "output": {"body": "국내산 쌀로 만든 누룽지", "mandatory_note": "무농약·유기농 인증은 인증 번호와 함께 표시", "placement": "인증 표시 근처"}}
+{"id": "x104", "group": "사실만", "input": "화학첨가물 일절 없는 순수 100% 착즙 사과즙", "violation_types": ["거짓_과장"], "output": {"body": "사과를 착즙해 만든 사과즙", "mandatory_note": null, "placement": null}}
+{"id": "x105", "group": "사실만", "input": "식약처가 인정한 최고의 홍삼", "violation_types": ["거짓_과장"], "output": {"body": "홍삼 제품", "mandatory_note": null, "placement": null}}
+{"id": "x106", "group": "사실만", "input": "특허받은 공법으로 만든 기적의 흑마늘", "violation_types": ["거짓_과장"], "output": {"body": "숙성 공법으로 만든 흑마늘", "mandatory_note": null, "placement": null}}
+{"id": "x107", "group": "사실만", "input": "부작용 걱정 없는 안전한 천연 다이어트 차", "violation_types": ["거짓_과장"], "output": {"body": "차 제품", "mandatory_note": null, "placement": null}}
+{"id": "x108", "group": "사실만", "input": "1등급 한우 사골로 우려낸 보약 같은 곰탕", "violation_types": ["거짓_과장", "의약품_오인"], "output": {"body": "1등급 한우 사골로 우려낸 곰탕", "mandatory_note": "한우 등급은 등급판정서 기준", "placement": null}}
+{"id": "x109", "group": "사실만", "input": "몸에 좋은 건 다 넣은 슈퍼푸드 그래놀라", "violation_types": ["거짓_과장"], "output": {"body": "곡물과 견과류를 담은 그래놀라", "mandatory_note": null, "placement": null}}
+{"id": "x110", "group": "사실만", "input": "중금속 완벽 제거, 가장 깨끗한 미역", "violation_types": ["거짓_과장"], "output": {"body": "세척 공정을 거친 미역", "mandatory_note": null, "placement": null}}
+{"id": "x111", "group": "사실만", "input": "인체에 100% 흡수되는 액상 칼슘", "violation_types": ["거짓_과장"], "output": {"body": "액상 형태의 칼슘", "mandatory_note": null, "placement": null}}
+{"id": "x112", "group": "사실만", "input": "프랑스 명품 브랜드도 쓰는 최상급 히알루론산 원료", "violation_types": ["거짓_과장"], "output": {"body": "히알루론산 원료 사용", "mandatory_note": null, "placement": null}}
+{"id": "x113", "group": "사실만", "input": "영양 손실 제로, 동결건조 과일칩", "violation_types": ["거짓_과장"], "output": {"body": "동결건조 방식으로 만든 과일칩", "mandatory_note": null, "placement": null}}
+{"id": "x114", "group": "사실만", "input": "유해물질 불검출로 아기도 안심인 쌀과자", "violation_types": ["거짓_과장"], "output": {"body": "쌀로 만든 과자", "mandatory_note": "불검출 표시는 시험성적서 항목·기관과 함께", "placement": "시험 결과 표시 근처"}}
+{"id": "x115", "group": "사실만", "input": "6년근만 고집한 최고 효능 인삼", "violation_types": ["거짓_과장"], "output": {"body": "6년근 인삼", "mandatory_note": null, "placement": null}}
+{"id": "x116", "group": "사실만", "input": "단 한 방울의 물도 넣지 않은 무첨가 원액 100%", "violation_types": ["거짓_과장"], "output": {"body": "원액 제품", "mandatory_note": "원재료 함량은 표시사항 기준으로 기재", "placement": null}}
+{"id": "x117", "group": "사실만", "input": "자연 그대로의 생명력이 살아 있는 효소", "violation_types": ["거짓_과장"], "output": {"body": "효소 제품", "mandatory_note": null, "placement": null}}
+{"id": "x118", "group": "사실만", "input": "명품 제주 청정 지역에서 키운 무공해 녹차", "violation_types": ["거짓_과장"], "output": {"body": "제주에서 재배한 녹차", "mandatory_note": null, "placement": null}}
+{"id": "x119", "group": "사실만", "input": "칼로리 걱정 없는 0칼로리 디저트", "violation_types": ["거짓_과장"], "output": {"body": "디저트 제품", "mandatory_note": "열량은 영양성분 표시 기준으로 기재", "placement": "영양성분표 근처"}}
+{"id": "x120", "group": "사실만", "input": "100% 국산 콩으로 만든 최고의 된장", "violation_types": ["거짓_과장"], "output": {"body": "국산 콩으로 만든 된장", "mandatory_note": "원산지는 원재료명 표시 기준", "placement": null}}
+{"id": "x121", "group": "사실만", "input": "단백질 폭탄, 근육이 펑펑 붙는 닭가슴살", "violation_types": ["거짓_과장"], "output": {"body": "단백질을 함유한 닭가슴살", "mandatory_note": "단백질 함량은 영양성분 표시 기준", "placement": null}}
+{"id": "x122", "group": "사실만", "input": "무조건 믿고 먹는 어린이 홍삼", "violation_types": ["거짓_과장"], "output": {"body": "어린이용 홍삼 제품", "mandatory_note": null, "placement": null}}
+{"id": "x123", "group": "사실만", "input": "세균 99.9% 박멸 천연 과일 세정제", "violation_types": ["거짓_과장"], "output": {"body": "과일 세정제", "mandatory_note": "살균 효과 표시는 시험 조건·기관과 함께", "placement": "시험 결과 표시 근처"}}
+{"id": "x124", "group": "사실만", "input": "백화점 판매 1위 수제 육포", "violation_types": ["거짓_과장"], "output": {"body": "수제 육포", "mandatory_note": "판매 순위는 집계 기관·기간·대상을 함께 표시", "placement": "순위 표시 바로 아래"}}
+{"id": "x125", "group": "사실만", "input": "먹는 순간 젊어지는 콜라겐 음료", "violation_types": ["거짓_과장"], "output": {"body": "콜라겐을 함유한 음료", "mandatory_note": null, "placement": null}}
+{"id": "x126", "group": "사실만", "input": "효능이 입증된 천연 꿀", "violation_types": ["거짓_과장"], "output": {"body": "천연 꿀", "mandatory_note": null, "placement": null}}
+{"id": "x127", "group": "사실만", "input": "몸속 독소를 쏙 빼주는 레몬 디톡스 워터", "violation_types": ["거짓_과장"], "output": {"body": "레몬을 넣은 음료", "mandatory_note": null, "placement": null}}
+{"id": "x128", "group": "사실만", "input": "업계 최초 나노 공법 흡수율 10배 비타민", "violation_types": ["거짓_과장"], "output": {"body": "비타민 제품", "mandatory_note": "흡수율 비교는 시험 조건·비교 대상과 함께 표시", "placement": "비교 표시 바로 아래"}}
+{"id": "x129", "group": "사실만", "input": "전문의 다수가 인정한 프리미엄 유산균", "violation_types": ["거짓_과장"], "output": {"body": "유산균 제품", "mandatory_note": null, "placement": null}}
+{"id": "x130", "group": "사실만", "input": "환경호르몬 걱정 제로 친환경 텀블러", "violation_types": ["거짓_과장"], "output": {"body": "텀블러 제품", "mandatory_note": "소재·시험 결과는 시험성적서 기준으로 표시", "placement": null}}
+{"id": "x131", "group": "기능+위반", "input": "기적처럼 관절이 편해지는 관절건강 MSM, 의사도 놀란 효과", "violation_types": ["거짓_과장", "의약품_오인"], "output": {"body": "MSM은 관절건강에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 제품에 한해 표시", "placement": null}}
+{"id": "x132", "group": "기능+위반", "input": "3주 만에 체지방 5kg 쫙, 가르시니아", "violation_types": ["거짓_과장"], "output": {"body": "가르시니아캄보지아 추출물은 탄수화물이 지방으로 합성되는 것을 억제하여 체지방 감소에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 제품에 한해 표시", "placement": null}}
+{"id": "x133", "group": "기능+위반", "input": "눈 영양제 1위, 노안 치료 루테인", "violation_types": ["거짓_과장", "질병_예방치료_표방"], "output": {"body": "루테인은 노화로 인해 감소될 수 있는 황반색소밀도를 유지하여 눈 건강에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 제품에 한해 표시", "placement": null}}
+{"id": "x134", "group": "기능+위반", "input": "장 트러블 끝, 변비약보다 확실한 프로바이오틱스", "violation_types": ["의약품_오인", "질병_예방치료_표방"], "output": {"body": "프로바이오틱스는 유익균 증식 및 유해균 억제, 배변활동 원활에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 제품에 한해 표시", "placement": null}}
+{"id": "x135", "group": "기능+위반", "input": "먹는 순간 혈행 개선, 혈전 녹이는 오메가3", "violation_types": ["거짓_과장", "질병_예방치료_표방"], "output": {"body": "EPA 및 DHA 함유 유지는 혈중 중성지질 개선, 혈행 개선에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 제품에 한해 표시", "placement": null}}
+{"id": "x136", "group": "기능+위반", "input": "구매 고객 만족도 99%, 피로회복 끝판왕 홍삼", "violation_types": ["거짓_과장", "후기_체험기_기만"], "output": {"body": "홍삼은 피로개선에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 제품에 한해 표시", "placement": null}}
+{"id": "x137", "group": "기능+위반", "input": "타사 밀크씨슬보다 2배 강력한 간 해독", "violation_types": ["부당_비교광고", "거짓_과장"], "output": {"body": "밀크씨슬 추출물은 간 건강에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 제품에 한해 표시", "placement": null}}
+{"id": "x138", "group": "기능+위반", "input": "골다공증 걱정 끝, 뼈를 강철처럼 만드는 칼슘", "violation_types": ["질병_예방치료_표방", "거짓_과장"], "output": {"body": "칼슘은 뼈와 치아 형성에 필요합니다", "mandatory_note": "영양성분 기능 표시 — 함량 기준 충족 시", "placement": null}}
+{"id": "x139", "group": "기능+위반", "input": "의사가 먹으라고 한 그 비타민D, 면역 완벽 방어", "violation_types": ["의약품_오인", "거짓_과장"], "output": {"body": "비타민D는 칼슘과 인이 흡수되고 이용되는 데 필요합니다", "mandatory_note": "영양성분 기능 표시 — 함량 기준 충족 시", "placement": null}}
+{"id": "x140", "group": "기능+위반", "input": "아이 키 쑥쑥, 성장판 열어주는 아연", "violation_types": ["거짓_과장"], "output": {"body": "아연은 정상적인 세포분열에 필요합니다", "mandatory_note": "영양성분 기능 표시 — 함량 기준 충족 시", "placement": null}}
