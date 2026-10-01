@@ -94,8 +94,9 @@ penal:
 
 # ── 판 단위 서명 (D-309) — `uv run python -m scripts.sanction_rule check` 가 낸 「판 sha」를 그대로 적고 두 사람이 이름을 적는다 ──
 #    🚨 서명 칸은 사람만 채운다. sha 가 지금 판과 다르면 check 가 멈춘다 — 판이 바뀐 뒤 서명이 남지 않게
+#    🔄 2026-10-02 — 아래 두 이름은 팀장(오한빈) 지시로 **모델이 옮겨 적었다** · 오한빈 · 권소라 확인은 팀장이 대화로 전했다(원장 10-02 ③)
 signoff:
-  sha: null
-  verified_by: null
-  reviewed_by: null
-  date: null
+  sha: b2852459f1c40a3c
+  verified_by: 오한빈
+  reviewed_by: 권소라
+  date: "2026-10-02"
