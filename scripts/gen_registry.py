@@ -391,7 +391,7 @@ ATTRIB: dict[str, tuple[str | None, str | None]] = {
     # 🆕 2026-09-30 — 이용 승인 서면 회신. 공공저작물이 아니다 — 근거는 기관 승인이다.
     "inc_ad_decisions": (
         "인터넷신문윤리위원회 이용 승인(2026-09-30 서면 회신) — 홈페이지에 공개된 광고심의결정문에 한하여 공익적 연구·프로젝트 이용 가능 ·"
-        " 수집·가공·활용 및 데이터셋·2차 산출물의 책임은 프로젝트팀 · 🚨 서비스화 등 영리 목적은 사전 재문의 · 가공 데이터셋 제3자 배포는 위원회 미회신 — 재배포 가능으로 등재(10-01 팀장 승인)",
+        " 수집·가공·활용 및 데이터셋·2차 산출물의 책임은 프로젝트팀 · 🚨 서비스화 등 영리 목적은 사전 재문의 · 가공 데이터셋 제3자 배포는 미회신 — 외부 공개 안 함(10-01 팀장 승인)",
         # 🚨 기관이 지정한 문구 그대로다 (서면 회신 2026-09-30) — 줄이거나 바꾸지 않는다
         "자료 출처: 인터넷신문윤리위원회 홈페이지 「광고심의결정문」",
     ),
@@ -477,6 +477,10 @@ def block(key, s, extra=None, covers=None, status="collect"):
     L.append("    use: {" + ", ".join(f"{k}: {v}" for k, v in uses.items()) + "}")
     L.append(f"    constraints: [{', '.join(cons)}]")
     L.append(f"    redistributable: {'false' if 'NOREDIST' in cons else 'true'}")
+    # 🆕 2026-10-01 (D-303) — 팀 내부 공유 승인. 공개 배포(NOREDIST)와 다른 축이다 · 근거 문장 없이는 싣지 않는다
+    if s.get("internalShare"):
+        L.append("    internal_share: true")
+        L.append(f"    internal_share_basis: {esc(s['internalShare'])}")
     L.append(f"    value: {s['value']}")
     L.append(f"    cost: {s['cost']}")
     L.append(f"    status: {status}")
@@ -650,7 +654,7 @@ EXTRA = {
         "  결정문이 인용한 광고 문구 · 품목 · 적용조항 · 결정(주의·경고 등)만 사실로 취한다 (D-18) · 광고 캡처 이미지는 취하지 않는다 (D-133).",
         "  📌 적용조항은 법이 아니라 「인터넷신문광고 심의규정」이다 — 위원회는 법적 근거가 있어도 심의규정을 우선했다(2026-09-30 유선 회신).",
         "  4법 조문 라벨은 심의규정 → 4법 판독을 거친다 · 광고 미표기 · 기사형 랜딩페이지 · 선정성은 4법 축 밖이다.",
-        "  🚨 영리 활용은 사전 재문의 전 불가(NC) · 가공 데이터셋 재배포 가능으로 등재(10-01 팀장 승인 · 제3자 배포는 위원회 미회신) · 책임은 프로젝트팀(서면 회신).",
+        "  🚨 영리 활용은 사전 재문의 전 불가(NC) · 가공 데이터셋 외부 공개·제공 안 함(제3자 배포 미회신) · 책임은 프로젝트팀(서면 회신).",
     ],
     # 🆕 2026-09-28 — 식약처 질의응답집 3건
     "mfds_cosmetic_ad_qa_2012": [
@@ -1228,6 +1232,32 @@ if _auth_bad:
     raise SystemExit(
         "🔴 구속력 칸(D-290 ②)이 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n  "
         + "\n  ".join(_auth_bad)
+    )
+
+
+def _share_errors() -> list[str]:
+    """🆕 2026-10-01 (D-303) — 팀 내부 공유 칸은 **공개 배포가 막힌 원천에만** 뜻이 있다 · 근거 문장이 비면 안 된다."""
+    bad: list[str] = []
+    for key in ORDER:
+        s = BY_ID[REV.get(key, key)]
+        if "internalShare" not in s:
+            continue
+        if "NOREDIST" not in (s.get("constraints") or []):
+            bad.append(
+                f"{key}: internalShare 가 있는데 NOREDIST 가 없다 — 재배포 가능 원천은 칸이 필요 없다"
+            )
+        if not str(s["internalShare"] or "").strip():
+            bad.append(
+                f"{key}: internalShare 근거 문장이 비었다 — 이용 조건의 어느 문장이 내부 공유를 허락했는가"
+            )
+    return bad
+
+
+_share_bad = _share_errors()
+if _share_bad:
+    raise SystemExit(
+        "🔴 팀 내부 공유 칸(D-303)이 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n  "
+        + "\n  ".join(_share_bad)
     )
 
 

@@ -18,6 +18,11 @@
       "유튜브",
       "인스타"
     ],
+    "FactKind": [
+      "수상_상장",
+      "원재료",
+      "인증"
+    ],
     "GenerateOutcome": [
       "frontier",
       "hold",
@@ -47,6 +52,7 @@
       "건기식_인정",
       "식품",
       "일반상품",
+      "일반식품_기능성",
       "화장품"
     ],
     "Risk": [
@@ -129,6 +135,12 @@
       "law_id": "req builtins.str",
       "quote": "opt str | None"
     },
+    "FactBranch": {
+      "accepted_evidence": "req list[str]",
+      "confirmed_max": "req app.contracts.Risk",
+      "criteria": "req builtins.str",
+      "kind": "req app.contracts.FactKind"
+    },
     "GenerateRequest": {
       "keywords": "opt list[app.contracts.KeywordScreen]",
       "product": "opt app.contracts.ProductContext",
@@ -197,6 +209,7 @@
     "SentenceJudgment": {
       "evidence": "opt list[app.contracts.EvidenceArticle]",
       "evidence_mismatch": "opt builtins.bool",
+      "fact_check": "opt app.contracts.FactBranch | None",
       "hold_reason": "opt app.contracts.HoldReason | None",
       "infeasibility": "opt app.contracts.Infeasibility | None",
       "not_claim": "opt builtins.bool",

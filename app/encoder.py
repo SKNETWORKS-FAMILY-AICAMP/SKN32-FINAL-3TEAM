@@ -11,10 +11,8 @@ import functools
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from app.contracts import Violation
-
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models" / "copylane-encoder-kcbert-final"
 _REQUIRED_FILES = ("config.json", "label_scheme.json", "model.safetensors", "tokenizer.json")
@@ -64,7 +62,9 @@ def load_label_scheme(model_dir: Path = MODEL_DIR) -> LabelScheme:
 
     try:
         labels = tuple(Violation(value) for value in raw["label_list"])
-        thresholds = {Violation(label): float(value) for label, value in raw["label_thresholds"].items()}
+        thresholds = {
+            Violation(label): float(value) for label, value in raw["label_thresholds"].items()
+        }
     except (KeyError, TypeError, ValueError) as e:
         raise EncoderUnavailable(f"판정 인코더 라벨 스킴이 잘못됐다: {path}") from e
 
@@ -75,14 +75,18 @@ def load_label_scheme(model_dir: Path = MODEL_DIR) -> LabelScheme:
     return LabelScheme(labels=labels, thresholds=thresholds)
 
 
-def select_candidates(scheme: LabelScheme, probabilities: list[float]) -> tuple[EncoderCandidate, ...]:
+def select_candidates(
+    scheme: LabelScheme, probabilities: list[float]
+) -> tuple[EncoderCandidate, ...]:
     """모델 출력 축과 같은 순서의 확률에 라벨별 threshold를 적용한다."""
     if len(probabilities) != len(scheme.labels):
         raise EncoderUnavailable(
             f"판정 인코더 logit 수가 라벨 수와 다르다: logits={len(probabilities)} labels={len(scheme.labels)}"
         )
     return tuple(
-        EncoderCandidate(violation=label, confidence=probabilities[i], threshold=scheme.thresholds[label])
+        EncoderCandidate(
+            violation=label, confidence=probabilities[i], threshold=scheme.thresholds[label]
+        )
         for i, label in enumerate(scheme.labels)
         if probabilities[i] >= scheme.thresholds[label]
     )

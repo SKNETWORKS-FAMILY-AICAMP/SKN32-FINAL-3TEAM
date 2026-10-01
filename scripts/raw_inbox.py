@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
 import json
@@ -125,10 +126,12 @@ def secret_in(data: bytes) -> str | None:
 
 
 def _noredist(source_id: str) -> bool:
+    """받은편지함(팀장 Drive · 「제한됨」)에 못 올리는 원천인가. 🔄 2026-10-01 (D-303) — 공개 배포 금지가 아니라
+    **팀 내부 공유 금지**로 가른다(`registry.team_shareable`). `data_store._noredist_seen` 과 같은 함수다 (D-99)."""
     from collect import registry  # noqa: PLC0415
 
     try:
-        return not registry.redistributable(source_id)
+        return not registry.team_shareable(source_id)
     except registry.RegistryError:
         return True  # 🚨 모르는 원천은 막는 쪽 (D-220)
 
@@ -168,6 +171,21 @@ def _branch_ledger(branch: str) -> list[dict]:
             f"`{branch}` 의 원장을 못 읽었다 — `git fetch` 했는지 본다\n  {out.stderr.strip()[:300]}"
         )
     return _ledger_rows(out.stdout)
+
+
+def _branch_registry(branch: str) -> str:
+    """🆕 2026-09-29 — 그 브랜치의 레지스트리(`data_sources.yaml`) 원문. 병합 전 검사는 **이것으로** 원천을 판정한다.
+
+    원천을 등재하는 커밋과 수집한 커밋이 같은 브랜치로 온다 — 병합 전 이 작업 트리에는 그 원천이 아직 없다
+    (`collect.registry.read_from` 에 경위).
+    🚨 못 읽으면 멈춘다 — 이 작업 트리의 레지스트리로 대신 판정하지 않는다 (D-220).
+    """
+    out = _git("show", f"{_branch_name(branch)}:data_sources.yaml")
+    if out.returncode != 0:
+        raise InboxError(
+            f"`{branch}` 의 레지스트리를 못 읽었다 — `git fetch` 했는지 본다\n  {out.stderr.strip()[:300]}"
+        )
+    return out.stdout
 
 
 def _base_ledger(branch: str) -> list[dict]:
@@ -488,6 +506,7 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
     try:
         ledger = _branch_ledger(branch) if check_only else _local_ledger()
         broken = _check_branch(branch, ledger) if check_only else []
+        reg = _branch_registry(branch) if check_only else None
         rows = _foreign(ledger)
         root = inbox_root()
     except InboxError as e:
@@ -497,14 +516,22 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
     if bad:
         print(f"🔴 원장에 받을 수 없는 행이 있다 — 아무것도 하지 않았다: {bad[:5]}")
         return 1
+    from collect import registry  # noqa: PLC0415
+
     held: dict[str, list[str]] = {"g2": [], "noredist": [], "unknown": []}
     carry = []
-    for r in rows:
-        why = _held_back(str(r["source_id"]))
-        if why:
-            held[why].append(_path_of(r))
-        else:
-            carry.append(r)
+    # 🔄 2026-09-29 — 병합 전 검사는 **그 브랜치의 레지스트리**로 판정한다(`_branch_registry`) · 병합 뒤는 이 작업 트리의 것
+    try:
+        with registry.read_from(reg) if reg is not None else contextlib.nullcontext():
+            for r in rows:
+                why = _held_back(str(r["source_id"]))
+                if why:
+                    held[why].append(_path_of(r))
+                else:
+                    carry.append(r)
+    except registry.RegistryError as e:
+        print(f"🔴 {branch} 의 레지스트리로 판정하지 못했다 — {e}", file=sys.stderr)
+        return 1
     lack, leaked = [], []
     for r in carry:
         src = _found(root, str(r["sha256"]))
@@ -516,6 +543,10 @@ def import_(*, branch: str | None = None, yes: bool = False, dry_run: bool = Fal
             leaked.append(f"{_path_of(r)} ({why})")
     head = f"{'검사 — ' + branch if check_only else '합치기'} · 다른 기기가 받은 원문 {len(rows)}개"
     print(head)
+    if check_only:
+        print(
+            f"  레지스트리 — `{branch}` 의 것으로 판정했다(병합 뒤의 레지스트리 · 등급 · 재배포 여부)"
+        )
     for line in summary(rows):
         print(line)
     # 🚨 G2 는 받은편지함으로 가져오지 않는다 — 정본이 추출 뒤 지운 것을 되살리지 않는다(D-92). 막지도 않는다(`pending` 과 같다)

@@ -68,7 +68,9 @@ def test_구역_없는_화면은_사이드바가_없다() -> None:
     client = TestClient(app)
     for path in ("/u/", "/u/cs"):
         body = client.get(path).text
-        assert 'class="user-sidebar"' not in body, f"🔴 {path} 에 사이드바가 붙었다 — 구역 밖이어야 한다"
+        assert 'class="user-sidebar"' not in body, (
+            f"🔴 {path} 에 사이드바가 붙었다 — 구역 밖이어야 한다"
+        )
 
 
 def test_활성_pill과_사이드바_항목에_활성_표시가_붙는다() -> None:
@@ -78,7 +80,9 @@ def test_활성_pill과_사이드바_항목에_활성_표시가_붙는다() -> N
     from app.api import app  # noqa: PLC0415
 
     body = TestClient(app).get("/u/matching").text
-    assert "user-topnav-pill user-topnav-pill-active" in body, "🔴 매칭 pill 에 활성 표시가 안 붙는다"
+    assert "user-topnav-pill user-topnav-pill-active" in body, (
+        "🔴 매칭 pill 에 활성 표시가 안 붙는다"
+    )
     assert 'href="/u/matching">' in body, "🔴 매칭 pill 링크가 없다"
 
 
@@ -164,11 +168,17 @@ def test_마이페이지는_로그인_안하면_로그인으로_보낸다() -> N
     assert r.status_code == 303
     assert r.headers["location"] == "/u/login"
 
-    r = client.post("/u/mypage", content=b"section=profile&name=%EA%B6%8C%EC%86%8C%EB%9D%BC", follow_redirects=False)
+    r = client.post(
+        "/u/mypage",
+        content=b"section=profile&name=%EA%B6%8C%EC%86%8C%EB%9D%BC",
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     assert r.headers["location"] == "/u/login"
 
-    r = client.post("/u/mypage/disable", content=b"confirm=%EB%81%84%EA%B8%B0", follow_redirects=False)
+    r = client.post(
+        "/u/mypage/disable", content=b"confirm=%EB%81%84%EA%B8%B0", follow_redirects=False
+    )
     assert r.status_code == 303
     assert r.headers["location"] == "/u/login"
 
@@ -193,3 +203,25 @@ def test_랜딩은_governor_로그인이_아니라_일반_회원_로그인으로
     body = TestClient(app).get("/u/landing").text
     assert 'href="/u/login"' in body
     assert 'href="/u/signup"' in body
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(("code", "want"), [(501, "pending"), (503, "down")])
+def test_검수_BFF_는_501_과_503_을_가른다(
+    monkeypatch: pytest.MonkeyPatch, code: int, want: str
+) -> None:
+    """🆕 2026-10-01 (ksr 병합) — 501 = 엔진 미착수 · 503 = 엔진 연결 실패. 둘을 한 갈래로 합치지 않는다.
+
+    ⛔ ohb 와 ksr 가 같은 503 수정을 따로 했고, 자동 병합이 `in (501, 503)` → pending 을 앞에 두어
+       503 → down 줄이 **닿지 않는 줄**이 됐다(충돌 표시 없이). 화면 그림은 같아도 상태는 넘긴다 (D-147).
+    """
+    from fastapi import HTTPException  # noqa: PLC0415
+
+    import app.api  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    def boom(_req):  # noqa: ANN001, ANN202
+        raise HTTPException(code)
+
+    monkeypatch.setattr(app.api, "judge", boom)
+    assert user_router._core_judge("문구") == (want, None)

@@ -488,10 +488,11 @@ def _copies(form: dict[str, list[str]]) -> list[str]:
 def _core_judge(text: str):  # noqa: ANN202
     """코어 판정을 부른다 — `POST /judge` 와 **같은 함수**다 (D-119 · 판정 코어는 하나).
 
-    ★ 반환 `(상태, 응답)` — `ok` 는 `JudgeResponse`, `pending` 은 엔진 미착수(501) · 연결 실패(503).
+    ★ 반환 `(상태, 응답)` — `ok` 는 `JudgeResponse`, `pending` 은 엔진 미착수(501), `down` 은 엔진 연결 실패(503).
     ⛔ 501 · 503 을 결과처럼 꾸미지 않는다 (D-147). 다른 오류는 삼키지 않고 올린다.
-    🔄 2026-09-30 — main 병합으로 `/judge` 가 DB · 그래프 없음을 503 으로 낸다. 최소 수정으로 기존
-       「엔진 준비 중」 그림에 태운다 — 「엔진 연결 실패」 전용 문구는 화면 소유자 몫이다 ⬜
+    🔄 2026-09-29 (ohb · ksr 병합) — `POST /judge` 가 501 대신 그래프를 부르고, DB · 그래프 의존성이 없으면 **503** 을 낸다.
+       종전에는 501 만 받아서 503 이 화면 오류로 떨어졌다. 🚨 화면 문구는 화면 담당(ksr · lse)이 정한다 — 지금은
+       `engine_pending` 그림을 같이 쓰고 `engine_down` 을 넘겨 둔다.
     """
     from app.api import judge as core_judge  # noqa: PLC0415 — 순환 import 를 피한다
     from app.contracts import JudgeRequest  # noqa: PLC0415
@@ -499,8 +500,12 @@ def _core_judge(text: str):  # noqa: ANN202
     try:
         return "ok", core_judge(JudgeRequest(text=text))
     except HTTPException as e:
-        if e.status_code in (501, 503):
+        # 🔄 2026-10-01 (ksr 병합) — ksr 도 같은 503 수정을 따로 했다(`in (501, 503)` → pending). ohb 의 갈래를 둔다:
+        #    501 = 엔진 미착수 · 503 = 연결 실패 — 둘을 합치면 아래 `down` 이 닿지 않는 줄이 된다(자동 병합이 그렇게 만들었다)
+        if e.status_code == 501:
             return "pending", None
+        if e.status_code == 503:
+            return "down", None
         raise
 
 
@@ -589,8 +594,12 @@ async def judge(request: Request) -> HTMLResponse:
     results: list[dict] = []
     for n, text in targets:
         state, res = _core_judge(text)
-        if state == "pending":
-            return _render(request, "user/review.html", _review_ctx(copies, engine_pending=True))
+        if state in ("pending", "down"):
+            return _render(
+                request,
+                "user/review.html",
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+            )
         results.append({"n": n, "result": res})
     return _render(request, "user/review.html", _review_ctx(copies, results))
 

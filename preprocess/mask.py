@@ -191,6 +191,13 @@ LEGAL_FORMS = (
     "재단법인",
     "사단법인",
     "의료법인",
+    # 🆕 2026-09-30 — 전수 탐침(`build/review/census_ftc.py` · 8,272 문서)에서 **앵커에 법인격이 붙은 채 남은** 꼴.
+    #    「(사)한국진주양식협회」 → 앵커 「사)한국진주양식협회」 · 「학교법인 경동대학교」 → 앵커가 통째 — 본문의 맨 이름이 남았다(6611 · 8361 · 8405)
+    "학교법인",
+    "사회복지법인",
+    "(사)",
+    "(재)",
+    "(학)",
     "(주)",
     "（주）",
     "㈜",
@@ -514,6 +521,13 @@ def variants(bare: str, *, with_bare: bool = True) -> list[str]:
         f"{bare}(주)",
         f"유한회사 {bare}",
         f"{bare} 유한회사",
+        f"{bare}(유)",
+        # 🆕 2026-09-30 — 비영리 법인격 앞붙이(6611 「사단법인 한국진주양식협회는」 · 8361 「학교법인 경동대학교」)
+        f"사단법인 {bare}",
+        f"재단법인 {bare}",
+        f"학교법인 {bare}",
+        f"(사){bare}",
+        f"(재){bare}",
     ]
     if with_bare:
         out.append(bare)
@@ -609,6 +623,10 @@ _ANCHOR_AND = re.compile(r"\s*(?:및|,)\s*")
 #: 「A **등 3개 가습기살균제 제조ㆍ판매 사업자**」 — 뒤를 통째로 잘라 A 만 남긴다.
 #: 🚨 `\d+` 을 요구한다. 「등」만으로 자르면 「…등급」·「…등기부」가 걸린다.
 _ANCHOR_ETC = re.compile(r"\s*등\s*\d+\s*개.*$")
+#: 옛 이름 괄호 — 「[구 케이제이아이파이낸스인터내셔널(유)]」 · 「(舊 ○○)」
+_ANCHOR_FORMER = re.compile(
+    r"\s*[\[(（]\s*(?:구|舊|전)\s*[:：]?\s*([^\[\]()（）]+(?:\([^()]*\)[^\[\]()（）]*)*)[\])）]"
+)
 
 
 #: 🔴 **로마자 ↔ 한글 표기** `[관행]` (2026-09-17 · D-235). 의결서는 같은 법인을 「에스케이
@@ -633,17 +651,123 @@ ROMAN: tuple[tuple[str, str], ...] = (
 )
 
 
+#: 🆕 2026-09-30 (판정 J8 (나′) · 원장 09-30 ⑮) — 라틴 **글자 이름**. 앵커 머리가 이 이름들로만 이어지면
+#:    그 머리의 라틴 약자가 같은 법인의 표기다(「비엠더블유코리아」 → 「BMW코리아」 · 「케이티앤지」 → 「KT&G」).
+#:    ★ `ROMAN` 표를 넓힌 것이다 — 표는 손으로 적은 대응이라 BMW · KT&G · JYP · CPLB 가 빠져 있었다 `[관행]`.
+LETTER_NAMES: tuple[tuple[str, str], ...] = (
+    ("에이치", "H"),
+    ("더블유", "W"),
+    ("에이", "A"),
+    ("에프", "F"),
+    ("아이", "I"),
+    ("제이", "J"),
+    ("케이", "K"),
+    ("에스", "S"),
+    ("브이", "V"),
+    ("엑스", "X"),
+    ("와이", "Y"),
+    ("제트", "Z"),
+    ("비", "B"),
+    ("씨", "C"),
+    ("디", "D"),
+    ("이", "E"),
+    ("지", "G"),
+    ("엘", "L"),
+    ("엠", "M"),
+    ("엔", "N"),
+    ("오", "O"),
+    ("피", "P"),
+    ("큐", "Q"),
+    ("알", "R"),
+    ("티", "T"),
+    ("유", "U"),
+    ("앤", "&"),
+)
+
+
+def letter_acronyms(name: str) -> list[tuple[str, str]]:
+    """앵커 머리를 라틴 글자 이름으로 읽은 **모든** 갈래 `(약자, 나머지)` — 글자 둘 이상만.
+
+    ★ 갈래를 다 낸다 — 「에스케이디스커버리」는 SK+디스커버리 와 SKD+스커버리 둘로 읽힌다. 없는 표기는
+      `mask()` 가 그냥 지나가므로(글에 없으면 안 바뀐다) 틀린 갈래는 해가 없다.
+    """
+    out: list[tuple[str, str]] = []
+
+    def walk(pos: int, acro: str) -> None:
+        letters = len(acro.replace("&", ""))
+        if letters >= 2 and not acro.endswith("&"):
+            out.append((acro, name[pos:]))
+        for ko, la in LETTER_NAMES:
+            if name.startswith(ko, pos):
+                walk(pos + len(ko), acro + la)
+
+    walk(0, "")
+    return out
+
+
 def roman_variants(name: str) -> list[str]:
     """앵커 알맹이의 **로마자/한글 맞바꾼 표기**. 🚨 앵커가 있는 문서에서만 쓴다.
 
     ⛔ 바꾼 결과가 어디에도 없으면 `mask()` 가 그냥 지나간다 — 없는 것을 만들지 않는다.
+    🔄 2026-09-30 (판정 J8 (나′)) — 글자 이름 약자 + 나머지(「BMW코리아」 · 「SK텔레콤」)도 낸다.
+       🚨 나머지가 없으면(「케이티앤지」 → 「KT&G」) 약자만 남는데, 그것은 `bare_acronyms` 가 낱말 경계로 다룬다.
     """
     out: list[str] = []
     for x, y in ROMAN:
         for u, v in ((x, y), (y, x)):
             if u in name and (alt := name.replace(u, v)) != name:
                 out.append(alt)
+    out += [acro + rest for acro, rest in letter_acronyms(name) if rest]
     return out
+
+
+#: 🆕 2026-09-30 (판정 J8 (나′)) — 약자만 쓰인 자리(「LG 건조기」 · 「BMW의 경우」)를 지울 때 뒤에 붙어도 되는 조사.
+#:    ⛔ 한글이 조사 아닌 글자로 이어지면 **다른 이름의 머리**다(「SK브로드밴드」 · 「SK온」 · 「LG유플러스」) — 지우지 않는다(D-236)
+_ACRO_PARTICLE = r"(?:와의|과의|에서|에게|으로|이다|이며|보다|처럼|까지|부터|의|는|은|이|가|를|을|와|과|에|로|도|만)"
+#: 약자만으로 지워도 되는 글자 수. 둘짜리는 `ROMAN` 표(손으로 적은 대응)에 있는 것만 — 「TV」 · 「IT」 · 「AI」 같은
+#: 일반어가 둘짜리 약자와 부딪힌다 `[임의]`. 셋 이상(BMW · KT&G · JYP · CPLB)은 글자 이름에서 만든다
+_ACRO_MIN = 3
+
+
+def bare_acronyms(name: str) -> list[str]:
+    """이 앵커의 **약자만의 표기** — 낱말 경계로만 지운다. 긴 것부터.
+
+    ★ 만든 약자는 **끝까지 읽은 갈래**만 쓴다 — 나머지가 글자 이름으로 시작하지 않는 것(「CPLB」 ○ · 「CPL」 ✕).
+    🚨 표의 둘짜리 약자는 이름 전체가 더 긴 약자이면 쓰지 않는다 — 「케이티앤지」(KT&G)에서 「KT」는 **다른 회사**(케이티)다.
+    """
+    maximal = [
+        (a, rest)
+        for a, rest in letter_acronyms(name)
+        if not any(rest.startswith(ko) for ko, _la in LETTER_NAMES)
+    ]
+    whole = {a for a, rest in maximal if not rest}
+    table = {
+        x
+        for x, y in ROMAN
+        if name.startswith(y) and not any(w.startswith(x) and w != x for w in whole)
+    }
+    made = {a for a, _rest in maximal if len(a.replace("&", "")) >= _ACRO_MIN}
+    return sorted(table | made, key=len, reverse=True)
+
+
+def _mask_bare_acronym(text: str, name: str, log: list[dict] | None = None) -> str:
+    """🆕 2026-09-30 (판정 J8 (나′) · 원장 09-30 ⑮) — 피심인의 **라틴 약자만** 쓰인 자리를 `[업체]` 로.
+
+    ★ 앵커에서 만든 약자만 쓴다(D-235) — 전역 목록이 아니다. 낱말 경계로만 지운다 — 앞은 라틴 · 숫자가 아니고,
+      뒤는 끝 · 문장부호 · 공백이거나 조사 하나 뒤 끝이다. 그래서 「[업체]케미칼」 같은 토막이 생기지 않는다(D-236).
+    """
+    # 띄어 쓴 꼴(「SK 텔레콤」)은 약자보다 먼저 — 안 하면 「[업체] 텔레콤」이 남는다(16881 실측).
+    # 🚨 부분 문자열로 바꾸지 않는다 — 「LG 전자제품 판매장」이 「[업체]제품 판매장」이 된다(1701 실측) · 경계는 약자와 한 벌
+    spaced = [f"{a} {rest}" for a, rest in letter_acronyms(name) if rest]
+    for acro in sorted(spaced, key=len, reverse=True) + bare_acronyms(name):
+        pat = re.compile(
+            # 🚨 뒤에 「-」 도 막는다 — 모델 번호 「LG-SH150A」 를 「[업체]-SH150A」 로 토막 내지 않는다(15715 실측)
+            rf"(?<![A-Za-z0-9&.\-]){re.escape(acro)}(?={_ACRO_PARTICLE}?(?![가-힣A-Za-z0-9&\-]))"
+        )
+        if pat.search(text):
+            _note(log, "라틴 약자", acro, MASK_ORG)
+            text = pat.sub(MASK_ORG, text)
+    return text
 
 
 def anchor_names(bare: str) -> list[str]:
@@ -664,7 +788,11 @@ def anchor_names(bare: str) -> list[str]:
       앵커의 부분/변형이었다. D-233 상 피심인은 **대상 안**이라 이건 결함이다.
     """
     head = _ANCHOR_ETC.sub("", bare)
+    # 🆕 2026-09-30 — 옛 이름 괄호 「X[구 Y]」 · 「X(구 Y)」는 **둘 다** 피심인이다(8009 사건명이 통째 남았다 · 전수 탐침)
+    former = [m.group(1).strip() for m in _ANCHOR_FORMER.finditer(head)]
+    head = _ANCHOR_FORMER.sub("", head)
     out = [x.strip() for x in _ANCHOR_AND.split(head) if x.strip()]
+    out += [strip_legal(x) for x in former if strip_legal(x)]
     # 🔴 **표기 변형을 조각마다 붙인다** — 「에스케이케미칼」이면 「SK케미칼」도 앵커다.
     #    ⛔ 통째로 맞아야 한다. 「SK」만 지우면 「[업체]케미칼」이 되어 **가림 효과는 0인데
     #       문구만 망가진다** — 2026-09-17 실측에서 눈으로 본 그 꼴이다 (D-157).
@@ -690,6 +818,8 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
     text = _mask_people(text, people, log)
     # 🆕 2026-09-22 — 앵커가 놓친 피심인. 사람인지 모르므로 `[업체]` (D-248 트레이드오프) · 경계·조사 규칙은 위와 한 벌 (D-99)
     text = _mask_people(text, respondent_named_of(bare), log, MASK_ORG, "피심인 이름자리")
+    # 🆕 2026-09-30 (D-258 집행) — 대표자 실명. 경계·조사 규칙은 위와 한 벌 (D-99)
+    text = _mask_people(text, respondent_ceos_of(bare), log, MASK_CEO, "대표자명")
     for b in anchor_names(bare):
         if not usable(b):
             continue
@@ -697,7 +827,37 @@ def mask(text: str, bare: str, log: list[dict] | None = None) -> str:
             if v in text:
                 _note(log, "앵커", v, MASK_ORG)
             text = text.replace(v, MASK_ORG)
+        text = _mask_spaced_anchor(text, b, log)
+        text = _mask_bare_acronym(text, b, log)  # 🆕 09-30 (판정 J8 (나′)) — 약자만 쓰인 자리
     return mask_respondent_email(text, bare, log)
+
+
+def _mask_spaced_anchor(text: str, b: str, log: list[dict] | None = None) -> str:
+    """🆕 2026-09-30 — 앵커를 **띄어 쓴 꼴**(「신기한비누」 ↔ 「신기한 비누」 · 9859 봉인 평가 실측).
+
+    🚨 짧은 앵커(`is_short`)와 한글만이 아닌 앵커는 하지 않는다 — 띄어쓰기를 풀면 보통 낱말과 부딪힌다(D-236).
+    🚨 공백은 **한 자리**만 허용한다 — 앵커 글자 사이 어디든 공백이 하나 끼어도 같다고 본다(두 칸 이상은 문장이다).
+    """
+    if is_short(b) or not re.fullmatch(r"[가-힣]+", b) or len(b) < 4:
+        return text
+    # 법인격이 붙어 있으면 함께 가린다 — 안 그러면 「(주)[업체]」가 다음 규칙에서 「[업체][업체]」가 된다(11897 실측)
+    legal = r"(?:주식회사\s?|㈜\s?|\(주\)\s?)?"
+    pat = re.compile(
+        r"(?<![가-힣])"
+        + legal
+        + "".join(re.escape(ch) + (r"(?: ?)" if i < len(b) - 1 else "") for i, ch in enumerate(b))
+        + r"(?:\s?주식회사|\s?㈜|\s?\(주\))?"
+    )
+    core = re.compile(
+        "".join(re.escape(ch) + (r" ?" if i < len(b) - 1 else "") for i, ch in enumerate(b))
+    )
+    hits = [
+        m.group(0) for m in pat.finditer(text) if " " in (core.search(m.group(0)) or m).group(0)
+    ]
+    for v in dict.fromkeys(hits):
+        _note(log, "앵커(띄어 씀)", v, MASK_ORG)
+        text = text.replace(v, MASK_ORG)
+    return text
 
 
 #: 사건명 꼴 — 「<피심인>의 <법·행위> …행위에 대한 건」. 🚨 머리는 **40자까지** · 뒤는 **6어절 안**에서 끝난다.
@@ -976,13 +1136,20 @@ class Anchor(str):
     people: tuple[str, ...] = ()
     #: 🆕 2026-09-22 — 본문이 「피심인 X」라 부르고 피심정보내용의 **이름 자리**에도 적힌 X (`respondent_named`)
     named: tuple[str, ...] = ()
+    #: 🆕 2026-09-30 — 피심정보내용이 **직함과 함께** 적은 대표자 실명 (`respondent_ceos` · D-258 집행)
+    ceos: tuple[str, ...] = ()
 
     def __new__(
-        cls, value: str, people: tuple[str, ...] = (), named: tuple[str, ...] = ()
+        cls,
+        value: str,
+        people: tuple[str, ...] = (),
+        named: tuple[str, ...] = (),
+        ceos: tuple[str, ...] = (),
     ) -> Anchor:
         obj = super().__new__(cls, value)
         obj.people = tuple(people)
         obj.named = tuple(named)
+        obj.ceos = tuple(ceos)
         return obj
 
 
@@ -992,6 +1159,41 @@ def respondent_people_of(bare: str) -> tuple[str, ...]:
 
 def respondent_named_of(bare: str) -> tuple[str, ...]:
     return getattr(bare, "named", ())
+
+
+def respondent_ceos_of(bare: str) -> tuple[str, ...]:
+    return getattr(bare, "ceos", ())
+
+
+# ══ 대표자 실명 — 피심정보내용이 직함과 함께 적은 이름 (2026-09-30 · D-258 집행) ══════════════
+#  ⛔ 검토(2026-09-30 §1-5) — 봉인 평가 9859 「나만의 S라인 비밀 … **김석호**의 신기한 비누」에 대표이사 실명이 남았다.
+#     피심정보내용은 「대표이사 김석호」라 적었지만 주민번호 표지가 없어 `respondent_people` 이 못 봤고,
+#     본문이 「피심인 김석호」라 부르지 않아 `respondent_named` 도 못 봤다. 광고 문구 안의 이름은 직함이 없다.
+#  ★ D-258 이 ftc 의 「개인 실명」을 대표자 밖까지 가리게 정했다 — 대표자는 그 안쪽이다. **원천이 직함과 함께
+#    이름 자리에 적은 것**만 받는다(성씨로 시작하는 2~4자 · 가림 기호 없음). 이름 모양으로 추측하지 않는다(D-248 (b)).
+_CEO_TITLE = re.compile(
+    r"(?:공동\s*대표이사|대표이사|대표자|대표|이사장|회장|사장)\s*[:：]?\s*([^\n]{2,40})"
+)
+_CEO_NAME = re.compile(r"^[가-힣](?:\s?[가-힣]){1,3}$")
+_CEO_GLYPH = re.compile(r"[○◯OＯ0０*＊ㅇ△×X◁◀▷▶♤♠]")
+
+
+def respondent_ceos(root: ET.Element) -> tuple[str, ...]:
+    """피심정보내용의 「대표이사 X」 · 「대표 X, Y」의 X · Y (붙인 꼴 · 띄어 적은 꼴 둘 다). 긴 것부터."""
+    info = _t(root, "피심정보내용")
+    out: dict[str, None] = {}
+    for m in _CEO_TITLE.finditer(info):
+        for part in re.split(r"[,，、ㆍ·]|\s외\s|\(|\)", m.group(1)):
+            part = part.strip()
+            if not _CEO_NAME.match(part) or _CEO_GLYPH.search(part):
+                continue
+            joined = part.replace(" ", "")
+            if joined[0] not in _SURNAMES or joined in _NOT_RESPONDENT or joined in _NOT_NAME:
+                continue
+            out[joined] = None
+            if " " in part:
+                out[part] = None  # 원천이 띄어 적은 꼴(「김 정 배」)도 본문에 나올 수 있다
+    return tuple(sorted(out, key=len, reverse=True))
 
 
 # ══ 앵커가 못 뽑은 피심인 — 원천이 두 번 적은 이름 (2026-09-22) ═════════════════════
@@ -1168,13 +1370,15 @@ def anchor_ftc(root: ET.Element) -> tuple[str, str]:
     people = respondent_people(root)
     # 🆕 2026-09-22 — 앵커가 놓친 피심인(원천이 두 번 적은 이름). 사람은 `people` 이 먼저 잡으므로 뺀다
     named = tuple(x for x in respondent_named(root) if x not in people)
+    # 🆕 2026-09-30 (D-258 집행) — 직함과 함께 적힌 대표자 실명. 앞의 둘이 잡은 이름은 뺀다
+    ceos = tuple(x for x in respondent_ceos(root) if x not in people and x not in named)
     m = re.match(r"^(.+?)의\s", name)
     if m:
-        return m.group(1), Anchor(strip_legal(m.group(1)), people, named)
+        return m.group(1), Anchor(strip_legal(m.group(1)), people, named, ceos)
     head = name.split()[0] if name.split() else ""
     if head and _LEGAL_RE.search(head):
-        return head, Anchor(strip_legal(head), people, named)
-    return "", Anchor("", people, named)
+        return head, Anchor(strip_legal(head), people, named, ceos)
+    return "", Anchor("", people, named, ceos)
 
 
 #: 마스킹 뒤에 **법인격 표기를 달고 남아 있는 이름**을 찾는다.

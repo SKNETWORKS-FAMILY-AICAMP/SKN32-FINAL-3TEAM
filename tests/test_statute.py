@@ -171,11 +171,13 @@ def test_사람_8유형_라벨은_분할의_입력이_아니다() -> None:
     from preprocess import split
 
     # 🔄 2026-09-25 (D-285 개정 4) — 해설서 **조문·조건 판**(`labels/guide_statute/`)은 대기가 0 이 되면 입력이 된다.
+    #    🔄 2026-09-30 — 화장품 질의응답 · 공정위 보도자료 판도 같다(`split.ROUND_LABEL_DIRS` · 기기 게이트 실측으로 드러남).
     #    그 밖의 `labels/`(사람 8유형)는 여전히 입력이 아니다
     assert not any(
-        "/labels/" in p.as_posix() and "/labels/guide_statute/" not in p.as_posix()
+        "/labels/" in p.as_posix() and not any(r in p.as_posix() for r in split.ROUND_LABEL_DIRS)
         for p in split.inputs()
     )
+    assert all(r.startswith("labels/") and r.endswith("/") for r in split.ROUND_LABEL_DIRS)
     assert all("조건" in d and "판독" in d for d in split.guide_docs())
     import ast
 

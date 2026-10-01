@@ -99,6 +99,28 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
         "labels/guide_statute/readings.jsonl",
         "독립 판독 둘의 원자료 — 다시 돌려도 같은 판독이 아니다",
     ),
+    # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집도 같다. 원천은 판독 원자료 · 팀장 판정 · 감사(아래 `labels/`)
+    (
+        "생성물",
+        "labels/cosmetic_qa/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round cq-rebuild`",
+    ),
+    (
+        "생성물",
+        "labels/ftc_press_old/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round fp-rebuild`",
+    ),
+    # 🆕 2026-09-30 (판정 J1 (b) · J2) — 해설서 수정문구 · 결정문 봉인 문구 판
+    (
+        "생성물",
+        "labels/guide_fix/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round gf-rebuild`",
+    ),
+    (
+        "생성물",
+        "labels/ftc_sealed/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round fs-rebuild`",
+    ),
     ("원천", "labels/", "사람의 판정 — 어떤 명령으로도 다시 안 나온다"),
     ("표본", "_labelsheet.jsonl", "다시 뽑으면 그 표본이 아니다 — 라벨과 κ 가 갈린다"),
     ("표본", "golden/split_manifest.json", "다시 나누면 평가 누수 방어와 수치 비교가 무너진다"),
