@@ -176,7 +176,14 @@ def test_식품_4_7호는_목이_맞을_때만_그_처분이고_아니면_그_�
     """🆕 2026-10-01 (D-310) — 유형 max 로 접으면 보통의 과장에 「영업정지 수준」이 붙는다. 목이 맞을 때만 그 행이다."""
     spec = _food(
         [
-            ROW | {"id": "m", "kind": "영업정지", "type": "거짓_과장", "annex1": ["4.마"]},
+            ROW
+            | {
+                "id": "m",
+                "kind": "영업정지",
+                "type": "거짓_과장",
+                "annex1": ["4.마"],
+                "cover": "전부",
+            },
             ROW | {"id": "d", "kind": "영업정지", "type": "의약품_오인"},
             {
                 "id": "c",
@@ -224,8 +231,35 @@ def test_식품_4_7호는_목이_맞을_때만_그_처분이고_아니면_그_�
             "annex1 은 식품 4~7호 행에만",
         ),
         (
-            ROW | {"id": "x", "kind": "영업정지", "type": "거짓_과장", "annex1": ["4마"]},
+            ROW
+            | {
+                "id": "x",
+                "kind": "영업정지",
+                "type": "거짓_과장",
+                "annex1": ["4마"],
+                "cover": "전부",
+            },
             "꼴이 아니다",
+        ),
+        (
+            ROW | {"id": "x", "kind": "영업정지", "type": "거짓_과장", "annex1": ["4.마"]},
+            "cover 가 없거나 틀렸다",
+        ),
+        (
+            ROW
+            | {
+                "id": "x",
+                "kind": "영업정지",
+                "type": "거짓_과장",
+                "annex1": ["4.마"],
+                "cover": "대부분",
+            },
+            "cover 가 없거나 틀렸다",
+        ),
+        (
+            ROW
+            | {"id": "x", "kind": "영업정지", "type": "소비자_기만", "annex1": [], "cover": "일부"},
+            "cover 는 annex1 목이 있는 행에만",
         ),
     ],
 )
@@ -261,3 +295,82 @@ def test_가능_상한은_하한보다_높을_때만_근거와_함께다() -> No
     ):
         with pytest.raises(ValidationError, match=why):
             RiskAssessment(**bad)
+
+
+@pytest.mark.gate
+def test_넓은_목은_맞아도_하한이_아니라_가능_상한이다() -> None:
+    """🆕 2026-10-01 (D-310 개정 2 · 팀장 판정 (다)) — 별표1 목이 별표7 행보다 넓으면 목만으로 그 행이라 할 수 없다.
+
+    🔴 4.마(수상 · 인증 · 보증 · 선정 · 특허)가 맞았다고 「식약처 인증」 문구에 업무정지 하한을 붙이면 하한이 확실한 최소가 아니다.
+    """
+    spec = _food(
+        [
+            ROW
+            | {
+                "id": "aw",
+                "kind": "영업정지",
+                "type": "거짓_과장",
+                "quote": "사실과 다른 수상",
+                "fact": "수상_상장",
+                "annex1": ["4.마"],
+                "cover": "일부",
+            },
+            ROW
+            | {
+                "id": "aw3",
+                "kind": "영업정지",
+                "type": "거짓_과장",
+                "quote": "사실과 다른 수상(블록 3)",
+                "fact": "수상_상장",
+                "annex1": ["4.마"],
+                "cover": "일부",
+            },
+            ROW
+            | {
+                "id": "ex",
+                "kind": "품목제조정지",
+                "type": "후기_체험기_기만",
+                "annex1": ["5.다"],
+                "cover": "전부",
+            },
+            ROW | {"id": "ty", "kind": "품목제조정지", "type": "소비자_기만", "annex1": []},
+            ROW
+            | {
+                "id": "io",
+                "kind": "영업정지",
+                "type": "소비자_기만",
+                "annex1": ["5.차"],
+                "cover": "전부",
+            },
+        ]
+    )
+    broad = sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호|마목"])
+    assert (broad.floor, broad.ceiling) == (Risk.R1, Risk.R2), "넓은 목은 하한 R1 · 상한 R2"
+    assert broad.ceiling_note.count("「") == 1, (
+        f"블록마다 같은 행위는 한 번만: {broad.ceiling_note}"
+    )
+    assert "4.마 중 「사실과 다른 수상」" in broad.ceiling_note
+    exact = sr.floor_of(spec, "후기_체험기_기만", "013475", ["013094:제8조제1항제5호|다목"])
+    assert (exact.floor, exact.ceiling, exact.basis) == (Risk.R2, None, ("ex",))
+    # 목을 모르면 상한 근거에 고시 근거 행도 보인다
+    miss = sr.floor_of(spec, "소비자_기만", "013475", ["013094:제8조제1항제5호"])
+    assert (miss.floor, miss.ceiling) == (Risk.R1, Risk.R2)
+    assert "5.차" in miss.ceiling_note and sr.NO_MOK_BASIS in miss.ceiling_note
+    hit = sr.floor_of(spec, "소비자_기만", "013475", ["013094:제8조제1항제5호|차목"])
+    assert (hit.floor, hit.ceiling) == (Risk.R2, None)
+
+
+@pytest.mark.gate
+def test_원천의_목_덮음은_판정대로다() -> None:
+    """🆕 2026-10-01 (D-310 개정 2 · (다)) — 전부: 5.다 · 5.차 · 5.카 / 일부: 4.다 · 4.마 · 5.나 · 7.나."""
+    rows = [r for r in sr.load_rules()["rows"] if r.get("annex1")]
+    by = {c: {r["cover"] for r in rows if c in r["annex1"]} for r in rows for c in r["annex1"]}
+    assert by == {
+        "5.다": {"전부"},
+        "5.차": {"전부"},
+        "5.카": {"전부"},
+        "4.다": {"일부"},
+        "4.마": {"일부"},
+        "5.나": {"일부"},
+        "7.나": {"일부"},
+    }, by

@@ -66,6 +66,11 @@ MOK_TYPES = frozenset(
 #: 목을 못 맞힐 때의 하한 — 별표7 블록 1 거) · 블록 3 카) · 블록 4 2)다) 「그 밖에 … 부당한 표시ㆍ광고 → 시정명령」 `[문헌]`
 OTHERWISE = Risk.R1
 _ANNEX1 = re.compile(r"^[4-7]\.[가-하]$")
+#: 🆕 2026-10-01 (D-310 개정 2 · (다)) 별표7 행이 별표1 목을 덮는 정도 — 전부면 목이 맞을 때 하한 · 일부면 가능 상한만.
+#:    ⛔ 기본값을 두지 않는다 — 목 칸이 있는 행은 둘 중 하나를 적어야 한다(lint · 없음이 「전부」로 읽히면 하한이 과대된다 · D-220)
+COVER = ("전부", "일부")
+#: 목 칸이 빈 행(`annex1: []`)의 근거 — 별표1 목이 아니라 고시로 닿는다(유형 오인 · 혼동). 상한 근거 줄에 쓴다
+NO_MOK_BASIS = "고시 69549 제2조 3.너"
 #: 식품표시광고법(법률) ID — 근거 인용의 법. 처분 원천(시행규칙 013475)과 다른 ID 다
 FOOD_ACT = "013094"
 
@@ -198,6 +203,12 @@ def lint(spec: dict[str, Any]) -> list[str]:
         for code in r.get("annex1") or []:
             if not _ANNEX1.match(str(code)):
                 bad.append(f"{rid} annex1 꼴이 아니다 {code!r} — `4.마` 처럼")
+        if r.get("annex1") and r.get("cover") not in COVER:
+            bad.append(
+                f"{rid} cover 가 없거나 틀렸다 {r.get('cover')!r} — 별표1 목을 이 행이 전부 · 일부 덮나 (D-310 개정 2)"
+            )
+        if not r.get("annex1") and "cover" in r:
+            bad.append(f"{rid} cover 는 annex1 목이 있는 행에만 (D-310 개정 2)")
         if "verified_by" in r or "reviewed_by" in r:
             bad.append(f"{rid} 행에 서명 칸이 있다 — 서명 자리는 `signoff` 하나다 (D-309)")
     for p in spec.get("penal") or []:
@@ -257,13 +268,24 @@ def _top(rows: list[dict[str, Any]]) -> Risk:
     return max((KIND_RISK[r["kind"]] for r in rows), key=order.index)
 
 
+def _mok_where(rows: list[dict[str, Any]]) -> str:
+    """상한 근거 줄의 「어디에 해당하면」 — 별표1 목 · 목 없는 행은 고시 근거."""
+    codes = sorted({c for r in rows for c in r.get("annex1") or []})
+    if any(not r.get("annex1") for r in rows):
+        codes.append(NO_MOK_BASIS)
+    return f"{' · '.join(codes)} 에 해당하면" if codes else "별표7 전용 목에 해당하면"
+
+
 def floor_of(
     spec: dict[str, Any], vtype: str, law_id: str, cites: list[str], *, signed_only: bool = True
 ) -> Floor:
     """(유형 · 처분 원천 법 · 근거 인용) → 하한 · 가능 상한. 서명된 판이 없거나 행이 없으면 `Floor(None)`.
 
-    식품 4~7호(D-310) — 근거 인용의 목이 맞는 행이 있으면 그 행 · 없으면 **하한 그 밖에 R1** + 그 유형의 목 행 중 가장 무거운
-    처분을 **가능 상한**으로(근거 줄에 목 목록). ⛔ 상한을 하한으로 올리지 않는다 — 하한은 확실한 최소다(D-310 개정 (다)).
+    식품 4~7호(D-310) — 근거 인용의 목이
+      · `cover: 전부` 행에 맞으면 그 행의 처분이 **하한**
+      · `cover: 일부` 행에만 맞으면 하한 **그 밖에 R1** · 그 행의 처분은 **가능 상한**(근거 줄에 그 행의 원문) — 🆕 D-310 개정 2 (다)
+      · 아무 행에도 안 맞거나 목이 없으면 하한 그 밖에 R1 · 그 유형 행 중 가장 무거운 처분이 가능 상한
+    ⛔ 상한을 하한으로 올리지 않는다 — 하한은 확실한 최소다(D-310 개정 (다)).
     """
     if signed_only and signature(spec) is None:
         return Floor(None)
@@ -271,22 +293,40 @@ def floor_of(
     if law_id == MOK_AXIS and Violation(vtype) in MOK_TYPES:
         codes = {c for c in map(annex1_code, cites) if c}
         hit = [r for r in rows if codes & set(r.get("annex1") or [])]
-        if hit:
-            return Floor(_top(hit), basis=tuple(r["id"] for r in hit))
+        full = [r for r in hit if r.get("cover") == "전부"]
+        part = [r for r in hit if r.get("cover") == "일부"]
+        floor = _top(full) if full else OTHERWISE
+        basis = tuple(r["id"] for r in full) if full else ("그 밖에(별표7)",)
+        if part:
+            top = _top(part)
+            if top.level <= floor.level:
+                return Floor(floor, basis=basis)
+            # 업종 블록마다 같은 행위의 행이 있다 — (목 · 사실 칸)마다 첫 행의 원문 하나만 보인다
+            first = {}
+            for r in part:
+                if KIND_RISK[r["kind"]] is top:
+                    first.setdefault((tuple(r["annex1"]), r.get("fact")), r["quote"])
+            quotes = " · ".join(f"「{q}」" for q in first.values())
+            hit_codes = " · ".join(sorted(codes & {c for r in part for c in r["annex1"]}))
+            return Floor(
+                floor,
+                ceiling=top,
+                ceiling_note=f"목에 따라 {top.value}({RISK_NAME[top]})까지 — 별표1 {hit_codes} 중 {quotes} 이면 별표7 전용 처분",
+                basis=basis,
+            )
+        if full:
+            return Floor(floor, basis=basis)
         if not rows:
-            return Floor(OTHERWISE, basis=("그 밖에(별표7)",))
+            return Floor(OTHERWISE, basis=basis)
         top = _top(rows)
         if top.level <= OTHERWISE.level:
-            return Floor(OTHERWISE, basis=("그 밖에(별표7)",))
-        mok = sorted(
-            {c for r in rows if KIND_RISK[r["kind"]] is top for c in r.get("annex1") or []}
-        )
-        where = f"별표1 {' · '.join(mok)} 에 해당하면" if mok else "별표7 전용 목에 해당하면"
+            return Floor(OTHERWISE, basis=basis)
+        where = _mok_where([r for r in rows if KIND_RISK[r["kind"]] is top])
         return Floor(
             OTHERWISE,
             ceiling=top,
-            ceiling_note=f"목에 따라 {top.value}({RISK_NAME[top]})까지 — {where} 별표7 전용 처분",
-            basis=("그 밖에(별표7)",),
+            ceiling_note=f"목에 따라 {top.value}({RISK_NAME[top]})까지 — 별표1 {where} 별표7 전용 처분",
+            basis=basis,
         )
     if not rows:
         return Floor(None)
@@ -376,7 +416,7 @@ def verify(spec: dict[str, Any], root: pathlib.Path = ROOT) -> list[str]:
 
 
 SHEET_COLS = (
-    "id", "법", "별표", "업종", "목", "위반(원문 인용)", "1차 처분(원문)", "처분 종류", "위험도",
+    "id", "법", "별표", "업종", "목", "별표1 목(덮음)", "위반(원문 인용)", "1차 처분(원문)", "처분 종류", "위험도",
     "유형", "사실 확인", "폐기", "비고", "verified_by", "reviewed_by", "상태",
 )  # fmt: skip
 
@@ -395,6 +435,9 @@ def sheet_rows(spec: dict[str, Any]) -> list[list[str]]:
                 s.get("annex_no") or f"제{r.get('article')}조",
                 r.get("industry", ""),
                 r.get("mok", "") + (f" · 별표5 2.{r['rule']['mok']}" if r.get("rule") else ""),
+                (" · ".join(r["annex1"]) + f"({r['cover']})")
+                if r.get("annex1")
+                else (NO_MOK_BASIS if "annex1" in r else ""),
                 r["quote"],
                 r["first"],
                 r["kind"],
@@ -436,29 +479,21 @@ def floor_by_type(spec: dict[str, Any], signed_only: bool = True) -> dict[str, d
         if cur is None or order.index(risk) > order.index(Risk(cur)):
             out[r["type"]][law] = risk.value
     for t in sorted(MOK_TYPES, key=lambda v: v.value):
-        codes = sorted(
-            {
-                c
-                for r in spec.get("rows") or []
-                if r["type"] == t.value and src_law(spec, r) == MOK_AXIS
-                for c in r.get("annex1") or []
-            }
-        )
-        top = max(
-            (
-                list(Risk).index(KIND_RISK[r["kind"]])
-                for r in spec.get("rows") or []
-                if r["type"] == t.value and src_law(spec, r) == MOK_AXIS
-            ),
-            default=None,
-        )
-        cap = (
-            f" · 가능 상한 {list(Risk)[top].value}({' · '.join(codes)})"
-            if codes and top is not None and list(Risk)[top].level > OTHERWISE.level
-            else ""
-        )
+        mine = [
+            r
+            for r in spec.get("rows") or []
+            if r["type"] == t.value and src_law(spec, r) == MOK_AXIS
+        ]
+        full = sorted({c for r in mine if r.get("cover") == "전부" for c in r["annex1"]})
+        top = _top(mine) if mine else None
+        if top is None or top.level <= OTHERWISE.level:
+            out.setdefault(t.value, {})[MOK_AXIS] = (
+                f"{OTHERWISE.value}(별표7 전용 행 없음 · 그 밖에)"
+            )
+            continue
         out.setdefault(t.value, {})[MOK_AXIS] = (
-            f"목 단위(목 미특정이면 하한 {OTHERWISE.value}{cap})"
+            f"목 단위(하한 {top.value} 인 목 {' · '.join(full) or '없음'} · 그 밖에 하한 {OTHERWISE.value} · "
+            f"가능 상한 {top.value} — {_mok_where([r for r in mine if KIND_RISK[r['kind']] is top])})"
         )
     return out
 
