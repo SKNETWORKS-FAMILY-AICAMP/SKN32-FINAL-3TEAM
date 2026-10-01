@@ -386,7 +386,9 @@ def _noredist_seen() -> list[str]:
     bad = []
     for sid in sorted(seen):
         try:
-            if not registry.redistributable(sid):
+            # 🔄 2026-10-01 (D-303) — 공유 저장소는 팀 비공개다(D-249 ⑤). 막는 것은 「팀 내부 공유도 안 되는」 원천뿐 —
+            #    `raw_inbox._noredist` 와 같은 함수 (D-99). 공개 배포 금지(NOREDIST)만으로는 막지 않는다
+            if not registry.team_shareable(sid):
                 bad.append(f"{sid} (받은 기기 {sorted(seen[sid])})")
         except registry.RegistryError:
             bad.append(f"{sid} (레지스트리에 없다)")  # 🚨 모르는 것은 막는 쪽 (D-220)
@@ -461,7 +463,7 @@ def publish(*, yes: bool = False, dry_run: bool = False) -> int:
     bad = _noredist_seen()
     if bad:
         print(
-            f"🔴 이 기기(정본)가 재배포 제약 소스를 받았다 — {bad}\n"
+            f"🔴 이 기기(정본)가 팀 내부 공유도 안 되는 소스를 받았다 — {bad}\n"
             "  🚨 저장소는 제3자 계정이다 (D-78 ③). 파생물에 그 행이 섞였을 수 있어 올리지 않는다 (D-71).\n"
             "     행 단위 `redistributable` 거름이 생기기 전까지 막는다"
         )

@@ -209,6 +209,9 @@ class Premise(enum.StrEnum):
     식품 = "식품"
     건기식_인정 = "건기식_인정"
     건기식_비인정 = "건기식_비인정"
+    #: 🆕 2026-09-30 (D-295) — **일반식품 기능성 표시** — 고시 「부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는
+    #:    광고에 관한 규정」 제3~6조 요건을 채운 일반식품. 🚨 건기식 인정과 섞지 않는다 — 요건이 다르다(원료 함유 ≠ 요건 충족 · D-263 ②)
+    일반식품_기능성 = "일반식품_기능성"
     화장품 = "화장품"
     일반상품 = "일반상품"
 
@@ -268,6 +271,12 @@ class RiskAssessment(BaseModel):
     encoder: Risk | None = None  # 인코더 예측
     final: Risk | None = None
     evidence_span: Span | None = None
+    #: 🆕 2026-10-01 (D-310 개정 (다)) **가능 상한** — 하한은 「확실한 최소」다. 목(별표1)을 못 맞혀 하한이 「그 밖에 R1」로 떨어진
+    #:    문장도 목에 따라 더 무거운 처분(예: 영업정지)이 있을 수 있다 — 그 가능성을 **숫자를 올리지 않고** 보인다.
+    #:    🚨 판정 · 통과 · 래칫에 쓰지 않는다(표시 전용). 상한이 하한과 같으면 비운다
+    ceiling: Risk | None = None
+    #: 상한이 무엇에서 나왔나 — 「목에 따라 R2(업무정지)까지 — 수상 · 체험기 · 이온수 등」. 상한이 있으면 반드시 있다
+    ceiling_note: str | None = None
 
     @model_validator(mode="after")
     def _ratchet(self) -> RiskAssessment:
@@ -291,6 +300,25 @@ class RiskAssessment(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _ceiling_above_floor(self) -> RiskAssessment:
+        # 🆕 D-310 개정 (다) — 상한은 하한보다 **높을 때만** · 근거 줄과 함께. 하한이 없으면 상한도 없다(없음을 상한으로 꾸미지 않는다 · D-220)
+        if self.ceiling is None:
+            if self.ceiling_note is not None:
+                raise ValueError("상한 근거 줄만 있고 상한이 없다 (D-310)")
+            return self
+        if self.floor is None:
+            raise ValueError("하한 없이 가능 상한을 적을 수 없다 (D-310 · D-09)")
+        if self.ceiling.level <= self.floor.level:
+            raise ValueError(
+                f"가능 상한({self.ceiling.value})이 하한({self.floor.value})보다 높지 않다 — 같으면 비운다 (D-310)"
+            )
+        if not (self.ceiling_note or "").strip():
+            raise ValueError(
+                "가능 상한에는 근거 줄이 있어야 한다 — 무엇에서 나온 상한인가 (D-310 · D-305)"
+            )
+        return self
+
 
 class SubstBranch(BaseModel):
     """**실증 분기** — 문장 하나의 주석 (🆕 D-263 ④ · D-268 「지시」의 내용).
@@ -305,6 +333,46 @@ class SubstBranch(BaseModel):
     #: 인정되는 실증 자료의 종류 — 시험·조사 결과 · 전문가 견해 · 학술문헌 (식품 시행규칙 제9조① · D-228)
     accepted_evidence: list[str] = Field(..., min_length=1)
     #: 기준 문안 — 조문을 인용한 설명 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
+    criteria: str = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def _not_patent_or_award(self) -> SubstBranch:
+        # 🆕 2026-10-01 (D-308 ④) — 특허 · 수상 · 인증은 실증 자료가 아니다 (D-228). 사실 확인은 `FactBranch` 다
+        bad = [e for e in self.accepted_evidence if any(w in e for w in NOT_SUBSTANTIATION)]
+        if bad:
+            raise ValueError(
+                f"실증 자료가 아니다 — {bad} (D-228) · 사실 확인은 사실 확인 분기(FactBranch)로"
+            )
+        return self
+
+
+#: 🆕 2026-10-01 (D-308 ④ (가)) — 실증 분기에 **올 수 없는** 자료 낱말. 특허 · 수상 · 인증은 효능 실증이 아니다 (D-228).
+#:    ⛔ 종전에는 docstring 의 약속뿐이었다 — 사실 확인 분기(`FactBranch`)가 생기며 둘이 섞일 자리가 생겨 코드로 막는다 (D-117)
+NOT_SUBSTANTIATION = ("특허", "수상", "상장", "인증")
+
+
+class FactKind(enum.StrEnum):
+    """사실 확인 분기의 주장 종류 (D-308 ④). 별표1 4.마(수상 · 인증 명칭) · 7.나(원재료 · 성분명)."""
+
+    수상_상장 = "수상_상장"
+    인증 = "인증"
+    원재료 = "원재료"
+
+
+class FactBranch(BaseModel):
+    """**사실 확인 분기** — 문장이 **사실을 주장**하고(수상 · 인증 · 원재료) 위반 여부가 그 주장의 참에 달린 경우 (🆕 D-308 ④).
+
+    기록되는 판정은 **사실을 확인 못 한 경우**다 (D-263 ①). 이것은 「그 사실이 참이면 **여기까지**」의 상한이다.
+    🚨 실증 분기(`SubstBranch`)와 다르다 — 이 증빙은 **그 사실만** 증명한다. 수상 증서는 「수상했다」를 증명할 뿐
+       효능을 증명하지 않는다(D-228). 그래서 칸을 나눴다 — 섞으면 「수상 = 실증」 착오가 화면에 되살아난다.
+    """
+
+    kind: FactKind
+    #: 사실이 참이면 내려갈 수 있는 등급의 **상한** — 확인 전 위험도보다 높을 수 없다(문장 검증기 `_fact_is_for_B`)
+    confirmed_max: Risk
+    #: 그 사실을 증명하는 자료 — 수상 증서 · 인증서 · 원료 배합 기록 등
+    accepted_evidence: list[str] = Field(..., min_length=1)
+    #: 기준 문안 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
     criteria: str = Field(..., min_length=1)
 
 
@@ -331,6 +399,8 @@ class SentenceJudgment(BaseModel):
     spans: list[Span] = Field(default_factory=list)
     #: 🆕 **실증 분기** — B 실증형에만 (D-263 ④ · D-268)
     substantiation: SubstBranch | None = None
+    #: 🆕 2026-10-01 **사실 확인 분기** — B 에만 (D-308 ④) · 실증 분기와 **다른 칸**이다
+    fact_check: FactBranch | None = None
 
     @model_validator(mode="after")
     def _hold_reason_iff_hold(self) -> SentenceJudgment:
@@ -395,6 +465,25 @@ class SentenceJudgment(BaseModel):
             raise ValueError(
                 f"실증했을 때의 상한({self.substantiation.substantiated_max.value})이 실증 전 위험도"
                 f"({self.risk.final.value})보다 높다 — 실증은 등급을 올리지 않는다 (D-263)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _fact_is_for_B(self) -> SentenceJudgment:
+        # 🆕 D-308 ④ — 사실 확인 분기도 **B 에만** · 확인 전 위험도가 있어야 · 상한은 그 아래 (`_subst_is_for_B` 와 같은 규칙)
+        if self.fact_check is None:
+            return self
+        if self.not_claim:
+            raise ValueError("판정 대상 아님 문장에 사실 확인 분기가 붙었다 (D-275)")
+        if self.infeasibility is not Infeasibility.B:
+            raise ValueError(
+                f"사실 확인 분기는 B 에만 붙는다 — 불가 사유 {self.infeasibility} (D-308)"
+            )
+        if self.risk.final is None:
+            raise ValueError("사실 확인 분기가 있는데 확인 전 위험도가 없다 (D-72)")
+        if self.fact_check.confirmed_max.level > self.risk.final.level:
+            raise ValueError(
+                "사실이 참일 때의 상한이 확인 전 위험도보다 높다 — 확인은 등급을 올리지 않는다 (D-263)"
             )
         return self
 

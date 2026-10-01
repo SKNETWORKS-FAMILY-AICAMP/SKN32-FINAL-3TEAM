@@ -485,8 +485,11 @@ def _copies(form: dict[str, list[str]]) -> list[str]:
 def _core_judge(text: str):  # noqa: ANN202
     """코어 판정을 부른다 — `POST /judge` 와 **같은 함수**다 (D-119 · 판정 코어는 하나).
 
-    ★ 반환 `(상태, 응답)` — `ok` 는 `JudgeResponse`, `pending` 은 엔진 미착수(501).
-    ⛔ 501 을 결과처럼 꾸미지 않는다 (D-147). 다른 오류는 삼키지 않고 올린다.
+    ★ 반환 `(상태, 응답)` — `ok` 는 `JudgeResponse`, `pending` 은 엔진 미착수(501), `down` 은 엔진 연결 실패(503).
+    ⛔ 501 · 503 을 결과처럼 꾸미지 않는다 (D-147). 다른 오류는 삼키지 않고 올린다.
+    🔄 2026-09-29 (ohb · ksr 병합) — `POST /judge` 가 501 대신 그래프를 부르고, DB · 그래프 의존성이 없으면 **503** 을 낸다.
+       종전에는 501 만 받아서 503 이 화면 오류로 떨어졌다. 🚨 화면 문구는 화면 담당(ksr · lse)이 정한다 — 지금은
+       `engine_pending` 그림을 같이 쓰고 `engine_down` 을 넘겨 둔다.
     """
     from app.api import judge as core_judge  # noqa: PLC0415 — 순환 import 를 피한다
     from app.contracts import JudgeRequest  # noqa: PLC0415
@@ -494,8 +497,12 @@ def _core_judge(text: str):  # noqa: ANN202
     try:
         return "ok", core_judge(JudgeRequest(text=text))
     except HTTPException as e:
+        # 🔄 2026-10-01 (ksr 병합) — ksr 도 같은 503 수정을 따로 했다(`in (501, 503)` → pending). ohb 의 갈래를 둔다:
+        #    501 = 엔진 미착수 · 503 = 연결 실패 — 둘을 합치면 아래 `down` 이 닿지 않는 줄이 된다(자동 병합이 그렇게 만들었다)
         if e.status_code == 501:
             return "pending", None
+        if e.status_code == 503:
+            return "down", None
         raise
 
 
@@ -581,8 +588,12 @@ async def judge(request: Request) -> HTMLResponse:
     results: list[dict] = []
     for n, text in targets:
         state, res = _core_judge(text)
-        if state == "pending":
-            return _render(request, "user/review.html", _review_ctx(copies, engine_pending=True))
+        if state in ("pending", "down"):
+            return _render(
+                request,
+                "user/review.html",
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+            )
         results.append({"n": n, "result": res})
     return _render(request, "user/review.html", _review_ctx(copies, results))
 
@@ -802,7 +813,9 @@ def _owned_judgments(owner_id: uuid.UUID) -> Select:
     """🔴 **내 판정만** (P1-5) — `judgment.doc_id` → `work_doc.owner_id` 로 거른다.
 
     홈 집계·최근 이력·이력 목록이 모두 이것에서 출발한다 — 소유자 조건을 화면마다 따로 적지 않는다.
-    ⬜ 비회원 문서(`owner_id` NULL · `session_id` 로만 묶임, D-129)는 여기 안 걸린다 — 로그인 전에는 이력을 안 보여 준다.
+    🔴 2026-10-01 — **비회원 검수는 이력에 쌓이지 않는다** (D-69 「비회원 … 이력 없음」 · 권소라 결정).
+       비회원 문서(`owner_id` NULL · `session_id` + `expires_at`, D-129)는 여기 안 걸린다 — 그 키는 **지울 키**이지 이력 키가 아니다.
+    ⛔ `session_id` 로 이력을 읽거나, 로그인·가입할 때 그 세션의 문서에 `owner_id` 를 채워 넣지 않는다 — 이력은 로그인한 뒤 검수한 것부터다.
     """
     return (
         select(Judgment)
@@ -1117,8 +1130,10 @@ def _mypage_ctx(user: UserAccount, tab: str, **extra: object) -> dict[str, objec
 
 @router.get("/mypage", response_class=HTMLResponse)
 def mypage(
-    request: Request, tab: str = "profile", session: Session = Depends(get_session)
-) -> HTMLResponse:  # noqa: B008
+    request: Request,
+    tab: str = "profile",
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
     """마이페이지 — 프로필 · 광고 기본값 · 계정 탭 (ksr 2026-09-13 · lse 2026-09-29 저장 배선).
 
     🔴 로그인해야 들어온다 — 채울 계정이 없으면 프로필도 없다 (cs_detail 과 같은 문).
@@ -1135,9 +1150,7 @@ def mypage(
 
 
 @router.post("/mypage", response_class=HTMLResponse)
-async def mypage_save(
-    request: Request, session: Session = Depends(get_session)
-) -> HTMLResponse:  # noqa: B008
+async def mypage_save(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
     """마이페이지 저장 — 섹션마다 갈린다 (2026-09-29).
 
     🔴 `profile` · `consent` 는 `user_account` 에 실제로 쓴다. `adprefs`(광고 기본값)는
@@ -1155,7 +1168,9 @@ async def mypage_save(
         return _render_form(
             request,
             "user/mypage.html",
-            _mypage_ctx(user, tab, error="화면이 오래돼서 다시 불러왔어요. 한 번 더 저장해 주세요."),
+            _mypage_ctx(
+                user, tab, error="화면이 오래돼서 다시 불러왔어요. 한 번 더 저장해 주세요."
+            ),
             403,
         )
 
@@ -1166,7 +1181,11 @@ async def mypage_save(
             return _render_form(
                 request,
                 "user/mypage.html",
-                {**_mypage_ctx(user, tab), "picked": {**_mypage_picked(user), "name": name, "org": org}, "error": "이름을 입력해 주세요."},
+                {
+                    **_mypage_ctx(user, tab),
+                    "picked": {**_mypage_picked(user), "name": name, "org": org},
+                    "error": "이름을 입력해 주세요.",
+                },
                 422,
             )
         user.name = name
@@ -1197,7 +1216,9 @@ async def mypage_save(
     for k in ("age", "sex", "channel", "category"):
         picked[k] = _one(form, k, _MYPAGE_FIELDS[k])
     return _render_form(
-        request, "user/mypage.html", {**_mypage_ctx(user, tab), "picked": picked, "saved_attempt": True}
+        request,
+        "user/mypage.html",
+        {**_mypage_ctx(user, tab), "picked": picked, "saved_attempt": True},
     )
 
 
@@ -1216,7 +1237,9 @@ async def mypage_disable(request: Request, session: Session = Depends(get_sessio
         return _render_form(
             request,
             "user/mypage.html",
-            _mypage_ctx(user, "account", error="화면이 오래돼서 다시 불러왔어요. 한 번 더 해 주세요."),
+            _mypage_ctx(
+                user, "account", error="화면이 오래돼서 다시 불러왔어요. 한 번 더 해 주세요."
+            ),
             403,
         )
     confirm = _one(form, "confirm", 20)
@@ -1225,7 +1248,9 @@ async def mypage_disable(request: Request, session: Session = Depends(get_sessio
             request,
             "user/mypage.html",
             _mypage_ctx(
-                user, "account", error=f"확인 문구가 맞지 않아요. 「{_MYPAGE_DISABLE_CONFIRM}」라고 정확히 입력해 주세요."
+                user,
+                "account",
+                error=f"확인 문구가 맞지 않아요. 「{_MYPAGE_DISABLE_CONFIRM}」라고 정확히 입력해 주세요.",
             ),
             422,
         )
