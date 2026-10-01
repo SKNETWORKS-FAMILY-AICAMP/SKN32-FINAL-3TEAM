@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import pathlib
 import sys
@@ -46,6 +47,8 @@ from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99
 )
 
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
+#: DB 사전 대조의 기준 — 적재기(`scripts/load_db.py` `load_dict`)가 읽는 바로 그 파일
+DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 
 #: 행 하나의 응답 갈래 — 조건별 대응표(D-275)와 selective risk 가 같이 쓴다.
 #: 🔴 「확정 위반」은 **전 문장 확정 ∧ 위반 있음**이 아니라 **위반을 확정한 문장이 하나라도** — 예측의 정의와 같다.
@@ -224,6 +227,53 @@ def report(s: dict[str, Any]) -> None:
 # ── 실행 ────────────────────────────────────────────────────────────────
 
 
+def _sha12(p: pathlib.Path) -> str:
+    return hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+
+
+def _key(e: Any) -> tuple[str, str | None, tuple[str, ...]]:
+    return (e.term, e.violation_type, tuple(e.basis))
+
+
+def dict_drift(db: Iterable[Any], file_rows: Iterable[dict]) -> dict[str, int]:
+    """DB 의 단독판정 사전(`graph.load_dict_entries`) ↔ 사전 파일 — 어긋난 **수**만 (용어는 싣지 않는다 · ND 면제 조건).
+
+    🆕 2026-10-01 (원장 10-01 ⑦) — A 기기 DB 에 동결 09-30 이전 사전이 남아 **봉인 평가 문서의 문구**가 걸렸다.
+       ⛔ 평가 도구가 DB 사전의 판을 몰라 그 수가 정본처럼 찍혔다 — 없음 · 낡음이 성공으로 집계됐다 (D-220 · D-174).
+    🔴 파일 쪽 변환은 적재기와 **한 함수**(`load_db.dict_row`)다 (D-99) — 「단독판정 항목만」도 그래프의 `SQL_DICT` 와 같은 거름.
+    """
+    from scripts.load_db import dict_row  # noqa: PLC0415 — 적재기의 변환을 그대로 (D-99)
+
+    want = {}
+    for term, law_ref, exact, vt in map(dict_row, file_rows):
+        if exact:
+            want[term] = (term, vt, tuple(b.strip() for b in law_ref.split(";") if b.strip()))
+    have = {e.term: _key(e) for e in db}
+    return {
+        "db_only": len(have.keys() - want.keys()),
+        "file_only": len(want.keys() - have.keys()),
+        "changed": sum(have[t] != want[t] for t in have.keys() & want.keys()),
+        "file": len(want),
+        "db": len(have),
+    }
+
+
+def check_dict(cur: Any, path: pathlib.Path = DICT_FILE) -> dict[str, Any]:
+    """DB 사전이 파일과 같아야 돈다 — 🔴 다르면 **멈춘다** (D-220). 같으면 판 표지(sha · 수)를 돌려준다(D-178)."""
+    if not path.exists():
+        raise SystemExit(f"🔴 {path} 가 없다 — DB 사전과 대조할 기준이 없다 (D-220)")
+    rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    d = dict_drift(g.load_dict_entries(cur), rows)
+    if d["db_only"] or d["file_only"] or d["changed"]:
+        raise SystemExit(
+            f"🔴 DB 사전이 {path} 와 다르다 — DB 에만 {d['db_only']} · 파일에만 {d['file_only']} · "
+            f"값이 다름 {d['changed']} (단독판정 · 파일 {d['file']} · DB {d['db']})\n"
+            "  이대로 재면 다른 판 사전의 수가 정본처럼 찍힌다(봉인 문서 문구가 걸릴 수 있다 · D-174).\n"
+            "  먼저: uv run python launcher.py load"
+        )
+    return {"dict_sha": _sha12(path), "dict_entries": d["file"]}
+
+
 def stub_runner() -> Callable[[str], dict[str, Any]]:
     """DB 없이 — 스텁 한 바퀴(`run_review_stub`). 사전을 못 훑어 전부 미판정이다 — 배선만 본다."""
     return lambda text: g.run_review_stub(text)[0]
@@ -251,6 +301,8 @@ def main(argv: list[str] | None = None) -> int:
     rows = load_rows(provenance=a.provenance)
     if a.limit:
         rows = rows[: a.limit]
+    #: 판 표지 — 원장에 수와 함께 적는다 (D-178). 🔴 실제 실행은 DB 사전이 파일과 같을 때만 돈다(`check_dict`)
+    stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN)}
     t0 = time.perf_counter()
     if a.stub:
         preds = run(rows, stub_runner())
@@ -259,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
 
         review = g.build_review()
         with pg_connect() as conn, conn.cursor() as cur:
+            stamp |= check_dict(cur)
             cfg = {"configurable": {"conn": cur}}
             preds = run(
                 rows, lambda t: review.invoke({"text": t, "product": ProductContext()}, config=cfg)
@@ -268,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
     report(s)
     print(
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"
+        f" · " + " · ".join(f"{k} {v}" for k, v in stamp.items())
     )
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -277,6 +331,7 @@ def main(argv: list[str] | None = None) -> int:
                     "summary": s,
                     "judged_by": g.JUDGED_BY,
                     "stub": a.stub,
+                    **stamp,
                     "rows": [{"id": r["id"], **p} for r, p in zip(rows, preds, strict=True)],
                 },
                 ensure_ascii=False,

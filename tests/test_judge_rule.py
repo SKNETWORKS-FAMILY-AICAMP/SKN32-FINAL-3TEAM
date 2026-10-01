@@ -236,3 +236,57 @@ def test_그래프_평가는_예측을_확정_문장에서만_세고_보류를_�
     assert s["scored_rows"] == 3 and s["unscored_rows"] == 1  # M 은 채점 밖
     assert s["lawful"]["주장"] == (1, 1)
     assert s["by_condition"]["M"] == {"미판정": 1}
+
+
+@pytest.mark.gate
+def test_그래프_평가는_DB_사전이_파일과_다르면_멈춘다() -> None:
+    """🆕 2026-10-01 (원장 10-01 ⑦) — 낡은 DB 사전(봉인 문서 문구가 든 판)으로 잰 수가 정본처럼 찍히지 않게 (D-220 · D-174)."""
+    from app import dictmatch as dm
+    from scripts import eval_graph as eg
+
+    file_rows = [
+        {"term": "암예방", "유형": ["질병_예방치료_표방"], "근거": [FOOD], "단독판정": True},
+        {"term": "최고", "유형": ["거짓_과장", "소비자_기만"], "근거": [FAIR], "단독판정": True},
+        {
+            "term": "천연",
+            "유형": ["거짓_과장"],
+            "근거": [FAIR],
+            "단독판정": False,
+        },  # 단독판정 밖 — 대조 밖
+    ]
+    same = [
+        dm.Entry("암예방", "질병_예방치료_표방", (FOOD,)),
+        dm.Entry("최고", None, (FAIR,)),
+    ]
+    assert eg.dict_drift(same, file_rows) == {
+        "db_only": 0,
+        "file_only": 0,
+        "changed": 0,
+        "file": 2,
+        "db": 2,
+    }
+    stale = [dm.Entry("암예방", "질병_예방치료_표방", (FAIR,)), dm.Entry("한상춘방짜유기")]
+    d = eg.dict_drift(stale, file_rows)
+    assert (d["db_only"], d["file_only"], d["changed"]) == (1, 1, 1)
+
+    class Cur:  # `load_dict_entries` 가 읽는 꼴만
+        def execute(self, *_a) -> None: ...  # noqa: ANN002
+
+        def fetchall(self) -> list[tuple]:
+            return [("한상춘방짜유기", "거짓_과장", FAIR)]
+
+    import json
+    import pathlib
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        p = pathlib.Path(td) / "banned_terms.jsonl"
+        p.write_text(
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in file_rows),
+            encoding="utf-8",
+            newline="\n",
+        )
+        with pytest.raises(SystemExit, match="launcher.py load"):
+            eg.check_dict(Cur(), p)
+        with pytest.raises(SystemExit, match="없다"):
+            eg.check_dict(Cur(), pathlib.Path(td) / "none.jsonl")
