@@ -60,6 +60,9 @@ ADOPTED = ROOT / "data" / "derived" / "labels" / "guide_statute" / "adopted.json
 SHEET = ROOT / "build" / "labels" / "guide_statute__판정시트.csv"
 #: 🆕 2026-09-25 (D-285 개정 4) — **팀장 판정**. 사람이 채운 CSV 를 `import-decisions` 가 옮긴다 — 부류 「원천」(사람의 판정 · `labels/`)
 DECISIONS = ROOT / "data" / "derived" / "labels" / "guide_statute" / "decisions.jsonl"
+#: 🆕 2026-10-01 (판정 J6 · D-220) — 블라인드 감사 두 표의 **들여온 결과**(원천 · 사람 판정). 앞 감사를 덮지 않는다
+GS_AUDIT_TEAM = ROOT / "data" / "derived" / "labels" / "guide_statute" / "audit__팀장.jsonl"
+CAUTION_AUDIT_TEAM = ROOT / "data" / "derived" / "labels" / "caution" / "audit__팀장.jsonl"
 #: 팀장 판정표 — 두 판독을 나란히 싣는다(지시서 §6 「팀장 판정표」). ⛔ 2인 시트(`SHEET`)는 판독을 싣지 않는다 — 둘은 다른 표다
 TEAM_SHEET = ROOT / "build" / "labels" / "guide_statute__팀장판정표.csv"
 TEAM_COLS = (
@@ -1582,7 +1585,7 @@ def audit_sheet(
 def guide_audit_sheet(out: pathlib.Path, n: int = 30, seed: int = AUDIT_SEED) -> dict:
     """해설서 위반문구 판(`gs`) 블라인드 감사표 — 칸은 이 판의 판독 꼴(근거 · 조건 · 제외목 · 원천결손).
 
-    ⬜ 채운 표를 읽는 명령은 아직 없다(화장품 · 수정문구 판의 `*-audit` 와 달리 이 판은 `Round` 가 아니다) — 대조는 채운 뒤 만든다.
+    🔄 2026-10-01 — 채운 표는 `audit-import --csv …` 가 읽는다(`guide_audit` · 이 판은 `Round` 가 아니라 따로 둔다).
     """
     took = {}
     for x in ADOPTED.read_text(encoding="utf-8").splitlines() if ADOPTED.exists() else []:
@@ -1619,7 +1622,7 @@ def guide_audit_sheet(out: pathlib.Path, n: int = 30, seed: int = AUDIT_SEED) ->
 def caution_audit_sheet(out: pathlib.Path, n: int = 30, seed: int = AUDIT_SEED) -> dict:
     """인정 조건문(섭취 주의사항 · 조건 D · 판정 J1 (가-2′)) 블라인드 감사표 — 규칙이 붙인 D 를 사람이 본다.
 
-    칸 — 조건(C·A·B·M·D·L) · 메모 · 판정자. 🔴 규칙의 값(D)을 싣지 않는다. ⬜ 채운 표를 읽는 명령은 아직 없다.
+    칸 — 조건(C·A·B·M·D·L) · 메모 · 판정자. 🔴 규칙의 값(D)을 싣지 않는다. 🔄 2026-10-01 — 읽는 명령 `caution-audit-import`.
     """
     from preprocess import split as sp  # noqa: PLC0415
 
@@ -1635,6 +1638,128 @@ def caution_audit_sheet(out: pathlib.Path, n: int = 30, seed: int = AUDIT_SEED) 
             d = docs[k]
             w.writerow([k, d["원천"], d["문구"][0], "", "", ""])
     return {"판": "인정조건문", "전체": len(docs), "표본": len(pick), "seed": seed}
+
+
+def _canonical_only(what: str) -> None:
+    """🔴 들여오기는 **정본에서만** — 사본이 `labels/`(원천)에 쓰면 정본과 갈라지고 공유 저장소로 못 간다 (D-226)."""
+    from scripts import derived_manifest as dm  # noqa: PLC0415
+
+    why = dm.not_canonical(what)
+    if why:
+        raise SystemExit(why)
+
+
+def _write_audit(got: list[dict], bad: list[str], out: pathlib.Path) -> dict:
+    """감사 결과를 쓴다 — `_audit` 과 같은 규칙: 문제 행이 하나라도 있으면 아무것도 안 쓴다 · 있는 파일은 덮지 않는다 (D-220)."""
+    if bad:
+        raise SystemExit(
+            "🔴 감사표에 문제가 있다 — **아무것도 쓰지 않았다**\n  " + "\n  ".join(bad[:30])
+        )
+    if not got:
+        raise SystemExit("🔴 판정자가 적힌 행이 0 — 쓸 것이 없다 (빈 표를 들여오지 않는다)")
+    if out.exists():
+        raise SystemExit(f"🔴 {out} 가 이미 있다 — 덮지 않는다. 새 감사는 --out 으로 다른 이름에")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8", newline="\n") as f:
+        for r in sorted(got, key=lambda r: r["지문"]):
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    hit = sum(r["일치"] for r in got)
+    return {
+        "감사": len(got),
+        "일치": hit,
+        "정확도": f"{hit / len(got):.1%}",
+        "불일치": [r["지문"] for r in got if not r["일치"]],
+        "→": str(out),
+    }
+
+
+def gs_same(x: dict, y: dict) -> bool:
+    """해설서 위반문구 판 감사 대조 — **기대 응답을 정하는 것**이 같은가: 조건 · (C·A·B 면) 호 집합.
+
+    채택 행이 `근거_후보`(호만 갈린 두 판독 · D-285 개정 2)면 **어느 후보와 같아도** 일치다 — 채택 규칙이 「어느 쪽을 인용해도 정답」이다.
+    목은 보지 않는다(`cq_same` 과 같은 기준).
+    """
+    if x["조건"] != y["조건"]:
+        return False
+    if x["조건"] in ("M", "D"):
+        return True
+    hx = {statute.ho_key(c) for c in x["근거"]}
+    cands = [y.get("근거") or []] + [c for c in (y.get("근거_후보") or []) if c]
+    return any(hx == {statute.ho_key(c) for c in cand} for cand in cands if cand)
+
+
+def guide_audit(path: pathlib.Path, out: pathlib.Path = GS_AUDIT_TEAM) -> dict:
+    """🆕 2026-10-01 — 채운 해설서 위반문구 감사표(`audit-sheet`) → 감사(원천) · 합의 정확도. ⬜ 이었던 「읽는 명령」.
+
+    🔴 조건이 빈 행은 판정 안 한 행(건너뜀) · 판정자가 비면 받지 않는다 · 합의 채택 행이 아니면 멈춘다.
+    원천결손 칸이 비면 N 으로 읽는다(표시가 없다 = 결손 아님) — 그 밖의 칸은 판독 해석기(`parse_line`)가 그대로 검사한다.
+    """
+    _canonical_only("audit-import")
+    took = {}
+    for x in ADOPTED.read_text(encoding="utf-8").splitlines() if ADOPTED.exists() else []:
+        if x.strip():
+            r = json.loads(x)
+            if r["판독"] == "독립판독_합의":
+                took[r["지문"]] = r
+    got, bad = [], []
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        for no, row in enumerate(csv.DictReader(f), 2):
+            k = (row.get("지문") or "").strip()
+            cond = (row.get("조건") or "").strip()
+            if not cond:
+                continue
+            who = (row.get("판정자") or "").strip()
+            if not who:
+                bad.append(f"{no}행 {k} 판정자가 비었다 — 사람이 적는 칸이다")
+                continue
+            if k not in took:
+                bad.append(f"{no}행 {k} 합의 채택 행이 아니다")
+                continue
+            c1, c2, ex = ((row.get(c) or "").strip() or "-" for c in ("주근거", "부근거", "제외목"))
+            gap = (row.get("원천결손") or "").strip() or "N"
+            line = "\t".join([k, c1, c2, cond, ex, gap, (row.get("메모") or "").strip()])
+            rec = parse_line(line)
+            if rec["문제"]:
+                bad.append(f"{no}행 {k} — " + " / ".join(rec["문제"]))
+                continue
+            rec.pop("문제")
+            got.append({"지문": k, "감사": rec, "판정자": who, "일치": gs_same(rec, took[k])})
+    return _write_audit(got, bad, out)
+
+
+#: 인정 조건문 감사가 받는 조건 — 규칙이 붙인 값은 D 하나다(판정 J1 (가-2′)). L 은 「주장 있는 적법」(D-301)
+CAUTION_CONDITIONS = ("C", "A", "B", "M", "D", "L")
+
+
+def caution_audit(path: pathlib.Path, out: pathlib.Path = CAUTION_AUDIT_TEAM) -> dict:
+    """🆕 2026-10-01 — 채운 인정 조건문 감사표(`caution-audit-sheet`) → 감사(원천) · 규칙(D) 정확도. ⬜ 이었던 「읽는 명령」.
+
+    일치 = 사람이 D 를 적었다. 🔴 지문이 지금의 인정 조건문(`split.caution_docs`)에 없으면 멈춘다 — 원천이 바뀐 뒤의 표다.
+    """
+    _canonical_only("caution-audit-import")
+    from preprocess import split as sp  # noqa: PLC0415
+
+    docs = {d["doc_id"] for d in sp.caution_docs()}
+    got, bad = [], []
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        for no, row in enumerate(csv.DictReader(f), 2):
+            k = (row.get("지문") or "").strip()
+            cond = (row.get("조건") or "").strip()
+            if not cond:
+                continue
+            who = (row.get("판정자") or "").strip()
+            if not who:
+                bad.append(f"{no}행 {k} 판정자가 비었다 — 사람이 적는 칸이다")
+                continue
+            if k not in docs:
+                bad.append(f"{no}행 {k} 지금의 인정 조건문에 없다")
+                continue
+            if cond not in CAUTION_CONDITIONS:
+                bad.append(f"{no}행 {k} 조건 {cond!r}")
+                continue
+            rec = {"조건": cond, "메모": (row.get("메모") or "").strip()}
+            got.append({"지문": k, "감사": rec, "판정자": who, "일치": cond == "D"})
+    return _write_audit(got, bad, out)
 
 
 # ── 원천별 이름 — 게이트 · 명령이 부르는 자리 (본체는 위 `_*` 하나 · D-99) ──────────────────────────────────
@@ -1770,6 +1895,15 @@ def main() -> int:
         pz.add_argument("--out", type=pathlib.Path, required=True)
         pz.add_argument("--n", type=int, default=30)
         pz.add_argument("--seed", type=int, default=AUDIT_SEED)
+    for name, hlp in (
+        ("audit-import", "해설서 위반문구 판"),
+        ("caution-audit-import", "인정 조건문"),
+    ):
+        pi = sub.add_parser(
+            name, help=f"{hlp} — 채운 블라인드 감사표 CSV → 감사(원천) · 정확도 (정본)"
+        )
+        pi.add_argument("--csv", type=pathlib.Path, required=True)
+        pi.add_argument("--out", type=pathlib.Path)
     p_fi = sub.add_parser("fs-input", help="결정문 봉인 문구 — 단위.json · 입력.md")
     p_fi.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_sealed")
     a = ap.parse_args()
@@ -1777,6 +1911,11 @@ def main() -> int:
         fn = guide_audit_sheet if a.cmd == "audit-sheet" else caution_audit_sheet
         print(json.dumps(fn(a.out, a.n, a.seed), ensure_ascii=False, indent=1))
         print(f"감사표 → {a.out} (판정자 칸은 사람이 채운다)")
+        return 0
+    if a.cmd in ("audit-import", "caution-audit-import"):
+        fn = guide_audit if a.cmd == "audit-import" else caution_audit
+        res = fn(a.csv, a.out) if a.out else fn(a.csv)
+        print(json.dumps(res, ensure_ascii=False, indent=1))
         return 0
     if a.cmd == "fs-input":
         print(json.dumps(fs_input(a.out), ensure_ascii=False, indent=1))

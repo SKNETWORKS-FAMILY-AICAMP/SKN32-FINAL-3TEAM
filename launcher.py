@@ -1273,6 +1273,31 @@ def data_sync(
     raise typer.Exit(run(*args))
 
 
+@app.command(name="sheet-push")
+def sheet_push(
+    dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 올릴지만 보여 준다"),
+) -> None:
+    """사람이 채울 판정표 · 감사표를 공유 저장소에 둡니다 — 채우는 중인 표는 덮지 않습니다.
+
+    🆕 2026-10-01 (팀장 판정 (나)) — 표는 `build/labels/` 에 생기는데 그 자리는 git 도 저장소도 나르지 않아,
+       채운 CSV 가 들여오기 전까지 한 기기에만 있었다. 저장소의 `copylane-sheets/` 에서 어느 기기에서든 채운다.
+    🚨 정본(클론 B)은 거기서 바로 들여온다 — `sheet-status` 가 명령을 보여 준다. 규칙은 `scripts/sheet_share.py`.
+    """
+    args = [sys.executable, "-m", "scripts.sheet_share", "push"]
+    if dry_run:
+        args.append("--dry-run")
+    raise typer.Exit(run(*args))
+
+
+@app.command(name="sheet-status")
+def sheet_status() -> None:
+    """공유 저장소의 판정표 · 감사표마다 채운 행 수와 들여오는 명령을 보여 줍니다.
+
+    🆕 2026-10-01 — 들여오기(`*-import-decisions` · `*-audit` · `audit-import` · `caution-audit-import`)는 정본에서만.
+    """
+    raise typer.Exit(run(sys.executable, "-m", "scripts.sheet_share", "status"))
+
+
 @app.command(name="data-setup")
 def data_setup(
     role: str = typer.Option("", "--role", help="canonical | replica (비우면 묻는다)"),
@@ -1946,6 +1971,9 @@ MENU: list[tuple[str, str, object]] = [
     # 🆕 2026-09-21 (D-256) — 정본 원문 거울 (팀장 기기 읽기용)
     ("50", "원문 거울 올리기 (정본)", raw_mirror_publish),
     ("51", "원문 거울 받기 (팀장 사본)", raw_mirror_sync),
+    # 🆕 2026-10-01 — 사람이 채우는 판정표 · 감사표를 공유 저장소에서 (팀장 판정 (나))
+    ("52", "판정표 · 감사표 올리기", sheet_push),
+    ("53", "판정표 · 감사표 현황", sheet_status),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)
