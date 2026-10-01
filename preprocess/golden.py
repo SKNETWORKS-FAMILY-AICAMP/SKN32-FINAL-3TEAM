@@ -150,8 +150,8 @@ def build() -> tuple[list[dict], dict]:
     rows: list[dict] = []
     stat: dict = collections.Counter()
 
-    # 🔄 2026-09-24 (D-283) — `guide_docs()` 는 비어 있다(해설서 호가 정해지기 전). 부르는 자리는 남긴다 —
-    #    호가 붙으면 이 한 줄로 들어온다.
+    # 🔄 2026-09-24 (D-283) · 🔄 2026-09-25 (D-285 개정 4) — `guide_docs()` 는 해설서 대기가 0 일 때만 채택본을 낸다
+    #    (대기 중에는 빈 목록 · `split.guide_state()`). 전환됐다(원장 09-25 ⑰) — 해설서 행이 이 한 줄로 들어온다.
     for d in ftc_docs() + casebook_docs() + approved_docs() + guide_docs():
         split = assign.get(d["doc_id"])
         if not split:

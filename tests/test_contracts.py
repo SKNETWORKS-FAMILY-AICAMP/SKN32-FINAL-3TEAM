@@ -626,14 +626,20 @@ def test_검수_픽스처에는_후보도_재생성도_없다(path: pathlib.Path
 
 
 @pytest.mark.gate
-def test_0018_의_제약_글자가_모델과_같다() -> None:
-    """🔴 D-99 — 런타임층 정본은 `app/models.py` 다. 마이그레이션 글자가 다르면 새 DB 와 옮긴 DB 가 갈린다."""
+@pytest.mark.parametrize(
+    "fname", ["20260923_0018_judgment_w3.py", "20260929_0022_judgment_ratchet.py"]
+)
+def test_0018_의_제약_글자가_모델과_같다(fname: str) -> None:
+    """🔴 D-99 — 런타임층 정본은 `app/models.py` 다. 마이그레이션 글자가 다르면 새 DB 와 옮긴 DB 가 갈린다.
+
+    🔄 2026-09-29 — 0022(래칫 · 최종 ≥ 하한)도 같은 자리라 함께 댄다.
+    """
     import importlib.util  # noqa: PLC0415
 
     from app.models import Judgment  # noqa: PLC0415
 
-    p = ROOT / "alembic" / "versions" / "20260923_0018_judgment_w3.py"
-    spec = importlib.util.spec_from_file_location("m0018", p)
+    p = ROOT / "alembic" / "versions" / fname
+    spec = importlib.util.spec_from_file_location(fname.removesuffix(".py"), p)
     assert spec and spec.loader
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -643,3 +649,30 @@ def test_0018_의_제약_글자가_모델과_같다() -> None:
     for name, check, _ in m._CHECKS:
         assert name in model, f"🔴 모델에 {name} 이 없다"
         assert " ".join(check.split()) == model[name], f"🔴 {name} 글자가 모델과 다르다"
+
+
+@pytest.mark.gate
+def test_검수_응답은_라운드가_없다() -> None:
+    """🔴 D-265 · D-266 — 검수는 한 번 판정하고 끝난다. ⛔ 종전에는 attempt=1 이면 미판정 문장으로도 pass 가 계약을 지났다."""
+    s = SentenceJudgment(sent_id="s0", text="면역력 강화", verdict=Verdict.unjudged)
+    for attempt in (1, 2):
+        with pytest.raises(ValidationError):
+            JudgeResponse(outcome=Outcome.passed, sentences=[s], attempt=attempt)
+    with pytest.raises(ValidationError):
+        JudgeResponse(outcome=Outcome.hold, sentences=[s], attempt=1)
+    # 🔴 attempt 0 이어도 미판정 문장의 pass 는 여전히 거부된다 (D-127 · D-273)
+    with pytest.raises(ValidationError):
+        JudgeResponse(outcome=Outcome.passed, sentences=[s], attempt=0)
+
+
+@pytest.mark.gate
+def test_모델의_래칫_제약이_최종이_하한_아래인_행을_막는다() -> None:
+    """🔴 D-09 — 계약(`RiskAssessment`)과 DB 가 같은 규칙을 든다 (D-99). 글자로 댄다(DB 없이)."""
+    from app.models import Judgment  # noqa: PLC0415
+
+    got = {
+        c.name: " ".join(str(c.sqltext).split()) for c in Judgment.__table__.constraints if c.name
+    }
+    assert got.get("ck_judgment_final_not_below_floor") == (
+        "risk_final IS NULL OR risk_floor IS NULL OR risk_final >= risk_floor"
+    )
