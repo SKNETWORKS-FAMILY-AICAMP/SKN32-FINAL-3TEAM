@@ -34,8 +34,8 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import auth
-from app.contracts import PASS_RISK_MAX, Risk
+from app import auth, sentsplit
+from app.contracts import PASS_RISK_MAX, Risk, is_pass
 from app.db import get_session, reachable
 from app.formbody import read_capped
 from app.models import (
@@ -514,14 +514,48 @@ def _flagged(result) -> set[str]:  # noqa: ANN001
 
     🚨 미판정·보류도 든다 — 통과로 집계하지 않는다 (D-127). 문턱은 `PASS_RISK_MAX` 한 곳 (D-273) —
        템플릿에 R0 을 따로 적지 않으려고 여기서 계산해 넘긴다 (D-99).
+    🔄 2026-10-01 — ⛔ 종전에는 위험도가 없는 확정(`final is None`)을 통과로 봤다. 판정 노드 1판은 **확정 위반을
+       위험도 없이** 낸다(하한 W5 전) — 그 문장이 지적에서 빠지고 보류 문장만 세어졌다. 계약의 `is_pass` 를 쓴다 (D-72 · D-99).
     """
-    out: set[str] = set()
-    for s in result.sentences:
-        ok = s.verdict.value == "confirmed" and (
-            s.risk.final is None or s.risk.final.level <= PASS_RISK_MAX.level
+    return {s.sent_id for s in result.sentences if not is_pass(s) and not s.not_claim}
+
+
+def _marks(text: str | None, result) -> dict[str, list[tuple[str, bool]]]:  # noqa: ANN001
+    """문장마다 **뺄 구간**을 칠할 조각 `(글자, 구간인가)` — 엔진의 `spans` 는 원문 좌표다 (D-278).
+
+    ★ 응답에는 문장의 원문 시작 자리가 없다 — 넣은 문구에서 되찾는다(`sentsplit.offsets` · 엔진과 같은 함수 · D-99).
+    🚨 원문을 모르거나(픽스처 미리보기) 좌표를 못 되찾으면 **칠하지 않는다** — 엉뚱한 글자를 칠하지 않는다 (D-224).
+    ★ 겹친 구간은 합쳐 한 번 칠한다. 조각은 템플릿이 이스케이프한다 (P2-9).
+    """
+    if not text:
+        return {}
+    try:
+        starts = sentsplit.offsets(text, [s.text for s in result.sentences])
+    except ValueError:
+        return {}
+    out: dict[str, list[tuple[str, bool]]] = {}
+    for s, at in zip(result.sentences, starts, strict=True):
+        n = len(s.text)
+        cuts = sorted(
+            (max(sp.start - at, 0), min(sp.end - at, n))
+            for sp in s.spans
+            if sp.start < at + n and sp.end > at
         )
-        if not ok and not s.not_claim:
-            out.add(s.sent_id)
+        if not cuts:
+            continue
+        merged = [cuts[0]]
+        for a, b in cuts[1:]:
+            if a <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+            else:
+                merged.append((a, b))
+        pieces: list[tuple[str, bool]] = []
+        pos = 0
+        for a, b in merged:
+            pieces += [(s.text[pos:a], False), (s.text[a:b], True)]
+            pos = b
+        pieces.append((s.text[pos:], False))
+        out[s.sent_id] = [p for p in pieces if p[0]]
     return out
 
 
@@ -536,6 +570,7 @@ def _review_ctx(copies: list[str], results: list[dict] | None = None, **extra) -
     }
     for r in results or []:
         r["flagged"] = _flagged(r["result"])
+        r["marks"] = _marks(r.get("text"), r["result"])
         # 분기마다의 지적 문장 — 화면이 고른 분기 기준으로 지적 건수를 센다 (2026-10-01)
         r["branch_flagged"] = {b.premise.value: _flagged(b) for b in r["result"].branches}
     if results:
@@ -600,7 +635,7 @@ async def judge(request: Request) -> HTMLResponse:
                 "user/review.html",
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
-        results.append({"n": n, "result": res})
+        results.append({"n": n, "result": res, "text": text})
     return _render(request, "user/review.html", _review_ctx(copies, results))
 
 

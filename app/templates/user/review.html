@@ -30,6 +30,7 @@
 }
 .rv-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
 .rv-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+.rv-why { margin: .4rem 0 0; }
 
 .rv-count { float: right; color: var(--u-clay); font-size: .75rem; font-weight: 400; }
 .rv-submit {
@@ -204,11 +205,14 @@
 {% endblock %}
 {% block user_content %}
 {# 문장 하나 — 기록되는 판정과 분기 결과가 같은 그림을 쓴다 #}
-{% macro sent_block(s, flag=false) %}
+{% macro sent_block(s, flag=false, marks=none) %}
       <div class="rv-sent{% if flag %} rv-flag{% endif %}">
         <span class="rv-sid">{{ s.sent_id }}</span>
         {% set sp = s.risk.evidence_span %}
-        {% if sp and sp.end > sp.start and sp.end <= s.text|length %}
+        {# 🆕 2026-10-01 — 뺄 구간(`spans` · 원문 좌표 D-278)은 서버가 문장 조각으로 잘라 넘긴다(`_marks`) #}
+        {% if marks %}
+        <p class="rv-text">{% for piece, hit in marks %}{% if hit %}<mark class="rv-hit">{{ piece }}</mark>{% else %}{{ piece }}{% endif %}{% endfor %}</p>
+        {% elif sp and sp.end > sp.start and sp.end <= s.text|length %}
         <p class="rv-text">{{ s.text[:sp.start] }}<mark class="rv-hit">{{ s.text[sp.start:sp.end] }}</mark>{{ s.text[sp.end:] }}</p>
         {% else %}
         <p class="rv-text">{{ s.text }}</p>
@@ -216,7 +220,9 @@
 
         <div class="rv-chips">
           <span class="rv-chip">
-            {%- if s.verdict.value == "confirmed" %}확정
+            {#- 🔄 2026-10-01 — 「확정」만 적으면 통과로 읽힌다. 위반이 있으면 「위반 확정」, 없으면 상단 배지와 같은 말 #}
+            {%- if s.verdict.value == "confirmed" and s.violations %}위반 확정
+            {%- elif s.verdict.value == "confirmed" %}특이사항 없음
             {%- elif s.verdict.value == "hold" %}보류
             {%- elif s.verdict.value == "no_basis" %}근거 없음
             {%- else %}미판정{% endif -%}
@@ -239,10 +245,10 @@
           {% endif %}
           {% if s.infeasibility %}
           <span class="rv-chip c-warn">
-            {{ s.infeasibility.value }} ·
-            {%- if s.infeasibility.value == "A" %} 자격형
-            {%- elif s.infeasibility.value == "B" %} 실증형
-            {%- else %} 절대형{% endif %}
+            {#- 🔄 2026-10-01 — A · B · C 글자는 사용자에게 뜻이 없다. 뜻을 적는다(증명서의 「사유 A」는 그대로) #}
+            {%- if s.infeasibility.value == "A" %}인정받은 제품만 가능
+            {%- elif s.infeasibility.value == "B" %}근거 자료 필요
+            {%- else %}사용 불가{% endif -%}
           </span>
           {% endif %}
           {% for v in s.violations %}
@@ -252,6 +258,13 @@
           <span class="rv-chip c-warn">근거 불일치 · 재생성됨</span>
           {% endif %}
         </div>
+        {% if s.infeasibility %}
+        <p class="rv-note rv-why">
+          {%- if s.infeasibility.value == "A" %}인정·심사를 받은 제품만 쓸 수 있는 표현이에요. 받지 않았다면 문구를 고쳐도 쓸 수 없어요.
+          {%- elif s.infeasibility.value == "B" %}객관적인 근거 자료로 사실임을 보일 수 있으면 쓸 수 있어요.
+          {%- else %}어떤 제품도 쓸 수 없는 표현이에요. 이 부분은 빼야 해요.{% endif -%}
+        </p>
+        {% endif %}
 
         {# 🆕 고치는 방향 — 검수는 대체 문구를 내지 않고 **지시**까지 낸다 (D-265 · D-268 · `SubstBranch`) #}
         {% if s.substantiation %}
@@ -455,7 +468,7 @@
 
     {# 기록되는 판정 — 고르기 전에만 보인다(회차마다). 유형을 모를 때의 가장 보수적인 경우다 (D-263 ①) #}
     <div class="rv-rec">
-      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged) }}{% endfor %}
+      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id)) }}{% endfor %}
       {% if result.certificate %}
       <div class="rv-sub">
         <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서</h2>
@@ -588,7 +601,7 @@
       {{ branch_wizard(item) }}
       {% else %}
       {% for s in result.sentences %}
-      {{ sent_block(s, s.sent_id in item.flagged) }}
+      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id)) }}
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}
@@ -670,7 +683,7 @@
       {% if result.timings %}
       <table>
         {% for t in result.timings %}
-        <tr><th>{{ t.node }}</th><td>{{ t.ms }} ms</td></tr>
+        <tr><th>{{ t.node }}</th><td>{{ "%.1f"|format(t.ms) }} ms</td></tr>
         {% endfor %}
       </table>
       {% endif %}
