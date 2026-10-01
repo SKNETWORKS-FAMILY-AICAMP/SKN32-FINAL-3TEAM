@@ -814,6 +814,17 @@ scourt_major:
   robots_checked_at: 2026-09-26
   collected_at: 2026-09-28
 
+inc_ad_decisions:
+  decided_by: 오한빈
+  decided_at: 2026-09-30
+  # 확인 2026-09-30 — 인터넷신문윤리위원회 유선 회신 → 같은 날 서면(메일) 회신: 공개 결정문에 한해 공익적 연구·프로젝트 이용 가능 ·
+  #   책임은 프로젝트팀 · 출처 문구 지정 · 영리 목적은 사전 재문의 · 제3자 배포는 미회신. 팀장 확인 · 권소라 전달
+  reviewed_by: 권소라
+  reviewed_at: 2026-09-30
+  robots_checked_at: 2026-09-30
+  # 🔄 2026-10-01 팀장 승인 — 데이터셋을 외부에 공개하지 않으므로 원문을 팀 받은편지함(raw-publish)으로 넘긴다(팀장 확인 · 권소라 전달)
+  collected_at: 2026-10-01
+
 easylaw_ad:
   decided_by: 오한빈
   decided_at: 2026-09-28
