@@ -45,7 +45,8 @@ BROKEN = re.compile(r"[^\s0-9A-Za-z가-힣ㆍ·.,!?%()\[\]~'\"“”‘’/:;\-+
 CREDENTIAL = re.compile(r"특허|인증|공인|식약처|임상|수상|논문")
 #: 기능이 아니라 노화 자체에 「도움」 — 「피부노화에 도움」은 뜻이 뒤집히고 노화방지 주장이 남는다
 #: 🔄 10-01 — 「피부노화개선에 도움」이 빠져나갔다(v5 실제 광고) · 노화 뒤에 무엇이 붙든 「도움」으로 이어지면 막는다
-AGING = re.compile(r"노화[가-힣]{0,6}\s*(?:에|를)\s*도움|노화\s*방지|안티\s*에이징")
+#: 🔄 10-01 (v7) — 「피부노화의 방지에 도움」이 빠져나갔다 · 띄어쓰기를 건너 잡는다
+AGING = re.compile(r"노화[가-힣\s]{0,8}(?:에|를)\s*도움|노화\S{0,2}\s*방지|안티\s*에이징")
 #: 숫자 — 성분명에 붙은 숫자(코엔자임 Q10 · CO2 · 비타민 B12)는 수치 주장이 아니다
 NUM = re.compile(r"(?<![A-Za-z\d])\d+")
 
@@ -54,6 +55,46 @@ NUM = re.compile(r"(?<![A-Za-z\d])\d+")
 class GateResult:
     passed: bool
     reasons: tuple[str, ...] = field(default_factory=tuple)
+
+
+HF_CLAIMS = ROOT / "data" / "derived" / "hf_display_claims.jsonl"
+#: 「~에 도움」 앞의 주장 구 — 「X에 도움」 · 「X하는 데 도움」 · 「X하는데 도움」
+CLAIM = re.compile(r"([가-힣A-Za-z0-9·,\s()]{2,40}?)(?:에|하는\s*데|하는데|되는\s*데)\s*도움")
+
+
+@cache
+def approved_blob() -> str:
+    """식약처 인정 기능성 문구를 이어 붙인 정규화문 — 주장 구가 여기 들어 있어야 「인정된 기능성」이다."""
+    if not HF_CLAIMS.exists():
+        return ""
+    parts = []
+    for line in HF_CLAIMS.open(encoding="utf-8"):
+        r = json.loads(line)
+        parts.append(dm.norm(r.get("정본_문구") or r.get("FNCLTY_CN") or ""))
+    return "\n".join(parts)
+
+
+def unapproved_claim(s: str) -> str | None:
+    """🆕 10-01 (v7) — 모델이 인정되지 않은 기능성을 지어냈다(「생체기능의 회복에 도움」 · 「피부노화의 방지에 도움」).
+    「~에 도움」의 기능 구를 고시 기능성 문구와 대조해, 핵심 낱말(주어 · 조사를 떼고 끝 8글자)이 어디에도 없으면 그 구를 낸다.
+    🚨 기능성화장품 문구(「피부의 미백에 도움을 줍니다」)는 식품 고시에 없으니 화장품 범주 낱말은 예외로 둔다."""
+    blob = approved_blob()
+    if not blob:
+        return None
+    # 주장마다 끊는다 — 「…도움을 줄 수 있음, …체지방 감소에 도움」이 한 덩어리로 잡히지 않게
+    for chunk in re.split(r"(?<=있음)|(?<=있습니다)|(?<=줍니다)|(?<=줌)|[.]", s):
+        m = CLAIM.search(chunk)
+        if not m:
+            continue
+        phrase = re.sub(r"^.*?(?:은|는|이|가)\s+", "", m.group(1)).strip(" ,·")
+        if any(k in chunk for k in ("미백", "주름", "자외선", "탈모", "여드름", "피부장벽", "튼살")):
+            continue  # 기능성화장품 범주 — 식품 고시에 없다
+        # 「중성지질 개선, 혈행 개선」 · 「유익균 증식 및 배변활동 원활」 — 기능마다 대조한다
+        for seg in re.split(r"[,、]|\s및\s|및(?=[가-힣])", phrase):
+            core = dm.norm(re.sub(r"(의|을|를)$", "", seg.strip()))[-8:]
+            if len(core) >= 2 and core not in blob and core.replace("의", "") not in blob:
+                return seg.strip()
+    return None
 
 
 @cache
@@ -97,4 +138,6 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"자격·인증 표방: {m.group()}")
     if m := AGING.search(s):
         why.append(f"노화 주장: {m.group()}")
+    if (u := unapproved_claim(s)) is not None:
+        why.append(f"인정되지 않은 기능성: {u}")
     return GateResult(not why, tuple(why))
