@@ -54,3 +54,14 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=5000]
+
+  # lse sLLM docs: block ad copy that may not be redistributed (quoted
+  # advertiser copy, golden redistributable=false). Skips with a warning on
+  # machines without the private data. See docs/lse/check_redistribution.py.
+  - repo: local
+    hooks:
+      - id: lse-no-restricted-ad-copy
+        name: lse - no redistribution-restricted ad copy
+        entry: python docs/lse/check_redistribution.py
+        language: system
+        files: ^docs/lse/
