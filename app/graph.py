@@ -43,6 +43,7 @@ from typing import Annotated, Any, TypedDict
 
 from app import dictmatch as dm
 from app import retrieve as rt
+from app import sentsplit
 from app.contracts import (
     AdaptedCopy,
     AdFormat,
@@ -51,6 +52,7 @@ from app.contracts import (
     Category,
     EvidenceArticle,
     GenerateOutcome,
+    HoldReason,
     Infeasibility,
     JudgeResponse,
     KeywordScreen,
@@ -59,8 +61,10 @@ from app.contracts import (
     ProductContext,
     Segment,
     SentenceJudgment,
+    Span,
     Timing,
     Verdict,
+    Violation,
     is_pass,
 )
 from app.settings import PARAMS
@@ -385,8 +389,13 @@ def route_laws(state: CoreState) -> tuple[str, ...]:
 
 @timed
 def split(state: CoreState) -> dict[str, Any]:
-    """문장 분할. 🔜 W4 — `preprocess/text.py` 의 분할기가 온다."""
-    return {"sents": [state["text"]]}
+    """문장 분할 — 전처리 사양 [P4](줄바꿈 · 이모지 · 해시태그 · 종결 부호 뒤 공백). 🔄 2026-10-01 (W4).
+
+    ★ 규칙은 `app/sentsplit.py` 한 곳이다 (D-99). 문장은 원문의 부분 문자열이라 `judge` 가 원문 좌표를 되찾는다(D-278).
+    ⛔ 종전 스텁은 원문 전체를 한 문장으로 넘겼다 — 여러 줄 광고의 문장별 판정 · 뺄 구간이 서지 않았다.
+    🚨 경계 규칙은 `[관행]` — 분할 정답 셋이 없어 정확도(D-77 L1-1)는 미측정이다.
+    """
+    return {"sents": sentsplit.split(state["text"])}
 
 
 @timed
@@ -649,20 +658,162 @@ def merge_laws(state: CoreState) -> dict[str, Any]:
     return {}
 
 
+#: 🆕 2026-10-01 (W4 · D-273 결정 3) — 위반 유형 → **불가 사유**(A 자격형 · B 실증형 · C 절대형 · D-59).
+#:    출처 `[문헌]` — `docs/ohb/sanction_rule_초안_2026-09-16.md` §6(별표 1 각 목의 단서 · 문언). D-273 이 이 표를 전제로 결정 3 을 세웠다.
+#: 🔴 **표에 없는 유형은 확정하지 않는다 — 보류다** (D-273 「사유를 못 정하면 보류」 · D-72).
+#:    ⬜ D-273 의 ⬜ 셋(`후기_체험기_기만` · `추천_보증_뒷광고` · `비방광고`)과 `기능성화장품_오인`(초안 표에 없다)이 여기 없다 — 판정 대기.
+#:    들어올 자리가 이 표다 (D-192). ⛔ 「C 에 가깝다」는 초안 문구로 채우지 않는다.
+INFEASIBILITY_OF: dict[Violation, Infeasibility] = {
+    Violation.질병_예방치료_표방: Infeasibility.C,
+    Violation.의약품_오인: Infeasibility.C,
+    Violation.건강기능식품_오인: Infeasibility.A,
+    Violation.거짓_과장: Infeasibility.B,
+    Violation.소비자_기만: Infeasibility.B,
+    Violation.부당_비교광고: Infeasibility.B,
+    Violation.실증책임_위반: Infeasibility.B,
+}
+
+#: 사유가 여럿이면 **더 막힌 쪽** — 종착 우선순위(증명서 A·C > 지시 B · D-268)와 같은 순서다.
+_INFEAS_ORDER = (Infeasibility.C, Infeasibility.A, Infeasibility.B)
+
+
+def _basis_article(cite: str) -> EvidenceArticle | None:
+    """사전 근거 인용(`법ID:제N조제N항제N호[|목]`) → 근거 조문. 꼴이 틀리면 `None` — 좌표를 지어내지 않는다 (D-224)."""
+    try:
+        law, jo, hang, ho, mok = statute.parse(cite)
+    except ValueError:
+        return None
+    return EvidenceArticle(
+        law_id=law, article=f"제{jo}조", item=f"제{hang}항제{ho}호" + (f"{mok}목" if mok else "")
+    )
+
+
+def _typed(names: set[str]) -> list[Violation]:
+    """유형 이름 → 계약 값. 계약에 없는 이름은 뺀다(판정 재료가 아니다). 정렬 · 중복 없음."""
+    return sorted(
+        (Violation(n) for n in names if n in Violation.__members__), key=lambda v: v.value
+    )
+
+
+def _hit_types(h: DictHit) -> set[str]:
+    """적중 하나의 유형 — 🔴 **인용에서 계산한다** (D-282 「라벨의 정본은 조문 인용 · 유형은 인용에서」).
+
+    ★ 법별 노드가 인용을 **제 법 것만** 남겼으므로 같은 항목이라도 법마다 맞는 유형이 나온다.
+    ⛔ `dict_entry.violation_type` 은 유형이 하나인 항목에만 채워진다(적재기 `load_dict` — 여러 유형 항목은 NULL).
+       그 칸으로 고르면 여러 유형 항목이 전부 「유형 없음」이 된다. 인용이 유형을 못 주면(식품 8~10호 등) 그 칸을 쓴다.
+    """
+    return set(statute.types_of(list(h.basis))) or (
+        {h.violation_type} if h.violation_type else set()
+    )
+
+
+def _judge_one(
+    sid: str,
+    text: str,
+    start: int | None,
+    scan: DictScan | None,
+    hits: list[DictHit],
+    retrieved: list[EvidenceArticle],
+) -> SentenceJudgment:
+    """문장 하나 — **인코더 전 판정** (D-269 그대로 · ⚠️ 재검 대기).
+
+    ① 사전을 **못 훑었으면** 미판정 — 못 본 것을 본 것처럼 말하지 않는다 (D-220 · D-63)
+    ② 이 판정에 보낸 법의 인용을 가진 적중(`hits` — 법별 노드가 거른 것)이 있으면 **위반 확정** (D-269)
+       — 근거 = 적중의 인용 조문 + 법별 노드가 고른 조문 · 뺄 구간 = 적중의 원문 좌표 · 불가 사유 = `INFEASIBILITY_OF`
+       🔴 유형마다 사유를 못 정하면(표에 없음) **보류** · 인용 좌표를 하나도 못 세우면 **근거 없음** (D-273 · D-127 · D-224)
+    ③ 적중은 있는데 그 인용이 **어느 법인지 못 정한다** → 근거 없음 — 유형은 유지 (D-127 「유형은 잡았는데 조문이 없다」)
+       ⛔ 인용이 **보내지 않은 법** 것이면 근거 없음이 아니다 — 이 판정이 볼 법이 아니다(D-267)
+    ④ 그 밖에 → **보류(확신 부족)** — 사전의 침묵은 「특이사항 없음」이 아니다 (D-269)
+    🚨 위험도를 적지 않는다 — 하한(`sanction_rule` · W5)이 없다. 지어내면 계약이 거부한다(D-09 · D-131).
+    🚨 `not_claim` 을 내지 않는다 — 주장 여부 판별은 인코더 몫이다 (D-275).
+    """
+    if scan is None or not scan.ran:
+        return SentenceJudgment(
+            sent_id=sid, text=text, verdict=Verdict.unjudged, evidence=retrieved
+        )
+    if hits:
+        types = _typed({t for h in hits for t in _hit_types(h)})
+        if not types:
+            return SentenceJudgment(
+                sent_id=sid, text=text, verdict=Verdict.hold, hold_reason=HoldReason.low_conf
+            )
+        reasons = {INFEASIBILITY_OF.get(t) for t in types}
+        if None in reasons:
+            # 🔴 D-273 — 사유를 못 정하면 보류. ⬜ 사유 칸(`low_conf`)은 D-273 「결정 4 의 보류 문장을 어느 사유로」(W4)의 1판이다
+            return SentenceJudgment(
+                sent_id=sid,
+                text=text,
+                verdict=Verdict.hold,
+                hold_reason=HoldReason.low_conf,
+                violations=types,
+                evidence=retrieved,
+            )
+        basis: list[EvidenceArticle] = []
+        for h in hits:
+            for c in h.basis:
+                a = _basis_article(c)
+                if a is not None and a not in basis:
+                    basis.append(a)
+        if not basis:
+            return SentenceJudgment(
+                sent_id=sid, text=text, verdict=Verdict.no_basis, violations=types
+            )
+        evidence = basis + [a for a in retrieved if a not in basis]
+        # 같은 적중이 두 법 노드로 들어온다(인용이 두 법에 걸친 항목) — 구간은 좌표마다 한 번 · 라벨은 두 법의 유형을 합친다
+        at: dict[tuple[int, int], set[str]] = {}
+        if start is not None:
+            for h in hits:
+                if h.span is not None:
+                    at.setdefault(h.span, set()).update(_hit_types(h))
+        spans = [
+            Span(start=start + a, end=start + b, label=",".join(sorted(ts)) or None)
+            for (a, b), ts in at.items()
+        ]
+        return SentenceJudgment(
+            sent_id=sid,
+            text=text,
+            verdict=Verdict.confirmed,
+            violations=types,
+            infeasibility=next(r for r in _INFEAS_ORDER if r in reasons),
+            evidence=evidence,
+            spans=spans,
+        )
+    unplaced = [
+        h for h in scan.hits if h.violation_type and not any(statute.law_of(b) for b in h.basis)
+    ]
+    if unplaced:
+        return SentenceJudgment(
+            sent_id=sid,
+            text=text,
+            verdict=Verdict.no_basis,
+            violations=_typed({h.violation_type for h in unplaced if h.violation_type}),
+        )
+    # 보낸 법 밖의 인용만 울린 경우도 여기다 — 이 판정이 볼 법이 아니다(D-267)
+    return SentenceJudgment(
+        sent_id=sid,
+        text=text,
+        verdict=Verdict.hold,
+        hold_reason=HoldReason.low_conf,
+        evidence=retrieved,
+    )
+
+
 @timed
 def judge(state: CoreState) -> dict[str, Any]:
-    """판정. 🔜 W4 — 상태 4종 · 조건(없음·C/A/B/M/D · D-242) · 불가 사유 · 실증 분기 주석(D-263 ④).
+    """판정 — 🔄 2026-10-01 (W4 1판) **인코더 전 규칙 판정** (D-269 · D-127 · D-224 · D-273). 문장 규칙은 `_judge_one`.
 
-    🚨 스텁은 `unjudged` 를 낸다 — **통과로 집계 금지** (D-127). 그럴듯한 `confirmed` 를 지어내지 않는다.
-    🔴 근거는 **법별 노드가 고른 것**(`law_results[*].articles`)을 `sent_id` 로 짝지어 옮긴다 — 🔄 2026-09-28 (W4 · D-291).
-       법 순서는 `LAW_NODES` 순서이고 같은 청크는 한 번만 싣는다. ⛔ 여기서 검색을 다시 부르지 않는다 (D-99).
-       ⛔ 붙는 근거가 없으면 `confirmed` 를 못 낸다 — 계약이 거부한다 (D-224 · `_confirmed_needs_evidence`).
-    🚨 **근거를 찾은 것과 판정한 것은 다르다** — 붙였다고 `confirmed` 로 올리지 않는다 (D-127).
+    🔴 근거는 **법별 노드가 고른 것**(`law_results[*].articles`)과 **법별 노드가 거른 사전 적중**(`dict_hits`)을
+       `sent_id` 로 짝지어 옮긴다. 법 순서는 `LAW_NODES` 순서이고 같은 좌표는 한 번만 싣는다. ⛔ 검색을 다시 부르지 않는다 (D-99).
+    🚨 **근거를 찾은 것과 판정한 것은 다르다** — 사전 적중 없이 검색 근거만으로는 확정하지 않는다 (D-127 · D-269).
+    ⚠️ D-269 는 「전제 정정 · 결론 재검 대기」다 — 그래프 평가 도구(`scripts/eval_graph.py` · W1)의 수로 재검한다. 결론은 그때까지 그대로다.
+    ⬜ 단서(`provisos`)는 아직 읽지 않는다 — 제품 사실을 모르면 요건 충족을 모른다(D-238 개정 (나)). 판정을 바꾸지 않고 근거에 남는다.
     """
     order = {name: k for k, name in enumerate(LAW_NODES)}
+    results = sorted(state.get("law_results", []), key=lambda r: order.get(r.law, len(order)))
     per_sent: dict[str, list[EvidenceArticle]] = {}
     seen: dict[str, set[tuple[str, str, str | None]]] = {}
-    for r in sorted(state.get("law_results", []), key=lambda r: order.get(r.law, len(order))):
+    hits_of: dict[str, list[DictHit]] = {}
+    for r in results:
         for sid, arts in r.articles:
             for a in arts:
                 # 🔄 2026-09-28 — 같은 청크 · 같은 좌표는 한 번. ⛔ 종전 열쇠 `chunk_id` 는 부모로 올린 줄(`chunk_id=None`)을
@@ -672,15 +823,27 @@ def judge(state: CoreState) -> dict[str, Any]:
                     continue
                 seen[sid].add(key)
                 per_sent.setdefault(sid, []).append(a)
+        for sid, hs in r.dict_hits:
+            hits_of.setdefault(sid, []).extend(hs)
+    scans = {s.sent_id: s for s in state.get("dict_scans", [])}
+    sents = state.get("sents", [])
+    # 🔴 원문 좌표를 못 되찾으면(분할 밖에서 문장이 들어왔다) **구간을 싣지 않는다** — 좌표를 지어내지 않는다 (D-224 · D-278).
+    #    판정 자체는 바뀌지 않는다. 뺄 구간이 필요한 지시 종착은 그때 계약이 막는다.
+    try:
+        starts: list[int | None] = list(sentsplit.offsets(state.get("text", ""), sents))
+    except ValueError:
+        starts = [None] * len(sents)
     return {
         "sentences": [
-            SentenceJudgment(
-                sent_id=(sid := sent_id(i)),
-                text=t,
-                verdict=Verdict.unjudged,
-                evidence=per_sent.get(sid, []),
+            _judge_one(
+                sid := sent_id(i),
+                t,
+                starts[i],
+                scans.get(sid),
+                hits_of.get(sid, []),
+                per_sent.get(sid, []),
             )
-            for i, t in enumerate(state.get("sents", []))
+            for i, t in enumerate(sents)
         ]
     }
 
@@ -777,6 +940,12 @@ def route_review(state: ReviewState) -> str:
         return "hold"
     if any(s.verdict is not Verdict.confirmed for s in sents):
         return "hold"
+    # 🆕 2026-10-01 (W4 1판) — **위험도가 없는 확정 위반은 증명서 · 지시로 못 간다** — 보류다 (D-268 「막힘」 · D-220).
+    #    지시는 실증 분기(실증 전 위험도)를, 증명서는 사유 설명을 요구한다 — 하한(`sanction_rule` · W5)이 서기 전에는 어느 쪽도
+    #    계약을 못 지난다. ⛔ 위험도를 지어내지 않는다 (D-09 · D-131). 문장 판정(확정 · 위반 · 근거 · 구간)은 그대로 나간다.
+    #    ⬜ D-227 「제재 기준이 없을 때 무엇을 내나」 — 판정 대기. 이 줄이 그 판정이 들어올 자리다 (D-192)
+    if any(s.violations and s.risk.final is None for s in sents):
+        return "hold"
     reasons = {s.infeasibility for s in sents if s.infeasibility}
     if reasons & {Infeasibility.A, Infeasibility.C}:
         return "certificate"
@@ -859,13 +1028,15 @@ def route_after_rejudge(state: GenerateState) -> str:
     """재생성 루프의 갈림 (D-126 · D-125).
 
     🔴 **이번 시도**의 판정(`rejected`)을 본다 — 누적 `rejects` 가 비었는지로 읽으면 한 번 거부된 뒤 통과해도
-       탐색 실패로 끝난다(전수 재검토 I3). `rejected` 를 안 적었으면 누적으로 판단한다 — 모르면 거부 쪽이다.
+       탐색 실패로 끝난다(전수 재검토 I3). 🔄 2026-10-01 — `rejected` 를 안 적었으면 **거부**다 — 모르면 거부 쪽이다.
     🚨 K 를 소진한 것은 **증명서가 아니라** 「표현 탐색 실패」다 (D-59).
     ⬜ 재판정이 보류·근거없음을 남기는 경우의 `hold` 종착 — 🔜 `rejudge` 가 판정을 낼 때 같이 (D-266 표).
     """
     rejected = state.get("rejected")
     if rejected is None:
-        rejected = bool(state.get("rejects"))
+        # 🔄 2026-10-01 — ⛔ 종전 `bool(rejects)` 는 아무도 안 적은 상태(주장 원장 · 재판정 스텁)를 **통과(프론티어)**로 보냈다 —
+        #    위 docstring 「모르면 거부 쪽」과 반대였다 (D-220 · D-125 (a) 기각). 이번 시도의 판정이 없으면 **거부**다
+        rejected = True
     if not rejected:
         return "frontier"
     if state.get("attempt", 0) >= MAX_ATTEMPT:
@@ -932,6 +1103,11 @@ def run_generate_stub(init: GenerateState | None = None) -> tuple[GenerateState,
             return state, visited  # type: ignore[return-value]
 
 
+#: 판정 코드의 판 — 응답 · 평가 도구(`scripts/eval_graph.py`)가 같은 값을 적는다 (D-99).
+#: 🔄 2026-10-01 — 스텁(`stub-0.2.0`)이 아니다 · **인코더 전 규칙 판정**(사전 적중 · D-269)이다
+JUDGED_BY = "rule-0.3.0-dict"
+
+
 def to_response(state: ReviewState) -> JudgeResponse:
     """검수 상태를 계약으로 옮긴다. 🚨 계약이 거부하면 여기서 터진다 — 화면보다 먼저다.
 
@@ -944,7 +1120,7 @@ def to_response(state: ReviewState) -> JudgeResponse:
         sentences=state.get("sentences", []),
         timings=state.get("timings", []),
         law_version="2026-09-10",
-        judged_by="stub-0.2.0",
+        judged_by=JUDGED_BY,
     )
 
 
