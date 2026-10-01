@@ -46,6 +46,11 @@ def show(r: dict) -> None:
             print(f"  2단계  : (실패 — {', '.join(r['stage2_problems'] or []) or '관문'}) → 1단계 문장을 냄")
     if r["final"]:
         print(f"  최종   : {r['final']}")
+    if r.get("rejudge"):
+        msg = {"rejected": "⛔ 위반 확정 → 탈락", "no_violation": "위반 미검출 (통과 보증 아님)", "passed": "✅ 통과",
+               "unavailable": "재판정 못 함 (DB 없음)"}[r["rejudge"]]
+        extra = f" · {', '.join(r.get('rejudge_violations') or [])}" if r.get("rejudge_violations") else ""
+        print(f"  재판정 : {msg}{extra}")
     print()
 
 
@@ -54,6 +59,7 @@ def main() -> None:
     ap.add_argument("text", nargs="?", help="시험할 광고 문구 — 없으면 대화형")
     ap.add_argument("--types", default="", help="위반 유형(쉼표) — 실제로는 판정 인코더가 준다")
     ap.add_argument("--persona", choices=sorted(PERSONAS), default=None)
+    ap.add_argument("--rejudge", action="store_true", help="후보를 팀 판정 코어로 재판정(DB 필요)")
     args = ap.parse_args()
 
     print("모델 올리는 중 (약 30초)…", flush=True)
@@ -68,7 +74,7 @@ def main() -> None:
         labels = [t.strip() for t in types.split(",") if t.strip()]
         persona = PERSONAS.get(pcode) if pcode else None
         print(f"■ {text}" + (f"  [{', '.join(labels)}]" if labels else ""))
-        show(run_one(model, tok, text, labels, persona))
+        show(run_one(model, tok, text, labels, persona, do_rejudge=args.rejudge))
 
     if args.text:
         once(args.text, args.types, args.persona)

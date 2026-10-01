@@ -16,6 +16,7 @@
 실행 (repo 루트):
     .venv-sllm/Scripts/python.exe docs/lse/persona_pipeline_e2e.py                 # 페르소나 없이 (검수 기본)
     .venv-sllm/Scripts/python.exe docs/lse/persona_pipeline_e2e.py --persona q1    # 고른 고객층 하나만
+    .venv-sllm/Scripts/python.exe docs/lse/persona_pipeline_e2e.py --rejudge       # 후보를 팀 판정 코어로 재판정(DB 필요)
     (--kadlint <kadlint 저장소 경로> 를 더하면 외부 금지 패턴으로도 센다 · 채점용)
 """
 
@@ -37,6 +38,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
+from rejudge import RejudgeUnavailable, rejudge  # noqa: E402
 from stage_gate import check as gate  # noqa: E402
 from train_persona_stage2 import SYSTEM as STAGE2_SYSTEM  # noqa: E402
 from train_persona_stage2 import rule_check  # noqa: E402
@@ -70,8 +72,29 @@ def chat(model, tok, system: str, user: str, n: int) -> str:
     return tok.decode(out[0][ids["input_ids"].shape[1]:], skip_special_tokens=True)
 
 
-def run_one(model, tok, text: str, labels: list[str], persona: str | None = None) -> dict:
-    """문구 하나 — 서비스가 부를 단위. `persona`(고객층 설명)를 주지 않으면 1단계 결과로 끝난다."""
+def with_rejudge(res: dict, do_rejudge: bool) -> dict:
+    """🆕 10-01 — 후보를 팀 판정 코어에 다시 넣는다(D-119 · `rejudge.py`). 위반이 확정되면 탈락(보류)시킨다.
+    DB 가 없으면 `rejudge: unavailable` 로 적고 후보를 그대로 둔다 — 돌지 않은 재판정을 통과로 적지 않는다(D-146)."""
+    if not do_rejudge or res["outcome"] != "candidate" or not res.get("final"):
+        return res
+    try:
+        r = rejudge(res["final"])
+    except RejudgeUnavailable as e:
+        return {**res, "rejudge": "unavailable", "rejudge_note": str(e)}
+    res = {**res, "rejudge": r.status, "rejudge_outcome": r.outcome, "rejudge_violations": list(r.violations),
+           "rejudge_basis": list(r.basis)}
+    if r.status == "rejected":
+        return {**res, "outcome": "hold", "final": None}
+    return res
+
+
+def run_one(model, tok, text: str, labels: list[str], persona: str | None = None, do_rejudge: bool = False) -> dict:
+    """문구 하나 — 서비스가 부를 단위. `persona`(고객층 설명)를 주지 않으면 1단계 결과로 끝난다.
+    `do_rejudge` 면 후보를 팀 판정 코어로 다시 판정한다(DB 필요)."""
+    return with_rejudge(_run_one(model, tok, text, labels, persona), do_rejudge)
+
+
+def _run_one(model, tok, text: str, labels: list[str], persona: str | None = None) -> dict:
     model.set_adapter("stage1")
     out1 = parse_stage1(chat(model, tok, STAGE1_SYSTEM, stage1_user({"input": text, "violation_types": labels}), 220))
     infeasible = out1.get("infeasible") if out1 else None
@@ -108,6 +131,7 @@ def main() -> None:
     ap.add_argument("--persona", choices=sorted(PERSONAS), default=None,
                     help="고른 고객층 하나 — 없으면 페르소나 없이(검수 기본)")
     ap.add_argument("--kadlint", type=Path, default=None)
+    ap.add_argument("--rejudge", action="store_true", help="후보를 팀 판정 코어로 재판정(DB 필요)")
     args = ap.parse_args()
     kad = load_kadlint(args.kadlint) if args.kadlint else []
     persona = PERSONAS[args.persona] if args.persona else None
@@ -123,7 +147,7 @@ def main() -> None:
         if row["input"] in seen:
             continue
         seen.add(row["input"])
-        r = run_one(model, tok, row["input"], row["labels"], persona)
+        r = run_one(model, tok, row["input"], row["labels"], persona, do_rejudge=args.rejudge)
         r["kadlint_final"] = [p.pattern[:20] for p, _ in kad if r["final"] and p.search(r["final"])]
         rows.append({**row, **r})
         print(f"{len(rows)}  {r['outcome']}  {time.time() - t0:.0f}s", flush=True)
@@ -139,6 +163,12 @@ def main() -> None:
     print(f"문구 {n} · 합법화 불가 {c['infeasible']} · 보류 {c['hold']} · 후보 {c['candidate']}"
           + (f" (말투 실패로 1단계 문장을 낸 것 {sum(bool(r.get('persona_failed')) for r in rows)})" if persona else "")
           + (f" · 최종 문장에 kadlint 금지 패턴 {sum(bool(r['kadlint_final']) for r in rows)}" if kad else ""))
+    if args.rejudge:
+        rj: dict[str, int] = {}
+        for r in rows:
+            if r.get("rejudge"):
+                rj[r["rejudge"]] = rj.get(r["rejudge"], 0) + 1
+        print(f"재판정: {rj} (rejected 는 보류로 내렸다 · no_violation 은 통과 보증이 아니다)")
     print(f"결과: {out}")
 
 
