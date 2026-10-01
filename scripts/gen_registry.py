@@ -477,6 +477,10 @@ def block(key, s, extra=None, covers=None, status="collect"):
     L.append("    use: {" + ", ".join(f"{k}: {v}" for k, v in uses.items()) + "}")
     L.append(f"    constraints: [{', '.join(cons)}]")
     L.append(f"    redistributable: {'false' if 'NOREDIST' in cons else 'true'}")
+    # 🆕 2026-10-01 (D-303) — 팀 내부 공유 승인. 공개 배포(NOREDIST)와 다른 축이다 · 근거 문장 없이는 싣지 않는다
+    if s.get("internalShare"):
+        L.append("    internal_share: true")
+        L.append(f"    internal_share_basis: {esc(s['internalShare'])}")
     L.append(f"    value: {s['value']}")
     L.append(f"    cost: {s['cost']}")
     L.append(f"    status: {status}")
@@ -1228,6 +1232,32 @@ if _auth_bad:
     raise SystemExit(
         "🔴 구속력 칸(D-290 ②)이 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n  "
         + "\n  ".join(_auth_bad)
+    )
+
+
+def _share_errors() -> list[str]:
+    """🆕 2026-10-01 (D-303) — 팀 내부 공유 칸은 **공개 배포가 막힌 원천에만** 뜻이 있다 · 근거 문장이 비면 안 된다."""
+    bad: list[str] = []
+    for key in ORDER:
+        s = BY_ID[REV.get(key, key)]
+        if "internalShare" not in s:
+            continue
+        if "NOREDIST" not in (s.get("constraints") or []):
+            bad.append(
+                f"{key}: internalShare 가 있는데 NOREDIST 가 없다 — 재배포 가능 원천은 칸이 필요 없다"
+            )
+        if not str(s["internalShare"] or "").strip():
+            bad.append(
+                f"{key}: internalShare 근거 문장이 비었다 — 이용 조건의 어느 문장이 내부 공유를 허락했는가"
+            )
+    return bad
+
+
+_share_bad = _share_errors()
+if _share_bad:
+    raise SystemExit(
+        "🔴 팀 내부 공유 칸(D-303)이 안 맞는다 — 아무것도 쓰지 않았다 (D-220).\n  "
+        + "\n  ".join(_share_bad)
     )
 
 
