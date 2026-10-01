@@ -95,7 +95,7 @@ def test_위험도는_처분_종류로만_정한다() -> None:
         ({"type": "추천_보증_뒷광고"}, "범위 밖"),
         ({"kind": "과징금"}, "모르는 처분 종류"),
         ({"fact": "특허"}, "모르는 사실 칸"),
-        ({"verified_by": "오한빈", "reviewed_by": "오한빈"}, "같다"),
+        ({"verified_by": "오한빈"}, "행에 서명 칸"),
         ({"type": "없는유형"}, "모르는 유형"),
     ],
 )
@@ -108,8 +108,10 @@ def test_원천_규칙을_어기면_잡는다(row: dict, why: str) -> None:
 def test_하한_요약은_같은_법_안에서_max_이고_서명_전_행은_안_센다() -> None:
     spec = _spec()
     spec["rows"].append(spec["rows"][0] | {"id": "t.2", "kind": "시정명령", "first": "시정명령"})
-    assert sr.floor_by_type(spec) == {}, "서명 전 행은 하한이 아니다 (v_risk_lookup)"
+    assert sr.floor_by_type(spec) == {}, "서명 전 판은 하한이 아니다 (v_risk_lookup)"
     assert sr.floor_by_type(spec, signed_only=False) == {"의약품_오인": {"013475": "R2"}}
+    spec["signoff"] = {"sha": sr.plan_sha(spec), "verified_by": "오한빈", "reviewed_by": "권소라"}
+    assert sr.floor_by_type(spec) == {"의약품_오인": {"013475": "R2"}}
 
 
 @pytest.mark.gate
@@ -126,3 +128,29 @@ def test_검토표는_서명_상태와_위험도를_싣는다(tmp_path: pathlib.
     assert sr.write_sheet(_spec(), out) == 1
     text = out.read_text(encoding="utf-8-sig")
     assert "R2" in text and "서명 전(안 쓴다)" in text
+
+
+@pytest.mark.gate
+def test_판_서명은_그_판에만_유효하고_한_글자만_바뀌어도_무효다() -> None:
+    """🆕 2026-10-01 (D-309) — 판 단위 2인 서명. 서명 뒤 행이 바뀌면 서명이 남아 하한으로 쓰이는 사고를 막는다."""
+    spec = _spec()
+    assert sr.signature(spec) is None and sr.lint(spec) == []
+    spec["signoff"] = {"sha": sr.plan_sha(spec), "verified_by": "오한빈", "reviewed_by": "권소라"}
+    assert sr.signature(spec) == ("오한빈", "권소라") and sr.lint(spec) == []
+    spec["rows"][0]["first"] = "영업정지1개월"  # 판이 바뀌었다
+    assert sr.signature(spec) is None
+    assert any("서명이 무효" in b for b in sr.lint(spec))
+    same = _spec()
+    same["signoff"] = {"sha": sr.plan_sha(same), "verified_by": "오한빈", "reviewed_by": "오한빈"}
+    assert sr.signature(same) is None and any("같다" in b for b in sr.lint(same))
+    nosha = _spec()
+    nosha["signoff"] = {"sha": None, "verified_by": "오한빈", "reviewed_by": "권소라"}
+    assert sr.signature(nosha) is None and any("sha 가 없다" in b for b in sr.lint(nosha))
+
+
+@pytest.mark.gate
+def test_판_sha_는_서명_칸을_보지_않는다() -> None:
+    a = _spec()
+    b = _spec()
+    b["signoff"] = {"sha": "x", "verified_by": "가", "reviewed_by": "나"}
+    assert sr.plan_sha(a) == sr.plan_sha(b)

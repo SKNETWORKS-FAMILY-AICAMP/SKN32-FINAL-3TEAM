@@ -7,7 +7,9 @@
   잃는다**(2026-10-01 실측 · 파싱 행의 처분이 첫 하위 목 것). 그래서 행은 사람이 읽을 원천(yaml)에 두고, 이 검사가 **원문 괘선 표의
   첫 칸(위반행위)과 1차 칸**에서 인용을 찾아 맞는지 본다. 못 찾으면 멈춘다 — 서명은 원문과 같은 글자 위에서만 한다 (D-149 · D-220).
 ★ 위험도는 처분 **종류**로만 정한다 — `KIND_RISK` 한 곳 (D-227 · D-99). yaml 에 위험도를 적지 않는다.
-🚨 서명(`verified_by` · `reviewed_by`)은 사람만 — 이 스크립트는 **읽기만** 한다. 둘이 같은 이름이면 멈춘다(D-66 · `ck_sanction_four_eyes`).
+🚨 서명은 사람만 — 이 스크립트는 **읽기만** 한다. 🔄 2026-10-01 (D-309) **판 단위 서명** — yaml 의 `signoff` 하나에 판 sha(`plan_sha`)와
+   두 이름. sha 가 지금 판과 다르면 **서명 무효**(check 가 멈춘다 · 적재기는 싣지 않는다) · 두 이름이 같으면 멈춘다(D-66 · `ck_sanction_four_eyes`).
+   적재기는 유효한 판 서명을 행마다 `verified_by` · `reviewed_by` 로 옮긴다(`signature`) — 스키마 · 뷰는 그대로다.
 ⛔ 적재(`load_db.load_sanction_rule`) · `assess_risk` 배선은 서명 뒤 작업이다 — 여기서 하지 않는다 (D-305).
 """
 
@@ -15,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import pathlib
 import re
@@ -167,16 +170,41 @@ def lint(spec: dict[str, Any]) -> list[str]:
         for f in ("quote", "first"):
             if not r.get(f):
                 bad.append(f"{rid} {f} 가 비었다 — 원문 대조를 못 한다")
-        v, rv = r.get("verified_by"), r.get("reviewed_by")
-        if v and rv and str(v).strip() == str(rv).strip():
-            bad.append(f"{rid} 검증자와 확인자가 같다 (D-66 · ck_sanction_four_eyes)")
+        if "verified_by" in r or "reviewed_by" in r:
+            bad.append(f"{rid} 행에 서명 칸이 있다 — 서명 자리는 `signoff` 하나다 (D-309)")
     for p in spec.get("penal") or []:
         for t in p.get("types") or []:
             try:
                 Violation(t)
             except ValueError:
                 bad.append(f"{p.get('id')} 모르는 유형 {t!r}")
+    so = spec.get("signoff") or {}
+    v, rv = (str(so.get(k) or "").strip() for k in ("verified_by", "reviewed_by"))
+    if v and rv and v == rv:
+        bad.append("signoff 검증자와 확인자가 같다 (D-66 · ck_sanction_four_eyes)")
+    if (v or rv) and so.get("sha") and so["sha"] != plan_sha(spec):
+        bad.append(
+            f"signoff 서명이 무효다 — 서명한 판 {so['sha']} ≠ 지금 판 {plan_sha(spec)} (판이 바뀌었다 · 사람이 지우고 다시 서명 · D-309)"
+        )
+    if (v or rv) and not so.get("sha"):
+        bad.append("signoff 에 이름은 있는데 판 sha 가 없다 — 무엇에 서명했는지 모른다 (D-309)")
     return bad
+
+
+def plan_sha(spec: dict[str, Any]) -> str:
+    """판 sha — 원천 · 행 · 형벌의 내용(서명 칸 제외). 🔴 한 글자라도 바뀌면 달라진다 — 서명은 이 값에 묶인다 (D-309)."""
+    body = {k: spec.get(k) for k in ("sources", "rows", "penal")}
+    blob = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def signature(spec: dict[str, Any]) -> tuple[str, str] | None:
+    """유효한 판 서명 `(verified_by, reviewed_by)` — 둘 다 있고 · 서로 다르고 · sha 가 지금 판과 같을 때만. 그 밖에는 None(서명 없음과 같다)."""
+    so = spec.get("signoff") or {}
+    v, rv = (str(so.get(k) or "").strip() for k in ("verified_by", "reviewed_by"))
+    if v and rv and v != rv and so.get("sha") == plan_sha(spec):
+        return v, rv
+    return None
 
 
 def verify(spec: dict[str, Any], root: pathlib.Path = ROOT) -> list[str]:
@@ -253,10 +281,11 @@ SHEET_COLS = (
 
 def sheet_rows(spec: dict[str, Any]) -> list[list[str]]:
     src = spec["sources"]
+    sig = signature(spec)
     out = []
     for r in spec.get("rows") or []:
         s = src[r["src"]]
-        signed = bool(r.get("verified_by")) and bool(r.get("reviewed_by"))
+        signed = sig is not None
         out.append(
             [
                 r["id"],
@@ -272,8 +301,8 @@ def sheet_rows(spec: dict[str, Any]) -> list[list[str]]:
                 r.get("fact") or "",
                 "폐기" if r.get("disposal") else "",
                 r.get("note", ""),
-                r.get("verified_by") or "",
-                r.get("reviewed_by") or "",
+                sig[0] if sig else "",
+                sig[1] if sig else "",
                 "서명됨(하한으로 쓴다)" if signed else "서명 전(안 쓴다)",
             ]
         )
@@ -294,9 +323,9 @@ def floor_by_type(spec: dict[str, Any], signed_only: bool = True) -> dict[str, d
     """유형 × 법 → 하한(같은 법 안에서 max · D-227 「업종은 언제나 max」). 검토 요약용 — 판정 경로는 DB 뷰가 한다."""
     order = list(Risk)
     out: dict[str, dict[str, str]] = {}
+    if signed_only and signature(spec) is None:
+        return out
     for r in spec.get("rows") or []:
-        if signed_only and not (r.get("verified_by") and r.get("reviewed_by")):
-            continue
         law = spec["sources"][r["src"]]["law_id"]
         cur = out.setdefault(r["type"], {}).get(law)
         risk = KIND_RISK[r["kind"]]
@@ -319,9 +348,14 @@ def main(argv: list[str] | None = None) -> int:
         print("🔴 원천이 원문과 맞지 않는다 — 서명하지 않는다\n  " + "\n  ".join(bad))
         return 1
     n = write_sheet(spec)
-    signed = sum(bool(r.get("verified_by") and r.get("reviewed_by")) for r in spec["rows"])
+    sig = signature(spec)
     print(
-        f"✅ 원문 대조 통과 — 행 {n} · 서명됨 {signed} · 형벌 조항 {len(spec.get('penal') or [])}"
+        f"✅ 원문 대조 통과 — 행 {n} · 형벌 조항 {len(spec.get('penal') or [])} · 판 sha {plan_sha(spec)} · "
+        + (
+            f"서명됨({sig[0]} · {sig[1]})"
+            if sig
+            else "서명 전 — `signoff` 에 이 판 sha 와 두 이름을 적는다(D-309)"
+        )
     )
     print(f"   검토표 → {SHEET.relative_to(ROOT)}")
     print("   유형 × 법 하한(서명 무시 · 미리보기):")
