@@ -18,6 +18,9 @@ v6 의 약점은 「살리기」다(실제 광고 정답표 기준 살릴 수 �
     .venv-sllm/Scripts/python.exe docs/lse/gen_synthetic_stage1.py --dry-run          # 씨앗 · 프롬프트만 본다(API 안 씀)
     .venv-sllm/Scripts/python.exe docs/lse/gen_synthetic_stage1.py --pilot 50         # 시범
     .venv-sllm/Scripts/python.exe docs/lse/gen_synthetic_stage1.py --target 2000      # 본 생성
+🔄 10-01 — API 결제 전이라 **직접 작성 경로**를 쓴다(GPT 대신 Claude 가 이 대화에서 위반 문구를 쓴다):
+    ... --export-seeds 150      # 종류별로 고르게 씨앗을 골라 synth_seeds.jsonl 로
+    ... --ingest synth_written.jsonl   # 직접 쓴 문구 {"seed": id, "inputs": [...]} 에 같은 거르기를 걸어 synth_stage1.jsonl 로
 API 키는 `.env` 의 OPENAI_API_KEY(화면 · 로그에 찍지 않는다) · 모델은 OPENAI_MODEL(기본 gpt-4o-mini).
 """
 
@@ -158,6 +161,8 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--pilot", type=int, default=0, help="이 수만큼만 만든다(시범)")
     ap.add_argument("--target", type=int, default=2000)
+    ap.add_argument("--export-seeds", type=int, default=0, help="고른 씨앗 수 — synth_seeds.jsonl 로 내보낸다")
+    ap.add_argument("--ingest", type=Path, default=None, help="직접 쓴 문구 파일(docs/lse 기준)")
     args = ap.parse_args()
     rng = random.Random(SEED)
     random.seed(SEED)
@@ -174,6 +179,50 @@ def main() -> None:
     for s in seeds:
         by_kind[s["kind"].split(":")[0]] = by_kind.get(s["kind"].split(":")[0], 0) + 1
     print(f"씨앗 {len(seeds)} · {by_kind} · 정답표 금지어 {len(answer_words)}개", flush=True)
+
+    if args.export_seeds:
+        # 종류별로 고르게 — 살리기 유형을 많이, 합법화 불가는 적게(손으로 쓴 100개가 이미 있다)
+        quota = {"건기식기능": 0.27, "원료사실": 0.23, "화장품기능": 0.14, "사실·인증순위": 0.17, "불가": 0.19}
+        picked: list[dict] = []
+        for kind, q in quota.items():
+            pool = [x for x in seeds if x["kind"].split(":")[0] == kind]
+            picked += pool[: max(1, round(args.export_seeds * q))]
+        with (HERE / "synth_seeds.jsonl").open("w", encoding="utf-8", newline="\n") as f:
+            for i, x in enumerate(picked):
+                f.write(json.dumps({"seed": f"g{i:03d}", **x}, ensure_ascii=False) + "\n")
+        print(f"씨앗 {len(picked)}개 → synth_seeds.jsonl")
+        return
+    if args.ingest:
+        seeds_by_id = {x["seed"]: x for x in map(json.loads, (HERE / "synth_seeds.jsonl").open(encoding="utf-8"))}
+        written = [json.loads(line) for line in (HERE / args.ingest).open(encoding="utf-8") if line.strip()]
+        rows, seen_inputs = [], set()
+        dropped = {"golden": 0, "정답표": 0, "중복": 0, "형식": 0}
+        answer_inputs_ = answer_inputs
+        for w in written:
+            sd = seeds_by_id[w["seed"]]
+            for text in w["inputs"]:
+                text = text.strip()
+                k = norm(text)
+                if not text or len(text) > 120:
+                    dropped["형식"] += 1
+                elif k in gset or k in gblob:
+                    dropped["golden"] += 1
+                elif any(x in text.replace(" ", "") for x in answer_words) or any(
+                        difflib.SequenceMatcher(None, k, a).ratio() >= SIM_MAX for a in answer_inputs_):
+                    dropped["정답표"] += 1
+                elif k in seen_inputs:
+                    dropped["중복"] += 1
+                else:
+                    seen_inputs.add(k)
+                    vt = [sd["target"]["infeasible"]] if "infeasible" in sd["target"] else (w.get("violation_types") or ["거짓_과장"])
+                    rows.append({"id": f"s{len(rows):05d}", "group": sd["kind"], "input": text, "violation_types": vt,
+                                 "output": sd["target"], "synthetic": True, "generator": "claude-in-session",
+                                 "prompt_version": PROMPT_VERSION})
+        with OUT.open("w", encoding="utf-8", newline="\n") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        print(f"받아들임 {len(rows)} · 버림 {dropped} · {OUT.name}")
+        return
 
     goal = args.pilot or args.target
     if args.dry_run:

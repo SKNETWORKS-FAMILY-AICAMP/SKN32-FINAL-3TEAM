@@ -51,8 +51,11 @@ from stage_gate import check as gate  # noqa: E402
 
 BASE = "Qwen/Qwen2.5-3B-Instruct"
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6")}
-EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"]}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7")}
+EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
+          "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"]}
+#: 🆕 v7 — 합성 데이터(합성 활용 허용 10-01 · `gen_synthetic_stage1.py`). 🚨 **학습에만** 쓰고 평가에는 넣지 않는다
+SYNTH = {"v7": ["synth_stage1.jsonl"]}
 KEY = HERE / "_private" / "real_answer_key.jsonl"
 REASONS = [v.value for v in Violation]
 SEED = 20261001
@@ -122,13 +125,21 @@ def load_rows(version: str = "v5") -> tuple[list[dict], list[dict]]:
         x["kind"] = x["group"]
         # 그룹마다 4개 중 1개를 평가로 — 같은 그룹의 다른 문구로 학습하고, 본 적 없는 문구로 잰다
         (ev if int(x["id"][1:]) % 4 == 0 else train).append(x)
-    train += [x for x in extra if int(x["id"][1:]) % 4 != 0]  # x · y 접두 모두 번호로 4개 중 1개를 평가로  # 새 유형 2배 — 784개 틀에 묻히지 않게
+    train += [x for x in extra if int(x["id"][1:]) % 4 != 0]  # x · y 접두 모두 번호로 4개 중 1개를 평가로
+    synth = [json.loads(line) for name in SYNTH.get(version, []) for line in (HERE / name).open(encoding="utf-8")]
+    for x in synth:
+        assert x.get("synthetic"), "합성 파일에 합성 표시가 없는 행이 있다"
+        x["core"] = x["output"].get("body") or "없음 — 살릴 주장이 없다"
+        x["kind"] = "합성:" + x["group"].split(":")[0]
+    train += synth  # 🚨 평가(ev)에는 넣지 않는다
+    if synth:
+        print(f"합성 {len(synth)}행 — 학습에만", flush=True)  # 새 유형 2배 — 784개 틀에 묻히지 않게
     rng.shuffle(train)
     print(f"학습 {len(train)} · 평가 {len(ev)} · 학습 중 합법화 불가 {sum('infeasible' in r['output'] for r in train)}", flush=True)
     return train, ev
 
 
-SYS = {"v5": SYSTEM, "v6": SYSTEM_V6}
+SYS = {"v5": SYSTEM, "v6": SYSTEM_V6, "v7": SYSTEM_V6}
 CUR = {"system": SYSTEM}
 
 
@@ -251,7 +262,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"
