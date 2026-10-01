@@ -92,6 +92,8 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
     sents: list[SentenceJudgment] = list(state.get("sentences", []))
     conf = [s for s in sents if s.verdict is Verdict.confirmed]
     types = sorted({v.value for s in conf for v in s.violations})
+    #: 🆕 2026-10-02 (D-311) — **보류 문장의 유형 후보**(단독판정 자격 없는 적중). 예측이 아니다 — 탐지 재현율만 읽는다
+    cands = sorted({v.value for s in sents if s.verdict is Verdict.hold for v in s.violations})
     ho = sorted({h for s in conf if s.violations for h in _ho(s)})
     verdicts = [s.verdict.value for s in sents]
     if any(s.violations for s in conf):
@@ -110,6 +112,7 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "verdicts": verdicts,
         "hold_reasons": sorted({s.hold_reason.value for s in sents if s.hold_reason is not None}),
         "types": types,
+        "candidates": cands,
         "ho": ho,
         "class": cls,
         #: 판정을 내린 행 — **전 문장이 확정**이다(selective risk 의 분모 · D-77 L1 #8)
@@ -184,6 +187,19 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["unscored_rows"] = n - len(sc)
     out["types"] = {t: (gold_t[t], tp_t[t], fp_t[t]) for t in sorted(set(gold_t) | set(fp_t))}
     out["ho"] = {c: (gold_h[c], tp_h[c], fp_h[c]) for c in sorted(set(gold_h) | set(fp_h))}
+    # 🆕 2026-10-02 (D-311 · 판정 10-02 보고 규칙) — **탐지 재현율**: 위반 행 중 확정 유형 ∪ 보류 유형 후보가 정답과 겹치는 비율.
+    #    ★ 확정 재현율과 **나란히만** 싣는다 — 탐지는 판정이 아니다(보류는 통과가 아니지만 위반 확정도 아니다 · D-127).
+    #    재측정 전에 정했다(D-175) — 이 수에 맞춰 사전 자격을 고르지 않는다
+    pos = det = conf_hit = 0
+    for r, p in sc:
+        pt = set(p["types"])
+        tt = truth_types(r, pt | set(p.get("candidates", ())))
+        if not tt:
+            continue
+        pos += 1
+        conf_hit += bool(pt & tt)
+        det += bool((pt | set(p.get("candidates", ()))) & tt)
+    out["detect"] = {"positive": pos, "confirmed": conf_hit, "detected": det}
     out["coverage"] = committed / len(sc) if sc else 0.0
     out["selective_risk"] = errors / committed if committed else None
     out["committed"] = committed
@@ -241,6 +257,12 @@ def report(s: dict[str, Any], conditional: bool = False) -> None:
         f"\n  selective risk {('-' if sr is None else f'{sr:.1%}')} · coverage {s['coverage']:.1%} "
         f"(판정을 내린 행 {s['committed']} / 채점 {s['scored_rows']})"
     )
+    d = s.get("detect") or {}
+    if d.get("positive"):
+        print(
+            f"\n  위반 행 {d['positive']} — 확정 재현율 {d['confirmed'] / d['positive']:.1%} · "
+            f"탐지 재현율(확정 ∪ 보류 유형 후보) {d['detected'] / d['positive']:.1%}  (D-311 · 탐지는 판정이 아니다)"
+        )
     print_lawful(s["lawful"])
     if not conditional:
         print(
@@ -260,18 +282,21 @@ def _key(e: Any) -> tuple[str, str | None, tuple[str, ...]]:
     return (e.term, e.violation_type, tuple(e.basis))
 
 
-def dict_drift(db: Iterable[Any], file_rows: Iterable[dict]) -> dict[str, int]:
+def dict_drift(
+    db: Iterable[Any], file_rows: Iterable[dict], *, exact: bool = True
+) -> dict[str, int]:
     """DB 의 단독판정 사전(`graph.load_dict_entries`) ↔ 사전 파일 — 어긋난 **수**만 (용어는 싣지 않는다 · ND 면제 조건).
 
     🆕 2026-10-01 (원장 10-01 ⑦) — A 기기 DB 에 동결 09-30 이전 사전이 남아 **봉인 평가 문서의 문구**가 걸렸다.
        ⛔ 평가 도구가 DB 사전의 판을 몰라 그 수가 정본처럼 찍혔다 — 없음 · 낡음이 성공으로 집계됐다 (D-220 · D-174).
     🔴 파일 쪽 변환은 적재기와 **한 함수**(`load_db.dict_row`)다 (D-99) — 「단독판정 항목만」도 그래프의 `SQL_DICT` 와 같은 거름.
+    🔄 2026-10-02 (D-311) — `exact=False` 면 **자격 없는 항목**끼리 대조한다(그래프의 `SQL_DICT_WEAK` 와 같은 거름).
     """
     from scripts.load_db import dict_row  # noqa: PLC0415 — 적재기의 변환을 그대로 (D-99)
 
     want = {}
-    for term, law_ref, exact, vt in map(dict_row, file_rows):
-        if exact:
+    for term, law_ref, solo, vt in map(dict_row, file_rows):
+        if solo is exact:
             want[term] = (term, vt, tuple(b.strip() for b in law_ref.split(";") if b.strip()))
     have = {e.term: _key(e) for e in db}
     return {
@@ -289,6 +314,10 @@ def check_dict(cur: Any, path: pathlib.Path = DICT_FILE) -> dict[str, Any]:
         raise SystemExit(f"🔴 {path} 가 없다 — DB 사전과 대조할 기준이 없다 (D-220)")
     rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
     d = dict_drift(g.load_dict_entries(cur), rows)
+    # 🆕 2026-10-02 (D-311) — 자격 없는 항목도 대조한다(보류 문장의 유형 후보가 다른 판 사전에서 오지 않게)
+    w = dict_drift(g.load_weak_entries(cur), rows, exact=False)
+    if w["db_only"] or w["file_only"] or w["changed"]:
+        d = {k: d[k] + w[k] for k in d}
     if d["db_only"] or d["file_only"] or d["changed"]:
         raise SystemExit(
             f"🔴 DB 사전이 {path} 와 다르다 — DB 에만 {d['db_only']} · 파일에만 {d['file_only']} · "

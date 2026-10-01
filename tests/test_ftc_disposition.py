@@ -159,7 +159,15 @@ def test_이전_판의_봉인을_지키고_빠진_것만_빠진다(monkeypatch) 
     ftc = [doc(str(i), ["거짓_과장"], [f"문구{i}"]) for i in range(10)]
     ftc.append(doc("95", [], [], ["적법 문구"]))  # 이전 판에서 봉인 · 지금은 무혐의
     monkeypatch.setattr(split, "ftc_docs", lambda: ftc)
-    for name in ("casebook_docs", "guide_docs", "cosmetic_docs", "ftc_press_docs", "caution_docs"):
+    # 🔄 2026-10-02 — 수정문구 판(`guide_fix_docs`)도 막는다 — 막지 않으면 기기의 실제 채택본(대기 0)이 평가로 섞인다
+    for name in (
+        "casebook_docs",
+        "guide_docs",
+        "cosmetic_docs",
+        "ftc_press_docs",
+        "guide_fix_docs",
+        "caution_docs",
+    ):
         monkeypatch.setattr(split, name, lambda: [])
     monkeypatch.setattr(split, "approved_docs", lambda: [])
     monkeypatch.setattr(split, "fingerprint", lambda: {})

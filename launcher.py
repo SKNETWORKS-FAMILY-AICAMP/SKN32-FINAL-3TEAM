@@ -1276,8 +1276,9 @@ def data_sync(
 @app.command(name="sheet-push")
 def sheet_push(
     dry_run: bool = typer.Option(False, "--dry-run", help="무엇을 올릴지만 보여 준다"),
+    yes: bool = typer.Option(False, "--yes", help="외부 전송 질문을 건너뛴다"),
 ) -> None:
-    """사람이 채울 판정표 · 감사표를 공유 저장소에 둡니다 — 채우는 중인 표는 덮지 않습니다.
+    """사람이 채울 판정표 · 감사표를 공유 저장소에 둡니다 — 채우는 중인 표 · 끝난 표 · 옛 판은 올리지 않습니다.
 
     🆕 2026-10-01 (팀장 판정 (나)) — 표는 `build/labels/` 에 생기는데 그 자리는 git 도 저장소도 나르지 않아,
        채운 CSV 가 들여오기 전까지 한 기기에만 있었다. 저장소의 `copylane-sheets/` 에서 어느 기기에서든 채운다.
@@ -1286,6 +1287,8 @@ def sheet_push(
     args = [sys.executable, "-m", "scripts.sheet_share", "push"]
     if dry_run:
         args.append("--dry-run")
+    if yes:
+        args.append("--yes")
     raise typer.Exit(run(*args))
 
 

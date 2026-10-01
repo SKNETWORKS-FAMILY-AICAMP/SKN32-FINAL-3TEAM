@@ -612,6 +612,8 @@ def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.graph as g
 
     monkeypatch.setattr(g, "load_dict_entries", lambda cur: [])
+    # 🆕 2026-10-02 (D-311) — 자격 없는 항목도 같은 대역으로 비운다
+    monkeypatch.setattr(g, "load_weak_entries", lambda cur: [])
 
 
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202
