@@ -91,6 +91,7 @@ WRITERS = {
 EXEMPT = {
     # 🆕 2026-10-01 (W1) — 평가 보고서다. 파생 데이터셋이 아니다(행 id · 예측만 · 원문 문구를 싣지 않는다)
     "scripts/eval_graph.py": "평가 보고서(행 id · 예측 · 수 — 문구를 싣지 않는다)",
+    "scripts/sanction_rule.py": "법령 처분 기준 검토표(공개 법령 문언 · 광고 문구를 싣지 않는다)",
     # 원천 하나의 추출기 — 원문 레코드를 낸다. 라벨 파생은 위 WRITERS 가 입력에서 막는다 ·
     # `--sheet` 는 런처가 ND 소스에서 거부한다(`launcher.extract`)
     "preprocess/mfds_casebook.py": "원천 하나의 추출기",
