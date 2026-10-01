@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import dataclasses
 import hashlib
 import json
 import pathlib
@@ -233,23 +234,63 @@ def annex1_code(cite: str) -> str | None:
     return f"{ho}.{mok}" if law == FOOD_ACT and 4 <= ho <= 7 and mok else None
 
 
+#: 위험도 이름 — 화면 근거 줄에 쓴다 (`app.contracts.Risk` docstring · D-280)
+RISK_NAME = {Risk.R1: "시정명령", Risk.R2: "업무정지", Risk.R3: "영업 상실"}
+
+
+@dataclasses.dataclass(frozen=True)
+class Floor:
+    """하한 조회 결과 — 🔄 2026-10-01 (D-310 개정 (다)) 하한 + **가능 상한**.
+
+    `floor` 는 「확실한 최소」 · `ceiling` 은 「목에 따라 그럴 수 있는 최대」(하한보다 높을 때만) · `basis` 는 근거 행 id.
+    🚨 상한은 표시 전용이다 — 래칫 · 통과에 쓰지 않는다(`RiskAssessment.ceiling`).
+    """
+
+    floor: Risk | None
+    ceiling: Risk | None = None
+    ceiling_note: str | None = None
+    basis: tuple[str, ...] = ()
+
+
+def _top(rows: list[dict[str, Any]]) -> Risk:
+    order = list(Risk)
+    return max((KIND_RISK[r["kind"]] for r in rows), key=order.index)
+
+
 def floor_of(
     spec: dict[str, Any], vtype: str, law_id: str, cites: list[str], *, signed_only: bool = True
-) -> tuple[Risk | None, list[str]]:
-    """(유형 · 처분 원천 법 · 근거 인용) → (하한, 근거 행 id). 하한이 없으면 (None, [])."""
+) -> Floor:
+    """(유형 · 처분 원천 법 · 근거 인용) → 하한 · 가능 상한. 서명된 판이 없거나 행이 없으면 `Floor(None)`.
+
+    식품 4~7호(D-310) — 근거 인용의 목이 맞는 행이 있으면 그 행 · 없으면 **하한 그 밖에 R1** + 그 유형의 목 행 중 가장 무거운
+    처분을 **가능 상한**으로(근거 줄에 목 목록). ⛔ 상한을 하한으로 올리지 않는다 — 하한은 확실한 최소다(D-310 개정 (다)).
+    """
     if signed_only and signature(spec) is None:
-        return None, []
+        return Floor(None)
     rows = [r for r in spec.get("rows") or [] if r["type"] == vtype and src_law(spec, r) == law_id]
     if law_id == MOK_AXIS and Violation(vtype) in MOK_TYPES:
         codes = {c for c in map(annex1_code, cites) if c}
-        rows = [r for r in rows if codes & set(r.get("annex1") or [])]
+        hit = [r for r in rows if codes & set(r.get("annex1") or [])]
+        if hit:
+            return Floor(_top(hit), basis=tuple(r["id"] for r in hit))
         if not rows:
-            return OTHERWISE, ["그 밖에(별표7)"]
+            return Floor(OTHERWISE, basis=("그 밖에(별표7)",))
+        top = _top(rows)
+        if top.level <= OTHERWISE.level:
+            return Floor(OTHERWISE, basis=("그 밖에(별표7)",))
+        mok = sorted(
+            {c for r in rows if KIND_RISK[r["kind"]] is top for c in r.get("annex1") or []}
+        )
+        where = f"별표1 {' · '.join(mok)} 에 해당하면" if mok else "별표7 전용 목에 해당하면"
+        return Floor(
+            OTHERWISE,
+            ceiling=top,
+            ceiling_note=f"목에 따라 {top.value}({RISK_NAME[top]})까지 — {where} 별표7 전용 처분",
+            basis=("그 밖에(별표7)",),
+        )
     if not rows:
-        return None, []
-    order = list(Risk)
-    best = max(rows, key=lambda r: order.index(KIND_RISK[r["kind"]]))
-    return KIND_RISK[best["kind"]], [r["id"] for r in rows]
+        return Floor(None)
+    return Floor(_top(rows), basis=tuple(r["id"] for r in rows))
 
 
 def plan_sha(spec: dict[str, Any]) -> str:
@@ -411,12 +452,14 @@ def floor_by_type(spec: dict[str, Any], signed_only: bool = True) -> dict[str, d
             ),
             default=None,
         )
-        named = (
-            f"{' · '.join(codes)} → 최대 {list(Risk)[top].value} · "
-            if codes and top is not None
+        cap = (
+            f" · 가능 상한 {list(Risk)[top].value}({' · '.join(codes)})"
+            if codes and top is not None and list(Risk)[top].level > OTHERWISE.level
             else ""
         )
-        out.setdefault(t.value, {})[MOK_AXIS] = f"목 단위({named}그 밖에 {OTHERWISE.value})"
+        out.setdefault(t.value, {})[MOK_AXIS] = (
+            f"목 단위(목 미특정이면 하한 {OTHERWISE.value}{cap})"
+        )
     return out
 
 

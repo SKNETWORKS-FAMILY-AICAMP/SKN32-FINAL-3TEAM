@@ -271,6 +271,12 @@ class RiskAssessment(BaseModel):
     encoder: Risk | None = None  # 인코더 예측
     final: Risk | None = None
     evidence_span: Span | None = None
+    #: 🆕 2026-10-01 (D-310 개정 (다)) **가능 상한** — 하한은 「확실한 최소」다. 목(별표1)을 못 맞혀 하한이 「그 밖에 R1」로 떨어진
+    #:    문장도 목에 따라 더 무거운 처분(예: 영업정지)이 있을 수 있다 — 그 가능성을 **숫자를 올리지 않고** 보인다.
+    #:    🚨 판정 · 통과 · 래칫에 쓰지 않는다(표시 전용). 상한이 하한과 같으면 비운다
+    ceiling: Risk | None = None
+    #: 상한이 무엇에서 나왔나 — 「목에 따라 R2(업무정지)까지 — 수상 · 체험기 · 이온수 등」. 상한이 있으면 반드시 있다
+    ceiling_note: str | None = None
 
     @model_validator(mode="after")
     def _ratchet(self) -> RiskAssessment:
@@ -291,6 +297,25 @@ class RiskAssessment(BaseModel):
             raise ValueError(
                 "하한 위로 올리려면 근거 스팬이 필요하다 (D-131) — "
                 f"floor={self.floor.value} final={self.final.value}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _ceiling_above_floor(self) -> RiskAssessment:
+        # 🆕 D-310 개정 (다) — 상한은 하한보다 **높을 때만** · 근거 줄과 함께. 하한이 없으면 상한도 없다(없음을 상한으로 꾸미지 않는다 · D-220)
+        if self.ceiling is None:
+            if self.ceiling_note is not None:
+                raise ValueError("상한 근거 줄만 있고 상한이 없다 (D-310)")
+            return self
+        if self.floor is None:
+            raise ValueError("하한 없이 가능 상한을 적을 수 없다 (D-310 · D-09)")
+        if self.ceiling.level <= self.floor.level:
+            raise ValueError(
+                f"가능 상한({self.ceiling.value})이 하한({self.floor.value})보다 높지 않다 — 같으면 비운다 (D-310)"
+            )
+        if not (self.ceiling_note or "").strip():
+            raise ValueError(
+                "가능 상한에는 근거 줄이 있어야 한다 — 무엇에서 나온 상한인가 (D-310 · D-305)"
             )
         return self
 

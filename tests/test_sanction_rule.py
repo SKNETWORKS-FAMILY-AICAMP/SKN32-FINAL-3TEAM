@@ -190,22 +190,24 @@ def test_식품_4_7호는_목이_맞을_때만_그_처분이고_아니면_그_�
             },
         ]
     )
-    assert sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호|마목"]) == (
-        Risk.R2,
-        ["m"],
+    hit = sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호|마목"])
+    assert (hit.floor, hit.ceiling, hit.basis) == (Risk.R2, None, ("m",)), (
+        "목이 맞으면 그 행 · 상한 없음"
     )
-    assert sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호"]) == (
-        Risk.R1,
-        ["그 밖에(별표7)"],
+    miss = sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호"])
+    assert (miss.floor, miss.ceiling) == (Risk.R1, Risk.R2), (
+        "목을 모르면 하한 그 밖에 R1 · 가능 상한 R2"
     )
-    assert sr.floor_of(spec, "비방광고", "013475", []) == (Risk.R1, ["그 밖에(별표7)"]), (
-        "행이 없어도 그 밖에 R1"
-    )
+    assert "4.마" in miss.ceiling_note and "업무정지" in miss.ceiling_note
+    # 🚨 상한을 하한으로 올리지 않는다 (D-310 개정 (다))
+    assert miss.floor is not miss.ceiling
+    none = sr.floor_of(spec, "비방광고", "013475", [])
+    assert (none.floor, none.ceiling) == (Risk.R1, None), "행이 없으면 그 밖에 R1 · 상한 없음"
     # 1~3호 · 화장품은 목으로 갈리지 않는다
-    assert sr.floor_of(spec, "의약품_오인", "013475", []) == (Risk.R2, ["d"])
-    assert sr.floor_of(spec, "거짓_과장", "008741", []) == (Risk.R2, ["c"])
+    assert sr.floor_of(spec, "의약품_오인", "013475", []) == sr.Floor(Risk.R2, basis=("d",))
+    assert sr.floor_of(spec, "거짓_과장", "008741", []) == sr.Floor(Risk.R2, basis=("c",))
     unsigned = dict(spec, signoff={})
-    assert sr.floor_of(unsigned, "거짓_과장", "013475", []) == (None, [])
+    assert sr.floor_of(unsigned, "거짓_과장", "013475", []) == sr.Floor(None)
     assert sr.annex1_code("002011:제3조제1항제1호") is None, "표시광고법 인용은 별표1 목이 아니다"
 
 
@@ -240,3 +242,22 @@ def test_원천의_10_01_판정_셋이_들어_있다() -> None:
     assert rows["food.b1.4ha"]["type"] == "건강기능식품_오인"
     assert rows["cosm.2.da"]["type"] == "소비자_기만" and rows["cosm.2.da"]["rule"]["mok"] == "다"
     assert not rows["food.b1.4a.cmp"].get("fact") and not rows["food.b3.4sa.cmp"].get("fact")
+
+
+@pytest.mark.gate
+def test_가능_상한은_하한보다_높을_때만_근거와_함께다() -> None:
+    """🆕 2026-10-01 (D-310 개정 (다)) — 표시 전용 칸. 하한 없는 상한 · 근거 없는 상한 · 하한 이하 상한을 계약이 거부한다."""
+    from pydantic import ValidationError
+
+    from app.contracts import RiskAssessment
+
+    ok = RiskAssessment(floor=Risk.R1, final=Risk.R1, ceiling=Risk.R2, ceiling_note="목에 따라 R2")
+    assert ok.ceiling is Risk.R2 and ok.final is Risk.R1, "상한은 최종 위험도를 올리지 않는다"
+    for bad, why in (
+        ({"floor": None, "ceiling": Risk.R2, "ceiling_note": "x"}, "하한 없이"),
+        ({"floor": Risk.R2, "ceiling": Risk.R2, "ceiling_note": "x"}, "높지 않다"),
+        ({"floor": Risk.R1, "ceiling": Risk.R2}, "근거 줄"),
+        ({"floor": Risk.R1, "ceiling_note": "x"}, "상한이 없다"),
+    ):
+        with pytest.raises(ValidationError, match=why):
+            RiskAssessment(**bad)
