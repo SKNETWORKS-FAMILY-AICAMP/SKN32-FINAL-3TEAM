@@ -345,3 +345,69 @@ def test_조건부_평가는_품목을_아는_행만_품목을_넘겨_돈다() -
         conditional=True,
     )
     assert seen[0].category is Category.화장품
+
+
+# ── 🆕 2026-10-02 (D-311) — 단독판정 자격 없는 적중은 보류 문장의 유형 후보다 ────────────────
+
+
+@pytest.mark.gate
+def test_자격_없는_적중은_확정하지_않고_보류에_유형_후보로_싣는다() -> None:
+    """★ D-311 · D-273 ④ — 강등된 질병 이름(「당뇨」)은 확정의 재료가 아니다. 그러나 **사전 침묵과 같은 보류**가 되면 안 된다."""
+    weak = DictHit("당뇨", "질병_예방치료_표방", (FOOD,), (0, 2))
+    st = _state("당뇨에 좋은 차", [])
+    st["dict_scans"] = [DictScan(sent_id="s0", ran=True, weak=(weak,))]
+    st["law_results"] = [
+        LawResult(law="law_food", sent_ids=("s0",), weak_hits=(("s0", (weak,)),)),
+        LawResult(law="law_ftc", sent_ids=("s0",)),
+    ]
+    (s,) = judge(st)["sentences"]
+    assert s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf
+    assert s.violations == [Violation.질병_예방치료_표방], (
+        "🚨 유형 후보가 사라지면 사전 침묵과 구별이 안 된다"
+    )
+    assert ("013094", "제8조", "제1항제1호") in {(a.law_id, a.article, a.item) for a in s.evidence}
+    st["sentences"] = [s]
+    assert route_review(st) == "hold", "🔴 자격 없는 적중으로 확정 · 통과가 나면 안 된다"
+
+
+@pytest.mark.gate
+def test_자격_없는_적중도_보낸_법의_인용만_남는다() -> None:
+    """🔴 법별 노드의 거름은 단독판정 적중과 **같다**(`_mine` · D-99) — 화장품 전제에서 식품 인용 후보가 붙지 않는다."""
+    from app.graph import _mine
+
+    weak = DictHit("당뇨", "질병_예방치료_표방", (FOOD,), (0, 2))
+    assert _mine((weak,), "화장품법") == ()
+    assert _mine((weak,), "식품표시광고법") == (weak,)
+
+
+@pytest.mark.gate
+def test_그래프_평가는_탐지_재현율을_확정_재현율과_나란히_낸다() -> None:
+    """🆕 D-311 · 판정 10-02 보고 규칙 — 보류 유형 후보는 **예측이 아니다**(유형 P/R · selective risk 에 안 든다). 탐지 칸에만."""
+    from scripts import eval_graph as eg
+
+    rows = [
+        {
+            "id": "a",
+            "text": "가",
+            "labels": ["질병_예방치료_표방"],
+            "근거": [FOOD],
+            "split": "test_sentence",
+        },
+        {
+            "id": "b",
+            "text": "나",
+            "labels": ["질병_예방치료_표방"],
+            "근거": [FOOD],
+            "split": "test_sentence",
+        },
+    ]
+    preds = [
+        {"outcome": "hold", "verdicts": ["hold"], "hold_reasons": ["low_conf"], "types": [],
+         "candidates": ["질병_예방치료_표방"], "ho": [], "class": "보류", "committed": False, "n_sents": 1},
+        {"outcome": "hold", "verdicts": ["hold"], "hold_reasons": ["low_conf"], "types": [],
+         "candidates": [], "ho": [], "class": "보류", "committed": False, "n_sents": 1},
+    ]  # fmt: skip
+    s = eg.summarize(rows, preds)
+    assert s["detect"] == {"positive": 2, "confirmed": 0, "detected": 1}
+    assert s["types"]["질병_예방치료_표방"] == (2, 0, 0), "🚨 후보가 예측으로 세어졌다 (D-127)"
+    assert s["committed"] == 0
