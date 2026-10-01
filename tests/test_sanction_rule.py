@@ -109,9 +109,9 @@ def test_하한_요약은_같은_법_안에서_max_이고_서명_전_행은_안_
     spec = _spec()
     spec["rows"].append(spec["rows"][0] | {"id": "t.2", "kind": "시정명령", "first": "시정명령"})
     assert sr.floor_by_type(spec) == {}, "서명 전 판은 하한이 아니다 (v_risk_lookup)"
-    assert sr.floor_by_type(spec, signed_only=False) == {"의약품_오인": {"013475": "R2"}}
+    assert sr.floor_by_type(spec, signed_only=False)["의약품_오인"] == {"013475": "R2"}
     spec["signoff"] = {"sha": sr.plan_sha(spec), "verified_by": "오한빈", "reviewed_by": "권소라"}
-    assert sr.floor_by_type(spec) == {"의약품_오인": {"013475": "R2"}}
+    assert sr.floor_by_type(spec)["의약품_오인"] == {"013475": "R2"}
 
 
 @pytest.mark.gate
@@ -154,3 +154,89 @@ def test_판_sha_는_서명_칸을_보지_않는다() -> None:
     b = _spec()
     b["signoff"] = {"sha": "x", "verified_by": "가", "reviewed_by": "나"}
     assert sr.plan_sha(a) == sr.plan_sha(b)
+
+
+def _food(rows: list[dict]) -> dict:
+    spec = {
+        "sources": {
+            "food": {"law_id": "013475", "annex_no": "0007", "path": "a.json"},
+            "cosm": {"law_id": "008741", "annex_no": "0007", "path": "b.json"},
+        },
+        "rows": rows,
+    }
+    spec["signoff"] = {"sha": sr.plan_sha(spec), "verified_by": "가", "reviewed_by": "나"}
+    return spec
+
+
+ROW = {"src": "food", "block": "b", "mok": "마)", "quote": "q", "first": "영업정지7일"}
+
+
+@pytest.mark.gate
+def test_식품_4_7호는_목이_맞을_때만_그_처분이고_아니면_그_밖에_R1() -> None:
+    """🆕 2026-10-01 (D-310) — 유형 max 로 접으면 보통의 과장에 「영업정지 수준」이 붙는다. 목이 맞을 때만 그 행이다."""
+    spec = _food(
+        [
+            ROW | {"id": "m", "kind": "영업정지", "type": "거짓_과장", "annex1": ["4.마"]},
+            ROW | {"id": "d", "kind": "영업정지", "type": "의약품_오인"},
+            {
+                "id": "c",
+                "src": "cosm",
+                "block": "b",
+                "mok": "2)",
+                "quote": "q",
+                "first": "f",
+                "kind": "광고업무정지",
+                "type": "거짓_과장",
+            },
+        ]
+    )
+    assert sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호|마목"]) == (
+        Risk.R2,
+        ["m"],
+    )
+    assert sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호"]) == (
+        Risk.R1,
+        ["그 밖에(별표7)"],
+    )
+    assert sr.floor_of(spec, "비방광고", "013475", []) == (Risk.R1, ["그 밖에(별표7)"]), (
+        "행이 없어도 그 밖에 R1"
+    )
+    # 1~3호 · 화장품은 목으로 갈리지 않는다
+    assert sr.floor_of(spec, "의약품_오인", "013475", []) == (Risk.R2, ["d"])
+    assert sr.floor_of(spec, "거짓_과장", "008741", []) == (Risk.R2, ["c"])
+    unsigned = dict(spec, signoff={})
+    assert sr.floor_of(unsigned, "거짓_과장", "013475", []) == (None, [])
+    assert sr.annex1_code("002011:제3조제1항제1호") is None, "표시광고법 인용은 별표1 목이 아니다"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("row", "why"),
+    [
+        (
+            ROW | {"id": "x", "kind": "영업정지", "type": "거짓_과장"},
+            "annex1(별표1 목 목록)이 없다",
+        ),
+        (
+            ROW | {"id": "x", "kind": "영업정지", "type": "의약품_오인", "annex1": ["2.가"]},
+            "annex1 은 식품 4~7호 행에만",
+        ),
+        (
+            ROW | {"id": "x", "kind": "영업정지", "type": "거짓_과장", "annex1": ["4마"]},
+            "꼴이 아니다",
+        ),
+    ],
+)
+def test_목_칸_규칙(row: dict, why: str) -> None:
+    spec = _food([row])
+    bad = sr.lint(spec)
+    assert any(why in b for b in bad), bad
+
+
+@pytest.mark.gate
+def test_원천의_10_01_판정_셋이_들어_있다() -> None:
+    """🆕 2026-10-01 (D-310) — 하) 건기식 오인 · 화장품 2.다 기만 · 7호 행에는 사실 확인 분기가 없다."""
+    rows = {r["id"]: r for r in sr.load_rules()["rows"]}
+    assert rows["food.b1.4ha"]["type"] == "건강기능식품_오인"
+    assert rows["cosm.2.da"]["type"] == "소비자_기만" and rows["cosm.2.da"]["rule"]["mok"] == "다"
+    assert not rows["food.b1.4a.cmp"].get("fact") and not rows["food.b3.4sa.cmp"].get("fact")

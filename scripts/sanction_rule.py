@@ -49,6 +49,25 @@ KIND_RISK: dict[str, Risk] = {
     "영업소폐쇄": Risk.R3,
 }
 
+#: 🆕 2026-10-01 (D-310) — **목 단위 하한**을 쓰는 축 · 유형. 식품 별표7 은 법 제8조① 4~7호를 [별표 1] 목마다 다르게 처분하고
+#:    나머지는 「그 밖에 → 시정명령」이다. 그래서 그 유형은 근거 인용의 목(`annex1`)이 맞는 행만 쓰고, 없으면 R1 이다(D-308 ⑥).
+#:    ⛔ 유형 max 로 접으면 보통의 과장 문구에 「영업정지 수준」이 붙는다 — 근거 없는 등급이다(D-305 · D-130).
+MOK_AXIS = "013475"
+MOK_TYPES = frozenset(
+    {
+        Violation.거짓_과장,
+        Violation.소비자_기만,
+        Violation.후기_체험기_기만,
+        Violation.비방광고,
+        Violation.부당_비교광고,
+    }
+)
+#: 목을 못 맞힐 때의 하한 — 별표7 블록 1 거) · 블록 3 카) · 블록 4 2)다) 「그 밖에 … 부당한 표시ㆍ광고 → 시정명령」 `[문헌]`
+OTHERWISE = Risk.R1
+_ANNEX1 = re.compile(r"^[4-7]\.[가-하]$")
+#: 식품표시광고법(법률) ID — 근거 인용의 법. 처분 원천(시행규칙 013475)과 다른 ID 다
+FOOD_ACT = "013094"
+
 #: D-255 — 범위 밖 유형은 하한 행을 두지 않는다(넣으면 「하한이 있다」가 확정처럼 읽힌다)
 OUT_OF_SCOPE = {Violation.추천_보증_뒷광고}
 
@@ -170,6 +189,14 @@ def lint(spec: dict[str, Any]) -> list[str]:
         for f in ("quote", "first"):
             if not r.get(f):
                 bad.append(f"{rid} {f} 가 비었다 — 원문 대조를 못 한다")
+        mok_row = src_law(spec, r) == MOK_AXIS and r.get("type") in {v.value for v in MOK_TYPES}
+        if mok_row and not isinstance(r.get("annex1"), list):
+            bad.append(f"{rid} 식품 4~7호 행에 annex1(별표1 목 목록)이 없다 — 목 단위 하한 (D-310)")
+        if not mok_row and "annex1" in r:
+            bad.append(f"{rid} annex1 은 식품 4~7호 행에만 — 목으로 갈리지 않는 행이다 (D-310)")
+        for code in r.get("annex1") or []:
+            if not _ANNEX1.match(str(code)):
+                bad.append(f"{rid} annex1 꼴이 아니다 {code!r} — `4.마` 처럼")
         if "verified_by" in r or "reviewed_by" in r:
             bad.append(f"{rid} 행에 서명 칸이 있다 — 서명 자리는 `signoff` 하나다 (D-309)")
     for p in spec.get("penal") or []:
@@ -189,6 +216,40 @@ def lint(spec: dict[str, Any]) -> list[str]:
     if (v or rv) and not so.get("sha"):
         bad.append("signoff 에 이름은 있는데 판 sha 가 없다 — 무엇에 서명했는지 모른다 (D-309)")
     return bad
+
+
+def src_law(spec: dict[str, Any], r: dict[str, Any]) -> str | None:
+    return ((spec.get("sources") or {}).get(r.get("src")) or {}).get("law_id")
+
+
+def annex1_code(cite: str) -> str | None:
+    """근거 인용 → [별표 1] 목 코드(`4.마`). 식품표시광고법 4~7호의 목 인용만 · 그 밖에는 None."""
+    from collect import statute  # noqa: PLC0415
+
+    try:
+        law, _jo, _hang, ho, mok = statute.parse(cite)
+    except ValueError:
+        return None
+    return f"{ho}.{mok}" if law == FOOD_ACT and 4 <= ho <= 7 and mok else None
+
+
+def floor_of(
+    spec: dict[str, Any], vtype: str, law_id: str, cites: list[str], *, signed_only: bool = True
+) -> tuple[Risk | None, list[str]]:
+    """(유형 · 처분 원천 법 · 근거 인용) → (하한, 근거 행 id). 하한이 없으면 (None, [])."""
+    if signed_only and signature(spec) is None:
+        return None, []
+    rows = [r for r in spec.get("rows") or [] if r["type"] == vtype and src_law(spec, r) == law_id]
+    if law_id == MOK_AXIS and Violation(vtype) in MOK_TYPES:
+        codes = {c for c in map(annex1_code, cites) if c}
+        rows = [r for r in rows if codes & set(r.get("annex1") or [])]
+        if not rows:
+            return OTHERWISE, ["그 밖에(별표7)"]
+    if not rows:
+        return None, []
+    order = list(Risk)
+    best = max(rows, key=lambda r: order.index(KIND_RISK[r["kind"]]))
+    return KIND_RISK[best["kind"]], [r["id"] for r in rows]
 
 
 def plan_sha(spec: dict[str, Any]) -> str:
@@ -327,10 +388,35 @@ def floor_by_type(spec: dict[str, Any], signed_only: bool = True) -> dict[str, d
         return out
     for r in spec.get("rows") or []:
         law = spec["sources"][r["src"]]["law_id"]
+        if law == MOK_AXIS and Violation(r["type"]) in MOK_TYPES:
+            continue
         cur = out.setdefault(r["type"], {}).get(law)
         risk = KIND_RISK[r["kind"]]
         if cur is None or order.index(risk) > order.index(Risk(cur)):
             out[r["type"]][law] = risk.value
+    for t in sorted(MOK_TYPES, key=lambda v: v.value):
+        codes = sorted(
+            {
+                c
+                for r in spec.get("rows") or []
+                if r["type"] == t.value and src_law(spec, r) == MOK_AXIS
+                for c in r.get("annex1") or []
+            }
+        )
+        top = max(
+            (
+                list(Risk).index(KIND_RISK[r["kind"]])
+                for r in spec.get("rows") or []
+                if r["type"] == t.value and src_law(spec, r) == MOK_AXIS
+            ),
+            default=None,
+        )
+        named = (
+            f"{' · '.join(codes)} → 최대 {list(Risk)[top].value} · "
+            if codes and top is not None
+            else ""
+        )
+        out.setdefault(t.value, {})[MOK_AXIS] = f"목 단위({named}그 밖에 {OTHERWISE.value})"
     return out
 
 
