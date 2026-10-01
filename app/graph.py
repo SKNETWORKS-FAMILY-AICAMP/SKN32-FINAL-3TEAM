@@ -661,8 +661,10 @@ def merge_laws(state: CoreState) -> dict[str, Any]:
 #: 🆕 2026-10-01 (W4 · D-273 결정 3) — 위반 유형 → **불가 사유**(A 자격형 · B 실증형 · C 절대형 · D-59).
 #:    출처 `[문헌]` — `docs/ohb/sanction_rule_초안_2026-09-16.md` §6(별표 1 각 목의 단서 · 문언). D-273 이 이 표를 전제로 결정 3 을 세웠다.
 #: 🔴 **표에 없는 유형은 확정하지 않는다 — 보류다** (D-273 「사유를 못 정하면 보류」 · D-72).
-#:    ⬜ D-273 의 ⬜ 셋(`후기_체험기_기만` · `추천_보증_뒷광고` · `비방광고`)과 `기능성화장품_오인`(초안 표에 없다)이 여기 없다 — 판정 대기.
+#:    ⬜ D-273 의 ⬜ 둘(`후기_체험기_기만` · `추천_보증_뒷광고`)과 `기능성화장품_오인`(초안 표에 없다)이 여기 없다 — 판정 대기.
 #:    들어올 자리가 이 표다 (D-192). ⛔ 「C 에 가깝다」는 초안 문구로 채우지 않는다.
+#: 🔄 2026-10-01 (D-304) — `비방광고` = **B** · 실증 분기의 상한은 **R0 아래로 못 간다**(「불리한 사실만 골라 비방」은 사실이어도
+#:    남는다 · 표시광고 고시). 상한은 실증 분기(`SubstBranch.substantiated_max`)가 싣는다 — 하한(W5)이 선 뒤에 만든다.
 INFEASIBILITY_OF: dict[Violation, Infeasibility] = {
     Violation.질병_예방치료_표방: Infeasibility.C,
     Violation.의약품_오인: Infeasibility.C,
@@ -671,6 +673,7 @@ INFEASIBILITY_OF: dict[Violation, Infeasibility] = {
     Violation.소비자_기만: Infeasibility.B,
     Violation.부당_비교광고: Infeasibility.B,
     Violation.실증책임_위반: Infeasibility.B,
+    Violation.비방광고: Infeasibility.B,  # D-304 — 실증 분기 상한 ≥ R1
 }
 
 #: 사유가 여럿이면 **더 막힌 쪽** — 종착 우선순위(증명서 A·C > 지시 B · D-268)와 같은 순서다.

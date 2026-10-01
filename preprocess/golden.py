@@ -11,7 +11,9 @@
 
     {"id":…, "text":…, "근거":[…], "labels":[…], "unit":"문장|낱말",
      "origin":"real|injected|approved", "provenance":…, "redistributable":…,
-     "split":"train|test_sentence"}
+     "split":"train|test_sentence", "품목":"식품|건기식|화장품|null"}
+
+🆕 2026-10-01 (D-306) — `품목` 은 **원천으로 정한 품목**이다(`CATEGORY_OF_SOURCE`). null 은 미상 — 무조건부로만 잰다.
 
 🆕 **`근거` 가 라벨의 정본이다** (2026-09-24 · D-282 · D-237 집행) — `collect.statute.cite` 꼴의 조문 인용 목록.
    `labels` 는 거기서 계산한 파생 유형이다. 둘이 어긋난 행이 하나라도 있으면 **쓰지 않고 멈춘다** (`check_basis`).
@@ -62,6 +64,25 @@ from preprocess.text import FOOTNOTE
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
 #: 🆕 2026-09-30 (판정 J1) — 식약처 인정서가 원천인 행(승인 문구 · 섭취 주의사항). origin 이 `approved` 다 — 계보가 G3 · 재배포 가능
 HF_SOURCES = ("mfds_hf_ingredient_board", "mfds_hf_individual")
+
+#: 🆕 2026-10-01 (D-306) — **원천 → 품목**. 골든 행의 `품목` 칸(조건부 평가 · 기획서 6-3 「조건부 / 무조건부 병기」).
+#:    값은 계약의 `Category` 값이다(`app.contracts.Category` — 게이트가 대조한다 · D-99).
+#:    출처 `[관행]` — 원천이 품목 하나만 다룬다(해설서 = 특수용도식품 · 화장품 질의응답집 · 건기식 원료 인정 두 원천).
+#: 🔴 **표에 없는 원천은 `None`(미상)이다** — 공정위 결정문은 결정문마다 상품이 달라 원천 이름으로 못 정한다 ·
+#:    사례집도 품목이 섞였다. ⛔ 지어내지 않는다 — 미상 행은 무조건부(세 법)로만 잰다 (D-220 · D-229 ⑥)
+CATEGORY_OF_SOURCE: dict[str, str] = {
+    "mfds_special_use_guide": "식품",
+    "mfds_cosmetic_ad_qa": "화장품",
+    "mfds_hf_ingredient_board": "건기식",
+    "mfds_hf_individual": "건기식",
+}
+
+
+def category_of(provenance: str) -> str | None:
+    """골든 행의 품목 — 원천으로만 정한다. 모르면 None (D-306)."""
+    return CATEGORY_OF_SOURCE.get(provenance)
+
+
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
 OUT = pathlib.Path("data/derived/golden/golden.jsonl")
 
@@ -495,6 +516,11 @@ def build() -> tuple[list[dict], dict]:
     before = len(kept)
     kept = [r for r in kept if not (r["split"] == "train" and overlap_key(r["text"]) in test_neg)]
     stat["음성겹침_학습제외"] = before - len(kept)
+
+    # 🆕 2026-10-01 (D-306) — 품목 칸. **칸은 늘 있다** — 미상은 `None` 으로 적는다(칸이 없는 것과 「모른다」를 가른다 · D-220)
+    for r in kept:
+        r["품목"] = category_of(r["provenance"])
+    stat["품목_미상"] = sum(r["품목"] is None for r in kept)
 
     check_basis(kept)
 

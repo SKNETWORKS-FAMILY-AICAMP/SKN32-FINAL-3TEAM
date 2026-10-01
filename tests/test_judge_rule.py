@@ -103,14 +103,13 @@ def test_사유가_여럿이면_더_막힌_쪽이다() -> None:
     ("vt", "cite"),
     [
         ("후기_체험기_기만", "013094:제8조제1항제5호|다목"),
-        ("비방광고", "002011:제3조제1항제4호"),
         ("기능성화장품_오인", "002015:제13조제1항제2호"),
         # 인용이 유형을 못 주면(식품 9호) 사전 칸의 유형을 쓴다 — 뒷광고는 인용으로 갈 호가 없다(D-255 범위 밖)
         ("추천_보증_뒷광고", "013094:제8조제1항제9호"),
     ],
 )
 def test_불가_사유를_못_정한_유형은_확정하지_않는다(vt: str, cite: str) -> None:
-    """⬜ D-273 의 ⬜ 셋과 표에 없는 유형 — 판정이 내려오면 `INFEASIBILITY_OF` 에 들어온다."""
+    """⬜ D-273 의 ⬜ 둘과 표에 없는 유형 — 판정이 내려오면 `INFEASIBILITY_OF` 에 들어온다. 비방은 D-304 로 B."""
     assert Violation(vt) not in INFEASIBILITY_OF
     s = _one(_state("체험 후기", [DictHit("체험", vt, (cite,), (0, 2))]))
     assert s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf
@@ -290,3 +289,51 @@ def test_그래프_평가는_DB_사전이_파일과_다르면_멈춘다() -> Non
             eg.check_dict(Cur(), p)
         with pytest.raises(SystemExit, match="없다"):
             eg.check_dict(Cur(), pathlib.Path(td) / "none.jsonl")
+
+
+@pytest.mark.gate
+def test_비방은_실증형이다() -> None:
+    """🆕 2026-10-01 (D-304) — 비방 = B. 기록되는 판정은 실증 못한 경우(D-263 ①) · 실증 분기 상한은 R1 이상(하한 W5 뒤)."""
+    s = _one(
+        _state(
+            "경쟁사 제품은 효과 없음",
+            [DictHit("효과없음", None, ("002011:제3조제1항제4호",), (0, 4))],
+        )
+    )
+    assert s.verdict is Verdict.confirmed and s.violations == [Violation.비방광고]
+    assert s.infeasibility is Infeasibility.B
+
+
+@pytest.mark.gate
+def test_골든_품목은_계약의_품목_값이고_모르면_미상이다() -> None:
+    """🆕 2026-10-01 (D-306) — 원천 → 품목 표의 값이 계약 `Category` 밖이면 조건부 평가가 그 행에서 죽는다 (D-99)."""
+    from app.contracts import Category
+    from preprocess.golden import CATEGORY_OF_SOURCE, category_of
+
+    assert set(CATEGORY_OF_SOURCE.values()) <= {c.value for c in Category}
+    assert category_of("ftc_decisions_body") is None, (
+        "결정문은 원천으로 품목을 못 정한다 — 지어내지 않는다"
+    )
+    assert category_of("mfds_cosmetic_ad_qa") == "화장품"
+
+
+@pytest.mark.gate
+def test_조건부_평가는_품목을_아는_행만_품목을_넘겨_돈다() -> None:
+    """🆕 2026-10-01 (D-306) — 품목 칸이 없는 판(재동결 전)이면 멈춘다 · 무조건부로 조용히 바꾸지 않는다 (D-220)."""
+    from app.contracts import Category, ProductContext
+    from scripts import eval_graph as eg
+
+    rows = [{"id": "a", "text": "가", "품목": "화장품"}, {"id": "b", "text": "나", "품목": None}]
+    assert [r["id"] for r in eg.conditional_rows(rows)] == ["a"]
+    assert eg.product_of(rows[0], True).category is Category.화장품
+    assert eg.product_of(rows[0], False) == ProductContext()
+    with pytest.raises(SystemExit, match="품목"):
+        eg.conditional_rows([{"id": "c"}])
+    seen = []
+    eg.run(
+        rows[:1],
+        lambda t, p: seen.append(p) or {"sentences": [], "outcome": None},
+        0,
+        conditional=True,
+    )
+    assert seen[0].category is Category.화장품

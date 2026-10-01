@@ -15,7 +15,9 @@
 🔴 **채점 규칙은 판정기 B 와 한 곳이다** — `scored` · `truth_types` · `truth_ho` · `lawful_report` · D-40 문턱을
    `scripts/eval_rule.py` 에서 가져온다 (D-99). 판정기 B 와 그래프의 수가 같은 자로 재진다.
 🚨 **봉인 평가셋으로 규칙을 고르지 않는다** (D-175) — 이 수는 보고용이다. 규칙 · 문턱을 이 수에 맞춰 고치면 누수다.
-🚨 조건부 평가(품목을 아는 경우)는 **측정 불가** — 골든셋에 품목 칸이 없다(판정 대기). 무조건부(품목 미확정 · 세 법)만 잰다.
+🔄 2026-10-01 (D-306) — `--conditional` 이면 **조건부**(골든 `품목` 칸을 제품 정보로 넘긴다 · 품목을 아는 행만) · 기본은
+   **무조건부**(품목 미확정 · 세 법). 기획서 6-3 「조건부 / 무조건부 병기」 — 두 번 돌려 나란히 적는다.
+   🔴 골든에 `품목` 칸이 없으면(재동결 전 판) `--conditional` 은 멈춘다 — 무조건부로 조용히 바꾸지 않는다 (D-220).
 🚨 게이트가 아니다 — 답이 기기마다 다르다(`data/**` 미커밋 · D-19). 수는 원장에 기기 · 커밋 · 골든 sha 와 함께 적는다 (D-178).
 """
 
@@ -34,7 +36,7 @@ from typing import Any
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from app import graph as g  # noqa: E402
-from app.contracts import ProductContext, SentenceJudgment, Verdict  # noqa: E402
+from app.contracts import Category, ProductContext, SentenceJudgment, Verdict  # noqa: E402
 from collect import statute  # noqa: E402
 from preprocess.golden import lawful_kind  # noqa: E402
 from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99)
@@ -195,7 +197,27 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     return out
 
 
-def report(s: dict[str, Any]) -> None:
+def conditional_rows(rows: list[dict]) -> list[dict]:
+    """조건부 평가 행 — `품목` 을 아는 행만. 🔴 칸 자체가 없는 판이면 멈춘다(재동결 전 골든 · D-220)."""
+    if rows and not all("품목" in r for r in rows):
+        raise SystemExit(
+            "🔴 골든에 `품목` 칸이 없다 — 재동결 전 판이다(D-306). 조건부 평가를 못 한다\n"
+            "  먼저(정본): uv run python launcher.py golden --write"
+        )
+    return [r for r in rows if r["품목"]]
+
+
+def product_of(r: dict, conditional: bool) -> ProductContext:
+    """행의 제품 정보 — 무조건부면 빈 것(세 법) · 조건부면 골든 `품목`. 🚨 인정 여부는 모른다(보수 전제 · D-263 ①)."""
+    return ProductContext(category=Category(r["품목"])) if conditional else ProductContext()
+
+
+def report(s: dict[str, Any], conditional: bool = False) -> None:
+    print(
+        "  [조건부 — 품목을 아는 행 · 골든 `품목`]"
+        if conditional
+        else "  [무조건부 — 품목 미확정 · 세 법]"
+    )
     print(
         f"그래프 평가 — 평가셋 {s['rows']}행 (채점 {s['scored_rows']} · 채점 밖 M · D {s['unscored_rows']})"
     )
@@ -220,7 +242,10 @@ def report(s: dict[str, Any]) -> None:
         f"(판정을 내린 행 {s['committed']} / 채점 {s['scored_rows']})"
     )
     print_lawful(s["lawful"])
-    print("\n  🔴 조건부 평가(품목을 아는 경우)는 측정 불가 — 골든셋에 품목 칸이 없다")
+    if not conditional:
+        print(
+            "\n  ⓘ 조건부(품목을 아는 경우)는 `--conditional` 로 따로 잰다 (D-306 · 기획서 6-3 병기)"
+        )
     print("  🚨 봉인 평가셋이다 — 이 수에 맞춰 규칙 · 문턱을 고르지 않는다 (D-175)")
 
 
@@ -274,18 +299,22 @@ def check_dict(cur: Any, path: pathlib.Path = DICT_FILE) -> dict[str, Any]:
     return {"dict_sha": _sha12(path), "dict_entries": d["file"]}
 
 
-def stub_runner() -> Callable[[str], dict[str, Any]]:
+def stub_runner() -> Callable[[str, ProductContext], dict[str, Any]]:
     """DB 없이 — 스텁 한 바퀴(`run_review_stub`). 사전을 못 훑어 전부 미판정이다 — 배선만 본다."""
-    return lambda text: g.run_review_stub(text)[0]
+    return lambda text, product: g.run_review_stub(text)[0]
 
 
 def run(
-    rows: Iterable[dict], runner: Callable[[str], dict[str, Any]], every: int = 100
+    rows: Iterable[dict],
+    runner: Callable[[str, ProductContext], dict[str, Any]],
+    every: int = 100,
+    *,
+    conditional: bool = False,
 ) -> list[dict]:
     preds = []
     t0 = time.perf_counter()
     for k, r in enumerate(rows, 1):
-        preds.append(predict(runner(r["text"])))
+        preds.append(predict(runner(r["text"], product_of(r, conditional))))
         if every and k % every == 0:
             print(f"  … {k}행 · {time.perf_counter() - t0:.0f}초", file=sys.stderr)
     return preds
@@ -297,15 +326,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--provenance")
     ap.add_argument("--stub", action="store_true", help="DB 없이 배선만")
     ap.add_argument("--out", type=pathlib.Path, help="수 · 행 예측을 JSON 으로")
+    ap.add_argument(
+        "--conditional",
+        action="store_true",
+        help="조건부 — 골든 품목을 제품 정보로 (품목을 아는 행만)",
+    )
     a = ap.parse_args(argv)
     rows = load_rows(provenance=a.provenance)
+    if a.conditional:
+        rows = conditional_rows(rows)
     if a.limit:
         rows = rows[: a.limit]
     #: 판 표지 — 원장에 수와 함께 적는다 (D-178). 🔴 실제 실행은 DB 사전이 파일과 같을 때만 돈다(`check_dict`)
-    stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN)}
+    stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN), "conditional": a.conditional}
     t0 = time.perf_counter()
     if a.stub:
-        preds = run(rows, stub_runner())
+        preds = run(rows, stub_runner(), conditional=a.conditional)
     else:
         from app.db import pg_connect  # noqa: PLC0415 — DB 가 없어도 --stub 은 돈다
 
@@ -314,11 +350,13 @@ def main(argv: list[str] | None = None) -> int:
             stamp |= check_dict(cur)
             cfg = {"configurable": {"conn": cur}}
             preds = run(
-                rows, lambda t: review.invoke({"text": t, "product": ProductContext()}, config=cfg)
+                rows,
+                lambda t, p: review.invoke({"text": t, "product": p}, config=cfg),
+                conditional=a.conditional,
             )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
-    report(s)
+    report(s, a.conditional)
     print(
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"
         f" · " + " · ".join(f"{k} {v}" for k, v in stamp.items())
