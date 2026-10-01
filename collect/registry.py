@@ -335,6 +335,19 @@ def redistributable(source_id: str) -> bool:
     return bool(spec(source_id).get("redistributable"))
 
 
+def team_shareable(source_id: str) -> bool:
+    """🆕 2026-10-01 (D-303) — **팀 비공개 저장소(받은편지함 · 공유 저장소)에 둘 수 있는가.**
+
+    ★ 개발을 위한 팀 내부 공유는 배포가 아니다(D-249 ⑤ — 사람을 지정한 팀 비공개 Drive 는 공개가 아니다).
+       그래서 `NOREDIST`(공개 배포 금지 · D-71)가 곧 「팀 Drive 금지」는 아니다.
+    🚨 그러나 내부 공유가 되는지는 **원천의 이용 조건**이 정한다 — AI Hub 처럼 승인받은 개인 밖 제공을 막는 원천이 있다.
+       그래서 일괄로 풀지 않고 원천마다 `internal_share: true` 와 근거(`internal_share_basis`)를 등재에 적는다(2인 확인).
+    ⛔ 칸이 없으면 막는 쪽 — 재배포 가능 원천만 통과 (D-220).
+    """
+    s = spec(source_id)
+    return bool(s.get("redistributable")) or s.get("internal_share") is True
+
+
 def mark_if_complete(source_id: str, *, saved: int, partial: bool) -> bool:
     """수집이 끝난 뒤 `collected_at` 을 찍을지 — 찍었으면 True. 🆕 2026-09-21 (전수 재검토 I8).
 

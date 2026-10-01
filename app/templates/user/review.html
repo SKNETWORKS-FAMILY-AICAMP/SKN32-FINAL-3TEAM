@@ -166,6 +166,10 @@
         <span class="rv-count">{{ copies|length }}건 · 여러 문구를 한 번에 검수할 수 있어요 · 문구당 최대 {{ max_text_len }}자</span>
       </h2>
       {% if notice %}<p class="rv-toast" role="status">{{ notice }}</p>{% endif %}
+      {# 🔴 2026-10-01 — 비회원 검수는 이력에 쌓이지 않는다 (D-69). 검수는 그대로 된다 — 로그인 벽이 아니다 (D-66) #}
+      {% if not me %}
+      <p class="rv-note">로그인하지 않고 검수한 문구는 <b>이력에 남지 않아요</b> — 남기려면 먼저 <a href="/u/login">로그인</a>하세요.</p>
+      {% endif %}
       {% for c in copies %}
       <div class="rv-copy">
         <div class="rv-copy-bar">

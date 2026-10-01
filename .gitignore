@@ -35,6 +35,7 @@ logs/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-*/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
@@ -99,3 +100,6 @@ docs/psj/e2e_prototype/copylane-encoder-koelectra-final/
 docs/psj/e2e_prototype/copylane-encoder-koelectra-final*.zip
 copylane-encoder-koelectra-final*.zip
 *.safetensors
+
+# lse sLLM — 재배포 불가 원천(공정위 의결서 인용 등)과 그걸 담은 실험 결과. 공개 저장소에 올리지 않는다 (2026-10-01)
+docs/lse/_private/

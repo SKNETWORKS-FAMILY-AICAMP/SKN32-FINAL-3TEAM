@@ -497,6 +497,8 @@ def _core_judge(text: str):  # noqa: ANN202
     try:
         return "ok", core_judge(JudgeRequest(text=text))
     except HTTPException as e:
+        # 🔄 2026-10-01 (ksr 병합) — ksr 도 같은 503 수정을 따로 했다(`in (501, 503)` → pending). ohb 의 갈래를 둔다:
+        #    501 = 엔진 미착수 · 503 = 연결 실패 — 둘을 합치면 아래 `down` 이 닿지 않는 줄이 된다(자동 병합이 그렇게 만들었다)
         if e.status_code == 501:
             return "pending", None
         if e.status_code == 503:
@@ -811,7 +813,9 @@ def _owned_judgments(owner_id: uuid.UUID) -> Select:
     """🔴 **내 판정만** (P1-5) — `judgment.doc_id` → `work_doc.owner_id` 로 거른다.
 
     홈 집계·최근 이력·이력 목록이 모두 이것에서 출발한다 — 소유자 조건을 화면마다 따로 적지 않는다.
-    ⬜ 비회원 문서(`owner_id` NULL · `session_id` 로만 묶임, D-129)는 여기 안 걸린다 — 로그인 전에는 이력을 안 보여 준다.
+    🔴 2026-10-01 — **비회원 검수는 이력에 쌓이지 않는다** (D-69 「비회원 … 이력 없음」 · 권소라 결정).
+       비회원 문서(`owner_id` NULL · `session_id` + `expires_at`, D-129)는 여기 안 걸린다 — 그 키는 **지울 키**이지 이력 키가 아니다.
+    ⛔ `session_id` 로 이력을 읽거나, 로그인·가입할 때 그 세션의 문서에 `owner_id` 를 채워 넣지 않는다 — 이력은 로그인한 뒤 검수한 것부터다.
     """
     return (
         select(Judgment)

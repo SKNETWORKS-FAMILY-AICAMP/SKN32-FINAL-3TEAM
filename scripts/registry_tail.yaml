@@ -38,22 +38,7 @@
   #    🚨 G0 · 전 용도 deny · hold — 회신이 오기 전에는 받지 않는다 (D-72).
   #       회신이 오면 그 메일을 근거로 등급·용도를 2인 확인으로 정하고, 거절이면 blocked 로 옮긴다.
   #    한국식품산업협회(ad.kfia.or.kr) 문의는 이미 blocked 에 있다 — 그 줄 reason 에 메일 발송을 적었다.
-  inc_ad_decisions:
-    name: 인터넷신문 광고심의결정문 (인터넷신문윤리위원회)
-    layer: "1층 판정라벨"
-    grade: G0
-    use: {U1: deny, U2: deny, U3: deny, U4: deny}
-    constraints: [PREAPPROVAL, NOREDIST]
-    redistributable: false
-    value: A
-    cost: free
-    status: hold
-    note: "📧 2026-09-18 이용 승인 요청 메일(권소라 → inc@inc.or.kr) — 범위: 공개 결정문 전체 200건(2026 제15차 · 08-13 기준 · 기사심의결정문 제외) · 용도: 학습·평가 한정(색인·인용은 요청하지 않았다) · 문의: 승인 유효 범위 · 소요 기간 · 영리 활용 · 가공 데이터셋 배포 · 출처 표시 형식. 📩 2026-09-22 15:59 중간 회신(광고심의 담당 연구원 · ads@inc.or.kr) — 이용 목적·범위에 내부 검토가 필요하다 · 검토가 끝나면 다시 회신 → ⏳ 최종 회신 대기. 회신이 오면 — 공정위·식약처가 아닌 기관의 실사례(출처 분리 홀드아웃) · 의약품_오인 · 식품표시광고법 2호 평가 보충"
-    collected_at: null
-    decided_at: null
-    decided_by: null
-    reviewed_by: null
-
+  #    🔄 2026-09-30 — inc_ad_decisions(인터넷신문윤리위원회)는 이용 승인 회신을 받아 data.js 로 올렸다(2인 확인 · manual).
   kocsc_ad_review:
     name: 방송미디어통신심의위원회 광고심의 자료 (광고심의소위원회 회의록 482 · 심의의결서 상품판매방송 166 · 제재 보도자료 약 25)
     layer: "1층 판정라벨"

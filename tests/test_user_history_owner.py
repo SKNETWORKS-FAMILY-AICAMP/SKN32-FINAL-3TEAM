@@ -94,3 +94,37 @@ def test_로그아웃이면_판정을_읽지_않고_로그인을_안내한다(re
     assert not rec.sql, f"🔴 로그아웃인데 판정을 읽었다 — {rec.sql}"
     assert 'href="/u/login"' in r.text, "🔴 로그인 안내가 없다"
     assert "아직 판정 기록이 없다" not in r.text, "🔴 못 본 것을 「기록 없음」으로 그렸다"
+    assert "이력에 남지 않아요" in r.text, "🔴 비회원 검수가 이력에 안 쌓인다는 안내가 없다 (D-69)"
+
+
+@pytest.mark.gate
+def test_비회원_검수는_이력에_쌓이지_않는다(
+    rec: _Recorder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🆕 2026-10-01 — 검수 화면은 비회원에게만 「이력에 남지 않아요」를 알린다 (D-69 · 로그인 벽 아님 D-66)."""
+    r = TestClient(app).get("/u/review")
+    assert r.status_code == 200, f"🔴 비회원 검수를 막았다(D-66) — {r.status_code}"
+    assert "이력에 남지 않아요" in r.text, "🔴 비회원에게 이력 안내가 없다"
+
+    monkeypatch.setattr(
+        user_router,
+        "_nav_user",
+        lambda *_a: SimpleNamespace(
+            name="테스트",
+            org=None,
+            initials="테스",
+            verified=True,
+            notifs=[],
+            unread=0,
+            cs_unread=False,
+        ),
+    )
+    r = TestClient(app).get("/u/review")
+    assert "이력에 남지 않아요" not in r.text, "🔴 로그인한 사람에게 비회원 안내를 그렸다"
+
+
+@pytest.mark.gate
+def test_판정_소유자_조건은_세션으로_넓히지_않는다() -> None:
+    """🆕 2026-10-01 — `session_id` 로 이력을 읽는 길을 열지 않는다. 비회원 문서의 그 키는 지울 키다 (D-129)."""
+    sql = str(user_router._owned_judgments(_ME).compile(dialect=postgresql.dialect()))
+    assert "owner_id" in sql and "session_id" not in sql, f"🔴 이력 조건에 세션이 섞였다 — {sql}"

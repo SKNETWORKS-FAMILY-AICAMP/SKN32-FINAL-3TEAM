@@ -203,3 +203,25 @@ def test_랜딩은_governor_로그인이_아니라_일반_회원_로그인으로
     body = TestClient(app).get("/u/landing").text
     assert 'href="/u/login"' in body
     assert 'href="/u/signup"' in body
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(("code", "want"), [(501, "pending"), (503, "down")])
+def test_검수_BFF_는_501_과_503_을_가른다(
+    monkeypatch: pytest.MonkeyPatch, code: int, want: str
+) -> None:
+    """🆕 2026-10-01 (ksr 병합) — 501 = 엔진 미착수 · 503 = 엔진 연결 실패. 둘을 한 갈래로 합치지 않는다.
+
+    ⛔ ohb 와 ksr 가 같은 503 수정을 따로 했고, 자동 병합이 `in (501, 503)` → pending 을 앞에 두어
+       503 → down 줄이 **닿지 않는 줄**이 됐다(충돌 표시 없이). 화면 그림은 같아도 상태는 넘긴다 (D-147).
+    """
+    from fastapi import HTTPException  # noqa: PLC0415
+
+    import app.api  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    def boom(_req):  # noqa: ANN001, ANN202
+        raise HTTPException(code)
+
+    monkeypatch.setattr(app.api, "judge", boom)
+    assert user_router._core_judge("문구") == (want, None)

@@ -126,10 +126,12 @@ def secret_in(data: bytes) -> str | None:
 
 
 def _noredist(source_id: str) -> bool:
+    """받은편지함(팀장 Drive · 「제한됨」)에 못 올리는 원천인가. 🔄 2026-10-01 (D-303) — 공개 배포 금지가 아니라
+    **팀 내부 공유 금지**로 가른다(`registry.team_shareable`). `data_store._noredist_seen` 과 같은 함수다 (D-99)."""
     from collect import registry  # noqa: PLC0415
 
     try:
-        return not registry.redistributable(source_id)
+        return not registry.team_shareable(source_id)
     except registry.RegistryError:
         return True  # 🚨 모르는 원천은 막는 쪽 (D-220)
 
