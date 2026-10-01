@@ -109,6 +109,9 @@ def rule_check(r: dict, body: str | None) -> list[str]:
     if "도움" in s and "도움" not in body:
         # 원문에 완화 표현이 있을 때만 — 「버섯추출물 함유」 같은 사실 표시에는 처음부터 없다
         p.append("완화 표현 빠짐")
+    if "도움" not in s and "도움" in body:
+        # 🆕 10-01 — 사실 표시(「차 제품」)에 「도움을 줄 수 있습니다」를 붙였다 · 없던 효능 주장이다
+        p.append("없던 주장 추가")
     return p
 
 
