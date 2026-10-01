@@ -43,6 +43,7 @@ sys.path.insert(0, str(ROOT))
 
 from build_persona_inputs import clean, split_claims  # noqa: E402
 from stage_gate import check as gate  # noqa: E402
+from stage_gate import ingredient_changed  # noqa: E402
 
 OUT = HERE / "synth_stage1.jsonl"
 PROMPT_VERSION = "synth-v1-2026-10-01"
@@ -196,7 +197,7 @@ def main() -> None:
         seeds_by_id = {x["seed"]: x for x in map(json.loads, (HERE / "synth_seeds.jsonl").open(encoding="utf-8"))}
         written = [json.loads(line) for line in (HERE / args.ingest).open(encoding="utf-8") if line.strip()]
         rows, seen_inputs = [], set()
-        dropped = {"golden": 0, "정답표": 0, "중복": 0, "형식": 0}
+        dropped = {"golden": 0, "정답표": 0, "중복": 0, "형식": 0, "원료명 불일치": 0}
         answer_inputs_ = answer_inputs
         for w in written:
             sd = seeds_by_id[w["seed"]]
@@ -212,6 +213,10 @@ def main() -> None:
                     dropped["정답표"] += 1
                 elif k in seen_inputs:
                     dropped["중복"] += 1
+                elif "body" in sd["target"] and ingredient_changed(text, sd["target"]["body"]):
+                    # 🆕 10-01 — 정답의 원료명이 문구와 다르면(「히알루론산」 → 정답 「히알우론산 HA-LF-P」) 버린다.
+                    #    「원료명을 바꿔 써도 된다」고 가르치게 된다 — v7 이 실제 광고의 원료명에 오타를 낸 원인 후보
+                    dropped["원료명 불일치"] += 1
                 else:
                     seen_inputs.add(k)
                     vt = [sd["target"]["infeasible"]] if "infeasible" in sd["target"] else (w.get("violation_types") or ["거짓_과장"])

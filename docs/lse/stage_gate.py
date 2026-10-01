@@ -97,6 +97,27 @@ def unapproved_claim(s: str) -> str | None:
     return None
 
 
+#: 원료명 자리 — 「○○추출물 함유」 의 ○○. 🚨 「○○은 …에 도움」 의 주어는 보지 않는다 — 고시 공식 원료명
+#:    (「Dimethylsulfone (MSM)은」)을 쓰는 게 정상이라 원문의 짧은 이름과 다르다(학습 정답 84개가 걸렸다)
+INGREDIENT = re.compile(r"([가-힣A-Za-z0-9·\-()]{2,40}?)\s*(?:을|를)?\s*함유")
+#: 원료명이 아니라 일반 낱말인 경우(「제품은」 · 「이 제품은」)
+_GENERIC = {"제품", "이제품", "본제품", "원료", "이원료", "식품", "차", "음료"}
+
+
+def ingredient_changed(original: str, s: str) -> str | None:
+    """🆕 10-01 (v7) — 원료명을 바꿔 썼다(원료명 한 글자 오타 · 원료명 앞부분을 다른 낱말로 잘못 읽음 — 실제 광고 평가셋).
+    고친 문장의 원료명이 원문(띄어쓰기 무시)에 그대로 없으면 그 원료명을 낸다. 일반 낱말은 보지 않는다."""
+    o = dm.norm(original)
+    for m in INGREDIENT.finditer(s):
+        # 괄호 속 공식 영문명(「유비퀴놀(Ubiquinol)」)은 원문에 없어도 된다 — 괄호 밖 이름으로 대조한다
+        name = dm.norm(re.sub(r"\([^)]*\)?", "", m.group(1)))
+        if len(name) < 3 or name in _GENERIC or any(ch.isdigit() for ch in name[:1]):
+            continue
+        if name not in o:
+            return m.group(1).strip()
+    return None
+
+
 @cache
 def dict_entries() -> tuple[dm.Entry, ...]:
     """금지 표현 사전 — **단독판정 자격** 항목만(D-156). 파일이 없으면 빈 사전(경고는 부르는 쪽)."""
@@ -140,4 +161,6 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"노화 주장: {m.group()}")
     if (u := unapproved_claim(s)) is not None:
         why.append(f"인정되지 않은 기능성: {u}")
+    if (g := ingredient_changed(original, s)) is not None:
+        why.append(f"원문에 없는 원료명: {g}")
     return GateResult(not why, tuple(why))
