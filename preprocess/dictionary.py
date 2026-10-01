@@ -142,6 +142,7 @@ def build() -> tuple[list[dict], dict]:
     """
     from preprocess.split import (  # noqa: PLC0415 — 모듈 최상단이면 순환 import
         casebook_basis,
+        casebook_not_ad,
         ho_of,
     )
 
@@ -171,6 +172,11 @@ def build() -> tuple[list[dict], dict]:
         if not statute.types_of(basis):
             continue
         for q in r.get("인용표현") or []:
+            # 🆕 2026-09-30 (판정 J4) — 분할과 **같은 함수**로 광고 표현이 아닌 인용을 뺀다(D-99).
+            #    ⛔ 빼지 않으면 원료명(「글루타치온」)이 5호 단독판정 항목이 된다
+            if casebook_not_ad(str(q), r):
+                stat["사례집_비광고"] = stat.get("사례집_비광고", 0) + 1
+                continue
             n = norm(q)
             if len(n) < MIN_TERM:
                 continue
@@ -194,6 +200,8 @@ def build() -> tuple[list[dict], dict]:
             stat["의결서"] += 1
 
     # 🔴 D-156 — 승인 문장에 그대로 들어 있는 항목을 표시한다
+    #    🔄 2026-09-30 (판정 J1) — 승인 문구는 이제 조건 A(지위에 달림)다. `적법중첩` 은 「지위에 따라 적법일 수 있는 문장 안의 항목」으로
+    #       읽는다 — 단독으로 위반을 내지 않는 동작은 그대로 맞다(분기는 전제가 가른다 · D-263)
     approved = [norm(x) for x in approved_terms(train)]
     rows: list[dict] = []
     for n, e in sorted(entries.items()):
@@ -227,7 +235,10 @@ def main() -> int:
 
     rows, stat = build()
     print(f"사전 항목 **{len(rows):,}종** (정규화 기준 · D-117)")
-    print(f"  들어온 인용 — 사례집 {stat['사례집']}회 · 의결서 {stat['의결서']}회")
+    print(
+        f"  들어온 인용 — 사례집 {stat['사례집']}회 · 의결서 {stat['의결서']}회"
+        f" · 사례집 비광고 인용 뺌 {stat.get('사례집_비광고', 0)} (판정 J4)"
+    )
     print(f"  🔴 평가로 **봉인돼 제외한 문서 {stat['봉인제외']}개** — 사전이 시험지를 외우지 않게")
     if stat["미배정"]:
         print(

@@ -48,6 +48,8 @@ def repo(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Pat
     monkeypatch.setattr(store, "RAW", root / "data" / "raw")
     monkeypatch.setattr(store, "MANIFEST", root / "data" / "manifest.jsonl")
     monkeypatch.setattr(ri, "ROOT", root)
+    # 🆕 2026-09-29 — 병합 전 검사는 브랜치의 레지스트리를 `git show` 로 읽는다. 가짜 레포에는 브랜치가 없으니 실물을 준다
+    monkeypatch.setattr(ri, "_branch_registry", lambda b: _REAL_REGISTRY())
     return root
 
 
@@ -574,6 +576,88 @@ def test_병합_전_검사는_브랜치_원장으로_보고_아무것도_놓지_
     assert not (repo / row["path"]).exists(), "검사가 파일을 놓았다"
     (inbox / "objects" / row["sha256"][:2] / row["sha256"]).unlink()
     assert ri.import_(branch="origin/collector") == 1, "받은편지함에 없는데 통과했다"
+
+
+def _REAL_REGISTRY() -> str:  # noqa: N802
+    from collect import registry
+
+    return registry.REGISTRY.read_text(encoding="utf-8")
+
+
+NEW_SRC = (
+    "probe_new_src"  # 이 작업 트리의 레지스트리에는 없다 — 브랜치가 등재와 수집을 같이 가져온다
+)
+
+
+def _branch_with_new_source(repo, inbox, monkeypatch, *, registered: bool) -> dict:
+    """팀원 브랜치가 원천을 **등재하면서** 수집한 모양 — 원장 줄의 원천은 브랜치 레지스트리에만 있다."""
+    import yaml
+
+    row = _uploaded(repo, inbox, monkeypatch, b'{"a":1}')
+    branch_rows = [{**r, "source_id": NEW_SRC} for r in _rows(repo)]
+    _ledger(repo, [])
+    monkeypatch.setattr(ri, "_branch_ledger", lambda b: branch_rows)
+    monkeypatch.setattr(ri, "_base_ledger", lambda b: [])
+    sources = {NEW_SRC: {"grade": "G3", "redistributable": True}} if registered else {}
+    monkeypatch.setattr(ri, "_branch_registry", lambda b: yaml.safe_dump({"sources": sources}))
+    return row
+
+
+@pytest.mark.gate
+def test_병합_전_검사는_브랜치의_레지스트리로_원천을_판정한다(repo, inbox, monkeypatch) -> None:
+    """🆕 2026-09-29 — 등재와 수집이 같은 브랜치로 오면 병합 전 이 작업 트리에는 그 원천이 없다(ksr 12원천 2,358개).
+
+    ⛔ 종전에는 이 작업 트리의 레지스트리로 판정해 전부 「레지스트리에 없는 원천」이었다.
+    """
+    _branch_with_new_source(repo, inbox, monkeypatch, registered=True)
+    assert ri.import_(branch="origin/collector") == 0
+
+
+@pytest.mark.gate
+def test_브랜치가_새_원천을_등재했어도_받은편지함_검사는_돈다(
+    repo, inbox, monkeypatch, capsys
+) -> None:
+    """🔴 이번 구멍의 본체 — 「모르는 원천」으로 다 걸러지면 받은편지함 · sha · 키 섞임 검사가 **한 파일도 안 돈다**."""
+    row = _branch_with_new_source(repo, inbox, monkeypatch, registered=True)
+    (inbox / "objects" / row["sha256"][:2] / row["sha256"]).unlink()
+    assert ri.import_(branch="origin/collector") == 1, "받은편지함에 없는데 통과했다"
+    out = capsys.readouterr().out
+    assert "받은편지함에 없음" in out, (
+        out
+    )  # 종전 판은 「레지스트리에 없는 원천」 으로 막혀 이 검사가 안 돌았다
+    assert "레지스트리에 없는 원천" not in out
+
+
+@pytest.mark.gate
+def test_브랜치_레지스트리에도_없는_원천은_막는다(repo, inbox, monkeypatch, capsys) -> None:
+    _branch_with_new_source(repo, inbox, monkeypatch, registered=False)
+    assert ri.import_(branch="origin/collector") == 1
+    assert "레지스트리에 없는 원천" in capsys.readouterr().out
+
+
+@pytest.mark.gate
+def test_브랜치_레지스트리를_못_읽으면_멈춘다(repo, inbox, monkeypatch) -> None:
+    """🚨 못 읽었다고 이 작업 트리의 레지스트리로 대신 판정하지 않는다 (D-220)."""
+    _branch_with_new_source(repo, inbox, monkeypatch, registered=True)
+
+    def _fail(b: str) -> str:
+        raise ri.InboxError("못 읽었다")
+
+    monkeypatch.setattr(ri, "_branch_registry", _fail)
+    assert ri.import_(branch="origin/collector") == 1
+    monkeypatch.setattr(ri, "_branch_registry", lambda b: "not_sources: 1\n")
+    assert ri.import_(branch="origin/collector") == 1
+
+
+@pytest.mark.gate
+def test_브랜치_레지스트리는_검사가_끝나면_제자리로_돌아간다() -> None:
+    from collect import registry
+
+    with registry.read_from("sources:\n  probe_x: {grade: G3, redistributable: true}\n"):
+        assert registry.redistributable("probe_x")
+    with pytest.raises(registry.RegistryError):
+        registry.spec("probe_x")
+    assert registry.spec(SRC)  # 이 작업 트리의 레지스트리
 
 
 @pytest.mark.gate

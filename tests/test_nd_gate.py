@@ -93,6 +93,7 @@ EXEMPT = {
     # `--sheet` 는 런처가 ND 소스에서 거부한다(`launcher.extract`)
     "preprocess/mfds_casebook.py": "원천 하나의 추출기",
     "preprocess/mfds_guide.py": "원천 하나의 추출기",
+    "preprocess/ftc_press_old.py": "원천 하나의 추출기(사건 레코드 · 문구 · 라벨을 만들지 않는다)",
     "preprocess/mfds_hf.py": "원천 하나의 추출기",
     "preprocess/mfds_press.py": "원천 하나의 추출기",
     "preprocess/ftc_extract.py": "원천 하나의 추출기",

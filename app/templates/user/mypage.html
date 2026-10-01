@@ -1,13 +1,14 @@
-{# app/templates/user/mypage.html — 마이페이지 · 소유자 ksr (병렬작업 계약 §5)
+{# app/templates/user/mypage.html — 마이페이지 · 소유자 ksr → lse (병렬작업 계약 §5)
 
   ★ 프로토타입의 `data-screen="mypage"` 중 **프로필 · 광고 기본값 · 계정** 셋을 옮겼다
     (ksr, 2026-09-13 — 2026-09-16 lse 셸로 이식).
     ⛔ 포트폴리오 · 구성원 관리 · 결제는 매칭/과금 범위라 뺐다.
-  🚨 **저장할 자리가 없다.** 사용자 계정과 광고 기본값 테이블이 스키마에 없다 —
-     `app/models.py` 의 `app_account` 는 거버넌스 운영자용(`role` 기본값 `governor`)이다.
-     ⛔ 그래서 **저장됐다고 말하지 않는다** (D-147) — 폼은 세우고, 저장이 아직 없다고 적는다.
+  🔄 2026-09-29 (lse) — `user_account` 표가 서서 **프로필 · 동의①② · 계정 끄기는 실제로 저장한다.**
+     ⛔ **광고 기본값(나이·성별·매체·물품)은 아직 저장하지 않는다** — `user_ad_preference` 표가
+        없다(팀장 승인 요청 #7). 그 탭만 종전처럼 「아직 저장되지 않았어요」라고 말한다(D-147).
+     ⛔ 이메일 변경은 범위 밖이다(설계초안 09-22) — 읽기 전용으로만 보여준다.
   🔄 2026-09-16 — "계정" 섹션의 로그아웃 버튼이 `/logout`(governor 전용, 팀장 소유)으로
-     가던 걸 지웠다. 일반 사용자는 그 세션과 무관하다 — 계정 시스템이 서면 같이 온다.
+     가던 걸 지웠다. 일반 사용자는 `/u/logout` 을 따로 쓴다.
   ⬜ 프로필 이미지 업로드는 `multipart/form-data` 가 필요해 **팀장 판정 전까지 만들지 않는다**
      (D-87 · §5) — 파일 입력을 두지 않는다.
 #}{% extends "user/_base.html" %}
@@ -51,7 +52,7 @@
            color: #fff; font-weight: 600; margin-top: .75rem; }
 .mp-hold { border: 1px dashed var(--u-line); border-radius: .75rem;
            padding: .8rem .9rem; color: var(--u-clay); font-size: .85rem; line-height: 1.7; }
-.mp-danger { color: #991b1b; border-color: #fecaca; background: #fef2f2; }
+.mp-danger { color: var(--u-bad-ink); border-color: var(--u-bad-line); background: var(--u-bad-bg); }
 </style>
 {% endblock %}
 {% block user_content %}
@@ -69,18 +70,22 @@
 
 <div class="mp-panel">
 
-{% if saved_attempt %}
+{% if error %}
 <div class="mp-card">
-  <p class="mp-hold">
-    🚨 <b>아직 저장되지 않았어요.</b> 사용자 계정과 광고 기본값을 담을 테이블이 없어서,
-    받은 값을 되돌려 보여드릴 뿐 어디에도 기록하지 않아요.
-    <b>저장됐다고 말하지 않으려고</b> 이렇게 알려드려요.
-  </p>
+  <p class="mp-hold mp-danger">🚨 {{ error }}</p>
+</div>
+{% endif %}
+
+{% if saved %}
+<div class="mp-card">
+  <p class="mp-hold">✓ 저장했어요.</p>
 </div>
 {% endif %}
 
 {% if tab == "profile" %}
 <form class="mp-card" method="post" action="/u/mypage">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <input type="hidden" name="section" value="profile">
   <h2>프로필</h2>
   <p class="mp-note">이름과 소속은 검수 결과를 팀원과 나눌 때 표시돼요.</p>
 
@@ -93,35 +98,28 @@
   </div>
 
   <label for="name">이름</label>
-  <input id="name" name="name" maxlength="40" value="{{ picked.name }}" placeholder="예: 권소라">
+  <input id="name" name="name" maxlength="40" value="{{ picked.name }}" placeholder="예: 권소라" required>
 
-  <label for="email">이메일</label>
-  <input id="email" name="email" type="email" maxlength="120" value="{{ picked.email }}"
-         placeholder="예: sora@example.com">
+  <label for="email-view">이메일</label>
+  <input id="email-view" value="{{ email }}" disabled>
+  <p class="mp-note" style="margin:-.6rem 0 1rem">이메일 변경은 아직 지원하지 않아요.</p>
 
   <label for="org">소속 조직</label>
   <input id="org" name="org" maxlength="60" value="{{ picked.org }}" placeholder="예: 마케팅팀">
 
-  <button class="mp-save" type="submit" name="section" value="profile">저장</button>
+  <button class="mp-save" type="submit">저장</button>
 </form>
 {% endif %}
 
 {% if tab == "defaults" %}
 <form class="mp-card" method="post" action="/u/mypage">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <input type="hidden" name="section" value="adprefs">
   <h2>광고 기본값</h2>
   <p class="mp-note">
     검수·카피생성 때 매번 입력하지 않아도 되도록 저장해두는 조건이에요.
     이번 한 번만 다르게 하고 싶으면 그 화면에서 바꾸면 되고, 여기 저장한 값은 그대로 남아요.
   </p>
-
-  <label>나이대</label>
-  <div class="mp-pick">
-    {% for v in ["10대", "20대", "30대", "40대", "50대 이상", "전연령"] %}
-    <input type="radio" id="age-{{ loop.index }}" name="age" value="{{ v }}"
-           {% if picked.age == v or (not picked.age and loop.last) %}checked{% endif %}>
-    <label for="age-{{ loop.index }}">{{ v }}</label>
-    {% endfor %}
-  </div>
 
   <label>성별</label>
   <div class="mp-pick">
@@ -156,14 +154,55 @@
     ⬜ 이건 <b>기본값</b>일 뿐이에요. 실제 판정 카테고리는 <b>우리가 판별해요</b> — 사용자에게 묻지 않아요 (D-82).
   </p>
 
-  <button class="mp-save" type="submit" name="section" value="adprefs">저장</button>
+  <button class="mp-save" type="submit">저장</button>
+
+  {% if saved_attempt %}
+  <p class="mp-hold" style="margin-top:.75rem">
+    🚨 <b>아직 저장되지 않았어요.</b> 광고 기본값을 담을 표가 아직 없어서
+    (팀장 승인 대기), 받은 값을 되돌려 보여드릴 뿐 기록하지 않아요.
+    <b>저장됐다고 말하지 않으려고</b> 이렇게 알려드려요.
+  </p>
+  {% endif %}
 </form>
 {% endif %}
 
 {% if tab == "account" %}
+<form class="mp-card" method="post" action="/u/mypage">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <input type="hidden" name="section" value="consent">
+  <h2>선택 동의</h2>
+  <p class="mp-note">둘 다 선택이에요 — 기능을 쓰는 대가가 아니에요(D-96). 안 골라도 검수·카피생성은 그대로 됩니다.</p>
+
+  <div class="mp-pick" style="flex-direction:column; align-items:flex-start; gap:.5rem">
+    <label style="display:flex; align-items:center; gap:.5rem; padding:0; border:0; background:none; font-weight:400">
+      <input type="checkbox" name="consent_history" value="1" id="consent-history"
+             style="position:static; opacity:1; width:auto; height:auto"
+             {% if consent_history %}checked{% endif %}>
+      ① 검수 이력 보관 — 이력 화면에서 지난 검수를 다시 볼 수 있어요
+    </label>
+    <label style="display:flex; align-items:center; gap:.5rem; padding:0; border:0; background:none; font-weight:400">
+      <input type="checkbox" name="consent_improve" value="1" id="consent-improve"
+             style="position:static; opacity:1; width:auto; height:auto"
+             {% if consent_improve %}checked{% endif %}>
+      ② 품질 개선 활용 — ①에 동의해야 고를 수 있어요
+    </label>
+  </div>
+
+  <button class="mp-save" type="submit">저장</button>
+</form>
+
 <div class="mp-card">
-  <h2>계정</h2>
-  <p class="mp-note">⬜ 로그인·로그아웃은 계정 시스템(진입점 B 엔진과 함께 옴)이 서면 여기 붙어요.</p>
+  <h2>계정 끄기</h2>
+  <p class="mp-note">
+    계정을 지우지 않고 꺼요 — 로그인할 수 없게 되고, 검수·카피생성 화면에서 바로 로그아웃돼요.
+    되돌리려면 팀에 문의해 주세요.
+  </p>
+  <form method="post" action="/u/mypage/disable">
+    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+    <label for="confirm">확인을 위해 <b>끄기</b>라고 입력해 주세요</label>
+    <input id="confirm" name="confirm" maxlength="20" placeholder="끄기">
+    <button class="mp-save mp-danger" type="submit" style="background:#991b1b; border-color:#991b1b">계정 끄기</button>
+  </form>
 </div>
 {% endif %}
 </div>{# /.mp-panel #}

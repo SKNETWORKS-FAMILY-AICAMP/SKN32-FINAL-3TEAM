@@ -8,6 +8,11 @@
   🔴 하이라이트를 **HTML 문자열로 조립하지 않는다** (보안점검 P2-9 · D-131).
      `risk.evidence_span` 의 (start, end) 로 원문을 **잘라서** 세 조각으로 그린다.
   ⛔ 엔진이 없다 — 가짜 결과를 만들지 않는다 (D-147). 결과는 골든 픽스처로만 그린다 (D-124).
+  🔄 2026-09-29 (ksr) — 프로토타입에 있고 여기 없던 것을 채웠다: 문구 여러 개(최대 5 · 추가·삭제·예시 넣기·
+     문구별 검수·전체 검수) · 위험도 머리(지적 N건 · 품목) · 문장별 「고치는 방향」(`substantiation` — D-265 지시) ·
+     「근거 보기」(조문 · 산출 내역을 문장별로 접기) · 팀에 공유 · 새로 검수 · 면책 문구.
+     ⛔ 질의응답은 넣지 않는다 — 09-23 lse·ksr 합의(sLLM 으로 무리 · 위험도 영역을 길게).
+     ⛔ 스크립트 없이 돈다 — 버튼 하나가 `op` 를 단 폼 제출이고 서버가 다시 그린다(CSP). 접기는 `<details>`.
 #}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 문구 검수{% endblock %}
 {% block screen_css %}
@@ -36,9 +41,9 @@
   display: inline-block; padding: .25rem .7rem; border-radius: 999px;
   font-size: .8rem; font-weight: 600; border: 1px solid var(--u-line);
 }
-.rv-outcome.o-pass { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
-.rv-outcome.o-certificate { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-.rv-outcome.o-guidance { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.rv-outcome.o-pass { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
+.rv-outcome.o-certificate { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+.rv-outcome.o-guidance { background: var(--u-warn-bg); color: var(--u-warn-ink); border-color: var(--u-warn-line); }
 .rv-outcome.o-hold { background: var(--u-signal-soft); color: var(--u-signal-ink); }
 
 .rv-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .55rem 0 0; }
@@ -47,16 +52,16 @@
   font-size: .74rem; border: 1px solid var(--u-line); color: var(--u-clay);
   background: var(--u-surface2);
 }
-.rv-chip.c-r0, .rv-chip.c-r1 { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
-.rv-chip.c-r2 { background: #fffbeb; color: #92400e; border-color: #fde68a; }
-.rv-chip.c-r3, .rv-chip.c-r4 { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-.rv-chip.c-warn { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.rv-chip.c-r0, .rv-chip.c-r1 { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
+.rv-chip.c-r2 { background: var(--u-warn-bg); color: var(--u-warn-ink); border-color: var(--u-warn-line); }
+.rv-chip.c-r3, .rv-chip.c-r4 { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+.rv-chip.c-warn { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
 .rv-chip.c-violation { background: var(--u-signal-soft); color: var(--u-signal-ink); border-color: var(--u-signal-soft); }
 
 .rv-sent { border-top: 1px solid var(--u-line); padding: .8rem 0; }
 .rv-sent:first-of-type { border-top: 0; padding-top: .2rem; }
 .rv-text { font-size: .95rem; line-height: 1.75; margin: 0; }
-.rv-hit { background: #fde68a; border-radius: .2rem; padding: 0 .1rem; }
+.rv-hit { background: var(--u-hit); color: inherit; border-radius: .2rem; padding: 0 .1rem; }
 .rv-sid { font-size: .7rem; color: var(--u-clay); }
 
 .rv-ratchet { display: flex; gap: .35rem; align-items: center; margin-top: .5rem;
@@ -74,7 +79,7 @@
 .rv-cand p { margin: .15rem 0; font-size: .85rem; }
 .rv-cand .rv-meta { color: var(--u-clay); font-size: .74rem; }
 
-.rv-cert { border: 1px solid #fecaca; background: #fef2f2; color: #7f1d1d;
+.rv-cert { border: 1px solid var(--u-bad-line); background: var(--u-bad-bg); color: var(--u-bad-ink);
            border-radius: .75rem; padding: .8rem .9rem; }
 .rv-cert p { margin: .3rem 0; font-size: .85rem; }
 
@@ -86,27 +91,115 @@
                  border-radius: 999px; font-size: .76rem; text-decoration: none; color: var(--u-clay); }
 .rv-fixtures a:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
 .rv-empty { color: var(--u-clay); font-size: .85rem; }
+
+/* 🆕 2026-09-29 — 프로토타입 v7.2 review-input 의 빈 자리 */
+.rv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.rv-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+.rv-btn { display: inline-flex; align-items: center; margin: 0; line-height: 1.2; font-weight: 400;
+          font-size: .8rem; border: 1px solid var(--u-line); border-radius: .75rem; padding: .45rem .75rem;
+          background: var(--u-surface); color: var(--u-ink); text-decoration: none; cursor: pointer; }
+.rv-btn:hover { background: var(--u-surface2); }
+.rv-btn[disabled] { color: var(--u-clay); cursor: not-allowed; background: var(--u-surface2); }
+.rv-copy { border: 1px solid var(--u-line); border-radius: .75rem; overflow: hidden; margin-bottom: .75rem; }
+.rv-copy-bar { display: flex; align-items: center; justify-content: space-between; padding: .35rem .75rem;
+               border-bottom: 1px solid var(--u-line); background: var(--u-surface2); font-size: .72rem; color: var(--u-clay); }
+.rv-copy-bar span { font-family: ui-monospace, monospace; }
+.rv-link { border: 0; background: none; padding: 0 0 0 .75rem; font-size: .74rem; color: var(--u-signal-ink); cursor: pointer; }
+.rv-link.rv-del { color: var(--u-clay); }
+.rv-copy-row { display: flex; align-items: stretch; }
+.rv-copy-row textarea { flex: 1; min-width: 0; border: 0; border-radius: 0; margin: 0; resize: vertical; }
+.rv-copy-go { width: 4.75rem; flex-shrink: 0; border: 0; border-left: 1px solid var(--u-line); border-radius: 0;
+              margin: 0; background: var(--u-signal); color: #fff; font-weight: 600; cursor: pointer; }
+.rv-copy-go:hover { background: var(--u-signal-ink); }
+.rv-copy-tools { display: flex; gap: .5rem; margin-bottom: 1.25rem; }
+.rv-add { flex: 1; border: 1px dashed var(--u-line); border-radius: .75rem; padding: .6rem; background: none;
+          color: var(--u-clay); font-size: .8rem; font-weight: 500; cursor: pointer; margin: 0; }
+.rv-add:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+.rv-all { border: 1px solid var(--u-signal); color: var(--u-signal-ink); background: none; border-radius: .75rem;
+          padding: .6rem 1rem; font-size: .8rem; font-weight: 600; cursor: pointer; margin: 0; }
+.rv-attach { width: 100%; border: 1px dashed var(--u-line); border-radius: .75rem; padding: 1.4rem;
+             text-align: center; color: var(--u-clay); font-size: .8rem; background: var(--u-surface2); }
+.rv-toast { border: 1px solid var(--u-line); background: var(--u-signal-soft); color: var(--u-signal-ink);
+            border-radius: .75rem; padding: .55rem .8rem; font-size: .82rem; margin-bottom: .75rem; }
+.rv-card > h2.rv-risk-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.rv-summary { display: inline-block; padding: .25rem .7rem; border-radius: 999px; font-size: .78rem; font-weight: 600;
+              background: var(--u-surface2); color: var(--u-clay); }
+.rv-summary.s-bad { background: var(--u-bad-bg); color: var(--u-bad-ink); }
+.rv-summary.s-ok { background: var(--u-ok-bg); color: var(--u-ok-ink); }
+.rv-copyno { font-family: ui-monospace, monospace; font-size: .7rem; color: var(--u-clay); margin: .9rem 0 .2rem; }
+.rv-copyno:first-of-type { margin-top: 0; }
+.rv-fix { margin: .55rem 0 0; padding: .55rem .7rem; border-radius: .6rem; background: var(--u-surface2);
+          font-size: .8rem; line-height: 1.6; }
+.rv-fix b { color: var(--u-ink); }
+.rv-ev { border: 1px solid var(--u-line); border-radius: .75rem; margin-bottom: .5rem; overflow: hidden; }
+.rv-ev > summary { padding: .5rem .75rem; font-size: .8rem; cursor: pointer; list-style: none;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv-ev > summary::after { content: " ▾"; color: var(--u-clay); }
+.rv-ev[open] > summary::after { content: " ▴"; }
+.rv-ev-body { border-top: 1px solid var(--u-line); padding: .75rem .9rem; background: var(--u-surface2); }
+.rv-ev-label { font-family: ui-monospace, monospace; font-size: .66rem; color: var(--u-clay); letter-spacing: .04em; margin: .5rem 0 .25rem; }
+.rv-ev-label:first-child { margin-top: 0; }
+.rv-calc { display: flex; justify-content: space-between; font-size: .78rem; padding: .15rem 0; }
+.rv-calc.total { border-top: 1px solid var(--u-line); margin-top: .25rem; padding-top: .35rem; font-weight: 600; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rv-disclaimer { font-size: .72rem; color: var(--u-clay); line-height: 1.6; margin: .25rem 0 0; }
 </style>
 {% endblock %}
 {% block user_content %}
 <div class="rv-head">
-  <h1>문구 검수</h1>
-  <p>문구를 넣고 <b>검수</b>를 누르면 오른쪽에 <b>어느 조문에 걸리는지</b>와 <b>왜 걸리는지</b>가 나와요.</p>
+  <div>
+    <h1>문구 검수</h1>
+    <p>문구를 넣고 <b>검수</b>를 누르면 오른쪽에 <b>어느 조문에 걸리는지</b>와 <b>왜 걸리는지</b>가 나와요.</p>
+  </div>
+  <div class="rv-actions">
+    {# ⬜ 팀 공유 — 팀(기업 회원)이 없다. D-260 ④ 가 `enterprise` 를 만들지 않기로 했다 #}
+    <button class="rv-btn" type="button" disabled title="팀(기업 회원) 기능이 없어 공유할 곳이 없어요 (D-260)">팀에 공유</button>
+    <a class="rv-btn" href="/u/review">+ 새로 검수</a>
+  </div>
 </div>
 
 <div class="rv-grid">
 
   <div>
     <form class="rv-card" method="post" action="/u/judge">
-      <h2>검수할 문구 <span class="rv-count">최대 {{ max_text_len }}자</span></h2>
-      <label for="text">광고 문구</label>
-      <textarea id="text" name="text" rows="6" maxlength="{{ max_text_len }}"
-                placeholder="예: 이 제품은 면역력을 높여 줍니다" required>{{ text }}</textarea>
-      <button class="rv-submit" type="submit">검수</button>
-      <p class="rv-note" style="margin-top:.6rem">
-        ⬜ 참고 자료 첨부(상세페이지 캡처·기존 광고물)는 <code>multipart/form-data</code> 가 필요해서
-        팀장 판정 전까지 만들지 않아요.
-      </p>
+      <h2>검수할 문구
+        <span class="rv-count">{{ copies|length }}건 · 여러 문구를 한 번에 검수할 수 있어요 · 문구당 최대 {{ max_text_len }}자</span>
+      </h2>
+      {% if notice %}<p class="rv-toast" role="status">{{ notice }}</p>{% endif %}
+      {% for c in copies %}
+      <div class="rv-copy">
+        <div class="rv-copy-bar">
+          <span>문구 {{ loop.index }}</span>
+          <span>
+            <button class="rv-link" type="submit" name="op" value="sample:{{ loop.index }}" formnovalidate>예시 넣기</button>
+            {% if copies|length > 1 %}
+            <button class="rv-link rv-del" type="submit" name="op" value="del:{{ loop.index }}" formnovalidate>삭제</button>
+            {% endif %}
+          </span>
+        </div>
+        <div class="rv-copy-row">
+          <label class="visually-hidden" for="text-{{ loop.index }}">문구 {{ loop.index }}</label>
+          <textarea id="text-{{ loop.index }}" name="text" rows="4" maxlength="{{ max_text_len }}"
+                    placeholder="검수할 광고 문구를 붙여넣으세요.">{{ c }}</textarea>
+          <button class="rv-copy-go" type="submit" name="op" value="judge:{{ loop.index }}"
+                  title="이 문구 검수하기">검수</button>
+        </div>
+      </div>
+      {% endfor %}
+      <div class="rv-copy-tools">
+        <button class="rv-add" type="submit" name="op" value="add" formnovalidate>+ 검수할 문구 추가</button>
+        {% if copies|length > 1 %}
+        <button class="rv-all" type="submit" name="op" value="all">전체 검수</button>
+        {% endif %}
+      </div>
+
+      <h2>참고 자료 첨부 <span class="rv-count">최대 5개 · 이미지 · 문서</span></h2>
+      {# ⬜ 파일 업로드는 `multipart/form-data` → `python-multipart` 새 의존성(uv.lock 은 팀장 · §5) ·
+            이미지 판정은 향후 과제(D-104). 그래서 비활성으로 둔다 #}
+      <div class="rv-attach" aria-disabled="true">
+        ＋ 상세페이지 캡처 · 기존 광고물 올리기<br>
+        <span class="rv-note">파일 첨부는 아직 준비 중이에요 — 업로드 처리(새 의존성)와 이미지 판정이 정해지면 열려요.</span>
+      </div>
     </form>
 
     <div class="rv-card">
@@ -132,9 +225,16 @@
         지금은 왼쪽의 골든 픽스처로 각 분기가 어떻게 보이는지 확인할 수 있어요.
       </p>
     </div>
-  {% elif result %}
+  {% elif results %}
     <div class="rv-card">
-      <h2>위험도
+      <h2 class="rv-risk-head">위험도
+        <span class="rv-summary {{ 's-bad' if flagged else 's-ok' }}">
+          {%- if flagged %}지적 {{ flagged }}건{% else %}특이사항 없음{% endif -%}
+        </span>
+      </h2>
+    {% for item in results %}
+      {% set result = item.result %}
+      <p class="rv-copyno">문구 {{ item.n }}{% if result.category %} · {{ result.category.value }}{% endif %}
         <span class="rv-outcome o-{{ result.outcome.value }}">
           {%- if result.outcome.value == "pass" %}통과
           {%- elif result.outcome.value == "certificate" %}합법화 불가
@@ -144,7 +244,7 @@
           {%- elif result.outcome.value == "hold" %}전문가 검토
           {%- else %}알 수 없는 값 ({{ result.outcome.value }}){% endif -%}
         </span>
-      </h2>
+      </p>
 
       {% for s in result.sentences %}
       <div class="rv-sent">
@@ -195,29 +295,59 @@
           {% endif %}
         </div>
 
-        <div class="rv-ratchet">
-          <span>산출 내역</span>
-          <span>하한 <b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></span>
-          <span>인코더 <b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></span>
-          <span>최종 <b>{{ s.risk.final.value if s.risk.final else "—" }}</b></span>
+        {# 🆕 고치는 방향 — 검수는 대체 문구를 내지 않고 **지시**까지 낸다 (D-265 · D-268 · `SubstBranch`) #}
+        {% if s.substantiation %}
+        <div class="rv-fix">
+          <b>고치는 방향</b> · {{ s.substantiation.criteria }}<br>
+          <span class="rv-note">
+            인정되는 실증 자료 — {{ s.substantiation.accepted_evidence|join(" · ") }}
+            · 실증하면 위험도 {{ s.substantiation.substantiated_max.value }} 까지 내려가요
+          </span>
         </div>
-
-        {% for e in s.evidence %}
-        <div class="rv-law">
-          <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
-          <div class="rv-law-id">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
-          {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
-        </div>
-        {% endfor %}
+        {% endif %}
       </div>
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}
+    {% endfor %}
+
+      {# 🆕 근거 보기 — 프로토타입 `rv-evidence-list` · 지적 문장만 접어서 둔다.
+         🔄 조문·산출 내역은 종전 문장 카드 안에 펼쳐 있던 것을 여기로 옮겼다(내용은 같다).
+         ⬜ 「제재 사례」 칸 — 계약에 사례 칸이 없다(EvidenceArticle 은 조문만 · D-192). 그래서 비운다 #}
+      <div style="border-top:1px solid var(--u-line);margin-top:1rem;padding-top:.8rem">
+        <h2 class="rv-risk-head" style="font-size:.88rem">근거 보기 <span class="rv-count">조문 · 산출 내역</span></h2>
+        {% set ns = namespace(any=false) %}
+        {% for item in results %}{% for s in item.result.sentences if s.sent_id in item.flagged %}
+        {% set ns.any = true %}
+        <details class="rv-ev">
+          <summary>문구 {{ item.n }} · {{ s.text }}</summary>
+          <div class="rv-ev-body">
+            <p class="rv-ev-label">이 문장에 걸린 근거</p>
+            {% for e in s.evidence %}
+            <div class="rv-law">
+              <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
+              <div class="rv-law-id">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
+              {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+            </div>
+            {% else %}
+            <p class="rv-note">붙은 근거 조문이 없어요.</p>
+            {% endfor %}
+            <p class="rv-ev-label">위험도 산출 내역</p>
+            <div class="rv-calc"><span>코드 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
+            <div class="rv-calc"><span>인코더 예측</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>
+            <div class="rv-calc total"><span>최종 위험도</span><b>{{ s.risk.final.value if s.risk.final else "—" }}</b></div>
+          </div>
+        </details>
+        {% endfor %}{% endfor %}
+        {% if not ns.any %}<p class="rv-note">지적된 문장이 없어 표시할 근거가 없어요.</p>{% endif %}
+      </div>
     </div>
 
+    {% for item in results %}
+    {% set result = item.result %}
     {% if result.certificate %}
     <div class="rv-card">
-      <h2>합법화 불가 증명서</h2>
+      <h2>합법화 불가 증명서{% if results|length > 1 %} <span class="rv-count">문구 {{ item.n }}</span>{% endif %}</h2>
       <div class="rv-cert">
         <p><b>사유 {{ result.certificate.reason.value }}</b>
           {%- if result.certificate.reason.value == "A" %} · 자격형 — 인정 기능성이 없어요
@@ -260,7 +390,7 @@
     {% endif %}
 
     <div class="rv-card">
-      <h2>판정 메타</h2>
+      <h2>판정 메타{% if results|length > 1 %} <span class="rv-count">문구 {{ item.n }}</span>{% endif %}</h2>
       <table>
         <tr><th>법령판</th><td>{{ result.law_version }}</td></tr>
         <tr><th>판정 버전</th><td>{{ result.judged_by }}</td></tr>
@@ -273,19 +403,26 @@
         {% endfor %}
       </table>
       {% endif %}
-      <p class="rv-note" style="margin-top:.6rem">
-        본 진단은 문장 단위 1차 스크리닝이며 법적 확정 판단이 아니에요.
-        최종 판단은 심의기구·전문가 검토를 따르세요.
-      </p>
     </div>
+    {% endfor %}
   {% else %}
     <div class="rv-card">
-      <h2>위험도 <span class="rv-outcome">검수 전</span></h2>
-      <p class="rv-note">
-        왼쪽에 문구를 넣고 검수를 누르거나, 골든 픽스처를 눌러 각 분기가 어떻게 보이는지 확인해 보세요.
+      <h2 class="rv-risk-head">위험도 <span class="rv-summary">검수 전</span></h2>
+      <p class="rv-pending" style="text-align:center">
+        왼쪽 문구칸 옆의 <b>검수 버튼</b>을 눌러주세요.<br>
+        <span class="rv-note">골든 픽스처를 눌러 각 분기가 어떻게 보이는지 확인할 수도 있어요.</span>
       </p>
+      <div style="border-top:1px solid var(--u-line);margin-top:1rem;padding-top:.8rem">
+        <h2 class="rv-risk-head" style="font-size:.88rem">근거 보기 <span class="rv-count">조문 · 산출 내역</span></h2>
+        <p class="rv-note">검수를 하면 문장별 근거 조문이 여기에 쌓여요.</p>
+      </div>
     </div>
   {% endif %}
+    {# 프로토타입 그대로 — 결과가 있든 없든 오른쪽 맨 아래에 둔다 #}
+    <p class="rv-disclaimer">
+      본 진단은 문장 단위 1차 스크리닝이며 법적 확정 판단이 아니에요.
+      최종 판단은 심의기구·전문가 검토를 따르세요.
+    </p>
   </div>
 
 </div>

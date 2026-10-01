@@ -503,6 +503,267 @@ sources:
     robots_checked_at: 2026-09-25
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
+  mfds_cosmetic_ad_qa_2012:
+    name: "식약처 「2012년 화장품·의약외품 표시·광고 등 질의·응답집」 ★신규등재 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_641/view.do?seq=12518"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_641 · seq=12518 · 첨부 PDF 1개)"
+    scale: "PDF 166쪽 · 본문 약 9만 자(텍스트 층 있음 · 빈 쪽 9)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「화장품·의약외품 표시·광고 등 질의·응답집(2012-02)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 질의응답집은 가치가 사례이고 기준 시점이 지난다(D-290 · mfds_cosmetic_ad_qa 선례). 근거 조문으로 인용하지 않는다. / 광고 캡처·예시 이미지는 광고주 저작물이라 취하지 않는다(D-18 · D-133) / 🚨 2012-02 기준 — 2021 질의응답집(mfds_cosmetic_ad_qa) · 2025 지침(mfds_cosmetic_ad_guideline)이 우선한다. 판단 사례로만 쓴다(D-290 ③). / 🚨 중복 문항 제외 — 2021 질의응답집(mfds_cosmetic_ad_qa)과 15자 조각 겹침 3.9%(2026-09-28 · 권소라) — 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선)."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_cosmetic_func_qa_2023:
+    name: "식약처 「기능성화장품 심사를 위한 질의응답집」 민원인안내서 (안내서-1342-01 · 2023-12) ★신규등재 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_641/view.do?seq=32464"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_641 · seq=32464 · 첨부 PDF 1개)"
+    scale: "PDF 35쪽 · 본문 약 2.4만 자(텍스트 층 있음)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「기능성화장품 심사를 위한 질의응답집(민원인안내서 1342-01, 2023-12)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 질의응답집은 가치가 사례이고 기준 시점이 지난다(D-290 · mfds_cosmetic_ad_qa 선례). 근거 조문으로 인용하지 않는다. / 광고 캡처·예시 이미지는 광고주 저작물이라 취하지 않는다(D-18 · D-133) / 🚨 중복 문항 제외 — 2021 질의응답집(mfds_cosmetic_ad_qa)과 15자 조각 겹침 1.5% · 청크 6.7%(조문 인용)(2026-09-28 · 권소라) — 같은 질의·답은 전처리에서 문구 단위로 뺀다 / 심사 절차(자료 제출 · 시험법) 문항은 광고 판단 범위 밖 — 받지만 라벨에 넣지 않는다."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_food_func_claim_qa_2021:
+    name: "식약처 「일반식품의 기능성 표시제도 질의응답집」 민원인안내서 (안내서-1098-01 · 2021-01) ★신규등재 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_1060/view.do?seq=14784"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_1060 · seq=14784 · 첨부 PDF 1개)"
+    scale: "PDF 24쪽 · 본문 약 2만 자(텍스트 층 있음)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「일반식품의 기능성 표시제도 질의응답집(민원인안내서 1098-01, 2021-01)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답은 전처리에서 문구 단위로 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 질의응답집은 가치가 사례이고 기준 시점이 지난다(D-290 · mfds_cosmetic_ad_qa 선례). 근거 조문으로 인용하지 않는다. / 광고 캡처·예시 이미지는 광고주 저작물이라 취하지 않는다(D-18 · D-133) / 🚨 중복 문항 제외 — 기존 파생물과 15자 조각 겹침 0% · 청크 11.8%는 고시 문언 인용(2026-09-28 · 권소라) — 고시 원문과 같은 문장은 전처리에서 뺀다(D-171 상용구) / 2021-01 기준 — 이후 고시 개정분이 우선한다(D-290 ③)."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_ad_judge_manual_2015:
+    name: "식약처 「허위·과대광고 판별 매뉴얼」 (2015-03 · 자료집) ★신규등재 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_218/view.do?seq=19009"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_218 · seq=19009 · 첨부 PDF 1개)"
+    scale: "PDF 67쪽 · 본문 약 5.5만 자(텍스트 층 있음) · 이미지 객체 약 1,080(광고 캡처)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「허위·과대광고 판별 매뉴얼(2015-03)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      본문 속 광고 문구의 인물 실명(전문의 등) · 업체명·상표 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답·문구는 전처리에서 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 기준 시점이 지난 자료라 판단 사례로만(D-290). 근거 조문으로 인용하지 않는다 / 🚨 광고 캡처 이미지(약 1,080개)는 광고주 저작물 — 취하지 않는다(D-18 G1 · D-133) · 문서가 텍스트로 적은 문구만 사실로 취한다(D-16). / 🚨 42쪽 등 광고 문구 안의 전문의 등 실명은 마스킹(D-17). / 🚨 2015 기준(식품표시광고법 2019 전) — 판단 사례로만 쓴다(D-290 ③)."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_cosmetic_faq_2020:
+    name: "식약처 「화장품 분야 자주하는 질문집」 민원인안내서 (안내서-1079 · 2020) ★신규등재 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.mfds.go.kr/brd/m_641/view.do?seq=32451"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_641 · seq=32451 · 첨부 PDF 1개)"
+    scale: "PDF 147쪽 · 본문 약 10.7만 자(텍스트 층 있음) · 문항 약 210 · 광고 판단 문항 약 45(그중 41은 2025판에 없음)"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「화장품 분야 자주하는 질문집(민원인안내서 1079, 2020)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      3쪽 · 117쪽 담당 부서 전화번호 · 139쪽 업체명(㈜) 등 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답·문구는 전처리에서 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 기준 시점이 지난 자료라 판단 사례로만(D-290). 근거 조문으로 인용하지 않는다 / 🚨 중복 문항 제외 — 2021 질의응답집(mfds_cosmetic_ad_qa)과 15자 조각 겹침 6.3% · 청크 8.7%(조문 인용) · 2025판과 광고 문항 4개 비슷 — 같은 질의·답은 전처리에서 문구 단위로 빼고 최신판을 쓴다. / 🚨 2020 기준 — 2025 질문집 · 2025 지침이 우선한다(D-290 ③). / 영업 등록 · 기재사항 · 수입통관 문항은 광고 판단 범위 밖."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  mfds_daegu_ad_cases_2013:
+    name: "식약처 대구지방청 「식품 등 허위과대광고 사례」 (2013-09) ★신규등재 2026-09-28"
+    org: "식품의약품안전처(대구지방식품의약품안전청)"
+    url: "https://www.mfds.go.kr/brd/m_861/view.do?seq=15177"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: C
+    cost: free
+    status: collect
+    access: "자료실 PDF 다운로드 (게시물 m_861 · seq=15177 · 첨부 PDF 1개)"
+    scale: "PDF 55쪽 · 텍스트 약 3천 자뿐 · 이미지 객체 약 340(광고 캡처 위주) — OCR 필요"
+    license: "공공누리 미부착 · 저작권법 제24조의2 제1항 (D-132 준용 · 2026-09-09 팀장 판정)"
+    attribution: "출처: 식품의약품안전처 「대구지방식품의약품안전청 「식품 등 허위과대광고 사례」(2013-09)」 (저작권법 제24조의2 제1항 · 제37조)"
+    masking: >-
+      광고 캡처 속 업체명·상표·인물 · 판권면 담당자 즉시 마스킹 (D-17 · D-133 직접 식별자).
+      🚨 전처리는 오한빈 담당(2026-09-23 역할 분담) — 수집 쪽은 원문을 받은편지함에만 둔다.
+    fragment_note: >-
+      문서가 적은 판단·예시 문구만 사실로 취한다 (D-18) · 광고 캡처·예시 이미지는 취하지 않는다 (D-133).
+      🚨 중복 문항 제외 — 기존 원천과 같은 질의·답·문구는 전처리에서 빼고 한 번만 쓴다(최신판 우선).
+    caution: "🚨 1층 사례로 쓴다 — 기준 시점이 지난 자료라 판단 사례로만(D-290). 근거 조문으로 인용하지 않는다 / 🚨 텍스트 층이 거의 없다 — OCR 필요(원문만 먼저 받아 둔다 · 2026-09-28 사용자 지시). / 🚨 광고 캡처 이미지는 광고주 저작물 — 이미지 자체는 취하지 않고 OCR 로 뽑은 광고 문구만 사실로 쓴다(D-16 · D-18 · mfds_casebook 선례). / 🚨 2013 기준 — 판단 사례로만(D-290 ③)."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-28
+    evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  ftc_press:
+    name: "공정거래위원회 보도자료 게시판 (보도자료 본문 · 첨부 안내서) ★신규등재 2026-09-26 · 2인 확인 2026-09-28"
+    org: "공정거래위원회"
+    url: "https://www.ftc.go.kr/www/selectBbsNttList.do?bordCd=3&key=12"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: A
+    cost: free
+    status: manual
+    access: "게시판 목록·본문 + 첨부(hwp·pdf) 다운로드 (bordCd=3 · key=12)"
+    scale: "게시판 검색 실측(조사 2026-09-26) — 「비교광고」 19 · 「부당한 비교」 10 · 「비방광고」 20 · 「비방」 60(무관 글 포함) → 비교·비방 사건 약 30~40 추정 · SNS 뒷광고 모니터링 결과 4개년(nttSn 42753 · 43291 · 45909 등) · 「경제적 이해관계 표시 안내서」 2025 개정본 + Q&A 별첨(nttSn 46709)"
+    license: "공공누리 제1유형(출처표시) — 보도자료 상세 화면 하단 「공정거래위원회 보도자료 저작물은 공공누리 제1유형(출처표시) 조건에 따라 누구나 이용할 수 있습니다」 · 🔄 2026-09-28 — 2005년 전 게시물 31건(nttSn 33548~35185)은 표시가 없다(kogl_badge: none) → 저작권법 제24조의2 제1항 (D-132 · D-140 — 국가기관 자기 저작물 · 「사전 협의」 안내는 허락 요건이 아니다)"
+    attribution: "출처: 공정거래위원회 보도자료 (공공누리 제1유형 · 2005년 전 게시물은 저작권법 제24조의2 제1항 · 제37조)"
+    caution: "🚨 결정문과 같은 사건이면 같은 문서 계보로 묶는다 — 보도자료 문구가 결정문 봉인 평가 문구와 겹치면 평가가 오염된다(split.py 문구 단위 거름). / 2000년대 글은 본문이 짧고 hwp 첨부에 내용이 있다(파싱 필요). / 캡처 이미지 속 광고·SNS 계정명은 취하지 않는다(D-18 · D-133 · PII). / 🔄 2026-09-28 — 2005년 전 게시물 31건(1997~2004 · nttSn 33548~35185)은 공공누리 표시가 없다(kogl_badge: none). 공정위 저작권정책의 「공공누리 미부착 자료는 사전 협의」 문장은 D-132 · D-140 대로 허락 요건이 아니다(국가기관 자기 저작물 · 제24조의2 제1항 · 출처표시 제37조). 검수(2026-09-28): 31건 모두 공정위 명의 보도자료 · 본문 광고 이미지 0 · 외부 기고 흔적 0 · 단서(국가안보 · 사생활 · 다른 법률 공개 제한 · 국유재산 등록) 해당 없음 · 대표이사 성명 언급 8건은 전처리 마스킹(D-17) · 첨부 hwp 13(한글 3.0 옛 형식 12)은 텍스트만(D-18)."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-26
+    evidence_url: "https://www.ftc.go.kr/www/selectBbsNttView.do?key=12&bordCd=3&nttSn=46709"
+
+  gg_press:
+    name: "경기도 보도자료 (경기도뉴스포털 · 특별사법경찰단 식품·건기식 부당광고 수사 결과) ★신규등재 2026-09-26 · 2인 확인 2026-09-28"
+    org: "경기도"
+    url: "https://gnews.gg.go.kr/briefing/brief_gongbo.do?BS_CODE=s017"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: B
+    cost: free
+    status: manual
+    access: "게시판 본문 + 첨부(hwpx·JPG) (gnews.gg.go.kr/briefing · BS_CODE=s017)"
+    scale: "미실측 — 식품·건기식 광고 적발 보도가 연 몇 건 수준 · 1·2호 문장 합계 수십 추정(조사 2026-09-26 · 제목 검색이 서지 않아 실측 못 함)"
+    license: "공공누리 제1유형(출처표시) — 기사 하단 「위 기사는 공공누리 제1유형:출처표시 조건에 따라 이용할 수 있습니다」"
+    attribution: "출처: 경기도 보도자료 (경기도뉴스포털 · 공공누리 제1유형)"
+    caution: "🚨 반복 요청 시 「보안 정책에 의해 차단」 화면이 떴다(조사 2026-09-26) — 저속 수집 필수. / 서울시(제4유형) · 부산시(제4유형) 보도자료는 같은 성격이지만 불가다 — 지자체마다 유형이 다르다(D-110). / 사진 첨부(JPG)는 취하지 않는다."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-26
+    evidence_url: "https://gnews.gg.go.kr/briefing/brief_gongbo_view.do?BS_CODE=s017&number=63679"
+
+  scourt_major:
+    name: "대법원 누리집 「전국법원 주요판결」 게시판 ★신규등재 2026-09-26 · 2인 확인 2026-09-28"
+    org: "법원행정처"
+    url: "https://www.scourt.go.kr/portal/dcboard/DcNewsListAction.work?gubun=44"
+    layer: "1층 판정라벨"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY, PII]
+    redistributable: true
+    value: C
+    cost: free
+    status: manual
+    access: "게시판 목록·본문 + 첨부 (www.scourt.go.kr/portal/dcboard · gubun=44 · EUC-KR)"
+    scale: "게시판 검색 실측(조사 2026-09-26) — 「비방」 48(대부분 명예훼손·형사) · 「표시광고」 2 · 「비교광고」 0 → 관련 0~3건"
+    license: "저작권법 제24조의2 — 법원 저작권보호정책 「별도의 이용허락 없이 자유이용이 가능」 · 판결은 제7조 비보호"
+    attribution: "출처: 대법원 「전국법원 주요판결」 (저작권법 제24조의2 · 제37조)"
+    caution: "🚨 판결 속 당사자·증인 성명은 즉시 마스킹(PII · D-17). / 판결서 인터넷열람(로그인 · 건당 수수료)은 이 원천이 아니며 쓰지 않는다. / 수량이 적어 우선순위 낮음."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    robots_checked_at: 2026-09-26
+    evidence_url: "https://www.scourt.go.kr/portal/popup/jeojak_pop.html"
+
   mfds_quasi_drug_ad_guide:
     name: "식약처 「의약외품 표시 광고 가이드라인」 민원인안내서 (안내서-1179-05 · 2025-04) ★신규등재 2026-09-25"
     org: "식품의약품안전처"
@@ -651,6 +912,54 @@ sources:
     reviewed_at: 2026-09-02
     evidence_url: "https://www.data.go.kr/data/15074311/openapi.do"
 
+  mfds_cosmetic_func_report:
+    name: "식약처 기능성화장품 보고품목정보 API (15095680) ★신규등재 2026-09-26 · 2인 확인 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.data.go.kr/data/15095680/openapi.do"
+    layer: "표시 문구 관측"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: []
+    redistributable: true
+    value: A
+    cost: free
+    status: collect
+    access: "오픈API (공공데이터포털 활용신청 · 인증키 · apis.data.go.kr/1471000/FtnltCosmRptPrdlstInfoService01)"
+    scale: "의약품안전나라 보고 목록 총 182,489건(조사 2026-09-26) · 응답 필드(swagger) — EE_DOC_DATA(효능효과) · EE_NAME · EFFECT_YN1~3(미백·주름·자외선) · SPF · PA · ITEM_NAME · ENTP_NAME · 효능 문구는 고시 정형문이라 서로 다른 문장은 수십~수백 종 추정"
+    license: "이용허락범위: 제한없음 (공공데이터포털) — 출처표시 의무 없음"
+    attribution: "출처: 식품의약품안전처 기능성화장품 보고품목정보 (공공데이터포털 15095680)"
+    caution: "🚨 EE_DOC_DATA 값의 실제 형식(평문/XML/빈 값)은 키가 없어 미확인 — 첫 호출로 본다. / 업체명·제품명은 마스킹 대상(D-17 · org · brand). / 🚨 이 문구는 그 제품이 기능성으로 보고됐을 때만 적법이다 — 일반 화장품이 같은 문구를 쓰면 2호 위반이다(음성 예시로 쓸 때 조건을 같이 싣는다)."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    evidence_url: "https://www.data.go.kr/data/15095680/openapi.do"
+
+  mfds_cosmetic_func_review:
+    name: "식약처(평가원) 기능성화장품 심사품목 정보 API (15056939) ★신규등재 2026-09-26 · 2인 확인 2026-09-28"
+    org: "식품의약품안전처"
+    url: "https://www.data.go.kr/data/15056939/openapi.do"
+    layer: "표시 문구 관측"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: []
+    redistributable: true
+    value: B
+    cost: free
+    status: collect
+    access: "오픈API (공공데이터포털 활용신청 · 인증키 · 1471057/FtnltCosmSrngPrdlstInfoService05)"
+    scale: "의약품안전나라 심사 목록 총 20,706건(조사 2026-09-26) · 응답 필드 — EE_DOC_DATA(효능효과) · UD_DOC_DATA · NB_DOC_DATA · ITEM_NAME · ENTP_NAME"
+    license: "이용허락범위: 제한없음 (공공데이터포털) — 출처표시 의무 없음"
+    attribution: "출처: 식품의약품안전평가원 기능성화장품 심사품목 정보 (공공데이터포털 15056939)"
+    caution: "EE_DOC_DATA 형식 미확인 · 업체명·제품명 마스킹 · 보고품목 API 와 품목이 겹치는지 대조한다."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    evidence_url: "https://www.data.go.kr/data/15056939/openapi.do"
+
   kcia_guideline:
     name: "대한화장품협회 광고자문 기준 해설서 2025 ★2025판"
     org: "대한화장품협회"
@@ -783,7 +1092,7 @@ sources:
     decided_at: 2026-09-25
     decided_by: 오한빈
     reviewed_by: 권소라
-    reviewed_at: 2026-09-25
+    reviewed_at: 2026-09-26
     robots_checked_at: 2026-09-25
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
 
@@ -817,6 +1126,31 @@ sources:
     reviewed_at: 2026-09-25
     robots_checked_at: 2026-09-25
     evidence_url: "https://www.mfds.go.kr/wpge/m_34/de010803l001.do"
+
+  easylaw_ad:
+    name: "법제처 「찾기쉬운 생활법령정보」 — 인터넷 개인방송 › 뒷광고 규제 항목 ★신규등재 2026-09-26 · 2인 확인 2026-09-28"
+    org: "법제처"
+    url: "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=1575&ccfNo=2&cciNo=3&cnpClsNo=1"
+    layer: "3층 판단규범"
+    authority: "해설"
+    grade: G3
+    use: {U1: allow, U2: allow, U3: allow, U4: allow}
+    constraints: [BY]
+    redistributable: true
+    value: C
+    cost: free
+    status: manual
+    access: "웹 본문 (easylaw.go.kr/CSP · csmSeq=1575)"
+    scale: "해설 위주 · 위반 예시 문구 10개 미만(조사 2026-09-26)"
+    license: "법제처 생활법령정보 저작권정책 — 「영리 목적의 이용을 포함하여 자유로운 활용이 보장」 (제3자 저작물·사진·이미지 제외)"
+    attribution: "출처: 법제처 찾기쉬운 생활법령정보"
+    caution: "🚨 텍스트만 취한다 — 사진·이미지·제3자 저작물은 정책상 제외. / 공정위 추천·보증 심사지침(law_go_kr 행정규칙)의 해설이라 내용이 겹친다 — 보조."
+    collected_at: 2026-09-28
+    decided_at: 2026-09-28
+    decided_by: 오한빈
+    reviewed_by: 권소라
+    reviewed_at: 2026-09-28
+    evidence_url: "https://www.easylaw.go.kr/CSP/InfoCopyright.laf"
 
   mfds_cosmetic_faq_2025:
     name: "식약처 「2025 자주하는 질문집(화장품)」 민원인안내서 (안내서-1463-01 · 2025-11) ★신규등재 2026-09-25"
@@ -1664,6 +1998,42 @@ sources:
     decided_by: null
     reviewed_by: null
 
+  # ── 이용조건 메일 문의 · 회신 대기 (문의: 권소라)
+  #    🚨 G0 · 전 용도 deny · hold — 회신이 오기 전에는 받지 않는다 (D-72).
+  #       회신이 오면 그 메일을 근거로 등급·용도를 2인 확인으로 정하고, 거절이면 blocked 로 옮긴다.
+  #    한국식품산업협회(ad.kfia.or.kr) 문의는 이미 blocked 에 있다 — 그 줄 reason 에 메일 발송을 적었다.
+  inc_ad_decisions:
+    name: 인터넷신문 광고심의결정문 (인터넷신문윤리위원회)
+    layer: "1층 판정라벨"
+    grade: G0
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [PREAPPROVAL, NOREDIST]
+    redistributable: false
+    value: A
+    cost: free
+    status: hold
+    note: "📧 2026-09-18 이용 승인 요청 메일(권소라 → inc@inc.or.kr) — 범위: 공개 결정문 전체 200건(2026 제15차 · 08-13 기준 · 기사심의결정문 제외) · 용도: 학습·평가 한정(색인·인용은 요청하지 않았다) · 문의: 승인 유효 범위 · 소요 기간 · 영리 활용 · 가공 데이터셋 배포 · 출처 표시 형식. 📩 2026-09-22 15:59 중간 회신(광고심의 담당 연구원 · ads@inc.or.kr) — 이용 목적·범위에 내부 검토가 필요하다 · 검토가 끝나면 다시 회신 → ⏳ 최종 회신 대기. 회신이 오면 — 공정위·식약처가 아닌 기관의 실사례(출처 분리 홀드아웃) · 의약품_오인 · 식품표시광고법 2호 평가 보충"
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
+  kocsc_ad_review:
+    name: 방송미디어통신심의위원회 광고심의 자료 (광고심의소위원회 회의록 482 · 심의의결서 상품판매방송 166 · 제재 보도자료 약 25)
+    layer: "1층 판정라벨"
+    grade: G0
+    use: {U1: deny, U2: deny, U3: deny, U4: deny}
+    constraints: [PII, PREAPPROVAL, NOREDIST]
+    redistributable: false
+    value: A
+    cost: free
+    status: hold
+    note: "📧 2026-09-22 자료 이용 문의 메일(권소라 → hihi@kocsc.or.kr) — 식품·건강기능식품·화장품 판매방송·광고 심의분만 · 용도: 검색 색인 · 인용 표시 · 학습·평가 · 상용화 가능성도 적었다 · 누리집 저작권보호정책은 영리·DB·정보서비스 이용에 허가가 필요하다. 📩 2026-09-28 1차 지연답변 수신 → ⏳ 최종 회신 대기. 회신이 오면 — 의약품_오인 · 식품표시광고법 2호 · 화장품법 제13조① 2호 · 후기_체험기 평가 보충 · 다른 기관의 실사례. 🚨 근거가 방송심의 규정 조항이라 4법 조문으로 옮기는 판독이 따로 든다 · 회의록 속 성명은 마스킹(PII)"
+    collected_at: null
+    decided_at: null
+    decided_by: null
+    reviewed_by: null
+
   # 🚨 협상 불가 — 어떤 사정에서도 편입하지 않는다 (기획서 4-2)
   #    여기 있는 것은 「가치가 없어서」가 아니라 「법적·윤리적으로 막혀서」다.
   #    가치 판정으로 내린 것은 아래 not_adopted 에 둔다 — 등급 축을 오염시키지 않기 위해서다.
@@ -1673,7 +2043,9 @@ sources:
     #    🚨 수기 전사도 복제라 manual 로도 갈 수 없다. robots.txt 는 404(규칙 없음)였다 —
     #       robots 가 막은 것이 아니고, 확인 순서가 반대였다면 그대로 위반했다.
     - {name: 기능성표시식품 심의완료 공개목록 (한국식품산업협회), grade: G1, reason: "🚨 「단순 열람 외에 무단 변경, 복제·배포, 개작 등의 이용을 금지하며 위반 시 법적 처벌」 명시. 학습=복제+개작 · 색인=복제 · 인용=복제·배포 — 전 용도가 금지 범위다. ✅ 근거 규정(기능성 표시·광고 규정 제7조)은 law_go_kr covers 로 이미 확보. 잃는 것은 「그 규정에 따라 실제 승인된 제품·문구 목록」이다"}
-    - {name: 특수용도식품 자율심의 심의사례 키워드 검색 (한국식품산업협회 · ad.kfia.or.kr), grade: G1, reason: "🚨 2026-09-21 전화 문의(이서은) — 협회가 이용 불가 회신. 거절"}
+    - {name: "한국광고자율심의기구 심의결정자료 (기사형광고·인쇄매체광고 심의결정자료 및 통계 · 심의정보지)", grade: G1, reason: "🚨 2026-09-28 한국언론진흥재단 미디어지원팀 서면 회신 — 저작권 등 관련 사항을 고려할 때 활용 승인이 어렵다. 거절 · 경위: 09-26 기구에 이용 문의 메일(권소라) → 09-28 기구가 재단 신문윤리심의지원 사업 소관이라 이관 → 같은 날 재단 유선 문의 · 메일 → 거절 회신. 회신 메일은 권소라 보관(담당자 연락처는 저장소에 적지 않는다) · 옛 tail hold 줄 karb_ad_review 를 지우고 옮겼다"}
+    - {name: "한국제약바이오협회 광고심의 누리집 게시판 중 협회 자체 자료 4종 (ad.kpbma.or.kr — 세부 심의기준 · 의약품광고 사전심의규정 · 사례집·가이드북 · 심의사례 공유)", grade: G1, reason: "🚨 2026-09-29 협회 광고심의 담당 부서 서면 회신 — 협회가 광고심의 업무를 위해 마련·운영하는 자료라 AI 교육·학습용 활용 불가. 거절 · 경위: 09-22 담당 부서 전화(「공개 자료는 이용 가능」 · 메일로 다시 문의 요청) → 같은 날 게시판별 이용 문의 메일(권소라) → 09-29 거절 회신. 나머지 2종은 협회 자료가 아니라 소관처 확인을 안내받았다 — 의약품광고 및 전문의약품 정보제공 가이드라인(식약처 민원인안내서 · mfds.go.kr m_1060 · D-132 대상) · 방송광고심의에 관한 규정(방송통신심의위원회규칙 · 국가법령정보센터 행정규칙 · law_go_kr 범위). 둘 다 등재 전 · 의약품은 판정 법 4종 밖(D-271) · 방송 규정은 법 축 밖 — 쓸지는 팀장 판단. 회신 메일은 권소라 보관(담당자 연락처는 저장소에 적지 않는다) · 옛 tail hold 줄 kpbma_ad_review 를 지우고 옮겼다"}
+    - {name: 특수용도식품 자율심의 심의사례 키워드 검색 (한국식품산업협회 · ad.kfia.or.kr), grade: G1, reason: "🚨 2026-09-21 전화 문의(이서은) — 협회가 이용 불가 회신. 거절 · 📧 같은 날 23:08 이용 가능 여부 문의 메일(권소라 → ad@kfia.or.kr · 공개 화면에도 약관이 적용되는지 · 비영리 연구 목적 · 3구분 포함 · 상업 활용 협의) → ⏳ 서면 회신 대기 — 오면 거절 근거로 붙이고, 허락이면 재판정"}
     - {name: 쿠팡·네이버·올리브영 리뷰 직접 크롤링, grade: G1, reason: 약관 위반 + robots 금지}
     - {name: 고객사 CRM·구매이력·NPS 개인 레코드, grade: G1, reason: 개인정보 — sLLM 진입 금지}
     - {name: FGI 인터뷰 녹취·전사본, grade: G1, reason: 개인정보 + 비밀유지}

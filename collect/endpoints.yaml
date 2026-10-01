@@ -250,3 +250,24 @@ cosmetic_restricted:     # 15111772 화장품 사용제한 원료정보
   rows_key: body.items
   total_key: body.totalCount
   params: {}
+
+mfds_cosmetic_func_report:   # 15095680 식품의약품안전처_기능성화장품 보고품목정보
+  # 🆕 2026-09-28 — 2026-09-27 탐침(키 · 3건·200건 표본)으로 확인한 주소·모양. 판정요청서 §7.
+  #    오퍼레이션 /getRptPrdlstInq01 · totalCount 196,017 · 효능효과 EE_DOC_DATA 는 XML 문자열(CDATA) —
+  #    표본 200 중 16 만 값이 있다(EFFECT_YN1~3 = 미백·주름·자외선 여부).
+  #    개발계정 자동승인 · 10,000건/일 → 100건/장이면 약 1,960장 — 하루 한도 안.
+  url: https://apis.data.go.kr/1471000/FtnltCosmRptPrdlstInfoService01/getRptPrdlstInq01
+  style: query
+  fmt: json
+  rows_key: body.items
+  total_key: body.totalCount
+  params: {}
+
+mfds_cosmetic_func_review:   # 15056939 식품의약품안전평가원_기능성화장품 심사품목 정보
+  # 🆕 2026-09-28 — 2026-09-27 탐침으로 확인. totalCount 20,706 · EE_DOC_DATA(효능효과) · UD_DOC_DATA(용법용량) · NB_DOC_DATA
+  url: https://apis.data.go.kr/1471057/FtnltCosmSrngPrdlstInfoService05/getSrngPrdlstInq05
+  style: query
+  fmt: json
+  rows_key: body.items
+  total_key: body.totalCount
+  params: {}

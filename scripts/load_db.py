@@ -235,7 +235,24 @@ FRAGMENTS: list[tuple[str, str, str, str]] = [
         "해설서 인용표현 (사람 라벨)",
         "G2",
     ),
-    ("mfds_hf_ingredient_board:approved", "mfds_hf_ingredient_board", "승인 기능성 문구", "G3"),
+    # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집 인용 표현. 질의자 · 원천이 인용한 **광고 문구**라 해설서와 같은 판정(G2)
+    (
+        "mfds_cosmetic_ad_qa:golden",
+        "mfds_cosmetic_ad_qa",
+        "질의응답집 화장품 인용표현 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 이 인용한 광고 문구. 광고주 저작물 조각이라 G2
+    ("ftc_press:golden", "ftc_press", "보도자료 인용 광고 문구 (독립 판독)", "G2"),
+    # 🔄 2026-09-30 (판정 J1) — 섭취 주의사항(인정 조건문)도 이 조각이다 · 이름만 넓혔다(등급 그대로)
+    (
+        "mfds_hf_ingredient_board:approved",
+        "mfds_hf_ingredient_board",
+        "인정서 문구 (승인 기능성 · 섭취 주의)",
+        "G3",
+    ),
+    # 🆕 2026-09-30 (판정 J1 (가-2′)) — 개별인정형 원료 대장 I-0050 의 섭취 주의사항. 식약처 문서라 G3 (API 조각과 같은 원천)
+    ("mfds_hf_individual:approved", "mfds_hf_individual", "인정서 문구 (섭취 주의)", "G3"),
     # 🚨 주입본은 **우리 생성물**이지만 원본이 승인 문구라 계보를 그쪽에 둔다 (D-71).
     ("mfds_hf_ingredient_board:injected", "mfds_hf_ingredient_board", "규칙 주입 합성문", "G3"),
 ]
@@ -780,7 +797,8 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
         # 🆕 2026-09-25 (D-285 개정 4 · 팀장 판정 (ㄴ)) — `golden_sample` 에는 **조건 칸이 없다.**
         #    ⛔ 조건 M(보류) · D(판정 대상 아님) 행과 근거가 후보로만 있는 행을 넣으면 `violations` 가 빈 채 들어가
         #       **적법으로 읽힌다.** 넣지 않고 수를 보인다(`DB미적재_조건칸없음`). 칸은 W1 평가 도구와 함께 정한다.
-        if r.get("조건") in ("M", "D") or (r.get("조건") and not r["근거"]):
+        #    🔄 2026-09-30 — 조건 L(적법 · 화장품 지시서 §2)은 **넣는다**: 빈 `violations` 가 곧 적법이라 뜻이 맞다.
+        if r.get("조건") in ("M", "D") or (r.get("조건") in ("C", "A", "B") and not r["근거"]):
             stat["DB미적재_조건칸없음"] += 1
             continue
         evidence = [_evidence(c) for c in r["근거"]]
