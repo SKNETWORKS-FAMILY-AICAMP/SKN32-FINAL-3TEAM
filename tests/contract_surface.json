@@ -194,6 +194,8 @@
       "placement": "opt str | None"
     },
     "RiskAssessment": {
+      "ceiling": "opt app.contracts.Risk | None",
+      "ceiling_note": "opt str | None",
       "encoder": "opt app.contracts.Risk | None",
       "evidence_span": "opt app.contracts.Span | None",
       "final": "opt app.contracts.Risk | None",

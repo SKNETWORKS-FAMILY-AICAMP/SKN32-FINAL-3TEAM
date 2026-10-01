@@ -95,7 +95,7 @@ def test_위험도는_처분_종류로만_정한다() -> None:
         ({"type": "추천_보증_뒷광고"}, "범위 밖"),
         ({"kind": "과징금"}, "모르는 처분 종류"),
         ({"fact": "특허"}, "모르는 사실 칸"),
-        ({"verified_by": "오한빈", "reviewed_by": "오한빈"}, "같다"),
+        ({"verified_by": "오한빈"}, "행에 서명 칸"),
         ({"type": "없는유형"}, "모르는 유형"),
     ],
 )
@@ -108,8 +108,10 @@ def test_원천_규칙을_어기면_잡는다(row: dict, why: str) -> None:
 def test_하한_요약은_같은_법_안에서_max_이고_서명_전_행은_안_센다() -> None:
     spec = _spec()
     spec["rows"].append(spec["rows"][0] | {"id": "t.2", "kind": "시정명령", "first": "시정명령"})
-    assert sr.floor_by_type(spec) == {}, "서명 전 행은 하한이 아니다 (v_risk_lookup)"
-    assert sr.floor_by_type(spec, signed_only=False) == {"의약품_오인": {"013475": "R2"}}
+    assert sr.floor_by_type(spec) == {}, "서명 전 판은 하한이 아니다 (v_risk_lookup)"
+    assert sr.floor_by_type(spec, signed_only=False)["의약품_오인"] == {"013475": "R2"}
+    spec["signoff"] = {"sha": sr.plan_sha(spec), "verified_by": "오한빈", "reviewed_by": "권소라"}
+    assert sr.floor_by_type(spec)["의약품_오인"] == {"013475": "R2"}
 
 
 @pytest.mark.gate
@@ -126,3 +128,136 @@ def test_검토표는_서명_상태와_위험도를_싣는다(tmp_path: pathlib.
     assert sr.write_sheet(_spec(), out) == 1
     text = out.read_text(encoding="utf-8-sig")
     assert "R2" in text and "서명 전(안 쓴다)" in text
+
+
+@pytest.mark.gate
+def test_판_서명은_그_판에만_유효하고_한_글자만_바뀌어도_무효다() -> None:
+    """🆕 2026-10-01 (D-309) — 판 단위 2인 서명. 서명 뒤 행이 바뀌면 서명이 남아 하한으로 쓰이는 사고를 막는다."""
+    spec = _spec()
+    assert sr.signature(spec) is None and sr.lint(spec) == []
+    spec["signoff"] = {"sha": sr.plan_sha(spec), "verified_by": "오한빈", "reviewed_by": "권소라"}
+    assert sr.signature(spec) == ("오한빈", "권소라") and sr.lint(spec) == []
+    spec["rows"][0]["first"] = "영업정지1개월"  # 판이 바뀌었다
+    assert sr.signature(spec) is None
+    assert any("서명이 무효" in b for b in sr.lint(spec))
+    same = _spec()
+    same["signoff"] = {"sha": sr.plan_sha(same), "verified_by": "오한빈", "reviewed_by": "오한빈"}
+    assert sr.signature(same) is None and any("같다" in b for b in sr.lint(same))
+    nosha = _spec()
+    nosha["signoff"] = {"sha": None, "verified_by": "오한빈", "reviewed_by": "권소라"}
+    assert sr.signature(nosha) is None and any("sha 가 없다" in b for b in sr.lint(nosha))
+
+
+@pytest.mark.gate
+def test_판_sha_는_서명_칸을_보지_않는다() -> None:
+    a = _spec()
+    b = _spec()
+    b["signoff"] = {"sha": "x", "verified_by": "가", "reviewed_by": "나"}
+    assert sr.plan_sha(a) == sr.plan_sha(b)
+
+
+def _food(rows: list[dict]) -> dict:
+    spec = {
+        "sources": {
+            "food": {"law_id": "013475", "annex_no": "0007", "path": "a.json"},
+            "cosm": {"law_id": "008741", "annex_no": "0007", "path": "b.json"},
+        },
+        "rows": rows,
+    }
+    spec["signoff"] = {"sha": sr.plan_sha(spec), "verified_by": "가", "reviewed_by": "나"}
+    return spec
+
+
+ROW = {"src": "food", "block": "b", "mok": "마)", "quote": "q", "first": "영업정지7일"}
+
+
+@pytest.mark.gate
+def test_식품_4_7호는_목이_맞을_때만_그_처분이고_아니면_그_밖에_R1() -> None:
+    """🆕 2026-10-01 (D-310) — 유형 max 로 접으면 보통의 과장에 「영업정지 수준」이 붙는다. 목이 맞을 때만 그 행이다."""
+    spec = _food(
+        [
+            ROW | {"id": "m", "kind": "영업정지", "type": "거짓_과장", "annex1": ["4.마"]},
+            ROW | {"id": "d", "kind": "영업정지", "type": "의약품_오인"},
+            {
+                "id": "c",
+                "src": "cosm",
+                "block": "b",
+                "mok": "2)",
+                "quote": "q",
+                "first": "f",
+                "kind": "광고업무정지",
+                "type": "거짓_과장",
+            },
+        ]
+    )
+    hit = sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호|마목"])
+    assert (hit.floor, hit.ceiling, hit.basis) == (Risk.R2, None, ("m",)), (
+        "목이 맞으면 그 행 · 상한 없음"
+    )
+    miss = sr.floor_of(spec, "거짓_과장", "013475", ["013094:제8조제1항제4호"])
+    assert (miss.floor, miss.ceiling) == (Risk.R1, Risk.R2), (
+        "목을 모르면 하한 그 밖에 R1 · 가능 상한 R2"
+    )
+    assert "4.마" in miss.ceiling_note and "업무정지" in miss.ceiling_note
+    # 🚨 상한을 하한으로 올리지 않는다 (D-310 개정 (다))
+    assert miss.floor is not miss.ceiling
+    none = sr.floor_of(spec, "비방광고", "013475", [])
+    assert (none.floor, none.ceiling) == (Risk.R1, None), "행이 없으면 그 밖에 R1 · 상한 없음"
+    # 1~3호 · 화장품은 목으로 갈리지 않는다
+    assert sr.floor_of(spec, "의약품_오인", "013475", []) == sr.Floor(Risk.R2, basis=("d",))
+    assert sr.floor_of(spec, "거짓_과장", "008741", []) == sr.Floor(Risk.R2, basis=("c",))
+    unsigned = dict(spec, signoff={})
+    assert sr.floor_of(unsigned, "거짓_과장", "013475", []) == sr.Floor(None)
+    assert sr.annex1_code("002011:제3조제1항제1호") is None, "표시광고법 인용은 별표1 목이 아니다"
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("row", "why"),
+    [
+        (
+            ROW | {"id": "x", "kind": "영업정지", "type": "거짓_과장"},
+            "annex1(별표1 목 목록)이 없다",
+        ),
+        (
+            ROW | {"id": "x", "kind": "영업정지", "type": "의약품_오인", "annex1": ["2.가"]},
+            "annex1 은 식품 4~7호 행에만",
+        ),
+        (
+            ROW | {"id": "x", "kind": "영업정지", "type": "거짓_과장", "annex1": ["4마"]},
+            "꼴이 아니다",
+        ),
+    ],
+)
+def test_목_칸_규칙(row: dict, why: str) -> None:
+    spec = _food([row])
+    bad = sr.lint(spec)
+    assert any(why in b for b in bad), bad
+
+
+@pytest.mark.gate
+def test_원천의_10_01_판정_셋이_들어_있다() -> None:
+    """🆕 2026-10-01 (D-310) — 하) 건기식 오인 · 화장품 2.다 기만 · 7호 행에는 사실 확인 분기가 없다."""
+    rows = {r["id"]: r for r in sr.load_rules()["rows"]}
+    assert rows["food.b1.4ha"]["type"] == "건강기능식품_오인"
+    assert rows["cosm.2.da"]["type"] == "소비자_기만" and rows["cosm.2.da"]["rule"]["mok"] == "다"
+    assert not rows["food.b1.4a.cmp"].get("fact") and not rows["food.b3.4sa.cmp"].get("fact")
+
+
+@pytest.mark.gate
+def test_가능_상한은_하한보다_높을_때만_근거와_함께다() -> None:
+    """🆕 2026-10-01 (D-310 개정 (다)) — 표시 전용 칸. 하한 없는 상한 · 근거 없는 상한 · 하한 이하 상한을 계약이 거부한다."""
+    from pydantic import ValidationError
+
+    from app.contracts import RiskAssessment
+
+    ok = RiskAssessment(floor=Risk.R1, final=Risk.R1, ceiling=Risk.R2, ceiling_note="목에 따라 R2")
+    assert ok.ceiling is Risk.R2 and ok.final is Risk.R1, "상한은 최종 위험도를 올리지 않는다"
+    for bad, why in (
+        ({"floor": None, "ceiling": Risk.R2, "ceiling_note": "x"}, "하한 없이"),
+        ({"floor": Risk.R2, "ceiling": Risk.R2, "ceiling_note": "x"}, "높지 않다"),
+        ({"floor": Risk.R1, "ceiling": Risk.R2}, "근거 줄"),
+        ({"floor": Risk.R1, "ceiling_note": "x"}, "상한이 없다"),
+    ):
+        with pytest.raises(ValidationError, match=why):
+            RiskAssessment(**bad)

@@ -7,7 +7,9 @@
   잃는다**(2026-10-01 실측 · 파싱 행의 처분이 첫 하위 목 것). 그래서 행은 사람이 읽을 원천(yaml)에 두고, 이 검사가 **원문 괘선 표의
   첫 칸(위반행위)과 1차 칸**에서 인용을 찾아 맞는지 본다. 못 찾으면 멈춘다 — 서명은 원문과 같은 글자 위에서만 한다 (D-149 · D-220).
 ★ 위험도는 처분 **종류**로만 정한다 — `KIND_RISK` 한 곳 (D-227 · D-99). yaml 에 위험도를 적지 않는다.
-🚨 서명(`verified_by` · `reviewed_by`)은 사람만 — 이 스크립트는 **읽기만** 한다. 둘이 같은 이름이면 멈춘다(D-66 · `ck_sanction_four_eyes`).
+🚨 서명은 사람만 — 이 스크립트는 **읽기만** 한다. 🔄 2026-10-01 (D-309) **판 단위 서명** — yaml 의 `signoff` 하나에 판 sha(`plan_sha`)와
+   두 이름. sha 가 지금 판과 다르면 **서명 무효**(check 가 멈춘다 · 적재기는 싣지 않는다) · 두 이름이 같으면 멈춘다(D-66 · `ck_sanction_four_eyes`).
+   적재기는 유효한 판 서명을 행마다 `verified_by` · `reviewed_by` 로 옮긴다(`signature`) — 스키마 · 뷰는 그대로다.
 ⛔ 적재(`load_db.load_sanction_rule`) · `assess_risk` 배선은 서명 뒤 작업이다 — 여기서 하지 않는다 (D-305).
 """
 
@@ -15,6 +17,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import dataclasses
+import hashlib
 import json
 import pathlib
 import re
@@ -45,6 +49,25 @@ KIND_RISK: dict[str, Risk] = {
     "영업허가등록취소": Risk.R3,
     "영업소폐쇄": Risk.R3,
 }
+
+#: 🆕 2026-10-01 (D-310) — **목 단위 하한**을 쓰는 축 · 유형. 식품 별표7 은 법 제8조① 4~7호를 [별표 1] 목마다 다르게 처분하고
+#:    나머지는 「그 밖에 → 시정명령」이다. 그래서 그 유형은 근거 인용의 목(`annex1`)이 맞는 행만 쓰고, 없으면 R1 이다(D-308 ⑥).
+#:    ⛔ 유형 max 로 접으면 보통의 과장 문구에 「영업정지 수준」이 붙는다 — 근거 없는 등급이다(D-305 · D-130).
+MOK_AXIS = "013475"
+MOK_TYPES = frozenset(
+    {
+        Violation.거짓_과장,
+        Violation.소비자_기만,
+        Violation.후기_체험기_기만,
+        Violation.비방광고,
+        Violation.부당_비교광고,
+    }
+)
+#: 목을 못 맞힐 때의 하한 — 별표7 블록 1 거) · 블록 3 카) · 블록 4 2)다) 「그 밖에 … 부당한 표시ㆍ광고 → 시정명령」 `[문헌]`
+OTHERWISE = Risk.R1
+_ANNEX1 = re.compile(r"^[4-7]\.[가-하]$")
+#: 식품표시광고법(법률) ID — 근거 인용의 법. 처분 원천(시행규칙 013475)과 다른 ID 다
+FOOD_ACT = "013094"
 
 #: D-255 — 범위 밖 유형은 하한 행을 두지 않는다(넣으면 「하한이 있다」가 확정처럼 읽힌다)
 OUT_OF_SCOPE = {Violation.추천_보증_뒷광고}
@@ -167,16 +190,123 @@ def lint(spec: dict[str, Any]) -> list[str]:
         for f in ("quote", "first"):
             if not r.get(f):
                 bad.append(f"{rid} {f} 가 비었다 — 원문 대조를 못 한다")
-        v, rv = r.get("verified_by"), r.get("reviewed_by")
-        if v and rv and str(v).strip() == str(rv).strip():
-            bad.append(f"{rid} 검증자와 확인자가 같다 (D-66 · ck_sanction_four_eyes)")
+        mok_row = src_law(spec, r) == MOK_AXIS and r.get("type") in {v.value for v in MOK_TYPES}
+        if mok_row and not isinstance(r.get("annex1"), list):
+            bad.append(f"{rid} 식품 4~7호 행에 annex1(별표1 목 목록)이 없다 — 목 단위 하한 (D-310)")
+        if not mok_row and "annex1" in r:
+            bad.append(f"{rid} annex1 은 식품 4~7호 행에만 — 목으로 갈리지 않는 행이다 (D-310)")
+        for code in r.get("annex1") or []:
+            if not _ANNEX1.match(str(code)):
+                bad.append(f"{rid} annex1 꼴이 아니다 {code!r} — `4.마` 처럼")
+        if "verified_by" in r or "reviewed_by" in r:
+            bad.append(f"{rid} 행에 서명 칸이 있다 — 서명 자리는 `signoff` 하나다 (D-309)")
     for p in spec.get("penal") or []:
         for t in p.get("types") or []:
             try:
                 Violation(t)
             except ValueError:
                 bad.append(f"{p.get('id')} 모르는 유형 {t!r}")
+    so = spec.get("signoff") or {}
+    v, rv = (str(so.get(k) or "").strip() for k in ("verified_by", "reviewed_by"))
+    if v and rv and v == rv:
+        bad.append("signoff 검증자와 확인자가 같다 (D-66 · ck_sanction_four_eyes)")
+    if (v or rv) and so.get("sha") and so["sha"] != plan_sha(spec):
+        bad.append(
+            f"signoff 서명이 무효다 — 서명한 판 {so['sha']} ≠ 지금 판 {plan_sha(spec)} (판이 바뀌었다 · 사람이 지우고 다시 서명 · D-309)"
+        )
+    if (v or rv) and not so.get("sha"):
+        bad.append("signoff 에 이름은 있는데 판 sha 가 없다 — 무엇에 서명했는지 모른다 (D-309)")
     return bad
+
+
+def src_law(spec: dict[str, Any], r: dict[str, Any]) -> str | None:
+    return ((spec.get("sources") or {}).get(r.get("src")) or {}).get("law_id")
+
+
+def annex1_code(cite: str) -> str | None:
+    """근거 인용 → [별표 1] 목 코드(`4.마`). 식품표시광고법 4~7호의 목 인용만 · 그 밖에는 None."""
+    from collect import statute  # noqa: PLC0415
+
+    try:
+        law, _jo, _hang, ho, mok = statute.parse(cite)
+    except ValueError:
+        return None
+    return f"{ho}.{mok}" if law == FOOD_ACT and 4 <= ho <= 7 and mok else None
+
+
+#: 위험도 이름 — 화면 근거 줄에 쓴다 (`app.contracts.Risk` docstring · D-280)
+RISK_NAME = {Risk.R1: "시정명령", Risk.R2: "업무정지", Risk.R3: "영업 상실"}
+
+
+@dataclasses.dataclass(frozen=True)
+class Floor:
+    """하한 조회 결과 — 🔄 2026-10-01 (D-310 개정 (다)) 하한 + **가능 상한**.
+
+    `floor` 는 「확실한 최소」 · `ceiling` 은 「목에 따라 그럴 수 있는 최대」(하한보다 높을 때만) · `basis` 는 근거 행 id.
+    🚨 상한은 표시 전용이다 — 래칫 · 통과에 쓰지 않는다(`RiskAssessment.ceiling`).
+    """
+
+    floor: Risk | None
+    ceiling: Risk | None = None
+    ceiling_note: str | None = None
+    basis: tuple[str, ...] = ()
+
+
+def _top(rows: list[dict[str, Any]]) -> Risk:
+    order = list(Risk)
+    return max((KIND_RISK[r["kind"]] for r in rows), key=order.index)
+
+
+def floor_of(
+    spec: dict[str, Any], vtype: str, law_id: str, cites: list[str], *, signed_only: bool = True
+) -> Floor:
+    """(유형 · 처분 원천 법 · 근거 인용) → 하한 · 가능 상한. 서명된 판이 없거나 행이 없으면 `Floor(None)`.
+
+    식품 4~7호(D-310) — 근거 인용의 목이 맞는 행이 있으면 그 행 · 없으면 **하한 그 밖에 R1** + 그 유형의 목 행 중 가장 무거운
+    처분을 **가능 상한**으로(근거 줄에 목 목록). ⛔ 상한을 하한으로 올리지 않는다 — 하한은 확실한 최소다(D-310 개정 (다)).
+    """
+    if signed_only and signature(spec) is None:
+        return Floor(None)
+    rows = [r for r in spec.get("rows") or [] if r["type"] == vtype and src_law(spec, r) == law_id]
+    if law_id == MOK_AXIS and Violation(vtype) in MOK_TYPES:
+        codes = {c for c in map(annex1_code, cites) if c}
+        hit = [r for r in rows if codes & set(r.get("annex1") or [])]
+        if hit:
+            return Floor(_top(hit), basis=tuple(r["id"] for r in hit))
+        if not rows:
+            return Floor(OTHERWISE, basis=("그 밖에(별표7)",))
+        top = _top(rows)
+        if top.level <= OTHERWISE.level:
+            return Floor(OTHERWISE, basis=("그 밖에(별표7)",))
+        mok = sorted(
+            {c for r in rows if KIND_RISK[r["kind"]] is top for c in r.get("annex1") or []}
+        )
+        where = f"별표1 {' · '.join(mok)} 에 해당하면" if mok else "별표7 전용 목에 해당하면"
+        return Floor(
+            OTHERWISE,
+            ceiling=top,
+            ceiling_note=f"목에 따라 {top.value}({RISK_NAME[top]})까지 — {where} 별표7 전용 처분",
+            basis=("그 밖에(별표7)",),
+        )
+    if not rows:
+        return Floor(None)
+    return Floor(_top(rows), basis=tuple(r["id"] for r in rows))
+
+
+def plan_sha(spec: dict[str, Any]) -> str:
+    """판 sha — 원천 · 행 · 형벌의 내용(서명 칸 제외). 🔴 한 글자라도 바뀌면 달라진다 — 서명은 이 값에 묶인다 (D-309)."""
+    body = {k: spec.get(k) for k in ("sources", "rows", "penal")}
+    blob = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def signature(spec: dict[str, Any]) -> tuple[str, str] | None:
+    """유효한 판 서명 `(verified_by, reviewed_by)` — 둘 다 있고 · 서로 다르고 · sha 가 지금 판과 같을 때만. 그 밖에는 None(서명 없음과 같다)."""
+    so = spec.get("signoff") or {}
+    v, rv = (str(so.get(k) or "").strip() for k in ("verified_by", "reviewed_by"))
+    if v and rv and v != rv and so.get("sha") == plan_sha(spec):
+        return v, rv
+    return None
 
 
 def verify(spec: dict[str, Any], root: pathlib.Path = ROOT) -> list[str]:
@@ -253,10 +383,11 @@ SHEET_COLS = (
 
 def sheet_rows(spec: dict[str, Any]) -> list[list[str]]:
     src = spec["sources"]
+    sig = signature(spec)
     out = []
     for r in spec.get("rows") or []:
         s = src[r["src"]]
-        signed = bool(r.get("verified_by")) and bool(r.get("reviewed_by"))
+        signed = sig is not None
         out.append(
             [
                 r["id"],
@@ -272,8 +403,8 @@ def sheet_rows(spec: dict[str, Any]) -> list[list[str]]:
                 r.get("fact") or "",
                 "폐기" if r.get("disposal") else "",
                 r.get("note", ""),
-                r.get("verified_by") or "",
-                r.get("reviewed_by") or "",
+                sig[0] if sig else "",
+                sig[1] if sig else "",
                 "서명됨(하한으로 쓴다)" if signed else "서명 전(안 쓴다)",
             ]
         )
@@ -294,14 +425,41 @@ def floor_by_type(spec: dict[str, Any], signed_only: bool = True) -> dict[str, d
     """유형 × 법 → 하한(같은 법 안에서 max · D-227 「업종은 언제나 max」). 검토 요약용 — 판정 경로는 DB 뷰가 한다."""
     order = list(Risk)
     out: dict[str, dict[str, str]] = {}
+    if signed_only and signature(spec) is None:
+        return out
     for r in spec.get("rows") or []:
-        if signed_only and not (r.get("verified_by") and r.get("reviewed_by")):
-            continue
         law = spec["sources"][r["src"]]["law_id"]
+        if law == MOK_AXIS and Violation(r["type"]) in MOK_TYPES:
+            continue
         cur = out.setdefault(r["type"], {}).get(law)
         risk = KIND_RISK[r["kind"]]
         if cur is None or order.index(risk) > order.index(Risk(cur)):
             out[r["type"]][law] = risk.value
+    for t in sorted(MOK_TYPES, key=lambda v: v.value):
+        codes = sorted(
+            {
+                c
+                for r in spec.get("rows") or []
+                if r["type"] == t.value and src_law(spec, r) == MOK_AXIS
+                for c in r.get("annex1") or []
+            }
+        )
+        top = max(
+            (
+                list(Risk).index(KIND_RISK[r["kind"]])
+                for r in spec.get("rows") or []
+                if r["type"] == t.value and src_law(spec, r) == MOK_AXIS
+            ),
+            default=None,
+        )
+        cap = (
+            f" · 가능 상한 {list(Risk)[top].value}({' · '.join(codes)})"
+            if codes and top is not None and list(Risk)[top].level > OTHERWISE.level
+            else ""
+        )
+        out.setdefault(t.value, {})[MOK_AXIS] = (
+            f"목 단위(목 미특정이면 하한 {OTHERWISE.value}{cap})"
+        )
     return out
 
 
@@ -319,9 +477,14 @@ def main(argv: list[str] | None = None) -> int:
         print("🔴 원천이 원문과 맞지 않는다 — 서명하지 않는다\n  " + "\n  ".join(bad))
         return 1
     n = write_sheet(spec)
-    signed = sum(bool(r.get("verified_by") and r.get("reviewed_by")) for r in spec["rows"])
+    sig = signature(spec)
     print(
-        f"✅ 원문 대조 통과 — 행 {n} · 서명됨 {signed} · 형벌 조항 {len(spec.get('penal') or [])}"
+        f"✅ 원문 대조 통과 — 행 {n} · 형벌 조항 {len(spec.get('penal') or [])} · 판 sha {plan_sha(spec)} · "
+        + (
+            f"서명됨({sig[0]} · {sig[1]})"
+            if sig
+            else "서명 전 — `signoff` 에 이 판 sha 와 두 이름을 적는다(D-309)"
+        )
     )
     print(f"   검토표 → {SHEET.relative_to(ROOT)}")
     print("   유형 × 법 하한(서명 무시 · 미리보기):")
