@@ -1,0 +1,233 @@
+{
+  "outcome": "hold",
+  "category": null,
+  "not_reviewed": [],
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "머리카락이 자라나는 효과적인 건강식품",
+      "verdict": "hold",
+      "hold_reason": "cat_unknown",
+      "violations": [
+        "질병_예방치료_표방",
+        "건강기능식품_오인"
+      ],
+      "infeasibility": "C",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제1호",
+          "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": null
+        },
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": null
+        }
+      ],
+      "risk": {
+        "floor": "R3",
+        "encoder": null,
+        "final": "R3",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
+    }
+  ],
+  "branches": [
+    {
+      "premise": "식품",
+      "verified": false,
+      "outcome": "certificate",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "머리카락이 자라나는 효과적인 건강식품",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [
+            "질병_예방치료_표방",
+            "건강기능식품_오인"
+          ],
+          "infeasibility": "C",
+          "evidence": [
+            {
+              "law_id": "013094",
+              "article": "제8조",
+              "item": "제1항제1호",
+              "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+              "chunk_id": null
+            },
+            {
+              "law_id": "013094",
+              "article": "제8조",
+              "item": "제1항제3호",
+              "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+              "chunk_id": null
+            }
+          ],
+          "risk": {
+            "floor": "R3",
+            "encoder": null,
+            "final": "R3",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 일반식품이라면 「머리카락이 자라나는」은 질병의 예방·치료 효능으로 읽힐 수 있고, 「건강식품」은 건강기능식품으로 오인하게 할 수 있습니다 — 식품표시광고법 제8조제1항제1호 · 제3호.",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제1호",
+          "quote": null,
+          "chunk_id": null
+        },
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": null,
+          "chunk_id": null
+        }
+      ]
+    },
+    {
+      "premise": "건기식_인정",
+      "verified": false,
+      "outcome": "certificate",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "머리카락이 자라나는 효과적인 건강식품",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [
+            "질병_예방치료_표방"
+          ],
+          "infeasibility": "C",
+          "evidence": [
+            {
+              "law_id": "013094",
+              "article": "제8조",
+              "item": "제1항제1호",
+              "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+              "chunk_id": null
+            }
+          ],
+          "risk": {
+            "floor": "R3",
+            "encoder": null,
+            "final": "R3",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 인정받은 건강기능식품이라도 발모는 인정받은 기능성의 범위 밖입니다 — 인정받은 문구로 바꿔야 합니다. 식품표시광고법 제8조제1항제1호.",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제1호",
+          "quote": null,
+          "chunk_id": null
+        }
+      ]
+    },
+    {
+      "premise": "건기식_비인정",
+      "verified": false,
+      "outcome": "certificate",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "머리카락이 자라나는 효과적인 건강식품",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [
+            "질병_예방치료_표방",
+            "건강기능식품_오인"
+          ],
+          "infeasibility": "C",
+          "evidence": [
+            {
+              "law_id": "013094",
+              "article": "제8조",
+              "item": "제1항제1호",
+              "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+              "chunk_id": null
+            },
+            {
+              "law_id": "013094",
+              "article": "제8조",
+              "item": "제1항제3호",
+              "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+              "chunk_id": null
+            }
+          ],
+          "risk": {
+            "floor": "R3",
+            "encoder": null,
+            "final": "R3",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 인정받지 않았다면 기능성 표방 자체가 자격의 문제이고, 발모 표현은 질병의 예방·치료 효능으로 읽힐 수 있습니다 — 식품표시광고법 제8조제1항제1호 · 제3호. 특허 · 수상 · 논문은 자격이 되지 않습니다.",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제1호",
+          "quote": null,
+          "chunk_id": null
+        },
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": null,
+          "chunk_id": null
+        }
+      ]
+    }
+  ],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.2.0"
+}

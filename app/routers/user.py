@@ -461,6 +461,9 @@ def landing(request: Request) -> HTMLResponse:
 #: 한 번에 검수하는 문구 수 상한 — 프로토타입 v7.2 `addReviewCopy` 의 5건 그대로 (ksr 2026-09-29).
 _MAX_COPIES = 5
 
+#: 품목 분기를 고른 뒤 「다시 선택」할 수 있는 횟수 (팀장 2026-10-01). 화면이 회차만큼 미리 그려 두고 넘긴다.
+_MAX_REDO = 3
+
 #: 「예시 넣기」 문구 — 프로토타입 `SAMPLE_COPY` 그대로. 🚨 실제 광고 인용이 아니라 화면용 예시다.
 _SAMPLE_COPY = (
     "이 영양제는 매일 섭취 시 눈 피로 회복에 탁월한 효과가 있습니다. "
@@ -522,11 +525,14 @@ def _review_ctx(copies: list[str], results: list[dict] | None = None, **extra) -
         "fixtures": _fixture_names("judge"),
         "max_text_len": PARAMS.max_text_len,
         "max_copies": _MAX_COPIES,
+        "max_redo": _MAX_REDO,
         "copies": copies,
         "results": results or [],
     }
     for r in results or []:
         r["flagged"] = _flagged(r["result"])
+        # 분기마다의 지적 문장 — 화면이 고른 분기 기준으로 지적 건수를 센다 (2026-10-01)
+        r["branch_flagged"] = {b.premise.value: _flagged(b) for b in r["result"].branches}
     if results:
         ctx["flagged"] = sum(len(r["flagged"]) for r in results)
     ctx.update(extra)
