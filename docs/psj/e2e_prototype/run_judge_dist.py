@@ -34,24 +34,74 @@ AUX = {"부당_비교광고", "비방광고"}
 DEV_FRAC, DEV_SEED = 0.15, 42  # 인코더 노트북 섹션 4 와 같은 값 — 바꾸면 둘 다 바꾼다
 #: 거래 조건 문장 표지 (D-272 개정) — 버킷을 가르는 데만 쓴다
 TRADE = re.compile(r"가격|할인|적립|쿠폰|무료\s*배송|배송|환불|반품|교환|\d+\s*원|만원|1\+1|2\+1|특가|최저가")
-EXPECT = {"scored": "위반·보류", "pending": "위반·보류", "M": "보류", "D": "신호 없음", "D_거래": "보류(표시광고법 대상)",
-          "neg": "전제별로 갈림(①-b)", "aux": "참고"}
+EXPECT = {"scored": "위반·보류", "pending": "위반·보류", "M": "보류(채점 안 함)", "D": "판정 대상 아님(별도 지표)", "D_거래": "보류(표시광고법 대상)",
+          "neg": "음성 L · 전제별로 갈림(①-b)", "aux": "참고"}
 ORDER = ["scored", "pending", "M", "D", "D_거래", "neg", "aux"]
 
 
 def bucket(r):
+    """🔄 10-01 팀장 채점 기준 — C·A·B = 양성 · L = 음성 · D = 별도 지표 · M = 채점 안 함.
+
+    조건이 M · D 면 라벨보다 먼저 가른다(채점 밖). L 은 음성인데 라벨이 붙어 있으면 데이터가 어긋난 것이라 멈춘다.
+    조건 칸이 없는 판(8,432판)에서는 라벨 없음 ∧ 조건 없음이 음성(neg)이다 — L 이 생긴 판에서도 같은 버킷으로 떨어진다.
+    """
     cond, labels = r.get("조건"), r.get("labels") or []
     if cond == "M":
         return "M"
+    if cond == "D":
+        return "D_거래" if TRADE.search(r["text"]) else "D"
+    if cond == "L":
+        if labels:
+            raise SystemExit(f"🔴 조건 L(적법)인데 라벨이 있다 — {r['id']} · {labels}")
+        return "neg"
     if any(l in AUX for l in labels):
         return "aux"
     if labels:
         return "scored"
-    if cond == "D":
-        return "D_거래" if TRADE.search(r["text"]) else "D"
     if cond in ("C", "B", "A"):
         return "pending"
     return "neg"
+
+
+def wilson(k, n, z=1.96):
+    """D-40 — 비율의 95% 구간. n=0 이면 (nan, nan)."""
+    if not n:
+        return float("nan"), float("nan")
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return max(0.0, c - h), min(1.0, c + h)
+
+
+#: 팀장 채점 묶음 — 버킷 → (묶음, 기대)
+TEAM = {"scored": "양성", "pending": "양성", "neg": "음성", "D": "D", "D_거래": "D_거래", "M": "채점 안 함", "aux": "참고"}
+PASS_STATES = ("confirmed:신호없음", "판정대상아님")
+
+
+def team_summary(dist):
+    """팀장 기준 요약. 판정 로직은 위반을 「확정 · 근거없음 · 보류」로 내고 통과는 「신호없음 · 판정대상아님」이다."""
+    agg = defaultdict(Counter)
+    for b, c in dist.items():
+        if b in TEAM:
+            agg[TEAM[b]].update(c)
+    pct = lambda k, n: f"{k:5d}/{n:<5d} {k / n:6.1%} [{wilson(k, n)[0]:.1%}~{wilson(k, n)[1]:.1%}]" if n else "    —"
+    print("\n[팀장 채점 기준 · C·A·B 양성 · L 음성 · D 별도 · M 채점 안 함]")
+    c = agg["양성"]; n = sum(c.values())
+    if n:
+        print(f"  양성 (C·A·B + 유형 라벨)  위반 확정    {pct(c['confirmed:위반'], n)}")
+        print(f"                            놓침(통과)   {pct(sum(c[s] for s in PASS_STATES), n)}   ← 낮을수록 좋다")
+    c = agg["음성"]; n = sum(c.values())
+    if n:
+        print(f"  음성 (L)                  오판정(확정) {pct(c['confirmed:위반'], n)}   ← 낮을수록 좋다")
+        print(f"                            통과         {pct(sum(c[s] for s in PASS_STATES), n)}")
+    c = agg["D"]; n = sum(c.values())
+    if n:
+        print(f"  D (주장 없는 문구)        판정대상아님 {pct(c['판정대상아님'], n)}   ← 높을수록 좋다")
+        print(f"                            위반 확정    {pct(c['confirmed:위반'], n)}")
+    c = agg["D_거래"]; n = sum(c.values())
+    if n:
+        print(f"  D_거래 (참고 · D-272 개정) 판정대상아님 {pct(c['판정대상아님'], n)}   ← 0 이어야 한다(not_claim 금지)")
 
 
 def group_key(r):
@@ -185,6 +235,7 @@ def main():
         n = sum(dist[b].values())
         if n:
             print(f"{b:8s} {n:5d}  " + "  ".join(f"{dist[b][s]:6d}({dist[b][s] / n:6.1%})".rjust(16) for s in states) + f"   {EXPECT[b]}")
+    team_summary(dist)
     print("\n사항 판별 (주장 · 거래조건 · 혼합 · 판정대상아님)")
     for b in ORDER:
         if subj[b]:
