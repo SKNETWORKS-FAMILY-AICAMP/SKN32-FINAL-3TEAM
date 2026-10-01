@@ -169,20 +169,22 @@
 .rv-flag { counter-increment: rvflag; }
 .rv-live { position: absolute; top: 1.1rem; right: 1.15rem; background: var(--u-ok-bg); color: var(--u-ok-ink); }
 .rv-live::before { content: "특이사항 없음"; }
-{% set v = namespace(s=["> .rv-flag"]) %}
-{% for r in range(max_redo + 1) %}
-  {% set cur = (".rv-redo-%d:checked ~ "|format(r) if r > 0 else "")
-             ~ (".rv-redo-%d:not(:checked) ~ "|format(r + 1) if r < max_redo else "") ~ ".rv-round-%d > "|format(r) %}
-  {% for tail in (".rv-k-none:checked ~ .rv-rec .rv-flag", ".rv-k-hf:checked ~ .rv-c-none:checked ~ .rv-rec .rv-flag",
+{# 선택자의 `>` 는 템플릿 글자로 적는다 — 변수에 담으면 자동 이스케이프가 `&gt;` 로 바꿔 CSS 가 깨진다.
+   이스케이프를 끄지 않는다 (P2-9) — 변수로 들어가는 것은 회차 숫자와 `>` 없는 고정 꼬리뿐이다. #}
+{% macro rv_flag_sel() -%}
+> .rv-flag
+{%- for r in range(max_redo + 1) -%}
+  {%- for tail in (".rv-k-none:checked ~ .rv-rec .rv-flag", ".rv-k-hf:checked ~ .rv-c-none:checked ~ .rv-rec .rv-flag",
                   ".rv-p-food:checked ~ .rv-res-food .rv-flag", ".rv-p-cos:checked ~ .rv-res-cos .rv-flag",
                   ".rv-p-gen:checked ~ .rv-res-gen .rv-flag",
                   ".rv-k-hf:checked ~ .rv-p-hfy:checked ~ .rv-res-hfy .rv-flag",
-                  ".rv-k-hf:checked ~ .rv-p-hfn:checked ~ .rv-res-hfn .rv-flag") %}
-    {% set v.s = v.s + [cur ~ tail] %}
-  {% endfor %}
-{% endfor %}
-.rv-card-live:has({{ v.s|join(", ")|safe }}) .rv-live { background: var(--u-bad-bg); color: var(--u-bad-ink); }
-.rv-card-live:has({{ v.s|join(", ")|safe }}) .rv-live::before { content: "지적 " counter(rvflag) "건"; }
+                  ".rv-k-hf:checked ~ .rv-p-hfn:checked ~ .rv-res-hfn .rv-flag") -%}
+    , {% if r > 0 %}.rv-redo-{{ r }}:checked ~ {% endif %}{% if r < max_redo %}.rv-redo-{{ r + 1 }}:not(:checked) ~ {% endif %}.rv-round-{{ r }} > {{ tail }}
+  {%- endfor -%}
+{%- endfor -%}
+{%- endmacro %}
+.rv-card-live:has({{ rv_flag_sel() }}) .rv-live { background: var(--u-bad-bg); color: var(--u-bad-ink); }
+.rv-card-live:has({{ rv_flag_sel() }}) .rv-live::before { content: "지적 " counter(rvflag) "건"; }
 .rv-q { border: 1px solid var(--u-signal); background: var(--u-signal-soft); border-radius: .75rem;
         padding: .8rem .9rem; margin-bottom: .6rem; }
 .rv-q-title { margin: 0 0 .15rem; font-size: .9rem; font-weight: 600; display: flex; justify-content: space-between; gap: .5rem; }
