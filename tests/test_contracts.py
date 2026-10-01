@@ -676,3 +676,33 @@ def test_모델의_래칫_제약이_최종이_하한_아래인_행을_막는다(
     assert got.get("ck_judgment_final_not_below_floor") == (
         "risk_final IS NULL OR risk_floor IS NULL OR risk_final >= risk_floor"
     )
+
+
+# ── 🆕 2026-10-01 (D-308 ④) 사실 확인 분기 · 실증 자료 거름 ─────────────────────────────
+
+
+@pytest.mark.gate
+def test_실증_분기에는_특허_수상_인증을_못_넣는다() -> None:
+    """D-228 — 효능 실증이 아니다. 종전에는 docstring 의 약속뿐이었다."""
+    from app.contracts import SubstBranch
+
+    with pytest.raises(ValidationError, match="실증 자료가 아니다"):
+        SubstBranch(substantiated_max=Risk.R1, accepted_evidence=["수상 증서"], criteria="기준")
+
+
+@pytest.mark.gate
+def test_사실_확인_분기는_B_에만_상한은_확인_전_아래로() -> None:
+    from app.contracts import FactBranch, FactKind
+
+    fact = FactBranch(
+        kind=FactKind.수상_상장,
+        confirmed_max=Risk.R0,
+        accepted_evidence=["수상 증서"],
+        criteria="기준",
+    )
+    ok = _viol(fact_check=fact)
+    assert ok.fact_check.kind is FactKind.수상_상장
+    with pytest.raises(ValidationError, match="B 에만"):
+        _viol(infeas=Infeasibility.C, fact_check=fact)
+    with pytest.raises(ValidationError, match="상한"):
+        _viol(fact_check=fact.model_copy(update={"confirmed_max": Risk.R3}))

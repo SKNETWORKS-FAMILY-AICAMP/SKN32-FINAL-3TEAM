@@ -1,0 +1,81 @@
+# sanction_review.yaml — **위험도 하한(`sanction_rule`) 원천 · 2인 서명 자리** (🆕 2026-10-01 · D-305 · D-308 · W5)
+#
+# ★ 무엇인가 — 법령 처분 기준(별표 · 조문)에서 **1차 처분**을 위반 유형마다 옮긴 행. 위험도는 처분 **종류**가 정한다(D-227 —
+#   시정명령 · 시정조치 R1 · 정지 R2 · 취소 · 폐쇄 R3) — 이 파일에 위험도를 적지 않는다(`scripts/sanction_rule.py` `KIND_RISK` 한 곳 · D-99).
+# ★ 누가 쓰나 — 행은 Claude 가 원문에서 옮긴 **초안**이다. `verified_by` · `reviewed_by` 는 **사람만** 적는다(서로 다른 두 사람 · D-66).
+#   🚨 서명 없는 행은 적재돼도 `v_risk_lookup` 에 안 보인다(스키마 · 0013) — 서명이 곧 「하한으로 쓴다」다.
+# ★ 검사 — `uv run python -m scripts.sanction_rule check` 가 행마다 **원문에서 인용과 1차 처분을 찾아** 대조한다(원문이 있는 기기 · 정본 · A).
+#   못 찾으면 멈춘다 — 옮겨 적은 글자가 원문과 다르면 서명할 수 없다 (D-149 · D-220). 검토표: `build/labels/sanction_rule__검토표.csv`
+#
+# 범위 (D-308) — **광고 문구만 보고 알 수 있는 위반**만 담는다.
+#   ⛔ 안 담는다 — 중지명령 위반 · 정지기간 중 광고 · 시정명령 불이행(①) · 실증자료 제출 불응(②) · 화장품 2.자 · 2.차(③) ·
+#      자체안전관리인증기준 · GMO 미표시 · 소비기한 · 변조 · 표시사항 거짓(④ · 문구에 주장이 없다) · 식품 8 · 9 · 10호 · 심의(⑧) ·
+#      뒷광고(화장품 2.다 · D-255 범위 밖) · 식품 축 블록 2(가금류 식육 포장 — 4호 하위 목이 소비기한 · 변조 · 자체안전관리뿐)
+#   ★ 「그 밖에 부당한 표시 · 광고 → 시정명령」은 **행이 아니라 코드 기본값 R1** 이다(⑥ · 유형이 특정되지 않아 `violation_type NOT NULL` 에 못 든다)
+#   ★ 사실에 달린 주장(수상 · 인증 · 원재료)은 `fact` 칸 — 판정은 보수 기록 + 사실 확인 분기(`FactBranch` · ④)
+#   ★ 폐기는 `disposal` — 등급을 바꾸지 않고 설명 줄로만(⑩)
+#   ★ 업종 블록이 여럿이면 **유형마다 행을 다 싣는다** — 하한은 같은 축 안에서 max(D-227 「업종은 언제나 max」)
+
+sources:
+  food:      {law_id: "013475", annex_no: "0007", path: data/raw/law/annex/013475_annex_0007_00.json, title: "식품 등의 표시ㆍ광고에 관한 법률 시행규칙 [별표 7] 행정처분 기준"}
+  cosm:      {law_id: "008741", annex_no: "0007", path: data/raw/law/annex/008741_annex_0007_00.json, title: "화장품법 시행규칙 [별표 7] 행정처분의 기준"}
+  cosm_rule: {law_id: "008741", annex_no: "0005", path: data/raw/law/annex/008741_annex_0005_00.json, title: "화장품법 시행규칙 [별표 5] 화장품 표시ㆍ광고의 범위 및 준수사항"}
+  fair:      {law_id: "002011", path: data/derived/law_article.jsonl, law: 표시ㆍ광고의 공정화에 관한 법률, title: "표시광고법 제7조(시정조치)"}
+
+rows:
+  # ── 식품 축 · 블록 1 — 식품제조ㆍ가공업 등 「라. 법 제8조제1항을 위반한 경우」 ────────────────────────
+  - {id: food.b1.1, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "1)", quote: "질병의 예방ㆍ치료에 효능이 있는", first: "영업정지2개월", kind: 영업정지, value: 2, unit: 개월, disposal: true, type: 질병_예방치료_표방, verified_by: null, reviewed_by: null}
+  - {id: food.b1.2, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "2)", quote: "식품등을 의약품으로 인식할 우려", first: "영업정지15일", kind: 영업정지, value: 15, unit: 일, note: "건강기능식품은 영업정지 1개월 — 같은 R2", type: 의약품_오인, verified_by: null, reviewed_by: null}
+  - {id: food.b1.3, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "3)", quote: "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려", first: "영업정지15일", kind: 영업정지, value: 15, unit: 일, type: 건강기능식품_오인, verified_by: null, reviewed_by: null}
+  - {id: food.b1.4ra, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "라)", quote: "체험기 및 체험사례", first: "품목 제조정지 1개월", kind: 품목제조정지, value: 1, unit: 개월, type: 후기_체험기_기만, verified_by: null, reviewed_by: null}
+  - {id: food.b1.4ma, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "마)", quote: "사실과 다른 수상", first: "영업정지7일", kind: 영업정지, value: 7, unit: 일, type: 거짓_과장, fact: 수상_상장, verified_by: null, reviewed_by: null}
+  - {id: food.b1.4sa, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "사)", quote: "다른 식품ㆍ축산물의 유형과 오인ㆍ혼동", first: "품목 제조정지 15일", kind: 품목제조정지, value: 15, unit: 일, type: 소비자_기만, note: "🚨 유형 확신 낮음 — 별표1 에 직접 대응 목이 없다(초안 09-16 §3-2) · 서명 전에 본다", verified_by: null, reviewed_by: null}
+  - {id: food.b1.4a, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "아)", quote: "사용하지 않은 원재료명 또는 성분명", first: "품목 제조정지 1개월", kind: 품목제조정지, value: 1, unit: 개월, type: 거짓_과장, fact: 원재료, note: "D-308 ⑤ 기본 4호", verified_by: null, reviewed_by: null}
+  - {id: food.b1.4a.cmp, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "아)", quote: "사용하지 않은 원재료명 또는 성분명", first: "품목 제조정지 1개월", kind: 품목제조정지, value: 1, unit: 개월, type: 부당_비교광고, fact: 원재료, note: "D-308 ⑤ 비교 대상이 나오면 7호(별표1 7.나)", verified_by: null, reviewed_by: null}
+  - {id: food.b1.4ja, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "자)", quote: "이온수ㆍ생명수 또는 약수", first: "영업정지15일", kind: 영업정지, value: 15, unit: 일, type: 소비자_기만, note: "별표1 5.차", verified_by: null, reviewed_by: null}
+  - {id: food.b1.4cha, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "차)", quote: "첨가물 무", first: "영업정지15일", kind: 영업정지, value: 15, unit: 일, type: 소비자_기만, note: "별표1 5.카", verified_by: null, reviewed_by: null}
+  - {id: food.b1.4ka, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "카)", quote: "사료ㆍ물에 첨가한 성분", first: "영업정지7일", kind: 영업정지, value: 7, unit: 일, type: 소비자_기만, note: "별표1 5.나", verified_by: null, reviewed_by: null}
+  - {id: food.b1.4ta, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "타)", quote: "안전관리인증농장으로 인증", first: "영업정지1개월", kind: 영업정지, value: 1, unit: 개월, type: 거짓_과장, fact: 인증, note: "별표1 4.마", verified_by: null, reviewed_by: null}
+  - {id: food.b1.4ha, src: food, block: "라. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품제조ㆍ가공업 등, mok: "하)", quote: "기능성 함량 기준에 부적합한 기능성표시식품", first: "품목 제조정지 15일", kind: 품목제조정지, value: 15, unit: 일, disposal: true, type: 거짓_과장, note: "별표1 4.나 · 품목 분기 일반식품_기능성(D-295)의 요건 미충족", verified_by: null, reviewed_by: null}
+
+  # ── 식품 축 · 블록 3 — 식품운반업 · 판매업 등 「다. 법 제8조제1항을 위반한 경우」 ──────────────────────
+  - {id: food.b3.1, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "1)", quote: "치료에 효능이 있는 것으로 인식할 우려", first: "영업정지2개월", kind: 영업정지, value: 2, unit: 개월, disposal: true, type: 질병_예방치료_표방, verified_by: null, reviewed_by: null}
+  - {id: food.b3.2, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "2)", quote: "식품등을 의약품으로 인식할 우려", first: "영업정지15일", kind: 영업정지, value: 15, unit: 일, note: "건강기능식품은 영업정지 1개월 — 같은 R2", type: 의약품_오인, verified_by: null, reviewed_by: null}
+  - {id: food.b3.3, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "3)", quote: "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려", first: "영업정지15일", kind: 영업정지, value: 15, unit: 일, type: 건강기능식품_오인, verified_by: null, reviewed_by: null}
+  - {id: food.b3.4ra, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "라)", quote: "체험기 및 체험사례", first: "영업정지7일", kind: 영업정지, value: 7, unit: 일, type: 후기_체험기_기만, verified_by: null, reviewed_by: null}
+  - {id: food.b3.4ma, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "마)", quote: "사실과 다르거나 제품과 관련 없는수상", first: "영업정지7일", kind: 영업정지, value: 7, unit: 일, type: 거짓_과장, fact: 수상_상장, verified_by: null, reviewed_by: null}
+  - {id: food.b3.4ba, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "바)", quote: "다른 식품ㆍ축산물의 유형과 오인ㆍ혼동", first: "영업정지7일", kind: 영업정지, value: 7, unit: 일, type: 소비자_기만, note: "🚨 유형 확신 낮음 — food.b1.4sa 와 같다", verified_by: null, reviewed_by: null}
+  - {id: food.b3.4sa, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "사)", quote: "사용하지 않은 원재료명 또는 성분명", first: "영업정지7일", kind: 영업정지, value: 7, unit: 일, type: 거짓_과장, fact: 원재료, note: "D-308 ⑤ 기본 4호", verified_by: null, reviewed_by: null}
+  - {id: food.b3.4sa.cmp, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "사)", quote: "사용하지 않은 원재료명 또는 성분명", first: "영업정지7일", kind: 영업정지, value: 7, unit: 일, type: 부당_비교광고, fact: 원재료, note: "D-308 ⑤ 비교 대상이 나오면 7호", verified_by: null, reviewed_by: null}
+  - {id: food.b3.4a, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "아)", quote: "사료ㆍ물에 첨가한 성분", first: "영업정지7일", kind: 영업정지, value: 7, unit: 일, type: 소비자_기만, verified_by: null, reviewed_by: null}
+  - {id: food.b3.4ja, src: food, block: "다. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품운반업ㆍ판매업 등, mok: "자)", quote: "안전관리인증농장으로 인증", first: "영업정지1개월", kind: 영업정지, value: 1, unit: 개월, type: 거짓_과장, fact: 인증, verified_by: null, reviewed_by: null}
+
+  # ── 식품 축 · 블록 4 — 식품접객업 「나. 법 제8조제1항을 위반한 경우」 ─────────────────────────────────
+  #    🔴 의약품 오인이 **시정명령(R1)** 이다 — 업종 max 로 축의 하한은 블록 1 · 3 의 R2 가 된다(D-227)
+  - {id: food.b4.1, src: food, block: "나. 법 제8조제1항을 위반한 경우", nth: 1, industry: 식품접객업, mok: "1)", quote: "식품등을 의약품으로 인식할 우려", first: "시정명령", kind: 시정명령, type: 의약품_오인, verified_by: null, reviewed_by: null}
+
+  # ── 화장품 축 — 별표 7 「더. 법 제13조를 위반하여 화장품을 표시·광고한 경우」 × 별표 5 제2호 ─────────────
+  #    1차 처분은 광고 위반 쪽(광고업무정지)을 옮긴다 — 우리 입력은 광고 문구다
+  - {id: cosm.1.ga, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "1)", quote: "별표 5 제2호가목·나목 및 카목", first: "광고업무정지 3개월", kind: 광고업무정지, value: 3, unit: 개월, rule: {mok: 가, quote: "의약품으로 잘못 인식할 우려"}, type: 의약품_오인, verified_by: null, reviewed_by: null}
+  - {id: cosm.1.na, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "1)", quote: "별표 5 제2호가목·나목 및 카목", first: "광고업무정지 3개월", kind: 광고업무정지, value: 3, unit: 개월, rule: {mok: 나, quote: "기능성화장품으로 잘못 인식할 우려"}, type: 기능성화장품_오인, verified_by: null, reviewed_by: null}
+  - {id: cosm.1.ka, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "1)", quote: "별표 5 제2호가목·나목 및 카목", first: "광고업무정지 3개월", kind: 광고업무정지, value: 3, unit: 개월, rule: {mok: 카, quote: "사실 유무와 관계없이 다른 제품을 비방"}, type: 비방광고, verified_by: null, reviewed_by: null}
+  - {id: cosm.2.ra, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "2)", quote: "별표 5 제2호다목부터 차목까지", first: "광고업무정지 2개월", kind: 광고업무정지, value: 2, unit: 개월, rule: {mok: 라, quote: "외국제품을 국내제품으로"}, type: 소비자_기만, verified_by: null, reviewed_by: null}
+  - {id: cosm.2.ma, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "2)", quote: "별표 5 제2호다목부터 차목까지", first: "광고업무정지 2개월", kind: 광고업무정지, value: 2, unit: 개월, rule: {mok: 마, quote: "기술제휴를 하지 않고"}, type: 거짓_과장, verified_by: null, reviewed_by: null}
+  - {id: cosm.2.ba, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "2)", quote: "별표 5 제2호다목부터 차목까지", first: "광고업무정지 2개월", kind: 광고업무정지, value: 2, unit: 개월, rule: {mok: 바, quote: "경쟁상품과 비교하는 표시"}, type: 부당_비교광고, verified_by: null, reviewed_by: null}
+  - {id: cosm.2.sa.false, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "2)", quote: "별표 5 제2호다목부터 차목까지", first: "광고업무정지 2개월", kind: 광고업무정지, value: 2, unit: 개월, rule: {mok: 사, quote: "사실과 다르거나 부분적으로 사실이라고"}, type: 거짓_과장, verified_by: null, reviewed_by: null}
+  - {id: cosm.2.sa.deceive, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "2)", quote: "별표 5 제2호다목부터 차목까지", first: "광고업무정지 2개월", kind: 광고업무정지, value: 2, unit: 개월, rule: {mok: 사, quote: "소비자를 속이거나"}, type: 소비자_기만, verified_by: null, reviewed_by: null}
+  - {id: cosm.2.a, src: cosm, block: "더. 법 제13조를 위반하여화장품을 표시·광고한경우", nth: 1, industry: 화장품, mok: "2)", quote: "별표 5 제2호다목부터 차목까지", first: "광고업무정지 2개월", kind: 광고업무정지, value: 2, unit: 개월, rule: {mok: 아, quote: "객관적으로 확인될 수 없거나 확인되지 않았는데도"}, type: 거짓_과장, note: "D-308 ② — 실증책임_위반 이 아니라 거짓_과장 행", verified_by: null, reviewed_by: null}
+
+  # ── 표시광고법 축 — 제7조(시정조치) · 별표가 없다(정지 · 취소 사다리 없음) ────────────────────────────────
+  #    🔴 D-305 「별표에서만」의 표시광고법 판 — 이 법의 처분 기준은 **조문**(제7조)이다. 과징금(제9조)은 금액이라 쓰지 않는다(D-182)
+  - {id: fair.1, src: fair, article: "7", hang: "①", quote: "제3조제1항을 위반하여 부당한 표시ㆍ광고 행위를 하는 경우", first: "시정을 위한 다음 각 호의 조치를 명할 수 있다", kind: 시정조치, industry: 전 업종, type: 거짓_과장, verified_by: null, reviewed_by: null}
+  - {id: fair.2, src: fair, article: "7", hang: "①", quote: "제3조제1항을 위반하여 부당한 표시ㆍ광고 행위를 하는 경우", first: "시정을 위한 다음 각 호의 조치를 명할 수 있다", kind: 시정조치, industry: 전 업종, type: 소비자_기만, verified_by: null, reviewed_by: null}
+  - {id: fair.3, src: fair, article: "7", hang: "①", quote: "제3조제1항을 위반하여 부당한 표시ㆍ광고 행위를 하는 경우", first: "시정을 위한 다음 각 호의 조치를 명할 수 있다", kind: 시정조치, industry: 전 업종, type: 부당_비교광고, verified_by: null, reviewed_by: null}
+  - {id: fair.4, src: fair, article: "7", hang: "①", quote: "제3조제1항을 위반하여 부당한 표시ㆍ광고 행위를 하는 경우", first: "시정을 위한 다음 각 호의 조치를 명할 수 있다", kind: 시정조치, industry: 전 업종, type: 비방광고, verified_by: null, reviewed_by: null}
+
+# ── 형벌 조항 (`penal_clause` · D-308 ⑦) — 2인 서명 칸이 없는 표다(스키마). 설명 줄은 품목이 정해지면 그 축만 · 미정이면 침묵 ──
+penal:
+  - {id: penal.food.26, law: 식품 등의 표시ㆍ광고에 관한 법률, law_id: "013094", article: "26", hang: "①", quote: "제8조제1항제1호부터 제3호까지의 규정을 위반하여 표시 또는 광고를 한 자는 10년 이하의 징역 또는 1억원 이하의 벌금", years: 10, fine_krw: 100000000, types: [질병_예방치료_표방, 의약품_오인, 건강기능식품_오인]}
+  - {id: penal.food.27, law: 식품 등의 표시ㆍ광고에 관한 법률, law_id: "013094", article: "27", hang: "", quote: "5년 이하의 징역 또는 5천만원 이하의 벌금", also: "제8조제1항제4호부터 제10호까지의 규정을 위반하여", years: 5, fine_krw: 50000000, types: [거짓_과장, 소비자_기만, 후기_체험기_기만, 비방광고, 부당_비교광고]}
+  - {id: penal.fair.17, law: 표시ㆍ광고의 공정화에 관한 법률, law_id: "002011", article: "17", hang: "", quote: "2년 이하의 징역 또는 1억5천만원 이하의 벌금", also: "제3조제1항을 위반하여 부당한 표시ㆍ광고 행위를", years: 2, fine_krw: 150000000, types: [거짓_과장, 소비자_기만, 부당_비교광고, 비방광고]}
+  - {id: penal.cosm.37, law: 화장품법, law_id: "002015", article: "37", hang: "①", quote: "1년 이하의 징역 또는 1천만원 이하의 벌금", also: "제13조", years: 1, fine_krw: 10000000, types: [의약품_오인, 기능성화장품_오인, 거짓_과장, 소비자_기만, 부당_비교광고, 비방광고]}

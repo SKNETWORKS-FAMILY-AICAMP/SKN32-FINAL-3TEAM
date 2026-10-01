@@ -64,4 +64,6 @@ def test_judge_calls_build_review_and_wraps_response(monkeypatch) -> None:
     assert response.json()["outcome"] == "hold"
     assert response.json()["sentences"][0]["hold_reason"] == "low_conf"
     assert response.json()["sentences"][0]["violations"] == ["거짓_과장"]
-    assert response.json()["judged_by"].startswith("stub")
+    assert response.json()["judged_by"].startswith(
+        "rule-"
+    )  # 🔄 2026-10-01 — 인코더 전 규칙 판정(D-269)

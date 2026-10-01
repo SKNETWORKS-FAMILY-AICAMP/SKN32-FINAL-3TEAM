@@ -1,7 +1,7 @@
 """`POST /judge` — 검수 그래프를 실제 DB 로 한 바퀴 (🆕 2026-09-29).
 
 ⛔ 종전에는 501 이었다. 이제 라우트가 `app/graph.py` 의 검수 그래프를 부르고 `to_response` 로 계약을 지나 낸다.
-🚨 판정 노드는 스텁이다 — 종착은 `hold` 이고 문장은 `unjudged` 다(D-127 · D-269). 여기서 재는 것은 **배선**이다:
+🔄 2026-10-01 — 판정 노드는 인코더 전 규칙 판정이다(D-269). 대역은 DB 없는 한 바퀴라 문장은 `unjudged` 다. 여기서 재는 것은 **배선**이다:
    ① 커서가 `config` 로 그래프에 들어간다 ② 계약을 지난 응답이 나간다 ③ DB 가 없으면 503 이고 원인을 응답에 안 담는다.
 """
 
@@ -62,10 +62,11 @@ def test_판정_라우트가_검수_그래프를_커서와_함께_부른다(fake
     r = TestClient(api.app).post("/judge", json={"text": "이 제품은 암 예방에 좋습니다"})
     assert r.status_code == 200, r.text
     body = r.json()
-    # 🚨 판정 노드가 스텁이라 늘 보류다 — 통과로 나가지 않는다 (D-127)
+    # 🚨 대역은 DB 없는 한 바퀴다 — 사전을 못 훑어 **미판정**이고 종착은 보류다. 통과로 나가지 않는다 (D-127 · D-220)
     assert body["outcome"] == Outcome.hold.value
     assert [s["verdict"] for s in body["sentences"]] == [Verdict.unjudged.value]
-    assert body["judged_by"].startswith("stub")
+    # 🔄 2026-10-01 — 판정 노드가 인코더 전 규칙 판정(D-269)이 됐다 · 판 이름이 그것을 말한다
+    assert body["judged_by"].startswith("rule-")
     (state, config), *_ = fake.calls
     assert state["text"] == "이 제품은 암 예방에 좋습니다"
     assert "product" in state

@@ -485,6 +485,21 @@ def load_documents(cur, dry: bool) -> int:
     return n
 
 
+def dict_row(r: dict) -> tuple[str, str, bool, str | None]:
+    """사전 파일 한 줄 → `dict_entry` 한 행 `(term, law_ref, exact_match, violation_type)`.
+
+    🆕 2026-10-01 — 적재(`load_dict`)와 **DB 사전 대조**(`scripts/eval_graph.py` `dict_drift`)가 같이 쓴다 (D-99).
+       ⛔ 대조 쪽에 같은 변환을 따로 적으면 적재 규칙이 바뀌는 날 대조가 조용히 어긋난다.
+    """
+    kinds = r.get("유형") or []
+    return (
+        r["term"],
+        "; ".join(r.get("근거") or []),
+        bool(r.get("단독판정")),
+        kinds[0] if len(kinds) == 1 else None,
+    )
+
+
 def load_dict(cur, dry: bool) -> tuple[int, int]:
     """금지표현 사전 (D-155). 반환 — (행 수, 유형이 붙은 수).
 
@@ -497,10 +512,8 @@ def load_dict(cur, dry: bool) -> tuple[int, int]:
     n = typed = 0
     rows = _jsonl("banned_terms.jsonl")
     declared: set[str] = set()
-    for r in rows:
-        declared.add(r["term"])
-        kinds = r.get("유형") or []
-        vt = kinds[0] if len(kinds) == 1 else None
+    for term, law_ref, exact, vt in map(dict_row, rows):
+        declared.add(term)
         typed += vt is not None
         if not dry:
             cur.execute(
@@ -510,14 +523,7 @@ def load_dict(cur, dry: bool) -> tuple[int, int]:
                 "ON CONFLICT (dict_kind, term) DO UPDATE SET "
                 "  violation_type = EXCLUDED.violation_type, "
                 "  law_ref = EXCLUDED.law_ref, exact_match = EXCLUDED.exact_match",
-                (
-                    DICT_FRAGMENT,
-                    DICT_KIND,
-                    r["term"],
-                    "; ".join(r.get("근거") or []),
-                    bool(r.get("단독판정")),
-                    vt,
-                ),
+                (DICT_FRAGMENT, DICT_KIND, term, law_ref, exact, vt),
             )
         n += 1
     if not dry:
