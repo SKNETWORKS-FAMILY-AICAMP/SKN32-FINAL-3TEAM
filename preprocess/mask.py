@@ -168,6 +168,14 @@ POLICY: dict[str, frozenset[str]] = {
     #    아니다. 그 쪽들(2쪽 점검표 · 3쪽 · 17쪽 판권면)은 추출기가 **담지 않아** 지킨다 — 별표 쪽만 읽는다
     #    (`preprocess/mfds_cosmetic_guideline.py` 머리말 · D-159). 그래서 축은 빈 집합이다 — 「정책 없음」과 다르다(D-72)
     "mfds_cosmetic_ad_guideline": frozenset(),
+    # ── 2026-10-03 — 레지스트리 masking 「판권면의 담당 공무원 성명·전화번호 · 본문 속 업체명·상표 즉시 마스킹」
+    #    (결정 오한빈 · 확인 권소라 2026-09-28). `mfds_cosmetic_ad_qa` 와 같은 문언 · 같은 축이다 — 판권면은 추출기가
+    #    **담지 않아** 지키고, 전화번호는 추출기가 `[전화]` 로 바꾼다(`preprocess/mfds_cosmetic_qa_2012.py` 머리말)
+    "mfds_cosmetic_ad_qa_2012": frozenset({"org", "brand"}),
+    # ── 2026-10-03 — 레지스트리 masking 「3쪽 · 117쪽 담당 부서 전화번호 · 139쪽 업체명(㈜) 등 즉시 마스킹」
+    #    (결정 오한빈 · 확인 권소라 2026-09-28). 축은 문언 그대로 org 하나다 — 「상표」가 문언에 없다.
+    #    3쪽은 추출기가 담지 않고, 본문의 전화번호는 추출기가 `[전화]` 로 바꾼다(`preprocess/mfds_cosmetic_faq_2020.py` 머리말)
+    "mfds_cosmetic_faq_2020": frozenset({"org"}),
 }
 
 #: 정책 키 ↔ 레지스트리 문언. 대조 테스트가 이걸 쓴다.

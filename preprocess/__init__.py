@@ -39,6 +39,9 @@ EXTRACTORS: dict[str, str] = {
     "mfds_ad_judge_manual_2015": "preprocess.mfds_ad_manual",
     # 🆕 2026-10-03 — 화장품 표시·광고 관리 지침 → 금지표현 · 실증대상 항목([별표 1] · [별표 2] · 구속력 「해설」)
     "mfds_cosmetic_ad_guideline": "preprocess.mfds_cosmetic_guideline",
+    # 🆕 2026-10-03 — 옛 질의응답집 둘 → 질의회신 레코드(문항 단위 · 라벨은 만들지 않는다 · 기준 시점이 지난 사례)
+    "mfds_cosmetic_ad_qa_2012": "preprocess.mfds_cosmetic_qa_2012",
+    "mfds_cosmetic_faq_2020": "preprocess.mfds_cosmetic_faq_2020",
 }
 
 #: 원천 id → 계측 모듈. 🔴 **라벨을 만들지 않고 세기만 한다** — 산출물이 없다.
