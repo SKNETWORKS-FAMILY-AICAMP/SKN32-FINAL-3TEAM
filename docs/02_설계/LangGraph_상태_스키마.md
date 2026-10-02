@@ -58,9 +58,11 @@
 | 상태 | 담는 것 | 그래프 |
 |---|---|---|
 | `CoreState` | 입력(`text` · `product`) · `sents` · `laws` · 누적(`evidence` · `law_results` · `sentences` · `timings`) | **코어 서브그래프** — 분할 → 품목 → 검색(1회) → 사전(하한) → 인코더(1회) → **법별 팬아웃**(표시광고법 · 식품표시광고법 · 화장품법) → 모음 → 판정 → 위험도 → 문서 규칙 |
-| `ReviewState` | 코어 출력 + `outcome` — 🔴 **재생성 키가 없다** | **검수** — 코어 → 증명서 · 지시 · 보류 · 통과 |
+| `ReviewState` | 코어 출력 + `outcome` · 🆕 `certificate`(조립기가 서기 전에는 비어 있다) — 🔴 **재생성 키가 없다** | **검수** — 코어 → 증명서 · 지시 · 보류 · 통과 · 🔄 2026-10-02 증명서 · 지시는 재료(증명서 · 실증 분기와 뺄 구간)가 없으면 **보류로 내린다** |
 | `GenerateState` | `segment` · `keywords` · `candidates` · `attempt` · `rejects` · `rejected` · `profile` · `adapted` · `outcome` | **생성** — 키워드 선별 → 조립 → 주장 원장 → 재판정 → 루프(K+1=3) |
 | `ComposeState` | `ad_format` · `sections` | 없음 — 이번 범위 밖 |
+
+> 🔄 **2026-10-02 (W5)** — `sentences` 의 리듀서는 `operator.add` 가 아니라 **`upsert_sentences`**(같은 `sent_id` 는 바꿔 끼우고 새 것은 뒤에 붙인다)다. `judge` 가 낸 문장에 `assess_risk` 가 위험도를 붙이고 문서 규칙(W8)이 다시 보류로 바꾸기 때문이다. 누적 키의 리듀서 표는 `app/graph.py` `REDUCER_OF` 한 곳이다(표에 없는 키는 `operator.add`).
 
 - 🔴 **코어는 함수 노드가 부른다** — 서브그래프를 노드로 그대로 끼우면 부모의 누적 키가 **두 번 쌓였다**(2026-09-23 실측 · 리눅스). 입출력은 `CORE_IN` · `CORE_OUT` 표 하나다.
 - 🔴 **빈 팬아웃은 조용히 그래프를 끝낸다**(같은 날 실측) — 표시광고법이 늘 들어가고, 라우터와 모음이 두 번 막는다.

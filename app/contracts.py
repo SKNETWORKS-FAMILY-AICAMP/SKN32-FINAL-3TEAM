@@ -199,6 +199,27 @@ class Category(enum.StrEnum):
     전용법_미수록 = "전용법_미수록"
 
 
+#: 🆕 2026-10-02 (팀장 판정 · D-271 ④ · D-277 개정) — **주된 광고법을 검수하지 않은 품목.** 표시광고법 판정은 하되 통과를 내지 않고
+#:    미검수 고지를 단다. `일반상품` 을 더한 까닭 — 식품 · 화장품이 아닌 상품에도 광고를 규율하는 법이 따로 있는 경우가 많다
+#:    (금융 · 분양 · 의료기기 · 생활화학제품 …). 그 목록을 다 가질 수 없으므로 「없다」고 가정하지 않는다 (D-63 · D-220).
+#:    ⛔ 종전에는 `일반상품` 이 표시광고법만 타고 **통과까지** 나갔다 — 안 본 법을 본 것처럼 말하는 자리였다.
+UNCOVERED_CATEGORIES = frozenset({Category.전용법_미수록, Category.일반상품})
+
+#: 미검수 법의 이름을 가릴 수 없을 때의 고지 한 줄 — D-277 ⬜ 「해당 품목의 전용법」. 품목 낱말로 법을 가리게 되면 그 이름을 적는다.
+NOT_REVIEWED_UNNAMED = "해당 품목의 전용법"
+
+
+class CategorySource(enum.StrEnum):
+    """**품목이 어디서 왔나** (🆕 2026-10-02 · D-276 ⑥). `app/models.py` `ck_judgment_category_source_values` 와 **같은 둘**이다.
+
+    🔴 「판별된 품목」과 「사용자가 고른 품목」을 응답이 가른다 — 고른 품목의 결과는 **선택 전제 결과**다.
+       화면은 전제 없는 통과 배지를 붙이지 않고 「○○ 기준」과 「사업자가 선택한 값이며 확인되지 않았습니다」를 함께 보인다 (D-229 ⑤ · D-263 ③).
+    """
+
+    classified = "classified"  # 우리가 판별했다 (D-82)
+    user_selected = "user_selected"  # 사용자가 골랐다 — 확인되지 않은 값이다 (D-276)
+
+
 class Premise(enum.StrEnum):
     """**품목 분기의 전제** — 분기 하나 = 전제 하나 (🆕 D-276 · D-263).
 
@@ -607,7 +628,9 @@ class JudgeResponse(BaseModel):
     outcome: Outcome
     #: 🆕 **판별된 품목** — 판정 결과에 속한다 (D-82 · D-277). `None` = 미확정 → 세 법 + 분기 (D-229 ⑥)
     category: Category | None = None
-    #: 🆕 **미검수 법** — 「○○법 미검수」. 품목이 `전용법_미수록` 이면 비지 않는다 · 제거할 수 없다 (D-271 ⑤ · D-277)
+    #: 🆕 2026-10-02 **품목의 출처** — 판별(`classified`) · 사용자 선택(`user_selected`). 품목이 있으면 출처가 있다 (D-276 ⑥)
+    category_source: CategorySource | None = None
+    #: 🆕 **미검수 법** — 「○○법 미검수」. 품목이 `UNCOVERED_CATEGORIES` 면 비지 않는다 · 제거할 수 없다 (D-271 ⑤ · D-277)
     not_reviewed: list[str] = Field(default_factory=list)
     sentences: list[SentenceJudgment] = Field(default_factory=list)
     #: 🆕 **품목 분기** — 처음에 전부 계산해 담고 화면이 고른다 · 다시 판정하지 않는다 (D-263 ⑦ · D-276)
@@ -732,16 +755,30 @@ class JudgeResponse(BaseModel):
     @model_validator(mode="after")
     def _uncovered_law_notice(self) -> JudgeResponse:
         # 🆕 D-271 ⑤ · D-277 — 전용법 품목은 **통과를 내지 않고 미검수 고지를 단다.** 고지는 제거할 수 없다.
-        uncovered = self.category is Category.전용법_미수록
+        # 🔄 2026-10-02 — `일반상품` 도 같다(`UNCOVERED_CATEGORIES`). 주된 광고법을 안 본 품목은 통과를 내지 않는다
+        uncovered = self.category in UNCOVERED_CATEGORIES
         if uncovered != bool(self.not_reviewed):
             raise ValueError(
-                "품목이 전용법_미수록 이면 미검수 법이 있고, 아니면 없다 (D-271 ⑤ · D-277) — "
+                "주된 광고법을 안 본 품목(전용법_미수록 · 일반상품)이면 미검수 법이 있고, 아니면 없다 (D-271 ⑤ · D-277) — "
                 f"category={self.category} not_reviewed={self.not_reviewed}"
             )
         if uncovered and self.outcome is Outcome.passed:
-            raise ValueError("전용법 품목에 통과를 냈다 — 안 본 법이 있다 (D-271 ⑤ · D-63)")
+            raise ValueError(
+                "주된 광고법을 안 본 품목에 통과를 냈다 — 안 본 법이 있다 (D-271 ⑤ · D-63)"
+            )
         if not uncovered and any(s.hold_reason is HoldReason.law_uncovered for s in self.sentences):
-            raise ValueError("law_uncovered 보류는 전용법 품목에서만 난다 (D-277)")
+            raise ValueError("law_uncovered 보류는 주된 광고법을 안 본 품목에서만 난다 (D-277)")
+        return self
+
+    @model_validator(mode="after")
+    def _category_has_source(self) -> JudgeResponse:
+        # 🆕 2026-10-02 (D-276 ⑥) — 품목이 있으면 출처가 있고 없으면 없다. DB `ck_judgment_category_source_pair` 와 같은 규칙 (D-99).
+        #    ⛔ 출처가 비면 화면이 「판별된 품목」과 「사용자가 고른 품목」을 못 가른다 — 고른 값에 통과 배지가 붙는다.
+        if (self.category is None) != (self.category_source is None):
+            raise ValueError(
+                "품목과 품목 출처는 함께 있거나 함께 없다 (D-276 ⑥) — "
+                f"category={self.category} category_source={self.category_source}"
+            )
         return self
 
     @model_validator(mode="after")

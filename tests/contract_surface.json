@@ -12,6 +12,10 @@
       "전용법_미수록",
       "화장품"
     ],
+    "CategorySource": [
+      "classified",
+      "user_selected"
+    ],
     "Channel": [
       "기사형",
       "상세페이지",
@@ -162,6 +166,7 @@
       "branches": "opt list[app.contracts.Branch]",
       "candidates": "opt list[app.contracts.Candidate]",
       "category": "opt app.contracts.Category | None",
+      "category_source": "opt app.contracts.CategorySource | None",
       "certificate": "opt app.contracts.Certificate | None",
       "judged_by": "opt builtins.str",
       "law_version": "opt builtins.str",

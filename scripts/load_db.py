@@ -767,6 +767,89 @@ def load_violation_article(cur, dry: bool) -> int:  # noqa: ANN001
     return len(rows)
 
 
+#: 제재표 행의 프래그먼트 — 별표(식품 · 화장품 별표7)와 조문(표시광고법 제7조). `FRAGMENTS` 에 이미 있는 둘이다 (D-18).
+SANCTION_FRAGMENT = {"annex": "law_go_kr:annex", "article": "law_go_kr:article"}
+
+#: `sanction_rule` 에 넣는 칸 — 적재(`load_sanction_rule`)가 **이 순서로** 넣고 **전부 갱신**한다.
+#:    ⛔ upsert 가 일부 칸만 고치면 원천과 DB 가 조용히 갈린다 (D-249 의 골든셋 판과 같은 규칙).
+SANCTION_COLS = (
+    "rule_key", "fragment_id", "law_id", "annex_no", "violation_type", "offense_count", "sanction_kind",
+    "sanction_value", "unit", "risk_level", "verified_by", "reviewed_by", "annex1", "cover", "quote",
+    "fact_kind", "plan_sha",
+)  # fmt: skip
+
+
+def sanction_row(spec: dict, r: dict, sig: tuple[str, str] | None, sha: str) -> tuple:  # noqa: ANN401
+    """원천 행 하나 → `sanction_rule` 한 행(`SANCTION_COLS` 순서).
+
+    🚨 위험도는 처분 **종류**에서 계산한다(`KIND_RISK` · D-227) — 원천에 위험도 칸이 없다.
+    🚨 `annex1` — 칸이 없는 행은 NULL(목으로 갈리지 않는다) · 빈 목록은 빈 배열(고시로 닿는다) — 합치지 않는다 (D-310 · 0023).
+    🔴 서명(`sig`)이 없으면 두 서명 칸이 NULL 이다 — 적재는 되지만 `v_risk_lookup` 에 안 보인다 (0013 · D-309).
+    """
+    from scripts import sanction_rule as sr  # noqa: PLC0415 — 원천 검사와 같은 모듈 (D-99)
+
+    src = spec["sources"][r["src"]]
+    return (
+        r["id"],
+        SANCTION_FRAGMENT["annex" if src.get("annex_no") else "article"],
+        src["law_id"],
+        src.get("annex_no"),
+        r["type"],
+        1,  # 1차 처분 — 위반 차수는 문구로 모른다 (D-305)
+        r["kind"],
+        r.get("value"),
+        r.get("unit"),
+        sr.KIND_RISK[r["kind"]].value,
+        sig[0] if sig else None,
+        sig[1] if sig else None,
+        list(r["annex1"]) if "annex1" in r else None,
+        r.get("cover"),
+        r["quote"],
+        r.get("fact"),
+        sha,
+    )
+
+
+def load_sanction_rule(cur, dry: bool) -> tuple[int, bool, int]:  # noqa: ANN001
+    """🆕 2026-10-02 (W5 · D-305 · D-309) — 위험도 하한 원천(`scripts/sanction_review.yaml`)을 `sanction_rule` 에 싣는다.
+
+    반환 — (행 수, 서명됐는가, 거둔 수). ★ 표는 원천의 **사본**이다 — 다시 넣으면 같아진다 (D-90).
+    🔴 **원천이 검사를 못 지나면 멈춘다** — 무효 서명(판이 바뀐 뒤 남은 서명) · 모르는 유형 · 모르는 처분 종류 (D-220 · D-309).
+       ⛔ 무효 서명을 「서명 없음」으로 낮춰 싣지 않는다 — 사람이 서명을 다시 해야 하는 상태를 조용히 지나가게 된다.
+    🔴 서명이 **없는** 판은 싣되 서명 칸이 NULL 이라 `v_risk_lookup` 에 안 보인다 — 하한이 없어 판정이 보류로 멈춘다 (0013).
+    🚨 원문 대조(`sanction_rule check`)는 여기서 하지 않는다 — 원문이 있는 기기에서 서명 전에 한 일이고, 서명이 판 sha 에 묶여 있다.
+    """
+    from scripts import sanction_rule as sr  # noqa: PLC0415
+
+    spec = sr.load_rules()
+    bad = sr.lint(spec)
+    if bad:
+        raise SystemExit(
+            "🔴 제재표 원천이 검사를 못 지났다 — 싣지 않는다 (D-309 · D-220)\n  " + "\n  ".join(bad)
+        )
+    sig, sha = sr.signature(spec), sr.plan_sha(spec)
+    rows = spec.get("rows") or []
+    if not dry:
+        cols = ", ".join(SANCTION_COLS)
+        marks = ", ".join(["%s"] * len(SANCTION_COLS))
+        sets = ", ".join(f"{c} = EXCLUDED.{c}" for c in SANCTION_COLS if c != "rule_key")
+        for r in rows:
+            cur.execute(
+                f"INSERT INTO sanction_rule ({cols}) VALUES ({marks}) "  # noqa: S608 — 칸 이름은 상수다
+                f"ON CONFLICT (rule_key) WHERE rule_key IS NOT NULL DO UPDATE SET {sets}",
+                sanction_row(spec, r, sig, sha),
+            )
+        # 🔴 넣고 나서 거둔다 (D-187) — 원천에서 빠진 행이 남으면 서명한 표에 없는 하한이 계속 걸린다
+        cur.execute(
+            "DELETE FROM sanction_rule WHERE rule_key IS NULL OR NOT (rule_key = ANY(%s))",
+            ([r["id"] for r in rows],),
+        )
+        swept = cur.rowcount
+    else:
+        swept = 0
+    return len(rows), sig is not None, swept
+
+
 def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
     """골든셋을 적재한다 (2026-09-10 · D-178).
 
@@ -884,6 +967,10 @@ def main() -> int:
         print(
             f"  violation_article {load_violation_article(cur, True):>6}  (collect/statute.py · D-282)"
         )
+        n_rule, signed, _ = load_sanction_rule(cur, True)
+        print(
+            f"  sanction_rule     {n_rule:>6}  ({'서명됨' if signed else '🚨 서명 전 — 하한으로 안 보인다'})"
+        )
         n_gold, gstat, _ = load_golden(cur, True)
         print(f"  golden_sample     {n_gold:>6}  (⬜ DB 를 안 봐서 거둘 수는 모른다)")
         for k in sorted(gstat):
@@ -927,6 +1014,11 @@ def main() -> int:
         print(f"  product_fact      {load_product_fact(cur, False):>6}")
         print(
             f"  violation_article {load_violation_article(cur, False):>6}  (collect/statute.py · D-282)"
+        )
+        n_rule, signed, swept_rule = load_sanction_rule(cur, False)
+        print(
+            f"  sanction_rule     {n_rule:>6}  ({'서명됨 — 하한으로 쓴다' if signed else '🚨 서명 전 — v_risk_lookup 에 안 보인다'})"
+            + (f"  (거둠 {swept_rule})" if swept_rule else "")
         )
         n_gold, gstat, swept = load_golden(cur, False)
         print(f"  golden_sample     {n_gold:>6}" + (f"  (거둠 {swept:,})" if swept else ""))

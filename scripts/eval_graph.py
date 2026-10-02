@@ -117,6 +117,8 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "class": cls,
         #: 판정을 내린 행 — **전 문장이 확정**이다(selective risk 의 분모 · D-77 L1 #8)
         "committed": bool(sents) and len(conf) == len(sents),
+        #: 🆕 2026-10-02 (W5) — 확정 위반 문장에 **위험도가 다 붙었나**. 붙었는데 종착이 보류면 하한이 아니라 종착 재료(증명서 · 지시 문안)가 없다
+        "risked": all(s.risk.final is not None for s in conf if s.violations),
         "n_sents": len(sents),
     }
 
@@ -145,7 +147,8 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         if p["hold_reasons"]:
             reasons.update(p["hold_reasons"])
         elif p["committed"]:
-            reasons["하한없음(W5)"] += 1
+            # 🔄 2026-10-02 (W5) — 위험도가 붙은 뒤의 보류는 다른 까닭이다: 증명서 · 지시의 문안이 아직 없다 (`app/graph.py` 종착)
+            reasons["종착재료없음(문안)" if p["risked"] else "하한없음(W5)"] += 1
         elif "unjudged" in p["verdicts"]:
             reasons["미판정"] += 1
         else:
