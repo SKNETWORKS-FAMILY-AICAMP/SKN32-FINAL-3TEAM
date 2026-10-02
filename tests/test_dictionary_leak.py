@@ -83,3 +83,49 @@ def test_반대_대조_봉인을_풀면_결과가_달라진다(hf: list[dict]) -
     assert dictionary.approved_terms(everything) != dictionary.approved_terms(train), (
         "전량과 train 이 같은 답을 낸다 — 이 게이트는 실패할 수 없다 (D-170)."
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  🆕 2026-10-02 (D-311) — 정본 섭취 주의사항도 **train 만** 단독판정 심사의 재료다
+# ══════════════════════════════════════════════════════════════════════
+
+_CAUTION = [
+    {"doc_id": "hfcau:a", "문구": ["고혈압 치료제 등 복용 시 전문가와 상담할 것"]},
+    {"doc_id": "hfcau:b", "문구": ["당뇨병의 치료 및 예방에 사용될 수 없음"]},
+]
+
+
+@pytest.fixture
+def caution(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    monkeypatch.setattr(split, "caution_docs", lambda: _CAUTION)
+    return _CAUTION
+
+
+def test_주의사항은_train_만_읽는다(caution: list[dict]) -> None:
+    """🔴 봉인 문장이 「어느 항목을 단독판정에서 뺄지」를 정하면 안 된다 — 09-10 사고와 같은 자리 (D-175)."""
+    got = dictionary.caution_terms({"hfcau:a"})
+    assert got == ["고혈압 치료제 등 복용 시 전문가와 상담할 것"]
+    assert dictionary.caution_terms({"hfcau:a", "hfcau:b"}) != got, (
+        "전량과 train 이 같은 답을 낸다 — 이 게이트는 실패할 수 없다 (D-170)."
+    )
+
+
+def test_주의사항이_전량으로_되돌아가지_않았다() -> None:
+    params = list(inspect.signature(dictionary.caution_terms).parameters)
+    assert params == ["train"], f"`caution_terms{tuple(params)}` — `train` 인자가 없어졌다 (D-175)."
+
+
+def test_주의사항에_나오는_단일_항목은_단독판정을_잃는다() -> None:
+    """★ D-311 — 주장 아닌 정본 문장에 그대로 나오면 `비주장문맥`. 🔴 이름은 `적법중첩` 과 다르다(시제품이 다르게 읽는다)."""
+    c = dictionary.confidence
+    assert c([], ["질병_예방치료_표방"], ["고혈압치료제등복용시…"]) == "비주장문맥"
+    assert c([], ["질병_예방치료_표방"], []) == "단일"
+    # 순서 — 적법중첩 > 모호 > 비주장문맥
+    assert c(["…도움을줄수있음"], ["건강기능식품_오인"], ["…"]) == "적법중첩"
+    assert c([], ["거짓_과장", "소비자_기만"], ["…"]) == "모호"
+
+
+def test_단독판정은_단일_뿐이다() -> None:
+    """🔴 `build` 가 `단독판정 = (신뢰도 == 단일)` 로 쓴다 — 새 신뢰도 값이 생겨도 자격이 새지 않게 (D-311)."""
+    src = inspect.getsource(dictionary.build)
+    assert '"단독판정": conf == "단일"' in src

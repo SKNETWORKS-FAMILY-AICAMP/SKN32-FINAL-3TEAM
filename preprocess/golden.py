@@ -211,6 +211,22 @@ def lawful_kind(r: dict) -> str | None:
     return None
 
 
+def ho_counts(rows: list[dict]) -> collections.Counter:
+    """호 단위 셈(D-282 · D-40 의 30 을 거는 단위) — **채점되는 위반 행만**.
+
+    🆕 2026-10-02 — 조건 M · D · L 행은 세지 않는다. `split.plan` 의 `tally_ho` · `eval_rule.scored` 와 같은 규칙이다 (D-99).
+    ⛔ 종전에는 `is_positive` 만 봐서 유형이 남은 M 행(결정문 봉인 문구의 이름만 23 등)까지 세었다 — 재동결 10-02 에서
+       표시광고법 2호가 31 ✅ 로 찍혔는데 채점되는 행은 그보다 적다(원장 10-02 ④).
+    """
+    hc: collections.Counter = collections.Counter()
+    for r in rows:
+        if not is_positive(r) or r.get("조건") in ("M", "D", "L"):
+            continue
+        for k in {statute.ho_key(x) for x in r["근거"]}:
+            hc[k] += 1
+    return hc
+
+
 def is_positive(r: dict) -> bool:
     """위반(양성) 평가 표본인가 — 유형이 있거나, 조건이 C·A·B 인 행(근거가 후보로만 있는 행 포함)."""
     return bool(r["labels"]) or r.get("조건") in ("C", "A", "B")
@@ -317,6 +333,10 @@ def build() -> tuple[list[dict], dict]:
                     "판독": mark["판독"],
                     "원천결손": False,
                 }
+                if mark["조건"] == "D":
+                    # 🆕 2026-10-02 — 조건 D(주장이 아니다)는 판정 대상이 아니다 — 근거 · 유형을 싣지 않는다(해설서 D 행과 같은 꼴 ·
+                    #    `check_basis` 「조건 D 인데 근거가 있다」). ⛔ 의결서의 호를 남겼더니 골든이 4 행에서 멈췄다(B 기기 · 원장 10-02 ④)
+                    row |= {"근거": [], "labels": []}
                 stat[f"봉인_조건_{mark['조건']}"] += 1
             rows.append(row)
             stat[split] += 1
@@ -573,11 +593,8 @@ def main() -> int:
         print(f"     단위 — {dict(units)}")
         # 🆕 D-282 — 정본 셈(호 단위). D-40 의 30 은 이 단위에 건다
         #    🔄 2026-09-30 — 위반 행(`is_positive`)으로 센다. ⛔ `labels` 로 세면 유형이 없는 호(화장품 4호 · 식품 8~10호)가 빠진다
-        hc: collections.Counter = collections.Counter()
-        for r in (x for x in sub if is_positive(x)):
-            for k in {statute.ho_key(x) for x in r["근거"]}:
-                hc[k] += 1
-        print("     ── 호 단위 (정본 · D-282) ──")
+        hc = ho_counts(sub)
+        print("     ── 호 단위 (정본 · D-282 · 채점 행만 — M · D · L 제외) ──")
         for k, v in sorted(hc.items()):
             mark = "✅" if s == "train" or v >= PARAMS.min_measurable else "🔴 측정 불가"
             print(f"     {v:>5}  {k:26} {statute.type_of(k) or '(유형 없음)'}  {mark}")

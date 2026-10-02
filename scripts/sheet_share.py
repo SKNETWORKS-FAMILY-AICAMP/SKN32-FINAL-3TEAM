@@ -18,6 +18,11 @@
    빈 표(판정자 0)만 새 판으로 바꾸고, 옛 판은 `_old/` 에 둔다 (D-220 · 사람의 작업을 잃지 않는다).
 🚨 저장소는 팀 비공개다(D-249 ⑤ · D-303) — 올리기 전에 `data-publish` 와 **같은 함수**로 「팀 내부 공유도 안 되는 원천을
    받은 기기인가」를 본다(`data_store._noredist_seen` · D-99). 걸리면 아무것도 올리지 않는다.
+🔴 **끝난 표 · 옛 판은 올리지 않는다** (🆕 2026-10-02 · 팀장 판정 (나)) — `판정자` 칸만 보면 이미 들여온 판정표 ·
+   폐기된 사람 라벨 시트(D-283) · 판정표 초안까지 「채울 표」로 올라간다. 다른 기기에서 그것을 채워 들여오면 지난 판정을 덮는다.
+   `done_reason()` 이 건너뛸 이유를 낸다 — 행 0 · 로컬에서 다 채움 · 지금 판의 판정표가 아닌 이름 · 들여오는 명령이 없음 ·
+   판정이 다 들어감. ⛔ 이름 목록으로 막지 않는다(D-99) — 규칙으로 가른다.
+🚨 외부 전송이다(제3자 계정 · D-78 ③) — `data-publish` 와 같은 질문을 한다(`--yes` 로 건너뛴다 · `--dry-run` 은 묻지 않는다).
 🚨 Excel 로 열고 저장할 때 **「CSV UTF-8」** 로 저장한다 — 그냥 「CSV」는 한글이 깨진다(들여오기가 지문을 못 읽고 멈춘다).
 🚨 같은 표를 두 사람이 동시에 열면 동기화가 충돌 사본(`… (1).csv`)을 만든다 — `status` 가 그것도 표로 보여 준다.
 """
@@ -27,6 +32,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import json
 import pathlib
 import shutil
 import sys
@@ -89,17 +95,64 @@ def kind_of(path: pathlib.Path) -> str:
     return "?"
 
 
+def keys_of(path: pathlib.Path) -> list[str]:
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        return [(r.get("지문") or "").strip() for r in csv.DictReader(f)]
+
+
+def decided(name: str) -> set[str]:
+    """판정표 이름 → 그 판의 `decisions.jsonl` 에 이미 들어간 지문. 파일이 없으면 빈 집합(들어간 것이 없다)."""
+    from scripts import guide_statute_round as gs  # noqa: PLC0415
+
+    cmd = IMPORT_BY_NAME[name]
+    tag = cmd.split("-", 1)[0]
+    path = gs.ROUNDS[tag][0].path("DECISIONS") if tag in gs.ROUNDS else gs.DECISIONS
+    if not path.exists():
+        return set()
+    return {
+        json.loads(x)["지문"] for x in path.read_text(encoding="utf-8").splitlines() if x.strip()
+    }
+
+
+def done_reason(path: pathlib.Path) -> str | None:
+    """🆕 2026-10-02 (팀장 판정 (나)) — 이 표를 **올리지 않을 이유**. 올릴 표면 None.
+
+    ① 행 0 — 채울 것이 없다(판정이 끝난 판은 판정표가 빈 채로 다시 써진다)
+    ② 로컬에서 판정자를 다 채웠다 — 이 기기에서 들여오면 된다 · 저장소에 올리면 다시 채울 표로 보인다
+    ③ 이름에 「팀장판정표」가 있는데 지금 판의 판정표 이름이 아니다 — 개정판 · 정합본 · 초안(옛 판)
+    ④ 들여오는 명령이 없다(`kind_of` 가 「?」) — 사람 8유형 라벨 시트 등(D-283) · 채워도 기록으로 갈 길이 없다
+    ⑤ 판정표의 지문이 전부 그 판의 `decisions.jsonl` 에 있다 — 판정이 다 들어갔다
+    """
+    n, total = filled(path)
+    if total == 0:
+        return "행 0"
+    if n == total:
+        return "로컬에서 다 채웠다 — 이 기기에서 들여온다"
+    if "팀장판정표" in path.name and path.name not in IMPORT_BY_NAME:
+        return "지금 판의 판정표가 아니다(개정판 · 정합본 · 초안)"
+    if kind_of(path) == "?":
+        return "들여오는 명령이 없다(옛 판 · 폐기)"
+    if path.name in IMPORT_BY_NAME:
+        keys = {k for k in keys_of(path) if k}
+        if keys and keys <= decided(path.name):
+            return "판정이 다 들어갔다"
+    return None
+
+
 def local_sheets(base: pathlib.Path = LOCAL) -> list[pathlib.Path]:
     return sorted(p for p in base.rglob("*.csv") if is_sheet(p)) if base.is_dir() else []
 
 
 def plan_push(local: list[pathlib.Path], base: pathlib.Path, dest: pathlib.Path) -> list[dict]:
-    """파일마다 할 일 — `새로` · `같음` · `빈 표 교체` · `채우는 중 · 덮지 않음`. 쓰지 않는다(순수)."""
+    """파일마다 할 일 — `건너뜀 · <이유>` · `새로` · `같음` · `빈 표 교체` · `채우는 중 · 덮지 않음`. 쓰지 않는다(순수)."""
     out = []
     for src in local:
         rel = src.relative_to(base)
         to = dest / rel
-        if not to.exists():
+        why = done_reason(src)
+        if why:
+            act = f"건너뜀 · {why}"
+        elif not to.exists():
             act = "새로"
         elif ds._sha(to) == ds._sha(src):
             act = "같음"
@@ -111,7 +164,11 @@ def plan_push(local: list[pathlib.Path], base: pathlib.Path, dest: pathlib.Path)
 
 
 def push(
-    *, dry_run: bool = False, base: pathlib.Path = LOCAL, root: pathlib.Path | None = None
+    *,
+    dry_run: bool = False,
+    yes: bool = False,
+    base: pathlib.Path = LOCAL,
+    root: pathlib.Path | None = None,
 ) -> int:
     bad = ds._noredist_seen()
     if bad:
@@ -128,19 +185,31 @@ def push(
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     for p in plan:
         print(f"  {p['act']:<24} {p['rel']}")
-        if dry_run or p["act"] in ("같음",) or p["act"].startswith("채우는 중"):
-            continue
-        if p["act"] == "빈 표 교체":
-            keep = dest / OLD / stamp / p["rel"]
-            keep.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(p["to"], keep)
-        ds._copy_verified(p["src"], p["to"], ds._sha(p["src"]))
     held = [p["rel"] for p in plan if p["act"].startswith("채우는 중")]
     if held:
         print(
             "🟡 채우는 중인 표는 덮지 않았다 — 판이 바뀌었으면 들여온 뒤(정본) 저장소 쪽을 지우고 다시 push 한다"
         )
-    print(f"\n저장소 → {dest}" + ("  (--dry-run · 쓰지 않았다)" if dry_run else ""))
+    writes = [p for p in plan if p["act"] in ("새로", "빈 표 교체")]
+    if dry_run or not writes:
+        print(
+            f"\n저장소 → {dest}"
+            + ("  (--dry-run · 쓰지 않았다)" if dry_run else "  (올릴 것 없음)")
+        )
+        return 0
+    # 🚨 외부 전송(제3자 계정 · D-78 ③) — `data-publish` 와 같은 질문 (D-99 · `data_store._ask`)
+    if not yes and not ds._ask(
+        f"🚨 외부 전송이다 (제3자 계정 · D-78 ③). 표 {len(writes)}개를 올릴까"
+    ):
+        print("올리지 않았다")
+        return 1
+    for p in writes:
+        if p["act"] == "빈 표 교체":
+            keep = dest / OLD / stamp / p["rel"]
+            keep.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p["to"], keep)
+        ds._copy_verified(p["src"], p["to"], ds._sha(p["src"]))
+    print(f"\n올렸다 {len(writes)}개 → {dest}")
     return 0
 
 
@@ -169,11 +238,12 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("push", help="빈 표를 저장소에 둔다 (채우는 중인 표는 덮지 않는다)")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--yes", action="store_true", help="외부 전송 질문을 건너뛴다")
     sub.add_parser("status", help="저장소의 표 · 채운 행 수 · 들여오는 명령")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "push":
-            return push(dry_run=a.dry_run)
+            return push(dry_run=a.dry_run, yes=a.yes)
         return status()
     except ds.StoreError as e:
         print(f"🔴 {e}")

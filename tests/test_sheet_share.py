@@ -38,27 +38,36 @@ def shareable(monkeypatch):  # noqa: ANN001, ANN201
     monkeypatch.setattr(sh.ds, "_noredist_seen", lambda: [])
 
 
+#: 🔄 2026-10-02 — 감사표 머리(판 감사 · `<판>-audit`). 들여오는 명령이 없는 머리(「?」)는 올리지 않는다(`done_reason` ④)
+AUDIT = ["지문", "문구", "대상", "별표5목", "조건", "판정자"]
+
+
 @pytest.mark.gate
 def test_채운_표는_덮지_않고_빈_표만_새_판으로_바꾼다(tmp_path, shareable) -> None:
     local, store = tmp_path / "build", tmp_path / "store"
-    _csv(local / "a__팀장판정표.csv", HEAD, [["k1", "문", "", ""]])
-    _csv(local / "감사_J6" / "b.csv", HEAD, [["k2", "문", "", ""], ["k3", "문", "", ""]])
+    team = "guide_fix__팀장판정표.csv"
+    _csv(local / team, HEAD, [["k1", "문", "", ""]])
+    _csv(
+        local / "감사_J6" / "b.csv",
+        AUDIT,
+        [["k2", "문", "", "", "", ""], ["k3", "문", "", "", "", ""]],
+    )
     _csv(local / "c.csv", ["지문", "문구"], [["k", "x"]])  # 판정자 칸이 없으면 표가 아니다
-    _csv(local / "same.csv", HEAD, [["k", "x", "", ""]])
+    _csv(local / "same.csv", AUDIT, [["k", "x", "", "", "", ""]])
     dest = store / sh.LAYOUT
-    _csv(dest / "a__팀장판정표.csv", HEAD, [["k1", "문", "D", "오한빈"]])  # 채우는 중
-    _csv(dest / "감사_J6" / "b.csv", HEAD, [["k2", "문", "", ""]])  # 옛 빈 표
+    _csv(dest / team, HEAD, [["k1", "문", "D", "오한빈"]])  # 채우는 중
+    _csv(dest / "감사_J6" / "b.csv", AUDIT, [["k2", "문", "", "", "", ""]])  # 옛 빈 표
     (dest / "same.csv").write_bytes((local / "same.csv").read_bytes())
 
     plan = {p["rel"]: p["act"] for p in sh.plan_push(sh.local_sheets(local), local, dest)}
     assert plan == {
-        "a__팀장판정표.csv": "채우는 중 · 덮지 않음 (1행 채움)",
+        team: "채우는 중 · 덮지 않음 (1행 채움)",
         "same.csv": "같음",
         "감사_J6/b.csv": "빈 표 교체",
     }
-    filled_before = (dest / "a__팀장판정표.csv").read_bytes()
-    assert sh.push(base=local, root=store) == 0
-    assert (dest / "a__팀장판정표.csv").read_bytes() == filled_before, "🚨 사람이 채운 표를 덮었다"
+    filled_before = (dest / team).read_bytes()
+    assert sh.push(base=local, root=store, yes=True) == 0
+    assert (dest / team).read_bytes() == filled_before, "🚨 사람이 채운 표를 덮었다"
     assert sh.filled(dest / "감사_J6" / "b.csv") == (0, 2)
     (old,) = (dest / sh.OLD).rglob("b.csv")
     assert sh.filled(old) == (0, 1), "옛 빈 표는 _old 에 남는다"
@@ -68,8 +77,8 @@ def test_채운_표는_덮지_않고_빈_표만_새_판으로_바꾼다(tmp_path
 @pytest.mark.gate
 def test_팀_공유가_안_되는_원천을_받은_기기는_표를_올리지_않는다(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(sh.ds, "_noredist_seen", lambda: ["x (받은 기기 ['c2'])"])
-    _csv(tmp_path / "build" / "a.csv", HEAD, [["k", "x", "", ""]])
-    assert sh.push(base=tmp_path / "build", root=tmp_path / "store") == 1
+    _csv(tmp_path / "build" / "a.csv", AUDIT, [["k", "x", "", "", "", ""]])
+    assert sh.push(base=tmp_path / "build", root=tmp_path / "store", yes=True) == 1
     assert not (tmp_path / "store").exists()
 
 
@@ -216,3 +225,59 @@ def test_들여오기는_정본에서만이다(tmp_path, monkeypatch) -> None:
         gs.caution_audit(f, tmp_path / "a.jsonl")
     with pytest.raises(SystemExit, match="정본"):
         gs.guide_audit(f, tmp_path / "b.jsonl")
+
+
+@pytest.mark.gate
+def test_끝난_표_옛_판_폐기_시트는_올리지_않는다(tmp_path, shareable, monkeypatch) -> None:
+    """🆕 2026-10-02 (팀장 판정 (나)) — 판정이 다 들어간 판정표 · 개정판 · 초안 · 사람 8유형 시트 · 다 채운 표 · 빈 표."""
+    local, store = tmp_path / "build", tmp_path / "store"
+    dec = tmp_path / "cq_decisions.jsonl"
+    dec.write_text('{"지문": "cq:a"}\n{"지문": "cq:b"}\n', encoding="utf-8")
+    monkeypatch.setattr(gs, "CQ_DECISIONS", dec)
+    monkeypatch.setattr(gs, "FS_DECISIONS", tmp_path / "없음.jsonl")
+    _csv(
+        local / "cosmetic_qa__팀장판정표.csv",
+        HEAD,
+        [["cq:a", "문", "", ""], ["cq:b", "문", "", ""]],
+    )
+    _csv(local / "ftc_sealed__팀장판정표.csv", HEAD, [["fs:a", "문", "", ""]])  # 판정 없음 → 올린다
+    _csv(local / "guide_statute__팀장판정표_개정4_합의후보.csv", HEAD, [["gs:a", "문", "", ""]])
+    _csv(local / "ftc_press_old" / "팀장판정표_초안.csv", AUDIT, [["fp:a", "문", "", "", "", ""]])
+    _csv(
+        local / "판정__round2_labelsheet.csv",
+        ["id", "문구", "유형", "판정자"],
+        [["1", "문", "", ""]],
+    )
+    _csv(local / "감사_J6" / "다채움.csv", AUDIT, [["cq:a", "문", "Y", "-", "C", "팀장"]])
+    _csv(local / "guide_statute__팀장판정표.csv", HEAD, [])
+    _csv(
+        local / "감사_J6" / "새감사.csv", AUDIT, [["cq:a", "문", "", "", "", ""]]
+    )  # 같은 지문이어도 빈 감사표는 올린다
+    plan = {
+        p["rel"]: p["act"] for p in sh.plan_push(sh.local_sheets(local), local, store / sh.LAYOUT)
+    }
+    assert plan == {
+        "cosmetic_qa__팀장판정표.csv": "건너뜀 · 판정이 다 들어갔다",
+        "ftc_sealed__팀장판정표.csv": "새로",
+        "guide_statute__팀장판정표_개정4_합의후보.csv": "건너뜀 · 지금 판의 판정표가 아니다(개정판 · 정합본 · 초안)",
+        "ftc_press_old/팀장판정표_초안.csv": "건너뜀 · 지금 판의 판정표가 아니다(개정판 · 정합본 · 초안)",
+        "판정__round2_labelsheet.csv": "건너뜀 · 들여오는 명령이 없다(옛 판 · 폐기)",
+        "감사_J6/다채움.csv": "건너뜀 · 로컬에서 다 채웠다 — 이 기기에서 들여온다",
+        "guide_statute__팀장판정표.csv": "건너뜀 · 행 0",
+        "감사_J6/새감사.csv": "새로",
+    }
+
+
+@pytest.mark.gate
+def test_올리기는_외부_전송을_묻고_아니라면_쓰지_않는다(tmp_path, shareable, monkeypatch) -> None:
+    """🆕 2026-10-02 — `data-publish` 와 같은 질문(D-78 ③). 답이 「아니」면 아무것도 쓰지 않고 1."""
+    local, store = tmp_path / "build", tmp_path / "store"
+    _csv(local / "감사_J6" / "b.csv", AUDIT, [["k", "문", "", "", "", ""]])
+    asked = []
+    monkeypatch.setattr(sh.ds, "_ask", lambda q: asked.append(q) or False)
+    assert sh.push(base=local, root=store) == 1
+    assert asked and "외부 전송" in asked[0]
+    assert not (store / sh.LAYOUT / "감사_J6" / "b.csv").exists()
+    assert (
+        sh.push(base=local, root=store, dry_run=True) == 0 and len(asked) == 1
+    )  # 미리보기는 묻지 않는다

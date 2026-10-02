@@ -37,7 +37,7 @@ from __future__ import annotations
 import functools
 import operator
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Annotated, Any, TypedDict
 
@@ -144,6 +144,10 @@ class DictScan:
     sent_id: str
     ran: bool = False
     hits: tuple[DictHit, ...] = ()
+    #: 🆕 2026-10-02 (D-311 · D-273 ④) — **단독판정 자격이 없는** 항목의 적중(적법중첩 · 모호 · 비주장문맥).
+    #:    🔴 확정의 재료가 아니다 — 보류 문장의 **유형 후보**로만 실린다(`_judge_one`). ⛔ 버리면 강등된 질병 이름이
+    #:       「사전 침묵」과 같은 보류가 되어, 사용자에게 힌트가 없고 탐지 재현율을 잴 수 없다(원장 10-02 ⑤).
+    weak: tuple[DictHit, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +185,8 @@ class LawResult:
     dict_hits: tuple[tuple[str, tuple[DictHit, ...]], ...] = ()
     #: 🆕 2026-09-28 (D-238 개정 (나)) — 문장별로 **근거에 딸린 적용 제외 목**(`sent_id`, 단서들). 부모 좌표가 `articles` 에 있다.
     provisos: tuple[tuple[str, tuple[Proviso, ...]], ...] = ()
+    #: 🆕 2026-10-02 (D-311) — 문장별로 **이 법의 근거를 가진 자격 없는 적중**. `dict_hits` 와 같은 거름이다
+    weak_hits: tuple[tuple[str, tuple[DictHit, ...]], ...] = ()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -521,11 +527,23 @@ SQL_DICT = """SELECT term, violation_type::text, law_ref
 FROM dict_entry
 WHERE dict_kind = %s AND exact_match
 ORDER BY term"""
+#: 🆕 2026-10-02 (D-311) — **자격이 없는** 항목. 보류 문장의 유형 후보로만 쓴다 — 확정 · 하한의 재료가 아니다.
+#:    🚨 `SQL_DICT` 와 거름 하나만 다르다 — 칸 · 순서는 같다(`_entries` 가 둘을 같은 꼴로 읽는다 · D-99)
+SQL_DICT_WEAK = SQL_DICT.replace("AND exact_match", "AND NOT exact_match")
 
 
 def load_dict_entries(cur: Any) -> list[dm.Entry]:
     """`dict_entry` → 매칭 항목. 근거(`law_ref`)는 적재기가 `"; "` 로 이은 인용이다(`scripts/load_db.py` `load_dict`)."""
-    cur.execute(SQL_DICT, (DICT_KIND,))
+    return _entries(cur, SQL_DICT)
+
+
+def load_weak_entries(cur: Any) -> list[dm.Entry]:
+    """🆕 2026-10-02 (D-311) — 단독판정 자격이 **없는** 항목. 꼴은 `load_dict_entries` 와 같다."""
+    return _entries(cur, SQL_DICT_WEAK)
+
+
+def _entries(cur: Any, sql: str) -> list[dm.Entry]:
+    cur.execute(sql, (DICT_KIND,))
     return [
         dm.Entry(
             term=term,
@@ -553,20 +571,23 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     if cur is None:
         return {"dict_scans": [DictScan(sent_id=sent_id(i)) for i in range(len(sents))]}
     entries = load_dict_entries(cur)
+    weak = load_weak_entries(cur)  # 🆕 D-311 — 보류 문장의 유형 후보
+
+    def _hits(text: str, es: list[dm.Entry]) -> tuple[DictHit, ...]:
+        return tuple(
+            DictHit(
+                term=m.entry.term,
+                violation_type=m.entry.violation_type,
+                basis=m.entry.basis,
+                span=m.span,
+            )
+            for m in dm.find(text, es)
+        )
+
     return {
         "dict_scans": [
             DictScan(
-                sent_id=sent_id(i),
-                ran=True,
-                hits=tuple(
-                    DictHit(
-                        term=m.entry.term,
-                        violation_type=m.entry.violation_type,
-                        basis=m.entry.basis,
-                        span=m.span,
-                    )
-                    for m in dm.find(text, entries)
-                ),
+                sent_id=sent_id(i), ran=True, hits=_hits(text, entries), weak=_hits(text, weak)
             )
             for i, text in enumerate(sents)
         ]
@@ -580,6 +601,19 @@ def encode(state: CoreState) -> dict[str, Any]:
     🔜 W7 — harness(D-94) 뒤. ⛔ 법별 노드가 인코더를 부르면 판정기가 세 벌이다 (D-99).
     """
     return {}
+
+
+def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:
+    """🆕 W4 — 사전 적중 중 **이 법의 인용**을 가진 것만, 인용도 이 법 것만 남긴다. 법을 못 정한 인용은 버린다 (D-220).
+
+    🔄 2026-10-02 (D-311) — 단독판정 적중과 자격 없는 적중이 **같은 거름**을 쓴다 (D-99).
+    """
+    mine = []
+    for h in hits:
+        basis = tuple(b for b in h.basis if statute.law_of(b) == law)
+        if basis:
+            mine.append(DictHit(h.term, h.violation_type, basis, h.span))
+    return tuple(mine)
 
 
 def _law_node(name: str) -> Callable[..., dict[str, Any]]:
@@ -604,6 +638,7 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
         picked: list[tuple[str, tuple[EvidenceArticle, ...]]] = []
         proviso_picked: list[tuple[str, tuple[Proviso, ...]]] = []
         dict_picked: list[tuple[str, tuple[DictHit, ...]]] = []
+        weak_picked: list[tuple[str, tuple[DictHit, ...]]] = []
         for i in range(n):
             sid = sent_id(i)
             e = by_sent.get(sid)
@@ -613,12 +648,8 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
             picked.append((sid, arts))
             proviso_picked.append((sid, provs))
             # 🆕 W4 — 사전 적중 중 **이 법의 인용**을 가진 것만, 인용도 이 법 것만 남긴다. 법을 못 정한 인용은 버린다 (D-220)
-            mine = []
-            for h in scans[sid].hits if sid in scans else ():
-                basis = tuple(b for b in h.basis if statute.law_of(b) == law)
-                if basis:
-                    mine.append(DictHit(h.term, h.violation_type, basis, h.span))
-            dict_picked.append((sid, tuple(mine)))
+            dict_picked.append((sid, _mine(scans[sid].hits if sid in scans else (), law)))
+            weak_picked.append((sid, _mine(scans[sid].weak if sid in scans else (), law)))
         return {
             "law_results": [
                 LawResult(
@@ -627,6 +658,7 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
                     articles=tuple(picked),
                     dict_hits=tuple(dict_picked),
                     provisos=tuple(proviso_picked),
+                    weak_hits=tuple(weak_picked),
                 )
             ]
         }
@@ -720,6 +752,7 @@ def _judge_one(
     scan: DictScan | None,
     hits: list[DictHit],
     retrieved: list[EvidenceArticle],
+    weak: list[DictHit] | None = None,
 ) -> SentenceJudgment:
     """문장 하나 — **인코더 전 판정** (D-269 그대로 · ⚠️ 재검 대기).
 
@@ -730,6 +763,9 @@ def _judge_one(
     ③ 적중은 있는데 그 인용이 **어느 법인지 못 정한다** → 근거 없음 — 유형은 유지 (D-127 「유형은 잡았는데 조문이 없다」)
        ⛔ 인용이 **보내지 않은 법** 것이면 근거 없음이 아니다 — 이 판정이 볼 법이 아니다(D-267)
     ④ 그 밖에 → **보류(확신 부족)** — 사전의 침묵은 「특이사항 없음」이 아니다 (D-269)
+       🆕 2026-10-02 (D-311 · D-273 ④) — 단독판정 자격 **없는** 항목이 이 법의 인용으로 울렸으면 보류 문장에 **유형 후보**를 싣는다.
+       확정하지 않는다 · 하한을 걸지 않는다(W5 · D-273 ④ 의 하한은 인코더 뒤 안건) · 근거는 적중의 인용 조문.
+       ⛔ 싣지 않으면 강등된 질병 이름(「당뇨에 좋은 차」)이 사전 침묵과 같은 보류가 된다(원장 10-02 ⑤)
     🚨 위험도를 적지 않는다 — 하한(`sanction_rule` · W5)이 없다. 지어내면 계약이 거부한다(D-09 · D-131).
     🚨 `not_claim` 을 내지 않는다 — 주장 여부 판별은 인코더 몫이다 (D-275).
     """
@@ -795,12 +831,20 @@ def _judge_one(
             violations=_typed({h.violation_type for h in unplaced if h.violation_type}),
         )
     # 보낸 법 밖의 인용만 울린 경우도 여기다 — 이 판정이 볼 법이 아니다(D-267)
+    cand = _typed({t for h in weak or () for t in _hit_types(h)})
+    basis_w: list[EvidenceArticle] = []
+    for h in weak or ():
+        for c in h.basis:
+            a = _basis_article(c)
+            if a is not None and a not in basis_w:
+                basis_w.append(a)
     return SentenceJudgment(
         sent_id=sid,
         text=text,
         verdict=Verdict.hold,
         hold_reason=HoldReason.low_conf,
-        evidence=retrieved,
+        violations=cand,
+        evidence=basis_w + [a for a in retrieved if a not in basis_w],
     )
 
 
@@ -819,6 +863,7 @@ def judge(state: CoreState) -> dict[str, Any]:
     per_sent: dict[str, list[EvidenceArticle]] = {}
     seen: dict[str, set[tuple[str, str, str | None]]] = {}
     hits_of: dict[str, list[DictHit]] = {}
+    weak_of: dict[str, list[DictHit]] = {}
     for r in results:
         for sid, arts in r.articles:
             for a in arts:
@@ -831,6 +876,8 @@ def judge(state: CoreState) -> dict[str, Any]:
                 per_sent.setdefault(sid, []).append(a)
         for sid, hs in r.dict_hits:
             hits_of.setdefault(sid, []).extend(hs)
+        for sid, hs in r.weak_hits:
+            weak_of.setdefault(sid, []).extend(hs)
     scans = {s.sent_id: s for s in state.get("dict_scans", [])}
     sents = state.get("sents", [])
     # 🔴 원문 좌표를 못 되찾으면(분할 밖에서 문장이 들어왔다) **구간을 싣지 않는다** — 좌표를 지어내지 않는다 (D-224 · D-278).
@@ -848,6 +895,7 @@ def judge(state: CoreState) -> dict[str, Any]:
                 scans.get(sid),
                 hits_of.get(sid, []),
                 per_sent.get(sid, []),
+                weak_of.get(sid, []),
             )
             for i, t in enumerate(sents)
         ]
