@@ -132,13 +132,15 @@ def main() -> None:
                     help="고른 고객층 하나 — 없으면 페르소나 없이(검수 기본)")
     ap.add_argument("--kadlint", type=Path, default=None)
     ap.add_argument("--rejudge", action="store_true", help="후보를 팀 판정 코어로 재판정(DB 필요)")
+    ap.add_argument("--stage1", default="v6", help="1단계 어댑터 버전(비교용) — 기본 v6(채택본)")
     args = ap.parse_args()
+    stage1 = ROOT / "models" / f"copylane_sllm_lora_adapter_{args.stage1}"
     kad = load_kadlint(args.kadlint) if args.kadlint else []
     persona = PERSONAS[args.persona] if args.persona else None
 
     tok = AutoTokenizer.from_pretrained(BASE)
     base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
-    model = PeftModel.from_pretrained(base, str(STAGE1), adapter_name="stage1")
+    model = PeftModel.from_pretrained(base, str(stage1), adapter_name="stage1")
     model.load_adapter(str(STAGE2), adapter_name="stage2")
     model.eval()
     t0 = time.time()
@@ -152,7 +154,8 @@ def main() -> None:
         rows.append({**row, **r})
         print(f"{len(rows)}  {r['outcome']}  {time.time() - t0:.0f}s", flush=True)
 
-    out = OUT.with_name(f"persona_pipeline_e2e_{args.persona or 'none'}.jsonl")
+    tag = "" if args.stage1 == "v6" else f"_{args.stage1}"
+    out = OUT.with_name(f"persona_pipeline_e2e_{args.persona or 'none'}{tag}.jsonl")
     out.parent.mkdir(exist_ok=True)
     with out.open("w", encoding="utf-8") as f:
         for r in rows:
