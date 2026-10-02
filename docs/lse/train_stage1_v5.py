@@ -52,14 +52,17 @@ from app.contracts import RewriteSet, Violation  # noqa: E402
 
 BASE = "Qwen/Qwen2.5-3B-Instruct"
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9")}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10")}
 EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v8": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
-          "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"]}
+          "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v10": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"]}
 #: 🆕 v7 — 합성 데이터(합성 활용 허용 10-01 · `gen_synthetic_stage1.py`). 🚨 **학습에만** 쓰고 평가에는 넣지 않는다
 SYNTH = {"v7": ["synth_stage1.jsonl"], "v8": ["synth_stage1.jsonl"],  # v7 은 거르기 전 435행 · v8 은 원료명 불일치를 뺀 410행
          # 🆕 v9 (10-02) — 「사실 + 고칠 수 없는 위반」 짝 255행을 2배로. 질병 유형 학습행이 74:7 로 불가에 쏠려 있었다
-         "v9": ["synth_stage1.jsonl", "synth_stage1_v9.jsonl", "synth_stage1_v9.jsonl"]}
+         "v9": ["synth_stage1.jsonl", "synth_stage1_v9.jsonl", "synth_stage1_v9.jsonl"],
+         # 🆕 v10 (10-02) — v9 와 같은 구성 · 정답이 원문에 없는 낱말(제품명 · 공정)을 지어낸 13행을 고치고 제품명 없이 끝나는 짝 8개를 더했다
+         #    (v9 가 「…로스팅한 곶감」처럼 제품명을 지어냈다 · 결과서 12차)
+         "v10": ["synth_stage1.jsonl", "synth_stage1_v9.jsonl", "synth_stage1_v9.jsonl"]}
 KEY = HERE / "_private" / "real_answer_key.jsonl"
 REASONS = [v.value for v in Violation]
 SEED = 20261001
@@ -143,7 +146,7 @@ def load_rows(version: str = "v5") -> tuple[list[dict], list[dict]]:
     return train, ev
 
 
-SYS = {"v5": SYSTEM, "v6": SYSTEM_V6, "v7": SYSTEM_V6, "v8": SYSTEM_V6, "v9": SYSTEM_V6}
+SYS = {"v5": SYSTEM, "v6": SYSTEM_V6, "v7": SYSTEM_V6, "v8": SYSTEM_V6, "v9": SYSTEM_V6, "v10": SYSTEM_V6}
 CUR = {"system": SYSTEM}
 
 
@@ -266,7 +269,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"

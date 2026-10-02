@@ -103,28 +103,28 @@
 {"id": "x103", "group": "사실만", "input": "국내 유일 무농약 인증 유기농 쌀로 만든 누룽지", "violation_types": ["거짓_과장"], "output": {"body": "국내산 쌀로 만든 누룽지", "mandatory_note": "무농약·유기농 인증은 인증 번호와 함께 표시", "placement": "인증 표시 근처"}}
 {"id": "x104", "group": "사실만", "input": "화학첨가물 일절 없는 순수 100% 착즙 사과즙", "violation_types": ["거짓_과장"], "output": {"body": "사과를 착즙해 만든 사과즙", "mandatory_note": null, "placement": null}}
 {"id": "x105", "group": "사실만", "input": "식약처가 인정한 최고의 홍삼", "violation_types": ["거짓_과장"], "output": {"body": "홍삼 제품", "mandatory_note": null, "placement": null}}
-{"id": "x106", "group": "사실만", "input": "특허받은 공법으로 만든 기적의 흑마늘", "violation_types": ["거짓_과장"], "output": {"body": "숙성 공법으로 만든 흑마늘", "mandatory_note": null, "placement": null}}
+{"id": "x106", "group": "사실만", "input": "특허받은 공법으로 만든 기적의 흑마늘", "violation_types": ["거짓_과장"], "output": {"body": "공법으로 만든 흑마늘", "mandatory_note": null, "placement": null}}
 {"id": "x107", "group": "사실만", "input": "부작용 걱정 없는 안전한 천연 다이어트 차", "violation_types": ["거짓_과장"], "output": {"body": "차 제품", "mandatory_note": null, "placement": null}}
 {"id": "x108", "group": "사실만", "input": "1등급 한우 사골로 우려낸 보약 같은 곰탕", "violation_types": ["거짓_과장", "의약품_오인"], "output": {"body": "1등급 한우 사골로 우려낸 곰탕", "mandatory_note": "한우 등급은 등급판정서 기준", "placement": null}}
-{"id": "x109", "group": "사실만", "input": "몸에 좋은 건 다 넣은 슈퍼푸드 그래놀라", "violation_types": ["거짓_과장"], "output": {"body": "곡물과 견과류를 담은 그래놀라", "mandatory_note": null, "placement": null}}
-{"id": "x110", "group": "사실만", "input": "중금속 완벽 제거, 가장 깨끗한 미역", "violation_types": ["거짓_과장"], "output": {"body": "세척 공정을 거친 미역", "mandatory_note": null, "placement": null}}
-{"id": "x111", "group": "사실만", "input": "인체에 100% 흡수되는 액상 칼슘", "violation_types": ["거짓_과장"], "output": {"body": "액상 형태의 칼슘", "mandatory_note": null, "placement": null}}
+{"id": "x109", "group": "사실만", "input": "몸에 좋은 건 다 넣은 슈퍼푸드 그래놀라", "violation_types": ["거짓_과장"], "output": {"body": "그래놀라", "mandatory_note": null, "placement": null}}
+{"id": "x110", "group": "사실만", "input": "중금속 완벽 제거, 가장 깨끗한 미역", "violation_types": ["거짓_과장"], "output": {"body": "미역", "mandatory_note": null, "placement": null}}
+{"id": "x111", "group": "사실만", "input": "인체에 100% 흡수되는 액상 칼슘", "violation_types": ["거짓_과장"], "output": {"body": "액상 칼슘", "mandatory_note": null, "placement": null}}
 {"id": "x112", "group": "사실만", "input": "프랑스 명품 브랜드도 쓰는 최상급 히알루론산 원료", "violation_types": ["거짓_과장"], "output": {"body": "히알루론산 원료 사용", "mandatory_note": null, "placement": null}}
-{"id": "x113", "group": "사실만", "input": "영양 손실 제로, 동결건조 과일칩", "violation_types": ["거짓_과장"], "output": {"body": "동결건조 방식으로 만든 과일칩", "mandatory_note": null, "placement": null}}
+{"id": "x113", "group": "사실만", "input": "영양 손실 제로, 동결건조 과일칩", "violation_types": ["거짓_과장"], "output": {"body": "동결건조 과일칩", "mandatory_note": null, "placement": null}}
 {"id": "x114", "group": "사실만", "input": "유해물질 불검출로 아기도 안심인 쌀과자", "violation_types": ["거짓_과장"], "output": {"body": "쌀로 만든 과자", "mandatory_note": "불검출 표시는 시험성적서 항목·기관과 함께", "placement": "시험 결과 표시 근처"}}
 {"id": "x115", "group": "사실만", "input": "6년근만 고집한 최고 효능 인삼", "violation_types": ["거짓_과장"], "output": {"body": "6년근 인삼", "mandatory_note": null, "placement": null}}
 {"id": "x116", "group": "사실만", "input": "단 한 방울의 물도 넣지 않은 무첨가 원액 100%", "violation_types": ["거짓_과장"], "output": {"body": "원액 제품", "mandatory_note": "원재료 함량은 표시사항 기준으로 기재", "placement": null}}
 {"id": "x117", "group": "사실만", "input": "자연 그대로의 생명력이 살아 있는 효소", "violation_types": ["거짓_과장"], "output": {"body": "효소 제품", "mandatory_note": null, "placement": null}}
-{"id": "x118", "group": "사실만", "input": "명품 제주 청정 지역에서 키운 무공해 녹차", "violation_types": ["거짓_과장"], "output": {"body": "제주에서 재배한 녹차", "mandatory_note": null, "placement": null}}
+{"id": "x118", "group": "사실만", "input": "명품 제주 청정 지역에서 키운 무공해 녹차", "violation_types": ["거짓_과장"], "output": {"body": "제주에서 키운 녹차", "mandatory_note": null, "placement": null}}
 {"id": "x119", "group": "사실만", "input": "칼로리 걱정 없는 0칼로리 디저트", "violation_types": ["거짓_과장"], "output": {"body": "디저트 제품", "mandatory_note": "열량은 영양성분 표시 기준으로 기재", "placement": "영양성분표 근처"}}
 {"id": "x120", "group": "사실만", "input": "100% 국산 콩으로 만든 최고의 된장", "violation_types": ["거짓_과장"], "output": {"body": "국산 콩으로 만든 된장", "mandatory_note": "원산지는 원재료명 표시 기준", "placement": null}}
-{"id": "x121", "group": "사실만", "input": "단백질 폭탄, 근육이 펑펑 붙는 닭가슴살", "violation_types": ["거짓_과장"], "output": {"body": "단백질을 함유한 닭가슴살", "mandatory_note": "단백질 함량은 영양성분 표시 기준", "placement": null}}
+{"id": "x121", "group": "사실만", "input": "단백질 폭탄, 근육이 펑펑 붙는 닭가슴살", "violation_types": ["거짓_과장"], "output": {"body": "닭가슴살", "mandatory_note": "단백질 함량은 영양성분 표시 기준", "placement": null}}
 {"id": "x122", "group": "사실만", "input": "무조건 믿고 먹는 어린이 홍삼", "violation_types": ["거짓_과장"], "output": {"body": "어린이용 홍삼 제품", "mandatory_note": null, "placement": null}}
 {"id": "x123", "group": "사실만", "input": "세균 99.9% 박멸 천연 과일 세정제", "violation_types": ["거짓_과장"], "output": {"body": "과일 세정제", "mandatory_note": "살균 효과 표시는 시험 조건·기관과 함께", "placement": "시험 결과 표시 근처"}}
 {"id": "x124", "group": "사실만", "input": "백화점 판매 1위 수제 육포", "violation_types": ["거짓_과장"], "output": {"body": "수제 육포", "mandatory_note": "판매 순위는 집계 기관·기간·대상을 함께 표시", "placement": "순위 표시 바로 아래"}}
-{"id": "x125", "group": "사실만", "input": "먹는 순간 젊어지는 콜라겐 음료", "violation_types": ["거짓_과장"], "output": {"body": "콜라겐을 함유한 음료", "mandatory_note": null, "placement": null}}
+{"id": "x125", "group": "사실만", "input": "먹는 순간 젊어지는 콜라겐 음료", "violation_types": ["거짓_과장"], "output": {"body": "콜라겐 음료", "mandatory_note": null, "placement": null}}
 {"id": "x126", "group": "사실만", "input": "효능이 입증된 천연 꿀", "violation_types": ["거짓_과장"], "output": {"body": "천연 꿀", "mandatory_note": null, "placement": null}}
-{"id": "x127", "group": "사실만", "input": "몸속 독소를 쏙 빼주는 레몬 디톡스 워터", "violation_types": ["거짓_과장"], "output": {"body": "레몬을 넣은 음료", "mandatory_note": null, "placement": null}}
+{"id": "x127", "group": "사실만", "input": "몸속 독소를 쏙 빼주는 레몬 디톡스 워터", "violation_types": ["거짓_과장"], "output": {"body": "레몬 워터", "mandatory_note": null, "placement": null}}
 {"id": "x128", "group": "사실만", "input": "업계 최초 나노 공법 흡수율 10배 비타민", "violation_types": ["거짓_과장"], "output": {"body": "비타민 제품", "mandatory_note": "흡수율 비교는 시험 조건·비교 대상과 함께 표시", "placement": "비교 표시 바로 아래"}}
 {"id": "x129", "group": "사실만", "input": "전문의 다수가 인정한 프리미엄 유산균", "violation_types": ["거짓_과장"], "output": {"body": "유산균 제품", "mandatory_note": null, "placement": null}}
 {"id": "x130", "group": "사실만", "input": "환경호르몬 걱정 제로 친환경 텀블러", "violation_types": ["거짓_과장"], "output": {"body": "텀블러 제품", "mandatory_note": "소재·시험 결과는 시험성적서 기준으로 표시", "placement": null}}

@@ -18,7 +18,7 @@
 {"id": "y018", "group": "인증순위", "input": "소비자 만족도 1위, 효과 최강 단백질 쉐이크", "violation_types": ["거짓_과장"], "output": {"body": "단백질 쉐이크", "mandatory_note": "만족도 순위는 조사 기관·기간·대상을 함께 표시", "placement": "순위 표시 바로 아래"}}
 {"id": "y019", "group": "인증순위", "input": "의사 추천 1위 프리미엄 오트밀", "violation_types": ["거짓_과장", "의약품_오인"], "output": {"body": "오트밀 제품", "mandatory_note": null, "placement": null}}
 {"id": "y020", "group": "인증순위", "input": "HACCP 인증이라 무조건 안전한 반찬", "violation_types": ["거짓_과장"], "output": {"body": "HACCP 인증 시설에서 만든 반찬", "mandatory_note": "HACCP 인증 번호를 함께 표시", "placement": "인증 표시 근처"}}
-{"id": "y021", "group": "인증순위", "input": "특허 출원한 비법 소스로 만든 떡볶이", "violation_types": ["소비자_기만"], "output": {"body": "특허 출원 중인 소스로 만든 떡볶이", "mandatory_note": "출원번호를 함께 표시 · 등록 특허와 구분", "placement": "특허 표시 근처"}}
+{"id": "y021", "group": "인증순위", "input": "특허 출원한 비법 소스로 만든 떡볶이", "violation_types": ["소비자_기만"], "output": {"body": "특허 출원한 소스로 만든 떡볶이", "mandatory_note": "출원번호를 함께 표시 · 등록 특허와 구분", "placement": "특허 표시 근처"}}
 {"id": "y022", "group": "인증순위", "input": "세계 3대 박람회 수상, 효능까지 검증된 녹즙", "violation_types": ["거짓_과장"], "output": {"body": "녹즙 제품", "mandatory_note": "수상 내역은 대회명·연도와 함께 표시 · 효능 근거로 쓰지 않음", "placement": null}}
 {"id": "y023", "group": "대상표시", "input": "직장인 필수 영양제, 피로 회복 비타민 사탕", "violation_types": ["건강기능식품_오인"], "output": {"body": "직장인을 위한 비타민 사탕", "mandatory_note": "비타민 함량은 영양성분 표시 기준", "placement": null}}
 {"id": "y024", "group": "대상표시", "input": "다이어터 영양제, 칼로리 컷 곤약 젤리", "violation_types": ["건강기능식품_오인"], "output": {"body": "곤약 젤리", "mandatory_note": "열량은 영양성분 표시 기준", "placement": "영양성분표 근처"}}
