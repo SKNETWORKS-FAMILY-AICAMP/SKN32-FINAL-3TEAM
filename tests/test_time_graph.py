@@ -67,3 +67,62 @@ def test_골든이_없거나_학습_문장이_없으면_멈춘다(tmp_path: path
         encoding="utf-8",
     )
     assert tg.train_sentences(p) == ["가"], "봉인 평가 행은 읽지 않는다 (D-175)"
+
+
+@pytest.mark.gate
+def test_검색_분해는_같은_함수를_감싸_재고_되돌린다() -> None:
+    """🆕 2026-10-02 — 검색 코드를 베끼지 않는다(D-99). 감싼 함수는 예외가 나도 되돌린다 · 이름이 없으면 멈춘다(D-220)."""
+    calls: list[str] = []
+
+    def mk(name: str):  # noqa: ANN202
+        def fn(*a, **k):  # noqa: ANN002, ANN003, ANN202
+            calls.append(name)
+            return "m" if name == "stored_model_id" else []
+
+        return fn
+
+    rtmod = NS(**{n: mk(n) for n in tg.SEARCH_PARTS})
+
+    def wide(cur, text):  # noqa: ANN001, ANN202
+        rtmod.stored_model_id(cur)
+        rtmod.check_inputs(cur)
+        rtmod.encode("m", text)
+        rtmod.by_vector(cur, text)
+        rtmod.by_lexical(cur, text)
+
+    rtmod.wide = wide
+    before = {n: getattr(rtmod, n) for n in tg.SEARCH_PARTS}
+    got = tg.search_parts(rtmod, None, "문장")
+    assert set(got) == {
+        "모델 판 조회",
+        "입력판 검사",
+        "임베딩(한 문장)",
+        "벡터 질의",
+        "어휘 갈래",
+        "검색 한 번",
+    }
+    assert all(v >= 0 for v in got.values())
+    assert calls == list(tg.SEARCH_PARTS)
+    assert {n: getattr(rtmod, n) for n in tg.SEARCH_PARTS} == before, "감싼 함수를 되돌린다"
+
+    def boom(cur, text):  # noqa: ANN001, ANN202
+        raise RuntimeError("x")
+
+    rtmod.wide = boom
+    with pytest.raises(RuntimeError):
+        tg.search_parts(rtmod, None, "문장")
+    assert {n: getattr(rtmod, n) for n in tg.SEARCH_PARTS} == before, "예외가 나도 되돌린다"
+    del rtmod.encode
+    with pytest.raises(SystemExit, match="이름이 바뀌었다"):
+        tg.search_parts(rtmod, None, "문장")
+
+
+@pytest.mark.gate
+def test_묶음_임베딩은_올라온_모델로만_잰다() -> None:
+    seen: list[int] = []
+    model = NS(encode=lambda xs: seen.append(len(xs)))
+    rtmod = NS(_model_cache={"m": model}, stored_model_id=lambda cur: "m")
+    out = tg.batch_encode_ms(rtmod, None, [f"s{i}" for i in range(100)], size=20, rounds=3)
+    assert len(out) == 3 and seen == [20, 20, 20]
+    with pytest.raises(SystemExit, match="올라와 있지 않다"):
+        tg.batch_encode_ms(NS(_model_cache={}, stored_model_id=lambda cur: "m"), None, ["a"])
