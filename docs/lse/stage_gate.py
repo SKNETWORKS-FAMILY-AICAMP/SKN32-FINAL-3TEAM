@@ -146,6 +146,41 @@ def ingredient_changed(original: str, s: str) -> str | None:
     return None
 
 
+#: 사실 문장에 원문 없이 붙어도 되는 연결 낱말 — 「○○로 만든」 · 「○○를 담은」 · 「○○ 함유」
+_LINK = {"만든", "담은", "담긴", "쓴", "사용", "사용한", "함유", "제품", "넣은", "포함", "구성", "구성한", "된", "한", "든", "으로", "로", "x"}
+_PARTICLE = re.compile(r"(으로|에서|이|가|은|는|을|를|의|와|과|로|에|도|만)$")
+
+
+def new_words(original: str, s: str) -> list[str]:
+    """🆕 10-02 (v9) — **사실만 남긴 문장**에 원문에 없는 낱말이 생겼는가(「카카오닙스를 저온 로스팅한 곶감 200g」).
+    v9 정답 다수가 「…한 [제품명]」으로 끝나 모델이 제품명을 붙이는 버릇을 배웠고, 붙일 이름이 없으면 지어낸다.
+    낱말마다 조사를 떼고 **앞 절반**이 원문(띄어쓰기 무시)에 있으면 원문 낱말로 본다 — 「삭혔어요 → 삭힌」 · 「구웠어요 → 구운」 같은
+    활용은 통과한다. 🚨 기능성 문구(「~에 도움」)는 고시 · 공식 문구라 원문에 없는 게 정상이다 — 부르는 쪽에서 뺀다."""
+    o = dm.norm(original).lower()
+    o_cv = {_cv(ch) for ch in o if "가" <= ch <= "힣"}
+    out = []
+    words = re.findall(r"[가-힣A-Za-z]+", s)
+    for w in words:
+        stem = _PARTICLE.sub("", w) if len(w) > 2 else w
+        if w in _LINK or stem in _LINK:
+            continue
+        head = stem[: max(1, len(stem) // 2)].lower()
+        # 한 음절 어간은 받침만 다른 불규칙 활용(「갈았어요 → 간」 · 「냈어요 → 낸」)을 같은 말로 본다
+        if head in o or (len(head) == 1 and "가" <= head <= "힣" and _cv(head) in o_cv):
+            continue
+        out.append(w)
+    # 원문보다 많이 되풀이된 낱말 — 「곶감을 띄운 곶감」(제품명 자리에 원료명을 다시 씀)
+    for w in {_PARTICLE.sub("", x) for x in words if len(x) >= 2}:
+        if len(w) >= 2 and sum(_PARTICLE.sub("", x) == w for x in words) > max(1, o.count(w)):
+            out.append(f"{w}(반복)")
+    return out
+
+
+def _cv(ch: str) -> int:
+    """한글 음절의 초성 · 중성 번호(받침을 뗀다)."""
+    return (ord(ch) - 0xAC00) // 28
+
+
 @cache
 def dict_entries() -> tuple[dm.Entry, ...]:
     """금지 표현 사전 — **단독판정 자격** 항목만(D-156). 파일이 없으면 빈 사전(경고는 부르는 쪽)."""
@@ -198,4 +233,6 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"인정되지 않은 기능성: {u}")
     if (g := ingredient_changed(original, s)) is not None:
         why.append(f"원문에 없는 원료명: {g}")
+    if "도움" not in s and (nw := new_words(original, s)):
+        why.append(f"원문에 없는 낱말: {', '.join(nw[:3])}")
     return GateResult(not why, tuple(why))
