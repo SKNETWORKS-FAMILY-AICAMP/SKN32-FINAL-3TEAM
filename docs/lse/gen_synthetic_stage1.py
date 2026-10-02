@@ -164,6 +164,8 @@ def main() -> None:
     ap.add_argument("--target", type=int, default=2000)
     ap.add_argument("--export-seeds", type=int, default=0, help="고른 씨앗 수 — synth_seeds.jsonl 로 내보낸다")
     ap.add_argument("--ingest", type=Path, default=None, help="직접 쓴 문구 파일(docs/lse 기준)")
+    ap.add_argument("--ingest-pairs", type=Path, default=None,
+                    help="🆕 v9 — 문구와 정답을 짝으로 직접 쓴 파일(docs/lse 기준) → synth_stage1_v9.jsonl")
     args = ap.parse_args()
     rng = random.Random(SEED)
     random.seed(SEED)
@@ -192,6 +194,47 @@ def main() -> None:
             for i, x in enumerate(picked):
                 f.write(json.dumps({"seed": f"g{i:03d}", **x}, ensure_ascii=False) + "\n")
         print(f"씨앗 {len(picked)}개 → synth_seeds.jsonl")
+        return
+    if args.ingest_pairs:
+        # 🆕 10-02 (v9) — 「살릴 수 있는데 버린다」를 줄이려고 **사실 + 고칠 수 없는 위반**이 섞인 문구를 짝으로 쓴다.
+        #    v8 까지의 합성은 질병 · 의약품 · 체험기를 「위반이 주장의 전부」로만 만들어 정답이 늘 불가였다(질병 81행 중 74행 불가).
+        #    한 줄 = {"kind", "vt": [위반 유형], "note": 병기 문구|null, "pairs": [[문구, 정답 본문|null(=합법화 불가)]]}.
+        #    정답이 문구마다 달라 사실(원산지 · 원료 · 제조 · 용량)이 문구 그대로 살아남는다. 거르기는 --ingest 와 같다.
+        out = HERE / "synth_stage1_v9.jsonl"
+        rows, seen_inputs = [], set()
+        dropped = {"golden": 0, "정답표": 0, "중복": 0, "형식": 0, "원료명 불일치": 0, "정답 관문": 0}
+        for line in (HERE / args.ingest_pairs).open(encoding="utf-8"):
+            if not line.strip():
+                continue
+            g = json.loads(line)
+            for text, body in g["pairs"]:
+                text = text.strip()
+                k = norm(text)
+                target = ({"infeasible": g["vt"][0]} if body is None
+                          else {"body": body, "mandatory_note": g.get("note"), "placement": None})
+                if not text or len(text) > 120:
+                    dropped["형식"] += 1
+                elif k in gset or k in gblob:
+                    dropped["golden"] += 1
+                elif any(x in text.replace(" ", "") for x in answer_words) or any(
+                        difflib.SequenceMatcher(None, k, a).ratio() >= SIM_MAX for a in answer_inputs):
+                    dropped["정답표"] += 1
+                elif k in seen_inputs:
+                    dropped["중복"] += 1
+                elif body and ingredient_changed(text, body):
+                    dropped["원료명 불일치"] += 1
+                elif body and not gate(text, body).passed and g["kind"] != "고시+질병":
+                    dropped["정답 관문"] += 1  # 정답이 관문에 걸리면 정답이 틀린 것이다(고시 문구는 팀 사전 오탐 예외)
+                else:
+                    seen_inputs.add(k)
+                    rows.append({"id": f"w{len(rows):05d}", "group": g["kind"], "input": text, "violation_types": g["vt"],
+                                 "output": target, "synthetic": True, "generator": "claude-in-session",
+                                 "prompt_version": "synth-v2-pairs-2026-10-02"})
+        with out.open("w", encoding="utf-8", newline="\n") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        n_inf = sum("infeasible" in r["output"] for r in rows)
+        print(f"받아들임 {len(rows)} (살림 {len(rows) - n_inf} · 불가 {n_inf}) · 버림 {dropped} · {out.name}")
         return
     if args.ingest:
         seeds_by_id = {x["seed"]: x for x in map(json.loads, (HERE / "synth_seeds.jsonl").open(encoding="utf-8"))}

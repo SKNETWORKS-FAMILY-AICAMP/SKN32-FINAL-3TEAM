@@ -26,7 +26,7 @@ DICT = ROOT / "data" / "derived" / "banned_terms.jsonl"
 
 #: 질병 표현 — 사전이 놓치는 일반 질병명 · 치료 어휘. 🚨 고시 문구의 「혈압이 높은 사람」 · 「혈당조절」은 질병명이 아니다
 DISEASE = re.compile(
-    r"치료|완치|예방|낫|증후군|질환|질병|[가-힣]{1,6}병(?![원아])|[가-힣]*통(?:증)?에|관절통|두통|당뇨|고혈압|암(?:을|에|세포|예방)|"
+    r"치료|완치|예방|낫(?!또)|증후군|질환|질병|[가-힣]{1,6}병(?![원아])|[가-힣]*통(?:증)?에|관절통|두통|당뇨|고혈압|암(?:을|에|세포|예방)|"
     r"빈혈|감기|비만|아토피|탈모|변비|불면증|우울증|골다공증|염증|[가-힣]+염(?![색료])"
 )
 #: 의약품 · 의약품 오인
@@ -49,6 +49,33 @@ CREDENTIAL = re.compile(r"특허|인증|공인|식약처|임상|수상|논문")
 AGING = re.compile(r"노화[가-힣\s]{0,8}(?:에|를)\s*도움|노화\S{0,2}\s*방지|안티\s*에이징")
 #: 숫자 — 성분명에 붙은 숫자(코엔자임 Q10 · CO2 · 비타민 B12)는 수치 주장이 아니다
 NUM = re.compile(r"(?<![A-Za-z\d])\d+")
+#: 🆕 10-02 (v9) — **사실로 읽히는 숫자**. 「원문 숫자 남음」이 용량 · 제조 · 배합까지 막아(v9 정답 51개 중 49개)
+#:    살릴 사실이 보류로 갔다. 아래 맥락의 숫자는 원문과 고친 문장 **양쪽에서 모두** 이 맥락일 때만 풀어 준다.
+#:    ⛔ 효과 · 순위 · 기간 보장(「3일만에」 · 「5kg 감량」 · 「1위」 · 「효과 100%」)은 그대로 막는다.
+_EFFECT = r"(?!\s*(?:감량|빠|줄|증가|성장|효과|개선|상승|하락|만에|이내|↓|↑|위\b|등\b))"
+FACT_NUM = re.compile(
+    r"(\d[\d,]*)\s*(?:kg|mg|ml|mL|g|L|IU|포|개입|봉|스틱|정|캡슐|병|팩|매입|매)" + _EFFECT       # 용량 · 개수
+    + r"|(\d+)\s*(?:시간|일|주|개월|년)\s*(?:간\s*|동안\s*)?(?:숙성|발효|달|우|고아|건조|말|볶|덖|끓|졸|저온|숙)"  # 제조 공정
+    + r"|(\d+)\s*년근|(\d+)\s*가지(?!\s*효)"                                                          # 원료 연근 · 가짓수
+    + r"|(\d+)\s*:\s*(\d+)"                                                                            # 배합비
+    + r"|(\d+)\s*%\s*(?:함유|착즙|원액|과즙|추출물|함량|사용|로|으로)"                                       # 함량
+)
+
+
+def fact_numbers(s: str) -> set[str]:
+    """사실 맥락의 숫자 — 쉼표를 떼고 NUM 과 같은 조각으로 낸다(「1,000mg」 → 1 · 000)."""
+    out: set[str] = set()
+    for m in FACT_NUM.finditer(s):
+        out |= set(NUM.findall(m.group()))
+    return out
+
+
+#: 기능성화장품 공식 표시 문구(화장품법 시행규칙 [별표 3] 범주) — 「탈모 증상의 완화」 · 「여드름성 피부」는 질병어 검사에서 뺀다
+COSMETIC_CLAIMS = (
+    "탈모 증상의 완화에 도움", "여드름성 피부를 완화하는 데 도움", "피부장벽의 기능을 회복하여 가려움 등의 개선에 도움",
+)
+#: 체험기 말투 중 **만든 사람의 제조 설명**(「달였어요」 · 「볶았어요」 · 「만들었어요」) — 소비 경험이 아니다
+PRODUCER = re.compile(r"(?:썰|달|빚|넣|담|만들|끓|갈|섞|볶|착즙|발효|숙성|건조|짜|졸|고|찧|절|삶|구|저)$")
 
 
 @dataclass(frozen=True)
@@ -137,18 +164,23 @@ def check(original: str, stage1: str | None) -> GateResult:
         return GateResult(False, ("1단계 실패",))
     s = stage1
     why: list[str] = []
-    hits = dm.find(s, dict_entries())
+    s_claim = s  # 기능성화장품 공식 문구를 뺀 문장 — 질병어 · 사전 검사용
+    for c in COSMETIC_CLAIMS:
+        s_claim = s_claim.replace(c, " ")
+    hits = dm.find(s_claim, dict_entries())
     if hits:
         why.append("금지 사전: " + ", ".join(sorted({h.entry.term for h in hits})[:3]))
-    if m := DISEASE.search(s):
+    if m := DISEASE.search(s_claim):
         why.append(f"질병 표현: {m.group()}")
     if m := DRUG.search(s):
         why.append(f"의약품 표현: {m.group().strip()}")
-    kept = set(NUM.findall(original)) & set(NUM.findall(s))
+    kept = (set(NUM.findall(original)) & set(NUM.findall(s))) - (fact_numbers(original) & fact_numbers(s))
     if kept:
         why.append(f"원문 숫자 남음: {sorted(kept)}")
-    if m := TESTIMONY.search(s):
-        why.append(f"체험기 말투: {m.group()}")
+    for m in TESTIMONY.finditer(s):
+        if not PRODUCER.search(s[: m.start()]):
+            why.append(f"체험기 말투: {m.group()}")
+            break
     if dm.norm(s).rstrip(".") == dm.norm(original).rstrip("."):
         why.append("원문 그대로")
     if m := VAGUE_TARGET.search(s):
