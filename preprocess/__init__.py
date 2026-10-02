@@ -35,6 +35,8 @@ EXTRACTORS: dict[str, str] = {
     "mfds_cosmetic_ad_qa": "preprocess.mfds_cosmetic_qa",
     # 🆕 2026-09-30 — 공정위 보도자료 1997~2007 → 사건 레코드(문구 · 라벨은 만들지 않는다)
     "ftc_press": "preprocess.ftc_press_old",
+    # 🆕 2026-10-03 — 판별 매뉴얼(2015) → 적발 사례 레코드(다섯 칸 · 라벨은 만들지 않는다 · 사람 가림은 추출기 안)
+    "mfds_ad_judge_manual_2015": "preprocess.mfds_ad_manual",
 }
 
 #: 원천 id → 계측 모듈. 🔴 **라벨을 만들지 않고 세기만 한다** — 산출물이 없다.
