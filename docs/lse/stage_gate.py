@@ -165,8 +165,10 @@ def check(original: str, stage1: str | None) -> GateResult:
     s = stage1
     why: list[str] = []
     s_claim = s  # 기능성화장품 공식 문구를 뺀 문장 — 질병어 · 사전 검사용
-    for c in COSMETIC_CLAIMS:
-        s_claim = s_claim.replace(c, " ")
+    # 🚨 원문이 기능성(심사 · 보고)을 말할 때만 뺀다 — 「탈모약 대신 바르는 토닉」에 공식 문구를 지어 붙인 것(v8 · 살리기 평가 #38)은 막는다
+    if "기능성" in original:
+        for c in COSMETIC_CLAIMS:
+            s_claim = s_claim.replace(c, " ")
     hits = dm.find(s_claim, dict_entries())
     if hits:
         why.append("금지 사전: " + ", ".join(sorted({h.entry.term for h in hits})[:3]))
