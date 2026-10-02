@@ -42,6 +42,8 @@ EXTRACTORS: dict[str, str] = {
     # 🆕 2026-10-03 — 옛 질의응답집 둘 → 질의회신 레코드(문항 단위 · 라벨은 만들지 않는다 · 기준 시점이 지난 사례)
     "mfds_cosmetic_ad_qa_2012": "preprocess.mfds_cosmetic_qa_2012",
     "mfds_cosmetic_faq_2020": "preprocess.mfds_cosmetic_faq_2020",
+    # 🆕 2026-10-03 — 1차 법령해석 → 표시·광고 질의회신 레코드(그물 427 · 라벨은 만들지 않는다 · 계측은 SCANNERS 의 interp_scan)
+    "mfds_cgm_expc": "preprocess.mfds_interp",
 }
 
 #: 원천 id → 계측 모듈. 🔴 **라벨을 만들지 않고 세기만 한다** — 산출물이 없다.

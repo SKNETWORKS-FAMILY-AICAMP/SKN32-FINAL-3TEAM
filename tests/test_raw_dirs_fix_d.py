@@ -36,6 +36,7 @@ READERS: list[tuple[str, str, str]] = [
     ("preprocess.mfds_cosmetic_guideline", "RAW_DIR", "mfds_cosmetic_ad_guideline"),
     ("preprocess.mfds_cosmetic_qa_2012", "RAW_DIR", "mfds_cosmetic_ad_qa_2012"),
     ("preprocess.mfds_cosmetic_faq_2020", "RAW_DIR", "mfds_cosmetic_faq_2020"),
+    ("preprocess.mfds_interp", "raw_of()", "mfds_cgm_expc"),
 ]
 
 
