@@ -51,8 +51,9 @@ def grade(row: dict, r: dict) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage1", default=STAGE1_VER)
+    ap.add_argument("--eval", default=EVAL.name, help="평가 파일(docs/lse 기준) — 🆕 10-02 원료명 보존은 stage1_ingredient_eval.jsonl")
     args = ap.parse_args()
-    rows = [json.loads(line) for line in EVAL.open(encoding="utf-8") if line.strip()]
+    rows = [json.loads(line) for line in (HERE / args.eval).open(encoding="utf-8") if line.strip()]
     tok = AutoTokenizer.from_pretrained(BASE)
     base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
     model = PeftModel.from_pretrained(base, str(ROOT / "models" / f"copylane_sllm_lora_adapter_{args.stage1}"),
@@ -67,7 +68,8 @@ def main() -> None:
                     "infeasible": r["infeasible"], "grade": g})
         detail = r["final"] or r["infeasible"] or "; ".join(r["gate1"] or []) or "-"
         print(f"{row['no']:>2} {g:<9} {row['input'][:28]:<30} → {detail}", flush=True)
-    out = HERE / "_private" / f"salvage_eval_{args.stage1}.jsonl"  # 직접 만든 문구지만 다른 실험 결과와 같은 자리에 둔다
+    tag = "" if args.eval == EVAL.name else "_" + Path(args.eval).stem.replace("stage1_", "").replace("_eval", "")
+    out = HERE / "_private" / f"salvage_eval{tag}_{args.stage1}.jsonl"  # 직접 만든 문구지만 다른 실험 결과와 같은 자리에 둔다
     with out.open("w", encoding="utf-8") as f:
         for x in res:
             f.write(json.dumps(x, ensure_ascii=False) + "\n")
