@@ -1,12 +1,12 @@
 {
   "outcome": "pass",
   "category": "식품",
-  "category_source": "classified",
+  "category_source": "user_selected",
   "not_reviewed": [],
   "sentences": [
     {
       "sent_id": "s1",
-      "text": "결혼을 앞둔 분들이나 바쁜 직장인을 위한 제품입니다.",
+      "text": "아침 식사 대용으로 간편하게 드실 수 있습니다.",
       "verdict": "confirmed",
       "hold_reason": null,
       "violations": [],
@@ -19,7 +19,7 @@
         "evidence_span": null
       },
       "evidence_mismatch": false,
-      "not_claim": true,
+      "not_claim": false,
       "spans": [],
       "substantiation": null
     }
@@ -43,5 +43,5 @@
     }
   ],
   "law_version": "2026-09-10",
-  "judged_by": "stub-0.2.0"
+  "judged_by": "rule-0.3.0-dict"
 }

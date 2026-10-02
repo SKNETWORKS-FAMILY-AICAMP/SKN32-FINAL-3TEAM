@@ -1,14 +1,16 @@
 {
-  "outcome": "pass",
-  "category": "식품",
-  "category_source": "classified",
-  "not_reviewed": [],
+  "outcome": "hold",
+  "category": "일반상품",
+  "category_source": "user_selected",
+  "not_reviewed": [
+    "해당 품목의 전용법"
+  ],
   "sentences": [
     {
       "sent_id": "s1",
-      "text": "결혼을 앞둔 분들이나 바쁜 직장인을 위한 제품입니다.",
-      "verdict": "confirmed",
-      "hold_reason": null,
+      "text": "공기청정기 필터를 6개월마다 바꿔 주세요.",
+      "verdict": "hold",
+      "hold_reason": "law_uncovered",
       "violations": [],
       "infeasibility": null,
       "evidence": [],
@@ -19,7 +21,7 @@
         "evidence_span": null
       },
       "evidence_mismatch": false,
-      "not_claim": true,
+      "not_claim": false,
       "spans": [],
       "substantiation": null
     }
@@ -43,5 +45,5 @@
     }
   ],
   "law_version": "2026-09-10",
-  "judged_by": "stub-0.2.0"
+  "judged_by": "rule-0.3.0-dict"
 }
