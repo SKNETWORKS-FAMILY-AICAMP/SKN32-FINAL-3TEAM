@@ -86,7 +86,8 @@ class GateResult:
 
 HF_CLAIMS = ROOT / "data" / "derived" / "hf_display_claims.jsonl"
 #: 「~에 도움」 앞의 주장 구 — 「X에 도움」 · 「X하는 데 도움」 · 「X하는데 도움」
-CLAIM = re.compile(r"([가-힣A-Za-z0-9·,\s()]{2,40}?)(?:에|하는\s*데|하는데|되는\s*데)\s*도움")
+#: 🔄 10-02 (v9) — 「흰모발의 개수를 감소시키는데 도움」이 빠져나갔다 · 「~시키는 데」 · 「~주는 데」 등 동사 어간을 가리지 않는다
+CLAIM = re.compile(r"([가-힣A-Za-z0-9·,\s()]{2,40}?)(?:에|[가-힣]{0,2}는\s*데)\s*도움")
 
 
 @cache
