@@ -47,6 +47,8 @@ CREDENTIAL = re.compile(r"특허|인증|공인|식약처|임상|수상|논문")
 #: 🔄 10-01 — 「피부노화개선에 도움」이 빠져나갔다(v5 실제 광고) · 노화 뒤에 무엇이 붙든 「도움」으로 이어지면 막는다
 #: 🔄 10-01 (v7) — 「피부노화의 방지에 도움」이 빠져나갔다 · 띄어쓰기를 건너 잡는다
 AGING = re.compile(r"노화[가-힣\s]{0,8}(?:에|를)\s*도움|노화\S{0,2}\s*방지|안티\s*에이징")
+#: 기능 동사로 끝나는 기능성 주장 — 「○○를 지원합니다」 · 「○○ 강화」 · 「○○를 증진시켜요」. 고시 문구는 「~에 도움」 꼴이라 걸리지 않는다
+FUNC_VERB = re.compile(r"[가-힣]{2,12}\s*(?:을|를|이|가)?\s*(?:지원|강화|증진|촉진|개선|향상|활성화)(?:합니다|해요|해\s*줍니다|시켜|하는|함\b|$)")
 #: 숫자 — 성분명에 붙은 숫자(코엔자임 Q10 · CO2 · 비타민 B12)는 수치 주장이 아니다
 NUM = re.compile(r"(?<![A-Za-z\d])\d+")
 #: 🆕 10-02 (v9) — **사실로 읽히는 숫자**. 「원문 숫자 남음」이 용량 · 제조 · 배합까지 막아(v9 정답 51개 중 49개)
@@ -274,6 +276,9 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"노화 주장: {m.group()}")
     if (u := unapproved_claim(s)) is not None:
         why.append(f"인정되지 않은 기능성: {u}")
+    # 🆕 10-02 (v11) — 「~에 도움」 꼴이 아닌 기능성 주장(「뼈성장과 뼈강도를 지원합니다」)이 대조를 빠져나갔다
+    if m := FUNC_VERB.search(s):
+        why.append(f"기능성 주장(도움 꼴 아님): {m.group().strip()}")
     if (g := ingredient_changed(original, s)) is not None:
         why.append(f"원문에 없는 원료명: {g}")
     if (t := ingredient_truncated(original, s)) is not None:
