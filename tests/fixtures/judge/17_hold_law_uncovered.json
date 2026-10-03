@@ -1,6 +1,7 @@
 {
   "outcome": "hold",
   "category": "전용법_미수록",
+  "category_source": "classified",
   "not_reviewed": [
     "의료기기법"
   ],

@@ -308,11 +308,24 @@ CREATE TABLE sanction_rule (
     superseded_at   DATE,
     verified_by     TEXT,                          -- 🚨 병합 셀 파싱은 2인 대조
     reviewed_by     TEXT,
+    -- 🆕 2026-10-02 (0023 · W5) — 원천(`scripts/sanction_review.yaml`)의 행을 그대로 싣는 칸. 하한 규칙은 `app/sanction.py` 한 곳 (D-99).
+    --    🚨 `annex1` NULL = 목으로 갈리지 않는 행 · 빈 배열 = 목 칸이 빈 행(고시로 닿는다) — 합치지 않는다 (D-310).
+    rule_key        TEXT,                          -- 원천 행의 id — 적재는 이 열쇠로 넣고 거둔다
+    annex1          TEXT[],                        -- 식품 4~7호 행의 [별표 1] 목 (D-310)
+    cover           TEXT,                          -- 전부(하한) / 일부(가능 상한만) (D-310 개정 2)
+    quote           TEXT,                          -- 위반행위 원문 인용 — 가능 상한의 근거 줄에 쓴다
+    fact_kind       TEXT,                          -- 사실 확인 분기의 종류 (D-308 ④)
+    plan_sha        TEXT,                          -- 이 행이 실린 원천 판 (D-309)
     CONSTRAINT ck_sanction_four_eyes
-      CHECK (verified_by IS NULL OR reviewed_by IS NULL OR verified_by <> reviewed_by)
+      CHECK (verified_by IS NULL OR reviewed_by IS NULL OR verified_by <> reviewed_by),
+    CONSTRAINT ck_sanction_cover
+      CHECK ((COALESCE(cardinality(annex1), 0) > 0) = (cover IS NOT NULL)
+             AND (cover IS NULL OR cover IN ('전부', '일부')))
 );
 CREATE INDEX ix_sanction_lookup ON sanction_rule(violation_type, offense_count)
   WHERE superseded_at IS NULL;
+CREATE UNIQUE INDEX ux_sanction_rule_key ON sanction_rule(rule_key)
+  WHERE rule_key IS NOT NULL;
 
 CREATE TABLE penalty_rule (
     rule_id         BIGSERIAL PRIMARY KEY,
@@ -520,7 +533,8 @@ WHERE g.redistributable = true;
 --      적재를 막으면 파싱 결과를 둘 곳이 없어지고, 그러면 서명이 파일 위에서 이뤄진다.
 CREATE VIEW v_risk_lookup AS
 SELECT s.violation_type, s.offense_count, s.sanction_kind,
-       s.sanction_value, s.unit, s.risk_level, s.law_id
+       s.sanction_value, s.unit, s.risk_level, s.law_id,
+       s.rule_key, s.annex1, s.cover, s.quote, s.fact_kind
 FROM sanction_rule s
 WHERE s.superseded_at IS NULL
   AND s.verified_by IS NOT NULL

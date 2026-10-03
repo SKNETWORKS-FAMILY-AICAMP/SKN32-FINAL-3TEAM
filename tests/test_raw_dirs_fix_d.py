@@ -32,6 +32,11 @@ READERS: list[tuple[str, str, str]] = [
     ("preprocess.ftc_triage", "RAW", "ftc_decisions_body"),
     ("preprocess.mfds_cosmetic_qa", "RAW_DIR", "mfds_cosmetic_ad_qa"),
     ("preprocess.ftc_press_old", "RAW_DIR", "ftc_press"),
+    ("preprocess.mfds_ad_manual", "RAW_DIR", "mfds_ad_judge_manual_2015"),
+    ("preprocess.mfds_cosmetic_guideline", "RAW_DIR", "mfds_cosmetic_ad_guideline"),
+    ("preprocess.mfds_cosmetic_qa_2012", "RAW_DIR", "mfds_cosmetic_ad_qa_2012"),
+    ("preprocess.mfds_cosmetic_faq_2020", "RAW_DIR", "mfds_cosmetic_faq_2020"),
+    ("preprocess.mfds_interp", "raw_of()", "mfds_cgm_expc"),
 ]
 
 
