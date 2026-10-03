@@ -151,6 +151,8 @@ UNWRITTEN: dict[str, str] = {
     # 🔄 2026-09-17 — 비었다. `casebook2021_labelsheet.jsonl` 이 여기 있었는데
     #    전사기를 `scripts/casebook2021_sheet.py` 로 커밋해 **1차 대조로 넘어갔다**
     #    (재생성 결과가 기기 파일과 바이트 동일 · sha 999710e20ac3 · 161,601 B).
+    #    🔄 2026-10-03 — 전사를 다시 했다. 그 sha · 크기는 09-17 판의 것이다. 지금은 쪽 전사
+    #    `data/derived/labels/casebook_2021/pages.json`(원천 · git 밖 — D-249 ⑥)에서 규칙으로 뽑는다(원장 10-03 ④ · ⑥).
     #    ★ 이 목록이 비어 있는 것이 정상이다. 여기 이름이 늘면 「한 기기에만 사는 원천」이 늘었다는 뜻이다.
 }
 
