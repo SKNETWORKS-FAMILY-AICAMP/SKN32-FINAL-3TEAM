@@ -203,3 +203,48 @@ def test_원자료에서_다시_계산해도_채택이_같다(tmp_path, monkeypa
     g.decide(src, back(a), back(b))
     assert (g.ADOPTED.read_bytes(), g.SHEET.read_bytes()) == first
     assert len(first[0].splitlines()) == 2  # 5.다 합의 · 4↔5 후보 — C↔M 은 시트
+
+
+# ── 2026-10-03 (D-312) 결정문 학습 문구 판 — 봉인 판과 같은 채택 · 가드, 입력에 앞뒤 글 ──
+@pytest.mark.gate
+def test_학습_문구_지문은_봉인_지문과_해시가_같고_머리만_다르다() -> None:
+    from preprocess import split as sp
+
+    k = g.ft_key("ftc:1", "문구")
+    assert k.startswith("ft:") and g.FT_KEY_RE.match(k)
+    assert k[3:] == sp.sealed_key("ftc:1", "문구")[3:]  # D-99 — 같은 문구는 판이 달라도 같은 해시
+
+
+@pytest.mark.gate
+def test_앞뒤_글은_주문에서_잘라_문구_자리를_표시한다() -> None:
+    order = "피심인은 소재 아파트 '가나 단지'를 분양광고하면서\n다음과 같이 소비자를 오인시킬 우려가 있는 광고행위를 하여서는 아니 된다."
+    got = g.ft_context(order, "가나 단지", width=10)
+    assert "⟦가나 단지⟧" in got and "\n" not in got
+    assert got.startswith("… ") and got.endswith(" …")  # 잘린 쪽에만 말줄임
+    assert g.ft_context("'가나'에 대하여", "가나", width=30) == "'⟦가나⟧'에 대하여"
+
+
+@pytest.mark.gate
+def test_주문에_없는_문구는_앞뒤_글을_지어내지_않는다() -> None:
+    with pytest.raises(ValueError, match="주문에 없는"):
+        g.ft_context("주문 본문", "없는 문구")
+
+
+@pytest.mark.gate
+def test_학습_문구_판은_봉인_판의_가드를_그대로_쓴다() -> None:
+    """D-99 — 조건 L · 원천 호와 다른 호는 합의여도 팀장에게. 가드를 따로 두면 두 판의 정의가 갈린다."""
+    assert g.FT.guard is g.fs_guard
+    assert g.ROUNDS["ft"][0] is g.FT and g.FT_SPLIT == "train"
+
+
+@pytest.mark.gate
+def test_두_호_문서에서_호_하나만_고른_합의는_팀장에게_가지_않는다() -> None:
+    """지시서 §0 「두 호가 걸린 문서면 문구에 맞는 호 하나 또는 둘」 — 원천 호 **안**이면 된다. 밖이거나 비면 팀장."""
+    src = {"근거_원천": [statute.fair(1), statute.fair(2)]}
+    got = lambda cond, *ho: {"대상": "Y", "조건": cond, "근거": [statute.fair(h) for h in ho]}  # noqa: E731
+    assert g.fs_guard(src, {}, {}, got("B", 1)) is None
+    assert g.fs_guard(src, {}, {}, got("B", 1, 2)) is None
+    assert "원천 호 밖" in g.fs_guard(src, {}, {}, got("B", 4))
+    assert "원천 호 밖" in g.fs_guard(src, {}, {}, got("C"))  # 위반인데 호가 비었다
+    assert g.fs_guard(src, {}, {}, got("M")) is None  # M · D 는 호를 보지 않는다
+    assert "조건 L" in g.fs_guard(src, {}, {}, got("L", 1))
