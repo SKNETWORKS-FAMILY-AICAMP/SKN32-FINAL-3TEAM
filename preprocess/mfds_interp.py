@@ -9,9 +9,12 @@
 ──────────────────────────────────────────────────────────────
 ★ **레코드 = 해석 하나** — 안건명 · 질의 · 답변 · 관련법령
 
-  5,129 건의 대부분은 수입신고 · 품목허가 · 시험법 같은 절차 질의다. **표시·광고 판단의 그물**에 걸린 것만 싣는다.
-  그물(`in_scope`) = ① 식품 · 화장품의 **표시·광고 규범**을 글 어디서든 드는 해석(`ARTICLES`)
-                   ∪ ② 질의 · 안건명에 「광고」가 있고 품목이 식품 · 화장품(또는 관련법령이 빈) 해석.
+  5,129 건의 대부분은 수입신고 · 품목허가 · 시험법 같은 절차 질의다. **광고 표현의 가부를 답한 해석**만 싣는다.
+  🔄 2026-10-04 — 그물(`in_scope`)은 **읽어 가른 목록**이다(`preprocess/mfds_interp_scope.py` 의 `AD` · 289 건).
+     두 번 읽어 갈린 해석(`PENDING` · 14 건)은 판정 전이라 밖이다. 읽지 않은 해석이 수집되면 `check_scope` 가 멈춘다.
+  아래 조문 그물은 **후보**(`candidate`)로 남았다 — 계측과 게이트에 쓴다:
+  조문 그물 = ① 식품 · 화장품의 **표시·광고 규범**을 글 어디서든 드는 해석(`ARTICLES`)
+            ∪ ② 질의 · 안건명에 「광고」가 있고 품목이 식품 · 화장품(또는 관련법령이 빈) 해석.
   실측(2026-10-03 · 클론 B 원문 · 작업공간) — 해석 5,129 → 그물 **427**: 식품 240 · 화장품 187.
     조항 — 식품표시광고법 제8조 187 · 화장품법 제13조 170 · 화장품 실증 규정 82 · 화장품 지침 80 ·
            식품 부당광고 고시 52 · 식품위생법 제13조(구법) 10 · 조항 없이 질의에 「광고」만 17.
@@ -47,12 +50,14 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import pathlib
 import re
 import sys
 
 from collect import store
+from preprocess import mfds_interp_scope as scope
 from preprocess.interp_scan import QUOTE_FAMILIES_AD, _fields
 from preprocess.mfds_cosmetic_qa_2012 import _PHONE, MASK_PHONE
 from preprocess.text import quoted
@@ -95,8 +100,9 @@ _FROM = re.compile(r"\(\s*답변\s*출처\s*\)\s*([^:：\n]{2,60})")
 _RULE = re.compile(r"-{5,}")
 
 REGIME = {"판정지위": "질의회신"}
-#: 그물 수의 하한 `[측정]` 2026-10-03 — 받은 것이 줄면(수집이 덜 됐으면) 검증이 멈춘다. 늘어나는 것은 정상이다
-EXPECTED_MIN = 427
+#: 그물 수의 하한 `[측정]` 2026-10-04 — 광고 표현 해석 목록(`mfds_interp_scope.AD`)의 크기다. 받은 것이 줄면 검증이 멈춘다
+#: 🔄 2026-10-04 — 종전 427 은 조문 그물(`candidate`)의 수였다. 그물이 목록으로 바뀌었다(원장 10-03 ㉕)
+EXPECTED_MIN = len(scope.AD)
 EXPECTED_TOTAL_MIN = 5129
 
 
@@ -135,12 +141,51 @@ def item_of(f: dict[str, str], arts: list[str]) -> str:
     return "모름" if not law or kinds else "범위밖"
 
 
-def in_scope(f: dict[str, str]) -> bool:
+def candidate(f: dict[str, str]) -> bool:
+    """조문 그물 — 표시·광고 규범을 드는 해석 ∪ 「광고」를 물은 식품 · 화장품 해석. 🚨 **후보일 뿐이다**.
+
+    🔄 2026-10-04 — 종전에는 이것이 그물(`in_scope`)이었다. 실측: 잡은 415 중 광고 문구의 가부를 답한 해석 245
+       (정밀 59%) · 그런 해석 294 중 245(재현 83%) — 표시 기준 답변이 끝에 제8조를 덧붙이는 꼴이 잡음이고,
+       답변이 「식품등의 표시기준」만 드는 영양강조 · 제품명 표현이 샌다(원장 10-03 ㉕). 계측과 게이트에만 쓴다.
+    """
     arts = articles(f)
     if arts:
         return True
     asked = "광고" in f.get("안건명", "") + f.get("질의요지", "")
     return asked and item_of(f, arts) != "범위밖"
+
+
+def ask_key(f: dict[str, str]) -> str:
+    """질의 지문 — 원문 `질의요지` 에서 글자 · 숫자만 남긴 것의 sha256 앞 12 자(`mfds_interp_scope` 머리말)."""
+    return hashlib.sha256(re.sub(r"\W", "", f.get("질의요지", "")).encode("utf-8")).hexdigest()[:12]
+
+
+def in_scope(f: dict[str, str]) -> bool:
+    """그물 — **읽어 가른 목록**(`mfds_interp_scope.AD`)에 든 해석. 🔴 갈린 해석(`PENDING`)은 밖이다(판정 대기)."""
+    return f.get("법령해석일련번호", "") in scope.AD
+
+
+def check_scope(all_fields: list[dict[str, str]]) -> list[str]:
+    """🔴 목록과 받은 것을 대조한다 — 실제 원문에만 건다. 읽지 않은 해석 · 질의가 바뀐 해석이 있으면 멈춘다 (D-220).
+
+    ⛔ 목록에 없는 해석을 「광고 표현 아님」으로 지나가게 두면, 새로 수집된 해석이 조용히 그물 밖으로 떨어진다.
+    """
+    bad: list[str] = []
+    by = {f.get("법령해석일련번호", ""): f for f in all_fields}
+    new = sorted(set(by) - scope.REVIEWED - {""}, key=int)
+    if new:
+        hint = sum(1 for i in new if candidate(by[i]))
+        bad.append(
+            f"읽지 않은 해석 {len(new)}(조문 그물에 걸리는 것 {hint}) — 읽어 가른 뒤 `mfds_interp_scope` 에 올린다: "
+            + " ".join(new[:8])
+        )
+    for name, table in (("AD", scope.AD), ("PENDING", scope.PENDING)):
+        moved = [i for i, (key, _) in table.items() if i in by and ask_key(by[i]) != key]
+        if moved:
+            bad.append(
+                f"{name} 의 질의가 바뀌었다 {len(moved)} — 다시 읽는다: " + " ".join(moved[:8])
+            )
+    return bad
 
 
 def _clean(text: str, stat: collections.Counter) -> str:
@@ -165,7 +210,8 @@ def record(f: dict[str, str], stat: collections.Counter) -> dict:
     src = _FROM.search(answer)
     rec = {
         "id": f.get("법령해석일련번호", ""),
-        "품목": item_of(f, arts),
+        # 목록에 든 해석은 읽어 가른 품목을 쓴다 — `item_of` 는 조문을 안 드는 해석에서 틀린다(`mfds_interp_scope` 머리말)
+        "품목": scope.AD.get(f.get("법령해석일련번호", ""), (None, item_of(f, arts)))[1],
         "조항": arts,
         "구법": OLD_LAW in arts,
         "광고질의": "광고" in f.get("안건명", "") + f.get("질의요지", ""),
@@ -205,11 +251,16 @@ def raw_of(source: str) -> pathlib.Path:
     return store.family_path(source)
 
 
-def parse(all_fields: list[dict[str, str]]) -> tuple[list[dict], dict]:
-    """해석 전부 → (그물에 걸린 레코드, 계측). 🚨 마스킹은 여기서 하지 않는다 — 전화번호만 바꾼다."""
+def parse(all_fields: list[dict[str, str]], pick=in_scope) -> tuple[list[dict], dict]:
+    """해석 전부 → (그물에 걸린 레코드, 계측). 🚨 마스킹은 여기서 하지 않는다 — 전화번호만 바꾼다.
+
+    `pick` — 그물. 기본은 읽어 가른 목록(`in_scope`)이고, 게이트는 합성 글에 조문 그물(`candidate`)을 건다.
+    """
     stat: collections.Counter = collections.Counter()
     stat["해석"] = len(all_fields)
-    rows = [record(f, stat) for f in all_fields if in_scope(f)]
+    stat["조문_그물"] = sum(1 for f in all_fields if candidate(f))
+    stat["대기"] = sum(1 for f in all_fields if f.get("법령해석일련번호", "") in scope.PENDING)
+    rows = [record(f, stat) for f in all_fields if pick(f)]
     # 같은 질의가 두 번 실렸다 — 뒤의 것(해석일자 · 일련번호가 늦은 것)을 남기고 앞의 것에 그 id 를 적는다
     keep: dict[str, dict] = {}
     for r in sorted(rows, key=lambda r: (r["해석일자"] or "", int(r["id"] or 0))):
@@ -223,9 +274,9 @@ def parse(all_fields: list[dict[str, str]]) -> tuple[list[dict], dict]:
     return rows, dict(stat)
 
 
-def verify(all_fields: list[dict[str, str]]) -> list[str]:
+def verify(all_fields: list[dict[str, str]], pick=in_scope) -> list[str]:
     """🔴 받은 것과 대조한다 — 일련번호가 있고 겹치지 않나 · 답변이 비지 않았나 · 그물 수가 줄지 않았나."""
-    rows, stat = parse(all_fields)
+    rows, stat = parse(all_fields, pick)
     bad: list[str] = []
     ids = [r["id"] for r in rows]
     if any(not i for i in ids):
@@ -234,7 +285,7 @@ def verify(all_fields: list[dict[str, str]]) -> list[str]:
         bad.append("일련번호가 겹친다")
     if stat["빈_답변"]:
         bad.append(f"답변이 빈 해석 {stat['빈_답변']}")
-    if any(r["품목"] == "범위밖" and not r["조항"] for r in rows):
+    if any(r["품목"] in ("범위밖", "모름") and not r["조항"] for r in rows):
         bad.append("범위 밖 품목이 그물에 들었다")
     return bad
 
@@ -245,7 +296,7 @@ def check_received(stat: dict, n: int) -> list[str]:
     if stat["해석"] < EXPECTED_TOTAL_MIN:
         bad.append(f"해석 {stat['해석']:,} — 잰 판은 {EXPECTED_TOTAL_MIN:,} 이었다(수집이 덜 됐다)")
     if n < EXPECTED_MIN:
-        bad.append(f"그물 {n} — 잰 판은 {EXPECTED_MIN} 이었다")
+        bad.append(f"그물 {n} — 목록은 {EXPECTED_MIN} 이다(목록의 해석이 원문에 없다)")
     return bad
 
 
@@ -297,13 +348,18 @@ def check_person(log: list[dict]) -> list[str]:
 
 def _report(rows: list[dict], stat: dict) -> None:
     count = collections.Counter
-    print(f"해석 {stat['해석']:,} → 표시·광고 그물 {len(rows):,}")
+    print(
+        f"해석 {stat['해석']:,} → 광고 표현 해석(목록) {len(rows):,}"
+        f" · 조문 그물(후보) {stat['조문_그물']:,} · 판정 대기 {stat['대기']}"
+    )
     for k, v in count(r["품목"] for r in rows).most_common():
         print(f"    {v:>4}  {k}")
     print("\n  조항 (그물이다 — 판정이 아니다)")
     for k, v in count(a for r in rows for a in r["조항"]).most_common():
         print(f"    · {v:>4}  {k}")
-    print(f"    · {sum(1 for r in rows if not r['조항']):>4}  조항 없이 질의에 「광고」만")
+    print(
+        f"    · {sum(1 for r in rows if not r['조항']):>4}  조항 없음(답변이 표시기준 등 다른 규범만 든다)"
+    )
     asked = [r for r in rows if r["광고질의"]]
     print(
         f"\n  질의에 「광고」가 있는 해석 {len(asked)} · 인용표현 {sum(len(r['인용표현']) for r in rows):,}건"
@@ -328,14 +384,16 @@ def main() -> int:
     got = fields()
     rows, stat = parse(got)
     out, changed, log = masked(rows)
-    bad = verify(got) + check_received(stat, len(rows)) + check_person(log)
+    bad = verify(got) + check_received(stat, len(rows)) + check_scope(got) + check_person(log)
     if a.verify:
         if bad:
             print("🔴 받은 것과 어긋난다 — 파싱 결과를 믿지 않는다:", file=sys.stderr)
             for b in bad:
                 print(f"  · {b}", file=sys.stderr)
             return 1
-        print("★ 대조 통과 — 일련번호 · 답변 · 그물 수가 잰 판 이상이다 · 사람 축 치환 0")
+        print(
+            "★ 대조 통과 — 일련번호 · 답변 · 목록의 해석이 다 있다 · 읽지 않은 해석 0 · 사람 축 치환 0"
+        )
     _report(rows, stat)
 
     if a.dump:
