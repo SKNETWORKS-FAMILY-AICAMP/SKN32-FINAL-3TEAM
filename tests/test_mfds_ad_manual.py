@@ -47,13 +47,14 @@ CASE_HF = "\n".join(
         "MINISTRY OF FOOD AND DRUG SAFETY 65",
     ]
 )
-#: 축산물 사례 — 처분 칸이 없다
+#: 축산물 사례 — 처분 내용 없이 「▶ 처분 근거 :」만 있다(원천 15/15 건)
 CASE_MEAT = "\n".join(
     [
         "▶ 위반 구분 : 허위 표시•광고",
         "▶ 위반 내용 : 인증을 받지 않은 제품을 인증받은 것처럼 광고",
         "▶ 광고 매체 : 인터넷",
         "▶ 과대광고 문구 : 무항생제 인증 마크 사용",
+        "▶ 처분 근거 : 축산물 위생관리법 제32조 및 시행규칙 제52조 제1항 제14호 위반",
         "94 MINISTRY OF FOOD AND DRUG SAFETY",
     ]
 )
@@ -97,6 +98,16 @@ def test_처분_칸이_없으면_판정지위를_지어내지_않는다() -> Non
     rows, _ = mm.parse(HALVES)
     assert rows[0]["판정지위"] == "행정처분" and rows[0]["기준시점"] == "2015-03"
     assert rows[2]["처분"] is None and rows[2]["판정지위"] is None  # D-220
+
+
+@pytest.mark.gate
+def test_처분_근거만_있는_사례는_근거가_문구에_섞이지_않는다() -> None:
+    """🔴 축산물 사례의 「▶ 처분 근거 :」 줄 — 표지를 안 보면 근거가 광고 문구 끝에 붙는다 (실측 15/15)."""
+    rows, _ = mm.parse(HALVES)
+    meat = rows[2]
+    assert meat["문구"] == "무항생제 인증 마크 사용"
+    assert meat["처분근거"] == "축산물 위생관리법 제32조 및 시행규칙 제52조 제1항 제14호"
+    assert meat["처분"] is None and meat["판정지위"] is None  # 처분 내용은 원천에 없다 (D-220)
 
 
 @pytest.mark.gate
