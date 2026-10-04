@@ -185,6 +185,8 @@ def test_이전_판의_봉인을_지키고_빠진_것만_빠진다(monkeypatch) 
         "caution_docs",
     ):
         monkeypatch.setattr(split, name, lambda: [])
+    # 🔄 2026-10-05 — 새 판(`placed_docs`)도 막는다 — 같은 이유다(재동결 뒤 기기의 채택본이 평가로 섞였다 · 원장 10-03 ㊿-23)
+    monkeypatch.setattr(split, "placed_docs", lambda: ([], [], {}))
     monkeypatch.setattr(split, "approved_docs", lambda: [])
     monkeypatch.setattr(split, "fingerprint", lambda: {})
     monkeypatch.setattr(split, "pending_guide", lambda: {})

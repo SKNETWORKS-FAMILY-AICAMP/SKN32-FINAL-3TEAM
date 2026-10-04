@@ -168,6 +168,10 @@ def reason_keep(
 _ENUM_HEAD = re.compile(r"^\s*(?:\(?\d{1,2}\)|\d{1,2}\.(?=\s)|[①-⑳]|[가-하]\)|\([가-하]\))\s*")
 
 
+#: 새 판 학습 행과 평가 행의 포함 관계를 볼 때의 열쇠 길이 하한 [임의] — 원장 10-03 ㉜ · ㊳ · ㊿-16 이 6 자로 쟀다
+PLACED_MIN_KEY = 6
+
+
 def overlap_key(text: str) -> str:
     """🆕 2026-09-30 — 학습 · 평가 겹침을 가르는 열쇠. `norm`(공백 · NFKC) **앞에 항목 번호 머리를 뗀다.**
 
@@ -176,6 +180,29 @@ def overlap_key(text: str) -> str:
     🚨 매칭용 `app.dictmatch.norm` 은 건드리지 않는다 — 판정기 사전과 런타임이 쓴다(D-99 는 **같은 일**에만).
     """
     return norm(_ENUM_HEAD.sub("", text))
+
+
+def drop_placed_overlap(rows: list[dict], placed_ids: set[str]) -> tuple[list[dict], int, int]:
+    """새 판의 학습 행 중 평가 행과 겹치는 것을 뺀다 — (남은 행, 같은 글자로 뺀 수, 포함 관계로 뺀 수).
+
+    🔴 겹치면 **학습 쪽**을 뺀다 — 뒤의 문구 겹침 거름은 평가 쪽을 빼므로, 새 학습 행을 그대로 두면 봉인 평가가 준다 (D-254).
+    ★ `placed_ids` 는 새 판 학습 문서의 id 다 — 그 밖의 학습 행(결정문 · 인정 문구)은 건드리지 않는다.
+    """
+    test_keys = {overlap_key(r["text"]) for r in rows if r["split"] == "test_sentence"}
+    long_keys = [k for k in test_keys if len(k) >= PLACED_MIN_KEY]
+    kept: list[dict] = []
+    same = inside = 0
+    for r in rows:
+        if r["split"] == "train" and r["id"].split("#")[0] in placed_ids:
+            k = overlap_key(r["text"])
+            if k in test_keys:
+                same += 1
+                continue
+            if len(k) >= PLACED_MIN_KEY and any(k in t or t in k for t in long_keys):
+                inside += 1
+                continue
+        kept.append(r)
+    return kept, same, inside
 
 
 def is_negative(r: dict) -> bool:
@@ -299,7 +326,18 @@ def build() -> tuple[list[dict], dict]:
     # 🆕 2026-09-30 (판정 J1 (가-2′)) — 인정 조건문(조건 D · 전량 train). 이유 되풀이(ㅇ)의 입력은 아니다
     # 🆕 2026-09-30 (판정 J2) — 봉인 결정문 주문 문구의 대상 · 조건(판독 둘 · 팀장). 대기가 남으면 None — 종전대로 낸다
     marks = split_mod.ftc_sealed_marks()
-    for d in docs + cosmetic_docs() + ftc_press_docs() + guide_fix_docs() + caution_docs():
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판독 판(학습 · 평가). 배정은 분할 원장이 한다
+    placed_train, placed_test, _placed_stat = split_mod.placed_docs()
+    placed_ids = {d["doc_id"] for d in placed_train}
+    for d in (
+        docs
+        + cosmetic_docs()
+        + ftc_press_docs()
+        + guide_fix_docs()
+        + caution_docs()
+        + placed_train
+        + placed_test
+    ):
         split = assign.get(d["doc_id"])
         if not split:
             stat["미배정"] += 1
@@ -336,6 +374,10 @@ def build() -> tuple[list[dict], dict]:
                 "redistributable": True,
                 "split": split,
             }
+            if d.get(
+                "품목"
+            ):  # 🆕 2026-10-05 — 새 판은 행이 품목을 들고 온다(원천 하나에 품목이 둘)
+                row["품목"] = d["품목"]
             if "조건" in d:  # 🆕 D-285 개정 4 — 읽는 쪽이 조건을 먼저 본다 (`is_negative`)
                 for f in ("조건", "근거_후보", "판독", "원천결손"):
                     row[f] = d[f]
@@ -523,6 +565,13 @@ def build() -> tuple[list[dict], dict]:
         capped.append(r)
     rows = capped
 
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 🔴 **새 판의 학습 행이 평가 행과 겹치면 학습 쪽을 뺀다.**
+    #    ⛔ 아래 거름은 겹치면 **평가 쪽**을 뺀다 — 새 학습 행을 그대로 두면 봉인 평가 행이 줄어든다 (D-254).
+    #    ★ 열쇠가 같거나, 양쪽이 PLACED_MIN_KEY 자 이상이고 한쪽이 다른 쪽을 품으면 뺀다.
+    rows, same, inside = drop_placed_overlap(rows, placed_ids)
+    stat["새판_평가와_같은글자_학습제외"] = same
+    stat["새판_평가와_포함관계_학습제외"] = inside
+
     # 🔴 문구 단위 2차 필터 — 평가는 **안 본 것**이어야 한다
     #    🔄 2026-09-30 — 대조 열쇠는 `overlap_key`(항목 번호 머리를 뗀다 · D-292 집행 정정)
     train_text = {overlap_key(r["text"]) for r in rows if r["split"] == "train"}
@@ -556,7 +605,7 @@ def build() -> tuple[list[dict], dict]:
 
     # 🆕 2026-10-01 (D-306) — 품목 칸. **칸은 늘 있다** — 미상은 `None` 으로 적는다(칸이 없는 것과 「모른다」를 가른다 · D-220)
     for r in kept:
-        r["품목"] = category_of(r["provenance"])
+        r["품목"] = r.get("품목") or category_of(r["provenance"])
     stat["품목_미상"] = sum(r["품목"] is None for r in kept)
 
     check_basis(kept)

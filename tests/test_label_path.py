@@ -55,7 +55,13 @@ def test_해설서_행은_조문_근거_없이_평가에_없다() -> None:
     assert not no_basis, (
         f"근거 조문 없는 해설서 라벨 {len(no_basis)}행 — 사람 8유형 라벨이 새어 들었다: {no_basis[:5]}"
     )
-    bad = sorted({r["split"] for r in rows} - {"test_sentence"})
+    # 🔄 2026-10-05 (D-316) — 근거자료 제출 판(`ge:`)만 학습에 든다 · 판독 조건이 붙은 행이다. 그 밖의 해설서 행은 평가뿐이다
+    ge = [r for r in rows if r["id"].startswith("ge:")]
+    leak = sorted({r["split"] for r in ge} - {"train"})
+    assert not leak, f"근거자료 판 행이 학습이 아닌 곳에 있다: {leak} (D-316)"
+    no_cond = [r["id"] for r in ge if not r.get("조건")]
+    assert not no_cond, f"조건 없는 근거자료 판 행 {len(no_cond)} — 판독을 안 거쳤다: {no_cond[:5]}"
+    bad = sorted({r["split"] for r in rows if not r["id"].startswith("ge:")} - {"test_sentence"})
     assert not bad, (
         f"해설서 행이 평가가 아닌 곳에 있다: {bad} — 평가 라벨은 사람이나 조문이 붙인다 (D-172)"
     )
