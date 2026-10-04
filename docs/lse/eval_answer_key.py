@@ -68,6 +68,9 @@ def main() -> None:
     by = collections.Counter((x.get("source"), x["label"], x["grade"]) for x in res)
     for (src, lab, g), n in sorted(by.items(), key=lambda t: (str(t[0][0]), t[0][1], t[0][2])):
         print(f"   {src} · 정답 {lab} · {g}: {n}")
+    # 🆕 10-05 — 학습 데이터 안에 들어 있는 문구(`seen_in_training`)는 따로 센다 — 학습 때 본 문구라 점수가 부푼다
+    clean = [x for x in res if not x.get("seen_in_training")]
+    print(f"   학습에 없던 것만 {len(clean)}개 → {dict(sorted(collections.Counter(x['grade'] for x in clean).items()))}")
     sal = [x for x in res if x["grade"] == "✅ 살림" and x["label"] == "조건부"]
     print(f"   조건부를 살린 것 {len(sal)} 중 조건이 붙은 것 {sum(bool(x['got'].get('note')) for x in sal)}")
     print(f"결과: {out}  (재배포 불가 원문 포함 — _private)")
