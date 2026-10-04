@@ -41,6 +41,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
+from postfix import _CLAIM_HOLD, condition, repair_ingredients, to_approved_claim  # noqa: E402
 from rejudge import RejudgeUnavailable, rejudge  # noqa: E402
 from stage_gate import check as gate  # noqa: E402
 from train_persona_stage2 import SYSTEM as STAGE2_SYSTEM  # noqa: E402
@@ -104,16 +105,28 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
     infeasible = out1.get("infeasible") if out1 else None
     s1 = out1.get("body") if out1 and not infeasible else None
     res = {"input": text, "stage1": s1, "infeasible": infeasible, "gate1": None, "persona": persona,
-           "stage2": None, "gate2": None, "stage2_problems": None}
+           "stage2": None, "gate2": None, "stage2_problems": None,
+           "stage1_note": out1.get("mandatory_note") if out1 else None, "repairs": [], "note": None, "note_problem": None}
     if infeasible:
         return {**res, "outcome": "infeasible", "final": None}  # 증명서 경로(D-32 · D-125) — 고치지 않는다
+    # 🆕 10-05 후처리(`postfix.py`) — 관문 전에 기계로 고칠 수 있는 실수를 고친다: 원료명 베끼기 · 지어낸 기능성 문구
+    fixed, repairs = repair_ingredients(text, s1) if s1 else (s1, [])
+    note_in = res["stage1_note"]
+    g1 = gate(text, fixed)
+    if (not g1.passed and any(r.startswith(_CLAIM_HOLD) for r in g1.reasons)
+            and (ap := to_approved_claim(text, fixed, labels)) is not None):
+        repairs.append(f"공식 기능성 문구로: {fixed} → {ap[0]}")
+        fixed, note_in = ap
+        g1 = gate(text, fixed)  # 🚨 고친 문장도 관문을 다시 지난다
+    note, note_problem = condition(fixed, note_in) if fixed else (None, None)
+    res.update(stage1_fixed=fixed, repairs=repairs, note=note, note_problem=note_problem)
     # 🚨 관문 — 1단계가 위반을 못 지운 문장은 내보내지도, 말투로 포장하지도 않는다
-    g1 = gate(text, s1)
     res["gate1"] = list(g1.reasons)
     if not g1.passed:
         return {**res, "outcome": "hold", "final": None}
+    s1 = fixed
     if not persona:
-        return {**res, "outcome": "candidate", "final": s1}  # 검수 기본 — 위반을 뺀 문장 그대로
+        return {**res, "outcome": "candidate", "final": s1}  # 검수 기본 — 위반을 뺀 문장 그대로 + 조건(`note`)
     model.set_adapter("stage2")
     raw = chat(model, tok, STAGE2_SYSTEM, f"검수 통과 문장: {s1}\n대상 고객: {persona}", 160)
     i, j = raw.find("{"), raw.rfind("}")

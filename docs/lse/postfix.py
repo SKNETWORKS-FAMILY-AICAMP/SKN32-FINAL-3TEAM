@@ -1,0 +1,208 @@
+"""1단계 후처리 — 막지 않고 **고친다** (2026-10-05).
+
+관문(`stage_gate.py`)은 「막을 이유」를 찾는다. 여기는 1단계가 낸 문장의 **기계로 고칠 수 있는 실수**를 관문 전에 고친다.
+실제 광고 정답표의 조건부 7개 중 보류 5개를 뜯어보니 「조건을 못 써서」가 아니라 베끼기 실수 · 지어낸 기능성 문구였다.
+
+  ① 원료명 수리   — 앞부분을 떼었으면(「○○ 버섯추출물 → 버섯추출물」) 원문에서 이름 전체를 되찾고,
+                    한 글자 틀렸으면(「뽕 → 뽑」) 원문 표기로 되돌린다.
+  ② 공식 문구로   — 관문이 「인정되지 않은 기능성」으로 막은 문장을, 원문 · 고친 문장의 낱말로 식약처 인정 문구(`CLAIMS`)를 골라 바꾼다.
+                    🚨 위반 유형에 건강기능식품_오인이 있으면 하지 않는다(일반식품은 기능성 주장 자체가 안 된다).
+                    🚨 낱말이 두 기능 이상을 가리키면(모호) 하지 않는다 — 고르지 못한 것을 고른 척하지 않는다.
+  ③ 조건 붙이기   — 1단계의 조건 칸(`mandatory_note`)은 자유 글이라 없는 범주를 지어낸다(「모공 기능성화장품」).
+                    정해진 메뉴(`NOTE_MENU`) 안의 조건만 받고, 본문이 요구하는 조건(기능성 → 인정 제품 한정 · 함유 → 함량 병기)은 붙인다.
+
+🚨 고친 문장도 관문을 **다시** 지난다 — 후처리가 위반을 들여오지 않았는지는 관문이 본다.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[1]))
+
+from stage_gate import _ING_NAME, INGREDIENT, ingredient_truncated  # noqa: E402
+
+from app import dictmatch as dm  # noqa: E402
+
+# ── ① 원료명 수리 ────────────────────────────────────────────────────────────
+
+
+def _lev1(a: str, b: str) -> bool:
+    """편집 거리 1 이하(한 글자 바꿈 · 넣음 · 뺌)."""
+    if a == b:
+        return True
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    s, t = (a, b) if len(a) < len(b) else (b, a)
+    return any(t[:i] + t[i + 1:] == s for i in range(len(t)))
+
+
+def _original_form(original: str, norm_piece: str) -> str | None:
+    """정규화 조각을 원문 표기(띄어쓰기 포함)로 되찾는다."""
+    pat = r"\s*".join(map(re.escape, norm_piece))
+    m = re.search(pat, original)
+    return m.group() if m else None
+
+
+def _names(s: str) -> list[str]:
+    out = []
+    for m in list(_ING_NAME.finditer(s)) + list(INGREDIENT.finditer(s)):
+        n = (m.group(1) or (m.group(2) if m.lastindex and m.lastindex >= 2 else "") or "").strip()
+        if n and n not in out:
+            out.append(n)
+    return out
+
+
+def repair_ingredients(original: str, s: str) -> tuple[str, list[str]]:
+    """원료명 베끼기 실수를 원문 표기로 되돌린다. (고친 문장, 고친 내역)."""
+    fixes: list[str] = []
+    o = dm.norm(original)
+    # 앞부분 잘림 — 관문 검사가 돌려준 「앞말 이름」으로 바꾼다
+    for _ in range(3):
+        t = ingredient_truncated(original, s)
+        if not t:
+            break
+        full = t.split()[-1] if " " in t else t
+        cut = t.rsplit(" ", 1)[-1]
+        for name in sorted(_names(s), key=len, reverse=True):
+            nn = dm.norm(name)
+            if dm.norm(cut).endswith(nn) or dm.norm(t).endswith(nn):
+                s2 = s.replace(name, t if " " in t else full, 1)
+                if s2 != s:
+                    fixes.append(f"앞부분 되찾음: {name} → {t}")
+                    s = s2
+                break
+        else:
+            break
+    # 한 글자 오타 — 원문에 없는 이름을 원문의 같은 길이(±1) 조각과 대조한다
+    for name in _names(s):
+        nn = dm.norm(name)
+        if len(nn) < 4 or nn in o:
+            continue
+        best = None
+        for L in (len(nn), len(nn) + 1, len(nn) - 1):  # 바꿈 → 넣음 → 뺌 순(뺌을 먼저 보면 「뽑나무」가 「나무」가 된다)
+            for i in range(0, max(0, len(o) - L) + 1):
+                piece = o[i:i + L]
+                if piece[-2:] == nn[-2:] and _lev1(piece, nn):
+                    best = piece
+                    break
+            if best:
+                break
+        if best and (form := _original_form(original, best)):
+            s = s.replace(name, form, 1)
+            fixes.append(f"오타 되돌림: {name} → {form}")
+    return s, fixes
+
+
+# ── ② 공식 기능성 문구 ────────────────────────────────────────────────────────
+
+#: 식약처 인정 기능성 문구(`hf_display_claims` · 재배포 가능)에서 고른 깨끗한 꼴 — 낱말 → 문구.
+#: 🚨 문구마다 관문의 인정 기능성 대조(`unapproved_claim`)를 통과하는지 시험이 본다(`test_postfix` 대신 __main__ 자가 점검).
+CLAIMS: list[tuple[tuple[str, ...], str]] = [
+    (("체지방", "다이어트", "감량", "뱃살", "살 빠", "살빠", "지방"), "체지방 감소에 도움을 줄 수 있음"),  # redistribution: ok — 일반어 키워드
+    (("뼈",), "뼈 건강에 도움을 줄 수 있음"),
+    (("눈", "시력", "안구"), "눈의 피로 개선에 도움을 줄 수 있음"),
+    (("혈당", "당뇨"), "식후 혈당상승 억제에 도움을 줄 수 있음"),
+    (("관절", "연골", "무릎"), "관절 건강에 도움을 줄 수 있음"),
+    (("간 ", "간수치", "간 건강", "간건강", "간 해독"), "간 건강에 도움을 줄 수 있음"),  # redistribution: ok — 일반어 키워드
+    (("면역",), "면역기능 증진에 도움을 줄 수 있음"),
+    (("배변", "변비", "장 건강", "장건강", "쾌변"), "배변활동 원활에 도움을 줄 수 있음"),
+    (("혈압",), "혈압 조절에 도움을 줄 수 있음"),
+    (("콜레스테롤",), "혈중 콜레스테롤 개선에 도움을 줄 수 있음"),
+    (("기억력", "두뇌", "머리가 좋"), "기억력 개선에 도움을 줄 수 있음"),
+    (("보습", "건조한 피부", "피부 건조"), "피부 보습에 도움을 줄 수 있음"),
+    (("항산화", "노화", "활성산소"), "항산화에 도움을 줄 수 있음"),
+    (("혈행", "혈액순환", "혈액 순환", "피가 맑"), "혈행 개선에 도움을 줄 수 있음"),  # redistribution: ok — 일반어 키워드
+]
+#: 기능성화장품 범주(화장품법 시행규칙 [별표 3]) — 낱말 → (범주, 공식 문구)
+COSMETIC = [
+    (("미백", "기미", "주근깨", "하얘"), "미백", "피부의 미백에 도움을 줍니다"),
+    (("주름",), "주름", "피부의 주름 개선에 도움을 줍니다"),
+    (("자외선", "선크림", "SPF"), "자외선", "자외선으로부터 피부를 보호하는 데 도움을 줍니다"),
+    (("탈모",), "탈모", "탈모 증상의 완화에 도움을 줍니다"),
+    (("여드름",), "여드름", "여드름성 피부를 완화하는 데 도움을 줍니다"),
+    (("피부장벽",), "피부장벽", "피부장벽의 기능을 회복하여 가려움 등의 개선에 도움을 줍니다"),
+    (("튼살",), "튼살", "튼살로 인한 붉은 선을 엷게 하는 데 도움을 줍니다"),
+]
+_COSMETIC_PRODUCT = re.compile(r"크림|세럼|앰플|토너|로션|에센스|샴푸|패드|마스크팩|선크림|선스틱|바르|화장품|토닉|미스트")
+_CLAIM_HOLD = ("인정되지 않은 기능성", "기능성 주장(도움 꼴 아님)")
+
+
+def to_approved_claim(original: str, s: str, labels: list[str]) -> tuple[str, str] | None:
+    """(공식 문구, 조건) 또는 None. 원문과 고친 문장에서 낱말을 찾아 **하나의 기능**으로 모일 때만 고른다."""
+    if "건강기능식품_오인" in labels:
+        return None
+    text = f"{original} {s}"
+    if _COSMETIC_PRODUCT.search(original):
+        hits = {(cat, claim) for kws, cat, claim in COSMETIC if any(k in text for k in kws)}
+        if len(hits) == 1:
+            cat, claim = next(iter(hits))
+            return claim, f"{cat} 기능성화장품으로 심사·보고된 제품에 한함"
+        return None
+    hits = {claim for kws, claim in CLAIMS if any(k in text for k in kws)}
+    if len(hits) == 1:
+        return next(iter(hits)), NOTE_FOOD_FUNC
+    return None
+
+
+# ── ③ 조건 ───────────────────────────────────────────────────────────────────
+
+NOTE_FOOD_FUNC = "기능성 인정 건강기능식품에 한해 표시"
+NOTE_CONTENT = "원재료 함량을 함께 표시"
+NOTE_RANK = "순위 · 인증 · 수상은 근거(기관 · 기간 · 번호)와 함께만"
+NOTE_NUTRI = "영양성분 기능 표시 — 함량 기준 충족 시"
+_COS_CATS = "|".join(c for _, c, _ in COSMETIC)
+#: 받는 조건 — 이 밖의 조건은 지어낸 것으로 본다
+NOTE_MENU = [
+    re.compile(r"기능성\s*인정\s*건강기능식품에\s*한해"),
+    re.compile(r"원재료\s*함량"),
+    re.compile(r"순위.*근거"),
+    re.compile(r"영양성분\s*기능\s*표시"),
+    re.compile(rf"(?:{_COS_CATS}|해당)\s*기능성화장품으로\s*심사\s*·?\s*보고된"),
+]
+
+
+def condition(body: str, note: str | None) -> tuple[str | None, str | None]:
+    """(최종 조건, 문제). 본문이 요구하는 조건을 먼저 정하고, 1단계 조건은 메뉴 안이고 요구와 어긋나지 않을 때만 쓴다."""
+    need = None
+    for _, cat, claim in COSMETIC:
+        if claim[:8] in body:
+            need = f"{cat} 기능성화장품으로 심사·보고된 제품에 한함"
+            break
+    if need is None and "도움" in body:
+        need = NOTE_FOOD_FUNC if "필요합니다" not in body else NOTE_NUTRI
+    if need is None and "필요합니다" in body:
+        need = NOTE_NUTRI
+    if need is None and "함유" in body:
+        need = NOTE_CONTENT
+    problem = None
+    if note and not any(p.search(note) for p in NOTE_MENU):
+        problem = f"메뉴 밖 조건: {note}"
+        note = None
+    if need and note and need.split()[0] not in note and not (need == NOTE_CONTENT and "함량" in note):
+        # 1단계 조건이 본문과 어긋난다(「주름」 문장에 「미백」 조건) — 본문 쪽을 따른다
+        problem = problem or f"본문과 어긋난 조건: {note}"
+        note = None
+    return (note or need), problem
+
+
+if __name__ == "__main__":
+    # 자가 점검 — 공식 문구가 관문의 인정 기능성 대조를 통과하는가 · 수리 예시
+    from stage_gate import check, unapproved_claim
+
+    bad = [c for _, c in CLAIMS if unapproved_claim(c)]
+    print("관문이 안 받는 공식 문구:", bad or "없음")
+    for o, s in [("차가 버섯추출물", "버섯추출물 함유"), ("뽕나무잎추출물", "뽑나무잎추출물 함유"),
+                 ("모링가 잎추출물 듬뿍", "잎추출물 함유"), ("귀한 홍화씨 추출물", "홍화씨 추출물 함유")]:
+        r, f = repair_ingredients(o, s)
+        print(f"{o!r} | {s!r} → {r!r} {f} 관문 {check(o, r).passed}")
+    print(to_approved_claim("뼈 성장 쑥쑥 칼슘", "뼈성장과 뼈강도를 지원합니다", []))
+    print(to_approved_claim("국내 1위 다이어트 보조제, 3일만에 5kg 감량", "x", []))
+    print(to_approved_claim("다이어트에 효과 좋은 곤약젤리", "x", ["건강기능식품_오인"]))
+    print(condition("피부의 주름 개선에 도움을 줍니다", None), condition("세럼", "모공 기능성화장품으로 심사·보고된 세럼에 한함"))

@@ -38,6 +38,8 @@ def show(r: dict) -> None:
         print(f"  사유   : {r['infeasible']}")
     if r["stage1"]:
         print(f"  1단계  : {r['stage1']}")
+    for fx in r.get("repairs") or []:
+        print(f"  후처리 : {fx}")
     if r["gate1"]:
         print(f"  관문   : {', '.join(r['gate1'])}")
     if r["persona"]:
@@ -46,6 +48,10 @@ def show(r: dict) -> None:
             print(f"  2단계  : (실패 — {', '.join(r['stage2_problems'] or []) or '관문'}) → 1단계 문장을 냄")
     if r["final"]:
         print(f"  최종   : {r['final']}")
+        if r.get("note"):
+            print(f"  조건   : {r['note']}")
+    if r.get("note_problem"):
+        print(f"  조건 버림 : {r['note_problem']}")
     if r.get("rejudge"):
         msg = {"rejected": "⛔ 위반 확정 → 탈락", "no_violation": "위반 미검출 (통과 보증 아님)", "passed": "✅ 통과",
                "unavailable": "재판정 못 함 (DB 없음)"}[r["rejudge"]]

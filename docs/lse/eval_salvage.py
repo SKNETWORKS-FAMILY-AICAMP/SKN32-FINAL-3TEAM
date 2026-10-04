@@ -65,8 +65,11 @@ def main() -> None:
         r = run_one(model, tok, row["input"], row["violation_types"])
         g = grade(row, r)
         res.append({**row, "outcome": r["outcome"], "final": r["final"], "stage1": r["stage1"], "gate1": r["gate1"],
-                    "infeasible": r["infeasible"], "grade": g})
-        detail = r["final"] or r["infeasible"] or "; ".join(r["gate1"] or []) or "-"
+                    "infeasible": r["infeasible"], "grade": g, "note": r.get("note"), "repairs": r.get("repairs"),
+                    "note_problem": r.get("note_problem"), "stage1_fixed": r.get("stage1_fixed")})
+        detail = (r["final"] + (f"  〔조건: {r['note']}〕" if r.get("note") else "")) if r["final"] else (
+            r["infeasible"] or "; ".join(r["gate1"] or []) or "-")
+        detail += "".join(f"  ⟨{fx}⟩" for fx in r.get("repairs") or [])
         print(f"{row['no']:>2} {g:<9} {row['input'][:28]:<30} → {detail}", flush=True)
     tag = "" if args.eval == EVAL.name else "_" + Path(args.eval).stem.replace("stage1_", "").replace("_eval", "")
     out = HERE / "_private" / f"salvage_eval{tag}_{args.stage1}.jsonl"  # 직접 만든 문구지만 다른 실험 결과와 같은 자리에 둔다
