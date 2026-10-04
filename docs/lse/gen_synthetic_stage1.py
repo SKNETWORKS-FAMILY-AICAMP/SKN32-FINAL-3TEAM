@@ -164,6 +164,7 @@ def main() -> None:
     ap.add_argument("--target", type=int, default=2000)
     ap.add_argument("--export-seeds", type=int, default=0, help="고른 씨앗 수 — synth_seeds.jsonl 로 내보낸다")
     ap.add_argument("--ingest", type=Path, default=None, help="직접 쓴 문구 파일(docs/lse 기준)")
+    ap.add_argument("--pairs-out", default="synth_stage1_v9.jsonl", help="--ingest-pairs 결과 파일 이름(docs/lse 기준)")
     ap.add_argument("--ingest-pairs", type=Path, default=None,
                     help="🆕 v9 — 문구와 정답을 짝으로 직접 쓴 파일(docs/lse 기준) → synth_stage1_v9.jsonl")
     args = ap.parse_args()
@@ -177,6 +178,10 @@ def main() -> None:
     if not answer_words:
         print("⚠️ 정답표 금지어 파일이 없다 — 평가 누수 거르기가 약해진다", flush=True)
     answer_inputs = [norm(k["input"]) for k in map(json.loads, key_path.open(encoding="utf-8"))] if key_path.exists() else []
+    # 🆕 10-05 — 정답표 v2(사례집 · 화장품 광고 Q&A)도 평가 전용이다 — 같은 거르기에 넣는다
+    key2 = HERE / "_private" / "answer_key_v2_draft.jsonl"
+    if key2.exists():
+        answer_inputs += [norm(k["input"]) for k in map(json.loads, key2.open(encoding="utf-8"))]
     seeds = build_seeds(rng, answer_words, gset, gblob)
     by_kind: dict[str, int] = {}
     for s in seeds:
@@ -200,7 +205,7 @@ def main() -> None:
         #    v8 까지의 합성은 질병 · 의약품 · 체험기를 「위반이 주장의 전부」로만 만들어 정답이 늘 불가였다(질병 81행 중 74행 불가).
         #    한 줄 = {"kind", "vt": [위반 유형], "note": 병기 문구|null, "pairs": [[문구, 정답 본문|null(=합법화 불가)]]}.
         #    정답이 문구마다 달라 사실(원산지 · 원료 · 제조 · 용량)이 문구 그대로 살아남는다. 거르기는 --ingest 와 같다.
-        out = HERE / "synth_stage1_v9.jsonl"
+        out = HERE / args.pairs_out
         rows, seen_inputs = [], set()
         dropped = {"golden": 0, "정답표": 0, "중복": 0, "형식": 0, "원료명 불일치": 0, "정답 관문": 0}
         for line in (HERE / args.ingest_pairs).open(encoding="utf-8"):
@@ -217,7 +222,10 @@ def main() -> None:
                 elif k in gset or k in gblob:
                     dropped["golden"] += 1
                 elif any(x in text.replace(" ", "") for x in answer_words) or any(
-                        difflib.SequenceMatcher(None, k, a).ratio() >= SIM_MAX for a in answer_inputs):
+                        difflib.SequenceMatcher(None, k, a).ratio() >= SIM_MAX or (len(a) >= 7 and a in k)
+                        for a in answer_inputs):
+                    # 🔄 10-05 — 정답표 문구(7자 이상 · 특징적인 것)가 학습 문구 **안에** 부분으로 들어간 것도 버린다(train_pairs 에서 평가 오염 발견).
+                    #    6자 이하(질병명 · 기능명 같은 일반 표현)는 거르지 않고, 평가 쪽이 seen_in_training 으로 따로 센다
                     dropped["정답표"] += 1
                 elif k in seen_inputs:
                     dropped["중복"] += 1

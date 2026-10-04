@@ -52,11 +52,11 @@ from app.contracts import RewriteSet, Violation  # noqa: E402
 
 BASE = "Qwen/Qwen2.5-3B-Instruct"
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11")}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12")}
 EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v8": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v10": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
-          "v11": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"]}
+          "v11": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v12": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"]}
 #: 🆕 v7 — 합성 데이터(합성 활용 허용 10-01 · `gen_synthetic_stage1.py`). 🚨 **학습에만** 쓰고 평가에는 넣지 않는다
 SYNTH = {"v7": ["synth_stage1.jsonl"], "v8": ["synth_stage1.jsonl"],  # v7 은 거르기 전 435행 · v8 은 원료명 불일치를 뺀 410행
          # 🆕 v9 (10-02) — 「사실 + 고칠 수 없는 위반」 짝 255행을 2배로. 질병 유형 학습행이 74:7 로 불가에 쏠려 있었다
@@ -65,7 +65,9 @@ SYNTH = {"v7": ["synth_stage1.jsonl"], "v8": ["synth_stage1.jsonl"],  # v7 은 �
          #    (v9 가 「…로스팅한 곶감」처럼 제품명을 지어냈다 · 결과서 12차)
          "v10": ["synth_stage1.jsonl", "synth_stage1_v9.jsonl", "synth_stage1_v9.jsonl"],
          # 🆕 v11 (10-02) — 같은 구성 · v9 데이터에 원료명 보존 짝 40개(띄어 쓴 · 조사처럼 보이는 앞말을 지키고 과장 수식어만 뗀다)를 더했다(304행)
-         "v11": ["synth_stage1.jsonl", "synth_stage1_v9.jsonl", "synth_stage1_v9.jsonl"]}
+         "v11": ["synth_stage1.jsonl", "synth_stage1_v9.jsonl", "synth_stage1_v9.jsonl"],
+         # 🆕 v12 (10-05) — v11 + 화장품 65행(기능성화장품_오인 라벨 · 공식 기능 범주 8 · 실증 표현 · 의약품 표방 · 일반 표현)을 2배로
+         "v12": ["synth_stage1.jsonl", "synth_stage1_v9.jsonl", "synth_stage1_v9.jsonl", "synth_stage1_v12.jsonl", "synth_stage1_v12.jsonl"]}
 KEY = HERE / "_private" / "real_answer_key.jsonl"
 REASONS = [v.value for v in Violation]
 SEED = 20261001
@@ -149,7 +151,7 @@ def load_rows(version: str = "v5") -> tuple[list[dict], list[dict]]:
     return train, ev
 
 
-SYS = {"v5": SYSTEM, "v6": SYSTEM_V6, "v7": SYSTEM_V6, "v8": SYSTEM_V6, "v9": SYSTEM_V6, "v10": SYSTEM_V6, "v11": SYSTEM_V6}
+SYS = {"v5": SYSTEM, "v6": SYSTEM_V6, "v7": SYSTEM_V6, "v8": SYSTEM_V6, "v9": SYSTEM_V6, "v10": SYSTEM_V6, "v11": SYSTEM_V6, "v12": SYSTEM_V6}
 CUR = {"system": SYSTEM}
 
 
@@ -272,7 +274,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"
