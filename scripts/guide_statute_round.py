@@ -1226,6 +1226,78 @@ CBC = Round(
 )
 
 
+# ── 🆕 2026-10-05 대구청 사례(2013) 판 — 지시서 `라벨링_지시서_2026-10-03_대구청사례_조문·조건.md` ──
+#: 대구지방식약청 「식품 등 허위과대광고 사례」의 **확정 문구**(사람이 원본에 대 확정한 전사 · 한 행이 단위)다.
+#:    🔴 원천 레코드는 `scripts/daegu2013_sheet.py --dump` 가 낸다(전사 → 마스킹 → 행).
+#:    🚨 전사에서 「제외」로 적힌 행(적법 쪽 추정 · 글자 미확정 · 기구)은 단위가 될 수 없다 — 오면 멈춘다.
+DG_SOURCE = "mfds_daegu_ad_cases_2013"
+DG_ROWS = ROOT / "data" / "derived" / "mfds_daegu_ad_cases_2013.jsonl"
+DG_KEY_RE = re.compile(r"^dg:[a-z2-7]{12}$")
+DG_DIR = ROOT / "data" / "derived" / "labels" / "daegu_2013"
+DG_READINGS = DG_DIR / "readings.jsonl"
+DG_ADOPTED = DG_DIR / "adopted.jsonl"
+DG_DECISIONS = DG_DIR / "decisions.jsonl"
+DG_AUDIT = DG_DIR / "audit.jsonl"
+DG_TEAM_SHEET = ROOT / "build" / "labels" / "daegu_2013__팀장판정표.csv"
+_DG_SAME = ("쪽", "묶음", "품목", "문구")
+
+
+def dg_units(units: list[dict]) -> dict[str, dict]:
+    """대구청 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 단위의 번호가 가리키는 파생물 행과 쪽 · 묶음 · 품목 · 문구가 같아야 한다."""
+    if not DG_ROWS.exists():
+        raise SystemExit(
+            f"🔴 {DG_ROWS} 가 없다 — 먼저: uv run python scripts/daegu2013_sheet.py --dump"
+        )
+    have = {}
+    for x in DG_ROWS.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            r = json.loads(x)
+            have[int(r["번호"])] = r
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    nos: set[int] = set()
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(DG_KEY_RE, k, src, bad):
+            continue
+        no = int(u["번호"])
+        h = have.get(no)
+        if h is None or any(str(u.get(f)) != str(h[f]) for f in _DG_SAME):
+            bad.append(f"{k} {no} 번 — 파생물의 행과 다르다")
+            continue
+        if h.get("제외"):
+            bad.append(f"{k} {no} 번은 전사에서 제외한 행이다 — {str(h['제외'])[:30]}")
+            continue
+        if no in nos:
+            bad.append(f"{k} {no} 번이 두 단위에 든다")
+            continue
+        nos.add(no)
+        src[k] = {
+            "지문": k,
+            "번호": no,
+            "쪽": int(h["쪽"]),
+            "묶음": h["묶음"],
+            "품목": h["품목"],
+            "문구": h["문구"],
+            "원천": DG_SOURCE,
+        }
+    _units_fail("대구청 사례", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.dg_units")
+    return src
+
+
+DG = Round(
+    prefix="DG",
+    cmd="dg",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=("번호", "쪽", "묶음", "품목"),
+    sheet_head=("번호", "쪽", "품목"),
+    units=dg_units,
+)
+
+
 # ── 🆕 2026-10-04 1차 법령해석(식약처 질의회신) 판 — 판독 지시 `build/labels/interp_ad/판독_지시_*.md` · 원장 10-03 ㉚ ──
 #: 식약처 1차 해석 중 광고 표현 해석(`python -m preprocess.mfds_interp --dump` · 289 해석)의 **문구**가 단위다.
 #:    🚨 법이 둘이다(식품 · 화장품) — 근거 코드가 겹쳐 사례집 2021 처럼 **판을 둘로 가른다**. 단위의 `품목` 과 지문 머리가 판을 정한다.
@@ -2337,6 +2409,7 @@ ROUNDS = {
     "co": (CO, "화장품 질의응답 2012 · 2020"),
     "cbf": (CBF, "사례집 2021 · 식품"),
     "cbc": (CBC, "사례집 2021 · 화장품"),
+    "dg": (DG, "대구청 사례 2013"),
     "mn": (MN, "판별 매뉴얼 2015"),
     "ipf": (IPF, "1차 법령해석 · 식품"),
     "ipc": (IPC, "1차 법령해석 · 화장품"),

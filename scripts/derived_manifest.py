@@ -127,6 +127,12 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
         "labels/casebook_2021_cosmetic/adopted.jsonl",
         "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round cbc-rebuild`",
     ),
+    # 🆕 2026-10-05 — 대구청 사례(2013) 판 · 확정 문구 전사(`labels/daegu_2013/phrases.json`)는 아래 `labels/` 규칙의 원천이다
+    (
+        "생성물",
+        "labels/daegu_2013/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round dg-rebuild`",
+    ),
     # 🆕 2026-10-04 — 판별 매뉴얼(2015) 판
     (
         "생성물",
