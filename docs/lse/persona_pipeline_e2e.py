@@ -41,7 +41,13 @@ sys.path.insert(0, str(HERE.parents[1]))
 
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
-from postfix import _CLAIM_HOLD, condition, label_check, repair_ingredients, to_approved_claim  # noqa: E402
+from postfix import (  # noqa: E402
+    _CLAIM_HOLD,
+    condition,
+    label_check,
+    repair_ingredients,
+    to_approved_claim,
+)
 from rejudge import RejudgeUnavailable, rejudge  # noqa: E402
 from stage_gate import check as gate  # noqa: E402
 from train_persona_stage2 import SYSTEM as STAGE2_SYSTEM  # noqa: E402

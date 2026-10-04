@@ -24,7 +24,14 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
 
-from stage_gate import _ING_NAME, DISEASE, DRUG, INGREDIENT, approved_blob, ingredient_truncated  # noqa: E402
+from stage_gate import (  # noqa: E402
+    _ING_NAME,
+    DISEASE,
+    DRUG,
+    INGREDIENT,
+    approved_blob,
+    ingredient_truncated,
+)
 
 from app import dictmatch as dm  # noqa: E402
 
