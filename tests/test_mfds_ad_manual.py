@@ -279,3 +279,19 @@ def test_자리표는_사례_80_건_조각_203_개다() -> None:
     assert len(CUTS) == 80
     assert sum(len(at) + 1 for _, at in CUTS.values()) == 203
     assert all(list(at) == sorted(set(at)) and all(x > 0 for x in at) for _, at in CUTS.values())
+
+
+@pytest.mark.gate
+def test_들어올_때_있던_자국_뒤_괄호는_지우지_않는다() -> None:
+    """🔴 추출기가 먼저 넣은 자국 뒤 괄호는 원어 표기가 아니다 — 광고 문구가 지워졌었다 (원장 10-03 ㊿-10 · ㊿-12)."""
+    from preprocess import mask
+
+    src = "mfds_ad_judge_manual_2015"  # 업체명 축이 켜진 원천
+    text = "1) [대표] (남, 60대) 3일째 좋아졌어요 · 전문의 [대표](하루 한 알로 혈관이 깨끗해집니다)"
+    log: list[dict] = []
+    assert mask.apply_policy(text, "", src, log) == text
+    assert [x for x in log if x["규칙"] == "괄호원어"] == []
+    # 이 정책이 방금 가린 이름 뒤의 원어 괄호는 그대로 지운다
+    assert mask.mask_paren_alias("[업체](Original Name Co.)") == "[업체]"
+    with pytest.raises(mask.MaskPolicyError):
+        mask.apply_policy("가\ue0f0나", "", src)

@@ -1843,6 +1843,12 @@ def doc_org_names(text: str) -> list[str]:
 _MASKED_PAREN = re.compile(r"(\[(?:업체|대표)\])\s*\([^)\n]{2,80}\)")
 
 
+#: 정책에 들어오기 **전부터** 있던 자국과 그 뒤 괄호 — `apply_policy` 가 사이에 `_HOLD` 를 끼워 `_MASKED_PAREN` 을 비킨다
+_PRE_MASKED_PAREN = re.compile(r"(\[(?:업체|대표)\])(\s*\()")
+#: 🚨 `ftc_press_old` 가 문구 표시에 U+E000 · U+E001 을 쓴다 — 겹치지 않게 다른 글자다
+_HOLD = "\ue0f0"
+
+
 def mask_paren_alias(text: str, log: list[dict] | None = None) -> str:
     """`[업체](Original Name)` 의 괄호를 지운다. 앞의 마스킹 자국은 남긴다."""
     return _MASKED_PAREN.sub(
@@ -2074,7 +2080,14 @@ class MaskPolicyError(RuntimeError):
     """마스킹 정책이 없는 원천을 지우려 했다."""
 
 
-def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = None) -> str:
+def apply_policy(
+    text: str,
+    bare: str,
+    source: str,
+    log: list[dict] | None = None,
+    *,
+    hold_pre: bool = True,
+) -> str:
     """레지스트리가 그 원천에 정한 것만 지운다 (`POLICY`).
 
     🚨 순서가 있다 — 앵커(정확) → 자리(넓음) → 주소 → 상표 → 사람.
@@ -2101,6 +2114,26 @@ def apply_policy(text: str, bare: str, source: str, log: list[dict] | None = Non
             f"     🚨 마스킹이 정말 불필요하다면 그 판단도 masking: 에 적는다 — 빈 칸으로 두지 않는다."
         )
     todo = POLICY[source]
+    # 🔴 **들어올 때 이미 있던 자국 뒤의 괄호는 건드리지 않는다** (2026-10-04 · 원장 10-03 ㊿-12).
+    #    `mask_paren_alias` 는 「이 정책이 방금 가린 이름」 뒤의 원어 · 약칭 괄호를 지우려는 것이다. 추출기가 먼저 넣은
+    #    자국(`[대표] (남, 60대)` · 쪽 전사의 `[업체](…)`) 뒤 괄호는 이름의 원어 표기가 아니다 — 판별 매뉴얼에서 광고 문구
+    #    2 곳이 그렇게 지워졌다(㊿-10). 자국과 괄호 사이에 지킴 글자를 끼웠다가 나갈 때 뺀다.
+    # ★ 결정문 · 보도자료 원문에는 자국이 없다(결정문 원문 8,272 건 중 0) — 그 원천들의 출력은 그대로다.
+    if _HOLD in text:
+        raise MaskPolicyError(
+            f"{source!r} 의 글에 지킴 글자(U+E0F0)가 들어 있다 — 쓰지 않는다 (D-220)"
+        )
+    # 🚨 `hold_pre=False` — 부르는 쪽이 먼저 넣은 자국이 **회사 이름을 가린 것**일 때만(보도자료의 갈린 상호 · `ftc_press_old`).
+    #    그 뒤 괄호는 정책이 가린 이름 뒤 괄호와 같은 것이라 지운다.
+    if hold_pre:
+        text = _PRE_MASKED_PAREN.sub(lambda m: m.group(1) + _HOLD + m.group(2), text)
+    return _apply_axes(text, bare, source, todo, log).replace(_HOLD, "")
+
+
+def _apply_axes(
+    text: str, bare: str, source: str, todo: frozenset[str], log: list[dict] | None
+) -> str:
+    """`apply_policy` 의 몸 — 선언된 축을 순서대로 건다."""
     # 🔴 **축을 선언대로 건다** (D-157). 예전에는 `org` 안에서 사람까지 걸었다.
     # 🚨 **자리는 그대로 둔다 — 앵커 바로 뒤다.** 축을 떼면서 사람을 맨 앞으로 옮겼더니
     #    치환이 416 → 398 로 줄었다(D-143 이 「본문바뀜 8」로 즉시 잡았다).
