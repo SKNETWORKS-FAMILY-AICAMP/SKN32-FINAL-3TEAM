@@ -24,7 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
 
-from stage_gate import _ING_NAME, DISEASE, DRUG, INGREDIENT, ingredient_truncated  # noqa: E402
+from stage_gate import _ING_NAME, DISEASE, DRUG, INGREDIENT, approved_blob, ingredient_truncated  # noqa: E402
 
 from app import dictmatch as dm  # noqa: E402
 
@@ -163,6 +163,52 @@ def to_approved_claim(original: str, s: str, labels: list[str]) -> tuple[str, st
     if len(hits) == 1:
         return next(iter(hits)), NOTE_FOOD_FUNC
     return None
+
+
+# ── ④ 위반 유형 · 주어 검사 (관문은 위반 유형을 모른다) ─────────────────────────
+
+_FOOD_FORM = re.compile(r"먹는|마시는|섭취|캡슐|알약|정제|환|드세요|드시")
+_SUBJECT = re.compile(r"^\s*([가-힣A-Za-z0-9·\-() ]{2,40}?)(?:은|는)\s+.*도움")
+
+
+def label_check(original: str, s: str, labels: list[str]) -> list[str]:
+    """🆕 10-05 (v12) — 관문이 못 보는 것. ① 위반 유형이 건강기능식품_오인인데 기능성 주장(「~에 도움」)을 냈다 —
+    일반식품은 기능성 주장 자체가 안 된다(정답표 기준 불가). ② 「○○은 ~에 도움」의 주어(원료명)가 원문에 없고 공식 원료명도 아니다 —
+    v12 가 존재하지 않는 원료명을 지어냈다(실제 광고 1건 · 위반 포장)."""
+    why: list[str] = []
+    if "건강기능식품_오인" in labels and "도움" in s:
+        why.append("건기식 오인 문구에 기능성 주장")
+    if any(c[:8] in s for _, _, c in COSMETIC) and _FOOD_FORM.search(original):
+        why.append("먹는 제품에 화장품 기능성")
+    official_cos = any(c[:8] in s for _, _, c in COSMETIC)  # 공식 화장품 문구(「튼살로 인한 붉은 선」의 「은」은 주어 표시가 아니다)
+    if not official_cos and (m := _SUBJECT.match(s)) and not re.search(r"(?:을|를|으로|로부터)\s|하$|되$", m.group(1).strip() + " "):
+        # 「여드름성 피부를 완화하는 데 도움」의 「하는」은 주어 표시가 아니다 — 목적어 조사가 있거나 동사로 끝나면 주어가 아니다
+        subj = m.group(1).strip()
+        core = dm.norm(re.sub(r"\([^)]*\)", "", subj))
+        # 공식 문구의 주어(「크레아틴의 섭취는」 · 「혈압이 높은 사람에게」)는 원문에 없어도 된다 — 인정 문구 본문에서도 찾는다
+        if (len(core) >= 3 and core not in dm.norm(original) and core not in _official_ingredients()
+                and core not in approved_blob()):
+            why.append(f"원문에 없는 원료명(주어): {subj}")
+    return why
+
+
+def _official_ingredients() -> str:
+    """식약처 인정 원료명(고시 · 개별인정 · 재배포 가능) — 주어가 공식 원료명이면 원문에 없어도 된다."""
+    global _OFFICIAL
+    if _OFFICIAL is None:
+        import json  # noqa: PLC0415
+
+        path = HERE.parents[1] / "data" / "derived" / "hf_display_claims.jsonl"
+        names = []
+        if path.exists():
+            for line in path.open(encoding="utf-8"):
+                r = json.loads(line)
+                names.append(dm.norm(re.sub(r"\([^)]*\)", "", r.get("APLC_RAWMTRL_NM") or "")))
+        _OFFICIAL = "\n".join(n for n in names if n)
+    return _OFFICIAL
+
+
+_OFFICIAL: str | None = None
 
 
 # ── ③ 조건 ───────────────────────────────────────────────────────────────────

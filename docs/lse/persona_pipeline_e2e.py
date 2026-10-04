@@ -41,7 +41,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
-from postfix import _CLAIM_HOLD, condition, repair_ingredients, to_approved_claim  # noqa: E402
+from postfix import _CLAIM_HOLD, condition, label_check, repair_ingredients, to_approved_claim  # noqa: E402
 from rejudge import RejudgeUnavailable, rejudge  # noqa: E402
 from stage_gate import check as gate  # noqa: E402
 from train_persona_stage2 import SYSTEM as STAGE2_SYSTEM  # noqa: E402
@@ -118,6 +118,8 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
         repairs.append(f"공식 기능성 문구로: {fixed} → {ap[0]}")
         fixed, note_in = ap
         g1 = gate(text, fixed)  # 🚨 고친 문장도 관문을 다시 지난다
+    if fixed and g1.passed and (extra := label_check(text, fixed, labels)):
+        g1 = type(g1)(False, tuple(g1.reasons) + tuple(extra))  # 🆕 10-05 — 위반 유형 · 주어 원료명(관문이 못 보는 것)
     note, note_problem = condition(fixed, note_in, text) if fixed else (None, None)
     res.update(stage1_fixed=fixed, repairs=repairs, note=note, note_problem=note_problem)
     # 🚨 관문 — 1단계가 위반을 못 지운 문장은 내보내지도, 말투로 포장하지도 않는다
