@@ -1118,6 +1118,114 @@ CO = Round(
 )
 
 
+# ── 🆕 2026-10-04 사례집 2021 판 — 지시서 `라벨링_지시서_2026-10-03_사례집2021_조문·조건.md` · 판정 묶음 ① ──
+#: 식약처 「부당한 표시 또는 광고 사례집」 2021 판의 **광고 화면**(쪽 · 칸 하나가 단위). 원천이 위반이라 든 화면이다(D-237).
+#:    🚨 법이 둘이다 — 식품(식품표시광고법 제8조 · [별표 1] 목)과 화장품(화장품법 제13조 · [별표 5] 목). 근거 코드가 겹쳐
+#:       (`1` 이 식품 1호이기도 화장품 1호이기도 하다) **판을 둘로 가른다** — 단위의 `법` 칸이 어느 판인지 정한다.
+#:    🔴 원천 레코드는 `scripts/casebook2021_sheet.py --dump` 가 낸다(쪽 전사 → 마스킹 → 행).
+CB_SOURCE = "mfds_casebook_2021"
+CB_SHEET = ROOT / "data" / "derived" / "casebook2021_labelsheet.jsonl"
+CB_KEY_RE = re.compile(r"^cb:[a-z2-7]{12}$")
+#: 단위의 문구는 화면 글의 줄을 이 글자로 이어 붙인 것이다(판독 입력을 만들 때의 꼴)
+CB_JOIN = " / "
+#: 원천 대조에서 보지 않는 글자 — 공백과 **표시 자국**(⟦ ⟧ · 전사가 형광 · 색글자 자리를 감싼다)
+_CB_SKIP = re.compile(r"[\s⟦⟧]+")
+#: 화면의 글이 든 칸 — 표시 문구 · 화면 글 · 식약처 설명 · 심의 삭제 · 본문 글
+CB_TEXT_FIELDS = ("문구", "표시문구", "화면글", "식약처설명", "글", "사례", "참고", "소제목")
+
+CBF_DIR = ROOT / "data" / "derived" / "labels" / "casebook_2021_food"
+CBF_READINGS = CBF_DIR / "readings.jsonl"
+CBF_ADOPTED = CBF_DIR / "adopted.jsonl"
+CBF_DECISIONS = CBF_DIR / "decisions.jsonl"
+CBF_AUDIT = CBF_DIR / "audit.jsonl"
+CBF_TEAM_SHEET = ROOT / "build" / "labels" / "casebook_2021_food__팀장판정표.csv"
+CBC_DIR = ROOT / "data" / "derived" / "labels" / "casebook_2021_cosmetic"
+CBC_READINGS = CBC_DIR / "readings.jsonl"
+CBC_ADOPTED = CBC_DIR / "adopted.jsonl"
+CBC_DECISIONS = CBC_DIR / "decisions.jsonl"
+CBC_AUDIT = CBC_DIR / "audit.jsonl"
+CBC_TEAM_SHEET = ROOT / "build" / "labels" / "casebook_2021_cosmetic__팀장판정표.csv"
+
+
+def _cb_text(v: object) -> str:
+    """원천 행의 한 칸 → 글(목록 · `{글, 표시}` 꼴을 편다)."""
+    if isinstance(v, dict):
+        return " ".join(_cb_text(x) for x in v.values())
+    if isinstance(v, list):
+        return " ".join(_cb_text(x) for x in v)
+    return v if isinstance(v, str) else ""
+
+
+def cb_units(units: list[dict], law: str) -> dict[str, dict]:
+    """사례집 2021 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 단위의 `행` 이 가리키는 원천 행과 쪽 · 칸이 같고,
+    문구의 줄마다 그 행의 글에 있어야 한다(공백 · 표시 자국만 다르게).
+
+    ★ 줄 단위로 보는 까닭 — 표시 문구가 없는 화면은 화면 글을 이어 붙여 단위 문구로 삼았다(114 중 21 · 원장 10-03 ㊿-8).
+    🔴 `법` 이 이 판의 것이 아닌 단위가 섞이면 멈춘다 — 식품 코드로 화장품 화면을 읽게 된다 (D-220).
+    """
+    if not CB_SHEET.exists():
+        raise SystemExit(
+            f"🔴 {CB_SHEET} 가 없다 — 먼저: uv run python scripts/casebook2021_sheet.py --dump"
+        )
+    rows = [json.loads(x) for x in CB_SHEET.read_text(encoding="utf-8").splitlines() if x.strip()]
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(CB_KEY_RE, k, src, bad):
+            continue
+        if u.get("법") != law:
+            bad.append(f"{k} 법 {u.get('법')!r} — 이 판은 {law} 다")
+            continue
+        no = int(u["행"])
+        r = rows[no - 1] if 1 <= no <= len(rows) else None
+        if r is None or (str(r["쪽"]), str(r["칸"])) != (str(u["쪽"]), str(u["칸"])):
+            bad.append(f"{k} 행 {no} 의 쪽 · 칸이 원천과 다르다")
+            continue
+        body = _CB_SKIP.sub("", " ".join(_cb_text(r.get(f)) for f in CB_TEXT_FIELDS))
+        lines = [x for x in u["문구"].split(CB_JOIN) if x.strip()]
+        miss = [x for x in lines if _CB_SKIP.sub("", x) not in body]
+        if miss or not lines:
+            bad.append(f"{k} {u['쪽']}쪽 원천에 없는 줄 {len(miss)} — {(miss or [''])[0][:30]!r}")
+            continue
+        src[k] = {
+            "지문": k,
+            "행": no,
+            "쪽": str(u["쪽"]),
+            "칸": str(u["칸"]),
+            "법": law,
+            "원천호": str(u["원천호"]),
+            "문구": u["문구"],
+            "원천": CB_SOURCE,
+        }
+    _units_fail(f"사례집 2021({law})", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.cb_units")
+    return src
+
+
+_CB_HEAD = ("행", "쪽", "칸", "법", "원천호")
+CBF = Round(
+    prefix="CBF",
+    cmd="cbf",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=_CB_HEAD,
+    sheet_head=("쪽", "원천호"),
+    units=lambda us: cb_units(us, "식품"),
+)
+CBC = Round(
+    prefix="CBC",
+    cmd="cbc",
+    cite_of=cq_cite_of,
+    exceptions=CQ_EXCEPTIONS,
+    mok_ho=CQ_MOK_HO,
+    head=_CB_HEAD,
+    sheet_head=("쪽", "원천호"),
+    units=lambda us: cb_units(us, "화장품"),
+)
+
+
 # ── 🆕 2026-09-30 (판정 J1 (b)) 해설서 **수정문구** 판 — 지시서 `라벨링_지시서_2026-09-30_해설서_수정문구_조문·조건.md` ──
 #: 해설서 「표시(안) → 수정」 표의 오른쪽 칸(`preprocess/mfds_guide.py` 의 `수정쌍`). 🚨 위반문구 1,834 와 **다른 행**이다 —
 #:    원래 문구(왼쪽 칸)는 위반문구 표에 없다(0/245 · 작업공간 실측). 이 판은 **수정문구**만 읽는다
@@ -2074,6 +2182,8 @@ def gf_rebuild() -> dict:
 ROUNDS = {
     "cq": (CQ, "화장품"),
     "co": (CO, "화장품 질의응답 2012 · 2020"),
+    "cbf": (CBF, "사례집 2021 · 식품"),
+    "cbc": (CBC, "사례집 2021 · 화장품"),
     "fp": (FP, "공정위 보도자료 1997~2007"),
     "gf": (GF, "해설서 수정문구"),
     "fs": (FS, "결정문 봉인 문구"),

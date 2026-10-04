@@ -116,6 +116,17 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
         "labels/cosmetic_qa_old/adopted.jsonl",
         "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round co-rebuild`",
     ),
+    # 🆕 2026-10-04 (판정 묶음 ①) — 사례집 2021 판(법이 둘이라 판도 둘)
+    (
+        "생성물",
+        "labels/casebook_2021_food/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round cbf-rebuild`",
+    ),
+    (
+        "생성물",
+        "labels/casebook_2021_cosmetic/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round cbc-rebuild`",
+    ),
     # 🆕 2026-09-30 (판정 J1 (b) · J2) — 해설서 수정문구 · 결정문 봉인 문구 판
     (
         "생성물",
