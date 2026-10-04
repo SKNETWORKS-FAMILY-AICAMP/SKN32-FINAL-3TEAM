@@ -39,6 +39,7 @@ class Rejudge:
     verdicts: tuple[str, ...] = field(default_factory=tuple)
     violations: tuple[str, ...] = field(default_factory=tuple)
     basis: tuple[str, ...] = field(default_factory=tuple)
+    hold_reasons: tuple[str, ...] = field(default_factory=tuple)
 
 
 @cache
@@ -70,13 +71,18 @@ def rejudge(text: str, product: Any = None) -> Rejudge:  # noqa: ANN401
     violations = tuple(sorted({v.value for s in sents for v in (s.violations or [])}))
     basis = tuple(sorted({f"{a.law_id}:{a.article}" for s in sents for a in (s.evidence or [])
                           if s.verdict in (Verdict.confirmed, Verdict.no_basis)}))
-    if any(s.verdict in (Verdict.confirmed, Verdict.no_basis) for s in sents):
+    hold_reasons = tuple(sorted({s.hold_reason.value for s in sents if getattr(s, "hold_reason", None)}))
+    # 🔄 10-04 (main 병합 · W5) — 코어가 **위반 유형을 찾고도 보류(low_conf)** 를 낸다. 종전 규칙(확정 · 근거 없음만 탈락)은
+    #    「먹기만 해도 위염이 싹 낫는 양배추즙」을 no_violation 으로 읽었다. ⛔ 위반 유형이 하나라도 붙으면 판정 종류와 상관없이 탈락이다.
+    #    ⛔ 또 종전 규칙은 `confirmed` 를 늘 탈락으로 읽었는데, 코어는 **위반 없음 확정**도 `confirmed`(위반 목록 빔)로 낸다 — 그건 탈락이 아니다.
+    if violations or any(s.verdict is Verdict.no_basis for s in sents):
         status = "rejected"
-    elif outcome == "passed":
+    elif outcome in ("pass", "passed"):
         status = "passed"
     else:
         status = "no_violation"
-    return Rejudge(status=status, outcome=outcome, verdicts=verdicts, violations=violations, basis=basis)
+    return Rejudge(status=status, outcome=outcome, verdicts=verdicts, violations=violations, basis=basis,
+                   hold_reasons=hold_reasons)
 
 
 if __name__ == "__main__":
