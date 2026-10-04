@@ -363,6 +363,30 @@ def test_골든_호_셈은_채점_행만_센다() -> None:
     assert golden.ho_counts(rows) == {statute.ho_key(c[0]): 2}
 
 
+@pytest.mark.gate
+def test_골든_호_셈은_서로_다른_글자로도_센다() -> None:
+    """🆕 2026-10-04 (판정 묶음 ⑫) — 평가의 하한 30 은 같은 호 · 같은 글자를 한 번만 센 수에 건다.
+
+    ⛔ 행으로만 세어 공정위 2호가 채점 행 25 로 보였는데 서로 다른 글자는 16 이었다(원장 10-03 ㊵).
+    """
+    c2, c3 = [statute.fair(2)], [statute.fair(3)]
+
+    def row(c: list[str], text: str, **kw: str) -> dict:
+        return {"labels": statute.types_of(c), "근거": c, "text": text, **kw}
+
+    rows = [
+        row(c2, "국내 최초 인증", 조건="B"),
+        row(c2, "국내  최초 인증", 조건="C"),  # 공백만 다르다 — 같은 글자
+        row(c2, "1) 국내 최초 인증"),  # 항목 번호 머리만 다르다 — 같은 글자(`overlap_key`)
+        row(c2, "업계 1위", 조건="B"),
+        row(c3, "국내 최초 인증", 조건="B"),  # 호가 다르면 따로 센다
+        row(c2, "국내 최초 인증", 조건="M"),  # 채점 행이 아니다
+    ]
+    k2, k3 = statute.ho_key(c2[0]), statute.ho_key(c3[0])
+    assert golden.ho_counts(rows) == {k2: 4, k3: 1}
+    assert golden.ho_counts(rows, distinct=True) == {k2: 2, k3: 1}
+
+
 # ── 블라인드 감사표 (판정 J6) ────────────────────────────────────────────────────────────
 
 

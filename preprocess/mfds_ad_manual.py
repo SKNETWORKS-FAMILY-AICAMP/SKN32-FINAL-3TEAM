@@ -44,7 +44,7 @@
   🚨 자국은 `mask.MASK_CEO` 를 쓴다 — 원천이 제품명을 가린 `○○○` 와 섞이지 않게(D-166).
 
 🔴 **마스킹 없이는 파생을 내보내지 않는다** (D-72 fail-closed · `preprocess.mask.apply_policy`).
-   2026-10-03 현재 `POLICY` 에 이 원천이 없다 — `--dump` 는 멈춘다(검토요청 2026-10-03 식품사례 3종 · 2인 확인 대기).
+   2026-10-04 `POLICY` 에 등재됐다 — 업체명 · 상표(검토요청 2026-10-03 식품사례 3종 §4 · 2인 확인). 인물 실명은 이 추출기가 가린다.
 ──────────────────────────────────────────────────────────────
 """
 
@@ -494,17 +494,24 @@ def redacted(rows: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 def masked(rows: list[dict]) -> tuple[list[dict], collections.Counter, list[dict]]:
-    """사람 가림 → 원천 정책 마스킹. **산출물로 나가는 모든 길이 여기를 지난다.**"""
+    """원천 정책 마스킹 → 사람 가림. **산출물로 나가는 모든 길이 여기를 지난다.**
+
+    🔴 **정책을 먼저 건다** (2026-10-04 · 원장 10-03 ㊿-10). 사람 가림을 먼저 걸면 정책의 `mask_paren_alias` 가
+       이 추출기의 자국 `[대표]` 바로 뒤 괄호를 「원어 표기」로 보고 지운다 — 체험자의 「(남, 60대)」 4 곳과
+       전문의 이름 뒤 **광고 문구** 2 곳(47 · 67 자)이 사라졌었다(기기 `--dump` · 사례 3). 그 규칙은 `[업체](영문 상호)` 를
+       지우려는 것이고 결정문 원천이 쓰고 있어 그쪽을 고치지 않는다 — 여기서 순서로 막는다.
+    ★ 정책이 날것에서 바꾸는 자리는 0 이다(기기 실측 · 80 사례) — 그래서 결과는 `redacted` 와 같고 `pieces` 의 자리표가 맞는다.
+    """
     from preprocess.mask import apply_policy  # noqa: PLC0415
 
-    red, log = redacted(rows)
+    log: list[dict] = []
     changed: collections.Counter = collections.Counter()
     out: list[dict] = []
-    for before, r in zip(rows, red, strict=True):
-        rec = dict(r)
+    for before in rows:
+        rec = dict(before)
         for f in MASK_FIELDS:
             if rec.get(f):
-                rec[f] = apply_policy(rec[f], "", SOURCE_ID, log)
+                rec[f] = redact_people(apply_policy(rec[f], "", SOURCE_ID, log), log)
                 if rec[f] != before[f]:
                     changed[f] += 1
         out.append(rec)

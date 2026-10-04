@@ -211,18 +211,28 @@ def lawful_kind(r: dict) -> str | None:
     return None
 
 
-def ho_counts(rows: list[dict]) -> collections.Counter:
+def ho_counts(rows: list[dict], *, distinct: bool = False) -> collections.Counter:
     """호 단위 셈(D-282 · D-40 의 30 을 거는 단위) — **채점되는 위반 행만**.
+
+    🆕 2026-10-04 (판정 묶음 ⑫ · 원장 10-03 ㊴ · ㊵) — `distinct=True` 면 호마다 **서로 다른 글자**로 센다(`overlap_key`).
+       ⛔ 행으로만 세면 같은 문구가 거듭 실린 호가 30 을 넘긴 것처럼 보인다 — 공정위 2호가 채점 행 25 인데 글자로는 16 이었다.
+       ★ D-40 의 하한은 평가에서 이 수에 건다. 학습은 행 수 그대로다(같은 글자의 수는 `정규화중복` 이 낸다).
 
     🆕 2026-10-02 — 조건 M · D · L 행은 세지 않는다. `split.plan` 의 `tally_ho` · `eval_rule.scored` 와 같은 규칙이다 (D-99).
     ⛔ 종전에는 `is_positive` 만 봐서 유형이 남은 M 행(결정문 봉인 문구의 이름만 23 등)까지 세었다 — 재동결 10-02 에서
        표시광고법 2호가 31 ✅ 로 찍혔는데 채점되는 행은 그보다 적다(원장 10-02 ④).
     """
     hc: collections.Counter = collections.Counter()
+    seen: set[tuple[str, str]] = set()
     for r in rows:
         if not is_positive(r) or r.get("조건") in ("M", "D", "L"):
             continue
         for k in {statute.ho_key(x) for x in r["근거"]}:
+            if distinct:
+                key = (k, overlap_key(r["text"]))
+                if key in seen:
+                    continue
+                seen.add(key)
             hc[k] += 1
     return hc
 
@@ -247,7 +257,14 @@ def check_basis(rows: list[dict]) -> None:
         cond = r.get("조건")
         if cond is None:
             continue
-        if cond not in ("C", "A", "B", "M", "D", "L"):  # 🔄 09-30 — L(적법 · 화장품 지시서 §2)
+        if cond not in (
+            "C",
+            "A",
+            "B",
+            "M",
+            "D",
+            "L",
+        ):  # 🔄 09-30 — L(적법 · 화장품 지시서 §2)
             bad.append(f"{r['id']}  모르는 조건 {cond!r}")
         elif cond == "L" and (r["근거"] or r.get("근거_후보")):
             bad.append(f"{r['id']}  조건 L(적법) 인데 근거가 있다")
@@ -557,6 +574,11 @@ def build() -> tuple[list[dict], dict]:
     #    치명적이지 않으므로 멈추지 않고 **수로 낸다.** ⛔ 안 세면 「행이 많다」로만 보인다.
     ntxt = collections.Counter(norm(r["text"]) for r in kept if r["split"] == "train")
     stat["정규화중복"] = sum(v - 1 for v in ntxt.values() if v > 1)
+    # 🆕 2026-10-04 (판정 묶음 ⑫) — 평가도 센다. ⛔ 학습만 세어 평가의 거듭 실린 채점 행(28 · 원장 10-03 ㊴)이 안 보였다
+    test_rows = [r for r in kept if r["split"] == "test_sentence"]
+    stat["채점행_거듭_평가"] = sum(ho_counts(test_rows).values()) - sum(
+        ho_counts(test_rows, distinct=True).values()
+    )
     return kept, stat
 
 
@@ -594,10 +616,18 @@ def main() -> int:
         # 🆕 D-282 — 정본 셈(호 단위). D-40 의 30 은 이 단위에 건다
         #    🔄 2026-09-30 — 위반 행(`is_positive`)으로 센다. ⛔ `labels` 로 세면 유형이 없는 호(화장품 4호 · 식품 8~10호)가 빠진다
         hc = ho_counts(sub)
-        print("     ── 호 단위 (정본 · D-282 · 채점 행만 — M · D · L 제외) ──")
+        # 🆕 2026-10-04 (판정 묶음 ⑫) — 평가의 하한 30 은 **서로 다른 글자**로 건다. 행 수는 옆에 같이 낸다
+        hd = ho_counts(sub, distinct=True)
+        print(
+            "     ── 호 단위 (정본 · D-282 · 채점 행만 — M · D · L 제외 · 평가는 서로 다른 글자로 하한을 건다) ──"
+        )
         for k, v in sorted(hc.items()):
-            mark = "✅" if s == "train" or v >= PARAMS.min_measurable else "🔴 측정 불가"
-            print(f"     {v:>5}  {k:26} {statute.type_of(k) or '(유형 없음)'}  {mark}")
+            if s == "train":
+                print(f"     {v:>5}  {k:26} {statute.type_of(k) or '(유형 없음)'}  ✅")
+                continue
+            mark = "✅" if hd[k] >= PARAMS.min_measurable else "🔴 측정 불가"
+            same = "" if hd[k] == v else f"  (행 {v} · 같은 글자 {v - hd[k]})"
+            print(f"     {hd[k]:>5}  {k:26} {statute.type_of(k) or '(유형 없음)'}  {mark}{same}")
     # 🆕 **「이유」 회수 계측** (2026-09-17 · D-234). 🚨 **버린 수가 안 보이면 계측이 반쪽이다** —
     #    무엇을 왜 버렸는지가 산출물 옆에 없으면, 필터를 고쳤을 때 무엇이 달라졌는지 못 본다 (D-142).
     drops = {k[len("이유버림_") :]: v for k, v in stat.items() if k.startswith("이유버림_")}
@@ -655,6 +685,10 @@ def main() -> int:
             "「피부 보습에…」와 「피부보습에…」가 접힌다 (D-117)"
         )
         print("     id 는 다르지만 학습에는 같은 표본이다. 행 수를 표본 수로 읽지 않는다.")
+    print(
+        f"\n  🟡 **평가 채점 행 중 같은 호 · 같은 글자로 거듭 실린 행 {stat.get('채점행_거듭_평가', 0)}개** — "
+        "하한은 서로 다른 글자로 센다 (판정 묶음 ⑫)"
+    )
     if stat.get("미배정"):
         print(f"\n  🚨 분할에 없는 문서 {stat['미배정']}개 — 조용히 빠졌다. 분할부터 다시 본다.")
 
