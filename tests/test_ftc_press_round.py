@@ -172,6 +172,118 @@ def test_앞말은_상호로_잡지_않는다() -> None:
 
 
 @pytest.mark.gate
+def test_뒷붙이_법인격_뒤의_말은_상호가_아니다(monkeypatch) -> None:
+    """🔴 「○○(주)의 부당한 광고행위」에서 「부당한」이 상호로 들어 그 낱말이 `[업체]` 가 됐다(원장 10-03 ㊽ · 2 사건)."""
+    monkeypatch.setitem(mask.POLICY, "ftc_press", mask.POLICY["ftc"])
+    body = (
+        "가나다맥주(주)의 부당한 광고행위\n부당한 광고행위에 대한 시정명령 · 가나다맥주는 광고에서"
+    )
+    assert not [n for n in ftc_press_old.doc_names(body) if "부당한" in n]
+    out, _, _ = ftc_press_old.masked([{"사건": "9", "제목": "건", "본문": body}])
+    assert out[0]["본문"].count("부당한") == 2 and "가나다맥주" not in out[0]["본문"]
+    # 풀어 쓴 법인격이나 띄어 쓴 앞붙이로도 나오는 말은 상호로 둔다
+    assert "라마바" in ftc_press_old.doc_names("가나다(주)라마바 · 라마바 주식회사는")
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("text", "gone"),
+    [
+        ("가나다(주)(대표 홍길동)에 대해", "홍길동"),
+        ("가나다(주)[대표이사 성춘향]의 광고", "성춘향"),
+        ("가나다(주)[代表\uf9e4事 洪吉童]\n이 자사의", "洪吉童"),
+        ("피심인: 가나다(주)(대표이사 성춘향\n피심인 일반현황", "성춘향"),
+    ],
+)
+def test_괄호_속_대표자_이름을_지운다(text: str, gone: str) -> None:
+    """🔴 「(대표 ○○○)」 · 한자 직함 · 성씨 목록 밖 이름이 본문에 남았다(실측 4 사건 · 원장 10-03 ㊾)."""
+    got = ftc_press_old.mask_paren_ceo(text)
+    assert gone not in got and "[대표]" in got
+
+
+def test_괄호_대표_규칙은_보통_말을_건드리지_않는다() -> None:
+    for text in ("(대표 상품은 다음과 같다)", "자사의 대표 제품인 가나다", "(대표적인 예)"):
+        assert ftc_press_old.mask_paren_ceo(text) == text
+
+
+@pytest.mark.gate
+def test_괘선으로_갈린_상호를_통째로_지운다(monkeypatch) -> None:
+    """🔴 「가나 │⏎│ 다건설(주)」 — 자리 치환이 뒷조각만 지워 앞조각이 남았다(실측 3 · 원장 10-03 ㊾)."""
+    monkeypatch.setitem(mask.POLICY, "ftc_press", mask.POLICY["ftc"])
+    body = "가나다건설(주)의 부당한 광고\n│ 경쟁사업자인 가나   │\n│ 다건설(주)가 시공한 │"
+    out, _, log = ftc_press_old.masked([{"사건": "9", "제목": "건", "본문": body}])
+    assert "가나" not in out[0]["본문"] and "다건설" not in out[0]["본문"]
+    assert any(e.get("규칙") == "갈린상호" for e in log)
+
+
+@pytest.mark.gate
+def test_사건별_이름_목록의_표기를_지우고_남으면_멈춘다(monkeypatch) -> None:
+    """🔴 약칭 · 상호와 같은 글자의 상표는 규칙으로 못 잡는다 — 사람이 확인한 목록으로 지운다(검토요청 §3-6 (ㅁ′))."""
+    monkeypatch.setitem(mask.POLICY, "ftc_press", mask.POLICY["ftc"])
+    body = "가나다맥주(주)의 부당한 광고행위\n오직 가나만이 국내자본\n연락처 : 02) 123-4567(홍보실)"
+    rows = [{"사건": "9", "제목": "가나 광고 건", "본문": body}]
+    unit = {
+        "지문": "fp:x",
+        "사건": "9",
+        "문구": "오직 가나만이 국내자본",
+        "원천판단": "가나의 광고",
+    }
+    listed = {"9": [("02) 123-4567(홍보실)", "연락처"), ("가나", "회사")]}
+    assert "가나만이" in ftc_press_old.masked(rows)[0][0]["본문"]  # 목록 없이는 남는다
+    out, _, log = ftc_press_old.masked(rows, listed)
+    assert "가나" not in out[0]["본문"] + out[0]["제목"] and "123-4567" not in out[0]["본문"]
+    assert not ftc_press_old.records_left(out, listed)
+    assert sum(e.get("규칙") == "이름목록" for e in log) >= 3
+    got, bad = ftc_press_old.mask_units(rows, [unit], listed)
+    assert (
+        not bad
+        and got[0]["문구"] == "오직 [업체]만이 국내자본"
+        and "가나" not in got[0]["원천판단"]
+    )
+    # 다른 사건의 목록은 걸리지 않는다
+    assert "가나만이" in ftc_press_old.masked(rows, {"8": [("가나", "회사")]})[0][0]["본문"]
+    # 남은 것을 세는 쪽이 지우는 쪽과 같은 꼴을 본다(줄넘김으로 갈린 표기)
+    assert ftc_press_old.listed_left("가 \n나의 광고", [("가나", "회사")]) == 1
+
+
+@pytest.mark.gate
+def test_이름_목록은_지문과_다르면_멈춘다(tmp_path, monkeypatch) -> None:
+    """🔴 목록은 저장소 밖(실명)이고 저장소에는 수와 지문만 있다 — 없거나 다르면 파생을 쓰지 않는다 (D-220)."""
+    csv_path = tmp_path / "이름목록.csv"
+    lock_path = tmp_path / "lock.json"
+    head = "사건,표기,갈래,처리,메모\n"
+    csv_path.write_text(
+        head + "9,가나,회사,지움,\n9,가나 우유,회사,뺌,상표\n", encoding="utf-8-sig"
+    )
+    monkeypatch.setattr(ftc_press_old, "NAMES", csv_path)
+    monkeypatch.setattr(ftc_press_old, "NAMES_LOCK", lock_path)
+    with pytest.raises(SystemExit, match="지문이 저장소에"):
+        ftc_press_old.load_names()
+    listed = ftc_press_old.read_names(csv_path)
+    assert listed == {"9": [("가나", "회사")]}  # 「뺌」은 싣지 않는다
+    lock = ftc_press_old.names_lock(listed)
+    assert "가나" not in json.dumps(lock, ensure_ascii=False) and lock["9"]["수"] == 1
+    lock_path.write_text(json.dumps({"사건": lock}, ensure_ascii=False), encoding="utf-8")
+    assert ftc_press_old.load_names() == listed
+    csv_path.write_text(head + "9,가나다,회사,지움,\n", encoding="utf-8-sig")
+    with pytest.raises(SystemExit, match="지문과 다르다"):
+        ftc_press_old.load_names()
+    csv_path.unlink()
+    with pytest.raises(SystemExit, match="가 없다"):
+        ftc_press_old.load_names()
+    for bad in ("9,가,회사,지움,\n", "9,가나,상표,지움,\n"):
+        csv_path.write_text(head + bad, encoding="utf-8-sig")
+        with pytest.raises(ValueError, match="행"):
+            ftc_press_old.read_names(csv_path)
+
+
+@pytest.mark.gate
+def test_저장소의_이름_목록_지문은_표기를_싣지_않는다() -> None:
+    lock = json.loads(ftc_press_old.NAMES_LOCK.read_text(encoding="utf-8"))["사건"]
+    assert lock and all(set(v) == {"수", "지문"} and len(v["지문"]) == 12 for v in lock.values())
+
+
+@pytest.mark.gate
 def test_마스킹_정책이_없으면_멈춘다() -> None:
     assert "ftc_press" not in mask.POLICY or pytest.skip(
         "정책이 등재됐다 — 이 게이트는 등재 전 판을 지킨다"
