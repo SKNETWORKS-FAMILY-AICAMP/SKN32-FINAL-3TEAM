@@ -183,6 +183,12 @@ POLICY: dict[str, frozenset[str]] = {
     #    실제 방어는 **쪽 전사에서 이름을 가려 두는 것**이다(`scripts/casebook2021_sheet.py` 머리말 · `EXPECTED_REDACTED`).
     # ⬜ 사람 축을 끄는 것(검토요청_2026-10-03_마스킹정책_식품사례_3종.md 2-2 (나))은 문언을 고치는 일이라 2인 확인 뒤다
     "mfds_casebook_2021": frozenset({"org", "brand", "addr", "person"}),
+    # ── 2026-10-04 등재 (검토요청_2026-09-30_마스킹정책_ftc_press.md §4 · 판정 오한빈 · 2인 확인 권소라 · (ㅁ′))
+    #    공정위 보도자료 1997~2007. 🔴 상표 축은 끈다 — 광고가 내세운 제품 이름은 판정이 읽는 글이다(D-233).
+    #    실측(원문 33 건 · 원장 10-03 ㊿) — 상표 축을 켠 것과 끈 것의 결과가 같다(이 원천에서 상표 축이 지운 것 0).
+    # 🚨 축만으로는 약칭 · 괄호 속 대표자 이름 · 상호와 같은 글자의 상표가 남는다 — 추출기가 사건별 확인 목록으로 지운다
+    #    (`preprocess/ftc_press_old.py` `mask_listed` · 목록은 저장소 밖 · 지문은 `ftc_press_names.lock.json`).
+    "ftc_press": frozenset({"org", "addr", "person"}),
 }
 
 #: 정책 키 ↔ 레지스트리 문언. 대조 테스트가 이걸 쓴다.
