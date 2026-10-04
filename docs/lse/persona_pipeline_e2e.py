@@ -1,9 +1,10 @@
 """1단계(위반 제거) → 관문 → [선택] 2단계(페르소나 말투) — 실제 광고 문구로 끝까지 돌려 본다 (2026-10-01).
 
-🔄 최종 구조(10-01 정리): 1단계는 **v10**(`copylane_sllm_lora_adapter_v10` · 합법화 불가를 낼 수 있다).
+🔄 최종 구조(10-01 정리): 1단계는 **v12**(`copylane_sllm_lora_adapter_v12` · 합법화 불가를 낼 수 있다).
    🔄 10-02 — v6 → v8. 같은 관문·재판정 · 고정 31개에서 위반 포장 0 은 같고 지나친 거절 5→4 · 살림 1→2 (결과서 11차).
    🔄 10-02 — v8 → v9. 살리기 평가 40 에서 살림 8 → 27 · 지나친 거절 20 → 0 · 포장 0 (결과서 12차).
    🔄 10-02 — v9 → v10. 정답이 지어낸 낱말을 고쳐 다시 학습 — 제품명 지어내기(「…로스팅한 곶감」)가 사라짐 (결과서 13차).
+   🔄 10-05 — v10 → v12. 화장품 65행 — 실제 광고(학습에 없던 87) 지나친 거절 8 → 4 · 위반 포장 0(label_check 포함) (결과서 16차).
    종착은 셋 — `infeasible`(1단계가 합법화 불가) · `hold`(관문 · 규칙에 걸림) · `candidate`(후보).
    🚨 `candidate` 도 적법 확정이 아니다 — `--rejudge` 의 `no_violation` 은 통과 보증이 아니고 사람 검수가 남는다.
 
@@ -57,7 +58,7 @@ from train_stage1_v5 import parse as parse_stage1  # noqa: E402
 from train_stage1_v5 import user_msg as stage1_user  # noqa: E402
 
 ROOT = HERE.parents[1]
-STAGE1_VER = "v10"  # 채택본 (10-02 · v6 → v8 → v9 → v10)
+STAGE1_VER = "v12"  # 채택본 (10-05 · v6 → v8 → v9 → v10 → v12)
 STAGE1 = ROOT / "models" / f"copylane_sllm_lora_adapter_{STAGE1_VER}"
 STAGE2 = ROOT / "models" / "copylane_sllm_persona_adapter"
 OUT = HERE / "_private" / "persona_pipeline_e2e.jsonl"
