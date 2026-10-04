@@ -1226,6 +1226,68 @@ CBC = Round(
 )
 
 
+# ── 🆕 2026-10-04 판별 매뉴얼(2015) 판 — 지시서 `라벨링_지시서_2026-10-03_판별매뉴얼_조문·조건.md` ──
+#: 식약처 「허위·과대광고 판별 매뉴얼」의 위반 사례 문구를 자른 **조각**(`preprocess.mfds_ad_manual.pieces`)이 단위다.
+#:    🔴 원천 레코드는 `python -m preprocess.mfds_ad_manual --dump` 가 낸다(사람 가림 + 마스킹 정책 · 2인 확인 2026-10-04).
+#:    🚨 식약처 서술만 든 조각(자른 까닭이 그것이다 · 지시서 ⑭-4)은 판독하지 않았다 — 단위 표에 없다(2 · 원장 10-03 ㊿-10).
+#:       그래서 단위 표는 조각의 **부분집합**이어도 된다. 조각에 없는 단위가 오면 멈춘다.
+MN_SOURCE = "mfds_ad_judge_manual_2015"
+MN_CASES = ROOT / "data" / "derived" / "mfds_ad_judge_manual_2015.jsonl"
+MN_KEY_RE = re.compile(r"^mn:[a-z2-7]{12}$")
+MN_DIR = ROOT / "data" / "derived" / "labels" / "ad_manual_2015"
+MN_READINGS = MN_DIR / "readings.jsonl"
+MN_ADOPTED = MN_DIR / "adopted.jsonl"
+MN_DECISIONS = MN_DIR / "decisions.jsonl"
+MN_AUDIT = MN_DIR / "audit.jsonl"
+MN_TEAM_SHEET = ROOT / "build" / "labels" / "ad_manual_2015__팀장판정표.csv"
+_MN_SAME = ("구역", "쪽", "면", "조각", "조각수", "문구")
+
+
+def mn_pieces() -> dict[str, dict]:
+    """판별 매뉴얼 파생물 → 지문별 조각. 🔴 자리표와 문구가 어긋나면 `pieces` 가 멈춘다 (D-220)."""
+    from preprocess import mfds_ad_manual  # noqa: PLC0415 — 추출기는 이 판을 돌릴 때만 든다
+
+    if not MN_CASES.exists():
+        raise SystemExit(
+            f"🔴 {MN_CASES} 가 없다 — 먼저: uv run python -m preprocess.mfds_ad_manual --dump"
+        )
+    rows = [json.loads(x) for x in MN_CASES.read_text(encoding="utf-8").splitlines() if x.strip()]
+    return {p["지문"]: p for p in mfds_ad_manual.pieces(rows)}
+
+
+def mn_units(units: list[dict]) -> dict[str, dict]:
+    """단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 지문 · 구역 · 쪽 · 면 · 조각 · 문구가 파생물의 조각과 같아야 한다."""
+    have = mn_pieces()
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(MN_KEY_RE, k, src, bad):
+            continue
+        h = have.get(k)
+        if h is None or any(u.get(f) != h[f] for f in _MN_SAME):
+            bad.append(
+                f"{k} {u.get('쪽')}{u.get('면')} 조각 {u.get('조각')} — 파생물의 조각과 다르다"
+            )
+            continue
+        src[k] = {**h, "원천": MN_SOURCE}
+    _units_fail("판별 매뉴얼", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.mn_units")
+    return src
+
+
+MN = Round(
+    prefix="MN",
+    cmd="mn",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=("구역", "쪽", "면", "조각", "조각수"),
+    sheet_head=("구역", "쪽", "조각"),
+    units=mn_units,
+)
+
+
 # ── 🆕 2026-09-30 (판정 J1 (b)) 해설서 **수정문구** 판 — 지시서 `라벨링_지시서_2026-09-30_해설서_수정문구_조문·조건.md` ──
 #: 해설서 「표시(안) → 수정」 표의 오른쪽 칸(`preprocess/mfds_guide.py` 의 `수정쌍`). 🚨 위반문구 1,834 와 **다른 행**이다 —
 #:    원래 문구(왼쪽 칸)는 위반문구 표에 없다(0/245 · 작업공간 실측). 이 판은 **수정문구**만 읽는다
@@ -2184,6 +2246,7 @@ ROUNDS = {
     "co": (CO, "화장품 질의응답 2012 · 2020"),
     "cbf": (CBF, "사례집 2021 · 식품"),
     "cbc": (CBC, "사례집 2021 · 화장품"),
+    "mn": (MN, "판별 매뉴얼 2015"),
     "fp": (FP, "공정위 보도자료 1997~2007"),
     "gf": (GF, "해설서 수정문구"),
     "fs": (FS, "결정문 봉인 문구"),
