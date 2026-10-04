@@ -77,13 +77,13 @@
 
 | 원천 | 채택 대안 | 판정자 | 2인 확인 — 검토자 · 날짜 | 비고 |
 |---|---|---|---|---|
-| `mfds_cgm_expc` | | | | |
+| `mfds_cgm_expc` | (라) — 이 원천에만 좁은 사람 축 + 치환이 생기면 추출기가 멈춘다 | 오한빈 · 2026-10-04 | 권소라 · 2026-10-04 | 두 사람의 확인을 팀장이 전했고(2026-10-04) 글자는 모델이 옮겨 적었다 · 정책(업체명 · 대표자명)과 레지스트리 문언은 그대로다 · `scripts/registry_review.yaml` 은 건드리지 않았다(등급 판정의 서명은 09-19 것이 그대로 선다) |
 
 ## 5. 한 일 · 남은 일
 
 1. ✅ `preprocess/mask.py` — `PERSON_STRICT` · `mask_person_strict` · `_person_for`(호출부 두 곳을 한 자리로) · 게이트 `tests/test_mask.py` 54 줄
 2. ✅ `preprocess/mfds_interp.py` — `check_person`(사람 축 치환이 확인된 해석 밖에서 생기면 `--verify` · `--dump` 가 멈춘다) · `PERSON_SEEN`(사람이 채운다 · 지금 비어 있다)
-3. ⬜ §4 확인 — (가) · (나)로 정해지면 `PERSON_STRICT` 에서 이 원천을 빼고 그 대안대로 한다
+3. ✅ 2026-10-04 (라)로 확인 — 코드는 그대로 둔다 · (가) · (나)로 정해지면 `PERSON_STRICT` 에서 이 원천을 빼고 그 대안대로 한다
 4. ⬜ `uv run python -m preprocess.mfds_interp --dump` — §4 확인 뒤
 5. ⬜ 계측 모듈(`interp_scan --candidates`)의 후보 파일도 같은 정책을 지난다 — 다시 쓴다
 
