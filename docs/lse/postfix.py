@@ -130,7 +130,9 @@ COSMETIC = [
     (("피부장벽",), "피부장벽", "피부장벽의 기능을 회복하여 가려움 등의 개선에 도움을 줍니다"),
     (("튼살",), "튼살", "튼살로 인한 붉은 선을 엷게 하는 데 도움을 줍니다"),
 ]
-_COSMETIC_PRODUCT = re.compile(r"크림|세럼|앰플|토너|로션|에센스|샴푸|패드|마스크팩|선크림|선스틱|바르|화장품|토닉|미스트")
+_COSMETIC_PRODUCT = re.compile(
+    r"크림|세럼|앰플|토너|로션|에센스|샴푸|패드|마스크팩|선크림|선스틱|바르|화장품|토닉|미스트|비누|클렌저|클렌징|립밤|바디워시|트리트먼트|두피|롤온"
+)  # 🚨 「팩」은 넣지 않는다 — 「멸치 육수팩」
 _CLAIM_HOLD = ("인정되지 않은 기능성", "기능성 주장(도움 꼴 아님)")
 
 
@@ -168,22 +170,34 @@ NOTE_MENU = [
 ]
 
 
-def condition(body: str, note: str | None) -> tuple[str | None, str | None]:
-    """(최종 조건, 문제). 본문이 요구하는 조건을 먼저 정하고, 1단계 조건은 메뉴 안이고 요구와 어긋나지 않을 때만 쓴다."""
+_COS_NOTE = re.compile(r"기능성화장품")
+_FOOD_NOTE = re.compile(r"건강기능식품|영양성분")
+
+
+def condition(body: str, note: str | None, original: str = "") -> tuple[str | None, str | None]:
+    """(최종 조건, 문제). 본문이 요구하는 조건을 먼저 정하고, 1단계 조건은 메뉴 안이고 요구와 어긋나지 않을 때만 쓴다.
+
+    🆕 10-05 — **제품 종류와 맞는가.** 다이어트 보조제(식품)에 「해당 기능성화장품으로 심사·보고된」이 붙었다(실제 광고 1건 · 보류라
+    나가지는 않았다). 원문 · 본문에 화장품 낱말(`_COSMETIC_PRODUCT`)이 있으면 화장품 — 화장품에는 건기식 · 영양성분 조건을,
+    화장품이 아니면 기능성화장품 조건을 받지 않는다. 화장품의 「~에 도움」(일반화장품 표현)에는 건기식 조건을 붙이지 않는다."""
+    cosmetic = bool(_COSMETIC_PRODUCT.search(f"{original} {body}"))
     need = None
     for _, cat, claim in COSMETIC:
         if claim[:8] in body:
             need = f"{cat} 기능성화장품으로 심사·보고된 제품에 한함"
             break
-    if need is None and "도움" in body:
+    if need is None and "도움" in body and not cosmetic:
         need = NOTE_FOOD_FUNC if "필요합니다" not in body else NOTE_NUTRI
-    if need is None and "필요합니다" in body:
+    if need is None and "필요합니다" in body and not cosmetic:
         need = NOTE_NUTRI
     if need is None and "함유" in body:
         need = NOTE_CONTENT
     problem = None
     if note and not any(p.search(note) for p in NOTE_MENU):
         problem = f"메뉴 밖 조건: {note}"
+        note = None
+    if note and ((_COS_NOTE.search(note) and not cosmetic) or (_FOOD_NOTE.search(note) and cosmetic)):
+        problem = f"제품 종류와 어긋난 조건({'화장품' if cosmetic else '식품'}): {note}"
         note = None
     if need and note and need.split()[0] not in note and not (need == NOTE_CONTENT and "함량" in note):
         # 1단계 조건이 본문과 어긋난다(「주름」 문장에 「미백」 조건) — 본문 쪽을 따른다

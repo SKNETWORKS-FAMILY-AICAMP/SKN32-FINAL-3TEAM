@@ -118,7 +118,7 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
         repairs.append(f"공식 기능성 문구로: {fixed} → {ap[0]}")
         fixed, note_in = ap
         g1 = gate(text, fixed)  # 🚨 고친 문장도 관문을 다시 지난다
-    note, note_problem = condition(fixed, note_in) if fixed else (None, None)
+    note, note_problem = condition(fixed, note_in, text) if fixed else (None, None)
     res.update(stage1_fixed=fixed, repairs=repairs, note=note, note_problem=note_problem)
     # 🚨 관문 — 1단계가 위반을 못 지운 문장은 내보내지도, 말투로 포장하지도 않는다
     res["gate1"] = list(g1.reasons)
