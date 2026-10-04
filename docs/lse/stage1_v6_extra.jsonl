@@ -15,7 +15,7 @@
 {"id": "y015", "group": "인증순위", "input": "국가가 공인한 최고 품질의 꿀", "violation_types": ["거짓_과장"], "output": {"body": "꿀 제품", "mandatory_note": "인증 표시는 인증 기관·번호와 함께", "placement": "인증 표시 근처"}}
 {"id": "y016", "group": "인증순위", "input": "특허받은 제조법이라 몸에 더 좋은 발효 식초", "violation_types": ["소비자_기만"], "output": {"body": "특허 제조법으로 만든 발효 식초", "mandatory_note": "특허 등록번호를 함께 표시 · 효능 근거로 쓰지 않음", "placement": "특허 표시 근처"}}
 {"id": "y017", "group": "인증순위", "input": "해외 학회가 인정한 유일한 콜라겐", "violation_types": ["거짓_과장"], "output": {"body": "콜라겐 제품", "mandatory_note": null, "placement": null}}
-{"id": "y018", "group": "인증순위", "input": "소비자 만족도 1위, 효과 최강 단백질 쉐이크", "violation_types": ["거짓_과장"], "output": {"body": "단백질 쉐이크", "mandatory_note": "만족도 순위는 조사 기관·기간·대상을 함께 표시", "placement": "순위 표시 바로 아래"}}
+{"id": "y018", "group": "인증순위", "input": "소비자 만족도 1위, 효과 최강 식물성 프로틴 파우더", "violation_types": ["거짓_과장"], "output": {"body": "식물성 프로틴 파우더", "mandatory_note": "만족도 순위는 조사 기관·기간·대상을 함께 표시", "placement": "순위 표시 바로 아래"}}
 {"id": "y019", "group": "인증순위", "input": "의사 추천 1위 프리미엄 오트밀", "violation_types": ["거짓_과장", "의약품_오인"], "output": {"body": "오트밀 제품", "mandatory_note": null, "placement": null}}
 {"id": "y020", "group": "인증순위", "input": "HACCP 인증이라 무조건 안전한 반찬", "violation_types": ["거짓_과장"], "output": {"body": "HACCP 인증 시설에서 만든 반찬", "mandatory_note": "HACCP 인증 번호를 함께 표시", "placement": "인증 표시 근처"}}
 {"id": "y021", "group": "인증순위", "input": "특허 출원한 비법 소스로 만든 떡볶이", "violation_types": ["소비자_기만"], "output": {"body": "특허 출원한 소스로 만든 떡볶이", "mandatory_note": "출원번호를 함께 표시 · 등록 특허와 구분", "placement": "특허 표시 근처"}}
