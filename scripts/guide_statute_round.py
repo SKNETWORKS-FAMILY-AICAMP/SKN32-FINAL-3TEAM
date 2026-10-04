@@ -1226,6 +1226,97 @@ CBC = Round(
 )
 
 
+# ── 🆕 2026-10-04 1차 법령해석(식약처 질의회신) 판 — 판독 지시 `build/labels/interp_ad/판독_지시_*.md` · 원장 10-03 ㉚ ──
+#: 식약처 1차 해석 중 광고 표현 해석(`python -m preprocess.mfds_interp --dump` · 289 해석)의 **문구**가 단위다.
+#:    🚨 법이 둘이다(식품 · 화장품) — 근거 코드가 겹쳐 사례집 2021 처럼 **판을 둘로 가른다**. 단위의 `품목` 과 지문 머리가 판을 정한다.
+IP_SOURCE = "mfds_cgm_expc"
+IP_QA = ROOT / "data" / "derived" / "mfds_cgm_expc_ad.jsonl"
+#: 문구를 찾는 칸 — 인용표현에 없으면 이 칸들의 글에서 찾는다(공백만 다르게 · 옛 화장품 판과 같은 이유)
+IP_TEXT_FIELDS = ("안건명", "질의", "답변", "이유")
+IP_HEAD = {"식품": "if", "화장품": "ic"}
+IPF_DIR = ROOT / "data" / "derived" / "labels" / "interp_ad_food"
+IPF_READINGS = IPF_DIR / "readings.jsonl"
+IPF_ADOPTED = IPF_DIR / "adopted.jsonl"
+IPF_DECISIONS = IPF_DIR / "decisions.jsonl"
+IPF_AUDIT = IPF_DIR / "audit.jsonl"
+IPF_TEAM_SHEET = ROOT / "build" / "labels" / "interp_ad_food__팀장판정표.csv"
+IPC_DIR = ROOT / "data" / "derived" / "labels" / "interp_ad_cosmetic"
+IPC_READINGS = IPC_DIR / "readings.jsonl"
+IPC_ADOPTED = IPC_DIR / "adopted.jsonl"
+IPC_DECISIONS = IPC_DIR / "decisions.jsonl"
+IPC_AUDIT = IPC_DIR / "audit.jsonl"
+IPC_TEAM_SHEET = ROOT / "build" / "labels" / "interp_ad_cosmetic__팀장판정표.csv"
+
+
+def ip_units(units: list[dict], item: str) -> dict[str, dict]:
+    """1차 해석 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 문항이 파생물에 있고 품목이 같고, 문구가 그 해석의
+    `인용표현` 에 있거나 해석 글에 공백만 다르게 있어야 한다.
+
+    🔴 품목이 이 판의 것이 아닌 단위 · 지문 머리가 품목과 어긋난 단위가 오면 멈춘다 — 다른 법의 코드로 읽게 된다 (D-220).
+    """
+    if not IP_QA.exists():
+        raise SystemExit(
+            f"🔴 {IP_QA} 가 없다 — 먼저: uv run python -m preprocess.mfds_interp --dump"
+        )
+    qa = {}
+    for x in IP_QA.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            r = json.loads(x)
+            qa[str(r["id"])] = r
+    key_re = re.compile(rf"^{IP_HEAD[item]}:[a-z2-7]{{12}}$")
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(key_re, k, src, bad):
+            continue
+        q = qa.get(str(u["문항"]))
+        if q is None:
+            bad.append(f"{k} 파생물에 없는 해석 {u['문항']!r}")
+            continue
+        if u.get("품목") != item or q.get("품목") != item:
+            bad.append(f"{k} 품목 {u.get('품목')!r} · 원천 {q.get('품목')!r} — 이 판은 {item} 다")
+            continue
+        body = _WS.sub("", " ".join(str(q.get(f) or "") for f in IP_TEXT_FIELDS))
+        if u["문구"] not in (q.get("인용표현") or []) and _WS.sub("", u["문구"]) not in body:
+            bad.append(f"{k} {u['문항']} 원천에 없는 문구 {u['문구'][:30]!r}")
+            continue
+        src[k] = {
+            "지문": k,
+            "품목": item,
+            "문항": str(u["문항"]),
+            "자리": u["자리"],
+            "문구": u["문구"],
+            "원천": IP_SOURCE,
+        }
+    _units_fail(f"1차 해석({item})", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.ip_units")
+    return src
+
+
+_IP_HEAD = ("품목", "문항", "자리")
+IPF = Round(
+    prefix="IPF",
+    cmd="ipf",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=_IP_HEAD,
+    sheet_head=("문항",),
+    units=lambda us: ip_units(us, "식품"),
+)
+IPC = Round(
+    prefix="IPC",
+    cmd="ipc",
+    cite_of=cq_cite_of,
+    exceptions=CQ_EXCEPTIONS,
+    mok_ho=CQ_MOK_HO,
+    head=_IP_HEAD,
+    sheet_head=("문항",),
+    units=lambda us: ip_units(us, "화장품"),
+)
+
+
 # ── 🆕 2026-10-04 판별 매뉴얼(2015) 판 — 지시서 `라벨링_지시서_2026-10-03_판별매뉴얼_조문·조건.md` ──
 #: 식약처 「허위·과대광고 판별 매뉴얼」의 위반 사례 문구를 자른 **조각**(`preprocess.mfds_ad_manual.pieces`)이 단위다.
 #:    🔴 원천 레코드는 `python -m preprocess.mfds_ad_manual --dump` 가 낸다(사람 가림 + 마스킹 정책 · 2인 확인 2026-10-04).
@@ -2247,6 +2338,8 @@ ROUNDS = {
     "cbf": (CBF, "사례집 2021 · 식품"),
     "cbc": (CBC, "사례집 2021 · 화장품"),
     "mn": (MN, "판별 매뉴얼 2015"),
+    "ipf": (IPF, "1차 법령해석 · 식품"),
+    "ipc": (IPC, "1차 법령해석 · 화장품"),
     "fp": (FP, "공정위 보도자료 1997~2007"),
     "gf": (GF, "해설서 수정문구"),
     "fs": (FS, "결정문 봉인 문구"),
