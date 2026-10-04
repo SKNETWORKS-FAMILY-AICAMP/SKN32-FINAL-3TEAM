@@ -75,6 +75,13 @@ def fact_numbers(s: str) -> set[str]:
     return out
 
 
+#: 🆕 10-05 — 기능성화장품 공식 표시 문구 전부(`postfix.COSMETIC` 과 같은 7개) — 이 꼴만 「인정된 화장품 기능성」으로 본다
+OFFICIAL_COSMETIC = (
+    "피부의 미백에 도움", "피부의 주름 개선에 도움", "자외선으로부터 피부를 보호하는 데 도움", "탈모 증상의 완화에 도움",
+    "여드름성 피부를 완화하는 데 도움", "피부장벽의 기능을 회복하여 가려움 등의 개선에 도움", "튼살로 인한 붉은 선을 엷게 하는 데 도움",
+)
+#: 원문에 이것이 있으면 공식 화장품 문구라도 예외를 두지 않는다 — 의약품 표방에서 나온 문구다
+_DRUG_ORIGIN = re.compile(r"치료|약|발모|육모|처방|완치|재생|호르몬")
 #: 기능성화장품 공식 표시 문구(화장품법 시행규칙 [별표 3] 범주) — 「탈모 증상의 완화」 · 「여드름성 피부」는 질병어 검사에서 뺀다
 COSMETIC_CLAIMS = (
     "탈모 증상의 완화에 도움", "여드름성 피부를 완화하는 데 도움", "피부장벽의 기능을 회복하여 가려움 등의 개선에 도움",
@@ -121,7 +128,11 @@ def unapproved_claim(s: str) -> str | None:
             continue
         phrase = re.sub(r"^.*?(?:은|는|이|가)\s+", "", m.group(1)).strip(" ,·")
         if any(k in chunk for k in ("미백", "주름", "자외선", "탈모", "여드름", "피부장벽", "튼살")):
-            continue  # 기능성화장품 범주 — 식품 고시에 없다
+            # 기능성화장품 범주 — 식품 고시에 없다. 🔄 10-05 — **공식 문구일 때만** 건너뛴다.
+            #    「피부의 여드름 개선에 도움」(공식은 「여드름성 피부를 완화하는 데 도움」)이 치료를 표방한 실제 광고에서 나와 통과했다(정답표 v2)
+            if any(dm.norm(c) in dm.norm(chunk) for c in OFFICIAL_COSMETIC):
+                continue
+            return phrase
         # 「중성지질 개선, 혈행 개선」 · 「유익균 증식 및 배변활동 원활」 — 기능마다 대조한다
         for seg in re.split(r"[,、]|\s및\s|및(?=[가-힣])", phrase):
             core = dm.norm(re.sub(r"(의|을|를)$", "", seg.strip()))[-8:]
@@ -157,7 +168,8 @@ _ING_NAME = re.compile(r"([가-힣A-Za-z0-9·\-]{2,30}?(?:추출물|추출분말
 #: 원료명 앞에서 떼어도 되는 말 — 과장 · 품질 수식어(원산지 · 품종은 사실이라 여기 넣지 않는다)
 _ING_MODIFIER = {"귀한", "듬뿍", "고함량", "고농축", "프리미엄", "최고급", "고급", "천연", "순수", "특급", "명품", "정품", "기적의",  # redistribution: ok — 일반 수식어
                  "특별한", "엄선한", "엄선된", "신비의", "황금", "슈퍼", "진짜", "100%", "고품질", "최상급", "희귀한", "비법",  # redistribution: ok — 일반 수식어
-                 "보톡스", "바르는", "먹는", "마시는"}
+                 "보톡스", "바르는", "먹는", "마시는",
+                 "성분", "원료", "주성분", "유효성분", "고시"}  # 🔄 10-05 — 「○○ 성분 △△」의 「성분」은 원료명이 아니다(정답표 v2)
 _ING_PARTICLE = re.compile(r"(?:을|를|은|는|의|에|로|으로|와|과|도|만|이며|이고|하고|에서|요|다|죠|니다)$|[!?.,~]$|\d")
 
 
@@ -250,8 +262,10 @@ def check(original: str, stage1: str | None) -> GateResult:
     why: list[str] = []
     s_claim = s  # 기능성화장품 공식 문구를 뺀 문장 — 질병어 · 사전 검사용
     # 🚨 원문이 기능성(심사 · 보고)을 말할 때만 뺀다 — 「탈모약 대신 바르는 토닉」에 공식 문구를 지어 붙인 것(v8 · 살리기 평가 #38)은 막는다
-    if "기능성" in original:
-        for c in COSMETIC_CLAIMS:
+    # 🔄 10-05 — 또는 원문이 **같은 기능 개념**을 말하고 의약품 표현이 없을 때(탈모 기능만 말한 실제 광고 → 공식 문구 · 정답표 v2)
+    for c in COSMETIC_CLAIMS:
+        concept = c.split()[0].replace("여드름성", "여드름").replace("피부장벽의", "피부장벽")
+        if "기능성" in original or (concept in original and not _DRUG_ORIGIN.search(original)):
             s_claim = s_claim.replace(c, " ")
     hits = dm.find(s_claim, dict_entries())
     if hits:

@@ -24,7 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
 
-from stage_gate import _ING_NAME, INGREDIENT, ingredient_truncated  # noqa: E402
+from stage_gate import _ING_NAME, DISEASE, DRUG, INGREDIENT, ingredient_truncated  # noqa: E402
 
 from app import dictmatch as dm  # noqa: E402
 
@@ -130,6 +130,13 @@ COSMETIC = [
     (("피부장벽",), "피부장벽", "피부장벽의 기능을 회복하여 가려움 등의 개선에 도움을 줍니다"),
     (("튼살",), "튼살", "튼살로 인한 붉은 선을 엷게 하는 데 도움을 줍니다"),
 ]
+def _kw(k: str, text: str) -> bool:
+    """낱말 찾기 — 공백을 단 키워드(「간 」)는 앞이 한글이 아닐 때만(「인간」 · 「시간」에 걸리지 않게). 「뼈」 · 「눈」은 그대로 찾는다."""
+    if k.endswith(" "):
+        return re.search(rf"(?<![가-힣]){re.escape(k.strip())}(?:\s|건강|수치|해독|기능)", text) is not None
+    return k in text
+
+
 _COSMETIC_PRODUCT = re.compile(
     r"크림|세럼|앰플|토너|로션|에센스|샴푸|패드|마스크팩|선크림|선스틱|바르|화장품|토닉|미스트|비누|클렌저|클렌징|립밤|바디워시|트리트먼트|두피|롤온"
 )  # 🚨 「팩」은 넣지 않는다 — 「멸치 육수팩」
@@ -140,6 +147,10 @@ def to_approved_claim(original: str, s: str, labels: list[str]) -> tuple[str, st
     """(공식 문구, 조건) 또는 None. 원문과 고친 문장에서 낱말을 찾아 **하나의 기능**으로 모일 때만 고른다."""
     if "건강기능식품_오인" in labels:
         return None
+    # 🔄 10-05 — 원문이 질병 · 의약품을 표방하면 바꾸지 않는다(정답표 기준 불가). 호르몬 작용을 주장한 실제 광고가
+    #    「간 건강에 도움」이 됐다(정답표 v2 · 위반 포장) — 「간」 낱말이 「인간」에 걸렸고, 호르몬 주장은 고칠 대상이 아니다
+    if {"질병_예방치료_표방", "의약품_오인"} & set(labels) or DISEASE.search(original) or DRUG.search(original)             or re.search(r"호르몬|치료|완치|처방", original):
+        return None
     text = f"{original} {s}"
     if _COSMETIC_PRODUCT.search(original):
         hits = {(cat, claim) for kws, cat, claim in COSMETIC if any(k in text for k in kws)}
@@ -147,7 +158,7 @@ def to_approved_claim(original: str, s: str, labels: list[str]) -> tuple[str, st
             cat, claim = next(iter(hits))
             return claim, f"{cat} 기능성화장품으로 심사·보고된 제품에 한함"
         return None
-    hits = {claim for kws, claim in CLAIMS if any(k in text for k in kws)}
+    hits = {claim for kws, claim in CLAIMS if any(_kw(k, text) for k in kws)}
     if len(hits) == 1:
         return next(iter(hits)), NOTE_FOOD_FUNC
     return None
