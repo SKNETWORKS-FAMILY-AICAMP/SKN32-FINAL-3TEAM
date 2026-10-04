@@ -244,6 +244,43 @@ FRAGMENTS: list[tuple[str, str, str, str]] = [
     ),
     # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 이 인용한 광고 문구. 광고주 저작물 조각이라 G2
     ("ftc_press:golden", "ftc_press", "보도자료 인용 광고 문구 (독립 판독)", "G2"),
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판독 판. 인용 광고 문구라 앞의 판들과 같은 판정(G2)
+    (
+        "mfds_daegu_ad_cases_2013:golden",
+        "mfds_daegu_ad_cases_2013",
+        "대구청 사례 확정 문구 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_ad_judge_manual_2015:golden",
+        "mfds_ad_judge_manual_2015",
+        "판별 매뉴얼 사례 문구 조각 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_cgm_expc:golden",
+        "mfds_cgm_expc",
+        "1차 법령해석 인용 표현 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_casebook_2021:golden",
+        "mfds_casebook_2021",
+        "사례집 2021 광고 화면 문구 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_cosmetic_ad_qa_2012:golden",
+        "mfds_cosmetic_ad_qa_2012",
+        "화장품 질의응답 2012 인용 표현 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_cosmetic_faq_2020:golden",
+        "mfds_cosmetic_faq_2020",
+        "화장품 FAQ 2020 인용 표현 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
     # 🔄 2026-09-30 (판정 J1) — 섭취 주의사항(인정 조건문)도 이 조각이다 · 이름만 넓혔다(등급 그대로)
     (
         "mfds_hf_ingredient_board:approved",
