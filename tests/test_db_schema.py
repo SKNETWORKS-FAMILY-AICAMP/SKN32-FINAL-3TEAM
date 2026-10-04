@@ -639,3 +639,61 @@ def test_마이그레이션_SQL_은_alembic_이_부른다() -> None:
     )
     orphan = [f.name for f in sorted(MIG_DIR.glob("*.sql")) if f.name not in versions]
     assert not orphan, f"🔴 alembic 판이 부르지 않는 마이그레이션 SQL: {orphan}"
+
+
+@pytest.mark.gate
+def test_골든_조건_값이_세_곳에서_같다() -> None:
+    """🔴 `golden_sample.cond` 의 CHECK · 적재 코드 · 판독 판의 조건 목록 · 실제 골든이 같은 값을 쓴다 (0024 · D-317 · D-99).
+
+    ⛔ 한 곳에만 값을 더하면 적재가 그 행에서 막히거나(스키마가 좁다) 스키마만 넓어진 채 아무도 안 쓴다.
+    """
+    import json
+
+    from scripts import derived_manifest as dm
+    from scripts import guide_statute_round as gsr
+    from scripts import load_db
+
+    m = re.search(r"CHECK \(cond IN \(([^)]*)\)\)", SCHEMA.read_text(encoding="utf-8"))
+    assert m, "🚨 `schema.sql` 에서 cond 의 CHECK 를 못 찾았다 — 검사를 고친다"
+    schema = set(re.findall(r"'([^']+)'", m.group(1)))
+    assert (
+        schema == set(load_db.GOLDEN_CONDS) == set(gsr.CAUTION_CONDITIONS) == {*gsr.CONDITIONS, "L"}
+    )
+    mig = (MIG_DIR / "0024_golden_cond.sql").read_text(encoding="utf-8")
+    assert (
+        set(re.findall(r"'([^']+)'", re.search(r"CHECK \(cond IN \(([^)]*)\)\)", mig).group(1)))
+        == schema
+    )
+    golden = ROOT / "data" / "derived" / "golden" / "golden.jsonl"
+    dm.gate_guard(golden)
+    used = {
+        json.loads(x).get("조건")
+        for x in golden.read_text(encoding="utf-8").splitlines()
+        if x.strip()
+    } - {None}
+    assert used <= schema, f"🚨 골든에 스키마에 없는 조건이 있다 — {sorted(used - schema)}"
+
+
+@pytest.mark.gate
+def test_골든을_DB_에서_직접_읽는_질의는_조건을_본다() -> None:
+    """🔴 `golden_sample` 을 조건 없이 읽으면 M · D 가 적법으로, 근거 붙은 M 이 위반으로 읽힌다 (0024 · D-317 · D-192).
+
+    ★ 행 수 세기 · 열쇠만 읽기 · 지우기는 뜻을 읽지 않으므로 둔다. 그 밖의 질의는 `cond` 를 쓰거나 뷰(`v_golden_*`)를 지난다.
+    """
+    bad: list[str] = []
+    for d in ("app", "scripts", "preprocess", "collect"):
+        for p in sorted((ROOT / d).rglob("*.py")):
+            for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+                if line.lstrip().startswith("#") or not re.search(
+                    r"\bFROM\s+golden_sample\b", line
+                ):
+                    continue
+                if re.search(
+                    r"count\(\*\) FROM golden_sample\"|SELECT sample_id FROM|DELETE FROM|\bcond\b",
+                    line,
+                ):
+                    continue
+                bad.append(f"{p.relative_to(ROOT).as_posix()}:{i}")
+    assert not bad, (
+        f"🔴 조건을 안 보고 골든을 읽는 질의 — {bad}. `v_golden_scored` · `v_golden_legal` 을 지나거나 `cond` 를 쓴다"
+    )
