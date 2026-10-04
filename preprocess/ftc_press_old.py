@@ -165,16 +165,54 @@ def extract() -> list[dict]:
 MASK_FIELDS = ("제목", "본문")
 
 
-def masked(rows: list[dict]) -> tuple[list[dict], collections.Counter, list[dict]]:
-    from preprocess.mask import apply_policy  # noqa: PLC0415
+#: 🆕 2026-10-04 — **법인격 약칭이 뒤에 붙은 상호**(「○○맥주(주)의 부당한 광고행위」). 보도자료는 이 꼴로 피심인을 적는다.
+#:    `mask.doc_org_names` 는 앞붙이(「(주)○○」)와 풀어 쓴 뒷붙이(「○○ 주식회사」)만 캔다 — 「A는 (주)B」에서 A 를
+#:    상호로 잡지 않으려는 것이다. 그래서 여기서는 **붙여 쓴 약칭 뒤에 조사·구두점이 오는 자리만** 받는다.
+#:    ⛔ 이것이 없으면 「○○(주)」는 자리 치환으로 지워지는데 같은 문서의 맨몸 「○○는 …」은 남는다
+#:       (실측 2026-10-04 · 원장 10-03 ㊸ — 정책 초안을 걸었을 때 문구 119 중 19 에 상호가 남았다).
+#:    🔗 공통화하지 못한 까닭 — `mask.py` 를 넓히면 결정문(`ftc`) 파생물이 바뀐다(재측정 전). 넓힐 때는 그쪽으로 옮긴다 (D-99).
+_ABBR_AFTER = re.compile(
+    r"([가-힣A-Za-z0-9]{3,12})(?:㈜|\(주\)|（주）)"
+    r"(?=(?:에게|에서|[의은는이가을를에와과도])?(?:[\s,.·)」』]|$))"
+)
 
+
+def doc_names(body: str) -> list[str]:
+    """이 보도자료가 법인격 표기와 함께 적은 상호들 — 긴 것부터(같은 길이는 글자 순 · D-176)."""
+    from preprocess.mask import doc_org_names  # noqa: PLC0415
+
+    names = set(doc_org_names(body)) | set(_ABBR_AFTER.findall(body))
+    return sorted(names, key=lambda n: (-len(n), n))
+
+
+def _mask_text(text: str, names: list[str], log: list[dict] | None = None) -> str:
+    """정책대로 지운 뒤, 이 문서가 밝힌 상호의 **맨몸 언급**까지 지운다."""
+    from preprocess.mask import MASK_ORG, apply_policy, mask_org_bare  # noqa: PLC0415
+
+    text = mask_org_bare(apply_policy(text, "", SOURCE_ID, log), names, log)[0]
+    for n in (
+        names
+    ):  # 줄넘김으로 갈린 이름(「○○ ○사는」) — 옛 보도자료의 괘선 칸은 낱말 안에서 줄이 바뀐다
+        text = _spaced(n).sub(MASK_ORG, text)
+    return text
+
+
+def _spaced(name: str) -> re.Pattern:
+    """글자 사이의 공백을 허용한 이름 꼴 — 지울 때와 남았는지 볼 때 같은 꼴을 쓴다."""
+    return re.compile(r"\s*".join(re.escape(c) for c in name))
+
+
+def masked(rows: list[dict]) -> tuple[list[dict], collections.Counter, list[dict]]:
     log: list[dict] = []
     changed: collections.Counter = collections.Counter()
     out = []
     for r in rows:
         rec = dict(r)
+        names = doc_names(
+            rec["본문"]
+        )  # 🚨 제목도 본문의 이름으로 지운다 — 제목에만 맨몸으로 나올 수 있다
         for f in MASK_FIELDS:
-            m = apply_policy(rec[f], "", SOURCE_ID, log)
+            m = _mask_text(rec[f], names, log)
             changed[f] += m != rec[f]
             rec[f] = m
         out.append(rec)
@@ -183,6 +221,8 @@ def masked(rows: list[dict]) -> tuple[list[dict], collections.Counter, list[dict
 
 #: 🆕 마스킹된 문구 단위 — `guide_statute_round fp-merge --units` 가 읽는다
 OUT_UNITS = pathlib.Path("data/derived/ftc_press_old_units.jsonl")
+#: 문구 단위에서 문구 말고 **원문의 글이 든 칸** — 마스킹을 같이 건다(🚨 칸을 더하면 여기에도 더한다)
+UNIT_TEXT_FIELDS = ("원천판단",)
 #: 문구 자리 표시 — 마스킹을 **본문 안에서** 건 뒤 이 사이를 꺼낸다(사용자 영역 글자 · 원문에 나오지 않는다)
 _OPEN, _CLOSE = "\ue000", "\ue001"
 _WS = re.compile(r"\s+")
@@ -196,8 +236,6 @@ def mask_units(rows: list[dict], units: list[dict]) -> tuple[list[dict], list[st
        ★ 그래서 원문 본문에서 문구 자리를 찾아 표시를 끼우고 **본문 전체를 마스킹한 뒤** 표시 사이를 꺼낸다.
     🔴 원문에서 못 찾은 문구 · 표시가 깨진 문구는 돌려주지 않고 `bad` 로 모은다 — 부르는 쪽이 멈춘다 (D-220).
     """
-    from preprocess.mask import apply_policy  # noqa: PLC0415
-
     by = {r["사건"]: r for r in rows}
     out, bad = [], []
     for u in units:
@@ -209,12 +247,29 @@ def mask_units(rows: list[dict], units: list[dict]) -> tuple[list[dict], list[st
             continue
         body = r["본문"]
         marked = body[: m.start()] + _OPEN + body[m.start() : m.end()] + _CLOSE + body[m.end() :]
-        got = apply_policy(marked, "", SOURCE_ID, [])
+        names = doc_names(body)
+        got = _mask_text(marked, names)
         seg = re.search(re.escape(_OPEN) + "(.*?)" + re.escape(_CLOSE), got, re.S)
         if not seg:
             bad.append(f"{u['지문']} 마스킹이 문구 경계를 먹었다 {u['문구'][:30]!r}")
             continue
-        out.append({**u, "문구": re.sub(r"\s+", " ", seg.group(1)).strip(), "마스킹": True})
+        rec = {**u, "문구": re.sub(r"\s+", " ", seg.group(1)).strip(), "마스킹": True}
+        # 🆕 2026-10-04 — **문구 말고 글이 든 칸도 같은 이름으로 지운다**. 종전에는 `{**u}` 로 그대로 실려
+        #    `원천판단`(본문에서 옮긴 판단 문장)의 상호가 파생물에 남았다(실측 10 / 119 · 원장 10-03 ㊸).
+        for f in UNIT_TEXT_FIELDS:
+            if isinstance(rec.get(f), str):
+                rec[f] = _mask_text(rec[f], names)
+        left = [
+            n
+            for n in names
+            if any(_spaced(n).search(str(rec.get(f, ""))) for f in ("문구", *UNIT_TEXT_FIELDS))
+        ]
+        if left:  # 🔴 지운 뒤에도 남으면 쓰지 않는다 (D-220) — 이름은 내지 않고 수만 낸다
+            bad.append(
+                f"{u['지문']} 사건 {u['사건']} 마스킹 뒤에도 문서가 밝힌 상호가 {len(left)}개 남았다"
+            )
+            continue
+        out.append(rec)
     return out, bad
 
 

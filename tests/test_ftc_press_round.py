@@ -120,6 +120,58 @@ def test_문구는_본문_안에서_마스킹된다(monkeypatch) -> None:
 
 
 @pytest.mark.gate
+def test_뒷붙이_약칭으로_적은_상호의_맨몸_언급도_지운다(monkeypatch) -> None:
+    """🔴 「○○(주)의 부당한 광고행위」 꼴 — 자리 치환은 「○○(주)」만 지우고 문구 속 맨몸 「○○는」을 남겼다.
+
+    실측 2026-10-04(원장 10-03 ㊸) — 정책 초안을 걸었을 때 문구 119 중 19 에 문서가 밝힌 상호가 남았다.
+    """
+    monkeypatch.setitem(mask.POLICY, "ftc_press", mask.POLICY["ftc"])
+    body = "가나다맥주(주)의 부당한 광고행위에 대한 시정명령\n가나다맥주는 100% 국내자본기업\n이라고 광고"
+    phrase = "가나다맥주는 100% 국내자본기업"
+    assert "가나다맥주" in mask.apply_policy(body, "", "ftc_press", [])  # 정책만으로는 남는다
+    got, bad = ftc_press_old.mask_units(
+        [{"사건": "9", "본문": body}], [{"지문": "fp:x", "사건": "9", "문구": phrase}]
+    )
+    assert not bad and got[0]["문구"] == "[업체]는 100% 국내자본기업"
+    assert (
+        "가나다맥주"
+        not in ftc_press_old.masked([{"사건": "9", "제목": "가나다맥주 건", "본문": body}])[0][0][
+            "제목"
+        ]
+    )
+
+
+@pytest.mark.gate
+def test_원천판단_칸과_줄넘김으로_갈린_이름도_지운다(monkeypatch) -> None:
+    """🔴 문구 말고 글이 든 칸(`원천판단`)이 그대로 파생물에 실렸다(실측 10 / 119) · 괘선 칸은 낱말 안에서 줄이 바뀐다."""
+    monkeypatch.setitem(mask.POLICY, "ftc_press", mask.POLICY["ftc"])
+    body = "한국라마바(주)에 대해 비방한 광고\n이 성분을 써 온 라마 바사는 물의를 빚자\n라는 문구 · 라마바(주)가 받은 상"
+    got, bad = ftc_press_old.mask_units(
+        [{"사건": "9", "본문": body}],
+        [
+            {
+                "지문": "fp:x",
+                "사건": "9",
+                "문구": "이 성분을 써 온 라마 바사는 물의를 빚자",
+                "원천판단": "라마바사를 비방한 광고",
+            }
+        ],
+    )
+    assert not bad
+    assert "라마" not in got[0]["문구"] and "라마바" not in got[0]["원천판단"]
+
+
+@pytest.mark.gate
+def test_앞말은_상호로_잡지_않는다() -> None:
+    """「공정위는 (주)○○」 · 「피심인과 (주)○○」의 앞말을 상호로 읽으면 본문의 그 낱말이 전부 지워진다."""
+    names = ftc_press_old.doc_names(
+        "공정거래위원회는 (주)가나다와 경쟁사업자인 (주)라마바산업에 대해"
+    )
+    assert "공정거래위원회는" not in names and "경쟁사업자인" not in names
+    assert "라마바산업" in names
+
+
+@pytest.mark.gate
 def test_마스킹_정책이_없으면_멈춘다() -> None:
     assert "ftc_press" not in mask.POLICY or pytest.skip(
         "정책이 등재됐다 — 이 게이트는 등재 전 판을 지킨다"
