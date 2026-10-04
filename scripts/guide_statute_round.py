@@ -1024,6 +1024,100 @@ FP = Round(
 )
 
 
+# ── 🆕 2026-10-04 옛 화장품 질의응답(2012 · FAQ 2020) 판 — 판정 묶음 ① (`판정기록_2026-10-04_판독판_판정묶음.md`) ──
+#: 지시서는 화장품 2025 판과 같다(`라벨링_지시서_2026-09-25_질의응답집_화장품_조문·조건.md`) — 근거 코드 · 제외목 · 별표5목 표도 같다.
+#:    다른 것은 원천 둘 · 문항 표기 · 원천 대조뿐이다(판독자가 부호 없이 뽑은 문구가 있다 — 원장 10-03 ㉒).
+#:    🚨 2012 판은 2010 화장품법 기준이다 — 원천의 조문 번호를 지금 번호로 읽지 않는다(추출기 머리말). 판독은 현행 조문으로 붙였다.
+CO_QA = {
+    "mfds_cosmetic_ad_qa_2012": ROOT / "data" / "derived" / "mfds_cosmetic_ad_qa_2012.jsonl",
+    "mfds_cosmetic_faq_2020": ROOT / "data" / "derived" / "mfds_cosmetic_faq_2020.jsonl",
+}
+CO_DIR = ROOT / "data" / "derived" / "labels" / "cosmetic_qa_old"
+CO_READINGS = CO_DIR / "readings.jsonl"
+CO_ADOPTED = CO_DIR / "adopted.jsonl"
+CO_DECISIONS = CO_DIR / "decisions.jsonl"
+CO_AUDIT = CO_DIR / "audit.jsonl"
+CO_TEAM_SHEET = ROOT / "build" / "labels" / "cosmetic_qa_old__팀장판정표.csv"
+#: 지문 머리 — `ca:` 2012 판 · `cf:` FAQ 2020. 🚨 지문은 판독 때 만든 것을 그대로 쓴다(다시 계산하지 않는다 — 화장품 2025 판과 같은 이유)
+CO_KEY_RE = re.compile(r"^c[af]:[a-z2-7]{12}$")
+CO_KEY_SOURCE = {"ca": "mfds_cosmetic_ad_qa_2012", "cf": "mfds_cosmetic_faq_2020"}
+#: 문구를 찾는 칸 — 인용표현에 없으면 이 칸들의 글에서 찾는다(공백만 다르게)
+CO_TEXT_FIELDS = ("제목", "소제목", "질의", "답변")
+
+
+def co_question(source: str, rec: dict) -> str | None:
+    """원천 레코드 → 단위 표의 문항 표기. 2012 판 「장 번호-문항」(화장품 편만) · FAQ 2020 「Q번호」. 범위 밖이면 None."""
+    if source == "mfds_cosmetic_faq_2020":
+        return f"Q{int(rec['문항'])}"
+    if rec.get("편") != "화장품":
+        return None  # 의약외품 편은 이 판의 범위 밖이다 (D-192)
+    m = re.match(r"(\d+)\.", str(rec.get("장") or ""))
+    return f"{m.group(1)}-{int(rec['문항'])}" if m else None
+
+
+def co_units(units: list[dict]) -> dict[str, dict]:
+    """옛 화장품 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 문구가 그 문항의 `인용표현` 에 있거나 문항 글에 공백만 다르게 있어야 한다.
+
+    ★ 문항 글에서도 찾는 까닭 — 이 원천은 인용부호 없이 적은 광고 표현이 많아 판독자가 문구를 직접 뽑았다(325 중 144 · 원장 10-03 ㊿-6).
+    🔴 지문 머리와 `원천` 이 어긋나면 멈춘다 — 두 원천의 문항 표기가 달라 섞이면 다른 문항에 붙는다 (D-220).
+    """
+    qa: dict[tuple[str, str], dict] = {}
+    for source, path in CO_QA.items():
+        if not path.exists():
+            raise SystemExit(
+                f"🔴 {path} 가 없다 — 먼저: uv run python -m preprocess."
+                f"{'mfds_cosmetic_qa_2012' if source.endswith('2012') else 'mfds_cosmetic_faq_2020'} --dump"
+            )
+        for x in path.read_text(encoding="utf-8").splitlines():
+            if x.strip():
+                r = json.loads(x)
+                q = co_question(source, r)
+                if q is not None:
+                    qa[(source, q)] = r
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(CO_KEY_RE, k, src, bad):
+            continue
+        # 원천은 **지문 머리**가 정한다 — 판독 원자료(`readings.jsonl`)는 `원천` 칸을 싣지 않는다(`rebuild` 가 그것만 읽는다).
+        #    단위 표가 `원천` 을 적어 왔으면 머리와 같은지 본다
+        source = CO_KEY_SOURCE[k[:2]]
+        if u.get("원천") not in (None, source):
+            bad.append(f"{k} 지문 머리와 원천이 어긋난다 {u.get('원천')!r}")
+            continue
+        q = qa.get((source, str(u["문항"])))
+        if q is None:
+            bad.append(f"{k} {source} 에 없는 문항 {u['문항']!r}")
+            continue
+        body = _WS.sub("", " ".join(str(q.get(f) or "") for f in CO_TEXT_FIELDS))
+        if u["문구"] not in (q.get("인용표현") or []) and _WS.sub("", u["문구"]) not in body:
+            bad.append(f"{k} {u['문항']} 원천에 없는 문구 {u['문구'][:30]!r}")
+            continue
+        src[k] = {
+            "지문": k,
+            "문항": str(u["문항"]),
+            "자리": u["자리"],
+            "문구": u["문구"],
+            "원천": source,
+        }
+    _units_fail("옛 화장품 질의응답", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.co_units")
+    return src
+
+
+CO = Round(
+    prefix="CO",
+    cmd="co",
+    cite_of=cq_cite_of,
+    exceptions=CQ_EXCEPTIONS,
+    mok_ho=CQ_MOK_HO,
+    head=("문항", "자리"),
+    sheet_head=("문항",),
+    units=lambda us: co_units(us),
+)
+
+
 # ── 🆕 2026-09-30 (판정 J1 (b)) 해설서 **수정문구** 판 — 지시서 `라벨링_지시서_2026-09-30_해설서_수정문구_조문·조건.md` ──
 #: 해설서 「표시(안) → 수정」 표의 오른쪽 칸(`preprocess/mfds_guide.py` 의 `수정쌍`). 🚨 위반문구 1,834 와 **다른 행**이다 —
 #:    원래 문구(왼쪽 칸)는 위반문구 표에 없다(0/245 · 작업공간 실측). 이 판은 **수정문구**만 읽는다
@@ -1979,6 +2073,7 @@ def gf_rebuild() -> dict:
 
 ROUNDS = {
     "cq": (CQ, "화장품"),
+    "co": (CO, "화장품 질의응답 2012 · 2020"),
     "fp": (FP, "공정위 보도자료 1997~2007"),
     "gf": (GF, "해설서 수정문구"),
     "fs": (FS, "결정문 봉인 문구"),

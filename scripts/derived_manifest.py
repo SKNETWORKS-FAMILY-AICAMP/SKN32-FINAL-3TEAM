@@ -110,6 +110,12 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
         "labels/ftc_press_old/adopted.jsonl",
         "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round fp-rebuild`",
     ),
+    # 🆕 2026-10-04 (판정 묶음 ①) — 옛 화장품 질의응답(2012 · 2020) 판
+    (
+        "생성물",
+        "labels/cosmetic_qa_old/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round co-rebuild`",
+    ),
     # 🆕 2026-09-30 (판정 J1 (b) · J2) — 해설서 수정문구 · 결정문 봉인 문구 판
     (
         "생성물",
