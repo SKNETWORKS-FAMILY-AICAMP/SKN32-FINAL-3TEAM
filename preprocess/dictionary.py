@@ -100,6 +100,23 @@ def approved_terms(train: set[str]) -> list[str]:
     return [q for d in approved_docs() if d["doc_id"] in train for q in d["문구"]]
 
 
+def caution_terms(train: set[str]) -> list[str]:
+    """정본 축 **섭취 주의사항** — 주장이 아닌 문장. 🆕 2026-10-02 (D-311 · D-156 확장).
+
+    ★ 왜 — 단독판정 심사(`단독판정`)가 승인 문장 하나와만 대조했다. 그래서 규제기관이 쓴 주의사항
+      (「고혈압 치료제 등 복용 시 전문가와 상담할 것」 · 「당뇨병의 치료 및 예방에 사용될 수 없음」)에 든
+      질병 · 약 이름이 단독으로 위반을 확정했다(원장 10-02 ⑤ — 학습 D 반반 교차 50 → 5 · 골든 밖 관측 축 18/274 → 2).
+    🔴 **`train` 만 본다** — `approved_terms` 와 같은 이유다(09-10 사고 · `tests/test_dictionary_leak.py`).
+       지금은 주의사항이 전량 train 이지만, 분할이 바뀌는 날 봉인 문장이 사전 설계를 고르지 않게 인자로 받는다.
+    🔴 **정본 축만** — `split.caution_docs()`(I-0050 개별인정 · 게시판)를 그대로 쓴다 (D-99 · D-185).
+       ⛔ I-0040 업체 신고(`hf_display_claims.jsonl` · 관측 축)는 재료가 아니다 — 표시 문구가 섞인 관측값이고
+          봉인 승인 문장을 품은 문단이 85 개였다(원장 10-02 ⑤). 그쪽은 **시험**에만 쓴다.
+    """
+    from preprocess.split import caution_docs  # noqa: PLC0415 — 모듈 최상단이면 순환 import
+
+    return [q for d in caution_docs() if d["doc_id"] in train for q in d["문구"]]
+
+
 def assign_map() -> dict[str, str]:
     """`doc_id` → `train`/`test_sentence`. 🔴 없으면 멈춘다 — 조용히 전량으로 가지 않는다."""
     if not SPLIT.exists():
@@ -133,6 +150,20 @@ def _add(entries: dict, n: str, raw: str, basis: list[str], src: str) -> None:
             e["유형"].add(t)
             e["짝"].add((t, c))
     e["출처"].add(src)
+
+
+def confidence(overlap: list[str], types: list[str], nonclaim: list[str]) -> str:
+    """항목 하나의 `신뢰도` — **단독판정은 `단일` 뿐이다**. 🆕 2026-10-02 (D-311).
+
+    🔴 값은 하나다 — 적법중첩(지위에 따라 적법 · D-156) > 모호(여러 유형 · D-155) > 비주장문맥(주장 아닌 자리에 쓰인다) > 단일.
+    ⛔ 비주장문맥을 「적법중첩」 이름에 담지 않는다 — 박수진 시제품 1단계가 적법중첩을 `overlap`(품목 전제 분기)으로 읽어
+       식품 전제에서 위반으로 돌린다(원장 10-02 ⑤). 주의사항의 질병 이름은 지위 문제가 아니다.
+    """
+    if overlap:
+        return "적법중첩"
+    if len(types) > 1:
+        return "모호"
+    return "비주장문맥" if nonclaim else "단일"
 
 
 def build() -> tuple[list[dict], dict]:
@@ -203,12 +234,16 @@ def build() -> tuple[list[dict], dict]:
     #    🔄 2026-09-30 (판정 J1) — 승인 문구는 이제 조건 A(지위에 달림)다. `적법중첩` 은 「지위에 따라 적법일 수 있는 문장 안의 항목」으로
     #       읽는다 — 단독으로 위반을 내지 않는 동작은 그대로 맞다(분기는 전제가 가른다 · D-263)
     approved = [norm(x) for x in approved_terms(train)]
+    # 🆕 2026-10-02 (D-311) — 주장이 아닌 정본 문장(섭취 주의사항)에 그대로 나오는 항목도 단독으로 확정하지 못한다
+    caution = [norm(x) for x in caution_terms(train)]
     rows: list[dict] = []
     for n, e in sorted(entries.items()):
         types = sorted(e["유형"])
         overlap = [a for a in approved if n in a]
+        nonclaim = [c for c in caution if n in c]
         if len(types) > 1:
             stat["충돌"][tuple(types)] += 1
+        conf = confidence(overlap, types, nonclaim)
         rows.append(
             {
                 "term": n,
@@ -219,10 +254,13 @@ def build() -> tuple[list[dict], dict]:
                 "짝": sorted([t, c] for t, c in e["짝"]),
                 "출처": sorted(e["출처"]),
                 # 🚨 신뢰도는 「얼마나 확실한가」가 아니라 **「단독으로 써도 되는가」**다.
-                "신뢰도": ("적법중첩" if overlap else ("모호" if len(types) > 1 else "단일")),
+                "신뢰도": conf,
                 "적법예시": sorted({a for a in overlap})[:2],
+                # 🆕 D-311 — 단독판정을 잃은 근거 문장(사람이 본다 · 판정 재료가 아니다)
+                "비주장예시": sorted(set(nonclaim))[:2] if conf == "비주장문맥" else [],
                 # 🔴 단독 판정 자격 — 정확매칭만 「위험도 하한」이 된다 (수집전처리_기획 4-9)
-                "단독판정": not overlap and len(types) == 1,
+                # 🔄 2026-10-02 (D-311) — 비주장문맥도 자격이 없다
+                "단독판정": conf == "단일",
             }
         )
     return rows, stat
@@ -256,6 +294,13 @@ def main() -> int:
     solo = sum(1 for r in rows if r["단독판정"])
     print(f"  🔴 **단독 판정 자격이 있는 것 {solo}종** ({solo * 100 // len(rows)}%)")
     print("     나머지는 문맥이 필요하다 — 사전만으로는 못 푼다 (D-156).")
+
+    nc = [r for r in rows if r["신뢰도"] == "비주장문맥"]
+    print(
+        f"\n  🆕 **비주장문맥 {len(nc)}종** — 정본 섭취 주의사항(train)에 그대로 나온다 · 단독으로 확정하지 않는다 (D-311)"
+    )
+    # 🔴 목록을 늘 찍는다 — 분할 · 주의사항 원천이 바뀌면 이 목록이 **조용히** 바뀐다. 원장에 판마다 적는다 (D-149)
+    print("     " + " · ".join(r["term"] for r in nc))
 
     lap = [r for r in rows if r["신뢰도"] == "적법중첩"]
     if lap:

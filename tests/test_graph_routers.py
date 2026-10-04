@@ -41,6 +41,7 @@ from app.graph import (
     LAW_NODES,
     MAX_ATTEMPT,
     NODES,
+    REDUCER_OF,
     REVIEW_TERMINALS,
     ROUTES_AFTER_REJUDGE,
     ROUTES_REVIEW,
@@ -48,6 +49,7 @@ from app.graph import (
     LawResult,
     laws_for,
     merge_laws,
+    reducer_of,
     route_after_rejudge,
     route_laws,
     route_review,
@@ -376,8 +378,9 @@ def test_누적_키에_리듀서가_붙어_있다(state_name: str, key: str) -> 
     cls = STATE_REDUCERS[state_name][0]
     hints = typing.get_type_hints(cls, include_extras=True)
     assert key in hints, f"🚨 {state_name} 에 `{key}` 가 없다"
-    assert operator.add in getattr(hints[key], "__metadata__", ()), (
-        f"🚨 {state_name}.`{key}` 에 리듀서가 없다 — `Annotated[list[...], operator.add]` 여야 한다.\n"
+    # 🔄 2026-10-02 (W5) — 리듀서는 `reducer_of(key)` 가 정한다(`sentences` 는 같은 문장을 바꿔 끼우는 `upsert_sentences` · 그 밖에 `operator.add`)
+    assert reducer_of(key) in getattr(hints[key], "__metadata__", ()), (
+        f"🚨 {state_name}.`{key}` 에 리듀서가 없다 — `Annotated[list[...], {reducer_of(key).__name__}]` 여야 한다.\n"
         "   ⛔ 없으면 LangGraph 가 마지막 노드의 값으로 덮어쓴다. 오류는 안 난다."
     )
 
@@ -388,7 +391,8 @@ def test_리듀서가_붙은_키는_표에_다_있다(state_name: str) -> None:
     """반대 방향 — 표에 안 적은 누적 키가 생기면 위 게이트가 그 키를 안 돈다 (D-99 · D-170)."""
     cls, keys = STATE_REDUCERS[state_name]
     hints = typing.get_type_hints(cls, include_extras=True)
-    annotated = {k for k, h in hints.items() if operator.add in getattr(h, "__metadata__", ())}
+    known = {operator.add, *REDUCER_OF.values()}
+    annotated = {k for k, h in hints.items() if known & set(getattr(h, "__metadata__", ()))}
     assert annotated == set(keys), f"🚨 {state_name} 표와 선언이 다르다 — {annotated ^ set(keys)}"
 
 
@@ -612,6 +616,8 @@ def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.graph as g
 
     monkeypatch.setattr(g, "load_dict_entries", lambda cur: [])
+    # 🆕 2026-10-02 (D-311) — 자격 없는 항목도 같은 대역으로 비운다
+    monkeypatch.setattr(g, "load_weak_entries", lambda cur: [])
 
 
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202

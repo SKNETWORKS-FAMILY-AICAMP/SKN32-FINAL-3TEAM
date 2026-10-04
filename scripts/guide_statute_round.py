@@ -1184,15 +1184,20 @@ def fs_units(units: list[dict]) -> dict[str, dict]:
 
 
 def fs_guard(s: dict, a: dict, b: dict, got: dict) -> str | None:
-    """합의여도 팀장에게 — ① 조건 L(원천은 위반이다 · D-237) ② C·A·B 인데 판독의 호가 **원천의 호**와 다르다(호는 원천이 정한다)."""
+    """합의여도 팀장에게 — ① 조건 L(원천은 위반이다 · D-237) ② C·A·B 인데 판독의 호가 **원천의 호 밖**이거나 비었다(호는 원천이 정한다).
+
+    🔄 2026-10-03 — 「원천 호와 같다」에서 「원천 호 **안**이다」로 고쳤다. 지시서 §0 은 「두 호가 걸린 문서면 문구에 맞는 호
+    하나 또는 둘」이라 적는데, 종전 가드는 두 호 문서에서 하나만 고른 합의를 전부 팀장에게 보냈다(학습 판 368 중 20).
+    봉인 판은 문서마다 호가 하나라 결과가 같다(119 행 · 채택이 그대로임을 게이트가 본다).
+    """
     if got["대상"] != "Y":
         return None
     if got["조건"] == "L":
         return "조건 L — 원천(의결서)은 위반이라 했다 (D-237)"
     if got["조건"] in ("C", "A", "B"):
         mine = {statute.ho_key(c) for c in got.get("근거") or []}
-        if mine != {statute.ho_key(c) for c in s["근거_원천"]}:
-            return "원천 호와 다름 — 호는 의결서가 정한다"
+        if not mine or not mine <= {statute.ho_key(c) for c in s["근거_원천"]}:
+            return "원천 호 밖 — 호는 의결서가 정한다"
     return None
 
 
@@ -1220,6 +1225,155 @@ def fs_input(out_dir: pathlib.Path) -> dict:
     ho = lambda r: ",".join(f"공{statute.parse(c)[3]}" for c in r["근거_원천"])  # noqa: E731
     lines = ["# 판독 입력 — 결정문 봉인 문구", "", "지문 | 문서 | 원천 호 | **문구**", ""]
     lines += [f"{r['지문']} | {r['doc_id']} | {ho(r)} | **{r['문구']}**" for r in rows]
+    (out_dir / "입력.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    return {"단위": len(units), "문서": len({r["doc_id"] for r in rows})}
+
+
+# ── 🆕 2026-10-03 (D-312) 결정문 **학습 문구** 판 — 지시서 `라벨링_지시서_2026-10-02_결정문학습문구_대상·조건.md` ──
+#: 분할이 `train` 으로 배정한 결정문의 **주문 문구**. 봉인 판(FS)과 같은 정의 · 같은 채택 함수 · 같은 가드를 쓴다 (D-99).
+#:    다른 곳은 둘이다 — ① 입력(봉인 아닌 문서) ② 판독자에게 **인용부호 앞뒤 글**을 함께 보인다(대상 이름인지 광고 내용인지 가르는 재료 · 지시서 §1 ④)
+FT_SOURCE = "ftc_decisions_body"
+FT_STAGE = ROOT / "data" / "derived" / "ftc_stage.jsonl"
+FT_DIR = ROOT / "data" / "derived" / "labels" / "ftc_train"
+FT_READINGS = FT_DIR / "readings.jsonl"
+FT_ADOPTED = FT_DIR / "adopted.jsonl"
+FT_DECISIONS = FT_DIR / "decisions.jsonl"
+FT_AUDIT = FT_DIR / "audit.jsonl"
+FT_TEAM_SHEET = ROOT / "build" / "labels" / "ftc_train__팀장판정표.csv"
+FT_KEY_RE = re.compile(r"^ft:[a-z2-7]{12}$")
+#: 인용부호 앞뒤로 보이는 글자 수 `[임의]` — 지시서 §1 ④ 가 30 으로 적었다. 판정 경로가 아니라 판독자가 읽는 재료다
+FT_CONTEXT = 30
+#: 학습 쪽 분할 값 — `preprocess.split` 의 배정 값. 🚨 「봉인이 아닌 것」으로 고르지 않는다(배정이 없는 문서가 섞인다 · D-220)
+FT_SPLIT = "train"
+
+
+def ft_key(doc_id: str, text: str) -> str:
+    """학습 문구의 지문 — 봉인 판과 같은 해시(`split.sealed_key`)에 머리만 `ft:` (D-99)."""
+    from preprocess import split as sp  # noqa: PLC0415
+
+    return "ft:" + sp.sealed_key(doc_id, text).split(":", 1)[1]
+
+
+def ft_context(order: str, text: str, width: int = FT_CONTEXT) -> str:
+    """주문에서 문구가 인용된 자리의 앞뒤 글 — `… 앞 ⟦문구⟧ 뒤 …`. 🔴 주문에 없으면 멈춘다(지어내지 않는다 · D-220).
+
+    같은 문구가 주문에 여러 번 나오면 **첫 자리**를 보인다. 줄바꿈은 공백으로 접는다.
+    """
+    i = order.find(text)
+    if i < 0:
+        raise ValueError(f"주문에 없는 문구 — {text[:30]!r}")
+    fold = lambda x: re.sub(r"\s+", " ", x)  # noqa: E731
+    head = fold(order[max(i - width, 0) : i])
+    tail = fold(order[i + len(text) : i + len(text) + width])
+    return f"{'… ' if i > width else ''}{head}⟦{text}⟧{tail}{' …' if i + len(text) + width < len(order) else ''}"
+
+
+def _ft_orders() -> dict[str, str]:
+    """문서 id → 마스킹을 지난 주문. 🔴 파생물이 없으면 멈춘다."""
+    if not FT_STAGE.exists():
+        raise SystemExit(
+            f"🔴 {FT_STAGE} 가 없다 — 먼저: uv run python -m preprocess.ftc_extract --stage --dump"
+        )
+    got: dict[str, str] = {}
+    for line in FT_STAGE.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            got[f"ftc:{r['seq']}"] = str(r.get("주문_마스킹") or "")
+    return got
+
+
+def _ft_source() -> dict[str, dict]:
+    """학습 문서의 주문 문구 → 지문별 행. 🔴 분할 기록 · 주문이 없거나 문구가 주문에 없으면 멈춘다 (D-220)."""
+    from preprocess import split as sp  # noqa: PLC0415
+
+    if not FS_MANIFEST.exists():
+        raise SystemExit(f"🔴 {FS_MANIFEST} 가 없다 — 어느 문서가 학습 쪽인지 모른다")
+    assign = json.loads(FS_MANIFEST.read_text(encoding="utf-8"))["assign"]
+    orders = _ft_orders()
+    got: dict[str, dict] = {}
+    for d in sp.ftc_docs():
+        if assign.get(d["doc_id"]) != FT_SPLIT:
+            continue
+        for text in d["문구"]:
+            k = ft_key(d["doc_id"], text)
+            if k in got:
+                raise SystemExit(f"🔴 {d['doc_id']} 에 같은 주문 문구가 두 번 — {text[:30]!r}")
+            if d["doc_id"] not in orders:
+                raise SystemExit(f"🔴 {d['doc_id']} 의 주문이 {FT_STAGE} 에 없다")
+            try:
+                around = ft_context(orders[d["doc_id"]], text)
+            except ValueError as e:
+                raise SystemExit(f"🔴 {d['doc_id']} — {e}") from e
+            got[k] = {
+                "지문": k,
+                "doc_id": d["doc_id"],
+                "근거_원천": d["근거"],
+                "문구": text,
+                "앞뒤": around,
+                "원천": d["원천"],
+            }
+    return got
+
+
+def ft_rows() -> list[dict]:
+    rows = list(_ft_source().values())
+    registry.assert_derivable(rows, who="guide_statute_round.ft_rows")
+    return rows
+
+
+def ft_units(units: list[dict]) -> dict[str, dict]:
+    """단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 지금 학습 쪽 문서의 주문 문구와 같아야 한다(분할이 바뀌었으면 멈춘다)."""
+    have = _ft_source()
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(FT_KEY_RE, k, src, bad):
+            continue
+        h = have.get(k)
+        if h is None or u.get("doc_id") != h["doc_id"] or u.get("문구") != h["문구"]:
+            bad.append(f"{k} {u.get('doc_id')} 학습 주문 문구에 없다 {str(u.get('문구'))[:30]!r}")
+            continue
+        src[k] = h
+    miss = set(have) - set(src)
+    if miss:
+        bad.append(f"학습 주문 문구 중 단위 표에 없는 것 {len(miss)} — 전량이 아니면 합치지 않는다")
+    _units_fail("결정문 학습 문구", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.ft_units")
+    return src
+
+
+FT = Round(
+    prefix="FT",
+    cmd="ft",
+    cite_of=fp_cite_of,
+    exceptions=FP_EXCEPTIONS,
+    mok_ho={},
+    head=("doc_id", "근거_원천"),
+    sheet_head=("doc_id",),
+    units=lambda us: ft_units(us),
+    guard=fs_guard,  # 봉인 판과 **같은 함수** — 조건 L · 원천 호와 다른 호는 합의여도 팀장에게 (D-99)
+)
+
+
+def ft_input(out_dir: pathlib.Path) -> dict:
+    """판독 재료 — `단위.json` · `입력.md`(문서 id · 원천 호 · 앞뒤 글 · 문구)."""
+    rows = ft_rows()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    units = [{h: r[h] for h in ("지문", "doc_id", "문구")} for r in rows]
+    (out_dir / "단위.json").write_text(
+        json.dumps(units, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
+    )
+    ho = lambda r: ",".join(f"공{statute.parse(c)[3]}" for c in r["근거_원천"])  # noqa: E731
+    lines = [
+        "# 판독 입력 — 결정문 학습 문구",
+        "",
+        "지문 | 문서 | 원천 호 | 주문에서 인용된 자리(⟦ ⟧ 가 문구) | **문구**",
+        "",
+    ]
+    lines += [
+        f"{r['지문']} | {r['doc_id']} | {ho(r)} | {r['앞뒤']} | **{r['문구']}**" for r in rows
+    ]
     (out_dir / "입력.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return {"단위": len(units), "문서": len({r["doc_id"] for r in rows})}
 
@@ -1828,6 +1982,7 @@ ROUNDS = {
     "fp": (FP, "공정위 보도자료 1997~2007"),
     "gf": (GF, "해설서 수정문구"),
     "fs": (FS, "결정문 봉인 문구"),
+    "ft": (FT, "결정문 학습 문구"),
 }
 
 
@@ -1906,6 +2061,8 @@ def main() -> int:
         pi.add_argument("--out", type=pathlib.Path)
     p_fi = sub.add_parser("fs-input", help="결정문 봉인 문구 — 단위.json · 입력.md")
     p_fi.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_sealed")
+    p_ti = sub.add_parser("ft-input", help="결정문 학습 문구 — 단위.json · 입력.md(앞뒤 글 포함)")
+    p_ti.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_train")
     a = ap.parse_args()
     if a.cmd in ("audit-sheet", "caution-audit-sheet"):
         fn = guide_audit_sheet if a.cmd == "audit-sheet" else caution_audit_sheet
@@ -1919,6 +2076,10 @@ def main() -> int:
         return 0
     if a.cmd == "fs-input":
         print(json.dumps(fs_input(a.out), ensure_ascii=False, indent=1))
+        print(f"판독 재료 → {a.out}")
+        return 0
+    if a.cmd == "ft-input":
+        print(json.dumps(ft_input(a.out), ensure_ascii=False, indent=1))
         print(f"판독 재료 → {a.out}")
         return 0
     if a.cmd == "gf-input":

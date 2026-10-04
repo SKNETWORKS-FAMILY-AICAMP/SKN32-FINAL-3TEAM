@@ -58,6 +58,11 @@ _REGISTRY_SOURCE = {
     "law_go_kr": "law_go_kr",
     "mfds_cgm_expc": "mfds_cgm_expc",
     "mfds_cosmetic_ad_qa": "mfds_cosmetic_ad_qa",
+    "mfds_cosmetic_ad_guideline": "mfds_cosmetic_ad_guideline",
+    "mfds_cosmetic_ad_qa_2012": "mfds_cosmetic_ad_qa_2012",
+    "mfds_cosmetic_faq_2020": "mfds_cosmetic_faq_2020",
+    "mfds_casebook_2021": "mfds_casebook_2021",
+    "ftc_press": "ftc_press",
 }
 
 
@@ -1122,3 +1127,92 @@ def test_전부_숫자인_등록번호는_사람_표지가_아니다() -> None:
 
     root = _ftc_full("x", "주식회사 가나(110111-1234567)\n대표 김다라(******-*******)", "x")
     assert respondent_people(root) == ("김다라",)
+
+
+# ─────────────────────────────────────────────────────────────
+#  🆕 2026-10-03 — 사람 축을 좁게 거는 원천 (`PERSON_STRICT` · mfds_cgm_expc)
+#  실측: 넓은 규칙의 치환 280 이 전부 오탐(제품명 예시의 빈칸 · 숫자 자리) → 좁은 규칙 0 (원천 5,129 건 전체)
+# ─────────────────────────────────────────────────────────────
+_STRICT_PERSON = [
+    "대표 김○○는 말했다",
+    "민원인 이ㅇㅇ",
+    "김○○ 대표가",
+    "박○○ 씨",
+    "대표이사 000",
+    "대표자: 홍가나",
+    "담당자 김가나에게",
+    "원장 ○○○",
+    "최○○ 주무관",
+    "성명 김가나",
+    "질의자(김○○)",
+    "성지기공 이○○로부터 전달",
+    "이에 이○○는 다른",
+    "청구인의 남편 방○○은",
+    "화장품정책과장 김가나",
+    "바이오생약국장 이다라",
+    "담당 주무관 박마바에게",
+    "윤○○의 진술조서",
+    "대표이사 성○○",
+]
+_STRICT_NOT_PERSON = [
+    "(예시) 흑마늘○○(흑마늘 ○○%)",
+    "딸기○○",
+    "총카페인함량 000밀리그램",
+    "#000000",
+    "○○년○○월○○일",
+    "대표자, 소재지 및",
+    "대표자인지 법인인지",
+    "회장원위부를",
+    '"통닭○○"',
+    "(예시) 차○○(녹차 ○○%)",
+    "(예시) 김○○(김 ○○%)",
+    "제품명 '유기농○○'",
+    "민원인 안내서",
+    "대표자 변경을 하려면",
+    "00브랜드 허브 샴푸",
+    "약 000만원",
+    "의사·치과의사",
+    "대표 홈페이지에서",
+    "○○ 대표 제품",
+    "대표 ○○%",
+    "팀장 변경시 교육",
+    "영업자 지위를 승계",
+    "영업주 배우자에게",
+    "대표 성분인",
+    "국가대표 선수가",
+    "대표자 성명 및 주소",
+    "거짓·과장 성능을 표시",
+    "제품명 배○○ 으로 표시",
+    "“김○○” 으로 표시",
+    "(예시) 유○○, 차○○",
+    "고○○ 함유 제품",
+    "식품의약품안전처장 인증을 득하여",
+    "대표이사 명의로 영업신고",
+    "대표자 연락처 등의",
+]
+
+
+@pytest.mark.parametrize("text", _STRICT_PERSON)
+def test_좁은_사람_축은_사람이라는_증거가_곁에_있으면_가린다(text: str) -> None:
+    from preprocess.mask import MASK_CEO, apply_policy
+
+    assert MASK_CEO in apply_policy(text, "", "mfds_cgm_expc"), text
+
+
+@pytest.mark.parametrize("text", _STRICT_NOT_PERSON)
+def test_좁은_사람_축은_제품명_예시와_보통_낱말을_건드리지_않는다(text: str) -> None:
+    """🔴 원천이 가린 것은 사람만이 아니다 — 제품명의 빈칸 · 숫자 자리 · 날짜 틀이 판정 재료다 (D-157)."""
+    from preprocess.mask import apply_policy
+
+    assert apply_policy(text, "", "mfds_cgm_expc") == text
+
+
+def test_좁은_규칙은_선언한_원천에만_건다() -> None:
+    """반대 대조 — 다른 원천의 사람 축은 그대로다(산출물이 바뀌지 않는다)."""
+    from preprocess.mask import PERSON_ALL_NAMES, PERSON_STRICT, apply_policy
+
+    assert sorted(PERSON_STRICT) == ["mfds_cgm_expc"] and not (PERSON_STRICT & PERSON_ALL_NAMES)
+    text = "대표이사 000 은 흑마늘○○ 을 팔았다"
+    assert apply_policy(text, "", "mfds_cgm_expc") == "대표이사 [대표] 은 흑마늘○○ 을 팔았다"
+    for src in ("ftc", "law_go_kr", "mfds_sanctions", "mfds_casebook"):
+        assert apply_policy(text, "", src) == "대표이사 [대표] 은 흑마[대표] 을 팔았다", src

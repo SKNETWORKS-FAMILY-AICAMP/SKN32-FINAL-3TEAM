@@ -37,19 +37,23 @@ from __future__ import annotations
 import functools
 import operator
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Annotated, Any, TypedDict
 
 from app import dictmatch as dm
 from app import retrieve as rt
-from app import sentsplit
+from app import sanction, sentsplit
 from app.contracts import (
+    NOT_REVIEWED_UNNAMED,
+    UNCOVERED_CATEGORIES,
     AdaptedCopy,
     AdFormat,
     AdSection,
     Candidate,
     Category,
+    CategorySource,
+    Certificate,
     EvidenceArticle,
     GenerateOutcome,
     HoldReason,
@@ -59,6 +63,8 @@ from app.contracts import (
     MediaProfile,
     Outcome,
     ProductContext,
+    Risk,
+    RiskAssessment,
     Segment,
     SentenceJudgment,
     Span,
@@ -144,6 +150,10 @@ class DictScan:
     sent_id: str
     ran: bool = False
     hits: tuple[DictHit, ...] = ()
+    #: 🆕 2026-10-02 (D-311 · D-273 ④) — **단독판정 자격이 없는** 항목의 적중(적법중첩 · 모호 · 비주장문맥).
+    #:    🔴 확정의 재료가 아니다 — 보류 문장의 **유형 후보**로만 실린다(`_judge_one`). ⛔ 버리면 강등된 질병 이름이
+    #:       「사전 침묵」과 같은 보류가 되어, 사용자에게 힌트가 없고 탐지 재현율을 잴 수 없다(원장 10-02 ⑤).
+    weak: tuple[DictHit, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +191,8 @@ class LawResult:
     dict_hits: tuple[tuple[str, tuple[DictHit, ...]], ...] = ()
     #: 🆕 2026-09-28 (D-238 개정 (나)) — 문장별로 **근거에 딸린 적용 제외 목**(`sent_id`, 단서들). 부모 좌표가 `articles` 에 있다.
     provisos: tuple[tuple[str, tuple[Proviso, ...]], ...] = ()
+    #: 🆕 2026-10-02 (D-311) — 문장별로 **이 법의 근거를 가진 자격 없는 적중**. `dict_hits` 와 같은 거름이다
+    weak_hits: tuple[tuple[str, tuple[DictHit, ...]], ...] = ()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -189,6 +201,27 @@ class LawResult:
 #
 # ⛔ `Annotated[..., operator.add]` 가 없으면 LangGraph 는 **마지막 노드의 값으로 조용히 덮어쓴다.**
 #    문장이 여럿인데 마지막 문장만 남는 사고가 여기서 난다 — 오류가 안 나서 발견이 늦다 (D-124 ③).
+
+
+def upsert_sentences(
+    old: list[SentenceJudgment], new: list[SentenceJudgment]
+) -> list[SentenceJudgment]:
+    """`sentences` 의 리듀서 — **같은 `sent_id` 는 바꿔 끼우고, 새 것은 뒤에 붙인다** (🆕 2026-10-02 · W5).
+
+    ★ 왜 `operator.add` 가 아닌가 — 문장 판정은 한 노드가 끝내지 않는다. `judge` 가 판정을 내고 `assess_risk` 가 같은 문장에
+      위험도를 붙이며, 문서 규칙(`doc_rules` · W8)이 다시 보류로 바꾼다. 더하기만 하면 뒤 노드가 낸 문장이 **두 번째 줄**로 쌓여
+      문장 수가 늘고, 앞 줄(위험도 없는 판정)이 그대로 종착으로 간다.
+    🔴 순서는 **처음 들어온 자리**를 지킨다 — 바꿔 끼워도 문장 순서가 안 바뀐다. 서로 다른 `sent_id` 는 종전처럼 쌓인다(D-124 ③).
+    """
+    at = {s.sent_id: i for i, s in enumerate(old)}
+    out = list(old)
+    for s in new:
+        if s.sent_id in at:
+            out[at[s.sent_id]] = s
+        else:
+            at[s.sent_id] = len(out)
+            out.append(s)
+    return out
 
 
 class CoreState(TypedDict, total=False):
@@ -208,8 +241,8 @@ class CoreState(TypedDict, total=False):
     dict_scans: Annotated[list[DictScan], operator.add]
     # ── 법별 팬아웃 🔴 누적 (D-267) — 법 노드가 **병렬로** 쓴다. 리듀서가 없으면 하나만 남는다
     law_results: Annotated[list[LawResult], operator.add]
-    # ── 판정 누적 🔴 누적 ─────────────────────────────────────────────
-    sentences: Annotated[list[SentenceJudgment], operator.add]
+    # ── 판정 누적 🔴 누적 — 🔄 2026-10-02 같은 문장은 바꿔 끼운다(`upsert_sentences`) ─────────
+    sentences: Annotated[list[SentenceJudgment], upsert_sentences]
     # ── 계측 (D-77 · D-43 이 LangSmith 를 배제해 이것이 유일한 경로) 🔴 누적 ──
     timings: Annotated[list[Timing], operator.add]
 
@@ -222,6 +255,9 @@ class ReviewState(CoreState, total=False):
     """
 
     outcome: Outcome
+    #: 🆕 2026-10-02 (W5) — 합법화 불가 증명서(D-32). **조립기가 아직 없다** — 사유 설명 문안이 확정된 뒤에 선다(D-308 ⬜).
+    #:    읽는 쪽(`certificate` 종착 · `to_response`)을 먼저 세웠다 — 이 칸이 비면 증명서 종착은 보류로 내린다 (D-220).
+    certificate: Certificate
 
 
 class GenerateState(TypedDict, total=False):
@@ -268,6 +304,14 @@ STATE_REDUCERS: dict[str, tuple[type, tuple[str, ...]]] = {
     "generate": (GenerateState, ("keywords", "candidates", "rejects", "adapted", "timings")),
     "compose": (ComposeState, ("sections",)),
 }
+
+#: 🆕 2026-10-02 (W5) — 누적 키의 리듀서. **표에 없는 키는 `operator.add`** 다. 게이트와 스텁(`_apply`)이 이 표로 읽는다 (D-99).
+REDUCER_OF: dict[str, Callable[[list[Any], list[Any]], list[Any]]] = {"sentences": upsert_sentences}
+
+
+def reducer_of(key: str) -> Callable[[list[Any], list[Any]], list[Any]]:
+    return REDUCER_OF.get(key, operator.add)
+
 
 #: 코어 입출력 — 함수 노드가 **이것만** 넣고 **이것만** 꺼낸다 (모듈 docstring 의 실측 참조).
 CORE_IN = ("text", "product")
@@ -521,11 +565,23 @@ SQL_DICT = """SELECT term, violation_type::text, law_ref
 FROM dict_entry
 WHERE dict_kind = %s AND exact_match
 ORDER BY term"""
+#: 🆕 2026-10-02 (D-311) — **자격이 없는** 항목. 보류 문장의 유형 후보로만 쓴다 — 확정 · 하한의 재료가 아니다.
+#:    🚨 `SQL_DICT` 와 거름 하나만 다르다 — 칸 · 순서는 같다(`_entries` 가 둘을 같은 꼴로 읽는다 · D-99)
+SQL_DICT_WEAK = SQL_DICT.replace("AND exact_match", "AND NOT exact_match")
 
 
 def load_dict_entries(cur: Any) -> list[dm.Entry]:
     """`dict_entry` → 매칭 항목. 근거(`law_ref`)는 적재기가 `"; "` 로 이은 인용이다(`scripts/load_db.py` `load_dict`)."""
-    cur.execute(SQL_DICT, (DICT_KIND,))
+    return _entries(cur, SQL_DICT)
+
+
+def load_weak_entries(cur: Any) -> list[dm.Entry]:
+    """🆕 2026-10-02 (D-311) — 단독판정 자격이 **없는** 항목. 꼴은 `load_dict_entries` 와 같다."""
+    return _entries(cur, SQL_DICT_WEAK)
+
+
+def _entries(cur: Any, sql: str) -> list[dm.Entry]:
+    cur.execute(sql, (DICT_KIND,))
     return [
         dm.Entry(
             term=term,
@@ -553,20 +609,23 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     if cur is None:
         return {"dict_scans": [DictScan(sent_id=sent_id(i)) for i in range(len(sents))]}
     entries = load_dict_entries(cur)
+    weak = load_weak_entries(cur)  # 🆕 D-311 — 보류 문장의 유형 후보
+
+    def _hits(text: str, es: list[dm.Entry]) -> tuple[DictHit, ...]:
+        return tuple(
+            DictHit(
+                term=m.entry.term,
+                violation_type=m.entry.violation_type,
+                basis=m.entry.basis,
+                span=m.span,
+            )
+            for m in dm.find(text, es)
+        )
+
     return {
         "dict_scans": [
             DictScan(
-                sent_id=sent_id(i),
-                ran=True,
-                hits=tuple(
-                    DictHit(
-                        term=m.entry.term,
-                        violation_type=m.entry.violation_type,
-                        basis=m.entry.basis,
-                        span=m.span,
-                    )
-                    for m in dm.find(text, entries)
-                ),
+                sent_id=sent_id(i), ran=True, hits=_hits(text, entries), weak=_hits(text, weak)
             )
             for i, text in enumerate(sents)
         ]
@@ -580,6 +639,19 @@ def encode(state: CoreState) -> dict[str, Any]:
     🔜 W7 — harness(D-94) 뒤. ⛔ 법별 노드가 인코더를 부르면 판정기가 세 벌이다 (D-99).
     """
     return {}
+
+
+def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:
+    """🆕 W4 — 사전 적중 중 **이 법의 인용**을 가진 것만, 인용도 이 법 것만 남긴다. 법을 못 정한 인용은 버린다 (D-220).
+
+    🔄 2026-10-02 (D-311) — 단독판정 적중과 자격 없는 적중이 **같은 거름**을 쓴다 (D-99).
+    """
+    mine = []
+    for h in hits:
+        basis = tuple(b for b in h.basis if statute.law_of(b) == law)
+        if basis:
+            mine.append(DictHit(h.term, h.violation_type, basis, h.span))
+    return tuple(mine)
 
 
 def _law_node(name: str) -> Callable[..., dict[str, Any]]:
@@ -604,6 +676,7 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
         picked: list[tuple[str, tuple[EvidenceArticle, ...]]] = []
         proviso_picked: list[tuple[str, tuple[Proviso, ...]]] = []
         dict_picked: list[tuple[str, tuple[DictHit, ...]]] = []
+        weak_picked: list[tuple[str, tuple[DictHit, ...]]] = []
         for i in range(n):
             sid = sent_id(i)
             e = by_sent.get(sid)
@@ -613,12 +686,8 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
             picked.append((sid, arts))
             proviso_picked.append((sid, provs))
             # 🆕 W4 — 사전 적중 중 **이 법의 인용**을 가진 것만, 인용도 이 법 것만 남긴다. 법을 못 정한 인용은 버린다 (D-220)
-            mine = []
-            for h in scans[sid].hits if sid in scans else ():
-                basis = tuple(b for b in h.basis if statute.law_of(b) == law)
-                if basis:
-                    mine.append(DictHit(h.term, h.violation_type, basis, h.span))
-            dict_picked.append((sid, tuple(mine)))
+            dict_picked.append((sid, _mine(scans[sid].hits if sid in scans else (), law)))
+            weak_picked.append((sid, _mine(scans[sid].weak if sid in scans else (), law)))
         return {
             "law_results": [
                 LawResult(
@@ -627,6 +696,7 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
                     articles=tuple(picked),
                     dict_hits=tuple(dict_picked),
                     provisos=tuple(proviso_picked),
+                    weak_hits=tuple(weak_picked),
                 )
             ]
         }
@@ -720,6 +790,7 @@ def _judge_one(
     scan: DictScan | None,
     hits: list[DictHit],
     retrieved: list[EvidenceArticle],
+    weak: list[DictHit] | None = None,
 ) -> SentenceJudgment:
     """문장 하나 — **인코더 전 판정** (D-269 그대로 · ⚠️ 재검 대기).
 
@@ -730,6 +801,9 @@ def _judge_one(
     ③ 적중은 있는데 그 인용이 **어느 법인지 못 정한다** → 근거 없음 — 유형은 유지 (D-127 「유형은 잡았는데 조문이 없다」)
        ⛔ 인용이 **보내지 않은 법** 것이면 근거 없음이 아니다 — 이 판정이 볼 법이 아니다(D-267)
     ④ 그 밖에 → **보류(확신 부족)** — 사전의 침묵은 「특이사항 없음」이 아니다 (D-269)
+       🆕 2026-10-02 (D-311 · D-273 ④) — 단독판정 자격 **없는** 항목이 이 법의 인용으로 울렸으면 보류 문장에 **유형 후보**를 싣는다.
+       확정하지 않는다 · 하한을 걸지 않는다(W5 · D-273 ④ 의 하한은 인코더 뒤 안건) · 근거는 적중의 인용 조문.
+       ⛔ 싣지 않으면 강등된 질병 이름(「당뇨에 좋은 차」)이 사전 침묵과 같은 보류가 된다(원장 10-02 ⑤)
     🚨 위험도를 적지 않는다 — 하한(`sanction_rule` · W5)이 없다. 지어내면 계약이 거부한다(D-09 · D-131).
     🚨 `not_claim` 을 내지 않는다 — 주장 여부 판별은 인코더 몫이다 (D-275).
     """
@@ -795,12 +869,20 @@ def _judge_one(
             violations=_typed({h.violation_type for h in unplaced if h.violation_type}),
         )
     # 보낸 법 밖의 인용만 울린 경우도 여기다 — 이 판정이 볼 법이 아니다(D-267)
+    cand = _typed({t for h in weak or () for t in _hit_types(h)})
+    basis_w: list[EvidenceArticle] = []
+    for h in weak or ():
+        for c in h.basis:
+            a = _basis_article(c)
+            if a is not None and a not in basis_w:
+                basis_w.append(a)
     return SentenceJudgment(
         sent_id=sid,
         text=text,
         verdict=Verdict.hold,
         hold_reason=HoldReason.low_conf,
-        evidence=retrieved,
+        violations=cand,
+        evidence=basis_w + [a for a in retrieved if a not in basis_w],
     )
 
 
@@ -819,6 +901,7 @@ def judge(state: CoreState) -> dict[str, Any]:
     per_sent: dict[str, list[EvidenceArticle]] = {}
     seen: dict[str, set[tuple[str, str, str | None]]] = {}
     hits_of: dict[str, list[DictHit]] = {}
+    weak_of: dict[str, list[DictHit]] = {}
     for r in results:
         for sid, arts in r.articles:
             for a in arts:
@@ -831,6 +914,8 @@ def judge(state: CoreState) -> dict[str, Any]:
                 per_sent.setdefault(sid, []).append(a)
         for sid, hs in r.dict_hits:
             hits_of.setdefault(sid, []).extend(hs)
+        for sid, hs in r.weak_hits:
+            weak_of.setdefault(sid, []).extend(hs)
     scans = {s.sent_id: s for s in state.get("dict_scans", [])}
     sents = state.get("sents", [])
     # 🔴 원문 좌표를 못 되찾으면(분할 밖에서 문장이 들어왔다) **구간을 싣지 않는다** — 좌표를 지어내지 않는다 (D-224 · D-278).
@@ -848,20 +933,145 @@ def judge(state: CoreState) -> dict[str, Any]:
                 scans.get(sid),
                 hits_of.get(sid, []),
                 per_sent.get(sid, []),
+                weak_of.get(sid, []),
             )
             for i, t in enumerate(sents)
         ]
     }
 
 
-@timed
-def assess_risk(state: CoreState) -> dict[str, Any]:
-    """위험도. 🔜 W5 — D-09 래칫 `max(코드 하한, 인코더 예측)` · 초기 판정과 분기마다.
+#: 위험도 하한을 읽는 질의 — 🔴 **뷰만 읽는다**(`v_risk_lookup` · 2인 서명이 끝난 현행 행만 보인다 · 0013 · D-309).
+#:    칸은 `app/sanction.py` `Row` 의 열쇠로 옮긴다 — 원천 검사(yaml)와 **같은 함수**(`floor_rows`)가 읽는다 (D-99).
+SQL_RISK = """SELECT rule_key, law_id, violation_type::text, sanction_kind, annex1, cover, quote, fact_kind
+FROM v_risk_lookup
+ORDER BY rule_key"""
 
-    🔴 코드 하한은 `sanction_rule` · `v_risk_lookup` 에서 온다 — **지금 0행이라 스텁이다.**
-       ⛔ 하한 없이 최종만 적으면 계약이 거부한다. 그래서 아무것도 적지 않는다.
+
+def load_sanction_rows(cur: Any) -> list[dict[str, Any]]:
+    """`v_risk_lookup` → 하한 조회 행. 서명 전이거나 적재 전이면 **빈 목록**이다 — 그러면 하한이 없어 판정이 보류로 멈춘다 (D-220)."""
+    cur.execute(SQL_RISK)
+    return [
+        {
+            "id": k,
+            "law_id": law,
+            "type": t,
+            "kind": kind,
+            "annex1": a1,
+            "cover": cv,
+            "quote": q,
+            "fact": f,
+        }
+        for k, law, t, kind, a1, cv, q, f in cur.fetchall()
+    ]
+
+
+def floor_of_sentence(
+    rows: list[dict[str, Any]], by_law: dict[str, tuple[DictHit, ...]]
+) -> sanction.Floor:
+    """문장 하나의 하한 — **한 전제 안에서 걸린 법들의 하한 중 높은 쪽** (D-272 · D-09). `by_law` = 법 축 이름 → 그 법의 적중.
+
+    유형은 인용에서 계산한다(`_hit_types` · 판정과 같은 함수 · D-282) · 목 단위 하한은 그 법의 인용으로 찾는다 (D-310).
+    🔴 (유형 · 법) 하나라도 **행이 없으면 하한을 모른다** — `Floor(None)`. ⛔ 아는 것만으로 max 를 내면 모르는 처분이
+       더 무거울 때 하한이 「확실한 최소」가 아니게 된다. 모르면 위험도를 적지 않고 보류로 둔다 (D-220 · D-72).
+    가능 상한은 하한보다 높은 것 중 가장 높은 것 하나 — 근거 줄과 함께 (D-310 개정 (다)).
     """
-    return {}
+    found: list[sanction.Floor] = []
+    for law, hits in by_law.items():
+        law_id = sanction.SANCTION_LAW[law]
+        cites = [b for h in hits for b in h.basis]
+        for t in sorted({t for h in hits for t in _hit_types(h)}):
+            if t not in Violation.__members__:
+                continue  # 계약에 없는 유형은 판정 재료가 아니다 (`_typed`)
+            f = sanction.floor_rows(rows, t, law_id, cites)
+            if f.floor is None:
+                return sanction.Floor(None)
+            found.append(f)
+    if not found:
+        return sanction.Floor(None)
+    top = max(found, key=lambda f: f.floor.level)  # type: ignore[union-attr]
+    ceil = max(
+        (f for f in found if f.ceiling is not None and f.ceiling.level > top.floor.level),  # type: ignore[union-attr]
+        key=lambda f: f.ceiling.level,  # type: ignore[union-attr]
+        default=None,
+    )
+    return sanction.Floor(
+        top.floor,
+        ceiling=ceil.ceiling if ceil else None,
+        ceiling_note=ceil.ceiling_note if ceil else None,
+        basis=tuple(dict.fromkeys(b for f in found for b in f.basis)),
+    )
+
+
+def _with_risk(s: SentenceJudgment, risk: RiskAssessment) -> SentenceJudgment:
+    """문장에 위험도를 붙인 **새 문장** — 계약 검증을 다시 지난다(위반 없으면 R0 · 있으면 R1 이상 · D-273)."""
+    return SentenceJudgment(**{**{k: getattr(s, k) for k in type(s).model_fields}, "risk": risk})
+
+
+@timed
+def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
+    """위험도 — **코드 하한**(제재표) · 가능 상한 (D-09 · D-305 · D-310). 🆕 2026-10-02 (W5) 배선.
+
+    ★ 확정 문장에만 적는다 — 보류 문장의 유형 후보에는 하한을 걸지 않는다(D-311 · D-313 ③).
+       · 위반 없는 확정 → 하한 R0 · 최종 R0 (D-130 「걸린 것이 없으면 R0」 · D-273 불변식)
+       · 위반 확정 → 하한 = 한 전제 안에서 걸린 법들의 하한 중 높은 쪽(`floor_of_sentence`) · 최종 = 하한(인코더가 없다 · D-131)
+    🔴 **하한을 모르면 적지 않는다** — 제재표가 비었거나(서명 전 · 적재 전) 맞는 행이 없으면 위험도가 없고, 위험도 없는 확정 위반은
+       종착이 보류다(`route_review` · D-220). ⛔ 지어내면 계약이 거부한다(D-09).
+    🚨 **품목 미확정은 아직 적지 않는다** — 전제(식품 · 화장품 · …)마다 하한이 달라 「가장 보수적인 전제」의 등급과 보류 여부를
+       정해야 한다. 그 기준이 D-229 ⑥ 「전제 정정 · 결론 재검 대기」다. 판정이 내려오면 **이 줄**이 그 자리다 (D-192).
+    🔴 커서는 `match_dict` 와 같이 `config` 로 받는다(주석 없이). DB 가 없으면 아무것도 적지 않는다 — 판정은 그대로 나간다.
+    """
+    sents = list(state.get("sentences", []))
+    product = state.get("product") or ProductContext()
+    cur = ((config or {}).get("configurable") or {}).get("conn")
+    out: list[SentenceJudgment] = []
+    if product.category in UNCOVERED_CATEGORIES:
+        # 🆕 2026-10-02 (D-277 · D-271 ④ 개정) — 주된 광고법을 안 본 품목은 「걸린 것 없음」을 확정하지 않는다.
+        #    표시광고법으로 걸린 것이 없을 뿐 그 품목의 법은 보지 않았다 — 보류(`law_uncovered`)다. 걸린 문장은 확정 그대로다.
+        #    🚨 판정 대상 아님(`not_claim`)은 그대로 둔다 — 주장이 없으면 어느 법으로도 걸릴 것이 없다 (D-275).
+        #       그 문장뿐인 문서도 통과는 아니다 — 종착(`route_review`)이 막는다.
+        for s in sents:
+            if s.verdict is Verdict.confirmed and not s.violations and not s.not_claim:
+                out.append(
+                    SentenceJudgment(
+                        **{
+                            **{k: getattr(s, k) for k in type(s).model_fields},
+                            "verdict": Verdict.hold,
+                            "hold_reason": HoldReason.law_uncovered,
+                            "risk": RiskAssessment(floor=Risk.R0, final=Risk.R0),
+                        }
+                    )
+                )
+    done = {s.sent_id for s in out}
+    todo = [
+        s
+        for s in sents
+        if s.verdict is Verdict.confirmed and s.risk.final is None and s.sent_id not in done
+    ]
+    if not todo or cur is None or product.category is None:
+        return {"sentences": out} if out else {}
+    # 🚨 제재표는 **적을 문장이 있을 때만** 읽는다 — 보류뿐인 요청에 질의를 하나 더 얹지 않는다 (D-77 L3)
+    rows = load_sanction_rows(cur) if any(s.violations for s in todo) else []
+    by_sent: dict[str, dict[str, tuple[DictHit, ...]]] = {}
+    for r in state.get("law_results", []):
+        for sid, hits in r.dict_hits:
+            if hits:
+                by_sent.setdefault(sid, {})[LAW_OF_NODE[r.law]] = hits
+    for s in todo:
+        if not s.violations:
+            out.append(_with_risk(s, RiskAssessment(floor=Risk.R0, final=Risk.R0)))
+            continue
+        f = floor_of_sentence(rows, by_sent.get(s.sent_id, {}))
+        if f.floor is None:
+            continue
+        out.append(
+            _with_risk(
+                s,
+                RiskAssessment(
+                    floor=f.floor, final=f.floor, ceiling=f.ceiling, ceiling_note=f.ceiling_note
+                ),
+            )
+        )
+    return {"sentences": out} if out else {}
 
 
 @timed
@@ -892,9 +1102,20 @@ NODES: dict[str, Callable[..., dict[str, Any]]] = {
 def certificate(state: ReviewState) -> dict[str, Any]:
     """합법화 불가 증명서 (D-32). **A 자격형 · C 절대형에만** (D-125).
 
-    ⬜ 계약은 `outcome=certificate` 에 `Certificate` 를 요구한다 — 🔜 W4 (판정이 불가 사유를 낼 때 같이).
+    🔴 2026-10-02 (W5) — 계약은 `outcome=certificate` 에 증명서(`Certificate` · 사유 · 설명)를 요구한다. **조립기가 아직 없다** —
+       설명은 사용자에게 보이는 문안이고 조문 대조 뒤에 확정한다(D-308 ⬜ · D-263 ②). 증명서가 없으면 **보류로 내린다**.
+       ⛔ 빈 증명서로 종착을 찍으면 계약이 응답을 거부해 화면에 오류가 난다 — 위험도가 붙은 뒤로는 실제 요청이 여기 온다.
+       문장 판정(확정 · 유형 · 근거 · 위험도)은 그대로 나간다. 조립기가 서면 이 분기가 사라진다 (D-192).
     """
+    if state.get("sentences") and state.get("certificate") is None:
+        return {"outcome": Outcome.hold}
     return {"outcome": Outcome.certificate}
+
+
+def guidance_ready(sents: list[SentenceJudgment]) -> bool:
+    """「지시」의 재료가 다 있는가 — 확정된 B 실증형 위반마다 **실증 분기와 뺄 구간** (D-268 · 계약 `_guidance_payload` 와 같은 조건)."""
+    subst = [s for s in sents if s.infeasibility is Infeasibility.B and s.violations]
+    return bool(subst) and all(s.substantiation is not None and s.spans for s in subst)
 
 
 @timed
@@ -903,9 +1124,13 @@ def guidance(state: ReviewState) -> dict[str, Any]:
 
     🔄 2026-09-23 (W3) — 계약에 `Outcome.guidance` 가 섰다 (D-274). 종전에는 보류로 끝냈다.
     ⛔ 통과로 보내지 않는다 — 확정 위반이다. 증명서도 아니다 — 실증형이다 (D-59).
-    🚨 계약은 지시 문장마다 **실증 분기와 뺄 구간**을 요구한다(`_guidance_payload`) — 판정 노드(W4)가 그것을 내야
-       이 종착이 계약을 지난다. ★ 스텁 `judge` 는 `unjudged` 만 내므로 **지금 이 노드에 오는 길은 없다.**
+    🔴 2026-10-02 (W5) — 계약은 지시 문장마다 **실증 분기와 뺄 구간**을 요구한다(`_guidance_payload`). 실증 분기는 기준 문안
+       (조문을 인용한 설명 · D-263 ②)을 싣는데 **문안이 아직 초안**이다 — 재료가 모자라면 **보류로 내린다** (D-220).
+       ⛔ 종전 주석 「지금 이 노드에 오는 길은 없다」는 위험도가 붙으면서 틀린 말이 됐다. 문안이 확정되면 이 분기가 사라진다 (D-192).
     """
+    sents = list(state.get("sentences", []))
+    if sents and not guidance_ready(sents):
+        return {"outcome": Outcome.hold}
     return {"outcome": Outcome.guidance}
 
 
@@ -959,7 +1184,9 @@ def route_review(state: ReviewState) -> str:
         return "guidance"
     # 🔴 통과는 D-125 의 정의대로만 — 확정 ∧ R0 (🔄 D-273 · `is_pass`) · 위험도가 없으면 통과가 아니다
     if all(is_pass(s) for s in sents):
-        return "passed"
+        # 🆕 2026-10-02 (D-271 ④ · D-277 개정) — 주된 광고법을 안 본 품목은 통과가 없다. 계약(`_uncovered_law_notice`)과 같은 규칙 (D-99)
+        category = (state.get("product") or ProductContext()).category
+        return "hold" if category in UNCOVERED_CATEGORIES else "passed"
     return "hold"
 
 
@@ -1057,7 +1284,7 @@ def route_after_rejudge(state: GenerateState) -> str:
 
 def _apply(state: dict[str, Any], out: dict[str, Any], reducers: tuple[str, ...]) -> None:
     for k, v in out.items():
-        state[k] = [*state.get(k, []), *v] if k in reducers else v
+        state[k] = reducer_of(k)(list(state.get(k, [])), list(v)) if k in reducers else v
 
 
 def _run_core(state: dict[str, Any], visited: list[str]) -> None:
@@ -1118,12 +1345,20 @@ def to_response(state: ReviewState) -> JudgeResponse:
     """검수 상태를 계약으로 옮긴다. 🚨 계약이 거부하면 여기서 터진다 — 화면보다 먼저다.
 
     🔄 D-265 — `attempt` 를 넘기지 않는다. 검수에서는 **항상 0** 이다(재검수 횟수와 다른 축).
-    ⬜ `category` · `not_reviewed` · `branches` (D-276 · D-277) 는 **넘기지 않는다** — 받은 품목은 판별 결과가 아니고(D-82),
-       분기는 `merge_laws` 가 만든다. 🔜 W4 — `classify` 가 판별하고 `merge_laws` 가 분기를 낼 때 같이 옮긴다 (D-192).
+    🔄 2026-10-02 — **품목 · 품목 출처 · 미검수 법을 싣는다** (D-276 ⑥ · D-277 · D-271 ④ 개정).
+       · 품목은 요청이 준 값이다 — `classify` 가 아직 판별하지 않으므로 출처는 늘 `user_selected`(확인되지 않은 값)다.
+         ⛔ 종전에는 「받은 품목은 판별 결과가 아니다」라 싣지 않았다 — 그러면 계약의 통과 금지(`_uncovered_law_notice`)가 발동하지 않는다.
+       · 주된 광고법을 안 본 품목(`UNCOVERED_CATEGORIES`)이면 미검수 고지가 붙는다. 법 이름을 가릴 낱말 목록이 아직 없어 한 줄이다 (D-277 ⬜).
+    ⬜ `branches`(D-276)는 아직 넘기지 않는다 — 분기는 `merge_laws` 가 전제별로 판정을 낼 때 같이 옮긴다 (D-192).
     """
+    category = (state.get("product") or ProductContext()).category
     return JudgeResponse(
         outcome=state.get("outcome", Outcome.hold),
+        category=category,
+        category_source=CategorySource.user_selected if category is not None else None,
+        not_reviewed=[NOT_REVIEWED_UNNAMED] if category in UNCOVERED_CATEGORIES else [],
         sentences=state.get("sentences", []),
+        certificate=state.get("certificate"),
         timings=state.get("timings", []),
         law_version="2026-09-10",
         judged_by=JUDGED_BY,

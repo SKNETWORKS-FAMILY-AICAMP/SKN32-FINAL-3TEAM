@@ -322,6 +322,47 @@ def test_봉인_판이_끝나면_골든이_대상_N_을_빼고_조건을_붙인�
         golden.build()
 
 
+@pytest.mark.gate
+def test_봉인_문구가_조건_D_면_근거와_유형을_싣지_않는다(fs, tmp_path, monkeypatch) -> None:
+    """🆕 2026-10-02 — 조건 D 는 판정 대상이 아니다. 의결서 호를 남기면 `check_basis` 가 골든을 멈춘다(B 기기 · 4 행)."""
+    tmp, man, docs = fs
+    k1, k2, k3 = (r["지문"] for r in g.fs_rows())
+    same = [
+        f"{k1}\tY\t공1\t-\t-\tB\t실증\t",
+        f"{k2}\tY\t-\t-\t-\tD\t-\t표시사항",
+        f"{k3}\tN\t-\t-\t-\t-\t-\t",
+    ]
+    _fs_merge(tmp, same, same)
+    inj = tmp_path / "inj.jsonl"
+    inj.write_text("", encoding="utf-8")
+    monkeypatch.setattr(golden, "SPLIT", man)
+    monkeypatch.setattr(golden, "INJECTED", inj)
+    monkeypatch.setattr(golden.split_mod, "verify_inputs", lambda m, who: None)
+    monkeypatch.setattr(golden, "ftc_docs", lambda: docs)
+    for name in ("approved_docs", "casebook_docs", "guide_docs", "caution_docs", "guide_fix_docs"):
+        monkeypatch.setattr(golden, name, lambda: [])
+    monkeypatch.setattr(golden, "lineage", lambda prov, origin: ("f", True))
+    rows, _ = golden.build()
+    d = next(r for r in rows if r["text"] == "GiGA LTE")
+    assert (d["조건"], d["근거"], d["labels"]) == ("D", [], [])
+    assert not golden.is_positive(d) and not golden.is_negative(d)
+    golden.check_basis(rows)  # 🔴 멈추지 않는다
+
+
+@pytest.mark.gate
+def test_골든_호_셈은_채점_행만_센다() -> None:
+    """🆕 2026-10-02 — 유형이 남은 M 행 · D · L 은 호 셈(D-40)에 안 든다 — `split.tally_ho` 와 같은 규칙 (D-99)."""
+    c = [statute.fair(2)]
+    base = {"labels": statute.types_of(c), "근거": c}
+    rows = [
+        {**base, "조건": "B"},
+        {**base, "조건": "M"},
+        {**base},
+        {"labels": [], "근거": [], "조건": "D"},
+    ]
+    assert golden.ho_counts(rows) == {statute.ho_key(c[0]): 2}
+
+
 # ── 블라인드 감사표 (판정 J6) ────────────────────────────────────────────────────────────
 
 
