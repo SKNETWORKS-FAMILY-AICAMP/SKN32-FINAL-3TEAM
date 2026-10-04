@@ -1226,6 +1226,68 @@ CBC = Round(
 )
 
 
+# ── 🆕 2026-10-05 해설서 **근거자료 제출** 판 — 판독 지시 `build/labels/guide_evidence/판독_지시.md` · 원장 10-03 ㉜ ──
+#: 해설서 「근거자료 제출」 블록의 표시내용(`preprocess/mfds_guide.py` 의 `블록 == "근거자료"` · 619 행)이 단위다.
+#:    🚨 위반문구(삭제 블록 1,834)와 **다른 행**이다 — 원천은 「근거를 내면 쓸 수 있다」고 한 표현이라 한 조건이 아니다(㉜).
+#:    🚨 같은 표 · 같은 문구가 두 번 실린 행이 있다(고유 문구 614 / 619) — 지문은 판독 때 만든 것을 그대로 쓰고, 수로 대조한다.
+GE_KEY_RE = re.compile(r"^ge:[a-z2-7]{12}$")
+GE_BLOCK = "근거자료"
+GE_DIR = ROOT / "data" / "derived" / "labels" / "guide_evidence"
+GE_READINGS = GE_DIR / "readings.jsonl"
+GE_ADOPTED = GE_DIR / "adopted.jsonl"
+GE_DECISIONS = GE_DIR / "decisions.jsonl"
+GE_AUDIT = GE_DIR / "audit.jsonl"
+GE_TEAM_SHEET = ROOT / "build" / "labels" / "guide_evidence__팀장판정표.csv"
+_GE_SAME = ("표", "제품유형", "종류", "문구")
+
+
+def ge_units(units: list[dict]) -> dict[str, dict]:
+    """근거자료 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 표 · 제품유형 · 종류 · 문구가 해설서 파생물의 근거자료 블록 행과 같아야 한다.
+
+    🔴 같은 행이 원천에 실린 수보다 단위에 더 많이 들면 멈춘다 — 한 행을 두 번 세게 된다 (D-220).
+    """
+    if not GF_GUIDE.exists():
+        raise SystemExit(
+            f"🔴 {GF_GUIDE} 가 없다 — 먼저: uv run python -m preprocess.mfds_guide --dump"
+        )
+    have: collections.Counter = collections.Counter()
+    for x in GF_GUIDE.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            r = json.loads(x)
+            if r.get("블록") == GE_BLOCK and r.get("원천") == GF_SOURCE:
+                have[tuple(str(r[f]) for f in _GE_SAME)] += 1
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    used: collections.Counter = collections.Counter()
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(GE_KEY_RE, k, src, bad):
+            continue
+        t = tuple(str(u.get(f)) for f in _GE_SAME)
+        used[t] += 1
+        if used[t] > have[t]:
+            bad.append(
+                f"{k} 표 {u.get('표')} 근거자료 블록에 없는(또는 수를 넘는) 행 {str(u.get('문구'))[:30]!r}"
+            )
+            continue
+        src[k] = {"지문": k, **dict(zip(_GE_SAME, t, strict=True)), "원천": GF_SOURCE}
+    _units_fail("해설서 근거자료", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.ge_units")
+    return src
+
+
+GE = Round(
+    prefix="GE",
+    cmd="ge",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=("표", "제품유형", "종류"),
+    sheet_head=("표", "제품유형"),
+    units=ge_units,
+)
+
+
 # ── 🆕 2026-10-05 대구청 사례(2013) 판 — 지시서 `라벨링_지시서_2026-10-03_대구청사례_조문·조건.md` ──
 #: 대구지방식약청 「식품 등 허위과대광고 사례」의 **확정 문구**(사람이 원본에 대 확정한 전사 · 한 행이 단위)다.
 #:    🔴 원천 레코드는 `scripts/daegu2013_sheet.py --dump` 가 낸다(전사 → 마스킹 → 행).
@@ -2415,6 +2477,7 @@ ROUNDS = {
     "ipc": (IPC, "1차 법령해석 · 화장품"),
     "fp": (FP, "공정위 보도자료 1997~2007"),
     "gf": (GF, "해설서 수정문구"),
+    "ge": (GE, "해설서 근거자료 제출"),
     "fs": (FS, "결정문 봉인 문구"),
     "ft": (FT, "결정문 학습 문구"),
 }

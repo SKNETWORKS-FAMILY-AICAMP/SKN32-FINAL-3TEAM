@@ -133,6 +133,12 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
         "labels/daegu_2013/adopted.jsonl",
         "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round dg-rebuild`",
     ),
+    # 🆕 2026-10-05 — 해설서 근거자료 제출 판
+    (
+        "생성물",
+        "labels/guide_evidence/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round ge-rebuild`",
+    ),
     # 🆕 2026-10-04 — 판별 매뉴얼(2015) 판
     (
         "생성물",
