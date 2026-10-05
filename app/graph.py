@@ -43,6 +43,7 @@ from typing import Annotated, Any, TypedDict
 
 from app import dictmatch as dm
 from app import premise as pm
+from app import reasons as rs
 from app import retrieve as rt
 from app import sanction, sentsplit
 from app.contracts import (
@@ -1353,17 +1354,55 @@ NODES: dict[str, Callable[..., dict[str, Any]]] = {
 # ══════════════════════════════════════════════════════════════════════
 
 
+def _certificate_of(sents: list[SentenceJudgment], category: Category | None) -> Certificate | None:
+    """증명서 조립 (🆕 2026-10-06 · D-320 · D-59 · D-125). 문안은 `app/reasons.py` 의 승인된 줄만 — 없으면 **None**.
+
+    ★ 자격형 · 절대형 문장마다 (품목의 법, 유형, 사유)로 문안을 꺼낸다. 증명서의 사유는 **가장 막힌 사유**(절대형 > 자격형 ·
+       종착 우선순위와 같다)이고 설명은 그 사유의 문장들에서 꺼낸 글을 문장 순서대로 겹치지 않게 잇는다.
+       자격 안내는 증명서의 사유가 자격형일 때만 싣는다 — 절대형 증명서에 「인정받으면 된다」를 함께 적지 않는다(D-61 🚨).
+    🔴 자격형 · 절대형 문장 중 **하나라도 문안이 없으면 증명서를 내지 않는다** — 일부 문장만 설명하는 증명서는 나머지가
+       왜 불가인지 말하지 못한다(D-220). 품목 미확정 · 일반상품 · 전용법 미수록도 꺼낼 법이 없어 None 이다(D-320 ⑤).
+    ⛔ 실증형(B) 문장은 보지 않는다 — 증명서의 대상이 아니다(D-59 · D-268).
+    """
+    picked: list[tuple[Infeasibility, list[rs.ReasonText]]] = []
+    for s in sents:
+        if not s.violations or s.infeasibility not in (Infeasibility.A, Infeasibility.C):
+            continue
+        got = [t for v in s.violations if (t := rs.lookup(category, v, s.infeasibility))]
+        if not got:
+            return None
+        picked.append((s.infeasibility, got))
+    if not picked:
+        return None
+    top = next(r for r in _INFEAS_ORDER if any(i is r for i, _ in picked))
+    lines = [t for i, got in picked if i is top for t in got]
+    explanation = list(dict.fromkeys(t.explanation for t in lines))
+    guidance = list(dict.fromkeys(t.guidance for t in lines if t.guidance))
+    return Certificate(
+        reason=top,
+        explanation=" ".join(explanation),
+        guidance=" ".join(guidance) if top is Infeasibility.A and guidance else None,
+    )
+
+
 @timed
 def certificate(state: ReviewState) -> dict[str, Any]:
     """합법화 불가 증명서 (D-32). **A 자격형 · C 절대형에만** (D-125).
+
+    🔄 2026-10-06 (D-320) — **조립기가 섰다**(`_certificate_of`). 승인된 문안이 있는 조합이면 증명서를 내고, 없으면 종전대로 보류다.
 
     🔴 2026-10-02 (W5) — 계약은 `outcome=certificate` 에 증명서(`Certificate` · 사유 · 설명)를 요구한다. **조립기가 아직 없다** —
        설명은 사용자에게 보이는 문안이고 조문 대조 뒤에 확정한다(D-308 ⬜ · D-263 ②). 증명서가 없으면 **보류로 내린다**.
        ⛔ 빈 증명서로 종착을 찍으면 계약이 응답을 거부해 화면에 오류가 난다 — 위험도가 붙은 뒤로는 실제 요청이 여기 온다.
        문장 판정(확정 · 유형 · 근거 · 위험도)은 그대로 나간다. 조립기가 서면 이 분기가 사라진다 (D-192).
     """
-    if state.get("sentences") and state.get("certificate") is None:
-        return {"outcome": Outcome.hold}
+    cert = state.get("certificate")
+    if cert is None and state.get("sentences"):
+        category = (state.get("product") or ProductContext()).category
+        cert = _certificate_of(list(state["sentences"]), category)
+        if cert is None:
+            return {"outcome": Outcome.hold}
+        return {"outcome": Outcome.certificate, "certificate": cert}
     return {"outcome": Outcome.certificate}
 
 
