@@ -214,3 +214,13 @@ def test_위반_유형이_없는_문장은_고쳐_쓰지_않는다(wired) -> Non
     html = _go(text)
     assert wired.sllm == []
     assert "위반 유형을 찾지 못했어요" in html
+
+
+def test_버튼이_없으면_이유를_적는다() -> None:
+    """버튼이 안 뜨는 문장은 왜 안 뜨는지 보인다 — 사유 A · 위반 유형 없음 (10-06 화면 확인)."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    html = TestClient(app).get("/u/preview/05_certificate_a").text
+    assert "고쳐 쓰기 없음 · 사유 A(자격형)" in html

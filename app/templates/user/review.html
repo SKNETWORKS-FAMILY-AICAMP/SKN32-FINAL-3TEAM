@@ -317,12 +317,16 @@
         {% set rw = item.rewrites[s.sent_id] if item.rewrites and s.sent_id in item.rewrites else none %}
         {% if rw %}
         {% include "user/_review_rewrite.html" %}
-        {% elif s.sent_id in item.flagged and s.violations and not (s.infeasibility and s.infeasibility.value == "A") %}
+        {% elif s.infeasibility and s.infeasibility.value == "A" %}
+        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 기능성이 없는 제품이라 표현을 바꿔도 같은 위반이에요 (D-59).</p>
+        {% elif s.violations %}
         <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
           <input type="hidden" name="target" value="{{ item.n }}:{{ s.sent_id }}">
           <button type="submit" class="rv-chip" style="cursor:pointer">이 문장 고쳐 쓰기 (10초 안팎)</button>
         </form>
+        {% elif s.sent_id in item.flagged %}
+        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 위반 유형이 특정되지 않았어요(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.</p>
         {% endif %}
       </div>
       {% else %}
