@@ -38,10 +38,11 @@ import functools
 import operator
 import time
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated, Any, TypedDict
 
 from app import dictmatch as dm
+from app import premise as pm
 from app import retrieve as rt
 from app import sanction, sentsplit
 from app.contracts import (
@@ -50,6 +51,7 @@ from app.contracts import (
     AdaptedCopy,
     AdFormat,
     AdSection,
+    Branch,
     Candidate,
     Category,
     CategorySource,
@@ -62,6 +64,7 @@ from app.contracts import (
     KeywordScreen,
     MediaProfile,
     Outcome,
+    Premise,
     ProductContext,
     Risk,
     RiskAssessment,
@@ -243,6 +246,8 @@ class CoreState(TypedDict, total=False):
     law_results: Annotated[list[LawResult], operator.add]
     # ── 판정 누적 🔴 누적 — 🔄 2026-10-02 같은 문장은 바꿔 끼운다(`upsert_sentences`) ─────────
     sentences: Annotated[list[SentenceJudgment], upsert_sentences]
+    # ── 품목 분기 (🆕 2026-10-05 · D-319 · D-263 ⑦) — `premise_branches` **한 노드만** 쓴다. 덮어쓰는 칸이다(리듀서 없음)
+    branches: list[Branch]
     # ── 계측 (D-77 · D-43 이 LangSmith 를 배제해 이것이 유일한 경로) 🔴 누적 ──
     timings: Annotated[list[Timing], operator.add]
 
@@ -315,7 +320,16 @@ def reducer_of(key: str) -> Callable[[list[Any], list[Any]], list[Any]]:
 
 #: 코어 입출력 — 함수 노드가 **이것만** 넣고 **이것만** 꺼낸다 (모듈 docstring 의 실측 참조).
 CORE_IN = ("text", "product")
-CORE_OUT = ("sents", "laws", "evidence", "dict_scans", "law_results", "sentences", "timings")
+CORE_OUT = (
+    "sents",
+    "laws",
+    "evidence",
+    "dict_scans",
+    "law_results",
+    "sentences",
+    "branches",
+    "timings",
+)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -708,7 +722,8 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
 
 @timed
 def merge_laws(state: CoreState) -> dict[str, Any]:
-    """법별 결과를 모은다 (D-267 팬인). 🔜 W4 — 전제별로 묶어 `branches` · `premise_basis`(D-263 ①).
+    """법별 결과를 모은다 (D-267 팬인). 🔄 2026-10-05 — 전제별로 묶어 분기를 내는 일은 `premise_branches` 가 한다(D-319 ·
+    판정과 위험도가 선 뒤라야 전제마다 다시 낼 수 있다). 여기는 대조만 한다.
 
     🔴 **보낸 법이 전부, 한 번씩, 문장을 다 보고 돌아왔는가**를 여기서 대조한다 (D-220 fail-closed).
        ⛔ 병렬 노드 하나가 빠지거나 두 번 쌓여도 LangGraph 는 오류를 안 낸다 — 판정이 한 법만큼 가벼워진 채
@@ -1016,8 +1031,8 @@ def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN00
        · 위반 확정 → 하한 = 한 전제 안에서 걸린 법들의 하한 중 높은 쪽(`floor_of_sentence`) · 최종 = 하한(인코더가 없다 · D-131)
     🔴 **하한을 모르면 적지 않는다** — 제재표가 비었거나(서명 전 · 적재 전) 맞는 행이 없으면 위험도가 없고, 위험도 없는 확정 위반은
        종착이 보류다(`route_review` · D-220). ⛔ 지어내면 계약이 거부한다(D-09).
-    🚨 **품목 미확정은 아직 적지 않는다** — 전제(식품 · 화장품 · …)마다 하한이 달라 「가장 보수적인 전제」의 등급과 보류 여부를
-       정해야 한다. 그 기준이 D-229 ⑥ 「전제 정정 · 결론 재검 대기」다. 판정이 내려오면 **이 줄**이 그 자리다 (D-192).
+    🚨 **품목 미확정은 여기서 적지 않는다** — 전제(식품 · 화장품 · …)마다 하한이 다르다. 전제마다 다시 판정해 가장 보수적인
+       등급을 적는 것은 `premise_branches` 다(🔄 2026-10-05 · D-319 — D-229 ⑥ 재검이 닫혔다).
     🔴 커서는 `match_dict` 와 같이 `config` 로 받는다(주석 없이). DB 가 없으면 아무것도 적지 않는다 — 판정은 그대로 나간다.
     """
     sents = list(state.get("sentences", []))
@@ -1074,6 +1089,244 @@ def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN00
     return {"sentences": out} if out else {}
 
 
+# ══════════════════════════════════════════════════════════════════
+#  품목 분기 (🆕 2026-10-05 · D-319 · D-229 ⑥ · D-263 · D-267 · D-276) — 전제마다 판정을 다시 낸다
+# ══════════════════════════════════════════════════════════════════
+#
+# ★ 재료는 법별 노드가 이미 갈라 둔 것이다(`law_results`) — 검색 · 사전 · 인코더를 다시 부르지 않는다 (D-267 · D-99).
+#   전제 하나 = 그 전제의 법 묶음(`pm.PREMISE_LAWS`)에서 울린 적중만으로 `_judge_one` 을 다시 부른 것 + 전제가 유형을 바꾸는 자리.
+# 🔴 사전을 읽는 방식은 그대로다 — 낱말의 인용 법이 그 판정의 법이다. 그래서 식품법 낱말은 화장품 · 일반상품 전제에서
+#    「위반 없음」이 아니라 **사전 침묵(보류)** 이다 (D-269). 그 차이를 확정으로 덮지 않는 것이 D-319 ① 이다.
+
+
+def _premise_hits(
+    premise: Premise, hits: Iterable[DictHit]
+) -> tuple[list[DictHit], list[DictHit], bool, bool]:
+    """전제가 유형을 바꾸는 자리 (D-319 ④′). `(남는 적중, 판정하지 못하는 적중, 꺼진 것이 있나, 자격형으로 바뀐 것이 있나)`.
+
+    ① ④ 건강기능식품 전제 둘 · 일반식품 기능성에서 3호(건강기능식품 오인) 인용은 서지 않는다 — 인용에서 그 줄만 뺀다
+    ② `건기식_비인정` 은 그 자리에 [별표 1] 4.나(인정하지 않은 기능성)가 선다 — 자격형이다
+    ③ `건기식_인정` 의 질병 표방은 인용의 목이 나 · 다일 때만 그대로 남고, 아니면 판정하지 못한다
+    """
+    kept: list[DictHit] = []
+    unknown: list[DictHit] = []
+    voided = converted = False
+    for h in hits:
+        basis = list(h.basis)
+        if premise in pm.NO_HF_MISLEAD:
+            rest = [c for c in basis if statute.type_of(c) != pm.HF_MISLEAD]
+            if len(rest) != len(basis):
+                if premise is Premise.건기식_비인정:
+                    rest.append(pm.UNRECOGNIZED_FUNCTION_CITE)
+                    converted = True
+                else:
+                    voided = True
+                basis = rest
+        if premise is Premise.건기식_인정:
+            vague = [
+                c
+                for c in basis
+                if statute.type_of(c) == pm.DISEASE
+                and statute.parse(c)[4] not in pm.DISEASE_NO_PROVISO_MOK
+            ]
+            if vague:
+                unknown.append(replace(h, basis=tuple(vague)))
+                basis = [c for c in basis if c not in vague]
+        if basis:
+            kept.append(h if tuple(basis) == h.basis else replace(h, basis=tuple(basis)))
+    return kept, unknown, voided, converted
+
+
+def _premise_sentences(
+    premise: Premise, state: CoreState, rows: list[dict[str, Any]]
+) -> list[SentenceJudgment]:
+    """전제 하나에서의 문장 판정 — 위험도까지. `judge` · `assess_risk` 와 같은 함수를 전제의 법 묶음으로 다시 부른다 (D-99)."""
+    laws = pm.PREMISE_LAWS[premise]
+    results = {r.law: r for r in state.get("law_results", [])}
+    scans = {s.sent_id: s for s in state.get("dict_scans", [])}
+    sents = state.get("sents", [])
+    try:
+        starts: list[int | None] = list(sentsplit.offsets(state.get("text", ""), sents))
+    except ValueError:
+        starts = [None] * len(sents)
+    category = pm.PREMISE_CATEGORY[premise]
+    out: list[SentenceJudgment] = []
+    for i, text in enumerate(sents):
+        sid = sent_id(i)
+        arts: list[EvidenceArticle] = []
+        by_law: dict[str, tuple[DictHit, ...]] = {}
+        unknown: list[DictHit] = []
+        undecided: list[DictHit] = []
+        raw_hit = voided = converted = False
+        for law in laws:
+            r = results.get(law)
+            if r is None:
+                continue
+            for a in dict(r.articles).get(sid, ()):
+                if a not in arts:
+                    arts.append(a)
+            hs = dict(r.dict_hits).get(sid, ())
+            raw_hit = raw_hit or bool(hs)
+            kept, unk, v, c = _premise_hits(premise, hs)
+            voided, converted = voided or v, converted or c
+            undecided += unk
+            # 판정하지 못하는 적중은 자격 없는 적중과 같은 길로 — 보류 문장의 유형 후보다 (D-311 과 같은 모양)
+            unknown += unk + list(dict(r.weak_hits).get(sid, ()))
+            if kept:
+                by_law[LAW_OF_NODE[law]] = tuple(kept)
+        hits = [h for hs in by_law.values() for h in hs]
+        if undecided or (raw_hit and voided and not hits):
+            # 🔴 이 전제에서 **판정하지 못한다** — 보류이고 걸린 것은 전부 유형 후보로만 싣는다 (D-319 ④′ · D-220 · D-311).
+            #    · 판정하지 못하는 적중이 하나라도 있으면(질병 표방의 목을 모른다) 남은 적중만으로 확정하지 않는다 —
+            #      확정하면 그 분기는 「거짓 · 과장뿐」이라고 말하게 된다(🔄 2026-10-05 재검 · 원장 10-03 ㊿-34).
+            #    · 3호가 **서지 않는다 ≠ 통과다.** 인정 · 고시된 문구와 맞는지는 대조하지 않았다 — 그 재료(건강기능식품의
+            #      고시형 문구 · 일반식품 기능성 고시 [별표 2])를 읽는 자리가 아직 없다. 그 대조가 붙기 전에는 통과를 내지 않는다.
+            #    ⛔ 하한을 걸지 않는다 — 보류 문장의 유형 후보다 (D-311 · D-313 ③).
+            j = _judge_one(sid, text, starts[i], scans.get(sid), [], arts, hits + unknown)
+        else:
+            j = _judge_one(sid, text, starts[i], scans.get(sid), hits, arts, unknown)
+            if converted and j.verdict is Verdict.confirmed and j.violations:
+                j = j.model_copy(
+                    update={
+                        "infeasibility": next(
+                            x for x in _INFEAS_ORDER if x in {j.infeasibility, Infeasibility.A}
+                        )
+                    }
+                )
+        if j.verdict is Verdict.confirmed:
+            if not j.violations:
+                risk = RiskAssessment(floor=Risk.R0, final=Risk.R0)
+                if category in UNCOVERED_CATEGORIES and not j.not_claim:
+                    # `assess_risk` 와 같은 규칙 — 주된 광고법을 안 본 품목은 「걸린 것 없음」을 확정하지 않는다 (D-314)
+                    j = j.model_copy(
+                        update={"verdict": Verdict.hold, "hold_reason": HoldReason.law_uncovered}
+                    )
+                j = _with_risk(j, risk)
+            else:
+                f = floor_of_sentence(rows, by_law)
+                if f.floor is not None:
+                    j = _with_risk(
+                        j,
+                        RiskAssessment(
+                            floor=f.floor,
+                            final=f.floor,
+                            ceiling=f.ceiling,
+                            ceiling_note=f.ceiling_note,
+                        ),
+                    )
+        out.append(j)
+    return out
+
+
+def _branch_outcome(premise: Premise, sents: list[SentenceJudgment]) -> Outcome:
+    """분기의 종착 — 검수 종착과 같은 라우터를 전제의 품목으로 부른다 (D-99). 지시는 재료가 다 있을 때만(`guidance_ready`)."""
+    name = route_review(
+        {"sentences": sents, "product": ProductContext(category=pm.PREMISE_CATEGORY[premise])}  # type: ignore[typeddict-item]
+    )
+    if name == "guidance" and not guidance_ready(sents):
+        return Outcome.hold
+    return {
+        "hold": Outcome.hold,
+        "certificate": Outcome.certificate,
+        "guidance": Outcome.guidance,
+        "passed": Outcome.passed,
+    }[name]
+
+
+def _recorded(
+    base: SentenceJudgment, per: list[SentenceJudgment], reason: HoldReason
+) -> SentenceJudgment | None:
+    """기록되는 판정 하나 (D-319 ① ①′ · D-263 ①). 바꿀 것이 없으면 `None`.
+
+    🔴 **모든 전제에서 같은 위반이 설 때만 확정이다.** 한 전제라도 판정하지 못하거나(사전 침묵) 위반이 없으면 보류 + 분기다 —
+       적용되는지 모르는 법의 조문으로 확정하지 않는다. 보류에도 유형 · 근거 · 가장 보수적인 위험도를 싣는다
+       (계약 `_recorded_is_conservative` — 기록된 위험도 ≥ 검증 안 된 모든 분기의 위험도).
+    """
+    hit = [j for j in per if j.verdict is Verdict.confirmed and j.violations]
+    if not hit:
+        return None  # 어느 전제에서도 확정 위반이 없다 — 종전 판정(사전 침묵 보류 등) 그대로
+    risks = [j.risk.final for j in per if j.risk.final is not None]
+    top = max(risks, key=lambda r: r.level) if risks else None
+    worst = max(hit, key=lambda j: j.risk.final.level if j.risk.final is not None else -1)
+    risk = RiskAssessment(floor=top, final=top) if top is not None else RiskAssessment()
+    same = len(hit) == len(per) and len({tuple(j.violations) for j in per}) == 1
+    if same:
+        # 등급만 다르면 가장 높은 등급으로 기록한다 (D-319 ①′)
+        return worst.model_copy(
+            update={
+                "risk": worst.risk
+                if top is None
+                else worst.risk.model_copy(update={"floor": top, "final": top})
+            }
+        )
+    return SentenceJudgment(
+        sent_id=base.sent_id,
+        text=base.text,
+        verdict=Verdict.hold,
+        hold_reason=reason,
+        violations=worst.violations,
+        infeasibility=worst.infeasibility,
+        evidence=worst.evidence,
+        spans=worst.spans,
+        risk=risk,
+    )
+
+
+def _judgment_key(j: SentenceJudgment) -> tuple:
+    """전제끼리 판정이 같은가를 보는 열쇠 — 판정 · 사유 · 유형 · 불가 사유 · 위험도 · 근거 좌표."""
+    return (
+        j.verdict,
+        j.hold_reason,
+        tuple(j.violations),
+        j.infeasibility,
+        j.risk.final,
+        tuple((e.law_id, e.article, e.item) for e in j.evidence),
+    )
+
+
+@timed
+def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
+    """품목 분기 — 전제마다 판정을 내고, 기록되는 판정을 가장 보수적인 쪽으로 맞춘다 (D-319 · D-263 ⑦ 「처음에 전부 계산」).
+
+    ★ 품목을 모르면 전제 여섯, 식품이면 둘(식품 · 일반식품 기능성), 건강기능식품이면 둘(인정 · 비인정). 전제가 하나뿐이면 분기가 없다.
+       품목이 주어졌는데 전제마다 판정이 같아도 분기가 없다.
+    🔴 **기준 문안이 확정되지 않았으면 아무것도 하지 않는다** — 분기에는 문안이 필수 칸이고(계약 `Branch.criteria`) 초안 문안으로
+       응답을 내지 않는다 (D-147 · D-220). 그때는 종전대로다(품목 미확정의 확정 위반은 위험도 없이 보류로 내려간다).
+    🔴 DB 가 없으면(하한을 못 읽는다) 아무것도 하지 않는다 — 분기마다 위험도를 지어내지 않는다 (D-09).
+    🚨 `judge` · `assess_risk` 가 낸 문장을 **바꿔 끼운다**(`upsert_sentences`) — 문장 수는 늘지 않는다.
+    """
+    category = (state.get("product") or ProductContext()).category
+    premises = pm.PREMISES_OF[category]
+    cur = ((config or {}).get("configurable") or {}).get("conn")
+    base = list(state.get("sentences", []))
+    if len(premises) < 2 or not pm.criteria_ready(premises) or cur is None or not base:
+        return {}
+    if any(s.verdict is Verdict.unjudged for s in base):
+        return {}  # 사전을 못 훑었다 — 전제별 판정의 재료가 없다 (D-220)
+    rows = load_sanction_rows(cur)
+    per = {p: _premise_sentences(p, state, rows) for p in premises}
+    if category is not None and len({tuple(map(_judgment_key, per[p])) for p in premises}) == 1:
+        # 품목이 주어졌고 전제가 판정을 바꾸지 않는다 — 고를 것이 없는 선택지를 내지 않는다(종전 판정 그대로).
+        # ⛔ 품목을 모를 때는 같아도 낸다 — 「품목 미확정이면 분기는 언제나」(D-229 ⑥ · D-319 ②).
+        return {}
+    reason = HoldReason.cat_unknown if category is None else HoldReason.premise_unknown
+    changed = [
+        r
+        for i, b in enumerate(base)
+        if (r := _recorded(b, [per[p][i] for p in premises], reason)) is not None
+    ]
+    branches = [
+        Branch(
+            premise=p,
+            outcome=_branch_outcome(p, per[p]),
+            sentences=per[p],
+            criteria=pm.CRITERIA[p],
+        )
+        for p in premises
+    ]
+    return {"branches": branches, "sentences": changed}
+
+
 @timed
 def doc_rules(state: CoreState) -> dict[str, Any]:
     """층 3 문서 규칙 — R-D1 최소판 → 문서 경고 + `hold(rd1)` (D-83). 🔜 W8.
@@ -1085,11 +1338,11 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
 
 #: 코어 순서 — 팬아웃 앞 · 법별 노드(`LAW_NODES` · 병렬) · 팬아웃 뒤. 컴파일본과 스텁이 **이 표 하나**를 쓴다 (D-99).
 CORE_BEFORE_LAWS = ("split", "classify", "retrieve", "match_dict", "encode")
-CORE_AFTER_LAWS = ("merge_laws", "judge", "assess_risk", "doc_rules")
+CORE_AFTER_LAWS = ("merge_laws", "judge", "assess_risk", "premise_branches", "doc_rules")
 NODES: dict[str, Callable[..., dict[str, Any]]] = {
     **{f.__name__: f for f in (split, classify, retrieve, match_dict, encode)},
     **{name: _law_node(name) for name in LAW_NODES},
-    **{f.__name__: f for f in (merge_laws, judge, assess_risk, doc_rules)},
+    **{f.__name__: f for f in (merge_laws, judge, assess_risk, premise_branches, doc_rules)},
 }
 
 
@@ -1349,7 +1602,8 @@ def to_response(state: ReviewState) -> JudgeResponse:
        · 품목은 요청이 준 값이다 — `classify` 가 아직 판별하지 않으므로 출처는 늘 `user_selected`(확인되지 않은 값)다.
          ⛔ 종전에는 「받은 품목은 판별 결과가 아니다」라 싣지 않았다 — 그러면 계약의 통과 금지(`_uncovered_law_notice`)가 발동하지 않는다.
        · 주된 광고법을 안 본 품목(`UNCOVERED_CATEGORIES`)이면 미검수 고지가 붙는다. 법 이름을 가릴 낱말 목록이 아직 없어 한 줄이다 (D-277 ⬜).
-    ⬜ `branches`(D-276)는 아직 넘기지 않는다 — 분기는 `merge_laws` 가 전제별로 판정을 낼 때 같이 옮긴다 (D-192).
+    🆕 2026-10-05 (D-319) — `branches` 를 넘긴다. 분기는 `premise_branches` 가 전제별로 판정을 내 만든다 — 기준 문안이 확정되지
+       않았으면 빈 목록이다(`app/premise.py` `criteria_ready`).
     """
     category = (state.get("product") or ProductContext()).category
     return JudgeResponse(
@@ -1358,6 +1612,7 @@ def to_response(state: ReviewState) -> JudgeResponse:
         category_source=CategorySource.user_selected if category is not None else None,
         not_reviewed=[NOT_REVIEWED_UNNAMED] if category in UNCOVERED_CATEGORIES else [],
         sentences=state.get("sentences", []),
+        branches=state.get("branches", []),
         certificate=state.get("certificate"),
         timings=state.get("timings", []),
         law_version="2026-09-10",

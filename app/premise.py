@@ -1,0 +1,83 @@
+"""app/premise.py — **품목 전제의 표** (D-319 · D-267 · D-276). 판정 그래프의 분기 노드(`app/graph.py` `premise_branches`)가 읽는다.
+
+★ 표가 넷이다 — 품목 → 전제 · 전제 → 법 묶음 · 전제 → 품목(미검수 판단) · 전제 → 기준 문안.
+🔴 **기준 문안은 확정된 줄만 적는다** (D-319 ③ · D-263 ② · D-147). 초안 문안을 여기 옮기지 않는다 — 한 줄이라도 비면
+   분기 노드는 분기를 내지 않고 종전대로 돈다(`criteria_ready` · D-220). 초안은 `docs/ohb/기준문안_초안_2026-10-02.md` §1 · §6 이다.
+🚨 전제가 유형을 바꾸는 자리(D-319 ④′)는 조문 글자만 대조한 법 해석이다 — 근거는 줄마다 적는다.
+"""
+
+from __future__ import annotations
+
+from app.contracts import Category, Premise, Violation
+
+#: 품목 → 그 품목에서 갈리는 전제 (D-276 ① · D-295). 🔴 **품목을 모르면 전부다** (D-229 ⑥ 「분기는 언제나」).
+#:    `전용법_미수록` 은 전제가 아니다 — 판정할 법이 없다 (D-277).
+PREMISES_OF: dict[Category | None, tuple[Premise, ...]] = {
+    None: (
+        Premise.식품,
+        Premise.일반식품_기능성,
+        Premise.건기식_인정,
+        Premise.건기식_비인정,
+        Premise.화장품,
+        Premise.일반상품,
+    ),
+    Category.식품: (Premise.식품, Premise.일반식품_기능성),
+    Category.건기식: (Premise.건기식_인정, Premise.건기식_비인정),
+    Category.화장품: (Premise.화장품,),
+    Category.일반상품: (Premise.일반상품,),
+    Category.전용법_미수록: (),
+}
+
+#: 전제 → 법별 노드 이름 (D-319 ④ · D-267 표 · D-271 ④). 표시광고법은 모든 전제에 든다.
+PREMISE_LAWS: dict[Premise, tuple[str, ...]] = {
+    Premise.식품: ("law_ftc", "law_food"),
+    Premise.일반식품_기능성: ("law_ftc", "law_food"),
+    Premise.건기식_인정: ("law_ftc", "law_food"),
+    Premise.건기식_비인정: ("law_ftc", "law_food"),
+    Premise.화장품: ("law_ftc", "law_cosmetic"),
+    Premise.일반상품: ("law_ftc",),
+}
+
+#: 전제 → 그 전제의 품목. 주된 광고법을 안 본 품목(`UNCOVERED_CATEGORIES`)인지 · 종착 규칙이 이것으로 읽는다 (D-314).
+PREMISE_CATEGORY: dict[Premise, Category] = {
+    Premise.식품: Category.식품,
+    Premise.일반식품_기능성: Category.식품,
+    Premise.건기식_인정: Category.건기식,
+    Premise.건기식_비인정: Category.건기식,
+    Premise.화장품: Category.화장품,
+    Premise.일반상품: Category.일반상품,
+}
+
+#: D-319 ④′ ① ④ — **건강기능식품 오인(식품표시광고법 제8조① 3호)이 서지 않는 전제.** 3호 본문 「건강기능식품이 **아닌 것을**」 ·
+#:    시행령 [별표 1] 3.나(고시한 내용의 표시 · 광고는 제외) · 지시서 ⑫-3 개정(판정기록 10-04).
+NO_HF_MISLEAD = frozenset({Premise.건기식_인정, Premise.건기식_비인정, Premise.일반식품_기능성})
+HF_MISLEAD = Violation.건강기능식품_오인.value
+
+#: D-319 ④′ ② — `건기식_비인정` 에서 기능성 표방이 서는 자리. 시행령 [별표 1] 4.나 「건강기능식품의 경우 식품의약품안전처장이
+#:    인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고」. 불가 사유는 **자격형**이다(인정을 받으면 풀린다 · D-59 · 지시서 ⑫-3 「A · 4.나」).
+UNRECOGNIZED_FUNCTION_CITE = "013094:제8조제1항제4호|나목"
+
+#: D-319 ④′ ③ — `건기식_인정` 에서 질병 표방의 건기식 단서는 [별표 1] 1호 **가목 · 라목**에만 있다. 인용의 목이 나 · 다이면 이 전제에서도
+#:    위반이고, 가 · 라이거나 **목을 모르면 판정하지 못한다**(통과로도 위반으로도 내리지 않는다 · D-220).
+DISEASE = Violation.질병_예방치료_표방.value
+DISEASE_NO_PROVISO_MOK = frozenset({"나", "다"})
+
+#: 전제 → **확정된** 기준 문안 한 줄 (계약 `Branch.criteria` · D-263 ②). 🔴 승인된 줄만 적는다 — 지금은 비어 있다(D-319 ③ 승인 대기).
+CRITERIA: dict[Premise, str] = {}
+
+
+def criteria_ready(premises: tuple[Premise, ...]) -> bool:
+    """이 전제들의 기준 문안이 **전부** 확정됐는가. 하나라도 비면 분기를 내지 않는다 — 빈 문안 · 초안 문안으로 응답을 내지 않는다."""
+    return all(CRITERIA.get(p) for p in premises)
+
+
+# 🔴 표가 어긋나면 import 에서 멈춘다 (D-220) — 전제가 늘었는데 한 표만 고치면 그 전제는 법 없이 판정된다.
+if set(PREMISE_LAWS) != set(Premise) or set(PREMISE_CATEGORY) != set(Premise):
+    raise RuntimeError("🔴 전제 표가 계약 `Premise` 와 어긋났다 (D-276 · D-319)")
+if {p for ps in PREMISES_OF.values() for p in ps} != set(Premise) or set(PREMISES_OF) != {
+    None,
+    *Category,
+}:
+    raise RuntimeError(
+        "🔴 품목 → 전제 표가 계약 `Category` · `Premise` 와 어긋났다 (D-276 · D-319)"
+    )

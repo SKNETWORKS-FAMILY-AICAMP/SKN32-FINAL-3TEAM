@@ -411,3 +411,33 @@ def test_그래프_평가는_탐지_재현율을_확정_재현율과_나란히_�
     assert s["detect"] == {"positive": 2, "confirmed": 0, "detected": 1}
     assert s["types"]["질병_예방치료_표방"] == (2, 0, 0), "🚨 후보가 예측으로 세어졌다 (D-127)"
     assert s["committed"] == 0
+
+
+def test_불가_사유_진단은_축이_다른_짝을_어긋남으로_세지_않는다() -> None:
+    """🆕 2026-10-06 — 예측 사유(A/B/C)와 라벨 조건의 대조. 라벨의 A 는 지위 · 조성 전부라 예측 B 와는 축이 다르다(D-308 4′)."""
+    from scripts import eval_graph as eg
+
+    def row(cond: str | None, *labels: str) -> dict:
+        return {
+            "text": "문장",
+            "조건": cond,
+            "labels": list(labels),
+            "근거": [],
+            "split": "test_sentence",
+        }
+
+    rows = [
+        row("C", "질병_예방치료_표방"),
+        row("A", "거짓_과장"),
+        row("C", "건강기능식품_오인"),
+        row("C", "거짓_과장"),
+        row("M", "거짓_과장"),
+        row("B", "거짓_과장"),
+        row(None, "거짓_과장"),
+    ]
+    preds = [{"infeasibility": x} for x in ("C", "B", "A", "B", "B", None, "B")]
+    q = eg.reason_report(rows, preds)
+    assert q == {"n": 4, "exact": 1, "axis_gap": 1, "wrong": 2, "wrong_hf": 1}, q
+    assert eg.reason_report([row("C", "거짓_과장")], [{}])["n"] == 0, (
+        "🚨 사유 없는 예측을 셌다 — 없음을 일치로도 어긋남으로도 세지 않는다 (D-220)"
+    )
