@@ -120,7 +120,51 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         #: 🆕 2026-10-02 (W5) — 확정 위반 문장에 **위험도가 다 붙었나**. 붙었는데 종착이 보류면 하한이 아니라 종착 재료(증명서 · 지시 문안)가 없다
         "risked": all(s.risk.final is not None for s in conf if s.violations),
         "n_sents": len(sents),
+        #: 🆕 2026-10-05 (D-319) — **전제별 분기**의 요약. 분기는 판정이 아니다 — 위 칸(기록되는 판정)과 섞어 세지 않는다 (D-263 ①)
+        "branches": {b.premise.value: _branch_view(b) for b in state.get("branches", [])},
     }
+
+
+def _branch_view(b: Any) -> dict[str, Any]:
+    """분기 하나 → 확정 위반의 유형 · 호 · 종착. 기록되는 판정과 **같은 규칙**으로 센다(확정 문장의 위반만 · D-127)."""
+    conf = [s for s in b.sentences if s.verdict is Verdict.confirmed]
+    return {
+        "outcome": b.outcome.value,
+        "types": sorted({v.value for s in conf for v in s.violations}),
+        "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
+        "committed": bool(b.sentences) and len(conf) == len(b.sentences),
+    }
+
+
+#: 골든 `품목` 칸 → 그 품목의 **첫 전제**(가장 보수적인 쪽 · `app/premise.py` 의 값). 분기 지표가 「정답 품목의 분기」를 이것으로 고른다.
+#:    🚨 건강기능식품은 인정 여부를 골든이 모른다 — 비인정(보수) 분기로 본다.
+BRANCH_OF_CATEGORY = {"식품": "식품", "건기식": "건기식_비인정", "화장품": "화장품"}
+
+
+def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
+    """분기 지표 (D-319 ⬜ 「정답 품목의 분기가 맞는가」) — 품목을 아는 채점 행의 **위반 행**에서 그 품목의 분기를 본다.
+
+    ★ 기록되는 판정이 보류(`cat_unknown`)여도 사용자가 자기 품목을 고르면 보게 되는 것이 이 분기다.
+    🚨 분기가 없으면(기준 문안 미확정 · 전제 하나) 0 이다 — 「분기 행」 수를 함께 읽는다.
+    """
+    out = {"rows_with_branches": sum(1 for p in preds if p.get("branches")), "positive": 0}
+    out.update({"confirmed": 0, "type_hit": 0, "ho_hit": 0, "wrong": 0})
+    for r, p in zip(rows, preds, strict=True):
+        name = BRANCH_OF_CATEGORY.get(r.get("품목") or "")
+        if not name or not scored(r) or not truth_types(r, set()):
+            continue
+        b = (p.get("branches") or {}).get(name)
+        if b is None:
+            continue
+        out["positive"] += 1
+        if not b["types"]:
+            continue
+        out["confirmed"] += 1
+        tt, th = truth_types(r, set(b["types"])), truth_ho(r, set(b["ho"]))
+        out["type_hit"] += bool(set(b["types"]) & tt)
+        out["ho_hit"] += bool(set(b["ho"]) & th)
+        out["wrong"] += not (set(b["types"]) & tt)
+    return out
 
 
 # ── 집계 ────────────────────────────────────────────────────────────────
@@ -213,6 +257,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         by_text[r["text"]] = by_text.get(r["text"], False) or flag[id(r)]
     out["lawful"] = lawful_report(rows, lambda t: by_text.get(t, False))
     out["lawful_rows_seen"] = sum(1 for r in rows if lawful_kind(r))
+    out["branch"] = branch_report(rows, preds)
     return out
 
 
@@ -267,6 +312,21 @@ def report(s: dict[str, Any], conditional: bool = False) -> None:
             f"탐지 재현율(확정 ∪ 보류 유형 후보) {d['detected'] / d['positive']:.1%}  (D-311 · 탐지는 판정이 아니다)"
         )
     print_lawful(s["lawful"])
+    b = s.get("branch") or {}
+    if b.get("rows_with_branches"):
+        n = b["positive"]
+        print(
+            f"\n  분기 (D-319) — 분기가 나온 행 {b['rows_with_branches']} · 정답 품목의 분기를 본 위반 행 {n}"
+            + (
+                f" · 그 분기의 확정 위반 {b['confirmed']}({b['confirmed'] / n:.1%}) · 유형 맞음 {b['type_hit']} · "
+                f"호 맞음 {b['ho_hit']} · 유형 틀림 {b['wrong']}"
+                if n
+                else ""
+            )
+            + "  (분기는 판정이 아니다 · 건강기능식품은 비인정 분기로 본다)"
+        )
+    else:
+        print("\n  분기 (D-319) — 없음(기준 문안 미확정 · 또는 전제가 하나뿐인 품목)")
     if not conditional:
         print(
             "\n  ⓘ 조건부(품목을 아는 경우)는 `--conditional` 로 따로 잰다 (D-306 · 기획서 6-3 병기)"
