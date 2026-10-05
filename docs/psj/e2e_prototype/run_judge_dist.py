@@ -152,6 +152,46 @@ def extra_holdout(path, frac=0.2):
     return hold, stem
 
 
+def eval_file(path):
+    """🆕 10-01 — 검증 전용 파일(실제 포장 문구 등)을 **전부** 버킷 `eval:<이름>` 으로 싣는다. 학습에 쓰지 않은 문장이어야 한다.
+
+    .txt — my_negd 형식: 한 줄에 한 문장 · `[종류] 문장` · `#` 줄 무시 · `# 제품 …` 줄은 다음 줄들의 제품 묶음 표시
+    .jsonl — {id, text, family?, product?} · 라벨이 없으면 D(주장 없는 문구)로 본다
+    🔴 문장 원문은 결과 CSV 에 넣지 않는다(--with-text 일 때만 · 저장소 밖) — 실제 포장 문구라 공개 저장소에 올리지 않는다.
+    """
+    if not os.path.exists(path):
+        raise SystemExit(f"🔴 검증 파일이 없다: {path}")
+    stem = os.path.splitext(os.path.basename(path))[0]
+    rows, product = [], "-"
+    if path.endswith(".jsonl"):
+        with open(path, encoding="utf-8") as f:
+            rows = [json.loads(x) for x in f if x.strip()]
+    else:
+        with open(path, encoding="utf-8-sig") as f:
+            for i, line in enumerate(f):
+                line = line.strip()
+                if line.startswith("#"):
+                    m = re.match(r"^#\s*제품\s*(.+)$", line)
+                    if m:
+                        product = m.group(1).strip()
+                    continue
+                if not line:
+                    continue
+                m = re.match(r"^\[([^\]]+)\]\s*(.+)$", line)
+                rows.append({"id": f"{stem}:{i + 1}", "text": (m.group(2) if m else line).strip(),
+                             "family": m.group(1).strip() if m else "-", "product": product})
+    seen, out = set(), []
+    for r in rows:
+        if r["text"] in seen:
+            continue
+        seen.add(r["text"])
+        r.setdefault("labels", [])
+        r.setdefault("조건", "D")
+        r["bucket"] = f"eval:{stem}"
+        out.append(r)
+    return out, stem
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=None)
@@ -163,6 +203,7 @@ def main():
     ap.add_argument("--margin", type=float, default=QUIET_MARGIN, help="여유 구간 (τ 배수 · 1.0 이면 끔)")
     ap.add_argument("--margin-sweep", default=None, help="예: 1.0,0.8,0.6,0.5,0.4 — 여유 구간별 버킷 분포만 출력하고 끝낸다")
     ap.add_argument("--holdout", action="append", default=[], help="추가 파일 홀드아웃 버킷 (예: C:\\Users\\...\\proto_negd4.jsonl) — 여러 번 줄 수 있다")
+    ap.add_argument("--eval-file", action="append", default=[], help="검증 전용 파일 전부를 버킷 eval:<이름> 으로 (.txt my_negd 형식 또는 .jsonl) — 여러 번 줄 수 있다")
     ap.add_argument("--with-text", action="store_true", help="문장 원문 포함 — 저장소 밖 경로일 때만 (D-249 ⑥)")
     a = ap.parse_args()
 
@@ -184,6 +225,13 @@ def main():
         ORDER.append(f"hold:{stem}")
         EXPECT[f"hold:{stem}"] = "위반·보류(정답 유형)" if any(r.get("labels") for r in hold) else "신호 없음 (D형)"
         print(f"[INFO] 홀드아웃 {stem}: {len(hold)}행 (학습 안 함 · 노트북 v7.4 와 같은 행)")
+    for ep in a.eval_file:
+        ev, stem = eval_file(ep)
+        rows += ev
+        ORDER.append(f"eval:{stem}")
+        EXPECT[f"eval:{stem}"] = "판정 대상 아님 (검증 · 학습 안 함)"
+        fams = Counter(r.get("family", "-") for r in ev)
+        print(f"[INFO] 검증 {stem}: {len(ev)}행 · 종류 {len(fams)} · 제품 묶음 {len({r.get('product', '-') for r in ev})} (학습 안 한 문장만 넣는다)")
     print(f"[INFO] golden {sha[:8]} · {a.split} {len(rows)}행" + ("  🔴 최종 측정 — 이 결과로 규칙을 고치지 않는다" if a.final else ""))
 
     tok, mdl, labels, th = load_encoder(resolve_model_dir(a.model))
@@ -206,6 +254,7 @@ def main():
         return
 
     subj = defaultdict(Counter)
+    famdist = defaultdict(lambda: defaultdict(Counter))  # 검증 파일 — 종류별 판정
     dist, reasons, prem = defaultdict(Counter), defaultdict(Counter), defaultdict(lambda: defaultdict(Counter))
     out = []
     for r, lp in zip(rows, probs):
@@ -214,12 +263,14 @@ def main():
         state = s2["verdict"] if s2["verdict"] != "confirmed" else (
             "confirmed:위반" if s2["violations"] else ("판정대상아님" if s2.get("not_claim") else "confirmed:신호없음"))
         subj[b][s2.get("subject")] += 1
+        if b.startswith("eval:"):
+            famdist[b][r.get("family", "-")][state] += 1
         dist[b][state] += 1
         if s2.get("hold_reason"):
             reasons[b][s2["hold_reason"]] += 1
         for p, br in s2.get("branches", {}).items():
             prem[p][b]["위반예상" if (br["violations"] or br["no_basis_types"]) else ("보류" if br["verdict"] == "hold" else "신호없음/해소")] += 1
-        row = {"bucket": b, "id": r["id"], "조건": r.get("조건"), "labels": "|".join(r.get("labels") or []),
+        row = {"bucket": b, "id": r["id"], "family": r.get("family", ""), "조건": r.get("조건"), "labels": "|".join(r.get("labels") or []),
                "verdict": s2["verdict"], "hold_reason": s2.get("hold_reason") or "", "violations": "|".join(s2["violations"]),
                "no_basis": "|".join(s2["no_basis_types"]), "hold_types": "|".join(s2["hold_types"]),
                "dict_backed": int(s2["dict_backed"]), "signals": "|".join(f"{x['kind']}:{x['type']}" for x in s2["signals"]),
@@ -240,6 +291,12 @@ def main():
     for b in ORDER:
         if subj[b]:
             print(f"  {b:12s} " + " · ".join(f"{k} {v}" for k, v in subj[b].most_common()))
+    for b, fd in famdist.items():
+        print(f"\n검증 {b} — 종류별 (판정대상아님 · 통과 · 보류 · 위반 확정)")
+        for f, c in sorted(fd.items(), key=lambda kv: -sum(kv[1].values())):
+            n = sum(c.values())
+            print(f"  {f:14s} n={n:3d}  판정대상아님 {c['판정대상아님']:3d} · 통과 {c['confirmed:신호없음']:3d} · "
+                  f"보류 {c['hold'] + c['no_basis']:3d} · 위반 {c['confirmed:위반']:3d}")
     print("\n보류 사유별 (D-269)")
     for b in ORDER:
         if reasons[b]:
