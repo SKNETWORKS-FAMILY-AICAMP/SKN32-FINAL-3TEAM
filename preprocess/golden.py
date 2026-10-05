@@ -326,6 +326,8 @@ def build() -> tuple[list[dict], dict]:
     # 🆕 2026-09-30 (판정 J1 (가-2′)) — 인정 조건문(조건 D · 전량 train). 이유 되풀이(ㅇ)의 입력은 아니다
     # 🆕 2026-09-30 (판정 J2) — 봉인 결정문 주문 문구의 대상 · 조건(판독 둘 · 팀장). 대기가 남으면 None — 종전대로 낸다
     marks = split_mod.ftc_sealed_marks()
+    # 🆕 2026-10-05 (D-312) — 학습 결정문 주문 문구도 같은 정의로(판독 둘 · 팀장). 대기가 남으면 None — 종전대로 낸다
+    train_marks = split_mod.ftc_train_marks()
     # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판독 판(학습 · 평가). 배정은 분할 원장이 한다
     placed_train, placed_test, _placed_stat = split_mod.placed_docs()
     placed_ids = {d["doc_id"] for d in placed_train}
@@ -345,8 +347,24 @@ def build() -> tuple[list[dict], dict]:
         sealed_ftc = (
             marks is not None and d["원천"] == "ftc_decisions_body" and split == split_mod.SEALED
         )
+        train_ftc = (
+            train_marks is not None and d["원천"] == "ftc_decisions_body" and split == "train"
+        )
+        side = "봉인" if sealed_ftc else "학습"
         for k, text in enumerate(d["문구"]):
             mark = None
+            if train_ftc:
+                mark = train_marks.get(split_mod.train_key(d["doc_id"], text))
+                if mark is None:
+                    # 🔴 판이 학습 주문 문구 전량을 들고 있어야 한다 — 분할이 바뀌면 판을 다시 맞춘다 (D-220 · D-312)
+                    raise SystemExit(
+                        f"🔴 {d['doc_id']} 학습 주문 문구가 판독 판에 없다 {text[:30]!r} — 분할이 바뀌었다. "
+                        "`guide_statute_round ft-input` 부터 다시"
+                    )
+                if mark["대상"] == "N":
+                    # 광고 문구가 아니다(시장 · 업종 용어 · 법령 이름) — 학습에서 뺀다 (지시서 결정문학습문구 §1 ②)
+                    stat["학습_대상아님(N)"] += 1
+                    continue
             if sealed_ftc:
                 mark = marks.get(split_mod.sealed_key(d["doc_id"], text))
                 if mark is None:
@@ -392,11 +410,13 @@ def build() -> tuple[list[dict], dict]:
                     "판독": mark["판독"],
                     "원천결손": False,
                 }
-                if mark["조건"] == "D":
+                if mark["조건"] in ("D", "L"):
                     # 🆕 2026-10-02 — 조건 D(주장이 아니다)는 판정 대상이 아니다 — 근거 · 유형을 싣지 않는다(해설서 D 행과 같은 꼴 ·
                     #    `check_basis` 「조건 D 인데 근거가 있다」). ⛔ 의결서의 호를 남겼더니 골든이 4 행에서 멈췄다(B 기기 · 원장 10-02 ④)
+                    # 🆕 2026-10-05 — 조건 L(원천이 위반 아님이라 한 문구 · 학습 판 ⑫-10)도 같다 — 적법 행은 근거 · 유형이 빈다
+                    #    (`golden_sample` 의 `ck_golden_cond_empty` · D-317)
                     row |= {"근거": [], "labels": []}
-                stat[f"봉인_조건_{mark['조건']}"] += 1
+                stat[f"{side}_조건_{mark['조건']}"] += 1
             rows.append(row)
             stat[split] += 1
 

@@ -218,6 +218,8 @@ def fs(tmp_path, monkeypatch):
         json.dumps({"assign": {"ftc:1": split.SEALED, "ftc:2": "train"}}), encoding="utf-8"
     )
     monkeypatch.setattr(g, "FS_MANIFEST", man)
+    # 🔄 2026-10-05 (D-312) — 학습 문구 판을 막는다 — 막지 않으면 기기의 실제 채택본이 이 모의 학습 문서에 걸려 멈춘다
+    monkeypatch.setattr(split, "ftc_train_marks", lambda: None)
     basis = [statute.fair(1)]
     docs = [
         {
@@ -424,3 +426,80 @@ def test_감사표는_판독을_싣지_않고_같은_seed_면_같은_표본이�
     assert g.GF_AUDIT.read_text(encoding="utf-8") == '{"지문": "앞 감사"}\n'
     got = g._audit(g.GF, filled, tmp / "audit__팀장.jsonl")
     assert got["감사"] == 2
+
+
+# ── 2026-10-05 (D-312) 결정문 학습 문구 판 → 골든 학습 행 ──
+def _train_golden(fs, tmp_path, monkeypatch, marks: dict | None):
+    _tmp, man, docs = fs
+    inj = tmp_path / "inj.jsonl"
+    inj.write_text("", encoding="utf-8")
+    monkeypatch.setattr(golden, "SPLIT", man)
+    monkeypatch.setattr(golden, "INJECTED", inj)
+    monkeypatch.setattr(golden.split_mod, "verify_inputs", lambda m, who: None)
+    monkeypatch.setattr(golden, "ftc_docs", lambda: docs)
+    for name in ("approved_docs", "casebook_docs", "guide_docs", "caution_docs", "guide_fix_docs"):
+        monkeypatch.setattr(golden, name, lambda: [])
+    monkeypatch.setattr(golden, "lineage", lambda prov, origin: ("f", True))
+    monkeypatch.setattr(split, "ftc_sealed_marks", lambda: None)
+    monkeypatch.setattr(split, "ftc_train_marks", lambda: marks)
+    return docs
+
+
+def _mark(doc: str, text: str, cond: str | None, target: str = "Y") -> tuple[str, dict]:
+    k = split.train_key(doc, text)
+    return k, {"지문": k, "대상": target, "조건": cond, "판독": "독립판독_합의"}
+
+
+@pytest.mark.gate
+def test_학습_판이_끝나면_골든_학습_행이_대상_N_을_빼고_조건을_붙인다(
+    fs, tmp_path, monkeypatch
+) -> None:
+    """🔴 D-312 — 대상 이름 · 시장 용어가 위반 라벨로 학습에 남지 않는다. 봉인 문서의 행은 이 판이 건드리지 않는다."""
+    docs = _train_golden(fs, tmp_path, monkeypatch, None)
+    docs[1]["문구"] = ["실증 문구", "이름만", "시장 용어", "거래조건", "원천 무혐의"]
+    marks = dict(
+        [
+            _mark("ftc:2", "실증 문구", "B"),
+            _mark("ftc:2", "이름만", "M"),
+            _mark("ftc:2", "시장 용어", None, "N"),
+            _mark("ftc:2", "거래조건", "D"),
+            _mark("ftc:2", "원천 무혐의", "L"),
+        ]
+    )
+    monkeypatch.setattr(split, "ftc_train_marks", lambda: marks)
+    rows, stat = golden.build()
+    train = {r["text"]: r for r in rows if r["split"] == "train"}
+    assert set(train) == {"실증 문구", "이름만", "거래조건", "원천 무혐의"}  # 🔴 대상 N 은 빠진다
+    assert stat["학습_대상아님(N)"] == 1 and stat["학습_조건_M"] == 1
+    assert train["실증 문구"]["조건"] == "B" and train["실증 문구"]["근거"] == [statute.fair(1)]
+    assert (
+        train["이름만"]["조건"] == "M" and train["이름만"]["labels"]
+    )  # 호 · 유형은 원천 그대로 (봉인 판과 같다)
+    for text in ("거래조건", "원천 무혐의"):  # D · L 은 근거 · 유형이 빈다 (`ck_golden_cond_empty`)
+        assert (train[text]["근거"], train[text]["labels"]) == ([], [])
+    assert golden.is_negative(train["원천 무혐의"]) and not golden.is_negative(train["거래조건"])
+    sealed = [r for r in rows if r["split"] == split.SEALED]
+    assert sealed and all("조건" not in r for r in sealed)  # 봉인 판이 없으면 봉인 행은 종전대로
+    golden.check_basis(rows)
+
+
+@pytest.mark.gate
+def test_학습_주문_문구가_판에_없으면_조건_없이_내지_않고_멈춘다(fs, tmp_path, monkeypatch) -> None:
+    """🔴 분할이 바뀌어 학습 문서가 달라지면 판을 다시 맞춘다 — 판정 없는 행이 섞이지 않는다 (D-220)."""
+    _train_golden(fs, tmp_path, monkeypatch, {})
+    with pytest.raises(SystemExit, match="학습 주문 문구가 판독 판에 없다"):
+        golden.build()
+
+
+@pytest.mark.gate
+def test_학습_판의_대기가_남으면_골든은_종전대로다(tmp_path, monkeypatch) -> None:
+    """대기가 0 일 때만 든다 — 채택본이 반만 선 판으로 학습 행을 바꾸지 않는다."""
+    monkeypatch.setattr(split, "FTC_TRAIN_READINGS", tmp_path / "r.jsonl")
+    monkeypatch.setattr(split, "FTC_TRAIN_ADOPTED", tmp_path / "a.jsonl")
+    assert split.ftc_train_marks() is None  # 판이 없다
+    (tmp_path / "r.jsonl").write_text('{"지문": "ft:a"}\n{"지문": "ft:b"}\n', encoding="utf-8")
+    (tmp_path / "a.jsonl").write_text(
+        '{"지문": "ft:a", "대상": "Y", "조건": "B"}\n', encoding="utf-8"
+    )
+    assert split.ftc_train_state()["대기"] == 1 and split.ftc_train_marks() is None
+    assert split.FTC_TRAIN_ADOPTED not in split.inputs()

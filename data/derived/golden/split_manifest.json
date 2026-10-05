@@ -37,6 +37,10 @@
       "sha256": "fad2bc5cc8c506abe341fe4c294cec64b250af98af6e117d5a7931dbdf5f95ef",
       "bytes": 48848
     },
+    "data/derived/labels/ftc_train/adopted.jsonl": {
+      "sha256": "8f8b338f293fb40c1086fb6c92fc2dfff0c115f21ebaa08813e940af591a3f10",
+      "bytes": 151245
+    },
     "data/derived/labels/daegu_2013/adopted.jsonl": {
       "sha256": "e765fa577847306e3d0d00b79700ccb20372c4811c81bc3f3565a780517edd19",
       "bytes": 105145
