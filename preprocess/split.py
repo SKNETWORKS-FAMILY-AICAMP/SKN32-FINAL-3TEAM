@@ -99,6 +99,7 @@ import re
 
 from app.settings import PARAMS
 from collect import statute
+from preprocess import ftc_triage
 
 FTC_PHRASES = pathlib.Path("data/derived/ftc_layer1_phrases.json")
 CASEBOOK = pathlib.Path("data/derived/mfds_casebook_labels.jsonl")
@@ -158,6 +159,8 @@ def inputs() -> tuple[pathlib.Path, ...]:
     got += (FTC_SEALED_ADOPTED,) if fs and not fs["대기"] else ()
     ft = ftc_train_state()
     got += (FTC_TRAIN_ADOPTED,) if ft and not ft["대기"] else ()
+    fr = ftc_reason_state()
+    got += (FTC_REASON_ADOPTED,) if fr and not fr["대기"] else ()
     # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판들도 같은 규칙 · 「문항」 판은 평가 행 목록도 입력이다
     for name, (_cmd, place) in PLACED.items():
         st = placed_state(name)
@@ -266,6 +269,21 @@ def ftc_docs() -> list[dict]:
         order_ok = [str(x) for x in (r.get("문구_적법") or [])]
         reason_ok = [str(x) for x in (r.get("문구_이유_적법") or [])]
         if not (labels and (order or reason)) and not (order_ok or reason_ok):
+            continue
+        # 🆕 2026-10-05 (원장 10-03 ㊿-27 · D-313 개정) — **표시광고법 사건만 남긴다.**
+        #    ⛔ 전자상거래법 제21조 사건 등 46 문서가 표시광고법 제3조제1항 호를 달고 학습에 들어가 있었다(골든 행 488 · 평가 0).
+        #    🔴 칸이 없으면(낡은 산출물) · 못 읽었으면(`미상`) 멈춘다 — 조용히 넣지도 빼지도 않는다 (D-220)
+        law = r.get("적용법")
+        if law is None:
+            raise SystemExit(
+                f"🔴 {FTC_PHRASES} 에 `적용법` 칸이 없다 — 낡은 산출물이다.\n"
+                "  먼저: uv run python -m preprocess.ftc_extract --stage --dump"
+            )
+        if law == ftc_triage.LAW_UNKNOWN:
+            raise SystemExit(
+                f"🔴 ftc:{r['seq']} — 적용된 법을 못 읽었다(`ftc_triage.case_law`). 규칙에 더하거나 빼는 판정을 받는다"
+            )
+        if law not in ftc_triage.AD_LAWS:
             continue
         got.append(
             {
@@ -441,6 +459,7 @@ ROUND_LABEL_DIRS = (
     "labels/guide_fix/",  # 🆕 09-30 판정 J1 (b)
     "labels/ftc_sealed/",  # 🆕 09-30 판정 J2
     "labels/ftc_train/",  # 🆕 10-05 D-312 — 학습 쪽 주문 문구
+    "labels/ftc_reason/",  # 🆕 10-05 — 학습 쪽 이유 구역 문구(원장 10-03 ㊿-28)
 )
 FTC_PRESS_ADOPTED = pathlib.Path("data/derived/labels/ftc_press_old/adopted.jsonl")
 
@@ -551,6 +570,39 @@ def ftc_train_marks() -> dict[str, dict] | None:
     if not st or st["대기"]:
         return None
     return {r["지문"]: r for r in _jsonl(FTC_TRAIN_ADOPTED)}
+
+
+#: 🆕 2026-10-05 (원장 10-03 ㊿-28) — 결정문 **이유 구역 문구**(학습 전용)에 같은 정의(대상 · 조건)를 붙이고 호를 좁히는 판.
+#:    🚨 경로의 정본은 `scripts/guide_statute_round.py` `FR_READINGS` · `FR_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99)
+FTC_REASON_READINGS = pathlib.Path("data/derived/labels/ftc_reason/readings.jsonl")
+FTC_REASON_ADOPTED = pathlib.Path("data/derived/labels/ftc_reason/adopted.jsonl")
+
+
+def reason_key(doc_id: str, text: str) -> str:
+    """이유 구역 문구의 지문 — 봉인 판과 같은 해시에 머리만 `fr:`. 🚨 `guide_statute_round` 의 FR 판이 이 함수를 부른다 (D-99).
+
+    `text` 는 `golden.reason_keep` 을 지난 글자(태그 · 각주를 벗긴 것)다 — 골든 행의 `text` 와 같다.
+    """
+    return "fr:" + sealed_key(doc_id, text).split(":", 1)[1]
+
+
+def ftc_reason_state() -> dict[str, int] | None:
+    """결정문 이유 구역 문구 판의 상태 — 다른 판과 같은 규칙."""
+    return _round_state(FTC_REASON_READINGS, FTC_REASON_ADOPTED, "fr-rebuild")
+
+
+def ftc_reason_marks() -> dict[str, dict] | None:
+    """이유 구역 문구 지문 → 채택 행(대상 · 조건 · 판독이 고른 호). **대기가 0 일 때만** — 아니면 None(골든은 종전대로 낸다).
+
+    ★ 주문 판(`ftc_train_marks`)과 다른 곳은 하나다 — 이유 문구는 **문서의 호를 내려 붙인 것**이라, 조건 C · A · B 행의
+      호를 판독이 고른 것으로 좁힌다(원천 호 안에서 · 지시서 이유구역 §3 · §6). M 은 문서의 호를 든 채 남는다.
+    🚨 분할(문서 배정) · 평가 행은 이 판을 모른다 — 이유 문구는 학습에만 있다 (D-234).
+    🚨 사전(`preprocess/dictionary.py`)은 이유 문구를 쓰지 않는다 — 이 판은 사전에 닿지 않는다.
+    """
+    st = ftc_reason_state()
+    if not st or st["대기"]:
+        return None
+    return {r["지문"]: r for r in _jsonl(FTC_REASON_ADOPTED)}
 
 
 def _round_docs(st: dict[str, int] | None, adopted: pathlib.Path, source: str) -> list[dict]:
@@ -1163,6 +1215,7 @@ def main() -> int:
         ("해설서 수정문구", guide_fix_state(), "test_sentence_해설서수정문구"),
         ("결정문 봉인 문구(대상 · 조건)", ftc_sealed_state(), None),
         ("결정문 학습 문구(대상 · 조건)", ftc_train_state(), None),
+        ("결정문 이유 구역 문구(대상 · 조건 · 호)", ftc_reason_state(), None),
     ):
         if st:
             print(
