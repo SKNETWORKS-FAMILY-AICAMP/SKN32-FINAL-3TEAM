@@ -35,7 +35,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import auth
-from app.contracts import PASS_RISK_MAX, Risk
+from app.contracts import PASS_RISK_MAX, Risk, Violation
 from app.db import get_session, reachable
 from app.formbody import read_capped
 from app.models import (
@@ -119,6 +119,7 @@ _SCREEN_ALIAS: tuple[tuple[str, str], ...] = (
     ("/u/judge", "/u/review"),
     ("/u/preview/", "/u/review"),
     ("/u/generate/preview/", "/u/generate"),
+    ("/u/rewrite", "/u/generate"),  # 원문 고쳐 쓰기 결과는 카피생성 화면에 그린다 (lse 10-06)
     ("/u/compose/preview/", "/u/compose"),
 )
 
@@ -732,6 +733,86 @@ def generate_preview(request: Request, name: str) -> HTMLResponse:
 def segments(request: Request) -> HTMLResponse:
     """대상고객 탐색 — ★ **골격만**. `/u/generate` 카드에서만 들어온다 (사이드바 밖)."""
     return _render(request, "user/segments.html")
+
+
+# ── B · 원문 고쳐 쓰기 (재생성) — lse 2026-10-06 ─────────────────────────
+#: 🔴 **검수는 대체 문구를 내지 않는다**(D-265) — 고쳐 쓰기는 생성 화면(B)에서만 한다.
+#:    검수 화면은 지적 문장을 이리로 **넘기기만** 한다(`from=review` + 위반 유형).
+#: 흐름: 위반 유형(검수가 준 것 · 없으면 판정 코어) → sLLM 서버(`sllm_client`) → 후보면 **앱의 판정 코어로 재판정**(D-119).
+#: ⛔ sLLM 서버가 없으면 「후보 없음」을 그린다 — 지어내지 않는다(D-146 · D-147).
+
+_VIOLATIONS = frozenset(v.value for v in Violation)
+
+
+def _violations_of(result) -> list[str]:  # noqa: ANN001 — JudgeResponse
+    """판정 결과의 위반 유형(문장 순서대로 · 중복 없이)."""
+    out: list[str] = []
+    for s in result.sentences:
+        for v in s.violations or []:
+            if v.value not in out:
+                out.append(v.value)
+    return out
+
+
+def _rejudge(body: str) -> dict:
+    """고친 문구를 판정 코어에 다시 넣는다(D-119). 🚨 `no_violation` 은 「위반을 못 찾음」이지 통과가 아니다."""
+    state, res = _core_judge(body)
+    if state != "ok":
+        return {"status": "unavailable"}
+    violations = _violations_of(res)
+    hold = sorted({s.hold_reason.value for s in res.sentences if s.hold_reason})
+    if violations or any(s.verdict.value == "no_basis" for s in res.sentences):
+        return {"status": "rejected", "violations": violations, "hold_reasons": hold}
+    status = "passed" if res.outcome.value == "pass" else "no_violation"
+    return {"status": status, "violations": [], "hold_reasons": hold}
+
+
+@router.post("/rewrite", response_class=HTMLResponse)
+async def rewrite(request: Request) -> HTMLResponse:
+    """원문 고쳐 쓰기 BFF (lse 2026-10-06).
+
+    🔴 **POST 다** — 원문을 URL 에 싣지 않는다(보안점검 P1-4). ★ 원문은 되돌려 그린다 — **템플릿이 이스케이프한다**(P2-9).
+    ⛔ 사유 A(자격형)는 고쳐 쓰지 않는다 — 표현이 아니라 자격의 문제라 같은 위반을 되풀이한다(D-59).
+    """
+    from starlette.concurrency import run_in_threadpool  # noqa: PLC0415
+
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    form = await _form(request)
+    text = _one(form, "text", PARAMS.max_text_len).strip()
+    ctx = {"fixtures": _fixture_names("generate"), "max_text_len": PARAMS.max_text_len}
+    if not text:
+        return _render(
+            request,
+            "user/generate.html",
+            {**ctx, "rw": {"original": "", "notice": "고쳐 쓸 원문을 넣어 주세요"}},
+        )
+
+    rw: dict = {"original": text}
+    if form.get("from", [""])[0] == "review":
+        rw["violations"] = [v for v in dict.fromkeys(form.get("violation", [])) if v in _VIOLATIONS]
+        rw["source"] = "검수 결과"
+    else:
+        state, res = await run_in_threadpool(_core_judge, text)
+        if state == "ok":
+            if any(s.infeasibility and s.infeasibility.value == "A" for s in res.sentences):
+                rw["qualification"] = True
+                return _render(request, "user/generate.html", {**ctx, "rw": rw})
+            rw["violations"] = _violations_of(res)
+            rw["source"] = "판정 코어"
+        else:
+            rw["violations"] = []
+            rw["source"] = None  # 판정 코어에 못 붙었다 — 위반 유형 없이 보낸다
+
+    s_state, out = await run_in_threadpool(sllm_client.rewrite, text, rw["violations"])
+    if out and out.get("infeasible") and out["infeasible"] not in _VIOLATIONS:
+        # 위반 유형 없이 보내면 모델이 사유를 제 말로 지어 쓴다(10-06 실측) — 그 말을 사유로 그리지 않는다
+        out = {**out, "infeasible": None}
+    rw["down"] = s_state != "ok"
+    rw["out"] = out
+    if out and out["outcome"] == "candidate" and out.get("rewrite"):
+        rw["rejudge"] = await run_in_threadpool(_rejudge, out["rewrite"]["body"])
+    return _render(request, "user/generate.html", {**ctx, "rw": rw})
 
 
 # ══════════════════════════════════════════════════════════════════════

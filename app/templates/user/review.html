@@ -309,6 +309,17 @@
           </span>
         </div>
         {% endif %}
+
+        {# 🆕 2026-10-06 lse — 지적 문장을 카피생성(B)의 「원문 고쳐 쓰기」로 **넘기기만** 한다. 여기서 문구를 만들지 않는다 (D-265).
+           ⛔ 사유 A(자격형)는 넘기지 않는다 — 재생성이 같은 위반을 되풀이한다 (D-59). 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4) #}
+        {% if s.sent_id in item.flagged and not (s.infeasibility and s.infeasibility.value == "A") %}
+        <form method="post" action="/u/rewrite" style="margin:.5rem 0 0">
+          <input type="hidden" name="from" value="review">
+          <input type="hidden" name="text" value="{{ s.text }}">
+          {% for v in s.violations %}<input type="hidden" name="violation" value="{{ v.value }}">{% endfor %}
+          <button type="submit" class="rv-chip" style="cursor:pointer">이 문장 고쳐 쓰기 →</button>
+        </form>
+        {% endif %}
       </div>
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
