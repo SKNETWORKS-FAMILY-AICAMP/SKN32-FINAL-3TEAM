@@ -1303,7 +1303,9 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         return {}
     if any(s.verdict is Verdict.unjudged for s in base):
         return {}  # 사전을 못 훑었다 — 전제별 판정의 재료가 없다 (D-220)
-    rows = load_sanction_rows(cur)
+    # 하한은 확정 위반에만 쓰인다 — 어느 법에서도 걸린 낱말이 없으면 제재표를 읽지 않는다(`assess_risk` 가 할 일이 없으면 안 읽는 것과 같다)
+    hit = any(hs for r in state.get("law_results", []) for _, hs in r.dict_hits)
+    rows = load_sanction_rows(cur) if hit else []
     per = {p: _premise_sentences(p, state, rows) for p in premises}
     if category is not None and len({tuple(map(_judgment_key, per[p])) for p in premises}) == 1:
         # 품목이 주어졌고 전제가 판정을 바꾸지 않는다 — 고를 것이 없는 선택지를 내지 않는다(종전 판정 그대로).
