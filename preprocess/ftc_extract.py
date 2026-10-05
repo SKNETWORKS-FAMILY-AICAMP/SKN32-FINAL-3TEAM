@@ -46,7 +46,7 @@ import xml.etree.ElementTree as ET
 
 from collect import store
 from preprocess import stage
-from preprocess.ftc_triage import CORE, _text, classify
+from preprocess.ftc_triage import CORE, _text, case_law, classify
 from preprocess.mask import MARK_RE, Ledger, Trace, anchor_ftc, apply_policy
 from preprocess.text import FOOTNOTE, sep_norm
 
@@ -475,6 +475,8 @@ def main() -> int:
                 "seq": seq,
                 "결정일자": _text(r, "결정일자"),
                 "분류": k,
+                # 🆕 2026-10-05 — 사건에 적용된 법. `split.ftc_docs()` 가 읽어 표시광고법 사건만 남긴다(원장 10-03 ㊿-27)
+                "적용법": case_law(name, order, gist, reason),
                 "사건명": apply_policy(name, bare, "ftc"),
                 "문구": ps,
                 "문구_이유": rs,  # 🆕 D-232 (A) — 섞지 않는다
