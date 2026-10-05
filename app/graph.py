@@ -1156,6 +1156,7 @@ def _premise_sentences(
         arts: list[EvidenceArticle] = []
         by_law: dict[str, tuple[DictHit, ...]] = {}
         unknown: list[DictHit] = []
+        undecided: list[DictHit] = []
         raw_hit = voided = converted = False
         for law in laws:
             r = results.get(law)
@@ -1168,14 +1169,20 @@ def _premise_sentences(
             raw_hit = raw_hit or bool(hs)
             kept, unk, v, c = _premise_hits(premise, hs)
             voided, converted = voided or v, converted or c
+            undecided += unk
             # 판정하지 못하는 적중은 자격 없는 적중과 같은 길로 — 보류 문장의 유형 후보다 (D-311 과 같은 모양)
             unknown += unk + list(dict(r.weak_hits).get(sid, ()))
             if kept:
                 by_law[LAW_OF_NODE[law]] = tuple(kept)
         hits = [h for hs in by_law.values() for h in hs]
-        if raw_hit and voided and not hits and not unknown:
-            # 걸린 것이 전부 이 전제에서 서지 않는다 — 전제 아래의 「걸린 것 없음」이다 (픽스처 15 의 `건기식_인정` 분기)
-            j = SentenceJudgment(sent_id=sid, text=text, verdict=Verdict.confirmed, evidence=arts)
+        if undecided or (raw_hit and voided and not hits):
+            # 🔴 이 전제에서 **판정하지 못한다** — 보류이고 걸린 것은 전부 유형 후보로만 싣는다 (D-319 ④′ · D-220 · D-311).
+            #    · 판정하지 못하는 적중이 하나라도 있으면(질병 표방의 목을 모른다) 남은 적중만으로 확정하지 않는다 —
+            #      확정하면 그 분기는 「거짓 · 과장뿐」이라고 말하게 된다(🔄 2026-10-05 재검 · 원장 10-03 ㊿-34).
+            #    · 3호가 **서지 않는다 ≠ 통과다.** 인정 · 고시된 문구와 맞는지는 대조하지 않았다 — 그 재료(건강기능식품의
+            #      고시형 문구 · 일반식품 기능성 고시 [별표 2])를 읽는 자리가 아직 없다. 그 대조가 붙기 전에는 통과를 내지 않는다.
+            #    ⛔ 하한을 걸지 않는다 — 보류 문장의 유형 후보다 (D-311 · D-313 ③).
+            j = _judge_one(sid, text, starts[i], scans.get(sid), [], arts, hits + unknown)
         else:
             j = _judge_one(sid, text, starts[i], scans.get(sid), hits, arts, unknown)
             if converted and j.verdict is Verdict.confirmed and j.violations:
@@ -1265,11 +1272,24 @@ def _recorded(
     )
 
 
+def _judgment_key(j: SentenceJudgment) -> tuple:
+    """전제끼리 판정이 같은가를 보는 열쇠 — 판정 · 사유 · 유형 · 불가 사유 · 위험도 · 근거 좌표."""
+    return (
+        j.verdict,
+        j.hold_reason,
+        tuple(j.violations),
+        j.infeasibility,
+        j.risk.final,
+        tuple((e.law_id, e.article, e.item) for e in j.evidence),
+    )
+
+
 @timed
 def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     """품목 분기 — 전제마다 판정을 내고, 기록되는 판정을 가장 보수적인 쪽으로 맞춘다 (D-319 · D-263 ⑦ 「처음에 전부 계산」).
 
     ★ 품목을 모르면 전제 여섯, 식품이면 둘(식품 · 일반식품 기능성), 건강기능식품이면 둘(인정 · 비인정). 전제가 하나뿐이면 분기가 없다.
+       품목이 주어졌는데 전제마다 판정이 같아도 분기가 없다.
     🔴 **기준 문안이 확정되지 않았으면 아무것도 하지 않는다** — 분기에는 문안이 필수 칸이고(계약 `Branch.criteria`) 초안 문안으로
        응답을 내지 않는다 (D-147 · D-220). 그때는 종전대로다(품목 미확정의 확정 위반은 위험도 없이 보류로 내려간다).
     🔴 DB 가 없으면(하한을 못 읽는다) 아무것도 하지 않는다 — 분기마다 위험도를 지어내지 않는다 (D-09).
@@ -1285,6 +1305,10 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         return {}  # 사전을 못 훑었다 — 전제별 판정의 재료가 없다 (D-220)
     rows = load_sanction_rows(cur)
     per = {p: _premise_sentences(p, state, rows) for p in premises}
+    if category is not None and len({tuple(map(_judgment_key, per[p])) for p in premises}) == 1:
+        # 품목이 주어졌고 전제가 판정을 바꾸지 않는다 — 고를 것이 없는 선택지를 내지 않는다(종전 판정 그대로).
+        # ⛔ 품목을 모를 때는 같아도 낸다 — 「품목 미확정이면 분기는 언제나」(D-229 ⑥ · D-319 ②).
+        return {}
     reason = HoldReason.cat_unknown if category is None else HoldReason.premise_unknown
     changed = [
         r

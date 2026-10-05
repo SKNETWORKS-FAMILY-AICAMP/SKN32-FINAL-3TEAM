@@ -10,22 +10,22 @@
       "verdict": "hold",
       "hold_reason": "premise_unknown",
       "violations": [
-        "건강기능식품_오인"
+        "거짓_과장"
       ],
       "infeasibility": "A",
       "evidence": [
         {
           "law_id": "013094",
           "article": "제8조",
-          "item": "제1항제3호",
-          "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+          "item": "제1항제4호나목",
+          "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
           "chunk_id": null
         }
       ],
       "risk": {
-        "floor": "R2",
+        "floor": "R1",
         "encoder": null,
-        "final": "R2",
+        "final": "R1",
         "evidence_span": null
       },
       "evidence_mismatch": false,
@@ -74,22 +74,22 @@
           "verdict": "confirmed",
           "hold_reason": null,
           "violations": [
-            "건강기능식품_오인"
+            "거짓_과장"
           ],
           "infeasibility": "A",
           "evidence": [
             {
               "law_id": "013094",
               "article": "제8조",
-              "item": "제1항제3호",
-              "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+              "item": "제1항제4호나목",
+              "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
               "chunk_id": null
             }
           ],
           "risk": {
-            "floor": "R2",
+            "floor": "R1",
             "encoder": null,
-            "final": "R2",
+            "final": "R1",
             "evidence_span": null
           },
           "evidence_mismatch": false,
@@ -103,8 +103,8 @@
         {
           "law_id": "013094",
           "article": "제8조",
-          "item": "제1항제3호",
-          "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+          "item": "제1항제4호나목",
+          "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
           "chunk_id": null
         }
       ]

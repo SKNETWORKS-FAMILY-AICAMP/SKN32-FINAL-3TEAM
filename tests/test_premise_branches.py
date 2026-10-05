@@ -4,6 +4,8 @@
   ① 품목을 모르면 **모든 전제에서 같은 위반이 설 때만 확정**이다 — 한 전제라도 판정하지 못하면 보류(`cat_unknown`) + 분기 (D-319 ①)
   ② 보류에도 유형 · 가장 보수적인 위험도가 실리고 응답이 계약을 지난다 (`_recorded_is_conservative` · `_branch_hold_has_branches`)
   ③ 전제가 유형을 바꾸는 자리 — 건강기능식품 전제의 3호 · 4.나 · 질병 표방의 목 (D-319 ④′)
+  ⑤ 판정하지 못하는 전제는 **보류**다 — 3호가 서지 않는 것을 통과로, 남은 적중만으로 확정으로 내지 않는다 (D-319 ④′ · D-220)
+  ⑥ 품목이 주어졌고 전제가 판정을 바꾸지 않으면 분기를 내지 않는다
   ④ 기준 문안이 확정되지 않았거나 DB 가 없으면 **분기를 내지 않는다** — 초안 문안 · 지어낸 위험도로 응답을 내지 않는다 (D-147 · D-220)
 """
 
@@ -180,10 +182,17 @@ def test_건강기능식품_오인은_건기식_전제에서_서지_않는다(cr
     )
     for p in (Premise.건기식_인정, Premise.일반식품_기능성):
         b = _branch(st, p)
-        assert b.sentences[0].verdict is Verdict.confirmed and not b.sentences[0].violations, (
+        s0 = b.sentences[0]
+        assert Violation.건강기능식품_오인 not in s0.violations, (
             f"{p.value} 에서 3호가 섰다 — 「건강기능식품이 아닌 것을」 (D-319 ④′ ① ④)"
         )
-        assert b.sentences[0].risk.final is Risk.R0 and b.outcome is Outcome.passed
+        assert s0.verdict is Verdict.hold and s0.hold_reason is HoldReason.low_conf, (
+            f"🚨 {p.value} 에서 3호가 서지 않는 것을 판정으로 내렸다 — 서지 않는다 ≠ 통과다. "
+            "인정 · 고시된 문구와의 대조가 없다 (D-220)"
+        )
+        assert s0.risk.final is None and b.outcome is Outcome.hold, (
+            "판정하지 못한 분기가 통과 · 위험도를 냈다"
+        )
     un = _branch(st, Premise.건기식_비인정).sentences[0]
     assert un.violations == [Violation.거짓_과장] and un.infeasibility is Infeasibility.A, (
         "인정하지 않은 기능성은 [별표 1] 4.나 — 거짓 · 과장이고 자격형이다 (D-319 ④′ ②)"
@@ -203,6 +212,42 @@ def test_건기식_인정의_질병_표방은_목을_모르면_판정하지_못�
     assert b.verdict is Verdict.confirmed and b.violations == [Violation.질병_예방치료_표방], (
         "치료 효과(나목)에는 건기식 단서가 없다 — 이 전제에서도 위반이다"
     )
+
+
+def test_판정하지_못하는_적중이_있으면_남은_적중만으로_확정하지_않는다(criteria: None) -> None:
+    st, _ = _run({"law_food": [_hit(FOOD1)], "law_ftc": [_hit(FAIR1)]})
+    b = _branch(st, Premise.건기식_인정).sentences[0]
+    assert b.verdict is Verdict.hold, (
+        "🚨 목을 모르는 질병 표방을 떨어뜨리고 표시광고법 적중만으로 확정했다 — 그 분기는 "
+        "「거짓 · 과장뿐」이라고 말하게 된다 (D-319 ④′ ③ · D-220)"
+    )
+    assert set(b.violations) == {Violation.질병_예방치료_표방, Violation.거짓_과장}, (
+        "보류에는 걸린 것이 전부 유형 후보로 실린다 (D-311)"
+    )
+    assert b.risk.final is None, "유형 후보에는 하한을 걸지 않는다 (D-311 · D-313 ③)"
+    food = _branch(st, Premise.식품).sentences[0]
+    assert food.verdict is Verdict.confirmed, "다른 전제의 확정은 그대로다"
+    to_response({**st, "outcome": Outcome.hold})
+
+
+def test_어느_분기도_문구_대조_없이_통과를_내지_않는다(criteria: None) -> None:
+    for by_law in ({"law_food": [_hit(FOOD3)]}, {"law_food": [_hit(FOOD3)], "law_ftc": []}):
+        for cat in (None, Category.식품, Category.건기식):
+            st, _ = _run(by_law, cat)
+            for b in st["branches"]:
+                assert b.outcome is not Outcome.passed, (
+                    f"🚨 {cat} · {b.premise.value} 분기가 통과다 — 걸린 낱말이 있는데 대조 없이 통과를 냈다"
+                )
+
+
+def test_품목이_주어지고_전제가_판정을_바꾸지_않으면_분기가_없다(criteria: None) -> None:
+    for cat in (Category.식품, Category.건기식):
+        st, out = _run({"law_food": [_hit(FOOD4)], "law_ftc": []}, cat)
+        assert _quiet(out), f"{cat.value} — 두 전제의 판정이 같은데 고를 것이 없는 분기를 냈다"
+        assert st["sentences"][0].verdict is Verdict.confirmed, "종전 판정 그대로다"
+        to_response({**st, "outcome": Outcome.hold})
+    st, out = _run({"law_ftc": [_hit(FAIR1)]})
+    assert not _quiet(out), "품목을 모르면 판정이 같아도 분기를 낸다 (D-229 ⑥)"
 
 
 def test_품목이_식품이면_전제는_둘이고_사유는_premise_unknown_이다(criteria: None) -> None:
