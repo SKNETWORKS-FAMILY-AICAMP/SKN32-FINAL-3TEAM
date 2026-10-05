@@ -813,6 +813,9 @@ def _parse(R: Round, line: str) -> dict:
         raise ValueError(f"칸이 모자란다({len(p)}): {line[:80]!r}")
     p += [""] * (8 - len(p))
     key, target, prim, sec, mok, cond, exc, memo = (x.strip() for x in p[:8])
+    # 🔄 2026-10-05 — 부근거 칸은 쉼표로 여럿을 받는다(세 호가 걸린 결정문의 이유 문구 · 지시서 이유구역 §3).
+    #    한 호만 적는 종전 판독은 그대로 읽힌다
+    secs = [x.strip() for x in sec.split(",")]
     rec = {
         "지문": key,
         "대상": target,
@@ -836,7 +839,7 @@ def _parse(R: Round, line: str) -> dict:
         return rec
     if cond not in CQ_CONDITIONS:
         rec["문제"].append(f"조건 {cond!r}")
-    for c in (prim, sec):
+    for c in (prim, *secs):
         if c in ("", "-"):
             continue
         if c.startswith("기타:"):
@@ -1867,6 +1870,219 @@ def ft_input(out_dir: pathlib.Path) -> dict:
     return {"단위": len(units), "문서": len({r["doc_id"] for r in rows})}
 
 
+# ── 🆕 2026-10-05 결정문 **이유 구역 문구** 판 — 지시서 `라벨링_지시서_2026-10-05_결정문이유구역_대상·조건.md` ──
+#: 분할이 `train` 으로 배정한 결정문의 **이유 구역 문구**(학습 전용 · D-234). 주문 판(FT)과 같은 정의 · 같은 채택 함수 · 같은 가드다 (D-99).
+#:    다른 곳은 셋이다 — ① 단위가 이유 문구(`golden.reason_keep` 을 지난 글자) ② 판독이 **호를 고른다**(이유 문구는 문서의 호를 내려 붙인 것)
+#:    ③ 단위 표가 원천의 **부분**이어도 합친다 — 골든의 뒤 거름(인용 상한 · 겹침)이 빼는 문구는 판독하지 않는다.
+#:       남은 이유 행에 판독이 없으면 `golden.build` 가 멈춘다(전량 검사는 그쪽에 있다 · D-220)
+FR_DIR = ROOT / "data" / "derived" / "labels" / "ftc_reason"
+FR_READINGS = FR_DIR / "readings.jsonl"
+FR_ADOPTED = FR_DIR / "adopted.jsonl"
+FR_DECISIONS = FR_DIR / "decisions.jsonl"
+FR_AUDIT = FR_DIR / "audit.jsonl"
+FR_TEAM_SHEET = ROOT / "build" / "labels" / "ftc_reason__팀장판정표.csv"
+FR_KEY_RE = re.compile(r"^fr:[a-z2-7]{12}$")
+#: 판독자에게 보이는 글자 수 · 자리 수 `[임의]` — 지시서 §1 이 적은 값이다. 판정 경로가 아니라 판독자가 읽는 재료다
+FR_CONTEXT = 200
+FR_CONTEXT_MORE = 100
+FR_MORE_MAX = 3
+FR_HEADS = 2
+FR_HEAD_MAX = 60
+FR_BATCH = 150
+FR_QUOTES = "\"'“”‘’「」『』〈〉<>"
+#: 번호 붙은 제목 줄 — 「1.」 「가.」 「(1)」 「(가)」 「①」 「1)」 「가)」
+FR_HEAD_RE = re.compile(
+    r"^\s*(?:\d{1,2}\.|[가-하]\.|\(\d{1,2}\)|\([가-하]\)|[①-⑳]|\d{1,2}\)|[가-하]\))\s*\S"
+)
+
+
+def _fr_source() -> dict[str, dict]:
+    """학습 문서의 이유 구역 문구 → 지문별 행. 🔴 분할 기록이 없으면 멈춘다 (D-220).
+
+    ★ `golden.build` 가 이유 행을 만드는 것과 **같은 함수**로 거른다(`reason_docs` · `reason_repeats` · `reason_keep` · D-99).
+    한 문서에 같은 글자가 두 번이면 한 단위다(골든은 문구 하나가 한 행으로 남는다).
+    """
+    from preprocess import golden as gd  # noqa: PLC0415
+    from preprocess import split as sp  # noqa: PLC0415
+
+    if not FS_MANIFEST.exists():
+        raise SystemExit(f"🔴 {FS_MANIFEST} 가 없다 — 어느 문서가 학습 쪽인지 모른다")
+    assign = json.loads(FS_MANIFEST.read_text(encoding="utf-8"))["assign"]
+    docs = gd.reason_docs()
+    repeats = gd.reason_repeats(docs)
+    got: dict[str, dict] = {}
+    for d in docs:
+        if d["원천"] != FT_SOURCE or assign.get(d["doc_id"]) != FT_SPLIT:
+            continue
+        for raw in d.get("문구_이유") or []:
+            text, why = gd.reason_keep(raw, repeats)
+            if why:
+                continue
+            k = sp.reason_key(d["doc_id"], text)
+            got.setdefault(
+                k,
+                {
+                    "지문": k,
+                    "doc_id": d["doc_id"],
+                    "근거_원천": d["근거"],
+                    "문구": text,
+                    "원천": d["원천"],
+                },
+            )
+    return got
+
+
+def fr_rows() -> list[dict]:
+    rows = list(_fr_source().values())
+    registry.assert_derivable(rows, who="guide_statute_round.fr_rows")
+    return rows
+
+
+def fr_units(units: list[dict]) -> dict[str, dict]:
+    """단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 지금 학습 문서의 이유 문구에 있어야 한다(분할이 바뀌었으면 멈춘다).
+
+    🚨 다른 판과 달리 **전량을 요구하지 않는다** — 원천은 골든의 뒤 거름 전이라 단위 표보다 넓다(위 머리말 ③).
+    """
+    have = _fr_source()
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(FR_KEY_RE, k, src, bad):
+            continue
+        h = have.get(k)
+        if h is None or u.get("doc_id") != h["doc_id"] or u.get("문구") != h["문구"]:
+            bad.append(f"{k} {u.get('doc_id')} 학습 이유 문구에 없다 {str(u.get('문구'))[:30]!r}")
+            continue
+        src[k] = h
+    _units_fail("결정문 이유 구역 문구", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.fr_units")
+    return src
+
+
+FR = Round(
+    prefix="FR",
+    cmd="fr",
+    cite_of=fp_cite_of,
+    exceptions=FP_EXCEPTIONS,
+    mok_ho={},
+    head=("doc_id", "근거_원천"),
+    sheet_head=("doc_id",),
+    units=lambda us: fr_units(us),
+    guard=fs_guard,  # 봉인 · 주문 판과 **같은 함수** — 조건 L · 원천 호 밖은 합의여도 팀장에게 (D-99)
+)
+
+
+def fr_context(reason: str, text: str) -> dict:
+    """이유 글에서 문구가 인용된 자리 — 앞뒤 글 · 그 자리 앞의 번호 붙은 제목 줄 · 다른 인용 자리(자리마다 제목 줄).
+
+    인용부호 안에 나온 자리를 먼저 본다(문구의 첫 등장 자리는 인용이 아닐 수 있다 — 표본 400 중 68 · 원장 10-03 ㊿-27).
+    인용부호 안 자리가 없으면 첫 등장 자리를, 글에 아예 없으면 앞뒤 없이 낸다(지어내지 않는다 · D-220).
+    """
+    fold = lambda x: re.sub(r"\s+", " ", x)  # noqa: E731
+    heads = [
+        (m.start(), m.group(0).strip())
+        for m in re.finditer(r"[^\n]+", reason)
+        if 3 < len(m.group(0).strip()) <= FR_HEAD_MAX and FR_HEAD_RE.match(m.group(0))
+    ]
+    near = lambda at: [h for o, h in heads if o < at][-FR_HEADS:]  # noqa: E731
+    pos = [m.start() for m in re.finditer(re.escape(text), reason)]
+    quoted = [
+        i
+        for i in pos
+        if i > 0
+        and reason[i - 1] in FR_QUOTES
+        and i + len(text) < len(reason)
+        and reason[i + len(text)] in FR_QUOTES
+    ]
+    got = {"앞뒤": None, "소제목": [], "다른자리": [], "인용자리": len(quoted), "자리": len(pos)}
+    if not pos:
+        return got
+    i = (quoted or pos)[0]
+    w = FR_CONTEXT
+    got["앞뒤"] = (
+        ("… " if i > w else "")
+        + fold(reason[max(0, i - w) : i])
+        + f"⟦{text}⟧"
+        + fold(reason[i + len(text) : i + len(text) + w])
+        + " …"
+    )
+    got["소제목"] = near(i)
+    w = FR_CONTEXT_MORE
+    for j in quoted[1 : 1 + FR_MORE_MAX]:
+        got["다른자리"].append(
+            "〔"
+            + (" › ".join(near(j)) or "소제목 없음")
+            + "〕 "
+            + fold(reason[max(0, j - w) : j])
+            + f"⟦{text}⟧"
+            + fold(reason[j + len(text) : j + len(text) + w])
+        )
+    return got
+
+
+def fr_input(out_dir: pathlib.Path) -> dict:
+    """판독 재료 — `단위.json` · `입력_NN.md`(150 단위씩). 원문(`data/raw/ftc`)에서 마스킹을 지난 이유 글을 다시 읽는다.
+
+    🚨 원천 전량(뒤 거름 전)을 낸다 — 골든에 이미 판이 걸려 있으면 `golden.build` 가 멈추며 말한 문구만 골라 판독한다.
+    """
+    import xml.etree.ElementTree as ET  # noqa: PLC0415, N817
+
+    from preprocess import ftc_extract as fx  # noqa: PLC0415
+    from preprocess.mask import anchor_ftc, apply_policy  # noqa: PLC0415
+
+    rows = fr_rows()
+    need: dict[str, list[dict]] = collections.defaultdict(list)
+    for r in rows:
+        need[r["doc_id"].split(":", 1)[1]].append(r)
+    units, seen = [], set()
+    for p in fx.store.current_files(fx.RAW, "*.xml"):
+        if p.name.split("_")[0].split(".")[0] not in need:
+            continue
+        root = ET.parse(p).getroot()
+        seq = fx._text(root, "결정문일련번호")  # noqa: SLF001
+        if seq not in need or seq in seen:
+            continue
+        seen.add(seq)
+        _, bare = anchor_ftc(root)
+        reason = apply_policy(fx._text(root, "이유"), bare, "ftc")  # noqa: SLF001
+        for r in need[seq]:
+            units.append(
+                {h: r[h] for h in ("지문", "doc_id", "근거_원천", "문구")}
+                | fr_context(reason, r["문구"])
+            )
+    miss = set(need) - seen
+    if miss:
+        raise SystemExit(f"🔴 원문을 못 찾은 문서 {len(miss)} — {sorted(miss)[:5]} ({fx.RAW})")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "단위.json").write_text(
+        json.dumps(units, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
+    )
+    ho = lambda u: ",".join(f"공{statute.parse(c)[3]}" for c in u["근거_원천"])  # noqa: E731
+    head = (
+        "# 결정문 이유 구역 판독 — 입력\n\n"
+        "단위마다: 지문 · 원천 호(문서의 호를 내려 붙인 것) · 소제목(문구가 인용된 자리 앞의 가장 가까운 번호 붙은 제목 줄) · 문구 · "
+        "앞뒤(⟦문구⟧ 가 인용부호 안에 처음 나온 자리의 앞뒤 200자) · 다른 인용 자리(있으면 — 자리마다 〔그 자리의 소제목〕을 앞에 붙였다). "
+        "판독 대상은 ⟦ ⟧ 안의 문구다.\n\n"
+    )
+    for n in range(0, len(units), FR_BATCH):
+        body = []
+        for u in units[n : n + FR_BATCH]:
+            body += [
+                f"\n## {u['지문']}",
+                f"- 원천 호: {ho(u)}",
+                f"- 소제목: {' › '.join(u['소제목']) or '(없음)'}",
+                f"- 문구: {u['문구']}",
+                f"- 앞뒤: {u['앞뒤'] or '(앞뒤 글을 찾지 못했다 — 문구만 본다)'}",
+                *(f"- 다른 인용 자리: {x}" for x in u["다른자리"]),
+                "",
+            ]
+        (out_dir / f"입력_{n // FR_BATCH + 1:02d}.md").write_text(
+            head + "\n".join(body) + "\n", encoding="utf-8", newline="\n"
+        )
+    return {"단위": len(units), "문서": len(seen), "묶음": -(-len(units) // FR_BATCH)}
+
+
 #: 식품 판독에 주는 기준 원문 — 현행 조문 · [별표] · 고시(지시서 §4). 🔴 하나라도 없으면 멈춘다(빈 묶음을 주지 않는다 · D-220)
 LAW_ARTICLE = ROOT / "data" / "derived" / "law_article.jsonl"
 LAW_NORM = ROOT / "data" / "derived" / "law_norm"
@@ -2480,6 +2696,7 @@ ROUNDS = {
     "ge": (GE, "해설서 근거자료 제출"),
     "fs": (FS, "결정문 봉인 문구"),
     "ft": (FT, "결정문 학습 문구"),
+    "fr": (FR, "결정문 이유 구역 문구"),
 }
 
 
@@ -2560,7 +2777,15 @@ def main() -> int:
     p_fi.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_sealed")
     p_ti = sub.add_parser("ft-input", help="결정문 학습 문구 — 단위.json · 입력.md(앞뒤 글 포함)")
     p_ti.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_train")
+    p_ri = sub.add_parser(
+        "fr-input", help="결정문 이유 구역 문구 — 단위.json · 입력_NN.md(앞뒤 글 · 소제목 포함)"
+    )
+    p_ri.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_reason")
     a = ap.parse_args()
+    if a.cmd == "fr-input":
+        print(json.dumps(fr_input(a.out), ensure_ascii=False, indent=1))
+        print(f"판독 재료 → {a.out}")
+        return 0
     if a.cmd in ("audit-sheet", "caution-audit-sheet"):
         fn = guide_audit_sheet if a.cmd == "audit-sheet" else caution_audit_sheet
         print(json.dumps(fn(a.out, a.n, a.seed), ensure_ascii=False, indent=1))

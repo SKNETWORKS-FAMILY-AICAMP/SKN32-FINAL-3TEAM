@@ -133,6 +133,12 @@ _REASON_REPEAT_DOCS = 4
 _REASON_MIN = 4
 
 
+def reason_docs() -> list[dict]:
+    """이유 되풀이 거름(ㅇ)이 보는 문서들. 🚨 `build` 와 `guide_statute_round` 의 FR 판이 **같은 함수**를 부른다 (D-99) —
+    둘이 다른 목록으로 되풀이를 세면 판의 단위와 골든의 이유 행이 어긋난다."""
+    return ftc_docs() + casebook_docs() + approved_docs() + guide_docs()
+
+
 def reason_repeats(docs: list[dict]) -> set[str]:
     """이유 문구 중 `_REASON_REPEAT_DOCS` 개 이상의 문서에 같은 글자로 나오는 것(`overlap_key` 기준)."""
     seen: dict[str, set[str]] = collections.defaultdict(set)
@@ -321,7 +327,7 @@ def build() -> tuple[list[dict], dict]:
     #    (대기 중에는 빈 목록 · `split.guide_state()`). 전환됐다(원장 09-25 ⑰) — 해설서 행이 이 한 줄로 들어온다.
     # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집도 같은 길이다(`cosmetic_docs()` 도 대기 0 일 때만 낸다)
     #    🆕 09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 같은 길(`ftc_press_docs()`)
-    docs = ftc_docs() + casebook_docs() + approved_docs() + guide_docs()
+    docs = reason_docs()
     repeats = reason_repeats(docs)  # 🆕 2026-09-30 (판정 J3 (가)) — 이유 거름 ㅇ
     # 🆕 2026-09-30 (판정 J1 (가-2′)) — 인정 조건문(조건 D · 전량 train). 이유 되풀이(ㅇ)의 입력은 아니다
     # 🆕 2026-09-30 (판정 J2) — 봉인 결정문 주문 문구의 대상 · 조건(판독 둘 · 팀장). 대기가 남으면 None — 종전대로 낸다
@@ -622,6 +628,52 @@ def build() -> tuple[list[dict], dict]:
     before = len(kept)
     kept = [r for r in kept if not (r["split"] == "train" and overlap_key(r["text"]) in test_neg)]
     stat["음성겹침_학습제외"] = before - len(kept)
+
+    # 🆕 2026-10-05 (원장 10-03 ㊿-28) — **결정문 이유 구역 문구에 판독 판을 건다**(대상 · 조건 · 호).
+    #    이유 문구는 인용부호 안을 기계로 뽑고 문서의 호를 내려 붙인 것이다 — 판독해 보니 위반 광고 문구는 절반이 안 됐다.
+    #    · 대상 N(증거 이름 · 약칭 · 법령 · 위원회 용어) → 학습에서 뺀다
+    #    · 조건 C · A · B → 호를 판독이 고른 것으로 좁힌다(원천 호 안에서 — 밖이면 멈춘다 · D-237)
+    #    · 조건 D · L → 근거 · 유형을 비운다 · 조건 M → 문서의 호를 든 채 남는다(주문 판과 같은 꼴)
+    #    🚨 **거름을 다 지난 뒤**에 건다 — 앞에서 빼면 문구 겹침 거름(평가 쪽을 뺀다)의 결과가 달라져 평가 행이 움직인다.
+    #       그래서 「학습 이유 문구와 겹쳐 빠진 평가 문구」는 그 이유 문구가 대상 N 이 돼도 돌아오지 않는다(평가를 그대로 둔다)
+    #    🔴 판이 남은 이유 행 전량을 들고 있어야 한다 — 없는 문구를 조건 없이 내면 판정 없는 양성이 섞인다 (D-220)
+    reason_marks = split_mod.ftc_reason_marks()
+    if reason_marks is not None:
+        marked: list[dict] = []
+        for r in kept:
+            doc_id, _, tail = r["id"].partition("#")
+            if not (
+                r.get("구역") == "이유"
+                and r["provenance"] == "ftc_decisions_body"
+                and r["split"] == "train"
+                and tail.startswith("r")
+                and not tail.startswith("ra")
+            ):
+                marked.append(r)
+                continue
+            mark = reason_marks.get(split_mod.reason_key(doc_id, r["text"]))
+            if mark is None:
+                raise SystemExit(
+                    f"🔴 {r['id']} 이유 문구가 판독 판에 없다 {r['text'][:30]!r} — 분할 · 거름이 바뀌었다. "
+                    "`guide_statute_round fr-input` 으로 단위를 다시 내고 빠진 문구를 판독한다"
+                )
+            if mark["대상"] == "N":
+                stat["이유_대상아님(N)"] += 1
+                continue
+            cond = mark["조건"]
+            r |= {"조건": cond, "근거_후보": [], "판독": mark["판독"], "원천결손": False}
+            if cond in ("D", "L"):
+                r |= {"근거": [], "labels": []}
+            elif cond in ("C", "A", "B"):
+                picked = sorted(mark["근거"])
+                if not picked or not set(picked) <= set(r["근거"]):
+                    raise SystemExit(
+                        f"🔴 {r['id']} — 판독의 호 {picked} 가 원천(의결서)의 호 {r['근거']} 밖이다 (D-237)"
+                    )
+                r |= {"근거": picked, "labels": statute.types_of(picked)}
+            stat[f"이유_조건_{cond}"] += 1
+            marked.append(r)
+        kept = marked
 
     # 🆕 2026-10-01 (D-306) — 품목 칸. **칸은 늘 있다** — 미상은 `None` 으로 적는다(칸이 없는 것과 「모른다」를 가른다 · D-220)
     for r in kept:
