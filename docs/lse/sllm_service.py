@@ -79,6 +79,22 @@ def load(stage1: str | None = None) -> tuple:
     return _MODEL
 
 
+def _rejudge_view(r: dict) -> dict | None:
+    """재판정 결과를 이유까지 싣는다(🆕 10-05) — 한 단어(`rejected`)만으로는 왜 떨어졌는지 모른다.
+    status: rejected(위반 유형이 붙음 → 후보 탈락) · no_violation(위반 없음 — 🚨 통과 보증 아님) · passed · unavailable(DB 없음)."""
+    if not r.get("rejudge"):
+        return None  # 재판정을 안 켰거나 후보가 아니었다
+    return {
+        "status": r["rejudge"],
+        "core_outcome": r.get("rejudge_outcome"),  # 판정 코어 종착(hold · certificate · guidance · passed)
+        "violations": r.get("rejudge_violations") or [],
+        "hold_reasons": r.get("rejudge_hold_reasons") or [],  # low_conf = 인코더 없음 · 확신 부족
+        "basis": r.get("rejudge_basis") or [],
+        "rejected_body": r.get("rejudge_body"),  # 탈락한 후보 문장
+        "note": r.get("rejudge_note"),
+    }
+
+
 def rewrite(text: str, violation_types: list[str] | None = None, persona: str | None = None,
             do_rejudge: bool = False) -> dict:
     """문구 하나를 고쳐 쓴다. 위반 유형은 판정 코어(검수)가 준 것을 그대로 넘긴다 — 없으면 빈 목록."""
@@ -95,10 +111,12 @@ def rewrite(text: str, violation_types: list[str] | None = None, persona: str | 
         "reasons": r.get("gate1") or [],
         "repairs": r.get("repairs") or [],
         "note_problem": r.get("note_problem"),
-        "rejudge": r.get("rejudge"),
+        "rejudge": _rejudge_view(r),
         "model": ver,
         "latency_ms": int((time.time() - t0) * 1000),
     }
+    if r.get("rejudge") == "rejected":
+        out["reasons"] = [*out["reasons"], "재판정 탈락: " + " · ".join(r.get("rejudge_violations") or ["근거 없음"])]
     if r["outcome"] == "candidate" and r.get("final"):
         out["rewrite"] = {"body": r["final"], "mandatory_note": r.get("note"), "placement": None}
     return out

@@ -94,9 +94,10 @@ def with_rejudge(res: dict, do_rejudge: bool) -> dict:
     except RejudgeUnavailable as e:
         return {**res, "rejudge": "unavailable", "rejudge_note": str(e)}
     res = {**res, "rejudge": r.status, "rejudge_outcome": r.outcome, "rejudge_violations": list(r.violations),
-           "rejudge_basis": list(r.basis)}
+           "rejudge_basis": list(r.basis), "rejudge_hold_reasons": list(r.hold_reasons)}
     if r.status == "rejected":
-        return {**res, "outcome": "hold", "final": None}
+        # 탈락한 후보 문장은 남긴다 — 왜 떨어졌는지 사람이 보게(🆕 10-05)
+        return {**res, "outcome": "hold", "final": None, "rejudge_body": res["final"]}
     return res
 
 
