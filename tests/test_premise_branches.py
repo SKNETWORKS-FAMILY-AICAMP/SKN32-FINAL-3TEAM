@@ -122,14 +122,38 @@ def test_분기_노드가_코어_순서와_출력에_들어_있다() -> None:
     )
 
 
-def test_기준_문안이_확정되지_않으면_분기를_내지_않는다() -> None:
-    assert pm.CRITERIA == {} or all(pm.CRITERIA.values()), "빈 문안이 표에 있다"
+def test_기준_문안이_확정되지_않으면_분기를_내지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        pm, "CRITERIA", {p: v for p, v in pm.CRITERIA.items() if p is not Premise.화장품}
+    )
     st, out = _run({"law_food": [_hit(FOOD4)]})
-    if not pm.criteria_ready(pm.PREMISES_OF[None]):
-        assert _quiet(out), (
-            "🚨 문안이 비었는데 분기 노드가 무언가 냈다 — 초안 · 빈 문안으로 응답을 내지 않는다 (D-147 · D-220)"
+    assert _quiet(out), (
+        "🚨 문안이 한 줄 비었는데 분기 노드가 무언가 냈다 — 초안 · 빈 문안으로 응답을 내지 않는다 (D-147 · D-220)"
+    )
+    assert st["sentences"][0].verdict is Verdict.confirmed, "문안 전에는 종전 판정 그대로다"
+
+
+def test_기준_문안_표는_승인본이고_픽스처와_한_벌이다() -> None:
+    """✅ 2026-10-06 승인본 — 전제 여섯이 다 있고, 화면이 보는 픽스처의 분기 문안과 글자가 같다 (D-99 · D-263 ②)."""
+    import json
+    import pathlib
+
+    assert set(pm.CRITERIA) == set(Premise) and all(v.strip() for v in pm.CRITERIA.values()), (
+        "기준 문안이 빈 전제가 있다 — 분기가 꺼진다"
+    )
+    for p, v in pm.CRITERIA.items():
+        assert "초안" not in v and "적법" not in v and "안전" not in v, (
+            f"{p.value} — 초안 표시나 「적법」 · 「안전」이 문안에 있다 (D-147 · D-05 · D-130)"
         )
-        assert st["sentences"][0].verdict is Verdict.confirmed, "문안 전에는 종전 판정 그대로다"
+    seen = 0
+    for f in sorted(pathlib.Path("tests/fixtures/judge").glob("*.json")):
+        for b in json.loads(f.read_text(encoding="utf-8")).get("branches", []):
+            seen += 1
+            assert b["criteria"] == pm.CRITERIA[Premise(b["premise"])], (
+                f"🚨 {f.name} 의 {b['premise']} 문안이 표와 다르다 — 화면은 픽스처를 보고 만든다. 두 벌이 되면 "
+                "응답과 화면의 글자가 갈린다 (D-99)"
+            )
+    assert seen, "분기가 든 픽스처가 없다 — 이 게이트가 아무것도 보지 않는다"
 
 
 def test_DB_가_없으면_분기를_내지_않는다(criteria: None) -> None:
