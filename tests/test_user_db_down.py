@@ -10,7 +10,9 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -76,8 +78,14 @@ def test_DB_가_없어도_이력이_뜨고_기록없음으로_적지_않는다(d
 
 
 @pytest.mark.gate
-def test_쿼리_오류는_DB_없음으로_삼키지_않는다() -> None:
-    """🚨 음성 대조 — 「연결 실패만 받아 준다」가 참인지 잰다. 넓게 잡으면 이 테스트가 🔴 다."""
+def test_쿼리_오류는_DB_없음으로_삼키지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🚨 음성 대조 — 「연결 실패만 받아 준다」가 참인지 잰다. 넓게 잡으면 이 테스트가 🔴 다.
+
+    🔄 2026-09-29 — 홈은 **로그인해야** 판정을 센다(P1-5). 로그아웃이면 쿼리가 안 나가 잴 게 없으니 로그인을 흉내 낸다.
+    """
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    monkeypatch.setattr(user_router, "current_user", lambda *_a: SimpleNamespace(id=uuid.uuid4()))
 
     def _breaks() -> Iterator[_QueryBreaks]:
         yield _QueryBreaks()

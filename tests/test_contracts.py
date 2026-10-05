@@ -402,6 +402,7 @@ from app.contracts import (  # noqa: E402
     PASS_RISK_MAX,
     Branch,
     Category,
+    CategorySource,
     EvidenceArticle,
     GenerateOutcome,
     Premise,
@@ -576,28 +577,55 @@ def test_전제를_몰라_보류하면_분기를_준다() -> None:
 
 
 @pytest.mark.gate
-def test_전용법_품목은_통과가_없고_미검수_고지가_붙는다() -> None:
-    """D-271 ⑤ · D-277 — 안 본 법을 본 것처럼 말하지 않는다."""
+@pytest.mark.parametrize("category", [Category.전용법_미수록, Category.일반상품])
+def test_주된_광고법을_안_본_품목은_통과가_없고_미검수_고지가_붙는다(category: Category) -> None:
+    """D-271 ⑤ · D-277 — 안 본 법을 본 것처럼 말하지 않는다. 🔄 2026-10-02 — `일반상품` 도 같다(D-271 ④ 개정)."""
+    src = CategorySource.user_selected
     s = SentenceJudgment(
         sent_id="s1", text="t", verdict=Verdict.hold, hold_reason=HoldReason.law_uncovered
     )
     JudgeResponse(
         outcome=Outcome.hold,
-        category=Category.전용법_미수록,
+        category=category,
+        category_source=src,
         not_reviewed=["의료기기법"],
         sentences=[s],
     )
     with pytest.raises(ValidationError, match="D-277"):
-        JudgeResponse(outcome=Outcome.hold, category=Category.전용법_미수록, sentences=[s])
+        JudgeResponse(outcome=Outcome.hold, category=category, category_source=src, sentences=[s])
     with pytest.raises(ValidationError, match="통과"):
         JudgeResponse(
             outcome=Outcome.passed,
-            category=Category.전용법_미수록,
+            category=category,
+            category_source=src,
             not_reviewed=["의료기기법"],
             sentences=[_clean()],
         )
-    with pytest.raises(ValidationError, match="전용법 품목에서만"):
-        JudgeResponse(outcome=Outcome.hold, category=Category.식품, sentences=[s])
+    with pytest.raises(ValidationError, match="안 본 품목에서만"):
+        JudgeResponse(
+            outcome=Outcome.hold, category=Category.식품, category_source=src, sentences=[s]
+        )
+
+
+@pytest.mark.gate
+def test_품목과_품목_출처는_함께_있다() -> None:
+    """🆕 2026-10-02 (D-276 ⑥) — 출처가 비면 화면이 「판별」과 「사용자 선택」을 못 가른다. DB 제약과 같은 규칙이다."""
+    JudgeResponse(outcome=Outcome.hold, sentences=[_hold(HoldReason.low_conf)])
+    JudgeResponse(
+        outcome=Outcome.passed,
+        category=Category.식품,
+        category_source=CategorySource.user_selected,
+        sentences=[_clean()],
+    )
+    with pytest.raises(ValidationError, match="D-276"):
+        JudgeResponse(outcome=Outcome.passed, category=Category.식품, sentences=[_clean()])
+    with pytest.raises(ValidationError, match="D-276"):
+        JudgeResponse(
+            outcome=Outcome.passed, category_source=CategorySource.classified, sentences=[_clean()]
+        )
+    m = re.search(r'product_category_source in"\s*" \(([^)]*)\)', MODELS)
+    assert m, "🚨 `app/models.py` 에서 품목 출처 제약을 못 찾았다"
+    assert {v.value for v in CategorySource} == set(re.findall(r"'([^']+)'", m.group(1)))
 
 
 @pytest.mark.gate
@@ -676,3 +704,33 @@ def test_모델의_래칫_제약이_최종이_하한_아래인_행을_막는다(
     assert got.get("ck_judgment_final_not_below_floor") == (
         "risk_final IS NULL OR risk_floor IS NULL OR risk_final >= risk_floor"
     )
+
+
+# ── 🆕 2026-10-01 (D-308 ④) 사실 확인 분기 · 실증 자료 거름 ─────────────────────────────
+
+
+@pytest.mark.gate
+def test_실증_분기에는_특허_수상_인증을_못_넣는다() -> None:
+    """D-228 — 효능 실증이 아니다. 종전에는 docstring 의 약속뿐이었다."""
+    from app.contracts import SubstBranch
+
+    with pytest.raises(ValidationError, match="실증 자료가 아니다"):
+        SubstBranch(substantiated_max=Risk.R1, accepted_evidence=["수상 증서"], criteria="기준")
+
+
+@pytest.mark.gate
+def test_사실_확인_분기는_B_에만_상한은_확인_전_아래로() -> None:
+    from app.contracts import FactBranch, FactKind
+
+    fact = FactBranch(
+        kind=FactKind.수상_상장,
+        confirmed_max=Risk.R0,
+        accepted_evidence=["수상 증서"],
+        criteria="기준",
+    )
+    ok = _viol(fact_check=fact)
+    assert ok.fact_check.kind is FactKind.수상_상장
+    with pytest.raises(ValidationError, match="B 에만"):
+        _viol(infeas=Infeasibility.C, fact_check=fact)
+    with pytest.raises(ValidationError, match="상한"):
+        _viol(fact_check=fact.model_copy(update={"confirmed_max": Risk.R3}))

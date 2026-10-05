@@ -1,0 +1,49 @@
+{
+  "outcome": "hold",
+  "category": "일반상품",
+  "category_source": "user_selected",
+  "not_reviewed": [
+    "해당 품목의 전용법"
+  ],
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "공기청정기 필터를 6개월마다 바꿔 주세요.",
+      "verdict": "hold",
+      "hold_reason": "law_uncovered",
+      "violations": [],
+      "infeasibility": null,
+      "evidence": [],
+      "risk": {
+        "floor": "R0",
+        "encoder": null,
+        "final": "R0",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
+    }
+  ],
+  "branches": [],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "rule-0.3.0-dict"
+}

@@ -62,6 +62,45 @@ RE_ECOM = re.compile(r"전자상거래|통신판매|임시중지명령")
 #: 법률명이 실제로 적힌 경우. 사건명이 애매할 때만 쓰는 보조 기준이다.
 RE_LAWNAME = re.compile(r"표시\s*·?\s*광고의?\s*공정화|표시광고법")
 
+#: 🆕 2026-10-05 (원장 10-03 ㊿-27 · D-313 개정) — **사건에 적용된 법.** 분류(`classify`)와 따로 읽는다.
+#:    ⛔ `classify` 는 주문의 「거짓·과장」 한 낱말로 A′ 에 넣는다 — 전자상거래법 제21조 사건(「거짓 또는 과장된 사실을 알려」)이
+#:       표시광고법 제3조제1항 호를 달고 골든 학습에 들어가 있었다(46 문서 · 골든 행 488 — 전부 학습 · 원장 10-03 ㊿-27).
+#:    🚨 뿌리(`classify` 가 다른 법 사건을 후보로 넣는다)는 그대로다 — 후보 수(D-143 판 대조)가 움직여서 여기서 고치지 않는다.
+#:       걸러 내는 자리는 `preprocess.split.ftc_docs()` 다. `classify` 를 고치면 이 거름과 같이 본다 (D-192 · D-99)
+RE_LAW_ECOM = re.compile(
+    r"전자상거래\s*등에서의\s*소비자\s*보호|전자상거래법|전자상거래소비자보호법"
+)
+RE_LAW_FAIR = re.compile(r"독점규제\s*및\s*공정거래|공정거래법")
+RE_LAW_OTHER = re.compile(r"(?:방문판매|할부거래|가맹사업|약관의\s*규제|하도급)[가-힣 ]{0,14}법")
+#: 법 이름 없이 「법 제3조」 · 「법 제7조」만 적은 옛 의결서 — 표시광고법의 부당 표시·광고 금지(제3조) · 시정조치(제7조)
+RE_LAW_ART37 = re.compile(r"법\s*제\s*(?:3|7)\s*조")
+LAW_AD = "표시광고법"
+LAW_AD_UNNAMED = "법 이름 없음(제3조·제7조)"
+LAW_UNKNOWN = "미상"
+#: 골든 · 분할에 들어가는 사건 — 표시광고법이 적혔거나, 법 이름 없이 제3조 · 제7조를 인용했다
+AD_LAWS = frozenset((LAW_AD, LAW_AD_UNNAMED))
+
+
+def case_law(name: str, order: str, gist: str, reason: str) -> str:
+    """사건에 적용된 법 — 정규화문(`sep_norm`)을 받는다. 앞선 규칙이 이긴다.
+
+    표시광고법이 한 번이라도 적혔으면 표시광고법 사건이다(전자상거래법과 함께 적용된 사건을 남긴다).
+    🔴 아무것도 못 읽으면 `미상` 을 돌려준다 — 부르는 쪽(`split.ftc_docs`)이 멈춘다. 넣지도 빼지도 않는다 (D-220).
+    """
+    t = name + order + gist + reason
+    if RE_LAWNAME.search(t):
+        return LAW_AD
+    if RE_LAW_ECOM.search(t):
+        return "전자상거래법"
+    if RE_LAW_FAIR.search(t):
+        return "공정거래법"
+    if RE_LAW_OTHER.search(t):
+        return "다른 법"
+    if RE_LAW_ART37.search(t):
+        return LAW_AD_UNNAMED
+    return LAW_UNKNOWN
+
+
 BUCKETS = [
     ("A", "표시광고 본건 (사건명)"),
     ("A'", "표시광고 (주문·결정요지)"),

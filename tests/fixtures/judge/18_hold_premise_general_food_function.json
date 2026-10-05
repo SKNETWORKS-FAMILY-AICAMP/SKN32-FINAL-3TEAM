@@ -1,0 +1,132 @@
+{
+  "outcome": "hold",
+  "category": "식품",
+  "category_source": "classified",
+  "not_reviewed": [],
+  "sentences": [
+    {
+      "sent_id": "s1",
+      "text": "면역력 증진에 도움을 줄 수 있다고 알려진 홍삼이 들어 있습니다.",
+      "verdict": "hold",
+      "hold_reason": "premise_unknown",
+      "violations": [
+        "건강기능식품_오인"
+      ],
+      "infeasibility": "A",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": null
+        }
+      ],
+      "risk": {
+        "floor": "R2",
+        "encoder": null,
+        "final": "R2",
+        "evidence_span": null
+      },
+      "evidence_mismatch": false,
+      "not_claim": false,
+      "spans": [],
+      "substantiation": null
+    }
+  ],
+  "branches": [
+    {
+      "premise": "일반식품_기능성",
+      "verified": false,
+      "outcome": "pass",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "면역력 증진에 도움을 줄 수 있다고 알려진 홍삼이 들어 있습니다.",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [],
+          "infeasibility": null,
+          "evidence": [],
+          "risk": {
+            "floor": "R0",
+            "encoder": null,
+            "final": "R0",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 일반식품도 고시 「부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정」의 요건을 모두 채우면 기능성을 표시할 수 있습니다 — ① 적용 제외가 아닐 것(제3조②: 주류·특수의료용도등식품 · 영양성분 함량 기준 미달 · 36개월 이하 영유아·어린이 표방 · 임산·수유부 대상 · 정제·캡슐·스틱/포 분말·앰플 형태) ② 고시 범위의 기능성일 것(제4조①: 건강기능식품 기준 및 규격의 기능성 원료 · 일반식품 사용을 인정받은 원재료 · 인체적용시험으로 실증한 기능성 — 건강민감계층 · 성기능 · 질병발생 위험 감소는 제외 · 제4조②) ③ 안전관리인증기준적용업소에서 제조하고 기능성 원재료를 1일 섭취기준량의 30% 이상 함유할 것(제5조) ④ 「본 제품은 건강기능식품이 아닙니다」 등 제6조의 표시를 갖출 것. 원료 함유 ≠ 요건 충족 — 요건을 확인하지 못하면 이 분기는 「검증 안 됨」입니다.",
+      "evidence": []
+    },
+    {
+      "premise": "식품",
+      "verified": false,
+      "outcome": "certificate",
+      "sentences": [
+        {
+          "sent_id": "s1",
+          "text": "면역력 증진에 도움을 줄 수 있다고 알려진 홍삼이 들어 있습니다.",
+          "verdict": "confirmed",
+          "hold_reason": null,
+          "violations": [
+            "건강기능식품_오인"
+          ],
+          "infeasibility": "A",
+          "evidence": [
+            {
+              "law_id": "013094",
+              "article": "제8조",
+              "item": "제1항제3호",
+              "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+              "chunk_id": null
+            }
+          ],
+          "risk": {
+            "floor": "R2",
+            "encoder": null,
+            "final": "R2",
+            "evidence_span": null
+          },
+          "evidence_mismatch": false,
+          "not_claim": false,
+          "spans": [],
+          "substantiation": null
+        }
+      ],
+      "criteria": "(초안) 위 고시 요건을 채우지 않은 일반식품이라면 신체 기능에 도움을 준다는 표현 자체가 「건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려」가 있는 광고입니다 — 표현을 바꿔도 같은 위반입니다.",
+      "evidence": [
+        {
+          "law_id": "013094",
+          "article": "제8조",
+          "item": "제1항제3호",
+          "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": null
+        }
+      ]
+    }
+  ],
+  "candidates": [],
+  "certificate": null,
+  "attempt": 0,
+  "timings": [
+    {
+      "node": "분할",
+      "ms": 4.1
+    },
+    {
+      "node": "검색",
+      "ms": 182.6
+    },
+    {
+      "node": "판정",
+      "ms": 91.3
+    }
+  ],
+  "law_version": "2026-09-10",
+  "judged_by": "stub-0.2.0"
+}

@@ -46,9 +46,9 @@ import xml.etree.ElementTree as ET
 
 from collect import store
 from preprocess import stage
-from preprocess.ftc_triage import CORE, _text, classify
+from preprocess.ftc_triage import CORE, _text, case_law, classify
 from preprocess.mask import MARK_RE, Ledger, Trace, anchor_ftc, apply_policy
-from preprocess.text import sep_norm
+from preprocess.text import FOOTNOTE, sep_norm
 
 SOURCE_ID = "ftc_decisions_body"  # 수집기 `collect.ftc_body`
 # 🆕 D-254 — 폴더 이름은 store.FAMILY_OF 에서만 꺼낸다 (D-99 · 감사 §1-7)
@@ -77,6 +77,9 @@ NOISE = re.compile(
     #   ① 「별지 기재 문안」류 36건. 처분 **방식**이지 광고 문구가 아니다
     #   ② 마스킹이 이름만 지우고 남긴 법인격 표기가 인용부호에 감싸여 문구로 잡혔다 (2건)
     r"|별지|기재 ?문안|^주식회사$|^유한회사$|^㈜$"
+    # 🔄 2026-09-30 — 결정문 자신의 약칭(「'이 사건 광고'라 한다」). 어느 광고인지도 안 알려 준다 —
+    #    무혐의 주문(16081 · 16089 · 16095)에서 적법 문구로 들어갈 뻔했다. 이유 쪽 거름(`golden._REASON_DROP` ㅁ)과 같은 자리다
+    r"|^이 ?사건 ?(?:광고|표시)"
 )
 
 #: 🔄 **2026-09-08 — 「자국이 들어갔다」로 버리던 것을 「알맹이가 없다」로 바꾼다.**
@@ -137,11 +140,145 @@ def content_len(q: str) -> int:
     return len(rest.strip())
 
 
+# ══ 주문의 처분 — 조항마다 다르다 (2026-09-30 · D-237 · D-255 ③) ═══════════════════════
+#  ⛔ 종전에는 주문 **전체**에서 유형어를 찾고, 뽑힌 문구 전부에 그 유형을 붙였다.
+#     「…광고한 행위는 표시ㆍ광고의 공정화에 관한 법률 제3조 제1항에 위반되지 아니한다」 뒤에 심사보고서의
+#     혐의 내용(「거짓ㆍ과장의 광고로서 …」)이 이어 붙은 주문(16081 · 16089 · 16095)에서 **무혐의 문구가 위반 양성**이
+#     됐다 — 봉인 평가 4행 · 학습 7행(검토 2026-09-30 §1-2). 원천이 「위반 아님」이라 한 것을 뒤집은 셈이다(D-237).
+#  ⛔ 뒷광고(경제적 이해관계 미공개) 사건의 인용은 상품명이다 — 위반은 표시하지 않은 것이라 문구에 없다.
+#     D-255 ③ 이 범위 밖으로 정했는데 봉인 평가에 24행이 들어가 있었다.
+#  ★ 주문을 **항목**(「1.」 · 「가.」)으로 나누고 항목마다 처분을 읽는다. 유형은 **위반 항목에서만** 센다.
+#  🚨 항목은 머리가 아닐 수 있다 — 「다음과 같이 … 광고행위를 다시 하여서는 아니 된다. 1. … 2. …」의 1 · 2 는 **머리 아래 행위**다.
+#     그래서 처분 말이 없는 항목은 **앞의 머리**(위반 · 적법 · 종결)를 따른다(표본 857 문서 실측 — 10365 · 2963 · 8577).
+#  🚨 [임의] 정규식이다 — 항목 머리가 번호도 글자도 아닌 주문(한 문단)은 통째로 한 항목이다.
+_UNIT_HEAD = re.compile(r"(?<![가-힣\d])(?:\d{1,2}|[가-하])\s*\.(?!\d)\s*[^\s.\d]")
+
+
+def _units(order: str) -> list[str]:
+    """항목으로 자른다. 🚨 항목 머리는 **줄 머리** 또는 **문장 끝(글자 뒤 마침표) 다음**에만 선다 —
+    「2022. 4. 19. 인터넷 신문」의 날짜 · 「위 1.의 행위」를 자르지 않는다(857 문서 실측 · 19183)."""
+    cuts = [0]
+    for m in _UNIT_HEAD.finditer(order):
+        p = m.start()
+        before = order[:p].rstrip(" \t")
+        if p == 0 or not before:
+            continue
+        if before.endswith("\n") or (
+            before.endswith(".") and len(before) >= 2 and not before[-2].isdigit()
+        ):
+            cuts.append(p)
+    cuts.append(len(order))
+    return [order[a:b] for a, b in zip(cuts, cuts[1:], strict=False) if order[a:b].strip()]
+
+
+#: 원천이 위법이 아니라고 한 항목 · 판단 없이 닫은 항목
+#: 🔄 2026-10-03 — 「법 위반에 해당하지 아니한다」 꼴을 더했다. 이 꼴을 못 읽어 16739 의 5 항(주행보조 프로그램 광고는
+#:    위반 아님)의 문구 둘이 위반 양성으로 학습 쪽에 들어가 있었다(8,272 문서 실측 — 이 꼴은 그 문서 하나 · 원장 10-03 ⑫)
+_LAWFUL = re.compile(r"위반되지\s*(?:아니|않)|위반에\s*해당(?:하지|되지)\s*(?:아니|않)|무혐의")
+_CLOSED = re.compile(r"심의\s*절차를\s*종료|종결\s*처리")
+#: 처분을 명하는 머리 — 시정명령 · 경고 · 고발
+_ORDER = re.compile(r"하여서는\s*아니\s*된다|하여야\s*한다|경고한다|고발한다")
+#: 처분에 딸린 항목 — 과징금 · 공표 · 통지의 **명령 꼴**. 🚨 **무엇이 위반인지 말하지 않는다** — 위반으로 세면
+#:    뒷광고 사건(「1. 대가 미공개 … 2. 과징금」)이 위반 문서가 된다(표본 실측)
+_ANCILLARY = re.compile(
+    r"납부하여야|공표하여야|통지하여야|게재함으로써|과징금액\s*[:：]|납부\s*기한\s*[:：]|납부\s*장소\s*[:：]|납\s*부\s*처\s*[:：]"
+)
+_PROHIBIT = re.compile(r"하여서는\s*아니\s*된다|경고한다")
+#: 뒷광고 — 경제적 이해관계(대가)를 **밝히지 않은** 것이 위반인 항목 (D-255 ③)
+_ENDORSE = re.compile(r"경제적\s*(?:이해\s*관계|대가)")
+_HIDE = re.compile(r"공개하지|은폐|누락|밝히지|표시하지")
+
+
+def _own_kind(c: str) -> str:
+    """항목 **자기 글**만으로 본 처분 — `적법` · `종결` · `뒷광고` · `부수` · `머리` · `행위`."""
+    if _LAWFUL.search(c):
+        return "적법"
+    if _CLOSED.search(c):
+        return "종결"
+    if _ENDORSE.search(c) and _HIDE.search(c):
+        return "뒷광고"
+    if _ANCILLARY.search(c) and not _PROHIBIT.search(c):
+        return "부수"
+    if _ORDER.search(c):
+        return "머리"
+    return "행위"
+
+
+def clauses(order: str) -> list[tuple[str, str]]:
+    """주문 → `(처분, 항목 글)`. 처분은 `위반` · `적법` · `종결` · `뒷광고` · `기타`.
+
+    ★ `행위` 항목(처분 말이 없다)은 **앞의 머리**를 따른다 — 위반 머리 아래면 위반, 무혐의 아래면 적법(16095 의 심사보고서 인용).
+    🚨 `부수`(과징금 · 공표)와 머리가 없는 앞자리 `행위` 는 `기타` 다 — 문서 처분(`doc_disposition`)이 정한다.
+    """
+    out: list[tuple[str, str]] = []
+    head = "기타"
+    for c in _units(order):
+        own = _own_kind(c)
+        if own == "머리":
+            head = k = "위반"
+        elif own in ("적법", "종결"):
+            head = k = own
+        elif own == "뒷광고":
+            k = own
+            if _ORDER.search(c):  # 머리 자체가 뒷광고 — 아래 행위도 뒷광고다
+                head = own
+        elif own == "부수":
+            k = "기타"
+        else:
+            k = head
+        out.append((k, c))
+    return out
+
+
+def doc_disposition(cls: list[tuple[str, str]]) -> str:
+    """문서 전체의 처분 — `기타` 조항의 문구가 어디로 갈지 정한다.
+
+    위반 조항이 있으면 `위반` · 없고 적법이 있으면 `적법` · 뒷광고가 있으면 `뒷광고` · 종결이 있으면 `종결` ·
+    어느 것도 없으면 `위반`(고발 · 이의신청 기각처럼 처분 말이 다른 꼴 — **종전 동작 그대로** 문서 유형을 따른다).
+    🚨 `기타` 는 떨어뜨리지 않는다 — 16095 의 무혐의 문구는 「1. 심사보고서상 혐의 내용」 조항 안에 있다.
+    """
+    kinds = {k for k, _ in cls}
+    for k in ("위반", "적법", "뒷광고", "종결"):
+        if k in kinds:
+            return k
+    return "위반"
+
+
+def place(phrases: list[str], cls: list[tuple[str, str]]) -> dict[str, list[str]]:
+    """문구마다 처분을 붙여 나눈다 — `{"위반": […], "적법": […], "버림": […]}`.
+
+    ★ 문구가 든 조항의 처분을 따른다. 위반 조항과 적법 조항에 **같이** 들면 위반이다(원천이 위반이라 적은 자리가 있다).
+    🚨 공백을 접어 찾는다 — 원천은 조항 안에서 줄을 바꾼다.
+    """
+    whole = doc_disposition(cls)
+    flat = [(k, _WS_ALL.sub("", c)) for k, c in cls]
+    out: dict[str, list[str]] = {"위반": [], "적법": [], "버림": []}
+    for p in phrases:
+        key = _WS_ALL.sub("", p)
+        kinds = {k for k, c in flat if key and key in c} or {"기타"}
+        kinds = {whole if k == "기타" else k for k in kinds}
+        if "위반" in kinds:
+            out["위반"].append(p)
+        elif "적법" in kinds:
+            out["적법"].append(p)
+        else:  # 뒷광고(D-255 ③) · 종결(판단 없음)
+            out["버림"].append(p)
+    return out
+
+
+_WS_ALL = re.compile(r"\s+")
+
+
+def violation_text(cls: list[tuple[str, str]]) -> str:
+    """유형을 셀 글 — **위반 조항만**. 위반 조항이 없는 문서는 빈 글이다(유형 없음)."""
+    return "\n".join(c for k, c in cls if k == "위반")
+
+
 def phrases_in(order: str) -> list[str]:
     """주문에서 광고 문구 원문만. 🚨 이미 마스킹을 지난 문자열을 받는다."""
     out: list[str] = []
     for q in QUOTE.findall(order):
-        q = q.strip()
+        q = FOOTNOTE.sub("", q).strip()
         if len(q) < 4 or q.isdigit() or NOISE.search(q):
             continue
         if content_len(q) < 4:  # 🔄 자국을 걷어내면 아무것도 안 남는 인용 (2026-09-08)
@@ -206,6 +343,9 @@ def main() -> int:
     #: ★ 그래서 **마스킹을 지난 주문의 인용**만 본다. 그중 알맹이가 4자 이상인데
     #:   `NOISE` 로 버려진 것이 **필터가 삼킨 것**이다 — 오늘 고친 것이 정확히 이 자리다.
     watch: list[tuple[str, str]] = []
+    #: 🆕 2026-09-30 — 문서 처분 · 문구 처분 셈 (「안 셌다」와 「0 이다」를 가른다)
+    disp: collections.Counter = collections.Counter()
+    placed: collections.Counter = collections.Counter()
 
     for p in store.current_files(RAW, "*.xml"):
         blob = p.read_bytes()
@@ -241,7 +381,7 @@ def main() -> int:
         #    ★ `--trace` 로 볼 수 있고, 그 경로는 **저장을 거부한다.**
         mlog = Trace() if a.trace else Ledger()
         # 분류·유형 판별은 **정규화문**으로 한다 (D-117 — 원문으로 classify 하면 135건이 샌다)
-        masked = apply_policy(order, bare, "ftc")
+        # 🔄 2026-09-30 — 유형은 아래 `violation_text(cls)` 를 정규화해 센다(항목은 원문에서만 보인다)
         # 🔴 저장은 **원문**으로 한다. 원장도 이쪽에 건다 — 나가는 것이 이쪽이다
         masked_raw = apply_policy(raw["주문"], bare, "ftc", mlog)
 
@@ -270,6 +410,32 @@ def main() -> int:
             gained_docs += 1
             gained_ph += len(rs)
 
+        # 🆕 2026-09-30 — **조항마다 처분을 읽는다** (D-237 · D-255 ③ · 위 `clauses` 머리말).
+        #    🚨 원문(마스킹 뒤) 주문으로 나눈다 — `sep_norm` 은 「1.」의 마침표를 바꿔 조항 머리가 안 보인다.
+        cls = clauses(masked_raw)
+        whole = doc_disposition(cls)
+        disp[whole] += 1
+        by = place(ps, cls)
+        # 이유 문구는 조항 자리가 없다 — 문서 처분을 따르고, 주문의 적법·버림 문구와 같은 글자면 그쪽을 따른다
+        ok_keys = {_WS_ALL.sub("", x) for x in by["적법"]}
+        drop_keys = {_WS_ALL.sub("", x) for x in by["버림"]}
+        rby: dict[str, list[str]] = {"위반": [], "적법": [], "버림": []}
+        for q in rs:
+            key = _WS_ALL.sub("", q)
+            if (
+                whole in ("뒷광고", "종결") or key in drop_keys
+            ):  # 문서가 범위 밖이거나 판단 없이 닫혔다
+                rby["버림"].append(q)
+            elif whole == "적법" or key in ok_keys:
+                rby["적법"].append(q)
+            else:
+                rby["위반"].append(q)
+        for part, got in (("주문", by), ("이유", rby)):
+            for kk, v in got.items():
+                placed[(part, kk)] += len(v)
+        ps_all = list(ps)  # 필터 감시(`watch`)는 처분과 상관없이 **뽑힌 것 전부**를 본다
+        ps, ps_ok, rs, rs_ok = by["위반"], by["적법"], rby["위반"], rby["적법"]
+
         stage_rows.append(
             {
                 "seq": seq,
@@ -279,22 +445,28 @@ def main() -> int:
                 "주문_마스킹": masked_raw,
                 "문구": ps,
                 "문구_이유": rs,  # 🆕 D-232 (A)
+                # 🆕 2026-09-30 — 원천이 위반 아님이라 한 문구(D-237) · 버린 문구(뒷광고 D-255 ③ · 판단 없음)
+                "처분": whole,
+                "문구_적법": ps_ok,
+                "문구_이유_적법": rs_ok,
+                "문구_버림": by["버림"] + rby["버림"],
                 "치환원장": mlog,
                 "치환원장_이유": rlog,  # 🆕
             }
         )
         for q in QUOTE.findall(masked_raw):
             q = q.strip()
-            if q in ps or content_len(q) < 4 or q.isdigit():
+            if q in ps_all or content_len(q) < 4 or q.isdigit():
                 continue
             hit = NOISE.search(q)
             watch.append((hit.group(0) if hit else "🔴미분류", q))
         # 🔴 **주문에 문구가 없어도 이유가 있으면 담는다** (2026-09-17 · D-232 (A)).
         #    ⛔ 종전에는 여기서 `continue` 라 571건이 `rows` 에 못 들어갔다.
-        if not ps and not rs:
+        if not (ps or rs or ps_ok or rs_ok):
             continue
         docs_with += bool(ps)
-        ts = types_in(masked)
+        # 🔄 2026-09-30 — 유형은 **위반 조항에서만** 센다(무혐의 조항 · 심사보고서의 「거짓ㆍ과장」을 세지 않는다)
+        ts = types_in(sep_norm(violation_text(cls)))
         for t in ts:
             lab[t["label"]] += 1
         grounds = [m.group(1).strip() for m in GROUND.finditer(masked_raw)][:3]
@@ -303,14 +475,28 @@ def main() -> int:
                 "seq": seq,
                 "결정일자": _text(r, "결정일자"),
                 "분류": k,
+                # 🆕 2026-10-05 — 사건에 적용된 법. `split.ftc_docs()` 가 읽어 표시광고법 사건만 남긴다(원장 10-03 ㊿-27)
+                "적용법": case_law(name, order, gist, reason),
                 "사건명": apply_policy(name, bare, "ftc"),
                 "문구": ps,
                 "문구_이유": rs,  # 🆕 D-232 (A) — 섞지 않는다
+                # 🆕 2026-09-30 — 조건 L(적법) 문구. 유형이 붙지 않는다 — 원천이 위반 아님이라 했다 (D-237)
+                "문구_적법": ps_ok,
+                "문구_이유_적법": rs_ok,
                 "유형": ts,
                 "근거절": grounds,
             }
         )
 
+    print("  🆕 주문 처분 (2026-09-30 · D-237 · D-255 ③) — 문서")
+    for kk, c in disp.most_common():
+        print(f"    {kk:6} {c:>5,}")
+    print(
+        "  🆕 문구 처분 — 🔴 버림 = 뒷광고(범위 밖) · 판단 없이 닫힌 조항 · 적법 = 원천이 위반 아님이라 한 문구"
+    )
+    for (part, kk), c in sorted(placed.items()):
+        print(f"    {part} {kk:4} {c:>6,}")
+    print()
     total_core = sum(buck[k] for k in CORE)
     n_ph = sum(len(x["문구"]) for x in rows)
     print(f"결정문 {sum(buck.values()):,}건 · 1층 후보 {total_core:,}건")

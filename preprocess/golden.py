@@ -11,7 +11,9 @@
 
     {"id":…, "text":…, "근거":[…], "labels":[…], "unit":"문장|낱말",
      "origin":"real|injected|approved", "provenance":…, "redistributable":…,
-     "split":"train|test_sentence"}
+     "split":"train|test_sentence", "품목":"식품|건기식|화장품|null"}
+
+🆕 2026-10-01 (D-306) — `품목` 은 **원천으로 정한 품목**이다(`CATEGORY_OF_SOURCE`). null 은 미상 — 무조건부로만 잰다.
 
 🆕 **`근거` 가 라벨의 정본이다** (2026-09-24 · D-282 · D-237 집행) — `collect.statute.cite` 꼴의 조문 인용 목록.
    `labels` 는 거기서 계산한 파생 유형이다. 둘이 어긋난 행이 하나라도 있으면 **쓰지 않고 멈춘다** (`check_basis`).
@@ -47,9 +49,40 @@ from collect import registry, statute
 from preprocess import split as split_mod
 from preprocess.dictionary import norm
 from preprocess.lineage import lineage
-from preprocess.split import approved_docs, casebook_docs, ftc_docs, guide_docs
+from preprocess.split import (
+    approved_docs,
+    casebook_docs,
+    caution_docs,
+    cosmetic_docs,
+    ftc_docs,
+    ftc_press_docs,
+    guide_docs,
+    guide_fix_docs,
+)
+from preprocess.text import FOOTNOTE
 
 SPLIT = pathlib.Path("data/derived/golden/split_manifest.json")
+#: 🆕 2026-09-30 (판정 J1) — 식약처 인정서가 원천인 행(승인 문구 · 섭취 주의사항). origin 이 `approved` 다 — 계보가 G3 · 재배포 가능
+HF_SOURCES = ("mfds_hf_ingredient_board", "mfds_hf_individual")
+
+#: 🆕 2026-10-01 (D-306) — **원천 → 품목**. 골든 행의 `품목` 칸(조건부 평가 · 기획서 6-3 「조건부 / 무조건부 병기」).
+#:    값은 계약의 `Category` 값이다(`app.contracts.Category` — 게이트가 대조한다 · D-99).
+#:    출처 `[관행]` — 원천이 품목 하나만 다룬다(해설서 = 특수용도식품 · 화장품 질의응답집 · 건기식 원료 인정 두 원천).
+#: 🔴 **표에 없는 원천은 `None`(미상)이다** — 공정위 결정문은 결정문마다 상품이 달라 원천 이름으로 못 정한다 ·
+#:    사례집도 품목이 섞였다. ⛔ 지어내지 않는다 — 미상 행은 무조건부(세 법)로만 잰다 (D-220 · D-229 ⑥)
+CATEGORY_OF_SOURCE: dict[str, str] = {
+    "mfds_special_use_guide": "식품",
+    "mfds_cosmetic_ad_qa": "화장품",
+    "mfds_hf_ingredient_board": "건기식",
+    "mfds_hf_individual": "건기식",
+}
+
+
+def category_of(provenance: str) -> str | None:
+    """골든 행의 품목 — 원천으로만 정한다. 모르면 None (D-306)."""
+    return CATEGORY_OF_SOURCE.get(provenance)
+
+
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
 OUT = pathlib.Path("data/derived/golden/golden.jsonl")
 
@@ -77,33 +110,164 @@ _REASON_DROP = (
     #   ⬜ 대가로 「목재**이용법**」 한 건을 놓친다 — 카피를 버리는 쪽이 더 나쁘다 (D-157).
     re.compile(r"(?<![방요용수기주])법$|법\)|과태료|공정경쟁규약|규약$|시행규칙|부과기준"),
     # ㅁ 문서 내부 지시어·서증 — 「이 사건 광고」·「소갑 제○호증」. 어느 광고인지도 안 알려 준다
-    re.compile(r"^이 ?사건|^본 ?건|^행위 ?\d|^소갑|심사보고서|^별지|호증$|^표 ?\d|^그림 ?\d"),
+    #   🆕 09-30 (원장 ⑮) — 원천이 표를 그림으로 넣은 파일 이름(「table_image_17(1).png」 · 6행이 학습 양성으로 새었다)
+    re.compile(
+        r"^이 ?사건|^본 ?건|^행위 ?\d|^소갑|심사보고서|^별지|호증$|^표 ?\d|^그림 ?\d"
+        r"|table_image|\.(?:png|jpe?g|gif)\b"
+    ),
+    # ㅂ 법 · 절차 문언 — 조문 · 판단 기준 · 과징금 산정 말 (2026-09-30 · 판정 J3 (가) · 원장 09-30 ⑦)
+    #   ⛔ 「공정거래위원회」 「위원회」 「대법원」은 넣지 않는다 — 「…공정거래위원회 인정」(기관 사칭 광고)을 먹는다(표본으로 확인)
+    re.compile(
+        r"제\s?\d+\s?조|시행령|대통령령|위반행위|과징금|시정명령|심사지침|피심인|해당한다|사업자\s?등"
+        r"|표시ㆍ광고|소비자로 하여금|의결서|사건절차"
+        # 🆕 09-30 (원장 ⑫) — 법리 상용구 「보통의 주의력을 가진 일반 소비자가 … 전체적ㆍ궁극적 인상」(학습 12행 중 6 이 새었다)
+        r"|보통의\s?주의력|궁극적\s?인상"
+    ),
 )
+#: 원천이 가린 기호 — 걷어내고 남는 알맹이가 하한보다 짧으면 버린다(ㅅ) · 「▩▩▩▩▩」 「○○○○」
+_REASON_REDACT = re.compile(r"[▩▨▧▦▤▣◈◎○◯□■♧]|\*{2,}|OO|ㅇㅇ")
+#: 🆕 2026-09-30 (판정 J3 (가)) — **같은 글자가 이만큼 많은 문서의 이유에 나오면** 용어 · 정의 · 산정 말이다(ㅇ) `[임의]`.
+#:    ⛔ 셋(같은 사건의 여러 피심인 의결서 · 7023 · 7025 · 7029)은 광고 문구라 넷부터 · 🚨 한 사건 가족이 넷을 넘으면 카피도 빠진다
+_REASON_REPEAT_DOCS = 4
 #: 태그를 벗기고 남은 알맹이가 이보다 짧으면 버린다 — `ftc_extract.phrases_in` 과 같은 하한
 _REASON_MIN = 4
 
 
-def reason_keep(text: str) -> tuple[str, str | None]:
+def reason_docs() -> list[dict]:
+    """이유 되풀이 거름(ㅇ)이 보는 문서들. 🚨 `build` 와 `guide_statute_round` 의 FR 판이 **같은 함수**를 부른다 (D-99) —
+    둘이 다른 목록으로 되풀이를 세면 판의 단위와 골든의 이유 행이 어긋난다."""
+    return ftc_docs() + casebook_docs() + approved_docs() + guide_docs()
+
+
+def reason_repeats(docs: list[dict]) -> set[str]:
+    """이유 문구 중 `_REASON_REPEAT_DOCS` 개 이상의 문서에 같은 글자로 나오는 것(`overlap_key` 기준)."""
+    seen: dict[str, set[str]] = collections.defaultdict(set)
+    for d in docs:
+        for t in d.get("문구_이유") or []:
+            seen[overlap_key(_TAG.sub("", FOOTNOTE.sub("", t)))].add(d["doc_id"])
+    return {k for k, v in seen.items() if len(v) >= _REASON_REPEAT_DOCS}
+
+
+def reason_keep(
+    text: str, repeats: set[str] | frozenset[str] = frozenset()
+) -> tuple[str, str | None]:
     """이유 문구를 학습에 넣을지. 돌려주는 값은 `(쓸 문자열, 버린 사유 or None)`.
 
     ★ **버린 사유를 함께 돌려준다** — 세는 쪽과 거르는 쪽이 같은 함수를 봐야
       「몇 개를 왜 버렸나」가 산출물 옆에 남는다 (D-142 · D-110).
     """
-    s = _TAG.sub("", text).strip()  # ㄱ — 벗긴다
+    # ㄱ — 벗긴다 · 🔄 2026-09-30 각주는 번호까지(종전에는 「개별소비세<각주>3</각주>인하」가 「개별소비세3인하」로 남았다)
+    s = _TAG.sub("", FOOTNOTE.sub("", text)).strip()
     if len(s) < _REASON_MIN:
         return s, "태그뿐"
     for i, pat in enumerate(_REASON_DROP):
         if pat.search(s):
-            return s, "ㄴㄷㄹㅁ"[i]
+            return s, "ㄴㄷㄹㅁㅂ"[i]
+    if len(_REASON_REDACT.sub("", s).strip()) < _REASON_MIN:
+        return s, "ㅅ"  # 🆕 원천이 가린 기호뿐
+    if overlap_key(s) in repeats:
+        return s, "ㅇ"  # 🆕 여러 문서에 되풀이되는 용어 · 정의
     return s, None
+
+
+#: 항목 번호 머리 — 「1) 」 「(2) 」 「③ 」 「가) 」 「1. 」. 🚨 뒤에 공백이 있어야 한다 — 「1.5배」 · 「2중」을 먹지 않는다
+_ENUM_HEAD = re.compile(r"^\s*(?:\(?\d{1,2}\)|\d{1,2}\.(?=\s)|[①-⑳]|[가-하]\)|\([가-하]\))\s*")
+
+
+#: 새 판 학습 행과 평가 행의 포함 관계를 볼 때의 열쇠 길이 하한 [임의] — 원장 10-03 ㉜ · ㊳ · ㊿-16 이 6 자로 쟀다
+PLACED_MIN_KEY = 6
+
+
+def overlap_key(text: str) -> str:
+    """🆕 2026-09-30 — 학습 · 평가 겹침을 가르는 열쇠. `norm`(공백 · NFKC) **앞에 항목 번호 머리를 뗀다.**
+
+    ⛔ 종전 열쇠는 `norm` 뿐이라 원천이 붙인 「1) 」 「2) 」 가 다른 글자로 읽혔다 — 평가 음성 60 중 **4** 가
+       학습과 같은 문장인데 빠지지 않았다(검토 2026-09-30 §4 · D-292 집행 정정).
+    🚨 매칭용 `app.dictmatch.norm` 은 건드리지 않는다 — 판정기 사전과 런타임이 쓴다(D-99 는 **같은 일**에만).
+    """
+    return norm(_ENUM_HEAD.sub("", text))
+
+
+def drop_placed_overlap(rows: list[dict], placed_ids: set[str]) -> tuple[list[dict], int, int]:
+    """새 판의 학습 행 중 평가 행과 겹치는 것을 뺀다 — (남은 행, 같은 글자로 뺀 수, 포함 관계로 뺀 수).
+
+    🔴 겹치면 **학습 쪽**을 뺀다 — 뒤의 문구 겹침 거름은 평가 쪽을 빼므로, 새 학습 행을 그대로 두면 봉인 평가가 준다 (D-254).
+    ★ `placed_ids` 는 새 판 학습 문서의 id 다 — 그 밖의 학습 행(결정문 · 인정 문구)은 건드리지 않는다.
+    """
+    test_keys = {overlap_key(r["text"]) for r in rows if r["split"] == "test_sentence"}
+    long_keys = [k for k in test_keys if len(k) >= PLACED_MIN_KEY]
+    kept: list[dict] = []
+    same = inside = 0
+    for r in rows:
+        if r["split"] == "train" and r["id"].split("#")[0] in placed_ids:
+            k = overlap_key(r["text"])
+            if k in test_keys:
+                same += 1
+                continue
+            if len(k) >= PLACED_MIN_KEY and any(k in t or t in k for t in long_keys):
+                inside += 1
+                continue
+        kept.append(r)
+    return kept, same, inside
 
 
 def is_negative(r: dict) -> bool:
     """적법(음성) 표본인가. 🔴 `조건` 칸이 있으면 **음성이 아니다** — 해설서 행은 원천이 위반이라 했다 (D-237 · 지시서 §7).
 
+    🔄 2026-09-30 (D-285 개정 5 · 화장품 지시서 §2 · §7) — **단, 조건 `L`(조건 없이 적법)은 음성이다.**
+       ⛔ 이 한 줄이 없으면 L 행은 위반(`is_positive`)으로도 적법으로도 안 세진다 — 조용히 빠진다 (D-220).
     ★ `eval_rule` 도 이것을 쓴다 — 음성 판별을 두 곳에 두면 한쪽만 고쳐진다 (D-99).
     """
-    return not r["labels"] and "조건" not in r
+    return not r["labels"] and r.get("조건", "L") == "L"
+
+
+#: 🆕 2026-10-01 (D-301) — 「적법 문장(주장 없음)」의 원천이 되는 판의 지문 머리. 🚨 정본은 `scripts/guide_statute_round.py`
+#:    `GF_KEY_RE`(`gf:`) 다 — 바꾸면 양쪽을 같이 (D-99)
+LAWFUL_NOCLAIM_PREFIX = "gf:"
+
+
+def lawful_kind(r: dict) -> str | None:
+    """🆕 2026-10-01 (D-301) — **적법 문장**인가, 그렇다면 어느 쪽인가. `"주장"` · `"주장없음"` · `None`.
+
+    ★ 법적으로 문장은 위반이거나 적법이다 — 주장 없는 문장(조건 D)도 적법이다. 그러나 **「위반이라 하지 않았다」는
+       「적법이라 확인했다」가 아니다.** 그래서 적법 문장은 둘뿐이다:
+       - `"주장"` — 원천이 위반 아님을 선언한 문구(조건 L · `is_negative`). 이 칸만 특이도 · 정밀도라 부른다
+       - `"주장없음"` — 원천이 **승인한 형태**이면서 주장이 없는 문구(해설서 수정문구 판의 조건 D · `gf:`)
+    ⛔ 평가 D 의 해설서 위반문구 행(`mfds_special_use_guide` · 지문 `gf:` 아님)은 **원천이 삭제를 지시한** 문구다
+       (「날씬한 몸매를 원하시는 분」) — 문장만 보면 주장이 없어도 위반을 내는 것을 오답이라 할 수 없다. 넣지 않는다.
+    ⛔ 라벨 없는 행 · 조건 M 은 적법이 아니다 — 판정받지 않았거나 문장만으로 안 정해진다 (D-220).
+    """
+    if is_negative(r):
+        return "주장"
+    if r.get("조건") == "D" and str(r.get("id", "")).startswith(LAWFUL_NOCLAIM_PREFIX):
+        return "주장없음"
+    return None
+
+
+def ho_counts(rows: list[dict], *, distinct: bool = False) -> collections.Counter:
+    """호 단위 셈(D-282 · D-40 의 30 을 거는 단위) — **채점되는 위반 행만**.
+
+    🆕 2026-10-04 (판정 묶음 ⑫ · 원장 10-03 ㊴ · ㊵) — `distinct=True` 면 호마다 **서로 다른 글자**로 센다(`overlap_key`).
+       ⛔ 행으로만 세면 같은 문구가 거듭 실린 호가 30 을 넘긴 것처럼 보인다 — 공정위 2호가 채점 행 25 인데 글자로는 16 이었다.
+       ★ D-40 의 하한은 평가에서 이 수에 건다. 학습은 행 수 그대로다(같은 글자의 수는 `정규화중복` 이 낸다).
+
+    🆕 2026-10-02 — 조건 M · D · L 행은 세지 않는다. `split.plan` 의 `tally_ho` · `eval_rule.scored` 와 같은 규칙이다 (D-99).
+    ⛔ 종전에는 `is_positive` 만 봐서 유형이 남은 M 행(결정문 봉인 문구의 이름만 23 등)까지 세었다 — 재동결 10-02 에서
+       표시광고법 2호가 31 ✅ 로 찍혔는데 채점되는 행은 그보다 적다(원장 10-02 ④).
+    """
+    hc: collections.Counter = collections.Counter()
+    seen: set[tuple[str, str]] = set()
+    for r in rows:
+        if not is_positive(r) or r.get("조건") in ("M", "D", "L"):
+            continue
+        for k in {statute.ho_key(x) for x in r["근거"]}:
+            if distinct:
+                key = (k, overlap_key(r["text"]))
+                if key in seen:
+                    continue
+                seen.add(key)
+            hc[k] += 1
+    return hc
 
 
 def is_positive(r: dict) -> bool:
@@ -126,8 +290,17 @@ def check_basis(rows: list[dict]) -> None:
         cond = r.get("조건")
         if cond is None:
             continue
-        if cond not in ("C", "A", "B", "M", "D"):
+        if cond not in (
+            "C",
+            "A",
+            "B",
+            "M",
+            "D",
+            "L",
+        ):  # 🔄 09-30 — L(적법 · 화장품 지시서 §2)
             bad.append(f"{r['id']}  모르는 조건 {cond!r}")
+        elif cond == "L" and (r["근거"] or r.get("근거_후보")):
+            bad.append(f"{r['id']}  조건 L(적법) 인데 근거가 있다")
         elif cond in ("C", "A", "B") and not (r["근거"] or r.get("근거_후보")):
             bad.append(f"{r['id']}  조건 {cond} 인데 근거도 후보도 없다")
         elif cond == "D" and r["근거"]:
@@ -152,12 +325,64 @@ def build() -> tuple[list[dict], dict]:
 
     # 🔄 2026-09-24 (D-283) · 🔄 2026-09-25 (D-285 개정 4) — `guide_docs()` 는 해설서 대기가 0 일 때만 채택본을 낸다
     #    (대기 중에는 빈 목록 · `split.guide_state()`). 전환됐다(원장 09-25 ⑰) — 해설서 행이 이 한 줄로 들어온다.
-    for d in ftc_docs() + casebook_docs() + approved_docs() + guide_docs():
+    # 🆕 2026-09-30 (D-285 개정 5) — 화장품 질의응답집도 같은 길이다(`cosmetic_docs()` 도 대기 0 일 때만 낸다)
+    #    🆕 09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 도 같은 길(`ftc_press_docs()`)
+    docs = reason_docs()
+    repeats = reason_repeats(docs)  # 🆕 2026-09-30 (판정 J3 (가)) — 이유 거름 ㅇ
+    # 🆕 2026-09-30 (판정 J1 (가-2′)) — 인정 조건문(조건 D · 전량 train). 이유 되풀이(ㅇ)의 입력은 아니다
+    # 🆕 2026-09-30 (판정 J2) — 봉인 결정문 주문 문구의 대상 · 조건(판독 둘 · 팀장). 대기가 남으면 None — 종전대로 낸다
+    marks = split_mod.ftc_sealed_marks()
+    # 🆕 2026-10-05 (D-312) — 학습 결정문 주문 문구도 같은 정의로(판독 둘 · 팀장). 대기가 남으면 None — 종전대로 낸다
+    train_marks = split_mod.ftc_train_marks()
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판독 판(학습 · 평가). 배정은 분할 원장이 한다
+    placed_train, placed_test, _placed_stat = split_mod.placed_docs()
+    placed_ids = {d["doc_id"] for d in placed_train}
+    for d in (
+        docs
+        + cosmetic_docs()
+        + ftc_press_docs()
+        + guide_fix_docs()
+        + caution_docs()
+        + placed_train
+        + placed_test
+    ):
         split = assign.get(d["doc_id"])
         if not split:
             stat["미배정"] += 1
             continue
+        sealed_ftc = (
+            marks is not None and d["원천"] == "ftc_decisions_body" and split == split_mod.SEALED
+        )
+        train_ftc = (
+            train_marks is not None and d["원천"] == "ftc_decisions_body" and split == "train"
+        )
+        side = "봉인" if sealed_ftc else "학습"
         for k, text in enumerate(d["문구"]):
+            mark = None
+            if train_ftc:
+                mark = train_marks.get(split_mod.train_key(d["doc_id"], text))
+                if mark is None:
+                    # 🔴 판이 학습 주문 문구 전량을 들고 있어야 한다 — 분할이 바뀌면 판을 다시 맞춘다 (D-220 · D-312)
+                    raise SystemExit(
+                        f"🔴 {d['doc_id']} 학습 주문 문구가 판독 판에 없다 {text[:30]!r} — 분할이 바뀌었다. "
+                        "`guide_statute_round ft-input` 부터 다시"
+                    )
+                if mark["대상"] == "N":
+                    # 광고 문구가 아니다(시장 · 업종 용어 · 법령 이름) — 학습에서 뺀다 (지시서 결정문학습문구 §1 ②)
+                    stat["학습_대상아님(N)"] += 1
+                    continue
+            if sealed_ftc:
+                mark = marks.get(split_mod.sealed_key(d["doc_id"], text))
+                if mark is None:
+                    # 🔴 판이 봉인 문구 전량을 들고 있어야 한다 — 빠진 문구를 조건 없이 내면 판정 없는 행이 섞인다 (D-220)
+                    raise SystemExit(
+                        f"🔴 {d['doc_id']} 봉인 문구가 판독 판에 없다 {text[:30]!r} — 봉인이 바뀌었다. "
+                        "`guide_statute_round fs-input` 부터 다시"
+                    )
+                if mark["대상"] == "N":
+                    # 광고 문구가 아니다 — 평가에서 뺀다 (지시서 결정문봉인문구 §4)
+                    stat["봉인_대상아님(N)"] += 1
+                    continue
             row = {
                 "id": f"{d['doc_id']}#{k}",
                 "text": text,
@@ -165,17 +390,66 @@ def build() -> tuple[list[dict], dict]:
                 "labels": d["유형"],
                 "unit": d["단위"],
                 # 🔄 D-285 개정 4 — 조건 칸이 있는 행(해설서)은 유형이 비어도 **승인 문구가 아니다**
-                "origin": "real" if d["유형"] or "조건" in d else "approved",
+                # 🔄 2026-09-30 (판정 J1) — origin 은 **원천이 누구 글인가**다(식약처 인정서 = approved · 광고 인용 = real).
+                #    ⛔ 종전 「유형이 없으면 approved」 — 승인 문구가 조건 A 3호로 가면 real 로 바뀌어 계보(재배포 · G3)가 틀어진다
+                "origin": "approved" if d["원천"] in HF_SOURCES else "real",
                 "provenance": d["원천"],
                 "구역": "주문",  # 🆕 D-234 — 어디서 왔는지 남긴다
                 "redistributable": True,
                 "split": split,
             }
+            if d.get(
+                "품목"
+            ):  # 🆕 2026-10-05 — 새 판은 행이 품목을 들고 온다(원천 하나에 품목이 둘)
+                row["품목"] = d["품목"]
             if "조건" in d:  # 🆕 D-285 개정 4 — 읽는 쪽이 조건을 먼저 본다 (`is_negative`)
                 for f in ("조건", "근거_후보", "판독", "원천결손"):
                     row[f] = d[f]
+                # 🆕 09-30 — 화장품 [별표 5] 목은 인용 꼴 밖의 칸이다(지시서 §7 🔶)
+                if d.get("별표5목"):
+                    row["별표5목"] = d["별표5목"]
+            if mark is not None:
+                # 호 · 유형은 원천(의결서) 그대로 — 판독은 대상 · 조건만 붙인다 (D-237)
+                row |= {
+                    "조건": mark["조건"],
+                    "근거_후보": [],
+                    "판독": mark["판독"],
+                    "원천결손": False,
+                }
+                if mark["조건"] in ("D", "L"):
+                    # 🆕 2026-10-02 — 조건 D(주장이 아니다)는 판정 대상이 아니다 — 근거 · 유형을 싣지 않는다(해설서 D 행과 같은 꼴 ·
+                    #    `check_basis` 「조건 D 인데 근거가 있다」). ⛔ 의결서의 호를 남겼더니 골든이 4 행에서 멈췄다(B 기기 · 원장 10-02 ④)
+                    # 🆕 2026-10-05 — 조건 L(원천이 위반 아님이라 한 문구 · 학습 판 ⑫-10)도 같다 — 적법 행은 근거 · 유형이 빈다
+                    #    (`golden_sample` 의 `ck_golden_cond_empty` · D-317)
+                    row |= {"근거": [], "labels": []}
+                stat[f"{side}_조건_{mark['조건']}"] += 1
             rows.append(row)
             stat[split] += 1
+
+        # 🆕 2026-09-30 (D-237) — **원천이 위반 아님이라 한 문구는 적법(조건 L) 행이다.**
+        #    ⛔ 종전에는 주문 전체의 유형이 붙어 **무혐의 문구가 위반 양성**이었다(봉인 4 · 학습 7 — 검토 2026-09-30 §1-2).
+        #    🚨 id 를 `#a{k}` 로 가른다 — 위반 문구(`#{k}`)와 번호대를 나눈다. 봉인 문서의 적법 문구는 평가 음성이다.
+        for k, text in enumerate(d.get("문구_적법") or []):
+            rows.append(
+                {
+                    "id": f"{d['doc_id']}#a{k}",
+                    "text": text,
+                    "근거": [],
+                    "labels": [],
+                    "unit": d["단위"],
+                    "origin": "real",
+                    "provenance": d["원천"],
+                    "구역": "주문",
+                    "redistributable": True,
+                    "split": split,
+                    "조건": "L",
+                    "근거_후보": [],
+                    "판독": "원천_무혐의",
+                    "원천결손": False,
+                }
+            )
+            stat[split] += 1
+            stat["적법(무혐의)"] += 1
 
         # 🆕 **「이유」 문구 — 학습에만 넣는다** (2026-09-17 · D-232 (A) · D-234).
         #
@@ -189,7 +463,7 @@ def build() -> tuple[list[dict], dict]:
         #    그러면 「한 숫자가 두 과제를 평균한 수」가 되고, 그것이 D-172 가 경고한 자리다.
         if split == "train":
             for k, text in enumerate(d.get("문구_이유") or []):
-                text, why = reason_keep(text)
+                text, why = reason_keep(text, repeats)
                 if why:
                     stat[f"이유버림_{why}"] += 1
                     continue
@@ -200,7 +474,9 @@ def build() -> tuple[list[dict], dict]:
                         "근거": d.get("근거") or [],
                         "labels": d["유형"],
                         "unit": d["단위"],
-                        "origin": "approved" if not d["유형"] else "real",
+                        # 🔄 09-30 — 이유 문구는 결정문에서만 온다 → 광고 인용(real). ⛔ 종전 「유형 없으면 approved」는
+                        #    유형 없는 결정문(무혐의)의 이유 행에 없는 계보 (ftc, approved) 를 붙일 뻔했다
+                        "origin": "real",
                         "provenance": d["원천"],
                         "구역": "이유",
                         "redistributable": True,
@@ -208,8 +484,42 @@ def build() -> tuple[list[dict], dict]:
                     }
                 )
                 stat["train(이유)"] += 1
-        elif d.get("문구_이유"):
-            stat["봉인문서_이유_버림"] += len(d["문구_이유"])
+            # 🆕 2026-09-30 (D-237) — 이유의 적법 문구(주문 적법 문구와 같은 글자 · 무혐의 문서의 인용)
+            # 🔄 2026-09-30 (판정 J9 (가) · D-298) — **주문 적법 문구와 같은 글자만** 남긴다.
+            #    ⛔ 이유의 인용은 광고 문구가 아닌 것이 섞인다(채택률 39.7% · D-232) — 적법 쪽도 같다:
+            #       277 의 「IMT-2020」 · 「World」 · 「5G 상용화 로드맵」이 적법(L) 학습 행이었다(원장 09-30 ⑮)
+            order_ok = {overlap_key(x) for x in d.get("문구_적법") or []}
+            for k, text in enumerate(d.get("문구_이유_적법") or []):
+                text, why = reason_keep(text, repeats)
+                if why:
+                    stat[f"이유버림_{why}"] += 1
+                    continue
+                if overlap_key(text) not in order_ok:
+                    stat["이유적법_주문밖"] += 1
+                    continue
+                rows.append(
+                    {
+                        "id": f"{d['doc_id']}#ra{k}",
+                        "text": text,
+                        "근거": [],
+                        "labels": [],
+                        "unit": d["단위"],
+                        "origin": "real",
+                        "provenance": d["원천"],
+                        "구역": "이유",
+                        "redistributable": True,
+                        "split": split,
+                        "조건": "L",
+                        "근거_후보": [],
+                        "판독": "원천_무혐의",
+                        "원천결손": False,
+                    }
+                )
+                stat["train(이유·적법)"] += 1
+        elif d.get("문구_이유") or d.get("문구_이유_적법"):
+            stat["봉인문서_이유_버림"] += len(d.get("문구_이유") or []) + len(
+                d.get("문구_이유_적법") or []
+            )
 
     # 🔴 **주입본이 없으면 멈춘다** (2026-09-10 · D-72 fail-closed).
     #    ⛔ 종전에는 `if INJECTED.exists():` 라 없으면 아무 말 없이 건너뛰고
@@ -281,11 +591,23 @@ def build() -> tuple[list[dict], dict]:
         capped.append(r)
     rows = capped
 
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 🔴 **새 판의 학습 행이 평가 행과 겹치면 학습 쪽을 뺀다.**
+    #    ⛔ 아래 거름은 겹치면 **평가 쪽**을 뺀다 — 새 학습 행을 그대로 두면 봉인 평가 행이 줄어든다 (D-254).
+    #    ★ 열쇠가 같거나, 양쪽이 PLACED_MIN_KEY 자 이상이고 한쪽이 다른 쪽을 품으면 뺀다.
+    rows, same, inside = drop_placed_overlap(rows, placed_ids)
+    stat["새판_평가와_같은글자_학습제외"] = same
+    stat["새판_평가와_포함관계_학습제외"] = inside
+
     # 🔴 문구 단위 2차 필터 — 평가는 **안 본 것**이어야 한다
-    train_text = {norm(r["text"]) for r in rows if r["split"] == "train"}
+    #    🔄 2026-09-30 — 대조 열쇠는 `overlap_key`(항목 번호 머리를 뗀다 · D-292 집행 정정)
+    train_text = {overlap_key(r["text"]) for r in rows if r["split"] == "train"}
     kept, dropped = [], 0
     for r in rows:
-        if r["split"] == "test_sentence" and is_positive(r) and norm(r["text"]) in train_text:
+        if (
+            r["split"] == "test_sentence"
+            and is_positive(r)
+            and overlap_key(r["text"]) in train_text
+        ):
             dropped += 1
             continue
         kept.append(r)
@@ -294,14 +616,69 @@ def build() -> tuple[list[dict], dict]:
     # 🆕 2026-09-21 (전수 재검토 I11 · 팀장 판정 (나)) — 🔴 **적법(음성) 평가 문장과 겹치는 학습 행은 학습에서 뺀다.**
     #    ⛔ 위 거름은 라벨이 **있는** 평가 행에만 걸려, 적법 문장은 train·test 양쪽에 그대로 남았다 — 학습에서
     #       「적법」으로 본 문장이 평가에 또 나오면 모델은 판단이 아니라 기억으로 맞히고 **Precision 이 부풀었다.**
-    #    ★ 이쪽은 **학습을 깎는다**(평가를 안 깎는다) — 모자란 것은 평가 음성이고(D-40) 학습 음성(승인 문구)은 넉넉하다.
+    #    ★ 이쪽은 **학습을 깎는다**(평가를 안 깎는다) — 모자란 것은 평가 음성이다(D-40).
+    #    🔄 2026-09-30 (판정 J1) — 승인 문구는 이제 조건 A 양성이라 이 규칙 밖이고 위 양성 규칙(평가 쪽을 뺀다)을 탄다.
+    #       이 규칙은 조건 L 문구(결정문 무혐의 · 보도자료 · 화장품)에만 걸린다. ⛔ 종전 주석 「학습 음성(승인 문구)은 넉넉하다」
     #      평가셋이 그대로라 이전 측정과 같은 시험지로 비교된다. 학습 행의 라벨이 있어도 뺀다 — 같은 문구가
     #      학습에선 위반 · 평가에선 적법이면 **서로 모순된 표본**이다.
     #    🚨 위 위반 문장 규칙(평가 쪽을 뺀다)과 방향이 다르다 — 통일할지는 이 수(`음성겹침_학습제외`)를 본 뒤 정한다.
-    test_neg = {norm(r["text"]) for r in kept if r["split"] == "test_sentence" and is_negative(r)}
+    test_neg = {
+        overlap_key(r["text"]) for r in kept if r["split"] == "test_sentence" and is_negative(r)
+    }
     before = len(kept)
-    kept = [r for r in kept if not (r["split"] == "train" and norm(r["text"]) in test_neg)]
+    kept = [r for r in kept if not (r["split"] == "train" and overlap_key(r["text"]) in test_neg)]
     stat["음성겹침_학습제외"] = before - len(kept)
+
+    # 🆕 2026-10-05 (원장 10-03 ㊿-28) — **결정문 이유 구역 문구에 판독 판을 건다**(대상 · 조건 · 호).
+    #    이유 문구는 인용부호 안을 기계로 뽑고 문서의 호를 내려 붙인 것이다 — 판독해 보니 위반 광고 문구는 절반이 안 됐다.
+    #    · 대상 N(증거 이름 · 약칭 · 법령 · 위원회 용어) → 학습에서 뺀다
+    #    · 조건 C · A · B → 호를 판독이 고른 것으로 좁힌다(원천 호 안에서 — 밖이면 멈춘다 · D-237)
+    #    · 조건 D · L → 근거 · 유형을 비운다 · 조건 M → 문서의 호를 든 채 남는다(주문 판과 같은 꼴)
+    #    🚨 **거름을 다 지난 뒤**에 건다 — 앞에서 빼면 문구 겹침 거름(평가 쪽을 뺀다)의 결과가 달라져 평가 행이 움직인다.
+    #       그래서 「학습 이유 문구와 겹쳐 빠진 평가 문구」는 그 이유 문구가 대상 N 이 돼도 돌아오지 않는다(평가를 그대로 둔다)
+    #    🔴 판이 남은 이유 행 전량을 들고 있어야 한다 — 없는 문구를 조건 없이 내면 판정 없는 양성이 섞인다 (D-220)
+    reason_marks = split_mod.ftc_reason_marks()
+    if reason_marks is not None:
+        marked: list[dict] = []
+        for r in kept:
+            doc_id, _, tail = r["id"].partition("#")
+            if not (
+                r.get("구역") == "이유"
+                and r["provenance"] == "ftc_decisions_body"
+                and r["split"] == "train"
+                and tail.startswith("r")
+                and not tail.startswith("ra")
+            ):
+                marked.append(r)
+                continue
+            mark = reason_marks.get(split_mod.reason_key(doc_id, r["text"]))
+            if mark is None:
+                raise SystemExit(
+                    f"🔴 {r['id']} 이유 문구가 판독 판에 없다 {r['text'][:30]!r} — 분할 · 거름이 바뀌었다. "
+                    "`guide_statute_round fr-input` 으로 단위를 다시 내고 빠진 문구를 판독한다"
+                )
+            if mark["대상"] == "N":
+                stat["이유_대상아님(N)"] += 1
+                continue
+            cond = mark["조건"]
+            r |= {"조건": cond, "근거_후보": [], "판독": mark["판독"], "원천결손": False}
+            if cond in ("D", "L"):
+                r |= {"근거": [], "labels": []}
+            elif cond in ("C", "A", "B"):
+                picked = sorted(mark["근거"])
+                if not picked or not set(picked) <= set(r["근거"]):
+                    raise SystemExit(
+                        f"🔴 {r['id']} — 판독의 호 {picked} 가 원천(의결서)의 호 {r['근거']} 밖이다 (D-237)"
+                    )
+                r |= {"근거": picked, "labels": statute.types_of(picked)}
+            stat[f"이유_조건_{cond}"] += 1
+            marked.append(r)
+        kept = marked
+
+    # 🆕 2026-10-01 (D-306) — 품목 칸. **칸은 늘 있다** — 미상은 `None` 으로 적는다(칸이 없는 것과 「모른다」를 가른다 · D-220)
+    for r in kept:
+        r["품목"] = r.get("품목") or category_of(r["provenance"])
+    stat["품목_미상"] = sum(r["품목"] is None for r in kept)
 
     check_basis(kept)
 
@@ -318,6 +695,11 @@ def build() -> tuple[list[dict], dict]:
     #    치명적이지 않으므로 멈추지 않고 **수로 낸다.** ⛔ 안 세면 「행이 많다」로만 보인다.
     ntxt = collections.Counter(norm(r["text"]) for r in kept if r["split"] == "train")
     stat["정규화중복"] = sum(v - 1 for v in ntxt.values() if v > 1)
+    # 🆕 2026-10-04 (판정 묶음 ⑫) — 평가도 센다. ⛔ 학습만 세어 평가의 거듭 실린 채점 행(28 · 원장 10-03 ㊴)이 안 보였다
+    test_rows = [r for r in kept if r["split"] == "test_sentence"]
+    stat["채점행_거듭_평가"] = sum(ho_counts(test_rows).values()) - sum(
+        ho_counts(test_rows, distinct=True).values()
+    )
     return kept, stat
 
 
@@ -340,7 +722,7 @@ def main() -> int:
         cond = collections.Counter(r["조건"] for r in sub if "조건" in r)
         if cond:
             print(
-                f"     조건 칸이 있는 행(해설서) — {dict(sorted(cond.items()))}"
+                f"     조건 칸이 있는 행(해설서 · 화장품) — {dict(sorted(cond.items()))}"
                 f" · 근거_후보 {sum(1 for r in sub if r.get('근거_후보'))}"
             )
         c: collections.Counter = collections.Counter()
@@ -353,14 +735,20 @@ def main() -> int:
         units = collections.Counter(r["unit"] for r in sub)
         print(f"     단위 — {dict(units)}")
         # 🆕 D-282 — 정본 셈(호 단위). D-40 의 30 은 이 단위에 건다
-        hc: collections.Counter = collections.Counter()
-        for r in pos:
-            for k in {statute.ho_key(x) for x in r["근거"]}:
-                hc[k] += 1
-        print("     ── 호 단위 (정본 · D-282) ──")
+        #    🔄 2026-09-30 — 위반 행(`is_positive`)으로 센다. ⛔ `labels` 로 세면 유형이 없는 호(화장품 4호 · 식품 8~10호)가 빠진다
+        hc = ho_counts(sub)
+        # 🆕 2026-10-04 (판정 묶음 ⑫) — 평가의 하한 30 은 **서로 다른 글자**로 건다. 행 수는 옆에 같이 낸다
+        hd = ho_counts(sub, distinct=True)
+        print(
+            "     ── 호 단위 (정본 · D-282 · 채점 행만 — M · D · L 제외 · 평가는 서로 다른 글자로 하한을 건다) ──"
+        )
         for k, v in sorted(hc.items()):
-            mark = "✅" if s == "train" or v >= PARAMS.min_measurable else "🔴 측정 불가"
-            print(f"     {v:>5}  {k:26} {statute.type_of(k) or '(유형 없음)'}  {mark}")
+            if s == "train":
+                print(f"     {v:>5}  {k:26} {statute.type_of(k) or '(유형 없음)'}  ✅")
+                continue
+            mark = "✅" if hd[k] >= PARAMS.min_measurable else "🔴 측정 불가"
+            same = "" if hd[k] == v else f"  (행 {v} · 같은 글자 {v - hd[k]})"
+            print(f"     {hd[k]:>5}  {k:26} {statute.type_of(k) or '(유형 없음)'}  {mark}{same}")
     # 🆕 **「이유」 회수 계측** (2026-09-17 · D-234). 🚨 **버린 수가 안 보이면 계측이 반쪽이다** —
     #    무엇을 왜 버렸는지가 산출물 옆에 없으면, 필터를 고쳤을 때 무엇이 달라졌는지 못 본다 (D-142).
     drops = {k[len("이유버림_") :]: v for k, v in stat.items() if k.startswith("이유버림_")}
@@ -373,7 +761,10 @@ def main() -> int:
             "ㄴ": "약칭 정의가 잘려 들어온 것",
             "ㄷ": "중첩 인용부호로 이어붙은 것",
             "ㄹ": "법령 약칭",
-            "ㅁ": "문서 내부 지시어·서증",
+            "ㅁ": "문서 내부 지시어·서증 · 그림 파일 이름",
+            "ㅂ": "법 · 절차 문언 (J3)",
+            "ㅅ": "원천이 가린 기호뿐 (J3)",
+            "ㅇ": "넷 이상 문서에 되풀이 (J3)",
             "태그뿐": "태그를 벗기니 알맹이가 없는 것",
         }
         for k, v in sorted(drops.items(), key=lambda x: -x[1]):
@@ -384,6 +775,11 @@ def main() -> int:
                 "train 에 넣으면 같은 문서가 양쪽에 선다"
             )
         print("     🚨 이유 인용 중 광고 카피는 전수 39.7% 다 — 남은 것에도 잡음이 있다 (⬜ D-234)")
+        # 🆕 09-30 (판정 J9 · D-298) — 이유 적법 문구 중 주문 적법과 글자가 다른 것
+        print(
+            f"     이유 적법 — 담은 것 {stat.get('train(이유·적법)', 0)} · "
+            f"주문 적법 밖이라 버림 {stat.get('이유적법_주문밖', 0)} (D-298)"
+        )
 
     # 🆕 D-249 — 버린 수가 안 보이면 상한이 조용히 표본을 깎는다 (D-142)
     print(
@@ -410,6 +806,10 @@ def main() -> int:
             "「피부 보습에…」와 「피부보습에…」가 접힌다 (D-117)"
         )
         print("     id 는 다르지만 학습에는 같은 표본이다. 행 수를 표본 수로 읽지 않는다.")
+    print(
+        f"\n  🟡 **평가 채점 행 중 같은 호 · 같은 글자로 거듭 실린 행 {stat.get('채점행_거듭_평가', 0)}개** — "
+        "하한은 서로 다른 글자로 센다 (판정 묶음 ⑫)"
+    )
     if stat.get("미배정"):
         print(f"\n  🚨 분할에 없는 문서 {stat['미배정']}개 — 조용히 빠졌다. 분할부터 다시 본다.")
 

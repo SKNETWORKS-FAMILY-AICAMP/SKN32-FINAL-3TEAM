@@ -7,10 +7,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import re
 import subprocess
 import sys
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -63,9 +65,36 @@ def _load() -> dict[str, Any]:
     return yaml.safe_load(REGISTRY.read_text(encoding="utf-8")) or {}
 
 
+#: 🆕 2026-09-29 — 병합 전 검사가 잠시 끼워 넣는 **다른 브랜치의** 레지스트리. `None` 이면 이 작업 트리의 것이다(`read_from`).
+_OVERRIDE: dict[str, Any] | None = None
+
+
+@contextlib.contextmanager
+def read_from(text: str) -> Iterator[None]:
+    """다른 브랜치의 레지스트리(`data_sources.yaml` 원문)로 **잠시** 판정한다 — 🆕 2026-09-29 · `raw_inbox import --from` 전용.
+
+    ⛔ 종전 병합 전 검사는 이 작업 트리의 레지스트리로 판정했다. 원천을 등재하면서 수집까지 한 브랜치(ksr 09-28 · 12원천
+       2,358개)는 원천이 병합과 **함께** 들어오므로 전부 「레지스트리에 없는 원천」으로 막혔고, 그 탓에 받은편지함 · sha ·
+       키 섞임 검사가 **한 파일도 안 돌았다**(2026-09-29 클론 B · ksr 병합 전 검사).
+    🚨 읽기 판정(`spec` 을 거치는 것)만 바뀐다 — 이 안에서 원장을 쓰지 않는다(`mark_collected` 등).
+    🚨 브랜치가 적은 등급 · 재배포 여부를 그대로 믿는 것이다 — 그 레지스트리는 브랜치의 `registry_review.yaml`(사람 서명)에서
+       만든 생성물이고, 서명이 맞는지는 병합 검토(팀장)가 본다. 이 검사가 대신하지 않는다.
+    🔴 `sources` 가 없으면 멈춘다 — 빈 레지스트리를 「막을 것 없음」으로 읽지 않는다 (D-220).
+    """
+    global _OVERRIDE  # noqa: PLW0603
+    data = yaml.safe_load(text) or {}
+    if not isinstance(data, dict) or not isinstance(data.get("sources"), dict):
+        raise RegistryError("넘겨받은 레지스트리에 `sources` 가 없다 — 판정하지 않는다 (D-220)")
+    prev, _OVERRIDE = _OVERRIDE, data
+    try:
+        yield
+    finally:
+        _OVERRIDE = prev
+
+
 def spec(source_id: str) -> dict[str, Any]:
     """소스 정의를 돌려준다. 없으면 거부한다."""
-    sources = _load().get("sources") or {}
+    sources = (_OVERRIDE if _OVERRIDE is not None else _load()).get("sources") or {}
     entry = sources.get(source_id)
     if not isinstance(entry, dict):
         raise RegistryError(
@@ -304,6 +333,19 @@ def redistributable(source_id: str) -> bool:
     AI Hub 6종이 그 함정이다 — 등급은 G3 인데 데이터셋 재배포는 막혀 있다.
     """
     return bool(spec(source_id).get("redistributable"))
+
+
+def team_shareable(source_id: str) -> bool:
+    """🆕 2026-10-01 (D-303) — **팀 비공개 저장소(받은편지함 · 공유 저장소)에 둘 수 있는가.**
+
+    ★ 개발을 위한 팀 내부 공유는 배포가 아니다(D-249 ⑤ — 사람을 지정한 팀 비공개 Drive 는 공개가 아니다).
+       그래서 `NOREDIST`(공개 배포 금지 · D-71)가 곧 「팀 Drive 금지」는 아니다.
+    🚨 그러나 내부 공유가 되는지는 **원천의 이용 조건**이 정한다 — AI Hub 처럼 승인받은 개인 밖 제공을 막는 원천이 있다.
+       그래서 일괄로 풀지 않고 원천마다 `internal_share: true` 와 근거(`internal_share_basis`)를 등재에 적는다(2인 확인).
+    ⛔ 칸이 없으면 막는 쪽 — 재배포 가능 원천만 통과 (D-220).
+    """
+    s = spec(source_id)
+    return bool(s.get("redistributable")) or s.get("internal_share") is True
 
 
 def mark_if_complete(source_id: str, *, saved: int, partial: bool) -> bool:

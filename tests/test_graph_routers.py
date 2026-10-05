@@ -41,6 +41,7 @@ from app.graph import (
     LAW_NODES,
     MAX_ATTEMPT,
     NODES,
+    REDUCER_OF,
     REVIEW_TERMINALS,
     ROUTES_AFTER_REJUDGE,
     ROUTES_REVIEW,
@@ -48,6 +49,7 @@ from app.graph import (
     LawResult,
     laws_for,
     merge_laws,
+    reducer_of,
     route_after_rejudge,
     route_laws,
     route_review,
@@ -171,7 +173,9 @@ def test_검수에는_재생성_갈래가_없다() -> None:
 @pytest.mark.parametrize(
     ("rejects", "attempt", "want"),
     [
-        ([], 0, "frontier"),
+        # 🔄 2026-10-01 — 이번 시도의 판정(`rejected`)이 없으면 **거부**다(「모르면 거부 쪽」 · D-220). ⛔ 종전 기대값은 frontier 였다
+        ([], 0, "assemble"),
+        ([], MAX_ATTEMPT, "search_failed"),
         (["인용 검증"], 0, "assemble"),
         (["인용 검증"], MAX_ATTEMPT - 1, "assemble"),
         (["인용 검증"], MAX_ATTEMPT, "search_failed"),  # 🚨 증명서가 아니다 (D-125)
@@ -179,6 +183,13 @@ def test_검수에는_재생성_갈래가_없다() -> None:
 )
 def test_재생성_루프_갈림(rejects: list[str], attempt: int, want: str) -> None:
     assert route_after_rejudge({"rejects": rejects, "attempt": attempt}) == want  # type: ignore[arg-type]
+
+
+@pytest.mark.gate
+def test_이번_시도를_판정하지_않았으면_통과로_가지_않는다() -> None:
+    """🆕 2026-10-01 — 주장 원장 · 재판정이 `rejected` 를 안 적으면 **거부**다. ⛔ 종전에는 프론티어(통과 쪽)였다 (D-220 · D-125)."""
+    assert route_after_rejudge({"attempt": 0}) == "assemble"  # type: ignore[arg-type]
+    assert route_after_rejudge({"rejected": False, "attempt": 0}) == "frontier"  # type: ignore[arg-type]
 
 
 @pytest.mark.gate
@@ -304,11 +315,32 @@ def test_지시_종착은_계약의_지시를_낸다() -> None:
 
 @pytest.mark.gate
 def test_생성_스텁이_한_바퀴_돈다() -> None:
-    """거부가 없으면 한 라운드 뒤 프론티어다. 🔴 **첫 조립이 attempt 0** 이다 (D-126 · 0-base)."""
+    """🔄 2026-10-01 — 스텁은 이번 시도를 판정하지 않는다 → 거부로 세어 **K+1 라운드 뒤 탐색 실패**다(「모르면 거부」 · D-220).
+    ⛔ 종전 기대값은 「한 라운드 뒤 프론티어」였다 — 아무도 판정하지 않은 후보가 통과 쪽으로 갔다. 🔴 첫 조립이 attempt 0 (D-126)."""
+    state, visited = run_generate_stub()
+    assert visited[:5] == ["keyword_screen", "assemble", "claim_ledger", "rejudge", "assemble"]
+    assert visited.count("assemble") == MAX_ATTEMPT + 1
+    assert state["attempt"] == MAX_ATTEMPT
+    assert state["outcome"] is GenerateOutcome.search_failed  # 🔄 D-274 — 생성 종착
+
+
+def _passes():  # noqa: ANN202
+    from app.graph import timed
+
+    def claim_ledger(state: dict) -> dict:
+        return {"rejected": False}
+
+    return timed(claim_ledger)
+
+
+@pytest.mark.gate
+def test_주장_원장이_통과시키면_한_바퀴_뒤_프론티어다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """거부가 없다고 **판정했을 때만** 프론티어다. 🔴 첫 조립이 attempt 0 (D-126 · 0-base)."""
+    monkeypatch.setitem(GENERATE_NODES, "claim_ledger", _passes())
     state, visited = run_generate_stub()
     assert visited == ["keyword_screen", "assemble", "claim_ledger", "rejudge", "frontier"]
     assert state["attempt"] == 0
-    assert state["outcome"] is GenerateOutcome.frontier  # 🔄 D-274 — 생성 종착
+    assert state["outcome"] is GenerateOutcome.frontier
 
 
 def _always_reject():  # noqa: ANN202
@@ -346,8 +378,9 @@ def test_누적_키에_리듀서가_붙어_있다(state_name: str, key: str) -> 
     cls = STATE_REDUCERS[state_name][0]
     hints = typing.get_type_hints(cls, include_extras=True)
     assert key in hints, f"🚨 {state_name} 에 `{key}` 가 없다"
-    assert operator.add in getattr(hints[key], "__metadata__", ()), (
-        f"🚨 {state_name}.`{key}` 에 리듀서가 없다 — `Annotated[list[...], operator.add]` 여야 한다.\n"
+    # 🔄 2026-10-02 (W5) — 리듀서는 `reducer_of(key)` 가 정한다(`sentences` 는 같은 문장을 바꿔 끼우는 `upsert_sentences` · 그 밖에 `operator.add`)
+    assert reducer_of(key) in getattr(hints[key], "__metadata__", ()), (
+        f"🚨 {state_name}.`{key}` 에 리듀서가 없다 — `Annotated[list[...], {reducer_of(key).__name__}]` 여야 한다.\n"
         "   ⛔ 없으면 LangGraph 가 마지막 노드의 값으로 덮어쓴다. 오류는 안 난다."
     )
 
@@ -358,7 +391,8 @@ def test_리듀서가_붙은_키는_표에_다_있다(state_name: str) -> None:
     """반대 방향 — 표에 안 적은 누적 키가 생기면 위 게이트가 그 키를 안 돈다 (D-99 · D-170)."""
     cls, keys = STATE_REDUCERS[state_name]
     hints = typing.get_type_hints(cls, include_extras=True)
-    annotated = {k for k, h in hints.items() if operator.add in getattr(h, "__metadata__", ())}
+    known = {operator.add, *REDUCER_OF.values()}
+    annotated = {k for k, h in hints.items() if known & set(getattr(h, "__metadata__", ()))}
     assert annotated == set(keys), f"🚨 {state_name} 표와 선언이 다르다 — {annotated ^ set(keys)}"
 
 
@@ -582,6 +616,8 @@ def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.graph as g
 
     monkeypatch.setattr(g, "load_dict_entries", lambda cur: [])
+    # 🆕 2026-10-02 (D-311) — 자격 없는 항목도 같은 대역으로 비운다
+    monkeypatch.setattr(g, "load_weak_entries", lambda cur: [])
 
 
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202
@@ -820,9 +856,20 @@ def test_사전이_울리면_법별_노드가_제_법_인용만_남긴다(monkey
         "law_food": ["013094:제8조제1항제1호"],
         "law_cosmetic": [],
     }
-    assert all(s.verdict is Verdict.unjudged for s in out["sentences"]), (
-        "🚨 사전 적중은 판정이 아니다 (D-127)"
-    )
+    # 🔄 2026-10-01 (W4 1판 · D-269) — 사전 적중이 **보낸 법의 인용**과 짝지어지면 위반 확정이다(인코더 전).
+    #    ⛔ 종전 기대값은 「미판정」이었다(판정 노드 스텁). 근거는 적중의 인용 조문 · 구간은 원문 좌표 · 사유는 표(C)
+    (sent,) = out["sentences"]
+    # 🔴 유형은 인용에서 계산한다(D-282) — 표시광고법 §3①1 은 거짓_과장 · 식품 §8①1 은 질병 표방. 법마다 맞는 유형이다
+    assert sent.verdict is Verdict.confirmed
+    assert sent.violations == [Violation.거짓_과장, Violation.질병_예방치료_표방]
+    assert sent.infeasibility is Infeasibility.C
+    assert {(a.law_id, a.article, a.item) for a in sent.evidence} >= {
+        ("013094", "제8조", "제1항제1호"),
+        ("002011", "제3조", "제1항제1호"),
+    }
+    assert [(x.start, x.end) for x in sent.spans] == [(s, e)]
+    # 🔴 위험도(하한 · W5)가 없는 확정 위반은 증명서로 못 간다 — 보류다 (D-268 막힘 · D-220)
+    assert out["outcome"] is Outcome.hold
 
 
 @pytest.mark.gate

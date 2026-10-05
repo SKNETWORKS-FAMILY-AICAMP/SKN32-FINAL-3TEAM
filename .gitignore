@@ -35,6 +35,7 @@ logs/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-*/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
@@ -98,4 +99,11 @@ Claude outputs/
 docs/psj/e2e_prototype/copylane-encoder-koelectra-final/
 docs/psj/e2e_prototype/copylane-encoder-koelectra-final*.zip
 copylane-encoder-koelectra-final*.zip
+# kcbert(D-70 · psj v7.x) — 노트북이 `copylane-encoder-kcbert-v7*.zip` 을 내고, 앱은 `models/`(61행) 아래를 읽는다.
+#  🚨 압축을 저장소 안 다른 자리(e2e_prototype · 루트)에 풀거나 두는 경우를 막는다 (2026-10-01)
+docs/psj/e2e_prototype/copylane-encoder-kcbert-final/
+copylane-encoder-kcbert-*.zip
 *.safetensors
+
+# lse sLLM — 재배포 불가 원천(공정위 의결서 인용 등)과 그걸 담은 실험 결과. 공개 저장소에 올리지 않는다 (2026-10-01)
+docs/lse/_private/

@@ -223,6 +223,65 @@ def test_NOREDIST_와_redistributable_이_일치한다() -> None:
 
 
 @pytest.mark.gate
+def test_팀_내부_공유_칸은_공개_배포가_막힌_원천에만_근거와_함께_있다() -> None:
+    """🆕 2026-10-01 (D-303) — 팀 내부 공유는 배포가 아니다(D-249 ⑤). 그러나 되는지는 원천의 이용 조건이 정한다.
+
+    ⛔ 같은 날 앞 판 — 받은편지함이 NOREDIST 를 막아서 `inc_ad_decisions` 의 NOREDIST 를 **지워** 길을 열었다.
+       「공개 가능」 깃발이 회신(제3자 배포 미회신)과 반대가 됐다. 두 축을 칸 둘로 가른다.
+    """
+    for key, src in _sources().items():
+        if src.get("internal_share") is None:
+            assert "internal_share_basis" not in src, f"{key}: 근거만 있고 칸이 없다"
+            continue
+        assert src["internal_share"] is True, (
+            f"{key}: internal_share 는 true 만 적는다(없으면 막는 쪽)"
+        )
+        assert src.get("redistributable") is False, (
+            f"{key}: 재배포 가능 원천에 내부 공유 칸이 있다 — 필요 없는 칸이다"
+        )
+        assert str(src.get("internal_share_basis") or "").strip(), (
+            f"{key}: 내부 공유 근거 문장이 없다"
+        )
+
+
+@pytest.mark.gate
+def test_팀_저장소_두_문은_같은_함수로_내부_공유를_가른다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-10-01 (D-303) — 받은편지함(`raw_inbox`)과 공유 저장소(`data_store`)가 **같은 판단**을 쓴다 (D-99).
+
+    재배포 가능 → 통과 · NOREDIST + 내부 공유 칸 → 통과 · NOREDIST 만 → 막음 · 모르는 원천 → 막음 (D-220).
+    """
+    sys.path.insert(0, str(ROOT))
+    from collect import registry  # noqa: PLC0415
+    from scripts import raw_inbox  # noqa: PLC0415
+
+    table = {
+        "open": {"redistributable": True},
+        "team": {"redistributable": False, "internal_share": True},
+        "closed": {"redistributable": False},
+    }
+
+    def fake_spec(sid: str) -> dict:
+        if sid not in table:
+            raise registry.RegistryError(sid)
+        return table[sid]
+
+    monkeypatch.setattr(registry, "spec", fake_spec)
+    assert registry.team_shareable("open") and registry.team_shareable("team")
+    assert not registry.team_shareable("closed")
+    assert [raw_inbox._noredist(s) for s in ("open", "team", "closed", "모름")] == [  # noqa: SLF001
+        False,
+        False,
+        True,
+        True,
+    ]
+    src = (ROOT / "scripts" / "data_store.py").read_text(encoding="utf-8")
+    body = src[src.index("def _noredist_seen") : src.index("def _commit")]
+    assert "registry.team_shareable(sid)" in body and "registry.redistributable(" not in body, (
+        "🔴 공유 저장소가 공개 배포 깃발로 막는다 — 받은편지함과 판단이 갈린다 (D-303 · D-99)"
+    )
+
+
+@pytest.mark.gate
 def test_수집이_시작된_소스는_2인_확인이_끝나_있다() -> None:
     """🚨 collected_at 이 찍혔다는 것은 판정이 끝났다는 뜻이다 (D-66).
 
