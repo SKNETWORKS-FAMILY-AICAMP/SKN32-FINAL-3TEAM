@@ -1740,7 +1740,7 @@ def ft_key(doc_id: str, text: str) -> str:
     """학습 문구의 지문 — 봉인 판과 같은 해시(`split.sealed_key`)에 머리만 `ft:` (D-99)."""
     from preprocess import split as sp  # noqa: PLC0415
 
-    return "ft:" + sp.sealed_key(doc_id, text).split(":", 1)[1]
+    return sp.train_key(doc_id, text)
 
 
 def ft_context(order: str, text: str, width: int = FT_CONTEXT) -> str:

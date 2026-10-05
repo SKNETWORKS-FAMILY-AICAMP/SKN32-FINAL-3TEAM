@@ -156,6 +156,8 @@ def inputs() -> tuple[pathlib.Path, ...]:
     got += (GUIDE_FIX_ADOPTED,) if gf and not gf["대기"] else ()
     fs = ftc_sealed_state()
     got += (FTC_SEALED_ADOPTED,) if fs and not fs["대기"] else ()
+    ft = ftc_train_state()
+    got += (FTC_TRAIN_ADOPTED,) if ft and not ft["대기"] else ()
     # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판들도 같은 규칙 · 「문항」 판은 평가 행 목록도 입력이다
     for name, (_cmd, place) in PLACED.items():
         st = placed_state(name)
@@ -438,6 +440,7 @@ ROUND_LABEL_DIRS = (
     "labels/ftc_press_old/",
     "labels/guide_fix/",  # 🆕 09-30 판정 J1 (b)
     "labels/ftc_sealed/",  # 🆕 09-30 판정 J2
+    "labels/ftc_train/",  # 🆕 10-05 D-312 — 학습 쪽 주문 문구
 )
 FTC_PRESS_ADOPTED = pathlib.Path("data/derived/labels/ftc_press_old/adopted.jsonl")
 
@@ -519,6 +522,35 @@ def ftc_sealed_marks() -> dict[str, dict] | None:
     if not st or st["대기"]:
         return None
     return {r["지문"]: r for r in _jsonl(FTC_SEALED_ADOPTED)}
+
+
+#: 🆕 2026-10-05 (D-312) — 결정문 **학습 쪽 주문 문구**에 같은 정의(대상 · 조건)를 붙이는 판. 🚨 경로의 정본은
+#:    `scripts/guide_statute_round.py` `FT_READINGS` · `FT_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99)
+FTC_TRAIN_READINGS = pathlib.Path("data/derived/labels/ftc_train/readings.jsonl")
+FTC_TRAIN_ADOPTED = pathlib.Path("data/derived/labels/ftc_train/adopted.jsonl")
+
+
+def train_key(doc_id: str, text: str) -> str:
+    """학습 주문 문구의 지문 — 봉인 판과 같은 해시에 머리만 `ft:`. 🚨 `guide_statute_round.ft_key` 가 이 함수를 부른다 (D-99)."""
+    return "ft:" + sealed_key(doc_id, text).split(":", 1)[1]
+
+
+def ftc_train_state() -> dict[str, int] | None:
+    """결정문 학습 문구 판의 상태 — 다른 판과 같은 규칙."""
+    return _round_state(FTC_TRAIN_READINGS, FTC_TRAIN_ADOPTED, "ft-rebuild")
+
+
+def ftc_train_marks() -> dict[str, dict] | None:
+    """학습 주문 문구 지문 → 채택 행(대상 · 조건). **대기가 0 일 때만** — 아니면 None(골든은 종전대로 조건 없이 낸다).
+
+    ★ 봉인 판(`ftc_sealed_marks`)과 같은 길이다 — 문구 단위로 대상 N 을 빼고 조건을 붙인다(`golden.build`).
+    🚨 분할(문서 배정)은 이 판을 모른다 — 학습 문서의 주문 문구만 바뀌고 봉인 · 평가 행은 그대로다 (D-312).
+    🚨 사전(`preprocess/dictionary.py`)에는 반영하지 않는다 — 사전은 동결이다(D-313 결정 1 · 재작업 때 함께).
+    """
+    st = ftc_train_state()
+    if not st or st["대기"]:
+        return None
+    return {r["지문"]: r for r in _jsonl(FTC_TRAIN_ADOPTED)}
 
 
 def _round_docs(st: dict[str, int] | None, adopted: pathlib.Path, source: str) -> list[dict]:
@@ -1130,6 +1162,7 @@ def main() -> int:
     for name, st, key in (
         ("해설서 수정문구", guide_fix_state(), "test_sentence_해설서수정문구"),
         ("결정문 봉인 문구(대상 · 조건)", ftc_sealed_state(), None),
+        ("결정문 학습 문구(대상 · 조건)", ftc_train_state(), None),
     ):
         if st:
             print(

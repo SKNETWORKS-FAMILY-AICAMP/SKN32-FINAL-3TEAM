@@ -167,6 +167,11 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
         "labels/ftc_sealed/adopted.jsonl",
         "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round fs-rebuild`",
     ),
+    (
+        "생성물",
+        "labels/ftc_train/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round ft-rebuild`",
+    ),
     ("원천", "labels/", "사람의 판정 — 어떤 명령으로도 다시 안 나온다"),
     ("표본", "_labelsheet.jsonl", "다시 뽑으면 그 표본이 아니다 — 라벨과 κ 가 갈린다"),
     ("표본", "golden/split_manifest.json", "다시 나누면 평가 누수 방어와 수치 비교가 무너진다"),
