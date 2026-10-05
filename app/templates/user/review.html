@@ -310,14 +310,18 @@
         </div>
         {% endif %}
 
-        {# 🆕 2026-10-06 lse — 지적 문장을 카피생성(B)의 「원문 고쳐 쓰기」로 **넘기기만** 한다. 여기서 문구를 만들지 않는다 (D-265).
-           ⛔ 사유 A(자격형)는 넘기지 않는다 — 재생성이 같은 위반을 되풀이한다 (D-59). 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4) #}
-        {% if s.sent_id in item.flagged and not (s.infeasibility and s.infeasibility.value == "A") %}
-        <form method="post" action="/u/rewrite" style="margin:.5rem 0 0">
-          <input type="hidden" name="from" value="review">
-          <input type="hidden" name="text" value="{{ s.text }}">
-          {% for v in s.violations %}<input type="hidden" name="violation" value="{{ v.value }}">{% endfor %}
-          <button type="submit" class="rv-chip" style="cursor:pointer">이 문장 고쳐 쓰기 →</button>
+        {# 🆕 2026-10-06 lse — 지적 문장 고쳐 쓰기(sLLM 재생성 · 팀장 승인). 결과는 이 문장 아래에 붙는다.
+           판정(`JudgeResponse`)에는 대체 문구가 없다 — 고쳐 쓰기는 따로 부르는 재생성 호출이다 (D-265 계약 유지).
+           ⛔ 사유 A(자격형)는 고쳐 쓰지 않는다 (D-59). ⛔ 위반 유형이 없는 문장(확신 부족 보류만)은 고칠 것이 없다 —
+           유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측). 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4) #}
+        {% set rw = item.rewrites[s.sent_id] if item.rewrites and s.sent_id in item.rewrites else none %}
+        {% if rw %}
+        {% include "user/_review_rewrite.html" %}
+        {% elif s.sent_id in item.flagged and s.violations and not (s.infeasibility and s.infeasibility.value == "A") %}
+        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
+          {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
+          <input type="hidden" name="target" value="{{ item.n }}:{{ s.sent_id }}">
+          <button type="submit" class="rv-chip" style="cursor:pointer">이 문장 고쳐 쓰기 (10초 안팎)</button>
         </form>
         {% endif %}
       </div>
