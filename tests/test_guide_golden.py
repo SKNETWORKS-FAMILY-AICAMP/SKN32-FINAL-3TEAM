@@ -128,7 +128,8 @@ def test_판정기_B_는_M_D_를_채점하지_않고_후보는_어느_쪽이든_
 
 
 @pytest.mark.gate
-def test_DB_에는_조건_칸_없는_M_D_후보_행을_넣지_않는다(monkeypatch) -> None:
+def test_DB_에는_M_D_후보_행이_조건과_함께_든다(monkeypatch) -> None:
+    """🔄 2026-10-05 (0024 · D-317) — 종전에는 조건 칸이 없어 이 행들을 **넣지 않았다**(D-285 개정 4 ⑥ · 3 행 미적재)."""
     from scripts import load_db
 
     row = {
@@ -156,7 +157,79 @@ def test_DB_에는_조건_칸_없는_M_D_후보_행을_넣지_않는다(monkeypa
     ]
     monkeypatch.setattr(load_db, "_jsonl_at", lambda *_a, **_k: rows)
     n, stat, _ = load_db.load_golden(None, True)
-    assert n == 1 and stat["DB미적재_조건칸없음"] == 3
+    assert n == 4 and "DB미적재_조건칸없음" not in stat
+    assert (stat["조건:M"], stat["조건:D"], stat["조건:C"], stat["근거후보만"]) == (1, 1, 2, 1)
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("more", "why"),
+    [
+        ({"조건": "D", "근거": [statute.food(1)]}, "ck_golden_cond_empty"),
+        ({"조건": "L", "labels": ["거짓_과장"], "근거": [statute.food(4)]}, "ck_golden_cond_empty"),
+        ({"조건": "C"}, "ck_golden_cond_basis"),
+        ({"조건": "E", "근거": [statute.food(1)]}, "스키마에 없는 값"),
+    ],
+)
+def test_DB_제약에_걸릴_골든_행은_적재가_먼저_멈춘다(monkeypatch, more: dict, why: str) -> None:
+    """🔴 조건과 라벨 칸이 어긋난 행은 **어느 행인지 말하고** 멈춘다 — DB 제약까지 가면 id 없이 죽는다 (D-220 · D-317)."""
+    from scripts import load_db
+
+    row = {
+        "id": "gs:bad#0",
+        "text": "t",
+        "근거": [],
+        "labels": [],
+        "unit": "문장",
+        "origin": "real",
+        "provenance": "mfds_special_use_guide",
+        "redistributable": False,
+        "split": "test_sentence",
+        **more,
+    }
+    monkeypatch.setattr(load_db, "_jsonl_at", lambda *_a, **_k: [row])
+    with pytest.raises(SystemExit, match=why):
+        load_db.load_golden(None, True)
+
+
+@pytest.mark.gate
+def test_골든_DB_뷰의_뜻이_코드와_같다() -> None:
+    """🔴 `v_golden_scored` · `v_golden_legal` 은 `eval_rule.scored` · `golden.is_negative` 의 사본이다 (D-99 · D-317).
+
+    ⛔ 뷰는 SQL 이라 코드와 따로 논다 — 조건마다 두 쪽의 답을 맞춰 본다. DB 없이 뷰의 WHERE 글자를 파이썬으로 옮겨 잰다.
+    """
+    import pathlib
+    import re
+    import sys
+
+    from preprocess import golden
+    from scripts import load_db
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root / "scripts"))
+    import eval_rule
+
+    sql = (root / "db" / "schema.sql").read_text(encoding="utf-8")
+    where = {
+        n: " ".join(b.split())
+        for n, b in re.findall(
+            r"CREATE VIEW (v_golden_\w+) AS\s+SELECT g\.\* FROM golden_sample g\s+WHERE (.*?);",
+            sql,
+            re.S,
+        )
+    }
+    assert where == {
+        "v_golden_scored": "g.cond IS NULL OR g.cond NOT IN ('M','D')",
+        "v_golden_legal": "cardinality(g.violations) = 0 AND (g.cond IS NULL OR g.cond = 'L')",
+    }, f"뷰의 조건문이 바뀌었다 — 아래 대조를 같이 고친다: {where}"
+    for cond in (None, *load_db.GOLDEN_CONDS):
+        for labels in ([], ["거짓_과장"]):
+            r = {"labels": labels, **({"조건": cond} if cond else {})}
+            assert eval_rule.scored(r) == (cond is None or cond not in ("M", "D")), (cond, labels)
+            assert golden.is_negative(r) == (not labels and (cond is None or cond == "L")), (
+                cond,
+                labels,
+            )
 
 
 def _src(k: str, text: str = "문구", kind: str = "9. 체중조절용 조제식품") -> dict:

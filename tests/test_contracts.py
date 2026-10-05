@@ -402,6 +402,7 @@ from app.contracts import (  # noqa: E402
     PASS_RISK_MAX,
     Branch,
     Category,
+    CategorySource,
     EvidenceArticle,
     GenerateOutcome,
     Premise,
@@ -576,28 +577,55 @@ def test_전제를_몰라_보류하면_분기를_준다() -> None:
 
 
 @pytest.mark.gate
-def test_전용법_품목은_통과가_없고_미검수_고지가_붙는다() -> None:
-    """D-271 ⑤ · D-277 — 안 본 법을 본 것처럼 말하지 않는다."""
+@pytest.mark.parametrize("category", [Category.전용법_미수록, Category.일반상품])
+def test_주된_광고법을_안_본_품목은_통과가_없고_미검수_고지가_붙는다(category: Category) -> None:
+    """D-271 ⑤ · D-277 — 안 본 법을 본 것처럼 말하지 않는다. 🔄 2026-10-02 — `일반상품` 도 같다(D-271 ④ 개정)."""
+    src = CategorySource.user_selected
     s = SentenceJudgment(
         sent_id="s1", text="t", verdict=Verdict.hold, hold_reason=HoldReason.law_uncovered
     )
     JudgeResponse(
         outcome=Outcome.hold,
-        category=Category.전용법_미수록,
+        category=category,
+        category_source=src,
         not_reviewed=["의료기기법"],
         sentences=[s],
     )
     with pytest.raises(ValidationError, match="D-277"):
-        JudgeResponse(outcome=Outcome.hold, category=Category.전용법_미수록, sentences=[s])
+        JudgeResponse(outcome=Outcome.hold, category=category, category_source=src, sentences=[s])
     with pytest.raises(ValidationError, match="통과"):
         JudgeResponse(
             outcome=Outcome.passed,
-            category=Category.전용법_미수록,
+            category=category,
+            category_source=src,
             not_reviewed=["의료기기법"],
             sentences=[_clean()],
         )
-    with pytest.raises(ValidationError, match="전용법 품목에서만"):
-        JudgeResponse(outcome=Outcome.hold, category=Category.식품, sentences=[s])
+    with pytest.raises(ValidationError, match="안 본 품목에서만"):
+        JudgeResponse(
+            outcome=Outcome.hold, category=Category.식품, category_source=src, sentences=[s]
+        )
+
+
+@pytest.mark.gate
+def test_품목과_품목_출처는_함께_있다() -> None:
+    """🆕 2026-10-02 (D-276 ⑥) — 출처가 비면 화면이 「판별」과 「사용자 선택」을 못 가른다. DB 제약과 같은 규칙이다."""
+    JudgeResponse(outcome=Outcome.hold, sentences=[_hold(HoldReason.low_conf)])
+    JudgeResponse(
+        outcome=Outcome.passed,
+        category=Category.식품,
+        category_source=CategorySource.user_selected,
+        sentences=[_clean()],
+    )
+    with pytest.raises(ValidationError, match="D-276"):
+        JudgeResponse(outcome=Outcome.passed, category=Category.식품, sentences=[_clean()])
+    with pytest.raises(ValidationError, match="D-276"):
+        JudgeResponse(
+            outcome=Outcome.passed, category_source=CategorySource.classified, sentences=[_clean()]
+        )
+    m = re.search(r'product_category_source in"\s*" \(([^)]*)\)', MODELS)
+    assert m, "🚨 `app/models.py` 에서 품목 출처 제약을 못 찾았다"
+    assert {v.value for v in CategorySource} == set(re.findall(r"'([^']+)'", m.group(1)))
 
 
 @pytest.mark.gate

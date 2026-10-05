@@ -308,11 +308,24 @@ CREATE TABLE sanction_rule (
     superseded_at   DATE,
     verified_by     TEXT,                          -- 🚨 병합 셀 파싱은 2인 대조
     reviewed_by     TEXT,
+    -- 🆕 2026-10-02 (0023 · W5) — 원천(`scripts/sanction_review.yaml`)의 행을 그대로 싣는 칸. 하한 규칙은 `app/sanction.py` 한 곳 (D-99).
+    --    🚨 `annex1` NULL = 목으로 갈리지 않는 행 · 빈 배열 = 목 칸이 빈 행(고시로 닿는다) — 합치지 않는다 (D-310).
+    rule_key        TEXT,                          -- 원천 행의 id — 적재는 이 열쇠로 넣고 거둔다
+    annex1          TEXT[],                        -- 식품 4~7호 행의 [별표 1] 목 (D-310)
+    cover           TEXT,                          -- 전부(하한) / 일부(가능 상한만) (D-310 개정 2)
+    quote           TEXT,                          -- 위반행위 원문 인용 — 가능 상한의 근거 줄에 쓴다
+    fact_kind       TEXT,                          -- 사실 확인 분기의 종류 (D-308 ④)
+    plan_sha        TEXT,                          -- 이 행이 실린 원천 판 (D-309)
     CONSTRAINT ck_sanction_four_eyes
-      CHECK (verified_by IS NULL OR reviewed_by IS NULL OR verified_by <> reviewed_by)
+      CHECK (verified_by IS NULL OR reviewed_by IS NULL OR verified_by <> reviewed_by),
+    CONSTRAINT ck_sanction_cover
+      CHECK ((COALESCE(cardinality(annex1), 0) > 0) = (cover IS NOT NULL)
+             AND (cover IS NULL OR cover IN ('전부', '일부')))
 );
 CREATE INDEX ix_sanction_lookup ON sanction_rule(violation_type, offense_count)
   WHERE superseded_at IS NULL;
+CREATE UNIQUE INDEX ux_sanction_rule_key ON sanction_rule(rule_key)
+  WHERE rule_key IS NOT NULL;
 
 CREATE TABLE penalty_rule (
     rule_id         BIGSERIAL PRIMARY KEY,
@@ -421,6 +434,18 @@ CREATE TABLE golden_sample (
     --       이 `g.*` 라 **뷰 컬럼 순서까지** 갈린다. 실측으로 확인한 유일한 차이였다.
     unit             TEXT NOT NULL DEFAULT '문장'
                      CHECK (unit IN ('문장','낱말')),
+    -- 🆕 2026-10-05 (0024 · D-317) — **조건** · **후보 근거**. 골든 파일의 `조건` · `근거_후보` 칸의 사본이다.
+    --    ⛔ 이 칸이 없어서 조건 M(보류) · D(판정 대상 아님) · 근거가 후보로만 있는 행을 **넣지 못했다**
+    --       (넣으면 빈 `violations` 가 적법으로 읽힌다 · D-285 개정 4 ⑥) — 재동결 뒤 1,314 행이 파일에만 있었다.
+    --    조건 — C 그 자체 위반 · A 인정 범위 안이면 가능 · B 근거를 내면 가능 · M 보류 · D 판정 대상 아님 · L 적법
+    --           (D-242 · D-285 · D-301). NULL 은 조건을 붙이지 않는 원천의 행이다(결정문 · 주입).
+    --    후보 근거 — [[{law_id, article, item}, …], …] 대안들의 목록 · 각 대안은 조문 묶음. 어느 쪽이든 정답이다.
+    --    🔴 **`violations` 가 비었다고 적법이 아니다** — 유형 이름이 없는 호의 위반 행 · M · D 행도 비어 있다.
+    --       골든을 DB 에서 읽을 때는 `v_golden_scored`(채점 행) · `v_golden_legal`(적법 행)을 지난다.
+    --    🚨 자리가 맨 뒤인 이유는 `unit` 과 같다 — `ADD COLUMN` 은 뒤에 붙고 뷰가 `g.*` 다.
+    cond             TEXT
+                     CHECK (cond IN ('C','A','B','M','D','L')),
+    evidence_candidate JSONB,
     -- 🔴 **평가 split 전부**를 막는다 (2026-09-10 · D-170).
     --    ⛔ 종전 조건은 `split = 'test_holdout'` 하나였다. 그런데 파이프라인이 실제로 쓰는
     --       평가 split 은 `test_sentence` 라, 이 제약은 **어떤 행에도 걸리지 않았다.**
@@ -431,7 +456,16 @@ CREATE TABLE golden_sample (
     -- 🚨 D-91 — 표면 변형은 S0 원형과 짝으로만 존재한다. 짝이 없으면 델타를 못 잰다
     CONSTRAINT ck_surface_pairing
       CHECK ((surface_variant = 'S0' AND surface_of IS NULL)
-          OR (surface_variant <> 'S0' AND surface_of IS NOT NULL))
+          OR (surface_variant <> 'S0' AND surface_of IS NOT NULL)),
+    -- 🆕 2026-10-05 (0024 · D-317) — 조건과 라벨 칸이 어긋난 행을 막는다. 실제 골든(10,064 행)에 맞춘 것만 건다:
+    --    D · L 은 유형 · 근거 · 후보가 전부 빈다 / C · A · B 는 근거나 후보 중 하나는 있다 /
+    --    M 은 걸지 않는다(근거가 붙은 보류 행이 있다) / 조건 없는 행은 종전대로다.
+    CONSTRAINT ck_golden_cond_empty
+      CHECK (cond IS NULL OR cond NOT IN ('D','L')
+          OR (cardinality(violations) = 0 AND evidence IS NULL AND evidence_candidate IS NULL)),
+    CONSTRAINT ck_golden_cond_basis
+      CHECK (cond IS NULL OR cond NOT IN ('C','A','B')
+          OR evidence IS NOT NULL OR evidence_candidate IS NOT NULL)
 );
 COMMENT ON CONSTRAINT ck_golden_injected_not_holdout ON golden_sample IS
   '4-8절 · 평가는 실사례 홀드아웃으로만 한다. 주입본이 섞이면 지표가 부풀려진다';
@@ -510,6 +544,17 @@ CREATE VIEW v_publishable_golden AS
 SELECT g.* FROM golden_sample g
 WHERE g.redistributable = true;
 
+-- 🆕 2026-10-05 (0024 · D-317) — **골든을 DB 에서 읽는 문**. 조건을 안 보고 읽으면 M · D 가 적법으로, 근거 붙은 M 이 위반으로 읽힌다.
+--    뜻의 정본은 코드다 — 채점 행은 `scripts/eval_rule.py` `scored()` · 적법 행은 `preprocess/golden.py` `is_negative()`.
+--    바꾸면 양쪽을 같이 고친다 (D-99 · `tests/test_guide_golden.py` 가 대조한다).
+CREATE VIEW v_golden_scored AS
+SELECT g.* FROM golden_sample g
+WHERE g.cond IS NULL OR g.cond NOT IN ('M','D');
+
+CREATE VIEW v_golden_legal AS
+SELECT g.* FROM golden_sample g
+WHERE cardinality(g.violations) = 0 AND (g.cond IS NULL OR g.cond = 'L');
+
 -- 위험도 산정은 코드가 이 뷰를 읽는다 (블랙박스 점수 금지)
 -- 🔴 **2인 확인이 끝난 행만 보인다** (2026-09-13 · 0013 · D-66 · D-170).
 --    ⛔ `ck_sanction_four_eyes` 는 **둘 다 NULL 이면 통과한다** — 0007 이 NOT NULL 을 걷으면서
@@ -520,7 +565,8 @@ WHERE g.redistributable = true;
 --      적재를 막으면 파싱 결과를 둘 곳이 없어지고, 그러면 서명이 파일 위에서 이뤄진다.
 CREATE VIEW v_risk_lookup AS
 SELECT s.violation_type, s.offense_count, s.sanction_kind,
-       s.sanction_value, s.unit, s.risk_level, s.law_id
+       s.sanction_value, s.unit, s.risk_level, s.law_id,
+       s.rule_key, s.annex1, s.cover, s.quote, s.fact_kind
 FROM sanction_rule s
 WHERE s.superseded_at IS NULL
   AND s.verified_by IS NOT NULL

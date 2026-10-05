@@ -55,6 +55,22 @@ def test_일부_조항만_무혐의면_그_조항의_문구만_적법이다() ->
 
 
 @pytest.mark.gate
+def test_위반에_해당하지_아니한다_꼴도_적법_항목이다() -> None:
+    """🔴 16739 — 「… 광고한 행위는 법 위반에 해당하지 아니한다」를 못 읽어 무혐의 문구가 위반 양성이 됐다 (D-237 · 원장 10-03 ⑫)."""
+    order = (
+        "1. 피심인은 객관적인 근거 없이 “한 번 충전으로 천 킬로미터”라고 광고하는 행위를 다시 하여서는 아니 된다.\n\n"
+        "2. 피심인은 다음 각 호에 따라 과징금을 국고에 납부하여야 한다.\n\n"
+        "3. 피심인이 주행보조 프로그램에 대해 “첨단 편의기술 기본 탑재” 등의 문구를 사용하여 광고한 행위는 "
+        "법 위반에 해당하지 아니한다."
+    )
+    cls = fe.clauses(order)
+    assert [k for k, _ in cls] == ["위반", "기타", "적법"]
+    by = fe.place(fe.phrases_in(order), cls)
+    assert by["위반"] == ["한 번 충전으로 천 킬로미터"]
+    assert by["적법"] == ["첨단 편의기술 기본 탑재"]
+
+
+@pytest.mark.gate
 def test_뒷광고_사건은_범위_밖이다() -> None:
     order = (
         "1. 피심인은 블로그 운영자들에게 자신의 의료서비스 '▩▩▩▩▩’에 관한 광고를 게시해 줄 것을 요청하고 "
@@ -169,6 +185,8 @@ def test_이전_판의_봉인을_지키고_빠진_것만_빠진다(monkeypatch) 
         "caution_docs",
     ):
         monkeypatch.setattr(split, name, lambda: [])
+    # 🔄 2026-10-05 — 새 판(`placed_docs`)도 막는다 — 같은 이유다(재동결 뒤 기기의 채택본이 평가로 섞였다 · 원장 10-03 ㊿-23)
+    monkeypatch.setattr(split, "placed_docs", lambda: ([], [], {}))
     monkeypatch.setattr(split, "approved_docs", lambda: [])
     monkeypatch.setattr(split, "fingerprint", lambda: {})
     monkeypatch.setattr(split, "pending_guide", lambda: {})

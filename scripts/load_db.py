@@ -57,6 +57,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 DERIVED = ROOT / "data" / "derived"
 REGISTRY = ROOT / "data_sources.yaml"
 
+#: `golden_sample.cond` 가 받는 값 (0024 · D-317). 🚨 정본은 `db/schema.sql` 의 CHECK 와
+#:    `scripts/guide_statute_round.py` `CAUTION_CONDITIONS` 다 — `tests/test_db_schema.py` 가 셋을 맞춘다 (D-99)
+GOLDEN_CONDS = ("C", "A", "B", "M", "D", "L")
+
 USE_CODE = {"U1": "U1_train", "U2": "U2_rag", "U3": "U3_cite", "U4": "U4_deploy"}
 FLAGS = {
     "BY",
@@ -244,6 +248,43 @@ FRAGMENTS: list[tuple[str, str, str, str]] = [
     ),
     # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료 1997~2007 이 인용한 광고 문구. 광고주 저작물 조각이라 G2
     ("ftc_press:golden", "ftc_press", "보도자료 인용 광고 문구 (독립 판독)", "G2"),
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판독 판. 인용 광고 문구라 앞의 판들과 같은 판정(G2)
+    (
+        "mfds_daegu_ad_cases_2013:golden",
+        "mfds_daegu_ad_cases_2013",
+        "대구청 사례 확정 문구 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_ad_judge_manual_2015:golden",
+        "mfds_ad_judge_manual_2015",
+        "판별 매뉴얼 사례 문구 조각 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_cgm_expc:golden",
+        "mfds_cgm_expc",
+        "1차 법령해석 인용 표현 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_casebook_2021:golden",
+        "mfds_casebook_2021",
+        "사례집 2021 광고 화면 문구 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_cosmetic_ad_qa_2012:golden",
+        "mfds_cosmetic_ad_qa_2012",
+        "화장품 질의응답 2012 인용 표현 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
+    (
+        "mfds_cosmetic_faq_2020:golden",
+        "mfds_cosmetic_faq_2020",
+        "화장품 FAQ 2020 인용 표현 (독립 판독 · 팀장 판정)",
+        "G2",
+    ),
     # 🔄 2026-09-30 (판정 J1) — 섭취 주의사항(인정 조건문)도 이 조각이다 · 이름만 넓혔다(등급 그대로)
     (
         "mfds_hf_ingredient_board:approved",
@@ -767,6 +808,89 @@ def load_violation_article(cur, dry: bool) -> int:  # noqa: ANN001
     return len(rows)
 
 
+#: 제재표 행의 프래그먼트 — 별표(식품 · 화장품 별표7)와 조문(표시광고법 제7조). `FRAGMENTS` 에 이미 있는 둘이다 (D-18).
+SANCTION_FRAGMENT = {"annex": "law_go_kr:annex", "article": "law_go_kr:article"}
+
+#: `sanction_rule` 에 넣는 칸 — 적재(`load_sanction_rule`)가 **이 순서로** 넣고 **전부 갱신**한다.
+#:    ⛔ upsert 가 일부 칸만 고치면 원천과 DB 가 조용히 갈린다 (D-249 의 골든셋 판과 같은 규칙).
+SANCTION_COLS = (
+    "rule_key", "fragment_id", "law_id", "annex_no", "violation_type", "offense_count", "sanction_kind",
+    "sanction_value", "unit", "risk_level", "verified_by", "reviewed_by", "annex1", "cover", "quote",
+    "fact_kind", "plan_sha",
+)  # fmt: skip
+
+
+def sanction_row(spec: dict, r: dict, sig: tuple[str, str] | None, sha: str) -> tuple:  # noqa: ANN401
+    """원천 행 하나 → `sanction_rule` 한 행(`SANCTION_COLS` 순서).
+
+    🚨 위험도는 처분 **종류**에서 계산한다(`KIND_RISK` · D-227) — 원천에 위험도 칸이 없다.
+    🚨 `annex1` — 칸이 없는 행은 NULL(목으로 갈리지 않는다) · 빈 목록은 빈 배열(고시로 닿는다) — 합치지 않는다 (D-310 · 0023).
+    🔴 서명(`sig`)이 없으면 두 서명 칸이 NULL 이다 — 적재는 되지만 `v_risk_lookup` 에 안 보인다 (0013 · D-309).
+    """
+    from scripts import sanction_rule as sr  # noqa: PLC0415 — 원천 검사와 같은 모듈 (D-99)
+
+    src = spec["sources"][r["src"]]
+    return (
+        r["id"],
+        SANCTION_FRAGMENT["annex" if src.get("annex_no") else "article"],
+        src["law_id"],
+        src.get("annex_no"),
+        r["type"],
+        1,  # 1차 처분 — 위반 차수는 문구로 모른다 (D-305)
+        r["kind"],
+        r.get("value"),
+        r.get("unit"),
+        sr.KIND_RISK[r["kind"]].value,
+        sig[0] if sig else None,
+        sig[1] if sig else None,
+        list(r["annex1"]) if "annex1" in r else None,
+        r.get("cover"),
+        r["quote"],
+        r.get("fact"),
+        sha,
+    )
+
+
+def load_sanction_rule(cur, dry: bool) -> tuple[int, bool, int]:  # noqa: ANN001
+    """🆕 2026-10-02 (W5 · D-305 · D-309) — 위험도 하한 원천(`scripts/sanction_review.yaml`)을 `sanction_rule` 에 싣는다.
+
+    반환 — (행 수, 서명됐는가, 거둔 수). ★ 표는 원천의 **사본**이다 — 다시 넣으면 같아진다 (D-90).
+    🔴 **원천이 검사를 못 지나면 멈춘다** — 무효 서명(판이 바뀐 뒤 남은 서명) · 모르는 유형 · 모르는 처분 종류 (D-220 · D-309).
+       ⛔ 무효 서명을 「서명 없음」으로 낮춰 싣지 않는다 — 사람이 서명을 다시 해야 하는 상태를 조용히 지나가게 된다.
+    🔴 서명이 **없는** 판은 싣되 서명 칸이 NULL 이라 `v_risk_lookup` 에 안 보인다 — 하한이 없어 판정이 보류로 멈춘다 (0013).
+    🚨 원문 대조(`sanction_rule check`)는 여기서 하지 않는다 — 원문이 있는 기기에서 서명 전에 한 일이고, 서명이 판 sha 에 묶여 있다.
+    """
+    from scripts import sanction_rule as sr  # noqa: PLC0415
+
+    spec = sr.load_rules()
+    bad = sr.lint(spec)
+    if bad:
+        raise SystemExit(
+            "🔴 제재표 원천이 검사를 못 지났다 — 싣지 않는다 (D-309 · D-220)\n  " + "\n  ".join(bad)
+        )
+    sig, sha = sr.signature(spec), sr.plan_sha(spec)
+    rows = spec.get("rows") or []
+    if not dry:
+        cols = ", ".join(SANCTION_COLS)
+        marks = ", ".join(["%s"] * len(SANCTION_COLS))
+        sets = ", ".join(f"{c} = EXCLUDED.{c}" for c in SANCTION_COLS if c != "rule_key")
+        for r in rows:
+            cur.execute(
+                f"INSERT INTO sanction_rule ({cols}) VALUES ({marks}) "  # noqa: S608 — 칸 이름은 상수다
+                f"ON CONFLICT (rule_key) WHERE rule_key IS NOT NULL DO UPDATE SET {sets}",
+                sanction_row(spec, r, sig, sha),
+            )
+        # 🔴 넣고 나서 거둔다 (D-187) — 원천에서 빠진 행이 남으면 서명한 표에 없는 하한이 계속 걸린다
+        cur.execute(
+            "DELETE FROM sanction_rule WHERE rule_key IS NULL OR NOT (rule_key = ANY(%s))",
+            ([r["id"] for r in rows],),
+        )
+        swept = cur.rowcount
+    else:
+        swept = 0
+    return len(rows), sig is not None, swept
+
+
 def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
     """골든셋을 적재한다 (2026-09-10 · D-178).
 
@@ -780,6 +904,9 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
         DERIVED / "golden" / "golden.jsonl", "uv run python launcher.py golden --write"
     )
     stat: collections.Counter = collections.Counter()
+    expect: collections.Counter = (
+        collections.Counter()
+    )  # (분할, 조건) → 행 수 — `verify_golden` 이 DB 와 맞춘다
     declared: set[str] = set()
     n = 0
     for r in rows:
@@ -800,24 +927,40 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
             )
         if r["labels"] and not r["근거"]:
             raise SystemExit(f"🔴 위반 라벨에 근거 조문이 없다 — {r['id']} (D-282)")
-        # 🆕 2026-09-25 (D-285 개정 4 · 팀장 판정 (ㄴ)) — `golden_sample` 에는 **조건 칸이 없다.**
-        #    ⛔ 조건 M(보류) · D(판정 대상 아님) 행과 근거가 후보로만 있는 행을 넣으면 `violations` 가 빈 채 들어가
-        #       **적법으로 읽힌다.** 넣지 않고 수를 보인다(`DB미적재_조건칸없음`). 칸은 W1 평가 도구와 함께 정한다.
-        #    🔄 2026-09-30 — 조건 L(적법 · 화장품 지시서 §2)은 **넣는다**: 빈 `violations` 가 곧 적법이라 뜻이 맞다.
-        if r.get("조건") in ("M", "D") or (r.get("조건") in ("C", "A", "B") and not r["근거"]):
-            stat["DB미적재_조건칸없음"] += 1
-            continue
+        # 🔄 2026-10-05 (0024 · D-317) — **조건 칸 · 후보 근거 칸이 생겼다.** 조건 M · D · 근거가 후보로만 있는 행도 넣는다.
+        #    ⛔ 종전(D-285 개정 4 ⑥)에는 칸이 없어 이 행들을 넣지 않고 수만 보였다(`DB미적재_조건칸없음`) —
+        #       재동결 뒤 1,314 행이 파일에만 있었다(원장 10-03 ㊿-23).
+        #    🔴 DB 제약(`ck_golden_cond_empty` · `ck_golden_cond_basis`)과 **같은 것을 여기서 먼저 본다** — 어느 행인지 말하고 멈춘다
+        #       (제약이 걸리면 id 없이 죽는다 · D-220). 바꾸면 `db/schema.sql` 과 같이 고친다 (D-99).
+        cond = r.get("조건")
+        cands = r.get("근거_후보") or []
+        if cond is not None and cond not in GOLDEN_CONDS:
+            raise SystemExit(
+                f"🔴 골든셋 행의 조건이 스키마에 없는 값이다 — {r['id']} · {cond!r} (0024)"
+            )
+        if cond in ("D", "L") and (r["labels"] or r["근거"] or cands):
+            raise SystemExit(
+                f"🔴 조건 {cond} 행에 유형 · 근거 · 후보가 있다 — {r['id']} (ck_golden_cond_empty)"
+            )
+        if cond in ("C", "A", "B") and not (r["근거"] or cands):
+            raise SystemExit(
+                f"🔴 조건 {cond} 행에 근거도 후보도 없다 — {r['id']} (ck_golden_cond_basis)"
+            )
         evidence = [_evidence(c) for c in r["근거"]]
+        candidate = [[_evidence(c) for c in alt] for alt in cands]
         stat[r["split"]] += 1
         stat[f"unit:{r['unit']}"] += 1
         stat["근거있음"] += bool(evidence)
+        stat["근거후보만"] += bool(candidate and not evidence)
+        stat[f"조건:{cond or '없음'}"] += 1
+        expect[(r["split"], cond)] += 1
         declared.add(r["id"])
         if not dry:
             cur.execute(
                 "INSERT INTO golden_sample "
                 "(sample_id, fragment_id, text, unit, violations, evidence, origin, rule_id, "
-                " provenance, redistributable, split) "
-                "VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s) "
+                " provenance, redistributable, split, cond, evidence_candidate) "
+                "VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s::jsonb) "
                 # 🔴 2026-09-20 (D-249) — **넣는 칸은 전부 갱신한다.** ⛔ 종전에는 text·unit·violations·split
                 #    만 고쳐, 재배포 표시를 false 로 바꾼 골든셋을 다시 넣어도 DB 는 true 로 남았다 —
                 #    `v_publishable_golden`(공개할 때 반드시 지나는 뷰 · D-71)이 인용 문구 5,799행을 「공개 가능」으로 냈다.
@@ -827,7 +970,8 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
                 "  violations = EXCLUDED.violations, evidence = EXCLUDED.evidence, "
                 "  origin = EXCLUDED.origin, "
                 "  rule_id = EXCLUDED.rule_id, provenance = EXCLUDED.provenance, "
-                "  redistributable = EXCLUDED.redistributable, split = EXCLUDED.split",
+                "  redistributable = EXCLUDED.redistributable, split = EXCLUDED.split, "
+                "  cond = EXCLUDED.cond, evidence_candidate = EXCLUDED.evidence_candidate",
                 (
                     r["id"],
                     fid,
@@ -840,13 +984,42 @@ def load_golden(cur, dry: bool) -> tuple[int, collections.Counter, int]:
                     r["provenance"],
                     r["redistributable"],
                     r["split"],
+                    cond,
+                    json.dumps(candidate, ensure_ascii=False) if candidate else None,
                 ),
             )
         n += 1
     # 🔴 **넣고 나서 거둔다** — 순서가 반대면 이번에 넣을 행까지 고아로 본다.
     #    ⛔ `--dry-run` 은 DB 에 안 붙으므로 거두지 않는다. 그래서 예행은 **거둘 수를 모른다.**
     swept = 0 if dry else sweep_golden(cur, declared)
+    if not dry:
+        verify_golden(cur, expect)
     return n, stat, swept
+
+
+def verify_golden(cur, expect: collections.Counter) -> None:  # noqa: ANN001
+    """🆕 2026-10-05 (D-317) — **넣은 뒤 되읽어 대조한다** (D-149). 조건 칸을 읽는 쪽이다.
+
+    ⛔ 적재는 넣은 줄 수만 냈다 — DB 가 실제로 그 모양인지는 보지 않았다. 고아 902 행이 쌓였던 것(2026-09-13)도
+       되읽지 않아서 늦게 드러났다.
+    🔴 분할 × 조건으로 센 수가 골든 파일과 다르면 **멈춘다** — 「옮기고 적재하지 않은 DB」(조건이 비어 있다)와
+       「거두지 못한 옛 행」을 여기서 잡는다. 트랜잭션 안이라 멈추면 이번 적재는 되돌아간다.
+    """
+    cur.execute("SELECT split::text, cond, count(*) FROM golden_sample GROUP BY split, cond")
+    got = {(s, c): n for s, c, n in cur.fetchall()}
+    want = dict(expect)
+    if got != want:
+        keys = sorted(set(got) | set(want), key=str)
+        diff = [
+            f"{k}: 파일 {want.get(k, 0)} · DB {got.get(k, 0)}"
+            for k in keys
+            if got.get(k) != want.get(k)
+        ]
+        raise SystemExit(
+            "🔴 골든셋을 되읽으니 파일과 다르다 (분할 × 조건) — "
+            + " / ".join(diff[:6])
+            + "\n  🚨 이번 적재를 되돌린다. `launcher.py migrate` 가 0024 까지 갔는지 본다 (D-317)."
+        )
 
 
 def main() -> int:
@@ -883,6 +1056,10 @@ def main() -> int:
         print(f"  product_fact      {load_product_fact(cur, True):>6}")
         print(
             f"  violation_article {load_violation_article(cur, True):>6}  (collect/statute.py · D-282)"
+        )
+        n_rule, signed, _ = load_sanction_rule(cur, True)
+        print(
+            f"  sanction_rule     {n_rule:>6}  ({'서명됨' if signed else '🚨 서명 전 — 하한으로 안 보인다'})"
         )
         n_gold, gstat, _ = load_golden(cur, True)
         print(f"  golden_sample     {n_gold:>6}  (⬜ DB 를 안 봐서 거둘 수는 모른다)")
@@ -927,6 +1104,11 @@ def main() -> int:
         print(f"  product_fact      {load_product_fact(cur, False):>6}")
         print(
             f"  violation_article {load_violation_article(cur, False):>6}  (collect/statute.py · D-282)"
+        )
+        n_rule, signed, swept_rule = load_sanction_rule(cur, False)
+        print(
+            f"  sanction_rule     {n_rule:>6}  ({'서명됨 — 하한으로 쓴다' if signed else '🚨 서명 전 — v_risk_lookup 에 안 보인다'})"
+            + (f"  (거둠 {swept_rule})" if swept_rule else "")
         )
         n_gold, gstat, swept = load_golden(cur, False)
         print(f"  golden_sample     {n_gold:>6}" + (f"  (거둠 {swept:,})" if swept else ""))
