@@ -155,7 +155,16 @@ def inputs() -> tuple[pathlib.Path, ...]:
     gf = guide_fix_state()
     got += (GUIDE_FIX_ADOPTED,) if gf and not gf["대기"] else ()
     fs = ftc_sealed_state()
-    return got + ((FTC_SEALED_ADOPTED,) if fs and not fs["대기"] else ())
+    got += (FTC_SEALED_ADOPTED,) if fs and not fs["대기"] else ()
+    ft = ftc_train_state()
+    got += (FTC_TRAIN_ADOPTED,) if ft and not ft["대기"] else ()
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판들도 같은 규칙 · 「문항」 판은 평가 행 목록도 입력이다
+    for name, (_cmd, place) in PLACED.items():
+        st = placed_state(name)
+        if st and not st["대기"]:
+            _readings, adopted, eval_path = placed_paths(name)
+            got += (adopted,) + ((eval_path,) if place == "문항" else ())
+    return got
 
 
 def fingerprint() -> dict[str, dict]:
@@ -213,6 +222,13 @@ def verify_inputs(manifest: dict, *, who: str) -> None:
         )
 
 
+#: 🆕 2026-10-04 (판정 묶음 ⑨ · 원장 10-03 ㊱ · ㊲) — **같은 결정문이 일련번호만 달리 두 번 실린 것.** 뒤 번호를 뺀다.
+#:    · 18239 · 18261 — 사건번호 · 의결일 · 주문 + 이유 글자가 같다. 둘 다 봉인이라 2호 채점 행 3 이 두 번 세였다
+#:    · 15899 · 15939 — 의결번호 · 주문 글자가 같다(의결일 칸만 다르다). 학습에 같은 26 행이 두 번 들어 있었다
+#:    🚨 손으로 적은 목록이다 — 원천을 다시 받으면 같은 대조(의결번호 + 주문 글자)를 다시 돌린다
+FTC_SAME_DOC = {"18261": "18239", "15939": "15899"}
+
+
 def ftc_docs() -> list[dict]:
     """공정위 의결서 — **문서 하나가 한 줄**. 조문에서 읽은 유형이 붙어 있다."""
     if not FTC_PHRASES.exists():
@@ -220,7 +236,15 @@ def ftc_docs() -> list[dict]:
             f"{FTC_PHRASES} 가 없다 —\n  먼저: uv run python -m preprocess.ftc_extract --stage --dump"
         )
     got = []
-    for r in json.loads(FTC_PHRASES.read_text(encoding="utf-8")):
+    recs = json.loads(FTC_PHRASES.read_text(encoding="utf-8"))
+    seqs = {str(r["seq"]) for r in recs}
+    for dup, keep in FTC_SAME_DOC.items():
+        if dup in seqs and keep not in seqs:
+            # 🔴 남기기로 한 쪽이 없는데 다른 쪽을 빼면 그 사건이 통째로 사라진다 (D-220)
+            raise SystemExit(f"🔴 ftc:{dup} 를 같은 결정문 ftc:{keep} 때문에 빼는데 {keep} 가 없다")
+    for r in recs:
+        if str(r["seq"]) in FTC_SAME_DOC:
+            continue
         # 🆕 2026-09-24 (D-282) — **근거 조문이 정본이다.** 유형은 인용에서 계산하고, 추출기가 적은 유형과 대조한다.
         #    ⛔ 종전에는 유형만 넘기고 `article` 을 여기서 버렸다 — 골든셋 6,741행 중 조문 칸이 있는 행이 0 이었다.
         units = r.get("유형") or []
@@ -416,6 +440,7 @@ ROUND_LABEL_DIRS = (
     "labels/ftc_press_old/",
     "labels/guide_fix/",  # 🆕 09-30 판정 J1 (b)
     "labels/ftc_sealed/",  # 🆕 09-30 판정 J2
+    "labels/ftc_train/",  # 🆕 10-05 D-312 — 학습 쪽 주문 문구
 )
 FTC_PRESS_ADOPTED = pathlib.Path("data/derived/labels/ftc_press_old/adopted.jsonl")
 
@@ -499,6 +524,35 @@ def ftc_sealed_marks() -> dict[str, dict] | None:
     return {r["지문"]: r for r in _jsonl(FTC_SEALED_ADOPTED)}
 
 
+#: 🆕 2026-10-05 (D-312) — 결정문 **학습 쪽 주문 문구**에 같은 정의(대상 · 조건)를 붙이는 판. 🚨 경로의 정본은
+#:    `scripts/guide_statute_round.py` `FT_READINGS` · `FT_ADOPTED` 다 — 바꾸면 양쪽을 같이 (D-99)
+FTC_TRAIN_READINGS = pathlib.Path("data/derived/labels/ftc_train/readings.jsonl")
+FTC_TRAIN_ADOPTED = pathlib.Path("data/derived/labels/ftc_train/adopted.jsonl")
+
+
+def train_key(doc_id: str, text: str) -> str:
+    """학습 주문 문구의 지문 — 봉인 판과 같은 해시에 머리만 `ft:`. 🚨 `guide_statute_round.ft_key` 가 이 함수를 부른다 (D-99)."""
+    return "ft:" + sealed_key(doc_id, text).split(":", 1)[1]
+
+
+def ftc_train_state() -> dict[str, int] | None:
+    """결정문 학습 문구 판의 상태 — 다른 판과 같은 규칙."""
+    return _round_state(FTC_TRAIN_READINGS, FTC_TRAIN_ADOPTED, "ft-rebuild")
+
+
+def ftc_train_marks() -> dict[str, dict] | None:
+    """학습 주문 문구 지문 → 채택 행(대상 · 조건). **대기가 0 일 때만** — 아니면 None(골든은 종전대로 조건 없이 낸다).
+
+    ★ 봉인 판(`ftc_sealed_marks`)과 같은 길이다 — 문구 단위로 대상 N 을 빼고 조건을 붙인다(`golden.build`).
+    🚨 분할(문서 배정)은 이 판을 모른다 — 학습 문서의 주문 문구만 바뀌고 봉인 · 평가 행은 그대로다 (D-312).
+    🚨 사전(`preprocess/dictionary.py`)에는 반영하지 않는다 — 사전은 동결이다(D-313 결정 1 · 재작업 때 함께).
+    """
+    st = ftc_train_state()
+    if not st or st["대기"]:
+        return None
+    return {r["지문"]: r for r in _jsonl(FTC_TRAIN_ADOPTED)}
+
+
 def _round_docs(st: dict[str, int] | None, adopted: pathlib.Path, source: str) -> list[dict]:
     """문구 판 채택본 → 분할 문서(행 하나 = 문서 하나). 🔴 대기가 남으면 빈 목록 · 대상 N 은 뺀다 (D-99 — 두 판이 같은 함수)."""
     if not st or st["대기"]:
@@ -520,6 +574,111 @@ def _round_docs(st: dict[str, int] | None, adopted: pathlib.Path, source: str) -
         for r in _jsonl(adopted)
         if r["대상"] == "Y"
     ]
+
+
+#: 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판독 판의 **배치**. 🚨 경로의 정본은 `scripts/guide_statute_round.py` 의 판 설정이다 (D-99)
+#:    자리 — "train" 전량 학습 · "test" 전량 평가 · "문항" 평가 행 목록(`eval_rows.jsonl`)의 행만 평가, 그 문항의 다른 행은 버리고 나머지는 학습
+#:    ★ 근거 — 식품은 사례집 2021 = 평가 / 대구청 · 판별 매뉴얼 · 1차 해석 식품 · 근거자료 = 학습 · 화장품은 문항 단위(2호가 걸린 문항 중
+#:      원천이 판단을 내린 행만 평가) (판정기록 2026-10-04 ①). 근거자료 판은 판독 조건대로 · 조건 L 은 내지 않는다 (D-316).
+PLACED: dict[str, tuple[str, str]] = {
+    "daegu_2013": ("dg-rebuild", "train"),
+    "ad_manual_2015": ("mn-rebuild", "train"),
+    "interp_ad_food": ("ipf-rebuild", "train"),
+    "guide_evidence": ("ge-rebuild", "train"),
+    "casebook_2021_food": ("cbf-rebuild", "test"),
+    "casebook_2021_cosmetic": ("cbc-rebuild", "test"),
+    "cosmetic_qa_old": ("co-rebuild", "문항"),
+    "interp_ad_cosmetic": ("ipc-rebuild", "문항"),
+}
+#: 판 → 행의 품목(골든 `품목` 칸 · D-306). 원천 하나에 품목이 둘인 판(1차 해석 · 사례집 2021)이 있어 원천으로는 못 정한다
+_MN_ITEM = {"식품": "식품", "건강기능식품": "건기식", "축산물": "식품"}
+PLACED_ITEM = {
+    "daegu_2013": lambda r: r["품목"],
+    "ad_manual_2015": lambda r: _MN_ITEM[r["구역"]],
+    "interp_ad_food": lambda r: "식품",
+    "guide_evidence": lambda r: "식품",
+    "casebook_2021_food": lambda r: "식품",
+    "casebook_2021_cosmetic": lambda r: "화장품",
+    "cosmetic_qa_old": lambda r: "화장품",
+    "interp_ad_cosmetic": lambda r: "화장품",
+}
+PLACED_DIR = pathlib.Path("data/derived/labels")
+#: 새 판의 채택본 · 평가 행 목록도 판독 판의 산출물이다 — 사람 8유형 라벨과 가르는 목록에 같이 든다 (`tests/test_statute.py`)
+ROUND_LABEL_DIRS += tuple(f"labels/{name}/" for name in PLACED)
+#: 조건 L 을 내지 않는 판 — 적법 문장은 원천이 적법이라 선언한 것뿐이다 (D-301 · D-316 · 범위 밖 D-192)
+PLACED_NO_L = frozenset({"guide_evidence"})
+
+
+def placed_paths(name: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path]:
+    d = PLACED_DIR / name
+    return d / "readings.jsonl", d / "adopted.jsonl", d / "eval_rows.jsonl"
+
+
+def placed_state(name: str) -> dict[str, int] | None:
+    """새 판 하나의 상태 — 다른 판과 같은 규칙(대기 0 일 때만 든다)."""
+    readings, adopted, _ = placed_paths(name)
+    return _round_state(readings, adopted, PLACED[name][0])
+
+
+def placed_docs() -> tuple[list[dict], list[dict], dict[str, dict[str, int]]]:
+    """새 판들의 분할 문서 — (학습, 평가, 판별 수). 🔴 대기가 남은 판은 들지 않는다 · 대상 N 은 뺀다.
+
+    🔴 「문항」 판은 평가 행 목록이 없으면 멈춘다 — 목록 없이 전량 학습으로 넣으면 평가로 갈 문항이 학습에 든다 (D-220).
+    🔴 목록의 지문이 채택본에 없거나 채점 행(C · A · B)이 아니면 멈춘다.
+    """
+    train: list[dict] = []
+    test: list[dict] = []
+    stat: dict[str, dict[str, int]] = {}
+    for name, (_cmd, place) in PLACED.items():
+        st = placed_state(name)
+        if not st or st["대기"]:
+            continue
+        _readings, adopted, eval_path = placed_paths(name)
+        rows = [r for r in _jsonl(adopted) if r["대상"] == "Y"]
+        c = collections.Counter()
+        picked: set[str] = set()
+        held: set[tuple[str, str]] = set()
+        if place == "문항":
+            if not eval_path.exists():
+                raise SystemExit(
+                    f"🔴 {eval_path} 가 없다 — 평가로 보낼 행의 목록(사람이 확인한 원천 판단)이 먼저다"
+                )
+            by = {r["지문"]: r for r in rows}
+            for e in _jsonl(eval_path):
+                r = by.get(e["지문"])
+                if r is None or r["조건"] not in ("C", "A", "B"):
+                    raise SystemExit(f"🔴 {eval_path} 의 {e['지문']} 는 채택본의 채점 행이 아니다")
+                picked.add(r["지문"])
+                held.add((r["원천"], str(r["문항"])))
+        for r in rows:
+            if name in PLACED_NO_L and r["조건"] == "L":
+                c["뺌_조건L"] += 1
+                continue
+            doc = {
+                "doc_id": r["지문"],
+                "원천": r["원천"],
+                "유형": r["labels"],
+                "근거": r["근거"],
+                "근거_후보": r["근거_후보"],
+                "조건": r["조건"],
+                "판독": r["판독"],
+                "원천결손": r["원천결손"],
+                "별표5목": r["별표5목"],
+                "문구": [r["문구"]],
+                "단위": "문장",
+                "판": name,
+                "품목": PLACED_ITEM[name](r),
+            }
+            if place == "test" or r["지문"] in picked:
+                test.append(doc)
+                c["평가"] += 1
+            elif place == "문항" and (r["원천"], str(r.get("문항"))) in held:
+                c["뺌_평가문항의_다른행"] += 1
+            else:
+                train.append(doc)
+                c["학습"] += 1
+        stat[name] = dict(c)
+    return train, test, stat
 
 
 def guide_docs() -> list[dict]:
@@ -744,6 +903,9 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
         + term
         + caution
     )
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판독 판. 수는 판마다 따로 센다 (D-160)
+    placed_train, placed_test, placed_stat = placed_docs()
+    train += placed_train
     # 🆕 **사람이 붙인 해설서 라벨은 전량 평가다** (2026-09-17 · D-172 · guide_docs 참조).
     #    🚨 `sealed`(ftc 봉인)와 **따로 센다** — 한 수에 두 원천을 평균하지 않는다 (D-160).
     guide = guide_docs()
@@ -754,7 +916,7 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
     # 🆕 2026-09-30 (판정 J1 (b)) — 해설서 수정문구도 평가다. 따로 센다 (D-160)
     #    🔄 2026-10-01 (D-299 · D-301) — **조건 D 행만**(적법 문장 · 주장 없음). 위반 · 적법 주장 평가에는 안 든다
     guide_fix = guide_fix_docs()
-    sent = list(sealed.values()) + guide + cosmetic + press + guide_fix + neg_eval
+    sent = list(sealed.values()) + guide + cosmetic + press + guide_fix + neg_eval + placed_test
 
     def lawful_units(rows: list[dict]) -> int:
         """🆕 2026-09-30 (판정 J1) — **조건 L 문구 수**(적법 · 음성). 결정문 적법 문구 + 조건 L 행의 문구."""
@@ -839,6 +1001,8 @@ def plan(seed: int = 20260909, prev_sealed: set[str] | None = None) -> dict:
             "test_sentence_해설서수정문구": {"문서": len(guide_fix), "문구": phrases(guide_fix)},
             "사전(사례집)": {"문서": len(term), "문구": phrases(term)},
         },
+        # 🆕 2026-10-05 — 새 판독 판의 배치(판별 · 학습 · 평가 · 뺀 것)
+        "placed": placed_stat,
         "counts": {
             "train": tally(train),
             "test_sentence": sent_pos,
@@ -998,6 +1162,7 @@ def main() -> int:
     for name, st, key in (
         ("해설서 수정문구", guide_fix_state(), "test_sentence_해설서수정문구"),
         ("결정문 봉인 문구(대상 · 조건)", ftc_sealed_state(), None),
+        ("결정문 학습 문구(대상 · 조건)", ftc_train_state(), None),
     ):
         if st:
             print(

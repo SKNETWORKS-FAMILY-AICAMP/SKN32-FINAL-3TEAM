@@ -361,7 +361,8 @@ def _mask_text(
     from preprocess.mask import MASK_ORG, apply_policy, mask_org_bare  # noqa: PLC0415
 
     text = mask_paren_ceo(_mask_split(text, names, log), log)
-    text = mask_org_bare(apply_policy(text, "", SOURCE_ID, log), names, log)[0]
+    # 🚨 `hold_pre=False` — 앞에서 넣은 자국(`_mask_split`)이 갈린 **상호**라 그 뒤 괄호(대표 · 원어)는 정책대로 지운다
+    text = mask_org_bare(apply_policy(text, "", SOURCE_ID, log, hold_pre=False), names, log)[0]
     for n in (
         names
     ):  # 줄넘김으로 갈린 이름(「○○ ○사는」) — 옛 보도자료의 괘선 칸은 낱말 안에서 줄이 바뀐다

@@ -24,6 +24,13 @@ GOLDEN_LINEAGE: dict[tuple[str, str], tuple[str, bool]] = {
     ("mfds_cosmetic_ad_qa", "real"): ("mfds_cosmetic_ad_qa:golden", False),
     # 🆕 2026-09-30 (⑤-1·3 (나)) — 공정위 보도자료가 인용한 광고 문구도 광고주 몫이다
     ("ftc_press", "real"): ("ftc_press:golden", False),
+    # 🆕 2026-10-05 (판정 묶음 ① · D-316) — 새 판독 판의 원천. 전부 원천이 인용한 **광고 문구**라 재배포 불가 (D-249)
+    ("mfds_daegu_ad_cases_2013", "real"): ("mfds_daegu_ad_cases_2013:golden", False),
+    ("mfds_ad_judge_manual_2015", "real"): ("mfds_ad_judge_manual_2015:golden", False),
+    ("mfds_cgm_expc", "real"): ("mfds_cgm_expc:golden", False),
+    ("mfds_casebook_2021", "real"): ("mfds_casebook_2021:golden", False),
+    ("mfds_cosmetic_ad_qa_2012", "real"): ("mfds_cosmetic_ad_qa_2012:golden", False),
+    ("mfds_cosmetic_faq_2020", "real"): ("mfds_cosmetic_faq_2020:golden", False),
     # 식약처 승인 문구와 우리 합성문
     # 🔄 2026-09-30 (판정 J1) — `approved` 는 「식약처 인정서 문구」다(승인 기능성 문구 · 섭취 주의사항). 적법이라는 뜻이 아니다
     ("mfds_hf_ingredient_board", "approved"): ("mfds_hf_ingredient_board:approved", True),
