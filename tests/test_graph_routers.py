@@ -618,6 +618,9 @@ def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(g, "load_dict_entries", lambda cur: [])
     # 🆕 2026-10-02 (D-311) — 자격 없는 항목도 같은 대역으로 비운다
     monkeypatch.setattr(g, "load_weak_entries", lambda cur: [])
+    # 🆕 2026-10-06 (D-319 집행 — 기준 문안 승인으로 품목 분기가 켜졌다) — 분기 노드가 제재표를 읽는다. 문자열 커서로는 못 읽으므로
+    #    「서명 전 · 적재 전」(빈 표)과 같은 대역을 준다 — 하한이 없어 위험도는 붙지 않는다 (D-220)
+    monkeypatch.setattr(g, "load_sanction_rows", lambda cur: [])
 
 
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202
@@ -860,7 +863,11 @@ def test_사전이_울리면_법별_노드가_제_법_인용만_남긴다(monkey
     #    ⛔ 종전 기대값은 「미판정」이었다(판정 노드 스텁). 근거는 적중의 인용 조문 · 구간은 원문 좌표 · 사유는 표(C)
     (sent,) = out["sentences"]
     # 🔴 유형은 인용에서 계산한다(D-282) — 표시광고법 §3①1 은 거짓_과장 · 식품 §8①1 은 질병 표방. 법마다 맞는 유형이다
-    assert sent.verdict is Verdict.confirmed
+    # 🔄 2026-10-06 (D-319 ①) — 품목 미확정이고 전제마다 서는 위반이 다르다(식품 계열 전제: 거짓 · 과장 + 질병 표방 ·
+    #    화장품 · 일반상품 전제: 거짓 · 과장뿐) → 확정이 아니라 **보류(`cat_unknown`) + 분기**다. 유형 · 사유 · 근거 · 구간은 그대로 실린다.
+    #    ⛔ 종전 기대값은 「확정」이었다(분기 노드가 꺼져 있던 때).
+    assert sent.verdict is Verdict.hold and sent.hold_reason is HoldReason.cat_unknown
+    assert len(out["branches"]) == 6, "품목을 모르면 분기는 전제 전부다 (D-229 ⑥)"
     assert sent.violations == [Violation.거짓_과장, Violation.질병_예방치료_표방]
     assert sent.infeasibility is Infeasibility.C
     assert {(a.law_id, a.article, a.item) for a in sent.evidence} >= {
