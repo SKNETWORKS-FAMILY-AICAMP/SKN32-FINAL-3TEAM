@@ -1,14 +1,18 @@
-"""판정 로직 1·2단계 규칙 테스트 — 설계결정을 코드로 고정한다 (박수진 · 2026-10-01)
+"""판정 로직 1·2단계 규칙 테스트 — 설계결정을 코드로 고정한다 (🔄 2026-10-06 main `ebb3f10` 맞춤판 · 박수진)
 
   uv run pytest docs/psj/e2e_prototype/test_judge_rules.py -q
 
-🔴 인코더 모델 없이 돈다 — 인코더 점수는 테스트가 직접 넣는다(가짜 점수). 3차 재학습 · τ 변경 뒤에도 그대로 쓴다.
-🔴 금지 표현 사전(banned_terms.jsonl)이 필요한 테스트는 사전이 없으면 건너뛴다 — `launcher.py data-setup` 으로 받는다.
-🚨 문장은 이 파일에서 지어낸 예문이다 — 평가셋(test_sentence) 문장을 옮겨 오지 않는다 (D-175 · D-249).
+🔴 인코더 모델 · DB · 받은 사전 없이 돈다 — 인코더 점수는 테스트가 직접 넣고, 사전은 이 파일이 만든 **작은 사전**이다.
+   그래서 사전 판(506종)이 바뀌어도 · 인코더를 다시 학습해도 같은 결과다.
+🚨 문장 · 낱말은 이 파일에서 지어낸 것이다 — 평가셋(test_sentence) 문장을 옮겨 오지 않는다 (D-175 · D-249).
 
-낱말 목록(TRADE_CUE · CLAIM_CUE · NOTCLAIM_CUE)을 고쳐도 아래 규칙이 깨지면 안 된다.
+무엇을 고정하나
+  · 규칙 판정은 판정 그래프의 함수가 낸다(`app/graph.py`) — 여기서는 **인코더 층**과 품목 미확정 처리만 본다.
+  · 인코더만으로는 확정하지 않는다 (D-224 · D-131) · 사전 확정은 인코더 합의가 있을 때만 (D-127)
+  · 통과(확정 · 위반 없음)는 사전도 인코더도 조용할 때만 (D-273) · 품목 미확정 · 주된 광고법을 안 본 품목에는 통과가 없다 (D-319 ② · D-314)
+  · 전제가 유형을 바꾸는 자리 (D-319 ④′) · 편입 대기 칸은 후보로 내지 않는다 (D-321)
 """
-
+import json
 import os
 import sys
 
@@ -20,192 +24,239 @@ sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..", "..")))
 
 import judge_stage1 as s1  # noqa: E402
 import judge_stage2 as s2  # noqa: E402
-from app.contracts import Category  # noqa: E402
+from app import premise as pm  # noqa: E402
+from app.contracts import Category, Verdict  # noqa: E402
+from collect import statute  # noqa: E402
 
-TH = {
-    "질병_예방치료_표방": 0.325,
-    "건강기능식품_오인": 0.275,
-    "의약품_오인": 0.525,
-    "거짓_과장": 0.65,
-    "소비자_기만": 0.275,
-    "후기_체험기_기만": 0.45,
-}
+FOOD, FAIR, COSM = (statute.STATUTE_ID[k] for k in ("식품표시광고법", "표시광고법", "화장품법"))
+WAIT = "기능성화장품_오인"
 HF = "건강기능식품_오인"
-PASS = ("confirmed",)
+TH = {"질병_예방치료_표방": 0.35, "건강기능식품_오인": 0.45, "의약품_오인": 0.45, "거짓_과장": 0.375, "소비자_기만": 0.475,
+      "후기_체험기_기만": 0.325, "부당_비교광고": 0.9, "비방광고": 0.8, WAIT: 1.01}
+
+#: 지어낸 낱말 — 실제 광고 낱말이 아니다. (낱말, 인용, 유형, 단독판정)
+TERMS = [
+    ("가나표지", f"{FAIR}:제3조제1항제1호", "거짓_과장", True),            # 표시광고법 — 모든 전제의 법 묶음에 든다
+    ("다라표지", f"{FOOD}:제8조제1항제1호", "질병_예방치료_표방", True),    # 식품표시광고법 — 식품 전제에서만 선다
+    ("마바표지", f"{FOOD}:제8조제1항제3호", HF, True),                      # 3호 — 건강기능식품 전제에서는 서지 않는다
+    ("사아표지", f"{COSM}:제13조제1항제2호", WAIT, True),                   # 인코더가 내지 않는 유형
+    ("자차표지", f"{FOOD}:제8조제1항제1호", "질병_예방치료_표방", False),   # 단독판정 자격 없음 (D-311)
+]
+PLAIN = "오늘도 좋은 하루"           # 표지 없음 · 사항 「주장」
+NOTCLAIM = "직사광선을 피해 서늘한 곳에 두십시오 보관"
+TRADE = "전 상품 무료 배송"
+
+
+@pytest.fixture(scope="module")
+def book(tmp_path_factory):
+    path = tmp_path_factory.mktemp("dict") / "banned_terms.jsonl"
+    with open(path, "w", encoding="utf-8") as f:
+        for term, cite, kind, solo in TERMS:
+            f.write(json.dumps({"term": term, "원문": [term], "유형": [kind], "근거": [cite], "단독판정": solo}, ensure_ascii=False) + "\n")
+    return s1.load_banned_terms(str(path))
 
 
 def probs(**over):
     """모든 유형 0.01 — 넣은 유형만 바꾼다."""
-    p = {k: 0.01 for k in TH}
-    p.update(over)
-    return p
-
-
-def near(label):
-    """τ × margin 이상 · τ 미만 — 경계 근처 신호만 나는 점수."""
-    return (TH[label] * s1.QUIET_MARGIN + TH[label]) / 2
+    return {**{k: 0.01 for k in TH}, **over}
 
 
 def above(label):
-    """τ 이상 — 인코더가 울린 점수."""
-    return min(0.99, TH[label] + 0.2)
+    return min(0.99, TH[label] + 0.05)
 
 
-@pytest.fixture(scope="module")
-def book():
-    if not os.path.exists(s1.BANNED_TERMS_PATH):
-        pytest.skip("banned_terms.jsonl 없음 — data-setup 으로 받는다")
-    return s1.load_banned_terms()
+def near(label):
+    return TH[label] * (s1.QUIET_MARGIN + 1) / 2      # τ × margin 이상 · τ 미만
 
 
-def run(text, p, book, category=None, recognized=None):
-    a = s1.stage1_signals(text, p, book, TH)
-    return a, s2.stage2_judge(a, category=category, recognized=recognized)
+def run(book, text, category=None, agree=True, **p):
+    return s2.stage2_judge(s1.stage1_signals(text, probs(**p), book, TH), category=category, agree=agree)
 
 
-def kinds(a):
-    return {x["kind"] for x in a["signals"]}
+# ── 1단계 ──────────────────────────────────────────────────────────────
+def test_사전은_자격으로_갈린다(book):
+    assert len(book.exact) == 4 and len(book.weak) == 1
+    scan = book.scan("가나표지 그리고 자차표지")
+    assert scan.ran and [h.term for h in scan.hits] == ["가나표지"] and [h.term for h in scan.weak] == ["자차표지"]
 
 
-# ── 사항 판별 (낱말 단계) ────────────────────────────────────────────────
+def test_편입_대기_칸은_후보도_여유구간도_아니다():
+    enc = s1.encoder_signal(PLAIN, probs(**{WAIT: 0.99}), TH)
+    assert enc["candidates"] == [] and enc["near"] is None and enc["quiet"] and WAIT not in enc["active"]
 
 
-@pytest.mark.parametrize(
-    "text, want",
-    [
-        ("전 상품 무료배송, 주문 다음 날 도착", "거래조건"),
-        ("5만원 이상 구매 시 사은품 증정", "거래조건"),
-        ("1일 2회, 1회 1포를 물과 함께 드세요", "판정대상아님"),
-        ("서늘하고 건조한 곳에 보관하세요", "판정대상아님"),
-        ("야근이 잦은 분께 추천합니다", "판정대상아님"),
-        ("개봉 후에는 냉장 보관하시고 뜨거우니 드실 때 주의하세요", "판정대상아님"),
-        ("면역력 강화에 도움을 줍니다", "주장"),
-        ("부작용 걱정 없이 드셔도 좋아요", "주장"),  # D-286 ⑥ — 안전 주장이 붙으면 D 가 아니다
-        ("관절 건강에 알맞은 구성", "주장"),  # 대상 + 효능 → 주장
-        ("혈당 걱정 끝! 지금 30% 할인", "혼합"),
-    ],
-)
-def test_사항_판별(text, want):
-    assert s1.sentence_subject(text)[0] == want
+def test_후보와_여유구간():
+    enc = s1.encoder_signal(PLAIN, probs(거짓_과장=above("거짓_과장")), TH)
+    assert enc["candidates"] == ["거짓_과장"] and not enc["quiet"]
+    enc = s1.encoder_signal(PLAIN, probs(거짓_과장=near("거짓_과장")), TH)
+    assert enc["candidates"] == [] and enc["near"] == "거짓_과장" and not enc["quiet"]
 
 
-# ── D-272 개정 — 거래 조건은 판정 대상 아님이 아니다 ─────────────────────
+def test_사항_판별():
+    assert s1.sentence_subject(PLAIN)[0] == "주장"
+    assert s1.sentence_subject(NOTCLAIM)[0] == "판정대상아님"
+    assert s1.sentence_subject(TRADE)[0] == "거래조건"
 
 
-def test_거래조건은_not_claim_으로_나가지_않는다(book):
-    a, r = run("전 상품 무료배송, 주문 다음 날 도착", probs(거짓_과장=0.9, 소비자_기만=0.9), book)
-    assert a["subject"] == "거래조건"
-    assert a["not_claim"] is False and r["not_claim"] is False
-    assert r["verdict"] == "hold" and "거래조건" in r["hold_types"]
-    assert "model" not in kinds(a)  # 인코더 점수를 판정 근거로 쓰지 않는다
+# ── 사전 확정 × 인코더 합의 (D-127) ────────────────────────────────────
+def test_모든_전제에서_같은_위반이면_품목을_몰라도_확정(book):
+    r = run(book, "가나표지 문장", 거짓_과장=above("거짓_과장"))
+    assert r["verdict"] == "confirmed" and r["violations"] == ["거짓_과장"]
+    assert set(r["branches"]) == {p.value for p in pm.PREMISES_OF[None]}      # 품목 미확정이면 분기는 언제나 (D-229 ⑥)
+    assert r["outcome"] == "hold"                                             # 위험도 하한을 못 읽는다(DB 없음) → 종착은 보류
 
 
-def test_거래조건은_신호가_없어도_통과가_아니다(book):
-    _, r = run("5만원 이상 구매 시 사은품 증정", probs(), book)
-    assert r["verdict"] == "hold"
+def test_전제에_따라_갈리면_보류와_분기(book):
+    r = run(book, "다라표지 문장", 질병_예방치료_표방=above("질병_예방치료_표방"))
+    assert (r["verdict"], r["hold_reason"]) == ("hold", "cat_unknown") and r["hold_types"] == ["질병_예방치료_표방"]
+    assert r["branches"]["식품"]["violations"] == ["질병_예방치료_표방"]
+    assert r["branches"]["화장품"]["verdict"] == "hold" and r["branches"]["일반상품"]["verdict"] == "hold"
+    assert r["branches"]["건기식_인정"]["verdict"] == "hold"                  # 목을 모르는 질병 표방 — 이 전제에서는 판정하지 못한다
 
 
-# ── D-275 · D-286 ③ — 판정 대상 아님 ──────────────────────────────────
+def test_품목을_알면_확정(book):
+    r = run(book, "다라표지 문장", Category.식품, 질병_예방치료_표방=above("질병_예방치료_표방"))
+    assert r["verdict"] == "confirmed" and r["violations"] == ["질병_예방치료_표방"] and r["branches"] == {}
 
 
-def test_주장_없는_문구_경계_신호만이면_판정_대상_아님(book):
-    a, r = run("서늘하고 건조한 곳에 보관하세요", probs(거짓_과장=near("거짓_과장")), book)
-    assert a["not_claim"] is True and a["signals"] == []
-    assert r["verdict"] == "confirmed" and r["violations"] == [] and r["not_claim"] is True
+def test_인코더가_합의하지_않으면_보류_유형은_남긴다(book):
+    r = run(book, "가나표지 문장", Category.화장품)
+    assert (r["verdict"], r["hold_reason"]) == ("hold", "low_conf") and r["hold_types"] == ["거짓_과장"]
+    assert r["rule"]["verdict"] == "confirmed"                                # 규칙만으로는 확정이었다
+    r = run(book, "가나표지 문장", Category.화장품, agree=False)              # 그래프의 지금 규칙 (D-269)
+    assert r["verdict"] == "confirmed" and r["violations"] == ["거짓_과장"]
 
 
-# ── D-127 — 코드가 인코더를 덮지 않는다 ─────────────────────────────────
+def test_다른_유형에_울린_것은_합의가_아니다(book):
+    r = run(book, "가나표지 문장", Category.화장품, 의약품_오인=above("의약품_오인"))
+    assert r["verdict"] == "hold" and r["hold_types"] == ["거짓_과장"]
 
 
-def test_τ_넘긴_인코더_신호는_판정_대상_아님으로_덮지_않는다(book):
-    a, r = run("서늘하고 건조한 곳에 보관하세요", probs(거짓_과장=above("거짓_과장")), book)
-    assert a["subject"] == "판정대상아님"
-    assert a["not_claim"] is False
-    assert r["verdict"] == "hold"
+def test_인코더가_내지_않는_유형은_사전이_선다(book):
+    r = run(book, "사아표지 문장", Category.화장품)
+    assert r["verdict"] == "confirmed" and r["violations"] == [WAIT]
 
 
-def test_주장_문장의_경계_신호는_보류(book):
-    a, r = run("한 끼로 든든한 하루를 시작하세요", probs(거짓_과장=near("거짓_과장")), book)
-    assert "near_threshold" in kinds(a)
-    assert r["verdict"] == "hold"
+# ── 인코더만 (D-224 · D-131) ───────────────────────────────────────────
+@pytest.mark.parametrize("category", [None, Category.식품, Category.건기식, Category.화장품, Category.일반상품, Category.전용법_미수록])
+def test_인코더만으로는_확정하지_않는다(book, category):
+    r = run(book, PLAIN, category, **{k: 0.99 for k in TH})
+    assert r["verdict"] == "hold" and r["violations"] == [] and r["hold_types"]
+    assert all(b["violations"] == [] for b in r["branches"].values())
 
 
-def test_신호가_전혀_없으면_확정_위반_없음(book):
-    a, r = run("한 끼로 든든한 하루를 시작하세요", probs(), book)
-    assert a["signals"] == [] and a["not_claim"] is False
-    assert r["verdict"] == "confirmed" and r["violations"] == []
+def test_인코더_후보는_보류의_유형_후보(book):
+    r = run(book, PLAIN, Category.식품, 소비자_기만=above("소비자_기만"))
+    assert (r["verdict"], r["hold_reason"], r["hold_types"]) == ("hold", "low_conf", ["소비자_기만"])
 
 
-def test_사전만으로는_확정하지_않는다(book):
-    _, r = run("이 제품을 드시면 당뇨가 완치됩니다", probs(), book)
-    assert r["dict_backed"]
-    assert r["verdict"] == "hold" and r["violations"] == []
+def test_여유_구간은_보류(book):
+    r = run(book, PLAIN, Category.식품, 거짓_과장=near("거짓_과장"))
+    assert (r["verdict"], r["hold_reason"], r["hold_types"]) == ("hold", "low_conf", [])
 
 
-def test_사전과_인코더가_합의하면_확정(book):
-    _, r = run("이 제품을 드시면 당뇨가 완치됩니다", probs(질병_예방치료_표방=above("질병_예방치료_표방")), book)
-    assert r["verdict"] == "confirmed" and "질병_예방치료_표방" in r["violations"]
-    assert r["basis"]  # D-224 — 확정에는 근거 조문
+def test_자격_없는_적중은_인코더가_조용해도_보류(book):
+    r = run(book, "자차표지 문장", Category.식품)
+    assert (r["verdict"], r["hold_reason"]) == ("hold", "low_conf") and r["hold_types"] == ["질병_예방치료_표방"]
 
 
-def test_인코더_단독은_확정하지_않는다(book):
-    _, r = run("한 끼로 든든한 하루를 시작하세요", probs(거짓_과장=above("거짓_과장")), book)
-    assert r["verdict"] in ("hold", "no_basis") and r["violations"] == []
+def test_거래_조건은_보류이고_후보는_표시광고법_유형만(book):
+    r = run(book, TRADE, Category.식품, 질병_예방치료_표방=above("질병_예방치료_표방"))
+    assert (r["verdict"], r["hold_reason"], r["hold_types"]) == ("hold", "low_conf", []) and not r["not_claim"]
+    r = run(book, TRADE, Category.식품, 거짓_과장=above("거짓_과장"), 의약품_오인=above("의약품_오인"))
+    assert (r["verdict"], r["hold_reason"], r["hold_types"]) == ("hold", "low_conf", ["거짓_과장"])
+    r = run(book, TRADE, Category.식품)                                       # 인코더가 조용해도 통과로 내지 않는다 (D-272 개정 ①)
+    assert r["verdict"] == "hold" and not r["pass"]
 
 
-# ── D-229 · D-263 · D-276 — 전제 ─────────────────────────────────────
+# ── 통과 (D-273 · D-314 · D-319 ②) ─────────────────────────────────────
+def test_사전도_인코더도_조용하면_확정_위반없음(book):
+    r = run(book, PLAIN, Category.식품)
+    assert r["verdict"] == "confirmed" and r["violations"] == [] and r["pass"] and r["outcome"] == "pass"
+    assert r["rule"]["verdict"] == "hold"                                     # 규칙만으로는 보류였다 (D-269)
 
 
-def test_건기식_전제에서는_건기식_오인을_확정하지_않는다(book):
-    _, r = run("매일 한 포로 면역 기능을 챙기세요", probs(**{HF: above(HF)}), book, category=Category.건기식)
-    for p, br in r["branches"].items():
-        assert HF not in br["violations"], p
-    assert HF not in r["violations"]
+def test_품목을_모르면_통과가_없다(book):
+    r = run(book, PLAIN)
+    assert (r["verdict"], r["hold_reason"]) == ("hold", "cat_unknown") and r["outcome"] == "hold"
+    assert r["branches"]["식품"]["pass"] and r["branches"]["일반상품"]["hold_reason"] == "law_uncovered"
 
 
-def test_품목_모름이고_전제별로_갈리면_보류_cat_unknown(book):
-    _, r = run("이 제품은 기억력 개선에 도움을 줄 수 있습니다", probs(), book)
-    assert r["verdict"] == "hold" and r["hold_reason"] == "cat_unknown"
-    assert r["branches"]["건기식_인정"]["verdict"] == "confirmed"
-    assert r["conservative_premise"] == "식품"
+@pytest.mark.parametrize("category", [Category.일반상품, Category.전용법_미수록])
+def test_주된_광고법을_안_본_품목은_통과가_없다(book, category):
+    r = run(book, PLAIN, category)
+    assert (r["verdict"], r["hold_reason"]) == ("hold", "law_uncovered") and r["outcome"] == "hold"
 
 
-def test_건기식인데_인정_여부를_모르면_premise_unknown(book):
-    _, r = run("이 제품은 기억력 개선에 도움을 줄 수 있습니다", probs(), book, category=Category.건기식)
-    assert r["hold_reason"] == "premise_unknown"
-    assert r["conservative_premise"] == "건기식_비인정"
+def test_판정_대상_아님(book):
+    r = run(book, NOTCLAIM, Category.식품)
+    assert r["verdict"] == "confirmed" and r["not_claim"] and r["outcome"] == "pass"
+    r = run(book, NOTCLAIM, Category.일반상품)                                # 주장이 없는 문장은 법을 안 봤어도 확정이다 (D-314)
+    assert r["verdict"] == "confirmed" and r["not_claim"] and r["outcome"] == "hold"
+    r = run(book, NOTCLAIM)                                                   # 문장은 확정 · 종착은 통과가 아니다 (D-319 ②)
+    assert r["verdict"] == "confirmed" and r["not_claim"] and r["outcome"] == "hold"
+    r = run(book, NOTCLAIM, Category.식품, 거짓_과장=above("거짓_과장"))      # 인코더가 울리면 판정 대상이다
+    assert r["verdict"] == "hold" and not r["not_claim"]
 
 
-def test_사업자_선택은_기록되는_판정을_바꾸지_않는다(book):
-    _, r = run("이 제품은 기억력 개선에 도움을 줄 수 있습니다", probs(), book)
-    sel = s2.apply_selection(r, "건기식_인정", detected=None)
-    assert sel["verdict"] == r["verdict"] == "hold"
-    ps = sel["premise_selection"]
-    assert ps["applied"] and ps["pass_badge"] is False
-    assert ps["notice"] == s2.NOTICE_USER_SELECTED
+# ── 전제가 유형을 바꾸는 자리 (D-319 ④′) ───────────────────────────────
+def test_건강기능식품에서는_3호_후보가_서지_않는다(book):
+    r = run(book, PLAIN, Category.건기식, **{HF: above(HF)})
+    assert r["verdict"] == "hold" and r["hold_types"] == ["거짓_과장"]        # 비인정 전제의 [별표 1] 4.나
+    assert r["branches"]["건기식_인정"]["hold_types"] == [] and r["branches"]["건기식_인정"]["verdict"] == "hold"
+    assert r["branches"]["건기식_비인정"]["hold_types"] == ["거짓_과장"]
+    r = run(book, PLAIN, Category.식품, **{HF: above(HF)})
+    assert r["hold_types"] == [HF] and r["branches"]["일반식품_기능성"]["hold_types"] == []
 
 
-def test_전용법_미수록은_신호가_없어도_law_uncovered(book):
-    _, r = run("한 끼로 든든한 하루를 시작하세요", probs(), book, category=Category.전용법_미수록)
-    assert r["verdict"] == "hold" and r["hold_reason"] == "law_uncovered"
+def test_건강기능식품의_3호_적중은_전제에_따라_갈린다(book):
+    r = run(book, "마바표지 문장", Category.건기식, **{HF: above(HF)})
+    assert (r["verdict"], r["hold_reason"]) == ("hold", "premise_unknown") and r["hold_types"] == ["거짓_과장"]
+    assert r["branches"]["건기식_비인정"]["violations"] == ["거짓_과장"]      # 3호 → 4호 나목 · 인코더의 3호 후보도 같이 옮긴다
+    assert r["branches"]["건기식_인정"]["verdict"] == "hold"
 
 
-# ── 10-01 팀장 채점 기준 — run_judge_dist 버킷 ───────────────────────────
+# ── 팀장 평가 도구와 같은 자 ────────────────────────────────────────────
+def test_평가_도구에_그대로_들어간다(book):
+    eg = pytest.importorskip("scripts.eval_graph")
+    rows = [{"id": "x:1", "text": "가나표지 문장", "labels": ["거짓_과장"], "조건": "B", "근거": [f"{FAIR}:제3조제1항제1호"], "split": "dev"},
+            {"id": "x:2", "text": PLAIN, "labels": ["소비자_기만"], "조건": "B", "근거": [f"{FAIR}:제3조제1항제2호"], "split": "dev"},
+            {"id": "x:3", "text": "오늘은 맑은 날", "labels": [], "조건": "L", "근거": [], "split": "dev"}]
+    ps = [probs(거짓_과장=above("거짓_과장")), probs(소비자_기만=above("소비자_기만")), probs()]
+    preds = [eg.predict(s2.stage2_judge(s1.stage1_signals(r["text"], p, book, TH), category=Category.화장품)["state"])
+             for r, p in zip(rows, ps)]
+    assert [p["class"] for p in preds] == ["확정위반", "보류", "확정무위반"]
+    assert preds[0]["types"] == ["거짓_과장"] and preds[1]["candidates"] == ["소비자_기만"]
+    s = eg.summarize(rows, preds)
+    assert s["detect"] == {"positive": 2, "confirmed": 1, "detected": 2}
+    assert s["lawful"]["주장"] == (1, 0)
 
 
-def test_채점_버킷():
-    import run_judge_dist as rd
+def test_문장_판정은_계약을_지난다(book):
+    r = run(book, "다라표지 문장", 질병_예방치료_표방=above("질병_예방치료_표방"))
+    st = r["state"]
+    assert st["sentences"][0].verdict is Verdict.hold and len(st["branches"]) == 6
+    assert all(b.criteria for b in st["branches"])
 
-    def b(**k):
-        return rd.bucket({"id": "t", "text": k.pop("text", "보관하세요"), **k})
 
-    assert b(조건="L") == "neg"
-    assert b() == "neg"
-    assert b(조건="C") == b(조건="A") == b(조건="B") == "pending"
-    assert b(labels=["거짓_과장"]) == "scored"
-    assert b(조건="M", labels=["거짓_과장"]) == "M"  # M 은 채점 안 함
-    assert b(조건="D", labels=["거짓_과장"]) == "D"  # D 는 별도 지표
-    assert b(조건="D", text="무료배송 이벤트") == "D_거래"
+# ── 분포 스크립트 ───────────────────────────────────────────────────────
+def test_버킷은_확정_8종_기준이다():
+    rd = pytest.importorskip("run_judge_dist")
+    row = lambda cond, labels, rid="g:1#1", text=PLAIN: {"id": rid, "text": text, "조건": cond, "labels": labels}
+    assert rd.bucket(row("B", ["비방광고"])) == "scored"                     # 새 2종도 채점 (D-321)
+    assert rd.bucket(row("B", ["부당_비교광고", WAIT])) == "scored"
+    assert rd.bucket(row("A", [WAIT])) == "대기"                             # 편입 대기만 달린 행
+    assert rd.bucket(row("C", [])) == "pending"                              # 유형 없는 위반
+    assert rd.bucket(row("M", ["거짓_과장"])) == "M"
+    assert rd.bucket(row("L", [])) == "neg"
+    assert rd.bucket(row("D", [], rid="gf:1#1")) == "D"                      # 적법 문장(주장 없음) — 원천이 승인한 형태만 (D-301)
+    assert rd.bucket(row("D", [])) == "D_기타"
+    assert rd.bucket(row("D", [], text=TRADE)) == "D_거래"
     with pytest.raises(SystemExit):
-        b(조건="L", labels=["거짓_과장"])  # L(적법)에 위반 라벨 — 데이터 어긋남
-    assert rd.TEAM["scored"] == rd.TEAM["pending"] == "양성"
+        rd.bucket(row("L", ["거짓_과장"]))
+
+
+def test_test_는_final_없이는_멈춘다(tmp_path):
+    rd = pytest.importorskip("run_judge_dist")
+    with pytest.raises(SystemExit):
+        rd.main(["--split", "test", "--out-dir", str(tmp_path)])
