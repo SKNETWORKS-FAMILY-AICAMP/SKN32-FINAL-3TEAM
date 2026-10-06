@@ -462,7 +462,8 @@ def landing(request: Request) -> HTMLResponse:
 _MAX_COPIES = 5
 
 #: 품목 분기를 고른 뒤 「다시 선택」할 수 있는 횟수 (팀장 2026-10-01). 화면이 회차만큼 미리 그려 두고 넘긴다.
-_MAX_REDO = 3
+#: 🔄 2026-10-06 — 3 → 5. 분기별 판정 결과를 바꿔 보는 횟수다 — 엔진을 다시 돌리지 않는다.
+_MAX_REDO = 5
 
 #: 「예시 넣기」 문구 — 프로토타입 `SAMPLE_COPY` 그대로. 🚨 실제 광고 인용이 아니라 화면용 예시다.
 _SAMPLE_COPY = (
