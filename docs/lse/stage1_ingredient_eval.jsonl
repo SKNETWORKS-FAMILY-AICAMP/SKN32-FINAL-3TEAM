@@ -1,0 +1,14 @@
+{"no": 1, "input": "꽃송이 버섯추출물만 있으면 감기도 비켜 가요", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["꽃송이", "버섯추출물"]}
+{"no": 2, "input": "요즘 핫한 잎새 버섯 분말, 혈당 스파이크 OUT", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["잎새", "버섯"]}
+{"no": 3, "input": "블랙 라즈베리 추출물로 10년 젊게", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["블랙", "라즈베리"]}
+{"no": 4, "input": "레드 오렌지 추출물 마시고 허리 사이즈 줄었어요", "violation_types": ["후기_체험기_기만"], "expect": "salvage", "keep": ["레드", "오렌지"]}
+{"no": 5, "input": "그린 루이보스 추출물 한 잔이면 독소 끝", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["그린", "루이보스"]}
+{"no": 6, "input": "와일드 블루베리 분말, 시력 회복 1위", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["와일드", "블루베리"]}
+{"no": 7, "input": "골든 아마씨 오일로 혈관 청소", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["골든", "아마씨"]}
+{"no": 8, "input": "자색 고구마 분말, 먹는 순간 피부 광채", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["자색", "고구마"]}
+{"no": 9, "input": "백 하수오 추출물로 흰머리가 검게", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["백", "하수오"]}
+{"no": 10, "input": "흑 보리 분말 듬뿍, 탈모 고민 끝", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["흑", "보리"]}
+{"no": 11, "input": "[암 예방 특가] 고농축 꽃송이 버섯추출물 스틱", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["꽃송이", "버섯추출물"]}
+{"no": 12, "input": "프리미엄 와일드 블루베리 분말 200g, 눈이 맑아지는 기적", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["와일드", "블루베리", "200g"]}
+{"no": 13, "input": "국산 잎새 버섯을 말려 썰었어요 – 당뇨인 필수 차", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["국산", "잎새", "버섯"]}
+{"no": 14, "input": "변비 해결 그린 키위즙, 국산 그린 키위를 껍질째 착즙", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["국산", "그린", "키위"]}
