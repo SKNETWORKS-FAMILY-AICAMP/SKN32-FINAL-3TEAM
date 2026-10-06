@@ -13,7 +13,9 @@
 
   {% elif rw.down %}
   <b>고쳐 쓰기 서버(sLLM)에 연결하지 못했어요</b> — 후보를 만들지 않았어요 (D-146).<br>
-  <span class="rv-note">서버를 띄운 뒤 다시 눌러 주세요 · <code>.venv-sllm\Scripts\python.exe docs\lse\sllm_service.py --serve --port 8765</code></span>
+  {# 🔄 2026-10-06 (흡수 검토) — 여기 있던 서버 실행 명령 줄을 뺐다. 사용자 화면에 저장소 안쪽 경로를 보이지 않는다.
+     띄우는 법은 `docs/lse/sLLM_연결_안내_2026-10-05.md` 에 있다 #}
+  <span class="rv-note">잠시 뒤 다시 눌러 주세요.</span>
 
   {% elif rw.out.outcome == "candidate" and rw.rejudge and rw.rejudge.status == "rejected" %}
   <b>보류 — 고친 문구가 재판정에서 위반 의심</b><br>

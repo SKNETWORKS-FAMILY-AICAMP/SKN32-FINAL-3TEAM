@@ -116,9 +116,15 @@ CLAIM = re.compile(r"([가-힣A-Za-z0-9·,\s()]{2,40}?)(?:에|[가-힣]{0,2}는\
 
 @cache
 def approved_blob() -> str:
-    """식약처 인정 기능성 문구를 이어 붙인 정규화문 — 주장 구가 여기 들어 있어야 「인정된 기능성」이다."""
+    """식약처 인정 기능성 문구를 이어 붙인 정규화문 — 주장 구가 여기 들어 있어야 「인정된 기능성」이다.
+
+    🔴 2026-10-06 (ohb 흡수 검토) — 파일이 없으면 **멈춘다** (D-220). ⛔ 종전에는 빈 문자열을 돌려줘서
+       인정 기능성 대조(`unapproved_claim`)가 경고 없이 빠졌다 — 파생물을 안 받은 PC 에서 관문이 열린 채 돈다.
+    """
     if not HF_CLAIMS.exists():
-        return ""
+        raise FileNotFoundError(
+            f"🔴 {HF_CLAIMS} 가 없다 — 인정 기능성 대조 없이 관문을 돌리지 않는다. `launcher.py data-sync` 로 받는다."
+        )
     parts = []
     for line in HF_CLAIMS.open(encoding="utf-8"):
         r = json.loads(line)
@@ -255,9 +261,15 @@ def _cv(ch: str) -> int:
 
 @cache
 def dict_entries() -> tuple[dm.Entry, ...]:
-    """금지 표현 사전 — **단독판정 자격** 항목만(D-156). 파일이 없으면 빈 사전(경고는 부르는 쪽)."""
+    """금지 표현 사전 — **단독판정 자격** 항목만(D-156).
+
+    🔴 2026-10-06 (ohb 흡수 검토) — 파일이 없으면 **멈춘다** (D-220). ⛔ 종전에는 빈 사전을 돌려주고
+       「경고는 부르는 쪽」이라 적었는데 경고하는 호출부가 없었다 — 사전 검사가 조용히 빠졌다.
+    """
     if not DICT.exists():
-        return ()
+        raise FileNotFoundError(
+            f"🔴 {DICT} 가 없다 — 금지 표현 사전 없이 관문을 돌리지 않는다. `launcher.py data-sync` 로 받는다."
+        )
     out = []
     for line in DICT.open(encoding="utf-8"):
         r = json.loads(line)
