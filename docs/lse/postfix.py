@@ -207,10 +207,13 @@ def _official_ingredients() -> str:
 
         path = HERE.parents[1] / "data" / "derived" / "hf_display_claims.jsonl"
         names = []
-        if path.exists():
-            for line in path.open(encoding="utf-8"):
-                r = json.loads(line)
-                names.append(dm.norm(re.sub(r"\([^)]*\)", "", r.get("APLC_RAWMTRL_NM") or "")))
+        # 🔴 2026-10-06 (ohb 흡수 검토) — 파일이 없으면 멈춘다 (D-220). ⛔ 종전에는 빈 목록으로 지나가
+        #    「공식 원료명에 있는가」 대조가 늘 「없음」이 됐다. `stage_gate.approved_blob` · `dict_entries` 와 같은 규칙이다
+        if not path.exists():
+            raise FileNotFoundError(f"🔴 {path} 가 없다 — 공식 원료명 대조 없이 후처리를 돌리지 않는다.")
+        for line in path.open(encoding="utf-8"):
+            r = json.loads(line)
+            names.append(dm.norm(re.sub(r"\([^)]*\)", "", r.get("APLC_RAWMTRL_NM") or "")))
         _OFFICIAL = "\n".join(n for n in names if n)
     return _OFFICIAL
 
