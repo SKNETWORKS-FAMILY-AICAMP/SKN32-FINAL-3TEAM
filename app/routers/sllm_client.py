@@ -44,6 +44,26 @@ def rewrite(text: str, violation_types: list[str]) -> tuple[str, dict | None]:
             out = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, OSError, ValueError):
         return "down", None
-    if not isinstance(out, dict) or out.get("outcome") not in OUTCOMES:
+    if not _well_formed(out):
         return "down", None
     return "ok", out
+
+
+def _well_formed(out: object) -> bool:
+    """화면(`_review_rewrite.html`)이 읽는 칸이 다 있는가 — 없으면 깨진 응답이다 (D-220).
+
+    🔴 2026-10-06 (흡수 검토 · 재현) — 종착만 보고 통과시켰더니 `candidate` 인데 `rewrite` 가 빈 응답,
+       `latency_ms` 가 없는 응답에서 화면이 없는 값을 읽다 500 을 냈다. 서버(`docs/lse/sllm_service.py`)는
+       후보 문장이 비면 `rewrite: None` 인 채 `candidate` 를 돌려줄 수 있다.
+    ⛔ 화면에서 빈 값을 기본값으로 메우지 않는다 — 문구 없는 후보가 「후보」로 그려진다 (D-162).
+    """
+    if not isinstance(out, dict) or out.get("outcome") not in OUTCOMES:
+        return False
+    if not isinstance(out.get("model"), str) or not isinstance(out.get("latency_ms"), int | float):
+        return False
+    if not isinstance(out.get("reasons", []), list) or not isinstance(out.get("repairs", []), list):
+        return False
+    if out["outcome"] == "candidate":
+        rw = out.get("rewrite")
+        return isinstance(rw, dict) and isinstance(rw.get("body"), str) and bool(rw["body"].strip())
+    return True

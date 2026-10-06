@@ -224,3 +224,48 @@ def test_버튼이_없으면_이유를_적는다() -> None:
 
     html = TestClient(app).get("/u/preview/05_certificate_a").text
     assert "고쳐 쓰기 없음 · 사유 A(자격형)" in html
+
+
+# ── 2026-10-06 흡수 검토 — 깨진 응답은 후보가 아니다 (D-220 · D-146) ─────────────────────
+@pytest.mark.parametrize(
+    "broken",
+    [
+        {**_CANDIDATE, "rewrite": None},  # 후보인데 문구가 없다
+        {**_CANDIDATE, "rewrite": {"body": "  ", "mandatory_note": None, "placement": None}},
+        {k: v for k, v in _CANDIDATE.items() if k != "latency_ms"},
+        {k: v for k, v in _CANDIDATE.items() if k != "model"},
+        {**_CANDIDATE, "outcome": "done"},
+        ["candidate"],
+    ],
+)
+def test_칸이_빠진_응답은_깨진_응답이다(broken: object) -> None:
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    assert not sllm_client._well_formed(broken)
+    assert sllm_client._well_formed(_CANDIDATE)
+
+
+def test_깨진_응답이면_화면은_후보를_그리지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 재현 — 고치기 전에는 `rw.rejudge` 를 읽다 500 이었다. 가짜는 서버 응답까지만 바꾼다(검사는 진짜)."""
+    import io  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    from app.routers import sllm_client  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    payload = json.dumps({**_CANDIDATE, "rewrite": None}).encode()
+    monkeypatch.setattr(sllm_client.urllib.request, "urlopen", lambda *a, **k: io.BytesIO(payload))
+    monkeypatch.setattr(
+        user_router, "_core_judge", lambda text: ("ok", _fixture("02_hold_low_conf"))
+    )
+    html = _go()
+    assert "연결하지 못했어요" in html
+    assert "고친 문구 후보" not in html
+
+
+def test_화면에_서버_실행_명령을_보이지_않는다(wired) -> None:  # noqa: ANN001
+    wired.sllm_out = ("down", None)
+    html = _go()
+    assert "연결하지 못했어요" in html
+    assert ".venv-sllm" not in html
+    assert "sllm_service.py" not in html
