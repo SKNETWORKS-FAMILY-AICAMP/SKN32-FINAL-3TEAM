@@ -307,6 +307,80 @@ def headline(s):
            f" · 행 {s['class']}"
 
 
+def type_table(rows, cand_rows, active):
+    """유형별 인코더 후보 — **이 실행의 모든 행** 기준(위반 · M · D · L 을 다 분모에 넣는다). 판정 로직과 무관하게 인코더 후보만 본다.
+
+    정밀도 = 후보가 선 행 중 그 유형이 정답인 비율. 결과보고서의 「유형 있는 위반 행 안」 정밀도와 다르다 — 여기는 적법 문장에 선 것도 틀린 것으로 센다.
+    「어느 유형의 후보를 믿을 수 있나」를 dev 로 보는 표다. 🔴 test 에서는 진단으로만 읽고 이 표로 규칙 · 문턱을 고르지 않는다 (D-175).
+    """
+    keep = [(r, c) for r, c in zip(rows, cand_rows) if not r["bucket"].startswith(("hold:", "eval:"))]
+    out = {}
+    print(f"\n유형별 인코더 후보 — 이 실행의 모든 행 기준 (n={len(keep)}) · 판정 로직과 무관")
+    print(f"  {'유형':12s} {'정답':>5s} {'후보':>5s} {'맞음':>5s} {'정밀도':>6s} {'재현율':>6s}   잘못 선 곳 — 다른 유형 위반 · 유형 없는 위반 · M · D(적법) · D_기타 · L")
+    for t in active:
+        right = lambda r: r["bucket"] == "scored" and t in (r.get("labels") or [])
+        gold = sum(1 for r, _ in keep if right(r))
+        fire = [(r, c) for r, c in keep if t in c]
+        tp = sum(1 for r, _ in fire if right(r))
+        w = Counter(r["bucket"] for r, _ in fire if not right(r))
+        fmt = lambda k, n: f"{k / n:6.3f}" if n else "     —"
+        mark = "  측정 불가(정답 30 미만 · D-40)" if gold < 30 else ""
+        print(f"  {t[:12]:12s} {gold:5d} {len(fire):5d} {tp:5d} {fmt(tp, len(fire))} {fmt(tp, gold)}   "
+              f"{w['scored']:4d} · {w['pending']:3d} · {w['M']:3d} · {w['D']:3d} · {w['D_기타']:3d} · {w['neg']:2d}{mark}")
+        out[t] = {"gold": gold, "fired": len(fire), "tp": tp, "wrong_by_bucket": dict(w)}
+    solo = Counter()
+    for r, c in keep:
+        if len(c) == 1:
+            solo[(r["bucket"], c[0])] += 1
+    top = Counter()
+    for (b, t), v in solo.items():
+        top[t] += v
+    if top:
+        t0 = top.most_common(1)[0][0]
+        n_by = Counter(r["bucket"] for r, _ in keep)
+        print(f"  후보가 「{t0}」 하나뿐인 행 — " + " · ".join(f"{b} {solo[(b, t0)]}/{n_by[b]}" for b in ("scored", "pending", "M", "D", "D_기타", "neg") if n_by[b]))
+    return out
+
+
+def timing(rows, tok, mdl, labels, book, th, cat_of, agree, margin, n):
+    """추론 시간 — 문장 하나씩(배치 1) · 배치 16 · 판정 로직(1 · 2단계). 이 기기의 CPU 로 잰 값이다.
+
+    🚨 배포 기기의 수가 아니다 — 판정 목표(p95 3초 · D-77)와 견줄 때는 배포 환경에서 다시 잰다. 여기 수는 「대략 어느 자릿수인가」를 보는 것이다.
+    """
+    import time
+
+    import torch
+    texts = [r["text"] for r in rows]
+    lens = [len(tok(t)["input_ids"]) for t in texts]          # 특수 토큰 포함 · 학습은 128 에서 자른다
+    lens_sorted = sorted(lens)
+    q = lambda xs, f: xs[min(len(xs) - 1, int(f * len(xs)))]
+    print(f"\n[문장 길이 · 토큰] {len(texts)}행 — 중앙값 {q(lens_sorted, 0.5)} · p95 {q(lens_sorted, 0.95)} · 최대 {lens_sorted[-1]} · "
+          f"128 초과 {sum(x > 128 for x in lens)}행 ({sum(x > 128 for x in lens) / len(lens):.1%}) — 넘는 부분은 잘려 인코더가 보지 못한다")
+    sample = random.Random(0).sample(range(len(rows)), min(n, len(rows)))
+    for i in sample[:3]:                                        # 예열
+        predict_label_probs_batch([texts[i]], tok, mdl, labels)
+    one, probs = [], {}
+    for i in sample:
+        t0 = time.perf_counter()
+        probs[i] = predict_label_probs_batch([texts[i]], tok, mdl, labels)[0]
+        one.append((time.perf_counter() - t0) * 1000)
+    t0 = time.perf_counter()
+    predict_label_probs_batch([texts[i] for i in sample], tok, mdl, labels, batch_size=16)
+    batch_ms = (time.perf_counter() - t0) * 1000 / len(sample)
+    judge = []
+    for i in sample:
+        t0 = time.perf_counter()
+        stage2_judge(stage1_signals(texts[i], probs[i], book, th, margin=margin), category=cat_of(rows[i]), agree=agree)
+        judge.append((time.perf_counter() - t0) * 1000)
+    row = lambda name, xs: print(f"  {name:34s} 평균 {sum(xs) / len(xs):7.1f} ms · 중앙값 {q(sorted(xs), 0.5):7.1f} · p95 {q(sorted(xs), 0.95):7.1f} · 최대 {max(xs):7.1f}")
+    print(f"\n[추론 시간] 표본 {len(sample)}문장 · CPU · torch 스레드 {torch.get_num_threads()}")
+    row("인코더 — 문장 하나씩 (배치 1)", one)
+    print(f"  {'인코더 — 배치 16 (문장당)':34s} 평균 {batch_ms:7.1f} ms")
+    row("판정 로직 — 1 · 2단계 (인코더 제외)", judge)
+    print("  🚨 이 기기의 CPU 로 잰 값이다 — 배포 환경에서 다시 잰다. 문서 한 건은 문장 수만큼 인코더가 돈다")
+    print("     배치는 가장 긴 문장에 맞춰 채우므로(패딩) 짧은 문장이 많으면 CPU 에서는 하나씩 돌리는 것보다 빠르지 않을 수 있다")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=None, help="모델 폴더 또는 zip. zip 은 저장소 밖(~/copylane_local/models)에 풀어 쓴다 · `--probs-csv` 를 주면 label_scheme.json 만 읽는다")
@@ -325,6 +399,7 @@ def main(argv=None):
     ap.add_argument("--holdout", action="append", default=[], help="추가 파일 홀드아웃 버킷 — 모델을 직접 돌릴 때만")
     ap.add_argument("--eval-file", action="append", default=[], help="검증 전용 파일 전부를 버킷 eval:<이름> 으로 — 모델을 직접 돌릴 때만")
     ap.add_argument("--with-text", action="store_true", help="문장 원문 포함 — 저장소 밖 경로일 때만 (D-249 ⑥)")
+    ap.add_argument("--timing", type=int, default=0, metavar="N", help="추론 시간 — N 문장을 뽑아 인코더 · 판정 로직의 문장당 시간과 토큰 길이를 재고 끝낸다 (dev · 모델 직접 실행만)")
     a = ap.parse_args(argv)
 
     if a.split == "test" and not a.final:
@@ -333,6 +408,8 @@ def main(argv=None):
         raise SystemExit("🔴 여유 구간은 dev 에서만 고른다 (D-175) — test 에서는 훑지 않는다.")
     if a.conditional and a.category:
         raise SystemExit("🔴 --conditional 과 --category 는 같이 쓰지 않는다 — 품목을 골든에서 읽거나 하나로 고정하거나.")
+    if a.timing and (a.probs_csv or a.split == "test"):
+        raise SystemExit("🔴 --timing 은 dev 에서 모델을 직접 돌릴 때만 쓴다 — `--probs-csv` · `--split test` 와 같이 쓰지 않는다.")
     if a.probs_csv and (a.holdout or a.eval_file):
         raise SystemExit("🔴 --holdout · --eval-file 은 저장된 확률이 없다 — `--probs-csv` 없이 모델을 직접 돌릴 때만 쓴다.")
     out_dir = os.path.abspath(a.out_dir)
@@ -426,9 +503,13 @@ def main(argv=None):
     book = load_banned_terms(a.banned)
     with open(a.banned, "rb") as f:
         dict_sha = hashlib.sha256(f.read()).hexdigest()
-    probs = [prob_of[r["id"]] for r in rows] if prob_of else predict_label_probs_batch([r["text"] for r in rows], tok, mdl, labels)
     agree = not a.dict_stands
     cat_of = (lambda r: Category(r["품목"])) if a.conditional else (lambda r: Category(a.category) if a.category else None)
+    if a.timing:
+        print(f"[INFO] golden {sha[:12]} · {a.split} {len(rows)}행 · 모델 {scheme.get('experiment', '?')}")
+        timing(rows, tok, mdl, labels, book, th, cat_of, agree, a.margin, a.timing)
+        return 0
+    probs = [prob_of[r["id"]] for r in rows] if prob_of else predict_label_probs_batch([r["text"] for r in rows], tok, mdl, labels)
     cat_note = "골든 품목(조건부)" if a.conditional else (a.category or "모름(무조건부)")
     print(f"[INFO] golden {sha[:12]} · 사전 {dict_sha[:12]} ({len(book.exact)} 단독판정 · {len(book.weak)} 자격 없음) · {a.split} {len(rows)}행 · 품목 {cat_note}"
           + ("  🔴 최종 측정 — 이 결과로 규칙을 고치지 않는다" if a.final else ""))
@@ -455,7 +536,7 @@ def main(argv=None):
     reasons, subj, moved, whys = defaultdict(Counter), defaultdict(Counter), defaultdict(Counter), Counter()
     prem = defaultdict(lambda: defaultdict(Counter))
     famdist = defaultdict(lambda: defaultdict(Counter))
-    states, states0, out = [], [], []
+    states, states0, out, cand_rows = [], [], [], []
     for r, lp in zip(rows, probs):
         s1 = stage1_signals(r["text"], lp, book, th, margin=a.margin)
         cat = cat_of(r)
@@ -468,6 +549,7 @@ def main(argv=None):
         dist0[b][st0] += 1
         moved[b][(st0, st)] += 1
         whys[s2["why"]] += 1
+        cand_rows.append(list(s2["enc_candidates"]))
         subj[b][s2["subject"]] += 1
         if s2["hold_reason"]:
             reasons[b][s2["hold_reason"]] += 1
@@ -505,6 +587,7 @@ def main(argv=None):
     print("\n인코더 층의 까닭별 (기록되는 판정 기준)")
     for k, v in whys.most_common():
         print(f"  {v:5d}  {k}")
+    types = type_table(rows, cand_rows, [x for x in labels if 0 < th[x] <= 1])
     print("\n사항 판별 (주장 · 거래조건 · 혼합 · 판정대상아님)")
     for b in order:
         if subj[b]:
@@ -555,7 +638,7 @@ def main(argv=None):
             "probs_csv": os.path.basename(a.probs_csv) if a.probs_csv else None, "margin": a.margin, "agree_required": agree,
             "category": cat_note, "exclude_injected": a.exclude_injected, "judged_by": g.JUDGED_BY, "at": stamp,
             "dist": {"규칙만": {b: dict(c) for b, c in dist0.items()}, "규칙+인코더": {b: dict(c) for b, c in dist.items()}},
-            "hold_reasons": {b: dict(c) for b, c in reasons.items()}, "why": dict(whys), "summary": summary}
+            "hold_reasons": {b: dict(c) for b, c in reasons.items()}, "why": dict(whys), "encoder_types": types, "summary": summary}
     with open(os.path.join(out_dir, tag + ".json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(meta, f, ensure_ascii=False, indent=1, default=str)
     print(f"\n[INFO] 행별 결과(저장소 밖): {path}" + ("" if a.with_text else " · 문장 원문 없음(id 로 대조)"))
