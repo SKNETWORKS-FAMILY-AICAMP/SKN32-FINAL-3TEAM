@@ -411,3 +411,78 @@ def test_그래프_평가는_탐지_재현율을_확정_재현율과_나란히_�
     assert s["detect"] == {"positive": 2, "confirmed": 0, "detected": 1}
     assert s["types"]["질병_예방치료_표방"] == (2, 0, 0), "🚨 후보가 예측으로 세어졌다 (D-127)"
     assert s["committed"] == 0
+
+
+def test_불가_사유_진단은_축이_다른_짝을_어긋남으로_세지_않는다() -> None:
+    """🆕 2026-10-06 — 예측 사유(A/B/C)와 라벨 조건의 대조. 라벨의 A 는 지위 · 조성 전부라 예측 B 와는 축이 다르다(D-308 4′)."""
+    from scripts import eval_graph as eg
+
+    def row(cond: str | None, *labels: str) -> dict:
+        return {
+            "text": "문장",
+            "조건": cond,
+            "labels": list(labels),
+            "근거": [],
+            "split": "test_sentence",
+        }
+
+    rows = [
+        row("C", "질병_예방치료_표방"),
+        row("A", "거짓_과장"),
+        row("C", "건강기능식품_오인"),
+        row("C", "거짓_과장"),
+        row("M", "거짓_과장"),
+        row("B", "거짓_과장"),
+        row(None, "거짓_과장"),
+    ]
+    preds = [{"infeasibility": x} for x in ("C", "B", "A", "B", "B", None, "B")]
+    q = eg.reason_report(rows, preds)
+    assert q == {"n": 4, "exact": 1, "axis_gap": 1, "wrong": 2, "wrong_hf": 1}, q
+    assert eg.reason_report([row("C", "거짓_과장")], [{}])["n"] == 0, (
+        "🚨 사유 없는 예측을 셌다 — 없음을 일치로도 어긋남으로도 세지 않는다 (D-220)"
+    )
+
+
+def test_보수_기록은_분기_보류에_실린_유형을_기록으로_센다() -> None:
+    """🆕 2026-10-06 (D-263 ① · D-319 ①) — 확정 ∪ 전제를 몰라 멈춘 문장의 유형. 자격 없는 적중의 후보(`candidates`)는 세지 않는다."""
+    from scripts import eval_graph as eg
+
+    def row(cond: str, *labels: str) -> dict:
+        return {
+            "text": "문장",
+            "조건": cond,
+            "labels": list(labels),
+            "근거": [],
+            "split": "test_sentence",
+        }
+
+    rows = [
+        row("C", "질병_예방치료_표방"),
+        row("B", "거짓_과장"),
+        row("B", "거짓_과장"),
+        row("D"),
+        row("C", "의약품_오인"),
+    ]
+    preds = [
+        {"types": [], "premise_held": ["질병_예방치료_표방"], "candidates": ["질병_예방치료_표방"]},
+        {"types": ["소비자_기만"], "premise_held": []},
+        {"types": [], "premise_held": [], "candidates": ["거짓_과장"]},
+        {"types": ["거짓_과장"], "premise_held": []},
+        {"types": []},
+    ]
+    w = eg.recorded_report(rows, preds)
+    assert w == {"rows": 2, "wrong": 1, "positive": 4, "hit": 1}, w
+
+
+def test_조건부_평가는_승인_문구_규칙_행을_뺀다() -> None:
+    """🆕 2026-10-06 — 그 행의 `품목` 은 원천이고 라벨은 「일반식품이 쓰면」이라는 전제다. 품목을 제품 정보로 넘기면 전제가 어긋난다."""
+    from preprocess.split import APPROVED_READING
+    from scripts import eval_graph as eg
+
+    rows = [
+        {"품목": "건기식", "판독": APPROVED_READING},
+        {"품목": "건기식", "판독": "독립판독_합의"},
+        {"품목": None, "판독": None},
+        {"품목": "식품"},
+    ]
+    assert [r.get("판독") for r in eg.conditional_rows(rows)] == ["독립판독_합의", None]
