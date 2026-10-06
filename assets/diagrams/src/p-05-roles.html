@@ -6,7 +6,10 @@
      D-208(2026-09-12 밤)이 분할 축을 **층 → 기능**으로 바꾸면서 배치가 달라졌다 —
      **사용자 2(ksr · lse) · 관리자 2(ssm · psj)** 이고, **배포·운영이 ssm 에 붙었다.**
      ⛔ 종전 부제 「AI 에이전트 기준」도 뺐다 — 지금 나누는 축은 **기능**이다.
-  🚨 정본은 `docs/00_병렬작업_계약.md` §5 와 `.github/CODEOWNERS`(집행본)다.
+  🔄 **2026-10-06** — 배치는 그대로다. 산출물의 상태만 현재에 맞췄다: 「판정 코어 — 지금은 스텁」 → 인코더 전 규칙 판정이 돈다 ·
+     `POST /u/judge` 가 「DB 없이」 픽스처를 그리던 것 → 실제 코어를 부른다 · 사용자 계정 · 운영 화면이 붙었다(D-260).
+     `CODEOWNERS` 는 두지 않기로 한 파일이라(계약 §5 · D-211) 정본 표기에서 뺐다. 🚨 배포 칸(AWS · 서버)의 현재 상태는 확인하지 못해 그대로 뒀다 (D-188).
+  🚨 정본은 `docs/00_병렬작업_계약.md` §5 다.
      ⛔ 여기 적힌 것은 요약이다 — 어긋나면 계약이 이긴다 (D-54).
   🚨 요소마다 `[실측]`/`[기획]` (D-219) — 「담당이 정해졌다」와 「그 산출물이 있다」를 가른다.
   ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
@@ -24,7 +27,7 @@
   <header>
     <span class="no">P-05</span>
     <h1>역할 분담 — 기능 단위 (D-208)</h1>
-    <span class="right">공통 기반 1 · 사용자 2 · 관리자 2 · 배포 1(겸) · 2026-09-13</span>
+    <span class="right">공통 기반 1 · 사용자 2 · 관리자 2 · 배포 1(겸) · 2026-10-06</span>
   </header>
 
   <div class="body">
@@ -37,7 +40,8 @@
     <div class="hub">
       <div class="card gov"><b>공통 기반 — 팀장 (ohb)</b>
         <span><span class="tag m">실측</span>API 표면 · 수집 · 전처리 · 적재 · 검색 코어 · 원장 3종 · <code>tests/**</code></span>
-        <span><span class="tag p">기획</span>판정 코어(그래프 노드) — 지금은 스텁이다</span>
+        <span><span class="tag m">실측</span>판정 코어(검수 그래프) — 인코더 전 규칙 판정이 돈다</span>
+        <span><span class="tag p">기획</span>인코더 배선 · 문서 규칙 · 생성 그래프</span>
         <span class="owner">app/api.py · graph.py · retrieve.py · models.py · preprocess/** · scripts/** · tests/**</span></div>
     </div>
     <div class="dn">↓</div>
@@ -46,12 +50,15 @@
       <fieldset>
         <legend>사용자 화면 · BFF — 2명 (ksr · lse)</legend>
         <div class="card pos"><b>검수 입력 · 결과 화면 + BFF</b>
-          <span><span class="tag m">실측</span><code>GET /u/</code> · <code>POST /u/judge</code> 가 뜬다 — <b style="display:inline">DB 없이</b></span>
-          <span>SCR-RV-01 · 02</span></div>
-        <div class="card off"><b>재검수 · 판정 게이트</b>
-          <span><span class="tag p">기획</span>고치면 잠긴다 · 새 판정 행 (W-02)</span></div>
-        <div class="card off"><b>근거 조문 표시 · 질의응답</b>
-          <span><span class="tag p">기획</span>SCR-RV-02 ④ · SCR-RV-03</span></div>
+          <span><span class="tag m">실측</span><code>POST /u/judge</code> 가 <b style="display:inline">실제 판정 코어</b>를 부른다</span>
+          <span>근거 조문 · 위험도 · 보류 사유를 그린다 · SCR-RV-01 · 02</span></div>
+        <div class="card pos"><b>가입 · 로그인 · 이력 · 문의</b>
+          <span><span class="tag m">실측</span><code>/u/signup</code> · <code>/u/history</code> · <code>/u/cs</code> (D-260)</span></div>
+        <div class="card" style="border-left:3px solid #8A6A1F;background:#FFF9EC"><b style="color:#8A6A1F">이 문장 고쳐 쓰기 (lse)</b>
+          <span><span class="tag m">실측</span>로컬 sLLM → 코어 재판정 · 2026-10-06 병합</span>
+          <span>⚠️ 승인 범위는 판정 대기</span></div>
+        <div class="card off"><b>재검수 · 판정 게이트 · 분기 화면</b>
+          <span><span class="tag p">기획</span>고치면 잠긴다 · 품목 분기 · 기준 문안 (W-02)</span></div>
         <span class="chip owner">app/routers/user.py · app/templates/user/</span>
       </fieldset>
 
@@ -60,8 +67,9 @@
         <div class="card pos"><b>거버넌스 콘솔</b>
           <span><span class="tag m">실측</span><code>GET /login</code> · <code>GET /admin/</code> 이 뜬다 · Argon2id (0012 · D-213)</span>
           <span>SCR-AM-01 · 02 · 03</span></div>
-        <div class="card off"><b>DB 저장 경로 파악</b>
-          <span><span class="tag p">기획</span>무엇이 어디에 저장되는가</span></div>
+        <div class="card"><b>운영 화면 — 회원 · 약관 · 공지 · 문의 · 통계 · 오류</b>
+          <span><span class="tag m">실측</span>화면이 뜬다 · 오류 로그는 DB 를 읽는다</span>
+          <span><span class="tag p">기획</span>나머지는 아직 더미로 그린다</span></div>
         <div class="card off"><b>판정 근거 관리 · 2인 확인 UI</b>
           <span><span class="tag p">기획</span>판정자 · 확인자 · 승인 상태</span>
           <span>🚨 <b style="display:inline">사람만 채우는 칸</b>이다 — 자동 채움을 만들면 D-66 이 무효가 된다</span></div>
@@ -120,6 +128,6 @@
     <span class="k">기능으로 자르면 파일 소유가 저절로 갈린다.</span>
     규칙을 늘려 지키게 하는 대신 <span class="k">부딪칠 일이 없게 나눈다</span> —
     이유 없는 잠금이 많아지면 이유 있는 잠금까지 같이 안 읽힌다 (D-167 · D-211).
-    <div class="lock">정본은 docs/00_병렬작업_계약.md §5 와 .github/CODEOWNERS · 원천은 src/p-05-roles.html (D-217)</div>
+    <div class="lock">정본은 docs/00_병렬작업_계약.md §5 · 원천은 src/p-05-roles.html (D-217)</div>
   </footer>
 </div>

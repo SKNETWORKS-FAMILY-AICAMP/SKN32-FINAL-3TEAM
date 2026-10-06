@@ -15,6 +15,10 @@
 >
 > 🔄 **v1.1 변경** — 골든셋에 **`surface_variant`(S0~S5) · `surface_of`** 추가 (D-91 · 회피 표기는 위법 유형과 직교),
 > `ck_surface_pairing` 제약 신설 (표면 변형은 S0 원형과 짝으로만 존재).
+>
+> 🔄 **본문 대조 2026-10-06** — 부록 DDL 은 `db/schema.sql`(마이그레이션 머리 `0024_golden_cond` · 2026-10-05)과 글자가 같다. 본문 §0 ~ §9 를 그 부록에 맞췄다:
+> 뷰 3 → **5** · 제약 플래그 11 → **12종** · `chunk`(`law` · `context` · `part_no` · `tsv` · `exempt_of`) · `sanction_rule`(0023 의 여섯 칸) · `golden_sample`(`unit` · `cond` · `evidence_candidate`) 설명 · 벡터 인덱스 판단 · §9 6번의 상태.
+> 표지의 날짜(2026-08-20)와 판 번호(v1.1)는 처음 쓴 때의 것이다 — 그 뒤의 변경은 마이그레이션 0003 ~ 0024 와 `db/schema.sql` 의 주석이 든다.
 
 ---
 
@@ -23,7 +27,7 @@
 | | |
 |---|---|
 | **스택** | PostgreSQL 16 + **pgvector** (D-41 — 별도 벡터DB를 쓰지 않는다) |
-| **테이블** | **19개** + 뷰 3개 · 열거형 14종 |
+| **테이블** | **19개** + 뷰 **5개** · 열거형 14종 (🔄 2026-10-06 대조 · `db/schema.sql` — 뷰는 0024 에서 둘 늘었다) |
 | **설계의 축** | 🚨 **모든 파생물이 `fragment_id` 하나에 매달린다.** 소스를 지우면 문장·청크·벡터·사전·골든셋이 함께 사라진다 |
 | **★ 이 문서의 특징** | **DDL을 실제로 실행해 검증했다.** 아래 결과는 추정이 아니라 실측이다 |
 
@@ -113,7 +117,7 @@ transform_pair    1  ->  0
 | 테이블 | 역할 | 핵심 제약 |
 |---|---|---|
 | **`source`** | 소스 레지스트리 — `data_sources.yaml` 의 DB 표현 | 🚨 `decided_by <> reviewed_by` · `BY` 플래그면 `attribution` 필수 |
-| `source_constraint` | 제약 플래그 (1:N) | 🔄 **11종** 열거형 — `NOREDIST` `NOSTORE` `QUERYLOG` `PREAPPROVAL` + **`NOTRAIN`**(사용자 업로드물 · D-122) 포함 (D-71·D-73) |
+| `source_constraint` | 제약 플래그 (1:N) | 🔄 **12종** 열거형(`flag_t`) — `BY` `NC` `SA` `PII` `TOS` `GATED` `NOREDIST` `NOSTORE` `QUERYLOG` `PREAPPROVAL` + **`NOTRAIN`**(사용자 업로드물 · D-122) + 🔄 **`ND`**(변경금지 · 공공누리 제3 · 4유형 — 파생 데이터셋 금지 · 0020 · 2026-09-25) (D-71·D-73) |
 | `source_use` | U1~U4 허용 여부 | 전파 규칙은 애플리케이션 계층에서 적용 |
 | `collect_manifest` | 수집 이력 · 재현성 | `sha256` 동일하면 스킵. `event` 로 삭제 이벤트도 기록 |
 
@@ -123,27 +127,27 @@ transform_pair    1  ->  0
 
 | 테이블 | 역할 | 주의 |
 |---|---|---|
-| `document` | 문서 단위 (의결서 1건 · 법령 1건) | `superseded_at IS NULL` 이 현행 |
+| `document` | 문서 단위 (의결서 1건 · 법령 1건) | `superseded_at IS NULL` 이 현행 · 🔄 `annex_no`(0015) — 별표 번호. 머리글에서 읽은 값만 들고 없으면 NULL 이다(파일명 일련번호로 채우지 않는다 · D-224) |
 | **`sentence`** | 문장 + **비파괴 정규화** | `raw`(표시·오프셋) / `norm`(매칭) / `offset_map`(대응) 3열. `evasion_flags` 는 **회피 표기 자체가 위법 신호**라 피처로 쓴다 |
 
 ### 3-3. RAG (2)
 
 | 테이블 | 역할 | 주의 |
 |---|---|---|
-| `chunk` | 조·항 단위 청크 | 🚨 `token_count <= 512` — 🔄 **인용 단위(`text`)** 상한. 리랭커에 들어가는 것은 `input_token_count`(상한 CHECK 없음 · D-200) |
-| `chunk_embedding` | pgvector | `vector(1024)` — 🔄 ✅ **KURE-v1 = 1024 실측 확인** (2026-09-09 밤 · 사실원장 · 아래 §9-4) |
+| `chunk` | 조·항 단위 청크 | 🚨 `token_count <= 512` — 🔄 **인용 단위(`text`)** 상한. 리랭커에 들어가는 것은 `input_token_count`(상한 CHECK 없음 · D-200) · 🔄 그 뒤 늘어난 칸(2026-10-06 대조) — `context`(검색 문맥 · 0008 · `text` 는 인용 단위로 한 글자도 안 바꾼다 · D-158) · `paragraph_no`(우리가 센 항 서수) · `tsv`(어휘 색인 생성열 + GIN · 0010 · D-193) · `part_no` / `part_total`(700자를 넘어 쪼갠 조각 · 0011 · D-199 · `ck_chunk_part`) · **`law`**(법 축 넷 · NOT NULL · `ck_chunk_law` · 0019 · D-271 ① — 종전 `category TEXT[]` 를 대체) · **`exempt_of`**(적용 제외 목의 부모 경로 · `ck_chunk_exempt` — 별표 청크만 · 0021 · D-238 개정 (나)). 🚨 `context` · `part_no` · `input_token_count` · `exempt_of` 의 NULL 은 「아직 재적재 안 됨」이다 — 빈 값과 합치지 않는다 |
+| `chunk_embedding` | pgvector | `vector(1024)` — 🔄 ✅ **KURE-v1 = 1024 실측 확인** (2026-09-09 밤 · 사실원장 · 아래 §9-4) · 🔄 `input_sha256`(0008 · D-176) — 벡터를 만든 입력 문자열의 지문. 일부만 NULL 이면 검색이 섞임으로 보고 막는다 |
 
 ### 3-4. 🚨 위험도 — RAG가 아니라 관계형 (3)
 
 | 테이블 | 담는 것 |
 |---|---|
-| **`sanction_rule`** | 행정처분 기준 [별표] — `위반유형 × 차수 → 처분종류·값` |
+| **`sanction_rule`** | 행정처분 기준 [별표] — `위반유형 × 차수 → 처분종류·값` · 🔄 **0023(2026-10-02 · W5)** — 서명된 원천(`scripts/sanction_review.yaml`)의 행을 그대로 싣는 칸 여섯: `rule_key`(원천 행의 id · 적재는 이 열쇠로 넣고 거둔다 · 부분 유일 인덱스 `ux_sanction_rule_key`) · `annex1`(식품 4 ~ 7호 행의 [별표 1] 목 · D-310) · `cover`(전부 = 하한 / 일부 = 가능 상한만 · D-310 개정 2) · `quote`(위반행위 원문 인용) · `fact_kind`(사실 확인 분기의 종류 · D-308 ④) · `plan_sha`(이 행이 실린 원천 판 · D-309). `ck_sanction_cover` — 목이 있으면 `cover` 가 있고 값은 「전부」 · 「일부」뿐이다. 🚨 `annex1` NULL(목으로 갈리지 않는 행)과 빈 배열(목 칸이 빈 행)을 합치지 않는다. `risk_level` 은 적재기(`scripts/load_db.py` `load_sanction_rule`)가 처분 종류에서 계산해 넣고, 하한 규칙은 `app/sanction.py` 한 곳이다 |
 | `penalty_rule` | 과징금 고시 — 부과기준율·정액·가중·감경 (2026.7.1 개정) |
 | `penal_clause` | 벌칙 — 징역·벌금 상한 · 🔄 **R 축과 별도 축**(D-182 · D-227 — 척도는 R0~R3, R4 는 도달 불가) |
 
 **왜 벡터가 아닌가.** 별표를 평문화해 임베딩하면 ① 표 구조가 깨져 「차수」와 「일수」의 대응이 사라지고 ② 검색 결과가 확률적이라 **같은 입력에 다른 위험도**가 나올 수 있으며 ③ 그러면 *"블랙박스 점수는 검수 도구로서 실격"*(기획서 3-4)에 정면으로 걸립니다.
 
-**벡터에는 「이 별표가 규정하는 내용」 요약 문장만** 넣어 검색 진입점으로 쓰고, **실제 값은 `v_risk_lookup` 뷰를 코드가 조회**합니다.
+**벡터에는 「이 별표가 규정하는 내용」 요약 문장만** 넣어 검색 진입점으로 쓰고, **실제 값은 `v_risk_lookup` 뷰를 코드가 조회**합니다. 🔄 2026-10-06 대조 — 뷰 조회는 구현됐다(`app/graph.py` `load_sanction_rows` · `assess_risk` · 2026-10-02). ⬜ 「요약 문장만 벡터에 넣는다」가 청크에 그렇게 구현됐는지는 이번에 확인하지 못했다([`벡터DB_구축_결과서.md`](벡터DB_구축_결과서.md) 는 「위험도는 벡터에 넣지 않았다」고만 적는다).
 
 > ⚠️ 별표는 **병합 셀이 흔해** 자동 파싱이 자주 틀립니다. `verified_by` · `reviewed_by` 를 두고 **2인 대조**를 기록합니다.
 
@@ -151,18 +155,18 @@ transform_pair    1  ->  0
 
 | 테이블 | 역할 | 주의 |
 |---|---|---|
-| `dict_entry` | 금지·허용·질병인접·완화금지 사전 | 🚨 `exact_match` — **정확매칭만 위험도 하한 자격**. 근사매칭은 인코더와 동등 취급 (기획서 3-5 ④) |
-| **`product_fact`** | 인정 기능성 문구 | **A 자격형 판정(D-59)의 근거.** `recognition_no` 가 D-61의 대조 키 |
+| `dict_entry` | 금지·허용·질병인접·완화금지 사전 | 🚨 `exact_match` — **정확매칭만 위험도 하한 자격**. 근사매칭은 인코더와 동등 취급 (기획서 3-5 ④) · 🔄 `dict_kind` 는 적재기가 넣는 한국어 표기(금지표현 / 적법표현 / 질병표현 / 완화금지)가 정본이다 · `uq_dict_term (dict_kind, term)` |
+| **`product_fact`** | 인정 기능성 문구 | **A 자격형 판정(D-59)의 근거.** `recognition_no` 가 D-61의 대조 키 · 🔄 자연키 `uq_product_fact (fragment_id, ingredient, functional_claim, recog_kind)`(0004 — 적재를 멱등으로) |
 
 ### 🆕 3-5-2. 라벨 ↔ 조문 (1) <sub>(2026-09-21 대조 · 0003)</sub>
 
 | 테이블 | 역할 | 주의 |
 |---|---|---|
-| `violation_article` | 위법 유형 ↔ 조문 대응 — **타입이 아니라 데이터**(D-158) | `adopted=false` 가 「뺐다」는 기록이다. `fragment` 에 매달리지 않는다(`segment`·`dataset_manifest` 와 같다) |
+| `violation_article` | 위법 유형 ↔ 조문 대응 — **타입이 아니라 데이터**(D-158) | `adopted=false` 가 「뺐다」는 기록이다. `fragment` 에 매달리지 않는다(`segment`·`dataset_manifest` 와 같다) · 🔄 2026-09-24 부터 `collect/statute.py` 의 표를 적재기가 옮겨 넣는 사본이다(D-282 · `load_violation_article`) |
 
 ### 3-6. 골든셋 · 학습 (2)
 
-**`golden_sample` 이 이 스키마에서 열이 가장 많은 테이블입니다.** 라벨 축이 넷이고 측정 축이 셋이며 출처 추적이 둘입니다.
+**`golden_sample` 이 이 스키마에서 열이 가장 많은 테이블입니다.** 라벨 축이 넷이고 측정 축이 셋이며 출처 추적이 둘입니다. 🔄 그 뒤 단위(`unit`) · 근거 좌표(`evidence`) · 조건(`cond`) · 후보 근거(`evidence_candidate`)가 늘었습니다(2026-10-06 대조).
 
 | 축 | 컬럼 | 근거 |
 |---|---|:-:|
@@ -173,11 +177,20 @@ transform_pair    1  ->  0
 | 🔄 **측정 축** | `certainty` · `tense` · `sent_type` | **D-74** |
 | 주장 스팬 | `claim_spans JSONB` | **D-30** — 주입 좌표에서 자동 생성 |
 | 🚨 **출처 추적** | `provenance` · `redistributable` | **D-71** |
+| 🔄 **근거 좌표** | `evidence JSONB` — `[{law_id, article, item}]`. 라벨의 정본은 조문 인용이다 | **D-282** |
+| 🔄 **표면 변환** | `surface_variant` S0 ~ S5 · `surface_of`(자기 참조) · `ck_surface_pairing` | **D-91** |
+| 🔄 **분할** | `split` — `train` · `dev`(배정되지 않는 값) · `test_sentence` · `test_holdout` | D-170 · D-172 |
+| 🔄 **단위** | `unit` — 문장 / 낱말(CHECK · 0003). 한 시험지로 세면 두 과제를 평균한 수가 된다 | D-155 · D-172 |
+| 🔄 **조건** | `cond` — C 그 자체 위반 · A 인정 범위 안이면 가능 · B 근거를 내면 가능 · M 보류 · D 판정 대상 아님 · L 적법 · NULL 은 조건을 붙이지 않는 원천의 행(CHECK · 0024 · 2026-10-05) | **D-317** |
+| 🔄 **후보 근거** | `evidence_candidate JSONB` — 대안들의 목록 · 각 대안은 조문 묶음(0024) | **D-317** |
 | 🔄 **동의** | `consent` (사용자 입력 유래 행) · ⬜ SQL 에 칸이 없다 — 아래 주석 | **D-96** |
 
 > 🔄 **`consent` 는 사용자 입력에서 온 행에만 의미가 있습니다** (D-96). 결함 주입(D-25)·시정 페어(D-26) 유래는
 > 우리가 만든 것이라 해당되지 않습니다. 🔄 **D-128** — 사용자 유래 행은 `provenance = 'user'` · `fragment_id NULL` 허용(`CHECK (fragment_id IS NOT NULL OR provenance = 'user')`) · `consent_train` 을 `work_doc` 에서 행으로 복사(D-71 형태). 🚨 아래 SQL 에는 아직 `consent` 열과 이 CHECK 가 **없다** — 다음 DDL 개정에서 `golden_sample` 에 넣는다. **학습 데이터 구성 시 `provenance` 가 사용자 입력이면 `consent=true` 를 요구**하고,
 > 게이트가 이를 검사합니다 — `redistributable` 과 정확히 같은 처리입니다.
+
+> 🔄 **조건 칸과 두 제약**(0024 · D-317) — `ck_golden_cond_empty`: 조건 D · L 은 유형 · 근거 · 후보가 전부 빈다. `ck_golden_cond_basis`: 조건 C · A · B 는 근거나 후보 중 하나는 있다. M 에는 걸지 않는다(근거가 붙은 보류 행이 있다). 🔴 **`violations` 가 비었다고 적법이 아니다** — 유형 이름이 없는 호의 위반 행 · M · D 행도 비어 있다. 골든을 DB 에서 읽을 때는 §4 의 `v_golden_scored` · `v_golden_legal` 을 지난다.
+> 🔄 `risk` 는 NULL 을 받는다(D-178) — 골든셋은 정답 라벨을 담는 시험지이고 위험도는 판정할 때 `sanction_rule` · `v_risk_lookup` 으로 계산한다.
 
 > 🚨 **`ck_golden_injected_not_holdout`** — 주입본이 **평가 split** 에 들어가는 것을 DB가 거부합니다. 평가는 **실사례 홀드아웃으로만** 해야 하는데, 이건 사람이 실수하기 가장 쉬운 지점입니다.
 >
@@ -192,15 +205,21 @@ transform_pair    1  ->  0
 
 ---
 
-## 4. 뷰 셋 — 실수를 구조로 막습니다
+## 4. 뷰 다섯 — 실수를 구조로 막습니다 <sub>(🔄 2026-10-06 대조 — 셋에서 다섯으로 · 0024)</sub>
 
 | 뷰 | 막는 실수 |
 |---|---|
 | **`v_current_chunk`** | 🚨 `superseded_at` 필터를 잊는 것. **가장 흔한 사고**이고, 구판 조문으로 판정하면 결과가 통째로 틀립니다 |
-| **`v_publishable_golden`** | 🚨 AI Hub 유래가 섞인 골든셋을 공개 배포하는 것 (D-71) |
-| `v_risk_lookup` | 위험도를 벡터 검색으로 구하는 것 · 🔄 **2인 확인이 안 끝난 `sanction_rule` 행**(0013 · D-66 — 읽히지 않는다) |
+| **`v_publishable_golden`** | 🚨 AI Hub 유래가 섞인 골든셋을 공개 배포하는 것 (D-71) — `redistributable = true` 인 행만 |
+| 🔄 **`v_golden_scored`** | 조건 M(보류) · D(판정 대상 아님) 행을 채점에 넣는 것 — `cond IS NULL OR cond NOT IN ('M','D')` (0024 · D-317) |
+| 🔄 **`v_golden_legal`** | 빈 `violations` 를 전부 적법으로 읽는 것 — 유형이 비어 있고 조건이 없거나 L 인 행만 (0024 · D-317) |
+| `v_risk_lookup` | 위험도를 벡터 검색으로 구하는 것 · 🔄 **2인 확인이 안 끝난 `sanction_rule` 행**(0013 · D-66 — 읽히지 않는다) · 🔄 0023 뒤로 `rule_key` · `annex1` · `cover` · `quote` · `fact_kind` 도 낸다 — 판정 그래프의 `assess_risk` 가 이 뷰만 읽는다 |
 
 **데이터셋을 공개할 때는 반드시 `v_publishable_golden` 을 통합니다.** 테이블을 직접 SELECT 하면 `redistributable = false` 행이 섞입니다.
+
+🔄 **골든을 DB 에서 읽는 문은 `v_golden_scored`(채점 행) · `v_golden_legal`(적법 행)입니다.** 뜻의 정본은 코드입니다 — 채점 행은 `scripts/eval_rule.py` `scored()`, 적법 행은 `preprocess/golden.py` `is_negative()`. 뷰의 조건이 그 코드와 같은지 게이트가 대조하고(`tests/test_guide_golden.py`), 저장소 코드가 `golden_sample` 을 조건 없이 직접 읽으면 게이트가 막습니다(`tests/test_db_schema.py` — 행 수 세기 · 열쇠만 읽기 · 지우기는 예외).
+
+🚨 뷰 셋(`v_current_chunk` · `v_publishable_golden` · `v_golden_*`)은 `SELECT c.*` · `g.*` 라 **열 목록이 만들 때 굳습니다.** 표에 열을 더하면 같은 마이그레이션에서 뷰를 떼고 다시 만듭니다(0009 · 0021 · 0024).
 
 ---
 
@@ -232,14 +251,17 @@ data/manifest.jsonl          →  collect_manifest
 | `ix_golden_redis` | 공개 배포 필터 |
 | `ix_fragment_grade` (부분) | `WHERE excluded = false` |
 | 🔄 `ix_chunk_tsv` **GIN** | 어휘 검색(`tsv @@`) · 0010 · D-193 |
+| 🔄 `ux_sanction_rule_key` (부분 · 유일) | `WHERE rule_key IS NOT NULL` — 제재표 적재가 원천 행의 열쇠로 넣고 거둔다 · 0023 |
 
-🚨 **벡터 인덱스(HNSW/IVFFlat)는 지금 만들지 않습니다.** 청크가 수천 규모라 순차 스캔으로 충분하고, **데이터가 다 들어온 뒤에 만드는 것이 품질이 좋습니다.** 4W에 적재가 끝나면 그때 판단합니다.
+🚨 **벡터 인덱스(HNSW/IVFFlat)는 만들지 않았습니다 — 판정입니다.** 청크가 수천 규모(6,667 · 클론 B 09-28 실측 · 원장 09-25 ㊲ ~ ㊴)라 순차 스캔으로 충분하고, `ivfflat` 의 `lists` 를 잘못 잡으면 재현율이 조용히 떨어집니다. 🔄 종전의 「4W 에 적재가 끝나면 그때 판단」은 적재 뒤 이렇게 정해졌습니다 — **청크가 만 단위가 되면 실측해서 만듭니다**([`데이터베이스_저장소_설계_2차.md`](데이터베이스_저장소_설계_2차.md) §4 · [`벡터DB_구축_결과서.md`](벡터DB_구축_결과서.md) §8). 인덱스가 없는 지금 벡터 질의는 문장당 p50 67.8 ms 입니다(원장 10-02 ⑨ · 클론 A · CPU).
 
 ---
 
 ## 7. 마이그레이션
 
-- **Alembic** 단일 체인. `launcher.py doctor` 가 head 일치를 검사합니다 (D-51).
+- **Alembic** 단일 체인. `launcher.py doctor` 가 head 일치를 검사합니다 (D-51). 🔄 머리는 `0024_golden_cond` 입니다(2026-10-06 · `alembic/versions/` 0001 ~ 0024).
+- 🔄 **스키마를 바꿀 때 고치는 것은 둘입니다** — `db/schema.sql`(현재 상태의 선언)과 새 마이그레이션(`db/migrations/NNNN_*.sql` + 그것을 부르는 alembic 판). 둘이 갈렸는지는 `launcher.py db-drift` 가 임시 DB 둘(선언을 직접 올린 것 · 0001 부터 옮긴 것)을 떠서 대조합니다. 0001 은 동결본 `db/schema_0001.sql` 을 읽습니다(D-225).
+- 🔄 `db/migrations/` 에 번호가 빠진 곳(0012 · 0014 · 0016 ~ 0018 · 0022)은 **런타임 층**을 고친 판입니다 — 런타임 층의 정본은 `app/models.py` 라(D-89) 그 판들은 alembic 파일에 DDL 을 직접 적고, 이 문서와 `db/schema.sql` 에는 들어오지 않습니다.
 - 🚨 **스키마는 1W~5W에 계속 바뀝니다** — 그래서 ORM을 하나만 둡니다(D-42, FastAPI + SQLAlchemy 단독).
 - **되돌릴 수 없는 변경**(컬럼 삭제)은 **2W 이후 금지.** 골든셋이 쌓인 뒤에는 열을 지우면 라벨이 사라집니다.
 
@@ -251,7 +273,7 @@ data/manifest.jsonl          →  collect_manifest
 |:-:|---|---|:-:|
 | 1 | ~~🚨 **`vector(N)` 차원**~~ | ✅ **1024 확정** — KURE-v1 실측 (2026-09-09 밤 · 사실원장) | ✅ |
 | 2 | 🚨 **`K_MIN` 값** | 사실원장 미정 항목. 현재 `20` 은 **임시값** | 1W |
-| 3 | **`sanction_rule` 세분화** | 별표 조회가 API로 되는지에 달림 — 스모크 테스트 결과 | 1W |
+| 3 | ~~**`sanction_rule` 세분화**~~ | 🔄 ✅ **0023 으로 섰다**(2026-10-02) — 원천은 사람이 서명한 `scripts/sanction_review.yaml` 이고 표는 그 행을 싣는다. 식품 4 ~ 7호는 [별표 1] 목 단위다(D-305 · D-309 · D-310) | ✅ |
 | 4 | `three_elem` JSONB vs 3열 | 의결서에서 셋이 항상 함께 나오는지 확인 후 | 2W |
 | 5 | 파티셔닝 | `sentence` 가 수만 행을 넘으면 검토. 지금은 불필요 | 4W |
 
@@ -268,7 +290,7 @@ data/manifest.jsonl          →  collect_manifest
 | 3 | 캐스케이드 삭제 | `DELETE FROM source` → 9개 테이블 0건 | ✅ **통과** |
 | 4 | **pgvector 실환경 검증** | `CREATE EXTENSION vector` + 실제 임베딩 삽입·삭제 | ✅ **해소** (2026-09-09 밤 · `chunk_embedding` 적재 · 사실원장) |
 | 5 | Alembic head 일치 | `doctor` | ✅ **구현** — `scripts/doctor.py` `_alembic_heads()` ↔ DB 리비전 (2026-09-21 대조) |
-| 6 | `v_publishable_golden` 필터 | `redistributable=false` 행이 새지 않는지 | 미착수 |
+| 6 | `v_publishable_golden` 필터 | `redistributable=false` 행이 새지 않는지 | 🟡 **간접 게이트만**(2026-10-06 대조 · `tests/test_db_schema.py`) — 적재가 넣는 칸을 갱신에서도 전부 고치는지(`redistributable` 이 갱신에서 빠져 뷰가 인용 문구를 냈던 2026-09-20 사고의 재발 방지) · 뷰를 만드는 마이그레이션이 먼저 떼는지를 본다. ⬜ 실제 DB 에 `redistributable=false` 행을 넣고 뷰가 그 행을 내지 않는지 재는 검사는 없다 · 뷰의 행 수도 DB 에서 세지 않았다(D-317 ⬜) |
 
 > 🔄 **2026-09-21 — 4번도 닫혔습니다(위 표).** 아래는 그때의 기록입니다.
 > 🚨 **4번이 남았습니다.** 이 컨테이너에 pgvector가 없어 `vector` 타입을 스텁으로 대체해 검증했습니다. **나머지 스키마는 전부 실검증됐지만 벡터 컬럼만은 실환경에서 다시 확인**해야 합니다 — `chunk_embedding` 의 CASCADE는 FK로 걸려 있어 타입과 무관하지만, **차원 불일치는 적재 시점에 터집니다.**
@@ -282,6 +304,8 @@ data/manifest.jsonl          →  collect_manifest
 >
 > 🚨 **게이트가 둘의 일치를 검사합니다** (`tests/test_db_schema.py`) — 한 글자라도
 > 달라지면 빨간불입니다. 둘이 갈리면 **사람은 문서를 읽고 DB 는 파일대로 돕니다.**
+>
+> 🔄 **2026-10-06 대조** — 아래 블록은 `db/schema.sql`(573줄 · 0024 까지)과 글자가 같다.
 >
 > 🔴 스키마를 바꿀 때는 `db/schema.sql` 을 고치고 **새 마이그레이션**을 씁니다.
 > `alembic/versions/0001_governance_layer.py` 는 그 파일을 읽어 실행만 하며, 고치지 않습니다.

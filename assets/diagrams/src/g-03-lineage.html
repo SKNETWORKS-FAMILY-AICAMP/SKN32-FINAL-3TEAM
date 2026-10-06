@@ -1,0 +1,106 @@
+<!doctype html>
+<!--
+  G-03 · 소스 → 파생물 → 용도 계보   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-10-06 새로 그림.** 종전 판(원천 없음)에서 달라진 것 —
+     ① 골든셋이 1,910 → **8,383**행이 됐고 원천이 셋 → **열셋**이다 ② 해설서는 사전이 아니라 **평가 · 학습(근거자료 판)** 으로 간다(D-316) · 사전에는 안 넣는다
+     ③ `sanction_rule` 은 「예정」이 아니라 **적재됨**(38 · 서명)이고 원천은 행정처분 API 가 아니라 **법령 별표**다 ④ 건기식 `product_fact` 의 원천은 개별인정 대장이다
+     ⑤ 청크 2,400 → **6,667** ⑥ 종전의 「원장 19,988행 · 고유 경로 10,032」는 이번에 다시 재지 않아 뺐다.
+  수의 출처 — 골든 8,383 · 사전 506: 원장 10-03 ㊿-28 보충 5 (클론 B) · 원천별 줄은 같은 해시(`529c970556d7`) 파일을 10-06 작업공간에서 셈 ·
+     주입 784 · 파생물 행 수: `data/derived_manifest.jsonl` 245개(10-06 읽음) · DB 적재 수: 원장 10-06 ① (클론 A 기기 출력) · 청크 6,667: 원장 10-03 ㊹ (클론 B) · ㊺ (클론 A).
+  🚨 한쪽 기기의 수를 다른 쪽 사실로 쓰지 않는다(D-178) — DB 수는 클론 A 의 것이다.
+  ⛔ 광고 문구 원문은 싣지 않는다. `data/derived/` 는 비공개다.
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) · 수의 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>G-03 소스 → 파생물 → 용도 계보</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  /* 표 판 — plate.css 에 표 스타일이 없어 이 장 안에 둔다. 새 8장이 같은 조각을 쓴다 */
+  table.t{width:100%; border-collapse:collapse; background:#fff}
+  .t th{background:var(--band); color:var(--sub); font-weight:500; font-size:11px; text-align:left;
+        padding:7px 10px; border:1px solid var(--line)}
+  .t td{padding:7px 10px; border:1px solid var(--line); vertical-align:top; font-size:11.6px}
+  .t td b{font-size:12.2px}
+  .t td > b:first-child{display:block}
+  .t td span.s{display:block; color:var(--sub); font-size:11px}
+  .t tr.off td{background:var(--offbg); color:var(--off)}
+  .t tr.off td b{color:var(--off)}
+  .t td.c{text-align:center; vertical-align:middle}
+  .t code, .note code, .card code{font-family:ui-monospace,Menlo,monospace; font-size:10.8px}
+  .ok{color:#286E4C; font-weight:600} .no{color:var(--rsk); font-weight:600}
+  .gv{color:var(--gov)} .rk{color:var(--rsk)}
+
+  .t td.md{font-size:11px; color:var(--gov); font-weight:600}
+  .t tr.off td.md{color:var(--off)}
+  .t td{padding:6px 10px}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">G-03</span>
+    <h1>소스 → 파생물 → 용도 계보</h1>
+    <span class="right">그 데이터가 지금 어디에 쓰였는가 · [실측] · 재동결 10-05 판 · 2026-10-06</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
+      <span class="chip">[기획] 아직 안 만들었다</span>
+      <span class="chip gov">🗄 표 = DB · 📄 파생 파일</span>
+    </div>
+    <table class="t">
+      <tr><th style="width:19%">원천 <span class="tag m">실측</span></th><th style="width:8%">방식</th><th style="width:25%">📄 파생물 <span class="tag m">실측</span></th><th style="width:20%">🗄 DB 표 <span class="tag m">실측</span></th><th>어디에 쓰이나 <span class="tag m">실측</span></th></tr>
+      <tr class=""><td><b>공정위 의결서 본문</b><span class="s">ftc_decisions_body · G3</span></td><td class="md">API</td>
+          <td><b>ftc_stage 8,272</b><span class="s">→ 1층 문구 · 이유 구역 판 3,342</span></td><td>golden_sample · dict_entry</td><td><b>학습 2,502 · 평가(봉인) 104</b><span class="s">사전 292 항목 — 표시광고법 호</span></td></tr>
+      <tr class=""><td><b>법제처 법령 · 고시 · 별표</b><span class="s">law_go_kr · G3</span></td><td class="md">API</td>
+          <td><b>law_article 3,741 노드</b><span class="s">별표 243행 · chunks 6,667</span></td><td>chunk = chunk_embedding 6,667<span class="s">sanction_rule 38 · violation_article 14</span></td><td><b>근거 조문 검색 · 인용</b><span class="s">위험도 하한 — 서명된 제재표에서 (D-305)</span></td></tr>
+      <tr class=""><td><b>특수용도식품 해설서</b><span class="s">mfds_special_use_guide · G3</span></td><td class="md">게시물 첨부</td>
+          <td><b>mfds_guide_labels 2,728</b><span class="s">위반문구 판 1,834 · 근거자료 판 619 · 수정쌍 245</span></td><td>golden_sample</td><td><b>평가 1,949 · 학습 577</b><span class="s">근거자료 판만 학습 (D-316) · 사전에는 안 넣는다</span></td></tr>
+      <tr class=""><td><b>기능성 원료 게시판</b><span class="s">mfds_hf_ingredient_board · G3</span></td><td class="md">게시판</td>
+          <td><b>mfds_hf_labels 465</b><span class="s">→ injected_golden 784 (주입)</span></td><td>golden_sample</td><td><b>주입 784 · 인정서 문구 448</b><span class="s">주입본은 학습에만 · 인정서 문구 42는 평가</span></td></tr>
+      <tr class=""><td><b>개별인정 원료 대장</b><span class="s">mfds_hf_individual · G3</span></td><td class="md">API</td>
+          <td><b>hf_api_labels 447</b><span class="s">표시 문구 773 은 경계 사례 후보로 따로</span></td><td>product_fact 447<span class="s">golden_sample</span></td><td><b>인정받은 기능성 문구</b><span class="s">인정 조건문 132 — 학습</span></td></tr>
+      <tr class=""><td><b>부당광고 사례집 2026</b><span class="s">mfds_casebook · G3 · U1 deny</span></td><td class="md">게시물 첨부</td>
+          <td><b>mfds_casebook_labels 190</b></td><td>dict_entry · golden_sample</td><td><b>사전 213 항목 · 학습(낱말) 327</b><span class="s">평가 홀드아웃이 아니라 금지 표현 사전 (D-155)</span></td></tr>
+      <tr class=""><td><b>식약처 해석 · 질의응답 · 사례 7종</b><span class="s">1차 해석 · 화장품 QA 3 · 판별 매뉴얼 · 대구청 · 사례집 2021</span></td><td class="md">게시물 첨부 · API · 사람</td>
+          <td><b>판독 판 채택본</b><span class="s">labels/…/adopted — 원천마다 한 벌</span></td><td>golden_sample</td><td><b>학습 1,166 · 평가 276</b><span class="s">화장품법 세 호의 평가 표본이 여기서 선다</span></td></tr>
+      <tr class=""><td><b>공정위 보도자료</b><span class="s">ftc_press · G3 · manual</span></td><td class="md">사람</td>
+          <td><b>ftc_press_old 단위 119</b></td><td>golden_sample</td><td><b>평가 118</b><span class="s">표시광고법 부당 비교 · 비방의 평가 표본</span></td></tr>
+      <tr class="off"><td><b>식약처 보도자료</b><span class="s">mfds_press · G3 · U1 deny</span></td><td class="md">게시판</td>
+          <td><b>mfds_press_index 4,344</b><span class="s">labels 135</span></td><td>—</td><td>골든 · 사전 · DB 에 실리지 않았다<span class="s">파생물까지만 있다</span></td></tr>
+      <tr class="off"><td><b>화장품 원료 · 사용제한 원료</b><span class="s">cosmetic_ingredient · cosmetic_restricted · G3</span></td><td class="md">API</td>
+          <td><b>21,897 · 31,191</b></td><td>—</td><td>적재 입력 목록에 없다<span class="s">파생물까지만 있다</span></td></tr>
+      <tr class="off"><td><b>식약처 행정처분 · 과징금 부과기준</b><span class="s">mfds_sanctions · foodsafety_penalty_std · G3</span></td><td class="md">API</td>
+          <td>—<span class="s">파생물 원장에 줄이 없다</span></td><td>—</td><td>수집일만 찍혀 있다<span class="s">제재표는 이 원천이 아니라 법령 별표에서 왔다</span></td></tr>
+      <tr class="off"><td><b>AI Hub 말뭉치</b><span class="s">aihub_* · G3 · U2 · U3 deny</span></td><td class="md">사람</td>
+          <td>—<span class="s">파생물 원장에 줄이 없다</span></td><td>—</td><td>골든에 이 원천의 행이 없다</td></tr>
+    </table>
+
+    <div class="legend">
+      <span class="chip pos">골든 8,383 = 학습 5,894 + 평가 2,489</span>
+      <span class="chip pos">사전 506 (단독판정 394)</span>
+      <span class="chip pos">주입 784</span>
+      <span class="chip pos">청크 6,667 = 임베딩 6,667</span>
+      <span class="chip">파생물 원장 245개</span>
+      <span class="chip rsk">용도까지 못 간 원천 — 표의 회색 넷</span>
+    </div>
+    <div class="cols2" style="margin-top:10px">
+      <p class="note" style="margin:0">
+        이 표가 답하는 질문은 「데이터를 어디서 구했느냐」가 아니라 <b>「그 데이터가 지금 무엇을 하고 있느냐」</b>다.
+        골든에 든 여덟 줄(원천 열셋)을 더하면 8,383 이다(작업공간 셈 · 같은 해시).
+      </p>
+      <p class="note" style="margin:0">
+        🔴 <b>사전의 출처는 DB 에서 한 조각으로 합쳐진다</b> — 파일은 의결서 292 · 사례집 213 · 둘 다 1 인데 적재기가 전부 의결서 조각으로 싣는다(⬜ 10-06 에도 그대로).
+        학습 입력은 DB 가 아니라 골든 파일이다 (D-296).
+      </p>
+    </div>
+  </div>
+
+  <footer>
+    <span class="k">계보가 끊긴 줄도 그린다.</span>
+    수집했다고 쓰인 것은 아니다 — <span class="k">파생물 · DB · 용도까지 이어진 원천과 거기서 멈춘 원천을 같은 표에 놓는다.</span>
+    <div class="lock">수 — 원장 10-03 ㊿-28 보충 5 · ㊹ (클론 B) · 원장 10-06 ① (클론 A · DB 적재 출력) · 파생물 원장 245개 · 원천별 줄은 10-06 작업공간 셈 · 원천은 src/g-03-lineage.html (D-217)</div>
+  </footer>
+</div>

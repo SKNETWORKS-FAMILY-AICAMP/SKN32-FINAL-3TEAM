@@ -1,0 +1,76 @@
+<!doctype html>
+<!--
+  G-02 · 수집 방식 — 어떻게 받았는가   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-10-06 새로 그림.** 종전 판(원천 없음)은 등재 47 을 방식 일곱(API 13 · 파일 17 · 스크레이핑 3 · 신청 6 · 수기 3 · 자체 산출 1 · 미확인 4)으로 갈랐다.
+     그 갈래는 `access` **산문**에서 온 것이었다. 지금은 방식의 판단을 **수집기 표**(`collect/__init__.py` `COLLECTORS` · `MANUAL_SOURCES` · `SCRAPERS`)가 한다(D-179) —
+     이 장도 그 표와 `status` 로 가른다. 그래서 「파일 다운로드」가 따로 없다: 게시물 첨부를 받는 수집기는 게시물 HTML 을 파싱하는 **스크레이퍼**다.
+  수 — `data_sources.yaml` 과 수집기 표를 2026-10-06 에 직접 셈(커밋 c7f483a): 등재 70 = collect 45 + manual 10 + hold 15 · blocked 13 · not_adopted 14.
+  🚨 「수집일 찍힘」은 `collected_at` 이 있는 수다 — 찍혔다 ≠ 받았다(일부 수집은 안 찍는다). 파일이 기기에 있는지는 이 장이 말하지 않는다.
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) · 수의 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>G-02 수집 방식 — 어떻게 받았는가</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  /* 표 판 — plate.css 에 표 스타일이 없어 이 장 안에 둔다. 새 8장이 같은 조각을 쓴다 */
+  table.t{width:100%; border-collapse:collapse; background:#fff}
+  .t th{background:var(--band); color:var(--sub); font-weight:500; font-size:11px; text-align:left;
+        padding:7px 10px; border:1px solid var(--line)}
+  .t td{padding:7px 10px; border:1px solid var(--line); vertical-align:top; font-size:11.6px}
+  .t td b{font-size:12.2px}
+  .t td > b:first-child{display:block}
+  .t td span.s{display:block; color:var(--sub); font-size:11px}
+  .t tr.off td{background:var(--offbg); color:var(--off)}
+  .t tr.off td b{color:var(--off)}
+  .t td.c{text-align:center; vertical-align:middle}
+  .t code, .note code, .card code{font-family:ui-monospace,Menlo,monospace; font-size:10.8px}
+  .ok{color:#286E4C; font-weight:600} .no{color:var(--rsk); font-weight:600}
+  .gv{color:var(--gov)} .rk{color:var(--rsk)}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">G-02</span>
+    <h1>수집 방식 — 어떻게 받았는가</h1>
+    <span class="right">방식마다 지켜야 할 것이 다르다 · [실측] · 2026-10-06</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
+      <span class="chip">[기획] 아직 안 만들었다</span>
+    </div>
+    <table class="t">
+      <tr><th style="width:23%">수집 방식 <span class="tag m">실측</span></th><th style="width:7%;text-align:center">등재</th><th style="width:9%;text-align:center">수집일 찍힘</th><th>이 방식이 지켜야 하는 것 <span class="tag m">실측</span></th></tr>
+      <tr class=""><td><b style="color:#164B72">오픈 API</b><span class="s">자동 수집기 — 식품안전나라 · 공공데이터 · 법제처</span></td>
+          <td class="c"><b>12</b></td><td class="c"><b>11</b></td><td>키는 <code>setkey</code> 한 입구로만 넣는다 — 셸 인자 · 대화에 값을 쓰지 않는다. 요청 간격을 두고 재시도한다. 법제처는 한 모듈이 대상별로 갈린다.</td></tr>
+      <tr class=""><td><b style="color:#8A6A1F">게시물 첨부 · 게시판</b><span class="s">자동 수집기 — HTML 을 파싱하는 스크레이퍼</span></td>
+          <td class="c"><b>17</b></td><td class="c"><b>17</b></td><td><b style="display:inline">robots 확인 기록이 없으면 게이트가 거부한다</b> — 17건 전부 기록이 있다. 받은 파일의 sha256 을 원장에 남겨 같은 파일인지 가른다.</td></tr>
+      <tr class=""><td><b>사람이 받아 올린다</b><span class="s">수집기 없음 — 신청 · 회원가입 · 다른 사이트</span></td>
+          <td class="c"><b>16</b></td><td class="c"><b>1</b></td><td>AI Hub · 통계 · 설문 계열. 사람이 받은 파일을 <code>register</code> 로 올리고, 그 경로도 같은 게이트를 지난다. 5건은 승인 선행(GATED).</td></tr>
+      <tr class=""><td><b style="color:#A03A2B">수기 전용</b><span class="s">status: manual</span></td>
+          <td class="c"><b>10</b></td><td class="c"><b>7</b></td><td><b style="display:inline">자동 접근이 약관 위반</b>이거나 수집기가 못 받는 소스. 자동 수집기는 거부하고 사람이 올리는 경로만 연다. 2인 서명 8 / 10.</td></tr>
+      <tr class="off"><td><b>보류</b><span class="s">status: hold</span></td>
+          <td class="c"><b>15</b></td><td class="c"><b>0</b></td><td><b style="display:inline">지금은 받지 않는다</b> — 판정이 안 끝났거나 선결 조건 대기(G0 4 · G2 8 · G3 3). 탐침은 막지 않는다 — 판정을 끝내려면 열어 봐야 한다.</td></tr>
+    </table>
+
+    <div class="legend">
+      <span class="chip">등재 70 = 자동 29 + 사람이 올림 16 + 수기 10 + 보류 15</span>
+      <span class="chip pos">스크레이퍼 17 — robots 확인 기록 17</span>
+      <span class="chip rsk">편입 금지 13 (G1)</span>
+      <span class="chip">미채택 14 (등급 유지)</span>
+    </div>
+    <p class="note" style="margin:10px 0 0">
+      <b>방식은 산문이 아니라 표가 정한다</b> (D-179). 종전에는 접근 방식 설명에 「크롤링」 같은 낱말이 있는지로 판단해, 게시물 HTML 을 긁는 소스가 robots 검사를 지나갔다.
+      <b>편입 금지와 미채택은 방식이 아니다</b> — 등재 밖의 별도 목록이고, 편입 금지는 G1 고정 · 미채택은 실제 등급을 유지한다 (D-90 ②).
+    </p>
+  </div>
+
+  <footer>
+    <span class="k">어떻게 받았는지가 무엇을 지켜야 하는지를 정한다.</span>
+    모든 방식이 같은 첫 줄(<span class="k">registry.require</span>)을 지나고, 그 뒤 방식마다 다른 조건이 붙는다 — 스크레이퍼는 robots, 사람이 올린 것은 같은 게이트, 보류는 받지 않음.
+    <div class="lock">수 — data_sources.yaml · collect/__init__.py 직접 셈 2026-10-06 (커밋 c7f483a) · 원천은 src/g-02-collect-modes.html (D-217)</div>
+  </footer>
+</div>

@@ -1,8 +1,10 @@
 <!doctype html>
 <!--
   E-02 · 런타임층 — 사용자가 쓴 것   ★ 원천 (D-90 · D-217)
-  🔴 2026-09-13 재작성. 종전 판은 **6표**였다 — `app_account`(0012 · D-213)가 빠져 있었다.
-  🚨 요소마다 [실측]/[기획] (D-219).
+  🔴 2026-10-06 재작성. 09-13 판은 **7표**였다 — 그 뒤 `app_error_log`(0016) ·
+     `user_account` · `notice` · `terms` · `ticket`(0017 · D-260)가 서서 **12표**다. 정본은 `app/models.py` 다.
+     보류 사유 4종 → 6종(0018) · 위험도 「R3 · R4」 → R0~R3(D-227 — R4 는 도달 불가).
+  🚨 요소마다 [실측]/[기획] (D-219) — 「표가 있다」와 「넣는 코드가 있다」를 가른다.
 -->
 <meta charset="utf-8">
 <title>E-02 런타임층</title>
@@ -11,59 +13,64 @@
 <div class="plate">
   <header>
     <span class="no">E-02</span>
-    <h1>런타임층 7표 — 사용자가 쓴 것</h1>
-    <span class="right">work_doc 이 수명의 단위다 · [실측]/[기획] · 2026-09-13</span>
+    <h1>런타임층 12표 — 사용자가 쓴 것</h1>
+    <span class="right">work_doc 이 수명의 단위다 · [실측]/[기획] · 2026-10-06</span>
   </header>
 
   <div class="body">
     <div class="legend" style="margin:0 0 12px">
-      <span class="chip pos">[실측] 표가 있고 마이그레이션이 돌았다</span>
-      <span class="chip">[기획] 아직</span>
+      <span class="chip pos">[실측] 표가 있다 — 초록 칸은 넣는 코드도 있다</span>
+      <span class="chip">[기획] 표는 섰고 넣는 코드가 아직 없다</span>
     </div>
 
-    <div class="cols">
+    <div class="cols tight">
       <fieldset>
-        <legend>수명의 단위</legend>
+        <legend>문서 · 판정 6 (09-09)</legend>
         <div class="card gov">
           <b>work_doc</b>
           <span><span class="tag m">실측</span>consent_store · consent_train 기본 false</span>
-          <span>CHECK 동의 없으면 expires_at 필수</span></div>
+          <span>CHECK 동의 없으면 expires_at 필수 · owner_id → user_account</span></div>
         <div class="card"><b>copy_sentence</b>
-          <span><span class="tag m">실측</span>raw / norm / offset_map</span>
-          <span>origin user·generated·batch·crawl</span></div>
-        <div class="card"><b>upload_blob</b>
-          <span><span class="tag m">실측</span>UPLOAD_ROOT 아래 · sha256</span>
-          <span>업로드물 경로는 여기 한 곳뿐</span></div>
-      </fieldset>
-
-      <fieldset>
-        <legend>판정이 쌓이는 곳</legend>
+          <span><span class="tag m">실측</span>raw / norm / offset_map → work_doc</span></div>
         <div class="card gov">
           <b>judgment</b>
-          <span><span class="tag m">실측</span>verdict 4종 · hold_reason · attempt 0~2</span>
-          <span>risk_floor → risk_final · law_version</span></div>
-        <div class="card"><b>batch_run</b>
-          <span><span class="tag m">실측</span>done / total · state · summary</span>
-          <span>원문 없이 집계만</span></div>
-        <div class="card"><b>slot_assignment</b>
-          <span><span class="tag p">기획</span>template · slot · position</span>
-          <span>unreviewed_note 제거 불가 고지</span></div>
+          <span><span class="tag m">실측</span>verdict 4종 · hold_reason · law_version → work_doc</span>
+          <span>risk_floor → risk_final — 하한 아래로 못 내린다 (0022)</span></div>
+        <div class="card"><b>batch_run · upload_blob · slot_assignment</b>
+          <span><span class="tag m">실측</span>셋 다 work_doc 에 매달린다 (CASCADE)</span></div>
+        <span class="chip rsk">넣는 코드가 없다 — 판정은 아직 저장되지 않는다</span>
       </fieldset>
 
       <fieldset>
-        <legend>🆕 계정 (0012 · D-213)</legend>
+        <legend>계정 2 (0012 · 0017)</legend>
         <div class="card pos">
           <b>app_account</b>
-          <span><span class="tag m">실측</span>governor 하나 · Argon2id</span>
-          <span>CHECK pw_hash LIKE '$argon2id$%'</span>
-          <span>가입 화면 없음 — launcher admin-add</span></div>
+          <span><span class="tag m">실측</span>관리자 · governor 하나 · Argon2id</span>
+          <span>가입 화면 없음 — launcher admin-add (D-213)</span></div>
         <div class="card pos">
-          <b>데이터층으로 가는 FK 없음</b>
-          <span>읽기만 한다 — 학습에 섞이지 않는다</span></div>
+          <b>user_account</b>
+          <span><span class="tag m">실측</span>일반 사용자 · email 유일 · 약관 동의 시각</span>
+          <span>가입 · 로그인 · 마이페이지가 쓴다 (D-260)</span></div>
         <p class="note" style="margin:8px 0 0">
-          ⬜ <b>`work_doc.owner_id` 에 FK 를 안 걸었다</b> — 일반 사용자 가입이 진입점 B 와 함께
-          오기 때문이다 (D-129). 지금 걸면 가리킬 곳 없는 제약이 된다.
+          ★ 계정 표가 둘이고 세션 쿠키도 따로다. 세션은 표가 아니라 <b>서명 쿠키</b>다.
+          ⬜ <code>org_id</code> 칸은 어느 표에도 없다.
         </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>운영 4 (0016 · 0017)</legend>
+        <div class="card pos">
+          <b>app_error_log</b>
+          <span><span class="tag m">실측</span>WARNING 이상을 쌓는다 · 관리자 오류 화면이 읽는다</span></div>
+        <div class="card pos">
+          <b>ticket</b>
+          <span><span class="tag m">실측</span>문의 접수 → user_account · 담당 → app_account</span></div>
+        <div class="card"><b>notice · terms</b>
+          <span><span class="tag m">실측</span>작성자 → app_account · 알림과 가입이 읽는다</span>
+          <span><span class="tag p">기획</span>넣는 코드를 찾지 못했다</span></div>
+        <div class="card gov">
+          <b>데이터층으로 가는 FK 없음</b>
+          <span>판정은 데이터층을 읽기만 한다 — 학습에 섞이지 않는다</span></div>
       </fieldset>
     </div>
 
@@ -75,17 +82,20 @@
           <span class="chip">no_basis 근거없음</span>
           <span class="chip rsk">unjudged 미판정</span>
         </div></fieldset>
-      <fieldset><legend>보류 사유 4종</legend>
+      <fieldset><legend>보류 사유 6종 (0018)</legend>
         <div class="legend" style="margin:0">
           <span class="chip">low_conf</span><span class="chip">gap2</span>
           <span class="chip">cat_unknown</span><span class="chip">rd1</span>
+          <span class="chip">premise_unknown</span><span class="chip">law_uncovered</span>
         </div></fieldset>
-      <fieldset><legend>위험도 5값 · 순서형</legend>
+      <fieldset><legend>위험도 R0~R3 · 순서형 (D-227)</legend>
         <div class="legend" style="margin:0">
-          <span class="chip pos">R0 특이사항 없음</span>
-          <span class="chip warn">R1 · R2 주의</span>
-          <span class="chip rsk">R3 · R4 높음</span>
-        </div></fieldset>
+          <span class="chip pos">R0</span>
+          <span class="chip warn">R1 시정명령</span>
+          <span class="chip rsk">R2 업무정지</span>
+          <span class="chip rsk">R3 영업 상실</span>
+        </div>
+        <p class="note" style="margin:8px 0 0">R4 는 ENUM 에 남았으나 도달 불가다.</p></fieldset>
     </div>
   </div>
 
@@ -93,6 +103,6 @@
     <span class="k">사용자가 쓴 것은 지울 키가 있어야 저장된다.</span>
     동의가 없으면 <span class="k">expires_at</span> 이 필수이고, 그것을 DB `CHECK` 가 강제한다 —
     「나중에 지운다」가 문장으로만 남지 않게 (D-128 · D-129).
-    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 원천 src/e-02-runtime-layer.html (D-217)</div>
+    <div class="lock">표의 정본은 app/models.py · 수의 정본은 docs/00_사실원장.md (D-54) · 원천 src/e-02-runtime-layer.html (D-217)</div>
   </footer>
 </div>

@@ -1,0 +1,108 @@
+<!doctype html>
+<!--
+  P-04 · 업무 WBS · 게이트   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-10-06 새로 그림.** 종전 판(원천 없음)의 게이트 칸이 낡았다 —
+     「Phase 0 9/9」(실제 9/10 충족) · 「Phase 2 9/28」(→ 10/2 → 10/13 · D-270) · 「Phase 3 10/13」.
+  ★ 정본은 `docs/01_기획/03_작업일정.md` v1.2 (10-06 판) §2 · §4 와 원장 「일정」이다.
+  ⚠️ **D-270 은 상태 줄에 「전제 정정 · 결론 재검 대기」(2026-10-06)가 달렸다** — 날짜(10/13)와 결론은 판정 전까지 그대로 적고 표시만 붙인다.
+  🚨 Phase 1 게이트(9/11)의 충족 여부는 원장 「일정」에 적혀 있지 않아 날짜만 적었다 — 충족 표시를 지어 넣지 않는다.
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) · 수의 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>P-04 업무 WBS · 게이트</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  /* 표 판 — plate.css 에 표 스타일이 없어 이 장 안에 둔다. 새 8장이 같은 조각을 쓴다 */
+  table.t{width:100%; border-collapse:collapse; background:#fff}
+  .t th{background:var(--band); color:var(--sub); font-weight:500; font-size:11px; text-align:left;
+        padding:7px 10px; border:1px solid var(--line)}
+  .t td{padding:7px 10px; border:1px solid var(--line); vertical-align:top; font-size:11.6px}
+  .t td b{font-size:12.2px}
+  .t td > b:first-child{display:block}
+  .t td span.s{display:block; color:var(--sub); font-size:11px}
+  .t tr.off td{background:var(--offbg); color:var(--off)}
+  .t tr.off td b{color:var(--off)}
+  .t td.c{text-align:center; vertical-align:middle}
+  .t code, .note code, .card code{font-family:ui-monospace,Menlo,monospace; font-size:10.8px}
+  .ok{color:#286E4C; font-weight:600} .no{color:var(--rsk); font-weight:600}
+  .gv{color:var(--gov)} .rk{color:var(--rsk)}
+
+  .wbs td.mono{font-family:ui-monospace,Menlo,monospace; color:var(--sub); font-weight:600}
+  .wbs td.g{font-size:11.3px; background:#FDFBFA}
+  .wbs td.g b{font-size:11.8px}
+  .wbs td{padding:6px 10px}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">P-04</span>
+    <h1>업무 WBS · 게이트</h1>
+    <span class="right">작업일 38일 · 7.6주 · [실측]/[기획] · 2026-10-06 (5W 마지막 날)</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 지난 것 — 기록이 있다</span>
+      <span class="chip">[기획] 앞으로의 것</span>
+      <span class="chip warn">⚠️ 전제 정정 · 결론 재검 대기 (D-270 · 10-06)</span>
+    </div>
+    <table class="t wbs">
+      <tr><th style="width:6%;text-align:center">주차</th><th style="width:6%;text-align:center">작업일</th><th>주요 산출물 (공식 WBS — 제출 시점)</th><th style="width:36%">게이트 · 마일스톤</th></tr>
+      <tr class=""><td class="c mono">1W</td><td class="c"><b>5</b></td>
+          <td style="border-left:3px solid #164B72"><b>WBS · 기획서 · 요구사항 정의서</b><span class="s">8/28 ~ 9/3</span></td>
+          <td class="g"><span class="tag m">실측</span>9/2 Phase 0 — 미달성</td></tr>
+      <tr class=""><td class="c mono">2W</td><td class="c"><b>5</b></td>
+          <td style="border-left:3px solid #286E4C"><b>수집 데이터 보고서 · DB 설계</b><span class="s">9/4 ~ 9/10</span></td>
+          <td class="g"><span class="tag m">실측</span><b style="display:inline" class="ok">Phase 0 — 9/10 충족</b><span class="s">9/9 재설정도 미달성 → 9/10 · 문구 하나가 한 바퀴</span></td></tr>
+      <tr class=""><td class="c mono">3W</td><td class="c"><b>5</b></td>
+          <td style="border-left:3px solid #286E4C"><b>전처리 결과서 · 중간 발표</b><span class="s">9/11 ~ 9/17</span></td>
+          <td class="g"><span class="tag m">실측</span>9/11 Phase 1 · <b style="display:inline">9/15 중간 발표</b><span class="s">9/17 범위 확정 — 6종 유지 → 10/6 재판정 8종 (D-321)</span></td></tr>
+      <tr class=""><td class="c mono">4W</td><td class="c"><b>5</b></td>
+          <td style="border-left:3px solid #8A6A1F"><b>학습결과서 · 학습 모델</b><span class="s">9/18 ~ 9/28 · 추석 2일</span></td>
+          <td class="g"><span class="tag m">실측</span><s>9/28 Phase 2</s> → 10/2 로 옮김 (D-270)</td></tr>
+      <tr class=""><td class="c mono">5W</td><td class="c"><b>5</b></td>
+          <td style="border-left:3px solid #8A6A1F"><b>벡터DB 구축 결과서 · 화면설계서</b><span class="s">9/29 ~ 10/6 · 대체공휴일 1일 · ◀ 지금</span></td>
+          <td class="g"><span class="tag m">실측</span><s>10/2</s> → 10/13 으로 옮김 (D-270 개정 09-29)<span class="s">10/2 · 10/5 골든 재동결 · 10/6 품목 분기 켬</span></td></tr>
+      <tr class=""><td class="c mono">6W</td><td class="c"><b>5</b></td>
+          <td style="border-left:3px solid #8A6A1F"><b>멀티 에이전트 아키텍처 · 테스트 보고서</b><span class="s">10/7 ~ 10/14 · 한글날 1일</span></td>
+          <td class="g"><span class="tag p">기획</span><b style="display:inline" class="rk">10/13 판정 게이트 + 생성 게이트</b><span class="s">판정 F1 지표 · 채점 규칙 미정 — 판정 대기</span><span class="s" style="color:#8A6A1F">⚠️ 생성 게이트: 전제 정정 · 결론 재검 대기</span></td></tr>
+      <tr class=""><td class="c mono">7W</td><td class="c"><b>5</b></td>
+          <td style="border-left:3px solid #164B72"><b>웹 애플리케이션 · 시스템 구성도</b><span class="s">10/15 ~ 10/21</span></td>
+          <td class="g"><span class="tag p">기획</span><b style="display:inline" class="rk">10/16 기능 동결</b><span class="s">이후 작업일 6일</span></td></tr>
+      <tr class=""><td class="c mono">8W</td><td class="c"><b class="rk">2</b></td>
+          <td style="border-left:3px solid #A03A2B"><b>최종 발표 PT · 소스코드 · 시연영상</b><span class="s">10/22 ~ 10/24</span></td>
+          <td class="g">—</td></tr>
+      <tr class=""><td class="c mono">9W</td><td class="c"><b class="rk">1</b></td>
+          <td style="border-left:3px solid #A03A2B"><b>산출물 보완 · 잔여 정리</b><span class="s">10/25 ~ 10/26</span></td>
+          <td class="g"><span class="tag p">기획</span><b style="display:inline" class="rk">10/26 최종 발표</b></td></tr>
+    </table>
+
+    <div class="cols2" style="margin-top:14px">
+      <fieldset>
+        <legend>5W 까지 선 것 — 10-06</legend>
+        <div class="card pos" style="margin-bottom:0"><b>판정(검수) 경로가 끝까지 돈다 <span class="tag m">실측</span></b>
+          <span><code>/judge</code> 가 검수 그래프를 돈다 · 사전 적중 기반 판정 첫 판 · 품목 분기 · 증명서 조립기 · 평가 도구</span>
+          <span>골든셋 재동결(10/2 · 10/5) · 확정 클래스 8종 (D-321)</span></div>
+      </fieldset>
+      <fieldset>
+        <legend>남은 것 — 6W 로 넘어간다</legend>
+        <div class="card off" style="margin-bottom:0"><b>인코더 배선 · 규칙 조립 생성 <span class="tag p">기획</span></b>
+          <span>그래프의 인코더 노드는 빈 노드 — 3차 재학습 결과 대기 · 생성 그래프 노드는 스텁</span>
+          <span>sLLM 고쳐 쓰기는 10-06 병합 · ⚠️ 승인 범위는 판정 대기</span></div>
+      </fieldset>
+    </div>
+    <div class="legend">
+      <span class="chip rsk">8W · 9W 합쳐 작업일 3일 — 제작 기간이 아니라 제출 기간이다</span>
+      <span class="chip warn">실제 완성은 7W 에 끝나 있어야 한다</span>
+      <span class="chip">평일 공휴일 4일 — 9/24 · 9/25 · 10/5 · 10/9</span>
+    </div>
+  </div>
+
+  <footer>
+    <span class="k">게이트를 옮긴 것도 그린다.</span>
+    9/28 → 10/2 → 10/13 — 생성 코드가 없는 채 날짜만 다가오던 게이트를 두 번 옮겼고, 10/13 에는 판정 게이트와 생성 게이트가 같이 걸려 있다 (D-270).
+    <div class="lock">일정의 정본은 docs/01_기획/03_작업일정.md v1.2 · 원장 「일정」 (2026-10-06 판) · 원천은 src/p-04-wbs-gates.html (D-217)</div>
+  </footer>
+</div>

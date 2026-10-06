@@ -1,0 +1,125 @@
+<!doctype html>
+<!--
+  P-02 · AI 파트 — 단계별 입력과 출력   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-10-06 새로 그림.** 종전 판(원천 없음 · PNG 만)은 다섯 단계(룰 · 분류 · 법령 RAG · 위험 판정 · 대체 문구)였다.
+     지금 구현과 다른 자리 — ① 위험도 하한은 사전이 아니라 **제재표**에서 나온다(D-305) ② 척도는 R0~R3(D-227)
+     ③ 검수에는 재생성 루프가 없다(D-265 · D-266) ④ 인코더 노드는 빈 노드다 ⑤ 「대체 문구」는 그래프에 없다.
+  ★ 순서의 정본은 `app/graph.py` `CORE_BEFORE_LAWS` · `CORE_AFTER_LAWS` 다. 이 장은 그것을 읽은 것이다.
+  ⚠️ sLLM 고쳐 쓰기는 **사실(10-06 병합)과 「판정 대기」만** 적는다 — D-265 · D-270 과의 관계는 팀장 판정 전이다.
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) · 수의 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>P-02 AI 파트 — 단계별 입력과 출력</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  /* 표 판 — plate.css 에 표 스타일이 없어 이 장 안에 둔다. 새 8장이 같은 조각을 쓴다 */
+  table.t{width:100%; border-collapse:collapse; background:#fff}
+  .t th{background:var(--band); color:var(--sub); font-weight:500; font-size:11px; text-align:left;
+        padding:7px 10px; border:1px solid var(--line)}
+  .t td{padding:7px 10px; border:1px solid var(--line); vertical-align:top; font-size:11.6px}
+  .t td b{font-size:12.2px}
+  .t td > b:first-child{display:block}
+  .t td span.s{display:block; color:var(--sub); font-size:11px}
+  .t tr.off td{background:var(--offbg); color:var(--off)}
+  .t tr.off td b{color:var(--off)}
+  .t td.c{text-align:center; vertical-align:middle}
+  .t code, .note code, .card code{font-family:ui-monospace,Menlo,monospace; font-size:10.8px}
+  .ok{color:#286E4C; font-weight:600} .no{color:var(--rsk); font-weight:600}
+  .gv{color:var(--gov)} .rk{color:var(--rsk)}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">P-02</span>
+    <h1>AI 파트 — 단계별 입력과 출력</h1>
+    <span class="right">무엇이 들어가고 무엇이 나오는가 · [실측]/[기획] · 2026-10-06</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
+      <span class="chip">[기획] 아직 안 만들었다</span>
+      <span class="chip warn">⚠️ 판정 대기 — 결론을 적지 않는다</span>
+    </div>
+    <table class="t">
+      <tr><th style="width:21%">단계 (코어 노드 순서)</th><th style="width:25%">입력</th><th style="width:27%">출력</th><th>없거나 실패하면</th></tr>
+      <tr><td><b class="gv">① split · classify</b><span class="s"><span class="tag m">실측</span>문장 분할 · 품목</span></td>
+          <td>원고 · 제품 정보<span class="s">품목은 주어진 값만 쓴다</span></td>
+          <td>문장 목록 · 보낼 법<span class="s">식품·건기식 2법 / 화장품 2법</span></td>
+          <td>품목 없음 → 미확정 · 법 셋 전부<span class="s">🚨 사용자 화면은 품목을 보내지 않는다</span></td></tr>
+      <tr><td><b class="gv">② retrieve</b><span class="s"><span class="tag m">실측</span>조문 검색 · 한 번</span></td>
+          <td>문장<span class="s">벡터(KURE-v1) + 어휘(ts_rank_cd)</span></td>
+          <td>두 갈래 후보 — 법마다 폭만큼<span class="s">섞지 않고 나른다 (D-291)</span></td>
+          <td>두 갈래가 돌았는지를 값으로 남긴다<span class="s">「못 찾음」과 「못 돌림」을 가른다</span></td></tr>
+      <tr><td><b class="gv">③ match_dict</b><span class="s"><span class="tag m">실측</span>금지 표현 사전</span></td>
+          <td>문장 · 사전<span class="s">단독판정 자격 항목 / 자격 없는 항목</span></td>
+          <td>적중 · 원문 좌표<span class="s">자격 없는 적중은 유형 후보로만 (D-311)</span></td>
+          <td>못 훑음 → 미판정<span class="s">「안 돌았다」≠「안 걸렸다」</span></td></tr>
+      <tr class="off"><td><b>④ encode</b><span class="s"><span class="tag p">기획</span>빈 노드</span></td>
+          <td>문장</td>
+          <td>위반 유형 후보 · 신뢰도<span class="s">확정 클래스 8종 (D-321)</span></td>
+          <td>인코더 모듈은 저장소에 있으나 그래프에 미배선<span class="s">값을 지어 넣지 않고 그대로 넘긴다</span></td></tr>
+      <tr><td><b class="gv">⑤ 법별 노드 셋 · merge_laws</b><span class="s"><span class="tag m">실측</span>팬아웃 – 팬인 (D-267)</span></td>
+          <td>②의 후보 · ③의 적중</td>
+          <td>자기 법의 근거 · 적중만<span class="s">표시광고법 · 식품표시광고법 · 화장품법</span></td>
+          <td>보낸 법이 다 돌아왔는지 대조한다<span class="s">건강기능식품법은 노드가 없다 — 참고 전용</span></td></tr>
+      <tr><td><b class="gv">⑥ judge</b><span class="s"><span class="tag m">실측</span>규칙판 — 인코더 전</span></td>
+          <td>문장 · 법별 근거 · 적중</td>
+          <td>확정 · 보류 · 근거 없음 · 미판정<span class="s">확정에는 근거 조문 · 뺄 구간 · 불가 사유</span></td>
+          <td>사전에 안 걸린 문장은 보류 (D-269)<span class="s">통과로 내지 않는다</span></td></tr>
+      <tr><td><b class="gv">⑦ assess_risk</b><span class="s"><span class="tag m">실측</span>위험도 하한</span></td>
+          <td>확정 위반 · 제재표<span class="s">서명된 행만 읽는다</span></td>
+          <td>위험도 R0~R3<span class="s">하한은 제재 별표에서만 (D-305)</span></td>
+          <td>위험도 없는 확정 → 종착은 보류<span class="s">⬜ 기준이 없을 때 무엇을 낼지 판정 대기</span></td></tr>
+      <tr><td><b class="gv">⑧ premise_branches</b><span class="s"><span class="tag m">실측</span>품목 분기 (D-319)</span></td>
+          <td>문장 판정 · 전제 여섯</td>
+          <td>전제마다의 판정 + 기준 문안<span class="s">처음에 전부 계산한다 — 다시 판정하지 않는다</span></td>
+          <td>판정 못 하는 전제 → 보류 + 분기<span class="s">품목 미확정에는 통과 표시가 없다</span></td></tr>
+      <tr class="off"><td><b>⑨ doc_rules</b><span class="s"><span class="tag p">기획</span>빈 노드</span></td>
+          <td>문서 전체</td>
+          <td>문서 경고 · 보류<span class="s">의무 문구 유무 등</span></td>
+          <td>—</td></tr>
+      <tr><td><b class="gv">종착 (검수)</b><span class="s"><span class="tag m">실측</span>루프 없음 (D-266)</span></td>
+          <td>코어 출력</td>
+          <td>보류 &gt; 증명서 &gt; 지시 &gt; 통과<span class="s">증명서 조립기 <span class="tag m">실측</span> · 지시는 <span class="tag p">기획</span> 재료 없음</span></td>
+          <td>문안이 없는 조합 → 증명서가 아니라 보류<span class="s">인코더 전에는 종착이 거의 전부 보류다</span></td></tr>
+    </table>
+
+    <div class="cols2" style="margin-top:14px">
+      <fieldset>
+        <legend>생성 (진입점 B · C) — 그래프</legend>
+        <div class="card off"><b>생성 노드 여섯 — 빈 노드 <span class="tag p">기획</span></b>
+          <span>keyword_screen → assemble → claim_ledger → rejudge → frontier · search_failed</span>
+          <span>계약과 라우터만 있다 · <code>POST /generate</code> · <code>/compose</code> 는 501</span></div>
+        <div class="card off"><b>규칙 조립 4종 · 재생성 루프 <span class="tag p">기획</span></b>
+          <span>삭제안 · 사실 진술 치환 · 인정 문구 슬롯 · 실증 유지 (D-264)</span>
+          <span>총 라운드 3 · 세 거부는 한 카운터 (D-126) — 생성 상태에만 있다</span></div>
+        <div class="card off" style="margin-bottom:0"><b>페르소나 · 세그먼트 · sLLM 다듬기 · 각색 <span class="tag p">기획</span></b>
+          <span>설계만 (D-270) · ⚠️ D-270 은 「전제 정정 · 결론 재검 대기」(10-06)</span></div>
+      </fieldset>
+      <fieldset>
+        <legend>그래프 밖 — 검수 화면의 「이 문장 고쳐 쓰기」</legend>
+        <div class="card pos"><b>10-06 에 병합됐다 <span class="tag m">실측</span></b>
+          <span><code>POST /u/review/rewrite</code> → 로컬 sLLM 서버 (Qwen2.5-3B-Instruct + LoRA · 별도 가상환경)</span>
+          <span>돌아온 문구를 <b style="display:inline">앱의 판정 코어로 다시 판정</b>해 같은 화면에 그린다</span></div>
+        <div class="card"><b>그래프에는 들어오지 않았다 <span class="tag m">실측</span></b>
+          <span>검수 응답의 후보 목록은 비어 있다 · 자격형 문장과 유형 없는 문장은 보내지 않는다</span>
+          <span>서버가 없거나 응답이 깨지면 후보를 그리지 않는다</span></div>
+        <div class="card" style="margin-bottom:0;border-left:3px solid #8A6A1F;background:#FFF9EC"><b style="color:#8A6A1F">⚠️ 판정 대기</b>
+          <span>D-265(검수는 대체 문구를 내지 않는다) · D-270(sLLM 은 설계만)과의 관계 · 승인 범위(실사용 / 시연)</span>
+          <span>모델 레지스트리 등재 · 라이선스도 미정</span></div>
+      </fieldset>
+    </div>
+    <p class="note" style="margin:12px 0 0">
+      <b>RAG 는 사실 · 파인튜닝은 형식</b>(기획서) — 법령 지식을 모델에 주입하면 없는 조문을 지어낸다. 조문은 검색이 나르고, 판정에는 근거 조문이 붙어야 확정된다.
+    </p>
+  </div>
+
+  <footer>
+    <span class="k">빈 노드는 비어 있는 것이지 틀린 것이 아니다.</span>
+    자리에 무엇이 올지 적어 두고 상태를 그대로 넘긴다 — 그럴듯한 값을 넣으면 진짜가 붙을 때 무엇이 바뀌었는지 알 수 없다.
+    <div class="lock">구조의 정본은 app/graph.py · docs/02_설계/AI_시스템_아키텍처.md (2026-10-06 판 · 커밋 c7f483a) · 원천은 src/p-02-ai-stages.html (D-217)</div>
+  </footer>
+</div>
