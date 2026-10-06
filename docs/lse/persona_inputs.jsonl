@@ -1,0 +1,231 @@
+{"id": "t000-p2", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t000-p3", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t000-p5", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t001-p5", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t001-p6", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있습니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t001-p4", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t002-p1", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t002-p5", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t002-p2", "split": "train", "group": "간", "input": "간 건강에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t003-p2", "split": "train", "group": "관절뼈", "input": "관절건강에 도움이 될 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t003-p1", "split": "train", "group": "관절뼈", "input": "관절건강에 도움이 될 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t003-p6", "split": "train", "group": "관절뼈", "input": "관절건강에 도움이 될 수 있습니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t004-p1", "split": "train", "group": "관절뼈", "input": "관절건강에 도움이 될 수 있음", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t004-p2", "split": "train", "group": "관절뼈", "input": "관절건강에 도움이 될 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t004-p4", "split": "train", "group": "관절뼈", "input": "관절건강에 도움이 될 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t005-p4", "split": "train", "group": "관절뼈", "input": "Dimethylsulfone(MSM)은 관절건강에 도움이 될 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t005-p2", "split": "train", "group": "관절뼈", "input": "Dimethylsulfone(MSM)은 관절건강에 도움이 될 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t005-p3", "split": "train", "group": "관절뼈", "input": "Dimethylsulfone(MSM)은 관절건강에 도움이 될 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t006-p2", "split": "train", "group": "관절뼈", "input": "뼈 건강에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t006-p5", "split": "train", "group": "관절뼈", "input": "뼈 건강에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t006-p3", "split": "train", "group": "관절뼈", "input": "뼈 건강에 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t007-p3", "split": "train", "group": "관절뼈", "input": "호프추출물은 관절 건강에 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t007-p4", "split": "train", "group": "관절뼈", "input": "호프추출물은 관절 건강에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t007-p2", "split": "train", "group": "관절뼈", "input": "호프추출물은 관절 건강에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t008-p3", "split": "train", "group": "관절뼈", "input": "Dimethylsulfone (MSM)은 관절건강에 도움이 될 수 있으나  인체시험을 통한 확인이 필요합니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t008-p1", "split": "train", "group": "관절뼈", "input": "Dimethylsulfone (MSM)은 관절건강에 도움이 될 수 있으나  인체시험을 통한 확인이 필요합니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t008-p2", "split": "train", "group": "관절뼈", "input": "Dimethylsulfone (MSM)은 관절건강에 도움이 될 수 있으나  인체시험을 통한 확인이 필요합니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t009-p5", "split": "train", "group": "관절뼈", "input": "로즈힙분말은 관절 및 연골건강에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t009-p2", "split": "train", "group": "관절뼈", "input": "로즈힙분말은 관절 및 연골건강에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t009-p3", "split": "train", "group": "관절뼈", "input": "로즈힙분말은 관절 및 연골건강에 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t010-p4", "split": "train", "group": "관절뼈", "input": "체내 칼슘 흡수 촉진에 도움을 줄 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t010-p6", "split": "train", "group": "관절뼈", "input": "체내 칼슘 흡수 촉진에 도움을 줄 수 있음", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t010-p2", "split": "train", "group": "관절뼈", "input": "체내 칼슘 흡수 촉진에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t011-p3", "split": "train", "group": "관절뼈", "input": "디메틸설폰(Dimethylsulfone)은 관절건강에 도움이 될 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t011-p4", "split": "train", "group": "관절뼈", "input": "디메틸설폰(Dimethylsulfone)은 관절건강에 도움이 될 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t011-p1", "split": "train", "group": "관절뼈", "input": "디메틸설폰(Dimethylsulfone)은 관절건강에 도움이 될 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t012-p4", "split": "train", "group": "관절뼈", "input": "뼈 건강에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t012-p6", "split": "train", "group": "관절뼈", "input": "뼈 건강에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t012-p5", "split": "train", "group": "관절뼈", "input": "뼈 건강에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t013-p1", "split": "train", "group": "관절뼈", "input": "체내 칼슘흡수 촉진에 도움을 줌", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t013-p6", "split": "train", "group": "관절뼈", "input": "체내 칼슘흡수 촉진에 도움을 줌", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t013-p4", "split": "train", "group": "관절뼈", "input": "체내 칼슘흡수 촉진에 도움을 줌", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t014-p4", "split": "train", "group": "관절뼈", "input": "관절건강 개선에 도움을 줄 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t014-p2", "split": "train", "group": "관절뼈", "input": "관절건강 개선에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t014-p6", "split": "train", "group": "관절뼈", "input": "관절건강 개선에 도움을 줄 수 있음", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t015-p6", "split": "train", "group": "눈", "input": "루테인은 노화로 인해 감소될 수 있는 황반색소밀도를 유지시켜 주어 눈건강에 도움을 줍니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t015-p2", "split": "train", "group": "눈", "input": "루테인은 노화로 인해 감소될 수 있는 황반색소밀도를 유지시켜 주어 눈건강에 도움을 줍니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t015-p3", "split": "train", "group": "눈", "input": "루테인은 노화로 인해 감소될 수 있는 황반색소밀도를 유지시켜 주어 눈건강에 도움을 줍니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t016-p1", "split": "train", "group": "눈", "input": "헤마토코쿠스 CO2 초임계추출물의 섭취는 눈의 피로도 개선에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t016-p4", "split": "train", "group": "눈", "input": "헤마토코쿠스 CO2 초임계추출물의 섭취는 눈의 피로도 개선에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t016-p5", "split": "train", "group": "눈", "input": "헤마토코쿠스 CO2 초임계추출물의 섭취는 눈의 피로도 개선에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t017-p1", "split": "train", "group": "눈", "input": "눈의 피로 개선에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t017-p5", "split": "train", "group": "눈", "input": "눈의 피로 개선에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t017-p2", "split": "train", "group": "눈", "input": "눈의 피로 개선에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t018-p4", "split": "train", "group": "눈", "input": "노화로 인해 감소될 수 있는 황반색소밀도를 유지하여 눈 건강에 도움을 줌", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t018-p5", "split": "train", "group": "눈", "input": "노화로 인해 감소될 수 있는 황반색소밀도를 유지하여 눈 건강에 도움을 줌", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t018-p6", "split": "train", "group": "눈", "input": "노화로 인해 감소될 수 있는 황반색소밀도를 유지하여 눈 건강에 도움을 줌", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t019-p2", "split": "train", "group": "눈", "input": "눈의 피로 개선에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t019-p4", "split": "train", "group": "눈", "input": "눈의 피로 개선에 도움을 줄 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t019-p3", "split": "train", "group": "눈", "input": "눈의 피로 개선에 도움을 줄 수 있음", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t020-p5", "split": "train", "group": "눈", "input": "눈 건강에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t020-p2", "split": "train", "group": "눈", "input": "눈 건강에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t020-p6", "split": "train", "group": "눈", "input": "눈 건강에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t021-p1", "split": "train", "group": "눈", "input": "건조한 눈을 개선아혀 눈 건강에 도움을 줄 수 있음", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t021-p2", "split": "train", "group": "눈", "input": "건조한 눈을 개선아혀 눈 건강에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t021-p5", "split": "train", "group": "눈", "input": "건조한 눈을 개선아혀 눈 건강에 도움을 줄 수 있음", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t022-p2", "split": "train", "group": "눈", "input": "헤마토코쿠스 추출물의 섭취는 눈의 피로도 개선에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t022-p1", "split": "train", "group": "눈", "input": "헤마토코쿠스 추출물의 섭취는 눈의 피로도 개선에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t022-p3", "split": "train", "group": "눈", "input": "헤마토코쿠스 추출물의 섭취는 눈의 피로도 개선에 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t023-p2", "split": "train", "group": "눈", "input": "노화로 인해 감소될 수 있는 황반색소밀도를 유지시켜 주어 눈건강에 도움을 줌", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t023-p4", "split": "train", "group": "눈", "input": "노화로 인해 감소될 수 있는 황반색소밀도를 유지시켜 주어 눈건강에 도움을 줌", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t023-p1", "split": "train", "group": "눈", "input": "노화로 인해 감소될 수 있는 황반색소밀도를 유지시켜 주어 눈건강에 도움을 줌", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t024-p3", "split": "train", "group": "면역", "input": "과도한 운동 후의 L-글루타민 보충은 신체 저항능력 향상에 도움이 될 수 있음", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t024-p6", "split": "train", "group": "면역", "input": "과도한 운동 후의 L-글루타민 보충은 신체 저항능력 향상에 도움이 될 수 있음", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t024-p1", "split": "train", "group": "면역", "input": "과도한 운동 후의 L-글루타민 보충은 신체 저항능력 향상에 도움이 될 수 있음", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t025-p2", "split": "train", "group": "면역", "input": "신체방어능력향상에 도움이 될 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t025-p4", "split": "train", "group": "면역", "input": "신체방어능력향상에 도움이 될 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t025-p5", "split": "train", "group": "면역", "input": "신체방어능력향상에 도움이 될 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t026-p4", "split": "train", "group": "면역", "input": "비특이적 면역을 증강시키는데 도움을 줄 수 있으나 인체시험에서의 확인이 필요합니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t026-p5", "split": "train", "group": "면역", "input": "비특이적 면역을 증강시키는데 도움을 줄 수 있으나 인체시험에서의 확인이 필요합니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t026-p3", "split": "train", "group": "면역", "input": "비특이적 면역을 증강시키는데 도움을 줄 수 있으나 인체시험에서의 확인이 필요합니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t027-p4", "split": "train", "group": "면역", "input": "면역조절에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t027-p3", "split": "train", "group": "면역", "input": "면역조절에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t027-p2", "split": "train", "group": "면역", "input": "면역조절에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t028-p2", "split": "train", "group": "면역", "input": "표고버섯균사체 AHCC는 신체방어능력 향상에 도움이 될 수 있으나 인체시험을 통한 확인이 필요합니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t028-p3", "split": "train", "group": "면역", "input": "표고버섯균사체 AHCC는 신체방어능력 향상에 도움이 될 수 있으나 인체시험을 통한 확인이 필요합니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t028-p4", "split": "train", "group": "면역", "input": "표고버섯균사체 AHCC는 신체방어능력 향상에 도움이 될 수 있으나 인체시험을 통한 확인이 필요합니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t029-p1", "split": "train", "group": "운동피로", "input": "크레아틴의 섭취는 근력 운동 시에 운동수행능력 향상에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t029-p4", "split": "train", "group": "운동피로", "input": "크레아틴의 섭취는 근력 운동 시에 운동수행능력 향상에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t029-p2", "split": "train", "group": "운동피로", "input": "크레아틴의 섭취는 근력 운동 시에 운동수행능력 향상에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t030-p2", "split": "train", "group": "운동피로", "input": "근력 운동 시에 운동수행능력 향상에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t030-p5", "split": "train", "group": "운동피로", "input": "근력 운동 시에 운동수행능력 향상에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t030-p1", "split": "train", "group": "운동피로", "input": "근력 운동 시에 운동수행능력 향상에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t031-p5", "split": "train", "group": "장", "input": "장내 유익균의 증식과 유해균의 억제에 도움을 줄 수 있습니다.\" “배변활동을 원활히 하는데 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t031-p4", "split": "train", "group": "장", "input": "장내 유익균의 증식과 유해균의 억제에 도움을 줄 수 있습니다.\" “배변활동을 원활히 하는데 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t031-p6", "split": "train", "group": "장", "input": "장내 유익균의 증식과 유해균의 억제에 도움을 줄 수 있습니다.\" “배변활동을 원활히 하는데 도움을 줄 수 있습니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t032-p2", "split": "train", "group": "장", "input": "장내 유익균 증식, 유해균 억제, 배변활동에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t032-p1", "split": "train", "group": "장", "input": "장내 유익균 증식, 유해균 억제, 배변활동에 도움을 줄 수 있음", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t032-p6", "split": "train", "group": "장", "input": "장내 유익균 증식, 유해균 억제, 배변활동에 도움을 줄 수 있음", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t033-p2", "split": "train", "group": "장", "input": "유익한 유산균 증식, 유해균 억제, 배변활동 원활, 장 면역을 조절하여 장 건강에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t033-p4", "split": "train", "group": "장", "input": "유익한 유산균 증식, 유해균 억제, 배변활동 원활, 장 면역을 조절하여 장 건강에 도움을 줄 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t033-p3", "split": "train", "group": "장", "input": "유익한 유산균 증식, 유해균 억제, 배변활동 원활, 장 면역을 조절하여 장 건강에 도움을 줄 수 있음", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t034-p2", "split": "train", "group": "전립선", "input": "전립선 건강의 유지에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t034-p6", "split": "train", "group": "전립선", "input": "전립선 건강의 유지에 도움을 줄 수 있습니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t034-p5", "split": "train", "group": "전립선", "input": "전립선 건강의 유지에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t035-p5", "split": "train", "group": "전립선", "input": "쏘팔메토 열매추출물은 전립선 건강의 유지에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t035-p3", "split": "train", "group": "전립선", "input": "쏘팔메토 열매추출물은 전립선 건강의 유지에 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t035-p6", "split": "train", "group": "전립선", "input": "쏘팔메토 열매추출물은 전립선 건강의 유지에 도움을 줄 수 있습니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t036-p5", "split": "train", "group": "체지방", "input": "공액리놀레산(Conjugated Linoleic Acid)는 과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t036-p6", "split": "train", "group": "체지방", "input": "공액리놀레산(Conjugated Linoleic Acid)는 과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t036-p2", "split": "train", "group": "체지방", "input": "공액리놀레산(Conjugated Linoleic Acid)는 과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t037-p5", "split": "train", "group": "체지방", "input": "탄수화물에서 지방으로의 합성을 억제하여 체지방 감소에 도움을 줍니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t037-p2", "split": "train", "group": "체지방", "input": "탄수화물에서 지방으로의 합성을 억제하여 체지방 감소에 도움을 줍니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t037-p3", "split": "train", "group": "체지방", "input": "탄수화물에서 지방으로의 합성을 억제하여 체지방 감소에 도움을 줍니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t038-p2", "split": "train", "group": "체지방", "input": "체지방 감소에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t038-p1", "split": "train", "group": "체지방", "input": "체지방 감소에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t038-p4", "split": "train", "group": "체지방", "input": "체지방 감소에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t039-p4", "split": "train", "group": "체지방", "input": "과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t039-p2", "split": "train", "group": "체지방", "input": "과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t039-p5", "split": "train", "group": "체지방", "input": "과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t040-p6", "split": "train", "group": "체지방", "input": "공액리놀레산(Conjugated Linoleic Acid)은 과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t040-p2", "split": "train", "group": "체지방", "input": "공액리놀레산(Conjugated Linoleic Acid)은 과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t040-p5", "split": "train", "group": "체지방", "input": "공액리놀레산(Conjugated Linoleic Acid)은 과체중인 성인의 체지방 감소에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t041-p5", "split": "train", "group": "체지방", "input": "체지방 감소에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t041-p3", "split": "train", "group": "체지방", "input": "체지방 감소에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t041-p4", "split": "train", "group": "체지방", "input": "체지방 감소에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t042-p3", "split": "train", "group": "체지방", "input": "혈당 조절에 도움을 줄 수 있음, 혈압이 높은 사람에게 도움을 줄 수 있음, 체지방 감소에 도움을 줄 수 있음", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t042-p1", "split": "train", "group": "체지방", "input": "혈당 조절에 도움을 줄 수 있음, 혈압이 높은 사람에게 도움을 줄 수 있음, 체지방 감소에 도움을 줄 수 있음", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t042-p2", "split": "train", "group": "체지방", "input": "혈당 조절에 도움을 줄 수 있음, 혈압이 높은 사람에게 도움을 줄 수 있음, 체지방 감소에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t043-p2", "split": "train", "group": "콜레스테롤", "input": "혈중 콜레스테롤 개선에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t043-p1", "split": "train", "group": "콜레스테롤", "input": "혈중 콜레스테롤 개선에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t043-p4", "split": "train", "group": "콜레스테롤", "input": "혈중 콜레스테롤 개선에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t044-p1", "split": "train", "group": "콜레스테롤", "input": "콜레스테롤 감소에 도움을 줄 수 있음", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t044-p2", "split": "train", "group": "콜레스테롤", "input": "콜레스테롤 감소에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t044-p5", "split": "train", "group": "콜레스테롤", "input": "콜레스테롤 감소에 도움을 줄 수 있음", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t045-p6", "split": "train", "group": "혈당", "input": "당의 흡수를 억제하여 식후 혈당상승억제에 도움을 줄 수 있음", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t045-p4", "split": "train", "group": "혈당", "input": "당의 흡수를 억제하여 식후 혈당상승억제에 도움을 줄 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t045-p2", "split": "train", "group": "혈당", "input": "당의 흡수를 억제하여 식후 혈당상승억제에 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t046-p5", "split": "train", "group": "혈당", "input": "난소화성말토덱스트린은 식사와 함께 섭취하면 당의 흡수를 억제시켜 식후 혈당 조절에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t046-p4", "split": "train", "group": "혈당", "input": "난소화성말토덱스트린은 식사와 함께 섭취하면 당의 흡수를 억제시켜 식후 혈당 조절에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t046-p1", "split": "train", "group": "혈당", "input": "난소화성말토덱스트린은 식사와 함께 섭취하면 당의 흡수를 억제시켜 식후 혈당 조절에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t047-p5", "split": "train", "group": "혈당", "input": "당의 흡수를 억제하여 식후혈당상승억제에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t047-p6", "split": "train", "group": "혈당", "input": "당의 흡수를 억제하여 식후혈당상승억제에 도움을 줄 수 있습니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t047-p3", "split": "train", "group": "혈당", "input": "당의 흡수를 억제하여 식후혈당상승억제에 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t048-p3", "split": "train", "group": "혈당", "input": "피니톨은 캐롭빈 포드에서 정제·추출한 원료로서 혈당조절에 도움을 줄 수 있으나 인체시험에서 확인이 필요합니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t048-p4", "split": "train", "group": "혈당", "input": "피니톨은 캐롭빈 포드에서 정제·추출한 원료로서 혈당조절에 도움을 줄 수 있으나 인체시험에서 확인이 필요합니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t048-p6", "split": "train", "group": "혈당", "input": "피니톨은 캐롭빈 포드에서 정제·추출한 원료로서 혈당조절에 도움을 줄 수 있으나 인체시험에서 확인이 필요합니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t049-p3", "split": "train", "group": "혈당", "input": "PMO 참밀알부민은 급격한 식후 혈당상승을 억제하는데 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t049-p5", "split": "train", "group": "혈당", "input": "PMO 참밀알부민은 급격한 식후 혈당상승을 억제하는데 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t049-p4", "split": "train", "group": "혈당", "input": "PMO 참밀알부민은 급격한 식후 혈당상승을 억제하는데 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t050-p2", "split": "train", "group": "혈당", "input": "혈당조절에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t050-p3", "split": "train", "group": "혈당", "input": "혈당조절에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t050-p6", "split": "train", "group": "혈당", "input": "혈당조절에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t051-p3", "split": "train", "group": "혈당", "input": "씨제이홍경천등복합추출물은 혈당조절을 신경 쓰시는 분들의 공복혈당 조절에 도움을 줄 수 있으나 아직은 과학적 근거가 부족합니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t051-p1", "split": "train", "group": "혈당", "input": "씨제이홍경천등복합추출물은 혈당조절을 신경 쓰시는 분들의 공복혈당 조절에 도움을 줄 수 있으나 아직은 과학적 근거가 부족합니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t051-p6", "split": "train", "group": "혈당", "input": "씨제이홍경천등복합추출물은 혈당조절을 신경 쓰시는 분들의 공복혈당 조절에 도움을 줄 수 있으나 아직은 과학적 근거가 부족합니다", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t052-p2", "split": "train", "group": "혈당", "input": "식후 혈당조절에 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t052-p4", "split": "train", "group": "혈당", "input": "식후 혈당조절에 도움을 줄 수 있습니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t052-p1", "split": "train", "group": "혈당", "input": "식후 혈당조절에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "t053-p6", "split": "train", "group": "혈당", "input": "혈중 콜레스테롤 개선에 도움을 줄 수 있음, 식후혈당 상승 억제에 도움을 줄 수 있음", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "t053-p4", "split": "train", "group": "혈당", "input": "혈중 콜레스테롤 개선에 도움을 줄 수 있음, 식후혈당 상승 억제에 도움을 줄 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "t053-p5", "split": "train", "group": "혈당", "input": "혈중 콜레스테롤 개선에 도움을 줄 수 있음, 식후혈당 상승 억제에 도움을 줄 수 있음", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t054-p2", "split": "train", "group": "혈압", "input": "혈압이 걱정되시는 분에게 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t054-p5", "split": "train", "group": "혈압", "input": "혈압이 걱정되시는 분에게 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t054-p3", "split": "train", "group": "혈압", "input": "혈압이 걱정되시는 분에게 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t055-p3", "split": "train", "group": "혈압", "input": "코엔자임 Q10은 혈압이 높은 사람에게 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t055-p5", "split": "train", "group": "혈압", "input": "코엔자임 Q10은 혈압이 높은 사람에게 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t055-p2", "split": "train", "group": "혈압", "input": "코엔자임 Q10은 혈압이 높은 사람에게 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t056-p2", "split": "train", "group": "혈압", "input": "혈압조절에 도움을 줌", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t056-p3", "split": "train", "group": "혈압", "input": "혈압조절에 도움을 줌", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "t056-p5", "split": "train", "group": "혈압", "input": "혈압조절에 도움을 줌", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t057-p5", "split": "train", "group": "혈압", "input": "혈압이 높은 사람에게 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "t057-p2", "split": "train", "group": "혈압", "input": "혈압이 높은 사람에게 도움을 줄 수 있습니다", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "t057-p1", "split": "train", "group": "혈압", "input": "혈압이 높은 사람에게 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "e000-q1", "split": "eval", "group": "기억인지", "input": "기억력 개선에 도움을 줄 수도 있으나 아직은 과학적 근거가 부족합니다", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e000-q2", "split": "eval", "group": "기억인지", "input": "기억력 개선에 도움을 줄 수도 있으나 아직은 과학적 근거가 부족합니다", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e000-p4", "split": "eval", "group": "기억인지", "input": "기억력 개선에 도움을 줄 수도 있으나 아직은 과학적 근거가 부족합니다", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "e001-q1", "split": "eval", "group": "기억인지", "input": "노인의 인지능력 개선에 도움을 줄 수 있습니다", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e001-q2", "split": "eval", "group": "기억인지", "input": "노인의 인지능력 개선에 도움을 줄 수 있습니다", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e001-p5", "split": "eval", "group": "기억인지", "input": "노인의 인지능력 개선에 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "e002-q1", "split": "eval", "group": "기억인지", "input": "노화로 인해 저하된 인지력 개선에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e002-q2", "split": "eval", "group": "기억인지", "input": "노화로 인해 저하된 인지력 개선에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e002-p5", "split": "eval", "group": "기억인지", "input": "노화로 인해 저하된 인지력 개선에 도움을 줄 수 있으나, 관련 인체적용시험이 미흡함", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "e003-q1", "split": "eval", "group": "기억인지", "input": "노인의 인지능력 개선에 도움을 줄 수 있으나, 인체적용시험이 미흡", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e003-q2", "split": "eval", "group": "기억인지", "input": "노인의 인지능력 개선에 도움을 줄 수 있으나, 인체적용시험이 미흡", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e003-p2", "split": "eval", "group": "기억인지", "input": "노인의 인지능력 개선에 도움을 줄 수 있으나, 인체적용시험이 미흡", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "e004-q1", "split": "eval", "group": "기억인지", "input": "기억력 개선에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e004-q2", "split": "eval", "group": "기억인지", "input": "기억력 개선에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e004-p1", "split": "eval", "group": "기억인지", "input": "기억력 개선에 도움을 줄 수 있으나 인체시험을 통한 확인이 필요함", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "e005-q1", "split": "eval", "group": "수면긴장", "input": "유단백가수분해물은 스트레스로 인한 긴장을 완화하는데 도움을 줄 수 있습니다", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e005-q2", "split": "eval", "group": "수면긴장", "input": "유단백가수분해물은 스트레스로 인한 긴장을 완화하는데 도움을 줄 수 있습니다", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e005-p5", "split": "eval", "group": "수면긴장", "input": "유단백가수분해물은 스트레스로 인한 긴장을 완화하는데 도움을 줄 수 있습니다", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "e006-q1", "split": "eval", "group": "수면긴장", "input": "스트레스로 인한 긴장을 완화시키는데 도움을 줄 수 있음", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e006-q2", "split": "eval", "group": "수면긴장", "input": "스트레스로 인한 긴장을 완화시키는데 도움을 줄 수 있음", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e006-p2", "split": "eval", "group": "수면긴장", "input": "스트레스로 인한 긴장을 완화시키는데 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "e007-q1", "split": "eval", "group": "수면긴장", "input": "산화스트레스로부터 인체를 보호하는데 도움을 줄 수 있습니다", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e007-q2", "split": "eval", "group": "수면긴장", "input": "산화스트레스로부터 인체를 보호하는데 도움을 줄 수 있습니다", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e007-p3", "split": "eval", "group": "수면긴장", "input": "산화스트레스로부터 인체를 보호하는데 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "e008-q1", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있습니다", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e008-q2", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있습니다", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e008-p3", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있습니다", "persona": "p3", "persona_label": "20대 — 운동·자기관리 루틴을 즐기는 사람", "source": "hf_display_claims"}
+{"id": "e009-q1", "split": "eval", "group": "피부", "input": "자외선에 의한 피부손상으로부터 피부 건강을 유지하는데 도움을 줄 수 있음, 체지방 감소에 도움을 줄 수 있음", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e009-q2", "split": "eval", "group": "피부", "input": "자외선에 의한 피부손상으로부터 피부 건강을 유지하는데 도움을 줄 수 있음, 체지방 감소에 도움을 줄 수 있음", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e009-p4", "split": "eval", "group": "피부", "input": "자외선에 의한 피부손상으로부터 피부 건강을 유지하는데 도움을 줄 수 있음, 체지방 감소에 도움을 줄 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "e010-q1", "split": "eval", "group": "피부", "input": "면역과민반응에 의한 피부상태 개선에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e010-q2", "split": "eval", "group": "피부", "input": "면역과민반응에 의한 피부상태 개선에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e010-p2", "split": "eval", "group": "피부", "input": "면역과민반응에 의한 피부상태 개선에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "e011-q1", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 자외선에 의한 피부 손상으로부터 피부 건강을 유지하는데 도움을 줄 수 있음", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e011-q2", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 자외선에 의한 피부 손상으로부터 피부 건강을 유지하는데 도움을 줄 수 있음", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e011-p2", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 자외선에 의한 피부 손상으로부터 피부 건강을 유지하는데 도움을 줄 수 있음", "persona": "p2", "persona_label": "50대 — 가족과 함께하는 꾸준한 건강 습관", "source": "hf_display_claims"}
+{"id": "e012-q1", "split": "eval", "group": "피부", "input": "햇볕 또는 자외선에 의한 피부손상으로부터 피부건강을 유지하는데 도움을 줄 수 있습니다", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e012-q2", "split": "eval", "group": "피부", "input": "햇볕 또는 자외선에 의한 피부손상으로부터 피부건강을 유지하는데 도움을 줄 수 있습니다", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e012-p1", "split": "eval", "group": "피부", "input": "햇볕 또는 자외선에 의한 피부손상으로부터 피부건강을 유지하는데 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "e013-q1", "split": "eval", "group": "피부", "input": "자외선에 의해 손상된 피부 건강 유지에 도움을 줄 수 있음", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e013-q2", "split": "eval", "group": "피부", "input": "자외선에 의해 손상된 피부 건강 유지에 도움을 줄 수 있음", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e013-p5", "split": "eval", "group": "피부", "input": "자외선에 의해 손상된 피부 건강 유지에 도움을 줄 수 있음", "persona": "p5", "persona_label": "60대 액티브 시니어 — 여행과 취미를 즐기는 일상", "source": "hf_display_claims"}
+{"id": "e014-q1", "split": "eval", "group": "피부", "input": "항당화를 통한 피부 건강 개선에 도움을 줄 수 있음", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e014-q2", "split": "eval", "group": "피부", "input": "항당화를 통한 피부 건강 개선에 도움을 줄 수 있음", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e014-p6", "split": "eval", "group": "피부", "input": "항당화를 통한 피부 건강 개선에 도움을 줄 수 있음", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "e015-q1", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 자외선에 의한 피부손상으로부터 피부건강 유지에 도움을 줄 수 있음", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e015-q2", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 자외선에 의한 피부손상으로부터 피부건강 유지에 도움을 줄 수 있음", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e015-p4", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 자외선에 의한 피부손상으로부터 피부건강 유지에 도움을 줄 수 있음", "persona": "p4", "persona_label": "40대 맞벌이 부부 — 효율적으로 챙기는 생활", "source": "hf_display_claims"}
+{"id": "e016-q1", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 ② 자외선에 의한 피부손상으로부터 피부건강 유지에 도움을 줄 수 있음", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e016-q2", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 ② 자외선에 의한 피부손상으로부터 피부건강 유지에 도움을 줄 수 있음", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e016-p6", "split": "eval", "group": "피부", "input": "피부 보습에 도움을 줄 수 있음 ② 자외선에 의한 피부손상으로부터 피부건강 유지에 도움을 줄 수 있음", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}
+{"id": "e017-q1", "split": "eval", "group": "항산화", "input": "코엔자임 Q10은 항산화에 도움을 줄 수 있습니다", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e017-q2", "split": "eval", "group": "항산화", "input": "코엔자임 Q10은 항산화에 도움을 줄 수 있습니다", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e017-p1", "split": "eval", "group": "항산화", "input": "코엔자임 Q10은 항산화에 도움을 줄 수 있습니다", "persona": "p1", "persona_label": "30대 직장인 — 바쁜 일상 속 간편한 관리", "source": "hf_display_claims"}
+{"id": "e018-q1", "split": "eval", "group": "항산화", "input": "항산화에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "q1", "persona_label": "30대 프리랜서 — 재택근무하며 자기 페이스대로 사는 사람", "source": "hf_display_claims"}
+{"id": "e018-q2", "split": "eval", "group": "항산화", "input": "항산화에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "q2", "persona_label": "40대 등산·캠핑 동호인 — 주말마다 야외 활동", "source": "hf_display_claims"}
+{"id": "e018-p6", "split": "eval", "group": "항산화", "input": "항산화에 도움을 줄 수 있으나 관련 인체적용시험이 미흡함", "persona": "p6", "persona_label": "20대 대학생 — 가성비와 트렌드에 민감", "source": "hf_display_claims"}

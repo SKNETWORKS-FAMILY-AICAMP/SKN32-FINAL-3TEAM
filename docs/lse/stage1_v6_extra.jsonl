@@ -1,0 +1,50 @@
+{"id": "y001", "group": "원료사실", "input": "아로니아추출물 듬뿍, 먹으면 바로 효과 보는 젤리", "violation_types": ["소비자_기만"], "output": {"body": "아로니아추출물 함유 젤리", "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}}
+{"id": "y002", "group": "원료사실", "input": "귀한 홍화씨 추출물이 들어간 기적의 차", "violation_types": ["소비자_기만"], "output": {"body": "홍화씨 추출물 함유 차", "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}}
+{"id": "y003", "group": "원료사실", "input": "브로콜리새싹 추출물로 몸이 달라지는 경험", "violation_types": ["소비자_기만"], "output": {"body": "브로콜리새싹 추출물 함유", "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}}
+{"id": "y004", "group": "원료사실", "input": "레몬밤 추출물 고농축, 이것 하나면 충분", "violation_types": ["소비자_기만"], "output": {"body": "레몬밤 추출물 함유", "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}}
+{"id": "y005", "group": "원료사실", "input": "새싹보리 분말 대용량, 매일 먹으면 날씬해져요", "violation_types": ["소비자_기만", "거짓_과장"], "output": {"body": "새싹보리 분말 함유", "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}}
+{"id": "y006", "group": "원료사실", "input": "히비스커스 추출물 그 자체, 붓기 싹", "violation_types": ["소비자_기만", "거짓_과장"], "output": {"body": "히비스커스 추출물 함유", "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}}
+{"id": "y007", "group": "원료사실", "input": "보스웰리아 추출물 넣은 무릎 전용 음료", "violation_types": ["소비자_기만"], "output": {"body": "보스웰리아 추출물 함유 음료", "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}}
+{"id": "y008", "group": "원료사실", "input": "깔라만시 원액 100%로 지방이 녹는 느낌", "violation_types": ["소비자_기만", "거짓_과장"], "output": {"body": "깔라만시 원액 제품", "mandatory_note": "원재료 함량을 함께 표시", "placement": null}}
+{"id": "y009", "group": "원료사실", "input": "작두콩 추출물 한 병이면 코가 뻥", "violation_types": ["소비자_기만", "거짓_과장"], "output": {"body": "작두콩 추출물 함유", "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}}
+{"id": "y010", "group": "원료사실", "input": "우엉 뿌리 진하게 우려낸 해독 차", "violation_types": ["소비자_기만", "거짓_과장"], "output": {"body": "우엉 뿌리를 우려낸 차", "mandatory_note": null, "placement": null}}
+{"id": "y011", "group": "원료사실", "input": "타트체리 농축액, 잠 못 드는 밤에 딱", "violation_types": ["소비자_기만"], "output": {"body": "타트체리 농축액 제품", "mandatory_note": "원재료 함량을 함께 표시", "placement": null}}
+{"id": "y012", "group": "원료사실", "input": "노니 원액 그대로, 만병통치 열대 과일", "violation_types": ["소비자_기만", "거짓_과장"], "output": {"body": "노니 원액 제품", "mandatory_note": "원재료 함량을 함께 표시", "placement": null}}
+{"id": "y013", "group": "인증순위", "input": "식약처 인증받은 국산 참깨로 짠 참기름", "violation_types": ["거짓_과장"], "output": {"body": "국산 참깨로 짠 참기름", "mandatory_note": "원산지는 원재료명 표시 기준", "placement": null}}
+{"id": "y014", "group": "인증순위", "input": "업계 1위 판매량, 가장 맛있는 김치", "violation_types": ["거짓_과장"], "output": {"body": "김치 제품", "mandatory_note": "판매 순위는 집계 기관·기간·대상을 함께 표시", "placement": "순위 표시 바로 아래"}}
+{"id": "y015", "group": "인증순위", "input": "국가가 공인한 최고 품질의 꿀", "violation_types": ["거짓_과장"], "output": {"body": "꿀 제품", "mandatory_note": "인증 표시는 인증 기관·번호와 함께", "placement": "인증 표시 근처"}}
+{"id": "y016", "group": "인증순위", "input": "특허받은 제조법이라 몸에 더 좋은 발효 식초", "violation_types": ["소비자_기만"], "output": {"body": "특허 제조법으로 만든 발효 식초", "mandatory_note": "특허 등록번호를 함께 표시 · 효능 근거로 쓰지 않음", "placement": "특허 표시 근처"}}
+{"id": "y017", "group": "인증순위", "input": "해외 학회가 인정한 유일한 콜라겐", "violation_types": ["거짓_과장"], "output": {"body": "콜라겐 제품", "mandatory_note": null, "placement": null}}
+{"id": "y018", "group": "인증순위", "input": "소비자 만족도 1위, 효과 최강 식물성 프로틴 파우더", "violation_types": ["거짓_과장"], "output": {"body": "식물성 프로틴 파우더", "mandatory_note": "만족도 순위는 조사 기관·기간·대상을 함께 표시", "placement": "순위 표시 바로 아래"}}
+{"id": "y019", "group": "인증순위", "input": "의사 추천 1위 프리미엄 오트밀", "violation_types": ["거짓_과장", "의약품_오인"], "output": {"body": "오트밀 제품", "mandatory_note": null, "placement": null}}
+{"id": "y020", "group": "인증순위", "input": "HACCP 인증이라 무조건 안전한 반찬", "violation_types": ["거짓_과장"], "output": {"body": "HACCP 인증 시설에서 만든 반찬", "mandatory_note": "HACCP 인증 번호를 함께 표시", "placement": "인증 표시 근처"}}
+{"id": "y021", "group": "인증순위", "input": "특허 출원한 비법 소스로 만든 떡볶이", "violation_types": ["소비자_기만"], "output": {"body": "특허 출원한 소스로 만든 떡볶이", "mandatory_note": "출원번호를 함께 표시 · 등록 특허와 구분", "placement": "특허 표시 근처"}}
+{"id": "y022", "group": "인증순위", "input": "세계 3대 박람회 수상, 효능까지 검증된 녹즙", "violation_types": ["거짓_과장"], "output": {"body": "녹즙 제품", "mandatory_note": "수상 내역은 대회명·연도와 함께 표시 · 효능 근거로 쓰지 않음", "placement": null}}
+{"id": "y023", "group": "대상표시", "input": "직장인 필수 영양제, 피로 회복 비타민 사탕", "violation_types": ["건강기능식품_오인"], "output": {"body": "직장인을 위한 비타민 사탕", "mandatory_note": "비타민 함량은 영양성분 표시 기준", "placement": null}}
+{"id": "y024", "group": "대상표시", "input": "다이어터 영양제, 칼로리 컷 곤약 젤리", "violation_types": ["건강기능식품_오인"], "output": {"body": "곤약 젤리", "mandatory_note": "열량은 영양성분 표시 기준", "placement": "영양성분표 근처"}}
+{"id": "y025", "group": "대상표시", "input": "임산부 전용 영양제 같은 과일즙", "violation_types": ["건강기능식품_오인"], "output": {"body": "과일즙 제품", "mandatory_note": null, "placement": null}}
+{"id": "y026", "group": "대상표시", "input": "운동하는 분들의 근육 영양제, 고단백 바", "violation_types": ["건강기능식품_오인"], "output": {"body": "운동하는 분들을 위한 고단백 바", "mandatory_note": "단백질 함량은 영양성분 표시 기준", "placement": null}}
+{"id": "y027", "group": "대상표시", "input": "어르신 기력 보충 영양제 같은 죽", "violation_types": ["건강기능식품_오인"], "output": {"body": "어르신을 위한 죽", "mandatory_note": null, "placement": null}}
+{"id": "y028", "group": "건기식오인", "input": "면역력 증진 기능성 인정, 일반 꿀 스틱", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y029", "group": "건기식오인", "input": "혈행 개선 기능성 원료 함유 식용유", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y030", "group": "건기식오인", "input": "식약처 기능성 인증 눈 건강 젤리", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y031", "group": "건기식오인", "input": "장 건강 기능성 표시 요구르트 맛 음료", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y032", "group": "건기식오인", "input": "건강기능식품 등급 원료로 만든 과자", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y033", "group": "건기식오인", "input": "피부 건강 기능성 콜라겐 캔디", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y034", "group": "건기식오인", "input": "기억력 개선 인정 성분 들어간 두유", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y035", "group": "건기식오인", "input": "체지방 감소 기능성 다이어트 국수", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y036", "group": "건기식오인", "input": "간 건강 기능식품 수준의 헛개 음료", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y037", "group": "건기식오인", "input": "혈당 조절 기능성 쌀", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "y038", "group": "건기식기능", "input": "눈 건강 끝판왕, 노안 걱정 없는 마리골드꽃추출물", "violation_types": ["거짓_과장", "질병_예방치료_표방"], "output": {"body": "마리골드꽃추출물은 노화로 인해 감소될 수 있는 황반색소밀도를 유지하여 눈 건강에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 건강기능식품에 한해 표시", "placement": null}}
+{"id": "y039", "group": "건기식기능", "input": "최강 면역 부스터, 감기 따윈 없는 홍삼", "violation_types": ["거짓_과장", "질병_예방치료_표방"], "output": {"body": "홍삼은 면역력 증진에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 건강기능식품에 한해 표시", "placement": null}}
+{"id": "y040", "group": "건기식기능", "input": "먹는 순간 장이 깨끗해지는 프리바이오틱스 1위", "violation_types": ["거짓_과장"], "output": {"body": "프락토올리고당은 장내 유익균 증식 및 배변활동 원활에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 건강기능식품에 한해 표시", "placement": null}}
+{"id": "y041", "group": "건기식기능", "input": "피부가 물광으로 변신, 히알루론산 효과 100%", "violation_types": ["거짓_과장"], "output": {"body": "히알루론산은 피부 보습에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 건강기능식품에 한해 표시", "placement": null}}
+{"id": "y042", "group": "건기식기능", "input": "타사보다 3배 빠른 스트레스 해소 테아닌", "violation_types": ["부당_비교광고", "거짓_과장"], "output": {"body": "L-테아닌은 스트레스로 인한 긴장 완화에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 건강기능식품에 한해 표시", "placement": null}}
+{"id": "y043", "group": "건기식기능", "input": "콜레스테롤 수치를 확 낮추는 홍국 1등 제품", "violation_types": ["거짓_과장"], "output": {"body": "홍국은 혈중 콜레스테롤 개선에 도움을 줄 수 있습니다", "mandatory_note": "기능성 인정 건강기능식품에 한해 표시", "placement": null}}
+{"id": "y044", "group": "화장품기능", "input": "바르는 순간 기미가 지워지는 크림", "violation_types": ["거짓_과장"], "output": {"body": "피부의 미백에 도움을 줍니다", "mandatory_note": "미백 기능성화장품으로 심사·보고된 제품에 한함", "placement": null}}
+{"id": "y045", "group": "화장품기능", "input": "주름 걱정 이제 그만, 10년 젊어지는 아이크림", "violation_types": ["거짓_과장"], "output": {"body": "피부의 주름 개선에 도움을 줍니다", "mandatory_note": "주름 개선 기능성화장품으로 심사·보고된 제품에 한함", "placement": null}}
+{"id": "y046", "group": "화장품기능", "input": "자외선 완벽 차단, 피부암 예방 선크림", "violation_types": ["거짓_과장", "질병_예방치료_표방"], "output": {"body": "자외선으로부터 피부를 보호하는 데 도움을 줍니다", "mandatory_note": "자외선 차단 기능성화장품으로 심사·보고된 제품에 한함", "placement": null}}
+{"id": "y047", "group": "화장품기능", "input": "피부 속까지 재생시키는 탄력 세럼", "violation_types": ["의약품_오인"], "output": {"body": "탄력 있어 보이는 피부로 가꿔 줍니다", "mandatory_note": null, "placement": null}}
+{"id": "y048", "group": "화장품기능", "input": "모공을 없애 주는 토너", "violation_types": ["거짓_과장"], "output": {"body": "모공이 덜 두드러져 보이게 피부결을 정돈합니다", "mandatory_note": null, "placement": null}}
+{"id": "y049", "group": "화장품기능", "input": "피부 세포를 되살리는 수분 앰플", "violation_types": ["의약품_오인"], "output": {"body": "피부에 수분을 공급해 촉촉하게 가꿔 줍니다", "mandatory_note": null, "placement": null}}
+{"id": "y050", "group": "화장품기능", "input": "트러블을 치료하는 진정 패드", "violation_types": ["의약품_오인"], "output": {"body": "피부를 진정시켜 편안하게 가꿔 줍니다", "mandatory_note": null, "placement": null}}

@@ -5,7 +5,8 @@
 
 🚨 **엔진이 필요한 화면은 DB 없이도 떠야 한다** (D-124) — `review`·`generate`·`compose` 는
    골든 픽스처로 모든 분기를 그린다. ⬜ **`history`·`/`(홈) 은 예외다** — 실제 DB(`app/db.py`,
-   `Judgment`)에 붙는다. 판정 엔진이 아직 없어 지금은 빈 목록/0 건으로 뜬다.
+   `Judgment`)에 붙는다. 🔄 판정은 돌지만(코어 `/judge`) 결과를 `judgment` 표에 **저장하는 코드가 아직 없어**
+   지금은 빈 목록/0 건으로 뜬다.
    🔄 2026-09-22 (ohb 흡수) — **DB 가 없어도 뜬다.** 붙지 못하면 「DB 없음」을 그리고 수를 0 으로 적지 않는다
       (`app.db.reachable` · D-72). 게이트가 `/u/` 200 을 요구하고 CI 에는 Postgres 가 없다.
 
@@ -35,7 +36,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import auth, sentsplit
-from app.contracts import PASS_RISK_MAX, Risk, is_pass
+from app.contracts import PASS_RISK_MAX, Premise, Risk, Violation, is_pass
 from app.db import get_session, reachable
 from app.formbody import read_capped
 from app.models import (
@@ -119,6 +120,7 @@ _SCREEN_ALIAS: tuple[tuple[str, str], ...] = (
     ("/u/judge", "/u/review"),
     ("/u/preview/", "/u/review"),
     ("/u/generate/preview/", "/u/generate"),
+    ("/u/review/rewrite", "/u/review"),  # 지적 문장 고쳐 쓰기 결과는 검수 화면에 그린다 (lse 10-06)
     ("/u/compose/preview/", "/u/compose"),
 )
 
@@ -640,6 +642,142 @@ async def judge(request: Request) -> HTMLResponse:
     return _render(request, "user/review.html", _review_ctx(copies, results))
 
 
+# ── 검수 → 지적 문장 고쳐 쓰기 (sLLM 재생성) — lse 2026-10-06 · 팀장 승인 ─────────────
+#: ★ 검수 결과의 지적 문장 아래 「이 문장 고쳐 쓰기」 → 그 문장을 sLLM 서버(`sllm_client`)가 고쳐 쓰고,
+#:   고친 문구를 **앱의 판정 코어로 재판정**(D-119)해 **같은 검수 화면**의 그 문장 아래에 그린다.
+#: 🔴 검수 판정(`JudgeResponse`)에는 대체 문구를 넣지 않는다 — `candidates` 는 비운 채다(D-265 계약).
+#:    고쳐 쓰기는 판정과 따로 부르는 **재생성 호출**이고, 화면이 판정 결과 옆에 붙여 보일 뿐이다.
+#: ⛔ 사유 A(자격형)는 고쳐 쓰지 않는다 — 같은 위반을 되풀이한다(D-59).
+#: ⛔ sLLM 서버가 없으면 후보를 그리지 않는다(D-146 · D-147). 모델이 지어낸 불가 사유는 그리지 않는다.
+
+_VIOLATIONS = frozenset(v.value for v in Violation)
+_PREMISES = frozenset(p.value for p in Premise)
+_TARGET = re.compile(r"^(\d{1,2}):([A-Za-z0-9_\-]{1,32})$")
+
+
+def _violations_of(result) -> list[str]:  # noqa: ANN001 — JudgeResponse · Branch
+    """판정 결과(또는 분기 하나)의 위반 유형(문장 순서대로 · 중복 없이)."""
+    out: list[str] = []
+    for s in result.sentences:
+        for v in s.violations or []:
+            if v.value not in out:
+                out.append(v.value)
+    return out
+
+
+def _branch_of(result, premise: str):  # noqa: ANN001, ANN202 — JudgeResponse → Branch | None
+    """고른 전제의 분기. 없으면 `None` — 없는 전제의 판정을 지어내지 않는다 (D-147)."""
+    return next((b for b in result.branches if b.premise.value == premise), None)
+
+
+def _rejudge(body: str, premise: str = "") -> dict:
+    """고친 문구를 판정 코어에 다시 넣는다(D-119). 🚨 `no_violation` 은 「위반을 못 찾음」이지 통과가 아니다.
+
+    🆕 2026-10-06 (ksr) — 분기를 고르고 고쳐 썼으면 재판정도 **같은 전제의 분기**로 읽는다. 재판정에 그 분기가
+       없으면(전제마다 판정이 같아 분기가 생략됨) 기록되는 판정을 읽는다.
+    """
+    state, res = _core_judge(body)
+    if state != "ok":
+        return {"status": "unavailable"}
+    res = (_branch_of(res, premise) if premise else None) or res
+    violations = _violations_of(res)
+    hold = sorted({s.hold_reason.value for s in res.sentences if s.hold_reason})
+    if violations or any(s.verdict.value == "no_basis" for s in res.sentences):
+        return {"status": "rejected", "violations": violations, "hold_reasons": hold}
+    status = "passed" if res.outcome.value == "pass" else "no_violation"
+    return {"status": status, "violations": [], "hold_reasons": hold}
+
+
+def _rewrite_sentence(sentence, premise: str = "") -> dict:  # noqa: ANN001 — SentenceJudgment
+    """지적 문장 하나를 고쳐 쓰고 재판정한다. 화면용 dict(`rw`)."""
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    violations = [v.value for v in sentence.violations or []]
+    rw: dict = {"violations": violations}
+    s_state, out = sllm_client.rewrite(sentence.text, violations)
+    if out and out.get("infeasible") and out["infeasible"] not in _VIOLATIONS:
+        # 위반 유형 없이 보내면 모델이 사유를 제 말로 지어 쓴다(10-06 실측) — 그 말을 사유로 그리지 않는다
+        out = {**out, "infeasible": None}
+    rw["down"] = s_state != "ok"
+    rw["out"] = out
+    if out and out["outcome"] == "candidate" and out.get("rewrite"):
+        rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise)
+    return rw
+
+
+@router.post("/review/rewrite", response_class=HTMLResponse)
+async def review_rewrite(request: Request) -> HTMLResponse:
+    """지적 문장 고쳐 쓰기 BFF (lse 2026-10-06).
+
+    🔴 **POST 다** — 문구를 URL 에 싣지 않는다(P1-4). 화면에 상태를 두지 않으므로 문구 칸을 다시 받아 **다시 판정**하고,
+       `target`(`문구번호:문장id`) 문장을 고쳐 써 그 아래에 붙인다. 위반 유형은 **서버의 판정 결과**에서 읽는다(폼을 믿지 않는다).
+    🆕 2026-10-06 (ksr · 병합) — 품목 분기가 있는 문구는 **분기를 고른 뒤에만** 고쳐 쓴다. 폼이 고른 전제(`premise`)와
+       회차(`round`)를 싣고, 위반 유형은 **그 전제의 분기 문장**에서 읽는다 — 품목을 모를 때의 기록 판정(가장 보수적인
+       전제)으로 고쳐 쓰지 않는다. 다시 그릴 때 고른 분기를 펼쳐 둔다(`picked`) — 화면에 상태가 없어서다.
+    """
+    from starlette.concurrency import run_in_threadpool  # noqa: PLC0415
+
+    form = await _form(request)
+    copies = _copies(form)
+    m = _TARGET.match(form.get("target", [""])[0])
+    if not m:
+        raise HTTPException(422, "고쳐 쓸 문장을 모른다")
+    want_n, want_sid = int(m.group(1)), m.group(2)
+    premise = _one(form, "premise", 32)
+    if premise and premise not in _PREMISES:
+        raise HTTPException(422, "모르는 전제")
+    redo = _one(form, "round", 2) or "0"
+    if not redo.isdigit() or int(redo) > _MAX_REDO:
+        raise HTTPException(422, "모르는 회차")
+
+    targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
+    results: list[dict] = []
+    for n, text in targets:
+        state, res = await run_in_threadpool(_core_judge, text)
+        if state in ("pending", "down"):
+            return _render(
+                request,
+                "user/review.html",
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+            )
+        results.append({"n": n, "result": res, "text": text, "rewrites": {}})
+
+    item = next((r for r in results if r["n"] == want_n), None)
+    source = item and item["result"]
+    if source is not None and source.branches:
+        source = _branch_of(source, premise)
+        if source is None:
+            return _render(
+                request,
+                "user/review.html",
+                _review_ctx(
+                    copies,
+                    results,
+                    notice="제품 유형을 먼저 골라 주세요 — 고른 유형의 판정으로 고쳐 써요",
+                ),
+            )
+        item["picked"] = {"premise": premise, "round": int(redo)}
+    else:
+        premise = ""
+    sent = source and next((s for s in source.sentences if s.sent_id == want_sid), None)
+    if sent is None:
+        return _render(
+            request,
+            "user/review.html",
+            _review_ctx(copies, results, notice="고쳐 쓸 문장을 찾지 못했어요"),
+        )
+    if sent.infeasibility and sent.infeasibility.value == "A":
+        rw = {"qualification": True}
+    elif not sent.violations:
+        # 확신 부족 보류만 있고 위반 유형이 없다 — 고칠 것이 없다. 유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측)
+        rw = {"no_violation": True}
+    else:
+        rw = await run_in_threadpool(_rewrite_sentence, sent, premise)
+    # 열쇠는 (전제, 문장) — 분기 없는 문구의 전제는 빈 글자다. 다른 분기의 같은 문장에 붙지 않는다
+    item["rewrites"][premise] = {want_sid: rw}
+    return _render(request, "user/review.html", _review_ctx(copies, results))
+
+
 @router.get("/preview/{name}", response_class=HTMLResponse)
 def judge_preview(request: Request, name: str) -> HTMLResponse:
     """골든 픽스처 하나를 **결과 화면으로** 그린다 (D-124 ③).
@@ -910,7 +1048,8 @@ def history(
 
     🔄 2026-09-16 — `Judgment` × `CopySentence` 조인(ksr)으로 **판정 원문**까지 보여준다.
        필터(`verdict`)·페이지네이션(`page`)·상세 토글(`?open_id=`)은 lse 것을 그대로 쓴다.
-    ⬜ 판정 엔진이 아직 없어 `judgment` 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
+    ⬜ 판정 결과를 `judgment` 표에 저장하는 코드가 아직 없어 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
+       (판정 자체는 돈다 — `/u/judge` 가 코어를 부른다. 그 결과를 적는 자리가 없다.)
        가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
     ⛔ **`page`·`verdict` 는 사용자가 URL 을 손으로 바꿀 수 있다** — 잘못된 값으로
        500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.

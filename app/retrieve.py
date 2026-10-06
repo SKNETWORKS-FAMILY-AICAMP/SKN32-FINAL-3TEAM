@@ -1,7 +1,7 @@
 """app/retrieve.py — 조문 검색 코어. 두 소비자가 이것을 부른다 (D-99 · D-51).
 
     app/api.py    /search       search() — 어휘 + 벡터를 RRF 로 섞은 한 순위
-    app/graph.py  retrieve()    search() — 같은 것을 부른다 (🔜 W4~)
+    app/graph.py  retrieve()    wide() — 법마다 폭만큼 · 두 갈래 따로. 법별 노드가 law_view() 로 받는다 (D-291)
 
 갈래는 셋이고 **뜻이 각각 다르다** (D-167 — 열의 뜻으로 가른다):
 

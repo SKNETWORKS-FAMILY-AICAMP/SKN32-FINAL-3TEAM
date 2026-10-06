@@ -8,10 +8,10 @@
    같은 상세 페이지 안에 읽기 전용으로 둔다(목업은 모달, 여기는 별도 페이지).
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **약관 버전을 담는 테이블 자체가 없다** — 심사 서류·회원 목록과 같은 이유
-   (admin_review_docs.py 참고). 법무·정책 쪽 약관 관리 기능이 스키마와 함께 먼저
-   생겨야 한다. 그래서 DB 조회를 시도하지 않고 **더미로만** 그린다.
-   ⬜ 스키마가 생기면 admin_errors.py 패턴(우선 DB, 실패 시 더미)으로 바꾼다.
+🔴 **이 화면은 아직 DB 를 읽지 않는다 — 더미로만 그린다.** 🔄 약관 버전 표 `terms` 는 생겼다
+   (alembic `0017_ops_tables` · `app/models.py` `Terms` · D-260 ①). 가입 화면(`app/routers/user.py`)은
+   그 표에서 현행 버전을 읽는데, 이 관리자 화면은 아직 옮기지 않았다. 새 버전을 쓰는 경로도 없다.
+   ⬜ DB 조회로 바꿀 때는 admin_errors.py 패턴(읽었다 · 표가 없다 · 못 붙었다를 가른다)을 따른다.
 
 🚨 목업(`app/static/mockup.html`)의 `terms` 뷰(10650번 줄대) 하드코딩 배열 구조를
    그대로 따른다. 이전 버전 이력은 목업에서도 `showTermsHistory()` 모달에 하드코딩된
@@ -31,7 +31,7 @@ from app.templating import templates
 router = APIRouter(prefix="/terms")
 
 # ─────────────────────────────────────────────────────────────
-# 더미 — 약관 버전 테이블 자체가 아직 없다. ⬜ 테이블 승인·적재 뒤 DB 조회로 바꾼다.
+# 더미 — `terms` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다. ⬜ DB 조회로 바꾼다.
 # 목업 app/static/mockup.html 의 terms 뷰 하드코딩 배열을 그대로 옮겨온 것 — 실제
 # 약관 내용이 아니라 화면 구조 확인용이다.
 # ─────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ _DUMMY_TERMS: list[dict] = [
 
 @router.get("", response_class=HTMLResponse)
 def terms_list(request: Request) -> HTMLResponse:
-    """약관 버전 목록 — 읽기 전용. 약관 테이블이 아직 없어 더미로만 그린다."""
+    """약관 버전 목록 — 읽기 전용. `terms` 표를 아직 읽지 않고 더미로만 그린다."""
     actor = require_governor(request)
     return templates.TemplateResponse(
         request,

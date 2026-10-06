@@ -204,8 +204,9 @@
 </style>
 {% endblock %}
 {% block user_content %}
-{# 문장 하나 — 기록되는 판정과 분기 결과가 같은 그림을 쓴다 #}
-{% macro sent_block(s, flag=false, marks=none) %}
+{# 문장 하나 — 기록되는 판정과 분기 결과가 같은 그림을 쓴다.
+   `rw_item` 을 주면 문장 아래에 고쳐 쓰기(버튼 · 결과 · 없는 이유)를 단다 — `premise` 는 고른 분기의 전제, `r` 은 회차 #}
+{% macro sent_block(s, flag=false, marks=none, rw_item=none, premise="", r=0) %}
       <div class="rv-sent{% if flag %} rv-flag{% endif %}">
         <span class="rv-sid">{{ s.sent_id }}</span>
         {% set sp = s.risk.evidence_span %}
@@ -275,6 +276,33 @@
             · 실증하면 위험도 {{ s.substantiation.substantiated_max.value }} 까지 내려가요
           </span>
         </div>
+        {% endif %}
+
+        {# 🆕 2026-10-06 lse — 지적 문장 고쳐 쓰기(sLLM 재생성 · 팀장 승인). 결과는 이 문장 아래에 붙는다.
+           판정(`JudgeResponse`)에는 대체 문구가 없다 — 고쳐 쓰기는 따로 부르는 재생성 호출이다 (D-265 계약 유지).
+           ⛔ 사유 A(자격형)는 고쳐 쓰지 않는다 (D-59). ⛔ 위반 유형이 없는 문장(확신 부족 보류만)은 고칠 것이 없다 —
+           유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측). 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4)
+           🔄 2026-10-06 ksr (병합) — 문장 카드가 매크로라 여기로 옮겼다. 품목 분기가 있는 문구는 **분기를 고른 뒤의
+           문장에만** 단다 — 고른 전제의 판정으로 고쳐 써야 해서다. 고르기 전(기록되는 판정)에는 달지 않는다 #}
+        {% if rw_item is not none %}
+        {% set rw = ((rw_item.rewrites or {}).get(premise) or {}).get(s.sent_id) %}
+        {% if rw %}
+        {% include "user/_review_rewrite.html" %}
+        {% elif s.infeasibility and s.infeasibility.value == "A" %}
+        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 기능성이 없는 제품이라 표현을 바꿔도 같은 위반이에요 (D-59).</p>
+        {% elif s.violations %}
+        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
+          {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
+          <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
+          {% if premise %}
+          <input type="hidden" name="premise" value="{{ premise }}">
+          <input type="hidden" name="round" value="{{ r }}">
+          {% endif %}
+          <button type="submit" class="rv-chip" style="cursor:pointer">이 문장 고쳐 쓰기 (10초 안팎)</button>
+        </form>
+        {% elif flag %}
+        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 위반 유형이 특정되지 않았어요(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.</p>
+        {% endif %}
         {% endif %}
       </div>
 {% endmacro %}
@@ -348,28 +376,35 @@
   {% endif %}
 {% endfor %}
 {% set only_hf = ns.kinds == ["hf"] %}
+{# 🆕 2026-10-06 — 고쳐 쓰기는 서버를 다녀온다. 화면에 상태가 없으니 서버가 받은 전제 · 회차(`picked`)로 같은 자리를 펼친다 #}
+{% set pp = SLUG.get(item.picked.premise) if item.picked else none %}
+{% set pr = item.picked.round if pp else -1 %}
+{% set pk = "hf" if pp in ("hfy", "hfn") else pp %}
 <div class="rv-br">
   {% for r in range(1, max_redo + 1) %}
   <input class="visually-hidden rv-redo-{{ r }}" type="checkbox" id="rvr-{{ n }}-{{ r }}"
-         aria-label="문구 {{ n }} 다시 선택 {{ r }}회차">
+         aria-label="문구 {{ n }} 다시 선택 {{ r }}회차"{% if r <= pr %} checked{% endif %}>
   {% endfor %}
   {% for r in range(max_redo + 1) %}
   <div class="rv-round rv-round-{{ r }}">
     {% if not only_hf %}
-    <input class="visually-hidden rv-k-none" type="radio" name="rvk-{{ n }}-{{ r }}" id="rvk-{{ n }}-{{ r }}-none" checked
+    <input class="visually-hidden rv-k-none" type="radio" name="rvk-{{ n }}-{{ r }}" id="rvk-{{ n }}-{{ r }}-none"
+           {%- if r != pr %} checked{% endif %}
            aria-label="유형 고르지 않음">
     {% endif %}
     {% for k in ns.kinds %}
     <input class="visually-hidden rv-k {{ 'rv-k-hf' if k == 'hf' else 'rv-leafk rv-p-' ~ k }}" type="radio"
            name="rvk-{{ n }}-{{ r }}" id="rvk-{{ n }}-{{ r }}-{{ k }}" aria-label="{{ KIND[k][0] }}"
-           {%- if only_hf %} checked{% endif %}>
+           {%- if only_hf or (r == pr and k == pk) %} checked{% endif %}>
     {% endfor %}
     {% if "hf" in ns.kinds %}
-    <input class="visually-hidden rv-c-none" type="radio" name="rvc-{{ n }}-{{ r }}" checked aria-label="인증 고르지 않음">
+    <input class="visually-hidden rv-c-none" type="radio" name="rvc-{{ n }}-{{ r }}"
+           {%- if not (r == pr and pk == "hf") %} checked{% endif %} aria-label="인증 고르지 않음">
     {% endif %}
     {% for p in ("hfy", "hfn") if p in ns.have %}
     <input class="visually-hidden rv-c rv-p-{{ p }}" type="radio" name="rvc-{{ n }}-{{ r }}"
-           id="rvc-{{ n }}-{{ r }}-{{ p }}" aria-label="인증 {{ '받음' if p == 'hfy' else '안 받음' }}">
+           id="rvc-{{ n }}-{{ r }}-{{ p }}" aria-label="인증 {{ '받음' if p == 'hfy' else '안 받음' }}"
+           {%- if r == pr and p == pp %} checked{% endif %}>
     {% endfor %}
 
     {# 🔄 배지는 **고른 분기의 결과**로 바뀐다 — 고르기 전에는 기록되는 판정(보류)이다. 고른 뒤에는 「고르신 내용 기준」을 단다 #}
@@ -423,7 +458,7 @@
       <div class="rv-fix" style="margin-top:0"><b>이 전제라면</b> · {{ b.criteria }}
         {% if not b.verified %}<br><span class="rv-note">고르신 내용을 그대로 받은 결과예요 — 인정번호 대조는 하지 않았어요.</span>{% endif %}
       </div>
-      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value]) }}{% endfor %}
+      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r) }}{% endfor %}
       {# 「다시 선택」은 위험도 판정 바로 아래 — 증명서 · 근거 보기보다 위다 (2026-10-01) #}
       <div class="rv-redo">
         {% if r < max_redo %}
@@ -601,7 +636,7 @@
       {{ branch_wizard(item) }}
       {% else %}
       {% for s in result.sentences %}
-      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id)) }}
+      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item) }}
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}

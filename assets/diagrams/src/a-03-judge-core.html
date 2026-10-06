@@ -2,96 +2,112 @@
 <!--
   A-03 · 판정 코어 — 순서와 불변식   ★ 이 파일이 원천이다 (D-90 · D-217)
   ─────────────────────────────────────────────────────────────────
-  🔴 **2026-09-12 재작성.** ⑤ 가 「BM25 + 벡터 → 리랭커」였다 — 어휘 갈래는 BM25 가 아니고
-     (`ts_rank_cd` + 생성열 `chunk.tsv`), 리랭커는 미착수다.
+  🔴 **2026-10-06 재작성.** 09-12 판은 검색 말고 전부 `[기획]` 이었고 「`retrieve` 노드는 스텁」 ·
+     「사전에서 위험도 하한」 · 「불일치면 재생성 최대 2회」를 적었다. 지금은 —
+     ① 코어가 실제로 돈다. 순서의 정본은 `app/graph.py` `CORE_BEFORE_LAWS` · `LAW_NODES` · `CORE_AFTER_LAWS` 다
+     ② 빈 노드는 `encode` · `doc_rules` 둘이다
+     ③ 하한은 제재표에서만 나온다 (D-305) — 사전은 확정의 재료다
+     ④ 검수 그래프에는 루프가 없다 (D-265 · D-266)
+     ⑤ 법별 노드 팬아웃 (D-267) · 품목 분기 (D-319)가 섰다
   🚨 **요소마다 출처를 붙인다** (D-219) — **구현된 것은 `[실측]`, 미구현은 `[기획]`.**
-     ⛔ 「이 장은 전부 설계」라고 한 줄로 적으면 ⑤ 처럼 **이미 도는 것**이 계획으로 읽힌다.
-     ★ A-04(막힌 구간)와 축이 다르다 — 저기는 **무엇이 없어서 무엇이 안 되나**,
-        여기는 **순서와 불변식**이다. 둘 다 요소마다 출처를 붙인다.
   ⛔ PNG 를 손으로 고치지 않는다. `launcher.py diagram` 으로 다시 뽑는다.
 -->
 <meta charset="utf-8">
 <title>A-03 판정 코어</title>
 <link rel="stylesheet" href="plate.css">
+<style>
+  /* 이 장은 12칸(왼쪽 1~6 · 오른쪽 7~12)이다 — 공용 판의 「6번째 칸 윗줄 없음」을 이 장에서만 둘째 칸으로 옮긴다 */
+  .steps > .stp:nth-child(6){border-top:1px solid var(--line)}
+  .steps > .stp:nth-child(2){border-top:none}
+  .stp.off .n{border:1px dashed #C4CCD4; color:var(--off)}
+  .stp.off b{color:var(--off)}
+</style>
 
 <div class="plate">
   <header>
     <span class="no">A-03</span>
     <h1>판정 코어 — 순서와 불변식</h1>
-    <span class="right">[실측] 은 돌고 있는 것 · [기획] 은 아직 · 2026-09-12</span>
+    <span class="right">[실측] 은 돌고 있는 것 · [기획] 은 아직 · 2026-10-06</span>
   </header>
 
   <div class="body">
     <div class="legend" style="margin:0 0 12px">
-      <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
-      <span class="chip">[기획] 아직 안 만들었다</span>
+      <span class="chip pos">[실측] 구현돼 있고 돈다</span>
+      <span class="chip">[기획] 빈 노드 · 아직 안 만들었다</span>
+      <span class="chip gov">판정 코드의 판 rule-0.3.0-dict — 인코더 전 규칙 판정</span>
     </div>
     <div class="steps">
 
-      <div class="stp"><div class="n">1</div><div>
-        <b>정규화</b>
-        <span><span class="tag p">기획</span>회피 표기를 복원하되 원문 좌표를 보존한다. 매칭은 정규화문, 표시는 원문</span></div></div>
+      <div class="stp pos"><div class="n">1</div><div>
+        <b>split — 문장 분할</b>
+        <span><span class="tag m">실측</span>원고를 문장으로 나눈다. 분할 정확도는 재지 않았다</span></div></div>
 
-      <div class="stp"><div class="n">6</div><div>
-        <b>인코더 판정</b>
-        <span><span class="tag p">기획</span>등급을 올리려면 근거 스팬을 반드시 붙인다</span>
-        <div class="inv">ck_judgment_raise_needs_evidence</div></div></div>
+      <div class="stp pos"><div class="n">7</div><div>
+        <b>merge_laws — 법별 결과를 문장 단위로 모은다</b>
+        <span><span class="tag m">실측</span>팬아웃한 노드들이 같은 키에 쓰므로 리듀서가 모은다</span></div></div>
 
-      <div class="stp"><div class="n">2</div><div>
-        <b>문장 분할</b>
-        <span><span class="tag p">기획</span>입력 형태(단순 / 여러 개 / 긴 글)가 문서 경계를 선언한다. 길이·개행으로 추정하지 않는다</span></div></div>
+      <div class="stp pos"><div class="n">2</div><div>
+        <b>classify — 품목</b>
+        <span><span class="tag m">실측</span>요청이 준 품목을 그대로 쓴다. 없으면 미확정</span>
+        <span><span class="tag p">기획</span>문구로 품목을 판별하는 코드는 없다</span></div></div>
 
-      <div class="stp"><div class="n">7</div><div>
-        <b>래칫</b>
-        <span><span class="tag p">기획</span>안전 방향 단조성 — 최종 등급은 하한 아래로 내려가지 않는다</span></div></div>
+      <div class="stp pos"><div class="n">8</div><div>
+        <b>judge — 문장 판정 (규칙판)</b>
+        <span><span class="tag m">실측</span>단독판정 자격이 있는 사전 적중 = 확정. 그 밖은 보류 (D-269)</span>
+        <div class="inv">불변식 ① 확정 위반에는 근거 조문이 붙는다 (D-224)</div></div></div>
 
-      <div class="stp"><div class="n">3</div><div>
-        <b>카테고리 판별</b>
-        <span><span class="tag p">기획</span>사용자에게 묻지 않는다. 확신이 낮으면 가장 넓은 법령 집합을 걸고 보류로 표시한다</span></div></div>
+      <div class="stp pos"><div class="n">3</div><div>
+        <b>retrieve — 근거 검색 · 팬아웃 앞에서 한 번</b>
+        <span><span class="tag m">실측</span>ts_rank_cd(생성열 chunk.tsv) + KURE-v1 → 법마다 거른 뒤 RRF · k=60 [문헌] (D-193 · D-291)</span>
+        <span><span class="tag p">기획</span>리랭커는 아직 없다. 현행 조문만 (v_current_chunk)</span></div></div>
 
-      <div class="stp"><div class="n">8</div><div>
-        <b>인용 검증</b>
-        <span><span class="tag p">기획</span>제시한 조문을 원문과 대조한다. 불일치면 재생성 — 최대 2회, 3회째는 미판정</span>
-        <div class="inv">CHECK attempt BETWEEN 0 AND 2</div></div></div>
+      <div class="stp pos"><div class="n">9</div><div>
+        <b>assess_risk — 위험도 하한</b>
+        <span><span class="tag m">실측</span>하한은 서명된 제재표에서만 읽는다 (D-305). 두 법이 걸리면 높은 쪽 (D-272) · R0~R3</span>
+        <div class="inv">불변식 ② 최종 위험도는 하한 아래로 내려가지 않는다 (래칫)</div></div></div>
 
-      <div class="stp"><div class="n">4</div><div>
-        <b>사전 정확매칭</b>
-        <span><span class="tag p">기획</span>금지·적법 표현 사전에서 위험도 하한을 뽑는다. 근사매칭은 하한 자격이 없다</span>
-        <div class="inv">불변식 ① 코드가 정한 하한을 모델이 낮출 수 없다</div></div></div>
+      <div class="stp pos"><div class="n">4</div><div>
+        <b>match_dict — 사전 정확매칭</b>
+        <span><span class="tag m">실측</span>금지 표현 사전의 적중과 원문 좌표를 낸다. 사전은 하한이 아니라 확정의 재료다</span></div></div>
 
-      <div class="stp"><div class="n">9</div><div>
-        <b>판정 확정</b>
-        <span><span class="tag p">기획</span>확정 · 보류 · 근거없음 · 미판정 넷 중 하나. 보류는 오류가 아니라 정의된 출력이다</span>
-        <div class="inv">CHECK (verdict='hold') = (hold_reason IS NOT NULL)</div></div></div>
+      <div class="stp pos"><div class="n">10</div><div>
+        <b>premise_branches — 품목 분기</b>
+        <span><span class="tag m">실측</span>품목을 모르면 전제 여섯을 미리 계산한다. 모든 전제에서 같은 위반일 때만 확정 (D-319)</span>
+        <div class="inv">불변식 ③ 품목 미확정에는 통과 표시가 없다</div></div></div>
 
-      <div class="stp"><div class="n">5</div><div>
-        <b>근거 검색 — 어휘 + 벡터를 순위로 섞는다</b>
-        <span><span class="tag m">실측</span>ts_rank_cd(생성열 chunk.tsv) + KURE-v1 1024차원 → RRF Σ 1/(k+순위) · k=60 [문헌]</span>
-        <span><span class="tag p">기획</span>그 뒤 리랭커(bge-reranker-v2-m3)로 상위를 다시 세운다. 현행 조문만 (v_current_chunk)</span>
-        <div class="inv">점수를 섞지 않는다 — 가중치가 [임의]가 되면 그 값이 판정 경로에 들어간다 (D-193)</div></div></div>
+      <div class="stp off"><div class="n">5</div><div>
+        <b>encode — 인코더</b>
+        <span><span class="tag p">기획</span>빈 노드. 인코더 모듈은 저장소에 있으나 배선되지 않았다</span></div></div>
 
-      <div class="stp"><div class="n">—</div><div>
-        <b>출력</b>
-        <span><span class="tag p">기획</span>violations[] · evidence[] · risk · rewrite — disclaimer 는 항상 붙는다</span></div></div>
+      <div class="stp off"><div class="n">11</div><div>
+        <b>doc_rules — 문서 단위 규칙</b>
+        <span><span class="tag p">기획</span>빈 노드. 의무 문구 유무 등</span></div></div>
+
+      <div class="stp pos"><div class="n">6</div><div>
+        <b>법별 노드 팬아웃 — law_ftc · law_food · law_cosmetic</b>
+        <span><span class="tag m">실측</span>품목이 법을 정한다 (D-267). 미확정이면 셋 다. 노드는 자기 법의 근거 · 사전 적중만 거른다</span></div></div>
+
+      <div class="stp pos"><div class="n">12</div><div>
+        <b>종착 — 보류 &gt; 증명서 &gt; 지시 &gt; 통과</b>
+        <span><span class="tag m">실측</span>보류 · 증명서(조립기 10-06 · D-320 — 인코더 전 처리는 판정 대기)</span>
+        <span><span class="tag p">기획</span>지시는 실증 분기 재료가 없어 보류로 내려간다. 통과는 규칙만 있고 인코더 전에는 나오지 않는다</span></div></div>
 
     </div>
 
     <p class="note" style="margin-top:14px">
-      🚨 <b>불변식 넷은 전부 DB 제약 또는 게이트로 강제된다</b> — 「그렇게 하기로 했다」가 아니라
-      <b>그렇게 안 하면 저장이 안 된다.</b> 위 네 줄 중 셋이 `CHECK` 이고 하나가 코드 하한이다.
+      🚨 <b>검수 그래프에는 루프가 없다</b> (D-265 · D-266) — 재생성은 생성 그래프의 것이고 그 노드 여섯은 빈 노드다.
+      검수 화면의 「고쳐 쓰기」는 <b>그래프 밖</b> 호출이고(2026-10-06 병합) 승인 범위는 <b>판정 대기</b>다.
     </p>
     <p class="note">
-      ⛔ <b>「설계상 있다」와 「지금 돈다」를 같은 글씨로 적지 않는다.</b> 그래서 한 장 단위가 아니라
-      <b>요소마다</b> 출처를 붙인다 (D-219) — ⑤ 의 검색은 <b>이미 돌고</b>, 그 뒤 리랭커는 아직이다.
-      🔴 다만 <b>그래프의 `retrieve` 노드는 아직 스텁</b>이다 — 「코어가 돈다」와 「그래프가 그것을
-      부른다」는 다른 말이고, 그 구분은 <b>A-04</b> 가 진다.
+      ⛔ <b>불변식은 지금 계약(<code>app/contracts.py</code>)의 검증기가 강제한다.</b> 같은 규칙이 <code>judgment</code> 표의
+      CHECK 로도 서 있지만, 그래프가 판정을 DB 에 쓰는 길은 아직 없다 — 그 구분은 <b>A-04</b> 가 진다.
     </p>
   </div>
 
   <footer>
     <span class="k">순서가 안전을 만든다.</span>
-    사전이 하한을 먼저 박고, 모델은 <span class="k">올릴 때만</span> 말할 수 있으며,
-    올리려면 근거 스팬이 있어야 한다 — 그 셋이 뒤집히면 준법 도구가 아니다.
-    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-03-judge-core.html (D-217)</div>
+    사전이 걸려야 확정하고, 하한은 제재표가 정하며, 모델은 <span class="k">올릴 때만</span> 말할 수 있다 —
+    사전의 침묵을 「특이사항 없음」으로 읽지 않는다 (D-269).
+    <div class="lock">순서의 정본은 app/graph.py · 수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-03-judge-core.html (D-217)</div>
   </footer>
 </div>

@@ -1,0 +1,40 @@
+{"no": 1, "input": "고혈압 낮추는 오미자청, 문경 오미자를 설탕에 100일 숙성", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["문경", "오미자", "100일"]}
+{"no": 2, "input": "남성 갱년기 치료엔 마카! 페루산 마카 뿌리를 가루 냈어요", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["페루산", "마카"]}
+{"no": 3, "input": "#빈혈 #저혈압 치료 꼬막무침, 벌교 참꼬막을 데쳐 양념", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["벌교", "꼬막"]}
+{"no": 4, "input": "숙취해소제 대신 황태국! 인제 용대리 황태를 통째로 우려 냄", "violation_types": ["의약품_오인"], "expect": "salvage", "keep": ["인제", "황태"]}
+{"no": 5, "input": "\"아이 감기가 뚝 떨어졌어요\" 제주 한라봉을 통째로 갈아 만든 잼", "violation_types": ["후기_체험기_기만", "질병_예방치료_표방"], "expect": "salvage", "keep": ["제주", "한라봉"]}
+{"no": 6, "input": "위염·장염 싹! 장흥 매생이를 동결건조한 블록 5g x 10개", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["장흥", "매생이"]}
+{"no": 7, "input": "혈관 청소 산수유차 – 구례 산수유 열매를 씨를 빼고 말렸어요", "violation_types": ["건강기능식품_오인"], "expect": "salvage", "keep": ["구례", "산수유"]}
+{"no": 8, "input": "의사들도 먹는 퀴노아 밥, 볼리비아산 퀴노아와 국산 백미를 3:7로", "violation_types": ["의약품_오인"], "expect": "salvage", "keep": ["볼리비아산", "퀴노아"]}
+{"no": 9, "input": "혈압약 끊게 해준 히비스커스 티, 이집트산 히비스커스 꽃잎 100% 티백 25개입", "violation_types": ["의약품_오인", "후기_체험기_기만"], "expect": "salvage", "keep": ["이집트산", "히비스커스"]}
+{"no": 10, "input": "당뇨인도 안심하는 수수 부꾸미, 국산 찰수수와 팥으로 빚었어요", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["찰수수", "팥"]}
+{"no": 11, "input": "눈이 밝아지는 구기자 차, 청양 구기자를 볶아서 우렸습니다", "violation_types": ["건강기능식품_오인"], "expect": "salvage", "keep": ["청양", "구기자"]}
+{"no": 12, "input": "변비약보다 확실한 함초 소금, 신안 갯벌 함초를 말려 갈았어요", "violation_types": ["의약품_오인"], "expect": "salvage", "keep": ["신안", "함초"]}
+{"no": 13, "input": "골다공증 예방 멸치칼슘 쿠키? 우리밀과 국산 흑임자로 구운 쿠키", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["우리밀", "흑임자"]}
+{"no": 14, "input": "[라이브] 여러분 피부병에 이 비누 진짜 최고예요 동백오일 30% 함유 비누", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["동백오일"]}
+{"no": 15, "input": "흉터 치료 연고보다 좋은 크림, 마데카소사이드 함유 50ml", "violation_types": ["의약품_오인"], "expect": "salvage", "keep": ["마데카소사이드"]}
+{"no": 16, "input": "탈모 완치 앰플✨ 인삼 추출물과 비오틴 함유", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["인삼", "비오틴"]}
+{"no": 17, "input": "기미 주사급 효과, 쌀겨 추출물 함유 토닝 패드 70매", "violation_types": ["의약품_오인"], "expect": "salvage", "keep": ["쌀겨", "패드"]}
+{"no": 18, "input": "건조증 치료하는 립밤, 아르간오일과 스쿠알란 함유", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["아르간오일", "스쿠알란"]}
+{"no": 19, "input": "면역력 2배 UP 식혜, 국산 엿기름과 찹쌀로 직접 삭혔어요", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["엿기름", "찹쌀"]}
+{"no": 20, "input": "살 빠지는 수정과, 국산 계피와 생강을 달여 곶감을 띄웠어요", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["계피", "곶감"]}
+{"no": 21, "input": "젊어지는 샘물 같은 말차 라떼, 일본 우지산 말차 사용", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["우지산", "말차"]}
+{"no": 22, "input": "뇌가 깨어나는 카카오닙스, 에콰도르산 카카오닙스를 저온 로스팅 200g", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["에콰도르산", "카카오닙스"]}
+{"no": 23, "input": "장 건강 지키는 미숫가루, 국산 보리·현미·검은콩 등 12곡", "violation_types": ["건강기능식품_오인"], "expect": "salvage", "keep": ["미숫가루"]}
+{"no": 24, "input": "다이어트 성공 후기 폭발 곤약 잡채, 국산 당면 대신 곤약면 사용", "violation_types": ["후기_체험기_기만"], "expect": "salvage", "keep": ["곤약면"]}
+{"no": 25, "input": "관절 통증 잡는 홍합탕 밀키트, 통영 홍합 1kg 포함", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["통영", "홍합"]}
+{"no": 26, "input": "감기 예방 샤인머스캣 주스, 김천 샤인머스캣을 껍질째 착즙", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["김천", "샤인머스캣"]}
+{"no": 27, "input": "치아씨드 푸딩 – 혈당 스파이크 완벽 차단! 멕시코산 치아씨드와 코코넛밀크", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["치아씨드", "코코넛밀크"]}
+{"no": 28, "input": "고지혈증 치료 갈치구이, 제주 은갈치 두 토막 진공 포장", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["제주", "갈치"]}
+{"no": 29, "input": "면역력 키우는 둥굴레차", "violation_types": ["건강기능식품_오인"], "expect": "infeasible", "keep": []}
+{"no": 30, "input": "피부 미백 효과 율무 가루", "violation_types": ["건강기능식품_오인"], "expect": "infeasible", "keep": []}
+{"no": 31, "input": "암을 이기는 꾸지뽕 진액", "violation_types": ["질병_예방치료_표방"], "expect": "infeasible", "keep": []}
+{"no": 32, "input": "먹으면 혈당이 정상으로 돌아오는 토마토즙", "violation_types": ["질병_예방치료_표방"], "expect": "infeasible", "keep": []}
+{"no": 33, "input": "성기능 개선 처방 대체 흑염소 진액", "violation_types": ["의약품_오인"], "expect": "infeasible", "keep": []}
+{"no": 34, "input": "리뷰: 석 달 마셨더니 담석이 없어졌다는 분 많아요", "violation_types": ["후기_체험기_기만", "질병_예방치료_표방"], "expect": "infeasible", "keep": []}
+{"no": 35, "input": "한 달이면 키 10cm 크는 우유", "violation_types": ["거짓_과장"], "expect": "infeasible", "keep": []}
+{"no": 36, "input": "갑상선암 환자를 위한 특효 차", "violation_types": ["질병_예방치료_표방"], "expect": "infeasible", "keep": []}
+{"no": 37, "input": "항암 치료 중 꼭 드세요 감태 환", "violation_types": ["의약품_오인", "질병_예방치료_표방"], "expect": "infeasible", "keep": []}
+{"no": 38, "input": "탈모약 대신 바르는 토닉", "violation_types": ["의약품_오인"], "expect": "infeasible", "keep": []}
+{"no": 39, "input": "관절 연골을 재생시키는 즙", "violation_types": ["거짓_과장"], "expect": "infeasible", "keep": []}
+{"no": 40, "input": "간 해독에 좋은 고사리 나물", "violation_types": ["건강기능식품_오인"], "expect": "infeasible", "keep": []}

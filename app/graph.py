@@ -7,12 +7,16 @@
    검수 경로에 있으면 안 되는 가지가 됐다.
 
        core     (서브그래프)  split → classify → retrieve → match_dict → encode
-                              → 법별 팬아웃(D-267) → merge_laws → judge → assess_risk → doc_rules
+                              → 법별 팬아웃(D-267) → merge_laws → judge → assess_risk → premise_branches(D-319)
+                              → doc_rules
        review   (진입점 A)   core → route_review → certificate · guidance · hold · passed   ← 루프 없음
        generate (진입점 B)   keyword_screen → assemble → claim_ledger → rejudge → 루프(D-126)
        compose  (진입점 C)   상태만 — 이번 범위 밖 (계약만 · D-266)
 
-🚨 **모델도 판정 로직도 없이 end-to-end 한 바퀴가 돈다** — Phase 0 게이트의 정의(D-124)는 그대로다.
+🚨 **DB 도 모델도 없이 end-to-end 한 바퀴가 돈다** — Phase 0 게이트의 정의(D-124)는 그대로다.
+   🔄 2026-10-06 — 판정 로직은 섰다: **인코더 전 규칙 판정**(`JUDGED_BY` · D-269) · 위험도 하한(`assess_risk`) ·
+      품목 분기(`premise_branches`) · 증명서 조립(`_certificate_of` · D-320). DB 가 없으면 사전을 못 훑어 문장은 미판정이다.
+      빈 노드는 `encode` · `doc_rules` 와 생성(B)의 `keyword_screen` · `claim_ledger` · `rejudge` 다(`assemble` 은 라운드 수만 센다).
 
 ★ D-124 가 정한 검사 셋도 그대로다 —
    ① **라우터 함수는 그래프 없이 단독 테스트한다** → langgraph 를 **모듈 최상단에서 import 하지 않는다.**
@@ -181,8 +185,9 @@ class Proviso:
 class LawResult:
     """법별 노드 하나가 낸 것 (D-267). `merge_laws` 가 모은다.
 
-    🔜 **W4 에서 칸이 는다** — 전제(`Premise`) · 문장별 유형 · 근거 · 하한. 🔄 2026-09-24 — W3 로 계약에 `Premise` 가
-       섰다(`app/contracts.py`). 칸을 늘릴 때 **그 타입을 쓴다** — ⛔ 문자열로 전제를 따로 지으면 **두 벌**이 된다 (D-99).
+    🔄 **칸이 늘었다** — 근거(`articles`) · 사전 적중(`dict_hits` · `weak_hits`) · 단서(`provisos`). 전제 · 문장별 유형 · 하한은
+       이 칸에 싣지 않는다 — `judge` · `assess_risk` 가 이 결과를 읽어 문장에 적고, 전제는 `premise_branches` 가 법별 결과를 전제의
+       법 묶음으로 다시 읽어 계약 `Branch`(`Premise`)로 낸다(D-319). ⛔ 문자열로 전제를 따로 지으면 **두 벌**이 된다 (D-99).
     ★ 「이 법이 이 문장들을 봤다」(`sent_ids` — `merge_laws` 의 fail-closed 대조가 읽는다)와 🆕 **이 법이 고른 근거**(`articles` · W4)를 나른다.
     """
 
@@ -261,8 +266,8 @@ class ReviewState(CoreState, total=False):
     """
 
     outcome: Outcome
-    #: 🆕 2026-10-02 (W5) — 합법화 불가 증명서(D-32). **조립기가 아직 없다** — 사유 설명 문안이 확정된 뒤에 선다(D-308 ⬜).
-    #:    읽는 쪽(`certificate` 종착 · `to_response`)을 먼저 세웠다 — 이 칸이 비면 증명서 종착은 보류로 내린다 (D-220).
+    #: 🆕 2026-10-02 (W5) — 합법화 불가 증명서(D-32). 🔄 2026-10-06 (D-320) — 조립기가 섰다: `certificate` 종착이
+    #:    `_certificate_of` 로 지어 이 칸에 적는다. 승인된 사유 문안이 없는 조합이면 칸이 비고 종착은 보류로 내린다 (D-220).
     certificate: Certificate
 
 
@@ -442,7 +447,7 @@ def route_laws(state: CoreState) -> tuple[str, ...]:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  코어 노드 — 자리와 계약만 있고 판정은 없다
+#  코어 노드 — `encode` · `doc_rules` 는 자리와 계약만 있다(빈 노드)
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -462,7 +467,7 @@ def classify(state: CoreState) -> dict[str, Any]:
     """품목 판별 → **적용할 법**. 🚨 사용자에게 묻지 않는다 — 우리가 판별한다 (D-82).
 
     ★ 지금은 **받은 품목**으로만 법을 고른다 — 받은 것이 없으면(`None`) 세 법 전부다 (D-229 ⑥ · D-267).
-       판별해서 지어내지 않는다. 🔜 W4 — `product_fact` 인정번호 대조 + 규칙으로 `None` 을 좁힌다.
+       판별해서 지어내지 않는다. 🔜 `product_fact` 인정번호 대조 + 규칙으로 `None` 을 좁힌다 — 아직 없다.
     """
     product = state.get("product") or ProductContext()
     return {"laws": laws_for(product.category)}
@@ -609,13 +614,13 @@ def _entries(cur: Any, sql: str) -> list[dm.Entry]:
 
 @timed
 def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
-    """금지 표현 사전 매칭 — **위험도 하한의 재료만** 낸다 (구현계획 F · D-09). 🆕 2026-09-28 (W4) 연결.
+    """금지 표현 사전 매칭 — **재료만** 낸다: 판정(`judge`)과 위험도 하한(`assess_risk`)이 읽는다 (구현계획 F · D-09). 🆕 2026-09-28 (W4) 연결.
 
     ★ 매칭 규칙은 `app/dictmatch.py` 한 곳이다 — 판정기 B(`scripts/eval_rule.py`)와 **같은 적중**을 낸다 (D-99).
     🔴 `exact_match`(단독판정) 항목만 — `load_dict_entries`. 🔴 커서는 `retrieve` 와 같이 `config` 로 받는다(주석 없이).
     🔴 **DB 가 없어도 돈다** — 문장마다 `ran=False` 를 남긴다. ⛔ 빈 dict 로 삼키면 「못 훑었다」가 「안 걸렸다」가 된다 (D-220).
     🚨 사전의 **침묵은 「특이사항 없음」이 아니다** — 인코더 전에는 안 걸린 문장이 보류다 (D-269). 그 판정은 `judge` 가 한다.
-    🚨 사전 적중은 **판정이 아니다** — 하한과 근거 후보다. 확정은 법별 노드 · `judge` 가 조문 적용 뒤에 낸다 (D-127).
+    🚨 사전 적중은 **판정이 아니다** — 하한과 근거 후보다. 확정은 `judge` 가 법별 노드가 거른 적중으로 낸다 (D-127 · D-269).
     """
     sents = state.get("sents", [])
     if not sents:
@@ -670,11 +675,12 @@ def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:
 
 
 def _law_node(name: str) -> Callable[..., dict[str, Any]]:
-    """법별 노드 하나 (D-267). 🔜 W4 다음 — 자기 법의 조문 적용(유형 유효성 · 단서) · 하한 조회.
+    """법별 노드 하나 (D-267). 🔜 자기 법의 조문 적용(유형 유효성 · 단서)은 아직 없다. 하한은 이 노드가 아니라
+    `assess_risk` 가 법별 적중으로 읽는다(`floor_of_sentence`).
 
     🆕 2026-09-28 (W4 · D-291) — **자기 법의 근거를 거른다.** 넓은 검색의 두 갈래 후보에서 이 법 것만 골라 섞고
        (`rt.law_view` — 거른 뒤 섞는다 · ㊲) 앞의 `LAW_TOP_K` 개를 좌표로 옮긴다. 좌표를 못 세운 것은 버린다 (D-224).
-    ★ 판정은 여전히 없다 — 「이 법이 이 문장들을 봤다 + 이 근거를 골랐다」까지다. 판정을 지어내지 않는다.
+    ★ 이 노드는 판정하지 않는다 — 「이 법이 이 문장들을 봤다 + 이 근거 · 사전 적중을 골랐다」까지다. 판정은 `judge` 가 낸다.
     🚨 읽는 것은 `law_payload()` 가 보낸 키뿐이다 — 컴파일본에서는 그것만 온다.
     🔴 참고 전용 법(건강기능식품법)은 노드가 될 수 없다 — 여기서 한 번 더 막는다 (D-271 ⑥ · D-220).
     """
@@ -820,7 +826,7 @@ def _judge_one(
        🆕 2026-10-02 (D-311 · D-273 ④) — 단독판정 자격 **없는** 항목이 이 법의 인용으로 울렸으면 보류 문장에 **유형 후보**를 싣는다.
        확정하지 않는다 · 하한을 걸지 않는다(W5 · D-273 ④ 의 하한은 인코더 뒤 안건) · 근거는 적중의 인용 조문.
        ⛔ 싣지 않으면 강등된 질병 이름(「당뇨에 좋은 차」)이 사전 침묵과 같은 보류가 된다(원장 10-02 ⑤)
-    🚨 위험도를 적지 않는다 — 하한(`sanction_rule` · W5)이 없다. 지어내면 계약이 거부한다(D-09 · D-131).
+    🚨 여기서는 위험도를 적지 않는다 — 하한은 `assess_risk` 가 제재표(`sanction_rule` · W5)에서 읽어 붙인다. 지어내면 계약이 거부한다(D-09 · D-131).
     🚨 `not_claim` 을 내지 않는다 — 주장 여부 판별은 인코더 몫이다 (D-275).
     """
     if scan is None or not scan.ran:
@@ -1391,10 +1397,12 @@ def certificate(state: ReviewState) -> dict[str, Any]:
 
     🔄 2026-10-06 (D-320) — **조립기가 섰다**(`_certificate_of`). 승인된 문안이 있는 조합이면 증명서를 내고, 없으면 종전대로 보류다.
 
-    🔴 2026-10-02 (W5) — 계약은 `outcome=certificate` 에 증명서(`Certificate` · 사유 · 설명)를 요구한다. **조립기가 아직 없다** —
-       설명은 사용자에게 보이는 문안이고 조문 대조 뒤에 확정한다(D-308 ⬜ · D-263 ②). 증명서가 없으면 **보류로 내린다**.
+    🔴 계약은 `outcome=certificate` 에 증명서(`Certificate` · 사유 · 설명)를 요구한다. 설명은 사용자에게 보이는 문안이라
+       승인된 줄만 쓴다(`app/reasons.py` · D-263 ②). 증명서를 못 지으면 **보류로 내린다** — 문안이 없는 조합 · 품목 미확정 ·
+       일반상품 · 전용법 미수록이 여기다(D-320 ② ⑤).
        ⛔ 빈 증명서로 종착을 찍으면 계약이 응답을 거부해 화면에 오류가 난다 — 위험도가 붙은 뒤로는 실제 요청이 여기 온다.
-       문장 판정(확정 · 유형 · 근거 · 위험도)은 그대로 나간다. 조립기가 서면 이 분기가 사라진다 (D-192).
+       문장 판정(확정 · 유형 · 근거 · 위험도)은 그대로 나간다.
+       (2026-10-02 · W5 에는 조립기가 없어 이 종착이 늘 보류였다.)
     """
     cert = state.get("certificate")
     if cert is None and state.get("sentences"):
@@ -1421,6 +1429,7 @@ def guidance(state: ReviewState) -> dict[str, Any]:
     🔴 2026-10-02 (W5) — 계약은 지시 문장마다 **실증 분기와 뺄 구간**을 요구한다(`_guidance_payload`). 실증 분기는 기준 문안
        (조문을 인용한 설명 · D-263 ②)을 싣는데 **문안이 아직 초안**이다 — 재료가 모자라면 **보류로 내린다** (D-220).
        ⛔ 종전 주석 「지금 이 노드에 오는 길은 없다」는 위험도가 붙으면서 틀린 말이 됐다. 문안이 확정되면 이 분기가 사라진다 (D-192).
+    🚨 2026-10-06 — 실증 분기(`substantiation`)를 채우는 노드가 아직 없다. 그래서 이 종착은 지금 **늘 보류로 내려간다**.
     """
     sents = list(state.get("sentences", []))
     if sents and not guidance_ready(sents):
@@ -1469,6 +1478,8 @@ def route_review(state: ReviewState) -> str:
     #    지시는 실증 분기(실증 전 위험도)를, 증명서는 사유 설명을 요구한다 — 하한(`sanction_rule` · W5)이 서기 전에는 어느 쪽도
     #    계약을 못 지난다. ⛔ 위험도를 지어내지 않는다 (D-09 · D-131). 문장 판정(확정 · 위반 · 근거 · 구간)은 그대로 나간다.
     #    ⬜ D-227 「제재 기준이 없을 때 무엇을 내나」 — 판정 대기. 이 줄이 그 판정이 들어올 자리다 (D-192)
+    #    🔄 2026-10-06 — 하한은 섰다(`assess_risk` · W5). 지금 이 줄에 걸리는 것은 제재표에서 하한을 못 읽은 확정 위반이다
+    #       (표가 비었다 · 맞는 행이 없다 · 품목 미확정인데 분기가 서지 않았다).
     if any(s.violations and s.risk.final is None for s in sents):
         return "hold"
     reasons = {s.infeasibility for s in sents if s.infeasibility}
@@ -1502,6 +1513,9 @@ def assemble(state: GenerateState) -> dict[str, Any]:
     🔴 **첫 조립이 `attempt=0` 이다** (D-126 · 0-base · 총 라운드 K+1=3). ⛔ 종전(검수 그래프 안)에는 원문 판정이
        0 을 차지해 **조립이 두 번뿐**이었다 — 최악 호출 N×(K+1)=9 가 6 이 되던 자리다.
     ⬜ sLLM 은 같은 전제 안의 **다듬기**로만 뒤에 붙는다 — D-270 으로 설계만.
+       🔄 2026-10-06 — 검수 화면의 문장 고쳐 쓰기(`POST /u/review/rewrite` · `app/routers/sllm_client.py`)가 병합됐다. 그 경로는
+          이 그래프를 거치지 않고, 이 노드는 그대로다. D-265 · D-270 과의 관계 · 승인 범위는 **판정 대기**다
+          (D-270 은 「전제 정정 · 결론 재검 대기」).
     """
     attempt = state.get("attempt")
     return {"attempt": 0 if attempt is None else attempt + 1}
@@ -1767,7 +1781,9 @@ def main() -> int:
     gstate, gvisited = run_generate_stub()
     print("\n생성 방문 순서 —", " → ".join(gvisited))
     print(f"   종착 {gstate['outcome'].value} · attempt {gstate['attempt']}")
-    print("\n🚨 스텁이다 — 판정도 모델도 없다. 한 바퀴가 돈다는 것만 보인다 (D-124 · D-266).")
+    print(
+        "\n🚨 DB 없이 돈 한 바퀴다 — 사전을 못 훑어 문장은 미판정이고 모델도 없다. 방문 순서만 보인다 (D-124 · D-266)."
+    )
     return 0
 
 
