@@ -63,14 +63,18 @@ def wired(monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201
         sllm=[],
         judge_out={ORIGINAL: ("ok", _fixture("02_hold_low_conf")), BODY: ("ok", _light())},
         sllm_out=("ok", _CANDIDATE),
+        cats=[],
+        products=[],
     )
 
-    def fake_judge(text: str):  # noqa: ANN202
+    def fake_judge(text: str, product=None):  # noqa: ANN001, ANN202
         st.judge.append(text)
+        st.products.append(product.category.value if product and product.category else None)
         return st.judge_out[text]
 
-    def fake_sllm(text: str, violations: list[str]):  # noqa: ANN202
+    def fake_sllm(text: str, violations: list[str], category: str | None = None):  # noqa: ANN202
         st.sllm.append((text, violations))
+        st.cats.append(category)
         return st.sllm_out
 
     monkeypatch.setattr(user_router, "_core_judge", fake_judge)
@@ -269,3 +273,40 @@ def test_화면에_서버_실행_명령을_보이지_않는다(wired) -> None:  
     assert "연결하지 못했어요" in html
     assert ".venv-sllm" not in html
     assert "sllm_service.py" not in html
+
+
+def test_판정_결과의_품목을_서버와_재판정에_넘긴다(wired) -> None:  # noqa: ANN001
+    """🆕 10-06 (팀장 전달 §2 #3) — 품목을 문구에서 추측하지 않게 판정 결과의 품목을 넘긴다(D-319)."""
+    from app.contracts import Category  # noqa: PLC0415
+
+    judged = _fixture("02_hold_low_conf").model_copy(update={"category": Category.화장품})
+    wired.judge_out[ORIGINAL] = ("ok", judged)
+    _go()
+    assert wired.cats == ["화장품"], "🔴 품목을 sLLM 서버에 넘기지 않았다"
+    assert wired.products == [None, "화장품"], (
+        "🔴 원문 판정은 품목 없이 · 고친 문구 재판정은 원문 판정의 품목으로"
+    )
+
+
+def test_품목이_미확정이면_넘기지_않는다(wired) -> None:  # noqa: ANN001
+    judged = _fixture("02_hold_low_conf").model_copy(update={"category": None})
+    wired.judge_out[ORIGINAL] = ("ok", judged)
+    _go()
+    assert wired.cats == [None] and wired.products == [None, None]
+
+
+def test_클라이언트가_품목을_보낸다(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    sent = {}
+
+    def fake_urlopen(req, timeout=None):  # noqa: ANN001, ANN202, ARG001
+        sent.update(json.loads(req.data.decode("utf-8")))
+        return io.BytesIO(json.dumps(_CANDIDATE).encode())
+
+    monkeypatch.setattr(sllm_client.urllib.request, "urlopen", fake_urlopen)
+    assert sllm_client.rewrite("문구", ["거짓_과장"], "건기식")[0] == "ok"
+    assert sent["category"] == "건기식" and sent["rejudge"] is False

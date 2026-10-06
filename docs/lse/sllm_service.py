@@ -39,16 +39,23 @@ sys.path.insert(0, str(ROOT))
 os.environ.setdefault("HF_HUB_OFFLINE", "1")  # 모델은 캐시에 있다 — 허브 호출에서 멈추지 않게(10-02 embed 멈춤과 같은 원인)
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
+from typing import Literal  # noqa: E402
+
 from pydantic import BaseModel, Field  # noqa: E402
+
+from app.settings import PARAMS  # noqa: E402 — 문구 길이 상한은 앱과 한 곳(D-99)
 
 
 class RewriteReq(BaseModel):
     """`POST /rewrite` 요청 — 🚨 모듈 맨 위에 둔다(함수 안에 두면 FastAPI 가 본문이 아니라 쿼리로 읽는다)."""
 
-    text: str = Field(..., min_length=1, max_length=500)
+    #: 🔄 10-06 (팀장 전달 §2 #4) — 종전 500 자 · 앱은 2,000 자라 넘으면 422 가 「연결하지 못했어요」로 보였다
+    text: str = Field(..., min_length=1, max_length=PARAMS.max_text_len)
     violation_types: list[str] = Field(default_factory=list)
     persona: str | None = None  # 고객층 설명 — 주면 2단계(말투)까지 돈다
     rejudge: bool = False  # 판정 코어 재판정(DB 필요)
+    #: 🆕 10-06 (팀장 전달 §2 #3) — 품목(`app.contracts.Category` 값 · 판정 결과의 품목 · D-319). 없으면 후처리가 문구에서 추측한다
+    category: Literal["식품", "건기식", "화장품", "일반상품", "전용법_미수록"] | None = None
 
 
 _MODEL = None
@@ -96,14 +103,14 @@ def _rejudge_view(r: dict) -> dict | None:
 
 
 def rewrite(text: str, violation_types: list[str] | None = None, persona: str | None = None,
-            do_rejudge: bool = False) -> dict:
+            do_rejudge: bool = False, category: str | None = None) -> dict:
     """문구 하나를 고쳐 쓴다. 위반 유형은 판정 코어(검수)가 준 것을 그대로 넘긴다 — 없으면 빈 목록."""
     from persona_pipeline_e2e import run_one  # noqa: PLC0415
 
     model, tok, ver = load()
     t0 = time.time()
     with _LOCK:
-        r = run_one(model, tok, text, list(violation_types or []), persona, do_rejudge=do_rejudge)
+        r = run_one(model, tok, text, list(violation_types or []), persona, do_rejudge=do_rejudge, category=category)
     out = {
         "outcome": r["outcome"],
         "rewrite": None,
@@ -135,7 +142,7 @@ def serve(port: int) -> None:
 
     @app.post("/rewrite")
     def do_rewrite(req: RewriteReq) -> dict:
-        return rewrite(req.text, req.violation_types, req.persona, req.rejudge)
+        return rewrite(req.text, req.violation_types, req.persona, req.rejudge, req.category)
 
     load()  # 첫 요청이 느리지 않게 미리 올린다(약 30초)
     uvicorn.run(app, host="127.0.0.1", port=port)  # 🚨 로컬만 — 외부에 열지 않는다
@@ -145,6 +152,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--text")
     ap.add_argument("--types", default="", help="위반 유형(쉼표)")
+    ap.add_argument("--category", default=None, help="품목(식품 · 건기식 · 화장품 …) — 🆕 10-06")
     ap.add_argument("--serve", action="store_true")
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
@@ -152,7 +160,7 @@ def main() -> None:
         serve(args.port)
     elif args.text:
         types = [t.strip() for t in args.types.split(",") if t.strip()]
-        print(json.dumps(rewrite(args.text, types), ensure_ascii=False, indent=2))
+        print(json.dumps(rewrite(args.text, types, category=args.category), ensure_ascii=False, indent=2))
     else:
         ap.print_help()
 
