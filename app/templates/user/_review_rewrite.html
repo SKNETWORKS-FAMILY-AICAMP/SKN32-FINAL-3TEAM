@@ -1,0 +1,53 @@
+{# app/templates/user/_review_rewrite.html — 지적 문장 고쳐 쓰기 결과 · 소유자 lse (2026-10-06)
+
+  `review.html` 이 지적 문장 아래에 include 한다 (`rw` 하나). BFF 는 `app/routers/user.py` 의 `review_rewrite()`.
+  🚨 후보도 적법 확정이 아니다 — 재판정(D-119)의 「위반 못 찾음」은 통과가 아니다. 사람 검수가 남는다.
+  ⛔ sLLM 서버가 없으면 후보를 그리지 않는다 (D-146 · D-147).
+#}
+<div class="rv-fix" style="margin-top:.6rem">
+  {% if rw.qualification %}
+  <b>고쳐 쓰지 않아요</b> · 사유 A(자격형) — 표현이 아니라 자격의 문제라 고쳐 써도 같은 위반이 되풀이돼요 (D-59).
+
+  {% elif rw.no_violation %}
+  <b>고쳐 쓰지 않아요</b> · 판정 코어가 이 문장에서 <b>위반 유형을 찾지 못했어요</b>(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.
+
+  {% elif rw.down %}
+  <b>고쳐 쓰기 서버(sLLM)에 연결하지 못했어요</b> — 후보를 만들지 않았어요 (D-146).<br>
+  <span class="rv-note">서버를 띄운 뒤 다시 눌러 주세요 · <code>.venv-sllm\Scripts\python.exe docs\lse\sllm_service.py --serve --port 8765</code></span>
+
+  {% elif rw.out.outcome == "candidate" and rw.rejudge and rw.rejudge.status == "rejected" %}
+  <b>보류 — 고친 문구가 재판정에서 위반 의심</b><br>
+  <span style="text-decoration:line-through">{{ rw.out.rewrite.body }}</span><br>
+  {% for v in rw.rejudge.violations %}<span class="rv-chip c-warn">{{ v|replace("_", " ") }}</span> {% endfor %}
+  {% if not rw.rejudge.violations %}<span class="rv-chip c-warn">근거 없음</span>{% endif %}
+  <br><span class="rv-note">후보로 내지 않고 사람 검토로 넘겨요 (D-119).</span>
+
+  {% elif rw.out.outcome == "candidate" %}
+  <b>고친 문구 후보</b><br>
+  <span style="font-size:.9rem">{{ rw.out.rewrite.body }}</span><br>
+  {% if rw.out.rewrite.mandatory_note %}<span class="rv-note">필수 병기 · {{ rw.out.rewrite.mandatory_note }}</span><br>{% endif %}
+  {% if rw.out.rewrite.placement %}<span class="rv-note">배치 · {{ rw.out.rewrite.placement }}</span><br>{% endif %}
+  {% if rw.rejudge.status == "passed" %}<span class="rv-chip c-r0">재판정 · 통과</span>
+  {% elif rw.rejudge.status == "no_violation" %}<span class="rv-chip c-violation">재판정 · 위반 못 찾음 (통과 아님)</span>
+  {% else %}<span class="rv-chip">재판정 못 함 — 판정 코어 연결 실패</span>{% endif %}
+  {% if "low_conf" in (rw.rejudge.hold_reasons or []) %}<span class="rv-chip">확신 부족</span>{% endif %}
+  {% for r in rw.out.repairs %}<br><span class="rv-note">후처리 · {{ r }}</span>{% endfor %}
+
+  {% elif rw.out.outcome == "infeasible" %}
+  <b>합법화 불가</b> · {{ rw.out.infeasible|replace("_", " ") if rw.out.infeasible else "유형 미상" }}
+  — 표현을 바꿔도 같은 위반이 남아 살릴 사실이 없어요.
+
+  {% else %}
+  <b>보류 — 사람 검토 필요</b><br>
+  {% if rw.out.reasons == ["원문 그대로"] %}
+  <span class="rv-note">고칠 곳을 찾지 못했어요 — 고친 문구가 원문과 같았어요.</span>
+  {% else %}
+  <span class="rv-note">고친 문구가 안전장치(관문)에 걸려 후보로 내지 않았어요.</span>
+  {% for r in rw.out.reasons %}<br><span class="rv-note">· {{ r }}</span>{% endfor %}
+  {% endif %}
+  {% endif %}
+
+  {% if rw.out %}
+  <br><span class="rv-note">🚨 후보도 <b>적법 확정이 아니에요</b> — 사람 검수가 남아요 · 모델 {{ rw.out.model }} · {{ (rw.out.latency_ms / 1000)|round(1) }}초</span>
+  {% endif %}
+</div>
