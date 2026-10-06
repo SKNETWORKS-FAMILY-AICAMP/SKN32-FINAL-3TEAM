@@ -33,7 +33,24 @@ def test_bangbang_is_in_the_list() -> None:
 
     `ftc_extract` 는 이미 뽑고 있었다 — **뽑는 쪽과 인정하는 쪽이 어긋난 채로** 지나갔다.
     """
-    assert "비방광고" in CANDIDATE_TYPES
+    # 🔄 2026-10-06 (D-321) — 편입됐다. 후보 목록이 아니라 확정 목록에 있다
+    assert "비방광고" in VIOLATION_TYPES and "비방광고" not in CANDIDATE_TYPES
+
+
+def test_확정_클래스는_여덟이고_기능성화장품은_편입_대기다() -> None:
+    """🆕 2026-10-06 (D-321 · D-232 재판정) — 인코더가 내는 확정 클래스 목록. ⛔ 재학습 차수에만 바꾼다."""
+    assert VIOLATION_TYPES == [
+        "질병_예방치료_표방",
+        "건강기능식품_오인",
+        "의약품_오인",
+        "거짓_과장",
+        "소비자_기만",
+        "후기_체험기_기만",
+        "부당_비교광고",
+        "비방광고",
+    ], "확정 클래스가 바뀌었다 — 인코더 라벨 순서 · 학습기와 함께 바꾸는 일이다 (D-232 ①③)"
+    assert "기능성화장품_오인" in CANDIDATE_TYPES, "학습 11 행이라 편입 대기다 (D-321)"
+    assert not set(VIOLATION_TYPES) & set(CANDIDATE_TYPES), "확정과 후보에 같은 유형이 있다"
 
 
 def test_merged_labels_stay_merged() -> None:

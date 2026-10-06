@@ -61,6 +61,10 @@ _REGISTRY_SOURCE = {
     "mfds_cosmetic_ad_guideline": "mfds_cosmetic_ad_guideline",
     "mfds_cosmetic_ad_qa_2012": "mfds_cosmetic_ad_qa_2012",
     "mfds_cosmetic_faq_2020": "mfds_cosmetic_faq_2020",
+    "mfds_casebook_2021": "mfds_casebook_2021",
+    "ftc_press": "ftc_press",
+    "mfds_daegu_ad_cases_2013": "mfds_daegu_ad_cases_2013",
+    "mfds_ad_judge_manual_2015": "mfds_ad_judge_manual_2015",
 }
 
 

@@ -46,7 +46,7 @@ import xml.etree.ElementTree as ET
 
 from collect import store
 from preprocess import stage
-from preprocess.ftc_triage import CORE, _text, classify
+from preprocess.ftc_triage import CORE, _text, case_law, classify
 from preprocess.mask import MARK_RE, Ledger, Trace, anchor_ftc, apply_policy
 from preprocess.text import FOOTNOTE, sep_norm
 
@@ -172,7 +172,9 @@ def _units(order: str) -> list[str]:
 
 
 #: 원천이 위법이 아니라고 한 항목 · 판단 없이 닫은 항목
-_LAWFUL = re.compile(r"위반되지\s*(?:아니|않)|무혐의")
+#: 🔄 2026-10-03 — 「법 위반에 해당하지 아니한다」 꼴을 더했다. 이 꼴을 못 읽어 16739 의 5 항(주행보조 프로그램 광고는
+#:    위반 아님)의 문구 둘이 위반 양성으로 학습 쪽에 들어가 있었다(8,272 문서 실측 — 이 꼴은 그 문서 하나 · 원장 10-03 ⑫)
+_LAWFUL = re.compile(r"위반되지\s*(?:아니|않)|위반에\s*해당(?:하지|되지)\s*(?:아니|않)|무혐의")
 _CLOSED = re.compile(r"심의\s*절차를\s*종료|종결\s*처리")
 #: 처분을 명하는 머리 — 시정명령 · 경고 · 고발
 _ORDER = re.compile(r"하여서는\s*아니\s*된다|하여야\s*한다|경고한다|고발한다")
@@ -473,6 +475,8 @@ def main() -> int:
                 "seq": seq,
                 "결정일자": _text(r, "결정일자"),
                 "분류": k,
+                # 🆕 2026-10-05 — 사건에 적용된 법. `split.ftc_docs()` 가 읽어 표시광고법 사건만 남긴다(원장 10-03 ㊿-27)
+                "적용법": case_law(name, order, gist, reason),
                 "사건명": apply_policy(name, bare, "ftc"),
                 "문구": ps,
                 "문구_이유": rs,  # 🆕 D-232 (A) — 섞지 않는다

@@ -2,7 +2,7 @@
 
 🚨 원문 PDF 는 저장소에 없다(CI) — 실제 문서에서 본 **모양**을 합성 글로 옮겨 대조한다. 이름은 전부 지어낸 것이다.
    실측(클론 B 원문 · 작업공간): 사례 80(식품 37 · 건강기능식품 28 · 축산물 15) · 처분 칸 65 · 목차 대조 통과 ·
-   사람 가림 21 곳 · 남은 이름 후보 0.
+   사람 가림 22 곳 · 남은 이름 후보 0 · 조각 203.
 """
 
 from __future__ import annotations
@@ -47,13 +47,14 @@ CASE_HF = "\n".join(
         "MINISTRY OF FOOD AND DRUG SAFETY 65",
     ]
 )
-#: 축산물 사례 — 처분 칸이 없다
+#: 축산물 사례 — 처분 내용 없이 「▶ 처분 근거 :」만 있다(원천 15/15 건)
 CASE_MEAT = "\n".join(
     [
         "▶ 위반 구분 : 허위 표시•광고",
         "▶ 위반 내용 : 인증을 받지 않은 제품을 인증받은 것처럼 광고",
         "▶ 광고 매체 : 인터넷",
         "▶ 과대광고 문구 : 무항생제 인증 마크 사용",
+        "▶ 처분 근거 : 축산물 위생관리법 제32조 및 시행규칙 제52조 제1항 제14호 위반",
         "94 MINISTRY OF FOOD AND DRUG SAFETY",
     ]
 )
@@ -97,6 +98,16 @@ def test_처분_칸이_없으면_판정지위를_지어내지_않는다() -> Non
     rows, _ = mm.parse(HALVES)
     assert rows[0]["판정지위"] == "행정처분" and rows[0]["기준시점"] == "2015-03"
     assert rows[2]["처분"] is None and rows[2]["판정지위"] is None  # D-220
+
+
+@pytest.mark.gate
+def test_처분_근거만_있는_사례는_근거가_문구에_섞이지_않는다() -> None:
+    """🔴 축산물 사례의 「▶ 처분 근거 :」 줄 — 표지를 안 보면 근거가 광고 문구 끝에 붙는다 (실측 15/15)."""
+    rows, _ = mm.parse(HALVES)
+    meat = rows[2]
+    assert meat["문구"] == "무항생제 인증 마크 사용"
+    assert meat["처분근거"] == "축산물 위생관리법 제32조 및 시행규칙 제52조 제1항 제14호"
+    assert meat["처분"] is None and meat["판정지위"] is None  # 처분 내용은 원천에 없다 (D-220)
 
 
 @pytest.mark.gate
@@ -193,3 +204,94 @@ def test_마스킹_정책이_없으면_파생을_내보내지_못한다() -> Non
     # 사람 가림만 건 길은 정책 없이도 돈다(화면 확인용 · 파일로 내지 않는다)
     red, log = mm.redacted(rows)
     assert MASK_CEO in red[1]["문구"] and len(log) == 1
+
+
+@pytest.mark.gate
+def test_정책_마스킹이_사람_자국_뒤_괄호를_지우지_않는다() -> None:
+    """🔴 `mask_paren_alias` 는 `[대표]` 뒤 괄호를 지운다 — 정책을 사람 가림보다 먼저 걸어 막는다 (원장 10-03 ㊿-10)."""
+    from preprocess.mask import POLICY
+
+    if mm.SOURCE_ID not in POLICY:
+        pytest.skip("정책 등재 전 — 위 게이트가 지킨다")
+    rows = [{"위반내용": "체험기 이용", "문구": "1) 가나다 (남, 63세) ... 3일째 좋아졌어요"}]
+    out, _, log = mm.masked(rows)
+    assert out[0]["문구"] == f"1) {MASK_CEO} (남, 60대) ... 3일째 좋아졌어요"
+    assert "괄호원어" not in [x["규칙"] for x in log]
+    red, _ = mm.redacted(rows)
+    assert out == red  # 자리표(`pieces`)는 사람 가림만 건 글에 맞춰 굳혔다
+
+
+@pytest.mark.gate
+def test_보도_제목의_유명인_이름을_가린다() -> None:
+    """성씨 규칙 밖의 이름(외국 이름) — 「이름 + 몸매 비결」 꼴 (원장 10-03 ⑪)."""
+    log: list[dict] = []
+    got = mm.redact_people("가나다 라 몸매 비결로 지목된 슈퍼푸드", log)
+    assert got == f"{mm.MASK_CEO} 몸매 비결로 지목된 슈퍼푸드"
+    assert [x["규칙"] for x in log] == ["유명인_이름"]
+
+
+def _cut(text: str, at: tuple[int, ...]) -> dict[str, tuple[str, tuple[int, ...]]]:
+    import hashlib
+
+    return {"22L": (hashlib.sha256(text.encode()).hexdigest()[:12], at)}
+
+
+@pytest.mark.gate
+def test_조각은_자리표대로_잘리고_이으면_문구가_된다() -> None:
+    text = "첫 문장입니다. 둘째 문장입니다."
+    row = {"쪽": 22, "면": "L", "구역": "식품", "문구": text}
+    got = mm.pieces([row], _cut(text, (9,)))
+    assert [p["문구"] for p in got] == ["첫 문장입니다.", "둘째 문장입니다."]
+    assert [p["조각"] for p in got] == [1, 2] and got[0]["조각수"] == 2
+    # 지문은 글이 아니라 자리로 만든다 — 가림이 바뀌어도 같다
+    assert got[0]["지문"] == mm.piece_id(22, "L", 1) and got[0]["지문"] != got[1]["지문"]
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("row_text", "cut_text", "at", "why"),
+    [
+        ("문구가 바뀌었다.", "원래 문구였다.", (), "다르다"),
+        ("짧은 문구.", "짧은 문구.", (99,), "문구 밖"),
+        ("짧은 문구.", "짧은 문구.", (3, 3), "문구 밖"),
+    ],
+)
+def test_자리표와_문구가_어긋나면_멈춘다(
+    row_text: str, cut_text: str, at: tuple[int, ...], why: str
+) -> None:
+    """🔴 D-220 — 굳힌 자리가 다른 글자를 가리키면 조각을 내지 않는다."""
+    row = {"쪽": 22, "면": "L", "구역": "식품", "문구": row_text}
+    with pytest.raises(ValueError, match=why):
+        mm.pieces([row], _cut(cut_text, at))
+
+
+@pytest.mark.gate
+def test_자리표에_없는_사례는_멈춘다() -> None:
+    with pytest.raises(ValueError, match="자리표에 없는"):
+        mm.pieces([{"쪽": 1, "면": "R", "구역": "식품", "문구": "글"}], {})
+
+
+@pytest.mark.gate
+def test_자리표는_사례_80_건_조각_203_개다() -> None:
+    """자리표가 통째로 바뀌는 것을 잡는다 — 수는 원장 10-03 ⑪."""
+    from preprocess.mfds_ad_manual_cuts import CUTS
+
+    assert len(CUTS) == 80
+    assert sum(len(at) + 1 for _, at in CUTS.values()) == 203
+    assert all(list(at) == sorted(set(at)) and all(x > 0 for x in at) for _, at in CUTS.values())
+
+
+@pytest.mark.gate
+def test_들어올_때_있던_자국_뒤_괄호는_지우지_않는다() -> None:
+    """🔴 추출기가 먼저 넣은 자국 뒤 괄호는 원어 표기가 아니다 — 광고 문구가 지워졌었다 (원장 10-03 ㊿-10 · ㊿-12)."""
+    from preprocess import mask
+
+    src = "mfds_ad_judge_manual_2015"  # 업체명 축이 켜진 원천
+    text = "1) [대표] (남, 60대) 3일째 좋아졌어요 · 전문의 [대표](하루 한 알로 혈관이 깨끗해집니다)"
+    log: list[dict] = []
+    assert mask.apply_policy(text, "", src, log) == text
+    assert [x for x in log if x["규칙"] == "괄호원어"] == []
+    # 이 정책이 방금 가린 이름 뒤의 원어 괄호는 그대로 지운다
+    assert mask.mask_paren_alias("[업체](Original Name Co.)") == "[업체]"
+    with pytest.raises(mask.MaskPolicyError):
+        mask.apply_policy("가\ue0f0나", "", src)

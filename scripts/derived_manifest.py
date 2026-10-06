@@ -110,6 +110,52 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
         "labels/ftc_press_old/adopted.jsonl",
         "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round fp-rebuild`",
     ),
+    # 🆕 2026-10-04 (판정 묶음 ①) — 옛 화장품 질의응답(2012 · 2020) 판
+    (
+        "생성물",
+        "labels/cosmetic_qa_old/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round co-rebuild`",
+    ),
+    # 🆕 2026-10-04 (판정 묶음 ①) — 사례집 2021 판(법이 둘이라 판도 둘)
+    (
+        "생성물",
+        "labels/casebook_2021_food/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round cbf-rebuild`",
+    ),
+    (
+        "생성물",
+        "labels/casebook_2021_cosmetic/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round cbc-rebuild`",
+    ),
+    # 🆕 2026-10-05 — 대구청 사례(2013) 판 · 확정 문구 전사(`labels/daegu_2013/phrases.json`)는 아래 `labels/` 규칙의 원천이다
+    (
+        "생성물",
+        "labels/daegu_2013/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round dg-rebuild`",
+    ),
+    # 🆕 2026-10-05 — 해설서 근거자료 제출 판
+    (
+        "생성물",
+        "labels/guide_evidence/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round ge-rebuild`",
+    ),
+    # 🆕 2026-10-04 — 판별 매뉴얼(2015) 판
+    (
+        "생성물",
+        "labels/ad_manual_2015/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round mn-rebuild`",
+    ),
+    # 🆕 2026-10-04 — 1차 법령해석 판(법이 둘이라 판도 둘)
+    (
+        "생성물",
+        "labels/interp_ad_food/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round ipf-rebuild`",
+    ),
+    (
+        "생성물",
+        "labels/interp_ad_cosmetic/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round ipc-rebuild`",
+    ),
     # 🆕 2026-09-30 (판정 J1 (b) · J2) — 해설서 수정문구 · 결정문 봉인 문구 판
     (
         "생성물",
@@ -120,6 +166,17 @@ KIND_RULES: tuple[tuple[str, str, str], ...] = (
         "생성물",
         "labels/ftc_sealed/adopted.jsonl",
         "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round fs-rebuild`",
+    ),
+    (
+        "생성물",
+        "labels/ftc_train/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round ft-rebuild`",
+    ),
+    # 🆕 2026-10-05 — 결정문 이유 구역 문구 판(원장 10-03 ㊿-28)
+    (
+        "생성물",
+        "labels/ftc_reason/adopted.jsonl",
+        "판독 원자료 + 팀장 판정 + 채택 규칙의 계산 — `guide_statute_round fr-rebuild`",
     ),
     ("원천", "labels/", "사람의 판정 — 어떤 명령으로도 다시 안 나온다"),
     ("표본", "_labelsheet.jsonl", "다시 뽑으면 그 표본이 아니다 — 라벨과 κ 가 갈린다"),
@@ -151,6 +208,8 @@ UNWRITTEN: dict[str, str] = {
     # 🔄 2026-09-17 — 비었다. `casebook2021_labelsheet.jsonl` 이 여기 있었는데
     #    전사기를 `scripts/casebook2021_sheet.py` 로 커밋해 **1차 대조로 넘어갔다**
     #    (재생성 결과가 기기 파일과 바이트 동일 · sha 999710e20ac3 · 161,601 B).
+    #    🔄 2026-10-03 — 전사를 다시 했다. 그 sha · 크기는 09-17 판의 것이다. 지금은 쪽 전사
+    #    `data/derived/labels/casebook_2021/pages.json`(원천 · git 밖 — D-249 ⑥)에서 규칙으로 뽑는다(원장 10-03 ④ · ⑥).
     #    ★ 이 목록이 비어 있는 것이 정상이다. 여기 이름이 늘면 「한 기기에만 사는 원천」이 늘었다는 뜻이다.
 }
 

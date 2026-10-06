@@ -813,6 +813,9 @@ def _parse(R: Round, line: str) -> dict:
         raise ValueError(f"칸이 모자란다({len(p)}): {line[:80]!r}")
     p += [""] * (8 - len(p))
     key, target, prim, sec, mok, cond, exc, memo = (x.strip() for x in p[:8])
+    # 🔄 2026-10-05 — 부근거 칸은 쉼표로 여럿을 받는다(세 호가 걸린 결정문의 이유 문구 · 지시서 이유구역 §3).
+    #    한 호만 적는 종전 판독은 그대로 읽힌다
+    secs = [x.strip() for x in sec.split(",")]
     rec = {
         "지문": key,
         "대상": target,
@@ -836,7 +839,7 @@ def _parse(R: Round, line: str) -> dict:
         return rec
     if cond not in CQ_CONDITIONS:
         rec["문제"].append(f"조건 {cond!r}")
-    for c in (prim, sec):
+    for c in (prim, *secs):
         if c in ("", "-"):
             continue
         if c.startswith("기타:"):
@@ -1024,6 +1027,495 @@ FP = Round(
 )
 
 
+# ── 🆕 2026-10-04 옛 화장품 질의응답(2012 · FAQ 2020) 판 — 판정 묶음 ① (`판정기록_2026-10-04_판독판_판정묶음.md`) ──
+#: 지시서는 화장품 2025 판과 같다(`라벨링_지시서_2026-09-25_질의응답집_화장품_조문·조건.md`) — 근거 코드 · 제외목 · 별표5목 표도 같다.
+#:    다른 것은 원천 둘 · 문항 표기 · 원천 대조뿐이다(판독자가 부호 없이 뽑은 문구가 있다 — 원장 10-03 ㉒).
+#:    🚨 2012 판은 2010 화장품법 기준이다 — 원천의 조문 번호를 지금 번호로 읽지 않는다(추출기 머리말). 판독은 현행 조문으로 붙였다.
+CO_QA = {
+    "mfds_cosmetic_ad_qa_2012": ROOT / "data" / "derived" / "mfds_cosmetic_ad_qa_2012.jsonl",
+    "mfds_cosmetic_faq_2020": ROOT / "data" / "derived" / "mfds_cosmetic_faq_2020.jsonl",
+}
+CO_DIR = ROOT / "data" / "derived" / "labels" / "cosmetic_qa_old"
+CO_READINGS = CO_DIR / "readings.jsonl"
+CO_ADOPTED = CO_DIR / "adopted.jsonl"
+CO_DECISIONS = CO_DIR / "decisions.jsonl"
+CO_AUDIT = CO_DIR / "audit.jsonl"
+CO_TEAM_SHEET = ROOT / "build" / "labels" / "cosmetic_qa_old__팀장판정표.csv"
+#: 지문 머리 — `ca:` 2012 판 · `cf:` FAQ 2020. 🚨 지문은 판독 때 만든 것을 그대로 쓴다(다시 계산하지 않는다 — 화장품 2025 판과 같은 이유)
+CO_KEY_RE = re.compile(r"^c[af]:[a-z2-7]{12}$")
+CO_KEY_SOURCE = {"ca": "mfds_cosmetic_ad_qa_2012", "cf": "mfds_cosmetic_faq_2020"}
+#: 문구를 찾는 칸 — 인용표현에 없으면 이 칸들의 글에서 찾는다(공백만 다르게)
+CO_TEXT_FIELDS = ("제목", "소제목", "질의", "답변")
+
+
+def co_question(source: str, rec: dict) -> str | None:
+    """원천 레코드 → 단위 표의 문항 표기. 2012 판 「장 번호-문항」(화장품 편만) · FAQ 2020 「Q번호」. 범위 밖이면 None."""
+    if source == "mfds_cosmetic_faq_2020":
+        return f"Q{int(rec['문항'])}"
+    if rec.get("편") != "화장품":
+        return None  # 의약외품 편은 이 판의 범위 밖이다 (D-192)
+    m = re.match(r"(\d+)\.", str(rec.get("장") or ""))
+    return f"{m.group(1)}-{int(rec['문항'])}" if m else None
+
+
+def co_units(units: list[dict]) -> dict[str, dict]:
+    """옛 화장품 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 문구가 그 문항의 `인용표현` 에 있거나 문항 글에 공백만 다르게 있어야 한다.
+
+    ★ 문항 글에서도 찾는 까닭 — 이 원천은 인용부호 없이 적은 광고 표현이 많아 판독자가 문구를 직접 뽑았다(325 중 144 · 원장 10-03 ㊿-6).
+    🔴 지문 머리와 `원천` 이 어긋나면 멈춘다 — 두 원천의 문항 표기가 달라 섞이면 다른 문항에 붙는다 (D-220).
+    """
+    qa: dict[tuple[str, str], dict] = {}
+    for source, path in CO_QA.items():
+        if not path.exists():
+            raise SystemExit(
+                f"🔴 {path} 가 없다 — 먼저: uv run python -m preprocess."
+                f"{'mfds_cosmetic_qa_2012' if source.endswith('2012') else 'mfds_cosmetic_faq_2020'} --dump"
+            )
+        for x in path.read_text(encoding="utf-8").splitlines():
+            if x.strip():
+                r = json.loads(x)
+                q = co_question(source, r)
+                if q is not None:
+                    qa[(source, q)] = r
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(CO_KEY_RE, k, src, bad):
+            continue
+        # 원천은 **지문 머리**가 정한다 — 판독 원자료(`readings.jsonl`)는 `원천` 칸을 싣지 않는다(`rebuild` 가 그것만 읽는다).
+        #    단위 표가 `원천` 을 적어 왔으면 머리와 같은지 본다
+        source = CO_KEY_SOURCE[k[:2]]
+        if u.get("원천") not in (None, source):
+            bad.append(f"{k} 지문 머리와 원천이 어긋난다 {u.get('원천')!r}")
+            continue
+        q = qa.get((source, str(u["문항"])))
+        if q is None:
+            bad.append(f"{k} {source} 에 없는 문항 {u['문항']!r}")
+            continue
+        body = _WS.sub("", " ".join(str(q.get(f) or "") for f in CO_TEXT_FIELDS))
+        if u["문구"] not in (q.get("인용표현") or []) and _WS.sub("", u["문구"]) not in body:
+            bad.append(f"{k} {u['문항']} 원천에 없는 문구 {u['문구'][:30]!r}")
+            continue
+        src[k] = {
+            "지문": k,
+            "문항": str(u["문항"]),
+            "자리": u["자리"],
+            "문구": u["문구"],
+            "원천": source,
+        }
+    _units_fail("옛 화장품 질의응답", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.co_units")
+    return src
+
+
+CO = Round(
+    prefix="CO",
+    cmd="co",
+    cite_of=cq_cite_of,
+    exceptions=CQ_EXCEPTIONS,
+    mok_ho=CQ_MOK_HO,
+    head=("문항", "자리"),
+    sheet_head=("문항",),
+    units=lambda us: co_units(us),
+)
+
+
+# ── 🆕 2026-10-04 사례집 2021 판 — 지시서 `라벨링_지시서_2026-10-03_사례집2021_조문·조건.md` · 판정 묶음 ① ──
+#: 식약처 「부당한 표시 또는 광고 사례집」 2021 판의 **광고 화면**(쪽 · 칸 하나가 단위). 원천이 위반이라 든 화면이다(D-237).
+#:    🚨 법이 둘이다 — 식품(식품표시광고법 제8조 · [별표 1] 목)과 화장품(화장품법 제13조 · [별표 5] 목). 근거 코드가 겹쳐
+#:       (`1` 이 식품 1호이기도 화장품 1호이기도 하다) **판을 둘로 가른다** — 단위의 `법` 칸이 어느 판인지 정한다.
+#:    🔴 원천 레코드는 `scripts/casebook2021_sheet.py --dump` 가 낸다(쪽 전사 → 마스킹 → 행).
+CB_SOURCE = "mfds_casebook_2021"
+CB_SHEET = ROOT / "data" / "derived" / "casebook2021_labelsheet.jsonl"
+CB_KEY_RE = re.compile(r"^cb:[a-z2-7]{12}$")
+#: 단위의 문구는 화면 글의 줄을 이 글자로 이어 붙인 것이다(판독 입력을 만들 때의 꼴)
+CB_JOIN = " / "
+#: 원천 대조에서 보지 않는 글자 — 공백과 **표시 자국**(⟦ ⟧ · 전사가 형광 · 색글자 자리를 감싼다)
+_CB_SKIP = re.compile(r"[\s⟦⟧]+")
+#: 화면의 글이 든 칸 — 표시 문구 · 화면 글 · 식약처 설명 · 심의 삭제 · 본문 글
+CB_TEXT_FIELDS = ("문구", "표시문구", "화면글", "식약처설명", "글", "사례", "참고", "소제목")
+
+CBF_DIR = ROOT / "data" / "derived" / "labels" / "casebook_2021_food"
+CBF_READINGS = CBF_DIR / "readings.jsonl"
+CBF_ADOPTED = CBF_DIR / "adopted.jsonl"
+CBF_DECISIONS = CBF_DIR / "decisions.jsonl"
+CBF_AUDIT = CBF_DIR / "audit.jsonl"
+CBF_TEAM_SHEET = ROOT / "build" / "labels" / "casebook_2021_food__팀장판정표.csv"
+CBC_DIR = ROOT / "data" / "derived" / "labels" / "casebook_2021_cosmetic"
+CBC_READINGS = CBC_DIR / "readings.jsonl"
+CBC_ADOPTED = CBC_DIR / "adopted.jsonl"
+CBC_DECISIONS = CBC_DIR / "decisions.jsonl"
+CBC_AUDIT = CBC_DIR / "audit.jsonl"
+CBC_TEAM_SHEET = ROOT / "build" / "labels" / "casebook_2021_cosmetic__팀장판정표.csv"
+
+
+def _cb_text(v: object) -> str:
+    """원천 행의 한 칸 → 글(목록 · `{글, 표시}` 꼴을 편다)."""
+    if isinstance(v, dict):
+        return " ".join(_cb_text(x) for x in v.values())
+    if isinstance(v, list):
+        return " ".join(_cb_text(x) for x in v)
+    return v if isinstance(v, str) else ""
+
+
+def cb_units(units: list[dict], law: str) -> dict[str, dict]:
+    """사례집 2021 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 단위의 `행` 이 가리키는 원천 행과 쪽 · 칸이 같고,
+    문구의 줄마다 그 행의 글에 있어야 한다(공백 · 표시 자국만 다르게).
+
+    ★ 줄 단위로 보는 까닭 — 표시 문구가 없는 화면은 화면 글을 이어 붙여 단위 문구로 삼았다(114 중 21 · 원장 10-03 ㊿-8).
+    🔴 `법` 이 이 판의 것이 아닌 단위가 섞이면 멈춘다 — 식품 코드로 화장품 화면을 읽게 된다 (D-220).
+    """
+    if not CB_SHEET.exists():
+        raise SystemExit(
+            f"🔴 {CB_SHEET} 가 없다 — 먼저: uv run python scripts/casebook2021_sheet.py --dump"
+        )
+    rows = [json.loads(x) for x in CB_SHEET.read_text(encoding="utf-8").splitlines() if x.strip()]
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(CB_KEY_RE, k, src, bad):
+            continue
+        if u.get("법") != law:
+            bad.append(f"{k} 법 {u.get('법')!r} — 이 판은 {law} 다")
+            continue
+        no = int(u["행"])
+        r = rows[no - 1] if 1 <= no <= len(rows) else None
+        if r is None or (str(r["쪽"]), str(r["칸"])) != (str(u["쪽"]), str(u["칸"])):
+            bad.append(f"{k} 행 {no} 의 쪽 · 칸이 원천과 다르다")
+            continue
+        body = _CB_SKIP.sub("", " ".join(_cb_text(r.get(f)) for f in CB_TEXT_FIELDS))
+        lines = [x for x in u["문구"].split(CB_JOIN) if x.strip()]
+        miss = [x for x in lines if _CB_SKIP.sub("", x) not in body]
+        if miss or not lines:
+            bad.append(f"{k} {u['쪽']}쪽 원천에 없는 줄 {len(miss)} — {(miss or [''])[0][:30]!r}")
+            continue
+        src[k] = {
+            "지문": k,
+            "행": no,
+            "쪽": str(u["쪽"]),
+            "칸": str(u["칸"]),
+            "법": law,
+            "원천호": str(u["원천호"]),
+            "문구": u["문구"],
+            "원천": CB_SOURCE,
+        }
+    _units_fail(f"사례집 2021({law})", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.cb_units")
+    return src
+
+
+_CB_HEAD = ("행", "쪽", "칸", "법", "원천호")
+CBF = Round(
+    prefix="CBF",
+    cmd="cbf",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=_CB_HEAD,
+    sheet_head=("쪽", "원천호"),
+    units=lambda us: cb_units(us, "식품"),
+)
+CBC = Round(
+    prefix="CBC",
+    cmd="cbc",
+    cite_of=cq_cite_of,
+    exceptions=CQ_EXCEPTIONS,
+    mok_ho=CQ_MOK_HO,
+    head=_CB_HEAD,
+    sheet_head=("쪽", "원천호"),
+    units=lambda us: cb_units(us, "화장품"),
+)
+
+
+# ── 🆕 2026-10-05 해설서 **근거자료 제출** 판 — 판독 지시 `build/labels/guide_evidence/판독_지시.md` · 원장 10-03 ㉜ ──
+#: 해설서 「근거자료 제출」 블록의 표시내용(`preprocess/mfds_guide.py` 의 `블록 == "근거자료"` · 619 행)이 단위다.
+#:    🚨 위반문구(삭제 블록 1,834)와 **다른 행**이다 — 원천은 「근거를 내면 쓸 수 있다」고 한 표현이라 한 조건이 아니다(㉜).
+#:    🚨 같은 표 · 같은 문구가 두 번 실린 행이 있다(고유 문구 614 / 619) — 지문은 판독 때 만든 것을 그대로 쓰고, 수로 대조한다.
+GE_KEY_RE = re.compile(r"^ge:[a-z2-7]{12}$")
+GE_BLOCK = "근거자료"
+GE_DIR = ROOT / "data" / "derived" / "labels" / "guide_evidence"
+GE_READINGS = GE_DIR / "readings.jsonl"
+GE_ADOPTED = GE_DIR / "adopted.jsonl"
+GE_DECISIONS = GE_DIR / "decisions.jsonl"
+GE_AUDIT = GE_DIR / "audit.jsonl"
+GE_TEAM_SHEET = ROOT / "build" / "labels" / "guide_evidence__팀장판정표.csv"
+_GE_SAME = ("표", "제품유형", "종류", "문구")
+
+
+def ge_units(units: list[dict]) -> dict[str, dict]:
+    """근거자료 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 표 · 제품유형 · 종류 · 문구가 해설서 파생물의 근거자료 블록 행과 같아야 한다.
+
+    🔴 같은 행이 원천에 실린 수보다 단위에 더 많이 들면 멈춘다 — 한 행을 두 번 세게 된다 (D-220).
+    """
+    if not GF_GUIDE.exists():
+        raise SystemExit(
+            f"🔴 {GF_GUIDE} 가 없다 — 먼저: uv run python -m preprocess.mfds_guide --dump"
+        )
+    have: collections.Counter = collections.Counter()
+    for x in GF_GUIDE.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            r = json.loads(x)
+            if r.get("블록") == GE_BLOCK and r.get("원천") == GF_SOURCE:
+                have[tuple(str(r[f]) for f in _GE_SAME)] += 1
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    used: collections.Counter = collections.Counter()
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(GE_KEY_RE, k, src, bad):
+            continue
+        t = tuple(str(u.get(f)) for f in _GE_SAME)
+        used[t] += 1
+        if used[t] > have[t]:
+            bad.append(
+                f"{k} 표 {u.get('표')} 근거자료 블록에 없는(또는 수를 넘는) 행 {str(u.get('문구'))[:30]!r}"
+            )
+            continue
+        src[k] = {"지문": k, **dict(zip(_GE_SAME, t, strict=True)), "원천": GF_SOURCE}
+    _units_fail("해설서 근거자료", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.ge_units")
+    return src
+
+
+GE = Round(
+    prefix="GE",
+    cmd="ge",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=("표", "제품유형", "종류"),
+    sheet_head=("표", "제품유형"),
+    units=ge_units,
+)
+
+
+# ── 🆕 2026-10-05 대구청 사례(2013) 판 — 지시서 `라벨링_지시서_2026-10-03_대구청사례_조문·조건.md` ──
+#: 대구지방식약청 「식품 등 허위과대광고 사례」의 **확정 문구**(사람이 원본에 대 확정한 전사 · 한 행이 단위)다.
+#:    🔴 원천 레코드는 `scripts/daegu2013_sheet.py --dump` 가 낸다(전사 → 마스킹 → 행).
+#:    🚨 전사에서 「제외」로 적힌 행(적법 쪽 추정 · 글자 미확정 · 기구)은 단위가 될 수 없다 — 오면 멈춘다.
+DG_SOURCE = "mfds_daegu_ad_cases_2013"
+DG_ROWS = ROOT / "data" / "derived" / "mfds_daegu_ad_cases_2013.jsonl"
+DG_KEY_RE = re.compile(r"^dg:[a-z2-7]{12}$")
+DG_DIR = ROOT / "data" / "derived" / "labels" / "daegu_2013"
+DG_READINGS = DG_DIR / "readings.jsonl"
+DG_ADOPTED = DG_DIR / "adopted.jsonl"
+DG_DECISIONS = DG_DIR / "decisions.jsonl"
+DG_AUDIT = DG_DIR / "audit.jsonl"
+DG_TEAM_SHEET = ROOT / "build" / "labels" / "daegu_2013__팀장판정표.csv"
+_DG_SAME = ("쪽", "묶음", "품목", "문구")
+
+
+def dg_units(units: list[dict]) -> dict[str, dict]:
+    """대구청 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 단위의 번호가 가리키는 파생물 행과 쪽 · 묶음 · 품목 · 문구가 같아야 한다."""
+    if not DG_ROWS.exists():
+        raise SystemExit(
+            f"🔴 {DG_ROWS} 가 없다 — 먼저: uv run python scripts/daegu2013_sheet.py --dump"
+        )
+    have = {}
+    for x in DG_ROWS.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            r = json.loads(x)
+            have[int(r["번호"])] = r
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    nos: set[int] = set()
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(DG_KEY_RE, k, src, bad):
+            continue
+        no = int(u["번호"])
+        h = have.get(no)
+        if h is None or any(str(u.get(f)) != str(h[f]) for f in _DG_SAME):
+            bad.append(f"{k} {no} 번 — 파생물의 행과 다르다")
+            continue
+        if h.get("제외"):
+            bad.append(f"{k} {no} 번은 전사에서 제외한 행이다 — {str(h['제외'])[:30]}")
+            continue
+        if no in nos:
+            bad.append(f"{k} {no} 번이 두 단위에 든다")
+            continue
+        nos.add(no)
+        src[k] = {
+            "지문": k,
+            "번호": no,
+            "쪽": int(h["쪽"]),
+            "묶음": h["묶음"],
+            "품목": h["품목"],
+            "문구": h["문구"],
+            "원천": DG_SOURCE,
+        }
+    _units_fail("대구청 사례", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.dg_units")
+    return src
+
+
+DG = Round(
+    prefix="DG",
+    cmd="dg",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=("번호", "쪽", "묶음", "품목"),
+    sheet_head=("번호", "쪽", "품목"),
+    units=dg_units,
+)
+
+
+# ── 🆕 2026-10-04 1차 법령해석(식약처 질의회신) 판 — 판독 지시 `build/labels/interp_ad/판독_지시_*.md` · 원장 10-03 ㉚ ──
+#: 식약처 1차 해석 중 광고 표현 해석(`python -m preprocess.mfds_interp --dump` · 289 해석)의 **문구**가 단위다.
+#:    🚨 법이 둘이다(식품 · 화장품) — 근거 코드가 겹쳐 사례집 2021 처럼 **판을 둘로 가른다**. 단위의 `품목` 과 지문 머리가 판을 정한다.
+IP_SOURCE = "mfds_cgm_expc"
+IP_QA = ROOT / "data" / "derived" / "mfds_cgm_expc_ad.jsonl"
+#: 문구를 찾는 칸 — 인용표현에 없으면 이 칸들의 글에서 찾는다(공백만 다르게 · 옛 화장품 판과 같은 이유)
+IP_TEXT_FIELDS = ("안건명", "질의", "답변", "이유")
+IP_HEAD = {"식품": "if", "화장품": "ic"}
+IPF_DIR = ROOT / "data" / "derived" / "labels" / "interp_ad_food"
+IPF_READINGS = IPF_DIR / "readings.jsonl"
+IPF_ADOPTED = IPF_DIR / "adopted.jsonl"
+IPF_DECISIONS = IPF_DIR / "decisions.jsonl"
+IPF_AUDIT = IPF_DIR / "audit.jsonl"
+IPF_TEAM_SHEET = ROOT / "build" / "labels" / "interp_ad_food__팀장판정표.csv"
+IPC_DIR = ROOT / "data" / "derived" / "labels" / "interp_ad_cosmetic"
+IPC_READINGS = IPC_DIR / "readings.jsonl"
+IPC_ADOPTED = IPC_DIR / "adopted.jsonl"
+IPC_DECISIONS = IPC_DIR / "decisions.jsonl"
+IPC_AUDIT = IPC_DIR / "audit.jsonl"
+IPC_TEAM_SHEET = ROOT / "build" / "labels" / "interp_ad_cosmetic__팀장판정표.csv"
+
+
+def ip_units(units: list[dict], item: str) -> dict[str, dict]:
+    """1차 해석 단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 문항이 파생물에 있고 품목이 같고, 문구가 그 해석의
+    `인용표현` 에 있거나 해석 글에 공백만 다르게 있어야 한다.
+
+    🔴 품목이 이 판의 것이 아닌 단위 · 지문 머리가 품목과 어긋난 단위가 오면 멈춘다 — 다른 법의 코드로 읽게 된다 (D-220).
+    """
+    if not IP_QA.exists():
+        raise SystemExit(
+            f"🔴 {IP_QA} 가 없다 — 먼저: uv run python -m preprocess.mfds_interp --dump"
+        )
+    qa = {}
+    for x in IP_QA.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            r = json.loads(x)
+            qa[str(r["id"])] = r
+    key_re = re.compile(rf"^{IP_HEAD[item]}:[a-z2-7]{{12}}$")
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(key_re, k, src, bad):
+            continue
+        q = qa.get(str(u["문항"]))
+        if q is None:
+            bad.append(f"{k} 파생물에 없는 해석 {u['문항']!r}")
+            continue
+        if u.get("품목") != item or q.get("품목") != item:
+            bad.append(f"{k} 품목 {u.get('품목')!r} · 원천 {q.get('품목')!r} — 이 판은 {item} 다")
+            continue
+        body = _WS.sub("", " ".join(str(q.get(f) or "") for f in IP_TEXT_FIELDS))
+        if u["문구"] not in (q.get("인용표현") or []) and _WS.sub("", u["문구"]) not in body:
+            bad.append(f"{k} {u['문항']} 원천에 없는 문구 {u['문구'][:30]!r}")
+            continue
+        src[k] = {
+            "지문": k,
+            "품목": item,
+            "문항": str(u["문항"]),
+            "자리": u["자리"],
+            "문구": u["문구"],
+            "원천": IP_SOURCE,
+        }
+    _units_fail(f"1차 해석({item})", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.ip_units")
+    return src
+
+
+_IP_HEAD = ("품목", "문항", "자리")
+IPF = Round(
+    prefix="IPF",
+    cmd="ipf",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=_IP_HEAD,
+    sheet_head=("문항",),
+    units=lambda us: ip_units(us, "식품"),
+)
+IPC = Round(
+    prefix="IPC",
+    cmd="ipc",
+    cite_of=cq_cite_of,
+    exceptions=CQ_EXCEPTIONS,
+    mok_ho=CQ_MOK_HO,
+    head=_IP_HEAD,
+    sheet_head=("문항",),
+    units=lambda us: ip_units(us, "화장품"),
+)
+
+
+# ── 🆕 2026-10-04 판별 매뉴얼(2015) 판 — 지시서 `라벨링_지시서_2026-10-03_판별매뉴얼_조문·조건.md` ──
+#: 식약처 「허위·과대광고 판별 매뉴얼」의 위반 사례 문구를 자른 **조각**(`preprocess.mfds_ad_manual.pieces`)이 단위다.
+#:    🔴 원천 레코드는 `python -m preprocess.mfds_ad_manual --dump` 가 낸다(사람 가림 + 마스킹 정책 · 2인 확인 2026-10-04).
+#:    🚨 식약처 서술만 든 조각(자른 까닭이 그것이다 · 지시서 ⑭-4)은 판독하지 않았다 — 단위 표에 없다(2 · 원장 10-03 ㊿-10).
+#:       그래서 단위 표는 조각의 **부분집합**이어도 된다. 조각에 없는 단위가 오면 멈춘다.
+MN_SOURCE = "mfds_ad_judge_manual_2015"
+MN_CASES = ROOT / "data" / "derived" / "mfds_ad_judge_manual_2015.jsonl"
+MN_KEY_RE = re.compile(r"^mn:[a-z2-7]{12}$")
+MN_DIR = ROOT / "data" / "derived" / "labels" / "ad_manual_2015"
+MN_READINGS = MN_DIR / "readings.jsonl"
+MN_ADOPTED = MN_DIR / "adopted.jsonl"
+MN_DECISIONS = MN_DIR / "decisions.jsonl"
+MN_AUDIT = MN_DIR / "audit.jsonl"
+MN_TEAM_SHEET = ROOT / "build" / "labels" / "ad_manual_2015__팀장판정표.csv"
+_MN_SAME = ("구역", "쪽", "면", "조각", "조각수", "문구")
+
+
+def mn_pieces() -> dict[str, dict]:
+    """판별 매뉴얼 파생물 → 지문별 조각. 🔴 자리표와 문구가 어긋나면 `pieces` 가 멈춘다 (D-220)."""
+    from preprocess import mfds_ad_manual  # noqa: PLC0415 — 추출기는 이 판을 돌릴 때만 든다
+
+    if not MN_CASES.exists():
+        raise SystemExit(
+            f"🔴 {MN_CASES} 가 없다 — 먼저: uv run python -m preprocess.mfds_ad_manual --dump"
+        )
+    rows = [json.loads(x) for x in MN_CASES.read_text(encoding="utf-8").splitlines() if x.strip()]
+    return {p["지문"]: p for p in mfds_ad_manual.pieces(rows)}
+
+
+def mn_units(units: list[dict]) -> dict[str, dict]:
+    """단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 지문 · 구역 · 쪽 · 면 · 조각 · 문구가 파생물의 조각과 같아야 한다."""
+    have = mn_pieces()
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(MN_KEY_RE, k, src, bad):
+            continue
+        h = have.get(k)
+        if h is None or any(u.get(f) != h[f] for f in _MN_SAME):
+            bad.append(
+                f"{k} {u.get('쪽')}{u.get('면')} 조각 {u.get('조각')} — 파생물의 조각과 다르다"
+            )
+            continue
+        src[k] = {**h, "원천": MN_SOURCE}
+    _units_fail("판별 매뉴얼", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.mn_units")
+    return src
+
+
+MN = Round(
+    prefix="MN",
+    cmd="mn",
+    cite_of=cite_of,
+    exceptions=EXCEPTIONS,
+    mok_ho={},
+    head=("구역", "쪽", "면", "조각", "조각수"),
+    sheet_head=("구역", "쪽", "조각"),
+    units=mn_units,
+)
+
+
 # ── 🆕 2026-09-30 (판정 J1 (b)) 해설서 **수정문구** 판 — 지시서 `라벨링_지시서_2026-09-30_해설서_수정문구_조문·조건.md` ──
 #: 해설서 「표시(안) → 수정」 표의 오른쪽 칸(`preprocess/mfds_guide.py` 의 `수정쌍`). 🚨 위반문구 1,834 와 **다른 행**이다 —
 #:    원래 문구(왼쪽 칸)는 위반문구 표에 없다(0/245 · 작업공간 실측). 이 판은 **수정문구**만 읽는다
@@ -1184,15 +1676,20 @@ def fs_units(units: list[dict]) -> dict[str, dict]:
 
 
 def fs_guard(s: dict, a: dict, b: dict, got: dict) -> str | None:
-    """합의여도 팀장에게 — ① 조건 L(원천은 위반이다 · D-237) ② C·A·B 인데 판독의 호가 **원천의 호**와 다르다(호는 원천이 정한다)."""
+    """합의여도 팀장에게 — ① 조건 L(원천은 위반이다 · D-237) ② C·A·B 인데 판독의 호가 **원천의 호 밖**이거나 비었다(호는 원천이 정한다).
+
+    🔄 2026-10-03 — 「원천 호와 같다」에서 「원천 호 **안**이다」로 고쳤다. 지시서 §0 은 「두 호가 걸린 문서면 문구에 맞는 호
+    하나 또는 둘」이라 적는데, 종전 가드는 두 호 문서에서 하나만 고른 합의를 전부 팀장에게 보냈다(학습 판 368 중 20).
+    봉인 판은 문서마다 호가 하나라 결과가 같다(119 행 · 채택이 그대로임을 게이트가 본다).
+    """
     if got["대상"] != "Y":
         return None
     if got["조건"] == "L":
         return "조건 L — 원천(의결서)은 위반이라 했다 (D-237)"
     if got["조건"] in ("C", "A", "B"):
         mine = {statute.ho_key(c) for c in got.get("근거") or []}
-        if mine != {statute.ho_key(c) for c in s["근거_원천"]}:
-            return "원천 호와 다름 — 호는 의결서가 정한다"
+        if not mine or not mine <= {statute.ho_key(c) for c in s["근거_원천"]}:
+            return "원천 호 밖 — 호는 의결서가 정한다"
     return None
 
 
@@ -1222,6 +1719,368 @@ def fs_input(out_dir: pathlib.Path) -> dict:
     lines += [f"{r['지문']} | {r['doc_id']} | {ho(r)} | **{r['문구']}**" for r in rows]
     (out_dir / "입력.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return {"단위": len(units), "문서": len({r["doc_id"] for r in rows})}
+
+
+# ── 🆕 2026-10-03 (D-312) 결정문 **학습 문구** 판 — 지시서 `라벨링_지시서_2026-10-02_결정문학습문구_대상·조건.md` ──
+#: 분할이 `train` 으로 배정한 결정문의 **주문 문구**. 봉인 판(FS)과 같은 정의 · 같은 채택 함수 · 같은 가드를 쓴다 (D-99).
+#:    다른 곳은 둘이다 — ① 입력(봉인 아닌 문서) ② 판독자에게 **인용부호 앞뒤 글**을 함께 보인다(대상 이름인지 광고 내용인지 가르는 재료 · 지시서 §1 ④)
+FT_SOURCE = "ftc_decisions_body"
+FT_STAGE = ROOT / "data" / "derived" / "ftc_stage.jsonl"
+FT_DIR = ROOT / "data" / "derived" / "labels" / "ftc_train"
+FT_READINGS = FT_DIR / "readings.jsonl"
+FT_ADOPTED = FT_DIR / "adopted.jsonl"
+FT_DECISIONS = FT_DIR / "decisions.jsonl"
+FT_AUDIT = FT_DIR / "audit.jsonl"
+FT_TEAM_SHEET = ROOT / "build" / "labels" / "ftc_train__팀장판정표.csv"
+FT_KEY_RE = re.compile(r"^ft:[a-z2-7]{12}$")
+#: 인용부호 앞뒤로 보이는 글자 수 `[임의]` — 지시서 §1 ④ 가 30 으로 적었다. 판정 경로가 아니라 판독자가 읽는 재료다
+FT_CONTEXT = 30
+#: 학습 쪽 분할 값 — `preprocess.split` 의 배정 값. 🚨 「봉인이 아닌 것」으로 고르지 않는다(배정이 없는 문서가 섞인다 · D-220)
+FT_SPLIT = "train"
+
+
+def ft_key(doc_id: str, text: str) -> str:
+    """학습 문구의 지문 — 봉인 판과 같은 해시(`split.sealed_key`)에 머리만 `ft:` (D-99)."""
+    from preprocess import split as sp  # noqa: PLC0415
+
+    return sp.train_key(doc_id, text)
+
+
+def ft_context(order: str, text: str, width: int = FT_CONTEXT) -> str:
+    """주문에서 문구가 인용된 자리의 앞뒤 글 — `… 앞 ⟦문구⟧ 뒤 …`. 🔴 주문에 없으면 멈춘다(지어내지 않는다 · D-220).
+
+    같은 문구가 주문에 여러 번 나오면 **첫 자리**를 보인다. 줄바꿈은 공백으로 접는다.
+    """
+    i = order.find(text)
+    if i < 0:
+        raise ValueError(f"주문에 없는 문구 — {text[:30]!r}")
+    fold = lambda x: re.sub(r"\s+", " ", x)  # noqa: E731
+    head = fold(order[max(i - width, 0) : i])
+    tail = fold(order[i + len(text) : i + len(text) + width])
+    return f"{'… ' if i > width else ''}{head}⟦{text}⟧{tail}{' …' if i + len(text) + width < len(order) else ''}"
+
+
+def _ft_orders() -> dict[str, str]:
+    """문서 id → 마스킹을 지난 주문. 🔴 파생물이 없으면 멈춘다."""
+    if not FT_STAGE.exists():
+        raise SystemExit(
+            f"🔴 {FT_STAGE} 가 없다 — 먼저: uv run python -m preprocess.ftc_extract --stage --dump"
+        )
+    got: dict[str, str] = {}
+    for line in FT_STAGE.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            got[f"ftc:{r['seq']}"] = str(r.get("주문_마스킹") or "")
+    return got
+
+
+def _ft_source() -> dict[str, dict]:
+    """학습 문서의 주문 문구 → 지문별 행. 🔴 분할 기록 · 주문이 없거나 문구가 주문에 없으면 멈춘다 (D-220)."""
+    from preprocess import split as sp  # noqa: PLC0415
+
+    if not FS_MANIFEST.exists():
+        raise SystemExit(f"🔴 {FS_MANIFEST} 가 없다 — 어느 문서가 학습 쪽인지 모른다")
+    assign = json.loads(FS_MANIFEST.read_text(encoding="utf-8"))["assign"]
+    orders = _ft_orders()
+    got: dict[str, dict] = {}
+    for d in sp.ftc_docs():
+        if assign.get(d["doc_id"]) != FT_SPLIT:
+            continue
+        for text in d["문구"]:
+            k = ft_key(d["doc_id"], text)
+            if k in got:
+                raise SystemExit(f"🔴 {d['doc_id']} 에 같은 주문 문구가 두 번 — {text[:30]!r}")
+            if d["doc_id"] not in orders:
+                raise SystemExit(f"🔴 {d['doc_id']} 의 주문이 {FT_STAGE} 에 없다")
+            try:
+                around = ft_context(orders[d["doc_id"]], text)
+            except ValueError as e:
+                raise SystemExit(f"🔴 {d['doc_id']} — {e}") from e
+            got[k] = {
+                "지문": k,
+                "doc_id": d["doc_id"],
+                "근거_원천": d["근거"],
+                "문구": text,
+                "앞뒤": around,
+                "원천": d["원천"],
+            }
+    return got
+
+
+def ft_rows() -> list[dict]:
+    rows = list(_ft_source().values())
+    registry.assert_derivable(rows, who="guide_statute_round.ft_rows")
+    return rows
+
+
+def ft_units(units: list[dict]) -> dict[str, dict]:
+    """단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 지금 학습 쪽 문서의 주문 문구와 같아야 한다(분할이 바뀌었으면 멈춘다)."""
+    have = _ft_source()
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(FT_KEY_RE, k, src, bad):
+            continue
+        h = have.get(k)
+        if h is None or u.get("doc_id") != h["doc_id"] or u.get("문구") != h["문구"]:
+            bad.append(f"{k} {u.get('doc_id')} 학습 주문 문구에 없다 {str(u.get('문구'))[:30]!r}")
+            continue
+        src[k] = h
+    miss = set(have) - set(src)
+    if miss:
+        bad.append(f"학습 주문 문구 중 단위 표에 없는 것 {len(miss)} — 전량이 아니면 합치지 않는다")
+    _units_fail("결정문 학습 문구", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.ft_units")
+    return src
+
+
+FT = Round(
+    prefix="FT",
+    cmd="ft",
+    cite_of=fp_cite_of,
+    exceptions=FP_EXCEPTIONS,
+    mok_ho={},
+    head=("doc_id", "근거_원천"),
+    sheet_head=("doc_id",),
+    units=lambda us: ft_units(us),
+    guard=fs_guard,  # 봉인 판과 **같은 함수** — 조건 L · 원천 호와 다른 호는 합의여도 팀장에게 (D-99)
+)
+
+
+def ft_input(out_dir: pathlib.Path) -> dict:
+    """판독 재료 — `단위.json` · `입력.md`(문서 id · 원천 호 · 앞뒤 글 · 문구)."""
+    rows = ft_rows()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    units = [{h: r[h] for h in ("지문", "doc_id", "문구")} for r in rows]
+    (out_dir / "단위.json").write_text(
+        json.dumps(units, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
+    )
+    ho = lambda r: ",".join(f"공{statute.parse(c)[3]}" for c in r["근거_원천"])  # noqa: E731
+    lines = [
+        "# 판독 입력 — 결정문 학습 문구",
+        "",
+        "지문 | 문서 | 원천 호 | 주문에서 인용된 자리(⟦ ⟧ 가 문구) | **문구**",
+        "",
+    ]
+    lines += [
+        f"{r['지문']} | {r['doc_id']} | {ho(r)} | {r['앞뒤']} | **{r['문구']}**" for r in rows
+    ]
+    (out_dir / "입력.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    return {"단위": len(units), "문서": len({r["doc_id"] for r in rows})}
+
+
+# ── 🆕 2026-10-05 결정문 **이유 구역 문구** 판 — 지시서 `라벨링_지시서_2026-10-05_결정문이유구역_대상·조건.md` ──
+#: 분할이 `train` 으로 배정한 결정문의 **이유 구역 문구**(학습 전용 · D-234). 주문 판(FT)과 같은 정의 · 같은 채택 함수 · 같은 가드다 (D-99).
+#:    다른 곳은 셋이다 — ① 단위가 이유 문구(`golden.reason_keep` 을 지난 글자) ② 판독이 **호를 고른다**(이유 문구는 문서의 호를 내려 붙인 것)
+#:    ③ 단위 표가 원천의 **부분**이어도 합친다 — 골든의 뒤 거름(인용 상한 · 겹침)이 빼는 문구는 판독하지 않는다.
+#:       남은 이유 행에 판독이 없으면 `golden.build` 가 멈춘다(전량 검사는 그쪽에 있다 · D-220)
+FR_DIR = ROOT / "data" / "derived" / "labels" / "ftc_reason"
+FR_READINGS = FR_DIR / "readings.jsonl"
+FR_ADOPTED = FR_DIR / "adopted.jsonl"
+FR_DECISIONS = FR_DIR / "decisions.jsonl"
+FR_AUDIT = FR_DIR / "audit.jsonl"
+FR_TEAM_SHEET = ROOT / "build" / "labels" / "ftc_reason__팀장판정표.csv"
+FR_KEY_RE = re.compile(r"^fr:[a-z2-7]{12}$")
+#: 판독자에게 보이는 글자 수 · 자리 수 `[임의]` — 지시서 §1 이 적은 값이다. 판정 경로가 아니라 판독자가 읽는 재료다
+FR_CONTEXT = 200
+FR_CONTEXT_MORE = 100
+FR_MORE_MAX = 3
+FR_HEADS = 2
+FR_HEAD_MAX = 60
+FR_BATCH = 150
+FR_QUOTES = "\"'“”‘’「」『』〈〉<>"
+#: 번호 붙은 제목 줄 — 「1.」 「가.」 「(1)」 「(가)」 「①」 「1)」 「가)」
+FR_HEAD_RE = re.compile(
+    r"^\s*(?:\d{1,2}\.|[가-하]\.|\(\d{1,2}\)|\([가-하]\)|[①-⑳]|\d{1,2}\)|[가-하]\))\s*\S"
+)
+
+
+def _fr_source() -> dict[str, dict]:
+    """학습 문서의 이유 구역 문구 → 지문별 행. 🔴 분할 기록이 없으면 멈춘다 (D-220).
+
+    ★ `golden.build` 가 이유 행을 만드는 것과 **같은 함수**로 거른다(`reason_docs` · `reason_repeats` · `reason_keep` · D-99).
+    한 문서에 같은 글자가 두 번이면 한 단위다(골든은 문구 하나가 한 행으로 남는다).
+    """
+    from preprocess import golden as gd  # noqa: PLC0415
+    from preprocess import split as sp  # noqa: PLC0415
+
+    if not FS_MANIFEST.exists():
+        raise SystemExit(f"🔴 {FS_MANIFEST} 가 없다 — 어느 문서가 학습 쪽인지 모른다")
+    assign = json.loads(FS_MANIFEST.read_text(encoding="utf-8"))["assign"]
+    docs = gd.reason_docs()
+    repeats = gd.reason_repeats(docs)
+    got: dict[str, dict] = {}
+    for d in docs:
+        if d["원천"] != FT_SOURCE or assign.get(d["doc_id"]) != FT_SPLIT:
+            continue
+        for raw in d.get("문구_이유") or []:
+            text, why = gd.reason_keep(raw, repeats)
+            if why:
+                continue
+            k = sp.reason_key(d["doc_id"], text)
+            got.setdefault(
+                k,
+                {
+                    "지문": k,
+                    "doc_id": d["doc_id"],
+                    "근거_원천": d["근거"],
+                    "문구": text,
+                    "원천": d["원천"],
+                },
+            )
+    return got
+
+
+def fr_rows() -> list[dict]:
+    rows = list(_fr_source().values())
+    registry.assert_derivable(rows, who="guide_statute_round.fr_rows")
+    return rows
+
+
+def fr_units(units: list[dict]) -> dict[str, dict]:
+    """단위 표 → 지문별 원천 행. 🔴 **원천 대조** — 지금 학습 문서의 이유 문구에 있어야 한다(분할이 바뀌었으면 멈춘다).
+
+    🚨 다른 판과 달리 **전량을 요구하지 않는다** — 원천은 골든의 뒤 거름 전이라 단위 표보다 넓다(위 머리말 ③).
+    """
+    have = _fr_source()
+    src: dict[str, dict] = {}
+    bad: list[str] = []
+    for u in units:
+        k = u["지문"]
+        if not _key_ok(FR_KEY_RE, k, src, bad):
+            continue
+        h = have.get(k)
+        if h is None or u.get("doc_id") != h["doc_id"] or u.get("문구") != h["문구"]:
+            bad.append(f"{k} {u.get('doc_id')} 학습 이유 문구에 없다 {str(u.get('문구'))[:30]!r}")
+            continue
+        src[k] = h
+    _units_fail("결정문 이유 구역 문구", bad)
+    registry.assert_derivable(list(src.values()), who="guide_statute_round.fr_units")
+    return src
+
+
+FR = Round(
+    prefix="FR",
+    cmd="fr",
+    cite_of=fp_cite_of,
+    exceptions=FP_EXCEPTIONS,
+    mok_ho={},
+    head=("doc_id", "근거_원천"),
+    sheet_head=("doc_id",),
+    units=lambda us: fr_units(us),
+    guard=fs_guard,  # 봉인 · 주문 판과 **같은 함수** — 조건 L · 원천 호 밖은 합의여도 팀장에게 (D-99)
+)
+
+
+def fr_context(reason: str, text: str) -> dict:
+    """이유 글에서 문구가 인용된 자리 — 앞뒤 글 · 그 자리 앞의 번호 붙은 제목 줄 · 다른 인용 자리(자리마다 제목 줄).
+
+    인용부호 안에 나온 자리를 먼저 본다(문구의 첫 등장 자리는 인용이 아닐 수 있다 — 표본 400 중 68 · 원장 10-03 ㊿-27).
+    인용부호 안 자리가 없으면 첫 등장 자리를, 글에 아예 없으면 앞뒤 없이 낸다(지어내지 않는다 · D-220).
+    """
+    fold = lambda x: re.sub(r"\s+", " ", x)  # noqa: E731
+    heads = [
+        (m.start(), m.group(0).strip())
+        for m in re.finditer(r"[^\n]+", reason)
+        if 3 < len(m.group(0).strip()) <= FR_HEAD_MAX and FR_HEAD_RE.match(m.group(0))
+    ]
+    near = lambda at: [h for o, h in heads if o < at][-FR_HEADS:]  # noqa: E731
+    pos = [m.start() for m in re.finditer(re.escape(text), reason)]
+    quoted = [
+        i
+        for i in pos
+        if i > 0
+        and reason[i - 1] in FR_QUOTES
+        and i + len(text) < len(reason)
+        and reason[i + len(text)] in FR_QUOTES
+    ]
+    got = {"앞뒤": None, "소제목": [], "다른자리": [], "인용자리": len(quoted), "자리": len(pos)}
+    if not pos:
+        return got
+    i = (quoted or pos)[0]
+    w = FR_CONTEXT
+    got["앞뒤"] = (
+        ("… " if i > w else "")
+        + fold(reason[max(0, i - w) : i])
+        + f"⟦{text}⟧"
+        + fold(reason[i + len(text) : i + len(text) + w])
+        + " …"
+    )
+    got["소제목"] = near(i)
+    w = FR_CONTEXT_MORE
+    for j in quoted[1 : 1 + FR_MORE_MAX]:
+        got["다른자리"].append(
+            "〔"
+            + (" › ".join(near(j)) or "소제목 없음")
+            + "〕 "
+            + fold(reason[max(0, j - w) : j])
+            + f"⟦{text}⟧"
+            + fold(reason[j + len(text) : j + len(text) + w])
+        )
+    return got
+
+
+def fr_input(out_dir: pathlib.Path) -> dict:
+    """판독 재료 — `단위.json` · `입력_NN.md`(150 단위씩). 원문(`data/raw/ftc`)에서 마스킹을 지난 이유 글을 다시 읽는다.
+
+    🚨 원천 전량(뒤 거름 전)을 낸다 — 골든에 이미 판이 걸려 있으면 `golden.build` 가 멈추며 말한 문구만 골라 판독한다.
+    """
+    import xml.etree.ElementTree as ET  # noqa: PLC0415, N817
+
+    from preprocess import ftc_extract as fx  # noqa: PLC0415
+    from preprocess.mask import anchor_ftc, apply_policy  # noqa: PLC0415
+
+    rows = fr_rows()
+    need: dict[str, list[dict]] = collections.defaultdict(list)
+    for r in rows:
+        need[r["doc_id"].split(":", 1)[1]].append(r)
+    units, seen = [], set()
+    for p in fx.store.current_files(fx.RAW, "*.xml"):
+        if p.name.split("_")[0].split(".")[0] not in need:
+            continue
+        root = ET.parse(p).getroot()
+        seq = fx._text(root, "결정문일련번호")  # noqa: SLF001
+        if seq not in need or seq in seen:
+            continue
+        seen.add(seq)
+        _, bare = anchor_ftc(root)
+        reason = apply_policy(fx._text(root, "이유"), bare, "ftc")  # noqa: SLF001
+        for r in need[seq]:
+            units.append(
+                {h: r[h] for h in ("지문", "doc_id", "근거_원천", "문구")}
+                | fr_context(reason, r["문구"])
+            )
+    miss = set(need) - seen
+    if miss:
+        raise SystemExit(f"🔴 원문을 못 찾은 문서 {len(miss)} — {sorted(miss)[:5]} ({fx.RAW})")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "단위.json").write_text(
+        json.dumps(units, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
+    )
+    ho = lambda u: ",".join(f"공{statute.parse(c)[3]}" for c in u["근거_원천"])  # noqa: E731
+    head = (
+        "# 결정문 이유 구역 판독 — 입력\n\n"
+        "단위마다: 지문 · 원천 호(문서의 호를 내려 붙인 것) · 소제목(문구가 인용된 자리 앞의 가장 가까운 번호 붙은 제목 줄) · 문구 · "
+        "앞뒤(⟦문구⟧ 가 인용부호 안에 처음 나온 자리의 앞뒤 200자) · 다른 인용 자리(있으면 — 자리마다 〔그 자리의 소제목〕을 앞에 붙였다). "
+        "판독 대상은 ⟦ ⟧ 안의 문구다.\n\n"
+    )
+    for n in range(0, len(units), FR_BATCH):
+        body = []
+        for u in units[n : n + FR_BATCH]:
+            body += [
+                f"\n## {u['지문']}",
+                f"- 원천 호: {ho(u)}",
+                f"- 소제목: {' › '.join(u['소제목']) or '(없음)'}",
+                f"- 문구: {u['문구']}",
+                f"- 앞뒤: {u['앞뒤'] or '(앞뒤 글을 찾지 못했다 — 문구만 본다)'}",
+                *(f"- 다른 인용 자리: {x}" for x in u["다른자리"]),
+                "",
+            ]
+        (out_dir / f"입력_{n // FR_BATCH + 1:02d}.md").write_text(
+            head + "\n".join(body) + "\n", encoding="utf-8", newline="\n"
+        )
+    return {"단위": len(units), "문서": len(seen), "묶음": -(-len(units) // FR_BATCH)}
 
 
 #: 식품 판독에 주는 기준 원문 — 현행 조문 · [별표] · 고시(지시서 §4). 🔴 하나라도 없으면 멈춘다(빈 묶음을 주지 않는다 · D-220)
@@ -1825,9 +2684,19 @@ def gf_rebuild() -> dict:
 
 ROUNDS = {
     "cq": (CQ, "화장품"),
+    "co": (CO, "화장품 질의응답 2012 · 2020"),
+    "cbf": (CBF, "사례집 2021 · 식품"),
+    "cbc": (CBC, "사례집 2021 · 화장품"),
+    "dg": (DG, "대구청 사례 2013"),
+    "mn": (MN, "판별 매뉴얼 2015"),
+    "ipf": (IPF, "1차 법령해석 · 식품"),
+    "ipc": (IPC, "1차 법령해석 · 화장품"),
     "fp": (FP, "공정위 보도자료 1997~2007"),
     "gf": (GF, "해설서 수정문구"),
+    "ge": (GE, "해설서 근거자료 제출"),
     "fs": (FS, "결정문 봉인 문구"),
+    "ft": (FT, "결정문 학습 문구"),
+    "fr": (FR, "결정문 이유 구역 문구"),
 }
 
 
@@ -1906,7 +2775,17 @@ def main() -> int:
         pi.add_argument("--out", type=pathlib.Path)
     p_fi = sub.add_parser("fs-input", help="결정문 봉인 문구 — 단위.json · 입력.md")
     p_fi.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_sealed")
+    p_ti = sub.add_parser("ft-input", help="결정문 학습 문구 — 단위.json · 입력.md(앞뒤 글 포함)")
+    p_ti.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_train")
+    p_ri = sub.add_parser(
+        "fr-input", help="결정문 이유 구역 문구 — 단위.json · 입력_NN.md(앞뒤 글 · 소제목 포함)"
+    )
+    p_ri.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "labels" / "ftc_reason")
     a = ap.parse_args()
+    if a.cmd == "fr-input":
+        print(json.dumps(fr_input(a.out), ensure_ascii=False, indent=1))
+        print(f"판독 재료 → {a.out}")
+        return 0
     if a.cmd in ("audit-sheet", "caution-audit-sheet"):
         fn = guide_audit_sheet if a.cmd == "audit-sheet" else caution_audit_sheet
         print(json.dumps(fn(a.out, a.n, a.seed), ensure_ascii=False, indent=1))
@@ -1919,6 +2798,10 @@ def main() -> int:
         return 0
     if a.cmd == "fs-input":
         print(json.dumps(fs_input(a.out), ensure_ascii=False, indent=1))
+        print(f"판독 재료 → {a.out}")
+        return 0
+    if a.cmd == "ft-input":
+        print(json.dumps(ft_input(a.out), ensure_ascii=False, indent=1))
         print(f"판독 재료 → {a.out}")
         return 0
     if a.cmd == "gf-input":

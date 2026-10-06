@@ -2,6 +2,7 @@
 
   uv run python -m preprocess.mfds_ad_manual                # 센다
   uv run python -m preprocess.mfds_ad_manual --verify       # 목차(구역 · 쪽 범위)와 대조한다
+  uv run python -m preprocess.mfds_ad_manual --pieces       # 조각(문장 · 나열 항목) 수를 센다 — 자리표와 문구가 맞는지도 본다
   uv run python -m preprocess.mfds_ad_manual --people       # 가린 자리 · 남은 이름 후보를 화면에만 낸다(사람 확인용)
   uv run python -m preprocess.mfds_ad_manual --dump         # 🔴 마스킹 정책이 있어야 한다
 
@@ -13,7 +14,7 @@
     ▶ 위반 구분 · ▶ 위반 내용 · ▶ 광고 매체 · ▶ 과대광고 문구 · ▶ 처분내용(근거)
 
   실측(2026-10-03 · 클론 B 원문 · 작업공간) — 사례 **80**(식품 37 · 건강기능식품 28 · 축산물 15) · 처분 칸 65
-  (축산물 15 건에는 처분 칸이 없다) · 목차 대조 통과 · 사람 가림 21 곳 · 남은 이름 후보 0(기기 실행 2026-10-03 — 사례 수 · 가림 수 같음).
+  (축산물 15 건은 처분 내용 없이 「▶ 처분 근거 :」만 적는다 — `처분근거` 에만 옮기고 `판정지위` 는 비운다) · 목차 대조 통과 · 사람 가림 22 곳 · 남은 이름 후보 0(작업공간 2026-10-03 — 유명인 이름 1 곳을 더 가린 뒤 · 기기 실행은 가림 21 일 때).
   🚨 **PDF 한 쪽이 책의 두 쪽(펼침)이다** — 통째로 읽으면 왼쪽 사례와 오른쪽 사례의 줄이 섞인다.
      쪽을 좌우 반으로 잘라 따로 읽는다(`pages`). 반쪽 하나에 사례는 하나뿐이다(실측 80/80 · `verify` 가 본다).
   🚨 글자 간격 허용값을 좁힌다(`X_TOLERANCE`) — 기본값으로는 「수면장애등이사라집니다」처럼 띄어쓰기가 사라진다.
@@ -21,7 +22,8 @@
 ★ **라벨을 만들지 않는다** — `위반구분` · `처분근거` 는 원천의 선언을 옮긴 것이다.
   · 근거가 **구법**이다(식품위생법 시행규칙 제8조 — 식품표시광고법 2019 시행 전). 현행 호는 라벨 판(지시서)이 붙인다.
   · 🚨 기준 시점이 지난 자료다 — 판단 사례로만 쓰고 근거 조문으로 인용하지 않는다(D-290 ③ · 레지스트리 caution).
-  · 문구 한 덩어리에 문장이 여럿이다. 어느 문장이 위반인지는 원천이 적지 않았다 — 문장 분할 · 판독은 라벨 판의 일이다.
+  · 문구 한 덩어리에 문장이 여럿이다. 어느 문장이 위반인지는 원천이 적지 않았다 — 판독은 라벨 판의 일이다.
+  · 조각(문장 · 나열 항목)은 `pieces` 가 낸다 — 자를 자리는 `preprocess/mfds_ad_manual_cuts.py` 에 굳혀 두었다(사례 80 → 조각 203).
 
 ★ **담지 않는 것** (D-159 — 담지 않기가 먼저다)
   · 광고 캡처 이미지(약 1,080 개) — 광고주 저작물이다(D-18 · D-133). 문서가 글자로 적은 문구만 사실로 취한다
@@ -36,19 +38,22 @@
   · 체험자 「(대구, 이름)」 → 「(대구, [대표])」 — 지역은 광역 단위라 둔다(D-133 ④)
   · 체험자 「(이름, 39세, 사는 곳)」 → 「([대표], 30대, [주소])」 — 사는 곳이 시 · 동네 단위다
   · 체험자 「이름(34세 …」 · 「이름씨」 → 이름만 가린다(성씨로 시작하는 세 글자)
+  · 보도 제목의 「유명인 이름 + 몸매 비결」 → 이름만 가린다(외국 이름 — 성씨 규칙 밖)
   · 「전문의 이름(」 · 「이름 박사는」 · 「[외국인 이름 박사]」 → 이름만 가린다. 직함은 남긴다(자국을 남긴다 — `mask.mask_person` 과 같다)
   🚨 **규칙은 본 꼴만 잡는다** — 그래서 `--people` 이 가린 자리와 **남은 이름 후보**를 함께 낸다. 사람이 확인한다.
   🚨 자국은 `mask.MASK_CEO` 를 쓴다 — 원천이 제품명을 가린 `○○○` 와 섞이지 않게(D-166).
 
 🔴 **마스킹 없이는 파생을 내보내지 않는다** (D-72 fail-closed · `preprocess.mask.apply_policy`).
-   2026-10-03 현재 `POLICY` 에 이 원천이 없다 — `--dump` 는 멈춘다(검토요청 2026-10-03 식품사례 3종 · 2인 확인 대기).
+   2026-10-04 `POLICY` 에 등재됐다 — 업체명 · 상표(검토요청 2026-10-03 식품사례 3종 §4 · 2인 확인). 인물 실명은 이 추출기가 가린다.
 ──────────────────────────────────────────────────────────────
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import collections
+import hashlib
 import json
 import pathlib
 import re
@@ -56,6 +61,7 @@ import sys
 
 from collect import store
 from preprocess.mask import _SURNAMES, MASK_ADDR, MASK_CEO
+from preprocess.mfds_ad_manual_cuts import CUTS
 
 SOURCE_ID = "mfds_ad_judge_manual_2015"
 RAW_DIR = pathlib.Path("data/raw") / SOURCE_ID
@@ -80,6 +86,9 @@ FIELDS = {
     "광고매체": r"광고\s*매체",
     "문구": r"과대\s*광고\s*문구",
     "처분": r"처분\s*내용\s*\(근거\)",
+    # 🚨 축산물 사례는 처분 내용 없이 「▶ 처분 근거 : 축산물 위생관리법 …」만 적는다 — 이 표지를 안 보면
+    # 근거 줄이 `문구` 끝에 붙어 광고 문구로 읽힌다(실측 2026-10-03: 15/15 건이 그랬다)
+    "근거만": r"처분\s*근거",
 }
 _LABEL = re.compile(
     r"▶\s*(?:" + "|".join(f"(?P<{k}>{v})" for k, v in FIELDS.items()) + r")\s*[:：]\s*"
@@ -129,6 +138,8 @@ _P_NAME_TITLE = re.compile(r"(?<![가-힣])([가-힣]{3})(\s*(?:박사|교수|�
 #: 「[N.W 워커박사]」 — 대괄호 안 외국인 이름
 _P_FOREIGN = re.compile(r"(\[\s*)([A-Z]\.(?:[A-Z]\.?)?\s*[가-힣]{2,8})(\s*박사\s*\])")
 #: 이름 자리에 오지만 이름이 아닌 말 `[임의]` — 성씨 글자로 시작하는 보통명사 · 직함 앞의 기관 낱말
+#: 보도 제목이 끌어온 유명인 「이름 몸매 비결」 — 외국 이름은 성씨 규칙 밖이라 위 꼴에 안 걸린다(실측 2026-10-03: 1 곳)
+_P_CELEB = re.compile(r"(?<![가-힣])([가-힣]{2,4}\s[가-힣]{1,3})(\s*몸매\s*비결)")
 _NOT_NAME = frozenset(
     {
         "대학교",
@@ -305,6 +316,9 @@ def parse(halves: list[tuple[int, str, str]]) -> tuple[list[dict], dict]:
             else:
                 sanction = rec["처분"]
                 stat["처분_꼴_다름"].append(where)
+        elif rec.get("근거만"):
+            # 처분 내용은 원천에 없다 — 근거만 옮긴다. 판정지위는 지어내지 않는다 (D-220)
+            basis = re.sub(r"\s*위반$", "", rec["근거만"])
         rows.append(
             {
                 "구역": section,
@@ -319,7 +333,7 @@ def parse(halves: list[tuple[int, str, str]]) -> tuple[list[dict], dict]:
                 "원천": SOURCE_ID,
                 "층": "1층 판정라벨",
                 **REGIME,
-                # 🚨 처분 칸이 없으면 지위를 지어내지 않는다 (D-220) — 축산물 사례가 그렇다
+                # 🚨 처분 내용이 없으면 지위를 지어내지 않는다 (D-220) — 축산물 사례는 근거만 있다
                 "판정지위": STATUS_SANCTION if sanction else None,
             }
         )
@@ -396,6 +410,10 @@ def redact_people(text: str, log: list[dict] | None = None) -> str:
         note("외국인_이름")
         return f"{m.group(1)}{MASK_CEO}{m.group(3)}"
 
+    def celeb(m: re.Match[str]) -> str:
+        note("유명인_이름")
+        return f"{MASK_CEO}{m.group(2)}"
+
     # 🚨 순서 — 꼴이 **좁은 것부터**. 「(이름, 나이, 사는 곳)」을 먼저 먹어야 뒤 규칙이 그 안을 다시 훑지 않는다
     text = _P_TRIPLE.sub(triple, text)
     text = _P_SEX_AGE.sub(sex_age, text)
@@ -404,6 +422,7 @@ def redact_people(text: str, log: list[dict] | None = None) -> str:
     text = _P_NAME_SSI.sub(name_ssi, text)
     text = _P_TITLE_NAME.sub(title_name, text)
     text = _P_FOREIGN.sub(foreign, text)
+    text = _P_CELEB.sub(celeb, text)
     return _P_NAME_TITLE.sub(name_title, text)
 
 
@@ -414,6 +433,51 @@ def candidates(text: str) -> list[str]:
 
 #: 마스킹을 거는 자리 — 광고 문구와 그 요약. 다른 칸은 원천의 분류어 · 조문이다
 MASK_FIELDS = ("위반내용", "문구")
+
+
+def piece_id(page: int, side: str, n: int) -> str:
+    """조각 지문 — 글이 아니라 **자리**(쪽 · 면 · 몇 번째)로 만든다. 가림이 바뀌어도 지문은 그대로다."""
+    digest = hashlib.sha256(f"{SOURCE_ID}|{page}{side}|{n}".encode()).digest()
+    return "mn:" + base64.b32encode(digest).decode().lower()[:12]
+
+
+def pieces(
+    rows: list[dict], cuts: dict[str, tuple[str, tuple[int, ...]]] | None = None
+) -> list[dict]:
+    """가린 사례(`redacted` 의 결과) → 조각. 🔴 자리표와 문구가 어긋나면 멈춘다 (D-220).
+
+    자리표는 **이 문구**에 맞춰 굳힌 것이다 — 추출 · 가림이 달라지면 자리가 다른 글자를 가리킨다.
+    그래서 문구의 sha 를 먼저 대조하고, 자른 조각을 이으면 원래 문구가 되는지도 본다.
+    """
+    cuts = CUTS if cuts is None else cuts
+    out: list[dict] = []
+    for r in rows:
+        key = f"{r['쪽']}{r['면']}"
+        if key not in cuts:
+            raise ValueError(f"자리표에 없는 사례 — {key}")
+        sha, at = cuts[key]
+        text = r["문구"]
+        if hashlib.sha256(text.encode()).hexdigest()[:12] != sha:
+            raise ValueError(f"문구가 자리표를 굳힌 때와 다르다 — {key}")
+        bounds = [0, *at, len(text)]
+        if bounds != sorted(set(bounds)):
+            raise ValueError(f"자를 자리가 문구 밖이거나 순서가 어긋난다 — {key}")
+        parts = [text[a:b].strip() for a, b in zip(bounds, bounds[1:], strict=False)]
+        if not all(parts) or _n("".join(parts)).replace(" ", "") != text.replace(" ", ""):
+            raise ValueError(f"조각을 이어도 문구가 되지 않는다 — {key}")
+        for n, part in enumerate(parts, 1):
+            out.append(
+                {
+                    "지문": piece_id(r["쪽"], r["면"], n),
+                    "구역": r["구역"],
+                    "쪽": r["쪽"],
+                    "면": r["면"],
+                    "조각": n,
+                    "조각수": len(parts),
+                    "문구": part,
+                }
+            )
+    return out
 
 
 def redacted(rows: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -430,17 +494,24 @@ def redacted(rows: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 def masked(rows: list[dict]) -> tuple[list[dict], collections.Counter, list[dict]]:
-    """사람 가림 → 원천 정책 마스킹. **산출물로 나가는 모든 길이 여기를 지난다.**"""
+    """원천 정책 마스킹 → 사람 가림. **산출물로 나가는 모든 길이 여기를 지난다.**
+
+    🔴 **정책을 먼저 건다** (2026-10-04 · 원장 10-03 ㊿-10). 사람 가림을 먼저 걸면 정책의 `mask_paren_alias` 가
+       이 추출기의 자국 `[대표]` 바로 뒤 괄호를 「원어 표기」로 보고 지운다 — 체험자의 「(남, 60대)」 4 곳과
+       전문의 이름 뒤 **광고 문구** 2 곳(47 · 67 자)이 사라졌었다(기기 `--dump` · 사례 3). 그 규칙은 `[업체](영문 상호)` 를
+       지우려는 것이고 결정문 원천이 쓰고 있어 그쪽을 고치지 않는다 — 여기서 순서로 막는다.
+    ★ 정책이 날것에서 바꾸는 자리는 0 이다(기기 실측 · 80 사례) — 그래서 결과는 `redacted` 와 같고 `pieces` 의 자리표가 맞는다.
+    """
     from preprocess.mask import apply_policy  # noqa: PLC0415
 
-    red, log = redacted(rows)
+    log: list[dict] = []
     changed: collections.Counter = collections.Counter()
     out: list[dict] = []
-    for before, r in zip(rows, red, strict=True):
-        rec = dict(r)
+    for before in rows:
+        rec = dict(before)
         for f in MASK_FIELDS:
             if rec.get(f):
-                rec[f] = apply_policy(rec[f], "", SOURCE_ID, log)
+                rec[f] = redact_people(apply_policy(rec[f], "", SOURCE_ID, log), log)
                 if rec[f] != before[f]:
                     changed[f] += 1
         out.append(rec)
@@ -479,6 +550,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="판별 매뉴얼 PDF → 적발 사례 레코드")
     ap.add_argument("--verify", action="store_true", help="목차와 대조한다")
     ap.add_argument("--people", action="store_true", help="가린 자리 · 남은 이름 후보(화면에만)")
+    ap.add_argument("--pieces", action="store_true", help="조각 수 — 자리표와 문구를 대조한다")
     ap.add_argument("--dump", action="store_true", help=f"{OUT} 로 쓴다 (마스킹 정책 필요)")
     a = ap.parse_args()
 
@@ -496,6 +568,12 @@ def main() -> int:
     _report(rows, stat)
     if a.people:
         _people(rows)
+    if a.pieces:
+        red, _ = redacted(rows)
+        cut = pieces(red)  # 🔴 어긋나면 여기서 멈춘다
+        by = collections.Counter(str(p["구역"]) for p in cut)
+        over = sum(1 for p in cut if len(p["문구"]) > 120)
+        print(f"\n  조각 {len(cut):,} — {dict(by)} · 120 자를 넘는 조각 {over}")
 
     if a.dump:
         if bad:  # 🔴 대조가 깨진 파싱은 파생물로 내보내지 않는다 (D-72)

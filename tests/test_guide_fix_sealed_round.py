@@ -218,6 +218,10 @@ def fs(tmp_path, monkeypatch):
         json.dumps({"assign": {"ftc:1": split.SEALED, "ftc:2": "train"}}), encoding="utf-8"
     )
     monkeypatch.setattr(g, "FS_MANIFEST", man)
+    # 🔄 2026-10-05 (D-312) — 학습 문구 판을 막는다 — 막지 않으면 기기의 실제 채택본이 이 모의 학습 문서에 걸려 멈춘다
+    monkeypatch.setattr(split, "ftc_train_marks", lambda: None)
+    # 🔄 2026-10-05 — 이유 구역 판도 같은 이유로 막는다(기기의 실제 채택본이 모의 이유 문구에 걸려 멈춘다)
+    monkeypatch.setattr(split, "ftc_reason_marks", lambda: None)
     basis = [statute.fair(1)]
     docs = [
         {
@@ -363,6 +367,30 @@ def test_골든_호_셈은_채점_행만_센다() -> None:
     assert golden.ho_counts(rows) == {statute.ho_key(c[0]): 2}
 
 
+@pytest.mark.gate
+def test_골든_호_셈은_서로_다른_글자로도_센다() -> None:
+    """🆕 2026-10-04 (판정 묶음 ⑫) — 평가의 하한 30 은 같은 호 · 같은 글자를 한 번만 센 수에 건다.
+
+    ⛔ 행으로만 세어 공정위 2호가 채점 행 25 로 보였는데 서로 다른 글자는 16 이었다(원장 10-03 ㊵).
+    """
+    c2, c3 = [statute.fair(2)], [statute.fair(3)]
+
+    def row(c: list[str], text: str, **kw: str) -> dict:
+        return {"labels": statute.types_of(c), "근거": c, "text": text, **kw}
+
+    rows = [
+        row(c2, "국내 최초 인증", 조건="B"),
+        row(c2, "국내  최초 인증", 조건="C"),  # 공백만 다르다 — 같은 글자
+        row(c2, "1) 국내 최초 인증"),  # 항목 번호 머리만 다르다 — 같은 글자(`overlap_key`)
+        row(c2, "업계 1위", 조건="B"),
+        row(c3, "국내 최초 인증", 조건="B"),  # 호가 다르면 따로 센다
+        row(c2, "국내 최초 인증", 조건="M"),  # 채점 행이 아니다
+    ]
+    k2, k3 = statute.ho_key(c2[0]), statute.ho_key(c3[0])
+    assert golden.ho_counts(rows) == {k2: 4, k3: 1}
+    assert golden.ho_counts(rows, distinct=True) == {k2: 2, k3: 1}
+
+
 # ── 블라인드 감사표 (판정 J6) ────────────────────────────────────────────────────────────
 
 
@@ -400,3 +428,247 @@ def test_감사표는_판독을_싣지_않고_같은_seed_면_같은_표본이�
     assert g.GF_AUDIT.read_text(encoding="utf-8") == '{"지문": "앞 감사"}\n'
     got = g._audit(g.GF, filled, tmp / "audit__팀장.jsonl")
     assert got["감사"] == 2
+
+
+# ── 2026-10-05 (D-312) 결정문 학습 문구 판 → 골든 학습 행 ──
+def _train_golden(fs, tmp_path, monkeypatch, marks: dict | None):
+    _tmp, man, docs = fs
+    inj = tmp_path / "inj.jsonl"
+    inj.write_text("", encoding="utf-8")
+    monkeypatch.setattr(golden, "SPLIT", man)
+    monkeypatch.setattr(golden, "INJECTED", inj)
+    monkeypatch.setattr(golden.split_mod, "verify_inputs", lambda m, who: None)
+    monkeypatch.setattr(golden, "ftc_docs", lambda: docs)
+    for name in ("approved_docs", "casebook_docs", "guide_docs", "caution_docs", "guide_fix_docs"):
+        monkeypatch.setattr(golden, name, lambda: [])
+    monkeypatch.setattr(golden, "lineage", lambda prov, origin: ("f", True))
+    monkeypatch.setattr(split, "ftc_sealed_marks", lambda: None)
+    monkeypatch.setattr(split, "ftc_train_marks", lambda: marks)
+    return docs
+
+
+def _mark(doc: str, text: str, cond: str | None, target: str = "Y") -> tuple[str, dict]:
+    k = split.train_key(doc, text)
+    return k, {"지문": k, "대상": target, "조건": cond, "판독": "독립판독_합의"}
+
+
+@pytest.mark.gate
+def test_학습_판이_끝나면_골든_학습_행이_대상_N_을_빼고_조건을_붙인다(
+    fs, tmp_path, monkeypatch
+) -> None:
+    """🔴 D-312 — 대상 이름 · 시장 용어가 위반 라벨로 학습에 남지 않는다. 봉인 문서의 행은 이 판이 건드리지 않는다."""
+    docs = _train_golden(fs, tmp_path, monkeypatch, None)
+    docs[1]["문구"] = ["실증 문구", "이름만", "시장 용어", "거래조건", "원천 무혐의"]
+    marks = dict(
+        [
+            _mark("ftc:2", "실증 문구", "B"),
+            _mark("ftc:2", "이름만", "M"),
+            _mark("ftc:2", "시장 용어", None, "N"),
+            _mark("ftc:2", "거래조건", "D"),
+            _mark("ftc:2", "원천 무혐의", "L"),
+        ]
+    )
+    monkeypatch.setattr(split, "ftc_train_marks", lambda: marks)
+    rows, stat = golden.build()
+    train = {r["text"]: r for r in rows if r["split"] == "train"}
+    assert set(train) == {"실증 문구", "이름만", "거래조건", "원천 무혐의"}  # 🔴 대상 N 은 빠진다
+    assert stat["학습_대상아님(N)"] == 1 and stat["학습_조건_M"] == 1
+    assert train["실증 문구"]["조건"] == "B" and train["실증 문구"]["근거"] == [statute.fair(1)]
+    assert (
+        train["이름만"]["조건"] == "M" and train["이름만"]["labels"]
+    )  # 호 · 유형은 원천 그대로 (봉인 판과 같다)
+    for text in ("거래조건", "원천 무혐의"):  # D · L 은 근거 · 유형이 빈다 (`ck_golden_cond_empty`)
+        assert (train[text]["근거"], train[text]["labels"]) == ([], [])
+    assert golden.is_negative(train["원천 무혐의"]) and not golden.is_negative(train["거래조건"])
+    sealed = [r for r in rows if r["split"] == split.SEALED]
+    assert sealed and all("조건" not in r for r in sealed)  # 봉인 판이 없으면 봉인 행은 종전대로
+    golden.check_basis(rows)
+
+
+@pytest.mark.gate
+def test_학습_주문_문구가_판에_없으면_조건_없이_내지_않고_멈춘다(fs, tmp_path, monkeypatch) -> None:
+    """🔴 분할이 바뀌어 학습 문서가 달라지면 판을 다시 맞춘다 — 판정 없는 행이 섞이지 않는다 (D-220)."""
+    _train_golden(fs, tmp_path, monkeypatch, {})
+    with pytest.raises(SystemExit, match="학습 주문 문구가 판독 판에 없다"):
+        golden.build()
+
+
+@pytest.mark.gate
+def test_학습_판의_대기가_남으면_골든은_종전대로다(tmp_path, monkeypatch) -> None:
+    """대기가 0 일 때만 든다 — 채택본이 반만 선 판으로 학습 행을 바꾸지 않는다."""
+    monkeypatch.setattr(split, "FTC_TRAIN_READINGS", tmp_path / "r.jsonl")
+    monkeypatch.setattr(split, "FTC_TRAIN_ADOPTED", tmp_path / "a.jsonl")
+    assert split.ftc_train_marks() is None  # 판이 없다
+    (tmp_path / "r.jsonl").write_text('{"지문": "ft:a"}\n{"지문": "ft:b"}\n', encoding="utf-8")
+    (tmp_path / "a.jsonl").write_text(
+        '{"지문": "ft:a", "대상": "Y", "조건": "B"}\n', encoding="utf-8"
+    )
+    assert split.ftc_train_state()["대기"] == 1 and split.ftc_train_marks() is None
+    assert split.FTC_TRAIN_ADOPTED not in split.inputs()
+
+
+# ── 2026-10-05 결정문 이유 구역 문구 판 → 골든 학습 이유 행 (원장 10-03 ㊿-28) ──
+def _rmark(
+    doc: str, text: str, cond: str | None, basis: list[str] | None = None
+) -> tuple[str, dict]:
+    k = split.reason_key(doc, text)
+    return k, {
+        "지문": k,
+        "대상": "N" if cond is None else "Y",
+        "조건": cond,
+        "근거": basis or [],
+        "판독": "독립판독_합의",
+    }
+
+
+def _reason_golden(fs, tmp_path, monkeypatch, texts: list[str]):
+    docs = _train_golden(fs, tmp_path, monkeypatch, None)
+    two = [statute.fair(1), statute.fair(2)]
+    docs[1] |= {"근거": two, "유형": statute.types_of(two), "문구": [], "문구_이유": texts}
+    return two
+
+
+@pytest.mark.gate
+def test_이유_판이_끝나면_골든_이유_행이_대상_N_을_빼고_호를_좁힌다(
+    fs, tmp_path, monkeypatch
+) -> None:
+    """🔴 이유 문구는 문서의 호를 내려 붙인 것이다 — 증거 이름 · 약칭이 위반 양성으로 남지 않고, 위반 행의 호는 판독이 고른 것이다."""
+    texts = [
+        "거짓 문구 하나",
+        "이름만 있는 것",
+        "증거 문서 이름",
+        "가격 고지 문구",
+        "원천 무혐의 문구",
+    ]
+    two = _reason_golden(fs, tmp_path, monkeypatch, texts)
+    marks = dict(
+        [
+            _rmark("ftc:2", texts[0], "B", [statute.fair(1)]),
+            _rmark("ftc:2", texts[1], "M", [statute.fair(1)]),
+            _rmark("ftc:2", texts[2], None),
+            _rmark("ftc:2", texts[3], "D"),
+            _rmark("ftc:2", texts[4], "L"),
+        ]
+    )
+    monkeypatch.setattr(split, "ftc_reason_marks", lambda: marks)
+    rows, stat = golden.build()
+    got = {r["text"]: r for r in rows if r.get("구역") == "이유"}
+    assert set(got) == set(texts) - {texts[2]}  # 🔴 대상 N 은 빠진다
+    assert stat["이유_대상아님(N)"] == 1 and stat["이유_조건_B"] == 1
+    assert got[texts[0]]["근거"] == [statute.fair(1)]  # 🔴 문서의 두 호가 아니라 판독이 고른 호
+    assert got[texts[0]]["labels"] == statute.types_of([statute.fair(1)])
+    assert got[texts[1]]["조건"] == "M" and got[texts[1]]["근거"] == two  # M 은 문서의 호를 든 채
+    for t in (texts[3], texts[4]):
+        assert (got[t]["근거"], got[t]["labels"]) == ([], [])
+    sealed = [r for r in rows if r["split"] == split.SEALED]
+    assert sealed and all("조건" not in r for r in sealed)  # 평가 행은 이 판을 모른다
+    golden.check_basis(rows)
+
+
+@pytest.mark.gate
+def test_이유_문구가_판에_없거나_호가_원천_밖이면_멈춘다(fs, tmp_path, monkeypatch) -> None:
+    """🔴 판정 없는 양성이 섞이지 않는다 · 호는 의결서가 정한다 (D-220 · D-237)."""
+    texts = ["거짓 문구 하나"]
+    _reason_golden(fs, tmp_path, monkeypatch, texts)
+    monkeypatch.setattr(split, "ftc_reason_marks", lambda: {})
+    with pytest.raises(SystemExit, match="이유 문구가 판독 판에 없다"):
+        golden.build()
+    out = dict([_rmark("ftc:2", texts[0], "B", [statute.fair(4)])])
+    monkeypatch.setattr(split, "ftc_reason_marks", lambda: out)
+    with pytest.raises(SystemExit, match="원천.*밖"):
+        golden.build()
+
+
+@pytest.mark.gate
+def test_이유_판의_대기가_남으면_골든은_종전대로다(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(split, "FTC_REASON_READINGS", tmp_path / "r.jsonl")
+    monkeypatch.setattr(split, "FTC_REASON_ADOPTED", tmp_path / "a.jsonl")
+    assert split.ftc_reason_marks() is None  # 판이 없다
+    (tmp_path / "r.jsonl").write_text('{"지문": "fr:a"}\n{"지문": "fr:b"}\n', encoding="utf-8")
+    (tmp_path / "a.jsonl").write_text('{"지문": "fr:a", "대상": "N"}\n', encoding="utf-8")
+    assert split.ftc_reason_state()["대기"] == 1 and split.ftc_reason_marks() is None
+    assert split.FTC_REASON_ADOPTED not in split.inputs()
+
+
+@pytest.mark.gate
+def test_이유_판의_지문과_경로는_분할과_판이_같은_것을_본다() -> None:
+    """D-99 — 지문 함수 · 산출물 경로가 두 모듈에서 갈리면 골든이 판을 못 찾는다."""
+    k = split.reason_key("ftc:1", "문구")
+    assert (
+        g.FR_KEY_RE.match(k)
+        and k.split(":", 1)[1] == split.sealed_key("ftc:1", "문구").split(":", 1)[1]
+    )
+    assert g.FR_READINGS == g.ROOT / split.FTC_REASON_READINGS
+    assert g.FR_ADOPTED == g.ROOT / split.FTC_REASON_ADOPTED
+    assert "labels/ftc_reason/" in split.ROUND_LABEL_DIRS
+
+
+def test_판독의_부근거_칸은_쉼표로_여럿을_받는다() -> None:
+    """세 호가 걸린 결정문 — 주근거 하나 + 부근거 둘. 한 호만 적는 종전 줄은 그대로 읽힌다."""
+    rec = g._parse(g.FR, "fr:aaaaaaaaaaaa\tY\t공4\t공1,공3\t-\tB\t실증\t메모")
+    assert not rec["문제"] and rec["근거"] == [statute.fair(4), statute.fair(1), statute.fair(3)]
+    one = g._parse(g.FR, "fr:aaaaaaaaaaaa\tY\t공1\t-\t-\tB\t실증\t")
+    assert not one["문제"] and one["근거"] == [statute.fair(1)]
+    bad = g._parse(g.FR, "fr:aaaaaaaaaaaa\tY\t공1\t공2,엉뚱\t-\tB\t실증\t")
+    assert bad["문제"]  # 모르는 꼴은 문제로 남는다(조용히 버리지 않는다)
+
+
+# ── 2026-10-05 표시광고법 사건만 분할에 든다 (원장 10-03 ㊿-27) ──
+def _phrases(tmp_path, monkeypatch, recs: list[dict]) -> None:
+    p = tmp_path / "phrases.json"
+    p.write_text(json.dumps(recs, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(split, "FTC_PHRASES", p)
+
+
+def _rec(seq: str, law: str | None) -> dict:
+    r = {
+        "seq": seq,
+        "문구": ["문구 하나"],
+        "문구_이유": [],
+        "유형": [{"label": "거짓_과장", "article": "제3조제1항제1호"}],
+    }
+    return r if law is None else r | {"적용법": law}
+
+
+@pytest.mark.gate
+def test_표시광고법_사건이_아니면_분할에_들지_않는다(tmp_path, monkeypatch) -> None:
+    """🔴 전자상거래법 사건이 표시광고법 호를 달고 학습에 들어가 있었다(46 문서 · 골든 488 행)."""
+    from preprocess import ftc_triage as tr
+
+    _phrases(
+        tmp_path,
+        monkeypatch,
+        [
+            _rec("1", tr.LAW_AD),
+            _rec("2", "전자상거래법"),
+            _rec("3", tr.LAW_AD_UNNAMED),
+            _rec("4", "공정거래법"),
+        ],
+    )
+    assert [d["doc_id"] for d in split.ftc_docs()] == ["ftc:1", "ftc:3"]
+
+
+@pytest.mark.gate
+def test_적용법을_못_읽었거나_칸이_없으면_멈춘다(tmp_path, monkeypatch) -> None:
+    """🔴 조용히 넣지도 빼지도 않는다 (D-220)."""
+    from preprocess import ftc_triage as tr
+
+    _phrases(tmp_path, monkeypatch, [_rec("1", None)])
+    with pytest.raises(SystemExit, match="적용법"):
+        split.ftc_docs()
+    _phrases(tmp_path, monkeypatch, [_rec("1", tr.LAW_UNKNOWN)])
+    with pytest.raises(SystemExit, match="적용된 법을 못 읽었다"):
+        split.ftc_docs()
+
+
+def test_적용법은_표시광고법이_적혔으면_표시광고법이다() -> None:
+    from preprocess import ftc_triage as tr
+
+    law = lambda t: tr.case_law("", t, "", "")  # noqa: E731
+    assert law("표시·광고의 공정화에 관한 법률 제3조") == tr.LAW_AD
+    assert law("전자상거래 등에서의 소비자보호에 관한 법률 제21조 및 표시광고법 제3조") == tr.LAW_AD
+    assert law("전자상거래 등에서의 소비자보호에 관한 법률 제21조제1항제1호") == "전자상거래법"
+    assert law("독점규제 및 공정거래에 관한 법률 제23조") == "공정거래법"
+    assert law("법 제3조 제1항 제1호에 해당") == tr.LAW_AD_UNNAMED
+    assert law("주문 없음") == tr.LAW_UNKNOWN
+    assert {tr.LAW_AD, tr.LAW_AD_UNNAMED} == tr.AD_LAWS

@@ -11,6 +11,8 @@
   ② 유형 · 호 P/R/F1 — 예측 = **확정 문장의 위반만**(보류 · 근거없음 · 미판정은 예측이 아니다 · D-127). 30 미만은 측정 불가 (D-40)
   ③ selective risk — 판정을 내린 행(전 문장 확정) 중 틀린 비율 · coverage 와 쌍으로 (D-77 L1 #8)
   ④ 조건별 대응표 — 라벨 조건(C/A/B/M/D/L) × 응답 (D-275 가 W1 몫으로 넘긴 표)
+  ⑦ 보수 기록 — 확정 ∪ 분기 보류에 실린 유형을 「기록된 판정」으로 센다 (🆕 2026-10-06 · D-263 ① 「게이트 수치도 이것으로」)
+  ⑥ 불가 사유 진단 — 확정 위반의 사유(A/B/C)를 라벨 조건과 대조 (🆕 2026-10-06 · 원장 10-03 ㊿-36). 🚨 게이트가 아니다
   ⑤ 적법 문장 오탐률 — 내역(주장 있음 · 주장 없음)과 함께만 (D-301)
 🔴 **채점 규칙은 판정기 B 와 한 곳이다** — `scored` · `truth_types` · `truth_ho` · `lawful_report` · D-40 문턱을
    `scripts/eval_rule.py` 에서 가져온다 (D-99). 판정기 B 와 그래프의 수가 같은 자로 재진다.
@@ -36,9 +38,16 @@ from typing import Any
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from app import graph as g  # noqa: E402
-from app.contracts import Category, ProductContext, SentenceJudgment, Verdict  # noqa: E402
+from app.contracts import (  # noqa: E402
+    Category,
+    HoldReason,
+    ProductContext,
+    SentenceJudgment,
+    Verdict,
+)
 from collect import statute  # noqa: E402
 from preprocess.golden import lawful_kind  # noqa: E402
+from preprocess.split import APPROVED_READING  # noqa: E402
 from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99)
     MIN_MEASURABLE,
     lawful_report,
@@ -120,10 +129,132 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         #: 🆕 2026-10-02 (W5) — 확정 위반 문장에 **위험도가 다 붙었나**. 붙었는데 종착이 보류면 하한이 아니라 종착 재료(증명서 · 지시 문안)가 없다
         "risked": all(s.risk.final is not None for s in conf if s.violations),
         "n_sents": len(sents),
+        #: 🆕 2026-10-06 (D-263 ① · D-319 ①) — **분기 때문에 보류로 기록된 문장에 실린 유형**(가장 보수적인 전제의 위반).
+        #:    `candidates`(자격 없는 적중까지 든 보류 후보)와 다르다 — 전제를 몰라 멈춘 문장만이다
+        "premise_held": sorted(
+            {
+                v.value
+                for s in sents
+                if s.verdict is Verdict.hold and s.hold_reason in PREMISE_HOLDS
+                for v in s.violations
+            }
+        ),
+        #: 🆕 2026-10-06 — 확정 위반 문장의 **가장 막힌 불가 사유**(C > A > B · 종착 우선순위와 같은 순서). 없으면 `None`
+        "infeasibility": next(
+            (
+                x.value
+                for x in g._INFEAS_ORDER
+                if any(s.infeasibility is x for s in conf if s.violations)
+            ),
+            None,
+        ),
+        #: 🆕 2026-10-05 (D-319) — **전제별 분기**의 요약. 분기는 판정이 아니다 — 위 칸(기록되는 판정)과 섞어 세지 않는다 (D-263 ①)
+        "branches": {b.premise.value: _branch_view(b) for b in state.get("branches", [])},
     }
 
 
+def _branch_view(b: Any) -> dict[str, Any]:
+    """분기 하나 → 확정 위반의 유형 · 호 · 종착. 기록되는 판정과 **같은 규칙**으로 센다(확정 문장의 위반만 · D-127)."""
+    conf = [s for s in b.sentences if s.verdict is Verdict.confirmed]
+    return {
+        "outcome": b.outcome.value,
+        "types": sorted({v.value for s in conf for v in s.violations}),
+        "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
+        "committed": bool(b.sentences) and len(conf) == len(b.sentences),
+    }
+
+
+#: 골든 `품목` 칸 → 그 품목의 **첫 전제**(가장 보수적인 쪽 · `app/premise.py` 의 값). 분기 지표가 「정답 품목의 분기」를 이것으로 고른다.
+#:    🚨 건강기능식품은 인정 여부를 골든이 모른다 — 비인정(보수) 분기로 본다.
+BRANCH_OF_CATEGORY = {"식품": "식품", "건기식": "건기식_비인정", "화장품": "화장품"}
+
+
+def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
+    """분기 지표 (D-319 ⬜ 「정답 품목의 분기가 맞는가」) — 품목을 아는 채점 행의 **위반 행**에서 그 품목의 분기를 본다.
+
+    ★ 기록되는 판정이 보류(`cat_unknown`)여도 사용자가 자기 품목을 고르면 보게 되는 것이 이 분기다.
+    🚨 분기가 없으면(기준 문안 미확정 · 전제 하나) 0 이다 — 「분기 행」 수를 함께 읽는다.
+    """
+    out = {"rows_with_branches": sum(1 for p in preds if p.get("branches")), "positive": 0}
+    out.update({"confirmed": 0, "type_hit": 0, "ho_hit": 0, "wrong": 0})
+    for r, p in zip(rows, preds, strict=True):
+        name = BRANCH_OF_CATEGORY.get(r.get("품목") or "")
+        if not name or not scored(r) or not truth_types(r, set()):
+            continue
+        b = (p.get("branches") or {}).get(name)
+        if b is None:
+            continue
+        out["positive"] += 1
+        if not b["types"]:
+            continue
+        out["confirmed"] += 1
+        tt, th = truth_types(r, set(b["types"])), truth_ho(r, set(b["ho"]))
+        out["type_hit"] += bool(set(b["types"]) & tt)
+        out["ho_hit"] += bool(set(b["ho"]) & th)
+        out["wrong"] += not (set(b["types"]) & tt)
+    return out
+
+
 # ── 집계 ────────────────────────────────────────────────────────────────
+
+
+#: 전제를 몰라 멈춘 보류 사유 — 계약 `_branch_hold_has_branches` 의 것과 같다(D-263 ② · D-229 ⑥).
+PREMISE_HOLDS = frozenset({HoldReason.cat_unknown, HoldReason.premise_unknown})
+
+
+def recorded_report(rows: list[dict], preds: list[dict]) -> dict[str, int]:
+    """보수 기록 지표 (🆕 2026-10-06 · D-263 ① 「기록되는 판정 = 가장 보수적인 전제 · 게이트 수치도 이것으로 잰다」).
+
+    ★ 기록된 유형 = 확정 문장의 위반 ∪ 분기 때문에 보류된 문장에 실린 위반(`premise_held`). 채점 행만 센다.
+       `rows` 기록이 있는 행 · `wrong` 기록이 정답과 하나도 안 겹친다(적법 행에 기록이 있는 것 포함) ·
+       `positive` 위반 행 · `hit` 그중 기록이 정답과 겹친다.
+    🚨 「확정만 센 수」(selective risk · 확정 재현율)와 **나란히만** 읽는다 — 보류는 확정이 아니다(D-127).
+       품목 미확정의 보수 기록에는 그 품목에 적용되는지 모르는 법의 유형이 든다(D-319 ①).
+    """
+    out = {"rows": 0, "wrong": 0, "positive": 0, "hit": 0}
+    for r, p in zip(rows, preds, strict=True):
+        if not scored(r):
+            continue
+        rec = set(p["types"]) | set(p.get("premise_held", ()))
+        tt = truth_types(r, rec)
+        if tt:
+            out["positive"] += 1
+            out["hit"] += bool(rec & tt)
+        if rec:
+            out["rows"] += 1
+            out["wrong"] += not (rec & tt)
+    return out
+
+
+#: 예측 사유 → 라벨 조건의 짝 가운데 **축이 달라 어긋남으로 세지 않는** 것. 라벨의 A 는 「제품의 지위 · 조성에 달림」 전부이고
+#: (지시서 §2 · §3 ⑨ — 천연 · 무첨가 · 인증 마크 · 기관 이름) 증명서의 A 는 「인정 절차를 밟으면 풀림」뿐이다(D-59). 앞쪽은
+#: 설계가 B + 사실 확인 분기로 보낸다(D-308 4′ · D-313 결정 4).
+REASON_AXIS_GAP = frozenset({("B", "A")})
+HF_MISLEAD_TYPE = "건강기능식품_오인"
+
+
+def reason_report(rows: list[dict], preds: list[dict]) -> dict[str, int]:
+    """불가 사유 진단 (🆕 2026-10-06) — 확정 위반을 낸 채점 행에서 예측 사유를 라벨 `조건`(A/B/C)과 대조한다.
+
+    ★ `exact` 글자가 같다 · `axis_gap` 축이 달라 어긋남이 아니다(`REASON_AXIS_GAP`) · `wrong` 증명서 ↔ 지시 또는 A ↔ C 가 바뀐다.
+    🚨 **진단이다 — 게이트 · 규칙 선택에 쓰지 않는다** (D-175). 조건 라벨은 대부분 모델 판독의 합의이고(원장 10-03 ㊿-36),
+       식품 3호는 사유가 주장의 범위에 달려(범위 안 A · 밖 C · D-320) 유형 하나로 못 정한다 — `wrong_hf` 로 따로 센다.
+    🔴 사유가 없는 예측(확정 위반 아님) · 조건이 A/B/C 가 아닌 행은 세지 않는다 — 없음을 일치로 세지 않는다 (D-220).
+    """
+    out = {"n": 0, "exact": 0, "axis_gap": 0, "wrong": 0, "wrong_hf": 0}
+    for r, p in zip(rows, preds, strict=True):
+        got, want = p.get("infeasibility"), r.get("조건")
+        if got is None or want not in ("A", "B", "C") or not scored(r):
+            continue
+        out["n"] += 1
+        if got == want:
+            out["exact"] += 1
+        elif (got, want) in REASON_AXIS_GAP:
+            out["axis_gap"] += 1
+        else:
+            out["wrong"] += 1
+            out["wrong_hf"] += HF_MISLEAD_TYPE in (r.get("labels") or [])
+    return out
 
 
 def _prf(gold: int, tp: int, fp: int) -> tuple[float, float, float]:
@@ -213,6 +344,9 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         by_text[r["text"]] = by_text.get(r["text"], False) or flag[id(r)]
     out["lawful"] = lawful_report(rows, lambda t: by_text.get(t, False))
     out["lawful_rows_seen"] = sum(1 for r in rows if lawful_kind(r))
+    out["branch"] = branch_report(rows, preds)
+    out["reason"] = reason_report(rows, preds)
+    out["recorded"] = recorded_report(rows, preds)
     return out
 
 
@@ -223,7 +357,11 @@ def conditional_rows(rows: list[dict]) -> list[dict]:
             "🔴 골든에 `품목` 칸이 없다 — 재동결 전 판이다(D-306). 조건부 평가를 못 한다\n"
             "  먼저(정본): uv run python launcher.py golden --write"
         )
-    return [r for r in rows if r["품목"]]
+    # 🆕 2026-10-06 (원장 10-03 ㊿-40) — **승인 문구 규칙 행은 뺀다.** 그 행의 `품목`(건기식)은 원천이고 라벨(3호 · 조건 A)은
+    #    「일반식품이 이 문구를 쓰면」이라는 보수 전제다(`preprocess/split.py` `APPROVED_READING` · 판정 J1). 품목을 제품 정보로 넘기면
+    #    그래프는 건강기능식품으로 보고 4.나를 내고 채점은 3호를 기대한다 — 전제가 어긋난 행이다. 무조건부에는 그대로 든다.
+    #    ⬜ 다음 재동결 때 그 행(과 같은 원천의 주입 행)의 `품목` 을 미상으로 고치면 이 줄은 필요 없다 (D-192)
+    return [r for r in rows if r["품목"] and r.get("판독") != APPROVED_READING]
 
 
 def product_of(r: dict, conditional: bool) -> ProductContext:
@@ -267,6 +405,36 @@ def report(s: dict[str, Any], conditional: bool = False) -> None:
             f"탐지 재현율(확정 ∪ 보류 유형 후보) {d['detected'] / d['positive']:.1%}  (D-311 · 탐지는 판정이 아니다)"
         )
     print_lawful(s["lawful"])
+    w = s.get("recorded") or {}
+    if w.get("rows"):
+        print(
+            f"\n  보수 기록 (D-263 ① · 확정 ∪ 분기 보류에 실린 유형) — 기록이 있는 채점 행 {w['rows']} · "
+            f"틀림 {w['wrong']}({w['wrong'] / w['rows']:.1%}) · 위반 행 {w['positive']} 중 기록이 맞은 것 {w['hit']}"
+            + (f"({w['hit'] / w['positive']:.1%})" if w["positive"] else "")
+            + "  (확정만 센 수와 나란히만 읽는다)"
+        )
+    q = s.get("reason") or {}
+    if q.get("n"):
+        print(
+            f"\n  불가 사유 (진단 · 게이트 아님) — 확정 위반 ∧ 라벨 조건 A/B/C 인 행 {q['n']} · 글자 일치 {q['exact']}"
+            f"({q['exact'] / q['n']:.1%}) · 축 다름(예측 B · 라벨 A) {q['axis_gap']} · 방향 어긋남 {q['wrong']}"
+            f"({q['wrong'] / q['n']:.1%} · 그중 식품 3호 {q['wrong_hf']})"
+        )
+    b = s.get("branch") or {}
+    if b.get("rows_with_branches"):
+        n = b["positive"]
+        print(
+            f"\n  분기 (D-319) — 분기가 나온 행 {b['rows_with_branches']} · 정답 품목의 분기를 본 위반 행 {n}"
+            + (
+                f" · 그 분기의 확정 위반 {b['confirmed']}({b['confirmed'] / n:.1%}) · 유형 맞음 {b['type_hit']} · "
+                f"호 맞음 {b['ho_hit']} · 유형 틀림 {b['wrong']}"
+                if n
+                else ""
+            )
+            + "  (분기는 판정이 아니다 · 건강기능식품은 비인정 분기로 본다)"
+        )
+    else:
+        print("\n  분기 (D-319) — 없음(기준 문안 미확정 · 또는 전제가 하나뿐인 품목)")
     if not conditional:
         print(
             "\n  ⓘ 조건부(품목을 아는 경우)는 `--conditional` 로 따로 잰다 (D-306 · 기획서 6-3 병기)"
