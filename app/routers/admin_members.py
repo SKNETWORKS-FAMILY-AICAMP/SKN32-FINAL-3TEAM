@@ -7,11 +7,13 @@
 ✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 상태 변경 등은 화면에 없다(목업에도 없음).
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **회원(개인·인플루언서·기업) 을 담는 테이블 자체가 없다** — `app_account` 는 `governor`
-   (관리자) 로그인 전용 테이블이라 다른 개념이다 (alembic 0012_app_account.py 참고).
-   서비스 쪽 회원가입·인증 기능(ksr·lse 담당)이 스키마와 함께 먼저 생겨야 한다. 그래서
-   admin_board.py·admin_cs.py 와 같은 이유로 DB 조회를 시도하지 않고 **더미로만** 그린다.
-   ⬜ 스키마가 생기면 admin_errors.py 패턴(우선 DB, 실패 시 더미)으로 바꾼다.
+🔴 **이 화면은 아직 DB 를 읽지 않는다 — 더미로만 그린다** (admin_board.py·admin_cs.py 와 같다).
+   🔄 일반 사용자 계정 표 `user_account` 는 생겼고(alembic `0017_ops_tables` · `app/models.py`
+   `UserAccount` · D-260 ②) 서비스 쪽 가입·로그인(`app/routers/user.py`)이 그 표를 쓴다.
+   `app_account` 는 `governor`(관리자) 로그인 전용 테이블이라 다른 개념이다 (alembic 0012_app_account.py 참고).
+   🚨 `user_account` 에는 회원 유형 · 요금제 · 상태 칸이 **없다**(`UserAccount` docstring) — 아래 더미의
+      유형(인플루언서·기업) · 플랜 칸은 목업 것이고 표에 대응하는 칸이 없다.
+   ⬜ DB 조회로 바꿀 때는 admin_errors.py 패턴(읽었다 · 표가 없다 · 못 붙었다를 가른다)을 따른다.
 
 🚨 목업(`app/static/mockup.html`)의 `MEMBERS_V22` 배열·`member-detail` 뷰 구조를 그대로
    따른다 — 나중에 실데이터 붙을 때 필드명이 어긋나지 않게. 결제 이력은 목업에서도
@@ -39,7 +41,7 @@ MEMBER_STATUSES = ("active", "dormant")
 _STATUS_LABEL = {"active": "활성", "dormant": "휴면"}
 
 # ─────────────────────────────────────────────────────────────
-# 더미 — 회원 테이블 자체가 아직 없다. ⬜ 테이블 승인·적재 뒤 DB 조회로 바꾼다.
+# 더미 — `user_account` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다. ⬜ DB 조회로 바꾼다.
 # 목업 app/static/mockup.html 의 MEMBERS_V22 배열을 그대로 옮겨온 것 — 실제 회원
 # 정보가 아니라 화면 구조 확인용이다.
 # ─────────────────────────────────────────────────────────────
@@ -175,7 +177,7 @@ def _clean_choice(value: str | None, allowed: tuple[str, ...]) -> str | None:
 
 @router.get("", response_class=HTMLResponse)
 def member_list(request: Request) -> HTMLResponse:
-    """회원 목록 — 읽기 전용. 회원 테이블이 아직 없어 더미로만 그린다."""
+    """회원 목록 — 읽기 전용. `user_account` 표를 아직 읽지 않고 더미로만 그린다."""
     actor = require_governor(request)
     qp = request.query_params
     q = (qp.get("q") or "").strip()

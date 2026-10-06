@@ -2,12 +2,14 @@
 <!--
   U-01 · 액터 · 유스케이스   ★ 이 파일이 원천이다 (D-90 · D-217)
   ─────────────────────────────────────────────────────────────────
-  🔴 **2026-09-13 재작성.** 고친 것 셋 —
-     ① **UC-25 임베딩 「미실행」** → 실제로는 **2,400행**이 들어와 있다 (상태 역전 · 2026-09-12 오후)
-     ② **UC-16 · UC-17 에 화면이 생겼다** — `/login` · `/admin/` (0012 · D-213).
-        ⛔ 다만 **읽기만** 이다. 쓰기 경로는 아직 없다 — 그것을 칸에 적었다.
-     ③ 「동작 중」이라는 말을 지웠다 — `[실측]`/`[기획]` 이 그 자리를 대신한다 (D-219).
-  🚨 **UC-19 · UC-21 은 여전히 화면이 없다.** 고친 것이 없으므로 그대로 붉게 둔다.
+  🔴 **2026-10-06 재작성.** 09-13 판에서 달라진 것 —
+     ① **UC-01 · 03 · 04 · 06 이 돈다** — `POST /u/judge` 가 픽스처가 아니라 실제 판정 코어를 부르고,
+        결과 화면이 근거 조문 · 위험도(제재표 하한) · 보류 사유 6종을 그린다. 「`sanction_rule` 0행」은 옛말이다.
+     ② **UC-05** — 검수 화면에 「이 문장 고쳐 쓰기」가 붙었다(10-06 병합). ⚠️ 승인 범위는 판정 대기라 사실과 대기를 함께 적는다.
+     ③ **UC-10** — 이력 화면과 조회는 있다. 판정을 넣는 코드가 없어 빈 목록이다.
+     ④ 사용자 계정(가입 · 로그인 · 문의)이 섰다 (0017 · D-260).
+     ⑤ 수 — 사전 536 → 506 · 골든 1,910 → 8,383 · 청크 2,400 → 6,667.
+  🚨 **UC-19 · UC-21 은 여전히 화면이 없다.** 그대로 붉게 둔다.
   ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
 -->
 <meta charset="utf-8">
@@ -18,13 +20,14 @@
   <header>
     <span class="no">U-01</span>
     <h1>액터 · 유스케이스</h1>
-    <span class="right">굵은 것이 MVP 필수 · [실측]/[기획] · 2026-09-13</span>
+    <span class="right">굵은 것이 MVP 필수 · [실측]/[기획] · 2026-10-06 · 클론 A</span>
   </header>
 
   <div class="body">
     <div class="legend" style="margin:0 0 12px">
       <span class="chip pos">[실측] 화면·코드가 지금 있다</span>
       <span class="chip">[기획] 아직</span>
+      <span class="chip warn">⚠️ 판정 대기</span>
       <span class="chip rsk">🔴 화면이 없다</span>
     </div>
 
@@ -33,75 +36,77 @@
       <fieldset>
         <legend>작성자 — 검수</legend>
         <div class="card pos"><b>UC-01 문장별 판정을 받는다</b>
-          <span><span class="tag m">실측</span>F-01 · SCR-RV-01 화면이 뜬다 · <code>POST /u/judge</code></span>
-          <span><span class="tag p">기획</span>엔진이 없어 지금은 골든 픽스처로 분기만 그린다</span></div>
+          <span><span class="tag m">실측</span>F-01 · <code>POST /u/judge</code> 가 판정 코어를 부른다</span>
+          <span>인코더 전 규칙 판정 — 사전 적중은 확정, 그 밖은 보류</span></div>
         <div class="card off"><b>UC-02 카테고리를 교정한다</b>
-          <span><span class="tag p">기획</span>F-02 · 묻지 않는 것이 기본 (D-82)</span></div>
-        <div class="card off"><b>UC-03 근거 조문을 본다</b>
-          <span><span class="tag p">기획</span>F-03 — 🚨 <b style="display:inline">검색 코어는 돈다</b>(<code>/search</code>), 화면이 아직 안 붙었다</span></div>
-        <div class="card off"><b>UC-04 위험도를 본다</b>
-          <span><span class="tag p">기획</span>F-04 — <code>sanction_rule</code> 0행이라 <b style="display:inline">읽을 값이 없다</b></span></div>
-        <div class="card off"><b>UC-05 대체 문구를 받는다</b>
-          <span><span class="tag p">기획</span>F-05 · 합법화 불가 분기 포함</span></div>
-        <div class="card off"><b>UC-06 보류를 확인한다</b>
-          <span><span class="tag p">기획</span>F-06 · 보류 사유 4종은 표에 있다</span></div>
+          <span><span class="tag p">기획</span>F-02 · 화면에 품목 칸이 없다 — 요청은 전부 품목 미확정</span></div>
+        <div class="card pos"><b>UC-03 근거 조문을 본다</b>
+          <span><span class="tag m">실측</span>F-03 · 결과 화면의 「근거 보기」에 조문이 붙는다</span></div>
+        <div class="card pos"><b>UC-04 위험도를 본다</b>
+          <span><span class="tag m">실측</span>F-04 · 제재표에서 읽은 하한 R1~R3</span></div>
+        <div class="card" style="border-left:3px solid #8A6A1F;background:#FFF9EC"><b style="color:#8A6A1F">UC-05 대체 문구를 받는다</b>
+          <span><span class="tag m">실측</span>F-05 · 「이 문장 고쳐 쓰기」 — 로컬 sLLM → 코어 재판정 (10-06 병합)</span>
+          <span>⚠️ D-265 · D-270 과의 관계 · 승인 범위는 판정 대기</span></div>
+        <div class="card pos"><b>UC-06 보류를 확인한다</b>
+          <span><span class="tag m">실측</span>F-06 · 보류 사유 6종을 화면이 그린다</span>
+          <span><span class="tag p">기획</span>품목 분기 · 기준 문안을 그리는 자리는 없다</span></div>
         <div class="card off"><b>UC-07 후속 질문을 한다</b>
-          <span><span class="tag p">기획</span>F-07 · Phase 1</span></div>
-        <div class="card off"><b>UC-08 고쳐서 재검수한다</b>
-          <span><span class="tag p">기획</span>판정 게이트 — 라우트 미정 (W-02)</span></div>
+          <span><span class="tag p">기획</span>F-07</span></div>
+        <div class="card"><b>UC-08 고쳐서 재검수한다</b>
+          <span><span class="tag m">실측</span>고쳐서 다시 누르면 새로 판정한다 — 화면에 상태가 없다</span>
+          <span><span class="tag p">기획</span>잠금 · 판정 이력 행 (W-02)</span></div>
       </fieldset>
 
       <fieldset>
         <legend>작성자 — 보관 · 생성</legend>
         <div class="card off"><b>UC-09 동의하고 저장한다</b>
-          <span><span class="tag m">실측</span>F-13 · 기본은 미저장 — <b style="display:inline">CHECK 이 이미 막는다</b></span>
-          <span><span class="tag p">기획</span>저장 라우트가 아직 없다</span></div>
-        <div class="card off"><b>UC-10 검수 이력을 본다</b>
-          <span><span class="tag p">기획</span>F-13</span></div>
+          <span><span class="tag m">실측</span>F-13 · 기본은 미저장 — CHECK 이 막는다</span>
+          <span><span class="tag p">기획</span>판정을 저장하는 코드가 없다</span></div>
+        <div class="card"><b>UC-10 검수 이력을 본다</b>
+          <span><span class="tag m">실측</span>F-13 · <code>GET /u/history</code> — 로그인한 사람 것만</span>
+          <span><span class="tag p">기획</span>넣는 코드가 없어 지금은 빈 목록이다</span></div>
         <div class="card off"><b>UC-11 철회하고 지운다</b>
           <span><span class="tag m">실측</span>F-13 · CASCADE 는 스키마에 있다</span>
           <span><span class="tag p">기획</span>부르는 화면이 없다</span></div>
-        <div class="card off"><b>UC-12 생성 조건을 정한다</b>
-          <span><span class="tag p">기획</span>F-08 · Phase 3 · <code>POST /generate</code> 는 501</span></div>
-        <div class="card off"><b>UC-13 차단 키워드를 거른다</b>
-          <span><span class="tag p">기획</span>F-09 · Phase 3</span></div>
-        <div class="card off"><b>UC-14 3안을 받는다</b>
-          <span><span class="tag p">기획</span>F-10 · Phase 3</span></div>
+        <div class="card off"><b>UC-12~14 생성 조건 · 차단 키워드 · 3안</b>
+          <span><span class="tag m">실측</span>F-08~10 · 화면은 뜨고 「엔진 준비 중」을 그린다</span>
+          <span><span class="tag p">기획</span>생성 그래프는 빈 노드 · <code>POST /generate</code> 501</span></div>
         <div class="card off"><b>UC-15 광고물을 조립한다</b>
-          <span><span class="tag p">기획</span>F-12 · Phase 3 · <code>POST /compose</code> 는 501</span></div>
+          <span><span class="tag p">기획</span>F-12 · <code>POST /compose</code> 는 501</span></div>
+        <div class="card pos"><b>🆕 가입하고 로그인한다 · 문의한다</b>
+          <span><span class="tag m">실측</span><code>/u/signup</code> · <code>/u/login</code> · <code>/u/mypage</code> · <code>/u/cs</code> (D-260)</span></div>
         <div class="card"><b>비회원도 검수한다</b>
-          <span><span class="tag m">실측</span>저장만 안 된다 — <code>owner_id</code> NULL · <code>session_id</code> + <code>expires_at</code> (D-66 · D-129)</span></div>
+          <span><span class="tag m">실측</span>로그인 없이 판정을 받는다 — 이력은 없다</span></div>
       </fieldset>
 
       <fieldset>
         <legend>운영자 · 검토자 · 배치</legend>
         <div class="card pos"><b>UC-16 등급 · 용도를 판정한다</b>
-          <span><span class="tag m">실측</span>🆕 F-14 · <code>GET /admin/</code> 이 뜬다 — 로그인 없으면 <b style="display:inline">읽기도 막는다</b> (D-213)</span>
-          <span><span class="tag p">기획</span>⬜ <b style="display:inline">쓰기 경로는 아직 없다</b> — 여는 것은 별도 판정이다</span></div>
+          <span><span class="tag m">실측</span>F-14 · <code>GET /admin/</code> · 소스 목록 — 로그인 없으면 읽기도 막는다 (D-213)</span>
+          <span><span class="tag p">기획</span>⬜ 쓰기 경로는 아직 없다</span></div>
         <div class="card pos"><b>UC-17 확인하고 서명한다</b>
-          <span><span class="tag m">실측</span>🆕 F-14 · 콘솔에서 근거를 <b style="display:inline">본다</b> · Argon2id 로그인 (0012)</span>
-          <span><span class="tag p">기획</span>서명 UI 는 미착수 — 🚨 <b style="display:inline">사람만 채우는 칸</b>이다 (D-66)</span>
-          <span>자기 판정은 자기가 확인 못 한다 — <code>decided_by ≠ reviewed_by</code> 를 <b style="display:inline">DB 가 막는다</b></span></div>
+          <span><span class="tag m">실측</span>F-14 · 콘솔에서 근거를 <b style="display:inline">본다</b> · Argon2id 로그인</span>
+          <span><span class="tag p">기획</span>서명 UI 는 미착수 — 🚨 <b style="display:inline">사람만 채우는 칸</b>이다 (D-66)</span></div>
         <div class="card pos"><b>UC-18 법령 버전을 관리한다</b>
-          <span><span class="tag m">실측</span>F-15 · <code>superseded_at</code> · <code>v_current_chunk</code> · <code>launcher.py collect law_go_kr</code></span></div>
+          <span><span class="tag m">실측</span>F-15 · <code>superseded_at</code> · <code>v_current_chunk</code></span></div>
         <div class="card flag"><b>UC-19 재검증 대기를 처리한다</b>
-          <span><span class="tag p">기획</span>🔴 <b style="display:inline">화면도 라우트도 없다</b> (W-02 오른쪽 끝)</span></div>
-        <div class="card off"><b>UC-20 판정 품질 통계를 본다</b>
-          <span><span class="tag p">기획</span>F-17 · Phase 1</span></div>
+          <span><span class="tag p">기획</span>🔴 <b style="display:inline">화면도 라우트도 없다</b> (W-02)</span></div>
+        <div class="card"><b>UC-20 판정 품질 통계를 본다</b>
+          <span><span class="tag m">실측</span>F-17 · 관리자 통계 화면이 뜬다</span>
+          <span><span class="tag p">기획</span>읽을 표가 없어 더미로 그린다</span></div>
         <div class="card flag"><b>UC-21 CSV 를 일괄 검수한다</b>
           <span><span class="tag p">기획</span>F-16 · 🔴 <b style="display:inline">화면이 없다</b> — <code>batch_run</code> 표만 있다</span></div>
         <div class="card pos"><b>UC-22~24 수집 · 전처리 · 적재</b>
           <span><span class="tag m">실측</span>배치가 돈다 — <code>launcher.py</code> 의 명령들</span>
-          <span>청크 2,400 · 별표 243행 · 사전 536 · 골든 1,910</span></div>
+          <span>사전 506 · 골든 8,383 · 제재표 38 · 대응표 14</span></div>
         <div class="card pos"><b>UC-25 임베딩</b>
-          <span><span class="tag m">실측</span>🆕 <b style="display:inline">2,400행 · chunk 와 1:1</b> — KURE-v1 1024차원</span>
-          <span>★ 종전 도면은 여기를 <b style="display:inline">「미실행」</b> 회색으로 그리고 있었다</span></div>
+          <span><span class="tag m">실측</span>6,667행 · chunk 와 1:1 — KURE-v1 1024차원</span></div>
       </fieldset>
     </div>
 
     <div class="legend">
       <span class="chip rsk">화면이 없는 유스케이스 2건 — UC-19 재검증 대기 · UC-21 배치 검수</span>
-      <span class="chip pos">🆕 이번에 초록으로 바뀐 것 — UC-16 · UC-17 · UC-25</span>
+      <span class="chip pos">🆕 09-13 뒤 초록으로 바뀐 것 — UC-01 · 03 · 04 · 06 · 가입 · 로그인</span>
     </div>
   </div>
 
@@ -109,6 +114,6 @@
     <span class="k">유스케이스가 25개라고 25개가 도는 것은 아니다.</span>
     「화면이 없다」를 그림에서 지우지 않는 이유는
     <span class="k">없는 화면이 목록에서 사라지면 아무도 그것을 만들지 않기 때문</span>이다 (D-188 · A-04).
-    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 라우트는 app/api.py 와 D-124 계약 · 원천은 src/u-01-usecases.html (D-217)</div>
+    <div class="lock">적재 수는 원장 10-06 ① (클론 A) · 청크 6,667 은 09-28 · 수의 정본은 docs/00_사실원장.md (D-54) · 원천은 src/u-01-usecases.html (D-217)</div>
   </footer>
 </div>

@@ -2,7 +2,7 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** 이용 내역·결제 이력은 예시 수치다 — 담는 테이블이 아직 없다.
-  🔴 회원 테이블이 아직 없다 — 더미다 (admin_members.py 참고).
+  🔴 계정 표(`user_account`)는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 더미다 (admin_members.py 참고).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 회원 상세{% endblock %}
@@ -14,7 +14,7 @@
 
 <p><a href="/admin/members">← 회원 목록</a></p>
 
-<p class="warn">🧪 <b>더미 데이터입니다.</b> 회원 테이블이 아직 없어요 — 이용 내역·결제 이력도 예시 수치입니다.</p>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 계정 표(<code>user_account</code>)는 생겼지만 이 화면은 아직 그 표를 읽지 않아요 — 이용 내역·결제 이력도 예시 수치입니다.</p>
 
 <h1>{{ row.name }} <small class="hint">{{ row.type }}</small></h1>
 <table class="kv">

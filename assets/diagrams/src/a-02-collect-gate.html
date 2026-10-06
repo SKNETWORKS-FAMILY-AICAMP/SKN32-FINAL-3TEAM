@@ -1,0 +1,111 @@
+<!doctype html>
+<!--
+  A-02 · 수집 게이트   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-10-06 새로 그림.** 종전 판(원천 없음)은 「등재 · 용도 허용 · 2인 서명 — 셋을 함께 본다」였고 수가 낡았다(등재 47 · 서명 37 · 미채택 13).
+     `collect/registry.py` `require()` 의 검사는 지금 **여덟**이다 — GATED 승인 · status(manual · hold) · G2 원문 삭제 경로 · robots 가 더해졌다.
+  ★ 검사 순서는 코드 순서 그대로다 — 「되돌릴 수 없는 것부터」(`require()` docstring).
+  🚨 G2 는 `G2_DROP_WIRED` 가 비어 있어 **지금 전부 막힌다** — 삭제 경로가 붙기 전에는 받지 않는다 (D-92).
+  수 — `data_sources.yaml` 을 2026-10-06 에 직접 셈(커밋 c7f483a · 생성물 · 읽기만).
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) · 수의 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>A-02 수집 게이트</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  /* 표 판 — plate.css 에 표 스타일이 없어 이 장 안에 둔다. 새 8장이 같은 조각을 쓴다 */
+  table.t{width:100%; border-collapse:collapse; background:#fff}
+  .t th{background:var(--band); color:var(--sub); font-weight:500; font-size:11px; text-align:left;
+        padding:7px 10px; border:1px solid var(--line)}
+  .t td{padding:7px 10px; border:1px solid var(--line); vertical-align:top; font-size:11.6px}
+  .t td b{font-size:12.2px}
+  .t td > b:first-child{display:block}
+  .t td span.s{display:block; color:var(--sub); font-size:11px}
+  .t tr.off td{background:var(--offbg); color:var(--off)}
+  .t tr.off td b{color:var(--off)}
+  .t td.c{text-align:center; vertical-align:middle}
+  .t code, .note code, .card code{font-family:ui-monospace,Menlo,monospace; font-size:10.8px}
+  .ok{color:#286E4C; font-weight:600} .no{color:var(--rsk); font-weight:600}
+  .gv{color:var(--gov)} .rk{color:var(--rsk)}
+
+  .steps > .stp:nth-child(5){border-top:none}
+  .steps > .stp:nth-child(6){border-top:1px solid var(--line)}
+  .steps{grid-auto-flow:column; grid-template-rows:repeat(4,auto)}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">A-02</span>
+    <h1>수집 게이트</h1>
+    <span class="right">미등재 소스는 수집 자체가 실행되지 않는다 · [실측]/[기획] · 2026-10-06</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
+      <span class="chip">[기획] 아직 안 만들었다</span>
+      <span class="chip gov">🔒 사람만 채운다 — 2인 확인 원장</span>
+    </div>
+    <div class="pipe" style="margin:0 0 12px">
+      <div class="box" style="border-left:3px solid var(--gov);background:#F7FAFC"><b class="gv">scripts/registry_review.yaml</b><span><span class="tag m">실측</span>사람이 쓰는 2인 확인 원장 — 손으로 고치는 유일한 파일</span></div>
+      <div class="j">→</div>
+      <div class="box"><b>gen_registry.py</b><span><span class="tag m">실측</span>생성</span></div>
+      <div class="j">→</div>
+      <div class="box"><b>data_sources.yaml</b><span><span class="tag m">실측</span>생성물 — 손으로 고치지 않는다 (D-90)</span></div>
+      <div class="j">→</div>
+      <div class="box" style="border-left:3px solid var(--gov);background:#F7FAFC"><b class="gv">registry.require(소스, 용도)</b><span><span class="tag m">실측</span>수집기의 첫 줄 (D-15)</span></div>
+    </div>
+
+    <fieldset>
+      <legend>require() 가 보는 것 — 코드 순서 · 하나라도 걸리면 RegistryError</legend>
+      <div class="steps">
+        <div class="stp pos"><div class="n">1</div><div><b>등재돼 있는가</b><span><span class="tag m">실측</span>레지스트리에 없으면 거부 — 「일단 받아 두고 나중에 판정」 경로가 없다</span></div></div>
+        <div class="stp pos"><div class="n">2</div><div><b>G1 이 아닌가</b><span><span class="tag m">실측</span>받아서 지우는 것과 받지 않는 것은 다르다</span></div></div>
+        <div class="stp pos"><div class="n">3</div><div><b>그 용도가 allow 인가</b><span><span class="tag m">실측</span>U1~U4 중 요청한 용도 — 등급 × 용도 (G-01)</span></div></div>
+        <div class="stp pos"><div class="n">4</div><div><b>2인 확인이 있는가</b><span><span class="tag m">실측</span><code>reviewed_by</code> — 수집을 시작하는 순간이 마지노선 (D-90 ④)</span></div></div>
+        <div class="stp pos"><div class="n">5</div><div><b>GATED 면 승인됐는가</b><span><span class="tag m">실측</span><code>approved_at</code> 없으면 거부 — 「신청했다」가 아니라 「승인됐다」</span></div></div>
+        <div class="stp pos"><div class="n">6</div><div><b>status — manual · hold</b><span><span class="tag m">실측</span>manual 은 사람이 올리는 경로(register)에서만 · hold 는 지금 안 받는다 (D-108)</span></div></div>
+        <div class="stp pos"><div class="n">7</div><div><b>G2 면 원문 삭제 경로가 붙었는가</b><span><span class="tag m">실측</span><code>G2_DROP_WIRED</code> 가 비어 있다 → <b style="display:inline" class="rk">G2 는 지금 전부 거부</b> (D-92)</span></div></div>
+        <div class="stp pos"><div class="n">8</div><div><b>HTML 을 긁으면 robots 확인 기록</b><span><span class="tag m">실측</span>판단은 산문이 아니라 수집기 표가 한다 (D-179)</span></div></div>
+      </div>
+    </fieldset>
+
+    <div class="cols2" style="margin-top:14px">
+      <fieldset>
+        <legend>여덟 다 통과</legend>
+        <div class="card pos"><b>원본을 무손상으로 저장한다 <span class="tag m">실측</span></b>
+          <span>덮어쓰지 않는다 · sha256 이 같으면 건너뛴다</span></div>
+        <div class="card pos"><b>수집 원장에 한 줄 append <span class="tag m">실측</span></b>
+          <span><code>data/manifest.jsonl</code> — 내용 없이 지문만 · 유일하게 커밋된다</span></div>
+        <div class="card pos" style="margin-bottom:0"><b>다 받았을 때만 수집일을 찍는다 <span class="tag m">실측</span></b>
+          <span>일부만 받았거나 새로 저장한 것이 0 이면 안 찍는다 — 찍혔다 ≠ 받았다</span></div>
+      </fieldset>
+      <fieldset class="rsk">
+        <legend>하나라도 걸리면</legend>
+        <div class="card flag"><b>RegistryError — 프로그램이 멈춘다 <span class="tag m">실측</span></b>
+          <span>이 예외가 게이트다 · 삼키지 않는다</span></div>
+        <div class="card"><b>탐침은 다른 문이다 <span class="tag m">실측</span></b>
+          <span>열어 보고 세되 저장하지 않는다 — 2인 확인 · 용도 · hold 를 안 본다 (D-109)</span>
+          <span>G1 · manual · GATED 미승인 · robots 는 탐침도 막는다</span></div>
+        <div class="card" style="margin-bottom:0"><b>사람이 받은 파일도 같은 문을 지난다 <span class="tag m">실측</span></b>
+          <span>register 경로 — manual 만 통과시키고 나머지 검사는 같다</span></div>
+      </fieldset>
+    </div>
+
+    <div class="legend">
+      <span class="chip">등재 70</span>
+      <span class="chip pos">2인 서명 59 / 70</span>
+      <span class="chip warn">서명 대기 11</span>
+      <span class="chip">collect 45 · manual 10 · hold 15</span>
+      <span class="chip rsk">G2 10 — 전부 막힘</span>
+      <span class="chip">편입 금지 13 · 미채택 14 (별도 목록)</span>
+    </div>
+  </div>
+
+  <footer>
+    <span class="k">문서가 아니라 수집기의 첫 줄이 막는다.</span>
+    등급표를 읽어 사람이 지키는 것이 아니라, 미등재 · G1 · 용도 deny · 서명 없음이면 <span class="k">수집 자체가 실행되지 않는다</span> (D-15).
+    <div class="lock">수 — data_sources.yaml 직접 셈 2026-10-06 (커밋 c7f483a) · 검사 순서의 정본은 collect/registry.py · 원천은 src/a-02-collect-gate.html (D-217)</div>
+  </footer>
+</div>

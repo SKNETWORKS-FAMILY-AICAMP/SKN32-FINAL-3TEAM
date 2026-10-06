@@ -7,14 +7,15 @@
 ✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 상태 변경·담당자 배정 폼은 전부 `disabled` 뼈대다.
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **`ticket` 테이블은 아직 없다** — DB 승인 요청조차 안 한 상태다. 그래서 DB 조회를
-   시도하지 않고 **더미로만** 그린다 (admin_board.py 와 같은 이유).
-   ⬜ 스키마가 생기면 admin_errors.py 패턴(우선 DB, 실패 시 더미)으로 바꾼다.
+🔴 **이 화면은 아직 DB 를 읽지 않는다 — 더미로만 그린다** (admin_board.py 와 같다).
+   🔄 `ticket` 표는 생겼고(alembic `0017_ops_tables` · `app/models.py` `Ticket` · D-260 ③)
+   사용자 쪽 문의 접수(`app/routers/user.py` `/u/cs`)가 그 표에 쓴다. 이 관리자 화면은 아직 옮기지 않았다.
+   ⬜ DB 조회로 바꿀 때는 admin_errors.py 패턴(읽었다 · 표가 없다 · 못 붙었다를 가른다)을 따른다.
 
 🚨 목업(`app/static/mockup.html`)의 `TICKETS` 구조를 그대로 따른다 — 사용자 쪽 「CS 문의」
    화면이 접수한 티켓이 그대로 여기 뜨는 구조였다(목업 08 CS문의 화면 참고). 사용자 쪽
-   티켓 접수 기능(ksr·lse 담당)이 먼저 생겨야 실데이터가 흐른다 — 이 화면은 그 전까지
-   관리자 쪽 뼈대만 먼저 만든다.
+   티켓 접수 기능(ksr·lse 담당)은 섰다 — 이 화면이 `ticket` 표를 읽게 바꿔야 실데이터가 흐른다.
+   🚨 아래 분류 상수(`TICKET_TYPES` 등)는 목업 것이다 — 표의 값은 `app/models.py` `TICKET_*` 이고 「결제」·「매칭」이 없다.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ TICKET_PRIORITIES = ("긴급", "보통", "낮음")
 TICKET_STATUSES = ("미처리", "처리중", "완료")
 
 # ─────────────────────────────────────────────────────────────
-# 더미 — ticket 테이블 자체가 아직 없다. ⬜ 테이블 승인·적재 뒤 DB 조회로 바꾼다.
+# 더미 — `ticket` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다. ⬜ DB 조회로 바꾼다.
 # 목업 app/static/mockup.html 의 TICKETS 배열 구조를 옮겨온 것 — 실제 문의 내용이 아니라
 # 화면 구조 확인용이다.
 # ─────────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ def _clean_choice(value: str | None, allowed: tuple[str, ...]) -> str | None:
 
 @router.get("/tickets", response_class=HTMLResponse)
 def ticket_list(request: Request) -> HTMLResponse:
-    """CS 티켓 목록 — 읽기 전용. `ticket` 테이블이 아직 없어 더미로만 그린다."""
+    """CS 티켓 목록 — 읽기 전용. `ticket` 표를 아직 읽지 않고 더미로만 그린다."""
     actor = require_governor(request)
     qp = request.query_params
     ticket_type = _clean_choice(qp.get("type"), TICKET_TYPES)

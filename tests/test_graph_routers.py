@@ -286,7 +286,7 @@ CORE_ALL = (*CORE_BEFORE_LAWS, *LAW_NODES, *CORE_AFTER_LAWS)
 def test_한_바퀴가_돈다() -> None:
     """🚨 Phase 0 게이트의 정의 — 문구 하나가 end-to-end 한 바퀴 (D-124)."""
     state, visited = run_review_stub("면역력 강화에 도움을 줍니다.")
-    assert tuple(visited) == (*CORE_ALL, "hold")  # 품목 미확정 → 세 법 전부 → 스텁 판정은 보류
+    assert tuple(visited) == (*CORE_ALL, "hold")  # 품목 미확정 → 세 법 전부 → 미판정이라 보류
     assert state["outcome"] is Outcome.hold
     to_response(state)  # 계약을 통과한다
 
@@ -465,7 +465,7 @@ def _init(text: str = "문구", category: Category | None = None) -> dict:
 @pytest.mark.parametrize(
     ("sents", "category", "tail"),
     [
-        (None, None, "hold"),  # 스텁 판정(unjudged) → 보류
+        (None, None, "hold"),  # DB 없이는 사전을 못 훑어 미판정(unjudged) → 보류
         (None, Category.화장품, "hold"),  # 🆕 법 둘만 — 팬아웃 폭이 달라도 모음은 한 번
         ([_ok()], None, "passed"),
         ([_no_reason()], None, "hold"),  # 🔴 I1 · 🔄 계약이 막는 모양도 보류로 (D-273)
