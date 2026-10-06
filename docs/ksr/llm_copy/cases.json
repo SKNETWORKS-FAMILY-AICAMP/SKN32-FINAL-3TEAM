@@ -1,0 +1,206 @@
+[
+  {
+    "id": "food_no_1",
+    "branch": "food_no",
+    "inputs": {
+      "name": "아침곡간 그래놀라",
+      "kind": "그래놀라",
+      "features": [
+        "고소하고 바삭한 식감",
+        "우유나 요거트에 바로"
+      ],
+      "ingredients": [
+        "통귀리",
+        "아몬드",
+        "꿀"
+      ],
+      "target": "아침을 간단히 먹는 직장인"
+    }
+  },
+  {
+    "id": "food_no_2",
+    "branch": "food_no",
+    "inputs": {
+      "name": "제주담은 감귤주스",
+      "kind": "과일주스",
+      "features": [
+        "착즙 그대로의 상큼함",
+        "190ml 한 병"
+      ],
+      "ingredients": [
+        "제주 감귤"
+      ]
+    }
+  },
+  {
+    "id": "food_yes_1",
+    "branch": "food_yes",
+    "inputs": {
+      "name": "바른손 두부",
+      "kind": "두부",
+      "features": [
+        "국산 콩 100%",
+        "부드럽고 고소한 맛"
+      ],
+      "ingredients": [
+        "국산 콩"
+      ],
+      "certs": [
+        "HACCP 인증 시설 제조"
+      ]
+    }
+  },
+  {
+    "id": "food_yes_2",
+    "branch": "food_yes",
+    "inputs": {
+      "name": "숲속 유정란",
+      "kind": "달걀",
+      "features": [
+        "매일 아침 선별",
+        "10구 한 판"
+      ],
+      "certs": [
+        "HACCP 인증",
+        "동물복지 인증 농장"
+      ]
+    }
+  },
+  {
+    "id": "hf_yes_1",
+    "branch": "hf_yes",
+    "inputs": {
+      "name": "데일리바이옴",
+      "kind": "프로바이오틱스 캡슐",
+      "features": [
+        "하루 한 캡슐",
+        "작은 캡슐"
+      ],
+      "ingredients": [
+        "프로바이오틱스"
+      ],
+      "fixed": "유산균 증식 및 유해균 억제·배변활동 원활·장 건강에 도움을 줄 수 있음"
+    }
+  },
+  {
+    "id": "hf_yes_2",
+    "branch": "hf_yes",
+    "inputs": {
+      "name": "아이케어 루테인",
+      "kind": "루테인 연질캡슐",
+      "features": [
+        "하루 한 알",
+        "목넘김이 편한 작은 크기"
+      ],
+      "ingredients": [
+        "루테인"
+      ],
+      "fixed": "노화로 인해 감소될 수 있는 황반색소밀도를 유지하여 눈 건강에 도움을 줄 수 있음"
+    }
+  },
+  {
+    "id": "hf_no_1",
+    "branch": "hf_no",
+    "inputs": {
+      "name": "매일한포 석류즙",
+      "kind": "과채즙",
+      "features": [
+        "새콤달콤한 맛",
+        "스틱 한 포로 간편하게"
+      ],
+      "ingredients": [
+        "석류"
+      ]
+    }
+  },
+  {
+    "id": "hf_no_2",
+    "branch": "hf_no",
+    "inputs": {
+      "name": "든든한 단백질바",
+      "kind": "단백질바",
+      "features": [
+        "쫀득한 식감",
+        "초코맛"
+      ],
+      "ingredients": [
+        "단백질",
+        "카카오"
+      ],
+      "target": "운동 후 간식을 찾는 사람"
+    }
+  },
+  {
+    "id": "cos_no_1",
+    "branch": "cos_no",
+    "inputs": {
+      "name": "촉촉 수분크림",
+      "kind": "크림",
+      "features": [
+        "끈적임 없이 산뜻"
+      ],
+      "ingredients": [
+        "히알루론산"
+      ]
+    }
+  },
+  {
+    "id": "cos_no_2",
+    "branch": "cos_no",
+    "inputs": {
+      "name": "모닝글로우 클렌징폼",
+      "kind": "클렌징폼",
+      "features": [
+        "쫀쫀한 거품",
+        "세안 후 당김 없이"
+      ],
+      "ingredients": [
+        "글리세린"
+      ],
+      "target": "아침 세안이 귀찮은 사람"
+    }
+  },
+  {
+    "id": "cos_yes_1",
+    "branch": "cos_yes",
+    "inputs": {
+      "name": "브라이트 세럼",
+      "kind": "세럼",
+      "features": [
+        "묽고 가벼운 제형",
+        "빠르게 흡수"
+      ],
+      "ingredients": [
+        "나이아신아마이드"
+      ],
+      "certs": [
+        "미백 기능성화장품 심사"
+      ],
+      "fixed": "피부 미백에 도움을 준다"
+    }
+  },
+  {
+    "id": "cos_yes_2",
+    "branch": "cos_yes",
+    "inputs": {
+      "name": "데일리 선크림",
+      "kind": "선크림",
+      "features": [
+        "백탁 없이 가볍게",
+        "SPF50+ PA++++"
+      ],
+      "certs": [
+        "자외선 차단 기능성화장품 심사"
+      ],
+      "fixed": "자외선으로부터 피부를 보호하는 데 도움을 준다"
+    }
+  },
+  {
+    "id": "min_cos_1",
+    "branch": "cos_no",
+    "inputs": {
+      "target": "야근이 잦은 30대 직장인",
+      "phrase": "끈적임 없이 산뜻한 수분크림"
+    }
+  }
+]
