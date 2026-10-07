@@ -30,6 +30,7 @@
 }
 .rv-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
 .rv-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+.rv-why { margin: .4rem 0 0; }
 
 .rv-count { float: right; color: var(--u-clay); font-size: .75rem; font-weight: 400; }
 .rv-submit {
@@ -142,10 +143,383 @@
 .rv-calc { display: flex; justify-content: space-between; font-size: .78rem; padding: .15rem 0; }
 .rv-calc.total { border-top: 1px solid var(--u-line); margin-top: .25rem; padding-top: .35rem; font-weight: 600; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* 🆕 2026-10-01 — 품목 분기 고르기. 스크립트 없이 라디오 · 체크박스의 `:checked ~` 로 단계를 넘긴다 */
+.rv-br { border-top: 1px solid var(--u-line); padding-top: .8rem; }
+.rv-round, .rv-q2, .rv-res { display: none; }
+.rv-round-0 { display: block; }
+{% for r in range(1, max_redo + 1) %}
+.rv-redo-{{ r }}:checked ~ .rv-round-{{ r - 1 }} { display: none; }
+.rv-redo-{{ r }}:checked ~ .rv-round-{{ r }} { display: block; }
+{% endfor %}
+.rv-k:checked ~ .rv-q1 { display: none; }
+.rv-k-hf:checked ~ .rv-q2 { display: block; }
+.rv-k-hf:checked ~ .rv-c:checked ~ .rv-q2 { display: none; }
+.rv-leafk:checked ~ .rv-rec, .rv-k-hf:checked ~ .rv-c:checked ~ .rv-rec { display: none; }
+.rv-p-food:checked ~ .rv-res-food, .rv-p-cos:checked ~ .rv-res-cos, .rv-p-gen:checked ~ .rv-res-gen,
+.rv-k-hf:checked ~ .rv-p-hfy:checked ~ .rv-res-hfy,
+.rv-k-hf:checked ~ .rv-p-hfn:checked ~ .rv-res-hfn { display: block; }
+.rv-sub { border-top: 1px solid var(--u-line); margin-top: 1rem; padding-top: .8rem; }
+.rv-bd { display: none; }
+.rv-p-food:checked ~ .rv-copyno .rv-bd-food, .rv-p-cos:checked ~ .rv-copyno .rv-bd-cos,
+.rv-p-gen:checked ~ .rv-copyno .rv-bd-gen,
+.rv-k-hf:checked ~ .rv-p-hfy:checked ~ .rv-copyno .rv-bd-hfy,
+.rv-k-hf:checked ~ .rv-p-hfn:checked ~ .rv-copyno .rv-bd-hfn { display: inline; }
+.rv-leafk:checked ~ .rv-copyno .rv-bd-rec, .rv-k-hf:checked ~ .rv-c:checked ~ .rv-copyno .rv-bd-rec { display: none; }
+/* 지적 건수 — 보이는 지적 문장만 센다(`display:none` 은 카운터를 올리지 않는다) */
+.rv-card-live { position: relative; counter-reset: rvflag; }
+.rv-flag { counter-increment: rvflag; }
+.rv-live { position: absolute; top: 1.1rem; right: 1.15rem; background: var(--u-ok-bg); color: var(--u-ok-ink); }
+.rv-live::before { content: "특이사항 없음"; }
+{# 선택자의 `>` 는 템플릿 글자로 적는다 — 변수에 담으면 자동 이스케이프가 `&gt;` 로 바꿔 CSS 가 깨진다.
+   이스케이프를 끄지 않는다 (P2-9) — 변수로 들어가는 것은 회차 숫자와 `>` 없는 고정 꼬리뿐이다. #}
+{% macro rv_flag_sel() -%}
+> .rv-flag
+{%- for r in range(max_redo + 1) -%}
+  {%- for tail in (".rv-k-none:checked ~ .rv-rec .rv-flag", ".rv-k-hf:checked ~ .rv-c-none:checked ~ .rv-rec .rv-flag",
+                  ".rv-p-food:checked ~ .rv-res-food .rv-flag", ".rv-p-cos:checked ~ .rv-res-cos .rv-flag",
+                  ".rv-p-gen:checked ~ .rv-res-gen .rv-flag",
+                  ".rv-k-hf:checked ~ .rv-p-hfy:checked ~ .rv-res-hfy .rv-flag",
+                  ".rv-k-hf:checked ~ .rv-p-hfn:checked ~ .rv-res-hfn .rv-flag") -%}
+    , {% if r > 0 %}.rv-redo-{{ r }}:checked ~ {% endif %}{% if r < max_redo %}.rv-redo-{{ r + 1 }}:not(:checked) ~ {% endif %}.rv-round-{{ r }} > {{ tail }}
+  {%- endfor -%}
+{%- endfor -%}
+{%- endmacro %}
+.rv-card-live:has({{ rv_flag_sel() }}) .rv-live { background: var(--u-bad-bg); color: var(--u-bad-ink); }
+.rv-card-live:has({{ rv_flag_sel() }}) .rv-live::before { content: "지적 " counter(rvflag) "건"; }
+.rv-q { border: 1px solid var(--u-signal); background: var(--u-signal-soft); border-radius: .75rem;
+        padding: .8rem .9rem; margin-bottom: .6rem; }
+.rv-q-title { margin: 0 0 .15rem; font-size: .9rem; font-weight: 600; display: flex; justify-content: space-between; gap: .5rem; }
+.rv-redo-no { font-size: .7rem; font-weight: 400; color: var(--u-clay); white-space: nowrap; }
+.rv-opts { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
+.rv-opt { flex: 1; min-width: 8.5rem; display: flex; flex-direction: column; gap: .1rem; margin: 0; cursor: pointer;
+          border: 1px solid var(--u-line); border-radius: .75rem; padding: .6rem .75rem;
+          background: var(--u-surface); color: var(--u-ink); font-size: .88rem; font-weight: 600; }
+.rv-opt small { font-size: .72rem; font-weight: 400; color: var(--u-clay); }
+.rv-opt:hover { border-color: var(--u-signal); }
+.rv-opt-off { cursor: not-allowed; color: var(--u-clay); background: var(--u-surface2); }
+.rv-opt-off:hover { border-color: var(--u-line); }
+.rv-back { display: inline-block; margin-top: .6rem; padding: 0; cursor: pointer; }
+.rv-redo { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .6rem; }
 .rv-disclaimer { font-size: .72rem; color: var(--u-clay); line-height: 1.6; margin: .25rem 0 0; }
 </style>
 {% endblock %}
 {% block user_content %}
+{# 문장 하나 — 기록되는 판정과 분기 결과가 같은 그림을 쓴다.
+   `rw_item` 을 주면 문장 아래에 고쳐 쓰기(버튼 · 결과 · 없는 이유)를 단다 — `premise` 는 고른 분기의 전제, `r` 은 회차 #}
+{% macro sent_block(s, flag=false, marks=none, rw_item=none, premise="", r=0) %}
+      <div class="rv-sent{% if flag %} rv-flag{% endif %}">
+        <span class="rv-sid">{{ s.sent_id }}</span>
+        {% set sp = s.risk.evidence_span %}
+        {# 🆕 2026-10-01 — 뺄 구간(`spans` · 원문 좌표 D-278)은 서버가 문장 조각으로 잘라 넘긴다(`_marks`) #}
+        {% if marks %}
+        <p class="rv-text">{% for piece, hit in marks %}{% if hit %}<mark class="rv-hit">{{ piece }}</mark>{% else %}{{ piece }}{% endif %}{% endfor %}</p>
+        {% elif sp and sp.end > sp.start and sp.end <= s.text|length %}
+        <p class="rv-text">{{ s.text[:sp.start] }}<mark class="rv-hit">{{ s.text[sp.start:sp.end] }}</mark>{{ s.text[sp.end:] }}</p>
+        {% else %}
+        <p class="rv-text">{{ s.text }}</p>
+        {% endif %}
+
+        <div class="rv-chips">
+          <span class="rv-chip">
+            {#- 🔄 2026-10-01 — 「확정」만 적으면 통과로 읽힌다. 위반이 있으면 「위반 확정」, 없으면 상단 배지와 같은 말 #}
+            {%- if s.verdict.value == "confirmed" and s.violations %}위반 확정
+            {%- elif s.verdict.value == "confirmed" %}특이사항 없음
+            {%- elif s.verdict.value == "hold" %}보류
+            {%- elif s.verdict.value == "no_basis" %}근거 없음
+            {%- else %}미판정{% endif -%}
+          </span>
+          {% if s.hold_reason %}
+          <span class="rv-chip">
+            {#- 🔄 2026-09-23 (D-279) — gap2 · rd1 을 원장 D-127 뜻으로 고치고 새 사유 둘(D-263 · D-277)을 더했다.
+                ⛔ 모르는 값은 「알 수 없는 값」으로 — 종전에는 전부 「라운드 1 미해소」로 읽혔다 #}
+            {%- if s.hold_reason.value == "low_conf" %}확신 부족
+            {%- elif s.hold_reason.value == "gap2" %}코드·모델 2등급 차
+            {%- elif s.hold_reason.value == "cat_unknown" %}카테고리 판별 실패
+            {%- elif s.hold_reason.value == "rd1" %}공존 규칙 발동
+            {%- elif s.hold_reason.value == "premise_unknown" %}전제 선택 필요 — 인정 여부
+            {%- elif s.hold_reason.value == "law_uncovered" %}전용법 미검수
+            {%- else %}알 수 없는 값 ({{ s.hold_reason.value }}){% endif -%}
+          </span>
+          {% endif %}
+          {% if s.risk.final %}
+          <span class="rv-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
+          {% endif %}
+          {% if s.infeasibility %}
+          <span class="rv-chip c-warn">
+            {#- 🔄 2026-10-01 — A · B · C 글자는 사용자에게 뜻이 없다. 뜻을 적는다(증명서의 「사유 A」는 그대로) #}
+            {%- if s.infeasibility.value == "A" %}인정받은 제품만 가능
+            {%- elif s.infeasibility.value == "B" %}근거 자료 필요
+            {%- else %}사용 불가{% endif -%}
+          </span>
+          {% endif %}
+          {% for v in s.violations %}
+          <span class="rv-chip c-violation">{{ v.value|replace("_", " ") }}</span>
+          {% endfor %}
+          {% if s.evidence_mismatch %}
+          <span class="rv-chip c-warn">근거 불일치 · 재생성됨</span>
+          {% endif %}
+        </div>
+        {% if s.infeasibility %}
+        <p class="rv-note rv-why">
+          {%- if s.infeasibility.value == "A" %}인정·심사를 받은 제품만 쓸 수 있는 표현이에요. 받지 않았다면 문구를 고쳐도 쓸 수 없어요.
+          {%- elif s.infeasibility.value == "B" %}객관적인 근거 자료로 사실임을 보일 수 있으면 쓸 수 있어요.
+          {%- else %}어떤 제품도 쓸 수 없는 표현이에요. 이 부분은 빼야 해요.{% endif -%}
+        </p>
+        {% endif %}
+
+        {# 🆕 고치는 방향 — 검수는 대체 문구를 내지 않고 **지시**까지 낸다 (D-265 · D-268 · `SubstBranch`) #}
+        {% if s.substantiation %}
+        <div class="rv-fix">
+          <b>고치는 방향</b> · {{ s.substantiation.criteria }}<br>
+          <span class="rv-note">
+            인정되는 실증 자료 — {{ s.substantiation.accepted_evidence|join(" · ") }}
+            · 실증하면 위험도 {{ s.substantiation.substantiated_max.value }} 까지 내려가요
+          </span>
+        </div>
+        {% endif %}
+
+        {# 🆕 2026-10-06 lse — 지적 문장 고쳐 쓰기(sLLM 재생성 · 팀장 승인). 결과는 이 문장 아래에 붙는다.
+           판정(`JudgeResponse`)에는 대체 문구가 없다 — 고쳐 쓰기는 따로 부르는 재생성 호출이다 (D-265 계약 유지).
+           ⛔ 사유 A(자격형)는 고쳐 쓰지 않는다 (D-59). ⛔ 위반 유형이 없는 문장(확신 부족 보류만)은 고칠 것이 없다 —
+           유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측). 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4)
+           🔄 2026-10-06 ksr (병합) — 문장 카드가 매크로라 여기로 옮겼다. 품목 분기가 있는 문구는 **분기를 고른 뒤의
+           문장에만** 단다 — 고른 전제의 판정으로 고쳐 써야 해서다. 고르기 전(기록되는 판정)에는 달지 않는다 #}
+        {% if rw_item is not none %}
+        {% set rw = ((rw_item.rewrites or {}).get(premise) or {}).get(s.sent_id) %}
+        {% if rw %}
+        {% include "user/_review_rewrite.html" %}
+        {% elif s.infeasibility and s.infeasibility.value == "A" %}
+        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 기능성이 없는 제품이라 표현을 바꿔도 같은 위반이에요 (D-59).</p>
+        {% elif s.violations %}
+        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
+          {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
+          <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
+          {% if premise %}
+          <input type="hidden" name="premise" value="{{ premise }}">
+          <input type="hidden" name="round" value="{{ r }}">
+          {% endif %}
+          <button type="submit" class="rv-chip" style="cursor:pointer">이 문장 고쳐 쓰기 (10초 안팎)</button>
+        </form>
+        {% elif flag %}
+        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 위반 유형이 특정되지 않았어요(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.</p>
+        {% endif %}
+        {% endif %}
+      </div>
+{% endmacro %}
+{# 🆕 2026-10-01 — 품목 분기를 **묻고 고르게** 한다 (D-263 ③ · D-276 · 팀장 10-01: 홀드 → 버튼 → 화면 넘김 · 재검수 3회).
+   ★ 분기는 응답에 이미 다 들어 있다 — 화면이 고르고 **다시 판정하지 않는다** (D-263 ⑦). 그래서 서버 왕복이 없다.
+   ⛔ 스크립트 없이 돈다(CSP) — 라디오 + `:checked ~` 로 단계를 넘긴다. 「다시 선택」은 체크박스가 다음 회차를 연다.
+   🚨 버튼은 **응답에 있는 분기만** 낸다 — 없는 전제의 결과를 지어내지 않는다 (D-147).
+   🚨 분기 결과는 전제 문구(「○○라면」)와 함께만 그린다 (D-263 ③). 기록되는 판정은 그대로 `sentences` 다 (D-263 ①). #}
+{# 근거 보기의 문장 하나 — 조문 · 산출 내역. 전체 근거 보기와 분기 결과가 같은 그림을 쓴다 #}
+{% macro ev_details(n, s) %}
+        <details class="rv-ev">
+          <summary>문구 {{ n }} · {{ s.text }}</summary>
+          <div class="rv-ev-body">
+            <p class="rv-ev-label">이 문장에 걸린 근거</p>
+            {% for e in s.evidence %}
+            <div class="rv-law">
+              <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
+              <div class="rv-law-id">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
+              {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+            </div>
+            {% else %}
+            <p class="rv-note">붙은 근거 조문이 없어요.</p>
+            {% endfor %}
+            <p class="rv-ev-label">위험도 산출 내역</p>
+            <div class="rv-calc"><span>코드 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
+            <div class="rv-calc"><span>인코더 예측</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>
+            <div class="rv-calc total"><span>최종 위험도</span><b>{{ s.risk.final.value if s.risk.final else "—" }}</b></div>
+          </div>
+        </details>
+{% endmacro %}
+{# 근거 보기 묶음 — 분기 안에서 쓴다. 그 판정(기록 또는 고른 분기)의 지적 문장만 든다 #}
+{% macro ev_group(n, sentences, flagged) %}
+<div class="rv-sub">
+  <h2 class="rv-risk-head" style="font-size:.88rem">근거 보기 <span class="rv-count">조문 · 산출 내역</span></h2>
+  {% for s in sentences if s.sent_id in flagged %}
+  {{ ev_details(n, s) }}
+  {% else %}
+  <p class="rv-note">지적된 문장이 없어 표시할 근거가 없어요.</p>
+  {% endfor %}
+</div>
+{% endmacro %}
+{% macro cert_reason(v) %}
+<p><b>사유 {{ v }}</b>
+  {%- if v == "A" %} · 자격형 — 인정 기능성이 없어요
+  {%- elif v == "B" %} · 실증형 — 근거를 대면 돼요
+  {%- else %} · 절대형 — 표현 자체가 금지예요{% endif %}</p>
+{% endmacro %}
+{% macro outcome_badge(v, ask=false) %}
+<span class="rv-outcome o-{{ v }}">
+  {%- if v == "pass" %}통과
+  {%- elif v == "certificate" %}합법화 불가
+  {%- elif v == "guidance" %}지시 — 실증 자료 필요
+  {%- elif v == "hold" and ask %}보류 · 확인 필요
+  {%- elif v == "hold" %}전문가 검토
+  {%- else %}알 수 없는 값 ({{ v }}){% endif -%}
+</span>
+{% endmacro %}
+{% macro branch_wizard(item) %}
+{% set result = item.result %}
+{% set n = item.n %}
+{% set SLUG = {"식품": "food", "건기식_인정": "hfy", "건기식_비인정": "hfn", "화장품": "cos", "일반상품": "gen"} %}
+{% set KIND = {"food": ("식품", "일반식품 · 가공식품"), "hf": ("건강기능식품", "기능성을 표방하는 제품"),
+               "cos": ("화장품", "바르는 제품"), "gen": ("일반상품", "식품 · 화장품이 아닌 상품")} %}
+{% set ns = namespace(have=[], kinds=[]) %}
+{% for b in result.branches %}
+  {% set p = SLUG.get(b.premise.value) %}
+  {% if p %}
+    {% set ns.have = ns.have + [p] %}
+    {% set k = "hf" if p in ("hfy", "hfn") else p %}
+    {% if k not in ns.kinds %}{% set ns.kinds = ns.kinds + [k] %}{% endif %}
+  {% endif %}
+{% endfor %}
+{% set only_hf = ns.kinds == ["hf"] %}
+{# 🆕 2026-10-06 — 고쳐 쓰기는 서버를 다녀온다. 화면에 상태가 없으니 서버가 받은 전제 · 회차(`picked`)로 같은 자리를 펼친다 #}
+{% set pp = SLUG.get(item.picked.premise) if item.picked else none %}
+{% set pr = item.picked.round if pp else -1 %}
+{% set pk = "hf" if pp in ("hfy", "hfn") else pp %}
+<div class="rv-br">
+  {% for r in range(1, max_redo + 1) %}
+  <input class="visually-hidden rv-redo-{{ r }}" type="checkbox" id="rvr-{{ n }}-{{ r }}"
+         aria-label="문구 {{ n }} 다시 선택 {{ r }}회차"{% if r <= pr %} checked{% endif %}>
+  {% endfor %}
+  {% for r in range(max_redo + 1) %}
+  <div class="rv-round rv-round-{{ r }}">
+    {% if not only_hf %}
+    <input class="visually-hidden rv-k-none" type="radio" name="rvk-{{ n }}-{{ r }}" id="rvk-{{ n }}-{{ r }}-none"
+           {%- if r != pr %} checked{% endif %}
+           aria-label="유형 고르지 않음">
+    {% endif %}
+    {% for k in ns.kinds %}
+    <input class="visually-hidden rv-k {{ 'rv-k-hf' if k == 'hf' else 'rv-leafk rv-p-' ~ k }}" type="radio"
+           name="rvk-{{ n }}-{{ r }}" id="rvk-{{ n }}-{{ r }}-{{ k }}" aria-label="{{ KIND[k][0] }}"
+           {%- if only_hf or (r == pr and k == pk) %} checked{% endif %}>
+    {% endfor %}
+    {% if "hf" in ns.kinds %}
+    <input class="visually-hidden rv-c-none" type="radio" name="rvc-{{ n }}-{{ r }}"
+           {%- if not (r == pr and pk == "hf") %} checked{% endif %} aria-label="인증 고르지 않음">
+    {% endif %}
+    {% for p in ("hfy", "hfn") if p in ns.have %}
+    <input class="visually-hidden rv-c rv-p-{{ p }}" type="radio" name="rvc-{{ n }}-{{ r }}"
+           id="rvc-{{ n }}-{{ r }}-{{ p }}" aria-label="인증 {{ '받음' if p == 'hfy' else '안 받음' }}"
+           {%- if r == pr and p == pp %} checked{% endif %}>
+    {% endfor %}
+
+    {# 🔄 배지는 **고른 분기의 결과**로 바뀐다 — 고르기 전에는 기록되는 판정(보류)이다. 고른 뒤에는 「고르신 내용 기준」을 단다 #}
+    <p class="rv-copyno">문구 {{ n }}{% if result.category %} · {{ result.category.value }}{% endif %}
+      <span class="rv-bd-rec">{{ outcome_badge(result.outcome.value, true) }}</span>
+      {% for b in result.branches if SLUG.get(b.premise.value) %}
+      <span class="rv-bd rv-bd-{{ SLUG[b.premise.value] }}">{{ outcome_badge(b.outcome.value) }}
+        {%- if not b.verified %} <span class="rv-redo-no">고르신 내용 기준</span>{% endif %}</span>
+      {% endfor %}
+    </p>
+
+    <div class="rv-q rv-q1">
+      <p class="rv-q-title">이 제품은 어떤 유형인가요? <span class="rv-redo-no">재검수 {{ r }}/{{ max_redo }}</span></p>
+      <p class="rv-note">유형에 따라 적용되는 조문이 달라서 판정을 잠시 멈췄어요.</p>
+      <div class="rv-opts">
+        {% for k in ns.kinds %}
+        <label class="rv-opt" for="rvk-{{ n }}-{{ r }}-{{ k }}">{{ KIND[k][0] }}<small>{{ KIND[k][1] }}</small></label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="rv-q rv-q2">
+      <p class="rv-q-title">건강기능식품 인증을 받았나요? <span class="rv-redo-no">재검수 {{ r }}/{{ max_redo }}</span></p>
+      <p class="rv-note">이 기능성으로 식약처 인정을 받았는지에 따라 쓸 수 있는 표현이 달라요.</p>
+      <div class="rv-opts">
+        {% for p, label, sub in (("hfy", "예 (Y)", "인정 · 신고 완료"), ("hfn", "아니오 (N)", "인증 없음")) %}
+        {% if p in ns.have %}
+        <label class="rv-opt" for="rvc-{{ n }}-{{ r }}-{{ p }}">{{ label }}<small>{{ sub }}</small></label>
+        {% else %}
+        <span class="rv-opt rv-opt-off">{{ label }}<small>이 경우의 판정이 응답에 없어요</small></span>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% if not only_hf %}
+      <label class="rv-link rv-back" for="rvk-{{ n }}-{{ r }}-none">← 유형 다시 고르기</label>
+      {% endif %}
+    </div>
+
+    {% for b in result.branches if SLUG.get(b.premise.value) %}
+    {% set p = SLUG[b.premise.value] %}
+    <div class="rv-res rv-res-{{ p }}">
+      <div class="rv-chips" style="margin:0 0 .5rem">
+        {% if p in ("hfy", "hfn") %}
+        <span class="rv-chip c-violation">건강기능식품</span>
+        <span class="rv-chip c-violation">인증 {{ "받음" if p == "hfy" else "안 받음" }}</span>
+        {% else %}
+        <span class="rv-chip c-violation">{{ KIND[p][0] }}</span>
+        {% endif %}
+        <span class="rv-redo-no">재검수 {{ r }}/{{ max_redo }}</span>
+      </div>
+      <div class="rv-fix" style="margin-top:0"><b>이 전제라면</b> · {{ b.criteria }}
+        {% if not b.verified %}<br><span class="rv-note">고르신 내용을 그대로 받은 결과예요 — 인정번호 대조는 하지 않았어요.</span>{% endif %}
+      </div>
+      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r) }}{% endfor %}
+      {# 「다시 선택」은 위험도 판정 바로 아래 — 증명서 · 근거 보기보다 위다 (2026-10-01) #}
+      <div class="rv-redo">
+        {% if r < max_redo %}
+        <span class="rv-note">선택을 바꿔 다시 볼 수 있어요 · {{ max_redo - r }}회 남음</span>
+        <label class="rv-btn" for="rvr-{{ n }}-{{ r + 1 }}">다시 선택</label>
+        {% else %}
+        <span class="rv-note">재검수 {{ max_redo }}회를 모두 썼어요 — <b>새로 검수</b>로 시작해 주세요.</span>
+        {% endif %}
+      </div>
+      {# 🔄 근거 보기 · 증명서도 **고른 분기 기준**이다 — 분기 안에 두어 고른 것만 보인다.
+         🚨 계약의 `Branch` 에는 증명서 칸이 없다 — 사유는 이 분기 문장의 불가 유형에서 읽고, 설명문은 지어내지 않는다 (D-147) #}
+      {% if b.outcome.value == "certificate" %}
+      <div class="rv-sub">
+        <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서 <span class="rv-count">고르신 내용 기준</span></h2>
+        <div class="rv-cert">
+          {% for v in b.sentences|selectattr("infeasibility")|map(attribute="infeasibility.value")|unique|sort %}
+          {{ cert_reason(v) }}
+          {% else %}
+          <p>이 전제에서는 합법화할 수 없는 문구예요.</p>
+          {% endfor %}
+          <p>설명은 위의 「이 전제라면」 기준 문안을 따라요.</p>
+        </div>
+      </div>
+      {% endif %}
+      {{ ev_group(n, b.sentences, item.branch_flagged[b.premise.value]) }}
+      {% if b.evidence %}
+      <details class="rv-ev">
+        <summary>이 전제의 기준 조문</summary>
+        <div class="rv-ev-body">
+          {% for e in b.evidence %}
+          <div class="rv-law">
+            <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
+            <div class="rv-law-id">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
+            {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {# 기록되는 판정 — 고르기 전에만 보인다(회차마다). 유형을 모를 때의 가장 보수적인 경우다 (D-263 ①) #}
+    <div class="rv-rec">
+      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id)) }}{% endfor %}
+      {% if result.certificate %}
+      <div class="rv-sub">
+        <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서</h2>
+        <div class="rv-cert">
+          {{ cert_reason(result.certificate.reason.value) }}
+          <p>{{ result.certificate.explanation }}</p>
+          {% if result.certificate.guidance %}<p>{{ result.certificate.guidance }}</p>{% endif %}
+        </div>
+      </div>
+      {% endif %}
+      {{ ev_group(n, result.sentences, item.flagged) }}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}
 <div class="rv-head">
   <div>
     <h1>문구 검수</h1>
@@ -230,14 +604,20 @@
       </p>
     </div>
   {% elif results %}
-    <div class="rv-card">
+    {# 🔄 2026-10-01 — 분기가 있으면 지적 건수는 **고른 분기 기준**으로 바뀐다. 서버는 어느 분기를 골랐는지 모르므로
+       CSS 가 센다 — 보이는 지적 문장(`.rv-flag`)을 카운터로 세고, 하나도 없으면 「특이사항 없음」이다 #}
+    {% set live = results|selectattr("result.branches")|list|length > 0 %}
+    <div class="rv-card{% if live %} rv-card-live{% endif %}">
       <h2 class="rv-risk-head">위험도
+        {% if not live %}
         <span class="rv-summary {{ 's-bad' if flagged else 's-ok' }}">
           {%- if flagged %}지적 {{ flagged }}건{% else %}특이사항 없음{% endif -%}
         </span>
+        {% endif %}
       </h2>
     {% for item in results %}
       {% set result = item.result %}
+      {% if not result.branches %}
       <p class="rv-copyno">문구 {{ item.n }}{% if result.category %} · {{ result.category.value }}{% endif %}
         <span class="rv-outcome o-{{ result.outcome.value }}">
           {%- if result.outcome.value == "pass" %}통과
@@ -245,130 +625,46 @@
           {#- 🔄 2026-09-23 (D-279) — 지시(D-268)를 더하고 탐색 실패(생성 종착 · D-274)를 뺐다.
               ⛔ 모르는 값은 「알 수 없는 값」으로 그린다 — 종전에는 전부 「전문가 검토」로 읽혔다 #}
           {%- elif result.outcome.value == "guidance" %}지시 — 실증 자료 필요
+          {%- elif result.outcome.value == "hold" and result.branches %}보류 · 확인 필요
           {%- elif result.outcome.value == "hold" %}전문가 검토
           {%- else %}알 수 없는 값 ({{ result.outcome.value }}){% endif -%}
         </span>
       </p>
+      {% endif %}
 
+      {% if result.branches %}
+      {{ branch_wizard(item) }}
+      {% else %}
       {% for s in result.sentences %}
-      <div class="rv-sent">
-        <span class="rv-sid">{{ s.sent_id }}</span>
-        {% set sp = s.risk.evidence_span %}
-        {% if sp and sp.end > sp.start and sp.end <= s.text|length %}
-        <p class="rv-text">{{ s.text[:sp.start] }}<mark class="rv-hit">{{ s.text[sp.start:sp.end] }}</mark>{{ s.text[sp.end:] }}</p>
-        {% else %}
-        <p class="rv-text">{{ s.text }}</p>
-        {% endif %}
-
-        <div class="rv-chips">
-          <span class="rv-chip">
-            {%- if s.verdict.value == "confirmed" %}확정
-            {%- elif s.verdict.value == "hold" %}보류
-            {%- elif s.verdict.value == "no_basis" %}근거 없음
-            {%- else %}미판정{% endif -%}
-          </span>
-          {% if s.hold_reason %}
-          <span class="rv-chip">
-            {#- 🔄 2026-09-23 (D-279) — gap2 · rd1 을 원장 D-127 뜻으로 고치고 새 사유 둘(D-263 · D-277)을 더했다.
-                ⛔ 모르는 값은 「알 수 없는 값」으로 — 종전에는 전부 「라운드 1 미해소」로 읽혔다 #}
-            {%- if s.hold_reason.value == "low_conf" %}확신 부족
-            {%- elif s.hold_reason.value == "gap2" %}코드·모델 2등급 차
-            {%- elif s.hold_reason.value == "cat_unknown" %}카테고리 판별 실패
-            {%- elif s.hold_reason.value == "rd1" %}공존 규칙 발동
-            {%- elif s.hold_reason.value == "premise_unknown" %}전제 선택 필요 — 인정 여부
-            {%- elif s.hold_reason.value == "law_uncovered" %}전용법 미검수
-            {%- else %}알 수 없는 값 ({{ s.hold_reason.value }}){% endif -%}
-          </span>
-          {% endif %}
-          {% if s.risk.final %}
-          <span class="rv-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
-          {% endif %}
-          {% if s.infeasibility %}
-          <span class="rv-chip c-warn">
-            {{ s.infeasibility.value }} ·
-            {%- if s.infeasibility.value == "A" %} 자격형
-            {%- elif s.infeasibility.value == "B" %} 실증형
-            {%- else %} 절대형{% endif %}
-          </span>
-          {% endif %}
-          {% for v in s.violations %}
-          <span class="rv-chip c-violation">{{ v.value|replace("_", " ") }}</span>
-          {% endfor %}
-          {% if s.evidence_mismatch %}
-          <span class="rv-chip c-warn">근거 불일치 · 재생성됨</span>
-          {% endif %}
-        </div>
-
-        {# 🆕 고치는 방향 — 검수는 대체 문구를 내지 않고 **지시**까지 낸다 (D-265 · D-268 · `SubstBranch`) #}
-        {% if s.substantiation %}
-        <div class="rv-fix">
-          <b>고치는 방향</b> · {{ s.substantiation.criteria }}<br>
-          <span class="rv-note">
-            인정되는 실증 자료 — {{ s.substantiation.accepted_evidence|join(" · ") }}
-            · 실증하면 위험도 {{ s.substantiation.substantiated_max.value }} 까지 내려가요
-          </span>
-        </div>
-        {% endif %}
-
-        {# 🆕 2026-10-06 lse — 지적 문장 고쳐 쓰기(sLLM 재생성 · 팀장 승인). 결과는 이 문장 아래에 붙는다.
-           판정(`JudgeResponse`)에는 대체 문구가 없다 — 고쳐 쓰기는 따로 부르는 재생성 호출이다 (D-265 계약 유지).
-           ⛔ 사유 A(자격형)는 고쳐 쓰지 않는다 (D-59). ⛔ 위반 유형이 없는 문장(확신 부족 보류만)은 고칠 것이 없다 —
-           유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측). 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4) #}
-        {% set rw = item.rewrites[s.sent_id] if item.rewrites and s.sent_id in item.rewrites else none %}
-        {% if rw %}
-        {% include "user/_review_rewrite.html" %}
-        {% elif s.infeasibility and s.infeasibility.value == "A" %}
-        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 기능성이 없는 제품이라 표현을 바꿔도 같은 위반이에요 (D-59).</p>
-        {% elif s.violations %}
-        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
-          {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
-          <input type="hidden" name="target" value="{{ item.n }}:{{ s.sent_id }}">
-          <button type="submit" class="rv-chip" style="cursor:pointer">이 문장 고쳐 쓰기 (10초 안팎)</button>
-        </form>
-        {% elif s.sent_id in item.flagged %}
-        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 위반 유형이 특정되지 않았어요(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.</p>
-        {% endif %}
-      </div>
+      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item) }}
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}
+      {% endif %}
     {% endfor %}
+      {# 🚨 문장들 **뒤에** 있어야 카운터가 다 세어진다 — 자리는 CSS 가 머리 오른쪽으로 올린다 #}
+      {% if live %}<span class="rv-summary rv-live" role="status"></span>{% endif %}
 
       {# 🆕 근거 보기 — 프로토타입 `rv-evidence-list` · 지적 문장만 접어서 둔다.
          🔄 조문·산출 내역은 종전 문장 카드 안에 펼쳐 있던 것을 여기로 옮겼다(내용은 같다).
          ⬜ 「제재 사례」 칸 — 계약에 사례 칸이 없다(EvidenceArticle 은 조문만 · D-192). 그래서 비운다 #}
-      <div style="border-top:1px solid var(--u-line);margin-top:1rem;padding-top:.8rem">
+      {# 🔄 2026-10-01 — 분기가 있는 문구의 근거는 분기 안에서 그린다(고른 분기 기준). 여기는 분기 없는 문구만 #}
+      {% if results|rejectattr("result.branches")|list %}
+      <div class="rv-sub">
         <h2 class="rv-risk-head" style="font-size:.88rem">근거 보기 <span class="rv-count">조문 · 산출 내역</span></h2>
         {% set ns = namespace(any=false) %}
-        {% for item in results %}{% for s in item.result.sentences if s.sent_id in item.flagged %}
+        {% for item in results if not item.result.branches %}{% for s in item.result.sentences if s.sent_id in item.flagged %}
         {% set ns.any = true %}
-        <details class="rv-ev">
-          <summary>문구 {{ item.n }} · {{ s.text }}</summary>
-          <div class="rv-ev-body">
-            <p class="rv-ev-label">이 문장에 걸린 근거</p>
-            {% for e in s.evidence %}
-            <div class="rv-law">
-              <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
-              <div class="rv-law-id">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
-              {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
-            </div>
-            {% else %}
-            <p class="rv-note">붙은 근거 조문이 없어요.</p>
-            {% endfor %}
-            <p class="rv-ev-label">위험도 산출 내역</p>
-            <div class="rv-calc"><span>코드 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
-            <div class="rv-calc"><span>인코더 예측</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>
-            <div class="rv-calc total"><span>최종 위험도</span><b>{{ s.risk.final.value if s.risk.final else "—" }}</b></div>
-          </div>
-        </details>
+        {{ ev_details(item.n, s) }}
         {% endfor %}{% endfor %}
         {% if not ns.any %}<p class="rv-note">지적된 문장이 없어 표시할 근거가 없어요.</p>{% endif %}
       </div>
+      {% endif %}
     </div>
 
     {% for item in results %}
     {% set result = item.result %}
-    {% if result.certificate %}
+    {% if result.certificate and not result.branches %}
     <div class="rv-card">
       <h2>합법화 불가 증명서{% if results|length > 1 %} <span class="rv-count">문구 {{ item.n }}</span>{% endif %}</h2>
       <div class="rv-cert">
@@ -422,7 +718,7 @@
       {% if result.timings %}
       <table>
         {% for t in result.timings %}
-        <tr><th>{{ t.node }}</th><td>{{ t.ms }} ms</td></tr>
+        <tr><th>{{ t.node }}</th><td>{{ "%.1f"|format(t.ms) }} ms</td></tr>
         {% endfor %}
       </table>
       {% endif %}
