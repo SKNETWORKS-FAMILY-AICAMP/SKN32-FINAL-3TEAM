@@ -16,7 +16,9 @@
 🚨 **DB 도 모델도 없이 end-to-end 한 바퀴가 돈다** — Phase 0 게이트의 정의(D-124)는 그대로다.
    🔄 2026-10-06 — 판정 로직은 섰다: **인코더 전 규칙 판정**(`JUDGED_BY` · D-269) · 위험도 하한(`assess_risk`) ·
       품목 분기(`premise_branches`) · 증명서 조립(`_certificate_of` · D-320). DB 가 없으면 사전을 못 훑어 문장은 미판정이다.
-      빈 노드는 `encode` · `doc_rules` 와 생성(B)의 `keyword_screen` · `claim_ledger` · `rejudge` 다(`assemble` 은 라운드 수만 센다).
+      빈 노드는 `doc_rules` 와 생성(B)의 `keyword_screen` · `claim_ledger` · `rejudge` 다(`assemble` 은 라운드 수만 센다).
+   🔄 2026-10-07 — `encode` 는 **그림자 배선**이다: 모델 폴더가 설정되면(`COPYLANE_MODEL_DIR`) 문장마다 인코더 신호를
+      상태(`encodings`)에 싣는다. 🚨 `judge` 는 그 칸을 **읽지 않는다** — 판정은 여전히 인코더 전 규칙 판정이다(`JUDGED_BY`).
 
 ★ D-124 가 정한 검사 셋도 그대로다 —
    ① **라우터 함수는 그래프 없이 단독 테스트한다** → langgraph 를 **모듈 최상단에서 import 하지 않는다.**
@@ -39,6 +41,7 @@
 from __future__ import annotations
 
 import functools
+import logging
 import operator
 import time
 from collections.abc import Callable, Iterable
@@ -46,6 +49,7 @@ from dataclasses import dataclass, replace
 from typing import Annotated, Any, TypedDict
 
 from app import dictmatch as dm
+from app import encoder as enc
 from app import premise as pm
 from app import reasons as rs
 from app import retrieve as rt
@@ -131,6 +135,25 @@ class SentEvidence:
     #: 두 갈래 **후보 수의 합**(겹친 것은 두 번 센다 · 법을 합친 행 수 — 법마다 폭은 `rt.POOL`). 🚨 0 은 「안 겹쳤다」이고,
     #: `lexical=False` 는 「검색어를 못 만들었다」다 — 다른 사건이다 (D-202).
     pool: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class SentEncoding:
+    """문장 하나의 **인코더 신호** (🆕 2026-10-07 · 그림자 배선). 🚨 판정이 아니다 — 유형 후보와 확신뿐이다 (D-131).
+
+    ⛔ `judge` · `premise_branches` · 종착은 이 칸을 읽지 않는다. 읽는 쪽은 평가 도구(`scripts/eval_graph.py`)뿐이다.
+       판정에 쓰는 규칙(합의 · 통과 · 후보를 어느 칸에 싣나)은 팀장 판정 뒤에 들어온다 — 그 자리는 `judge` 다 (D-192).
+    ⛔ 문장 판정의 `violations` 에 섞지 않는다 — 그 칸은 고쳐 쓰기(`app/routers/user.py` 버튼 · sLLM 에 넘기는 유형 ·
+       `_rejudge` 의 탈락 기준)가 읽는다. 섞으면 적법 문장에 버튼이 뜨고 고친 문구가 재판정에서 탈락한다.
+    """
+
+    sent_id: str
+    #: (유형, 확률) — 모델의 출력 순서 그대로. 문턱은 모델 폴더의 것이라 여기 싣지 않는다
+    scores: tuple[tuple[str, float], ...]
+    #: 문턱을 넘은 유형. 편입 대기 칸(문턱 > 1 · D-321)은 넘을 수 없어 들지 않는다
+    candidates: tuple[str, ...]
+    #: 문장이 길어 뒤가 잘렸다 — 잘린 부분은 인코더가 보지 않았다 (D-220)
+    truncated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,6 +271,8 @@ class CoreState(TypedDict, total=False):
     evidence: Annotated[list[SentEvidence], operator.add]
     # ── 사전 매칭 🔴 누적 (🆕 2026-09-28 · W4) — 문장마다 한 벌 ───────────
     dict_scans: Annotated[list[DictScan], operator.add]
+    # ── 인코더 신호 🔴 누적 (🆕 2026-10-07 · 그림자) — 문장마다 한 벌. 모델이 없으면 **비어 있다**(없음 ≠ 조용함)
+    encodings: Annotated[list[SentEncoding], operator.add]
     # ── 법별 팬아웃 🔴 누적 (D-267) — 법 노드가 **병렬로** 쓴다. 리듀서가 없으면 하나만 남는다
     law_results: Annotated[list[LawResult], operator.add]
     # ── 판정 누적 🔴 누적 — 🔄 2026-10-02 같은 문장은 바꿔 끼운다(`upsert_sentences`) ─────────
@@ -310,8 +335,14 @@ class ComposeState(TypedDict, total=False):
 #: 상태별 누적 키 — 게이트가 **양쪽으로** 본다: 여기 적힌 키에 리듀서가 있는가 · 리듀서가 붙은 키가 여기 다 있는가.
 #: 🚨 **키를 늘리면 여기 한 줄만 늘린다** (D-99).
 STATE_REDUCERS: dict[str, tuple[type, tuple[str, ...]]] = {
-    "core": (CoreState, ("evidence", "dict_scans", "law_results", "sentences", "timings")),
-    "review": (ReviewState, ("evidence", "dict_scans", "law_results", "sentences", "timings")),
+    "core": (
+        CoreState,
+        ("evidence", "dict_scans", "encodings", "law_results", "sentences", "timings"),
+    ),
+    "review": (
+        ReviewState,
+        ("evidence", "dict_scans", "encodings", "law_results", "sentences", "timings"),
+    ),
     "generate": (GenerateState, ("keywords", "candidates", "rejects", "adapted", "timings")),
     "compose": (ComposeState, ("sections",)),
 }
@@ -331,6 +362,7 @@ CORE_OUT = (
     "laws",
     "evidence",
     "dict_scans",
+    "encodings",
     "law_results",
     "sentences",
     "branches",
@@ -447,7 +479,7 @@ def route_laws(state: CoreState) -> tuple[str, ...]:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  코어 노드 — `encode` · `doc_rules` 는 자리와 계약만 있다(빈 노드)
+#  코어 노드 — `doc_rules` 는 자리와 계약만 있다(빈 노드) · `encode` 는 그림자 배선(판정이 읽지 않는다)
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -654,11 +686,44 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
 
 @timed
 def encode(state: CoreState) -> dict[str, Any]:
-    """인코더 — 유형 · 근거 스팬 · 확신 (D-131). **팬아웃 앞에서 한 번** 돈다 (D-267).
+    """인코더 — 유형 후보 · 확신 (D-131). **팬아웃 앞에서 한 번** 돈다 (D-267). 🆕 2026-10-07 **그림자 배선**.
 
-    🔜 W7 — harness(D-94) 뒤. ⛔ 법별 노드가 인코더를 부르면 판정기가 세 벌이다 (D-99).
+    ★ 문장마다 신호를 `encodings` 에 싣기만 한다 — **판정은 바뀌지 않는다**(`judge` 가 읽지 않는다 · `SentEncoding`).
+    🔴 값이 없을 때 (D-220)
+       · 모델 폴더가 설정되지 않았다 → 아무것도 싣지 않는다. 인코더를 쓰지 않는 정상 경로다(CI · 모델 없는 기기)
+       · 설정했는데 올리지 못했다 → **경고를 남기고** 아무것도 싣지 않는다. 판정은 규칙 판정 그대로 나간다(보류 쪽이라 안전하다).
+         ⛔ 조용히 넘기지 않는다 — 켰다고 믿는 사람이 꺼진 줄 모른다 (D-162). 수를 재는 도구는 이 경우 **멈춘다**
+         (`scripts/eval_graph.py --encoder`).
+    ⛔ 법별 노드가 인코더를 부르면 판정기가 세 벌이다 (D-99). 근거 구간(스팬)은 지금 모델이 내지 않는다.
     """
-    return {}
+    model_dir = enc.configured_dir()
+    if model_dir is None:
+        return {}
+    try:
+        model = enc.encoder_at(model_dir)
+        preds = [model.predict(t) for t in state.get("sents", [])]
+    except enc.EncoderUnavailable as e:
+        _warn_encoder_off(str(model_dir), str(e))
+        return {}
+    return {
+        "encodings": [
+            SentEncoding(
+                sent_id=sent_id(i),
+                scores=tuple((label.value, score) for label, score in p.scores.items()),
+                candidates=tuple(c.violation.value for c in p.candidates),
+                truncated=p.truncated,
+            )
+            for i, p in enumerate(preds)
+        ]
+    }
+
+
+@functools.cache
+def _warn_encoder_off(model_dir: str, why: str) -> None:
+    """같은 까닭은 프로세스에서 한 번만 적는다 — 요청마다 같은 줄이 쌓이지 않게."""
+    logging.getLogger("copylane.graph").warning(
+        "판정 인코더를 올리지 못했다 — 인코더 신호 없이 규칙 판정으로 간다 (%s): %s", model_dir, why
+    )
 
 
 def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:

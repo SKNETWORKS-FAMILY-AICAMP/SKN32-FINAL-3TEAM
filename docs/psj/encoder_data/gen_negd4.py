@@ -41,10 +41,22 @@ rng = random.Random(20260929)
 BLOCK = re.compile(
     r"건강|효과|효능|개선|도움|예방|치료|완화|회복|면역|질환|질병|증상|환자|당뇨|혈압|혈당|혈행|콜레스테롤|비만|다이어트|체중|체지방|"
     r"피로|활력|기능성|성장|발달|두뇌|기억|수면|스트레스|관절|뼈|장\s*건강|간\s*건강|소화|변비|해독|디톡스|항산화|노화|피부|미용|"
-    r"의약|약사|의사|복용|처방|임산부|수유부|어린이|영유아|노약자|알레르기|과민|부작용|이상사례|"
+    r"의약|약사|의사|복용|처방|과민|부작용|이상사례|"
     r"할인|적립|무료|배송|최저가|특가|환불|반품|교환|보상|쿠폰|이벤트|사은품|1\+1|2\+1|\d\s*원|만원|가격|"
     r"최초|최고|유일|1위|인증|특허|수상|검증|입증|안심|안전|100\s*%|천연|무첨가|프리미엄"
 )
+#: 🔄 10-01 — 대상 · 알레르기 낱말은 **섭취 맥락일 때만** 막는다.
+#:    「임산부 · 어린이는 섭취 전 상담」 같은 건기식형 섭취 주의 문구는 건기식 오인 단서라 음성에 넣지 않는다.
+#:    「어린이 손에 닿지 않는 곳에 보관」 · 「영유아 질식 우려」 · 「알레르기 유발물질 ○○ 함유」(의무 표시)는 D 라 막지 않는다.
+BLOCK_CONTEXT = re.compile(
+    r"(임산부|수유부|어린이|영유아|노약자|유아|소아)[^.]{0,30}(섭취|복용|드시|드실|먹|상담|전문가)|"
+    r"(섭취|복용)[^.]{0,30}(임산부|수유부|어린이|영유아|노약자|유아|소아)|"
+    r"알레르기(?!\s*유발)"
+)
+
+
+def blocked(text: str):
+    return BLOCK.search(text) or BLOCK_CONTEXT.search(text)
 
 
 def norm_key(s):
@@ -53,7 +65,9 @@ def norm_key(s):
 
 def split_lines(s):
     out = []
-    for x in re.split(r"[\n\r]+|(?<=[.。])\s+|(?:^|\s)[-‐‑·•]\s+|\(\d\)\s*|[①②③④⑤]", s or ""):
+    for x in re.split(
+        r"[\n\r]+|(?<=[.。])\s+|(?:^|\s)[-‐‑·•]\s+|\(\d\)\s*|[①②③④⑤]", s or ""
+    ):
         x = re.sub(r"^[\s\-‐·•*\d\)\.]+", "", x).strip(" .")
         if 6 <= len(x) <= 90:
             out.append(x)
@@ -193,7 +207,9 @@ def fill(t):
 
 
 def main():
-    out_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "proto_negd4.jsonl")
+    out_path = (
+        sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "proto_negd4.jsonl")
+    )
     my_path = os.path.join(HERE, "my_negd.txt")
     lin = {}
 
@@ -216,7 +232,7 @@ def main():
         if len(text) < 4 or k in seen:
             drop["짧음·중복"] += 1
             return
-        if BLOCK.search(text):
+        if blocked(text):
             drop["금지 어휘"] += 1
             if fam == "직접작성":
                 print(f"  [제외 · 금지 어휘] {text}")
@@ -287,7 +303,9 @@ def main():
         "  계보:",
         {
             f"{p}/{o}": (
-                "공개 불가 · 등재 대기" if pend else ("재배포 가능" if rd else "재배포 불가")
+                "공개 불가 · 등재 대기"
+                if pend
+                else ("재배포 가능" if rd else "재배포 불가")
             )
             for (p, o), (rd, pend) in lin.items()
         },
