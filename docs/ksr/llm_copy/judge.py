@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from branches import Branch
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
+#: 판정 인코더 — 10-07 에 받은 v10(합성O · 이유O · 8종). `models/` 는 git 이 무시한다
+ENCODER_DIR = ROOT / "models" / "copylane-encoder-kcbert-v10-합성O-이유O"
 
 
 @dataclass(frozen=True)
@@ -83,3 +85,35 @@ class GraphJudge:
     def close(self) -> None:
         self._cur.close()
         self._conn.close()
+
+
+class EncoderJudge:
+    """판정 인코더(KC-BERT)를 판정 단계에 붙인다 — 유형 후보가 하나라도 문턱을 넘으면 탈락.
+
+    검수 그래프는 아직 인코더를 부르지 않는다(`rule-0.3.0-dict`). 그래서 여기서 `app.encoder` 를 직접 부른다.
+    `inner`(사전 엔진)를 먼저 돌리고, 거기서 안 걸린 것만 인코더에 넣는다.
+    🚨 「통과」는 여전히 「위반을 못 찾았다」다 — 인코더는 후보 신호만 내고 확정 · 위험도는 정하지 않는다.
+    """
+
+    def __init__(self, inner: NoJudge | GraphJudge, model_dir: pathlib.Path = ENCODER_DIR) -> None:
+        sys.path.insert(0, str(ROOT))
+        from app.encoder import JudgeEncoder  # noqa: PLC0415
+
+        self._inner = inner
+        self._enc = JudgeEncoder(model_dir)
+        self.name = "encoder" if isinstance(inner, GraphJudge) else "encoder-only"
+
+    def judge(self, text: str, branch: Branch) -> Judged:
+        j = self._inner.judge(text, branch)
+        if not j.passed:
+            return j
+        cands = self._enc.predict(text).candidates
+        if cands:
+            detail = " / ".join(
+                f"{c.violation.value} {c.confidence:.2f}≥{c.threshold}" for c in cands
+            )
+            return Judged(False, "인코더 유형 후보", detail)
+        return Judged(True, "위반 못 찾음", j.detail)
+
+    def close(self) -> None:
+        self._inner.close()
