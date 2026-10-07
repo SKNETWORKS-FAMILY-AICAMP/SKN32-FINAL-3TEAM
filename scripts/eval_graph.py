@@ -278,7 +278,8 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         if p["hold_reasons"]:
             reasons.update(p["hold_reasons"])
         elif p["committed"]:
-            # 🔄 2026-10-02 (W5) — 위험도가 붙은 뒤의 보류는 다른 까닭이다: 증명서 · 지시의 문안이 아직 없다 (`app/graph.py` 종착)
+            # 🔄 2026-10-02 (W5) — 위험도가 붙은 뒤의 보류는 다른 까닭이다: 종착의 재료가 없다 (`app/graph.py` 종착).
+            #    🔄 2026-10-06 — 증명서 조립기는 섰다(D-320). 여기 남는 것은 사유 문안이 없는 조합과 실증 분기가 없는 지시다
             reasons["종착재료없음(문안)" if p["risked"] else "하한없음(W5)"] += 1
         elif "unjudged" in p["verdicts"]:
             reasons["미판정"] += 1

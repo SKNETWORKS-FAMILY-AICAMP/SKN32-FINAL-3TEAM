@@ -2,13 +2,12 @@
 <!--
   W-02 · 재검수와 판정 게이트   ★ 이 파일이 원천이다 (D-90 · D-217)
   ─────────────────────────────────────────────────────────────────
-  🔴 **2026-09-13 재작성.** 종전 판에 **없는 것 셋**이 있었다 — 저장소 grep 전부 0건 —
-     ① `POST /v1/review/{doc_id}/rejudge`
-     ② `GET /v1/review/pending-revalidation`
-     ③ `export_gate.locked` — **그런 칸도 표도 없다.** 잠금은 아직 **규칙일 뿐**이다.
-     ⛔ 없는 라우트·없는 칼럼을 그려 두면 팀원이 그 이름으로 붙는다 (D-124 계약이 정본).
+  🔴 **2026-10-06 재작성.** 09-13 판은 「판정 입구는 `POST /judge`(501) 하나뿐」이라 적었다.
+     지금 `/judge` 는 검수 그래프를 돌고, 검수 화면에는 다시 판정하는 길이 **둘** 있다(`app/routers/user.py`) —
+     ① 문구를 고쳐 다시 `POST /u/judge` ② 「이 문장 고쳐 쓰기」 `POST /u/review/rewrite`(10-06 병합 · ⚠️ 승인 범위 판정 대기).
+     둘 다 **화면에 상태를 두지 않고 매번 새로 판정**하며 DB 에 쓰지 않는다.
   ★ **규칙 자체는 지운 것이 없다.** 「고치면 미판정」·「미판정이면 잠긴다」·「덮어쓰지 않는다」는
-    설계 판정으로 살아 있다 — 다만 **[기획]** 으로 표시한다 (D-219).
+    설계 판정으로 살아 있다 — 잠금 칸과 판정을 쓰는 코드가 없어 **[기획]** 이다 (D-219).
   ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
 -->
 <meta charset="utf-8">
@@ -22,6 +21,7 @@
   .chain .box.pos{border-left:3px solid #286E4C; background:#F7FBF9} .chain .box.pos b{color:#286E4C}
   .chain .box.rsk{border-left:3px solid var(--rsk); background:var(--rskbg)} .chain .box.rsk b{color:var(--rsk)}
   .chain .box.gov{border-left:3px solid var(--gov); background:#F7FAFC} .chain .box.gov b{color:var(--gov)}
+  .chain .box.warn{border-left:3px solid #8A6A1F; background:#FFF9EC} .chain .box.warn b{color:#8A6A1F}
   .chain .box.off{border:1px dashed #C4CCD4; background:var(--offbg)} .chain .box.off b{color:var(--off)}
   .chain .dn{align-self:center; color:var(--off); font-size:13px; padding:5px 0}
   .colhead{font-size:11.5px; color:var(--sub); margin:0 0 8px}
@@ -31,13 +31,14 @@
   <header>
     <span class="no">W-02</span>
     <h1>재검수와 판정 게이트</h1>
-    <span class="right">고치면 잠긴다 · [실측]/[기획] · 2026-09-13</span>
+    <span class="right">다시 판정은 돈다 · 잠금과 이력은 아직 · [실측]/[기획] · 2026-10-06</span>
   </header>
 
   <div class="body">
     <div class="legend" style="margin:0 0 12px">
       <span class="chip pos">[실측] 코드·제약이 지금 강제한다</span>
       <span class="chip">[기획] 판정으로 정해졌고 아직 코드가 없다</span>
+      <span class="chip warn">⚠️ 판정 대기</span>
       <span class="chip rsk">🔴 화면·라우트가 없다</span>
     </div>
 
@@ -45,23 +46,26 @@
       <div>
         <p class="colhead">사용자가 고쳤을 때</p>
         <div class="chain">
-          <div class="box"><b>작성자가 문구를 고친다</b>
-            <span><span class="tag p">기획</span>SCR-RV-02 의 수정 반영 — 화면이 아직 픽스처다</span></div>
+          <div class="box pos"><b>작성자가 문구를 고쳐 다시 검수한다</b>
+            <span><span class="tag m">실측</span><code>POST /u/judge</code> — 화면에 상태가 없어 매번 새로 판정한다</span>
+            <span><span class="tag p">기획</span>재검수 때 품목을 묻는 자리는 없다 (D-276)</span></div>
+          <div class="dn">↓ 또는</div>
+          <div class="box warn"><b>「이 문장 고쳐 쓰기」를 누른다</b>
+            <span><span class="tag m">실측</span><code>POST /u/review/rewrite</code> — 문구 칸을 다시 받아 다시 판정하고, 지적 문장 하나를 같은 기기의 sLLM 서버에 보낸다</span>
+            <span>자격형 문장 · 위반 유형이 없는 문장은 보내지 않는다. 서버가 없으면 후보를 그리지 않는다</span>
+            <span>⚠️ 2026-10-06 병합 — D-265 · D-270 과의 관계와 승인 범위는 <b style="display:inline">판정 대기</b></span></div>
           <div class="dn">↓</div>
-          <div class="box rsk"><b>그 문장이 즉시 「미판정」이 된다</b>
-            <span><span class="tag m">실측</span><code>judgment.verdict</code> 에 <code>unjudged</code> 가 <b style="display:inline">값으로 있다</b></span>
-            <span><span class="tag p">기획</span>고칠 때 그 값을 넣는 코드는 아직 없다</span></div>
+          <div class="box pos"><b>고친 문구를 판정 코어로 다시 판정한다</b>
+            <span><span class="tag m">실측</span><code>POST /judge</code> 와 같은 함수다 — 판정 코어는 하나 (D-266)</span>
+            <span>품목 없이 돈다 — 인코더 전에는 종착이 보류라 「재판정 · 통과」 가지에 닿지 않는다</span></div>
           <div class="dn">↓</div>
-          <div class="box rsk"><b>생성 · 다운로드 · 공유가 전부 잠긴다</b>
-            <span><span class="tag p">기획</span>🔴 <b style="display:inline">잠금 칸이 아직 없다</b> — <code>export_gate</code> 라는 표도 칼럼도 없다</span>
-            <span>⛔ 규칙은 살아 있다. 어디에 둘지가 <b style="display:inline">미정</b>이다 — 이름을 여기서 지어내지 않는다 (D-188)</span></div>
+          <div class="box rsk"><b>고친 문장은 「미판정」 · 내보내기가 잠긴다</b>
+            <span><span class="tag m">실측</span><code>judgment.verdict</code> 에 <code>unjudged</code> 가 값으로 있다</span>
+            <span><span class="tag p">기획</span>🔴 <b style="display:inline">잠금 칸이 없다</b> — 어디에 둘지 미정. 이름을 여기서 지어내지 않는다 (D-188)</span></div>
           <div class="dn">↓</div>
-          <div class="box off"><b>재검수 — reason: edited</b>
-            <span><span class="tag p">기획</span>⬜ 라우트 미정. 종전 도면의 <code>POST /v1/review/{doc_id}/rejudge</code> 는 <b style="display:inline">없다</b></span>
-            <span>지금 있는 판정 입구는 <code>POST /judge</code>(501) 하나뿐이다</span></div>
-          <div class="dn">↓</div>
-          <div class="box pos"><b>새 judgment 행이 쌓인다</b>
-            <span><span class="tag m">실측</span>표·제약이 이미 이 모양이다 — <code>attempt</code> 0~2 · <b style="display:inline">이전 판정을 덮어쓰지 않는다</b></span></div>
+          <div class="box off"><b>새 judgment 행이 쌓인다</b>
+            <span><span class="tag m">실측</span>표·제약은 이 모양이다 — 이전 판정을 덮어쓰지 않는다</span>
+            <span><span class="tag p">기획</span>판정을 넣는 코드가 없다 — 다시 판정해도 행이 남지 않는다</span></div>
         </div>
       </div>
 
@@ -76,7 +80,7 @@
           <div class="dn">↓</div>
           <div class="box off"><b>judgment.law_version 이 구버전인 문서를 찾는다</b>
             <span><span class="tag m">실측</span><code>law_version</code> 칸은 판정에 붙어 있다</span>
-            <span><span class="tag p">기획</span>⬜ 조회 라우트 미정. <code>GET /v1/review/pending-revalidation</code> 은 <b style="display:inline">없다</b></span></div>
+            <span><span class="tag p">기획</span>⬜ 조회 라우트 미정 · 판정 행이 아직 쌓이지 않아 찾을 것도 없다</span></div>
           <div class="dn">↓</div>
           <div class="box rsk"><b>「재검증 대기」 — 화면이 아직 없다</b>
             <span><span class="tag p">기획</span><code>reason: law_updated</code> · U-01 의 UC-19 와 같은 자리다</span></div>
@@ -87,10 +91,9 @@
           문장에 박으면 재판정 시 덮어써서 <b>「언제 무엇으로 판정했나」를 잃는다.</b>
         </p>
         <p class="note" style="margin:10px 0 0">
-          🚨 <b>이 장에서 [실측]인 것과 [기획]인 것이 갈리는 자리</b> —
-          <b>표와 칼럼은 거의 다 서 있고, 그것을 읽고 쓰는 라우트가 없다.</b>
-          그래서 종전 도면이 라우트 이름을 세 개나 적어 둘 수 있었다: <b>이름이 없어도 그림은 그려진다.</b>
-          ⛔ 그림이 계약을 앞서면 팀원은 <b>404 를 만난다</b> (D-124).
+          🚨 <b>이 장에서 [실측]과 [기획]이 갈리는 자리</b> —
+          <b>다시 판정하는 길은 돌고, 그 결과를 남기는 길이 없다.</b> 표와 칼럼은 서 있고 넣는 코드가 없다.
+          그래서 「고치면 잠긴다」는 아직 규칙이다.
         </p>
       </div>
     </div>
@@ -99,7 +102,7 @@
   <footer>
     <span class="k">고친 문구는 「아직 판정 안 된 것」이지 「통과한 것」이 아니다.</span>
     잠금을 기본값으로 두는 이유는 <span class="k">사용자가 고쳤다는 사실을 시스템이 모를 수 없게</span> 하기 위해서다 —
-    다만 지금은 <span class="k">규칙이고 아직 코드가 아니다</span> (D-72 fail-closed 를 코드로 옮기는 것이 남았다).
-    <div class="lock">라우트의 정본은 app/api.py 와 D-124 계약 · 원천은 src/w-02-recheck-gate.html (D-217)</div>
+    다만 잠금은 지금 <span class="k">규칙이고 아직 코드가 아니다</span> (D-72 fail-closed 를 코드로 옮기는 것이 남았다).
+    <div class="lock">라우트의 정본은 app/api.py · app/routers/user.py · 원천은 src/w-02-recheck-gate.html (D-217)</div>
   </footer>
 </div>

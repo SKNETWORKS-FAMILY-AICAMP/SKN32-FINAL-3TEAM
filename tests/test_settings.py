@@ -20,7 +20,19 @@ from app import settings as st
 ROOT = Path(__file__).resolve().parent.parent
 
 #: 훑지 않는 곳 — 가상환경·생성물·캐시·데이터. `.gitignore` 와 같은 뜻이다 (집행계약 §6).
-_SKIP = {".venv", "build", "dist", "data", "models", "mlruns", "__pycache__", ".ruff_cache"}
+#: 🔄 2026-10-06 — `.venv-sllm`(sLLM 전용 환경 · lse 요청). 그 속 라이브러리 파일이 UTF-8 이 아니라 스캔이 깨졌다.
+#:    `.gitignore` 의 `.venv-*/` 와 같은 뜻이다 · `tests/test_templates.py` 의 스캔도 같은 이름을 뺀다.
+_SKIP = {
+    ".venv",
+    ".venv-sllm",
+    "build",
+    "dist",
+    "data",
+    "models",
+    "mlruns",
+    "__pycache__",
+    ".ruff_cache",
+}
 
 
 def _rel(p: Path) -> str:

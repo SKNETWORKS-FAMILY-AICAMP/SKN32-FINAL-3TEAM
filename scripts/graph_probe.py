@@ -22,7 +22,8 @@
 🚨 **게이트가 아니다.** 답이 기기마다 다르다 (`data/**` 미커밋 · D-19 · D-89).
    🚨 **`scripts/search_probe.py` 와 다른 물건이다** — 저쪽은 검색 **순위**를 재고,
       이쪽은 **그래프가 검색을 부르는 배선**을 본다. 이름을 가른다 (D-204 의 어법).
-⬜ **판정을 재지 않는다** — `judge` 는 아직 스텁이라 종착은 `hold` 가 정상이다 (D-127).
+⬜ **판정을 재지 않는다** — `judge` 는 인코더 전 규칙 판정이라 사전에 안 걸린 문장은 보류다. 종착은 대개 `hold` 가 정상이다 (D-269).
+   판정의 수는 `scripts/eval_graph.py` 가 잰다.
 """
 
 from __future__ import annotations
@@ -123,7 +124,9 @@ def main(argv: list[str]) -> int:
     #    ⛔ ①과 ③을 한 값으로 합치지 않는다. 「느린 것」과 「안 돈 것」은 다른 사건이다.
     skip = "모델 로드 포함" if after > before else ("" if after else "벡터 미실행")
 
-    print(f"\n  종착  {out['outcome'].value}   (🚨 judge 가 스텁이라 hold 가 정상이다 · D-127)")
+    print(
+        f"\n  종착  {out['outcome'].value}   (🚨 인코더 전 규칙 판정 — 사전에 안 걸리면 hold 가 정상이다 · D-269)"
+    )
     print("  계측")
     for t in out["timings"]:
         # 🚨 예산이 **있는 노드만** 판정한다. 없는 노드에 초록·빨강을 찍으면
@@ -145,8 +148,8 @@ def main(argv: list[str]) -> int:
         print("      🚨 이 실행에서 **모델을 로드했다** — 프로세스당 한 번이다 (`_model_cache`).")
         print("         `retrieve` 의 진짜 수는 **같은 프로세스에서 두 번째 검색부터**다.")
         print("         한 프로세스에서 여러 번 재는 것은 원장에 있다 (D-19 · D-178).")
-    print("      ⬜ `retrieve` 는 아직 **문장 하나**만 돈다 — `split` 이 스텁이다 (D-127).")
-    print("         문장 분할이 서면 이 수에 문장 수가 곱해진다. 같은 작업에서 배치로 묶는다.")
+    print("      ⬜ `retrieve` 는 **문장마다 따로** 검색한다 — 이 수에 문장 수가 곱해진다.")
+    print("         배치로 묶는 것은 아직 없다.")
     print("\n🚨 이 수는 **이 기기**의 수다 — `data/**` 는 미커밋이다 (D-19 · D-178).\n")
     return 0
 

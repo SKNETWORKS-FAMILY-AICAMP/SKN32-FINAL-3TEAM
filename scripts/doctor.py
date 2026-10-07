@@ -40,7 +40,7 @@ launcher는 얇은 껍데기, 로직은 여기. 출력은 「무엇이 틀렸나
   18. manifest.jsonl 의 모든 source_id 가 data_sources.yaml 에 존재하는가   ← `--data` 로 구현
   19. raw/ 하위 파일이 derived/ 없이 방치돼 있지 않은가 (전처리 미실행 감지)
 
-TODO: 1~17·19 는 아직 자리표시자다. 지금 도는 것은 `--data` 뿐이다.
+TODO: 1~17·19 는 아직 자리표시자다. 지금 도는 것은 `--data`(18번 · 원장 ↔ 디스크)와 `--env`(환경 · git 신원 · DB)다.
       🚨 「TODO(W1)」로 적혀 있던 것을 고쳤다 — W1~W10 은 폐기된 표기다 (D-62).
          죽은 표를 가리키는 TODO 는 다음 사람이 일정표를 찾다가 시간을 쓴다.
 
@@ -521,7 +521,7 @@ def _report_sanction(stat: tuple[int, int] | None) -> None:
         return
     total, pending = stat
     if total == 0:
-        print("⬜ sanction_rule 0행 — 2인 확인을 셀 것이 아직 없다. 적재기가 붙으면 여기가 센다.")
+        print("⬜ sanction_rule 0행 — 2인 확인을 셀 것이 아직 없다. 적재하면 여기가 센다.")
         print("   🚨 **0행을 「초록」으로 읽지 않는다** — 셀 것이 없는 것과 다 맞는 것은 다르다.")
         return
     if pending:

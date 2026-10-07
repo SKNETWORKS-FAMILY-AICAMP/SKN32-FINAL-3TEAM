@@ -737,8 +737,9 @@ class JudgeResponse(BaseModel):
     @model_validator(mode="after")
     def _branch_hold_has_branches(self) -> JudgeResponse:
         # 🆕 D-263 ② · D-229 ⑥ — 전제를 몰라 멈췄으면 **선택지(분기)를 준다.**
-        #    ⬜ D-229 ⑥ 의 넓은 규칙 「품목 미확정이면 분기는 언제나」는 **W4(`merge_laws`)가 분기를 만드는 커밋**에서
-        #       검증기로 올린다 — 지금 걸면 분기를 못 만드는 스텁 그래프 응답이 깨진다 (D-192).
+        #    ⬜ D-229 ⑥ 의 넓은 규칙 「품목 미확정이면 분기는 언제나」는 아직 검증기로 올리지 않았다. 분기는 이제
+        #       `app/graph.py` `premise_branches` 가 만들지만(D-319) DB 가 없거나 기준 문안이 비면 분기를 내지 않는다 —
+        #       지금 걸면 그 응답이 깨진다 (D-192).
         premise_holds = {HoldReason.cat_unknown, HoldReason.premise_unknown}
         if any(s.hold_reason in premise_holds for s in self.sentences) and not self.branches:
             raise ValueError(

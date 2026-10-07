@@ -1,14 +1,14 @@
 """scripts/build_diagram.py — 도면 원천(HTML) → PNG (2026-09-12 · D-217).
 
-  uv run python launcher.py diagram            # 원천이 있는 것 전부
+  uv run python launcher.py diagram            # 21장 전부
   uv run python launcher.py diagram --only p-01-competition
 
 ⛔ **PNG 는 생성물이다** — 손으로 고치지 않는다. `assets/diagrams/src/<이름>.html` 을 고치고
    이 명령으로 다시 뽑는다 (D-90). 2026-09-12 에 A-04 가 어긋난 이유가 정확히 이것이었다:
    **원천은 고쳐졌는데 다시 그린 사람이 없었다.**
 
-🚨 **21장 중 원천이 있는 것만 뽑는다.** 나머지는 원천이 저장소 밖에 있거나 없다 —
-   `assets/diagrams/README.md` 가 어느 것이 어느 쪽인지 든다. **없는 것을 있다고 하지 않는다** (D-188).
+🚨 **`src/` 에 원천이 있는 장만 뽑는다.** 🔄 2026-10-06 — 21장 모두 원천이 있다(09-13 에는 13장이었다).
+   번호 ↔ 원천 대응은 `assets/diagrams/README.md` 가 든다. 원천 없이 PNG 만 넣으면 이 명령은 그 장을 모른다 (D-188).
 
 🚨 렌더러는 `scripts/build_pdf.py` 와 **같은 playwright chromium** 을 쓴다 — 스택이 안 는다.
    `uv sync --group docs && uv run playwright install chromium` 이 선행이다.
@@ -57,7 +57,7 @@ def build(only: str | None = None) -> int:
         # 🚨 뷰포트 높이를 작게 잡는다 — `full_page` 는 max(내용, 뷰포트) 라
         #    800 으로 두면 내용이 짧은 장에 **빈 여백이 붙는다** (A-04 에서 밟았다).
         page = browser.new_page(viewport={"width": WIDTH, "height": 100}, device_scale_factor=SCALE)
-        # 🔴 뽑기 전에 잰다 — 한 장이라도 나가면 되돌리기가 비싸다 (2026-09-13 실측: 13장)
+        # 🔴 뽑기 전에 잰다 — 한 장이라도 나가면 되돌리기가 비싸다 (2026-09-13 실측: 그때 원천이 있던 13장)
         fontcheck.require(page, want, source="assets/diagrams/src/plate.css")
         for s in srcs:
             page.goto(s.as_uri(), wait_until="networkidle")
@@ -67,7 +67,7 @@ def build(only: str | None = None) -> int:
                 f"✅ {s.name} → {target.relative_to(ROOT).as_posix()}  ({target.stat().st_size:,}B)"
             )
         browser.close()
-    print(f"\n🚨 원천이 있는 것만 뽑았다 — {len(srcs)}장. 나머지는 원천이 없다 (D-188).")
+    print(f"\n✅ 원천({SRC.relative_to(ROOT).as_posix()})에서 {len(srcs)}장을 뽑았다.")
     return 0
 
 

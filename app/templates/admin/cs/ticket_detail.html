@@ -2,7 +2,7 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** 상태 변경·답변 작성·담당자 배정 폼은 disabled 뼈대다.
-  🔴 `ticket` 테이블이 아직 없다 — 더미다.
+  🔴 `ticket` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 더미다.
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 티켓 상세{% endblock %}
@@ -14,7 +14,7 @@
 
 <p><a href="/admin/cs/tickets">← 문의 관리</a></p>
 
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>ticket</code> 테이블이 아직 없어요 — 사용자 쪽 접수 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>ticket</code> 표는 생겼지만 이 화면은 아직 그 표를 읽지 않아요 — 사용자가 접수한 문의는 여기 보이지 않습니다.</p>
 
 <h1>{{ row.title }}</h1>
 <table class="kv">
