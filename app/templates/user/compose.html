@@ -161,7 +161,7 @@
         {#- 🔄 2026-10-01 — 검수 화면(review.html · D-279)과 같은 사유 표로 맞췄다. ⛔ 종전에는 모르는 값이 전부 「라운드 1 미해소」였다 #}
         {%- if s.hold_reason.value == "low_conf" %}확신 부족
         {%- elif s.hold_reason.value == "gap2" %}코드·모델 2등급 차
-        {%- elif s.hold_reason.value == "cat_unknown" %}카테고리 판별 실패
+        {%- elif s.hold_reason.value == "cat_unknown" %}품목 선택 필요
         {%- elif s.hold_reason.value == "rd1" %}공존 규칙 발동
         {%- elif s.hold_reason.value == "premise_unknown" %}전제 선택 필요 — 인정 여부
         {%- elif s.hold_reason.value == "law_uncovered" %}전용법 미검수
