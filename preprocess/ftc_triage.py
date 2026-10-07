@@ -203,7 +203,7 @@ def main() -> int:
         verdict = "측정 가능" if ev_core[f] >= 30 else "🚨 측정 불가 (D-40)"
         print(f"  {f} {label:12}전체 {ev_cnt[f]:>4}건 · 1층후보 {ev_core[f]:>4}건  ← {verdict}")
     print(f"  하나라도 있는 결정문 {any_ev:,}건 / {n:,}건")
-    print("  🚨 사전([P6])이 아직 없어 어휘 10개로만 셌다 — 이 수는 하한이다.")
+    print("  🚨 사전([P6])을 쓰지 않고 어휘 10개로만 셌다 — 이 수는 하한이다.")
 
     if a.dump:
         OUT.parent.mkdir(parents=True, exist_ok=True)

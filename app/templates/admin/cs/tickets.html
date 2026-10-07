@@ -2,8 +2,8 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** 상태 변경·담당자 배정 폼은 disabled 뼈대다.
-  🔴 `ticket` 테이블이 아직 없다 — 전부 더미다 (admin_cs.py 참고). 사용자 쪽 티켓 접수
-     기능(ksr·lse)이 먼저 생겨야 실데이터가 흐른다.
+  🔴 `ticket` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 전부 더미다 (admin_cs.py 참고).
+     사용자 쪽 티켓 접수(ksr·lse)는 그 표에 쓴다.
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 문의 관리{% endblock %}
@@ -13,7 +13,7 @@
 {% include "admin/_nav.html" %}
 <div class="admin-main">
 <h1>문의 관리</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>ticket</code> 테이블이 아직 없어요 — 사용자 쪽 접수 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>ticket</code> 표는 생겼지만 이 화면은 아직 그 표를 읽지 않아요 — 사용자가 접수한 문의는 여기 보이지 않습니다.</p>
 
 <div class="cs-kpis">
   <div class="cs-kpi"><span>전체</span><b>{{ counts["전체"] }}</b></div>

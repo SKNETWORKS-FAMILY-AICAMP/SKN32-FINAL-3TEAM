@@ -7,10 +7,10 @@
 ✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 화면의 "새 공지 작성" 버튼은 `disabled` 뼈대다.
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **`notice` 테이블은 아직 없다** — DB 승인 요청조차 안 한 상태다. 그래서 DB 조회를
-   시도하지 않고 **더미로만** 그린다 (admin_errors.py 의 dummy_no_table 분기보다 한 단계
-   이른 상태 — 테이블 존재 여부를 물을 대상 자체가 없다).
-   ⬜ 스키마가 생기면 admin_errors.py 패턴(우선 DB, 실패 시 더미)으로 바꾼다.
+🔴 **이 화면은 아직 DB 를 읽지 않는다 — 더미로만 그린다.** 🔄 `notice` 표는 생겼다
+   (alembic `0017_ops_tables` · `app/models.py` `Notice` · D-260 ①). 사용자 화면의 알림
+   (`app/routers/user.py`)은 그 표를 읽는데, 이 관리자 화면은 아직 옮기지 않았다.
+   ⬜ DB 조회로 바꿀 때는 admin_errors.py 패턴(읽었다 · 표가 없다 · 못 붙었다를 가른다)을 따른다.
 
 🚨 목업(`app/static/mockup.html`)의 `_notices` 배열 구조를 그대로 따른다 —
    나중에 실데이터 붙을 때 필드명이 어긋나지 않게.
@@ -34,7 +34,7 @@ router = APIRouter(prefix="/board")
 PAGE_SIZE = 20
 
 # ─────────────────────────────────────────────────────────────
-# 더미 — notice 테이블 자체가 아직 없다. ⬜ 테이블 승인·적재 뒤 DB 조회로 바꾼다.
+# 더미 — `notice` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다. ⬜ DB 조회로 바꾼다.
 # 목업 app/static/mockup.html 의 _notices 배열을 그대로 옮겨온 것 — 실제 운영
 # 문구가 아니라 화면 구조 확인용이다.
 # ─────────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ def _paginate(rows: list[dict], page: int) -> tuple[list[dict], int]:
 
 @router.get("/notices", response_class=HTMLResponse)
 def notice_list(request: Request) -> HTMLResponse:
-    """공지사항 목록 — 읽기 전용. `notice` 테이블이 아직 없어 더미로만 그린다."""
+    """공지사항 목록 — 읽기 전용. `notice` 표를 아직 읽지 않고 더미로만 그린다."""
     actor = require_governor(request)
     qp = request.query_params
     category = (qp.get("category") or "").strip() or None

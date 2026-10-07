@@ -2,7 +2,7 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** "새 버전 등록" 버튼은 자리만 잡은 뼈대다 — action 없음.
-  🔴 약관 버전 테이블이 아직 없다 — 전부 더미다 (admin_terms.py 참고).
+  🔴 약관 버전 표(`terms`)는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 전부 더미다 (admin_terms.py 참고).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 약관 버전 관리{% endblock %}
@@ -12,7 +12,7 @@
 {% include "admin/_nav.html" %}
 <div class="admin-main">
 <h1>약관 버전 관리</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> 약관 버전 테이블이 아직 없어요 — 법무·정책 쪽 관리 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 약관 버전 표(<code>terms</code>)는 생겼지만 이 화면은 아직 그 표를 읽지 않아요.</p>
 
 <form class="filter-bar" style="justify-content:flex-end;">
   <button type="button" class="new-btn" disabled title="⬜ 아직 못 쓴다 — 테이블 승인 대기 중">+ 새 버전 등록</button>
