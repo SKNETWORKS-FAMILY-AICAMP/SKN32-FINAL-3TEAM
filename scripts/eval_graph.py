@@ -3,6 +3,7 @@
     uv run python scripts/eval_graph.py                          # 정본 기기 · 실제 DB · 전부
     uv run python scripts/eval_graph.py --limit 200              # 앞 200행만(실행 시간을 먼저 잰다)
     uv run python scripts/eval_graph.py --provenance ftc_decisions_body
+    uv run python scripts/eval_graph.py --dev --encoder models/<판>   # 🆕 dev(검증 묶음)로 — 판 · 문턱 · 규칙은 여기서 고른다 (D-175)
     uv run python scripts/eval_graph.py --stub                   # DB 없이 — 배선만(전부 미판정 · 수는 0 이 정상)
     uv run python scripts/eval_graph.py --out build/eval/graph.json
 
@@ -48,6 +49,7 @@ from app.contracts import (  # noqa: E402
     Verdict,
 )
 from collect import statute  # noqa: E402
+from preprocess import devsplit  # noqa: E402
 from preprocess.golden import lawful_kind  # noqa: E402
 from preprocess.split import APPROVED_READING  # noqa: E402
 from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99)
@@ -68,17 +70,24 @@ DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 CLASSES = ("확정위반", "확정무위반", "보류", "근거없음", "미판정")
 
 
-def load_rows(path: pathlib.Path = GOLDEN, provenance: str | None = None) -> list[dict]:
-    """봉인 평가셋 행. 🔴 파일이 없으면 멈춘다 — 빈 목록으로 0 을 내지 않는다 (D-220)."""
+def load_rows(
+    path: pathlib.Path = GOLDEN, provenance: str | None = None, *, dev: bool = False
+) -> list[dict]:
+    """봉인 평가셋 행(기본) 또는 **dev 행**(`dev=True`). 🔴 파일이 없으면 멈춘다 — 빈 목록으로 0 을 내지 않는다 (D-220).
+
+    🆕 2026-10-07 — dev 는 학습 분할에서 뗀 검증 묶음이다(`preprocess/devsplit.py` · 인코더 노트북과 같은 행).
+       판 · 문턱 · 규칙을 고르는 자리는 봉인이 아니라 여기다 (D-175).
+    """
     if not path.exists():
         raise SystemExit(
             f"🔴 {path} 가 없다 — 정본은 `launcher.py golden --write` · 사본은 `data-sync`"
         )
-    rows = [
-        r
-        for r in (json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip())
-        if r["split"] == "test_sentence"
-    ]
+    every = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    if dev:
+        by_id = {r["id"]: r for r in every}
+        rows = [by_id[i] for i in devsplit.dev_ids(every)]
+    else:
+        rows = [r for r in every if r["split"] == "test_sentence"]
     if provenance:
         rows = [r for r in rows if r.get("provenance") == provenance]
     return rows
@@ -418,14 +427,14 @@ def product_of(r: dict, conditional: bool) -> ProductContext:
     return ProductContext(category=Category(r["품목"])) if conditional else ProductContext()
 
 
-def report(s: dict[str, Any], conditional: bool = False) -> None:
+def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -> None:
     print(
         "  [조건부 — 품목을 아는 행 · 골든 `품목`]"
         if conditional
         else "  [무조건부 — 품목 미확정 · 세 법]"
     )
     print(
-        f"그래프 평가 — 평가셋 {s['rows']}행 (채점 {s['scored_rows']} · 채점 밖 M · D {s['unscored_rows']})"
+        f"그래프 평가 — {'dev(검증 묶음)' if dev else '평가셋'} {s['rows']}행 (채점 {s['scored_rows']} · 채점 밖 M · D {s['unscored_rows']})"
     )
     print(f"  종착   {s['outcome']}")
     print(f"  문장   {s['verdict']}")
@@ -508,7 +517,14 @@ def report(s: dict[str, Any], conditional: bool = False) -> None:
         print(
             "\n  ⓘ 조건부(품목을 아는 경우)는 `--conditional` 로 따로 잰다 (D-306 · 기획서 6-3 병기)"
         )
-    print("  🚨 봉인 평가셋이다 — 이 수에 맞춰 규칙 · 문턱을 고르지 않는다 (D-175)")
+    if dev:
+        print(
+            "  ⓘ dev(검증 묶음)다 — 판 · 문턱 · 규칙은 여기서 고른다 (D-175). "
+            "🚨 학습 분할에서 뗀 행이라 사전이 평가셋보다 잘 울린다 — 사전 쪽 수를 평가셋 수처럼 읽지 않는다.\n"
+            "     해설서 수정문구류(적법 · 주장 없음)가 없다 — 「적법 문구를 가르는가」는 dev 로 재지 못한다"
+        )
+    else:
+        print("  🚨 봉인 평가셋이다 — 이 수에 맞춰 규칙 · 문턱을 고르지 않는다 (D-175)")
 
 
 # ── 실행 ────────────────────────────────────────────────────────────────
@@ -566,6 +582,33 @@ def check_dict(cur: Any, path: pathlib.Path = DICT_FILE) -> dict[str, Any]:
             "  먼저: uv run python launcher.py load"
         )
     return {"dict_sha": _sha12(path), "dict_entries": d["file"]}
+
+
+def check_dev(rows: list[dict], model_dir: pathlib.Path | None) -> dict[str, Any]:
+    """dev 행이 **그 인코더가 학습에서 뺀 dev 와 같은지** — 모델 폴더의 `label_scheme.json`(`dev_sha` · `dev_rows`)과 대조한다.
+
+    🔴 **다르면 멈춘다** (D-220 · D-175) — 그 모델은 이 행의 일부를 학습에서 봤다. 그 수는 dev 수치가 아니다.
+    🚨 모델 폴더에 dev 지문이 없으면(옛 산출물) 대조할 수 없다 — 멈추지 않고 판 표지에 「미확인」으로 적는다.
+       없음을 일치로 세지 않는다. 인코더 없이 재면 대조할 모델이 없다 — 지문만 적는다.
+    """
+    stamp: dict[str, Any] = {"dev_rows": len(rows), "dev_sha": devsplit.sha(r["id"] for r in rows)}
+    if model_dir is None:
+        return stamp
+    try:
+        scheme = json.loads((model_dir / "label_scheme.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"🔴 {model_dir} 의 label_scheme.json 을 읽지 못했다 — {e}") from e
+    want = scheme.get("dev_sha")
+    if not want:
+        return stamp | {"dev_check": "미확인(모델 폴더에 dev 지문 없음)"}
+    if (want, scheme.get("dev_rows")) != (stamp["dev_sha"], stamp["dev_rows"]):
+        raise SystemExit(
+            f"🔴 dev 가 이 모델의 dev 와 다르다 — 여기 {stamp['dev_rows']}행 · {stamp['dev_sha']} / "
+            f"모델 {scheme.get('dev_rows')}행 · {want}\n"
+            "  이 모델은 이 행의 일부를 학습에서 봤다 — dev 수치로 쓸 수 없다 (D-175).\n"
+            "  골든 판이 다르거나 모델이 다른 규칙으로 dev 를 뗐다(`preprocess/devsplit.py` 는 v11 규칙이다)."
+        )
+    return stamp | {"dev_check": "일치"}
 
 
 def use_encoder(model_dir: pathlib.Path | None) -> dict[str, Any]:
@@ -631,14 +674,24 @@ def main(argv: list[str] | None = None) -> int:
         type=pathlib.Path,
         help=f"인코더 모델 폴더 — 그림자로 돌려 「후보로 더했다면」의 수를 낸다 (없으면 {enc.ENV_MODEL_DIR} · 둘 다 없으면 인코더 없이)",
     )
+    ap.add_argument(
+        "--dev",
+        action="store_true",
+        help="봉인 평가셋 대신 dev(검증 묶음)로 잰다 — 판 · 문턱 · 규칙을 고르는 자리 (D-175)",
+    )
     a = ap.parse_args(argv)
-    rows = load_rows(provenance=a.provenance)
+    rows = load_rows(dev=a.dev)
+    #: dev 대조는 **거르기 전 전체 행**으로 한다 — 원천으로 거른 뒤에는 지문이 달라진다
+    dev_stamp = check_dev(rows, a.encoder or enc.configured_dir()) if a.dev else {}
+    if a.provenance:
+        rows = [r for r in rows if r.get("provenance") == a.provenance]
     if a.conditional:
         rows = conditional_rows(rows)
     if a.limit:
         rows = rows[: a.limit]
     #: 판 표지 — 원장에 수와 함께 적는다 (D-178). 🔴 실제 실행은 DB 사전이 파일과 같을 때만 돈다(`check_dict`)
     stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN), "conditional": a.conditional}
+    stamp |= {"split": "dev" if a.dev else "test_sentence"} | dev_stamp
     stamp |= use_encoder(a.encoder)
     t0 = time.perf_counter()
     if a.stub:
@@ -657,7 +710,7 @@ def main(argv: list[str] | None = None) -> int:
             )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
-    report(s, a.conditional)
+    report(s, a.conditional, dev=a.dev)
     print(
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"
         f" · " + " · ".join(f"{k} {v}" for k, v in stamp.items())
