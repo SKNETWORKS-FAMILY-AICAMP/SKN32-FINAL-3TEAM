@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+  P-03 · 복제 검수 로직   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-10-06 새로 그림.** 종전 판(원천 없음)은 「신규 · 채택 제안」 장이었다 — 생성물이 학습 문구를 베끼는지 판정 앞에서 거른다는 안.
+  🚨 **현행 근거를 찾지 못했다** — `docs/00_설계결정기록.md` 에 이 로직의 결정이 없고(「복제 검수」 · 자카드 · 유사도 임계 글자 검색 0),
+     `app/` · `scripts/` · `preprocess/` 에 구현도 없다. 남은 기록은 `docs/ohb/인계_2026-09-10.md` 의 「채택 여부 — 팀 결정」 한 줄이다.
+     ⛔ 그래서 이 장은 **제안([기획])** 으로만 그린다. 임계 0.60 · 0.92 · 2회는 종전 도면의 제안값이고 측정 근거가 없다 — `[임의]`.
+  ★ 「이미 있는 재료」 칸만 [실측]이다. 종전 도면의 「골든 원문이 벡터DB 에 이미 들어간다」는 지금 사실이 아니다 — 임베딩은 조문 청크뿐이다.
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) · 수의 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>P-03 복제 검수 로직</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  /* 표 판 — plate.css 에 표 스타일이 없어 이 장 안에 둔다. 새 8장이 같은 조각을 쓴다 */
+  table.t{width:100%; border-collapse:collapse; background:#fff}
+  .t th{background:var(--band); color:var(--sub); font-weight:500; font-size:11px; text-align:left;
+        padding:7px 10px; border:1px solid var(--line)}
+  .t td{padding:7px 10px; border:1px solid var(--line); vertical-align:top; font-size:11.6px}
+  .t td b{font-size:12.2px}
+  .t td > b:first-child{display:block}
+  .t td span.s{display:block; color:var(--sub); font-size:11px}
+  .t tr.off td{background:var(--offbg); color:var(--off)}
+  .t tr.off td b{color:var(--off)}
+  .t td.c{text-align:center; vertical-align:middle}
+  .t code, .note code, .card code{font-family:ui-monospace,Menlo,monospace; font-size:10.8px}
+  .ok{color:#286E4C; font-weight:600} .no{color:var(--rsk); font-weight:600}
+  .gv{color:var(--gov)} .rk{color:var(--rsk)}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">P-03</span>
+    <h1>복제 검수 로직</h1>
+    <span class="right">채택 제안 — 결정 기록 없음 · 전부 [기획] · 2026-10-06</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 12px">
+      <span class="chip pos">[실측] 지금 저장소에 있다</span>
+      <span class="chip">[기획] 제안 — 구현 · 결정 없음</span>
+      <span class="chip warn">팀 결정 필요 — 채택 여부가 기록에 없다</span>
+    </div>
+    <div class="pipe" style="margin:0 0 14px">
+      <div class="box off"><b>문구 생성</b><span><span class="tag p">기획</span>생성 노드 — 빈 노드</span></div>
+      <div class="j">→</div>
+      <div class="box" style="border-left:3px solid var(--rsk);background:var(--rskbg)"><b style="color:var(--rsk)">복제 검수</b><span><span class="tag p">기획</span>여기가 제안된 자리</span></div>
+      <div class="j">→</div>
+      <div class="box pos"><b>판정 코어</b><span><span class="tag m">실측</span>검수 경로로 돈다</span></div>
+      <div class="j">→</div>
+      <div class="box off"><b>후보 조립 · 프론티어</b><span><span class="tag p">기획</span>빈 노드</span></div>
+    </div>
+
+    <div class="cols2">
+      <fieldset>
+        <legend>왜 판정보다 앞인가 — 제안의 논거</legend>
+        <div class="card"><b>복제본은 판정을 통과할 수 있다 <span class="tag p">기획</span></b>
+          <span>원본이 걸리지 않는 문구였다면 베낀 것도 걸리지 않는다</span></div>
+        <div class="card flag"><b>걸리지 않는 복제가 막을 대상이다 <span class="tag p">기획</span></b>
+          <span>판정 뒤에 두면 걸러지지 않는다</span></div>
+        <div class="card flag" style="margin-bottom:0"><b>더 위험한 쪽 <span class="tag p">기획</span></b>
+          <span>학습 재료에는 제재받은 문구가 있다 — 베끼면 위반 문구를 내주는 셈이다</span></div>
+      </fieldset>
+      <fieldset>
+        <legend>지금 있는 것 · 없는 것</legend>
+        <div class="card pos"><b>정규화 · 겹침 열쇠 <span class="tag m">실측</span></b>
+          <span><code>app/dictmatch.py</code> <code>norm</code> · <code>preprocess/golden.py</code> <code>overlap_key</code></span>
+          <span>사전 매칭과 골든 중복 셈에 쓰인다 — 생성물 대조에는 안 쓰인다</span></div>
+        <div class="card pos"><b>대조 대상 — golden_sample <span class="tag m">실측</span></b>
+          <span>🗄 표 · 8,383행 (학습 5,894 · 평가 2,489)</span></div>
+        <div class="card off"><b>골든 문구의 임베딩 — 없다 <span class="tag m">실측</span></b>
+          <span>KURE-v1 벡터는 조문 청크 6,667 뿐이다 · 의미 대조를 하려면 새로 만들어야 한다</span></div>
+        <div class="card off" style="margin-bottom:0"><b>대조 코드 · 채택 결정 — 없다 <span class="tag m">실측</span></b>
+          <span>결정 기록에 항목이 없다 · 고쳐 쓰기(10-06 병합)는 재판정만 하고 복제 대조는 하지 않는다</span></div>
+      </fieldset>
+    </div>
+
+    <table class="t" style="margin-top:14px">
+      <tr><th style="width:17%">단계 <span class="tag p">기획</span></th><th style="width:37%">방법</th><th style="width:16%">임계</th><th>걸리면</th></tr>
+      <tr class="off"><td><b>1차 · 축자 복제</b></td><td>정규화문 기준 문자 5-gram 자카드</td><td>≥ 0.60 <span class="tag p">임의</span></td><td>차단 · 재생성</td></tr>
+      <tr class="off"><td><b>2차 · 의미 복제</b></td><td>KURE-v1 임베딩 코사인 유사도</td><td>≥ 0.92 <span class="tag p">임의</span></td><td>차단 · 재생성</td></tr>
+      <tr class="off"><td><b>재생성 상한</b></td><td>생성 루프의 카운터를 같이 쓴다 (D-126 — 총 라운드 3)</td><td>재시도 2회</td><td>상한을 넘으면 후보를 버린다</td></tr>
+    </table>
+    <p class="note" style="margin:10px 0 0">
+      🚨 <b>임계 둘은 측정한 값이 아니다.</b> 종전 도면에 적힌 제안값이고 출처가 없다 — 채택한다면 수정쌍 · 골든으로 재서 정해야 한다.
+      생성 경로 자체가 빈 노드라(P-02) 지금은 이 검수가 설 자리도 돌지 않는다.
+    </p>
+  </div>
+
+  <footer>
+    <span class="k">제안으로 남아 있다 — 채택도 폐기도 기록되지 않았다.</span>
+    없는 것을 있다고 그리지 않으려고 이 장의 단계 표는 전부 [기획]이고, 재료 칸만 [실측]이다.
+    <div class="lock">수 — golden_sample 8,383 · 청크 6,667: 원장 10-06 ① (클론 A · 적재 출력) · 원장 10-03 ㊹ (클론 B) · 원천은 src/p-03-duplicate-check.html (D-217)</div>
+  </footer>
+</div>

@@ -95,7 +95,9 @@ def test_만드는_자리가_하나다() -> None:
         p.relative_to(ROOT).as_posix()
         for p in ROOT.rglob("*.py")
         if p.resolve() != me
-        and not ({".venv", "build", "dist", "__pycache__"} & set(p.relative_to(ROOT).parts))
+        and not (
+            {".venv", ".venv-sllm", "build", "dist", "__pycache__"} & set(p.relative_to(ROOT).parts)
+        )
         and pat.search(p.read_text(encoding="utf-8"))
     ]
     assert found == ["app/templating.py"], (

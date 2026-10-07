@@ -2,11 +2,13 @@
 <!--
   A-01 · 전체 구성   ★ 이 파일이 원천이다 (D-90 · D-217)
   ─────────────────────────────────────────────────────────────────
-  🔴 **2026-09-12 재작성.** 종전 판은 `chunk_embedding` 을 「미실행」 회색으로 그렸고
-     (실제 2,400행), **로그인·관리자·에디션이 아예 없었다** (D-213 으로 섰다).
-  🚨 수집기·전처리 모듈 수는 2026-09-10 실측을 그대로 옮겼다 — 이 자리에서 다시 못 쟀다 (D-188).
+  🔴 **2026-10-06 재작성.** 09-12 판은 「`/judge` → 501」 · 런타임층 7표 · `chunk_embedding` 2,400 이었다.
+     지금은 `POST /judge` 가 검수 그래프를 돌고(`app/api.py`), 런타임층은 12표(`app/models.py`), 청크는 6,667 이다.
+     501 은 `/generate` · `/compose` 뿐이다.
+  🚨 수집기 · 전처리 모듈의 개수는 뺐다 — 09-10 에 센 수였고 이번에 같은 기준으로 다시 세지 못했다 (D-188).
   🚨 **「외부 원천」 칸에는 `[실측]`/`[기획]` 을 안 붙인다** (D-219) — 그 축은 **우리가 구현했나**를
      묻는데 남의 원천에는 뜻이 없다. P-01 의 경쟁 칸과 같은 이유다. **범례에 그렇게 적어 둔다.**
+  ⚠️ 검수 화면의 고쳐 쓰기(sLLM)는 병합 사실과 「승인 범위 판정 대기」를 함께 적는다 — 결론을 대신 적지 않는다.
   ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
 -->
 <meta charset="utf-8">
@@ -17,37 +19,38 @@
   <header>
     <span class="no">A-01</span>
     <h1>전체 구성</h1>
-    <span class="right">오프라인 배치 ▸ 온라인 서비스 · [실측]/[기획] · 2026-09-12</span>
+    <span class="right">오프라인 배치 ▸ 온라인 서비스 · [실측]/[기획] · 2026-10-06</span>
   </header>
 
   <div class="body">
     <div class="legend" style="margin:0 0 12px">
       <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
       <span class="chip">[기획] 아직 안 만들었다</span>
+      <span class="chip warn">⚠️ 판정 대기 — 사실만 적는다</span>
     </div>
     <div class="cols5">
 
       <fieldset>
         <legend>외부 원천 — 남의 것이라 태그 없음</legend>
-        <div class="card"><b>법령 API</b><span>법령 · 고시</span></div>
+        <div class="card"><b>법령 API</b><span>법령 · 행정규칙 · 별표</span></div>
         <div class="card"><b>공정위 의결서</b><span>ftc_decisions</span></div>
         <div class="card"><b>식약처 게시판</b><span>mfds_board</span></div>
-        <div class="card"><b>사례집 · 고시 PDF</b><span>mfds_casebook</span></div>
+        <div class="card"><b>사례집 · 해설서</b><span>mfds_casebook</span></div>
       </fieldset>
 
       <fieldset>
         <legend>수집 게이트</legend>
         <div class="card gov">
           <b>registry.require()</b><span><span class="tag m">실측</span>등급 G0~G3 × 용도 U1~U4</span><span>2인 서명까지 함께 본다</span></div>
-        <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
-          <b style="color:#8A94A0">미등재 · 미서명</b><span><span class="tag m">실측</span>수집이 실행되지 않는다</span></div>
+        <div class="card off">
+          <b>미등재 · 미서명</b><span><span class="tag m">실측</span>수집이 실행되지 않는다</span></div>
       </fieldset>
 
       <fieldset>
         <legend>오프라인 배치</legend>
-        <div class="card"><b>collect/</b><span><span class="tag m">실측</span>수집기 15종</span></div>
+        <div class="card"><b>collect/</b><span><span class="tag m">실측</span>수집기</span></div>
         <div class="card"><b>data/raw</b><span><span class="tag m">실측</span>원문 무손상</span></div>
-        <div class="card"><b>preprocess/</b><span><span class="tag m">실측</span>24 모듈</span></div>
+        <div class="card"><b>preprocess/</b><span><span class="tag m">실측</span>전처리 · 라벨 · 청크</span></div>
         <div class="card"><b>load_db.py</b><span><span class="tag m">실측</span>fail-closed (D-72)</span></div>
         <div class="card"><b>embed.py</b><span><span class="tag m">실측</span>KURE-v1 · 1024차원</span></div>
       </fieldset>
@@ -55,20 +58,22 @@
       <fieldset>
         <legend>PostgreSQL 16 · pgvector</legend>
         <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
-          <b style="color:#186A5E">데이터층 19표</b><span><span class="tag m">실측</span>법령 · 사전 · 골든셋 · 위험도</span></div>
+          <b style="color:#186A5E">데이터층 19표 · 뷰 5</b><span><span class="tag m">실측</span>법령 · 사전 · 골든셋 · 제재표</span></div>
         <div class="card" style="border-left:3px solid #186A5E;background:#F7FBFA">
-          <b style="color:#186A5E">런타임층 7표</b><span><span class="tag m">실측</span>사용자 문서 · 판정 이력</span><span>app_account 신설 (D-213)</span></div>
+          <b style="color:#186A5E">런타임층 12표</b><span><span class="tag m">실측</span>계정 · 문의 · 오류 로그</span><span><span class="tag p">기획</span>판정을 쓰는 코드는 아직</span></div>
         <div class="card pos">
-          <b>chunk_embedding</b><span><span class="tag m">실측</span>2,400 · vector(1024)</span><span>chunk.tsv 생성열 (0010)</span></div>
+          <b>chunk_embedding</b><span><span class="tag m">실측</span>6,667 · vector(1024)</span><span>chunk.tsv 생성열 (0010)</span></div>
       </fieldset>
 
       <fieldset>
         <legend>온라인 서비스</legend>
-        <div class="card"><b>FastAPI</b><span><span class="tag m">실측</span>/health · POST /search</span><span>보안 헤더 · 로그 마스킹</span></div>
-        <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
-          <b style="color:#8A94A0">판정 코어</b><span><span class="tag m">실측</span>/judge → 501</span></div>
-        <div class="card" style="border:1px dashed #C4CCD4;background:#F5F6F8">
-          <b style="color:#8A94A0">생성기 · 템플릿</b><span><span class="tag p">기획</span>Phase 3</span></div>
+        <div class="card"><b>FastAPI</b><span><span class="tag m">실측</span>/health · /search · /judge</span><span>보안 헤더 · 로그 마스킹</span></div>
+        <div class="card pos">
+          <b>판정 코어 — 검수 그래프</b><span><span class="tag m">실측</span>인코더 전 규칙 판정</span><span><span class="tag p">기획</span>encode · doc_rules 빈 노드</span></div>
+        <div class="card pos">
+          <b>사용자 화면 /u/</b><span><span class="tag m">실측</span>검수 · 가입 · 이력</span><span><span class="tag m">실측</span>고쳐 쓰기(sLLM)</span><span>⚠️ 승인 범위 판정 대기</span></div>
+        <div class="card off">
+          <b>생성기 · 템플릿</b><span><span class="tag p">기획</span>/generate · /compose 501</span></div>
         <div class="card gov">
           <b>거버넌스 콘솔</b><span><span class="tag m">실측</span>/login · /admin — Argon2id</span><span>cloud 에디션에선 안 붙는다</span></div>
       </fieldset>
@@ -80,18 +85,23 @@
       <span class="seg">게이트가 먼저 본다</span><span class="to">→</span>
       <span class="seg">배치가 만든다</span><span class="to">→</span>
       <span class="seg">DB 가 보관한다</span><span class="to">→</span>
-      <span class="seg">서비스는 조회만 한다</span>
+      <span class="seg">판정은 데이터층을 읽기만 한다</span>
     </div>
 
     <p class="note" style="margin-top:12px">
       🔴 <b>판정 시각에 외부 API 를 부르지 않는다.</b> 근거는 미리 만들어 두고, 요청 때는 읽기만 한다 —
-      원천이 죽어도 검수는 돈다. <b>검색은 벡터 + 어휘(ts_rank_cd)를 RRF 로 섞은 한 순위다</b> (D-193).
+      원천이 죽어도 검수는 돈다. <b>검색은 벡터 + 어휘(ts_rank_cd)를 RRF 로 섞은 한 순위다</b> (D-193) · 리랭커는 아직 없다.
+    </p>
+    <p class="note">
+      ⚠️ <b>고쳐 쓰기</b> — 검수 화면의 <code>POST /u/review/rewrite</code> 가 같은 기기의 sLLM 서버를 부르고, 고친 문구를
+      앱의 판정 코어로 다시 판정한다(2026-10-06 병합). 그래프의 생성 노드는 그대로 빈 노드다.
+      D-265 · D-270 과의 관계와 승인 범위는 <b>판정 대기</b>다.
     </p>
   </div>
 
   <footer>
     <span class="k">「설계상 있다」와 「지금 돈다」를 같은 글씨로 적지 않는다.</span>
     점선·회색은 <span class="k">아직 없는 것</span>이고, 초록은 <span class="k">실측으로 확인한 것</span>이다.
-    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-01-overview.html (D-217)</div>
+    <div class="lock">청크 6,667 은 원장 09-28 실측(두 기기) · 수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-01-overview.html (D-217)</div>
   </footer>
 </div>

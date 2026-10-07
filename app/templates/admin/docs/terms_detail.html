@@ -2,7 +2,7 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** 새 버전 등록은 disabled 뼈대다.
-  🔴 약관 버전 테이블이 아직 없다 — 더미다 (admin_terms.py 참고).
+  🔴 약관 버전 표(`terms`)는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 더미다 (admin_terms.py 참고).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 약관 버전 상세{% endblock %}
@@ -14,7 +14,7 @@
 
 <p><a href="/admin/terms">← 약관 버전 목록</a></p>
 
-<p class="warn">🧪 <b>더미 데이터입니다.</b> 약관 버전 테이블이 아직 없어요.</p>
+<p class="warn">🧪 <b>더미 데이터입니다.</b> 약관 버전 표(<code>terms</code>)는 생겼지만 이 화면은 아직 그 표를 읽지 않아요.</p>
 
 <h1>{{ row.name }} <small class="hint">{{ row.version }}</small></h1>
 <table class="kv">

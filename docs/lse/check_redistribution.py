@@ -79,8 +79,26 @@ def read_text(path: Path) -> str | None:
     return None
 
 
+#: 🆕 10-05 — 일반 규제 용어 허용 목록(사용자 승인). 골든 갱신으로 「여드름」 · 「미백 기능성화장품」 같은 짧은 일반 표현이
+#:    재배포 불가 문장으로 들어와 lse 파일 대부분이 막혔다. 광고 문구가 될 수 없는 말만 둔다 — 목록 파일에 이유를 적는다.
+ALLOW = ROOT / "docs" / "lse" / "redistribution_allow.txt"
+
+
+def allowed() -> set[str]:
+    if not ALLOW.exists():
+        return set()
+    out = set()
+    for line in ALLOW.read_text(encoding="utf-8").splitlines():
+        term = line.split("#", 1)[0].strip()
+        if term:
+            out.add(term)
+    return out
+
+
 def main(argv: list[str]) -> int:
     free, quoted = restricted()
+    ok = allowed()
+    free, quoted = free - ok, quoted - ok
     if not free and not quoted:
         print("⚠️ 재배포 불가 기준 문구가 없다(_private · golden 없음) — 검사를 건너뛴다")
         return 0

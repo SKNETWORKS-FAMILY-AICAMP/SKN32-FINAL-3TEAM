@@ -2,10 +2,11 @@
 <!--
   A-04 · 막힌 구간   ★ 이 파일이 원천이다 (D-90 · D-217)
   ─────────────────────────────────────────────────────────────────
-  🔴 **2026-09-12 재작성.** 종전 판은 3행 중 2행이 뒤집혀 있었다 —
-     「별표1 파싱 미착수」(실제 243행 감사 통과) · 「임베딩 미실행」(실제 2,400행).
-     ⛔ 없는 것을 있다고, 있는 것을 없다고 그리면 공개 저장소 첫 화면에서
-        프로젝트를 실제보다 못한 것으로 보이게 한다.
+  🔴 **2026-10-06 재작성.** 09-12 판의 막힌 줄 셋 중 둘이 뚫렸다 —
+     「`sanction_rule` 0행 · 적재기가 없다」(지금 38행 · 서명됨 · `assess_risk` 가 읽는다) ·
+     「`retrieve` 노드는 스텁」(지금 검색 코어를 부른다). 지금 막힌 것을 코드에서 확인해 다시 그렸다 —
+     `app/graph.py`(빈 노드) · `app/routers/user.py`(`_core_judge` · 이력) · `app/api.py`(501) · `app/retrieve.py`.
+     ⛔ 없는 것을 있다고, 있는 것을 없다고 그리지 않는다.
   🚨 수는 그린 시점 실측이다 — 정본은 `docs/00_사실원장.md` (D-54).
   ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
 -->
@@ -17,96 +18,141 @@
   <header>
     <span class="no">A-04</span>
     <h1>막힌 구간</h1>
-    <span class="right">무엇이 없어서 무엇이 안 되나 · [실측]/[기획] · 2026-09-12</span>
+    <span class="right">무엇이 없어서 무엇이 안 되나 · [실측]/[기획] · 2026-10-06 · 클론 A</span>
   </header>
 
   <div class="body">
     <div class="legend" style="margin:0 0 12px">
       <span class="chip pos">[실측] 구현돼 있고 재 봤다</span>
       <span class="chip">[기획] 아직 안 만들었다</span>
+      <span class="chip rsk">🔴 붉은 칸 = 그래서 막혀 있는 것</span>
     </div>
     <div class="flow">
 
       <div class="step pos">
-        <b>별표 파싱 완료</b>
-        <span><span class="tag m">실측</span>5법령 · 별표 12건 · <b style="display:inline">243행</b></span>
-        <span>감사 통과 — 사람이 볼 행 0</span>
+        <b>제재표 · 대응표 적재</b>
+        <span><span class="tag m">실측</span>sanction_rule <b style="display:inline">38</b>(서명됨) · violation_article <b style="display:inline">14</b></span>
       </div>
       <div class="arrow">→</div>
-      <div class="step off">
-        <b>sanction_rule · penal_clause</b>
-        <span><span class="tag m">실측</span>0행 — <b style="display:inline">적재기가 없다</b></span>
-        <span>범위는 정해졌다 (별표7 광고 4행 · D-183)</span>
+      <div class="step pos">
+        <b>retrieve · assess_risk 노드</b>
+        <span><span class="tag m">실측</span>검색 코어를 부르고 v_risk_lookup 을 읽는다</span>
       </div>
       <div class="arrow">→</div>
-      <div class="step rsk">
-        <b>위험도 배지 · 제재 수치 · 프론티어 x축</b>
-        <span><span class="tag p">기획</span>SCR-RV-02 ② · SCR-GN-03 ①</span>
+      <div class="step pos">
+        <b>근거 조문 · 위험도 배지</b>
+        <span><span class="tag m">실측</span>검수 결과 화면이 그린다</span>
       </div>
-      <p class="note pos">★ 앞칸이 뚫렸다 — <b>병목이 「파싱」에서 「적재기」로 한 칸 옮겨졌다.</b></p>
+      <p class="note pos">★ 이 줄은 <b>뚫렸다</b> — 09-12 판은 가운데 두 칸을 회색으로 그리고 있었다.</p>
 
       <div class="step">
-        <b>라벨 ↔ 조문 대응</b>
-        <span><span class="tag p">기획</span>사람 판정 + 2인 확인</span>
-        <span>원천 300노드는 law_norm 이 파싱해 뒀다</span>
+        <b>인코더 모듈</b>
+        <span><span class="tag m">실측</span>app/encoder.py 는 저장소에 있다</span>
+        <span>3차 재학습 결과 대기</span>
       </div>
       <div class="arrow">→</div>
       <div class="step off">
-        <b>violation_article</b>
-        <span><span class="tag m">실측</span>0행</span>
+        <b>encode 노드</b>
+        <span><span class="tag p">기획</span>빈 노드 — 배선되지 않았다</span>
       </div>
       <div class="arrow">→</div>
       <div class="step rsk">
-        <b>근거 조문 표시</b>
-        <span><span class="tag p">기획</span>SCR-RV-02 ③</span>
+        <b>사전 밖 문장은 전부 보류</b>
+        <span><span class="tag m">실측</span>통과가 나오지 않는다 (D-269)</span>
+        <span>주장이 아닌 문장도 사전 낱말에 걸린다</span>
       </div>
-      <p class="note">기계가 못 하는 자리다 — <b>사람이 판정하고 두 사람이 확인해야 한다.</b></p>
 
-      <div class="step pos">
-        <b>임베딩 · 검색 배선</b>
-        <span><span class="tag m">실측</span>KURE-v1 1024차원 · RRF 2층 (D-193)</span>
-        <span>벡터 + 어휘(ts_rank_cd · 생성열 chunk.tsv)</span>
+      <div class="step">
+        <b>검수 화면의 요청</b>
+        <span><span class="tag m">실측</span>문구만 보낸다 — 품목 칸이 없다</span>
       </div>
       <div class="arrow">→</div>
-      <div class="step pos">
-        <b>chunk_embedding</b>
-        <span><span class="tag m">실측</span>2,400 — chunk 와 1:1</span>
-        <span>모델 입력 토큰 최대 422 / 상한 512</span>
+      <div class="step off">
+        <b>classify · 화면의 분기 자리</b>
+        <span><span class="tag p">기획</span>문구로 품목을 판별하는 코드가 없다</span>
+        <span><span class="tag p">기획</span>분기 · 기준 문안을 그리는 자리가 없다</span>
       </div>
       <div class="arrow">→</div>
-      <div class="step pos">
-        <b>의미 검색 — /search 로 돈다</b>
-        <span><span class="tag m">실측</span>SCR-RV-03 — 한 순위로 섞어 낸다</span>
-        <span><span class="tag p">기획</span>🔴 그래프의 retrieve 노드는 아직 스텁이다 — 판정이 이걸 못 쓴다</span>
+      <div class="step rsk">
+        <b>화면 요청은 전부 품목 미확정</b>
+        <span><span class="tag m">실측</span>전제 여섯 · 종착 보류 (D-319)</span>
+        <span>계산된 분기가 화면에 보이지 않는다</span>
       </div>
-      <p class="note pos">★ 이 줄은 <b>2026-09-12 에 뚫렸다.</b> 종전 도면은 여기를 회색으로 그리고 있었다.</p>
+
+      <div class="step">
+        <b>work_doc · copy_sentence · judgment</b>
+        <span><span class="tag m">실측</span>표와 제약은 서 있다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>판정 저장</b>
+        <span><span class="tag p">기획</span>넣는 코드가 없다 — BFF 도 그래프도 쓰지 않는다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
+        <b>검수 이력 · 홈 집계가 빈 목록</b>
+        <span><span class="tag m">실측</span>화면과 조회는 있다 (/u/history)</span>
+        <span>재검수 게이트 · 재검증 대기도 여기 걸린다</span>
+      </div>
+
+      <div class="step off">
+        <b>실증 분기</b>
+        <span><span class="tag p">기획</span>채우는 코드가 없다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>지시 종착</b>
+        <span><span class="tag m">실측</span>재료가 없으면 보류로 내린다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
+        <b>실증형 위반의 안내</b>
+        <span><span class="tag p">기획</span>뺄 구간 · 필요한 실증 자료 (D-268)</span>
+      </div>
+
+      <div class="step off">
+        <b>생성 그래프 노드 여섯</b>
+        <span><span class="tag p">기획</span>전부 빈 노드</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>POST /generate · /compose</b>
+        <span><span class="tag m">실측</span>501 을 낸다 — 가짜 200 을 안 낸다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
+        <b>카피 생성 · 광고 조립 화면</b>
+        <span><span class="tag m">실측</span>화면은 뜨고 「엔진 준비 중」을 그린다</span>
+      </div>
 
       <div class="step off">
         <b>리랭커 (3층)</b>
-        <span><span class="tag p">기획</span>bge-reranker-v2-m3 · 미착수</span>
+        <span><span class="tag p">기획</span>미착수 — 모델 미선정</span>
       </div>
       <div class="arrow">→</div>
       <div class="step off">
+        <b>근거 순위</b>
+        <span><span class="tag m">실측</span>지금은 RRF 순위를 그대로 쓴다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
         <b>인용 순서 정밀화</b>
-        <span><span class="tag p">기획</span>지금은 RRF 순위를 그대로 쓴다</span>
-      </div>
-      <div class="arrow">→</div>
-      <div class="step off">
-        <b>⬜ 새로 생긴 빈칸</b>
-        <span><span class="tag p">기획</span>2층이 서면서 3층이 다음 자리가 됐다</span>
+        <span><span class="tag p">기획</span>상위 근거를 다시 세우는 층이 없다</span>
       </div>
 
     </div>
 
-    <div class="legend">
-      <span class="chip rsk">🔴 붉은 칸 = 그래서 막혀 있는 화면</span>
-    </div>
+    <p class="note" style="margin-top:14px">
+      ⚠️ <b>판정 대기</b> — 10/13 생성 관문(D-270)은 「전제 정정 · 결론 재검 대기」다 ·
+      검수 화면의 고쳐 쓰기(로컬 sLLM → 코어 재판정 · 2026-10-06 병합)는 그래프 밖에 붙어 있고 승인 범위가 판정 전이다 ·
+      인코더 배선 전의 증명서 처리도 미정이다.
+    </p>
   </div>
 
   <footer>
     <span class="k">막힌 것을 그려서 남긴다.</span>
     「설계상 있다」와 「지금 돈다」를 같은 글씨로 적지 않는다 —
     <span class="k">뚫린 줄은 초록으로 바꾸고, 병목이 옮겨 간 것도 같이 적는다.</span>
-    <div class="lock">수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-04-blocked.html (D-217)</div>
+    <div class="lock">적재 수는 원장 10-06 ① (클론 A) · 수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-04-blocked.html (D-217)</div>
   </footer>
 </div>

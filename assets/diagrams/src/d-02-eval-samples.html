@@ -1,0 +1,144 @@
+<!doctype html>
+<!--
+  D-02 · 위반 유형별 평가 표본   ★ 이 파일이 원천이다 (D-90 · D-217)
+  ─────────────────────────────────────────────────────────────────
+  🔴 **2026-10-06 새로 그림.** 종전 판(원천 없음)은 유형 10종 · 평가 206행 · 「측정 가능 2종 / 불가 8종」이었다.
+     지금 — ① 셈 단위가 **유형이 아니라 호**다(D-282 ⑥ · D-40 상태 줄) ② 30 은 **서로 다른 글자**에 건다(`preprocess/golden.py` `ho_counts`)
+     ③ 평가 2,489행 · 16호 중 **12호 측정 가능 / 4호 측정 불가** ④ 확정 클래스 8종(D-321).
+  수 — 원장 10-03 ㊿-38 (클론 B 셸 · 골든 `529c970556d7` · 조건 M · D 제외 · 이후 재측정 없음).
+     2026-10-06 에 같은 해시의 파일을 작업공간에서 `ho_counts` 로 다시 세어 **16호 전부 일치**했다. 「학습」 열은 그때 같이 센 학습 분할의 채점 행 수다.
+     `docs/03_데이터/전처리_결과서_2차.md` §5 (10-06 판)의 표와 같다.
+  🚨 막대는 150 에서 자른다(▸) — 520 까지 그리면 30 선이 안 보인다. 수는 막대 옆 글자가 정본이다.
+  🚨 라벨 분포만 센 것이다 — 평가 분할의 예측 · 점수는 여기 없다(D-175).
+  🚨 요소마다 `[실측]`/`[기획]` (D-219) · 수의 정본은 `docs/00_사실원장.md` (D-54).
+  ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
+-->
+<meta charset="utf-8">
+<title>D-02 위반 유형별 평가 표본</title>
+<link rel="stylesheet" href="plate.css">
+<style>
+  /* 표 판 — plate.css 에 표 스타일이 없어 이 장 안에 둔다. 새 8장이 같은 조각을 쓴다 */
+  table.t{width:100%; border-collapse:collapse; background:#fff}
+  .t th{background:var(--band); color:var(--sub); font-weight:500; font-size:11px; text-align:left;
+        padding:7px 10px; border:1px solid var(--line)}
+  .t td{padding:7px 10px; border:1px solid var(--line); vertical-align:top; font-size:11.6px}
+  .t td b{font-size:12.2px}
+  .t td > b:first-child{display:block}
+  .t td span.s{display:block; color:var(--sub); font-size:11px}
+  .t tr.off td{background:var(--offbg); color:var(--off)}
+  .t tr.off td b{color:var(--off)}
+  .t td.c{text-align:center; vertical-align:middle}
+  .t code, .note code, .card code{font-family:ui-monospace,Menlo,monospace; font-size:10.8px}
+  .ok{color:#286E4C; font-weight:600} .no{color:var(--rsk); font-weight:600}
+  .gv{color:var(--gov)} .rk{color:var(--rsk)}
+
+  .bars{position:relative; padding-top:18px}
+  .bars .axis{position:absolute; top:0; left:340px; right:260px; height:100%; pointer-events:none}
+  .bars .axis span{position:absolute; top:0; bottom:0; border-left:1px dashed var(--rsk); padding-left:5px;
+                   font-size:10.5px; color:var(--rsk); white-space:nowrap; z-index:2}
+  .bars .r{display:grid; grid-template-columns:150px 170px 1fr 150px 90px; gap:0 10px; align-items:center; height:22px}
+  .bars .r.top{margin-top:7px}
+  .bars .law{font-size:11px; color:var(--gov); font-weight:600}
+  .bars .ho{font-size:11.6px; text-align:right}
+  .bars .track{position:relative; height:15px; background:var(--offbg); border:1px solid var(--line)}
+  .bars .b{position:absolute; left:0; top:0; bottom:0}
+  .bars .b.ok{background:#286E4C} .bars .b.lo{background:#C4CCD4}
+  .bars .brk{position:absolute; right:14px; top:-2px; bottom:-2px; width:5px; background:#fff; transform:skewX(-20deg)}
+  .bars em{position:absolute; top:-2px; font-style:normal; font-family:ui-monospace,Menlo,monospace; font-size:10.8px; font-weight:700; z-index:3}
+  .bars em.in{left:6px !important; color:#fff}
+  .bars em.out{margin-left:6px; color:var(--sub)}
+  .bars .meta{font-size:10.8px; color:var(--sub); font-family:ui-monospace,Menlo,monospace}
+  .bars .v{font-size:11.2px; font-weight:600}
+  .bars .okc{color:#286E4C} .bars .noc{color:var(--rsk)}
+</style>
+
+<div class="plate">
+  <header>
+    <span class="no">D-02</span>
+    <h1>위반 유형별 평가 표본</h1>
+    <span class="right">단위 = 호 · 서로 다른 글자 · 평가 분할 · [실측] · 재동결 10-05 판 · 클론 B</span>
+  </header>
+
+  <div class="body">
+    <div class="legend" style="margin:0 0 6px">
+      <span class="chip pos"><span class="tag m">실측</span> 전부 실측 — 원장 10-03 ㊿-38 · 클론 B</span>
+      <span class="chip gov">막대 = 서로 다른 글자 (같은 문구는 한 번)</span>
+      <span class="chip">채점 행 = 조건 M · D · L 을 뺀 위반 행</span>
+    </div>
+    <div class="bars">
+      <div class="axis"><span style="left:20%">30 — 측정 하한 (D-40)</span></div>
+      <div class="r top"><span class="law">표시광고법 §3①</span><span class="ho">1 거짓 · 과장</span>
+        <span class="track"><i class="b ok" style="width:52.0%"></i><em class="in" style="left:0.0%">78</em></span>
+        <span class="meta">채점 78 · 학습 1,609</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">2 기만</span>
+        <span class="track"><i class="b lo" style="width:12.7%"></i><em class="in" style="left:0.0%">19</em></span>
+        <span class="meta">채점 25 · 학습 407</span><span class="v noc">측정 불가</span></div>
+      <div class="r"><span class="law"></span><span class="ho">3 부당 비교</span>
+        <span class="track"><i class="b ok" style="width:20.7%"></i><em class="in" style="left:0.0%">31</em></span>
+        <span class="meta">채점 31 · 학습 14</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">4 비방</span>
+        <span class="track"><i class="b ok" style="width:40.7%"></i><em class="in" style="left:0.0%">61</em></span>
+        <span class="meta">채점 61 · 학습 74</span><span class="v okc">측정 가능</span></div>
+      <div class="r top"><span class="law">식품표시광고법 §8①</span><span class="ho">1 질병 예방 · 치료</span>
+        <span class="track"><i class="b ok" style="width:62.0%"></i><em class="in" style="left:0.0%">93</em></span>
+        <span class="meta">채점 93 · 학습 460</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">2 의약품 오인</span>
+        <span class="track"><i class="b lo" style="width:11.3%"></i><em class="out" style="left:11.3%">17</em></span>
+        <span class="meta">채점 17 · 학습 195</span><span class="v noc">측정 불가</span></div>
+      <div class="r"><span class="law"></span><span class="ho">3 건강기능식품 오인</span>
+        <span class="track"><i class="b ok" style="width:100.0%"></i><i class="brk"></i><em class="in" style="left:0.0%">520 ▸</em></span>
+        <span class="meta">채점 523 · 학습 493</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">4 거짓 · 과장</span>
+        <span class="track"><i class="b ok" style="width:100.0%"></i><i class="brk"></i><em class="in" style="left:0.0%">371 ▸</em></span>
+        <span class="meta">채점 377 · 학습 682</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">5 소비자 기만</span>
+        <span class="track"><i class="b ok" style="width:100.0%"></i><i class="brk"></i><em class="in" style="left:0.0%">222 ▸</em></span>
+        <span class="meta">채점 224 · 학습 444</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">6 비방</span>
+        <span class="track"><i class="b ok" style="width:94.0%"></i><em class="in" style="left:0.0%">141</em></span>
+        <span class="meta">채점 142 · 학습 187</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">7 부당 비교</span>
+        <span class="track"><i class="b ok" style="width:44.0%"></i><em class="in" style="left:0.0%">66</em></span>
+        <span class="meta">채점 66 · 학습 170</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">8호</span>
+        <span class="track"><i class="b lo" style="width:0.7%"></i><em class="out" style="left:0.7%">1</em></span>
+        <span class="meta">채점 1 · 학습 0</span><span class="v noc">측정 불가</span></div>
+      <div class="r"><span class="law"></span><span class="ho">10호</span>
+        <span class="track"><i class="b lo" style="width:2.7%"></i><em class="out" style="left:2.7%">4</em></span>
+        <span class="meta">채점 4 · 학습 0</span><span class="v noc">측정 불가</span></div>
+      <div class="r top"><span class="law">화장품법 §13①</span><span class="ho">1호</span>
+        <span class="track"><i class="b ok" style="width:50.0%"></i><em class="in" style="left:0.0%">75</em></span>
+        <span class="meta">채점 76 · 학습 218</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">2호</span>
+        <span class="track"><i class="b ok" style="width:20.7%"></i><em class="in" style="left:0.0%">31</em></span>
+        <span class="meta">채점 32 · 학습 11</span><span class="v okc">측정 가능</span></div>
+      <div class="r"><span class="law"></span><span class="ho">4호</span>
+        <span class="track"><i class="b ok" style="width:47.3%"></i><em class="in" style="left:0.0%">71</em></span>
+        <span class="meta">채점 72 · 학습 194</span><span class="v okc">측정 가능</span></div>
+    </div>
+
+    <div class="legend">
+      <span class="chip pos">측정 가능 12호</span>
+      <span class="chip rsk">측정 불가 4호 — 서로 다른 글자 30 미만</span>
+      <span class="chip">평가 2,489행 · 채점 1,819 + 채점 밖 670</span>
+      <span class="chip gov">확정 클래스 8종 (D-321 · 10-06)</span>
+    </div>
+
+    <div class="cols2" style="margin-top:12px">
+      <p class="note" style="margin:0">
+        <b>30 미만이면 점수를 내지 않고 「측정 불가」로 적는다</b> (D-40). 남은 구멍은 표시광고법 2호(채점 25행인데 글자로는 19) · 식품 2호 · 8호 · 10호다.
+        학습 쪽에서 얇은 호는 표시광고법 3호 14 · 화장품법 2호 11 이다.
+      </p>
+      <p class="note" style="margin:0">
+        <b>단위를 함께 적는다.</b> 같은 호가 「채점 행 25 / 서로 다른 글자 19」로 다르게 세어진다 — 어느 쪽이 틀린 것이 아니라 축이 다르다.
+        유형 이름은 법마다 범위가 달라(비방 = 식품 6호 / 표시광고법 4호) 이름으로 합치지 않는다 (D-282).
+      </p>
+    </div>
+  </div>
+
+  <footer>
+    <span class="k">채울 수 없는 칸은 비워 둔다.</span>
+    표본이 모자란 호에 수치를 만들어 넣으면 그 수가 원장으로 흘러간다 — <span class="k">기존 호의 미달은 「측정 불가」로 보고하고</span>, 편입은 후보의 호가 평가 30 을 넘는지로 판정한다 (D-321).
+    <div class="lock">수 — 원장 10-03 ㊿-38 · 클론 B · 골든 529c970556d7 (재동결 10-05 판) · 2026-10-06 작업공간 재셈 일치 · 원천은 src/d-02-eval-samples.html (D-217)</div>
+  </footer>
+</div>
