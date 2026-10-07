@@ -3,12 +3,19 @@
 이 모듈은 모델이 내는 신호를 ``위반 후보 + confidence``로만 해석한다.
 후보 신호만으로는 법령 근거나 최종 판정 상태를 만들 수 없으므로, ``confirmed``·
 ``hold``·위험도 매핑은 이 계층의 책임이 아니다.
+
+🆕 2026-10-07 — 그래프의 ``encode`` 노드가 이 모듈을 부른다(`app/graph.py` · **그림자 배선**: 신호를 상태에
+   싣기만 하고 판정은 읽지 않는다). 어느 모델을 쓸지는 환경 변수 ``COPYLANE_MODEL_DIR`` 하나로 정한다 —
+   **비어 있으면 인코더를 올리지 않는다**(`configured_dir`). 폴더만 바꾸면 다른 판이 돈다(라벨 · 문턱은
+   그 폴더의 ``label_scheme.json`` 이 정한다 — 코드에 적지 않는다).
 """
 
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +23,37 @@ from app.contracts import Violation
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models" / "copylane-encoder-kcbert-final"
 _REQUIRED_FILES = ("config.json", "label_scheme.json", "model.safetensors", "tokenizer.json")
+
+#: 그래프가 읽는 모델 폴더 — 값이 없으면 인코더 없이 돈다. 이름은 박수진 시제품(`docs/psj/e2e_prototype/judge_stage1.py`
+#: `resolve_model_dir`)과 같다 — 두 벌로 두지 않는다 (D-99).
+ENV_MODEL_DIR = "COPYLANE_MODEL_DIR"
+
+#: 문장 길이 상한(토큰). `[관행]` — **학습 설정값**이다(인코더 노트북 · 시제품 `predict_label_probs_batch` 가 128 에서 자른다).
+#: ⛔ 종전에는 모델 설정의 최대 길이(kcbert 300)까지 받았다 — 학습 때 못 본 길이의 입력이 들어가 시제품 수치와 어긋난다.
+#: 모델마다 달라질 값이라 `label_scheme.json` 에 실리면 그쪽을 읽는 것이 맞다 — 지금 산출물에는 그 칸이 없다.
+MAX_TOKENS = 128
+
+
+def configured_dir() -> Path | None:
+    """`COPYLANE_MODEL_DIR` 이 가리키는 폴더. **비어 있으면 `None`** — 인코더를 쓰지 않는다는 뜻이다.
+
+    🚨 값이 있는데 폴더 · 파일이 없는 것은 「안 쓴다」가 아니다 — `encoder_at` 이 `EncoderUnavailable` 로 멈춘다.
+    """
+    raw = os.environ.get(ENV_MODEL_DIR, "").strip()
+    return Path(raw) if raw else None
+
+
+def weights_sha12(model_dir: Path) -> str:
+    """가중치 파일의 sha256 앞 12자 — 수를 낼 때 어느 판으로 쟀는지 적는 지문이다 (D-178). 파일이 없으면 멈춘다."""
+    path = model_dir / "model.safetensors"
+    h = hashlib.sha256()
+    try:
+        with path.open("rb") as f:
+            for block in iter(lambda: f.read(1 << 20), b""):
+                h.update(block)
+    except OSError as e:
+        raise EncoderUnavailable(f"판정 인코더 가중치를 읽지 못했다: {path}") from e
+    return h.hexdigest()[:12]
 
 
 class EncoderUnavailable(RuntimeError):
@@ -37,6 +75,8 @@ class EncoderPrediction:
 
     scores: dict[Violation, float]
     candidates: tuple[EncoderCandidate, ...]
+    #: 문장이 `MAX_TOKENS` 를 넘어 **뒤가 잘렸다** — 잘린 뒷부분은 보지 않았다. 조용히 넘기지 않고 싣는다 (D-220)
+    truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -136,19 +176,24 @@ class JudgeEncoder:
         except ImportError as e:
             raise EncoderUnavailable("torch가 없어 판정 인코더를 실행할 수 없다") from e
 
-        max_length = int(getattr(self.model.config, "max_position_embeddings", 512))
-        inputs = self.tokenizer(text, truncation=True, max_length=max_length, return_tensors="pt")
+        full = len(self.tokenizer(text, truncation=False)["input_ids"])
+        inputs = self.tokenizer(text, truncation=True, max_length=MAX_TOKENS, return_tensors="pt")
         with torch.inference_mode():
             probabilities = torch.sigmoid(self.model(**inputs).logits)[0].tolist()
         scores = {label: float(probabilities[i]) for i, label in enumerate(self.scheme.labels)}
         candidates = select_candidates(self.scheme, list(scores.values()))
-        return EncoderPrediction(scores=scores, candidates=candidates)
+        return EncoderPrediction(scores=scores, candidates=candidates, truncated=full > MAX_TOKENS)
 
 
 @functools.cache
+def encoder_at(model_dir: Path) -> JudgeEncoder:
+    """폴더마다 한 번만 모델을 메모리에 올린다. 🚨 실패는 캐시되지 않는다 — 파일을 채우면 다음 호출에 올라간다."""
+    return JudgeEncoder(model_dir)
+
+
 def default_encoder() -> JudgeEncoder:
-    """프로세스마다 한 번만 모델을 메모리에 올린다."""
-    return JudgeEncoder()
+    """기본 폴더(`MODEL_DIR`)의 모델."""
+    return encoder_at(MODEL_DIR)
 
 
 def predict(text: str) -> EncoderPrediction:
