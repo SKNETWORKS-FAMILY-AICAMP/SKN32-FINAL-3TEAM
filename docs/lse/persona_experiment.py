@@ -35,7 +35,11 @@ sys.path.insert(0, str(ROOT))
 from app.contracts import RewriteSet, Segment  # noqa: E402
 from app.encoder import JudgeEncoder  # noqa: E402
 
-BASE = "Qwen/Qwen2.5-3B-Instruct"
+# 🔄 2026-10-07 — 베이스 이름은 `sllm_meta` 한 곳에서 읽는다(환경 변수 `COPYLANE_SLLM_BASE` · 비우면 종전 값)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sllm_meta import base_model  # noqa: E402
+
+BASE = base_model()
 ADAPTER = ROOT / "models" / "copylane_sllm_lora_adapter"
 # 🔒 결과에 재배포 불가 원천(식약처 사례집) 문구가 들어간다 — git 이 무시하는 _private 에 둔다
 OUT = ROOT / "docs" / "lse" / "_private" / "persona_experiment_results.jsonl"
