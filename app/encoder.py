@@ -28,10 +28,14 @@ _REQUIRED_FILES = ("config.json", "label_scheme.json", "model.safetensors", "tok
 #: `resolve_model_dir`)과 같다 — 두 벌로 두지 않는다 (D-99).
 ENV_MODEL_DIR = "COPYLANE_MODEL_DIR"
 
-#: 문장 길이 상한(토큰). `[관행]` — **학습 설정값**이다(인코더 노트북 · 시제품 `predict_label_probs_batch` 가 128 에서 자른다).
+#: 문장 길이 상한(토큰)의 **기본값**. `[관행]` — 학습 설정값이다(인코더 노트북 · 시제품 `predict_label_probs_batch` 가 128 에서 자른다).
 #: ⛔ 종전에는 모델 설정의 최대 길이(kcbert 300)까지 받았다 — 학습 때 못 본 길이의 입력이 들어가 시제품 수치와 어긋난다.
-#: 모델마다 달라질 값이라 `label_scheme.json` 에 실리면 그쪽을 읽는 것이 맞다 — 지금 산출물에는 그 칸이 없다.
+#: 🔄 모델마다 달라질 값이다 — `label_scheme.json` 에 `max_len` 이 실려 있으면 **그 값을 쓴다**(`LabelScheme.max_tokens`).
+#:    10-06 산출물(박수진 A · 소성민 v11)에는 그 칸이 없어 이 기본값으로 돈다 — 둘 다 128 로 학습했다.
+#:    기본값으로 돌았는지는 `LabelScheme.max_tokens_from_model` 이 말하고 평가 도구가 판 표지에 적는다 (D-220).
 MAX_TOKENS = 128
+#: `max_len` 으로 받는 범위 — 이 밖은 오타로 보고 멈춘다. 위쪽은 모델의 위치 임베딩 길이가 다시 막는다
+_MAX_TOKENS_RANGE = (8, 512)
 
 
 def configured_dir() -> Path | None:
@@ -85,6 +89,10 @@ class LabelScheme:
 
     labels: tuple[Violation, ...]
     thresholds: dict[Violation, float]
+    #: 문장 길이 상한(토큰) — 모델 폴더가 실어 주면 그 값, 아니면 기본값(`MAX_TOKENS`)
+    max_tokens: int = MAX_TOKENS
+    #: 상한을 모델 폴더(`max_len`)에서 읽었는가. 거짓이면 기본값으로 돈 것이다
+    max_tokens_from_model: bool = False
 
 
 def load_label_scheme(model_dir: Path = MODEL_DIR) -> LabelScheme:
@@ -112,7 +120,17 @@ def load_label_scheme(model_dir: Path = MODEL_DIR) -> LabelScheme:
         raise EncoderUnavailable("판정 인코더 라벨 스킴에 중복 라벨이 있다")
     if set(labels) != set(thresholds):
         raise EncoderUnavailable("판정 인코더 라벨과 threshold의 키가 다르다")
-    return LabelScheme(labels=labels, thresholds=thresholds)
+    max_len = raw.get("max_len")
+    if max_len is None:
+        return LabelScheme(labels=labels, thresholds=thresholds)
+    lo, hi = _MAX_TOKENS_RANGE
+    if isinstance(max_len, bool) or not isinstance(max_len, int) or not lo <= max_len <= hi:
+        raise EncoderUnavailable(
+            f"판정 인코더 라벨 스킴의 max_len 이 {lo}~{hi} 의 정수가 아니다: {max_len!r} ({path})"
+        )
+    return LabelScheme(
+        labels=labels, thresholds=thresholds, max_tokens=max_len, max_tokens_from_model=True
+    )
 
 
 def select_candidates(
@@ -167,6 +185,11 @@ class JudgeEncoder:
         )
         if config_labels != self.scheme.labels:
             raise EncoderUnavailable("config.json과 label_scheme.json의 라벨 순서가 다르다")
+        limit = int(getattr(self.model.config, "max_position_embeddings", self.scheme.max_tokens))
+        if self.scheme.max_tokens > limit:
+            raise EncoderUnavailable(
+                f"문장 길이 상한 {self.scheme.max_tokens} 이 모델이 받는 길이 {limit} 보다 길다: {model_dir}"
+            )
         self.model.eval()
 
     def predict(self, text: str) -> EncoderPrediction:
@@ -177,12 +200,16 @@ class JudgeEncoder:
             raise EncoderUnavailable("torch가 없어 판정 인코더를 실행할 수 없다") from e
 
         full = len(self.tokenizer(text, truncation=False)["input_ids"])
-        inputs = self.tokenizer(text, truncation=True, max_length=MAX_TOKENS, return_tensors="pt")
+        inputs = self.tokenizer(
+            text, truncation=True, max_length=self.scheme.max_tokens, return_tensors="pt"
+        )
         with torch.inference_mode():
             probabilities = torch.sigmoid(self.model(**inputs).logits)[0].tolist()
         scores = {label: float(probabilities[i]) for i, label in enumerate(self.scheme.labels)}
         candidates = select_candidates(self.scheme, list(scores.values()))
-        return EncoderPrediction(scores=scores, candidates=candidates, truncated=full > MAX_TOKENS)
+        return EncoderPrediction(
+            scores=scores, candidates=candidates, truncated=full > self.scheme.max_tokens
+        )
 
 
 @functools.cache

@@ -57,3 +57,37 @@ def test_candidates_use_each_labels_threshold() -> None:
 #    인코더 연결은 이제 `encode()` 노드(app/graph.py, 현재 스텁) 자리다 — 거기 배선할 때
 #    이 자리에 새 그래프 통합 테스트를 다시 쓴다. `EncoderCandidate`/`EncoderPrediction`은
 #    위 테스트들이 이미 이 모듈 자체(라벨 스킴 · 후보 선별)를 커버한다.
+
+
+# ── 🆕 2026-10-07 — 문장 길이 상한은 모델 폴더가 정한다(`max_len`). 없으면 기본값이고 그 사실이 남는다 ──
+
+
+def _scheme_file(tmp_path, **extra) -> None:
+    (tmp_path / "label_scheme.json").write_text(
+        json.dumps(
+            {"label_list": ["거짓_과장"], "label_thresholds": {"거짓_과장": 0.4}, **extra},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_max_len_이_없으면_기본값이고_기본값임이_남는다(tmp_path) -> None:
+    from app.encoder import MAX_TOKENS  # noqa: PLC0415
+
+    _scheme_file(tmp_path)
+    scheme = load_label_scheme(tmp_path)
+    assert (scheme.max_tokens, scheme.max_tokens_from_model) == (MAX_TOKENS, False)
+
+
+def test_max_len_이_있으면_그_값을_쓴다(tmp_path) -> None:
+    _scheme_file(tmp_path, max_len=256)
+    scheme = load_label_scheme(tmp_path)
+    assert (scheme.max_tokens, scheme.max_tokens_from_model) == (256, True)
+
+
+@pytest.mark.parametrize("bad", [0, 4, 100000, "128", 128.0, True])
+def test_max_len_이_이상하면_멈춘다(tmp_path, bad) -> None:
+    _scheme_file(tmp_path, max_len=bad)
+    with pytest.raises(EncoderUnavailable, match="max_len"):
+        load_label_scheme(tmp_path)

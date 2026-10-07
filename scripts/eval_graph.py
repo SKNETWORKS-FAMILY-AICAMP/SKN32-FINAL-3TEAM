@@ -471,7 +471,7 @@ def report(s: dict[str, Any], conditional: bool = False) -> None:
                 )
         if e["truncated_sents"]:
             print(
-                f"    🔴 {enc.MAX_TOKENS} 토큰을 넘어 뒤가 잘린 문장 {e['truncated_sents']} — 잘린 부분은 보지 않았다"
+                f"    🔴 토큰 상한을 넘어 뒤가 잘린 문장 {e['truncated_sents']} — 잘린 부분은 보지 않았다"
             )
     print_lawful(s["lawful"])
     w = s.get("recorded") or {}
@@ -580,8 +580,14 @@ def use_encoder(model_dir: pathlib.Path | None) -> dict[str, Any]:
     if path is None:
         return {}
     try:
-        enc.encoder_at(path)
-        return {"encoder": path.name, "encoder_sha": enc.weights_sha12(path)}
+        scheme = enc.encoder_at(path).scheme
+        return {
+            "encoder": path.name,
+            "encoder_sha": enc.weights_sha12(path),
+            # 상한을 모델 폴더가 실어 줬는지 · 기본값으로 돌았는지 함께 적는다 (D-220)
+            "encoder_max_tokens": f"{scheme.max_tokens}"
+            + ("" if scheme.max_tokens_from_model else "(기본값)"),
+        }
     except enc.EncoderUnavailable as e:
         raise SystemExit(
             f"🔴 인코더를 올리지 못했다 — {e}\n  끄려면 --encoder 와 {enc.ENV_MODEL_DIR} 을 비운다"
