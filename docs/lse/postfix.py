@@ -138,10 +138,24 @@ COSMETIC = [
     (("튼살",), "튼살", "튼살로 인한 붉은 선을 엷게 하는 데 도움을 줍니다"),
     (("염색", "새치", "흰머리", "모발 색"), "염모", "모발의 색상을 변화시키는 데 도움을 줍니다"),  # 🆕 10-05
 ]
+#: 🔄 10-06 (팀장 전달 §2 #1) — 흔한 낱말과 겹치는 키워드는 **낱말 경계**로만 찾는다.
+#:    종전에는 부분 문자열이라 「경북 지방 특산」 → 체지방 문구 · 「한눈에 반한」 → 눈 피로 문구를 붙였다.
+#:    ⛔ 모든 키워드에 경계를 걸지 않는다 — 「잔주름」 · 「식후혈당」처럼 앞말이 붙는 정상 꼴을 놓친다.
+_AMBIG = frozenset({"지방", "눈", "뼈"})
+#: 한 글자 키워드 뒤에 올 수 있는 것 — 조사 · 기능 낱말(「눈의」 · 「뼈 건강」 · 「눈건강」). 「눈꽃」 · 「눈에 띄」는 아니다.
+_AFTER_ONE = r"(?=$|[^가-힣]|[의이가을를은는도과와](?![가-힣])|에(?!\s*띄)|건강|피로|영양|보호|침침|밀도)"
+
+
 def _kw(k: str, text: str) -> bool:
-    """낱말 찾기 — 공백을 단 키워드(「간 」)는 앞이 한글이 아닐 때만(「인간」 · 「시간」에 걸리지 않게). 「뼈」 · 「눈」은 그대로 찾는다."""
+    """낱말 찾기 — 공백을 단 키워드(「간 」)는 앞이 한글이 아닐 때만(「인간」 · 「시간」에 걸리지 않게).
+    흔한 낱말과 겹치는 키워드(`_AMBIG`)는 앞이 한글이 아닐 때만 · 한 글자면 뒤도 본다."""
     if k.endswith(" "):
         return re.search(rf"(?<![가-힣]){re.escape(k.strip())}(?:\s|건강|수치|해독|기능)", text) is not None
+    if k == "지방":  # 「경북 지방」 · 「지방 특산」 — 몸의 지방일 때만(뒤에 분해 · 감소 · 연소 · 흡수 · 빼기 꼴)
+        return re.search(r"(?<![가-힣])지방\s*(?:을|를|이|가)?\s*(?:분해|감소|연소|흡수|축적|태우|태워|빼|빠|줄|쏙|컷)", text) is not None
+    if k in _AMBIG:
+        pat = rf"(?<![가-힣]){re.escape(k)}" + (_AFTER_ONE if len(k) == 1 else "")
+        return re.search(pat, text) is not None
     return k in text
 
 
@@ -149,9 +163,21 @@ _COSMETIC_PRODUCT = re.compile(
     r"크림|세럼|앰플|토너|로션|에센스|샴푸|패드|마스크팩|선크림|선스틱|바르|화장품|토닉|미스트|비누|클렌저|클렌징|립밤|바디워시|트리트먼트|두피|롤온"
 )  # 🚨 「팩」은 넣지 않는다 — 「멸치 육수팩」
 _CLAIM_HOLD = ("인정되지 않은 기능성", "기능성 주장(도움 꼴 아님)")
+#: 먹는 품목 — `app.contracts.Category` 값
+_FOODS = ("식품", "건기식")
 
 
-def to_approved_claim(original: str, s: str, labels: list[str]) -> tuple[str, str] | None:
+def is_cosmetic(text: str, category: str | None = None) -> bool:
+    """화장품인가. 🆕 10-06 (팀장 전달 §2 #3) — **품목(`Category` 값 · D-319)을 받으면 그것을 먼저 쓴다.**
+    종전에는 문구에서만 추측해 골든 학습 쪽 화장품 105 행 중 8 행만 화장품으로 잡혔다. 품목이 없거나 식품 · 건기식 · 화장품 밖이면 종전 추측."""
+    if category == "화장품":
+        return True
+    if category in _FOODS:
+        return False
+    return bool(_COSMETIC_PRODUCT.search(text))
+
+
+def to_approved_claim(original: str, s: str, labels: list[str], category: str | None = None) -> tuple[str, str] | None:
     """(공식 문구, 조건) 또는 None. 원문과 고친 문장에서 낱말을 찾아 **하나의 기능**으로 모일 때만 고른다."""
     if "건강기능식품_오인" in labels:
         return None
@@ -160,8 +186,8 @@ def to_approved_claim(original: str, s: str, labels: list[str]) -> tuple[str, st
     if {"질병_예방치료_표방", "의약품_오인"} & set(labels) or DISEASE.search(original) or DRUG.search(original)             or re.search(r"호르몬|치료|완치|처방", original):
         return None
     text = f"{original} {s}"
-    if _COSMETIC_PRODUCT.search(original):
-        hits = {(cat, claim) for kws, cat, claim in COSMETIC if any(k in text for k in kws)}
+    if is_cosmetic(original, category):
+        hits = {(cat, claim) for kws, cat, claim in COSMETIC if any(_kw(k, text) for k in kws)}  # 🔄 10-06 (§2 #2) — 식품 갈래와 같은 규칙
         if len(hits) == 1:
             cat, claim = next(iter(hits))
             return claim, f"{cat} 기능성화장품으로 심사·보고된 제품에 한함"
@@ -178,14 +204,15 @@ _FOOD_FORM = re.compile(r"먹는|마시는|섭취|캡슐|알약|정제|환|드�
 _SUBJECT = re.compile(r"^\s*([가-힣A-Za-z0-9·\-() ]{2,40}?)(?:은|는)\s+.*도움")
 
 
-def label_check(original: str, s: str, labels: list[str]) -> list[str]:
+def label_check(original: str, s: str, labels: list[str], category: str | None = None) -> list[str]:
     """🆕 10-05 (v12) — 관문이 못 보는 것. ① 위반 유형이 건강기능식품_오인인데 기능성 주장(「~에 도움」)을 냈다 —
     일반식품은 기능성 주장 자체가 안 된다(정답표 기준 불가). ② 「○○은 ~에 도움」의 주어(원료명)가 원문에 없고 공식 원료명도 아니다 —
     v12 가 존재하지 않는 원료명을 지어냈다(실제 광고 1건 · 위반 포장)."""
     why: list[str] = []
     if "건강기능식품_오인" in labels and "도움" in s:
         why.append("건기식 오인 문구에 기능성 주장")
-    if any(c[:8] in s for _, _, c in COSMETIC) and _FOOD_FORM.search(original):
+    eats = category in _FOODS or (category != "화장품" and bool(_FOOD_FORM.search(original)))  # 🔄 10-06 — 품목이 있으면 품목으로
+    if any(c[:8] in s for _, _, c in COSMETIC) and eats:
         why.append("먹는 제품에 화장품 기능성")
     official_cos = any(c[:8] in s for _, _, c in COSMETIC)  # 공식 화장품 문구(「튼살로 인한 붉은 선」의 「은」은 주어 표시가 아니다)
     if not official_cos and (m := _SUBJECT.match(s)) and not re.search(r"(?:을|를|으로|로부터)\s|하$|되$", m.group(1).strip() + " "):
@@ -246,13 +273,13 @@ _COS_NOTE = re.compile(r"기능성화장품")
 _FOOD_NOTE = re.compile(r"건강기능식품|영양성분")
 
 
-def condition(body: str, note: str | None, original: str = "") -> tuple[str | None, str | None]:
+def condition(body: str, note: str | None, original: str = "", category: str | None = None) -> tuple[str | None, str | None]:
     """(최종 조건, 문제). 본문이 요구하는 조건을 먼저 정하고, 1단계 조건은 메뉴 안이고 요구와 어긋나지 않을 때만 쓴다.
 
     🆕 10-05 — **제품 종류와 맞는가.** 다이어트 보조제(식품)에 「해당 기능성화장품으로 심사·보고된」이 붙었다(실제 광고 1건 · 보류라
     나가지는 않았다). 원문 · 본문에 화장품 낱말(`_COSMETIC_PRODUCT`)이 있으면 화장품 — 화장품에는 건기식 · 영양성분 조건을,
     화장품이 아니면 기능성화장품 조건을 받지 않는다. 화장품의 「~에 도움」(일반화장품 표현)에는 건기식 조건을 붙이지 않는다."""
-    cosmetic = bool(_COSMETIC_PRODUCT.search(f"{original} {body}"))
+    cosmetic = is_cosmetic(f"{original} {body}", category)
     need = None
     for _, cat, claim in COSMETIC:
         if claim[:8] in body:
