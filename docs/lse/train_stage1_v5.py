@@ -50,9 +50,13 @@ from stage_gate import check as gate  # noqa: E402
 
 from app.contracts import RewriteSet, Violation  # noqa: E402
 
-BASE = "Qwen/Qwen2.5-3B-Instruct"
+# 🔄 10-08 — 베이스는 `sllm_meta` 한 곳에서 읽는다(환경 변수 COPYLANE_SLLM_BASE · 비우면 Qwen2.5-3B-Instruct 그대로).
+#    라이선스 — Qwen2.5-3B 는 qwen-research(이용 제한) · Qwen3-4B-Instruct-2507 은 apache-2.0 → 4B 시험 학습(`q4b-v12`)
+from sllm_meta import base_model  # noqa: E402
+
+BASE = base_model()
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12")}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12")}
 EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v8": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v10": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
@@ -160,6 +164,9 @@ def load_rows(version: str = "v5") -> tuple[list[dict], list[dict]]:
 
 
 SYS = {"v5": SYSTEM, "v6": SYSTEM_V6, "v7": SYSTEM_V6, "v8": SYSTEM_V6, "v9": SYSTEM_V6, "v10": SYSTEM_V6, "v11": SYSTEM_V6, "v12": SYSTEM_V6}
+#: 🆕 10-08 — 4B 시험판(`q4b-v12`)은 v12 와 **같은 데이터 · 같은 학습 프롬프트** — 베이스만 바꿔 비교한다
+for _m in (EXTRAS, SYNTH, SYS):
+    _m["q4b-v12"] = _m["v12"]
 CUR = {"system": SYSTEM}
 
 
@@ -282,7 +289,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"

@@ -72,7 +72,8 @@ def score(r: dict, res: dict) -> dict:
 def main(names: list[str]) -> None:
     model, tok, ver = load()
     data = rows()
-    out_path = HERE / "prompt_experiment_out.jsonl"
+    # 🔄 10-08 — 다른 판(4B 시험판 등)은 따로 쓴다 — v12 결과를 덮지 않는다
+    out_path = HERE / ("prompt_experiment_out.jsonl" if ver == "v12" else f"prompt_experiment_out_{ver}.jsonl")
     summary: dict[str, collections.Counter] = {}
     with out_path.open("w", encoding="utf-8", newline="\n") as fo:
         for v in names:
