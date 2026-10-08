@@ -559,3 +559,39 @@ def test_응답_봉투가_두_갈래_상태와_두_분모를_든다() -> None:
     src = (ROOT / "app" / "api.py").read_text(encoding="utf-8")
     for key in ("_pool", "_top"):
         assert f'f"{{rt.MATCH_VECTOR}}{key}"' in src, f"counts 키에 {key} 분모가 없다"
+
+
+# ── 🆕 2026-10-08 인용 자격 칸(D-224 ④) ────────────────────────────────────
+#: 🔴 2026-10-08 — 법별 할당 질의 둘(`wide()` 가 쓴다)을 빠뜨렸다가 실DB 에서 구문 오류로 잡혔다. 다섯 다 든다.
+ALL_SQL = [
+    rt.SQL_VECTOR,
+    rt.SQL_LITERAL,
+    rt.SQL_LEXICAL,
+    rt.SQL_VECTOR_PER_LAW,
+    rt.SQL_LEXICAL_PER_LAW,
+]
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("sql", ALL_SQL)
+def test_모든_질의가_인용_자격을_읽는다(sql: str) -> None:
+    assert "'U3_cite'" in sql
+    assert "citable" in rt._NAMES  # noqa: SLF001
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("sql", [rt.SQL_VECTOR_PER_LAW, rt.SQL_LEXICAL_PER_LAW])
+def test_법별_할당_질의의_바깥_칸은_전부_이름이다(sql: str) -> None:
+    """🔴 바깥 칸 목록에 식 조각(「allowed)」)이 들어가면 질의가 구문 오류로 죽고 판정이 멈춘다 (10-08 실DB)."""
+    head = sql.split(" FROM (", 1)[0].removeprefix("SELECT ")
+    names = [c.strip() for c in head.split(",")]
+    assert all(n.isidentifier() for n in names), names
+    assert "citable" in names
+
+
+@pytest.mark.gate
+def test_이름_없는_식은_감쌀_때_멈춘다() -> None:
+    with pytest.raises(ValueError):
+        rt._outer_name("EXISTS (SELECT 1 FROM t q WHERE q.allowed)")  # noqa: SLF001
+    assert rt._outer_name("EXISTS (SELECT 1) AS citable") == "citable"  # noqa: SLF001
+    assert rt._outer_name("c.chunk_id") == "chunk_id"  # noqa: SLF001

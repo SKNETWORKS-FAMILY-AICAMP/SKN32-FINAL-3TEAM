@@ -105,10 +105,8 @@ def test_인용_자격이_열린_청크만_조문_글을_싣는다(kw: dict, wan
     assert a.quote == want
 
 
-@pytest.mark.parametrize("sql", [rt.SQL_VECTOR, rt.SQL_LITERAL, rt.SQL_LEXICAL])
-def test_모든_질의가_인용_자격을_읽는다(sql: str) -> None:
-    assert "'U3_cite'" in sql
-    assert "citable" in rt._NAMES  # noqa: SLF001
+#: 질의문이 인용 자격 칸을 싣는지 · 법별 할당 질의가 그 칸을 이름으로 부르는지는 게이트 파일
+#: `tests/test_retrieve.py` 에 있다(집행계약 §1-3 에 오른 파일).
 
 
 # ── ④ 고쳐 쓰기를 꺼 둔 환경 ─────────────────────────────────────────────

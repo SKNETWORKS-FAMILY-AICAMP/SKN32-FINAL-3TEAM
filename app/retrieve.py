@@ -230,9 +230,11 @@ _SELECT: tuple[tuple[str, str], ...] = (
     # 🆕 2026-10-08 — **이 원천이 화면 인용(`U3_cite`)을 열었는가** (D-224 ④). 검색은 `U2_rag` 로 거르므로 인용 자격은 따로 읽는다.
     #    ⛔ 없으면 그래프가 `quote` 를 늘 비웠다 — 법령 원천은 U3 가 열려 있는데도 화면에 조문 글이 한 줄도 안 나갔다.
     #    🚨 `EXISTS` 다 — 행이 없으면 거짓(인용 못 함). 없음이 자격으로 집계되지 않게 (D-220).
+    #    🔴 **`AS citable` 을 붙인다** — `_per_law()` 가 바깥 질의의 칸 이름을 식에서 떼어 낸다(`_outer_name`).
+    #       이름 없는 식은 바깥에서 부를 수 없다(10-08 실DB 에서 `SQL_*_PER_LAW` 구문 오류로 잡혔다).
     (
         "EXISTS (SELECT 1 FROM source_use q WHERE q.source_id = s.source_id"
-        " AND q.use_code = 'U3_cite' AND q.allowed)",
+        " AND q.use_code = 'U3_cite' AND q.allowed) AS citable",
         "citable",
     ),
 )
@@ -288,6 +290,21 @@ ORDER BY distance, c.chunk_id
 LIMIT %s"""
 
 
+def _outer_name(expr: str) -> str:
+    """안쪽 질의의 칸 식 → 바깥(`_per_law`)에서 부를 이름. 「x AS 이름」이면 이름, 「표.칸」이면 칸.
+
+    🔴 2026-10-08 — 종전에는 마지막 「.」 뒤를 잘랐다. 칸이 아닌 식(`EXISTS (…)`)이 들어오자 「allowed)」 같은 조각이 이름이
+       되어 법별 할당 질의 둘이 구문 오류로 죽었다 — `wide()` 를 거치는 판정 전부가 멈춘다. 이름을 못 세우면 **멈춘다** (D-220).
+    """
+    head, sep, alias = expr.rpartition(" AS ")
+    name = alias.strip() if sep else expr.rpartition(".")[2]
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        raise ValueError(
+            f"바깥 질의에서 부를 칸 이름을 못 세운다: {expr!r} — 식이면 `AS 이름` 을 붙인다"
+        )
+    return name
+
+
 def _per_law(sql: str, *, score: str, order: str) -> str:
     """갈래 질의를 **법마다 `LIMIT` 개씩** 받는 질의로 감싼다 (🆕 2026-09-28 · 사실원장 ㊳ · D-267 · D-271 ③).
 
@@ -303,7 +320,7 @@ def _per_law(sql: str, *, score: str, order: str) -> str:
     inner, sep, tail = sql.rpartition("\nORDER BY ")
     if not sep or not tail.rstrip().endswith("LIMIT %s"):
         raise ValueError("원 질의가 `ORDER BY … LIMIT %s` 로 끝나지 않는다 — 감쌀 자리가 없다")
-    cols = ", ".join(e.rpartition(".")[2] for e, _ in _SELECT)
+    cols = ", ".join(_outer_name(e) for e, _ in _SELECT)
     return f"""SELECT {cols}, {score} FROM (
 SELECT w.*, row_number() OVER (PARTITION BY w.law ORDER BY {order}) AS law_rank
 FROM (
