@@ -12,8 +12,11 @@
   · 무조건부(품목 모름) · 조건부(골든 품목) 둘 다 잰다
   · 판정은 `judge_stage2.stage2_judge` 그대로다 — 이 파일은 문턱과 여유 구간만 바꿔 넣는다 (D-99)
   · k = 1.0 줄은 `run_judge_dist.py` 의 지금 결과와 같아야 한다
+  · `--agree-base` (카드 8) — 사전 확정에 대한 **합의**는 F1 최대 문턱 그대로 본다. 후보 문턱만 k 배가 된다
+      안 붙이면 카드 7 과 같다 — 문턱 하나로 후보와 합의를 함께 본다
+  · `--limit2-both` (카드 8) — 한도 ② (문장당 유형)를 무조건부 · 조건부 둘 다에 건다. 안 붙이면 카드 7 과 같이 무조건부만 본다
 
-고르는 규칙은 실험 카드에 먼저 적었다(`docs/psj/reports/v10_문턱규칙_거짓과장_실험기록_20261007.md` 카드 7) — 여기서는 그 규칙을 그대로 계산해 보일 뿐이다.
+고르는 규칙은 실험 카드에 먼저 적었다(`docs/psj/reports/v10_문턱규칙_거짓과장_실험기록_20261007.md` 카드 7 · 8) — 여기서는 그 규칙을 그대로 계산해 보일 뿐이다.
 
 🔴 dev 전용 — test 행이 든 확률 파일이면 멈춘다 (D-175).
 🔴 집계표(`--out-md`)에는 건수만 쓴다. 행 id 가 든 요약(JSON)은 저장소 밖(`--out-dir`)에 쓴다 (D-249 ⑥).
@@ -84,11 +87,12 @@ def scaled(th, k, base):
     return {x: (t * k if 0 < t <= 1 else t) for x, t in th.items()}, min(1.0, base / k)
 
 
-def judge_all(rows, probs, book, th, margin, conditional):
+def judge_all(rows, probs, book, th, margin, conditional, agree_th=None):
+    """`agree_th` — 사전 확정에 대한 합의를 볼 문턱(카드 8). None 이면 후보 문턱과 같다(카드 7)."""
     out = []
     for r, lp in zip(rows, probs):
         cat = Category(r["품목"]) if conditional else None
-        out.append(stage2_judge(stage1_signals(r["text"], lp, book, th, margin=margin), category=cat))
+        out.append(stage2_judge(stage1_signals(r["text"], lp, book, th, margin=margin, agree_thresholds=agree_th), category=cat))
     return out
 
 
@@ -126,10 +130,10 @@ def compare(m, base):
     m["law_confirmed_up"] = m["law_confirmed"] - base["law_confirmed"]
 
 
-def limits(k, un, co):
-    """카드 7 의 한도 — ① 통과 변화 없음(두 조건) ② 후보 부담(무조건부) ③ 틀린 확정이 늘지 않는다(두 조건)."""
+def limits(k, un, co, both=False):
+    """한도 — ① 통과 변화 없음(두 조건) ② 후보 부담(카드 7 은 무조건부 · 카드 8 `both` 는 두 조건) ③ 틀린 확정이 늘지 않는다(두 조건)."""
     a = all(not m["quiet_lost"] and not m["quiet_gained"] for m in (un, co))
-    b = un["avg"] <= LIMIT_AVG + 1e-9 and un["ge4"] <= LIMIT_GE4 + 1e-9
+    b = all(m["avg"] <= LIMIT_AVG + 1e-9 and m["ge4"] <= LIMIT_GE4 + 1e-9 for m in ((un, co) if both else (un,)))
     c = all(m["errors_up"] <= 0 and m["law_confirmed_up"] <= 0 for m in (un, co))
     return {"①": a, "②": b, "③": c}
 
@@ -155,6 +159,8 @@ def main(argv=None):
     ap.add_argument("--probs-csv", required=True, help="노트북이 저장한 dev 행별 확률 CSV (id · p_<유형>)")
     ap.add_argument("--scales", default=SCALES, help=f"후보 문턱 배율 k 들 (기본 {SCALES}) — 1.0 은 늘 함께 잰다")
     ap.add_argument("--base-margin", type=float, default=QUIET_MARGIN, help="지금의 여유 구간 (τ 배수 · 보류 경계)")
+    ap.add_argument("--agree-base", action="store_true", help="카드 8 — 사전 확정에 대한 합의는 F1 최대 문턱 그대로 본다 (후보 문턱만 k 배)")
+    ap.add_argument("--limit2-both", action="store_true", help="카드 8 — 한도 ② 를 무조건부 · 조건부 둘 다에 건다 (기본: 무조건부만 · 카드 7)")
     ap.add_argument("--golden", default=rj.GOLDEN)
     ap.add_argument("--banned", default=BANNED_TERMS_PATH)
     ap.add_argument("--out-dir", default=rj.OUT_DIR, help="요약 JSON 을 둘 곳 — 저장소 밖")
@@ -192,7 +198,7 @@ def main(argv=None):
         for k in ks:
             t0 = time.perf_counter()
             thk, mg = scaled(th, k, a.base_margin)
-            m = measure(rs, judge_all(rs, probs, book, thk, mg, name == "조건부"))
+            m = measure(rs, judge_all(rs, probs, book, thk, mg, name == "조건부", th if a.agree_base else None))
             m["margin"] = mg
             result[name][k] = m
             print(f"  {name} · k {k:g} · 여유 구간 {mg:.3f} — 탐지 {m['detected']}/{m['positive']} · 확정 {m['confirmed']}/{m['positive']} "
@@ -200,23 +206,27 @@ def main(argv=None):
         for k in ks:
             compare(result[name][k], result[name][1.0])
 
-    lim = {k: limits(k, result["무조건부"][k], result["조건부"][k]) for k in ks}
+    lim = {k: limits(k, result["무조건부"][k], result["조건부"][k], a.limit2_both) for k in ks}
     rate = lambda k: result["무조건부"][k]["detected"] / result["무조건부"][k]["positive"]
-    okay = [k for k in ks if k < 1.0 and all(lim[k].values())]
-    pick = max(okay, key=lambda k: (rate(k), k)) if okay else None
+    choose = lambda lm: max((k for k in ks if k < 1.0 and all(lm[k].values())), key=lambda k: (rate(k), k), default=None)
+    pick = choose(lim)
+    #: 참고 — 한도 ② 를 다른 쪽(무조건부만 ↔ 두 조건)으로 걸었으면 무엇이 골라지는가. 판정에는 쓰지 않는다
+    pick_other = choose({k: limits(k, result["무조건부"][k], result["조건부"][k], not a.limit2_both) for k in ks})
     mark = {k: " ◀" for k in ([pick] if pick is not None else [])}
 
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     md = [f"# 후보 문턱 배율 훑기 — 판정 로직까지 (dev · {stamp[:8]})", "",
           f"> 모델 {scheme.get('experiment', '?')} · 확률 `{os.path.basename(a.probs_csv)}` · dev 지문 `{dev_mark}` · golden `{sha[:12]}` · 사전 `{dict_sha[:12]}` · "
-          f"규칙 {g.JUDGED_BY} + 인코더 층(`judge_stage2.py`) · 사전 확정에 인코더 합의 요구",
+          f"규칙 {g.JUDGED_BY} + 인코더 층(`judge_stage2.py`) · 사전 확정에 인코더 합의 요구 — "
+          + ("**합의 문턱은 F1 최대 문턱 그대로**(카드 8)" if a.agree_base else "합의 문턱 = 후보 문턱(카드 7)"),
           f"> 후보 문턱 = k × τ(F1 최대) · 여유 구간 = min(1, {a.base_margin:g} ÷ k) · 건수만 적는다(행 id · 문장 없음)",
           "> τ: " + " · ".join(f"{k} {v:g}" for k, v in th.items()), ""]
     for name in sets:
         n = len(sets[name])
         md += table(f"{name} — {n}행", [(k, result[name][k]["margin"], result[name][k]) for k in ks], mark) + [""]
-    md += ["### 한도 · 목표 (카드 7 에 먼저 적은 것)", "",
-           "| k | ① 통과 변화 없음 (두 조건) | ② 문장당 유형 ≤ 2.0 · 4개 이상 ≤ 5% (무조건부) | ③ 틀린 확정이 늘지 않는다 (두 조건) | 무조건부 탐지 재현율 | 목표 90% |",
+    scope2 = "두 조건" if a.limit2_both else "무조건부"
+    md += ["### 한도 · 목표 (카드에 먼저 적은 것)", "",
+           f"| k | ① 통과 변화 없음 (두 조건) | ② 문장당 유형 ≤ 2.0 · 4개 이상 ≤ 5% ({scope2}) | ③ 틀린 확정이 늘지 않는다 (두 조건) | 무조건부 탐지 재현율 | 목표 90% |",
            "|---:|---|---|---|---:|---|"]
     yn = lambda x: "지킴" if x else "**넘음**"
     for k in ks:
@@ -224,21 +234,26 @@ def main(argv=None):
                   f"{'충족' if rate(k) >= TARGET_DETECT else '미달'} |")
     md += ["", ("고른 값 — 한도를 모두 지킨 k 중 무조건부 탐지 재현율이 가장 높은 것: "
                 + (f"**k = {pick:g}** ({rate(pick):.1%} · 목표 {'충족' if rate(pick) >= TARGET_DETECT else '미달'})" if pick is not None
-                   else "**없음** — 한도를 모두 지킨 k 가 없다")), ""]
+                   else "**없음** — 한도를 모두 지킨 k 가 없다")),
+           "", (f"참고 — 한도 ② 를 {'무조건부만' if a.limit2_both else '두 조건 모두'}에 걸었으면: "
+                + (f"k = {pick_other:g} ({rate(pick_other):.1%})" if pick_other is not None else "없음") + " · 판정에는 쓰지 않는다"), ""]
     whys = sorted({w for name in sets for k in ks for w in result[name][k]["why"]},
                   key=lambda w: -result["무조건부"][1.0]["why"].get(w, 0))
     for name in sets:
         md += [f"### 인코더 층의 까닭별 — {name}", "", "| 까닭 | " + " | ".join(f"k {k:g}" for k in ks) + " |", "|---|" + "---:|" * len(ks)]
         md += [f"| {w} | " + " | ".join(str(result[name][k]["why"].get(w, 0)) for k in ks) + " |"
                for w in whys if any(result[name][k]["why"].get(w) for k in ks)]
-        md += ["", f"위반 확정이 선 행 (버킷별) — " + " / ".join(
+        md += ["", "위반 확정이 선 행 (버킷별) — " + " / ".join(
             f"k {k:g}: " + (" · ".join(f"{b} {v}" for b, v in sorted(result[name][k]["confirmed_by_bucket"].items())) or "없음") for k in ks), ""]
+    while md and not md[-1]:
+        md.pop()                                   # 파일 끝의 빈 줄 — 훅(end-of-file-fixer)이 고치지 않게
     print("\n" + "\n".join(md))
 
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"cand_threshold_sweep_dev_{stamp}.json")
+    path = os.path.join(out_dir, f"cand_threshold_sweep_dev_{'agreebase_' if a.agree_base else ''}{stamp}.json")
     meta = {"at": stamp, "golden_sha256": sha, "banned_terms_sha256": dict_sha, "model_experiment": scheme.get("experiment"),
             "probs_csv": os.path.basename(a.probs_csv), "dev_mark": dev_mark, "thresholds_f1": th, "base_margin": a.base_margin, "scales": ks,
+            "agree_base": a.agree_base, "limit2_both": a.limit2_both, "pick_other_limit2": pick_other,
             "judged_by": g.JUDGED_BY, "target_detect": TARGET_DETECT, "limit_avg": LIMIT_AVG, "limit_ge4": LIMIT_GE4,
             "limits": {f"{k:g}": lim[k] for k in ks}, "pick": pick,
             "result": {name: {f"{k:g}": result[name][k] for k in ks} for name in sets}}

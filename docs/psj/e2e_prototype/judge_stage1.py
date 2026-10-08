@@ -239,7 +239,7 @@ def predict_label_probs_batch(texts: list[str], tokenizer, model, label_list: li
 #  1단계 — 신호 모음 (판정하지 않는다)
 # ══════════════════════════════════════════════════════════════════════
 def encoder_signal(text: str, label_probs: dict[str, float], thresholds: dict[str, float],
-                   margin: float = QUIET_MARGIN) -> dict:
+                   margin: float = QUIET_MARGIN, agree_thresholds: Optional[dict[str, float]] = None) -> dict:
     """인코더가 낸 것 — 후보(τ 이상) · 여유 구간 · 사항 판별.
 
       candidates   확률 >= τ 인 유형 (D-131 「유형 후보 + 확신」). 편입 대기 칸은 내지 않는다
@@ -247,6 +247,8 @@ def encoder_signal(text: str, label_probs: dict[str, float], thresholds: dict[st
       quiet        후보도 여유 구간도 없다 — 인코더가 조용하다
       subject      주장 · 거래조건 · 혼합 · 판정대상아님
       active       이 모델이 후보를 낼 수 있는 유형 (τ ≤ 1) — 2단계가 「합의를 물을 수 있는 유형인가」를 이것으로 본다
+      agree_candidates  사전 확정에 대한 **합의**를 볼 때 쓰는 유형. `agree_thresholds` 를 주면 그 문턱 이상인 유형이고, 안 주면 candidates 와 같다
+                        `[실험 · 카드 8 · 2026-10-08]` 후보 문턱만 낮추고 합의 문턱은 그대로 둘 때 쓴다 — 기본 동작은 바뀌지 않는다
     """
     act = active_labels(thresholds)
     unknown = set(act) - {v.value for v in Violation}
@@ -259,17 +261,19 @@ def encoder_signal(text: str, label_probs: dict[str, float], thresholds: dict[st
         top = max(ratio, key=ratio.get) if ratio else None
         if top is not None and ratio[top] >= margin:
             near = top
+    agree = cands if agree_thresholds is None else sorted(
+        label for label in act if label_probs.get(label, 0.0) >= agree_thresholds[label])
     subject, trade_m = sentence_subject(text)
-    return {"candidates": cands, "near": near, "quiet": not cands and near is None,
+    return {"candidates": cands, "agree_candidates": agree, "near": near, "quiet": not cands and near is None,
             "subject": subject, "trade_term": trade_m.group(0) if trade_m else None, "active": sorted(act),
             "probs": {k: round(float(v), 4) for k, v in label_probs.items()}}
 
 
 def stage1_signals(text: str, label_probs: dict[str, float], book: DictBook, thresholds: dict[str, float],
-                   margin: float = QUIET_MARGIN) -> dict:
+                   margin: float = QUIET_MARGIN, agree_thresholds: Optional[dict[str, float]] = None) -> dict:
     """문장 하나의 신호 — `scan`(사전 · 그래프의 `DictScan`) · `enc`(인코더 · `encoder_signal`). 판정하지 않는다."""
     scan = book.scan(text)
-    enc = encoder_signal(text, label_probs, thresholds, margin)
+    enc = encoder_signal(text, label_probs, thresholds, margin, agree_thresholds)
     return {"text": text, "scan": scan, "enc": enc, "subject": enc["subject"],
             "matched_terms_all": sorted({h.term for h in scan.hits} | {h.term for h in scan.weak})}
 
