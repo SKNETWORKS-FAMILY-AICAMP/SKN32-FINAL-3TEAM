@@ -105,13 +105,16 @@ def load_rows(
 
 
 def _ho(sent: SentenceJudgment) -> set[str]:
-    """확정 문장의 근거 중 **인용 꼴로 되돌릴 수 있는 것**의 호. 검색 근거(「[별표 1]…」)는 호로 못 돌린다 — 세지 않는다."""
+    """확정 문장의 근거 중 **사전 근거**(인용 꼴로 되돌릴 수 있는 것)의 호. 검색 근거는 판정 문맥이라 세지 않는다.
+
+    🔴 2026-10-08 — 종전에는 `law_id:article+item` 을 이어 붙여 `statute.parse` 에 넣었다. 그래프는 목을 「제5호다목」으로
+       적고 인용 꼴은 「제5호|다목」이라 **목 붙은 사전 근거가 전부 조용히 빠졌다**(호 재현율이 낮게 나온다).
+       되읽기는 그래프가 쓰는 꼴과 같은 곳(`statute.from_article_item`)에서 한다 (D-99).
+    """
     out = set()
     for a in sent.evidence:
-        try:
-            out.add(statute.ho_key(f"{a.law_id}:{a.article}{a.item}"))
-        except ValueError:
-            continue
+        if (c := statute.from_article_item(a.law_id, a.article, a.item)) is not None:
+            out.add(statute.ho_key(c))
     return out
 
 

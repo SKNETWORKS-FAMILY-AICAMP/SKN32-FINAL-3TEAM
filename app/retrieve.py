@@ -166,6 +166,8 @@ class Hit:
     #:    🔴 `citation` 은 이 청크 자신의 좌표로 그대로 둔다 — 화면은 「이 글이 어디 있나」를, 판정은 「무엇을 어겼나」를 본다.
     #:    🚨 `None` 이면 **위반 근거로 못 쓴다** — 좌표를 못 세웠거나, 별표인데 제외 표시가 아직 안 실렸다 (D-224 · D-220).
     basis_citation: str | None = None
+    #: 🆕 2026-10-08 — 원천의 `U3_cite` 가 열렸는가 (D-224 ④). 🚨 `None` = 질의가 이 칸을 안 실었다 — 인용하지 않는다.
+    citable: bool | None = None
     #: 코사인 거리. 🚨 어휘·기호 갈래는 `None` 이다 — **0.0 으로 채우지 않는다.**
     #:    0.0 은 「완전히 같다」는 뜻이라, 없는 값을 가장 좋은 값으로 만든다.
     distance: float | None = None
@@ -225,6 +227,14 @@ _SELECT: tuple[tuple[str, str], ...] = (
     ("d.title", "doc_title"),
     ("s.attribution", "attribution"),
     ("s.url", "source_url"),
+    # 🆕 2026-10-08 — **이 원천이 화면 인용(`U3_cite`)을 열었는가** (D-224 ④). 검색은 `U2_rag` 로 거르므로 인용 자격은 따로 읽는다.
+    #    ⛔ 없으면 그래프가 `quote` 를 늘 비웠다 — 법령 원천은 U3 가 열려 있는데도 화면에 조문 글이 한 줄도 안 나갔다.
+    #    🚨 `EXISTS` 다 — 행이 없으면 거짓(인용 못 함). 없음이 자격으로 집계되지 않게 (D-220).
+    (
+        "EXISTS (SELECT 1 FROM source_use q WHERE q.source_id = s.source_id"
+        " AND q.use_code = 'U3_cite' AND q.allowed)",
+        "citable",
+    ),
 )
 _COLS = ",\n       ".join(e for e, _ in _SELECT)
 _NAMES = tuple(n for _, n in _SELECT)

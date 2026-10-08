@@ -241,7 +241,11 @@
             {%- else %}알 수 없는 값 ({{ s.hold_reason.value }}){% endif -%}
           </span>
           {% endif %}
-          {% if s.risk.final %}
+          {#- 🔄 2026-10-08 — 보류 문장의 R0 은 칩을 그리지 않는다. R0 은 「특이사항 없음」(D-280)이라 보류 옆에 초록으로 서면
+              통과로 읽힌다 · 보류의 위험도는 가장 보수적인 경우의 등급이다(D-280 · D-263 ①) — R1 이상은 그대로 그린다.
+              ⛔ 법 미수록 보류(D-277 · D-314)가 R0 을 싣는 이유는 결정기록에 없다 — 값은 판정 안건이고 여기서는 그리지만 않는다.
+              🚨 `compose.html` 의 칩과 한 벌이다 (D-99) — 한쪽을 고치면 둘 다 #}
+          {% if s.risk.final and not (s.verdict.value != "confirmed" and s.risk.final.value == "R0") %}
           <span class="rv-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
           {% endif %}
           {% if s.infeasibility %}
@@ -290,6 +294,9 @@
         {% include "user/_review_rewrite.html" %}
         {% elif s.infeasibility and s.infeasibility.value == "A" %}
         <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 · 심사를 받은 제품만 쓸 수 있는 말이라 고쳐 써도 같은 위반이에요 (D-59).</p>
+        {% elif s.violations and not rewrite_enabled|default(true) %}
+        {# 🆕 2026-10-08 — 고쳐 쓰기 서버를 두지 않은 환경. 누를 수 없는 버튼을 그리지 않는다 (D-146) #}
+        <p class="rv-note" style="margin:.5rem 0 0">이 환경에서는 문장 고쳐 쓰기를 제공하지 않아요.</p>
         {% elif s.violations %}
         <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
@@ -329,7 +336,7 @@
             <p class="rv-ev-label">위험도 산출 내역</p>
             <div class="rv-calc"><span>코드 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
             <div class="rv-calc"><span>인코더 예측</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>
-            <div class="rv-calc total"><span>최종 위험도</span><b>{{ s.risk.final.value if s.risk.final else "—" }}</b></div>
+            <div class="rv-calc total"><span>최종 위험도</span><b>{{ "— (보류 · 등급 미정)" if s.risk.final and s.verdict.value != "confirmed" and s.risk.final.value == "R0" else (s.risk.final.value if s.risk.final else "—") }}</b></div>
           </div>
         </details>
 {% endmacro %}

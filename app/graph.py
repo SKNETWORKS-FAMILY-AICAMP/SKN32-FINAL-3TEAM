@@ -514,7 +514,9 @@ def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
     """`Hit` → 계약. 🔴 **확신이 없으면 안 옮긴다** (D-224).
 
     ⛔ 위반 근거 좌표(`basis_citation`)가 `None` 이면 좌표를 못 세운 것이다 — 「제18조」로 줄여 적으면 실은 제3항인 근거를
-       가리킨다. 지어내지 않고 **버린다.** ⛔ **`quote` 는 비운다** — `search()` 는 `U2_rag` 로 거르고 인용 자격은 `U3_cite` 다.
+       가리킨다. 지어내지 않고 **버린다.**
+    🔄 2026-10-08 — `quote` 는 **원천의 `U3_cite` 가 열린 청크만** 싣는다(`hit.citable` · D-224 ④). 종전에는 그 자격을 읽지 않아
+       늘 비웠다. ⛔ 제외 목에서 올린 좌표(`exempt_of`)는 이 청크의 글이 그 좌표의 글이 아니므로 싣지 않는다(`chunk_id` 와 같은 이유).
     🔄 2026-09-28 (D-238 개정 (나)) — `citation` 이 아니라 `basis_citation` 을 옮긴다. 적용 제외 목이면 **부모 목의 좌표**가
        오고, 그 좌표를 가진 청크는 이 청크가 아니므로 `chunk_id` 를 비운다 — 제외 목의 글이 위반 근거 자리에 보이지 않게.
        제외 목 자신은 `_proviso()` 가 따로 나른다.
@@ -522,11 +524,13 @@ def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
     """
     if not hit.basis_citation or not hit.law_id:
         return None
+    own = not hit.exempt_of
     return EvidenceArticle(
         law_id=hit.law_id,
         article=hit.basis_citation,
         item=hit.item or "",
-        chunk_id=None if hit.exempt_of else hit.chunk_id,
+        chunk_id=hit.chunk_id if own else None,
+        quote=hit.text if own and hit.citable is True and hit.text else None,
     )
 
 
@@ -842,13 +846,12 @@ _INFEAS_ORDER = (Infeasibility.C, Infeasibility.A, Infeasibility.B)
 
 def _basis_article(cite: str) -> EvidenceArticle | None:
     """사전 근거 인용(`법ID:제N조제N항제N호[|목]`) → 근거 조문. 꼴이 틀리면 `None` — 좌표를 지어내지 않는다 (D-224)."""
+    # 꼴은 `collect/statute.py` 한 곳 — 평가 도구가 되읽는다 (D-99)
     try:
-        law, jo, hang, ho, mok = statute.parse(cite)
+        law, article, item = statute.article_item(cite)
     except ValueError:
         return None
-    return EvidenceArticle(
-        law_id=law, article=f"제{jo}조", item=f"제{hang}항제{ho}호" + (f"{mok}목" if mok else "")
-    )
+    return EvidenceArticle(law_id=law, article=article, item=item)
 
 
 def _typed(names: set[str]) -> list[Violation]:
