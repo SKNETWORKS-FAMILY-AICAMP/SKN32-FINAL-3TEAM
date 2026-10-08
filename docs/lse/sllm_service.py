@@ -52,6 +52,8 @@ class RewriteReq(BaseModel):
 
 
 _MODEL = None
+#: 올라간 판의 표지 — `/health` 가 그대로 돌려준다(어느 어댑터 · 어느 베이스 · 가중치 지문)
+_META: dict = {}
 _LOCK = threading.Lock()  # generate 는 동시에 부르지 않는다 — GPU 하나 · 요청은 줄 세운다
 
 
@@ -65,10 +67,19 @@ def load(stage1: str | None = None) -> tuple:
         from persona_pipeline_e2e import STAGE1_VER, STAGE2  # noqa: PLC0415
         from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: PLC0415
 
+        import sllm_meta  # noqa: PLC0415
+
         ver = stage1 or STAGE1_VER
-        adapter = ROOT / "models" / f"copylane_sllm_lora_adapter_{ver}"
+        adapter = sllm_meta.stage1_dir(ver)
         if not adapter.exists():
             raise FileNotFoundError(f"1단계 어댑터가 없다 — {adapter} (연결 안내서의 「모델 파일」을 본다)")
+        # 🆕 2026-10-07 — 어댑터가 학습된 베이스와 올리려는 베이스가 다르면 **올리기 전에** 멈춘다 (D-220).
+        #    다른 베이스에 얹은 어댑터는 오류 없이 엉뚱한 문장을 낸다. 판 · 베이스는 `sllm_meta` 의 환경 변수로 바꾼다
+        sllm_meta.check_base(adapter, BASE)
+        if STAGE2.exists():
+            sllm_meta.check_base(STAGE2, BASE)
+        _META.update(model=ver, base=BASE, adapter_sha=sllm_meta.adapter_sha12(adapter),
+                     stage2=STAGE2.name if STAGE2.exists() else None)
         tok = AutoTokenizer.from_pretrained(BASE)
         base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
         model = PeftModel.from_pretrained(base, str(adapter), adapter_name="stage1")
@@ -126,18 +137,18 @@ def serve(port: int) -> None:
     import uvicorn  # noqa: PLC0415
     from fastapi import FastAPI  # noqa: PLC0415
 
-    app = FastAPI(title="CopyLane sLLM 1단계", version="v12")
+    _, _, loaded = load()  # 첫 요청이 느리지 않게 미리 올린다(약 30초)
+    app = FastAPI(title="CopyLane sLLM 1단계", version=loaded)
 
     @app.get("/health")
     def health() -> dict:
-        _, _, ver = load()
-        return {"ok": True, "model": ver}
+        load()
+        return {"ok": True, **_META}
 
     @app.post("/rewrite")
     def do_rewrite(req: RewriteReq) -> dict:
         return rewrite(req.text, req.violation_types, req.persona, req.rejudge)
 
-    load()  # 첫 요청이 느리지 않게 미리 올린다(약 30초)
     uvicorn.run(app, host="127.0.0.1", port=port)  # 🚨 로컬만 — 외부에 열지 않는다
 
 

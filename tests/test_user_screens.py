@@ -225,3 +225,14 @@ def test_검수_BFF_는_501_과_503_을_가른다(
 
     monkeypatch.setattr(app.api, "judge", boom)
     assert user_router._core_judge("문구") == (want, None)
+
+
+def test_검수_분기_다시_선택은_5회다() -> None:
+    """🆕 2026-10-06 — 「다시 선택」 3 → 5."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    body = TestClient(app).get("/u/preview/21_hold_cat_unknown_hair").text
+    assert 'id="rvr-1-5"' in body
+    assert 'id="rvr-1-6"' not in body
