@@ -166,6 +166,8 @@ class Hit:
     #:    🔴 `citation` 은 이 청크 자신의 좌표로 그대로 둔다 — 화면은 「이 글이 어디 있나」를, 판정은 「무엇을 어겼나」를 본다.
     #:    🚨 `None` 이면 **위반 근거로 못 쓴다** — 좌표를 못 세웠거나, 별표인데 제외 표시가 아직 안 실렸다 (D-224 · D-220).
     basis_citation: str | None = None
+    #: 🆕 2026-10-08 — 원천의 `U3_cite` 가 열렸는가 (D-224 ④). 🚨 `None` = 질의가 이 칸을 안 실었다 — 인용하지 않는다.
+    citable: bool | None = None
     #: 코사인 거리. 🚨 어휘·기호 갈래는 `None` 이다 — **0.0 으로 채우지 않는다.**
     #:    0.0 은 「완전히 같다」는 뜻이라, 없는 값을 가장 좋은 값으로 만든다.
     distance: float | None = None
@@ -225,6 +227,16 @@ _SELECT: tuple[tuple[str, str], ...] = (
     ("d.title", "doc_title"),
     ("s.attribution", "attribution"),
     ("s.url", "source_url"),
+    # 🆕 2026-10-08 — **이 원천이 화면 인용(`U3_cite`)을 열었는가** (D-224 ④). 검색은 `U2_rag` 로 거르므로 인용 자격은 따로 읽는다.
+    #    ⛔ 없으면 그래프가 `quote` 를 늘 비웠다 — 법령 원천은 U3 가 열려 있는데도 화면에 조문 글이 한 줄도 안 나갔다.
+    #    🚨 `EXISTS` 다 — 행이 없으면 거짓(인용 못 함). 없음이 자격으로 집계되지 않게 (D-220).
+    #    🔴 **`AS citable` 을 붙인다** — `_per_law()` 가 바깥 질의의 칸 이름을 식에서 떼어 낸다(`_outer_name`).
+    #       이름 없는 식은 바깥에서 부를 수 없다(10-08 실DB 에서 `SQL_*_PER_LAW` 구문 오류로 잡혔다).
+    (
+        "EXISTS (SELECT 1 FROM source_use q WHERE q.source_id = s.source_id"
+        " AND q.use_code = 'U3_cite' AND q.allowed) AS citable",
+        "citable",
+    ),
 )
 _COLS = ",\n       ".join(e for e, _ in _SELECT)
 _NAMES = tuple(n for _, n in _SELECT)
@@ -278,6 +290,21 @@ ORDER BY distance, c.chunk_id
 LIMIT %s"""
 
 
+def _outer_name(expr: str) -> str:
+    """안쪽 질의의 칸 식 → 바깥(`_per_law`)에서 부를 이름. 「x AS 이름」이면 이름, 「표.칸」이면 칸.
+
+    🔴 2026-10-08 — 종전에는 마지막 「.」 뒤를 잘랐다. 칸이 아닌 식(`EXISTS (…)`)이 들어오자 「allowed)」 같은 조각이 이름이
+       되어 법별 할당 질의 둘이 구문 오류로 죽었다 — `wide()` 를 거치는 판정 전부가 멈춘다. 이름을 못 세우면 **멈춘다** (D-220).
+    """
+    head, sep, alias = expr.rpartition(" AS ")
+    name = alias.strip() if sep else expr.rpartition(".")[2]
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        raise ValueError(
+            f"바깥 질의에서 부를 칸 이름을 못 세운다: {expr!r} — 식이면 `AS 이름` 을 붙인다"
+        )
+    return name
+
+
 def _per_law(sql: str, *, score: str, order: str) -> str:
     """갈래 질의를 **법마다 `LIMIT` 개씩** 받는 질의로 감싼다 (🆕 2026-09-28 · 사실원장 ㊳ · D-267 · D-271 ③).
 
@@ -293,7 +320,7 @@ def _per_law(sql: str, *, score: str, order: str) -> str:
     inner, sep, tail = sql.rpartition("\nORDER BY ")
     if not sep or not tail.rstrip().endswith("LIMIT %s"):
         raise ValueError("원 질의가 `ORDER BY … LIMIT %s` 로 끝나지 않는다 — 감쌀 자리가 없다")
-    cols = ", ".join(e.rpartition(".")[2] for e, _ in _SELECT)
+    cols = ", ".join(_outer_name(e) for e, _ in _SELECT)
     return f"""SELECT {cols}, {score} FROM (
 SELECT w.*, row_number() OVER (PARTITION BY w.law ORDER BY {order}) AS law_rank
 FROM (
@@ -773,6 +800,27 @@ def diversify(hits: list[Hit], *, cap: int = PARAMS.per_law_cap) -> list[Hit]:
         (head if n < cap else tail).append(h)
         seen[h.law_id] = n + 1
     return head + tail
+
+
+#: 🆕 2026-10-08 — **좌표로** 법령 조문 청크를 꺼낸다 — 사전 근거(위반 인용)에 원문을 붙일 때 (D-224 ④ · 근거 표시 「(나)」).
+#:    🔴 거버넌스 조인은 검색과 **같은 것**(`_JOINS`)이다 — U2 가 안 열린 원천 · 폐지 조문은 여기서도 안 나온다.
+#:    🚨 법령 청크만 본다(`doc_type = '법령'`). 식품 제8조① 각 호 ↔ 시행령 [별표 1] 각 호 대응(D-281)은 아직 붙이지 않는다 ⬜.
+#:    ⛔ `LIMIT` 이 없다 — 법 × 조 몇 개의 청크 전부라 작고, 자르면 어느 호가 빠졌는지 모른다.
+SQL_ARTICLES = f"""SELECT {_COLS}
+{_JOINS}
+WHERE u.allowed AND c.doc_type = '법령' AND c.law_id = ANY(%s::text[]) AND c.article = ANY(%s::text[])
+ORDER BY c.law_id, c.article, c.chunk_id"""
+
+
+def by_article(cur: Any, law_ids: Sequence[str], articles: Sequence[str]) -> list[Hit]:
+    """법 ID · 조(「제8조」) 묶음의 법령 청크 — `citation` 이 붙은 `Hit` 로. 비면 질의하지 않는다.
+
+    🚨 `match` 칸은 화면에 나가지 않는다 — 받는 쪽(`app/graph.py` `basis_texts`)이 근거 조문으로 옮긴다.
+    """
+    if not law_ids or not articles:
+        return []
+    cur.execute(SQL_ARTICLES, (sorted(set(law_ids)), sorted(set(articles))))
+    return _rows_to_hits(cur.fetchall(), MATCH_LITERAL)
 
 
 def law_view(

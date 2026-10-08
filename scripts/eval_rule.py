@@ -35,6 +35,7 @@ from app.dictmatch import terms_in  # noqa: E402 — 정규화 · 매칭은 한 
 from app.settings import PARAMS  # noqa: E402
 from collect import statute  # noqa: E402
 from preprocess.golden import is_negative, lawful_kind  # noqa: E402 — 음성 판별은 한 곳 (D-99)
+from scripts.collect import VIOLATION_TYPES  # noqa: E402 — 확정 클래스 정본 한 곳 (D-321 · D-99)
 
 DICT = pathlib.Path("data/derived/banned_terms.jsonl")
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
@@ -95,12 +96,32 @@ def ho_scores(rows: list[dict], pairs: dict[str, list[str]]) -> dict[str, tuple[
     return {c: (gold[c], tp[c], fp[c]) for c in sorted(set(gold) | set(fp))}
 
 
+#: 🆕 2026-10-08 (D-321 집행) — 채점 · 게이트 · 발표 지표에 드는 유형은 **확정 클래스뿐**이다. 편입 대기(`기능성화장품_오인`)는
+#:    인코더가 칸을 저장하되 출력을 꺼 둔 유형이라 정답에서도 뺀다(D-321 결정 3). ⛔ 목록을 여기 다시 적지 않는다 — `VIOLATION_TYPES` 한 곳.
+CLASSES: frozenset[str] = frozenset(VIOLATION_TYPES)
+
+
+def untyped_violation(r: dict) -> bool:
+    """🆕 2026-10-08 (D-321 ⬜ 「유형이 없어 학습 · 채점에서 빠진다」의 집행) — **위반인데 확정 클래스 유형이 없는 행**.
+
+    ★ 화장품법 제13조①4호처럼 근거는 있는데 유형이 없는 행(평가 131 · 원장 D-321) · 편입 대기 유형만 붙은 행.
+    ⛔ 빼지 않으면 정답 유형이 빈 집합이 되어 「확정 · 위반 없음」이 정답으로 · 위반 확정이 오탐으로 세진다.
+    🚨 근거 후보만 있는 행(`근거_후보`)은 여기서 보지 않는다 — 후보 중 하나가 정답이고 `truth_types` 가 고른다.
+    """
+    if r.get("조건") not in ("A", "B", "C") or r.get("근거_후보") and not r.get("근거"):
+        return False
+    if r.get("labels"):
+        return not (set(r["labels"]) & CLASSES)
+    return bool(r.get("근거"))
+
+
 def scored(r: dict) -> bool:
     """🆕 D-285 개정 4 — 채점하는 행인가. 🔴 조건 M(보류) · D(판정 대상 아님) 행은 **판정기 B 가 낼 수 없는 답**이라 뺀다.
 
     ⛔ 빼지 않으면 `labels` 가 빈 이 행들이 **적법 표본**으로 세져 오탐률이 부푼다(지시서 §7). 뺀 수는 따로 보인다.
+    🔄 2026-10-08 (D-321) — 유형 없는 위반 행도 뺀다(`untyped_violation`).
     """
-    return r.get("조건") not in ("M", "D")
+    return r.get("조건") not in ("M", "D") and not untyped_violation(r)
 
 
 def _best(cands: list[set], pred: set) -> set:
@@ -109,10 +130,13 @@ def _best(cands: list[set], pred: set) -> set:
 
 
 def truth_types(r: dict, pred: set[str]) -> set[str]:
-    """행의 정답 유형 — 근거가 있으면 그것, 후보만 있으면 예측에 맞춰 고른 후보의 유형."""
+    """행의 정답 유형 — 근거가 있으면 그것, 후보만 있으면 예측에 맞춰 고른 후보의 유형.
+
+    🔄 2026-10-08 (D-321) — **확정 클래스만** 남긴다(`CLASSES`). 편입 대기 유형은 정답이 아니다.
+    """
     if r.get("근거_후보") and not r["labels"]:
-        return _best([set(statute.types_of(c)) for c in r["근거_후보"]], pred)
-    return set(r["labels"])
+        return _best([set(statute.types_of(c)) & CLASSES for c in r["근거_후보"]], pred)
+    return set(r["labels"]) & CLASSES
 
 
 def truth_ho(r: dict, pred: set[str]) -> set[str]:
