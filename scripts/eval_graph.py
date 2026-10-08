@@ -53,6 +53,9 @@ from preprocess import devsplit  # noqa: E402
 from preprocess.golden import lawful_kind  # noqa: E402
 from preprocess.split import APPROVED_READING  # noqa: E402
 from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99)
+    CLASSES as TYPE_CLASSES,
+)
+from scripts.eval_rule import (  # noqa: E402
     MIN_MEASURABLE,
     lawful_report,
     print_lawful,
@@ -62,6 +65,11 @@ from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99
 )
 
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
+#: 🆕 2026-10-08 (D-175 집행) — **봉인 평가셋을 돌린 기록**(이 기기). 원장 · 결정이 「한 번」을 말해도 도구가 세지 않으면 지켜졌는지
+#:    알 수 없다. 🚨 `build/` 는 커밋되지 않는다 — 기기마다 따로 쌓인다. 정본 기록은 원장이다(실행마다 판 표지와 함께 옮긴다)
+SEALED_LOG = pathlib.Path("build/eval/sealed_runs.jsonl")
+#: 🆕 2026-10-08 (D-321 결정 4) — 6종 표. 8종에서 이번 차수에 편입한 둘을 뺀 것(종전 6종 · 2차와 이어 본다)
+NEW_IN_D321 = frozenset({"부당_비교광고", "비방광고"})
 #: DB 사전 대조의 기준 — 적재기(`scripts/load_db.py` `load_dict`)가 읽는 바로 그 파일
 DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 
@@ -279,6 +287,47 @@ def _prf(gold: int, tp: int, fp: int) -> tuple[float, float, float]:
     return p, r, (2 * p * r / (p + r) if p + r else 0.0)
 
 
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
+    """비율 k/n 의 95% 신뢰구간(윌슨) — D-40 (b) 「신뢰구간 병기」. `n == 0` 이면 `None`(구간이 없다 · 0 으로 쓰지 않는다).
+
+    [문헌] 윌슨 점수 구간 — 표본이 작고 비율이 0 · 1 에 가까울 때 정규 근사보다 덜 깨진다. z = 1.96 은 95% [관행].
+    """
+    if n <= 0:
+        return None
+    ph = k / n
+    den = 1 + z * z / n
+    mid = (ph + z * z / (2 * n)) / den
+    half = z * ((ph * (1 - ph) / n + z * z / (4 * n * n)) ** 0.5) / den
+    return max(0.0, mid - half), min(1.0, mid + half)
+
+
+def _ci(k: int, n: int) -> str:
+    c = wilson(k, n)
+    return "-" if c is None else f"[{c[0]:.1%}, {c[1]:.1%}]"
+
+
+def macro_table(types: dict[str, tuple[int, int, int]]) -> dict[str, dict[str, Any]]:
+    """🆕 2026-10-08 (D-321 결정 4 · D-40) — 8종 · 6종 **두 표**. 측정 가능한(정답 30 이상) 유형만 macro 에 든다.
+
+    ★ micro 는 측정 불가 유형까지 합친 수다 — 둘을 나란히 낸다(어느 쪽을 게이트에 쓸지는 정하지 않았다 · ⬜ 판정).
+    🚨 표에 없는 유형(편입 대기)은 `truth_types` 가 이미 뺐다.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for name, keep in (("8종", TYPE_CLASSES), ("6종", TYPE_CLASSES - NEW_IN_D321)):
+        rows = {t: v for t, v in types.items() if t in keep}
+        meas = {t: v for t, v in rows.items() if v[0] >= MIN_MEASURABLE}
+        prf = [_prf(*v) for v in meas.values()]
+        g, tp, fp = (sum(v[i] for v in rows.values()) for i in range(3))
+        out[name] = {
+            "measurable": sorted(meas),
+            "unmeasurable": sorted(set(rows) - set(meas)),
+            "macro": tuple(sum(x[i] for x in prf) / len(prf) for i in range(3)) if prf else None,
+            "micro": _prf(g, tp, fp),
+            "micro_n": (g, tp, fp),
+        }
+    return out
+
+
 def encoder_report(
     rows: list[dict], preds: list[dict], sc: list[tuple[dict, dict]]
 ) -> dict[str, Any]:
@@ -354,7 +403,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     committed = errors = 0
     sc = [(r, p) for r, p in zip(rows, preds, strict=True) if scored(r)]
     for r, p in sc:
-        pt, ph = set(p["types"]), set(p["ho"])
+        pt, ph = set(p["types"]) & TYPE_CLASSES, set(p["ho"])
         tt, th = truth_types(r, pt), truth_ho(r, ph)
         for t in tt:
             gold_t[t] += 1
@@ -378,6 +427,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["unscored_rows"] = n - len(sc)
     out["types"] = {t: (gold_t[t], tp_t[t], fp_t[t]) for t in sorted(set(gold_t) | set(fp_t))}
     out["ho"] = {c: (gold_h[c], tp_h[c], fp_h[c]) for c in sorted(set(gold_h) | set(fp_h))}
+    out["macro"] = macro_table(out["types"])
     # 🆕 2026-10-02 (D-311 · 판정 10-02 보고 규칙) — **탐지 재현율**: 위반 행 중 확정 유형 ∪ 보류 유형 후보가 정답과 겹치는 비율.
     #    ★ 확정 재현율과 **나란히만** 싣는다 — 탐지는 판정이 아니다(보류는 통과가 아니지만 위반 확정도 아니다 · D-127).
     #    재측정 전에 정했다(D-175) — 이 수에 맞춰 사전 자격을 고르지 않는다
@@ -444,23 +494,35 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     for k, v in s["by_condition"].items():
         print(f"    {k:>2}  " + "  ".join(f"{c} {v.get(c, 0)}" for c in CLASSES))
     for name, tab in (("유형", s["types"]), ("호 (정본 · D-282)", s["ho"])):
-        print(f"\n  {name:26} {'정답':>5} {'P':>7} {'R':>7} {'F1':>7}")
+        print(f"\n  {name:26} {'정답':>5} {'P':>7} {'R':>7} {'F1':>7}  R 95% 구간")
         for k, (gold, tp, fp) in tab.items():
             p, r, f = _prf(gold, tp, fp)
             mark = "  🔴 측정 불가 (D-40)" if gold < MIN_MEASURABLE else ""
             if gold == 0:
                 mark = f"  🚨 정답 0인데 오탐 {fp}건"
-            print(f"  {k:26} {gold:>5} {p:>7.3f} {r:>7.3f} {f:>7.3f}{mark}")
+            print(f"  {k:26} {gold:>5} {p:>7.3f} {r:>7.3f} {f:>7.3f}  {_ci(tp, gold):>16}{mark}")
+    for name, m in (s.get("macro") or {}).items():
+        mac = "-" if m["macro"] is None else " · ".join(f"{x:.3f}" for x in m["macro"])
+        mic = " · ".join(f"{x:.3f}" for x in m["micro"])
+        print(
+            f"\n  {name} (D-321 결정 4) — macro P · R · F1 {mac} (측정 가능 {len(m['measurable'])}종) · "
+            f"micro P · R · F1 {mic} · 측정 불가 {', '.join(m['unmeasurable']) or '없음'}"
+        )
     sr = s["selective_risk"]
+    err = round(sr * s["committed"]) if sr is not None else 0
+    sr_mark = (
+        "" if s["committed"] >= MIN_MEASURABLE else "  🔴 측정 불가 (판정을 내린 행 n<30 · D-40)"
+    )
     print(
-        f"\n  selective risk {('-' if sr is None else f'{sr:.1%}')} · coverage {s['coverage']:.1%} "
-        f"(판정을 내린 행 {s['committed']} / 채점 {s['scored_rows']})"
+        f"\n  selective risk {('-' if sr is None else f'{sr:.1%}')} {_ci(err, s['committed'])} · coverage {s['coverage']:.1%} "
+        f"(판정을 내린 행 {s['committed']} / 채점 {s['scored_rows']}){sr_mark}"
     )
     d = s.get("detect") or {}
     if d.get("positive"):
         print(
-            f"\n  위반 행 {d['positive']} — 확정 재현율 {d['confirmed'] / d['positive']:.1%} · "
-            f"탐지 재현율(확정 ∪ 보류 유형 후보) {d['detected'] / d['positive']:.1%}  (D-311 · 탐지는 판정이 아니다)"
+            f"\n  위반 행 {d['positive']} — 확정 재현율 {d['confirmed'] / d['positive']:.1%} {_ci(d['confirmed'], d['positive'])} · "
+            f"탐지 재현율(확정 ∪ 보류 유형 후보) {d['detected'] / d['positive']:.1%} {_ci(d['detected'], d['positive'])}"
+            "  (D-311 · 탐지는 판정이 아니다 · 괄호는 95% 구간)"
         )
     e = s.get("encoder") or {}
     if e.get("rows"):
@@ -658,6 +720,17 @@ def run(
     return preds
 
 
+def log_sealed_run(stamp: dict[str, Any]) -> int:
+    """🆕 2026-10-08 (D-175) — 봉인 평가셋 실행 한 줄을 남기고 이 기기의 누적 횟수를 낸다. 🔴 기록을 못 쓰면 멈춘다(조용히 넘기지 않는다)."""
+    import datetime  # noqa: PLC0415
+
+    SEALED_LOG.parent.mkdir(parents=True, exist_ok=True)
+    line = {"at": datetime.datetime.now().isoformat(timespec="seconds")} | stamp
+    with SEALED_LOG.open("a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
+    return sum(1 for x in SEALED_LOG.read_text(encoding="utf-8").splitlines() if x.strip())
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--limit", type=int)
@@ -710,6 +783,19 @@ def main(argv: list[str] | None = None) -> int:
             )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
+    if not a.dev and not a.stub:
+        n_runs = log_sealed_run(
+            stamp
+            | {
+                "judged_by": g.JUDGED_BY,
+                "rows": len(rows),
+                "limit": a.limit,
+                "provenance": a.provenance,
+            }
+        )
+        print(
+            f"  🔒 봉인 평가셋 실행 — 이 기기 기록 {n_runs}번째 ({SEALED_LOG}) · 원장에 판 표지와 함께 옮긴다 (D-175)"
+        )
     report(s, a.conditional, dev=a.dev)
     print(
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"

@@ -173,6 +173,8 @@ def _add(
 #:    `L` 원천이 위반이 아니라 한 문구 · `판독없음` 판이 없거나 그 문구가 판에 없다.
 #:    ⬜ D-312 의 문언은 N · M · D 다 — `L`(10-05 에 생긴 조건)과 `판독없음` 은 그 문언 밖이고 보수 쪽으로 넣었다(판정 대기).
 READING_DEMOTES = ("N", "M", "D", "L")
+#: 🆕 2026-10-08 — 판독 판이 쓰는 조건 값 전부(`D-286` · `L` 은 10-05). 이 밖의 값 · 빈 값은 판에 없는 것과 같다(`판독없음`)
+READING_KNOWN = frozenset({"A", "B", "C", "M", "D", "L"})
 READING_MISSING = "판독없음"
 #: 🆕 판독이 **광고 문구가 아니라** 한 인용 — 자격을 잃는 데서 그치지 않고 사전에 들어오지 않는다(`build`).
 READING_NOT_AD = "N"
@@ -182,9 +184,10 @@ def ftc_reading(marks: dict[str, dict] | None, doc_id: str, text: str) -> str | 
     """학습 주문 문구 하나의 판독 표시 — 단독판정을 잃으면 그 표시, 아니면 `None`. 🆕 D-312 사전 집행.
 
     ★ 골든(`golden.build`)과 **같은 판 · 같은 열쇠**다(`split.ftc_train_marks` · `split.train_key` · D-99).
-    🔴 **판이 없으면 자격을 주지 않는다** — `marks is None`(판독 대기) · 문구가 판에 없음(분할이 바뀜)은 `판독없음` 이다.
-       ⛔ 「판이 없으면 종전대로」는 대상 이름 · 맥락 조각이 조용히 확정 자격을 되찾는 길이다 (D-220).
-       골든은 같은 자리에서 멈춘다 — 사전은 골든보다 먼저 서야 해서(주입기가 사전을 읽는다) 멈추지 않고 자격만 뺀다.
+    🔴 **판이 없으면 자격을 주지 않는다** — `marks is None`(판독 대기) · 문구가 판에 없음(분할이 바뀜) · 알 수 없는 조건 값은
+       `판독없음` 이다. ⛔ 「판이 없으면 종전대로」는 대상 이름 · 맥락 조각이 조용히 확정 자격을 되찾는 길이다 (D-220).
+       🚨 골든과 다르다 — 골든은 판이 있는데 문구가 없으면 멈추고, 판이 대기면 종전대로 낸다(`golden.build`). 사전은 골든보다
+       먼저 서야 해서(주입기가 사전을 읽는다) 멈추지 않고, 어느 경우든 자격을 뺀다.
     """
     from preprocess.split import train_key  # noqa: PLC0415 — 모듈 최상단이면 순환 import
 
@@ -194,6 +197,8 @@ def ftc_reading(marks: dict[str, dict] | None, doc_id: str, text: str) -> str | 
     if mark.get("대상") == "N":
         return "N"
     cond = mark.get("조건")
+    if cond not in READING_KNOWN:
+        return READING_MISSING
     return cond if cond in READING_DEMOTES else None
 
 

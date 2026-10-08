@@ -694,6 +694,10 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     hold = sorted({s.hold_reason.value for s in res.sentences if s.hold_reason})
     if violations or any(s.verdict.value == "no_basis" for s in res.sentences):
         return {"status": "rejected", "violations": violations, "hold_reasons": hold}
+    if any(s.verdict.value == "unjudged" for s in res.sentences):
+        # 🆕 2026-10-08 (D-127) — 미판정은 「안 봤다」다. ⛔ 「위반 못 찾음」으로 내면 안 본 문장을 본 것처럼 말한다.
+        #    🚨 같은 규칙이 `docs/lse/rejudge.py` 에도 있다(이서은 폴더 · 서버 쪽 재판정) — 바꾸면 양쪽을 같이 (D-99)
+        return {"status": "unjudged", "violations": [], "hold_reasons": hold}
     status = "passed" if res.outcome.value == "pass" else "no_violation"
     return {"status": status, "violations": [], "hold_reasons": hold}
 

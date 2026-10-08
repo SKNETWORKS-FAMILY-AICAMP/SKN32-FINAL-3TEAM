@@ -31,6 +31,7 @@
   {% if rw.out.rewrite.placement %}<span class="rv-note">배치 · {{ rw.out.rewrite.placement }}</span><br>{% endif %}
   {% if rw.rejudge.status == "passed" %}<span class="rv-chip c-r0">재판정 · 통과</span>
   {% elif rw.rejudge.status == "no_violation" %}<span class="rv-chip c-violation">재판정 · 위반 못 찾음 (통과 아님)</span>
+  {% elif rw.rejudge.status == "unjudged" %}<span class="rv-chip">재판정 못 함 — 판정을 마치지 못한 문장이 있음 (통과 아님)</span>
   {% else %}<span class="rv-chip">재판정 못 함 — 판정 코어 연결 실패</span>{% endif %}
   {% if "low_conf" in (rw.rejudge.hold_reasons or []) %}<span class="rv-chip">확신 부족</span>{% endif %}
   {% for r in rw.out.repairs %}<br><span class="rv-note">후처리 · {{ r }}</span>{% endfor %}
