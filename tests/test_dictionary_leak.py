@@ -129,3 +129,72 @@ def test_단독판정은_단일_뿐이다() -> None:
     """🔴 `build` 가 `단독판정 = (신뢰도 == 단일)` 로 쓴다 — 새 신뢰도 값이 생겨도 자격이 새지 않게 (D-311)."""
     src = inspect.getsource(dictionary.build)
     assert '"단독판정": conf == "단일"' in src
+
+
+# ── D-312 사전 집행 — 학습 주문 문구의 판독이 자격을 정한다 ─────────────────────────────────────────
+def _mark(doc_id: str, text: str, target: str, cond: str | None) -> dict[str, dict]:
+    return {split.train_key(doc_id, text): {"대상": target, "조건": cond}}
+
+
+@pytest.mark.parametrize(
+    ("target", "cond", "want"),
+    [
+        ("N", None, "N"),  # 대상 이름 — 시장 · 업종 용어 · 제품 이름
+        ("Y", "M", "M"),  # 맥락이 있어야 뜻이 선다
+        ("Y", "D", "D"),  # 주장이 아니다
+        ("Y", "L", "L"),  # 원천이 위반이 아니라 한 문구
+        ("Y", "B", None),
+        ("Y", "A", None),
+        ("Y", "C", None),
+    ],
+)
+def test_판독_표시가_단독판정을_가른다(target: str, cond: str | None, want: str | None) -> None:
+    """★ D-312 — 대상 N · 조건 M · D 문구에서 온 항목은 단독판정 자격이 없다. B · A · C 는 그대로다."""
+    marks = _mark("ftc:1", "문구", target, cond)
+    assert dictionary.ftc_reading(marks, "ftc:1", "문구") == want
+
+
+def test_판이_없으면_자격을_주지_않는다() -> None:
+    """🔴 판독 대기(`None`) · 판에 없는 문구는 `판독없음` 이다 — 「없으면 종전대로」가 아니다 (D-220)."""
+    assert dictionary.ftc_reading(None, "ftc:1", "문구") == dictionary.READING_MISSING
+    marks = _mark("ftc:1", "문구", "Y", "B")
+    assert dictionary.ftc_reading(marks, "ftc:1", "다른 문구") == dictionary.READING_MISSING
+    assert dictionary.ftc_reading(marks, "ftc:2", "문구") == dictionary.READING_MISSING, (
+        "문서가 다르면 다른 문구다 — 열쇠는 문서 id 와 문구다"
+    )
+    assert dictionary.confidence([], ["거짓_과장"], [], [dictionary.READING_MISSING]) != "단일"
+
+
+def test_판독강등은_단일이_아니다() -> None:
+    """★ 순서 — 적법중첩 > 모호 > 비주장문맥 > 판독강등 > 단일. 이름은 앞의 셋과 다르다(까닭이 다르다 · D-311 결정 3)."""
+    c = dictionary.confidence
+    assert c([], ["거짓_과장"], [], ["M"]) == "판독강등"
+    assert c([], ["거짓_과장"], [], []) == "단일"
+    assert c([], ["거짓_과장"], []) == "단일", "판독 인자가 없으면(사례집 항목) 종전과 같다"
+    assert c(["…"], ["거짓_과장"], [], ["N"]) == "적법중첩"
+    assert c([], ["거짓_과장", "소비자_기만"], [], ["N"]) == "모호"
+    assert c([], ["질병_예방치료_표방"], ["…"], ["M"]) == "비주장문맥"
+
+
+def test_인용_하나라도_표시가_있으면_항목이_자격을_잃는다() -> None:
+    """🔴 같은 낱말이 한 사건에서는 주장(B)이고 다른 사건에서는 맥락 조각(M)이면 — 단독으로 확정하지 못한다."""
+    entries: dict = {}
+    dictionary._add(
+        entries, "낱말", "낱 말", ["002011:제3조제1항제1호"], "ftc_decisions_body", None
+    )
+    dictionary._add(entries, "낱말", "낱말", ["002011:제3조제1항제1호"], "ftc_decisions_body", "M")
+    assert sorted(entries["낱말"]["판독"]) == ["M"]
+
+
+def test_사전은_골든과_같은_판을_읽는다() -> None:
+    """🔴 판을 따로 읽으면 골든의 조건과 사전의 자격이 갈린다 (D-99) — 같은 함수 · 같은 열쇠."""
+    assert "ftc_train_marks" in inspect.getsource(dictionary.build)
+    assert "train_key" in inspect.getsource(dictionary.ftc_reading)
+
+
+def test_대상_이름_인용은_사전에_들어오지_않는다() -> None:
+    """🔴 시장 · 업종 용어 · 제품 이름은 위반 문구가 아니다 — 자격만 빼면 보류 문장의 유형 후보 근거로 남는다 (D-312 · D-311 결정 4)."""
+    src = inspect.getsource(dictionary.build)
+    assert "READING_NOT_AD" in src and "continue" in src.split("READING_NOT_AD", 1)[1][:600]
+    assert dictionary.READING_NOT_AD == "N"
+    assert dictionary.ftc_reading(_mark("ftc:1", "문구", "N", None), "ftc:1", "문구") == "N"
