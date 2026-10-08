@@ -32,19 +32,14 @@ if not templates.env.autoescape:  # pragma: no cover — 기본값이 바뀌어�
 def evidence_parts(evidence: object) -> dict[str, list]:
     """근거 목록 → `{"basis": 인용 근거, "refs": 참고 조문}` (🆕 2026-10-08 · 근거 표시 「(나)」 · D-224).
 
-    ★ **인용 근거** = 사전 항목이 인용한 조문 — 판정이 기대는 조문. 꼴이 인용으로 되돌아오는 줄이다
-       (`collect.statute.from_article_item` · 그래프가 쓰는 꼴과 한 곳 · D-99).
-    ★ **참고 조문** = 검색이 문장과 가깝다고 찾은 조문 — 판정을 바꾸지 않는다.
-    🚨 계약(`EvidenceArticle`)에는 둘을 가르는 칸이 없다 — 꼴로 가른다. 칸을 둘지는 판정 안건이다(인코더 후보 출처와 함께).
-       그래프는 인용 근거를 **앞에** 둔다(`app/graph.py` `_judge_one`). 순서가 아니라 꼴로 가르는 것은 픽스처 · 외부 응답도 같게 읽으려고다.
+    ★ **인용 근거** = 사전 항목이 인용한 조문 — 판정이 기대는 조문. ★ **참고 조문** = 검색이 찾은 조문 — 판정을 바꾸지 않는다.
+    🔄 2026-10-08 (D-323 결정 2) — 계약 칸 `EvidenceArticle.basis` 로 가른다. ⛔ 종전에는 좌표 꼴로 갈랐다(칸이 없던 때의 임시).
+       칸이 거짓이면 참고다 — 칸을 모르는 쪽이 만든 근거가 판정 근거로 그려지지 않게 (D-220).
     """
-    from collect import statute  # noqa: PLC0415 — 템플릿 필터에서만 쓴다
-
     basis: list = []
     refs: list = []
     for e in evidence or ():  # type: ignore[attr-defined]
-        cite = statute.from_article_item(e.law_id, e.article, e.item)
-        (basis if cite is not None else refs).append(e)
+        (basis if getattr(e, "basis", False) is True else refs).append(e)
     return {"basis": basis, "refs": refs}
 
 

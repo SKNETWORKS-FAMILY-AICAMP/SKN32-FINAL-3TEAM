@@ -113,7 +113,8 @@ def _ho(sent: SentenceJudgment) -> set[str]:
     """
     out = set()
     for a in sent.evidence:
-        if (c := statute.from_article_item(a.law_id, a.article, a.item)) is not None:
+        # 🔄 2026-10-08 (D-323 결정 2) — 사전 근거만(`basis`). 꼴은 같은 곳에서 되읽는다
+        if a.basis and (c := statute.from_article_item(a.law_id, a.article, a.item)) is not None:
             out.add(statute.ho_key(c))
     return out
 

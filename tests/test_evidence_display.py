@@ -10,6 +10,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -258,15 +261,22 @@ def test_근거를_인용_근거와_참고_조문으로_가른다() -> None:
     from app.templating import evidence_parts  # noqa: PLC0415
 
     ev = [
-        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제1호"),
-        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제5호다목"),
+        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제1호", basis=True),
+        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제5호다목", basis=True),
+        # 🔄 D-323 결정 2 — 칸으로 가른다. 꼴이 인용이어도 칸이 거짓이면 참고다(칸을 모르는 쪽이 만든 근거)
+        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제4호"),
         g.EvidenceArticle(law_id="002011", article="제1조", item="", chunk_id="c", quote="목적"),
         g.EvidenceArticle(law_id="005361", article="제2조제1항제5호", item="5.", chunk_id="d"),
         g.EvidenceArticle(law_id="013453", article="[별표 1]제1호다목", item="본문", chunk_id="e"),
     ]
     parts = evidence_parts(ev)
     assert [e.item for e in parts["basis"]] == ["제1항제1호", "제1항제5호다목"]
-    assert [e.article for e in parts["refs"]] == ["제1조", "제2조제1항제5호", "[별표 1]제1호다목"]
+    assert [e.article for e in parts["refs"]] == [
+        "제8조",
+        "제1조",
+        "제2조제1항제5호",
+        "[별표 1]제1호다목",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -276,3 +286,60 @@ def test_근거를_인용_근거와_참고_조문으로_가른다() -> None:
 def test_근거_보기의_머리말은_판정에_맞춘다(fixture: str, label: str) -> None:
     html = TestClient(app).get(f"/u/preview/{fixture}").text
     assert label in html
+
+
+# ── ⑥ D-323 — 인코더 후보는 따로 실린다 · 사전 근거는 칸으로 표시된다 ─────────────────
+
+
+def test_사전_근거는_basis_칸이_참이다() -> None:
+    a = g._basis_article("013094:제8조제1항제1호")  # noqa: SLF001
+    assert a is not None and a.basis is True
+    r = g._evidence_article(_hit(citable=True))  # noqa: SLF001
+    assert r is not None and r.basis is False, "검색 근거는 참고 조문이다"
+
+
+def test_인코더_후보_칸은_기본이_비어_있고_violations_와_따로다() -> None:
+    from app.contracts import EncoderTypeCandidate, Violation  # noqa: PLC0415
+
+    s = SentenceJudgment(sent_id="s0", text="x", verdict=Verdict.hold, hold_reason="low_conf")
+    assert s.encoder_candidates == [] and s.violations == []
+    s2 = s.model_copy(
+        update={
+            "encoder_candidates": [
+                EncoderTypeCandidate(violation=Violation.거짓_과장, confidence=0.7)
+            ]
+        }
+    )
+    assert s2.violations == [], "🔴 인코더 후보가 사전 근거 칸으로 새지 않는다 (D-323 결정 3)"
+    with pytest.raises(ValueError):
+        EncoderTypeCandidate(violation=Violation.거짓_과장, confidence=1.5)
+
+
+def test_인코더_후보만_있는_보류는_재판정에서_탈락하지_않는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-323 결정 4 — 탈락은 사전 근거로만. 인코더 후보만 남으면 「위반 못 찾음」이다(통과 아님)."""
+    from app.contracts import (  # noqa: PLC0415
+        EncoderTypeCandidate,
+        JudgeResponse,
+        Outcome,
+        Violation,
+    )
+    from app.routers import user as u  # noqa: PLC0415
+
+    s = SentenceJudgment(
+        sent_id="s0",
+        text="x",
+        verdict=Verdict.hold,
+        hold_reason="low_conf",
+        encoder_candidates=[EncoderTypeCandidate(violation=Violation.거짓_과장, confidence=0.9)],
+    )
+    base = json.loads(
+        (Path(__file__).parent / "fixtures/judge/02_hold_low_conf.json").read_text(encoding="utf-8")
+    )
+    res = JudgeResponse.model_validate(
+        {**base, "sentences": [s.model_dump(mode="json")], "outcome": Outcome.hold.value}
+    )
+    monkeypatch.setattr(u, "_core_judge", lambda body, product=None: ("ok", res))
+    got = u._rejudge("고친 문구")  # noqa: SLF001
+    assert got["status"] == "no_violation" and got["violations"] == []
