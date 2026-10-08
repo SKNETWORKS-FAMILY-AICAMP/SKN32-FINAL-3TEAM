@@ -470,6 +470,73 @@ def gate(base, base_seeds, res, seeds):
     return verdict, rows, fails
 
 
+#: 🆕 규약 2판 (2026-10-08) — 시드 평균끼리 견준다. 허용폭 = max(1판 값, Baseline 재현 시드 42 · 43 · 44 사이의 범위)
+#:    Baseline 재현 = 카드 9 노트북의 「Baseline재현」(v10 과 같은 코드 · 시드별 CSV 가 다 있다). 범위는 각 시드의 자기 문턱으로 잰 값이다.
+#:    시드 3개 평균끼리의 차이가 우연으로 나는 폭(약 2 표준오차)이 시드 3개의 범위와 비슷하다 — 그래서 범위를 여유로 쓴다.
+GATE_V2 = {
+    "prauc_drop": 0.02,  # B  — 1판 0.02 · 범위 0.0095
+    "recall_drop": 0.025,  # G1 — 1판 2%p · 범위 13행(491 · 502 · 489) = 2.5%p
+    "type_recall_drop": {  # G2 — 1판 5%p · 유형별 범위 (dev 양성 30 이상)
+        "질병_예방치료_표방": 0.067,
+        "건강기능식품_오인": 0.214,
+        "의약품_오인": 0.162,
+        "거짓_과장": 0.05,
+        "소비자_기만": 0.163,
+    },
+    "neg_flag_up": 4,  # G3 — 1판 +1행 · 범위 4행(17 · 21 · 18)
+    "adopt_prauc": 0.008,
+}
+
+
+def seed_means(dev, Y, paths):
+    """시드별 CSV → 시드마다 자기 문턱(규칙대로)으로 잰 값의 평균. 규약 2판의 자."""
+    per = []
+    for pth in paths:
+        P = read_probs(pth, dev)
+        e = evaluate(dev, P, pick_thresholds(Y, P))
+        per.append(e)
+    n = len(per)
+    out = {
+        "n": n,
+        "prauc6": statistics.mean(e["prauc6"] for e in per),
+        "det": statistics.mean(e["det"] for e in per),
+        "hit": statistics.mean(e["hit"] for e in per),
+        "neg": statistics.mean(e["neg"][0] for e in per),
+        "scored": per[0]["scored"],
+        "neg_n": per[0]["neg"][1],
+        "type": {x: statistics.mean(e["types"][x]["tp"] / e["types"][x]["n"] for e in per) for x in GATE_V2["type_recall_drop"]},
+        "per_seed": [(e["det"], e["hit"], e["neg"][0]) for e in per],
+    }
+    return out
+
+
+def gate_v2(b, c):
+    """규약 2판 — 시드 평균끼리 · 허용폭은 Baseline 재현의 시드 범위만큼."""
+    d_pr = c["prauc6"] - b["prauc6"]
+    d_rec = (c["det"] - b["det"]) / b["scored"]
+    d_type = {x: c["type"][x] - b["type"][x] for x in GATE_V2["type_recall_drop"]}
+    over = {x: d_type[x] < -GATE_V2["type_recall_drop"][x] - 1e-12 for x in d_type}
+    worst = min(d_type, key=lambda x: d_type[x] + GATE_V2["type_recall_drop"][x])
+    d_neg = c["neg"] - b["neg"]
+    ok = {"B": d_pr >= -GATE_V2["prauc_drop"], "G1": d_rec >= -GATE_V2["recall_drop"] - 1e-12,
+          "G2": not any(over.values()), "G3": d_neg <= GATE_V2["neg_flag_up"] + 1e-9}
+    fails = [k for k, v in ok.items() if not v]
+    verdict = ("탈락 (" + " · ".join(fails) + ")") if fails else (
+        "채택 후보 (PR-AUC)" if d_pr >= GATE_V2["adopt_prauc"] else "통과 · Baseline 과 차이 없음 — 겨냥한 지표가 미리 적은 만큼 나아졌는지 본다")
+    yn = lambda k: "통과" if ok[k] else "**탈락**"
+    rows = [
+        ["B 6종 PR-AUC (시드 평균)", f"{b['prauc6']:.4f}", f"{c['prauc6']:.4f}", f"{d_pr:+.4f}", f"−{GATE_V2['prauc_drop']} 까지", yn("B")],
+        ["G1 위반 탐지 (시드 평균 · /%d)" % b["scored"], f"{b['det']:.1f}", f"{c['det']:.1f}", f"{d_rec * 100:+.1f}%p", f"−{GATE_V2['recall_drop'] * 100:.1f}%p 까지", yn("G1")],
+    ] + [
+        [f"G2 재현율 — {x} (시드 평균)", f"{b['type'][x] * 100:.1f}%", f"{c['type'][x] * 100:.1f}%", f"{d_type[x] * 100:+.1f}%p",
+         f"−{GATE_V2['type_recall_drop'][x] * 100:.1f}%p 까지", "**탈락**" if over[x] else "통과"]
+        for x in GATE_V2["type_recall_drop"]
+    ] + [
+        ["G3 음성(D · L) 오판정 (시드 평균 · /%d)" % b["neg_n"], f"{b['neg']:.1f}", f"{c['neg']:.1f}", f"{d_neg:+.1f}행", f"+{GATE_V2['neg_flag_up']}행 까지", yn("G3")],
+    ]
+    return verdict, rows, fails
+
+
 def inside_repo(path):
     p = os.path.abspath(path)
     while True:
@@ -532,6 +599,10 @@ def main():
     )
     ap.add_argument("--out-md", help="집계표(md · id 없음)를 쓸 경로 — 저장소 안에 둬도 된다")
     ap.add_argument(
+        "--rule", default="v1", choices=["v1", "v2"],
+        help="통과 기준 — v1 = 규약 1판(가장 좋은 시드 하나 · 10-07) · v2 = 규약 2판(시드 평균 · Baseline 재현 흔들림만큼 여유 · 10-08)",
+    )
+    ap.add_argument(
         "--out-rows", help="행 단위 목록(csv · 문장 원문 없음)을 쓸 경로 — 저장소 밖에만"
     )
     a = ap.parse_args()
@@ -574,7 +645,19 @@ def main():
         )
     else:
         md += table(["지표", name], summary_rows(res, seeds if len(seeds) > 1 else []))
-    if base:
+    if base and a.rule == "v2":
+        if len(a.probs) < 3 or len(a.baseline_probs) < 3:
+            raise SystemExit("🔴 규약 2판은 시드별 CSV 가 셋 이상 있어야 한다 (이 모델 · Baseline 둘 다)")
+        bm, cm = seed_means(dev, Y, a.baseline_probs), seed_means(dev, Y, a.probs)
+        verdict, rows, fails = gate_v2(bm, cm)
+        md += ["", "## 2. 통과 판정 — 규약 2판 (시드 평균 · Baseline 대비)", "", f"**{verdict}**", ""]
+        md += table(["기준", "Baseline", "이 모델", "차이", "허용", "판정"], rows)
+        md += ["", "시드별 (자기 문턱) — 위반 탐지 · 정답 유형 적중 · 음성 오판정: Baseline "
+               + " / ".join(f"{d} · {h} · {g}" for d, h, g in bm["per_seed"]) + " · 이 모델 "
+               + " / ".join(f"{d} · {h} · {g}" for d, h, g in cm["per_seed"])]
+        v1, _, _ = gate(base, bseeds if len(bseeds) > 1 else None, res, seeds if len(seeds) > 1 else None)
+        md += ["", f"참고 — 규약 1판(가장 좋은 시드 하나)으로는 「{v1}」이다."]
+    elif base:
         verdict, rows, fails = gate(
             base, bseeds if len(bseeds) > 1 else None, res, seeds if len(seeds) > 1 else None
         )
