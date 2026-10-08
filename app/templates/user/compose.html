@@ -168,7 +168,8 @@
         {%- else %}알 수 없는 값 ({{ s.hold_reason.value }}){% endif -%}
       </span>
       {% endif %}
-      {% if s.risk.final %}
+      {#- 🔄 2026-10-08 — 검수 화면(review.html)과 같은 규칙: 보류 문장의 R0 칩은 그리지 않는다(D-280 · D-263 ①) #}
+      {% if s.risk.final and not (s.verdict.value != "confirmed" and s.risk.final.value == "R0") %}
       <span class="cp-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
       {% endif %}
       {% if s.infeasibility %}

@@ -198,3 +198,11 @@ def test_대상_이름_인용은_사전에_들어오지_않는다() -> None:
     assert "READING_NOT_AD" in src and "continue" in src.split("READING_NOT_AD", 1)[1][:600]
     assert dictionary.READING_NOT_AD == "N"
     assert dictionary.ftc_reading(_mark("ftc:1", "문구", "N", None), "ftc:1", "문구") == "N"
+
+
+@pytest.mark.parametrize("cond", [None, "", "X", "b"])
+def test_알_수_없는_조건_값은_자격을_주지_않는다(cond: str | None) -> None:
+    """🔴 판의 조건 칸이 비었거나 모르는 값이면 「판에 없음」과 같다 — 열린 방향(자격 유지)으로 새지 않는다 (D-220)."""
+    assert dictionary.ftc_reading(_mark("ftc:1", "문구", "Y", cond), "ftc:1", "문구") == (
+        dictionary.READING_MISSING
+    )

@@ -81,6 +81,33 @@ def parse(c: str) -> tuple[str, int, int, int, str | None]:
     return m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4)), m.group(5)
 
 
+#: 🆕 2026-10-08 — 근거 조문 칸(`EvidenceArticle` 의 article · item) 꼴. `article_item` 이 만들고 `from_article_item` 이 되읽는다.
+_ART = re.compile(r"^제(\d+)조$")
+_ITEM = re.compile(r"^제(\d+)항제(\d+)호(?:([가-힣])목)?$")
+
+
+def article_item(c: str) -> tuple[str, str, str]:
+    """인용 → 근거 조문 칸 `(법 ID, 「제N조」, 「제N항제N호[X목]」)` — 판정 그래프가 사전 근거를 계약에 옮길 때 쓴다.
+
+    🆕 2026-10-08 — `app/graph.py` `_basis_article` 이 따로 조립하던 꼴을 여기로 옮겼다. 되읽는 쪽(`from_article_item`)과
+       한 곳에 두어야 꼴이 갈리지 않는다 (D-99) — 갈렸을 때 평가 도구가 목 붙은 근거를 조용히 버렸다(`scripts/eval_graph.py` `_ho`).
+    """
+    law, jo, hang, ho, mok = parse(c)
+    return law, f"제{jo}조", f"제{hang}항제{ho}호" + (f"{mok}목" if mok else "")
+
+
+def from_article_item(law_id: str, article: str, item: str) -> str | None:
+    """`article_item` 의 역 — 그 꼴이 아니면 **None** (D-220 · 지어내지 않는다).
+
+    ⛔ 검색 근거(`article`=「제8조제1항제4호」 · `item`=「4.」 · 별표 「[별표 1]제5호다목」)는 이 꼴이 아니다 — None.
+       검색이 찾은 조문은 판정의 근거 문맥이지 위반 인용이 아니다. 별표 → 조문 호 대응(D-281)도 여기서 하지 않는다 ⬜.
+    """
+    a, i = _ART.match(article or ""), _ITEM.match(item or "")
+    if not law_id or a is None or i is None:
+        return None
+    return cite(law_id, int(a[1]), int(i[1]), int(i[2]), i[3])
+
+
 def law_of(c: str) -> str | None:
     """인용 → **법 축**(`collect/law_map.LAWS`). 꼴이 틀리거나 모르는 법 ID 면 **None** — 기본 법으로 떨어지지 않는다 (D-220).
 
