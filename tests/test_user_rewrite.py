@@ -269,3 +269,70 @@ def test_화면에_서버_실행_명령을_보이지_않는다(wired) -> None:  
     assert "연결하지 못했어요" in html
     assert ".venv-sllm" not in html
     assert "sllm_service.py" not in html
+
+
+# ── 품목 분기가 있는 문구 — 분기를 고른 뒤에만 고쳐 쓴다 (ksr 2026-10-06 · main 병합) ─────────────
+#: 03_hold_cat_unknown — 기록 판정은 건강기능식품_오인(A) · 화장품 분기는 의약품_오인(C) · 식품 분기는 A
+BRANCHED = "면역력 강화에 도움을 줍니다."
+
+
+def _light_branched(premise: str, violations=()):  # noqa: ANN001, ANN202
+    """재판정용 가짜 — 기록 판정에는 위반을 두고, 고른 전제의 분기에는 `violations` 만 둔다."""
+    branch = _light(violations)
+    branch.premise = SimpleNamespace(value=premise)
+    res = _light(["건강기능식품_오인"])
+    res.branches = [branch]
+    return res
+
+
+def test_분기가_있으면_고른_전제의_위반_유형으로_고쳐_쓴다(wired) -> None:  # noqa: ANN001
+    wired.judge_out[BRANCHED] = ("ok", _fixture("03_hold_cat_unknown"))
+    wired.judge_out[BODY] = ("ok", _light_branched("화장품"))
+    html = _post([("text", BRANCHED), ("target", "1:s1"), ("premise", "화장품"), ("round", "2")])
+    assert wired.sllm == [(BRANCHED, ["의약품_오인"])], (
+        "🔴 품목을 모를 때의 기록 판정(건강기능식품_오인)으로 고쳐 썼다 — 고른 분기의 판정을 읽어야 한다"
+    )
+    assert "고친 문구 후보" in html, (
+        "🔴 재판정을 고른 전제의 분기로 읽지 않았다(기록 판정의 위반으로 탈락)"
+    )
+    # 다시 그릴 때 고른 자리(2회차 · 화장품)가 펼쳐져 있어야 결과가 보인다
+    assert 'id="rvk-1-2-cos" aria-label="화장품" checked' in html
+    assert 'id="rvr-1-2"' in html and html.count('회차" checked') == 2
+
+
+def test_분기를_고르지_않으면_고쳐_쓰지_않는다(wired) -> None:  # noqa: ANN001
+    wired.judge_out[BRANCHED] = ("ok", _fixture("03_hold_cat_unknown"))
+    html = _post([("text", BRANCHED), ("target", "1:s1")])
+    assert wired.sllm == [], "🔴 분기를 고르기 전의 판정으로 고쳐 썼다"
+    assert "제품 유형을 먼저 골라 주세요" in html
+
+
+def test_분기의_사유_A는_고쳐_쓰지_않는다(wired) -> None:  # noqa: ANN001
+    wired.judge_out[BRANCHED] = ("ok", _fixture("03_hold_cat_unknown"))
+    html = _post([("text", BRANCHED), ("target", "1:s1"), ("premise", "식품"), ("round", "0")])
+    assert wired.sllm == []
+    assert "고쳐 쓰지 않아요" in html
+
+
+@pytest.mark.parametrize(
+    "extra", [[("premise", "없는_전제")], [("premise", "화장품"), ("round", "9")], [("round", "x")]]
+)
+def test_모르는_전제와_회차는_거부한다(wired, extra: list) -> None:  # noqa: ANN001
+    wired.judge_out[BRANCHED] = ("ok", _fixture("03_hold_cat_unknown"))
+    _post([("text", BRANCHED), ("target", "1:s1"), *extra], status=422)
+    assert wired.sllm == []
+
+
+def test_고쳐_쓰기_버튼은_분기를_고른_뒤의_문장에만_있다() -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    html = TestClient(app).get("/u/preview/03_hold_cat_unknown").text
+    # 기록되는 판정은 회차의 맨 끝이다 — 다음 회차가 시작하는 데서 자른다
+    rec = [part.split('class="rv-round ')[0] for part in html.split('<div class="rv-rec">')[1:]]
+    assert rec and all("/u/review/rewrite" not in part for part in rec), (
+        "🔴 고르기 전(기록되는 판정)에 고쳐 쓰기 버튼이 있다"
+    )
+    assert 'name="premise" value="화장품"' in html, "화장품 분기의 지적 문장에는 버튼이 있어야 한다"
+    assert 'name="premise" value="건기식_인정"' not in html, "위반이 없는 분기에는 버튼이 없다"

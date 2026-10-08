@@ -57,10 +57,14 @@ from train_stage1_v5 import SYSTEM_V6 as STAGE1_SYSTEM  # noqa: E402
 from train_stage1_v5 import parse as parse_stage1  # noqa: E402
 from train_stage1_v5 import user_msg as stage1_user  # noqa: E402
 
+from sllm_meta import stage1_dir, stage1_version, stage2_dir  # noqa: E402
+
 ROOT = HERE.parents[1]
-STAGE1_VER = "v12"  # 채택본 (10-05 · v6 → v8 → v9 → v10 → v12)
-STAGE1 = ROOT / "models" / f"copylane_sllm_lora_adapter_{STAGE1_VER}"
-STAGE2 = ROOT / "models" / "copylane_sllm_persona_adapter"
+# 채택본은 v12 (10-05 · v6 → v8 → v9 → v10 → v12). 🔄 2026-10-07 — 판은 `sllm_meta` 한 곳에서 읽는다:
+#   환경 변수 `COPYLANE_SLLM_STAGE1` · `COPYLANE_SLLM_STAGE2` 로 바꾸고, 비우면 종전 값 그대로다
+STAGE1_VER = stage1_version()
+STAGE1 = stage1_dir(STAGE1_VER)
+STAGE2 = stage2_dir()
 OUT = HERE / "_private" / "persona_pipeline_e2e.jsonl"
 #: 고를 수 있는 고객층 — 🚨 D-27 고민 · 증상 축 없음. 실제 서비스에서는 세그먼트(`app.contracts.Segment.label`)가 들어온다
 PERSONAS = {

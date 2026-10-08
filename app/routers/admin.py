@@ -261,7 +261,7 @@ def source_detail(request: Request, source_id: str) -> HTMLResponse:
 
     ⬜ **쓰기는 아직 안 연다.** 제안·확인 버튼은 화면엔 있지만 비활성(disabled) 이다 —
        `source_grade_proposal`/`source_grade_history` 테이블 팀장 승인이 먼저다
-       (docs/psj/소스등급_판정흐름_스키마초안.md, 병렬작업 계약 §5 `db/**` 등급 1).
+       (docs/psj/notes/소스등급_판정흐름_스키마초안.md, 병렬작업 계약 §5 `db/**` 등급 1).
        승인 나오면 이 화면에 POST 라우트만 붙이면 된다 — 뼈대는 미리 만들어 둔다.
     """
     actor = require_governor(request)

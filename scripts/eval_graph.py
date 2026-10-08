@@ -3,6 +3,7 @@
     uv run python scripts/eval_graph.py                          # 정본 기기 · 실제 DB · 전부
     uv run python scripts/eval_graph.py --limit 200              # 앞 200행만(실행 시간을 먼저 잰다)
     uv run python scripts/eval_graph.py --provenance ftc_decisions_body
+    uv run python scripts/eval_graph.py --dev --encoder models/<판>   # 🆕 dev(검증 묶음)로 — 판 · 문턱 · 규칙은 여기서 고른다 (D-175)
     uv run python scripts/eval_graph.py --stub                   # DB 없이 — 배선만(전부 미판정 · 수는 0 이 정상)
     uv run python scripts/eval_graph.py --out build/eval/graph.json
 
@@ -29,6 +30,7 @@ import argparse
 import collections
 import hashlib
 import json
+import os
 import pathlib
 import sys
 import time
@@ -37,6 +39,7 @@ from typing import Any
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+from app import encoder as enc  # noqa: E402
 from app import graph as g  # noqa: E402
 from app.contracts import (  # noqa: E402
     Category,
@@ -46,6 +49,7 @@ from app.contracts import (  # noqa: E402
     Verdict,
 )
 from collect import statute  # noqa: E402
+from preprocess import devsplit  # noqa: E402
 from preprocess.golden import lawful_kind  # noqa: E402
 from preprocess.split import APPROVED_READING  # noqa: E402
 from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99)
@@ -66,17 +70,24 @@ DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 CLASSES = ("확정위반", "확정무위반", "보류", "근거없음", "미판정")
 
 
-def load_rows(path: pathlib.Path = GOLDEN, provenance: str | None = None) -> list[dict]:
-    """봉인 평가셋 행. 🔴 파일이 없으면 멈춘다 — 빈 목록으로 0 을 내지 않는다 (D-220)."""
+def load_rows(
+    path: pathlib.Path = GOLDEN, provenance: str | None = None, *, dev: bool = False
+) -> list[dict]:
+    """봉인 평가셋 행(기본) 또는 **dev 행**(`dev=True`). 🔴 파일이 없으면 멈춘다 — 빈 목록으로 0 을 내지 않는다 (D-220).
+
+    🆕 2026-10-07 — dev 는 학습 분할에서 뗀 검증 묶음이다(`preprocess/devsplit.py` · 인코더 노트북과 같은 행).
+       판 · 문턱 · 규칙을 고르는 자리는 봉인이 아니라 여기다 (D-175).
+    """
     if not path.exists():
         raise SystemExit(
             f"🔴 {path} 가 없다 — 정본은 `launcher.py golden --write` · 사본은 `data-sync`"
         )
-    rows = [
-        r
-        for r in (json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip())
-        if r["split"] == "test_sentence"
-    ]
+    every = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    if dev:
+        by_id = {r["id"]: r for r in every}
+        rows = [by_id[i] for i in devsplit.dev_ids(every)]
+    else:
+        rows = [r for r in every if r["split"] == "test_sentence"]
     if provenance:
         rows = [r for r in rows if r.get("provenance") == provenance]
     return rows
@@ -122,6 +133,11 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "hold_reasons": sorted({s.hold_reason.value for s in sents if s.hold_reason is not None}),
         "types": types,
         "candidates": cands,
+        #: 🆕 2026-10-07 (그림자 배선) — **인코더가 문턱을 넘겨 낸 유형**(`encodings`). 판정에 쓰이지 않은 신호다 —
+        #:    `candidates`(문장 판정에 실린 보류 후보)와 섞지 않는다. 인코더가 안 돌았으면 `encoded` 가 거짓이고 이 칸은 빈다
+        "enc_candidates": sorted({c for e in state.get("encodings", []) for c in e.candidates}),
+        "encoded": bool(sents) and len(state.get("encodings", [])) == len(sents),
+        "enc_truncated": sum(1 for e in state.get("encodings", []) if e.truncated),
         "ho": ho,
         "class": cls,
         #: 판정을 내린 행 — **전 문장이 확정**이다(selective risk 의 분모 · D-77 L1 #8)
@@ -263,6 +279,46 @@ def _prf(gold: int, tp: int, fp: int) -> tuple[float, float, float]:
     return p, r, (2 * p * r / (p + r) if p + r else 0.0)
 
 
+def encoder_report(
+    rows: list[dict], preds: list[dict], sc: list[tuple[dict, dict]]
+) -> dict[str, Any]:
+    """**인코더 신호를 유형 후보로 더했다면**의 탐지 재현율 (🆕 2026-10-07 · 그림자 배선).
+
+    ★ 판정은 인코더를 읽지 않는다 — 이 수는 「붙이면 탐지가 얼마가 되나」이고 **지금 그래프가 낸 판정의 수가 아니다.**
+       `detect`(D-311 결정 5 · 확정 ∪ 보류 유형 후보)는 그대로 두고 **따로** 싣는다.
+       ⬜ D-311 의 「보류 유형 후보」는 사전의 자격 없는 적중을 가리켜 적은 말이다 — 인코더 후보를 같은 줄에 세는지는 팀장 확인.
+    🔴 인코더가 **전 문장에** 돈 행만 센다(`encoded`). 안 돈 행을 「조용했다」로 세지 않는다 (D-220) — 없으면 `rows` 가 0 이다.
+    · `lawful` — 적법 문장에 인코더 후보가 선 수. 칸은 `lawful_report` 와 같다(음성 L · 주장없음 D · D-301).
+    """
+    done = [(r, p) for r, p in zip(rows, preds, strict=True) if p.get("encoded")]
+    if not done:
+        return {"rows": 0}
+    ids = {id(r) for r, _ in done}
+    pos = det = det_enc = 0
+    for r, p in sc:
+        if id(r) not in ids:
+            continue
+        pt = set(p["types"]) | set(p.get("candidates", ()))
+        pe = pt | set(p["enc_candidates"])
+        tt = truth_types(r, pe)
+        if not tt:
+            continue
+        pos += 1
+        det += bool(pt & tt)
+        det_enc += bool(pe & tt)
+    fired: dict[str, bool] = {}
+    for r, p in done:
+        fired[r["text"]] = fired.get(r["text"], False) or bool(p["enc_candidates"])
+    return {
+        "rows": len(done),
+        "positive": pos,
+        "detected": det,
+        "detected_with_encoder": det_enc,
+        "lawful": lawful_report([r for r, _ in done], lambda t: fired.get(t, False)),
+        "truncated_sents": sum(p.get("enc_truncated", 0) for _, p in done),
+    }
+
+
 def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     """행 · 예측 → 수. 🔴 순수 함수 — 게이트가 대역 예측으로 잰다."""
     assert len(rows) == len(preds)
@@ -335,6 +391,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         conf_hit += bool(pt & tt)
         det += bool((pt | set(p.get("candidates", ()))) & tt)
     out["detect"] = {"positive": pos, "confirmed": conf_hit, "detected": det}
+    out["encoder"] = encoder_report(rows, preds, sc)
     out["coverage"] = committed / len(sc) if sc else 0.0
     out["selective_risk"] = errors / committed if committed else None
     out["committed"] = committed
@@ -370,14 +427,14 @@ def product_of(r: dict, conditional: bool) -> ProductContext:
     return ProductContext(category=Category(r["품목"])) if conditional else ProductContext()
 
 
-def report(s: dict[str, Any], conditional: bool = False) -> None:
+def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -> None:
     print(
         "  [조건부 — 품목을 아는 행 · 골든 `품목`]"
         if conditional
         else "  [무조건부 — 품목 미확정 · 세 법]"
     )
     print(
-        f"그래프 평가 — 평가셋 {s['rows']}행 (채점 {s['scored_rows']} · 채점 밖 M · D {s['unscored_rows']})"
+        f"그래프 평가 — {'dev(검증 묶음)' if dev else '평가셋'} {s['rows']}행 (채점 {s['scored_rows']} · 채점 밖 M · D {s['unscored_rows']})"
     )
     print(f"  종착   {s['outcome']}")
     print(f"  문장   {s['verdict']}")
@@ -405,6 +462,26 @@ def report(s: dict[str, Any], conditional: bool = False) -> None:
             f"\n  위반 행 {d['positive']} — 확정 재현율 {d['confirmed'] / d['positive']:.1%} · "
             f"탐지 재현율(확정 ∪ 보류 유형 후보) {d['detected'] / d['positive']:.1%}  (D-311 · 탐지는 판정이 아니다)"
         )
+    e = s.get("encoder") or {}
+    if e.get("rows"):
+        print(
+            f"\n  [인코더 · 그림자] 인코더가 돈 행 {e['rows']} — 🚨 판정은 인코더를 읽지 않는다. 아래는 「후보로 더했다면」이다"
+        )
+        if e["positive"]:
+            print(
+                f"    위반 행 {e['positive']} — 탐지 재현율 {e['detected'] / e['positive']:.1%} → "
+                f"인코더 후보까지 {e['detected_with_encoder'] / e['positive']:.1%}"
+            )
+        for kind, (n, hit) in e["lawful"].items():
+            if n:
+                mark = "" if n >= MIN_MEASURABLE else "  ← 측정 불가 (n<30 · D-40)"
+                print(
+                    f"    적법 · {kind} {n} 행 중 인코더 후보가 선 행 {hit} ({hit / n:.1%}){mark}"
+                )
+        if e["truncated_sents"]:
+            print(
+                f"    🔴 토큰 상한을 넘어 뒤가 잘린 문장 {e['truncated_sents']} — 잘린 부분은 보지 않았다"
+            )
     print_lawful(s["lawful"])
     w = s.get("recorded") or {}
     if w.get("rows"):
@@ -440,7 +517,14 @@ def report(s: dict[str, Any], conditional: bool = False) -> None:
         print(
             "\n  ⓘ 조건부(품목을 아는 경우)는 `--conditional` 로 따로 잰다 (D-306 · 기획서 6-3 병기)"
         )
-    print("  🚨 봉인 평가셋이다 — 이 수에 맞춰 규칙 · 문턱을 고르지 않는다 (D-175)")
+    if dev:
+        print(
+            "  ⓘ dev(검증 묶음)다 — 판 · 문턱 · 규칙은 여기서 고른다 (D-175). "
+            "🚨 학습 분할에서 뗀 행이라 사전이 평가셋보다 잘 울린다 — 사전 쪽 수를 평가셋 수처럼 읽지 않는다.\n"
+            "     해설서 수정문구류(적법 · 주장 없음)가 없다 — 「적법 문구를 가르는가」는 dev 로 재지 못한다"
+        )
+    else:
+        print("  🚨 봉인 평가셋이다 — 이 수에 맞춰 규칙 · 문턱을 고르지 않는다 (D-175)")
 
 
 # ── 실행 ────────────────────────────────────────────────────────────────
@@ -500,6 +584,59 @@ def check_dict(cur: Any, path: pathlib.Path = DICT_FILE) -> dict[str, Any]:
     return {"dict_sha": _sha12(path), "dict_entries": d["file"]}
 
 
+def check_dev(rows: list[dict], model_dir: pathlib.Path | None) -> dict[str, Any]:
+    """dev 행이 **그 인코더가 학습에서 뺀 dev 와 같은지** — 모델 폴더의 `label_scheme.json`(`dev_sha` · `dev_rows`)과 대조한다.
+
+    🔴 **다르면 멈춘다** (D-220 · D-175) — 그 모델은 이 행의 일부를 학습에서 봤다. 그 수는 dev 수치가 아니다.
+    🚨 모델 폴더에 dev 지문이 없으면(옛 산출물) 대조할 수 없다 — 멈추지 않고 판 표지에 「미확인」으로 적는다.
+       없음을 일치로 세지 않는다. 인코더 없이 재면 대조할 모델이 없다 — 지문만 적는다.
+    """
+    stamp: dict[str, Any] = {"dev_rows": len(rows), "dev_sha": devsplit.sha(r["id"] for r in rows)}
+    if model_dir is None:
+        return stamp
+    try:
+        scheme = json.loads((model_dir / "label_scheme.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"🔴 {model_dir} 의 label_scheme.json 을 읽지 못했다 — {e}") from e
+    want = scheme.get("dev_sha")
+    if not want:
+        return stamp | {"dev_check": "미확인(모델 폴더에 dev 지문 없음)"}
+    if (want, scheme.get("dev_rows")) != (stamp["dev_sha"], stamp["dev_rows"]):
+        raise SystemExit(
+            f"🔴 dev 가 이 모델의 dev 와 다르다 — 여기 {stamp['dev_rows']}행 · {stamp['dev_sha']} / "
+            f"모델 {scheme.get('dev_rows')}행 · {want}\n"
+            "  이 모델은 이 행의 일부를 학습에서 봤다 — dev 수치로 쓸 수 없다 (D-175).\n"
+            "  골든 판이 다르거나 모델이 다른 규칙으로 dev 를 뗐다(`preprocess/devsplit.py` 는 v11 규칙이다)."
+        )
+    return stamp | {"dev_check": "일치"}
+
+
+def use_encoder(model_dir: pathlib.Path | None) -> dict[str, Any]:
+    """인코더를 켠다 — 판 표지(폴더 이름 · 가중치 지문)를 돌려준다. 안 켜면 빈 표지다.
+
+    🔴 **켰는데 못 올리면 멈춘다** (D-220) — 그래프의 `encode` 는 이 경우 경고만 남기고 규칙 판정으로 간다.
+       수를 재는 자리에서 그대로 두면 인코더 없는 수가 인코더 수처럼 찍힌다.
+    """
+    if model_dir is not None:
+        os.environ[enc.ENV_MODEL_DIR] = str(model_dir)
+    path = enc.configured_dir()
+    if path is None:
+        return {}
+    try:
+        scheme = enc.encoder_at(path).scheme
+        return {
+            "encoder": path.name,
+            "encoder_sha": enc.weights_sha12(path),
+            # 상한을 모델 폴더가 실어 줬는지 · 기본값으로 돌았는지 함께 적는다 (D-220)
+            "encoder_max_tokens": f"{scheme.max_tokens}"
+            + ("" if scheme.max_tokens_from_model else "(기본값)"),
+        }
+    except enc.EncoderUnavailable as e:
+        raise SystemExit(
+            f"🔴 인코더를 올리지 못했다 — {e}\n  끄려면 --encoder 와 {enc.ENV_MODEL_DIR} 을 비운다"
+        ) from e
+
+
 def stub_runner() -> Callable[[str, ProductContext], dict[str, Any]]:
     """DB 없이 — 스텁 한 바퀴(`run_review_stub`). 사전을 못 훑어 전부 미판정이다 — 배선만 본다."""
     return lambda text, product: g.run_review_stub(text)[0]
@@ -532,14 +669,30 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="조건부 — 골든 품목을 제품 정보로 (품목을 아는 행만)",
     )
+    ap.add_argument(
+        "--encoder",
+        type=pathlib.Path,
+        help=f"인코더 모델 폴더 — 그림자로 돌려 「후보로 더했다면」의 수를 낸다 (없으면 {enc.ENV_MODEL_DIR} · 둘 다 없으면 인코더 없이)",
+    )
+    ap.add_argument(
+        "--dev",
+        action="store_true",
+        help="봉인 평가셋 대신 dev(검증 묶음)로 잰다 — 판 · 문턱 · 규칙을 고르는 자리 (D-175)",
+    )
     a = ap.parse_args(argv)
-    rows = load_rows(provenance=a.provenance)
+    rows = load_rows(dev=a.dev)
+    #: dev 대조는 **거르기 전 전체 행**으로 한다 — 원천으로 거른 뒤에는 지문이 달라진다
+    dev_stamp = check_dev(rows, a.encoder or enc.configured_dir()) if a.dev else {}
+    if a.provenance:
+        rows = [r for r in rows if r.get("provenance") == a.provenance]
     if a.conditional:
         rows = conditional_rows(rows)
     if a.limit:
         rows = rows[: a.limit]
     #: 판 표지 — 원장에 수와 함께 적는다 (D-178). 🔴 실제 실행은 DB 사전이 파일과 같을 때만 돈다(`check_dict`)
     stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN), "conditional": a.conditional}
+    stamp |= {"split": "dev" if a.dev else "test_sentence"} | dev_stamp
+    stamp |= use_encoder(a.encoder)
     t0 = time.perf_counter()
     if a.stub:
         preds = run(rows, stub_runner(), conditional=a.conditional)
@@ -557,7 +710,7 @@ def main(argv: list[str] | None = None) -> int:
             )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
-    report(s, a.conditional)
+    report(s, a.conditional, dev=a.dev)
     print(
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"
         f" · " + " · ".join(f"{k} {v}" for k, v in stamp.items())
