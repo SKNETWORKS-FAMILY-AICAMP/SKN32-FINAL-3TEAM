@@ -517,6 +517,8 @@ def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
        가리킨다. 지어내지 않고 **버린다.**
     🔄 2026-10-08 — `quote` 는 **원천의 `U3_cite` 가 열린 청크만** 싣는다(`hit.citable` · D-224 ④). 종전에는 그 자격을 읽지 않아
        늘 비웠다. ⛔ 제외 목에서 올린 좌표(`exempt_of`)는 이 청크의 글이 그 좌표의 글이 아니므로 싣지 않는다(`chunk_id` 와 같은 이유).
+       ⛔ 쪼갠 조각(`part_total` ≠ 1)도 싣지 않는다 — 계약에 「일부다」를 말할 칸이 없어 조각이 조문 전문처럼 보인다(D-224 ③ · D-199).
+          `None`(재적재 전)도 싣지 않는다 — 모르는 것을 전문으로 치지 않는다 (D-220).
     🔄 2026-09-28 (D-238 개정 (나)) — `citation` 이 아니라 `basis_citation` 을 옮긴다. 적용 제외 목이면 **부모 목의 좌표**가
        오고, 그 좌표를 가진 청크는 이 청크가 아니므로 `chunk_id` 를 비운다 — 제외 목의 글이 위반 근거 자리에 보이지 않게.
        제외 목 자신은 `_proviso()` 가 따로 나른다.
@@ -525,12 +527,13 @@ def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
     if not hit.basis_citation or not hit.law_id:
         return None
     own = not hit.exempt_of
+    whole = hit.part_total == 1
     return EvidenceArticle(
         law_id=hit.law_id,
         article=hit.basis_citation,
         item=hit.item or "",
         chunk_id=hit.chunk_id if own else None,
-        quote=hit.text if own and hit.citable is True and hit.text else None,
+        quote=hit.text if own and whole and hit.citable is True and hit.text else None,
     )
 
 

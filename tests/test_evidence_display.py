@@ -75,6 +75,8 @@ def _hit(**kw: object) -> rt.Hit:
         law="식품표시광고법",
         text="조문 글",
         exempt_of="",
+        part_no=1,
+        part_total=1,
         match=rt.MATCH_FUSED,
         citation="제8조제1항제1호",
         basis_citation="제8조제1항제1호",
@@ -90,6 +92,11 @@ def _hit(**kw: object) -> rt.Hit:
         ({"citable": False}, None),
         ({"citable": None}, None),  # 질의가 칸을 안 실었다 — 자격을 지어내지 않는다
         ({"citable": True, "exempt_of": "1.가"}, None),  # 제외 목의 글은 부모 좌표의 글이 아니다
+        (
+            {"citable": True, "part_no": 2, "part_total": 3},
+            None,
+        ),  # 조각 — 「일부다」를 말할 칸이 없다 (D-224 ③)
+        ({"citable": True, "part_total": None}, None),  # 재적재 전 — 전문인지 모른다 (D-220)
     ],
 )
 def test_인용_자격이_열린_청크만_조문_글을_싣는다(kw: dict, want: str | None) -> None:
@@ -108,19 +115,31 @@ def test_모든_질의가_인용_자격을_읽는다(sql: str) -> None:
 
 
 def test_꺼_둔_환경에서는_서버를_부르지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sllm_client, "ENABLED", False)
+    monkeypatch.setenv("COPYLANE_SLLM_URL", "off")
     assert sllm_client.rewrite("문구", ["거짓_과장"]) == ("off", None)
 
 
 def test_꺼_둔_환경에서는_버튼_대신_안내를_그린다(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sllm_client, "ENABLED", False)
+    monkeypatch.setenv("COPYLANE_SLLM_URL", "off")
     html = TestClient(app).get("/u/preview/02_hold_low_conf").text
     assert 'action="/u/review/rewrite"' not in html
     assert "이 환경에서는 문장 고쳐 쓰기를 제공하지 않아요" in html
 
 
 def test_켜_둔_환경에서는_버튼이_있다(monkeypatch: pytest.MonkeyPatch) -> None:
-    """⛔ 로컬 · 시연의 동작은 바뀌지 않는다 — 기본값(`COPYLANE_SLLM_URL` 없음)이 켜짐이다."""
-    monkeypatch.setattr(sllm_client, "ENABLED", True)
+    """⛔ 로컬 · 시연의 동작은 바뀌지 않는다 — 변수를 안 주면 켜짐이다."""
+    monkeypatch.delenv("COPYLANE_SLLM_URL", raising=False)
     html = TestClient(app).get("/u/preview/02_hold_low_conf").text
     assert 'action="/u/review/rewrite"' in html
+
+
+def test_꺼짐은_부를_때_읽는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 import 시점에 읽으면 `.env` 의 `off` 가 import 순서에 따라 안 먹힌다 — 부를 때마다 읽는다."""
+    monkeypatch.delenv("COPYLANE_SLLM_URL", raising=False)
+    assert sllm_client.enabled()
+    for v in ("off", "OFF", " off ", ""):
+        monkeypatch.setenv("COPYLANE_SLLM_URL", v)
+        assert not sllm_client.enabled()
+    monkeypatch.setenv("COPYLANE_SLLM_URL", "http://127.0.0.1:9999/")
+    assert sllm_client.enabled()
+    assert sllm_client._url() == "http://127.0.0.1:9999"  # noqa: SLF001
