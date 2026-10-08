@@ -88,13 +88,17 @@ def chat(model, tok, system: str, user: str, n: int) -> str:
     return tok.decode(out[0][ids["input_ids"].shape[1]:], skip_special_tokens=True)
 
 
-def with_rejudge(res: dict, do_rejudge: bool) -> dict:
+def with_rejudge(res: dict, do_rejudge: bool, category: str | None = None) -> dict:
     """🆕 10-01 — 후보를 팀 판정 코어에 다시 넣는다(D-119 · `rejudge.py`). 위반이 확정되면 탈락(보류)시킨다.
     DB 가 없으면 `rejudge: unavailable` 로 적고 후보를 그대로 둔다 — 돌지 않은 재판정을 통과로 적지 않는다(D-146)."""
     if not do_rejudge or res["outcome"] != "candidate" or not res.get("final"):
         return res
     try:
-        r = rejudge(res["final"])
+        # 🆕 10-06 (§2 #3) — 품목을 받았으면 재판정에도 넘긴다(D-319). 없으면 미확정 그대로
+        from app.contracts import Category, ProductContext  # noqa: PLC0415
+
+        product = ProductContext(category=Category(category)) if category else None
+        r = rejudge(res["final"], product)
     except RejudgeUnavailable as e:
         return {**res, "rejudge": "unavailable", "rejudge_note": str(e)}
     res = {**res, "rejudge": r.status, "rejudge_outcome": r.outcome, "rejudge_violations": list(r.violations),
@@ -105,13 +109,15 @@ def with_rejudge(res: dict, do_rejudge: bool) -> dict:
     return res
 
 
-def run_one(model, tok, text: str, labels: list[str], persona: str | None = None, do_rejudge: bool = False) -> dict:
+def run_one(model, tok, text: str, labels: list[str], persona: str | None = None, do_rejudge: bool = False,
+            category: str | None = None) -> dict:
     """문구 하나 — 서비스가 부를 단위. `persona`(고객층 설명)를 주지 않으면 1단계 결과로 끝난다.
-    `do_rejudge` 면 후보를 팀 판정 코어로 다시 판정한다(DB 필요)."""
-    return with_rejudge(_run_one(model, tok, text, labels, persona), do_rejudge)
+    `do_rejudge` 면 후보를 팀 판정 코어로 다시 판정한다(DB 필요).
+    `category` — 🆕 10-06 품목(`app.contracts.Category` 값 · 판정 결과의 품목). 없으면 후처리가 문구에서 추측한다."""
+    return with_rejudge(_run_one(model, tok, text, labels, persona, category), do_rejudge, category)
 
 
-def _run_one(model, tok, text: str, labels: list[str], persona: str | None = None) -> dict:
+def _run_one(model, tok, text: str, labels: list[str], persona: str | None = None, category: str | None = None) -> dict:
     model.set_adapter("stage1")
     out1 = parse_stage1(chat(model, tok, STAGE1_SYSTEM, stage1_user({"input": text, "violation_types": labels}), 220))
     infeasible = out1.get("infeasible") if out1 else None
@@ -126,13 +132,13 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
     note_in = res["stage1_note"]
     g1 = gate(text, fixed)
     if (not g1.passed and any(r.startswith(_CLAIM_HOLD) for r in g1.reasons)
-            and (ap := to_approved_claim(text, fixed, labels)) is not None):
+            and (ap := to_approved_claim(text, fixed, labels, category)) is not None):
         repairs.append(f"공식 기능성 문구로: {fixed} → {ap[0]}")
         fixed, note_in = ap
         g1 = gate(text, fixed)  # 🚨 고친 문장도 관문을 다시 지난다
-    if fixed and g1.passed and (extra := label_check(text, fixed, labels)):
+    if fixed and g1.passed and (extra := label_check(text, fixed, labels, category)):
         g1 = type(g1)(False, tuple(g1.reasons) + tuple(extra))  # 🆕 10-05 — 위반 유형 · 주어 원료명(관문이 못 보는 것)
-    note, note_problem = condition(fixed, note_in, text) if fixed else (None, None)
+    note, note_problem = condition(fixed, note_in, text, category) if fixed else (None, None)
     res.update(stage1_fixed=fixed, repairs=repairs, note=note, note_problem=note_problem)
     # 🚨 관문 — 1단계가 위반을 못 지운 문장은 내보내지도, 말투로 포장하지도 않는다
     res["gate1"] = list(g1.reasons)

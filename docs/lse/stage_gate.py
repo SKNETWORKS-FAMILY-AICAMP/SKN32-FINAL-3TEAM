@@ -226,6 +226,19 @@ def ingredient_truncated(original: str, s: str) -> str | None:
 _LINK = {"만든", "담은", "담긴", "쓴", "사용", "사용한", "함유", "제품", "넣은", "포함", "구성", "구성한", "된", "한", "든", "으로", "로", "x",
          "위한"}
 _PARTICLE = re.compile(r"(으로|에서|이|가|은|는|을|를|의|와|과|로|에|도|만)$")
+#: 활용형 끝 음절 — 「달인」 · 「구운」 · 「삭힌」 · 「말린」 · 「갈아」 · 「볶아」 · 「달여」(원문 「달였어요」 · 「갈았어요」 꼴)
+_CONJ_END = re.compile(r"[인은는한된던운린긴친쓴든힌킨진근픈쁜게고아어여워와]$")
+#: 기능성 문구에 들어가는 공통 낱말 — 「~에 도움을 줄 수 있음」 · 「~에 도움을 줍니다」
+_CLAIM_COMMON = {"도움", "도움을", "줄", "수", "있음", "있습니다", "줍니다", "주는", "데", "하는"}
+
+
+def _claim_word(w: str) -> bool:
+    """🆕 10-06 (§2 #5) — 인정 기능성 · 공식 화장품 문구에 쓰이는 낱말인가. 「도움」 문장에서도 사실 부분은 보되 이 낱말은 허용한다."""
+    stem = _PARTICLE.sub("", w.removesuffix("(반복)"))
+    if w in _CLAIM_COMMON or stem in _CLAIM_COMMON:
+        return True
+    n = dm.norm(stem)
+    return bool(n) and (n in approved_blob() or any(n in dm.norm(c) for c in OFFICIAL_COSMETIC))
 
 
 def new_words(original: str, s: str) -> list[str]:
@@ -240,7 +253,18 @@ def new_words(original: str, s: str) -> list[str]:
     words = re.findall(r"[가-힣A-Za-z]+", re.sub(r"\([^)]*\)?", " ", s))
     for w in words:
         stem = _PARTICLE.sub("", w) if len(w) > 2 else w
+        # 🔄 10-06 — 두 글자 「쌀로」 · 「잎을」도 조사를 뗀다(남는 게 있을 때만) · 괄호를 떼고 남은 조사 하나(「(MSM)은」 → 「은」)는 낱말이 아니다
+        if len(w) == 2 and _PARTICLE.sub("", w):
+            stem = _PARTICLE.sub("", w)
+        if not stem or _PARTICLE.fullmatch(w):
+            continue
         if w in _LINK or stem in _LINK:
+            continue
+        # 🔄 10-06 (팀장 전달 §2 #5) — 두 글자 명사는 **통째로** 본다. 첫 음절만 보면 「항암」이 원문 「항상」으로 지나간다.
+        #    활용형 끝(「달인」 · 「구운」 · 「삭힌」 …)은 종전대로 앞 절반만 본다
+        if len(stem) == 2 and all("가" <= c <= "힣" for c in stem) and not _CONJ_END.search(stem):
+            if stem.lower() not in o:
+                out.append(w)
             continue
         head = stem[: max(1, len(stem) // 2)].lower()
         # 한 음절 어간은 받침만 다른 불규칙 활용(「갈았어요 → 간」 · 「냈어요 → 낸」)을 같은 말로 본다
@@ -327,6 +351,11 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"원문에 없는 원료명: {g}")
     if (t := ingredient_truncated(original, s)) is not None:
         why.append(f"원료명 앞부분 잃음: {t}")
-    if "도움" not in s and (nw := new_words(original, s)):
+    # 🔄 10-06 (팀장 전달 §2 #5) — 종전에는 「도움」이 있으면 이 검사를 통째로 건너뛰어 「…달인 곶감은 면역에 도움」이 지나갔다.
+    #    이제 늘 보고, 「도움」 문장에서는 인정 문구 낱말(`_claim_word`)만 허용한다
+    nw = new_words(original, s)
+    if "도움" in s:
+        nw = [w for w in nw if not _claim_word(w)]
+    if nw:
         why.append(f"원문에 없는 낱말: {', '.join(nw[:3])}")
     return GateResult(not why, tuple(why))

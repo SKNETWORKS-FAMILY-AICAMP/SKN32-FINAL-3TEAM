@@ -289,7 +289,7 @@
         {% if rw %}
         {% include "user/_review_rewrite.html" %}
         {% elif s.infeasibility and s.infeasibility.value == "A" %}
-        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 기능성이 없는 제품이라 표현을 바꿔도 같은 위반이에요 (D-59).</p>
+        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 · 심사를 받은 제품만 쓸 수 있는 말이라 고쳐 써도 같은 위반이에요 (D-59).</p>
         {% elif s.violations %}
         <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
