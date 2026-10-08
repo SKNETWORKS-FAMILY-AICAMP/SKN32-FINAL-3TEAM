@@ -4,6 +4,8 @@
 정상 광고 문구는 통과시키면서 위반 탐지는 지키는지 **시드마다 짝지어** 잰다. 재학습 없음 — 카드 9 노트북이 저장한 행별 확률만 읽는다.
 
   uv run python docs\\psj\\e2e_prototype\\card10_combo.py --dir <행별 확률 폴더> --syn-csv <정상 합성 문구 CSV> --out-md docs\\psj\\reports\\<집계표>.md
+  # 🆕 카드 12 — 견줄 모델을 바꾼다 (기본은 카드 9 모델)
+  uv run python docs\\psj\\e2e_prototype\\card10_combo.py --model card11 --dir <…> --syn-csv <…> --out-md <…>
 
   · 견주는 쌍 — 같은 시드의 「Baseline 재현 + 카드 8」 대 「카드 9 모델 + 카드 8」 (시드 42 · 43 · 44)
   · 문턱 — 시드마다 그 시드의 공통 dev 확률로 규칙(F1 최대)대로 다시 고른다(노트북과 같은 값). 후보 문턱 = 0.6 × τ · 여유 구간 0.5 ÷ 0.6 · 합의 문턱 = τ
@@ -33,6 +35,9 @@ from scripts.eval_graph import conditional_rows
 
 MODELS = {"기준": "copylane-encoder-kcbert-v10-Baseline재현", "카드10": "copylane-encoder-kcbert-v10-카드9-정상음성"}
 NAMES = {"기준": "Baseline 재현 + 카드 8", "카드10": "카드 9 모델 + 카드 8"}
+#: `--model` — 견줄 모델 (실험 태그 · 표에 쓰는 이름 · 카드 이름). 「기준」은 언제나 Baseline 재현 + 카드 8 이다
+CHOICES = {"card9": ("copylane-encoder-kcbert-v10-카드9-정상음성", "카드 9 모델 + 카드 8", "카드 10"),
+           "card11": ("copylane-encoder-kcbert-v10-카드11-정상음성절반", "카드 11 모델 + 카드 8", "카드 12")}
 SEEDS = [42, 43, 44]
 K = 0.6                       # 카드 8 의 채택 후보
 SYN_SHA = "aae3b4a5ab5471d31583ca704e0e4fc9bfc24b56693b65e13569a759ecd9cd22"
@@ -75,7 +80,9 @@ def main(argv=None):
     ap.add_argument("--banned", default=BANNED_TERMS_PATH)
     ap.add_argument("--out-dir", default=rj.OUT_DIR)
     ap.add_argument("--out-md", default=None)
+    ap.add_argument("--model", default="card9", choices=sorted(CHOICES), help="견줄 모델 — card9 (카드 10 · 올리지 않음) · card11 (카드 12)")
     a = ap.parse_args(argv)
+    MODELS["카드10"], NAMES["카드10"], CARD = CHOICES[a.model]
     out_dir = os.path.abspath(a.out_dir)
     if os.path.commonpath([out_dir, REPO]) == REPO:
         raise SystemExit(f"🔴 요약(JSON · 행 id 포함)을 저장소 안에 쓰지 않는다 (D-249 ⑥): {out_dir}")
@@ -142,7 +149,7 @@ def main(argv=None):
 
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     pct = lambda k, n: f"{k}/{n} ({k / n:.1%})" if n else "—"
-    md = [f"# 카드 10 — 카드 9 모델 + 카드 8 후보 문턱 (dev · {stamp[:8]})", "",
+    md = [f"# {CARD} — {NAMES['카드10']} 후보 문턱 (dev · {stamp[:8]})", "",
           f"> golden `{gsha[:12]}` · 공통 dev 지문 `{mark}` · 사전 `{dict_sha[:12]}` · 규칙 {g.JUDGED_BY} + 인코더 층(`judge_stage2.py`)",
           f"> 후보 문턱 = {K} × τ · 여유 구간 {QUIET_MARGIN / K:.3f} · 합의 문턱 = τ · τ 는 시드마다 그 시드의 공통 dev 로 고른 F1 최대 문턱 · 건수만 적는다", ""]
     for n in ("무조건부", "조건부"):
@@ -165,7 +172,7 @@ def main(argv=None):
                       f"{pct(y['dev_uncond']['quiet'], y['dev_uncond']['n'])} | {y['dev_uncond']['typed']} | {y['dev_cond']['confirmed']} · {y['dev_uncond']['confirmed']} | "
                       f"{y['amb_cond']['pass']}/{y['amb_cond']['n']} |")
     yn = lambda x: "지킴" if x else "**넘음**"
-    md += ["", "### 목표 · 한도 (카드 10 에 먼저 적은 것 · 같은 시드의 「Baseline 재현 + 카드 8」 대비)", "",
+    md += ["", f"### 목표 · 한도 ({CARD} 에 먼저 적은 것 · 같은 시드의 「Baseline 재현 + 카드 8」 대비)", "",
            "| 시드 | 목표 — 정상 합성 dev 조건부 통과 50% 이상 | ① 무조건부 탐지 재현율 −2%p 이내 | ② 조용한 위반 행 +1 이내 | ③ 문장당 유형 2.0 · 4개 이상 5% | ④ 틀린 확정이 늘지 않는다 |",
            "|---:|---|---|---|---|---|"]
     for s in SEEDS:
@@ -175,9 +182,9 @@ def main(argv=None):
     print("\n" + "\n".join(md))
 
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"card10_combo_dev_{stamp}.json")
+    path = os.path.join(out_dir, f"combo_{a.model}_card8_dev_{stamp}.json")
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        json.dump({"at": stamp, "golden_sha256": gsha, "dev_mark": mark, "banned_terms_sha256": dict_sha, "k": K, "judged_by": g.JUDGED_BY,
+        json.dump({"at": stamp, "model": MODELS["카드10"], "card": CARD, "golden_sha256": gsha, "dev_mark": mark, "banned_terms_sha256": dict_sha, "k": K, "judged_by": g.JUDGED_BY,
                    "goal_pass": GOAL_PASS, "lim_detect": LIM_DETECT, "lim_quiet_pos": LIM_QUIET_POS, "lim_avg": LIM_AVG, "lim_ge4": LIM_GE4,
                    "verdict": {str(s): V[s] for s in SEEDS}, "adopt": adopt,
                    "result": {f"{k}_seed{s}": v for (k, s), v in R.items()}}, f, ensure_ascii=False, indent=1, default=str)
