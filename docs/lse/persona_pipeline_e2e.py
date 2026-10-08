@@ -53,7 +53,8 @@ from rejudge import RejudgeUnavailable, rejudge  # noqa: E402
 from stage_gate import check as gate  # noqa: E402
 from train_persona_stage2 import SYSTEM as STAGE2_SYSTEM  # noqa: E402
 from train_persona_stage2 import rule_check  # noqa: E402
-from train_stage1_v5 import SYSTEM_V6 as STAGE1_SYSTEM  # noqa: E402
+# 🔄 10-08 — 학습 프롬프트(SYSTEM_V6) + 사실 · 관계어 보존 규칙(프롬프트 실험 P1 채택). 학습은 그대로다
+from train_stage1_v5 import SYSTEM_SERVE as STAGE1_SYSTEM  # noqa: E402
 from train_stage1_v5 import parse as parse_stage1  # noqa: E402
 from train_stage1_v5 import user_msg as stage1_user  # noqa: E402
 

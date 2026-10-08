@@ -22,12 +22,8 @@ sys.path[:0] = [str(HERE), str(HERE.parent.parent)]
 
 import persona_pipeline_e2e as pe  # noqa: E402
 from sllm_service import load  # noqa: E402
-from train_stage1_v5 import SYSTEM_V6  # noqa: E402
+from train_stage1_v5 import KEEP_RULE, SYSTEM_V6  # noqa: E402 — P1 의 규칙은 서비스와 같은 글(10-08 채택)
 
-KEEP_RULE = (
-    "\n추가: 원산지 · 원료명 · 제조 방법 · 용량 같은 사실은 원문 낱말 그대로 쓴다. "
-    "「대신 · 없이 · 무첨가 · 넣지 않고」처럼 앞말과의 관계를 바꾸는 말은 빼지 않는다 — 빼면 뜻이 뒤집힌다."
-)
 #: 🚨 예시 문구는 연습 문제(뜻 보존 15)와 겹치지 않게 다른 제품 · 다른 원료로 썼다
 FEW_SHOT = (
     "\n예시) 위반 문구: 골다공증 걱정 끝 라떼, 우유 대신 국산 귀리 음료로 만들어요 · 위반 유형: 질병_예방치료_표방\n"
