@@ -488,7 +488,7 @@ def _copies(form: dict[str, list[str]]) -> list[str]:
     return texts or [""]
 
 
-def _core_judge(text: str):  # noqa: ANN202
+def _core_judge(text: str, product=None):  # noqa: ANN001, ANN202
     """코어 판정을 부른다 — `POST /judge` 와 **같은 함수**다 (D-119 · 판정 코어는 하나).
 
     ★ 반환 `(상태, 응답)` — `ok` 는 `JudgeResponse`, `pending` 은 엔진 미착수(501), `down` 은 엔진 연결 실패(503).
@@ -501,7 +501,11 @@ def _core_judge(text: str):  # noqa: ANN202
     from app.contracts import JudgeRequest  # noqa: PLC0415
 
     try:
-        return "ok", core_judge(JudgeRequest(text=text))
+        # 🆕 10-06 (lse) — 고쳐 쓴 문구의 재판정은 원문 판정의 품목을 넘긴다(D-319). 검수는 종전대로 품목 없이
+        req = (
+            JudgeRequest(text=text) if product is None else JudgeRequest(text=text, product=product)
+        )
+        return "ok", core_judge(req)
     except HTTPException as e:
         # 🔄 2026-10-01 (ksr 병합) — ksr 도 같은 503 수정을 따로 했다(`in (501, 503)` → pending). ohb 의 갈래를 둔다:
         #    501 = 엔진 미착수 · 503 = 연결 실패 — 둘을 합치면 아래 `down` 이 닿지 않는 줄이 된다(자동 병합이 그렇게 만들었다)
@@ -670,13 +674,19 @@ def _branch_of(result, premise: str):  # noqa: ANN001, ANN202 — JudgeResponse 
     return next((b for b in result.branches if b.premise.value == premise), None)
 
 
-def _rejudge(body: str, premise: str = "") -> dict:
+def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     """고친 문구를 판정 코어에 다시 넣는다(D-119). 🚨 `no_violation` 은 「위반을 못 찾음」이지 통과가 아니다.
 
     🆕 2026-10-06 (ksr) — 분기를 고르고 고쳐 썼으면 재판정도 **같은 전제의 분기**로 읽는다. 재판정에 그 분기가
        없으면(전제마다 판정이 같아 분기가 생략됨) 기록되는 판정을 읽는다.
+    🆕 2026-10-06 (lse) — 원문 판정에 품목이 있으면 재판정에도 그 품목을 넘긴다(D-319). 분기를 고른 문구는 원문 판정의
+       품목이 비어 있다 — 그때는 종전대로 품목 없이 판정하고 고른 전제의 분기를 읽는다.
     """
-    state, res = _core_judge(body)
+    from app.contracts import Category, ProductContext  # noqa: PLC0415
+
+    state, res = _core_judge(
+        body, ProductContext(category=Category(category)) if category else None
+    )
     if state != "ok":
         return {"status": "unavailable"}
     res = (_branch_of(res, premise) if premise else None) or res
@@ -688,20 +698,23 @@ def _rejudge(body: str, premise: str = "") -> dict:
     return {"status": status, "violations": [], "hold_reasons": hold}
 
 
-def _rewrite_sentence(sentence, premise: str = "") -> dict:  # noqa: ANN001 — SentenceJudgment
+def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
+    sentence, premise: str = "", category: str | None = None
+) -> dict:
     """지적 문장 하나를 고쳐 쓰고 재판정한다. 화면용 dict(`rw`)."""
     from app.routers import sllm_client  # noqa: PLC0415
 
     violations = [v.value for v in sentence.violations or []]
     rw: dict = {"violations": violations}
-    s_state, out = sllm_client.rewrite(sentence.text, violations)
+    # 🆕 10-06 (팀장 전달 §2 #3) — 품목을 넘긴다. 미확정이면 None — 서버가 문구에서 추측한다(분기 선택과의 연결은 품목 흐름에 맞춰 이어간다)
+    s_state, out = sllm_client.rewrite(sentence.text, violations, category)
     if out and out.get("infeasible") and out["infeasible"] not in _VIOLATIONS:
         # 위반 유형 없이 보내면 모델이 사유를 제 말로 지어 쓴다(10-06 실측) — 그 말을 사유로 그리지 않는다
         out = {**out, "infeasible": None}
     rw["down"] = s_state != "ok"
     rw["out"] = out
     if out and out["outcome"] == "candidate" and out.get("rewrite"):
-        rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise)
+        rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise, category)
     return rw
 
 
@@ -772,7 +785,8 @@ async def review_rewrite(request: Request) -> HTMLResponse:
         # 확신 부족 보류만 있고 위반 유형이 없다 — 고칠 것이 없다. 유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측)
         rw = {"no_violation": True}
     else:
-        rw = await run_in_threadpool(_rewrite_sentence, sent, premise)
+        cat = item["result"].category.value if item["result"].category else None
+        rw = await run_in_threadpool(_rewrite_sentence, sent, premise, cat)
     # 열쇠는 (전제, 문장) — 분기 없는 문구의 전제는 빈 글자다. 다른 분기의 같은 문장에 붙지 않는다
     item["rewrites"][premise] = {want_sid: rw}
     return _render(request, "user/review.html", _review_ctx(copies, results))
