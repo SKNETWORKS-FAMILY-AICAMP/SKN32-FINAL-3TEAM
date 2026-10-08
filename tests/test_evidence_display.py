@@ -75,6 +75,8 @@ def _hit(**kw: object) -> rt.Hit:
         law="식품표시광고법",
         text="조문 글",
         exempt_of="",
+        part_no=1,
+        part_total=1,
         match=rt.MATCH_FUSED,
         citation="제8조제1항제1호",
         basis_citation="제8조제1항제1호",
@@ -90,6 +92,11 @@ def _hit(**kw: object) -> rt.Hit:
         ({"citable": False}, None),
         ({"citable": None}, None),  # 질의가 칸을 안 실었다 — 자격을 지어내지 않는다
         ({"citable": True, "exempt_of": "1.가"}, None),  # 제외 목의 글은 부모 좌표의 글이 아니다
+        (
+            {"citable": True, "part_no": 2, "part_total": 3},
+            None,
+        ),  # 조각 — 「일부다」를 말할 칸이 없다 (D-224 ③)
+        ({"citable": True, "part_total": None}, None),  # 재적재 전 — 전문인지 모른다 (D-220)
     ],
 )
 def test_인용_자격이_열린_청크만_조문_글을_싣는다(kw: dict, want: str | None) -> None:
@@ -98,29 +105,174 @@ def test_인용_자격이_열린_청크만_조문_글을_싣는다(kw: dict, wan
     assert a.quote == want
 
 
-@pytest.mark.parametrize("sql", [rt.SQL_VECTOR, rt.SQL_LITERAL, rt.SQL_LEXICAL])
-def test_모든_질의가_인용_자격을_읽는다(sql: str) -> None:
-    assert "'U3_cite'" in sql
-    assert "citable" in rt._NAMES  # noqa: SLF001
+#: 질의문이 인용 자격 칸을 싣는지 · 법별 할당 질의가 그 칸을 이름으로 부르는지는 게이트 파일
+#: `tests/test_retrieve.py` 에 있다(집행계약 §1-3 에 오른 파일).
 
 
 # ── ④ 고쳐 쓰기를 꺼 둔 환경 ─────────────────────────────────────────────
 
 
 def test_꺼_둔_환경에서는_서버를_부르지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sllm_client, "ENABLED", False)
+    monkeypatch.setenv("COPYLANE_SLLM_URL", "off")
     assert sllm_client.rewrite("문구", ["거짓_과장"]) == ("off", None)
 
 
 def test_꺼_둔_환경에서는_버튼_대신_안내를_그린다(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sllm_client, "ENABLED", False)
+    monkeypatch.setenv("COPYLANE_SLLM_URL", "off")
     html = TestClient(app).get("/u/preview/02_hold_low_conf").text
     assert 'action="/u/review/rewrite"' not in html
     assert "이 환경에서는 문장 고쳐 쓰기를 제공하지 않아요" in html
 
 
 def test_켜_둔_환경에서는_버튼이_있다(monkeypatch: pytest.MonkeyPatch) -> None:
-    """⛔ 로컬 · 시연의 동작은 바뀌지 않는다 — 기본값(`COPYLANE_SLLM_URL` 없음)이 켜짐이다."""
-    monkeypatch.setattr(sllm_client, "ENABLED", True)
+    """⛔ 로컬 · 시연의 동작은 바뀌지 않는다 — 변수를 안 주면 켜짐이다."""
+    monkeypatch.delenv("COPYLANE_SLLM_URL", raising=False)
     html = TestClient(app).get("/u/preview/02_hold_low_conf").text
     assert 'action="/u/review/rewrite"' in html
+
+
+def test_꺼짐은_부를_때_읽는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 import 시점에 읽으면 `.env` 의 `off` 가 import 순서에 따라 안 먹힌다 — 부를 때마다 읽는다."""
+    monkeypatch.delenv("COPYLANE_SLLM_URL", raising=False)
+    assert sllm_client.enabled()
+    for v in ("off", "OFF", " off ", ""):
+        monkeypatch.setenv("COPYLANE_SLLM_URL", v)
+        assert not sllm_client.enabled()
+    monkeypatch.setenv("COPYLANE_SLLM_URL", "http://127.0.0.1:9999/")
+    assert sllm_client.enabled()
+    assert sllm_client._url() == "http://127.0.0.1:9999"  # noqa: SLF001
+
+
+# ── ⑤ 근거 표시 「(나)」 — 인용 근거와 참고 조문을 가른다 (🆕 2026-10-08) ──────────────────
+
+
+def _row(**kw: object) -> tuple:
+    d = dict.fromkeys(rt._NAMES)  # noqa: SLF001
+    d.update(
+        doc_type="법령", exempt_of="", part_no=1, part_total=1, citable=True, law="식품표시광고법"
+    )
+    d.update(kw)
+    return tuple(d[n] for n in rt._NAMES)  # noqa: SLF001
+
+
+class _Cur:
+    def __init__(self, rows: list[tuple]) -> None:
+        self.rows, self.calls = rows, []
+
+    def execute(self, sql: str, params: tuple) -> None:
+        self.calls.append(params)
+
+    def fetchall(self) -> list[tuple]:
+        return self.rows
+
+
+def test_사전_근거에_조문_원문을_붙인다() -> None:
+    cur = _Cur(
+        [
+            _row(
+                chunk_id="a1",
+                law_id="013094",
+                article="제8조",
+                paragraph="①",
+                item="1.",
+                text="1. 질병",
+            ),
+            _row(
+                chunk_id="a5",
+                law_id="013094",
+                article="제8조",
+                paragraph="①",
+                item="5.",
+                text="5. 기만",
+            ),
+            # 쪼갠 조각 — 원문을 붙이지 않는다 (D-224 ③)
+            _row(
+                chunk_id="b1",
+                law_id="002011",
+                article="제3조",
+                paragraph="①",
+                item="1.",
+                part_total=2,
+                text="x",
+            ),
+        ]
+    )
+    cites = [
+        "013094:제8조제1항제1호",
+        "013094:제8조제1항제5호|다목",
+        "002011:제3조제1항제1호",
+        "꼴이 아님",
+    ]
+    got = g.basis_texts(cur, cites)
+    assert set(got) == {"013094:제8조제1항제1호", "013094:제8조제1항제5호|다목"}
+    a = got["013094:제8조제1항제5호|다목"]
+    assert (a.article, a.item, a.chunk_id, a.quote) == ("제8조", "제1항제5호다목", "a5", "5. 기만")
+    assert len(cur.calls) == 1, "커서는 한 번만 묻는다"
+
+
+def test_원문_자격이_없으면_붙이지_않는다() -> None:
+    cur = _Cur(
+        [
+            _row(
+                chunk_id="a1",
+                law_id="013094",
+                article="제8조",
+                paragraph="①",
+                item="1.",
+                citable=False,
+                text="t",
+            )
+        ]
+    )
+    assert g.basis_texts(cur, ["013094:제8조제1항제1호"]) == {}
+
+
+def test_원문이_붙은_근거는_좌표를_바꾸지_않는다() -> None:
+    """평가 도구가 되읽는 꼴(`statute.from_article_item`)이 그대로다 — 원문만 더 붙는다."""
+    cite = "013094:제8조제1항제1호"
+    texts = {
+        cite: g.EvidenceArticle(
+            law_id="013094", article="제8조", item="제1항제1호", chunk_id="a1", quote="q"
+        )
+    }
+    a = g._basis_article(cite, texts)  # noqa: SLF001
+    assert a is not None and statute.from_article_item(a.law_id, a.article, a.item) == cite
+
+
+def test_같은_청크는_참고_조문에_다시_싣지_않는다() -> None:
+    basis = [
+        g.EvidenceArticle(
+            law_id="013094", article="제8조", item="제1항제1호", chunk_id="a1", quote="q"
+        )
+    ]
+    retrieved = [
+        g.EvidenceArticle(
+            law_id="013094", article="제8조제1항제1호", item="1.", chunk_id="a1", quote="q"
+        ),
+        g.EvidenceArticle(law_id="013094", article="제1조", item="", chunk_id="z", quote="목적"),
+    ]
+    assert [a.chunk_id for a in g._references(retrieved, basis)] == ["z"]  # noqa: SLF001
+
+
+def test_근거를_인용_근거와_참고_조문으로_가른다() -> None:
+    from app.templating import evidence_parts  # noqa: PLC0415
+
+    ev = [
+        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제1호"),
+        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제5호다목"),
+        g.EvidenceArticle(law_id="002011", article="제1조", item="", chunk_id="c", quote="목적"),
+        g.EvidenceArticle(law_id="005361", article="제2조제1항제5호", item="5.", chunk_id="d"),
+        g.EvidenceArticle(law_id="013453", article="[별표 1]제1호다목", item="본문", chunk_id="e"),
+    ]
+    parts = evidence_parts(ev)
+    assert [e.item for e in parts["basis"]] == ["제1항제1호", "제1항제5호다목"]
+    assert [e.article for e in parts["refs"]] == ["제1조", "제2조제1항제5호", "[별표 1]제1호다목"]
+
+
+@pytest.mark.parametrize(
+    ("fixture", "label"),
+    [("05_certificate_a", "위반 근거"), ("02_hold_low_conf", "걸린 표현의 인용 조문 — 확정 아님")],
+)
+def test_근거_보기의_머리말은_판정에_맞춘다(fixture: str, label: str) -> None:
+    html = TestClient(app).get(f"/u/preview/{fixture}").text
+    assert label in html

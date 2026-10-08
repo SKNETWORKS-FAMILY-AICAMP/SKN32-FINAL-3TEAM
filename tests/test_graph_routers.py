@@ -621,6 +621,9 @@ def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
     # 🆕 2026-10-06 (D-319 집행 — 기준 문안 승인으로 품목 분기가 켜졌다) — 분기 노드가 제재표를 읽는다. 문자열 커서로는 못 읽으므로
     #    「서명 전 · 적재 전」(빈 표)과 같은 대역을 준다 — 하한이 없어 위험도는 붙지 않는다 (D-220)
     monkeypatch.setattr(g, "load_sanction_rows", lambda cur: [])
+    # 🆕 2026-10-08 (근거 표시 「(나)」) — 사전 근거에 원문을 붙이는 조회도 문자열 커서로는 못 한다. 「못 찾음」(빈 표)과 같은 대역이다 —
+    #    근거는 원문 없는 좌표로 간다(종전과 같다)
+    monkeypatch.setattr(g, "basis_texts", lambda cur, cites: {})
 
 
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202

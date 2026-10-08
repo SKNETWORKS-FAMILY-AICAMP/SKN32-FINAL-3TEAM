@@ -16,14 +16,39 @@ import os
 import urllib.error
 import urllib.request
 
-#: sLLM 서버 주소 — 바꿀 일이 있으면 환경 변수로(예: 포트를 바꿔 띄웠을 때).
-_RAW_URL = os.environ.get("COPYLANE_SLLM_URL", "http://127.0.0.1:8765").strip()
+#: sLLM 서버 주소의 기본값 — 바꿀 일이 있으면 환경 변수 `COPYLANE_SLLM_URL` 로(예: 포트를 바꿔 띄웠을 때).
+SLLM_URL = "http://127.0.0.1:8765"
 #: 🆕 2026-10-08 — 이 환경에 고쳐 쓰기 서버를 **두지 않는다**는 표시: `COPYLANE_SLLM_URL=off` (또는 빈 값).
 #:    GPU 가 없는 배포 기기(원장 「지원 리소스」 · 배포계획)에서 버튼이 남아 「잠시 뒤 다시 눌러 주세요」를 내면 거짓이다 —
-#:    없는 기능은 없다고 그린다. ⛔ 기본값은 그대로(로컬 주소) — 로컬 · 시연의 동작은 바뀌지 않는다.
-#:    배포에 넣을지는 정하지 않았다(배포계획 「sLLM 미정」) — 이 줄은 그 결정을 내리지 않고 스위치만 둔다.
-ENABLED = _RAW_URL.lower() not in ("", "off")
-SLLM_URL = _RAW_URL.rstrip("/")
+#:    없는 기능은 없다고 그린다. ⛔ 기본값은 켜짐(로컬 주소) — 로컬 · 시연의 동작은 바뀌지 않는다.
+#:    배포에 넣을지는 정하지 않았다(배포계획 「sLLM 미정」) — 이 스위치는 그 결정을 내리지 않는다.
+OFF_VALUES = ("", "off")
+
+
+def _env_url() -> str | None:
+    """환경 변수 값 — **부를 때마다** 읽는다. `None` = 주지 않았다.
+
+    🔴 2026-10-08 — `.env` 는 `app.settings.settings()` 가 처음 불릴 때 읽힌다(`collect/env.py` · D-99). 이 모듈이 import
+       시점에 환경 변수를 읽으면 `.env` 에 적은 `off` 가 import 순서에 따라 먹히기도 하고 안 먹히기도 한다. 그래서 먼저 부른다.
+    """
+    from app.settings import settings  # noqa: PLC0415 — `.env` 를 읽는 곳은 하나다
+
+    settings()
+    v = os.environ.get("COPYLANE_SLLM_URL")
+    return None if v is None else v.strip()
+
+
+def enabled() -> bool:
+    """이 환경에 고쳐 쓰기를 두었는가. 변수를 안 주면 켜짐이다."""
+    v = _env_url()
+    return v is None or v.lower() not in OFF_VALUES
+
+
+def _url() -> str:
+    v = _env_url()
+    return v.rstrip("/") if v else SLLM_URL
+
+
 #: 문장당 4~12초(RTX 3080) · 첫 요청은 더 걸린다 — 넉넉히 잡되 무한히 기다리지 않는다.
 TIMEOUT_S = 90
 
@@ -38,16 +63,16 @@ def rewrite(
 
     재판정은 여기서 켜지 않는다 — 앱이 **앱의 판정 코어**로 다시 판정한다(D-119 · 판정 코어는 하나).
     `category` — 🆕 10-06 판정 결과의 품목(D-319). 없으면 서버가 문구에서 추측한다.
-    🆕 2026-10-08 — 꺼 둔 환경(`ENABLED` 거짓)이면 부르지 않고 `("off", None)` — 「연결 실패」와 가른다.
+    🆕 2026-10-08 — 꺼 둔 환경(`enabled()` 거짓)이면 부르지 않고 `("off", None)` — 「연결 실패」와 가른다.
     """
-    if not ENABLED:
+    if not enabled():
         return "off", None
     body = json.dumps(
         {"text": text, "violation_types": violation_types, "rejudge": False, "category": category},
         ensure_ascii=False,
     ).encode("utf-8")
     req = urllib.request.Request(  # noqa: S310 — 주소는 위 상수(로컬)다
-        f"{SLLM_URL}/rewrite",
+        f"{_url()}/rewrite",
         data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
