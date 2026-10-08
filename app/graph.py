@@ -145,6 +145,8 @@ class SentEncoding:
        판정에 쓰는 규칙(합의 · 통과 · 후보를 어느 칸에 싣나)은 팀장 판정 뒤에 들어온다 — 그 자리는 `judge` 다 (D-192).
     ⛔ 문장 판정의 `violations` 에 섞지 않는다 — 그 칸은 고쳐 쓰기(`app/routers/user.py` 버튼 · sLLM 에 넘기는 유형 ·
        `_rejudge` 의 탈락 기준)가 읽는다. 섞으면 적법 문장에 버튼이 뜨고 고친 문구가 재판정에서 탈락한다.
+    🔄 2026-10-08 (D-323) — 응답에 실을 자리가 정해졌다: `SentenceJudgment.encoder_candidates`(유형 · 확신). 배선(클론 B)은
+       이 칸만 채운다 — 하한 · 확정 · 분기 열쇠(`_judgment_key`)에는 넣지 않는다 · 거름은 유형 단위(`pm.NO_HF_MISLEAD`)다.
     """
 
     sent_id: str
@@ -719,7 +721,7 @@ def basis_texts(cur: Any, cites: Iterable[str]) -> dict[str, EvidenceArticle]:
         if h is None or h.citable is not True or h.part_total != 1 or not h.text:
             continue
         out[c] = EvidenceArticle(
-            law_id=law, article=article, item=item, chunk_id=h.chunk_id, quote=h.text
+            law_id=law, article=article, item=item, chunk_id=h.chunk_id, quote=h.text, basis=True
         )
     return out
 
@@ -894,7 +896,7 @@ def _basis_article(
         law, article, item = statute.article_item(cite)
     except ValueError:
         return None
-    return EvidenceArticle(law_id=law, article=article, item=item)
+    return EvidenceArticle(law_id=law, article=article, item=item, basis=True)  # D-323 결정 2
 
 
 def _references(
@@ -1408,7 +1410,10 @@ def _recorded(
 
 
 def _judgment_key(j: SentenceJudgment) -> tuple:
-    """전제끼리 판정이 같은가를 보는 열쇠 — 판정 · 사유 · 유형 · 불가 사유 · 위험도 · 근거 좌표."""
+    """전제끼리 판정이 같은가를 보는 열쇠 — 판정 · 사유 · 유형 · 불가 사유 · 위험도 · 근거 좌표.
+
+    ⛔ 인코더 후보(`encoder_candidates`)는 넣지 않는다 — 판정이 아니다. 넣으면 후보만 다른데도 분기가 생긴다 (D-323 결정 1).
+    """
     return (
         j.verdict,
         j.hold_reason,

@@ -19,7 +19,8 @@
           "article": "제8조",
           "item": "제1항제4호",
           "quote": "거짓·과장된 표시 또는 광고",
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ],
       "risk": {

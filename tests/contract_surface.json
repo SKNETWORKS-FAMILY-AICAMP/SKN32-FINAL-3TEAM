@@ -132,8 +132,13 @@
       "screening": "opt list[app.contracts.SentenceJudgment]",
       "sections": "opt list[app.contracts.AdSection]"
     },
+    "EncoderTypeCandidate": {
+      "confidence": "req builtins.float",
+      "violation": "req app.contracts.Violation"
+    },
     "EvidenceArticle": {
       "article": "req builtins.str",
+      "basis": "opt builtins.bool",
       "chunk_id": "opt str | None",
       "item": "opt builtins.str",
       "law_id": "req builtins.str",
@@ -214,6 +219,7 @@
       "vulnerable_flag": "opt builtins.bool"
     },
     "SentenceJudgment": {
+      "encoder_candidates": "opt list[app.contracts.EncoderTypeCandidate]",
       "evidence": "opt list[app.contracts.EvidenceArticle]",
       "evidence_mismatch": "opt builtins.bool",
       "fact_check": "opt app.contracts.FactBranch | None",
