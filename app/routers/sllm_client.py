@@ -25,13 +25,17 @@ TIMEOUT_S = 90
 OUTCOMES = ("candidate", "hold", "infeasible")
 
 
-def rewrite(text: str, violation_types: list[str]) -> tuple[str, dict | None]:
+def rewrite(
+    text: str, violation_types: list[str], category: str | None = None
+) -> tuple[str, dict | None]:
     """원문 하나를 sLLM 서버에 보낸다. `("ok", 응답)` 또는 `("down", None)`.
 
     재판정은 여기서 켜지 않는다 — 앱이 **앱의 판정 코어**로 다시 판정한다(D-119 · 판정 코어는 하나).
+    `category` — 🆕 10-06 판정 결과의 품목(D-319). 없으면 서버가 문구에서 추측한다.
     """
     body = json.dumps(
-        {"text": text, "violation_types": violation_types, "rejudge": False}, ensure_ascii=False
+        {"text": text, "violation_types": violation_types, "rejudge": False, "category": category},
+        ensure_ascii=False,
     ).encode("utf-8")
     req = urllib.request.Request(  # noqa: S310 — 주소는 위 상수(로컬)다
         f"{SLLM_URL}/rewrite",
