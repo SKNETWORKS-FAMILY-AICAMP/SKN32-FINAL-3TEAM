@@ -137,12 +137,28 @@ def train_only() -> set[str]:
     return {k for k, v in assign_map().items() if v == "train"}
 
 
-def _add(entries: dict, n: str, raw: str, basis: list[str], src: str) -> None:
-    """🔄 D-282 — 근거(조문 인용)만 받는다. 유형은 인용에서 계산하고 **(유형, 근거) 짝**을 남긴다."""
+def _add(
+    entries: dict, n: str, raw: str, basis: list[str], src: str, reading: str | None = None
+) -> None:
+    """🔄 D-282 — 근거(조문 인용)만 받는다. 유형은 인용에서 계산하고 **(유형, 근거) 짝**을 남긴다.
+
+    🆕 `reading` — 그 인용이 단독판정을 잃는 판독 표시(`ftc_reading`). 인용 하나라도 표시가 있으면 항목이 자격을 잃는다.
+    """
     e = entries.setdefault(
-        n, {"term": n, "원문": [], "유형": set(), "근거": set(), "짝": set(), "출처": set()}
+        n,
+        {
+            "term": n,
+            "원문": [],
+            "유형": set(),
+            "근거": set(),
+            "짝": set(),
+            "출처": set(),
+            "판독": set(),
+        },
     )
     e["원문"].append(raw)
+    if reading:
+        e["판독"].add(reading)
     for c in basis:
         t = statute.type_of(c)
         e["근거"].add(c)
@@ -152,10 +168,42 @@ def _add(entries: dict, n: str, raw: str, basis: list[str], src: str) -> None:
     e["출처"].add(src)
 
 
-def confidence(overlap: list[str], types: list[str], nonclaim: list[str]) -> str:
+#: 🆕 D-312 — 학습 주문 문구의 판독 표시 가운데 **단독판정을 잃는 것**. 값은 사전 행의 `판독` 칸에 그대로 실린다.
+#:    `N` 대상 아님(시장 · 업종 용어 · 제품 · 법령 이름 — 🔴 이 인용은 `build` 가 아예 넣지 않는다) · `M` 맥락이 있어야 뜻이 선다 · `D` 주장이 아니다 ·
+#:    `L` 원천이 위반이 아니라 한 문구 · `판독없음` 판이 없거나 그 문구가 판에 없다.
+#:    ⬜ D-312 의 문언은 N · M · D 다 — `L`(10-05 에 생긴 조건)과 `판독없음` 은 그 문언 밖이고 보수 쪽으로 넣었다(판정 대기).
+READING_DEMOTES = ("N", "M", "D", "L")
+READING_MISSING = "판독없음"
+#: 🆕 판독이 **광고 문구가 아니라** 한 인용 — 자격을 잃는 데서 그치지 않고 사전에 들어오지 않는다(`build`).
+READING_NOT_AD = "N"
+
+
+def ftc_reading(marks: dict[str, dict] | None, doc_id: str, text: str) -> str | None:
+    """학습 주문 문구 하나의 판독 표시 — 단독판정을 잃으면 그 표시, 아니면 `None`. 🆕 D-312 사전 집행.
+
+    ★ 골든(`golden.build`)과 **같은 판 · 같은 열쇠**다(`split.ftc_train_marks` · `split.train_key` · D-99).
+    🔴 **판이 없으면 자격을 주지 않는다** — `marks is None`(판독 대기) · 문구가 판에 없음(분할이 바뀜)은 `판독없음` 이다.
+       ⛔ 「판이 없으면 종전대로」는 대상 이름 · 맥락 조각이 조용히 확정 자격을 되찾는 길이다 (D-220).
+       골든은 같은 자리에서 멈춘다 — 사전은 골든보다 먼저 서야 해서(주입기가 사전을 읽는다) 멈추지 않고 자격만 뺀다.
+    """
+    from preprocess.split import train_key  # noqa: PLC0415 — 모듈 최상단이면 순환 import
+
+    mark = None if marks is None else marks.get(train_key(doc_id, text))
+    if mark is None:
+        return READING_MISSING
+    if mark.get("대상") == "N":
+        return "N"
+    cond = mark.get("조건")
+    return cond if cond in READING_DEMOTES else None
+
+
+def confidence(
+    overlap: list[str], types: list[str], nonclaim: list[str], reading: list[str] | None = None
+) -> str:
     """항목 하나의 `신뢰도` — **단독판정은 `단일` 뿐이다**. 🆕 2026-10-02 (D-311).
 
-    🔴 값은 하나다 — 적법중첩(지위에 따라 적법 · D-156) > 모호(여러 유형 · D-155) > 비주장문맥(주장 아닌 자리에 쓰인다) > 단일.
+    🔴 값은 하나다 — 적법중첩(지위에 따라 적법 · D-156) > 모호(여러 유형 · D-155) > 비주장문맥(주장 아닌 자리에 쓰인다)
+       > 판독강등(그 문구를 판독이 광고 주장으로 보지 않았다 · D-312) > 단일.
     ⛔ 비주장문맥을 「적법중첩」 이름에 담지 않는다 — 박수진 시제품 1단계가 적법중첩을 `overlap`(품목 전제 분기)으로 읽어
        식품 전제에서 위반으로 돌린다(원장 10-02 ⑤). 주의사항의 질병 이름은 지위 문제가 아니다.
     """
@@ -163,7 +211,10 @@ def confidence(overlap: list[str], types: list[str], nonclaim: list[str]) -> str
         return "적법중첩"
     if len(types) > 1:
         return "모호"
-    return "비주장문맥" if nonclaim else "단일"
+    if nonclaim:
+        return "비주장문맥"
+    # 🆕 D-312 — 대상 이름 · 맥락 조각 · 주장 아닌 문구에서 온 항목. ⛔ 앞의 세 이름에 담지 않는다 — 까닭이 다르다(D-311 결정 3 과 같은 이유)
+    return "판독강등" if reading else "단일"
 
 
 def build() -> tuple[list[dict], dict]:
@@ -174,6 +225,7 @@ def build() -> tuple[list[dict], dict]:
     from preprocess.split import (  # noqa: PLC0415 — 모듈 최상단이면 순환 import
         casebook_basis,
         casebook_not_ad,
+        ftc_train_marks,
         ho_of,
     )
 
@@ -214,6 +266,9 @@ def build() -> tuple[list[dict], dict]:
             _add(entries, n, str(q), basis, "mfds_casebook")
             stat["사례집"] += 1
 
+    # 🆕 D-312 사전 집행 — 학습 주문 문구의 판독(대상 · 조건). 골든과 같은 판이다. 없으면 `None` — `ftc_reading` 이 자격을 뺀다
+    marks = ftc_train_marks()
+    stat["판독"] = collections.Counter()
     for r in json.loads(FTC.read_text(encoding="utf-8")):
         units = r.get("유형") or []
         if not units:
@@ -227,7 +282,15 @@ def build() -> tuple[list[dict], dict]:
             n = norm(q)
             if len(n) < MIN_TERM:
                 continue
-            _add(entries, n, str(q), basis, "ftc_decisions_body")
+            reading = ftc_reading(marks, did, str(q))
+            if reading:
+                stat["판독"][reading] += 1
+            if reading == READING_NOT_AD:
+                # 🔴 대상 이름(시장 · 업종 용어 · 제품 · 법령 이름)은 **항목으로 넣지 않는다** — 골든이 같은 자리에서 학습 행을
+                #    빼는 것과 같은 처리다(`golden.build` · D-99). ⛔ 「자격 없음」으로 남기면 이름이 보류 문장의 유형 후보 근거가
+                #    되고(D-311 결정 4), 고쳐 쓴 문구가 뺄 수 없는 이름 때문에 재판정에서 떨어진다.
+                continue
+            _add(entries, n, str(q), basis, "ftc_decisions_body", reading)
             stat["의결서"] += 1
 
     # 🔴 D-156 — 승인 문장에 그대로 들어 있는 항목을 표시한다
@@ -243,7 +306,8 @@ def build() -> tuple[list[dict], dict]:
         nonclaim = [c for c in caution if n in c]
         if len(types) > 1:
             stat["충돌"][tuple(types)] += 1
-        conf = confidence(overlap, types, nonclaim)
+        reading = sorted(e["판독"])
+        conf = confidence(overlap, types, nonclaim, reading)
         rows.append(
             {
                 "term": n,
@@ -258,8 +322,10 @@ def build() -> tuple[list[dict], dict]:
                 "적법예시": sorted({a for a in overlap})[:2],
                 # 🆕 D-311 — 단독판정을 잃은 근거 문장(사람이 본다 · 판정 재료가 아니다)
                 "비주장예시": sorted(set(nonclaim))[:2] if conf == "비주장문맥" else [],
+                # 🆕 D-312 — 이 항목의 인용에 붙은 판독 표시(N · M · D · L · 판독없음). 신뢰도가 다른 값이어도 싣는다(사람이 본다)
+                "판독": reading,
                 # 🔴 단독 판정 자격 — 정확매칭만 「위험도 하한」이 된다 (수집전처리_기획 4-9)
-                # 🔄 2026-10-02 (D-311) — 비주장문맥도 자격이 없다
+                # 🔄 2026-10-02 (D-311) — 비주장문맥도 자격이 없다 · 🔄 D-312 사전 집행 — 판독강등도 없다
                 "단독판정": conf == "단일",
             }
         )
@@ -301,6 +367,25 @@ def main() -> int:
     )
     # 🔴 목록을 늘 찍는다 — 분할 · 주의사항 원천이 바뀌면 이 목록이 **조용히** 바뀐다. 원장에 판마다 적는다 (D-149)
     print("     " + " · ".join(r["term"] for r in nc))
+
+    rd = [r for r in rows if r["신뢰도"] == "판독강등"]
+    by_mark = collections.Counter(m for r in rd for m in r["판독"])
+    print(
+        f"\n  🆕 **판독강등 {len(rd)}종** — 학습 주문 문구의 판독이 광고 주장으로 보지 않았다 · 단독으로 확정하지 않는다 (D-312)"
+    )
+    print(
+        f"     표시별 항목 {dict(sorted(by_mark.items()))} · 인용 {dict(sorted(stat['판독'].items()))}"
+        " — M 맥락 · D 주장 아님 · L 원천이 위반 아님 · 판독없음"
+    )
+    print(
+        f"     🔴 대상 이름(N) 인용 {stat['판독'].get(READING_NOT_AD, 0)}회는 **넣지 않았다**"
+        " — 시장 · 업종 용어 · 제품 이름은 위반 문구가 아니다 (D-312)"
+    )
+    if READING_MISSING in stat["판독"]:
+        print(
+            "     🚨 **판독 판이 없거나 판에 없는 문구가 있다** — 그 항목은 자격을 잃었다."
+            " `guide_statute_round ft-input` 부터 다시 (D-220)"
+        )
 
     lap = [r for r in rows if r["신뢰도"] == "적법중첩"]
     if lap:
