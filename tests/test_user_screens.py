@@ -236,3 +236,26 @@ def test_검수_분기_다시_선택은_5회다() -> None:
     body = TestClient(app).get("/u/preview/21_hold_cat_unknown_hair").text
     assert 'id="rvr-1-5"' in body
     assert 'id="rvr-1-6"' not in body
+
+
+@pytest.mark.parametrize("fmt", ["카드뉴스", "배너"])
+def test_광고생성은_고른_종류와_내용을_다시_그린다(fmt: str) -> None:
+    """🔄 10-08 (lse) — 「상세페이지」에 checked 가 박혀 있어 다른 종류를 골라 제출해도 상세페이지로 돌아갔다 · 적은 내용도 비었다."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    body = TestClient(app).post("/u/compose", data={"ad_format": fmt, "prompt": "보습 제품"}).text
+    assert f'value="{fmt}" checked' in body
+    assert 'value="상세페이지" checked' not in body
+    assert ">보습 제품</textarea>" in body
+
+
+def test_광고생성_미리보기는_픽스처의_종류에_체크한다() -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    body = TestClient(app).get("/u/compose/preview/12_compose_from_b").text
+    assert 'value="카드뉴스" checked' in body
+    assert 'value="상세페이지" checked' not in body
