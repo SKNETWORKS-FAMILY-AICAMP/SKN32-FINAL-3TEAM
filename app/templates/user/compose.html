@@ -190,13 +190,27 @@
       {%- else %}어떤 제품도 쓸 수 없는 표현이에요. 이 부분은 빼야 해요.{% endif -%}
     </p>
     {% endif %}
-    {% for e in s.evidence %}
+    {#- 🔄 2026-10-08 — 검수 화면(review.html `ev_details`)과 같은 규칙: 인용 근거만 펼치고 참고 조문은 접는다 (D-99 · `evidence_parts`) #}
+    {% set parts = s.evidence|evidence_parts %}
+    {% for e in parts.basis %}
     <div class="cp-law">
-      <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
+      <div>{{ e.article }}{% if e.item and e.item != "본문" and not e.article.endswith(("호", "목", ")")) %} {{ e.item }}{% endif %}</div>
       <div class="cp-lawid">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
       {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
     </div>
     {% endfor %}
+    {% if parts.refs %}
+    <details style="margin-top:.35rem">
+      <summary class="cp-note" style="cursor:pointer">검색이 찾은 참고 조문 {{ parts.refs|length }}건 — 판정 근거가 아니에요</summary>
+      {% for e in parts.refs %}
+      <div class="cp-law">
+        <div>{{ e.article }}{% if e.item and e.item != "본문" and not e.article.endswith(("호", "목", ")")) %} {{ e.item }}{% endif %}</div>
+        <div class="cp-lawid">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
+        {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+      </div>
+      {% endfor %}
+    </details>
+    {% endif %}
     {% if s.verdict.value != "confirmed" %}
     <p class="cp-note" style="margin-top:.5rem">
       ⛔ 재검증이 <b>확정</b>이 아니라서 이 문구는 지면에 배치되지 않아요 — 섹션이 빈 채로 남아요 (D-63).

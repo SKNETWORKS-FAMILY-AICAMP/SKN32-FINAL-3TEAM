@@ -140,6 +140,8 @@
 .rv-ev-body { border-top: 1px solid var(--u-line); padding: .75rem .9rem; background: var(--u-surface2); }
 .rv-ev-label { font-family: ui-monospace, monospace; font-size: .66rem; color: var(--u-clay); letter-spacing: .04em; margin: .5rem 0 .25rem; }
 .rv-ev-label:first-child { margin-top: 0; }
+.rv-ev-ref { margin: .35rem 0 .25rem; }
+.rv-ev-ref > summary { cursor: pointer; font-size: .74rem; color: var(--u-clay); }
 .rv-calc { display: flex; justify-content: space-between; font-size: .78rem; padding: .15rem 0; }
 .rv-calc.total { border-top: 1px solid var(--u-line); margin-top: .25rem; padding-top: .35rem; font-weight: 600; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -318,21 +320,35 @@
    ⛔ 스크립트 없이 돈다(CSP) — 라디오 + `:checked ~` 로 단계를 넘긴다. 「다시 선택」은 체크박스가 다음 회차를 연다.
    🚨 버튼은 **응답에 있는 분기만** 낸다 — 없는 전제의 결과를 지어내지 않는다 (D-147).
    🚨 분기 결과는 전제 문구(「○○라면」)와 함께만 그린다 (D-263 ③). 기록되는 판정은 그대로 `sentences` 다 (D-263 ①). #}
+{# 조문 한 줄 — 🆕 2026-10-08 · 항목 칸이 조문 칸과 겹치면(「제2조제1항제5호 5.」 · 별표의 「본문」) 그리지 않는다 #}
+{% macro law_row(e) %}
+            <div class="rv-law">
+              <div>{{ e.article }}{% if e.item and e.item != "본문" and not e.article.endswith(("호", "목", ")")) %} {{ e.item }}{% endif %}</div>
+              <div class="rv-law-id">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
+              {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+            </div>
+{% endmacro %}
 {# 근거 보기의 문장 하나 — 조문 · 산출 내역. 전체 근거 보기와 분기 결과가 같은 그림을 쓴다 #}
 {% macro ev_details(n, s) %}
         <details class="rv-ev">
           <summary>문구 {{ n }} · {{ s.text }}</summary>
           <div class="rv-ev-body">
-            <p class="rv-ev-label">이 문장에 걸린 근거</p>
-            {% for e in s.evidence %}
-            <div class="rv-law">
-              <div>{{ e.article }}{% if e.item %} {{ e.item }}{% endif %}</div>
-              <div class="rv-law-id">법령 {{ e.law_id }}{% if e.chunk_id %} · 청크 {{ e.chunk_id }}{% endif %}</div>
-              {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
-            </div>
+            {#- 🔄 2026-10-08 (근거 표시 「(나)」) — **인용 근거**(사전 항목이 인용한 조문 · 판정이 기대는 것)와 **참고 조문**(검색이
+                찾은 것 · 판정을 바꾸지 않는다)을 가른다. 참고는 접는다 — 펼치기 전에는 판정 근거로 읽히지 않게.
+                ⛔ 확정이 아닌 문장의 인용 근거는 「위반 근거」라 부르지 않는다(유형 후보 · D-311). 가르는 규칙은 `evidence_parts` 한 곳.
+                🚨 `compose.html` 의 근거 그림과 한 벌이다 (D-99) #}
+            {% set parts = s.evidence|evidence_parts %}
+            <p class="rv-ev-label">{{ "위반 근거" if s.verdict.value == "confirmed" else "걸린 표현의 인용 조문 — 확정 아님" }}</p>
+            {% for e in parts.basis %}{{ law_row(e) }}
             {% else %}
-            <p class="rv-note">붙은 근거 조문이 없어요.</p>
+            <p class="rv-note">판정이 기댄 조문이 없어요 — 사전에 걸린 표현이 없어요.</p>
             {% endfor %}
+            {% if parts.refs %}
+            <details class="rv-ev-ref">
+              <summary>검색이 찾은 참고 조문 {{ parts.refs|length }}건 — 판정 근거가 아니에요</summary>
+              {% for e in parts.refs %}{{ law_row(e) }}{% endfor %}
+            </details>
+            {% endif %}
             <p class="rv-ev-label">위험도 산출 내역</p>
             <div class="rv-calc"><span>코드 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
             <div class="rv-calc"><span>인코더 예측</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>

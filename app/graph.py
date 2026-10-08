@@ -271,6 +271,9 @@ class CoreState(TypedDict, total=False):
     evidence: Annotated[list[SentEvidence], operator.add]
     # ── 사전 매칭 🔴 누적 (🆕 2026-09-28 · W4) — 문장마다 한 벌 ───────────
     dict_scans: Annotated[list[DictScan], operator.add]
+    #: 🆕 2026-10-08 — 사전 근거 인용 → 원문이 붙은 근거 조문(`basis_texts`). `match_dict` **한 노드만** 쓴다(리듀서 없음).
+    #:    비면 원문 없이 좌표만 간다 — 판정은 바뀌지 않는다 (D-224 ④).
+    basis_texts: dict[str, EvidenceArticle]
     # ── 인코더 신호 🔴 누적 (🆕 2026-10-07 · 그림자) — 문장마다 한 벌. 모델이 없으면 **비어 있다**(없음 ≠ 조용함)
     encodings: Annotated[list[SentEncoding], operator.add]
     # ── 법별 팬아웃 🔴 누적 (D-267) — 법 노드가 **병렬로** 쓴다. 리듀서가 없으면 하나만 남는다
@@ -681,14 +684,44 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
             for m in dm.find(text, es)
         )
 
-    return {
-        "dict_scans": [
-            DictScan(
-                sent_id=sent_id(i), ran=True, hits=_hits(text, entries), weak=_hits(text, weak)
-            )
-            for i, text in enumerate(sents)
-        ]
-    }
+    scans = [
+        DictScan(sent_id=sent_id(i), ran=True, hits=_hits(text, entries), weak=_hits(text, weak))
+        for i, text in enumerate(sents)
+    ]
+    # 🆕 2026-10-08 — 걸린 항목의 인용 조문에 원문을 붙일 재료 (근거 표시 「(나)」 · D-224 ④). 같은 커서로 한 번만 묻는다
+    cites = {c for s in scans for h in (*s.hits, *s.weak) for c in h.basis}
+    return {"dict_scans": scans, "basis_texts": basis_texts(cur, cites)}
+
+
+def basis_texts(cur: Any, cites: Iterable[str]) -> dict[str, EvidenceArticle]:
+    """사전 근거 인용 → **원문이 붙은** 근거 조문 (🆕 2026-10-08 · D-224 ④ · 근거 표시 「(나)」).
+
+    ★ 좌표 꼴은 `_basis_article` 과 같다(`statute.article_item`) — 원문만 더 붙는다. 청크는 조문 청크의 `citation` 으로 찾는다(D-99).
+    🔴 **원문을 싣는 조건은 검색 근거와 같다** — 원천의 `U3_cite` 가 열렸고(`citable`) · 쪼갠 조각이 아니다(`part_total == 1`).
+       못 찾거나 조건이 안 서면 그 인용은 **빠진다** — `_basis_article` 이 원문 없는 좌표로 낸다 (D-220 · 지어내지 않는다).
+    🚨 목(「|다목」)은 시행령 [별표] 의 것이다 — 조문 청크는 **호까지**라 호의 글을 붙인다. 좌표(항목 칸)는 목까지 그대로다.
+    """
+    want: dict[str, tuple[str, str, str, str]] = {}
+    for c in cites:
+        try:
+            law, article, item = statute.article_item(c)
+        except ValueError:
+            continue
+        ho = item.split("호", 1)[0] + "호"
+        want[c] = (law, article, item, article + ho)
+    if not want:
+        return {}
+    hits = rt.by_article(cur, [w[0] for w in want.values()], [w[1] for w in want.values()])
+    at = {(h.law_id, h.citation): h for h in hits if h.citation}
+    out: dict[str, EvidenceArticle] = {}
+    for c, (law, article, item, coord) in want.items():
+        h = at.get((law, coord))
+        if h is None or h.citable is not True or h.part_total != 1 or not h.text:
+            continue
+        out[c] = EvidenceArticle(
+            law_id=law, article=article, item=item, chunk_id=h.chunk_id, quote=h.text
+        )
+    return out
 
 
 @timed
@@ -847,14 +880,34 @@ INFEASIBILITY_OF: dict[Violation, Infeasibility] = {
 _INFEAS_ORDER = (Infeasibility.C, Infeasibility.A, Infeasibility.B)
 
 
-def _basis_article(cite: str) -> EvidenceArticle | None:
-    """사전 근거 인용(`법ID:제N조제N항제N호[|목]`) → 근거 조문. 꼴이 틀리면 `None` — 좌표를 지어내지 않는다 (D-224)."""
+def _basis_article(
+    cite: str, texts: dict[str, EvidenceArticle] | None = None
+) -> EvidenceArticle | None:
+    """사전 근거 인용(`법ID:제N조제N항제N호[|목]`) → 근거 조문. 꼴이 틀리면 `None` — 좌표를 지어내지 않는다 (D-224).
+
+    🆕 2026-10-08 — `texts`(`basis_texts`)에 있으면 **원문이 붙은 줄**을 낸다. 없으면 종전대로 좌표만.
+    """
+    if texts and cite in texts:
+        return texts[cite]
     # 꼴은 `collect/statute.py` 한 곳 — 평가 도구가 되읽는다 (D-99)
     try:
         law, article, item = statute.article_item(cite)
     except ValueError:
         return None
     return EvidenceArticle(law_id=law, article=article, item=item)
+
+
+def _references(
+    retrieved: list[EvidenceArticle], basis: list[EvidenceArticle]
+) -> list[EvidenceArticle]:
+    """검색 근거 중 인용 근거와 겹치지 않는 것 — 인용 근거 **뒤에** 붙는 참고 조문 (🆕 2026-10-08 · 근거 표시 「(나)」).
+
+    🔴 같은 청크는 한 번 — 인용 근거에 원문이 붙으면(`basis_texts`) 검색이 같은 청크를 찾았을 때 두 번 나간다.
+    """
+    own = {b.chunk_id for b in basis if b.chunk_id}
+    return [
+        a for a in retrieved if a not in basis and (a.chunk_id is None or a.chunk_id not in own)
+    ]
 
 
 def _typed(names: set[str]) -> list[Violation]:
@@ -884,6 +937,7 @@ def _judge_one(
     hits: list[DictHit],
     retrieved: list[EvidenceArticle],
     weak: list[DictHit] | None = None,
+    texts: dict[str, EvidenceArticle] | None = None,
 ) -> SentenceJudgment:
     """문장 하나 — **인코더 전 판정** (D-269 그대로 · ⚠️ 재검 대기).
 
@@ -924,14 +978,14 @@ def _judge_one(
         basis: list[EvidenceArticle] = []
         for h in hits:
             for c in h.basis:
-                a = _basis_article(c)
+                a = _basis_article(c, texts)
                 if a is not None and a not in basis:
                     basis.append(a)
         if not basis:
             return SentenceJudgment(
                 sent_id=sid, text=text, verdict=Verdict.no_basis, violations=types
             )
-        evidence = basis + [a for a in retrieved if a not in basis]
+        evidence = basis + _references(retrieved, basis)
         # 같은 적중이 두 법 노드로 들어온다(인용이 두 법에 걸친 항목) — 구간은 좌표마다 한 번 · 라벨은 두 법의 유형을 합친다
         at: dict[tuple[int, int], set[str]] = {}
         if start is not None:
@@ -966,7 +1020,7 @@ def _judge_one(
     basis_w: list[EvidenceArticle] = []
     for h in weak or ():
         for c in h.basis:
-            a = _basis_article(c)
+            a = _basis_article(c, texts)
             if a is not None and a not in basis_w:
                 basis_w.append(a)
     return SentenceJudgment(
@@ -975,7 +1029,7 @@ def _judge_one(
         verdict=Verdict.hold,
         hold_reason=HoldReason.low_conf,
         violations=cand,
-        evidence=basis_w + [a for a in retrieved if a not in basis_w],
+        evidence=basis_w + _references(retrieved, basis_w),
     )
 
 
@@ -1011,6 +1065,7 @@ def judge(state: CoreState) -> dict[str, Any]:
             weak_of.setdefault(sid, []).extend(hs)
     scans = {s.sent_id: s for s in state.get("dict_scans", [])}
     sents = state.get("sents", [])
+    texts = state.get("basis_texts") or {}
     # 🔴 원문 좌표를 못 되찾으면(분할 밖에서 문장이 들어왔다) **구간을 싣지 않는다** — 좌표를 지어내지 않는다 (D-224 · D-278).
     #    판정 자체는 바뀌지 않는다. 뺄 구간이 필요한 지시 종착은 그때 계약이 막는다.
     try:
@@ -1027,6 +1082,7 @@ def judge(state: CoreState) -> dict[str, Any]:
                 hits_of.get(sid, []),
                 per_sent.get(sid, []),
                 weak_of.get(sid, []),
+                texts,
             )
             for i, t in enumerate(sents)
         ]
@@ -1228,6 +1284,7 @@ def _premise_sentences(
     except ValueError:
         starts = [None] * len(sents)
     category = pm.PREMISE_CATEGORY[premise]
+    texts = state.get("basis_texts") or {}
     out: list[SentenceJudgment] = []
     for i, text in enumerate(sents):
         sid = sent_id(i)
@@ -1260,9 +1317,9 @@ def _premise_sentences(
             #    · 3호가 **서지 않는다 ≠ 통과다.** 인정 · 고시된 문구와 맞는지는 대조하지 않았다 — 그 재료(건강기능식품의
             #      고시형 문구 · 일반식품 기능성 고시 [별표 2])를 읽는 자리가 아직 없다. 그 대조가 붙기 전에는 통과를 내지 않는다.
             #    ⛔ 하한을 걸지 않는다 — 보류 문장의 유형 후보다 (D-311 · D-313 ③).
-            j = _judge_one(sid, text, starts[i], scans.get(sid), [], arts, hits + unknown)
+            j = _judge_one(sid, text, starts[i], scans.get(sid), [], arts, hits + unknown, texts)
         else:
-            j = _judge_one(sid, text, starts[i], scans.get(sid), hits, arts, unknown)
+            j = _judge_one(sid, text, starts[i], scans.get(sid), hits, arts, unknown, texts)
             if converted and j.verdict is Verdict.confirmed and j.violations:
                 j = j.model_copy(
                     update={

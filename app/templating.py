@@ -27,3 +27,25 @@ if not templates.env.autoescape:  # pragma: no cover — 기본값이 바뀌어�
         "Jinja2 자동 이스케이프가 꺼져 있다 — 보안점검 P2-9.\n"
         "  고치는 법 — app/templating.py 에서 autoescape 를 켠 채로 만든다"
     )
+
+
+def evidence_parts(evidence: object) -> dict[str, list]:
+    """근거 목록 → `{"basis": 인용 근거, "refs": 참고 조문}` (🆕 2026-10-08 · 근거 표시 「(나)」 · D-224).
+
+    ★ **인용 근거** = 사전 항목이 인용한 조문 — 판정이 기대는 조문. 꼴이 인용으로 되돌아오는 줄이다
+       (`collect.statute.from_article_item` · 그래프가 쓰는 꼴과 한 곳 · D-99).
+    ★ **참고 조문** = 검색이 문장과 가깝다고 찾은 조문 — 판정을 바꾸지 않는다.
+    🚨 계약(`EvidenceArticle`)에는 둘을 가르는 칸이 없다 — 꼴로 가른다. 칸을 둘지는 판정 안건이다(인코더 후보 출처와 함께).
+       그래프는 인용 근거를 **앞에** 둔다(`app/graph.py` `_judge_one`). 순서가 아니라 꼴로 가르는 것은 픽스처 · 외부 응답도 같게 읽으려고다.
+    """
+    from collect import statute  # noqa: PLC0415 — 템플릿 필터에서만 쓴다
+
+    basis: list = []
+    refs: list = []
+    for e in evidence or ():  # type: ignore[attr-defined]
+        cite = statute.from_article_item(e.law_id, e.article, e.item)
+        (basis if cite is not None else refs).append(e)
+    return {"basis": basis, "refs": refs}
+
+
+templates.env.filters["evidence_parts"] = evidence_parts

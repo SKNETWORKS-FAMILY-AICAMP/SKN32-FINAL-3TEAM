@@ -141,3 +141,138 @@ def test_꺼짐은_부를_때_읽는다(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("COPYLANE_SLLM_URL", "http://127.0.0.1:9999/")
     assert sllm_client.enabled()
     assert sllm_client._url() == "http://127.0.0.1:9999"  # noqa: SLF001
+
+
+# ── ⑤ 근거 표시 「(나)」 — 인용 근거와 참고 조문을 가른다 (🆕 2026-10-08) ──────────────────
+
+
+def _row(**kw: object) -> tuple:
+    d = dict.fromkeys(rt._NAMES)  # noqa: SLF001
+    d.update(
+        doc_type="법령", exempt_of="", part_no=1, part_total=1, citable=True, law="식품표시광고법"
+    )
+    d.update(kw)
+    return tuple(d[n] for n in rt._NAMES)  # noqa: SLF001
+
+
+class _Cur:
+    def __init__(self, rows: list[tuple]) -> None:
+        self.rows, self.calls = rows, []
+
+    def execute(self, sql: str, params: tuple) -> None:
+        self.calls.append(params)
+
+    def fetchall(self) -> list[tuple]:
+        return self.rows
+
+
+def test_사전_근거에_조문_원문을_붙인다() -> None:
+    cur = _Cur(
+        [
+            _row(
+                chunk_id="a1",
+                law_id="013094",
+                article="제8조",
+                paragraph="①",
+                item="1.",
+                text="1. 질병",
+            ),
+            _row(
+                chunk_id="a5",
+                law_id="013094",
+                article="제8조",
+                paragraph="①",
+                item="5.",
+                text="5. 기만",
+            ),
+            # 쪼갠 조각 — 원문을 붙이지 않는다 (D-224 ③)
+            _row(
+                chunk_id="b1",
+                law_id="002011",
+                article="제3조",
+                paragraph="①",
+                item="1.",
+                part_total=2,
+                text="x",
+            ),
+        ]
+    )
+    cites = [
+        "013094:제8조제1항제1호",
+        "013094:제8조제1항제5호|다목",
+        "002011:제3조제1항제1호",
+        "꼴이 아님",
+    ]
+    got = g.basis_texts(cur, cites)
+    assert set(got) == {"013094:제8조제1항제1호", "013094:제8조제1항제5호|다목"}
+    a = got["013094:제8조제1항제5호|다목"]
+    assert (a.article, a.item, a.chunk_id, a.quote) == ("제8조", "제1항제5호다목", "a5", "5. 기만")
+    assert len(cur.calls) == 1, "커서는 한 번만 묻는다"
+
+
+def test_원문_자격이_없으면_붙이지_않는다() -> None:
+    cur = _Cur(
+        [
+            _row(
+                chunk_id="a1",
+                law_id="013094",
+                article="제8조",
+                paragraph="①",
+                item="1.",
+                citable=False,
+                text="t",
+            )
+        ]
+    )
+    assert g.basis_texts(cur, ["013094:제8조제1항제1호"]) == {}
+
+
+def test_원문이_붙은_근거는_좌표를_바꾸지_않는다() -> None:
+    """평가 도구가 되읽는 꼴(`statute.from_article_item`)이 그대로다 — 원문만 더 붙는다."""
+    cite = "013094:제8조제1항제1호"
+    texts = {
+        cite: g.EvidenceArticle(
+            law_id="013094", article="제8조", item="제1항제1호", chunk_id="a1", quote="q"
+        )
+    }
+    a = g._basis_article(cite, texts)  # noqa: SLF001
+    assert a is not None and statute.from_article_item(a.law_id, a.article, a.item) == cite
+
+
+def test_같은_청크는_참고_조문에_다시_싣지_않는다() -> None:
+    basis = [
+        g.EvidenceArticle(
+            law_id="013094", article="제8조", item="제1항제1호", chunk_id="a1", quote="q"
+        )
+    ]
+    retrieved = [
+        g.EvidenceArticle(
+            law_id="013094", article="제8조제1항제1호", item="1.", chunk_id="a1", quote="q"
+        ),
+        g.EvidenceArticle(law_id="013094", article="제1조", item="", chunk_id="z", quote="목적"),
+    ]
+    assert [a.chunk_id for a in g._references(retrieved, basis)] == ["z"]  # noqa: SLF001
+
+
+def test_근거를_인용_근거와_참고_조문으로_가른다() -> None:
+    from app.templating import evidence_parts  # noqa: PLC0415
+
+    ev = [
+        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제1호"),
+        g.EvidenceArticle(law_id="013094", article="제8조", item="제1항제5호다목"),
+        g.EvidenceArticle(law_id="002011", article="제1조", item="", chunk_id="c", quote="목적"),
+        g.EvidenceArticle(law_id="005361", article="제2조제1항제5호", item="5.", chunk_id="d"),
+        g.EvidenceArticle(law_id="013453", article="[별표 1]제1호다목", item="본문", chunk_id="e"),
+    ]
+    parts = evidence_parts(ev)
+    assert [e.item for e in parts["basis"]] == ["제1항제1호", "제1항제5호다목"]
+    assert [e.article for e in parts["refs"]] == ["제1조", "제2조제1항제5호", "[별표 1]제1호다목"]
+
+
+@pytest.mark.parametrize(
+    ("fixture", "label"),
+    [("05_certificate_a", "위반 근거"), ("02_hold_low_conf", "걸린 표현의 인용 조문 — 확정 아님")],
+)
+def test_근거_보기의_머리말은_판정에_맞춘다(fixture: str, label: str) -> None:
+    html = TestClient(app).get(f"/u/preview/{fixture}").text
+    assert label in html

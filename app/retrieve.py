@@ -802,6 +802,27 @@ def diversify(hits: list[Hit], *, cap: int = PARAMS.per_law_cap) -> list[Hit]:
     return head + tail
 
 
+#: 🆕 2026-10-08 — **좌표로** 법령 조문 청크를 꺼낸다 — 사전 근거(위반 인용)에 원문을 붙일 때 (D-224 ④ · 근거 표시 「(나)」).
+#:    🔴 거버넌스 조인은 검색과 **같은 것**(`_JOINS`)이다 — U2 가 안 열린 원천 · 폐지 조문은 여기서도 안 나온다.
+#:    🚨 법령 청크만 본다(`doc_type = '법령'`). 식품 제8조① 각 호 ↔ 시행령 [별표 1] 각 호 대응(D-281)은 아직 붙이지 않는다 ⬜.
+#:    ⛔ `LIMIT` 이 없다 — 법 × 조 몇 개의 청크 전부라 작고, 자르면 어느 호가 빠졌는지 모른다.
+SQL_ARTICLES = f"""SELECT {_COLS}
+{_JOINS}
+WHERE u.allowed AND c.doc_type = '법령' AND c.law_id = ANY(%s::text[]) AND c.article = ANY(%s::text[])
+ORDER BY c.law_id, c.article, c.chunk_id"""
+
+
+def by_article(cur: Any, law_ids: Sequence[str], articles: Sequence[str]) -> list[Hit]:
+    """법 ID · 조(「제8조」) 묶음의 법령 청크 — `citation` 이 붙은 `Hit` 로. 비면 질의하지 않는다.
+
+    🚨 `match` 칸은 화면에 나가지 않는다 — 받는 쪽(`app/graph.py` `basis_texts`)이 근거 조문으로 옮긴다.
+    """
+    if not law_ids or not articles:
+        return []
+    cur.execute(SQL_ARTICLES, (sorted(set(law_ids)), sorted(set(articles))))
+    return _rows_to_hits(cur.fetchall(), MATCH_LITERAL)
+
+
 def law_view(
     vector_hits: list[Hit], lexical_hits: list[Hit], law: str, *, cap: int = PARAMS.per_law_cap
 ) -> list[Hit]:
