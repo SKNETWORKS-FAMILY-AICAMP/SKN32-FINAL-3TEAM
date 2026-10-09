@@ -3,6 +3,8 @@
 분기 하나가 정하는 것: 프롬프트의 「쓸 수 있는 것」 · 코드 필터의 금지 낱말 · 고정 문구 필요 여부 · 판정엔진에 넘길 품목.
 🚨 금지 낱말은 **임시 기준**이다 — 화장품은 판정 사전에 화장품법 항목이 0 이라 지침을 직접 옮겼다.
    지침이 사전에 편입되면 사전을 읽는 쪽으로 돌린다 (점검목록 §3-4).
+🔗 화면의 분기 표는 `app/routers/user.py` `_GEN_BRANCHES` 다 — 이름 · 판정 전제(`premise`)가 여기의 `label` · `category` 와
+   맞아야 한다. 앱이 이 폴더를 import 하지 않아 표가 둘이다 — `tests/test_user_screens.py` 가 둘을 견준다.
 """
 
 from __future__ import annotations

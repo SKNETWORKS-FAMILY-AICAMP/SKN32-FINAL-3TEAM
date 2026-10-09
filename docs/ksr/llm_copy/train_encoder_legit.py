@@ -45,6 +45,11 @@ LEGIT = ROOT / "docs/ksr/LLM_카피생성_정상카피_900_판독용_ksr_2026-10
 #:    같은 파일의 적법(사실 전제) 200줄은 `--facts` 를 줄 때만 음성으로 넣는다 — 🚨 골든셋이 같은 꼴을 조건 B · 거짓_과장으로
 #:    둔다(라벨 규칙 판정 대기). `--facts` 판은 그 판정에 쓸 숫자를 보려는 것이다
 PAIRS = ROOT / "docs/ksr/LLM_카피생성_사실진술_짝_300_판독용_ksr_2026-10-08.csv"
+#: 🔴 2026-10-10 (D-325 결정 1 · 2) — 학습 음성으로 쓰는 것은 **사람이 검수한 행만**이다. 검수 전(판독 칸이 빈) 행 ·
+#:    애매 표시 행은 학습 · 채점 어디에도 쓰지 않는다. 종전에는 900행을 판독 칸을 보지 않고 전부 넣었다(D-325 판정 전의 실험).
+#:    `[임의]` 사람 판독 칸에서 「써도 된다」로 읽는 값 — 검수 기준의 낱말은 D-325 ⬜ 로 아직 정해지지 않았다. 정해지면 여기만 고친다
+HUMAN_COL = "판독(사람)"
+HUMAN_LEGIT = frozenset({"적법"})
 V10_DIR = ROOT / "models" / "copylane-encoder-kcbert-v10-합성O-이유O"
 OUT_DIR = ROOT / "models" / "copylane-encoder-kcbert-v10-ksr실험-적법900"
 
@@ -260,19 +265,48 @@ def main() -> int:
 
     if args.facts and not args.pairs:
         ap.error("--facts 는 --pairs 와 함께 준다")
+    if args.pairs:
+        # 🔴 짝 문장의 정답은 `판독(보조)` · `위반유형(보조)` — 모델이 붙인 라벨이다. 모델이 붙인 정답으로 학습하지 않는다
+        #    (D-325 결정 1). 사람 판독 칸이 선 뒤에 이 길을 다시 연다. ⛔ 파일(`PAIRS`)도 저장소에 없다 — 없으면 여기서 멈춘다
+        raise SystemExit(
+            "🔴 --pairs 는 닫혀 있다 — 짝 문장의 정답이 모델 보조 판독이다 (D-325 결정 1). "
+            + ("" if PAIRS.exists() else f"파일도 없다: {PAIRS.name}")
+        )
     legit, pairs, facts = [], [], []
     if not args.no_legit:
         dev_texts = {norm_text(r["text"]) for r in dev_rows}
         seen = {norm_text(r["text"]) for r in train_rows}
         with LEGIT.open(encoding="utf-8-sig", newline="") as f:
-            for row in csv.DictReader(f):
+            reader = csv.DictReader(f)
+            if HUMAN_COL not in (reader.fieldnames or []):
+                raise SystemExit(f"🔴 {LEGIT.name} 에 「{HUMAN_COL}」 칸이 없다 — 검수 여부를 알 수 없다 (D-325)")
+            skipped: Counter[str] = Counter()
+            for row in reader:
+                human = (row[HUMAN_COL] or "").strip()
+                if not human:
+                    skipped["검수 전"] += 1
+                    continue
+                if (row.get("애매표시") or "").strip():
+                    skipped["애매 표시"] += 1
+                    continue
+                if human not in HUMAN_LEGIT:
+                    skipped[f"판독 「{human}」"] += 1
+                    continue
                 # 🆕 조건부로 읽힌 줄은 원문 대신 수정안을 쓴다 (`--pairs` 일 때만 — 종전 실행과 견줄 수 있게)
                 text = (row.get("수정안(보조)") or row["text"]) if args.pairs else row["text"]
                 t = norm_text(text)
                 if t not in dev_texts and t not in seen:
                     seen.add(t)
                     legit.append({"id": f"ksr-legit:{row['id']}", "text": text, "target": []})
-        print(f"더한 적법 문장 {len(legit)}행 (합성 정상 카피 · 음성)")
+        print(
+            f"더한 적법 문장 {len(legit)}행 (합성 정상 카피 · 사람 검수 · 음성) · 뺀 것 {dict(skipped)}"
+        )
+        if not legit:
+            # 없음이 「기준선과 같은 학습」으로 조용히 넘어가지 않게 한다 (D-220) — 기준선은 `--no-legit` 로 따로 돈다
+            raise SystemExit(
+                "🔴 사람이 검수한 적법 행이 0 이다 — 학습하지 않는다 (D-325 결정 2). "
+                f"「{HUMAN_COL}」 칸을 채운 뒤 다시 돌린다"
+            )
         if args.pairs:
             with PAIRS.open(encoding="utf-8-sig", newline="") as f:
                 for row in csv.DictReader(f):
