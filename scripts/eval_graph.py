@@ -21,6 +21,8 @@
 🔄 2026-10-01 (D-306) — `--conditional` 이면 **조건부**(골든 `품목` 칸을 제품 정보로 넘긴다 · 품목을 아는 행만) · 기본은
    **무조건부**(품목 미확정 · 세 법). 기획서 6-3 「조건부 / 무조건부 병기」 — 두 번 돌려 나란히 적는다.
    🔴 골든에 `품목` 칸이 없으면(재동결 전 판) `--conditional` 은 멈춘다 — 무조건부로 조용히 바꾸지 않는다 (D-220).
+🔄 2026-10-10 — 조건부는 골든 `전제` 칸을 먼저 읽는다(없으면 `품목`). 정답은 (문구 · 전제)의 짝에 붙는다 — 승인 문구 규칙 행이
+   `식품` 전제로 돌아오고, 분기 지표의 정답 전제도 이 칸이다. 채점은 그대로 기록되는 판정이다 (D-263 결정 1).
 🚨 게이트가 아니다 — 답이 기기마다 다르다(`data/**` 미커밋 · D-19). 수는 원장에 기기 · 커밋 · 골든 sha 와 함께 적는다 (D-178).
 """
 
@@ -41,9 +43,11 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from app import encoder as enc  # noqa: E402
 from app import graph as g  # noqa: E402
+from app import premise as pm  # noqa: E402
 from app.contracts import (  # noqa: E402
     Category,
     HoldReason,
+    Premise,
     ProductContext,
     SentenceJudgment,
     Verdict,
@@ -194,34 +198,38 @@ def _branch_view(b: Any) -> dict[str, Any]:
     }
 
 
-#: 골든 `품목` 칸 → 그 품목의 **첫 전제**(가장 보수적인 쪽 · `app/premise.py` 의 값). 분기 지표가 「정답 품목의 분기」를 이것으로 고른다.
-#:    🚨 건강기능식품은 인정 여부를 골든이 모른다 — 비인정(보수) 분기로 본다.
-BRANCH_OF_CATEGORY = {"식품": "식품", "건기식": "건기식_비인정", "화장품": "화장품"}
-
-
 def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
-    """분기 지표 (D-319 ⬜ 「정답 품목의 분기가 맞는가」) — 품목을 아는 채점 행의 **위반 행**에서 그 품목의 분기를 본다.
+    """분기 지표 (D-319 ⬜ 「정답 전제의 분기가 맞는가」) — 전제를 아는 채점 행의 **위반 행**에서 그 전제의 분기를 본다.
 
-    ★ 기록되는 판정이 보류(`cat_unknown`)여도 사용자가 자기 품목을 고르면 보게 되는 것이 이 분기다.
+    ★ 기록되는 판정이 보류(`cat_unknown`)여도 사용자가 자기 제품의 전제를 고르면 보게 되는 것이 이 분기다.
     🚨 분기가 없으면(기준 문안 미확정 · 전제 하나) 0 이다 — 「분기 행」 수를 함께 읽는다.
+    🔄 2026-10-10 — 정답 전제는 **골든의 `전제` 칸**이다(`preprocess/golden.py` `label_premise`). 종전에는 품목에서 짐작했다
+       (건강기능식품이면 전부 비인정). 전제를 모르는 행은 세지 않는다 — 건강기능식품은 [별표 1] 4.나 인용 행만 든다 (D-220).
+       `by_premise` — 전제별 (위반 행 · 그 분기의 확정 위반 · 유형 맞음). 전제마다 행 수가 크게 달라 합만 읽으면 가려진다
     """
     out = {"rows_with_branches": sum(1 for p in preds if p.get("branches")), "positive": 0}
     out.update({"confirmed": 0, "type_hit": 0, "ho_hit": 0, "wrong": 0})
+    by: dict[str, list[int]] = {}
     for r, p in zip(rows, preds, strict=True):
-        name = BRANCH_OF_CATEGORY.get(r.get("품목") or "")
+        name = r.get("전제")
         if not name or not scored(r) or not truth_types(r, set()):
             continue
         b = (p.get("branches") or {}).get(name)
         if b is None:
             continue
         out["positive"] += 1
+        cell = by.setdefault(name, [0, 0, 0])
+        cell[0] += 1
         if not b["types"]:
             continue
         out["confirmed"] += 1
+        cell[1] += 1
+        cell[2] += bool(set(b["types"]) & truth_types(r, set(b["types"])))
         tt, th = truth_types(r, set(b["types"])), truth_ho(r, set(b["ho"]))
         out["type_hit"] += bool(set(b["types"]) & tt)
         out["ho_hit"] += bool(set(b["ho"]) & th)
         out["wrong"] += not (set(b["types"]) & tt)
+    out["by_premise"] = {k: tuple(v) for k, v in sorted(by.items())}
     return out
 
 
@@ -471,27 +479,42 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
 
 
 def conditional_rows(rows: list[dict]) -> list[dict]:
-    """조건부 평가 행 — `품목` 을 아는 행만. 🔴 칸 자체가 없는 판이면 멈춘다(재동결 전 골든 · D-220)."""
+    """조건부 평가 행 — **전제나 품목을 아는 행**. 🔴 칸 자체가 없는 판이면 멈춘다(재동결 전 골든 · D-220).
+
+    🔄 2026-10-10 — 제품 정보는 아는 만큼만 넘긴다(`product_of`): 골든 `전제` 가 있으면 그 전제의 품목 · 없으면 `품목`.
+       승인 문구 규칙 행이 돌아온다 — `전제` 가 `식품` 이라 「일반식품이 이 문구를 쓰면」으로 넘어간다(종전에는 뺐다).
+    """
     if rows and not all("품목" in r for r in rows):
         raise SystemExit(
             "🔴 골든에 `품목` 칸이 없다 — 재동결 전 판이다(D-306). 조건부 평가를 못 한다\n"
             "  먼저(정본): uv run python launcher.py golden --write"
         )
-    # 🆕 2026-10-06 (원장 10-03 ㊿-40) — **승인 문구 규칙 행은 뺀다.** 그 행의 `품목`(건기식)은 원천이고 라벨(3호 · 조건 A)은
-    #    「일반식품이 이 문구를 쓰면」이라는 보수 전제다(`preprocess/split.py` `APPROVED_READING` · 판정 J1). 품목을 제품 정보로 넘기면
-    #    그래프는 건강기능식품으로 보고 4.나를 내고 채점은 3호를 기대한다 — 전제가 어긋난 행이다. 무조건부에는 그대로 든다.
-    #    ⬜ 다음 재동결 때 그 행(과 같은 원천의 주입 행)의 `품목` 을 미상으로 고치면 이 줄은 필요 없다 (D-192)
-    return [r for r in rows if r["품목"] and r.get("판독") != APPROVED_READING]
+    if rows and not all("전제" in r for r in rows):
+        raise SystemExit(
+            "🔴 골든에 `전제` 칸이 없다 — 2026-10-10 재동결 전 판이다. 조건부 평가를 못 한다\n"
+            "  먼저(정본): uv run python launcher.py golden --write · (사본): data-sync"
+        )
+    # 🔴 승인 문구 규칙 행의 `품목`(건기식)은 원천이다 — 그 행은 `전제`(식품)로만 든다. `전제` 가 빈 승인 문구 행이 있으면
+    #    품목으로 넘기지 않는다(그래프는 건강기능식품으로 보고 4.나를 내고 채점은 3호를 기대한다 · 원장 10-03 ㊿-40)
+    return [r for r in rows if r["전제"] or (r["품목"] and r.get("판독") != APPROVED_READING)]
 
 
 def product_of(r: dict, conditional: bool) -> ProductContext:
-    """행의 제품 정보 — 무조건부면 빈 것(세 법) · 조건부면 골든 `품목`. 🚨 인정 여부는 모른다(보수 전제 · D-263 ①)."""
-    return ProductContext(category=Category(r["품목"])) if conditional else ProductContext()
+    """행의 제품 정보 — 무조건부면 빈 것(세 법) · 조건부면 **아는 만큼**: 골든 `전제` 가 있으면 그 전제의 것 · 없으면 `품목`.
+
+    🚨 채점은 여전히 **기록되는 판정**으로 한다(가장 보수적인 전제 · D-263 결정 1 「게이트 수치도 이것으로 잰다」).
+       전제의 분기를 읽은 수는 분기 지표(`branch_report`)에 따로 낸다 — 섞지 않는다.
+    """
+    if not conditional:
+        return ProductContext()
+    if r.get("전제"):
+        return pm.product_of(Premise(r["전제"]))
+    return ProductContext(category=Category(r["품목"]))
 
 
 def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -> None:
     print(
-        "  [조건부 — 품목을 아는 행 · 골든 `품목`]"
+        "  [조건부 — 전제나 품목을 아는 행 · 골든 `전제` → `품목`]"
         if conditional
         else "  [무조건부 — 품목 미확정 · 세 법]"
     )
@@ -586,8 +609,13 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
                 if n
                 else ""
             )
-            + "  (분기는 판정이 아니다 · 건강기능식품은 비인정 분기로 본다)"
+            + "  (분기는 판정이 아니다 · 정답 전제는 골든 `전제` 칸 — 전제를 모르는 행은 세지 않는다)"
         )
+        for name, (pos, conf, hit) in (b.get("by_premise") or {}).items():
+            print(
+                f"    전제 {name} — 위반 행 {pos} · 그 분기의 확정 위반 {conf}({conf / pos:.1%}) · 유형 맞음 {hit}"
+                + ("" if pos >= MIN_MEASURABLE else "  ← 측정 불가 (n<30 · D-40)")
+            )
     else:
         print("\n  분기 (D-319) — 없음(기준 문안 미확정 · 또는 전제가 하나뿐인 품목)")
     if not conditional:

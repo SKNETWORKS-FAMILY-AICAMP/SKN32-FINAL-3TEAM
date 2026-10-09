@@ -32,6 +32,7 @@ from judge_stage2 import stage2_judge
 from app import graph as g
 from app.contracts import Category
 from scripts.eval_graph import conditional_rows
+from scripts import eval_graph as _eg  # 🆕 10-10 — 제품 정보는 평가 도구의 한 곳에서 (`product_of`)
 
 MODELS = {"기준": "copylane-encoder-kcbert-v10-Baseline재현", "카드10": "copylane-encoder-kcbert-v10-카드9-정상음성"}
 NAMES = {"기준": "Baseline 재현 + 카드 8", "카드10": "카드 9 모델 + 카드 8"}
@@ -63,7 +64,7 @@ def judge_syn(rows, prob_of, book, th, conditional):
     st = Counter()
     typed = 0
     for r in rows:
-        cat = Category(r["품목"]) if conditional else None
+        cat = _eg.product_of(r, True).category if conditional else None  # 🔄 10-10 — 골든 `전제` 를 먼저 읽는다(승인 문구 = 식품) · 없으면 품목 (`eval_graph.product_of`)
         v = stage2_judge(stage1_signals(r["text"], prob_of[r["id"]], book, thk, margin=mg, agree_thresholds=th), category=cat)
         st[rj.state_of(v)] += 1
         typed += bool(v["violations"] or v["hold_types"] or v["no_basis_types"])

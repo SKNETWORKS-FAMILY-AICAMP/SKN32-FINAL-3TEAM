@@ -35,6 +35,7 @@ from judge_stage1 import BANNED_TERMS_PATH, QUIET_MARGIN, REPO, load_banned_term
 from judge_stage2 import stage2_judge
 from app import graph as g
 from app.contracts import Category
+from scripts import eval_graph as _eg  # 🆕 10-10 — 제품 정보는 평가 도구의 한 곳에서 (`product_of`)
 
 SCALES = "1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3"
 #: 카드 7 에 먼저 적은 값 — 결과를 본 뒤 고치지 않는다
@@ -91,7 +92,7 @@ def judge_all(rows, probs, book, th, margin, conditional, agree_th=None):
     """`agree_th` — 사전 확정에 대한 합의를 볼 문턱(카드 8). None 이면 후보 문턱과 같다(카드 7)."""
     out = []
     for r, lp in zip(rows, probs):
-        cat = Category(r["품목"]) if conditional else None
+        cat = _eg.product_of(r, True).category if conditional else None  # 🔄 10-10 — 골든 `전제` 를 먼저 읽는다(승인 문구 = 식품) · 없으면 품목 (`eval_graph.product_of`)
         out.append(stage2_judge(stage1_signals(r["text"], lp, book, th, margin=margin, agree_thresholds=agree_th), category=cat))
     return out
 
