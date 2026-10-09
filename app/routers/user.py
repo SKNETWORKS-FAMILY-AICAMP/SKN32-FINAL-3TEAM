@@ -36,6 +36,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import auth, sentsplit
+from app import premise as pm
 from app.contracts import PASS_RISK_MAX, Premise, Risk, Violation, is_pass
 from app.db import get_session, reachable
 from app.formbody import read_capped
@@ -682,6 +683,21 @@ def _branch_of(result, premise: str):  # noqa: ANN001, ANN202 — JudgeResponse 
     return next((b for b in result.branches if b.premise.value == premise), None)
 
 
+def _sllm_category(category: str | None, premise: str) -> str | None:
+    """생성 서버에 넘길 품목 (🆕 2026-10-10 · 인계 10-08 §2 「함께」 · D-319).
+
+    원문 판정에 품목이 있으면 그 품목 · 없고 분기를 골랐으면 **고른 전제의 품목**(`pm.PREMISE_CATEGORY` — 판정이 쓰는 표 · D-99) ·
+    둘 다 없으면 `None`(서버가 문구에서 추측한다). ⛔ 종전에는 분기를 고른 문구가 늘 `None` 이었다 — 사용자가 화장품을 골랐는데
+    서버는 문구로 식품이라 추측할 수 있었다.
+    🚨 재판정에는 이 값을 넘기지 않는다 — 재판정은 종전대로 품목 없이 판정하고 고른 전제의 분기를 읽는다(`_rejudge`).
+       품목을 넘기면 전제가 줄어 그 분기가 생략될 수 있다(전제마다 판정이 같으면 분기를 내지 않는다).
+    ⬜ 건강기능식품의 **인정 여부**(전제 `건기식_인정` · `건기식_비인정`)는 넘어가지 않는다 — 서버에 받는 칸이 없다(이서은 확인 대기).
+    """
+    if category or not premise:
+        return category
+    return pm.PREMISE_CATEGORY[Premise(premise)].value
+
+
 def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     """고친 문구를 판정 코어에 다시 넣는다(D-119). 🚨 `no_violation` 은 「위반을 못 찾음」이지 통과가 아니다.
 
@@ -711,15 +727,20 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
 
 
 def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
-    sentence, premise: str = "", category: str | None = None
+    sentence, premise: str = "", category: str | None = None, sllm_category: str | None = None
 ) -> dict:
-    """지적 문장 하나를 고쳐 쓰고 재판정한다. 화면용 dict(`rw`)."""
+    """지적 문장 하나를 고쳐 쓰고 재판정한다. 화면용 dict(`rw`).
+
+    `category` 는 원문 판정의 품목(재판정에 넘긴다) · `sllm_category` 는 생성 서버에 넘기는 품목이다 — 둘이 다른 것은
+    분기를 고른 문구뿐이다(원문 판정의 품목은 비어 있고, 고른 전제가 품목을 말한다 · `_sllm_category`).
+    """
     from app.routers import sllm_client  # noqa: PLC0415
 
     violations = [v.value for v in sentence.violations or []]
     rw: dict = {"violations": violations}
-    # 🆕 10-06 (팀장 전달 §2 #3) — 품목을 넘긴다. 미확정이면 None — 서버가 문구에서 추측한다(분기 선택과의 연결은 품목 흐름에 맞춰 이어간다)
-    s_state, out = sllm_client.rewrite(sentence.text, violations, category)
+    # 🆕 10-06 (팀장 전달 §2 #3) — 품목을 넘긴다. 미확정이면 None — 서버가 문구에서 추측한다
+    # 🔄 2026-10-10 — 분기를 고른 문구는 고른 전제의 품목을 넘긴다(인계 10-08 §2 「함께」). 서버가 추측하지 않는다
+    s_state, out = sllm_client.rewrite(sentence.text, violations, sllm_category or category)
     if out and out.get("infeasible") and out["infeasible"] not in _VIOLATIONS:
         # 위반 유형 없이 보내면 모델이 사유를 제 말로 지어 쓴다(10-06 실측) — 그 말을 사유로 그리지 않는다
         out = {**out, "infeasible": None}
@@ -800,7 +821,9 @@ async def review_rewrite(request: Request) -> HTMLResponse:
         rw = {"no_violation": True}
     else:
         cat = item["result"].category.value if item["result"].category else None
-        rw = await run_in_threadpool(_rewrite_sentence, sent, premise, cat)
+        rw = await run_in_threadpool(
+            _rewrite_sentence, sent, premise, cat, _sllm_category(cat, premise)
+        )
     # 열쇠는 (전제, 문장) — 분기 없는 문구의 전제는 빈 글자다. 다른 분기의 같은 문장에 붙지 않는다
     item["rewrites"][premise] = {want_sid: rw}
     return _render(request, "user/review.html", _review_ctx(copies, results))
