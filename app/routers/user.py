@@ -902,13 +902,36 @@ _GEN_CATEGORIES = (("cos", "화장품"), ("food", "식품"), ("hf", "건강기�
 _GEN_HF_NO_NOTICE = (
     "기능성 인정이 없으면 건강기능식품으로 광고할 수 없습니다. 일반식품으로 생성합니다."
 )
+#: 🆕 2026-10-10 — `premise` = 이 분기로 만든 문구를 **어느 전제로 판정하는가** (D-276 결정 1 · `app/premise.py`).
+#:    생성의 분기(품목 × 인증 여부)와 판정의 전제는 축이 다르다 — 대응을 여기 한 곳에 적는다. 생성 평가도 이 표로 잰다.
+#:    · 식품의 「인증 예」는 HACCP 같은 인증이다 — ⛔ `일반식품_기능성`(고시의 기능성 표시 요건)이 아니다. 전제는 `식품`
+#:    · 건강기능식품의 「인증 아니오」는 일반식품으로 생성한다(위 안내) — 전제는 `식품`. ⛔ `건기식_비인정` 이 아니다
+#:    · ⬜ 화장품의 「인증 예」(기능성화장품 심사 · 보고)에 맞는 전제가 없다 — 화장품의 전제는 `화장품` 하나다.
+#:      심사받은 효능 범위 안의 문구가 그 전제에서 어떻게 판정되는지는 정해지지 않았다 (판정 대기)
+#:    시험 코드 `docs/ksr/llm_copy/branches.py` 의 `category` 와 맞는지는 `tests/test_user_screens.py` 가 본다
 _GEN_BRANCHES: dict[str, dict] = {
-    "food_no": {"label": "식품 · 인증 아니오"},
-    "food_yes": {"label": "식품 · 인증 예 (HACCP 등)", "needs": "certs"},
-    "hf_yes": {"label": "건강기능식품 · 인증 예 (기능성 인정)", "needs": "fixed"},
-    "hf_no": {"label": "건강기능식품 · 인증 아니오", "notice": _GEN_HF_NO_NOTICE},
-    "cos_no": {"label": "화장품 · 인증 아니오 (일반)"},
-    "cos_yes": {"label": "화장품 · 인증 예 (기능성 심사·보고)", "needs": "fixed"},
+    "food_no": {"label": "식품 · 인증 아니오", "premise": Premise.식품},
+    "food_yes": {
+        "label": "식품 · 인증 예 (HACCP 등)",
+        "needs": "certs",
+        "premise": Premise.식품,
+    },
+    "hf_yes": {
+        "label": "건강기능식품 · 인증 예 (기능성 인정)",
+        "needs": "fixed",
+        "premise": Premise.건기식_인정,
+    },
+    "hf_no": {
+        "label": "건강기능식품 · 인증 아니오",
+        "notice": _GEN_HF_NO_NOTICE,
+        "premise": Premise.식품,
+    },
+    "cos_no": {"label": "화장품 · 인증 아니오 (일반)", "premise": Premise.화장품},
+    "cos_yes": {
+        "label": "화장품 · 인증 예 (기능성 심사·보고)",
+        "needs": "fixed",
+        "premise": Premise.화장품,
+    },
 }
 #: 대상 고객 — 나이대 × 성별. 🚨 축은 **둘까지만** 겹친다(셋을 겹치면 20명 미만 칸이 생긴다 · `k_anon_min`).
 #:    ⛔ 건강 고민 · 증상은 축으로 두지 않는다 (D-27). 나이대 구간은 페르소나 정리 2판(10-01)의 1층과 같다
@@ -1106,6 +1129,8 @@ async def compose(request: Request) -> HTMLResponse:
             "picked": {
                 "ad_format": _one(form, "ad_format", 32),
                 "prompt": _one(form, "prompt", PARAMS.max_text_len),
+                #: 🆕 2026-10-10 — 후보 카드에서 온 필수 병기 문구. 없으면 빈 값이다(직접 입력)
+                "note": _one(form, "note", PARAMS.max_text_len),
             },
             "engine_pending": True,
         },
