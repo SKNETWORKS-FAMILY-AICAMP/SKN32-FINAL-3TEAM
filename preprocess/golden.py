@@ -11,9 +11,12 @@
 
     {"id":…, "text":…, "근거":[…], "labels":[…], "unit":"문장|낱말",
      "origin":"real|injected|approved", "provenance":…, "redistributable":…,
-     "split":"train|test_sentence", "품목":"식품|건기식|화장품|null"}
+     "split":"train|test_sentence", "품목":"식품|건기식|화장품|null", "전제":"<Premise>|null"}
 
 🆕 2026-10-01 (D-306) — `품목` 은 **원천으로 정한 품목**이다(`CATEGORY_OF_SOURCE`). null 은 미상 — 무조건부로만 잰다.
+🆕 2026-10-10 — `전제` 는 **이 라벨이 정답이 되는 제품 전제 하나**다(`label_premise` · 값은 계약 `Premise`). 🚨 `품목` 과 다른
+   칸이다 — `품목` 은 원천이고 `전제` 는 정답이 가정한 제품이다. 승인 문구는 원천이 건강기능식품 게시판인데 라벨은 「일반식품이
+   이 문구를 쓰면」이다. null 은 「모른다」다 — 읽는 쪽은 품목으로, 품목도 없으면 무조건부로 잰다 (D-220).
 
 🆕 **`근거` 가 라벨의 정본이다** (2026-09-24 · D-282 · D-237 집행) — `collect.statute.cite` 꼴의 조문 인용 목록.
    `labels` 는 거기서 계산한 파생 유형이다. 둘이 어긋난 행이 하나라도 있으면 **쓰지 않고 멈춘다** (`check_basis`).
@@ -44,6 +47,8 @@ import json
 import pathlib
 import re
 
+from app import premise as pm
+from app.contracts import Premise
 from app.settings import PARAMS
 from collect import registry, statute
 from preprocess import split as split_mod
@@ -81,6 +86,69 @@ CATEGORY_OF_SOURCE: dict[str, str] = {
 def category_of(provenance: str) -> str | None:
     """골든 행의 품목 — 원천으로만 정한다. 모르면 None (D-306)."""
     return CATEGORY_OF_SOURCE.get(provenance)
+
+
+#: 실제 사례 행의 품목 → 전제. 건강기능식품은 여기 없다 — 인정 여부는 품목 칸이 말해 주지 않는다
+_PREMISE_OF_ITEM = {"식품": "식품", "화장품": "화장품"}
+#: 전제의 법 묶음을 법 이름으로 (`pm.PREMISE_LAWS` 는 법별 노드 이름이다). 검산에만 쓴다. 🔗 정본은 `app/graph.py` `LAW_OF_NODE` —
+#:    그래프를 여기서 import 하지 않으려고 옮겨 적었다. 둘이 같은지는 `tests/test_label_premise.py` 가 본다
+_LAW_OF_NODE = {"law_ftc": "표시광고법", "law_food": "식품표시광고법", "law_cosmetic": "화장품법"}
+
+
+def label_premise(r: dict) -> str | None:
+    """행의 라벨이 **어느 제품 전제에서 붙은 정답인가** (🆕 2026-10-10 · D-276 결정 1 의 전제 · 값은 계약 `Premise`).
+
+    같은 문구가 제품에 따라 다른 조항에 걸린다 — 정답은 문구가 아니라 (문구 · 전제)의 짝에 붙는다. 생성 화면의 분기
+    (`app/routers/user.py` `_GEN_BRANCHES`) · 생성 평가 입력 · 조건부 판정 평가(`scripts/eval_graph.py`)가 이 칸을 읽는다.
+    🔴 **출처나 조문이 말해 줄 때만 적는다.** 모르면 `None` 이다 — 품목 칸으로 짐작하지 않는다 (D-220).
+       읽는 쪽은 아는 만큼만 넘긴다: 전제가 있으면 전제 · 없으면 품목 · 품목도 없으면 무조건부.
+    ★ 적는 행
+       · 승인 문구 규칙 행 → `식품`. 원천은 건강기능식품 게시판인데 라벨은 「일반식품이 이 문구를 쓰면」이다 (판정 J1)
+       · 식품 · 화장품의 실제 사례 → 그 품목. 식품의 두 전제는 3호가 서느냐만 다르고 기록은 보수 전제다 (D-263 ①)
+       · 건강기능식품의 실제 사례 중 [별표 1] 4.나(인정하지 않은 기능성) 인용 → `건기식_비인정`. 조문이 전제를 말한다
+    ⛔ 적지 않는 행
+       · 건강기능식품의 그 밖의 실제 사례 — 인정 여부를 모른다. 비인정을 넘기면 그래프가 기능성 낱말마다 4.나를 더 낸다
+       · 공정위 원천(품목 미상) — 라벨은 「표시광고법으로 본 정답」이지 제품 전제가 아니다. `일반상품` 으로 적으면
+         식품 · 건강기능식품 광고의 의결서에 「식품 · 화장품이 아닌 상품」이라고 적게 된다
+       · 주입 행 · 사전 낱말 · 인정 조건문 — 읽는 쪽이 없거나(학습 전용) 주장이 아니다
+       · 품목이 식품인데 4.나를 인용한 행 — 그 조항은 건강기능식품의 것이다. 품목 칸이 의심스럽다 (⬜ 봉인 8 행 · 열지 않았다)
+    """
+    if r.get("origin") == "injected" or r.get("unit") == "낱말":
+        return None
+    if r.get("판독") == split_mod.APPROVED_READING:
+        return "식품"
+    if r.get("origin") != "real":
+        return None
+    item, unrecognized = r.get("품목"), pm.UNRECOGNIZED_FUNCTION_CITE in (r.get("근거") or ())
+    if item == "건기식":
+        return "건기식_비인정" if unrecognized else None
+    if unrecognized:
+        return None
+    return _PREMISE_OF_ITEM.get(item)
+
+
+def check_premise(rows: list[dict]) -> None:
+    """`전제` 칸 검산 — 라벨의 근거가 그 전제에서 설 수 있는가. 🔴 어긋나면 멈춘다 (D-220).
+
+    전제는 출처에서 정하고(`label_premise`) 판정의 표(`app/premise.py`)로는 **검산만** 한다 — 판정기의 표로 정답을 만들지 않는다.
+    """
+    bad = []
+    for r in rows:
+        p = r["전제"]
+        if p is None:
+            continue
+        premise = Premise(p)
+        laws = {_LAW_OF_NODE[n] for n in pm.PREMISE_LAWS[premise]}
+        for c in r["근거"]:
+            if statute.law_of(c) not in laws:
+                bad.append(f"{r['id']} — 근거 {c} 의 법이 전제 {p} 의 법 묶음 밖이다")
+            elif statute.type_of(c) == pm.HF_MISLEAD and premise in pm.NO_HF_MISLEAD:
+                bad.append(f"{r['id']} — 3호(건강기능식품 오인)는 전제 {p} 에서 서지 않는다")
+    if bad:
+        raise SystemExit(
+            f"🔴 전제 칸이 근거와 어긋난 행 {len(bad)} — 출처 규칙(`label_premise`)을 고친다\n  "
+            + "\n  ".join(bad[:10])
+        )
 
 
 INJECTED = pathlib.Path("data/derived/injected_golden.jsonl")
@@ -679,6 +747,11 @@ def build() -> tuple[list[dict], dict]:
     for r in kept:
         r["품목"] = r.get("품목") or category_of(r["provenance"])
     stat["품목_미상"] = sum(r["품목"] is None for r in kept)
+    # 🆕 2026-10-10 — 전제 칸. **칸은 늘 있다** — 미정은 빈 목록이다(칸이 없는 것과 「정하지 못했다」를 가른다 · D-220)
+    for r in kept:
+        r["전제"] = label_premise(r)
+        stat["전제_" + (r["전제"] or ("없음 · 품목만" if r["품목"] else "없음"))] += 1
+    check_premise(kept)
 
     check_basis(kept)
 
@@ -710,6 +783,9 @@ def main() -> int:
 
     rows, stat = build()
     print(f"골든셋 **{len(rows):,}행**")
+    # 🆕 2026-10-10 — 라벨 전제(`전제` 칸). 「없음 · 품목만」은 품목으로 · 「없음」은 무조건부로만 잰다
+    prem = {k[3:]: v for k, v in sorted(stat.items()) if k.startswith("전제_")}
+    print(f"  라벨 전제 — {prem}")
     for s in ("train", "test_sentence"):
         sub = [r for r in rows if r["split"] == s]
         pos = [r for r in sub if r["labels"]]
