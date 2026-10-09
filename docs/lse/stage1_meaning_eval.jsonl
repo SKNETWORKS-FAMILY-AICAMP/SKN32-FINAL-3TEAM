@@ -1,0 +1,15 @@
+{"no": 1, "input": "다이어트 성공 후기 폭발 곤약 잡채, 국산 당면 대신 곤약면 사용", "violation_types": ["후기_체험기_기만"], "expect": "salvage", "keep": ["대신", "곤약면"]}
+{"no": 2, "input": "혈당 걱정 끝! 설탕 대신 국산 조청으로 단맛을 낸 약과", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["조청", "약과"]}
+{"no": 3, "input": "아토피 치료 비누, 합성 계면활성제 없이 올리브유로 만든 비누", "violation_types": ["의약품_오인"], "expect": "salvage", "keep": ["올리브유"]}
+{"no": 4, "input": "고혈압에 좋은 저염 된장, 소금 대신 함초를 넣어 숙성", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["함초"]}
+{"no": 5, "input": "면역력 폭발 꿀차, 색소 무첨가 국산 아카시아꿀", "violation_types": ["건강기능식품_오인"], "expect": "salvage", "keep": ["아카시아꿀"]}
+{"no": 6, "input": "기적의 다이어트 떡, 밀가루 없이 쌀가루로만 빚었어요", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["쌀가루"]}
+{"no": 7, "input": "피부병 낫는 세안제, 파라벤 없는 약산성 폼", "violation_types": ["의약품_오인"], "expect": "salvage", "keep": ["폼"]}
+{"no": 8, "input": "장 청소 해주는 식빵, 버터 대신 올리브유로 구웠어요", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["올리브유"]}
+{"no": 9, "input": "감기 뚝 생강청, 방부제 넣지 않고 울산 생강을 졸였어요", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["울산", "생강"]}
+{"no": 10, "input": "탈모 치료 샴푸, 실리콘 대신 어성초 추출물 함유", "violation_types": ["의약품_오인"], "expect": "salvage", "keep": ["어성초"]}
+{"no": 11, "input": "숙면 보장 캐모마일 차, 카페인 없는 이집트산 캐모마일", "violation_types": ["거짓_과장"], "expect": "salvage", "keep": ["이집트산", "캐모마일"]}
+{"no": 12, "input": "변비 해결 그래놀라, 정제 설탕 대신 메이플 시럽으로 구움", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["메이플"]}
+{"no": 13, "input": "혈관 건강 지키는 들기름, 첨가물 없이 국산 들깨만 저온 압착", "violation_types": ["건강기능식품_오인"], "expect": "salvage", "keep": ["들깨"]}
+{"no": 14, "input": "관절염 특효 사골곰탕, 화학조미료 무첨가 한우 사골을 고아", "violation_types": ["질병_예방치료_표방"], "expect": "salvage", "keep": ["한우", "사골"]}
+{"no": 15, "input": "간 기능 회복 헛개차, 무설탕 국산 헛개열매만 달였어요", "violation_types": ["건강기능식품_오인"], "expect": "salvage", "keep": ["헛개"]}
