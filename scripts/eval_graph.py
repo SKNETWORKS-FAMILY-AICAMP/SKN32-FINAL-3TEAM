@@ -145,9 +145,11 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "hold_reasons": sorted({s.hold_reason.value for s in sents if s.hold_reason is not None}),
         "types": types,
         "candidates": cands,
-        #: 🆕 2026-10-07 (그림자 배선) — **인코더가 문턱을 넘겨 낸 유형**(`encodings`). 판정에 쓰이지 않은 신호다 —
-        #:    `candidates`(문장 판정에 실린 보류 후보)와 섞지 않는다. 인코더가 안 돌았으면 `encoded` 가 거짓이고 이 칸은 빈다
-        "enc_candidates": sorted({c for e in state.get("encodings", []) for c in e.candidates}),
+        #: 🔄 2026-10-09 (D-323 집행) — **응답에 실린 인코더 유형 후보**(문장의 `encoder_candidates` · 이 품목의 전제로 거른 것).
+        #:    판정에 쓰이지 않은 신호다 — `candidates`(문장 판정에 실린 보류 후보)와 섞지 않는다.
+        #:    인코더가 안 돌았으면 `encoded` 가 거짓이고 이 칸은 빈다. ⛔ 종전에는 상태의 `encodings` 를 직접 읽었다 —
+        #:    응답에 나가는 것과 재는 것이 달라질 수 있었다(거름이 응답에만 걸린다)
+        "enc_candidates": sorted({c.violation.value for s in sents for c in s.encoder_candidates}),
         "encoded": bool(sents) and len(state.get("encodings", [])) == len(sents),
         "enc_truncated": sum(1 for e in state.get("encodings", []) if e.truncated),
         "ho": ho,
@@ -531,7 +533,8 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     e = s.get("encoder") or {}
     if e.get("rows"):
         print(
-            f"\n  [인코더 · 그림자] 인코더가 돈 행 {e['rows']} — 🚨 판정은 인코더를 읽지 않는다. 아래는 「후보로 더했다면」이다"
+            f"\n  [인코더 후보 · 응답의 encoder_candidates] 인코더가 돈 행 {e['rows']} — "
+            "🚨 판정(확정 · 보류)은 인코더를 읽지 않는다. 아래는 후보까지 합친 탐지다 (D-323)"
         )
         if e["positive"]:
             print(

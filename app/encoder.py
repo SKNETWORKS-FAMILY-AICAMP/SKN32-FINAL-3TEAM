@@ -60,6 +60,19 @@ def weights_sha12(model_dir: Path) -> str:
     return h.hexdigest()[:12]
 
 
+@functools.cache
+def weights_mark(model_dir: Path) -> str:
+    """응답의 `judged_by` 에 붙는 인코더 판 표지 — 가중치 지문 12자. 폴더마다 **한 번만** 읽는다(가중치는 수백 MB 다).
+
+    🔴 지문을 못 읽으면 `지문없음` 이라고 **적는다** — 인코더가 돈 응답이 인코더 없는 응답과 같은 표지로 나가지 않게 (D-220).
+       폴더 이름은 싣지 않는다 — `judged_by` 칸의 길이(80자 · `app/models.py`)를 이름 길이에 맡기지 않는다.
+    """
+    try:
+        return weights_sha12(model_dir)
+    except EncoderUnavailable:
+        return "지문없음"
+
+
 class EncoderUnavailable(RuntimeError):
     """모델 파일 또는 로컬 추론 의존성이 없는 경우."""
 
