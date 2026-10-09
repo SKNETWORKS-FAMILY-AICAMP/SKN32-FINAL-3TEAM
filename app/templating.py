@@ -27,3 +27,20 @@ if not templates.env.autoescape:  # pragma: no cover — 기본값이 바뀌어�
         "Jinja2 자동 이스케이프가 꺼져 있다 — 보안점검 P2-9.\n"
         "  고치는 법 — app/templating.py 에서 autoescape 를 켠 채로 만든다"
     )
+
+
+def evidence_parts(evidence: object) -> dict[str, list]:
+    """근거 목록 → `{"basis": 인용 근거, "refs": 참고 조문}` (🆕 2026-10-08 · 근거 표시 「(나)」 · D-224).
+
+    ★ **인용 근거** = 사전 항목이 인용한 조문 — 판정이 기대는 조문. ★ **참고 조문** = 검색이 찾은 조문 — 판정을 바꾸지 않는다.
+    🔄 2026-10-08 (D-323 결정 2) — 계약 칸 `EvidenceArticle.basis` 로 가른다. ⛔ 종전에는 좌표 꼴로 갈랐다(칸이 없던 때의 임시).
+       칸이 거짓이면 참고다 — 칸을 모르는 쪽이 만든 근거가 판정 근거로 그려지지 않게 (D-220).
+    """
+    basis: list = []
+    refs: list = []
+    for e in evidence or ():  # type: ignore[attr-defined]
+        (basis if getattr(e, "basis", False) is True else refs).append(e)
+    return {"basis": basis, "refs": refs}
+
+
+templates.env.filters["evidence_parts"] = evidence_parts

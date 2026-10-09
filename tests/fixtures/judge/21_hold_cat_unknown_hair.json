@@ -19,14 +19,16 @@
           "article": "제8조",
           "item": "제1항제1호",
           "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         },
         {
           "law_id": "013094",
           "article": "제8조",
           "item": "제1항제3호",
           "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ],
       "risk": {
@@ -63,14 +65,16 @@
               "article": "제8조",
               "item": "제1항제1호",
               "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
-              "chunk_id": null
+              "chunk_id": null,
+              "basis": true
             },
             {
               "law_id": "013094",
               "article": "제8조",
               "item": "제1항제3호",
               "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
-              "chunk_id": null
+              "chunk_id": null,
+              "basis": true
             }
           ],
           "risk": {
@@ -92,14 +96,16 @@
           "article": "제8조",
           "item": "제1항제1호",
           "quote": null,
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         },
         {
           "law_id": "013094",
           "article": "제8조",
           "item": "제1항제3호",
           "quote": null,
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ]
     },
@@ -123,7 +129,8 @@
               "article": "제8조",
               "item": "제1항제1호",
               "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
-              "chunk_id": null
+              "chunk_id": null,
+              "basis": true
             }
           ],
           "risk": {
@@ -145,7 +152,8 @@
           "article": "제8조",
           "item": "제1항제1호",
           "quote": null,
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ]
     },
@@ -170,14 +178,16 @@
               "article": "제8조",
               "item": "제1항제1호",
               "quote": "질병의 예방·치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
-              "chunk_id": null
+              "chunk_id": null,
+              "basis": true
             },
             {
               "law_id": "013094",
               "article": "제8조",
               "item": "제1항제3호",
               "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
-              "chunk_id": null
+              "chunk_id": null,
+              "basis": true
             }
           ],
           "risk": {
@@ -199,14 +209,16 @@
           "article": "제8조",
           "item": "제1항제1호",
           "quote": null,
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         },
         {
           "law_id": "013094",
           "article": "제8조",
           "item": "제1항제3호",
           "quote": null,
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ]
     }

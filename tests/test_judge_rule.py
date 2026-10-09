@@ -486,3 +486,53 @@ def test_조건부_평가는_승인_문구_규칙_행을_뺀다() -> None:
         {"품목": "식품"},
     ]
     assert [r.get("판독") for r in eg.conditional_rows(rows)] == ["독립판독_합의", None]
+
+
+# ── 2026-10-08 평가 규칙 집행 (D-321 · D-40 · D-175) ─────────────────────────────────────────────
+def test_유형_없는_위반_행과_편입_대기_유형만_붙은_행은_채점_밖이다() -> None:
+    """★ D-321 — 「유형이 없어 학습 · 채점에서 빠진다」(평가 131) · 편입 대기 유형은 게이트 · 발표 지표에 넣지 않는다."""
+    from scripts.eval_rule import scored, truth_types, untyped_violation  # noqa: PLC0415
+
+    untyped = {"조건": "C", "labels": [], "근거": ["002015:제13조제1항제4호"]}
+    pending = {"조건": "A", "labels": ["기능성화장품_오인"], "근거": ["002015:제13조제1항제2호"]}
+    mixed = {
+        "조건": "B",
+        "labels": ["거짓_과장", "기능성화장품_오인"],
+        "근거": ["002011:제3조제1항제1호"],
+    }
+    lawful = {"조건": "L", "labels": [], "근거": []}
+    cand = {"조건": "B", "labels": [], "근거": [], "근거_후보": [["002011:제3조제1항제1호"]]}
+    assert untyped_violation(untyped) and not scored(untyped)
+    assert untyped_violation(pending) and not scored(pending)
+    assert scored(mixed) and truth_types(mixed, set()) == {"거짓_과장"}, (
+        "편입 대기 유형은 정답에서 빠진다"
+    )
+    assert scored(lawful), "적법 행은 그대로 채점한다"
+    assert scored(cand), "근거 후보만 있는 행은 후보가 정답이다 — 빼지 않는다"
+
+
+def test_6종_8종_표와_신뢰구간() -> None:
+    """★ D-321 결정 4 — 두 표 · D-40 — 30 미만은 macro 에서 빠지고 · 신뢰구간은 n=0 이면 없다."""
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    t = {
+        "거짓_과장": (40, 20, 5),
+        "비방광고": (35, 7, 0),
+        "후기_체험기_기만": (10, 5, 0),
+    }
+    m = eg.macro_table(t)
+    assert m["8종"]["measurable"] == ["거짓_과장", "비방광고"]
+    assert m["6종"]["measurable"] == ["거짓_과장"], "6종 표에는 이번 편입 둘이 없다"
+    assert "후기_체험기_기만" in m["8종"]["unmeasurable"]
+    lo, hi = eg.wilson(20, 40)
+    assert lo < 0.5 < hi
+    assert eg.wilson(0, 0) is None
+
+
+def test_봉인_실행은_기록하고_횟수를_센다(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """★ D-175 — 봉인 평가셋 실행을 기록한다. 도구가 세지 않으면 「한 번」이 지켜졌는지 알 수 없다."""
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    monkeypatch.setattr(eg, "SEALED_LOG", tmp_path / "sealed.jsonl")
+    assert eg.log_sealed_run({"golden_sha": "x"}) == 1
+    assert eg.log_sealed_run({"golden_sha": "x"}) == 2

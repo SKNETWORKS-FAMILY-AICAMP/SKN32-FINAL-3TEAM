@@ -377,3 +377,11 @@ def test_클라이언트가_품목을_보낸다(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(sllm_client.urllib.request, "urlopen", fake_urlopen)
     assert sllm_client.rewrite("문구", ["거짓_과장"], "건기식")[0] == "ok"
     assert sent["category"] == "건기식" and sent["rejudge"] is False
+
+
+def test_재판정에서_미판정이면_위반_못_찾음이_아니다(wired) -> None:  # noqa: ANN001
+    """🔴 D-127 — 미판정(안 봤다)을 「위반 못 찾음」으로 내지 않는다."""
+    wired.judge_out[BODY] = ("ok", _fixture("09_unjudged"))
+    html = _go()
+    assert "판정을 마치지 못한 문장" in html
+    assert "위반 못 찾음" not in html

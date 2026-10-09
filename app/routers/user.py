@@ -566,6 +566,12 @@ def _marks(text: str | None, result) -> dict[str, list[tuple[str, bool]]]:  # no
     return out
 
 
+def _sllm_enabled() -> bool:
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    return sllm_client.enabled()
+
+
 def _review_ctx(copies: list[str], results: list[dict] | None = None, **extra) -> dict:
     ctx = {
         "fixtures": _fixture_names("judge"),
@@ -574,6 +580,8 @@ def _review_ctx(copies: list[str], results: list[dict] | None = None, **extra) -
         "max_redo": _MAX_REDO,
         "copies": copies,
         "results": results or [],
+        # 🆕 2026-10-08 — 고쳐 쓰기를 꺼 둔 환경이면 버튼 대신 안내를 그린다(`sllm_client.enabled()`)
+        "rewrite_enabled": _sllm_enabled(),
     }
     for r in results or []:
         r["flagged"] = _flagged(r["result"])
@@ -694,6 +702,10 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     hold = sorted({s.hold_reason.value for s in res.sentences if s.hold_reason})
     if violations or any(s.verdict.value == "no_basis" for s in res.sentences):
         return {"status": "rejected", "violations": violations, "hold_reasons": hold}
+    if any(s.verdict.value == "unjudged" for s in res.sentences):
+        # 🆕 2026-10-08 (D-127) — 미판정은 「안 봤다」다. ⛔ 「위반 못 찾음」으로 내면 안 본 문장을 본 것처럼 말한다.
+        #    🚨 같은 규칙이 `docs/lse/rejudge.py` 에도 있다(이서은 폴더 · 서버 쪽 재판정) — 바꾸면 양쪽을 같이 (D-99)
+        return {"status": "unjudged", "violations": [], "hold_reasons": hold}
     status = "passed" if res.outcome.value == "pass" else "no_violation"
     return {"status": status, "violations": [], "hold_reasons": hold}
 
@@ -711,6 +723,8 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     if out and out.get("infeasible") and out["infeasible"] not in _VIOLATIONS:
         # 위반 유형 없이 보내면 모델이 사유를 제 말로 지어 쓴다(10-06 실측) — 그 말을 사유로 그리지 않는다
         out = {**out, "infeasible": None}
+    # 🆕 2026-10-08 — 이 환경에는 서버를 두지 않았다(`sllm_client.enabled()`) — 「연결 실패」와 가른다
+    rw["off"] = s_state == "off"
     rw["down"] = s_state != "ok"
     rw["out"] = out
     if out and out["outcome"] == "candidate" and out.get("rewrite"):

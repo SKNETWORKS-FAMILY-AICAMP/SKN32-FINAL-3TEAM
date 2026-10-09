@@ -564,7 +564,8 @@ def ftc_train_marks() -> dict[str, dict] | None:
 
     ★ 봉인 판(`ftc_sealed_marks`)과 같은 길이다 — 문구 단위로 대상 N 을 빼고 조건을 붙인다(`golden.build`).
     🚨 분할(문서 배정)은 이 판을 모른다 — 학습 문서의 주문 문구만 바뀌고 봉인 · 평가 행은 그대로다 (D-312).
-    🚨 사전(`preprocess/dictionary.py`)에는 반영하지 않는다 — 사전은 동결이다(D-313 결정 1 · 재작업 때 함께).
+    🔄 사전(`preprocess/dictionary.py` `ftc_reading`)도 이 판을 읽는다 — 대상 N · 조건 M · D · L 문구에서 온 항목은
+       단독판정 자격이 없다(D-312 사전 집행). ⛔ 종전에는 「사전은 동결(D-313 결정 1)」이라 반영하지 않았다.
     """
     st = ftc_train_state()
     if not st or st["대기"]:
