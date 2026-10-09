@@ -42,6 +42,7 @@ from judge_stage1 import (QUIET_MARGIN, REPO, BANNED_TERMS_PATH, load_banned_ter
 from judge_stage2 import stage2_judge
 from app import graph as g
 from app.contracts import Category
+from scripts import eval_graph as _eg  # 🆕 10-10 — 제품 정보는 평가 도구의 한 곳에서 (`product_of`)
 from preprocess.golden import lawful_kind  # 적법 문장 판별은 한 곳 (D-301 · D-99)
 
 GOLDEN = os.path.join(REPO, "data", "derived", "golden", "golden.jsonl")
@@ -504,7 +505,7 @@ def main(argv=None):
     with open(a.banned, "rb") as f:
         dict_sha = hashlib.sha256(f.read()).hexdigest()
     agree = not a.dict_stands
-    cat_of = (lambda r: Category(r["품목"])) if a.conditional else (lambda r: Category(a.category) if a.category else None)
+    cat_of = (lambda r: _eg.product_of(r, True).category) if a.conditional else (lambda r: Category(a.category) if a.category else None)
     if a.timing:
         print(f"[INFO] golden {sha[:12]} · {a.split} {len(rows)}행 · 모델 {scheme.get('experiment', '?')}")
         timing(rows, tok, mdl, labels, book, th, cat_of, agree, a.margin, a.timing)
