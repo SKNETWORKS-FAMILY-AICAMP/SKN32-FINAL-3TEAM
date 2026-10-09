@@ -95,8 +95,15 @@
   <p class="cp-note" style="margin:0 0 .4rem">
     담고 싶은 내용을 적어주세요. 적은 내용에 맞춰 섹션 구성과 문구가 달라져요.
   </p>
+  {% if carried %}
+  {# 🆕 2026-10-08 — 카피 생성의 후보 카드에서 넘어왔다. ⬜ 엔진이 붙으면 직접 입력이 아니라 `source_copy` 경로로 옮긴다 #}
+  <p class="cp-note" style="margin:0 0 .4rem">
+    ★ <b>카피 생성에서 고른 문구</b>를 채워 뒀어요.
+    {%- if carried.note %} 필수 병기 문구 — <b>{{ carried.note }}</b>{% endif %}
+  </p>
+  {% endif %}
   <textarea id="prompt" name="prompt" rows="3" maxlength="{{ max_text_len }}"
-            placeholder="예: 건조한 계절에 쓰기 좋은 보습 제품이라는 점을 알리고 싶어요">{{ picked.prompt if picked and picked.prompt else "" }}</textarea>
+            placeholder="예: 건조한 계절에 쓰기 좋은 보습 제품이라는 점을 알리고 싶어요">{{ carried.prompt if carried else (picked.prompt if picked and picked.prompt else "") }}</textarea>
   <p class="cp-note" style="margin-top:.4rem">
     🚨 <b>판정 코어가 입력한 내용을 먼저 걸러요.</b> 걸러지지 않은 문구는 지면에 얹히지 않아요 (D-63 · D-119).
   </p>
