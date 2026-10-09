@@ -17,8 +17,9 @@
    🔄 2026-10-06 — 판정 로직은 섰다: **인코더 전 규칙 판정**(`JUDGED_BY` · D-269) · 위험도 하한(`assess_risk`) ·
       품목 분기(`premise_branches`) · 증명서 조립(`_certificate_of` · D-320). DB 가 없으면 사전을 못 훑어 문장은 미판정이다.
       빈 노드는 `doc_rules` 와 생성(B)의 `keyword_screen` · `claim_ledger` · `rejudge` 다(`assemble` 은 라운드 수만 센다).
-   🔄 2026-10-07 — `encode` 는 **그림자 배선**이다: 모델 폴더가 설정되면(`COPYLANE_MODEL_DIR`) 문장마다 인코더 신호를
-      상태(`encodings`)에 싣는다. 🚨 `judge` 는 그 칸을 **읽지 않는다** — 판정은 여전히 인코더 전 규칙 판정이다(`JUDGED_BY`).
+   🔄 2026-10-07 — `encode` 는 모델 폴더가 설정되면(`COPYLANE_MODEL_DIR`) 문장마다 인코더 신호를 상태(`encodings`)에 싣는다.
+   🔄 2026-10-09 (D-323 집행) — 그 신호가 응답에 나간다: 문장의 **`encoder_candidates`**(유형 · 확신) 한 칸에만.
+      🚨 판정(확정 · 보류 · `violations` · 하한 · 분기 열쇠)은 그 칸을 **읽지 않는다** — 여전히 인코더 전 규칙 판정이다(`JUDGED_BY`).
 
 ★ D-124 가 정한 검사 셋도 그대로다 —
    ① **라우터 함수는 그래프 없이 단독 테스트한다** → langgraph 를 **모듈 최상단에서 import 하지 않는다.**
@@ -65,6 +66,7 @@ from app.contracts import (
     Category,
     CategorySource,
     Certificate,
+    EncoderTypeCandidate,
     EvidenceArticle,
     GenerateOutcome,
     HoldReason,
@@ -141,12 +143,13 @@ class SentEvidence:
 class SentEncoding:
     """문장 하나의 **인코더 신호** (🆕 2026-10-07 · 그림자 배선). 🚨 판정이 아니다 — 유형 후보와 확신뿐이다 (D-131).
 
-    ⛔ `judge` · `premise_branches` · 종착은 이 칸을 읽지 않는다. 읽는 쪽은 평가 도구(`scripts/eval_graph.py`)뿐이다.
+    ⛔ 판정(`_judge_one`) · 분기 열쇠 · 종착은 이 칸을 읽지 않는다. 읽는 쪽은 응답의 후보 칸으로 옮기는 `_encoder_candidates` 뿐이다.
        판정에 쓰는 규칙(합의 · 통과 · 후보를 어느 칸에 싣나)은 팀장 판정 뒤에 들어온다 — 그 자리는 `judge` 다 (D-192).
     ⛔ 문장 판정의 `violations` 에 섞지 않는다 — 그 칸은 고쳐 쓰기(`app/routers/user.py` 버튼 · sLLM 에 넘기는 유형 ·
        `_rejudge` 의 탈락 기준)가 읽는다. 섞으면 적법 문장에 버튼이 뜨고 고친 문구가 재판정에서 탈락한다.
     🔄 2026-10-08 (D-323) — 응답에 실을 자리가 정해졌다: `SentenceJudgment.encoder_candidates`(유형 · 확신). 배선(클론 B)은
        이 칸만 채운다 — 하한 · 확정 · 분기 열쇠(`_judgment_key`)에는 넣지 않는다 · 거름은 유형 단위(`pm.NO_HF_MISLEAD`)다.
+    ✅ 2026-10-09 — 배선했다: `_encoder_candidates` 가 이 운반체를 계약 칸으로 옮긴다(`judge` · `_premise_sentences` · `_recorded`).
     """
 
     sent_id: str
@@ -484,7 +487,7 @@ def route_laws(state: CoreState) -> tuple[str, ...]:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  코어 노드 — `doc_rules` 는 자리와 계약만 있다(빈 노드) · `encode` 는 그림자 배선(판정이 읽지 않는다)
+#  코어 노드 — `doc_rules` 는 자리와 계약만 있다(빈 노드) · `encode` 의 신호는 후보 칸으로만 나간다(판정이 읽지 않는다 · D-323)
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -728,9 +731,10 @@ def basis_texts(cur: Any, cites: Iterable[str]) -> dict[str, EvidenceArticle]:
 
 @timed
 def encode(state: CoreState) -> dict[str, Any]:
-    """인코더 — 유형 후보 · 확신 (D-131). **팬아웃 앞에서 한 번** 돈다 (D-267). 🆕 2026-10-07 **그림자 배선**.
+    """인코더 — 유형 후보 · 확신 (D-131). **팬아웃 앞에서 한 번** 돈다 (D-267). 🆕 2026-10-07 배선 · 🔄 2026-10-09 응답에 싣는다.
 
-    ★ 문장마다 신호를 `encodings` 에 싣기만 한다 — **판정은 바뀌지 않는다**(`judge` 가 읽지 않는다 · `SentEncoding`).
+    ★ 문장마다 신호를 `encodings` 에 싣는다 — **판정은 바뀌지 않는다.** `judge` 는 이 신호를 문장의 `encoder_candidates`
+       칸으로 옮기기만 한다(`_encoder_candidates` · D-323).
     🔴 값이 없을 때 (D-220)
        · 모델 폴더가 설정되지 않았다 → 아무것도 싣지 않는다. 인코더를 쓰지 않는 정상 경로다(CI · 모델 없는 기기)
        · 설정했는데 올리지 못했다 → **경고를 남기고** 아무것도 싣지 않는다. 판정은 규칙 판정 그대로 나간다(보류 쪽이라 안전하다).
@@ -766,6 +770,33 @@ def _warn_encoder_off(model_dir: str, why: str) -> None:
     logging.getLogger("copylane.graph").warning(
         "판정 인코더를 올리지 못했다 — 인코더 신호 없이 규칙 판정으로 간다 (%s): %s", model_dir, why
     )
+
+
+def _encoder_candidates(
+    e: SentEncoding | None, premises: Iterable[Premise]
+) -> list[EncoderTypeCandidate]:
+    """인코더 신호 → 문장의 `encoder_candidates` (🆕 2026-10-09 · D-323 결정 1 · 6). 🚨 판정이 아니다 — 유형 후보와 확신뿐이다.
+
+    ★ 거름은 **유형 단위**다 — 건강기능식품 오인은 건강기능식품 전제 둘 · 일반식품 기능성 전제에서 서지 않는다
+       (`pm.NO_HF_MISLEAD` · 사전 적중의 `_premise_hits` 와 같은 표 · D-319 ④′ · D-99). 법 거름은 하지 않는다 —
+       유형만으로는 법을 못 정한다(D-323 결정 6).
+    ★ `premises` 가 여럿이면 **전제별로 거른 후보의 합집합**이다 — 한 전제에서라도 설 수 있는 후보는 남기고, 어느 전제에서도
+       설 수 없는 후보만 뺀다(2026-10-09 팀장 판정 (다) · D-323 ⬜ 「기록 판정에 실리는 후보」). 분기 문장은 전제 하나로,
+       기록 판정은 그 품목의 전제 전부(`pm.PREMISES_OF`)로 부른다 — 위험도를 가장 보수적인 전제로 적는 것과 같은 방향이다 (D-263 ①).
+    🔴 값이 없을 때 (D-220)
+       · 신호가 없다(인코더가 꺼졌거나 못 올렸다) → 빈 목록. 「후보 없음」이 아니라 「인코더가 없다」다 — 계약 주석이 그렇게 읽게 한다
+       · 전제가 없다(전제 표에 없는 품목 · `전용법_미수록`) → **거르지 않는다.** 빈 합집합으로 후보를 전부 지우지 않는다
+    """
+    if e is None:
+        return []
+    ps = tuple(premises)
+    never_hf = bool(ps) and all(p in pm.NO_HF_MISLEAD for p in ps)
+    score = dict(e.scores)
+    return [
+        EncoderTypeCandidate(violation=Violation(t), confidence=score[t])
+        for t in e.candidates
+        if not (never_hf and t == pm.HF_MISLEAD)
+    ]
 
 
 def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:
@@ -1074,21 +1105,29 @@ def judge(state: CoreState) -> dict[str, Any]:
         starts: list[int | None] = list(sentsplit.offsets(state.get("text", ""), sents))
     except ValueError:
         starts = [None] * len(sents)
-    return {
-        "sentences": [
-            _judge_one(
-                sid := sent_id(i),
-                t,
-                starts[i],
-                scans.get(sid),
-                hits_of.get(sid, []),
-                per_sent.get(sid, []),
-                weak_of.get(sid, []),
-                texts,
+    # 🆕 2026-10-09 (D-323) — 인코더 신호는 **한 칸에만** 옮긴다. `_judge_one` 은 그 신호를 받지 않는다 — 판정이 읽을 길이 없다.
+    #    기록 판정이라 이 품목의 전제 전부로 거른다(합집합 · `_encoder_candidates`).
+    encs = {e.sent_id: e for e in state.get("encodings", [])}
+    premises = pm.PREMISES_OF[(state.get("product") or ProductContext()).category]
+    out: list[SentenceJudgment] = []
+    for i, t in enumerate(sents):
+        sid = sent_id(i)
+        j = _judge_one(
+            sid,
+            t,
+            starts[i],
+            scans.get(sid),
+            hits_of.get(sid, []),
+            per_sent.get(sid, []),
+            weak_of.get(sid, []),
+            texts,
+        )
+        if sid in encs:
+            j = j.model_copy(
+                update={"encoder_candidates": _encoder_candidates(encs[sid], premises)}
             )
-            for i, t in enumerate(sents)
-        ]
-    }
+        out.append(j)
+    return {"sentences": out}
 
 
 #: 위험도 하한을 읽는 질의 — 🔴 **뷰만 읽는다**(`v_risk_lookup` · 2인 서명이 끝난 현행 행만 보인다 · 0013 · D-309).
@@ -1287,6 +1326,7 @@ def _premise_sentences(
         starts = [None] * len(sents)
     category = pm.PREMISE_CATEGORY[premise]
     texts = state.get("basis_texts") or {}
+    encs = {e.sent_id: e for e in state.get("encodings", [])}
     out: list[SentenceJudgment] = []
     for i, text in enumerate(sents):
         sid = sent_id(i)
@@ -1351,6 +1391,11 @@ def _premise_sentences(
                             ceiling_note=f.ceiling_note,
                         ),
                     )
+        if sid in encs:
+            # 분기 문장 — 이 전제 하나로 거른다 (D-323 결정 6). 판정이 끝난 뒤에 붙인다 — 위 판정은 이 칸을 보지 않았다
+            j = j.model_copy(
+                update={"encoder_candidates": _encoder_candidates(encs[sid], (premise,))}
+            )
         out.append(j)
     return out
 
@@ -1378,6 +1423,8 @@ def _recorded(
     🔴 **모든 전제에서 같은 위반이 설 때만 확정이다.** 한 전제라도 판정하지 못하거나(사전 침묵) 위반이 없으면 보류 + 분기다 —
        적용되는지 모르는 법의 조문으로 확정하지 않는다. 보류에도 유형 · 근거 · 가장 보수적인 위험도를 싣는다
        (계약 `_recorded_is_conservative` — 기록된 위험도 ≥ 검증 안 된 모든 분기의 위험도).
+    🚨 인코더 후보는 **기록 판정의 것**(`base` — 이 품목의 전제 전부로 거른 합집합)을 그대로 둔다. 가장 무거운 전제의
+       문장을 옮겨 올 때 그 전제 하나로 거른 후보가 따라오면 다른 전제에서 서는 후보가 사라진다 (D-323 · 2026-10-09 (다)).
     """
     hit = [j for j in per if j.verdict is Verdict.confirmed and j.violations]
     if not hit:
@@ -1393,7 +1440,8 @@ def _recorded(
             update={
                 "risk": worst.risk
                 if top is None
-                else worst.risk.model_copy(update={"floor": top, "final": top})
+                else worst.risk.model_copy(update={"floor": top, "final": top}),
+                "encoder_candidates": base.encoder_candidates,
             }
         )
     return SentenceJudgment(
@@ -1406,6 +1454,7 @@ def _recorded(
         evidence=worst.evidence,
         spans=worst.spans,
         risk=risk,
+        encoder_candidates=base.encoder_candidates,
     )
 
 
@@ -1782,6 +1831,18 @@ def run_generate_stub(init: GenerateState | None = None) -> tuple[GenerateState,
 JUDGED_BY = "rule-0.3.0-dict"
 
 
+def judged_by(state: dict[str, Any]) -> str:
+    """응답의 판 표지 (🆕 2026-10-09). 인코더가 돌았으면 그 판의 가중치 지문을 붙인다 — `rule-0.3.0-dict+enc:<지문 12자>`.
+
+    ★ 앞머리는 그대로 `JUDGED_BY` 다 — **판정은 규칙 판정**이고 인코더는 `encoder_candidates` 만 채웠다 (D-323).
+    🔴 인코더가 안 돌았으면(설정 없음 · 못 올림) 붙이지 않는다 — 신호가 실린 응답만 인코더 판을 적는다.
+    """
+    model_dir = enc.configured_dir()
+    if model_dir is None or not state.get("encodings"):
+        return JUDGED_BY
+    return f"{JUDGED_BY}+enc:{enc.weights_mark(model_dir)}"
+
+
 def to_response(state: ReviewState) -> JudgeResponse:
     """검수 상태를 계약으로 옮긴다. 🚨 계약이 거부하면 여기서 터진다 — 화면보다 먼저다.
 
@@ -1804,7 +1865,7 @@ def to_response(state: ReviewState) -> JudgeResponse:
         certificate=state.get("certificate"),
         timings=state.get("timings", []),
         law_version="2026-09-10",
-        judged_by=JUDGED_BY,
+        judged_by=judged_by(state),
     )
 
 
