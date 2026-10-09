@@ -261,6 +261,8 @@ def test_평가_도구는_인코더_신호를_따로_센다(fake: None) -> None:
     rep = eg.encoder_report(rows, [p, p], [(hit, p), (miss, p)])
     assert rep["rows"] == 2
     assert (rep["positive"], rep["detected"], rep["detected_with_encoder"]) == (2, 0, 1)
+    # 유형 무관(규약 G1) — 틀린 유형으로 걸린 행(`miss`)도 센다. 유형 적중과 다른 수다
+    assert rep["flagged_any"] == 2
 
 
 @pytest.mark.gate
