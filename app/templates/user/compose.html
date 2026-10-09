@@ -81,21 +81,33 @@
 
 <form class="cp-card" method="post" action="/u/compose">
   <h2><span class="cp-step">01 ·</span> 어떤 종류로 만들까요</h2>
+  {# 🔄 10-08 (lse) — 「상세페이지」에 checked 가 박혀 있어 카드뉴스 · 배너를 골라 제출해도 상세페이지로 돌아갔다.
+     고른 값(picked) → 픽스처 결과의 포맷 → 기본 상세페이지 순으로 체크한다 #}
+  {% set fmt = (picked.ad_format if picked else none) or (result.ad_format.value if result else none) or "상세페이지" %}
   <div class="cp-pick">
-    <input type="radio" id="f-detail" name="ad_format" value="상세페이지" checked>
-    <label for="f-detail">상세페이지</label>
-    <input type="radio" id="f-card" name="ad_format" value="카드뉴스">
-    <label for="f-card">카드뉴스</label>
-    <input type="radio" id="f-banner" name="ad_format" value="배너">
-    <label for="f-banner">배너</label>
+    {% for fid, val in (("f-detail", "상세페이지"), ("f-card", "카드뉴스"), ("f-banner", "배너")) %}
+    <input type="radio" id="{{ fid }}" name="ad_format" value="{{ val }}"{% if fmt == val %} checked{% endif %}>
+    <label for="{{ fid }}">{{ val }}</label>
+    {% endfor %}
   </div>
 
   <h2><span class="cp-step">02 ·</span> 어떤 내용을 담을까요</h2>
   <p class="cp-note" style="margin:0 0 .4rem">
     담고 싶은 내용을 적어주세요. 적은 내용에 맞춰 섹션 구성과 문구가 달라져요.
   </p>
+  {# 🆕 2026-10-10 — 후보 카드가 넘긴 **필수 병기 문구**는 이 폼의 제출에도 같이 간다. 종전에는 한 번 보여 주고 잃었다.
+     ⬜ 엔진이 붙으면 `ComposeRequest` 의 각색본 경로(`source_copy`)가 이 값을 받는다 #}
+  {% set note = (carried.note if carried else (picked.note if picked else "")) %}
+  {% if note %}<input type="hidden" name="note" value="{{ note }}">{% endif %}
+  {% if carried %}
+  {# 🆕 2026-10-08 — 카피 생성의 후보 카드에서 넘어왔다. ⬜ 엔진이 붙으면 직접 입력이 아니라 `source_copy` 경로로 옮긴다 #}
+  <p class="cp-note" style="margin:0 0 .4rem">
+    ★ <b>카피 생성에서 고른 문구</b>를 채워 뒀어요.
+    {%- if carried.note %} 필수 병기 문구 — <b>{{ carried.note }}</b>{% endif %}
+  </p>
+  {% endif %}
   <textarea id="prompt" name="prompt" rows="3" maxlength="{{ max_text_len }}"
-            placeholder="예: 건조한 계절에 쓰기 좋은 보습 제품이라는 점을 알리고 싶어요"></textarea>
+            placeholder="예: 건조한 계절에 쓰기 좋은 보습 제품이라는 점을 알리고 싶어요">{{ carried.prompt if carried else (picked.prompt if picked and picked.prompt else "") }}</textarea>
   <p class="cp-note" style="margin-top:.4rem">
     🚨 <b>판정 코어가 입력한 내용을 먼저 걸러요.</b> 걸러지지 않은 문구는 지면에 얹히지 않아요 (D-63 · D-119).
   </p>
@@ -113,7 +125,8 @@
   <p class="cp-pending">
     광고 생성 코어가 아직 안 붙었어요. <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
     고르신 것 — 종류 <b>{{ picked.ad_format }}</b>
-    {%- if picked.prompt %} · 내용 「{{ picked.prompt }}」{% endif %}<br>
+    {%- if picked.prompt %} · 내용 「{{ picked.prompt }}」{% endif %}
+    {%- if picked.note %} · 필수 병기 문구 「{{ picked.note }}」{% endif %}<br>
     아래 골든 픽스처로 결과 화면의 모든 분기를 볼 수 있어요.
   </p>
 </div>

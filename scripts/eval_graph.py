@@ -343,13 +343,17 @@ def encoder_report(
        `detect`(D-311 결정 5 · 확정 ∪ 보류 유형 후보)는 그대로 두고 **따로** 싣는다.
        ⬜ D-311 의 「보류 유형 후보」는 사전의 자격 없는 적중을 가리켜 적은 말이다 — 인코더 후보를 같은 줄에 세는지는 팀장 확인.
     🔴 인코더가 **전 문장에** 돈 행만 센다(`encoded`). 안 돈 행을 「조용했다」로 세지 않는다 (D-220) — 없으면 `rows` 가 0 이다.
+    🆕 2026-10-10 — 「탐지」의 뜻이 둘이라 **이름을 달리해 함께** 낸다. 섞어 견주면 같은 판이 다른 점수로 보인다.
+       · `detected_with_encoder` — **유형 적중**: 정답 유형이 (확정 ∪ 보류 후보 ∪ 인코더 후보)에 있다. 이 도구의 탐지다 (D-311 결정 5)
+       · `flagged_any` — **유형 무관**: 무엇이든 하나라도 걸렸다(정답 유형이 아니어도). 인코더 실험 규약 G1 의 「탐지」가 이 뜻이다.
+         🚨 유형 무관은 관문에 쓰는 수가 아니다 — 틀린 유형으로 걸린 것도 센다. 규약의 수와 맞대어 읽으려고 싣는다
     · `lawful` — 적법 문장에 인코더 후보가 선 수. 칸은 `lawful_report` 와 같다(음성 L · 주장없음 D · D-301).
     """
     done = [(r, p) for r, p in zip(rows, preds, strict=True) if p.get("encoded")]
     if not done:
         return {"rows": 0}
     ids = {id(r) for r, _ in done}
-    pos = det = det_enc = 0
+    pos = det = det_enc = any_fired = 0
     for r, p in sc:
         if id(r) not in ids:
             continue
@@ -361,6 +365,7 @@ def encoder_report(
         pos += 1
         det += bool(pt & tt)
         det_enc += bool(pe & tt)
+        any_fired += bool(pe)
     fired: dict[str, bool] = {}
     for r, p in done:
         fired[r["text"]] = fired.get(r["text"], False) or bool(p["enc_candidates"])
@@ -369,6 +374,7 @@ def encoder_report(
         "positive": pos,
         "detected": det,
         "detected_with_encoder": det_enc,
+        "flagged_any": any_fired,
         "lawful": lawful_report([r for r, _ in done], lambda t: fired.get(t, False)),
         "truncated_sents": sum(p.get("enc_truncated", 0) for _, p in done),
     }
@@ -539,7 +545,9 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
         if e["positive"]:
             print(
                 f"    위반 행 {e['positive']} — 탐지 재현율 {e['detected'] / e['positive']:.1%} → "
-                f"인코더 후보까지 {e['detected_with_encoder'] / e['positive']:.1%}"
+                f"인코더 후보까지 {e['detected_with_encoder'] / e['positive']:.1%} (유형 적중)"
+                f" · 무엇이든 걸린 행 {e['flagged_any'] / e['positive']:.1%}"
+                " (유형 무관 · 규약 G1 의 탐지 — 관문에 쓰지 않는다)"
             )
         for kind, (n, hit) in e["lawful"].items():
             if n:
