@@ -21,6 +21,13 @@
      띄우는 법은 `docs/lse/sLLM_연결_안내_2026-10-05.md` 에 있다 #}
   <span class="rv-note">잠시 뒤 다시 눌러 주세요.</span>
 
+  {% elif rw.out.outcome == "candidate" and rw.note_conflict %}
+  {# 🆕 2026-10-10 (ohb) — 조건이 고른 제품 전제에서 채워질 수 없는 후보. 재판정은 공식 기능성 문구를 거부하지 못한다 #}
+  <b>보류 — 이 제품 유형에서는 쓸 수 없는 문구</b><br>
+  <span style="text-decoration:line-through">{{ rw.out.rewrite.body }}</span><br>
+  <span class="rv-chip c-warn">조건 · {{ rw.out.rewrite.mandatory_note }}</span>
+  <br><span class="rv-note">이 문구는 그 기능성으로 인정받은 건강기능식품에서만 쓸 수 있어요 — 후보로 내지 않아요.</span>
+
   {% elif rw.out.outcome == "candidate" and rw.rejudge and rw.rejudge.status == "rejected" %}
   <b>보류 — 고친 문구가 재판정에서 위반 의심</b><br>
   <span style="text-decoration:line-through">{{ rw.out.rewrite.body }}</span><br>
