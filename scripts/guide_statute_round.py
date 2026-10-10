@@ -1136,6 +1136,23 @@ _CB_SKIP = re.compile(r"[\s⟦⟧]+")
 #: 화면의 글이 든 칸 — 표시 문구 · 화면 글 · 식약처 설명 · 심의 삭제 · 본문 글
 CB_TEXT_FIELDS = ("문구", "표시문구", "화면글", "식약처설명", "글", "사례", "참고", "소제목")
 
+#: 🆕 2026-10-10 (D-326) — 식품편에서 **소제목이 제품을 건강기능식품이라고 적은** 묶음. 이 편의 머리글은
+#:    「온라인 식품 · 건강기능식품 분야」다 — 판 전체를 「식품」으로 적으면 「인정받지 않은 기능성」 화면이 식품이 된다.
+#:    글자는 쪽 전사(`casebook2021_sheet.py`)의 `소제목` 그대로다. 🔴 목록에 없는데 「건강기능식품」이 든 소제목은
+#:    `cb_item` 이 멈춘다 — 전사가 바뀌어 새 묶음이 조용히 식품으로 가지 않게 (D-220).
+#:    ⛔ 소제목이 제품을 말하지 않는 묶음(「식품등을 …」 · 「심의결과에 따르지 않은 광고」 · 소제목 없음)은 판의 품목(식품)이다 —
+#:       그 라벨은 식품 전제에서 정답이다. 출처가 달리 말할 때만 바꾼다
+CB_HF_SUBTITLES = frozenset(
+    {
+        "○ 인정받지 않은 기능성내용으로 광고한 건강기능식품",
+        "○ 자율심의 받지 않은 건강기능식품의 광고",
+        "○ 건강기능식품을 ‘항암효과’, ‘염증완화’ 등으로 광고",
+        "○ 건강기능식품을 ‘건망증, 치매예방’ 등으로 광고",
+    }
+)
+#: 소제목 안의 이 꼴은 제품이 아니라 **오인 대상**을 가리킨다(「일반식품을 … 건강기능식품으로」) — 지금 전사에는 없다
+_CB_NOT_PRODUCT = "일반식품"
+
 CBF_DIR = ROOT / "data" / "derived" / "labels" / "casebook_2021_food"
 CBF_READINGS = CBF_DIR / "readings.jsonl"
 CBF_ADOPTED = CBF_DIR / "adopted.jsonl"
@@ -1157,6 +1174,25 @@ def _cb_text(v: object) -> str:
     if isinstance(v, list):
         return " ".join(_cb_text(x) for x in v)
     return v if isinstance(v, str) else ""
+
+
+def cb_item(row: dict, law: str) -> str:
+    """원천 행 → 품목(골든 `품목` 칸). 화장품 판은 화장품 · 식품 판은 소제목이 건강기능식품이라 적었으면 건기식 · 아니면 식품.
+
+    🔴 값이 없을 때 (D-220) — 소제목이 없으면 판의 품목(식품)이다. 「건강기능식품」이 들었는데 목록(`CB_HF_SUBTITLES`)에
+       없는 소제목은 멈춘다(짐작으로 식품 · 건기식 어느 쪽으로도 보내지 않는다).
+    """
+    if law != "식품":
+        return law
+    sub = (row.get("소제목") or "").strip()
+    if sub in CB_HF_SUBTITLES:
+        return "건기식"
+    if "건강기능식품" in sub and _CB_NOT_PRODUCT not in sub:
+        raise SystemExit(
+            f"🔴 사례집 2021 {row.get('쪽')}쪽 소제목 {sub!r} — 건강기능식품 묶음인지 정하지 않았다 "
+            "(`CB_HF_SUBTITLES` 에 넣거나 제품이 아님을 적는다)"
+        )
+    return "식품"
 
 
 def cb_units(units: list[dict], law: str) -> dict[str, dict]:
@@ -1198,6 +1234,7 @@ def cb_units(units: list[dict], law: str) -> dict[str, dict]:
             "칸": str(u["칸"]),
             "법": law,
             "원천호": str(u["원천호"]),
+            "품목": cb_item(r, law),  # 🆕 2026-10-10 — 원천 행의 소제목에서 (D-326)
             "문구": u["문구"],
             "원천": CB_SOURCE,
         }
@@ -1213,7 +1250,8 @@ CBF = Round(
     cite_of=cite_of,
     exceptions=EXCEPTIONS,
     mok_ho={},
-    head=_CB_HEAD,
+    # 🆕 2026-10-10 — 식품편은 품목이 둘이다(식품 · 건기식). 채택본이 품목을 들고 분할(`split.PLACED_ITEM`)이 그것을 읽는다
+    head=(*_CB_HEAD, "품목"),
     sheet_head=("쪽", "원천호"),
     units=lambda us: cb_units(us, "식품"),
 )

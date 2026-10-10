@@ -645,12 +645,30 @@ PLACED: dict[str, tuple[str, str]] = {
 }
 #: 판 → 행의 품목(골든 `품목` 칸 · D-306). 원천 하나에 품목이 둘인 판(1차 해석 · 사례집 2021)이 있어 원천으로는 못 정한다
 _MN_ITEM = {"식품": "식품", "건강기능식품": "건기식", "축산물": "식품"}
+
+
+def _cbf_item(r: dict) -> str:
+    """사례집 2021 식품편 행의 품목 — **채택본이 들고 온다** (🆕 2026-10-10 · D-326).
+
+    ⛔ 종전에는 판 전체가 `"식품"` 상수였다 — 소제목이 「건강기능식품」인 화면 10 행이 식품으로 들어갔다(그중 6 행은
+       [별표 1] 4.나 인용이라 전제를 못 적었고 4 행은 식품 전제가 붙었다 · 원장 10-10 ⑩).
+    품목은 판독 판이 원천 행의 소제목에서 적는다(`scripts/guide_statute_round.py` `cb_item`).
+    🔴 칸이 없거나 모르는 값이면 멈춘다 — 옛 채택본으로 골든을 만들면 다시 전부 식품이 된다 (D-220).
+    """
+    if r.get("품목") not in ("식품", "건기식"):
+        raise SystemExit(
+            f"🔴 사례집 2021 식품편 채택본 {r.get('지문')} 에 품목이 없다 — 먼저: "
+            "uv run python -m scripts.guide_statute_round cbf-rebuild"
+        )
+    return r["품목"]
+
+
 PLACED_ITEM = {
     "daegu_2013": lambda r: r["품목"],
     "ad_manual_2015": lambda r: _MN_ITEM[r["구역"]],
     "interp_ad_food": lambda r: "식품",
     "guide_evidence": lambda r: "식품",
-    "casebook_2021_food": lambda r: "식품",
+    "casebook_2021_food": lambda r: _cbf_item(r),
     "casebook_2021_cosmetic": lambda r: "화장품",
     "cosmetic_qa_old": lambda r: "화장품",
     "interp_ad_cosmetic": lambda r: "화장품",
