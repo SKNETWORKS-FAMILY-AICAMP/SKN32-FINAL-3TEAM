@@ -36,7 +36,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import auth, sentsplit
-from app.contracts import PASS_RISK_MAX, Premise, Risk, Violation, is_pass
+from app import premise as pm
+from app.contracts import PASS_RISK_MAX, Category, Premise, Risk, Violation, is_pass
 from app.db import get_session, reachable
 from app.formbody import read_capped
 from app.models import (
@@ -682,6 +683,21 @@ def _branch_of(result, premise: str):  # noqa: ANN001, ANN202 — JudgeResponse 
     return next((b for b in result.branches if b.premise.value == premise), None)
 
 
+def _sllm_category(category: str | None, premise: str) -> str | None:
+    """생성 서버에 넘길 품목 (🆕 2026-10-10 · 인계 10-08 §2 「함께」 · D-319).
+
+    원문 판정에 품목이 있으면 그 품목 · 없고 분기를 골랐으면 **고른 전제의 품목**(`pm.PREMISE_CATEGORY` — 판정이 쓰는 표 · D-99) ·
+    둘 다 없으면 `None`(서버가 문구에서 추측한다). ⛔ 종전에는 분기를 고른 문구가 늘 `None` 이었다 — 사용자가 화장품을 골랐는데
+    서버는 문구로 식품이라 추측할 수 있었다.
+    🚨 재판정에는 이 값을 넘기지 않는다 — 재판정은 종전대로 품목 없이 판정하고 고른 전제의 분기를 읽는다(`_rejudge`).
+       품목을 넘기면 전제가 줄어 그 분기가 생략될 수 있다(전제마다 판정이 같으면 분기를 내지 않는다).
+    ⬜ 건강기능식품의 **인정 여부**(전제 `건기식_인정` · `건기식_비인정`)는 넘어가지 않는다 — 서버에 받는 칸이 없다(이서은 확인 대기).
+    """
+    if category or not premise:
+        return category
+    return pm.PREMISE_CATEGORY[Premise(premise)].value
+
+
 def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     """고친 문구를 판정 코어에 다시 넣는다(D-119). 🚨 `no_violation` 은 「위반을 못 찾음」이지 통과가 아니다.
 
@@ -710,16 +726,45 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     return {"status": status, "violations": [], "hold_reasons": hold}
 
 
+def _note_conflict(note: str | None, premise: str, category: str | None) -> bool:
+    """후보의 조건이 **이 제품 전제에서 채워질 수 없는가** (🆕 2026-10-10 · D-326 · 원장 10-10 ⑪).
+
+    서버 후처리는 공식 기능성 문구에 「기능성 인정 건강기능식품에 한해 표시」를 붙인다(`sllm_client.NOTE_RECOGNIZED_HF`).
+    그 문구는 일반식품 · 인정 없는 건강기능식품에서는 쓸 수 없는데(3호 · [별표 1] 4.나), 재판정은 그것을 거부하지 못한다 —
+    공식 기능성 문구는 식품 분기에서 확신 부족 보류로 나온다(dev 승인 문구 19 행 중 거부 0). 서버는 전제를 모른다.
+    ★ 보는 전제 — 고른 분기가 있으면 그 전제 하나 · 없고 품목을 알면 그 품목의 전제 전부(`pm.PREMISES_OF`).
+       **그 전부가 `건기식_인정` 이 아닐 때만** 참이다.
+    🔴 값이 없을 때 (D-220) — 조건이 없거나 다른 조건이면 거짓(이 검사의 대상이 아니다) · 전제도 품목도 모르면 거짓이다.
+       모르는 것을 「쓸 수 없음」으로도 「쓸 수 있음」으로도 적지 않는다 — 재판정 표시가 그대로 나간다.
+    """
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    if (note or "").strip() != sllm_client.NOTE_RECOGNIZED_HF:
+        return False
+    if premise:
+        premises: tuple[Premise, ...] = (Premise(premise),)
+    elif category:
+        premises = pm.PREMISES_OF.get(Category(category), ())
+    else:
+        premises = ()
+    return bool(premises) and Premise.건기식_인정 not in premises
+
+
 def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
-    sentence, premise: str = "", category: str | None = None
+    sentence, premise: str = "", category: str | None = None, sllm_category: str | None = None
 ) -> dict:
-    """지적 문장 하나를 고쳐 쓰고 재판정한다. 화면용 dict(`rw`)."""
+    """지적 문장 하나를 고쳐 쓰고 재판정한다. 화면용 dict(`rw`).
+
+    `category` 는 원문 판정의 품목(재판정에 넘긴다) · `sllm_category` 는 생성 서버에 넘기는 품목이다 — 둘이 다른 것은
+    분기를 고른 문구뿐이다(원문 판정의 품목은 비어 있고, 고른 전제가 품목을 말한다 · `_sllm_category`).
+    """
     from app.routers import sllm_client  # noqa: PLC0415
 
     violations = [v.value for v in sentence.violations or []]
     rw: dict = {"violations": violations}
-    # 🆕 10-06 (팀장 전달 §2 #3) — 품목을 넘긴다. 미확정이면 None — 서버가 문구에서 추측한다(분기 선택과의 연결은 품목 흐름에 맞춰 이어간다)
-    s_state, out = sllm_client.rewrite(sentence.text, violations, category)
+    # 🆕 10-06 (팀장 전달 §2 #3) — 품목을 넘긴다. 미확정이면 None — 서버가 문구에서 추측한다
+    # 🔄 2026-10-10 — 분기를 고른 문구는 고른 전제의 품목을 넘긴다(인계 10-08 §2 「함께」). 서버가 추측하지 않는다
+    s_state, out = sllm_client.rewrite(sentence.text, violations, sllm_category or category)
     if out and out.get("infeasible") and out["infeasible"] not in _VIOLATIONS:
         # 위반 유형 없이 보내면 모델이 사유를 제 말로 지어 쓴다(10-06 실측) — 그 말을 사유로 그리지 않는다
         out = {**out, "infeasible": None}
@@ -729,6 +774,10 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     rw["out"] = out
     if out and out["outcome"] == "candidate" and out.get("rewrite"):
         rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise, category)
+        # 🆕 2026-10-10 — 후보의 조건이 이 전제에서 채워질 수 없으면 후보로 내지 않는다(재판정이 못 거르는 자리)
+        rw["note_conflict"] = _note_conflict(
+            out["rewrite"].get("mandatory_note"), premise, category
+        )
     return rw
 
 
@@ -800,7 +849,9 @@ async def review_rewrite(request: Request) -> HTMLResponse:
         rw = {"no_violation": True}
     else:
         cat = item["result"].category.value if item["result"].category else None
-        rw = await run_in_threadpool(_rewrite_sentence, sent, premise, cat)
+        rw = await run_in_threadpool(
+            _rewrite_sentence, sent, premise, cat, _sllm_category(cat, premise)
+        )
     # 열쇠는 (전제, 문장) — 분기 없는 문구의 전제는 빈 글자다. 다른 분기의 같은 문장에 붙지 않는다
     item["rewrites"][premise] = {want_sid: rw}
     return _render(request, "user/review.html", _review_ctx(copies, results))
@@ -872,6 +923,130 @@ def _frontier(candidates: list) -> list[dict]:  # noqa: ANN401
     return sorted(points, key=lambda p: p["cx"])
 
 
+#: 🆕 2026-10-08 — 생성 입력의 **분기 6종**(품목 × 인증 여부 · LLM 카피 생성 기획서 §3).
+#:    시험 코드(`docs/ksr/llm_copy/branches.py`)와 같은 표다 — ⛔ 앱이 시험 폴더를 import 하지 않는다.
+#:    화면이 쓰는 것(이름 · 안내 · 그 분기에서만 읽는 칸)만 여기 둔다. 프롬프트 · 금지 낱말은 엔진의 것이다.
+_GEN_CATEGORIES = (("cos", "화장품"), ("food", "식품"), ("hf", "건강기능식품"))
+_GEN_HF_NO_NOTICE = (
+    "기능성 인정이 없으면 건강기능식품으로 광고할 수 없습니다. 일반식품으로 생성합니다."
+)
+#: 🆕 2026-10-10 — `premise` = 이 분기로 만든 문구를 **어느 전제로 판정하는가** (D-276 결정 1 · `app/premise.py`).
+#:    생성의 분기(품목 × 인증 여부)와 판정의 전제는 축이 다르다 — 대응을 여기 한 곳에 적는다. 생성 평가도 이 표로 잰다.
+#:    · 식품의 「인증 예」는 HACCP 같은 인증이다 — ⛔ `일반식품_기능성`(고시의 기능성 표시 요건)이 아니다. 전제는 `식품`
+#:    · 건강기능식품의 「인증 아니오」는 일반식품으로 생성한다(위 안내) — 전제는 `식품`. ⛔ `건기식_비인정` 이 아니다
+#:    · ⬜ 화장품의 「인증 예」(기능성화장품 심사 · 보고)에 맞는 전제가 없다 — 화장품의 전제는 `화장품` 하나다.
+#:      심사받은 효능 범위 안의 문구가 그 전제에서 어떻게 판정되는지는 정해지지 않았다 (판정 대기)
+#:    시험 코드 `docs/ksr/llm_copy/branches.py` 의 `category` 와 맞는지는 `tests/test_user_screens.py` 가 본다
+_GEN_BRANCHES: dict[str, dict] = {
+    "food_no": {"label": "식품 · 인증 아니오", "premise": Premise.식품},
+    "food_yes": {
+        "label": "식품 · 인증 예 (HACCP 등)",
+        "needs": "certs",
+        "premise": Premise.식품,
+    },
+    "hf_yes": {
+        "label": "건강기능식품 · 인증 예 (기능성 인정)",
+        "needs": "fixed",
+        "premise": Premise.건기식_인정,
+    },
+    "hf_no": {
+        "label": "건강기능식품 · 인증 아니오",
+        "notice": _GEN_HF_NO_NOTICE,
+        "premise": Premise.식품,
+    },
+    "cos_no": {"label": "화장품 · 인증 아니오 (일반)", "premise": Premise.화장품},
+    "cos_yes": {
+        "label": "화장품 · 인증 예 (기능성 심사·보고)",
+        "needs": "fixed",
+        "premise": Premise.화장품,
+    },
+}
+#: 대상 고객 — 나이대 × 성별. 🚨 축은 **둘까지만** 겹친다(셋을 겹치면 20명 미만 칸이 생긴다 · `k_anon_min`).
+#:    ⛔ 건강 고민 · 증상은 축으로 두지 않는다 (D-27). 나이대 구간은 페르소나 정리 2판(10-01)의 1층과 같다
+_GEN_AGES = (
+    ("all", "전체 나이대"),
+    ("20", "20대"),
+    ("30", "30대"),
+    ("40", "40대"),
+    ("50", "50대"),
+    ("60", "60대 이상"),
+)
+_GEN_SEXES = (("all", "성별 전체"), ("f", "여성"), ("m", "남성"))
+#: 칸마다 받는 길이. 여러 개를 적는 칸(특징 · 원재료 · 인증)은 항목 하나의 길이(`line`)와 개수다
+_GEN_MAX_LINES = 12
+_GEN_LIMITS = {"name": 128, "kind": 64, "phrase": 200, "target": 128, "fixed": 300, "line": 64}
+_GEN_LIMITS["list"] = (_GEN_LIMITS["line"] + 2) * _GEN_MAX_LINES
+
+
+def _gen_ctx(extra: dict | None = None) -> dict:
+    """생성 화면이 늘 받는 것 — 세 경로(입력 · 제출 · 픽스처)가 같은 폼을 그린다."""
+    return {
+        "fixtures": _fixture_names("generate"),
+        "gen_categories": _GEN_CATEGORIES,
+        "gen_ages": _GEN_AGES,
+        "gen_sexes": _GEN_SEXES,
+        "gen_limits": _GEN_LIMITS,
+        "gen_hf_no_notice": _GEN_HF_NO_NOTICE,
+        "gen_want": PARAMS.candidate_n,
+        **(extra or {}),
+    }
+
+
+def _gen_lines(form: dict[str, list[str]], name: str) -> list[str]:
+    """여러 개를 적는 칸 — 쉼표나 줄바꿈으로 나눈다. ⛔ 넘치는 것 · 긴 것을 자르지 않고 거부한다 (D-220)."""
+    raw = _one(form, name, _GEN_LIMITS["list"])
+    lines = [ln.strip() for ln in re.split(r"[,\n]", raw) if ln.strip()]
+    if len(lines) > _GEN_MAX_LINES or any(len(ln) > _GEN_LIMITS["line"] for ln in lines):
+        raise HTTPException(
+            422, f"{name} 은 {_GEN_MAX_LINES}개 · 하나에 {_GEN_LIMITS['line']}자까지 받는다"
+        )
+    return lines
+
+
+def _gen_picked(form: dict[str, list[str]]) -> tuple[dict, dict, list[str]]:
+    """폼에서 (적은 값 · 분기 · 고칠 곳)을 읽는다.
+
+    🚨 분기에 안 맞는 칸은 화면에서 숨길 뿐이라 **값이 같이 넘어온다** — 인증 · 고정 문구는
+       그 분기일 때만 읽는다. 「아니오」로 바꿨는데 예전 인증이 입력 사실로 남으면 안 된다.
+    """
+    category, cert = _one(form, "category", 8), _one(form, "cert", 8)
+    branch = _GEN_BRANCHES.get(f"{category}_{cert}")
+    if branch is None:
+        raise HTTPException(422, "그런 분기가 없다 — 품목과 인증 여부를 다시 고른다")
+    needs = branch.get("needs")
+    age, sex = _one(form, "age", 8), _one(form, "sex", 8)
+    ages, sexes = dict(_GEN_AGES), dict(_GEN_SEXES)
+    if age not in ages or sex not in sexes:
+        raise HTTPException(422, "그런 대상 고객이 없다 — 나이대와 성별을 다시 고른다")
+    picked = {
+        "category": category,
+        "cert": cert,
+        "age": age,
+        "sex": sex,
+        #: 화면 · 엔진에 넘길 이름 — 「30대 여성」 · 「남성」 · 「전체」
+        "audience": " ".join(v for k, v in ((age, ages[age]), (sex, sexes[sex])) if k != "all")
+        or "전체",
+        "name": _one(form, "name", _GEN_LIMITS["name"]).strip(),
+        "kind": _one(form, "kind", _GEN_LIMITS["kind"]).strip(),
+        "phrase": _one(form, "phrase", _GEN_LIMITS["phrase"]).strip(),
+        "target": _one(form, "target", _GEN_LIMITS["target"]).strip(),
+        "features": _gen_lines(form, "features"),
+        "ingredients": _gen_lines(form, "ingredients"),
+        "certs": _gen_lines(form, "certs") if needs == "certs" else [],
+        "fixed": _one(form, "fixed", _GEN_LIMITS["fixed"]).strip() if needs == "fixed" else "",
+    }
+    errors: list[str] = []
+    if not any(picked[k] for k in ("name", "kind", "phrase", "features")):
+        errors.append("제품명 · 유형 · 간단한 문구 · 특징 중 하나는 적어 주세요.")
+    if needs == "certs" and not picked["certs"]:
+        errors.append("인증 「예」를 골랐어요 — 받은 인증의 이름을 적어 주세요.")
+    if needs == "fixed" and not picked["fixed"]:
+        errors.append(
+            "인증 「예」를 골랐어요 — 인정 · 심사받은 기능성 문구를 원문 그대로 적어 주세요."
+        )
+    return picked, branch, errors
+
+
 @router.get("/generate", response_class=HTMLResponse)
 def generate_page(request: Request) -> HTMLResponse:
     """카피 생성 입력 화면 (`gen-input`, ksr 2026-09-13).
@@ -879,36 +1054,24 @@ def generate_page(request: Request) -> HTMLResponse:
     `review`/`index` 와 같은 패턴이다: DB·엔진 없이 골든 픽스처(`GenerateResponse`,
     D-181)로 뜬다. `POST /generate` 코어는 아직 501 이다 — 여기서 부르지 않는다.
     """
-    return _render(
-        request,
-        "user/generate.html",
-        {"fixtures": _fixture_names("generate"), "max_text_len": PARAMS.max_text_len},
-    )
+    return _render(request, "user/generate.html", _gen_ctx())
 
 
 @router.post("/generate", response_class=HTMLResponse)
 async def generate(request: Request) -> HTMLResponse:
     """카피 생성 — ⛔ **코어가 아직 501 이다** (D-181). 가짜 결과를 그리지 않는다 (D-147).
 
-    🚨 `GenerateRequest` 는 `segment` 가 필수라 필드가 여럿이다. 그래도
-       `python-multipart` 는 필요 없다 — `parse_qs` 가 여러 필드를 그대로 준다.
-    ★ 고른 값은 되돌려 그린다. **템플릿이 이스케이프한다** (P2-9).
+    🔄 2026-10-08 — 입력이 분기(품목 × 인증 여부) + 제품 내용이다 (`_gen_picked`). 코어의
+       `GenerateRequest`(세그먼트 · 키워드)와는 아직 모양이 다르다 — 엔진이 붙을 때 맞춘다.
+    ★ 적은 값은 되돌려 그린다. **템플릿이 이스케이프한다** (P2-9).
     """
-    form = await _form(request)
-    keywords = [k for k in form.get("keyword", []) if len(k) <= 64][:32]
+    picked, branch, errors = _gen_picked(await _form(request))
     return _render(
         request,
         "user/generate.html",
-        {
-            "fixtures": _fixture_names("generate"),
-            "max_text_len": PARAMS.max_text_len,
-            "picked": {
-                "product": _one(form, "product", 128),
-                "segment": _one(form, "segment", 128),
-                "keywords": keywords,
-            },
-            "engine_pending": True,
-        },
+        _gen_ctx(
+            {"picked": picked, "branch": branch, "errors": errors, "engine_pending": not errors}
+        ),
     )
 
 
@@ -925,14 +1088,14 @@ def generate_preview(request: Request, name: str) -> HTMLResponse:
     return _render(
         request,
         "user/generate.html",
-        {
-            "fixtures": _fixture_names("generate"),
-            "max_text_len": PARAMS.max_text_len,
-            "result": result,
-            "points": _frontier(result.candidates),
-            "risk_axis_max": _RISK_AXIS_MAX.value,
-            "fixture_name": name,
-        },
+        _gen_ctx(
+            {
+                "result": result,
+                "points": _frontier(result.candidates),
+                "risk_axis_max": _RISK_AXIS_MAX.value,
+                "fixture_name": name,
+            }
+        ),
     )
 
 
@@ -968,8 +1131,23 @@ async def compose(request: Request) -> HTMLResponse:
 
     🚨 `ComposeRequest` 는 두 경로 중 **하나로만** 들어온다 (계약 `_one_of_two_paths`) —
        B 의 각색본(`source_copy`) 또는 직접 입력(`prompt`). 이 화면은 후자다.
+    🆕 2026-10-08 — 카피 생성의 후보 카드(「AI 광고 생성 →」)가 `carry` 를 달고 온다. 그때는 제출이 아니라
+       **문구를 채운 입력 화면**을 그린다. ⬜ 직접 입력 칸에 채우는 것은 임시다 — 엔진이 붙으면 `source_copy` 로 옮긴다.
     """
     form = await _form(request)
+    if form.get("carry"):
+        return _render(
+            request,
+            "user/compose.html",
+            {
+                "fixtures": _fixture_names("compose"),
+                "max_text_len": PARAMS.max_text_len,
+                "carried": {
+                    "prompt": _one(form, "prompt", PARAMS.max_text_len),
+                    "note": _one(form, "note", PARAMS.max_text_len),
+                },
+            },
+        )
     return _render(
         request,
         "user/compose.html",
@@ -979,6 +1157,8 @@ async def compose(request: Request) -> HTMLResponse:
             "picked": {
                 "ad_format": _one(form, "ad_format", 32),
                 "prompt": _one(form, "prompt", PARAMS.max_text_len),
+                #: 🆕 2026-10-10 — 후보 카드에서 온 필수 병기 문구. 없으면 빈 값이다(직접 입력)
+                "note": _one(form, "note", PARAMS.max_text_len),
             },
             "engine_pending": True,
         },

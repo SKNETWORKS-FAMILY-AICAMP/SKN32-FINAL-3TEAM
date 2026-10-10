@@ -296,6 +296,13 @@ def test_분기가_있으면_고른_전제의_위반_유형으로_고쳐_쓴다(
     assert wired.sllm == [(BRANCHED, ["의약품_오인"])], (
         "🔴 품목을 모를 때의 기록 판정(건강기능식품_오인)으로 고쳐 썼다 — 고른 분기의 판정을 읽어야 한다"
     )
+    # 🆕 2026-10-10 — 고른 전제의 품목을 생성 서버에 넘긴다 · 재판정은 종전대로 품목 없이 판정해 그 분기를 읽는다
+    assert wired.cats == ["화장품"], (
+        "🔴 고른 전제의 품목을 sLLM 서버에 넘기지 않았다(서버가 문구에서 추측한다)"
+    )
+    assert wired.products == [None, None], (
+        "🔴 재판정에 품목을 넘겼다 — 고른 전제의 분기가 생략될 수 있다"
+    )
     assert "고친 문구 후보" in html, (
         "🔴 재판정을 고른 전제의 분기로 읽지 않았다(기록 판정의 위반으로 탈락)"
     )
@@ -355,6 +362,21 @@ def test_판정_결과의_품목을_서버와_재판정에_넘긴다(wired) -> N
     )
 
 
+def test_생성_서버에_넘길_품목은_원문_판정의_품목이_먼저이고_없으면_고른_전제의_품목이다() -> None:
+    from app import premise as pm  # noqa: PLC0415
+    from app.contracts import Premise  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    assert user_router._sllm_category("화장품", "식품") == "화장품"
+    assert user_router._sllm_category(None, "") is None
+    for p in Premise:
+        assert user_router._sllm_category(None, p.value) == pm.PREMISE_CATEGORY[p].value
+    # 건강기능식품의 두 전제는 같은 품목으로 간다 — 인정 여부는 넘어가지 않는다(서버에 받는 칸이 없다)
+    assert user_router._sllm_category(None, "건기식_인정") == "건기식"
+    assert user_router._sllm_category(None, "건기식_비인정") == "건기식"
+    assert user_router._sllm_category(None, "일반식품_기능성") == "식품"
+
+
 def test_품목이_미확정이면_넘기지_않는다(wired) -> None:  # noqa: ANN001
     judged = _fixture("02_hold_low_conf").model_copy(update={"category": None})
     wired.judge_out[ORIGINAL] = ("ok", judged)
@@ -385,3 +407,59 @@ def test_재판정에서_미판정이면_위반_못_찾음이_아니다(wired) -
     html = _go()
     assert "판정을 마치지 못한 문장" in html
     assert "위반 못 찾음" not in html
+
+
+# ── 🆕 2026-10-10 (ohb) — 후보의 조건이 고른 제품 전제에서 채워질 수 없으면 후보가 아니다 (D-326) ──
+#    서버는 품목만 받는다. 공식 기능성 문구는 재판정에서 거부되지 않는다(식품 분기 · 확신 부족 보류) — 앱이 조건을 본다.
+
+
+def test_앱이_읽는_조건_글자는_서버_후처리의_것과_같다() -> None:
+    """앱은 `docs/` 를 import 하지 않는다 — 글자를 파일에서 읽어 맞춘다 (D-99)."""
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    post = (Path(__file__).resolve().parents[1] / "docs" / "lse" / "postfix.py").read_text("utf-8")
+    assert f'NOTE_FOOD_FUNC = "{sllm_client.NOTE_RECOGNIZED_HF}"' in post
+
+
+@pytest.mark.parametrize(
+    ("premise", "category", "want"),
+    [
+        ("식품", None, True),
+        ("건기식_비인정", None, True),
+        ("일반식품_기능성", None, True),
+        ("건기식_인정", None, False),
+        ("", "식품", True),  # 식품의 전제 둘 다 인정 건강기능식품이 아니다
+        ("", "건기식", False),  # 인정 여부를 모른다 — 쓸 수 없다고 적지 않는다
+        ("", None, False),  # 전제도 품목도 모른다
+    ],
+)
+def test_조건과_전제가_어긋나는지(premise: str, category, want: bool) -> None:  # noqa: ANN001
+    from app.routers import sllm_client  # noqa: PLC0415
+    from app.routers import user as u  # noqa: PLC0415
+
+    assert u._note_conflict(sllm_client.NOTE_RECOGNIZED_HF, premise, category) is want  # noqa: SLF001
+    # 다른 조건 · 조건 없음은 이 검사의 대상이 아니다
+    assert not u._note_conflict("원재료 함량을 함께 표시", premise, category)  # noqa: SLF001
+    assert not u._note_conflict(None, premise, category)  # noqa: SLF001
+
+
+@pytest.mark.parametrize(("category", "blocked"), [("식품", True), ("건기식", False)])
+def test_인정_건강기능식품_조건이_붙은_후보는_식품에서_후보가_아니다(
+    wired,  # noqa: ANN001
+    category: str,
+    blocked: bool,
+) -> None:
+    from app.contracts import Category  # noqa: PLC0415
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    res = _fixture("02_hold_low_conf").model_copy(update={"category": Category(category)})
+    wired.judge_out[ORIGINAL] = ("ok", res)
+    note = sllm_client.NOTE_RECOGNIZED_HF
+    wired.sllm_out = (
+        "ok",
+        {**_CANDIDATE, "rewrite": {**_CANDIDATE["rewrite"], "mandatory_note": note}},
+    )
+    html = _go()
+    assert wired.judge == [ORIGINAL, BODY], "재판정은 그대로 부른다 (D-119)"
+    assert ("이 제품 유형에서는 쓸 수 없는 문구" in html) is blocked
+    assert ("고친 문구 후보" in html) is not blocked

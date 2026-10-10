@@ -127,6 +127,20 @@ def test_인코더가_합의하지_않으면_보류_유형은_남긴다(book):
     assert r["verdict"] == "confirmed" and r["violations"] == ["거짓_과장"]
 
 
+def test_합의_문턱을_따로_두면_후보를_넓혀도_확정은_그대로다(book):
+    """카드 8 — 후보 문턱만 절반으로 낮춘다. 합의 문턱을 따로 주지 않으면 합의도 같이 느슨해진다."""
+    low = {k: (v * 0.5 if v <= 1 else v) for k, v in TH.items()}
+    p = probs(거짓_과장=TH["거짓_과장"] * 0.7)                                # 낮춘 후보 문턱 이상 · 원래 문턱 미만
+    judge = lambda **kw: s2.stage2_judge(s1.stage1_signals("가나표지 문장", p, book, low, margin=1.0, **kw), category=Category.화장품)
+    r = judge()                                                              # 문턱 하나 — 합의가 되어 확정
+    assert r["verdict"] == "confirmed" and r["violations"] == ["거짓_과장"]
+    r = judge(agree_thresholds=TH)                                           # 합의는 원래 문턱 — 보류 · 유형은 남는다
+    assert (r["verdict"], r["hold_reason"]) == ("hold", "low_conf") and r["hold_types"] == ["거짓_과장"]
+    assert r["enc_candidates"] == ["거짓_과장"]                              # 후보는 낮춘 문턱으로 선다
+    r = s2.stage2_judge(s1.stage1_signals(PLAIN, p, book, low, margin=1.0, agree_thresholds=TH), category=Category.화장품)
+    assert r["verdict"] == "hold" and r["hold_types"] == ["거짓_과장"]        # 사전이 조용한 문장 — 후보가 붙은 보류 (합의와 무관)
+
+
 def test_다른_유형에_울린_것은_합의가_아니다(book):
     r = run(book, "가나표지 문장", Category.화장품, 의약품_오인=above("의약품_오인"))
     assert r["verdict"] == "hold" and r["hold_types"] == ["거짓_과장"]

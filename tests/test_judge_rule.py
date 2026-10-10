@@ -331,12 +331,25 @@ def test_조건부_평가는_품목을_아는_행만_품목을_넘겨_돈다() -
     from app.contracts import Category, ProductContext
     from scripts import eval_graph as eg
 
-    rows = [{"id": "a", "text": "가", "품목": "화장품"}, {"id": "b", "text": "나", "품목": None}]
-    assert [r["id"] for r in eg.conditional_rows(rows)] == ["a"]
+    rows = [
+        {"id": "a", "text": "가", "품목": "화장품", "전제": "화장품"},
+        {"id": "b", "text": "나", "품목": None, "전제": None},
+        {
+            "id": "h",
+            "text": "다",
+            "품목": "건기식",
+            "전제": None,
+        },  # 품목만 안다 — 인정 여부는 모른다
+    ]
+    assert [r["id"] for r in eg.conditional_rows(rows)] == ["a", "h"]
     assert eg.product_of(rows[0], True).category is Category.화장품
+    assert eg.product_of(rows[2], True).category is Category.건기식
     assert eg.product_of(rows[0], False) == ProductContext()
     with pytest.raises(SystemExit, match="품목"):
         eg.conditional_rows([{"id": "c"}])
+    # 🆕 2026-10-10 — `전제` 칸이 없는 판(재동결 전)에서도 멈춘다 — 품목만으로 조용히 돌지 않는다
+    with pytest.raises(SystemExit, match="전제"):
+        eg.conditional_rows([{"id": "c", "품목": "식품"}])
     seen = []
     eg.run(
         rows[:1],
@@ -474,18 +487,27 @@ def test_보수_기록은_분기_보류에_실린_유형을_기록으로_센다(
     assert w == {"rows": 2, "wrong": 1, "positive": 4, "hit": 1}, w
 
 
-def test_조건부_평가는_승인_문구_규칙_행을_뺀다() -> None:
-    """🆕 2026-10-06 — 그 행의 `품목` 은 원천이고 라벨은 「일반식품이 쓰면」이라는 전제다. 품목을 제품 정보로 넘기면 전제가 어긋난다."""
+def test_조건부_평가는_승인_문구_규칙_행을_전제로만_넘긴다() -> None:
+    """그 행의 `품목` 은 원천이고 라벨은 「일반식품이 쓰면」이라는 전제다. 품목을 제품 정보로 넘기면 전제가 어긋난다.
+
+    🔄 2026-10-10 — 종전에는 뺐다. 골든 `전제`(식품)가 생겨 그 전제로 든다. `전제` 가 빈 승인 문구 행은 여전히 뺀다.
+    """
+    from app.contracts import Category
     from preprocess.split import APPROVED_READING
     from scripts import eval_graph as eg
 
     rows = [
-        {"품목": "건기식", "판독": APPROVED_READING},
-        {"품목": "건기식", "판독": "독립판독_합의"},
-        {"품목": None, "판독": None},
-        {"품목": "식품"},
+        {"품목": "건기식", "판독": APPROVED_READING, "전제": "식품"},
+        {"품목": "건기식", "판독": APPROVED_READING, "전제": None},
+        {"품목": "건기식", "판독": "독립판독_합의", "전제": None},
+        {"품목": None, "판독": None, "전제": None},
+        {"품목": "식품", "전제": "식품"},
     ]
-    assert [r.get("판독") for r in eg.conditional_rows(rows)] == ["독립판독_합의", None]
+    got = eg.conditional_rows(rows)
+    assert got == [rows[0], rows[2], rows[4]]
+    assert eg.product_of(rows[0], True).category is Category.식품, (
+        "원천(건기식)이 아니라 전제(식품)다"
+    )
 
 
 # ── 2026-10-08 평가 규칙 집행 (D-321 · D-40 · D-175) ─────────────────────────────────────────────

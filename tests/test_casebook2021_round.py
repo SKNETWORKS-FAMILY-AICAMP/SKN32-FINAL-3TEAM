@@ -143,3 +143,48 @@ def test_병합한_뒤_원자료만으로_다시_계산된다(cb) -> None:
     )  # 원자료가 행 · 쪽 · 칸 · 법을 들고 있어 원천 대조가 다시 선다
     row = json.loads(g.CBF_ADOPTED.read_text(encoding="utf-8").splitlines()[0])
     assert (row["법"], row["쪽"], row["조건"]) == ("식품", "10", "C")
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("sub", "law", "want"),
+    [
+        *((s, "식품", "건기식") for s in sorted(g.CB_HF_SUBTITLES)),
+        ("○ 일반식품을 ‘면역력 향상’ 등으로 광고", "식품", "식품"),
+        ("○ 식품등을 ‘변비’, ‘설사’ 등으로 광고", "식품", "식품"),
+        ("○ 심의결과에 따르지 않은 광고", "식품", "식품"),
+        ("", "식품", "식품"),
+        (None, "식품", "식품"),
+        ("○ 인정받지 않은 기능성내용으로 광고한 건강기능식품", "화장품", "화장품"),
+    ],
+)
+def test_품목은_소제목이_건강기능식품이라_적은_묶음만_건기식이다(sub, law: str, want: str) -> None:
+    """🔴 2026-10-10 (D-326) — 종전에는 식품편 전체가 식품이었다. 「인정받지 않은 기능성」 화면이 식품으로 들어갔다."""
+    assert g.cb_item({"쪽": "32", "소제목": sub}, law) == want
+
+
+@pytest.mark.gate
+def test_정하지_않은_건강기능식품_소제목은_멈춘다() -> None:
+    """목록에 없는 묶음을 짐작으로 식품 · 건기식 어느 쪽으로도 보내지 않는다 (D-220)."""
+    with pytest.raises(SystemExit, match="정하지 않았다"):
+        g.cb_item({"쪽": "40", "소제목": "○ 건강기능식품을 ‘새 묶음’으로 광고"}, "식품")
+    # 제품이 아니라 오인 대상을 가리키는 꼴은 식품이다
+    assert g.cb_item({"소제목": "○ 일반식품을 건강기능식품처럼 광고"}, "식품") == "식품"
+
+
+@pytest.mark.gate
+def test_채택본이_품목을_들고_나온다(cb) -> None:
+    """식품편 채택본의 `품목` 을 분할이 읽는다(`split._cbf_item`) — 판독 판에서 골든까지 한 줄로 흐른다."""
+    sheet = g.CB_SHEET
+    rows = [json.loads(x) for x in sheet.read_text(encoding="utf-8").splitlines()]
+    rows[0]["소제목"] = "○ 자율심의 받지 않은 건강기능식품의 광고"
+    _jsonl(sheet, rows)
+    got = g.cb_units(
+        [
+            _u("cb:aaaaaaaaaaaa", "1", "10", "1", "식품", "치매예방"),
+            _u("cb:bbbbbbbbbbbb", 2, 49, 2, "식품", "성인병 예방"),
+        ],
+        "식품",
+    )
+    assert (got["cb:aaaaaaaaaaaa"]["품목"], got["cb:bbbbbbbbbbbb"]["품목"]) == ("건기식", "식품")
+    assert "품목" in g.CBF.head and "품목" not in g.CBC.head

@@ -23,6 +23,10 @@ SLLM_URL = "http://127.0.0.1:8765"
 #:    없는 기능은 없다고 그린다. ⛔ 기본값은 켜짐(로컬 주소) — 로컬 · 시연의 동작은 바뀌지 않는다.
 #:    배포에 넣을지는 정하지 않았다(배포계획 「sLLM 미정」) — 이 스위치는 그 결정을 내리지 않는다.
 OFF_VALUES = ("", "off")
+#: 🆕 2026-10-10 — 서버 후처리가 **공식 기능성 문구**에 붙이는 조건(`docs/lse/postfix.py` `NOTE_FOOD_FUNC` 와 같은 글자 ·
+#:    둘이 같은지는 `tests/test_user_rewrite.py` 가 본다 · D-99). 이 조건이 붙은 후보는 **인정받은 건강기능식품에서만** 쓸 수 있다 —
+#:    앱이 고른 전제와 맞는지 본다(`app/routers/user.py` `_note_conflict`). 서버는 품목만 받고 전제를 모른다
+NOTE_RECOGNIZED_HF = "기능성 인정 건강기능식품에 한해 표시"
 
 
 def _env_url() -> str | None:

@@ -307,6 +307,7 @@ def test_평가_도구가_분기를_기록과_따로_센다(criteria: None) -> N
     row = {
         "text": TEXT,
         "품목": "식품",
+        "전제": "식품",
         "근거": [FOOD4],
         "labels": ["거짓_과장"],
         "조건": "B",
@@ -314,7 +315,10 @@ def test_평가_도구가_분기를_기록과_따로_센다(criteria: None) -> N
     }
     b = eg.branch_report([row], [p])
     assert (b["rows_with_branches"], b["positive"], b["confirmed"], b["ho_hit"]) == (1, 1, 1, 1), b
-    row["품목"] = "화장품"
+    assert b["by_premise"] == {"식품": (1, 1, 1)}
+    # 🔄 2026-10-10 — 정답 전제는 골든 `전제` 칸이다. 품목만 알고 전제를 모르면 세지 않는다 (D-220)
+    assert eg.branch_report([{**row, "전제": None}], [p])["positive"] == 0
+    row["전제"] = "화장품"
     b = eg.branch_report([row], [p])
     assert (b["positive"], b["confirmed"]) == (1, 0), (
         "화장품 분기는 판정하지 못했다 — 확정으로 세지 않는다"

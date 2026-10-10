@@ -259,3 +259,110 @@ def test_광고생성_미리보기는_픽스처의_종류에_체크한다() -> N
     body = TestClient(app).get("/u/compose/preview/12_compose_from_b").text
     assert 'value="카드뉴스" checked' in body
     assert 'value="상세페이지" checked' not in body
+
+
+# ── 🆕 2026-10-10 — 카피 생성의 새 입력(분기 6종 + 제품 내용 · ksr 10-08)과 후보 → 광고 생성 넘기기.
+#    흡수할 때 이 길을 타는 테스트가 없었다. 🚨 문구 · 이름은 여기서 지어낸 것이다 (D-175 · D-249)
+
+
+def _gen_post(**data: str):  # noqa: ANN202
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    base = {"category": "food", "cert": "no", "age": "all", "sex": "all"}
+    return TestClient(app).post("/u/generate", data={**base, **data})
+
+
+def test_생성_분기표의_전제는_시험코드의_품목과_맞는다() -> None:
+    """`_GEN_BRANCHES` 의 `premise` 를 읽는 쪽 — 화면 분기와 시험 코드(`docs/ksr/llm_copy/branches.py`)가 같은 표인가.
+
+    앱은 시험 폴더를 import 하지 않는다. 그래서 표가 둘이고, 어긋나면 생성 평가가 다른 전제로 잰다.
+    """
+    import importlib.util  # noqa: PLC0415
+    import pathlib  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    from app import premise as pm  # noqa: PLC0415
+    from app.routers.user import _GEN_BRANCHES  # noqa: PLC0415
+
+    path = pathlib.Path(__file__).resolve().parents[1] / "docs/ksr/llm_copy/branches.py"
+    if not path.exists():
+        pytest.skip("시험 코드가 없다 — docs/ksr/llm_copy/branches.py")
+    spec = importlib.util.spec_from_file_location("_ksr_branches", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod  # dataclass 가 제 모듈을 찾는다
+    try:
+        spec.loader.exec_module(mod)
+        assert set(_GEN_BRANCHES) == set(mod.BRANCHES)
+        for key, b in _GEN_BRANCHES.items():
+            assert b["label"] == mod.BRANCHES[key].label, key
+            assert pm.PREMISE_CATEGORY[b["premise"]].value == mod.BRANCHES[key].category, key
+    finally:
+        del sys.modules[spec.name]
+
+
+def test_생성_입력은_분기와_판정_전제를_되돌려_그린다() -> None:
+    r = _gen_post(category="hf", cert="no", name="지어낸 곡물바", age="30", sex="f")
+    assert r.status_code == 200
+    assert "건강기능식품 · 인증 아니오" in r.text
+    assert "판정 전제 <b>식품</b>" in r.text  # 인정 없는 건강기능식품은 일반식품으로 생성한다
+    assert "30대 여성" in r.text
+
+
+def test_생성_입력은_분기에_안_맞는_칸을_읽지_않는다() -> None:
+    """숨긴 칸의 값도 같이 넘어온다 — 「아니오」인데 예전 인증이 입력 사실로 남으면 안 된다."""
+    r = _gen_post(name="지어낸 곡물바", certs="지어낸인증가나다", fixed="지어낸고정문구라마")
+    assert r.status_code == 200
+    assert "지어낸인증가나다" not in r.text
+    assert "지어낸고정문구라마" not in r.text
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {},  # 제품 내용이 하나도 없다
+        {"category": "food", "cert": "yes", "name": "지어낸 곡물바"},  # 인증 이름이 없다
+        {"category": "hf", "cert": "yes", "name": "지어낸 영양제"},  # 인정 문구가 없다
+        {"category": "cos", "cert": "yes", "name": "지어낸 크림"},  # 심사 문구가 없다
+    ],
+)
+def test_생성_입력이_모자라면_고칠_곳을_보이고_엔진_대기를_그리지_않는다(data: dict) -> None:
+    r = _gen_post(**data)
+    assert r.status_code == 200
+    assert 'class="gn-errors"' in r.text
+    assert 'class="gn-pending"' not in r.text
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"category": "zz"},  # 없는 분기
+        {"age": "99"},  # 없는 대상 고객
+        {"features": ",".join(f"특징{i}" for i in range(13))},  # 개수 상한
+        {"features": "가" * 65},  # 항목 길이 상한
+        {"name": "가" * 129},  # 칸 길이 상한
+    ],
+)
+def test_생성_입력은_넘치거나_없는_값을_자르지_않고_거부한다(data: dict) -> None:
+    assert _gen_post(**{"name": "지어낸 곡물바", **data}).status_code == 422
+
+
+def test_후보에서_넘어온_문구와_병기_문구는_광고생성_제출까지_간다() -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    c = TestClient(app)
+    first = c.post(
+        "/u/compose", data={"carry": "1", "prompt": "지어낸 후보 문구", "note": "지어낸 병기 문구"}
+    ).text
+    assert ">지어낸 후보 문구</textarea>" in first
+    assert 'name="note" value="지어낸 병기 문구"' in first
+    assert "고르신 것" not in first  # 넘어온 것은 제출이 아니다 — 입력 화면을 그린다
+    second = c.post(
+        "/u/compose",
+        data={"ad_format": "배너", "prompt": "지어낸 후보 문구", "note": "지어낸 병기 문구"},
+    ).text
+    assert "필수 병기 문구 「지어낸 병기 문구」" in second
+    assert 'name="note" value="지어낸 병기 문구"' in second

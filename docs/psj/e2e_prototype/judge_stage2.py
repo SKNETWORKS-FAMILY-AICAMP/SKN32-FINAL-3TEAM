@@ -13,6 +13,7 @@
   ① 사전이 확정한 위반 (단독판정 적중 · 인용 있음)
        인코더가 **같은 유형**에 τ 이상이면 확정 그대로 (D-127 「확정 = 코드 · 인코더 합의」)
        인코더가 그 유형에 조용하면 → `hold(low_conf)` · 유형은 후보로 남긴다   ← `agree=False` 면 이 줄을 끈다(그래프의 지금 규칙 D-269)
+       `[실험 · 카드 8 · 2026-10-08]` 합의를 보는 문턱은 후보 문턱과 따로 줄 수 있다(`stage1_signals(…, agree_thresholds=…)`). 안 주면 같은 문턱이다
   ② 사전이 보류로 둔 문장 (침묵 · 자격 없는 적중)
        인코더 후보가 있다        → `hold(low_conf)` 그대로 · 후보 유형을 싣는다. 🔴 **인코더만으로 확정하지 않는다** — 붙일 조문이 없다 (D-224 · D-131)
        거래 조건 문장            → 보류 그대로(통과 · `not_claim` 없음). 후보는 표시광고법에 자리가 있는 유형만 싣는다 (D-272 개정)
@@ -70,9 +71,12 @@ def rule_state(text: str, scan: g.DictScan, category: Optional[Category]) -> dic
     return state
 
 
-def encoder_candidates(enc: dict, premise: Optional[Premise]) -> list[Violation]:
-    """인코더 후보 — 전제가 유형을 바꾸는 자리를 적용한 것 (D-319 ④′ ① ② ④ · `app/premise.py`)."""
-    c = {Violation(x) for x in enc["candidates"]}
+def encoder_candidates(enc: dict, premise: Optional[Premise], key: str = "candidates") -> list[Violation]:
+    """인코더 후보 — 전제가 유형을 바꾸는 자리를 적용한 것 (D-319 ④′ ① ② ④ · `app/premise.py`).
+
+    `key="agree_candidates"` — 사전 확정에 대한 합의를 볼 때 쓰는 유형(`judge_stage1.encoder_signal`). 그 칸이 없으면 후보와 같다.
+    """
+    c = {Violation(x) for x in enc.get(key, enc["candidates"])}
     if premise in pm.NO_HF_MISLEAD and HF in c:
         c.discard(HF)                                   # 3호 「건강기능식품이 아닌 것을」 — 이 전제에서는 서지 않는다
         if premise is Premise.건기식_비인정:
@@ -92,7 +96,8 @@ def adjust(j: SentenceJudgment, enc: dict, scan: g.DictScan, *, premise: Optiona
         if not askable:
             # 인코더가 내지 않는 유형(편입 대기 칸 · 이 모델에 없는 유형)에는 합의를 물을 수 없다 — 사전이 선다 (D-269)
             return j, "사전 확정 — 인코더가 내지 않는 유형이라 합의를 묻지 않는다 (D-269 · D-321)"
-        if askable & set(cands):
+        # `[실험 · 카드 8]` 합의는 합의 문턱으로 본다 — 후보 문턱만 낮췄을 때 합의까지 느슨해지지 않게. 따로 주지 않으면 후보와 같다
+        if askable & set(encoder_candidates(enc, premise, "agree_candidates")):
             return j, "사전 확정 · 인코더 합의 (D-127)"
         return (_remake(j, verdict=Verdict.hold, hold_reason=HoldReason.low_conf, infeasibility=None, spans=[],
                         risk=RiskAssessment()),
