@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session
 
 from app import auth, sentsplit
 from app import premise as pm
-from app.contracts import PASS_RISK_MAX, Premise, Risk, Violation, is_pass
+from app.contracts import PASS_RISK_MAX, Category, Premise, Risk, Violation, is_pass
 from app.db import get_session, reachable
 from app.formbody import read_capped
 from app.models import (
@@ -726,6 +726,30 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     return {"status": status, "violations": [], "hold_reasons": hold}
 
 
+def _note_conflict(note: str | None, premise: str, category: str | None) -> bool:
+    """후보의 조건이 **이 제품 전제에서 채워질 수 없는가** (🆕 2026-10-10 · D-326 · 원장 10-10 ⑪).
+
+    서버 후처리는 공식 기능성 문구에 「기능성 인정 건강기능식품에 한해 표시」를 붙인다(`sllm_client.NOTE_RECOGNIZED_HF`).
+    그 문구는 일반식품 · 인정 없는 건강기능식품에서는 쓸 수 없는데(3호 · [별표 1] 4.나), 재판정은 그것을 거부하지 못한다 —
+    공식 기능성 문구는 식품 분기에서 확신 부족 보류로 나온다(dev 승인 문구 19 행 중 거부 0). 서버는 전제를 모른다.
+    ★ 보는 전제 — 고른 분기가 있으면 그 전제 하나 · 없고 품목을 알면 그 품목의 전제 전부(`pm.PREMISES_OF`).
+       **그 전부가 `건기식_인정` 이 아닐 때만** 참이다.
+    🔴 값이 없을 때 (D-220) — 조건이 없거나 다른 조건이면 거짓(이 검사의 대상이 아니다) · 전제도 품목도 모르면 거짓이다.
+       모르는 것을 「쓸 수 없음」으로도 「쓸 수 있음」으로도 적지 않는다 — 재판정 표시가 그대로 나간다.
+    """
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    if (note or "").strip() != sllm_client.NOTE_RECOGNIZED_HF:
+        return False
+    if premise:
+        premises: tuple[Premise, ...] = (Premise(premise),)
+    elif category:
+        premises = pm.PREMISES_OF.get(Category(category), ())
+    else:
+        premises = ()
+    return bool(premises) and Premise.건기식_인정 not in premises
+
+
 def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     sentence, premise: str = "", category: str | None = None, sllm_category: str | None = None
 ) -> dict:
@@ -750,6 +774,10 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     rw["out"] = out
     if out and out["outcome"] == "candidate" and out.get("rewrite"):
         rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise, category)
+        # 🆕 2026-10-10 — 후보의 조건이 이 전제에서 채워질 수 없으면 후보로 내지 않는다(재판정이 못 거르는 자리)
+        rw["note_conflict"] = _note_conflict(
+            out["rewrite"].get("mandatory_note"), premise, category
+        )
     return rw
 
 

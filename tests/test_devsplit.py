@@ -27,6 +27,9 @@ FROZEN_1005 = ("529c970556d7", 749, "4ebfcb231da703b5")
 #: 🆕 2026-10-10 재동결 — `전제` 칸만 더한 판. 문구 · 라벨 · 분할 · 행 순서는 10-05 판과 같다(행별 지문 대조 · 달라진 행 0 /
 #:    8,383 · 클론 B). dev 를 고르는 함수는 새 칸을 읽지 않으므로 dev 는 같은 749 행이어야 한다 — 이 줄이 그것을 지킨다
 FROZEN_1010 = ("9fe079465d88", 749, "4ebfcb231da703b5")
+#: 🆕 2026-10-10 2 차 재동결 — 사례집 2021 식품편의 `품목` 을 소제목에서 읽은 판(봉인 10 행의 품목 · 전제만 바뀌었다 ·
+#:    원장 10-10 ⑩). 바뀐 행은 전부 평가 쪽이라 dev 는 같은 749 행이어야 한다
+FROZEN_1010B = ("f6ccc5a7de44", 749, "4ebfcb231da703b5")
 
 
 def _row(rid: str, *, split: str = "train", unit: str = "문장", origin: str = "real", **kw) -> dict:
@@ -113,7 +116,7 @@ def test_재동결_1005_판의_dev_는_노트북과_같다() -> None:
     if not GOLDEN.exists():
         pytest.skip("골든 사본이 없는 기기 — data-sync 뒤에 돈다")
     raw = GOLDEN.read_bytes()
-    frozen = {f[0]: f[1:] for f in (FROZEN_1005, FROZEN_1010)}
+    frozen = {f[0]: f[1:] for f in (FROZEN_1005, FROZEN_1010, FROZEN_1010B)}
     sha12 = hashlib.sha256(raw).hexdigest()[:12]
     if sha12 not in frozen:
         pytest.skip("골든이 아는 동결 판이 아니다 — 새 판의 dev 지문은 새 모델 폴더가 든다")
