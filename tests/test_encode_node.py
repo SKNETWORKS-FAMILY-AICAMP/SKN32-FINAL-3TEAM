@@ -179,6 +179,66 @@ def test_후보_거름은_유형_단위이고_전제가_여럿이면_합집합�
 
 
 @pytest.mark.gate
+def test_인정_없는_건강기능식품_전제에서는_건기식_오인_후보를_거짓과장으로_옮긴다() -> None:
+    """🆕 2026-10-10 (팀장 판정 (나)) — 같은 문구가 제품에 따라 다른 조항에 걸린다. 3호가 서지 않는 자리에 4.나가 선다."""
+    hf_only = g.SentEncoding(
+        sent_id="s0", scores=(("건강기능식품_오인", 0.8),), candidates=("건강기능식품_오인",)
+    )
+
+    def got(premises: tuple[Premise, ...]) -> list[tuple[str, float, str | None]]:
+        return [
+            (c.violation.value, c.confidence, c.moved_from.value if c.moved_from else None)
+            for c in g._encoder_candidates(hf_only, premises)
+        ]
+
+    native, moved = ("건강기능식품_오인", 0.8, None), ("거짓_과장", 0.8, "건강기능식품_오인")
+    assert got((Premise.식품,)) == [native]
+    assert got((Premise.건기식_인정,)) == []  # 인정받은 제품이면 서는 것이 없다
+    assert got((Premise.일반식품_기능성,)) == []
+    assert got((Premise.건기식_비인정,)) == [moved], (
+        "확률은 옮기기 전 유형의 것이고 원래 유형을 적는다"
+    )
+    # 합집합 — 품목이 건강기능식품이면 옮긴 후보만 · 품목 미상이면 둘 다 (한 전제에서라도 서면 남는다)
+    assert got(g.pm.PREMISES_OF[Category.건기식]) == [moved]
+    assert got(g.pm.PREMISES_OF[Category.식품]) == [native]
+    assert got(g.pm.PREMISES_OF[None]) == [native, moved]
+    assert got(()) == [native]  # 전제 없는 품목 — 거르지도 옮기지도 않는다
+    # ⛔ 인코더가 거짓_과장을 직접 냈으면 더하지 않는다 — 직접 낸 쪽의 확률이 남는다
+    both = g.SentEncoding(
+        sent_id="s0",
+        scores=(("거짓_과장", 0.6), ("건강기능식품_오인", 0.8)),
+        candidates=("거짓_과장", "건강기능식품_오인"),
+    )
+    assert [
+        (c.violation.value, c.confidence, c.moved_from)
+        for c in g._encoder_candidates(both, (Premise.건기식_비인정,))
+    ] == [("거짓_과장", 0.6, None)]
+
+
+@pytest.mark.gate
+def test_평가_도구는_옮긴_후보를_직접_낸_후보와_섞지_않는다() -> None:
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    s = SentenceJudgment(
+        sent_id="s0",
+        text="가",
+        verdict=g.Verdict.hold,
+        hold_reason=g.HoldReason.low_conf,
+        encoder_candidates=[
+            g.EncoderTypeCandidate(violation=Violation.질병_예방치료_표방, confidence=0.7),
+            g.EncoderTypeCandidate(
+                violation=Violation.거짓_과장,
+                confidence=0.8,
+                moved_from=Violation.건강기능식품_오인,
+            ),
+        ],
+    )
+    p = eg.predict({"sentences": [s]})
+    assert p["enc_candidates"] == ["질병_예방치료_표방"]
+    assert p["enc_moved"] == ["거짓_과장"]
+
+
+@pytest.mark.gate
 def test_기록_판정은_품목의_전제로_거르고_분기_문장은_그_전제로_거른다(fake_hf: None) -> None:
     both, rest = ["거짓_과장", "건강기능식품_오인"], ["거짓_과장"]
     # 기록 판정 — 품목 미상 · 식품은 남고, 건강기능식품은 빠진다 (2026-10-09 (다))

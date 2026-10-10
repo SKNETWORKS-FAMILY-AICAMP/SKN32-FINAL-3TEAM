@@ -412,6 +412,11 @@ class EncoderTypeCandidate(BaseModel):
     violation: Violation
     #: 모델의 확률 — 문턱은 모델 폴더(`label_scheme.json`)의 것이라 여기 싣지 않는다 (D-324)
     confidence: float = Field(..., ge=0.0, le=1.0)
+    #: 🆕 2026-10-10 — **전제가 유형을 옮긴 후보**면 인코더가 실제로 낸 유형. `None` 이면 인코더가 이 유형을 그대로 냈다.
+    #:    건강기능식품 오인(3호)은 건강기능식품 전제에서 서지 않고, 인정이 없는 전제에서는 그 자리에 [별표 1] 4.나
+    #:    (인정하지 않은 기능성 · 거짓_과장)가 선다 — 사전 적중과 같은 규칙이다(`app/graph.py` `_premise_hits` · D-319 ④′ ②).
+    #:    🚨 이때 `confidence` 는 **옮기기 전 유형**의 확률이다. 화면 · 평가는 이 칸으로 「옮긴 후보」를 가른다
+    moved_from: Violation | None = None
 
 
 class SentenceJudgment(BaseModel):
