@@ -153,7 +153,19 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         #:    판정에 쓰이지 않은 신호다 — `candidates`(문장 판정에 실린 보류 후보)와 섞지 않는다.
         #:    인코더가 안 돌았으면 `encoded` 가 거짓이고 이 칸은 빈다. ⛔ 종전에는 상태의 `encodings` 를 직접 읽었다 —
         #:    응답에 나가는 것과 재는 것이 달라질 수 있었다(거름이 응답에만 걸린다)
-        "enc_candidates": sorted({c.violation.value for s in sents for c in s.encoder_candidates}),
+        #: 🔄 2026-10-10 — **인코더가 직접 낸 유형만** 센다. 전제가 옮긴 후보(`moved_from`)는 `enc_moved` 에 따로 둔다 —
+        #:    옮긴 후보를 섞으면 건강기능식품 오인 신호가 거짓_과장 적중으로 세어진다
+        "enc_candidates": sorted(
+            {c.violation.value for s in sents for c in s.encoder_candidates if c.moved_from is None}
+        ),
+        "enc_moved": sorted(
+            {
+                c.violation.value
+                for s in sents
+                for c in s.encoder_candidates
+                if c.moved_from is not None
+            }
+        ),
         "encoded": bool(sents) and len(state.get("encodings", [])) == len(sents),
         "enc_truncated": sum(1 for e in state.get("encodings", []) if e.truncated),
         "ho": ho,

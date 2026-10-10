@@ -772,6 +772,14 @@ def _warn_encoder_off(model_dir: str, why: str) -> None:
     )
 
 
+#: [별표 1] 4.나(인정하지 않은 기능성)의 8유형 — 인코더 후보를 옮길 때 쓴다. 🔴 인용에서 유형을 못 읽으면 import 에서 멈춘다 (D-220)
+_UNRECOGNIZED_TYPE = statute.type_of(pm.UNRECOGNIZED_FUNCTION_CITE)
+if _UNRECOGNIZED_TYPE is None:
+    raise RuntimeError(
+        f"🔴 {pm.UNRECOGNIZED_FUNCTION_CITE} 의 유형을 못 읽었다 — `collect/statute.py` 의 표를 본다 (D-319 ④′ ②)"
+    )
+
+
 def _encoder_candidates(
     e: SentEncoding | None, premises: Iterable[Premise]
 ) -> list[EncoderTypeCandidate]:
@@ -780,6 +788,8 @@ def _encoder_candidates(
     ★ 거름은 **유형 단위**다 — 건강기능식품 오인은 건강기능식품 전제 둘 · 일반식품 기능성 전제에서 서지 않는다
        (`pm.NO_HF_MISLEAD` · 사전 적중의 `_premise_hits` 와 같은 표 · D-319 ④′ · D-99). 법 거름은 하지 않는다 —
        유형만으로는 법을 못 정한다(D-323 결정 6).
+    ★ 🆕 2026-10-10 — `건기식_비인정` 에서는 3호를 빼는 데서 그치지 않고 **4.나(거짓_과장)로 옮긴다**(`moved_from` 에 원래 유형).
+       같은 문구가 제품에 따라 다른 조항에 걸린다 — 인정 없는 건강기능식품이 기능성을 내세우면 3호가 아니라 4.나다.
     ★ `premises` 가 여럿이면 **전제별로 거른 후보의 합집합**이다 — 한 전제에서라도 설 수 있는 후보는 남기고, 어느 전제에서도
        설 수 없는 후보만 뺀다(2026-10-09 팀장 판정 (다) · D-323 ⬜ 「기록 판정에 실리는 후보」). 분기 문장은 전제 하나로,
        기록 판정은 그 품목의 전제 전부(`pm.PREMISES_OF`)로 부른다 — 위험도를 가장 보수적인 전제로 적는 것과 같은 방향이다 (D-263 ①).
@@ -792,11 +802,28 @@ def _encoder_candidates(
     ps = tuple(premises)
     never_hf = bool(ps) and all(p in pm.NO_HF_MISLEAD for p in ps)
     score = dict(e.scores)
-    return [
+    out = [
         EncoderTypeCandidate(violation=Violation(t), confidence=score[t])
         for t in e.candidates
         if not (never_hf and t == pm.HF_MISLEAD)
     ]
+    # 🆕 2026-10-10 (팀장 판정 (나)) — 인정이 없는 건강기능식품 전제에서는 3호가 빠진 자리에 4.나(거짓_과장)가 선다.
+    #    사전 적중이 `_premise_hits` 에서 하는 것과 같은 옮김이다 (D-319 ④′ ② · D-99). 그 전제가 `premises` 에 있으면 합집합에 든다.
+    #    ⛔ 인코더가 거짓_과장을 직접 냈으면 더하지 않는다 — 같은 유형이 두 번 실리지 않고, 직접 낸 쪽(제 확률)이 남는다
+    moved = Violation(_UNRECOGNIZED_TYPE)
+    if (
+        pm.HF_MISLEAD in e.candidates
+        and Premise.건기식_비인정 in ps
+        and moved.value not in e.candidates
+    ):
+        out.append(
+            EncoderTypeCandidate(
+                violation=moved,
+                confidence=score[pm.HF_MISLEAD],
+                moved_from=Violation(pm.HF_MISLEAD),
+            )
+        )
+    return out
 
 
 def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:
