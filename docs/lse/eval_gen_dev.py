@@ -134,9 +134,10 @@ def fact_retention(original: str, out: str) -> float | None:
 
 
 def score() -> None:
+    from stage_gate import _claim_word, new_words  # noqa: PLC0415
+
     from app.routers import sllm_client  # noqa: PLC0415
     from app.routers import user as u  # noqa: PLC0415
-    from stage_gate import _claim_word, new_words  # noqa: PLC0415
 
     rows = [json.loads(line) for line in OUT.open(encoding="utf-8") if line.strip()]
     scored = []
@@ -151,10 +152,10 @@ def score() -> None:
         y["outcome"] = res["outcome"]
         y["ms"] = x["ms"]
         # 관문 전 · 후 낱말 삽입 — 「도움」 문장의 인정 문구 낱말은 뺀다(관문과 같은 규칙)
-        def ins(s: str | None) -> bool:
+        def ins(s: str | None, original: str = x["text"]) -> bool:
             if not s:
                 return False
-            nw = new_words(x["text"], s)
+            nw = new_words(original, s)
             if "도움" in s:
                 nw = [w for w in nw if not _claim_word(w)]
             return bool(nw)
