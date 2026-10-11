@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+from app import premise as pm
 from app.contracts import Category, Infeasibility, Violation
+from collect import statute
 from collect.law_map import STATUTE_ID
 
 FOOD = STATUTE_ID["식품표시광고법"]
@@ -92,3 +94,32 @@ def lookup(
     if key in ONLY_FOR and ONLY_FOR[key] is not category:
         return None
     return REASON_TEXT.get(key)
+
+
+#: 🆕 2026-10-11 — **보류 문장의 유형 후보가 조건부일 때** 붙이는 말 (D-319 보충 10-11 · D-326).
+#:    건강기능식품 제품의 `거짓_과장` 후보 중에는 시행령 [별표 1] 4.나(인정하지 않은 기능성)에서 온 것이 있다 — 그 후보는
+#:    「그 기능성으로 인정받지 않았다면」의 것이다. **조문이 조건을 말한다** — 새 칸을 두지 않고 문장의 인용 근거에 4.나가
+#:    있는지로 가른다(D-282 「정본은 조문 인용」 · 인코더 후보는 조문이 없어 `moved_from` 칸으로 말한다).
+#: ✅ 2026-10-11 승인 — 오한빈 (모델 권고 승인 · 글자는 모델이 옮겨 적음). 정본 글자는 `docs/ohb/기준문안_초안_2026-10-02.md` §11 이고
+#:    게이트(`tests/test_premise_branches.py`)가 글자를 대조한다. 고치려면 그 문서를 먼저 고치고 다시 승인받는다 (D-147 · D-263 ②)
+UNRECOGNIZED_CANDIDATE_NOTE = "이 후보는 이 기능성으로 인정받지 않은 건강기능식품일 때 해당합니다. 인정받은 기능성이라면 해당하지 않습니다."
+_UNRECOGNIZED = statute.article_item(pm.UNRECOGNIZED_FUNCTION_CITE)
+
+
+def candidate_condition(sentence: object) -> str | None:
+    """보류 문장의 유형 후보에 붙일 조건 문안. 붙일 것이 없으면 **None** — 지어내지 않는다 (D-220).
+
+    ★ 확신 부족 보류 문장이고 **인용 근거**(`EvidenceArticle.basis`)에 [별표 1] 4.나가 있을 때만 낸다.
+    ⛔ 확정 문장에는 내지 않는다 — 확정의 조건은 불가 사유(자격형)와 증명서 사유 문안이 말한다(`REASON_TEXT`).
+    ⛔ 참고 조문(검색이 찾은 조문)에 4.나가 있는 것으로는 내지 않는다 — 판정이 기댄 조문이 아니다.
+    🚨 근거는 문장 단위다 — 한 문장에 조건 없는 `거짓_과장` 낱말이 함께 걸려도 이 말이 붙는다. 그래서 「이 후보는」이
+       가리키는 것은 4.나 근거이고, 화면은 이 말을 근거 옆에 그린다.
+    """
+    verdict = getattr(getattr(sentence, "verdict", None), "value", None)
+    reason = getattr(getattr(sentence, "hold_reason", None), "value", None)
+    if (verdict, reason) != ("hold", "low_conf"):
+        return None
+    for e in getattr(sentence, "evidence", None) or ():
+        if getattr(e, "basis", False) is True and (e.law_id, e.article, e.item) == _UNRECOGNIZED:
+            return UNRECOGNIZED_CANDIDATE_NOTE
+    return None
