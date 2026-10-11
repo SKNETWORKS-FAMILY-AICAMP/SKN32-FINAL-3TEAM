@@ -68,6 +68,9 @@ STAGE1_VER = stage1_version()
 STAGE1 = stage1_dir(STAGE1_VER)
 STAGE2 = stage2_dir()
 OUT = HERE / "_private" / "persona_pipeline_e2e.jsonl"
+#: 🆕 10-12 — 고객층을 고르지 않았을 때의 2단계(「자연스럽게 다듬기」). 1단계 문장은 위반을 지운 뼈대라 딱딱하다 —
+#:    고객층을 짚지 않고 광고 문장으로만 다듬는다. 같은 2단계 어댑터 · 같은 관문(`persona=True`)을 지난다
+NEUTRAL_PERSONA = "일반 소비자 — 특정 고객층을 짚지 않고, 제품 사실을 자연스러운 광고 문장으로"
 #: 고를 수 있는 고객층 — 🚨 D-27 고민 · 증상 축 없음. 실제 서비스에서는 세그먼트(`app.contracts.Segment.label`)가 들어온다
 PERSONAS = {
     "p1": "30대 직장인 — 바쁜 일상 속 간편한 관리",
@@ -112,10 +115,13 @@ def with_rejudge(res: dict, do_rejudge: bool, category: str | None = None) -> di
 
 
 def run_one(model, tok, text: str, labels: list[str], persona: str | None = None, do_rejudge: bool = False,
-            category: str | None = None) -> dict:
+            category: str | None = None, polish: bool = False) -> dict:
     """문구 하나 — 서비스가 부를 단위. `persona`(고객층 설명)를 주지 않으면 1단계 결과로 끝난다.
     `do_rejudge` 면 후보를 팀 판정 코어로 다시 판정한다(DB 필요).
-    `category` — 🆕 10-06 품목(`app.contracts.Category` 값 · 판정 결과의 품목). 없으면 후처리가 문구에서 추측한다."""
+    `category` — 🆕 10-06 품목(`app.contracts.Category` 값 · 판정 결과의 품목). 없으면 후처리가 문구에서 추측한다.
+    `polish` — 🆕 10-12 고객층이 없어도 2단계로 자연스럽게 다듬는다(`NEUTRAL_PERSONA`). 실패하면 1단계 문장을 낸다."""
+    if not persona and polish:
+        persona = NEUTRAL_PERSONA
     return with_rejudge(_run_one(model, tok, text, labels, persona, category), do_rejudge, category)
 
 
@@ -166,7 +172,7 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
     if not s2 or probs or not g2.passed:
         # 2단계가 실패해도 1단계 문장은 이미 관문을 넘었다 — 말투만 포기하고 1단계 문장을 낸다
         return {**res, "outcome": "candidate", "final": s1, "persona_failed": True}
-    return {**res, "outcome": "candidate", "final": s2}
+    return {**res, "outcome": "candidate", "final": s2, "stage1_final": s1}
 
 
 def main() -> None:

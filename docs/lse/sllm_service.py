@@ -53,6 +53,7 @@ class RewriteReq(BaseModel):
     text: str = Field(..., min_length=1, max_length=PARAMS.max_text_len)
     violation_types: list[str] = Field(default_factory=list)
     persona: str | None = None  # 고객층 설명 — 주면 2단계(말투)까지 돈다
+    polish: bool = False  # 🆕 10-12 고객층 없이도 2단계로 자연스럽게 다듬기 — 🚨 시험 전이라 기본은 끔
     rejudge: bool = False  # 판정 코어 재판정(DB 필요)
     #: 🆕 10-06 (팀장 전달 §2 #3) — 품목(`app.contracts.Category` 값 · 판정 결과의 품목 · D-319). 없으면 후처리가 문구에서 추측한다
     category: Literal["식품", "건기식", "화장품", "일반상품", "전용법_미수록"] | None = None
@@ -114,14 +115,15 @@ def _rejudge_view(r: dict) -> dict | None:
 
 
 def rewrite(text: str, violation_types: list[str] | None = None, persona: str | None = None,
-            do_rejudge: bool = False, category: str | None = None) -> dict:
+            do_rejudge: bool = False, category: str | None = None, polish: bool = False) -> dict:
     """문구 하나를 고쳐 쓴다. 위반 유형은 판정 코어(검수)가 준 것을 그대로 넘긴다 — 없으면 빈 목록."""
     from persona_pipeline_e2e import run_one  # noqa: PLC0415
 
     model, tok, ver = load()
     t0 = time.time()
     with _LOCK:
-        r = run_one(model, tok, text, list(violation_types or []), persona, do_rejudge=do_rejudge, category=category)
+        r = run_one(model, tok, text, list(violation_types or []), persona, do_rejudge=do_rejudge, category=category,
+                   polish=polish)
     out = {
         "outcome": r["outcome"],
         "rewrite": None,
@@ -154,7 +156,7 @@ def serve(port: int) -> None:
 
     @app.post("/rewrite")
     def do_rewrite(req: RewriteReq) -> dict:
-        return rewrite(req.text, req.violation_types, req.persona, req.rejudge, req.category)
+        return rewrite(req.text, req.violation_types, req.persona, req.rejudge, req.category, req.polish)
 
     uvicorn.run(app, host="127.0.0.1", port=port)  # 🚨 로컬만 — 외부에 열지 않는다
 
