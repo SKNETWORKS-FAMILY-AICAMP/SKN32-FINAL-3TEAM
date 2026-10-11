@@ -35,10 +35,16 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, get_cosine_schedul
 
 ROOT = Path(__file__).resolve().parents[2]
 LSE = ROOT / "docs" / "lse"
-BASE = "Qwen/Qwen2.5-3B-Instruct"
-ADAPTER = ROOT / "models" / "copylane_sllm_persona_adapter"
+# 🔄 10-11 — 베이스는 `sllm_meta` 한 곳에서 읽는다(COPYLANE_SLLM_BASE). 3B 가 아니면 어댑터 · 평가 파일을 따로 쓴다 —
+#    3B 용 2단계 어댑터는 4B 에 붙지 않는다(라이선스로 Qwen3-4B-Instruct-2507 로 옮김 · 1단계 q4b-v13)
+sys.path.insert(0, str(LSE))
+from sllm_meta import base_model  # noqa: E402
+
+BASE = base_model()
+_SFX = "" if BASE == "Qwen/Qwen2.5-3B-Instruct" else "_q4b"
+ADAPTER = ROOT / "models" / f"copylane_sllm_persona_adapter{_SFX}"
 # 평가 출력은 공개 원천 문장뿐이지만, 실험 산출물은 한곳(_private)에 모은다
-OUT = LSE / "_private" / "persona_stage2_eval.jsonl"
+OUT = LSE / "_private" / f"persona_stage2_eval{_SFX}.jsonl"
 SEED = 20261001
 EPOCHS, LR, MAX_LEN = 3, 2e-4, 384
 
@@ -70,17 +76,25 @@ def load() -> list[dict]:
     return rows
 
 
-def leak_guard(rows: list[dict]) -> None:
+def leak_guard(rows: list[dict]) -> list[dict]:
+    """누수 검사. 🔄 10-11 — 골든 10-10 재동결로 **평가** 주제 하나(e001 · 식약처 고시 문구)가 골든 학습 행(그 문구를 인용한 광고)
+    안에 부분으로 들어왔다. 평가 행은 학습에 안 들어가므로 멈추지 않고 **평가에서 빼고 수를 찍는다**. 학습 행이 겹치면 종전대로 멈춘다."""
     norm = lambda s: re.sub(r"[\s\W_]+", "", s or "")  # noqa: E731
     golden = [norm(json.loads(line)["text"]) for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")]
     gset, gblob = set(golden), "\n".join(golden)
-    hit = [r["id"] for r in rows if norm(r["input"]) in gset or norm(r["input"]) in gblob]
-    assert not hit, f"① golden 과 겹치는 입력: {hit[:5]}"
+    overlap = {r["id"] for r in rows if norm(r["input"]) in gset or norm(r["input"]) in gblob}
+    hit = [r["id"] for r in rows if r["id"] in overlap and r["split"] == "train"]
+    assert not hit, f"① golden 과 겹치는 학습 입력: {hit[:5]}"
+    dropped = sorted(overlap)
+    if dropped:
+        print(f"① golden 과 겹치는 평가 입력 {len(dropped)} 개를 평가에서 뺀다: {dropped}", flush=True)
+    rows = [r for r in rows if r["id"] not in overlap]
     tr = {r["group"] for r in rows if r["split"] == "train"}
     ev = {r["group"] for r in rows if r["split"] == "eval"}
     assert not tr & ev, f"② 학습 · 평가 주제 겹침: {tr & ev}"
     assert not {r["persona"] for r in rows if r["split"] == "train" and r["persona"].startswith("q")}, "③ 평가 페르소나가 학습에 있다"
-    print(f"누수 검사 통과 — 학습 주제 {len(tr)} · 평가 주제 {len(ev)} · golden 겹침 0")
+    print(f"누수 검사 통과 — 학습 주제 {len(tr)} · 평가 주제 {len(ev)} · golden 겹침 학습 0 · 평가에서 뺌 {len(dropped)}")
+    return rows
 
 
 def user_msg(r: dict) -> str:
@@ -197,7 +211,7 @@ def main() -> None:
     args = ap.parse_args()
     torch.manual_seed(SEED)
     rows = load()
-    leak_guard(rows)
+    rows = leak_guard(rows)
     train_rows = [r for r in rows if r["split"] == "train"]
     eval_rows = [r for r in rows if r["split"] == "eval"]
     # 정답 자체도 규칙을 지켜야 한다 — 어기면 학습 재료가 틀린 것이다

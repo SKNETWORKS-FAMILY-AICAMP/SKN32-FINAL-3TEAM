@@ -28,10 +28,11 @@ def _adapter(tmp_path: Path, base: object) -> Path:
 def test_값이_없으면_종전_채택본이다(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (meta.ENV_STAGE1, meta.ENV_STAGE2, meta.ENV_BASE):
         monkeypatch.delenv(name, raising=False)
-    assert meta.stage1_version() == "v12"
-    assert meta.stage1_dir().name == "copylane_sllm_lora_adapter_v12"
-    assert meta.stage2_dir().name == "copylane_sllm_persona_adapter"
-    assert meta.base_model() == "Qwen/Qwen2.5-3B-Instruct"
+    # 🔄 2026-10-11 — 채택본이 Qwen3-4B(q4b-v13)로 바뀌었다(라이선스 · `docs/lse/sllm_meta.py` 주석)
+    assert meta.stage1_version() == "q4b-v13"
+    assert meta.stage1_dir().name == "copylane_sllm_lora_adapter_q4b-v13"
+    assert meta.stage2_dir().name == "copylane_sllm_persona_adapter_q4b"
+    assert meta.base_model() == "Qwen/Qwen3-4B-Instruct-2507"
 
 
 def test_환경_변수로_판과_베이스를_바꾼다(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
