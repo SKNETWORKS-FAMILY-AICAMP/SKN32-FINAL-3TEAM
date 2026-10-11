@@ -43,6 +43,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
 from postfix import (  # noqa: E402
+    CONDITIONAL_CLAIM_NOTE,
     _CLAIM_HOLD,
     condition,
     label_check,
@@ -141,6 +142,9 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
         g1 = type(g1)(False, tuple(g1.reasons) + tuple(extra))  # 🆕 10-05 — 위반 유형 · 주어 원료명(관문이 못 보는 것)
     note, note_problem = condition(fixed, note_in, text, category) if fixed else (None, None)
     res.update(stage1_fixed=fixed, repairs=repairs, note=note, note_problem=note_problem)
+    if fixed and g1.passed and note and CONDITIONAL_CLAIM_NOTE.search(note):
+        # 🆕 10-12 — 인정 · 심사 제품에서만 쓸 수 있는 문구는 후보로 내지 않는다(제품이 그 조건을 갖췄는지 서버가 모른다)
+        g1 = type(g1)(False, (f"조건 확인 필요: {note}",))
     # 🚨 관문 — 1단계가 위반을 못 지운 문장은 내보내지도, 말투로 포장하지도 않는다
     res["gate1"] = list(g1.reasons)
     if not g1.passed:

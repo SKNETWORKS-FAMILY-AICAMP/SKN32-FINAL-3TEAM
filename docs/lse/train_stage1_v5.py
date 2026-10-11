@@ -56,7 +56,7 @@ from sllm_meta import base_model  # noqa: E402
 
 BASE = base_model()
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13")}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14")}
 EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v8": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v10": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
@@ -173,6 +173,12 @@ for _m in (EXTRAS, SYNTH, SYS):
 EXTRAS["q4b-v13"] = EXTRAS["v12"] + ["stage1_v13_extra.jsonl"]
 SYNTH["q4b-v13"] = SYNTH["v12"]
 SYS["q4b-v13"] = SYS["v12"]
+#: 🆕 10-12 — 4B 보강 2차(`q4b-v14`) = q4b-v13 + 직접 만든 55 행(`stage1_v14_extra.jsonl` · 불가 40 · 사실 15).
+#:    v13 이 실제 광고에서 과장 · 의약품 · 기만 주장을 공식 기능성 문구 + 조건으로 바꿔 포장 4(범주로만 봄) —
+#:    일반식품의 기능 주장 · 기만 · 화장품 치료 주장은 「바꿔 쓰지 않고 불가」를 더 가르친다
+EXTRAS["q4b-v14"] = EXTRAS["q4b-v13"] + ["stage1_v14_extra.jsonl"]
+SYNTH["q4b-v14"] = SYNTH["v12"]
+SYS["q4b-v14"] = SYS["v12"]
 CUR = {"system": SYSTEM}
 
 
@@ -295,7 +301,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"
