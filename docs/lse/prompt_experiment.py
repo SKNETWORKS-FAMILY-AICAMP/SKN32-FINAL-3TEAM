@@ -45,7 +45,9 @@ VARIANTS = {
     "P2": ("+ 보존 규칙 + 예시 2개(few-shot)", SYSTEM_V6 + KEEP_RULE + FEW_SHOT),
     "P3": ("짧은 새 프롬프트(학습과 다른 꼴)", SHORT),
 }
-SETS = {"살리기": "stage1_salvage_eval.jsonl", "원료명": "stage1_ingredient_eval.jsonl", "뜻보존": "stage1_meaning_eval.jsonl"}
+SETS = {"살리기": "stage1_salvage_eval.jsonl", "원료명": "stage1_ingredient_eval.jsonl", "뜻보존": "stage1_meaning_eval.jsonl",
+        # 🆕 10-11 — 직접 만든 불가 확대 40 + 대조군(살림) 10 · 4B 시험판의 약점(거짓_과장 · 소비자_기만 불가를 고쳐 씀)을 잡으려고
+        "불가확대": "stage1_infeasible_eval.jsonl"}
 
 
 def rows() -> list[dict]:
@@ -73,7 +75,9 @@ def main(names: list[str]) -> None:
     model, tok, ver = load()
     data = rows()
     # 🔄 10-08 — 다른 판(4B 시험판 등)은 따로 쓴다 — v12 결과를 덮지 않는다
-    out_path = HERE / ("prompt_experiment_out.jsonl" if ver == "v12" else f"prompt_experiment_out_{ver}.jsonl")
+    # 🔄 10-11 — 판 · 프롬프트마다 따로 쓴다(10-08 의 v12 P0 ~ P3 결과를 덮지 않는다)
+    tag = "" if (ver == "v12" and names == list(VARIANTS)) else "_" + "_".join([ver, *names])
+    out_path = HERE / f"prompt_experiment_out{tag}.jsonl"
     summary: dict[str, collections.Counter] = {}
     with out_path.open("w", encoding="utf-8", newline="\n") as fo:
         for v in names:
@@ -96,7 +100,7 @@ def main(names: list[str]) -> None:
         sal = sum(n for k, n in c.items() if k.endswith(":살림"))
         want = sum(1 for r in data if r["expect"] == "salvage")
         print(f"{v} {VARIANTS[v][0]:<28} 살림 {sal}/{want} · 포장 {sum(n for k, n in c.items() if k.endswith(':포장'))} · "
-              f"막음 {c['살리기:막음']}/12 · 뜻 바뀜 {c['뜻 바뀜(관문이 막음)']} · {c['초']}초")
+              f"막음 {c['살리기:막음']}/12 · 불가확대 막음 {c['불가확대:막음']}/40 · 뜻 바뀜 {c['뜻 바뀜(관문이 막음)']} · {c['초']}초")
 
 
 if __name__ == "__main__":

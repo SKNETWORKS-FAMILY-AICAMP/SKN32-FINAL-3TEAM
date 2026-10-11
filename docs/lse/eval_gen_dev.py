@@ -30,10 +30,14 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path[:0] = [str(HERE), str(ROOT)]
 
+from sllm_meta import stage1_version  # noqa: E402
+
 IN = ROOT / "build" / "eval" / "gen_inputs_dev.jsonl"
-OUT = ROOT / "build" / "eval" / "gen_out_dev.jsonl"
-SCORE = ROOT / "build" / "eval" / "gen_score_dev.jsonl"
-REVIEW = ROOT / "build" / "eval" / "gen_blindspot_review_dev.csv"
+#: 🔄 10-11 — 판마다 따로 쓴다(v12 는 종전 이름 그대로 · 4B 시험판 등은 `_판` 을 붙인다) — 판이 섞이지 않게
+_SFX = "" if stage1_version() == "v12" else f"_{stage1_version()}"
+OUT = ROOT / "build" / "eval" / f"gen_out_dev{_SFX}.jsonl"
+SCORE = ROOT / "build" / "eval" / f"gen_score_dev{_SFX}.jsonl"
+REVIEW = ROOT / "build" / "eval" / f"gen_blindspot_review_dev{_SFX}.csv"
 
 
 def _sllm_category(r: dict) -> str | None:
