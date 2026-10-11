@@ -205,6 +205,12 @@ def _branch_view(b: Any) -> dict[str, Any]:
     return {
         "outcome": b.outcome.value,
         "types": sorted({v.value for s in conf for v in s.violations}),
+        #: 🆕 2026-10-11 — 분기 안 **보류 문장의 유형 후보**(행의 `candidates` 와 같은 뜻 · D-311). 지표에는 쓰지 않는다 —
+        #:    전제가 후보를 바꾸는 자리(D-319 보충 10-11)를 결과 파일끼리 견줄 수 있게 적는다. 종전에는 확정 유형만 적어
+        #:    분기 안의 후보가 바뀌어도 대조에 보이지 않았다(원장 10-10 ⑮)
+        "candidates": sorted(
+            {v.value for s in b.sentences if s.verdict is Verdict.hold for v in s.violations}
+        ),
         "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
         "committed": bool(b.sentences) and len(conf) == len(b.sentences),
     }

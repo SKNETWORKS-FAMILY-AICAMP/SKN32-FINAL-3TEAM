@@ -417,3 +417,15 @@ def test_판정이_갈리는_분기는_그대로_선다(criteria: None) -> None:
     st, _ = _run({"law_food": [_hit(FOOD3)], "law_ftc": []}, Category.건기식)
     assert [b.premise for b in st["branches"]] == [Premise.건기식_인정, Premise.건기식_비인정]
     assert FOOD4_NA.endswith("|나목")
+
+
+def test_평가_도구가_분기_안의_보류_후보를_적는다(criteria: None) -> None:
+    """결과 파일끼리 견줄 때 분기 안의 후보가 보이게 — 종전에는 확정 유형만 적었다 (원장 10-10 ⑮)."""
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    st, _ = _run_weak([_hit(FOOD3)])
+    view = eg.predict(st)["branches"]
+    assert view["식품"]["candidates"] == ["건강기능식품_오인"]
+    assert view["건기식_인정"]["candidates"] == []
+    assert view["건기식_비인정"]["candidates"] == ["거짓_과장"]
+    assert all(not v["types"] for v in view.values()), "후보는 확정 유형 칸에 들지 않는다"
