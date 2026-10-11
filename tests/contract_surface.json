@@ -135,6 +135,7 @@
     "EncoderTypeCandidate": {
       "confidence": "req builtins.float",
       "moved_from": "opt app.contracts.Violation | None",
+      "references": "opt list[app.contracts.EvidenceArticle]",
       "violation": "req app.contracts.Violation"
     },
     "EvidenceArticle": {
