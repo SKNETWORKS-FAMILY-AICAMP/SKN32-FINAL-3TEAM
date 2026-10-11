@@ -1375,7 +1375,11 @@ def _premise_sentences(
             voided, converted = voided or v, converted or c
             undecided += unk
             # 판정하지 못하는 적중은 자격 없는 적중과 같은 길로 — 보류 문장의 유형 후보다 (D-311 과 같은 모양)
-            unknown += unk + list(dict(r.weak_hits).get(sid, ()))
+            # 🔄 2026-10-11 — **자격 없는 적중도 전제 거름을 탄다** (D-319 ④′ ① ②). ⛔ 종전에는 그대로 붙였다 — 건강기능식품
+            #    전제에서도 보류 후보에 건강기능식품 오인(3호)이 남았다(dev 조건부 건강기능식품 제품 82 행 중 10 · 원장 10-10 ⑭).
+            #    확정 여부 · 「판정하지 못한다」 갈래는 자격 있는 적중만 본다 — 후보가 그 갈래를 움직이지 않는다
+            wk, wunk, _, _ = _premise_hits(premise, dict(r.weak_hits).get(sid, ()))
+            unknown += unk + wk + wunk
             if kept:
                 by_law[LAW_OF_NODE[law]] = tuple(kept)
         hits = [h for hs in by_law.values() for h in hs]
@@ -1485,10 +1489,48 @@ def _recorded(
     )
 
 
+def _held_candidates(
+    base: SentenceJudgment, per: list[SentenceJudgment]
+) -> SentenceJudgment | None:
+    """제품을 알 때 보류 문장의 **유형 후보** — 그 품목의 전제로 거른 후보의 합집합 (🆕 2026-10-11 · D-319 ④′). 같으면 `None`.
+
+    기록되는 판정(`judge`)은 전제 거름 전의 것이다 — 건강기능식품이라고 알려 줬는데 후보에 건강기능식품 오인(3호)이 남는다.
+    그 유형은 건강기능식품 전제 둘에서 서지 않는다. 인코더 후보를 품목의 전제로 거르는 것과 같은 규칙이다
+    (`_encoder_candidates` · D-323 · 2026-10-09 (다)) — 한 전제에서라도 서는 후보는 남기고 어디서도 서지 않는 후보만 뺀다.
+    ★ 문장이 **모든 전제에서 확신 부족 보류일 때만** 손댄다. 한 전제라도 확정 · 근거 없음이면 `_recorded` 의 몫이다.
+    ⛔ 품목을 모를 때는 부르지 않는다 — 전제 여섯에 식품이 있어 3호 후보가 설 수 있고, 다른 전제의 옮긴 후보까지 합치면
+       정답이 마침 그 유형인 행이 맞은 것처럼 세어진다(인코더의 옮긴 후보를 따로 두는 것과 같은 까닭 · 원장 10-10 ⑫).
+    🚨 건강기능식품의 `거짓_과장` 후보는 「그 기능성으로 인정받지 않았다면」의 것이다 — 근거에 [별표 1] 4.나가 실린다.
+    """
+
+    def low(j: SentenceJudgment) -> bool:
+        return j.verdict is Verdict.hold and j.hold_reason is HoldReason.low_conf
+
+    if not low(base) or not per or not all(low(j) for j in per):
+        return None
+    types = _typed({v.value for j in per for v in j.violations})
+    evidence: list[EvidenceArticle] = []
+    for j in per:
+        for a in j.evidence:
+            if a not in evidence:
+                evidence.append(a)
+    if types == list(base.violations):
+        return None
+    return SentenceJudgment(
+        **{
+            **{k: getattr(base, k) for k in type(base).model_fields},
+            "violations": types,
+            "evidence": evidence,
+        }
+    )
+
+
 def _judgment_key(j: SentenceJudgment) -> tuple:
     """전제끼리 판정이 같은가를 보는 열쇠 — 판정 · 사유 · 유형 · 불가 사유 · 위험도 · 근거 좌표.
 
     ⛔ 인코더 후보(`encoder_candidates`)는 넣지 않는다 — 판정이 아니다. 넣으면 후보만 다른데도 분기가 생긴다 (D-323 결정 1).
+    🚨 보류 문장의 유형 후보는 이 열쇠에 **들어 있다** — 분기를 낼지는 `_branch_key` 로 본다(후보만 다르면 분기를 내지 않는다).
+       이 열쇠는 그대로 둔다 — 팀원 프로토타입(`docs/psj/e2e_prototype/judge_stage2.py`)이 부른다.
     """
     return (
         j.verdict,
@@ -1498,6 +1540,19 @@ def _judgment_key(j: SentenceJudgment) -> tuple:
         j.risk.final,
         tuple((e.law_id, e.article, e.item) for e in j.evidence),
     )
+
+
+def _branch_key(j: SentenceJudgment) -> tuple:
+    """**분기를 낼지** 보는 열쇠 (🆕 2026-10-11 · D-319 · D-311 · D-323 결정 1) — 확신 부족 보류 문장은 유형 후보 · 그 근거를 뺀다.
+
+    보류 문장의 유형은 후보이지 판정이 아니다(D-311). 후보까지 견주면 어느 전제를 골라도 보류인데 제품 유형을 고르라는
+    분기가 생긴다 — 자격 없는 적중이 전제를 따르게 되면서(`_premise_sentences`) dev 조건부 345 행의 분기가 6 → 33 이 된다
+    (원장 10-10 ⑮). 인코더 후보를 열쇠에 넣지 않는 것과 같은 까닭이다.
+    ★ 판정이 갈리는 분기(한쪽 확정 · 한쪽 보류 · 등급 · 사유)는 `_judgment_key` 의 칸이 달라 그대로 선다.
+    """
+    if j.verdict is Verdict.hold and j.hold_reason is HoldReason.low_conf:
+        return (j.verdict, j.hold_reason)
+    return _judgment_key(j)
 
 
 @timed
@@ -1523,16 +1578,28 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
     hit = any(hs for r in state.get("law_results", []) for _, hs in r.dict_hits)
     rows = load_sanction_rows(cur) if hit else []
     per = {p: _premise_sentences(p, state, rows) for p in premises}
-    if category is not None and len({tuple(map(_judgment_key, per[p])) for p in premises}) == 1:
-        # 품목이 주어졌고 전제가 판정을 바꾸지 않는다 — 고를 것이 없는 선택지를 내지 않는다(종전 판정 그대로).
+    # 🆕 2026-10-11 — 제품을 알 때 보류 문장의 유형 후보는 그 품목의 전제로 거른 합집합이다 (`_held_candidates`)
+    held = (
+        []
+        if category is None
+        else [
+            h
+            for i, b in enumerate(base)
+            if (h := _held_candidates(b, [per[p][i] for p in premises])) is not None
+        ]
+    )
+    if category is not None and len({tuple(map(_branch_key, per[p])) for p in premises}) == 1:
+        # 품목이 주어졌고 전제가 판정을 바꾸지 않는다 — 고를 것이 없는 선택지를 내지 않는다.
         # ⛔ 품목을 모를 때는 같아도 낸다 — 「품목 미확정이면 분기는 언제나」(D-229 ⑥ · D-319 ②).
-        return {}
+        # 🔄 2026-10-11 — 판정은 종전 그대로이고 보류 문장의 후보만 바로잡는다. 바꿀 것이 없으면 아무것도 내지 않는다
+        return {"sentences": held} if held else {}
     reason = HoldReason.cat_unknown if category is None else HoldReason.premise_unknown
     changed = [
         r
         for i, b in enumerate(base)
         if (r := _recorded(b, [per[p][i] for p in premises], reason)) is not None
     ]
+    changed += [h for h in held if h.sent_id not in {r.sent_id for r in changed}]
     branches = [
         Branch(
             premise=p,

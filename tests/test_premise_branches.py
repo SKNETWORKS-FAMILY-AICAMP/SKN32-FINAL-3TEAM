@@ -38,6 +38,7 @@ from app.graph import (
     to_response,
     upsert_sentences,
 )
+from collect import statute
 from scripts import sanction_rule as sr
 
 pytestmark = pytest.mark.gate
@@ -323,3 +324,132 @@ def test_평가_도구가_분기를_기록과_따로_센다(criteria: None) -> N
     assert (b["positive"], b["confirmed"]) == (1, 0), (
         "화장품 분기는 판정하지 못했다 — 확정으로 세지 않는다"
     )
+
+
+# ── 🆕 2026-10-11 — 단독 자격 없는 적중(보류 문장의 유형 후보)도 전제를 따른다 (D-319 ④′ · 원장 10-10 ⑭ ⑮) ──
+#    ⛔ 종전에는 자격 없는 적중이 전제 거름을 타지 않았다 — 건강기능식품이라고 알려 줘도 후보가 「건강기능식품 오인」이었다.
+
+FOOD4_NA = pm.UNRECOGNIZED_FUNCTION_CITE
+
+
+def _run_weak(weak: list[DictHit], category: Category | None = None) -> tuple[dict, dict]:
+    """`_run` 과 같되 **자격 없는 적중**(`weak_hits`)만 식품표시광고법 노드에 싣는다."""
+    laws = LAW_NODES if category is None else ("law_food", "law_ftc")
+    st: dict = {
+        "text": TEXT,
+        "sents": [TEXT],
+        "product": ProductContext(category=category),
+        "laws": laws,
+        "dict_scans": [DictScan(sent_id="s0", ran=True, weak=tuple(weak))],
+        "law_results": [
+            LawResult(
+                law=law,
+                sent_ids=("s0",),
+                weak_hits=(("s0", tuple(weak) if law == "law_food" else ()),),
+            )
+            for law in laws
+        ],
+    }
+    cfg = {"configurable": {"conn": _Cur()}}
+    st["sentences"] = judge(st)["sentences"]
+    st["sentences"] = upsert_sentences(st["sentences"], assess_risk(st, cfg).get("sentences", []))
+    out = premise_branches(st, cfg)
+    st["sentences"] = upsert_sentences(st["sentences"], out.get("sentences", []))
+    st["branches"] = out.get("branches", [])
+    return st, out
+
+
+def _cites(s) -> list[tuple[str, str]]:  # noqa: ANN001
+    return [(e.article, e.item) for e in s.evidence if e.basis]
+
+
+def test_건강기능식품_제품의_보류_후보에_건강기능식품_오인이_남지_않는다(criteria: None) -> None:
+    st, out = _run_weak([_hit(FOOD3)], Category.건기식)
+    s = st["sentences"][0]
+    assert (s.verdict, s.hold_reason) == (Verdict.hold, HoldReason.low_conf), "판정은 그대로 보류다"
+    assert s.violations == [Violation.거짓_과장], (
+        "3 호는 건강기능식품 전제에서 서지 않는다 — 4.나로 옮긴다"
+    )
+    _law, article, item = statute.article_item(FOOD4_NA)
+    assert (article, item) in _cites(s), "근거가 4.나여야 화면이 조건을 말할 수 있다"
+    assert not st["branches"], (
+        "🔴 어느 전제를 골라도 보류인데 분기를 냈다 — 후보만 다른 것은 판정이 다른 것이 아니다"
+    )
+    assert s.risk.final is None, "보류 문장의 유형 후보에는 하한을 걸지 않는다 (D-311)"
+    to_response({**st, "outcome": Outcome.hold})
+
+
+def test_3호와_다른_인용이_함께_든_후보는_3호만_빠진다(criteria: None) -> None:
+    """사전의 「혈당」 꼴 — 인용이 3 호와 4 호 둘이다. 건강기능식품에서는 거짓_과장만 남는다."""
+    st, _ = _run_weak([_hit(FOOD3, FOOD4)], Category.건기식)
+    assert st["sentences"][0].violations == [Violation.거짓_과장]
+    assert not st["branches"]
+
+
+def test_식품_제품의_보류_후보는_그대로다(criteria: None) -> None:
+    st, out = _run_weak([_hit(FOOD3)], Category.식품)
+    assert _quiet(out), "식품 전제에서는 3 호 후보가 선다 — 바꿀 것이 없고 분기도 없다"
+    assert st["sentences"][0].violations == [Violation.건강기능식품_오인]
+
+
+def test_품목을_모르면_기록은_그대로이고_분기의_후보만_전제를_따른다(criteria: None) -> None:
+    st, out = _run_weak([_hit(FOOD3)])
+    assert out["sentences"] == [], "품목을 모를 때의 기록 판정은 손대지 않는다 — 식품일 수 있다"
+    assert st["sentences"][0].violations == [Violation.건강기능식품_오인]
+    want = {
+        Premise.식품: [Violation.건강기능식품_오인],
+        Premise.일반식품_기능성: [],
+        Premise.건기식_인정: [],
+        Premise.건기식_비인정: [Violation.거짓_과장],
+    }
+    for premise, types in want.items():
+        b = _branch(st, premise)
+        assert b.sentences[0].verdict is Verdict.hold, (
+            f"{premise.value} — 후보는 확정을 만들지 않는다"
+        )
+        assert b.sentences[0].violations == types, premise.value
+        assert b.outcome is not Outcome.passed, f"{premise.value} — 후보가 빠졌다고 통과가 아니다"
+    to_response({**st, "outcome": Outcome.hold})
+
+
+def test_판정이_갈리는_분기는_그대로_선다(criteria: None) -> None:
+    """자격 있는 3 호 적중 — 인정 전제는 보류, 비인정 전제는 4.나 확정이다. 판정 칸이 달라 분기가 선다."""
+    st, _ = _run({"law_food": [_hit(FOOD3)], "law_ftc": []}, Category.건기식)
+    assert [b.premise for b in st["branches"]] == [Premise.건기식_인정, Premise.건기식_비인정]
+    assert FOOD4_NA.endswith("|나목")
+
+
+def test_평가_도구가_분기_안의_보류_후보를_적는다(criteria: None) -> None:
+    """결과 파일끼리 견줄 때 분기 안의 후보가 보이게 — 종전에는 확정 유형만 적었다 (원장 10-10 ⑮)."""
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    st, _ = _run_weak([_hit(FOOD3)])
+    view = eg.predict(st)["branches"]
+    assert view["식품"]["candidates"] == ["건강기능식품_오인"]
+    assert view["건기식_인정"]["candidates"] == []
+    assert view["건기식_비인정"]["candidates"] == ["거짓_과장"]
+    assert all(not v["types"] for v in view.values()), "후보는 확정 유형 칸에 들지 않는다"
+
+
+def test_조건부_후보에는_조건_문안이_붙는다(criteria: None) -> None:
+    """건강기능식품 제품의 `거짓_과장` 후보는 「인정이 없다면」의 것이다 — 근거의 4.나가 그 조건이다 (D-319 보충 10-11)."""
+    import pathlib  # noqa: PLC0415
+
+    from app import reasons  # noqa: PLC0415
+
+    st, _ = _run_weak([_hit(FOOD3)], Category.건기식)
+    assert reasons.candidate_condition(st["sentences"][0]) == reasons.UNRECOGNIZED_CANDIDATE_NOTE
+    # 식품 제품 — 후보는 건강기능식품 오인이고 4.나가 없다
+    st, _ = _run_weak([_hit(FOOD3)], Category.식품)
+    assert reasons.candidate_condition(st["sentences"][0]) is None
+    # 조건 없는 거짓_과장(4 호) — 건강기능식품 제품이어도 붙이지 않는다
+    st, _ = _run_weak([_hit(FOOD4)], Category.건기식)
+    assert st["sentences"][0].violations == [Violation.거짓_과장]
+    assert reasons.candidate_condition(st["sentences"][0]) is None
+    # 확정 문장 — 조건은 불가 사유(자격형)가 말한다
+    st, _ = _run({"law_food": [_hit(FOOD4_NA)], "law_ftc": []}, Category.건기식)
+    assert st["sentences"][0].verdict is Verdict.confirmed
+    assert reasons.candidate_condition(st["sentences"][0]) is None
+    # 글자는 승인본(기준 문안 §11)과 같다
+    doc = pathlib.Path("docs/ohb/기준문안_초안_2026-10-02.md").read_text(encoding="utf-8")
+    assert f"| {reasons.UNRECOGNIZED_CANDIDATE_NOTE} |" in doc.split("## 11.")[1]

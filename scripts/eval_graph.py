@@ -205,6 +205,12 @@ def _branch_view(b: Any) -> dict[str, Any]:
     return {
         "outcome": b.outcome.value,
         "types": sorted({v.value for s in conf for v in s.violations}),
+        #: 🆕 2026-10-11 — 분기 안 **보류 문장의 유형 후보**(행의 `candidates` 와 같은 뜻 · D-311). 지표에는 쓰지 않는다 —
+        #:    전제가 후보를 바꾸는 자리(D-319 보충 10-11)를 결과 파일끼리 견줄 수 있게 적는다. 종전에는 확정 유형만 적어
+        #:    분기 안의 후보가 바뀌어도 대조에 보이지 않았다(원장 10-10 ⑮)
+        "candidates": sorted(
+            {v.value for s in b.sentences if s.verdict is Verdict.hold for v in s.violations}
+        ),
         "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
         "committed": bool(b.sentences) and len(conf) == len(b.sentences),
     }
@@ -335,7 +341,7 @@ def _ci(k: int, n: int) -> str:
 def macro_table(types: dict[str, tuple[int, int, int]]) -> dict[str, dict[str, Any]]:
     """🆕 2026-10-08 (D-321 결정 4 · D-40) — 8종 · 6종 **두 표**. 측정 가능한(정답 30 이상) 유형만 macro 에 든다.
 
-    ★ micro 는 측정 불가 유형까지 합친 수다 — 둘을 나란히 낸다(어느 쪽을 게이트에 쓸지는 정하지 않았다 · ⬜ 판정).
+    ★ micro 는 측정 불가 유형까지 합친 수다 — 둘을 나란히 낸다. ✅ 2026-10-11 — 어느 쪽도 합격선이 아니다(D-322 결정 A · 보고 묶음).
     🚨 표에 없는 유형(편입 대기)은 `truth_types` 가 이미 뺐다.
     """
     out: dict[str, dict[str, Any]] = {}
@@ -354,6 +360,43 @@ def macro_table(types: dict[str, tuple[int, int, int]]) -> dict[str, dict[str, A
     return out
 
 
+def _with_encoder(r: dict, p: dict) -> set[str]:
+    """확정 ∪ 사전의 보류 후보 ∪ 인코더 후보 — 옮긴 후보는 그 전제인 행에서만 (D-326 보충 12 · `encoder_report` 의 규칙).
+
+    ★ `encoder_report` 와 `detect_by_type` 가 같이 쓴다 — 규칙을 두 곳에 적지 않는다 (D-99).
+    """
+    pe = set(p["types"]) | set(p.get("candidates", ())) | set(p.get("enc_candidates", ()))
+    if r.get("전제") == Premise.건기식_비인정.value:
+        pe |= set(p.get("enc_moved", ()))
+    return pe
+
+
+def detect_by_type(sc: list[tuple[dict, dict]]) -> dict[str, tuple[int, int, int, int, int]]:
+    """🆕 2026-10-11 (D-321 결정 6 · D-40 · D-311 보충) — **유형별 탐지**: 유형 → (정답, 확정, 사전 후보까지, 인코더가 돈 정답, 인코더 후보까지).
+
+    ★ `types` 표의 R 은 확정만 센다 — 사전이 확정하지 못하는 유형은 0 으로만 찍혀 후보가 어디까지 닿는지 보이지 않았다.
+    · **(행 · 유형) 단위다.** 한 행에 유형이 여럿이면 유형마다 센다 — 정답의 합은 위반 행 수(`detect.positive`)보다 크다.
+    · 세 칸은 포함 관계다(확정 ⊆ 사전 후보까지 ⊆ 인코더 후보까지). 「탐지」는 사전 후보까지의 이름이다 (D-311 보충).
+    · 정답은 `truth_types` — 후보만 있는 행은 가장 넓은 예측(인코더가 돌았으면 인코더 후보까지)에 맞춰 고른다. 세 칸이 같은 정답을 본다.
+    🔴 인코더가 안 돈 행은 인코더 칸의 분모에도 들지 않는다 — 「후보 없음」으로 세지 않는다 (D-220).
+    ⛔ 판정이 아니고 합격선도 없다 (D-322 결정 A). 정답 30 미만은 측정 불가로 찍는다 (D-40) — 수를 지우지는 않는다.
+    """
+    acc: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0, 0, 0, 0])
+    for r, p in sc:
+        pt = set(p["types"])
+        pd = pt | set(p.get("candidates", ()))
+        enc = bool(p.get("encoded"))
+        pe = _with_encoder(r, p) if enc else pd
+        for t in truth_types(r, pe):
+            a = acc[t]
+            a[0] += 1
+            a[1] += t in pt
+            a[2] += t in pd
+            a[3] += enc
+            a[4] += enc and t in pe
+    return {t: (v[0], v[1], v[2], v[3], v[4]) for t, v in sorted(acc.items())}
+
+
 def encoder_report(
     rows: list[dict], preds: list[dict], sc: list[tuple[dict, dict]]
 ) -> dict[str, Any]:
@@ -361,13 +404,21 @@ def encoder_report(
 
     ★ 판정은 인코더를 읽지 않는다 — 이 수는 「붙이면 탐지가 얼마가 되나」이고 **지금 그래프가 낸 판정의 수가 아니다.**
        `detect`(D-311 결정 5 · 확정 ∪ 보류 유형 후보)는 그대로 두고 **따로** 싣는다.
-       ⬜ D-311 의 「보류 유형 후보」는 사전의 자격 없는 적중을 가리켜 적은 말이다 — 인코더 후보를 같은 줄에 세는지는 팀장 확인.
+       ✅ 닫음 (2026-10-11 · D-311 보충) — D-311 의 「보류 유형 후보」는 사전의 자격 없는 적중이다. **「탐지 재현율」은 사전 후보까지
+          (`detected`)의 이름이고, 인코더 후보까지(`detected_with_encoder`)는 따로 싣고 그 이름으로 부른다** — 한 수로 합치지 않는다
+          (D-323 결정 3 · 안건 1 (나) 기각 이유).
     🔴 인코더가 **전 문장에** 돈 행만 센다(`encoded`). 안 돈 행을 「조용했다」로 세지 않는다 (D-220) — 없으면 `rows` 가 0 이다.
     🆕 2026-10-10 — 「탐지」의 뜻이 둘이라 **이름을 달리해 함께** 낸다. 섞어 견주면 같은 판이 다른 점수로 보인다.
-       · `detected_with_encoder` — **유형 적중**: 정답 유형이 (확정 ∪ 보류 후보 ∪ 인코더 후보)에 있다. 이 도구의 탐지다 (D-311 결정 5)
+       · `detected_with_encoder` — **유형 적중**: 정답 유형이 (확정 ∪ 보류 후보 ∪ 인코더 후보)에 있다. D-311 결정 5 의 탐지에 인코더 후보를 더한 수다
        · `flagged_any` — **유형 무관**: 무엇이든 하나라도 걸렸다(정답 유형이 아니어도). 인코더 실험 규약 G1 의 「탐지」가 이 뜻이다.
-         🚨 유형 무관은 관문에 쓰는 수가 아니다 — 틀린 유형으로 걸린 것도 센다. 규약의 수와 맞대어 읽으려고 싣는다
+         ★ **인코더 판의 채택 관문은 이 수다**(D-324 결정 4 · 규약 2판 G1). 🚨 틀린 유형으로 걸린 것도 센다 —
+            시스템 보고(D-324 결정 5)의 탐지는 유형 적중이고 이 수가 아니다. 둘을 섞어 읽지 않는다 (D-324 보충 10-11)
     · `lawful` — 적법 문장에 인코더 후보가 선 수. 칸은 `lawful_report` 와 같다(음성 L · 주장없음 D · D-301).
+    🆕 2026-10-11 (D-326 보충 12) — **옮긴 후보(`enc_moved`)는 골든 `전제` 가 그 옮김의 전제(`건기식_비인정`)인 행에서만 센다.**
+       그 행의 정답(거짓_과장 · [별표 1] 4.나)은 「인정 없는 건강기능식품일 때」의 답이고 옮긴 후보가 바로 그 답이다 — 인코더가
+       기준 전제(식품)로 배우면 이 행에 `건강기능식품_오인` 을 내고 그래프가 옮긴다. 안 세면 맞는 답이 빗나감으로 찍힌다.
+       ⛔ 전제가 다르거나 없는 행에서는 세지 않는다 — 정답이 마침 거짓_과장인 행이 건강기능식품 오인 신호로 맞은 것처럼 세어진다
+          (dev 무조건부에서 옮긴 40 행 중 5 행 · 원장 10-10 ⑫). 유형 무관(`flagged_any`)에도 같은 규칙이다.
     """
     done = [(r, p) for r, p in zip(rows, preds, strict=True) if p.get("encoded")]
     if not done:
@@ -378,7 +429,7 @@ def encoder_report(
         if id(r) not in ids:
             continue
         pt = set(p["types"]) | set(p.get("candidates", ()))
-        pe = pt | set(p["enc_candidates"])
+        pe = _with_encoder(r, p)
         tt = truth_types(r, pe)
         if not tt:
             continue
@@ -474,6 +525,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         det += bool((pt | set(p.get("candidates", ()))) & tt)
     out["detect"] = {"positive": pos, "confirmed": conf_hit, "detected": det}
     out["encoder"] = encoder_report(rows, preds, sc)
+    out["detect_types"] = detect_by_type(sc)
     out["coverage"] = committed / len(sc) if sc else 0.0
     out["selective_risk"] = errors / committed if committed else None
     out["committed"] = committed
@@ -582,7 +634,7 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
                 f"    위반 행 {e['positive']} — 탐지 재현율 {e['detected'] / e['positive']:.1%} → "
                 f"인코더 후보까지 {e['detected_with_encoder'] / e['positive']:.1%} (유형 적중)"
                 f" · 무엇이든 걸린 행 {e['flagged_any'] / e['positive']:.1%}"
-                " (유형 무관 · 규약 G1 의 탐지 — 관문에 쓰지 않는다)"
+                " (유형 무관 · 규약 G1 — 인코더 채택 관문의 수 · 시스템 보고의 탐지가 아니다 · D-324 결정 4)"
             )
         for kind, (n, hit) in e["lawful"].items():
             if n:
@@ -594,6 +646,21 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
             print(
                 f"    🔴 토큰 상한을 넘어 뒤가 잘린 문장 {e['truncated_sents']} — 잘린 부분은 보지 않았다"
             )
+    dt = s.get("detect_types") or {}
+    if dt:
+        print(
+            f"\n  {'유형별 탐지 (D-321 결정 6)':24} {'정답':>5} {'확정':>7} {'사전 후보까지':>9} {'인코더 후보까지':>10}"
+        )
+        for k, (gold, conf, det, egold, edet) in dt.items():
+            mark = "  🔴 측정 불가 (D-40)" if gold < MIN_MEASURABLE else ""
+            enc_col = f"{edet / egold:>10.1%}" if egold else f"{'-':>10}"
+            if egold and egold != gold:
+                enc_col += f" (인코더가 돈 정답 {egold})"
+            print(f"  {k:26} {gold:>5} {conf / gold:>7.1%} {det / gold:>9.1%} {enc_col}{mark}")
+        print(
+            "     ⓘ (행 · 유형) 단위다 — 한 행에 유형이 여럿이면 유형마다 세어 정답의 합이 위반 행 수보다 크다."
+            " 후보는 판정이 아니고 합격선도 없다 (D-311 보충 · D-322 결정 A)"
+        )
     print_lawful(s["lawful"])
     w = s.get("recorded") or {}
     if w.get("rows"):

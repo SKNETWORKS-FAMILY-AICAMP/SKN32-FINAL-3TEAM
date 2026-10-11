@@ -15,6 +15,8 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from app import reasons
+
 TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates"
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
 
@@ -44,3 +46,5 @@ def evidence_parts(evidence: object) -> dict[str, list]:
 
 
 templates.env.filters["evidence_parts"] = evidence_parts
+# 🆕 2026-10-11 — 보류 문장의 조건부 후보에 붙일 말. 문안과 규칙은 `app/reasons.py` 한 곳이다 (D-99)
+templates.env.filters["candidate_condition"] = reasons.candidate_condition
