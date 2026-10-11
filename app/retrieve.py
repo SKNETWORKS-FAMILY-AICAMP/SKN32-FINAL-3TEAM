@@ -823,6 +823,23 @@ def by_article(cur: Any, law_ids: Sequence[str], articles: Sequence[str]) -> lis
     return _rows_to_hits(cur.fetchall(), MATCH_LITERAL)
 
 
+#: 🆕 2026-10-12 (D-327) — **별표 번호로** 별표 청크를 꺼낸다 — 유형 후보의 참조 조항(세부 기준)에 원문을 붙일 때.
+#:    🔴 거버넌스 조인은 검색과 같은 것(`_JOINS`)이다. 🚨 `d.annex_no` 는 원문 머리글에서 읽은 값만이다 — NULL 인 별표는 안 나온다 (D-224).
+#:    ⛔ `LIMIT` 이 없다 — 법 × 별표 몇 개의 청크 전부라 작고, 자르면 어느 목이 빠졌는지 모른다(`SQL_ARTICLES` 와 같은 까닭).
+SQL_ANNEX = f"""SELECT {_COLS}
+{_JOINS}
+WHERE u.allowed AND c.doc_type = '별표' AND c.law_id = ANY(%s::text[]) AND d.annex_no = ANY(%s::int[])
+ORDER BY c.law_id, d.annex_no, c.chunk_id"""
+
+
+def by_annex(cur: Any, law_ids: Sequence[str], annex_nos: Sequence[int]) -> list[Hit]:
+    """법 ID · 별표 번호 묶음의 별표 청크 — `citation` 이 붙은 `Hit` 로. 비면 질의하지 않는다 (`by_article` 의 별표 판)."""
+    if not law_ids or not annex_nos:
+        return []
+    cur.execute(SQL_ANNEX, (sorted(set(law_ids)), sorted(set(annex_nos))))
+    return _rows_to_hits(cur.fetchall(), MATCH_LITERAL)
+
+
 def law_view(
     vector_hits: list[Hit], lexical_hits: list[Hit], law: str, *, cap: int = PARAMS.per_law_cap
 ) -> list[Hit]:

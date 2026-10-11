@@ -624,6 +624,8 @@ def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
     # 🆕 2026-10-08 (근거 표시 「(나)」) — 사전 근거에 원문을 붙이는 조회도 문자열 커서로는 못 한다. 「못 찾음」(빈 표)과 같은 대역이다 —
     #    근거는 원문 없는 좌표로 간다(종전과 같다)
     monkeypatch.setattr(g, "basis_texts", lambda cur, cites: {})
+    # 🆕 2026-10-12 (D-327) — 참조 조항의 원문도 같은 커서로 읽는다. 대역 커서로는 못 읽으니 비운다 — 좌표만 간다
+    monkeypatch.setattr(g, "reference_texts", lambda cur: {})
 
 
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202
