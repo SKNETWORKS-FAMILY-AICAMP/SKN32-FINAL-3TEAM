@@ -341,7 +341,7 @@ def _ci(k: int, n: int) -> str:
 def macro_table(types: dict[str, tuple[int, int, int]]) -> dict[str, dict[str, Any]]:
     """🆕 2026-10-08 (D-321 결정 4 · D-40) — 8종 · 6종 **두 표**. 측정 가능한(정답 30 이상) 유형만 macro 에 든다.
 
-    ★ micro 는 측정 불가 유형까지 합친 수다 — 둘을 나란히 낸다(어느 쪽을 게이트에 쓸지는 정하지 않았다 · ⬜ 판정).
+    ★ micro 는 측정 불가 유형까지 합친 수다 — 둘을 나란히 낸다. ✅ 2026-10-11 — 어느 쪽도 합격선이 아니다(D-322 결정 A · 보고 묶음).
     🚨 표에 없는 유형(편입 대기)은 `truth_types` 가 이미 뺐다.
     """
     out: dict[str, dict[str, Any]] = {}
@@ -358,6 +358,43 @@ def macro_table(types: dict[str, tuple[int, int, int]]) -> dict[str, dict[str, A
             "micro_n": (g, tp, fp),
         }
     return out
+
+
+def _with_encoder(r: dict, p: dict) -> set[str]:
+    """확정 ∪ 사전의 보류 후보 ∪ 인코더 후보 — 옮긴 후보는 그 전제인 행에서만 (D-326 보충 12 · `encoder_report` 의 규칙).
+
+    ★ `encoder_report` 와 `detect_by_type` 가 같이 쓴다 — 규칙을 두 곳에 적지 않는다 (D-99).
+    """
+    pe = set(p["types"]) | set(p.get("candidates", ())) | set(p.get("enc_candidates", ()))
+    if r.get("전제") == Premise.건기식_비인정.value:
+        pe |= set(p.get("enc_moved", ()))
+    return pe
+
+
+def detect_by_type(sc: list[tuple[dict, dict]]) -> dict[str, tuple[int, int, int, int, int]]:
+    """🆕 2026-10-11 (D-321 결정 6 · D-40 · D-311 보충) — **유형별 탐지**: 유형 → (정답, 확정, 사전 후보까지, 인코더가 돈 정답, 인코더 후보까지).
+
+    ★ `types` 표의 R 은 확정만 센다 — 사전이 확정하지 못하는 유형은 0 으로만 찍혀 후보가 어디까지 닿는지 보이지 않았다.
+    · **(행 · 유형) 단위다.** 한 행에 유형이 여럿이면 유형마다 센다 — 정답의 합은 위반 행 수(`detect.positive`)보다 크다.
+    · 세 칸은 포함 관계다(확정 ⊆ 사전 후보까지 ⊆ 인코더 후보까지). 「탐지」는 사전 후보까지의 이름이다 (D-311 보충).
+    · 정답은 `truth_types` — 후보만 있는 행은 가장 넓은 예측(인코더가 돌았으면 인코더 후보까지)에 맞춰 고른다. 세 칸이 같은 정답을 본다.
+    🔴 인코더가 안 돈 행은 인코더 칸의 분모에도 들지 않는다 — 「후보 없음」으로 세지 않는다 (D-220).
+    ⛔ 판정이 아니고 합격선도 없다 (D-322 결정 A). 정답 30 미만은 측정 불가로 찍는다 (D-40) — 수를 지우지는 않는다.
+    """
+    acc: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0, 0, 0, 0])
+    for r, p in sc:
+        pt = set(p["types"])
+        pd = pt | set(p.get("candidates", ()))
+        enc = bool(p.get("encoded"))
+        pe = _with_encoder(r, p) if enc else pd
+        for t in truth_types(r, pe):
+            a = acc[t]
+            a[0] += 1
+            a[1] += t in pt
+            a[2] += t in pd
+            a[3] += enc
+            a[4] += enc and t in pe
+    return {t: (v[0], v[1], v[2], v[3], v[4]) for t, v in sorted(acc.items())}
 
 
 def encoder_report(
@@ -391,9 +428,7 @@ def encoder_report(
         if id(r) not in ids:
             continue
         pt = set(p["types"]) | set(p.get("candidates", ()))
-        pe = pt | set(p["enc_candidates"])
-        if r.get("전제") == Premise.건기식_비인정.value:
-            pe |= set(p.get("enc_moved", ()))
+        pe = _with_encoder(r, p)
         tt = truth_types(r, pe)
         if not tt:
             continue
@@ -489,6 +524,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         det += bool((pt | set(p.get("candidates", ()))) & tt)
     out["detect"] = {"positive": pos, "confirmed": conf_hit, "detected": det}
     out["encoder"] = encoder_report(rows, preds, sc)
+    out["detect_types"] = detect_by_type(sc)
     out["coverage"] = committed / len(sc) if sc else 0.0
     out["selective_risk"] = errors / committed if committed else None
     out["committed"] = committed
@@ -609,6 +645,21 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
             print(
                 f"    🔴 토큰 상한을 넘어 뒤가 잘린 문장 {e['truncated_sents']} — 잘린 부분은 보지 않았다"
             )
+    dt = s.get("detect_types") or {}
+    if dt:
+        print(
+            f"\n  {'유형별 탐지 (D-321 결정 6)':24} {'정답':>5} {'확정':>7} {'사전 후보까지':>9} {'인코더 후보까지':>10}"
+        )
+        for k, (gold, conf, det, egold, edet) in dt.items():
+            mark = "  🔴 측정 불가 (D-40)" if gold < MIN_MEASURABLE else ""
+            enc_col = f"{edet / egold:>10.1%}" if egold else f"{'-':>10}"
+            if egold and egold != gold:
+                enc_col += f" (인코더가 돈 정답 {egold})"
+            print(f"  {k:26} {gold:>5} {conf / gold:>7.1%} {det / gold:>9.1%} {enc_col}{mark}")
+        print(
+            "     ⓘ (행 · 유형) 단위다 — 한 행에 유형이 여럿이면 유형마다 세어 정답의 합이 위반 행 수보다 크다."
+            " 후보는 판정이 아니고 합격선도 없다 (D-311 보충 · D-322 결정 A)"
+        )
     print_lawful(s["lawful"])
     w = s.get("recorded") or {}
     if w.get("rows"):
