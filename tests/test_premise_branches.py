@@ -429,3 +429,27 @@ def test_평가_도구가_분기_안의_보류_후보를_적는다(criteria: Non
     assert view["건기식_인정"]["candidates"] == []
     assert view["건기식_비인정"]["candidates"] == ["거짓_과장"]
     assert all(not v["types"] for v in view.values()), "후보는 확정 유형 칸에 들지 않는다"
+
+
+def test_조건부_후보에는_조건_문안이_붙는다(criteria: None) -> None:
+    """건강기능식품 제품의 `거짓_과장` 후보는 「인정이 없다면」의 것이다 — 근거의 4.나가 그 조건이다 (D-319 보충 10-11)."""
+    import pathlib  # noqa: PLC0415
+
+    from app import reasons  # noqa: PLC0415
+
+    st, _ = _run_weak([_hit(FOOD3)], Category.건기식)
+    assert reasons.candidate_condition(st["sentences"][0]) == reasons.UNRECOGNIZED_CANDIDATE_NOTE
+    # 식품 제품 — 후보는 건강기능식품 오인이고 4.나가 없다
+    st, _ = _run_weak([_hit(FOOD3)], Category.식품)
+    assert reasons.candidate_condition(st["sentences"][0]) is None
+    # 조건 없는 거짓_과장(4 호) — 건강기능식품 제품이어도 붙이지 않는다
+    st, _ = _run_weak([_hit(FOOD4)], Category.건기식)
+    assert st["sentences"][0].violations == [Violation.거짓_과장]
+    assert reasons.candidate_condition(st["sentences"][0]) is None
+    # 확정 문장 — 조건은 불가 사유(자격형)가 말한다
+    st, _ = _run({"law_food": [_hit(FOOD4_NA)], "law_ftc": []}, Category.건기식)
+    assert st["sentences"][0].verdict is Verdict.confirmed
+    assert reasons.candidate_condition(st["sentences"][0]) is None
+    # 글자는 승인본(기준 문안 §11)과 같다
+    doc = pathlib.Path("docs/ohb/기준문안_초안_2026-10-02.md").read_text(encoding="utf-8")
+    assert f"| {reasons.UNRECOGNIZED_CANDIDATE_NOTE} |" in doc.split("## 11.")[1]
