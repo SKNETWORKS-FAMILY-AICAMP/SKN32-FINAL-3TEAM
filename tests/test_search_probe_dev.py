@@ -66,7 +66,9 @@ def test_못_찾은_줄도_분모에_남는다() -> None:
 
 def test_결과_줄에_문구가_실리지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
     view = [_hit("002011", "제3조제1항제1호")]
-    monkeypatch.setattr(spd.rt, "wide", lambda cur, q, pool: ([], [], None))
+    monkeypatch.setattr(
+        spd.rt, "wide", lambda cur, q, pool: ([], [], None)
+    )  # 갈래 후보는 비어 있다
     monkeypatch.setattr(spd.rt, "law_view", lambda vec, lex, law: view)
     row = {"id": "r1", "text": "문구", "근거": ["002011:제3조제1항제1호"]}
     (rec,) = spd.probe_row(None, row, 50)
@@ -76,7 +78,21 @@ def test_결과_줄에_문구가_실리지_않는다(monkeypatch: pytest.MonkeyP
         "cite": "002011:제3조제1항제1호",
         "pool": 1,
         "rank": 1,
+        "rank_vec": None,
+        "rank_lex": None,
         "screen": 1,
         "uncited_top": 0,
     }
     assert "문구" not in str(rec)
+
+
+def test_갈래별_집계는_네_칸의_합이_전체다() -> None:
+    recs = [
+        {"law": "가", "rank_vec": 3, "rank_lex": None},
+        {"law": "가", "rank_vec": None, "rank_lex": 7},
+        {"law": "가", "rank_vec": 1, "rank_lex": 2},
+        {"law": "가", "rank_vec": None, "rank_lex": None},  # 못 찾은 줄도 센다 (D-220)
+    ]
+    got = spd.by_branch(recs)["가"]
+    assert got == {"n": 4, "vec_only": 1, "lex_only": 1, "both": 1, "neither": 1}
+    assert got["vec_only"] + got["lex_only"] + got["both"] + got["neither"] == got["n"]

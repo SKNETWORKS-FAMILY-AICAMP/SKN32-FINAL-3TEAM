@@ -20,6 +20,7 @@
 🚨 **문구를 찍지 않는다** — 화면 출력도 결과 파일도 행 id 와 순위뿐이다(D-249 · 실제 광고 문구다). 결과 파일은 `build/` 아래(git 무시).
 🚨 질의는 **행의 문구 전체**다. 판정 그래프는 문장으로 갈라 문장마다 찾는다 — 여러 문장 행에서는 조건이 다르다(dev 근거 행
    640 중 600 이 한 문장이다 · 2026-10-12 결과 파일로 셈).
+🆕 2026-10-12 — 갈래별 자리(벡터 · 어휘)와 시행일이 뒤인 현행 청크 수도 낸다 — 어느 갈래가 정답을 넣는지 · 시행 전 조항이 섞일 수 있는지.
 ⬜ 좌표 없는 줄이 상위를 얼마나 차지하는지도 센다(`uncited_top`) — D-293(좌표를 원문 번호로 넓힌다)은 집행 전이다.
 """
 
@@ -94,6 +95,9 @@ def probe_row(cur: Any, row: dict, pool: int) -> list[dict[str, Any]]:
             "cite": t["ho"],
             "pool": len(view),
             "rank": sp.rank_of(view, t["ho"]),
+            # 🆕 2026-10-12 — 갈래별 자리(그 법의 후보 안에서). 어느 갈래가 정답을 넣는지 가른다 — 섞은 순위만 보면 안 보인다
+            "rank_vec": sp.rank_of([h for h in wvec if h.law == t["law"]], t["ho"]),
+            "rank_lex": sp.rank_of([h for h in wlex if h.law == t["law"]], t["ho"]),
             "screen": screen_rank(view, t["ho"]),
             "uncited_top": sum(1 for h in view[:TOP_K] if not h.basis_citation),
         }
@@ -123,6 +127,26 @@ def tally(recs: list[dict[str, Any]], key: str, rank: str = "rank", scr: str = "
     }  # fmt: skip
 
 
+def by_branch(recs: list[dict[str, Any]], key: str = "law") -> dict[str, dict[str, int]]:
+    """갈래별 「후보 안」 — n · 벡터만 · 어휘만 · 둘 다 · 어느 쪽도 아님. 🔴 넷의 합은 n 이다 — 못 찾은 줄도 센다 (D-220)."""
+    acc: dict[str, dict[str, int]] = collections.defaultdict(
+        lambda: {"n": 0, "vec_only": 0, "lex_only": 0, "both": 0, "neither": 0}
+    )
+    for r in recs:
+        v, x = r["rank_vec"] is not None, r["rank_lex"] is not None
+        a = acc[r[key]]
+        a["n"] += 1
+        a["both" if v and x else "vec_only" if v else "lex_only" if x else "neither"] += 1
+    return dict(sorted(acc.items()))
+
+
+#: 🆕 2026-10-12 — 시행일이 **오늘보다 뒤**인 현행 청크 · 시행일을 모르는 현행 청크. 검색 조건은 시행일을 보지 않는다
+#:    (`app/retrieve.py` `SQL_VECTOR` · `SQL_LEXICAL`) — 시행 전 조항이 참고 조문에 섞일 수 있는지 수로 본다 (D-239 · D-293 ⬜)
+SQL_NOT_YET = """SELECT count(*) FILTER (WHERE effective_date > CURRENT_DATE),
+       count(*) FILTER (WHERE effective_date IS NULL), count(*)
+FROM v_current_chunk"""
+
+
 def _table(title: str, tab: dict[str, dict[str, Any]]) -> None:
     k = TOP_K
     print(
@@ -137,7 +161,13 @@ def _table(title: str, tab: dict[str, dict[str, Any]]) -> None:
         )  # fmt: skip
 
 
-def report(recs: list[dict[str, Any]], rows: int, pool: int, secs: float) -> None:
+def report(
+    recs: list[dict[str, Any]],
+    rows: int,
+    pool: int,
+    secs: float,
+    dates: tuple[int, int, int] | None = None,
+) -> None:
     print(
         f"\n검색 탐침(dev 문구) — 행 {rows} · 근거 좌표 {len(recs)} · 후보 폭 {pool} · 상위 {TOP_K} · {secs:.0f}초"
         f" · 행당 {secs / max(rows, 1) * 1000:.0f} ms"
@@ -155,12 +185,25 @@ def report(recs: list[dict[str, Any]], rows: int, pool: int, secs: float) -> Non
     if mok:
         _table("세부 기준(목) — 식품표시광고법", tally(mok, "law", "mok_rank", "mok_screen"))
         _table("세부 기준(목) — 목별", tally(mok, "mok", "mok_rank", "mok_screen"))
+    print(
+        f"\n  {'갈래별 후보 안 (호)':30} {'n':>5} {'벡터만':>7} {'어휘만':>7} {'둘 다':>7} {'없음':>7}"
+    )
+    for name, v in by_branch(recs).items():
+        print(
+            f"  {name:34} {v['n']:>5} {v['vec_only']:>7} {v['lex_only']:>7} {v['both']:>7} {v['neither']:>7}"
+        )
     slots = len(recs) * TOP_K
     unc = sum(r["uncited_top"] for r in recs)
     print(
         f"\n  거른 순서의 상위 {TOP_K} 자리 {slots} 중 좌표 없는 줄 {unc} ({unc / max(slots, 1):.1%}) — 화면은 이 줄을 건너뛴다"
         " (D-224 · D-293 집행 전)"
     )
+    if dates is not None:
+        later, unknown, total = dates
+        print(
+            f"  현행 청크 {total:,} 중 시행일이 오늘보다 뒤 {later:,} · 시행일을 모름 {unknown:,} — 검색 조건은 시행일을 보지 않는다"
+            " (D-239 · 🚨 「모름」은 「시행 중」이 아니다)"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -192,18 +235,27 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        cur.execute(SQL_NOT_YET)
+        dates = tuple(int(x) for x in cur.fetchone())
         for i, r in enumerate(rows, start=1):
             recs += probe_row(cur, r, a.pool)
             if i % 100 == 0:
                 print(f"  … {i}행 · {time.perf_counter() - t0:.0f}초", flush=True)
     secs = time.perf_counter() - t0
-    report(recs, len(rows), a.pool, secs)
+    report(recs, len(rows), a.pool, secs, dates)
 
     out = pathlib.Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(
-            {"rows": len(rows), "pool": a.pool, "top_k": TOP_K, "limit": a.limit, "records": recs},
+            {
+                "rows": len(rows),
+                "pool": a.pool,
+                "top_k": TOP_K,
+                "limit": a.limit,
+                "chunk_dates": dict(zip(("not_yet", "unknown", "total"), dates, strict=True)),
+                "records": recs,
+            },
             ensure_ascii=False,
             indent=1,
         ),
