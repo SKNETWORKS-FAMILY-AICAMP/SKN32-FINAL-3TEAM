@@ -265,6 +265,10 @@
           <span class="rv-chip c-warn">근거 불일치 · 재생성됨</span>
           {% endif %}
         </div>
+        {#- 🆕 2026-10-11 (ohb) — 보류 문장의 후보가 조건부일 때의 말. 문안 · 규칙은 서버(`app/reasons.py` `candidate_condition`)다 —
+            템플릿에 조문을 적지 않는다. 자리와 모양은 화면 담당(ksr)이 다듬는다 #}
+        {% set cc = s|candidate_condition %}
+        {% if cc %}<p class="rv-note rv-why">{{ cc }}</p>{% endif %}
         {% if s.infeasibility %}
         <p class="rv-note rv-why">
           {%- if s.infeasibility.value == "A" %}인정·심사를 받은 제품만 쓸 수 있는 표현이에요. 받지 않았다면 문구를 고쳐도 쓸 수 없어요.

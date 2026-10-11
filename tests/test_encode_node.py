@@ -344,3 +344,34 @@ def test_평가_도구는_켰는데_못_올리면_멈춘다(off: None, tmp_path:
     assert eg.use_encoder(None) == {}
     with pytest.raises(SystemExit, match="인코더를 올리지 못했다"):
         eg.use_encoder(tmp_path / "없는_폴더")
+
+
+@pytest.mark.gate
+def test_옮긴_후보는_전제가_인정_없는_건강기능식품인_행에서만_적중이다() -> None:
+    """🔴 2026-10-11 (D-326 보충 12) — 인코더가 기준 전제로 배우면 4.나 행에 `건강기능식품_오인` 을 내고 그래프가 옮긴다.
+
+    그 행의 정답은 옮긴 쪽이다. ⛔ 전제가 없는 행까지 세면 정답이 마침 거짓_과장인 행이 건강기능식품 오인 신호로 맞는다.
+    """
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    p = {
+        "encoded": True,
+        "types": [],
+        "candidates": [],
+        "enc_candidates": [],
+        "enc_moved": ["거짓_과장"],
+    }
+    mine = {"text": "가", "labels": ["거짓_과장"], "split": "train", "전제": "건기식_비인정"}
+    none = {"text": "나", "labels": ["거짓_과장"], "split": "train", "전제": None}
+    food = {"text": "다", "labels": ["거짓_과장"], "split": "train", "전제": "식품"}
+    old = {"text": "라", "labels": ["거짓_과장"], "split": "train"}  # 전제 칸이 없는 옛 골든
+    for row, want in ((mine, 1), (none, 0), (food, 0), (old, 0)):
+        rep = eg.encoder_report([row], [p], [(row, p)])
+        assert (rep["positive"], rep["detected_with_encoder"], rep["flagged_any"]) == (
+            1,
+            want,
+            want,
+        )
+    # 인코더가 직접 낸 후보는 전제와 무관하게 센다 — 종전 그대로
+    direct = {**p, "enc_candidates": ["거짓_과장"], "enc_moved": []}
+    assert eg.encoder_report([none], [direct], [(none, direct)])["detected_with_encoder"] == 1

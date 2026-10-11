@@ -205,6 +205,12 @@ def _branch_view(b: Any) -> dict[str, Any]:
     return {
         "outcome": b.outcome.value,
         "types": sorted({v.value for s in conf for v in s.violations}),
+        #: 🆕 2026-10-11 — 분기 안 **보류 문장의 유형 후보**(행의 `candidates` 와 같은 뜻 · D-311). 지표에는 쓰지 않는다 —
+        #:    전제가 후보를 바꾸는 자리(D-319 보충 10-11)를 결과 파일끼리 견줄 수 있게 적는다. 종전에는 확정 유형만 적어
+        #:    분기 안의 후보가 바뀌어도 대조에 보이지 않았다(원장 10-10 ⑮)
+        "candidates": sorted(
+            {v.value for s in b.sentences if s.verdict is Verdict.hold for v in s.violations}
+        ),
         "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
         "committed": bool(b.sentences) and len(conf) == len(b.sentences),
     }
@@ -368,6 +374,11 @@ def encoder_report(
        · `flagged_any` — **유형 무관**: 무엇이든 하나라도 걸렸다(정답 유형이 아니어도). 인코더 실험 규약 G1 의 「탐지」가 이 뜻이다.
          🚨 유형 무관은 관문에 쓰는 수가 아니다 — 틀린 유형으로 걸린 것도 센다. 규약의 수와 맞대어 읽으려고 싣는다
     · `lawful` — 적법 문장에 인코더 후보가 선 수. 칸은 `lawful_report` 와 같다(음성 L · 주장없음 D · D-301).
+    🆕 2026-10-11 (D-326 보충 12) — **옮긴 후보(`enc_moved`)는 골든 `전제` 가 그 옮김의 전제(`건기식_비인정`)인 행에서만 센다.**
+       그 행의 정답(거짓_과장 · [별표 1] 4.나)은 「인정 없는 건강기능식품일 때」의 답이고 옮긴 후보가 바로 그 답이다 — 인코더가
+       기준 전제(식품)로 배우면 이 행에 `건강기능식품_오인` 을 내고 그래프가 옮긴다. 안 세면 맞는 답이 빗나감으로 찍힌다.
+       ⛔ 전제가 다르거나 없는 행에서는 세지 않는다 — 정답이 마침 거짓_과장인 행이 건강기능식품 오인 신호로 맞은 것처럼 세어진다
+          (dev 무조건부에서 옮긴 40 행 중 5 행 · 원장 10-10 ⑫). 유형 무관(`flagged_any`)에도 같은 규칙이다.
     """
     done = [(r, p) for r, p in zip(rows, preds, strict=True) if p.get("encoded")]
     if not done:
@@ -379,6 +390,8 @@ def encoder_report(
             continue
         pt = set(p["types"]) | set(p.get("candidates", ()))
         pe = pt | set(p["enc_candidates"])
+        if r.get("전제") == Premise.건기식_비인정.value:
+            pe |= set(p.get("enc_moved", ()))
         tt = truth_types(r, pe)
         if not tt:
             continue
