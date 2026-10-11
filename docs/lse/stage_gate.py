@@ -278,6 +278,34 @@ def new_words(original: str, s: str) -> list[str]:
     return out
 
 
+#: 🆕 10-11 — 4B 시험판 dev 검수(19 행 · 이서은 확인)에서 관문을 지나간 꼴 셋 + 쓸모없는 후보. 🚨 규칙은 **직접 만든 문구**로
+#:    골랐다(`docs/lse/gate_regress.py`) — dev 문구로 맞추지 않았다(D-322 원칙)
+#: 보장 주장 — 「수익보장」 · 「효과 보장」은 지운 문장에 남으면 그대로 위반이다
+GUARANTEE = re.compile(r"보장")
+#: 영양성분 기능 표시 꼴(「…하는 데 필요」) · 항산화 — 「도움」 꼴이 아니라 인정 문구 대조(`unapproved_claim`)를 비껴간다.
+#: 🔄 주어(영양성분 「칼슘은 …」)가 있는 「필요합니다」 문장은 후처리가 영양성분 조건(`NOTE_NUTRI`)을 붙이므로 둔다 —
+#:    막는 것은 **주어 없이 기능만 남은** 꼴(「눈의 건강을 유지하는 데 필요」)과 「도움」 없는 「항산화」다
+NUTRIENT_FUNC = re.compile(r"(?:데|에)\s*필요(?:함|합니다|한|하다|$)|항산화")
+NUTRIENT_SUBJECT = re.compile(r"^\s*[가-힣A-Za-z0-9·()\- ]{1,20}?(?:은|는)\s")
+#: 원문이 체험기 꼴(후기 · 체험 · 「(홍길동님)」) — 이때 원문의 **몸 변화 단위** 숫자가 남으면 막는다(「4kg 가량」은 용량이 아니라 감량).
+#: 🔄 용량 · 비율(30g · 500ml · 7:3)은 체험기 원문에서도 사실이다 — 학습 정답 오탐 5 를 보고 몸 단위로 좁혔다
+TESTIMONY_SRC = re.compile(r"후기|체험|[가-힣a-zA-Z*x○]{1,4}\s*님\s*[)\],]|\(\s*[가-힣a-zA-Z*x○]{1,4}\s*님")
+BODY_NUM = re.compile(r"(\d+)\s*(?:kg|㎏|킬로|키로|cm|센티|인치|사이즈)", re.I)
+#: 낱말 조각 — 살린 사실이 없는 후보(「견적」 · 「OO 제품」). 원료 · 공정 · 산지 낱말이나 숫자가 있으면 사실로 본다
+_FRAGMENT_GENERIC = {"제품", "상품", "서비스", "브랜드", "회원"}
+
+
+def fragment_only(s: str) -> bool:
+    """후보가 낱말 하나(일반어 제외) 뿐이고 숫자 · 연결 낱말(함유 · 사용 · 만든 …)이 없는가."""
+    if NUM.search(s):
+        return False
+    words = [w for w in re.findall(r"[가-힣A-Za-z]+", s)]
+    if any((w in _LINK or _PARTICLE.sub("", w) in _LINK) and w not in _FRAGMENT_GENERIC for w in words):
+        return False
+    content = [w for w in words if len(w) >= 2 and w not in _FRAGMENT_GENERIC]
+    return len(content) <= 1
+
+
 #: 🆕 10-08 — 앞말과의 관계를 뒤집는 말. 빠지면 뜻이 바뀐다(「국산 당면 대신 곤약면」 → 「국산 당면 곤약면」 · 살리기 평가 #24).
 #: 같은 갈래의 다른 말로 바꿔 쓴 것(「설탕 없이」 → 「무설탕」)은 뜻이 남은 것으로 본다  redistribution: ok — 일반 관계어
 _RELATION = {
@@ -388,6 +416,14 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"원료명 앞부분 잃음: {t}")
     if (f := meaning_flipped(original, s)) is not None:
         why.append(f"뜻 바뀜 의심: {f}")
+    if GUARANTEE.search(s):
+        why.append("보장 주장 남음")
+    if "도움" not in s and (m := NUTRIENT_FUNC.search(s)) and not (m.group().strip() != "항산화" and NUTRIENT_SUBJECT.search(s)):
+        why.append(f"기능 문구(조건 필요): {m.group().strip()}")
+    if TESTIMONY_SRC.search(original) and (k := set(BODY_NUM.findall(original)) & set(BODY_NUM.findall(s))):
+        why.append(f"체험기 수치 남음: {sorted(k)}")
+    if fragment_only(s):
+        why.append("살릴 사실 없음(낱말 조각)")
     # 🔄 10-06 (팀장 전달 §2 #5) — 종전에는 「도움」이 있으면 이 검사를 통째로 건너뛰어 「…달인 곶감은 면역에 도움」이 지나갔다.
     #    이제 늘 보고, 「도움」 문장에서는 인정 문구 낱말(`_claim_word`)만 허용한다
     nw = new_words(original, s)
