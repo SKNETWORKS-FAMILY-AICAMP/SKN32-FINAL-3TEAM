@@ -375,3 +375,35 @@ def test_옮긴_후보는_전제가_인정_없는_건강기능식품인_행에�
     # 인코더가 직접 낸 후보는 전제와 무관하게 센다 — 종전 그대로
     direct = {**p, "enc_candidates": ["거짓_과장"], "enc_moved": []}
     assert eg.encoder_report([none], [direct], [(none, direct)])["detected_with_encoder"] == 1
+
+
+@pytest.mark.gate
+def test_유형별_탐지는_세_칸을_따로_세고_인코더가_안_돈_행은_분모에서_뺀다() -> None:
+    """🆕 2026-10-11 (D-321 결정 6 · D-311 보충) — 확정 ⊆ 사전 후보까지 ⊆ 인코더 후보까지 · (행 · 유형) 단위."""
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    def pred(types=(), cand=(), enc=(), moved=(), encoded=True) -> dict:
+        return {
+            "encoded": encoded,
+            "types": list(types),
+            "candidates": list(cand),
+            "enc_candidates": list(enc),
+            "enc_moved": list(moved),
+        }
+
+    two = {"text": "가", "labels": ["거짓_과장", "의약품_오인"], "split": "train"}
+    one = {"text": "나", "labels": ["거짓_과장"], "split": "train"}
+    off = {"text": "다", "labels": ["의약품_오인"], "split": "train"}
+    na = {"text": "라", "labels": ["거짓_과장"], "split": "train", "전제": "건기식_비인정"}
+    sc = [
+        (two, pred(types=["거짓_과장"], enc=["의약품_오인"])),
+        (one, pred(cand=["거짓_과장"])),
+        (off, pred(enc=["의약품_오인"], encoded=False)),  # 안 돈 행 — 후보 칸이 있어도 세지 않는다
+        (na, pred(moved=["거짓_과장"])),  # 옮긴 후보는 그 전제인 행에서 적중이다 (D-326 보충 12)
+    ]
+    got = eg.detect_by_type(sc)
+    assert got == {"거짓_과장": (3, 1, 2, 3, 3), "의약품_오인": (2, 0, 0, 1, 1)}
+    # 정답의 합(5)은 행 수(4)보다 크다 — 행 단위 수(`detect`)와 맞대지 않는다
+    assert sum(v[0] for v in got.values()) == 5
+    # 옮긴 후보 규칙은 `encoder_report` 와 한 함수다 — 전제가 없으면 적중이 아니다
+    assert eg.detect_by_type([({**na, "전제": None}, sc[3][1])]) == {"거짓_과장": (1, 0, 0, 1, 0)}
