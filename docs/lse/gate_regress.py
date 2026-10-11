@@ -54,6 +54,15 @@ OK = [  # 통과해야 한다
     ("품질 최고 매트, 면 소재로 국내에서 봉제", "면 소재로 국내에서 봉제한 매트"),
 ]
 
+#: 🆕 10-11 — 2단계(말투) · `check(s1, s2, persona=True)` — (1단계 문장, 말투 문장, 막아야 하나)
+PERSONA = [
+    ("문경 오미자를 설탕에 100일 숙성한 오미자청", "바쁜 아침, 문경 오미자를 설탕에 100일 숙성한 오미자청 한 잔으로 시작해 보세요", False),
+    ("문경 오미자를 설탕에 100일 숙성한 오미자청", "캠핑 가서 시원하게 타 먹는 문경 오미자청", False),
+    ("문경 오미자를 설탕에 100일 숙성한 오미자청", "혈압 걱정되는 분께 문경 오미자청", True),
+    ("문경 오미자를 설탕에 100일 숙성한 오미자청", "면역이 약한 아이에게 문경 오미자청", True),
+    ("국산 귀리와 현미 가루 배합 쉐이크", "다이어트 효과 보장! 국산 귀리 쉐이크", True),
+    ("인삼 추출물과 비오틴 함유 앰플", "바쁜 하루 끝에 인삼 추출물과 비오틴 함유 앰플로 건강을 챙기세요", True),
+]
 
 def main() -> None:
     b = sum(not check(o, s).passed for o, s in BAD)
@@ -66,6 +75,12 @@ def main() -> None:
         r = check(o, s)
         if not r.passed:
             print("  ⛔ 막힘:", s, r.reasons)
+    pm = sum((not check(a, b, persona=True).passed) == bad for a, b, bad in PERSONA)
+    print(f"2단계(말투) 맞음 {pm}/{len(PERSONA)}")
+    for a, b, bad in PERSONA:
+        r = check(a, b, persona=True)
+        if (not r.passed) != bad:
+            print("  ⛔ 말투:", b, r.reasons)
     tr, ev = t.load_rows("v12")
     seen, n, fp = set(), 0, collections.Counter()
     for r in tr + ev:

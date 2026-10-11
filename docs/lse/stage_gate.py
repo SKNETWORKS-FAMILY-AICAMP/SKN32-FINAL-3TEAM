@@ -295,6 +295,12 @@ BODY_NUM = re.compile(r"(\d+)\s*(?:kg|㎏|킬로|키로|cm|센티|인치|사이�
 _FRAGMENT_GENERIC = {"제품", "상품", "서비스", "브랜드", "회원"}
 
 
+#: 🆕 10-11 — 2단계(말투)가 **새로 넣은 낱말**이 건강 고민 · 몸 상태를 말하면 막는다(「면역이 약한 아이에게」 · 「관절이 아픈 부모님께」).
+#:    말투 낱말은 허용하지만(`check(persona=True)`) 대상을 건강 고민으로 짚으면 효능을 암시한다. 1단계 문장에 이미 있던 낱말은 보지 않는다
+HEALTH_CUE = re.compile(r"혈압|혈당|콜레스테롤|면역|피로|다이어트|체중|뱃살|체지방|관절|연골|뼈|시력|변비|숙면|불면|수면|스트레스|"
+                        r"기억력|집중력|탈모|노화|주름|미백|여드름|아토피|염증|통증|아프|아픈|약한|허약|회복|갱년기|소화|위장|건강")
+
+
 def fragment_only(s: str) -> bool:
     """후보가 낱말 하나(일반어 제외) 뿐이고 숫자 · 연결 낱말(함유 · 사용 · 만든 …)이 없는가."""
     if NUM.search(s):
@@ -365,8 +371,12 @@ def dict_entries() -> tuple[dm.Entry, ...]:
     return tuple(out)
 
 
-def check(original: str, stage1: str | None) -> GateResult:
-    """1단계 결과가 2단계로 넘어가도 되는가. 하나라도 걸리면 보류."""
+def check(original: str, stage1: str | None, persona: bool = False) -> GateResult:
+    """1단계 결과가 2단계로 넘어가도 되는가. 하나라도 걸리면 보류.
+
+    🆕 10-11 `persona=True` — 2단계(말투)의 출력을 1단계 문장과 견줄 때. 말투는 **새 낱말을 넣는 일**이라
+    「원문에 없는 낱말」 · 「살릴 사실 없음」 · 「원문 그대로」는 보지 않는다(10-06 부터 늘 보게 되면서 2단계가 거의 다 보류돼
+    1단계 문장으로 돌아갔다 · 3B 114/114). 주장에 관한 검사(사전 · 질병 · 의약품 · 수치 · 보장 · 기능 문구 · 인정 문구 대조 …)는 그대로다."""
     if not stage1 or not stage1.strip():
         return GateResult(False, ("1단계 실패",))
     s = stage1
@@ -392,7 +402,7 @@ def check(original: str, stage1: str | None) -> GateResult:
         if not PRODUCER.search(s[: m.start()]):
             why.append(f"체험기 말투: {m.group()}")
             break
-    if dm.norm(s).rstrip(".") == dm.norm(original).rstrip("."):
+    if not persona and dm.norm(s).rstrip(".") == dm.norm(original).rstrip("."):
         why.append("원문 그대로")
     if m := VAGUE_TARGET.search(s):
         why.append(f"주장 대상 불명: {m.group()}")
@@ -422,11 +432,16 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"기능 문구(조건 필요): {m.group().strip()}")
     if TESTIMONY_SRC.search(original) and (k := set(BODY_NUM.findall(original)) & set(BODY_NUM.findall(s))):
         why.append(f"체험기 수치 남음: {sorted(k)}")
-    if fragment_only(s):
+    if not persona and fragment_only(s):
         why.append("살릴 사실 없음(낱말 조각)")
     # 🔄 10-06 (팀장 전달 §2 #5) — 종전에는 「도움」이 있으면 이 검사를 통째로 건너뛰어 「…달인 곶감은 면역에 도움」이 지나갔다.
     #    이제 늘 보고, 「도움」 문장에서는 인정 문구 낱말(`_claim_word`)만 허용한다
-    nw = new_words(original, s)
+    if persona:
+        # 말투가 넣은 낱말 중 건강 고민 · 몸 상태 낱말 — 원문(1단계 문장)에 없던 것만
+        cue = sorted({w for w in new_words(original, s) if HEALTH_CUE.search(w)})
+        if cue:
+            why.append(f"말투에 건강 고민 낱말: {', '.join(cue[:3])}")
+    nw = [] if persona else new_words(original, s)
     if "도움" in s:
         nw = [w for w in nw if not _claim_word(w)]
     if nw:

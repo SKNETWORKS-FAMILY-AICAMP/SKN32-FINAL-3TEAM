@@ -156,7 +156,8 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
     except Exception:  # noqa: BLE001 — 형식 실패는 보류로
         s2 = None
     probs = rule_check({"input": s1, "persona_label": persona}, s2)
-    g2 = gate(s1, s2) if s2 else None  # 말투를 입히다 위반을 들여오지 않았는지 — 같은 관문을 다시 지난다
+    # 말투를 입히다 위반을 들여오지 않았는지 — 같은 관문을 다시 지난다. 🔄 10-11 말투 낱말은 허용(`persona=True`) · 주장 검사는 그대로
+    g2 = gate(s1, s2, persona=True) if s2 else None
     res.update(stage2=s2, gate2=list(g2.reasons) if g2 else None, stage2_problems=probs)
     if not s2 or probs or not g2.passed:
         # 2단계가 실패해도 1단계 문장은 이미 관문을 넘었다 — 말투만 포기하고 1단계 문장을 낸다
