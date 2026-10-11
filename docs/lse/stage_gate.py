@@ -300,6 +300,42 @@ _FRAGMENT_GENERIC = {"제품", "상품", "서비스", "브랜드", "회원"}
 HEALTH_CUE = re.compile(r"혈압|혈당|콜레스테롤|면역|피로|다이어트|체중|뱃살|체지방|관절|연골|뼈|시력|변비|숙면|불면|수면|스트레스|"
                         r"기억력|집중력|탈모|노화|주름|미백|여드름|아토피|염증|통증|아프|아픈|약한|허약|회복|갱년기|소화|위장|건강")
 
+#: 🆕 10-12 — 4B v14 dev 검수(33 행 · 이서은 동의)에서 지나간 꼴 둘. 🚨 규칙은 직접 만든 문구로 골랐다(`gate_regress.py`)
+#: 「무+원료」(없음)를 「함유」로 — 「무○○ 함유」 · 「○○ 함유」(원문에는 「무○○」로만). 무(채소) · 무게 · 무료 같은 낱말은 뺀다
+NEG_ING = re.compile(r"(?<![가-힣])무([가-힣]{2,4})")
+_NOT_NEG = ("말랭이", "생채", "김치", "청", "순", "즙", "화과", "기질", "게", "늬", "료", "역", "릎", "지개", "조건", "한", "려", "엇", "척", "대", "사")  # redistribution: ok — 일반어
+HAS_ING = r"\)?\s*(?:을|를|이|가)?\s*(?:함유|첨가|넣은|들어)"
+#: 원문의 효능 주장(대상 + 효과 동사)이 그대로 남음 — 「…바이러스를 제거합니다」 · 「…배출을 줄인」. 실증이 필요한 주장이다.
+#: 🚨 대상을 좁혀 둔다 — 「씨를 제거한 대추」 · 「저온 살균 우유」 같은 공정 사실은 막지 않는다
+EFFECT_TARGET = r"바이러스|세균|유해균|균|미세\s*먼지|먼지|냄새|악취|유해\s*물질|독소|노폐물|질소산화물|배출\s*가스|배출|오염\s*물질|진드기|곰팡이|기미|잡티"
+EFFECT_CLAIM = re.compile(rf"({EFFECT_TARGET})\s*(?:을|를|이|가|도)?\s*(?:[가-힣]+\s+){{0,2}}?(제거|차단|억제|줄이|줄인|줄여|감소|박멸|살균|없애|없앤|잡아|잡는|흡착|분해)")
+
+
+def negation_flipped(original: str, s: str) -> str | None:
+    """원문의 「무○○」(없음)가 출력에서 「○○ 함유」로 뒤집혔는가."""
+    for m in NEG_ING.finditer(original):
+        x = m.group(1)
+        if x.startswith(_NOT_NEG):
+            continue
+        if re.search(rf"무{x}{HAS_ING}", s):
+            return f"무{x} → 함유"
+        rest = original.replace(m.group(), " ")
+        if x not in rest and re.search(rf"(?<!무){x}{HAS_ING}", s):
+            return f"무{x} → {x} 함유"
+    return None
+
+
+def effect_claim_kept(original: str, s: str) -> str | None:
+    """원문에 있던 효능 주장(대상 + 효과 동사)이 출력에도 남았는가.
+    「…에 도움」 꼴은 인정 기능성 문구 대조(`unapproved_claim`)가 맡는다 — 「유해균 억제에 도움」(인정 문구 · 학습 정답 23)은 보지 않는다"""
+    if "도움" in s:
+        return None
+    for m in EFFECT_CLAIM.finditer(s):
+        target = re.sub(r"\s", "", m.group(1))
+        if EFFECT_CLAIM.search(original) and target in re.sub(r"\s", "", original):
+            return m.group().strip()
+    return None
+
 
 def fragment_only(s: str) -> bool:
     """후보가 낱말 하나(일반어 제외) 뿐이고 숫자 · 연결 낱말(함유 · 사용 · 만든 …)이 없는가."""
@@ -426,6 +462,10 @@ def check(original: str, stage1: str | None, persona: bool = False) -> GateResul
         why.append(f"원료명 앞부분 잃음: {t}")
     if (f := meaning_flipped(original, s)) is not None:
         why.append(f"뜻 바뀜 의심: {f}")
+    if (f := negation_flipped(original, s)) is not None:
+        why.append(f"뜻 뒤집힘: {f}")
+    if (e := effect_claim_kept(original, s)) is not None:
+        why.append(f"효능 주장 남음: {e}")
     if GUARANTEE.search(s):
         why.append("보장 주장 남음")
     if "도움" not in s and (m := NUTRIENT_FUNC.search(s)) and not (m.group().strip() != "항산화" and NUTRIENT_SUBJECT.search(s)):
