@@ -1037,7 +1037,7 @@ def _gen_picked(form: dict[str, list[str]]) -> tuple[dict, dict, list[str]]:
     }
     errors: list[str] = []
     if not any(picked[k] for k in ("name", "kind", "phrase", "features")):
-        errors.append("제품명 · 유형 · 간단한 문구 · 특징 중 하나는 적어 주세요.")
+        errors.append("제품명 · 제품 종류 · 간단한 문구 · 특징 중 하나는 적어 주세요.")
     if needs == "certs" and not picked["certs"]:
         errors.append("인증 「예」를 골랐어요 — 받은 인증의 이름을 적어 주세요.")
     if needs == "fixed" and not picked["fixed"]:

@@ -45,7 +45,7 @@ def user_prompt(
     if inputs.name:
         facts.append(f"제품명: {inputs.name}")
     if inputs.kind:
-        facts.append(f"제품 유형: {inputs.kind}")
+        facts.append(f"제품 종류: {inputs.kind}")
     if inputs.phrase:
         facts.append(f"이용자가 적은 문구: {inputs.phrase}")
     if inputs.features:

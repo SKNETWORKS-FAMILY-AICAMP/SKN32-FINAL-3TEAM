@@ -23,7 +23,7 @@
   border: 1px solid var(--u-line); border-radius: 1rem;
   background: var(--u-surface); padding: 1.1rem 1.15rem; margin-bottom: 1rem;
 }
-.gn-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
+.gn-card > h2, .gn-cols > div > h2 { margin: 0 0 .6rem; font-size: .95rem; }
 .gn-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
 
 .gn-pick { display: flex; flex-wrap: wrap; gap: .45rem; margin: .2rem 0 1rem; }
@@ -57,11 +57,19 @@
 .gn-field { margin: 0 0 .9rem; }
 .gn-field > label { display: block; margin: 0 0 .3rem; font-size: .84rem; font-weight: 600; }
 .gn-field input[type="text"], .gn-field textarea { width: 100%; }
-/* 제품명 · 유형 · 특징 · 원재료를 한 줄에 — 좁은 화면에서는 둘씩 · 하나씩으로 접힌다 */
+/* 제품명 · 제품 종류 · 특징 · 원재료를 둘씩 — 좁은 화면에서는 하나씩으로 접힌다 */
 .gn-row4 { display: grid; gap: 0 .6rem; }
 @media (min-width: 30rem) { .gn-row4 { grid-template-columns: 1fr 1fr; } }
-@media (min-width: 52rem) { .gn-row4 { grid-template-columns: 1.1fr .8fr 1.3fr 1.3fr; } }
 .gn-row4 .gn-field { min-width: 0; }
+/* 왼쪽에 고르는 것(품목 · 인증 · 대상 고객 · 메모) | 오른쪽에 적는 것(제품 내용) — 좁은 화면에서는 위아래로 접힌다 */
+.gn-cols > div { min-width: 0; }
+/* 제품 내용의 줄 사이 — 왼쪽 단락들이 떨어져 있는 만큼 띄운다 */
+.gn-cols > div + div .gn-field { margin-bottom: 1.3rem; }
+@media (min-width: 56rem) {
+  /* 왼쪽은 인증 안내 한 줄(제일 긴 화장품 문장 ≈ 41.5rem)까지만 — 오른쪽이 24rem 밑으로 내려가면 왼쪽이 먼저 줄어든다 */
+  .gn-cols { display: grid; grid-template-columns: minmax(0, 42rem) minmax(24rem, 1fr); }
+  .gn-cols > div + div { border-left: 1px solid var(--u-line); padding-left: 1.4rem; margin-left: 1.4rem; }
+}
 .gn-cand form { margin: .7rem 0 0; }
 .gn-cand .gn-next {
   width: 100%; margin: 0; padding: .4rem .8rem; border-radius: 999px;
@@ -115,6 +123,9 @@
 @media (min-width: 48rem) { .gn-cands { grid-template-columns: repeat(3, 1fr); } }
 .gn-cand { border: 1px solid var(--u-line); border-radius: .75rem; padding: .8rem .85rem;
            background: var(--u-surface2); }
+/* 후보 묶음은 눈에 띄게 — 겉을 연노랑으로 채우고 안의 후보 상자는 흰 바탕으로 띄운다 */
+.gn-card.gn-candbox { background: var(--u-warn-bg); border-color: var(--u-warn-line); }
+.gn-candbox .gn-cand { background: var(--u-surface); border-color: var(--u-warn-line); }
 .gn-cand h3 { margin: 0 0 .35rem; font-size: .88rem; }
 .gn-cand p { margin: .15rem 0; font-size: .85rem; }
 .gn-cand .gn-meta { color: var(--u-clay); font-size: .74rem; }
@@ -158,6 +169,8 @@
 
 {% set p = picked or {} %}
 <form class="gn-card" id="gen-form" method="post" action="/u/generate">
+ <div class="gn-cols">
+ <div>
   <h2>품목</h2>
   <div class="gn-pick">
     {% for key, label in gen_categories %}
@@ -204,7 +217,9 @@
     <input type="text" id="g-target" name="target" maxlength="{{ gen_limits.target }}" value="{{ p.target or '' }}"
            placeholder="예: 아침을 간단히 먹는 직장인">
   </div>
+ </div>
 
+ <div>
   {% if errors %}
   <ul class="gn-errors">
     {% for e in errors %}<li>{{ e }}</li>{% endfor %}
@@ -214,7 +229,7 @@
   <h2>제품 내용</h2>
   <p class="gn-note" style="margin:0 0 .8rem">
     🚨 여기 적힌 것이 <b>제품 사실의 전부</b>예요 — 적지 않은 수치 · 성분 · 인증은 카피에 나오지 않아요.
-    제품명 · 유형 · 간단한 문구 · 특징 중 하나는 적어 주세요.
+    제품명 · 제품 종류 · 간단한 문구 · 특징 중 하나는 적어 주세요.
   </p>
   <div class="gn-row4">
     <div class="gn-field">
@@ -223,7 +238,7 @@
              placeholder="예: 아침곡간 그래놀라">
     </div>
     <div class="gn-field">
-      <label for="g-kind">유형</label>
+      <label for="g-kind">제품 종류</label>
       <input type="text" id="g-kind" name="kind" maxlength="{{ gen_limits.kind }}" value="{{ p.kind or '' }}"
              placeholder="예: 그래놀라">
     </div>
@@ -258,6 +273,8 @@
   </div>
 
   <button class="gn-submit" type="submit">이 내용으로 카피 생성</button>
+ </div>
+ </div>
 </form>
 
 {% if engine_pending %}
@@ -339,7 +356,7 @@
 {% endif %}
 
 {% if result.candidates %}
-<div class="gn-card">
+<div class="gn-card gn-candbox">
   <h2>후보</h2>
   <div class="gn-cands">
     {% for c in result.candidates %}
