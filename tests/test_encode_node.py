@@ -143,11 +143,17 @@ def test_신호는_문장마다_한_벌이고_문장_판정에_섞이지_않는�
     # ⛔ 문장 판정의 유형 칸은 고쳐 쓰기가 읽는다 — 인코더 후보가 거기 들어가면 안 된다
     assert all(not s.violations for s in state["sentences"])
     # 후보는 제 칸에 — 유형과 확신(모델의 확률)이 그대로 실린다 (D-323 결정 1)
+    # 🔄 2026-10-12 (D-327) — 후보마다 참조 조항이 붙는다. 유형 · 확신은 종전 그대로이고 조항은 따로 본다
     assert all(
-        s.encoder_candidates
+        [c.model_copy(update={"references": []}) for c in s.encoder_candidates]
         == [EncoderTypeCandidate(violation=Violation.거짓_과장, confidence=0.9)]
         for s in state["sentences"]
     )
+    # 품목을 모르면 세 법으로 보낸다 — 거짓 · 과장의 조항이 세 법 모두에서 실린다. 🚨 근거(`evidence`)에는 섞이지 않는다
+    refs = state["sentences"][0].encoder_candidates[0].references
+    assert {r.law_id for r in refs} == {"002011", "005361", "013094", "013453", "002015", "008741"}
+    assert all(r.basis is False for r in refs)
+    assert all(not s.evidence for s in state["sentences"])
 
 
 @pytest.mark.gate

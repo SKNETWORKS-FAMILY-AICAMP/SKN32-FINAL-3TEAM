@@ -44,6 +44,7 @@ from __future__ import annotations
 import functools
 import logging
 import operator
+import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
@@ -279,6 +280,9 @@ class CoreState(TypedDict, total=False):
     #: 🆕 2026-10-08 — 사전 근거 인용 → 원문이 붙은 근거 조문(`basis_texts`). `match_dict` **한 노드만** 쓴다(리듀서 없음).
     #:    비면 원문 없이 좌표만 간다 — 판정은 바뀌지 않는다 (D-224 ④).
     basis_texts: dict[str, EvidenceArticle]
+    #: 🆕 2026-10-12 (D-327) — 참조 조항 좌표 → 원문이 붙은 조항(`reference_texts`). `match_dict` **한 노드만** 쓴다(리듀서 없음).
+    #:    비면 좌표만 간다 — 좌표는 표(`collect/statute.py` `references`)가 정한 값이라 DB 없이도 선다.
+    ref_texts: dict[str, EvidenceArticle]
     # ── 인코더 신호 🔴 누적 (🆕 2026-10-07 · 그림자) — 문장마다 한 벌. 모델이 없으면 **비어 있다**(없음 ≠ 조용함)
     encodings: Annotated[list[SentEncoding], operator.add]
     # ── 법별 팬아웃 🔴 누적 (D-267) — 법 노드가 **병렬로** 쓴다. 리듀서가 없으면 하나만 남는다
@@ -695,7 +699,63 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     ]
     # 🆕 2026-10-08 — 걸린 항목의 인용 조문에 원문을 붙일 재료 (근거 표시 「(나)」 · D-224 ④). 같은 커서로 한 번만 묻는다
     cites = {c for s in scans for h in (*s.hits, *s.weak) for c in h.basis}
-    return {"dict_scans": scans, "basis_texts": basis_texts(cur, cites)}
+    return {
+        "dict_scans": scans,
+        "basis_texts": basis_texts(cur, cites),
+        "ref_texts": reference_texts(cur),
+    }
+
+
+#: 참조 조항표가 낼 수 있는 좌표 전부 — 유형 · 위반 근거 법의 모든 짝과 옮긴 후보의 인용([별표 1] 4.나). 수십 개다.
+_REF_COORDS: tuple[str, ...] = tuple(
+    sorted(
+        {
+            c
+            for v in Violation
+            for law in LAW_OF_NODE.values()
+            for c in statute.references(v.value, law)
+        }
+        | set(statute.reference_of_cite(pm.UNRECOGNIZED_FUNCTION_CITE))
+    )
+)
+_ANNEX_NO = re.compile(r"^\[별표 (\d+)\]")
+_ARTICLE = re.compile(r"^제\d+조(?:의\d+)?")
+
+
+def _ref_article(coord: str) -> EvidenceArticle:
+    """참조 조항 좌표(`법ID:좌표`) → 좌표만 든 조항. 🚨 `basis` 는 거짓이다 — 판정이 기대는 조문이 아니다 (D-327 · D-323 결정 2)."""
+    law_id, _, cite = coord.partition(":")
+    return EvidenceArticle(law_id=law_id, article=cite)
+
+
+def reference_texts(cur: Any) -> dict[str, EvidenceArticle]:
+    """참조 조항 좌표 → **원문이 붙은** 조항 (🆕 2026-10-12 · D-327). 유형 후보 옆에 「이 유형을 정한 조항」으로 싣는다.
+
+    ★ 청크는 좌표로 찾는다 — 법령 조문은 `rt.by_article`, 별표는 `rt.by_annex`, 대조는 청크의 `citation`(D-99 · 좌표를 여기서 조립하지 않는다).
+    🔴 **원문을 싣는 조건은 근거 조문과 같다**(`basis_texts`) — 원천의 `U3_cite` 가 열렸고 · 쪼갠 조각이 아니고 · 제외 목이 아니다.
+       못 찾거나 조건이 안 서면 그 좌표는 **빠진다** — 받는 쪽(`_candidate_refs`)이 좌표만으로 낸다 (D-220 · 지어내지 않는다).
+    """
+    arts: list[tuple[str, str]] = []
+    annexes: list[tuple[str, int]] = []
+    for c in _REF_COORDS:
+        law_id, _, cite = c.partition(":")
+        if (m := _ANNEX_NO.match(cite)) is not None:
+            annexes.append((law_id, int(m[1])))
+        elif (m := _ARTICLE.match(cite)) is not None:
+            arts.append((law_id, m[0]))
+    hits = rt.by_article(cur, [a[0] for a in arts], [a[1] for a in arts])
+    hits += rt.by_annex(cur, [a[0] for a in annexes], [a[1] for a in annexes])
+    at = {(h.law_id, h.citation): h for h in hits if h.citation}
+    out: dict[str, EvidenceArticle] = {}
+    for c in _REF_COORDS:
+        law_id, _, cite = c.partition(":")
+        h = at.get((law_id, cite))
+        if h is None or h.citable is not True or h.part_total != 1 or h.exempt_of or not h.text:
+            continue
+        out[c] = EvidenceArticle(
+            law_id=law_id, article=cite, item=h.item or "", chunk_id=h.chunk_id, quote=h.text
+        )
+    return out
 
 
 def basis_texts(cur: Any, cites: Iterable[str]) -> dict[str, EvidenceArticle]:
@@ -780,8 +840,30 @@ if _UNRECOGNIZED_TYPE is None:
     )
 
 
+def _candidate_refs(
+    c: EncoderTypeCandidate, laws: Iterable[str], texts: dict[str, EvidenceArticle] | None
+) -> list[EvidenceArticle]:
+    """유형 후보 하나의 **참조 조항** — 문장이 보내진 법(`laws` · 법 축)마다 표가 정한 좌표 (🆕 2026-10-12 · D-327).
+
+    ★ 유형만으로는 법을 못 정한다(D-323 결정 6) — 그래서 법마다 따로 싣고, 그 법에 조항이 없으면 그 법은 비운다 (D-220).
+    ★ 옮긴 후보(`moved_from`)는 식품표시광고법에서 **옮겨 간 인용**([별표 1] 4.나)의 조항을 싣는다 — 유형의 일반 조항(제4호)이 아니라.
+    🚨 좌표는 표(`collect/statute.py`)가 정한다. `texts` 에 있으면 원문이 붙고, 없으면 좌표만이다.
+    """
+    food = LAW_OF_NODE["law_food"]
+    coords: list[str] = []
+    for law in laws:
+        if c.moved_from is not None and law == food:
+            coords += statute.reference_of_cite(pm.UNRECOGNIZED_FUNCTION_CITE)
+        else:
+            coords += statute.references(c.violation.value, law)
+    return [(texts or {}).get(x) or _ref_article(x) for x in dict.fromkeys(coords)]
+
+
 def _encoder_candidates(
-    e: SentEncoding | None, premises: Iterable[Premise]
+    e: SentEncoding | None,
+    premises: Iterable[Premise],
+    laws: Iterable[str] = (),
+    texts: dict[str, EvidenceArticle] | None = None,
 ) -> list[EncoderTypeCandidate]:
     """인코더 신호 → 문장의 `encoder_candidates` (🆕 2026-10-09 · D-323 결정 1 · 6). 🚨 판정이 아니다 — 유형 후보와 확신뿐이다.
 
@@ -823,7 +905,9 @@ def _encoder_candidates(
                 moved_from=Violation(pm.HF_MISLEAD),
             )
         )
-    return out
+    # 🆕 2026-10-12 (D-327) — 후보마다 참조 조항을 붙인다. `laws` 가 비면(법을 모른다) 붙이지 않는다 — 빈 목록이다
+    law_axes = tuple(laws)
+    return [c.model_copy(update={"references": _candidate_refs(c, law_axes, texts)}) for c in out]
 
 
 def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:
@@ -1136,6 +1220,9 @@ def judge(state: CoreState) -> dict[str, Any]:
     #    기록 판정이라 이 품목의 전제 전부로 거른다(합집합 · `_encoder_candidates`).
     encs = {e.sent_id: e for e in state.get("encodings", [])}
     premises = pm.PREMISES_OF[(state.get("product") or ProductContext()).category]
+    # 🆕 2026-10-12 (D-327) — 참조 조항은 **이번에 보낸 법**마다 싣는다(`state["laws"]` 는 노드 이름이다 → 법 축)
+    ref_laws = tuple(LAW_OF_NODE[n] for n in state.get("laws") or () if n in LAW_OF_NODE)
+    ref_texts = state.get("ref_texts") or {}
     out: list[SentenceJudgment] = []
     for i, t in enumerate(sents):
         sid = sent_id(i)
@@ -1151,7 +1238,11 @@ def judge(state: CoreState) -> dict[str, Any]:
         )
         if sid in encs:
             j = j.model_copy(
-                update={"encoder_candidates": _encoder_candidates(encs[sid], premises)}
+                update={
+                    "encoder_candidates": _encoder_candidates(
+                        encs[sid], premises, ref_laws, ref_texts
+                    )
+                }
             )
         out.append(j)
     return {"sentences": out}
@@ -1425,7 +1516,15 @@ def _premise_sentences(
         if sid in encs:
             # 분기 문장 — 이 전제 하나로 거른다 (D-323 결정 6). 판정이 끝난 뒤에 붙인다 — 위 판정은 이 칸을 보지 않았다
             j = j.model_copy(
-                update={"encoder_candidates": _encoder_candidates(encs[sid], (premise,))}
+                update={
+                    "encoder_candidates": _encoder_candidates(
+                        encs[sid],
+                        (premise,),
+                        # 분기 문장 — 이 전제의 법 묶음으로 참조 조항을 싣는다 (D-327)
+                        tuple(LAW_OF_NODE[n] for n in laws if n in LAW_OF_NODE),
+                        state.get("ref_texts") or {},
+                    )
+                }
             )
         out.append(j)
     return out
