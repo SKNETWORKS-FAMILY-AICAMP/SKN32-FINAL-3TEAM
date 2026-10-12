@@ -70,6 +70,28 @@ def test_고정_문구는_코드가_끼운다() -> None:
     assert check(f"{PLACEHOLDER} 변비 해소까지", inp, hf, [])[0] == "forbidden"
 
 
+def test_고정_문구_자리는_앞뒤_말과_떨어져야_한다() -> None:
+    """10-12 실행에서 보관된 어색한 이음새 — 판정은 고정 문구를 뺀 글자로 하므로 코드 필터가 본다."""
+    hf = BRANCHES["hf_yes"]
+    inp = Inputs(name="아이케어 루테인", kind="연질캡슐", fixed="눈 건강에 도움을 줄 수 있음")
+    for ok in (
+        f"아침 루틴에 더하는 한 알, {PLACEHOLDER}",
+        f"가방 속 스틱 하나면 돼요. {PLACEHOLDER}",
+        f"{PLACEHOLDER} — 작은 정제로 간편하게",
+        f"작은 크기라 목넘김이 편한 연질캡슐, {PLACEHOLDER}.",
+    ):
+        assert check(ok, inp, hf, []) is None, ok
+    for bad in (
+        f"작은 크기로 목넘김이 편한 {PLACEHOLDER}",
+        f"바쁜 하루도 하루 한 알로 {PLACEHOLDER}",
+        f"메이크업 전 산뜻하게, {PLACEHOLDER}로 매일 준비해요",
+        f"아침 스킨케어 마지막에, {PLACEHOLDER} 아이케어 루테인",
+    ):
+        assert check(bad, inp, hf, [])[0] == "seam", bad
+    # 고정 문구가 없는 분기는 묻지 않는다
+    assert check("끈적임 없이 산뜻하게 스며드는 촉촉 수분크림", CREAM, COS, []) is None
+
+
 def test_탈락_문구_원문은_프롬프트에_안_들어간다() -> None:
     prompt = user_prompt(CREAM, COS, 20, ["보관한 문구"], Counter(number=6, forbidden=2))
     assert "입력에 없는 수치 6건" in prompt
