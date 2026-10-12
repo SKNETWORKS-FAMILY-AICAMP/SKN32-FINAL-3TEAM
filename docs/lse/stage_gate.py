@@ -506,6 +506,11 @@ def check(original: str, stage1: str | None, persona: bool = False) -> GateResul
         cue = sorted({w for w in new_words(original, s) if HEALTH_CUE.search(w)})
         if cue:
             why.append(f"말투에 건강 고민 낱말: {', '.join(cue[:3])}")
+        # 🆕 10-12 — 제품 모양에 안 맞는 쓰는 법을 지어냄(「선스틱, …두드리고」 · 「젤리 스틱, 물에 녹여」) · `usage_dict.py`
+        from usage_dict import usage_mismatch  # noqa: PLC0415
+
+        if bad_use := usage_mismatch(original, new_words(original, s)):
+            why.append(f"쓰는 법이 제품과 안 맞음: {', '.join(bad_use[:2])}")
         if lost := facts_dropped(original, s):
             why.append(f"말투가 사실 낱말을 빼거나 바꿈: {', '.join(lost[:3])}")
         fact = sorted({w for w in new_words(original, s) if NEW_FACT.search(_PARTICLE.sub("", w))})
