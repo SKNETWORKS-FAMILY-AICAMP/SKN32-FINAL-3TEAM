@@ -55,6 +55,22 @@ DEV_EXPECT = {
 }
 
 
+
+def same_dev_golden(sha_a, sha_b):
+    """두 골든 판이 **같은 공통 dev** 를 내는가 (🆕 2026-10-12).
+
+    다른 판의 골든으로 학습한 모델을 막는 까닭은 dev 행이 달라져 「모델이 학습한 행을 dev 라고 재게 되는」 것이다 (D-220).
+    둘 다 `DEV_EXPECT` 에 있고 (행 수 · 지문)이 같으면 dev 행이 같다 — 529c970556d7 → f6ccc5a7de44 는 `전제` 칸 ·
+    봉인 10 행의 품목만 달라졌다(팀장 전달 10-10 §0). 앞자리만 받아도 맞춘다(label_scheme 에 앞 12 자만 적힌 판).
+    """
+    if not sha_a or not sha_b:
+        return False
+    if sha_a.startswith(sha_b) or sha_b.startswith(sha_a):
+        return True
+    find = lambda s: next((v for k, v in DEV_EXPECT.items() if k.startswith(s)), None)
+    ea, eb = find(sha_a), find(sha_b)
+    return ea is not None and ea == eb
+
 def encoder_target(r):
     """인코더가 배울 · 채점할 표적 (모델만 볼 때의 정답).
 

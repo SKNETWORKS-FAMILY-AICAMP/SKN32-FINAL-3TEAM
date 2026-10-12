@@ -40,6 +40,7 @@ from collections import Counter, defaultdict
 from judge_stage1 import (QUIET_MARGIN, REPO, BANNED_TERMS_PATH, load_banned_terms, load_encoder, load_scheme,
                           predict_label_probs_batch, resolve_model_dir, stage1_signals)
 from judge_stage2 import stage2_judge
+import score_encoder_dev as sd  # 🆕 10-12 — 같은 dev 를 내는 골든 판 (`same_dev_golden`)
 from app import graph as g
 from app.contracts import Category
 from scripts import eval_graph as _eg  # 🆕 10-10 — 제품 정보는 평가 도구의 한 곳에서 (`product_of`)
@@ -434,7 +435,9 @@ def main(argv=None):
         tok, mdl, labels, th = load_encoder(model_dir)
         with open(os.path.join(model_dir, "label_scheme.json"), encoding="utf-8") as f:
             scheme = json.load(f)
-    if scheme.get("golden_sha256") and scheme["golden_sha256"] != sha:
+    if scheme.get("golden_sha256") and scheme["golden_sha256"] != sha and not (
+        a.split == "dev" and sd.same_dev_golden(scheme["golden_sha256"], sha)  # 🔄 2026-10-12 — 공통 dev 가 같은 판이면 dev 는 잰다
+    ):
         raise SystemExit(f"🔴 이 모델은 다른 골든으로 학습했다 — 모델 {scheme['golden_sha256'][:12]} · 지금 {sha[:12]}\n"
                          "  dev 행이 달라진다(모델이 학습한 행을 dev 라고 재게 된다). 같은 판 골든으로 맞춘다 (D-220)")
 
