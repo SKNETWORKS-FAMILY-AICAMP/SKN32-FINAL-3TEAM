@@ -102,6 +102,8 @@
 .gn-actions a { border-color: var(--u-signal); color: var(--u-signal-ink); }
 .gn-actions button[disabled] { color: var(--u-clay); font-weight: 400; cursor: not-allowed; }
 
+.gn-fold > summary { cursor: pointer; font-size: .84rem; font-weight: 600; color: var(--u-signal-ink); }
+.gn-fold[open] > summary { margin-bottom: .8rem; }
 .gn-frontier { display: grid; gap: 1rem; }
 @media (min-width: 48rem) { .gn-frontier { grid-template-columns: 340px 1fr; align-items: stretch; } }
 .gn-plot { border: 1px solid var(--u-line); border-radius: 1rem; padding: 1rem; background: var(--u-surface); }
@@ -297,6 +299,9 @@
   <h2>생성된 카피 {{ result.candidates|length }}종{% if fixture_name %} <span class="gn-note">— {{ fixture_name }}</span>{% endif %}</h2>
 
   {% if points %}
+  {# 프론티어 그림과 설명은 접어 둔다 — `<details>` 라 스크립트 없이 열고 닫힌다 (CSP) #}
+  <details class="gn-fold">
+  <summary>리스크–소구력 프론티어와 설명 보기</summary>
   <div class="gn-frontier">
     <div class="gn-plot">
       <p class="gn-note" style="margin:0 0 .5rem">리스크–소구력 프론티어</p>
@@ -335,6 +340,7 @@
       </p>
     </div>
   </div>
+  </details>
   {% endif %}
 </div>
 
