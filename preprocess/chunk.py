@@ -318,7 +318,9 @@ def from_articles() -> tuple[list[dict], int]:
             raise SystemExit(
                 "🔴 law_article.jsonl 의 산문 행에 `좌표막힘` 칸이 없다 — `law_article --dump` 를 먼저 다시 돌린다 (D-293 개정)"
             )
-        article = f"제{r['조']}조" + (f"의{r['가지']}" if r.get("가지") else "")
+        # 🔄 2026-10-12 (곁가지 · D-117) — 산문 행정규칙은 조가 없다. ⛔ 종전에는 장 번호를 조 자리에 넣어 원문에 없는 「제Ⅲ조」를
+        #    지어냈다 — `/search` 가 좌표가 없을 때 이 칸을 보여 준다. 산문의 자리는 `paragraph`(장 · 원문 번호 사슬)가 맡는다
+        article = "" if prose else f"제{r['조']}조" + (f"의{r['가지']}" if r.get("가지") else "")
         doc_id = f"law:{r['파일'].replace('.xml', '')}"
         parts = _split_long(body)
         for i, text in enumerate(parts):

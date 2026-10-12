@@ -73,6 +73,8 @@ def test_짧은_끝_항목은_부모에_묶고_자식_있는_짧은_머리_줄�
     assert any(t.startswith("(3) 소비기한") for t in texts)  # 긴 항목은 따로 남는다
     assert chunk.SKIPPED["부모에 묶은 짧은 항목"] >= 2
     assert chunk.SKIPPED["자식이 있는 짧은 머리 줄"] >= 1
+    # 🆕 2026-10-12 (곁가지 · D-117) — 산문 청크의 조 칸은 비어 있다. 원문에 없는 「제Ⅲ조」를 지어내지 않는다
+    assert {r["article"] for r in got} == {""}
 
 
 @pytest.mark.parametrize(
