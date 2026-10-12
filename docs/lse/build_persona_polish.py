@@ -1517,7 +1517,58 @@ EVAL_GROUPS = {
 }
 
 
+#: 🆕 10-12 4차 — **「안전한 말투」판**(`--safe` · `persona_polish_safe.jsonl` · 어댑터 `…_polish_safe`).
+#:    3차 시험에서 처음 보는 제품의 쓰는 법을 지어내다 틀렸다(「선스틱, 입술 펴기 전에」 · 「샴푸 바, 샤워기 끝에 닿아서」).
+#:    쓰는 법 · 때 · 곳을 짚지 않고 문장 끝 · 소개 말투만 바꾼다 — 덜 화려하지만 틀릴 거리가 없다
+SAFE_OUT = HERE / "persona_polish_safe.jsonl"
+_SAFE_N0 = (
+    "{s}{이에요}",
+    "{s}, 지금 만나 보세요",
+    "{s}{을} 만나 보세요",
+    "{s}, 한번 만나 보세요",
+    "{s}{을} 소개해요",
+    "{s}입니다",
+)
+_SAFE_HOOK = {
+    "p1": "바쁜 하루 속,",
+    "p2": "가족과 함께,",
+    "p3": "운동하는 일상 속,",
+    "p4": "맞벌이 일상 속,",
+    "p5": "여행과 취미를 즐기는 일상에,",
+    "p6": "자취 일상 속,",
+    "q1": "재택근무 하루 속,",
+    "q2": "주말 야외 활동에,",
+}
+
+
+def _josa(s: str, pair: str) -> str:
+    """받침에 따라 조사 고르기 — 끝 글자가 한글이 아니면(ml · +) 받침 있는 쪽."""
+    c = s.rstrip()[-1]
+    if not ("가" <= c <= "힣"):
+        jong = 1
+    else:
+        jong = (ord(c) - 0xAC00) % 28
+    if pair == "이에요":
+        return "이에요" if jong else "예요"
+    if pair == "을":
+        return "을" if jong else "를"
+    if pair == "으로":
+        return "로" if jong in (0, 8) else "으로"  # 받침 없음 · ㄹ 받침은 「로」
+    raise ValueError(pair)
+
+
+def safe_target(s1: str, code: str, key: str) -> str:
+    if code == "n0":
+        t = _SAFE_N0[sum(map(ord, key)) % len(_SAFE_N0)]
+        for pair in ("이에요", "을", "으로"):
+            t = t.replace("{" + pair + "}", _josa(s1, pair))
+        return t.replace("{s}", s1)
+    return f"{_SAFE_HOOK[code]} {s1}{_josa(s1, '이에요')}"
+
+
 def main() -> None:
+    safe = "--safe" in sys.argv
+    out_path = SAFE_OUT if safe else OUT
     rows, bad = [], []
     for group, s1, neutral, personas in DATA + DATA2 + DATA3:
         split = "eval" if group in EVAL_GROUPS | EVAL2_GROUPS | EVAL3_GROUPS else "train"
@@ -1526,6 +1577,8 @@ def main() -> None:
             # 평가 고객층(q*)은 학습에 넣지 않는다 — 학습 주제의 q* 말투는 뺀다(주제가 학습 · 평가에 걸치면 누수 검사 ②가 멈춘다)
             if code.startswith("q") and split == "train":
                 continue
+            if safe:
+                target = safe_target(s1, code, group)
             r = {
                 "id": f"pol-{group}-{code}",
                 "split": split,
@@ -1544,12 +1597,12 @@ def main() -> None:
     for b in bad:
         print("⛔", b)
     assert not bad, f"정답 {len(bad)} 개가 관문 · 규칙을 못 지난다"
-    with OUT.open("w", encoding="utf-8", newline="\n") as f:
+    with out_path.open("w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     tr = [r for r in rows if r["split"] == "train"]
     print(
-        f"{OUT.name} — {len(rows)} 행(주제 {len(DATA) + len(DATA2) + len(DATA3)}) · 학습 {len(tr)} · 평가 {len(rows) - len(tr)} · "
+        f"{out_path.name} — {len(rows)} 행(주제 {len(DATA) + len(DATA2) + len(DATA3)}) · 학습 {len(tr)} · 평가 {len(rows) - len(tr)} · "
         f"중립 {sum(r['persona'] == 'n0' for r in rows)}"
     )
 
