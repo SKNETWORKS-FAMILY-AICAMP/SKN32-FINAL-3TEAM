@@ -42,7 +42,8 @@ def test_산문_조문은_괄호_번호_계층을_따르고_상위_항목을_싣
     by = {r["본문"]: r for r in rows}
     assert "1) 유형" not in by["파. 조미식품"]["본문"]  # 납작해지지 않는다
     item = [r for r in rows if r["본문"] == "(1) 제품명"]
-    assert [r["항"] for r in item] == ["Ⅲ.1.파.2.(1)", "Ⅲ.1.하.1.(1)"]
+    # 🔄 2026-10-12 (D-293 개정 안건 2 (나)) — 경로가 마커의 꼴을 보존한다(「2)」 · 「1)」)
+    assert [r["항"] for r in item] == ["Ⅲ.1.파.2).(1)", "Ⅲ.1.하.1).(1)"]
     assert item[0]["제목"] == "Ⅲ. 개별표시사항"
     assert item[0]["항본문"].split("\n") == ["1. 식품", "파. 조미식품", "2) 표시사항"]
     assert chunk._context(item[0]) != chunk._context(item[1])  # 같은 본문이라도 문맥이 가른다
@@ -56,6 +57,7 @@ def test_짧은_끝_항목은_부모에_묶고_자식_있는_짧은_머리_줄�
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rows = la._prose(PROSE)
+    la.mark_coord_block(rows)  # 🆕 2026-10-12 (D-293 개정) — 파일 단위 좌표 자격(`parse` 가 부른다)
     for r in rows:
         r.update({"법령": "시험 고시", "파일": "admrul_99999_20260101.xml", "가지": ""})
     (tmp_path / "law_article.jsonl").write_text(
@@ -100,6 +102,7 @@ def test_외국어_문안_이름표가_하나도_없으면_멈춘다(
         "text": "한국어 원문뿐이다",
         "annex_title": "인삼의 유래",
         "annex_no_head": None,
+        "좌표막힘": "",
     }
     (d / "36814_0001.jsonl").write_text(
         json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8"

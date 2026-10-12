@@ -136,6 +136,7 @@ def _hit(**kw: object) -> rt.Hit:
         part_no=1,
         part_total=1,
         exempt_of="",
+        coord_block="",
         doc_type="별표",
         annex_no=4,
         doc_title=None,
@@ -238,7 +239,7 @@ LAW_N = "식품 등의 표시ㆍ광고에 관한 법률 시행규칙"
 
 def test_법령_본문은_표의_조_중_제목이_같은_것만_실린다(caplog: pytest.LogCaptureFixture) -> None:
     rows = [
-        ("013475", "제8조", "제8조(광고의 기준) 법 제7조…", "", "", LAW_N, LAW_F),
+        ("013475", "제8조", "제8조(광고의 기준) 법 제7조…", "", "", LAW_N, LAW_F, ""),
         (
             "013475",
             "제9조",
@@ -247,8 +248,9 @@ def test_법령_본문은_표의_조_중_제목이_같은_것만_실린다(caplo
             "",
             LAW_N,
             LAW_F,
+            "",
         ),  # 개정으로 밀렸다 — 표는 「실증방법 등」
-        ("013475", "제13조", "제13조(등록사항의 변경) …", "", "", LAW_N, LAW_F),  # 표에 없다
+        ("013475", "제13조", "제13조(등록사항의 변경) …", "", "", LAW_N, LAW_F, ""),  # 표에 없다
     ]
     out = g.body_scope(_BodyCur(rows))
     assert ("013475", "제8조") in out
@@ -260,9 +262,9 @@ def test_법령_본문은_표의_조_중_제목이_같은_것만_실린다(caplo
 def test_고시_본문은_이름에_광고가_있어야_하고_상투_조문은_뺀다() -> None:
     ad_f, ad_n = "admrul_41277_x.xml", "화장품 표시·광고 실증에 관한 규정"
     rows = [
-        ("41277", "제1조", "제1조(목적) …", "", "", ad_n, ad_f),
-        ("41277", "제3조", "제3조(실증자료) …", "", "", ad_n, ad_f),
-        ("41277", "제6조", "제6조(규제의 재검토) …", "", "", ad_n, ad_f),
+        ("41277", "제1조", "제1조(목적) …", "", "", ad_n, ad_f, ""),
+        ("41277", "제3조", "제3조(실증자료) …", "", "", ad_n, ad_f, ""),
+        ("41277", "제6조", "제6조(규제의 재검토) …", "", "", ad_n, ad_f, ""),
         (
             "37098",
             "제6조",
@@ -271,27 +273,52 @@ def test_고시_본문은_이름에_광고가_있어야_하고_상투_조문은_
             "",
             "화장품 안전기준 등에 관한 규정",
             "admrul_37098_x.xml",
-        ),
-        (
-            "20207",
-            "제Ⅱ조",
-            "Ⅱ. 적용범위 …",
             "",
-            "",
-            "비교표시·광고에 관한 심사지침",
-            "admrul_20207_x.xml",
         ),
     ]
     out = g.body_scope(_BodyCur(rows))
     assert ("41277", "제3조") in out
     assert ("41277", "제1조") not in out and ("41277", "제6조") not in out
     assert not any(lid == "37098" for lid, _ in out)
-    assert ("20207", "*") in out  # 산문 고시는 고시 단위
 
 
-def test_본문_거름은_산문_고시를_고시_단위로_받는다() -> None:
+PROSE_F, PROSE_N = "admrul_20207_x.xml", "비교표시·광고에 관한 심사지침"
+
+
+def _prose_row(paragraph: str, text: str, context: str = "") -> tuple:
+    return ("20207", "", text, context, "", PROSE_N, PROSE_F, paragraph)
+
+
+def test_산문_고시는_장_단위로_싣고_상투_장은_뺀다() -> None:
+    """🆕 2026-10-12 (D-293 개정 집행) — 종전 고시 단위(`"*"`)였다. 산문 좌표가 서면 「Ⅰ. 목적」 · 「Ⅵ. 재검토기한」이 참고 조문 자리를 먹는다."""
+    rows = [
+        _prose_row("Ⅰ", "Ⅰ. 목적 이 심사지침은 …"),
+        _prose_row("Ⅱ", "Ⅱ. 적용범위 이 심사지침은 …"),
+        # 장 노드가 청크에 없다 — 문맥 첫 줄이 장 머리다
+        _prose_row("Ⅳ.1", "1. 일반원칙 …", "Ⅳ. 세부심사지침\n"),
+        _prose_row("Ⅵ", "Ⅵ. 재검토기한 공정거래위원회는 …"),
+        _prose_row("2:Ⅲ", "Ⅲ. 재검토 기한 …"),  # 다시 쓰인 장 번호의 구역
+        # 장 머리 글을 못 읽었다 — 모르면 싣지 않는다
+        _prose_row("Ⅴ.1", "1. …", "[시행 예정 표시]"),
+    ]
+    out = g.body_scope(_BodyCur(rows))
+    assert ("20207", "Ⅱ") in out and ("20207", "Ⅳ") in out
+    assert ("20207", "Ⅰ") not in out and ("20207", "Ⅵ") not in out and ("20207", "2:Ⅲ") not in out
+    assert ("20207", "Ⅴ") not in out
+    assert ("20207", "*") not in out
+
+
+def test_상투_장은_낱말_경계로_가른다() -> None:
+    assert g._boilerplate_chapter("목적 이 고시는")  # noqa: SLF001
+    assert g._boilerplate_chapter("재검토기한")  # noqa: SLF001
+    assert not g._boilerplate_chapter("목적물의 표시")  # noqa: SLF001
+
+
+def test_본문_거름은_산문_고시를_장으로_받는다() -> None:
     prose = _hit(
-        law_id="20207", doc_type="법령", annex_no=None, article="제Ⅱ조", paragraph="Ⅱ.1", item=""
+        law_id="20207", doc_type="법령", annex_no=None, article="", paragraph="Ⅱ.1", item=""
     )
-    assert g.in_reference_scope(prose, frozenset(), frozenset({("20207", "*")}))
-    assert not g.in_reference_scope(prose, frozenset(), frozenset({("20207", "제2조")}))
+    assert g.in_reference_scope(prose, frozenset(), frozenset({("20207", "Ⅱ")}))
+    assert not g.in_reference_scope(prose, frozenset(), frozenset({("20207", "Ⅰ")}))
+    # 고시 단위(`"*"`)는 없어졌다
+    assert not g.in_reference_scope(prose, frozenset(), frozenset({("20207", "*")}))

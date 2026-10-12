@@ -231,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         unmarked = cur.fetchone()[0]
         if unmarked:
             print(
-                f"🔴 적용 제외 표시(`exempt_of`)가 안 실린 청크 {unmarked:,}개 — 재지 않는다 (0021 · D-220)",
+                f"🔴 적용 제외 표시(`exempt_of`) · 좌표 자격(`coord_block`)이 안 실린 청크 {unmarked:,}개 — 재지 않는다 (0021 · 0025 · D-220)",
                 file=sys.stderr,
             )
             return 1

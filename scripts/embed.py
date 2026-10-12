@@ -63,6 +63,8 @@ CHUNK_COLS = (
     "law",
     # 🆕 2026-09-28 (0021 · D-238 개정 (나)) — 적용 제외 목이면 부모 경로 · 아니면 빈 문자열. 임베딩 입력에 안 든다
     "exempt_of",
+    # 🆕 2026-10-12 (0025 · D-293 개정) — 좌표를 막는 이유. 임베딩 입력에 안 든다
+    "coord_block",
     "text",
     "token_count",
     # 🔴 2026-09-12 밤 (0011 · D-200) — 모델에 **실제로 들어가는** 문자열의 토큰 수.
@@ -295,6 +297,16 @@ def main() -> int:
         print(
             f"🔴 chunks.jsonl 이 적용 제외 표시 전 판이다 — `exempt_of` 칸이 없는 행 {old:,}개 (0021 · D-238).\n"
             "   정본: uv run python launcher.py chunk --dump   ·   사본: uv run python launcher.py data-sync",
+            file=sys.stderr,
+        )
+        return 1
+    # 🔴 **좌표 자격 표시 전 판이면 멈춘다** (2026-10-12 · 0025 · D-293 개정). ⛔ 칸을 비워 실으면 겹친 경로 · 순서가 깨진 노드가
+    #    「막지 않는다」로 읽혀 좌표가 선다 — 없음이 성공으로 집계된다 (D-220).
+    old = sum(1 for r in rows if "coord_block" not in r)
+    if old:
+        print(
+            f"🔴 chunks.jsonl 이 좌표 자격 표시 전 판이다 — `coord_block` 칸이 없는 행 {old:,}개 (0025 · D-293 개정).\n"
+            "   정본: law_article --dump → law_norm --write → chunk --dump   ·   사본: uv run python launcher.py data-sync",
             file=sys.stderr,
         )
         return 1

@@ -287,7 +287,7 @@ class CoreState(TypedDict, total=False):
     #:    🚨 비거나 없으면 **별표를 하나도 싣지 않는다**(D-220) — 모르는 별표를 참고 조문으로 내지 않는다.
     #:    ⛔ frozenset 이 아니라 정렬한 튜플이다 — 체크포인터(D-129)가 상태를 직렬화한다.
     annex_scope: tuple[tuple[str, int], ...]
-    #: 🆕 2026-10-12 (D-329) — 참고 조문으로 실어도 되는 **본문**의 `(법 ID, 조)` · 산문 고시는 `(법 ID, "*")`. `retrieve` **한 노드만** 쓴다.
+    #: 🆕 2026-10-12 (D-329) — 참고 조문으로 실어도 되는 **본문**의 `(법 ID, 조)` · 산문 고시는 `(법 ID, 장)`(🔄 D-293 개정 집행). `retrieve` **한 노드만** 쓴다.
     #:    🚨 비거나 없으면 본문을 하나도 싣지 않는다(D-220). ⛔ 정렬한 튜플이다 — 체크포인터(D-129)가 직렬화한다.
     body_scope: tuple[tuple[str, str], ...]
     # ── 인코더 신호 🔴 누적 (🆕 2026-10-07 · 그림자) — 문장마다 한 벌. 모델이 없으면 **비어 있다**(없음 ≠ 조용함)
@@ -557,6 +557,7 @@ def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
         item=hit.item or "",
         chunk_id=hit.chunk_id if own else None,
         quote=hit.text if own and whole and hit.citable is True and hit.text else None,
+        doc_title=hit.doc_title,  # 🆕 2026-10-12 (D-293 개정 안건 3) — 산문 좌표는 고시 이름과 같이 가야 뜻이 선다
     )
 
 
@@ -850,21 +851,37 @@ def _article_title(
 
 
 #: 🆕 2026-10-12 (D-329) — 본문 청크의 조 머리 · 문맥 · 원천. 🚨 글은 앞부분만 읽는다 — 조 제목을 읽는 데 그만큼이면 된다(`_article_title`).
-#:    산문 고시의 `article` 칸은 지어낸 「제Ⅰ조」라 숫자 조가 아니다 — 고시 단위(`"*"`)로만 가른다(D-293 집행 때 머리 절로 다시 본다).
+#:    산문 고시는 `paragraph` 의 장(「Ⅱ」)과 장 머리 글로 가른다(🔄 2026-10-12 · D-293 개정 집행 — 종전 고시 단위 `"*"`).
 SQL_BODY_HEADS = """SELECT DISTINCT c.law_id, c.article, left(c.text, 120), left(c.context, 240), c.item,
-       d.title, d.source_ref
+       d.title, d.source_ref, c.paragraph
 FROM v_current_chunk c
 JOIN document d ON d.doc_id = c.doc_id
 WHERE c.doc_type = '법령'"""
 _NUM_ARTICLE = re.compile(r"^제\d+조(?:의\d+)?$")
+#: 산문 고시의 장 머리 줄 — 「Ⅰ. 목적 이 고시는 …」 → 「목적 이 고시는 …」. 글자는 `preprocess/law_article.py` `_ROMAN` 과 같다
+_CHAPTER_HEAD = re.compile(r"^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\.\s*(.*)$")
+
+
+def _boilerplate_chapter(head: str) -> bool:
+    """장 머리 글이 상투 제목(`BOILERPLATE_TITLES`)으로 시작하는가 — 「목적 이 심사지침은 …」 · 「재검토기한 공정거래위원회는 …」.
+
+    🚨 낱말 경계를 본다 — 제목 바로 뒤가 글 끝 · 띄어쓰기 · 괄호여야 한다(「목적물」 같은 낱말은 아니다).
+    """
+    for t in statute.BOILERPLATE_TITLES:
+        if head.startswith(t) and (len(head) == len(t) or head[len(t)] in " (\u3000"):
+            return True
+    return False
 
 
 def body_scope(cur: Any) -> tuple[tuple[str, str], ...]:
-    """참고 조문으로 실어도 되는 본문 — `(법 ID, 조)` · 산문 고시는 `(법 ID, "*")` · 정렬한 튜플 (🆕 2026-10-12 · D-329).
+    """참고 조문으로 실어도 되는 본문 — `(법 ID, 조)` · 산문 고시는 `(법 ID, 장)` · 정렬한 튜플 (🆕 2026-10-12 · D-329).
 
         법령 본문      → `collect/statute.py` `REFERENCE_ARTICLES` 의 조 중 **DB 의 조 제목이 표와 같은 것**
         행정규칙 본문  → 고시 이름에 `AD_WORD` 가 있는 고시의 조 — 상투 조문(`BOILERPLATE_TITLES`)과 제목을 못 읽은 조는 뺀다.
-                         산문 고시(숫자 조가 없다)는 고시 단위로 싣는다
+                         산문 고시(숫자 조가 없다)는 **장 단위** `(법 ID, "Ⅱ")` 로 싣는다 — 상투 장(「Ⅰ. 목적」 · 「Ⅵ. 재검토기한」)과
+                         머리 글을 못 읽은 장은 뺀다
+                         🔄 2026-10-12 (D-293 개정 집행) — 종전 고시 단위(`(법 ID, "*")`)였다. 산문 좌표가 서면서 상투 장이 참고 조문
+                         자리를 차지할 수 있어 D-329 안건 2 의 규칙을 장에 그대로 건다
 
     🔴 **제목이 표와 다르면 싣지 않는다** — 개정으로 조 번호가 밀리면 다른 조문을 가리킨다. 다른 조를 경고로 남긴다 (D-220).
     ★ 조 제목은 `_article_title` 한 곳에서 읽는다 — 별표의 위임 조문 제목과 같은 규칙이다 (D-99).
@@ -873,12 +890,25 @@ def body_scope(cur: Any) -> tuple[tuple[str, str], ...]:
     rows = cur.fetchall()
     titles: dict[tuple[str, str], set[str]] = {}
     kind: dict[str, tuple[str, str]] = {}  # 법 ID → (원천 파일, 문서 이름)
-    for law_id, article, text, context, item, doc_title, src in rows:
+    chapters: dict[tuple[str, str], set[str]] = {}  # (법 ID, 장) → 장 머리 글
+    for law_id, article, text, context, item, doc_title, src, paragraph in rows:
         kind.setdefault(law_id, (str(src or ""), str(doc_title or "")))
         if article and _NUM_ARTICLE.match(article):
             t = _article_title(article, text, context, item)
             if t:
                 titles.setdefault((law_id, article), set()).add(t)
+        ch = rt.prose_chapter(paragraph or "")
+        if ch is not None:
+            # 장 노드 자신은 글이 머리 줄이다 · 아래 노드는 문맥 첫 줄(시행 예정 표시 `[` 줄 다음)이 장 머리 줄이다(`chunk._context`)
+            lines = (
+                [str(text or "")]
+                if str(paragraph).strip() == ch
+                else str(context or "").split("\n")
+            )
+            head = next((m[1] for x in lines if (m := _CHAPTER_HEAD.match(x.strip()))), None)
+            chapters.setdefault((law_id, ch), set())
+            if head:
+                chapters[(law_id, ch)].add(head)
     out: set[tuple[str, str]] = set()
     mismatched: list[str] = []
     for law_id, article, title, _crit in statute.REFERENCE_ARTICLES:
@@ -891,8 +921,10 @@ def body_scope(cur: Any) -> tuple[tuple[str, str], ...]:
         if not src.startswith("admrul_") or AD_WORD not in doc_title:
             continue
         nums = [a for (lid, a) in titles if lid == law_id]
-        if not nums:
-            out.add((law_id, "*"))  # 산문 고시 — 숫자 조가 없다
+        if not nums:  # 산문 고시 — 숫자 조가 없다. 장 단위로 싣는다
+            for (lid, ch), heads in chapters.items():
+                if lid == law_id and heads and not any(_boilerplate_chapter(h) for h in heads):
+                    out.add((law_id, ch))
         for a in nums:
             ts = titles[(law_id, a)]
             if len(ts) == 1 and not (ts & statute.BOILERPLATE_TITLES):
@@ -913,7 +945,7 @@ def in_reference_scope(
     """검색 근거 하나를 참고 조문 후보로 남기는가.
 
         별표  → `scope`(D-328 · 위임 근거에 「광고」)에 `(법 ID, 별표 번호)`
-        본문  → `body`(D-329)에 `(법 ID, 조)` 또는 `(법 ID, "*")`
+        본문  → `body`(D-329)에 `(법 ID, 조)` · 산문 고시는 `(법 ID, 장)`(🔄 2026-10-12 · D-293 개정 집행)
         그 밖 → 거짓 — 모르는 문서 종류다
 
     🔴 없거나 모르면 거짓이다 (D-220).
@@ -923,7 +955,10 @@ def in_reference_scope(
     if hit.doc_type == "별표":
         return hit.annex_no is not None and (hit.law_id, hit.annex_no) in scope
     if hit.doc_type == "법령":
-        return (hit.law_id, "*") in body or (hit.law_id, hit.article or "") in body
+        ch = rt.prose_chapter(hit.paragraph or "")
+        if ch is not None:
+            return (hit.law_id, ch) in body
+        return (hit.law_id, hit.article or "") in body
     return False
 
 
@@ -952,7 +987,12 @@ def reference_texts(cur: Any) -> dict[str, EvidenceArticle]:
         if h is None or h.citable is not True or h.part_total != 1 or h.exempt_of or not h.text:
             continue
         out[c] = EvidenceArticle(
-            law_id=law_id, article=cite, item=h.item or "", chunk_id=h.chunk_id, quote=h.text
+            law_id=law_id,
+            article=cite,
+            item=h.item or "",
+            chunk_id=h.chunk_id,
+            quote=h.text,
+            doc_title=h.doc_title,
         )
     return out
 
@@ -983,7 +1023,13 @@ def basis_texts(cur: Any, cites: Iterable[str]) -> dict[str, EvidenceArticle]:
         if h is None or h.citable is not True or h.part_total != 1 or not h.text:
             continue
         out[c] = EvidenceArticle(
-            law_id=law, article=article, item=item, chunk_id=h.chunk_id, quote=h.text, basis=True
+            law_id=law,
+            article=article,
+            item=item,
+            chunk_id=h.chunk_id,
+            quote=h.text,
+            basis=True,
+            doc_title=h.doc_title,
         )
     return out
 
