@@ -68,11 +68,14 @@ SUIT = re.compile(r"추천|적합|딱 맞|안성맞춤|필수")
 ODD = re.compile(r"(프리랜서|직장인|대학생|\d0대|시니어|부부|분들?) 중 ")
 
 
-def load() -> list[dict]:
+def load(polish: bool = False) -> list[dict]:
     targets = {r["id"]: r["target"] for r in map(json.loads, (LSE / "persona_targets.jsonl").open(encoding="utf-8"))}
     rows = [json.loads(line) for line in (LSE / "persona_inputs.jsonl").open(encoding="utf-8")]
     for r in rows:
         r["target"] = targets[r["id"]]
+    if polish:
+        # 🆕 10-12 — 제품 사실 문장 → 자연스러운 광고 문장(고객층 없음 · 고객층 말투) · `build_persona_polish.py`
+        rows += [json.loads(line) for line in (LSE / "persona_polish.jsonl").open(encoding="utf-8")]
     return rows
 
 
@@ -186,8 +189,14 @@ def evaluate(model, tok, rows: list[dict], variant: str) -> list[dict]:
     res = []
     for r in rows:
         body = generate(model, tok, r)
+        probs = rule_check(r, body)
+        if body and not probs:
+            # 🆕 10-12 — 서비스와 같은 관문(말투 모드)도 지나야 통과로 센다
+            from stage_gate import check as gate  # noqa: PLC0415
+
+            probs = [f"관문: {x}" for x in gate(r["input"], body, persona=True).reasons]
         res.append({"variant": variant, **{k: r[k] for k in ("id", "group", "persona", "input", "target")},
-                    "body": body, "problems": rule_check(r, body), "claim_kept": round(claim_kept(r, body), 3)})
+                    "body": body, "problems": probs, "claim_kept": round(claim_kept(r, body), 3)})
     ok = [x for x in res if not x["problems"]]
     div = []
     for _, grp in itertools.groupby(sorted(res, key=lambda x: x["input"]), key=lambda x: x["input"]):
@@ -208,9 +217,14 @@ def evaluate(model, tok, rows: list[dict], variant: str) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--eval-only", action="store_true")
+    ap.add_argument("--polish", action="store_true", help="🆕 10-12 다듬기 데이터(persona_polish.jsonl)를 더해 따로 저장(_polish)")
     args = ap.parse_args()
+    global ADAPTER, OUT
+    if args.polish:
+        ADAPTER = ADAPTER.with_name(ADAPTER.name + "_polish")
+        OUT = OUT.with_name(OUT.stem + "_polish.jsonl")
     torch.manual_seed(SEED)
-    rows = load()
+    rows = load(args.polish)
     rows = leak_guard(rows)
     train_rows = [r for r in rows if r["split"] == "train"]
     eval_rows = [r for r in rows if r["split"] == "eval"]
