@@ -170,8 +170,15 @@ def stage2_judge(stage1_result: dict, category: Optional[Category] = None, agree
         if not pm.criteria_ready(premises):
             raise SystemExit("🔴 전제의 기준 문안이 비었다 — 분기를 낼 수 없다 (D-319 ③ · `app/premise.py` CRITERIA)")
         per = {p: layer(g._premise_sentences(p, state, [])[0], enc, scan, premise=p, agree=agree) for p in premises}
-        same = len({g._judgment_key(j) for j, _ in per.values()}) == 1
-        if category is None or not same:                         # 품목을 모르면 같아도 분기를 낸다 (D-229 ⑥ · D-319 ②)
+        # 🔄 2026-10-12 — 분기를 낼지는 그래프와 같은 열쇠(`g._branch_key`)로 본다 — 확신 부족 보류 문장의 후보 · 근거는 견주지 않는다
+        #    (D-319 · D-323 결정 1 · 원장 10-10 ⑮ · 팀장 전달 10-11). ⛔ 종전 `g._judgment_key` 는 보류 후보만 달라도 분기를 냈다
+        same = len({g._branch_key(j) for j, _ in per.values()}) == 1
+        # 제품을 알 때 보류 문장의 후보 = 그 품목의 전제로 거른 합집합 — 그래프의 `_held_candidates` 를 그대로 부른다 (D-319 ④′)
+        held = None if category is None else g._held_candidates(base, [j for j, _ in per.values()])
+        if category is not None and same:
+            if held is not None:                                 # 판정은 그대로 · 보류 문장의 후보만 바로잡는다 (분기는 내지 않는다)
+                recorded, rec_why = held, rec_why + " · 후보는 이 품목의 전제에서 서는 것만"
+        else:                         # 품목을 모르면 같아도 분기를 낸다 (D-229 ⑥ · D-319 ②)
             reason = HoldReason.cat_unknown if category is None else HoldReason.premise_unknown
             rec = g._recorded(base, [j for j, _ in per.values()], reason)
             if rec is not None:
@@ -182,14 +189,9 @@ def stage2_judge(stage1_result: dict, category: Optional[Category] = None, agree
                 recorded = _remake(recorded, verdict=Verdict.hold, hold_reason=reason, not_claim=False, risk=R0)
                 rec_why = "통과를 내지 못하는 전제가 있다 → 보류 + 분기 (D-319 ②)"
                 pass_blocked = True
-            elif category is not None and recorded.verdict is Verdict.hold and recorded.hold_reason is HoldReason.low_conf:
-                # `[제안]` 품목을 아는데 전제가 후보를 바꾼다(건강기능식품의 3호 → 4호 나목 등) — 그 품목의 어느 전제에서도
-                #   서지 않는 유형을 후보로 남기지 않는다. 후보 = 그 품목의 전제들에서 서는 후보의 합 (D-319 ④′)
-                union = sorted({v for j, _ in per.values() if j.verdict is Verdict.hold for v in j.violations},
-                               key=lambda v: v.value)
-                if union != list(recorded.violations):
-                    recorded = _remake(recorded, violations=union)
-                    rec_why += " · 후보는 이 품목의 전제에서 서는 것만"
+            elif held is not None:
+                # 🔄 2026-10-12 — 종전 `[제안]` 합집합(D-319 ④′)이 그래프에 들어갔다 — 그래프와 같은 함수를 부른다
+                recorded, rec_why = held, rec_why + " · 후보는 이 품목의 전제에서 서는 것만"
             branches = [Branch(premise=p, outcome=_OUTCOME[_route([j], pm.PREMISE_CATEGORY[p])], sentences=[j],
                                criteria=pm.CRITERIA[p]) for p, (j, _) in per.items()]
 
