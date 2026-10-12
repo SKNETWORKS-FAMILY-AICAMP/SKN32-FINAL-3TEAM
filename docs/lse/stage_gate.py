@@ -299,6 +299,9 @@ _FRAGMENT_GENERIC = {"제품", "상품", "서비스", "브랜드", "회원"}
 #:    말투 낱말은 허용하지만(`check(persona=True)`) 대상을 건강 고민으로 짚으면 효능을 암시한다. 1단계 문장에 이미 있던 낱말은 보지 않는다
 HEALTH_CUE = re.compile(r"혈압|혈당|콜레스테롤|면역|피로|다이어트|체중|뱃살|체지방|관절|연골|뼈|시력|변비|숙면|불면|수면|스트레스|"
                         r"기억력|집중력|탈모|노화|주름|미백|여드름|아토피|염증|통증|아프|아픈|약한|허약|회복|갱년기|소화|위장|건강")
+#: 🆕 10-12 — 2단계가 **새로 지어 넣은 사실**(산지 · 원료 · 무첨가 · 인증 · 천연). 말투는 사실을 더하지 않는다
+#:    (프롬프트 다듬기 시험에서 「국내산 원료로 제조되며, 무첨가로 생산」을 지어 붙였다 · 관문이 못 막았다)
+NEW_FACT = re.compile(r"국내산|국산|[가-힣]{1,4}산$|산지|원료|무첨가|첨가물|함유|인증|천연|유기농|무농약|수제|직접|제조|생산|공정")
 
 #: 🆕 10-12 — 4B v14 dev 검수(33 행 · 이서은 동의)에서 지나간 꼴 둘. 🚨 규칙은 직접 만든 문구로 골랐다(`gate_regress.py`)
 #: 「무+원료」(없음)를 「함유」로 — 「무○○ 함유」 · 「○○ 함유」(원문에는 「무○○」로만). 무(채소) · 무게 · 무료 같은 낱말은 뺀다
@@ -481,6 +484,9 @@ def check(original: str, stage1: str | None, persona: bool = False) -> GateResul
         cue = sorted({w for w in new_words(original, s) if HEALTH_CUE.search(w)})
         if cue:
             why.append(f"말투에 건강 고민 낱말: {', '.join(cue[:3])}")
+        fact = sorted({w for w in new_words(original, s) if NEW_FACT.search(_PARTICLE.sub("", w))})
+        if fact:
+            why.append(f"말투가 지어낸 사실: {', '.join(fact[:3])}")
     nw = [] if persona else new_words(original, s)
     if "도움" in s:
         nw = [w for w in nw if not _claim_word(w)]

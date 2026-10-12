@@ -399,6 +399,43 @@ def test_클라이언트가_품목을_보낸다(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(sllm_client.urllib.request, "urlopen", fake_urlopen)
     assert sllm_client.rewrite("문구", ["거짓_과장"], "건기식")[0] == "ok"
     assert sent["category"] == "건기식" and sent["rejudge"] is False
+    assert sent["polish"] is sllm_client.POLISH  # 🆕 10-12 — 자연스럽게 다듬기
+
+
+PLAIN = "원료를 담은 제품"  # 1단계(담백한) 문장 — 위의 BODY 를 2단계가 다듬은 안으로 본다
+
+
+def test_다듬은_안과_담백한_안을_둘_다_재판정해_나란히_보인다(wired) -> None:  # noqa: ANN001
+    """🆕 10-12 — 서버가 2단계로 다듬은 문장과 1단계 문장을 같이 주면 둘 다 재판정하고 둘 다 보인다."""
+    wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN})
+    wired.judge_out[PLAIN] = ("ok", _light())
+    html = _go()
+    assert wired.judge == [ORIGINAL, BODY, PLAIN], "🔴 담백한 안을 재판정하지 않았다 (D-119)"
+    assert "자연스럽게 다듬은 안" in html and BODY in html
+    assert "담백한 안" in html and PLAIN in html
+
+
+def test_다듬은_안이_재판정에서_떨어지면_담백한_안을_후보로_올린다(wired) -> None:  # noqa: ANN001
+    wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN})
+    wired.judge_out[BODY] = ("ok", _light(["건강기능식품_오인"]))
+    wired.judge_out[PLAIN] = ("ok", _light())
+    html = _go()
+    assert "고친 문구 후보" in html and PLAIN in html
+    assert "재판정에서 위반 의심" not in html and "담백한 안" not in html
+
+
+def test_담백한_안이_재판정에서_떨어지면_보이지_않는다(wired) -> None:  # noqa: ANN001
+    wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN})
+    wired.judge_out[PLAIN] = ("ok", _light(["건강기능식품_오인"]))
+    html = _go()
+    assert BODY in html and PLAIN not in html
+
+
+def test_담백한_안이_빈_글자면_깨진_응답이다() -> None:
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    assert not sllm_client._well_formed({**_CANDIDATE, "plain": "  "})
+    assert sllm_client._well_formed({**_CANDIDATE, "plain": None})
 
 
 def test_재판정에서_미판정이면_위반_못_찾음이_아니다(wired) -> None:  # noqa: ANN001

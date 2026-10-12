@@ -139,6 +139,9 @@ def rewrite(text: str, violation_types: list[str] | None = None, persona: str | 
         out["reasons"] = [*out["reasons"], "재판정 탈락: " + " · ".join(r.get("rejudge_violations") or ["근거 없음"])]
     if r["outcome"] == "candidate" and r.get("final"):
         out["rewrite"] = {"body": r["final"], "mandatory_note": r.get("note"), "placement": None}
+        # 🆕 10-12 — 2단계로 다듬었으면 1단계(담백한) 문장도 같이 — 화면이 두 안을 나란히 보인다(D-34 후보 여러 개의 첫걸음)
+        s1 = r.get("stage1_final")
+        out["plain"] = s1 if s1 and s1 != r["final"] else None
     return out
 
 
