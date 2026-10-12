@@ -50,10 +50,16 @@
 .cp-chip { display: inline-block; padding: .15rem .55rem; border-radius: 999px;
            font-size: .74rem; border: 1px solid var(--u-line);
            color: var(--u-clay); background: var(--u-surface2); }
-.cp-chip.c-r0, .cp-chip.c-r1 { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
+.cp-chip.c-r0, .cp-chip.c-r1, .cp-chip.c-ok { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
 .cp-chip.c-r2 { background: var(--u-warn-bg); color: var(--u-warn-ink); border-color: var(--u-warn-line); }
 .cp-chip.c-r3, .cp-chip.c-r4 { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
-.cp-chip.c-warn { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+.cp-chip.c-warn, .cp-chip.c-bad { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+/* 주황 — 조건이 맞으면 쓸 수 있는 위반(인정받은 제품만 · 근거 자료 필요). 공통 토큰에 없어 여기 둔다 */
+.cp-chip.c-orange { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+@media (prefers-color-scheme: dark) {
+  .user-shell:not([data-theme="light"]) .cp-chip.c-orange { background: #3a1d0b; color: #fdba74; border-color: #8a4a1c; }
+}
+.user-shell[data-theme="dark"] .cp-chip.c-orange { background: #3a1d0b; color: #fdba74; border-color: #8a4a1c; }
 .cp-chip.c-violation { background: var(--u-signal-soft); color: var(--u-signal-ink);
                        border-color: var(--u-signal-soft); }
 
@@ -161,9 +167,16 @@
   <div class="cp-scr">
     <p>{{ s.text }}</p>
     <div class="cp-chips">
-      <span class="cp-chip">
+      {#- 🔄 2026-10-12 — 위반 확정 문장은 **종류를 판정 칩에 적는다**: 인정받은 제품만(A) · 근거 자료 필요(B)는 주황 · 사용 불가(C)는 빨강.
+          종류가 실리지 않은 위반만 「위반 확정」으로 남는다. 종류 칩은 그래서 확정 위반 문장에는 다시 그리지 않는다 #}
+      {% set inf = s.infeasibility.value if s.infeasibility else "" %}
+      {% set hit = s.verdict.value == "confirmed" and s.violations %}
+      <span class="cp-chip{% if hit %} {{ 'c-orange' if inf in ('A', 'B') else 'c-bad' }}{% elif s.verdict.value == 'confirmed' %} c-ok{% endif %}">
         {#- 🔄 2026-10-01 — 검수 화면(review.html)과 같은 말을 쓴다 #}
-        {%- if s.verdict.value == "confirmed" and s.violations %}위반 확정
+        {%- if hit and inf == "A" %}인정받은 제품만 가능
+        {%- elif hit and inf == "B" %}객관적인 근거 자료 필요
+        {%- elif hit and inf == "C" %}사용 불가
+        {%- elif hit %}위반 확정
         {%- elif s.verdict.value == "confirmed" %}특이사항 없음
         {%- elif s.verdict.value == "hold" %}보류
         {%- elif s.verdict.value == "no_basis" %}근거 없음
@@ -185,10 +198,10 @@
       {% if s.risk.final and not (s.verdict.value != "confirmed" and s.risk.final.value == "R0") %}
       <span class="cp-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
       {% endif %}
-      {% if s.infeasibility %}
+      {% if s.infeasibility and not hit %}
       <span class="cp-chip c-warn">
         {%- if s.infeasibility.value == "A" %}인정받은 제품만 가능
-        {%- elif s.infeasibility.value == "B" %}근거 자료 필요
+        {%- elif s.infeasibility.value == "B" %}객관적인 근거 자료 필요
         {%- else %}사용 불가{% endif -%}
       </span>
       {% endif %}
