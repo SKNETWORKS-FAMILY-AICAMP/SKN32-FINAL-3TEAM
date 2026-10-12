@@ -196,7 +196,7 @@ def report(
     unc = sum(r["uncited_top"] for r in recs)
     print(
         f"\n  거른 순서의 상위 {TOP_K} 자리 {slots} 중 좌표 없는 줄 {unc} ({unc / max(slots, 1):.1%}) — 화면은 이 줄을 건너뛴다"
-        " (D-224 · D-293 집행 전)"
+        " (D-224 · 산문 · 별표 좌표 자격은 D-293)"
     )
     if dates is not None:
         later, unknown, total = dates
@@ -231,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         unmarked = cur.fetchone()[0]
         if unmarked:
             print(
-                f"🔴 적용 제외 표시(`exempt_of`)가 안 실린 청크 {unmarked:,}개 — 재지 않는다 (0021 · D-220)",
+                f"🔴 적용 제외 표시(`exempt_of`) · 좌표 자격(`coord_block`)이 안 실린 청크 {unmarked:,}개 — 재지 않는다 (0021 · 0025 · D-220)",
                 file=sys.stderr,
             )
             return 1

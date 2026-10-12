@@ -168,6 +168,9 @@ class Hit:
     basis_citation: str | None = None
     #: 🆕 2026-10-08 — 원천의 `U3_cite` 가 열렸는가 (D-224 ④). 🚨 `None` = 질의가 이 칸을 안 실었다 — 인용하지 않는다.
     citable: bool | None = None
+    #: 🆕 2026-10-12 (0025 · D-293 개정) — **좌표를 막는 이유.** 빈 문자열 = 막지 않는다 · 「겹침」 · 「순서」.
+    #:    🚨 `None` 은 「아직 재적재 안 됨」이다 — 그때 별표 · 산문 좌표는 서지 않는다(`citation`). 조문은 이 칸을 안 본다.
+    coord_block: str | None = None
     #: 코사인 거리. 🚨 어휘·기호 갈래는 `None` 이다 — **0.0 으로 채우지 않는다.**
     #:    0.0 은 「완전히 같다」는 뜻이라, 없는 값을 가장 좋은 값으로 만든다.
     distance: float | None = None
@@ -214,6 +217,8 @@ _SELECT: tuple[tuple[str, str], ...] = (
     ("c.part_total", "part_total"),
     # 🆕 2026-09-28 (0021 · D-238 개정 (나)) — 적용 제외 목의 부모 경로. ⛔ 없으면 제외 목이 위반 근거 좌표로 나간다(사실원장 ㊷).
     ("c.exempt_of", "exempt_of"),
+    # 🆕 2026-10-12 (0025 · D-293 개정) — 좌표를 막는 이유. ⛔ 없으면 겹친 경로 · 순서가 깨진 노드에 좌표가 선다
+    ("c.coord_block", "coord_block"),
     ("c.doc_type", "doc_type"),
     ("c.law", "law"),
     ("c.text", "text"),
@@ -403,7 +408,8 @@ _CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 #:    ⛔ 합치지 않았다 — `app/` 이 `preprocess/` 를 import 하면 런타임이 전처리 층에 매인다.
 #:       그래서 D-99 의 나머지 절반을 쓴다: **양쪽에 서로를 가리키는 주석.**
 #:       ★ 한쪽을 고치면 다른 쪽도 고친다. 게이트가 두 값이 같은지 본다.
-_JO = "가나다라마바사아자차카타파하"
+#: 🔄 2026-10-12 (D-293 개정) — 「거~허」 까지 넓혔다(짝과 같이).
+_JO = "가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허"
 
 #: 별표 계층을 옮기는 말 — 깊이마다 **모양이 다르다** (2026-09-14 실측 · 301행 전부).
 #:    깊이 0 `1`      → 제1호      (숫자)
@@ -421,6 +427,41 @@ _ANNEX_SECTIONS = {"본문": "", "비고": " 비고"}
 _HO = re.compile(r"([0-9]+)(?:의([0-9]+))?")
 
 
+#: 산문 행정규칙 경로의 머리 — 장 번호(「Ⅲ」). 조문 청크의 `paragraph` 는 「①」 이거나 비어 있어 이 꼴이 안 된다.
+#:    🚨 글자는 `preprocess/law_article.py` `_ROMAN` 과 같다(층이 달라 합치지 않는다 · D-99 의 주석 짝)
+_PROSE_HEAD = re.compile(r"^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+(?:\.|$)")
+
+
+def prose_chapter(paragraph: str) -> str | None:
+    """산문 행정규칙 경로의 장 — 「Ⅲ.2.가」 → 「Ⅲ」 · 「2:Ⅲ」 → 「2:Ⅲ」(다시 쓰인 장 번호의 구역). 산문 경로가 아니면 `None`.
+
+    `app/graph.py` `body_scope` · `in_reference_scope` 가 장 단위로 참고 조문 범위를 정할 때 쓴다(D-329 · D-293 개정).
+    """
+    path = (paragraph or "").strip()
+    sec, _, rest = path.rpartition(":")
+    if not _PROSE_HEAD.match(rest):
+        return None
+    head = rest.split(".", 1)[0]
+    return f"{sec}:{head}" if sec else head
+
+
+def _prose_citation(hit_like: dict) -> str | None:
+    """산문 행정규칙의 좌표 — 원문 번호 사슬 그대로 「Ⅲ.2.가」 · 「Ⅱ.1.거.1).가)」 (🆕 2026-10-12 · D-293 · 개정 안건 2 (나)).
+
+    🔴 문서 이름 없이는 뜻이 서지 않는다 — 받는 쪽은 `doc_title` 을 같이 쓴다(D-293 트레이드오프 · `EvidenceArticle.doc_title`).
+    ⛔ 세우지 않는 것 (D-224 ② · 모르면 `None`)
+       · 구역 앞머리 「2:」 가 붙은 경로 — 장 번호가 다시 쓰인 뒤의 구역이다. 「2:」 는 우리가 센 것이라 원문에 없다
+       · `coord_block` 이 빈 문자열이 아닌 것 — 경로가 파일 안에서 겹치거나 형제 순서가 깨졌다(`law_article.mark_coord_block`)
+       · `coord_block` 이 `None` — 재적재 전이다. 없음이 「막지 않는다」로 집계되지 않게 (D-220)
+    """
+    path = (hit_like.get("paragraph") or "").strip()
+    if ":" in path or not _PROSE_HEAD.match(path):
+        return None
+    if hit_like.get("coord_block") != "":
+        return None
+    return path
+
+
 def _annex_citation(hit_like: dict) -> str | None:
     """「[별표 1] 제2호가목1)」을 조립한다. 🔴 확신이 없으면 `None`.
 
@@ -435,6 +476,9 @@ def _annex_citation(hit_like: dict) -> str | None:
     """
     no = hit_like.get("annex_no")
     if not no:
+        return None
+    # 🆕 2026-10-12 (D-293 개정) — 경로가 겹치거나 형제 순서가 깨진 노드 · 재적재 전(`None`)은 세우지 않는다 (D-224 ② · D-220)
+    if hit_like.get("coord_block") != "":
         return None
     section = (hit_like.get("item") or "").strip()
     if section not in _ANNEX_SECTIONS:
@@ -482,6 +526,9 @@ def citation(hit_like: dict) -> str | None:
         return _annex_citation(hit_like)
     if hit_like.get("doc_type") != "법령":
         return None
+    # 🆕 2026-10-12 (D-293) — 산문 행정규칙은 조 · 항 · 호가 없다. 경로가 장 번호로 시작하면 그 갈래다(구역 앞머리 「2:」 포함)
+    if prose_chapter(hit_like.get("paragraph") or "") is not None:
+        return _prose_citation(hit_like)
     art = (hit_like.get("article") or "").strip()
     if not art:
         return None

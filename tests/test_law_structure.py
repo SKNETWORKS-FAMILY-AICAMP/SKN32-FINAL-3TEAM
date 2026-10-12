@@ -121,5 +121,7 @@ def test_마커가_없는_조는_종전처럼_한_행이다(tmp_path: pathlib.Pa
 )
 def test_별표_인용은_ASCII_숫자만_호로_읽는다(path: str, want: str | None) -> None:
     section = "비고" if path == "머리" else "본문"
-    got = rt.citation({"doc_type": "별표", "annex_no": 2, "item": section, "paragraph": path})
+    got = rt.citation(
+        {"doc_type": "별표", "annex_no": 2, "item": section, "paragraph": path, "coord_block": ""}
+    )
     assert got == want
