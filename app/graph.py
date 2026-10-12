@@ -283,6 +283,10 @@ class CoreState(TypedDict, total=False):
     #: 🆕 2026-10-12 (D-327) — 참조 조항 좌표 → 원문이 붙은 조항(`reference_texts`). `match_dict` **한 노드만** 쓴다(리듀서 없음).
     #:    비면 좌표만 간다 — 좌표는 표(`collect/statute.py` `references`)가 정한 값이라 DB 없이도 선다.
     ref_texts: dict[str, EvidenceArticle]
+    #: 🆕 2026-10-12 (D-328) — 판정 화면의 참고 조문으로 실어도 되는 별표 `(법 ID, 별표 번호)`. `retrieve` **한 노드만** 쓴다(리듀서 없음).
+    #:    🚨 비거나 없으면 **별표를 하나도 싣지 않는다**(D-220) — 모르는 별표를 참고 조문으로 내지 않는다.
+    #:    ⛔ frozenset 이 아니라 정렬한 튜플이다 — 체크포인터(D-129)가 상태를 직렬화한다.
+    annex_scope: tuple[tuple[str, int], ...]
     # ── 인코더 신호 🔴 누적 (🆕 2026-10-07 · 그림자) — 문장마다 한 벌. 모델이 없으면 **비어 있다**(없음 ≠ 조용함)
     encodings: Annotated[list[SentEncoding], operator.add]
     # ── 법별 팬아웃 🔴 누적 (D-267) — 법 노드가 **병렬로** 쓴다. 리듀서가 없으면 하나만 남는다
@@ -473,6 +477,8 @@ def law_payload(state: CoreState) -> dict[str, Any]:
         "evidence": list(state.get("evidence", [])),
         # 🆕 2026-09-28 (W4) — 사전 적중도 법별로 가른다. ⛔ 빠지면 컴파일본의 노드는 적중이 없는 것으로 본다(오류 없음)
         "dict_scans": list(state.get("dict_scans", [])),
+        # 🆕 2026-10-12 (D-328) — 참고 조문으로 실어도 되는 별표. ⛔ 빠지면 컴파일본의 노드는 별표를 하나도 안 싣는다(오류 없음 · 안전 쪽)
+        "annex_scope": tuple(state.get("annex_scope") or ()),
     }
 
 
@@ -624,7 +630,8 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
                 pool=st.pool_vector + st.pool_lexical,
             )
         )
-    return {"evidence": found}
+    # 🆕 2026-10-12 (D-328) — 참고 조문으로 실어도 되는 별표. 같은 커서로 요청마다 한 번 묻는다(`reference_texts` 와 같은 꼴)
+    return {"evidence": found, "annex_scope": annex_scope(cur)}
 
 
 #: 사전 종류 — 🚨 `scripts/load_db.py` `DICT_KIND` 와 **같은 값**이다. ⛔ `app/` 이 `scripts/` 를 import 하지 않는다 —
@@ -726,6 +733,123 @@ def _ref_article(coord: str) -> EvidenceArticle:
     """참조 조항 좌표(`법ID:좌표`) → 좌표만 든 조항. 🚨 `basis` 는 거짓이다 — 판정이 기대는 조문이 아니다 (D-327 · D-323 결정 2)."""
     law_id, _, cite = coord.partition(":")
     return EvidenceArticle(law_id=law_id, article=cite)
+
+
+#: 🆕 2026-10-12 (D-328) — 참고 조문으로 실을 별표를 가르는 낱말. 🚨 `[판정]` D-328 — 위임 근거(법령 별표는 위임 조문의 제목 ·
+#:    행정규칙 별표는 고시 이름)에 이 낱말이 있어야 싣는다. 바꾸면 화면의 참고 조문이 바뀐다 — 보고에 올린다.
+AD_WORD = "광고"
+#: 별표 제목의 「(제N조 관련)」 — 위임 조문. 여럿이면 하나라도 맞으면 된다(013475 [별표 3] 「제5조제2항, 제6조제4항 및 제7조제2항」)
+_DELEGATE = re.compile(r"제(\d+)조(?:의(\d+))?")
+#: 조 머리 줄 「제8조(광고의 기준) …」 — 조문 제목
+_ARTICLE_HEAD = re.compile(r"^(제\d+조(?:의\d+)?)\s*\(([^)]*)\)")
+#: 현행 별표 문서와 그 별표가 딸린 법령 문서(같은 법 ID · 문서 종류 「법령」)의 이름 · 원천 파일.
+#: 🚨 원천 파일(`source_ref`)의 머리 `admrul_` 로 행정규칙을 가른다 — 적재기가 `law_article.jsonl` 의 `파일` 을 그대로 넣는다(`scripts/load_db.py`)
+SQL_ANNEX_DOCS = """SELECT d.law_id, d.annex_no, d.title, p.title, p.source_ref
+FROM document d
+LEFT JOIN LATERAL (
+  SELECT title, source_ref FROM document
+  WHERE law_id = d.law_id AND doc_type = '법령' AND superseded_at IS NULL
+  ORDER BY doc_id DESC LIMIT 1
+) p ON TRUE
+WHERE d.doc_type = '별표' AND d.annex_no IS NOT NULL AND d.superseded_at IS NULL"""
+#: 위임 조문의 청크들 — 조문 제목은 두 자리에 있다(`preprocess/chunk.py` `_context`):
+#:    조 행  → 글이 「제N조(제목) …」으로 시작한다
+#:    항 행  → 문맥이 조 제목이다(앞에 시행 예정 표시 「[…]」 줄이 올 수 있다). ⛔ 제목뿐인 조 머리 행은 청크로 안 싣는다(D-195) —
+#:             013453 제3조가 그렇다. 조 행만 보면 제목을 못 읽는다
+SQL_ARTICLE_HEADS = """SELECT DISTINCT c.law_id, c.article, c.text, c.context, c.item
+FROM v_current_chunk c
+WHERE c.doc_type = '법령' AND c.law_id = ANY(%s::text[]) AND c.article = ANY(%s::text[])"""
+
+
+def annex_in_scope(
+    annex_title: str | None,
+    law_title: str | None,
+    law_source: str | None,
+    article_titles: dict[str, str],
+) -> bool:
+    """별표 하나를 판정 화면의 참고 조문으로 실어도 되는가 (🆕 2026-10-12 · D-328).
+
+        행정규칙(고시) 별표  → 고시 이름에 `AD_WORD`
+        법령 별표           → 별표 제목의 「(제N조 관련)」 조문 중 하나라도 그 제목에 `AD_WORD`
+
+    🔴 **모르면 거짓이다** (D-220) — 딸린 법령 문서를 못 찾았거나 · 위임 조문이 제목에 없거나 · 그 조문의 제목을 못 읽었으면 싣지 않는다.
+    ⛔ 손으로 만든 문서 목록을 두지 않는다 — 원문의 제목에서 계산한다(D-90). 새 별표도 같은 규칙으로 갈린다.
+    🚨 대상은 별표뿐이다 — 법령 · 행정규칙 **본문**은 이 규칙을 타지 않는다(D-328 범위 · D-293 개정에서 산문을 따로 정한다).
+    """
+    if not law_source:
+        return False
+    if law_source.startswith("admrul_"):
+        return AD_WORD in (law_title or "")
+    refs = [f"제{a}조" + (f"의{b}" if b else "") for a, b in _DELEGATE.findall(annex_title or "")]
+    return any(AD_WORD in (article_titles.get(r) or "") for r in refs)
+
+
+def annex_scope(cur: Any) -> tuple[tuple[str, int], ...]:
+    """현행 별표 중 참고 조문으로 실어도 되는 것 `(법 ID, 별표 번호)` — 정렬한 튜플 (🆕 2026-10-12 · D-328).
+
+    ★ 규칙은 `annex_in_scope` 한 곳이다. 여기는 재료(별표 제목 · 딸린 법령의 이름과 원천 · 위임 조문의 제목)만 DB 에서 모은다.
+    🚨 별표 번호가 없는 별표는 처음부터 빠진다 — 좌표가 서지 않아 어차피 참고 조문이 못 된다(`_annex_citation` · D-224).
+    """
+    cur.execute(SQL_ANNEX_DOCS)
+    docs = cur.fetchall()
+    want: dict[str, set[str]] = {}
+    for law_id, _no, title, _lt, src in docs:
+        if src and not str(src).startswith("admrul_"):
+            for a, b in _DELEGATE.findall(title or ""):
+                want.setdefault(law_id, set()).add(f"제{a}조" + (f"의{b}" if b else ""))
+    found: dict[tuple[str, str], set[str]] = {}
+    if want:
+        cur.execute(
+            SQL_ARTICLE_HEADS,
+            (sorted(want), sorted({a for v in want.values() for a in v})),
+        )
+        for law_id, article, text, context, item in cur.fetchall():
+            if article not in want.get(law_id, ()):
+                continue
+            title = _article_title(article, text, context, item)
+            if title:
+                found.setdefault((law_id, article), set()).add(title)
+    # 🔴 제목이 하나로 모이지 않으면 모르는 것이다 — 싣지 않는다 (D-220)
+    heads: dict[str, dict[str, str]] = {}
+    for (law_id, article), titles in found.items():
+        if len(titles) == 1:
+            heads.setdefault(law_id, {})[article] = next(iter(titles))
+    return tuple(
+        sorted(
+            (law_id, int(no))
+            for law_id, no, title, law_title, src in docs
+            if annex_in_scope(title, law_title, src, heads.get(law_id, {}))
+        )
+    )
+
+
+def _article_title(
+    article: str, text: str | None, context: str | None, item: str | None
+) -> str | None:
+    """청크 하나에서 조문 제목을 읽는다 — 조 행은 글의 머리 「제N조(제목)」, 항 행은 문맥(시행 예정 「[…]」 줄을 뺀 한 줄). 못 읽으면 `None`.
+
+    🚨 호 행의 문맥은 「제목 + 항 본문」이라 읽지 않는다 — 제목이 빈 조라면 항 본문을 제목으로 읽게 된다.
+    """
+    m = _ARTICLE_HEAD.match(text or "")
+    if m:
+        return m[2] if m[1] == article else None
+    if item:
+        return None
+    lines = [
+        x.strip()
+        for x in (context or "").split("\n")
+        if x.strip() and not x.strip().startswith("[")
+    ]
+    return lines[0] if len(lines) == 1 else None
+
+
+def in_reference_scope(hit: rt.Hit, scope: frozenset[tuple[str, int]]) -> bool:
+    """검색 근거 하나를 참고 조문 후보로 남기는가 (D-328). 별표가 아니면 늘 참 · 별표면 `scope` 에 있어야 한다(없거나 모르면 거짓 · D-220)."""
+    if hit.doc_type != "별표":
+        return True
+    return (
+        hit.law_id is not None and hit.annex_no is not None and (hit.law_id, hit.annex_no) in scope
+    )
 
 
 def reference_texts(cur: Any) -> dict[str, EvidenceArticle]:
@@ -943,6 +1067,7 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
         n = len(state.get("sents", []))
         by_sent = {e.sent_id: e for e in state.get("evidence", [])}
         scans = {s.sent_id: s for s in state.get("dict_scans", [])}
+        scope = frozenset(state.get("annex_scope") or ())
         picked: list[tuple[str, tuple[EvidenceArticle, ...]]] = []
         proviso_picked: list[tuple[str, tuple[Proviso, ...]]] = []
         dict_picked: list[tuple[str, tuple[DictHit, ...]]] = []
@@ -951,6 +1076,9 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
             sid = sent_id(i)
             e = by_sent.get(sid)
             hits = rt.law_view(e.vector_hits, e.lexical_hits, law) if e else []
+            # 🆕 2026-10-12 (D-328) — 광고를 다루지 않는 별표는 참고 조문으로 싣지 않는다. 🚨 근거로 바꾸기 **전에** 거른다 —
+            #    적용 제외 목은 근거가 되면 `chunk_id` 가 비어 어느 문서인지 모른다. 섞은 순서(`law_view`)는 그대로 둔다(거른 뒤 섞지 않는다)
+            hits = [h for h in hits if in_reference_scope(h, scope)]
             # 🔄 2026-09-28 (D-238 개정 (나)) — 적용 제외 목은 부모 좌표로 올리고 단서로 따로 나른다(`_pick`)
             arts, provs = _pick(hits)
             picked.append((sid, arts))

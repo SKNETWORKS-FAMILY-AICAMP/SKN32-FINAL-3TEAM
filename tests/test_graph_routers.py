@@ -626,6 +626,8 @@ def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(g, "basis_texts", lambda cur, cites: {})
     # 🆕 2026-10-12 (D-327) — 참조 조항의 원문도 같은 커서로 읽는다. 대역 커서로는 못 읽으니 비운다 — 좌표만 간다
     monkeypatch.setattr(g, "reference_texts", lambda cur: {})
+    # 🆕 2026-10-12 (D-328) — 참고 조문으로 실을 별표도 같은 커서로 읽는다. 대역 커서로는 못 읽으니 비운다 — 별표는 참고 조문에서 빠진다(안전 쪽)
+    monkeypatch.setattr(g, "annex_scope", lambda cur: ())
 
 
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202
