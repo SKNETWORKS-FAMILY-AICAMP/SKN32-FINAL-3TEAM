@@ -30,7 +30,10 @@ ROOT = Path(__file__).resolve().parents[2]
 #:    2단계도 4B 로 다시 학습했다(`…persona_adapter_q4b` · 규칙 통과 54/54). 3B 로 돌아가려면 환경 변수 셋을
 #:    COPYLANE_SLLM_BASE=Qwen/Qwen2.5-3B-Instruct · COPYLANE_SLLM_STAGE1=v12 · COPYLANE_SLLM_STAGE2=models\copylane_sllm_persona_adapter
 #:    🚨 `train_stage1_v5.py` 도 이 베이스를 읽는다 — 3B 판(v5 ~ v12)을 다시 학습하려면 COPYLANE_SLLM_BASE 를 3B 로 준다
-DEFAULT_STAGE1 = "q4b-v13"
+#: 🔄 2026-10-12 — 1단계 q4b-v13 → **q4b-v14**(보강 2차 · 직접 만든 55 행). 실제 광고 87 — 포장 4 → 0 · 불가를 불가로 47 → 55,
+#:    dev 바뀐 위험 33 행 검수의 위법 의심 2 는 관문 보강으로 0(`docs/lse/고쳐쓰기_dev평가_2026-10-11.md` §6-3).
+#:    보강 3차 q4b-v15 는 실제 광고에서 v14 보다 나빠(포장 1 · 불가 막음 48) 채택하지 않았다. v13 으로 돌아가려면 COPYLANE_SLLM_STAGE1=q4b-v13
+DEFAULT_STAGE1 = "q4b-v14"
 DEFAULT_BASE = "Qwen/Qwen3-4B-Instruct-2507"
 #: 🔄 2026-10-12 — 2단계는 다듬기 데이터(`persona_polish.jsonl`)를 더해 다시 학습한 판(`…_q4b_polish`). 고객층 없이 다듬기 39/39 통과
 #:    (종전 판 16/39 · 「건강 · 도움」을 붙여 막힘). 종전 판으로 돌아가려면 COPYLANE_SLLM_STAGE2=models\copylane_sllm_persona_adapter_q4b
