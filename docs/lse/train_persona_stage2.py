@@ -38,6 +38,7 @@ LSE = ROOT / "docs" / "lse"
 # 🔄 10-11 — 베이스는 `sllm_meta` 한 곳에서 읽는다(COPYLANE_SLLM_BASE). 3B 가 아니면 어댑터 · 평가 파일을 따로 쓴다 —
 #    3B 용 2단계 어댑터는 4B 에 붙지 않는다(라이선스로 Qwen3-4B-Instruct-2507 로 옮김 · 1단계 q4b-v13)
 sys.path.insert(0, str(LSE))
+sys.path.insert(1, str(ROOT))  # 🆕 10-12 — 평가가 관문(`stage_gate` → `app.dictmatch`)을 읽는다
 from sllm_meta import base_model  # noqa: E402
 
 BASE = base_model()

@@ -31,7 +31,9 @@ def test_값이_없으면_종전_채택본이다(monkeypatch: pytest.MonkeyPatch
     # 🔄 2026-10-11 — 채택본이 Qwen3-4B(q4b-v13)로 바뀌었다(라이선스 · `docs/lse/sllm_meta.py` 주석)
     assert meta.stage1_version() == "q4b-v13"
     assert meta.stage1_dir().name == "copylane_sllm_lora_adapter_q4b-v13"
-    assert meta.stage2_dir().name == "copylane_sllm_persona_adapter_q4b"
+    assert (
+        meta.stage2_dir().name == "copylane_sllm_persona_adapter_q4b_polish"
+    )  # 🔄 10-12 다듬기 판
     assert meta.base_model() == "Qwen/Qwen3-4B-Instruct-2507"
 
 

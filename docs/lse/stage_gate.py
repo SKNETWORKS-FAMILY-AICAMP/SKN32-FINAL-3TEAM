@@ -341,6 +341,26 @@ def effect_claim_kept(original: str, s: str) -> str | None:
     return None
 
 
+_FACT_SKIP = re.compile(r"^(?:있|없|하|합|함|해|됩|된|되|입니|이며|이고|줍|줄|줌|주는|수$|필요|미흡|확인|도움|등$|및$|또는$|으나$)")
+
+
+def facts_dropped(s1: str, s2: str) -> list[str]:
+    """🆕 10-12 — 2단계(말투 · 다듬기)가 **1단계 문장의 사실 낱말**을 빼거나 바꿨는가. 말투는 덧붙이는 일이지 사실을 고치는 일이 아니다.
+    낱말은 조사를 떼고, 활용 어미 한 글자(「압착한」 → 「압착」)는 떼고 본다 · 숫자는 그대로 남아야 한다.
+    (다듬기 시험에서 「저온 건조해 빚은 여주」 → 「…뚱한 여주」, 「채 썬」 → 「썬」이 나왔다)"""
+    out = dm.norm(s2)
+    lost = []
+    for w in re.findall(r"[가-힣A-Za-z0-9]+", s1):
+        if _FACT_SKIP.match(w):
+            continue  # 서술 · 완화 표현(「있습니다」 · 「필요함」)은 말투가 바꿔 쓸 수 있다 — 주장 검사가 따로 본다
+        t = _PARTICLE.sub("", w) if len(w) > 2 else w
+        if len(t) >= 2 and _CONJ_END.search(t):
+            t = t[:-1]  # 「빚은」 → 「빚」 · 「압착한」 → 「압착」
+        if t and dm.norm(t) not in out:
+            lost.append(w)
+    return lost
+
+
 def fragment_only(s: str) -> bool:
     """후보가 낱말 하나(일반어 제외) 뿐이고 숫자 · 연결 낱말(함유 · 사용 · 만든 …)이 없는가."""
     if NUM.search(s):
@@ -485,6 +505,8 @@ def check(original: str, stage1: str | None, persona: bool = False) -> GateResul
         cue = sorted({w for w in new_words(original, s) if HEALTH_CUE.search(w)})
         if cue:
             why.append(f"말투에 건강 고민 낱말: {', '.join(cue[:3])}")
+        if lost := facts_dropped(original, s):
+            why.append(f"말투가 사실 낱말을 빼거나 바꿈: {', '.join(lost[:3])}")
         fact = sorted({w for w in new_words(original, s) if NEW_FACT.search(_PARTICLE.sub("", w))})
         if fact:
             why.append(f"말투가 지어낸 사실: {', '.join(fact[:3])}")

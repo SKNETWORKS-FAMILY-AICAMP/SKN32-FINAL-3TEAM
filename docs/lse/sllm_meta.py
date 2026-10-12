@@ -32,7 +32,9 @@ ROOT = Path(__file__).resolve().parents[2]
 #:    🚨 `train_stage1_v5.py` 도 이 베이스를 읽는다 — 3B 판(v5 ~ v12)을 다시 학습하려면 COPYLANE_SLLM_BASE 를 3B 로 준다
 DEFAULT_STAGE1 = "q4b-v13"
 DEFAULT_BASE = "Qwen/Qwen3-4B-Instruct-2507"
-DEFAULT_STAGE2 = ROOT / "models" / "copylane_sllm_persona_adapter_q4b"
+#: 🔄 2026-10-12 — 2단계는 다듬기 데이터(`persona_polish.jsonl`)를 더해 다시 학습한 판(`…_q4b_polish`). 고객층 없이 다듬기 39/39 통과
+#:    (종전 판 16/39 · 「건강 · 도움」을 붙여 막힘). 종전 판으로 돌아가려면 COPYLANE_SLLM_STAGE2=models\copylane_sllm_persona_adapter_q4b
+DEFAULT_STAGE2 = ROOT / "models" / "copylane_sllm_persona_adapter_q4b_polish"
 
 ENV_STAGE1 = "COPYLANE_SLLM_STAGE1"
 ENV_STAGE2 = "COPYLANE_SLLM_STAGE2"
