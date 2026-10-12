@@ -25,10 +25,10 @@ ROOT = Path(__file__).resolve().parents[2]
 DICT = ROOT / "data" / "derived" / "banned_terms.jsonl"
 
 #: 질병 표현 — 사전이 놓치는 일반 질병명 · 치료 어휘. 🚨 고시 문구의 「혈압이 높은 사람」 · 「혈당조절」은 질병명이 아니다
-#: 🔄 10-12 — 그릇 「병」(젖병 · 보온병 · 물병 · 유리병 · 꽃병 · 술병 · 페트병)은 질병이 아니다(다듬기 데이터 · v15 데이터에서 걸림)
+#: 🔄 10-12 — 그릇 「병」(젖병 · 보온병 · 물병 · 유리병 · 꽃병 · 술병 · 페트병) · 「수염」은 질병이 아니다(다듬기 데이터 · v15 데이터에서 걸림)
 DISEASE = re.compile(
     r"치료|완치|예방|낫(?!또)|증후군|질환|질병|[가-힣]{1,6}(?<!젖)(?<!온)(?<!물)(?<!리)(?<!꽃)(?<!술)(?<!트)병(?![원아])|[가-힣]*통(?:증)?에|관절통|두통|당뇨|고혈압|암(?:을|에|세포|예방)|"
-    r"빈혈|감기|비만|아토피|탈모|변비|불면증|우울증|골다공증|염증|천식|소화불량|속쓰림|(?!무염|저염|죽염|천일염)[가-힣]+염(?![색료])"
+    r"빈혈|감기|비만|아토피|탈모|변비|불면증|우울증|골다공증|염증|천식|소화불량|속쓰림|(?!무염|저염|죽염|천일염)[가-힣]+(?<!수)염(?![색료])"
 )
 #: 의약품 · 의약품 오인
 #:    🔄 10-01 — 「[가-힣]+약」 꼴은 「곤약」 · 「치약」을 잡았다 → 의약품 낱말을 직접 적는다
@@ -456,7 +456,8 @@ def check(original: str, stage1: str | None, persona: bool = False) -> GateResul
     if m := DRUG.search(s):
         why.append(f"의약품 표현: {m.group().strip()}")
     kept = (set(NUM.findall(original)) & set(NUM.findall(s))) - (fact_numbers(original) & fact_numbers(s))
-    if kept:
+    if kept and not persona:
+        # 🔄 10-12 — 말투 모드의 「원문」은 이미 관문을 지난 1단계 문장이다 — 그 숫자(28cm · 주 2회)는 남아야 맞다
         why.append(f"원문 숫자 남음: {sorted(kept)}")
     for m in TESTIMONY.finditer(s):
         if not PRODUCER.search(s[: m.start()]):
