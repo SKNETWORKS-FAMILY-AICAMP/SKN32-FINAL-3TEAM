@@ -156,11 +156,13 @@ def test_거름은_별표만_본다() -> None:
     assert not g.in_reference_scope(_hit(annex_no=4), scope)
     assert not g.in_reference_scope(_hit(annex_no=None), scope)
     assert not g.in_reference_scope(_hit(annex_no=6), frozenset())  # 모르면 싣지 않는다
+    # 🔄 2026-10-12 (D-329) — 본문도 범위를 탄다(종전 「본문은 규칙 밖」). 별표 표는 본문을 가르지 않는다
     body = _hit(doc_type="법령", annex_no=None, article="제8조", paragraph="①", item="")
-    assert g.in_reference_scope(body, frozenset())  # 본문은 규칙 밖
+    assert not g.in_reference_scope(body, scope)  # 본문 범위가 비면 싣지 않는다
+    assert g.in_reference_scope(body, frozenset(), frozenset({("013475", "제8조")}))
 
 
-def _state(hits: list[rt.Hit], scope: tuple) -> dict:
+def _state(hits: list[rt.Hit], scope: tuple, body: tuple = ()) -> dict:
     ev = g.SentEvidence(
         sent_id=g.sent_id(0),
         vector_hits=tuple(hits),
@@ -169,7 +171,9 @@ def _state(hits: list[rt.Hit], scope: tuple) -> dict:
         lexical=True,
         pool=len(hits),
     )
-    return g.law_payload({"sents": ["문장"], "evidence": [ev], "annex_scope": scope})
+    return g.law_payload(
+        {"sents": ["문장"], "evidence": [ev], "annex_scope": scope, "body_scope": body}
+    )
 
 
 def test_법별_노드가_허용_밖의_별표를_참고_조문에서_뺀다() -> None:
@@ -181,14 +185,113 @@ def test_법별_노드가_허용_밖의_별표를_참고_조문에서_뺀다() -
         ),
     ]
     node = g._law_node("law_food")  # noqa: SLF001
-    out = node(_state(hits, (("013475", 6),)))["law_results"][0].articles[0][1]
+    body = (("013475", "제8조"),)
+    out = node(_state(hits, (("013475", 6),), body))["law_results"][0].articles[0][1]
     assert {a.chunk_id for a in out} == {"in", "body"}
-    # 허용 표가 비면 별표는 하나도 안 실리고 본문은 그대로다
-    out = node(_state(hits, ()))["law_results"][0].articles[0][1]
+    # 별표 허용 표가 비면 별표는 하나도 안 실리고 본문은 본문 범위대로다
+    out = node(_state(hits, (), body))["law_results"][0].articles[0][1]
     assert {a.chunk_id for a in out} == {"body"}
+    # 🆕 D-329 — 본문 범위가 비면 본문도 안 실린다
+    out = node(_state(hits, (("013475", 6),)))["law_results"][0].articles[0][1]
+    assert {a.chunk_id for a in out} == {"in"}
 
 
 def test_법별_노드로_보내는_것에_허용_표가_실린다() -> None:
     """⛔ `law_payload` 에 없으면 컴파일본(`Send`)의 노드는 허용 표를 못 본다 — 오류 없이 별표가 전부 빠진다."""
     assert g.law_payload({"annex_scope": (("013475", 6),)})["annex_scope"] == (("013475", 6),)
     assert g.law_payload({})["annex_scope"] == ()
+    assert g.law_payload({"body_scope": (("013475", "제8조"),)})["body_scope"] == (
+        ("013475", "제8조"),
+    )
+    assert g.law_payload({})["body_scope"] == ()
+
+
+# ── 본문 범위 (🆕 2026-10-12 · D-329) ─────────────────────────────────────────────
+
+
+def test_참고_조문_표는_줄마다_기준과_제목이_있고_조가_겹치지_않는다() -> None:
+    from collect import statute
+
+    rows = statute.REFERENCE_ARTICLES
+    assert len(rows) == 28
+    assert all(c in "abcd" and t for _l, _a, t, c in rows)
+    assert len({(r[0], r[1]) for r in rows}) == len(rows)
+    # 일반 정의 · 매체 정의는 표에 없다
+    assert ("002011", "제2조") not in {(r[0], r[1]) for r in rows}
+    assert ("005361", "제2조") not in {(r[0], r[1]) for r in rows}
+
+
+class _BodyCur:
+    def __init__(self, rows: list[tuple]) -> None:
+        self.rows = rows
+
+    def execute(self, sql: str, args: tuple | None = None) -> None:
+        assert sql is g.SQL_BODY_HEADS
+
+    def fetchall(self) -> list[tuple]:
+        return self.rows
+
+
+LAW_F = "law_013475_20241230.xml"
+LAW_N = "식품 등의 표시ㆍ광고에 관한 법률 시행규칙"
+
+
+def test_법령_본문은_표의_조_중_제목이_같은_것만_실린다(caplog: pytest.LogCaptureFixture) -> None:
+    rows = [
+        ("013475", "제8조", "제8조(광고의 기준) 법 제7조…", "", "", LAW_N, LAW_F),
+        (
+            "013475",
+            "제9조",
+            "제9조(다른 제목) …",
+            "",
+            "",
+            LAW_N,
+            LAW_F,
+        ),  # 개정으로 밀렸다 — 표는 「실증방법 등」
+        ("013475", "제13조", "제13조(등록사항의 변경) …", "", "", LAW_N, LAW_F),  # 표에 없다
+    ]
+    out = g.body_scope(_BodyCur(rows))
+    assert ("013475", "제8조") in out
+    assert ("013475", "제9조") not in out
+    assert ("013475", "제13조") not in out
+    assert "013475:제9조" in caplog.text
+
+
+def test_고시_본문은_이름에_광고가_있어야_하고_상투_조문은_뺀다() -> None:
+    ad_f, ad_n = "admrul_41277_x.xml", "화장품 표시·광고 실증에 관한 규정"
+    rows = [
+        ("41277", "제1조", "제1조(목적) …", "", "", ad_n, ad_f),
+        ("41277", "제3조", "제3조(실증자료) …", "", "", ad_n, ad_f),
+        ("41277", "제6조", "제6조(규제의 재검토) …", "", "", ad_n, ad_f),
+        (
+            "37098",
+            "제6조",
+            "제6조(유통화장품의 안전관리 기준) …",
+            "",
+            "",
+            "화장품 안전기준 등에 관한 규정",
+            "admrul_37098_x.xml",
+        ),
+        (
+            "20207",
+            "제Ⅱ조",
+            "Ⅱ. 적용범위 …",
+            "",
+            "",
+            "비교표시·광고에 관한 심사지침",
+            "admrul_20207_x.xml",
+        ),
+    ]
+    out = g.body_scope(_BodyCur(rows))
+    assert ("41277", "제3조") in out
+    assert ("41277", "제1조") not in out and ("41277", "제6조") not in out
+    assert not any(lid == "37098" for lid, _ in out)
+    assert ("20207", "*") in out  # 산문 고시는 고시 단위
+
+
+def test_본문_거름은_산문_고시를_고시_단위로_받는다() -> None:
+    prose = _hit(
+        law_id="20207", doc_type="법령", annex_no=None, article="제Ⅱ조", paragraph="Ⅱ.1", item=""
+    )
+    assert g.in_reference_scope(prose, frozenset(), frozenset({("20207", "*")}))
+    assert not g.in_reference_scope(prose, frozenset(), frozenset({("20207", "제2조")}))
