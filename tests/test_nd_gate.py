@@ -87,6 +87,7 @@ WRITERS = {
     "scripts/guide_statute_round.py",
     "scripts/casebook2021_sheet.py",
     "scripts/daegu2013_sheet.py",  # 🆕 2026-10-05 — 대구청 확정 문구 전사 → 파생물
+    "scripts/gen_eval_inputs.py",  # 🆕 2026-10-10 — 생성 평가 입력(dev 문구 · 전제 · 정답) → build/
 }
 #: 게이트를 부르지 않는 모듈과 그 이유 — 🚨 새 모듈이 아래 탐지에 걸리면 어느 쪽인지 **정하고** 적는다
 EXEMPT = {

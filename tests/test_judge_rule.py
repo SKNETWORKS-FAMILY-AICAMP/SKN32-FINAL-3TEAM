@@ -331,12 +331,25 @@ def test_조건부_평가는_품목을_아는_행만_품목을_넘겨_돈다() -
     from app.contracts import Category, ProductContext
     from scripts import eval_graph as eg
 
-    rows = [{"id": "a", "text": "가", "품목": "화장품"}, {"id": "b", "text": "나", "품목": None}]
-    assert [r["id"] for r in eg.conditional_rows(rows)] == ["a"]
+    rows = [
+        {"id": "a", "text": "가", "품목": "화장품", "전제": "화장품"},
+        {"id": "b", "text": "나", "품목": None, "전제": None},
+        {
+            "id": "h",
+            "text": "다",
+            "품목": "건기식",
+            "전제": None,
+        },  # 품목만 안다 — 인정 여부는 모른다
+    ]
+    assert [r["id"] for r in eg.conditional_rows(rows)] == ["a", "h"]
     assert eg.product_of(rows[0], True).category is Category.화장품
+    assert eg.product_of(rows[2], True).category is Category.건기식
     assert eg.product_of(rows[0], False) == ProductContext()
     with pytest.raises(SystemExit, match="품목"):
         eg.conditional_rows([{"id": "c"}])
+    # 🆕 2026-10-10 — `전제` 칸이 없는 판(재동결 전)에서도 멈춘다 — 품목만으로 조용히 돌지 않는다
+    with pytest.raises(SystemExit, match="전제"):
+        eg.conditional_rows([{"id": "c", "품목": "식품"}])
     seen = []
     eg.run(
         rows[:1],
@@ -474,15 +487,74 @@ def test_보수_기록은_분기_보류에_실린_유형을_기록으로_센다(
     assert w == {"rows": 2, "wrong": 1, "positive": 4, "hit": 1}, w
 
 
-def test_조건부_평가는_승인_문구_규칙_행을_뺀다() -> None:
-    """🆕 2026-10-06 — 그 행의 `품목` 은 원천이고 라벨은 「일반식품이 쓰면」이라는 전제다. 품목을 제품 정보로 넘기면 전제가 어긋난다."""
+def test_조건부_평가는_승인_문구_규칙_행을_전제로만_넘긴다() -> None:
+    """그 행의 `품목` 은 원천이고 라벨은 「일반식품이 쓰면」이라는 전제다. 품목을 제품 정보로 넘기면 전제가 어긋난다.
+
+    🔄 2026-10-10 — 종전에는 뺐다. 골든 `전제`(식품)가 생겨 그 전제로 든다. `전제` 가 빈 승인 문구 행은 여전히 뺀다.
+    """
+    from app.contracts import Category
     from preprocess.split import APPROVED_READING
     from scripts import eval_graph as eg
 
     rows = [
-        {"품목": "건기식", "판독": APPROVED_READING},
-        {"품목": "건기식", "판독": "독립판독_합의"},
-        {"품목": None, "판독": None},
-        {"품목": "식품"},
+        {"품목": "건기식", "판독": APPROVED_READING, "전제": "식품"},
+        {"품목": "건기식", "판독": APPROVED_READING, "전제": None},
+        {"품목": "건기식", "판독": "독립판독_합의", "전제": None},
+        {"품목": None, "판독": None, "전제": None},
+        {"품목": "식품", "전제": "식품"},
     ]
-    assert [r.get("판독") for r in eg.conditional_rows(rows)] == ["독립판독_합의", None]
+    got = eg.conditional_rows(rows)
+    assert got == [rows[0], rows[2], rows[4]]
+    assert eg.product_of(rows[0], True).category is Category.식품, (
+        "원천(건기식)이 아니라 전제(식품)다"
+    )
+
+
+# ── 2026-10-08 평가 규칙 집행 (D-321 · D-40 · D-175) ─────────────────────────────────────────────
+def test_유형_없는_위반_행과_편입_대기_유형만_붙은_행은_채점_밖이다() -> None:
+    """★ D-321 — 「유형이 없어 학습 · 채점에서 빠진다」(평가 131) · 편입 대기 유형은 게이트 · 발표 지표에 넣지 않는다."""
+    from scripts.eval_rule import scored, truth_types, untyped_violation  # noqa: PLC0415
+
+    untyped = {"조건": "C", "labels": [], "근거": ["002015:제13조제1항제4호"]}
+    pending = {"조건": "A", "labels": ["기능성화장품_오인"], "근거": ["002015:제13조제1항제2호"]}
+    mixed = {
+        "조건": "B",
+        "labels": ["거짓_과장", "기능성화장품_오인"],
+        "근거": ["002011:제3조제1항제1호"],
+    }
+    lawful = {"조건": "L", "labels": [], "근거": []}
+    cand = {"조건": "B", "labels": [], "근거": [], "근거_후보": [["002011:제3조제1항제1호"]]}
+    assert untyped_violation(untyped) and not scored(untyped)
+    assert untyped_violation(pending) and not scored(pending)
+    assert scored(mixed) and truth_types(mixed, set()) == {"거짓_과장"}, (
+        "편입 대기 유형은 정답에서 빠진다"
+    )
+    assert scored(lawful), "적법 행은 그대로 채점한다"
+    assert scored(cand), "근거 후보만 있는 행은 후보가 정답이다 — 빼지 않는다"
+
+
+def test_6종_8종_표와_신뢰구간() -> None:
+    """★ D-321 결정 4 — 두 표 · D-40 — 30 미만은 macro 에서 빠지고 · 신뢰구간은 n=0 이면 없다."""
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    t = {
+        "거짓_과장": (40, 20, 5),
+        "비방광고": (35, 7, 0),
+        "후기_체험기_기만": (10, 5, 0),
+    }
+    m = eg.macro_table(t)
+    assert m["8종"]["measurable"] == ["거짓_과장", "비방광고"]
+    assert m["6종"]["measurable"] == ["거짓_과장"], "6종 표에는 이번 편입 둘이 없다"
+    assert "후기_체험기_기만" in m["8종"]["unmeasurable"]
+    lo, hi = eg.wilson(20, 40)
+    assert lo < 0.5 < hi
+    assert eg.wilson(0, 0) is None
+
+
+def test_봉인_실행은_기록하고_횟수를_센다(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """★ D-175 — 봉인 평가셋 실행을 기록한다. 도구가 세지 않으면 「한 번」이 지켜졌는지 알 수 없다."""
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    monkeypatch.setattr(eg, "SEALED_LOG", tmp_path / "sealed.jsonl")
+    assert eg.log_sealed_run({"golden_sha": "x"}) == 1
+    assert eg.log_sealed_run({"golden_sha": "x"}) == 2

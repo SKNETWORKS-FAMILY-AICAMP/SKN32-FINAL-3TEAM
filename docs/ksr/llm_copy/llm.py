@@ -19,7 +19,9 @@ from filters import REASONS, Inputs
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 URL = "https://api.openai.com/v1/chat/completions"
-DEFAULT_MODEL = "gpt-4o-mini"
+#: `--model` 을 안 줬을 때 쓰는 값 — 쉼표로 이으면 섞어 돌린다(`run.make_llm`).
+#: 🔄 2026-10-08 — 종전 `gpt-4o-mini` 는 20개를 요청하면 16개만 냈다(10-03 실행 1). 10-03 최종 3개를 뽑은 섞음으로 바꿨다
+DEFAULT_MODEL = "gpt-5.6-luna,gpt-6-luna"
 
 SYSTEM = """너는 한국어 광고 카피라이터다. 제품 정보와 규칙을 받아 광고 문구 후보를 만든다.
 
@@ -113,7 +115,7 @@ def _api_key() -> str:
 
 
 class OpenAIChat:
-    def __init__(self, model: str = DEFAULT_MODEL, temperature: float | None = None) -> None:
+    def __init__(self, model: str, temperature: float | None = None) -> None:
         self.model = model
         self.temperature = temperature
         self.usage: Counter[str] = Counter()

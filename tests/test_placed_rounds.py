@@ -124,3 +124,17 @@ def test_새_학습_행이_평가와_겹치면_학습_쪽을_뺀다() -> None:
     kept, same, inside = golden.drop_placed_overlap(rows, {"ge:same", "ge:in", "ge:short"})
     assert [x["id"] for x in kept] == ["ftc:1#0", "ge:short#0", "ftc:2#0"]
     assert (same, inside) == (1, 1)
+
+
+def test_사례집_식품편은_채택본의_품목을_읽는다(root) -> None:
+    """🔴 2026-10-10 (D-326) — 판 상수 「식품」이 아니다. 품목 칸이 없는 옛 채택본이면 멈춘다 (D-220)."""
+    _put(root, "casebook_2021_food", [_row("cb:a"), _row("cb:b", 품목="건기식")])
+    _train, test, _stat = split.placed_docs()
+    assert {d["doc_id"]: d["품목"] for d in test} == {"cb:a": "식품", "cb:b": "건기식"}
+
+
+@pytest.mark.parametrize("bad", [None, "", "화장품"])
+def test_사례집_식품편_채택본에_품목이_없으면_멈춘다(root, bad) -> None:
+    _put(root, "casebook_2021_food", [_row("cb:a", 품목=bad)])
+    with pytest.raises(SystemExit, match="cbf-rebuild"):
+        split.placed_docs()

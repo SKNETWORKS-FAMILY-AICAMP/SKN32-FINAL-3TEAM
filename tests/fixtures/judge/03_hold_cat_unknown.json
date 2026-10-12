@@ -18,7 +18,8 @@
           "article": "제8조",
           "item": "제1항제3호",
           "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ],
       "risk": {
@@ -54,7 +55,8 @@
               "article": "제8조",
               "item": "제1항제3호",
               "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
-              "chunk_id": null
+              "chunk_id": null,
+              "basis": true
             }
           ],
           "risk": {
@@ -76,7 +78,8 @@
           "article": "제8조",
           "item": "제1항제3호",
           "quote": null,
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ]
     },

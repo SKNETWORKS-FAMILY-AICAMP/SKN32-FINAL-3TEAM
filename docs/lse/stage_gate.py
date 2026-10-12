@@ -278,6 +278,41 @@ def new_words(original: str, s: str) -> list[str]:
     return out
 
 
+#: 🆕 10-08 — 앞말과의 관계를 뒤집는 말. 빠지면 뜻이 바뀐다(「국산 당면 대신 곤약면」 → 「국산 당면 곤약면」 · 살리기 평가 #24).
+#: 같은 갈래의 다른 말로 바꿔 쓴 것(「설탕 없이」 → 「무설탕」)은 뜻이 남은 것으로 본다  redistribution: ok — 일반 관계어
+_RELATION = {
+    "대체": re.compile(r"대신|빼고|제외하고"),
+    "부정": re.compile(r"없이|없는|없고|않은|않고|않았|아닌|무첨가|무설탕|무가당|무색소|무방부제|무농약|미함유|미첨가|프리(?!미엄)|\bfree\b", re.I),  # redistribution: ok — 일반 관계어
+}
+_VERB_TAIL = re.compile(r"(지|게|고)$")
+
+
+def meaning_flipped(original: str, s: str) -> str | None:
+    """원문의 관계어(대신 · 없이 · 무첨가 …)가 빠졌는데 **그 앞말은 남았는가** — 「A 대신 B」가 「A B」가 되는 꼴.
+    앞말까지 함께 지웠으면(「숙취해소제 대신 황태국」 → 「황태를 우려 냄」) 뜻이 바뀐 게 아니다."""
+    s_low = s.lower()
+    for group, pat in _RELATION.items():
+        if pat.search(s_low):
+            continue  # 같은 갈래의 말이 출력에 있다
+        for m in pat.finditer(original):
+            word = m.group()
+            # 관계어가 걸리는 말 하나만 본다 — 「무설탕」은 설탕 · 「당면 대신」은 당면 · 「방부제 넣지 않고」는 동사를 건너 방부제.  redistribution: ok — 일반 관계어
+            # 🔄 두 낱말 앞까지 보면 「튼살 걱정 없는」의 튼살 · 「국내 유일 무농약」의 국내를 잡았다(학습 정답 오탐 4)
+            # 「무첨가 · 미함유 · 미첨가」는 대상이 앞말(「색소 무첨가」)이다 — 뒤쪽 「첨가」는 일반어
+            if word.startswith(("무", "미")) and len(word) >= 3 and word not in ("무첨가", "미함유", "미첨가"):  # redistribution: ok — 일반 관계어
+                target = word[1:]
+            else:
+                before = re.findall(r"[가-힣A-Za-z0-9]+", original[: m.start()])
+                if before and _VERB_TAIL.search(before[-1]) and len(before) >= 2:
+                    before = before[:-1]
+                if not before:
+                    continue
+                target = _PARTICLE.sub("", before[-1]) if len(before[-1]) > 2 else before[-1]
+            if len(target) >= 2 and dm.norm(target) in dm.norm(s):
+                return f"「{word}」 빠짐 ({target} · {group})"
+    return None
+
+
 def _cv(ch: str) -> int:
     """한글 음절의 초성 · 중성 번호(받침을 뗀다)."""
     return (ord(ch) - 0xAC00) // 28
@@ -351,6 +386,8 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"원문에 없는 원료명: {g}")
     if (t := ingredient_truncated(original, s)) is not None:
         why.append(f"원료명 앞부분 잃음: {t}")
+    if (f := meaning_flipped(original, s)) is not None:
+        why.append(f"뜻 바뀜 의심: {f}")
     # 🔄 10-06 (팀장 전달 §2 #5) — 종전에는 「도움」이 있으면 이 검사를 통째로 건너뛰어 「…달인 곶감은 면역에 도움」이 지나갔다.
     #    이제 늘 보고, 「도움」 문장에서는 인정 문구 낱말(`_claim_word`)만 허용한다
     nw = new_words(original, s)

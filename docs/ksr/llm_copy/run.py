@@ -3,6 +3,7 @@
     uv run python docs/ksr/llm_copy/run.py --fake --judge off             # 키 · DB 없이 흐름만
     uv run python docs/ksr/llm_copy/run.py --case cos_no_1 --judge off    # GPT + 코드 필터
     uv run python docs/ksr/llm_copy/run.py --case cos_no_1                # GPT + 코드 필터 + 판정엔진
+    uv run python docs/ksr/llm_copy/run.py --case cos_no_1 --judge encoder  # 위에 판정 인코더(v10)까지
     uv run python docs/ksr/llm_copy/run.py --model gpt-4o --more 1        # 모델 바꿔서 · 「더 탐색하기」 1번
 
 결과는 `build/llm_copy/` 에 JSON 으로 남는다(git 무시 폴더). 탈락 문구 원문은 이 로그에만 있다.
@@ -27,7 +28,7 @@ import llm as llm_mod  # noqa: E402
 import pipeline  # noqa: E402
 from branches import BRANCHES  # noqa: E402
 from filters import REASONS, Inputs  # noqa: E402
-from judge import GraphJudge, NoJudge  # noqa: E402
+from judge import EncoderJudge, GraphJudge, NoJudge  # noqa: E402
 
 
 def show(case_id: str, res: pipeline.Result, sec: float, judged: bool) -> None:
@@ -73,9 +74,10 @@ def main() -> int:
     ap.add_argument("--temperature", type=float, default=None)
     ap.add_argument(
         "--judge",
-        choices=("reject", "graph", "off"),
+        choices=("reject", "encoder", "encoder-only", "graph", "off"),
         default="reject",
-        help="reject: 엔진이 위반·유형 후보를 찾으면 탈락(지금 기본) · graph: 종착 pass 만 통과 · off: 판정 안 함",
+        help="reject: 엔진이 위반·유형 후보를 찾으면 탈락(지금 기본) · encoder: reject + 판정 인코더 · "
+        "encoder-only: 인코더만(DB 없이) · graph: 종착 pass 만 통과 · off: 판정 안 함",
     )
     ap.add_argument("--fake", action="store_true", help="GPT 대신 대역 — 키 없이 흐름만 본다")
     ap.add_argument(
@@ -96,7 +98,14 @@ def main() -> int:
     if not cases:
         raise SystemExit("돌릴 시험 입력이 없다")
 
-    judge = NoJudge() if args.judge == "off" else GraphJudge(reject_only=args.judge == "reject")
+    if args.judge == "off":
+        judge = NoJudge()
+    elif args.judge == "encoder-only":
+        judge = EncoderJudge(NoJudge())
+    elif args.judge == "encoder":
+        judge = EncoderJudge(GraphJudge(reject_only=True))
+    else:
+        judge = GraphJudge(reject_only=args.judge == "reject")
     out_dir = ROOT / "build" / "llm_copy"
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

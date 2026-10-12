@@ -53,7 +53,8 @@ def main() -> None:
     model = PeftModel.from_pretrained(
         base, str(ROOT / "models" / f"copylane_sllm_lora_adapter_{args.stage1}"), adapter_name="stage1"
     )
-    model.load_adapter(str(STAGE2), adapter_name="stage2")
+    if STAGE2.exists():  # 🔄 10-08 — 다른 베이스(4B 시험판)에는 3B 용 2단계 어댑터가 붙지 않는다 · 1단계만 잰다
+        model.load_adapter(str(STAGE2), adapter_name="stage2")
     model.eval()
     res = []
     for i, k in enumerate(rows, 1):

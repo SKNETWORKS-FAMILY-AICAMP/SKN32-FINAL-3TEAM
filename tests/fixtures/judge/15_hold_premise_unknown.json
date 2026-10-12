@@ -19,7 +19,8 @@
           "article": "제8조",
           "item": "제1항제4호나목",
           "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ],
       "risk": {
@@ -83,7 +84,8 @@
               "article": "제8조",
               "item": "제1항제4호나목",
               "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
-              "chunk_id": null
+              "chunk_id": null,
+              "basis": true
             }
           ],
           "risk": {
@@ -105,7 +107,8 @@
           "article": "제8조",
           "item": "제1항제4호나목",
           "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
-          "chunk_id": null
+          "chunk_id": null,
+          "basis": true
         }
       ]
     }

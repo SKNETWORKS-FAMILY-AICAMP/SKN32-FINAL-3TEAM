@@ -278,6 +278,10 @@ class EvidenceArticle(BaseModel):
     item: str = ""
     quote: str | None = None
     chunk_id: str | None = None
+    #: 🆕 2026-10-08 (D-323 결정 2) — **사전 항목이 인용한 조문**(판정이 기대는 조문)이면 참 · 검색이 찾은 참고 조문이면 거짓.
+    #:    ⛔ enum 이 아니라 참거짓이다 — enum 은 DB 값과 맞춰야 하는 규칙(D-54)을 끌고 온다. 둘뿐이라 참거짓으로 족하다.
+    #:    🚨 기본값은 거짓(참고) — 칸을 모르는 쪽이 만든 근거가 「판정 근거」로 읽히지 않게 (D-220).
+    basis: bool = False
 
 
 class RiskAssessment(BaseModel):
@@ -398,6 +402,29 @@ class FactBranch(BaseModel):
     criteria: str = Field(..., min_length=1)
 
 
+class EncoderTypeCandidate(BaseModel):
+    """인코더가 낸 **유형 후보** 하나 (🆕 2026-10-08 · D-323 결정 1 · D-131). 🚨 판정이 아니다.
+
+    ⛔ 하한 · 확정 · 재판정 탈락 · 분기 열쇠 어디에도 들지 않는다 — 근거 구간(스팬)이 없는 인코더 출력은 상향 0 이다 (D-131).
+    ⛔ `SentenceJudgment.violations` 와 섞지 않는다 — 그 칸은 사전 근거가 있는 유형만이다 (D-323 결정 3).
+    """
+
+    violation: Violation
+    #: 모델의 확률 — 문턱은 모델 폴더(`label_scheme.json`)의 것이라 여기 싣지 않는다 (D-324)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    #: 🆕 2026-10-10 — **전제가 유형을 옮긴 후보**면 인코더가 실제로 낸 유형. `None` 이면 인코더가 이 유형을 그대로 냈다.
+    #:    건강기능식품 오인(3호)은 건강기능식품 전제에서 서지 않고, 인정이 없는 전제에서는 그 자리에 [별표 1] 4.나
+    #:    (인정하지 않은 기능성 · 거짓_과장)가 선다 — 사전 적중과 같은 규칙이다(`app/graph.py` `_premise_hits` · D-319 ④′ ②).
+    #:    🚨 이때 `confidence` 는 **옮기기 전 유형**의 확률이다. 화면 · 평가는 이 칸으로 「옮긴 후보」를 가른다
+    moved_from: Violation | None = None
+    #: 🆕 2026-10-12 (D-327) — **참조 조항** — 이 유형을 정한 금지 조항과 세부 기준. 문장이 보내진 법마다 따로 실린다.
+    #:    🚨 **이 문구에서 찾아낸 근거가 아니다** — 「이 유형이라면 이 조항」이다. `SentenceJudgment.evidence`(사전이 인용한 근거 ·
+    #:       검색이 찾은 참고 조문)와 섞지 않는다 (D-323 결정 2 · 3). `basis` 는 늘 거짓이다 — 판정이 기대는 조문이 아니다.
+    #:    🔴 비어 있으면 「그 법에 이 유형의 조항이 없다」다(예: 화장품법의 건강기능식품 오인) — 조항이 없다고 후보가 틀린 것은 아니다.
+    #:       좌표만 있고 `quote` 가 비면 원문을 못 붙인 것이다(DB 없음 · 인용 자격 없음 · 쪼갠 조각) — 좌표는 표가 정한 값이다.
+    references: list[EvidenceArticle] = Field(default_factory=list)
+
+
 class SentenceJudgment(BaseModel):
     """문장 하나의 판정. 상태 스키마 「판정 누적」이 그대로 이 모양이다."""
 
@@ -405,10 +432,15 @@ class SentenceJudgment(BaseModel):
     text: str
     verdict: Verdict
     hold_reason: HoldReason | None = None
+    #: 🔄 2026-10-08 (D-323 결정 3) — **사전 근거가 있는 유형만**: 확정의 위반 · 보류의 자격 없는 사전 적중(D-311 결정 4).
+    #:    재판정 탈락 · 고쳐 쓰기 버튼 · 생성 서버에 넘기는 유형이 이 칸을 읽는다. ⛔ 인코더 후보는 `encoder_candidates` 로
     violations: list[Violation] = Field(default_factory=list)
     infeasibility: Infeasibility | None = None
     evidence: list[EvidenceArticle] = Field(default_factory=list)
     risk: RiskAssessment = Field(default_factory=RiskAssessment)
+    #: 🆕 2026-10-08 (D-323 결정 1) — 인코더 유형 후보. 비어 있으면 인코더가 없거나 조용하다 — **「위반 없음」이 아니다** (D-220).
+    #:    그래프가 채우는 것은 인코더 배선 뒤다(클론 B) · 그 전에는 늘 빈 목록이다.
+    encoder_candidates: list[EncoderTypeCandidate] = Field(default_factory=list)
     #: 🔄 근거 불일치는 상태가 아니라 **재생성 이벤트**다 (D-127)
     evidence_mismatch: bool = False
     #: 🆕 **판정 대상 아님** — 주장이 아닌 문장(섭취 대상 · 사업자 정보 · 의무 표기 · 구호 …) (D-275 · D-242 조건 D).

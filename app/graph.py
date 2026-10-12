@@ -17,8 +17,9 @@
    🔄 2026-10-06 — 판정 로직은 섰다: **인코더 전 규칙 판정**(`JUDGED_BY` · D-269) · 위험도 하한(`assess_risk`) ·
       품목 분기(`premise_branches`) · 증명서 조립(`_certificate_of` · D-320). DB 가 없으면 사전을 못 훑어 문장은 미판정이다.
       빈 노드는 `doc_rules` 와 생성(B)의 `keyword_screen` · `claim_ledger` · `rejudge` 다(`assemble` 은 라운드 수만 센다).
-   🔄 2026-10-07 — `encode` 는 **그림자 배선**이다: 모델 폴더가 설정되면(`COPYLANE_MODEL_DIR`) 문장마다 인코더 신호를
-      상태(`encodings`)에 싣는다. 🚨 `judge` 는 그 칸을 **읽지 않는다** — 판정은 여전히 인코더 전 규칙 판정이다(`JUDGED_BY`).
+   🔄 2026-10-07 — `encode` 는 모델 폴더가 설정되면(`COPYLANE_MODEL_DIR`) 문장마다 인코더 신호를 상태(`encodings`)에 싣는다.
+   🔄 2026-10-09 (D-323 집행) — 그 신호가 응답에 나간다: 문장의 **`encoder_candidates`**(유형 · 확신) 한 칸에만.
+      🚨 판정(확정 · 보류 · `violations` · 하한 · 분기 열쇠)은 그 칸을 **읽지 않는다** — 여전히 인코더 전 규칙 판정이다(`JUDGED_BY`).
 
 ★ D-124 가 정한 검사 셋도 그대로다 —
    ① **라우터 함수는 그래프 없이 단독 테스트한다** → langgraph 를 **모듈 최상단에서 import 하지 않는다.**
@@ -43,6 +44,7 @@ from __future__ import annotations
 import functools
 import logging
 import operator
+import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
@@ -65,6 +67,7 @@ from app.contracts import (
     Category,
     CategorySource,
     Certificate,
+    EncoderTypeCandidate,
     EvidenceArticle,
     GenerateOutcome,
     HoldReason,
@@ -141,10 +144,13 @@ class SentEvidence:
 class SentEncoding:
     """문장 하나의 **인코더 신호** (🆕 2026-10-07 · 그림자 배선). 🚨 판정이 아니다 — 유형 후보와 확신뿐이다 (D-131).
 
-    ⛔ `judge` · `premise_branches` · 종착은 이 칸을 읽지 않는다. 읽는 쪽은 평가 도구(`scripts/eval_graph.py`)뿐이다.
+    ⛔ 판정(`_judge_one`) · 분기 열쇠 · 종착은 이 칸을 읽지 않는다. 읽는 쪽은 응답의 후보 칸으로 옮기는 `_encoder_candidates` 뿐이다.
        판정에 쓰는 규칙(합의 · 통과 · 후보를 어느 칸에 싣나)은 팀장 판정 뒤에 들어온다 — 그 자리는 `judge` 다 (D-192).
     ⛔ 문장 판정의 `violations` 에 섞지 않는다 — 그 칸은 고쳐 쓰기(`app/routers/user.py` 버튼 · sLLM 에 넘기는 유형 ·
        `_rejudge` 의 탈락 기준)가 읽는다. 섞으면 적법 문장에 버튼이 뜨고 고친 문구가 재판정에서 탈락한다.
+    🔄 2026-10-08 (D-323) — 응답에 실을 자리가 정해졌다: `SentenceJudgment.encoder_candidates`(유형 · 확신). 배선(클론 B)은
+       이 칸만 채운다 — 하한 · 확정 · 분기 열쇠(`_judgment_key`)에는 넣지 않는다 · 거름은 유형 단위(`pm.NO_HF_MISLEAD`)다.
+    ✅ 2026-10-09 — 배선했다: `_encoder_candidates` 가 이 운반체를 계약 칸으로 옮긴다(`judge` · `_premise_sentences` · `_recorded`).
     """
 
     sent_id: str
@@ -271,6 +277,12 @@ class CoreState(TypedDict, total=False):
     evidence: Annotated[list[SentEvidence], operator.add]
     # ── 사전 매칭 🔴 누적 (🆕 2026-09-28 · W4) — 문장마다 한 벌 ───────────
     dict_scans: Annotated[list[DictScan], operator.add]
+    #: 🆕 2026-10-08 — 사전 근거 인용 → 원문이 붙은 근거 조문(`basis_texts`). `match_dict` **한 노드만** 쓴다(리듀서 없음).
+    #:    비면 원문 없이 좌표만 간다 — 판정은 바뀌지 않는다 (D-224 ④).
+    basis_texts: dict[str, EvidenceArticle]
+    #: 🆕 2026-10-12 (D-327) — 참조 조항 좌표 → 원문이 붙은 조항(`reference_texts`). `match_dict` **한 노드만** 쓴다(리듀서 없음).
+    #:    비면 좌표만 간다 — 좌표는 표(`collect/statute.py` `references`)가 정한 값이라 DB 없이도 선다.
+    ref_texts: dict[str, EvidenceArticle]
     # ── 인코더 신호 🔴 누적 (🆕 2026-10-07 · 그림자) — 문장마다 한 벌. 모델이 없으면 **비어 있다**(없음 ≠ 조용함)
     encodings: Annotated[list[SentEncoding], operator.add]
     # ── 법별 팬아웃 🔴 누적 (D-267) — 법 노드가 **병렬로** 쓴다. 리듀서가 없으면 하나만 남는다
@@ -479,7 +491,7 @@ def route_laws(state: CoreState) -> tuple[str, ...]:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  코어 노드 — `doc_rules` 는 자리와 계약만 있다(빈 노드) · `encode` 는 그림자 배선(판정이 읽지 않는다)
+#  코어 노드 — `doc_rules` 는 자리와 계약만 있다(빈 노드) · `encode` 의 신호는 후보 칸으로만 나간다(판정이 읽지 않는다 · D-323)
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -514,7 +526,11 @@ def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
     """`Hit` → 계약. 🔴 **확신이 없으면 안 옮긴다** (D-224).
 
     ⛔ 위반 근거 좌표(`basis_citation`)가 `None` 이면 좌표를 못 세운 것이다 — 「제18조」로 줄여 적으면 실은 제3항인 근거를
-       가리킨다. 지어내지 않고 **버린다.** ⛔ **`quote` 는 비운다** — `search()` 는 `U2_rag` 로 거르고 인용 자격은 `U3_cite` 다.
+       가리킨다. 지어내지 않고 **버린다.**
+    🔄 2026-10-08 — `quote` 는 **원천의 `U3_cite` 가 열린 청크만** 싣는다(`hit.citable` · D-224 ④). 종전에는 그 자격을 읽지 않아
+       늘 비웠다. ⛔ 제외 목에서 올린 좌표(`exempt_of`)는 이 청크의 글이 그 좌표의 글이 아니므로 싣지 않는다(`chunk_id` 와 같은 이유).
+       ⛔ 쪼갠 조각(`part_total` ≠ 1)도 싣지 않는다 — 계약에 「일부다」를 말할 칸이 없어 조각이 조문 전문처럼 보인다(D-224 ③ · D-199).
+          `None`(재적재 전)도 싣지 않는다 — 모르는 것을 전문으로 치지 않는다 (D-220).
     🔄 2026-09-28 (D-238 개정 (나)) — `citation` 이 아니라 `basis_citation` 을 옮긴다. 적용 제외 목이면 **부모 목의 좌표**가
        오고, 그 좌표를 가진 청크는 이 청크가 아니므로 `chunk_id` 를 비운다 — 제외 목의 글이 위반 근거 자리에 보이지 않게.
        제외 목 자신은 `_proviso()` 가 따로 나른다.
@@ -522,11 +538,14 @@ def _evidence_article(hit: rt.Hit) -> EvidenceArticle | None:
     """
     if not hit.basis_citation or not hit.law_id:
         return None
+    own = not hit.exempt_of
+    whole = hit.part_total == 1
     return EvidenceArticle(
         law_id=hit.law_id,
         article=hit.basis_citation,
         item=hit.item or "",
-        chunk_id=None if hit.exempt_of else hit.chunk_id,
+        chunk_id=hit.chunk_id if own else None,
+        quote=hit.text if own and whole and hit.citable is True and hit.text else None,
     )
 
 
@@ -674,21 +693,108 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
             for m in dm.find(text, es)
         )
 
+    scans = [
+        DictScan(sent_id=sent_id(i), ran=True, hits=_hits(text, entries), weak=_hits(text, weak))
+        for i, text in enumerate(sents)
+    ]
+    # 🆕 2026-10-08 — 걸린 항목의 인용 조문에 원문을 붙일 재료 (근거 표시 「(나)」 · D-224 ④). 같은 커서로 한 번만 묻는다
+    cites = {c for s in scans for h in (*s.hits, *s.weak) for c in h.basis}
     return {
-        "dict_scans": [
-            DictScan(
-                sent_id=sent_id(i), ran=True, hits=_hits(text, entries), weak=_hits(text, weak)
-            )
-            for i, text in enumerate(sents)
-        ]
+        "dict_scans": scans,
+        "basis_texts": basis_texts(cur, cites),
+        "ref_texts": reference_texts(cur),
     }
+
+
+#: 참조 조항표가 낼 수 있는 좌표 전부 — 유형 · 위반 근거 법의 모든 짝과 옮긴 후보의 인용([별표 1] 4.나). 수십 개다.
+_REF_COORDS: tuple[str, ...] = tuple(
+    sorted(
+        {
+            c
+            for v in Violation
+            for law in LAW_OF_NODE.values()
+            for c in statute.references(v.value, law)
+        }
+        | set(statute.reference_of_cite(pm.UNRECOGNIZED_FUNCTION_CITE))
+    )
+)
+_ANNEX_NO = re.compile(r"^\[별표 (\d+)\]")
+_ARTICLE = re.compile(r"^제\d+조(?:의\d+)?")
+
+
+def _ref_article(coord: str) -> EvidenceArticle:
+    """참조 조항 좌표(`법ID:좌표`) → 좌표만 든 조항. 🚨 `basis` 는 거짓이다 — 판정이 기대는 조문이 아니다 (D-327 · D-323 결정 2)."""
+    law_id, _, cite = coord.partition(":")
+    return EvidenceArticle(law_id=law_id, article=cite)
+
+
+def reference_texts(cur: Any) -> dict[str, EvidenceArticle]:
+    """참조 조항 좌표 → **원문이 붙은** 조항 (🆕 2026-10-12 · D-327). 유형 후보 옆에 「이 유형을 정한 조항」으로 싣는다.
+
+    ★ 청크는 좌표로 찾는다 — 법령 조문은 `rt.by_article`, 별표는 `rt.by_annex`, 대조는 청크의 `citation`(D-99 · 좌표를 여기서 조립하지 않는다).
+    🔴 **원문을 싣는 조건은 근거 조문과 같다**(`basis_texts`) — 원천의 `U3_cite` 가 열렸고 · 쪼갠 조각이 아니고 · 제외 목이 아니다.
+       못 찾거나 조건이 안 서면 그 좌표는 **빠진다** — 받는 쪽(`_candidate_refs`)이 좌표만으로 낸다 (D-220 · 지어내지 않는다).
+    """
+    arts: list[tuple[str, str]] = []
+    annexes: list[tuple[str, int]] = []
+    for c in _REF_COORDS:
+        law_id, _, cite = c.partition(":")
+        if (m := _ANNEX_NO.match(cite)) is not None:
+            annexes.append((law_id, int(m[1])))
+        elif (m := _ARTICLE.match(cite)) is not None:
+            arts.append((law_id, m[0]))
+    hits = rt.by_article(cur, [a[0] for a in arts], [a[1] for a in arts])
+    hits += rt.by_annex(cur, [a[0] for a in annexes], [a[1] for a in annexes])
+    at = {(h.law_id, h.citation): h for h in hits if h.citation}
+    out: dict[str, EvidenceArticle] = {}
+    for c in _REF_COORDS:
+        law_id, _, cite = c.partition(":")
+        h = at.get((law_id, cite))
+        if h is None or h.citable is not True or h.part_total != 1 or h.exempt_of or not h.text:
+            continue
+        out[c] = EvidenceArticle(
+            law_id=law_id, article=cite, item=h.item or "", chunk_id=h.chunk_id, quote=h.text
+        )
+    return out
+
+
+def basis_texts(cur: Any, cites: Iterable[str]) -> dict[str, EvidenceArticle]:
+    """사전 근거 인용 → **원문이 붙은** 근거 조문 (🆕 2026-10-08 · D-224 ④ · 근거 표시 「(나)」).
+
+    ★ 좌표 꼴은 `_basis_article` 과 같다(`statute.article_item`) — 원문만 더 붙는다. 청크는 조문 청크의 `citation` 으로 찾는다(D-99).
+    🔴 **원문을 싣는 조건은 검색 근거와 같다** — 원천의 `U3_cite` 가 열렸고(`citable`) · 쪼갠 조각이 아니다(`part_total == 1`).
+       못 찾거나 조건이 안 서면 그 인용은 **빠진다** — `_basis_article` 이 원문 없는 좌표로 낸다 (D-220 · 지어내지 않는다).
+    🚨 목(「|다목」)은 시행령 [별표] 의 것이다 — 조문 청크는 **호까지**라 호의 글을 붙인다. 좌표(항목 칸)는 목까지 그대로다.
+    """
+    want: dict[str, tuple[str, str, str, str]] = {}
+    for c in cites:
+        try:
+            law, article, item = statute.article_item(c)
+        except ValueError:
+            continue
+        ho = item.split("호", 1)[0] + "호"
+        want[c] = (law, article, item, article + ho)
+    if not want:
+        return {}
+    hits = rt.by_article(cur, [w[0] for w in want.values()], [w[1] for w in want.values()])
+    at = {(h.law_id, h.citation): h for h in hits if h.citation}
+    out: dict[str, EvidenceArticle] = {}
+    for c, (law, article, item, coord) in want.items():
+        h = at.get((law, coord))
+        if h is None or h.citable is not True or h.part_total != 1 or not h.text:
+            continue
+        out[c] = EvidenceArticle(
+            law_id=law, article=article, item=item, chunk_id=h.chunk_id, quote=h.text, basis=True
+        )
+    return out
 
 
 @timed
 def encode(state: CoreState) -> dict[str, Any]:
-    """인코더 — 유형 후보 · 확신 (D-131). **팬아웃 앞에서 한 번** 돈다 (D-267). 🆕 2026-10-07 **그림자 배선**.
+    """인코더 — 유형 후보 · 확신 (D-131). **팬아웃 앞에서 한 번** 돈다 (D-267). 🆕 2026-10-07 배선 · 🔄 2026-10-09 응답에 싣는다.
 
-    ★ 문장마다 신호를 `encodings` 에 싣기만 한다 — **판정은 바뀌지 않는다**(`judge` 가 읽지 않는다 · `SentEncoding`).
+    ★ 문장마다 신호를 `encodings` 에 싣는다 — **판정은 바뀌지 않는다.** `judge` 는 이 신호를 문장의 `encoder_candidates`
+       칸으로 옮기기만 한다(`_encoder_candidates` · D-323).
     🔴 값이 없을 때 (D-220)
        · 모델 폴더가 설정되지 않았다 → 아무것도 싣지 않는다. 인코더를 쓰지 않는 정상 경로다(CI · 모델 없는 기기)
        · 설정했는데 올리지 못했다 → **경고를 남기고** 아무것도 싣지 않는다. 판정은 규칙 판정 그대로 나간다(보류 쪽이라 안전하다).
@@ -724,6 +830,84 @@ def _warn_encoder_off(model_dir: str, why: str) -> None:
     logging.getLogger("copylane.graph").warning(
         "판정 인코더를 올리지 못했다 — 인코더 신호 없이 규칙 판정으로 간다 (%s): %s", model_dir, why
     )
+
+
+#: [별표 1] 4.나(인정하지 않은 기능성)의 8유형 — 인코더 후보를 옮길 때 쓴다. 🔴 인용에서 유형을 못 읽으면 import 에서 멈춘다 (D-220)
+_UNRECOGNIZED_TYPE = statute.type_of(pm.UNRECOGNIZED_FUNCTION_CITE)
+if _UNRECOGNIZED_TYPE is None:
+    raise RuntimeError(
+        f"🔴 {pm.UNRECOGNIZED_FUNCTION_CITE} 의 유형을 못 읽었다 — `collect/statute.py` 의 표를 본다 (D-319 ④′ ②)"
+    )
+
+
+def _candidate_refs(
+    c: EncoderTypeCandidate, laws: Iterable[str], texts: dict[str, EvidenceArticle] | None
+) -> list[EvidenceArticle]:
+    """유형 후보 하나의 **참조 조항** — 문장이 보내진 법(`laws` · 법 축)마다 표가 정한 좌표 (🆕 2026-10-12 · D-327).
+
+    ★ 유형만으로는 법을 못 정한다(D-323 결정 6) — 그래서 법마다 따로 싣고, 그 법에 조항이 없으면 그 법은 비운다 (D-220).
+    ★ 옮긴 후보(`moved_from`)는 식품표시광고법에서 **옮겨 간 인용**([별표 1] 4.나)의 조항을 싣는다 — 유형의 일반 조항(제4호)이 아니라.
+    🚨 좌표는 표(`collect/statute.py`)가 정한다. `texts` 에 있으면 원문이 붙고, 없으면 좌표만이다.
+    """
+    food = LAW_OF_NODE["law_food"]
+    coords: list[str] = []
+    for law in laws:
+        if c.moved_from is not None and law == food:
+            coords += statute.reference_of_cite(pm.UNRECOGNIZED_FUNCTION_CITE)
+        else:
+            coords += statute.references(c.violation.value, law)
+    return [(texts or {}).get(x) or _ref_article(x) for x in dict.fromkeys(coords)]
+
+
+def _encoder_candidates(
+    e: SentEncoding | None,
+    premises: Iterable[Premise],
+    laws: Iterable[str] = (),
+    texts: dict[str, EvidenceArticle] | None = None,
+) -> list[EncoderTypeCandidate]:
+    """인코더 신호 → 문장의 `encoder_candidates` (🆕 2026-10-09 · D-323 결정 1 · 6). 🚨 판정이 아니다 — 유형 후보와 확신뿐이다.
+
+    ★ 거름은 **유형 단위**다 — 건강기능식품 오인은 건강기능식품 전제 둘 · 일반식품 기능성 전제에서 서지 않는다
+       (`pm.NO_HF_MISLEAD` · 사전 적중의 `_premise_hits` 와 같은 표 · D-319 ④′ · D-99). 법 거름은 하지 않는다 —
+       유형만으로는 법을 못 정한다(D-323 결정 6).
+    ★ 🆕 2026-10-10 — `건기식_비인정` 에서는 3호를 빼는 데서 그치지 않고 **4.나(거짓_과장)로 옮긴다**(`moved_from` 에 원래 유형).
+       같은 문구가 제품에 따라 다른 조항에 걸린다 — 인정 없는 건강기능식품이 기능성을 내세우면 3호가 아니라 4.나다.
+    ★ `premises` 가 여럿이면 **전제별로 거른 후보의 합집합**이다 — 한 전제에서라도 설 수 있는 후보는 남기고, 어느 전제에서도
+       설 수 없는 후보만 뺀다(2026-10-09 팀장 판정 (다) · D-323 ⬜ 「기록 판정에 실리는 후보」). 분기 문장은 전제 하나로,
+       기록 판정은 그 품목의 전제 전부(`pm.PREMISES_OF`)로 부른다 — 위험도를 가장 보수적인 전제로 적는 것과 같은 방향이다 (D-263 ①).
+    🔴 값이 없을 때 (D-220)
+       · 신호가 없다(인코더가 꺼졌거나 못 올렸다) → 빈 목록. 「후보 없음」이 아니라 「인코더가 없다」다 — 계약 주석이 그렇게 읽게 한다
+       · 전제가 없다(전제 표에 없는 품목 · `전용법_미수록`) → **거르지 않는다.** 빈 합집합으로 후보를 전부 지우지 않는다
+    """
+    if e is None:
+        return []
+    ps = tuple(premises)
+    never_hf = bool(ps) and all(p in pm.NO_HF_MISLEAD for p in ps)
+    score = dict(e.scores)
+    out = [
+        EncoderTypeCandidate(violation=Violation(t), confidence=score[t])
+        for t in e.candidates
+        if not (never_hf and t == pm.HF_MISLEAD)
+    ]
+    # 🆕 2026-10-10 (팀장 판정 (나)) — 인정이 없는 건강기능식품 전제에서는 3호가 빠진 자리에 4.나(거짓_과장)가 선다.
+    #    사전 적중이 `_premise_hits` 에서 하는 것과 같은 옮김이다 (D-319 ④′ ② · D-99). 그 전제가 `premises` 에 있으면 합집합에 든다.
+    #    ⛔ 인코더가 거짓_과장을 직접 냈으면 더하지 않는다 — 같은 유형이 두 번 실리지 않고, 직접 낸 쪽(제 확률)이 남는다
+    moved = Violation(_UNRECOGNIZED_TYPE)
+    if (
+        pm.HF_MISLEAD in e.candidates
+        and Premise.건기식_비인정 in ps
+        and moved.value not in e.candidates
+    ):
+        out.append(
+            EncoderTypeCandidate(
+                violation=moved,
+                confidence=score[pm.HF_MISLEAD],
+                moved_from=Violation(pm.HF_MISLEAD),
+            )
+        )
+    # 🆕 2026-10-12 (D-327) — 후보마다 참조 조항을 붙인다. `laws` 가 비면(법을 모른다) 붙이지 않는다 — 빈 목록이다
+    law_axes = tuple(laws)
+    return [c.model_copy(update={"references": _candidate_refs(c, law_axes, texts)}) for c in out]
 
 
 def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:
@@ -840,15 +1024,34 @@ INFEASIBILITY_OF: dict[Violation, Infeasibility] = {
 _INFEAS_ORDER = (Infeasibility.C, Infeasibility.A, Infeasibility.B)
 
 
-def _basis_article(cite: str) -> EvidenceArticle | None:
-    """사전 근거 인용(`법ID:제N조제N항제N호[|목]`) → 근거 조문. 꼴이 틀리면 `None` — 좌표를 지어내지 않는다 (D-224)."""
+def _basis_article(
+    cite: str, texts: dict[str, EvidenceArticle] | None = None
+) -> EvidenceArticle | None:
+    """사전 근거 인용(`법ID:제N조제N항제N호[|목]`) → 근거 조문. 꼴이 틀리면 `None` — 좌표를 지어내지 않는다 (D-224).
+
+    🆕 2026-10-08 — `texts`(`basis_texts`)에 있으면 **원문이 붙은 줄**을 낸다. 없으면 종전대로 좌표만.
+    """
+    if texts and cite in texts:
+        return texts[cite]
+    # 꼴은 `collect/statute.py` 한 곳 — 평가 도구가 되읽는다 (D-99)
     try:
-        law, jo, hang, ho, mok = statute.parse(cite)
+        law, article, item = statute.article_item(cite)
     except ValueError:
         return None
-    return EvidenceArticle(
-        law_id=law, article=f"제{jo}조", item=f"제{hang}항제{ho}호" + (f"{mok}목" if mok else "")
-    )
+    return EvidenceArticle(law_id=law, article=article, item=item, basis=True)  # D-323 결정 2
+
+
+def _references(
+    retrieved: list[EvidenceArticle], basis: list[EvidenceArticle]
+) -> list[EvidenceArticle]:
+    """검색 근거 중 인용 근거와 겹치지 않는 것 — 인용 근거 **뒤에** 붙는 참고 조문 (🆕 2026-10-08 · 근거 표시 「(나)」).
+
+    🔴 같은 청크는 한 번 — 인용 근거에 원문이 붙으면(`basis_texts`) 검색이 같은 청크를 찾았을 때 두 번 나간다.
+    """
+    own = {b.chunk_id for b in basis if b.chunk_id}
+    return [
+        a for a in retrieved if a not in basis and (a.chunk_id is None or a.chunk_id not in own)
+    ]
 
 
 def _typed(names: set[str]) -> list[Violation]:
@@ -878,6 +1081,7 @@ def _judge_one(
     hits: list[DictHit],
     retrieved: list[EvidenceArticle],
     weak: list[DictHit] | None = None,
+    texts: dict[str, EvidenceArticle] | None = None,
 ) -> SentenceJudgment:
     """문장 하나 — **인코더 전 판정** (D-269 그대로 · ⚠️ 재검 대기).
 
@@ -918,14 +1122,14 @@ def _judge_one(
         basis: list[EvidenceArticle] = []
         for h in hits:
             for c in h.basis:
-                a = _basis_article(c)
+                a = _basis_article(c, texts)
                 if a is not None and a not in basis:
                     basis.append(a)
         if not basis:
             return SentenceJudgment(
                 sent_id=sid, text=text, verdict=Verdict.no_basis, violations=types
             )
-        evidence = basis + [a for a in retrieved if a not in basis]
+        evidence = basis + _references(retrieved, basis)
         # 같은 적중이 두 법 노드로 들어온다(인용이 두 법에 걸친 항목) — 구간은 좌표마다 한 번 · 라벨은 두 법의 유형을 합친다
         at: dict[tuple[int, int], set[str]] = {}
         if start is not None:
@@ -960,7 +1164,7 @@ def _judge_one(
     basis_w: list[EvidenceArticle] = []
     for h in weak or ():
         for c in h.basis:
-            a = _basis_article(c)
+            a = _basis_article(c, texts)
             if a is not None and a not in basis_w:
                 basis_w.append(a)
     return SentenceJudgment(
@@ -969,7 +1173,7 @@ def _judge_one(
         verdict=Verdict.hold,
         hold_reason=HoldReason.low_conf,
         violations=cand,
-        evidence=basis_w + [a for a in retrieved if a not in basis_w],
+        evidence=basis_w + _references(retrieved, basis_w),
     )
 
 
@@ -1005,26 +1209,43 @@ def judge(state: CoreState) -> dict[str, Any]:
             weak_of.setdefault(sid, []).extend(hs)
     scans = {s.sent_id: s for s in state.get("dict_scans", [])}
     sents = state.get("sents", [])
+    texts = state.get("basis_texts") or {}
     # 🔴 원문 좌표를 못 되찾으면(분할 밖에서 문장이 들어왔다) **구간을 싣지 않는다** — 좌표를 지어내지 않는다 (D-224 · D-278).
     #    판정 자체는 바뀌지 않는다. 뺄 구간이 필요한 지시 종착은 그때 계약이 막는다.
     try:
         starts: list[int | None] = list(sentsplit.offsets(state.get("text", ""), sents))
     except ValueError:
         starts = [None] * len(sents)
-    return {
-        "sentences": [
-            _judge_one(
-                sid := sent_id(i),
-                t,
-                starts[i],
-                scans.get(sid),
-                hits_of.get(sid, []),
-                per_sent.get(sid, []),
-                weak_of.get(sid, []),
+    # 🆕 2026-10-09 (D-323) — 인코더 신호는 **한 칸에만** 옮긴다. `_judge_one` 은 그 신호를 받지 않는다 — 판정이 읽을 길이 없다.
+    #    기록 판정이라 이 품목의 전제 전부로 거른다(합집합 · `_encoder_candidates`).
+    encs = {e.sent_id: e for e in state.get("encodings", [])}
+    premises = pm.PREMISES_OF[(state.get("product") or ProductContext()).category]
+    # 🆕 2026-10-12 (D-327) — 참조 조항은 **이번에 보낸 법**마다 싣는다(`state["laws"]` 는 노드 이름이다 → 법 축)
+    ref_laws = tuple(LAW_OF_NODE[n] for n in state.get("laws") or () if n in LAW_OF_NODE)
+    ref_texts = state.get("ref_texts") or {}
+    out: list[SentenceJudgment] = []
+    for i, t in enumerate(sents):
+        sid = sent_id(i)
+        j = _judge_one(
+            sid,
+            t,
+            starts[i],
+            scans.get(sid),
+            hits_of.get(sid, []),
+            per_sent.get(sid, []),
+            weak_of.get(sid, []),
+            texts,
+        )
+        if sid in encs:
+            j = j.model_copy(
+                update={
+                    "encoder_candidates": _encoder_candidates(
+                        encs[sid], premises, ref_laws, ref_texts
+                    )
+                }
             )
-            for i, t in enumerate(sents)
-        ]
-    }
+        out.append(j)
+    return {"sentences": out}
 
 
 #: 위험도 하한을 읽는 질의 — 🔴 **뷰만 읽는다**(`v_risk_lookup` · 2인 서명이 끝난 현행 행만 보인다 · 0013 · D-309).
@@ -1222,6 +1443,8 @@ def _premise_sentences(
     except ValueError:
         starts = [None] * len(sents)
     category = pm.PREMISE_CATEGORY[premise]
+    texts = state.get("basis_texts") or {}
+    encs = {e.sent_id: e for e in state.get("encodings", [])}
     out: list[SentenceJudgment] = []
     for i, text in enumerate(sents):
         sid = sent_id(i)
@@ -1243,7 +1466,11 @@ def _premise_sentences(
             voided, converted = voided or v, converted or c
             undecided += unk
             # 판정하지 못하는 적중은 자격 없는 적중과 같은 길로 — 보류 문장의 유형 후보다 (D-311 과 같은 모양)
-            unknown += unk + list(dict(r.weak_hits).get(sid, ()))
+            # 🔄 2026-10-11 — **자격 없는 적중도 전제 거름을 탄다** (D-319 ④′ ① ②). ⛔ 종전에는 그대로 붙였다 — 건강기능식품
+            #    전제에서도 보류 후보에 건강기능식품 오인(3호)이 남았다(dev 조건부 건강기능식품 제품 82 행 중 10 · 원장 10-10 ⑭).
+            #    확정 여부 · 「판정하지 못한다」 갈래는 자격 있는 적중만 본다 — 후보가 그 갈래를 움직이지 않는다
+            wk, wunk, _, _ = _premise_hits(premise, dict(r.weak_hits).get(sid, ()))
+            unknown += unk + wk + wunk
             if kept:
                 by_law[LAW_OF_NODE[law]] = tuple(kept)
         hits = [h for hs in by_law.values() for h in hs]
@@ -1254,9 +1481,9 @@ def _premise_sentences(
             #    · 3호가 **서지 않는다 ≠ 통과다.** 인정 · 고시된 문구와 맞는지는 대조하지 않았다 — 그 재료(건강기능식품의
             #      고시형 문구 · 일반식품 기능성 고시 [별표 2])를 읽는 자리가 아직 없다. 그 대조가 붙기 전에는 통과를 내지 않는다.
             #    ⛔ 하한을 걸지 않는다 — 보류 문장의 유형 후보다 (D-311 · D-313 ③).
-            j = _judge_one(sid, text, starts[i], scans.get(sid), [], arts, hits + unknown)
+            j = _judge_one(sid, text, starts[i], scans.get(sid), [], arts, hits + unknown, texts)
         else:
-            j = _judge_one(sid, text, starts[i], scans.get(sid), hits, arts, unknown)
+            j = _judge_one(sid, text, starts[i], scans.get(sid), hits, arts, unknown, texts)
             if converted and j.verdict is Verdict.confirmed and j.violations:
                 j = j.model_copy(
                     update={
@@ -1286,6 +1513,19 @@ def _premise_sentences(
                             ceiling_note=f.ceiling_note,
                         ),
                     )
+        if sid in encs:
+            # 분기 문장 — 이 전제 하나로 거른다 (D-323 결정 6). 판정이 끝난 뒤에 붙인다 — 위 판정은 이 칸을 보지 않았다
+            j = j.model_copy(
+                update={
+                    "encoder_candidates": _encoder_candidates(
+                        encs[sid],
+                        (premise,),
+                        # 분기 문장 — 이 전제의 법 묶음으로 참조 조항을 싣는다 (D-327)
+                        tuple(LAW_OF_NODE[n] for n in laws if n in LAW_OF_NODE),
+                        state.get("ref_texts") or {},
+                    )
+                }
+            )
         out.append(j)
     return out
 
@@ -1313,6 +1553,8 @@ def _recorded(
     🔴 **모든 전제에서 같은 위반이 설 때만 확정이다.** 한 전제라도 판정하지 못하거나(사전 침묵) 위반이 없으면 보류 + 분기다 —
        적용되는지 모르는 법의 조문으로 확정하지 않는다. 보류에도 유형 · 근거 · 가장 보수적인 위험도를 싣는다
        (계약 `_recorded_is_conservative` — 기록된 위험도 ≥ 검증 안 된 모든 분기의 위험도).
+    🚨 인코더 후보는 **기록 판정의 것**(`base` — 이 품목의 전제 전부로 거른 합집합)을 그대로 둔다. 가장 무거운 전제의
+       문장을 옮겨 올 때 그 전제 하나로 거른 후보가 따라오면 다른 전제에서 서는 후보가 사라진다 (D-323 · 2026-10-09 (다)).
     """
     hit = [j for j in per if j.verdict is Verdict.confirmed and j.violations]
     if not hit:
@@ -1328,7 +1570,8 @@ def _recorded(
             update={
                 "risk": worst.risk
                 if top is None
-                else worst.risk.model_copy(update={"floor": top, "final": top})
+                else worst.risk.model_copy(update={"floor": top, "final": top}),
+                "encoder_candidates": base.encoder_candidates,
             }
         )
     return SentenceJudgment(
@@ -1341,11 +1584,53 @@ def _recorded(
         evidence=worst.evidence,
         spans=worst.spans,
         risk=risk,
+        encoder_candidates=base.encoder_candidates,
+    )
+
+
+def _held_candidates(
+    base: SentenceJudgment, per: list[SentenceJudgment]
+) -> SentenceJudgment | None:
+    """제품을 알 때 보류 문장의 **유형 후보** — 그 품목의 전제로 거른 후보의 합집합 (🆕 2026-10-11 · D-319 ④′). 같으면 `None`.
+
+    기록되는 판정(`judge`)은 전제 거름 전의 것이다 — 건강기능식품이라고 알려 줬는데 후보에 건강기능식품 오인(3호)이 남는다.
+    그 유형은 건강기능식품 전제 둘에서 서지 않는다. 인코더 후보를 품목의 전제로 거르는 것과 같은 규칙이다
+    (`_encoder_candidates` · D-323 · 2026-10-09 (다)) — 한 전제에서라도 서는 후보는 남기고 어디서도 서지 않는 후보만 뺀다.
+    ★ 문장이 **모든 전제에서 확신 부족 보류일 때만** 손댄다. 한 전제라도 확정 · 근거 없음이면 `_recorded` 의 몫이다.
+    ⛔ 품목을 모를 때는 부르지 않는다 — 전제 여섯에 식품이 있어 3호 후보가 설 수 있고, 다른 전제의 옮긴 후보까지 합치면
+       정답이 마침 그 유형인 행이 맞은 것처럼 세어진다(인코더의 옮긴 후보를 따로 두는 것과 같은 까닭 · 원장 10-10 ⑫).
+    🚨 건강기능식품의 `거짓_과장` 후보는 「그 기능성으로 인정받지 않았다면」의 것이다 — 근거에 [별표 1] 4.나가 실린다.
+    """
+
+    def low(j: SentenceJudgment) -> bool:
+        return j.verdict is Verdict.hold and j.hold_reason is HoldReason.low_conf
+
+    if not low(base) or not per or not all(low(j) for j in per):
+        return None
+    types = _typed({v.value for j in per for v in j.violations})
+    evidence: list[EvidenceArticle] = []
+    for j in per:
+        for a in j.evidence:
+            if a not in evidence:
+                evidence.append(a)
+    if types == list(base.violations):
+        return None
+    return SentenceJudgment(
+        **{
+            **{k: getattr(base, k) for k in type(base).model_fields},
+            "violations": types,
+            "evidence": evidence,
+        }
     )
 
 
 def _judgment_key(j: SentenceJudgment) -> tuple:
-    """전제끼리 판정이 같은가를 보는 열쇠 — 판정 · 사유 · 유형 · 불가 사유 · 위험도 · 근거 좌표."""
+    """전제끼리 판정이 같은가를 보는 열쇠 — 판정 · 사유 · 유형 · 불가 사유 · 위험도 · 근거 좌표.
+
+    ⛔ 인코더 후보(`encoder_candidates`)는 넣지 않는다 — 판정이 아니다. 넣으면 후보만 다른데도 분기가 생긴다 (D-323 결정 1).
+    🚨 보류 문장의 유형 후보는 이 열쇠에 **들어 있다** — 분기를 낼지는 `_branch_key` 로 본다(후보만 다르면 분기를 내지 않는다).
+       이 열쇠는 그대로 둔다 — 팀원 프로토타입(`docs/psj/e2e_prototype/judge_stage2.py`)이 부른다.
+    """
     return (
         j.verdict,
         j.hold_reason,
@@ -1354,6 +1639,19 @@ def _judgment_key(j: SentenceJudgment) -> tuple:
         j.risk.final,
         tuple((e.law_id, e.article, e.item) for e in j.evidence),
     )
+
+
+def _branch_key(j: SentenceJudgment) -> tuple:
+    """**분기를 낼지** 보는 열쇠 (🆕 2026-10-11 · D-319 · D-311 · D-323 결정 1) — 확신 부족 보류 문장은 유형 후보 · 그 근거를 뺀다.
+
+    보류 문장의 유형은 후보이지 판정이 아니다(D-311). 후보까지 견주면 어느 전제를 골라도 보류인데 제품 유형을 고르라는
+    분기가 생긴다 — 자격 없는 적중이 전제를 따르게 되면서(`_premise_sentences`) dev 조건부 345 행의 분기가 6 → 33 이 된다
+    (원장 10-10 ⑮). 인코더 후보를 열쇠에 넣지 않는 것과 같은 까닭이다.
+    ★ 판정이 갈리는 분기(한쪽 확정 · 한쪽 보류 · 등급 · 사유)는 `_judgment_key` 의 칸이 달라 그대로 선다.
+    """
+    if j.verdict is Verdict.hold and j.hold_reason is HoldReason.low_conf:
+        return (j.verdict, j.hold_reason)
+    return _judgment_key(j)
 
 
 @timed
@@ -1379,16 +1677,28 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
     hit = any(hs for r in state.get("law_results", []) for _, hs in r.dict_hits)
     rows = load_sanction_rows(cur) if hit else []
     per = {p: _premise_sentences(p, state, rows) for p in premises}
-    if category is not None and len({tuple(map(_judgment_key, per[p])) for p in premises}) == 1:
-        # 품목이 주어졌고 전제가 판정을 바꾸지 않는다 — 고를 것이 없는 선택지를 내지 않는다(종전 판정 그대로).
+    # 🆕 2026-10-11 — 제품을 알 때 보류 문장의 유형 후보는 그 품목의 전제로 거른 합집합이다 (`_held_candidates`)
+    held = (
+        []
+        if category is None
+        else [
+            h
+            for i, b in enumerate(base)
+            if (h := _held_candidates(b, [per[p][i] for p in premises])) is not None
+        ]
+    )
+    if category is not None and len({tuple(map(_branch_key, per[p])) for p in premises}) == 1:
+        # 품목이 주어졌고 전제가 판정을 바꾸지 않는다 — 고를 것이 없는 선택지를 내지 않는다.
         # ⛔ 품목을 모를 때는 같아도 낸다 — 「품목 미확정이면 분기는 언제나」(D-229 ⑥ · D-319 ②).
-        return {}
+        # 🔄 2026-10-11 — 판정은 종전 그대로이고 보류 문장의 후보만 바로잡는다. 바꿀 것이 없으면 아무것도 내지 않는다
+        return {"sentences": held} if held else {}
     reason = HoldReason.cat_unknown if category is None else HoldReason.premise_unknown
     changed = [
         r
         for i, b in enumerate(base)
         if (r := _recorded(b, [per[p][i] for p in premises], reason)) is not None
     ]
+    changed += [h for h in held if h.sent_id not in {r.sent_id for r in changed}]
     branches = [
         Branch(
             premise=p,
@@ -1714,6 +2024,18 @@ def run_generate_stub(init: GenerateState | None = None) -> tuple[GenerateState,
 JUDGED_BY = "rule-0.3.0-dict"
 
 
+def judged_by(state: dict[str, Any]) -> str:
+    """응답의 판 표지 (🆕 2026-10-09). 인코더가 돌았으면 그 판의 가중치 지문을 붙인다 — `rule-0.3.0-dict+enc:<지문 12자>`.
+
+    ★ 앞머리는 그대로 `JUDGED_BY` 다 — **판정은 규칙 판정**이고 인코더는 `encoder_candidates` 만 채웠다 (D-323).
+    🔴 인코더가 안 돌았으면(설정 없음 · 못 올림) 붙이지 않는다 — 신호가 실린 응답만 인코더 판을 적는다.
+    """
+    model_dir = enc.configured_dir()
+    if model_dir is None or not state.get("encodings"):
+        return JUDGED_BY
+    return f"{JUDGED_BY}+enc:{enc.weights_mark(model_dir)}"
+
+
 def to_response(state: ReviewState) -> JudgeResponse:
     """검수 상태를 계약으로 옮긴다. 🚨 계약이 거부하면 여기서 터진다 — 화면보다 먼저다.
 
@@ -1736,7 +2058,7 @@ def to_response(state: ReviewState) -> JudgeResponse:
         certificate=state.get("certificate"),
         timings=state.get("timings", []),
         law_version="2026-09-10",
-        judged_by=JUDGED_BY,
+        judged_by=judged_by(state),
     )
 
 

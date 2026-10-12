@@ -21,6 +21,8 @@
 🔄 2026-10-01 (D-306) — `--conditional` 이면 **조건부**(골든 `품목` 칸을 제품 정보로 넘긴다 · 품목을 아는 행만) · 기본은
    **무조건부**(품목 미확정 · 세 법). 기획서 6-3 「조건부 / 무조건부 병기」 — 두 번 돌려 나란히 적는다.
    🔴 골든에 `품목` 칸이 없으면(재동결 전 판) `--conditional` 은 멈춘다 — 무조건부로 조용히 바꾸지 않는다 (D-220).
+🔄 2026-10-10 — 조건부는 골든 `전제` 칸을 먼저 읽는다(없으면 `품목`). 정답은 (문구 · 전제)의 짝에 붙는다 — 승인 문구 규칙 행이
+   `식품` 전제로 돌아오고, 분기 지표의 정답 전제도 이 칸이다. 채점은 그대로 기록되는 판정이다 (D-263 결정 1).
 🚨 게이트가 아니다 — 답이 기기마다 다르다(`data/**` 미커밋 · D-19). 수는 원장에 기기 · 커밋 · 골든 sha 와 함께 적는다 (D-178).
 """
 
@@ -41,9 +43,11 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from app import encoder as enc  # noqa: E402
 from app import graph as g  # noqa: E402
+from app import premise as pm  # noqa: E402
 from app.contracts import (  # noqa: E402
     Category,
     HoldReason,
+    Premise,
     ProductContext,
     SentenceJudgment,
     Verdict,
@@ -53,6 +57,9 @@ from preprocess import devsplit  # noqa: E402
 from preprocess.golden import lawful_kind  # noqa: E402
 from preprocess.split import APPROVED_READING  # noqa: E402
 from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99)
+    CLASSES as TYPE_CLASSES,
+)
+from scripts.eval_rule import (  # noqa: E402
     MIN_MEASURABLE,
     lawful_report,
     print_lawful,
@@ -62,6 +69,11 @@ from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99
 )
 
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
+#: 🆕 2026-10-08 (D-175 집행) — **봉인 평가셋을 돌린 기록**(이 기기). 원장 · 결정이 「한 번」을 말해도 도구가 세지 않으면 지켜졌는지
+#:    알 수 없다. 🚨 `build/` 는 커밋되지 않는다 — 기기마다 따로 쌓인다. 정본 기록은 원장이다(실행마다 판 표지와 함께 옮긴다)
+SEALED_LOG = pathlib.Path("build/eval/sealed_runs.jsonl")
+#: 🆕 2026-10-08 (D-321 결정 4) — 6종 표. 8종에서 이번 차수에 편입한 둘을 뺀 것(종전 6종 · 2차와 이어 본다)
+NEW_IN_D321 = frozenset({"부당_비교광고", "비방광고"})
 #: DB 사전 대조의 기준 — 적재기(`scripts/load_db.py` `load_dict`)가 읽는 바로 그 파일
 DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 
@@ -97,13 +109,17 @@ def load_rows(
 
 
 def _ho(sent: SentenceJudgment) -> set[str]:
-    """확정 문장의 근거 중 **인용 꼴로 되돌릴 수 있는 것**의 호. 검색 근거(「[별표 1]…」)는 호로 못 돌린다 — 세지 않는다."""
+    """확정 문장의 근거 중 **사전 근거**(인용 꼴로 되돌릴 수 있는 것)의 호. 검색 근거는 판정 문맥이라 세지 않는다.
+
+    🔴 2026-10-08 — 종전에는 `law_id:article+item` 을 이어 붙여 `statute.parse` 에 넣었다. 그래프는 목을 「제5호다목」으로
+       적고 인용 꼴은 「제5호|다목」이라 **목 붙은 사전 근거가 전부 조용히 빠졌다**(호 재현율이 낮게 나온다).
+       되읽기는 그래프가 쓰는 꼴과 같은 곳(`statute.from_article_item`)에서 한다 (D-99).
+    """
     out = set()
     for a in sent.evidence:
-        try:
-            out.add(statute.ho_key(f"{a.law_id}:{a.article}{a.item}"))
-        except ValueError:
-            continue
+        # 🔄 2026-10-08 (D-323 결정 2) — 사전 근거만(`basis`). 꼴은 같은 곳에서 되읽는다
+        if a.basis and (c := statute.from_article_item(a.law_id, a.article, a.item)) is not None:
+            out.add(statute.ho_key(c))
     return out
 
 
@@ -133,9 +149,23 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "hold_reasons": sorted({s.hold_reason.value for s in sents if s.hold_reason is not None}),
         "types": types,
         "candidates": cands,
-        #: 🆕 2026-10-07 (그림자 배선) — **인코더가 문턱을 넘겨 낸 유형**(`encodings`). 판정에 쓰이지 않은 신호다 —
-        #:    `candidates`(문장 판정에 실린 보류 후보)와 섞지 않는다. 인코더가 안 돌았으면 `encoded` 가 거짓이고 이 칸은 빈다
-        "enc_candidates": sorted({c for e in state.get("encodings", []) for c in e.candidates}),
+        #: 🔄 2026-10-09 (D-323 집행) — **응답에 실린 인코더 유형 후보**(문장의 `encoder_candidates` · 이 품목의 전제로 거른 것).
+        #:    판정에 쓰이지 않은 신호다 — `candidates`(문장 판정에 실린 보류 후보)와 섞지 않는다.
+        #:    인코더가 안 돌았으면 `encoded` 가 거짓이고 이 칸은 빈다. ⛔ 종전에는 상태의 `encodings` 를 직접 읽었다 —
+        #:    응답에 나가는 것과 재는 것이 달라질 수 있었다(거름이 응답에만 걸린다)
+        #: 🔄 2026-10-10 — **인코더가 직접 낸 유형만** 센다. 전제가 옮긴 후보(`moved_from`)는 `enc_moved` 에 따로 둔다 —
+        #:    옮긴 후보를 섞으면 건강기능식품 오인 신호가 거짓_과장 적중으로 세어진다
+        "enc_candidates": sorted(
+            {c.violation.value for s in sents for c in s.encoder_candidates if c.moved_from is None}
+        ),
+        "enc_moved": sorted(
+            {
+                c.violation.value
+                for s in sents
+                for c in s.encoder_candidates
+                if c.moved_from is not None
+            }
+        ),
         "encoded": bool(sents) and len(state.get("encodings", [])) == len(sents),
         "enc_truncated": sum(1 for e in state.get("encodings", []) if e.truncated),
         "ho": ho,
@@ -175,39 +205,49 @@ def _branch_view(b: Any) -> dict[str, Any]:
     return {
         "outcome": b.outcome.value,
         "types": sorted({v.value for s in conf for v in s.violations}),
+        #: 🆕 2026-10-11 — 분기 안 **보류 문장의 유형 후보**(행의 `candidates` 와 같은 뜻 · D-311). 지표에는 쓰지 않는다 —
+        #:    전제가 후보를 바꾸는 자리(D-319 보충 10-11)를 결과 파일끼리 견줄 수 있게 적는다. 종전에는 확정 유형만 적어
+        #:    분기 안의 후보가 바뀌어도 대조에 보이지 않았다(원장 10-10 ⑮)
+        "candidates": sorted(
+            {v.value for s in b.sentences if s.verdict is Verdict.hold for v in s.violations}
+        ),
         "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
         "committed": bool(b.sentences) and len(conf) == len(b.sentences),
     }
 
 
-#: 골든 `품목` 칸 → 그 품목의 **첫 전제**(가장 보수적인 쪽 · `app/premise.py` 의 값). 분기 지표가 「정답 품목의 분기」를 이것으로 고른다.
-#:    🚨 건강기능식품은 인정 여부를 골든이 모른다 — 비인정(보수) 분기로 본다.
-BRANCH_OF_CATEGORY = {"식품": "식품", "건기식": "건기식_비인정", "화장품": "화장품"}
-
-
 def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
-    """분기 지표 (D-319 ⬜ 「정답 품목의 분기가 맞는가」) — 품목을 아는 채점 행의 **위반 행**에서 그 품목의 분기를 본다.
+    """분기 지표 (D-319 ⬜ 「정답 전제의 분기가 맞는가」) — 전제를 아는 채점 행의 **위반 행**에서 그 전제의 분기를 본다.
 
-    ★ 기록되는 판정이 보류(`cat_unknown`)여도 사용자가 자기 품목을 고르면 보게 되는 것이 이 분기다.
+    ★ 기록되는 판정이 보류(`cat_unknown`)여도 사용자가 자기 제품의 전제를 고르면 보게 되는 것이 이 분기다.
     🚨 분기가 없으면(기준 문안 미확정 · 전제 하나) 0 이다 — 「분기 행」 수를 함께 읽는다.
+    🔄 2026-10-10 — 정답 전제는 **골든의 `전제` 칸**이다(`preprocess/golden.py` `label_premise`). 종전에는 품목에서 짐작했다
+       (건강기능식품이면 전부 비인정). 전제를 모르는 행은 세지 않는다 — 건강기능식품은 [별표 1] 4.나 인용 행만 든다 (D-220).
+       `by_premise` — 전제별 (위반 행 · 그 분기의 확정 위반 · 유형 맞음). 전제마다 행 수가 크게 달라 합만 읽으면 가려진다
     """
     out = {"rows_with_branches": sum(1 for p in preds if p.get("branches")), "positive": 0}
     out.update({"confirmed": 0, "type_hit": 0, "ho_hit": 0, "wrong": 0})
+    by: dict[str, list[int]] = {}
     for r, p in zip(rows, preds, strict=True):
-        name = BRANCH_OF_CATEGORY.get(r.get("품목") or "")
+        name = r.get("전제")
         if not name or not scored(r) or not truth_types(r, set()):
             continue
         b = (p.get("branches") or {}).get(name)
         if b is None:
             continue
         out["positive"] += 1
+        cell = by.setdefault(name, [0, 0, 0])
+        cell[0] += 1
         if not b["types"]:
             continue
         out["confirmed"] += 1
+        cell[1] += 1
+        cell[2] += bool(set(b["types"]) & truth_types(r, set(b["types"])))
         tt, th = truth_types(r, set(b["types"])), truth_ho(r, set(b["ho"]))
         out["type_hit"] += bool(set(b["types"]) & tt)
         out["ho_hit"] += bool(set(b["ho"]) & th)
         out["wrong"] += not (set(b["types"]) & tt)
+    out["by_premise"] = {k: tuple(v) for k, v in sorted(by.items())}
     return out
 
 
@@ -279,6 +319,84 @@ def _prf(gold: int, tp: int, fp: int) -> tuple[float, float, float]:
     return p, r, (2 * p * r / (p + r) if p + r else 0.0)
 
 
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
+    """비율 k/n 의 95% 신뢰구간(윌슨) — D-40 (b) 「신뢰구간 병기」. `n == 0` 이면 `None`(구간이 없다 · 0 으로 쓰지 않는다).
+
+    [문헌] 윌슨 점수 구간 — 표본이 작고 비율이 0 · 1 에 가까울 때 정규 근사보다 덜 깨진다. z = 1.96 은 95% [관행].
+    """
+    if n <= 0:
+        return None
+    ph = k / n
+    den = 1 + z * z / n
+    mid = (ph + z * z / (2 * n)) / den
+    half = z * ((ph * (1 - ph) / n + z * z / (4 * n * n)) ** 0.5) / den
+    return max(0.0, mid - half), min(1.0, mid + half)
+
+
+def _ci(k: int, n: int) -> str:
+    c = wilson(k, n)
+    return "-" if c is None else f"[{c[0]:.1%}, {c[1]:.1%}]"
+
+
+def macro_table(types: dict[str, tuple[int, int, int]]) -> dict[str, dict[str, Any]]:
+    """🆕 2026-10-08 (D-321 결정 4 · D-40) — 8종 · 6종 **두 표**. 측정 가능한(정답 30 이상) 유형만 macro 에 든다.
+
+    ★ micro 는 측정 불가 유형까지 합친 수다 — 둘을 나란히 낸다. ✅ 2026-10-11 — 어느 쪽도 합격선이 아니다(D-322 결정 A · 보고 묶음).
+    🚨 표에 없는 유형(편입 대기)은 `truth_types` 가 이미 뺐다.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for name, keep in (("8종", TYPE_CLASSES), ("6종", TYPE_CLASSES - NEW_IN_D321)):
+        rows = {t: v for t, v in types.items() if t in keep}
+        meas = {t: v for t, v in rows.items() if v[0] >= MIN_MEASURABLE}
+        prf = [_prf(*v) for v in meas.values()]
+        g, tp, fp = (sum(v[i] for v in rows.values()) for i in range(3))
+        out[name] = {
+            "measurable": sorted(meas),
+            "unmeasurable": sorted(set(rows) - set(meas)),
+            "macro": tuple(sum(x[i] for x in prf) / len(prf) for i in range(3)) if prf else None,
+            "micro": _prf(g, tp, fp),
+            "micro_n": (g, tp, fp),
+        }
+    return out
+
+
+def _with_encoder(r: dict, p: dict) -> set[str]:
+    """확정 ∪ 사전의 보류 후보 ∪ 인코더 후보 — 옮긴 후보는 그 전제인 행에서만 (D-326 보충 12 · `encoder_report` 의 규칙).
+
+    ★ `encoder_report` 와 `detect_by_type` 가 같이 쓴다 — 규칙을 두 곳에 적지 않는다 (D-99).
+    """
+    pe = set(p["types"]) | set(p.get("candidates", ())) | set(p.get("enc_candidates", ()))
+    if r.get("전제") == Premise.건기식_비인정.value:
+        pe |= set(p.get("enc_moved", ()))
+    return pe
+
+
+def detect_by_type(sc: list[tuple[dict, dict]]) -> dict[str, tuple[int, int, int, int, int]]:
+    """🆕 2026-10-11 (D-321 결정 6 · D-40 · D-311 보충) — **유형별 탐지**: 유형 → (정답, 확정, 사전 후보까지, 인코더가 돈 정답, 인코더 후보까지).
+
+    ★ `types` 표의 R 은 확정만 센다 — 사전이 확정하지 못하는 유형은 0 으로만 찍혀 후보가 어디까지 닿는지 보이지 않았다.
+    · **(행 · 유형) 단위다.** 한 행에 유형이 여럿이면 유형마다 센다 — 정답의 합은 위반 행 수(`detect.positive`)보다 크다.
+    · 세 칸은 포함 관계다(확정 ⊆ 사전 후보까지 ⊆ 인코더 후보까지). 「탐지」는 사전 후보까지의 이름이다 (D-311 보충).
+    · 정답은 `truth_types` — 후보만 있는 행은 가장 넓은 예측(인코더가 돌았으면 인코더 후보까지)에 맞춰 고른다. 세 칸이 같은 정답을 본다.
+    🔴 인코더가 안 돈 행은 인코더 칸의 분모에도 들지 않는다 — 「후보 없음」으로 세지 않는다 (D-220).
+    ⛔ 판정이 아니고 합격선도 없다 (D-322 결정 A). 정답 30 미만은 측정 불가로 찍는다 (D-40) — 수를 지우지는 않는다.
+    """
+    acc: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0, 0, 0, 0])
+    for r, p in sc:
+        pt = set(p["types"])
+        pd = pt | set(p.get("candidates", ()))
+        enc = bool(p.get("encoded"))
+        pe = _with_encoder(r, p) if enc else pd
+        for t in truth_types(r, pe):
+            a = acc[t]
+            a[0] += 1
+            a[1] += t in pt
+            a[2] += t in pd
+            a[3] += enc
+            a[4] += enc and t in pe
+    return {t: (v[0], v[1], v[2], v[3], v[4]) for t, v in sorted(acc.items())}
+
+
 def encoder_report(
     rows: list[dict], preds: list[dict], sc: list[tuple[dict, dict]]
 ) -> dict[str, Any]:
@@ -286,26 +404,39 @@ def encoder_report(
 
     ★ 판정은 인코더를 읽지 않는다 — 이 수는 「붙이면 탐지가 얼마가 되나」이고 **지금 그래프가 낸 판정의 수가 아니다.**
        `detect`(D-311 결정 5 · 확정 ∪ 보류 유형 후보)는 그대로 두고 **따로** 싣는다.
-       ⬜ D-311 의 「보류 유형 후보」는 사전의 자격 없는 적중을 가리켜 적은 말이다 — 인코더 후보를 같은 줄에 세는지는 팀장 확인.
+       ✅ 닫음 (2026-10-11 · D-311 보충) — D-311 의 「보류 유형 후보」는 사전의 자격 없는 적중이다. **「탐지 재현율」은 사전 후보까지
+          (`detected`)의 이름이고, 인코더 후보까지(`detected_with_encoder`)는 따로 싣고 그 이름으로 부른다** — 한 수로 합치지 않는다
+          (D-323 결정 3 · 안건 1 (나) 기각 이유).
     🔴 인코더가 **전 문장에** 돈 행만 센다(`encoded`). 안 돈 행을 「조용했다」로 세지 않는다 (D-220) — 없으면 `rows` 가 0 이다.
+    🆕 2026-10-10 — 「탐지」의 뜻이 둘이라 **이름을 달리해 함께** 낸다. 섞어 견주면 같은 판이 다른 점수로 보인다.
+       · `detected_with_encoder` — **유형 적중**: 정답 유형이 (확정 ∪ 보류 후보 ∪ 인코더 후보)에 있다. D-311 결정 5 의 탐지에 인코더 후보를 더한 수다
+       · `flagged_any` — **유형 무관**: 무엇이든 하나라도 걸렸다(정답 유형이 아니어도). 인코더 실험 규약 G1 의 「탐지」가 이 뜻이다.
+         ★ **인코더 판의 채택 관문은 이 수다**(D-324 결정 4 · 규약 2판 G1). 🚨 틀린 유형으로 걸린 것도 센다 —
+            시스템 보고(D-324 결정 5)의 탐지는 유형 적중이고 이 수가 아니다. 둘을 섞어 읽지 않는다 (D-324 보충 10-11)
     · `lawful` — 적법 문장에 인코더 후보가 선 수. 칸은 `lawful_report` 와 같다(음성 L · 주장없음 D · D-301).
+    🆕 2026-10-11 (D-326 보충 12) — **옮긴 후보(`enc_moved`)는 골든 `전제` 가 그 옮김의 전제(`건기식_비인정`)인 행에서만 센다.**
+       그 행의 정답(거짓_과장 · [별표 1] 4.나)은 「인정 없는 건강기능식품일 때」의 답이고 옮긴 후보가 바로 그 답이다 — 인코더가
+       기준 전제(식품)로 배우면 이 행에 `건강기능식품_오인` 을 내고 그래프가 옮긴다. 안 세면 맞는 답이 빗나감으로 찍힌다.
+       ⛔ 전제가 다르거나 없는 행에서는 세지 않는다 — 정답이 마침 거짓_과장인 행이 건강기능식품 오인 신호로 맞은 것처럼 세어진다
+          (dev 무조건부에서 옮긴 40 행 중 5 행 · 원장 10-10 ⑫). 유형 무관(`flagged_any`)에도 같은 규칙이다.
     """
     done = [(r, p) for r, p in zip(rows, preds, strict=True) if p.get("encoded")]
     if not done:
         return {"rows": 0}
     ids = {id(r) for r, _ in done}
-    pos = det = det_enc = 0
+    pos = det = det_enc = any_fired = 0
     for r, p in sc:
         if id(r) not in ids:
             continue
         pt = set(p["types"]) | set(p.get("candidates", ()))
-        pe = pt | set(p["enc_candidates"])
+        pe = _with_encoder(r, p)
         tt = truth_types(r, pe)
         if not tt:
             continue
         pos += 1
         det += bool(pt & tt)
         det_enc += bool(pe & tt)
+        any_fired += bool(pe)
     fired: dict[str, bool] = {}
     for r, p in done:
         fired[r["text"]] = fired.get(r["text"], False) or bool(p["enc_candidates"])
@@ -314,6 +445,7 @@ def encoder_report(
         "positive": pos,
         "detected": det,
         "detected_with_encoder": det_enc,
+        "flagged_any": any_fired,
         "lawful": lawful_report([r for r, _ in done], lambda t: fired.get(t, False)),
         "truncated_sents": sum(p.get("enc_truncated", 0) for _, p in done),
     }
@@ -354,7 +486,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     committed = errors = 0
     sc = [(r, p) for r, p in zip(rows, preds, strict=True) if scored(r)]
     for r, p in sc:
-        pt, ph = set(p["types"]), set(p["ho"])
+        pt, ph = set(p["types"]) & TYPE_CLASSES, set(p["ho"])
         tt, th = truth_types(r, pt), truth_ho(r, ph)
         for t in tt:
             gold_t[t] += 1
@@ -378,6 +510,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["unscored_rows"] = n - len(sc)
     out["types"] = {t: (gold_t[t], tp_t[t], fp_t[t]) for t in sorted(set(gold_t) | set(fp_t))}
     out["ho"] = {c: (gold_h[c], tp_h[c], fp_h[c]) for c in sorted(set(gold_h) | set(fp_h))}
+    out["macro"] = macro_table(out["types"])
     # 🆕 2026-10-02 (D-311 · 판정 10-02 보고 규칙) — **탐지 재현율**: 위반 행 중 확정 유형 ∪ 보류 유형 후보가 정답과 겹치는 비율.
     #    ★ 확정 재현율과 **나란히만** 싣는다 — 탐지는 판정이 아니다(보류는 통과가 아니지만 위반 확정도 아니다 · D-127).
     #    재측정 전에 정했다(D-175) — 이 수에 맞춰 사전 자격을 고르지 않는다
@@ -392,6 +525,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         det += bool((pt | set(p.get("candidates", ()))) & tt)
     out["detect"] = {"positive": pos, "confirmed": conf_hit, "detected": det}
     out["encoder"] = encoder_report(rows, preds, sc)
+    out["detect_types"] = detect_by_type(sc)
     out["coverage"] = committed / len(sc) if sc else 0.0
     out["selective_risk"] = errors / committed if committed else None
     out["committed"] = committed
@@ -409,27 +543,42 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
 
 
 def conditional_rows(rows: list[dict]) -> list[dict]:
-    """조건부 평가 행 — `품목` 을 아는 행만. 🔴 칸 자체가 없는 판이면 멈춘다(재동결 전 골든 · D-220)."""
+    """조건부 평가 행 — **전제나 품목을 아는 행**. 🔴 칸 자체가 없는 판이면 멈춘다(재동결 전 골든 · D-220).
+
+    🔄 2026-10-10 — 제품 정보는 아는 만큼만 넘긴다(`product_of`): 골든 `전제` 가 있으면 그 전제의 품목 · 없으면 `품목`.
+       승인 문구 규칙 행이 돌아온다 — `전제` 가 `식품` 이라 「일반식품이 이 문구를 쓰면」으로 넘어간다(종전에는 뺐다).
+    """
     if rows and not all("품목" in r for r in rows):
         raise SystemExit(
             "🔴 골든에 `품목` 칸이 없다 — 재동결 전 판이다(D-306). 조건부 평가를 못 한다\n"
             "  먼저(정본): uv run python launcher.py golden --write"
         )
-    # 🆕 2026-10-06 (원장 10-03 ㊿-40) — **승인 문구 규칙 행은 뺀다.** 그 행의 `품목`(건기식)은 원천이고 라벨(3호 · 조건 A)은
-    #    「일반식품이 이 문구를 쓰면」이라는 보수 전제다(`preprocess/split.py` `APPROVED_READING` · 판정 J1). 품목을 제품 정보로 넘기면
-    #    그래프는 건강기능식품으로 보고 4.나를 내고 채점은 3호를 기대한다 — 전제가 어긋난 행이다. 무조건부에는 그대로 든다.
-    #    ⬜ 다음 재동결 때 그 행(과 같은 원천의 주입 행)의 `품목` 을 미상으로 고치면 이 줄은 필요 없다 (D-192)
-    return [r for r in rows if r["품목"] and r.get("판독") != APPROVED_READING]
+    if rows and not all("전제" in r for r in rows):
+        raise SystemExit(
+            "🔴 골든에 `전제` 칸이 없다 — 2026-10-10 재동결 전 판이다. 조건부 평가를 못 한다\n"
+            "  먼저(정본): uv run python launcher.py golden --write · (사본): data-sync"
+        )
+    # 🔴 승인 문구 규칙 행의 `품목`(건기식)은 원천이다 — 그 행은 `전제`(식품)로만 든다. `전제` 가 빈 승인 문구 행이 있으면
+    #    품목으로 넘기지 않는다(그래프는 건강기능식품으로 보고 4.나를 내고 채점은 3호를 기대한다 · 원장 10-03 ㊿-40)
+    return [r for r in rows if r["전제"] or (r["품목"] and r.get("판독") != APPROVED_READING)]
 
 
 def product_of(r: dict, conditional: bool) -> ProductContext:
-    """행의 제품 정보 — 무조건부면 빈 것(세 법) · 조건부면 골든 `품목`. 🚨 인정 여부는 모른다(보수 전제 · D-263 ①)."""
-    return ProductContext(category=Category(r["품목"])) if conditional else ProductContext()
+    """행의 제품 정보 — 무조건부면 빈 것(세 법) · 조건부면 **아는 만큼**: 골든 `전제` 가 있으면 그 전제의 것 · 없으면 `품목`.
+
+    🚨 채점은 여전히 **기록되는 판정**으로 한다(가장 보수적인 전제 · D-263 결정 1 「게이트 수치도 이것으로 잰다」).
+       전제의 분기를 읽은 수는 분기 지표(`branch_report`)에 따로 낸다 — 섞지 않는다.
+    """
+    if not conditional:
+        return ProductContext()
+    if r.get("전제"):
+        return pm.product_of(Premise(r["전제"]))
+    return ProductContext(category=Category(r["품목"]))
 
 
 def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -> None:
     print(
-        "  [조건부 — 품목을 아는 행 · 골든 `품목`]"
+        "  [조건부 — 전제나 품목을 아는 행 · 골든 `전제` → `품목`]"
         if conditional
         else "  [무조건부 — 품목 미확정 · 세 법]"
     )
@@ -444,33 +593,48 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     for k, v in s["by_condition"].items():
         print(f"    {k:>2}  " + "  ".join(f"{c} {v.get(c, 0)}" for c in CLASSES))
     for name, tab in (("유형", s["types"]), ("호 (정본 · D-282)", s["ho"])):
-        print(f"\n  {name:26} {'정답':>5} {'P':>7} {'R':>7} {'F1':>7}")
+        print(f"\n  {name:26} {'정답':>5} {'P':>7} {'R':>7} {'F1':>7}  R 95% 구간")
         for k, (gold, tp, fp) in tab.items():
             p, r, f = _prf(gold, tp, fp)
             mark = "  🔴 측정 불가 (D-40)" if gold < MIN_MEASURABLE else ""
             if gold == 0:
                 mark = f"  🚨 정답 0인데 오탐 {fp}건"
-            print(f"  {k:26} {gold:>5} {p:>7.3f} {r:>7.3f} {f:>7.3f}{mark}")
+            print(f"  {k:26} {gold:>5} {p:>7.3f} {r:>7.3f} {f:>7.3f}  {_ci(tp, gold):>16}{mark}")
+    for name, m in (s.get("macro") or {}).items():
+        mac = "-" if m["macro"] is None else " · ".join(f"{x:.3f}" for x in m["macro"])
+        mic = " · ".join(f"{x:.3f}" for x in m["micro"])
+        print(
+            f"\n  {name} (D-321 결정 4) — macro P · R · F1 {mac} (측정 가능 {len(m['measurable'])}종) · "
+            f"micro P · R · F1 {mic} · 측정 불가 {', '.join(m['unmeasurable']) or '없음'}"
+        )
     sr = s["selective_risk"]
+    err = round(sr * s["committed"]) if sr is not None else 0
+    sr_mark = (
+        "" if s["committed"] >= MIN_MEASURABLE else "  🔴 측정 불가 (판정을 내린 행 n<30 · D-40)"
+    )
     print(
-        f"\n  selective risk {('-' if sr is None else f'{sr:.1%}')} · coverage {s['coverage']:.1%} "
-        f"(판정을 내린 행 {s['committed']} / 채점 {s['scored_rows']})"
+        f"\n  selective risk {('-' if sr is None else f'{sr:.1%}')} {_ci(err, s['committed'])} · coverage {s['coverage']:.1%} "
+        f"(판정을 내린 행 {s['committed']} / 채점 {s['scored_rows']}){sr_mark}"
     )
     d = s.get("detect") or {}
     if d.get("positive"):
         print(
-            f"\n  위반 행 {d['positive']} — 확정 재현율 {d['confirmed'] / d['positive']:.1%} · "
-            f"탐지 재현율(확정 ∪ 보류 유형 후보) {d['detected'] / d['positive']:.1%}  (D-311 · 탐지는 판정이 아니다)"
+            f"\n  위반 행 {d['positive']} — 확정 재현율 {d['confirmed'] / d['positive']:.1%} {_ci(d['confirmed'], d['positive'])} · "
+            f"탐지 재현율(확정 ∪ 보류 유형 후보) {d['detected'] / d['positive']:.1%} {_ci(d['detected'], d['positive'])}"
+            "  (D-311 · 탐지는 판정이 아니다 · 괄호는 95% 구간)"
         )
     e = s.get("encoder") or {}
     if e.get("rows"):
         print(
-            f"\n  [인코더 · 그림자] 인코더가 돈 행 {e['rows']} — 🚨 판정은 인코더를 읽지 않는다. 아래는 「후보로 더했다면」이다"
+            f"\n  [인코더 후보 · 응답의 encoder_candidates] 인코더가 돈 행 {e['rows']} — "
+            "🚨 판정(확정 · 보류)은 인코더를 읽지 않는다. 아래는 후보까지 합친 탐지다 (D-323)"
         )
         if e["positive"]:
             print(
                 f"    위반 행 {e['positive']} — 탐지 재현율 {e['detected'] / e['positive']:.1%} → "
-                f"인코더 후보까지 {e['detected_with_encoder'] / e['positive']:.1%}"
+                f"인코더 후보까지 {e['detected_with_encoder'] / e['positive']:.1%} (유형 적중)"
+                f" · 무엇이든 걸린 행 {e['flagged_any'] / e['positive']:.1%}"
+                " (유형 무관 · 규약 G1 — 인코더 채택 관문의 수 · 시스템 보고의 탐지가 아니다 · D-324 결정 4)"
             )
         for kind, (n, hit) in e["lawful"].items():
             if n:
@@ -482,6 +646,21 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
             print(
                 f"    🔴 토큰 상한을 넘어 뒤가 잘린 문장 {e['truncated_sents']} — 잘린 부분은 보지 않았다"
             )
+    dt = s.get("detect_types") or {}
+    if dt:
+        print(
+            f"\n  {'유형별 탐지 (D-321 결정 6)':24} {'정답':>5} {'확정':>7} {'사전 후보까지':>9} {'인코더 후보까지':>10}"
+        )
+        for k, (gold, conf, det, egold, edet) in dt.items():
+            mark = "  🔴 측정 불가 (D-40)" if gold < MIN_MEASURABLE else ""
+            enc_col = f"{edet / egold:>10.1%}" if egold else f"{'-':>10}"
+            if egold and egold != gold:
+                enc_col += f" (인코더가 돈 정답 {egold})"
+            print(f"  {k:26} {gold:>5} {conf / gold:>7.1%} {det / gold:>9.1%} {enc_col}{mark}")
+        print(
+            "     ⓘ (행 · 유형) 단위다 — 한 행에 유형이 여럿이면 유형마다 세어 정답의 합이 위반 행 수보다 크다."
+            " 후보는 판정이 아니고 합격선도 없다 (D-311 보충 · D-322 결정 A)"
+        )
     print_lawful(s["lawful"])
     w = s.get("recorded") or {}
     if w.get("rows"):
@@ -509,8 +688,13 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
                 if n
                 else ""
             )
-            + "  (분기는 판정이 아니다 · 건강기능식품은 비인정 분기로 본다)"
+            + "  (분기는 판정이 아니다 · 정답 전제는 골든 `전제` 칸 — 전제를 모르는 행은 세지 않는다)"
         )
+        for name, (pos, conf, hit) in (b.get("by_premise") or {}).items():
+            print(
+                f"    전제 {name} — 위반 행 {pos} · 그 분기의 확정 위반 {conf}({conf / pos:.1%}) · 유형 맞음 {hit}"
+                + ("" if pos >= MIN_MEASURABLE else "  ← 측정 불가 (n<30 · D-40)")
+            )
     else:
         print("\n  분기 (D-319) — 없음(기준 문안 미확정 · 또는 전제가 하나뿐인 품목)")
     if not conditional:
@@ -658,6 +842,17 @@ def run(
     return preds
 
 
+def log_sealed_run(stamp: dict[str, Any]) -> int:
+    """🆕 2026-10-08 (D-175) — 봉인 평가셋 실행 한 줄을 남기고 이 기기의 누적 횟수를 낸다. 🔴 기록을 못 쓰면 멈춘다(조용히 넘기지 않는다)."""
+    import datetime  # noqa: PLC0415
+
+    SEALED_LOG.parent.mkdir(parents=True, exist_ok=True)
+    line = {"at": datetime.datetime.now().isoformat(timespec="seconds")} | stamp
+    with SEALED_LOG.open("a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
+    return sum(1 for x in SEALED_LOG.read_text(encoding="utf-8").splitlines() if x.strip())
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--limit", type=int)
@@ -710,6 +905,19 @@ def main(argv: list[str] | None = None) -> int:
             )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
+    if not a.dev and not a.stub:
+        n_runs = log_sealed_run(
+            stamp
+            | {
+                "judged_by": g.JUDGED_BY,
+                "rows": len(rows),
+                "limit": a.limit,
+                "provenance": a.provenance,
+            }
+        )
+        print(
+            f"  🔒 봉인 평가셋 실행 — 이 기기 기록 {n_runs}번째 ({SEALED_LOG}) · 원장에 판 표지와 함께 옮긴다 (D-175)"
+        )
     report(s, a.conditional, dev=a.dev)
     print(
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"

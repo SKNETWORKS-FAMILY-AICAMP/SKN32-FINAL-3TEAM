@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from app.contracts import Category, Premise, Violation
+from app.contracts import Category, Premise, ProductContext, Violation
 
 #: 품목 → 그 품목에서 갈리는 전제 (D-276 ① · D-295). 🔴 **품목을 모르면 전부다** (D-229 ⑥ 「분기는 언제나」).
 #:    `전용법_미수록` 은 전제가 아니다 — 판정할 법이 없다 (D-277).
@@ -57,12 +57,29 @@ HF_MISLEAD = Violation.건강기능식품_오인.value
 #:    인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고」. 불가 사유는 **자격형**이다(인정을 받으면 풀린다 · D-59 · 지시서 ⑫-3 「A · 4.나」).
 UNRECOGNIZED_FUNCTION_CITE = "013094:제8조제1항제4호|나목"
 
+
 #: D-319 ④′ ③ — `건기식_인정` 에서 질병 표방의 건기식 단서는 [별표 1] 1호 **가목 · 라목**에만 있다. 인용의 목이 나 · 다이면 이 전제에서도
 #:    위반이고, 가 · 라이거나 **목을 모르면 판정하지 못한다**(통과로도 위반으로도 내리지 않는다 · D-220).
 DISEASE = Violation.질병_예방치료_표방.value
 DISEASE_NO_PROVISO_MOK = frozenset({"나", "다"})
 
 #: 전제 → **확정된** 기준 문안 한 줄 (계약 `Branch.criteria` · D-263 ②). 🔴 승인된 줄만 적는다.
+#: 🆕 2026-10-10 — 인정 · 요건 충족을 전제로 삼는 전제. 계약의 제품 정보(`ProductContext`)는 품목과 자격 두 칸이고
+#:    전제는 그 둘의 짝이다 — 이 표와 `PREMISE_CATEGORY` 가 그 짝을 적는다. ⬜ 화장품에는 자격 있는 전제가 없다(기능성화장품)
+RECOGNIZED_PREMISES = frozenset({Premise.건기식_인정, Premise.일반식품_기능성})
+
+
+def product_of(premise: Premise) -> ProductContext:
+    """전제 → 계약의 제품 정보. **전제를 아는 쪽이 제품 정보를 만드는 한 곳이다** — 골든의 `전제` 칸(평가) · 고른 분기(화면).
+
+    🚨 그래프는 지금 `has_recognized_function` 을 읽지 않는다 — 품목의 전제를 전부 계산하고 화면 · 평가가 그 전제의 분기를
+       골라 읽는다(D-263 ⑦ · D-276). 자격 칸은 생성 쪽(고쳐 쓰기 서버)이 전제를 알아야 할 때를 위해 같이 채운다.
+    """
+    return ProductContext(
+        category=PREMISE_CATEGORY[premise], has_recognized_function=premise in RECOGNIZED_PREMISES
+    )
+
+
 #: ✅ 2026-10-06 승인 — 오한빈 (모델 권고 승인 · 글자는 모델이 옮겨 적음) · 🔄 같은 날 `일반식품_기능성` 한 줄 재승인(광고의 조건은
 #:    「정해진 문구」가 아니라 자율심의다 — 식품표시광고법 제10조 · 시행규칙 제10조 4호 · 원장 10-03 ㊿-40). 정본 글자는 `docs/ohb/기준문안_초안_2026-10-02.md` §10 이고
 #:    근거 조문은 그 문서의 §1 · §6 · §8-1 표다. 글자를 고치면 그 문서를 먼저 고치고 다시 승인받는다(D-147 · D-263 ②).

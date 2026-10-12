@@ -173,6 +173,9 @@ class SearchHit(BaseModel):
     #: 🆕 2026-09-28 (D-238 개정 (나)) — **위반 근거로 쓸 좌표.** 적용 제외 목이면 부모 목의 좌표다.
     #:    `citation` 은 이 글이 있는 자리 · `basis_citation` 은 어긴 규범의 자리. 🚨 `null` 이면 위반 근거로 못 쓴다.
     basis_citation: str | None = None
+    #: 🆕 2026-10-08 — 원천이 화면 인용(`U3_cite`)을 열었는가 (D-224 ④ · `app/retrieve.py` `Hit.citable` 과 한 벌).
+    #:    `false` 면 이 글을 인용으로 옮기지 않는다. `null` = 질의가 칸을 안 실었다(인용 못 함).
+    citable: bool | None = None
     doc_type: str | None = None
     #: 🆕 별표 번호 (0015) — **원문 머리글에서 읽은 값만.** `null` 이면 인용이 안 선다.
     #:    ⛔ 파일명 일련번호가 아니다 — 짐작해 채우면 다른 별표를 가리킬 수 있다 (D-224).
