@@ -263,7 +263,7 @@ def _post(**data: str):  # noqa: ANN202
 def _wire(monkeypatch: pytest.MonkeyPatch, gen: _FakeLLM) -> None:
     monkeypatch.setattr(copygen, "off_reason", lambda: None)
     monkeypatch.setattr(copygen._llm, "make", lambda: gen)
-    monkeypatch.setattr(copygen, "EncoderJudge", _FakeJudge)
+    monkeypatch.setattr(copygen, "GraphJudge", _FakeJudge)
 
 
 def test_화면은_엔진이_꺼져_있으면_까닭을_적고_후보를_그리지_않는다() -> None:
@@ -490,7 +490,7 @@ def test_화면은_셋의_이름을_적고_문턱_수치는_카드에_적지_않
     gen = _FakeLLM([GOOD])
     monkeypatch.setattr(copygen, "off_reason", lambda: None)
     monkeypatch.setattr(copygen._llm, "make", lambda: gen)
-    monkeypatch.setattr(copygen, "EncoderJudge", Scored)
+    monkeypatch.setattr(copygen, "GraphJudge", Scored)
     body = _post(features="고소하고 바삭한 식감").text
     for name in pipeline.TIERS:
         assert f"<h3>{name}</h3>" in body
@@ -601,3 +601,103 @@ def test_생성_폼은_생성_중_표시를_갖고_있다() -> None:
     )
     assert '<script src="/static/user_wait.js" defer></script>' in body
     assert c.get("/static/user_wait.js").status_code == 200
+
+
+# ── 판정 그래프 전체를 지난다 (2026-10-13 오후) ─────────────────────────
+
+
+def _graph_judge(monkeypatch: pytest.MonkeyPatch, sentences, judged_by="rule+enc:지어낸지문"):  # noqa: ANN001, ANN202
+    """`GraphJudge` 를 대역 그래프 · 대역 인코더로 세운다. 그래프가 받은 요청을 적어 둔다."""
+    from pathlib import Path  # noqa: PLC0415
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    import app.api  # noqa: PLC0415
+    from app import encoder as enc  # noqa: PLC0415
+    from app.contracts import SentenceJudgment, Violation  # noqa: PLC0415
+
+    seen: list = []
+
+    def core(req):  # noqa: ANN001, ANN202
+        seen.append(req)
+        if isinstance(sentences, Exception):
+            raise sentences
+        return SimpleNamespace(
+            judged_by=judged_by,
+            sentences=[
+                SentenceJudgment.model_validate({"sent_id": f"s{i}", "text": "글", **s})
+                for i, s in enumerate(sentences)
+            ],
+        )
+
+    scores = {Violation.건강기능식품_오인: 0.6, Violation.거짓_과장: 0.2}
+    scheme = SimpleNamespace(
+        thresholds={Violation.건강기능식품_오인: 0.675, Violation.거짓_과장: 0.5}
+    )
+    model = SimpleNamespace(
+        scheme=scheme, predict=lambda _t: enc.EncoderPrediction(scores=scores, candidates=())
+    )
+    monkeypatch.setattr(app.api, "judge", core)
+    monkeypatch.setattr(enc, "configured_dir", lambda: Path("지어낸-모델-폴더"))
+    monkeypatch.setattr(enc, "encoder_at", lambda _d: model)
+    return judge.GraphJudge(), seen
+
+
+UNSURE = {"verdict": "hold", "hold_reason": "low_conf"}
+
+
+@pytest.mark.parametrize(
+    ("sentences", "passed", "outcome"),
+    [
+        ([UNSURE], True, "위반 후보 못 찾음"),
+        (
+            [{"verdict": "confirmed", "risk": {"floor": "R0", "final": "R0"}}],
+            True,
+            "위반 후보 못 찾음",
+        ),
+        ([UNSURE, {**UNSURE, "violations": ["거짓_과장"]}], False, "사전 적중"),
+        (
+            [{**UNSURE, "encoder_candidates": [{"violation": "거짓_과장", "confidence": 0.7}]}],
+            False,
+            "인코더 유형 후보",
+        ),
+        ([{"verdict": "unjudged"}], False, "미판정"),
+        ([{"verdict": "hold", "hold_reason": "premise_unknown"}], False, "hold"),
+    ],
+)
+def test_그래프_전체를_지나고_걸린_것은_떨군다(
+    monkeypatch: pytest.MonkeyPatch, sentences: list, passed: bool, outcome: str
+) -> None:
+    """🚨 사전 · 인코더 · 미판정 어디에 걸려도 탈락이다. 걸린 것 없는 확신 부족 보류는 남긴다 — 그래프가 통과를 내지 않는다 (D-269)."""
+    j, _ = _graph_judge(monkeypatch, sentences)
+    got = j.judge("지어낸 문구", BRANCHES["cos_no"])
+    assert (got.passed, got.outcome) == (passed, outcome)
+
+
+def test_그래프에는_분기의_품목이_가고_설_수_없는_유형은_거리에서_뺀다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.contracts import Category  # noqa: PLC0415
+
+    j, seen = _graph_judge(monkeypatch, [UNSURE])
+    cos = j.judge("지어낸 문구", BRANCHES["cos_no"])
+    hf = j.judge("지어낸 문구", BRANCHES["hf_yes"])
+    assert [(r.product.category, r.product.has_recognized_function) for r in seen] == [
+        (Category.화장품, False),
+        (Category.건기식, True),
+    ]
+    # 화장품에서는 건강기능식품 오인이 가장 가깝다. 건강기능식품 전제에서는 그 유형이 서지 않는다 — 다음 유형으로 잰다
+    assert (cos.top, hf.top) == ("건강기능식품_오인", "거짓_과장")
+    assert hf.closeness == 0.4
+
+
+def test_그래프에_못_닿거나_인코더가_안_돌았으면_생성하지_않는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import HTTPException  # noqa: PLC0415
+
+    j, _ = _graph_judge(monkeypatch, HTTPException(503))
+    with pytest.raises(copygen.CopyGenOff):
+        j.judge("지어낸 문구", BRANCHES["cos_no"])
+    j, _ = _graph_judge(monkeypatch, [UNSURE], judged_by="rule-사전만")
+    with pytest.raises(copygen.CopyGenOff):
+        j.judge("지어낸 문구", BRANCHES["cos_no"])

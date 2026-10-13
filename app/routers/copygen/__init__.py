@@ -1,10 +1,12 @@
-"""app/routers/copygen — 카피 생성 엔진(GPT 생성 → 코드 필터 → 인코더 판정) · 소유자 ksr (2026-10-13).
+"""app/routers/copygen — 카피 생성 엔진(GPT 생성 → 코드 필터 → 판정 그래프 전체) · 소유자 ksr (2026-10-13).
 
 시험 코드 `docs/ksr/llm_copy/`(10-03 ~ 10-12 · 결과표 `docs/ksr/LLM_카피생성_분기별_프롬프트_결과표_ksr_2026-10-12.md`)를
 화면(`POST /u/generate`)에 붙인 것이다. 흐름은 그때와 같다 —
 
     GPT 가 후보 20개를 쓴다(모델 둘 · 10개씩)  →  코드 필터(지어낸 수치 · 인증 · 성분 · 금지어 · 중복)
-    →  인코더 판정(유형 후보가 문턱을 넘으면 탈락)  →  3개가 모일 때까지 최대 3라운드  →  서로 가장 다른 3개
+    →  **판정 그래프 전체**(사전 · 검색 · 법별 판정 · 인코더 — 걸리면 탈락 · `judge.GraphJudge`)
+    →  3개가 모일 때까지 최대 3라운드  →  보수 · 균형 · 공격 3개
+🔄 2026-10-13 오후 (권소라) — 판정을 인코더만에서 **그래프 전체**로 바꿨다. 사전이 들어가야 한다.
 
 🔴 **GPT API 를 생성 경로에서 부른다** — D-78 ② 는 「GPT 는 판정 · 생성 런타임 밖」이었다. 2026-10-13 권소라가 팀장과 협의해
    **생성에만** 붙이기로 했다(판정에는 넣지 않는다 — 판정은 우리 인코더가 한다). ⬜ 결정 원장(D-78)의 개정은 팀장 몫이다.
@@ -27,7 +29,7 @@ from . import llm as _llm
 from .branches import BRANCHES
 from .errors import CopyGenError, CopyGenOff
 from .filters import REASONS, Inputs
-from .judge import EncoderJudge
+from .judge import GraphJudge
 from .pipeline import MAX_ROUNDS, PER_ROUND, WANT, Result
 from .pipeline import run as _run
 
@@ -82,7 +84,7 @@ def generate(branch_key: str, fields: dict, exclude: tuple[str, ...] = ()) -> Re
     if branch.needs_fixed and not inputs.fixed:
         raise ValueError("이 분기는 고정 문구(fixed)가 있어야 한다")
     gen = _llm.make()
-    res = _run(inputs, branch, gen, EncoderJudge(), exclude=tuple(exclude))
+    res = _run(inputs, branch, gen, GraphJudge(), exclude=tuple(exclude))
     # 🚨 문구는 찍지 않는다 — 건수만 (이용자 입력과 생성 문구는 로그에 남기지 않는다)
     dropped: Counter[str] = res.reasons()
     _log.info(
