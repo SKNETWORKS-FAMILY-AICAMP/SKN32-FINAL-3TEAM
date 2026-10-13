@@ -129,11 +129,11 @@ def candidate_condition(sentence: object) -> str | None:
 #: 사전 유형이 없는 문장에 인코더 유형 후보가 있으면 **접힌 칸 밖에** 다는 한 줄. 유형 이름 · 확률은 싣지 않는다 (D-330 결정 3)
 #: 🚨 문안은 화면 담당(ksr) 검토 대상이다(D-330 ⬜ 검토 A ~ H) — 고치면 여기 한 곳을 고친다 (D-99)
 GUESSED_TYPE_MARK = "AI 추정 유형 있음 — 판정 아님"
-#: 추정 유형으로 부른 고쳐 쓰기에 생성 서버가 「고칠 수 없음」(`infeasible`)으로 답했을 때의 말.
-#: ⛔ 「합법화 불가」라 그리지 않는다 — 불가는 코드의 불가 사유(D-59 · `INFEASIBILITY_OF`)만 말하고, 추정 유형은 틀릴 수 있다
-#:    (카드 17 이 원천 적법 문장에 후보를 세우는 비율 19 / 86 · 원장 10-13(A) ④). v14 는 dev 511 에서 133 을 불가로 답했다
-#:    (`docs/lse/고쳐쓰기_dev평가_2026-10-11.md` §6-3)
-GUESSED_INFEASIBLE_TEXT = "고쳐 쓴 문장을 만들지 못했어요 · AI 추정 유형 기준"
+#: 고쳐 쓰기에 생성 서버(sLLM)가 「고칠 수 없음」(`infeasible`)으로 답했을 때의 말 — **유형의 출처와 무관하게 이 말 하나다**.
+#: ⛔ 「합법화 불가」라 그리지 않는다 — 불가는 코드의 불가 사유(D-59 · `INFEASIBILITY_OF`)만 말한다(D-10 · D-323 보충 개정 10-14).
+#:    코드가 「실증하면 쓸 수 있다」(B)로 정한 문장 70 중 13 에 sLLM 이 불가로 답했다 — 같은 카드에서 말이 갈린다
+#:    (`docs/lse/고쳐쓰기_dev평가_2026-10-11.md` §1 · 3B v12 · 정답 유형 입력). 사유 C 문장은 카드가 이미 「불가」를 말한다
+REWRITE_INFEASIBLE_TEXT = "고쳐 쓴 문장을 만들지 못했어요"
 #: 고친 문장을 다시 판정했을 때 사전은 지났는데 인코더가 유형 후보를 내면 다는 말 (D-323 결정 4 「위반 못 찾음 + 인코더 주의」)
 ENC_REMAINS_MARK = "AI 추정 유형 남음 — 판정 아님"
 
@@ -153,3 +153,30 @@ def guessed_types(sentence: object) -> list[str]:
 def guessed_mark(sentence: object) -> str | None:
     """겉 표지 글자 — 추정 유형이 있으면 `GUESSED_TYPE_MARK` · 없으면 None (D-330 보충 2)."""
     return GUESSED_TYPE_MARK if guessed_types(sentence) else None
+
+
+#: 🆕 2026-10-14 (D-330 보충 3) — 보류 문장에서 사전 유형 후보와 인코더 유형 후보가 **같은 유형**일 때 유형 줄에 붙이는 말.
+#: ⛔ 확정이 아니다 — 합의로 확정할지는 사전 재작업 때 판정한다(D-313 ⬜). 문안은 화면 담당 검토 대상이다
+AGREED_MARK = "사전과 AI 추정이 같은 유형 — 확정 아님"
+
+
+def agreed_types(sentence: object) -> list[str]:
+    """보류 문장의 사전 유형 후보(`violations`) ∩ 인코더 유형 후보(옮긴 후보 제외) — 이름 · 정렬. 아니면 빈 목록 (D-330 보충 3).
+
+    ⛔ 보류가 아니면 빈 목록 — 확정 문장의 유형은 이미 「걸린 유형」이다. ⛔ 품목 전제가 옮긴 후보(`moved_from`)는 세지 않는다 —
+       평가 도구가 「인코더가 직접 낸 유형」만 세는 것과 같다(`scripts/eval_graph.py` `enc_candidates`).
+    """
+    if getattr(getattr(sentence, "verdict", None), "value", None) != "hold":
+        return []
+    mine = {v.value for v in getattr(sentence, "violations", None) or ()}
+    enc = {
+        c.violation.value
+        for c in getattr(sentence, "encoder_candidates", None) or ()
+        if getattr(c, "moved_from", None) is None
+    }
+    return sorted(mine & enc)
+
+
+def agreed_mark(sentence: object) -> str | None:
+    """유형 줄에 붙일 말 — 합의한 유형이 있으면 `AGREED_MARK` · 없으면 None (D-330 보충 3)."""
+    return AGREED_MARK if agreed_types(sentence) else None

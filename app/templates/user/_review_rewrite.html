@@ -59,13 +59,11 @@
   </div>
   {% endif %}
 
-  {% elif rw.out.outcome == "infeasible" and rw.guessed_infeasible %}
-  {#- 🆕 2026-10-14 (D-323 보충) — 추정 유형으로 부른 고쳐 쓰기의 「고칠 수 없음」. 「합법화 불가」는 코드의 불가 사유만 말한다 (D-59) #}
-  <b>{{ rw.guessed_infeasible }}</b> — 추정 유형이 틀렸을 수 있어요. 판정이 아니에요.
-
   {% elif rw.out.outcome == "infeasible" %}
-  <b>합법화 불가</b> · {{ rw.out.infeasible|replace("_", " ") if rw.out.infeasible else "유형 미상" }}
-  — 표현을 바꿔도 같은 위반이 남아 살릴 사실이 없어요.
+  {#- 🔄 2026-10-14 (D-323 보충 개정 · D-10 · D-59) — 생성 서버의 「고칠 수 없음」을 「합법화 불가」로 그리지 않는다.
+      불가는 코드의 불가 사유만 말한다 — 문장 카드의 사유 줄이 그 말이다. 서버가 댄 유형도 그리지 않는다 #}
+  <b>{{ rw.infeasible_note }}</b>{% if rw.guessed %} · AI 추정 유형 기준{% endif %}
+  — 고쳐 쓰기 모델이 표현을 바꿔도 같은 문제가 남는다고 보고 멈췄어요. 이 문장의 판정은 위 카드를 따르세요.
 
   {% else %}
   <b>보류 — 사람 검토 필요</b><br>

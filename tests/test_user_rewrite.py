@@ -149,8 +149,9 @@ def test_사유_A는_고쳐_쓰지_않는다(wired) -> None:  # noqa: ANN001
 @pytest.mark.parametrize(
     ("out", "want"),
     [
-        ({"outcome": "infeasible", "infeasible": "거짓_과장"}, "합법화 불가"),
-        ({"outcome": "infeasible", "infeasible": "지어낸 사유"}, "유형 미상"),
+        # 🔄 2026-10-14 (D-323 보충 개정) — 서버의 「고칠 수 없음」은 유형과 무관하게 「만들지 못했어요」다
+        ({"outcome": "infeasible", "infeasible": "거짓_과장"}, "고쳐 쓴 문장을 만들지 못했어요"),
+        ({"outcome": "infeasible", "infeasible": "지어낸 사유"}, "고쳐 쓴 문장을 만들지 못했어요"),
         ({"outcome": "hold", "reasons": ["원문에 없는 낱말: 곶감"]}, "원문에 없는 낱말: 곶감"),
         ({"outcome": "hold", "reasons": ["원문 그대로"]}, "고칠 곳을 찾지 못했어요"),
     ],
@@ -196,14 +197,19 @@ def test_추정_유형의_고칠_수_없음은_합법화_불가로_그리지_않
     wired.sllm_out = ("ok", {**base, "outcome": "infeasible", "infeasible": "소비자_기만"})
     html = _go()
     assert "합법화 불가" not in html, "🔴 추정 유형의 「고칠 수 없음」을 합법화 불가로 그렸다"
-    assert reasons.GUESSED_INFEASIBLE_TEXT in html
+    assert reasons.REWRITE_INFEASIBLE_TEXT in html and "AI 추정 유형 기준" in html
 
 
-def test_사전_유형의_고칠_수_없음은_그대로_합법화_불가다(wired) -> None:  # noqa: ANN001
-    """사전 유형으로 부른 결과는 종전대로다 — 이 보충은 추정 유형의 경우만 바꾼다."""
+@pytest.mark.gate
+def test_사전_유형의_고칠_수_없음도_합법화_불가로_그리지_않는다(wired) -> None:  # noqa: ANN001
+    """🔴 D-323 보충 개정(10-14) · D-10 — 「불가」는 코드의 불가 사유만 말한다. 원문 판정은 보류(사유 없음)라 카드에도 「불가」가 없다."""
+    from app import reasons  # noqa: PLC0415
+
     base = {"rewrite": None, "reasons": [], "repairs": [], "model": "v14", "latency_ms": 5000}
     wired.sllm_out = ("ok", {**base, "outcome": "infeasible", "infeasible": "거짓_과장"})
-    assert "합법화 불가" in _go()
+    html = _go()
+    assert "합법화 불가" not in html, "🔴 생성 서버의 「고칠 수 없음」을 합법화 불가로 그렸다"
+    assert reasons.REWRITE_INFEASIBLE_TEXT in html and "AI 추정 유형 기준" not in html
 
 
 def _light_enc(enc=("거짓_과장",)):  # noqa: ANN001, ANN202

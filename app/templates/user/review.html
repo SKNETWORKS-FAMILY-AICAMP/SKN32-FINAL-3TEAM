@@ -424,6 +424,7 @@
         {% if s.violations or s.evidence_mismatch %}
         <p class="rv-types">
           {%- if s.violations %}{{ "걸린 유형" if hit else "유형 후보 — 확정 아님" }} · {% for x in s.violations %}{{ x.value|replace("_", " ") }}{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}
+          {%- set am = s|agreed_mark %}{% if am %} · <b class="rv-agree">{{ am }}</b>{% endif %}
           {%- if s.evidence_mismatch %}{% if s.violations %} · {% endif %}근거 불일치 · 재생성됨{% endif -%}
         </p>
         {% endif %}

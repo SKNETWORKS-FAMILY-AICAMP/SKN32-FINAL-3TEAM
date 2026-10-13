@@ -469,6 +469,37 @@ def test_사전_유형_없이_인코더_후보만_있으면_접힌_칸_밖에_�
         )
 
 
+@pytest.mark.gate
+@pytest.mark.parametrize(("enc", "marked"), [("거짓_과장", True), ("소비자_기만", False)])
+def test_보류_문장에서_사전과_인코더가_같은_유형이면_표시한다(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, enc: str, marked: bool
+) -> None:
+    """🆕 2026-10-14 (D-330 보충 3) — 사전 유형 후보 ∩ 인코더 유형 후보가 있으면 유형 줄에 「같은 유형 — 확정 아님」.
+    판정은 바뀌지 않는다 — 보류 그대로다. 합의로 확정할지는 사전 재작업 때(D-313 ⬜)."""
+    import json  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api as api  # noqa: PLC0415
+    from app import reasons  # noqa: PLC0415
+
+    raw = json.loads(
+        (api.FIXTURE_ROOT / "judge" / "02_hold_low_conf.json").read_text(encoding="utf-8")
+    )
+    raw["judged_by"] = "rule-0.3.0-dict+encb:abcdef123456"
+    assert raw["sentences"][0]["verdict"] == "hold" and raw["sentences"][0]["violations"]
+    raw["sentences"][0]["encoder_candidates"] = [{"violation": enc, "confidence": 0.9}]
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "agree_case.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(api, "FIXTURE_ROOT", tmp_path)
+
+    html = TestClient(api.app).get("/u/preview/agree_case").text
+    assert (reasons.AGREED_MARK in html) is marked
+    assert "유형 후보 — 확정 아님" in html, "🔴 표시가 판정(보류)을 바꿨다"
+
+
 # ── 🆕 2026-10-12 (ksr) — AI 광고 생성 섹션 편집기. 종류 셋(SNS 피드 · 상세페이지 · 배너 300×250).
 #    문구는 판정을 지나야 지면에 얹힌다 — 얹는 기준은 `_lands` 한 곳이다. 🚨 문구는 여기서 지어낸 것이다 (D-175)
 

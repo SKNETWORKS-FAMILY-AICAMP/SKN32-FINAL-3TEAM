@@ -797,9 +797,10 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     rw["off"] = s_state == "off"
     rw["down"] = s_state != "ok"
     rw["out"] = out
-    if guessed and out and out.get("outcome") == "infeasible":
-        # ⛔ 추정 유형으로 받은 「고칠 수 없음」을 「합법화 불가」로 그리지 않는다 — 불가는 코드의 불가 사유만 말한다 (D-59)
-        rw["guessed_infeasible"] = reasons.GUESSED_INFEASIBLE_TEXT
+    if out and out.get("outcome") == "infeasible":
+        # 🔄 2026-10-14 (D-323 보충 개정) — 생성 서버의 「고칠 수 없음」은 유형 출처와 무관하게 「만들지 못했어요」다.
+        #    ⛔ 「합법화 불가」는 코드의 불가 사유만 말한다 (D-59 · D-10) — 같은 카드에서 코드(실증 B)와 말이 갈리던 자리
+        rw["infeasible_note"] = reasons.REWRITE_INFEASIBLE_TEXT
     if out and out["outcome"] == "candidate" and out.get("rewrite"):
         rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise, category)
         # 🆕 2026-10-10 — 후보의 조건이 이 전제에서 채워질 수 없으면 후보로 내지 않는다(재판정이 못 거르는 자리)

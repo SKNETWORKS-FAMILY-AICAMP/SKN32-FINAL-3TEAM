@@ -52,6 +52,7 @@ templates.env.filters["candidate_condition"] = reasons.candidate_condition
 # 🆕 2026-10-14 (D-330 보충 2 · D-323 보충) — 사전 유형 없이 인코더 유형 후보만 있는 문장. 규칙 · 문안은 `app/reasons.py` 한 곳 (D-99)
 templates.env.filters["guessed_types"] = reasons.guessed_types
 templates.env.filters["guessed_mark"] = reasons.guessed_mark
+templates.env.filters["agreed_mark"] = reasons.agreed_mark
 templates.env.globals["ENC_REMAINS_MARK"] = reasons.ENC_REMAINS_MARK
 
 
