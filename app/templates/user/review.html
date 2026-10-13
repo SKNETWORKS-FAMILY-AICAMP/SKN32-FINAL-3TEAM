@@ -389,8 +389,9 @@
         {% if rw %}{% set rw_kind = "result" %}
         {% elif s.infeasibility and s.infeasibility.value == "A" %}{% set rw_kind = "a" %}
         {# 🆕 2026-10-08 — 고쳐 쓰기 서버를 두지 않은 환경. 누를 수 없는 버튼을 그리지 않는다 (D-146) #}
-        {% elif s.violations and not rewrite_enabled|default(true) %}{% set rw_kind = "off" %}
-        {% elif s.violations %}{% set rw_kind = "button" %}
+        {#- 🆕 2026-10-14 (D-323 보충) — 사전 유형이 없어도 인코더 추정 유형이 있으면 연다(`guessed_types`). 결과의 「불가」는 다르게 그린다 #}
+        {% elif (s.violations or s|guessed_types) and not rewrite_enabled|default(true) %}{% set rw_kind = "off" %}
+        {% elif s.violations or s|guessed_types %}{% set rw_kind = "button" %}
         {% elif flag %}{% set rw_kind = "none" %}
         {% endif %}
         {% endif %}
@@ -426,6 +427,9 @@
           {%- if s.evidence_mismatch %}{% if s.violations %} · {% endif %}근거 불일치 · 재생성됨{% endif -%}
         </p>
         {% endif %}
+        {#- 🆕 2026-10-14 (D-330 보충 2) — 사전 유형 없이 인코더 후보만 있는 문장의 겉 표지. 유형 이름 · 확률은 접힌 칸 안에만 #}
+        {% set gm = s|guessed_mark %}
+        {% if gm %}<p class="rv-types rv-guess">{{ gm }}</p>{% endif %}
 
         {% if flag or s.violations or s.evidence or s.encoder_candidates or enc_on %}
         <details class="rv-more">
@@ -451,7 +455,7 @@
           <input type="hidden" name="premise" value="{{ premise }}">
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
-          <button type="submit" class="rv-rw-btn">이 문장 고쳐 쓰기 (10초 안팎)</button>
+          <button type="submit" class="rv-rw-btn">이 문장 고쳐 쓰기{% if not s.violations %} · AI 추정 유형 기준{% endif %} (10초 안팎)</button>
         </form>
         {% endif %}
       </div>

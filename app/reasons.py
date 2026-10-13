@@ -123,3 +123,33 @@ def candidate_condition(sentence: object) -> str | None:
         if getattr(e, "basis", False) is True and (e.law_id, e.article, e.item) == _UNRECOGNIZED:
             return UNRECOGNIZED_CANDIDATE_NOTE
     return None
+
+
+# ── 인코더 추정 유형 (🆕 2026-10-14 · D-330 보충 2 · D-323 보충) ─────────────────────────────
+#: 사전 유형이 없는 문장에 인코더 유형 후보가 있으면 **접힌 칸 밖에** 다는 한 줄. 유형 이름 · 확률은 싣지 않는다 (D-330 결정 3)
+#: 🚨 문안은 화면 담당(ksr) 검토 대상이다(D-330 ⬜ 검토 A ~ H) — 고치면 여기 한 곳을 고친다 (D-99)
+GUESSED_TYPE_MARK = "AI 추정 유형 있음 — 판정 아님"
+#: 추정 유형으로 부른 고쳐 쓰기에 생성 서버가 「고칠 수 없음」(`infeasible`)으로 답했을 때의 말.
+#: ⛔ 「합법화 불가」라 그리지 않는다 — 불가는 코드의 불가 사유(D-59 · `INFEASIBILITY_OF`)만 말하고, 추정 유형은 틀릴 수 있다
+#:    (카드 17 이 원천 적법 문장에 후보를 세우는 비율 19 / 86 · 원장 10-13(A) ④). v14 는 dev 511 에서 133 을 불가로 답했다
+#:    (`docs/lse/고쳐쓰기_dev평가_2026-10-11.md` §6-3)
+GUESSED_INFEASIBLE_TEXT = "고쳐 쓴 문장을 만들지 못했어요 · AI 추정 유형 기준"
+#: 고친 문장을 다시 판정했을 때 사전은 지났는데 인코더가 유형 후보를 내면 다는 말 (D-323 결정 4 「위반 못 찾음 + 인코더 주의」)
+ENC_REMAINS_MARK = "AI 추정 유형 남음 — 판정 아님"
+
+
+def guessed_types(sentence: object) -> list[str]:
+    """사전 유형(`violations`)이 없고 **인코더 유형 후보만** 있는 문장의 추정 유형 이름(정렬). 아니면 빈 목록.
+
+    ★ 화면의 겉 표지 · 고쳐 쓰기 버튼 · 고쳐 쓰기 BFF 가 생성 서버에 넘길 유형이 모두 이 함수를 쓴다 (D-99).
+    ⛔ 사전 유형이 있으면 빈 목록 — 그 문장은 사전 유형으로 고쳐 쓰고 유형 줄이 이미 있다. 판정 대상 아님(`not_claim`)도 빈 목록.
+    🔴 후보가 없으면 빈 목록이다 — 「추정 유형 없음」은 「문제없음」이 아니다(D-220 · D-330 결정 1). 이 함수는 그 말을 하지 않는다.
+    """
+    if getattr(sentence, "violations", None) or getattr(sentence, "not_claim", False):
+        return []
+    return sorted({c.violation.value for c in getattr(sentence, "encoder_candidates", None) or ()})
+
+
+def guessed_mark(sentence: object) -> str | None:
+    """겉 표지 글자 — 추정 유형이 있으면 `GUESSED_TYPE_MARK` · 없으면 None (D-330 보충 2)."""
+    return GUESSED_TYPE_MARK if guessed_types(sentence) else None
