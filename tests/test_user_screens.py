@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 
@@ -366,3 +368,29 @@ def test_후보에서_넘어온_문구와_병기_문구는_광고생성_제출�
     ).text
     assert "필수 병기 문구 「지어낸 병기 문구」" in second
     assert 'name="note" value="지어낸 병기 문구"' in second
+
+
+@pytest.mark.gate
+def test_인코더_후보는_판정_아님으로_그리고_확률을_보이지_않는다(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """🆕 2026-10-13 (D-330) — 인코더 유형 후보는 「AI 추정 · 판정 아님」으로 그리고 확률(%)은 그리지 않는다.
+    인코더 출력은 보정된 확률이 아니다 — 「N%」는 「N% 확률로 위반」으로 읽힌다 (D-330 안건 1 (나) · D-323)."""
+    import json  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api as api  # noqa: PLC0415
+
+    raw = json.loads((api.FIXTURE_ROOT / "judge" / "01_pass.json").read_text(encoding="utf-8"))
+    raw["judged_by"] = "rule-0.3.0-dict+enc:abcdef123456"
+    raw["sentences"][0]["encoder_candidates"] = [{"violation": "거짓_과장", "confidence": 0.917}]
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "enc_case.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(api, "FIXTURE_ROOT", tmp_path)
+
+    html = TestClient(api.app).get("/u/preview/enc_case").text
+    assert "AI 추정 · 판정 아님" in html, "🔴 인코더 후보가 그려지지 않았다"
+    assert "추정 확신" not in html and "92%" not in html, "🔴 인코더 확률이 화면에 나왔다 (D-330)"
