@@ -16,7 +16,8 @@
 
 고정한 것 (바꾸면 규약도 같이 바꾼다)
   · dev = 원천별 묶음 15% + 6종 보충 · 시드 42 · 문장 단위 · 합성 아님 (v11 규칙) → 재동결 10-05 판에서 749행
-  · 정답 = 조건 M · D · L 은 유형이 적혀 있어도 음성 · 채점 행 = 749행 전부 (광고 문구 줄만 본 값을 함께 낸다)
+  · 정답 = 조건 M · D · L 은 유형이 적혀 있어도 음성 · 전제 건기식_비인정 행은 거짓_과장 → 건강기능식품_오인(`encoder_target`)
+    · 채점 행 = 749행 전부 (광고 문구 줄만 본 값을 함께 낸다)
   · 모델 고르기 = 6종 macro PR-AUC · 통과 기준 = 아래 GATE
 
 🔴 test 행은 읽지 않는다. 확률 CSV 에 dev 가 아닌 id 가 있으면 멈춘다 (D-175).
@@ -48,8 +49,47 @@ LABELS = CONF8 + ["기능성화장품_오인"]  # 저장 9칸 — 마지막은 �
 DEV_FRAC, DEV_SEED = 0.15, 42
 #: 골든 sha → (dev 행 수 · 지문). 같은 골든이면 이 값이 나와야 한다
 DEV_EXPECT = {
-    "529c970556d77bd2c231526e20531294bf469f794e74a4796835a36f456eb7fe": (749, "4ebfcb231da703b5")
+    "529c970556d77bd2c231526e20531294bf469f794e74a4796835a36f456eb7fe": (749, "4ebfcb231da703b5"),
+    # 🆕 2026-10-12 — 10-10 2 차 재동결 판 (`전제` 칸 · 팀장 전달 10-10 §0). dev 행은 그대로다
+    "f6ccc5a7de44c6863ebb901d4e5a726acb35c92527e41fd1c3850490158fe744": (749, "4ebfcb231da703b5"),
 }
+
+
+
+def same_dev_golden(sha_a, sha_b):
+    """두 골든 판이 **같은 공통 dev** 를 내는가 (🆕 2026-10-12).
+
+    다른 판의 골든으로 학습한 모델을 막는 까닭은 dev 행이 달라져 「모델이 학습한 행을 dev 라고 재게 되는」 것이다 (D-220).
+    둘 다 `DEV_EXPECT` 에 있고 (행 수 · 지문)이 같으면 dev 행이 같다 — 529c970556d7 → f6ccc5a7de44 는 `전제` 칸 ·
+    봉인 10 행의 품목만 달라졌다(팀장 전달 10-10 §0). 앞자리만 받아도 맞춘다(label_scheme 에 앞 12 자만 적힌 판).
+    """
+    if not sha_a or not sha_b:
+        return False
+    if sha_a.startswith(sha_b) or sha_b.startswith(sha_a):
+        return True
+    find = lambda s: next((v for k, v in DEV_EXPECT.items() if k.startswith(s)), None)
+    ea, eb = find(sha_a), find(sha_b)
+    return ea is not None and ea == eb
+
+def encoder_target(r):
+    """인코더가 배울 · 채점할 표적 (모델만 볼 때의 정답).
+
+    · 조건 M · D · L 은 라벨이 있어도 음성 (D-296 개정 2)
+    · 🆕 2026-10-12 — 전제 `건기식_비인정` 행은 `거짓_과장` 을 `건강기능식품_오인` 으로 (D-326 보충 12 · 팀장 전달 10-11 §2).
+      인코더는 기준 전제(식품) 하나로 배우고 전제에 따라 옮기는 일은 그래프가 한다. 다른 유형(질병 · 의약품 · 후기)은 그대로다.
+      근거에 4 호 나목 말고 다른 4 호 목이 있는 행은 `거짓_과장` 도 남긴다(학습 1 · dev 1).
+    🚨 골든 `labels` 는 고치지 않는다 — 그래프까지 볼 때(`scripts/eval_graph.py`)의 정답은 골든 라벨과 전제다. 두 수를 섞어 견주지 않는다.
+       `전제` 칸이 없는 골든(529c970556d7)에서는 종전과 같다.
+    """
+    if r.get("조건") in ("M", "D", "L"):
+        return []
+    t = list(r.get("labels") or [])
+    if r.get("전제") == "건기식_비인정" and "거짓_과장" in t:
+        other4 = any("제4호" in g and "|나목" not in g for g in (r.get("근거") or []))
+        t = [x for x in t if x != "거짓_과장" or other4]
+        if "건강기능식품_오인" not in t:
+            t.append("건강기능식품_오인")
+    return t
 #: 🔒 통과 기준 — Baseline 대비. 실험을 돌리기 전에만 고친다
 GATE = {
     "prauc_drop": 0.02,  # B  6종 PR-AUC(시드 평균) 하락 허용폭
@@ -80,9 +120,7 @@ def load_dev(path):
         if line.strip():
             r = json.loads(line)
             if r["split"] == "train":
-                r["target"] = (
-                    [] if r.get("조건") in ("M", "D", "L") else list(r.get("labels") or [])
-                )
+                r["target"] = encoder_target(r)
                 train.append(r)
     del raw
 
