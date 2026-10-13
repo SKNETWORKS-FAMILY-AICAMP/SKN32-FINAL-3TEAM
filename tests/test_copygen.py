@@ -668,6 +668,8 @@ UNSURE = {"verdict": "hold", "hold_reason": "low_conf"}
         ),
         ([{"verdict": "unjudged"}], False, "미판정"),
         ([{"verdict": "hold", "hold_reason": "premise_unknown"}], False, "hold"),
+        # 🆕 D-220 — 문장이 없으면 본 것이 없다. 통째 거리로 넘기지 않는다
+        ([], False, "판정할 문장 없음"),
     ],
 )
 def test_그래프_전체를_지나고_걸린_것은_떨군다(
