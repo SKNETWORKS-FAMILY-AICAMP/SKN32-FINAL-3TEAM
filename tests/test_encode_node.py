@@ -71,7 +71,9 @@ def _cands(s: SentenceJudgment) -> list[str]:
 
 @pytest.fixture
 def off(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(enc.ENV_MODEL_DIR, raising=False)
+    # 🚨 지우지 않고 빈 값으로 둔다 — 지우면 프로세스에서 처음 `collect.env.load()` 가 불릴 때 `.env` 의 값이 들어와
+    #    (override=False 는 「없는 키」를 채운다) 켜 둔 기기에서 이 파일만 돌리면 「설정 없음」이 아니게 된다 (2026-10-14)
+    monkeypatch.setenv(enc.ENV_MODEL_DIR, "")
 
 
 #: 🆕 2026-10-13 (D-333) — 가짜 폴더는 잠금의 판이 아니다. 여기서 보는 것은 그래프 배선이므로 잠금 대조는 연다 —
