@@ -5,8 +5,8 @@
 
 🚨 **엔진이 필요한 화면은 DB 없이도 떠야 한다** (D-124) — `review`·`generate`·`compose` 는
    골든 픽스처로 모든 분기를 그린다. ⬜ **`history`·`/`(홈) 은 예외다** — 실제 DB(`app/db.py`,
-   `Judgment`)에 붙는다. 🔄 판정은 돌지만(코어 `/judge`) 결과를 `judgment` 표에 **저장하는 코드가 아직 없어**
-   지금은 빈 목록/0 건으로 뜬다.
+   `Judgment`)에 붙는다. 🔄 2026-10-13 — 검수(`/u/judge`)가 판정을 `judgment` 표에 적는다(`_keep_history`).
+   이력 보관에 동의한 회원 것만 쌓인다 (D-96 · D-69).
    🔄 2026-09-22 (ohb 흡수) — **DB 가 없어도 뜬다.** 붙지 못하면 「DB 없음」을 그리고 수를 0 으로 적지 않는다
       (`app.db.reachable` · D-72). 게이트가 `/u/` 200 을 요구하고 CI 에는 Postgres 가 없다.
 
@@ -34,11 +34,11 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import Select, func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app import auth, sentsplit
+from app import auth, dictmatch, sentsplit
 from app import premise as pm
 from app.contracts import (
     PASS_RISK_MAX,
@@ -385,7 +385,7 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     """사용자 첫 화면 = 홈. 🚨 **history 와 같은 요령으로 진짜 DB 집계다.**
 
     🔄 종전에는 여기가 문구 검수였다 — 검수는 `/u/review` 로 옮겼다 (2026-09-16, ksr 안).
-    ⬜ 판정 엔진이 없어 지금은 통계가 0/— 로 뜬다 — 정상이다 (D-147, 가짜 수치를 안 그린다).
+    🔄 2026-10-13 — 검수가 판정을 적는다(`_keep_history`). 적힌 것이 없으면 0/— 다 (D-147, 가짜 수치를 안 그린다).
     ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX`
       (D-125 통과 조건의 위험도 문턱 = 🔄 **R0** · D-273)을 그대로 쓴다 — 문턱을 여기서 따로 두지 않는다.
     """
@@ -444,7 +444,12 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     )
     pass_rate = round(pass_count / total_month * 100) if total_month else None
 
-    recent = session.execute(mine.order_by(Judgment.judged_at.desc()).limit(3)).scalars().all()
+    recent = [
+        _hist_view(j, raw)
+        for j, raw in session.execute(
+            _history_stmt(user.id).order_by(Judgment.judged_at.desc()).limit(3)
+        ).all()
+    ]
     return _render(
         request,
         "user/index.html",
@@ -487,7 +492,7 @@ _SAMPLE_COPY = (
 )
 
 #: 🔴 버튼 하나 = 폼 제출 하나 (`op`). CSP 가 스크립트를 막아 문구 추가·삭제도 서버가 다시 그린다.
-_OP = re.compile(r"^(add|all|del:\d|sample:\d|judge:\d)$")
+_OP = re.compile(r"^(add|all|load|del:\d|sample:\d|judge:\d)$")
 
 
 def _copies(form: dict[str, list[str]]) -> list[str]:
@@ -614,14 +619,17 @@ def review(request: Request) -> HTMLResponse:
 
 
 @router.post("/judge", response_class=HTMLResponse)
-async def judge(request: Request) -> HTMLResponse:
+async def judge(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
     """문구 검수 BFF — 문구 칸 조작과 판정 호출 (ksr 2026-09-29 · 프로토타입 v7.2 `goReview`).
 
     🔴 **POST 다** — 문구를 URL 에 싣지 않는다 (보안점검 P1-4).
-    ★ `op` — `add`(칸 추가) · `del:N` · `sample:N`(예시 넣기) · `judge:N`(그 문구만) · `all`(전체 검수).
+    ★ `op` — `add`(칸 추가) · `del:N` · `sample:N`(예시 넣기) · `judge:N`(그 문구만) · `all`(전체 검수) ·
+       `load`(이력의 문구를 입력 칸에 담기만 한다 — 판정하지 않는다 · 프로토타입 `reviewAgain`).
     ★ 판정은 코어(`app.api.judge`)를 부른다 — 여기서 판정하지 않는다 (D-119).
        엔진이 501 이면 「엔진 준비 중」을 그린다. **가짜 결과를 만들지 않는다** (D-147).
     ★ 넣은 문구는 되돌려 그린다. **템플릿이 이스케이프한다** (P2-9) — 문자열 조립 금지.
+    🆕 2026-10-13 — 판정이 끝나면 **이력에 적는다** (`_keep_history`). 검수만 적는다 — 고쳐 쓰기의 재판정 ·
+       카피 생성 · 광고 생성의 판정은 적지 않는다.
     """
     form = await _form(request)
     copies = _copies(form)
@@ -647,6 +655,12 @@ async def judge(request: Request) -> HTMLResponse:
     if kind == "sample":
         copies[idx] = _SAMPLE_COPY
         return _render(request, "user/review.html", _review_ctx(copies))
+    if kind == "load":
+        return _render(
+            request,
+            "user/review.html",
+            _review_ctx(copies, notice="이력의 문구를 검수 입력칸에 넣었어요"),
+        )
 
     targets = [(idx + 1, copies[idx])] if kind == "judge" else list(enumerate(copies, 1))
     targets = [(n, t.strip()) for n, t in targets if t.strip()]
@@ -664,7 +678,8 @@ async def judge(request: Request) -> HTMLResponse:
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
         results.append({"n": n, "result": res, "text": text})
-    return _render(request, "user/review.html", _review_ctx(copies, results))
+    kept = _keep_history(request, session, results)
+    return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
 
 
 # ── 검수 → 지적 문장 고쳐 쓰기 (sLLM 재생성) — lse 2026-10-06 · 팀장 승인 ─────────────
@@ -1530,16 +1545,177 @@ def _owned_judgments(owner_id: uuid.UUID) -> Select:
     )
 
 
-def _history_rows(
-    session: Session, owner_id: uuid.UUID, verdict: str | None, page: int
-) -> tuple[list, int]:
-    """이력 한 쪽의 행과 전체 건수. `judgment` × `copy_sentence` 조인 (ksr 원문 조인 · lse 필터·페이지)."""
-    stmt = (
+def _save_review(session: Session, user: UserAccount, results: list[dict]) -> int:
+    """검수 결과를 `work_doc` · `copy_sentence` · `judgment` 에 적고 **적은 판정 수**를 돌려준다 (🆕 2026-10-13).
+
+    ★ 문구 하나 = 문서 하나 · 문장 하나 = 판정 하나. 적는 판정은 응답의 `sentences` 다 — 분기는 판정이 아니다 (D-263 ①).
+    🚨 **판정 대상 아님(`not_claim`)은 적지 않는다** — 표에 그 칸이 없어 적으면 「특이사항 없음」으로 읽힌다.
+       안 본 것을 본 것처럼 남기지 않는다 (D-63 · D-275).
+    ★ 표의 `violation_type` 은 한 칸이라 **첫 유형**만 든다. 유형 전부 · 불가 사유(A/B/C)는 `evidence` 에 조문과 함께 싣는다 —
+       이력의 배지가 검수 화면과 같은 말을 하려면 사유가 있어야 한다.
+    ⛔ 뺄 구간(`spans`)은 적지 않는다 — 담을 칸이 없다.
+    """
+    kept = 0
+    for r in results:
+        res = r["result"]
+        judged = [s for s in res.sentences if not s.not_claim]
+        if not judged:
+            continue
+        doc = WorkDoc(
+            id=uuid.uuid4(),
+            title=r["text"][:200],
+            kind="single",
+            # 🚨 이 함수는 「① 검수 이력 보관」에 동의한 사람 것만 받는다 (`_keep_history` · D-96)
+            consent_store=True,
+            consent_train=user.consent_improve_at is not None,
+            owner_id=user.id,
+        )
+        rows: list[Judgment] = []
+        for s in judged:
+            sent = CopySentence(
+                id=uuid.uuid4(), raw=s.text, norm=dictmatch.norm(s.text), origin="user"
+            )
+            doc.sentences.append(sent)
+            span = s.risk.evidence_span
+            rows.append(
+                Judgment(
+                    doc_id=doc.id,
+                    subject_type="copy_sentence",
+                    subject_id=sent.id,
+                    verdict=s.verdict.value,
+                    hold_reason=s.hold_reason.value if s.hold_reason else None,
+                    product_category=res.category.value if res.category else None,
+                    product_category_source=(
+                        res.category_source.value if res.category_source else None
+                    ),
+                    violation_type=s.violations[0].value if s.violations else None,
+                    evidence={
+                        "articles": [e.model_dump() for e in s.evidence],
+                        "violations": [v.value for v in s.violations],
+                        "infeasibility": s.infeasibility.value if s.infeasibility else None,
+                    },
+                    evidence_span=span.model_dump() if span else None,
+                    risk_floor=s.risk.floor.level if s.risk.floor else None,
+                    risk_final=s.risk.final.level if s.risk.final else None,
+                    law_version=res.law_version,
+                    attempt=res.attempt,
+                    judged_by=res.judged_by,
+                )
+            )
+        # 문서 · 문장이 먼저 들어가야 판정의 FK(`doc_id`)가 선다 — 판정은 문서와 관계(relationship)가 없어 순서를 손으로 준다
+        session.add(doc)
+        session.flush()
+        session.add_all(rows)
+        kept += len(rows)
+    session.commit()
+    return kept
+
+
+def _keep_history(request: Request, session: Session, results: list[dict]) -> str | None:
+    """검수 결과를 이력에 적고 **어떻게 됐는지** 돌려준다 — 화면이 그대로 알린다 (🆕 2026-10-13).
+
+    ★ `saved` 적었다 · `off` 로그인했지만 「① 검수 이력 보관」이 꺼져 있다 · `failed` 적지 못했다 ·
+      `None` 비회원이거나(D-69 — 안내는 입력 카드에 이미 있다) 적을 판정이 없다.
+    🚨 **동의가 없으면 적지 않는다** (D-96 — 기본값은 미보관). 검수는 그대로 된다 — 동의는 기능의 대가가 아니다.
+    🚨 적지 못해도 검수 결과는 그린다 — 저장 실패가 판정을 가리지 않는다. 대신 「저장됐다」고 말하지 않는다 (D-147).
+    🔴 원인 문자열은 로그에 담지 않는다(접속 정보 · 문구가 섞인다) — 예외의 종류 이름만 남긴다.
+    """
+    user = current_user(request, session)
+    if user is None:
+        return None
+    if user.consent_history_at is None:
+        return "off"
+    try:
+        kept = _save_review(session, user, results)
+    except SQLAlchemyError as e:
+        session.rollback()
+        logging.getLogger(__name__).warning("검수 이력 저장 실패 — %s", type(e).__name__)
+        return "failed"
+    return "saved" if kept else None
+
+
+#: 필터 칩의 글자 — 값(`_VERDICTS`)은 URL 에, 글자는 화면에
+_VERDICT_LABELS = {
+    "confirmed": "확정",
+    "hold": "보류",
+    "no_basis": "근거 없음",
+    "unjudged": "미판정",
+}
+#: 🚨 `review.html` 의 `HOLD` 와 **같은 글자**다 (D-99) — 한쪽을 고치면 둘 다
+_HOLD_LABELS = {
+    "low_conf": "확신 부족",
+    "gap2": "코드·모델 2등급 차",
+    "cat_unknown": "품목 선택 필요",
+    "rd1": "공존 규칙 발동",
+    "premise_unknown": "전제 선택 필요 — 인정 여부",
+    "law_uncovered": "전용법 미검수",
+}
+#: 확정 위반의 배지 `(색, 글자)` — 검수 화면의 문장 카드와 같은 말이다 (사용자 확정 문구 10-01)
+_INF_BADGES = {
+    "A": ("warn", "인정받은 제품만 가능"),
+    "B": ("warn", "객관적인 근거 자료 필요"),
+    "C": ("bad", "사용 불가"),
+}
+#: 위험도 칩 — 🚨 `review.html` 의 `RISK` 와 같은 글자다 (R0 은 그리지 않는다 · R4 는 닿지 않는 값이라 R3 과 같이 적는다)
+_RISK_LABELS = {1: "낮은 위험", 2: "위험", 3: "고위험", 4: "고위험"}
+
+#: 반복 지적 패턴 — 최근 몇 건을 보고, 같은 유형이 몇 건 이상이면 알리나
+_PATTERN_WINDOW = 10
+_PATTERN_MIN = 3
+
+
+def _hist_view(j: Judgment, raw: str | None = None) -> SimpleNamespace:
+    """판정 한 행 → 이력 화면이 그리는 모양. 배지 글자는 검수 화면과 같다 (D-99)."""
+    ev = j.evidence or {}
+    if j.verdict == "confirmed" and j.violation_type:
+        tone, label = _INF_BADGES.get(ev.get("infeasibility"), ("bad", "위반 확정"))
+    elif j.verdict == "confirmed":
+        tone, label = "ok", "특이사항 없음"
+    elif j.verdict == "hold":
+        tone, label = "hold", "보류"
+    elif j.verdict == "no_basis":
+        tone, label = "hold", "근거 없음"
+    else:
+        tone, label = "hold", "미판정"
+    articles = ev.get("articles") or []
+    return SimpleNamespace(
+        id=j.id,
+        at=j.judged_at.astimezone(_KST).strftime("%Y-%m-%d %H:%M"),
+        verdict=j.verdict,
+        tone=tone,
+        label=label,
+        hold_reason=(
+            _HOLD_LABELS.get(j.hold_reason, f"알 수 없는 값 ({j.hold_reason})")
+            if j.hold_reason
+            else None
+        ),
+        # ⛔ 확정이 아닌 문장의 위험도는 그리지 않는다 — 판정처럼 읽힌다 (D-280)
+        risk=_RISK_LABELS.get(j.risk_final) if j.verdict == "confirmed" else None,
+        category=j.product_category.replace("_", " ") if j.product_category else None,
+        violations=ev.get("violations") or ([j.violation_type] if j.violation_type else []),
+        # 인용 근거(판정이 기대는 조문)와 참고 조문(검색이 찾은 것)을 가른다 — 검수 화면과 같은 규칙 (D-323)
+        basis=[a for a in articles if a.get("basis")],
+        refs=[a for a in articles if not a.get("basis")],
+        law_version=j.law_version,
+        text=raw,
+    )
+
+
+def _history_stmt(owner_id: uuid.UUID) -> Select:
+    """내 판정 × 그 문장의 원문 — 이력 목록과 홈의 「최근 검수 이력」이 같이 쓴다."""
+    return (
         _owned_judgments(owner_id)
         .add_columns(CopySentence.raw)
         .join(CopySentence, CopySentence.id == Judgment.subject_id)
         .where(Judgment.subject_type == "copy_sentence")
     )
+
+
+def _history_rows(
+    session: Session, owner_id: uuid.UUID, verdict: str | None, page: int
+) -> tuple[list, int]:
+    """이력 한 쪽의 행과 전체 건수. `judgment` × `copy_sentence` 조인 (ksr 원문 조인 · lse 필터·페이지)."""
+    stmt = _history_stmt(owner_id)
     if verdict:
         stmt = stmt.where(Judgment.verdict == verdict)
 
@@ -1547,19 +1723,30 @@ def _history_rows(
     raw_rows = session.execute(
         stmt.order_by(Judgment.judged_at.desc()).limit(_PAGE_SIZE).offset((page - 1) * _PAGE_SIZE)
     ).all()
-    rows = [
-        SimpleNamespace(
-            id=j.id,
-            judged_at=j.judged_at,
-            verdict=j.verdict,
-            hold_reason=j.hold_reason,
-            risk_final=j.risk_final,
-            law_version=j.law_version,
-            text=raw,
-        )
-        for j, raw in raw_rows
-    ]
-    return rows, total
+    return [_hist_view(j, raw) for j, raw in raw_rows], total
+
+
+def _repeat_pattern(session: Session, owner_id: uuid.UUID) -> SimpleNamespace | None:
+    """반복 지적 패턴 — 내 최근 판정에서 **같은 위반 유형**이 거듭 나오면 알린다 (프로토타입 v7.2 이력 화면).
+
+    🚨 실제 판정에서 센다 — 거듭 나온 유형이 없으면 띠를 그리지 않는다 (D-147).
+    """
+    rows = session.execute(
+        _owned_judgments(owner_id)
+        .with_only_columns(Judgment.violation_type)
+        .order_by(Judgment.judged_at.desc())
+        .limit(_PATTERN_WINDOW)
+    ).all()
+    counts: dict[str, int] = {}
+    for (vtype,) in rows:
+        if vtype:
+            counts[vtype] = counts.get(vtype, 0) + 1
+    if not counts:
+        return None
+    vtype, n = max(counts.items(), key=lambda kv: kv[1])
+    if n < _PATTERN_MIN:
+        return None
+    return SimpleNamespace(total=len(rows), count=n, violation=vtype.replace("_", " "))
 
 
 @router.get("/history", response_class=HTMLResponse)
@@ -1574,13 +1761,12 @@ def history(
 
     🔄 2026-09-16 — `Judgment` × `CopySentence` 조인(ksr)으로 **판정 원문**까지 보여준다.
        필터(`verdict`)·페이지네이션(`page`)·상세 토글(`?open_id=`)은 lse 것을 그대로 쓴다.
-    ⬜ 판정 결과를 `judgment` 표에 저장하는 코드가 아직 없어 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
-       (판정 자체는 돈다 — `/u/judge` 가 코어를 부른다. 그 결과를 적는 자리가 없다.)
+    🔄 2026-10-13 — 검수(`/u/judge`)가 판정을 적는다(`_keep_history`). 「① 검수 이력 보관」에 동의한 회원 것만 쌓인다 (D-96).
        가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
     ⛔ **`page`·`verdict` 는 사용자가 URL 을 손으로 바꿀 수 있다** — 잘못된 값으로
        500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.
-    ⬜ 근거(evidence)·질의응답은 디자인엔 있지만 이번엔 뺐다 — QnA 를 저장할 테이블이
-       아직 없다. 원문·결론·위험도·법령 버전만 보여준다.
+    ⬜ 질의응답은 디자인엔 있지만 뺐다 — 검수 화면에서도 뺐고(09-23) 저장할 테이블도 없다.
+       원문 · 결론 · 위험도 · 근거 조문 · 법령 버전을 보여준다.
     🔴 2026-09-29 — **로그인한 사람 것만** 보여 준다 (보안점검 P1-5 · `_owned_judgments`).
        로그아웃이면 리다이렉트하지 않고 로그인 안내를 그린다(200) — `/u/cs` 와 같다(D-66).
        DB 가 없으면 로그인 여부를 알 수 없으니 「DB 없음」 안내가 먼저다 (D-72).
@@ -1602,6 +1788,10 @@ def history(
             "db_down": db_down,
             "judgments": rows,
             "verdicts": _VERDICTS,
+            "verdict_labels": _VERDICT_LABELS,
+            "pattern": None if user is None else _repeat_pattern(session, user.id),
+            # 동의가 꺼져 있으면 새 검수가 안 쌓인다 — 빈 목록의 까닭을 알린다 (D-96)
+            "consent_off": user is not None and user.consent_history_at is None,
             "verdict": verdict,
             "page": page,
             "has_prev": page > 1,

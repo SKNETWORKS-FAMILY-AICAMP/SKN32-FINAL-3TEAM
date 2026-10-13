@@ -760,6 +760,13 @@
          🔄 2026-10-13 — 입력을 가리지 않게 카드 맨 아래 한 줄로 옮겼다 #}
       {% if not me %}
       <p class="rv-hist">로그인하지 않으면 검수한 문구가 <b>이력에 남지 않아요</b> · <a href="/u/login">로그인</a></p>
+      {# 🆕 2026-10-13 — 방금 한 검수가 이력에 어떻게 됐는지 그대로 알린다. 못 적었으면 「저장됐다」고 말하지 않는다 (D-147) #}
+      {% elif history_kept == "saved" %}
+      <p class="rv-hist" role="status">이 검수는 <b>이력에 저장됐어요</b> · <a href="/u/history">이력 보기</a></p>
+      {% elif history_kept == "off" %}
+      <p class="rv-hist" role="status">검수 이력 보관이 꺼져 있어 이 검수는 <b>이력에 남지 않아요</b> · <a href="/u/mypage?tab=account">마이페이지에서 켜기</a></p>
+      {% elif history_kept == "failed" %}
+      <p class="rv-hist" role="status">이 검수를 <b>이력에 저장하지 못했어요</b> — 검수 결과는 오른쪽 그대로예요.</p>
       {% endif %}
     </form>
 
