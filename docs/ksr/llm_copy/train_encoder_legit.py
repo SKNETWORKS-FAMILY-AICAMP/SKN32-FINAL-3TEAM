@@ -292,6 +292,13 @@ def main() -> int:
             skipped: Counter[str] = Counter()
             taken: Counter[str] = Counter()
             for row in reader:
+                # 🔴 2026-10-13 (팀장) — GPT 정상 문구 353 검수판은 **채점 전용**이다. 인증 · 인정 문구 58행이 골든 규칙상 조건 A 인데
+                #    「적법(사실 전제)」로 적혀 있어, 넘기면 「위반 아님」으로 학습된다 (D-78 ② · D-325 결정 3)
+                if (row.get("id") or "").startswith("gpt-"):
+                    raise SystemExit(
+                        f"🔴 {args.legit.name} 은 GPT 정상 문구 검수판이다 — 채점 전용이라 학습에 넣지 않는다. "
+                        "`--legit` 에는 900 검수판만 넘긴다"
+                    )
                 human = (row[HUMAN_COL] or "").strip()
                 if not human:
                     skipped["검수 전"] += 1
