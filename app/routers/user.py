@@ -38,7 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app import auth, sentsplit
+from app import auth, reasons, sentsplit
 from app import premise as pm
 from app.contracts import (
     PASS_RISK_MAX,
@@ -735,7 +735,16 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
         #    🚨 같은 규칙이 `docs/lse/rejudge.py` 에도 있다(이서은 폴더 · 서버 쪽 재판정) — 바꾸면 양쪽을 같이 (D-99)
         return {"status": "unjudged", "violations": [], "hold_reasons": hold}
     status = "passed" if res.outcome.value == "pass" else "no_violation"
-    return {"status": status, "violations": [], "hold_reasons": hold}
+    # 🆕 2026-10-14 (D-323 결정 4 집행 · D-323 보충) — 사전은 지났는데 인코더가 유형 후보를 내면 「위반 못 찾음 + AI 추정 유형 남음」.
+    #    판정이 아니다 — 상태는 그대로 두고 칸 하나로 싣는다. 후보가 없으면 빈 목록(「문제없음」이 아니다 · D-220)
+    enc = sorted(
+        {
+            c.violation.value
+            for s in res.sentences
+            for c in getattr(s, "encoder_candidates", None) or ()
+        }
+    )
+    return {"status": status, "violations": [], "hold_reasons": hold, "enc_types": enc}
 
 
 def _note_conflict(note: str | None, premise: str, category: str | None) -> bool:
@@ -773,7 +782,11 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     from app.routers import sllm_client  # noqa: PLC0415
 
     violations = [v.value for v in sentence.violations or []]
-    rw: dict = {"violations": violations}
+    # 🆕 2026-10-14 (D-323 보충) — 사전 유형이 없으면 인코더 추정 유형으로 부른다(`reasons.guessed_types` · 화면 버튼과 같은 함수).
+    #    생성은 기록되는 판정이 아니다 — D-332 보충 ① 과 같은 판단. 서버 계약은 그대로(`violation_types` 칸)
+    guessed = [] if violations else reasons.guessed_types(sentence)
+    violations = violations or guessed
+    rw: dict = {"violations": violations, "guessed": bool(guessed)}
     # 🆕 10-06 (팀장 전달 §2 #3) — 품목을 넘긴다. 미확정이면 None — 서버가 문구에서 추측한다
     # 🔄 2026-10-10 — 분기를 고른 문구는 고른 전제의 품목을 넘긴다(인계 10-08 §2 「함께」). 서버가 추측하지 않는다
     s_state, out = sllm_client.rewrite(sentence.text, violations, sllm_category or category)
@@ -784,6 +797,10 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     rw["off"] = s_state == "off"
     rw["down"] = s_state != "ok"
     rw["out"] = out
+    if out and out.get("outcome") == "infeasible":
+        # 🔄 2026-10-14 (D-323 보충 개정) — 생성 서버의 「고칠 수 없음」은 유형 출처와 무관하게 「만들지 못했어요」다.
+        #    ⛔ 「합법화 불가」는 코드의 불가 사유만 말한다 (D-59 · D-10) — 같은 카드에서 코드(실증 B)와 말이 갈리던 자리
+        rw["infeasible_note"] = reasons.REWRITE_INFEASIBLE_TEXT
     if out and out["outcome"] == "candidate" and out.get("rewrite"):
         rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise, category)
         # 🆕 2026-10-10 — 후보의 조건이 이 전제에서 채워질 수 없으면 후보로 내지 않는다(재판정이 못 거르는 자리)
@@ -796,7 +813,11 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
         if plain:
             p_rejudge = _rejudge(plain, premise, category)
             if p_rejudge.get("status") != "rejected":
-                if rw["rejudge"].get("status") == "rejected":
+                # 🆕 2026-10-14 — 다듬은 안에만 AI 추정 유형이 남으면 담백한 안을 올린다(사전 탈락과 같은 자리 · 더 보수적인 쪽)
+                enc_only_polished = bool(rw["rejudge"].get("enc_types")) and not p_rejudge.get(
+                    "enc_types"
+                )
+                if rw["rejudge"].get("status") == "rejected" or enc_only_polished:
                     rw["out"] = {**out, "rewrite": {**out["rewrite"], "body": plain}, "plain": None}
                     rw["rejudge"] = p_rejudge
                 else:
@@ -875,8 +896,9 @@ async def review_rewrite(request: Request) -> HTMLResponse:
         )
     if sent.infeasibility and sent.infeasibility.value == "A":
         rw = {"qualification": True}
-    elif not sent.violations:
+    elif not sent.violations and not reasons.guessed_types(sent):
         # 확신 부족 보류만 있고 위반 유형이 없다 — 고칠 것이 없다. 유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측)
+        # 🔄 2026-10-14 (D-323 보충) — 인코더 추정 유형이 있으면 그 유형으로 고쳐 쓴다(`_rewrite_sentence`)
         rw = {"no_violation": True}
     else:
         cat = item["result"].category.value if item["result"].category else None

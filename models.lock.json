@@ -53,6 +53,82 @@
         }
       },
       "role": "encoder"
+    },
+    "copylane_sllm_lora_adapter_q4b-v13": {
+      "base": "qwen3_4b",
+      "decision": "D-335",
+      "files": {
+        "README.md": {
+          "bytes": 5208,
+          "sha256": "64f73e39bbc6055ebe544bd45a11181e4b0935c9c51580e15b59877edb679a30"
+        },
+        "adapter_config.json": {
+          "bytes": 1180,
+          "sha256": "08a933c0ecced80c7471a63b83651808129eaef362aedfefde1395b9fb3ab513"
+        },
+        "adapter_model.safetensors": {
+          "bytes": 23631240,
+          "sha256": "4af055bd8c9ac5113f83f7810f85d1211055857d13a7422c039195fe24575504"
+        }
+      },
+      "role": "sllm_stage1"
+    },
+    "copylane_sllm_lora_adapter_q4b-v14": {
+      "base": "qwen3_4b",
+      "decision": "D-335",
+      "files": {
+        "README.md": {
+          "bytes": 5208,
+          "sha256": "64f73e39bbc6055ebe544bd45a11181e4b0935c9c51580e15b59877edb679a30"
+        },
+        "adapter_config.json": {
+          "bytes": 1180,
+          "sha256": "8e2bbff7bb8ea7109e33f20ef8cd38bb79b0eb4866d440a62255aa1ca6e2f077"
+        },
+        "adapter_model.safetensors": {
+          "bytes": 23631240,
+          "sha256": "ea832ca3175084a2ae46dd0fbb9d1bad785d6b029019bd76407c1dc223979071"
+        }
+      },
+      "role": "sllm_stage1"
+    },
+    "copylane_sllm_persona_adapter_q4b": {
+      "base": "qwen3_4b",
+      "decision": "D-335",
+      "files": {
+        "README.md": {
+          "bytes": 5208,
+          "sha256": "64f73e39bbc6055ebe544bd45a11181e4b0935c9c51580e15b59877edb679a30"
+        },
+        "adapter_config.json": {
+          "bytes": 1180,
+          "sha256": "ed4d04d6e73c997fb55283607002dc29f16338b625af8da98172697615701bde"
+        },
+        "adapter_model.safetensors": {
+          "bytes": 23631240,
+          "sha256": "efd44629eca0bf023f660eafc59e4175669a74b1b478ed26b0ba6e3f686ffb49"
+        }
+      },
+      "role": "sllm_stage2"
+    },
+    "copylane_sllm_persona_adapter_q4b_polish": {
+      "base": "qwen3_4b",
+      "decision": "D-335",
+      "files": {
+        "README.md": {
+          "bytes": 5208,
+          "sha256": "64f73e39bbc6055ebe544bd45a11181e4b0935c9c51580e15b59877edb679a30"
+        },
+        "adapter_config.json": {
+          "bytes": 1180,
+          "sha256": "616612086d07b339c435fdf55a1e4e0106fbb2b0e53d2ead17da93e7d7dea342"
+        },
+        "adapter_model.safetensors": {
+          "bytes": 23631240,
+          "sha256": "15c24339ab347d7ea1fa913d499d8ab5acf3845c1bd792567887b6ec46cabcd9"
+        }
+      },
+      "role": "sllm_stage2"
     }
   },
   "roles": {
@@ -63,12 +139,16 @@
       ]
     },
     "sllm_stage1": {
-      "adopted": null,
-      "rollback": []
+      "adopted": "copylane_sllm_lora_adapter_q4b-v14",
+      "rollback": [
+        "copylane_sllm_lora_adapter_q4b-v13"
+      ]
     },
     "sllm_stage2": {
-      "adopted": null,
-      "rollback": []
+      "adopted": "copylane_sllm_persona_adapter_q4b_polish",
+      "rollback": [
+        "copylane_sllm_persona_adapter_q4b"
+      ]
     }
   },
   "version": 1
