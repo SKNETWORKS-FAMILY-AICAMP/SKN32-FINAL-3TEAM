@@ -5,9 +5,12 @@
 ``hold``·위험도 매핑은 이 계층의 책임이 아니다.
 
 🆕 2026-10-07 — 그래프의 ``encode`` 노드가 이 모듈을 부른다(`app/graph.py` · **그림자 배선**: 신호를 상태에
-   싣기만 하고 판정은 읽지 않는다). 어느 모델을 쓸지는 환경 변수 ``COPYLANE_MODEL_DIR`` 하나로 정한다 —
-   **비어 있으면 인코더를 올리지 않는다**(`configured_dir`). 폴더만 바꾸면 다른 판이 돈다(라벨 · 문턱은
-   그 폴더의 ``label_scheme.json`` 이 정한다 — 코드에 적지 않는다).
+   싣기만 하고 판정은 읽지 않는다). 어느 모델을 쓸지는 설정 ``COPYLANE_MODEL_DIR`` 하나로 정한다 —
+   **비어 있으면 인코더를 올리지 않는다**(`configured_dir`). 라벨 · 문턱은 그 폴더의 ``label_scheme.json`` 이
+   정한다 — 코드에 적지 않는다.
+🔄 2026-10-13 (D-333) — **앱은 잠금(`models.lock.json`)에 있는 판만 올린다**(`checked_dir`). 설정은 잠금의 채택 ·
+   되돌림 판 중에서 **고르는** 것이다 — 판을 바꾼 사실이 git 에 남는다(D-205). 실험(잠금 밖)은 도구가
+   `permit_unlocked()` 를 부르고 돌린다(`scripts/eval_graph.py --encoder`). 응답 표지는 **판 지문**이다(`bundle_mark`).
 """
 
 from __future__ import annotations
@@ -15,10 +18,10 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from app import model_lock
 from app.contracts import Violation
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models" / "copylane-encoder-kcbert-final"
@@ -41,14 +44,29 @@ _MAX_TOKENS_RANGE = (8, 512)
 def configured_dir() -> Path | None:
     """`COPYLANE_MODEL_DIR` 이 가리키는 폴더. **비어 있으면 `None`** — 인코더를 쓰지 않는다는 뜻이다.
 
+    🔄 2026-10-13 (D-333) — `.env` 를 읽는 한 곳(`collect.env.setting`)으로 읽는다. ⛔ 종전에는 `os.environ` 만 봐서
+       `.env` 에 적은 값이 **다른 모듈이 `.env` 를 먼저 읽었을 때만** 먹혔다(import 순서 의존 · D-99).
+       값은 `models/` 아래 **판 이름**이어도 되고 경로여도 된다 — 이름이면 `models/<이름>` 을 본다.
     🚨 값이 있는데 폴더 · 파일이 없는 것은 「안 쓴다」가 아니다 — `encoder_at` 이 `EncoderUnavailable` 로 멈춘다.
     """
-    raw = os.environ.get(ENV_MODEL_DIR, "").strip()
-    return Path(raw) if raw else None
+    # `.env` 를 읽는 곳은 하나다 (D-99) · 지연 import — 판정 API 가 수집 층을 끌지 않게
+    from collect import env  # noqa: PLC0415
+
+    raw = env.setting(ENV_MODEL_DIR)
+    if not raw:
+        return None
+    path = Path(raw)
+    named = model_lock.MODELS / raw
+    if not path.is_absolute() and named.is_dir():
+        return named
+    return path
 
 
 def weights_sha12(model_dir: Path) -> str:
-    """가중치 파일의 sha256 앞 12자 — 수를 낼 때 어느 판으로 쟀는지 적는 지문이다 (D-178). 파일이 없으면 멈춘다."""
+    """가중치 파일의 sha256 앞 12자 — 수를 낼 때 어느 판으로 쟀는지 적는 지문이다 (D-178). 파일이 없으면 멈춘다.
+
+    🚨 문턱(`label_scheme.json`)만 다른 판을 가르지 못한다 — 판을 가르는 값은 `lock_match(...).bundle` 이다 (D-333).
+    """
     path = model_dir / "model.safetensors"
     h = hashlib.sha256()
     try:
@@ -60,15 +78,67 @@ def weights_sha12(model_dir: Path) -> str:
     return h.hexdigest()[:12]
 
 
-@functools.cache
-def weights_mark(model_dir: Path) -> str:
-    """응답의 `judged_by` 에 붙는 인코더 판 표지 — 가중치 지문 12자. 폴더마다 **한 번만** 읽는다(가중치는 수백 MB 다).
+#: 인코더가 돈 응답의 표지 접두 — `judged_by` 의 `rule-…` 뒤에 붙고 그 뒤에 판 지문 12자가 온다(`app/graph.py` `judged_by`).
+#: 🔄 2026-10-13 (D-333) `+enc:<가중치 지문>` → `+encb:<판 지문>` — 접두를 바꿔 옛 표지와 섞이지 않게 한다(D-178).
+#: 🚨 읽는 쪽(검수 화면 · 카피 생성)은 `ran()` 으로 본다 — 글자를 다시 적지 않는다 (D-99)
+JUDGED_BY_MARK = "+encb:"
 
-    🔴 지문을 못 읽으면 `지문없음` 이라고 **적는다** — 인코더가 돈 응답이 인코더 없는 응답과 같은 표지로 나가지 않게 (D-220).
-       폴더 이름은 싣지 않는다 — `judged_by` 칸의 길이(80자 · `app/models.py`)를 이름 길이에 맡기지 않는다.
+
+def ran(judged_by: object) -> bool:
+    """이 응답에서 인코더가 돌았는가 — 표지로 본다. 🔴 옛 표지(`+enc:`)는 거짓이다 — 판 지문이 아니다 (D-333)."""
+    return isinstance(judged_by, str) and JUDGED_BY_MARK in judged_by
+
+
+#: 잠금 밖 판을 올려도 되는가 — **도구만** 켠다(`permit_unlocked`). 앱은 켜지 않는다 (D-205 · D-333)
+_UNLOCKED_OK = False
+
+
+def permit_unlocked() -> None:
+    """이 프로세스에서 **잠금 밖** 판도 올린다 — 평가 · 실험 도구가 부른다. 🚨 앱(서버)은 부르지 않는다.
+
+    ★ 실험은 도구 인자로 한다(D-205). 도구는 판 표지에 「잠금 밖」을 남겨 채택 판의 수와 섞이지 않게 한다.
+    """
+    global _UNLOCKED_OK  # noqa: PLW0603 — 프로세스 단위 스위치다
+    _UNLOCKED_OK = True
+
+
+@functools.cache
+def lock_match(model_dir: Path) -> model_lock.Match:
+    """폴더를 잠금에 대 본다 — **폴더마다 한 번만** 해시한다(가중치는 수백 MB 다).
+
+    🔴 잠금을 못 읽으면 `EncoderUnavailable` — 모르는 판을 아는 판으로 세지 않는다 (D-220). 실패는 캐시되지 않는다.
     """
     try:
-        return weights_sha12(model_dir)
+        return model_lock.match(model_dir, "encoder")
+    except (model_lock.LockError, OSError) as e:
+        raise EncoderUnavailable(f"모델 잠금으로 판을 확인하지 못했다 — {e}") from e
+
+
+def checked_dir(model_dir: Path) -> model_lock.Match:
+    """앱이 올려도 되는 판인가 — 잠금의 채택 · 되돌림 판이면 그 결과, 아니면 `EncoderUnavailable`.
+
+    🚨 거절은 서비스를 멈추지 않는다 — 그래프의 `encode` 가 경고를 남기고 인코더 없이 규칙 판정으로 간다(D-323).
+    """
+    m = lock_match(model_dir)
+    if m.status == model_lock.OUTSIDE and not _UNLOCKED_OK:
+        raise EncoderUnavailable(
+            f"잠금(models.lock.json)에 없는 판이다 — {m.why} ({model_dir}).\n"
+            "  채택 · 되돌림 판으로 바꾸거나(launcher.py setting COPYLANE_MODEL_DIR <판 이름>) · "
+            "실험은 도구 인자로 한다(scripts/eval_graph.py --encoder)"
+        )
+    return m
+
+
+@functools.cache
+def bundle_mark(model_dir: Path) -> str:
+    """응답의 `judged_by` 에 붙는 인코더 판 표지 — **판 지문** 12자(파일 전부 · D-333). 폴더마다 한 번만 읽는다.
+
+    🔄 2026-10-13 — ⛔ 종전 표지는 가중치 지문(`+enc:`)이라 문턱만 다른 판을 가르지 못했다. 접두를 `+encb:` 로 바꿔
+       옛 표지와 섞이지 않게 한다(D-178). 🔴 판을 못 읽으면 `지문없음` 이라고 **적는다** — 인코더가 돈 응답이 인코더 없는
+       응답과 같은 표지로 나가지 않게 (D-220). 폴더 이름은 싣지 않는다 — `judged_by` 칸은 80자다(`app/models.py`).
+    """
+    try:
+        return lock_match(model_dir).bundle
     except EncoderUnavailable:
         return "지문없음"
 

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
-from app import reasons
+from app import encoder, reasons
 from app.contracts import LAW_VERSION_UNKNOWN
 
 TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates"
@@ -62,3 +62,7 @@ def law_version_label(value: object) -> str:
 
 
 templates.env.filters["law_version_label"] = law_version_label
+
+# 🆕 2026-10-13 (D-333) — 이 응답에서 인코더가 돌았는가. ⛔ 종전에는 화면이 `"+enc:" in judged_by` 를 직접 적었다 —
+#    표지가 `+encb:` 로 바뀌면 화면만 조용히 「사용 안 함」이 된다. 표지 글자는 `app/encoder.py` 한 곳이다 (D-99)
+templates.env.filters["encoder_ran"] = encoder.ran

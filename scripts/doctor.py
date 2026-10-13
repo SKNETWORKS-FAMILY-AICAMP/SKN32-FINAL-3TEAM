@@ -9,7 +9,7 @@ launcher는 얇은 껍데기, 로직은 여기. 출력은 「무엇이 틀렸나
   3. postgres 접속 + pgvector 확장
   4. Alembic head == DB revision
   5. LangGraph 버전 == 핀
-  6. 모델 캐시 (인코더·리랭커·GGUF)
+  6. 모델 판 — 인코더 폴더가 잠금(models.lock.json)의 판인가 (🔄 2026-10-13 · D-333 · `--env` 에서 이름·크기만)
   7. GPU 가용 → 없으면 CPU 폴백 안내
   8. kiwipiepy 사전 로드
 
@@ -673,10 +673,48 @@ def _check_data_env() -> int:
     return red
 
 
+def _check_models() -> int:
+    """④-3 모델 판 (🆕 2026-10-13 · D-333 · 머리말 6) — 설정한 인코더 폴더가 **잠금(`models.lock.json`)의 채택 · 되돌림 판**인가.
+
+    🚨 해시는 하지 않는다 — 기본 진단은 3초 안이다(머리말). 이름 · 크기만 대고, 내용까지는
+       `uv run python -m scripts.model_lock check` 가 sha 로 본다. 크기가 같고 내용만 다른 것은 여기서 못 잡는다.
+    🔴 빨강 — 잠금을 못 읽는다 · 설정한 폴더가 잠금의 판과 이름 · 크기부터 다르다 (앱이 그 판을 올리지 않는다).
+    """
+    from app import encoder as enc  # noqa: PLC0415
+    from app import model_lock as ml  # noqa: PLC0415
+
+    try:
+        lock = ml.load()
+    except ml.LockError as e:
+        print(f"🔴 모델 잠금 — {e}")
+        return 1
+    folder = enc.configured_dir()
+    if folder is None:
+        print(
+            f"🟡 {enc.ENV_MODEL_DIR} 가 비었다 — 인코더 없이 돈다 "
+            "(켜려면 launcher.py setting COPYLANE_MODEL_DIR <판 이름>)"
+        )
+        return 0
+    r = lock["roles"].get("encoder") or {"adopted": None, "rollback": []}
+    names = ([r["adopted"]] if r["adopted"] else []) + list(r["rollback"])
+    for label, name in [("채택", n) if n == r["adopted"] else ("되돌림", n) for n in names]:
+        if not ml.quick(folder, name, lock):
+            print(
+                f"✅ 인코더 {label} 판 {name} — 이름 · 크기 일치 (sha 는 python -m scripts.model_lock check)"
+            )
+            return 0
+    why = ml.quick(folder, r["adopted"], lock) if r["adopted"] else "잠금에 채택 판이 없다"
+    print(f"🔴 인코더 폴더가 잠금의 어느 판과도 다르다 — {folder}\n   채택 판과: {why}")
+    print(
+        "   앱은 이 판을 올리지 않는다(경고 뒤 인코더 없이 판정). 실험은 eval_graph --encoder 로 한다"
+    )
+    return 1
+
+
 def check_env() -> int:
     """환경·신원·DB 를 본다. 🔴 반환값은 **빨간 건수**다.
 
-    ⬜ 여기서 안 보는 것 — uv.lock 동기화 · 모델 캐시 · GPU. 아직 자리표시자다 (D-188).
+    ⬜ 여기서 안 보는 것 — uv.lock 동기화 · GPU. 아직 자리표시자다 (D-188). 🔄 2026-10-13 모델 판은 ⑥ 이 본다 (D-333).
     """
     red = 0
 
@@ -716,6 +754,9 @@ def check_env() -> int:
     # ④-2 데이터 역할·저장소·기기 별칭 (D-226 · D-250) — 틀린 값은 데이터 명령이 **쓰는 중에** 드러난다
     red += _check_data_env()
 
+    # ④-3 모델 판 (D-333 · 머리말 6) — 이 기기의 인코더 폴더가 잠금의 판인가. 🚨 3초 안에 끝나게 이름 · 크기만 본다(sha 는 아래 안내)
+    red += _check_models()
+
     # ⑤ 화면 골격 — 팀원이 첫날 여는 자리
     for rel in ("app/templates/base.html", "app/static/base.css"):
         print(("✅ " if (ROOT / rel).exists() else "🔴 없다 — ") + rel)
@@ -738,7 +779,7 @@ def main() -> int:
         if red:
             print(f"🔴 {red}건 — 위 「고치는 법」을 먼저 읽어라.")
             return 1
-        print("🔴 없음. ⬜ 다만 uv.lock 동기화·모델 캐시·GPU 는 **아직 안 본다** (D-188).")
+        print("🔴 없음. ⬜ 다만 uv.lock 동기화·GPU 는 **아직 안 본다** (D-188).")
         # 🔄 2026-09-21 (전수 재검토) — ⛔ `--env --data` 를 같이 주면 여기서 끝나 데이터 검사를 **건너뛰고 0** 이었다
         #    (`return 0 if not args.data else 0`). 둘 다 줬으면 이어서 데이터를 본다.
         if not args.data:

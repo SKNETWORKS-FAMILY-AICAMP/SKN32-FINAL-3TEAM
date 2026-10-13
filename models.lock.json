@@ -1,0 +1,75 @@
+{
+  "bundles": {
+    "copylane-encoder-kcbert-v10-카드17-검수정상음성": {
+      "base": "kcbert_base",
+      "decision": "D-331",
+      "files": {
+        "config.json": {
+          "bytes": 1866,
+          "sha256": "b3ee67e45710d092c099a31bdcc3096d6f3b896ef72ea8c2a31a1e112c7923e9"
+        },
+        "label_scheme.json": {
+          "bytes": 6525,
+          "sha256": "3bd100cc6debdf6cddbfddf81704de37e024c17a33b36d75e3d85421e4e65408"
+        },
+        "model.safetensors": {
+          "bytes": 435725324,
+          "sha256": "80348d88c0e976757ad381a1d87a559917529b088b5a73bc586762f283b5c084"
+        },
+        "tokenizer.json": {
+          "bytes": 721704,
+          "sha256": "2f334818031d19f0e799ae2b729aa1746b2e0f3db6341bfebdda8138a19f1ebd"
+        },
+        "tokenizer_config.json": {
+          "bytes": 352,
+          "sha256": "c842f1e4ca132ffb493921dbe10eaf61b3be45f15a4ab983ae4a42aef76192df"
+        }
+      },
+      "role": "encoder"
+    },
+    "copylane-encoder-kcbert-v10-합성O-이유O": {
+      "base": "kcbert_base",
+      "decision": "D-331",
+      "files": {
+        "config.json": {
+          "bytes": 1866,
+          "sha256": "b3ee67e45710d092c099a31bdcc3096d6f3b896ef72ea8c2a31a1e112c7923e9"
+        },
+        "label_scheme.json": {
+          "bytes": 4042,
+          "sha256": "14d846d31433dcc7738df12441dfab29211a83a71148a2592aa40f28081a2e1e"
+        },
+        "model.safetensors": {
+          "bytes": 435725324,
+          "sha256": "b1205ce5484dc3583b3bfb3d31acf5261598efbf88704b0bc179ce37a81baf87"
+        },
+        "tokenizer.json": {
+          "bytes": 721704,
+          "sha256": "2f334818031d19f0e799ae2b729aa1746b2e0f3db6341bfebdda8138a19f1ebd"
+        },
+        "tokenizer_config.json": {
+          "bytes": 352,
+          "sha256": "c842f1e4ca132ffb493921dbe10eaf61b3be45f15a4ab983ae4a42aef76192df"
+        }
+      },
+      "role": "encoder"
+    }
+  },
+  "roles": {
+    "encoder": {
+      "adopted": "copylane-encoder-kcbert-v10-카드17-검수정상음성",
+      "rollback": [
+        "copylane-encoder-kcbert-v10-합성O-이유O"
+      ]
+    },
+    "sllm_stage1": {
+      "adopted": null,
+      "rollback": []
+    },
+    "sllm_stage2": {
+      "adopted": null,
+      "rollback": []
+    }
+  },
+  "version": 1
+}
