@@ -146,6 +146,9 @@ def rewrite(text: str, violation_types: list[str] | None = None, persona: str | 
         "note_problem": r.get("note_problem"),
         "rejudge": _rejudge_view(r),
         "model": ver,
+        # 🆕 10-14 (D-335) — 이 문장을 쓴 판을 잠금 대조 결과와 함께 싣는다(「채택:판 지문」). 2단계는 실제로 다듬었을 때만
+        "lock": {"stage1": _META.get("lock_stage1"),
+                 "stage2": _META.get("lock_stage2") if (persona or polish) else None},
         "latency_ms": int((time.time() - t0) * 1000),
     }
     if r.get("rejudge") == "rejected":
