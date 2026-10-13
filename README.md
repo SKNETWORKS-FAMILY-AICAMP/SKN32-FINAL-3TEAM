@@ -174,7 +174,7 @@ split → classify → retrieve → match_dict → encode
 | 자리 | 모델 | 2026-10-06 |
 |---|---|---|
 | 검색 임베딩 | **KURE-v1** (1024차원) · `pgvector` + 어휘(`ts_rank_cd`)를 **RRF** 로 섞은 한 순위 (D-193) | 🟢 동작. 리랭커(bge-reranker-v2-m3)는 **미구현** |
-| 판정 인코더 | **KC-BERT** 파인튜닝 — 로더 `app/encoder.py` 는 「위반 후보 + 확신」만 내고 확정 · 위험도는 만들지 않는다 | ⬜ **그래프에 붙지 않았다**(`encode` 는 빈 노드). 가중치(`models/`)는 저장소에 없고, 재동결 10-05 판으로 재학습 대기 |
+| 판정 인코더 | **KC-BERT** 파인튜닝 — 로더 `app/encoder.py` 는 「위반 후보 + 확신」만 내고 확정 · 위험도는 만들지 않는다 | 🔄 2026-10-13 — 그래프에 **그림자 배선**(후보만 싣고 판정은 읽지 않는다 · D-323). 채택 판은 카드 17(D-331). 가중치(`models/`)는 저장소에 없고, 쓰는 판은 `models.lock.json` 이 정한다(D-333) |
 | 생성 sLLM | 모델 레지스트리(`data_sources.yaml` `models`) 등재는 **Qwen3 4B**. 병합된 고쳐 쓰기 서버가 실제로 쓰는 베이스는 **`Qwen/Qwen2.5-3B-Instruct` + LoRA** | ⬜ **미정 · 판정 대기** — Qwen2.5-3B 의 레지스트리 등재 · 라이선스 확인 |
 
 <details>
@@ -332,7 +332,8 @@ uv run python launcher.py serve      # FastAPI
 │   ├── sanction.py        제재표 → 위험도 하한
 │   ├── premise.py         품목 전제 표 · 기준 문안 (D-319)
 │   ├── reasons.py         증명서 사유 문안 (D-320)
-│   ├── encoder.py         판정 인코더 로더(KC-BERT) — ⬜ 그래프에 미연결 · 가중치는 저장소 밖
+│   ├── encoder.py         판정 인코더 로더(KC-BERT) — 그림자 배선(판정은 읽지 않는다 · D-323) · 가중치는 저장소 밖
+│   ├── model_lock.py      모델 잠금 읽기 · 대조 — 앱은 잠금의 채택 · 되돌림 판만 올린다 (D-333)
 │   ├── models.py          런타임층 12표 (SQLAlchemy)
 │   ├── settings.py        ★ 접속·판정 파라미터의 단일 출처 (D-209)
 │   ├── logging_conf.py    🔴 로그 마스킹 — 문구가 로그에 안 실린다 (D-210)
@@ -355,6 +356,7 @@ uv run python launcher.py serve      # FastAPI
 │   ├── g3/ g2_facts/ g2_norepub/ quarantine/
 │   └── .g1_blocked/       빈 디렉터리 — 존재 자체가 「배제했다」는 기록
 ├── data_sources.yaml      소스 레지스트리 (생성물 — 판정 매트릭스에서 만든다)
+├── models.lock.json       모델 잠금 — 쓰는 모델 판 · 파일별 sha256 (D-333 · 쓰기는 `python -m scripts.model_lock add`)
 ├── assets/                brand/ 브랜드 자산 · diagrams/ 도면 21장
 ├── 발표자료/               📌 발표용 제출 문서
 └── docs/                  ★ 아래 참조 — 공용 문서 + 개인 폴더 ohb/ ksr/ lse/ ssm/ psj/

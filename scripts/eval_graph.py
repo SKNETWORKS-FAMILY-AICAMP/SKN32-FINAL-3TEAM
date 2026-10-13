@@ -796,21 +796,27 @@ def check_dev(rows: list[dict], model_dir: pathlib.Path | None) -> dict[str, Any
 
 
 def use_encoder(model_dir: pathlib.Path | None) -> dict[str, Any]:
-    """인코더를 켠다 — 판 표지(폴더 이름 · 가중치 지문)를 돌려준다. 안 켜면 빈 표지다.
+    """인코더를 켠다 — 판 표지(폴더 이름 · 가중치 지문 · 판 지문 · 잠금 상태)를 돌려준다. 안 켜면 빈 표지다.
 
     🔴 **켰는데 못 올리면 멈춘다** (D-220) — 그래프의 `encode` 는 이 경우 경고만 남기고 규칙 판정으로 간다.
        수를 재는 자리에서 그대로 두면 인코더 없는 수가 인코더 수처럼 찍힌다.
+    🆕 2026-10-13 (D-333) — 평가는 **잠금 밖 판도 잰다**(실험은 도구 인자로 · D-205). 대신 판 표지에 잠금 상태
+       (`채택` · `되돌림` · `잠금 밖`)와 판 지문을 남긴다 — 문턱만 다른 판의 수가 같은 가중치 지문으로 섞이지 않게(D-178).
     """
     if model_dir is not None:
         os.environ[enc.ENV_MODEL_DIR] = str(model_dir)
     path = enc.configured_dir()
     if path is None:
         return {}
+    enc.permit_unlocked()
     try:
         scheme = enc.encoder_at(path).scheme
+        m = enc.lock_match(path)
         return {
             "encoder": path.name,
             "encoder_sha": enc.weights_sha12(path),
+            "encoder_bundle": m.bundle,
+            "encoder_lock": m.status + (f" · {m.name}" if m.name else f" — {m.why}"),
             # 상한을 모델 폴더가 실어 줬는지 · 기본값으로 돌았는지 함께 적는다 (D-220)
             "encoder_max_tokens": f"{scheme.max_tokens}"
             + ("" if scheme.max_tokens_from_model else "(기본값)"),

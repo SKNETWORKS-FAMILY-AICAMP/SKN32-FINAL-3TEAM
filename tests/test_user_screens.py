@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 
@@ -238,13 +240,40 @@ def test_검수_분기_다시_선택은_5회다() -> None:
     assert 'id="rvr-1-6"' not in body
 
 
-@pytest.mark.parametrize("fmt", ["카드뉴스", "배너"])
-def test_광고생성은_고른_종류와_내용을_다시_그린다(fmt: str) -> None:
-    """🔄 10-08 (lse) — 「상세페이지」에 checked 가 박혀 있어 다른 종류를 골라 제출해도 상세페이지로 돌아갔다 · 적은 내용도 비었다."""
+@pytest.mark.parametrize(
+    ("fixture", "want"),
+    [
+        ("15_hold_premise_unknown", "인증 여부 선택 필요"),
+        ("03_hold_cat_unknown", "유형 선택 필요"),
+        ("21_hold_cat_unknown_hair", "유형 선택 필요"),
+    ],
+)
+def test_검수_배지는_인증_여부만_물을_때_인증_여부_선택_필요다(fixture: str, want: str) -> None:
+    """🆕 2026-10-13 (D-330) — 분기가 건강기능식품 인정 · 비인정뿐이면 유형은 묻지 않는다. 배지도 「인증 여부 선택 필요」다."""
+    import re  # noqa: PLC0415
+
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
 
+    body = TestClient(app).get(f"/u/preview/{fixture}").text
+    badges = set(re.findall(r'class="rv-outcome o-hold o-ask">\s*([^<]+?)\s*<', body))
+    assert badges == {want}
+
+
+@pytest.mark.parametrize("fmt", ["SNS 피드", "배너"])
+def test_광고생성은_고른_종류와_내용을_다시_그린다(
+    monkeypatch: pytest.MonkeyPatch, fmt: str
+) -> None:
+    """🔄 10-08 (lse) — 「상세페이지」에 checked 가 박혀 있어 다른 종류를 골라 제출해도 상세페이지로 돌아갔다 · 적은 내용도 비었다.
+
+    🔄 10-12 (ksr) — 종류가 SNS 피드 · 상세페이지 · 배너 셋이다. 제출은 판정을 부른다 — 엔진이 없을 때의 화면을 본다.
+    """
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    _fake_judge(monkeypatch, "pending")
     body = TestClient(app).post("/u/compose", data={"ad_format": fmt, "prompt": "보습 제품"}).text
     assert f'value="{fmt}" checked' in body
     assert 'value="상세페이지" checked' not in body
@@ -256,9 +285,10 @@ def test_광고생성_미리보기는_픽스처의_종류에_체크한다() -> N
 
     from app.api import app  # noqa: PLC0415
 
+    # 🔄 10-12 (ksr) — 픽스처의 「카드뉴스」는 화면의 종류 셋에 없다. 다른 종류에 체크하지 않는다
     body = TestClient(app).get("/u/compose/preview/12_compose_from_b").text
-    assert 'value="카드뉴스" checked' in body
-    assert 'value="상세페이지" checked' not in body
+    assert " checked" not in body
+    assert "섹션 골격 — 카드뉴스" in body
 
 
 # ── 🆕 2026-10-10 — 카피 생성의 새 입력(분기 6종 + 제품 내용 · ksr 10-08)과 후보 → 광고 생성 넘기기.
@@ -348,11 +378,16 @@ def test_생성_입력은_넘치거나_없는_값을_자르지_않고_거부한�
     assert _gen_post(**{"name": "지어낸 곡물바", **data}).status_code == 422
 
 
-def test_후보에서_넘어온_문구와_병기_문구는_광고생성_제출까지_간다() -> None:
+def test_후보에서_넘어온_문구와_병기_문구는_광고생성_제출까지_간다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
 
+    _fake_judge(
+        monkeypatch, "pending"
+    )  # 🔄 10-12 — 제출은 판정을 부른다. 엔진이 없을 때의 화면을 본다
     c = TestClient(app)
     first = c.post(
         "/u/compose", data={"carry": "1", "prompt": "지어낸 후보 문구", "note": "지어낸 병기 문구"}
@@ -366,3 +401,261 @@ def test_후보에서_넘어온_문구와_병기_문구는_광고생성_제출�
     ).text
     assert "필수 병기 문구 「지어낸 병기 문구」" in second
     assert 'name="note" value="지어낸 병기 문구"' in second
+
+
+@pytest.mark.gate
+def test_인코더_후보는_판정_아님으로_그리고_확률을_보이지_않는다(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """🆕 2026-10-13 (D-330) — 인코더 유형 후보는 「판정 아님」을 달아 접힌 「근거 보기」 안에 그리고 확률(%)은 그리지 않는다.
+    인코더 출력은 보정된 확률이 아니다 — 「N%」는 「N% 확률로 위반」으로 읽힌다 (D-330 안건 1 (나) · 보충 10-13 · D-323)."""
+    import json  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api as api  # noqa: PLC0415
+
+    raw = json.loads((api.FIXTURE_ROOT / "judge" / "01_pass.json").read_text(encoding="utf-8"))
+    raw["judged_by"] = "rule-0.3.0-dict+encb:abcdef123456"  # 🔄 D-333 — 판 지문 표지
+    raw["sentences"][0]["encoder_candidates"] = [{"violation": "거짓_과장", "confidence": 0.917}]
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "enc_case.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(api, "FIXTURE_ROOT", tmp_path)
+
+    html = TestClient(api.app).get("/u/preview/enc_case").text
+    assert "AI 추정 유형 — 판정 아님" in html, (
+        "🔴 인코더 후보가 「판정 아님」 표지로 그려지지 않았다 (D-330 보충)"
+    )
+    assert "거짓 과장" in html, "🔴 인코더 후보의 유형이 그려지지 않았다"
+    assert "추정 확신" not in html and "92%" not in html, "🔴 인코더 확률이 화면에 나왔다 (D-330)"
+
+
+# ── 🆕 2026-10-12 (ksr) — AI 광고 생성 섹션 편집기. 종류 셋(SNS 피드 · 상세페이지 · 배너 300×250).
+#    문구는 판정을 지나야 지면에 얹힌다 — 얹는 기준은 `_lands` 한 곳이다. 🚨 문구는 여기서 지어낸 것이다 (D-175)
+
+
+def _sent(sid: str, text: str, how: str):  # noqa: ANN202
+    """판정 문장 하나 — `ok`(확정 · R0) · `unsure`(유형 후보 없는 확신 부족 보류) · `cand`(후보 있는 보류) · `none`(미판정)."""
+    from app.contracts import SentenceJudgment  # noqa: PLC0415
+
+    extra = {
+        "ok": {"verdict": "confirmed", "risk": {"floor": "R0", "final": "R0"}},
+        "unsure": {"verdict": "hold", "hold_reason": "low_conf"},
+        "cand": {"verdict": "hold", "hold_reason": "low_conf", "violations": ["거짓_과장"]},
+        "none": {"verdict": "unjudged"},
+    }[how]
+    return SentenceJudgment.model_validate({"sent_id": sid, "text": text, **extra})
+
+
+def _fake_judge(monkeypatch: pytest.MonkeyPatch, status: str, *sentences) -> list[str]:  # noqa: ANN002
+    """`_core_judge` 를 갈아 끼운다 — 화면이 판정 결과를 어떻게 읽는지만 본다. 받은 문구를 돌려준다."""
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    seen: list[str] = []
+
+    def fake(text: str, product=None):  # noqa: ANN001, ANN202
+        seen.append(text)
+        if status != "ok":
+            return status, None
+        return "ok", SimpleNamespace(sentences=list(sentences))
+
+    monkeypatch.setattr(user_router, "_core_judge", fake)
+    return seen
+
+
+def _draft_of(body: str) -> dict:
+    import json  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
+    m = re.search(r'<script type="application/json" id="de-data">(.*?)</script>', body, re.DOTALL)
+    assert m, "🔴 편집기 초안 칸(#de-data)이 없다"
+    return json.loads(m.group(1))
+
+
+@pytest.mark.parametrize(
+    ("how", "want"), [("ok", "ok"), ("unsure", "unsure"), ("cand", "ng"), ("none", "ng")]
+)
+def test_얹는_기준은_통과와_후보_없는_확신부족_보류뿐이다(how: str, want: str) -> None:
+    """🚨 유형 후보가 붙은 보류 · 미판정은 얹지 않는다. 사전의 침묵(후보 없는 보류)은 「확인 필요」로 얹는다."""
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    assert user_router._lands(_sent("s0", "지어낸 문구", how)) == want
+
+
+@pytest.mark.parametrize(
+    ("fmt", "key", "w", "h"),
+    [
+        ("SNS 피드", "sns", 1080, 1080),
+        ("상세페이지", "detail", 860, None),
+        ("배너", "banner", 300, 250),
+    ],
+)
+def test_광고생성은_판정을_지난_문구로_편집기를_연다(
+    monkeypatch: pytest.MonkeyPatch, fmt: str, key: str, w: int, h: int | None
+) -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    seen = _fake_judge(
+        monkeypatch,
+        "ok",
+        _sent("s0", "지어낸 첫 문장.", "ok"),
+        _sent("s1", "지어낸 둘째 문장.", "unsure"),
+    )
+    body = (
+        TestClient(app)
+        .post(
+            "/u/compose",
+            data={
+                "ad_format": fmt,
+                "prompt": "지어낸 첫 문장. 지어낸 둘째 문장.",
+                "note": "지어낸 병기 문구",
+            },
+        )
+        .text
+    )
+    assert seen == ["지어낸 첫 문장. 지어낸 둘째 문장."]
+    draft = _draft_of(body)
+    assert (draft["key"], draft["w"], draft["h"]) == (key, w, h)
+    assert draft["copy"] == [
+        {"text": "지어낸 첫 문장.", "unsure": False},
+        {"text": "지어낸 둘째 문장.", "unsure": True},
+    ]
+    assert draft["note"] == "지어낸 병기 문구"
+    assert 'src="/static/user_compose.js"' in body
+    assert 'name="ad_format"' not in body  # 편집기가 뜨면 입력 폼은 감춘다
+    # 「종류 다시 고르기」가 문구와 병기 문구를 들고 돌아간다
+    assert 'name="note" value="지어낸 병기 문구"' in body
+
+
+def test_광고생성은_얹지_못하는_문장이_있으면_편집기를_열지_않는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """🚨 판정을 지나지 않은 문구는 지면에 얹히지 않는다 (D-63 · D-119) — 그 판정을 그리고 입력 화면에 남는다."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    _fake_judge(
+        monkeypatch,
+        "ok",
+        _sent("s0", "지어낸 첫 문장.", "ok"),
+        _sent("s1", "지어낸 둘째 문장.", "cand"),
+    )
+    body = (
+        TestClient(app)
+        .post(
+            "/u/compose", data={"ad_format": "배너", "prompt": "지어낸 첫 문장. 지어낸 둘째 문장."}
+        )
+        .text
+    )
+    assert 'id="de-data"' not in body
+    assert "user_compose.js" not in body
+    assert "얹을 수 없는 문장이 <b>1건</b>" in body
+    assert "입력 판정" in body
+    assert 'value="배너" checked' in body
+    assert body.count("지면에 배치되지 않아요") == 1  # 얹지 못하는 문장에만 적는다
+
+
+def test_광고생성은_없는_종류와_빈_문구를_판정에_보내지_않는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    seen = _fake_judge(monkeypatch, "ok", _sent("s0", "지어낸 문구", "ok"))
+    c = TestClient(app)
+    # 계약의 「카드뉴스」는 화면의 종류 셋에 없다 — 다른 종류로 바꿔 받지 않고 거부한다
+    assert (
+        c.post("/u/compose", data={"ad_format": "카드뉴스", "prompt": "지어낸 문구"}).status_code
+        == 422
+    )
+    blank = c.post("/u/compose", data={"ad_format": "배너", "prompt": "   "})
+    assert blank.status_code == 200
+    assert "광고에 담을 문구를 적어 주세요." in blank.text
+    assert seen == []
+
+
+def test_광고생성_초안_칸은_적은_문구로_스크립트를_닫지_못한다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """🔴 초안은 JSON 칸으로 넘긴다 — 문구의 `</script>` 가 그 칸을 닫으면 뒤가 HTML 로 읽힌다 (P2-9)."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    evil = "</script><b>지어낸 문구</b>"
+    _fake_judge(monkeypatch, "ok", _sent("s0", evil, "ok"))
+    body = (
+        TestClient(app)
+        .post("/u/compose", data={"ad_format": "배너", "prompt": evil, "note": evil})
+        .text
+    )
+    assert evil not in body
+    assert _draft_of(body)["copy"][0]["text"] == evil
+
+
+@pytest.mark.parametrize(
+    ("hows", "status", "want"),
+    [
+        (("ok",), "ok", "ok"),
+        (("ok", "unsure"), "ok", "unsure"),
+        (("unsure", "cand"), "ok", "ng"),
+        ((), "pending", "pending"),
+        ((), "down", "down"),
+    ],
+)
+def test_편집기_칸_판정은_얹을지를_상태_하나로_돌려준다(
+    monkeypatch: pytest.MonkeyPatch, hows: tuple[str, ...], status: str, want: str
+) -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    _fake_judge(
+        monkeypatch, status, *[_sent(f"s{i}", f"지어낸 문장 {i}", h) for i, h in enumerate(hows)]
+    )
+    r = TestClient(app).post("/u/compose/judge", json={"text": "지어낸 문구"})
+    assert r.status_code == 200
+    got = r.json()
+    assert got["state"] == want
+    # 얹지 못하는 문장만 까닭과 함께 싣는다
+    if want == "ng":
+        assert got["notes"] == [{"text": "지어낸 문장 1", "why": "보류 — 확신 부족 (거짓 과장)"}]
+    else:
+        assert got["notes"] == []
+
+
+def test_편집기_칸_판정은_JSON_본문만_받는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.settings import PARAMS  # noqa: PLC0415
+
+    seen = _fake_judge(monkeypatch, "ok", _sent("s0", "지어낸 문구", "ok"))
+    c = TestClient(app)
+    assert c.post("/u/compose/judge", data={"text": "지어낸 문구"}).status_code == 415
+    assert c.post("/u/compose/judge", json={"text": "  "}).status_code == 422
+    assert c.post("/u/compose/judge", json={"nope": 1}).status_code == 422
+    assert c.post("/u/compose/judge", json=["지어낸 문구"]).status_code == 422
+    too_long = "가" * (PARAMS.max_text_len + 1)
+    assert c.post("/u/compose/judge", json={"text": too_long}).status_code == 422
+    assert seen == []
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [("unknown", "미확인"), ("", "미확인"), (None, "미확인"), ("2026-10-01", "2026-10-01")],
+)
+def test_모르는_법령판은_미확인으로_그린다(value: object, want: str) -> None:
+    """🆕 2026-10-13 — 화면은 내부 값 `unknown` 을 그리지 않는다 · 빈 값도 「미확인」이다 (D-220)."""
+    from app.templating import law_version_label
+
+    assert law_version_label(value) == want

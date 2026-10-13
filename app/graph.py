@@ -57,6 +57,7 @@ from app import reasons as rs
 from app import retrieve as rt
 from app import sanction, sentsplit
 from app.contracts import (
+    LAW_VERSION_UNKNOWN,
     NOT_REVIEWED_UNNAMED,
     UNCOVERED_CATEGORIES,
     AdaptedCopy,
@@ -1051,6 +1052,9 @@ def encode(state: CoreState) -> dict[str, Any]:
     if model_dir is None:
         return {}
     try:
+        enc.checked_dir(
+            model_dir
+        )  # 🆕 2026-10-13 (D-333) — 잠금에 없는 판은 올리지 않는다 · 거절도 아래 경고 경로를 탄다
         model = enc.encoder_at(model_dir)
         preds = [model.predict(t) for t in state.get("sents", [])]
     except enc.EncoderUnavailable as e:
@@ -2276,7 +2280,10 @@ JUDGED_BY = "rule-0.3.0-dict"
 
 
 def judged_by(state: dict[str, Any]) -> str:
-    """응답의 판 표지 (🆕 2026-10-09). 인코더가 돌았으면 그 판의 가중치 지문을 붙인다 — `rule-0.3.0-dict+enc:<지문 12자>`.
+    """응답의 판 표지 (🆕 2026-10-09). 인코더가 돌았으면 그 판의 판 지문을 붙인다 — `rule-0.3.0-dict+encb:<판 지문 12자>`.
+
+    🔄 2026-10-13 (D-333) — ⛔ 종전 `+enc:<가중치 지문>` 은 문턱만 다른 판(카드 17 의 F1 최대 판 · 채택 판)을 가르지 못했다.
+       판 지문은 판의 **파일 전부**로 낸다(`app/model_lock.py` `bundle_sha`). 접두를 바꿔 옛 표지와 섞이지 않게 한다(D-178).
 
     ★ 앞머리는 그대로 `JUDGED_BY` 다 — **판정은 규칙 판정**이고 인코더는 `encoder_candidates` 만 채웠다 (D-323).
     🔴 인코더가 안 돌았으면(설정 없음 · 못 올림) 붙이지 않는다 — 신호가 실린 응답만 인코더 판을 적는다.
@@ -2284,7 +2291,7 @@ def judged_by(state: dict[str, Any]) -> str:
     model_dir = enc.configured_dir()
     if model_dir is None or not state.get("encodings"):
         return JUDGED_BY
-    return f"{JUDGED_BY}+enc:{enc.weights_mark(model_dir)}"
+    return f"{JUDGED_BY}{enc.JUDGED_BY_MARK}{enc.bundle_mark(model_dir)}"
 
 
 def to_response(state: ReviewState) -> JudgeResponse:
@@ -2308,7 +2315,9 @@ def to_response(state: ReviewState) -> JudgeResponse:
         branches=state.get("branches", []),
         certificate=state.get("certificate"),
         timings=state.get("timings", []),
-        law_version="2026-09-10",
+        # 🔄 2026-10-13 — 고정 날짜를 뺐다. 읽을 판이 없으면 「모름」이다 (D-220 · D-103 ③ · `LAW_VERSION_UNKNOWN`).
+        #    ⬜ 현행 청크의 시행일을 적재가 채우면 그 최댓값을 읽는다 — 그 전에는 날짜를 적지 않는다.
+        law_version=LAW_VERSION_UNKNOWN,
         judged_by=judged_by(state),
     )
 

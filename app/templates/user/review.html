@@ -41,11 +41,22 @@
 .rv-outcome {
   display: inline-block; padding: .25rem .7rem; border-radius: 999px;
   font-size: .8rem; font-weight: 600; border: 1px solid var(--u-line);
+  /* 모르는 값(전용 색이 없는 결과)은 회색 바탕으로 남는다 */
+  background: var(--u-surface2); color: var(--u-clay);
 }
 .rv-outcome.o-pass { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
 .rv-outcome.o-certificate { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
-.rv-outcome.o-guidance { background: var(--u-warn-bg); color: var(--u-warn-ink); border-color: var(--u-warn-line); }
+/* 🔄 2026-10-12 — 근거 자료 필요 = 주황 · 유형 · 인증 여부 선택 필요(분기를 고르기 전의 보류) = 노랑 · 전문가 검토 필요 = 보라.
+   주황 · 노랑은 공통 토큰(`user.css`)에 없어 여기 둔다 — 어두운 화면 값은 아래에서 덮는다 */
+.rv-outcome.o-guidance { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
 .rv-outcome.o-hold { background: var(--u-signal-soft); color: var(--u-signal-ink); }
+.rv-outcome.o-hold.o-ask { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+@media (prefers-color-scheme: dark) {
+  .user-shell:not([data-theme="light"]) .rv-outcome.o-guidance { background: #3a1d0b; color: #fdba74; border-color: #8a4a1c; }
+  .user-shell:not([data-theme="light"]) .rv-outcome.o-hold.o-ask { background: #332b08; color: #fde047; border-color: #7a6612; }
+}
+.user-shell[data-theme="dark"] .rv-outcome.o-guidance { background: #3a1d0b; color: #fdba74; border-color: #8a4a1c; }
+.user-shell[data-theme="dark"] .rv-outcome.o-hold.o-ask { background: #332b08; color: #fde047; border-color: #7a6612; }
 
 .rv-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .55rem 0 0; }
 .rv-chip {
@@ -53,14 +64,28 @@
   font-size: .74rem; border: 1px solid var(--u-line); color: var(--u-clay);
   background: var(--u-surface2);
 }
-.rv-chip.c-r0, .rv-chip.c-r1 { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
+.rv-chip.c-r0, .rv-chip.c-r1, .rv-chip.c-ok { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
 .rv-chip.c-r2 { background: var(--u-warn-bg); color: var(--u-warn-ink); border-color: var(--u-warn-line); }
 .rv-chip.c-r3, .rv-chip.c-r4 { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
-.rv-chip.c-warn { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+.rv-chip.c-warn, .rv-chip.c-bad { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+/* 위험도 칩 — R0 은 바탕 없는 점선 · R1 은 노랑(공통 토큰에 없어 여기 둔다) */
+.rv-chip.c-none { background: none; border-style: dashed; color: var(--u-clay); }
+.rv-chip.c-yellow { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+@media (prefers-color-scheme: dark) {
+  .user-shell:not([data-theme="light"]) .rv-chip.c-yellow { background: #332b08; color: #fde047; border-color: #7a6612; }
+}
+.user-shell[data-theme="dark"] .rv-chip.c-yellow { background: #332b08; color: #fde047; border-color: #7a6612; }
+/* 주황 — 조건이 맞으면 쓸 수 있는 위반(인정받은 제품만 · 근거 자료 필요). 공통 토큰에 없어 여기 둔다 */
+.rv-chip.c-orange { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+@media (prefers-color-scheme: dark) {
+  .user-shell:not([data-theme="light"]) .rv-chip.c-orange { background: #3a1d0b; color: #fdba74; border-color: #8a4a1c; }
+}
+.user-shell[data-theme="dark"] .rv-chip.c-orange { background: #3a1d0b; color: #fdba74; border-color: #8a4a1c; }
 .rv-chip.c-violation { background: var(--u-signal-soft); color: var(--u-signal-ink); border-color: var(--u-signal-soft); }
 
-.rv-sent { border-top: 1px solid var(--u-line); padding: .8rem 0; }
-.rv-sent:first-of-type { border-top: 0; padding-top: .2rem; }
+/* 🔄 2026-10-12 — 문장 칸(s0 · s1 …)은 눈에 띄게 연노랑 상자로 그린다 */
+.rv-sent { border: 1px solid var(--u-warn-line); border-radius: .75rem; background: var(--u-warn-bg);
+           padding: .7rem .85rem; margin: .6rem 0; }
 .rv-text { font-size: .95rem; line-height: 1.75; margin: 0; }
 .rv-hit { background: var(--u-hit); color: inherit; border-radius: .2rem; padding: 0 .1rem; }
 .rv-sid { font-size: .7rem; color: var(--u-clay); }
@@ -106,6 +131,7 @@
                border-bottom: 1px solid var(--u-line); background: var(--u-surface2); font-size: .72rem; color: var(--u-clay); }
 .rv-copy-bar span { font-family: ui-monospace, monospace; }
 .rv-link { border: 0; background: none; padding: 0 0 0 .75rem; font-size: .74rem; color: var(--u-signal-ink); cursor: pointer; }
+.rv-len { font-size: .72rem; color: var(--u-clay); }
 .rv-link.rv-del { color: var(--u-clay); }
 .rv-copy-row { display: flex; align-items: stretch; }
 .rv-copy-row textarea { flex: 1; min-width: 0; border: 0; border-radius: 0; margin: 0; resize: vertical; }
@@ -126,6 +152,12 @@
           padding: .6rem 1rem; font-size: .8rem; font-weight: 600; cursor: pointer; margin: 0; }
 .rv-attach { width: 100%; border: 1px dashed var(--u-line); border-radius: .75rem; padding: 1.4rem;
              text-align: center; color: var(--u-clay); font-size: .8rem; background: var(--u-surface2); }
+/* 준비 중인 칸은 접어 둔다 — 제목 줄이 `<summary>` 다 (스크립트 없이 · CSP) */
+.rv-fold > summary { font-size: .95rem; font-weight: 700; cursor: pointer; }
+.rv-fold[open] > summary { margin-bottom: .6rem; }
+.rv-soon { display: inline-block; margin-left: .35rem; padding: .1rem .55rem; border-radius: 999px;
+           border: 1px solid var(--u-warn-line); background: var(--u-warn-bg); color: var(--u-warn-ink);
+           font-size: .72rem; font-weight: 600; vertical-align: middle; }
 .rv-toast { border: 1px solid var(--u-line); background: var(--u-signal-soft); color: var(--u-signal-ink);
             border-radius: .75rem; padding: .55rem .8rem; font-size: .82rem; margin-bottom: .75rem; }
 .rv-card > h2.rv-risk-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
@@ -198,6 +230,19 @@
         padding: .8rem .9rem; margin-bottom: .6rem; }
 .rv-q-title { margin: 0 0 .15rem; font-size: .9rem; font-weight: 600; display: flex; justify-content: space-between; gap: .5rem; }
 .rv-redo-no { font-size: .7rem; font-weight: 400; color: var(--u-clay); white-space: nowrap; }
+.rv-redo-top { float: right; }
+.rv-one .rv-redo-top { float: none; position: absolute; top: 1.4rem; right: 8.3rem; font-size: .75rem; }
+.rv-one:has({{ rv_flag_sel() }}) .rv-redo-top { right: 6.2rem; }
+/* 상세 사유 확인 — 사유 칩 · 설명을 접어 둔다 */
+.rv-more { margin: .5rem 0 0; }
+.rv-more > summary { cursor: pointer; font-size: .78rem; color: var(--u-signal-ink); }
+.rv-more > .rv-chips { margin-top: .45rem; }
+/* 칩 묶음은 전제 문안의 세로 가운데에 둔다 — 문안이 여러 줄이어도 칩이 늘어나지 않는다 */
+.rv-premise-row { align-items: center; }
+.rv-premise-chips { display: flex; flex-direction: column; align-items: stretch; gap: .35rem; flex-shrink: 0;
+                    margin-bottom: .6rem; /* 가운데에서 살짝 위로 — 글줄의 눈높이에 맞춘다 */ }
+.rv-premise-chips > .rv-chip { white-space: nowrap; text-align: center; }
+.rv-premise { flex: 1; min-width: 12rem; font-size: .8rem; line-height: 1.6; }
 .rv-opts { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
 .rv-opt { flex: 1; min-width: 8.5rem; display: flex; flex-direction: column; gap: .1rem; margin: 0; cursor: pointer;
           border: 1px solid var(--u-line); border-radius: .75rem; padding: .6rem .75rem;
@@ -208,15 +253,126 @@
 .rv-opt-off:hover { border-color: var(--u-line); }
 .rv-back { display: inline-block; margin-top: .6rem; padding: 0; cursor: pointer; }
 .rv-redo { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .6rem; }
+/* 🆕 2026-10-12 (ksr · 안) — 인코더 유형 후보. 판정 칩과 다른 모양(점선 · 바탕 없음) · 다른 말(「AI 추정」) — D-323 */
+.rv-enc { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin: .55rem 0 0; }
+.rv-enc-label { font-family: ui-monospace, monospace; font-size: .68rem; color: var(--u-clay); letter-spacing: .04em; }
+.rv-chip.c-enc { background: none; border-style: dashed; color: var(--u-clay); }
 .rv-disclaimer { font-size: .72rem; color: var(--u-clay); line-height: 1.6; margin: .25rem 0 0; }
+
+/* ══ 🔄 2026-10-13 (ksr) 시안 적용 — 글자 크기 위계 · 문장 색 카드 · 접힌 개발자 정보. 뒤에 두어 위 규칙을 덮는다 ══ */
+/* 글자 크기: 제목 18 · 카드 제목 15 · 문장 · 입력 14 · 결론 · 이유 13 · 가장 작은 글자 12 */
+.rv-head h1 { font-size: 1.125rem; font-weight: 600; }
+.rv-head p { font-size: .8125rem; }
+.rv-card > h2 { font-size: .9375rem; font-weight: 600; }
+.rv-note { font-size: .8rem; }
+.rv-count, .rv-len, .rv-copy-bar, .rv-copyno, .rv-sid, .rv-redo-no, .rv-disclaimer, .rv-ev-label { font-size: .75rem; }
+.rv-copy-row textarea, .rv-copy-go { font-size: .875rem; }
+.rv-add { font-size: .8125rem; }
+.rv-add b { color: var(--u-ink); font-weight: 600; }
+.rv-hist { margin: .9rem 0 0; padding-top: .75rem; border-top: 1px solid var(--u-line); font-size: .75rem; color: var(--u-clay); }
+.rv-hist b { font-weight: 600; }
+/* 개발자 정보 — 접어 둔다 */
+.rv-dev { padding: .7rem 1.15rem; border-style: dashed; }
+.rv-dev > summary { cursor: pointer; font-size: .75rem; color: var(--u-clay); }
+.rv-dev[open] > summary { margin-bottom: .7rem; }
+.rv-dev table { font-size: .8rem; width: 100%; }
+.rv-dev table th { font-weight: 600; text-align: left; }
+/* 문장 카드 */
+.rv-sent { border: 1px solid var(--u-line); border-radius: .75rem; background: var(--u-surface); padding: .8rem .95rem; margin: .6rem 0; }
+.rv-sent-head { display: flex; align-items: center; gap: .45rem; margin-bottom: .55rem; }
+.rv-dot { width: .42rem; height: .42rem; border-radius: 50%; background: var(--u-clay); flex-shrink: 0; }
+.rv-concl { font-size: .8125rem; font-weight: 600; color: var(--u-clay); }
+.rv-sent-head .rv-sid { margin-left: auto; font-family: ui-monospace, monospace; }
+.rv-t-bad { background: var(--u-bad-bg); border-color: var(--u-bad-line); }
+.rv-t-bad .rv-concl { color: var(--u-bad-ink); } .rv-t-bad .rv-dot { background: var(--u-bad-dot); }
+.rv-t-ok { background: var(--u-ok-bg); border-color: var(--u-ok-line); }
+.rv-t-ok .rv-concl { color: var(--u-ok-ink); } .rv-t-ok .rv-dot { background: var(--u-ok-dot); }
+.rv-t-hold { background: var(--u-surface2); }
+.rv-t-hold .rv-concl { color: var(--u-ink); }
+.rv-t-orange { background: #fff7ed; border-color: #fdba74; }
+.rv-t-orange .rv-concl { color: #9a3412; } .rv-t-orange .rv-dot { background: #ea580c; }
+/* 위험도 — 카드 색과 겹치지 않게 흰 바탕에 글자 · 테두리만 칠한다 */
+.rv-risk { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600;
+           background: var(--u-surface); border: 1px solid var(--u-line); color: var(--u-clay); }
+.rv-risk.rk-0 { background: none; border-style: dashed; font-weight: 400; }
+.rv-risk.rk-1 { color: #854d0e; border-color: #fde047; }
+.rv-risk.rk-2 { color: #9a3412; border-color: #fdba74; }
+.rv-risk.rk-3 { color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+/* 검수한 문장 — 흰 상자 · 따옴표 · 굵게. 설명과 섞이지 않게 「내 문구」를 모양으로 가른다 */
+.rv-sent .rv-text { font-size: .9375rem; font-weight: 600; line-height: 1.6; margin: 0 0 .55rem; padding: .6rem .8rem;
+                    background: var(--u-surface); border: 1px solid var(--u-line); border-radius: .6rem; color: var(--u-ink); }
+.rv-sent .rv-text::before { content: "“"; color: var(--u-clay); margin-right: .1rem; }
+.rv-sent .rv-text::after { content: "”"; color: var(--u-clay); margin-left: .1rem; }
+.rv-sent .rv-why { font-size: .8125rem; line-height: 1.65; color: var(--u-clay); margin: 0 0 .5rem; }
+.rv-sent .rv-fix { background: var(--u-surface); margin: 0 0 .55rem; }
+.rv-types { font-size: .78rem; color: var(--u-clay); margin: 0 0 .35rem; }
+.rv-sent .rv-more { margin: 0; }
+.rv-more > summary { font-size: .8125rem; font-weight: 500; list-style: none; display: inline-block; }
+.rv-more > summary::-webkit-details-marker { display: none; }
+.rv-more > summary::after { content: " →"; }
+.rv-more[open] > summary::after { content: " ↑"; }
+.rv-more > .rv-ev-body { margin-top: .5rem; border: 1px solid var(--u-line); border-radius: .6rem; background: var(--u-surface); }
+.rv-more > .rv-note { margin: .5rem 0 0; }
+.rv-rw-btn { margin: .55rem 0 0; padding: .3rem .8rem; border-radius: 999px; border: 1px solid var(--u-signal);
+             background: var(--u-surface); color: var(--u-signal-ink); font-size: .8125rem; font-weight: 500; cursor: pointer; }
+@media (prefers-color-scheme: dark) {
+  .user-shell:not([data-theme="light"]) .rv-t-orange { background: #3a1d0b; border-color: #8a4a1c; }
+  .user-shell:not([data-theme="light"]) .rv-t-orange .rv-concl { color: #fdba74; }
+  .user-shell:not([data-theme="light"]) .rv-risk.rk-1 { color: #fde047; border-color: #7a6612; }
+  .user-shell:not([data-theme="light"]) .rv-risk.rk-2 { color: #fdba74; border-color: #8a4a1c; }
+}
+.user-shell[data-theme="dark"] .rv-t-orange { background: #3a1d0b; border-color: #8a4a1c; }
+.user-shell[data-theme="dark"] .rv-t-orange .rv-concl { color: #fdba74; }
+.user-shell[data-theme="dark"] .rv-risk.rk-1 { color: #fde047; border-color: #7a6612; }
+.user-shell[data-theme="dark"] .rv-risk.rk-2 { color: #fdba74; border-color: #8a4a1c; }
 </style>
 {% endblock %}
 {% block user_content %}
 {# 문장 하나 — 기록되는 판정과 분기 결과가 같은 그림을 쓴다.
    `rw_item` 을 주면 문장 아래에 고쳐 쓰기(버튼 · 결과 · 없는 이유)를 단다 — `premise` 는 고른 분기의 전제, `r` 은 회차 #}
-{% macro sent_block(s, flag=false, marks=none, rw_item=none, premise="", r=0) %}
-      <div class="rv-sent{% if flag %} rv-flag{% endif %}">
-        <span class="rv-sid">{{ s.sent_id }}</span>
+{% macro sent_block(s, flag=false, marks=none, rw_item=none, premise="", r=0, enc_on=false) %}
+      {# 🔄 2026-10-13 (ksr) — 문장 칸은 **결과에 따라 색이 다른 카드**다 (프로토타입 v7.2 의 문장 카드 구조).
+         색 점 + 결론(+ 위험도) → 검수한 문장(흰 상자 · 따옴표 · 걸린 곳 형광) → 이유 → 「근거 보기」(접힘 · 조문 · 산출 내역 · AI 추정).
+         · 빨강 = 쓸 수 없다(절대형 C · 전제를 고른 뒤의 자격형 · 종류가 실리지 않은 위반) · 주황 = 조건이 맞으면 쓸 수 있다(A · B)
+         · 회색 = 확정하지 못했다(보류 · 근거 없음 · 미판정) · 초록 = 특이사항 없음
+         🚨 `compose.html` 의 문장 칸과 한 벌이다 (D-99) — 한쪽을 고치면 둘 다 #}
+      {% set inf = s.infeasibility.value if s.infeasibility else "" %}
+      {% set v = s.verdict.value %}
+      {% set hit = v == "confirmed" and s.violations %}
+      {#- 전제를 고른 분기(`premise`) 안의 자격형(A)은 「위반 확정」이다 — 그 전제가 이미 「인정받지 않았다」여서
+          「인정받은 제품만 가능」이라 적으면 고른 뒤에도 조건부로 읽힌다. 「사용 불가」는 어떤 제품도 못 쓰는 절대형(C)의 말이다 #}
+      {% set a_closed = inf == "A" and premise %}
+      {% set tone = ("orange" if inf in ("A", "B") and not a_closed else "bad") if hit else ("ok" if v == "confirmed" else "hold") %}
+      {#- 🔄 2026-09-23 (D-279) — gap2 · rd1 은 원장 D-127 뜻이다. ⛔ 모르는 값은 「알 수 없는 값」으로 적는다 #}
+      {% set HOLD = {"low_conf": "확신 부족", "gap2": "코드·모델 2등급 차", "cat_unknown": "품목 선택 필요", "rd1": "공존 규칙 발동",
+                     "premise_unknown": "전제 선택 필요 — 인정 여부", "law_uncovered": "전용법 미검수"} %}
+      {#- 🔄 2026-10-13 — R 등급은 이용자에게 뜻이 없다: 낮은 위험(R1 · 시정명령) / 위험(R2 · 업무정지) / 고위험(R3 · 영업취소).
+          R4 는 도달하지 않는 값이라 R3 과 같이 적는다(D-182). 등급 · 처분 이름은 `title` 에, R 등급 그대로는 「근거 보기」의 산출 내역에 있다.
+          R0 은 바탕 없는 점선 칩 「칩 없음」으로 적는다(위험도 자리를 비우지 않는다). ⛔ 보류 문장의 R0 은 그리지 않는다 — 통과로 읽힌다 (D-280) #}
+      {% set RISK = {"R0": ("rk-0", "칩 없음", "특이사항 없음"), "R1": ("rk-1", "낮은 위험", "시정명령을 받을 수 있어요"), "R2": ("rk-2", "위험", "업무정지를 받을 수 있어요"),
+                     "R3": ("rk-3", "고위험", "영업취소 · 폐쇄까지 갈 수 있어요"), "R4": ("rk-3", "고위험", "영업취소 · 폐쇄까지 갈 수 있어요")} %}
+      {% set fin = s.risk.final.value if s.risk.final else "" %}
+      <div class="rv-sent rv-t-{{ tone }}{% if flag %} rv-flag{% endif %}">
+        <div class="rv-sent-head">
+          <span class="rv-dot" aria-hidden="true"></span>
+          <span class="rv-concl"{% if fin == "R0" and v == "confirmed" %} title="위험도 R0 — 특이사항 없음"{% endif %}>
+            {%- if hit and a_closed %}위반 확정
+            {%- elif hit and inf == "A" %}인정받은 제품만 가능
+            {%- elif hit and inf == "B" %}객관적인 근거 자료 필요
+            {%- elif hit and inf == "C" %}사용 불가
+            {%- elif hit %}위반 확정
+            {%- elif v == "confirmed" %}특이사항 없음
+            {%- elif v == "hold" %}보류{% if s.hold_reason %} · {{ HOLD.get(s.hold_reason.value, "알 수 없는 값 (" ~ s.hold_reason.value ~ ")") }}{% endif %}
+            {%- elif v == "no_basis" %}근거 없음
+            {%- else %}미판정{% endif -%}
+          </span>
+          {% if fin in RISK and not (fin == "R0" and v != "confirmed") %}
+          <span class="rv-risk {{ RISK[fin][0] }}" title="위험도 {{ fin }} — {{ RISK[fin][2] }}">{{ RISK[fin][1] }}</span>
+          {% elif fin and fin != "R0" %}
+          <span class="rv-risk">위험도 {{ fin }}</span>
+          {% endif %}
+          <span class="rv-sid">{{ s.sent_id }}</span>
+        </div>
         {% set sp = s.risk.evidence_span %}
         {# 🆕 2026-10-01 — 뺄 구간(`spans` · 원문 좌표 D-278)은 서버가 문장 조각으로 잘라 넘긴다(`_marks`) #}
         {% if marks %}
@@ -227,58 +383,33 @@
         <p class="rv-text">{{ s.text }}</p>
         {% endif %}
 
-        <div class="rv-chips">
-          <span class="rv-chip">
-            {#- 🔄 2026-10-01 — 「확정」만 적으면 통과로 읽힌다. 위반이 있으면 「위반 확정」, 없으면 상단 배지와 같은 말 #}
-            {%- if s.verdict.value == "confirmed" and s.violations %}위반 확정
-            {%- elif s.verdict.value == "confirmed" %}특이사항 없음
-            {%- elif s.verdict.value == "hold" %}보류
-            {%- elif s.verdict.value == "no_basis" %}근거 없음
-            {%- else %}미판정{% endif -%}
-          </span>
-          {% if s.hold_reason %}
-          <span class="rv-chip">
-            {#- 🔄 2026-09-23 (D-279) — gap2 · rd1 을 원장 D-127 뜻으로 고치고 새 사유 둘(D-263 · D-277)을 더했다.
-                ⛔ 모르는 값은 「알 수 없는 값」으로 — 종전에는 전부 「라운드 1 미해소」로 읽혔다 #}
-            {%- if s.hold_reason.value == "low_conf" %}확신 부족
-            {%- elif s.hold_reason.value == "gap2" %}코드·모델 2등급 차
-            {%- elif s.hold_reason.value == "cat_unknown" %}품목 선택 필요
-            {%- elif s.hold_reason.value == "rd1" %}공존 규칙 발동
-            {%- elif s.hold_reason.value == "premise_unknown" %}전제 선택 필요 — 인정 여부
-            {%- elif s.hold_reason.value == "law_uncovered" %}전용법 미검수
-            {%- else %}알 수 없는 값 ({{ s.hold_reason.value }}){% endif -%}
-          </span>
-          {% endif %}
-          {#- 🔄 2026-10-08 — 보류 문장의 R0 은 칩을 그리지 않는다. R0 은 「특이사항 없음」(D-280)이라 보류 옆에 초록으로 서면
-              통과로 읽힌다 · 보류의 위험도는 가장 보수적인 경우의 등급이다(D-280 · D-263 ①) — R1 이상은 그대로 그린다.
-              ⛔ 법 미수록 보류(D-277 · D-314)가 R0 을 싣는 이유는 결정기록에 없다 — 값은 판정 안건이고 여기서는 그리지만 않는다.
-              🚨 `compose.html` 의 칩과 한 벌이다 (D-99) — 한쪽을 고치면 둘 다 #}
-          {% if s.risk.final and not (s.verdict.value != "confirmed" and s.risk.final.value == "R0") %}
-          <span class="rv-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
-          {% endif %}
-          {% if s.infeasibility %}
-          <span class="rv-chip c-warn">
-            {#- 🔄 2026-10-01 — A · B · C 글자는 사용자에게 뜻이 없다. 뜻을 적는다(증명서의 「사유 A」는 그대로) #}
-            {%- if s.infeasibility.value == "A" %}인정받은 제품만 가능
-            {%- elif s.infeasibility.value == "B" %}근거 자료 필요
-            {%- else %}사용 불가{% endif -%}
-          </span>
-          {% endif %}
-          {% for v in s.violations %}
-          <span class="rv-chip c-violation">{{ v.value|replace("_", " ") }}</span>
-          {% endfor %}
-          {% if s.evidence_mismatch %}
-          <span class="rv-chip c-warn">근거 불일치 · 재생성됨</span>
-          {% endif %}
-        </div>
+        {# 🆕 2026-10-06 lse — 지적 문장 고쳐 쓰기(sLLM 재생성 · 팀장 승인). 결과는 이 문장 아래에 붙는다.
+           판정(`JudgeResponse`)에는 대체 문구가 없다 — 고쳐 쓰기는 따로 부르는 재생성 호출이다 (D-265 계약 유지).
+           ⛔ 사유 A(자격형)는 고쳐 쓰지 않는다 (D-59). ⛔ 위반 유형이 없는 문장(확신 부족 보류만)은 고칠 것이 없다 —
+           유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측). 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4)
+           🔄 2026-10-06 ksr (병합) — 문장 카드가 매크로라 여기로 옮겼다. 품목 분기가 있는 문구는 **분기를 고른 뒤의
+           문장에만** 단다 — 고른 전제의 판정으로 고쳐 써야 해서다. 고르기 전(기록되는 판정)에는 달지 않는다 #}
+        {% set rw = none %}{% set rw_kind = "" %}
+        {% if rw_item is not none %}
+        {% set rw = ((rw_item.rewrites or {}).get(premise) or {}).get(s.sent_id) %}
+        {% if rw %}{% set rw_kind = "result" %}
+        {% elif s.infeasibility and s.infeasibility.value == "A" %}{% set rw_kind = "a" %}
+        {# 🆕 2026-10-08 — 고쳐 쓰기 서버를 두지 않은 환경. 누를 수 없는 버튼을 그리지 않는다 (D-146) #}
+        {% elif s.violations and not rewrite_enabled|default(true) %}{% set rw_kind = "off" %}
+        {% elif s.violations %}{% set rw_kind = "button" %}
+        {% elif flag %}{% set rw_kind = "none" %}
+        {% endif %}
+        {% endif %}
+
         {#- 🆕 2026-10-11 (ohb) — 보류 문장의 후보가 조건부일 때의 말. 문안 · 규칙은 서버(`app/reasons.py` `candidate_condition`)다 —
             템플릿에 조문을 적지 않는다. 자리와 모양은 화면 담당(ksr)이 다듬는다 #}
         {% set cc = s|candidate_condition %}
-        {% if cc %}<p class="rv-note rv-why">{{ cc }}</p>{% endif %}
+        {% if cc %}<p class="rv-why">{{ cc }}</p>{% endif %}
         {% if s.infeasibility %}
-        <p class="rv-note rv-why">
-          {%- if s.infeasibility.value == "A" %}인정·심사를 받은 제품만 쓸 수 있는 표현이에요. 받지 않았다면 문구를 고쳐도 쓸 수 없어요.
-          {%- elif s.infeasibility.value == "B" %}객관적인 근거 자료로 사실임을 보일 수 있으면 쓸 수 있어요.
+        <p class="rv-why">
+          {%- if inf == "A" and premise %}고르신 제품 유형에서는 쓸 수 없는 표현이에요. 이 기능성으로 인정·심사를 받은 제품만 쓸 수 있어요.
+          {%- elif inf == "A" %}인정·심사를 받은 제품만 쓸 수 있는 표현이에요. 받지 않았다면 문구를 고쳐도 쓸 수 없어요.
+          {%- elif inf == "B" %}객관적인 근거 자료로 사실임을 보일 수 있으면 쓸 수 있어요.
           {%- else %}어떤 제품도 쓸 수 없는 표현이에요. 이 부분은 빼야 해요.{% endif -%}
         </p>
         {% endif %}
@@ -294,22 +425,31 @@
         </div>
         {% endif %}
 
-        {# 🆕 2026-10-06 lse — 지적 문장 고쳐 쓰기(sLLM 재생성 · 팀장 승인). 결과는 이 문장 아래에 붙는다.
-           판정(`JudgeResponse`)에는 대체 문구가 없다 — 고쳐 쓰기는 따로 부르는 재생성 호출이다 (D-265 계약 유지).
-           ⛔ 사유 A(자격형)는 고쳐 쓰지 않는다 (D-59). ⛔ 위반 유형이 없는 문장(확신 부족 보류만)은 고칠 것이 없다 —
-           유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측). 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4)
-           🔄 2026-10-06 ksr (병합) — 문장 카드가 매크로라 여기로 옮겼다. 품목 분기가 있는 문구는 **분기를 고른 뒤의
-           문장에만** 단다 — 고른 전제의 판정으로 고쳐 써야 해서다. 고르기 전(기록되는 판정)에는 달지 않는다 #}
-        {% if rw_item is not none %}
-        {% set rw = ((rw_item.rewrites or {}).get(premise) or {}).get(s.sent_id) %}
-        {% if rw %}
+        {# 걸린 유형 한 줄 — ⛔ 확정이 아닌 문장의 유형은 「후보」라 적는다 (D-311) #}
+        {% if s.violations or s.evidence_mismatch %}
+        <p class="rv-types">
+          {%- if s.violations %}{{ "걸린 유형" if hit else "유형 후보 — 확정 아님" }} · {% for x in s.violations %}{{ x.value|replace("_", " ") }}{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}
+          {%- if s.evidence_mismatch %}{% if s.violations %} · {% endif %}근거 불일치 · 재생성됨{% endif -%}
+        </p>
+        {% endif %}
+
+        {% if flag or s.violations or s.evidence or s.encoder_candidates or enc_on %}
+        <details class="rv-more">
+          <summary>근거 보기</summary>
+          {{ ev_body(s, premise, enc_on) }}
+          {% if rw_kind == "a" %}
+          <p class="rv-note">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 · 심사를 받은 제품만 쓸 수 있는 말이라 고쳐 써도 같은 위반이에요 (D-59).</p>
+          {% elif rw_kind == "off" %}
+          <p class="rv-note">이 환경에서는 문장 고쳐 쓰기를 제공하지 않아요.</p>
+          {% elif rw_kind == "none" %}
+          <p class="rv-note">고쳐 쓰기 없음 · 위반 유형이 특정되지 않았어요(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.</p>
+          {% endif %}
+        </details>
+        {% endif %}
+
+        {% if rw_kind == "result" %}
         {% include "user/_review_rewrite.html" %}
-        {% elif s.infeasibility and s.infeasibility.value == "A" %}
-        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 · 심사를 받은 제품만 쓸 수 있는 말이라 고쳐 써도 같은 위반이에요 (D-59).</p>
-        {% elif s.violations and not rewrite_enabled|default(true) %}
-        {# 🆕 2026-10-08 — 고쳐 쓰기 서버를 두지 않은 환경. 누를 수 없는 버튼을 그리지 않는다 (D-146) #}
-        <p class="rv-note" style="margin:.5rem 0 0">이 환경에서는 문장 고쳐 쓰기를 제공하지 않아요.</p>
-        {% elif s.violations %}
+        {% elif rw_kind == "button" %}
         <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
           <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
@@ -319,9 +459,6 @@
           {% endif %}
           <button type="submit" class="rv-fix-go">✨ 이 문장 고쳐 쓰기 <small>· 위반을 지우고 자연스럽게 다듬어요 (15~20초)</small></button>
         </form>
-        {% elif flag %}
-        <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 위반 유형이 특정되지 않았어요(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.</p>
-        {% endif %}
         {% endif %}
       </div>
 {% endmacro %}
@@ -338,10 +475,8 @@
               {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
             </div>
 {% endmacro %}
-{# 근거 보기의 문장 하나 — 조문 · 산출 내역. 전체 근거 보기와 분기 결과가 같은 그림을 쓴다 #}
-{% macro ev_details(n, s) %}
-        <details class="rv-ev">
-          <summary>문구 {{ n }} · {{ s.text }}</summary>
+{# 근거 보기의 속 — 조문 · AI 추정 · 산출 내역. 🔄 2026-10-13 문장 카드 안의 「근거 보기」가 펼친다(종전에는 카드 아래 따로 쌓았다) #}
+{% macro ev_body(s, premise="", enc_on=false) %}
           <div class="rv-ev-body">
             {#- 🔄 2026-10-08 (근거 표시 「(나)」) — **인용 근거**(사전 항목이 인용한 조문 · 판정이 기대는 것)와 **참고 조문**(검색이
                 찾은 것 · 판정을 바꾸지 않는다)을 가른다. 참고는 접는다 — 펼치기 전에는 판정 근거로 읽히지 않게.
@@ -359,23 +494,36 @@
               {% for e in parts.refs %}{{ law_row(e) }}{% endfor %}
             </details>
             {% endif %}
+            {#- 🆕 2026-10-12 (ksr · 안) — 인코더 유형 후보와 참조 조항(`references` · D-327). 🚨 이 문구에서 찾은 근거가 아니다 —
+                「위반 근거」 · 「인용 조문」과 다른 말 · 다른 자리로 그린다 #}
+            {% if s.encoder_candidates %}
+            <p class="rv-ev-label">AI 추정 유형 — 판정 아님</p>
+            <p class="rv-note">AI 가 문장만 보고 추정한 유형이에요. 아래 조항은 이 문구에서 찾은 근거가 아니라 「이 유형이라면 이 조항」이에요.</p>
+            {% for c in s.encoder_candidates %}
+            {#- 🔄 2026-10-13 (D-330 안건 1 (나)) — 확률(%)을 그리지 않는다. 인코더 출력은 보정된 확률이 아니라 「N% 확률로 위반」으로 읽힌다 #}
+            <div class="rv-calc"><span>{{ c.violation.value|replace("_", " ") }}{% if c.moved_from %} · 조건부 (원래 추정 {{ c.moved_from.value|replace("_", " ") }}){% endif %}</span></div>
+            {% if c.references %}
+            <details class="rv-ev-ref">
+              <summary>이 유형을 정한 조항 {{ c.references|length }}건</summary>
+              {% for e in c.references %}{{ law_row(e) }}{% endfor %}
+            </details>
+            {% else %}
+            <p class="rv-note">이 유형을 정한 조항이 실리지 않았어요.</p>
+            {% endif %}
+            {% endfor %}
+            {% for c in s.encoder_candidates if c.moved_from and not premise %}
+            <p class="rv-note">「{{ c.violation.value|replace("_", " ") }}」 추정은 건강기능식품인데 이 기능성으로 인정받지 않았다면의 것이에요.</p>
+            {% endfor %}
+            {% elif enc_on %}
+            {# ⛔ 후보가 없다고 「문제없음」이라 적지 않는다. 인코더가 돌지 않았으면(`enc_on` 거짓) 아무것도 그리지 않는다 (D-323) #}
+            <p class="rv-ev-label">AI 추정 유형 — 판정 아님</p>
+            <p class="rv-note">AI 추정 유형 없음 — 「문제없음」이라는 뜻은 아니에요.</p>
+            {% endif %}
             <p class="rv-ev-label">위험도 산출 내역</p>
             <div class="rv-calc"><span>코드 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
             <div class="rv-calc"><span>인코더 예측</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>
             <div class="rv-calc total"><span>최종 위험도</span><b>{{ "— (보류 · 등급 미정)" if s.risk.final and s.verdict.value != "confirmed" and s.risk.final.value == "R0" else (s.risk.final.value if s.risk.final else "—") }}</b></div>
           </div>
-        </details>
-{% endmacro %}
-{# 근거 보기 묶음 — 분기 안에서 쓴다. 그 판정(기록 또는 고른 분기)의 지적 문장만 든다 #}
-{% macro ev_group(n, sentences, flagged) %}
-<div class="rv-sub">
-  <h2 class="rv-risk-head" style="font-size:.88rem">근거 보기 <span class="rv-count">조문 · 산출 내역</span></h2>
-  {% for s in sentences if s.sent_id in flagged %}
-  {{ ev_details(n, s) }}
-  {% else %}
-  <p class="rv-note">지적된 문장이 없어 표시할 근거가 없어요.</p>
-  {% endfor %}
-</div>
 {% endmacro %}
 {% macro cert_reason(v) %}
 <p><b>사유 {{ v }}</b>
@@ -383,13 +531,14 @@
   {%- elif v == "B" %} · 실증형 — 근거를 대면 돼요
   {%- else %} · 절대형 — 표현 자체가 금지예요{% endif %}</p>
 {% endmacro %}
-{% macro outcome_badge(v, ask=false) %}
-<span class="rv-outcome o-{{ v }}">
+{# 🆕 2026-10-13 (D-330) — 품목이 이미 건강기능식품이라 인증 여부만 묻는 문구(`cert_only`)는 「인증 여부 선택 필요」다 #}
+{% macro outcome_badge(v, ask=false, cert_only=false) %}
+<span class="rv-outcome o-{{ v }}{% if v == 'hold' and ask %} o-ask{% endif %}">
   {%- if v == "pass" %}통과
   {%- elif v == "certificate" %}합법화 불가
-  {%- elif v == "guidance" %}지시 — 실증 자료 필요
-  {%- elif v == "hold" and ask %}보류 · 확인 필요
-  {%- elif v == "hold" %}전문가 검토
+  {%- elif v == "guidance" %}객관적인 근거 자료 필요
+  {%- elif v == "hold" and ask %}{{ "인증 여부 선택 필요" if cert_only else "유형 선택 필요" }}
+  {%- elif v == "hold" %}전문가 검토 필요
   {%- else %}알 수 없는 값 ({{ v }}){% endif -%}
 </span>
 {% endmacro %}
@@ -442,7 +591,8 @@
 
     {# 🔄 배지는 **고른 분기의 결과**로 바뀐다 — 고르기 전에는 기록되는 판정(보류)이다. 고른 뒤에는 「고르신 내용 기준」을 단다 #}
     <p class="rv-copyno">문구 {{ n }}{% if result.category %} · {{ result.category.value }}{% endif %}
-      <span class="rv-bd-rec">{{ outcome_badge(result.outcome.value, true) }}</span>
+      <span class="rv-redo-no rv-redo-top">재검수 {{ r }}/{{ max_redo }}</span>
+      <span class="rv-bd-rec">{{ outcome_badge(result.outcome.value, true, only_hf) }}</span>
       {% for b in result.branches if SLUG.get(b.premise.value) %}
       <span class="rv-bd rv-bd-{{ SLUG[b.premise.value] }}">{{ outcome_badge(b.outcome.value) }}
         {%- if not b.verified %} <span class="rv-redo-no">고르신 내용 기준</span>{% endif %}</span>
@@ -450,7 +600,7 @@
     </p>
 
     <div class="rv-q rv-q1">
-      <p class="rv-q-title">이 제품은 어떤 유형인가요? <span class="rv-redo-no">재검수 {{ r }}/{{ max_redo }}</span></p>
+      <p class="rv-q-title">이 제품은 어떤 유형인가요?</p>
       <p class="rv-note">유형에 따라 적용되는 조문이 달라서 판정을 잠시 멈췄어요.</p>
       <div class="rv-opts">
         {% for k in ns.kinds %}
@@ -460,7 +610,7 @@
     </div>
 
     <div class="rv-q rv-q2">
-      <p class="rv-q-title">건강기능식품 인증을 받았나요? <span class="rv-redo-no">재검수 {{ r }}/{{ max_redo }}</span></p>
+      <p class="rv-q-title">건강기능식품 인증을 받았나요?</p>
       <p class="rv-note">이 기능성으로 식약처 인정을 받았는지에 따라 쓸 수 있는 표현이 달라요.</p>
       <div class="rv-opts">
         {% for p, label, sub in (("hfy", "예 (Y)", "인정 · 신고 완료"), ("hfn", "아니오 (N)", "인증 없음")) %}
@@ -479,19 +629,21 @@
     {% for b in result.branches if SLUG.get(b.premise.value) %}
     {% set p = SLUG[b.premise.value] %}
     <div class="rv-res rv-res-{{ p }}">
-      <div class="rv-chips" style="margin:0 0 .5rem">
-        {% if p in ("hfy", "hfn") %}
-        <span class="rv-chip c-violation">건강기능식품</span>
-        <span class="rv-chip c-violation">인증 {{ "받음" if p == "hfy" else "안 받음" }}</span>
-        {% else %}
-        <span class="rv-chip c-violation">{{ KIND[p][0] }}</span>
-        {% endif %}
-        <span class="rv-redo-no">재검수 {{ r }}/{{ max_redo }}</span>
+      <div class="rv-chips rv-premise-row" style="margin:.45rem 0 .5rem">
+        {# 칩은 왼쪽에 세로로 쌓는다 — 옆의 전제 문안이 여러 줄일 때 칩 아래가 비지 않게 #}
+        <div class="rv-premise-chips">
+          {% if p in ("hfy", "hfn") %}
+          <span class="rv-chip c-violation">건강기능식품</span>
+          <span class="rv-chip c-violation">인증 {{ "받음" if p == "hfy" else "안 받음" }}</span>
+          {% else %}
+          <span class="rv-chip c-violation">{{ KIND[p][0] }}</span>
+          {% endif %}
+        </div>
+        {# 🔄 2026-10-12 — 전제 문안(「이 전제라면 …」)은 상자 대신 칩 옆에 이어 적는다 (D-263 ③ — 분기 결과는 전제와 함께만 그린다) #}
+        <span class="rv-premise"><b>이 전제라면</b> · {{ b.criteria }}
+          {%- if not b.verified %} <span class="rv-note">고르신 내용을 그대로 받은 결과예요 — 인정번호 대조는 하지 않았어요.</span>{% endif %}</span>
       </div>
-      <div class="rv-fix" style="margin-top:0"><b>이 전제라면</b> · {{ b.criteria }}
-        {% if not b.verified %}<br><span class="rv-note">고르신 내용을 그대로 받은 결과예요 — 인정번호 대조는 하지 않았어요.</span>{% endif %}
-      </div>
-      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r) }}{% endfor %}
+      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r, result.judged_by|encoder_ran) }}{% endfor %}
       {# 「다시 선택」은 위험도 판정 바로 아래 — 증명서 · 근거 보기보다 위다 (2026-10-01) #}
       <div class="rv-redo">
         {% if r < max_redo %}
@@ -516,7 +668,6 @@
         </div>
       </div>
       {% endif %}
-      {{ ev_group(n, b.sentences, item.branch_flagged[b.premise.value]) }}
       {% if b.evidence %}
       <details class="rv-ev">
         <summary>이 전제의 기준 조문</summary>
@@ -536,7 +687,7 @@
 
     {# 기록되는 판정 — 고르기 전에만 보인다(회차마다). 유형을 모를 때의 가장 보수적인 경우다 (D-263 ①) #}
     <div class="rv-rec">
-      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id)) }}{% endfor %}
+      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), enc_on=result.judged_by|encoder_ran) }}{% endfor %}
       {% if result.certificate %}
       <div class="rv-sub">
         <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서</h2>
@@ -547,7 +698,6 @@
         </div>
       </div>
       {% endif %}
-      {{ ev_group(n, result.sentences, item.flagged) }}
     </div>
   </div>
   {% endfor %}
@@ -556,7 +706,7 @@
 <div class="rv-head">
   <div>
     <h1>문구 검수</h1>
-    <p>문구를 넣고 <b>검수</b>를 누르면 오른쪽에 <b>어느 조문에 걸리는지</b>와 <b>왜 걸리는지</b>가 나와요.</p>
+    <p>문구를 넣고 <b>검수</b>를 누르면 오른쪽에 위험도와 근거가 나와요.</p>
   </div>
   <div class="rv-actions">
     {# ⬜ 팀 공유 — 팀(기업 회원)이 없다. D-260 ④ 가 `enterprise` 를 만들지 않기로 했다 #}
@@ -570,18 +720,16 @@
   <div>
     <form class="rv-card" method="post" action="/u/judge">
       <h2>검수할 문구
-        <span class="rv-count">{{ copies|length }}건 · 여러 문구를 한 번에 검수할 수 있어요 · 문구당 최대 {{ max_text_len }}자</span>
+        <span class="rv-count">{{ copies|length }} / {{ max_copies }}건 · 문구당 최대 {{ max_text_len }}자</span>
       </h2>
       {% if notice %}<p class="rv-toast" role="status">{{ notice }}</p>{% endif %}
-      {# 🔴 2026-10-01 — 비회원 검수는 이력에 쌓이지 않는다 (D-69). 검수는 그대로 된다 — 로그인 벽이 아니다 (D-66) #}
-      {% if not me %}
-      <p class="rv-note">로그인하지 않고 검수한 문구는 <b>이력에 남지 않아요</b> — 남기려면 먼저 <a href="/u/login">로그인</a>하세요.</p>
-      {% endif %}
       {% for c in copies %}
       <div class="rv-copy">
         <div class="rv-copy-bar">
           <span>문구 {{ loop.index }}</span>
           <span>
+            {# 🆕 2026-10-12 — 글자 수. 숫자는 `user_count.js` 가 적는다 — 스크립트가 안 돌면 숨은 채로 남는다 #}
+            <span class="rv-len" data-count-for="text-{{ loop.index }}" hidden>{{ c|length }}/{{ max_text_len }}</span>
             <button class="rv-link" type="submit" name="op" value="sample:{{ loop.index }}" formnovalidate>예시 넣기</button>
             {% if copies|length > 1 %}
             <button class="rv-link rv-del" type="submit" name="op" value="del:{{ loop.index }}" formnovalidate>삭제</button>
@@ -598,23 +746,32 @@
       </div>
       {% endfor %}
       <div class="rv-copy-tools">
-        <button class="rv-add" type="submit" name="op" value="add" formnovalidate>+ 검수할 문구 추가</button>
+        <button class="rv-add" type="submit" name="op" value="add" formnovalidate><b>+ 검수할 문구 추가</b> · 최대 {{ max_copies }}개를 한 번에 검수할 수 있어요</button>
         {% if copies|length > 1 %}
         <button class="rv-all" type="submit" name="op" value="all">전체 검수</button>
         {% endif %}
       </div>
 
-      <h2>참고 자료 첨부 <span class="rv-count">최대 5개 · 이미지 · 문서</span></h2>
       {# ⬜ 파일 업로드는 `multipart/form-data` → `python-multipart` 새 의존성(uv.lock 은 팀장 · §5) ·
-            이미지 판정은 향후 과제(D-104). 그래서 비활성으로 둔다 #}
-      <div class="rv-attach" aria-disabled="true">
-        ＋ 상세페이지 캡처 · 기존 광고물 올리기<br>
-        <span class="rv-note">파일 첨부는 아직 준비 중이에요 — 업로드 처리(새 의존성)와 이미지 판정이 정해지면 열려요.</span>
-      </div>
+            이미지 판정은 향후 과제(D-104). 그래서 비활성으로 두고, 접어 둔다 #}
+      <details class="rv-fold">
+        <summary>참고 자료 첨부 <span class="rv-soon">아직 준비 중이에요</span>
+          <span class="rv-count">최대 5개 · 이미지 · 문서</span></summary>
+        <div class="rv-attach" aria-disabled="true">
+          ＋ 상세페이지 캡처 · 기존 광고물 올리기<br>
+          <span class="rv-note">파일 첨부는 아직 준비 중이에요 — 업로드 처리(새 의존성)와 이미지 판정이 정해지면 열려요.</span>
+        </div>
+      </details>
+      {# 🔴 2026-10-01 — 비회원 검수는 이력에 쌓이지 않는다 (D-69). 검수는 그대로 된다 — 로그인 벽이 아니다 (D-66).
+         🔄 2026-10-13 — 입력을 가리지 않게 카드 맨 아래 한 줄로 옮겼다 #}
+      {% if not me %}
+      <p class="rv-hist">로그인하지 않으면 검수한 문구가 <b>이력에 남지 않아요</b> · <a href="/u/login">로그인</a></p>
+      {% endif %}
     </form>
 
-    <div class="rv-card">
-      <h2>골든 픽스처로 분기 보기</h2>
+    {# 🔄 2026-10-13 — 이용자가 읽을 것이 아니라 접어 둔다. 지우지 않는다 — 화면 분기를 확인하는 길이다 (D-124) #}
+    <details class="rv-card rv-dev">
+      <summary>개발자 정보 — 골든 픽스처로 분기 보기</summary>
       <p class="rv-note">
         ⛔ 엔진이 없어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).
         가짜 200 을 만들지 않아요 — 진짜가 오면 두 번 고쳐야 하니까요 (D-147).
@@ -624,7 +781,7 @@
         <li><a href="/u/preview/{{ name }}">{{ name }}</a></li>
       {% endfor %}
       </ul>
-    </div>
+    </details>
   </div>
 
   <div>
@@ -640,7 +797,8 @@
     {# 🔄 2026-10-01 — 분기가 있으면 지적 건수는 **고른 분기 기준**으로 바뀐다. 서버는 어느 분기를 골랐는지 모르므로
        CSS 가 센다 — 보이는 지적 문장(`.rv-flag`)을 카운터로 세고, 하나도 없으면 「특이사항 없음」이다 #}
     {% set live = results|selectattr("result.branches")|list|length > 0 %}
-    <div class="rv-card{% if live %} rv-card-live{% endif %}">
+    {# 분기가 있는 문구가 하나뿐이면 재검수 회차를 카드 머리(지적 건수 왼쪽)로 올린다 — 여럿이면 문구 줄 오른쪽에 둔다 #}
+    <div class="rv-card{% if live %} rv-card-live{% endif %}{% if results|selectattr("result.branches")|list|length == 1 %} rv-one{% endif %}">
       <h2 class="rv-risk-head">위험도
         {% if not live %}
         <span class="rv-summary {{ 's-bad' if flagged else 's-ok' }}">
@@ -657,9 +815,9 @@
           {%- elif result.outcome.value == "certificate" %}합법화 불가
           {#- 🔄 2026-09-23 (D-279) — 지시(D-268)를 더하고 탐색 실패(생성 종착 · D-274)를 뺐다.
               ⛔ 모르는 값은 「알 수 없는 값」으로 그린다 — 종전에는 전부 「전문가 검토」로 읽혔다 #}
-          {%- elif result.outcome.value == "guidance" %}지시 — 실증 자료 필요
-          {%- elif result.outcome.value == "hold" and result.branches %}보류 · 확인 필요
-          {%- elif result.outcome.value == "hold" %}전문가 검토
+          {%- elif result.outcome.value == "guidance" %}객관적인 근거 자료 필요
+          {%- elif result.outcome.value == "hold" and result.branches %}유형 선택 필요
+          {%- elif result.outcome.value == "hold" %}전문가 검토 필요
           {%- else %}알 수 없는 값 ({{ result.outcome.value }}){% endif -%}
         </span>
       </p>
@@ -669,7 +827,7 @@
       {{ branch_wizard(item) }}
       {% else %}
       {% for s in result.sentences %}
-      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item) }}
+      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on=result.judged_by|encoder_ran) }}
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}
@@ -677,22 +835,6 @@
     {% endfor %}
       {# 🚨 문장들 **뒤에** 있어야 카운터가 다 세어진다 — 자리는 CSS 가 머리 오른쪽으로 올린다 #}
       {% if live %}<span class="rv-summary rv-live" role="status"></span>{% endif %}
-
-      {# 🆕 근거 보기 — 프로토타입 `rv-evidence-list` · 지적 문장만 접어서 둔다.
-         🔄 조문·산출 내역은 종전 문장 카드 안에 펼쳐 있던 것을 여기로 옮겼다(내용은 같다).
-         ⬜ 「제재 사례」 칸 — 계약에 사례 칸이 없다(EvidenceArticle 은 조문만 · D-192). 그래서 비운다 #}
-      {# 🔄 2026-10-01 — 분기가 있는 문구의 근거는 분기 안에서 그린다(고른 분기 기준). 여기는 분기 없는 문구만 #}
-      {% if results|rejectattr("result.branches")|list %}
-      <div class="rv-sub">
-        <h2 class="rv-risk-head" style="font-size:.88rem">근거 보기 <span class="rv-count">조문 · 산출 내역</span></h2>
-        {% set ns = namespace(any=false) %}
-        {% for item in results if not item.result.branches %}{% for s in item.result.sentences if s.sent_id in item.flagged %}
-        {% set ns.any = true %}
-        {{ ev_details(item.n, s) }}
-        {% endfor %}{% endfor %}
-        {% if not ns.any %}<p class="rv-note">지적된 문장이 없어 표시할 근거가 없어요.</p>{% endif %}
-      </div>
-      {% endif %}
     </div>
 
     {% for item in results %}
@@ -741,12 +883,14 @@
     </div>
     {% endif %}
 
-    <div class="rv-card">
-      <h2>판정 메타{% if results|length > 1 %} <span class="rv-count">문구 {{ item.n }}</span>{% endif %}</h2>
+    <details class="rv-card rv-dev">
+      <summary>개발자 정보 — 판정 메타{% if results|length > 1 %} · 문구 {{ item.n }}{% endif %}</summary>
       <table>
-        <tr><th>법령판</th><td>{{ result.law_version }}</td></tr>
+        <tr><th>법령판</th><td>{{ result.law_version|law_version_label }}</td></tr>
         <tr><th>판정 버전</th><td>{{ result.judged_by }}</td></tr>
         <tr><th>라운드</th><td>{{ result.attempt }}</td></tr>
+        {# 🆕 2026-10-12 (ksr · 안) — 인코더가 돌았는가. 돌지 않았으면 문장에 추정 줄이 없다 — 「추정 없음」과 가른다 #}
+        <tr><th>AI 추정</th><td>{{ "사용함" if result.judged_by|encoder_ran else "사용 안 함 — 문장에 AI 추정 유형이 나오지 않아요" }}</td></tr>
       </table>
       {% if result.timings %}
       <table>
@@ -755,19 +899,15 @@
         {% endfor %}
       </table>
       {% endif %}
-    </div>
+    </details>
     {% endfor %}
   {% else %}
     <div class="rv-card">
       <h2 class="rv-risk-head">위험도 <span class="rv-summary">검수 전</span></h2>
       <p class="rv-pending" style="text-align:center">
         왼쪽 문구칸 옆의 <b>검수 버튼</b>을 눌러주세요.<br>
-        <span class="rv-note">골든 픽스처를 눌러 각 분기가 어떻게 보이는지 확인할 수도 있어요.</span>
+        <span class="rv-note">문장마다 결과와 근거 조문이 여기에 나와요.</span>
       </p>
-      <div style="border-top:1px solid var(--u-line);margin-top:1rem;padding-top:.8rem">
-        <h2 class="rv-risk-head" style="font-size:.88rem">근거 보기 <span class="rv-count">조문 · 산출 내역</span></h2>
-        <p class="rv-note">검수를 하면 문장별 근거 조문이 여기에 쌓여요.</p>
-      </div>
     </div>
   {% endif %}
     {# 프로토타입 그대로 — 결과가 있든 없든 오른쪽 맨 아래에 둔다 #}
@@ -778,4 +918,6 @@
   </div>
 
 </div>
+{# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
+<script src="/static/user_count.js" defer></script>
 {% endblock %}

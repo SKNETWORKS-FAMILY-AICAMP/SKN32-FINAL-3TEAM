@@ -68,7 +68,7 @@
       <dt>결론</dt><dd>{{ opened.verdict }}</dd>
       {% if opened.hold_reason %}<dt>보류 사유</dt><dd>{{ opened.hold_reason }}</dd>{% endif %}
       <dt>위험도</dt><dd>{{ opened.risk_final if opened.risk_final is not none else "—" }}</dd>
-      <dt>법령 버전</dt><dd>{{ opened.law_version }}</dd>
+      <dt>법령 버전</dt><dd>{{ opened.law_version|law_version_label }}</dd>
       <dt>판정 시각</dt><dd>{{ opened.judged_at.strftime('%Y-%m-%d %H:%M') }}</dd>
     </dl>
     <p class="history-detail-note">⬜ 근거·질의응답은 아직 없다 — 붙으면 여기 채운다.</p>

@@ -45,14 +45,21 @@ def user_prompt(
     if inputs.name:
         facts.append(f"제품명: {inputs.name}")
     if inputs.kind:
-        facts.append(f"제품 유형: {inputs.kind}")
+        facts.append(f"제품 종류: {inputs.kind}")
     if inputs.phrase:
         facts.append(f"이용자가 적은 문구: {inputs.phrase}")
     if inputs.features:
         facts.append("특징: " + " / ".join(inputs.features))
     if inputs.ingredients:
         facts.append("성분·원료: " + ", ".join(inputs.ingredients))
-    if inputs.certs:
+    if inputs.certs and branch.needs_fixed:
+        # 🔄 2026-10-12 — 고정 문구 분기에서는 인증 이름이 「문구에 쓸 사실」로 읽히지 않게 한다. 종전에는 「인증 사실:」 한 줄이라
+        #    gpt-6-luna 가 자리표시자 대신 인증 이름(「…, 미백 기능성화장품 심사」)을 적어 그 모델의 후보가 전부 떨어졌다(10-12 실행 · 20/20)
+        facts.append(
+            "받은 심사 · 인정(문구에 적지 않는다 — 이 내용은 고정 문구 자리가 대신 말한다): "
+            + ", ".join(inputs.certs)
+        )
+    elif inputs.certs:
         facts.append("인증 사실: " + ", ".join(inputs.certs))
     if inputs.target:
         facts.append(f"대상: {inputs.target}")
@@ -80,7 +87,11 @@ def user_prompt(
     if branch.needs_fixed:
         parts.append(
             f"[고정 문구] 기능성은 직접 쓰지 말고 {PLACEHOLDER} 를 문구마다 정확히 한 번 넣는다. "
-            "그 자리에 인정 · 심사 문구가 글자 그대로 들어간다."
+            "그 자리에 인정 · 심사 문구가 글자 그대로 들어간다. "
+            f"{PLACEHOLDER} 는 중괄호까지 이 글자 그대로 쓴다 — 심사 · 인정의 이름이나 다른 말로 바꿔 적지 않는다. "
+            f"그 자리에는 완결된 문장이 들어간다 — {PLACEHOLDER} 는 문구의 맨 끝에 쉼표 · 마침표 뒤로 두거나, "
+            f"맨 앞에 두고 줄표(—)로 잇는다. 조사를 붙이거나({PLACEHOLDER}로 · {PLACEHOLDER}와) "
+            "문장 가운데에 끼우지 않고, 꾸미는 말 바로 뒤에 붙이지 않는다."
         )
     if kept:
         parts.append(
@@ -210,7 +221,7 @@ class FakeLLM:
     ) -> list[dict[str, str]]:
         feat = inputs.features[0] if inputs.features else "가볍게"
         ingr = inputs.ingredients[0] if inputs.ingredients else "원료"
-        fx = f" {PLACEHOLDER}" if branch.needs_fixed else ""
+        fx = f", {PLACEHOLDER}" if branch.needs_fixed else ""
         inputs = dataclasses.replace(
             inputs, name=inputs.name or "이 제품", kind=inputs.kind or branch.category
         )
