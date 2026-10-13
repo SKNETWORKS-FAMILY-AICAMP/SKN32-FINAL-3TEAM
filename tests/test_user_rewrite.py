@@ -149,8 +149,9 @@ def test_사유_A는_고쳐_쓰지_않는다(wired) -> None:  # noqa: ANN001
 @pytest.mark.parametrize(
     ("out", "want"),
     [
-        ({"outcome": "infeasible", "infeasible": "거짓_과장"}, "합법화 불가"),
-        ({"outcome": "infeasible", "infeasible": "지어낸 사유"}, "유형 미상"),
+        # 🔄 2026-10-14 (D-323 보충 개정) — 서버의 「고칠 수 없음」은 유형과 무관하게 「만들지 못했어요」다
+        ({"outcome": "infeasible", "infeasible": "거짓_과장"}, "고쳐 쓴 문장을 만들지 못했어요"),
+        ({"outcome": "infeasible", "infeasible": "지어낸 사유"}, "고쳐 쓴 문장을 만들지 못했어요"),
         ({"outcome": "hold", "reasons": ["원문에 없는 낱말: 곶감"]}, "원문에 없는 낱말: 곶감"),
         ({"outcome": "hold", "reasons": ["원문 그대로"]}, "고칠 곳을 찾지 못했어요"),
     ],
@@ -162,6 +163,102 @@ def test_후보가_아닌_종착을_그린다(wired, out: dict, want: str) -> No
     assert want in html
     assert "고친 문구 후보" not in html
     assert "지어낸 사유" not in html, "🔴 모델이 지어낸 불가 사유를 그렸다"
+
+
+# ── 🆕 2026-10-14 (D-323 보충) — 사전 유형이 없고 인코더 추정 유형만 있는 문장 ─────────────────────
+
+
+def _guessed(name: str = "02_hold_low_conf"):  # noqa: ANN202
+    """원문 판정의 첫 문장에서 사전 유형을 지우고 인코더 유형 후보 하나를 싣는다."""
+    from app.contracts import EncoderTypeCandidate, Violation  # noqa: PLC0415
+
+    res = _fixture(name)
+    cand = EncoderTypeCandidate(violation=Violation.소비자_기만, confidence=0.8)
+    first = res.sentences[0].model_copy(update={"violations": [], "encoder_candidates": [cand]})
+    return res.model_copy(update={"sentences": [first, *res.sentences[1:]]})
+
+
+@pytest.mark.gate
+def test_추정_유형만_있는_문장은_그_유형으로_고쳐_쓴다(wired) -> None:  # noqa: ANN001
+    """🔴 D-323 보충 — 사전 유형이 없으면 인코더 추정 유형(`reasons.guessed_types`)을 생성 서버에 넘긴다."""
+    wired.judge_out[ORIGINAL] = ("ok", _guessed())
+    html = _go()
+    assert wired.sllm == [(ORIGINAL, ["소비자_기만"])], "🔴 추정 유형으로 부르지 않았다"
+    assert "고친 문구 후보" in html
+
+
+@pytest.mark.gate
+def test_추정_유형의_고칠_수_없음은_합법화_불가로_그리지_않는다(wired) -> None:  # noqa: ANN001
+    """🔴 D-323 보충 · D-59 — 「합법화 불가」는 코드의 불가 사유만 말한다. 추정 유형은 틀릴 수 있다."""
+    from app import reasons  # noqa: PLC0415
+
+    wired.judge_out[ORIGINAL] = ("ok", _guessed())
+    base = {"rewrite": None, "reasons": [], "repairs": [], "model": "v14", "latency_ms": 5000}
+    wired.sllm_out = ("ok", {**base, "outcome": "infeasible", "infeasible": "소비자_기만"})
+    html = _go()
+    assert "합법화 불가" not in html, "🔴 추정 유형의 「고칠 수 없음」을 합법화 불가로 그렸다"
+    assert reasons.REWRITE_INFEASIBLE_TEXT in html and "AI 추정 유형 기준" in html
+
+
+@pytest.mark.gate
+def test_사전_유형의_고칠_수_없음도_합법화_불가로_그리지_않는다(wired) -> None:  # noqa: ANN001
+    """🔴 D-323 보충 개정(10-14) · D-10 — 「불가」는 코드의 불가 사유만 말한다. 원문 판정은 보류(사유 없음)라 카드에도 「불가」가 없다."""
+    from app import reasons  # noqa: PLC0415
+
+    base = {"rewrite": None, "reasons": [], "repairs": [], "model": "v14", "latency_ms": 5000}
+    wired.sllm_out = ("ok", {**base, "outcome": "infeasible", "infeasible": "거짓_과장"})
+    html = _go()
+    assert "합법화 불가" not in html, "🔴 생성 서버의 「고칠 수 없음」을 합법화 불가로 그렸다"
+    assert reasons.REWRITE_INFEASIBLE_TEXT in html and "AI 추정 유형 기준" not in html
+
+
+def _light_enc(enc=("거짓_과장",)):  # noqa: ANN001, ANN202
+    """재판정 가짜 — 사전은 지났고 인코더 유형 후보가 남았다."""
+    light = _light()
+    light.sentences[0].encoder_candidates = [
+        SimpleNamespace(violation=SimpleNamespace(value=v)) for v in enc
+    ]
+    return light
+
+
+@pytest.mark.gate
+def test_재판정에_인코더_유형이_남으면_표지를_단다(wired) -> None:  # noqa: ANN001
+    """🔴 D-323 결정 4 — 「위반 못 찾음 + 인코더 주의」. 판정이 아니다 — 상태는 그대로다."""
+    from app import reasons  # noqa: PLC0415
+
+    wired.judge_out[BODY] = ("ok", _light_enc())
+    html = _go()
+    assert "위반 못 찾음 (통과 아님)" in html
+    assert reasons.ENC_REMAINS_MARK in html and "거짓 과장" in html
+
+
+def test_다듬은_안에만_추정_유형이_남으면_담백한_안을_올린다(wired) -> None:  # noqa: ANN001
+    wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN})
+    wired.judge_out[BODY] = ("ok", _light_enc())
+    wired.judge_out[PLAIN] = ("ok", _light())
+    html = _go()
+    assert "고친 문구 후보" in html and PLAIN in html
+    assert "담백한 안" not in html, "🔴 추정 유형이 남은 다듬은 안을 그대로 후보로 두었다"
+
+
+def test_검수_화면은_추정_유형만_있는_문장에도_고쳐_쓰기_버튼을_단다(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import json  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api as api  # noqa: PLC0415
+
+    raw = json.loads(_guessed().model_dump_json())
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "guessed.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(api, "FIXTURE_ROOT", tmp_path)
+    html = TestClient(api.app).get("/u/preview/guessed").text
+    assert 'action="/u/review/rewrite"' in html
+    assert "AI 추정 유형 기준" in html
 
 
 @pytest.mark.parametrize("target", ["", "1", "x:s1", "1:s1;rm", "9:s1"])

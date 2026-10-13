@@ -45,6 +45,7 @@
   {% elif rw.rejudge.status == "unjudged" %}<span class="rv-chip">재판정 못 함 — 판정을 마치지 못한 문장이 있음 (통과 아님)</span>
   {% else %}<span class="rv-chip">재판정 못 함 — 판정 코어 연결 실패</span>{% endif %}
   {% if "low_conf" in (rw.rejudge.hold_reasons or []) %}<span class="rv-chip">확신 부족</span>{% endif %}
+  {% if rw.rejudge.enc_types %}<span class="rv-chip c-warn">{{ ENC_REMAINS_MARK }} · {{ rw.rejudge.enc_types|join(" · ")|replace("_", " ") }}</span>{% endif %}
   {% for r in rw.out.repairs %}<br><span class="rv-note">후처리 · {{ r }}</span>{% endfor %}
   {% if rw.plain %}
   {# 🆕 2026-10-12 — 위는 2단계가 자연스럽게 다듬은 안 · 이것은 위반만 지운 1단계 안(더 담백하고 더 안전) #}
@@ -54,12 +55,15 @@
   {% elif rw.plain.rejudge.status == "no_violation" %}<span class="rv-chip c-violation">재판정 · 위반 못 찾음 (통과 아님)</span>
   {% elif rw.plain.rejudge.status == "unjudged" %}<span class="rv-chip">재판정 못 함 — 판정을 마치지 못한 문장이 있음 (통과 아님)</span>
   {% else %}<span class="rv-chip">재판정 못 함 — 판정 코어 연결 실패</span>{% endif %}
+  {% if rw.plain.rejudge.enc_types %}<span class="rv-chip c-warn">{{ ENC_REMAINS_MARK }} · {{ rw.plain.rejudge.enc_types|join(" · ")|replace("_", " ") }}</span>{% endif %}
   </div>
   {% endif %}
 
   {% elif rw.out.outcome == "infeasible" %}
-  <b>합법화 불가</b> · {{ rw.out.infeasible|replace("_", " ") if rw.out.infeasible else "유형 미상" }}
-  — 표현을 바꿔도 같은 위반이 남아 살릴 사실이 없어요.
+  {#- 🔄 2026-10-14 (D-323 보충 개정 · D-10 · D-59) — 생성 서버의 「고칠 수 없음」을 「합법화 불가」로 그리지 않는다.
+      불가는 코드의 불가 사유만 말한다 — 문장 카드의 사유 줄이 그 말이다. 서버가 댄 유형도 그리지 않는다 #}
+  <b>{{ rw.infeasible_note }}</b>{% if rw.guessed %} · AI 추정 유형 기준{% endif %}
+  — 고쳐 쓰기 모델이 표현을 바꿔도 같은 문제가 남는다고 보고 멈췄어요. 이 문장의 판정은 위 카드를 따르세요.
 
   {% else %}
   <b>보류 — 사람 검토 필요</b><br>
