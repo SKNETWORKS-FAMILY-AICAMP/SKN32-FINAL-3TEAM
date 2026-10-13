@@ -45,7 +45,7 @@ def test_상단_pill은_구역_넷뿐이다() -> None:
 
     from app.api import app  # noqa: PLC0415
 
-    body = TestClient(app).get("/u/").text
+    body = TestClient(app).get("/u/review").text
     for label in ("copylane 소개", "검수 및 카피생성", "AI 광고 생성", "매칭"):
         assert f">{label}</a>" in body, f"🔴 상단 pill에 「{label}」이 없다"
     assert "고객센터" not in body, "🔴 고객센터가 상단 pill로 새어나왔다 — 사이드바 하단이어야 한다"
@@ -205,6 +205,21 @@ def test_랜딩은_governor_로그인이_아니라_일반_회원_로그인으로
     body = TestClient(app).get("/u/landing").text
     assert 'href="/u/login"' in body
     assert 'href="/u/signup"' in body
+
+
+def test_로그인_전에_들어오면_랜딩이_첫_화면이다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-10-14 (사용자 요청) — 로그인 전 `/u/` 는 그 자리에서 랜딩을 그린다(로그인 벽 아님 · D-66). 「copylane 소개」 메뉴는 랜딩이 아니라 사용방법이다."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    monkeypatch.setattr(user_router, "reachable", lambda _s: True)
+    monkeypatch.setattr(user_router, "current_user", lambda *_a: None)
+    r = TestClient(app).get("/u/", follow_redirects=False)
+    assert r.status_code == 200 and "ld-hero" in r.text, "🔴 로그인 전 첫 화면이 랜딩이 아니다"
+    body = TestClient(app).get("/u/review").text
+    assert 'href="/u/help?tab=guide">copylane 소개</a>' in body
 
 
 @pytest.mark.gate
