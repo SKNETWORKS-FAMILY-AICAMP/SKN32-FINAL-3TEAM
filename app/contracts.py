@@ -282,6 +282,10 @@ class EvidenceArticle(BaseModel):
     #:    ⛔ enum 이 아니라 참거짓이다 — enum 은 DB 값과 맞춰야 하는 규칙(D-54)을 끌고 온다. 둘뿐이라 참거짓으로 족하다.
     #:    🚨 기본값은 거짓(참고) — 칸을 모르는 쪽이 만든 근거가 「판정 근거」로 읽히지 않게 (D-220).
     basis: bool = False
+    #: 🆕 2026-10-12 (D-293 개정 안건 3 (가)) — **문서 이름**(「표시ㆍ광고 내용의 실증에 관한 운영 고시」 · 「…[별표 1] 부당한 표시 또는 광고의 내용」).
+    #:    산문 고시 좌표 「Ⅱ.1」 은 고시 이름 없이 뜻이 서지 않는다. 🚨 **좌표가 아니다** — 좌표는 `law_id` + `article` 이다.
+    #:    `None` = 이름을 모른다(사전 근거처럼 청크 없이 만든 근거). 화면은 이름이 없으면 `law_id` 로 적는다.
+    doc_title: str | None = None
 
 
 class RiskAssessment(BaseModel):
@@ -417,6 +421,12 @@ class EncoderTypeCandidate(BaseModel):
     #:    (인정하지 않은 기능성 · 거짓_과장)가 선다 — 사전 적중과 같은 규칙이다(`app/graph.py` `_premise_hits` · D-319 ④′ ②).
     #:    🚨 이때 `confidence` 는 **옮기기 전 유형**의 확률이다. 화면 · 평가는 이 칸으로 「옮긴 후보」를 가른다
     moved_from: Violation | None = None
+    #: 🆕 2026-10-12 (D-327) — **참조 조항** — 이 유형을 정한 금지 조항과 세부 기준. 문장이 보내진 법마다 따로 실린다.
+    #:    🚨 **이 문구에서 찾아낸 근거가 아니다** — 「이 유형이라면 이 조항」이다. `SentenceJudgment.evidence`(사전이 인용한 근거 ·
+    #:       검색이 찾은 참고 조문)와 섞지 않는다 (D-323 결정 2 · 3). `basis` 는 늘 거짓이다 — 판정이 기대는 조문이 아니다.
+    #:    🔴 비어 있으면 「그 법에 이 유형의 조항이 없다」다(예: 화장품법의 건강기능식품 오인) — 조항이 없다고 후보가 틀린 것은 아니다.
+    #:       좌표만 있고 `quote` 가 비면 원문을 못 붙인 것이다(DB 없음 · 인용 자격 없음 · 쪼갠 조각) — 좌표는 표가 정한 값이다.
+    references: list[EvidenceArticle] = Field(default_factory=list)
 
 
 class SentenceJudgment(BaseModel):

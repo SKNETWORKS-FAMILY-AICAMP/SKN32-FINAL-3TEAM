@@ -135,12 +135,14 @@
     "EncoderTypeCandidate": {
       "confidence": "req builtins.float",
       "moved_from": "opt app.contracts.Violation | None",
+      "references": "opt list[app.contracts.EvidenceArticle]",
       "violation": "req app.contracts.Violation"
     },
     "EvidenceArticle": {
       "article": "req builtins.str",
       "basis": "opt builtins.bool",
       "chunk_id": "opt str | None",
+      "doc_title": "opt str | None",
       "item": "opt builtins.str",
       "law_id": "req builtins.str",
       "quote": "opt str | None"

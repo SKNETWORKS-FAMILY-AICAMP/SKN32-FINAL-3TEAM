@@ -177,8 +177,140 @@ def fair(ho: int) -> str:
     return cite(*FAIR, ho)
 
 
+# ── 참조 조항표 (🆕 2026-10-12 · D-327) ──────────────────────────────────────────
+#: 유형 후보 옆에 「이 유형을 정한 조항」으로 보여 줄 좌표 — **(유형 · 법 축) → 금지 조항과 세부 기준**.
+#:    ★ 방향이 `_HO` · `_MOK`(조문 → 유형 · D-282)와 **반대**다. 그 표에서 뽑을 수 있는 줄은 뽑고(`references`), 여기에는
+#:      그 표에 없는 대응만 적는다 — 두 표가 따로 놀지 않게 (D-99).
+#:    🚨 **보여 주는 값이다 — 라벨 · 채점 · 판정을 바꾸지 않는다.** 화장품법 제13조제1항제4호는 여전히 유형을 주지 않는다
+#:       (`type_of` 는 None · 그 행은 「유형 없는 위반」으로 채점에서 빠진다 · D-321).
+#:    좌표 꼴은 `법ID:` + 검색 좌표(`app/retrieve.py` `citation()` 이 내는 글자)다 — 청크를 그 좌표로 찾는다.
+#: 세부 기준이 든 하위 규범 — 🚨 법 ID 는 `collect/law_map.LAW_OF_ID` 에 있는 값이다(아래에서 대조한다)
+FOOD_ANNEX = "013453:[별표 1]"  # 식품표시광고법 시행령 [별표 1] 부당한 표시 또는 광고의 내용 — 호 번호가 법 제8조제1항과 대응한다(D-281)
+FAIR_DECREE = "005361:제3조"  # 표시광고법 시행령 제3조 — 제n항이 법 제3조제1항제n호를 푼다
+COSM_ANNEX = (
+    "008741:[별표 5]제2호"  # 화장품법 시행규칙 [별표 5] 제2호 — 화장품 표시 · 광고 시 준수사항
+)
+
+#: 화장품법의 대응 — **[문헌] 조문 원문 대조 + 판정(D-327 · 2026-10-12)**. `_HO` 에 없는 줄이다.
+#:    제13조제1항제4호(「그 밖에 사실과 다르게 …」)는 호만으로 유형을 못 가르지만, 거짓 · 과장과 기만 후보에 **보여 줄** 조항이다.
+#:    [별표 5] 제2호 — 가 의약품 오인 / 나 기능성화장품 오인 / 바 비교 · 「최고」 / 사 사실과 다름 · 속임 / 아 확인되지 않은 효능 / 카 비방
+_COSM_REF: dict[str, tuple[str, ...]] = {
+    "거짓_과장": (f"{COSM[0]}:제13조제1항제4호", f"{COSM_ANNEX}사목", f"{COSM_ANNEX}아목"),
+    "소비자_기만": (f"{COSM[0]}:제13조제1항제4호", f"{COSM_ANNEX}사목"),
+    "부당_비교광고": (f"{COSM_ANNEX}바목",),
+    "비방광고": (f"{COSM_ANNEX}카목",),
+    "의약품_오인": (f"{COSM_ANNEX}가목",),
+    "기능성화장품_오인": (f"{COSM_ANNEX}나목",),
+}
+
+
+def _detail(law_id: str, ho: int, mok: str | None = None) -> str | None:
+    """법률의 호 → 그 호를 푼 세부 기준 좌표. 화장품법은 `_COSM_REF` 가 맡는다 — 여기서는 None."""
+    if law_id == FOOD[0]:
+        return f"{FOOD_ANNEX}제{ho}호" + (f"{mok}목" if mok else "")
+    if law_id == FAIR[0]:
+        return f"{FAIR_DECREE}제{ho}항"
+    return None
+
+
+def reference_of_cite(c: str) -> tuple[str, ...]:
+    """위반 인용 하나 → 보여 줄 좌표(금지 조항 · 세부 기준). 꼴이 틀리면 `ValueError`(`parse`) — 지어내지 않는다.
+
+    옮긴 후보([별표 1] 4.나 · `app/premise.UNRECOGNIZED_FUNCTION_CITE`)처럼 **인용이 이미 정해진** 후보가 쓴다.
+    """
+    law_id, jo, hang, ho, mok = parse(c)
+    out = [f"{law_id}:제{jo}조제{hang}항제{ho}호"]
+    if (d := _detail(law_id, ho, mok)) is not None:
+        out.append(d)
+    return tuple(out)
+
+
+def references(violation: str, law: str) -> tuple[str, ...]:
+    """(유형 · 법 축) → 보여 줄 좌표들 — 금지 조항 먼저, 세부 기준 뒤. 🔴 그 법에 그 유형의 조항이 없으면 **빈 튜플**이다.
+
+    ⛔ 빈칸을 다른 법의 조항으로 메우지 않는다 — 없음이 「다른 조항」으로 보이지 않게 (D-220).
+    """
+    out: list[str] = []
+    for (law_id, jo, hang, ho), t in _HO.items():
+        if t == violation and LAW_OF_ID.get(law_id) == law:
+            out += reference_of_cite(cite(law_id, jo, hang, ho))
+    for (law_id, jo, hang, ho, mok), t in _MOK.items():
+        if t == violation and LAW_OF_ID.get(law_id) == law:
+            out += reference_of_cite(cite(law_id, jo, hang, ho, mok))
+    if law == LAW_OF_ID[COSM[0]]:
+        out += _COSM_REF.get(violation, ())
+    return tuple(dict.fromkeys(out))
+
+
+# 🔴 표가 어긋나면 import 에서 멈춘다 (D-220) — 모르는 법 ID 의 좌표는 청크를 못 찾고 조용히 좌표만 나간다
+for _c in (FOOD_ANNEX, FAIR_DECREE, COSM_ANNEX, *(c for v in _COSM_REF.values() for c in v)):
+    if _c.split(":", 1)[0] not in LAW_OF_ID:
+        raise RuntimeError(
+            f"🔴 참조 조항표의 법 ID 를 모른다 — {_c!r} (`collect/law_map.LAW_OF_ID`)"
+        )
+if {LAW_OF_ID[c.split(":", 1)[0]] for v in _COSM_REF.values() for c in v} != {LAW_OF_ID[COSM[0]]}:
+    raise RuntimeError("🔴 `_COSM_REF` 에 화장품법이 아닌 좌표가 있다 (D-327)")
+
+
 def table() -> list[tuple[str, str]]:
     """(인용, 파생 유형) 전부 — DB `violation_article` 적재와 게이트가 읽는다."""
     got = [(cite(*k), v) for k, v in _HO.items()]
     got += [(cite(k[0], k[1], k[2], k[3], k[4]), v) for k, v in _MOK.items()]
     return sorted(got)
+
+
+# ── 참고 조문으로 싣는 법령 조문 (🆕 2026-10-12 · D-329) ──────────────────────────────────────────
+#: 판정 화면의 참고 조문(검색 근거 · `basis=False`)으로 실어도 되는 **법령 본문의 조**. 표에 없는 조는 싣지 않는다 (D-220).
+#: 🚨 `[판정]` D-329 — 고르는 기준(조문 내용으로 판단):
+#:    a 광고 내용의 금지 · 기준   b 실증   c 광고 전후의 의무(사전 심의 · 광고에 넣을 사항 · 대상별 자료)
+#:    d 주장의 범주를 정하는 정의(기능성화장품 · 건강기능식품 등)
+#:    ⛔ 빼는 것 — 매체 · 용어의 일반 정의(표시광고법 제2조 · 시행령 제2조 「광고의 방법」) · 조직 · 절차 · 제재 · 행정
+#: 🔴 **제목을 같이 적는다** — 실행할 때 DB 의 조 제목과 다르면 그 조를 싣지 않는다(`app/graph.py` `body_scope`).
+#:    개정으로 조 번호가 밀려 다른 조문을 가리키는 것을 막는다.
+#: ★ 고르는 절차(D-329) — ① 후보: 광고 조항(금지 · 실증 · 광고 기준 · 심의 · 정의)과 그 조항을 위임받은 하위법령 조문
+#:    (본문의 「법 제N조」) ② 위 기준으로 고른다 ③ 줄마다 기준과 제목을 남긴다. 뺀 후보와 사유는 D-329 초안의 「뺀 조문」이다.
+#: ⛔ 판정 · 사전 인용 근거 · D-327 참조 조항은 이 표를 읽지 않는다 — 참고 조문의 범위만 정한다.
+REFERENCE_ARTICLES: tuple[tuple[str, str, str, str], ...] = (
+    ("002011", "제3조", "부당한 표시ㆍ광고 행위의 금지", "a"),
+    ("002011", "제4조", "중요정보의 고시 및 통합공고", "a"),
+    ("002011", "제5조", "표시ㆍ광고 내용의 실증 등", "b"),
+    ("005361", "제3조", "부당한 표시ㆍ광고의 내용", "a"),
+    ("005361", "제4조", "실증방법 등", "b"),
+    ("005361", "제5조", "실증자료", "b"),
+    ("005361", "제6조", "실증자료의 공개", "b"),
+    ("013094", "제2조", "정의", "d"),
+    ("013094", "제7조", "광고의 기준", "c"),
+    ("013094", "제8조", "부당한 표시 또는 광고행위의 금지", "a"),
+    ("013094", "제8조의2", "마약류 표시ㆍ광고 영업자 등에 대한 권고", "a"),
+    ("013094", "제9조", "표시 또는 광고 내용의 실증", "b"),
+    ("013094", "제10조", "표시 또는 광고의 자율심의", "c"),
+    ("013453", "제2조", "부당한 표시 또는 광고행위의 금지 대상", "a"),
+    ("013453", "제3조", "부당한 표시 또는 광고의 내용", "a"),
+    ("013475", "제8조", "광고의 기준", "c"),
+    ("013475", "제8조의2", "식품등이 아닌 물품의 범위", "a"),
+    ("013475", "제8조의3", "마약류 등 표시ㆍ광고의 범위", "a"),
+    ("013475", "제9조", "실증방법 등", "b"),
+    ("013475", "제10조", "표시 또는 광고 심의 대상 식품등", "c"),
+    ("002015", "제2조", "정의", "d"),
+    ("002015", "제4조의2", "영유아 또는 어린이 사용 화장품의 관리", "c"),
+    ("002015", "제13조", "부당한 표시ㆍ광고 행위 등의 금지", "a"),
+    ("002015", "제14조", "표시ㆍ광고 내용의 실증 등", "b"),
+    ("008741", "제2조", "기능성화장품의 범위", "d"),
+    ("008741", "제10조의2", "영유아 또는 어린이 사용 화장품의 표시ㆍ광고", "c"),
+    ("008741", "제22조", "표시ㆍ광고의 범위 등", "a"),
+    ("008741", "제23조", "표시ㆍ광고 실증의 대상 등", "b"),
+)
+#: 고시 안의 상투 조문 — 고시 이름에 「광고」가 있어도 싣지 않는다(D-329 안건 2). 법령 본문은 표가 이미 이 조들을 뺀다.
+BOILERPLATE_TITLES: frozenset[str] = frozenset(
+    {"목적", "규제의 재검토", "재검토 기한", "재검토기한"}
+)
+
+# 🔴 표가 어긋나면 import 에서 멈춘다 (D-220)
+_ARTICLE_KEY = re.compile(r"^제\d+조(?:의\d+)?$")
+for _lid, _art, _title, _crit in REFERENCE_ARTICLES:
+    if _lid not in LAW_OF_ID or not _ARTICLE_KEY.match(_art) or _crit not in "abcd" or not _title:
+        raise RuntimeError(
+            f"🔴 참고 조문 표의 줄이 어긋났다 — {(_lid, _art, _title, _crit)!r} (D-329)"
+        )
+if len({(r[0], r[1]) for r in REFERENCE_ARTICLES}) != len(REFERENCE_ARTICLES):
+    raise RuntimeError("🔴 참고 조문 표에 같은 조가 두 번 있다 (D-329)")

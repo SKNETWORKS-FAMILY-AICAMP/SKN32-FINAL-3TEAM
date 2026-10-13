@@ -624,6 +624,15 @@ def _no_dict_db(monkeypatch: pytest.MonkeyPatch) -> None:
     # 🆕 2026-10-08 (근거 표시 「(나)」) — 사전 근거에 원문을 붙이는 조회도 문자열 커서로는 못 한다. 「못 찾음」(빈 표)과 같은 대역이다 —
     #    근거는 원문 없는 좌표로 간다(종전과 같다)
     monkeypatch.setattr(g, "basis_texts", lambda cur, cites: {})
+    # 🆕 2026-10-12 (D-327) — 참조 조항의 원문도 같은 커서로 읽는다. 대역 커서로는 못 읽으니 비운다 — 좌표만 간다
+    monkeypatch.setattr(g, "reference_texts", lambda cur: {})
+    # 🆕 2026-10-12 (D-328) — 참고 조문으로 실을 별표도 같은 커서로 읽는다. 대역 커서로는 못 읽으니 비운다 — 별표는 참고 조문에서 빠진다(안전 쪽)
+    monkeypatch.setattr(g, "annex_scope", lambda cur: ())
+    # 🆕 2026-10-12 (D-329) — 본문 범위도 같은 커서로 읽는다. 비운다 — 본문도 참고 조문에서 빠진다(안전 쪽)
+    monkeypatch.setattr(g, "body_scope", lambda cur: ())
+    #    🚨 이 파일의 게이트는 근거의 **흐름**(커서 · 법별 노드 · `LAW_TOP_K` · 좌표)을 본다 — 범위 거름은 `tests/test_reference_scope.py` 가 본다.
+    #       대역 근거의 법 ID 가 지어낸 값이라 범위를 통과시킨다(거름을 끄는 것이지 판정을 바꾸는 것이 아니다)
+    monkeypatch.setattr(g, "in_reference_scope", lambda hit, scope, body=frozenset(): True)
 
 
 def _fake_wide(vec: list[object], lex: list[object] | None = None, **state_kw: object):  # noqa: ANN202
