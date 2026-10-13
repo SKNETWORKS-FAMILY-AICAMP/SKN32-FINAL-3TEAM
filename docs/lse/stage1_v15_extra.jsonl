@@ -1,0 +1,50 @@
+{"id": "x001", "group": "실증보강", "input": "지역 최고의 강사진, 수학 전문 강의", "violation_types": ["거짓_과장"], "output": {"body": "수학 전문 강의", "mandatory_note": null, "placement": null}}
+{"id": "x002", "group": "실증보강", "input": "경험이 풍부한 전문 상담사가 1:1 상담", "violation_types": ["거짓_과장"], "output": {"body": "전문 상담사의 1:1 상담", "mandatory_note": null, "placement": null}}
+{"id": "x003", "group": "실증보강", "input": "학부모가 가장 많이 추천하는 영어 학원, 원어민 회화 수업", "violation_types": ["거짓_과장"], "output": {"body": "원어민 회화 수업을 하는 영어 학원", "mandatory_note": null, "placement": null}}
+{"id": "x004", "group": "실증보강", "input": "국내 유일의 친환경 공법으로 지은 전원주택 단지", "violation_types": ["거짓_과장"], "output": {"body": "친환경 공법으로 지은 전원주택 단지", "mandatory_note": null, "placement": null}}
+{"id": "x005", "group": "실증보강", "input": "최상급 실력의 셰프가 만드는 코스 요리, 제철 해산물 사용", "violation_types": ["거짓_과장"], "output": {"body": "제철 해산물을 사용한 코스 요리", "mandatory_note": null, "placement": null}}
+{"id": "x006", "group": "실증보강", "input": "업계 최고 수준의 보안 기술을 갖춘 클라우드 저장소", "violation_types": ["거짓_과장"], "output": {"body": "클라우드 저장소", "mandatory_note": null, "placement": null}}
+{"id": "x007", "group": "실증보강", "input": "누구나 인정하는 명품 가구, 원목 수작업 제작", "violation_types": ["거짓_과장"], "output": {"body": "원목으로 수작업 제작한 가구", "mandatory_note": null, "placement": null}}
+{"id": "x008", "group": "실증보강", "input": "합격률이 가장 높은 자격증 과정, 주말반 운영", "violation_types": ["거짓_과장"], "output": {"body": "주말반으로 운영하는 자격증 과정", "mandatory_note": null, "placement": null}}
+{"id": "x009", "group": "실증보강", "input": "최고의 입지를 자랑하는 오피스텔, 역에서 도보권", "violation_types": ["거짓_과장"], "output": {"body": "역에서 도보권인 오피스텔", "mandatory_note": null, "placement": null}}
+{"id": "x010", "group": "실증보강", "input": "전문가들이 극찬한 노트북, 알루미늄 바디", "violation_types": ["거짓_과장"], "output": {"body": "알루미늄 바디 노트북", "mandatory_note": null, "placement": null}}
+{"id": "x011", "group": "실증보강", "input": "가장 안전한 카시트, 회전형 설계", "violation_types": ["거짓_과장"], "output": {"body": "회전형 설계 카시트", "mandatory_note": null, "placement": null}}
+{"id": "x012", "group": "실증보강", "input": "탁월한 연비를 자랑하는 하이브리드 SUV", "violation_types": ["거짓_과장"], "output": {"body": "하이브리드 SUV", "mandatory_note": null, "placement": null}}
+{"id": "x013", "group": "실증보강", "input": "소비자가 가장 만족한 이사 서비스, 포장 이사 전문", "violation_types": ["거짓_과장"], "output": {"body": "포장 이사 전문 이사 서비스", "mandatory_note": null, "placement": null}}
+{"id": "x014", "group": "실증보강", "input": "최강 흡입력 무선 청소기, 거치대 포함", "violation_types": ["거짓_과장"], "output": {"body": "거치대가 포함된 무선 청소기", "mandatory_note": null, "placement": null}}
+{"id": "x015", "group": "실증보강", "input": "검증된 실력의 집필진이 만든 문제집, 단원별 구성", "violation_types": ["거짓_과장"], "output": {"body": "단원별로 구성한 문제집", "mandatory_note": null, "placement": null}}
+{"id": "x016", "group": "실증보강", "input": "엄마들이 입소문 낸 유아 매트, 접이식", "violation_types": ["거짓_과장"], "output": {"body": "접이식 유아 매트", "mandatory_note": null, "placement": null}}
+{"id": "x017", "group": "실증보강", "input": "독보적인 기술력의 정수기, 직수형", "violation_types": ["거짓_과장"], "output": {"body": "직수형 정수기", "mandatory_note": null, "placement": null}}
+{"id": "x018", "group": "실증보강", "input": "다년간의 노하우를 가진 시공팀이 욕실 리모델링", "violation_types": ["거짓_과장"], "output": {"body": "욕실 리모델링 시공", "mandatory_note": null, "placement": null}}
+{"id": "x019", "group": "실증보강", "input": "완벽한 방음 설계 원룸, 복층 구조", "violation_types": ["거짓_과장"], "output": {"body": "복층 구조 원룸", "mandatory_note": null, "placement": null}}
+{"id": "x020", "group": "실증보강", "input": "전국 최대 규모 캠핑장, 계곡 옆 위치", "violation_types": ["거짓_과장"], "output": {"body": "계곡 옆 캠핑장", "mandatory_note": null, "placement": null}}
+{"id": "x021", "group": "효능보강", "input": "세균을 박멸하는 스팀 다리미, 세라믹 열판", "violation_types": ["거짓_과장"], "output": {"body": "세라믹 열판 스팀 다리미", "mandatory_note": null, "placement": null}}
+{"id": "x022", "group": "효능보강", "input": "미세먼지를 걸러 주는 방충망, 촘촘한 망사", "violation_types": ["거짓_과장"], "output": {"body": "촘촘한 망사 방충망", "mandatory_note": null, "placement": null}}
+{"id": "x023", "group": "효능보강", "input": "냄새를 없애 주는 음식물 처리기, 건조 분쇄 방식", "violation_types": ["거짓_과장"], "output": {"body": "건조 분쇄 방식 음식물 처리기", "mandatory_note": null, "placement": null}}
+{"id": "x024", "group": "효능보강", "input": "곰팡이를 막아 주는 욕실 실리콘, 흰색", "violation_types": ["거짓_과장"], "output": {"body": "흰색 욕실 실리콘", "mandatory_note": null, "placement": null}}
+{"id": "x025", "group": "효능보강", "input": "유해 물질을 차단하는 정수 필터, 교체형 카트리지", "violation_types": ["거짓_과장"], "output": {"body": "교체형 카트리지 정수 필터", "mandatory_note": null, "placement": null}}
+{"id": "x026", "group": "효능보강", "input": "진드기를 없애는 침구 청소기, UV 램프 장착", "violation_types": ["거짓_과장"], "output": {"body": "UV 램프를 장착한 침구 청소기", "mandatory_note": null, "placement": null}}
+{"id": "x027", "group": "효능보강", "input": "배출가스를 크게 줄인 신형 트럭, 디젤 엔진", "violation_types": ["거짓_과장"], "output": {"body": "디젤 엔진 신형 트럭", "mandatory_note": null, "placement": null}}
+{"id": "x028", "group": "효능보강", "input": "바이러스를 제거하는 공기청정기, 헤파필터 장착", "violation_types": ["소비자_기만"], "output": {"body": "헤파필터를 장착한 공기청정기", "mandatory_note": null, "placement": null}}
+{"id": "x029", "group": "효능보강", "input": "악취를 잡는 신발장, 통풍구 설계", "violation_types": ["거짓_과장"], "output": {"body": "통풍구 설계 신발장", "mandatory_note": null, "placement": null}}
+{"id": "x030", "group": "효능보강", "input": "노폐물을 빼 주는 족욕기, 온도 조절 기능", "violation_types": ["거짓_과장"], "output": {"body": "온도 조절 기능 족욕기", "mandatory_note": null, "placement": null}}
+{"id": "x031", "group": "효능보강", "input": "세균 걱정 없는 식기 건조대, 스테인리스 소재", "violation_types": ["거짓_과장"], "output": {"body": "스테인리스 소재 식기 건조대", "mandatory_note": null, "placement": null}}
+{"id": "x032", "group": "효능보강", "input": "먼지를 완벽 차단하는 창문 필터, 부착형", "violation_types": ["거짓_과장"], "output": {"body": "부착형 창문 필터", "mandatory_note": null, "placement": null}}
+{"id": "x033", "group": "효능보강", "input": "유해균을 억제하는 도마, 편백나무 원목", "violation_types": ["거짓_과장"], "output": {"body": "편백나무 원목 도마", "mandatory_note": null, "placement": null}}
+{"id": "x034", "group": "효능보강", "input": "오염 물질을 분해하는 세탁 세제, 액체형", "violation_types": ["거짓_과장"], "output": {"body": "액체형 세탁 세제", "mandatory_note": null, "placement": null}}
+{"id": "x035", "group": "효능보강", "input": "곰팡이 냄새를 없애는 제습기, 물통 분리형", "violation_types": ["거짓_과장"], "output": {"body": "물통 분리형 제습기", "mandatory_note": null, "placement": null}}
+{"id": "x036", "group": "무보존", "input": "살 안 찌는 무가당 요거트, 국산 원유 사용", "violation_types": ["거짓_과장"], "output": {"body": "국산 원유를 사용한 무가당 요거트", "mandatory_note": null, "placement": null}}
+{"id": "x037", "group": "무보존", "input": "다이어트 필수 무설탕 쿠키, 통밀 가루", "violation_types": ["거짓_과장"], "output": {"body": "통밀 가루로 만든 무설탕 쿠키", "mandatory_note": null, "placement": null}}
+{"id": "x038", "group": "무보존", "input": "숙면 보장 무카페인 허브차, 캐모마일", "violation_types": ["거짓_과장"], "output": {"body": "캐모마일 무카페인 허브차", "mandatory_note": null, "placement": null}}
+{"id": "x039", "group": "무보존", "input": "아토피에 좋은 무향료 로션, 대용량", "violation_types": ["거짓_과장"], "output": {"body": "대용량 무향료 로션", "mandatory_note": null, "placement": null}}
+{"id": "x040", "group": "무보존", "input": "소화가 잘되는 무유당 우유, 국산 원유", "violation_types": ["거짓_과장"], "output": {"body": "국산 원유로 만든 무유당 우유", "mandatory_note": null, "placement": null}}
+{"id": "x041", "group": "무보존", "input": "혈압 걱정 없는 무염 버터, 뉴질랜드산", "violation_types": ["거짓_과장"], "output": {"body": "뉴질랜드산 무염 버터", "mandatory_note": null, "placement": null}}
+{"id": "x042", "group": "무보존", "input": "건강해지는 무알코올 맥주, 보리 맥아", "violation_types": ["거짓_과장"], "output": {"body": "보리 맥아로 만든 무알코올 맥주", "mandatory_note": null, "placement": null}}
+{"id": "x043", "group": "무보존", "input": "피부가 좋아지는 무색소 젤리, 과즙 사용", "violation_types": ["거짓_과장"], "output": {"body": "과즙을 사용한 무색소 젤리", "mandatory_note": null, "placement": null}}
+{"id": "x044", "group": "비원료보강", "input": "업계 최고 보상! 생산물배상책임보험 가입 제품", "violation_types": ["거짓_과장"], "output": {"body": "생산물배상책임보험에 가입한 제품", "mandatory_note": null, "placement": null}}
+{"id": "x045", "group": "비원료보강", "input": "최강 사후관리, 무상 방문 점검", "violation_types": ["거짓_과장"], "output": {"body": "무상 방문 점검", "mandatory_note": null, "placement": null}}
+{"id": "x046", "group": "비원료보강", "input": "가장 믿을 수 있는 시공, 하자 보수 제공", "violation_types": ["거짓_과장"], "output": {"body": "하자 보수 제공", "mandatory_note": null, "placement": null}}
+{"id": "x047", "group": "비원료보강", "input": "최고의 배송 서비스, 새벽 배송 가능", "violation_types": ["거짓_과장"], "output": {"body": "새벽 배송 가능", "mandatory_note": null, "placement": null}}
+{"id": "x048", "group": "비원료보강", "input": "어디보다 확실한 환불 정책, 단순 변심 반품 가능", "violation_types": ["거짓_과장"], "output": {"body": "단순 변심 반품 가능", "mandatory_note": null, "placement": null}}
+{"id": "x049", "group": "비원료보강", "input": "최상의 고객 관리, 전담 매니저 배정", "violation_types": ["거짓_과장"], "output": {"body": "전담 매니저 배정", "mandatory_note": null, "placement": null}}
+{"id": "x050", "group": "비원료보강", "input": "가장 든든한 혜택, 회원 전용 적립", "violation_types": ["거짓_과장"], "output": {"body": "회원 전용 적립", "mandatory_note": null, "placement": null}}

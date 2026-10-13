@@ -53,6 +53,12 @@ def _url() -> str:
     return v.rstrip("/") if v else SLLM_URL
 
 
+#: 🆕 2026-10-12 — 고객층 없이도 2단계로 **자연스럽게 다듬은 문장**을 받는다(서버 `polish`). 1단계 문장은 위반을 지운
+#:    뼈대라 딱딱하다. 다듬은 문장도 서버 관문을 다시 지나고(사실 낱말을 빼거나 바꾸면 · 건강 낱말 · 지어낸 사실 → 막음),
+#:    실패하면 서버가 1단계 문장을 낸다. 화면은 다듬은 안과 담백한 안(1단계)을 함께 보인다.
+#:    시험(직접 만든 39 문장) — 다듬기 판 39/39 통과(종전 2단계 판 16/39). 끄려면 False
+POLISH = True
+
 #: 문장당 4~12초(RTX 3080) · 첫 요청은 더 걸린다 — 넉넉히 잡되 무한히 기다리지 않는다.
 TIMEOUT_S = 90
 
@@ -72,7 +78,13 @@ def rewrite(
     if not enabled():
         return "off", None
     body = json.dumps(
-        {"text": text, "violation_types": violation_types, "rejudge": False, "category": category},
+        {
+            "text": text,
+            "violation_types": violation_types,
+            "rejudge": False,
+            "category": category,
+            "polish": POLISH,
+        },
         ensure_ascii=False,
     ).encode("utf-8")
     req = urllib.request.Request(  # noqa: S310 — 주소는 위 상수(로컬)다
@@ -105,6 +117,10 @@ def _well_formed(out: object) -> bool:
         return False
     if not isinstance(out.get("reasons", []), list) or not isinstance(out.get("repairs", []), list):
         return False
+    if out.get("plain") is not None and not (
+        isinstance(out["plain"], str) and out["plain"].strip()
+    ):
+        return False  # 🆕 10-12 — 담백한 안은 있으면 글자여야 한다
     if out["outcome"] == "candidate":
         rw = out.get("rewrite")
         return isinstance(rw, dict) and isinstance(rw.get("body"), str) and bool(rw["body"].strip())

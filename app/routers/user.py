@@ -778,6 +778,17 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
         rw["note_conflict"] = _note_conflict(
             out["rewrite"].get("mandatory_note"), premise, category
         )
+        # 🆕 2026-10-12 — 서버가 다듬은 문장(2단계)과 담백한 문장(1단계)을 같이 주면 담백한 안도 재판정한다.
+        #    다듬은 안이 재판정에서 떨어지면 담백한 안을 후보로 올린다 · 둘 다 살면 담백한 안을 두 번째 안으로 보인다
+        plain = out.get("plain")
+        if plain:
+            p_rejudge = _rejudge(plain, premise, category)
+            if p_rejudge.get("status") != "rejected":
+                if rw["rejudge"].get("status") == "rejected":
+                    rw["out"] = {**out, "rewrite": {**out["rewrite"], "body": plain}, "plain": None}
+                    rw["rejudge"] = p_rejudge
+                else:
+                    rw["plain"] = {"body": plain, "rejudge": p_rejudge}
     return rw
 
 

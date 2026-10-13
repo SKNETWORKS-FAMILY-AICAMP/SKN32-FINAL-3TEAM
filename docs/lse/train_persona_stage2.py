@@ -35,10 +35,17 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, get_cosine_schedul
 
 ROOT = Path(__file__).resolve().parents[2]
 LSE = ROOT / "docs" / "lse"
-BASE = "Qwen/Qwen2.5-3B-Instruct"
-ADAPTER = ROOT / "models" / "copylane_sllm_persona_adapter"
+# 🔄 10-11 — 베이스는 `sllm_meta` 한 곳에서 읽는다(COPYLANE_SLLM_BASE). 3B 가 아니면 어댑터 · 평가 파일을 따로 쓴다 —
+#    3B 용 2단계 어댑터는 4B 에 붙지 않는다(라이선스로 Qwen3-4B-Instruct-2507 로 옮김 · 1단계 q4b-v13)
+sys.path.insert(0, str(LSE))
+sys.path.insert(1, str(ROOT))  # 🆕 10-12 — 평가가 관문(`stage_gate` → `app.dictmatch`)을 읽는다
+from sllm_meta import base_model  # noqa: E402
+
+BASE = base_model()
+_SFX = "" if BASE == "Qwen/Qwen2.5-3B-Instruct" else "_q4b"
+ADAPTER = ROOT / "models" / f"copylane_sllm_persona_adapter{_SFX}"
 # 평가 출력은 공개 원천 문장뿐이지만, 실험 산출물은 한곳(_private)에 모은다
-OUT = LSE / "_private" / "persona_stage2_eval.jsonl"
+OUT = LSE / "_private" / f"persona_stage2_eval{_SFX}.jsonl"
 SEED = 20261001
 EPOCHS, LR, MAX_LEN = 3, 2e-4, 384
 
@@ -62,25 +69,50 @@ SUIT = re.compile(r"추천|적합|딱 맞|안성맞춤|필수")
 ODD = re.compile(r"(프리랜서|직장인|대학생|\d0대|시니어|부부|분들?) 중 ")
 
 
-def load() -> list[dict]:
-    targets = {r["id"]: r["target"] for r in map(json.loads, (LSE / "persona_targets.jsonl").open(encoding="utf-8"))}
+def load(polish: bool = False, safe: bool = False) -> list[dict]:
+    targets = {
+        r["id"]: r["target"]
+        for r in map(json.loads, (LSE / "persona_targets.jsonl").open(encoding="utf-8"))
+    }
     rows = [json.loads(line) for line in (LSE / "persona_inputs.jsonl").open(encoding="utf-8")]
     for r in rows:
         r["target"] = targets[r["id"]]
+    if polish:
+        # 🆕 10-12 — 제품 사실 문장 → 자연스러운 광고 문장(고객층 없음 · 고객층 말투) · `build_persona_polish.py`
+        # 🆕 10-12 — `--safe` 는 쓰는 법을 짚지 않는 「안전한 말투」판(`build_persona_polish.py --safe`)
+        name = "persona_polish_safe.jsonl" if safe else "persona_polish.jsonl"
+        rows += [json.loads(line) for line in (LSE / name).open(encoding="utf-8")]
     return rows
 
 
-def leak_guard(rows: list[dict]) -> None:
+def leak_guard(rows: list[dict]) -> list[dict]:
+    """누수 검사. 🔄 10-11 — 골든 10-10 재동결로 **평가** 주제 하나(e001 · 식약처 고시 문구)가 골든 학습 행(그 문구를 인용한 광고)
+    안에 부분으로 들어왔다. 평가 행은 학습에 안 들어가므로 멈추지 않고 **평가에서 빼고 수를 찍는다**. 학습 행이 겹치면 종전대로 멈춘다."""
     norm = lambda s: re.sub(r"[\s\W_]+", "", s or "")  # noqa: E731
-    golden = [norm(json.loads(line)["text"]) for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")]
+    golden = [
+        norm(json.loads(line)["text"])
+        for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")
+    ]
     gset, gblob = set(golden), "\n".join(golden)
-    hit = [r["id"] for r in rows if norm(r["input"]) in gset or norm(r["input"]) in gblob]
-    assert not hit, f"① golden 과 겹치는 입력: {hit[:5]}"
+    overlap = {r["id"] for r in rows if norm(r["input"]) in gset or norm(r["input"]) in gblob}
+    hit = [r["id"] for r in rows if r["id"] in overlap and r["split"] == "train"]
+    assert not hit, f"① golden 과 겹치는 학습 입력: {hit[:5]}"
+    dropped = sorted(overlap)
+    if dropped:
+        print(
+            f"① golden 과 겹치는 평가 입력 {len(dropped)} 개를 평가에서 뺀다: {dropped}", flush=True
+        )
+    rows = [r for r in rows if r["id"] not in overlap]
     tr = {r["group"] for r in rows if r["split"] == "train"}
     ev = {r["group"] for r in rows if r["split"] == "eval"}
     assert not tr & ev, f"② 학습 · 평가 주제 겹침: {tr & ev}"
-    assert not {r["persona"] for r in rows if r["split"] == "train" and r["persona"].startswith("q")}, "③ 평가 페르소나가 학습에 있다"
-    print(f"누수 검사 통과 — 학습 주제 {len(tr)} · 평가 주제 {len(ev)} · golden 겹침 0")
+    assert not {
+        r["persona"] for r in rows if r["split"] == "train" and r["persona"].startswith("q")
+    }, "③ 평가 페르소나가 학습에 있다"
+    print(
+        f"누수 검사 통과 — 학습 주제 {len(tr)} · 평가 주제 {len(ev)} · golden 겹침 학습 0 · 평가에서 뺌 {len(dropped)}"
+    )
+    return rows
 
 
 def user_msg(r: dict) -> str:
@@ -131,7 +163,7 @@ def train(model, tok, rows: list[dict]) -> None:
         full = prompt + json.dumps({"body": r["target"]}, ensure_ascii=False) + tok.eos_token
         p_ids = tok(prompt, add_special_tokens=False)["input_ids"]
         ids = tok(full, add_special_tokens=False, truncation=True, max_length=MAX_LEN)["input_ids"]
-        labels = [-100] * min(len(p_ids), len(ids)) + ids[len(p_ids):]
+        labels = [-100] * min(len(p_ids), len(ids)) + ids[len(p_ids) :]
         data.append((ids, labels))
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=LR)
     steps = EPOCHS * len(data)
@@ -142,8 +174,10 @@ def train(model, tok, rows: list[dict]) -> None:
         rng.shuffle(data)
         tot = 0.0
         for ids, labels in data:
-            out = model(input_ids=torch.tensor([ids], device=model.device),
-                        labels=torch.tensor([labels], device=model.device))
+            out = model(
+                input_ids=torch.tensor([ids], device=model.device),
+                labels=torch.tensor([labels], device=model.device),
+            )
             out.loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
@@ -160,10 +194,10 @@ def generate(model, tok, r: dict) -> str | None:
     ids = tok(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         out = model.generate(**ids, max_new_tokens=160, do_sample=False)
-    raw = tok.decode(out[0][ids["input_ids"].shape[1]:], skip_special_tokens=True)
+    raw = tok.decode(out[0][ids["input_ids"].shape[1] :], skip_special_tokens=True)
     i, j = raw.find("{"), raw.rfind("}")
     try:
-        return json.loads(raw[i:j + 1])["body"]
+        return json.loads(raw[i : j + 1])["body"]
     except Exception:  # noqa: BLE001 — 형식 실패로 센다
         return None
 
@@ -172,32 +206,68 @@ def evaluate(model, tok, rows: list[dict], variant: str) -> list[dict]:
     res = []
     for r in rows:
         body = generate(model, tok, r)
-        res.append({"variant": variant, **{k: r[k] for k in ("id", "group", "persona", "input", "target")},
-                    "body": body, "problems": rule_check(r, body), "claim_kept": round(claim_kept(r, body), 3)})
+        probs = rule_check(r, body)
+        if body and not probs:
+            # 🆕 10-12 — 서비스와 같은 관문(말투 모드)도 지나야 통과로 센다
+            from stage_gate import check as gate  # noqa: PLC0415
+
+            probs = [f"관문: {x}" for x in gate(r["input"], body, persona=True).reasons]
+        res.append(
+            {
+                "variant": variant,
+                **{k: r[k] for k in ("id", "group", "persona", "input", "target")},
+                "body": body,
+                "problems": probs,
+                "claim_kept": round(claim_kept(r, body), 3),
+            }
+        )
     ok = [x for x in res if not x["problems"]]
     div = []
-    for _, grp in itertools.groupby(sorted(res, key=lambda x: x["input"]), key=lambda x: x["input"]):
+    for _, grp in itertools.groupby(
+        sorted(res, key=lambda x: x["input"]), key=lambda x: x["input"]
+    ):
         b = [x["body"] for x in grp if x["body"]]
         if len(b) == 3:
-            div.append(1 - sum(SequenceMatcher(None, a, c).ratio() for a, c in itertools.combinations(b, 2)) / 3)
+            div.append(
+                1
+                - sum(SequenceMatcher(None, a, c).ratio() for a, c in itertools.combinations(b, 2))
+                / 3
+            )
     probs: dict[str, int] = {}
     for x in res:
         for p in x["problems"]:
             probs[p] = probs.get(p, 0) + 1
     unseen = [x for x in res if x["persona"].startswith("q")]
-    print(f"[{variant}] 규칙 통과 {len(ok)}/{len(res)} (처음 보는 페르소나 {sum(not x['problems'] for x in unseen)}/{len(unseen)}) · "
-          f"주장 보존 평균 {sum(x['claim_kept'] for x in res) / len(res):.2f} · 페르소나 간 차이 {sum(div) / max(len(div), 1):.2f} · 문제 {probs}",
-          flush=True)
+    print(
+        f"[{variant}] 규칙 통과 {len(ok)}/{len(res)} (처음 보는 페르소나 {sum(not x['problems'] for x in unseen)}/{len(unseen)}) · "
+        f"주장 보존 평균 {sum(x['claim_kept'] for x in res) / len(res):.2f} · 페르소나 간 차이 {sum(div) / max(len(div), 1):.2f} · 문제 {probs}",
+        flush=True,
+    )
     return res
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--eval-only", action="store_true")
+    ap.add_argument(
+        "--polish",
+        action="store_true",
+        help="🆕 10-12 다듬기 데이터(persona_polish.jsonl)를 더해 따로 저장(_polish)",
+    )
+    ap.add_argument(
+        "--safe",
+        action="store_true",
+        help="🆕 10-12 --polish 와 함께 — 안전한 말투판(_polish_safe)",
+    )
     args = ap.parse_args()
+    global ADAPTER, OUT
+    if args.polish:
+        sfx = "_polish_safe" if args.safe else "_polish"
+        ADAPTER = ADAPTER.with_name(ADAPTER.name + sfx)
+        OUT = OUT.with_name(OUT.stem + sfx + ".jsonl")
     torch.manual_seed(SEED)
-    rows = load()
-    leak_guard(rows)
+    rows = load(args.polish, args.safe)
+    rows = leak_guard(rows)
     train_rows = [r for r in rows if r["split"] == "train"]
     eval_rows = [r for r in rows if r["split"] == "eval"]
     # 정답 자체도 규칙을 지켜야 한다 — 어기면 학습 재료가 틀린 것이다
@@ -212,8 +282,16 @@ def main() -> None:
     else:
         base.gradient_checkpointing_enable()
         base.enable_input_require_grads()
-        model = get_peft_model(base, LoraConfig(r=8, lora_alpha=16, lora_dropout=0.05, task_type="CAUSAL_LM",
-                                                target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]))
+        model = get_peft_model(
+            base,
+            LoraConfig(
+                r=8,
+                lora_alpha=16,
+                lora_dropout=0.05,
+                task_type="CAUSAL_LM",
+                target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+            ),
+        )
         model.print_trainable_parameters()
         print(f"학습 {len(train_rows)}쌍 · 평가 {len(eval_rows)}쌍", flush=True)
         train(model, tok, train_rows)

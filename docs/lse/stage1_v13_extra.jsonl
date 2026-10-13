@@ -1,0 +1,80 @@
+{"id": "z001", "group": "불가보강", "input": "마시기만 해도 체지방이 녹는 물", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z002", "group": "불가보강", "input": "하루 한 포로 근육이 저절로 생기는 가루", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z003", "group": "불가보강", "input": "바르면 셀룰라이트가 하룻밤에 사라지는 오일", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z004", "group": "불가보강", "input": "한 달 만에 피부 나이가 열 살 어려지는 앰플", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z005", "group": "불가보강", "input": "먹기만 하면 머리가 좋아지는 사탕", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z006", "group": "불가보강", "input": "영원히 늙지 않는 피부를 만드는 크림", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z007", "group": "불가보강", "input": "뼈가 다시 자라는 칼슘 젤리", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z008", "group": "불가보강", "input": "눈이 다시 좋아져 안경을 벗게 되는 차", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z009", "group": "불가보강", "input": "하루 만에 10kg 빠지는 디톡스 주스", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z010", "group": "불가보강", "input": "100% 모든 사람에게 효과 있는 발모 토닉", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z011", "group": "불가보강", "input": "효과 없으면 생명을 걸겠다는 다이어트 환", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z012", "group": "불가보강", "input": "뭘 먹어도 살이 안 찌는 알약", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z013", "group": "불가보강", "input": "피로가 영원히 사라지는 비타민 음료", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z014", "group": "불가보강", "input": "발바닥에 붙이면 독소가 다 빠지는 패치", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z015", "group": "불가보강", "input": "숨만 쉬어도 살 빠지는 복대", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z016", "group": "불가보강", "input": "몸속 노폐물을 100% 배출하는 차", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z017", "group": "불가보강", "input": "단 한 번에 탈모가 끝나는 샴푸", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z018", "group": "불가보강", "input": "나이 들어도 키가 크는 영양제", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z019", "group": "불가보강", "input": "성형한 것처럼 코가 높아지는 크림", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z020", "group": "불가보강", "input": "근육통이 즉시 사라지는 마법의 젤", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "z021", "group": "불가보강", "input": "정부가 공식 인증한 유일한 건강 음료", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z022", "group": "불가보강", "input": "대학병원 교수 전원이 추천하는 효소", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z023", "group": "불가보강", "input": "임상으로 완벽히 증명된 기적의 크림", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z024", "group": "불가보강", "input": "올해 소비자 만족 1위로 효과가 보장된 즙", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z025", "group": "불가보강", "input": "마감 임박! 오늘이 지나면 다시는 못 사는 다이어트 차", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z026", "group": "불가보강", "input": "의학 박사가 만든 만능 건강 분말", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z027", "group": "불가보강", "input": "세계 보건 기구가 인정한 장수 식품", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z028", "group": "불가보강", "input": "방송 출연 약사가 극찬한 약보다 좋은 즙", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z029", "group": "불가보강", "input": "특허 기술로 효과를 보장하는 탈모 샴푸", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z030", "group": "불가보강", "input": "국가가 검증한 100% 안전 무해 다이어트약", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z031", "group": "불가보강", "input": "100명 중 100명이 효과를 본 비법 차", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z032", "group": "불가보강", "input": "구매자 전원 체중 감량 보장 젤리", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z033", "group": "불가보강", "input": "병원에서만 파는 그 성분 그대로, 처방 없이 사는 크림", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z034", "group": "불가보강", "input": "한정판 99% 할인, 효과 없으면 열 배 환불 효소", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z035", "group": "불가보강", "input": "연예인들이 몰래 먹는 살 빠지는 비밀 환", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z036", "group": "불가보강", "input": "교수님들이 숨겨 온 회춘 차", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z037", "group": "불가보강", "input": "1등 쇼핑 호스트가 보증하는 완벽 디톡스", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z038", "group": "불가보강", "input": "의사들이 자기 가족에게만 주는 영양제", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z039", "group": "불가보강", "input": "공식 기관 시험에서 효과 1위를 차지한 다이어트 젤", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z040", "group": "불가보강", "input": "평생 보증 효과가 있는 탈모 앰플", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z041", "group": "불가보강", "input": "폐암을 예방하는 도라지 청", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "z042", "group": "불가보강", "input": "심장병을 고치는 양파 즙", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "z043", "group": "불가보강", "input": "갑상선 질환을 낫게 하는 미역 환", "violation_types": ["질병_예방치료_표방"], "output": {"infeasible": "질병_예방치료_표방"}}
+{"id": "z044", "group": "불가보강", "input": "수면제 대신 먹는 대추 차", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "z045", "group": "불가보강", "input": "진통제처럼 두통을 없애는 박하 오일", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "z046", "group": "불가보강", "input": "먹고 나서 당뇨약을 끊었다는 후기가 넘치는 차", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "z047", "group": "불가보강", "input": "후기: 일주일 만에 관절염이 사라졌어요", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "z048", "group": "불가보강", "input": "체험자 모두 혈압이 정상이 됐다는 즙", "violation_types": ["후기_체험기_기만"], "output": {"infeasible": "후기_체험기_기만"}}
+{"id": "z049", "group": "불가보강", "input": "집중력을 높여 성적이 오르는 일반 초콜릿", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "z050", "group": "불가보강", "input": "간 건강에 도움을 주는 일반 녹차", "violation_types": ["건강기능식품_오인"], "output": {"infeasible": "건강기능식품_오인"}}
+{"id": "z051", "group": "사실보강", "input": "마시기만 해도 살 빠지는 차! 보성 녹차 잎을 덖어 우린 티백 20개", "violation_types": ["거짓_과장"], "output": {"body": "보성 녹차 잎을 덖어 우린 티백 20개", "mandatory_note": null, "placement": null}}
+{"id": "z052", "group": "사실보강", "input": "근육이 저절로! 국산 대두 단백 분말 500g", "violation_types": ["거짓_과장"], "output": {"body": "국산 대두 단백 분말 500g", "mandatory_note": null, "placement": null}}
+{"id": "z053", "group": "사실보강", "input": "피부 나이 열 살 젊게, 동백 씨앗 오일 함유 앰플 30ml", "violation_types": ["거짓_과장"], "output": {"body": "동백 씨앗 오일 함유 앰플 30ml", "mandatory_note": null, "placement": null}}
+{"id": "z054", "group": "사실보강", "input": "머리가 좋아지는 사탕, 국산 꿀과 생강으로 졸였어요", "violation_types": ["거짓_과장"], "output": {"body": "국산 꿀과 생강으로 졸인 사탕", "mandatory_note": null, "placement": null}}
+{"id": "z055", "group": "사실보강", "input": "영원히 젊은 피부 크림, 쌀겨 추출물 함유 50ml", "violation_types": ["거짓_과장"], "output": {"body": "쌀겨 추출물 함유 크림 50ml", "mandatory_note": null, "placement": null}}
+{"id": "z056", "group": "사실보강", "input": "하루 만에 독소 배출 주스, 국산 케일과 사과를 착즙", "violation_types": ["거짓_과장"], "output": {"body": "국산 케일과 사과를 착즙한 주스", "mandatory_note": null, "placement": null}}
+{"id": "z057", "group": "사실보강", "input": "뭘 먹어도 안 찌는 곤약 젤리, 국산 곤약과 사과즙으로", "violation_types": ["거짓_과장"], "output": {"body": "국산 곤약과 사과즙으로 만든 곤약 젤리", "mandatory_note": null, "placement": null}}
+{"id": "z058", "group": "사실보강", "input": "피로 영원히 끝 음료, 비타민C 100mg 함유 100ml", "violation_types": ["거짓_과장"], "output": {"body": "비타민C 100mg 함유 음료 100ml", "mandatory_note": null, "placement": null}}
+{"id": "z059", "group": "사실보강", "input": "단 한 번에 탈모 끝 샴푸, 어성초 추출물 함유 500ml", "violation_types": ["거짓_과장"], "output": {"body": "어성초 추출물 함유 샴푸 500ml", "mandatory_note": null, "placement": null}}
+{"id": "z060", "group": "사실보강", "input": "즉시 근육통 해방 젤, 멘톨과 캄파 함유 100g", "violation_types": ["거짓_과장"], "output": {"body": "멘톨과 캄파 함유 젤 100g", "mandatory_note": null, "placement": null}}
+{"id": "z061", "group": "사실보강", "input": "정부 인증 유일 음료, 제주 한라봉을 통째로 착즙", "violation_types": ["소비자_기만"], "output": {"body": "제주 한라봉을 통째로 착즙한 음료", "mandatory_note": null, "placement": null}}
+{"id": "z062", "group": "사실보강", "input": "교수 전원 추천 효소, 국산 현미를 발효한 분말", "violation_types": ["소비자_기만"], "output": {"body": "국산 현미를 발효한 효소 분말", "mandatory_note": null, "placement": null}}
+{"id": "z063", "group": "사실보강", "input": "임상으로 증명된 기적의 크림, 판테놀 함유 50ml", "violation_types": ["소비자_기만"], "output": {"body": "판테놀 함유 크림 50ml", "mandatory_note": null, "placement": null}}
+{"id": "z064", "group": "사실보강", "input": "소비자 만족 1위로 효과 보장 즙, 영동 포도를 착즙", "violation_types": ["소비자_기만"], "output": {"body": "영동 포도를 착즙한 즙", "mandatory_note": null, "placement": null}}
+{"id": "z065", "group": "사실보강", "input": "마감 임박 다이어트 차, 국산 우엉을 볶아 우림", "violation_types": ["소비자_기만"], "output": {"body": "국산 우엉을 볶아 우린 차", "mandatory_note": null, "placement": null}}
+{"id": "z066", "group": "사실보강", "input": "의학 박사가 만든 만능 분말, 국산 검은콩과 서리태 가루", "violation_types": ["소비자_기만"], "output": {"body": "국산 검은콩과 서리태 가루", "mandatory_note": null, "placement": null}}
+{"id": "z067", "group": "사실보강", "input": "연예인 비밀 환, 국산 찹쌀과 흑임자를 빚어 구움", "violation_types": ["소비자_기만"], "output": {"body": "국산 찹쌀과 흑임자를 빚어 구운 환", "mandatory_note": null, "placement": null}}
+{"id": "z068", "group": "사실보강", "input": "효과 1위 다이어트 젤, 녹차 추출물 함유 200ml", "violation_types": ["소비자_기만"], "output": {"body": "녹차 추출물 함유 젤 200ml", "mandatory_note": null, "placement": null}}
+{"id": "z069", "group": "사실보강", "input": "의사 가족만 먹는 영양제, 국산 아로니아 동결건조 분말", "violation_types": ["소비자_기만"], "output": {"body": "국산 아로니아 동결건조 분말", "mandatory_note": null, "placement": null}}
+{"id": "z070", "group": "사실보강", "input": "평생 보증 탈모 앰플, 비오틴과 판테놀 함유", "violation_types": ["소비자_기만"], "output": {"body": "비오틴과 판테놀 함유 앰플", "mandatory_note": null, "placement": null}}
+{"id": "z071", "group": "사실보강", "input": "폐암 예방 도라지 청, 국산 도라지를 꿀에 재움", "violation_types": ["질병_예방치료_표방"], "output": {"body": "국산 도라지를 꿀에 재운 도라지 청", "mandatory_note": null, "placement": null}}
+{"id": "z072", "group": "사실보강", "input": "심장병 고치는 양파즙, 창녕 양파를 껍질째 달임", "violation_types": ["질병_예방치료_표방"], "output": {"body": "창녕 양파를 껍질째 달인 양파즙", "mandatory_note": null, "placement": null}}
+{"id": "z073", "group": "사실보강", "input": "수면제 대신 대추차, 경산 대추를 씨 빼고 달임", "violation_types": ["의약품_오인"], "output": {"body": "경산 대추를 씨 빼고 달인 대추차", "mandatory_note": null, "placement": null}}
+{"id": "z074", "group": "사실보강", "input": "두통 진통제 대신 박하 오일, 박하 잎 수증기 증류 10ml", "violation_types": ["의약품_오인"], "output": {"body": "박하 잎을 수증기 증류한 오일 10ml", "mandatory_note": null, "placement": null}}
+{"id": "z075", "group": "사실보강", "input": "후기 폭발 관절 차, 국산 우슬 뿌리를 볶아 우림", "violation_types": ["후기_체험기_기만"], "output": {"body": "국산 우슬 뿌리를 볶아 우린 차", "mandatory_note": null, "placement": null}}
+{"id": "z076", "group": "사실보강", "input": "체험자 모두 혈압 정상 즙, 국산 토마토를 착즙", "violation_types": ["후기_체험기_기만"], "output": {"body": "국산 토마토를 착즙한 즙", "mandatory_note": null, "placement": null}}
+{"id": "z077", "group": "사실보강", "input": "성적 오르는 초콜릿, 가나산 카카오 매스로 만듦", "violation_types": ["건강기능식품_오인"], "output": {"body": "가나산 카카오 매스로 만든 초콜릿", "mandatory_note": null, "placement": null}}
+{"id": "z078", "group": "사실보강", "input": "간 건강 녹차, 하동 녹차 잎을 덖음", "violation_types": ["건강기능식품_오인"], "output": {"body": "하동 녹차 잎을 덖은 녹차", "mandatory_note": null, "placement": null}}
+{"id": "z079", "group": "사실보강", "input": "나이 들어도 키 크는 우유, 국산 원유만 사용", "violation_types": ["거짓_과장"], "output": {"body": "국산 원유만 사용한 우유", "mandatory_note": null, "placement": null}}
+{"id": "z080", "group": "사실보강", "input": "숨만 쉬어도 살 빠지는 복대, 면 소재로 국내에서 봉제", "violation_types": ["거짓_과장"], "output": {"body": "면 소재로 국내에서 봉제한 복대", "mandatory_note": null, "placement": null}}

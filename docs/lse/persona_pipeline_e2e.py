@@ -43,6 +43,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
 from postfix import (  # noqa: E402
+    CONDITIONAL_CLAIM_NOTE,
     _CLAIM_HOLD,
     condition,
     label_check,
@@ -67,6 +68,12 @@ STAGE1_VER = stage1_version()
 STAGE1 = stage1_dir(STAGE1_VER)
 STAGE2 = stage2_dir()
 OUT = HERE / "_private" / "persona_pipeline_e2e.jsonl"
+#: 🆕 10-12 — 고객층을 고르지 않았을 때의 2단계(「자연스럽게 다듬기」). 1단계 문장은 위반을 지운 뼈대라 딱딱하다 —
+#:    고객층을 짚지 않고 광고 문장으로만 다듬는다. 같은 2단계 어댑터 · 같은 관문(`persona=True`)을 지난다
+NEUTRAL_PERSONA = "일반 소비자 — 특정 고객층을 짚지 않고, 제품 사실을 자연스러운 광고 문장으로"
+#: 🆕 10-13 — 다듬기는 **서비스 범위 품목**에서만. dev 후보(부동산 · 교육 · 가전 · 품목 모름)에 다듬기를 붙이면 말이 안 되는 쓰임이 절반 가까이 붙었다
+#:    (`eval_polish_dev.py` · dev 평가 §6-3-1). 쓰는 법 사전(`usage_dict.py`)도 식품 · 화장품 모양만 안다 — 그 밖은 담백한 안(1단계)만 낸다
+POLISH_CATEGORIES = ("식품", "건기식", "화장품")
 #: 고를 수 있는 고객층 — 🚨 D-27 고민 · 증상 축 없음. 실제 서비스에서는 세그먼트(`app.contracts.Segment.label`)가 들어온다
 PERSONAS = {
     "p1": "30대 직장인 — 바쁜 일상 속 간편한 관리",
@@ -111,10 +118,14 @@ def with_rejudge(res: dict, do_rejudge: bool, category: str | None = None) -> di
 
 
 def run_one(model, tok, text: str, labels: list[str], persona: str | None = None, do_rejudge: bool = False,
-            category: str | None = None) -> dict:
+            category: str | None = None, polish: bool = False) -> dict:
     """문구 하나 — 서비스가 부를 단위. `persona`(고객층 설명)를 주지 않으면 1단계 결과로 끝난다.
     `do_rejudge` 면 후보를 팀 판정 코어로 다시 판정한다(DB 필요).
-    `category` — 🆕 10-06 품목(`app.contracts.Category` 값 · 판정 결과의 품목). 없으면 후처리가 문구에서 추측한다."""
+    `category` — 🆕 10-06 품목(`app.contracts.Category` 값 · 판정 결과의 품목). 없으면 후처리가 문구에서 추측한다.
+    `polish` — 🆕 10-12 고객층이 없어도 2단계로 자연스럽게 다듬는다(`NEUTRAL_PERSONA`). 실패하면 1단계 문장을 낸다.
+    🔄 10-13 품목이 `POLISH_CATEGORIES` 일 때만 — 품목을 모르거나 그 밖이면 다듬지 않는다."""
+    if not persona and polish and category in POLISH_CATEGORIES:
+        persona = NEUTRAL_PERSONA
     return with_rejudge(_run_one(model, tok, text, labels, persona, category), do_rejudge, category)
 
 
@@ -141,6 +152,9 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
         g1 = type(g1)(False, tuple(g1.reasons) + tuple(extra))  # 🆕 10-05 — 위반 유형 · 주어 원료명(관문이 못 보는 것)
     note, note_problem = condition(fixed, note_in, text, category) if fixed else (None, None)
     res.update(stage1_fixed=fixed, repairs=repairs, note=note, note_problem=note_problem)
+    if fixed and g1.passed and note and CONDITIONAL_CLAIM_NOTE.search(note):
+        # 🆕 10-12 — 인정 · 심사 제품에서만 쓸 수 있는 문구는 후보로 내지 않는다(제품이 그 조건을 갖췄는지 서버가 모른다)
+        g1 = type(g1)(False, (f"조건 확인 필요: {note}",))
     # 🚨 관문 — 1단계가 위반을 못 지운 문장은 내보내지도, 말투로 포장하지도 않는다
     res["gate1"] = list(g1.reasons)
     if not g1.passed:
@@ -156,12 +170,13 @@ def _run_one(model, tok, text: str, labels: list[str], persona: str | None = Non
     except Exception:  # noqa: BLE001 — 형식 실패는 보류로
         s2 = None
     probs = rule_check({"input": s1, "persona_label": persona}, s2)
-    g2 = gate(s1, s2) if s2 else None  # 말투를 입히다 위반을 들여오지 않았는지 — 같은 관문을 다시 지난다
+    # 말투를 입히다 위반을 들여오지 않았는지 — 같은 관문을 다시 지난다. 🔄 10-11 말투 낱말은 허용(`persona=True`) · 주장 검사는 그대로
+    g2 = gate(s1, s2, persona=True) if s2 else None
     res.update(stage2=s2, gate2=list(g2.reasons) if g2 else None, stage2_problems=probs)
     if not s2 or probs or not g2.passed:
         # 2단계가 실패해도 1단계 문장은 이미 관문을 넘었다 — 말투만 포기하고 1단계 문장을 낸다
         return {**res, "outcome": "candidate", "final": s1, "persona_failed": True}
-    return {**res, "outcome": "candidate", "final": s2}
+    return {**res, "outcome": "candidate", "final": s2, "stage1_final": s1}
 
 
 def main() -> None:
