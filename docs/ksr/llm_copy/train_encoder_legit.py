@@ -47,9 +47,10 @@ LEGIT = ROOT / "docs/ksr/LLM_카피생성_정상카피_900_판독용_ksr_2026-10
 PAIRS = ROOT / "docs/ksr/LLM_카피생성_사실진술_짝_300_판독용_ksr_2026-10-08.csv"
 #: 🔴 2026-10-10 (D-325 결정 1 · 2) — 학습 음성으로 쓰는 것은 **사람이 검수한 행만**이다. 검수 전(판독 칸이 빈) 행 ·
 #:    애매 표시 행은 학습 · 채점 어디에도 쓰지 않는다. 종전에는 900행을 판독 칸을 보지 않고 전부 넣었다(D-325 판정 전의 실험).
-#:    `[임의]` 사람 판독 칸에서 「써도 된다」로 읽는 값 — 검수 기준의 낱말은 D-325 ⬜ 로 아직 정해지지 않았다. 정해지면 여기만 고친다
+#:    🔄 2026-10-13 (팀장 판정 · D-325 에 적는다) — 「적법(사실 전제)」도 다음 인코더 판의 학습 음성으로 쓴다. 조건부 · 애매 표시
+#:    행은 계속 뺀다. 검수본은 저장소 밖(공유 드라이브)에 있다 — `--legit` 로 그 파일을 가리킨다
 HUMAN_COL = "판독(사람)"
-HUMAN_LEGIT = frozenset({"적법"})
+HUMAN_LEGIT = frozenset({"적법", "적법(사실 전제)"})
 V10_DIR = ROOT / "models" / "copylane-encoder-kcbert-v10-합성O-이유O"
 OUT_DIR = ROOT / "models" / "copylane-encoder-kcbert-v10-ksr실험-적법900"
 
@@ -223,6 +224,12 @@ def main() -> int:
         help="적법 문장을 더하지 않는다 — 이 기기에서 v10 을 다시 만든 기준선",
     )
     ap.add_argument(
+        "--legit",
+        type=pathlib.Path,
+        default=LEGIT,
+        help="사람이 검수한 정상 카피 CSV — 검수본은 저장소 밖에 있다 (기본: 저장소의 판독용 파일)",
+    )
+    ap.add_argument(
         "--pairs",
         action="store_true",
         help="짝 위반 100줄을 양성으로 더한다 (조건부 줄은 수정안 문구로 바뀐다)",
@@ -276,11 +283,14 @@ def main() -> int:
     if not args.no_legit:
         dev_texts = {norm_text(r["text"]) for r in dev_rows}
         seen = {norm_text(r["text"]) for r in train_rows}
-        with LEGIT.open(encoding="utf-8-sig", newline="") as f:
+        if not args.legit.exists():
+            raise SystemExit(f"🔴 검수본이 없다 — {args.legit}. `--legit` 로 공유 드라이브에서 받은 파일을 가리킨다")
+        with args.legit.open(encoding="utf-8-sig", newline="") as f:
             reader = csv.DictReader(f)
             if HUMAN_COL not in (reader.fieldnames or []):
-                raise SystemExit(f"🔴 {LEGIT.name} 에 「{HUMAN_COL}」 칸이 없다 — 검수 여부를 알 수 없다 (D-325)")
+                raise SystemExit(f"🔴 {args.legit.name} 에 「{HUMAN_COL}」 칸이 없다 — 검수 여부를 알 수 없다 (D-325)")
             skipped: Counter[str] = Counter()
+            taken: Counter[str] = Counter()
             for row in reader:
                 human = (row[HUMAN_COL] or "").strip()
                 if not human:
@@ -297,9 +307,10 @@ def main() -> int:
                 t = norm_text(text)
                 if t not in dev_texts and t not in seen:
                     seen.add(t)
+                    taken[human] += 1
                     legit.append({"id": f"ksr-legit:{row['id']}", "text": text, "target": []})
         print(
-            f"더한 적법 문장 {len(legit)}행 (합성 정상 카피 · 사람 검수 · 음성) · 뺀 것 {dict(skipped)}"
+            f"더한 적법 문장 {len(legit)}행 {dict(taken)} (합성 정상 카피 · 사람 검수 · 음성) · 뺀 것 {dict(skipped)}"
         )
         if not legit:
             # 없음이 「기준선과 같은 학습」으로 조용히 넘어가지 않게 한다 (D-220) — 기준선은 `--no-legit` 로 따로 돈다

@@ -46,7 +46,7 @@
 }
 .rv-outcome.o-pass { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
 .rv-outcome.o-certificate { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
-/* 🔄 2026-10-12 — 근거 자료 필요 = 주황 · 유형 선택 필요(분기를 고르기 전의 보류) = 노랑 · 전문가 검토 필요 = 보라.
+/* 🔄 2026-10-12 — 근거 자료 필요 = 주황 · 유형 · 인증 여부 선택 필요(분기를 고르기 전의 보류) = 노랑 · 전문가 검토 필요 = 보라.
    주황 · 노랑은 공통 토큰(`user.css`)에 없어 여기 둔다 — 어두운 화면 값은 아래에서 덮는다 */
 .rv-outcome.o-guidance { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
 .rv-outcome.o-hold { background: var(--u-signal-soft); color: var(--u-signal-ink); }
@@ -524,12 +524,13 @@
   {%- elif v == "B" %} · 실증형 — 근거를 대면 돼요
   {%- else %} · 절대형 — 표현 자체가 금지예요{% endif %}</p>
 {% endmacro %}
-{% macro outcome_badge(v, ask=false) %}
+{# 🆕 2026-10-13 (D-330) — 품목이 이미 건강기능식품이라 인증 여부만 묻는 문구(`cert_only`)는 「인증 여부 선택 필요」다 #}
+{% macro outcome_badge(v, ask=false, cert_only=false) %}
 <span class="rv-outcome o-{{ v }}{% if v == 'hold' and ask %} o-ask{% endif %}">
   {%- if v == "pass" %}통과
   {%- elif v == "certificate" %}합법화 불가
   {%- elif v == "guidance" %}객관적인 근거 자료 필요
-  {%- elif v == "hold" and ask %}유형 선택 필요
+  {%- elif v == "hold" and ask %}{{ "인증 여부 선택 필요" if cert_only else "유형 선택 필요" }}
   {%- elif v == "hold" %}전문가 검토 필요
   {%- else %}알 수 없는 값 ({{ v }}){% endif -%}
 </span>
@@ -584,7 +585,7 @@
     {# 🔄 배지는 **고른 분기의 결과**로 바뀐다 — 고르기 전에는 기록되는 판정(보류)이다. 고른 뒤에는 「고르신 내용 기준」을 단다 #}
     <p class="rv-copyno">문구 {{ n }}{% if result.category %} · {{ result.category.value }}{% endif %}
       <span class="rv-redo-no rv-redo-top">재검수 {{ r }}/{{ max_redo }}</span>
-      <span class="rv-bd-rec">{{ outcome_badge(result.outcome.value, true) }}</span>
+      <span class="rv-bd-rec">{{ outcome_badge(result.outcome.value, true, only_hf) }}</span>
       {% for b in result.branches if SLUG.get(b.premise.value) %}
       <span class="rv-bd rv-bd-{{ SLUG[b.premise.value] }}">{{ outcome_badge(b.outcome.value) }}
         {%- if not b.verified %} <span class="rv-redo-no">고르신 내용 기준</span>{% endif %}</span>

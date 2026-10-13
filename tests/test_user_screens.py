@@ -238,6 +238,27 @@ def test_검수_분기_다시_선택은_5회다() -> None:
     assert 'id="rvr-1-6"' not in body
 
 
+@pytest.mark.parametrize(
+    ("fixture", "want"),
+    [
+        ("15_hold_premise_unknown", "인증 여부 선택 필요"),
+        ("03_hold_cat_unknown", "유형 선택 필요"),
+        ("21_hold_cat_unknown_hair", "유형 선택 필요"),
+    ],
+)
+def test_검수_배지는_인증_여부만_물을_때_인증_여부_선택_필요다(fixture: str, want: str) -> None:
+    """🆕 2026-10-13 (D-330) — 분기가 건강기능식품 인정 · 비인정뿐이면 유형은 묻지 않는다. 배지도 「인증 여부 선택 필요」다."""
+    import re  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    body = TestClient(app).get(f"/u/preview/{fixture}").text
+    badges = set(re.findall(r'class="rv-outcome o-hold o-ask">\s*([^<]+?)\s*<', body))
+    assert badges == {want}
+
+
 @pytest.mark.parametrize("fmt", ["SNS 피드", "배너"])
 def test_광고생성은_고른_종류와_내용을_다시_그린다(
     monkeypatch: pytest.MonkeyPatch, fmt: str
