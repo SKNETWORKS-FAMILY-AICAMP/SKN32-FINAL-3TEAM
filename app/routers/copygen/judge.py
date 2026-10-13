@@ -116,6 +116,10 @@ class GraphJudge(EncoderJudge):
 
         if not enc.ran(res.judged_by):
             raise CopyGenOff("판정 그래프가 인코더를 돌리지 못했어요.")
+        if not res.sentences:
+            # 🆕 2026-10-13 (D-220) — 그래프가 문장을 하나도 내지 않았다. 아래 반복이 비면 통째 거리(`_near`)로 넘어가 「못 찾음」이 된다 —
+            #    본 것이 없는 것을 통과로 세지 않는다. ⛔ 모든 문장이 `not_claim` 인 경우는 막지 않는다 — 판정 대상 아님도 판정이다 (D-275)
+            return Judged(False, "판정할 문장 없음")
         for s in res.sentences:
             if s.not_claim:
                 continue

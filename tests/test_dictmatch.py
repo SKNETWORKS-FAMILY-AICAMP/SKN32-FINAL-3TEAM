@@ -36,6 +36,36 @@ def test_안_걸리면_빈_목록이다() -> None:
     assert dm.find("평범한 문장", [dm.Entry(term="암예방")]) == []
 
 
+@pytest.mark.parametrize(
+    ("text", "span_text"),
+    [
+        ("중요한 약속 전날 밤에", None),  # 「편안한 약속」 류 — 증명서 오탐의 자리 (D-334)
+        ("진귀한 약재 침향", None),
+        ("키 약 하나로 쑥쑥", "키 약"),  # 낱말 첫 글자에서 시작 — 그대로 울린다
+        ("(키 약) 광고", "키 약"),  # 낱말 앞 문장부호는 첫머리로 본다
+        ("중요한 약속 그리고 한약 성분", "한약"),  # 걸린 자리를 건너 다음 자리를 본다
+        ("고급한약재", "한약"),  # 공백을 건너지 않으면 그대로다
+    ],
+)
+def test_짧은_항목은_낱말_가운데서_공백을_건너_울리지_않는다(
+    text: str, span_text: str | None
+) -> None:
+    """🔴 D-334 — 두 글자 이하 항목이 낱말 가운데서 시작해 공백을 건너면 적중이 아니다. 판정기 B 도 같다 (D-99)."""
+    entries = [dm.Entry(term="한약"), dm.Entry(term="키약")]
+    got = [text[m.span[0] : m.span[1]] for m in dm.find(text, entries)]
+    assert got == ([] if span_text is None else [span_text])
+    assert dm.terms_in(text, ["한약", "키약"]) == (
+        set() if span_text is None else {dm.norm(span_text)}
+    )
+
+
+def test_세_글자_이상은_낱말_가운데서_공백을_건너도_울린다() -> None:
+    """D-334 의 길이 조건 — 「전립선암 예방」의 「암 예방」은 낱말 가운데서 시작해도 질병 표방이다."""
+    text = "골다공증, 전립선암 예방"
+    (m,) = dm.find(text, [dm.Entry(term="암예방")])
+    assert text[m.span[0] : m.span[1]] == "암 예방"
+
+
 def test_세_곳이_같은_정규화를_쓴다() -> None:
     """🔴 D-99 — 사전 빌더 · 판정기 B 가 `app/dictmatch.norm` 을 쓴다. 사본이 다시 생기면 빨갛다."""
     from preprocess import dictionary
