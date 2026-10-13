@@ -108,6 +108,18 @@ def norm(s: str) -> str:
     return re.sub(r"[\s\W_]+", "", s or "")
 
 
+
+def read_extra(name: str) -> list[dict]:
+    """보강 파일을 읽는다. 🆕 10-14 (#25 · D-302 방식) — 재배포 불가 문구와 겹친 행은 공개 파일에 자리표시
+    (`{"id": …, "private": true}`)만 두고 본문은 `_private/<이름>_private.jsonl` 에 둔다. 자리에 그대로 끼워 순서
+    (= 내장 평가 나눔 · 섞기)가 옮기기 전과 같다. 비공개 파일이 없는 기기에서는 그 행을 뺀다."""
+    rows = [json.loads(line) for line in (HERE / name).open(encoding="utf-8") if line.strip()]
+    priv_path = HERE / "_private" / f"{Path(name).stem}_private.jsonl"
+    priv = {}
+    if priv_path.exists():
+        priv = {r["id"]: r for r in (json.loads(line) for line in priv_path.open(encoding="utf-8") if line.strip())}
+    return [priv[r["id"]] if r.get("private") else r for r in rows if not r.get("private") or r["id"] in priv]
+
 def load_rows(version: str = "v5") -> tuple[list[dict], list[dict]]:
     golden = [json.loads(line) for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")]
     test_set = {norm(r["text"]) for r in golden if r["split"] == "test_sentence"}
@@ -124,7 +136,7 @@ def load_rows(version: str = "v5") -> tuple[list[dict], list[dict]]:
     base = [json.loads(line) for line in (HERE / "train_pairs.jsonl").open(encoding="utf-8") if line.strip()]
     priv_path = HERE / "_private" / "ftc_pairs.jsonl"
     priv = [json.loads(line) for line in priv_path.open(encoding="utf-8")] if priv_path.exists() else []
-    extra = [json.loads(line) for name in EXTRAS[version] for line in (HERE / name).open(encoding="utf-8")]
+    extra = [r for name in EXTRAS[version] for r in read_extra(name)]
 
     dropped = sum(leaks(r) for r in base + priv)
     base = [r for r in base if not leaks(r)]

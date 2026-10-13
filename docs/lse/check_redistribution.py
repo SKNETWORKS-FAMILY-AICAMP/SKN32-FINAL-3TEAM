@@ -34,13 +34,18 @@ OPEN_SOURCES = (
 MIN_FREE = 8
 
 
+def squeeze(s: str) -> str:
+    """🆕 10-14 (#25) — 공백을 모두 지운다. 기준 문구 · 공개 원천 · 검사할 파일을 모두 이 꼴로 맞대 띄어쓰기만 바꾼 인용도 잡는다."""
+    return re.sub(r"\s+", "", s)
+
+
 def restricted() -> tuple[set[str], set[str]]:
     """(어디서든 잡을 문구, 따옴표 안에서만 잡을 짧은 문구)."""
     free: set[str] = set()
     quoted: set[str] = set()
 
     def add(s: str | None) -> None:
-        s = (s or "").strip()
+        s = squeeze(s or "")
         if len(s) >= MIN_FREE:
             free.add(s)
         elif len(s) >= 3:
@@ -59,10 +64,10 @@ def restricted() -> tuple[set[str], set[str]]:
             if r.get("redistributable") is False:
                 add(r.get("text"))
             else:
-                open_texts.add((r.get("text") or "").strip())
+                open_texts.add(squeeze(r.get("text") or ""))
     # 재배포 가능한 원천에도 같은 문장이 있으면(예: 고시 기능성 문구 「피부건강에 도움」) 인용이 아니다
     open_blob = "\n".join(
-        p.read_text(encoding="utf-8") for p in OPEN_SOURCES if p.exists()
+        squeeze(ln) for p in OPEN_SOURCES if p.exists() for ln in p.read_text(encoding="utf-8").splitlines()
     )
     free = {s for s in free - open_texts if s not in open_blob}
     quoted = {s for s in quoted - open_texts if s not in open_blob}
@@ -91,7 +96,7 @@ def allowed() -> set[str]:
     for line in ALLOW.read_text(encoding="utf-8").splitlines():
         term = line.split("#", 1)[0].strip()
         if term:
-            out.add(term)
+            out.add(squeeze(term))
     return out
 
 
@@ -111,7 +116,7 @@ def main(argv: list[str]) -> int:
         if text is None:
             continue
         # 일반어가 우연히 겹친 줄은 끝에 표시를 달아 뺀다 — 광고 문구 인용에는 쓰지 않는다
-        text = "\n".join(ln for ln in text.splitlines() if "redistribution: ok" not in ln)
+        text = squeeze("".join(ln for ln in text.splitlines() if "redistribution: ok" not in ln))
         hits = [s for s in free if s in text]
         hits += [s for s in quoted if re.search(rf"[\"'“‘「]{re.escape(s)}[\"'”’」]", text)]
         if hits:
