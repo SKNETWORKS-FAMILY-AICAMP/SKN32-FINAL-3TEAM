@@ -40,7 +40,7 @@ import sys
 from app.settings import PARAMS
 from collect import store
 from collect.law_map import LAW_OF_ID
-from preprocess.law_norm import exemption_parents
+from preprocess.law_norm import exemption_parents, loose_heads
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DERIVED = ROOT / "data" / "derived"
@@ -119,6 +119,9 @@ _TITLE_ONLY = re.compile(r"^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*$")
 #:       숫자 조각 「+1.0 +0」 · 인삼 유래 기본문안 영문이 「면역력」 질의 상위 10 에 들었다(사실원장 ㉟).
 #:    🚨 뺀 수는 사유별로 매번 찍는다(`main`) — 조용히 줄지 않게.
 SKIPPED: collections.Counter = collections.Counter()
+#: 🆕 2026-10-12 (D-293 개정) — 문서별 「마커 모양인데 마커로 안 읽은 본문 줄」 수. 🚨 보고만 한다(멈추지 않는다) —
+#:    「4)시장출하」 같은 삼킴과 「나.에 따라」 같은 본문이 함께 걸린다. 늘면 파서가 새 꼴을 놓친 것이다
+LOOSE: collections.Counter = collections.Counter()
 
 #: 「3. 삭제<2018.3.13>」 · 「제21조 <삭제>(2016.12.21.)」 · 표 행 「연번: 1 · 성분명: <삭 제> · 최대함량: <삭 제>」 — 규범이 없다
 _DELETED = re.compile(r"삭\s*제")
@@ -307,7 +310,17 @@ def from_articles() -> tuple[list[dict], int]:
             dropped += 1
             continue
         law = r["법령"]
-        article = f"제{r['조']}조" + (f"의{r['가지']}" if r.get("가지") else "")
+        prose = str(r.get("키", "")).startswith("prose-")
+        if prose and r.get("줄머리의심"):
+            LOOSE[f"law:{r['파일'].replace('.xml', '')}"] += r["줄머리의심"]
+        if prose and "좌표막힘" not in r:
+            # 🔴 좌표 자격을 안 단 파생물(D-293 개정 전 판)이다 — 「막지 않는다」로 채우면 겹친 경로에 좌표가 선다 (D-220)
+            raise SystemExit(
+                "🔴 law_article.jsonl 의 산문 행에 `좌표막힘` 칸이 없다 — `law_article --dump` 를 먼저 다시 돌린다 (D-293 개정)"
+            )
+        # 🔄 2026-10-12 (곁가지 · D-117) — 산문 행정규칙은 조가 없다. ⛔ 종전에는 장 번호를 조 자리에 넣어 원문에 없는 「제Ⅲ조」를
+        #    지어냈다 — `/search` 가 좌표가 없을 때 이 칸을 보여 준다. 산문의 자리는 `paragraph`(장 · 원문 번호 사슬)가 맡는다
+        article = "" if prose else f"제{r['조']}조" + (f"의{r['가지']}" if r.get("가지") else "")
         doc_id = f"law:{r['파일'].replace('.xml', '')}"
         parts = _split_long(body)
         for i, text in enumerate(parts):
@@ -344,6 +357,10 @@ def from_articles() -> tuple[list[dict], int]:
                     #: 🆕 2026-09-28 (D-238 개정 (나)) — 적용 제외 목의 **부모 경로**. 조문 쪽은 빈 문자열 = 「제외 목이 아니다」.
                     #:    ⬜ 조문 · 산문 행정규칙 안의 「다만」 단서(69549 제2조제1항제3호 등)는 아직 안 가른다 — 별표 목만이다.
                     "exempt_of": "",
+                    #: 🆕 2026-10-12 (D-293 개정 안건 1 (나)) — **좌표를 막는 이유.** 빈 문자열 = 막지 않는다 · 「겹침」 · 「순서」.
+                    #:    산문 행정규칙만 검사한다(`law_article.mark_coord_block`). 조문 행은 원천 키가 조 · 항 · 호라 빈 문자열이다.
+                    #:    🚨 DB 의 NULL 은 「아직 재적재 안 됨」이다 — 그때 산문 · 별표 좌표는 서지 않는다(`app/retrieve.py` `citation`)
+                    "coord_block": r["좌표막힘"] if prose else "",
                     "법령": law,
                 }
             )
@@ -371,12 +388,19 @@ def from_annex() -> list[dict]:
             raise SystemExit(
                 f"🔴 {p.stem} — 「다만 … 제외한다」 단서가 한 곳도 안 걸렸다. `law_norm.EXC` 를 원문과 다시 맞춘다 (D-238)"
             )
+        if any("좌표막힘" not in r for r in src):
+            # 🔴 좌표 자격을 안 단 파생물(D-293 개정 전 판)이다 — 「막지 않는다」로 채우지 않는다 (D-220)
+            raise SystemExit(
+                f"🔴 law_norm/{p.name} 에 `좌표막힘` 칸이 없는 행이 있다 — `law_norm --write` 를 먼저 다시 돌린다 (D-293 개정)"
+            )
         foreign = FOREIGN.get(p.stem)
         hit_foreign = 0
         for r in src:
             text = (r.get("text") or "").strip()
             if not text:
                 continue
+            if k := loose_heads(r.get("lines") or []):
+                LOOSE[f"annex:{p.stem}"] += k
             if foreign and text.startswith(foreign[1]):
                 hit_foreign += 1
                 SKIPPED["외국어 문안"] += 1
@@ -418,6 +442,8 @@ def from_annex() -> list[dict]:
                         "exempt_of": exempt.get(str(r["path"]), "")
                         if r["section"] == "본문"
                         else "",
+                        #: 🆕 2026-10-12 (D-293 개정) — 좌표를 막는 이유(`law_norm.coord_block`). 조문 쪽 칸과 같은 뜻이다
+                        "coord_block": r["좌표막힘"],
                         "법령": r["annex_title"],
                     }
                 )
@@ -503,6 +529,17 @@ def main() -> int:
     print(
         f"  ⚖️ 적용 제외 목 청크 {sum(ex.values())}개 {dict(ex)} — 위반 근거 좌표는 부모 목으로 올린다 (D-238)"
     )
+    # 🆕 2026-10-12 (D-293 개정) — 좌표를 막은 청크와 그 이유 · 마커 모양인데 마커로 안 읽은 줄. 멈추지 않는다
+    blk = collections.Counter((r["coord_block"], r["doc_id"]) for r in rows if r["coord_block"])
+    print(
+        f"  📍 좌표를 막은 청크 {sum(blk.values())}개 "
+        f"{dict(sorted((f'{d}·{w}', n) for (w, d), n in blk.items()))} (D-293 개정)"
+    )
+    if LOOSE:
+        print(
+            f"  🟡 마커 모양인데 마커로 안 읽은 본문 줄 {sum(LOOSE.values())}개 {dict(LOOSE.most_common())} "
+            "— 순서 검사가 막지 못한 삼킴이 있는지 본다(멈추지 않는다)"
+        )
     # 🔴 **뺀 수를 매번 찍는다** — 조용히 줄면 다음 사람이 원장과 어긋나는 수를 보고 헤맨다.
     print(f"  ⬜ 제목뿐인 조 머리 행 {dropped}개를 담지 않았다 (D-159 · D-195)")
     if SKIPPED:

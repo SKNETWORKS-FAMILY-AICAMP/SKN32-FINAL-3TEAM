@@ -57,7 +57,10 @@ def _prose(text: str) -> list[dict]:
     from preprocess import law_norm as ln  # noqa: PLC0415
 
     rows: list[dict] = []
-    stack: list[tuple[int, str, int]] = []  # (순위, 마커, rows 의 자리) — 바깥에서 안으로
+    #: (순위, 경로 낱말, rows 의 자리) — 바깥에서 안으로. 🔄 2026-10-12 (D-293 개정 안건 2 (나)) — 경로 낱말은 **원문 마커의 꼴을 보존**한다:
+    #:    「1)」 · 「가)」 는 괄호를 남긴다. ⛔ 종전에는 「1.」과 「1)」이 둘 다 `1` 이라 36814 처럼 둘을 다 쓰는 문서에서 좌표가 갈리지 않았다.
+    #:    🚨 별표 경로(`law_norm.parse`)는 건드리지 않는다 — `app/retrieve.py` `_annex_citation` 이 그 꼴을 읽는다.
+    stack: list[tuple[int, str, int]] = []
     cur: dict | None = None
     # 🔴 **최상위 마커가 문서 안에서 다시 쓰인다** (2026-09-09 실측).
     #    「부당한 표시·광고행위의 유형 및 기준 지정고시」는 본문이 Ⅰ~Ⅲ 으로 가고
@@ -72,7 +75,7 @@ def _prose(text: str) -> list[dict]:
             continue
         m = _ROMAN.match(s)
         if m:
-            rank, mark, reversed_ = _TOP, m.group(1), False
+            rank, mark, reversed_, level = _TOP, m.group(1), False, -1
             if mark in seen_top:
                 section += 1
             seen_top.add(mark)
@@ -82,6 +85,7 @@ def _prose(text: str) -> list[dict]:
             if hit is None:
                 if cur is not None:
                     cur["본문"] += " " + s
+                    cur["_줄"].append(s)
                 continue
             level, mark = hit
             rank, reversed_ = ln.RANK[level], False
@@ -91,7 +95,7 @@ def _prose(text: str) -> list[dict]:
             elif stack and rank < stack[-1][0]:
                 reversed_ = True  # 거꾸로 쓴 순서 — 자식으로 둔다 (`law_norm.parse(reverse_child=True)` 와 같다)
         parents = [rows[i] for _, _, i in stack]
-        stack.append((rank, mark, len(rows)))
+        stack.append((rank, f"{mark})" if level in (3, 4) else mark, len(rows)))
         top = parents[0] if parents and stack[0][0] == _TOP else None
         cur = {
             "키": f"prose-{len(rows)}",
@@ -102,6 +106,10 @@ def _prose(text: str) -> list[dict]:
             "항": (f"{section}:" if section > 1 else "") + ".".join(x[1] for x in stack),
             "본문": s,
             "_상위": [i for _, _, i in stack[:-1] if rows[i] is not top],
+            #: 순서 검사(`parse` → `law_norm.order_breaks`)가 읽고 지운다 — 원문 줄 · 모양 · 마커
+            "_줄": [s],
+            "_모양": level,
+            "_마커": mark,
         }
         if reversed_:
             cur["역순"] = True
@@ -339,6 +347,7 @@ def parse(path: pathlib.Path) -> list[dict]:
     if len(rows) == 1 and re.search(r"자세한 내용은|버튼을 이용", rows[0]["본문"]):
         rows[0]["본문없음"] = "원천이 본문 대신 첨부를 준다 — 별도 확보가 필요하다"
 
+    mark_coord_block(rows)
     out = []
     for r in rows:
         r["법령"] = name
@@ -346,6 +355,46 @@ def parse(path: pathlib.Path) -> list[dict]:
         r["층"] = "3층 판단규범"
         out.append(store.stamp(r, SOURCE))
     return out
+
+
+def mark_coord_block(rows: list[dict]) -> None:
+    """산문 행에 좌표 자격을 단다 (🆕 2026-10-12 · D-293 개정 안건 1 (나)). 한 파일의 행 전부를 받는다.
+
+        `좌표막힘` = 「겹침」 — 같은 경로가 파일 안에 둘 이상이다(한 좌표가 여러 곳을 가리킨다 · D-293 의 조건)
+                   「순서」 — 형제 번호가 되돌아가거나, 빈 번호를 앞 노드가 줄로 안았다(`law_norm.order_breaks`)
+                   빈 문자열 — 좌표가 선다
+    🚨 산문 행(`키` 가 `prose-`)만 단다 — 조문형 행정규칙 · 법령은 원천 키가 조 · 항 · 호라 걸지 않는다(호 묶음 245 에서 깨짐 0).
+    🚨 순서 검사용 칸(`_줄` · `_모양` · `_마커`)은 여기서 지운다 — 파생물에 싣지 않는다.
+    별표 쪽 짝은 `law_norm.coord_block` 이다 — 값의 뜻이 같다. 읽는 쪽은 `preprocess/chunk.py` 의 `coord_block` 칸이다.
+    """
+    from preprocess import law_norm as ln  # noqa: PLC0415 — 순환 회피 (`_prose` 와 같다)
+
+    prose = [r for r in rows if str(r.get("키", "")).startswith("prose-")]
+    if not prose:
+        return
+    import collections  # noqa: PLC0415
+
+    seen = collections.Counter(str(r["항"]) for r in prose)
+    #: 구역 — 장 번호가 다시 쓰이면 `_prose` 가 경로 앞에 「2:」 를 붙인다. 구역이 다르면 형제가 아니다
+    broken = ln.order_breaks(
+        [
+            (
+                str(r["항"]).partition(":")[0] if ":" in str(r["항"]) else "",
+                str(r["항"]),
+                r["_모양"],
+                r["_마커"],
+                r["_줄"],
+            )
+            for r in prose
+        ]
+    )
+    for i, r in enumerate(prose):
+        r["좌표막힘"] = "겹침" if seen[str(r["항"])] > 1 else ("순서" if i in broken else "")
+        # 마커 모양인데 마커로 안 읽은 본문 줄 — `chunk` 가 찍는다(멈추지 않는다)
+        if loose := ln.loose_heads(r["_줄"]):
+            r["줄머리의심"] = loose
+        for k in ("_줄", "_모양", "_마커"):
+            r.pop(k, None)
 
 
 _EFF = re.compile(r"_(\d{8})$")

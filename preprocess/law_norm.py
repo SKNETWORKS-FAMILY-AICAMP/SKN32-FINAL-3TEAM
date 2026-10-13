@@ -51,15 +51,23 @@ ANNEX = store.family_path("law_go_kr") / "annex"
 #: 🚨 **`app/retrieve.py` 의 `_JO` 와 같은 값이다** (2026-09-14 · 별표 인용).
 #:    ⛔ 합치지 않았다 — `app/` 이 `preprocess/` 를 import 하면 런타임이 전처리 층에 매인다.
 #:       D-99 의 나머지 절반을 쓴다: **양쪽에 서로를 가리키는 주석.** 한쪽을 고치면 둘 다 고친다.
-JO = "가나다라마바사아자차카타파하"
+#: 🔄 2026-10-12 (D-293 개정) — 「하」 다음 「거~허」 까지 넓혔다. ⛔ 종전 14 자라 「하.」 뒤의 「거. 너. …」를 마커로 못 읽고
+#:    앞 항목 본문에 붙였다 — 36814 겹친 노드 371 · 013475 [별표 4]제1호하목이 「거~커」목을 안았다(사실원장 10-12 ③).
+#:    `[문헌]` 법령 목 번호는 「하」 다음 「거」로 이어 간다. 「허」 다음(「고. 노.」)은 원문에서 못 봤다 — 오면 순서 검사가 막는다.
+JO = "가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허"
 #: `level` 은 **모양의 이름표**다(깊이가 아니다) — 법령 별표 노드의 값이 바뀌지 않게 종전 번호를 그대로 둔다.
 #: 🆕 2026-09-26 — 괄호 번호 `(1)` · `(가)`(6 · 7). 행정규칙(고시) 별표가 쓴다 — 36122 [별표 4] 제4호 아래
 #:    `(1)~(6)` · `(1)~(7)` · `(1)~(5)` 목록 셋을 모르고 **제4호 본문에 통째로 붙였다**(1,324자 · 사실원장 ㉜).
+#: 🔄 2026-10-12 (D-293 개정) — 마커 뒤에 띄어쓰기 **또는 「** 를 받는다(`_AFTER`). ⛔ 종전에는 띄어쓰기만 받아
+#:    「3.「중요한 표시ㆍ광고사항 고시」와의 관계」(38124) · 「차.「식품위생법」…」(36814)를 앞 항목에 붙였다.
+#:    🚨 마커 뒤 바로 한글(「4)시장출하」 · 008741 [별표 1])은 받지 않는다 — 「나.에 따라」와 모양으로 못 가른다.
+#:       그 자리는 순서 검사(`order_breaks`)가 좌표를 막는다.
+_AFTER = r"(?:\s|(?=「))"
 LEVELS: tuple[tuple[int, re.Pattern[str]], ...] = (
-    (1, re.compile(r"^(\d{1,2})\.\s")),
-    (2, re.compile(rf"^([{JO}])\.\s")),
-    (3, re.compile(r"^(\d{1,2})\)\s")),
-    (4, re.compile(rf"^([{JO}])\)\s")),
+    (1, re.compile(rf"^(\d{{1,2}})\.{_AFTER}")),
+    (2, re.compile(rf"^([{JO}])\.{_AFTER}")),
+    (3, re.compile(rf"^(\d{{1,2}})\){_AFTER}")),
+    (4, re.compile(rf"^([{JO}])\){_AFTER}")),
     (6, re.compile(r"^(\(\d{1,2}\))\s?")),
     (7, re.compile(rf"^(\([{JO}]\))\s?")),
     (5, re.compile(r"^([①-⑳])\s?")),
@@ -140,6 +148,90 @@ def _marker(line: str) -> tuple[int, str] | None:
         if m:
             return level, m.group(1)
     return None
+
+
+#: 원문자 번호 — 「①」 의 값. 🚨 `app/retrieve.py` `_CIRCLED` 와 같은 값이다(D-99 의 주석 짝 · 층이 달라 합치지 않는다)
+CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+#: 장 번호 — 산문 행정규칙의 「Ⅰ.」(`law_article._ROMAN` 의 글자와 같다)
+ROMAN = "ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ"
+#: 모양 → 줄머리 꼴. 빈 번호를 앞 노드가 줄로 안았는지 볼 때 쓴다(`order_breaks`)
+_HEAD_FORM: dict[int, str] = {1: "{}.", 2: "{}.", 3: "{})", 4: "{})", 6: "({})", 7: "({})", 5: "{}"}
+
+
+#: 🆕 2026-10-12 (D-293 개정) — 마커처럼 생겼는데 마커로 안 읽은 줄머리(「4)시장출하」). 🚨 **보고만 한다** — 「나.에 따라」도 걸린다
+LOOSE_HEAD = re.compile(rf"^(?:\d{{1,2}}|[{JO}])[.)](?=[^\s「])")
+
+
+def loose_heads(lines: list[str]) -> int:
+    """본문 줄(첫 줄 = 마커 줄 제외) 중 줄머리가 `LOOSE_HEAD` 인 줄 수 — `preprocess/chunk.py` 가 문서별로 찍는다(멈추지 않는다)."""
+    return sum(1 for x in lines[1:] if LOOSE_HEAD.match(x.strip()))
+
+
+def marker_value(mark: str) -> int | None:
+    """마커의 순번 — 「3」 → 3 · 「(다)」 → 3 · 「③」 → 3 · 「Ⅲ」 → 3. 모르는 꼴이면 `None`."""
+    m = mark.strip("()")
+    if m.isascii() and m.isdigit():
+        return int(m)
+    if len(m) == 1:
+        for table in (JO, CIRCLED, ROMAN):
+            if m in table:
+                return table.index(m) + 1
+    return None
+
+
+def _head_form(level: int, n: int) -> str | None:
+    """모양 `level` 의 `n` 번째 마커를 줄머리 꼴로 — 「4)」 · 「거.」 · 「(4)」. 못 만들면 `None`."""
+    fmt = _HEAD_FORM.get(level)
+    if fmt is None:
+        return None
+    if level in (2, 4, 7):
+        return fmt.format(JO[n - 1]) if 0 < n <= len(JO) else None
+    if level == 5:
+        return fmt.format(CIRCLED[n - 1]) if 0 < n <= len(CIRCLED) else None
+    return fmt.format(n)
+
+
+def order_breaks(items: list[tuple[str, str, int, str, list[str]]]) -> set[int]:
+    """형제 순서 검사 (🆕 2026-10-12 · D-293 개정 안건 1 (나)) — 좌표를 세우면 안 되는 노드의 자리.
+
+    `items` — 문서 순서대로 (구역, 경로, 모양, 마커, 원문 줄). 첫 줄이 마커 줄이다. 모양이 `LEVELS` 밖(머리 · 표 행)이면 안 본다.
+    같은 구역 · 같은 부모 경로 · 같은 모양의 마커가 한 형제 묶음이다.
+
+        번호가 되돌아가거나 겹친다 → 그 묶음 전체 — 한 번호가 두 자리를 가리킨다(34717 `Ⅲ` 의 「1…10 · 1 · 2 · 11…16」 18 노드)
+                                 자손은 막지 않는다 — 자손 경로가 겹치면 유일 조건(산문 「겹침」 · 별표 `~`)이 따로 막는다
+        번호가 빈다             → 앞 형제부터 다음 형제 앞까지의 노드 중 **빈 번호의 줄머리 마커를 본문 줄로 안은 노드만**
+                                 (008741 [별표 1]제3호나목3) 이 「4)시장출하」를 안았다)
+        원문 자체의 빈 번호 · 이어 매긴 번호 → 통과(36122 「5.」 아래 「나.」 없음 · 「(2)」 아래 「(바)」부터)
+
+    🚨 좌표만 막는다 — 노드 · 청크 · 본문은 그대로다(검색은 계속 찾는다).
+    ⛔ 마지막 형제 뒤의 삼킴은 번호가 안 비어 못 잡는다 — 글자표(`JO`)와 마커 정규식이 덮는다(D-293 개정 「틀릴 수 있는 지점」).
+    """
+    import collections  # noqa: PLC0415
+    import itertools  # noqa: PLC0415
+
+    groups: dict[tuple[str, str, int], list[int]] = collections.defaultdict(list)
+    for i, (sec, path, level, _mark, _lines) in enumerate(items):
+        if level not in _HEAD_FORM and level != -1:
+            continue
+        parent = path.rsplit(".", 1)[0] if "." in path else ""
+        groups[(sec, parent, level)].append(i)
+    out: set[int] = set()
+    for (_sec, _parent, level), idx in groups.items():
+        vals = [marker_value(items[i][3]) for i in idx]
+        if any(v is None for v in vals):
+            continue  # 모르는 꼴 — 순서를 말할 수 없다. 인용 조립이 따로 막는다
+        if any(b <= a for a, b in itertools.pairwise(vals)):
+            out.update(idx)
+            continue
+        for k in range(1, len(idx)):
+            missing = range(vals[k - 1] + 1, vals[k])
+            forms = [f for f in (_head_form(level, n) for n in missing) if f]
+            if not forms:
+                continue
+            for q in range(idx[k - 1], idx[k]):
+                if any(x.strip().startswith(tuple(forms)) for x in items[q][4][1:]):
+                    out.add(q)
+    return out
 
 
 def parse(content: str, *, reverse_child: bool = False) -> list[dict]:
@@ -225,8 +317,11 @@ def build(path: pathlib.Path) -> tuple[dict, list[dict]]:
     art = ARTICLE.search(d["title"])
     head_no = annex_number(d["content"])
     nodes = parse(d["content"])
+    broken = order_breaks(
+        [(n["section"], str(n["path"]), n["level"], n["marker"], n["lines"]) for n in nodes]
+    )
     rows = []
-    for n in nodes:
+    for i, n in enumerate(nodes):
         joined = "".join(x.strip() for x in n["lines"])
         # 마커를 본문에서 뗀다 — 「1. 질병의…」의 「1. 」
         body = re.sub(r"^[\dA-Za-z①-⑳" + JO + r"]{1,2}[.)]\s*", "", joined, count=1)
@@ -247,11 +342,13 @@ def build(path: pathlib.Path) -> tuple[dict, list[dict]]:
                     "text": body,  # 🚨 매칭용. 화면에 그대로 찍지 않는다
                     "lines": n["lines"],  # 🚨 원문 — 화면은 이쪽을 쓴다
                     "chars": len(body),
+                    **({"순서깨짐": True} if i in broken else {}),
                 },
                 "law_go_kr",
             )
         )
     unique_paths(rows)  # 🆕 2026-09-26 — 법령 별표도 같은 규칙(09-26 원장 12파일은 겹침 0)
+    coord_block(rows)
     return d, rows
 
 
@@ -578,8 +675,12 @@ def build_admrul(u: dict) -> list[dict]:
             label = ""
         nodes += table_nodes(label, lines, t)
     pend = PENDING_ALLOWED.get(u["file"])
+    #: 🆕 2026-10-12 (D-293 개정) — 형제 순서 검사. 머리 · 표 행은 모양이 0 이라 안 본다
+    broken = order_breaks(
+        [(n["section"], str(n["path"]), n["level"], n.get("marker", ""), n["lines"]) for n in nodes]
+    )
     rows = []
-    for n in nodes:
+    for i, n in enumerate(nodes):
         row = {
             "law_id": u["law_id"],
             "annex_no": u["annex_no"],
@@ -600,12 +701,30 @@ def build_admrul(u: dict) -> list[dict]:
         # 🆕 2026-09-27 — 칸 짝을 확신할 수 없는 표 행(`table_nodes`)
         if n.get("표불규칙"):
             row["표불규칙"] = True
+        if i in broken:
+            row["순서깨짐"] = True
         # 🚨 시행 전 판을 싣는 파일이면 같은 글귀 규칙으로 표시한다 — 별표에는 글귀가 없을 수 있다(멈추지 않는다)
         if pend and any(k in n["text"] for k in pend["시행예정"]):
             row["시행예정"] = pend["표시"]
         rows.append(store.stamp(row, "law_go_kr"))
     unique_paths(rows)
+    coord_block(rows)
     return rows
+
+
+def coord_block(rows: list[dict]) -> None:
+    """별표 행에 좌표 자격 `좌표막힘` 을 단다 (🆕 2026-10-12 · D-293 개정 안건 1 (나)). `unique_paths` **뒤에** 부른다.
+
+        「겹침」 — 경로가 겹쳐 `~` 를 붙였다(`unique_paths` 의 `경로중복`)
+        「순서」 — 형제 번호가 되돌아가거나 빈 번호를 줄로 안았다(`order_breaks` 의 `순서깨짐`)
+        빈 문자열 — 막지 않는다(좌표가 서는지는 `app/retrieve.py` `_annex_citation` 이 꼴로 따로 본다)
+    🔴 **모든 행에 단다** — 칸이 없는 파생물(이 함수 전 판)을 `preprocess/chunk.py` 가 알아보고 멈춘다. 없음이 「막지 않는다」로
+       집계되지 않게 (D-220). 산문 행정규칙 쪽 짝은 `law_article.mark_coord_block` 이다.
+    """
+    for r in rows:
+        # 🚨 먼저 뗀다 — 겹친 행에도 붙어 있을 수 있다(파생물에 남기지 않는다)
+        broken = r.pop("순서깨짐", False)
+        r["좌표막힘"] = "겹침" if r.get("경로중복") else ("순서" if broken else "")
 
 
 def unique_paths(rows: list[dict]) -> int:
