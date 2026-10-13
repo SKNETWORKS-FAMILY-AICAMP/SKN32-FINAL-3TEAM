@@ -58,13 +58,15 @@ QUERIES = ROOT / "data" / "derived" / "labels" / "search_probe" / "queries.jsonl
 SELF_MADE = "자작"
 
 #: 🆕 2026-09-28 (0021) — 적용 제외 표시가 **아직 안 실린** 현행 청크 수. 0 이어야 잰다(`main`)
-SQL_UNMARKED = "SELECT count(*) FROM v_current_chunk WHERE exempt_of IS NULL"
+#: 🔄 2026-10-12 (0025 · D-293 개정) — 좌표 자격(`coord_block`)이 안 실린 청크도 센다. ⛔ 그 판으로 재면 별표 · 산문 좌표가 전부
+#:    `None` 이라 정답이 조용히 0 이 된다 — 「검색이 나빠졌다」로 읽힌다
+SQL_UNMARKED = "SELECT count(*) FROM v_current_chunk WHERE exempt_of IS NULL OR coord_block IS NULL"
 
 #: 🆕 2026-09-29 (D-238 ① 의 탐침 판 · 팀장 판정 (가)) — 적용 제외 목 청크의 **좌표 칸만**.
 #:    좌표는 여기서 조립하지 않는다 — `rt.citation` · `rt.basis_citation` 이 한다 (D-99). 칸 이름은 그 둘이 읽는 이름이다.
 #:    🚨 `<> ''` 는 NULL 도 거른다 — NULL(표시 전 판)은 `SQL_UNMARKED` 가 먼저 멈춘다
 SQL_EXEMPT = """SELECT c.law_id, c.doc_type, c.article, c.paragraph, c.item, c.paragraph_no,
-       c.exempt_of, d.annex_no
+       c.exempt_of, c.coord_block, d.annex_no
 FROM v_current_chunk c
 LEFT JOIN document d ON d.doc_id = c.doc_id
 WHERE c.exempt_of <> ''"""
@@ -316,7 +318,7 @@ def main() -> int:
         unmarked = cur.fetchone()[0]
         if unmarked:
             print(
-                f"🔴 적용 제외 표시(`exempt_of`)가 안 실린 청크 {unmarked:,}개 — 재지 않는다 (0021 · D-220).\n"
+                f"🔴 적용 제외 표시(`exempt_of`) · 좌표 자격(`coord_block`)이 안 실린 청크 {unmarked:,}개 — 재지 않는다 (0021 · 0025 · D-220).\n"
                 "   정본: uv run python launcher.py chunk --dump → embed   ·   사본: data-sync → migrate → embed",
                 file=sys.stderr,
             )

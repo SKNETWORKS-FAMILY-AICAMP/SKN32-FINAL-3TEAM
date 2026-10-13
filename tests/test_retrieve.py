@@ -228,8 +228,10 @@ def test_citation_조립(row: dict, want: str | None) -> None:
        ⛔ D-224 의 핵심 규율(「모르면 `None`」)을 재는 검사가 커밋 전 점검에서 빠져 있었다 —
           「검사는 있는데 실행되지 않는다」는 **없는 것과 거의 같다** (D-170 의 어법).
        ★ DB 가 필요 없고 결정론적이라 게이트 조건을 만족한다 (D-89 의 기준).
+    🆕 2026-10-12 (0025 · D-293 개정) — 이 표의 행은 **재적재된**(좌표를 막지 않는) 청크다. 막힌 · 재적재 전 청크는
+       `tests/test_coord_block.py` 가 본다.
     """
-    assert rt.citation(row) == want
+    assert rt.citation({"coord_block": "", **row}) == want
 
 
 @pytest.mark.gate
