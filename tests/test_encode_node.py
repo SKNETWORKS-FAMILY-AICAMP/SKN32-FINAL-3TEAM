@@ -71,7 +71,9 @@ def _cands(s: SentenceJudgment) -> list[str]:
 
 @pytest.fixture
 def off(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(enc.ENV_MODEL_DIR, raising=False)
+    # 🚨 지우지 않고 빈 값으로 둔다 — 지우면 프로세스에서 처음 `collect.env.load()` 가 불릴 때 `.env` 의 값이 들어와
+    #    (override=False 는 「없는 키」를 채운다) 켜 둔 기기에서 이 파일만 돌리면 「설정 없음」이 아니게 된다 (2026-10-14)
+    monkeypatch.setenv(enc.ENV_MODEL_DIR, "")
 
 
 #: 🆕 2026-10-13 (D-333) — 가짜 폴더는 잠금의 판이 아니다. 여기서 보는 것은 그래프 배선이므로 잠금 대조는 연다 —
@@ -184,12 +186,18 @@ def test_후보_거름은_유형_단위이고_전제가_여럿이면_합집합�
 
     # 전제 하나 — 건강기능식품 오인이 서지 않는 전제 셋에서만 빠진다 (D-323 결정 6 · `pm.NO_HF_MISLEAD`)
     for p in Premise:
+        if p is Premise.화장품:
+            continue  # 🔄 2026-10-14 (D-338) — 화장품 전제는 옮김 표를 탄다(`tests/test_substantiation.py`)
         assert kinds((p,)) == (rest if p in g.pm.NO_HF_MISLEAD else both), p
+    assert kinds((Premise.화장품,)) == [
+        "거짓_과장",
+        "의약품_오인",
+    ]  # 건기식 오인 → 의약품 오인(조건부)
     # 품목의 전제 전부 — 한 전제에서라도 서면 남는다
     assert kinds(g.pm.PREMISES_OF[None]) == both  # 품목 미상
     assert kinds(g.pm.PREMISES_OF[Category.식품]) == both  # 식품 전제에서 선다
     assert kinds(g.pm.PREMISES_OF[Category.건기식]) == rest  # 두 전제 다 서지 않는다
-    assert kinds(g.pm.PREMISES_OF[Category.화장품]) == both
+    assert kinds(g.pm.PREMISES_OF[Category.화장품]) == ["거짓_과장", "의약품_오인"]  # D-338
     # 🔴 전제가 없는 품목은 거르지 않는다 — 빈 합집합으로 후보를 지우지 않는다 (D-220)
     assert g.pm.PREMISES_OF[Category.전용법_미수록] == ()
     assert kinds(()) == both
@@ -272,6 +280,8 @@ def test_기록_판정은_품목의_전제로_거르고_분기_문장은_그_전
         sents = g._premise_sentences(p, state, [])
         assert len(sents) == len(state["sentences"])
         want = rest if p in g.pm.NO_HF_MISLEAD else both
+        if p is Premise.화장품:  # 화장품이라면 건기식 오인 → 의약품 오인 (D-338)
+            want = ["거짓_과장", "의약품_오인"]
         assert all(_cands(s) == want for s in sents), p
 
 
