@@ -880,7 +880,7 @@
     <details class="rv-card rv-dev">
       <summary>개발자 정보 — 판정 메타{% if results|length > 1 %} · 문구 {{ item.n }}{% endif %}</summary>
       <table>
-        <tr><th>법령판</th><td>{{ result.law_version }}</td></tr>
+        <tr><th>법령판</th><td>{{ result.law_version|law_version_label }}</td></tr>
         <tr><th>판정 버전</th><td>{{ result.judged_by }}</td></tr>
         <tr><th>라운드</th><td>{{ result.attempt }}</td></tr>
         {# 🆕 2026-10-12 (ksr · 안) — 인코더가 돌았는가. 돌지 않았으면 문장에 추정 줄이 없다 — 「추정 없음」과 가른다 #}

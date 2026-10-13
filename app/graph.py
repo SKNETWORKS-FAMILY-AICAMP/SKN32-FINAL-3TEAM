@@ -57,6 +57,7 @@ from app import reasons as rs
 from app import retrieve as rt
 from app import sanction, sentsplit
 from app.contracts import (
+    LAW_VERSION_UNKNOWN,
     NOT_REVIEWED_UNNAMED,
     UNCOVERED_CATEGORIES,
     AdaptedCopy,
@@ -2308,7 +2309,9 @@ def to_response(state: ReviewState) -> JudgeResponse:
         branches=state.get("branches", []),
         certificate=state.get("certificate"),
         timings=state.get("timings", []),
-        law_version="2026-09-10",
+        # 🔄 2026-10-13 — 고정 날짜를 뺐다. 읽을 판이 없으면 「모름」이다 (D-220 · D-103 ③ · `LAW_VERSION_UNKNOWN`).
+        #    ⬜ 현행 청크의 시행일을 적재가 채우면 그 최댓값을 읽는다 — 그 전에는 날짜를 적지 않는다.
+        law_version=LAW_VERSION_UNKNOWN,
         judged_by=judged_by(state),
     )
 
