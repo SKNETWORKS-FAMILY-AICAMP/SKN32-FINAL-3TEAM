@@ -1,179 +1,293 @@
 {# app/templates/user/landing.html — 랜딩(로그인 전 첫 화면) · 소유자 ksr (병렬작업 계약 §5)
 
   ★ 프로토타입의 `data-screen="landing"` 을 옮긴 것이다 (ksr, 2026-09-13 — 2026-09-16 lse 셸로 이식).
-  🔄 2026-09-16 — `/login`(governor 전용)이 아니라 **`/u/login`·`/u/signup`**(일반 회원용,
-     오늘 새로 생김)으로 링크를 바꿨다. 원래 ksr 작성 시점엔 그 라우트가 없어 `/login`으로
-     보냈었다 — 관리자 콘솔로 잘못 보내던 것을 여기서 바로잡는다.
-  ⛔ 프로토타입의 「이미 240개 팀이 매달 12,000건 넘는 광고 문구를 검수하고 있어요」는
-     **지어낸 수치**다. 실제 사용량이 아니므로 옮기지 않는다 (D-147).
-  🚨 이 화면은 nav 를 넣지 않는다 — 로그인 전 화면이라 사용자 메뉴가 없다.
+  🔄 2026-09-16 — `/login`(governor 전용)이 아니라 **`/u/login`·`/u/signup`**(일반 회원용)으로 링크를 바꿨다.
+  ⛔ 프로토타입의 「이미 240개 팀이 매달 12,000건」 · 「누적 검수 82,400+」 같은 수는 **지어낸 수치**다.
+     실제 사용량이 아니므로 옮기지 않는다 (D-147).
+  🔄 2026-10-14 (lse · 소유자 확인) — 시안(목업 v7.1)의 모양을 되살린다: 로고 · 그라디언트 · 「AI 실시간 진단」 미리보기 ·
+     아이콘 카드 · 동작 순서 · 업종 칩. 미리보기는 **실제 검수 → 고쳐 쓰기 흐름**(위반 문장 → 근거 → 담백한 안 · 다듬은 안)으로
+     바꿨다 — 예시 문장은 직접 만든 것이고, 고친 문장은 그 문장을 실제로 돌린 결과다(10-13 · q4b-v14 + 다듬기).
+     업종 칩은 지금 판정이 다루는 범위만 적는다(시안의 의료기기 · 금융은 범위 밖이라 뺐다).
+  🚨 이 화면은 nav 를 넣지 않는다 — 로그인 전 화면이라 사용자 메뉴가 없다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
 #}{% extends "base.html" %}
-{% block title %}CopyLane — 광고 문구 준법 검수·카피생성{% endblock %}
+{% block title %}CopyLane — 광고 문구 준법 검수 · 카피생성{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="/static/user.css">
 <style>
-.ld-top { display: flex; align-items: center; justify-content: space-between;
-          gap: 1rem; padding: .75rem 0 1.25rem; border-bottom: 1px solid var(--u-line);
-          margin-bottom: 2rem; }
-.ld-brand { font-weight: 700; font-size: 1.05rem; color: var(--u-ink); text-decoration: none; }
-.ld-cta { display: inline-block; padding: .42rem .95rem; border-radius: .6rem;
-          background: var(--u-signal); color: #fff; font-size: .85rem;
-          font-weight: 600; text-decoration: none; }
-.ld-cta.is-ghost { background: transparent; color: var(--u-signal-ink);
-                   border: 1px solid var(--u-line); }
+/* 공통 머리 · 꼬리(개발용 링크)는 랜딩에서만 감춘다 — base.html(팀장 소유)은 고치지 않는다 */
+body:has(.ld-page) > header, body:has(.ld-page) > footer { display: none; }
+body:has(.ld-page) { max-width: none; margin: 0; padding: 0; }
+body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
-.ld-hero { display: grid; gap: 1.75rem; margin-bottom: 2.25rem; }
-@media (min-width: 52rem) { .ld-hero { grid-template-columns: 1fr 1fr; align-items: center; } }
-.ld-kicker { font-size: .78rem; color: var(--u-signal-ink); letter-spacing: .04em; margin: 0 0 .6rem; }
-.ld-hero h1 { font-size: 2rem; line-height: 1.3; margin: 0 0 .8rem; }
-.ld-hero h1 em { font-style: normal; color: var(--u-signal-ink); }
-.ld-lead { color: var(--u-clay); font-size: .95rem; line-height: 1.75; margin: 0 0 1.2rem; }
-.ld-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ld-page { --ld-grad: linear-gradient(135deg, #8b5cf6 0%, #c77df3 50%, #f472b6 100%);
+           --ld-grad-hover: linear-gradient(135deg, #7c3aed 0%, #b15fe0 50%, #ec5aa0 100%);
+           background: var(--u-surface); color: var(--u-ink); min-height: 100vh; }
+.ld-wrap { max-width: 70rem; margin: 0 auto; padding: 0 1.5rem; }
 
-.ld-demo { border: 1px solid var(--u-line); border-radius: 1rem;
-           background: var(--u-surface); padding: 1.1rem 1.15rem; }
-.ld-demo-head { display: flex; align-items: center; justify-content: space-between;
-                gap: .5rem; margin-bottom: .75rem; }
-.ld-demo-head b { font-size: .88rem; }
-.ld-tag { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px;
-          background: var(--u-signal-soft); color: var(--u-signal-ink); }
-.ld-quote { font-size: .9rem; line-height: 1.8; margin: 0 0 .6rem;
-            border-left: 2px solid var(--u-line); padding-left: .7rem; }
-.ld-hit { background: var(--u-hit); color: inherit; border-radius: .2rem; padding: 0 .1rem; }
-.ld-basis { font-size: .78rem; color: var(--u-bad-ink); background: var(--u-bad-bg);
-            border: 1px solid var(--u-bad-line); border-radius: .5rem; padding: .45rem .6rem; margin: 0 0 .7rem; }
-.ld-arrow { font-size: .74rem; color: var(--u-clay); margin: 0 0 .5rem; }
-.ld-fix { font-size: .9rem; line-height: 1.8; margin: 0;
-          border-left: 2px solid var(--u-signal); padding-left: .7rem; }
+/* 머리 */
+.ld-page .ld-head { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--u-line);
+           background: color-mix(in srgb, var(--u-surface) 88%, transparent); backdrop-filter: blur(8px); }
+/* base.css 의 전역 header · footer · h2 규칙(개발 화면용)을 랜딩에서 되돌린다 */
+.ld-page header, .ld-page footer { display: block; margin: 0; padding: 0; gap: 0; }
+.ld-page header nav { margin-left: 0; }
+.ld-page h2 { margin-top: 0; }
+.ld-head .ld-wrap { height: 4rem; display: flex; align-items: center; justify-content: space-between; }
+.ld-brand { display: flex; align-items: center; gap: .5rem; text-decoration: none; }
+.ld-brand img { width: 1.75rem; height: 1.75rem; border-radius: .4rem; }
+.ld-word { font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; background: var(--ld-grad);
+           -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ld-nav { display: flex; gap: .5rem; align-items: center; }
 
-.ld-warn { border: 1px solid var(--u-warn-line); background: var(--u-warn-bg); color: var(--u-warn-ink);
-           border-radius: .75rem; padding: .7rem .85rem; font-size: .82rem;
-           line-height: 1.6; margin-bottom: 2.25rem; }
+/* 버튼 */
+.ld-btn { display: inline-flex; align-items: center; justify-content: center; height: 2.75rem; padding: 0 1.4rem;
+          border-radius: .8rem; font-size: .92rem; font-weight: 600; text-decoration: none; transition: all .15s ease; }
+.ld-btn-sm { height: 2.25rem; padding: 0 1rem; font-size: .82rem; }
+.ld-btn-grad { color: #fff; background: var(--ld-grad); box-shadow: 0 6px 18px -6px rgba(139, 92, 246, .55); }
+.ld-btn-grad:hover { background: var(--ld-grad-hover); transform: translateY(-1px); }
+.ld-btn-line { color: var(--u-ink); border: 1px solid var(--u-line); background: var(--u-surface); font-weight: 500; }
+.ld-btn-line:hover { background: var(--u-surface2); }
+.ld-btn-text { color: var(--u-clay); font-weight: 500; }
+.ld-btn-text:hover { color: var(--u-ink); background: var(--u-surface2); }
 
-.ld-sect { margin-bottom: 2.25rem; }
-.ld-sect > h2 { font-size: 1.15rem; margin: 0 0 .3rem; }
-.ld-sect > p.ld-sub { color: var(--u-clay); font-size: .85rem; margin: 0 0 1rem; }
+/* 히어로 */
+.ld-hero { display: grid; gap: 3rem; align-items: center; padding-block: 4.5rem 4rem; }
+@media (min-width: 56rem) { .ld-hero { grid-template-columns: 1fr 1fr; gap: 2.5rem; padding-block: 5.5rem 4.5rem; } }
+.ld-kicker { font-family: ui-monospace, monospace; font-size: .72rem; letter-spacing: .14em; color: var(--u-signal);
+             margin: 0 0 1rem; }
+.ld-hero h1 { font-size: clamp(2.1rem, 4.4vw, 2.75rem); line-height: 1.18; letter-spacing: -.03em; font-weight: 800; margin: 0 0 1.25rem; }
+.ld-hero h1 em { font-style: normal; background: var(--ld-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ld-lead { font-size: 1rem; color: var(--u-clay); line-height: 1.75; max-width: 28rem; margin: 0 0 2rem; }
+.ld-lead b { color: var(--u-ink); font-weight: 600; }
+.ld-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+.ld-try { margin: 1rem 0 0; font-size: .82rem; color: var(--u-clay); }
+.ld-try a { color: var(--u-signal-ink); font-weight: 600; text-decoration: none; }
+.ld-try a:hover { text-decoration: underline; }
 
-.ld-feats { display: grid; gap: .7rem; }
-@media (min-width: 44rem) { .ld-feats { grid-template-columns: repeat(3, 1fr); } }
-.ld-feat { border: 1px solid var(--u-line); border-radius: 1rem;
-           padding: 1.1rem 1.15rem; background: var(--u-surface); }
-.ld-feat b { display: block; font-size: .98rem; margin-bottom: .35rem; }
+/* 미리보기 카드 */
+.ld-demo { position: relative; overflow: hidden; border: 1px solid var(--u-line); border-radius: 1.25rem;
+           background: var(--u-surface); padding: 1.5rem 1.25rem 1.25rem;
+           box-shadow: 0 18px 44px -14px rgba(139, 92, 246, .32); }
+.ld-demo::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--ld-grad); }
+.ld-demo-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .9rem; }
+.ld-demo-top small { font-family: ui-monospace, monospace; font-size: .66rem; letter-spacing: .08em; color: var(--u-clay); }
+.ld-badge { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 999px;
+            color: #fff; font-size: .66rem; font-weight: 700; background: var(--ld-grad); }
+.ld-badge i { font-style: normal; animation: ld-twinkle 2.4s ease-in-out infinite; }
+@keyframes ld-twinkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.8); } }
+.ld-bubble { position: relative; border: 1px solid var(--u-line); border-radius: .9rem; background: var(--u-surface2);
+             padding: .9rem 1rem; font-size: .86rem; line-height: 1.7; margin: 0; }
+.ld-pin { position: absolute; top: -.55rem; right: -.55rem; width: 1.5rem; height: 1.5rem; border-radius: 50%;
+          display: grid; place-items: center; color: #fff; font-size: .78rem; font-weight: 800;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, .18), 0 0 0 3px var(--u-surface); }
+.ld-pin-bad { background: var(--u-bad-dot); }
+.ld-pin-ok { background: var(--u-ok-dot); }
+.ld-mark { color: inherit; background: none; padding: 0; border-bottom: 2px solid var(--u-bad-dot);
+           background-image: linear-gradient(transparent 60%, var(--u-bad-bg) 60%); }
+.ld-basis { display: flex; gap: .45rem; align-items: flex-start; margin: .75rem 0 1rem .25rem;
+            font-size: .76rem; color: var(--u-bad-ink); line-height: 1.6; }
+.ld-basis::before { content: ""; width: .33rem; height: .33rem; border-radius: 50%; background: var(--u-bad-dot);
+                    margin-top: .45rem; flex-shrink: 0; }
+.ld-flow { display: flex; align-items: center; gap: .6rem; margin: 0 0 1rem; }
+.ld-flow hr { flex: 1; border: 0; border-top: 1px solid var(--u-line); margin: 0; }
+.ld-flow span { font-family: ui-monospace, monospace; font-size: .64rem; letter-spacing: .06em; color: var(--u-clay); white-space: nowrap; }
+.ld-flow b { width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center; color: #fff;
+             font-size: .78rem; background: var(--ld-grad); box-shadow: 0 2px 10px rgba(139, 92, 246, .35);
+             animation: ld-bob 1.8s ease-in-out infinite; }
+@keyframes ld-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+.ld-good { border-color: var(--u-ok-line); background: var(--u-ok-bg); color: var(--u-ink); margin-bottom: .6rem; }
+.ld-good small { display: block; font-size: .66rem; font-weight: 700; color: var(--u-ok-ink); margin-bottom: .2rem; }
+.ld-plain { background: var(--u-surface); }
+.ld-plain small { display: block; font-size: .66rem; font-weight: 700; color: var(--u-clay); margin-bottom: .2rem; }
+.ld-demo-note { margin: .8rem 0 0; font-size: .7rem; color: var(--u-clay); }
+
+/* 고지 */
+.ld-notice { border-block: 1px solid var(--u-line); background: var(--u-surface2); }
+.ld-notice p { margin: 0; padding: .9rem 0; font-size: .78rem; color: var(--u-clay); line-height: 1.6; }
+
+/* 구역 */
+.ld-sec { padding: 4.5rem 0; }
+.ld-sec-alt { background: var(--u-surface2); border-block: 1px solid var(--u-line); }
+.ld-sec h2 { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 .35rem; }
+.ld-sub { font-size: .88rem; color: var(--u-clay); margin: 0 0 2rem; }
+
+.ld-feats { display: grid; gap: 1.1rem; }
+@media (min-width: 52rem) { .ld-feats { grid-template-columns: repeat(3, 1fr); } }
+.ld-feat { display: block; border: 1px solid var(--u-line); border-radius: 1.1rem; padding: 1.5rem; text-decoration: none;
+           color: inherit; background: var(--u-surface); transition: border-color .15s, box-shadow .15s, transform .15s; }
+.ld-feat:hover { border-color: var(--u-signal); box-shadow: 0 6px 20px rgba(139, 92, 246, .16); transform: translateY(-2px); }
+.ld-ico { width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: var(--u-signal-soft); display: grid;
+          place-items: center; margin-bottom: 1rem; color: var(--u-signal); }
+.ld-ico svg { width: 1.2rem; height: 1.2rem; }
+.ld-feat b { display: block; font-size: 1.1rem; margin-bottom: .4rem; }
+.ld-feat:hover b { color: var(--u-signal-ink); }
 .ld-feat span { font-size: .84rem; color: var(--u-clay); line-height: 1.7; }
-a.ld-feat { display: block; text-decoration: none; color: inherit; }
-a.ld-feat:hover { border-color: var(--u-signal); }
-a.ld-feat:hover b { color: var(--u-signal-ink); }
-.ld-feat .ld-go { color: var(--u-signal); font-weight: 400; }
 
-.ld-qa { border-top: 1px solid var(--u-line); padding: .85rem 0; }
-.ld-qa:first-of-type { border-top: 0; }
-.ld-qa b { display: block; font-size: .88rem; margin-bottom: .25rem; }
-.ld-qa p { margin: 0; font-size: .85rem; color: var(--u-clay); line-height: 1.75; }
+.ld-steps { display: grid; gap: 1.1rem; counter-reset: step; }
+@media (min-width: 52rem) { .ld-steps { grid-template-columns: repeat(3, 1fr); } }
+.ld-step { position: relative; border: 1px solid var(--u-line); border-radius: 1.1rem; padding: 1.4rem 1.4rem 1.3rem;
+           background: var(--u-surface); }
+.ld-step::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 1.8rem;
+                   height: 1.8rem; border-radius: 50%; color: #fff; font-weight: 700; font-size: .85rem;
+                   background: var(--ld-grad); margin-bottom: .9rem; }
+.ld-step b { display: block; font-size: 1rem; margin-bottom: .35rem; }
+.ld-step span { font-size: .84rem; color: var(--u-clay); line-height: 1.7; }
 
-.ld-end { border: 1px solid var(--u-line); border-radius: 1rem; padding: 1.5rem 1.25rem;
-          text-align: center; background: var(--u-surface2); margin-bottom: 2rem; }
-.ld-end h2 { margin: 0 0 .3rem; font-size: 1.1rem; }
-.ld-end p { margin: 0 0 .9rem; color: var(--u-clay); font-size: .85rem; }
+.ld-chips { display: flex; flex-wrap: wrap; gap: .6rem; }
+.ld-chip { height: 2.5rem; padding: 0 1rem; display: inline-flex; align-items: center; border-radius: 999px;
+           border: 1px solid var(--u-line); background: var(--u-surface); font-size: .86rem; font-weight: 500; }
+
+.ld-qa-grid { display: grid; gap: 1.75rem 2.5rem; }
+@media (min-width: 52rem) { .ld-qa-grid { grid-template-columns: 1fr 1fr; } }
+.ld-qa b { display: block; font-size: .92rem; margin-bottom: .35rem; }
+.ld-qa p { margin: 0; font-size: .84rem; color: var(--u-clay); line-height: 1.75; }
+
+.ld-end { text-align: center; }
+.ld-end h2 { font-size: 1.75rem; }
 .ld-end .ld-actions { justify-content: center; }
 
-.ld-foot { border-top: 1px solid var(--u-line); padding-top: 1rem;
-           display: flex; flex-wrap: wrap; gap: .5rem 1rem;
-           justify-content: space-between; font-size: .78rem; color: var(--u-clay); }
-.ld-foot a { color: var(--u-clay); }
-.ld-soon { color: var(--u-clay); font-size: .78rem; margin: .5rem 0 0; }
+.ld-page .ld-foot { border-top: 1px solid var(--u-line); color: var(--u-clay); }
+.ld-foot .ld-wrap { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem;
+                    padding-block: 1.75rem; font-size: .8rem; color: var(--u-clay); }
+.ld-foot a { color: var(--u-clay); text-decoration: none; margin-left: 1.1rem; }
+.ld-foot a:hover { color: var(--u-ink); }
+.ld-foot img { width: 1.25rem; height: 1.25rem; border-radius: .3rem; vertical-align: -4px; margin-right: .4rem; }
+
+@media (prefers-reduced-motion: reduce) { .ld-badge i, .ld-flow b { animation: none; } }
 </style>{% endblock %}
 {% block content %}
-<div class="user-shell">
-<div class="user-main">
+<div class="user-shell ld-page">
 
-<div class="ld-top">
-  <a class="ld-brand" href="/u/landing">copylane</a>
-  <div class="ld-actions">
-    <a class="ld-cta is-ghost" href="/u/signup">회원가입</a>
-    <a class="ld-cta" href="/u/login">로그인</a>
+<header class="ld-head">
+  <div class="ld-wrap">
+    <a class="ld-brand" href="/u/landing"><img src="/static/brand/symbol-180.png" alt=""><span class="ld-word">copylane</span></a>
+    <nav class="ld-nav">
+      <a class="ld-btn ld-btn-sm ld-btn-text" href="/u/login">로그인</a>
+      <a class="ld-btn ld-btn-sm ld-btn-grad" href="/u/signup">무료로 시작하기</a>
+    </nav>
   </div>
-</div>
+</header>
 
-<div class="ld-hero">
+<section class="ld-wrap ld-hero">
   <div>
     <p class="ld-kicker">광고 문구 준법 검수 · 카피생성</p>
     <h1>올리기 전에,<br>위법 소지부터<br><em>확인하세요</em></h1>
     <p class="ld-lead">
-      문장 단위로 위법 표현과 <b>근거 조항</b>을 짚어드리고,
-      진단을 통과하는 어휘 안에서 <b>새 카피</b>까지 만들어드려요.
+      문장 단위로 위법 표현과 <b>근거 조항</b>을 짚어 드리고, 걸린 문장은 그 자리에서
+      <b>고쳐 써</b> 드려요. 진단을 통과하는 어휘 안에서 <b>새 카피</b>까지 만들어 드려요.
     </p>
     <div class="ld-actions">
-      <a class="ld-cta" href="/u/signup">회원가입하고 시작하기</a>
-      <a class="ld-cta is-ghost" href="/u/help">사용방법 보기</a>
+      <a class="ld-btn ld-btn-grad" href="/u/login">로그인하고 시작하기</a>
+      <a class="ld-btn ld-btn-line" href="/u/signup">회원가입</a>
     </div>
+    <p class="ld-try">가입 전에 해 보고 싶다면 → <a href="/u/review">로그인 없이 문구 검수해 보기</a></p>
   </div>
 
-  <div class="ld-demo">
-    <div class="ld-demo-head">
-      <b>검수 미리보기</b>
-      <span class="ld-tag">예시</span>
+  <div class="ld-demo" aria-label="검수와 고쳐 쓰기 예시">
+    <div class="ld-demo-top">
+      <small>검수 미리보기 · 예시</small>
+      <span class="ld-badge"><i>✦</i> AI 실시간 진단</span>
     </div>
-    <p class="ld-quote">이 영양제는 매일 섭취 시 <mark class="ld-hit">눈 피로 회복에 탁월한 효과</mark>가 있습니다. 간편하게 하루 한 알로 건강을 챙기세요.</p>
+    <p class="ld-bubble">
+      <span class="ld-pin ld-pin-bad" aria-hidden="true">!</span>
+      <span class="ld-mark">고혈압 낮추는</span> 오미자청, 문경 오미자를 설탕에 100일 숙성
+    </p>
     <p class="ld-basis">식품표시광고법 제8조 · 질병 예방·치료 효능 표방 소지</p>
-    <p class="ld-arrow">↓ 진단을 통과하는 대안</p>
-    <p class="ld-fix">장시간 화면을 보는 날에도 부담 없이, 하루 한 알로 눈 건강을 챙기는 습관을 시작해보세요.</p>
+    <div class="ld-flow" aria-hidden="true"><hr><b>↓</b><span>위반만 지우고 다시 쓰기</span><hr></div>
+    <p class="ld-bubble ld-good">
+      <span class="ld-pin ld-pin-ok" aria-hidden="true">✓</span>
+      <small>자연스럽게 다듬은 안</small>
+      문경 오미자를 설탕에 100일 숙성한 오미자청, 차갑게 두었다가 한 숟갈씩 드세요
+    </p>
+    <p class="ld-bubble ld-plain">
+      <small>담백한 안 · 위반만 지운 문장</small>
+      문경 오미자를 설탕에 100일 숙성한 오미자청
+    </p>
+    <p class="ld-demo-note">고친 문장도 다시 판정을 거쳐요 — 적법 확정이 아니라 사람 검수가 남아요.</p>
   </div>
+</section>
+
+<div class="ld-notice">
+  <div class="ld-wrap"><p>ⓘ CopyLane 의 진단 결과는 <b>참고용</b>이며 법적 확정 판단이 아니에요. 최종 게재 여부는 반드시 법무 검토를 거쳐 결정하세요.</p></div>
 </div>
 
-<div class="ld-warn">
-  CopyLane 의 진단 결과는 <b>참고용</b>이며 법적 확정 판단이 아니에요.
-  최종 게재 여부는 반드시 법무 검토를 거쳐 결정하세요.
-</div>
-
-<div class="ld-sect">
-  <h2>무엇을 할 수 있나요</h2>
-  <p class="ld-sub">검수부터 카피생성, 광고물 제작까지 한 곳에서 이어져요.</p>
-  <div class="ld-feats">
-    <a class="ld-feat" href="/u/review">
-      <b>검수 <span class="ld-go">→</span></b>
-      <span>문구를 넣으면 문장 단위로 위험 표현과 근거 조항을 짚어드려요.</span>
-    </a>
-    <a class="ld-feat" href="/u/generate">
-      <b>카피생성 <span class="ld-go">→</span></b>
-      <span>진단을 통과하는 어휘 안에서 새 카피를 만들어드려요.</span>
-    </a>
-    <a class="ld-feat" href="/u/compose">
-      <b>AI 광고생성 <span class="ld-go">→</span></b>
-      <span>만든 카피를 상세페이지 · 카드뉴스 · 배너 규격의 광고물로 만들어드려요.</span>
-    </a>
-  </div>
-</div>
-
-<div class="ld-sect">
-  <h2>서비스 안내</h2>
-  <div>
-    <div class="ld-qa">
-      <b>진단은 법적 확정 판단인가요?</b>
-      <p>아니요, 참고용 진단이에요. 위험 표현과 근거 조항을 미리 보여드리지만, 최종 게재 여부는 법무 검토를 거쳐 직접 결정하셔야 해요.</p>
-    </div>
-    <div class="ld-qa">
-      <b>같은 조직 계정끼리 결과를 공유하나요?</b>
-      <p>같은 조직으로 로그인한 팀원끼리 검수 결과를 함께 보는 것을 목표로 하고 있어요. 조직 밖으로는 공유되지 않아요.</p>
-    </div>
-    <div class="ld-qa">
-      <b>가입에 비용이 드나요?</b>
-      <p>검수·카피생성 기본 기능은 무료로 시작할 수 있어요. 자세한 이용 조건은 로그인 후 확인하실 수 있어요.</p>
+<section class="ld-sec">
+  <div class="ld-wrap">
+    <h2>무엇을 할 수 있나요</h2>
+    <p class="ld-sub">검수부터 카피생성, 광고물 제작까지 한 곳에서 이어져요</p>
+    <div class="ld-feats">
+      <a class="ld-feat" href="/u/review">
+        <span class="ld-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+        <b>검수 →</b>
+        <span>문구를 넣으면 문장 단위로 위험 표현과 근거 조항을 짚고, 걸린 문장은 그 자리에서 고쳐 써 드려요.</span>
+      </a>
+      <a class="ld-feat" href="/u/generate">
+        <span class="ld-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5L13.8 9.7L20 11.5L13.8 13.3L12 19.5L10.2 13.3L4 11.5L10.2 9.7L12 3.5Z"/></svg></span>
+        <b>카피생성 →</b>
+        <span>진단을 통과하는 어휘 안에서 새 카피를 만들어 드려요.</span>
+      </a>
+      <a class="ld-feat" href="/u/compose">
+        <span class="ld-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5v3M3.5 5h3M17 15.5v3M15.5 17h3"/><path d="M11.5 4.5 13.6 9.4 18.5 11.5 13.6 13.6 11.5 18.5 9.4 13.6 4.5 11.5 9.4 9.4Z"/></svg></span>
+        <b>AI 광고생성 →</b>
+        <span>만든 카피를 상세페이지 · 카드뉴스 · 배너 규격의 광고물로 만들어 드려요.</span>
+      </a>
     </div>
   </div>
-</div>
+</section>
 
-<div class="ld-end">
-  <h2>지금 회원가입하고 시작해보세요</h2>
-  <p>첫 검수까지 3분이면 충분해요.</p>
-  <div class="ld-actions">
-    <a class="ld-cta" href="/u/signup">회원가입하고 시작하기</a>
+<section class="ld-sec ld-sec-alt">
+  <div class="ld-wrap">
+    <h2>이렇게 짚고, 이렇게 고쳐요</h2>
+    <p class="ld-sub">판정은 조문에 기대고, 고쳐 쓴 문장도 다시 판정을 받아요</p>
+    <div class="ld-steps">
+      <div class="ld-step"><b>문장 단위로 판정</b><span>문구를 문장으로 나눠 금지 표현 사전과 법령 조문에 대 보고, 걸린 곳과 근거 조항을 보여 드려요.</span></div>
+      <div class="ld-step"><b>자체 AI 가 고쳐 쓰기</b><span>걸린 문장에서 위반만 지운 담백한 안과, 자연스럽게 다듬은 안을 함께 만들어요. 고칠 수 없는 문장은 「합법화 불가」로 알려 드려요.</span></div>
+      <div class="ld-step"><b>고친 문장도 다시 판정</b><span>고친 문장을 같은 판정에 다시 넣어 위반이 붙은 안은 빼요. 남은 안도 확정이 아니라 사람이 마지막으로 봐요.</span></div>
+    </div>
   </div>
-</div>
+</section>
 
-<div class="ld-foot">
-  <span>© 2026 CopyLane</span>
-  <span><a href="/u/help">도움말</a></span>
-</div>
+<section class="ld-sec">
+  <div class="ld-wrap">
+    <h2>이런 문구를 다뤄요</h2>
+    <p class="ld-sub">규제가 촘촘한 품목일수록 효과가 커요</p>
+    <div class="ld-chips">
+      <span class="ld-chip">식품</span>
+      <span class="ld-chip">건강기능식품</span>
+      <span class="ld-chip">화장품</span>
+      <span class="ld-chip">일반 상품 · 표시광고</span>
+    </div>
+  </div>
+</section>
 
-</div>{# /.user-main #}
+<section class="ld-sec ld-sec-alt">
+  <div class="ld-wrap">
+    <h2>서비스 안내</h2>
+    <p class="ld-sub">자주 묻는 것을 모았어요</p>
+    <div class="ld-qa-grid">
+      <div class="ld-qa"><b>진단은 법적 확정 판단인가요?</b><p>아니요, 참고용 진단이에요. 위험 표현과 근거 조항을 미리 보여 드리지만, 최종 게재 여부는 법무 검토를 거쳐 직접 결정하셔야 해요.</p></div>
+      <div class="ld-qa"><b>고쳐 쓴 문구는 바로 써도 되나요?</b><p>고친 문구도 다시 판정을 거치지만 적법 확정은 아니에요. 「조건부 후보」는 제품이 기능성 인정 · 심사를 받았을 때만 쓸 수 있어요.</p></div>
+      <div class="ld-qa"><b>같은 조직 계정끼리 결과를 공유하나요?</b><p>같은 조직으로 로그인한 팀원끼리 검수 결과를 함께 보는 것을 목표로 하고 있어요. 조직 밖으로는 공유되지 않아요.</p></div>
+      <div class="ld-qa"><b>가입에 비용이 드나요?</b><p>검수 · 카피생성 기본 기능은 무료로 시작할 수 있어요. 자세한 이용 조건은 로그인 후 확인하실 수 있어요.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="ld-sec ld-end">
+  <div class="ld-wrap">
+    <h2>지금 시작해 보세요</h2>
+    <p class="ld-sub">가입은 무료이고, 첫 검수까지 3분이면 충분해요</p>
+    <div class="ld-actions">
+      <a class="ld-btn ld-btn-grad" href="/u/login">로그인하고 시작하기</a>
+      <a class="ld-btn ld-btn-line" href="/u/signup">회원가입</a>
+    </div>
+  </div>
+</section>
+
+<footer class="ld-foot">
+  <div class="ld-wrap">
+    <span><img src="/static/brand/symbol-180.png" alt="">© 2026 CopyLane</span>
+    <span><a href="/u/help">도움말</a><a href="/u/signup">회원가입</a><a href="/u/login">로그인</a></span>
+  </div>
+</footer>
+
 </div>
 {% endblock %}
