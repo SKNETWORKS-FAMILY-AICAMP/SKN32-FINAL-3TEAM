@@ -34,6 +34,7 @@ def _node(path: str, text: str, section: str = "본문") -> dict:
         "path": path,
         "level": 1,
         "text": text,
+        "좌표막힘": "",  # 🆕 2026-10-12 (D-293 개정) — 생산자가 늘 다는 칸이다
     }
 
 
@@ -127,6 +128,7 @@ def _row(**kw: object) -> dict:
         "item": "본문",
         "paragraph": "1.가.1",
         "exempt_of": "1.가",
+        "coord_block": "",
         **kw,
     }
 
@@ -163,6 +165,7 @@ def _hit(cid: str, paragraph: str, exempt_of: str) -> rt.Hit:
         "part_no": 1,
         "part_total": 1,
         "exempt_of": exempt_of,
+        "coord_block": "",
         "doc_type": "별표",
         "annex_no": 1,
         "doc_title": None,
@@ -285,12 +288,14 @@ def test_탐침_제외_목_지도는_검색과_같은_함수로_좌표를_세운
     """🔴 좌표를 여기서 다시 조립하면 규칙이 두 벌이 된다 (D-99) — `rt.citation` · `rt.basis_citation` 이 낸 값이어야 한다."""
     from scripts import search_probe as sp  # noqa: PLC0415
 
-    #        law_id    doc_type article      paragraph item    paragraph_no exempt_of annex_no
+    #        law_id    doc_type article      paragraph item    paragraph_no exempt_of coord_block annex_no
     rows = [
-        ("013453", "별표", "제3조제1항", "3.나", "본문", None, "3", 1),
-        ("013453", "별표", "제3조제1항", "1.가.1", "본문", None, "1.가", 1),
+        ("013453", "별표", "제3조제1항", "3.나", "본문", None, "3", "", 1),
+        ("013453", "별표", "제3조제1항", "1.가.1", "본문", None, "1.가", "", 1),
         # 별표 번호 없음 → 좌표가 안 선다 (D-224)
-        ("013453", "별표", "제3조제1항", "3.나", "본문", None, "3", None),
+        ("013453", "별표", "제3조제1항", "3.나", "본문", None, "3", "", None),
+        # 🆕 2026-10-12 (0025) — 좌표가 막혔으면(형제 순서) 안 선다
+        ("013453", "별표", "제3조제1항", "3.다", "본문", None, "3", "순서", 1),
     ]
     cur = _Cur(rows)
     got = sp.exempt_map(cur)

@@ -142,6 +142,7 @@
       "article": "req builtins.str",
       "basis": "opt builtins.bool",
       "chunk_id": "opt str | None",
+      "doc_title": "opt str | None",
       "item": "opt builtins.str",
       "law_id": "req builtins.str",
       "quote": "opt str | None"
