@@ -68,8 +68,10 @@ def off_reason() -> str | None:
     return None
 
 
-def generate(branch_key: str, fields: dict) -> Result:
+def generate(branch_key: str, fields: dict, exclude: tuple[str, ...] = ()) -> Result:
     """분기와 이용자가 적은 값으로 후보를 만든다. 🚨 수십 초 걸린다 — 부르는 쪽이 스레드로 돌린다.
+
+    `exclude` — 이미 보여 준 문구(「더 탐색하기」). 그것과 닮지 않은 것만 낸다 (`pipeline.run`).
 
     `CopyGenOff` — 엔진을 쓸 수 없다(스위치 · 키 · 인코더) · `CopyGenError` — 호출이 실패했다.
     """
@@ -80,12 +82,13 @@ def generate(branch_key: str, fields: dict) -> Result:
     if branch.needs_fixed and not inputs.fixed:
         raise ValueError("이 분기는 고정 문구(fixed)가 있어야 한다")
     gen = _llm.make()
-    res = _run(inputs, branch, gen, EncoderJudge())
+    res = _run(inputs, branch, gen, EncoderJudge(), exclude=tuple(exclude))
     # 🚨 문구는 찍지 않는다 — 건수만 (이용자 입력과 생성 문구는 로그에 남기지 않는다)
     dropped: Counter[str] = res.reasons()
     _log.info(
-        "카피 생성 · 분기=%s · 모델=%s · 라운드=%d · 보관=%d · 탈락=%s · 토큰=%s",
+        "카피 생성 · 분기=%s · 이미 보여 준 것=%d · 모델=%s · 라운드=%d · 보관=%d · 탈락=%s · 토큰=%s",
         branch_key,
+        len(exclude),
         gen.model,
         len(res.rounds),
         len(res.kept),

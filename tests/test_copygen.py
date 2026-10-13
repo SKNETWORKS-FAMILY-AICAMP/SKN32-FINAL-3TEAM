@@ -359,7 +359,11 @@ def test_화면의_후보_카드는_분기와_인정_문구를_들고_넘어간�
     _wire(monkeypatch, gen)
     body = _post(category="hf", cert="yes", name="지어낸 정제", fixed=FIXED).text
     assert body.count('name="branch" value="hf_yes"') == 3
-    assert body.count(f'name="fixed" value="{FIXED}"') == 3
+    # 후보 카드 셋 + 「더 탐색하기」 폼 하나
+    assert body.count(f'name="fixed" value="{FIXED}"') == 4
+    # 이미 보여 준 문구는 자리표시자가 든 글자로 들고 다닌다 — 인정 문구를 여러 벌 싣지 않는다
+    assert body.count('name="shown" value="') == 3
+    assert f'name="shown" value="점심 먹고 물과 함께 삼켜요, {PLACEHOLDER}"' in body
 
 
 def test_광고_생성은_넘어온_품목으로_판정하고_인정_문구는_뺀다(
@@ -495,3 +499,105 @@ def test_화면은_셋의_이름을_적고_문턱_수치는_카드에_적지_않
     assert "통과한 후보 4개가 안전 ↔ 주의 어디쯤인지 보기" in body
     assert "문턱" not in body  # 이용자 화면에 「문턱」이라는 말을 쓰지 않는다
     assert "소구력은 재지 않아요" in body
+
+
+# ── 더 탐색하기 · 생성 중 표시 (2026-10-13) ─────────────────────────────
+
+
+def test_둘째_라운드부터도_인정_문구는_모델에_가지_않는다() -> None:
+    """🔴 「이미 뽑힌 문구」로 되돌려 보내는 글자는 인정 문구를 끼우기 전의 것이다 — 종전에는 끼운 뒤의 글자가 나갔다."""
+    gen = _FakeLLM(
+        [
+            [("사용 장면", f"점심 먹고 물과 함께 삼켜요, {PLACEHOLDER}")],
+            [("감각", f"{PLACEHOLDER} — 작은 정제라 삼키기 편해요")],
+            [("제품 사실", f"가방에 넣어 다니는 휴대용 통. {PLACEHOLDER}")],
+        ]
+    )
+    res = pipeline.run(
+        _inputs(name="지어낸 정제", kind="정제", features=["작은 정제"], fixed=FIXED),
+        BRANCHES["hf_yes"],
+        gen,
+        _FakeJudge(),
+    )
+    assert len(res.picked) == 3
+    assert all(FIXED in k.text and FIXED not in k.raw for k in res.picked)
+    for call in gen.calls:
+        assert FIXED not in call["prompt"]
+    assert f"점심 먹고 물과 함께 삼켜요, {PLACEHOLDER}" in gen.calls[1]["prompt"]
+
+
+def test_더_탐색하기는_보여_준_문구를_빼고_만든다(monkeypatch: pytest.MonkeyPatch) -> None:
+    shown = [t for _, t in GOOD[:3]]
+    fresh = [
+        ("사용 장면", "주말 나들이 도시락 옆에 하나 넣어 가요"),
+        ("감각", "씹을수록 구수한 곡물 향이 올라와요"),
+        ("제품 사실", "서랍에 두고 꺼내 먹기 좋은 낱개 포장"),
+    ]
+    # 첫 후보는 이미 보여 준 것과 거의 같다 — 중복으로 떨어져야 한다
+    gen = _FakeLLM([[("사용 장면", shown[0] + "."), *fresh]])
+    _wire(monkeypatch, gen)
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    data = [
+        ("category", "food"),
+        ("cert", "no"),
+        ("age", "all"),
+        ("sex", "all"),
+        ("name", "지어낸 곡물바"),
+        ("more", "1"),
+        *(("shown", t) for t in shown),
+    ]
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    body = (
+        TestClient(app)
+        .post(
+            "/u/generate",
+            content=urlencode(data),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        .text
+    )
+    assert "더 탐색 1번째" in body
+    for t in shown:
+        assert f"<p>{t}</p>" not in body  # 보여 준 것을 다시 내지 않는다
+        assert t in gen.calls[0]["prompt"]  # 모델에는 「이미 뽑힌 문구」로 알려 준다
+    for _, t in fresh:
+        assert f"<p>{t}</p>" in body
+    assert "보관분 · 이전 후보와 거의 같음 1건" in body
+    # 다음 폼은 여섯을 들고 간다 · 다음은 2번째
+    assert body.count('name="shown" value="') == 6
+    assert 'name="more" value="2"' in body
+    assert "다른 문구 더 탐색하기 (2/3)" in body
+
+
+def test_더_탐색하기는_세_번까지다(monkeypatch: pytest.MonkeyPatch) -> None:
+    _wire(monkeypatch, _FakeLLM([GOOD]))
+    first = _post().text
+    assert "다른 문구 더 탐색하기 (1/3)" in first
+    _wire(monkeypatch, _FakeLLM([GOOD]))
+    last = _post(more="3").text
+    assert "더 탐색 3번째" in last
+    assert "다른 문구 더 탐색하기" not in last
+    assert "더 탐색하기는 3번까지예요" in last
+    for bad in ("4", "0", "많이"):
+        assert _post(more=bad).status_code == 422, bad
+
+
+def test_생성_폼은_생성_중_표시를_갖고_있다() -> None:
+    """가운뎃점 넷 + 「문구 생성 중입니다」 — 처음에는 숨겨 두고 `user_wait.js` 가 제출 때 보인다."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    c = TestClient(app)
+    body = c.get("/u/generate").text
+    assert 'id="gen-form" method="post" action="/u/generate" data-wait-form' in body
+    assert (
+        '<p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>'
+        in body
+    )
+    assert '<script src="/static/user_wait.js" defer></script>' in body
+    assert c.get("/static/user_wait.js").status_code == 200

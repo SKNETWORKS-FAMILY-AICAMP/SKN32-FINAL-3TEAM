@@ -33,6 +33,8 @@ class Kept:
     top_threshold: float = 0.0
     #: 고른 셋에 붙는 이름(`TIERS`). 셋을 못 채웠으면 비어 있다 — 둘을 놓고 「보수 · 공격」이라 부르지 않는다
     tier: str = ""
+    #: 🆕 2026-10-13 — 인정 · 심사 문구를 끼우기 **전**의 글자(자리표시자가 든 것). 생성 모델에 되돌려 보낼 때는 이것만 쓴다
+    raw: str = ""
 
 
 @dataclass
@@ -97,16 +99,29 @@ def run(
     rounds: int = MAX_ROUNDS,
     per_round: int = PER_ROUND,
     carry: Result | None = None,
+    exclude: tuple[str, ...] = (),
 ) -> Result:
-    """`carry` 를 주면 「더 탐색하기」다 — 보관분을 들고 한 번 더 돈다 (§6-3)."""
+    """`carry` 를 주면 보관분을 들고 한 번 더 돈다 (§6-3).
+
+    `exclude` — **이미 이용자에게 보여 준 문구**(자리표시자가 든 글자). 화면의 「더 탐색하기」가 넘긴다(🆕 2026-10-13).
+    그것과 닮은 후보는 중복으로 떨구고, 생성 모델에는 「이미 뽑힌 문구」로 알려 다른 각도 · 표현을 쓰게 한다.
+    🔴 생성 모델에 되돌려 보내는 문구는 **인정 · 심사 문구를 끼우기 전의 글자**다(`Kept.raw`).
+       ⛔ 종전(시험 코드 포함)에는 끼운 뒤의 글자(`Kept.text`)를 보냈다 — 2라운드부터 인정 문구가 밖으로 나갔다.
+    """
     res = carry or Result(branch=branch.key, notice=branch.notice)
     # 프롬프트의 좋은 예를 거의 그대로 돌려준 후보는 중복으로 떨군다 — GPT 가 쓴 것이 아니다
-    seen = [k.text for k in res.kept] + [d["text"] for d in res.dropped] + list(branch.good)
+    seen = [
+        *(k.raw or k.text for k in res.kept),
+        *(d["text"] for d in res.dropped),
+        *branch.good,
+        *exclude,
+    ]
     start = len(res.rounds)
 
     for i in range(start, start + rounds):
         # 🚨 탈락 문구 원문은 넘기지 않는다 — 사유 유형 · 건수만 (§5-3)
-        cands = llm.generate(inputs, branch, per_round, [k.text for k in res.kept], res.reasons())
+        known = [*exclude, *(k.raw or k.text for k in res.kept)]
+        cands = llm.generate(inputs, branch, per_round, known, res.reasons())
         stat: Counter[str] = Counter(generated=len(cands))
         for c in cands:
             raw = c["text"]
@@ -142,6 +157,7 @@ def run(
                     j.top,
                     j.top_prob,
                     j.top_threshold,
+                    raw=raw,
                 )
             )
             stat["kept"] += 1

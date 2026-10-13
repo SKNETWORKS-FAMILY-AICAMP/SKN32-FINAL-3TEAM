@@ -1006,6 +1006,31 @@ def _gen_ctx(extra: dict | None = None) -> dict:
     }
 
 
+#: 🆕 2026-10-13 (권소라) — 「더 탐색하기」는 **세 번까지**다. 누를 때마다 생성 모델을 다시 부른다 — 끝없이 해 줄 수 없다.
+#:    🚨 횟수는 폼이 들고 다닌다(로그인 · 서버 저장이 없다) — 화면의 약속이지 비용의 방벽이 아니다.
+#:       새로 「카피 생성」을 누르면 처음부터다. 비용을 막는 것은 호출 제한의 일이다(변경 기록 10-13 §4-2 10번)
+_GEN_MORE_MAX = 3
+#: 이미 보여 준 문구의 상한 — 첫 결과 + 더 탐색 세 번 = 넷 묶음
+_GEN_SHOWN_MAX = PARAMS.candidate_n * (_GEN_MORE_MAX + 1)
+
+
+def _gen_more(form: dict[str, list[str]]) -> tuple[int, list[str]]:
+    """「더 탐색하기」가 넘긴 (몇 번째인가 · 이미 보여 준 문구). 처음 생성이면 `(0, [])`.
+
+    ★ 문구는 자리표시자가 든 글자로 들고 다닌다 — 인정 · 심사 문구를 폼에 여러 벌 싣지 않는다.
+    ⛔ 넘치는 것 · 긴 것 · 모르는 횟수는 자르지 않고 거부한다 (D-220).
+    """
+    raw = _one(form, "more", 4)
+    if not raw:
+        return 0, []
+    if not raw.isdigit() or not 1 <= int(raw) <= _GEN_MORE_MAX:
+        raise HTTPException(422, f"더 탐색하기는 {_GEN_MORE_MAX}번까지다")
+    shown = [s.strip() for s in form.get("shown", []) if s.strip()]
+    if len(shown) > _GEN_SHOWN_MAX or any(len(s) > _GEN_LIMITS["phrase"] for s in shown):
+        raise HTTPException(422, "이미 보여 준 문구가 너무 많거나 길다")
+    return int(raw), shown
+
+
 def _copygen_off() -> str | None:
     """카피 생성 엔진을 못 쓰는 까닭(쓸 수 있으면 `None`) — 판단은 `copygen.off_reason` 한 곳이다 (D-99)."""
     from app.routers import copygen  # noqa: PLC0415 — 엔진을 안 쓰는 화면이 import 값을 치르지 않게
@@ -1090,7 +1115,9 @@ async def generate(request: Request) -> HTMLResponse:
     """
     from app.routers import copygen  # noqa: PLC0415
 
-    picked, branch, errors = _gen_picked(await _form(request))
+    form = await _form(request)
+    picked, branch, errors = _gen_picked(form)
+    more, shown = _gen_more(form)
     ctx: dict = {"picked": picked, "branch": branch, "errors": errors}
     if errors:
         return _render(request, "user/generate.html", _gen_ctx(ctx))
@@ -1109,7 +1136,7 @@ async def generate(request: Request) -> HTMLResponse:
     }
     try:
         live = await run_in_threadpool(
-            copygen.generate, f"{picked['category']}_{picked['cert']}", fields
+            copygen.generate, f"{picked['category']}_{picked['cert']}", fields, tuple(shown)
         )
     except copygen.CopyGenOff as e:
         ctx |= {"engine_pending": True, "engine_why": str(e)}
@@ -1122,6 +1149,10 @@ async def generate(request: Request) -> HTMLResponse:
             "live": live,
             "live_reasons": [(copygen.REASONS[k], n) for k, n in live.reasons().most_common()],
             "live_strip": _gen_strip(live),
+            # 「더 탐색하기」 — 지금까지 보여 준 것(이번 것 포함)과 다음 횟수를 폼에 실어 둔다
+            "more": more,
+            "more_max": _GEN_MORE_MAX,
+            "more_shown": [*shown, *(k.raw or k.text for k in live.picked)],
         }
     return _render(request, "user/generate.html", _gen_ctx(ctx))
 

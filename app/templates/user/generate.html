@@ -121,6 +121,20 @@
   background: var(--u-surface2); font-size: .85rem; line-height: 1.7;
 }
 
+/* 🆕 2026-10-13 — 생성 중 표시. 가운뎃점 넷이 차례로 진해진다. `user_wait.js` 가 제출 때 `hidden` 을 푼다 */
+.gn-wait { margin: 0 0 .5rem; font-size: .86rem; font-weight: 600; color: var(--u-signal-ink); }
+.gn-wait i { font-style: normal; display: inline-block; margin-right: .18em; opacity: .2;
+             animation: gn-wait 1.6s infinite; }
+.gn-wait i:nth-child(2) { animation-delay: .2s; }
+.gn-wait i:nth-child(3) { animation-delay: .4s; }
+.gn-wait i:nth-child(4) { animation-delay: .6s; }
+@keyframes gn-wait { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .gn-wait i { animation: none; opacity: .7; } }
+.gn-more { margin: .8rem 0 0; }
+.gn-more button { border: 1px solid var(--u-signal); background: var(--u-surface); color: var(--u-signal-ink);
+                  font-weight: 600; border-radius: .6rem; padding: .5rem .9rem; cursor: pointer; }
+.gn-more button:disabled { opacity: .5; cursor: wait; }
+
 .gn-cands { display: grid; gap: .7rem; }
 @media (min-width: 48rem) { .gn-cands { grid-template-columns: repeat(3, 1fr); } }
 .gn-cand { border: 1px solid var(--u-line); border-radius: .75rem; padding: .8rem .85rem;
@@ -170,7 +184,7 @@
 </div>
 
 {% set p = picked or {} %}
-<form class="gn-card" id="gen-form" method="post" action="/u/generate">
+<form class="gn-card" id="gen-form" method="post" action="/u/generate" data-wait-form>
  <div class="gn-cols">
  <div>
   <h2>품목</h2>
@@ -282,6 +296,7 @@
     후보가 나오기까지 <b>30초~1분</b>쯤 걸려요.
   </p>
   {% endif %}
+  <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
   <button class="gn-submit" type="submit">이 내용으로 카피 생성</button>
  </div>
  </div>
@@ -311,7 +326,7 @@
   <h2>
     {% if live.status == "ok" %}후보 {{ live.picked|length }}개
     {% else %}탐색 실패 — {{ gen_want }}개 중 {{ live.picked|length }}개를 찾았어요{% endif %}
-    <span class="gn-note">— {{ branch.label }}</span>
+    <span class="gn-note">— {{ branch.label }}{% if more %} · 더 탐색 {{ more }}번째{% endif %}</span>
   </h2>
   {% if live.notice %}<p class="gn-note">{{ live.notice }}</p>{% endif %}
   {% if live.picked %}
@@ -344,6 +359,30 @@
     {%- if not live.picked %} — 특징이나 간단한 문구를 더 적으면 쓸 재료가 늘어요{% endif %}.
   </p>
   {% endif %}
+  {# 🆕 2026-10-13 (권소라) — 「더 탐색하기」. 지금까지 보여 준 문구를 빼고 다른 문구를 낸다 · 세 번까지.
+     입력과 이미 보여 준 문구(자리표시자가 든 글자)를 폼이 들고 간다 — 서버에 남기지 않는다 #}
+  {% if more < more_max %}
+  <form class="gn-more" method="post" action="/u/generate" data-wait-form>
+    <input type="hidden" name="category" value="{{ picked.category }}">
+    <input type="hidden" name="cert" value="{{ picked.cert }}">
+    <input type="hidden" name="age" value="{{ picked.age }}">
+    <input type="hidden" name="sex" value="{{ picked.sex }}">
+    {% for k in ("target", "name", "kind", "phrase", "fixed") %}
+    <input type="hidden" name="{{ k }}" value="{{ picked[k] }}">
+    {% endfor %}
+    {% for k in ("features", "ingredients", "certs") %}
+    <input type="hidden" name="{{ k }}" value="{{ picked[k]|join(',') }}">
+    {% endfor %}
+    <input type="hidden" name="more" value="{{ more + 1 }}">
+    {% for s in more_shown %}<input type="hidden" name="shown" value="{{ s }}">{% endfor %}
+    <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
+    <button type="submit">다른 문구 더 탐색하기 ({{ more + 1 }}/{{ more_max }})</button>
+    <span class="gn-note">지금까지 보여 드린 문구는 빼고 만들어요.</span>
+  </form>
+  {% else %}
+  <p class="gn-note gn-more">더 탐색하기는 {{ more_max }}번까지예요. 다른 문구가 더 필요하면 입력을 고쳐서 다시 만들어 주세요.</p>
+  {% endif %}
+
   {% if live_strip %}
   {# 🆕 2026-10-13 — 픽스처의 프론티어 그림 자리. 세로축(소구력 보존)은 잴 수 없어 한 축만 그린다 · `<details>` 라 스크립트 없이 열린다 #}
   <details class="gn-fold" style="margin-top:.8rem">
@@ -540,4 +579,6 @@
   {% endfor %}
   </ul>
 </div>
+{# 🆕 2026-10-13 — 생성 중 표시. 안 돌아도 생성은 된다 #}
+<script src="/static/user_wait.js" defer></script>
 {% endblock %}
