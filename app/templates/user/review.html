@@ -144,6 +144,37 @@
              font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .rv-fix-go:hover { background: var(--u-signal-ink); }
 .rv-fix-go small { font-weight: 400; opacity: .85; font-size: .72rem; }
+.rv-fix-go:disabled { opacity: .55; cursor: wait; }
+/* 🆕 2026-10-13 (lse) — 고쳐 쓰는 중 표시: 빛나는 별 · 차례로 바뀌는 단계 문구(빛이 지나가는 글자) · 흐르는 자리표시 줄 */
+.rv-think { display: flex; gap: .75rem; align-items: flex-start; margin: .7rem 0 0; padding: .8rem .95rem;
+            border: 1px solid var(--u-signal-soft); border-radius: .9rem; background: var(--u-surface); }
+.rv-think[hidden] { display: none; }
+.rv-think-orb { flex-shrink: 0; width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border-radius: 50%;
+                color: #fff; font-size: .85rem; background: var(--u-signal); animation: rv-orb 1.8s ease-in-out infinite; }
+@keyframes rv-orb { 0%, 100% { transform: scale(1) rotate(0deg); box-shadow: 0 0 0 0 var(--u-signal-soft); }
+                    50% { transform: scale(1.12) rotate(180deg); box-shadow: 0 0 0 .45rem transparent; } }
+.rv-think-body { flex: 1; min-width: 0; }
+.rv-think-steps { position: relative; height: 1.35rem; overflow: hidden; }
+.rv-think-steps span { position: absolute; inset: 0; opacity: 0; font-size: .86rem; font-weight: 600; white-space: nowrap;
+                       background: linear-gradient(90deg, var(--u-ink) 0%, var(--u-signal) 45%, var(--u-ink) 90%);
+                       background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+                       animation: rv-step 18s infinite, rv-shine 2.2s linear infinite; }
+.rv-think-steps span:nth-child(2) { animation-delay: 4.5s, 0s; }
+.rv-think-steps span:nth-child(3) { animation-delay: 9s, 0s; }
+.rv-think-steps span:nth-child(4) { animation-delay: 13.5s, 0s; }
+@keyframes rv-step { 0% { opacity: 0; transform: translateY(.5rem); } 3%, 22% { opacity: 1; transform: none; }
+                     25%, 100% { opacity: 0; transform: translateY(-.5rem); } }
+@keyframes rv-shine { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.rv-skel { margin-top: .5rem; display: grid; gap: .35rem; }
+.rv-skel i { display: block; height: .55rem; border-radius: .3rem; background: linear-gradient(90deg,
+             var(--u-surface2) 0%, var(--u-signal-soft) 50%, var(--u-surface2) 100%); background-size: 200% 100%;
+             animation: rv-shine 1.6s linear infinite; }
+.rv-skel i:nth-child(1) { width: 88%; }
+.rv-skel i:nth-child(2) { width: 64%; animation-delay: .2s; }
+@media (prefers-reduced-motion: reduce) {
+  .rv-think-orb, .rv-skel i, .rv-think-steps span { animation: none; }
+  .rv-think-steps span:first-child { opacity: 1; color: var(--u-signal-ink); background: none; }
+}
 .rv-copy-tools { display: flex; gap: .5rem; margin-bottom: 1.25rem; }
 .rv-add { flex: 1; border: 1px dashed var(--u-line); border-radius: .75rem; padding: .6rem; background: none;
           color: var(--u-clay); font-size: .8rem; font-weight: 500; cursor: pointer; margin: 0; }
@@ -450,7 +481,7 @@
         {% if rw_kind == "result" %}
         {% include "user/_review_rewrite.html" %}
         {% elif rw_kind == "button" %}
-        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0">
+        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0" data-wait-form>
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
           <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
           {% if premise %}
@@ -458,6 +489,20 @@
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
           <button type="submit" class="rv-fix-go">✨ 이 문장 고쳐 쓰기 <small>· 위반을 지우고 자연스럽게 다듬어요 (15~20초)</small></button>
+          {# 🆕 2026-10-13 (lse) — 고쳐 쓰는 동안의 표시. `user_wait.js`(ksr · 카피 생성과 같은 파일)가 제출 때 `hidden` 을 푼다.
+             움직임은 전부 CSS 다 — 단계 문구가 차례로 바뀌고 글자에 빛이 지나간다. 스크립트가 안 돌아도 고쳐 쓰기는 된다 #}
+          <div class="rv-think" data-wait hidden role="status" aria-live="polite">
+            <span class="rv-think-orb" aria-hidden="true">✦</span>
+            <div class="rv-think-body">
+              <div class="rv-think-steps">
+                <span>위반 표현을 짚는 중</span>
+                <span>위반만 지운 문장을 쓰는 중</span>
+                <span>자연스럽게 다듬는 중</span>
+                <span>판정 코어로 다시 확인하는 중</span>
+              </div>
+              <div class="rv-skel" aria-hidden="true"><i></i><i></i></div>
+            </div>
+          </div>
         </form>
         {% endif %}
       </div>
@@ -920,4 +965,5 @@
 </div>
 {# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
 <script src="/static/user_count.js" defer></script>
+<script src="/static/user_wait.js" defer></script>
 {% endblock %}
