@@ -84,6 +84,12 @@ SETTINGS = {
     "RAW_MIRROR": "정본 원문 거울 폴더 — 팀장 계정에만 공유 · 마스킹 전 원문. 예: …\\CopyLane_raw_mirror (D-256)",
     # 🔄 2026-09-21 (코드 리뷰 #10) — `KEYS` 에서 옮겼다. 비밀이 아니다 — 기본값 file:./mlruns 그대로 (D-43)
     "MLFLOW_TRACKING_URI": "실험 기록 — 🚨 LangSmith·W&B 는 쓰지 않는다 (D-43) · 기본값 file:./mlruns 그대로",
+    # 🆕 2026-10-13 (D-333 결정 7) — 모델 · 생성 스위치도 런처로 바꾼다(`launcher.py setting`). ⛔ 종전에는 `.env` 를
+    #    손으로 열거나 셸 환경 변수로 켰다 — 클론 A 의 인코더가 `.env` 밖에서 켜져 어느 판인지 기록이 없었다(인계 10-13 클론 A §0).
+    "COPYLANE_MODEL_DIR": "판정 인코더 판 — `models/` 아래 폴더 이름(또는 경로) · 비우면 인코더 없이 돈다 · 앱은 `models.lock.json` 의 채택 · 되돌림 판만 올린다 (D-331 · D-333)",
+    "COPYLANE_COPYGEN": "카피 생성(B) 스위치 — `gpt` 일 때만 켜진다 · 다른 값 · 빈 값은 꺼짐 (D-332)",
+    "COPYLANE_COPYGEN_MODEL": "카피 생성에 쓰는 GPT 모델 — 쉼표로 이으면 섞어 돈다 · 비우면 코드 기본값(`app/routers/copygen/llm.py`) (D-332)",
+    "COPYLANE_SLLM_URL": "고쳐 쓰기(sLLM) 서버 주소 — 🚨 `off` 또는 **빈 값이면 끔** · 줄이 없으면 로컬 기본 주소(`app/routers/sllm_client.py`)",
 }
 
 

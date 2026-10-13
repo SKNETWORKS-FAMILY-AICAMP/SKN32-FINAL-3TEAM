@@ -21,6 +21,9 @@ os.environ["COPYLANE_ERROR_LOG"] = "off"
 # 🆕 2026-10-13 (ksr) — **카피 생성 엔진(GPT 호출)을 끈다** (`COPYLANE_COPYGEN` · `app/routers/copygen`). 같은 까닭이다 —
 #    켜 둔 기기의 `.env` 로 `/u/generate` 를 누르는 테스트가 **실제로 밖을 부르면 안 된다.** 켜진 동작은 대역을 끼워 잰다.
 os.environ["COPYLANE_COPYGEN"] = "off"
+# 🆕 2026-10-13 (D-333) — **판정 인코더를 끈다** (`COPYLANE_MODEL_DIR`). 인코더는 이제 `.env` 에서도 켜진다(`collect.env.setting`) —
+#    켜 둔 기기에서 그래프를 도는 테스트가 수백 MB 모델을 올리고 결과가 기기마다 갈리면 안 된다. 켜진 동작은 대역을 끼워 잰다.
+os.environ["COPYLANE_MODEL_DIR"] = ""
 
 
 @pytest.fixture(autouse=True)

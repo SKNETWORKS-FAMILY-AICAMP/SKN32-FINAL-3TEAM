@@ -637,7 +637,7 @@
         <span class="rv-premise"><b>이 전제라면</b> · {{ b.criteria }}
           {%- if not b.verified %} <span class="rv-note">고르신 내용을 그대로 받은 결과예요 — 인정번호 대조는 하지 않았어요.</span>{% endif %}</span>
       </div>
-      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r, "+enc:" in result.judged_by) }}{% endfor %}
+      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r, result.judged_by|encoder_ran) }}{% endfor %}
       {# 「다시 선택」은 위험도 판정 바로 아래 — 증명서 · 근거 보기보다 위다 (2026-10-01) #}
       <div class="rv-redo">
         {% if r < max_redo %}
@@ -681,7 +681,7 @@
 
     {# 기록되는 판정 — 고르기 전에만 보인다(회차마다). 유형을 모를 때의 가장 보수적인 경우다 (D-263 ①) #}
     <div class="rv-rec">
-      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), enc_on="+enc:" in result.judged_by) }}{% endfor %}
+      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), enc_on=result.judged_by|encoder_ran) }}{% endfor %}
       {% if result.certificate %}
       <div class="rv-sub">
         <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서</h2>
@@ -821,7 +821,7 @@
       {{ branch_wizard(item) }}
       {% else %}
       {% for s in result.sentences %}
-      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on="+enc:" in result.judged_by) }}
+      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on=result.judged_by|encoder_ran) }}
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}
@@ -884,7 +884,7 @@
         <tr><th>판정 버전</th><td>{{ result.judged_by }}</td></tr>
         <tr><th>라운드</th><td>{{ result.attempt }}</td></tr>
         {# 🆕 2026-10-12 (ksr · 안) — 인코더가 돌았는가. 돌지 않았으면 문장에 추정 줄이 없다 — 「추정 없음」과 가른다 #}
-        <tr><th>AI 추정</th><td>{{ "사용함" if "+enc:" in result.judged_by else "사용 안 함 — 문장에 AI 추정 유형이 나오지 않아요" }}</td></tr>
+        <tr><th>AI 추정</th><td>{{ "사용함" if result.judged_by|encoder_ran else "사용 안 함 — 문장에 AI 추정 유형이 나오지 않아요" }}</td></tr>
       </table>
       {% if result.timings %}
       <table>

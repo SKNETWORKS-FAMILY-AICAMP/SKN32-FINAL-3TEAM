@@ -74,16 +74,24 @@ def off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(enc.ENV_MODEL_DIR, raising=False)
 
 
+#: 🆕 2026-10-13 (D-333) — 가짜 폴더는 잠금의 판이 아니다. 여기서 보는 것은 그래프 배선이므로 잠금 대조는 연다 —
+#:    앱이 잠금 밖 판을 거절하는지는 `tests/test_model_lock.py` 가 잰다
+def _unlock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(enc, "checked_dir", lambda model_dir: None)
+
+
 @pytest.fixture
 def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv(enc.ENV_MODEL_DIR, str(tmp_path))
     monkeypatch.setattr(enc, "encoder_at", lambda model_dir: _Fake())
+    _unlock(monkeypatch)
 
 
 @pytest.fixture
 def fake_hf(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv(enc.ENV_MODEL_DIR, str(tmp_path))
     monkeypatch.setattr(enc, "encoder_at", lambda model_dir: _FakeHF())
+    _unlock(monkeypatch)
 
 
 @pytest.mark.gate
@@ -108,6 +116,7 @@ def test_인코더가_돌아도_판정은_바뀌지_않는다(
 
     monkeypatch.setenv(enc.ENV_MODEL_DIR, str(tmp_path))
     monkeypatch.setattr(enc, "encoder_at", lambda model_dir: _Fake())
+    _unlock(monkeypatch)
     state, visited = g.run_review_stub(TEXT)
     out = g.build_review().invoke({"text": TEXT})
 
@@ -125,9 +134,14 @@ def test_인코더가_돌아도_판정은_바뀌지_않는다(
     assert g.to_response(state).model_dump(exclude=drop) == g.to_response(base).model_dump(
         exclude=drop
     )
-    # 판 표지 — 앞머리는 규칙 판정 그대로이고 인코더 판이 뒤에 붙는다. 가짜 폴더라 지문은 못 읽는다고 적힌다 (D-220)
+    # 판 표지 — 앞머리는 규칙 판정 그대로이고 인코더 판이 뒤에 붙는다.
+    # 🔄 2026-10-13 (D-333) — 표지는 판 지문(`+encb:` · 폴더의 파일 전부)이다. 가짜 폴더는 빈 폴더의 판 지문이 적힌다
     assert g.to_response(base).judged_by == g.JUDGED_BY
-    assert g.to_response(state).judged_by == f"{g.JUDGED_BY}+enc:지문없음"
+    assert (
+        g.to_response(state).judged_by
+        == f"{g.JUDGED_BY}{enc.JUDGED_BY_MARK}{enc.bundle_mark(tmp_path)}"
+    )
+    assert enc.ran(g.to_response(state).judged_by) and not enc.ran(g.to_response(base).judged_by)
 
 
 @pytest.mark.gate

@@ -416,7 +416,7 @@ def test_인코더_후보는_판정_아님으로_그리고_확률을_보이지_�
     import app.api as api  # noqa: PLC0415
 
     raw = json.loads((api.FIXTURE_ROOT / "judge" / "01_pass.json").read_text(encoding="utf-8"))
-    raw["judged_by"] = "rule-0.3.0-dict+enc:abcdef123456"
+    raw["judged_by"] = "rule-0.3.0-dict+encb:abcdef123456"  # 🔄 D-333 — 판 지문 표지
     raw["sentences"][0]["encoder_candidates"] = [{"violation": "거짓_과장", "confidence": 0.917}]
     (tmp_path / "judge").mkdir()
     (tmp_path / "judge" / "enc_case.json").write_text(
