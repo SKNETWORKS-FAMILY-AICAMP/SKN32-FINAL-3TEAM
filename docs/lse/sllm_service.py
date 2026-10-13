@@ -155,6 +155,10 @@ def rewrite(text: str, violation_types: list[str] | None = None, persona: str | 
         # 🆕 10-12 — 2단계로 다듬었으면 1단계(담백한) 문장도 같이 — 화면이 두 안을 나란히 보인다(D-34 후보 여러 개의 첫걸음)
         s1 = r.get("stage1_final")
         out["plain"] = s1 if s1 and s1 != r["final"] else None
+    # 🆕 10-13 — 「조건 확인 필요」 보류(인정 · 심사 제품에서만 쓸 수 있는 공식 문구)는 문장과 조건을 함께 싣는다.
+    #    후보는 아니다(outcome 은 hold) — 화면이 「조건부 후보 · 사람이 조건 확인」으로 보인다. 다듬지 않는다(공식 문구를 바꾸지 않게)
+    if r["outcome"] == "hold" and any(x.startswith("조건 확인 필요") for x in r.get("gate1") or []) and r.get("stage1_fixed"):
+        out["conditional"] = {"body": r["stage1_fixed"], "mandatory_note": r.get("note"), "placement": None}
     return out
 
 

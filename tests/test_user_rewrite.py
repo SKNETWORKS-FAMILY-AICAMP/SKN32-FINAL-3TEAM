@@ -500,3 +500,42 @@ def test_인정_건강기능식품_조건이_붙은_후보는_식품에서_후�
     assert wired.judge == [ORIGINAL, BODY], "재판정은 그대로 부른다 (D-119)"
     assert ("이 제품 유형에서는 쓸 수 없는 문구" in html) is blocked
     assert ("고친 문구 후보" in html) is not blocked
+
+
+COND = "체지방 감소에 도움을 줄 수 있음"  # 직접 만든 꼴 — 인정 기능성 공식 문구
+_HOLD_COND = {
+    **_CANDIDATE,
+    "outcome": "hold",
+    "rewrite": None,
+    "reasons": ["조건 확인 필요: 기능성 인정 건강기능식품에 한해 표시"],
+    "conditional": {
+        "body": COND,
+        "mandatory_note": "기능성 인정 건강기능식품에 한해 표시",
+        "placement": None,
+    },
+}
+
+
+def test_조건_확인_필요_보류는_조건부_후보로_보이고_재판정한다(wired) -> None:  # noqa: ANN001
+    """🆕 10-13 — 인정 · 심사 제품에서만 쓸 수 있는 문구는 후보가 아니라 「조건부 후보」로 조건과 함께 보인다."""
+    wired.sllm_out = ("ok", _HOLD_COND)
+    wired.judge_out[COND] = ("ok", _light())
+    html = _go()
+    assert COND in wired.judge, "🔴 조건부 후보를 재판정하지 않았다 (D-119)"
+    assert "조건부 후보" in html and COND in html
+    assert "조건 · 기능성 인정 건강기능식품에 한해 표시" in html
+    assert "고친 문구 후보" not in html, "🔴 조건부 문장을 일반 후보로 그렸다"
+
+
+def test_조건부_후보가_재판정에서_떨어지면_보이지_않는다(wired) -> None:  # noqa: ANN001
+    wired.sllm_out = ("ok", _HOLD_COND)
+    wired.judge_out[COND] = ("ok", _light(["건강기능식품_오인"]))
+    html = _go()
+    assert "조건부 후보" not in html and "보류 — 사람 검토 필요" in html
+
+
+def test_조건부_후보는_빈_문장이면_깨진_응답이다() -> None:
+    from app.routers import sllm_client  # noqa: PLC0415
+
+    assert not sllm_client._well_formed({**_HOLD_COND, "conditional": {"body": " "}})
+    assert sllm_client._well_formed(_HOLD_COND)

@@ -801,6 +801,14 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
                     rw["rejudge"] = p_rejudge
                 else:
                     rw["plain"] = {"body": plain, "rejudge": p_rejudge}
+    # 🆕 2026-10-13 — 「조건 확인 필요」 보류의 문장(인정 · 심사 제품에서만 쓸 수 있는 공식 문구)을 「조건부 후보」로 보인다.
+    #    🚨 후보가 아니다 — 재판정을 받고, 고른 전제에서 조건이 채워질 수 없으면(`_note_conflict`) 보이지 않는다.
+    #    사람이 제품의 인정 · 심사 여부를 확인한 뒤 쓰는 문장이다
+    cond = out.get("conditional") if out and out["outcome"] == "hold" else None
+    if cond and not _note_conflict(cond.get("mandatory_note"), premise, category):
+        c_rejudge = _rejudge(cond["body"], premise, category)
+        if c_rejudge.get("status") != "rejected":
+            rw["conditional"] = {**cond, "rejudge": c_rejudge}
     return rw
 
 
