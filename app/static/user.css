@@ -224,7 +224,7 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
   gap: .15rem;
   min-height: calc(100vh - 7.5rem);
 }
-.user-sidebar-label { font-size: .72rem; color: var(--u-clay); text-transform: uppercase; margin: 0 .6rem .6rem; }
+.user-sidebar-label { font-size: .72rem; color: var(--u-clay); margin: 0 .6rem .6rem; }
 .user-sidebar-item {
   padding: .5rem .6rem;
   border-radius: .6rem;
@@ -437,4 +437,29 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
 .auth-err {
   font-size: .82rem; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca;
   border-radius: .6rem; padding: .55rem .8rem; margin: 0 0 .5rem;
+}
+
+/* 🆕 10-14 좁은 화면(휴대폰) — 사이드바가 화면 한 판을 통째로 차지하고 본문이 그 아래로 밀리던 것을 고친다.
+   사이드바는 본문 위 한 줄짜리 칩으로, 상단 메뉴는 「로고 · 로그인」 줄과 「구역 넷」 줄 두 줄로 나눈다. */
+@media (max-width: 44rem) {
+  .user-topnav { padding: .6rem .75rem; column-gap: .15rem; }
+  .user-topnav::after { content: ""; order: 4; flex-basis: 100%; height: 0; }
+  .user-topnav-pill { order: 5; padding: .4rem .5rem; font-size: .8rem; letter-spacing: -.01em; }
+  .user-sidebar {
+    width: auto;
+    align-self: stretch;
+    min-height: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
+    padding: .6rem 1rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--u-line);
+  }
+  .user-sidebar-label { display: none; }
+  .user-sidebar-item { padding: .35rem .7rem; border: 1px solid var(--u-line); border-radius: 999px; font-size: .84rem; }
+  .user-sidebar-item-active { border-color: transparent; }
+  .user-sidebar-cs { margin: 0 0 0 auto; padding: .35rem .7rem; border-radius: 999px; font-size: .78rem; }
+  .user-main { padding: 1.25rem 1rem; }
 }
