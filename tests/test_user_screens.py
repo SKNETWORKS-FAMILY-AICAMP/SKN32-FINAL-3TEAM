@@ -647,3 +647,15 @@ def test_편집기_칸_판정은_JSON_본문만_받는다(monkeypatch: pytest.Mo
     too_long = "가" * (PARAMS.max_text_len + 1)
     assert c.post("/u/compose/judge", json={"text": too_long}).status_code == 422
     assert seen == []
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [("unknown", "미확인"), ("", "미확인"), (None, "미확인"), ("2026-10-01", "2026-10-01")],
+)
+def test_모르는_법령판은_미확인으로_그린다(value: object, want: str) -> None:
+    """🆕 2026-10-13 — 화면은 내부 값 `unknown` 을 그리지 않는다 · 빈 값도 「미확인」이다 (D-220)."""
+    from app.templating import law_version_label
+
+    assert law_version_label(value) == want

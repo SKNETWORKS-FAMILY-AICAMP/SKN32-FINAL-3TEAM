@@ -209,6 +209,12 @@ UNCOVERED_CATEGORIES = frozenset({Category.전용법_미수록, Category.일반�
 #: 미검수 법의 이름을 가릴 수 없을 때의 고지 한 줄 — D-277 ⬜ 「해당 품목의 전용법」. 품목 낱말로 법을 가리게 되면 그 이름을 적는다.
 NOT_REVIEWED_UNNAMED = "해당 품목의 전용법"
 
+#: 🆕 2026-10-13 — **법령 판을 모른다**는 값. 응답 기본값 · 그래프 · 화면이 같은 값을 본다 (D-99).
+#: 🔴 판정에 쓴 코퍼스의 판을 읽을 길이 없으면 이 값을 적는다 — 날짜를 지어내지 않는다 (D-220 · D-103 ③).
+#:    ⛔ 2026-10-13 까지 `app/graph.py` 가 「2026-09-10」을 고정으로 적었다 — 코퍼스를 다시 만들어도 그대로였다.
+#:    현행 청크의 시행일(`chunk.effective_date`)이 6,686 중 0 이 채워져 있어 읽을 값이 없다 (원장 10-13 클론 A ⑦).
+LAW_VERSION_UNKNOWN = "unknown"
+
 
 class CategorySource(enum.StrEnum):
     """**품목이 어디서 왔나** (🆕 2026-10-02 · D-276 ⑥). `app/models.py` `ck_judgment_category_source_values` 와 **같은 둘**이다.
@@ -680,7 +686,7 @@ class JudgeResponse(BaseModel):
     attempt: int = Field(0, ge=0, le=PARAMS.max_attempt)
     timings: list[Timing] = Field(default_factory=list)
     #: 🚨 개정되면 「재검증 대기」의 판단 근거가 된다 (D-103 ③)
-    law_version: str = "unknown"
+    law_version: str = LAW_VERSION_UNKNOWN
     judged_by: str = "unknown"  # 코드/모델 버전
 
     @model_validator(mode="after")
