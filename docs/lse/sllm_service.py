@@ -84,15 +84,26 @@ def load(stage1: str | None = None) -> tuple:
         # 🆕 2026-10-07 — 어댑터가 학습된 베이스와 올리려는 베이스가 다르면 **올리기 전에** 멈춘다 (D-220).
         #    다른 베이스에 얹은 어댑터는 오류 없이 엉뚱한 문장을 낸다. 판 · 베이스는 `sllm_meta` 의 환경 변수로 바꾼다
         sllm_meta.check_base(adapter, BASE)
-        if STAGE2.exists():
-            sllm_meta.check_base(STAGE2, BASE)
+        # 🆕 2026-10-13 (D-333) — 1단계는 잠금의 판이어야 올린다. 잠금 밖이면 멈춘다 → 앱은 「연결하지 못했어요」(후보를 지어내지 않는다)
+        m1 = sllm_meta.checked(adapter, sllm_meta.ROLE_STAGE1)
+        stage2 = STAGE2 if STAGE2.exists() else None
+        m2 = None
+        if stage2 is not None:
+            sllm_meta.check_base(stage2, BASE)
+            try:
+                m2 = sllm_meta.checked(stage2, sllm_meta.ROLE_STAGE2)
+            except sllm_meta.LockOutside as e:
+                # 2단계(말투 · 다듬기)가 잠금 밖이면 **2단계 없이** 올린다 — 1단계 담백한 안만 낸다
+                print(f"⚠️ 2단계를 올리지 않는다 — {e}", flush=True)
+                stage2 = None
         _META.update(model=ver, base=BASE, adapter_sha=sllm_meta.adapter_sha12(adapter),
-                     stage2=STAGE2.name if STAGE2.exists() else None)
+                     stage2=stage2.name if stage2 else None,
+                     lock_stage1=f"{m1.status}:{m1.bundle}", lock_stage2=f"{m2.status}:{m2.bundle}" if stage2 and m2 else None)
         tok = AutoTokenizer.from_pretrained(BASE)
         base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
         model = PeftModel.from_pretrained(base, str(adapter), adapter_name="stage1")
-        if STAGE2.exists():
-            model.load_adapter(str(STAGE2), adapter_name="stage2")
+        if stage2 is not None:
+            model.load_adapter(str(stage2), adapter_name="stage2")
         model.eval()
         _MODEL = (model, tok, ver)
     return _MODEL
@@ -120,6 +131,8 @@ def rewrite(text: str, violation_types: list[str] | None = None, persona: str | 
     from persona_pipeline_e2e import run_one  # noqa: PLC0415
 
     model, tok, ver = load()
+    if not _META.get("stage2"):
+        persona, polish = None, False  # 🆕 10-13 — 2단계를 올리지 않았다(잠금 밖 · 폴더 없음) → 1단계 문장만
     t0 = time.time()
     with _LOCK:
         r = run_one(model, tok, text, list(violation_types or []), persona, do_rejudge=do_rejudge, category=category,
