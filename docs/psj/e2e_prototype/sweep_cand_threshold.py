@@ -178,7 +178,10 @@ def main(argv=None):
     labels, th, scheme = load_scheme(rj.scheme_dir(a.model))
     sha, dev_mark, rows, prob_of = load_rows(a.golden, a.probs_csv, labels)
     if scheme.get("golden_sha256") and scheme["golden_sha256"] != sha:
-        raise SystemExit(f"🔴 이 모델은 다른 골든으로 학습했다 — 모델 {scheme['golden_sha256'][:12]} · 지금 {sha[:12]} (D-220)")
+        # 🔄 2026-10-12 — 판이 달라도 공통 dev 가 같은 판이면 잰다 (dev 지문은 load_rows 가 이미 확인했다)
+        if not sd.same_dev_golden(scheme["golden_sha256"], sha):
+            raise SystemExit(f"🔴 이 모델은 다른 골든으로 학습했다 — 모델 {scheme['golden_sha256'][:12]} · 지금 {sha[:12]} (D-220)")
+        print(f"[INFO] 모델은 골든 {scheme['golden_sha256'][:12]} 로 학습했다 · 지금 {sha[:12]} — 공통 dev 가 같은 판이다 (행 · 지문 같음)")
     book = CachedBook(load_banned_terms(a.banned))
     with open(a.banned, "rb") as f:
         dict_sha = hashlib.sha256(f.read()).hexdigest()

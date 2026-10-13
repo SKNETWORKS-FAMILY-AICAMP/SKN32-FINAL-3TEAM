@@ -18,6 +18,9 @@ import os
 import pytest
 
 os.environ["COPYLANE_ERROR_LOG"] = "off"
+# 🆕 2026-10-13 (ksr) — **카피 생성 엔진(GPT 호출)을 끈다** (`COPYLANE_COPYGEN` · `app/routers/copygen`). 같은 까닭이다 —
+#    켜 둔 기기의 `.env` 로 `/u/generate` 를 누르는 테스트가 **실제로 밖을 부르면 안 된다.** 켜진 동작은 대역을 끼워 잰다.
+os.environ["COPYLANE_COPYGEN"] = "off"
 
 
 @pytest.fixture(autouse=True)

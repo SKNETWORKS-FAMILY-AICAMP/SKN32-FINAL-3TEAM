@@ -1,0 +1,55 @@
+{"id": "w001", "group": "불가보강2", "input": "마시면 혈관이 깨끗해지는 양파 즙", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w002", "group": "불가보강2", "input": "먹으면 눈이 밝아지는 당근 주스", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w003", "group": "불가보강2", "input": "뼈가 튼튼해지는 멸치 볶음", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w004", "group": "불가보강2", "input": "장이 깨끗하게 청소되는 사과 식초", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w005", "group": "불가보강2", "input": "간이 해독되는 칡즙", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w006", "group": "불가보강2", "input": "피가 맑아지는 미나리 즙", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w007", "group": "불가보강2", "input": "면역이 쑥쑥 올라가는 도라지 배즙", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w008", "group": "불가보강2", "input": "기억력이 확 좋아지는 호두 강정", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w009", "group": "불가보강2", "input": "관절이 부드러워지는 우엉 차", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w010", "group": "불가보강2", "input": "혈당이 뚝 떨어지는 돼지감자 차", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w011", "group": "불가보강2", "input": "피부가 하얘지는 율무 미숫가루", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w012", "group": "불가보강2", "input": "살이 쭉쭉 빠지는 곤약 국수", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w013", "group": "불가보강2", "input": "숙면을 부르는 상추 즙", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w014", "group": "불가보강2", "input": "탈모가 멈추는 검은콩 두유", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w015", "group": "불가보강2", "input": "콜레스테롤을 녹이는 들기름", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w016", "group": "불가보강2", "input": "근육이 붙는 닭가슴살 소시지", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w017", "group": "불가보강2", "input": "소화가 확 되는 매실 진액", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w018", "group": "불가보강2", "input": "갱년기 증상이 사라지는 석류 즙", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w019", "group": "불가보강2", "input": "집중력이 올라가는 블루베리 잼", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w020", "group": "불가보강2", "input": "노화가 거꾸로 가는 녹차 가루", "violation_types": ["거짓_과장"], "output": {"infeasible": "거짓_과장"}}
+{"id": "w021", "group": "불가보강2", "input": "전문가들이 극찬한 기적의 발효 효소", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w022", "group": "불가보강2", "input": "한 번도 실패한 적 없는 다이어트 차", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w023", "group": "불가보강2", "input": "병원 원장님이 직접 개발한 해독 주스", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w024", "group": "불가보강2", "input": "효과 없으면 100% 환불되는 관절 젤리", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w025", "group": "불가보강2", "input": "뉴스에 나온 그 기적의 체중 감량 가루", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w026", "group": "불가보강2", "input": "방송 후 품절 대란 난 그 혈압 차", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w027", "group": "불가보강2", "input": "누적 판매 1위로 효과가 증명된 탈모 앰플", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w028", "group": "불가보강2", "input": "유명 대학 연구로 입증된 만능 크림", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w029", "group": "불가보강2", "input": "모든 피부 고민이 끝나는 단 하나의 크림", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w030", "group": "불가보강2", "input": "먹기만 하면 걱정 끝나는 건강 즙", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "w031", "group": "불가보강2", "input": "여드름을 치료하는 토너", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w032", "group": "불가보강2", "input": "아토피 피부염이 낫는 바디 오일", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w033", "group": "불가보강2", "input": "습진을 고치는 핸드크림", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w034", "group": "불가보강2", "input": "상처를 아물게 하는 연고형 크림", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w035", "group": "불가보강2", "input": "무좀균을 죽이는 발 스프레이", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w036", "group": "불가보강2", "input": "피부염 치료용 진정 젤", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w037", "group": "불가보강2", "input": "탈모 치료 효과가 있는 두피 토닉", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w038", "group": "불가보강2", "input": "염증을 가라앉히는 약용 크림", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w039", "group": "불가보강2", "input": "주사 맞은 것처럼 주름을 펴는 치료 앰플", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w040", "group": "불가보강2", "input": "흉터를 없애는 재생 연고 크림", "violation_types": ["의약품_오인"], "output": {"infeasible": "의약품_오인"}}
+{"id": "w041", "group": "사실보강2", "input": "혈관 청소 양파즙, 창녕 양파를 껍질째 달임", "violation_types": ["거짓_과장"], "output": {"body": "창녕 양파를 껍질째 달인 양파즙", "mandatory_note": null, "placement": null}}
+{"id": "w042", "group": "사실보강2", "input": "눈이 밝아지는 당근 주스, 제주 구좌 당근을 착즙", "violation_types": ["거짓_과장"], "output": {"body": "제주 구좌 당근을 착즙한 당근 주스", "mandatory_note": null, "placement": null}}
+{"id": "w043", "group": "사실보강2", "input": "뼈 튼튼 멸치 볶음, 남해 멸치를 간장에 볶음", "violation_types": ["거짓_과장"], "output": {"body": "남해 멸치를 간장에 볶은 멸치 볶음", "mandatory_note": null, "placement": null}}
+{"id": "w044", "group": "사실보강2", "input": "간 해독 칡즙, 국산 칡뿌리를 달여 짬", "violation_types": ["거짓_과장"], "output": {"body": "국산 칡뿌리를 달여 짠 칡즙", "mandatory_note": null, "placement": null}}
+{"id": "w045", "group": "사실보강2", "input": "면역 쑥쑥 도라지 배즙, 국산 도라지와 나주 배를 달임", "violation_types": ["거짓_과장"], "output": {"body": "국산 도라지와 나주 배를 달인 도라지 배즙", "mandatory_note": null, "placement": null}}
+{"id": "w046", "group": "사실보강2", "input": "혈당 뚝 돼지감자 차, 국산 돼지감자를 썰어 볶음", "violation_types": ["거짓_과장"], "output": {"body": "국산 돼지감자를 썰어 볶은 돼지감자 차", "mandatory_note": null, "placement": null}}
+{"id": "w047", "group": "사실보강2", "input": "살 쭉쭉 곤약 국수, 국산 곤약 가루로 뽑음", "violation_types": ["거짓_과장"], "output": {"body": "국산 곤약 가루로 뽑은 곤약 국수", "mandatory_note": null, "placement": null}}
+{"id": "w048", "group": "사실보강2", "input": "전문가 극찬 기적의 효소, 국산 쌀겨를 발효한 분말", "violation_types": ["소비자_기만"], "output": {"body": "국산 쌀겨를 발효한 분말", "mandatory_note": null, "placement": null}}
+{"id": "w049", "group": "사실보강2", "input": "원장님이 개발한 해독 주스, 국산 비트와 사과를 착즙", "violation_types": ["소비자_기만"], "output": {"body": "국산 비트와 사과를 착즙한 주스", "mandatory_note": null, "placement": null}}
+{"id": "w050", "group": "사실보강2", "input": "방송 품절 대란 혈압 차, 국산 뽕잎을 덖음", "violation_types": ["소비자_기만"], "output": {"body": "국산 뽕잎을 덖은 차", "mandatory_note": null, "placement": null}}
+{"id": "w051", "group": "사실보강2", "input": "여드름 치료 토너, 티트리 잎 추출물 함유 200ml", "violation_types": ["의약품_오인"], "output": {"body": "티트리 잎 추출물 함유 토너 200ml", "mandatory_note": null, "placement": null}}
+{"id": "w052", "group": "사실보강2", "input": "아토피가 낫는 바디 오일, 호호바 씨 오일 함유", "violation_types": ["의약품_오인"], "output": {"body": "호호바 씨 오일 함유 바디 오일", "mandatory_note": null, "placement": null}}
+{"id": "w053", "group": "사실보강2", "input": "습진 치료 핸드크림, 시어버터 함유 50ml", "violation_types": ["의약품_오인"], "output": {"body": "시어버터 함유 핸드크림 50ml", "mandatory_note": null, "placement": null}}
+{"id": "w054", "group": "사실보강2", "input": "흉터 재생 크림, 센텔라 아시아티카 추출물 함유", "violation_types": ["의약품_오인"], "output": {"body": "센텔라 아시아티카 추출물 함유 크림", "mandatory_note": null, "placement": null}}
+{"id": "w055", "group": "사실보강2", "input": "무좀균 박멸 스프레이, 페퍼민트 잎 오일 함유 100ml", "violation_types": ["의약품_오인"], "output": {"body": "페퍼민트 잎 오일 함유 스프레이 100ml", "mandatory_note": null, "placement": null}}

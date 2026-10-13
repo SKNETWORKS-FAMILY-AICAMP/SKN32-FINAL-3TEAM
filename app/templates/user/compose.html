@@ -2,12 +2,15 @@
 
   ★ 프로토타입의 `data-screen="draft-setup"` 과 `draft-editor` 의 **서버가 그릴 수 있는 부분**을
     옮긴 것이다 (ksr, 2026-09-13 — 2026-09-16 lse 셸로 이식). 예전 `draft-setup.html`·
-    `draft-editor.html`(빈 골격)을 대체한다 — 아트보드·인스펙터는 전부 JS 라
-    CSP(`script-src 'self'`)에서 못 만든다. 섹션 골격은 `ComposeResponse.sections` 를
-    **서버가 순서대로 그린다.**
+    `draft-editor.html`(빈 골격)을 대체한다.
+  🆕 2026-10-12 (ksr) — **섹션 편집기**(아트보드 · 인스펙터 · 확대/축소)를 붙였다. 종류는 셋이다 —
+     SNS 피드 · 상세페이지 · 배너 300×250 (`_AD_FORMATS`). 편집기는 `/static/user_compose.js` 가 그린다 —
+     CSP 가 `script-src 'self'` 라 **인라인 스크립트 · `onclick` 은 돌지 않는다.** 저장 · 공유 · 다운로드는 없다.
+     문구는 판정을 지나야 지면에 얹힌다 — 판정은 서버(`POST /u/compose` · `/u/compose/judge`)가 코어를 부른다.
+     픽스처 미리보기의 섹션 골격은 종전대로 `ComposeResponse.sections` 를 **서버가 순서대로 그린다.**
   🔴 「광고」 표시는 **구조적 강제**다 (D-93 · D-164) — `disclosure_section_order` 가
      비면 계약이 거부한다. 화면도 그 섹션을 지워 보이지 않는다.
-  ⛔ `POST /compose` 코어는 아직 없다 — 부르지 않는다. 결과는 골든 픽스처로만 (D-124 · D-147).
+  ⛔ `POST /compose` 코어(템플릿 엔진)는 아직 없다 — 부르지 않는다 (D-124 · D-147).
 #}{% extends "user/_base.html" %}
 {% block title %}CopyLane — AI 광고 생성{% endblock %}
 {% block screen_css %}
@@ -22,14 +25,99 @@
 .cp-step { font-size: .72rem; color: var(--u-clay); letter-spacing: .04em; }
 .cp-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
 
-.cp-pick { display: flex; flex-wrap: wrap; gap: .45rem; margin: .2rem 0 1rem; }
+/* 종류 카드 셋 — 프로토타입 `fmt-pick`. 규격과 고지 위치를 같이 적는다 */
+.cp-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin: .2rem 0 1rem; }
+@media (max-width: 40rem) { .cp-pick { grid-template-columns: 1fr; } }
 .cp-pick input { position: absolute; opacity: 0; width: 0; height: 0; }
-.cp-pick label { display: inline-block; margin: 0; padding: .4rem .85rem; border-radius: 999px;
-                 border: 1px solid var(--u-line); background: var(--u-surface);
-                 font-size: .84rem; font-weight: 500; cursor: pointer; }
-.cp-pick input:checked + label { background: var(--u-signal); border-color: var(--u-signal);
-                                 color: #fff; font-weight: 600; }
+.cp-pick label { display: block; margin: 0; padding: .7rem .85rem; border-radius: .75rem;
+                 border: 1px solid var(--u-line); background: var(--u-surface); cursor: pointer; }
+.cp-pick label b { display: block; font-size: .86rem; font-weight: 600; }
+.cp-pick label span { display: block; font-size: .72rem; color: var(--u-clay); line-height: 1.5; }
+.cp-pick label:hover { border-color: var(--u-signal); }
+.cp-pick input:checked + label { background: var(--u-signal-soft); border-color: var(--u-signal); }
+.cp-pick input:checked + label b { color: var(--u-signal-ink); }
 .cp-pick input:focus-visible + label { outline: 2px solid var(--u-signal-ink); outline-offset: 2px; }
+.cp-err { color: var(--u-bad-ink); font-size: .84rem; margin: 0 0 .6rem; }
+
+/* ── 섹션 편집기 (🆕 2026-10-12) — 왼쪽 섹션 목록 · 가운데 아트보드 · 오른쪽 인스펙터.
+      🚨 공통 `main` 폭(52rem)으로는 세 칸이 안 들어간다 — 편집기가 뜬 화면에서만 넓힌다 */
+main:has(.cp-ed) { max-width: 96rem; }
+.cp-ed { border: 1px solid var(--u-line); border-radius: 1rem; background: var(--u-surface);
+         overflow: hidden; margin-bottom: 1rem; }
+.cp-ed button { font: inherit; font-size: .78rem; padding: .3rem .6rem; border-radius: .5rem; cursor: pointer;
+                border: 1px solid var(--u-line); background: var(--u-surface); color: var(--u-ink); margin: 0; }
+.cp-ed button:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+.cp-ed button:disabled { opacity: .45; cursor: not-allowed; }
+.cp-ed button.is-main { border-color: var(--u-signal); color: var(--u-signal-ink); font-weight: 600; }
+.cp-ed button.is-bad { border-color: var(--u-bad-line); color: var(--u-bad-ink); }
+.cp-ed input[type="text"], .cp-ed textarea, .cp-ed select {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: .8rem; line-height: 1.55; margin: 0;
+  padding: .4rem .55rem; border: 1px solid var(--u-line); border-radius: .5rem;
+  background: var(--u-surface); color: var(--u-ink); }
+.cp-ed textarea { resize: vertical; }
+.cp-ed .is-ng { border-color: var(--u-bad-line); background: var(--u-bad-bg); }
+
+.cp-ed-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
+             padding: .6rem .9rem; border-bottom: 1px solid var(--u-line); }
+.cp-ed-bar form { margin: 0; }
+.cp-ed-bar b { font-size: .9rem; }
+.cp-ed-spec { font-size: .7rem; color: var(--u-clay); border: 1px solid var(--u-line);
+              border-radius: .4rem; padding: .1rem .45rem; }
+.cp-ed-msg { flex: 1; min-width: 8rem; font-size: .76rem; color: var(--u-clay); text-align: right; }
+.cp-ed-zoom { display: inline-flex; align-items: center; gap: .25rem; }
+.cp-ed-zoom span { font-size: .72rem; color: var(--u-clay); min-width: 2.6rem; text-align: center; }
+
+.cp-ed-cols { display: grid; grid-template-columns: 13rem minmax(0, 1fr) 19rem; height: 44rem; }
+@media (max-width: 62rem) { .cp-ed-cols { grid-template-columns: 1fr; height: auto; } }
+.cp-ed-list { border-right: 1px solid var(--u-line); display: flex; flex-direction: column; min-height: 0; }
+.cp-ed-cap { margin: 0; padding: .7rem .8rem .4rem; font-size: .7rem; color: var(--u-clay);
+             letter-spacing: .04em; display: flex; justify-content: space-between; }
+.cp-ed-blocks { flex: 1; overflow-y: auto; padding: 0 .6rem .6rem; }
+.cp-ed-item { border: 1px solid var(--u-line); border-radius: .7rem; padding: .5rem .6rem;
+              margin-bottom: .35rem; cursor: pointer; background: var(--u-surface); }
+.cp-ed-item:hover { border-color: var(--u-signal); }
+.cp-ed-item.is-on { border-color: var(--u-signal); background: var(--u-signal-soft); }
+.cp-ed-item-top { display: flex; align-items: center; gap: .4rem; font-size: .8rem; font-weight: 500; }
+.cp-ed-dot { width: .35rem; height: .35rem; border-radius: 50%; background: var(--u-ok-dot); flex-shrink: 0; }
+.cp-ed-dot.is-bad { background: var(--u-bad-dot); }
+.cp-ed-dot.is-warn { background: var(--u-warn-dot); }
+.cp-ed-dot.is-lock { background: var(--u-clay); }
+.cp-ed-item-top small { margin-left: auto; font-size: .66rem; color: var(--u-clay); }
+.cp-ed-item-sub { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .3rem;
+                  font-size: .66rem; color: var(--u-clay); min-height: 1.3rem; }
+.cp-ed-item-sub .is-bad { color: var(--u-bad-ink); }
+.cp-ed-item-sub .is-warn { color: var(--u-warn-ink); }
+.cp-ed-item-sub .is-ok { color: var(--u-ok-ink); }
+.cp-ed-item-ctl { margin-left: auto; display: inline-flex; gap: .15rem; }
+.cp-ed .cp-ed-item-ctl button { padding: 0 .35rem; font-size: .7rem; border-color: transparent; background: none; }
+.cp-ed-add { border-top: 1px solid var(--u-line); padding: .6rem; display: grid; gap: .4rem; }
+.cp-ed-add p { margin: 0; font-size: .72rem; color: var(--u-clay); line-height: 1.5; }
+
+.cp-ed-stagewrap { overflow: auto; background: var(--u-surface2); padding: 1.5rem 1.25rem; min-height: 20rem; }
+.cp-ed-stage { margin: 0 auto; }
+.cp-ed-insp { border-left: 1px solid var(--u-line); overflow-y: auto; padding: 1rem; min-height: 0; }
+.cp-ed-insp h3 { margin: 0 0 .15rem; font-size: .9rem; }
+.cp-ed-insp h4 { margin: 1rem 0 .4rem; font-size: .7rem; color: var(--u-clay); font-weight: 500; letter-spacing: .04em; }
+.cp-ed-insp p { margin: 0; }
+.cp-ed-layout { font-size: .68rem; color: var(--u-clay); }
+.cp-ed-field { margin-bottom: .8rem; }
+.cp-ed-field-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .25rem; }
+.cp-ed-field-top label { margin: 0; font-size: .76rem; font-weight: 500; }
+.cp-ed-field-top span { font-size: .66rem; color: var(--u-clay); }
+.cp-ed-st { font-size: .72rem; line-height: 1.55; margin-top: .3rem; color: var(--u-clay); }
+.cp-ed-st.is-ok { color: var(--u-ok-ink); }
+.cp-ed-st.is-warn { color: var(--u-warn-ink); }
+.cp-ed-st.is-bad { color: var(--u-bad-ink); }
+.cp-ed-st button { margin-right: .4rem; }
+.cp-ed-img { border: 1px solid var(--u-line); border-radius: .7rem; padding: .55rem; margin-bottom: .5rem; }
+.cp-ed-img-top { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; font-size: .76rem; }
+.cp-ed-thumb { width: 2.6rem; height: 2.6rem; border-radius: .5rem; border: 1px solid var(--u-line);
+               background: var(--u-surface2); overflow: hidden; flex-shrink: 0; }
+.cp-ed-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cp-ed-img-top div { flex: 1; min-width: 0; }
+.cp-ed-img-top small { display: block; font-size: .66rem; color: var(--u-clay); }
+.cp-ed-hint { font-size: .72rem; color: var(--u-clay); line-height: 1.6; }
+.cp-ed-foot { padding: .55rem .9rem; border-top: 1px solid var(--u-line); font-size: .72rem; color: var(--u-clay); margin: 0; }
 
 .cp-submit { background: var(--u-signal); border-color: var(--u-signal);
              color: #fff; font-weight: 600; margin-top: .75rem; }
@@ -50,10 +138,16 @@
 .cp-chip { display: inline-block; padding: .15rem .55rem; border-radius: 999px;
            font-size: .74rem; border: 1px solid var(--u-line);
            color: var(--u-clay); background: var(--u-surface2); }
-.cp-chip.c-r0, .cp-chip.c-r1 { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
+.cp-chip.c-r0, .cp-chip.c-r1, .cp-chip.c-ok { background: var(--u-ok-bg); color: var(--u-ok-ink); border-color: var(--u-ok-line); }
 .cp-chip.c-r2 { background: var(--u-warn-bg); color: var(--u-warn-ink); border-color: var(--u-warn-line); }
 .cp-chip.c-r3, .cp-chip.c-r4 { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
-.cp-chip.c-warn { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+.cp-chip.c-warn, .cp-chip.c-bad { background: var(--u-bad-bg); color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+/* 주황 — 조건이 맞으면 쓸 수 있는 위반(인정받은 제품만 · 근거 자료 필요). 공통 토큰에 없어 여기 둔다 */
+.cp-chip.c-orange { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+@media (prefers-color-scheme: dark) {
+  .user-shell:not([data-theme="light"]) .cp-chip.c-orange { background: #3a1d0b; color: #fdba74; border-color: #8a4a1c; }
+}
+.user-shell[data-theme="dark"] .cp-chip.c-orange { background: #3a1d0b; color: #fdba74; border-color: #8a4a1c; }
 .cp-chip.c-violation { background: var(--u-signal-soft); color: var(--u-signal-ink);
                        border-color: var(--u-signal-soft); }
 
@@ -71,6 +165,48 @@
 .cp-fixtures a { display: inline-block; padding: .2rem .6rem; border: 1px solid var(--u-line);
                  border-radius: 999px; font-size: .76rem; text-decoration: none; color: var(--u-clay); }
 .cp-fixtures a:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+/* ══ 🔄 2026-10-13 (ksr) — 「입력 판정」 문장 칸을 검수 화면과 같은 색 카드로. 뒤에 두어 위 규칙을 덮는다 ══ */
+.cp-scr, .cp-scr:first-of-type { border: 1px solid var(--u-line); border-radius: .75rem; background: var(--u-surface);
+                                 padding: .8rem .95rem; margin: .6rem 0; }
+.cp-scr-head { display: flex; align-items: center; gap: .45rem; margin-bottom: .55rem; }
+.cp-dot { width: .42rem; height: .42rem; border-radius: 50%; background: var(--u-clay); flex-shrink: 0; }
+.cp-concl { font-size: .8125rem; font-weight: 600; color: var(--u-clay); }
+.cp-sid { margin-left: auto; font-family: ui-monospace, monospace; font-size: .75rem; color: var(--u-clay); }
+.cp-t-bad { background: var(--u-bad-bg); border-color: var(--u-bad-line); }
+.cp-t-bad .cp-concl { color: var(--u-bad-ink); } .cp-t-bad .cp-dot { background: var(--u-bad-dot); }
+.cp-t-ok { background: var(--u-ok-bg); border-color: var(--u-ok-line); }
+.cp-t-ok .cp-concl { color: var(--u-ok-ink); } .cp-t-ok .cp-dot { background: var(--u-ok-dot); }
+.cp-t-hold { background: var(--u-surface2); }
+.cp-t-hold .cp-concl { color: var(--u-ink); }
+.cp-t-orange { background: #fff7ed; border-color: #fdba74; }
+.cp-t-orange .cp-concl { color: #9a3412; } .cp-t-orange .cp-dot { background: #ea580c; }
+.cp-risk { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600;
+           background: var(--u-surface); border: 1px solid var(--u-line); color: var(--u-clay); }
+.cp-risk.rk-0 { background: none; border-style: dashed; font-weight: 400; }
+.cp-risk.rk-1 { color: #854d0e; border-color: #fde047; }
+.cp-risk.rk-2 { color: #9a3412; border-color: #fdba74; }
+.cp-risk.rk-3 { color: var(--u-bad-ink); border-color: var(--u-bad-line); }
+.cp-scr p.cp-quote { font-size: .9375rem; font-weight: 600; line-height: 1.6; margin: 0 0 .55rem; padding: .6rem .8rem;
+                     background: var(--u-surface); border: 1px solid var(--u-line); border-radius: .6rem; color: var(--u-ink); }
+.cp-scr p.cp-quote::before { content: "“"; color: var(--u-clay); margin-right: .1rem; }
+.cp-scr p.cp-quote::after { content: "”"; color: var(--u-clay); margin-left: .1rem; }
+.cp-scr p.cp-why { font-size: .8125rem; line-height: 1.65; color: var(--u-clay); margin: 0 0 .5rem; }
+.cp-scr p.cp-types { font-size: .78rem; color: var(--u-clay); margin: 0 0 .35rem; }
+.cp-more > summary { cursor: pointer; font-size: .8125rem; font-weight: 500; color: var(--u-signal-ink); list-style: none; display: inline-block; }
+.cp-more > summary::-webkit-details-marker { display: none; }
+.cp-more > summary::after { content: " →"; }
+.cp-more[open] > summary::after { content: " ↑"; }
+.cp-more[open] > summary { margin-bottom: .5rem; }
+@media (prefers-color-scheme: dark) {
+  .user-shell:not([data-theme="light"]) .cp-t-orange { background: #3a1d0b; border-color: #8a4a1c; }
+  .user-shell:not([data-theme="light"]) .cp-t-orange .cp-concl { color: #fdba74; }
+  .user-shell:not([data-theme="light"]) .cp-risk.rk-1 { color: #fde047; border-color: #7a6612; }
+  .user-shell:not([data-theme="light"]) .cp-risk.rk-2 { color: #fdba74; border-color: #8a4a1c; }
+}
+.user-shell[data-theme="dark"] .cp-t-orange { background: #3a1d0b; border-color: #8a4a1c; }
+.user-shell[data-theme="dark"] .cp-t-orange .cp-concl { color: #fdba74; }
+.user-shell[data-theme="dark"] .cp-risk.rk-1 { color: #fde047; border-color: #7a6612; }
+.user-shell[data-theme="dark"] .cp-risk.rk-2 { color: #fdba74; border-color: #8a4a1c; }
 </style>
 {% endblock %}
 {% block user_content %}
@@ -79,26 +215,39 @@
   <p>고른 카피를 어디에 쓸지 정하면 <b>규격과 섹션 골격을 먼저 깔아드려요.</b> 이미지와 문구는 섹션별로 직접 채우면 돼요.</p>
 </div>
 
+{% if not draft %}
 <form class="cp-card" method="post" action="/u/compose">
   <h2><span class="cp-step">01 ·</span> 어떤 종류로 만들까요</h2>
-  {# 🔄 10-08 (lse) — 「상세페이지」에 checked 가 박혀 있어 카드뉴스 · 배너를 골라 제출해도 상세페이지로 돌아갔다.
-     고른 값(picked) → 픽스처 결과의 포맷 → 기본 상세페이지 순으로 체크한다 #}
+  {# 🔄 10-08 (lse) — 「상세페이지」에 checked 가 박혀 있어 다른 종류를 골라 제출해도 상세페이지로 돌아갔다.
+     고른 값(picked) → 픽스처 결과의 포맷 → 기본 상세페이지 순으로 체크한다.
+     🔄 10-12 (ksr) — 종류가 SNS 피드 · 상세페이지 · 배너 셋이다(`ad_formats`). 픽스처의 「카드뉴스」는 여기 없어 아무것도 체크하지 않는다 #}
   {% set fmt = (picked.ad_format if picked else none) or (result.ad_format.value if result else none) or "상세페이지" %}
   <div class="cp-pick">
-    {% for fid, val in (("f-detail", "상세페이지"), ("f-card", "카드뉴스"), ("f-banner", "배너")) %}
-    <input type="radio" id="{{ fid }}" name="ad_format" value="{{ val }}"{% if fmt == val %} checked{% endif %}>
-    <label for="{{ fid }}">{{ val }}</label>
+    {% for val, f in ad_formats.items() %}
+    <input type="radio" id="f-{{ f.key }}" name="ad_format" value="{{ val }}"{% if fmt == val %} checked{% endif %}>
+    <label for="f-{{ f.key }}"><b>{{ val }}</b><span>{{ f.spec }}</span><span>고지 · {{ f.disclose }}</span></label>
     {% endfor %}
   </div>
 
   <h2><span class="cp-step">02 ·</span> 어떤 내용을 담을까요</h2>
   <p class="cp-note" style="margin:0 0 .4rem">
-    담고 싶은 내용을 적어주세요. 적은 내용에 맞춰 섹션 구성과 문구가 달라져요.
+    광고에 담을 문구를 적어주세요. 첫 문장이 헤드라인, 나머지가 보조 문구로 들어가요.
   </p>
+  {% for e in errors or [] %}<p class="cp-err">{{ e }}</p>{% endfor %}
   {# 🆕 2026-10-10 — 후보 카드가 넘긴 **필수 병기 문구**는 이 폼의 제출에도 같이 간다. 종전에는 한 번 보여 주고 잃었다.
      ⬜ 엔진이 붙으면 `ComposeRequest` 의 각색본 경로(`source_copy`)가 이 값을 받는다 #}
   {% set note = (carried.note if carried else (picked.note if picked else "")) %}
   {% if note %}<input type="hidden" name="note" value="{{ note }}">{% endif %}
+  {# 🆕 2026-10-13 — 카피 생성에서 고른 분기와 인정 · 심사 문구(`origin`)도 제출까지 같이 간다 — 판정이 같은 품목으로 돈다 #}
+  {% if origin and origin.branch %}
+  <input type="hidden" name="branch" value="{{ origin.branch }}">
+  {% if origin.fixed %}<input type="hidden" name="fixed" value="{{ origin.fixed }}">{% endif %}
+  <p class="cp-note" style="margin:0 0 .4rem">
+    판정 기준 — <b>{{ origin.label }}</b>
+    {%- if origin.fixed %} · 인정 · 심사 문구 「{{ origin.fixed }}」는 판정에서 빼요.
+    <b>이용자가 적은 값이고 확인되지 않았어요.</b>{% endif %}
+  </p>
+  {% endif %}
   {% if carried %}
   {# 🆕 2026-10-08 — 카피 생성의 후보 카드에서 넘어왔다. ⬜ 엔진이 붙으면 직접 입력이 아니라 `source_copy` 경로로 옮긴다 #}
   <p class="cp-note" style="margin:0 0 .4rem">
@@ -112,26 +261,80 @@
     🚨 <b>판정 코어가 입력한 내용을 먼저 걸러요.</b> 걸러지지 않은 문구는 지면에 얹히지 않아요 (D-63 · D-119).
   </p>
 
-  <button class="cp-submit" type="submit">템플릿 만들기</button>
+  <button class="cp-submit" type="submit">판정 받고 템플릿 만들기</button>
   <p class="cp-note" style="margin-top:.6rem">
-    규격 · 여백 · 글자 크기는 KRDS 표준형 스타일 기준으로 셋팅돼요.<br>
-    ⬜ 섹션을 끌어 옮기거나 확대·축소하는 편집기는 스크립트가 필요해서 아직 없어요 (CSP · 공급망 P0-3).
+    규격 · 여백 · 글자 크기는 KRDS 표준형 스타일 기준으로 셋팅돼요.
   </p>
 </form>
+{% endif %}
 
 {% if engine_pending %}
 <div class="cp-card">
-  <h2>생성 결과</h2>
+  <h2>판정 결과</h2>
   <p class="cp-pending">
-    광고 생성 코어가 아직 안 붙었어요. <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
+    {% if engine_down %}판정 엔진에 연결하지 못했어요.{% else %}판정 엔진이 아직 준비되지 않았어요.{% endif %}
+    판정을 지나지 않은 문구로는 템플릿을 만들지 않아요 — <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
     고르신 것 — 종류 <b>{{ picked.ad_format }}</b>
     {%- if picked.prompt %} · 내용 「{{ picked.prompt }}」{% endif %}
-    {%- if picked.note %} · 필수 병기 문구 「{{ picked.note }}」{% endif %}<br>
-    아래 골든 픽스처로 결과 화면의 모든 분기를 볼 수 있어요.
+    {%- if picked.note %} · 필수 병기 문구 「{{ picked.note }}」{% endif %}
   </p>
 </div>
 {% endif %}
 
+{% if blocked %}
+<div class="cp-card">
+  <h2>템플릿을 만들지 않았어요</h2>
+  <p class="cp-pending">
+    지면에 얹을 수 없는 문장이 <b>{{ blocked }}건</b> 있어요. 아래 판정을 보고 문구를 고친 뒤 다시 만들어 주세요.<br>
+    고르신 것 — 종류 <b>{{ picked.ad_format }}</b>
+    {%- if picked.note %} · 필수 병기 문구 「{{ picked.note }}」{% endif %}
+  </p>
+</div>
+{% endif %}
+
+{% if draft %}
+{# 🆕 2026-10-12 — 섹션 편집기. 뼈대만 서버가 그리고 안은 `user_compose.js` 가 채운다. 초안은 아래 JSON 칸으로 넘긴다
+   (`tojson` 이 `<` `>` `&` `'` 를 이스케이프한다 · 실행되는 스크립트가 아니라 자료 칸이라 CSP 에 걸리지 않는다) #}
+<div class="cp-ed" id="de" data-judge-url="/u/compose/judge">
+  <div class="cp-ed-bar">
+    <form method="post" action="/u/compose">
+      <input type="hidden" name="carry" value="1">
+      <input type="hidden" name="prompt" value="{{ picked.prompt }}">
+      <input type="hidden" name="note" value="{{ picked.note }}">
+      {% if origin and origin.branch %}<input type="hidden" name="branch" value="{{ origin.branch }}">{% endif %}
+      {% if origin and origin.fixed %}<input type="hidden" name="fixed" value="{{ origin.fixed }}">{% endif %}
+      <button type="submit">← 종류 다시 고르기</button>
+    </form>
+    <b>{{ draft.label }}</b>
+    <span class="cp-ed-spec">{{ draft.spec }}</span>
+    <span class="cp-ed-msg" id="de-msg" role="status" aria-live="polite"></span>
+    <span class="cp-ed-zoom">
+      <button type="button" data-act="zoom" data-d="-1" aria-label="축소">−</button>
+      <span id="de-zoom"></span>
+      <button type="button" data-act="zoom" data-d="1" aria-label="확대">+</button>
+    </span>
+    <button type="button" class="is-main" data-act="audit">초안 검수</button>
+  </div>
+  <div class="cp-ed-cols">
+    <div class="cp-ed-list">
+      <p class="cp-ed-cap"><span>섹션</span><span id="de-count"></span></p>
+      <div class="cp-ed-blocks" id="de-blocks"></div>
+      <div class="cp-ed-add" id="de-add"></div>
+    </div>
+    <div class="cp-ed-stagewrap" id="de-stagewrap"><div class="cp-ed-stage" id="de-stage"></div></div>
+    <div class="cp-ed-insp" id="de-insp"></div>
+  </div>
+  <p class="cp-ed-foot">
+    고지 위치 · {{ draft.disclose }} &nbsp;·&nbsp; ⬜ 저장 · 공유 · 다운로드는 아직 없어요 — 화면을 새로 고치면 편집한 내용이 사라져요.
+  </p>
+  <noscript><p class="cp-ed-foot">편집기는 스크립트가 켜져 있어야 떠요.</p></noscript>
+</div>
+<script type="application/json" id="de-data">{{ draft|tojson }}</script>
+<script src="/static/user_compose.js" defer></script>
+{% endif %}
+
+{# 판정 목록 — 픽스처 결과(`result.screening`)와 방금 받은 판정(`screening` · 얹지 못한 문장이 있을 때)을 같은 모양으로 그린다 #}
+{% set scr = screening if screening else (result.screening if result else []) %}
 {% if result %}
 <div class="cp-card">
   <h2>섹션 골격 — {{ result.ad_format.value }}{% if fixture_name %} <span class="cp-note">· {{ fixture_name }}</span>{% endif %}</h2>
@@ -154,55 +357,58 @@
   </p>
 </div>
 
-{% if result.screening %}
+{% endif %}
+{% if scr %}
 <div class="cp-card">
   <h2>입력 판정</h2>
-  {% for s in result.screening %}
-  <div class="cp-scr">
-    <p>{{ s.text }}</p>
-    <div class="cp-chips">
-      <span class="cp-chip">
-        {#- 🔄 2026-10-01 — 검수 화면(review.html)과 같은 말을 쓴다 #}
-        {%- if s.verdict.value == "confirmed" and s.violations %}위반 확정
-        {%- elif s.verdict.value == "confirmed" %}특이사항 없음
-        {%- elif s.verdict.value == "hold" %}보류
-        {%- elif s.verdict.value == "no_basis" %}근거 없음
+  {% for s in scr %}
+  {# 🔄 2026-10-13 (ksr) — 검수 화면(review.html `sent_block`)과 같은 **색 카드**다 (D-99 한 벌 — 한쪽을 고치면 둘 다).
+     색 점 + 결론(+ 위험도) → 검수한 문장(흰 상자 · 따옴표) → 이유 → 「근거 보기」(접힘).
+     빨강 = 쓸 수 없다 · 주황 = 조건이 맞으면 쓸 수 있다(A · B) · 회색 = 확정하지 못했다 · 초록 = 특이사항 없음.
+     R0 은 바탕 없는 점선 칩 「칩 없음」이다. ⛔ 보류 문장의 R0 은 그리지 않는다 — 통과로 읽힌다 (D-280 · D-263 ①) #}
+  {% set inf = s.infeasibility.value if s.infeasibility else "" %}
+  {% set v = s.verdict.value %}
+  {% set hit = v == "confirmed" and s.violations %}
+  {% set tone = ("orange" if inf in ("A", "B") else "bad") if hit else ("ok" if v == "confirmed" else "hold") %}
+  {% set HOLD = {"low_conf": "확신 부족", "gap2": "코드·모델 2등급 차", "cat_unknown": "품목 선택 필요", "rd1": "공존 규칙 발동",
+                 "premise_unknown": "전제 선택 필요 — 인정 여부", "law_uncovered": "전용법 미검수"} %}
+  {% set RISK = {"R0": ("rk-0", "칩 없음", "특이사항 없음"), "R1": ("rk-1", "낮은 위험", "시정명령을 받을 수 있어요"), "R2": ("rk-2", "위험", "업무정지를 받을 수 있어요"),
+                 "R3": ("rk-3", "고위험", "영업취소 · 폐쇄까지 갈 수 있어요"), "R4": ("rk-3", "고위험", "영업취소 · 폐쇄까지 갈 수 있어요")} %}
+  {% set fin = s.risk.final.value if s.risk.final else "" %}
+  <div class="cp-scr cp-t-{{ tone }}">
+    <div class="cp-scr-head">
+      <span class="cp-dot" aria-hidden="true"></span>
+      <span class="cp-concl">
+        {%- if hit and inf == "A" %}인정받은 제품만 가능
+        {%- elif hit and inf == "B" %}객관적인 근거 자료 필요
+        {%- elif hit and inf == "C" %}사용 불가
+        {%- elif hit %}위반 확정
+        {%- elif v == "confirmed" %}특이사항 없음
+        {%- elif v == "hold" %}보류{% if s.hold_reason %} · {{ HOLD.get(s.hold_reason.value, "알 수 없는 값 (" ~ s.hold_reason.value ~ ")") }}{% endif %}
+        {%- elif v == "no_basis" %}근거 없음
         {%- else %}미판정{% endif -%}
       </span>
-      {% if s.hold_reason %}
-      <span class="cp-chip">
-        {#- 🔄 2026-10-01 — 검수 화면(review.html · D-279)과 같은 사유 표로 맞췄다. ⛔ 종전에는 모르는 값이 전부 「라운드 1 미해소」였다 #}
-        {%- if s.hold_reason.value == "low_conf" %}확신 부족
-        {%- elif s.hold_reason.value == "gap2" %}코드·모델 2등급 차
-        {%- elif s.hold_reason.value == "cat_unknown" %}품목 선택 필요
-        {%- elif s.hold_reason.value == "rd1" %}공존 규칙 발동
-        {%- elif s.hold_reason.value == "premise_unknown" %}전제 선택 필요 — 인정 여부
-        {%- elif s.hold_reason.value == "law_uncovered" %}전용법 미검수
-        {%- else %}알 수 없는 값 ({{ s.hold_reason.value }}){% endif -%}
-      </span>
+      {% if fin in RISK and not (fin == "R0" and v != "confirmed") %}
+      <span class="cp-risk {{ RISK[fin][0] }}" title="위험도 {{ fin }} — {{ RISK[fin][2] }}">{{ RISK[fin][1] }}</span>
+      {% elif fin and fin != "R0" %}
+      <span class="cp-risk">위험도 {{ fin }}</span>
       {% endif %}
-      {#- 🔄 2026-10-08 — 검수 화면(review.html)과 같은 규칙: 보류 문장의 R0 칩은 그리지 않는다(D-280 · D-263 ①) #}
-      {% if s.risk.final and not (s.verdict.value != "confirmed" and s.risk.final.value == "R0") %}
-      <span class="cp-chip c-{{ s.risk.final.value|lower }}">위험도 {{ s.risk.final.value }}</span>
-      {% endif %}
-      {% if s.infeasibility %}
-      <span class="cp-chip c-warn">
-        {%- if s.infeasibility.value == "A" %}인정받은 제품만 가능
-        {%- elif s.infeasibility.value == "B" %}근거 자료 필요
-        {%- else %}사용 불가{% endif -%}
-      </span>
-      {% endif %}
-      {% for v in s.violations %}
-      <span class="cp-chip c-violation">{{ v.value|replace("_", " ") }}</span>
-      {% endfor %}
+      <span class="cp-sid">{{ s.sent_id }}</span>
     </div>
+    <p class="cp-quote">{{ s.text }}</p>
     {% if s.infeasibility %}
-    <p class="cp-note" style="margin:.4rem 0 0">
-      {%- if s.infeasibility.value == "A" %}인정·심사를 받은 제품만 쓸 수 있는 표현이에요. 받지 않았다면 문구를 고쳐도 쓸 수 없어요.
-      {%- elif s.infeasibility.value == "B" %}객관적인 근거 자료로 사실임을 보일 수 있으면 쓸 수 있어요.
+    <p class="cp-why">
+      {%- if inf == "A" %}인정·심사를 받은 제품만 쓸 수 있는 표현이에요. 받지 않았다면 문구를 고쳐도 쓸 수 없어요.
+      {%- elif inf == "B" %}객관적인 근거 자료로 사실임을 보일 수 있으면 쓸 수 있어요.
       {%- else %}어떤 제품도 쓸 수 없는 표현이에요. 이 부분은 빼야 해요.{% endif -%}
     </p>
     {% endif %}
+    {% if s.violations %}
+    <p class="cp-types">{{ "걸린 유형" if hit else "유형 후보 — 확정 아님" }} · {% for x in s.violations %}{{ x.value|replace("_", " ") }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% endif %}
+    {% if s.evidence %}
+    <details class="cp-more">
+      <summary>근거 보기</summary>
     {#- 🔄 2026-10-08 — 검수 화면(review.html `ev_details`)과 같은 규칙: 인용 근거만 펼치고 참고 조문은 접는다 (D-99 · `evidence_parts`) #}
     {% set parts = s.evidence|evidence_parts %}
     {% for e in parts.basis %}
@@ -224,7 +430,14 @@
       {% endfor %}
     </details>
     {% endif %}
-    {% if s.verdict.value != "confirmed" %}
+    </details>
+    {% endif %}
+    {# 🔄 2026-10-12 — 방금 받은 판정에서 「확인 필요」로 얹을 수 있는 문장(`unsure_ids` · `_lands`)에는 배치 불가를 적지 않는다 #}
+    {% if unsure_ids and s.sent_id in unsure_ids %}
+    <p class="cp-note" style="margin-top:.5rem">
+      이 문장은 사전에 걸린 표현이 없어요. <b>확인 필요</b> 표시를 달고 얹을 수 있어요.
+    </p>
+    {% elif s.verdict.value != "confirmed" %}
     <p class="cp-note" style="margin-top:.5rem">
       ⛔ 재검증이 <b>확정</b>이 아니라서 이 문구는 지면에 배치되지 않아요 — 섹션이 빈 채로 남아요 (D-63).
     </p>
@@ -233,15 +446,16 @@
   {% endfor %}
 </div>
 {% endif %}
-{% endif %}
 
+{% if not draft %}
 <div class="cp-card">
   <h2>골든 픽스처로 분기 보기</h2>
-  <p class="cp-note">⛔ 엔진이 없어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).</p>
+  <p class="cp-note">⛔ 템플릿 엔진(코어 <code>/compose</code>)은 아직 없어서, 그 응답 모양은 <b>픽스처로 그려요</b> (D-124).</p>
   <ul class="cp-fixtures">
   {% for name in fixtures %}
     <li><a href="/u/compose/preview/{{ name }}">{{ name }}</a></li>
   {% endfor %}
   </ul>
 </div>
+{% endif %}
 {% endblock %}

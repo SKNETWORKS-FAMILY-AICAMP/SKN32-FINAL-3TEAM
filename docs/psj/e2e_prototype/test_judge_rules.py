@@ -216,11 +216,11 @@ def test_판정_대상_아님(book):
 # ── 전제가 유형을 바꾸는 자리 (D-319 ④′) ───────────────────────────────
 def test_건강기능식품에서는_3호_후보가_서지_않는다(book):
     r = run(book, PLAIN, Category.건기식, **{HF: above(HF)})
-    assert r["verdict"] == "hold" and r["hold_types"] == ["거짓_과장"]        # 비인정 전제의 [별표 1] 4.나
-    assert r["branches"]["건기식_인정"]["hold_types"] == [] and r["branches"]["건기식_인정"]["verdict"] == "hold"
-    assert r["branches"]["건기식_비인정"]["hold_types"] == ["거짓_과장"]
+    assert r["verdict"] == "hold" and r["hold_types"] == ["거짓_과장"]        # 비인정 전제의 [별표 1] 4.나 — 후보는 그 품목의 전제에서 서는 것만
+    # 🔄 2026-10-12 — 두 전제 모두 확신 부족 보류이고 후보만 다르다 → 분기를 내지 않는다 (그래프 `_branch_key` 와 같다 · 팀장 전달 10-11)
+    assert r["branches"] == {}
     r = run(book, PLAIN, Category.식품, **{HF: above(HF)})
-    assert r["hold_types"] == [HF] and r["branches"]["일반식품_기능성"]["hold_types"] == []
+    assert r["hold_types"] == [HF] and r["branches"] == {}
 
 
 def test_건강기능식품의_3호_적중은_전제에_따라_갈린다(book):
