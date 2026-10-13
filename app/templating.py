@@ -53,6 +53,7 @@ templates.env.filters["candidate_condition"] = reasons.candidate_condition
 templates.env.filters["guessed_types"] = reasons.guessed_types
 templates.env.filters["guessed_mark"] = reasons.guessed_mark
 templates.env.filters["agreed_mark"] = reasons.agreed_mark
+templates.env.filters["moved_note"] = reasons.moved_note
 templates.env.globals["ENC_REMAINS_MARK"] = reasons.ENC_REMAINS_MARK
 
 
