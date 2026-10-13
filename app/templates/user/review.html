@@ -112,6 +112,12 @@
 .rv-copy-go { width: 4.75rem; flex-shrink: 0; border: 0; border-left: 1px solid var(--u-line); border-radius: 0;
               margin: 0; background: var(--u-signal); color: #fff; font-weight: 600; cursor: pointer; }
 .rv-copy-go:hover { background: var(--u-signal-ink); }
+/* 🆕 2026-10-13 (lse) — 「이 문장 고쳐 쓰기」가 칩 모양이라 버튼인 줄 몰랐다 → 검수 버튼과 같은 색의 버튼 */
+.rv-fix-go { display: inline-flex; align-items: center; gap: .4rem; margin: .6rem 0 0; padding: .5rem .95rem;
+             border: 0; border-radius: .75rem; background: var(--u-signal); color: #fff; font-size: .82rem;
+             font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.rv-fix-go:hover { background: var(--u-signal-ink); }
+.rv-fix-go small { font-weight: 400; opacity: .85; font-size: .72rem; }
 .rv-copy-tools { display: flex; gap: .5rem; margin-bottom: 1.25rem; }
 .rv-add { flex: 1; border: 1px dashed var(--u-line); border-radius: .75rem; padding: .6rem; background: none;
           color: var(--u-clay); font-size: .8rem; font-weight: 500; cursor: pointer; margin: 0; }
@@ -311,7 +317,7 @@
           <input type="hidden" name="premise" value="{{ premise }}">
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
-          <button type="submit" class="rv-chip" style="cursor:pointer">이 문장 고쳐 쓰기 (10초 안팎)</button>
+          <button type="submit" class="rv-fix-go">✨ 이 문장 고쳐 쓰기 <small>· 위반을 지우고 자연스럽게 다듬어요 (15~20초)</small></button>
         </form>
         {% elif flag %}
         <p class="rv-note" style="margin:.5rem 0 0">고쳐 쓰기 없음 · 위반 유형이 특정되지 않았어요(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.</p>
