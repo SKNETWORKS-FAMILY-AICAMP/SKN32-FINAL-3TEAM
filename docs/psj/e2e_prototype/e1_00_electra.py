@@ -5,6 +5,7 @@ D4-10(KcBERT · 같은 데이터 · 같은 설정 · 같은 시드)의 행별 �
 
   uv run python docs\\psj\\e2e_prototype\\e1_00_electra.py --dir <D4-00 CSV> --d10-dir <D4-10 CSV> --e1-dir <E1-00 CSV> --review-csv <검수판> --out-md docs\\psj\\reports\\E1-00_KcELECTRA비교_dev_YYYYMMDD.md
   🆕 E1-01 (lr 5e-5) — `--run E1-01 --e1-dir <E1-01 CSV>` (기준 D4-10) · `--run E1-01 --ref E1-00 --ref-dir <E1-00 CSV> --e1-dir <E1-01 CSV>` (lr 효과)
+  🆕 E1-02 (OpenAI 임베딩) — `--run E1-02s` · `--run E1-02l` (`--e1-dir <E1-02 CSV>` · 결정적 학습이라 시드 표준편차 0)
   `--self-test` — E1-00 자리에 D4-10 CSV 를 넣는다 · 차이가 0 이고 D4-10 수가 기록(위반 탐지 464.7 · 479.3)과 같아야 한다
 
   · 문턱 — D-324 (card17_adopt.d324_thresholds · 목표 = 카드 17 기준선 재현 3 시드 평균) · 백본 · 입력 · 시드마다 고른다
@@ -27,7 +28,9 @@ E100 = "copylane-encoder-kcelectra-E1-00-KcELECTRA"
 # 🆕 E1-01 — 같은 스크립트로 판을 고른다. 키 = --run · --ref 값
 RUNS = {"D4-10": (D410, "KcBERT lr 2e-5 (D4-10)"),
         "E1-00": (E100, "KcELECTRA lr 2e-5 (E1-00)"),
-        "E1-01": ("copylane-encoder-kcelectra-E1-01-KcELECTRA-lr5e-5", "KcELECTRA lr 5e-5 (E1-01)")}
+        "E1-01": ("copylane-encoder-kcelectra-E1-01-KcELECTRA-lr5e-5", "KcELECTRA lr 5e-5 (E1-01)"),
+        "E1-02s": ("copylane-openai-E1-02-emb3-small", "OpenAI emb-3-small + 로지스틱 (E1-02)"),
+        "E1-02l": ("copylane-openai-E1-02-emb3-large", "OpenAI emb-3-large + 로지스틱 (E1-02)")}
 EQ = 0.02
 SELF_DET = {"품목": 464.7, "모름": 479.3}
 
@@ -38,7 +41,7 @@ def main(argv=None):
     ap.add_argument("--d10-dir", required=True, help="D4-10 행별 확률 폴더 (KcBERT)")
     ap.add_argument("--e1-dir", default=None, help="E1-00 행별 확률 폴더 (KcELECTRA · E1-00_csv.zip 을 푼 곳)")
     ap.add_argument("--review-csv", required=True)
-    ap.add_argument("--run", default="E1-00", choices=["E1-00", "E1-01"], help="견줄 ELECTRA 판 (--e1-dir 의 CSV)")
+    ap.add_argument("--run", default="E1-00", choices=["E1-00", "E1-01", "E1-02s", "E1-02l"], help="견줄 ELECTRA 판 (--e1-dir 의 CSV)")
     ap.add_argument("--ref", default="D4-10", choices=["D4-10", "E1-00"], help="기준 판 — D4-10 은 --d10-dir · E1-00 은 --ref-dir")
     ap.add_argument("--ref-dir", default=None, help="--ref E1-00 일 때 E1-00 CSV 폴더")
     ap.add_argument("--golden", default=sd.GOLDEN)
@@ -96,7 +99,7 @@ def main(argv=None):
 
     sc, nn = R[(names[0], "품목", SEEDS[0])]["scored"], R[(names[0], "품목", SEEDS[0])]["neg_n"]
     nsyn = R[(names[0], "품목", SEEDS[0])]["syn_n"]
-    md = [f"# {a.run} KcELECTRA — {a.ref} 대비 (dev)", "",
+    md = [f"# {a.run} {RUNS[a.run][1]} — {a.ref} 대비 (dev)", "",
           f"> golden `{gsha[:12]}` · dev `{mark}` · 시드 48 · 49 · 50 평균 · 백본 · 입력 · 시드마다 D-324 문턱 · 인코더 단독 · 발표용 비교(채택 판정 아님) · 건수만 적는다", ""]
     verdict = {}
     for m, lab in MODES.items():
