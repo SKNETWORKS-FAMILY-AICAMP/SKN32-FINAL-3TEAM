@@ -183,7 +183,13 @@ def ingredient_changed(original: str, s: str) -> str | None:
 
 #: 원료명으로 읽는 꼴 — 「○○추출물 함유」의 ○○ · 「○○분말」 · 「○○오일」
 _ING_NAME = re.compile(r"([가-힣A-Za-z0-9·\-]{2,30}?(?:추출물|추출분말|분말|오일|농축액|엑기스|가루|펩타이드|발효물))|"
-                       r"((?:[가-힣A-Za-z0-9·\-]+\s)?[가-힣A-Za-z0-9·\-]{2,30}?)\s*(?:을|를)?\s*함유")
+                       r"((?:[가-힣A-Za-z0-9·\-]+\s)?[가-힣A-Za-z0-9·\-]{2,30}?)\s*(?:을|를)?\s*함유|"
+                       r"([가-힣A-Za-z0-9·\-]{2,20}?)(?:\s?(?:캡슐|소프트젤|젤리|스틱|타블렛|츄어블|구미|앰플|세럼)|\s(?:정|환))"
+                       r"(?=$|[^가-힣]|[을를은는이가의와과로도만에])")
+#: 🆕 10-14 제형 낱말 자체(「젤리 스틱」의 「젤리」)는 원료명이 아니다
+_FORM_WORD = {"캡슐", "소프트젤", "젤리", "스틱", "타블렛", "츄어블", "구미", "앰플", "세럼"}
+#: 🆕 10-14 제형 꼴(「○○ 캡슐」)에서 떼어도 되는 앞 말 — 꾸밈 활용형(「촉촉한」 · 「쫀득한」) · 한 글자 말
+_ADJ_END = re.compile(r"(?:[한은는운된진던린긴쓴든큰픈쁜]|있는|없는)$")
 #: 원료명 앞에서 떼어도 되는 말 — 과장 · 품질 수식어(원산지 · 품종은 사실이라 여기 넣지 않는다)
 _ING_MODIFIER = {"귀한", "듬뿍", "고함량", "고농축", "프리미엄", "최고급", "고급", "천연", "순수", "특급", "명품", "정품", "기적의",  # redistribution: ok — 일반 수식어
                  "특별한", "엄선한", "엄선된", "신비의", "황금", "슈퍼", "진짜", "100%", "고품질", "최상급", "희귀한", "비법",  # redistribution: ok — 일반 수식어
@@ -196,13 +202,15 @@ def ingredient_truncated(original: str, s: str) -> str | None:
     """🆕 10-02 (v10) — 원료명의 **앞부분을 떼어냈다**(원문 「○○ 버섯추출물」 → 「버섯추출물 함유」 · 실제 광고 1건).
     띄어 쓴 원료명의 앞 낱말이 조사처럼 보이면(「○○가」) 모델이 떼어낸다. 고친 문장의 원료명이 원문에서 시작하는 자리의
     **바로 앞 말**이 수식어 · 조사 붙은 말 · 숫자가 아닌데 고친 문장에 없으면 그 말을 낸다. 낱말 안에서 잘린 것
-    (「흑마늘추출물 → 마늘추출물」)도 같은 규칙으로 본다."""
+    (「흑마늘추출물 → 마늘추출물」)도 같은 규칙으로 본다.
+    🆕 10-14 — 제형 앞 원료명(「○○ △△ 캡슐」 → 「△△ 캡슐」)도 원료명으로 읽는다(시연 연기 시험에서 본 꼴 · 직접 만든 문구로 회귀)."""
     words = original.split()
     joined = [re.sub(r"[^\w가-힣·\-]", "", w) for w in words]
     s_norm = dm.norm(s)
     for m in _ING_NAME.finditer(s):
-        name = dm.norm(m.group(1) or m.group(2) or "")
-        if len(name) < 3 or name in _GENERIC:
+        name = dm.norm(m.group(1) or m.group(2) or m.group(3) or "")
+        form = m.group(3) is not None
+        if len(name) < (2 if form else 3) or name in _GENERIC or (form and name in _FORM_WORD):
             continue
         for i, w in enumerate(joined):
             tail = "".join(joined[i:])
@@ -217,6 +225,7 @@ def ingredient_truncated(original: str, s: str) -> str | None:
             if pos == 0 and i > 0:
                 prev = joined[i - 1]
                 if (prev and prev not in _ING_MODIFIER and not _ING_PARTICLE.search(words[i - 1])
+                        and not (form and (_ADJ_END.search(prev) or len(prev) < 2))
                         and len(prev) <= 6 and dm.norm(prev) not in s_norm):
                     return f"{prev} {name}"
             break

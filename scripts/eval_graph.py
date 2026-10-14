@@ -166,8 +166,14 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
                 if c.moved_from is not None
             }
         ),
-        "encoded": bool(sents) and len(state.get("encodings", [])) == len(sents),
-        "enc_truncated": sum(1 for e in state.get("encodings", []) if e.truncated),
+        #: 🆕 2026-10-14 (D-340 결정 8) — 인코더가 직접 낸 후보의 **확신**(유형 → 문장 중 최댓값). 칸 표 · 추정 위험도의 재료다
+        "enc_conf": _enc_conf(sents),
+        #: 🔄 2026-10-14 (D-336) — 품목 입력 판은 문장마다 입력 여럿의 신호가 실린다 — **문장 수**로 센다(신호 수가 아니라)
+        "encoded": bool(sents)
+        and len({e.sent_id for e in state.get("encodings", [])}) == len(sents),
+        "enc_truncated": len({e.sent_id for e in state.get("encodings", []) if e.truncated}),
+        #: 🆕 2026-10-14 (D-336) — 신호를 낸 품목 입력(문장만 받는 판은 `*`)
+        "enc_inputs": sorted({e.input for e in state.get("encodings", [])}),
         "ho": ho,
         "class": cls,
         #: 판정을 내린 행 — **전 문장이 확정**이다(selective risk 의 분모 · D-77 L1 #8)
@@ -199,10 +205,38 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _enc_conf(sents: list[SentenceJudgment]) -> dict[str, float]:
+    """문장들의 인코더 직접 후보 → 유형별 최대 확신(소수 넷째 자리). 옮긴 후보는 넣지 않는다 — 확신이 원래 유형의 것이다."""
+    out: dict[str, float] = {}
+    for s in sents:
+        for c in s.encoder_candidates:
+            if c.moved_from is None:
+                out[c.violation.value] = max(out.get(c.violation.value, 0.0), c.confidence)
+    return {k: round(v, 4) for k, v in sorted(out.items())}
+
+
 def _branch_view(b: Any) -> dict[str, Any]:
     """분기 하나 → 확정 위반의 유형 · 호 · 종착. 기록되는 판정과 **같은 규칙**으로 센다(확정 문장의 위반만 · D-127)."""
     conf = [s for s in b.sentences if s.verdict is Verdict.confirmed]
     return {
+        #: 🆕 2026-10-14 (D-336 결정 6) — 분기의 **인코더 후보**(그 전제의 품목 입력 · 그 전제로 거른 것). 분기 관문을 따로 적는 재료다
+        "enc_candidates": sorted(
+            {
+                c.violation.value
+                for s in b.sentences
+                for c in s.encoder_candidates
+                if c.moved_from is None
+            }
+        ),
+        "enc_moved": sorted(
+            {
+                c.violation.value
+                for s in b.sentences
+                for c in s.encoder_candidates
+                if c.moved_from is not None
+            }
+        ),
+        "enc_conf": _enc_conf(list(b.sentences)),
         "outcome": b.outcome.value,
         "types": sorted({v.value for s in conf for v in s.violations}),
         #: 🆕 2026-10-11 — 분기 안 **보류 문장의 유형 후보**(행의 `candidates` 와 같은 뜻 · D-311). 지표에는 쓰지 않는다 —
@@ -249,6 +283,74 @@ def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         out["wrong"] += not (set(b["types"]) & tt)
     out["by_premise"] = {k: tuple(v) for k, v in sorted(by.items())}
     return out
+
+
+def branch_encoder_report(rows: list[dict], preds: list[dict]) -> dict[str, tuple[int, int, int]]:
+    """분기 인코더 지표 (🆕 2026-10-14 · D-336 결정 6) — 전제를 아는 채점 위반 행에서 **그 전제 분기의 인코더 후보**를 본다.
+
+    전제마다 (위반 행 · 후보가 정답 유형과 겹친 행 · 무엇이든 후보가 선 행). 분기의 후보는 그 전제의 것이라 옮긴 후보도 센다.
+    🔴 인코더가 안 돈 행은 세지 않는다(`encoded` · D-220). 🚨 분기는 판정이 아니다 — 기록 판정의 수와 섞지 않는다 (D-263 ①)
+    """
+    by: dict[str, list[int]] = {}
+    for r, p in zip(rows, preds, strict=True):
+        name = r.get("전제")
+        if not name or not p.get("encoded") or not scored(r):
+            continue
+        b = (p.get("branches") or {}).get(name)
+        if b is None:
+            continue
+        got = set(b.get("enc_candidates", ())) | set(b.get("enc_moved", ()))
+        tt = truth_types(r, got)
+        if not tt:
+            continue
+        cell = by.setdefault(name, [0, 0, 0])
+        cell[0] += 1
+        cell[1] += bool(got & tt)
+        cell[2] += bool(got)
+    return {k: tuple(v) for k, v in sorted(by.items())}
+
+
+#: 조합 판정 칸 (D-340 결정 1 · 원장 10-14(A) ①) — 칸 이름. 순서가 표의 순서다
+COMBO_CELLS = (
+    "사전 확정",
+    "합의(자격 없는 적중 ∧ 인코더 같은 유형)",
+    "자격 없는 적중 · 인코더 다른 유형",
+    "자격 없는 적중 · 인코더 조용",
+    "인코더만",
+    "둘 다 조용",
+)
+
+
+def combo_cell(p: dict) -> str:
+    """행 예측 → 조합 판정 칸. 기록 판정의 칸이다(인코더 후보는 직접 낸 것만 · 옮긴 후보 제외)."""
+    if p["committed"]:
+        return COMBO_CELLS[0]
+    dq, en = set(p.get("candidates", ())), set(p.get("enc_candidates", ()))
+    if dq and en & dq:
+        return COMBO_CELLS[1]
+    if dq and en:
+        return COMBO_CELLS[2]
+    if dq:
+        return COMBO_CELLS[3]
+    return COMBO_CELLS[4] if en else COMBO_CELLS[5]
+
+
+def combo_report(rows: list[dict], preds: list[dict]) -> dict[str, tuple[int, int, int, int]]:
+    """조합 판정 칸 표 (🆕 2026-10-14 · D-340 결정 8) — 칸마다 (행 · 위반(조건 A · B · C) · 적법(D · L) · 모호(M)).
+
+    🔴 인코더가 돈 행만 센다 — 안 돈 행을 「인코더 조용」 칸에 넣지 않는다 (D-220). 🚨 진단이다 — 칸의 수로 규칙 · 문턱을 고르지 않는다(D-175).
+    """
+    by = {k: [0, 0, 0, 0] for k in COMBO_CELLS}
+    for r, p in zip(rows, preds, strict=True):
+        if not p.get("encoded"):
+            continue
+        cell = by[combo_cell(p)]
+        cond = r.get("조건") or ""
+        cell[0] += 1
+        cell[1] += cond in ("A", "B", "C")
+        cell[2] += cond in ("D", "L")
+        cell[3] += cond == "M"
+    return {k: tuple(v) for k, v in by.items() if v[0]}
 
 
 # ── 집계 ────────────────────────────────────────────────────────────────
@@ -537,6 +639,8 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["lawful"] = lawful_report(rows, lambda t: by_text.get(t, False))
     out["lawful_rows_seen"] = sum(1 for r in rows if lawful_kind(r))
     out["branch"] = branch_report(rows, preds)
+    out["branch_encoder"] = branch_encoder_report(rows, preds)
+    out["combo"] = combo_report(rows, preds)
     out["reason"] = reason_report(rows, preds)
     out["recorded"] = recorded_report(rows, preds)
     return out
@@ -646,6 +750,19 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
             print(
                 f"    🔴 토큰 상한을 넘어 뒤가 잘린 문장 {e['truncated_sents']} — 잘린 부분은 보지 않았다"
             )
+    cb = s.get("combo") or {}
+    if cb:
+        print(
+            "\n  조합 판정 칸 (D-340 · 기록 판정 · 인코더가 돈 행 · 진단) — 행 · 위반(A·B·C) · 적법(D·L) · 모호(M)"
+        )
+        for k, (n, pos, law, m) in cb.items():
+            print(f"    {k:28} {n:>5} · {pos:>4} / {law:>3} · M {m}")
+    be = s.get("branch_encoder") or {}
+    for name, (pos, hit, fired) in be.items():
+        print(
+            f"    분기 인코더 · 전제 {name} — 위반 행 {pos} · 유형 맞음 {hit}({hit / pos:.1%}) · 무엇이든 {fired}"
+            + ("" if pos >= MIN_MEASURABLE else "  ← 측정 불가 (n<30 · D-40)")
+        )
     dt = s.get("detect_types") or {}
     if dt:
         print(
@@ -820,6 +937,8 @@ def use_encoder(model_dir: pathlib.Path | None) -> dict[str, Any]:
             # 상한을 모델 폴더가 실어 줬는지 · 기본값으로 돌았는지 함께 적는다 (D-220)
             "encoder_max_tokens": f"{scheme.max_tokens}"
             + ("" if scheme.max_tokens_from_model else "(기본값)"),
+            # 🆕 2026-10-14 (D-336) — 품목 입력 판인가 · 문턱이 몇 벌인가
+            "encoder_input": "품목 입력(문장쌍 · 문턱 두 벌)" if scheme.pair else "문장만",
         }
     except enc.EncoderUnavailable as e:
         raise SystemExit(
@@ -876,6 +995,11 @@ def main(argv: list[str] | None = None) -> int:
         help=f"인코더 모델 폴더 — 그림자로 돌려 「후보로 더했다면」의 수를 낸다 (없으면 {enc.ENV_MODEL_DIR} · 둘 다 없으면 인코더 없이)",
     )
     ap.add_argument(
+        "--no-enc-filter",
+        action="store_true",
+        help="인코더 후보의 전제별 거름 · 옮김을 끈다 — 거름표를 걷을지 판정하는 dev 비교용 (D-336 결정 5 · 앱은 늘 켠다)",
+    )
+    ap.add_argument(
         "--dev",
         action="store_true",
         help="봉인 평가셋 대신 dev(검증 묶음)로 잰다 — 판 · 문턱 · 규칙을 고르는 자리 (D-175)",
@@ -894,6 +1018,9 @@ def main(argv: list[str] | None = None) -> int:
     stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN), "conditional": a.conditional}
     stamp |= {"split": "dev" if a.dev else "test_sentence"} | dev_stamp
     stamp |= use_encoder(a.encoder)
+    if a.no_enc_filter:
+        g.disable_encoder_filter()
+        stamp |= {"encoder_filter": "끔"}
     t0 = time.perf_counter()
     if a.stub:
         preds = run(rows, stub_runner(), conditional=a.conditional)

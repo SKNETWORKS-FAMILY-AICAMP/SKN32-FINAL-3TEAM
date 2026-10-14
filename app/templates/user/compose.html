@@ -12,6 +12,7 @@
      비면 계약이 거부한다. 화면도 그 섹션을 지워 보이지 않는다.
   ⛔ `POST /compose` 코어(템플릿 엔진)는 아직 없다 — 부르지 않는다 (D-124 · D-147).
 #}{% extends "user/_base.html" %}
+{% from "user/_sent_words.html" import sent_concl %}
 {% block title %}CopyLane — AI 광고 생성{% endblock %}
 {% block screen_css %}
 <style>
@@ -168,9 +169,11 @@ main:has(.cp-ed) { max-width: 96rem; }
 /* ══ 🔄 2026-10-13 (ksr) — 「입력 판정」 문장 칸을 검수 화면과 같은 색 카드로. 뒤에 두어 위 규칙을 덮는다 ══ */
 .cp-scr, .cp-scr:first-of-type { border: 1px solid var(--u-line); border-radius: .75rem; background: var(--u-surface);
                                  padding: .8rem .95rem; margin: .6rem 0; }
-.cp-scr-head { display: flex; align-items: center; gap: .45rem; margin-bottom: .55rem; }
+.cp-scr-head { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; margin-bottom: .2rem; }
+.cp-todo { margin: 0 0 .5rem; font-size: .875rem; font-weight: 600; line-height: 1.6; color: var(--u-ink);
+           text-decoration: underline; text-underline-offset: .25em; text-decoration-thickness: 1px; }
 .cp-dot { width: .42rem; height: .42rem; border-radius: 50%; background: var(--u-clay); flex-shrink: 0; }
-.cp-concl { font-size: .8125rem; font-weight: 600; color: var(--u-clay); }
+.cp-concl { font-size: .95rem; font-weight: 600; color: var(--u-clay); }
 .cp-sid { margin-left: auto; font-family: ui-monospace, monospace; font-size: .75rem; color: var(--u-clay); }
 .cp-t-bad { background: var(--u-bad-bg); border-color: var(--u-bad-line); }
 .cp-t-bad .cp-concl { color: var(--u-bad-ink); } .cp-t-bad .cp-dot { background: var(--u-bad-dot); }
@@ -370,41 +373,34 @@ main:has(.cp-ed) { max-width: 96rem; }
   {% set v = s.verdict.value %}
   {% set hit = v == "confirmed" and s.violations %}
   {% set tone = ("orange" if inf in ("A", "B") else "bad") if hit else ("ok" if v == "confirmed" else "hold") %}
-  {% set HOLD = {"low_conf": "확신 부족", "gap2": "코드·모델 2등급 차", "cat_unknown": "품목 선택 필요", "rd1": "공존 규칙 발동",
-                 "premise_unknown": "전제 선택 필요 — 인정 여부", "law_uncovered": "전용법 미검수"} %}
   {% set RISK = {"R0": ("rk-0", "칩 없음", "특이사항 없음"), "R1": ("rk-1", "낮은 위험", "시정명령을 받을 수 있어요"), "R2": ("rk-2", "위험", "업무정지를 받을 수 있어요"),
                  "R3": ("rk-3", "고위험", "영업취소 · 폐쇄까지 갈 수 있어요"), "R4": ("rk-3", "고위험", "영업취소 · 폐쇄까지 갈 수 있어요")} %}
   {% set fin = s.risk.final.value if s.risk.final else "" %}
   <div class="cp-scr cp-t-{{ tone }}">
+    {# 🔄 2026-10-14 (ksr) — 검수 화면과 같은 순서: 문장 → 결론 한 줄(`sent_concl`) → 이유 → 할 일. 문장 번호는 겉에 적지 않는다 #}
+    <p class="cp-quote">{{ s.text }}</p>
     <div class="cp-scr-head">
       <span class="cp-dot" aria-hidden="true"></span>
-      <span class="cp-concl">
-        {%- if hit and inf == "A" %}인정받은 제품만 가능
-        {%- elif hit and inf == "B" %}객관적인 근거 자료 필요
-        {%- elif hit and inf == "C" %}사용 불가
-        {%- elif hit %}위반 확정
-        {%- elif v == "confirmed" %}특이사항 없음
-        {%- elif v == "hold" %}보류{% if s.hold_reason %} · {{ HOLD.get(s.hold_reason.value, "알 수 없는 값 (" ~ s.hold_reason.value ~ ")") }}{% endif %}
-        {%- elif v == "no_basis" %}근거 없음
-        {%- else %}미판정{% endif -%}
-      </span>
+      <span class="cp-concl">{{ sent_concl(s) }}</span>
       {% if fin in RISK and not (fin == "R0" and v != "confirmed") %}
       <span class="cp-risk {{ RISK[fin][0] }}" title="위험도 {{ fin }} — {{ RISK[fin][2] }}">{{ RISK[fin][1] }}</span>
       {% elif fin and fin != "R0" %}
       <span class="cp-risk">위험도 {{ fin }}</span>
       {% endif %}
-      <span class="cp-sid">{{ s.sent_id }}</span>
     </div>
-    <p class="cp-quote">{{ s.text }}</p>
-    {% if s.infeasibility %}
-    <p class="cp-why">
-      {%- if inf == "A" %}인정·심사를 받은 제품만 쓸 수 있는 표현이에요. 받지 않았다면 문구를 고쳐도 쓸 수 없어요.
-      {%- elif inf == "B" %}객관적인 근거 자료로 사실임을 보일 수 있으면 쓸 수 있어요.
-      {%- else %}어떤 제품도 쓸 수 없는 표현이에요. 이 부분은 빼야 해요.{% endif -%}
+    {% if s.violations %}
+    <p class="cp-types">
+      {%- if hit %}{% for x in s.violations %}{{ x.value|replace("_", " ") }}{% if not loop.last %} · {% endif %}{% endfor %} 유형으로 볼 수 있는 표현이에요
+      {%- else %}유형 후보 — 확정 아님 · {% for x in s.violations %}{{ x.value|replace("_", " ") }}{% if not loop.last %} · {% endif %}{% endfor %}{% endif -%}
     </p>
     {% endif %}
-    {% if s.violations %}
-    <p class="cp-types">{{ "걸린 유형" if hit else "유형 후보 — 확정 아님" }} · {% for x in s.violations %}{{ x.value|replace("_", " ") }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% if hit %}
+    <p class="cp-todo">
+      {%- if inf == "A" %}인정·심사를 받지 않았다면 문구를 고쳐도 쓸 수 없어요
+      {%- elif inf == "B" %}사실임을 보일 객관적인 근거 자료를 준비해 주세요
+      {%- elif inf == "C" %}이 표현은 빼 주세요
+      {%- else %}이 표현을 고쳐 주세요{% endif -%}
+    </p>
     {% endif %}
     {% if s.evidence %}
     <details class="cp-more">

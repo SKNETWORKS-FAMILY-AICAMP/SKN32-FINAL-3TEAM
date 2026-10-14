@@ -11,6 +11,8 @@
 🚨 「남겼다」는 「위반 후보를 못 찾았다」다 — 적법 확인이 아니다.
 🚨 그래프가 인코더를 돌리지 않았으면(`judged_by` 에 인코더 표지가 없다 — `app.encoder.ran`) **생성하지 않는다** — 사전만 지난 것을 다 지난 것처럼 내지 않는다.
 ★ 보수 · 균형 · 공격을 가르는 「문턱까지의 거리」는 인코더 확률에서 따로 잰다 — 그래프의 응답에는 문턱을 넘은 후보만 실리기 때문이다.
+🆕 2026-10-14 (D-336 결정 3) — 품목 입력 판이면 거리도 **그 분기 품목의 입력과 그 입력의 문턱**으로 잰다 — 그래프의 재검수(품목을 넘긴다)와
+   같은 계산이다. 문장만 받는 판은 종전대로 문장만 넣고 문턱 한 벌이다(`_input` 이 `None`).
 """
 
 from __future__ import annotations
@@ -53,8 +55,23 @@ class EncoderJudge:
         except enc.EncoderUnavailable as e:
             raise CopyGenOff("판정 인코더를 올리지 못했어요.") from e
 
-    def judge(self, text: str, branch: Branch) -> Judged:  # noqa: ARG002 — 분기는 판정기 자리의 약속이다
-        pred = self._enc.predict(text)
+    def _input(self, category: str) -> str | None:
+        """분기 품목 → 인코더 품목 입력. 문장만 받는 판이면 `None` — 품목을 넣지 않는다 (D-336)."""
+        if not getattr(self._enc, "takes_category", False):
+            return None
+        from app import premise as pm  # noqa: PLC0415
+        from app.contracts import Category  # noqa: PLC0415
+
+        return pm.encoder_input(Category(category))
+
+    def _predict(self, text: str, category_input: str | None):  # noqa: ANN202 — EncoderPrediction
+        if category_input is None:
+            return self._enc.predict(text)
+        return self._enc.predict(text, category_input)
+
+    def judge(self, text: str, branch: Branch) -> Judged:
+        cin = self._input(branch.category)
+        pred = self._predict(text, cin)
         if pred.truncated:
             # 뒤가 잘린 문장은 「못 본 것」이다 — 통과로 세지 않는다 (D-220)
             return Judged(False, "문장이 길어 끝까지 보지 못함")
@@ -63,12 +80,23 @@ class EncoderJudge:
                 f"{c.violation.value} {c.confidence:.2f}≥{c.threshold}" for c in pred.candidates
             )
             return Judged(False, "인코더 유형 후보", detail)
-        return self._near(pred)
+        return self._near(pred, category_input=cin)
 
-    def _near(self, pred, skip: frozenset[str] = frozenset()) -> Judged:  # noqa: ANN001
-        """남긴 후보의 「문턱까지의 거리」. `skip` — 이 품목에서 설 수 없는 유형(거리에서 뺀다)."""
+    def _near(
+        self,
+        pred,  # noqa: ANN001
+        skip: frozenset[str] = frozenset(),
+        category_input: str | None = None,
+    ) -> Judged:
+        """남긴 후보의 「문턱까지의 거리」. `skip` — 이 품목에서 설 수 없는 유형(거리에서 뺀다).
+
+        🆕 2026-10-14 — `category_input` 이 있으면(품목 입력 판) 그 입력의 문턱으로 잰다(`LabelScheme.thresholds_for`).
+        """
         # 문턱이 1 을 넘는 유형(대기 라벨 · 1.01)은 설 수 없는 유형이다 — 거리에서 뺀다
-        thresholds = self._enc.scheme.thresholds
+        scheme = self._enc.scheme
+        thresholds = (
+            scheme.thresholds if category_input is None else scheme.thresholds_for(category_input)
+        )
         near = [
             (prob / thresholds[label], label.value, prob, thresholds[label])
             for label, prob in pred.scores.items()
@@ -137,10 +165,13 @@ class GraphJudge(EncoderJudge):
             if not (is_pass(s) or unsure):
                 why = s.hold_reason.value if s.hold_reason else ""
                 return Judged(False, s.verdict.value, why)
-        pred = self._enc.predict(text)
+        cin = self._input(branch.category)
+        pred = self._predict(text, cin)
         if pred.truncated:
             return Judged(False, "문장이 길어 끝까지 보지 못함")
         # 그래프가 이 품목에서 서지 않는다고 거른 유형은 거리에서도 뺀다 (`pm.NO_HF_MISLEAD` · D-323 결정 6)
         premises = pm.PREMISES_OF.get(category, ())
         never_hf = bool(premises) and all(p in pm.NO_HF_MISLEAD for p in premises)
-        return self._near(pred, frozenset({pm.HF_MISLEAD}) if never_hf else frozenset())
+        return self._near(
+            pred, frozenset({pm.HF_MISLEAD}) if never_hf else frozenset(), category_input=cin
+        )

@@ -224,7 +224,7 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
   gap: .15rem;
   min-height: calc(100vh - 7.5rem);
 }
-.user-sidebar-label { font-size: .72rem; color: var(--u-clay); text-transform: uppercase; margin: 0 .6rem .6rem; }
+.user-sidebar-label { font-size: .72rem; color: var(--u-clay); margin: 0 .6rem .6rem; }
 .user-sidebar-item {
   padding: .5rem .6rem;
   border-radius: .6rem;
@@ -288,7 +288,49 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
   gap: 1rem;
   align-items: start;
 }
-.history-layout:has(.history-detail) { grid-template-columns: 1fr 320px; }
+.history-layout:has(.history-detail) { grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); }
+.history-sub { color: var(--u-clay); font-size: .82rem; margin: -.5rem 0 1.25rem; }
+/* 띠 — 반복 지적 패턴(주의) · 이력 보관 꺼짐(안내) */
+.history-band {
+  margin: 0 0 1.25rem;
+  padding: .7rem 1rem;
+  border: 1px solid var(--u-warn-line);
+  border-radius: .9rem;
+  background: var(--u-warn-bg);
+  color: var(--u-warn-ink);
+  font-size: .8rem;
+  line-height: 1.6;
+}
+.history-band-off { border-color: var(--u-line); background: var(--u-surface2); color: var(--u-ink); }
+/* 결과 배지 — 이력 목록 · 상세 · 홈의 「최근 검수 이력」이 같이 쓴다. 색은 검수 화면의 문장 카드와 같은 뜻이다 */
+.hist-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  flex-shrink: 0;
+  padding: .1rem .55rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--u-surface2);
+  color: var(--u-clay);
+}
+.hist-badge i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.hist-ok { background: var(--u-ok-bg); color: var(--u-ok-ink); }
+.hist-ok i { background: var(--u-ok-dot); }
+.hist-warn { background: var(--u-warn-bg); color: var(--u-warn-ink); }
+.hist-warn i { background: var(--u-warn-dot); }
+.hist-bad { background: var(--u-bad-bg); color: var(--u-bad-ink); }
+.hist-bad i { background: var(--u-bad-dot); }
+.hist-risk {
+  padding: .05rem .5rem;
+  border: 1px solid var(--u-line);
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--u-clay);
+}
 .history-list {
   list-style: none;
   margin: 0;
@@ -308,10 +350,11 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
 }
 .history-row:hover { background: var(--u-surface2); }
 .history-row-open { background: var(--u-signal-soft); }
-.history-row-date { font-size: .8rem; color: var(--u-clay); width: 9rem; flex-shrink: 0; }
-.history-row-verdict { width: 5.5rem; flex-shrink: 0; }
-.history-row-risk { color: var(--u-clay); width: 2rem; text-align: center; }
-.history-row-chevron { color: var(--u-clay); width: 1rem; text-align: center; }
+.history-row-date { font-size: .75rem; color: var(--u-clay); width: 7.5rem; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.history-row-cat { font-size: .72rem; color: var(--u-clay); width: 4.5rem; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-row-text { flex: 1; min-width: 0; font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-row-open .history-row-text { font-weight: 500; }
+.history-row-chevron { color: var(--u-clay); width: 1rem; text-align: center; flex-shrink: 0; }
 
 .history-detail {
   border: 1px solid var(--u-line);
@@ -327,11 +370,46 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
   font-weight: 600;
 }
 .history-detail-head a { color: var(--u-clay); text-decoration: none; }
-.history-detail-text { font-size: .9rem; line-height: 1.6; margin: 0 0 .75rem; }
-.history-detail dl { margin: 0; }
-.history-detail dt { font-size: .75rem; color: var(--u-clay); margin-top: .5rem; }
-.history-detail dd { margin: 0; }
-.history-detail-note { font-size: .8rem; color: var(--u-clay); margin-top: .75rem; }
+.history-detail-head p { margin: 0; }
+.history-detail-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
+.history-detail-when { font-size: .72rem; color: var(--u-clay); }
+.history-detail-text {
+  font-size: .85rem;
+  line-height: 1.6;
+  margin: 0 0 .75rem;
+  padding: .75rem .85rem;
+  border: 1px solid var(--u-line);
+  border-radius: .75rem;
+  background: var(--u-surface);
+}
+.history-detail-label { font-size: .7rem; letter-spacing: .04em; color: var(--u-clay); margin: 1rem 0 .4rem; }
+.history-detail-note { font-size: .78rem; line-height: 1.6; color: var(--u-clay); margin: .4rem 0 0; }
+.history-ev { border: 1px solid var(--u-line); border-radius: .75rem; background: var(--u-surface); padding: .75rem .85rem; }
+.history-ev > .history-detail-note { margin: 0; }
+.history-ev details { margin-top: .6rem; font-size: .78rem; color: var(--u-clay); }
+.history-ev summary { cursor: pointer; }
+.history-law { font-size: .8rem; line-height: 1.6; }
+.history-law + .history-law, .history-ev details .history-law { margin-top: .6rem; }
+.history-law blockquote {
+  margin: .3rem 0 0;
+  padding-left: .7rem;
+  border-left: 2px solid var(--u-line);
+  color: var(--u-clay);
+  font-size: .78rem;
+}
+.history-again {
+  width: 100%;
+  margin-top: 1rem;
+  padding: .6rem;
+  border: 0;
+  border-radius: .75rem;
+  background: var(--u-signal);
+  color: #fff;
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.history-again:hover { background: var(--u-signal-ink); }
 
 /* home — 대시보드 */
 .home-sub { color: var(--u-clay); margin-top: -.5rem; margin-bottom: 1.5rem; }
@@ -437,4 +515,29 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
 .auth-err {
   font-size: .82rem; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca;
   border-radius: .6rem; padding: .55rem .8rem; margin: 0 0 .5rem;
+}
+
+/* 🆕 10-14 좁은 화면(휴대폰) — 사이드바가 화면 한 판을 통째로 차지하고 본문이 그 아래로 밀리던 것을 고친다.
+   사이드바는 본문 위 한 줄짜리 칩으로, 상단 메뉴는 「로고 · 로그인」 줄과 「구역 넷」 줄 두 줄로 나눈다. */
+@media (max-width: 44rem) {
+  .user-topnav { padding: .6rem .75rem; column-gap: .15rem; }
+  .user-topnav::after { content: ""; order: 4; flex-basis: 100%; height: 0; }
+  .user-topnav-pill { order: 5; padding: .4rem .5rem; font-size: .8rem; letter-spacing: -.01em; }
+  .user-sidebar {
+    width: auto;
+    align-self: stretch;
+    min-height: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
+    padding: .6rem 1rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--u-line);
+  }
+  .user-sidebar-label { display: none; }
+  .user-sidebar-item { padding: .35rem .7rem; border: 1px solid var(--u-line); border-radius: 999px; font-size: .84rem; }
+  .user-sidebar-item-active { border-color: transparent; }
+  .user-sidebar-cs { margin: 0 0 0 auto; padding: .35rem .7rem; border-radius: 999px; font-size: .78rem; }
+  .user-main { padding: 1.25rem 1rem; }
 }
