@@ -57,8 +57,18 @@ _OUTCOME = {"hold": Outcome.hold, "certificate": Outcome.certificate, "guidance"
 
 
 def _remake(j: SentenceJudgment, **upd) -> SentenceJudgment:
-    """고친 **새 문장** — 계약 검증을 다시 지난다(`graph._with_risk` 와 같은 방식)."""
-    return SentenceJudgment(**{**{k: getattr(j, k) for k in type(j).model_fields}, **upd})
+    """고친 **새 문장** — 계약 검증을 다시 지난다(`graph._with_risk` 와 같은 방식).
+
+    🔄 2026-10-14 — 그래프가 확정된 실증형(B) 문장에 실증 분기(`substantiation` · D-337)를 붙인다. 계약은 그 칸을 B 실증형 확정에만
+    허용하므로, 보류로 바꾸거나 불가 사유를 지우면 그 칸도 비운다(D-337 이전 판의 동작과 같아진다).
+    """
+    fields = type(j).model_fields
+    if "substantiation" in fields and "substantiation" not in upd:
+        verdict = upd.get("verdict", j.verdict)
+        infeas = upd.get("infeasibility", j.infeasibility)
+        if verdict is not Verdict.confirmed or infeas is None or getattr(infeas, "name", None) != "B":
+            upd["substantiation"] = None
+    return SentenceJudgment(**{**{k: getattr(j, k) for k in fields}, **upd})
 
 
 def rule_state(text: str, scan: g.DictScan, category: Optional[Category]) -> dict:
