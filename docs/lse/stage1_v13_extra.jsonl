@@ -24,7 +24,7 @@
 {"id": "z024", "group": "불가보강", "input": "올해 소비자 만족 1위로 효과가 보장된 즙", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
 {"id": "z025", "group": "불가보강", "input": "마감 임박! 오늘이 지나면 다시는 못 사는 다이어트 차", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
 {"id": "z026", "group": "불가보강", "input": "의학 박사가 만든 만능 건강 분말", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
-{"id": "z027", "group": "불가보강", "input": "세계 보건 기구가 인정한 장수 식품", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
+{"id": "z027", "private": true}
 {"id": "z028", "group": "불가보강", "input": "방송 출연 약사가 극찬한 약보다 좋은 즙", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
 {"id": "z029", "group": "불가보강", "input": "특허 기술로 효과를 보장하는 탈모 샴푸", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}
 {"id": "z030", "group": "불가보강", "input": "국가가 검증한 100% 안전 무해 다이어트약", "violation_types": ["소비자_기만"], "output": {"infeasible": "소비자_기만"}}

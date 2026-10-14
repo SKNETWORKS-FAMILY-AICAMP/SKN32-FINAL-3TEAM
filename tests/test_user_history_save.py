@@ -18,6 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
+from app import judgment_store as js
 from app.api import FIXTURE_ROOT, app
 from app.contracts import JudgeResponse
 from app.db import get_session
@@ -97,11 +98,12 @@ def _check_row(j: Judgment) -> None:
 def test_픽스처의_판정이_표의_규칙에_맞게_적힌다(name: str) -> None:
     res = _fixture(name)
     keeper = _Keeper()
-    kept = user_router._save_review(keeper, _user(), [{"n": 1, "result": res, "text": "문구"}])
+    kept = js.save_review(keeper, _user(), [res])  # type: ignore[arg-type]
 
     judged = [s for s in res.sentences if not s.not_claim]
     rows = keeper.of(Judgment)
-    assert kept == len(rows) == len(judged), "🔴 판정 대상 문장 수와 적힌 판정 수가 다르다"
+    assert kept == (js.SAVED if judged else None), "🔴 적은 것과 알리는 상태가 다르다"
+    assert len(rows) == len(judged), "🔴 판정 대상 문장 수와 적힌 판정 수가 다르다"
     assert len(keeper.of(CopySentence)) == len(judged)
     assert len(keeper.of(WorkDoc)) == (1 if judged else 0), "🔴 적을 판정이 없는데 문서를 만들었다"
     sent_ids = {s.id for s in keeper.of(CopySentence)}
@@ -110,8 +112,11 @@ def test_픽스처의_판정이_표의_규칙에_맞게_적힌다(name: str) -> 
         assert j.subject_id in sent_ids, "🔴 판정이 가리키는 문장이 없다 — 이력 조인에서 빠진다"
         assert j.doc_id == keeper.of(WorkDoc)[0].id
         assert j.verdict == s.verdict.value
-        assert j.evidence["violations"] == [v.value for v in s.violations]
-        assert len(j.evidence["articles"]) == len(s.evidence)
+        # 🔄 2026-10-14 (ssm 과 합침) — 위반도 근거도 없는 문장은 `evidence` 를 비운다(None) — 빈 JSON 을 적지 않는다
+        ev = j.evidence or {}
+        assert (j.evidence is None) == (not s.violations and not s.evidence)
+        assert ev.get("violations", []) == [v.value for v in s.violations]
+        assert len(ev.get("articles", [])) == len(s.evidence)
     for doc in keeper.of(WorkDoc):
         assert doc.owner_id == _ME and doc.consent_store is True
         assert doc.session_id is None, "🔴 회원 이력에 세션 키를 섞었다 (D-129)"
@@ -124,7 +129,7 @@ def test_판정_대상_아님은_이력에_적지_않는다() -> None:
     skipped = [s.text for s in res.sentences if s.not_claim]
     assert skipped, "🔴 픽스처에 판정 대상 아님 문장이 없다 — 재는 대상이 없다"
     keeper = _Keeper()
-    user_router._save_review(keeper, _user(), [{"n": 1, "result": res, "text": "문구"}])
+    js.save_review(keeper, _user(), [res])  # type: ignore[arg-type]
     assert not {s.raw for s in keeper.of(CopySentence)} & set(skipped)
 
 
@@ -134,9 +139,7 @@ def test_품질_개선_동의는_문서에_그대로_실린다() -> None:
     res = _fixture("05_certificate_a")
     for improve in (False, True):
         keeper = _Keeper()
-        user_router._save_review(
-            keeper, _user(improve=improve), [{"n": 1, "result": res, "text": "문구"}]
-        )
+        js.save_review(keeper, _user(improve=improve), [res])  # type: ignore[arg-type]
         assert keeper.of(WorkDoc)[0].consent_train is improve
 
 

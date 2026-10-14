@@ -5,8 +5,8 @@
 
 🚨 **엔진이 필요한 화면은 DB 없이도 떠야 한다** (D-124) — `review`·`generate`·`compose` 는
    골든 픽스처로 모든 분기를 그린다. ⬜ **`history`·`/`(홈) 은 예외다** — 실제 DB(`app/db.py`,
-   `Judgment`)에 붙는다. 🔄 2026-10-13 — 검수(`/u/judge`)가 판정을 `judgment` 표에 적는다(`_keep_history`).
-   이력 보관에 동의한 회원 것만 쌓인다 (D-96 · D-69).
+   `Judgment`)에 붙는다. 🔄 2026-10-13 — `/u/judge` 가 **회원 ∧ 선택 동의 ①「검수 이력 보관」** 의 판정을 `judgment` 표에 적는다
+   (`app.judgment_store` · D-307 · D-96 · 🔄 10-14 ksr · ssm 두 벌을 한 모듈로). 비회원 · 미동의 회원의 이력은 그대로 빈 목록이다.
    🔄 2026-09-22 (ohb 흡수) — **DB 가 없어도 뜬다.** 붙지 못하면 「DB 없음」을 그리고 수를 0 으로 적지 않는다
       (`app.db.reachable` · D-72). 게이트가 `/u/` 200 을 요구하고 CI 에는 Postgres 가 없다.
 
@@ -34,11 +34,11 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import Select, func, select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app import auth, dictmatch, reasons, sentsplit
+from app import auth, judgment_store, reasons, sentsplit
 from app import premise as pm
 from app.contracts import (
     PASS_RISK_MAX,
@@ -394,7 +394,7 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     """사용자 첫 화면 = 홈. 🚨 **history 와 같은 요령으로 진짜 DB 집계다.**
 
     🔄 종전에는 여기가 문구 검수였다 — 검수는 `/u/review` 로 옮겼다 (2026-09-16, ksr 안).
-    🔄 2026-10-13 — 검수가 판정을 적는다(`_keep_history`). 적힌 것이 없으면 0/— 다 (D-147, 가짜 수치를 안 그린다).
+    🔄 2026-10-13 — 검수가 판정을 적는다(`app.judgment_store`). 적힌 것이 없으면 0/— 다 (D-147, 가짜 수치를 안 그린다).
     ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX`
       (D-125 통과 조건의 위험도 문턱 = 🔄 **R0** · D-273)을 그대로 쓴다 — 문턱을 여기서 따로 두지 않는다.
     """
@@ -414,17 +414,10 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     # 🔴 2026-09-29 — 통계·최근 이력은 **내 판정만** 센다 (P1-5 · `_owned_judgments`). 로그아웃이면 셀 대상이 없다.
     user = current_user(request, session)
     if user is None:
-        return _render(
-            request,
-            "user/index.html",
-            {
-                "need_login": True,
-                "total_month": None,
-                "violation_count": None,
-                "pass_rate": None,
-                "recent": [],
-            },
-        )
+        # 🔄 2026-10-14 (lse · 사용자 요청) — 로그인 전에 들어오면 **랜딩이 첫 화면**이다. 홈(통계)은 로그인한 사람의 것이다.
+        #    🚨 넘기지(303) 않고 이 주소에서 랜딩을 그린다 — 로그인 벽이 아니다(D-66 · 200 · 로그인 안내 · 「이력에 남지 않아요」 D-69).
+        #    「copylane 소개」 메뉴는 랜딩이 아니라 사용방법으로 간다(종전대로). DB 가 없을 때는 위에서 홈의 안내를 그린다
+        return templates.TemplateResponse(request, "user/landing.html", {})
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     mine = _owned_judgments(user.id)
     month = mine.where(Judgment.judged_at >= month_start)
@@ -634,8 +627,9 @@ async def judge(request: Request, session: Session = Depends(get_session)) -> HT
     ★ 판정은 코어(`app.api.judge`)를 부른다 — 여기서 판정하지 않는다 (D-119).
        엔진이 501 이면 「엔진 준비 중」을 그린다. **가짜 결과를 만들지 않는다** (D-147).
     ★ 넣은 문구는 되돌려 그린다. **템플릿이 이스케이프한다** (P2-9) — 문자열 조립 금지.
-    🆕 2026-10-13 — 판정이 끝나면 **이력에 적는다** (`_keep_history`). 검수만 적는다 — 고쳐 쓰기의 재판정 ·
-       카피 생성 · 광고 생성의 판정은 적지 않는다.
+    🆕 2026-10-13 — 판정이 끝나면 **이력에 적는다**(`app.judgment_store.save_review` · 회원 ∧ 선택 동의 ① · D-307 · D-96).
+       검수만 적는다 — 고쳐 쓰기의 재판정 · 카피 생성 · 광고 생성의 판정은 적지 않는다. 저장 결과는 상태 글자로 화면에 알리고
+       (`history_kept`), 못 적어도 판정 결과는 그대로 그린다. 🔄 10-14 — ksr(`_keep_history`) · ssm(`judgment_store`) 두 벌을 하나로 (D-99).
     """
     form = await _form(request)
     copies = _copies(form)
@@ -684,7 +678,9 @@ async def judge(request: Request, session: Session = Depends(get_session)) -> HT
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
         results.append({"n": n, "result": res, "text": text})
-    kept = _keep_history(request, session, results)
+    kept = judgment_store.save_review(
+        session, current_user(request, session), [r["result"] for r in results]
+    )
     return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
 
 
@@ -843,6 +839,14 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
                     rw["rejudge"] = p_rejudge
                 else:
                     rw["plain"] = {"body": plain, "rejudge": p_rejudge}
+    # 🆕 2026-10-13 — 「조건 확인 필요」 보류의 문장(인정 · 심사 제품에서만 쓸 수 있는 공식 문구)을 「조건부 후보」로 보인다.
+    #    🚨 후보가 아니다 — 재판정을 받고, 고른 전제에서 조건이 채워질 수 없으면(`_note_conflict`) 보이지 않는다.
+    #    사람이 제품의 인정 · 심사 여부를 확인한 뒤 쓰는 문장이다
+    cond = out.get("conditional") if out and out["outcome"] == "hold" else None
+    if cond and not _note_conflict(cond.get("mandatory_note"), premise, category):
+        c_rejudge = _rejudge(cond["body"], premise, category)
+        if c_rejudge.get("status") != "rejected":
+            rw["conditional"] = {**cond, "rejudge": c_rejudge}
     return rw
 
 
@@ -1203,6 +1207,12 @@ async def generate(
     ctx: dict = {"picked": picked, "branch": branch, "errors": errors}
     if errors:
         return _render(request, "user/generate.html", _gen_ctx(ctx))
+    # 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구는 생성 판정에서 빠진다 — **입력 때 한 번** 따로 판정해 경고한다(떨구지 않는다).
+    #    엔진이 꺼져 있어도 경고는 그린다 — 문구는 적힌 그대로 광고 생성으로 넘어가기 때문이다
+    if picked["fixed"]:
+        ctx["fixed_notes"] = await run_in_threadpool(
+            _fixed_notes, picked["fixed"], f"{picked['category']}_{picked['cert']}"
+        )
     if why := copygen.off_reason():
         ctx |= {"engine_pending": True, "engine_why": why}
         return _render(request, "user/generate.html", _gen_ctx(ctx))
@@ -1408,6 +1418,43 @@ def _compose_origin(form: dict[str, list[str]]) -> dict:
     }
 
 
+#: 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구를 따로 판정할 때 경고하는 유형. 인정 전제에서도 위반이다(D-319 ④′ ③ ·
+#:    화장품은 D-338 로 질병 · 건기식 오인이 의약품 오인으로 옮겨 온다). ⛔ 거짓_과장 · 건강기능식품_오인은 넣지 않는다 —
+#:    진짜 인정 문구(「도움을 줄 수 있음」)에 늘 걸린다(사전 대조 · 인정 문구 조각 347 중 거짓_과장 53 · 판정 요청 10-14 §1)
+_FIXED_WARN = frozenset({"질병_예방치료_표방", "의약품_오인"})
+
+
+def _fixed_notes(fixed: str, branch_key: str) -> list[dict]:
+    """인정 · 심사 문구 경고 — `[{"level": "strong" | "weak" | "unchecked", "text": …}]` (🆕 2026-10-14 · D-341 결정 1).
+
+    ★ 그 분기의 **판정 전제**(`_GEN_BRANCHES` · 건기식 「예」 → 건기식_인정 · 화장품 「예」 → 화장품)로 문구 하나만 판정하고
+       그 전제 분기의 문장을 읽는다. 분기가 없으면(기준 문안 미확정) 기록 판정의 문장을 읽는다.
+    ★ **경고일 뿐이다** — 생성 후보 · 광고 초안을 떨구지 않는다. 생성과 광고 생성이 이 함수 하나를 쓴다 (D-99).
+    🔴 엔진에 못 닿으면 「확인 못 함」을 낸다 — 빈 목록(경고 없음)으로 돌려주지 않는다 (D-220). 문구가 없으면 빈 목록.
+    """
+    gb = _GEN_BRANCHES.get(branch_key)
+    if not fixed or gb is None:
+        return []
+    from app import premise as pm  # noqa: PLC0415
+
+    premise = gb["premise"]
+    status, res = _core_judge(fixed, pm.product_of(premise))
+    if status != "ok":
+        return [{"level": "unchecked", "text": reasons.FIXED_UNCHECKED}]
+    sents = next(
+        (b.sentences for b in getattr(res, "branches", None) or () if b.premise is premise),
+        res.sentences,
+    )
+    strong = sorted({v.value for s in sents for v in s.violations} & _FIXED_WARN)
+    weak = sorted({c.violation.value for s in sents for c in s.encoder_candidates} & _FIXED_WARN)
+    if strong:
+        names = " · ".join(t.replace("_", " ") for t in strong)
+        return [{"level": "strong", "text": reasons.FIXED_STRONG.format(types=names)}]
+    if weak:
+        return [{"level": "weak", "text": reasons.FIXED_WEAK}]
+    return []
+
+
 def _judged_part(text: str, fixed: str) -> str:
     """판정에 넣을 글자 — 인정 · 심사 문구를 뺀 나머지."""
     return text.replace(fixed, " ").strip() if fixed else text
@@ -1456,6 +1503,9 @@ async def compose(request: Request) -> HTMLResponse:
     # 🆕 2026-10-13 — 인정 · 심사 문구가 그 문구에 그대로 들어 있을 때만 뺀다. 문구를 고쳐 인정 문구가 깨졌으면 전부 판정한다
     fixed = origin["fixed"] if origin["fixed"] and origin["fixed"] in prompt else ""
     part = _judged_part(prompt, fixed)
+    if fixed:
+        # 🆕 2026-10-14 (D-341 결정 1) — 판정에서 뺀 인정 · 심사 문구는 따로 판정해 경고를 같이 그린다(카피 생성과 같은 함수)
+        base["fixed_notes"] = await run_in_threadpool(_fixed_notes, fixed, origin["branch"])
     if not part:
         return _render(
             request,
@@ -1601,95 +1651,6 @@ def _owned_judgments(owner_id: uuid.UUID) -> Select:
     )
 
 
-def _save_review(session: Session, user: UserAccount, results: list[dict]) -> int:
-    """검수 결과를 `work_doc` · `copy_sentence` · `judgment` 에 적고 **적은 판정 수**를 돌려준다 (🆕 2026-10-13).
-
-    ★ 문구 하나 = 문서 하나 · 문장 하나 = 판정 하나. 적는 판정은 응답의 `sentences` 다 — 분기는 판정이 아니다 (D-263 ①).
-    🚨 **판정 대상 아님(`not_claim`)은 적지 않는다** — 표에 그 칸이 없어 적으면 「특이사항 없음」으로 읽힌다.
-       안 본 것을 본 것처럼 남기지 않는다 (D-63 · D-275).
-    ★ 표의 `violation_type` 은 한 칸이라 **첫 유형**만 든다. 유형 전부 · 불가 사유(A/B/C)는 `evidence` 에 조문과 함께 싣는다 —
-       이력의 배지가 검수 화면과 같은 말을 하려면 사유가 있어야 한다.
-    ⛔ 뺄 구간(`spans`)은 적지 않는다 — 담을 칸이 없다.
-    """
-    kept = 0
-    for r in results:
-        res = r["result"]
-        judged = [s for s in res.sentences if not s.not_claim]
-        if not judged:
-            continue
-        doc = WorkDoc(
-            id=uuid.uuid4(),
-            title=r["text"][:200],
-            kind="single",
-            # 🚨 이 함수는 「① 검수 이력 보관」에 동의한 사람 것만 받는다 (`_keep_history` · D-96)
-            consent_store=True,
-            consent_train=user.consent_improve_at is not None,
-            owner_id=user.id,
-        )
-        rows: list[Judgment] = []
-        for s in judged:
-            sent = CopySentence(
-                id=uuid.uuid4(), raw=s.text, norm=dictmatch.norm(s.text), origin="user"
-            )
-            doc.sentences.append(sent)
-            span = s.risk.evidence_span
-            rows.append(
-                Judgment(
-                    doc_id=doc.id,
-                    subject_type="copy_sentence",
-                    subject_id=sent.id,
-                    verdict=s.verdict.value,
-                    hold_reason=s.hold_reason.value if s.hold_reason else None,
-                    product_category=res.category.value if res.category else None,
-                    product_category_source=(
-                        res.category_source.value if res.category_source else None
-                    ),
-                    violation_type=s.violations[0].value if s.violations else None,
-                    evidence={
-                        "articles": [e.model_dump() for e in s.evidence],
-                        "violations": [v.value for v in s.violations],
-                        "infeasibility": s.infeasibility.value if s.infeasibility else None,
-                    },
-                    evidence_span=span.model_dump() if span else None,
-                    risk_floor=s.risk.floor.level if s.risk.floor else None,
-                    risk_final=s.risk.final.level if s.risk.final else None,
-                    law_version=res.law_version,
-                    attempt=res.attempt,
-                    judged_by=res.judged_by,
-                )
-            )
-        # 문서 · 문장이 먼저 들어가야 판정의 FK(`doc_id`)가 선다 — 판정은 문서와 관계(relationship)가 없어 순서를 손으로 준다
-        session.add(doc)
-        session.flush()
-        session.add_all(rows)
-        kept += len(rows)
-    session.commit()
-    return kept
-
-
-def _keep_history(request: Request, session: Session, results: list[dict]) -> str | None:
-    """검수 결과를 이력에 적고 **어떻게 됐는지** 돌려준다 — 화면이 그대로 알린다 (🆕 2026-10-13).
-
-    ★ `saved` 적었다 · `off` 로그인했지만 「① 검수 이력 보관」이 꺼져 있다 · `failed` 적지 못했다 ·
-      `None` 비회원이거나(D-69 — 안내는 입력 카드에 이미 있다) 적을 판정이 없다.
-    🚨 **동의가 없으면 적지 않는다** (D-96 — 기본값은 미보관). 검수는 그대로 된다 — 동의는 기능의 대가가 아니다.
-    🚨 적지 못해도 검수 결과는 그린다 — 저장 실패가 판정을 가리지 않는다. 대신 「저장됐다」고 말하지 않는다 (D-147).
-    🔴 원인 문자열은 로그에 담지 않는다(접속 정보 · 문구가 섞인다) — 예외의 종류 이름만 남긴다.
-    """
-    user = current_user(request, session)
-    if user is None:
-        return None
-    if user.consent_history_at is None:
-        return "off"
-    try:
-        kept = _save_review(session, user, results)
-    except SQLAlchemyError as e:
-        session.rollback()
-        logging.getLogger(__name__).warning("검수 이력 저장 실패 — %s", type(e).__name__)
-        return "failed"
-    return "saved" if kept else None
-
-
 #: 필터 칩의 글자 — 값(`_VERDICTS`)은 URL 에, 글자는 화면에
 _VERDICT_LABELS = {
     "confirmed": "확정",
@@ -1817,8 +1778,8 @@ def history(
 
     🔄 2026-09-16 — `Judgment` × `CopySentence` 조인(ksr)으로 **판정 원문**까지 보여준다.
        필터(`verdict`)·페이지네이션(`page`)·상세 토글(`?open_id=`)은 lse 것을 그대로 쓴다.
-    🔄 2026-10-13 — 검수(`/u/judge`)가 판정을 적는다(`_keep_history`). 「① 검수 이력 보관」에 동의한 회원 것만 쌓인다 (D-96).
-       가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
+    🔄 2026-10-13 — `/u/judge` 가 판정을 적는다(`app.judgment_store`) — **선택 동의 ①「검수 이력 보관」을 한 회원** 것만.
+       동의하지 않은 회원은 그대로 빈 목록이다. 가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
     ⛔ **`page`·`verdict` 는 사용자가 URL 을 손으로 바꿀 수 있다** — 잘못된 값으로
        500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.
     ⬜ 질의응답은 디자인엔 있지만 뺐다 — 검수 화면에서도 뺐고(09-23) 저장할 테이블도 없다.

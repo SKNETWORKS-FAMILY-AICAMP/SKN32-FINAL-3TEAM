@@ -52,7 +52,10 @@ def _sllm_category(r: dict) -> str | None:
 
 def gen() -> None:
     import persona_pipeline_e2e as pe  # noqa: PLC0415
+    import sllm_meta  # noqa: PLC0415
     from sllm_service import _META, load  # noqa: PLC0415
+
+    sllm_meta.permit_unlocked()  # 🆕 10-13 평가 도구 — 잠금 밖 판도 잰다(표지에 잠금 상태가 남는다 · D-333)
 
     model, tok, ver = load()
     rows = [json.loads(line) for line in IN.open(encoding="utf-8") if line.strip()]

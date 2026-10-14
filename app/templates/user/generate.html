@@ -334,6 +334,15 @@
  </div>
 </form>
 
+{# 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구를 따로 판정한 경고. 후보를 떨구지 않는다 · 문안은 `app/reasons.py` (FIXED_*) #}
+{% if fixed_notes %}
+<div class="gn-card">
+  {% for n in fixed_notes %}
+  <p class="gn-notice gn-fixed-{{ n.level }}">{{ n.text }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if engine_pending %}
 <div class="gn-card">
   <h2>생성 결과</h2>

@@ -21,7 +21,10 @@ HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent.parent)]
 
 import persona_pipeline_e2e as pe  # noqa: E402
+import sllm_meta  # noqa: E402
 from sllm_service import load  # noqa: E402
+
+sllm_meta.permit_unlocked()  # 🆕 10-13 실험 도구 — 잠금 밖 판도 잰다(D-333)
 from train_stage1_v5 import KEEP_RULE, SYSTEM_V6  # noqa: E402 — P1 의 규칙은 서비스와 같은 글(10-08 채택)
 
 #: 🚨 예시 문구는 연습 문제(뜻 보존 15)와 겹치지 않게 다른 제품 · 다른 원료로 썼다
