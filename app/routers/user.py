@@ -5,8 +5,8 @@
 
 🚨 **엔진이 필요한 화면은 DB 없이도 떠야 한다** (D-124) — `review`·`generate`·`compose` 는
    골든 픽스처로 모든 분기를 그린다. ⬜ **`history`·`/`(홈) 은 예외다** — 실제 DB(`app/db.py`,
-   `Judgment`)에 붙는다. 🔄 판정은 돌지만(코어 `/judge`) 결과를 `judgment` 표에 **저장하는 코드가 아직 없어**
-   지금은 빈 목록/0 건으로 뜬다.
+   `Judgment`)에 붙는다. 🔄 2026-10-13 — `/u/judge` 가 **회원 ∧ 선택 동의 ①** 의 판정을 `judgment` 표에 적는다
+   (`app.judgment_store` · D-307 · D-96). 비회원 · 미동의 회원의 이력은 그대로 빈 목록이다.
    🔄 2026-09-22 (ohb 흡수) — **DB 가 없어도 뜬다.** 붙지 못하면 「DB 없음」을 그리고 수를 0 으로 적지 않는다
       (`app.db.reachable` · D-72). 게이트가 `/u/` 200 을 요구하고 CI 에는 Postgres 가 없다.
 
@@ -38,7 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app import auth, reasons, sentsplit
+from app import auth, judgment_store, reasons, sentsplit
 from app import premise as pm
 from app.contracts import (
     PASS_RISK_MAX,
@@ -614,7 +614,10 @@ def review(request: Request) -> HTMLResponse:
 
 
 @router.post("/judge", response_class=HTMLResponse)
-async def judge(request: Request) -> HTMLResponse:
+async def judge(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
     """문구 검수 BFF — 문구 칸 조작과 판정 호출 (ksr 2026-09-29 · 프로토타입 v7.2 `goReview`).
 
     🔴 **POST 다** — 문구를 URL 에 싣지 않는다 (보안점검 P1-4).
@@ -622,6 +625,8 @@ async def judge(request: Request) -> HTMLResponse:
     ★ 판정은 코어(`app.api.judge`)를 부른다 — 여기서 판정하지 않는다 (D-119).
        엔진이 501 이면 「엔진 준비 중」을 그린다. **가짜 결과를 만들지 않는다** (D-147).
     ★ 넣은 문구는 되돌려 그린다. **템플릿이 이스케이프한다** (P2-9) — 문자열 조립 금지.
+    🆕 2026-10-13 (ssm · W10) — 판정을 받은 뒤 **회원 ∧ 선택 동의 ①** 이면 `judgment` 에 적는다(`app.judgment_store`).
+       비회원 · 미동의는 쓰지 않는다(D-307 · D-96). 저장이 실패해도 판정 결과는 그대로 그린다.
     """
     form = await _form(request)
     copies = _copies(form)
@@ -664,6 +669,9 @@ async def judge(request: Request) -> HTMLResponse:
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
         results.append({"n": n, "result": res, "text": text})
+    judgment_store.save_review(
+        session, current_user(request, session), [r["result"] for r in results]
+    )
     return _render(request, "user/review.html", _review_ctx(copies, results))
 
 
@@ -1596,9 +1604,8 @@ def history(
 
     🔄 2026-09-16 — `Judgment` × `CopySentence` 조인(ksr)으로 **판정 원문**까지 보여준다.
        필터(`verdict`)·페이지네이션(`page`)·상세 토글(`?open_id=`)은 lse 것을 그대로 쓴다.
-    ⬜ 판정 결과를 `judgment` 표에 저장하는 코드가 아직 없어 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
-       (판정 자체는 돈다 — `/u/judge` 가 코어를 부른다. 그 결과를 적는 자리가 없다.)
-       가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
+    🔄 2026-10-13 — `/u/judge` 가 판정을 적는다(`app.judgment_store`) — **선택 동의 ①「검수 이력 보관」을 한 회원** 것만.
+       동의하지 않은 회원은 그대로 빈 목록이다. 가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
     ⛔ **`page`·`verdict` 는 사용자가 URL 을 손으로 바꿀 수 있다** — 잘못된 값으로
        500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.
     ⬜ 근거(evidence)·질의응답은 디자인엔 있지만 이번엔 뺐다 — QnA 를 저장할 테이블이
