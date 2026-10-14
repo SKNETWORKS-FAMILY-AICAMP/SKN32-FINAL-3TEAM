@@ -314,9 +314,13 @@ def _gen_post(**data: str):  # noqa: ANN202
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
 
     base = {"category": "food", "cert": "no", "age": "all", "sex": "all"}
-    return TestClient(app).post("/u/generate", data={**base, **data})
+    # 🔄 2026-10-14 — 생성은 회원만 쓴다(`_gen_gate`). 폼 검증을 재는 자리라 회원으로 보낸다
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(user_router, "_gen_gate", lambda *_a: None)
+        return TestClient(app).post("/u/generate", data={**base, **data})
 
 
 def test_생성_분기표의_전제는_시험코드의_품목과_맞는다() -> None:
@@ -489,7 +493,7 @@ def test_사전_유형_없이_인코더_후보만_있으면_접힌_칸_밖에_�
 def test_보류_문장에서_사전과_인코더가_같은_유형이면_표시한다(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, enc: str, marked: bool
 ) -> None:
-    """🆕 2026-10-14 (D-330 보충 3) — 사전 유형 후보 ∩ 인코더 유형 후보가 있으면 유형 줄에 「같은 유형 — 확정 아님」.
+    """🆕 2026-10-14 (D-330 보충 3) — 사전 유형 후보 ∩ 인코더 유형 후보가 있으면 유형 줄에 「같은 유형」(줄 머리가 「확정 아님」을 말한다).
     판정은 바뀌지 않는다 — 보류 그대로다. 합의로 확정할지는 사전 재작업 때(D-313 ⬜)."""
     import json  # noqa: PLC0415
 
@@ -742,3 +746,97 @@ def test_모르는_법령판은_미확인으로_그린다(value: object, want: s
     from app.templating import law_version_label
 
     assert law_version_label(value) == want
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  카피 생성은 로그인한 회원만 (🆕 2026-10-14 권소라 · `_gen_gate`)
+# ══════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.gate
+def test_비회원은_카피_생성_폼_대신_로그인_안내를_본다() -> None:
+    """로그인 벽이 아니다(200 · D-66) — 폼 자리에 안내와 로그인 · 회원가입 두 갈래를 그린다."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    r = TestClient(app).get("/u/generate")
+    assert r.status_code == 200, f"🔴 로그인 벽을 세웠다 — {r.status_code}"
+    assert "로그인한 회원만 이용할 수 있어요" in r.text, "🔴 회원 전용 안내가 없다"
+    assert 'href="/u/login?next=/u/generate"' in r.text, "🔴 로그인으로 가는 길이 없다"
+    assert 'href="/u/signup?next=/u/generate"' in r.text, "🔴 회원가입으로 가는 길이 없다"
+    assert 'id="gen-form"' not in r.text, "🔴 비회원에게 생성 폼을 그렸다"
+
+
+@pytest.mark.gate
+def test_비회원의_생성_제출은_엔진에_닿지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🚨 화면만 가리면 제출이 열려 있다 — 생성은 밖(GPT)을 부르고 요금이 든다. 제출도 같은 문지기를 지난다."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.routers import copygen  # noqa: PLC0415
+
+    called: list[str] = []
+    monkeypatch.setattr(copygen, "off_reason", lambda: None)
+    monkeypatch.setattr(copygen, "generate", lambda *_a, **_k: called.append("generate"))
+    data = {"category": "food", "cert": "no", "age": "all", "sex": "all", "name": "지어낸 곡물바"}
+    r = TestClient(app).post("/u/generate", data=data)
+    assert r.status_code == 401, f"🔴 비회원 제출을 받았다 — {r.status_code}"
+    assert called == [], "🔴 비회원 제출이 생성 엔진을 불렀다"
+    assert "로그인한 회원만 이용할 수 있어요" in r.text
+
+
+def test_회원은_카피_생성_폼을_본다(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    monkeypatch.setattr(user_router, "current_user", lambda *_a: SimpleNamespace(name="테스트"))
+    r = TestClient(app).get("/u/generate")
+    assert r.status_code == 200
+    assert 'id="gen-form"' in r.text, "🔴 회원에게 생성 폼이 안 떴다"
+    assert "로그인한 회원만 이용할 수 있어요" not in r.text
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [
+        ("/u/generate", "/u/generate"),
+        ("/u/history", "/u/history"),
+        ("", "/u/"),
+        (None, "/u/"),
+        ("https://evil.example/u/generate", "/u/"),
+        ("//evil.example", "/u/"),
+        ("/admin", "/u/"),
+        ("/u/generate?x=1", "/u/"),
+        ("/u/login", "/u/"),
+        ("/u/signup", "/u/"),
+    ],
+)
+def test_로그인_뒤_돌아갈_곳은_사용자_화면_안의_경로만_받는다(value: str | None, want: str) -> None:
+    """🔴 열린 리다이렉트 방지 — 밖의 주소 · 다른 구역 · 로그인 화면 자신은 홈으로 돌린다."""
+    from app.routers.user import _next_path  # noqa: PLC0415
+
+    assert _next_path(value) == want
+
+
+def test_로그인_가입_화면은_돌아갈_곳을_폼에_싣는다() -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    c = TestClient(app)
+    for path, other in (("/u/login", "/u/signup"), ("/u/signup", "/u/login")):
+        body = c.get(f"{path}?next=/u/generate").text
+        assert '<input type="hidden" name="next" value="/u/generate">' in body, f"🔴 {path}"
+        assert f'href="{other}?next=/u/generate"' in body, f"🔴 {path} — 옆 화면으로 갈 때 잃는다"
+        plain = c.get(path).text
+        assert 'name="next"' not in plain, f"🔴 {path} — 돌아갈 곳이 없는데 칸을 그렸다"
+        bad = c.get(f"{path}?next=https://evil.example/").text
+        assert 'name="next"' not in bad and "evil.example" not in bad, (
+            f"🔴 {path} — 밖의 주소를 실었다"
+        )

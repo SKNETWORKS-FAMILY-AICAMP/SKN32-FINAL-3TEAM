@@ -169,6 +169,16 @@
 .gn-ch h3 { margin: 0 0 .3rem; font-size: .86rem; }
 .gn-ch p { margin: .15rem 0; font-size: .85rem; }
 
+/* 🆕 2026-10-14 — 비회원 안내. 보라색은 누르는 것(버튼)에만 쓴다 */
+.gn-gate { max-width: 40rem; padding: 1.6rem 1.5rem; }
+.gn-gate > h2 { font-size: 1.05rem; margin: 0 0 .5rem; }
+.gn-gate p { margin: 0 0 1.1rem; color: var(--u-clay); font-size: .875rem; line-height: 1.7; }
+.gn-gate-acts { display: flex; flex-wrap: wrap; gap: .6rem; }
+.gn-gate-acts a { display: inline-block; padding: .55rem 1.3rem; border-radius: .6rem; font-size: .88rem;
+                  font-weight: 600; text-decoration: none; border: 1px solid var(--u-signal);
+                  background: var(--u-surface); color: var(--u-signal-ink); }
+.gn-gate-acts a.gn-gate-main { background: var(--u-signal); color: #fff; }
+
 .gn-pending { border: 1px dashed var(--u-line); border-radius: .75rem;
               padding: .8rem .9rem; color: var(--u-clay); font-size: .85rem; }
 .gn-fixtures { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; padding: 0; margin: .5rem 0 0; }
@@ -182,6 +192,24 @@
   <h1>카피 생성</h1>
   <p>품목과 인증 여부를 고르고 제품 내용을 적으면, <b>적어 주신 사실 안에서만</b> 카피를 만들어요.</p>
 </div>
+
+{% if need_login %}
+{# 🆕 2026-10-14 (권소라) — 카피 생성은 로그인한 회원만 쓴다. 로그인 벽 대신 안내와 갈 곳 둘을 그린다 (`_gen_gate` · D-66).
+   로그인 · 가입을 마치면 이 화면으로 돌아온다(`next`). 검수는 비회원도 그대로 쓴다 #}
+<div class="gn-card gn-gate">
+  {% if db_down %}
+  <h2>지금은 로그인 여부를 확인할 수 없어요</h2>
+  <p>데이터베이스에 연결되지 않았어요. 잠시 뒤에 다시 열어 주세요.</p>
+  {% else %}
+  <h2>카피 생성은 로그인한 회원만 이용할 수 있어요</h2>
+  <p>로그인하거나 회원가입한 뒤 이용해 주세요.<br>문구 검수는 로그인하지 않아도 쓸 수 있어요.</p>
+  <div class="gn-gate-acts">
+    <a class="gn-gate-main" href="/u/login?next=/u/generate">로그인</a>
+    <a href="/u/signup?next=/u/generate">회원가입</a>
+  </div>
+  {% endif %}
+</div>
+{% else %}
 
 {% set p = picked or {} %}
 <form class="gn-card" id="gen-form" method="post" action="/u/generate" data-wait-form>
@@ -301,6 +329,15 @@
  </div>
  </div>
 </form>
+
+{# 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구를 따로 판정한 경고. 후보를 떨구지 않는다 · 문안은 `app/reasons.py` (FIXED_*) #}
+{% if fixed_notes %}
+<div class="gn-card">
+  {% for n in fixed_notes %}
+  <p class="gn-notice gn-fixed-{{ n.level }}">{{ n.text }}</p>
+  {% endfor %}
+</div>
+{% endif %}
 
 {% if engine_pending %}
 <div class="gn-card">
@@ -581,4 +618,5 @@
 </div>
 {# 🆕 2026-10-13 — 생성 중 표시. 안 돌아도 생성은 된다 #}
 <script src="/static/user_wait.js" defer></script>
+{% endif %}
 {% endblock %}

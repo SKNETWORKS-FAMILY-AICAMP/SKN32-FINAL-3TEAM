@@ -3,14 +3,17 @@
   🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인). `judgment` × `copy_sentence`
      조인으로 판정 원문까지 보여준다 — 쿼리는 lse(필터·페이지네이션)와 ksr(원문 조인)을
      2026-09-16에 합쳤다.
-  ⬜ 판정 결과를 `judgment` 표에 저장하는 코드가 아직 없어 지금은 항상 빈 목록이다 — 정상이다.
-  🔄 디자인(발표자료 프로토타입 v7.2)은 클릭 → 옆에 JS 드로어인데, 이 프로젝트는 CSP 가
-     인라인 스크립트를 막고 HTMX 도 아직 안 붙었다. `?open_id=` 링크로 같은 흐름을
-     서버 렌더만으로 낸다. 근거·QnA 는 뺐다 — 원문·결론·위험도·법령 버전만.
+  🔄 2026-10-13 (ksr) — 검수(`/u/judge`)가 판정을 적는다. 「① 검수 이력 보관」에 동의한 회원 것만 쌓인다 (D-96 · D-69).
+     화면은 프로토타입 v7.2 의 이력 화면을 따른다 — 날짜 · 품목 · 문구 · 결과 배지 줄, 누르면 오른쪽에 상세,
+     반복 지적 패턴 띠, 「이 문구로 다시 검수하기」. 배지 글자는 검수 화면의 문장 카드와 같다 (D-99).
+  🔄 디자인은 클릭 → 옆에 JS 드로어인데, 이 프로젝트는 CSP 가 인라인 스크립트를 막는다.
+     `?open_id=` 링크로 같은 흐름을 서버 렌더만으로 낸다.
+  ⬜ 질의응답은 뺐다 — 검수 화면에서도 뺐고(09-23) 저장할 표도 없다.
   🔄 2026-09-22 (ohb 흡수) — `db_down` 이면 DB 에 못 붙은 것이다. 「기록이 없다」로 그리지 않는다 (D-72).
 #}{% extends "user/_base.html" %}
 {% block title %}CopyLane — 검수 이력{% endblock %}
 {% block screen_css %}
+{# 나머지 이력 그림은 `user.css` 에 있다(홈과 같이 쓴다). 이 한 줄은 `test_이력이_판정_원문을_보여준다` 가 붙드는 자리라 둔다 #}
 <style>
 .history-row-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
@@ -25,11 +28,26 @@
 <p>로그인하지 않고 검수한 문구는 <b>이력에 남지 않아요</b> — 로그인한 뒤 검수한 것부터 쌓여요.</p>
 <p><a href="/u/login">로그인</a> · <a href="/u/signup">회원가입</a></p>
 {% else %}
+<p class="history-sub">문구를 누르면 오른쪽에 상세가 열려요. 다시 누르면 접힙니다.</p>
+
+{% if consent_off %}
+{# 🚨 동의가 꺼져 있으면 새 검수가 쌓이지 않는다 (D-96). 빈 목록의 까닭을 숨기지 않는다 #}
+<p class="history-band history-band-off" role="status">
+  <b>검수 이력 보관이 꺼져 있어요</b> — 지금 검수하는 문구는 이력에 남지 않아요.
+  <a href="/u/mypage?tab=account">마이페이지 › 계정</a>에서 「① 검수 이력 보관」을 켜면 그 뒤 검수부터 쌓여요.
+</p>
+{% endif %}
+
+{% if pattern %}
+<p class="history-band" role="status">
+  <b>반복 지적 패턴</b> — 최근 {{ pattern.total }}건 중 {{ pattern.count }}건이 '{{ pattern.violation }}' 유형으로 지적됐어요.
+</p>
+{% endif %}
 
 <div class="filter-chips">
   <a class="filter-chip{{ ' filter-chip-active' if not verdict }}" href="?page=1">전체</a>
   {% for v in verdicts %}
-  <a class="filter-chip{{ ' filter-chip-active' if verdict == v }}" href="?page=1&verdict={{ v }}">{{ v }}</a>
+  <a class="filter-chip{{ ' filter-chip-active' if verdict == v }}" href="?page=1&verdict={{ v }}">{{ verdict_labels[v] }}</a>
   {% endfor %}
 </div>
 
@@ -41,10 +59,10 @@
     <li>
       <a class="history-row{{ ' history-row-open' if is_open }}"
          href="?page={{ page }}{{ base_qs }}{{ '' if is_open else '&open_id=' ~ j.id }}">
-        <span class="history-row-date">{{ j.judged_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        <span class="history-row-date">{{ j.at }}</span>
+        <span class="history-row-cat">{{ j.category or "—" }}</span>
         <span class="history-row-text">"{{ j.text }}"</span>
-        <span class="history-row-verdict">{{ j.verdict }}</span>
-        <span class="history-row-risk">{{ j.risk_final if j.risk_final is not none else "—" }}</span>
+        <span class="hist-badge hist-{{ j.tone }}"><i aria-hidden="true"></i>{{ j.label }}</span>
         <span class="history-row-chevron">{{ '‹' if is_open else '›' }}</span>
       </a>
     </li>
@@ -53,8 +71,10 @@
   {% elif db_down %}
   <p role="status"><b>DB 에 붙지 못해 이력을 읽지 못했다</b> — 기록이 없다는 뜻이 아니다.
     개발 기기라면 <code>launcher.py db-up</code> 으로 DB 를 켠 뒤 새로고침한다.</p>
+  {% elif verdict or page > 1 %}
+  <p>이 조건에 맞는 검수 기록이 없어요. <a href="?page=1">전체 보기</a></p>
   {% else %}
-  <p>아직 판정 기록이 없다 — 판정 엔진이 붙으면 여기 쌓인다.</p>
+  <p>아직 검수 기록이 없어요 — <a href="/u/review">문구를 검수</a>하면 여기에 쌓여요.</p>
   {% endif %}
 
   {% if opened %}
@@ -63,15 +83,49 @@
       <p>검수 상세</p>
       <a href="?page={{ page }}{{ base_qs }}" title="접기">✕</a>
     </div>
+    <div class="history-detail-meta">
+      <span class="hist-badge hist-{{ opened.tone }}"><i aria-hidden="true"></i>{{ opened.label }}</span>
+      {% if opened.risk %}<span class="hist-risk">{{ opened.risk }}</span>{% endif %}
+      <span class="history-detail-when">{{ opened.at }}{% if opened.category %} · {{ opened.category }}{% endif %}</span>
+    </div>
     <p class="history-detail-text">"{{ opened.text }}"</p>
-    <dl>
-      <dt>결론</dt><dd>{{ opened.verdict }}</dd>
-      {% if opened.hold_reason %}<dt>보류 사유</dt><dd>{{ opened.hold_reason }}</dd>{% endif %}
-      <dt>위험도</dt><dd>{{ opened.risk_final if opened.risk_final is not none else "—" }}</dd>
-      <dt>법령 버전</dt><dd>{{ opened.law_version|law_version_label }}</dd>
-      <dt>판정 시각</dt><dd>{{ opened.judged_at.strftime('%Y-%m-%d %H:%M') }}</dd>
-    </dl>
-    <p class="history-detail-note">⬜ 근거·질의응답은 아직 없다 — 붙으면 여기 채운다.</p>
+    {% if opened.hold_reason %}
+    <p class="history-detail-note">보류 사유 — {{ opened.hold_reason }}</p>
+    {% endif %}
+    {% if opened.violations %}
+    <p class="history-detail-note">지적 유형 — {{ opened.violations|map("replace", "_", " ")|join(" · ") }}</p>
+    {% endif %}
+
+    {# 근거 — 검수 화면의 「근거 보기」와 같은 규칙: 인용 근거와 참고 조문을 가르고, 확정이 아니면 「위반 근거」라 부르지 않는다 #}
+    <p class="history-detail-label">{{ "위반 근거" if opened.verdict == "confirmed" and opened.violations else "근거" }}</p>
+    <div class="history-ev">
+      {% for e in opened.basis %}
+      <div class="history-law">
+        <div>{{ e.doc_title or ("법령 " ~ e.law_id) }} · {{ e.article }}{% if e.item and e.item != "본문" and not e.article.endswith(("호", "목", ")")) %} {{ e.item }}{% endif %}</div>
+        {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+      </div>
+      {% else %}
+      <p class="history-detail-note">판정이 기댄 조문이 없어요 — 사전에 걸린 표현이 없어요.</p>
+      {% endfor %}
+      {% if opened.refs %}
+      <details>
+        <summary>검색이 찾은 참고 조문 {{ opened.refs|length }}건 — 판정 근거가 아니에요</summary>
+        {% for e in opened.refs %}
+        <div class="history-law">
+          <div>{{ e.doc_title or ("법령 " ~ e.law_id) }} · {{ e.article }}{% if e.item and e.item != "본문" and not e.article.endswith(("호", "목", ")")) %} {{ e.item }}{% endif %}</div>
+          {% if e.quote %}<blockquote>{{ e.quote }}</blockquote>{% endif %}
+        </div>
+        {% endfor %}
+      </details>
+      {% endif %}
+    </div>
+    <p class="history-detail-note">법령 기준 {{ opened.law_version|law_version_label }}</p>
+
+    {# 문구를 검수 입력칸에 담기만 한다(`op=load`) — 판정은 이용자가 「검수」를 눌러야 돈다. 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4) #}
+    <form method="post" action="/u/judge">
+      <input type="hidden" name="text" value="{{ opened.text }}">
+      <button class="history-again" type="submit" name="op" value="load">이 문구로 다시 검수하기</button>
+    </form>
   </aside>
   {% endif %}
 </div>

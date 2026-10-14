@@ -8,8 +8,12 @@
 🚨 **이 파일은 계약이지 구현이 아니다.** 🔄 2026-09-29 — `/judge` 는 검수 그래프를 실제 DB 로 돌린다.
    🔄 2026-10-06 — 판정은 **인코더 전 규칙 판정**이다(`app/graph.py` `JUDGED_BY` = `rule-0.3.0-dict` · D-269). 사전 적중 확정 ·
    위험도 하한 · 품목 분기 · 증명서 조립이 실제로 돈다. 사전에 안 걸린 문장은 보류라 종착은 대부분 `hold` 다 —
-   **정직한 보류**이지 가짜 200 이 아니다. 빈 노드는 `encode` · `doc_rules` 다.
+   **정직한 보류**이지 가짜 200 이 아니다. 빈 노드는 `doc_rules` 다.
+   🔄 2026-10-14 — `encode` 는 빈 노드가 아니다. 문장마다 인코더 후보를 `encoder_candidates` 칸에 싣고, 판정은 그 칸을
+      읽지 않는다(D-323 · D-331). 확정된 B 실증형에 실증 분기가 붙으면 `guidance` 가 선다(D-337 · 원장 10-14(B) ⑤).
    `/generate` · `/compose` 는 여전히 **`501 Not Implemented`** — 200 에 가짜 응답을 넣지 않는다.
+   🔄 2026-10-14 — 501 은 **이 API 경로**의 이야기다. 카피 생성(B)은 화면 BFF `POST /u/generate`(`app/routers/copygen` · D-332)가,
+      AI 광고 생성(C)의 문구 판정은 `POST /u/compose` 가 이 파일의 `judge` 를 불러 돈다.
    가짜 응답을 넣으면 프론트가 그 모양에 맞춰 붙고, 진짜가 오면 두 번 고친다.
    D-147 이 같은 말을 데이터 쪽에서 한다 — **오류 응답은 데이터가 아니다.**
 
@@ -421,8 +425,11 @@ def judge(req: JudgeRequest) -> JudgeResponse:
     🔄 이제 코어(분할 · 품목 · **넓은 검색** · 사전 매칭 · 법별 노드 · 판정 · 위험도 · 품목 분기)가 선다.
        🔄 2026-10-06 — 판정은 **인코더 전 규칙 판정**이다(D-269 · `judged_by` = `app/graph.py` `JUDGED_BY`). 사전의 단독 판정 항목이
        걸린 문장만 위반으로 확정하고, 걸린 것이 없는 문장은 **보류**다 — 그래서 종착은 대부분 `hold` 다. 확정 위반에 위험도 하한과
-       승인된 사유 문안이 다 있으면 `certificate` 가 나온다(D-320). 🚨 `guidance` · `pass` 는 지금 판에서 나오지 않는다 — 실증 분기를
-       채우는 노드가 없고, 위반 없는 확정을 내는 것은 인코더 몫이다(`encode` 는 빈 노드). 사전을 못 훑은 문장만 `unjudged` 다.
+       승인된 사유 문안이 다 있으면 `certificate` 가 나온다(D-320).
+       🔄 2026-10-14 — 확정된 B 실증형에 실증 분기(`app/graph.py` `_substantiated` · D-337)가 붙고 문장이 전부 확정이면 `guidance` 가
+       선다(dev 보류 686 · 지시 63 · 증명서 · 통과 0 — 원장 10-14(B) ⑤ · 클론 B). `pass` 는 닫아 둔다(D-323 결정 5) — 사전에 안 걸린
+       주장 문장은 보류다. `encode` 는 인코더 후보를 문장의 `encoder_candidates` 칸에 싣지만 판정은 그 칸을 읽지 않는다(D-323).
+       사전을 못 훑은 문장만 `unjudged` 다.
        가짜 200 이 아니라 **정직한 보류**다.
     ★ 그래프를 여기서 새로 짓지 않는다 — `app/graph.py` 한 곳이다 (D-99 · D-51). 커서는 `config` 로 넣는다(노드가 스스로 연결하지 않는다).
     🚨 첫 호출은 인코더 로드가 들어가 느리다(기기 실측 약 20 초 · 사실원장 ㊷). 예열은 아직 없다 ⬜
@@ -516,7 +523,11 @@ def fixture(kind: str, name: str) -> Any:
     "/generate", response_model=GenerateResponse, responses={501: {"description": "엔진 미착수"}}
 )
 def generate(req: GenerateRequest) -> GenerateResponse:
-    """진입점 B — 카피 생성 (D-181). 🚨 엔진은 아직 없다. 계약만 나간다."""
+    """진입점 B — 카피 생성 (D-181). 🚨 이 API 경로는 엔진에 잇지 않았다 — 계약만 나간다.
+
+    🔄 2026-10-14 — 엔진은 있다: 화면 BFF `POST /u/generate`(`app/routers/copygen` · D-332)가 GPT 후보를 이 파일의 `judge` 로 거른다.
+    ⬜ 아래 501 의 문구(「생성 엔진이 아직 없다」)는 응답 글자라 이번에 바꾸지 않았다.
+    """
     raise HTTPException(501, "생성 엔진이 아직 없다. 고정 응답은 GET /fixtures/generate/… 에 있다.")
 
 
@@ -524,7 +535,10 @@ def generate(req: GenerateRequest) -> GenerateResponse:
     "/compose", response_model=ComposeResponse, responses={501: {"description": "엔진 미착수"}}
 )
 def compose(req: ComposeRequest) -> ComposeResponse:
-    """진입점 C — AI 광고 생성 (D-164 · D-181). 🚨 엔진은 아직 없다."""
+    """진입점 C — AI 광고 생성 (D-164 · D-181). 🚨 템플릿 엔진은 아직 없다.
+
+    🔄 2026-10-14 — 화면 BFF `POST /u/compose` 는 문구 판정만 이 파일의 `judge` 로 돈다 · 섹션 골격은 화면(`user_compose.js`)이 깐다.
+    """
     raise HTTPException(
         501, "템플릿 엔진이 아직 없다. 고정 응답은 GET /fixtures/compose/… 에 있다."
     )

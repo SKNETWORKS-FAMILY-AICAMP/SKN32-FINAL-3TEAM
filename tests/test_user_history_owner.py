@@ -66,7 +66,9 @@ def rec() -> Iterator[_Recorder]:
 
 def _login(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        user_router, "current_user", lambda *_a: SimpleNamespace(id=_ME, name="테스트")
+        user_router,
+        "current_user",
+        lambda *_a: SimpleNamespace(id=_ME, name="테스트", consent_history_at=None),
     )
 
 

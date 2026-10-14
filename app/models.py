@@ -202,7 +202,7 @@ class Judgment(Base):
     evidence_span: Mapped[dict | None] = mapped_column(JSONB)
     risk_floor: Mapped[int | None] = mapped_column(Integer)  # 코드 하한 (D-09 · D-130)
     risk_final: Mapped[int | None] = mapped_column(Integer)
-    # 🚨 D-103 ③ — 개정되면 「재검증 대기」의 판단 근거가 된다
+    # ⛔ 폐기 예정 (D-103 ③ 개정 2026-10-14) — 새 코드는 읽지 않는다 · W10 흡수 뒤 마이그레이션으로 뺀다
     law_version: Mapped[str] = mapped_column(String(40))
     # D-126 — 0-base. 총 라운드 K+1=3 이므로 0·1·2 만 가능
     attempt: Mapped[int] = mapped_column(Integer, default=0)

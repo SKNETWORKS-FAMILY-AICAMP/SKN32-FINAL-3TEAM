@@ -86,9 +86,10 @@
     {% for j in recent %}
     <li>
       <a class="history-row" href="/u/history?open_id={{ j.id }}">
-        <span class="history-row-date">{{ j.judged_at.strftime('%Y-%m-%d %H:%M') }}</span>
-        <span class="history-row-verdict">{{ j.verdict }}</span>
-        <span class="history-row-risk">{{ j.risk_final if j.risk_final is not none else "—" }}</span>
+        <span class="history-row-date">{{ j.at }}</span>
+        <span class="history-row-cat">{{ j.category or "—" }}</span>
+        <span class="history-row-text">"{{ j.text }}"</span>
+        <span class="hist-badge hist-{{ j.tone }}"><i aria-hidden="true"></i>{{ j.label }}</span>
         <span class="history-row-chevron">›</span>
       </a>
     </li>

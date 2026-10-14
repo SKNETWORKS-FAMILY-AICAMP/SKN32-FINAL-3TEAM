@@ -11,6 +11,8 @@
                               → doc_rules
        review   (진입점 A)   core → route_review → certificate · guidance · hold · passed   ← 루프 없음
        generate (진입점 B)   keyword_screen → assemble → claim_ledger → rejudge → 루프(D-126)
+                              🔄 2026-10-14 — 스텁이다 · 앱에서 부르는 곳이 없다(`build_generate`). 지금 도는 카피 생성(B)은
+                              `app/routers/copygen`(D-332)이고 코어를 `app.api.judge` 로 부른다
        compose  (진입점 C)   상태만 — 이번 범위 밖 (계약만 · D-266)
 
 🚨 **DB 도 모델도 없이 end-to-end 한 바퀴가 돈다** — Phase 0 게이트의 정의(D-124)는 그대로다.
@@ -20,6 +22,7 @@
    🔄 2026-10-07 — `encode` 는 모델 폴더가 설정되면(`COPYLANE_MODEL_DIR`) 문장마다 인코더 신호를 상태(`encodings`)에 싣는다.
    🔄 2026-10-09 (D-323 집행) — 그 신호가 응답에 나간다: 문장의 **`encoder_candidates`**(유형 · 확신) 한 칸에만.
       🚨 판정(확정 · 보류 · `violations` · 하한 · 분기 열쇠)은 그 칸을 **읽지 않는다** — 여전히 인코더 전 규칙 판정이다(`JUDGED_BY`).
+   🔄 2026-10-14 (D-337) — 확정된 B 실증형에 실증 분기(`_substantiated`)가 붙으면 종착 `guidance` 가 선다.
 
 ★ D-124 가 정한 검사 셋도 그대로다 —
    ① **라우터 함수는 그래프 없이 단독 테스트한다** → langgraph 를 **모듈 최상단에서 import 하지 않는다.**
@@ -91,7 +94,7 @@ from app.contracts import (
 )
 from app.settings import PARAMS
 from collect import statute
-from collect.law_map import LAWS, REFERENCE_ONLY
+from collect.law_map import LAW_OF_ID, LAWS, REFERENCE_ONLY
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
 MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
@@ -141,6 +144,10 @@ class SentEvidence:
     pool: int = 0
 
 
+#: 🆕 2026-10-14 (D-336) — 문장만 받는 판(카드 17)의 신호 표지. 품목 입력을 받지 않으므로 **어느 품목 입력에도 같은 신호**다
+ANY_INPUT = "*"
+
+
 @dataclass(frozen=True, slots=True)
 class SentEncoding:
     """문장 하나의 **인코더 신호** (🆕 2026-10-07 · 그림자 배선). 🚨 판정이 아니다 — 유형 후보와 확신뿐이다 (D-131).
@@ -161,6 +168,32 @@ class SentEncoding:
     candidates: tuple[str, ...]
     #: 문장이 길어 뒤가 잘렸다 — 잘린 부분은 인코더가 보지 않았다 (D-220)
     truncated: bool = False
+    #: 🆕 2026-10-14 (D-336 · D-339 결정 5) — 이 신호를 낸 **품목 입력**(`pm.encoder_input` 의 글자). 품목 입력 판은 문장마다
+    #:    입력 하나에 한 벌씩 싣는다(기록 판정의 입력 + 품목 분기들의 입력 · 한 배치). 문장만 받는 판은 `ANY_INPUT` 한 벌이다.
+    #:    읽는 쪽은 `_encodings_for` 로 고른다 — 기록 판정은 요청 품목의 입력, 분기는 그 전제의 입력
+    input: str = ANY_INPUT
+
+
+def _encoder_inputs(category: Category | None) -> tuple[str, ...]:
+    """이 요청에서 인코더에 넣을 품목 입력 (🆕 2026-10-14 · D-339 결정 5) — **기록 판정의 입력이 맨 앞**, 그 뒤에 품목 분기들의 입력.
+
+    ★ 품목을 모르면 「모름」 + 식품 · 건기식 · 화장품 — 한 배치다(분기 여섯의 입력은 넷으로 모인다 · 일반상품 → 모름).
+    ★ 품목을 알면 그 품목의 입력 하나다(전제가 둘이어도 품목 입력은 같다).
+    """
+    record = pm.encoder_input(category)
+    return tuple(
+        dict.fromkeys([record, *(pm.premise_input(p) for p in pm.PREMISES_OF.get(category, ()))])
+    )
+
+
+def _encodings_for(state: CoreState, category_input: str) -> dict[str, SentEncoding]:
+    """문장 → 이 품목 입력의 신호 (🆕 2026-10-14 · D-336). 문장만 받는 판의 신호(`ANY_INPUT`)는 어느 입력에나 든다.
+
+    🔴 그 입력의 신호가 없으면 그 문장은 비어 있다 — 다른 입력의 신호로 메우지 않는다(입력마다 문턱 · 확률이 다르다 · D-220).
+    """
+    return {
+        e.sent_id: e for e in state.get("encodings", []) if e.input in (ANY_INPUT, category_input)
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -1047,16 +1080,28 @@ def encode(state: CoreState) -> dict[str, Any]:
          ⛔ 조용히 넘기지 않는다 — 켰다고 믿는 사람이 꺼진 줄 모른다 (D-162). 수를 재는 도구는 이 경우 **멈춘다**
          (`scripts/eval_graph.py --encoder`).
     ⛔ 법별 노드가 인코더를 부르면 판정기가 세 벌이다 (D-99). 근거 구간(스팬)은 지금 모델이 내지 않는다.
+    🆕 2026-10-14 (D-336 · D-339 결정 5) — **품목 입력 판**(`takes_category`)이면 문장마다 품목 입력 여럿을 **한 배치**로 돌려
+       입력마다 한 벌씩 싣는다(`_encoder_inputs` · `SentEncoding.input`). 기록 판정은 요청 품목의 입력(모르면 「모름」), 분기는
+       그 전제의 입력을 읽는다. 문장만 받는 판(카드 17 · 가짜 인코더)은 종전대로 문장마다 한 번 · `ANY_INPUT` 한 벌이다.
     """
     model_dir = enc.configured_dir()
     if model_dir is None:
         return {}
+    sents = state.get("sents", [])
     try:
         enc.checked_dir(
             model_dir
         )  # 🆕 2026-10-13 (D-333) — 잠금에 없는 판은 올리지 않는다 · 거절도 아래 경고 경로를 탄다
         model = enc.encoder_at(model_dir)
-        preds = [model.predict(t) for t in state.get("sents", [])]
+        if getattr(model, "takes_category", False):
+            need = _encoder_inputs((state.get("product") or ProductContext()).category)
+            runs = [
+                (i, x, p)
+                for i, t in enumerate(sents)
+                for x, p in zip(need, model.predict_many(t, need), strict=True)
+            ]
+        else:
+            runs = [(i, ANY_INPUT, model.predict(t)) for i, t in enumerate(sents)]
     except enc.EncoderUnavailable as e:
         _warn_encoder_off(str(model_dir), str(e))
         return {}
@@ -1067,8 +1112,9 @@ def encode(state: CoreState) -> dict[str, Any]:
                 scores=tuple((label.value, score) for label, score in p.scores.items()),
                 candidates=tuple(c.violation.value for c in p.candidates),
                 truncated=p.truncated,
+                input=x,
             )
-            for i, p in enumerate(preds)
+            for i, x, p in runs
         ]
     }
 
@@ -1089,6 +1135,11 @@ if _UNRECOGNIZED_TYPE is None:
     )
 
 
+def _cosmetic_moved(c: EncoderTypeCandidate) -> bool:
+    """화장품 전제에서 옮긴 후보인가 (D-338 · `rs.COSMETIC_MOVE`)."""
+    return c.moved_from is not None and rs.COSMETIC_MOVE.get(c.moved_from) is c.violation
+
+
 def _candidate_refs(
     c: EncoderTypeCandidate, laws: Iterable[str], texts: dict[str, EvidenceArticle] | None
 ) -> list[EvidenceArticle]:
@@ -1099,13 +1150,30 @@ def _candidate_refs(
     🚨 좌표는 표(`collect/statute.py`)가 정한다. `texts` 에 있으면 원문이 붙고, 없으면 좌표만이다.
     """
     food = LAW_OF_NODE["law_food"]
+    cosmetic = LAW_OF_NODE["law_cosmetic"]
     coords: list[str] = []
     for law in laws:
-        if c.moved_from is not None and law == food:
+        if _cosmetic_moved(c):
+            # 🆕 2026-10-14 (D-338) — 화장품 전제에서 옮긴 후보는 「화장품이라면」의 것이다 — 화장품법의 조항만 싣는다
+            if law == cosmetic:
+                coords += statute.references(c.violation.value, law)
+        elif c.moved_from is not None and law == food:
             coords += statute.reference_of_cite(pm.UNRECOGNIZED_FUNCTION_CITE)
         else:
             coords += statute.references(c.violation.value, law)
     return [(texts or {}).get(x) or _ref_article(x) for x in dict.fromkeys(coords)]
+
+
+#: 🆕 2026-10-14 (D-336 결정 5 · D-339 ⬜) — 인코더 후보의 **전제별 거름 · 옮김**을 켜 두는가. 앱은 늘 켠다.
+#:    끄는 것은 평가 도구뿐이다(`scripts/eval_graph.py --no-enc-filter`) — 품목 입력 판의 dev 에서 거름 켬 / 끔을 견줘 거름표를 걷을지 판정한다.
+#:    🚨 꺼도 사전 적중의 전제 거름(`_premise_hits`)은 그대로다 — 이 스위치는 인코더 후보 칸만 본다
+_ENCODER_FILTER = True
+
+
+def disable_encoder_filter() -> None:
+    """이 프로세스에서 인코더 후보의 전제별 거름 · 옮김을 끈다 — **평가 도구만** 부른다(앱은 부르지 않는다)."""
+    global _ENCODER_FILTER  # noqa: PLW0603 — 프로세스 단위 스위치다(`enc.permit_unlocked` 와 같은 모양)
+    _ENCODER_FILTER = False
 
 
 def _encoder_candidates(
@@ -1130,7 +1198,8 @@ def _encoder_candidates(
     """
     if e is None:
         return []
-    ps = tuple(premises)
+    # 거름을 끈 평가(`disable_encoder_filter`)는 전제가 없는 것처럼 — 거르지도 옮기지도 않는다. 참조 조항은 그대로 붙인다
+    ps = tuple(premises) if _ENCODER_FILTER else ()
     never_hf = bool(ps) and all(p in pm.NO_HF_MISLEAD for p in ps)
     score = dict(e.scores)
     out = [
@@ -1154,6 +1223,22 @@ def _encoder_candidates(
                 moved_from=Violation(pm.HF_MISLEAD),
             )
         )
+    # 🆕 2026-10-14 (D-338) — **화장품 전제만**(분기 · 품목이 화장품인 기록)에서는 질병 표방 · 건강기능식품 오인 후보를 의약품 오인으로
+    #    옮긴다 — 우리 라벨 규약에서 화장품의 질병 · 건강 기능 주장은 의약품 오인이다(`rs.COSMETIC_MOVE`). 원래 후보는 그 전제에서 서지 않는다.
+    #    ⛔ 품목 미상 기록(전제 여섯의 합집합)에서는 옮기지 않는다 — 원래 후보가 식품 전제에서 서고, 화장품이라면의 사본을 더하면 소음이다.
+    #    ⛔ 인코더가 의약품 오인을 직접 냈으면 더하지 않는다 · 둘이 같은 유형으로 옮겨 가면 확률이 높은 쪽 하나만
+    if ps and all(p is Premise.화장품 for p in ps):
+        moves = [c for c in out if c.violation in rs.COSMETIC_MOVE]
+        out = [c for c in out if c.violation not in rs.COSMETIC_MOVE]
+        have = {c.violation for c in out}
+        for c in sorted(moves, key=lambda x: -x.confidence):
+            to = rs.COSMETIC_MOVE[c.violation]
+            if to in have:
+                continue
+            have.add(to)
+            out.append(
+                EncoderTypeCandidate(violation=to, confidence=c.confidence, moved_from=c.violation)
+            )
     # 🆕 2026-10-12 (D-327) — 후보마다 참조 조항을 붙인다. `laws` 가 비면(법을 모른다) 붙이지 않는다 — 빈 목록이다
     law_axes = tuple(laws)
     return [c.model_copy(update={"references": _candidate_refs(c, law_axes, texts)}) for c in out]
@@ -1473,8 +1558,11 @@ def judge(state: CoreState) -> dict[str, Any]:
         starts = [None] * len(sents)
     # 🆕 2026-10-09 (D-323) — 인코더 신호는 **한 칸에만** 옮긴다. `_judge_one` 은 그 신호를 받지 않는다 — 판정이 읽을 길이 없다.
     #    기록 판정이라 이 품목의 전제 전부로 거른다(합집합 · `_encoder_candidates`).
-    encs = {e.sent_id: e for e in state.get("encodings", [])}
-    premises = pm.PREMISES_OF[(state.get("product") or ProductContext()).category]
+    #    🆕 2026-10-14 (D-336 결정 2 · 3) — 품목 입력 판이면 **요청 품목의 입력**(모르면 「모름」)의 신호를 읽는다 — 카피 생성의
+    #       재검수(품목을 넘긴다)가 그 품목 분기와 같은 계산을 탄다. 문장만 받는 판은 종전과 같다(`ANY_INPUT`)
+    category = (state.get("product") or ProductContext()).category
+    encs = _encodings_for(state, pm.encoder_input(category))
+    premises = pm.PREMISES_OF[category]
     # 🆕 2026-10-12 (D-327) — 참조 조항은 **이번에 보낸 법**마다 싣는다(`state["laws"]` 는 노드 이름이다 → 법 축)
     ref_laws = tuple(LAW_OF_NODE[n] for n in state.get("laws") or () if n in LAW_OF_NODE)
     ref_texts = state.get("ref_texts") or {}
@@ -1570,6 +1658,34 @@ def _with_risk(s: SentenceJudgment, risk: RiskAssessment) -> SentenceJudgment:
     return SentenceJudgment(**{**{k: getattr(s, k) for k in type(s).model_fields}, "risk": risk})
 
 
+def _substantiated(s: SentenceJudgment) -> SentenceJudgment:
+    """확정된 실증형(B) 위반에 **실증 분기**를 붙인 새 문장 (🆕 2026-10-14 · D-337 · D-268 「지시」의 재료).
+
+    ★ 붙는 조건 — 확정 ∧ 위반 있음 ∧ 사유 B ∧ 위험도가 섰다(계약 `_subst_is_for_B` 는 실증 전 위험도를 요구한다) ∧ 위반이 전부
+       `rs.SUBST_MAX` 의 유형 ∧ 인용 근거(`basis`)의 법 축이 하나. 문안 · 상한은 `rs.subst_branch` 한 곳이다.
+    🔴 못 붙이면 그대로 — 그 문장은 지시가 서지 않아 종착이 보류다(`guidance_ready` · D-220). 법 축을 모르는 인용이 섞이면 붙이지 않는다.
+    🚨 문서 종착이 지시가 되려면 문장이 **전부** 확정이어야 한다(계약 `_guidance_payload` · D-268 우선순위). 사전에 안 걸린 문장이 하나라도
+       있으면 문서는 보류다 — 그래도 이 분기는 문장 카드의 「고치는 방향」으로 보인다.
+    """
+    if (
+        s.verdict is not Verdict.confirmed
+        or not s.violations
+        or s.infeasibility is not Infeasibility.B
+        or s.risk.final is None
+        or s.substantiation is not None
+    ):
+        return s
+    axes = {LAW_OF_ID.get(e.law_id) for e in s.evidence if e.basis}
+    if None in axes:
+        return s
+    sb = rs.subst_branch(list(s.violations), {a for a in axes if a is not None})
+    if sb is None:
+        return s
+    return SentenceJudgment(
+        **{**{k: getattr(s, k) for k in type(s).model_fields}, "substantiation": sb}
+    )
+
+
 @timed
 def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     """위험도 — **코드 하한**(제재표) · 가능 상한 (D-09 · D-305 · D-310). 🆕 2026-10-02 (W5) 배선.
@@ -1627,11 +1743,16 @@ def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN00
         if f.floor is None:
             continue
         out.append(
-            _with_risk(
-                s,
-                RiskAssessment(
-                    floor=f.floor, final=f.floor, ceiling=f.ceiling, ceiling_note=f.ceiling_note
-                ),
+            _substantiated(
+                _with_risk(
+                    s,
+                    RiskAssessment(
+                        floor=f.floor,
+                        final=f.floor,
+                        ceiling=f.ceiling,
+                        ceiling_note=f.ceiling_note,
+                    ),
+                )
             )
         )
     return {"sentences": out} if out else {}
@@ -1699,7 +1820,8 @@ def _premise_sentences(
         starts = [None] * len(sents)
     category = pm.PREMISE_CATEGORY[premise]
     texts = state.get("basis_texts") or {}
-    encs = {e.sent_id: e for e in state.get("encodings", [])}
+    # 🆕 2026-10-14 (D-336 결정 3) — 분기는 **그 전제의 품목 입력**의 신호를 읽는다(일반상품 → 「모름」 · `pm.premise_input`)
+    encs = _encodings_for(state, pm.premise_input(premise))
     out: list[SentenceJudgment] = []
     for i, text in enumerate(sents):
         sid = sent_id(i)
@@ -1759,14 +1881,16 @@ def _premise_sentences(
             else:
                 f = floor_of_sentence(rows, by_law)
                 if f.floor is not None:
-                    j = _with_risk(
-                        j,
-                        RiskAssessment(
-                            floor=f.floor,
-                            final=f.floor,
-                            ceiling=f.ceiling,
-                            ceiling_note=f.ceiling_note,
-                        ),
+                    j = _substantiated(
+                        _with_risk(
+                            j,
+                            RiskAssessment(
+                                floor=f.floor,
+                                final=f.floor,
+                                ceiling=f.ceiling,
+                                ceiling_note=f.ceiling_note,
+                            ),
+                        )
                     )
         if sid in encs:
             # 분기 문장 — 이 전제 하나로 거른다 (D-323 결정 6). 판정이 끝난 뒤에 붙인다 — 위 판정은 이 칸을 보지 않았다
@@ -2401,7 +2525,12 @@ def build_review():  # noqa: ANN201
 
 
 def build_generate():  # noqa: ANN201
-    """생성 그래프 (진입점 B · D-266). 🔜 W9 — `rejudge` 가 코어를 부르는 배선."""
+    """생성 그래프 (진입점 B · D-266). 🔜 W9 — `rejudge` 가 코어를 부르는 배선.
+
+    🔄 2026-10-14 — **앱에서 부르는 곳이 없다**(스텁 노드 · 게이트 `tests/test_graph_routers.py` 만 짓는다). 지금 도는 카피 생성(B)은
+       이 그래프가 아니라 `app/routers/copygen`(D-332 · GPT 후보 → 코드 필터 → `GraphJudge` → `app.api.judge`)이다.
+       ⬜ 이 그래프를 채울지 · D-266 의 진입점 B 를 고칠지는 판정 대기다.
+    """
     _require_tracing_off()
     from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
 

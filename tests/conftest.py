@@ -17,6 +17,8 @@ import os
 
 import pytest
 
+from collect import env
+
 os.environ["COPYLANE_ERROR_LOG"] = "off"
 # 🆕 2026-10-13 (ksr) — **카피 생성 엔진(GPT 호출)을 끈다** (`COPYLANE_COPYGEN` · `app/routers/copygen`). 같은 까닭이다 —
 #    켜 둔 기기의 `.env` 로 `/u/generate` 를 누르는 테스트가 **실제로 밖을 부르면 안 된다.** 켜진 동작은 대역을 끼워 잰다.
@@ -24,6 +26,17 @@ os.environ["COPYLANE_COPYGEN"] = "off"
 # 🆕 2026-10-13 (D-333) — **판정 인코더를 끈다** (`COPYLANE_MODEL_DIR`). 인코더는 이제 `.env` 에서도 켜진다(`collect.env.setting`) —
 #    켜 둔 기기에서 그래프를 도는 테스트가 수백 MB 모델을 올리고 결과가 기기마다 갈리면 안 된다. 켜진 동작은 대역을 끼워 잰다.
 os.environ["COPYLANE_MODEL_DIR"] = ""
+# 🆕 2026-10-14 — **`.env` 를 여기서 한 번 읽는다** (`override=False` — 위에서 박은 값이 이긴다).
+#    ⛔ 처음 읽는 때가 실행 순서에 달려 있었다 — 값을 지운(`delenv`) 테스트 뒤에 처음 읽히면 `.env` 값이 다시 채워져
+#       파일 몇 개만 돌리면 깨지고 전체로 돌리면 지나갔다(`tests/test_encode_node.py` `off` · 2026-10-14).
+#    ⛔ `.env` 를 아예 막지 않는다 — DB 게이트(`tests/test_risk_floor.py`)가 `.env` 의 `DATABASE_URL` 로 붙고,
+#       못 붙으면 **조용히 건너뛴다**(D-220 의 「없음이 통과」). 클론 B 의 주소는 기본값과 다르다.
+env.load()
+# 🔐 비밀 키는 비운다 — 테스트가 실수로라도 진짜 키로 밖을 부르지 않게. 이름의 정본은 `collect.env.KEYS` (D-99).
+#    `DATABASE_URL` 은 남긴다 — 위의 DB 게이트가 쓴다. 키가 필요한 동작은 대역을 끼워 잰다(`llm.has_key` 등).
+for _name in env.KEYS:
+    if _name != "DATABASE_URL":
+        os.environ[_name] = ""
 
 
 @pytest.fixture(autouse=True)
