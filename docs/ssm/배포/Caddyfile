@@ -1,0 +1,38 @@
+# Caddyfile — CopyLane 배포용 (초안 2026-10-12 · 🔄 2026-10-14 g4dn.xlarge · 소성민)
+#
+#   놓는 자리  /etc/caddy/Caddyfile   (서버에 apt 로 설치한 Caddy · 컨테이너 아님)
+#   적용       sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#   전제       도메인의 A 레코드가 탄력적 IP 를 가리킨다 · 보안 그룹과 ufw 에 80 · 443 이 열려 있다
+#
+# 🚨 서버에서 실행해 본 기록이 없다. `copylane.example.com` 을 실제 도메인으로 바꾼다.
+# 🚨 밖으로 넘기는 곳은 앱(127.0.0.1:8000) 하나다.
+#    sLLM 서버(127.0.0.1:8765)는 인증이 없다 — 여기서 넘기지 않는다. 앱이 서버 안에서만 부른다 (보안점검 P2-22).
+# 🔄 g4dn — 고쳐 쓰기 한 번은 앱이 문구를 다시 판정하고 sLLM 을 부르느라 수십 초 걸릴 수 있다
+#    (앱의 sLLM 대기 상한 90초 · sllm_client.TIMEOUT_S). Caddy 는 응답 대기 상한을 따로 두지 않으므로 그대로 둔다.
+
+copylane.example.com {
+    encode zstd gzip
+
+    # 앱(uvicorn)으로 넘긴다. Caddy 가 X-Forwarded-Proto 를 붙이고, uvicorn 은 127.0.0.1 에서 온
+    # 그 헤더를 기본으로 믿는다 — 세션 쿠키에 Secure 가 붙는지 배포 뒤 확인한다 (배포계획 Phase 4)
+    reverse_proxy 127.0.0.1:8000
+
+    # cloud 에디션에서는 앱이 /admin 과 /login 을 붙이지 않는다(404). 여기서 한 번 더 막는다
+    @closed path /admin /admin/* /login
+    respond @closed 404
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "same-origin"
+        -Server
+    }
+
+    # 접속 기록 — 보관 기간은 팀 판정(가입을 받을지)에 따른다
+    log {
+        output file /var/log/caddy/copylane-access.log {
+            roll_size 20mb
+            roll_keep 10
+        }
+    }
+}
