@@ -463,3 +463,10 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
   .user-sidebar-cs { margin: 0 0 0 auto; padding: .35rem .7rem; border-radius: 999px; font-size: .78rem; }
   .user-main { padding: 1.25rem 1rem; }
 }
+
+/* 🆕 10-14 좁은 화면 — 검수 화면의 「✨ 이 문장 고쳐 쓰기」 버튼(`review.html` `.rv-fix-go` · lse)이 본문과 설명을 옆으로 붙여
+   글자가 조각나던 것을 위아래로 쌓는다. 화면 파일의 인라인 스타일보다 늦게 와도 이기게 `form` 을 붙인다 */
+@media (max-width: 44rem) {
+  form .rv-fix-go { display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; width: 100%; text-align: left; }
+  form .rv-fix-go small { font-size: .74rem; }
+}
