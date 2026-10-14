@@ -12,7 +12,7 @@
    되돌림 판 중에서 **고르는** 것이다 — 판을 바꾼 사실이 git 에 남는다(D-205). 실험(잠금 밖)은 도구가
    `permit_unlocked()` 를 부르고 돌린다(`scripts/eval_graph.py --encoder`). 응답 표지는 **판 지문**이다(`bundle_mark`).
 🆕 2026-10-14 (D-336 · D-339 결정 2 · 3 · 5) — **품목 입력 판.** `label_scheme.json` 에 `input_format` 이 있는 판은 (품목 입력, 문장)
-   쌍으로만 부른다(`truncation="only_second"`) · 문턱은 두 벌이다 — `label_thresholds` = 「모름」 · `label_thresholds_known` = 품목 앎.
+   쌍으로만 부른다(`truncation="only_second"`) · 문턱은 두 벌이다 — `label_thresholds` = 「모름」 · `label_thresholds_by_cat` = 품목 앎(🔄 D-339 결정 2 개정 · 품목마다가 아니라 한 벌이다).
    품목 입력의 글자와 전제 대응의 정본은 `app/premise.py` 다(`ENCODER_INPUT` · `premise_input`). 어긋나면 로더가 멈춘다(D-220).
    문장만 받는 판(카드 17)은 품목 입력을 받지 않는다 — `takes_category` 가 거짓이고 품목을 주어도 한 번만 계산한다.
 """
@@ -181,7 +181,8 @@ class LabelScheme:
     max_tokens: int = MAX_TOKENS
     #: 상한을 모델 폴더(`max_len`)에서 읽었는가. 거짓이면 기본값으로 돈 것이다
     max_tokens_from_model: bool = False
-    #: 🆕 2026-10-14 (D-339 결정 2) — 품목 입력 판의 **품목 앎** 문턱(`label_thresholds_known`). 문장만 받는 판은 `None`
+    #: 🆕 2026-10-14 (D-339 결정 2) — 품목 입력 판의 **품목 앎** 문턱(스킴 칸 `KNOWN_FIELD`). 문장만 받는 판은 `None`
+    #:    🚨 칸 이름에 「by_cat」이 있지만 **품목마다 한 벌이 아니다** — 식품 · 건기식 · 화장품이 이 한 벌을 같이 쓴다
     thresholds_known: dict[Violation, float] | None = None
     #: 품목 입력 판인가(`input_format`) — 참이면 (품목 입력, 문장) 쌍으로만 부른다
     pair: bool = False
@@ -195,6 +196,12 @@ class LabelScheme:
         return self.thresholds_known
 
 
+#: 🔄 2026-10-14 (D-339 결정 2 개정 · (나)) — 품목 앎 문턱의 스킴 칸 이름. 박수진 스킴(`make_d410_scheme.py`)의 이름을 받았다.
+#:    🚨 이름과 달리 품목마다가 아니라 **한 벌**이다. 종전 결정의 이름(`REJECTED_FIELD`)은 받지 않는다 — 두 이름이 섞이지 않게 (D-99)
+KNOWN_FIELD = "label_thresholds_by_cat"
+REJECTED_FIELD = "label_thresholds_known"
+
+
 def _known_thresholds(
     raw: dict, labels: tuple[Violation, ...], path: Path
 ) -> dict[Violation, float] | None:
@@ -205,12 +212,12 @@ def _known_thresholds(
        · 쌍 입력 · `only_second` 가 아니다 · 품목 입력 글자가 앱의 표(`pm.ENCODER_INPUT` · 「모름」)와 다르다
        · `premise_to_input` 의 줄이 앱의 대응(`pm.premise_input`)과 다르다. ⬜ 줄이 **빠진** 것(일반식품_기능성)은 멈추지 않는다 —
          앱의 대응이 정본이고 빠진 줄은 앱의 것을 쓴다(D-339 결정 3)
-       · 품목 앎 문턱이 없다 · 키가 라벨과 다르다. `label_thresholds_by_cat` 은 **칸 이름이 다르다** — 받지 않는다(D-339 결정 2)
+       · 품목 앎 문턱(`KNOWN_FIELD`)이 없다 · 키가 라벨과 다르다. `REJECTED_FIELD` 는 **칸 이름이 다르다** — 받지 않는다(D-339 결정 2 개정)
     """
     fmt = raw.get("input_format")
-    known = raw.get("label_thresholds_known")
+    known = raw.get(KNOWN_FIELD)
     if fmt is None:
-        if known is not None or "label_thresholds_by_cat" in raw:
+        if known is not None or REJECTED_FIELD in raw:
             raise EncoderUnavailable(
                 f"품목 입력(input_format)이 없는 판에 품목 앎 문턱이 있다 — 어느 입력으로 배웠는지 모른다: {path}"
             )
@@ -243,19 +250,19 @@ def _known_thresholds(
             )
     if known is None:
         hint = (
-            " — label_thresholds_by_cat 은 칸 이름이 다르다(D-339 결정 2 · label_thresholds_known)"
-            if "label_thresholds_by_cat" in raw
+            f" — {REJECTED_FIELD} 는 칸 이름이 다르다(D-339 결정 2 개정 · {KNOWN_FIELD})"
+            if REJECTED_FIELD in raw
             else ""
         )
         raise EncoderUnavailable(
-            f"품목 입력 판인데 품목 앎 문턱(label_thresholds_known)이 없다{hint}: {path}"
+            f"품목 입력 판인데 품목 앎 문턱({KNOWN_FIELD})이 없다{hint}: {path}"
         )
     try:
         th = {Violation(label): float(value) for label, value in known.items()}
     except (AttributeError, TypeError, ValueError) as e:
-        raise EncoderUnavailable(f"label_thresholds_known 이 잘못됐다: {path}") from e
+        raise EncoderUnavailable(f"{KNOWN_FIELD} 이 잘못됐다: {path}") from e
     if set(th) != set(labels):
-        raise EncoderUnavailable("판정 인코더 라벨과 label_thresholds_known 의 키가 다르다")
+        raise EncoderUnavailable(f"판정 인코더 라벨과 {KNOWN_FIELD} 의 키가 다르다")
     return th
 
 

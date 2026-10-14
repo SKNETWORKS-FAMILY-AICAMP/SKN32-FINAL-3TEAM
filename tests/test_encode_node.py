@@ -548,7 +548,7 @@ def _pair_scheme(tmp_path: Path, **over: object) -> Path:
     raw: dict[str, object] = {
         "label_list": ["거짓_과장", "의약품_오인"],
         "label_thresholds": {"거짓_과장": 0.5, "의약품_오인": 0.6},
-        "label_thresholds_known": {"거짓_과장": 0.7, "의약품_오인": 0.4},
+        "label_thresholds_by_cat": {"거짓_과장": 0.7, "의약품_오인": 0.4},
         "input_format": {
             "pair": True,
             "first": "품목",
@@ -598,15 +598,15 @@ def test_품목_입력_스킴은_문턱_두_벌을_입력에_맞춰_쓴다(tmp_p
 @pytest.mark.parametrize(
     ("over", "match"),
     [
-        # 칸 이름이 다르다 — 받지 않는다 (D-339 결정 2)
+        # 종전 결정의 칸 이름은 받지 않는다 — 두 이름이 섞이지 않게 (D-339 결정 2 개정)
         (
             {
-                "label_thresholds_known": None,
-                "label_thresholds_by_cat": {"거짓_과장": 0.7, "의약품_오인": 0.4},
+                "label_thresholds_by_cat": None,
+                "label_thresholds_known": {"거짓_과장": 0.7, "의약품_오인": 0.4},
             },
-            "label_thresholds_known",
+            "label_thresholds_by_cat",
         ),
-        ({"label_thresholds_known": {"거짓_과장": 0.7}}, "label_thresholds_known"),
+        ({"label_thresholds_by_cat": {"거짓_과장": 0.7}}, "label_thresholds_by_cat"),
         ({"max_len": None}, "max_len"),
         ({"max_len": 128}, "max_len"),
     ],
@@ -645,7 +645,7 @@ def test_문장만_받는_판에_품목_앎_문턱이_있으면_멈춘다(tmp_pa
     with pytest.raises(enc.EncoderUnavailable, match="input_format"):
         enc.load_label_scheme(_pair_scheme(tmp_path, input_format=None))
     plain = enc.load_label_scheme(
-        _pair_scheme(tmp_path, input_format=None, label_thresholds_known=None, max_len=None)
+        _pair_scheme(tmp_path, input_format=None, label_thresholds_by_cat=None, max_len=None)
     )
     assert not plain.pair and plain.thresholds_for("화장품") == plain.thresholds
 
