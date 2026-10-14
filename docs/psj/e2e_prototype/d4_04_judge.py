@@ -15,6 +15,7 @@ D4-00 은 두 조건 모두 같은 확률(문구만)이다. 문턱은 D-324(card
   · 참고 — 확정 · 화장품 「유형 없는 위반」 의 통과 · 검수 적법 정상 문구 · 참고 묶음의 통과
   · 🟡 조건부에서 인코더에 넣은 품목은 골든 `품목` 칸이고, 판정 로직의 제품 정보는 `product_of`(전제 먼저)다 — 둘이 다른 행 수를 화면에 적는다
   · `--self-test` — D4-04 자리에 D4-00 을 넣는다. 차이가 0 이어야 한다
+  · 🆕 10-14 `--model D4-10 --d4-dir <D4-10 CSV>` — D4-10(품목 입력 + 사실 전제)도 같은 기준으로 잰다 (D4 실험기록 「D4-10 보충 — 판정 로직」)
 🔴 dev 전용 (D-175). 행 id 가 든 요약(JSON)은 저장소 밖(`--out-dir`)에 쓴다 (D-249 ⑥).
 """
 import argparse
@@ -37,8 +38,8 @@ from scripts.eval_graph import conditional_rows
 from scripts import eval_graph as _eg
 
 SEEDS = ca.SEEDS
-D400, D404 = ca.CAND, "copylane-encoder-kcbert-D4-04-품목입력"
-NAMES = {"D4-00": "D4-00", "D4-04": "D4-04"}
+D400 = ca.CAND
+TAGS = {"D4-04": "copylane-encoder-kcbert-D4-04-품목입력", "D4-10": "copylane-encoder-kcbert-D4-10-품목입력사실전제"}   # 🆕 10-14 — D4-10 도 같은 잣대로 잰다
 COND = {"무조건부": ("uncond", "모름"), "조건부": ("cond", "품목")}
 GROUPS = cj.GROUPS
 DET_DROP = 0.025
@@ -54,7 +55,9 @@ def main(argv=None):
     ap.add_argument("--out-dir", default=rj.OUT_DIR)
     ap.add_argument("--out-md", default=None)
     ap.add_argument("--self-test", action="store_true", help="D4-04 자리에 D4-00 을 넣는다 — 차이가 0 이어야 한다")
+    ap.add_argument("--model", default="D4-04", choices=list(TAGS), help="품목 입력 판 (D4-04 · D4-10)")
     a = ap.parse_args(argv)
+    M, D404 = a.model, TAGS[a.model]
     out_dir = os.path.abspath(a.out_dir)
     if os.path.commonpath([out_dir, REPO]) == REPO:
         raise SystemExit(f"🔴 요약(JSON · 행 id 포함)을 저장소 안에 쓰지 않는다 (D-249 ⑥): {out_dir}")
@@ -85,7 +88,7 @@ def main(argv=None):
         return f"{b}_dev행별확률.csv", f"{b}_합성정상_행별확률.csv"
 
     R, W, mismatch = {}, {}, None
-    for model in ("D4-00", "D4-04"):
+    for model in ("D4-00", M):
         for s in SEEDS:
             m, w, syn = {}, {}, {}
             for name, (ckey, mode) in COND.items():
@@ -127,13 +130,13 @@ def main(argv=None):
 
     mn = lambda model, fn: statistics.mean(fn(R[(model, s)]) for s in SEEDS)
     per = lambda model, fn: " · ".join(str(fn(R[(model, s)])) for s in SEEDS)
-    models = ("D4-00", "D4-04")
-    title = "D4-04 보충 — 품목입력 모델을 판정 로직에 넣어 잰 수 (dev · 탐색)" + (" — 자기 검증" if a.self_test else "")
+    models = ("D4-00", M)
+    title = f"{M} 보충 — 품목입력 모델을 판정 로직에 넣어 잰 수 (dev · 탐색)" + (" — 자기 검증" if a.self_test else "")
     md = [f"# {title}", "",
           f"> golden `{gsha[:12]}` · 공통 dev 지문 `{mark}` · 사전 `{dict_sha[:12]}` · 규칙 {g.JUDGED_BY} + 인코더 층(`judge_stage2.py`) · "
-          f"판 그대로(D-324 문턱 · 후보 = 합의 = τ · 여유 구간 {QUIET_MARGIN}) · D4-04 는 무조건부 = (나) 모름 · 조건부 = (가) 품목 · "
+          f"판 그대로(D-324 문턱 · 후보 = 합의 = τ · 여유 구간 {QUIET_MARGIN}) · {M} 는 무조건부 = (나) 모름 · 조건부 = (가) 품목 · "
           f"시드 {' · '.join(map(str, SEEDS))} 평균 (괄호 안은 시드별) · 건수만 적는다", "",
-          "| 지표 | D4-00 | D4-04 |", "|---|---:|---:|"]
+          f"| 지표 | D4-00 | {M} |", "|---|---:|---:|"]
     for n, lab in (("무조건부", "첫 판정"), ("조건부", "재판정")):
         P = R[("D4-00", SEEDS[0])]["dev"][n]["positive"]
         pn = R[("D4-00", SEEDS[0])]["dev"][n]["pos_n"]
@@ -154,7 +157,7 @@ def main(argv=None):
               " | ".join(f"{mn(mo, lambda x: x['syn']['합성정상dev_cond']['confirmed']):.1f} · {mn(mo, lambda x: x['syn']['합성정상dev_uncond']['confirmed']):.1f}" for mo in models) + " |")
 
     b = lambda n, k: mn("D4-00", lambda x: x["dev"][n][k])
-    c = lambda n, k: mn("D4-04", lambda x: x["dev"][n][k])
+    c = lambda n, k: mn(M, lambda x: x["dev"][n][k])
     Pu = R[("D4-00", SEEDS[0])]["dev"]["무조건부"]["positive"]
     checks = [
         ("① 재판정 — 조용해진 위반 행이 늘지 않는다", f"{b('조건부', 'pos_quiet'):.1f} → {c('조건부', 'pos_quiet'):.1f}", c("조건부", "pos_quiet") <= b("조건부", "pos_quiet") + 1e-9),
@@ -165,7 +168,7 @@ def main(argv=None):
         ("⑤ 첫 판정 — 틀린 확정이 늘지 않는다", f"{b('무조건부', 'errors'):.1f} → {c('무조건부', 'errors'):.1f}", c("무조건부", "errors") <= b("무조건부", "errors") + 1e-9),
         ("⑥ 첫 판정 — D · L 위반 확정 0", f"{c('무조건부', 'law_confirmed'):.1f}", c("무조건부", "law_confirmed") == 0),
     ]
-    md += ["", "### 기준 (D4 실험기록 「D4-04 보충 — 판정 로직」 에 먼저 적은 것 · 시드 평균 · D4-00 대비)", "", "| 기준 | 값 | |", "|---|---|---|"]
+    md += ["", f"### 기준 (D4 실험기록 「{M} 보충 — 판정 로직」 에 먼저 적은 것 · 시드 평균 · D4-00 대비)", "", "| 기준 | 값 | |", "|---|---|---|"]
     md += [f"| {k} | {v} | {'지킴' if ok else '**넘음**'} |" for k, v, ok in checks]
     ok_all = all(ok for _, _, ok in checks)
     md += ["", "**판정 로직 확인 통과** — 채택이 아니다 (팀장 판정)" if ok_all else
@@ -176,14 +179,14 @@ def main(argv=None):
            + " — 행 목록은 저장소 밖 요약(JSON)에만 있다"]
     print("\n" + "\n".join(md))
 
-    print("\n[진단 · 화면에만] D4-04 의 틀린 확정 행 (id · 정답 · 전제 · 확정 유형 · 까닭)")
+    print(f"\n[진단 · 화면에만] {M} 의 틀린 확정 행 (id · 정답 · 전제 · 확정 유형 · 까닭)")
     for s in SEEDS:
         for n in COND:
-            for x in W[("D4-04", s)][n]:
+            for x in W[(M, s)][n]:
                 print(f"  시드 {s} · {n} · {x['id']} · 정답 {x['gold']} · 전제 {x['premise']} · 확정 {x['confirmed']} · {x['why']}")
     print("[진단 · 화면에만] 재판정에서 조용한 행(위반 · 음성 전부)의 바뀜 — D4-00 대비 (시드별 수 · 위반만은 표의 「조용해진 위반 행」)")
     for s in SEEDS:
-        q0, q1 = set(R[("D4-00", s)]["dev"]["조건부"]["quiet"]), set(R[("D4-04", s)]["dev"]["조건부"]["quiet"])
+        q0, q1 = set(R[("D4-00", s)]["dev"]["조건부"]["quiet"]), set(R[(M, s)]["dev"]["조건부"]["quiet"])
         print(f"  시드 {s} — 새로 조용(통과 · 품목만 보류) {len(q1 - q0)} · 더는 조용하지 않음 {len(q0 - q1)}")
 
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")

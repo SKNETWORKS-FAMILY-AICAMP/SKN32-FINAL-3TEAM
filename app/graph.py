@@ -11,6 +11,8 @@
                               → doc_rules
        review   (진입점 A)   core → route_review → certificate · guidance · hold · passed   ← 루프 없음
        generate (진입점 B)   keyword_screen → assemble → claim_ledger → rejudge → 루프(D-126)
+                              🔄 2026-10-14 — 스텁이다 · 앱에서 부르는 곳이 없다(`build_generate`). 지금 도는 카피 생성(B)은
+                              `app/routers/copygen`(D-332)이고 코어를 `app.api.judge` 로 부른다
        compose  (진입점 C)   상태만 — 이번 범위 밖 (계약만 · D-266)
 
 🚨 **DB 도 모델도 없이 end-to-end 한 바퀴가 돈다** — Phase 0 게이트의 정의(D-124)는 그대로다.
@@ -20,6 +22,7 @@
    🔄 2026-10-07 — `encode` 는 모델 폴더가 설정되면(`COPYLANE_MODEL_DIR`) 문장마다 인코더 신호를 상태(`encodings`)에 싣는다.
    🔄 2026-10-09 (D-323 집행) — 그 신호가 응답에 나간다: 문장의 **`encoder_candidates`**(유형 · 확신) 한 칸에만.
       🚨 판정(확정 · 보류 · `violations` · 하한 · 분기 열쇠)은 그 칸을 **읽지 않는다** — 여전히 인코더 전 규칙 판정이다(`JUDGED_BY`).
+   🔄 2026-10-14 (D-337) — 확정된 B 실증형에 실증 분기(`_substantiated`)가 붙으면 종착 `guidance` 가 선다.
 
 ★ D-124 가 정한 검사 셋도 그대로다 —
    ① **라우터 함수는 그래프 없이 단독 테스트한다** → langgraph 를 **모듈 최상단에서 import 하지 않는다.**
@@ -2462,7 +2465,12 @@ def build_review():  # noqa: ANN201
 
 
 def build_generate():  # noqa: ANN201
-    """생성 그래프 (진입점 B · D-266). 🔜 W9 — `rejudge` 가 코어를 부르는 배선."""
+    """생성 그래프 (진입점 B · D-266). 🔜 W9 — `rejudge` 가 코어를 부르는 배선.
+
+    🔄 2026-10-14 — **앱에서 부르는 곳이 없다**(스텁 노드 · 게이트 `tests/test_graph_routers.py` 만 짓는다). 지금 도는 카피 생성(B)은
+       이 그래프가 아니라 `app/routers/copygen`(D-332 · GPT 후보 → 코드 필터 → `GraphJudge` → `app.api.judge`)이다.
+       ⬜ 이 그래프를 채울지 · D-266 의 진입점 B 를 고칠지는 판정 대기다.
+    """
     _require_tracing_off()
     from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
 

@@ -20,9 +20,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))  # `app.model_lock` — 표준 라이브러리만 쓴다(torch 없이 읽힌다)
 
 #: 채택본. 🔄 2026-10-11 — Qwen2.5-3B(v12 · 라이선스 qwen-research 이용 제한) → **Qwen3-4B-Instruct-2507(apache-2.0) · q4b-v13**.
 #:    근거 — 직접 만든 117 문장에서 살림 64 → 66 · 불가 확대 막음 31 → 38 · 진짜 포장 1 → 0, dev 511 재판정 지표 동등,
@@ -102,3 +105,47 @@ def adapter_sha12(adapter_dir: Path) -> str:
     except OSError as e:
         raise AdapterMismatch(f"어댑터 가중치를 읽지 못했다: {path}") from e
     return h.hexdigest()[:12]
+
+
+# ── 🆕 2026-10-13 모델 잠금 (D-333 · 팀장 요청) ─────────────────────────────────────────
+#: 서버(앱 경로)는 잠금(`models.lock.json`)의 채택 · 되돌림 판만 올린다. 대조는 `app/model_lock.py` 를 그대로 부른다 —
+#: 여기서 다시 짜지 않는다(D-99). 판을 고르는 것은 종전대로 환경 변수지만, 고른 폴더가 잠금 밖이면 올리지 않는다.
+ROLE_STAGE1 = "sllm_stage1"
+ROLE_STAGE2 = "sllm_stage2"
+
+#: 잠금 밖 판도 올리는가 — **평가 · 실험 도구만** 켠다(`permit_unlocked`). 서버(`--serve`)는 켜지 않는다 (D-205 · D-333)
+_UNLOCKED_OK = False
+
+
+class LockOutside(AdapterMismatch):
+    """어댑터 폴더가 잠금의 채택 · 되돌림 판이 아니다(또는 잠금을 읽지 못했다)."""
+
+
+def permit_unlocked() -> None:
+    """이 프로세스에서 잠금 밖 판도 올린다 — 평가 · 실험 도구가 부른다. 🚨 서버는 부르지 않는다."""
+    global _UNLOCKED_OK  # noqa: PLW0603 — 프로세스 단위 스위치다
+    _UNLOCKED_OK = True
+
+
+def lock_match(adapter_dir: Path, role: str):  # noqa: ANN201 — app.model_lock.Match
+    """폴더를 잠금에 대 본다(파일 전부 sha256). 🔴 잠금을 못 읽으면 `LockOutside` — 모르는 판을 아는 판으로 세지 않는다 (D-220)."""
+    from app import model_lock  # noqa: PLC0415
+
+    try:
+        return model_lock.match(adapter_dir, role)
+    except (model_lock.LockError, OSError) as e:
+        raise LockOutside(f"모델 잠금으로 판을 확인하지 못했다 — {e}") from e
+
+
+def checked(adapter_dir: Path, role: str):  # noqa: ANN201 — app.model_lock.Match
+    """올려도 되는 판인가 — 채택 · 되돌림이면 대조 결과, 잠금 밖이면 `LockOutside`(도구가 허락했으면 결과를 그대로)."""
+    from app import model_lock  # noqa: PLC0415
+
+    m = lock_match(adapter_dir, role)
+    if m.status == model_lock.OUTSIDE and not _UNLOCKED_OK:
+        raise LockOutside(
+            f"잠금(models.lock.json)에 없는 {role} 판이다 — {m.why} ({adapter_dir.name}). "
+            "  잠금의 채택 · 되돌림 판 폴더로 바꾸거나(COPYLANE_SLLM_STAGE1 · COPYLANE_SLLM_STAGE2) · "
+            "실험은 평가 도구로 한다(docs/lse/eval_*.py)"
+        )
+    return m

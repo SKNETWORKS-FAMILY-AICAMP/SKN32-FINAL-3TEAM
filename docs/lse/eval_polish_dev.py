@@ -32,7 +32,10 @@ OUT = ROOT / "build" / "eval" / f"polish_dev_{VER}.jsonl"
 
 def gen() -> None:
     import persona_pipeline_e2e as pe  # noqa: PLC0415
+    import sllm_meta  # noqa: PLC0415
     from sllm_service import _META, load  # noqa: PLC0415
+
+    sllm_meta.permit_unlocked()  # 🆕 10-13 평가 도구 — 잠금 밖 판도 잰다(D-333)
     from stage_gate import check  # noqa: PLC0415
     from train_persona_stage2 import rule_check  # noqa: PLC0415
 

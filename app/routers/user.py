@@ -5,8 +5,8 @@
 
 🚨 **엔진이 필요한 화면은 DB 없이도 떠야 한다** (D-124) — `review`·`generate`·`compose` 는
    골든 픽스처로 모든 분기를 그린다. ⬜ **`history`·`/`(홈) 은 예외다** — 실제 DB(`app/db.py`,
-   `Judgment`)에 붙는다. 🔄 판정은 돌지만(코어 `/judge`) 결과를 `judgment` 표에 **저장하는 코드가 아직 없어**
-   지금은 빈 목록/0 건으로 뜬다.
+   `Judgment`)에 붙는다. 🔄 2026-10-13 — `/u/judge` 가 **회원 ∧ 선택 동의 ①「검수 이력 보관」** 의 판정을 `judgment` 표에 적는다
+   (`app.judgment_store` · D-307 · D-96 · 🔄 10-14 ksr · ssm 두 벌을 한 모듈로). 비회원 · 미동의 회원의 이력은 그대로 빈 목록이다.
    🔄 2026-09-22 (ohb 흡수) — **DB 가 없어도 뜬다.** 붙지 못하면 「DB 없음」을 그리고 수를 0 으로 적지 않는다
       (`app.db.reachable` · D-72). 게이트가 `/u/` 200 을 요구하고 CI 에는 Postgres 가 없다.
 
@@ -38,7 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app import auth, reasons, sentsplit
+from app import auth, judgment_store, reasons, sentsplit
 from app import premise as pm
 from app.contracts import (
     PASS_RISK_MAX,
@@ -385,7 +385,7 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     """사용자 첫 화면 = 홈. 🚨 **history 와 같은 요령으로 진짜 DB 집계다.**
 
     🔄 종전에는 여기가 문구 검수였다 — 검수는 `/u/review` 로 옮겼다 (2026-09-16, ksr 안).
-    ⬜ 판정 엔진이 없어 지금은 통계가 0/— 로 뜬다 — 정상이다 (D-147, 가짜 수치를 안 그린다).
+    🔄 2026-10-13 — 검수가 판정을 적는다(`app.judgment_store`). 적힌 것이 없으면 0/— 다 (D-147, 가짜 수치를 안 그린다).
     ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX`
       (D-125 통과 조건의 위험도 문턱 = 🔄 **R0** · D-273)을 그대로 쓴다 — 문턱을 여기서 따로 두지 않는다.
     """
@@ -405,17 +405,10 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     # 🔴 2026-09-29 — 통계·최근 이력은 **내 판정만** 센다 (P1-5 · `_owned_judgments`). 로그아웃이면 셀 대상이 없다.
     user = current_user(request, session)
     if user is None:
-        return _render(
-            request,
-            "user/index.html",
-            {
-                "need_login": True,
-                "total_month": None,
-                "violation_count": None,
-                "pass_rate": None,
-                "recent": [],
-            },
-        )
+        # 🔄 2026-10-14 (lse · 사용자 요청) — 로그인 전에 들어오면 **랜딩이 첫 화면**이다. 홈(통계)은 로그인한 사람의 것이다.
+        #    🚨 넘기지(303) 않고 이 주소에서 랜딩을 그린다 — 로그인 벽이 아니다(D-66 · 200 · 로그인 안내 · 「이력에 남지 않아요」 D-69).
+        #    「copylane 소개」 메뉴는 랜딩이 아니라 사용방법으로 간다(종전대로). DB 가 없을 때는 위에서 홈의 안내를 그린다
+        return templates.TemplateResponse(request, "user/landing.html", {})
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     mine = _owned_judgments(user.id)
     month = mine.where(Judgment.judged_at >= month_start)
@@ -444,7 +437,12 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     )
     pass_rate = round(pass_count / total_month * 100) if total_month else None
 
-    recent = session.execute(mine.order_by(Judgment.judged_at.desc()).limit(3)).scalars().all()
+    recent = [
+        _hist_view(j, raw)
+        for j, raw in session.execute(
+            _history_stmt(user.id).order_by(Judgment.judged_at.desc()).limit(3)
+        ).all()
+    ]
     return _render(
         request,
         "user/index.html",
@@ -487,7 +485,7 @@ _SAMPLE_COPY = (
 )
 
 #: 🔴 버튼 하나 = 폼 제출 하나 (`op`). CSP 가 스크립트를 막아 문구 추가·삭제도 서버가 다시 그린다.
-_OP = re.compile(r"^(add|all|del:\d|sample:\d|judge:\d)$")
+_OP = re.compile(r"^(add|all|load|del:\d|sample:\d|judge:\d)$")
 
 
 def _copies(form: dict[str, list[str]]) -> list[str]:
@@ -614,14 +612,18 @@ def review(request: Request) -> HTMLResponse:
 
 
 @router.post("/judge", response_class=HTMLResponse)
-async def judge(request: Request) -> HTMLResponse:
+async def judge(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
     """문구 검수 BFF — 문구 칸 조작과 판정 호출 (ksr 2026-09-29 · 프로토타입 v7.2 `goReview`).
 
     🔴 **POST 다** — 문구를 URL 에 싣지 않는다 (보안점검 P1-4).
-    ★ `op` — `add`(칸 추가) · `del:N` · `sample:N`(예시 넣기) · `judge:N`(그 문구만) · `all`(전체 검수).
+    ★ `op` — `add`(칸 추가) · `del:N` · `sample:N`(예시 넣기) · `judge:N`(그 문구만) · `all`(전체 검수) ·
+       `load`(이력의 문구를 입력 칸에 담기만 한다 — 판정하지 않는다 · 프로토타입 `reviewAgain`).
     ★ 판정은 코어(`app.api.judge`)를 부른다 — 여기서 판정하지 않는다 (D-119).
        엔진이 501 이면 「엔진 준비 중」을 그린다. **가짜 결과를 만들지 않는다** (D-147).
     ★ 넣은 문구는 되돌려 그린다. **템플릿이 이스케이프한다** (P2-9) — 문자열 조립 금지.
+    🆕 2026-10-13 — 판정이 끝나면 **이력에 적는다**(`app.judgment_store.save_review` · 회원 ∧ 선택 동의 ① · D-307 · D-96).
+       검수만 적는다 — 고쳐 쓰기의 재판정 · 카피 생성 · 광고 생성의 판정은 적지 않는다. 저장 결과는 상태 글자로 화면에 알리고
+       (`history_kept`), 못 적어도 판정 결과는 그대로 그린다. 🔄 10-14 — ksr(`_keep_history`) · ssm(`judgment_store`) 두 벌을 하나로 (D-99).
     """
     form = await _form(request)
     copies = _copies(form)
@@ -647,6 +649,12 @@ async def judge(request: Request) -> HTMLResponse:
     if kind == "sample":
         copies[idx] = _SAMPLE_COPY
         return _render(request, "user/review.html", _review_ctx(copies))
+    if kind == "load":
+        return _render(
+            request,
+            "user/review.html",
+            _review_ctx(copies, notice="이력의 문구를 검수 입력칸에 넣었어요"),
+        )
 
     targets = [(idx + 1, copies[idx])] if kind == "judge" else list(enumerate(copies, 1))
     targets = [(n, t.strip()) for n, t in targets if t.strip()]
@@ -664,7 +672,10 @@ async def judge(request: Request) -> HTMLResponse:
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
         results.append({"n": n, "result": res, "text": text})
-    return _render(request, "user/review.html", _review_ctx(copies, results))
+    kept = judgment_store.save_review(
+        session, current_user(request, session), [r["result"] for r in results]
+    )
+    return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
 
 
 # ── 검수 → 지적 문장 고쳐 쓰기 (sLLM 재생성) — lse 2026-10-06 · 팀장 승인 ─────────────
@@ -822,6 +833,14 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
                     rw["rejudge"] = p_rejudge
                 else:
                     rw["plain"] = {"body": plain, "rejudge": p_rejudge}
+    # 🆕 2026-10-13 — 「조건 확인 필요」 보류의 문장(인정 · 심사 제품에서만 쓸 수 있는 공식 문구)을 「조건부 후보」로 보인다.
+    #    🚨 후보가 아니다 — 재판정을 받고, 고른 전제에서 조건이 채워질 수 없으면(`_note_conflict`) 보이지 않는다.
+    #    사람이 제품의 인정 · 심사 여부를 확인한 뒤 쓰는 문장이다
+    cond = out.get("conditional") if out and out["outcome"] == "hold" else None
+    if cond and not _note_conflict(cond.get("mandatory_note"), premise, category):
+        c_rejudge = _rejudge(cond["body"], premise, category)
+        if c_rejudge.get("status") != "rejected":
+            rw["conditional"] = {**cond, "rejudge": c_rejudge}
     return rw
 
 
@@ -1126,18 +1145,41 @@ def _gen_picked(form: dict[str, list[str]]) -> tuple[dict, dict, list[str]]:
     return picked, branch, errors
 
 
+def _gen_gate(request: Request, session: Session) -> dict | None:
+    """카피 생성은 **로그인한 회원만** 쓴다 — 회원이면 `None`, 아니면 안내를 그릴 값 (🆕 2026-10-14 권소라).
+
+    ★ 로그인 벽으로 튕기지 않는다 — 폼 자리에 안내와 로그인 · 회원가입 버튼을 그린다(이력 화면과 같다 · D-66).
+       검수(`/u/judge`)는 비회원도 그대로 쓴다. 막는 것은 생성의 입력 화면과 제출이다. 예시 결과(픽스처)는 열어 둔다.
+    🚨 화면만 가리면 제출 경로가 열려 있다 — 생성은 밖(GPT)을 부르고 요금이 든다. `POST` 도 같은 문지기를 지난다.
+    ★ 로그인 쿠키가 있는데 DB 에 못 붙으면 「회원이 아니다」가 아니라 「확인하지 못했다」다 (D-72).
+    """
+    if current_user(request, session) is not None:
+        return None
+    has_cookie = bool(request.cookies.get(auth.USER_SESSION_COOKIE))
+    return {"need_login": True, "db_down": has_cookie and not reachable(session)}
+
+
 @router.get("/generate", response_class=HTMLResponse)
-def generate_page(request: Request) -> HTMLResponse:
+def generate_page(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
     """카피 생성 입력 화면 (`gen-input`, ksr 2026-09-13).
 
     `review`/`index` 와 같은 패턴이다: DB·엔진 없이 골든 픽스처(`GenerateResponse`,
     D-181)로 뜬다. `POST /generate` 코어는 아직 501 이다 — 여기서 부르지 않는다.
+    🔄 2026-10-14 — 비회원에게는 입력 폼 대신 「로그인한 회원만」 안내를 그린다 (`_gen_gate`).
     """
+    if gate := _gen_gate(request, session):
+        return _render(request, "user/generate.html", gate)
     return _render(request, "user/generate.html", _gen_ctx())
 
 
 @router.post("/generate", response_class=HTMLResponse)
-async def generate(request: Request) -> HTMLResponse:
+async def generate(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
     """카피 생성 — GPT 가 후보를 쓰고 · 코드 필터가 거르고 · 판정 인코더가 본다 (`app/routers/copygen` · ksr 2026-10-13).
 
     🚨 코어 `POST /generate`(계약 `GenerateResponse`)는 여전히 501 이다 — 부르지 않는다. 여기 붙은 것은 화면의 엔진이고,
@@ -1148,6 +1190,11 @@ async def generate(request: Request) -> HTMLResponse:
     """
     from app.routers import copygen  # noqa: PLC0415
 
+    # 🆕 2026-10-14 — 비회원 제출은 엔진에 닿기 전에 멈춘다. 화면은 입력 화면과 같은 안내다 (`_gen_gate`)
+    if gate := _gen_gate(request, session):
+        resp = _render(request, "user/generate.html", gate)
+        resp.status_code = 401
+        return resp
     form = await _form(request)
     picked, branch, errors = _gen_picked(form)
     more, shown = _gen_more(form)
@@ -1552,16 +1599,88 @@ def _owned_judgments(owner_id: uuid.UUID) -> Select:
     )
 
 
-def _history_rows(
-    session: Session, owner_id: uuid.UUID, verdict: str | None, page: int
-) -> tuple[list, int]:
-    """이력 한 쪽의 행과 전체 건수. `judgment` × `copy_sentence` 조인 (ksr 원문 조인 · lse 필터·페이지)."""
-    stmt = (
+#: 필터 칩의 글자 — 값(`_VERDICTS`)은 URL 에, 글자는 화면에
+_VERDICT_LABELS = {
+    "confirmed": "확정",
+    "hold": "보류",
+    "no_basis": "근거 없음",
+    "unjudged": "미판정",
+}
+#: 🚨 `review.html` 의 `HOLD` 와 **같은 글자**다 (D-99) — 한쪽을 고치면 둘 다
+_HOLD_LABELS = {
+    "low_conf": "확신 부족",
+    "gap2": "코드·모델 2등급 차",
+    "cat_unknown": "품목 선택 필요",
+    "rd1": "공존 규칙 발동",
+    "premise_unknown": "전제 선택 필요 — 인정 여부",
+    "law_uncovered": "전용법 미검수",
+}
+#: 확정 위반의 배지 `(색, 글자)` — 검수 화면의 문장 카드와 같은 말이다 (사용자 확정 문구 10-01)
+_INF_BADGES = {
+    "A": ("warn", "인정받은 제품만 가능"),
+    "B": ("warn", "객관적인 근거 자료 필요"),
+    "C": ("bad", "사용 불가"),
+}
+#: 위험도 칩 — 🚨 `review.html` 의 `RISK` 와 같은 글자다 (R0 은 그리지 않는다 · R4 는 닿지 않는 값이라 R3 과 같이 적는다)
+_RISK_LABELS = {1: "낮은 위험", 2: "위험", 3: "고위험", 4: "고위험"}
+
+#: 반복 지적 패턴 — 최근 몇 건을 보고, 같은 유형이 몇 건 이상이면 알리나
+_PATTERN_WINDOW = 10
+_PATTERN_MIN = 3
+
+
+def _hist_view(j: Judgment, raw: str | None = None) -> SimpleNamespace:
+    """판정 한 행 → 이력 화면이 그리는 모양. 배지 글자는 검수 화면과 같다 (D-99)."""
+    ev = j.evidence or {}
+    if j.verdict == "confirmed" and j.violation_type:
+        tone, label = _INF_BADGES.get(ev.get("infeasibility"), ("bad", "위반 확정"))
+    elif j.verdict == "confirmed":
+        tone, label = "ok", "특이사항 없음"
+    elif j.verdict == "hold":
+        tone, label = "hold", "보류"
+    elif j.verdict == "no_basis":
+        tone, label = "hold", "근거 없음"
+    else:
+        tone, label = "hold", "미판정"
+    articles = ev.get("articles") or []
+    return SimpleNamespace(
+        id=j.id,
+        at=j.judged_at.astimezone(_KST).strftime("%Y-%m-%d %H:%M"),
+        verdict=j.verdict,
+        tone=tone,
+        label=label,
+        hold_reason=(
+            _HOLD_LABELS.get(j.hold_reason, f"알 수 없는 값 ({j.hold_reason})")
+            if j.hold_reason
+            else None
+        ),
+        # ⛔ 확정이 아닌 문장의 위험도는 그리지 않는다 — 판정처럼 읽힌다 (D-280)
+        risk=_RISK_LABELS.get(j.risk_final) if j.verdict == "confirmed" else None,
+        category=j.product_category.replace("_", " ") if j.product_category else None,
+        violations=ev.get("violations") or ([j.violation_type] if j.violation_type else []),
+        # 인용 근거(판정이 기대는 조문)와 참고 조문(검색이 찾은 것)을 가른다 — 검수 화면과 같은 규칙 (D-323)
+        basis=[a for a in articles if a.get("basis")],
+        refs=[a for a in articles if not a.get("basis")],
+        law_version=j.law_version,
+        text=raw,
+    )
+
+
+def _history_stmt(owner_id: uuid.UUID) -> Select:
+    """내 판정 × 그 문장의 원문 — 이력 목록과 홈의 「최근 검수 이력」이 같이 쓴다."""
+    return (
         _owned_judgments(owner_id)
         .add_columns(CopySentence.raw)
         .join(CopySentence, CopySentence.id == Judgment.subject_id)
         .where(Judgment.subject_type == "copy_sentence")
     )
+
+
+def _history_rows(
+    session: Session, owner_id: uuid.UUID, verdict: str | None, page: int
+) -> tuple[list, int]:
+    """이력 한 쪽의 행과 전체 건수. `judgment` × `copy_sentence` 조인 (ksr 원문 조인 · lse 필터·페이지)."""
+    stmt = _history_stmt(owner_id)
     if verdict:
         stmt = stmt.where(Judgment.verdict == verdict)
 
@@ -1569,19 +1688,30 @@ def _history_rows(
     raw_rows = session.execute(
         stmt.order_by(Judgment.judged_at.desc()).limit(_PAGE_SIZE).offset((page - 1) * _PAGE_SIZE)
     ).all()
-    rows = [
-        SimpleNamespace(
-            id=j.id,
-            judged_at=j.judged_at,
-            verdict=j.verdict,
-            hold_reason=j.hold_reason,
-            risk_final=j.risk_final,
-            law_version=j.law_version,
-            text=raw,
-        )
-        for j, raw in raw_rows
-    ]
-    return rows, total
+    return [_hist_view(j, raw) for j, raw in raw_rows], total
+
+
+def _repeat_pattern(session: Session, owner_id: uuid.UUID) -> SimpleNamespace | None:
+    """반복 지적 패턴 — 내 최근 판정에서 **같은 위반 유형**이 거듭 나오면 알린다 (프로토타입 v7.2 이력 화면).
+
+    🚨 실제 판정에서 센다 — 거듭 나온 유형이 없으면 띠를 그리지 않는다 (D-147).
+    """
+    rows = session.execute(
+        _owned_judgments(owner_id)
+        .with_only_columns(Judgment.violation_type)
+        .order_by(Judgment.judged_at.desc())
+        .limit(_PATTERN_WINDOW)
+    ).all()
+    counts: dict[str, int] = {}
+    for (vtype,) in rows:
+        if vtype:
+            counts[vtype] = counts.get(vtype, 0) + 1
+    if not counts:
+        return None
+    vtype, n = max(counts.items(), key=lambda kv: kv[1])
+    if n < _PATTERN_MIN:
+        return None
+    return SimpleNamespace(total=len(rows), count=n, violation=vtype.replace("_", " "))
 
 
 @router.get("/history", response_class=HTMLResponse)
@@ -1596,13 +1726,12 @@ def history(
 
     🔄 2026-09-16 — `Judgment` × `CopySentence` 조인(ksr)으로 **판정 원문**까지 보여준다.
        필터(`verdict`)·페이지네이션(`page`)·상세 토글(`?open_id=`)은 lse 것을 그대로 쓴다.
-    ⬜ 판정 결과를 `judgment` 표에 저장하는 코드가 아직 없어 표는 비어 있다 — 그래서 지금은 빈 목록으로 뜬다.
-       (판정 자체는 돈다 — `/u/judge` 가 코어를 부른다. 그 결과를 적는 자리가 없다.)
-       가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
+    🔄 2026-10-13 — `/u/judge` 가 판정을 적는다(`app.judgment_store`) — **선택 동의 ①「검수 이력 보관」을 한 회원** 것만.
+       동의하지 않은 회원은 그대로 빈 목록이다. 가짜 행을 만들어 채우지 않는다 (D-147 의 정신과 같다).
     ⛔ **`page`·`verdict` 는 사용자가 URL 을 손으로 바꿀 수 있다** — 잘못된 값으로
        500 을 내지 않고 조용히 안전한 기본값(1 페이지·전체)으로 되돌린다.
-    ⬜ 근거(evidence)·질의응답은 디자인엔 있지만 이번엔 뺐다 — QnA 를 저장할 테이블이
-       아직 없다. 원문·결론·위험도·법령 버전만 보여준다.
+    ⬜ 질의응답은 디자인엔 있지만 뺐다 — 검수 화면에서도 뺐고(09-23) 저장할 테이블도 없다.
+       원문 · 결론 · 위험도 · 근거 조문 · 법령 버전을 보여준다.
     🔴 2026-09-29 — **로그인한 사람 것만** 보여 준다 (보안점검 P1-5 · `_owned_judgments`).
        로그아웃이면 리다이렉트하지 않고 로그인 안내를 그린다(200) — `/u/cs` 와 같다(D-66).
        DB 가 없으면 로그인 여부를 알 수 없으니 「DB 없음」 안내가 먼저다 (D-72).
@@ -1624,6 +1753,10 @@ def history(
             "db_down": db_down,
             "judgments": rows,
             "verdicts": _VERDICTS,
+            "verdict_labels": _VERDICT_LABELS,
+            "pattern": None if user is None else _repeat_pattern(session, user.id),
+            # 동의가 꺼져 있으면 새 검수가 안 쌓인다 — 빈 목록의 까닭을 알린다 (D-96)
+            "consent_off": user is not None and user.consent_history_at is None,
             "verdict": verdict,
             "page": page,
             "has_prev": page > 1,
@@ -2093,12 +2226,37 @@ def _login_cookie(resp: RedirectResponse, request: Request, user: UserAccount) -
     return resp
 
 
+#: 로그인 · 가입 화면 자신 — 돌아갈 곳으로 받지 않는다(로그인한 뒤 다시 로그인 화면으로 가지 않게)
+_NEXT_SKIP = ("/u/login", "/u/signup", "/u/logout", "/u/reset")
+
+
+def _next_path(value: str | None) -> str:
+    """로그인 · 가입을 마친 뒤 돌아갈 곳 — 회원 전용 안내에서 넘어온 화면이다 (🆕 2026-10-14).
+
+    🔴 **사용자 화면 안의 경로만** 받는다(`_BACK_PATH` · 열린 리다이렉트 방지). 그 밖은 전부 홈(`/u/`)이다.
+    """
+    value = (value or "").strip()
+    if _BACK_PATH.match(value) and not value.startswith(_NEXT_SKIP):
+        return value
+    return "/u/"
+
+
+def _next_ctx(value: str | None) -> dict:
+    """화면이 폼과 링크에 실을 `next` — 홈이면 빈 값(주소 · 폼에 싣지 않는다)."""
+    nxt = _next_path(value)
+    return {"next": "" if nxt == "/u/" else nxt}
+
+
 @router.get("/login", response_class=HTMLResponse)
 def user_login(request: Request, session: Session = Depends(get_session)):  # noqa: B008
-    """일반 회원 로그인. `/login`(팀장 소유 · governor 전용)과 **다른 화면 · 다른 쿠키**다 (D-260 세션 (가))."""
+    """일반 회원 로그인. `/login`(팀장 소유 · governor 전용)과 **다른 화면 · 다른 쿠키**다 (D-260 세션 (가)).
+
+    🔄 2026-10-14 — `?next=` 로 돌아갈 화면을 받는다 (`_next_path`).
+    """
+    nxt = request.query_params.get("next")
     if current_user(request, session) is not None:
-        return RedirectResponse("/u/", status_code=303)
-    return _auth_page(request, "user/login.html", {"email": ""})
+        return RedirectResponse(_next_path(nxt), status_code=303)
+    return _auth_page(request, "user/login.html", {"email": "", **_next_ctx(nxt)})
 
 
 @router.post("/login")
@@ -2110,9 +2268,12 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     form = await _account_form(request)
     email = (form.get("email", [""])[0] or "").strip().lower()[:_EMAIL_MAX]
     password = form.get("password", [""])[0] or ""
+    nxt = form.get("next", [""])[0]
 
     def again(msg: str, code: int) -> HTMLResponse:
-        return _auth_page(request, "user/login.html", {"email": email, "error": msg}, code)
+        return _auth_page(
+            request, "user/login.html", {"email": email, "error": msg, **_next_ctx(nxt)}, code
+        )
 
     if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
         auth.audit("user_login", _actor(email=email), ok=False)
@@ -2140,7 +2301,7 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     user.last_login_at = datetime.now(UTC)
     session.commit()
     auth.audit("user_login", _actor(user.id), ok=True)
-    return _login_cookie(RedirectResponse("/u/", status_code=303), request, user)
+    return _login_cookie(RedirectResponse(_next_path(nxt), status_code=303), request, user)
 
 
 @router.post("/logout")
@@ -2199,7 +2360,9 @@ async def notifications_read(request: Request, session: Session = Depends(get_se
 @router.get("/signup", response_class=HTMLResponse)
 def user_signup(request: Request) -> HTMLResponse:
     """일반 회원 가입 (D-260 ② ⑧). 🚨 역할을 묻지 않는다 (D-66). 선택 동의 ①② 는 여기 없다 — 마이페이지에서만 (D-96)."""
-    return _auth_page(request, "user/signup.html", {"form": {}})
+    return _auth_page(
+        request, "user/signup.html", {"form": {}, **_next_ctx(request.query_params.get("next"))}
+    )
 
 
 @router.post("/signup")
@@ -2215,6 +2378,7 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
     pw2 = form.get("password2", [""])[0] or ""
     agree_terms = form.get("agree_terms", [""])[0] == "on"
     agree_disclaimer = form.get("agree_disclaimer", [""])[0] == "on"
+    nxt = form.get("next", [""])[0]
     kept = {
         "name": name,
         "email": email,
@@ -2223,7 +2387,9 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
     }
 
     def again(msg: str, code: int = 422) -> HTMLResponse:
-        return _auth_page(request, "user/signup.html", {"form": kept, "error": msg}, code)
+        return _auth_page(
+            request, "user/signup.html", {"form": kept, "error": msg, **_next_ctx(nxt)}, code
+        )
 
     if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
         return again("화면이 오래돼서 다시 불러왔어요. 한 번 더 가입해 주세요.", 403)
@@ -2260,7 +2426,7 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
         session.rollback()
         return again("이미 가입된 이메일이에요. 로그인해 주세요.", 409)
     auth.audit("user_signup", _actor(user.id), ok=True)
-    return _login_cookie(RedirectResponse("/u/", status_code=303), request, user)
+    return _login_cookie(RedirectResponse(_next_path(nxt), status_code=303), request, user)
 
 
 @router.get("/reset", response_class=HTMLResponse)

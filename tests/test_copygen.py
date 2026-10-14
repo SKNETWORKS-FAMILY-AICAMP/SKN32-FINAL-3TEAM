@@ -16,6 +16,18 @@ from app.routers import copygen
 from app.routers.copygen import filters, judge, llm, pipeline
 from app.routers.copygen.branches import BRANCHES, PLACEHOLDER
 
+
+@pytest.fixture(autouse=True)
+def _member(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-10-14 — 카피 생성은 로그인한 회원만 쓴다(`_gen_gate`). 이 파일은 생성 자체를 재므로 회원으로 돈다.
+
+    비회원이 막히는 것은 `tests/test_user_screens.py` 가 잰다.
+    """
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    monkeypatch.setattr(user_router, "_gen_gate", lambda *_a: None)
+
+
 FIXED = "지어낸 인정 문구에 도움을 줄 수 있음"
 
 
