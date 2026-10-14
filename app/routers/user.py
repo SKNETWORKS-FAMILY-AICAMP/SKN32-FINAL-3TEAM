@@ -73,7 +73,11 @@ router = APIRouter(prefix="/u", tags=["user"])
 #: 🚨 본문 상한 — 없으면 무제한이다 (보안점검 P2-11).
 #:    ⛔ 한글은 퍼센트 인코딩으로 **글자당 9바이트**다. 여유를 좁게 잡으면 길이 초과가
 #:       413(본문)으로 먼저 걸려 「문구가 너무 길다」라는 **정확한 이유가 안 나온다.**
-_MAX_BODY = PARAMS.max_text_len * 16
+#: 🔄 2026-10-14 — 검수는 문구 칸을 **여럿** 한 번에 보낸다. 칸 하나 몫만 잡아 두어 2000자 한글 문구가
+#:    두 칸만 돼도 413 이 났다(시나리오 테스트 10-14). 칸 수만큼 곱한다 — 상한은 여전히 있다.
+#: 한 번에 검수하는 문구 수 상한 — 프로토타입 v7.2 `addReviewCopy` 의 5건 그대로 (ksr 2026-09-29).
+_MAX_COPIES = 5
+_MAX_BODY = PARAMS.max_text_len * 16 * _MAX_COPIES
 
 #: 🔴 픽스처 이름 **화이트리스트**. `app/api.py` 가 밟은 경로 순회와 같은 이유다 —
 #:    이름을 경로로 쓰기 전에 모양을 고정한다.
@@ -342,12 +346,17 @@ async def _form(request: Request) -> dict[str, list[str]]:
       필드가 여럿이어도 마찬가지다 — `python-multipart` 가 필요한 것은
       **파일 업로드(`multipart/form-data`)** 뿐이다.
     ⬜ 업로드를 붙일 때는 lock 을 만지는 판정이다 (§5). 그 판정 전까지 만들지 않는다.
+    🔄 2026-10-14 — **빈 칸도 남긴다**(`keep_blank_values`). 버리면 빈 문구 칸이 사라져 칸 번호(`del:N` ·
+       `judge:N` · `sample:N`)가 다른 칸을 가리키거나 422 가 났다(시나리오 테스트 10-14).
+    🔄 2026-10-14 — 줄바꿈 `\r\n` 을 `\n` 으로 맞춘다. 브라우저 `maxlength` 는 줄바꿈을 1자로 세고 보낼 때는
+       `\r\n`(2자)으로 보내서, 화면에서 2000자 안인 문구가 서버 길이 검사에 걸렸다.
     """
     # 🔄 09-21 — 다 읽고 재지 않는다. 넘는 순간 멈춘다 (app/formbody.py · P2-11)
     body = await read_capped(
         request, _MAX_BODY, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다"
     )
-    return parse_qs(body.decode("utf-8", "replace"))
+    form = parse_qs(body.decode("utf-8", "replace"), keep_blank_values=True)
+    return {k: [v.replace("\r\n", "\n") for v in vs] for k, vs in form.items()}
 
 
 def _one(form: dict[str, list[str]], name: str, limit: int) -> str:
@@ -477,9 +486,6 @@ def landing(request: Request) -> HTMLResponse:
 #  A · 문구 검수 (SCR-A)
 # ══════════════════════════════════════════════════════════════════════
 
-
-#: 한 번에 검수하는 문구 수 상한 — 프로토타입 v7.2 `addReviewCopy` 의 5건 그대로 (ksr 2026-09-29).
-_MAX_COPIES = 5
 
 #: 품목 분기를 고른 뒤 「다시 선택」할 수 있는 횟수 (팀장 2026-10-01). 화면이 회차만큼 미리 그려 두고 넘긴다.
 #: 🔄 2026-10-06 — 3 → 5. 분기별 판정 결과를 바꿔 보는 횟수다 — 엔진을 다시 돌리지 않는다.

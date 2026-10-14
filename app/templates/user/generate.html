@@ -25,6 +25,10 @@
 }
 .gn-card > h2, .gn-cols > div > h2 { margin: 0 0 .6rem; font-size: .95rem; }
 .gn-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+/* 접어 두는 카드 — `.rv-dev` 와 같은 모양 */
+.gn-dev { padding: .7rem 1.15rem; border-style: dashed; }
+.gn-dev > summary { cursor: pointer; font-size: .75rem; color: var(--u-clay); }
+.gn-dev[open] > summary { margin-bottom: .7rem; }
 
 .gn-pick { display: flex; flex-wrap: wrap; gap: .45rem; margin: .2rem 0 1rem; }
 .gn-pick input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -596,17 +600,23 @@
 {% endif %}
 {% endif %}
 
-<div class="gn-card">
-  <h2>골든 픽스처로 분기 보기</h2>
+{# 🔄 2026-10-14 — 이용자가 읽을 것이 아니라 접어 둔다(검수 화면과 같다). 지우지 않는다 — 화면 분기를 확인하는 길이다 (D-124) #}
+<details class="gn-card gn-dev">
+  <summary>개발자 정보 — 골든 픽스처로 분기 보기</summary>
   <p class="gn-note">
-    ⛔ 엔진이 없어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).
+    {# 🔄 2026-10-14 — 생성 엔진이 켜져 있으면 「엔진이 없어서」가 틀린 말이다(시나리오 테스트 10-14). 켜짐 여부는 `gen_external` #}
+    {% if gen_external %}
+    아래는 실제 생성 결과가 아니라 <b>예시 응답(골든 픽스처)</b>으로 화면의 분기를 확인하는 곳이에요 (D-124).
+    {% else %}
+    ⛔ 생성 엔진이 꺼져 있어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).
+    {% endif %}
   </p>
   <ul class="gn-fixtures">
   {% for name in fixtures %}
     <li><a href="/u/generate/preview/{{ name }}">{{ name }}</a></li>
   {% endfor %}
   </ul>
-</div>
+</details>
 {# 🆕 2026-10-13 — 생성 중 표시. 안 돌아도 생성은 된다 #}
 <script src="/static/user_wait.js" defer></script>
 {% endif %}

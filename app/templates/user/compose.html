@@ -25,6 +25,10 @@
 .cp-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
 .cp-step { font-size: .72rem; color: var(--u-clay); letter-spacing: .04em; }
 .cp-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+/* 접어 두는 카드 — `.rv-dev` 와 같은 모양 */
+.cp-dev { padding: .7rem 1.15rem; border-style: dashed; }
+.cp-dev > summary { cursor: pointer; font-size: .75rem; color: var(--u-clay); }
+.cp-dev[open] > summary { margin-bottom: .7rem; }
 
 /* 종류 카드 셋 — 프로토타입 `fmt-pick`. 규격과 고지 위치를 같이 적는다 */
 .cp-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin: .2rem 0 1rem; }
@@ -444,14 +448,15 @@ main:has(.cp-ed) { max-width: 96rem; }
 {% endif %}
 
 {% if not draft %}
-<div class="cp-card">
-  <h2>골든 픽스처로 분기 보기</h2>
+{# 🔄 2026-10-14 — 이용자가 읽을 것이 아니라 접어 둔다(검수 화면과 같다). 지우지 않는다 (D-124) #}
+<details class="cp-card cp-dev">
+  <summary>개발자 정보 — 골든 픽스처로 분기 보기</summary>
   <p class="cp-note">⛔ 템플릿 엔진(코어 <code>/compose</code>)은 아직 없어서, 그 응답 모양은 <b>픽스처로 그려요</b> (D-124).</p>
   <ul class="cp-fixtures">
   {% for name in fixtures %}
     <li><a href="/u/compose/preview/{{ name }}">{{ name }}</a></li>
   {% endfor %}
   </ul>
-</div>
+</details>
 {% endif %}
 {% endblock %}
