@@ -548,3 +548,13 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
   form .rv-fix-go { display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; width: 100%; text-align: left; }
   form .rv-fix-go small { font-size: .74rem; }
 }
+
+/* 🆕 10-14 고쳐 쓴 문구 「복사」 버튼(`_review_rewrite.html` · `rewrite_copy.js` · lse) — 후보 상자 오른쪽 위 */
+.rv-fix .rv-cand { position: relative; padding-right: 6rem; min-height: 2.4rem; }
+.rv-copy {
+  position: absolute; top: .45rem; right: .45rem; white-space: nowrap;
+  padding: .2rem .55rem; border: 1px solid var(--u-line); border-radius: 999px;
+  background: var(--u-surface); color: var(--u-clay); font: inherit; font-size: .72rem; font-weight: 500; cursor: pointer;
+}
+.rv-copy:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+.rv-copy.is-done { border-color: #15803d; color: #15803d; }
