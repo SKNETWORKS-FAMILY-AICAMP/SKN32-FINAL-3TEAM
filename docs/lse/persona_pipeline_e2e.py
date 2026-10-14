@@ -78,6 +78,9 @@ POLISH_CATEGORIES = ("식품", "건기식", "화장품")
 #:    0 이면 끈다. ⛔ 「조건 확인 필요」 보류는 다시 쓰지 않는다 — 인정 · 심사 제품 전용 문구를 말만 바꿔 빠져나가면 위반 포장이다(v13 포장 4).
 #:    ⛔ 「만들지 못했어요」 · 후보는 다시 쓰지 않는다. 다시 쓴 안도 후처리 · 관문 · 2단계 관문을 똑같이 지난다. 씨앗을 고정해 같은 입력이면 같은 출력
 RETRY = 0
+#: 🆕 10-14 다듬기 방식 — "model"(2단계 어댑터 · 종전) 또는 "rule"(`polish_rule.py` · 모양별 쓰는 법 문구를 붙임 · 모델 안 씀).
+#:    규칙판은 처음 보는 제품 2 벌(22 · 20)에서 지어낸 쓰는 법이 거의 없었다(dev 평가 §6-8). 고객층 말투(`persona`)는 늘 모델이다
+POLISH_MODE = "model"
 RETRY_TEMPERATURE = 0.7
 RETRY_TOP_P = 0.9
 #: 고를 수 있는 고객층 — 🚨 D-27 고민 · 증상 축 없음. 실제 서비스에서는 세그먼트(`app.contracts.Segment.label`)가 들어온다
@@ -136,8 +139,25 @@ def run_one(model, tok, text: str, labels: list[str], persona: str | None = None
     `polish` — 🆕 10-12 고객층이 없어도 2단계로 자연스럽게 다듬는다(`NEUTRAL_PERSONA`). 실패하면 1단계 문장을 낸다.
     🔄 10-13 품목이 `POLISH_CATEGORIES` 일 때만 — 품목을 모르거나 그 밖이면 다듬지 않는다."""
     if not persona and polish and category in POLISH_CATEGORIES:
+        if POLISH_MODE == "rule":
+            return with_rejudge(_polish_rule(_run_one(model, tok, text, labels, None, category), category), do_rejudge, category)
         persona = NEUTRAL_PERSONA
     return with_rejudge(_run_one(model, tok, text, labels, persona, category), do_rejudge, category)
+
+
+def _polish_rule(res: dict, category: str | None) -> dict:
+    """🆕 10-14 규칙판 다듬기 — 1단계 후보에 모양별 쓰는 법 문구를 붙이고 관문(말투 모드)을 다시 지난다. 못 붙이거나 막히면 1단계 문장 그대로."""
+    from polish_rule import polish_by_rule  # noqa: PLC0415
+
+    s1 = res.get("final")
+    if res["outcome"] != "candidate" or not s1:
+        return res
+    s2 = polish_by_rule(s1, category)
+    g2 = gate(s1, s2, persona=True) if s2 else None
+    res = {**res, "persona": "rule", "stage2": s2, "gate2": list(g2.reasons) if g2 else None}
+    if not s2 or not g2.passed:
+        return {**res, "persona_failed": bool(s2)}
+    return {**res, "final": s2, "stage1_final": s1}
 
 
 def _run_one(model, tok, text: str, labels: list[str], persona: str | None = None, category: str | None = None) -> dict:
