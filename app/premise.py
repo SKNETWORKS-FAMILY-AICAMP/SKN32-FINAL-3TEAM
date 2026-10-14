@@ -107,6 +107,29 @@ CRITERIA: dict[Premise, str] = {
 }
 
 
+#: 🆕 2026-10-14 (D-336 · D-339 결정 3) — **판정 인코더의 품목 입력.** 품목 입력 판(`label_scheme.json` 의 `input_format`)은
+#:    (품목 입력, 문장) 쌍을 받는다. 이 표가 **대응의 정본**이다 — 스킴의 `premise_to_input` 이 이 표와 다르면 로더가 멈춘다(D-99 · `app/encoder.py`).
+#:    ★ 품목 → 입력이 정본이고 전제 → 입력은 `PREMISE_CATEGORY` 를 거쳐 낸다 — 두 벌로 적지 않는다.
+#:      그래서 `일반식품_기능성` → 식품 이다(스킴 쪽 표에는 이 줄이 없다 · ⬜ 박수진 확인).
+#:    🔴 **일반상품 · 전용법_미수록 · 품목 모름 → 「모름」** (D-339 결정 3) — 학습한 품목 입력은 셋뿐이다. 모르는 글자를 넣지 않는다.
+ENCODER_UNKNOWN = "모름"
+ENCODER_INPUT: dict[Category, str] = {
+    Category.식품: "식품",
+    Category.건기식: "건기식",
+    Category.화장품: "화장품",
+}
+
+
+def encoder_input(category: Category | None) -> str:
+    """품목 → 인코더 품목 입력. 표에 없는 품목(일반상품 · 전용법_미수록) · 모름은 「모름」."""
+    return ENCODER_INPUT.get(category, ENCODER_UNKNOWN) if category is not None else ENCODER_UNKNOWN
+
+
+def premise_input(premise: Premise) -> str:
+    """전제 → 인코더 품목 입력 — 그 전제의 품목(`PREMISE_CATEGORY`)으로 낸다."""
+    return encoder_input(PREMISE_CATEGORY[premise])
+
+
 def criteria_ready(premises: tuple[Premise, ...]) -> bool:
     """이 전제들의 기준 문안이 **전부** 확정됐는가. 하나라도 비면 분기를 내지 않는다 — 빈 문안 · 초안 문안으로 응답을 내지 않는다."""
     return all(CRITERIA.get(p) for p in premises)
