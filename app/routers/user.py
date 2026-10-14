@@ -1141,18 +1141,41 @@ def _gen_picked(form: dict[str, list[str]]) -> tuple[dict, dict, list[str]]:
     return picked, branch, errors
 
 
+def _gen_gate(request: Request, session: Session) -> dict | None:
+    """카피 생성은 **로그인한 회원만** 쓴다 — 회원이면 `None`, 아니면 안내를 그릴 값 (🆕 2026-10-14 권소라).
+
+    ★ 로그인 벽으로 튕기지 않는다 — 폼 자리에 안내와 로그인 · 회원가입 버튼을 그린다(이력 화면과 같다 · D-66).
+       검수(`/u/judge`)는 비회원도 그대로 쓴다. 막는 것은 생성의 입력 화면과 제출이다. 예시 결과(픽스처)는 열어 둔다.
+    🚨 화면만 가리면 제출 경로가 열려 있다 — 생성은 밖(GPT)을 부르고 요금이 든다. `POST` 도 같은 문지기를 지난다.
+    ★ 로그인 쿠키가 있는데 DB 에 못 붙으면 「회원이 아니다」가 아니라 「확인하지 못했다」다 (D-72).
+    """
+    if current_user(request, session) is not None:
+        return None
+    has_cookie = bool(request.cookies.get(auth.USER_SESSION_COOKIE))
+    return {"need_login": True, "db_down": has_cookie and not reachable(session)}
+
+
 @router.get("/generate", response_class=HTMLResponse)
-def generate_page(request: Request) -> HTMLResponse:
+def generate_page(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
     """카피 생성 입력 화면 (`gen-input`, ksr 2026-09-13).
 
     `review`/`index` 와 같은 패턴이다: DB·엔진 없이 골든 픽스처(`GenerateResponse`,
     D-181)로 뜬다. `POST /generate` 코어는 아직 501 이다 — 여기서 부르지 않는다.
+    🔄 2026-10-14 — 비회원에게는 입력 폼 대신 「로그인한 회원만」 안내를 그린다 (`_gen_gate`).
     """
+    if gate := _gen_gate(request, session):
+        return _render(request, "user/generate.html", gate)
     return _render(request, "user/generate.html", _gen_ctx())
 
 
 @router.post("/generate", response_class=HTMLResponse)
-async def generate(request: Request) -> HTMLResponse:
+async def generate(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
     """카피 생성 — GPT 가 후보를 쓰고 · 코드 필터가 거르고 · 판정 인코더가 본다 (`app/routers/copygen` · ksr 2026-10-13).
 
     🚨 코어 `POST /generate`(계약 `GenerateResponse`)는 여전히 501 이다 — 부르지 않는다. 여기 붙은 것은 화면의 엔진이고,
@@ -1163,6 +1186,11 @@ async def generate(request: Request) -> HTMLResponse:
     """
     from app.routers import copygen  # noqa: PLC0415
 
+    # 🆕 2026-10-14 — 비회원 제출은 엔진에 닿기 전에 멈춘다. 화면은 입력 화면과 같은 안내다 (`_gen_gate`)
+    if gate := _gen_gate(request, session):
+        resp = _render(request, "user/generate.html", gate)
+        resp.status_code = 401
+        return resp
     form = await _form(request)
     picked, branch, errors = _gen_picked(form)
     more, shown = _gen_more(form)
@@ -2283,12 +2311,37 @@ def _login_cookie(resp: RedirectResponse, request: Request, user: UserAccount) -
     return resp
 
 
+#: 로그인 · 가입 화면 자신 — 돌아갈 곳으로 받지 않는다(로그인한 뒤 다시 로그인 화면으로 가지 않게)
+_NEXT_SKIP = ("/u/login", "/u/signup", "/u/logout", "/u/reset")
+
+
+def _next_path(value: str | None) -> str:
+    """로그인 · 가입을 마친 뒤 돌아갈 곳 — 회원 전용 안내에서 넘어온 화면이다 (🆕 2026-10-14).
+
+    🔴 **사용자 화면 안의 경로만** 받는다(`_BACK_PATH` · 열린 리다이렉트 방지). 그 밖은 전부 홈(`/u/`)이다.
+    """
+    value = (value or "").strip()
+    if _BACK_PATH.match(value) and not value.startswith(_NEXT_SKIP):
+        return value
+    return "/u/"
+
+
+def _next_ctx(value: str | None) -> dict:
+    """화면이 폼과 링크에 실을 `next` — 홈이면 빈 값(주소 · 폼에 싣지 않는다)."""
+    nxt = _next_path(value)
+    return {"next": "" if nxt == "/u/" else nxt}
+
+
 @router.get("/login", response_class=HTMLResponse)
 def user_login(request: Request, session: Session = Depends(get_session)):  # noqa: B008
-    """일반 회원 로그인. `/login`(팀장 소유 · governor 전용)과 **다른 화면 · 다른 쿠키**다 (D-260 세션 (가))."""
+    """일반 회원 로그인. `/login`(팀장 소유 · governor 전용)과 **다른 화면 · 다른 쿠키**다 (D-260 세션 (가)).
+
+    🔄 2026-10-14 — `?next=` 로 돌아갈 화면을 받는다 (`_next_path`).
+    """
+    nxt = request.query_params.get("next")
     if current_user(request, session) is not None:
-        return RedirectResponse("/u/", status_code=303)
-    return _auth_page(request, "user/login.html", {"email": ""})
+        return RedirectResponse(_next_path(nxt), status_code=303)
+    return _auth_page(request, "user/login.html", {"email": "", **_next_ctx(nxt)})
 
 
 @router.post("/login")
@@ -2300,9 +2353,12 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     form = await _account_form(request)
     email = (form.get("email", [""])[0] or "").strip().lower()[:_EMAIL_MAX]
     password = form.get("password", [""])[0] or ""
+    nxt = form.get("next", [""])[0]
 
     def again(msg: str, code: int) -> HTMLResponse:
-        return _auth_page(request, "user/login.html", {"email": email, "error": msg}, code)
+        return _auth_page(
+            request, "user/login.html", {"email": email, "error": msg, **_next_ctx(nxt)}, code
+        )
 
     if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
         auth.audit("user_login", _actor(email=email), ok=False)
@@ -2330,7 +2386,7 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     user.last_login_at = datetime.now(UTC)
     session.commit()
     auth.audit("user_login", _actor(user.id), ok=True)
-    return _login_cookie(RedirectResponse("/u/", status_code=303), request, user)
+    return _login_cookie(RedirectResponse(_next_path(nxt), status_code=303), request, user)
 
 
 @router.post("/logout")
@@ -2389,7 +2445,9 @@ async def notifications_read(request: Request, session: Session = Depends(get_se
 @router.get("/signup", response_class=HTMLResponse)
 def user_signup(request: Request) -> HTMLResponse:
     """일반 회원 가입 (D-260 ② ⑧). 🚨 역할을 묻지 않는다 (D-66). 선택 동의 ①② 는 여기 없다 — 마이페이지에서만 (D-96)."""
-    return _auth_page(request, "user/signup.html", {"form": {}})
+    return _auth_page(
+        request, "user/signup.html", {"form": {}, **_next_ctx(request.query_params.get("next"))}
+    )
 
 
 @router.post("/signup")
@@ -2405,6 +2463,7 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
     pw2 = form.get("password2", [""])[0] or ""
     agree_terms = form.get("agree_terms", [""])[0] == "on"
     agree_disclaimer = form.get("agree_disclaimer", [""])[0] == "on"
+    nxt = form.get("next", [""])[0]
     kept = {
         "name": name,
         "email": email,
@@ -2413,7 +2472,9 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
     }
 
     def again(msg: str, code: int = 422) -> HTMLResponse:
-        return _auth_page(request, "user/signup.html", {"form": kept, "error": msg}, code)
+        return _auth_page(
+            request, "user/signup.html", {"form": kept, "error": msg, **_next_ctx(nxt)}, code
+        )
 
     if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
         return again("화면이 오래돼서 다시 불러왔어요. 한 번 더 가입해 주세요.", 403)
@@ -2450,7 +2511,7 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
         session.rollback()
         return again("이미 가입된 이메일이에요. 로그인해 주세요.", 409)
     auth.audit("user_signup", _actor(user.id), ok=True)
-    return _login_cookie(RedirectResponse("/u/", status_code=303), request, user)
+    return _login_cookie(RedirectResponse(_next_path(nxt), status_code=303), request, user)
 
 
 @router.get("/reset", response_class=HTMLResponse)

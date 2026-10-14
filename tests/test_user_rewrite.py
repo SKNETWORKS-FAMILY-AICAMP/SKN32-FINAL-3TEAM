@@ -291,13 +291,18 @@ def test_검수_화면의_지적_문장에_고쳐_쓰기_버튼이_있다(fixtur
     assert ('action="/u/review/rewrite"' in html) is has_button
 
 
-def test_카피생성_화면에는_고쳐_쓰기가_없다() -> None:
+def test_카피생성_화면에는_고쳐_쓰기가_없다(monkeypatch: pytest.MonkeyPatch) -> None:
     """재생성은 검수 쪽이다 — 카피생성(새 카피)과 섞지 않는다 (10-06 결정)."""
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
 
-    assert "rewrite" not in TestClient(app).get("/u/generate").text
+    # 🔄 2026-10-14 — 비회원에게는 폼이 안 뜬다(`_gen_gate`). 회원이 보는 폼을 잰다
+    monkeypatch.setattr(user_router, "_gen_gate", lambda *_a: None)
+    body = TestClient(app).get("/u/generate").text
+    assert 'id="gen-form"' in body, "🔴 생성 폼이 안 떴다 — 재는 대상이 없다"
+    assert "rewrite" not in body
 
 
 def test_서버_주소가_닫혀_있으면_down(monkeypatch: pytest.MonkeyPatch) -> None:
