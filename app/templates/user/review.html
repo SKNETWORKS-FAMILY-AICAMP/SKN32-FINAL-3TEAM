@@ -433,6 +433,12 @@
           {%- else %}{{ "표시한 부분을 고쳐 주세요" if shown.mark else "이 표현을 고쳐 주세요" }}{% endif -%}
         </p>
         {% endif %}
+        {# 🔄 2026-10-14 (ksr) — 「고치는 방향」(실증 분기 · D-337)의 문안은 「근거 보기」 안에 승인본 그대로 둔다 (D-147).
+           겉에는 **조건이 더 있다는 사실만** 한 줄로 알린다 — 할 일 줄만 보이면 「자료만 있으면 풀린다」로 읽힌다(D-337 (가) 를 기각한 이유).
+           ⛔ 이 줄에 조건의 내용을 풀어 쓰지 않는다 — 기준 문안이 아니다 #}
+        {% if s.substantiation %}
+        <p class="rv-why">함께 밝혀야 하는 사항이 있어요 — 「근거 보기」에서 확인하세요.</p>
+        {% endif %}
 
         {% if flag or s.violations or s.evidence or s.encoder_candidates or enc_on or s.substantiation %}
         <details class="rv-more">
