@@ -11,6 +11,10 @@
 🔄 2026-10-13 (D-333) — **앱은 잠금(`models.lock.json`)에 있는 판만 올린다**(`checked_dir`). 설정은 잠금의 채택 ·
    되돌림 판 중에서 **고르는** 것이다 — 판을 바꾼 사실이 git 에 남는다(D-205). 실험(잠금 밖)은 도구가
    `permit_unlocked()` 를 부르고 돌린다(`scripts/eval_graph.py --encoder`). 응답 표지는 **판 지문**이다(`bundle_mark`).
+🆕 2026-10-14 (D-336 · D-339 결정 2 · 3 · 5) — **품목 입력 판.** `label_scheme.json` 에 `input_format` 이 있는 판은 (품목 입력, 문장)
+   쌍으로만 부른다(`truncation="only_second"`) · 문턱은 두 벌이다 — `label_thresholds` = 「모름」 · `label_thresholds_known` = 품목 앎.
+   품목 입력의 글자와 전제 대응의 정본은 `app/premise.py` 다(`ENCODER_INPUT` · `premise_input`). 어긋나면 로더가 멈춘다(D-220).
+   문장만 받는 판(카드 17)은 품목 입력을 받지 않는다 — `takes_category` 가 거짓이고 품목을 주어도 한 번만 계산한다.
 """
 
 from __future__ import annotations
@@ -22,7 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app import model_lock
-from app.contracts import Violation
+from app import premise as pm
+from app.contracts import Premise, Violation
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models" / "copylane-encoder-kcbert-final"
 _REQUIRED_FILES = ("config.json", "label_scheme.json", "model.safetensors", "tokenizer.json")
@@ -176,6 +181,82 @@ class LabelScheme:
     max_tokens: int = MAX_TOKENS
     #: 상한을 모델 폴더(`max_len`)에서 읽었는가. 거짓이면 기본값으로 돈 것이다
     max_tokens_from_model: bool = False
+    #: 🆕 2026-10-14 (D-339 결정 2) — 품목 입력 판의 **품목 앎** 문턱(`label_thresholds_known`). 문장만 받는 판은 `None`
+    thresholds_known: dict[Violation, float] | None = None
+    #: 품목 입력 판인가(`input_format`) — 참이면 (품목 입력, 문장) 쌍으로만 부른다
+    pair: bool = False
+
+    def thresholds_for(self, category_input: str | None) -> dict[Violation, float]:
+        """품목 입력 → 그 입력의 문턱. 「모름」 · 입력 없음 · 문장만 받는 판은 `thresholds`(한 벌)이다."""
+        if not self.pair or category_input in (None, pm.ENCODER_UNKNOWN):
+            return self.thresholds
+        if self.thresholds_known is None:  # 로더가 막는 자리다 — 손으로 만든 스킴에서만 온다
+            raise EncoderUnavailable("품목 입력 판인데 품목 앎 문턱이 없다 (D-339 결정 2)")
+        return self.thresholds_known
+
+
+def _known_thresholds(
+    raw: dict, labels: tuple[Violation, ...], path: Path
+) -> dict[Violation, float] | None:
+    """🆕 2026-10-14 (D-336 · D-339 결정 2 · 3) — 품목 입력 판이면 품목 앎 문턱, 문장만 받는 판이면 `None`.
+
+    🔴 어긋나면 멈춘다 (D-220) — 학습과 다른 입력으로 부르면 에러 없이 엉뚱한 확률이 나온다.
+       · `input_format` 이 없는데 품목 앎 문턱이 있다 → 어느 입력으로 배웠는지 모른다
+       · 쌍 입력 · `only_second` 가 아니다 · 품목 입력 글자가 앱의 표(`pm.ENCODER_INPUT` · 「모름」)와 다르다
+       · `premise_to_input` 의 줄이 앱의 대응(`pm.premise_input`)과 다르다. ⬜ 줄이 **빠진** 것(일반식품_기능성)은 멈추지 않는다 —
+         앱의 대응이 정본이고 빠진 줄은 앱의 것을 쓴다(D-339 결정 3)
+       · 품목 앎 문턱이 없다 · 키가 라벨과 다르다. `label_thresholds_by_cat` 은 **칸 이름이 다르다** — 받지 않는다(D-339 결정 2)
+    """
+    fmt = raw.get("input_format")
+    known = raw.get("label_thresholds_known")
+    if fmt is None:
+        if known is not None or "label_thresholds_by_cat" in raw:
+            raise EncoderUnavailable(
+                f"품목 입력(input_format)이 없는 판에 품목 앎 문턱이 있다 — 어느 입력으로 배웠는지 모른다: {path}"
+            )
+        return None
+    if (
+        not isinstance(fmt, dict)
+        or fmt.get("pair") is not True
+        or fmt.get("truncation") != "only_second"
+    ):
+        raise EncoderUnavailable(
+            f"input_format 이 (품목, 문장) 쌍 · only_second 가 아니다 — 이 로더가 아는 입력이 아니다: {path}"
+        )
+    if (
+        set(fmt.get("values") or ()) != set(pm.ENCODER_INPUT.values())
+        or fmt.get("unknown") != pm.ENCODER_UNKNOWN
+    ):
+        raise EncoderUnavailable(
+            f"품목 입력 글자가 앱의 표(app/premise.py ENCODER_INPUT · {pm.ENCODER_UNKNOWN})와 다르다: {path}"
+        )
+    for name, value in (fmt.get("premise_to_input") or {}).items():
+        try:
+            want = pm.premise_input(Premise(name))
+        except ValueError as e:
+            raise EncoderUnavailable(
+                f"premise_to_input 에 모르는 전제가 있다: {name} ({path})"
+            ) from e
+        if value != want:
+            raise EncoderUnavailable(
+                f"premise_to_input 의 {name} → {value} 가 앱의 대응({want})과 다르다 — 정본은 app/premise.py (D-339 결정 3): {path}"
+            )
+    if known is None:
+        hint = (
+            " — label_thresholds_by_cat 은 칸 이름이 다르다(D-339 결정 2 · label_thresholds_known)"
+            if "label_thresholds_by_cat" in raw
+            else ""
+        )
+        raise EncoderUnavailable(
+            f"품목 입력 판인데 품목 앎 문턱(label_thresholds_known)이 없다{hint}: {path}"
+        )
+    try:
+        th = {Violation(label): float(value) for label, value in known.items()}
+    except (AttributeError, TypeError, ValueError) as e:
+        raise EncoderUnavailable(f"label_thresholds_known 이 잘못됐다: {path}") from e
+    if set(th) != set(labels):
+        raise EncoderUnavailable("판정 인코더 라벨과 label_thresholds_known 의 키가 다르다")
+    return th
 
 
 def load_label_scheme(model_dir: Path = MODEL_DIR) -> LabelScheme:
@@ -203,33 +284,46 @@ def load_label_scheme(model_dir: Path = MODEL_DIR) -> LabelScheme:
         raise EncoderUnavailable("판정 인코더 라벨 스킴에 중복 라벨이 있다")
     if set(labels) != set(thresholds):
         raise EncoderUnavailable("판정 인코더 라벨과 threshold의 키가 다르다")
+    known = _known_thresholds(raw, labels, path)
     max_len = raw.get("max_len")
     if max_len is None:
+        if known is not None:
+            # 품목 입력 판은 품목 몫만큼 길게 배웠다(136) — 기본값(128)으로 돌리면 학습과 다른 길이다 (D-220)
+            raise EncoderUnavailable(f"품목 입력 판인데 max_len 이 없다: {path}")
         return LabelScheme(labels=labels, thresholds=thresholds)
     lo, hi = _MAX_TOKENS_RANGE
     if isinstance(max_len, bool) or not isinstance(max_len, int) or not lo <= max_len <= hi:
         raise EncoderUnavailable(
             f"판정 인코더 라벨 스킴의 max_len 이 {lo}~{hi} 의 정수가 아니다: {max_len!r} ({path})"
         )
+    if known is not None and raw["input_format"].get("max_len", max_len) != max_len:
+        raise EncoderUnavailable(f"max_len 과 input_format.max_len 이 다르다: {path}")
     return LabelScheme(
-        labels=labels, thresholds=thresholds, max_tokens=max_len, max_tokens_from_model=True
+        labels=labels,
+        thresholds=thresholds,
+        max_tokens=max_len,
+        max_tokens_from_model=True,
+        thresholds_known=known,
+        pair=known is not None,
     )
 
 
 def select_candidates(
-    scheme: LabelScheme, probabilities: list[float]
+    scheme: LabelScheme, probabilities: list[float], category_input: str | None = None
 ) -> tuple[EncoderCandidate, ...]:
-    """모델 출력 축과 같은 순서의 확률에 라벨별 threshold를 적용한다."""
+    """모델 출력 축과 같은 순서의 확률에 라벨별 threshold를 적용한다.
+
+    🆕 2026-10-14 (D-339 결정 2) — 품목 입력 판은 입력에 맞는 문턱 한 벌을 쓴다(`LabelScheme.thresholds_for`).
+    """
     if len(probabilities) != len(scheme.labels):
         raise EncoderUnavailable(
             f"판정 인코더 logit 수가 라벨 수와 다르다: logits={len(probabilities)} labels={len(scheme.labels)}"
         )
+    th = scheme.thresholds_for(category_input)
     return tuple(
-        EncoderCandidate(
-            violation=label, confidence=probabilities[i], threshold=scheme.thresholds[label]
-        )
+        EncoderCandidate(violation=label, confidence=probabilities[i], threshold=th[label])
         for i, label in enumerate(scheme.labels)
-        if probabilities[i] >= scheme.thresholds[label]
+        if probabilities[i] >= th[label]
     )
 
 
@@ -275,24 +369,62 @@ class JudgeEncoder:
             )
         self.model.eval()
 
-    def predict(self, text: str) -> EncoderPrediction:
-        """sigmoid 확률과 라벨별 threshold 통과 후보를 반환한다."""
+    @property
+    def takes_category(self) -> bool:
+        """품목 입력 판인가 (🆕 2026-10-14 · D-336). 거짓이면 품목 입력을 받지 않는다 — 문장만 넣는다."""
+        return self.scheme.pair
+
+    def predict(self, text: str, category_input: str | None = None) -> EncoderPrediction:
+        """sigmoid 확률과 라벨별 threshold 통과 후보를 반환한다.
+
+        🆕 2026-10-14 (D-336) — `category_input` 은 품목 입력(`pm.encoder_input` 이 낸 글자). 없으면 「모름」이다.
+           문장만 받는 판은 이 값을 읽지 않는다.
+        """
+        return self.predict_many(text, (category_input or pm.ENCODER_UNKNOWN,))[0]
+
+    def predict_many(self, text: str, category_inputs: tuple[str, ...]) -> list[EncoderPrediction]:
+        """한 문장을 품목 입력 여럿으로 **한 배치**에 돌린다 (🆕 2026-10-14 · D-339 결정 5). 입력 순서대로 돌려준다.
+
+        ★ 문장만 받는 판은 한 번만 계산하고 같은 예측을 입력 수만큼 돌려준다 — 품목 입력이 바꿀 것이 없다.
+        🔴 모르는 품목 입력은 멈춘다 — 학습하지 않은 글자를 넣지 않는다 (D-220).
+        """
         try:
             import torch
         except ImportError as e:
             raise EncoderUnavailable("torch가 없어 판정 인코더를 실행할 수 없다") from e
 
-        full = len(self.tokenizer(text, truncation=False)["input_ids"])
-        inputs = self.tokenizer(
-            text, truncation=True, max_length=self.scheme.max_tokens, return_tensors="pt"
-        )
+        n = self.scheme.max_tokens
+        ins: list[str | None]
+        if self.scheme.pair:
+            ins = list(category_inputs)
+            known = {*pm.ENCODER_INPUT.values(), pm.ENCODER_UNKNOWN}
+            bad = [x for x in ins if x not in known]
+            if bad or not ins:
+                raise EncoderUnavailable(f"판정 인코더가 모르는 품목 입력이다: {bad or '없음'}")
+            full = [len(self.tokenizer(x, text, truncation=False)["input_ids"]) for x in ins]
+            batch = self.tokenizer(
+                ins,
+                [text] * len(ins),
+                truncation="only_second",
+                max_length=n,
+                padding=True,
+                return_tensors="pt",
+            )
+        else:
+            ins = [None]
+            full = [len(self.tokenizer(text, truncation=False)["input_ids"])]
+            batch = self.tokenizer(text, truncation=True, max_length=n, return_tensors="pt")
         with torch.inference_mode():
-            probabilities = torch.sigmoid(self.model(**inputs).logits)[0].tolist()
+            rows = torch.sigmoid(self.model(**batch).logits).tolist()
+        preds = [self._prediction(r, x, f > n) for r, x, f in zip(rows, ins, full, strict=True)]
+        return preds if self.scheme.pair else preds * len(category_inputs)
+
+    def _prediction(
+        self, probabilities: list[float], category_input: str | None, truncated: bool
+    ) -> EncoderPrediction:
         scores = {label: float(probabilities[i]) for i, label in enumerate(self.scheme.labels)}
-        candidates = select_candidates(self.scheme, list(scores.values()))
-        return EncoderPrediction(
-            scores=scores, candidates=candidates, truncated=full > self.scheme.max_tokens
-        )
+        candidates = select_candidates(self.scheme, list(scores.values()), category_input)
+        return EncoderPrediction(scores=scores, candidates=candidates, truncated=truncated)
 
 
 @functools.cache
