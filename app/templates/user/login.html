@@ -18,6 +18,8 @@
   <p class="auth-sub">조직 계정으로 로그인하세요.</p>
   {% if error %}<p class="auth-err" role="alert">{{ error }}</p>{% endif %}
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  {# 🆕 2026-10-14 — 회원 전용 안내에서 넘어왔으면 로그인 뒤 그 화면으로 돌아간다. 값은 서버가 거른 경로다 (`_next_path`) #}
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
   <label for="login-email">이메일</label>
   <input id="login-email" name="email" type="email" placeholder="you@company.com"
@@ -30,7 +32,7 @@
 
   <button class="auth-submit" type="submit">로그인</button>
 
-  <p class="auth-switch">계정이 없으신가요? <a href="/u/signup">회원가입</a></p>
+  <p class="auth-switch">계정이 없으신가요? <a href="/u/signup{% if next %}?next={{ next|urlencode }}{% endif %}">회원가입</a></p>
 </form>
 </div>
 {% endblock %}

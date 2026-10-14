@@ -35,6 +35,8 @@
   <p class="auth-sub">가입하면 검수·카피생성 기록을 내 계정으로 모아 볼 수 있어요.</p>
   {% if error %}<p class="auth-err" role="alert">{{ error }}</p>{% endif %}
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  {# 🆕 2026-10-14 — 회원 전용 안내에서 넘어왔으면 가입 뒤 그 화면으로 돌아간다 (`_next_path`) #}
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
   <label for="signup-name">이름</label>
   <input id="signup-name" name="name" type="text" value="{{ form.name or '' }}"
@@ -70,7 +72,7 @@
 
   <button class="auth-submit" type="submit">가입하기</button>
 
-  <p class="auth-switch">이미 계정이 있으신가요? <a href="/u/login">로그인</a></p>
+  <p class="auth-switch">이미 계정이 있으신가요? <a href="/u/login{% if next %}?next={{ next|urlencode }}{% endif %}">로그인</a></p>
 </form>
 </div>
 {% endblock %}

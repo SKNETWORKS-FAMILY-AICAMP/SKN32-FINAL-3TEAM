@@ -84,11 +84,14 @@ class _Writer:
 
 @pytest.mark.gate
 @pytest.mark.parametrize(
-    "user", [None, _user(history=False, improve=True)], ids=["비회원", "미동의"]
+    ("user", "status"),
+    [(None, None), (_user(history=False, improve=True), js.OFF)],
+    ids=["비회원", "미동의"],
 )
-def test_비회원과_미동의_회원은_아무것도_쓰지_않는다(user: object) -> None:
+def test_비회원과_미동의_회원은_아무것도_쓰지_않는다(user: object, status: str | None) -> None:
+    """🔄 2026-10-14 — 미동의 회원은 `off` 로 알린다(화면이 「이력 보관이 꺼져 있다」를 그린다 · D-96)."""
     w = _Writer()
-    assert js.save_review(w, user, [_resp("02_hold_low_conf.json")]) == 0  # type: ignore[arg-type]
+    assert js.save_review(w, user, [_resp("02_hold_low_conf.json")]) == status  # type: ignore[arg-type]
     assert not w.added and not w.committed, f"🔴 써서는 안 되는 판정을 적었다 — {w.added}"
 
 
@@ -101,11 +104,16 @@ def test_픽스처마다_행이_표의_제약을_지킨다(fx: Path) -> None:
     """`app/models.py` 의 CHECK 를 파이썬으로 다시 잰다 — 실제 DB 가 없어도 거절될 행을 먼저 잡는다."""
     res = JudgeResponse.model_validate(json.loads(fx.read_text("utf-8")))
     user = _user()
-    doc, sents, judgs = js.build_rows(user, [res])  # type: ignore[arg-type]
-
+    docs, sents, judgs = js.build_rows(user, [res])  # type: ignore[arg-type]
+    judged = [s for s in res.sentences if not s.not_claim]  # 판정 대상 아님은 적지 않는다 (D-275)
+    assert len(docs) == (1 if judged else 0), (
+        "🔴 문구 하나 = 문서 하나가 아니다(적을 문장이 없으면 문서도 없다)"
+    )
+    if not docs:
+        return
+    doc = docs[0]
     assert doc.owner_id == user.id and doc.consent_store and doc.expires_at is None
     assert doc.kind == "single" and len(doc.title) <= 200
-    judged = [s for s in res.sentences if not s.not_claim]  # 판정 대상 아님은 적지 않는다 (D-275)
     assert len(sents) == len(judgs) == len(judged), "🔴 판정한 문장마다 한 줄이 아니다"
     for cs, j, s in zip(sents, judgs, judged, strict=True):
         assert cs.doc_id == doc.id and j.doc_id == doc.id
@@ -129,6 +137,9 @@ def test_픽스처마다_행이_표의_제약을_지킨다(fx: Path) -> None:
         if s.violations:
             assert j.violation_type == s.violations[0].value
             assert j.evidence["violations"] == [v.value for v in s.violations]
+            assert j.evidence["infeasibility"] == (
+                s.infeasibility.value if s.infeasibility else None
+            )
 
 
 @pytest.mark.gate
@@ -138,7 +149,7 @@ def test_판정_대상_아님은_적지_않는다() -> None:
     res = _resp("16_pass_not_claim.json")
     assert res.sentences and all(s.not_claim for s in res.sentences), "픽스처 전제가 바뀌었다"
     w = _Writer()
-    assert js.save_review(w, _user(), [res]) == 0  # type: ignore[arg-type]
+    assert js.save_review(w, _user(), [res]) is None  # type: ignore[arg-type]
     assert not w.added and not w.committed, f"🔴 판정 대상 아님 문장을 적었다 — {w.added}"
     mixed = js.build_rows(_user(), [res, _resp("02_hold_low_conf.json")])  # type: ignore[arg-type]
     assert all(cs.raw not in {s.text for s in res.sentences} for cs in mixed[1]), (
@@ -149,8 +160,8 @@ def test_판정_대상_아님은_적지_않는다() -> None:
 @pytest.mark.gate
 def test_동의_둘을_문서에_그대로_옮긴다() -> None:
     res = _resp("02_hold_low_conf.json")
-    assert js.build_rows(_user(improve=False), [res])[0].consent_train is False  # type: ignore[arg-type]
-    assert js.build_rows(_user(improve=True), [res])[0].consent_train is True  # type: ignore[arg-type]
+    assert js.build_rows(_user(improve=False), [res])[0][0].consent_train is False  # type: ignore[arg-type]
+    assert js.build_rows(_user(improve=True), [res])[0][0].consent_train is True  # type: ignore[arg-type]
 
 
 @pytest.mark.gate
@@ -163,17 +174,20 @@ def test_사용자가_고른_품목은_출처와_함께_적는다() -> None:
 
 
 @pytest.mark.gate
-def test_동의한_회원의_검수는_문서_하나에_모인다() -> None:
+def test_동의한_회원의_검수는_문구마다_문서_하나다() -> None:
+    """🔄 2026-10-14 (ksr 흡수 · 팀장 (다)) — 문구 칸마다 별개의 광고 문구다(`kind='single'`). 종전에는 검수 한 번을 문서 하나로 묶었다.
+    문서 제목에 원문을 넣지 않는다 — 원문은 `copy_sentence.raw` 한 곳이다."""
     w = _Writer()
     results = [_resp("02_hold_low_conf.json"), _resp("05_certificate_a.json")]
-    n = js.save_review(w, _user(), results)  # type: ignore[arg-type]
+    status = js.save_review(w, _user(), results)  # type: ignore[arg-type]
     docs = [o for o in w.added if isinstance(o, WorkDoc)]
     sents = [o for o in w.added if isinstance(o, CopySentence)]
     judgs = [o for o in w.added if isinstance(o, Judgment)]
-    assert w.committed and len(docs) == 1
+    assert w.committed and status == js.SAVED and len(docs) == len(results)
+    assert {j.doc_id for j in judgs} == {d.id for d in docs}
+    assert not {s.raw for s in sents} & {d.title for d in docs}, "🔴 문서 제목에 원문이 들어갔다"
     assert (
-        n
-        == len(judgs)
+        len(judgs)
         == len(sents)
         == sum(len([s for s in r.sentences if not s.not_claim]) for r in results)
     )
@@ -188,7 +202,7 @@ def test_저장이_실패해도_예외를_올리지_않고_원문을_로그에_�
 ) -> None:
     w = _Writer(fail=True)
     with caplog.at_level(logging.WARNING, logger="copylane.judgment_store"):
-        assert js.save_review(w, _user(), [_resp("02_hold_low_conf.json")]) is None  # type: ignore[arg-type]
+        assert js.save_review(w, _user(), [_resp("02_hold_low_conf.json")]) == js.FAILED  # type: ignore[arg-type]
     assert w.rolled_back, "🔴 실패한 쓰기를 되돌리지 않았다"
     assert "RuntimeError" in caplog.text
     assert _SECRET not in caplog.text and "host=" not in caplog.text, (
@@ -282,8 +296,8 @@ def test_실제_DB_가_모든_픽스처의_행을_받는다() -> None:
         session.add(user)
         session.flush()
         results = [JudgeResponse.model_validate(json.loads(p.read_text("utf-8"))) for p in FIXTURES]
-        doc, sents, judgs = js.build_rows(user, results)
-        session.add(doc)
+        docs, sents, judgs = js.build_rows(user, results)
+        session.add_all(docs)
         session.flush()
         session.add_all(sents)
         session.flush()

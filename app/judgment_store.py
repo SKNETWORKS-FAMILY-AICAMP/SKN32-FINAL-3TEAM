@@ -12,8 +12,16 @@
 🔴 **실패해도 판정 응답은 나간다** — 저장은 부가 기능이다. 실패하면 되돌리고(rollback) 예외 **종류 이름만** 로그에 남긴다.
    ⛔ 원문 · 원인 문자열은 로그에 담지 않는다 — 원문은 영업비밀이고(D-46) 원인 문자열에는 접속 정보가 섞인다(`app.db.reachable` 와 같은 이유).
 
-★ 적는 단위 — 검수 한 번(문구 여러 칸) = `work_doc` 하나 · 엔진이 나눈 문장 하나 = `copy_sentence` 하나 + `judgment` 하나.
-   이력 화면(`_history_rows`)이 `judgment` × `copy_sentence` 를 문장 단위로 읽는다.
+★ 적는 단위 — 🔄 2026-10-14 (ksr 흡수 · 팀장 (다)) **문구 하나 = `work_doc` 하나** · 엔진이 나눈 문장 하나 = `copy_sentence` 하나 +
+   `judgment` 하나. 문구 칸마다 별개의 광고 문구이고 `kind='single'` 은 「사용자가 직접 쓰는 문서」다(`app/models.py`).
+   ⛔ 종전(ssm 10-13)에는 검수 한 번(문구 여러 칸)을 문서 하나로 묶었다. 이력 화면(`_history_rows`)이 `judgment` × `copy_sentence` 를
+   문장 단위로 읽는다. 문서 제목에는 문구 원문을 넣지 않는다 — 원문은 `copy_sentence.raw` 한 곳이다(동의 철회 때 지울 자리를 늘리지 않는다).
+★ 🆕 2026-10-14 (ksr 흡수) — 불가 사유(A · B · C)를 `evidence.infeasibility` 에 싣는다 — 표에 칸이 없고, 이력의 배지가 검수 화면과
+   같은 말을 하려면 사유가 있어야 한다(`app/routers/user.py` `_hist_view`).
+★ 🆕 2026-10-14 (ksr 흡수) — 결과를 **상태 글자**로 돌려준다 — 화면이 그대로 알린다(`review.html` `history_kept`):
+   `saved` 적었다 · `off` 회원인데 선택 동의 ① 이 꺼져 있다 · `failed` 적지 못했다 · `None` 비회원이거나 적을 판정이 없다.
+   못 적었으면 「저장됐다」고 말하지 않는다(D-147). 저장은 ksr 의 `_save_review` · `_keep_history`(10-13)와 이 모듈(ssm 10-13)이
+   같은 일을 두 벌로 하던 것을 이 모듈 하나로 모았다(D-99).
 ★ 적는 판정 — 응답의 **기록되는 판정**(`sentences`)만이다. 분기(`branches`)는 적지 않는다 —
    「선택한 전제의 저장은 판정 저장과 함께 정한다」(D-319 결정 7 ⬜) · 「고른 전제의 결과는 통과율에 섞지 않는다」(D-263 ①).
 ⚠️ `judgment.violation_type` 은 한 칸이다 — 문장에 위반 유형이 여럿이면 **첫 유형**을 적고, 전부는 `evidence.violations` 에 남긴다.
@@ -31,7 +39,7 @@ import uuid
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from app.contracts import CategorySource, Risk
+from app.contracts import Risk
 from app.dictmatch import norm
 from app.models import CopySentence, Judgment, WorkDoc
 
@@ -62,12 +70,14 @@ def _risk_int(r: Risk | None) -> int | None:
 def _category(res: JudgeResponse) -> tuple[str | None, str | None]:
     """(품목, 품목 출처) — **둘 다 있거나 둘 다 없다** (`ck_judgment_category_source_pair` · D-276).
 
-    ★ 응답에 품목은 있는데 출처가 비었으면 `classified` 다 — `/u/judge` 는 품목을 넘기지 않으므로 그 품목은 엔진이 판별한 것이다 (D-82).
+    🔄 2026-10-14 (ksr 흡수) — 계약이 이 짝을 이미 강제한다(`JudgeResponse` 검증 · D-99). 그대로 옮긴다.
+    ⛔ 종전에는 출처가 비면 `classified` 로 채웠다 — 계약이 바뀌면 조용히 틀린 출처를 적는 자리였다(D-220).
+       짝이 깨진 응답이 오면 DB 의 CHECK 가 거부하고 `failed` 로 알린다.
     """
-    if res.category is None:
-        return None, None
-    source = res.category_source or CategorySource.classified
-    return res.category.value, source.value
+    return (
+        res.category.value if res.category else None,
+        res.category_source.value if res.category_source else None,
+    )
 
 
 def _judgment_row(
@@ -79,6 +89,8 @@ def _judgment_row(
         {
             "violations": violations,
             "articles": [a.model_dump(mode="json") for a in s.evidence],
+            # 🆕 2026-10-14 (ksr 흡수) — 이력 배지가 읽는다(`_hist_view`). 확정 위반이 아니면 None
+            "infeasibility": s.infeasibility.value if s.infeasibility else None,
         }
         if violations or s.evidence
         else None
@@ -111,23 +123,29 @@ def _judged(res: JudgeResponse) -> list[SentenceJudgment]:
 
 def build_rows(
     user: UserAccount, results: Iterable[JudgeResponse]
-) -> tuple[WorkDoc, list[CopySentence], list[Judgment]]:
-    """적을 행을 만든다(DB 를 열지 않는다). 테스트가 이 함수로 칸을 잰다."""
-    results = list(results)
-    n_sent = sum(len(_judged(r)) for r in results)
-    doc = WorkDoc(
-        id=uuid.uuid4(),
-        title=f"문구 검수 {len(results)}건 · 문장 {n_sent}개"[:_TITLE_MAX],
-        kind="single",
-        consent_store=True,
-        consent_train=user.consent_improve_at is not None,
-        owner_id=user.id,
-        expires_at=None,
-    )
+) -> tuple[list[WorkDoc], list[CopySentence], list[Judgment]]:
+    """적을 행을 만든다(DB 를 열지 않는다). 테스트가 이 함수로 칸을 잰다.
+
+    🔄 2026-10-14 — **문구(응답) 하나 = 문서 하나**. 적을 문장이 없는 문구는 문서를 만들지 않는다.
+    """
+    docs: list[WorkDoc] = []
     sentences: list[CopySentence] = []
     judgments: list[Judgment] = []
     for res in results:
-        for s in _judged(res):
+        judged = _judged(res)
+        if not judged:
+            continue
+        doc = WorkDoc(
+            id=uuid.uuid4(),
+            title=f"문구 검수 · 문장 {len(judged)}개"[:_TITLE_MAX],
+            kind="single",
+            consent_store=True,
+            consent_train=user.consent_improve_at is not None,
+            owner_id=user.id,
+            expires_at=None,
+        )
+        docs.append(doc)
+        for s in judged:
             cs = CopySentence(
                 id=uuid.uuid4(),
                 doc_id=doc.id,
@@ -137,31 +155,38 @@ def build_rows(
             )
             sentences.append(cs)
             judgments.append(_judgment_row(doc.id, cs.id, s, res))
-    return doc, sentences, judgments
+    return docs, sentences, judgments
+
+
+#: `save_review` 의 상태 글자 — 화면(`review.html` `history_kept`)이 이 글자로 알린다
+SAVED, OFF, FAILED = "saved", "off", "failed"
 
 
 def save_review(
     session: Session, user: UserAccount | None, results: Iterable[JudgeResponse]
-) -> int | None:
-    """검수 결과를 적는다. 반환 — 적은 판정 행 수 · 적지 않을 사용자면 `0` · **실패하면 `None`**.
+) -> str | None:
+    """검수 결과를 적고 **어떻게 됐는지** 돌려준다 — `SAVED` · `OFF` · `FAILED` · `None`(비회원 · 적을 판정 없음).
 
-    🚨 예외를 올리지 않는다 — 호출한 화면은 반환값과 무관하게 판정 결과를 그린다.
+    🚨 예외를 올리지 않는다 — 호출한 화면은 판정 결과를 그대로 그리고, 상태 글자로 저장 여부만 알린다.
+       삼키지 않는다 — 실패는 `FAILED` 로 화면에 나가고 예외 종류는 로그에 남는다(D-162 · D-147).
     """
+    if user is None:
+        return None  # D-69 · D-307 — 비회원 안내는 입력 카드에 이미 있다
     if not should_store(user):
-        return 0
+        return OFF  # D-96 — 기본값은 미보관. 검수는 그대로 된다
     try:
-        doc, sentences, judgments = build_rows(user, results)  # type: ignore[arg-type]
+        docs, sentences, judgments = build_rows(user, results)
         if not judgments:
-            return 0
-        session.add(doc)
+            return None
+        session.add_all(docs)
         session.flush()  # work_doc 먼저 — copy_sentence · judgment 의 FK 가 가리킨다
         session.add_all(sentences)
         session.flush()
         session.add_all(judgments)
         session.commit()
-        return len(judgments)
-    except Exception as e:  # noqa: BLE001 — 저장 실패가 판정 응답을 막지 않는다
+        return SAVED
+    except Exception as e:  # noqa: BLE001 — 저장 실패가 판정 응답을 막지 않는다(상태는 화면에 나간다)
         with contextlib.suppress(Exception):  # 되돌리기 실패도 응답을 막지 않는다
             session.rollback()
         _log.warning("판정 저장 실패 — %s", type(e).__name__)
-        return None
+        return FAILED

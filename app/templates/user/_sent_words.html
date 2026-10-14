@@ -1,0 +1,25 @@
+{# app/templates/user/_sent_words.html — 문장 카드의 **결론 한 줄** · 소유자 ksr (🆕 2026-10-14)
+
+  검수 화면(`review.html` `sent_block`)과 AI 광고 생성 편집기(`compose.html` 입력 판정)가 같은 말을 쓴다 (D-99 한 벌).
+  ★ 결론은 문장 **아래**에 풀어 쓴 한 줄이다 — 「써도 되는지」가 먼저 읽히게 한다. 종전의 짧은 딱지(「사용 불가」 등)는
+     문구 머리의 종착 알약 · 이력 배지(`app/routers/user.py`)에 그대로 남는다 — 그쪽은 좁은 자리다.
+  ⛔ 판정을 바꾸지 않는다 — 같은 값을 다른 말로 적을 뿐이다. 보류를 「문제없음」으로 읽히게 적지 않는다 (D-220 · D-280).
+  🚨 확신 부족이 아닌 보류 사유(등급 차 · 공존 규칙 · 전용법 미검수 등)는 이용자 말이 정해지지 않아 종전 이름 그대로 둔다.
+#}
+{% macro sent_concl(s, premise="") -%}
+  {%- set inf = s.infeasibility.value if s.infeasibility else "" -%}
+  {%- set v = s.verdict.value -%}
+  {%- set hit = v == "confirmed" and s.violations -%}
+  {%- set HOLD = {"gap2": "코드·모델 2등급 차", "cat_unknown": "품목 선택 필요", "rd1": "공존 규칙 발동",
+                  "premise_unknown": "전제 선택 필요 — 인정 여부", "law_uncovered": "전용법 미검수"} -%}
+  {%- if hit and inf == "A" and premise %}고르신 제품 유형에서는 쓸 수 없어요
+  {%- elif hit and inf == "A" %}인정받은 제품만 쓸 수 있어요
+  {%- elif hit and inf == "B" %}근거 자료가 있으면 쓸 수 있어요
+  {%- elif hit and inf == "C" %}쓸 수 없는 표현이에요
+  {%- elif hit %}위반으로 봤어요
+  {%- elif v == "confirmed" %}특이사항 없어요
+  {%- elif v == "hold" and (not s.hold_reason or s.hold_reason.value == "low_conf") %}확정하지 못했어요 · 전문가 검토 필요
+  {%- elif v == "hold" %}보류 · {{ HOLD.get(s.hold_reason.value, "알 수 없는 값 (" ~ s.hold_reason.value ~ ")") }}
+  {%- elif v == "no_basis" %}근거 조문을 찾지 못했어요
+  {%- else %}이 문장은 판정하지 못했어요{% endif -%}
+{%- endmacro %}

@@ -107,7 +107,7 @@ def test_지적_문장을_판정_결과의_위반_유형으로_고쳐_쓰고_재
     assert "고친 문구 후보" in html and BODY in html
     assert "필수 병기 · 원재료 함량을 함께 표시" in html
     assert "위반 못 찾음 (통과 아님)" in html, "🔴 「위반 못 찾음」을 통과처럼 그렸다"
-    assert "재판정 · 통과" not in html
+    assert "다시 판정 · 통과" not in html
     assert "근거 보기" in html, "검수 결과 화면 안에 그려야 한다"
 
 
@@ -291,13 +291,18 @@ def test_검수_화면의_지적_문장에_고쳐_쓰기_버튼이_있다(fixtur
     assert ('action="/u/review/rewrite"' in html) is has_button
 
 
-def test_카피생성_화면에는_고쳐_쓰기가_없다() -> None:
+def test_카피생성_화면에는_고쳐_쓰기가_없다(monkeypatch: pytest.MonkeyPatch) -> None:
     """재생성은 검수 쪽이다 — 카피생성(새 카피)과 섞지 않는다 (10-06 결정)."""
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
 
-    assert "rewrite" not in TestClient(app).get("/u/generate").text
+    # 🔄 2026-10-14 — 비회원에게는 폼이 안 뜬다(`_gen_gate`). 회원이 보는 폼을 잰다
+    monkeypatch.setattr(user_router, "_gen_gate", lambda *_a: None)
+    body = TestClient(app).get("/u/generate").text
+    assert 'id="gen-form"' in body, "🔴 생성 폼이 안 떴다 — 재는 대상이 없다"
+    assert "rewrite" not in body
 
 
 def test_서버_주소가_닫혀_있으면_down(monkeypatch: pytest.MonkeyPatch) -> None:
