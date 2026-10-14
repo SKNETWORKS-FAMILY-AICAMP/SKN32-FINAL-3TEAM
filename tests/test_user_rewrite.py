@@ -107,7 +107,7 @@ def test_지적_문장을_판정_결과의_위반_유형으로_고쳐_쓰고_재
     assert "고친 문구 후보" in html and BODY in html
     assert "필수 병기 · 원재료 함량을 함께 표시" in html
     assert "위반 못 찾음 (통과 아님)" in html, "🔴 「위반 못 찾음」을 통과처럼 그렸다"
-    assert "재판정 · 통과" not in html
+    assert "다시 판정 · 통과" not in html
     assert "근거 보기" in html, "검수 결과 화면 안에 그려야 한다"
 
 
