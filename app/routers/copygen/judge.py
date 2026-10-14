@@ -9,7 +9,7 @@
    · 미판정 · 근거 없음 · 확신 부족이 아닌 보류 → 탈락   · 그 밖(확정 통과 · 걸린 것 없는 확신 부족 보류) → 남긴다
    광고 생성의 `_lands`(`app/routers/user.py`)와 같은 기준이다.
 🚨 「남겼다」는 「위반 후보를 못 찾았다」다 — 적법 확인이 아니다.
-🚨 그래프가 인코더를 돌리지 않았으면(`judged_by` 에 `+enc:` 가 없다) **생성하지 않는다** — 사전만 지난 것을 다 지난 것처럼 내지 않는다.
+🚨 그래프가 인코더를 돌리지 않았으면(`judged_by` 에 인코더 표지가 없다 — `app.encoder.ran`) **생성하지 않는다** — 사전만 지난 것을 다 지난 것처럼 내지 않는다.
 ★ 보수 · 균형 · 공격을 가르는 「문턱까지의 거리」는 인코더 확률에서 따로 잰다 — 그래프의 응답에는 문턱을 넘은 후보만 실리기 때문이다.
 """
 
@@ -46,6 +46,9 @@ class EncoderJudge:
         if model_dir is None:
             raise CopyGenOff("판정 인코더가 설정되지 않았어요.")
         try:
+            enc.checked_dir(
+                model_dir
+            )  # 🆕 2026-10-13 (D-333) — 잠금에 없는 판으로 생성 후보를 거르지 않는다(그래프와 같은 문)
             self._enc = enc.encoder_at(model_dir)
         except enc.EncoderUnavailable as e:
             raise CopyGenOff("판정 인코더를 올리지 못했어요.") from e
@@ -108,8 +111,15 @@ class GraphJudge(EncoderJudge):
                 # DB · 그래프 의존성이 없다 — 판정을 거치지 않은 문구는 만들지 않는다 (D-147)
                 raise CopyGenOff("판정 엔진에 연결하지 못했어요.") from e
             raise
-        if "+enc:" not in res.judged_by:
+        # 표지 글자는 인코더 모듈 한 곳 (D-99 · D-333 에서 `+enc:` → `+encb:`)
+        from app import encoder as enc  # noqa: PLC0415
+
+        if not enc.ran(res.judged_by):
             raise CopyGenOff("판정 그래프가 인코더를 돌리지 못했어요.")
+        if not res.sentences:
+            # 🆕 2026-10-13 (D-220) — 그래프가 문장을 하나도 내지 않았다. 아래 반복이 비면 통째 거리(`_near`)로 넘어가 「못 찾음」이 된다 —
+            #    본 것이 없는 것을 통과로 세지 않는다. ⛔ 모든 문장이 `not_claim` 인 경우는 막지 않는다 — 판정 대상 아님도 판정이다 (D-275)
+            return Judged(False, "판정할 문장 없음")
         for s in res.sentences:
             if s.not_claim:
                 continue

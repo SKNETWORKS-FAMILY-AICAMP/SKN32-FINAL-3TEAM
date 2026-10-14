@@ -57,6 +57,7 @@ from app import reasons as rs
 from app import retrieve as rt
 from app import sanction, sentsplit
 from app.contracts import (
+    LAW_VERSION_UNKNOWN,
     NOT_REVIEWED_UNNAMED,
     UNCOVERED_CATEGORIES,
     AdaptedCopy,
@@ -90,7 +91,7 @@ from app.contracts import (
 )
 from app.settings import PARAMS
 from collect import statute
-from collect.law_map import LAWS, REFERENCE_ONLY
+from collect.law_map import LAW_OF_ID, LAWS, REFERENCE_ONLY
 
 #: D-126 — 총 라운드 K+1=3. `attempt` 는 0-base 이므로 마지막 시도는 2 다
 MAX_ATTEMPT = PARAMS.max_attempt  # 🔄 값은 app/settings.py — 계약·DB 가 같은 수를 든다
@@ -1051,6 +1052,9 @@ def encode(state: CoreState) -> dict[str, Any]:
     if model_dir is None:
         return {}
     try:
+        enc.checked_dir(
+            model_dir
+        )  # 🆕 2026-10-13 (D-333) — 잠금에 없는 판은 올리지 않는다 · 거절도 아래 경고 경로를 탄다
         model = enc.encoder_at(model_dir)
         preds = [model.predict(t) for t in state.get("sents", [])]
     except enc.EncoderUnavailable as e:
@@ -1085,6 +1089,11 @@ if _UNRECOGNIZED_TYPE is None:
     )
 
 
+def _cosmetic_moved(c: EncoderTypeCandidate) -> bool:
+    """화장품 전제에서 옮긴 후보인가 (D-338 · `rs.COSMETIC_MOVE`)."""
+    return c.moved_from is not None and rs.COSMETIC_MOVE.get(c.moved_from) is c.violation
+
+
 def _candidate_refs(
     c: EncoderTypeCandidate, laws: Iterable[str], texts: dict[str, EvidenceArticle] | None
 ) -> list[EvidenceArticle]:
@@ -1095,9 +1104,14 @@ def _candidate_refs(
     🚨 좌표는 표(`collect/statute.py`)가 정한다. `texts` 에 있으면 원문이 붙고, 없으면 좌표만이다.
     """
     food = LAW_OF_NODE["law_food"]
+    cosmetic = LAW_OF_NODE["law_cosmetic"]
     coords: list[str] = []
     for law in laws:
-        if c.moved_from is not None and law == food:
+        if _cosmetic_moved(c):
+            # 🆕 2026-10-14 (D-338) — 화장품 전제에서 옮긴 후보는 「화장품이라면」의 것이다 — 화장품법의 조항만 싣는다
+            if law == cosmetic:
+                coords += statute.references(c.violation.value, law)
+        elif c.moved_from is not None and law == food:
             coords += statute.reference_of_cite(pm.UNRECOGNIZED_FUNCTION_CITE)
         else:
             coords += statute.references(c.violation.value, law)
@@ -1150,6 +1164,22 @@ def _encoder_candidates(
                 moved_from=Violation(pm.HF_MISLEAD),
             )
         )
+    # 🆕 2026-10-14 (D-338) — **화장품 전제만**(분기 · 품목이 화장품인 기록)에서는 질병 표방 · 건강기능식품 오인 후보를 의약품 오인으로
+    #    옮긴다 — 우리 라벨 규약에서 화장품의 질병 · 건강 기능 주장은 의약품 오인이다(`rs.COSMETIC_MOVE`). 원래 후보는 그 전제에서 서지 않는다.
+    #    ⛔ 품목 미상 기록(전제 여섯의 합집합)에서는 옮기지 않는다 — 원래 후보가 식품 전제에서 서고, 화장품이라면의 사본을 더하면 소음이다.
+    #    ⛔ 인코더가 의약품 오인을 직접 냈으면 더하지 않는다 · 둘이 같은 유형으로 옮겨 가면 확률이 높은 쪽 하나만
+    if ps and all(p is Premise.화장품 for p in ps):
+        moves = [c for c in out if c.violation in rs.COSMETIC_MOVE]
+        out = [c for c in out if c.violation not in rs.COSMETIC_MOVE]
+        have = {c.violation for c in out}
+        for c in sorted(moves, key=lambda x: -x.confidence):
+            to = rs.COSMETIC_MOVE[c.violation]
+            if to in have:
+                continue
+            have.add(to)
+            out.append(
+                EncoderTypeCandidate(violation=to, confidence=c.confidence, moved_from=c.violation)
+            )
     # 🆕 2026-10-12 (D-327) — 후보마다 참조 조항을 붙인다. `laws` 가 비면(법을 모른다) 붙이지 않는다 — 빈 목록이다
     law_axes = tuple(laws)
     return [c.model_copy(update={"references": _candidate_refs(c, law_axes, texts)}) for c in out]
@@ -1566,6 +1596,34 @@ def _with_risk(s: SentenceJudgment, risk: RiskAssessment) -> SentenceJudgment:
     return SentenceJudgment(**{**{k: getattr(s, k) for k in type(s).model_fields}, "risk": risk})
 
 
+def _substantiated(s: SentenceJudgment) -> SentenceJudgment:
+    """확정된 실증형(B) 위반에 **실증 분기**를 붙인 새 문장 (🆕 2026-10-14 · D-337 · D-268 「지시」의 재료).
+
+    ★ 붙는 조건 — 확정 ∧ 위반 있음 ∧ 사유 B ∧ 위험도가 섰다(계약 `_subst_is_for_B` 는 실증 전 위험도를 요구한다) ∧ 위반이 전부
+       `rs.SUBST_MAX` 의 유형 ∧ 인용 근거(`basis`)의 법 축이 하나. 문안 · 상한은 `rs.subst_branch` 한 곳이다.
+    🔴 못 붙이면 그대로 — 그 문장은 지시가 서지 않아 종착이 보류다(`guidance_ready` · D-220). 법 축을 모르는 인용이 섞이면 붙이지 않는다.
+    🚨 문서 종착이 지시가 되려면 문장이 **전부** 확정이어야 한다(계약 `_guidance_payload` · D-268 우선순위). 사전에 안 걸린 문장이 하나라도
+       있으면 문서는 보류다 — 그래도 이 분기는 문장 카드의 「고치는 방향」으로 보인다.
+    """
+    if (
+        s.verdict is not Verdict.confirmed
+        or not s.violations
+        or s.infeasibility is not Infeasibility.B
+        or s.risk.final is None
+        or s.substantiation is not None
+    ):
+        return s
+    axes = {LAW_OF_ID.get(e.law_id) for e in s.evidence if e.basis}
+    if None in axes:
+        return s
+    sb = rs.subst_branch(list(s.violations), {a for a in axes if a is not None})
+    if sb is None:
+        return s
+    return SentenceJudgment(
+        **{**{k: getattr(s, k) for k in type(s).model_fields}, "substantiation": sb}
+    )
+
+
 @timed
 def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
     """위험도 — **코드 하한**(제재표) · 가능 상한 (D-09 · D-305 · D-310). 🆕 2026-10-02 (W5) 배선.
@@ -1623,11 +1681,16 @@ def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN00
         if f.floor is None:
             continue
         out.append(
-            _with_risk(
-                s,
-                RiskAssessment(
-                    floor=f.floor, final=f.floor, ceiling=f.ceiling, ceiling_note=f.ceiling_note
-                ),
+            _substantiated(
+                _with_risk(
+                    s,
+                    RiskAssessment(
+                        floor=f.floor,
+                        final=f.floor,
+                        ceiling=f.ceiling,
+                        ceiling_note=f.ceiling_note,
+                    ),
+                )
             )
         )
     return {"sentences": out} if out else {}
@@ -1755,14 +1818,16 @@ def _premise_sentences(
             else:
                 f = floor_of_sentence(rows, by_law)
                 if f.floor is not None:
-                    j = _with_risk(
-                        j,
-                        RiskAssessment(
-                            floor=f.floor,
-                            final=f.floor,
-                            ceiling=f.ceiling,
-                            ceiling_note=f.ceiling_note,
-                        ),
+                    j = _substantiated(
+                        _with_risk(
+                            j,
+                            RiskAssessment(
+                                floor=f.floor,
+                                final=f.floor,
+                                ceiling=f.ceiling,
+                                ceiling_note=f.ceiling_note,
+                            ),
+                        )
                     )
         if sid in encs:
             # 분기 문장 — 이 전제 하나로 거른다 (D-323 결정 6). 판정이 끝난 뒤에 붙인다 — 위 판정은 이 칸을 보지 않았다
@@ -2276,7 +2341,10 @@ JUDGED_BY = "rule-0.3.0-dict"
 
 
 def judged_by(state: dict[str, Any]) -> str:
-    """응답의 판 표지 (🆕 2026-10-09). 인코더가 돌았으면 그 판의 가중치 지문을 붙인다 — `rule-0.3.0-dict+enc:<지문 12자>`.
+    """응답의 판 표지 (🆕 2026-10-09). 인코더가 돌았으면 그 판의 판 지문을 붙인다 — `rule-0.3.0-dict+encb:<판 지문 12자>`.
+
+    🔄 2026-10-13 (D-333) — ⛔ 종전 `+enc:<가중치 지문>` 은 문턱만 다른 판(카드 17 의 F1 최대 판 · 채택 판)을 가르지 못했다.
+       판 지문은 판의 **파일 전부**로 낸다(`app/model_lock.py` `bundle_sha`). 접두를 바꿔 옛 표지와 섞이지 않게 한다(D-178).
 
     ★ 앞머리는 그대로 `JUDGED_BY` 다 — **판정은 규칙 판정**이고 인코더는 `encoder_candidates` 만 채웠다 (D-323).
     🔴 인코더가 안 돌았으면(설정 없음 · 못 올림) 붙이지 않는다 — 신호가 실린 응답만 인코더 판을 적는다.
@@ -2284,7 +2352,7 @@ def judged_by(state: dict[str, Any]) -> str:
     model_dir = enc.configured_dir()
     if model_dir is None or not state.get("encodings"):
         return JUDGED_BY
-    return f"{JUDGED_BY}+enc:{enc.weights_mark(model_dir)}"
+    return f"{JUDGED_BY}{enc.JUDGED_BY_MARK}{enc.bundle_mark(model_dir)}"
 
 
 def to_response(state: ReviewState) -> JudgeResponse:
@@ -2308,7 +2376,9 @@ def to_response(state: ReviewState) -> JudgeResponse:
         branches=state.get("branches", []),
         certificate=state.get("certificate"),
         timings=state.get("timings", []),
-        law_version="2026-09-10",
+        # 🔄 2026-10-13 — 고정 날짜를 뺐다. 읽을 판이 없으면 「모름」이다 (D-220 · D-103 ③ · `LAW_VERSION_UNKNOWN`).
+        #    ⬜ 현행 청크의 시행일을 적재가 채우면 그 최댓값을 읽는다 — 그 전에는 날짜를 적지 않는다.
+        law_version=LAW_VERSION_UNKNOWN,
         judged_by=judged_by(state),
     )
 

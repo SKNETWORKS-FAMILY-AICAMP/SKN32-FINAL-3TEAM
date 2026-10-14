@@ -481,6 +481,42 @@ def keys(
 
 
 @app.command()
+def setting(
+    name: str = typer.Argument("", help="설정 이름 (비우면 전부 보기)"),
+    value: str = typer.Argument("", help="새 값 (비우면 보기만)"),
+    clear: bool = typer.Option(False, "--clear", help="값을 비운다"),
+) -> None:
+    """설정(모델 판 · 카피 생성 스위치 등)을 보거나 바꾼다 — 키가 아닌 값이라 화면에 보인다.
+
+    🆕 2026-10-13 (D-333 결정 7) — ⛔ 모델 판 · 생성 스위치를 `.env` 를 손으로 열거나 셸 환경 변수로 바꿨다 —
+       무엇이 켜졌는지 기기에 기록이 없었다(인계 10-13 클론 A §0). 이름의 정본은 `collect.env.SETTINGS` 한 곳 (D-99).
+    🚨 셸 · OS 환경 변수가 `.env` 보다 먼저다 — 같은 이름이 있으면 바꿔도 안 먹는다는 것을 명령이 알린다.
+    🚨 모델 판(`COPYLANE_MODEL_DIR`)은 `models.lock.json` 의 채택 · 되돌림 판만 앱이 올린다 (D-333).
+    """
+    from collect import env  # noqa: PLC0415 — 설정 이름의 정본
+
+    if name and name not in env.SETTINGS:
+        # 🚨 `run()` 은 명령 줄을 화면에 찍는다 — 키 이름에 값을 붙여 넣었다면 그 줄이 곧 유출이다(`setkey` 와 같은 자리 · D-254).
+        #    모르는 이름이면 run() 앞에서 멈추고 값은 되비추지 않는다
+        console.print("[red]🔴 모르는 설정이다[/red] — 준 값은 화면에 다시 찍지 않는다.")
+        console.print("  아는 이름: " + " · ".join(env.SETTINGS), markup=False)
+        if name in env.KEYS:
+            console.print("  🚨 키는 `launcher.py setkey <이름>` 으로 넣는다 (값이 화면에 안 뜬다)")
+        raise typer.Exit(1)
+    args = ["uv", "run", "python", "-m", "collect.setkey", "--setting"]
+    if name:
+        args.append(name)
+        if clear:
+            args.append("--clear")
+        elif value:
+            args.append(value)
+    elif clear or value:
+        console.print("[red]🔴 이름 없이 값을 줄 수 없다[/red] — setting <이름> <값>")
+        raise typer.Exit(2)
+    raise typer.Exit(run(*args))
+
+
+@app.command()
 def doctor(
     hash_check: bool = typer.Option(False, "--hash", help="전 파일 해시를 다시 계산한다 (느리다)"),
     env: bool = typer.Option(False, "--env", help="환경·git 신원·DB — 데이터 없이 돈다"),
@@ -1841,6 +1877,11 @@ def _invoke(fn, *extra: str) -> int:
 #: 🔴 `_check_menu` 가 이 표를 **명령의 실제 시그니처**와 대조한다 — 위치 인자 수·필수 여부 (D-254).
 ASK_ARG: dict[str, list[tuple[str, bool, str]]] = {
     "setkey": [("어떤 키를 넣을까", True, "key")],
+    # 🆕 2026-10-13 (D-333) — 비우면 전부 보기 · 값을 비우면 그 설정만 보기
+    "setting": [
+        ("어떤 설정인가 (엔터 = 전부 보기)", False, "setting"),
+        ("새 값 (엔터 = 보기만)", False, "text"),
+    ],
     "admin-add": [("누구의 계정인가 (이니셜)", True, "text")],
     "probe": [("어떤 소스를 열어 볼까", False, "collect")],
     "collect": [("어떤 소스를 받을까", True, "collect")],
@@ -1895,6 +1936,7 @@ ASK_FLAG: dict[str, list[tuple[str, str, str, str]]] = {
         ("해시 검사", "--hash", "빠르게 — 있는지만 본다", "느리게 — 전 파일 해시를 다시 잰다"),
     ],
     "keys": [("설정 파일", "--repair", "보기만 한다", ".env 의 안내 주석을 되살린다")],
+    "setting": [("값", "--clear", "그대로 둔다 (또는 위에서 준 값으로 바꾼다)", "비운다")],
     "golden": [("파생물", "--write", "보기만 한다", "실제로 쓴다 — 기존 분할이 덮어쓰인다")],
     "load": [("원본이 없는 행", "--allow-missing", "있으면 멈춘다", "허용하고 적재한다")],
     "chunk": [("chunks.jsonl", "--dump", "보기만 한다", "파일로 쓴다")],
@@ -1979,6 +2021,8 @@ MENU: list[tuple[str, str, object]] = [
     ("53", "판정표 · 감사표 현황", sheet_status),
     ("5", "API 키 현황", keys),
     ("6", "API 키 입력", setkey),
+    # 🆕 2026-10-13 (D-333) — 번호는 뒤에서 받는다 (D-162)
+    ("54", "설정 보기 · 바꾸기 (모델 판 · 생성 스위치)", setting),
     # 🚨 번호는 뒤에서 받는다 — 28~34 를 밀면 손에 익은 번호가 전부 바뀐다 (D-162)
     ("35", "콘솔 계정 만들기", admin_add),
     ("36", "콘솔 계정 목록", admin_list),
@@ -2198,6 +2242,11 @@ def _choices(kind: str) -> list[tuple[str, str]]:
         from collect import env  # noqa: PLC0415
 
         return [(name, purpose) for name, (purpose, _where) in env.KEYS.items()]
+    if kind == "setting":
+        # 🆕 2026-10-13 (D-333) — `setting` 이 받는 이름이 정확히 이 표다 (D-99)
+        from collect import env  # noqa: PLC0415
+
+        return list(env.SETTINGS.items())
     return []
 
 

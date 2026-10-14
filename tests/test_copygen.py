@@ -159,6 +159,9 @@ def test_인코더_후보가_서거나_뒤가_잘리면_탈락이다(monkeypatch
     }
     monkeypatch.setattr(enc, "configured_dir", lambda: Path("지어낸-모델-폴더"))
     monkeypatch.setattr(
+        enc, "checked_dir", lambda _d: None
+    )  # 🆕 D-333 — 잠금 대조는 test_model_lock 이 잰다
+    monkeypatch.setattr(
         enc, "encoder_at", lambda _d: SimpleNamespace(predict=preds.__getitem__, scheme=scheme)
     )
     j = judge.EncoderJudge()
@@ -606,7 +609,7 @@ def test_생성_폼은_생성_중_표시를_갖고_있다() -> None:
 # ── 판정 그래프 전체를 지난다 (2026-10-13 오후) ─────────────────────────
 
 
-def _graph_judge(monkeypatch: pytest.MonkeyPatch, sentences, judged_by="rule+enc:지어낸지문"):  # noqa: ANN001, ANN202
+def _graph_judge(monkeypatch: pytest.MonkeyPatch, sentences, judged_by="rule+encb:지어낸지문"):  # noqa: ANN001, ANN202
     """`GraphJudge` 를 대역 그래프 · 대역 인코더로 세운다. 그래프가 받은 요청을 적어 둔다."""
     from pathlib import Path  # noqa: PLC0415
     from types import SimpleNamespace  # noqa: PLC0415
@@ -638,6 +641,9 @@ def _graph_judge(monkeypatch: pytest.MonkeyPatch, sentences, judged_by="rule+enc
     )
     monkeypatch.setattr(app.api, "judge", core)
     monkeypatch.setattr(enc, "configured_dir", lambda: Path("지어낸-모델-폴더"))
+    monkeypatch.setattr(
+        enc, "checked_dir", lambda _d: None
+    )  # 🆕 D-333 — 잠금 대조는 test_model_lock 이 잰다
     monkeypatch.setattr(enc, "encoder_at", lambda _d: model)
     return judge.GraphJudge(), seen
 
@@ -662,6 +668,8 @@ UNSURE = {"verdict": "hold", "hold_reason": "low_conf"}
         ),
         ([{"verdict": "unjudged"}], False, "미판정"),
         ([{"verdict": "hold", "hold_reason": "premise_unknown"}], False, "hold"),
+        # 🆕 D-220 — 문장이 없으면 본 것이 없다. 통째 거리로 넘기지 않는다
+        ([], False, "판정할 문장 없음"),
     ],
 )
 def test_그래프_전체를_지나고_걸린_것은_떨군다(

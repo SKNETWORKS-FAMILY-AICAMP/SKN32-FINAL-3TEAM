@@ -119,7 +119,7 @@
       </details>
       {% endif %}
     </div>
-    <p class="history-detail-note">법령 기준 {{ opened.law_version }}</p>
+    <p class="history-detail-note">법령 기준 {{ opened.law_version|law_version_label }}</p>
 
     {# 문구를 검수 입력칸에 담기만 한다(`op=load`) — 판정은 이용자가 「검수」를 눌러야 돈다. 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4) #}
     <form method="post" action="/u/judge">

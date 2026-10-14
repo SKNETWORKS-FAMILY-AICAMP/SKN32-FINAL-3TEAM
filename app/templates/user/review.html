@@ -389,8 +389,9 @@
         {% if rw %}{% set rw_kind = "result" %}
         {% elif s.infeasibility and s.infeasibility.value == "A" %}{% set rw_kind = "a" %}
         {# 🆕 2026-10-08 — 고쳐 쓰기 서버를 두지 않은 환경. 누를 수 없는 버튼을 그리지 않는다 (D-146) #}
-        {% elif s.violations and not rewrite_enabled|default(true) %}{% set rw_kind = "off" %}
-        {% elif s.violations %}{% set rw_kind = "button" %}
+        {#- 🆕 2026-10-14 (D-323 보충) — 사전 유형이 없어도 인코더 추정 유형이 있으면 연다(`guessed_types`). 결과의 「불가」는 다르게 그린다 #}
+        {% elif (s.violations or s|guessed_types) and not rewrite_enabled|default(true) %}{% set rw_kind = "off" %}
+        {% elif s.violations or s|guessed_types %}{% set rw_kind = "button" %}
         {% elif flag %}{% set rw_kind = "none" %}
         {% endif %}
         {% endif %}
@@ -423,9 +424,13 @@
         {% if s.violations or s.evidence_mismatch %}
         <p class="rv-types">
           {%- if s.violations %}{{ "걸린 유형" if hit else "유형 후보 — 확정 아님" }} · {% for x in s.violations %}{{ x.value|replace("_", " ") }}{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}
+          {%- set am = s|agreed_mark %}{% if am %} · <b class="rv-agree">{{ am }}</b>{% endif %}
           {%- if s.evidence_mismatch %}{% if s.violations %} · {% endif %}근거 불일치 · 재생성됨{% endif -%}
         </p>
         {% endif %}
+        {#- 🆕 2026-10-14 (D-330 보충 2) — 사전 유형 없이 인코더 후보만 있는 문장의 겉 표지. 유형 이름 · 확률은 접힌 칸 안에만 #}
+        {% set gm = s|guessed_mark %}
+        {% if gm %}<p class="rv-types rv-guess">{{ gm }}</p>{% endif %}
 
         {% if flag or s.violations or s.evidence or s.encoder_candidates or enc_on %}
         <details class="rv-more">
@@ -451,7 +456,7 @@
           <input type="hidden" name="premise" value="{{ premise }}">
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
-          <button type="submit" class="rv-rw-btn">이 문장 고쳐 쓰기 (10초 안팎)</button>
+          <button type="submit" class="rv-rw-btn">이 문장 고쳐 쓰기{% if not s.violations %} · AI 추정 유형 기준{% endif %} (10초 안팎)</button>
         </form>
         {% endif %}
       </div>
@@ -506,7 +511,8 @@
             {% endif %}
             {% endfor %}
             {% for c in s.encoder_candidates if c.moved_from and not premise %}
-            <p class="rv-note">「{{ c.violation.value|replace("_", " ") }}」 추정은 건강기능식품인데 이 기능성으로 인정받지 않았다면의 것이에요.</p>
+            {#- 🔄 2026-10-14 (D-338) — 옮긴 갈래가 둘이 됐다. 말은 `app/reasons.py` `MOVED_NOTES` 한 곳 #}
+            {% set mn = c|moved_note %}{% if mn %}<p class="rv-note">「{{ c.violation.value|replace("_", " ") }}」 추정은 {{ mn }}</p>{% endif %}
             {% endfor %}
             {% elif enc_on %}
             {# ⛔ 후보가 없다고 「문제없음」이라 적지 않는다. 인코더가 돌지 않았으면(`enc_on` 거짓) 아무것도 그리지 않는다 (D-323) #}
@@ -637,7 +643,7 @@
         <span class="rv-premise"><b>이 전제라면</b> · {{ b.criteria }}
           {%- if not b.verified %} <span class="rv-note">고르신 내용을 그대로 받은 결과예요 — 인정번호 대조는 하지 않았어요.</span>{% endif %}</span>
       </div>
-      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r, "+enc:" in result.judged_by) }}{% endfor %}
+      {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r, result.judged_by|encoder_ran) }}{% endfor %}
       {# 「다시 선택」은 위험도 판정 바로 아래 — 증명서 · 근거 보기보다 위다 (2026-10-01) #}
       <div class="rv-redo">
         {% if r < max_redo %}
@@ -681,7 +687,7 @@
 
     {# 기록되는 판정 — 고르기 전에만 보인다(회차마다). 유형을 모를 때의 가장 보수적인 경우다 (D-263 ①) #}
     <div class="rv-rec">
-      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), enc_on="+enc:" in result.judged_by) }}{% endfor %}
+      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), enc_on=result.judged_by|encoder_ran) }}{% endfor %}
       {% if result.certificate %}
       <div class="rv-sub">
         <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서</h2>
@@ -828,7 +834,7 @@
       {{ branch_wizard(item) }}
       {% else %}
       {% for s in result.sentences %}
-      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on="+enc:" in result.judged_by) }}
+      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on=result.judged_by|encoder_ran) }}
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}
@@ -887,11 +893,11 @@
     <details class="rv-card rv-dev">
       <summary>개발자 정보 — 판정 메타{% if results|length > 1 %} · 문구 {{ item.n }}{% endif %}</summary>
       <table>
-        <tr><th>법령판</th><td>{{ result.law_version }}</td></tr>
+        <tr><th>법령판</th><td>{{ result.law_version|law_version_label }}</td></tr>
         <tr><th>판정 버전</th><td>{{ result.judged_by }}</td></tr>
         <tr><th>라운드</th><td>{{ result.attempt }}</td></tr>
         {# 🆕 2026-10-12 (ksr · 안) — 인코더가 돌았는가. 돌지 않았으면 문장에 추정 줄이 없다 — 「추정 없음」과 가른다 #}
-        <tr><th>AI 추정</th><td>{{ "사용함" if "+enc:" in result.judged_by else "사용 안 함 — 문장에 AI 추정 유형이 나오지 않아요" }}</td></tr>
+        <tr><th>AI 추정</th><td>{{ "사용함" if result.judged_by|encoder_ran else "사용 안 함 — 문장에 AI 추정 유형이 나오지 않아요" }}</td></tr>
       </table>
       {% if result.timings %}
       <table>

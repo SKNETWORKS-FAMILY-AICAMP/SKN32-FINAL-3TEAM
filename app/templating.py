@@ -15,7 +15,8 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
-from app import reasons
+from app import encoder, reasons
+from app.contracts import LAW_VERSION_UNKNOWN
 
 TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates"
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
@@ -48,3 +49,26 @@ def evidence_parts(evidence: object) -> dict[str, list]:
 templates.env.filters["evidence_parts"] = evidence_parts
 # 🆕 2026-10-11 — 보류 문장의 조건부 후보에 붙일 말. 문안과 규칙은 `app/reasons.py` 한 곳이다 (D-99)
 templates.env.filters["candidate_condition"] = reasons.candidate_condition
+# 🆕 2026-10-14 (D-330 보충 2 · D-323 보충) — 사전 유형 없이 인코더 유형 후보만 있는 문장. 규칙 · 문안은 `app/reasons.py` 한 곳 (D-99)
+templates.env.filters["guessed_types"] = reasons.guessed_types
+templates.env.filters["guessed_mark"] = reasons.guessed_mark
+templates.env.filters["agreed_mark"] = reasons.agreed_mark
+templates.env.filters["moved_note"] = reasons.moved_note
+templates.env.globals["ENC_REMAINS_MARK"] = reasons.ENC_REMAINS_MARK
+
+
+def law_version_label(value: object) -> str:
+    """법령 판 → 화면 글자 (🆕 2026-10-13). 모르는 판은 「미확인」이다 — 내부 값 `unknown` 을 그리지 않는다.
+
+    🔴 빈 값 · `None` 도 「미확인」이다 — 비어 있다고 아무 글자 없이 두면 판을 확인한 것처럼 읽힌다 (D-220).
+    """
+    if value is None or value == "" or value == LAW_VERSION_UNKNOWN:
+        return "미확인"
+    return str(value)
+
+
+templates.env.filters["law_version_label"] = law_version_label
+
+# 🆕 2026-10-13 (D-333) — 이 응답에서 인코더가 돌았는가. ⛔ 종전에는 화면이 `"+enc:" in judged_by` 를 직접 적었다 —
+#    표지가 `+encb:` 로 바뀌면 화면만 조용히 「사용 안 함」이 된다. 표지 글자는 `app/encoder.py` 한 곳이다 (D-99)
+templates.env.filters["encoder_ran"] = encoder.ran
