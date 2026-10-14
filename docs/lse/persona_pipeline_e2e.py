@@ -80,7 +80,8 @@ POLISH_CATEGORIES = ("식품", "건기식", "화장품")
 RETRY = 0
 #: 🆕 10-14 다듬기 방식 — "model"(2단계 어댑터 · 종전) 또는 "rule"(`polish_rule.py` · 모양별 쓰는 법 문구를 붙임 · 모델 안 씀).
 #:    규칙판은 처음 보는 제품 2 벌(22 · 20)에서 지어낸 쓰는 법이 거의 없었다(dev 평가 §6-8). 고객층 말투(`persona`)는 늘 모델이다
-POLISH_MODE = "model"
+#:    🔄 10-14 — 기본을 규칙판으로(사용자 결정 · 팀장 알림). 다듬기 어댑터는 고객층 말투에만 쓴다
+POLISH_MODE = "rule"
 RETRY_TEMPERATURE = 0.7
 RETRY_TOP_P = 0.9
 #: 고를 수 있는 고객층 — 🚨 D-27 고민 · 증상 축 없음. 실제 서비스에서는 세그먼트(`app.contracts.Segment.label`)가 들어온다
