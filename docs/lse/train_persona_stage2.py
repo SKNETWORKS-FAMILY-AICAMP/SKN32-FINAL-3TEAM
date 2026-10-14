@@ -47,6 +47,7 @@ ADAPTER = ROOT / "models" / f"copylane_sllm_persona_adapter{_SFX}"
 # 평가 출력은 공개 원천 문장뿐이지만, 실험 산출물은 한곳(_private)에 모은다
 OUT = LSE / "_private" / f"persona_stage2_eval{_SFX}.jsonl"
 SEED = 20261001
+POLISH2 = False  # 🆕 10-14 `--v2` — 5차 다듬기 데이터
 EPOCHS, LR, MAX_LEN = 3, 2e-4, 384
 
 SYSTEM = (
@@ -80,7 +81,7 @@ def load(polish: bool = False, safe: bool = False) -> list[dict]:
     if polish:
         # 🆕 10-12 — 제품 사실 문장 → 자연스러운 광고 문장(고객층 없음 · 고객층 말투) · `build_persona_polish.py`
         # 🆕 10-12 — `--safe` 는 쓰는 법을 짚지 않는 「안전한 말투」판(`build_persona_polish.py --safe`)
-        name = "persona_polish_safe.jsonl" if safe else "persona_polish.jsonl"
+        name = "persona_polish_safe.jsonl" if safe else ("persona_polish2.jsonl" if POLISH2 else "persona_polish.jsonl")
         rows += [json.loads(line) for line in (LSE / name).open(encoding="utf-8")]
     return rows
 
@@ -255,16 +256,31 @@ def main() -> None:
         help="🆕 10-12 다듬기 데이터(persona_polish.jsonl)를 더해 따로 저장(_polish)",
     )
     ap.add_argument(
+        "--v2",
+        action="store_true",
+        help="🆕 10-14 --polish 와 함께 — 5차 다듬기 데이터(persona_polish2.jsonl · 몸 부위 · 먹는 모양)로 _polish2",
+    )
+    ap.add_argument(
+        "--adapter-sfx",
+        default=None,
+        help="🆕 10-14 --eval-only 와 함께 — 다른 판 어댑터로 같은 평가를 돈다(예: _polish 를 5차 평가에)",
+    )
+    ap.add_argument(
         "--safe",
         action="store_true",
         help="🆕 10-12 --polish 와 함께 — 안전한 말투판(_polish_safe)",
     )
     args = ap.parse_args()
-    global ADAPTER, OUT
+    global ADAPTER, OUT, POLISH2
+    POLISH2 = args.v2
     if args.polish:
-        sfx = "_polish_safe" if args.safe else "_polish"
+        sfx = "_polish_safe" if args.safe else ("_polish2" if args.v2 else "_polish")
+        data_sfx = sfx
+        if args.adapter_sfx:
+            assert args.eval_only, "--adapter-sfx 는 --eval-only 에서만"
+            sfx = args.adapter_sfx
         ADAPTER = ADAPTER.with_name(ADAPTER.name + sfx)
-        OUT = OUT.with_name(OUT.stem + sfx + ".jsonl")
+        OUT = OUT.with_name(OUT.stem + data_sfx + ("" if sfx == data_sfx else f"_by{sfx}") + ".jsonl")
     torch.manual_seed(SEED)
     rows = load(args.polish, args.safe)
     rows = leak_guard(rows)
