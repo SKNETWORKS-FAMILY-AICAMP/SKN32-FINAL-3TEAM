@@ -1,13 +1,13 @@
-"""D4-13 KcELECTRA — D4-10 학습에서 백본만 바꾼 판과 견준다 (박수진 · 2026-10-14 · 발표용 비교 · 확률만 읽는다)
+"""E1-00 KcELECTRA — D4-10 학습에서 백본만 바꾼 판과 견준다 (박수진 · 2026-10-14 · 발표용 비교 · 확률만 읽는다)
 
-D4-13 노트북(`copylane_encoder_D4-13_KcELECTRA_백본비교_20261014.ipynb`)이 낸 시드 · 입력별 행별 확률을
+E1-00 노트북(`copylane_encoder_E1-00_KcELECTRA_백본비교_20261014.ipynb`)이 낸 시드 · 입력별 행별 확률을
 D4-10(KcBERT · 같은 데이터 · 같은 설정 · 같은 시드)의 행별 확률과 같은 D-324 문턱 규칙 · 같은 채점으로 견준다.
 
-  uv run python docs\\psj\\e2e_prototype\\d4_13_electra.py --dir <D4-00 CSV> --d10-dir <D4-10 CSV> --d13-dir <D4-13 CSV> --review-csv <검수판> --out-md docs\\psj\\reports\\D4-13_KcELECTRA비교_dev_YYYYMMDD.md
-  `--self-test` — D4-13 자리에 D4-10 CSV 를 넣는다 · 차이가 0 이고 D4-10 수가 기록(위반 탐지 464.7 · 479.3)과 같아야 한다
+  uv run python docs\\psj\\e2e_prototype\\e1_00_electra.py --dir <D4-00 CSV> --d10-dir <D4-10 CSV> --e1-dir <E1-00 CSV> --review-csv <검수판> --out-md docs\\psj\\reports\\E1-00_KcELECTRA비교_dev_YYYYMMDD.md
+  `--self-test` — E1-00 자리에 D4-10 CSV 를 넣는다 · 차이가 0 이고 D4-10 수가 기록(위반 탐지 464.7 · 479.3)과 같아야 한다
 
   · 문턱 — D-324 (card17_adopt.d324_thresholds · 목표 = 카드 17 기준선 재현 3 시드 평균) · 백본 · 입력 · 시드마다 고른다
-  · 판단 규칙 (D4 실험기록 「D4-13」 에 먼저 적었다) — 입력마다 6종 PR-AUC 시드 평균 차이가 0.02 이내면 「동등」, 넘으면 높은 쪽 「우세」.
+  · 판단 규칙 (D4 실험기록 「E1-00」 에 먼저 적었다) — 입력마다 6종 PR-AUC 시드 평균 차이가 0.02 이내면 「동등」, 넘으면 높은 쪽 「우세」.
     나머지 수(탐지 · 적중 · 오인 · 오판정 · 정상 문구)는 같이 적기만 한다 — 채택 판정이 아니다
 🔴 dev 전용 (D-175 · 봉인 평가셋은 D4-T 한 번으로 끝). 건수만 적는다 (D-249).
 """
@@ -22,7 +22,7 @@ from d4_04_product_input import measure
 from d4_10_fact_train import D410, FACT, MODES, fact_dev_ids
 
 SEEDS = ca.SEEDS
-D413 = "copylane-encoder-kcelectra-D4-13-KcELECTRA"
+E100 = "copylane-encoder-kcelectra-E1-00-KcELECTRA"
 EQ = 0.02
 SELF_DET = {"품목": 464.7, "모름": 479.3}
 
@@ -31,14 +31,14 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", required=True, help="D4-00 · 카드 17 행별 확률 폴더 (D-324 목표 재현율)")
     ap.add_argument("--d10-dir", required=True, help="D4-10 행별 확률 폴더 (KcBERT)")
-    ap.add_argument("--d13-dir", default=None, help="D4-13 행별 확률 폴더 (KcELECTRA · D4-13_csv.zip 을 푼 곳)")
+    ap.add_argument("--e1-dir", default=None, help="E1-00 행별 확률 폴더 (KcELECTRA · E1-00_csv.zip 을 푼 곳)")
     ap.add_argument("--review-csv", required=True)
     ap.add_argument("--golden", default=sd.GOLDEN)
     ap.add_argument("--out-md", default=None)
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
-    if not a.self_test and not a.d13_dir:
-        ap.error("--d13-dir 이 필요하다")
+    if not a.self_test and not a.e1_dir:
+        ap.error("--e1-dir 이 필요하다")
 
     dev, gsha, mark = sd.load_dev(a.golden)
     C = sd.CONF8
@@ -51,7 +51,7 @@ def main(argv=None):
     print(f"[INFO] golden {gsha[:12]} · dev {len(dev)}행 · 지문 {mark} · 사실 전제 dev {len(fids)}행")
 
     models = {"KcBERT (D4-10)": (a.d10_dir, D410),
-              "KcELECTRA (D4-13)": (a.d10_dir, D410) if a.self_test else (a.d13_dir, D413)}
+              "KcELECTRA (E1-00)": (a.d10_dir, D410) if a.self_test else (a.e1_dir, E100)}
     R = {}
     for name, (d, base) in models.items():
         for m in MODES:
@@ -85,7 +85,7 @@ def main(argv=None):
 
     sc, nn = R[(names[0], "품목", SEEDS[0])]["scored"], R[(names[0], "품목", SEEDS[0])]["neg_n"]
     nsyn = R[(names[0], "품목", SEEDS[0])]["syn_n"]
-    md = ["# D4-13 KcELECTRA — D4-10 학습에서 백본만 바꾼 비교 (dev)", "",
+    md = ["# E1-00 KcELECTRA — D4-10 학습에서 백본만 바꾼 비교 (dev)", "",
           f"> golden `{gsha[:12]}` · dev `{mark}` · 시드 48 · 49 · 50 평균 · 백본 · 입력 · 시드마다 D-324 문턱 · 인코더 단독 · 발표용 비교(채택 판정 아님) · 건수만 적는다", ""]
     verdict = {}
     for m, lab in MODES.items():
