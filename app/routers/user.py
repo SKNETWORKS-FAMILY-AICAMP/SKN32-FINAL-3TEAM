@@ -1201,6 +1201,12 @@ async def generate(
     ctx: dict = {"picked": picked, "branch": branch, "errors": errors}
     if errors:
         return _render(request, "user/generate.html", _gen_ctx(ctx))
+    # 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구는 생성 판정에서 빠진다 — **입력 때 한 번** 따로 판정해 경고한다(떨구지 않는다).
+    #    엔진이 꺼져 있어도 경고는 그린다 — 문구는 적힌 그대로 광고 생성으로 넘어가기 때문이다
+    if picked["fixed"]:
+        ctx["fixed_notes"] = await run_in_threadpool(
+            _fixed_notes, picked["fixed"], f"{picked['category']}_{picked['cert']}"
+        )
     if why := copygen.off_reason():
         ctx |= {"engine_pending": True, "engine_why": why}
         return _render(request, "user/generate.html", _gen_ctx(ctx))
@@ -1406,6 +1412,43 @@ def _compose_origin(form: dict[str, list[str]]) -> dict:
     }
 
 
+#: 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구를 따로 판정할 때 경고하는 유형. 인정 전제에서도 위반이다(D-319 ④′ ③ ·
+#:    화장품은 D-338 로 질병 · 건기식 오인이 의약품 오인으로 옮겨 온다). ⛔ 거짓_과장 · 건강기능식품_오인은 넣지 않는다 —
+#:    진짜 인정 문구(「도움을 줄 수 있음」)에 늘 걸린다(사전 대조 · 인정 문구 조각 347 중 거짓_과장 53 · 판정 요청 10-14 §1)
+_FIXED_WARN = frozenset({"질병_예방치료_표방", "의약품_오인"})
+
+
+def _fixed_notes(fixed: str, branch_key: str) -> list[dict]:
+    """인정 · 심사 문구 경고 — `[{"level": "strong" | "weak" | "unchecked", "text": …}]` (🆕 2026-10-14 · D-341 결정 1).
+
+    ★ 그 분기의 **판정 전제**(`_GEN_BRANCHES` · 건기식 「예」 → 건기식_인정 · 화장품 「예」 → 화장품)로 문구 하나만 판정하고
+       그 전제 분기의 문장을 읽는다. 분기가 없으면(기준 문안 미확정) 기록 판정의 문장을 읽는다.
+    ★ **경고일 뿐이다** — 생성 후보 · 광고 초안을 떨구지 않는다. 생성과 광고 생성이 이 함수 하나를 쓴다 (D-99).
+    🔴 엔진에 못 닿으면 「확인 못 함」을 낸다 — 빈 목록(경고 없음)으로 돌려주지 않는다 (D-220). 문구가 없으면 빈 목록.
+    """
+    gb = _GEN_BRANCHES.get(branch_key)
+    if not fixed or gb is None:
+        return []
+    from app import premise as pm  # noqa: PLC0415
+
+    premise = gb["premise"]
+    status, res = _core_judge(fixed, pm.product_of(premise))
+    if status != "ok":
+        return [{"level": "unchecked", "text": reasons.FIXED_UNCHECKED}]
+    sents = next(
+        (b.sentences for b in getattr(res, "branches", None) or () if b.premise is premise),
+        res.sentences,
+    )
+    strong = sorted({v.value for s in sents for v in s.violations} & _FIXED_WARN)
+    weak = sorted({c.violation.value for s in sents for c in s.encoder_candidates} & _FIXED_WARN)
+    if strong:
+        names = " · ".join(t.replace("_", " ") for t in strong)
+        return [{"level": "strong", "text": reasons.FIXED_STRONG.format(types=names)}]
+    if weak:
+        return [{"level": "weak", "text": reasons.FIXED_WEAK}]
+    return []
+
+
 def _judged_part(text: str, fixed: str) -> str:
     """판정에 넣을 글자 — 인정 · 심사 문구를 뺀 나머지."""
     return text.replace(fixed, " ").strip() if fixed else text
@@ -1454,6 +1497,9 @@ async def compose(request: Request) -> HTMLResponse:
     # 🆕 2026-10-13 — 인정 · 심사 문구가 그 문구에 그대로 들어 있을 때만 뺀다. 문구를 고쳐 인정 문구가 깨졌으면 전부 판정한다
     fixed = origin["fixed"] if origin["fixed"] and origin["fixed"] in prompt else ""
     part = _judged_part(prompt, fixed)
+    if fixed:
+        # 🆕 2026-10-14 (D-341 결정 1) — 판정에서 뺀 인정 · 심사 문구는 따로 판정해 경고를 같이 그린다(카피 생성과 같은 함수)
+        base["fixed_notes"] = await run_in_threadpool(_fixed_notes, fixed, origin["branch"])
     if not part:
         return _render(
             request,

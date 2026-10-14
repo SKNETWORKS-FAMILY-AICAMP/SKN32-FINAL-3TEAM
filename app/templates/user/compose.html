@@ -250,6 +250,10 @@ main:has(.cp-ed) { max-width: 96rem; }
     {%- if origin.fixed %} · 인정 · 심사 문구 「{{ origin.fixed }}」는 판정에서 빼요.
     <b>이용자가 적은 값이고 확인되지 않았어요.</b>{% endif %}
   </p>
+  {# 🆕 2026-10-14 (D-341 결정 1) — 뺀 인정 · 심사 문구를 따로 판정한 경고. 문안은 `app/reasons.py` (FIXED_*) #}
+  {% for n in fixed_notes or [] %}
+  <p class="cp-note cp-fixed-{{ n.level }}" style="margin:0 0 .4rem"><b>{{ n.text }}</b></p>
+  {% endfor %}
   {% endif %}
   {% if carried %}
   {# 🆕 2026-10-08 — 카피 생성의 후보 카드에서 넘어왔다. ⬜ 엔진이 붙으면 직접 입력이 아니라 `source_copy` 경로로 옮긴다 #}
@@ -295,6 +299,10 @@ main:has(.cp-ed) { max-width: 96rem; }
 </div>
 {% endif %}
 
+{# 🆕 2026-10-14 (D-341 결정 1) — 편집기를 열 때도 인정 · 심사 문구 경고를 그린다(입력 폼 쪽은 위 판정 기준 줄 아래) #}
+{% if draft and fixed_notes %}
+{% for n in fixed_notes %}<p class="cp-note cp-fixed-{{ n.level }}" style="margin:0 0 .4rem"><b>{{ n.text }}</b></p>{% endfor %}
+{% endif %}
 {% if draft %}
 {# 🆕 2026-10-12 — 섹션 편집기. 뼈대만 서버가 그리고 안은 `user_compose.js` 가 채운다. 초안은 아래 JSON 칸으로 넘긴다
    (`tojson` 이 `<` `>` `&` `'` 를 이스케이프한다 · 실행되는 스크립트가 아니라 자료 칸이라 CSP 에 걸리지 않는다) #}
