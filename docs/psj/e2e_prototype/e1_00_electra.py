@@ -4,6 +4,7 @@ E1-00 노트북(`copylane_encoder_E1-00_KcELECTRA_백본비교_20261014.ipynb`)�
 D4-10(KcBERT · 같은 데이터 · 같은 설정 · 같은 시드)의 행별 확률과 같은 D-324 문턱 규칙 · 같은 채점으로 견준다.
 
   uv run python docs\\psj\\e2e_prototype\\e1_00_electra.py --dir <D4-00 CSV> --d10-dir <D4-10 CSV> --e1-dir <E1-00 CSV> --review-csv <검수판> --out-md docs\\psj\\reports\\E1-00_KcELECTRA비교_dev_YYYYMMDD.md
+  🆕 E1-01 (lr 5e-5) — `--run E1-01 --e1-dir <E1-01 CSV>` (기준 D4-10) · `--run E1-01 --ref E1-00 --ref-dir <E1-00 CSV> --e1-dir <E1-01 CSV>` (lr 효과)
   `--self-test` — E1-00 자리에 D4-10 CSV 를 넣는다 · 차이가 0 이고 D4-10 수가 기록(위반 탐지 464.7 · 479.3)과 같아야 한다
 
   · 문턱 — D-324 (card17_adopt.d324_thresholds · 목표 = 카드 17 기준선 재현 3 시드 평균) · 백본 · 입력 · 시드마다 고른다
@@ -23,6 +24,10 @@ from d4_10_fact_train import D410, FACT, MODES, fact_dev_ids
 
 SEEDS = ca.SEEDS
 E100 = "copylane-encoder-kcelectra-E1-00-KcELECTRA"
+# 🆕 E1-01 — 같은 스크립트로 판을 고른다. 키 = --run · --ref 값
+RUNS = {"D4-10": (D410, "KcBERT lr 2e-5 (D4-10)"),
+        "E1-00": (E100, "KcELECTRA lr 2e-5 (E1-00)"),
+        "E1-01": ("copylane-encoder-kcelectra-E1-01-KcELECTRA-lr5e-5", "KcELECTRA lr 5e-5 (E1-01)")}
 EQ = 0.02
 SELF_DET = {"품목": 464.7, "모름": 479.3}
 
@@ -33,6 +38,9 @@ def main(argv=None):
     ap.add_argument("--d10-dir", required=True, help="D4-10 행별 확률 폴더 (KcBERT)")
     ap.add_argument("--e1-dir", default=None, help="E1-00 행별 확률 폴더 (KcELECTRA · E1-00_csv.zip 을 푼 곳)")
     ap.add_argument("--review-csv", required=True)
+    ap.add_argument("--run", default="E1-00", choices=["E1-00", "E1-01"], help="견줄 ELECTRA 판 (--e1-dir 의 CSV)")
+    ap.add_argument("--ref", default="D4-10", choices=["D4-10", "E1-00"], help="기준 판 — D4-10 은 --d10-dir · E1-00 은 --ref-dir")
+    ap.add_argument("--ref-dir", default=None, help="--ref E1-00 일 때 E1-00 CSV 폴더")
     ap.add_argument("--golden", default=sd.GOLDEN)
     ap.add_argument("--out-md", default=None)
     ap.add_argument("--self-test", action="store_true")
@@ -50,8 +58,11 @@ def main(argv=None):
     target = {x: statistics.mean(rec[s][x] for s in SEEDS) for x in rec[SEEDS[0]]}
     print(f"[INFO] golden {gsha[:12]} · dev {len(dev)}행 · 지문 {mark} · 사실 전제 dev {len(fids)}행")
 
-    models = {"KcBERT (D4-10)": (a.d10_dir, D410),
-              "KcELECTRA (E1-00)": (a.d10_dir, D410) if a.self_test else (a.e1_dir, E100)}
+    ref_dir = a.d10_dir if a.ref == "D4-10" else a.ref_dir
+    if not ref_dir:
+        ap.error("--ref E1-00 이면 --ref-dir 가 필요하다")
+    models = {RUNS[a.ref][1]: (ref_dir, RUNS[a.ref][0]),
+              RUNS[a.run][1]: (a.d10_dir, D410) if a.self_test else (a.e1_dir, RUNS[a.run][0])}
     R = {}
     for name, (d, base) in models.items():
         for m in MODES:
@@ -85,13 +96,13 @@ def main(argv=None):
 
     sc, nn = R[(names[0], "품목", SEEDS[0])]["scored"], R[(names[0], "품목", SEEDS[0])]["neg_n"]
     nsyn = R[(names[0], "품목", SEEDS[0])]["syn_n"]
-    md = ["# E1-00 KcELECTRA — D4-10 학습에서 백본만 바꾼 비교 (dev)", "",
+    md = [f"# {a.run} KcELECTRA — {a.ref} 대비 (dev)", "",
           f"> golden `{gsha[:12]}` · dev `{mark}` · 시드 48 · 49 · 50 평균 · 백본 · 입력 · 시드마다 D-324 문턱 · 인코더 단독 · 발표용 비교(채택 판정 아님) · 건수만 적는다", ""]
     verdict = {}
     for m, lab in MODES.items():
         diff = mn(names[1], m, "prauc6") - mn(names[0], m, "prauc6")
         verdict[m] = "동등" if abs(diff) <= EQ else (f"{names[1]} 우세" if diff > 0 else f"{names[0]} 우세")
-        md += [f"## 입력 {lab}", "", "| 지표 | " + " | ".join(names) + " | 차이 (ELECTRA − BERT) |", "|---|---:|---:|---:|"]
+        md += [f"## 입력 {lab}", "", "| 지표 | " + " | ".join(names) + " | 차이 (뒤 − 앞) |", "|---|---:|---:|---:|"]
         rows = [("6종 PR-AUC (시드 평균 ± 표준편차)", "prauc6", ".4f"), (f"위반 탐지 (/{sc})", "det", ".1f"), (f"정답 유형 적중 (/{sc})", "hit", ".1f"),
                 (f"유형 오인 (/{sc})", "F1", ".1f"), (f"놓침 (/{sc})", "F2", ".1f"), (f"적법 원천(D · L) 오판정 (/{nn})", "neg", ".1f"),
                 (f"검수 적법 정상 문구 후보 (/{nsyn})", "syn_flag", ".1f"), (f"사실 전제 dev 후보 (/{len(fids)})", "fact", ".1f")]
