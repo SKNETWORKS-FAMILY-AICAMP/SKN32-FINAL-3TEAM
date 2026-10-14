@@ -74,6 +74,12 @@ NEUTRAL_PERSONA = "일반 소비자 — 특정 고객층을 짚지 않고, 제�
 #: 🆕 10-13 — 다듬기는 **서비스 범위 품목**에서만. dev 후보(부동산 · 교육 · 가전 · 품목 모름)에 다듬기를 붙이면 말이 안 되는 쓰임이 절반 가까이 붙었다
 #:    (`eval_polish_dev.py` · dev 평가 §6-3-1). 쓰는 법 사전(`usage_dict.py`)도 식품 · 화장품 모양만 안다 — 그 밖은 담백한 안(1단계)만 낸다
 POLISH_CATEGORIES = ("식품", "건기식", "화장품")
+#: 🆕 10-14 다시 만들기(D-126 · 서버 안) — 1단계가 **관문에 걸려 보류**되면 표본 추출로 몇 번 더 써 보고 관문을 넘는 첫 안을 낸다.
+#:    0 이면 끈다. ⛔ 「조건 확인 필요」 보류는 다시 쓰지 않는다 — 인정 · 심사 제품 전용 문구를 말만 바꿔 빠져나가면 위반 포장이다(v13 포장 4).
+#:    ⛔ 「만들지 못했어요」 · 후보는 다시 쓰지 않는다. 다시 쓴 안도 후처리 · 관문 · 2단계 관문을 똑같이 지난다. 씨앗을 고정해 같은 입력이면 같은 출력
+RETRY = 0
+RETRY_TEMPERATURE = 0.7
+RETRY_TOP_P = 0.9
 #: 고를 수 있는 고객층 — 🚨 D-27 고민 · 증상 축 없음. 실제 서비스에서는 세그먼트(`app.contracts.Segment.label`)가 들어온다
 PERSONAS = {
     "p1": "30대 직장인 — 바쁜 일상 속 간편한 관리",
@@ -87,12 +93,17 @@ PERSONAS = {
 }
 
 
-def chat(model, tok, system: str, user: str, n: int) -> str:
+def chat(model, tok, system: str, user: str, n: int, seed: int | None = None) -> str:
+    """`seed` 가 없으면 그리디(종전 · 재현) · 있으면 그 씨앗으로 표본 추출(🆕 10-14 다시 만들기)."""
     msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     prompt = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
     ids = tok(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
-        out = model.generate(**ids, max_new_tokens=n, do_sample=False)
+        if seed is None:
+            out = model.generate(**ids, max_new_tokens=n, do_sample=False)
+        else:
+            torch.manual_seed(seed)
+            out = model.generate(**ids, max_new_tokens=n, do_sample=True, temperature=RETRY_TEMPERATURE, top_p=RETRY_TOP_P)
     return tok.decode(out[0][ids["input_ids"].shape[1]:], skip_special_tokens=True)
 
 
@@ -130,8 +141,20 @@ def run_one(model, tok, text: str, labels: list[str], persona: str | None = None
 
 
 def _run_one(model, tok, text: str, labels: list[str], persona: str | None = None, category: str | None = None) -> dict:
+    res = _attempt(model, tok, text, labels, persona, category)
+    if not RETRY or res["outcome"] != "hold" or any(x.startswith("조건 확인 필요") for x in res.get("gate1") or []):
+        return res
+    for k in range(1, RETRY + 1):
+        r2 = _attempt(model, tok, text, labels, persona, category, seed=k)
+        if r2["outcome"] == "candidate":
+            return {**r2, "retry": k, "first_gate1": res["gate1"]}  # 처음 안이 왜 걸렸는지 남긴다
+    return {**res, "retry": 0, "retry_tried": RETRY}
+
+
+def _attempt(model, tok, text: str, labels: list[str], persona: str | None = None, category: str | None = None,
+             seed: int | None = None) -> dict:
     model.set_adapter("stage1")
-    out1 = parse_stage1(chat(model, tok, STAGE1_SYSTEM, stage1_user({"input": text, "violation_types": labels}), 220))
+    out1 = parse_stage1(chat(model, tok, STAGE1_SYSTEM, stage1_user({"input": text, "violation_types": labels}), 220, seed))
     infeasible = out1.get("infeasible") if out1 else None
     s1 = out1.get("body") if out1 and not infeasible else None
     res = {"input": text, "stage1": s1, "infeasible": infeasible, "gate1": None, "persona": persona,
