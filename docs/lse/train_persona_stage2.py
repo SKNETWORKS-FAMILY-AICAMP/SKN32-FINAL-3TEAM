@@ -47,6 +47,12 @@ ADAPTER = ROOT / "models" / f"copylane_sllm_persona_adapter{_SFX}"
 # 평가 출력은 공개 원천 문장뿐이지만, 실험 산출물은 한곳(_private)에 모은다
 OUT = LSE / "_private" / f"persona_stage2_eval{_SFX}.jsonl"
 SEED = 20261001
+#: 🆕 10-14 `--hint` — 입력에 「쓰는 법:」 한 줄을 넣는 6차(`_polish3`). 시스템 프롬프트에 그 규칙을 더한다
+HINT = False
+HINT_RULE = (
+    "- '쓰는 법'이 주어지면 그 쓰는 법과 바르는 자리만 쓴다. 다른 먹는 법 · 바르는 법 · 몸 부위를 지어내지 않는다.\n"
+    "- '쓰는 법: 없음'이면 먹는 법 · 바르는 법을 쓰지 말고 두는 곳 · 때만 말하거나 끝맺기만 한다.\n"
+)
 POLISH2 = False  # 🆕 10-14 `--v2` — 5차 다듬기 데이터
 EPOCHS, LR, MAX_LEN = 3, 2e-4, 384
 
@@ -117,7 +123,13 @@ def leak_guard(rows: list[dict]) -> list[dict]:
 
 
 def user_msg(r: dict) -> str:
-    return f"검수 통과 문장: {r['input']}\n대상 고객: {r['persona_label']}"
+    base = f"검수 통과 문장: {r['input']}\n대상 고객: {r['persona_label']}"
+    if HINT:
+        # 🆕 10-14 다듬기 6차 — 쓰는 법을 알려 주고 그대로 쓰게 한다(지어내지 않게 · `usage_dict.usage_hint`)
+        from usage_dict import usage_hint  # noqa: PLC0415
+
+        base += f"\n쓰는 법: {usage_hint(r['input'])}"
+    return base
 
 
 def rule_check(r: dict, body: str | None) -> list[str]:
@@ -166,6 +178,9 @@ def train(model, tok, rows: list[dict]) -> None:
         ids = tok(full, add_special_tokens=False, truncation=True, max_length=MAX_LEN)["input_ids"]
         labels = [-100] * min(len(p_ids), len(ids)) + ids[len(p_ids) :]
         data.append((ids, labels))
+    # 🆕 10-14 — 프롬프트가 길이 상한을 넘으면 정답이 통째로 잘려 배울 것이 없다 → 손실이 nan 이 되어 어댑터가 망가진다(6차 첫 시도 · 508 행 전부)
+    empty = sum(all(x == -100 for x in lab) for _, lab in data)
+    assert not empty, f"정답이 길이 상한({MAX_LEN})에 잘려 사라진 행 {empty} 개 — MAX_LEN 을 늘린다"
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=LR)
     steps = EPOCHS * len(data)
     sched = get_cosine_schedule_with_warmup(opt, int(0.05 * steps), steps)
@@ -179,6 +194,8 @@ def train(model, tok, rows: list[dict]) -> None:
                 input_ids=torch.tensor([ids], device=model.device),
                 labels=torch.tensor([labels], device=model.device),
             )
+            if torch.isnan(out.loss):
+                raise RuntimeError("손실이 nan — 학습을 멈춘다(🆕 10-14 · 끝까지 돌려 망가진 어댑터를 저장하지 않는다)")
             out.loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
@@ -261,6 +278,11 @@ def main() -> None:
         help="🆕 10-14 --polish 와 함께 — 5차 다듬기 데이터(persona_polish2.jsonl · 몸 부위 · 먹는 모양)로 _polish2",
     )
     ap.add_argument(
+        "--hint",
+        action="store_true",
+        help="🆕 10-14 --polish --v2 와 함께 — 입력에 「쓰는 법:」 한 줄(다듬기 6차 · _polish3)",
+    )
+    ap.add_argument(
         "--adapter-sfx",
         default=None,
         help="🆕 10-14 --eval-only 와 함께 — 다른 판 어댑터로 같은 평가를 돈다(예: _polish 를 5차 평가에)",
@@ -271,10 +293,15 @@ def main() -> None:
         help="🆕 10-12 --polish 와 함께 — 안전한 말투판(_polish_safe)",
     )
     args = ap.parse_args()
-    global ADAPTER, OUT, POLISH2
+    global ADAPTER, OUT, POLISH2, HINT, SYSTEM, MAX_LEN
     POLISH2 = args.v2
+    if args.hint:
+        assert args.polish and args.v2, "--hint 는 --polish --v2 와 함께"
+        HINT = True
+        MAX_LEN = 640  # 🆕 10-14 — 「쓰는 법」 줄 · 규칙이 붙어 프롬프트가 길다(최대 565 토큰)
+        SYSTEM = SYSTEM.replace("출력은 JSON 한 줄만", HINT_RULE + "출력은 JSON 한 줄만")
     if args.polish:
-        sfx = "_polish_safe" if args.safe else ("_polish2" if args.v2 else "_polish")
+        sfx = "_polish_safe" if args.safe else ("_polish3" if args.hint else "_polish2" if args.v2 else "_polish")
         data_sfx = sfx
         if args.adapter_sfx:
             assert args.eval_only, "--adapter-sfx 는 --eval-only 에서만"
