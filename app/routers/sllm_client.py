@@ -121,6 +121,11 @@ def _well_formed(out: object) -> bool:
         isinstance(out["plain"], str) and out["plain"].strip()
     ):
         return False  # 🆕 10-12 — 담백한 안은 있으면 글자여야 한다
+    cond = out.get("conditional")
+    if cond is not None and not (
+        isinstance(cond, dict) and isinstance(cond.get("body"), str) and cond["body"].strip()
+    ):
+        return False  # 🆕 10-13 — 조건부 후보는 있으면 문장이 있어야 한다
     if out["outcome"] == "candidate":
         rw = out.get("rewrite")
         return isinstance(rw, dict) and isinstance(rw.get("body"), str) and bool(rw["body"].strip())

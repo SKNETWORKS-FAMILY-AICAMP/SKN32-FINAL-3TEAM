@@ -405,17 +405,10 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
     # 🔴 2026-09-29 — 통계·최근 이력은 **내 판정만** 센다 (P1-5 · `_owned_judgments`). 로그아웃이면 셀 대상이 없다.
     user = current_user(request, session)
     if user is None:
-        return _render(
-            request,
-            "user/index.html",
-            {
-                "need_login": True,
-                "total_month": None,
-                "violation_count": None,
-                "pass_rate": None,
-                "recent": [],
-            },
-        )
+        # 🔄 2026-10-14 (lse · 사용자 요청) — 로그인 전에 들어오면 **랜딩이 첫 화면**이다. 홈(통계)은 로그인한 사람의 것이다.
+        #    🚨 넘기지(303) 않고 이 주소에서 랜딩을 그린다 — 로그인 벽이 아니다(D-66 · 200 · 로그인 안내 · 「이력에 남지 않아요」 D-69).
+        #    「copylane 소개」 메뉴는 랜딩이 아니라 사용방법으로 간다(종전대로). DB 가 없을 때는 위에서 홈의 안내를 그린다
+        return templates.TemplateResponse(request, "user/landing.html", {})
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     mine = _owned_judgments(user.id)
     month = mine.where(Judgment.judged_at >= month_start)
@@ -840,6 +833,14 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
                     rw["rejudge"] = p_rejudge
                 else:
                     rw["plain"] = {"body": plain, "rejudge": p_rejudge}
+    # 🆕 2026-10-13 — 「조건 확인 필요」 보류의 문장(인정 · 심사 제품에서만 쓸 수 있는 공식 문구)을 「조건부 후보」로 보인다.
+    #    🚨 후보가 아니다 — 재판정을 받고, 고른 전제에서 조건이 채워질 수 없으면(`_note_conflict`) 보이지 않는다.
+    #    사람이 제품의 인정 · 심사 여부를 확인한 뒤 쓰는 문장이다
+    cond = out.get("conditional") if out and out["outcome"] == "hold" else None
+    if cond and not _note_conflict(cond.get("mandatory_note"), premise, category):
+        c_rejudge = _rejudge(cond["body"], premise, category)
+        if c_rejudge.get("status") != "rejected":
+            rw["conditional"] = {**cond, "rejudge": c_rejudge}
     return rw
 
 
