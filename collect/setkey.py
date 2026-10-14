@@ -289,7 +289,88 @@ def repair() -> list[str]:
     return changed or ["바뀐 것 없음"]
 
 
+def _env_line_value(name: str) -> str | None:
+    """`.env` 에 적힌 그 이름의 값 — 줄이 없으면 None. 🚨 비밀이 아닌 설정에만 쓴다(값을 화면에 낸다)."""
+    if not ENV_PATH.exists():
+        return None
+    pat = re.compile(rf"^\s*(?:export\s+)?{re.escape(name)}\s*=(.*)$")
+    for line in _read().splitlines():
+        m = pat.match(line)
+        if m:
+            return m.group(1).strip().strip("\"'")
+    return None
+
+
+def setting_main(argv: list[str]) -> int:
+    """🆕 2026-10-13 (D-333 결정 7) — **비밀이 아닌 설정**을 보고 바꾼다. 값은 화면에 낸다(설정은 값을 봐야 고친다).
+
+      (인자 없음)           전부 보기
+      <이름>                하나 보기
+      <이름> <값>           바꾼다
+      <이름> --clear        비운다(`이름=` 으로 남긴다)
+
+    🚨 **셸 · OS 환경 변수가 `.env` 보다 먼저다**(`collect/env.py` `load(override=False)`). 같은 이름이 셸에 있으면
+       `.env` 를 바꿔도 안 먹는다 — 그 사실을 **알린다**. 이 프로세스는 아직 `.env` 를 읽지 않았으므로
+       `os.environ` 의 값은 곧 셸 · OS 의 값이다(런처는 `.env` 를 읽지 않고 자식을 띄운다).
+    """
+    shell = {name: os.environ.get(name) for name in env.SETTINGS}
+
+    def show(name: str) -> None:
+        file_v = _env_line_value(name)
+        now = shell[name] if shell[name] is not None else file_v
+        tail = "  (셸 · OS 환경 변수 — .env 보다 먼저다)" if shell[name] is not None else ""
+        shown = "(줄 없음)" if now is None else (now or "(빈 값)")
+        print(f"  {name} = {shown}{tail}")
+        print(f"      {env.SETTINGS[name]}")
+
+    if not argv:
+        print(
+            "\n  설정 — 비밀이 아닌 값이라 그대로 보인다. 키는 `launcher.py keys` 로 지문만 본다.\n"
+        )
+        for name in env.SETTINGS:
+            show(name)
+        print(
+            "\n  바꾸기  uv run python launcher.py setting <이름> <값>   · 비우기  ... <이름> --clear\n"
+        )
+        return 0
+    name = argv[0]
+    if name not in env.SETTINGS:
+        print(
+            f"🔴 모르는 설정이다 — 아는 것: {list(env.SETTINGS)}.\n"
+            "  🚨 키라면 `launcher.py setkey <이름>` 으로 넣는다 (값이 화면에 안 뜬다)",
+            file=sys.stderr,
+        )
+        return 1
+    if len(argv) == 1:
+        show(name)
+        return 0
+    if len(argv) > 2:
+        print("🔴 값은 하나다 — 빈칸이 있으면 따옴표로 묶는다", file=sys.stderr)
+        return 2
+    try:
+        if argv[1] == "--clear":
+            put(name, "")
+            print(f"  [OK] .env — {name}= (비웠다)")
+        else:
+            put_setting(name, argv[1])
+            print(f"  [OK] .env — {name}={_env_line_value(name)}")
+    except SetKeyError as exc:
+        print(f"\n{exc}\n", file=sys.stderr)
+        return 1
+    if shell[name] is not None:
+        print(
+            f"  🚨 셸 · OS 환경 변수 {name}={shell[name]!r} 가 있다 — **.env 보다 먼저라 방금 바꾼 값이 안 먹는다.**\n"
+            '     Windows: [Environment]::SetEnvironmentVariable("'
+            + name
+            + '", $null, "User") 뒤 새 셸을 연다'
+        )
+        return 1
+    return 0
+
+
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--setting"]:
+        return setting_main(argv[1:])
     if argv[:1] == ["--repair"]:
         try:
             for line in repair():

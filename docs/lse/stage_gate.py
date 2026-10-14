@@ -25,9 +25,10 @@ ROOT = Path(__file__).resolve().parents[2]
 DICT = ROOT / "data" / "derived" / "banned_terms.jsonl"
 
 #: 질병 표현 — 사전이 놓치는 일반 질병명 · 치료 어휘. 🚨 고시 문구의 「혈압이 높은 사람」 · 「혈당조절」은 질병명이 아니다
+#: 🔄 10-12 — 그릇 「병」(젖병 · 보온병 · 물병 · 유리병 · 꽃병 · 술병 · 페트병) · 「수염」은 질병이 아니다(다듬기 데이터 · v15 데이터에서 걸림)
 DISEASE = re.compile(
-    r"치료|완치|예방|낫(?!또)|증후군|질환|질병|[가-힣]{1,6}병(?![원아])|[가-힣]*통(?:증)?에|관절통|두통|당뇨|고혈압|암(?:을|에|세포|예방)|"
-    r"빈혈|감기|비만|아토피|탈모|변비|불면증|우울증|골다공증|염증|천식|소화불량|속쓰림|(?!무염|저염|죽염|천일염)[가-힣]+염(?![색료])"
+    r"치료|완치|예방|낫(?!또)|증후군|질환|질병|[가-힣]{1,6}(?<!젖)(?<!온)(?<!물)(?<!리)(?<!꽃)(?<!술)(?<!트)병(?![원아])|[가-힣]*통(?:증)?에|관절통|두통|당뇨|고혈압|암(?:을|에|세포|예방)|"
+    r"빈혈|감기|비만|아토피|탈모|변비|불면증|우울증|골다공증|염증|천식|소화불량|속쓰림|(?!무염|저염|죽염|천일염)[가-힣]+(?<!수)염(?![색료])"
 )
 #: 의약품 · 의약품 오인
 #:    🔄 10-01 — 「[가-힣]+약」 꼴은 「곤약」 · 「치약」을 잡았다 → 의약품 낱말을 직접 적는다
@@ -278,6 +279,99 @@ def new_words(original: str, s: str) -> list[str]:
     return out
 
 
+#: 🆕 10-11 — 4B 시험판 dev 검수(19 행 · 이서은 확인)에서 관문을 지나간 꼴 셋 + 쓸모없는 후보. 🚨 규칙은 **직접 만든 문구**로
+#:    골랐다(`docs/lse/gate_regress.py`) — dev 문구로 맞추지 않았다(D-322 원칙)
+#: 보장 주장 — 「수익보장」 · 「효과 보장」은 지운 문장에 남으면 그대로 위반이다
+GUARANTEE = re.compile(r"보장")
+#: 영양성분 기능 표시 꼴(「…하는 데 필요」) · 항산화 — 「도움」 꼴이 아니라 인정 문구 대조(`unapproved_claim`)를 비껴간다.
+#: 🔄 주어(영양성분 「칼슘은 …」)가 있는 「필요합니다」 문장은 후처리가 영양성분 조건(`NOTE_NUTRI`)을 붙이므로 둔다 —
+#:    막는 것은 **주어 없이 기능만 남은** 꼴(「눈의 건강을 유지하는 데 필요」)과 「도움」 없는 「항산화」다
+NUTRIENT_FUNC = re.compile(r"(?:데|에)\s*필요(?:함|합니다|한|하다|$)|항산화")
+NUTRIENT_SUBJECT = re.compile(r"^\s*[가-힣A-Za-z0-9·()\- ]{1,20}?(?:은|는)\s")
+#: 원문이 체험기 꼴(후기 · 체험 · 「(홍길동님)」) — 이때 원문의 **몸 변화 단위** 숫자가 남으면 막는다(「4kg 가량」은 용량이 아니라 감량).
+#: 🔄 용량 · 비율(30g · 500ml · 7:3)은 체험기 원문에서도 사실이다 — 학습 정답 오탐 5 를 보고 몸 단위로 좁혔다
+TESTIMONY_SRC = re.compile(r"후기|체험|[가-힣a-zA-Z*x○]{1,4}\s*님\s*[)\],]|\(\s*[가-힣a-zA-Z*x○]{1,4}\s*님")
+BODY_NUM = re.compile(r"(\d+)\s*(?:kg|㎏|킬로|키로|cm|센티|인치|사이즈)", re.I)
+#: 낱말 조각 — 살린 사실이 없는 후보(「견적」 · 「OO 제품」). 원료 · 공정 · 산지 낱말이나 숫자가 있으면 사실로 본다
+_FRAGMENT_GENERIC = {"제품", "상품", "서비스", "브랜드", "회원"}
+
+
+#: 🆕 10-11 — 2단계(말투)가 **새로 넣은 낱말**이 건강 고민 · 몸 상태를 말하면 막는다(「면역이 약한 아이에게」 · 「관절이 아픈 부모님께」).
+#:    말투 낱말은 허용하지만(`check(persona=True)`) 대상을 건강 고민으로 짚으면 효능을 암시한다. 1단계 문장에 이미 있던 낱말은 보지 않는다
+HEALTH_CUE = re.compile(r"혈압|혈당|콜레스테롤|면역|피로|다이어트|체중|뱃살|체지방|관절|연골|뼈|시력|변비|숙면|불면|수면|스트레스|"
+                        r"기억력|집중력|탈모|노화|주름|미백|여드름|아토피|염증|통증|아프|아픈|약한|허약|회복|갱년기|소화|위장|건강")
+#: 🆕 10-12 — 2단계가 **새로 지어 넣은 사실**(산지 · 원료 · 무첨가 · 인증 · 천연). 말투는 사실을 더하지 않는다
+#:    (프롬프트 다듬기 시험에서 「국내산 원료로 제조되며, 무첨가로 생산」을 지어 붙였다 · 관문이 못 막았다)
+NEW_FACT = re.compile(r"국내산|국산|[가-힣]{2,4}산$|산지|원료|무첨가|첨가물|함유|인증|천연|유기농|무농약|수제|직접|제조|생산|공정")
+
+#: 🆕 10-12 — 4B v14 dev 검수(33 행 · 이서은 동의)에서 지나간 꼴 둘. 🚨 규칙은 직접 만든 문구로 골랐다(`gate_regress.py`)
+#: 「무+원료」(없음)를 「함유」로 — 「무○○ 함유」 · 「○○ 함유」(원문에는 「무○○」로만). 무(채소) · 무게 · 무료 같은 낱말은 뺀다
+NEG_ING = re.compile(r"(?<![가-힣])무([가-힣]{2,4})")
+_NOT_NEG = ("말랭이", "생채", "김치", "청", "순", "즙", "화과", "기질", "게", "늬", "료", "역", "릎", "지개", "조건", "한", "려", "엇", "척", "대", "사")  # redistribution: ok — 일반어
+HAS_ING = r"\)?\s*(?:을|를|이|가)?\s*(?:함유|첨가|넣은|들어)"
+#: 원문의 효능 주장(대상 + 효과 동사)이 그대로 남음 — 「…바이러스를 제거합니다」 · 「…배출을 줄인」. 실증이 필요한 주장이다.
+#: 🚨 대상을 좁혀 둔다 — 「씨를 제거한 대추」 · 「저온 살균 우유」 같은 공정 사실은 막지 않는다
+EFFECT_TARGET = r"바이러스|세균|유해균|균|미세\s*먼지|먼지|냄새|악취|유해\s*물질|독소|노폐물|질소산화물|배출\s*가스|배출|오염\s*물질|진드기|곰팡이|기미|잡티"
+EFFECT_CLAIM = re.compile(rf"({EFFECT_TARGET})\s*(?:을|를|이|가|도)?\s*(?:[가-힣]+\s+){{0,2}}?(제거|차단|억제|줄이|줄인|줄여|감소|박멸|살균|없애|없앤|잡아|잡는|흡착|분해)")
+
+
+def negation_flipped(original: str, s: str) -> str | None:
+    """원문의 「무○○」(없음)가 출력에서 「○○ 함유」로 뒤집혔는가."""
+    for m in NEG_ING.finditer(original):
+        x = m.group(1)
+        if x.startswith(_NOT_NEG):
+            continue
+        if re.search(rf"무{x}{HAS_ING}", s):
+            return f"무{x} → 함유"
+        rest = original.replace(m.group(), " ")
+        if x not in rest and re.search(rf"(?<!무){x}{HAS_ING}", s):
+            return f"무{x} → {x} 함유"
+    return None
+
+
+def effect_claim_kept(original: str, s: str) -> str | None:
+    """원문에 있던 효능 주장(대상 + 효과 동사)이 출력에도 남았는가.
+    「…에 도움」 꼴은 인정 기능성 문구 대조(`unapproved_claim`)가 맡는다 — 「유해균 억제에 도움」(인정 문구 · 학습 정답 23)은 보지 않는다"""
+    if "도움" in s:
+        return None
+    for m in EFFECT_CLAIM.finditer(s):
+        target = re.sub(r"\s", "", m.group(1))
+        if EFFECT_CLAIM.search(original) and target in re.sub(r"\s", "", original):
+            return m.group().strip()
+    return None
+
+
+_FACT_SKIP = re.compile(r"^(?:있|없|하|합|함|해|됩|된|되|입니|이며|이고|줍|줄|줌|주는|수$|필요|미흡|확인|도움|등$|및$|또는$|으나$)")
+
+
+def facts_dropped(s1: str, s2: str) -> list[str]:
+    """🆕 10-12 — 2단계(말투 · 다듬기)가 **1단계 문장의 사실 낱말**을 빼거나 바꿨는가. 말투는 덧붙이는 일이지 사실을 고치는 일이 아니다.
+    낱말은 조사를 떼고, 활용 어미 한 글자(「압착한」 → 「압착」)는 떼고 본다 · 숫자는 그대로 남아야 한다.
+    (다듬기 시험에서 「저온 건조해 빚은 여주」 → 「…뚱한 여주」, 「채 썬」 → 「썬」이 나왔다)"""
+    out = dm.norm(s2)
+    lost = []
+    for w in re.findall(r"[가-힣A-Za-z0-9]+", s1):
+        if _FACT_SKIP.match(w):
+            continue  # 서술 · 완화 표현(「있습니다」 · 「필요함」)은 말투가 바꿔 쓸 수 있다 — 주장 검사가 따로 본다
+        t = _PARTICLE.sub("", w) if len(w) > 2 else w
+        if len(t) >= 2 and _CONJ_END.search(t):
+            t = t[:-1]  # 「빚은」 → 「빚」 · 「압착한」 → 「압착」
+        if t and dm.norm(t) not in out:
+            lost.append(w)
+    return lost
+
+
+def fragment_only(s: str) -> bool:
+    """후보가 낱말 하나(일반어 제외) 뿐이고 숫자 · 연결 낱말(함유 · 사용 · 만든 …)이 없는가."""
+    if NUM.search(s):
+        return False
+    words = [w for w in re.findall(r"[가-힣A-Za-z]+", s)]
+    if any((w in _LINK or _PARTICLE.sub("", w) in _LINK) and w not in _FRAGMENT_GENERIC for w in words):
+        return False
+    content = [w for w in words if len(w) >= 2 and w not in _FRAGMENT_GENERIC]
+    return len(content) <= 1
+
+
 #: 🆕 10-08 — 앞말과의 관계를 뒤집는 말. 빠지면 뜻이 바뀐다(「국산 당면 대신 곤약면」 → 「국산 당면 곤약면」 · 살리기 평가 #24).
 #: 같은 갈래의 다른 말로 바꿔 쓴 것(「설탕 없이」 → 「무설탕」)은 뜻이 남은 것으로 본다  redistribution: ok — 일반 관계어
 _RELATION = {
@@ -337,8 +431,12 @@ def dict_entries() -> tuple[dm.Entry, ...]:
     return tuple(out)
 
 
-def check(original: str, stage1: str | None) -> GateResult:
-    """1단계 결과가 2단계로 넘어가도 되는가. 하나라도 걸리면 보류."""
+def check(original: str, stage1: str | None, persona: bool = False) -> GateResult:
+    """1단계 결과가 2단계로 넘어가도 되는가. 하나라도 걸리면 보류.
+
+    🆕 10-11 `persona=True` — 2단계(말투)의 출력을 1단계 문장과 견줄 때. 말투는 **새 낱말을 넣는 일**이라
+    「원문에 없는 낱말」 · 「살릴 사실 없음」 · 「원문 그대로」는 보지 않는다(10-06 부터 늘 보게 되면서 2단계가 거의 다 보류돼
+    1단계 문장으로 돌아갔다 · 3B 114/114). 주장에 관한 검사(사전 · 질병 · 의약품 · 수치 · 보장 · 기능 문구 · 인정 문구 대조 …)는 그대로다."""
     if not stage1 or not stage1.strip():
         return GateResult(False, ("1단계 실패",))
     s = stage1
@@ -358,13 +456,14 @@ def check(original: str, stage1: str | None) -> GateResult:
     if m := DRUG.search(s):
         why.append(f"의약품 표현: {m.group().strip()}")
     kept = (set(NUM.findall(original)) & set(NUM.findall(s))) - (fact_numbers(original) & fact_numbers(s))
-    if kept:
+    if kept and not persona:
+        # 🔄 10-12 — 말투 모드의 「원문」은 이미 관문을 지난 1단계 문장이다 — 그 숫자(28cm · 주 2회)는 남아야 맞다
         why.append(f"원문 숫자 남음: {sorted(kept)}")
     for m in TESTIMONY.finditer(s):
         if not PRODUCER.search(s[: m.start()]):
             why.append(f"체험기 말투: {m.group()}")
             break
-    if dm.norm(s).rstrip(".") == dm.norm(original).rstrip("."):
+    if not persona and dm.norm(s).rstrip(".") == dm.norm(original).rstrip("."):
         why.append("원문 그대로")
     if m := VAGUE_TARGET.search(s):
         why.append(f"주장 대상 불명: {m.group()}")
@@ -388,9 +487,36 @@ def check(original: str, stage1: str | None) -> GateResult:
         why.append(f"원료명 앞부분 잃음: {t}")
     if (f := meaning_flipped(original, s)) is not None:
         why.append(f"뜻 바뀜 의심: {f}")
+    if (f := negation_flipped(original, s)) is not None:
+        why.append(f"뜻 뒤집힘: {f}")
+    if (e := effect_claim_kept(original, s)) is not None:
+        why.append(f"효능 주장 남음: {e}")
+    if GUARANTEE.search(s):
+        why.append("보장 주장 남음")
+    if "도움" not in s and (m := NUTRIENT_FUNC.search(s)) and not (m.group().strip() != "항산화" and NUTRIENT_SUBJECT.search(s)):
+        why.append(f"기능 문구(조건 필요): {m.group().strip()}")
+    if TESTIMONY_SRC.search(original) and (k := set(BODY_NUM.findall(original)) & set(BODY_NUM.findall(s))):
+        why.append(f"체험기 수치 남음: {sorted(k)}")
+    if not persona and fragment_only(s):
+        why.append("살릴 사실 없음(낱말 조각)")
     # 🔄 10-06 (팀장 전달 §2 #5) — 종전에는 「도움」이 있으면 이 검사를 통째로 건너뛰어 「…달인 곶감은 면역에 도움」이 지나갔다.
     #    이제 늘 보고, 「도움」 문장에서는 인정 문구 낱말(`_claim_word`)만 허용한다
-    nw = new_words(original, s)
+    if persona:
+        # 말투가 넣은 낱말 중 건강 고민 · 몸 상태 낱말 — 원문(1단계 문장)에 없던 것만
+        cue = sorted({w for w in new_words(original, s) if HEALTH_CUE.search(w)})
+        if cue:
+            why.append(f"말투에 건강 고민 낱말: {', '.join(cue[:3])}")
+        # 🆕 10-12 — 제품 모양에 안 맞는 쓰는 법을 지어냄(「선스틱, …두드리고」 · 「젤리 스틱, 물에 녹여」) · `usage_dict.py`
+        from usage_dict import usage_mismatch  # noqa: PLC0415
+
+        if bad_use := usage_mismatch(original, new_words(original, s)):
+            why.append(f"쓰는 법이 제품과 안 맞음: {', '.join(bad_use[:2])}")
+        if lost := facts_dropped(original, s):
+            why.append(f"말투가 사실 낱말을 빼거나 바꿈: {', '.join(lost[:3])}")
+        fact = sorted({w for w in new_words(original, s) if NEW_FACT.search(_PARTICLE.sub("", w))})
+        if fact:
+            why.append(f"말투가 지어낸 사실: {', '.join(fact[:3])}")
+    nw = [] if persona else new_words(original, s)
     if "도움" in s:
         nw = [w for w in nw if not _claim_word(w)]
     if nw:

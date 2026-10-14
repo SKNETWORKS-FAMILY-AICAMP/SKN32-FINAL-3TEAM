@@ -114,6 +114,7 @@ EXEMPT = {
     "scripts/label_merge.py": "사람이 채운 시트를 합친다 — 시트는 WRITERS 가 만들 때 막았다",
     "scripts/label_sheet.py": "시트 ↔ CSV 왕복 — 시트는 WRITERS 가 만들 때 막았다",
     "scripts/derived_manifest.py": "원장 기록",
+    "scripts/model_lock.py": "모델 잠금 기록(판 이름 · 파일 sha · 크기 — 문구를 싣지 않는다 · D-333)",
     "scripts/build_pdf.py": "문서 출력",
     "scripts/extract_rationale.py": "레지스트리 생성물",
     "scripts/gen_registry.py": "레지스트리 생성물",

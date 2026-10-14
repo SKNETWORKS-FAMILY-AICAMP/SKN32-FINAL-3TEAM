@@ -56,7 +56,7 @@ from sllm_meta import base_model  # noqa: E402
 
 BASE = base_model()
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12")}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15")}
 EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v8": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v10": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
@@ -167,6 +167,24 @@ SYS = {"v5": SYSTEM, "v6": SYSTEM_V6, "v7": SYSTEM_V6, "v8": SYSTEM_V6, "v9": SY
 #: 🆕 10-08 — 4B 시험판(`q4b-v12`)은 v12 와 **같은 데이터 · 같은 학습 프롬프트** — 베이스만 바꿔 비교한다
 for _m in (EXTRAS, SYNTH, SYS):
     _m["q4b-v12"] = _m["v12"]
+#: 🆕 10-11 — 4B 보강판(`q4b-v13`) = v12 + 직접 만든 보강 80 행(`stage1_v13_extra.jsonl` · 불가 50 · 사실 30).
+#:    4B 시험판이 거짓_과장 · 소비자_기만의 불가 문구를 고쳐 쓰려 해서(10-08 실제 광고 포장 3) 그 꼴을 직접 만든 문구로 더한다.
+#:    4 개 중 1 개는 종전 규칙대로 내장 평가로 간다 · 평가 문제(`stage1_infeasible_eval.jsonl`)와 문구가 겹치지 않는다
+EXTRAS["q4b-v13"] = EXTRAS["v12"] + ["stage1_v13_extra.jsonl"]
+SYNTH["q4b-v13"] = SYNTH["v12"]
+SYS["q4b-v13"] = SYS["v12"]
+#: 🆕 10-12 — 4B 보강 2차(`q4b-v14`) = q4b-v13 + 직접 만든 55 행(`stage1_v14_extra.jsonl` · 불가 40 · 사실 15).
+#:    v13 이 실제 광고에서 과장 · 의약품 · 기만 주장을 공식 기능성 문구 + 조건으로 바꿔 포장 4(범주로만 봄) —
+#:    일반식품의 기능 주장 · 기만 · 화장품 치료 주장은 「바꿔 쓰지 않고 불가」를 더 가르친다
+EXTRAS["q4b-v14"] = EXTRAS["q4b-v13"] + ["stage1_v14_extra.jsonl"]
+SYNTH["q4b-v14"] = SYNTH["v12"]
+SYS["q4b-v14"] = SYS["v12"]
+#: 🆕 10-12 — 4B 보강 3차(`q4b-v15`) = q4b-v14 + 직접 만든 50 행(`stage1_v15_extra.jsonl`).
+#:    v14 dev 검수 33 행에서 남은 꼴 — 실증이 필요한 주장(최고 · 풍부 · 추천 · 유일)과 생활 · 가전 효능(세균 · 먼지 · 냄새 · 배출)은
+#:    빼고 제품 사실만, 「무○○」는 그대로, 원료가 아닌 사실(보험 · 보증 · 서비스)은 「함유」로 바꾸지 않는다
+EXTRAS["q4b-v15"] = EXTRAS["q4b-v14"] + ["stage1_v15_extra.jsonl"]
+SYNTH["q4b-v15"] = SYNTH["v12"]
+SYS["q4b-v15"] = SYS["v12"]
 CUR = {"system": SYSTEM}
 
 
@@ -289,7 +307,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"

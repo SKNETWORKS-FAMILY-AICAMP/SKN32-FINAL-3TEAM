@@ -20,6 +20,7 @@ import typing
 import pytest
 
 from app.contracts import (
+    LAW_VERSION_UNKNOWN,
     Category,
     EvidenceArticle,
     GenerateOutcome,
@@ -289,6 +290,18 @@ def test_한_바퀴가_돈다() -> None:
     assert tuple(visited) == (*CORE_ALL, "hold")  # 품목 미확정 → 세 법 전부 → 미판정이라 보류
     assert state["outcome"] is Outcome.hold
     to_response(state)  # 계약을 통과한다
+
+
+@pytest.mark.gate
+def test_법령판을_지어내지_않는다() -> None:
+    """🆕 2026-10-13 — 응답의 법령 판은 「모름」이다 (D-220 · D-103 ③).
+
+    ⛔ 2026-10-13 까지 `to_response` 가 「2026-09-10」을 고정으로 적었다. 판정 저장(W10)이 이 값을 판정 행에 남기면
+       「어느 법령 판으로 판정했나」가 틀린 채 쌓이고, 나중에 「재검증 대기」의 근거가 된다.
+    ⬜ 현행 청크의 시행일을 적재가 채우면 이 검사를 「코퍼스에서 읽은 날짜」로 바꾼다.
+    """
+    state, _ = run_review_stub("면역력 강화에 도움을 줍니다.")
+    assert to_response(state).law_version == LAW_VERSION_UNKNOWN
 
 
 @pytest.mark.gate

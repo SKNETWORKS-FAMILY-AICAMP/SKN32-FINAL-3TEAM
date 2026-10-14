@@ -29,6 +29,7 @@ REASONS = {
     "superlative": "비교 · 최상급",
     "forbidden": "분기 금지어",
     "fixed": "고정 문구 자리가 없거나 여럿",
+    "seam": "고정 문구가 앞뒤 말과 이어짐",
     "judge": "판정엔진 미통과",
 }
 
@@ -159,6 +160,21 @@ def too_similar(text: str, others: list[str]) -> bool:
     return any(difflib.SequenceMatcher(None, a, squeeze(o)).ratio() >= DUP_RATIO for o in others)
 
 
+#: 🆕 2026-10-12 — 고정 문구 자리의 모양. 인정 · 심사 문구는 완결된 문장이라 앞뒤 말과 떼어 놓아야 읽힌다.
+#:    10-12 실행에서 「목넘김이 편한 {자리}」(→ 「목넘김이 편한 노화로 인해…」) · 「{자리}로 매일 준비해요」 · 「마지막에, {자리} 데일리 선크림」
+#:    같은 후보가 보관됐다 — 판정은 고정 문구를 뺀 글자로 하므로 이음새는 판정이 못 잡는다.
+#:    받는 모양은 둘 — 맨 끝(쉼표 · 마침표 · 줄표 · 쌍점 뒤) · 맨 앞(뒤에 쉼표 · 마침표 · 줄표 · 쌍점)
+_SEP = r"[,.!?:—–\-]"
+_SEAM_END = re.compile(_SEP + r"\s*" + re.escape(PLACEHOLDER) + r"\s*\.?$")
+_SEAM_START = re.compile(r"^" + re.escape(PLACEHOLDER) + r"\s*" + _SEP + r"\s*\S")
+
+
+def seam_ok(text: str) -> bool:
+    """고정 문구 자리가 앞뒤 말과 떨어져 있는가 — 맨 끝이나 맨 앞에 구두점으로 떼어 둔 것만 받는다."""
+    t = text.strip()
+    return bool(_SEAM_END.search(t) or _SEAM_START.match(t))
+
+
 def check(text: str, inputs: Inputs, branch: Branch, seen: list[str]) -> tuple[str, str] | None:
     """탈락이면 `(사유 유형, 걸린 것)` · 통과면 `None`. `text` 는 고정 문구를 끼우기 **전**의 후보다."""
     n_fixed = text.count(PLACEHOLDER)
@@ -197,6 +213,9 @@ def check(text: str, inputs: Inputs, branch: Branch, seen: list[str]) -> tuple[s
         return "forbidden", hit[0]
     if hit := [t for t in dict_terms() if t in cand and t not in given]:
         return "forbidden", f"사전:{hit[0]}"
+    # 내용 사유(금지어 · 수치 · 성분)를 먼저 낸다 — 이음새는 내용이 깨끗한 후보에만 묻는다
+    if branch.needs_fixed and not seam_ok(text):
+        return "seam", "자리표시자가 구두점으로 떨어져 있지 않다"
     return None
 
 

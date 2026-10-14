@@ -7,6 +7,9 @@
 🔴 **매칭은 정규화문의 부분문자열이다** — 공백을 지우고 NFKC 로 접은 뒤 `term in text`.
    🚨 부분문자열이라 짧은 낱말이 위험하다(「면역력」 · 「두통」 — 인계 09-23 E6). 그래서 **단독판정 자격**이 있는 항목만
       받는다 — 자격 심사(적법중첩 · 모호 제외)가 이 매칭의 안전장치다 (D-156). 자격은 부르는 쪽이 고른다.
+🔴 **두 글자 이하 항목은 낱말 가운데서 시작해 공백을 건너는 자리를 적중으로 치지 않는다** (D-334) — 「중요한 약속」의
+   「한 약」이 「한약」으로 울려 의약품 오인 증명서가 나갔다. 그 자리를 건너뛰고 **다음 자리**를 본다. 세 글자 이상 · 공백을
+   건너지 않는 자리 · 낱말 첫 글자에서 시작하는 자리(「키 약」)는 그대로다. 좌표를 못 세우면(`span` 없음) 가리지 않는다.
 🔴 **보관은 원문으로 한다** (D-117) — 적중 자리(`span`)는 **원문 좌표**로 돌려준다. 뺄 구간(D-278)이 원문 위에 그려진다.
 🚨 이 모듈은 DB 도 파일도 모른다 — 항목을 받아 맞출 뿐이다. 항목을 어디서 읽는지는 부르는 쪽이 정한다.
 """
@@ -19,6 +22,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 _WS = re.compile(r"\s+")
+
+#: D-334 — 이 길이 이하(정규화 글자 수)의 항목만 「낱말 가운데서 시작해 공백을 건너는 자리」를 적중에서 뺀다.
+#: `[측정]` 원장 10-13(작업공간) ① — 비봉인 골든 5,894 행에서 이 규칙이 뺀 적중 2(둘 다 「…한 약…」) · 정상 카피 900 의 적중 1 → 0.
+#: 길이 조건을 빼면 같은 골든에서 19 를 잃는다(「전립선암 예방」 · 「업계 최초」) — 세 글자 이상은 공백을 건너도 낱말로 읽힌다
+SHORT_TERM = 2
 
 
 def norm(s: str) -> str:
@@ -63,7 +71,8 @@ class Match:
 def find(text: str, entries: Iterable[Entry]) -> list[Match]:
     """정규화문에 항목이 부분문자열로 들어 있으면 적중이다. 항목마다 **첫 자리** 하나를 낸다(입력 순서 그대로).
 
-    ★ `eval_rule.judge` 가 쓰던 규칙(`term in norm(text)`)과 **같은 적중 집합**을 낸다 — 좌표만 더한다.
+    ★ `eval_rule.judge` 가 쓰던 규칙(`term in norm(text)`)에서 **D-334 의 자리만 뺀** 적중 집합을 낸다 — 판정기 B 도
+       `terms_in` 으로 이 함수를 지나므로 둘은 늘 같다(D-99).
     """
     n, where = norm_with_map(text)
     whole = norm(text)
@@ -73,12 +82,35 @@ def find(text: str, entries: Iterable[Entry]) -> list[Match]:
         t = norm(e.term)
         if not t or t not in whole:
             continue
-        span = None
-        if same:
-            k = n.find(t)
-            span = (where[k], where[k + len(t) - 1] + 1)
-        out.append(Match(entry=e, span=span))
+        if not same:
+            # 좌표가 없으면 D-334 를 가릴 수 없다 — 종전대로 적중으로 둔다(가리지 못한 것을 지우지 않는다)
+            out.append(Match(entry=e, span=None))
+            continue
+        span = _first_word_span(text, n, where, t)
+        if span is not None:
+            out.append(Match(entry=e, span=span))
     return out
+
+
+def _first_word_span(text: str, n: str, where: list[int], t: str) -> tuple[int, int] | None:
+    """정규화문에서 `t` 가 나오는 자리 가운데 **D-334 에 걸리지 않는 첫 자리**의 원문 좌표. 없으면 `None`(적중 아님)."""
+    k = n.find(t)
+    while k != -1:
+        a, b = where[k], where[k + len(t) - 1] + 1
+        if not _splits_word(text, a, b, len(t)):
+            return (a, b)
+        k = n.find(t, k + 1)
+    return None
+
+
+def _splits_word(text: str, a: int, b: int, size: int) -> bool:
+    """짧은 항목이 **낱말 가운데서 시작해 공백을 건넜다** — 「중요[한 약]속」. 낱말 앞의 문장부호(「(한 약」)는 낱말 첫머리로 본다."""
+    if size > SHORT_TERM or not _WS.search(text[a:b]):
+        return False
+    i = a - 1
+    while i >= 0 and not text[i].isspace() and not text[i].isalnum():
+        i -= 1
+    return i >= 0 and not text[i].isspace()
 
 
 def terms_in(text: str, terms: Iterable[str]) -> set[str]:

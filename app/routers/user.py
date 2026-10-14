@@ -23,6 +23,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
 import re
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
@@ -30,14 +32,24 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from app import auth, sentsplit
+from app import auth, reasons, sentsplit
 from app import premise as pm
-from app.contracts import PASS_RISK_MAX, Category, Premise, Risk, Violation, is_pass
+from app.contracts import (
+    PASS_RISK_MAX,
+    Category,
+    HoldReason,
+    Premise,
+    Risk,
+    Verdict,
+    Violation,
+    is_pass,
+)
 from app.db import get_session, reachable
 from app.formbody import read_capped
 from app.models import (
@@ -723,7 +735,16 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
         #    🚨 같은 규칙이 `docs/lse/rejudge.py` 에도 있다(이서은 폴더 · 서버 쪽 재판정) — 바꾸면 양쪽을 같이 (D-99)
         return {"status": "unjudged", "violations": [], "hold_reasons": hold}
     status = "passed" if res.outcome.value == "pass" else "no_violation"
-    return {"status": status, "violations": [], "hold_reasons": hold}
+    # 🆕 2026-10-14 (D-323 결정 4 집행 · D-323 보충) — 사전은 지났는데 인코더가 유형 후보를 내면 「위반 못 찾음 + AI 추정 유형 남음」.
+    #    판정이 아니다 — 상태는 그대로 두고 칸 하나로 싣는다. 후보가 없으면 빈 목록(「문제없음」이 아니다 · D-220)
+    enc = sorted(
+        {
+            c.violation.value
+            for s in res.sentences
+            for c in getattr(s, "encoder_candidates", None) or ()
+        }
+    )
+    return {"status": status, "violations": [], "hold_reasons": hold, "enc_types": enc}
 
 
 def _note_conflict(note: str | None, premise: str, category: str | None) -> bool:
@@ -761,7 +782,11 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     from app.routers import sllm_client  # noqa: PLC0415
 
     violations = [v.value for v in sentence.violations or []]
-    rw: dict = {"violations": violations}
+    # 🆕 2026-10-14 (D-323 보충) — 사전 유형이 없으면 인코더 추정 유형으로 부른다(`reasons.guessed_types` · 화면 버튼과 같은 함수).
+    #    생성은 기록되는 판정이 아니다 — D-332 보충 ① 과 같은 판단. 서버 계약은 그대로(`violation_types` 칸)
+    guessed = [] if violations else reasons.guessed_types(sentence)
+    violations = violations or guessed
+    rw: dict = {"violations": violations, "guessed": bool(guessed)}
     # 🆕 10-06 (팀장 전달 §2 #3) — 품목을 넘긴다. 미확정이면 None — 서버가 문구에서 추측한다
     # 🔄 2026-10-10 — 분기를 고른 문구는 고른 전제의 품목을 넘긴다(인계 10-08 §2 「함께」). 서버가 추측하지 않는다
     s_state, out = sllm_client.rewrite(sentence.text, violations, sllm_category or category)
@@ -772,12 +797,31 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     rw["off"] = s_state == "off"
     rw["down"] = s_state != "ok"
     rw["out"] = out
+    if out and out.get("outcome") == "infeasible":
+        # 🔄 2026-10-14 (D-323 보충 개정) — 생성 서버의 「고칠 수 없음」은 유형 출처와 무관하게 「만들지 못했어요」다.
+        #    ⛔ 「합법화 불가」는 코드의 불가 사유만 말한다 (D-59 · D-10) — 같은 카드에서 코드(실증 B)와 말이 갈리던 자리
+        rw["infeasible_note"] = reasons.REWRITE_INFEASIBLE_TEXT
     if out and out["outcome"] == "candidate" and out.get("rewrite"):
         rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise, category)
         # 🆕 2026-10-10 — 후보의 조건이 이 전제에서 채워질 수 없으면 후보로 내지 않는다(재판정이 못 거르는 자리)
         rw["note_conflict"] = _note_conflict(
             out["rewrite"].get("mandatory_note"), premise, category
         )
+        # 🆕 2026-10-12 — 서버가 다듬은 문장(2단계)과 담백한 문장(1단계)을 같이 주면 담백한 안도 재판정한다.
+        #    다듬은 안이 재판정에서 떨어지면 담백한 안을 후보로 올린다 · 둘 다 살면 담백한 안을 두 번째 안으로 보인다
+        plain = out.get("plain")
+        if plain:
+            p_rejudge = _rejudge(plain, premise, category)
+            if p_rejudge.get("status") != "rejected":
+                # 🆕 2026-10-14 — 다듬은 안에만 AI 추정 유형이 남으면 담백한 안을 올린다(사전 탈락과 같은 자리 · 더 보수적인 쪽)
+                enc_only_polished = bool(rw["rejudge"].get("enc_types")) and not p_rejudge.get(
+                    "enc_types"
+                )
+                if rw["rejudge"].get("status") == "rejected" or enc_only_polished:
+                    rw["out"] = {**out, "rewrite": {**out["rewrite"], "body": plain}, "plain": None}
+                    rw["rejudge"] = p_rejudge
+                else:
+                    rw["plain"] = {"body": plain, "rejudge": p_rejudge}
     return rw
 
 
@@ -844,8 +888,9 @@ async def review_rewrite(request: Request) -> HTMLResponse:
         )
     if sent.infeasibility and sent.infeasibility.value == "A":
         rw = {"qualification": True}
-    elif not sent.violations:
+    elif not sent.violations and not reasons.guessed_types(sent):
         # 확신 부족 보류만 있고 위반 유형이 없다 — 고칠 것이 없다. 유형 없이 보내면 모델이 엉뚱한 불가를 낸다(10-06 실측)
+        # 🔄 2026-10-14 (D-323 보충) — 인코더 추정 유형이 있으면 그 유형으로 고쳐 쓴다(`_rewrite_sentence`)
         rw = {"no_violation": True}
     else:
         cat = item["result"].category.value if item["result"].category else None
@@ -988,8 +1033,42 @@ def _gen_ctx(extra: dict | None = None) -> dict:
         "gen_limits": _GEN_LIMITS,
         "gen_hf_no_notice": _GEN_HF_NO_NOTICE,
         "gen_want": PARAMS.candidate_n,
+        # 🆕 2026-10-13 — 생성 엔진이 켜져 있으면 「제품 정보가 밖(GPT)으로 나간다」를 입력 칸 옆에 적는다
+        "gen_external": _copygen_off() is None,
         **(extra or {}),
     }
+
+
+#: 🆕 2026-10-13 (권소라) — 「더 탐색하기」는 **세 번까지**다. 누를 때마다 생성 모델을 다시 부른다 — 끝없이 해 줄 수 없다.
+#:    🚨 횟수는 폼이 들고 다닌다(로그인 · 서버 저장이 없다) — 화면의 약속이지 비용의 방벽이 아니다.
+#:       새로 「카피 생성」을 누르면 처음부터다. 비용을 막는 것은 호출 제한의 일이다(변경 기록 10-13 §4-2 10번)
+_GEN_MORE_MAX = 3
+#: 이미 보여 준 문구의 상한 — 첫 결과 + 더 탐색 세 번 = 넷 묶음
+_GEN_SHOWN_MAX = PARAMS.candidate_n * (_GEN_MORE_MAX + 1)
+
+
+def _gen_more(form: dict[str, list[str]]) -> tuple[int, list[str]]:
+    """「더 탐색하기」가 넘긴 (몇 번째인가 · 이미 보여 준 문구). 처음 생성이면 `(0, [])`.
+
+    ★ 문구는 자리표시자가 든 글자로 들고 다닌다 — 인정 · 심사 문구를 폼에 여러 벌 싣지 않는다.
+    ⛔ 넘치는 것 · 긴 것 · 모르는 횟수는 자르지 않고 거부한다 (D-220).
+    """
+    raw = _one(form, "more", 4)
+    if not raw:
+        return 0, []
+    if not raw.isdigit() or not 1 <= int(raw) <= _GEN_MORE_MAX:
+        raise HTTPException(422, f"더 탐색하기는 {_GEN_MORE_MAX}번까지다")
+    shown = [s.strip() for s in form.get("shown", []) if s.strip()]
+    if len(shown) > _GEN_SHOWN_MAX or any(len(s) > _GEN_LIMITS["phrase"] for s in shown):
+        raise HTTPException(422, "이미 보여 준 문구가 너무 많거나 길다")
+    return int(raw), shown
+
+
+def _copygen_off() -> str | None:
+    """카피 생성 엔진을 못 쓰는 까닭(쓸 수 있으면 `None`) — 판단은 `copygen.off_reason` 한 곳이다 (D-99)."""
+    from app.routers import copygen  # noqa: PLC0415 — 엔진을 안 쓰는 화면이 import 값을 치르지 않게
+
+    return copygen.off_reason()
 
 
 def _gen_lines(form: dict[str, list[str]], name: str) -> list[str]:
@@ -1037,7 +1116,7 @@ def _gen_picked(form: dict[str, list[str]]) -> tuple[dict, dict, list[str]]:
     }
     errors: list[str] = []
     if not any(picked[k] for k in ("name", "kind", "phrase", "features")):
-        errors.append("제품명 · 유형 · 간단한 문구 · 특징 중 하나는 적어 주세요.")
+        errors.append("제품명 · 제품 종류 · 간단한 문구 · 특징 중 하나는 적어 주세요.")
     if needs == "certs" and not picked["certs"]:
         errors.append("인증 「예」를 골랐어요 — 받은 인증의 이름을 적어 주세요.")
     if needs == "fixed" and not picked["fixed"]:
@@ -1059,20 +1138,84 @@ def generate_page(request: Request) -> HTMLResponse:
 
 @router.post("/generate", response_class=HTMLResponse)
 async def generate(request: Request) -> HTMLResponse:
-    """카피 생성 — ⛔ **코어가 아직 501 이다** (D-181). 가짜 결과를 그리지 않는다 (D-147).
+    """카피 생성 — GPT 가 후보를 쓰고 · 코드 필터가 거르고 · 판정 인코더가 본다 (`app/routers/copygen` · ksr 2026-10-13).
 
-    🔄 2026-10-08 — 입력이 분기(품목 × 인증 여부) + 제품 내용이다 (`_gen_picked`). 코어의
-       `GenerateRequest`(세그먼트 · 키워드)와는 아직 모양이 다르다 — 엔진이 붙을 때 맞춘다.
+    🚨 코어 `POST /generate`(계약 `GenerateResponse`)는 여전히 501 이다 — 부르지 않는다. 여기 붙은 것은 화면의 엔진이고,
+       잔여 리스크 · 소구력 보존 같은 계약의 수치는 채우지 않는다(재는 노드가 없다 · D-147).
+    ★ 엔진을 쓸 수 없으면(스위치 · 키 · 인코더) 「준비 안 됨」과 그 까닭을, 호출이 실패하면 「실패」를 그린다. 가짜 후보를 만들지 않는다.
+    ★ 수십 초 걸린다 — 스레드로 돌려 그동안 다른 요청이 멈추지 않게 한다.
     ★ 적은 값은 되돌려 그린다. **템플릿이 이스케이프한다** (P2-9).
     """
-    picked, branch, errors = _gen_picked(await _form(request))
-    return _render(
-        request,
-        "user/generate.html",
-        _gen_ctx(
-            {"picked": picked, "branch": branch, "errors": errors, "engine_pending": not errors}
+    from app.routers import copygen  # noqa: PLC0415
+
+    form = await _form(request)
+    picked, branch, errors = _gen_picked(form)
+    more, shown = _gen_more(form)
+    ctx: dict = {"picked": picked, "branch": branch, "errors": errors}
+    if errors:
+        return _render(request, "user/generate.html", _gen_ctx(ctx))
+    if why := copygen.off_reason():
+        ctx |= {"engine_pending": True, "engine_why": why}
+        return _render(request, "user/generate.html", _gen_ctx(ctx))
+    fields = {
+        **{k: picked[k] for k in ("name", "kind", "phrase", "features", "ingredients", "certs")},
+        "fixed": picked["fixed"],
+        # 대상 — 고른 나이대 · 성별과 적은 말을 한 줄로. 「전체」는 대상이 아니다
+        "target": " · ".join(
+            v
+            for v in (picked["audience"] if picked["audience"] != "전체" else "", picked["target"])
+            if v
         ),
-    )
+    }
+    try:
+        live = await run_in_threadpool(
+            copygen.generate, f"{picked['category']}_{picked['cert']}", fields, tuple(shown)
+        )
+    except copygen.CopyGenOff as e:
+        ctx |= {"engine_pending": True, "engine_why": str(e)}
+    except copygen.CopyGenError:
+        # 🚨 까닭은 서버 로그에만 — 화면에는 「실패했다」만 그린다 (P1-4)
+        logging.getLogger(__name__).warning("카피 생성 실패", exc_info=True)
+        ctx |= {"engine_pending": True, "engine_failed": True}
+    else:
+        ctx |= {
+            "live": live,
+            "live_reasons": [(copygen.REASONS[k], n) for k, n in live.reasons().most_common()],
+            "live_strip": _gen_strip(live),
+            # 「더 탐색하기」 — 지금까지 보여 준 것(이번 것 포함)과 다음 횟수를 폼에 실어 둔다
+            "more": more,
+            "more_max": _GEN_MORE_MAX,
+            "more_shown": [*shown, *(k.raw or k.text for k in live.picked)],
+        }
+    return _render(request, "user/generate.html", _gen_ctx(ctx))
+
+
+#: 띠 그래프의 그릴 자리 — 가로 한 줄. 왼쪽 = 문턱에서 멀다 · 오른쪽 끝 = 문턱
+_STRIP = {"x0": 24, "x1": 316, "y": 46}
+
+
+def _gen_strip(live) -> list[dict]:  # noqa: ANN001
+    """통과한 후보 전부를 「문턱까지의 거리」 한 축에 찍을 좌표 (🆕 2026-10-13 · 픽스처의 프론티어 그림 자리).
+
+    🚨 세로축이 없다 — 소구력 보존을 재는 노드가 없다. 지어내지 않고 한 축만 그린다 (D-147).
+    ★ 고른 셋은 이름(보수 · 균형 · 공격)을 달고, 겹친 점은 위아래로 조금씩 벌린다.
+    """
+    span = _STRIP["x1"] - _STRIP["x0"]
+    points: list[dict] = []
+    stack: dict[int, int] = {}
+    for k in sorted(live.kept, key=lambda k: (not k.tier, k.closeness)):
+        cx = round(_STRIP["x0"] + min(max(k.closeness, 0.0), 1.0) * span)
+        n = stack.get(cx // 8, 0)
+        stack[cx // 8] = n + 1
+        points.append(
+            {
+                "cx": cx,
+                "cy": _STRIP["y"] - (0 if k.tier else 14 + 9 * (n % 3)),
+                "tier": k.tier,
+                "pct": round(k.closeness * 100),
+            }
+        )
+    return points
 
 
 @router.get("/generate/preview/{name}", response_class=HTMLResponse)
@@ -1110,59 +1253,261 @@ def segments(request: Request) -> HTMLResponse:
 # ══════════════════════════════════════════════════════════════════════
 
 
+#: 🆕 2026-10-12 — 광고 종류 **셋**(프로토타입 v7.2 `DRAFT_FORMATS` 일곱 중 SNS 피드 · 상세페이지 · 배너 300×250).
+#:    🚨 화면의 표다 — 코어 계약 `AdFormat`(상세페이지 · 카드뉴스 · 배너)은 그대로 둔다. 코어 `/compose` 가 서면 그때 맞춘다.
+#:    `h` 가 없으면 세로 가변이다. `disclose` = 「광고」 표시를 어디에 두는가 (D-93 · D-164)
+_AD_FORMATS: dict[str, dict] = {
+    "SNS 피드": {
+        "key": "sns",
+        "w": 1080,
+        "h": 1080,
+        "spec": "1080 × 1080 · 1:1",
+        "disclose": "캡션 첫 줄 · 더보기 컷오프 전",
+    },
+    "상세페이지": {
+        "key": "detail",
+        "w": 860,
+        "h": None,
+        "spec": "860 × 세로 가변",
+        "disclose": "페이지 하단 필수 표기 영역 (고정)",
+    },
+    "배너": {
+        "key": "banner",
+        "w": 300,
+        "h": 250,
+        "spec": "300 × 250",
+        "disclose": "면적 부족 · 랜딩 페이지 고지 필수",
+    },
+}
+
+
+def _compose_ctx(extra: dict | None = None) -> dict:
+    """광고 생성 화면이 늘 받는 것 — 입력 · 제출 · 편집기 · 픽스처가 같은 폼을 그린다."""
+    return {
+        "fixtures": _fixture_names("compose"),
+        "max_text_len": PARAMS.max_text_len,
+        "ad_formats": _AD_FORMATS,
+        **(extra or {}),
+    }
+
+
+def _lands(s) -> str:  # noqa: ANN001
+    """이 문장을 지면에 얹어도 되는가 — `ok`(통과) · `unsure`(확인 필요 표시를 달고 얹는다) · `ng`(얹지 않는다).
+
+    🚨 **얹는 기준은 여기 한 곳이다** (D-99). 판정은 코어가 한다 — 여기서는 그 결과를 읽기만 한다 (D-119).
+    ⚠️ 2026-10-12 (ksr · 권소라 결정) — 코어 1판은 사전이 침묵하면 통과가 아니라 **보류(확신 부족)** 를 낸다 (D-269).
+       「확정이 아니면 얹지 않는다」(D-63)를 그대로 걸면 어떤 문구도 편집기에 못 들어간다. 그래서 **유형 후보가 없는
+       확신 부족 보류**만 `unsure` 로 얹고 화면이 「확인 필요」를 단다. 엄격하게 되돌리려면 그 가지를 `ng` 로 바꾼다.
+    """
+    if is_pass(s) or s.not_claim:
+        return "ok"
+    if s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf and not s.violations:
+        return "unsure"
+    return "ng"
+
+
+#: 얹지 못하는 까닭 — 🚨 검수 화면(review.html)과 **같은 말**을 쓴다 (2026-10-01 판정 문구 확정)
+_INFEASIBLE_WHY = {"A": "인정받은 제품만 가능", "B": "객관적인 근거 자료 필요", "C": "사용 불가"}
+_HOLD_WHY = {
+    "low_conf": "확신 부족",
+    "gap2": "코드·모델 2등급 차",
+    "cat_unknown": "품목 선택 필요",
+    "rd1": "공존 규칙 발동",
+    "premise_unknown": "전제 선택 필요 — 인정 여부",
+    "law_uncovered": "전용법 미검수",
+}
+
+
+def _why_blocked(s) -> str:  # noqa: ANN001
+    types = " · ".join(v.value.replace("_", " ") for v in s.violations)
+    if s.verdict is Verdict.confirmed:
+        head = _INFEASIBLE_WHY.get(s.infeasibility.value if s.infeasibility else "", "위반 확정")
+    elif s.verdict is Verdict.hold:
+        head = "보류 — " + _HOLD_WHY.get(s.hold_reason.value if s.hold_reason else "", "사유 없음")
+    elif s.verdict is Verdict.no_basis:
+        head = "근거 없음"
+    else:
+        head = "미판정"
+    return f"{head} ({types})" if types else head
+
+
+def _compose_origin(form: dict[str, list[str]]) -> dict:
+    """카피 생성에서 넘어온 **분기**와 **인정 · 심사 문구** (🆕 2026-10-13). 없거나 모르는 값이면 빈 것이다.
+
+    ★ 분기를 알면 판정에 품목을 넘긴다(식품 · 건강기능식품 · 화장품 · 인정 여부) — 품목 없이 뭉뚱그려 판정하지 않는다.
+    ★ 인정 · 심사 문구는 **판정에서 뺀다** — 생성 단계와 같은 규칙이다(`copygen.pipeline`). 그 문구는 인정받은 글자 그대로라
+       유형 후보로 걸리면 인정 제품의 광고가 전부 막힌다(10-03 실측 · 10-13 화면에서 재현).
+    🚨 인정 문구는 **이용자가 적은 값이고 확인되지 않았다** — 화면이 그렇게 적는다 (D-263 ③ 「사업자가 선택한 값」).
+       ⛔ 인정 문구가 필요 없는 분기에서는 읽지 않는다 — 아무 문구나 「인정 문구」라며 판정에서 빼지 못하게.
+    """
+    from app.routers.copygen import BRANCHES  # noqa: PLC0415
+
+    key = _one(form, "branch", 16)
+    fixed = _one(form, "fixed", _GEN_LIMITS["fixed"]).strip()
+    branch = BRANCHES.get(key)
+    if branch is None:
+        return {"branch": "", "fixed": "", "label": "", "product": None}
+    from app.contracts import ProductContext  # noqa: PLC0415
+
+    return {
+        "branch": key,
+        "fixed": fixed if branch.needs_fixed else "",
+        "label": branch.label,
+        "product": ProductContext(
+            category=Category(branch.category), has_recognized_function=branch.recognized
+        ),
+    }
+
+
+def _judged_part(text: str, fixed: str) -> str:
+    """판정에 넣을 글자 — 인정 · 심사 문구를 뺀 나머지."""
+    return text.replace(fixed, " ").strip() if fixed else text
+
+
 @router.get("/compose", response_class=HTMLResponse)
 def compose_page(request: Request) -> HTMLResponse:
     """광고 초안 입력 화면 (`draft-setup`, ksr 2026-09-13). 구 `/u/draft-setup`·`/u/draft-editor`
     (빈 골격)를 대체한다.
-
-    ⬜ 프로토타입 `draft-editor` 의 아트보드·인스펙터·줌은 **전부 스크립트**라 만들지 않았다.
-       섹션 골격은 `ComposeResponse.sections` 를 서버가 순서대로 그린다.
     """
-    return _render(
-        request,
-        "user/compose.html",
-        {"fixtures": _fixture_names("compose"), "max_text_len": PARAMS.max_text_len},
-    )
+    return _render(request, "user/compose.html", _compose_ctx())
 
 
 @router.post("/compose", response_class=HTMLResponse)
 async def compose(request: Request) -> HTMLResponse:
-    """광고 생성 — ⛔ **코어가 아직 없다.** 가짜 결과를 그리지 않는다 (D-147).
+    """광고 생성 — 적은 문구를 **판정 코어에 먼저 통과시키고**, 얹을 수 있으면 섹션 편집기를 그린다 (ksr 2026-10-12).
 
-    🚨 `ComposeRequest` 는 두 경로 중 **하나로만** 들어온다 (계약 `_one_of_two_paths`) —
-       B 의 각색본(`source_copy`) 또는 직접 입력(`prompt`). 이 화면은 후자다.
-    🆕 2026-10-08 — 카피 생성의 후보 카드(「AI 광고 생성 →」)가 `carry` 를 달고 온다. 그때는 제출이 아니라
-       **문구를 채운 입력 화면**을 그린다. ⬜ 직접 입력 칸에 채우는 것은 임시다 — 엔진이 붙으면 `source_copy` 로 옮긴다.
+    🚨 코어 `POST /compose`(템플릿 엔진)는 아직 501 이다 — 부르지 않는다. 섹션 골격은 화면(`user_compose.js`)이 깔고,
+       **문구 판정만 코어 `/judge` 와 같은 함수**를 부른다 (`_core_judge` · D-119). 가짜 판정을 만들지 않는다 (D-147).
+    ★ 후보 카드(「AI 광고 생성 →」)는 `carry` 를 달고 온다. 그때는 제출이 아니라 **문구를 채운 입력 화면**을 그린다.
+    ★ 얹지 못하는 문장이 있으면 편집기를 열지 않고 그 판정을 그린다 (`_lands`). 엔진이 없으면 「준비 중」을 그린다.
     """
     form = await _form(request)
+    prompt = _one(form, "prompt", PARAMS.max_text_len)
+    note = _one(form, "note", PARAMS.max_text_len)
+    origin = _compose_origin(form)
     if form.get("carry"):
         return _render(
             request,
             "user/compose.html",
-            {
-                "fixtures": _fixture_names("compose"),
-                "max_text_len": PARAMS.max_text_len,
-                "carried": {
-                    "prompt": _one(form, "prompt", PARAMS.max_text_len),
-                    "note": _one(form, "note", PARAMS.max_text_len),
-                },
-            },
+            _compose_ctx({"carried": {"prompt": prompt, "note": note}, "origin": origin}),
         )
-    return _render(
-        request,
-        "user/compose.html",
-        {
-            "fixtures": _fixture_names("compose"),
-            "max_text_len": PARAMS.max_text_len,
-            "picked": {
-                "ad_format": _one(form, "ad_format", 32),
-                "prompt": _one(form, "prompt", PARAMS.max_text_len),
-                #: 🆕 2026-10-10 — 후보 카드에서 온 필수 병기 문구. 없으면 빈 값이다(직접 입력)
-                "note": _one(form, "note", PARAMS.max_text_len),
-            },
-            "engine_pending": True,
-        },
+    ad_format = _one(form, "ad_format", 32)
+    if ad_format not in _AD_FORMATS:
+        raise HTTPException(
+            422, "그런 광고 종류가 없다 — SNS 피드 · 상세페이지 · 배너 중에서 고른다"
+        )
+    picked = {"ad_format": ad_format, "prompt": prompt, "note": note}
+    base = {"picked": picked, "origin": origin}
+    if not prompt.strip():
+        return _render(
+            request,
+            "user/compose.html",
+            _compose_ctx({**base, "errors": ["광고에 담을 문구를 적어 주세요."]}),
+        )
+    # 🆕 2026-10-13 — 인정 · 심사 문구가 그 문구에 그대로 들어 있을 때만 뺀다. 문구를 고쳐 인정 문구가 깨졌으면 전부 판정한다
+    fixed = origin["fixed"] if origin["fixed"] and origin["fixed"] in prompt else ""
+    part = _judged_part(prompt, fixed)
+    if not part:
+        return _render(
+            request,
+            "user/compose.html",
+            _compose_ctx(
+                {**base, "errors": ["인정 · 심사 문구 말고 광고에 담을 문구를 더 적어 주세요."]}
+            ),
+        )
+    status, result = _core_judge(part, origin["product"])
+    if status != "ok":
+        return _render(
+            request,
+            "user/compose.html",
+            _compose_ctx({**base, "engine_pending": True, "engine_down": status == "down"}),
+        )
+    lands = [_lands(s) for s in result.sentences]
+    if "ng" in lands:
+        return _render(
+            request,
+            "user/compose.html",
+            _compose_ctx(
+                {
+                    **base,
+                    "screening": result.sentences,
+                    "blocked": lands.count("ng"),
+                    #: 얹을 수 있는 문장(확인 필요) — 화면이 「배치되지 않아요」를 이 문장에는 적지 않는다
+                    "unsure_ids": {
+                        s.sent_id
+                        for s, how in zip(result.sentences, lands, strict=True)
+                        if how == "unsure"
+                    },
+                }
+            ),
+        )
+    if fixed:
+        # 인정 문구가 든 문구는 **통째로** 얹는다 — 문장으로 쪼개면 인정 문구가 빠진다. 표시는 나머지 글자의 판정을 따른다
+        # 🔄 2026-10-13 (ohb 흡수) — 인정 문구는 **이용자가 적은 값이고 판정하지 않은 글자**다. 그 문구를 뺀 나머지가 통과해도
+        #    「판정 통과」로 그리지 않는다 — 늘 「확인 필요」다. 아무 글자나 「인정 문구」라며 판정에서 빼 통과를 얻지 못하게 (D-147 · D-220)
+        copy = [{"text": prompt.strip(), "unsure": True}]
+    else:
+        copy = [
+            {"text": s.text, "unsure": how == "unsure"}
+            for s, how in zip(result.sentences, lands, strict=True)
+        ]
+    draft = {
+        **_AD_FORMATS[ad_format],
+        "label": ad_format,
+        #: 판정을 지난 문장들 — 화면이 첫 문장을 헤드라인에, 나머지를 보조 문구에 얹는다
+        "copy": copy,
+        "note": note.strip(),
+        "max_text_len": PARAMS.max_text_len,
+        #: 편집기의 칸 판정이 같은 품목 · 같은 인정 문구로 돌게 넘긴다 (`/u/compose/judge`)
+        "branch": origin["branch"],
+        "fixed": origin["fixed"],
+    }
+    return _render(request, "user/compose.html", _compose_ctx({**base, "draft": draft}))
+
+
+@router.post("/compose/judge")
+async def compose_judge(request: Request) -> JSONResponse:
+    """편집기의 문구 한 칸을 판정한다 — 고친 문구는 판정을 지나야 지면에 얹힌다 (D-63 · D-119).
+
+    ★ 본문은 JSON `{"text": …}` 이다. 🔴 **POST 다** — 문구를 주소에 싣지 않는다 (P1-4).
+       🆕 2026-10-13 — `branch` · `fixed` 를 같이 받으면 그 품목으로 판정하고 인정 · 심사 문구는 뺀다 (`_compose_origin`).
+    ★ 응답 `state` — `ok` · `unsure`(확인 필요) · `ng`(얹지 않는다) · `pending`(엔진 미착수) · `down`(엔진 연결 실패).
+       `ng` 면 `notes` 에 걸린 문장과 까닭을 싣는다. 화면이 글자로 그린다(문자열 조립 금지 · P2-9).
+    """
+    if not request.headers.get("content-type", "").startswith("application/json"):
+        raise HTTPException(415, "JSON 본문만 받는다")
+    body = await read_capped(
+        request, _MAX_BODY, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다"
     )
+    try:
+        data = json.loads(body.decode("utf-8"))
+        text = data["text"]
+        origin = _compose_origin(
+            {k: [data[k]] for k in ("branch", "fixed") if isinstance(data.get(k), str)}
+        )
+    except (ValueError, KeyError, TypeError) as e:
+        raise HTTPException(422, "본문은 text 칸 하나를 가진 JSON 이다") from e
+    if not isinstance(text, str) or not text.strip():
+        raise HTTPException(422, "text 가 비었다")
+    if len(text) > PARAMS.max_text_len:
+        raise HTTPException(422, f"text 가 너무 길다 — {PARAMS.max_text_len}자까지 받는다")
+    fixed = origin["fixed"] if origin["fixed"] and origin["fixed"] in text else ""
+    part = _judged_part(text, fixed)
+    if not part:
+        # 인정 문구뿐이다 — 판정할 글자가 없다. 이용자가 적은 값이라 「확인 필요」로 얹는다
+        return JSONResponse({"state": "unsure", "notes": []})
+    status, result = _core_judge(part, origin["product"])
+    if status != "ok":
+        return JSONResponse({"state": status, "notes": []})
+    lands = [_lands(s) for s in result.sentences]
+    notes = [
+        {"text": s.text, "why": _why_blocked(s)}
+        for s, how in zip(result.sentences, lands, strict=True)
+        if how == "ng"
+    ]
+    # 🔄 2026-10-13 (ohb 흡수) — 인정 문구를 뺐으면 「통과」가 아니라 「확인 필요」다 (위 `compose` 와 같은 규칙 · D-147)
+    state = "ng" if notes else ("unsure" if fixed or "unsure" in lands else "ok")
+    return JSONResponse({"state": state, "notes": notes})
 
 
 @router.get("/compose/preview/{name}", response_class=HTMLResponse)
@@ -1179,12 +1524,7 @@ def compose_preview(request: Request, name: str) -> HTMLResponse:
     return _render(
         request,
         "user/compose.html",
-        {
-            "fixtures": _fixture_names("compose"),
-            "max_text_len": PARAMS.max_text_len,
-            "result": ComposeResponse.model_validate_json(raw),
-            "fixture_name": name,
-        },
+        _compose_ctx({"result": ComposeResponse.model_validate_json(raw), "fixture_name": name}),
     )
 
 
