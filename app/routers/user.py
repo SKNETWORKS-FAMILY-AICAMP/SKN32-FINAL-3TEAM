@@ -1210,9 +1210,12 @@ async def generate(
     # 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구는 생성 판정에서 빠진다 — **입력 때 한 번** 따로 판정해 경고한다(떨구지 않는다).
     #    엔진이 꺼져 있어도 경고는 그린다 — 문구는 적힌 그대로 광고 생성으로 넘어가기 때문이다
     if picked["fixed"]:
+        key = f"{picked['category']}_{picked['cert']}"
         ctx["fixed_notes"] = await run_in_threadpool(
-            _fixed_notes, picked["fixed"], f"{picked['category']}_{picked['cert']}"
-        )
+            _fixed_notes, picked["fixed"], key
+        ) + _fixed_match_notes(
+            picked["fixed"], key, picked["ingredients"]
+        )  # 🆕 10-14 (ksr) — 공식 문구 대조 (D-341 결정 4) · 원재료 칸으로 원료도 맞춰 본다
     if why := copygen.off_reason():
         ctx |= {"engine_pending": True, "engine_why": why}
         return _render(request, "user/generate.html", _gen_ctx(ctx))
@@ -1455,6 +1458,74 @@ def _fixed_notes(fixed: str, branch_key: str) -> list[dict]:
     return []
 
 
+def _fixed_match_notes(
+    fixed: str, branch_key: str, ingredients: list[str] | None = None
+) -> list[dict]:
+    """인정 · 심사 문구를 **공식 문구 목록과 글자로 대조**한 안내 (🆕 2026-10-14 ksr · D-341 결정 4 · `app/claim_match.py`).
+
+    ★ `_fixed_notes`(따로 판정한 경고)와 나란히 그린다 — 그 함수는 질병 · 의약품 표현을, 이 함수는 「공식 문구 그대로인가」를 본다.
+    ★ 경고일 뿐이다 — 후보 · 초안을 떨구지 않는다. 생성과 광고 생성이 이 함수 하나를 쓴다 (D-99).
+    ★ `ingredients`(카피 생성의 원재료 칸)를 받으면 **공식 문구여도 그 원료의 문구인지** 본다 — 다른 원료의 인정 문구를
+       옮겨 온 경우(10-14 측정 · 업체 표시 문구 22건). 광고 생성은 원재료를 모른다 — 넘기지 않는다(보지 않는다).
+    🔴 목록이 없거나(기능성화장품) 못 읽으면 「확인하지 못했어요」를 낸다 — 빈 목록(문제없음)으로 돌려주지 않는다 (D-220).
+    """
+    from app import claim_match  # noqa: PLC0415
+    from app.routers.copygen import BRANCHES  # noqa: PLC0415
+
+    branch = BRANCHES.get(branch_key)
+    if not fixed or branch is None or not branch.needs_fixed:
+        return []
+    res = claim_match.match(fixed, branch.category)
+    if res.state == "unchecked":
+        text = reasons.MATCH_NO_LIST if res.reason == "no_list" else reasons.MATCH_NO_DATA
+        return [{"level": "match_unchecked", "text": text}]
+
+    def src(*norms: str) -> str:
+        """「홍삼(고시형 2-2) · 인삼(고시형 2-1) 외 5」 — 이름이 같은 원료는 한 번 · 적힌 원재료와 맞는 원료를 앞에 · 둘까지."""
+        os_ = [o for n in norms for o in claim_match.owners().get(n, ())]
+        hit = {o.name for o in os_ if claim_match.fits_name(o.name, ingredients or [])}
+        names: dict[str, str] = {}
+        for o in sorted(os_, key=lambda o: o.name not in hit):
+            names.setdefault(
+                o.name or o.source,
+                f"{o.name}({o.source} {o.ref.split('(')[0]})" if o.name else o.source,
+            )
+        shown = list(names.values())
+        return " · ".join(shown[:2]) + (f" 외 {len(shown) - 2}" if len(shown) > 2 else "")
+
+    notes: list[dict] = []
+    for p in res.pieces:
+        if p.state == "same":
+            if claim_match.fits(p.official.norm, ingredients or []) is False:
+                given = ", ".join(i for i in (ingredients or []) if i)[:40]
+                notes.append(
+                    {
+                        "level": "match_other",
+                        "text": reasons.MATCH_OTHER.format(
+                            given=given, official=p.official.text, src=src(p.official.norm)
+                        ),
+                    }
+                )
+        elif p.state == "near":
+            why = " · ".join(reasons.MATCH_WHY[w] for w in p.why[:2])
+            notes.append(
+                {
+                    "level": "match_near",
+                    "text": reasons.MATCH_NEAR.format(
+                        why=why, official=p.official.text, src=src(p.official.norm)
+                    ),
+                }
+            )
+        else:
+            notes.append(
+                {"level": "match_none", "text": reasons.MATCH_NONE.format(piece=p.shown or p.text)}
+            )
+    if not notes and res.state == "same":
+        src_all = src(*(p.official.norm for p in res.pieces))
+        return [{"level": "match_same", "text": reasons.MATCH_SAME.format(src=src_all)}]
+    return notes[:3]
+
+
 def _judged_part(text: str, fixed: str) -> str:
     """판정에 넣을 글자 — 인정 · 심사 문구를 뺀 나머지."""
     return text.replace(fixed, " ").strip() if fixed else text
@@ -1505,7 +1576,11 @@ async def compose(request: Request) -> HTMLResponse:
     part = _judged_part(prompt, fixed)
     if fixed:
         # 🆕 2026-10-14 (D-341 결정 1) — 판정에서 뺀 인정 · 심사 문구는 따로 판정해 경고를 같이 그린다(카피 생성과 같은 함수)
-        base["fixed_notes"] = await run_in_threadpool(_fixed_notes, fixed, origin["branch"])
+        base["fixed_notes"] = await run_in_threadpool(
+            _fixed_notes, fixed, origin["branch"]
+        ) + _fixed_match_notes(
+            fixed, origin["branch"]
+        )  # 🆕 10-14 (ksr) — 공식 문구 대조 (D-341 결정 4)
     if not part:
         return _render(
             request,
