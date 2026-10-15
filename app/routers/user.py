@@ -1218,11 +1218,10 @@ async def generate(
     #    엔진이 꺼져 있어도 경고는 그린다 — 문구는 적힌 그대로 광고 생성으로 넘어가기 때문이다
     if picked["fixed"]:
         key = f"{picked['category']}_{picked['cert']}"
+        # 🔄 10-15 (ksr) — 따로 판정한 경고와 공식 문구 대조(원재료 칸으로 원료도)를 섞어 그린다 (`_fixed_all_notes`)
         ctx["fixed_notes"] = await run_in_threadpool(
-            _fixed_notes, picked["fixed"], key
-        ) + _fixed_match_notes(
-            picked["fixed"], key, picked["ingredients"]
-        )  # 🆕 10-14 (ksr) — 공식 문구 대조 (D-341 결정 4) · 원재료 칸으로 원료도 맞춰 본다
+            _fixed_all_notes, picked["fixed"], key, picked["ingredients"]
+        )
     if why := copygen.off_reason():
         ctx |= {"engine_pending": True, "engine_why": why}
         return _render(request, "user/generate.html", _gen_ctx(ctx))
@@ -1536,6 +1535,37 @@ def _fixed_match_notes(
     return notes[:3]
 
 
+def _fixed_all_notes(
+    fixed: str, branch_key: str, ingredients: list[str] | None = None
+) -> list[dict]:
+    """인정 · 심사 문구 안내 전부 — 따로 판정한 경고(`_fixed_notes` · 팀장)와 공식 문구 대조(`_fixed_match_notes`)를 **섞는다**
+    (🆕 2026-10-15 ksr · D-341 상태 줄 「약한 경고 문안 검토」).
+
+    ★ 강한 경고 · 확인 못 함은 그대로 두고 대조 안내를 뒤에 붙인다(D-341 결정 1 그대로).
+    ★ 약한 경고만 대조 결과로 고른다 — 같음(다른 원료 포함)이면 빼고 · 비슷함 · 목록에 없음이면 `FIXED_WEAK_UNLISTED` ·
+       화장품(목록 없음)이면 `FIXED_WEAK_COS`. 「목록에 없음」 · 「목록 없음」 안내는 합친 문안이 말하므로 뺀다.
+    ⛔ `_fixed_notes` 를 고치지 않는다 — 그 함수의 판정 · 측정(원장 10-14(A) ⑨)은 그대로다. 섞는 것은 화면에 내기 직전이다.
+    """
+    warn = _fixed_notes(fixed, branch_key)
+    match = _fixed_match_notes(fixed, branch_key, ingredients)
+    levels = {n["level"] for n in match}
+    out: list[dict] = []
+    for n in warn:
+        if n["level"] != "weak":
+            out.append(n)
+        elif levels & {"match_same", "match_other"} and not levels & {"match_near", "match_none"}:
+            continue  # 공식 문구임을 글자로 확인했다
+        elif levels & {"match_near", "match_none"}:
+            out.append({"level": "weak", "text": reasons.FIXED_WEAK_UNLISTED})
+            match = [m for m in match if m["level"] != "match_none"]
+        elif "match_unchecked" in levels and reasons.MATCH_NO_LIST in {m["text"] for m in match}:
+            out.append({"level": "weak", "text": reasons.FIXED_WEAK_COS})
+            match = [m for m in match if m["level"] != "match_unchecked"]
+        else:
+            out.append(n)
+    return out + match
+
+
 def _judged_part(text: str, fixed: str) -> str:
     """판정에 넣을 글자 — 인정 · 심사 문구를 뺀 나머지."""
     return text.replace(fixed, " ").strip() if fixed else text
@@ -1587,10 +1617,8 @@ async def compose(request: Request) -> HTMLResponse:
     if fixed:
         # 🆕 2026-10-14 (D-341 결정 1) — 판정에서 뺀 인정 · 심사 문구는 따로 판정해 경고를 같이 그린다(카피 생성과 같은 함수)
         base["fixed_notes"] = await run_in_threadpool(
-            _fixed_notes, fixed, origin["branch"]
-        ) + _fixed_match_notes(
-            fixed, origin["branch"]
-        )  # 🆕 10-14 (ksr) — 공식 문구 대조 (D-341 결정 4)
+            _fixed_all_notes, fixed, origin["branch"]
+        )  # 🔄 10-15 (ksr) — 경고와 공식 문구 대조를 섞는다 (`_fixed_all_notes`)
     if not part:
         return _render(
             request,

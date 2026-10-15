@@ -332,3 +332,43 @@ def test_문구_여럿_중_하나만_다르면_버튼을_그리지_않는다(cat
     r = _gen_page(monkeypatch, fixed="면역력 증진에 도움을 줄 수 있음. 뼈 건강에 도움을 줌")
     assert "gn-fixed-match_near" in r.text
     assert _forms(r.text) == []
+
+
+@pytest.mark.parametrize(
+    ("fixed", "key", "warn", "want"),
+    [
+        # 약한 경고 + 공식 문구와 같음 → 약한 경고를 뺀다
+        ("골다공증 발생 위험 감소에 도움을 줌", "hf_yes", "weak", ["match_same"]),
+        # 약한 경고 + 목록에 없음 → 정상일 수 있다고 말하지 않는 문안 하나로
+        ("관절염을 치료합니다", "hf_yes", "weak", ["weak:unlisted"]),
+        # 약한 경고 + 비슷함 → 합친 문안 + 비슷함 안내(공식 문구를 보인다)
+        (
+            "면역력 증진 및 관절염 예방에 도움을 줌",
+            "hf_yes",
+            "weak",
+            ["weak:unlisted", "match_near"],
+        ),
+        # 약한 경고 + 화장품 → 화장품 문안 하나로(「목록 없음」은 합친 문안이 말한다)
+        ("피부의 미백에 도움을 준다", "cos_yes", "weak", ["weak:cos"]),
+        # 강한 경고는 그대로 두고 대조를 뒤에 붙인다
+        ("당뇨병을 예방하고 치료합니다", "hf_yes", "strong", ["strong", "match_none"]),
+        # 경고가 없으면 대조만
+        ("뼈 건강에 도움을 줌", "hf_yes", None, ["match_near"]),
+    ],
+)
+def test_경고와_대조를_섞는다(catalog, monkeypatch, fixed, key, warn, want) -> None:
+    from app import reasons
+    from app.routers import user as user_router
+
+    canned = {
+        "weak": [{"level": "weak", "text": reasons.FIXED_WEAK}],
+        "strong": [{"level": "strong", "text": reasons.FIXED_STRONG.format(types="질병")}],
+        None: [],
+    }[warn]
+    monkeypatch.setattr(user_router, "_fixed_notes", lambda *_a: list(canned))
+    notes = user_router._fixed_all_notes(fixed, key)
+    named = {reasons.FIXED_WEAK_UNLISTED: "weak:unlisted", reasons.FIXED_WEAK_COS: "weak:cos"}
+    assert [named.get(n["text"], n["level"]) for n in notes] == want
+    assert all(
+        n["text"] != reasons.FIXED_WEAK for n in notes
+    )  # 옛 약한 문안은 대조가 답을 알면 안 나온다
