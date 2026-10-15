@@ -291,6 +291,14 @@ class Judgment(Base):
             "risk_encoder IS NULL OR verdict = 'hold'",
             name="ck_judgment_encoder_hold_only",
         ),
+        # 🆕 2026-10-16 (D-348 보충 2 결정 8 · 0027) — 인코더 하한에는 **근거 호가 적혀 있다**(`evidence.encoder_refs` · 비지 않은 배열).
+        #   ⚠️ CHECK 는 식이 NULL 이면 지나간다 — COALESCE 로 「칸 없음 = 0」을 만든다(evidence 가 NULL 이어도 거부).
+        #   계약 `_encoder_risk_has_basis` 와 같은 규칙 · 저장 `app/judgment_store.py` `_encoder_refs` (D-99 · D-224)
+        CheckConstraint(
+            "risk_encoder IS NULL"
+            " OR COALESCE(jsonb_array_length(evidence -> 'encoder_refs'), 0) > 0",
+            name="ck_judgment_encoder_has_basis",
+        ),
         # 🆕 2026-09-29 (D-09 래칫 · 계약 `RiskAssessment` 와 같은 규칙 · D-99) — 최종은 하한보다 낮을 수 없다.
         #   ⛔ 위 제약은 「하한보다 **높으면** 근거」만 보고, 하한 R3 · 최종 R0 을 받았다 — 인코더가 내린 것이다.
         #   🔴 글자는 마이그레이션 0022 의 `_CHECKS` 와 같아야 한다 (게이트 `test_0018_의_제약_글자가_모델과_같다`).

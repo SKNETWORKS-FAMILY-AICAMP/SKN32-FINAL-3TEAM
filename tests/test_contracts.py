@@ -687,6 +687,7 @@ def test_검수_픽스처에는_후보도_재생성도_없다(path: pathlib.Path
         "20260923_0018_judgment_w3.py",
         "20260929_0022_judgment_ratchet.py",
         "20261016_0026_judgment_encoder_floor.py",
+        "20261016_0027_judgment_encoder_basis.py",
     ],
 )
 def test_0018_의_제약_글자가_모델과_같다(fname: str) -> None:

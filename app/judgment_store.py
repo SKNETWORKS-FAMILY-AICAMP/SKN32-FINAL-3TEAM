@@ -26,6 +26,8 @@
    「선택한 전제의 저장은 판정 저장과 함께 정한다」(D-319 결정 7 ⬜) · 「고른 전제의 결과는 통과율에 섞지 않는다」(D-263 ①).
 ⚠️ `judgment.violation_type` 은 한 칸이다 — 문장에 위반 유형이 여럿이면 **첫 유형**을 적고, 전부는 `evidence.violations` 에 남긴다.
 ⚠️ 인코더 후보(`encoder_candidates`)는 적지 않는다 — 판정이 아니라 추정이다(D-323). 적을지는 따로 정한다.
+   🔄 2026-10-16 (D-348 보충 2 결정 8 · D-323 좁힘) — **인코더 하한(`risk_encoder`)이 적힌 문장은 그 근거 호만 적는다**
+   (`evidence.encoder_refs` · 유형과 참조 조항). 저장된 등급마다 근거가 남아야 한다(D-224) — 후보 전체 · 확률은 여전히 적지 않는다.
 🔴 🆕 2026-10-14 (흡수 중 고침 · 팀장 (다)) — **판정 대상 아님(`not_claim`) 문장은 적지 않는다.** 표에 그 칸이 없어 적으면
    「확정 · 위반 없음 · R0」 — 이력 · 통계에서 「특이사항 없음」(통과에 가까운 상태)으로 읽힌다. 통과는 닫아 두었다(D-275 · D-323 결정 5).
    ksr 의 이력 저장(`_save_review` · 10-13)과 같은 규칙이다 — 저장은 이 모듈 하나로 모은다(ksr 흡수 때 나머지 규칙을 옮긴다 · D-99).
@@ -67,6 +69,24 @@ def _risk_int(r: Risk | None) -> int | None:
     return None if r is None else int(r.value[1:])
 
 
+def _encoder_refs(s: SentenceJudgment) -> list[dict]:
+    """인코더 하한의 근거 — 참조 조항이 있는 후보의 (유형 · 조항)만 (D-348 보충 2 결정 2 · 8). 인코더 하한이 없으면 빈 목록.
+
+    ⛔ 확률(`confidence`) · 추정 위험도는 적지 않는다 — 판정이 아니다(D-323). 옮긴 후보는 원래 유형을 함께 적는다.
+    """
+    if s.risk.encoder is None:
+        return []
+    return [
+        {
+            "violation": c.violation.value,
+            "moved_from": c.moved_from.value if c.moved_from else None,
+            "articles": [a.model_dump(mode="json") for a in c.references],
+        }
+        for c in s.encoder_candidates
+        if c.references
+    ]
+
+
 def _category(res: JudgeResponse) -> tuple[str | None, str | None]:
     """(품목, 품목 출처) — **둘 다 있거나 둘 다 없다** (`ck_judgment_category_source_pair` · D-276).
 
@@ -85,16 +105,20 @@ def _judgment_row(
 ) -> Judgment:
     category, source = _category(res)
     violations = [v.value for v in s.violations]
-    evidence = (
+    enc_refs = _encoder_refs(s)
+    evidence: dict | None = (
         {
             "violations": violations,
             "articles": [a.model_dump(mode="json") for a in s.evidence],
             # 🆕 2026-10-14 (ksr 흡수) — 이력 배지가 읽는다(`_hist_view`). 확정 위반이 아니면 None
             "infeasibility": s.infeasibility.value if s.infeasibility else None,
         }
-        if violations or s.evidence
+        if violations or s.evidence or enc_refs
         else None
     )
+    if evidence is not None and enc_refs:
+        # 🆕 2026-10-16 (D-348 보충 2 결정 8) — 인코더 하한의 근거 호 · DB 가 `ck_judgment_encoder_has_basis` 로 댄다
+        evidence["encoder_refs"] = enc_refs
     span = s.risk.evidence_span
     return Judgment(
         id=uuid.uuid4(),

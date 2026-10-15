@@ -305,3 +305,26 @@ def test_화면은_인코더_하한을_AI_추정으로_사전_하한과_따로_�
     html = TestClient(api.app).get("/u/preview/enc_case").text
     assert "AI 추정 · 낮은 위험" in html, "인코더 하한에서 온 등급이 사전 등급처럼 그려졌다"
     assert "사전 하한" in html and "인코더 하한 (AI 추정 · 판정 아님)" in html
+
+
+def test_저장은_인코더_하한의_근거_호를_남긴다() -> None:
+    """보충 2 결정 8 — 저장된 등급마다 근거가 남는다(D-224). 확률 · 추정 위험도는 적지 않는다(D-323)."""
+    import uuid  # noqa: PLC0415
+
+    from app import judgment_store as js  # noqa: PLC0415
+    from app.contracts import JudgeResponse  # noqa: PLC0415
+
+    s = g._with_encoder_risk(_held(), Premise.식품, _rows())
+    res = JudgeResponse(outcome=Outcome.hold, sentences=[s])
+    row = js._judgment_row(uuid.uuid4(), uuid.uuid4(), s, res)
+    assert row.risk_encoder == 1 and row.risk_final == 1 and row.risk_floor is None
+    refs = row.evidence["encoder_refs"]
+    assert refs and refs[0]["violation"] == "거짓_과장" and refs[0]["articles"]
+    assert "confidence" not in str(refs), "확률은 적지 않는다 (D-323)"
+    plain = _held()
+    row2 = js._judgment_row(
+        uuid.uuid4(), uuid.uuid4(), plain, JudgeResponse(outcome=Outcome.hold, sentences=[plain])
+    )
+    assert row2.evidence is None and row2.risk_encoder is None, (
+        "인코더 하한이 없으면 후보를 적지 않는다"
+    )

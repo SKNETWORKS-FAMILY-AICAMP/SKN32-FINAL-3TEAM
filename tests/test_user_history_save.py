@@ -93,6 +93,9 @@ def _check_row(j: Judgment) -> None:
         assert j.risk_final <= max(lows) or j.evidence_span is not None
     if j.risk_encoder is not None:
         assert j.risk_encoder <= 1 and j.verdict == "hold" and j.risk_final is not None
+        assert (j.evidence or {}).get("encoder_refs"), (
+            "🔴 ck_judgment_encoder_has_basis — 인코더 하한의 근거 호가 없다"
+        )
     assert j.hold_reason is None or len(j.hold_reason) <= 16
     assert len(j.law_version) <= 40 and len(j.judged_by) <= 80
 
