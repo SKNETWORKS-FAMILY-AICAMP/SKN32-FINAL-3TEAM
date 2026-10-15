@@ -151,6 +151,64 @@ def guessed_types(sentence: object) -> list[str]:
     return sorted({c.violation.value for c in getattr(sentence, "encoder_candidates", None) or ()})
 
 
+def _rank_key(c: object) -> tuple[float, bool, str]:
+    v = getattr(c, "violation", None)
+    return (
+        -float(getattr(c, "confidence", 0.0)),
+        getattr(c, "moved_from", None) is not None,
+        str(getattr(v, "value", v)),
+    )
+
+
+def ordered_candidates(sentence: object) -> list:
+    """인코더 유형 후보를 **원시 확률 내림차순**으로 — 첫 원소가 대표다 (🆕 2026-10-15 · D-346 결정 6 · 초안 박수진 D4-13).
+
+    ★ 대표 = 원시 확률(`confidence`) 최댓값 — 판정 그래프 dev 후보 둘 이상 행에서 확률 ÷ 문턱보다 나았다(100 / 137 대 87 / 137 ·
+       원장 미기록). 품목 전제가 옮긴 후보는 원래 유형의 확률이 이미 `confidence` 에 실려 있다(그대로 쓴다).
+       동률은 ① 인코더가 직접 낸 후보 ② 유형 이름 순 — 요청마다 화면이 흔들리지 않게.
+    ⛔ 후보를 줄이지 않는다 · 판정 · 집합 함수(`agreed_types` · `differing_types` · `combo_cell` · `guessed_types`)는 이 함수를 쓰지 않는다.
+    🔴 빈 목록은 「후보 없음」이지 「문제없음」이 아니다 (D-220 · D-330 결정 1) — 이 함수는 그 말을 하지 않는다.
+    """
+    return sorted(getattr(sentence, "encoder_candidates", None) or (), key=_rank_key)
+
+
+def representative(sentence: object) -> object | None:
+    """대표 유형 후보 — `ordered_candidates` 의 첫 원소 · 없으면 None."""
+    got = ordered_candidates(sentence)
+    return got[0] if got else None
+
+
+#: 🆕 2026-10-15 (D-346 결정 6) — 후보가 둘 이상일 때 첫 줄(대표)에 붙이는 말. 확률(%)은 그리지 않는다(D-330 안건 1 (나)).
+#: 문안은 화면 담당 검토 대상이다
+REPRESENTATIVE_MARK = "가장 가능성 높은 추정"
+
+#: 🆕 2026-10-15 (D-340 결정 5 · D-346) — 인코더 후보의 **추정 위험도** 글자. 🚨 판정이 아니다 — 「확정되면」을 늘 붙인다.
+#:    `{floor}` · `{ceiling}` 은 「R1(시정명령)」 꼴. 모르면 `ESTIMATE_UNKNOWN`(없음을 낮음으로 그리지 않는다 · D-220). 문안은 화면 담당 검토 대상이다
+ESTIMATE_TEXT = "확정되면 위험도 {floor}"
+ESTIMATE_CEILING_TEXT = " · 목에 따라 {ceiling}까지"
+ESTIMATE_UNKNOWN = "확정되면 위험도 — 제재 기준에서 찾지 못해 알 수 없어요"
+
+
+def _risk_label(r: Risk) -> str:
+    """「R1(시정명령)」 꼴 — 이름은 `app/sanction.py` `RISK_NAME` 한 곳 (D-99)."""
+    from app.sanction import RISK_NAME  # noqa: PLC0415 — 쓰는 곳에서만
+
+    return f"{r.value}({RISK_NAME[r]})" if r in RISK_NAME else r.value
+
+
+def estimate_text(candidate: object) -> str | None:
+    """후보 하나의 추정 위험도 글자 — 대상이 아니면(`estimate` 없음) None (D-340 결정 5)."""
+    e = getattr(candidate, "estimate", None)
+    if e is None:
+        return None
+    if e.floor is None:
+        return ESTIMATE_UNKNOWN
+    out = ESTIMATE_TEXT.format(floor=_risk_label(e.floor))
+    if e.ceiling is not None:
+        out += ESTIMATE_CEILING_TEXT.format(ceiling=_risk_label(e.ceiling))
+    return out
+
+
 def guessed_mark(sentence: object) -> str | None:
     """겉 표지 글자 — 추정 유형이 있으면 `GUESSED_TYPE_MARK` · 없으면 None (D-330 보충 2)."""
     return GUESSED_TYPE_MARK if guessed_types(sentence) else None

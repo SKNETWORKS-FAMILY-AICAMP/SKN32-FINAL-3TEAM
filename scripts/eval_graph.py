@@ -60,6 +60,9 @@ from app.contracts import (  # noqa: E402
 )
 from collect import statute  # noqa: E402
 from preprocess import devsplit  # noqa: E402
+from preprocess import (
+    encoder_resplit as resplit,  # noqa: E402 — 봉인 · 확장 dev 의 정의는 한 곳 (D-347 · D-99)
+)
 from preprocess.golden import lawful_kind  # noqa: E402
 from preprocess.split import APPROVED_READING  # noqa: E402
 from scripts import sealed_log  # noqa: E402 — 봉인 기록은 한 곳 (D-344 ⑧ · D-99)
@@ -92,7 +95,11 @@ CLASSES = ("확정위반", "확정무위반", "보류", "근거없음", "미판�
 
 
 def load_rows(
-    path: pathlib.Path = GOLDEN, provenance: str | None = None, *, dev: bool = False
+    path: pathlib.Path = GOLDEN,
+    provenance: str | None = None,
+    *,
+    dev: bool = False,
+    guide_dev: bool = False,
 ) -> list[dict]:
     """봉인 평가셋 행(기본) 또는 **dev 행**(`dev=True`). 🔴 파일이 없으면 멈춘다 — 빈 목록으로 0 을 내지 않는다 (D-220).
 
@@ -107,8 +114,12 @@ def load_rows(
     if dev:
         by_id = {r["id"]: r for r in every}
         rows = [by_id[i] for i in devsplit.dev_ids(every)]
+        if guide_dev:
+            # 🆕 2026-10-15 (D-347) — 확장 dev = devsplit 의 dev + 재분할의 해설서 dev. 지문은 따로 찍는다(`check_dev`)
+            rows += resplit.guide_dev_rows(every)
     else:
-        rows = [r for r in every if r["split"] == "test_sentence"]
+        # 🔄 2026-10-15 (D-347) — 봉인 평가셋 = 봉인 행 중 인코더 학습 · dev 로 옮기지 않은 것. 정의는 한 곳(D-99)
+        rows = resplit.sealed_rows(every)
     if provenance:
         rows = [r for r in rows if r.get("provenance") == provenance]
     return rows
@@ -897,7 +908,15 @@ def check_dev(rows: list[dict], model_dir: pathlib.Path | None) -> dict[str, Any
     🚨 모델 폴더에 dev 지문이 없으면(옛 산출물) 대조할 수 없다 — 멈추지 않고 판 표지에 「미확인」으로 적는다.
        없음을 일치로 세지 않는다. 인코더 없이 재면 대조할 모델이 없다 — 지문만 적는다.
     """
-    stamp: dict[str, Any] = {"dev_rows": len(rows), "dev_sha": devsplit.sha(r["id"] for r in rows)}
+    #: 🆕 2026-10-15 (D-347) — 확장 dev 면 해설서 dev(봉인에서 옮긴 행)를 따로 떼어 따로 대조한다
+    guide = [r for r in rows if r["id"].startswith(resplit.PREFIXES)]
+    base = [r for r in rows if not r["id"].startswith(resplit.PREFIXES)]
+    stamp: dict[str, Any] = {"dev_rows": len(base), "dev_sha": devsplit.sha(r["id"] for r in base)}
+    if guide:
+        stamp |= {
+            "guide_dev_rows": len(guide),
+            "guide_dev_sha": devsplit.sha(r["id"] for r in guide),
+        }
     if model_dir is None:
         return stamp
     try:
@@ -914,6 +933,24 @@ def check_dev(rows: list[dict], model_dir: pathlib.Path | None) -> dict[str, Any
             "  이 모델은 이 행의 일부를 학습에서 봤다 — dev 수치로 쓸 수 없다 (D-175).\n"
             "  골든 판이 다르거나 모델이 다른 규칙으로 dev 를 뗐다(`preprocess/devsplit.py` 는 v11 규칙이다)."
         )
+    #: 재분할로 학습한 판은 `label_scheme.json` 에 재분할 판 · 지문을 싣는다(D-347 결정 4). 없으면 재분할 전 판이다 —
+    #: 그 판은 해설서 dev 를 학습에서 보지 않았다(그 행은 봉인이었다).
+    if scheme.get("resplit") is not None:
+        if scheme.get("resplit") != resplit.VERSION:
+            raise SystemExit(
+                f"🔴 이 모델은 재분할 {scheme.get('resplit')!r} 로 학습했다 — 여기 규칙은 {resplit.VERSION!r} (D-347)\n"
+                "  다른 배정이면 해설서 dev 의 일부를 학습에서 봤을 수 있다 — dev 수치로 쓸 수 없다 (D-175)."
+            )
+        if guide and scheme.get("resplit_dev_sha") != stamp["guide_dev_sha"]:
+            raise SystemExit(
+                f"🔴 해설서 dev 가 이 모델의 것과 다르다 — 여기 {stamp['guide_dev_sha']} / "
+                f"모델 {scheme.get('resplit_dev_sha')} (D-347 · D-175)"
+            )
+        return stamp | {"dev_check": "일치(재분할 판)" if guide else "일치"}
+    if guide:
+        return stamp | {
+            "dev_check": "일치 · 해설서 dev 는 이 판이 학습에서 보지 않은 봉인 몫(재분할 전 판)"
+        }
     return stamp | {"dev_check": "일치"}
 
 
@@ -1055,13 +1092,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="봉인 평가셋(test_sentence) 회차 — 잠금 채택 판 · 전 행 · 날짜 하나에 한 번 (D-339 결정 7 · 보고 전용)",
     )
+    ap.add_argument(
+        "--guide-dev",
+        action="store_true",
+        help="확장 dev — dev 에 재분할의 해설서 dev 를 더한다 (D-347 · `--dev` 와 함께만)",
+    )
     a = ap.parse_args(argv)
+    if a.guide_dev and not a.dev:
+        raise SystemExit(
+            "🔴 --guide-dev 는 --dev 와 함께만 — 봉인 평가셋에는 해설서 dev 가 없다 (D-347)"
+        )
     if a.sealed:
         import datetime  # noqa: PLC0415
 
         if why := sealed_refusal(a, datetime.date.today().isoformat()):
             raise SystemExit(f"🔴 {why}")
-    rows = load_rows(dev=a.dev)
+    rows = load_rows(dev=a.dev, guide_dev=a.guide_dev)
     #: dev 대조는 **거르기 전 전체 행**으로 한다 — 원천으로 거른 뒤에는 지문이 달라진다
     dev_stamp = check_dev(rows, a.encoder or enc.configured_dir()) if a.dev else {}
     if a.provenance:
@@ -1072,7 +1118,7 @@ def main(argv: list[str] | None = None) -> int:
         rows = rows[: a.limit]
     #: 판 표지 — 원장에 수와 함께 적는다 (D-178). 🔴 실제 실행은 DB 사전이 파일과 같을 때만 돈다(`check_dict`)
     stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN), "conditional": a.conditional}
-    stamp |= {"split": "dev" if a.dev else "test_sentence"} | dev_stamp
+    stamp |= {"split": "dev" if a.dev else "test_sentence", "resplit": resplit.VERSION} | dev_stamp
     stamp |= use_encoder(a.encoder, adopted_only=a.sealed)
     if a.no_enc_filter:
         g.disable_encoder_filter()
