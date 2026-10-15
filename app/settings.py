@@ -122,7 +122,8 @@ class Params(BaseModel):
 
     # ── 청크·토큰 (축이 둘이다) ────────────────────────────────────────
     #: `[설계]` **인용 단위**의 토큰 상한 — `chunk.token_count`. `db/schema.sql` 의
-    #: `ck_chunk_tokens` 와 같아야 한다. 게이트가 대조한다.
+    #: `ck_chunk_tokens` 와 같아야 한다. ⬜ 🔄 2026-10-15 (전수 점검) — 「게이트가 대조한다」고 적혀 있었는데 대조하는 게이트도,
+    #: 이 칸을 읽는 코드도 없다(이 칸 · `rerank_token_max` 둘 다). 리랭커를 붙일 때 읽는 쪽과 대조를 같이 만든다 (D-99).
     citation_token_max: int = Field(512, ge=1)
     #: `[설계]` **리랭커 입력**의 토큰 상한 — `chunk.input_token_count`.
     #: ⬜ **리랭커 미선정**이라 잠정으로 인용 상한과 같은 값을 쓴다. 모델이 정해지면 바뀐다.
@@ -343,7 +344,7 @@ def sqlalchemy_url() -> str:
     return url.replace("://", f"+{SQLALCHEMY_DRIVER}://", 1)
 
 
-def load_kwargs(model_id: str) -> dict[str, object]:
+def load_kwargs(model_id: str, *, local_only: bool = False) -> dict[str, object]:
     """`SentenceTransformer(model_id, **load_kwargs(model_id))` 에 줄 인자 (P0-3).
 
     🔴 **화이트리스트 밖이면 여기서 막는다** — 로드 시점이 아니라 **인자를 만드는 자리**에서.
@@ -351,6 +352,10 @@ def load_kwargs(model_id: str) -> dict[str, object]:
        바꿀 때 조용히 열린다.
     🚨 `revision` 이 비어 있으면 **태그를 따라간다** — 태그는 움직인다 (기획서 8-4 #9).
        ⬜ SHA 를 아직 안 박았다. 값이 서면 이 함수는 안 바뀐다.
+    🆕 2026-10-15 (D-344 ⑦ · D-77 L4 · 집행계약 doctor 16) — `local_only` 면 **이 기기의 캐시에서만** 올린다(`local_files_only`).
+       판정 경로(`app/retrieve.py` `encode`)가 이것을 쓴다 — 종전에는 첫 질의에서 HF 허브로 요청이 나갔고, 이그레스 프록시가
+       403 을 주는 망에서는 캐시가 있어도 올리지 못해 벡터 검색이 조용히 꺼졌다(클라우드 작업공간 재현 · 연결 거부 망은 캐시로 넘어감).
+       내려받기는 `scripts/embed.py`(`launcher.py embed`)만 한다 — 캐시가 있는지는 `doctor --env` 가 본다.
     """
     if model_id not in ALLOWED_MODELS:
         raise ValueError(
@@ -367,4 +372,6 @@ def load_kwargs(model_id: str) -> dict[str, object]:
     kw["model_kwargs"] = {"use_safetensors": True}
     if PARAMS.embed_revision:
         kw["revision"] = PARAMS.embed_revision
+    if local_only:
+        kw["local_files_only"] = True
     return kw

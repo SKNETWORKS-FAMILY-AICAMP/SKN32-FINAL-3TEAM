@@ -1816,12 +1816,18 @@ def train() -> None:
 
 
 @app.command(name="eval")
-@stub("W4~", "학습 산출물")
+@needs_data
 def eval_() -> None:
-    """학습한 모델이 얼마나 맞히는지 잰다.
+    """판정 그래프를 dev 로 잰다 — 4층 지표 중 품질의 일부.
 
-    4층 지표 — L1 품질 · L2 통합 · L3 운영 · L4 거버넌스 (D-77).
+    4층 지표(L1 품질 · L2 통합 · L3 운영 · L4 거버넌스)는 D-77 · 고르는 자리가 dev 인 것은 D-175.
+
+    🆕 2026-10-15 (D-344 ⑩) — `scripts/eval_graph.py --dev` 를 부른다(앱과 같은 그래프 · 설정한 인코더 · DB 필요).
+    🔴 봉인 평가셋은 여기서 열지 않는다 — 메뉴 한 번으로 봉인 회차가 열리면 「날짜 하나에 한 번」(D-339 결정 7)이 무너진다.
+       봉인 회차는 `uv run python -m scripts.eval_graph --sealed` 로 직접 친다(잠금 채택 판 · 전 행 · 돌기 전에 기록).
+    ⬜ L2 통합 · L3 운영 · L4 거버넌스 지표는 아직 없다 (D-188).
     """
+    raise typer.Exit(run("uv", "run", "python", "-m", "scripts.eval_graph", "--dev"))
 
 
 @app.command()

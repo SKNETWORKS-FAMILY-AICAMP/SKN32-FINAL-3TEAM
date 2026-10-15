@@ -35,6 +35,7 @@ if str(ROOT) not in sys.path:
 from app.contracts import Infeasibility  # noqa: E402
 from collect import registry  # noqa: E402
 from scripts import eval_graph as eg  # noqa: E402
+from scripts.eval_rule import untyped_violation  # noqa: E402 — 채점이 빼는 행과 같은 함수 (D-99)
 
 #: 골든 `조건` 칸 → 불가 사유 (계약 `Infeasibility`). 이 셋만 고쳐 쓸 대상이다
 REASON_OF_COND = {"A": Infeasibility.A, "B": Infeasibility.B, "C": Infeasibility.C}
@@ -60,7 +61,9 @@ def gen_inputs(rows: list[dict]) -> list[dict[str, Any]]:
     out = []
     for r in rows:
         reason = REASON_OF_COND.get(r.get("조건"))
-        if reason is None or not r.get("labels"):
+        # 🔴 2026-10-15 (전수 점검) — 「채점이 빼는 행을 뺀다」를 **채점과 같은 함수**로. 종전에는 `labels` 가 비었는지만 봐서
+        #    편입 대기 유형만 붙은 행(예 「기능성화장품_오인」 하나)이 들어가 그 유형이 고쳐 쓰기 서버에 위반으로 갔다
+        if reason is None or not r.get("labels") or untyped_violation(r):
             continue
         layer = layer_of(r)
         product = eg.product_of(r, layer != "참고")
@@ -73,7 +76,9 @@ def gen_inputs(rows: list[dict]) -> list[dict[str, Any]]:
                 "품목": product.category.value if product.category else None,
                 "인정": product.has_recognized_function if r["전제"] else None,
                 "정답_유형": list(r["labels"]),
-                "정답_근거": list(r["근거"]),
+                "정답_근거": list(
+                    r.get("근거") or []
+                ),  # 근거 후보만 있는 행은 빈 목록(`truth_ho` 와 같은 모양)
                 "불가_사유": reason.value,
             }
         )
@@ -100,9 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     # 🔴 변경금지(ND) 게이트 — 문구가 든 파생물이다. 골든이 만들 때 막았지만 여기서도 부른다 (`tests/test_nd_gate.py`)
     picked = {it["id"] for it in items}
     registry.assert_derivable([r for r in rows if r["id"] in picked], who="scripts.gen_eval_inputs")
-    untyped = sum(
-        1 for r in rows if r.get("조건") in REASON_OF_COND and r.get("근거") and not r.get("labels")
-    )
+    untyped = sum(1 for r in rows if untyped_violation(r))
     order = list(REASON_NAME)
     print(
         f"생성 평가 입력 — dev {len(rows)}행 중 {len(items)}행 (조건 A · B · C ∧ 유형 있음)"

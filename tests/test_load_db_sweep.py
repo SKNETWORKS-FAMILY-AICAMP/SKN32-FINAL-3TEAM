@@ -135,3 +135,142 @@ def test_source_에_못_들어간_원천의_원장_줄은_넣지_않고_센다(
     inserted = [p for sql, p in cur.calls if sql.startswith("INSERT INTO collect_manifest")]
     assert [p[0] for p in inserted] == ["들어간것"]
     assert "건너뛴것 2" in capsys.readouterr().out
+
+
+# ── 2026-10-15 전수 점검 — 소스 갱신 칸 · 빈 입력 가드 ─────────────────────────────────
+
+
+@pytest.mark.gate
+def test_소스는_넣는_칸을_모두_갱신한다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 재현(임시 PG16) — 5 칸만 갱신해 판정자를 바꾸면 옛 판정자 + 새 검토자가 섞이고, 둘이 같아지면
+    `ck_source_four_eyes` 에 걸려 적재가 멈췄다. 넣는 칸(source_id 밖)은 모두 `DO UPDATE` 에 있어야 한다."""
+    import re  # noqa: PLC0415
+
+    monkeypatch.setattr(
+        load_db,
+        "_sources",
+        lambda: {
+            "zz": {"decided_by": "B", "reviewed_by": "C", "attribution": "출처", "grade": "G3"}
+        },
+    )
+    cur = _Cur([])
+    load_db.load_sources(cur, dry=False)
+    sql = next(s for s, _ in cur.calls if "INSERT INTO source " in s)
+    cols = re.search(r"INSERT INTO source \(([^)]*)\)", sql).group(1)
+    inserted = {c.strip() for c in cols.split(",")} - {"source_id"}
+    updated = set(re.findall(r"(\w+)=EXCLUDED\.\1", sql))
+    assert inserted <= updated, f"갱신 안 되는 칸: {sorted(inserted - updated)}"
+
+
+@pytest.mark.gate
+def test_별표_폴더가_비면_멈춘다(derived: pathlib.Path) -> None:
+    """🔴 폴더는 있는데 내용 있는 별표 파일이 0 이면 별표 없이 성공을 냈다(뒤에 embed FK 오류로 터짐)."""
+    (derived / "law_article.jsonl").write_text(
+        json.dumps({"파일": "법_000001_x.xml", "법령": "법"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (derived / "law_norm").mkdir()
+    (derived / "law_norm" / "빈.jsonl").write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit, match="별표 파일이 하나도 없다"):
+        load_db.load_documents(_Cur([]), dry=True)
+
+
+@pytest.mark.gate
+def test_인정_문구가_0_행이면_멈춘다(derived: pathlib.Path) -> None:
+    """🔴 파일은 있는데 쓸 수 있는 행이 0 이면 0 행을 넣고 성공으로 냈다 (D-220)."""
+    (derived / "hf_api_labels.jsonl").write_text(
+        json.dumps({"원천": "mfds_hf_individual", "PRIMARY_FNCLTY": "", "RAWMTRL_NM": ""}) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="0 이다"):
+        load_db.load_product_fact(_Cur([]), dry=True)
+
+
+@pytest.mark.gate
+def test_제재표_원천에_행이_없으면_표를_거두지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 행이 0 이면 `NOT (rule_key = ANY('{}'))` 가 표 전체를 지웠다 — 빈 선언으로는 거두지 않는다 (D-220)."""
+    from scripts import sanction_rule as sr  # noqa: PLC0415
+
+    monkeypatch.setattr(sr, "load_rules", lambda: {"rows": []})
+    monkeypatch.setattr(sr, "lint", lambda spec: [])
+    monkeypatch.setattr(sr, "signature", lambda spec: None)
+    monkeypatch.setattr(sr, "plan_sha", lambda spec: "0" * 12)
+    cur = _Cur([])
+    with pytest.raises(SystemExit, match="행이 없다"):
+        load_db.load_sanction_rule(cur, dry=False)
+    assert not cur.deletes()
+
+
+# ── 2026-10-15 (D-344 ③) — 건너뛴 소스는 용도를 닫고 · 적재한 소스는 레지스트리와 같게 ─────────────
+
+
+class _UseCur(_Cur):
+    """`UPDATE source_use … RETURNING` 에 닫힌 (소스, 용도)를 돌려주는 대역."""
+
+    def __init__(self, opened: list[tuple[str, str]]) -> None:
+        super().__init__([])
+        self.opened = opened
+        self._last = ""
+
+    def execute(self, sql: str, params=None) -> None:  # noqa: ANN001
+        super().execute(sql, params)
+        self._last = sql
+
+    def fetchall(self):  # noqa: ANN201
+        if self._last.startswith("UPDATE source_use"):
+            return list(self.opened)
+        return []
+
+
+@pytest.mark.gate
+def test_2인_확인이_다시_열린_소스는_DB_용도를_닫는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 건너뛰기만 해서 마지막으로 넣은 `U2_rag` 가 남아 검색을 계속 허용했다 — 행은 두고 `allowed` 만 내린다 (D-344 ③)."""
+    monkeypatch.setattr(
+        load_db,
+        "_sources",
+        lambda: {
+            "ok": {"decided_by": "B", "reviewed_by": "C", "attribution": "출처", "grade": "G3"},
+            "re": {"decided_by": "B", "reviewed_by": None, "attribution": "출처", "grade": "G3"},
+        },
+    )
+    cur = _UseCur([("re", "U2_rag"), ("re", "U3_cite")])
+    _ok, skipped, _sw, _kept = load_db.load_sources(cur, dry=False)
+    upd = [p for s, p in cur.calls if s.startswith("UPDATE source_use")]
+    assert upd == [(["re"],)], upd
+    assert not any(s.startswith("DELETE FROM source ") for s, _ in cur.calls)
+    assert skipped == ["re (2인 확인 미완: 'B'/None) → DB 용도 닫음(U2_rag · U3_cite)"], skipped
+
+
+@pytest.mark.gate
+def test_예행에서는_용도를_닫지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        load_db, "_sources", lambda: {"re": {"decided_by": "B", "reviewed_by": None, "grade": "G3"}}
+    )
+    cur = _UseCur([("re", "U2_rag")])
+    load_db.load_sources(cur, dry=True)
+    assert cur.calls == []
+
+
+@pytest.mark.gate
+def test_레지스트리에서_뺀_제약과_용도는_DB_에서도_지운다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        load_db,
+        "_sources",
+        lambda: {
+            "zz": {
+                "decided_by": "B",
+                "reviewed_by": "C",
+                "attribution": "출처",
+                "grade": "G3",
+                "constraints": ["TOS"],
+                "use": {"U2": "allow", "U3": "deny"},
+            }
+        },
+    )
+    cur = _UseCur([])
+    load_db.load_sources(cur, dry=False)
+    dels = {s.split()[2]: p for s, p in cur.calls if s.startswith("DELETE FROM source_")}
+    assert dels == {
+        "source_constraint": ("zz", ["TOS"]),
+        "source_use": ("zz", ["U2_rag", "U3_cite"]),
+    }, dels

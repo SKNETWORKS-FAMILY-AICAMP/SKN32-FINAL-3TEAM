@@ -413,6 +413,21 @@ class FactBranch(BaseModel):
     criteria: str = Field(..., min_length=1)
 
 
+class RiskEstimate(BaseModel):
+    """인코더만 잡은 문장의 **추정 위험도** — 「확정되면 R? · 목에 따라 R?」 (🆕 2026-10-15 · D-340 결정 5 · D-346 · D-347 결정 6).
+
+    🚨 **판정이 아니다** — 하한 · 래칫 · 종착 · 분기 열쇠 어디에도 들지 않는다(표시 전용). 근거 인용 없이 그 전제의 법 ∩ 그 유형의
+       조항이 있는 법의 서명된 제재표에서 찾는다(`app/graph.py` `estimate_of` · `sanction.floor_rows`). D-131 개정 ① 이 판정되기
+       전까지 표시로만 쓴다.
+    🔴 `floor` 가 비면 **모른다**(그 법의 서명 행이 없다 · 그 법에 이 유형 조항이 없다) — R0 이 아니다 (D-220).
+    """
+
+    floor: Risk | None = None
+    #: 목에 따라 더 무거울 수 있는 처분 — `RiskAssessment.ceiling` 과 같은 뜻(D-310 개정 (다)) · 하한과 같으면 비운다
+    ceiling: Risk | None = None
+    ceiling_note: str | None = None
+
+
 class EncoderTypeCandidate(BaseModel):
     """인코더가 낸 **유형 후보** 하나 (🆕 2026-10-08 · D-323 결정 1 · D-131). 🚨 판정이 아니다.
 
@@ -434,6 +449,9 @@ class EncoderTypeCandidate(BaseModel):
     #:    🔴 비어 있으면 「그 법에 이 유형의 조항이 없다」다(예: 화장품법의 건강기능식품 오인) — 조항이 없다고 후보가 틀린 것은 아니다.
     #:       좌표만 있고 `quote` 가 비면 원문을 못 붙인 것이다(DB 없음 · 인용 자격 없음 · 쪼갠 조각) — 좌표는 표가 정한 값이다.
     references: list[EvidenceArticle] = Field(default_factory=list)
+    #: 🆕 2026-10-15 (D-340 결정 5 · D-346) — **추정 위험도**. `None` 이면 대상이 아니다 — 기록 판정(품목 미상) · 사전 유형이 있는
+    #:    문장 · 표시 목록 밖의 (전제 · 유형)(`app/graph.py` `ESTIMATE_TYPES`). 대상인데 모르면 `RiskEstimate(floor=None)` 이다
+    estimate: RiskEstimate | None = None
 
 
 class SentenceJudgment(BaseModel):
@@ -450,7 +468,7 @@ class SentenceJudgment(BaseModel):
     evidence: list[EvidenceArticle] = Field(default_factory=list)
     risk: RiskAssessment = Field(default_factory=RiskAssessment)
     #: 🆕 2026-10-08 (D-323 결정 1) — 인코더 유형 후보. 비어 있으면 인코더가 없거나 조용하다 — **「위반 없음」이 아니다** (D-220).
-    #:    그래프가 채우는 것은 인코더 배선 뒤다(클론 B) · 그 전에는 늘 빈 목록이다.
+    #:    🔄 그래프의 `encode` 가 채운다(배선 10-09 · 판은 잠금 · D-333) — 인코더가 안 돌면(폴더 없음 · 잠금 밖) 빈 목록이다.
     encoder_candidates: list[EncoderTypeCandidate] = Field(default_factory=list)
     #: 🔄 근거 불일치는 상태가 아니라 **재생성 이벤트**다 (D-127)
     evidence_mismatch: bool = False

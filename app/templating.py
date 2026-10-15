@@ -54,7 +54,17 @@ templates.env.filters["guessed_types"] = reasons.guessed_types
 templates.env.filters["guessed_mark"] = reasons.guessed_mark
 templates.env.filters["agreed_mark"] = reasons.agreed_mark
 templates.env.filters["moved_note"] = reasons.moved_note
+# 🆕 2026-10-15 (D-340 결정 3 · D-344 ⑨) — 사전 확정 문장에 인코더가 다른 유형을 냈다. 「근거 보기」 안에만 그린다
+templates.env.filters["differing_types"] = reasons.differing_types
+templates.env.globals["ENC_DIFFERS_MARK"] = reasons.ENC_DIFFERS_MARK
+# 🆕 2026-10-15 (D-346 결정 6 · D-340 결정 5) — 후보 순서 · 대표 표지 · 추정 위험도 글자. 규칙 · 글자는 `app/reasons.py` 한 곳
+templates.env.filters["ordered_candidates"] = reasons.ordered_candidates
+templates.env.filters["estimate_text"] = reasons.estimate_text
+templates.env.globals["REPRESENTATIVE_MARK"] = reasons.REPRESENTATIVE_MARK
 templates.env.globals["ENC_REMAINS_MARK"] = reasons.ENC_REMAINS_MARK
+templates.env.globals["NOTE_UNJUDGED_MARK"] = (
+    reasons.NOTE_UNJUDGED_MARK
+)  # 🆕 2026-10-15 (D-344 ⑤) — 광고 생성의 필수 병기 문구
 
 
 def law_version_label(value: object) -> str:

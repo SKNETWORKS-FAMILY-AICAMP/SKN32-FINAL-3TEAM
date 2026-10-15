@@ -1,5 +1,32 @@
 {
   "bundles": {
+    "copylane-encoder-kcbert-D4-10-품목입력사실전제": {
+      "base": "kcbert_base",
+      "decision": "D-339",
+      "files": {
+        "config.json": {
+          "bytes": 1866,
+          "sha256": "b3ee67e45710d092c099a31bdcc3096d6f3b896ef72ea8c2a31a1e112c7923e9"
+        },
+        "label_scheme.json": {
+          "bytes": 7875,
+          "sha256": "13a605acee3352926bf2ca83d0b5371a0cad6394e4817e03acd2be010a2dfaea"
+        },
+        "model.safetensors": {
+          "bytes": 435725324,
+          "sha256": "c9c230918a9503a678a8628303c87caa50d0eae5ba717bd31204340a46bf4042"
+        },
+        "tokenizer.json": {
+          "bytes": 721702,
+          "sha256": "a4a9a9569bce784386a90a0528d7f38d7886ebfd9fcd392ce9308f4a26f42c32"
+        },
+        "tokenizer_config.json": {
+          "bytes": 352,
+          "sha256": "c842f1e4ca132ffb493921dbe10eaf61b3be45f15a4ab983ae4a42aef76192df"
+        }
+      },
+      "role": "encoder"
+    },
     "copylane-encoder-kcbert-v10-카드17-검수정상음성": {
       "base": "kcbert_base",
       "decision": "D-331",
@@ -133,8 +160,9 @@
   },
   "roles": {
     "encoder": {
-      "adopted": "copylane-encoder-kcbert-v10-카드17-검수정상음성",
+      "adopted": "copylane-encoder-kcbert-D4-10-품목입력사실전제",
       "rollback": [
+        "copylane-encoder-kcbert-v10-카드17-검수정상음성",
         "copylane-encoder-kcbert-v10-합성O-이유O"
       ]
     },

@@ -39,7 +39,7 @@ import uuid
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from app.contracts import Risk
+from app.contracts import LAW_VERSION_UNKNOWN, Risk
 from app.dictmatch import norm
 from app.models import CopySentence, Judgment, WorkDoc
 
@@ -110,7 +110,7 @@ def _judgment_row(
         evidence_span=span.model_dump(mode="json") if span is not None else None,
         risk_floor=_risk_int(s.risk.floor),
         risk_final=_risk_int(s.risk.final),
-        law_version=(res.law_version or "unknown")[:_LAW_VERSION_MAX],
+        law_version=(res.law_version or LAW_VERSION_UNKNOWN)[:_LAW_VERSION_MAX],
         attempt=res.attempt,
         judged_by=(res.judged_by or "unknown")[:_JUDGED_BY_MAX],
     )

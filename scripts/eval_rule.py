@@ -1,6 +1,12 @@
 """scripts/eval_rule.py — **판정기 B** (룰 기반 사전 매칭) 와 그 실측 (기획문서 6-2).
 
-  uv run python scripts/eval_rule.py
+  uv run python scripts/eval_rule.py --sealed
+
+🔴 2026-10-15 (D-344 ⑧) — **`--sealed` 를 붙여야 돈다 · 돌기 전에 봉인 기록(`scripts/sealed_log.py`)에 한 줄을 남긴다.**
+   이 도구는 늘 봉인 평가셋(`test_sentence`)을 읽는다 — 보는 횟수가 쌓이는 것을 보이게 한다(D-175). 날짜 제한은 걸지 않는다
+   (「날짜 하나에 한 번」은 판정 그래프 봉인 회차의 규칙 · D-339 결정 7). ⛔ `--dev` 는 두지 않는다 — dev 는 학습 분할에서 뗀 것이고
+   사전은 학습 분할 **전체**로 만든다(`preprocess/dictionary.py` `train_only`) — 판정기 B 의 dev 수는 외운 것을 맞힌 수다.
+   🚨 이 수로 사전 항목 · 규칙을 고르지 않는다(D-175) — 고르는 자리는 dev 의 판정 그래프 평가다.
 
 ──────────────────────────────────────────────────────────────
 ★ **왜 룰 판정기가 따로 필요한가** — 상관 오류 방어다.
@@ -316,16 +322,37 @@ def print_lawful(stat: dict[str, tuple[int, int]]) -> None:
         )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse  # noqa: PLC0415
+
+    from preprocess import (
+        encoder_resplit,  # noqa: PLC0415 — 봉인 평가셋의 정의는 한 곳 (D-347 · D-99)
+    )
+    from scripts import sealed_log  # noqa: PLC0415 — 봉인 기록은 한 곳 (D-344 ⑧ · D-99)
+
+    ap = argparse.ArgumentParser(description="판정기 B — 봉인 평가셋 보고 (D-175 · D-344 ⑧)")
+    ap.add_argument(
+        "--sealed",
+        action="store_true",
+        required=True,
+        help="봉인 평가셋(test_sentence)을 연다 — 돌기 전에 기록 · 보고 전용 · 규칙을 고르지 않는다",
+    )
+    ap.parse_args(argv)
     rules = load_rules()
     if not GOLDEN.exists():
         print(f"🔴 {GOLDEN} 가 없다 — uv run python launcher.py golden --write", file=sys.stderr)
         return 1
-    every = [
-        json.loads(x)
-        for x in GOLDEN.read_text(encoding="utf-8").splitlines()
-        if x.strip() and json.loads(x)["split"] == "test_sentence"
-    ]
+    n_runs = sealed_log.append(
+        {"split": "test_sentence", "rules": len(rules), "resplit": encoder_resplit.VERSION},
+        tool=sealed_log.RULE,
+    )
+    print(
+        f"🔒 봉인 평가셋을 연다(판정기 B) — 이 기기 기록 {n_runs}번째 ({sealed_log.SEALED_LOG}) · "
+        "보고 전용 · 이 수로 사전 · 규칙을 고르지 않는다 (D-175)"
+    )
+    every = encoder_resplit.sealed_rows(
+        json.loads(x) for x in GOLDEN.read_text(encoding="utf-8").splitlines() if x.strip()
+    )
     rows = [r for r in every if scored(r)]
     print(f"판정기 B — 사전 {len(rules):,}종(단독판정) · 시험지 {len(rows)}행 (문장 단위)")
     held = collections.Counter(r["조건"] for r in every if not scored(r))

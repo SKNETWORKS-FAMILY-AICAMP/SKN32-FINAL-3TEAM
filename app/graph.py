@@ -84,6 +84,7 @@ from app.contracts import (
     ProductContext,
     Risk,
     RiskAssessment,
+    RiskEstimate,
     Segment,
     SentenceJudgment,
     Span,
@@ -125,8 +126,13 @@ class SentEvidence:
     🔴 **왜 생겼나** — 종전에는 `retrieve` 가 찾아 온 것을 놓을 칸이 상태에 **없었다.**
        ① 리듀서 없는 칸에 넣으면 문장이 여럿일 때 **마지막 하나만 남는다** ② `judge` 안에서 검색을
        다시 부르면 **코어가 두 벌이 된다** (D-99). 키가 있으면 계약이 선다.
-    🚨 `vector`·`lexical` 을 같이 나른다 — **벡터가 죽은 채 어휘 결과만으로 판정하면 근거가 반쪽인데
-       응답은 그럴듯하다.** `hold` 로 보내는 근거가 이 둘이다 (D-202).
+    🚨 `vector`·`lexical` 을 같이 나른다 — **벡터가 죽은 채 어휘 결과만으로 찾으면 참고 조문이 반쪽인데
+       응답은 그럴듯하다** (D-202).
+    🔄 2026-10-15 (D-344 ④) — ⛔ 종전 「`hold` 로 보내는 근거가 이 둘이다」는 틀렸다. 읽는 노드가 없고, 보내지도 않는다 —
+       검색은 **참고 조문**만 낸다. 확정 · 보류의 근거는 사전 적중과 그 인용이다(`_judge_one` · D-127 · D-269). 그래서 벡터가 죽어도
+       판정은 같다. 까닭은 기기 단위(검색 임베딩 캐시 없음 · 임베딩 판 섞임)라 `doctor --env` ④-4 와 프로세스당 한 번 경고
+       (`app/retrieve.py` `_warn_vector_off`)로 알린다 — 응답 칸은 두지 않는다(D-344 ④ (마)). 읽는 곳은 진단 도구(`graph_probe` ·
+       `time_graph`)뿐이다.
     """
 
     sent_id: str
@@ -136,7 +142,8 @@ class SentEvidence:
     #:       좌표로 옮기는 일은 이제 법별 노드가 한다(`LawResult.articles`).
     vector_hits: tuple[rt.Hit, ...] = ()
     lexical_hits: tuple[rt.Hit, ...] = ()
-    #: 두 갈래가 각각 돌았는가. ⛔ **둘 다 False 면 근거 없이 판정하는 것**이다 (D-224) — `hold`
+    #: 두 갈래가 각각 돌았는가. 🔄 둘 다 False 여도 판정은 사전으로 선다 — 검색 근거(참고 조문)가 없을 뿐이다 (위 docstring · D-344 ④).
+    #:    DB 가 없으면(커서 없음) 사전도 못 돌아 문장이 미판정이다 — 이 칸이 아니라 `scan.ran` 이 가른다.
     vector: bool = False
     lexical: bool = False
     #: 두 갈래 **후보 수의 합**(겹친 것은 두 번 센다 · 법을 합친 행 수 — 법마다 폭은 `rt.POOL`). 🚨 0 은 「안 겹쳤다」이고,
@@ -1525,7 +1532,10 @@ def judge(state: CoreState) -> dict[str, Any]:
        `sent_id` 로 짝지어 옮긴다. 법 순서는 `LAW_NODES` 순서이고 같은 좌표는 한 번만 싣는다. ⛔ 검색을 다시 부르지 않는다 (D-99).
     🚨 **근거를 찾은 것과 판정한 것은 다르다** — 사전 적중 없이 검색 근거만으로는 확정하지 않는다 (D-127 · D-269).
     ⚠️ D-269 는 「전제 정정 · 결론 재검 대기」다 — 그래프 평가 도구(`scripts/eval_graph.py` · W1)의 수로 재검한다. 결론은 그때까지 그대로다.
-    ⬜ 단서(`provisos`)는 아직 읽지 않는다 — 제품 사실을 모르면 요건 충족을 모른다(D-238 개정 (나)). 판정을 바꾸지 않고 근거에 남는다.
+    ⬜ 단서(`provisos`)는 아직 읽지 않는다 — 제품 사실을 모르면 요건 충족을 모른다(D-238 개정 (나)). 판정을 바꾸지 않는다.
+       🔄 2026-10-15 (전수 점검) — ⛔ 종전 주석 「근거에 남는다」는 틀렸다. 법별 노드가 고른 단서(`LawResult.provisos`)는
+       **응답에 실리지 않는다**(읽는 곳은 `scripts/graph_probe.py` 뿐). 🔄 D-344 ⑥b — **일부러 싣지 않는다.** 판정이 단서를 어떻게 확인하는가(D-238 개정 (나) ⬜)가
+       정해지지 않았다 — 「다만 ~은 제외」를 보여 주면 이용자가 자기가 예외라고 읽는다. D-238 ⬜ 가 닫히면 다시 연다.
     """
     order = {name: k for k, name in enumerate(LAW_NODES)}
     results = sorted(state.get("law_results", []), key=lambda r: order.get(r.law, len(order)))
@@ -1599,7 +1609,10 @@ ORDER BY rule_key"""
 
 
 def load_sanction_rows(cur: Any) -> list[dict[str, Any]]:
-    """`v_risk_lookup` → 하한 조회 행. 서명 전이거나 적재 전이면 **빈 목록**이다 — 그러면 하한이 없어 판정이 보류로 멈춘다 (D-220)."""
+    """`v_risk_lookup` → 하한 조회 행. 서명 전이거나 적재 전이면 **빈 목록**이다 — 그러면 하한이 없어 판정이 보류로 멈춘다 (D-220).
+
+    🔄 2026-10-15 (D-343) — 식품 4~7호의 「그 밖에 R1」도 이제 이 규칙을 따른다(`sanction.floor_rows` · 그 법의 서명 행이 있어야 선다).
+    """
     cur.execute(SQL_RISK)
     return [
         {
@@ -1637,6 +1650,14 @@ def floor_of_sentence(
             if f.floor is None:
                 return sanction.Floor(None)
             found.append(f)
+    return _combine_floors(found)
+
+
+def _combine_floors(found: list[sanction.Floor]) -> sanction.Floor:
+    """하한들의 합 — 하한은 가장 높은 것 · 가능 상한은 그보다 높은 것 중 가장 높은 것 하나 · 근거 줄은 순서대로 (D-272 · D-310).
+
+    🚨 판정(`floor_of_sentence`)과 추정 위험도(`estimate_of`)가 **이 함수 하나**로 합친다 (D-99). 비면 모른다(`Floor(None)`).
+    """
     if not found:
         return sanction.Floor(None)
     top = max(found, key=lambda f: f.floor.level)  # type: ignore[union-attr]
@@ -1651,6 +1672,62 @@ def floor_of_sentence(
         ceiling_note=ceil.ceiling_note if ceil else None,
         basis=tuple(dict.fromkeys(b for f in found for b in f.basis)),
     )
+
+
+#: 🆕 2026-10-15 (D-340 결정 5 · D-346 결정 3 ~ 5 · D-347 결정 6) — **추정 위험도를 싣는 (전제 · 유형)**. `[측정]` D4-10 dev
+#:    「제 전제 행 · 인코더만 잡은 문장」에서 n ≥ 20 ∧ 위반 비율 ≥ 90% ∧ 다른 생성기 적법 후보율 ≤ 15%(M 은 비율 · n 모두에서 뺌 ·
+#:    비방광고 제외) — 식품 거짓_과장(n 82 · 1.00 · 적법 0 / 40) · 식품 소비자_기만(n 31 · 0.94 · 2 / 40) · 화장품 의약품_오인(n 36 ·
+#:    0.97 · 0 / 78) (2026-10-15 · 클론 A · 원장 미기록). 🔄 **새 인코더 판이 채택되면 같은 규칙으로 다시 센다** — 목록은 판에 딸린다.
+#: 🚨 표시 전용이다 — 하한 · 판정에 들지 않는다. D-131 개정 ①(위험도만)은 D-347 결정 6 의 관문을 넘은 뒤 판정한다
+ESTIMATE_TYPES: frozenset[tuple[Premise, Violation]] = frozenset(
+    {
+        (Premise.식품, Violation.거짓_과장),
+        (Premise.식품, Violation.소비자_기만),
+        (Premise.화장품, Violation.의약품_오인),
+    }
+)
+
+
+def estimate_of(rows: list[dict[str, Any]], premise: Premise, vtype: Violation) -> RiskEstimate:
+    """(전제 · 유형) → 추정 위험도 — 그 전제의 법 ∩ 그 유형의 조항이 있는 법의 서명된 제재표 · 근거 인용 없이 (D-340 결정 5).
+
+    🔴 법 하나라도 하한을 모르면 모른다 — 아는 법만으로 max 를 내지 않는다(`floor_of_sentence` 와 같은 규칙 · D-220).
+       그 전제의 법 어디에도 이 유형의 조항이 없어도 모른다. 근거 인용이 없으니 식품 4 ~ 7 호는 「그 밖에」 하한 · 가장 무거운 처분이 상한이다.
+    """
+    laws = [
+        LAW_OF_NODE[n]
+        for n in pm.PREMISE_LAWS[premise]
+        if n in LAW_OF_NODE and statute.references(vtype.value, LAW_OF_NODE[n])
+    ]
+    found: list[sanction.Floor] = []
+    for law in laws:
+        law_id = sanction.SANCTION_LAW.get(law)
+        f = sanction.floor_rows(rows, vtype.value, law_id, []) if law_id else sanction.Floor(None)
+        if f.floor is None:
+            return RiskEstimate()
+        found.append(f)
+    c = _combine_floors(found)
+    return RiskEstimate(floor=c.floor, ceiling=c.ceiling, ceiling_note=c.ceiling_note)
+
+
+def _with_estimates(
+    j: SentenceJudgment, premise: Premise, rows: list[dict[str, Any]]
+) -> SentenceJudgment:
+    """분기 문장의 인코더 후보에 추정 위험도를 싣는다 — **사전 유형이 없는 문장**(인코더만 잡은 문장)의 표시 목록 유형만 (D-340 결정 5).
+
+    ⛔ 판정 칸(판정 · 위험도 · 유형)은 건드리지 않는다 — 후보 칸만 바뀐다. 판정 대상 아님(`not_claim`) 문장은 싣지 않는다.
+    """
+    if j.violations or j.not_claim or not j.encoder_candidates:
+        return j
+    if not any((premise, c.violation) in ESTIMATE_TYPES for c in j.encoder_candidates):
+        return j
+    cands = [
+        c.model_copy(update={"estimate": estimate_of(rows, premise, c.violation)})
+        if (premise, c.violation) in ESTIMATE_TYPES
+        else c
+        for c in j.encoder_candidates
+    ]
+    return j.model_copy(update={"encoder_candidates": cands})
 
 
 def _with_risk(s: SentenceJudgment, risk: RiskAssessment) -> SentenceJudgment:
@@ -1905,6 +1982,8 @@ def _premise_sentences(
                     )
                 }
             )
+            # 🆕 2026-10-15 (D-340 결정 5 · D-346) — 인코더만 잡은 문장의 추정 위험도(표시 전용 · 판정이 끝난 뒤)
+            j = _with_estimates(j, premise, rows)
         out.append(j)
     return out
 
@@ -2054,7 +2133,8 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         return {}  # 사전을 못 훑었다 — 전제별 판정의 재료가 없다 (D-220)
     # 하한은 확정 위반에만 쓰인다 — 어느 법에서도 걸린 낱말이 없으면 제재표를 읽지 않는다(`assess_risk` 가 할 일이 없으면 안 읽는 것과 같다)
     hit = any(hs for r in state.get("law_results", []) for _, hs in r.dict_hits)
-    rows = load_sanction_rows(cur) if hit else []
+    # 🔄 2026-10-15 (D-340 결정 5) — 인코더 후보가 있으면 추정 위험도에도 쓴다. 안 읽으면 표가 빈 것처럼 「모름」이 된다(D-343)
+    rows = load_sanction_rows(cur) if hit or state.get("encodings") else []
     per = {p: _premise_sentences(p, state, rows) for p in premises}
     # 🆕 2026-10-11 — 제품을 알 때 보류 문장의 유형 후보는 그 품목의 전제로 거른 합집합이다 (`_held_candidates`)
     held = (
@@ -2183,7 +2263,9 @@ def guidance(state: ReviewState) -> dict[str, Any]:
     🔴 2026-10-02 (W5) — 계약은 지시 문장마다 **실증 분기와 뺄 구간**을 요구한다(`_guidance_payload`). 실증 분기는 기준 문안
        (조문을 인용한 설명 · D-263 ②)을 싣는데 **문안이 아직 초안**이다 — 재료가 모자라면 **보류로 내린다** (D-220).
        ⛔ 종전 주석 「지금 이 노드에 오는 길은 없다」는 위험도가 붙으면서 틀린 말이 됐다. 문안이 확정되면 이 분기가 사라진다 (D-192).
-    🚨 2026-10-06 — 실증 분기(`substantiation`)를 채우는 노드가 아직 없다. 그래서 이 종착은 지금 **늘 보류로 내려간다**.
+    🔄 2026-10-14 (D-337) — 실증 분기는 `assess_risk` · `premise_branches` 가 채운다(`_substantiated`). 지시 종착이 선다 —
+       dev 749 행 중 63(원장 10-14(A) ⑧). 위 「재료가 모자라면 보류로 내린다」는 그대로 산다(`guidance_ready`).
+       ⛔ 종전 주석 「실증 분기를 채우는 노드가 아직 없다 · 늘 보류」(10-06)는 D-337 로 틀린 말이 됐다 (2026-10-15 전수 점검).
     """
     sents = list(state.get("sentences", []))
     if sents and not guidance_ready(sents):

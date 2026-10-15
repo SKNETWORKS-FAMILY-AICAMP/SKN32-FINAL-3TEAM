@@ -2,6 +2,9 @@
 
 🚨 **여기서는 밖을 부르지 않는다** — 생성 모델 · 인코더를 대역으로 갈아 끼워 흐름과 화면만 본다. 문구 품질은 재지 않는다.
    켜는 스위치는 `tests/conftest.py` 가 꺼 둔다(`COPYLANE_COPYGEN=off`). 문구 · 제품 이름은 여기서 지어낸 것이다 (D-175).
+🆕 2026-10-15 (D-344 ⑦) — **게이트는 시험 열한 개뿐이다** — 밖으로 나가는 것(프롬프트 · 고정 문구) · fail-closed(인코더 · 그래프 ·
+   스위치 · 인정 문구 확인 못 함) · 비밀 누출(오류 본문 · 호출 실패 까닭) · 판정 그래프 전체 통과. 화면 배치 · 고르기 시험은 게이트가
+   아니다 — 화면 수정이 「진행 불가」에 걸리지 않게(D-332 의 「게이트」는 이 열한 개를 말한다).
 """
 
 from __future__ import annotations
@@ -112,6 +115,7 @@ def test_셋을_못_채우면_탐색_실패다_기준을_낮추지_않는다() -
     assert len(res.rounds) == pipeline.MAX_ROUNDS
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_다음_라운드_프롬프트에는_탈락_사유와_건수만_간다() -> None:
     """🚨 탈락 문구 원문은 넘기지 않는다 — 걸린 표현이 예시가 되어 되돌아오지 않게 (설계 요약 §5-3)."""
     bad = "면역을 채워 주는 고소한 곡물바 한입"
@@ -123,6 +127,7 @@ def test_다음_라운드_프롬프트에는_탈락_사유와_건수만_간다()
     assert GOOD[0][1] in second["prompt"]  # 뽑힌 것은 겹치지 않게 알려 준다
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_고정_문구는_모델에_보내지_않고_코드가_끼운다() -> None:
     gen = _FakeLLM(
         [
@@ -152,6 +157,7 @@ def test_고정_문구는_모델에_보내지_않고_코드가_끼운다() -> No
 # ── 판정 · 생성 모델의 가장자리 ───────────────────────────────────────
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_인코더_후보가_서거나_뒤가_잘리면_탈락이다(monkeypatch: pytest.MonkeyPatch) -> None:
     from pathlib import Path  # noqa: PLC0415
     from types import SimpleNamespace  # noqa: PLC0415
@@ -189,6 +195,7 @@ def test_인코더_후보가_서거나_뒤가_잘리면_탈락이다(monkeypatch
     assert j.judge("잘림", BRANCHES["food_no"]).passed is False  # 못 본 것을 통과로 세지 않는다
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_인코더가_없으면_생성하지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
     from app import encoder as enc  # noqa: PLC0415
 
@@ -197,6 +204,7 @@ def test_인코더가_없으면_생성하지_않는다(monkeypatch: pytest.Monke
         judge.EncoderJudge()
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_스위치를_켜지_않으면_키가_있어도_꺼짐이다(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llm, "has_key", lambda: True)
     monkeypatch.setenv(copygen.ENV_SWITCH, "")
@@ -205,6 +213,7 @@ def test_스위치를_켜지_않으면_키가_있어도_꺼짐이다(monkeypatch
         copygen.generate("food_no", {"name": "지어낸 곡물바"})
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_생성_모델_오류는_응답_본문을_싣지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
     """🚨 오류 응답에는 보낸 프롬프트가 되돌아올 수 있다 — 상태 코드만 남긴다. 키도 메시지에 없다."""
     monkeypatch.setattr(llm, "_api_key", lambda: "지어낸-키-값")
@@ -246,6 +255,8 @@ def test_엔진의_분기표는_화면_분기와_시험_코드의_표와_같다(
         assert b["label"] == BRANCHES[key].label, key
         assert pm.PREMISE_CATEGORY[b["premise"]].value == BRANCHES[key].category, key
         assert (b.get("needs") == "fixed") == BRANCHES[key].needs_fixed, key
+        # 🆕 2026-10-15 — 화면의 분기 안내 문구도 엔진의 분기 표와 같은 글자다(`_GEN_HF_NO_NOTICE` · D-99)
+        assert b.get("notice", "") == BRANCHES[key].notice, key
 
     path = pathlib.Path(__file__).resolve().parents[1] / "docs/ksr/llm_copy/branches.py"
     if not path.exists():
@@ -314,6 +325,7 @@ def test_화면은_탐색_실패를_후보_수와_함께_적는다(monkeypatch: 
     assert "기준을 낮추거나 억지로 채우지 않아요" in body
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_화면은_호출_실패의_까닭을_그리지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
     class Boom(_FakeLLM):
         def generate(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
@@ -519,6 +531,7 @@ def test_화면은_셋의_이름을_적고_문턱_수치는_카드에_적지_않
 # ── 더 탐색하기 · 생성 중 표시 (2026-10-13) ─────────────────────────────
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_둘째_라운드부터도_인정_문구는_모델에_가지_않는다() -> None:
     """🔴 「이미 뽑힌 문구」로 되돌려 보내는 글자는 인정 문구를 끼우기 전의 것이다 — 종전에는 끼운 뒤의 글자가 나갔다."""
     gen = _FakeLLM(
@@ -684,6 +697,7 @@ UNSURE = {"verdict": "hold", "hold_reason": "low_conf"}
         ([], False, "판정할 문장 없음"),
     ],
 )
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_그래프_전체를_지나고_걸린_것은_떨군다(
     monkeypatch: pytest.MonkeyPatch, sentences: list, passed: bool, outcome: str
 ) -> None:
@@ -710,6 +724,7 @@ def test_그래프에는_분기의_품목이_가고_설_수_없는_유형은_거
     assert hf.closeness == 0.4
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_그래프에_못_닿거나_인코더가_안_돌았으면_생성하지_않는다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -782,6 +797,7 @@ def test_인정_문구는_인정_전제로_판정해_질병_의약품만_경고�
     assert user_router._fixed_notes("뼈 건강에 도움을 줄 수 있음", "hf_yes") == []
 
 
+@pytest.mark.gate  # D-344 ⑦ — 데이터 반출 · fail-closed · 비밀 누출을 지키는 시험만 게이트 (D-332)
 def test_인정_문구를_확인하지_못하면_경고_없음으로_두지_않는다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -825,3 +841,46 @@ def test_광고_생성은_인정_문구_경고를_그리고_초안은_떨구지_
     assert [t for t, _ in seen] == [fixed, "점심 먹고 물과 함께,"]
     m = re.search(r'id="de-data">(.*?)</script>', body, re.DOTALL)
     assert json.loads(m.group(1))["copy"] == [{"text": text, "unsure": True}]
+
+
+def test_고정_문구_분기도_길이_상한이_있다() -> None:
+    """🔴 2026-10-15 (전수 점검) 재현 — 고정 문구 분기(`hf_yes`)는 최소만 낮추고 최대 60 자는 지킨다.
+
+    종전에는 `not (needs_fixed and len >= 4)` 가 최대도 없애 231 자 후보가 통과했다(「더 탐색하기」 200 자 검사에서 422).
+    """
+    long_body = "고소하고 바삭한 식감으로 하루를 시작해 보세요 " * 8
+    short_ok = "든든한 한 끼"  # 6 자 — 고정 문구 분기에서는 받고, 그 밖 분기에서는 너무 짧다
+    hf = BRANCHES["hf_yes"]
+    assert hf.needs_fixed
+    over = filters.check(f"{long_body}, {PLACEHOLDER}", _inputs(fixed=FIXED), hf, [])
+    assert over is not None and over[0] == "format"
+    assert filters.check(f"{short_ok}, {PLACEHOLDER}", _inputs(fixed=FIXED), hf, []) is None
+    assert filters.check(short_ok, _inputs(), BRANCHES["food_no"], [])[0] == "format"
+
+
+def test_필수_병기_문구는_판정하지_않은_글자로_표시한다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-10-15 (D-344 ⑤) — 병기 문구(`note`)는 판정 밖이고 숨은 칸이다. 막지 않고 「판정하지 않은 글자 — 확인 필요」로 밝힌다."""
+    import json  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app import reasons  # noqa: PLC0415
+    from app.api import app  # noqa: PLC0415
+
+    seen = _compose_judge_spy(monkeypatch)
+    note = "개인차가 있을 수 있습니다."
+    c = TestClient(app)
+    first = c.post(
+        "/u/compose", data={"carry": "1", "prompt": "점심 먹고 물과 함께", "note": note}
+    ).text
+    assert f"<b>{note}</b> ({reasons.NOTE_UNJUDGED_MARK})" in first
+    body = c.post(
+        "/u/compose", data={"ad_format": "배너", "prompt": "점심 먹고 물과 함께", "note": note}
+    ).text
+    assert all(note not in judged for judged, _p in seen), "병기 문구를 판정에 넣지 않는다"
+    draft = json.loads(re.search(r'id="de-data">(.*?)</script>', body, re.DOTALL).group(1))
+    assert (draft["note"], draft["note_mark"]) == (note, reasons.NOTE_UNJUDGED_MARK)
+    nobody = c.post("/u/compose", data={"ad_format": "배너", "prompt": "점심 먹고 물과 함께"}).text
+    draft2 = json.loads(re.search(r'id="de-data">(.*?)</script>', nobody, re.DOTALL).group(1))
+    assert draft2["note_mark"] == ""
