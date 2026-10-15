@@ -517,6 +517,27 @@ def test_다듬은_안과_담백한_안을_둘_다_재판정해_나란히_보인
     assert "담백한 안" in html and PLAIN in html
 
 
+def test_규칙판_다듬기는_이름표가_쓰는_법을_더한_안이고_후보마다_복사_버튼이_있다(wired) -> None:  # noqa: ANN001
+    """🆕 10-14 — 서버가 규칙판으로 다듬었으면(`polish_mode: rule`) 「쓰는 법을 더한 안」 · 상자마다 「복사」(문구 그대로)."""
+    wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN, "polish_mode": "rule"})
+    wired.judge_out[PLAIN] = ("ok", _light())
+    html = _go()
+    assert "쓰는 법을 더한 안" in html and "자연스럽게 다듬은 안" not in html
+    assert f'data-copy="{BODY}"' in html and f'data-copy="{PLAIN}"' in html
+    assert "/static/rewrite_copy.js" in html
+    assert "후보도 적법 확정이 아니에요" in html
+
+
+def test_만들지_못했으면_후보_주의_문구를_달지_않는다(wired) -> None:  # noqa: ANN001
+    """🆕 10-14 — 「만들지 못했어요」 · 보류에는 후보가 없다 — 「후보도 적법 확정이 아니에요」를 붙이지 않는다."""
+    wired.sllm_out = (
+        "ok",
+        {**_CANDIDATE, "outcome": "infeasible", "rewrite": None, "infeasible": "거짓_과장"},
+    )
+    html = _go()
+    assert "후보도 적법 확정이 아니에요" not in html and "data-copy=" not in html
+
+
 def test_다듬은_안이_재판정에서_떨어지면_담백한_안을_후보로_올린다(wired) -> None:  # noqa: ANN001
     wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN})
     wired.judge_out[BODY] = ("ok", _light(["건강기능식품_오인"]))
@@ -641,3 +662,13 @@ def test_조건부_후보는_빈_문장이면_깨진_응답이다() -> None:
 
     assert not sllm_client._well_formed({**_HOLD_COND, "conditional": {"body": " "}})
     assert sllm_client._well_formed(_HOLD_COND)
+
+
+@pytest.mark.parametrize(("mode", "shown"), [("rule", True), ("model", False)])
+def test_규칙판이_덧붙인_안에는_표시사항_확인_문구를_단다(wired, mode: str, shown: bool) -> None:  # noqa: ANN001
+    """🆕 10-15 (D-342 ⓓ) — 규칙판의 쓰는 법은 일반 문구다 — 제품 표시사항과 맞추게 한다. 모델판 다듬기에는 달지 않는다."""
+    wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN, "polish_mode": mode})
+    wired.judge_out[PLAIN] = ("ok", _light())
+    html = _go()
+    assert ("제품 표시사항과 맞는지 확인하세요" in html) is shown
+    assert ("쓰는 법을 더한 안" in html) is shown

@@ -518,7 +518,7 @@
           <input type="hidden" name="premise" value="{{ premise }}">
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
-          <button type="submit" class="rv-fix-go">✨ 이 문장 고쳐 쓰기{% if not s.violations %} · AI 추정 유형 기준{% endif %} <small>· 위반을 지우고 자연스럽게 다듬어요 (20초 안팎)</small></button>
+          <button type="submit" class="rv-fix-go">✨ 이 문장 고쳐 쓰기{% if not s.violations %} · AI 추정 유형 기준{% endif %} <small>· 위반을 지우고 쓰는 법을 더해요 (20초 안팎)</small></button>
           {# 🆕 2026-10-13 (lse) — 고쳐 쓰는 동안의 표시. `user_wait.js`(ksr · 카피 생성과 같은 파일)가 제출 때 `hidden` 을 푼다.
              움직임은 전부 CSS 다 — 단계 문구가 차례로 바뀌고 글자에 빛이 지나간다. 스크립트가 안 돌아도 고쳐 쓰기는 된다 #}
           <div class="rv-think" data-wait hidden role="status" aria-live="polite">
@@ -1016,4 +1016,5 @@
 {# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
 <script src="/static/user_count.js" defer></script>
 <script src="/static/user_wait.js" defer></script>
+<script src="/static/rewrite_copy.js" defer></script>
 {% endblock %}

@@ -47,7 +47,11 @@ VARIANTS = {
     "P1": ("+ 사실 · 관계어 보존 규칙", SYSTEM_V6 + KEEP_RULE),
     "P2": ("+ 보존 규칙 + 예시 2개(few-shot)", SYSTEM_V6 + KEEP_RULE + FEW_SHOT),
     "P3": ("짧은 새 프롬프트(학습과 다른 꼴)", SHORT),
+    # 🆕 10-14 — P1 + 다시 만들기(관문 보류면 표본 추출로 2 번 더 · `persona_pipeline_e2e.RETRY`). 프롬프트는 P1 과 같다
+    "P1R": ("P1 + 다시 만들기 2회(관문 보류만)", SYSTEM_V6 + KEEP_RULE),
 }
+#: 다시 만들기 횟수 — 이름이 R 로 끝나는 판만 켠다
+RETRY_OF = {"P1R": 2}
 SETS = {"살리기": "stage1_salvage_eval.jsonl", "원료명": "stage1_ingredient_eval.jsonl", "뜻보존": "stage1_meaning_eval.jsonl",
         # 🆕 10-11 — 직접 만든 불가 확대 40 + 대조군(살림) 10 · 4B 시험판의 약점(거짓_과장 · 소비자_기만 불가를 고쳐 씀)을 잡으려고
         "불가확대": "stage1_infeasible_eval.jsonl"}
@@ -85,6 +89,7 @@ def main(names: list[str]) -> None:
     with out_path.open("w", encoding="utf-8", newline="\n") as fo:
         for v in names:
             pe.STAGE1_SYSTEM = VARIANTS[v][1]  # `_run_one` 이 모듈 전역을 읽는다
+            pe.RETRY = RETRY_OF.get(v, 0)
             c: collections.Counter = collections.Counter()
             t0 = time.time()
             for r in data:
@@ -93,7 +98,7 @@ def main(names: list[str]) -> None:
                 c[f"{r['set']}:{s['verdict']}"] += 1
                 c["뜻 바뀜(관문이 막음)"] += s["flip"]
                 fo.write(json.dumps({"variant": v, "set": r["set"], "no": r["no"], "input": r["input"], "raw": res.get("stage1"),
-                                     "final": res.get("final"), "outcome": res["outcome"], **s}, ensure_ascii=False) + "\n")
+                                     "final": res.get("final"), "outcome": res["outcome"], "retry": res.get("retry"), **s}, ensure_ascii=False) + "\n")
                 fo.flush()
             c["초"] = round(time.time() - t0)
             summary[v] = c
