@@ -721,3 +721,107 @@ def test_그래프에_못_닿거나_인코더가_안_돌았으면_생성하지_�
     j, _ = _graph_judge(monkeypatch, [UNSURE], judged_by="rule-사전만")
     with pytest.raises(copygen.CopyGenOff):
         j.judge("지어낸 문구", BRANCHES["cos_no"])
+
+
+# ── 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구를 따로 판정해 경고한다(떨구지 않는다) ─────────
+
+
+def _fixed_judge(monkeypatch: pytest.MonkeyPatch, *, violations=(), enc=(), status="ok") -> list:  # noqa: ANN001
+    """인정 전제 분기에 주어진 유형이 서는 가짜 판정 — (글자, 품목)을 적어 둔다."""
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from app.contracts import Premise, SentenceJudgment  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    seen: list = []
+
+    def fake(text: str, product=None):  # noqa: ANN001, ANN202
+        seen.append((text, product))
+        if status != "ok":
+            return status, None
+        s = SentenceJudgment.model_validate(
+            {
+                "sent_id": "s0",
+                "text": text,
+                "verdict": "hold",
+                "hold_reason": "low_conf",
+                "violations": list(violations),
+                "encoder_candidates": [{"violation": v, "confidence": 0.9} for v in enc],
+            }
+        )
+        quiet = s.model_copy(update={"violations": [], "encoder_candidates": []})
+        branches = [
+            SimpleNamespace(premise=Premise.건기식_인정, sentences=[s]),
+            SimpleNamespace(premise=Premise.건기식_비인정, sentences=[quiet]),
+        ]
+        return "ok", SimpleNamespace(sentences=[quiet], branches=branches)
+
+    monkeypatch.setattr(user_router, "_core_judge", fake)
+    return seen
+
+
+def test_인정_문구는_인정_전제로_판정해_질병_의약품만_경고한다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import reasons  # noqa: PLC0415
+    from app.contracts import Category  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    seen = _fixed_judge(monkeypatch, violations=["질병_예방치료_표방", "거짓_과장"])
+    notes = user_router._fixed_notes("관절염을 치료합니다", "hf_yes")
+    assert [n["level"] for n in notes] == ["strong"]
+    assert "질병 예방치료 표방" in notes[0]["text"] and "거짓" not in notes[0]["text"]
+    # 판정은 그 분기의 전제(건기식 · 인정)로 — 인정 전제 분기의 문장을 읽는다(비인정 분기는 조용하다)
+    assert (seen[-1][1].category, seen[-1][1].has_recognized_function) == (Category.건기식, True)
+    # 사전이 조용하고 인코더만 — 약한 경고 · 거짓_과장 · 건기식 오인만이면 경고 없음
+    _fixed_judge(monkeypatch, enc=["의약품_오인"])
+    assert user_router._fixed_notes("가", "hf_yes") == [
+        {"level": "weak", "text": reasons.FIXED_WEAK}
+    ]
+    _fixed_judge(monkeypatch, violations=["거짓_과장"], enc=["건강기능식품_오인"])
+    assert user_router._fixed_notes("뼈 건강에 도움을 줄 수 있음", "hf_yes") == []
+
+
+def test_인정_문구를_확인하지_못하면_경고_없음으로_두지_않는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """🔴 엔진에 못 닿은 것은 「경고 없음」이 아니다 (D-220). 문구가 없거나 모르는 분기면 판정을 부르지 않는다."""
+    from app import reasons  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    seen = _fixed_judge(monkeypatch, status="down")
+    assert user_router._fixed_notes("가", "hf_yes") == [
+        {"level": "unchecked", "text": reasons.FIXED_UNCHECKED}
+    ]
+    n = len(seen)
+    assert user_router._fixed_notes("", "hf_yes") == []
+    assert user_router._fixed_notes("가", "없는_분기") == []
+    assert len(seen) == n
+
+
+def test_광고_생성은_인정_문구_경고를_그리고_초안은_떨구지_않는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    seen = _fixed_judge(monkeypatch, violations=["질병_예방치료_표방"])
+    fixed = "관절염을 치료합니다"
+    text = f"점심 먹고 물과 함께, {fixed}"
+    body = (
+        TestClient(app)
+        .post(
+            "/u/compose",
+            data={"ad_format": "배너", "prompt": text, "branch": "hf_yes", "fixed": fixed},
+        )
+        .text
+    )
+    assert "인정 · 심사받은 문구로 보기 어려워요" in body
+    # 인정 문구 판정이 먼저 · 나머지 글자 판정이 뒤 — 초안은 그대로 얹힌다(경고일 뿐)
+    assert [t for t, _ in seen] == [fixed, "점심 먹고 물과 함께,"]
+    m = re.search(r'id="de-data">(.*?)</script>', body, re.DOTALL)
+    assert json.loads(m.group(1))["copy"] == [{"text": text, "unsure": True}]
