@@ -450,7 +450,7 @@ class SentenceJudgment(BaseModel):
     evidence: list[EvidenceArticle] = Field(default_factory=list)
     risk: RiskAssessment = Field(default_factory=RiskAssessment)
     #: 🆕 2026-10-08 (D-323 결정 1) — 인코더 유형 후보. 비어 있으면 인코더가 없거나 조용하다 — **「위반 없음」이 아니다** (D-220).
-    #:    그래프가 채우는 것은 인코더 배선 뒤다(클론 B) · 그 전에는 늘 빈 목록이다.
+    #:    🔄 그래프의 `encode` 가 채운다(배선 10-09 · 판은 잠금 · D-333) — 인코더가 안 돌면(폴더 없음 · 잠금 밖) 빈 목록이다.
     encoder_candidates: list[EncoderTypeCandidate] = Field(default_factory=list)
     #: 🔄 근거 불일치는 상태가 아니라 **재생성 이벤트**다 (D-127)
     evidence_mismatch: bool = False

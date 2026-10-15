@@ -7,10 +7,13 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.settings import PARAMS
+
 from .branches import PLACEHOLDER, Branch
 from .filters import Inputs, check, render, squeeze
 
-WANT = 3  # 최종 출력
+#: 최종 출력 — 🔄 2026-10-15 (전수 점검) 화면의 `gen_want` 와 같은 값(`PARAMS.candidate_n`)을 한 곳에서 읽는다 (D-99 · 종전 3 을 두 곳에 적었다)
+WANT = PARAMS.candidate_n
 PER_ROUND = 20  # 1회 생성
 MAX_ROUNDS = 3  # 자동 반복 상한 — 최대 60 후보
 

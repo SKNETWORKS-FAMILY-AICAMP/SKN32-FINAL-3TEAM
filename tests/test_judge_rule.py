@@ -558,3 +558,70 @@ def test_봉인_실행은_기록하고_횟수를_센다(tmp_path, monkeypatch) -
     monkeypatch.setattr(eg, "SEALED_LOG", tmp_path / "sealed.jsonl")
     assert eg.log_sealed_run({"golden_sha": "x"}) == 1
     assert eg.log_sealed_run({"golden_sha": "x"}) == 2
+
+
+# ── 2026-10-15 전수 점검 — 그래프 평가 도구 ─────────────────────────────────────────────
+
+from scripts import eval_graph as eg  # noqa: E402 — 이 절의 시험은 모두 평가 도구를 본다
+
+
+def _pred(**over):  # noqa: ANN003, ANN202
+    return dict(eg.predict({"sentences": [], "outcome": None}), **over)
+
+
+@pytest.mark.gate
+def test_채점_8종_밖_유형을_확정해도_적법_행에서는_틀림이다() -> None:
+    """🔴 재현 — 그래프가 8 종 밖 유형(기능성화장품_오인)을 적법 행에 확정하면 종전에는 유형을 8 종으로 거른 뒤 비어
+    selective risk 가 0 이었다(같은 행을 `lawful_report` 는 오탐으로 셌다). 유형 표는 그대로 8 종만 센다."""
+    rows = [
+        {"id": "a", "text": "가", "labels": [], "근거": [], "조건": "L", "split": "test_sentence"}
+    ]
+    s = eg.summarize(
+        rows, [_pred(types=["기능성화장품_오인"], committed=True, **{"class": "확정위반"})]
+    )
+    assert s["committed"] == 1 and s["selective_risk"] == 1.0
+    assert "기능성화장품_오인" not in s["types"]
+
+
+@pytest.mark.gate
+def test_잰_행이_없으면_보류율과_coverage_는_0_이_아니라_없음이다() -> None:
+    s = eg.summarize([], [])
+    assert s["hold_rate"] is None and s["coverage"] is None
+    assert eg._pct(None) == "-" and eg._pct(0.0) == "0.0%"
+
+
+@pytest.mark.gate
+def test_그래프_평가는_dev_와_봉인_중_하나를_반드시_고른다(capsys) -> None:  # noqa: ANN001
+    """🔴 2026-10-15 (D-175 · D-339 결정 7) — 인자 없이 돌리면 봉인 행을 읽던 기본값을 없앴다."""
+    with pytest.raises(SystemExit):
+        eg.main([])
+    with pytest.raises(SystemExit):
+        eg.main(["--dev", "--sealed"])
+
+
+@pytest.mark.gate
+def test_봉인_회차는_전_행_한_번이고_같은_날_두_번째는_막는다(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    import argparse  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    log = tmp_path / "sealed_runs.jsonl"
+    monkeypatch.setattr(eg, "SEALED_LOG", log)
+    base = {"limit": None, "provenance": None, "no_enc_filter": False, "stub": False}
+    assert eg.sealed_refusal(argparse.Namespace(**base), "2026-10-22") is None
+    for flag, val in (("limit", 200), ("provenance", "x"), ("no_enc_filter", True), ("stub", True)):
+        why = eg.sealed_refusal(argparse.Namespace(**{**base, flag: val}), "2026-10-22")
+        assert why and "함께 쓸 수 없다" in why
+    log.write_text(json.dumps({"at": "2026-10-22T10:00:00"}) + "\n", encoding="utf-8")
+    assert "이미 봉인 회차" in eg.sealed_refusal(argparse.Namespace(**base), "2026-10-22")
+    assert eg.sealed_refusal(argparse.Namespace(**base), "2026-10-23") is None
+
+
+@pytest.mark.gate
+def test_봉인_기록의_커밋은_git_을_부르지_않고_읽고_모르면_미확인이다(tmp_path) -> None:  # noqa: ANN001
+    assert eg.git_head(tmp_path) == "미확인"
+    (tmp_path / ".git" / "refs" / "heads").mkdir(parents=True)
+    (tmp_path / ".git" / "HEAD").write_text("ref: refs/heads/ohb\n", encoding="utf-8")
+    (tmp_path / ".git" / "refs" / "heads" / "ohb").write_text(
+        "abcdef1234567890\n", encoding="utf-8"
+    )
+    assert eg.git_head(tmp_path) == "abcdef123456"

@@ -34,6 +34,8 @@ REASONS = {
 }
 
 MIN_LEN, MAX_LEN = 8, 60
+#: 고정 문구(인정 · 심사 문구)가 붙는 분기의 **나머지 글자** 최소 — 고정 문구가 문장을 채우므로 더 짧아도 된다 `[관행]`
+FIXED_MIN_LEN = 4
 DUP_RATIO = 0.8
 
 CERT_WORDS = (
@@ -184,7 +186,10 @@ def check(text: str, inputs: Inputs, branch: Branch, seen: list[str]) -> tuple[s
         return "fixed", "이 분기는 고정 문구가 없다"
     # 고정 문구 안의 효능 낱말은 허용된 것이다 — 나머지 글자만 검사한다
     body = text.replace(PLACEHOLDER, " ").strip()
-    if not MIN_LEN <= len(body) <= MAX_LEN and not (branch.needs_fixed and len(body) >= 4):
+    # 🔴 2026-10-15 (전수 점검) — 종전 조건 `not (needs_fixed and len >= 4)` 는 고정 문구 분기에서 **최소만 낮춘 게 아니라 최대도 없앴다**
+    #    (231 자도 통과 · 「더 탐색하기」의 200 자 검사에서 422). 고정 문구 분기는 최소만 `FIXED_MIN_LEN` 으로 낮춘다.
+    lo = FIXED_MIN_LEN if branch.needs_fixed else MIN_LEN
+    if not lo <= len(body) <= MAX_LEN:
         return "format", f"{len(body)}자"
     if too_similar(text, seen):
         return "duplicate", ""
