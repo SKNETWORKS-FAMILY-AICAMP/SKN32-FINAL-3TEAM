@@ -78,8 +78,11 @@ class _Cur:
             self._r = [(x,) for x in self.db]
         elif "count(*) FROM fragment" in sql:
             self._r = (0, 0, 0)
-        elif sql.startswith("DELETE"):
+        elif sql.startswith("DELETE FROM source WHERE"):
             self.deleted.append(p[0])
+        elif sql.startswith("UPDATE source_use"):
+            # 🆕 2026-10-15 (D-344 ③) — 건너뛴 소스의 용도를 닫는다. 이 DB 대역에는 열린 용도가 없다
+            self._r = []
 
     def fetchall(self):  # noqa: ANN201
         return self._r
