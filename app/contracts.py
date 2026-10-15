@@ -448,6 +448,12 @@ class FactKind(enum.StrEnum):
     수상_상장 = "수상_상장"
     인증 = "인증"
     원재료 = "원재료"
+    #: 🆕 2026-10-16 (D-348 보충 3 결정 5) — 표시광고법 3조①1호로 의결된 사실 주장(원장 10-14(B) ⑤) · 건기식 인정 전제의 질병 문구
+    특허 = "특허"
+    등급 = "등급"
+    자격 = "자격"
+    #: 건기식 인정 전제에서 질병 문구가 **인정받은 기능성 그대로인가**(질병 발생 위험 감소 등 · [별표 1] 1호 목 나 · 다가 아님) — 결정 2
+    인정_기능성 = "인정_기능성"
 
 
 class FactBranch(BaseModel):
@@ -508,6 +514,21 @@ class EncoderTypeCandidate(BaseModel):
     estimate: RiskEstimate | None = None
 
 
+class UserFact(BaseModel):
+    """**사용자가 확인한 사실** 하나 (🆕 2026-10-16 · D-348 보충 3 결정 4 · (가) 출처를 남기고 반영).
+
+    ★ 결과 화면의 사실 확인 분기에서 사용자가 고른 것 — 재검수 요청에 실려 오고, 그 문장의 판정을 그 사실로 다시 낸다.
+       책임은 사용자에게 있다 — 그래서 판정된 문장에 이 칸을 그대로 남긴다(`SentenceJudgment.user_fact` · 저장 `evidence.user_fact`).
+    🚨 **검증이 아니다** — 시스템은 증빙을 대조하지 않는다(D-263 ⑥ 의 「검증된 분기」와 다르다). 화면은 「사용자 확인 전제」로 그린다(배지 ⬜).
+    """
+
+    #: 그 사실 주장이 있는 문장 글자 — 재검수의 문장과 정규화(공백 · NFKC)로 맞춘다. 문장 번호는 재분할로 바뀔 수 있어 쓰지 않는다
+    text: str = Field(..., min_length=1)
+    kind: FactKind
+    #: 참이라고 골랐나 · 거짓이라고 골랐나
+    true: bool
+
+
 class SentenceJudgment(BaseModel):
     """문장 하나의 판정. 상태 스키마 「판정 누적」이 그대로 이 모양이다."""
 
@@ -538,6 +559,8 @@ class SentenceJudgment(BaseModel):
     substantiation: SubstBranch | None = None
     #: 🆕 2026-10-01 **사실 확인 분기** — B 에만 (D-308 ④) · 실증 분기와 **다른 칸**이다
     fact_check: FactBranch | None = None
+    #: 🆕 2026-10-16 (D-348 보충 3 결정 4) — 이 문장의 판정이 **사용자가 확인한 사실**로 정해졌다(출처 · 책임). 있으면 확정이고 사실 확인 분기는 없다
+    user_fact: UserFact | None = None
 
     @model_validator(mode="after")
     def _hold_reason_iff_hold(self) -> SentenceJudgment:
@@ -626,14 +649,22 @@ class SentenceJudgment(BaseModel):
 
     @model_validator(mode="after")
     def _fact_is_for_B(self) -> SentenceJudgment:
-        # 🆕 D-308 ④ — 사실 확인 분기도 **B 에만** · 확인 전 위험도가 있어야 · 상한은 그 아래 (`_subst_is_for_B` 와 같은 규칙)
+        # 🔄 2026-10-16 (D-348 보충 3 결정 1 · 5) — 사실 확인 분기는 **사실을 몰라 멈춘 보류**(`premise_unknown`)에 붙는다.
+        #    ⛔ 종전 「확정 B 에만」(D-308 ④)은 사실을 모르는데 위반을 확정한 꼴이었다 — 사실이 참이면 위반이 아니다.
+        #    확인 전 위험도(가장 나쁜 경우)가 있어야 · 상한은 그 아래 (`_subst_is_for_B` 와 같은 규칙) · 불가 사유는 묻지 않는다(질병 C 도 붙는다)
+        if self.user_fact is not None and (
+            self.verdict is not Verdict.confirmed or self.fact_check is not None
+        ):
+            raise ValueError(
+                "사용자 확인 사실로 정한 문장은 확정이고 사실 확인 분기가 없다 (D-348 보충 3 결정 4)"
+            )
         if self.fact_check is None:
             return self
         if self.not_claim:
             raise ValueError("판정 대상 아님 문장에 사실 확인 분기가 붙었다 (D-275)")
-        if self.infeasibility is not Infeasibility.B:
+        if self.verdict is not Verdict.hold or self.hold_reason is not HoldReason.premise_unknown:
             raise ValueError(
-                f"사실 확인 분기는 B 에만 붙는다 — 불가 사유 {self.infeasibility} (D-308)"
+                "사실 확인 분기는 사실을 몰라 멈춘 보류(premise_unknown)에 붙는다 (D-348 보충 3 결정 1)"
             )
         if self.risk.final is None:
             raise ValueError("사실 확인 분기가 있는데 확인 전 위험도가 없다 (D-72)")
@@ -713,6 +744,9 @@ class ProductContext(BaseModel):
     #:   이지 자격이 아니다(함량 30% · 안전관리인증업소 제조가 요건) — D-228 의 특허와 같은 어법.
     has_recognized_function: bool = False
     recognition_no: str | None = None
+    #: 🆕 2026-10-16 (D-348 보충 3 결정 4) — 사용자가 확인한 사실(수상 · 인증 · 원재료 …). 제품에 관한 사실이라 여기 싣는다
+    #:    (`has_recognized_function` 과 같은 축 — 「이 문구를 쓸 자격 · 근거가 있는가」). 비면 사실을 모른다 = 가장 나쁜 쪽(D-263 ①)
+    facts: list[UserFact] = Field(default_factory=list)
 
 
 class Timing(BaseModel):
@@ -876,7 +910,11 @@ class JudgeResponse(BaseModel):
         #       `app/graph.py` `premise_branches` 가 만들지만(D-319) DB 가 없거나 기준 문안이 비면 분기를 내지 않는다 —
         #       지금 걸면 그 응답이 깨진다 (D-192).
         premise_holds = {HoldReason.cat_unknown, HoldReason.premise_unknown}
-        if any(s.hold_reason in premise_holds for s in self.sentences) and not self.branches:
+        # 🔄 2026-10-16 (D-348 보충 3) — 사실을 몰라 멈춘 문장은 그 문장의 사실 확인 분기가 선택지다(품목 분기가 없어도 된다)
+        if (
+            any(s.hold_reason in premise_holds and s.fact_check is None for s in self.sentences)
+            and not self.branches
+        ):
             raise ValueError(
                 "전제를 몰라 보류했는데 분기가 없다 — 선택지를 주지 않았다 (D-263 ② · D-229 ⑥)"
             )

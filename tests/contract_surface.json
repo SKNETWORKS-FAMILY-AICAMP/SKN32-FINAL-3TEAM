@@ -23,9 +23,13 @@
       "인스타"
     ],
     "FactKind": [
+      "등급",
       "수상_상장",
       "원재료",
-      "인증"
+      "인정_기능성",
+      "인증",
+      "자격",
+      "특허"
     ],
     "GenerateOutcome": [
       "frontier",
@@ -206,6 +210,7 @@
     },
     "ProductContext": {
       "category": "opt app.contracts.Category | None",
+      "facts": "opt list[app.contracts.UserFact]",
       "has_recognized_function": "opt builtins.bool",
       "recognition_no": "opt str | None"
     },
@@ -248,6 +253,7 @@
       "spans": "opt list[app.contracts.Span]",
       "substantiation": "opt app.contracts.SubstBranch | None",
       "text": "req builtins.str",
+      "user_fact": "opt app.contracts.UserFact | None",
       "verdict": "req app.contracts.Verdict",
       "violations": "opt list[app.contracts.Violation]"
     },
@@ -264,6 +270,11 @@
     "Timing": {
       "ms": "req builtins.float",
       "node": "req builtins.str"
+    },
+    "UserFact": {
+      "kind": "req app.contracts.FactKind",
+      "text": "req builtins.str",
+      "true": "req builtins.bool"
     }
   },
   "routes": [

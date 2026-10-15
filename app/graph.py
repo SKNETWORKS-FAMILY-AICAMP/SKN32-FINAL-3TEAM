@@ -53,7 +53,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import Annotated, Any, TypedDict
 
-from app import claimscope, sanction, sentsplit
+from app import claimscope, factcheck, sanction, sentsplit
 from app import dictmatch as dm
 from app import encoder as enc
 from app import premise as pm
@@ -75,6 +75,7 @@ from app.contracts import (
     EncoderBasis,
     EncoderTypeCandidate,
     EvidenceArticle,
+    FactBranch,
     GenerateOutcome,
     HoldReason,
     Infeasibility,
@@ -91,6 +92,7 @@ from app.contracts import (
     SentenceJudgment,
     Span,
     Timing,
+    UserFact,
     Verdict,
     Violation,
     is_pass,
@@ -2382,8 +2384,90 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     """층 3 문서 규칙 — R-D1 최소판 → 문서 경고 + `hold(rd1)` (D-83). 🔜 W8.
 
     ⛔ 「문맥을 이해한다」고 말하지 않는다 (D-83 ④) — 문장별 판정 결과의 **집합 연산**이다.
+    🆕 2026-10-16 (D-348 보충 3) — **사실 확인 분기**를 여기서 단다(기록 판정 · 위험도 · 품목 분기가 선 뒤 · `_with_fact`).
+       표(`app/factcheck.py`)가 비면 아무것도 하지 않는다 — 문안 승인 전에는 판정이 한 글자도 바뀌지 않는다.
     """
-    return {}
+    facts = list((state.get("product") or ProductContext()).facts)
+    changed = [f for s in state.get("sentences", []) if (f := _with_fact(s, facts)) is not None]
+    return {"sentences": changed} if changed else {}
+
+
+# ── 사실 확인 분기 (🆕 2026-10-16 · D-348 보충 3) ─────────────────────────────────────
+
+
+def _ho_coords(s: SentenceJudgment) -> set[tuple[str, int, int, int]]:
+    """문장이 기대는 호 — 사전 인용 근거 + 인코더 하한의 근거 호(대응표) · 좌표를 못 읽는 것은 버린다 (호 관문의 재료 · 보충 3 결정 2)."""
+    arts = [e for e in s.evidence if e.basis] + [
+        a for b in s.risk.encoder_basis for a in b.articles
+    ]
+    out: set[tuple[str, int, int, int]] = set()
+    for a in arts:
+        c = statute.from_article_item(a.law_id, a.article, a.item)
+        if c is None and not a.item:
+            c = f"{a.law_id}:{a.article}"  # 참조 조항 꼴 — `_ref_article` 은 좌표를 article 한 칸에 싣는다
+        try:
+            law, jo, hang, ho, _ = statute.parse(c) if c else (None, 0, 0, 0, None)
+        except ValueError:
+            continue
+        if law:
+            out.add((law, jo, hang, ho))
+    return out
+
+
+def _with_fact(s: SentenceJudgment, facts: list[UserFact]) -> SentenceJudgment | None:
+    """사실에 달린 문장 → 보류(`premise_unknown`) + 사실 확인 분기, 또는 사용자가 확인한 사실로 정한 판정. 바꿀 것이 없으면 None.
+
+    ★ 보충 3 결정 1 ~ 4 — 호 관문(`factcheck.in_gate`) ∧ 낱말 규칙(`factcheck.fact_kind`) ∧ 그 종류의 문안이 승인됐을 때만.
+       · 사용자 확인 없음 → 보류 + 분기(참이면 상한 · 받는 증빙 · 기준 문안) · 기록 위험도는 가장 나쁜 경우 그대로(D-263 ①)
+       · 사용자가 「참」 ∧ 사실 주장 꼴만(`fact_only`) → 확정 · 위반 없음 · R0 · `user_fact`(출처)
+       · 사용자가 「거짓」 ∧ 확정 위반 → 그 판정 그대로 + `user_fact` · 보류(인코더만)면 그대로 둔다(확정은 신뢰 층의 몫 · 결정 5)
+    🔴 위험도가 없으면(하한 모름) 분기를 달지 않는다(계약 · D-72) · 판정 대상 아님 · 이미 단 문장은 건드리지 않는다.
+    ⬜ 확정 문장 · 확신 부족 보류만 본다 — 품목 · 전제 보류(cat_unknown · premise_unknown) · 미검수 보류와 겹치는 자리 · 분기마다 계산은 집행 뒤
+    """
+    if s.not_claim or s.user_fact is not None or s.fact_check is not None:
+        return None
+    if not (
+        (s.verdict is Verdict.confirmed and s.violations)
+        or (s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf)
+    ):
+        return None
+    kind = factcheck.fact_kind(s.text)
+    if kind is None or kind not in factcheck.FACT_TEXTS or s.risk.final is None:
+        return None
+    if not factcheck.in_gate(_ho_coords(s)):
+        return None
+    key = dm.norm(s.text)
+    uf = next((f for f in facts if f.kind is kind and dm.norm(f.text) == key), None)
+    fields = {k: getattr(s, k) for k in type(s).model_fields}
+    if uf is not None:
+        if uf.true and factcheck.fact_only(s.text):
+            return SentenceJudgment(
+                sent_id=s.sent_id,
+                text=s.text,
+                verdict=Verdict.confirmed,
+                risk=RiskAssessment(floor=Risk.R0, final=Risk.R0),
+                encoder_candidates=s.encoder_candidates,
+                user_fact=uf,
+            )
+        if s.verdict is Verdict.confirmed:
+            return SentenceJudgment(**{**fields, "user_fact": uf})
+        return None
+    t = factcheck.FACT_TEXTS[kind]
+    cap = min(t.confirmed_max, s.risk.final, key=lambda r: r.level)
+    return SentenceJudgment(
+        **{
+            **fields,
+            "verdict": Verdict.hold,
+            "hold_reason": HoldReason.premise_unknown,
+            "substantiation": None if factcheck.fact_only(s.text) else s.substantiation,
+            "fact_check": FactBranch(
+                kind=kind,
+                confirmed_max=cap,
+                accepted_evidence=list(t.accepted_evidence),
+                criteria=t.criteria,
+            ),
+        }
+    )
 
 
 #: 코어 순서 — 팬아웃 앞 · 법별 노드(`LAW_NODES` · 병렬) · 팬아웃 뒤. 컴파일본과 스텁이 **이 표 하나**를 쓴다 (D-99).

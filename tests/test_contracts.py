@@ -774,8 +774,9 @@ def test_실증_분기에는_특허_수상_인증을_못_넣는다() -> None:
 
 
 @pytest.mark.gate
-def test_사실_확인_분기는_B_에만_상한은_확인_전_아래로() -> None:
-    from app.contracts import FactBranch, FactKind
+def test_사실_확인_분기는_사실을_몰라_멈춘_보류에_상한은_확인_전_아래로() -> None:
+    """🔄 2026-10-16 (D-348 보충 3 결정 1 · 5) — 「확정 B 에만」(D-308 ④)에서 「보류(premise_unknown) · 불가 사유 무관」으로."""
+    from app.contracts import FactBranch, FactKind, HoldReason  # noqa: PLC0415
 
     fact = FactBranch(
         kind=FactKind.수상_상장,
@@ -783,9 +784,22 @@ def test_사실_확인_분기는_B_에만_상한은_확인_전_아래로() -> No
         accepted_evidence=["수상 증서"],
         criteria="기준",
     )
-    ok = _viol(fact_check=fact)
+
+    def held(f: FactBranch, infeas: Infeasibility = Infeasibility.B) -> SentenceJudgment:
+        base = _viol(infeas=infeas).model_dump()
+        return SentenceJudgment(
+            **{
+                **base,
+                "verdict": Verdict.hold,
+                "hold_reason": HoldReason.premise_unknown,
+                "fact_check": f,
+            }
+        )
+
+    ok = held(fact)
     assert ok.fact_check.kind is FactKind.수상_상장
-    with pytest.raises(ValidationError, match="B 에만"):
-        _viol(infeas=Infeasibility.C, fact_check=fact)
+    held(fact, Infeasibility.C)  # 질병 C 에도 붙는다(인정_기능성)
+    with pytest.raises(ValidationError, match="premise_unknown"):
+        _viol(fact_check=fact)  # 확정에는 붙지 않는다 — 사실을 모르면 확정할 수 없다
     with pytest.raises(ValidationError, match="상한"):
-        _viol(fact_check=fact.model_copy(update={"confirmed_max": Risk.R3}))
+        held(fact.model_copy(update={"confirmed_max": Risk.R3}))
