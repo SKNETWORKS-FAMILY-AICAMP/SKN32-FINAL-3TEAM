@@ -1525,7 +1525,9 @@ def judge(state: CoreState) -> dict[str, Any]:
        `sent_id` 로 짝지어 옮긴다. 법 순서는 `LAW_NODES` 순서이고 같은 좌표는 한 번만 싣는다. ⛔ 검색을 다시 부르지 않는다 (D-99).
     🚨 **근거를 찾은 것과 판정한 것은 다르다** — 사전 적중 없이 검색 근거만으로는 확정하지 않는다 (D-127 · D-269).
     ⚠️ D-269 는 「전제 정정 · 결론 재검 대기」다 — 그래프 평가 도구(`scripts/eval_graph.py` · W1)의 수로 재검한다. 결론은 그때까지 그대로다.
-    ⬜ 단서(`provisos`)는 아직 읽지 않는다 — 제품 사실을 모르면 요건 충족을 모른다(D-238 개정 (나)). 판정을 바꾸지 않고 근거에 남는다.
+    ⬜ 단서(`provisos`)는 아직 읽지 않는다 — 제품 사실을 모르면 요건 충족을 모른다(D-238 개정 (나)). 판정을 바꾸지 않는다.
+       🔄 2026-10-15 (전수 점검) — ⛔ 종전 주석 「근거에 남는다」는 틀렸다. 법별 노드가 고른 단서(`LawResult.provisos`)는
+       **응답에 실리지 않는다**(읽는 곳은 `scripts/graph_probe.py` 뿐). 응답에 실을지는 ⬜ 판정 대기(2026-10-15 전수 점검).
     """
     order = {name: k for k, name in enumerate(LAW_NODES)}
     results = sorted(state.get("law_results", []), key=lambda r: order.get(r.law, len(order)))
@@ -2183,7 +2185,9 @@ def guidance(state: ReviewState) -> dict[str, Any]:
     🔴 2026-10-02 (W5) — 계약은 지시 문장마다 **실증 분기와 뺄 구간**을 요구한다(`_guidance_payload`). 실증 분기는 기준 문안
        (조문을 인용한 설명 · D-263 ②)을 싣는데 **문안이 아직 초안**이다 — 재료가 모자라면 **보류로 내린다** (D-220).
        ⛔ 종전 주석 「지금 이 노드에 오는 길은 없다」는 위험도가 붙으면서 틀린 말이 됐다. 문안이 확정되면 이 분기가 사라진다 (D-192).
-    🚨 2026-10-06 — 실증 분기(`substantiation`)를 채우는 노드가 아직 없다. 그래서 이 종착은 지금 **늘 보류로 내려간다**.
+    🔄 2026-10-14 (D-337) — 실증 분기는 `assess_risk` · `premise_branches` 가 채운다(`_substantiated`). 지시 종착이 선다 —
+       dev 749 행 중 63(원장 10-14(A) ⑧). 위 「재료가 모자라면 보류로 내린다」는 그대로 산다(`guidance_ready`).
+       ⛔ 종전 주석 「실증 분기를 채우는 노드가 아직 없다 · 늘 보류」(10-06)는 D-337 로 틀린 말이 됐다 (2026-10-15 전수 점검).
     """
     sents = list(state.get("sentences", []))
     if sents and not guidance_ready(sents):

@@ -335,19 +335,23 @@ def _remember_seen(
     )
 
 
-async def _form(request: Request) -> dict[str, list[str]]:
+async def _form(request: Request, *, keep_blank: bool = False) -> dict[str, list[str]]:
     """`application/x-www-form-urlencoded` 본문을 표준 라이브러리로 판다.
 
     ★ HTML 폼은 `enctype` 없이 보내면 이 형식이고, `urllib.parse.parse_qs` 로 끝난다.
       필드가 여럿이어도 마찬가지다 — `python-multipart` 가 필요한 것은
       **파일 업로드(`multipart/form-data`)** 뿐이다.
     ⬜ 업로드를 붙일 때는 lock 을 만지는 판정이다 (§5). 그 판정 전까지 만들지 않는다.
+    🔴 2026-10-15 (전수 점검) — `keep_blank` — 문구 칸(`text`)은 **칸 번호가 곧 주소**다(`del:N` · `sample:N` · `judge:N` ·
+       고쳐 쓰기의 `target`). 빈 칸을 버리면 뒤 칸 번호가 당겨져 엉뚱한 칸을 지우고 · 판정하고 · 「그런 칸이 없다」(422)가 났다
+       (「문구 추가 → 예시 넣기」 재현). 칸 번호를 쓰는 두 라우트(`/u/judge` · `/u/review/rewrite`)만 켠다 —
+       ⛔ 다른 폼은 빈 값이 「없음」이어야 하는 칸이 있다(`carry` 처럼 있는지만 보는 칸 · `cs_post` 는 따로 켠다).
     """
     # 🔄 09-21 — 다 읽고 재지 않는다. 넘는 순간 멈춘다 (app/formbody.py · P2-11)
     body = await read_capped(
         request, _MAX_BODY, f"본문이 너무 크다 — {_MAX_BODY} 바이트까지 받는다"
     )
-    return parse_qs(body.decode("utf-8", "replace"))
+    return parse_qs(body.decode("utf-8", "replace"), keep_blank_values=keep_blank)
 
 
 def _one(form: dict[str, list[str]], name: str, limit: int) -> str:
@@ -624,8 +628,10 @@ async def judge(request: Request, session: Session = Depends(get_session)) -> HT
     🆕 2026-10-13 — 판정이 끝나면 **이력에 적는다**(`app.judgment_store.save_review` · 회원 ∧ 선택 동의 ① · D-307 · D-96).
        검수만 적는다 — 고쳐 쓰기의 재판정 · 카피 생성 · 광고 생성의 판정은 적지 않는다. 저장 결과는 상태 글자로 화면에 알리고
        (`history_kept`), 못 적어도 판정 결과는 그대로 그린다. 🔄 10-14 — ksr(`_keep_history`) · ssm(`judgment_store`) 두 벌을 하나로 (D-99).
+    🔴 2026-10-15 (전수 점검) — 판정 코어 · 저장은 동기 함수다(DB · 모델 추론 · 첫 호출 약 20 초). `async` 라우트에서 그대로 부르면
+       **이벤트 루프가 멈춰 다른 사람의 요청이 모두 기다린다** — 고쳐 쓰기 · 카피 생성처럼 스레드로 넘긴다(`run_in_threadpool`).
     """
-    form = await _form(request)
+    form = await _form(request, keep_blank=True)
     copies = _copies(form)
     op = form.get("op", ["all"])[0]
     if not _OP.match(op):
@@ -664,7 +670,7 @@ async def judge(request: Request, session: Session = Depends(get_session)) -> HT
         )
     results: list[dict] = []
     for n, text in targets:
-        state, res = _core_judge(text)
+        state, res = await run_in_threadpool(_core_judge, text)
         if state in ("pending", "down"):
             return _render(
                 request,
@@ -672,8 +678,10 @@ async def judge(request: Request, session: Session = Depends(get_session)) -> HT
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
         results.append({"n": n, "result": res, "text": text})
-    kept = judgment_store.save_review(
-        session, current_user(request, session), [r["result"] for r in results]
+    kept = await run_in_threadpool(
+        lambda: judgment_store.save_review(
+            session, current_user(request, session), [r["result"] for r in results]
+        )
     )
     return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
 
@@ -856,7 +864,9 @@ async def review_rewrite(request: Request) -> HTMLResponse:
     """
     from starlette.concurrency import run_in_threadpool  # noqa: PLC0415
 
-    form = await _form(request)
+    form = await _form(
+        request, keep_blank=True
+    )  # 칸 번호가 `target` 의 주소다 (`_form` · 2026-10-15)
     copies = _copies(form)
     m = _TARGET.match(form.get("target", [""])[0])
     if not m:
@@ -991,6 +1001,8 @@ def _frontier(candidates: list) -> list[dict]:  # noqa: ANN401
 #:    시험 코드(`docs/ksr/llm_copy/branches.py`)와 같은 표다 — ⛔ 앱이 시험 폴더를 import 하지 않는다.
 #:    화면이 쓰는 것(이름 · 안내 · 그 분기에서만 읽는 칸)만 여기 둔다. 프롬프트 · 금지 낱말은 엔진의 것이다.
 _GEN_CATEGORIES = (("cos", "화장품"), ("food", "식품"), ("hf", "건강기능식품"))
+#: 🚨 엔진 분기 표 `copygen.branches.BRANCHES["hf_no"].notice` 와 **같은 글자**다(D-99) — 화면은 엔진을 늦게 import 하므로
+#:    가져오지 않고 둘을 게이트(`tests/test_copygen.py` 분기 표 대조)가 맞춰 본다
 _GEN_HF_NO_NOTICE = (
     "기능성 인정이 없으면 건강기능식품으로 광고할 수 없습니다. 일반식품으로 생성합니다."
 )
@@ -1508,7 +1520,9 @@ async def compose(request: Request) -> HTMLResponse:
                 {**base, "errors": ["인정 · 심사 문구 말고 광고에 담을 문구를 더 적어 주세요."]}
             ),
         )
-    status, result = _core_judge(part, origin["product"])
+    status, result = await run_in_threadpool(
+        _core_judge, part, origin["product"]
+    )  # 이벤트 루프를 막지 않는다 (`judge` · 2026-10-15)
     if status != "ok":
         return _render(
             request,
@@ -1589,7 +1603,9 @@ async def compose_judge(request: Request) -> JSONResponse:
     if not part:
         # 인정 문구뿐이다 — 판정할 글자가 없다. 이용자가 적은 값이라 「확인 필요」로 얹는다
         return JSONResponse({"state": "unsure", "notes": []})
-    status, result = _core_judge(part, origin["product"])
+    status, result = await run_in_threadpool(
+        _core_judge, part, origin["product"]
+    )  # `judge` 와 같은 까닭 (2026-10-15)
     if status != "ok":
         return JSONResponse({"state": status, "notes": []})
     lands = [_lands(s) for s in result.sentences]
@@ -1652,15 +1668,9 @@ _VERDICT_LABELS = {
     "no_basis": "근거 없음",
     "unjudged": "미판정",
 }
-#: 🚨 `review.html` 의 `HOLD` 와 **같은 글자**다 (D-99) — 한쪽을 고치면 둘 다
-_HOLD_LABELS = {
-    "low_conf": "확신 부족",
-    "gap2": "코드·모델 2등급 차",
-    "cat_unknown": "품목 선택 필요",
-    "rd1": "공존 규칙 발동",
-    "premise_unknown": "전제 선택 필요 — 인정 여부",
-    "law_uncovered": "전용법 미검수",
-}
+#: 🚨 `review.html` · `_sent_words.html` 의 `HOLD` 와 **같은 글자**다 (D-99) — 한쪽을 고치면 다 같이.
+#: 🔄 2026-10-15 (전수 점검) — 같은 내용의 사본(`_HOLD_WHY` · 광고 생성의 얹지 못하는 까닭)이 따로 있었다. 하나로 가리킨다
+_HOLD_LABELS = _HOLD_WHY
 #: 확정 위반의 배지 `(색, 글자)` — 검수 화면의 문장 카드와 같은 말이다 (사용자 확정 문구 10-01)
 _INF_BADGES = {
     "A": ("warn", "인정받은 제품만 가능"),

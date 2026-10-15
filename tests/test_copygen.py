@@ -246,6 +246,8 @@ def test_엔진의_분기표는_화면_분기와_시험_코드의_표와_같다(
         assert b["label"] == BRANCHES[key].label, key
         assert pm.PREMISE_CATEGORY[b["premise"]].value == BRANCHES[key].category, key
         assert (b.get("needs") == "fixed") == BRANCHES[key].needs_fixed, key
+        # 🆕 2026-10-15 — 화면의 분기 안내 문구도 엔진의 분기 표와 같은 글자다(`_GEN_HF_NO_NOTICE` · D-99)
+        assert b.get("notice", "") == BRANCHES[key].notice, key
 
     path = pathlib.Path(__file__).resolve().parents[1] / "docs/ksr/llm_copy/branches.py"
     if not path.exists():
@@ -825,3 +827,18 @@ def test_광고_생성은_인정_문구_경고를_그리고_초안은_떨구지_
     assert [t for t, _ in seen] == [fixed, "점심 먹고 물과 함께,"]
     m = re.search(r'id="de-data">(.*?)</script>', body, re.DOTALL)
     assert json.loads(m.group(1))["copy"] == [{"text": text, "unsure": True}]
+
+
+def test_고정_문구_분기도_길이_상한이_있다() -> None:
+    """🔴 2026-10-15 (전수 점검) 재현 — 고정 문구 분기(`hf_yes`)는 최소만 낮추고 최대 60 자는 지킨다.
+
+    종전에는 `not (needs_fixed and len >= 4)` 가 최대도 없애 231 자 후보가 통과했다(「더 탐색하기」 200 자 검사에서 422).
+    """
+    long_body = "고소하고 바삭한 식감으로 하루를 시작해 보세요 " * 8
+    short_ok = "든든한 한 끼"  # 6 자 — 고정 문구 분기에서는 받고, 그 밖 분기에서는 너무 짧다
+    hf = BRANCHES["hf_yes"]
+    assert hf.needs_fixed
+    over = filters.check(f"{long_body}, {PLACEHOLDER}", _inputs(fixed=FIXED), hf, [])
+    assert over is not None and over[0] == "format"
+    assert filters.check(f"{short_ok}, {PLACEHOLDER}", _inputs(fixed=FIXED), hf, []) is None
+    assert filters.check(short_ok, _inputs(), BRANCHES["food_no"], [])[0] == "format"

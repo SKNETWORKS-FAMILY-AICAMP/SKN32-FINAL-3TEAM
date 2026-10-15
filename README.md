@@ -13,7 +13,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![tests](https://img.shields.io/badge/tests-2628_(gate_1652)-0F7B4F?style=flat-square)
+![tests](https://img.shields.io/badge/tests-2643_(gate_1666)-0F7B4F?style=flat-square)
 ![decisions](https://img.shields.io/badge/설계결정-D--341-2B5BD7?style=flat-square)
 
 **[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 341건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
@@ -61,7 +61,7 @@ B ↔ C 는 왕복으로 **설계돼 있습니다** (D-181). C 가 매체 프로
 >
 > **검수 화면의 「고쳐 쓰기」** — `POST /u/review/rewrite` 가 로컬 sLLM 서버(`docs/lse/sllm_service.py` · `127.0.0.1:8765` · 별도 `.venv-sllm`)를 불러
 > 지적 문장을 고쳐 쓰고, 고친 문구를 같은 판정 코어로 다시 판정합니다(D-332 결정 3 · `app/routers/sllm_client.py`). 서버가 없으면 후보를 그리지 않습니다.
-> 쓰는 판은 모델 잠금 `models.lock.json` 이 정합니다 — Qwen3 4B 기반 LoRA 두 단계(1단계 q4b-v14 · 2단계 q4b_polish · D-335). ⬜ 서버가 잠금으로 판을 대조하는 것은 아직입니다(이서은).
+> 쓰는 판은 모델 잠금 `models.lock.json` 이 정합니다 — Qwen3 4B 기반 LoRA 두 단계(1단계 q4b-v14 · 2단계 q4b_polish · D-335). 서버는 1단계가 잠금 밖이면 올리지 않고, 2단계가 잠금 밖이면 2단계 없이 올립니다(`docs/lse/sllm_service.py` · 2026-10-13). ⬜ 앱이 응답의 판을 잠금과 대조하는 것은 아직입니다.
 
 ![전체 구성](assets/diagrams/a-01-overview.png)
 
@@ -251,11 +251,11 @@ split → classify → retrieve → match_dict → encode
 | 리랭킹 (bge-reranker-v2-m3) | 🔴 **미구현** | 하이브리드까지 섰고 3층은 아직 |
 | 판정 인코더 파인튜닝 | 🟢 **채택 · 다음 판 대기** | `experiments/` 틀 밖에서 진행 — 작업 자료와 보고서는 `docs/psj/` · `docs/ssm/`. 앱의 채택 판은 카드 17(D-331 · 잠금 D-333). 다음 판 D4-10(품목 입력)의 배선은 코드에 들어갔고(D-336 · 가짜 인코더 게이트 · 실모델 미실행) 잠금 채택 조건(D-339 결정 1 ② ③) 측정을 기다린다. 인코더 단독 봉인 회차는 한 번 열렸다(D4-T · 박수진 · 보고 전용 · D-175) |
 | sLLM 파인튜닝 | 🟢 **채택** | `docs/lse/` — Qwen3 4B LoRA 두 단계 판을 잠금에 올렸다(D-335) |
-| 평가 | 🟡 **부분** | 그래프 평가 도구 `scripts/eval_graph.py` — 유형별 탐지 · 인코더 후보 · 조합 판정 칸 표(D-340) · 분기 인코더 지표 · 거름 켬/끔(`--no-enc-filter`) · 판정기 B `scripts/eval_rule.py`. 채점은 합격선 없는 보고(D-321 · D-322 결정 A · D-324 결정 5). 판정 그래프 봉인 회차는 날짜 하나 · 그날의 커밋 하나 · 잠금 채택 판으로 한 번(D-339 결정 7 · 날짜 미정 · 제안 10/22 ~ 23) |
+| 평가 | 🟡 **부분** | 그래프 평가 도구 `scripts/eval_graph.py` — 유형별 탐지 · 인코더 후보 · 조합 판정 칸 표(D-340) · 분기 인코더 지표 · 거름 켬/끔(`--no-enc-filter`) · 판정기 B `scripts/eval_rule.py`. 채점은 합격선 없는 보고(D-321 · D-322 결정 A · D-324 결정 5). 판정 그래프 봉인 회차는 날짜 하나 · 그날의 커밋 하나 · 잠금 채택 판으로 한 번(D-339 결정 7 · 날짜 미정 · 제안 10/22 ~ 23) — 도구가 `--dev` · `--sealed` 중 하나를 요구하고, `--sealed` 는 채택 판 · 전 행 · 이 기기에서 그 날짜 첫 회차만 연다(2026-10-15) |
 
 ```
-게이트 테스트   pytest -m gate   1,652건  ← 1,650 passed · 2 skipped · launcher.py check · 클론 A · 2026-10-14(팀장 실행)
-전체 테스트     pytest           2,628건  ← 이 커밋에서 수집되는 수(2026-10-14) · 데이터 · DB 없는 기기는 일부가 건너뛴다
+게이트 테스트   pytest -m gate   1,666건  ← 이 커밋에서 수집되는 수(2026-10-15) · 클라우드 클론 1,638 passed · 28 skipped(데이터 · DB 없음) · 클론 A 의 수는 launcher.py check 로
+전체 테스트     pytest           2,643건  ← 이 커밋에서 수집되는 수(2026-10-15) · 데이터 · DB 없는 기기는 일부가 건너뛴다
 설계 결정       D-01 ~ D-341     빠진 번호 0
 ```
 

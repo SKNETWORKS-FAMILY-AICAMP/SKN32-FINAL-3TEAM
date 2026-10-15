@@ -95,3 +95,13 @@ def test_전제_칸이_없는_판이면_멈춘다() -> None:
 def test_광고_문구가_든_출력은_build_밖에_쓰지_않는다(tmp_path) -> None:  # noqa: ANN001
     with pytest.raises(SystemExit, match="build"):
         gi.main(["--out", str(tmp_path / "x.jsonl")])
+
+
+def test_편입_대기_유형만_붙은_행은_채점처럼_뺀다() -> None:
+    """🔴 2026-10-15 (전수 점검) 재현 — `labels` 가 비었는지만 봐서 편입 대기 유형만 붙은 행이 들어가
+    그 유형이 고쳐 쓰기 서버에 위반으로 갔다. 채점(`eval_rule.untyped_violation`)과 같은 함수로 뺀다."""
+    pending = {
+        **_row("대기", "화장품", "화장품", "C", ["002015:제13조제1항제2호"]),
+        "labels": ["기능성화장품_오인"],
+    }
+    assert "대기" not in {it["id"] for it in gi.gen_inputs([*ROWS, pending])}
