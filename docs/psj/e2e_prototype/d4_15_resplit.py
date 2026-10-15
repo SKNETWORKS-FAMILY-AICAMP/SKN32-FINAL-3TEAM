@@ -191,7 +191,7 @@ def main(argv=None):
     md += [f"## 배포 시드 · 문턱 (D-324 결정 3 — (가) 6종 PR-AUC 최고 = 시드 {best})", "",
            "| 유형 | label_thresholds (모름) | label_thresholds_by_cat (품목) | 규칙 |", "|---|---:|---:|---|"]
     for x in C:
-        md.append(f"| {x} | {R[(D415, '모름', best)]['th'][x]} | {R[(D415, '품목', best)]['th'][x]} | {R[(D415, '품목', best)]['src'][x]} |")
+        md.append(f"| {x} | {R[(D415, '모름', best)]['th'][x]} | {R[(D415, '품목', best)]['th'][x]} | {'F1 최대 (확장 dev 양성 30 미만 · D-347)' if R[(D415, '품목', best)]['src'][x].startswith('F1') else R[(D415, '품목', best)]['src'][x]} |")
     md += ["", "🚨 dev 다 — 문턱 · 회차 · 시드를 같은 확장 dev 로 골랐다. 새 봉인 평가셋(1,141행)은 열지 않았다 (D-347 · D-175)."]
     out = "\n".join(md) + "\n"
     print(out)
