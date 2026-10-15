@@ -58,7 +58,7 @@
 {% block user_content %}
 <div class="mp-head">
   <h1>마이페이지</h1>
-  <p>프로필과 광고 기본값을 여기서 관리해요.</p>
+  <p>프로필과 계정을 여기서 관리해요.</p>
 </div>
 
 <nav class="mp-tabs" aria-label="마이페이지 메뉴">
@@ -87,13 +87,14 @@
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   <input type="hidden" name="section" value="profile">
   <h2>프로필</h2>
-  <p class="mp-note">이름과 소속은 검수 결과를 팀원과 나눌 때 표시돼요.</p>
+  <p class="mp-note">이름과 소속은 검수 결과를 팀원과 나눌 때 표시돼요. <b>팀 공유는 아직 준비 중이에요.</b></p>
 
   <div class="mp-avatar">
-    <span class="mp-circle">{{ (picked.name or "?")[:1] }}</span>
+    {# 🔄 2026-10-15 (ksr · 점검 20) — 상단바(`_nav_user` · 앞 두 글자)와 같은 글자로 #}
+    <span class="mp-circle">{{ ((picked.name or "").strip() or "?")[:2] }}</span>
     <span class="mp-note">
       프로필 이미지 등록은 파일 업로드가 필요해서 아직 없어요.<br>
-      지금은 이름 첫 글자로 표시돼요.
+      지금은 이름 앞 두 글자로 표시돼요.
     </span>
   </div>
 
@@ -102,67 +103,13 @@
 
   <label for="email-view">이메일</label>
   <input id="email-view" value="{{ email }}" disabled>
-  <p class="mp-note" style="margin:-.6rem 0 1rem">이메일 변경은 아직 지원하지 않아요.</p>
+  {# 🔄 2026-10-15 (ksr · 점검 20) — 음수 위 여백이 입력칸 아래 테두리와 겹쳤다 #}
+  <p class="mp-note" style="margin:.35rem 0 1rem">이메일 변경은 아직 지원하지 않아요.</p>
 
   <label for="org">소속 조직</label>
   <input id="org" name="org" maxlength="60" value="{{ picked.org }}" placeholder="예: 마케팅팀">
 
   <button class="mp-save" type="submit">저장</button>
-</form>
-{% endif %}
-
-{% if tab == "defaults" %}
-<form class="mp-card" method="post" action="/u/mypage">
-  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-  <input type="hidden" name="section" value="adprefs">
-  <h2>광고 기본값</h2>
-  <p class="mp-note">
-    검수·카피생성 때 매번 입력하지 않아도 되도록 저장해두는 조건이에요.
-    이번 한 번만 다르게 하고 싶으면 그 화면에서 바꾸면 되고, 여기 저장한 값은 그대로 남아요.
-  </p>
-
-  <label>성별</label>
-  <div class="mp-pick">
-    {% for v in ["여성", "남성", "무관"] %}
-    <input type="radio" id="sex-{{ loop.index }}" name="sex" value="{{ v }}"
-           {% if picked.sex == v or (not picked.sex and loop.last) %}checked{% endif %}>
-    <label for="sex-{{ loop.index }}">{{ v }}</label>
-    {% endfor %}
-  </div>
-
-  <label>홍보 매체</label>
-  <div class="mp-pick">
-    {% for v in ["상세페이지", "인스타", "기사형", "유튜브"] %}
-    <input type="radio" id="ch-{{ loop.index }}" name="channel" value="{{ v }}"
-           {% if picked.channel == v or (not picked.channel and loop.first) %}checked{% endif %}>
-    <label for="ch-{{ loop.index }}">{{ v }}</label>
-    {% endfor %}
-  </div>
-  <p class="mp-note" style="margin:-.6rem 0 1rem">
-    🚨 매체가 바꾸는 것은 <b>표시의 방법</b>이지 표시 의무의 내용이 아니에요 — 판정 기준은 매체와 무관하게 같아요.
-  </p>
-
-  <label>광고 물품</label>
-  <div class="mp-pick">
-    {% for v in ["일반", "식품", "건기식", "화장품"] %}
-    <input type="radio" id="cat-{{ loop.index }}" name="category" value="{{ v }}"
-           {% if picked.category == v or (not picked.category and loop.first) %}checked{% endif %}>
-    <label for="cat-{{ loop.index }}">{{ v }}</label>
-    {% endfor %}
-  </div>
-  <p class="mp-note" style="margin:-.6rem 0 1rem">
-    ⬜ 이건 <b>기본값</b>일 뿐이에요. 실제 판정 카테고리는 <b>우리가 판별해요</b> — 사용자에게 묻지 않아요 (D-82).
-  </p>
-
-  <button class="mp-save" type="submit">저장</button>
-
-  {% if saved_attempt %}
-  <p class="mp-hold" style="margin-top:.75rem">
-    🚨 <b>아직 저장되지 않았어요.</b> 광고 기본값을 담을 표가 아직 없어서
-    (팀장 승인 대기), 받은 값을 되돌려 보여드릴 뿐 기록하지 않아요.
-    <b>저장됐다고 말하지 않으려고</b> 이렇게 알려드려요.
-  </p>
-  {% endif %}
 </form>
 {% endif %}
 

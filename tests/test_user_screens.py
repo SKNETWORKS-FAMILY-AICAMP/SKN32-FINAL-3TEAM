@@ -115,6 +115,118 @@ def test_검수_POST가_문구를_되돌려_그린다() -> None:
     assert "&lt;script&gt;" in r.text
 
 
+def _textareas(html: str) -> list[str]:
+    """검수 화면의 문구 칸 값들 (순서대로)."""
+    import html as h  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
+    return [
+        h.unescape(v)
+        for v in re.findall(r'<textarea[^>]*name="text"[^>]*>(.*?)</textarea>', html, re.S)
+    ]
+
+
+@pytest.mark.parametrize("filled", [0, 1, 4])
+def test_빈_문구_칸이_있어도_추가는_5칸까지_된다(filled: int) -> None:
+    """🚨 빈 칸을 버리면 칸이 2개에서 멈췄다 (시나리오 테스트 10-14 · `_form` 의 `keep_blank_values`)."""
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    c = TestClient(app)
+    copies = [""]
+    for _ in range(4):
+        copies = [f"문구{i}" if i < filled else t for i, t in enumerate(copies)]
+        body = urlencode([*(("text", t) for t in copies), ("op", "add")])
+        r = c.post(
+            "/u/judge",
+            content=body.encode(),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert r.status_code == 200
+        copies = _textareas(r.text)
+    assert len(copies) == 5
+    body = urlencode([*(("text", t) for t in copies), ("op", "add")])
+    r = c.post(
+        "/u/judge",
+        content=body.encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert len(_textareas(r.text)) == 5
+    assert "최대 5건" in r.text
+
+
+def test_빈_칸이_섞여도_칸_번호가_어긋나지_않는다() -> None:
+    """🚨 1번이 비고 2번에 문구가 있을 때 — 삭제 · 예시 넣기가 다른 칸을 건드리거나 422 가 나면 안 된다."""
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    c = TestClient(app)
+    hdr = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    def post(texts: list[str], op: str):  # noqa: ANN202
+        return c.post(
+            "/u/judge",
+            content=urlencode([*(("text", t) for t in texts), ("op", op)]).encode(),
+            headers=hdr,
+        )
+
+    r = post(["", ""], "del:2")
+    assert r.status_code == 200 and _textareas(r.text) == [""]
+    r = post(["", "붓기 관리"], "sample:1")
+    assert r.status_code == 200
+    got = _textareas(r.text)
+    assert len(got) == 2 and got[0] and got[1] == "붓기 관리", "🔴 예시 넣기가 2번 칸 문구를 지웠다"
+    r = post(["", "붓기 관리"], "del:1")
+    assert _textareas(r.text) == ["붓기 관리"]
+
+
+def test_줄바꿈은_한_글자로_센다() -> None:
+    """🚨 브라우저는 줄바꿈을 1자로 세고 `\\r\\n` 으로 보낸다 — 화면에서 2000자 안이면 서버도 받아야 한다 (10-14)."""
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.settings import PARAMS  # noqa: PLC0415
+
+    line = "피부 보습에 좋아요."
+    n = PARAMS.max_text_len // (len(line) + 1)
+    text = "\r\n".join([line] * n)
+    assert len(text.replace("\r\n", "\n")) <= PARAMS.max_text_len < len(text)
+    r = TestClient(app).post(
+        "/u/judge",
+        content=urlencode([("text", text), ("op", "add")]).encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200, "🔴 줄바꿈을 2자로 세서 거부했다"
+    assert _textareas(r.text)[0] == text.replace("\r\n", "\n")
+
+
+def test_다섯_칸을_꽉_채운_한글_문구도_받는다() -> None:
+    """🚨 본문 상한이 칸 하나 몫이라 2000자 한글 두 칸이면 413 이 났다 (10-14). 퍼센트 인코딩 한글은 글자당 9바이트다."""
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.settings import PARAMS  # noqa: PLC0415
+
+    full = "가" * PARAMS.max_text_len
+    r = TestClient(app).post(
+        "/u/judge",
+        content=urlencode([*(("text", full),) * 5, ("op", "add")]).encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200, f"🔴 {r.status_code} — 다섯 칸을 채운 문구를 거부했다"
+    assert "최대 5건" in r.text
+
+
 def test_검수_픽스처_미리보기가_결과_화면을_그린다() -> None:
     """🚨 `JudgeResponse` 계약을 통과한 픽스처만 결과로 그린다 (D-124 ③)."""
     from fastapi.testclient import TestClient  # noqa: PLC0415

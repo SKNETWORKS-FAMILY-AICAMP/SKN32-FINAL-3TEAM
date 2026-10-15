@@ -19,5 +19,12 @@
     {% block user_content %}{% endblock %}
   </div>
 </div>
+{# 🆕 2026-10-15 (ksr · 점검 02) — 공유 레이아웃의 개발용 머리줄 · 꼬리말은 `user.css` 가 숨기고 여기 접어 둔다. ⬜ 추후 삭제 #}
+<details class="user-devbar">
+  <summary>개발자 정보</summary>
+  <nav><a href="/">CopyLane</a><a href="/u/">사용자</a><a href="/admin/">관리자</a><a href="/docs">API</a></nav>
+  <small>판정 근거를 조문으로 돌려준다 · 화면 분기 확인용 골든 픽스처는 각 화면의 「개발자 정보」에 있다 (D-124)</small>
+</details>
 </div>
+<script src="/static/user_theme.js" defer></script>
 {% endblock %}

@@ -105,6 +105,8 @@ EXEMPT = {
     "preprocess/mfds_press.py": "원천 하나의 추출기",
     "preprocess/ftc_extract.py": "원천 하나의 추출기",
     "preprocess/hf_api.py": "원천 하나의 추출기",
+    # 🆕 2026-10-14 — 고시 「건강기능식품의 기준 및 규격」 전문에서 원료 · 기능성 문구만 뽑는다(공개 고시 문언 · 광고 문구 없음)
+    "preprocess/hf_gosi.py": "원천 하나의 추출기",
     "preprocess/law_norm.py": "법령 [별표] 파서 — 원문 노드",
     "preprocess/evasion_scan.py": "센다 — 데이터셋을 쓰지 않는다",
     "preprocess/ftc_reason_probe.py": "표본 탐침 — 의결서(ftc) 전용",

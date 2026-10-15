@@ -541,3 +541,38 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
   .user-sidebar-cs { margin: 0 0 0 auto; padding: .35rem .7rem; border-radius: 999px; font-size: .78rem; }
   .user-main { padding: 1.25rem 1rem; }
 }
+
+/* 🆕 2026-10-15 (ksr · 점검 01) — 테마 버튼 둘 중 지금 테마에 맞는 하나만 보인다. 속성이 없으면(쿠키 없음) 「어둡게」를 보인다 */
+.user-shell:not([data-theme="dark"]) .tn-to-light,
+.user-shell[data-theme="dark"] .tn-to-dark { display: none; }
+
+/* 🆕 2026-10-15 (ksr · 점검 02) — 공유 레이아웃(`base.html` · 팀장 파일)의 개발용 머리줄(사용자 · 관리자 · API)과
+   꼬리말(「골든 픽스처로 그린다」)을 사용자 화면에서는 숨기고, 화면 맨 아래 접힌 「개발자 정보」(`user/_base.html`)로 옮긴다.
+   ⬜ 추후 삭제 — 배포 전에 접힌 블록째 지운다 */
+body:has(> main .user-shell) > header,
+body:has(> main .user-shell) > footer { display: none; }
+.user-devbar { margin: 2.5rem 1.5rem 1.5rem; font-size: .78rem; color: var(--u-mute, #888); }
+.user-devbar summary { cursor: pointer; }
+.user-devbar nav { display: flex; gap: 1rem; margin: .5rem 0 .25rem; }
+.user-devbar a { color: inherit; }
+/* 🆕 2026-10-15 (ksr · 점검 09) — 화면 안의 접힌 개발자 메모. ⬜ 추후 삭제 */
+.user-devnote { margin-top: 1.5rem; font-size: .8rem; color: var(--u-mute, #888); }
+.user-devnote summary { cursor: pointer; }
+/* 🆕 10-14 좁은 화면 — 검수 화면의 「✨ 이 문장 고쳐 쓰기」 버튼(`review.html` `.rv-fix-go` · lse)이 본문과 설명을 옆으로 붙여
+   글자가 조각나던 것을 위아래로 쌓는다. 화면 파일의 인라인 스타일보다 늦게 와도 이기게 `form` 을 붙인다 */
+@media (max-width: 44rem) {
+  form .rv-fix-go { display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; width: 100%; text-align: left; }
+  form .rv-fix-go small { font-size: .74rem; }
+}
+
+/* 🆕 10-14 고쳐 쓴 문구 「복사」 버튼(`_review_rewrite.html` · `rewrite_copy.js` · lse) — 후보 상자 오른쪽 위
+   🔄 10-15 (ksr 병합) — 이름을 `.rv-copy` → `.rv-cand-copy` 로. `.rv-copy` 는 검수 화면의 문구 입력 상자(`review.html`)라
+   그 상자가 `position: absolute` 를 받아 화면 오른쪽 위로 떴다 */
+.rv-fix .rv-cand { position: relative; padding-right: 6rem; min-height: 2.4rem; }
+.rv-cand-copy {
+  position: absolute; top: .45rem; right: .45rem; white-space: nowrap;
+  padding: .2rem .55rem; border: 1px solid var(--u-line); border-radius: 999px;
+  background: var(--u-surface); color: var(--u-clay); font: inherit; font-size: .72rem; font-weight: 500; cursor: pointer;
+}
+.rv-cand-copy:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
+.rv-cand-copy.is-done { border-color: #15803d; color: #15803d; }
