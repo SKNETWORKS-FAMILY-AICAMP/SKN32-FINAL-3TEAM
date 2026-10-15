@@ -183,8 +183,11 @@ FROZEN_V1 = (
 
 
 @pytest.mark.skipif(not GOLDEN.exists(), reason="골든 사본이 없는 기기")
-def test_골든_사본이_있으면_재분할_v1_지문이_같다() -> None:
+def test_골든_사본이_있으면_재분할_v1_지문이_같다(monkeypatch: pytest.MonkeyPatch) -> None:
     import hashlib  # noqa: PLC0415
+
+    #: 🔴 자동 고정물이 바꾼 「연결 없음」을 되돌린다 — 진짜 판독 채택본으로 잰다(2026-10-15 · 기기 게이트에서 952 로 갈려 잡혔다)
+    monkeypatch.setattr(rs, "fix_links", _REAL_FIX_LINKS)
 
     raw = GOLDEN.read_bytes()
     if hashlib.sha256(raw).hexdigest()[:12] != FROZEN_V1[0]:
