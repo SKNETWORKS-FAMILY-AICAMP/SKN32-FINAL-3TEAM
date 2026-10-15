@@ -56,7 +56,7 @@ from sllm_meta import base_model  # noqa: E402
 
 BASE = base_model()
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15")}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1")}
 EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v8": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v10": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
@@ -170,6 +170,14 @@ def load_rows(version: str = "v5") -> tuple[list[dict], list[dict]]:
     train += synth  # 🚨 평가(ev)에는 넣지 않는다
     if synth:
         print(f"합성 {len(synth)}행 — 학습에만", flush=True)  # 새 유형 2배 — 784개 틀에 묻히지 않게
+    if version in EXPAND:  # 🆕 10-16 확장 묶음 — 학습에만
+        exp = [json.loads(line) for line in (HERE / "_private" / EXPAND[version]).open(encoding="utf-8") if line.strip()]
+        exp = [r for r in exp if not leaks(r)]
+        for x in exp:
+            x["core"] = x["output"].get("body") or "없음 — 살릴 주장이 없다"
+            x["kind"] = "확장:" + x["group"]
+        train = exp if version in NEW_ONLY else train + exp
+        print(f"확장 {len(exp)}행 — 학습에만{' (확장만)' if version in NEW_ONLY else ''}", flush=True)
     rng.shuffle(train)
     print(f"학습 {len(train)} · 평가 {len(ev)} · 학습 중 합법화 불가 {sum('infeasible' in r['output'] for r in train)}", flush=True)
     return train, ev
@@ -197,6 +205,16 @@ SYS["q4b-v14"] = SYS["v12"]
 EXTRAS["q4b-v15"] = EXTRAS["q4b-v14"] + ["stage1_v15_extra.jsonl"]
 SYNTH["q4b-v15"] = SYNTH["v12"]
 SYS["q4b-v15"] = SYS["v12"]
+#: 🆕 10-16 (10-15 회의 멘토 지적 「데이터가 너무 적다」) — 확장 묶음(`_private/expand_mix.jsonl` · `gen_expand_stage1.py mix`).
+#:    실제 위반 문장 교정(A) · 변형(B) · 식약처 수정쌍(C). 재배포 불가 원문이 섞여 `_private/` 에만 있다 · 학습에만 넣는다(평가 아님).
+#:    `q4b-v16` = q4b-v14 + 확장 (비교 ③) · `q4b-n1` = 확장만 (비교 ② · 멘토의 「새 데이터로만 학습한 모델」).
+#:    내장 평가는 두 판 모두 q4b-v14 와 같다 — 서로 견줄 수 있게. 본 비교는 사람 정답표(`real_answer_key.jsonl`)로 한다
+EXPAND = {"q4b-v16": "expand_mix.jsonl", "q4b-n1": "expand_mix.jsonl"}
+NEW_ONLY = {"q4b-n1"}
+for _v in EXPAND:
+    EXTRAS[_v] = EXTRAS["q4b-v14"]
+    SYNTH[_v] = SYNTH["q4b-v14"]
+    SYS[_v] = SYS["q4b-v14"]
 CUR = {"system": SYSTEM}
 
 
@@ -319,7 +337,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"

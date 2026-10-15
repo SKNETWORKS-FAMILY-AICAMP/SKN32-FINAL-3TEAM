@@ -58,11 +58,13 @@ from stage_gate import fact_numbers  # noqa: E402
 PRIV = HERE / "_private"
 SEEDS = PRIV / "expand_seeds.jsonl"
 SPEND = PRIV / "expand_spend.json"
-PROMPT_VERSION = "expand-v2-2026-10-16"
+PROMPT_VERSION = "expand-v3-2026-10-16"
 SEED = 20261016
 DOMAIN = {"식품", "건기식", "화장품"}
 MODEL = "gpt-4o-mini"
 BUDGET_USD = 10.0
+#: 🆕 v3 — 본 생성은 누적이 이 값에 닿으면 새 호출을 멈춘다(상한 $10 까지 여유를 남긴다 · `--stop-at`)
+STOP_AT_USD = 8.0
 #: 100만 토큰당 달러(입력, 출력) — 🚨 보수적으로 실제 공시가보다 크게 잡는다. 모르는 모델은 비싼 쪽으로 본다
 PRICE = {"gpt-4o-mini": (0.30, 1.20), "gpt-4.1": (3.0, 12.0)}
 PRICE_UNKNOWN = (5.0, 20.0)
@@ -74,6 +76,14 @@ SEVERITY = ["의약품_오인", "질병_예방치료_표방", "건강기능식�
 COPY_MAX = 0.7
 URL = "https://api.openai.com/v1/chat/completions"
 #: 원문의 사실 신호 — 이것이 있는데 「불가」면 지나친 거절로 본다(편향 막이 2)
+#: 🆕 v3 — 변형이 광고가 아니라 위반을 설명하는 글이 됐다(「인증된 것처럼 보이지만, 이 …는」)
+META = re.compile(r"(?:처럼|듯이?|것\s*같은)\s*(?:보이지만|말하지만|하지만)|표현이지만|강조하지만|암시하듯|오해를\s*줄\s*수")
+#: 🆕 v3 — 관문의 「원문 숫자 남음」을 **데이터 거르기에서만** 푼다: 고친 문장의 숫자가 모두 단위가 붙은 사실(함량 90% · 20mg ·
+#:    48시간)이면 사실 숫자다. 앱의 관문은 그대로다(실제 광고의 「100% 효과」 같은 주장 숫자를 막는 일). 풀지 않으면 시범 B v3 50 중
+#:    22 가 이 사유로 버려져 「숫자는 지운다」를 배운다 — 팀이 걱정한 「다 지우는 편향」이 이 길로 생긴다
+UNIT_NUM = re.compile(r"\d+(?:[.,]\d+)?\s*(?:%|mg|g|kg|ml|mL|L|kcal|cm|mm|시간|일|개월|년|개|종|가지|포|봉|팩|알|분량|억|만)")
+#: 🆕 v3 — 고친 문장이 술어 없이 낱말 나열만 남았다 — 사실이 아니라 낱말 조각이다
+LIST_ONLY = re.compile(r"^[가-힣A-Za-z]+(?:\s*[,·]\s*[가-힣A-Za-z]+)+$")
 FACT_SIGNAL = re.compile(r"\d+(?:\.\d+)?\s*(?:%|g|mg|kg|ml|mL|l|L|kcal|년|일|시간|가지|종)|함유|추출물|분말|원료|원유|국내산|국산|"
                          r"[가-힣]{2,4}산(?=\s|$|[,.)의])|만들|제조|숙성|건조|발효|착즙|우려|배합|함량|압착|로스팅|볶은|구운")
 
@@ -118,32 +128,39 @@ def variant_prompt(batch: list[tuple[str, list[str], str]]) -> str:
     return (
         "아래 각 위반 광고 문구마다, **같은 방식의 위반**을 쓰되 제품 · 원료를 적힌 「새 제품」으로 바꾼 새 가상 광고 문구를 1개씩 쓰세요.\n"
         "조건: 원문 낱말을 그대로 베끼지 말고 문장 구조도 바꿉니다. 실존 브랜드 · 회사 · 인물 이름을 쓰지 않습니다. "
-        "원문에 원산지 · 제조 방법 · 용량 같은 사실이 있었다면 새 제품에 맞는 다른 사실로 바꿔 넣습니다. 길이는 원문과 비슷하게.\n"
+        "🆕 새 문구에는 위반 표현과 함께 새 제품에 맞는 **구체적인 사실 1~2개**(원료명 · 함량이나 용량 수치 · 원산지 · 제조 · "
+        "가공 방법)를 반드시 넣습니다 — 위반만 빼면 사실이 남는 문구여야 합니다. 사실은 그럴듯한 가상의 것으로 씁니다. "
+        "길이는 원문과 비슷하거나 조금 길게. 🆕 광고 문구 자체를 씁니다 — 「~처럼 보이지만」 · 「~하는 표현이지만」처럼 "
+        "위반을 설명하는 글은 쓰지 않습니다.\n"
         f"문구 목록\n{items}\n\n"
         '출력: {"results": [{"i": 번호, "input": "새 광고 문구"}, ...]} — 목록의 모든 번호에 하나씩.'
     )
 
 
+def cost(model: str, pin: int, pout: int) -> float:
+    price = PRICE.get(model, PRICE_UNKNOWN)
+    return pin / 1e6 * price[0] + pout / 1e6 * price[1]
+
+
 class Budget:
     """누적 사용액 — 여러 번 나눠 돌려도 합계가 상한을 넘지 않게 `_private/expand_spend.json` 에 쌓는다."""
 
-    def __init__(self, model: str) -> None:
-        self.price = PRICE.get(model, PRICE_UNKNOWN)
+    def __init__(self) -> None:
         self.data = json.loads(SPEND.read_text(encoding="utf-8")) if SPEND.exists() else {"usd": 0.0, "runs": []}
         self.lock = threading.Lock()
+        self.stop_at = STOP_AT_USD
         self.run_usd = 0.0
-
-    def cost(self, pin: int, pout: int) -> float:
-        return pin / 1e6 * self.price[0] + pout / 1e6 * self.price[1]
 
     def left(self) -> float:
         return BUDGET_USD - self.data["usd"]
 
-    def add(self, pin: int, pout: int) -> None:
+    def add(self, model: str, pin: int, pout: int) -> None:
         with self.lock:
-            c = self.cost(pin, pout)
+            c = cost(model, pin, pout)
             self.data["usd"] += c
             self.run_usd += c
+            # 🆕 v3 — 호출마다 바로 쌓는다. 조각 끝에만 쓰면 중간에 멈춘 조각의 사용액이 빠진다(10-16 본 생성 2조각째)
+            SPEND.write_text(json.dumps(self.data, ensure_ascii=False, indent=1), encoding="utf-8")
 
     def save(self, note: str) -> None:
         self.data["runs"].append({"note": note, "usd": round(self.run_usd, 4)})
@@ -161,7 +178,7 @@ class Teacher:
         self.usage: collections.Counter[str] = collections.Counter()
 
     def ask(self, prompt: str, temperature: float) -> dict | None:
-        if self.budget.left() <= 0:
+        if self.budget.left() <= 0 or self.budget.data["usd"] >= self.budget.stop_at:
             self.usage["예산 초과로 건너뜀"] += 1
             return None
         body = {"model": self.model, "temperature": temperature, "response_format": {"type": "json_object"},
@@ -173,7 +190,7 @@ class Teacher:
                 with urllib.request.urlopen(req, timeout=120) as res:  # noqa: S310
                     data = json.load(res)
                 u = data.get("usage", {})
-                self.budget.add(u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+                self.budget.add(self.model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
                 for k in ("prompt_tokens", "completion_tokens"):
                     self.usage[k] += u.get(k, 0)
                 self.usage["calls"] += 1
@@ -270,6 +287,13 @@ def swap_target(item: str, rng: random.Random) -> str:
     return rng.choice(FOODS)
 
 
+def has_words(fact: str, s: str) -> bool:
+    """🆕 v3 — 사실의 낱말이 모두 `s` 에 있는가(순서 무관 · 끝 한 글자 활용 차이 허용). 통째 문자열로 견주면 교사가 순서만 바꿔 적은
+    사실(원문 「30% 고농축 히알루론산」 → 「히알루론산 30%」)까지 「원문에 없는 사실」로 버렸다(본 생성 B 1조각 159행)."""
+    t = norm(s)
+    return all(norm(w) in t or (len(w) > 2 and norm(w[:-1]) in t) for w in re.findall(r"[가-힣A-Za-z0-9.%]+", fact))
+
+
 def judge_one(text: str, types: list[str], ans: dict | None, keys: list[str], words: list[str]) -> dict:
     """교사 답 하나를 거른다 — 사유를 모두 적는다. `bias` 는 편향 막이(1 · 2)에만 걸린 사유다."""
     if not ans:
@@ -290,15 +314,19 @@ def judge_one(text: str, types: list[str], ans: dict | None, keys: list[str], wo
         body = body.strip()
         if not facts:
             why.append("사실 목록 없음")
-        if [f for f in facts if norm(f) not in norm(text)]:
+        if [f for f in facts if not has_words(f, text)]:
             why.append("원문에 없는 사실")
-        if [f for f in facts if norm(f) in norm(text) and norm(f) not in norm(body)]:
+        if [f for f in facts if has_words(f, text) and not has_words(f, body)]:
             bias.append("사실 빠짐(교사 목록)")
         if fact_numbers(text) - fact_numbers(body):
             bias.append("사실 숫자 빠짐")
+        if LIST_ONLY.match(body):
+            why.append("낱말 나열만 남음")
         g = gate(text, body)
-        if not g.passed:
-            why += [f"관문: {w.split(':')[0]}" for w in g.reasons]
+        reasons = [w.split(":")[0] for w in g.reasons]
+        if "원문 숫자 남음" in reasons and not re.search(r"\d", UNIT_NUM.sub("", body)):
+            reasons.remove("원문 숫자 남음")  # 숫자가 모두 단위 붙은 사실이다
+        why += [f"관문: {w}" for w in reasons]
         if leaks(body, keys, words):
             why.append("정답표 닮음")
         out = {"body": body, "mandatory_note": None, "placement": None}
@@ -325,28 +353,46 @@ def by_index(ans: dict | None, n: int) -> list[dict | None]:
     return out
 
 
-def estimate(part: str, n: int, budget: Budget) -> float:
-    """견적 — 묶음 하나당 입력 · 출력 토큰을 넉넉히 잡는다(한글 1자 ≈ 1토큰 이상으로)."""
-    calls = -(-n // BATCH) * (2 if part == "B" else 1)
-    pin, pout = calls * (len(fix_prompt([("가" * 40, ["거짓_과장"], "식품")] * BATCH)) * 1.5), calls * BATCH * 120
-    return budget.cost(int(pin), int(pout))
+def estimate(part: str, n: int, model: str, vmodel: str) -> float:
+    """견적 — 시범에서 잰 묶음 하나당 토큰(교정 입력 약 1,050 · 출력 약 270 / 변형 입력 약 900 · 출력 약 500)에 3할을 얹는다."""
+    calls = -(-n // BATCH)
+    est = cost(model, calls * 1400, calls * 360)
+    if part == "B":
+        est += cost(vmodel, calls * 1200, calls * 700)
+    return est
 
 
-def cmd_run(part: str, n: int, offset: int, model: str, tag: str, dry: bool) -> None:
-    budget = Budget(model)
-    est = estimate(part, n, budget)
-    print(f"견적 {part} {n}문장 · {model} · 약 ${est:.3f} (보수적) · 누적 ${budget.data['usd']:.3f} / 상한 ${BUDGET_USD}")
-    if dry:
+def cmd_run(part: str, n: int, offset: int, model: str, tag: str, dry: bool, stop_at: float, vmodel: str,
+            variants: int) -> None:
+    if part == "B" and (PRIV / "expand_pause_B").exists():
+        print("B 멈춤 표시(_private/expand_pause_B) — 건너뜀", flush=True)  # 🆕 v3 — 돌고 있는 묶음 실행의 순서를 바꿀 때
         return
-    assert est <= budget.left(), f"예산 부족 — 남은 ${budget.left():.3f}"
-    from rejudge import rejudge  # noqa: PLC0415 — DB 가 필요하다
-
+    budget = Budget()
+    budget.stop_at = min(stop_at, BUDGET_USD)
     seeds = [json.loads(line) for line in SEEDS.open(encoding="utf-8")]
     # A 와 B 가 같은 씨앗을 쓰지 않게 나눠 쓴다(A 는 앞에서 · B 는 뒤에서)
     pick = seeds[offset: offset + n] if part == "A" else seeds[::-1][offset: offset + n]
-    keys = answer_key_inputs()
-    words = json.loads((PRIV / "answer_words.json").read_text(encoding="utf-8"))
+    if part == "A":
+        # 🆕 v3 — 인코더 평가용 문장(golden test_sentence)은 학습 적재(`train_stage1_v5.load_rows`)에서 빠진다 — 미리 건너뛰어 돈을 아낀다.
+        #    씨앗 파일의 순서는 그대로 둔다(나눠 돌리는 조각의 배정이 흐트러지지 않게)
+        test_ids = {json.loads(line)["id"] for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")
+                    if '"test_sentence"' in line}
+        skipped = sum(s["sid"] in test_ids for s in pick)
+        pick = [s for s in pick if s["sid"] not in test_ids]
+        print(f"   인코더 평가 문장 건너뜀 {skipped}", flush=True)
+    est = estimate(part, len(pick) * (variants if part == "B" else 1), model, vmodel)
+    print(f"견적 {part} {n}문장{f' × 변형 {variants}' if part == 'B' else ''} · 교정 {model}"
+          f"{f' · 변형 {vmodel}' if part == 'B' else ''} · 약 ${est:.3f} (보수적) · 누적 ${budget.data['usd']:.3f} · "
+          f"멈춤선 ${budget.stop_at} · 상한 ${BUDGET_USD}")
+    if dry:
+        return
+    assert est <= budget.stop_at - budget.data["usd"], f"멈춤선까지 남은 ${budget.stop_at - budget.data['usd']:.3f} — 견적 초과"
+    from rejudge import rejudge  # noqa: PLC0415 — DB 가 필요하다
+
+    if part == "B":
+        pick = pick * variants  # 씨앗당 변형 여러 개 — 바꿔 끼울 제품이 달라 문구가 달라진다
     teacher = Teacher(model, budget)
+    vteacher = Teacher(vmodel, budget)
     rng = random.Random(SEED + offset)
 
     texts = [s["text"] for s in pick]
@@ -354,11 +400,11 @@ def cmd_run(part: str, n: int, offset: int, model: str, tag: str, dry: bool) -> 
     if part == "B":
         swaps = [swap_target(s["품목"], rng) for s in pick]
         groups = batched(list(range(len(pick))), BATCH)
-        answers = ask_batches(teacher, [variant_prompt([(pick[i]["text"], pick[i]["labels"], swaps[i]) for i in g])
+        answers = ask_batches(vteacher, [variant_prompt([(pick[i]["text"], pick[i]["labels"], swaps[i]) for i in g])
                                         for g in groups], 0.9)
         texts = [""] * len(pick)
-        for g, ans in zip(groups, answers):
-            for i, r in zip(g, by_index(ans, len(g))):
+        for g, ans in zip(groups, answers, strict=True):
+            for i, r in zip(g, by_index(ans, len(g)), strict=True):
                 v = (r or {}).get("input")
                 texts[i] = v.strip() if isinstance(v, str) else ""
 
@@ -366,44 +412,147 @@ def cmd_run(part: str, n: int, offset: int, model: str, tag: str, dry: bool) -> 
     groups = batched(todo, BATCH)
     fixed: dict[int, dict | None] = {}
     answers = ask_batches(teacher, [fix_prompt([(texts[i], pick[i]["labels"], pick[i]["품목"]) for i in g]) for g in groups], 0.2)
-    for g, ans in zip(groups, answers):
-        for i, r in zip(g, by_index(ans, len(g))):
+    for g, ans in zip(groups, answers, strict=True):
+        for i, r in zip(g, by_index(ans, len(g)), strict=True):
             fixed[i] = r
 
+    metas = [{"sid": s["sid"], "part": part, "품목": s["품목"], "types": s["labels"], "seed_text": s["text"], "input": texts[i],
+              "swap": swaps[i], "answer": fixed.get(i), "generator": model, "variant_model": vmodel if part == "B" else None}
+             for i, s in enumerate(pick)]
+    name = part + (f"_{offset}" if offset else "") + (f"_{tag}" if tag else "")
+    budget.save(f"run {name} n={n} {model}" + (f" · 변형 {vmodel}" if part == "B" else ""))
+    raw, rows = judge_records(metas, rejudge)
+    write_run(name, raw, rows)
+    print(f"{part}: 입력 {len(raw)} · 받아들임 {len(rows)} · 교정 {dict(teacher.usage)}"
+          + (f" · 변형 {dict(vteacher.usage)}" if part == "B" else "")
+          + f" · 이번 ${budget.run_usd:.4f} · 누적 ${budget.data['usd']:.4f} / ${BUDGET_USD}")
+
+
+def judge_records(metas: list[dict], rejudge: object) -> tuple[list[dict], list[dict]]:
+    """저장된 교사 답에 거르기를 건다 — `run` 과 `refilter`(API 없이 다시 거르기)가 같이 쓴다."""
+    keys = answer_key_inputs()
+    words = json.loads((PRIV / "answer_words.json").read_text(encoding="utf-8"))
     raw, rows = [], []
-    for i, s in enumerate(pick):
-        text, ans = texts[i], fixed.get(i)
-        rec = {"sid": s["sid"], "part": part, "품목": s["품목"], "types": s["labels"], "input": text, "swap": swaps[i],
-               "answer": ans}
+    for m in metas:
+        rec = {k: m.get(k) for k in ("sid", "part", "품목", "types", "seed_text", "input", "swap", "answer", "generator",
+                                     "variant_model")}
+        text, part = rec["input"] or "", rec["part"]
         if part == "B":
             if not text:
                 rec.update(status="변형 실패", why=["변형 실패"])
-            elif difflib.SequenceMatcher(None, norm(text), norm(s["text"])).ratio() >= COPY_MAX:
+            elif difflib.SequenceMatcher(None, norm(text), norm(rec["seed_text"] or "")).ratio() >= COPY_MAX:
                 rec.update(status="원문 베낌", why=["원문 베낌"])
+            elif META.search(text):
+                rec.update(status="설명문 변형", why=["설명문 변형"])
             elif leaks(text, keys, words):
                 rec.update(status="정답표 닮음", why=["정답표 닮음"])
         if "status" not in rec:
-            rec.update(judge_one(text, s["labels"], ans, keys, words))
+            rec.update(judge_one(text, rec["types"], rec["answer"], keys, words))
         # 재판정 — 고친 문장이 다른 검사를 모두 지났을 때만
-        if rec.get("output", {}).get("body") and not rec.get("why") and not rec.get("bias"):
-            rj = rejudge(rec["output"]["body"])
-            rec["rejudge"] = rj.status
+        if (rec.get("output") or {}).get("body") and not rec.get("why") and not rec.get("bias"):
+            body = rec["output"]["body"]
+            # 🆕 v3 — 다시 거를 때 같은 문장의 재판정은 재사용한다(한 건에 1~2초 · 판정 코어는 그대로)
+            if m.get("rejudge") and (m.get("output") or {}).get("body") == body:
+                rec["rejudge"] = m["rejudge"]
+            else:
+                rec["rejudge"] = rejudge(body).status  # type: ignore[operator]
+            rj = argparse.Namespace(status=rec["rejudge"])
             if rj.status == "rejected":
                 rec["why"].append("재판정 위반")
                 rec["status"] = "버림"
         raw.append(rec)
         if rec["status"] == "ok":
             rows.append({"id": f"{part.lower()}{len(rows):05d}", "group": f"확장{part}", "input": text,
-                         "violation_types": s["labels"], "output": rec["output"], "synthetic": part == "B",
-                         "seed_sid": s["sid"], "generator": model, "prompt_version": PROMPT_VERSION})
-    name = part + (f"_{offset}" if offset else "") + (f"_{tag}" if tag else "")
+                         "violation_types": rec["types"], "output": rec["output"], "synthetic": part == "B",
+                         "seed_sid": rec["sid"], "generator": rec["generator"], "prompt_version": PROMPT_VERSION})
+    return raw, rows
+
+
+def write_run(name: str, raw: list[dict], rows: list[dict]) -> None:
     for fname, data in ((f"expand_{name}_raw.jsonl", raw), (f"expand_{name}_rows.jsonl", rows)):
         with (PRIV / fname).open("w", encoding="utf-8", newline="\n") as f:
             for r in data:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    budget.save(f"run {name} n={n} {model}")
-    print(f"{part}: 입력 {len(raw)} · 받아들임 {len(rows)} · {dict(teacher.usage)} · 이번 ${budget.run_usd:.4f} · "
-          f"누적 ${budget.data['usd']:.4f} / ${BUDGET_USD}")
+
+
+def cmd_refilter(names: list[str]) -> None:
+    """🆕 v3 — 저장된 교사 답에 지금의 거르기를 다시 건다(API 를 부르지 않는다 · 재판정은 DB 필요)."""
+    from rejudge import rejudge  # noqa: PLC0415
+
+    for name in names:
+        metas = [json.loads(line) for line in (PRIV / f"expand_{name}_raw.jsonl").open(encoding="utf-8")]
+        raw, rows = judge_records(metas, rejudge)
+        write_run(name, raw, rows)
+        print(f"{name}: 다시 거름 · 입력 {len(raw)} · 받아들임 {len(rows)}")
+
+
+#: 🆕 v3 — 최종 묶음에서 불가가 차지할 몫의 상한(새 행 기준). golden 씨앗은 대부분 불가 감이라 다 넣으면 거절로 기운다
+MAX_INFEASIBLE = 0.35
+#: 같은 끝 낱말로 끝나는 고침의 상한(틀 반복 막이 · 편향 막이 3)
+MAX_SAME_END = 0.08
+#: 🆕 v3 — 막연한 말 — 사실이 아니라 꾸밈이거나 그 자체로 주의 표현(「천연」 · 「100% 자연」). 4o-mini 가 쓴 변형에 많았다
+#:    (본 생성 1조각: 고침 439 중 구체적 사실 신호 190 · 막연한 말 95 — 4.1 변형은 29 중 25 · 1)
+VAGUE = re.compile(r"천연|자연|신선한|고급|프리미엄|엄선|비법|전문가|건강한|다양한|풍부한|가득|특별한|정성")
+
+
+def cmd_mix() -> None:
+    """🆕 v3 — 4.1 교정 결과(`*_rows.jsonl` · generator gpt-4.1)를 모아 `_private/expand_mix.jsonl` 로. 4o-mini 교정은 넣지 않는다
+    (시범에서 받아들인 고침의 절반이 위반이 남았다). 입력 중복을 빼고, 끝 낱말 상한 · 불가 상한을 건다. C(식약처 수정쌍)는 2배."""
+    rng = random.Random(SEED)
+    rows, seen, drop = [], set(), collections.Counter()
+    for p in sorted(PRIV.glob("expand_*_rows.jsonl")):
+        if p.name == "expand_mfds_rows.jsonl":
+            continue
+        for r in map(json.loads, p.open(encoding="utf-8")):
+            if r.get("generator") != "gpt-4.1":
+                drop["4o-mini 교정"] += 1
+                continue
+            k = norm(r["input"])
+            if k in seen:
+                drop["입력 중복"] += 1
+                continue
+            body = r["output"].get("body")
+            if body and (not FACT_SIGNAL.search(body) or VAGUE.search(body)):
+                drop["구체적 사실 없음 · 막연한 말"] += 1  # 「성분이 포함된 꿀」 · 「천연 재료로 만든 된장」
+                continue
+            seen.add(k)
+            rows.append(r)
+    fixed = [r for r in rows if "body" in r["output"]]
+    infeasible = [r for r in rows if "infeasible" in r["output"]]
+    rng.shuffle(fixed)
+    ends: collections.Counter[str] = collections.Counter()
+    cap_end = max(20, int(len(fixed) * MAX_SAME_END))
+    kept_fixed = []
+    for r in fixed:
+        e = (r["output"]["body"].split() or [""])[-1]
+        if ends[e] >= cap_end:
+            drop["끝 낱말 상한"] += 1
+            continue
+        ends[e] += 1
+        kept_fixed.append(r)
+    # 불가는 유형을 고르게 — 유형별로 돌아가며 뽑는다
+    cap_inf = int(len(kept_fixed) * MAX_INFEASIBLE / (1 - MAX_INFEASIBLE))
+    by_t: dict[str, list[dict]] = collections.defaultdict(list)
+    for r in infeasible:
+        by_t[r["output"]["infeasible"]].append(r)
+    for v in by_t.values():
+        rng.shuffle(v)
+    kept_inf: list[dict] = []
+    while len(kept_inf) < cap_inf and any(by_t.values()):
+        for t in sorted(by_t):
+            if by_t[t] and len(kept_inf) < cap_inf:
+                kept_inf.append(by_t[t].pop())
+    drop["불가 상한"] += sum(len(v) for v in by_t.values())
+    mfds = [json.loads(line) for line in (PRIV / "expand_mfds_rows.jsonl").open(encoding="utf-8")]
+    out = kept_fixed + kept_inf + mfds * 2
+    rng.shuffle(out)
+    with (PRIV / "expand_mix.jsonl").open("w", encoding="utf-8", newline="\n") as f:
+        for r in out:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    inf_t = collections.Counter(r["output"]["infeasible"] for r in kept_inf)
+    print(f"묶음 {len(out)} = 고침 {len(kept_fixed)} + 불가 {len(kept_inf)} + 식약처 {len(mfds)}×2 · "
+          f"A {sum(r['group'] == '확장A' for r in out)} · B {sum(r['group'] == '확장B' for r in out)}")
+    print(f"   버림 {dict(drop)} · 불가 유형 {dict(inf_t)} · 끝 낱말 상위 {[c for _, c in ends.most_common(5)]}")
 
 
 def cmd_report(names: list[str]) -> None:
@@ -444,13 +593,16 @@ def cmd_report(names: list[str]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["seeds", "mfds", "run", "report"])
+    ap.add_argument("cmd", choices=["seeds", "mfds", "run", "refilter", "mix", "report"])
     ap.add_argument("part", nargs="*", help="run: A | B · report: 결과 이름표(A · B · A_v1 …)")
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--offset", type=int, default=0)
-    ap.add_argument("--model", default=MODEL)
+    ap.add_argument("--model", default=MODEL, help="교정(정답) 교사")
+    ap.add_argument("--variant-model", default=MODEL, help="B 의 변형 문구를 쓰는 교사(싼 모델로 충분)")
+    ap.add_argument("--variants", type=int, default=1, help="B 씨앗당 변형 수")
     ap.add_argument("--tag", default="")
     ap.add_argument("--dry-run", action="store_true", help="견적만 낸다(API 안 씀)")
+    ap.add_argument("--stop-at", type=float, default=STOP_AT_USD, help="누적이 이 값에 닿으면 새 호출을 멈춘다")
     args = ap.parse_args()
     if args.cmd == "seeds":
         cmd_seeds()
@@ -458,7 +610,12 @@ def main() -> None:
         cmd_mfds()
     elif args.cmd == "run":
         assert args.part and args.part[0] in ("A", "B"), "run A | run B"
-        cmd_run(args.part[0], args.n, args.offset, args.model, args.tag, args.dry_run)
+        cmd_run(args.part[0], args.n, args.offset, args.model, args.tag, args.dry_run, args.stop_at,
+                args.variant_model, args.variants)
+    elif args.cmd == "mix":
+        cmd_mix()
+    elif args.cmd == "refilter":
+        cmd_refilter(args.part)
     else:
         cmd_report(args.part)
 
