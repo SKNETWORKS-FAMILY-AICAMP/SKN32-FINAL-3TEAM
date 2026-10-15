@@ -1753,15 +1753,16 @@ def _with_risk(s: SentenceJudgment, risk: RiskAssessment) -> SentenceJudgment:
 def encoder_floor(
     rows: list[dict[str, Any]], premise: Premise, cands: Iterable[EncoderTypeCandidate]
 ) -> sanction.Floor:
-    """전제 하나에서 문장의 인코더 하한 — 후보(옮긴 후보 포함)마다 `estimate_of` 를 내고 합친다(`_combine_floors`).
+    """전제 하나에서 문장의 인코더 하한 — 후보(옮긴 후보 포함)마다 `estimate_of` 를 내고 합친다(`_combine_floors`). **R2 이상 층의 계산**이다.
 
     🔴 후보 하나라도 하한을 모르면 **모른다**(`Floor(None)`) — 아는 것만으로 max 를 내지 않는다(`floor_of_sentence` 와 같은 규칙 · D-220).
-       후보가 없으면 모른다(인코더가 조용하다 ≠ R0).
+       후보가 없으면 모른다(인코더가 조용하다 ≠ R0). 🔴 R0 하한은 모름이다 — 위반이라면 R1 이상이다(D-273 · 아래 `_r1_known`).
+    ⛔ R1 층(지금 기록 상한)은 이 함수로 고르지 않는다 — `_r1_known`(보충 2 결정 4 개정 · 2026-10-16).
     """
     found: list[sanction.Floor] = []
     for c in cands:
         e = estimate_of(rows, premise, c.violation)
-        if e.floor is None:
+        if e.floor is None or e.floor is Risk.R0:
             return sanction.Floor(None)
         found.append(sanction.Floor(e.floor, ceiling=e.ceiling, ceiling_note=e.ceiling_note))
     return _combine_floors(found)
@@ -1794,11 +1795,32 @@ def _with_encoder_risk(
     cap = encoder_cap(j.text)
     if cap is None:
         return j
+    if cap.level <= Risk.R1.level:
+        # 🔄 2026-10-16 (D-348 보충 2 결정 4 개정 · 팀장) — **R1 층은 「위반이라면 적어도 R1」**(D-273)이다. 유형이 틀려도 참이라
+        #    하한을 아는 후보 하나면 선다 — 모르는 후보가 이 값을 틀리게 하지 못한다. 「하나라도 모르면 비움」은 R2 이상 층(`encoder_floor`)
+        if not _r1_known(rows, premise, j.encoder_candidates):
+            return j
+        return _with_risk(j, _merged(j.risk, cap))
     f = encoder_floor(rows, premise, j.encoder_candidates)
     if f.floor is None:
         return j
     enc = min(f.floor, cap, key=lambda r: r.level)
     return _with_risk(j, _merged(j.risk, enc))
+
+
+def _r1_known(
+    rows: list[dict[str, Any]], premise: Premise, cands: Iterable[EncoderTypeCandidate]
+) -> bool:
+    """R1 층 — 그 전제에서 **하한이 R1 이상으로 확인되는 후보가 하나라도** 있는가 (보충 2 결정 4 개정).
+
+    🔴 R0 하한은 모름으로 센다 — 「위반이라면 R0」은 D-273(위반이면 R1 이상)과 모순이다. 제재표에 R0 에 대응하는 처분이 들어오면
+       그것은 D-273 을 바꾸는 결정이다 — 보류 문장에 R0 을 조용히 적지 않는다(통과로 읽힌다 · D-280).
+    """
+    return any(
+        (f := estimate_of(rows, premise, c.violation).floor) is not None
+        and f.level >= Risk.R1.level
+        for c in cands
+    )
 
 
 def _merged(risk: RiskAssessment, enc: Risk) -> RiskAssessment:

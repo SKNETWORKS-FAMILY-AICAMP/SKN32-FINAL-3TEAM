@@ -6,7 +6,8 @@
   ③ 보류 문장에만 · 판정(확정 · 보류) · 보류 사유 · 유형 · 종착은 바뀌지 않는다 (결정 3)
   ④ 분기마다 계산하고 기록 = 전제 최댓값 — 분기를 내지 않는 경로에서도 (결정 4) · 응답이 계약(기록 ≥ 분기)을 지난다
   ⑤ 기록에 들이는 높이는 신뢰 층(R1) · 주장 가드를 지난 문장만 (결정 5 · 보충 1 결정 1 · 3)
-  ⑥ 모르면 비운다 — 후보 하나라도 하한을 모르면 · 표가 비면 · DB 가 없으면 (D-220)
+  ⑥ 모르면 비운다 — R1 층은 하한(R1 이상)을 아는 후보가 하나도 없으면 · 표가 비면 · DB 가 없으면 (D-220) · R0 하한은 모름 (D-273)
+     R2 이상 층의 계산(`encoder_floor`)은 후보 하나라도 모르면 모른다 (보충 2 결정 4 개정)
 """
 
 from __future__ import annotations
@@ -127,16 +128,36 @@ def test_주장_가드를_지나는_꼴() -> None:
     assert g.encoder_cap(CLAIM) is ENCODER_RECORD_MAX
 
 
-def test_후보_하나라도_하한을_모르면_모른다() -> None:
+def test_R1_층은_하한을_아는_후보_하나면_선다() -> None:
+    """보충 2 결정 4 개정 — 「위반이라면 적어도 R1」(D-273)은 유형이 틀려도 참이다. 모르는 후보가 섞여도 R1 은 선다."""
     rows = _rows()
-    # 화장품 전제에 질병 표방 조항이 없다 — 모른다(원장 10-14(B) ③)
+    # 화장품 전제에 질병 표방 조항이 없다 — 그 후보는 모른다(원장 10-14(B) ③)
     assert g.estimate_of(rows, Premise.화장품, Violation.질병_예방치료_표방).floor is None
     s = _held(CLAIM, _cand(Violation.거짓_과장), _cand(Violation.질병_예방치료_표방))
-    assert g._with_encoder_risk(s, Premise.화장품, rows) is s
+    got = g._with_encoder_risk(s, Premise.화장품, rows)
+    assert got.risk.encoder is Risk.R1 and got.risk.floor is None
+    # R2 이상 층의 계산(`encoder_floor`)은 종전대로 — 하나라도 모르면 모른다
+    assert g.encoder_floor(rows, Premise.화장품, s.encoder_candidates).floor is None
+
+
+def test_아는_후보가_없으면_비운다() -> None:
+    rows = _rows()
+    only = _held(CLAIM, _cand(Violation.질병_예방치료_표방))
+    assert g._with_encoder_risk(only, Premise.화장품, rows) is only
     assert g.encoder_floor(rows, Premise.식품, []).floor is None, (
         "후보가 없으면 R0 이 아니라 모른다"
     )
     assert g._with_encoder_risk(_held(), Premise.식품, []) == _held(), "표가 비면 모른다"
+
+
+def test_R0_하한은_모름이다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-273 — 위반이라면 R1 이상. 제재표가 R0 을 내면 그것은 그 결정을 바꾸는 일이다 — 보류 문장에 R0 을 적지 않는다(D-280)."""
+    from app.contracts import RiskEstimate  # noqa: PLC0415
+
+    monkeypatch.setattr(g, "estimate_of", lambda rows, p, v: RiskEstimate(floor=Risk.R0))
+    s = _held()
+    assert g._with_encoder_risk(s, Premise.식품, _rows()) is s
+    assert g.encoder_floor(_rows(), Premise.식품, s.encoder_candidates).floor is None
 
 
 @pytest.mark.parametrize(
