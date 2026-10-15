@@ -625,3 +625,37 @@ def test_봉인_기록의_커밋은_git_을_부르지_않고_읽고_모르면_�
         "abcdef1234567890\n", encoding="utf-8"
     )
     assert eg.git_head(tmp_path) == "abcdef123456"
+
+
+# ── 2026-10-15 (D-344 ⑧) — 판정기 B 도 봉인 기록을 남긴다 · 판정 그래프의 「날짜 한 번」과 섞지 않는다 ──────────
+
+
+@pytest.mark.gate
+def test_판정기_B_는_sealed_를_붙여야_돈다() -> None:
+    from scripts import eval_rule  # noqa: PLC0415
+
+    with pytest.raises(SystemExit):
+        eval_rule.main([])
+
+
+@pytest.mark.gate
+def test_판정기_B_의_봉인_기록은_판정_그래프의_날짜_한_번을_막지_않는다(
+    tmp_path, monkeypatch
+) -> None:  # noqa: ANN001
+    import argparse  # noqa: PLC0415
+    import datetime  # noqa: PLC0415
+
+    from scripts import sealed_log  # noqa: PLC0415
+
+    log = tmp_path / "sealed_runs.jsonl"
+    monkeypatch.setattr(eg, "SEALED_LOG", log)
+    assert sealed_log.append({"split": "test_sentence"}, tool=sealed_log.RULE, path=log) == 1
+    today = datetime.date.today().isoformat()
+    base = {"limit": None, "provenance": None, "no_enc_filter": False, "stub": False}
+    assert eg.sealed_refusal(argparse.Namespace(**base), today) is None
+    assert (
+        eg.log_sealed_run({"golden_sha": "x"}) == 1
+    )  # 판정 그래프의 첫 회차 — 판정기 B 줄은 세지 않는다
+    assert "이미 봉인 회차" in eg.sealed_refusal(argparse.Namespace(**base), today)
+    rows = [__import__("json").loads(x) for x in log.read_text(encoding="utf-8").splitlines()]
+    assert [r["tool"] for r in rows] == [sealed_log.RULE, sealed_log.GRAPH]

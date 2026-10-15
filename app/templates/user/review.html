@@ -565,6 +565,8 @@
                 「위반 근거」 · 「인용 조문」과 다른 말 · 다른 자리로 그린다 #}
             {% if s.encoder_candidates %}
             <p class="rv-ev-label">AI 추정 유형 — 판정 아님</p>
+            {#- 🆕 2026-10-15 (D-340 결정 3 · D-344 ⑨) — 사전 확정 문장에 인코더가 다른 유형을 냈다. 판정은 그대로다(거부권 없음) · 규칙 · 글자는 `app/reasons.py` #}
+            {% set dt = s|differing_types %}{% if dt %}<p class="rv-note">{{ ENC_DIFFERS_MARK }} · {{ dt|join(" · ")|replace("_", " ") }}</p>{% endif %}
             <p class="rv-note">AI 가 문장만 보고 추정한 유형이에요. 아래 조항은 이 문구에서 찾은 근거가 아니라 「이 유형이라면 이 조항」이에요.</p>
             {% for c in s.encoder_candidates %}
             {#- 🔄 2026-10-13 (D-330 안건 1 (나)) — 확률(%)을 그리지 않는다. 인코더 출력은 보정된 확률이 아니라 「N% 확률로 위반」으로 읽힌다 #}
@@ -583,7 +585,8 @@
             {% set mn = c|moved_note %}{% if mn %}<p class="rv-note">「{{ c.violation.value|replace("_", " ") }}」 추정은 {{ mn }}</p>{% endif %}
             {% endfor %}
             {% elif enc_on %}
-            {# ⛔ 후보가 없다고 「문제없음」이라 적지 않는다. 인코더가 돌지 않았으면(`enc_on` 거짓) 아무것도 그리지 않는다 (D-323) #}
+            {# ⛔ 후보가 없다고 「문제없음」이라 적지 않는다. 인코더가 돌지 않았으면(`enc_on` 거짓) 아무것도 그리지 않는다 (D-323)
+               🔄 2026-10-15 (D-344 ⑨ (가)) — 사전 적중 ∧ 인코더 조용(D-340 결정 4)의 표시가 이 줄이다 — 「AI 위반 신호 없음」을 따로 두지 않는다 #}
             <p class="rv-ev-label">AI 추정 유형 — 판정 아님</p>
             <p class="rv-note">AI 추정 유형 없음 — 「문제없음」이라는 뜻은 아니에요.</p>
             {% endif %}
