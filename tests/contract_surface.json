@@ -134,6 +134,7 @@
     },
     "EncoderTypeCandidate": {
       "confidence": "req builtins.float",
+      "estimate": "opt app.contracts.RiskEstimate | None",
       "moved_from": "opt app.contracts.Violation | None",
       "references": "opt list[app.contracts.EvidenceArticle]",
       "violation": "req app.contracts.Violation"
@@ -212,6 +213,11 @@
       "encoder": "opt app.contracts.Risk | None",
       "evidence_span": "opt app.contracts.Span | None",
       "final": "opt app.contracts.Risk | None",
+      "floor": "opt app.contracts.Risk | None"
+    },
+    "RiskEstimate": {
+      "ceiling": "opt app.contracts.Risk | None",
+      "ceiling_note": "opt str | None",
       "floor": "opt app.contracts.Risk | None"
     },
     "Segment": {
