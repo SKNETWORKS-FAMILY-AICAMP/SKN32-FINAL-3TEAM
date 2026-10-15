@@ -42,6 +42,8 @@
   {% elif rw.out.outcome == "candidate" %}
   <b>고친 문구 후보</b>{% if rw.plain %} <span class="rv-note">{{ "쓰는 법을 더한 안" if rw.out.polish_mode == "rule" else "자연스럽게 다듬은 안" }}</span>{% endif %}
   <span class="rv-cand">{{ rw.out.rewrite.body }}<button type="button" class="rv-copy" data-copy="{{ rw.out.rewrite.body }}">복사</button></span>
+  {# 🆕 2026-10-15 (D-342 ⓓ) — 규칙판이 덧붙인 쓰는 법은 제품마다 다를 수 있다 — 표시사항과 맞추게 한다 #}
+  {% if rw.plain and rw.out.polish_mode == "rule" %}<span class="rv-note">덧붙인 쓰는 법은 일반 문구예요 — 제품 표시사항과 맞는지 확인하세요</span><br>{% endif %}
   {% if rw.out.rewrite.mandatory_note %}<span class="rv-note">필수 병기 · {{ rw.out.rewrite.mandatory_note }}</span><br>{% endif %}
   {% if rw.out.rewrite.placement %}<span class="rv-note">배치 · {{ rw.out.rewrite.placement }}</span><br>{% endif %}
   {% if rw.rejudge.status == "passed" %}<span class="rv-chip c-r0">다시 판정 · 통과</span>

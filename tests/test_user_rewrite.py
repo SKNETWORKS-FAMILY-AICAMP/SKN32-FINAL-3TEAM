@@ -662,3 +662,13 @@ def test_조건부_후보는_빈_문장이면_깨진_응답이다() -> None:
 
     assert not sllm_client._well_formed({**_HOLD_COND, "conditional": {"body": " "}})
     assert sllm_client._well_formed(_HOLD_COND)
+
+
+@pytest.mark.parametrize(("mode", "shown"), [("rule", True), ("model", False)])
+def test_규칙판이_덧붙인_안에는_표시사항_확인_문구를_단다(wired, mode: str, shown: bool) -> None:  # noqa: ANN001
+    """🆕 10-15 (D-342 ⓓ) — 규칙판의 쓰는 법은 일반 문구다 — 제품 표시사항과 맞추게 한다. 모델판 다듬기에는 달지 않는다."""
+    wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN, "polish_mode": mode})
+    wired.judge_out[PLAIN] = ("ok", _light())
+    html = _go()
+    assert ("제품 표시사항과 맞는지 확인하세요" in html) is shown
+    assert ("쓰는 법을 더한 안" in html) is shown

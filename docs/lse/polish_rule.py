@@ -11,7 +11,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
+from pathlib import Path
 
 from usage_dict import _UNIT_TAIL, FORMS
 
@@ -133,3 +135,12 @@ def polish_by_rule(s1: str, category: str | None) -> str | None:
         if pat is None or re.search(pat, s1):
             return f"{s1.rstrip(' .,')}, {say}"
     return None
+
+
+def rule_sha12() -> str:
+    """🆕 10-15 (D-342 ⓒ) — 규칙판의 판 지문: 이 파일 + `usage_dict.py` 의 sha256 앞 12자. 서버가 응답 `polish_rule` 에 싣는다.
+    줄바꿈(CRLF · LF)은 LF 로 맞춰 셈한다 — 집 PC · 노트북 · 서버의 체크아웃 설정이 달라도 같은 커밋이면 같은 지문이다."""
+    h = hashlib.sha256()
+    for name in ("polish_rule.py", "usage_dict.py"):
+        h.update(Path(__file__).with_name(name).read_bytes().replace(b"\r\n", b"\n"))
+    return h.hexdigest()[:12]

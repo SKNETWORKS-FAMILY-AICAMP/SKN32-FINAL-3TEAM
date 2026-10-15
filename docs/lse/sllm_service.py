@@ -125,6 +125,12 @@ def _rejudge_view(r: dict) -> dict | None:
     }
 
 
+def _rule_sha12() -> str:
+    from polish_rule import rule_sha12  # noqa: PLC0415
+
+    return rule_sha12()
+
+
 def _polish_is_rule() -> bool:
     import persona_pipeline_e2e as pe  # noqa: PLC0415
 
@@ -159,6 +165,8 @@ def rewrite(text: str, violation_types: list[str] | None = None, persona: str | 
                  # 🔄 10-14 — 2단계 어댑터를 실제로 쓴 때만(고객층 말투 · 모델판 다듬기). 규칙판 다듬기는 어댑터를 쓰지 않는다
                  "stage2": _META.get("lock_stage2") if (persona or (polish and not _polish_is_rule())) else None},
         "polish_mode": ("rule" if _polish_is_rule() else "model") if polish and not persona else None,
+        # 🆕 10-15 (D-342 ⓒ) — 규칙판으로 다듬었으면 규칙표의 판 지문(어댑터 대신 표가 썼다)
+        "polish_rule": _rule_sha12() if polish and not persona and _polish_is_rule() else None,
         "latency_ms": int((time.time() - t0) * 1000),
     }
     if r.get("rejudge") == "rejected":

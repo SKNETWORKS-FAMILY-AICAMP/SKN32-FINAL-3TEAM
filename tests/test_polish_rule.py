@@ -77,3 +77,23 @@ def test_원문에_있던_용량은_막지_않는다() -> None:
     s1 = "오메가3 미니 캡슐 90캡슐"
     assert check(s1, f"{s1}, 물과 함께 삼켜 드세요", persona=True).passed
     assert check(s1, f"{s1}, 한 번 드셔 보세요", persona=True).passed
+
+
+@pytest.mark.parametrize("s1", ["오메가3 캡슐", "오메가3 캡슐 60정", "비타민B6 정", "오메가3 미니 캡슐 90캡슐"])
+def test_숫자가_든_제품_이름에서도_모양을_읽는다(s1: str) -> None:
+    """🆕 10-15 (D-342 ⓔ) — 단위 떼기가 「오메가3 캡슐」의 「3 캡슐」을 수량으로 먹어 「오메가」만 남기던 것."""
+    out = polish_by_rule(s1, "건기식")
+    assert out == f"{s1}, 물과 함께 삼켜 드세요"
+    assert check(s1, out, persona=True).passed
+
+
+def test_규칙표_지문은_줄바꿈에_흔들리지_않는다(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 10-15 (D-342 ⓒ) — 응답 `polish_rule` 에 싣는 판 지문. CRLF 로 체크아웃한 기기에서도 같은 값이어야 한다."""
+    import polish_rule
+
+    sha = polish_rule.rule_sha12()
+    assert len(sha) == 12
+    for name in ("polish_rule.py", "usage_dict.py"):
+        (tmp_path / name).write_bytes((_LSE / name).read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    monkeypatch.setattr(polish_rule, "__file__", str(tmp_path / "polish_rule.py"))
+    assert polish_rule.rule_sha12() == sha
