@@ -315,6 +315,21 @@ HEALTH_CUE = re.compile(r"혈압|혈당|콜레스테롤|면역|피로|다이어�
 #: 🆕 10-12 — 2단계가 **새로 지어 넣은 사실**(산지 · 원료 · 무첨가 · 인증 · 천연). 말투는 사실을 더하지 않는다
 #:    (프롬프트 다듬기 시험에서 「국내산 원료로 제조되며, 무첨가로 생산」을 지어 붙였다 · 관문이 못 막았다)
 NEW_FACT = re.compile(r"국내산|국산|[가-힣]{2,4}산$|산지|원료|무첨가|첨가물|함유|인증|천연|유기농|무농약|수제|직접|제조|생산|공정")
+#: 🆕 10-15 — 2단계가 **새로 정한 용량 · 횟수 · 때**(「식사 후 한 알」 · 「한 숟갈」 · 「세안 후」). 섭취 · 사용 방법은 제품마다 표시가 정한다 —
+#:    다듬기가 정하면 표시와 다른 말이 된다(팀장 지적 · 규칙판 표에 있었다 · 사전 · 재판정은 못 잡는다). 1단계 문장에 이미 있던 표현은 보지 않는다
+DOSE_TIME = re.compile(
+    r"(?:한|두|세|네|다섯|\d+)\s*(?:알|정|캡슐|포|스푼|숟갈|숟가락|큰술|작은술|잔|컵|병|봉지?|방울|스틱|팩|펌프)"
+    r"(?=씩|으로|로|을|를|이|가|은|는|도|만|에|[^가-힣]|$)"  # 조사까지만 — 「포기」 · 「정말」은 단위가 아니다
+    r"|하나씩|한\s*개씩|하루\s*(?:\d|한|두|세|에)|(?:\d|한|두|세)\s*(?:번|회)\s*씩|매일|아침\s*저녁|공복|식전|식후"
+    r"|식사\s*(?:전|후|중|와\s*함께)"  # 「한 번 써 보세요」(말투)는 막지 않는다 — 횟수는 「하루 …」 · 「… 번씩」만
+    r"|(?:자기|잠들기|외출|운동)\s*전|(?:세안|샤워|샴푸|목욕|운동)\s*후"
+)
+
+
+def dose_time_added(original: str, s: str) -> list[str]:
+    """`s` 에 새로 생긴 용량 · 횟수 · 때 표현 — 원문(1단계 문장)에 같은 표현이 있으면 뺀다(공백은 무시하고 견준다)."""
+    base = re.sub(r"\s+", "", original)
+    return sorted({m.group() for m in DOSE_TIME.finditer(s) if re.sub(r"\s+", "", m.group()) not in base})
 
 #: 🆕 10-12 — 4B v14 dev 검수(33 행 · 이서은 동의)에서 지나간 꼴 둘. 🚨 규칙은 직접 만든 문구로 골랐다(`gate_regress.py`)
 #: 「무+원료」(없음)를 「함유」로 — 「무○○ 함유」 · 「○○ 함유」(원문에는 「무○○」로만). 무(채소) · 무게 · 무료 같은 낱말은 뺀다
@@ -528,6 +543,8 @@ def check(original: str, stage1: str | None, persona: bool = False) -> GateResul
         fact = sorted({w for w in new_words(original, s) if NEW_FACT.search(_PARTICLE.sub("", w))})
         if fact:
             why.append(f"말투가 지어낸 사실: {', '.join(fact[:3])}")
+        if dose := dose_time_added(original, s):
+            why.append(f"말투가 정한 용량 · 때: {', '.join(dose[:3])}")
     nw = [] if persona else new_words(original, s)
     if "도움" in s:
         nw = [w for w in nw if not _claim_word(w)]

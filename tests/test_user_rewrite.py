@@ -662,3 +662,26 @@ def test_조건부_후보는_빈_문장이면_깨진_응답이다() -> None:
 
     assert not sllm_client._well_formed({**_HOLD_COND, "conditional": {"body": " "}})
     assert sllm_client._well_formed(_HOLD_COND)
+
+
+@pytest.mark.parametrize(("mode", "shown"), [("rule", True), ("model", False)])
+def test_규칙판이_덧붙인_안에는_표시사항_확인_문구를_단다(wired, mode: str, shown: bool) -> None:  # noqa: ANN001
+    """🆕 10-15 (D-342 ⓓ) — 규칙판의 쓰는 법은 일반 문구다 — 제품 표시사항과 맞추게 한다. 모델판 다듬기에는 달지 않는다."""
+    wired.sllm_out = ("ok", {**_CANDIDATE, "plain": PLAIN, "polish_mode": mode})
+    wired.judge_out[PLAIN] = ("ok", _light())
+    html = _go()
+    assert ("제품 표시사항과 맞는지 확인하세요" in html) is shown
+    assert ("쓰는 법을 더한 안" in html) is shown
+
+
+def test_복사_버튼은_검수_입력_상자와_클래스가_겹치지_않는다(wired) -> None:  # noqa: ANN001
+    """🆕 10-15 (ksr 병합에서 발견) — 복사 버튼이 `.rv-copy` 였을 때 `user.css` 의 `position: absolute` 가
+    검수 화면 문구 입력 상자(`review.html` `<div class="rv-copy">`)에도 걸려 입력칸이 화면 오른쪽 위로 떴다."""
+    import re  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    html = _go()
+    assert 'class="rv-cand-copy"' in html and '<button type="button" class="rv-copy"' not in html
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "user.css").read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)  # 주석 속 이름은 규칙이 아니다
+    assert not re.search(r"\.rv-copy(?![-\w])", css), "공용 CSS 에 검수 입력 상자 이름(.rv-copy)을 쓰는 규칙이 있다"
