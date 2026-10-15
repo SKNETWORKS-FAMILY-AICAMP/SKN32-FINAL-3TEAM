@@ -14,7 +14,8 @@
 #   bash deploy_server.sh fetch         #  3. 저장소 받기 · 배포 커밋으로 맞추기
 #   bash deploy_server.sh env           #  4. .env 자리 만들기 (비밀 값은 넣지 않는다)
 #   bash deploy_server.sh install       #  5. 앱 패키지 설치 (.venv · CPU torch)
-#   bash deploy_server.sh model         #  6. 임베딩 모델 받기 · 판정 인코더 잠금 검사
+#   bash deploy_server.sh model         #  6. 임베딩 모델 받기 · 캐시에서 올라오는지 확인 · 판정 인코더 잠금 검사
+#   bash deploy_server.sh embed-cache   #     검색 임베딩 캐시만 다시 확인 (판정 경로와 같은 길 · 허브 차단)
 #   bash deploy_server.sh data          #  7. migrate → data-sync → load → embed
 #   bash deploy_server.sh verify        #  8. 지문 대조
 #   bash deploy_server.sh sllm-env      #  9. sLLM 가상환경 (.venv-sllm · GPU torch)
@@ -28,6 +29,10 @@
 #   bash deploy_server.sh all           #  3~10 을 이어서 (gpu · sllm · serve 는 따로)
 #
 #   🔄 2026-10-15 — DB 비밀번호 자동 생성(env) · 기본 비밀번호면 적재 거부(data) · services · backup 을 더했다
+#   🔄 2026-10-15 오후 (D-344 ⑦) — 판정 경로가 검색 임베딩(KURE)을 **캐시에서만** 올리게 바뀌었다.
+#       캐시가 없으면 앱은 뜨지만 벡터 검색이 꺼지고 어휘 검색만 한다(오류 없이 조용히). 그래서
+#       model 이 받은 뒤 허브를 막고 다시 올려 보고(embed-cache) · verify 가 doctor --env 의 캐시 줄을 보고 ·
+#       serve · services 는 캐시가 없으면 멈추고 · check 가 앱 로그의 「벡터 검색 불가」를 센다
 #
 # 🚨 이 파일에는 비밀번호 · 키 · DB 접속 문자열을 적지 않는다. 그 값은 서버의 .env 에만 둔다.
 # 🚨 g4dn 의 로컬 NVMe(125GB · /dev/nvme1n1 등)는 **인스턴스를 중지하면 지워진다**. 모델 · DB 를 거기 두지 않는다.
@@ -75,6 +80,37 @@ adopted() {
 lock_check() {   # $1 = 폴더 · $2 = 역할 — 잠금 밖 판이면 멈춘다 (app 과 같은 규칙 · app/model_lock.py)
   (cd "$APP_DIR" && uv run python -m scripts.model_lock check "$1" --role "$2") \
     && ok "잠금 일치 — $2 · $(basename "$1")" || die "잠금 밖 판이다 — $1 ($2). 폴더를 다시 옮긴다"
+}
+
+# ── 검색 임베딩 캐시 (🆕 2026-10-15 · D-344 ⑦) ─────────────────────────────────
+# 판정 경로(app/retrieve.py encode)는 load_kwargs(local_only=True) 로 **캐시에서만** 올린다.
+# 캐시가 없으면 오류 없이 어휘 검색만 한다 — 그래서 배포에서는 「있다」를 눈으로 확인하고 넘어간다.
+# 🚨 캐시는 이 스크립트를 돌린 사용자의 ~/.cache/huggingface 다(루트 디스크). 서비스도 같은 사용자로 돈다(services).
+embed_cache() {
+  say "6-1. 검색 임베딩 캐시 — 판정 경로와 같은 길로 올려 본다 (허브 차단 · D-344 ⑦)"
+  local out
+  if out="$(cd "$APP_DIR" && HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 uv run python - 2>&1 <<'PY'
+from huggingface_hub import constants
+from app.retrieve import encode
+from app.settings import PARAMS
+v = encode(PARAMS.embed_model_id, "부당한 표시·광고의 내용")  # 판정 경로와 같은 함수 — local_files_only
+print(f"RESULT {PARAMS.embed_model_id} · 차원 {len(v)} · 캐시 {constants.HF_HUB_CACHE}")
+PY
+)"; then
+    ok "캐시에서 올라왔다 — $(printf '%s\n' "$out" | grep '^RESULT' | cut -c8-)"
+    case "$out" in *"/opt/dlami/nvme"*|*"/mnt/"*) warn "캐시가 로컬 NVMe 쪽이다 — 중지하면 지워진다. HF_HOME 을 지우고 다시 받는다";; esac
+  else
+    printf '%s\n' "$out" | tail -5 | sed 's/^/         /'
+    die "캐시에서 못 올렸다 — 이대로면 벡터 검색이 꺼진 채 돈다. bash deploy_server.sh model 로 다시 받는다"
+  fi
+}
+
+# 빠른 확인 — doctor 의 캐시 검사(파일 두 개 · 외부 요청 없음 · 모델을 올리지 않는다). 있으면 0
+embed_cache_quick() {
+  local line
+  line="$(cd "$APP_DIR" && uv run python -c 'from scripts.doctor import _check_embed_cache; _check_embed_cache()' 2>&1 | grep '검색 임베딩' | head -1)"
+  printf '  %s\n' "${line:-검색 임베딩 캐시 — 확인하지 못했다}"
+  case "$line" in "✅"*) return 0;; *) return 1;; esac
 }
 
 instance_type() {  # IMDSv2
@@ -181,7 +217,10 @@ install() {
 # ── 6. 임베딩 · 판정 인코더 ─────────────────────────────────────────────────
 model() {
   say "6. 임베딩 · 판정 인코더"
-  L embed --check && ok "임베딩 모델(KURE-v1) 차원 확인" || die "embed --check 실패"
+  # 🚨 받는 단계는 이것 하나다 — 셸에 HF_HUB_OFFLINE=1 이 남아 있어도 받도록 0 으로 연다 (D-344 ⑦)
+  (export HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0; L embed --check) \
+    && ok "임베딩 모델(KURE-v1) 받기 · 차원 확인" || die "embed --check 실패 — 허브에 닿는지 · 디스크(df -h /)"
+  embed_cache
   local enc; enc="$APP_DIR/models/$(adopted encoder)"
   [ -d "$enc" ] || die "인코더 폴더가 없다 — $enc (PC 에서 SFTP 로 폴더째 올린다)"
   lock_check "$enc" encoder
@@ -223,6 +262,12 @@ verify() {
   [ "$(get_env COPYLANE_EDITION)" = cloud ] && ok "COPYLANE_EDITION=cloud" || die "COPYLANE_EDITION 이 cloud 가 아니다"
   [ -f "$APP_DIR/data/derived/hf_display_claims.jsonl" ] && ok "sLLM 관문용 hf_display_claims.jsonl 있음" \
     || warn "hf_display_claims.jsonl 이 없다 — sLLM /rewrite 가 500 을 낸다 (data-sync 확인)"
+  # 🆕 2026-10-15 (D-344 ⑦) — 팀 진단(doctor --env)의 검색 임베딩 캐시 줄. 🔴 줄이 있으면 보여 준다(배포 기기에서 뜻 없는 것도 섞인다)
+  local doc; doc="$(L doctor --env 2>&1 || true)"
+  printf '%s\n' "$doc" | grep '🔴' | sed 's/^/  [doctor] /' || true
+  printf '%s\n' "$doc" | grep '검색 임베딩' | sed 's/^/  [doctor] /' || true
+  printf '%s\n' "$doc" | grep -q '✅ 검색 임베딩' && ok "doctor --env — 검색 임베딩 캐시 있음" \
+    || die "doctor --env 가 검색 임베딩 캐시를 못 찾았다 — bash deploy_server.sh model"
   warn "DB 사전이 파일과 같은지는 평가 도구(scripts/eval_graph.py --dev)가 도는지로 본다"
 }
 
@@ -279,6 +324,7 @@ sllm() {
 serve() {
   say "12. 앱 실행 — 127.0.0.1:8000 (밖으로는 Caddy 만 연다)"
   export HF_HUB_OFFLINE=1      # 모델을 받은 뒤에는 허브로 나가지 않는다
+  embed_cache_quick || die "검색 임베딩 캐시가 없다 — 이대로 띄우면 벡터 검색이 꺼진다. bash deploy_server.sh model (D-344 ⑦)"
   L serve --no-reload
 }
 
@@ -289,6 +335,12 @@ check() {
     | awk '{print "  [정보] GPU " $0}' || warn "nvidia-smi 실패"
   curl -s -m 5 "http://127.0.0.1:$SLLM_PORT/health" && echo || warn "sLLM /health 응답 없음"
   curl -s -o /dev/null -m 5 -w "  [정보] 앱 HTTP %{http_code}\n" http://127.0.0.1:8000/ || warn "앱 응답 없음"
+  embed_cache_quick || warn "검색 임베딩 캐시가 없다 — 벡터 검색이 꺼져 있다 (bash deploy_server.sh model)"
+  if systemctl is-active -q copylane-app 2>/dev/null; then   # tmux 로 띄웠으면 창 2 화면에서 같은 줄을 찾는다
+    local n; n="$(journalctl -u copylane-app -b --no-pager 2>/dev/null | grep -c '벡터 검색 불가' || true)"
+    [ "${n:-0}" = 0 ] && ok "앱 로그에 「벡터 검색 불가」 없음" \
+      || warn "앱 로그에 「벡터 검색 불가」 ${n}줄 — journalctl -u copylane-app | grep '벡터 검색 불가'"
+  fi
   ss -ltn | awk 'NR>1 {print $4}' | grep -E ':(8000|8765|5432)$' | while read -r a; do
     case "$a" in 127.0.0.1:*) ok "$a (안쪽만)";; *) warn "$a — 밖에 열려 있다";; esac
   done
@@ -303,6 +355,7 @@ services() {
   if ss -ltn | awk '{print $4}' | grep -qE ':(8000|8765)$' && ! systemctl is-active -q copylane-app copylane-sllm 2>/dev/null; then
     die "8000 이나 8765 를 이미 누가 쓰고 있다 — tmux 의 serve · sllm 창을 Ctrl-C 로 끈 뒤 다시"
   fi
+  embed_cache || die "검색 임베딩 캐시가 먼저다 — 서비스는 허브를 막고(HF_HUB_OFFLINE=1) 돈다"
   local with_sllm=1
   [ "$(get_env COPYLANE_SLLM_URL)" = off ] && { with_sllm=0; warn "COPYLANE_SLLM_URL=off — sLLM 서비스는 만들지 않는다"; }
 
@@ -384,6 +437,7 @@ case "${1:-}" in
   env)        env_file ;;
   install)    install ;;
   model)      model ;;
+  embed-cache) embed_cache ;;
   data)       data ;;
   verify)     verify ;;
   sllm-env)   sllm_env ;;
@@ -395,5 +449,5 @@ case "${1:-}" in
   services-off) services_off ;;
   backup)     backup ;;
   all)        preflight; fetch; env_file; install; model; data; verify; sllm_env; sllm_model ;;
-  *) sed -n '2,30p' "$0"; exit 1 ;;
+  *) sed -n '2,35p' "$0"; exit 1 ;;
 esac
