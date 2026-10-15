@@ -148,9 +148,17 @@ def load_sources(
             VALUES (%(id)s,%(name)s,%(pub)s,%(url)s,%(layer)s,%(grade)s,%(cost)s,%(value)s,
                     %(access)s,%(lic)s,%(attr)s,%(robots)s,%(dec)s,%(rev)s,%(dat)s,%(ev)s,%(note)s)
             ON CONFLICT (source_id) DO UPDATE SET
-                name=EXCLUDED.name, license=EXCLUDED.license, attribution=EXCLUDED.attribution,
-                grade=EXCLUDED.grade, grade_reviewed_by=EXCLUDED.grade_reviewed_by
+                name=EXCLUDED.name, publisher=EXCLUDED.publisher, url=EXCLUDED.url,
+                layer=EXCLUDED.layer, grade=EXCLUDED.grade, cost=EXCLUDED.cost, value=EXCLUDED.value,
+                access=EXCLUDED.access, license=EXCLUDED.license, attribution=EXCLUDED.attribution,
+                robots_checked_at=EXCLUDED.robots_checked_at,
+                grade_decided_by=EXCLUDED.grade_decided_by, grade_reviewed_by=EXCLUDED.grade_reviewed_by,
+                grade_decided_at=EXCLUDED.grade_decided_at, grade_evidence_url=EXCLUDED.grade_evidence_url,
+                note=EXCLUDED.note
             """,
+            # 🔴 2026-10-15 (전수 점검) — **넣는 칸은 모두 갱신한다**(골든 · 제재표와 같은 규칙 · D-249). 종전에는 5 칸만 갱신해
+            #    레지스트리에서 판정자를 바꾸면 DB 에 옛 판정자 + 새 검토자가 섞였고, 둘이 같아지면 `ck_source_four_eyes` 에
+            #    걸려 적재 전체가 멈췄다(임시 PG16 재현). url · 가치 · 판정일도 옛 값으로 남았다.
             {
                 "id": sid,
                 "name": s.get("name", sid),
@@ -494,10 +502,12 @@ def load_documents(cur, dry: bool) -> int:
             "  먼저: uv run python -m preprocess.law_norm --write   🚨 --dump 가 아니다\n"
             "  🚨 일부러 비운 채 돌리려면 --allow-missing 을 붙인다."
         )
+    annex_files = 0
     for p in sorted(norm_dir.glob("*.jsonl")) if norm_dir.exists() else []:
         rows = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
         if not rows:
             continue
+        annex_files += 1
         doc_id = f"annex:{p.stem}"
         if not dry:
             # 🔴 **`DO NOTHING` 이 아니라 `DO UPDATE` 다** (2026-09-14 · 0015).
@@ -523,6 +533,13 @@ def load_documents(cur, dry: bool) -> int:
                 ),
             )
         n += 1
+    # 🔴 2026-10-15 (전수 점검) — 폴더는 있는데 별표 파일이 0 개(없거나 전부 빈 파일)면 멈춘다. 종전에는 별표 없이 「성공」을 내고
+    #    한참 뒤 `embed` 의 FK 오류(`chunk.doc_id`)로 터졌다 — 원인과 먼 자리 (D-220 · `_jsonl` 과 같은 규칙)
+    if norm_dir.exists() and not annex_files and not ALLOW_MISSING:
+        raise SystemExit(
+            f"🔴 {norm_dir} 에 내용 있는 별표 파일이 하나도 없다 — 별표가 통째로 빠진 채 document 가 채워진다.\n"
+            "  먼저: uv run python -m preprocess.law_norm --write   🚨 일부러 비우려면 --allow-missing"
+        )
     return n
 
 
@@ -674,6 +691,13 @@ def load_product_fact(cur, dry: bool) -> int:
     for src, cnt in sorted(skipped.items()):
         print(
             f"    ⬜ {src} {cnt}행은 product_fact 에 넣지 않았다 — 표시 문구는 인정이 아니다 (D-185)"
+        )
+    # 🔴 2026-10-15 (전수 점검) — 파일은 있는데 쓸 수 있는 행이 0(원천이 바뀌었거나 칸 이름이 어긋남)이면 멈춘다.
+    #    종전에는 0 행을 넣고 성공으로 냈다 — 「없음이 성공으로 집계」(D-220). 옛 행을 거두기(`_retire_product_fact`) 전에 멈춘다
+    if not n and not ALLOW_MISSING:
+        raise SystemExit(
+            "🔴 hf_api_labels.jsonl 에서 product_fact 에 넣을 행이 0 이다 — 원천 · 칸 이름(PRODUCT_FACT_SOURCES)을 본다.\n"
+            "  🚨 일부러 비우려면 --allow-missing"
         )
     if not dry:
         n -= _retire_product_fact(cur, seen)
@@ -870,6 +894,12 @@ def load_sanction_rule(cur, dry: bool) -> tuple[int, bool, int]:  # noqa: ANN001
         )
     sig, sha = sr.signature(spec), sr.plan_sha(spec)
     rows = spec.get("rows") or []
+    if not rows:
+        # 🔴 2026-10-15 (전수 점검) — 행이 0 이면 아래 거두기가 **표 전체를 지운다**(`NOT (rule_key = ANY('{}'))`). 다른 거두기
+        #    (`sweep_golden` · `sweep_dict` · `embed.sweep_orphans`)처럼 빈 선언으로는 거두지 않는다 (D-220)
+        raise SystemExit(
+            "🔴 제재표 원천에 행이 없다 — 싣지도 거두지도 않는다 (scripts/sanction_review.yaml · D-220)"
+        )
     if not dry:
         cols = ", ".join(SANCTION_COLS)
         marks = ", ".join(["%s"] * len(SANCTION_COLS))
