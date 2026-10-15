@@ -128,6 +128,10 @@ main:has(.cp-ed) { max-width: 96rem; }
 
 .cp-submit { background: var(--u-signal); border-color: var(--u-signal);
              color: #fff; font-weight: 600; margin-top: .75rem; }
+.cp-submit:disabled { opacity: .6; cursor: wait; }
+/* 🆕 2026-10-15 (ksr · 점검 0 · 09) — 생성 중 표시 · 접어 둔 개발자 메모 */
+.cp-wait { margin: .5rem 0 0; font-size: .86rem; font-weight: 600; color: var(--u-signal-ink); }
+.cp-devnote summary { cursor: pointer; }
 
 .cp-board { border: 1px solid var(--u-line); border-radius: .75rem; overflow: hidden; }
 .cp-sec { display: flex; gap: .75rem; align-items: flex-start;
@@ -225,7 +229,8 @@ main:has(.cp-ed) { max-width: 96rem; }
 </div>
 
 {% if not draft %}
-<form class="cp-card" method="post" action="/u/compose">
+{# 🆕 2026-10-15 (ksr · 점검 0) — 「판정 받고 템플릿 만들기」를 누르면 「생성 중…」(`user_wait.js`) #}
+<form class="cp-card" method="post" action="/u/compose" data-wait-form>
   <h2><span class="cp-step">01 ·</span> 어떤 종류로 만들까요</h2>
   {# 🔄 10-08 (lse) — 「상세페이지」에 checked 가 박혀 있어 다른 종류를 골라 제출해도 상세페이지로 돌아갔다.
      고른 값(picked) → 픽스처 결과의 포맷 → 기본 상세페이지 순으로 체크한다.
@@ -270,11 +275,14 @@ main:has(.cp-ed) { max-width: 96rem; }
   {% endif %}
   <textarea id="prompt" name="prompt" rows="3" maxlength="{{ max_text_len }}"
             placeholder="예: 건조한 계절에 쓰기 좋은 보습 제품이라는 점을 알리고 싶어요">{{ carried.prompt if carried else (picked.prompt if picked and picked.prompt else "") }}</textarea>
+  {# 🔄 2026-10-15 (ksr · 점검 09) — 결정 번호 · 「판정 코어」는 이용자 말이 아니라 접어 둔다. ⬜ 추후 삭제 #}
   <p class="cp-note" style="margin-top:.4rem">
-    🚨 <b>판정 코어가 입력한 내용을 먼저 걸러요.</b> 걸러지지 않은 문구는 지면에 얹히지 않아요 (D-63 · D-119).
+    <b>적은 문구는 먼저 검수를 거쳐요.</b> 확인되지 않은 문구는 광고에 얹지 않아요.
   </p>
+  <details class="cp-note cp-devnote"><summary>개발자 메모</summary>판정 코어가 입력을 먼저 거른다 — 걸러지지 않은 문구는 지면에 얹히지 않는다 (D-63 · D-119).</details>
 
-  <button class="cp-submit" type="submit">판정 받고 템플릿 만들기</button>
+  <button class="cp-submit" type="submit" data-wait-label="생성 중…">판정 받고 템플릿 만들기</button>
+  <p class="cp-wait" data-wait hidden role="status" aria-live="polite">광고 틀을 만드는 중이에요 — 문구 검수를 먼저 하고 있어요</p>
   <p class="cp-note" style="margin-top:.6rem">
     규격 · 여백 · 글자 크기는 KRDS 표준형 스타일 기준으로 셋팅돼요.
   </p>
@@ -349,6 +357,7 @@ main:has(.cp-ed) { max-width: 96rem; }
 <script type="application/json" id="de-data">{{ draft|tojson }}</script>
 <script src="/static/user_compose.js" defer></script>
 {% endif %}
+<script src="/static/user_wait.js" defer></script>
 
 {# 판정 목록 — 픽스처 결과(`result.screening`)와 방금 받은 판정(`screening` · 얹지 못한 문장이 있을 때)을 같은 모양으로 그린다 #}
 {% set scr = screening if screening else (result.screening if result else []) %}

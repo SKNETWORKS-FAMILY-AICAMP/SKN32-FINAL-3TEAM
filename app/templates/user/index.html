@@ -59,9 +59,11 @@
 {% endif %}
 
 <div class="hm-stats">
-  <div class="hm-stat"><div class="hm-k">이번 달 검수</div><div class="hm-v">{{ (total_month ~ "건") if total_month is not none else "—" }}</div></div>
-  <div class="hm-stat"><div class="hm-k">위법 소지 발견</div><div class="hm-v">{{ (violation_count ~ "건") if violation_count is not none else "—" }}</div></div>
-  <div class="hm-stat"><div class="hm-k">재검수 통과율</div><div class="hm-v">{{ (pass_rate ~ "%") if pass_rate is not none else "—" }}</div></div>
+  {# 🔄 2026-10-15 (ksr · 점검 11) — 이름을 계산에 맞췄다. 수는 **문장** 단위(`judgment` 한 줄 = 문장 하나)이고,
+     통과 비율은 재검수와 상관없이 「이번 달 검수한 문장 중 통과(확정 ∧ R0)」다(`user.py` `user_home`) #}
+  <div class="hm-stat"><div class="hm-k">이번 달 검수한 문장</div><div class="hm-v">{{ (total_month ~ "건") if total_month is not none else "—" }}</div></div>
+  <div class="hm-stat"><div class="hm-k">위법 소지 발견 (확정)</div><div class="hm-v">{{ (violation_count ~ "건") if violation_count is not none else "—" }}</div></div>
+  <div class="hm-stat"><div class="hm-k">통과 비율</div><div class="hm-v">{{ (pass_rate ~ "%") if pass_rate is not none else "—" }}</div></div>
 </div>
 
 <div class="hm-cards">

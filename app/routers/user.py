@@ -32,7 +32,7 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -161,7 +161,9 @@ def _render(
     # 🆕 2026-09-29 — 상단바는 **로그인한 사람의 실제 정보**로 그린다(이름 · 소속 · 이니셜). 테마는 쿠키 하나.
     ctx.setdefault("me", _nav_user(request))
     ctx.setdefault("theme", _theme(request))
-    ctx.setdefault("here", request.url.path)
+    # 🔄 2026-10-15 (ksr · 점검 01) — 테마 · 알림 폼이 돌아갈 곳. 폼 제출로만 열리는 결과 경로(`/u/judge` 등)로 돌아가면
+    #    405 원문(`{"detail":"Method Not Allowed"}`)이 떠서 그 입력 화면으로 돌린다(`_POST_ONLY`)
+    ctx.setdefault("here", _POST_ONLY.get(request.url.path, request.url.path))
     ctx.setdefault("today", _today_label())
     path = _screen_path(request.url.path)
     section = _SCREEN_SECTION.get(path)
@@ -171,7 +173,21 @@ def _render(
     ctx.setdefault(
         "active_sub", active_sub if active_sub is not None else _SECTION_ACTIVE_SUB.get(path)
     )
-    return templates.TemplateResponse(request, template, ctx)
+    resp = templates.TemplateResponse(request, template, ctx)
+    if ctx.get("me"):
+        # 🆕 2026-10-15 (ksr · 점검 07) — 로그인한 사람의 화면은 브라우저에 남기지 않는다. 남기면 로그아웃 뒤
+        #    「뒤로」로 이름 · 이력이 든 화면이 다시 보인다(공용 PC)
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+#: 🆕 2026-10-15 (ksr · 점검 01) — **폼 제출로만 열리는 결과 경로 → 그 입력 화면.** 주소창 새로 고침 · 테마 · 알림 폼이
+#:    이 경로를 그냥 열면(GET) 405 원문이 떴다. 그 입력 화면으로 돌려보낸다(아래 `user_post_only_get`).
+_POST_ONLY: dict[str, str] = {
+    "/u/judge": "/u/review",
+    "/u/review/rewrite": "/u/review",
+    "/u/compose/judge": "/u/compose",
+}
 
 
 #: 테마 쿠키 — 🚨 값은 둘뿐이다. 없으면 운영체제 설정(`prefers-color-scheme`)을 따른다.
@@ -397,7 +413,7 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
 
     🔄 종전에는 여기가 문구 검수였다 — 검수는 `/u/review` 로 옮겼다 (2026-09-16, ksr 안).
     🔄 2026-10-13 — 검수가 판정을 적는다(`app.judgment_store`). 적힌 것이 없으면 0/— 다 (D-147, 가짜 수치를 안 그린다).
-    ★ "위법 소지 발견"·"재검수 통과율"은 `app.contracts.PASS_RISK_MAX`
+    ★ "위법 소지 발견"·"통과 비율"(🔄 10-15 — 종전 이름 「재검수 통과율」은 계산과 달랐다)은 `app.contracts.PASS_RISK_MAX`
       (D-125 통과 조건의 위험도 문턱 = 🔄 **R0** · D-273)을 그대로 쓴다 — 문턱을 여기서 따로 두지 않는다.
     """
     if not reachable(session):
@@ -2129,22 +2145,19 @@ def cs_detail(request: Request, ticket_id: str, session: Session = Depends(get_s
 _MYPAGE_FIELDS = {
     "name": 40,
     "org": 60,
-    "age": 16,
-    "sex": 8,
-    "channel": 16,
-    "category": 16,
 }
 _MYPAGE_BLANK = dict.fromkeys(_MYPAGE_FIELDS, "")
 
 
 #: 마이페이지 가로 탭 (key, label). 프로토타입의 포트폴리오 · 구성원 관리 · 결제 탭은
 #: 매칭/과금 범위라 뺐다. ⛔ 탭 전환을 스크립트로 하지 않는다 (CSP) — `?tab=` 으로 고른다.
+#: 🔄 2026-10-15 (ksr · 점검 03) — 「광고 기본값」 탭을 지웠다. 담을 표(`user_ad_preference` · 팀장 승인 요청 #7)가 없어
+#:    「저장」을 눌러도 저장되지 않았고, 사용방법은 저장하면 자동으로 채워진다고 안내했다(권소라 판정 · 삭제)
 _MYPAGE_TABS: tuple[tuple[str, str], ...] = (
     ("profile", "프로필"),
-    ("defaults", "광고 기본값"),
     ("account", "계정"),
 )
-_MYPAGE_SECTION_TAB = {"profile": "profile", "adprefs": "defaults", "consent": "account"}
+_MYPAGE_SECTION_TAB = {"profile": "profile", "consent": "account"}
 #: 계정을 끌 때 정확히 이렇게 입력해야 한다 — 실수로 끄는 것을 막는 확인 문구다.
 _MYPAGE_DISABLE_CONFIRM = "끄기"
 
@@ -2171,12 +2184,11 @@ def mypage(
     tab: str = "profile",
     session: Session = Depends(get_session),  # noqa: B008
 ) -> HTMLResponse:
-    """마이페이지 — 프로필 · 광고 기본값 · 계정 탭 (ksr 2026-09-13 · lse 2026-09-29 저장 배선).
+    """마이페이지 — 프로필 · 계정 탭 (ksr 2026-09-13 · lse 2026-09-29 저장 배선).
 
     🔴 로그인해야 들어온다 — 채울 계정이 없으면 프로필도 없다 (cs_detail 과 같은 문).
-    ⛔ 광고 기본값(나이·성별·매체·물품)은 아직 저장하지 않는다 — `user_ad_preference` 표가
-       없다 (팀장 승인 요청 #7, 2026-09-29). 프로필 · 동의 · 계정 끄기는 `user_account`
-       에 이미 있는 칸(D-96 · disabled_at)이라 바로 저장한다.
+    🔄 2026-10-15 — 「광고 기본값」 탭은 지웠다(담을 표가 없음 · `_MYPAGE_TABS`). 프로필 · 동의 · 계정 끄기는
+       `user_account` 에 이미 있는 칸(D-96 · disabled_at)이라 바로 저장한다.
     """
     user = current_user(request, session)
     if user is None:
@@ -2190,9 +2202,8 @@ def mypage(
 async def mypage_save(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
     """마이페이지 저장 — 섹션마다 갈린다 (2026-09-29).
 
-    🔴 `profile` · `consent` 는 `user_account` 에 실제로 쓴다. `adprefs`(광고 기본값)는
-       아직 **저장하지 않는다** — 담을 표가 없다(팀장 승인 요청 #7). 가짜 성공을 그리지
-       않는다(D-147) — 그 섹션만 「아직 저장되지 않았어요」로 되돌린다.
+    🔴 `profile` · `consent` 는 `user_account` 에 실제로 쓴다. 그 밖의 섹션(지운 `adprefs` 등)은 아무것도 쓰지 않고
+       그 탭을 다시 그린다 — 가짜 성공을 그리지 않는다(D-147).
     """
     user = current_user(request, session)
     if user is None:
@@ -2248,15 +2259,8 @@ async def mypage_save(request: Request, session: Session = Depends(get_session))
         auth.audit("user_consent_save", _actor(user.id), ok=True)
         return _render_form(request, "user/mypage.html", _mypage_ctx(user, tab, saved=True))
 
-    # adprefs — 나머지는 아직 담을 표가 없다 (승인 요청 #7)
-    picked = {**_mypage_picked(user)}
-    for k in ("age", "sex", "channel", "category"):
-        picked[k] = _one(form, k, _MYPAGE_FIELDS[k])
-    return _render_form(
-        request,
-        "user/mypage.html",
-        {**_mypage_ctx(user, tab), "picked": picked, "saved_attempt": True},
-    )
+    # 🔄 2026-10-15 — 「광고 기본값」(adprefs)은 지웠다. 모르는 섹션은 저장하지 않고 그 탭을 다시 그린다
+    return _render_form(request, "user/mypage.html", _mypage_ctx(user, tab))
 
 
 @router.post("/mypage/disable", response_class=HTMLResponse)
@@ -2493,17 +2497,39 @@ def user_logout(request: Request) -> RedirectResponse:
 _BACK_PATH = re.compile(r"^/u(/[A-Za-z0-9_\-/]*)?$")
 
 
+@router.get("/judge", include_in_schema=False)
+@router.get("/review/rewrite", include_in_schema=False)
+@router.get("/compose/judge", include_in_schema=False)
+def user_post_only_get(request: Request) -> RedirectResponse:
+    """폼 제출로만 열리는 결과 주소를 그냥 열면 그 입력 화면으로 (🆕 2026-10-15 · ksr · 점검 01).
+
+    ⛔ 종전에는 405 원문(`{"detail":"Method Not Allowed"}`)이 떴다 — 결과 화면에서 다크 모드를 누르거나 주소창에서 다시 열 때.
+    """
+    return RedirectResponse(_POST_ONLY[request.url.path], status_code=303)
+
+
+#: 🆕 2026-10-15 (ksr · 점검 01) — 테마 버튼을 스크립트(`user_theme.js`)가 보낼 때 붙이는 머리글. 이때는 돌아가지 않고 204 —
+#:    화면을 다시 그리지 않아 검수 결과 · 광고 편집이 그대로 남는다. 스크립트가 없으면 종전대로 폼 제출 + 되돌아가기다
+_THEME_FETCH_HEADER = "x-copylane-theme"
+
+
 @router.post("/theme")
-async def user_theme(request: Request) -> RedirectResponse:
-    """다크모드 전환 — 상단바 달 버튼 (프로토타입 v7.2). ⛔ 스크립트 없이 폼 제출로 쿠키만 바꾼다(CSP).
+async def user_theme(request: Request) -> Response:
+    """다크모드 전환 — 상단바 달 버튼 (프로토타입 v7.2). 쿠키만 바꾼다.
 
     🚨 CSRF 토큰을 받지 않는다 — 바꾸는 것이 **화면 색 하나**뿐이고 계정 · 데이터를 건드리지 않는다.
        교차 사이트 POST 에는 `SameSite=Lax` 가 우리 쿠키를 싣지 않는다.
+    🔄 2026-10-15 — 스크립트가 보낸 요청(`_THEME_FETCH_HEADER`)은 204 로 답한다. 화면 색은 스크립트가 바로 바꾼다.
     """
     form = await _form(request)
     value = form.get("theme", [""])[0]
     back = form.get("next", ["/u/"])[0]
-    resp = RedirectResponse(back if _BACK_PATH.match(back) else "/u/", status_code=303)
+    back = _POST_ONLY.get(back, back)
+    resp: Response
+    if request.headers.get(_THEME_FETCH_HEADER) == "1":
+        resp = Response(status_code=204)
+    else:
+        resp = RedirectResponse(back if _BACK_PATH.match(back) else "/u/", status_code=303)
     if value in _THEMES:
         resp.set_cookie(_THEME_COOKIE, value, max_age=365 * 24 * 3600, **_cookie_kwargs(request))  # type: ignore[arg-type]
     return resp

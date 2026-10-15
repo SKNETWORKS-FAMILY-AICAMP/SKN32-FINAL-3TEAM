@@ -146,6 +146,13 @@
 .rv-fix-go:hover { background: var(--u-signal-ink); }
 .rv-fix-go small { font-weight: 400; opacity: .85; font-size: .72rem; }
 .rv-fix-go:disabled { opacity: .55; cursor: wait; }
+/* 🆕 2026-10-15 (ksr · 점검 0) — 검수 중 표시. 카피 생성(`.gn-wait`)과 같은 점 넷 */
+.rv-wait { margin: .6rem 0 0; font-size: .86rem; font-weight: 600; color: var(--u-signal-ink); }
+.rv-wait i { font-style: normal; display: inline-block; margin-right: .18em; opacity: .2; animation: rv-wait 1.6s infinite; }
+.rv-wait i:nth-child(2) { animation-delay: .2s; } .rv-wait i:nth-child(3) { animation-delay: .4s; } .rv-wait i:nth-child(4) { animation-delay: .6s; }
+@keyframes rv-wait { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .rv-wait i { animation: none; opacity: .7; } }
+.rv-copy-go:disabled, .rv-all:disabled { opacity: .6; cursor: wait; }
 /* 🆕 2026-10-13 (lse) — 고쳐 쓰는 중 표시: 빛나는 별 · 차례로 바뀌는 단계 문구(빛이 지나가는 글자) · 흐르는 자리표시 줄 */
 .rv-think { display: flex; gap: .75rem; align-items: flex-start; margin: .7rem 0 0; padding: .8rem .95rem;
             border: 1px solid var(--u-signal-soft); border-radius: .9rem; background: var(--u-surface); }
@@ -261,14 +268,15 @@
 {%- endfor -%}
 {%- endmacro %}
 .rv-card-live:has({{ rv_flag_sel() }}) .rv-live { background: var(--u-bad-bg); color: var(--u-bad-ink); }
-.rv-card-live:has({{ rv_flag_sel() }}) .rv-live::before { content: "지적 " counter(rvflag) "건"; }
+.rv-card-live:has({{ rv_flag_sel() }}) .rv-live::before { content: "확인할 문장 " counter(rvflag) "건"; }
 .rv-q { border: 1px solid var(--u-signal); background: var(--u-signal-soft); border-radius: .75rem;
         padding: .8rem .9rem; margin-bottom: .6rem; }
 .rv-q-title { margin: 0 0 .15rem; font-size: .9rem; font-weight: 600; display: flex; justify-content: space-between; gap: .5rem; }
 .rv-redo-no { font-size: .7rem; font-weight: 400; color: var(--u-clay); white-space: nowrap; }
 .rv-redo-top { float: right; }
 .rv-one .rv-redo-top { float: none; position: absolute; top: 1.4rem; right: 8.3rem; font-size: .75rem; }
-.rv-one:has({{ rv_flag_sel() }}) .rv-redo-top { right: 6.2rem; }
+/* 🔄 2026-10-15 — 「지적 N건」 → 「확인할 문장 N건」으로 길어져 재검수 표시를 더 왼쪽으로 */
+.rv-one:has({{ rv_flag_sel() }}) .rv-redo-top { right: 9.4rem; }
 /* 상세 사유 확인 — 사유 칩 · 설명을 접어 둔다 */
 .rv-more { margin: .5rem 0 0; }
 .rv-more > summary { cursor: pointer; font-size: .78rem; color: var(--u-signal-ink); }
@@ -777,11 +785,13 @@
 <div class="rv-head">
   <div>
     <h1>문구 검수</h1>
-    <p>문구를 넣고 <b>검수</b>를 누르면 오른쪽에 위험도와 근거가 나와요.</p>
+    {# 🔄 2026-10-15 (ksr · 점검 19) — 모바일은 결과가 아래에 쌓여 「오른쪽」이 틀렸다 #}
+    <p>문구를 넣고 <b>검수</b>를 누르면 위험도와 근거가 나와요.</p>
   </div>
   <div class="rv-actions">
     {# ⬜ 팀 공유 — 팀(기업 회원)이 없다. D-260 ④ 가 `enterprise` 를 만들지 않기로 했다 #}
-    <button class="rv-btn" type="button" disabled title="팀(기업 회원) 기능이 없어 공유할 곳이 없어요 (D-260)">팀에 공유</button>
+    {# 🔄 2026-10-15 (ksr · 점검 12) — 이유가 마우스를 올려야만 보였다(모바일은 볼 방법 없음) — 글자로 적는다 #}
+    <button class="rv-btn" type="button" disabled title="팀(기업 회원) 기능이 아직 없어 공유할 곳이 없어요 (D-260)">팀에 공유 · 준비 중</button>
     <a class="rv-btn" href="/u/review">+ 새로 검수</a>
   </div>
 </div>
@@ -789,7 +799,8 @@
 <div class="rv-grid">
 
   <div>
-    <form class="rv-card" method="post" action="/u/judge">
+    {# 🆕 2026-10-15 (ksr · 점검 0) — 검수 버튼을 누르면 「검수 중…」. 「예시 넣기」 · 「칸 추가」 · 「삭제」는 띄우지 않는다(`user_wait.js` `data-wait-only`) #}
+    <form class="rv-card" method="post" action="/u/judge" data-wait-form data-wait-only>
       <h2>검수할 문구
         <span class="rv-count">{{ copies|length }} / {{ max_copies }}건 · 문구당 최대 {{ max_text_len }}자</span>
       </h2>
@@ -812,16 +823,17 @@
           <textarea id="text-{{ loop.index }}" name="text" rows="4" maxlength="{{ max_text_len }}"
                     placeholder="검수할 광고 문구를 붙여넣으세요.">{{ c }}</textarea>
           <button class="rv-copy-go" type="submit" name="op" value="judge:{{ loop.index }}"
-                  title="이 문구 검수하기">검수</button>
+                  title="이 문구 검수하기" data-wait-go data-wait-label="검수 중…">검수</button>
         </div>
       </div>
       {% endfor %}
       <div class="rv-copy-tools">
         <button class="rv-add" type="submit" name="op" value="add" formnovalidate><b>+ 검수할 문구 추가</b> · 최대 {{ max_copies }}개를 한 번에 검수할 수 있어요</button>
         {% if copies|length > 1 %}
-        <button class="rv-all" type="submit" name="op" value="all">전체 검수</button>
+        <button class="rv-all" type="submit" name="op" value="all" data-wait-go data-wait-label="검수 중…">전체 검수</button>
         {% endif %}
       </div>
+      <p class="rv-wait" data-wait hidden role="status" aria-live="polite"><i>·</i><i>·</i><i>·</i><i>·</i> 검수 중이에요 — 문장마다 조문을 찾고 있어요</p>
 
       {# ⬜ 파일 업로드는 `multipart/form-data` → `python-multipart` 새 의존성(uv.lock 은 팀장 · §5) ·
             이미지 판정은 향후 과제(D-104). 그래서 비활성으로 두고, 접어 둔다 #}
@@ -879,11 +891,13 @@
        CSS 가 센다 — 보이는 지적 문장(`.rv-flag`)을 카운터로 세고, 하나도 없으면 「특이사항 없음」이다 #}
     {% set live = results|selectattr("result.branches")|list|length > 0 %}
     {# 분기가 있는 문구가 하나뿐이면 재검수 회차를 카드 머리(지적 건수 왼쪽)로 올린다 — 여럿이면 문구 줄 오른쪽에 둔다 #}
-    <div class="rv-card{% if live %} rv-card-live{% endif %}{% if results|selectattr("result.branches")|list|length == 1 %} rv-one{% endif %}">
+    {# 🆕 2026-10-15 (ksr · 점검 19) — 좁은 화면(한 줄로 쌓임)에서는 검수 뒤 결과 카드로 내려 준다(`user_wait.js` `data-scroll-narrow`) #}
+    <div class="rv-card{% if live %} rv-card-live{% endif %}{% if results|selectattr("result.branches")|list|length == 1 %} rv-one{% endif %}" data-scroll-narrow="48rem">
       <h2 class="rv-risk-head">위험도
         {% if not live %}
         <span class="rv-summary {{ 's-bad' if flagged else 's-ok' }}">
-          {%- if flagged %}지적 {{ flagged }}건{% else %}특이사항 없음{% endif -%}
+          {#- 🔄 2026-10-15 (ksr · 점검 11) — 「지적」은 확정 위반처럼 읽혀 보류까지 세는 이 수와 맞지 않았다 #}
+          {%- if flagged %}확인할 문장 {{ flagged }}건{% else %}특이사항 없음{% endif -%}
         </span>
         {% endif %}
       </h2>
@@ -986,7 +1000,7 @@
     <div class="rv-card">
       <h2 class="rv-risk-head">위험도 <span class="rv-summary">검수 전</span></h2>
       <p class="rv-pending" style="text-align:center">
-        왼쪽 문구칸 옆의 <b>검수 버튼</b>을 눌러주세요.<br>
+        문구칸 옆의 <b>검수 버튼</b>을 눌러 주세요.<br>
         <span class="rv-note">문장마다 결과와 근거 조문이 여기에 나와요.</span>
       </p>
     </div>
