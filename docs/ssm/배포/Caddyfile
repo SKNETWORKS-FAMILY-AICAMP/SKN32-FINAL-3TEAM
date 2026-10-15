@@ -1,4 +1,4 @@
-# Caddyfile — CopyLane 배포용 (초안 2026-10-12 · 🔄 2026-10-14 g4dn.xlarge · 소성민)
+# Caddyfile — CopyLane 배포용 (초안 2026-10-12 · 🔄 2026-10-14 g4dn.xlarge · 🔄 2026-10-15 닫는 경로 · 본문 상한 · 소성민)
 #
 #   놓는 자리  /etc/caddy/Caddyfile   (서버에 apt 로 설치한 Caddy · 컨테이너 아님)
 #   적용       sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
@@ -18,8 +18,16 @@ copylane.example.com {
     reverse_proxy 127.0.0.1:8000
 
     # cloud 에디션에서는 앱이 /admin 과 /login 을 붙이지 않는다(404). 여기서 한 번 더 막는다
-    @closed path /admin /admin/* /login
+    # 🔄 2026-10-15 — 무인증 API 문서 · 고정 응답도 닫는다 (배포점검 10-14 #1 · 병렬작업 계약 ⑮)
+    #    ⏳ `/docs` 공개 여부는 팀장 판정 대기다. 열기로 하면 아래 줄에서 /docs /docs/* /redoc /openapi.json 을 지운다
+    #    ⚠️ base.html 상단의 「API」 링크(/docs)는 이 서버에서 404 가 된다 — 알고 닫는 것이다
+    @closed path /admin /admin/* /login /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/*
     respond @closed 404
+
+    # 🔄 2026-10-15 — 요청 본문 상한. 문구는 최대 2,000자(settings.max_text_len)이고 파일 올리기는 없다
+    request_body {
+        max_size 1MB
+    }
 
     header {
         Strict-Transport-Security "max-age=31536000"

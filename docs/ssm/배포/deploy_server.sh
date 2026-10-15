@@ -22,7 +22,12 @@
 #   bash deploy_server.sh sllm          # 11. sLLM 서버 실행 (127.0.0.1:8765 · tmux 창 1)
 #   bash deploy_server.sh serve         # 12. 앱 실행 (127.0.0.1:8000 · tmux 창 2 · 앞에 Caddy)
 #   bash deploy_server.sh check         #     실행 중 상태 한 번에 보기 (GPU · 두 서버 · 포트)
+#   bash deploy_server.sh services      # 13. 상시 가동 — sLLM · 앱을 systemd 서비스로 (재부팅해도 다시 뜬다)
+#   bash deploy_server.sh services-off  #     서비스를 내리고 해제 (다시 tmux 로 띄울 때)
+#   bash deploy_server.sh backup        #     DB 덤프 하나 (컨테이너 DB · ~/backup · 7개만 남긴다)
 #   bash deploy_server.sh all           #  3~10 을 이어서 (gpu · sllm · serve 는 따로)
+#
+#   🔄 2026-10-15 — DB 비밀번호 자동 생성(env) · 기본 비밀번호면 적재 거부(data) · services · backup 을 더했다
 #
 # 🚨 이 파일에는 비밀번호 · 키 · DB 접속 문자열을 적지 않는다. 그 값은 서버의 .env 에만 둔다.
 # 🚨 g4dn 의 로컬 NVMe(125GB · /dev/nvme1n1 등)는 **인스턴스를 중지하면 지워진다**. 모델 · DB 를 거기 두지 않는다.
@@ -143,10 +148,26 @@ env_file() {
     set_env COPYLANE_SESSION_SECRET "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
     ok "COPYLANE_SESSION_SECRET 을 만들어 넣었다"
   fi
+  # 🔄 2026-10-15 — 컨테이너 DB 비밀번호. compose 는 같은 폴더의 .env 에서 POSTGRES_PASSWORD 를 읽는다.
+  #    🚨 첫 db-up 전에만 뜻이 있다 — DB 폴더(볼륨)가 한 번 만들어지면 비밀번호는 그때 값으로 굳는다.
+  #    16진수만 쓰므로 URL 에 넣어도 바꿀 글자가 없다.
+  if [ "$DB_MODE" = container ] && [ -z "$(get_env POSTGRES_PASSWORD)" ]; then
+    local pw; pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+    set_env POSTGRES_PASSWORD "$pw"
+    set_env DATABASE_URL "postgresql+psycopg://copylane:${pw}@localhost:5432/copylane"
+    ok "DB 비밀번호를 만들어 POSTGRES_PASSWORD · DATABASE_URL 에 넣었다 (화면에 찍지 않음)"
+    if docker volume ls -q 2>/dev/null | grep -q "pgdata"; then
+      warn "이미 DB 볼륨이 있다 — 옛 비밀번호로 만들어졌으면 접속이 거부된다. 적재 전이면: docker compose down -v 뒤 data 단계"
+    fi
+  fi
   ok "COPYLANE_MODEL_DIR=$(get_env COPYLANE_MODEL_DIR)"
   ok "COPYLANE_SLLM_URL=$(get_env COPYLANE_SLLM_URL)"
   warn "sLLM 을 싣지 않기로 판정되면 COPYLANE_SLLM_URL=off 로 바꾼다"
-  warn "직접 채울 것 — DATABASE_URL (DB_MODE=$DB_MODE) · DATA_STORE (공유 저장소 사본 폴더 경로)"
+  if [ "$DB_MODE" = container ]; then
+    warn "직접 채울 것 — DATA_STORE=$HOME/CopyLane_store (파생물을 올린 폴더 · 절차서 §4-1)"
+  else
+    warn "직접 채울 것 — DATABASE_URL (RDS · 끝에 ?sslmode=require · 절차서 §4-3) · DATA_STORE"
+  fi
   warn "편집: nano $APP_DIR/.env   🚨 값을 셸 인자나 대화창에 쓰지 않는다"
 }
 
@@ -171,6 +192,12 @@ data() {
   say "7. DB · 데이터"
   [ -n "$(get_env DATABASE_URL)" ] || die ".env 의 DATABASE_URL 이 비어 있다"
   [ -n "$(get_env DATA_STORE)" ]   || die ".env 의 DATA_STORE 가 비어 있다"
+  # 🔄 2026-10-15 — .env.example 의 개발용 기본 접속(copylane:copylane)으로는 배포 DB 를 만들지 않는다
+  case "$(get_env DATABASE_URL)" in
+    *copylane:copylane@*) die "DATABASE_URL 이 개발용 기본 비밀번호다 — POSTGRES_PASSWORD 줄을 지우고 env 단계를 다시" ;;
+  esac
+  [ -d "$(get_env DATA_STORE)/copylane-derived/objects" ] \
+    || die "DATA_STORE 아래 copylane-derived/objects 가 없다 — pack_store.py 로 만든 묶음을 그 구조대로 올린다 (절차서 §4-1)"
   if [ "$DB_MODE" = container ]; then
     L db-up
     docker compose -f "$APP_DIR/docker-compose.yml" ps | grep -q "0.0.0.0:5432" && die "5432 가 0.0.0.0 에 열려 있다" || ok "5432 는 127.0.0.1 에만"
@@ -267,6 +294,89 @@ check() {
   done
 }
 
+# ── 13. 상시 가동 — systemd 서비스 (🔄 2026-10-15) ──────────────────────────
+# tmux 로 띄운 서버는 재부팅 · 접속 끊김 사고에 같이 죽는다. 10/24 ~ 26 상시 가동 구간은 서비스로 둔다.
+# 🚨 tmux 의 sllm · serve 창을 먼저 끈다(Ctrl-C) — 포트가 겹치면 서비스가 못 뜬다.
+services() {
+  say "13. 서비스 등록 — copylane-sllm · copylane-app"
+  local uvbin user; uvbin="$(command -v uv)" || die "uv 없음"; user="$(id -un)"
+  if ss -ltn | awk '{print $4}' | grep -qE ':(8000|8765)$' && ! systemctl is-active -q copylane-app copylane-sllm 2>/dev/null; then
+    die "8000 이나 8765 를 이미 누가 쓰고 있다 — tmux 의 serve · sllm 창을 Ctrl-C 로 끈 뒤 다시"
+  fi
+  local with_sllm=1
+  [ "$(get_env COPYLANE_SLLM_URL)" = off ] && { with_sllm=0; warn "COPYLANE_SLLM_URL=off — sLLM 서비스는 만들지 않는다"; }
+
+  if [ "$with_sllm" = 1 ]; then
+    [ -x "$SLLM_VENV/bin/python" ] || die "9번(sllm-env)이 먼저다"
+    sudo tee /etc/systemd/system/copylane-sllm.service >/dev/null <<UNIT
+[Unit]
+Description=CopyLane sLLM rewrite server (127.0.0.1:$SLLM_PORT)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=$user
+WorkingDirectory=$APP_DIR
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+ExecStart=$SLLM_VENV/bin/python docs/lse/sllm_service.py --serve --port $SLLM_PORT
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  fi
+
+  sudo tee /etc/systemd/system/copylane-app.service >/dev/null <<UNIT
+[Unit]
+Description=CopyLane app (uvicorn 127.0.0.1:8000)
+After=network-online.target docker.service$( [ "$with_sllm" = 1 ] && echo " copylane-sllm.service")
+Wants=network-online.target
+
+[Service]
+User=$user
+WorkingDirectory=$APP_DIR
+Environment=HF_HUB_OFFLINE=1
+Environment=UV_FROZEN=1
+# launcher 가 안에서 다시 uv 를 부른다 — systemd 의 기본 PATH 에는 ~/.local/bin 이 없다
+Environment=PATH=$(dirname "$uvbin"):/usr/local/bin:/usr/bin:/bin
+ExecStart=$uvbin run python launcher.py serve --no-reload
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  sudo systemctl daemon-reload
+  [ "$with_sllm" = 1 ] && sudo systemctl enable --now copylane-sllm
+  sudo systemctl enable --now copylane-app
+  ok "등록 끝 — 상태: systemctl status copylane-app · 로그: journalctl -u copylane-app -f"
+  warn "sLLM 은 약 30초 뒤에 응답한다 — 그 뒤 bash deploy_server.sh check"
+}
+
+services_off() {
+  say "서비스 내리기 · 해제"
+  for u in copylane-app copylane-sllm; do
+    systemctl list-unit-files "$u.service" >/dev/null 2>&1 && sudo systemctl disable --now "$u" 2>/dev/null && ok "$u 내림" || true
+  done
+  warn "다시 tmux 로 띄울 때는 창 1 sllm · 창 2 serve"
+}
+
+# ── DB 백업 (🔄 2026-10-15) — 컨테이너 DB 만. RDS 는 자동 백업이 있다 ──────────
+backup() {
+  say "DB 백업"
+  [ "$DB_MODE" = container ] || { warn "DB_MODE=$DB_MODE — RDS 는 콘솔의 자동 백업 · 스냅샷을 쓴다"; return; }
+  mkdir -p "$HOME/backup" && chmod 700 "$HOME/backup"
+  local f; f="$HOME/backup/copylane_$(date +%Y%m%d_%H%M).sql.gz"
+  docker exec copylane-postgres pg_dump -U copylane copylane | gzip > "$f"
+  [ -s "$f" ] && ok "$f ($(du -h "$f" | cut -f1))" || die "덤프가 비었다 — $f"
+  ls -1t "$HOME/backup"/copylane_*.sql.gz | tail -n +8 | xargs -r rm --
+  warn "주 1회는 MobaXterm SFTP 로 내 PC 에 내려받는다 — 서버 안에만 있는 백업은 백업이 아니다"
+  warn "🚨 덤프에는 가입 계정이 들어 있다 — 저장소 · 메신저에 올리지 않는다"
+}
+
 case "${1:-}" in
   preflight)  preflight ;;
   gpu)        gpu ;;
@@ -281,6 +391,9 @@ case "${1:-}" in
   sllm)       sllm ;;
   serve)      serve ;;
   check)      check ;;
+  services)   services ;;
+  services-off) services_off ;;
+  backup)     backup ;;
   all)        preflight; fetch; env_file; install; model; data; verify; sllm_env; sllm_model ;;
   *) sed -n '2,30p' "$0"; exit 1 ;;
 esac
