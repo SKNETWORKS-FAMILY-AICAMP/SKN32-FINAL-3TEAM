@@ -13,10 +13,10 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16_+_pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![tests](https://img.shields.io/badge/tests-2650_(gate_1673)-0F7B4F?style=flat-square)
-![decisions](https://img.shields.io/badge/설계결정-D--343-2B5BD7?style=flat-square)
+![tests](https://img.shields.io/badge/tests-2666_(gate_1705)-0F7B4F?style=flat-square)
+![decisions](https://img.shields.io/badge/설계결정-D--345-2B5BD7?style=flat-square)
 
-**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 343건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
+**[📌 중간 발표 자료](발표자료/중간발표_2026-09-15/)** · [설계 결정 345건](docs/00_설계결정기록.md) · [사실 원장](docs/00_사실원장.md) · [고지](DISCLAIMER.md)
 
 </div>
 
@@ -252,12 +252,12 @@ split → classify → retrieve → match_dict → encode
 | 리랭킹 (bge-reranker-v2-m3) | 🔴 **미구현** | 하이브리드까지 섰고 3층은 아직 |
 | 판정 인코더 파인튜닝 | 🟢 **채택 · 다음 판 대기** | `experiments/` 틀 밖에서 진행 — 작업 자료와 보고서는 `docs/psj/` · `docs/ssm/`. 앱의 채택 판은 카드 17(D-331 · 잠금 D-333). 다음 판 D4-10(품목 입력)의 배선은 코드에 들어갔고(D-336 · 가짜 인코더 게이트 · 실모델 미실행) 잠금 채택 조건(D-339 결정 1 ② ③) 측정을 기다린다. 인코더 단독 봉인 회차는 한 번 열렸다(D4-T · 박수진 · 보고 전용 · D-175) |
 | sLLM 파인튜닝 | 🟢 **채택** | `docs/lse/` — Qwen3 4B LoRA 두 단계 판을 잠금에 올렸다(D-335) |
-| 평가 | 🟡 **부분** | 그래프 평가 도구 `scripts/eval_graph.py` — 유형별 탐지 · 인코더 후보 · 조합 판정 칸 표(D-340) · 분기 인코더 지표 · 거름 켬/끔(`--no-enc-filter`) · 판정기 B `scripts/eval_rule.py`. 채점은 합격선 없는 보고(D-321 · D-322 결정 A · D-324 결정 5). 판정 그래프 봉인 회차는 날짜 하나 · 그날의 커밋 하나 · 잠금 채택 판으로 한 번(D-339 결정 7 · 날짜 미정 · 제안 10/22 ~ 23) — 도구가 `--dev` · `--sealed` 중 하나를 요구하고, `--sealed` 는 채택 판 · 전 행 · 이 기기에서 그 날짜 첫 회차만 연다(2026-10-15) |
+| 평가 | 🟡 **부분** | 그래프 평가 도구 `scripts/eval_graph.py` — 유형별 탐지 · 인코더 후보 · 조합 판정 칸 표(D-340) · 분기 인코더 지표 · 거름 켬/끔(`--no-enc-filter`) · 판정기 B `scripts/eval_rule.py`(`--sealed` 를 붙여야 돌고 봉인 기록을 남긴다 · D-344 ⑧) · `launcher.py eval` = 그래프 dev 평가(봉인은 런처에서 열지 않는다 · D-344 ⑩). 채점은 합격선 없는 보고(D-321 · D-322 결정 A · D-324 결정 5). 판정 그래프 봉인 회차는 날짜 하나 · 그날의 커밋 하나 · 잠금 채택 판으로 한 번(D-339 결정 7 · 날짜 미정 · 제안 10/22 ~ 23) — 도구가 `--dev` · `--sealed` 중 하나를 요구하고, `--sealed` 는 채택 판 · 전 행 · 이 기기에서 그 날짜 첫 회차만 연다(2026-10-15) |
 
 ```
-게이트 테스트   pytest -m gate   1,673건  ← 이 커밋에서 수집되는 수(2026-10-15) · 클라우드 클론 1,645 passed · 28 skipped(데이터 · DB 없음) · 클론 A 의 수는 launcher.py check 로
-전체 테스트     pytest           2,650건  ← 이 커밋에서 수집되는 수(2026-10-15) · 데이터 · DB 없는 기기는 일부가 건너뛴다
-설계 결정       D-01 ~ D-343     빠진 번호 0
+게이트 테스트   pytest -m gate   1,705건  ← 이 커밋에서 수집되는 수(2026-10-15) · 클라우드 클론 1,677 passed · 28 skipped(데이터 · DB 없음) · 클론 A 의 수는 launcher.py check 로
+전체 테스트     pytest           2,666건  ← 이 커밋에서 수집되는 수(2026-10-15) · 데이터 · DB 없는 기기는 일부가 건너뛴다
+설계 결정       D-01 ~ D-345     빠진 번호 0
 ```
 
 ---
@@ -377,7 +377,7 @@ uv run python launcher.py serve      # FastAPI
 | 문서 | 무엇인가 |
 |---|---|
 | [`docs/00_사실원장.md`](docs/00_사실원장.md) | ★ **수치 · 일정 · 파라미터의 단일 출처.** 전부 실측이고, 어느 기기에서 쟀는지까지 적습니다 |
-| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 343건**(D-01~D-343 · 빠진 번호 0). 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
+| [`docs/00_설계결정기록.md`](docs/00_설계결정기록.md) | ★ **결정 345건**(D-01~D-345 · 빠진 번호 0). 맥락 · 대안 · 트레이드오프 · 왜 기각했는지 |
 | [`docs/00_거버넌스_집행계약.md`](docs/00_거버넌스_집행계약.md) | 게이트가 무엇을 어떻게 막는지 |
 | [`docs/00_산출물현황.md`](docs/00_산출물현황.md) | 산출물 현황 — 제출본은 여기서 빌드합니다 |
 | [`docs/00_병렬작업_계약.md`](docs/00_병렬작업_계약.md) | 팀원이 나눠 일할 때의 잠금 · 소유 · 계약 |
