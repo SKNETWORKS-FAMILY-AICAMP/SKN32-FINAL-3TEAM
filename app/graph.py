@@ -53,12 +53,12 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import Annotated, Any, TypedDict
 
+from app import claimscope, sanction, sentsplit
 from app import dictmatch as dm
 from app import encoder as enc
 from app import premise as pm
 from app import reasons as rs
 from app import retrieve as rt
-from app import sanction, sentsplit
 from app.contracts import (
     LAW_VERSION_UNKNOWN,
     NOT_REVIEWED_UNNAMED,
@@ -1443,12 +1443,19 @@ def _judge_one(
        확정하지 않는다 · 하한을 걸지 않는다(W5 · D-273 ④ 의 하한은 인코더 뒤 안건) · 근거는 적중의 인용 조문.
        ⛔ 싣지 않으면 강등된 질병 이름(「당뇨에 좋은 차」)이 사전 침묵과 같은 보류가 된다(원장 10-02 ⑤)
     🚨 여기서는 위험도를 적지 않는다 — 하한은 `assess_risk` 가 제재표(`sanction_rule` · W5)에서 읽어 붙인다. 지어내면 계약이 거부한다(D-09 · D-131).
-    🚨 `not_claim` 을 내지 않는다 — 주장 여부 판별은 인코더 몫이다 (D-275).
+    🔄 2026-10-15 (D-348 보충 1) — 주의 · 상담 문구(`app/claimscope.py`)만 `not_claim` 으로 낸다 · 사전 자격 적중이 있으면 내지 않는다.
+       그 밖의 주장 여부 판별은 여전히 없다(D-275 ⚠️ 재검의 나머지).
     """
     if scan is None or not scan.ran:
         return SentenceJudgment(
             sent_id=sid, text=text, verdict=Verdict.unjudged, evidence=retrieved
         )
+    if not scan.hits and claimscope.is_caution(text):
+        # 🆕 2026-10-15 (D-348 보충 1 결정 1 · D-275) — 주의 · 상담 문구는 **판정 대상 아님**(확정 · 위반 없음 · R0 은 `assess_risk`).
+        #    🔴 사전 자격 적중이 하나라도 있으면(법을 가리지 않는다 · `scan.hits`) 쓰지 않는다 — 주장이 섞인 문장을 지우지 않는다.
+        #    자격 없는 적중(`weak` · 「당뇨」 비주장문맥 등)은 막지 않는다 — 그 적중을 주의 문맥에서 끄는 것이 이 규칙의 목적이다.
+        #    근거 · 참고 조문을 싣지 않는다 — 판정할 주장이 없다.
+        return SentenceJudgment(sent_id=sid, text=text, verdict=Verdict.confirmed, not_claim=True)
     if hits:
         types = _typed({t for h in hits for t in _hit_types(h)})
         if not types:
@@ -1589,7 +1596,8 @@ def judge(state: CoreState) -> dict[str, Any]:
             weak_of.get(sid, []),
             texts,
         )
-        if sid in encs:
+        # 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님 문장에는 AI 추정 유형을 싣지 않는다(「주장이 아니다」와 함께 내지 않는다)
+        if sid in encs and not j.not_claim:
             j = j.model_copy(
                 update={
                     "encoder_candidates": _encoder_candidates(
@@ -1797,6 +1805,13 @@ def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN00
                         }
                     )
                 )
+    # 🆕 2026-10-15 (D-348 보충 1 · D-275) — **판정 대상 아님은 품목 · 제재표와 무관하게 R0** 이다(계약 불변식 · 걸린 것이 없다).
+    #    🔴 품목 미확정(기록 판정)에서도 적는다 — 아래 조기 반환을 타면 기록은 위험도가 비고 분기 문장은 R0 이라
+    #       「기록 ≥ 분기」 검증기(`_recorded_is_conservative`)가 응답을 거부한다.
+    seen_out = {s.sent_id for s in out}
+    for s in sents:
+        if s.not_claim and s.risk.final is None and s.sent_id not in seen_out:
+            out.append(_with_risk(s, RiskAssessment(floor=Risk.R0, final=Risk.R0)))
     done = {s.sent_id for s in out}
     todo = [
         s
@@ -1969,8 +1984,9 @@ def _premise_sentences(
                             ),
                         )
                     )
-        if sid in encs:
-            # 분기 문장 — 이 전제 하나로 거른다 (D-323 결정 6). 판정이 끝난 뒤에 붙인다 — 위 판정은 이 칸을 보지 않았다
+        if sid in encs and not j.not_claim:
+            # 분기 문장 — 이 전제 하나로 거른다 (D-323 결정 6). 판정 대상 아님에는 싣지 않는다(D-348 보충 1 · `judge` 와 같다).
+            # 판정이 끝난 뒤에 붙인다 — 위 판정은 이 칸을 보지 않았다
             j = j.model_copy(
                 update={
                     "encoder_candidates": _encoder_candidates(
@@ -2327,6 +2343,10 @@ def route_review(state: ReviewState) -> str:
     if all(is_pass(s) for s in sents):
         # 🆕 2026-10-02 (D-271 ④ · D-277 개정) — 주된 광고법을 안 본 품목은 통과가 없다. 계약(`_uncovered_law_notice`)과 같은 규칙 (D-99)
         category = (state.get("product") or ProductContext()).category
+        if category is None and any(s.not_claim for s in sents):
+            # 🆕 2026-10-15 (D-348 보충 1 · D-319 결정 2) — 품목 미확정에는 맨 위 통과를 내지 않는다. 판정 대상 아님(L0)이 이 그래프에
+            #    처음으로 「확정 ∧ R0」 문장을 내므로 그 길에서 막는다 · 품목을 알면 통과(D-275 · 계약 고정물 16)
+            return "hold"
         return "hold" if category in UNCOVERED_CATEGORIES else "passed"
     return "hold"
 
