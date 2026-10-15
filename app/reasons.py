@@ -267,10 +267,19 @@ COMBO_CELLS = (
     "자격 없는 적중 · 인코더 조용",
     "인코더만",
     "둘 다 조용",
+    #: 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님(L0 · 주의 · 상담 문구). 판정은 「확정 · 위반 없음 · R0」이라 「사전 확정」에 섞이면
+    #:    사전 확정의 정밀도가 떨어진 것처럼 읽힌다 — 칸을 가른다. ⛔ 앞 여섯 칸의 순서는 바꾸지 않는다(게이트가 번호로 읽는다)
+    "판정 대상 아님",
 )
 
 
-def combo_cell(committed: bool, dict_types: Iterable[str], enc_types: Iterable[str]) -> str:
+def combo_cell(
+    committed: bool,
+    dict_types: Iterable[str],
+    enc_types: Iterable[str],
+    *,
+    not_claim: bool = False,
+) -> str:
     """조합 판정 칸 — **규칙은 여기 한 곳**(D-340 결정 1 · D-99). 단위는 부르는 쪽이 정한다.
 
     ★ `committed` — 사전 단독 확정 · `dict_types` — 사전 유형 후보(자격 없는 적중) · `enc_types` — **인코더가 직접 낸** 유형 후보.
@@ -278,6 +287,10 @@ def combo_cell(committed: bool, dict_types: Iterable[str], enc_types: Iterable[s
        (`guessed_types`)는 옮긴 후보를 「유형 있음」으로 센다(D-330 보충 2 결정 ③) — 칸과 표지는 다른 물음이다.
     🚨 평가 도구는 **행 단위**로 넣고(행 안 문장의 합) 화면은 문장 단위다 — dev 749 행 중 한 문장 708(원장 10-14(A) ⑤)이라 갈리는 행은 많아야 41.
     """
+    if not_claim:
+        return COMBO_CELLS[
+            6
+        ]  # 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님만 있는 단위(행 · 문장)
     if committed:
         return COMBO_CELLS[0]
     dq, en = set(dict_types), set(enc_types)

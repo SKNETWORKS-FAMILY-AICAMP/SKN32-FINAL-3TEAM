@@ -142,3 +142,26 @@ def test_판정_대상_아님만_있는_문서는_품목을_모르면_보류_알
     assert route_review(food) == "passed"  # type: ignore[arg-type]
     other = {"sentences": [s], "product": ProductContext(category=Category.일반상품)}
     assert route_review(other) == "hold", "주된 광고법을 안 본 품목은 통과가 없다 (D-314)"  # type: ignore[arg-type]
+
+
+@pytest.mark.gate
+def test_평가_도구는_판정_대상_아님을_사전_확정_칸과_종착재료없음에_섞지_않는다() -> None:
+    """평가 도구의 보고 — 판정 대상 아님만 있는 행은 조합 칸 「판정 대상 아님」 · 보류 사유 「판정대상아님·품목미확정」으로 센다.
+
+    섞으면 사전 확정의 정밀도가 떨어진 것처럼, 종착 문안이 모자란 것처럼 읽힌다 (D-160 · D-348 보충 1).
+    """
+    from app import reasons
+    from app.contracts import Outcome, Risk, RiskAssessment
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    assert reasons.combo_cell(True, (), (), not_claim=True) == "판정 대상 아님"
+    assert reasons.combo_cell(True, (), ()) == reasons.COMBO_CELLS[0], (
+        "기본값은 앞 여섯 칸 규칙 그대로"
+    )
+
+    s = _nc().model_copy(update={"risk": RiskAssessment(floor=Risk.R0, final=Risk.R0)})
+    p = eg.predict({"sentences": [s], "outcome": Outcome.hold})
+    assert p["not_claim"] and p["not_claim_only"]
+    assert eg.combo_cell(p) == "판정 대상 아님"
+    rows = [{"text": s.text, "labels": [], "근거": []}]
+    assert eg.summarize(rows, [p])["hold_reasons"] == {"판정대상아님·품목미확정(D-319 ②)": 1}

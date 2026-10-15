@@ -201,6 +201,10 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         #: 🆕 2026-10-02 (W5) — 확정 위반 문장에 **위험도가 다 붙었나**. 붙었는데 종착이 보류면 하한이 아니라 종착 재료(증명서 · 지시 문안)가 없다
         "risked": all(s.risk.final is not None for s in conf if s.violations),
         "n_sents": len(sents),
+        #: 🆕 2026-10-15 (D-348 보충 1) — **판정 대상 아님 문장이 있나**(L0 · 주의 · 상담 문구). 칸 표에서 「사전 확정」과 가르고,
+        #:    판정 대상 아님만 있는 행이 품목 미확정으로 보류된 까닭(D-319 결정 2)을 「종착 재료 없음」과 가른다
+        "not_claim": any(s.not_claim for s in sents),
+        "not_claim_only": bool(sents) and all(s.not_claim for s in sents),
         #: 🆕 2026-10-06 (D-263 ① · D-319 ①) — **분기 때문에 보류로 기록된 문장에 실린 유형**(가장 보수적인 전제의 위반).
         #:    `candidates`(자격 없는 적중까지 든 보류 후보)와 다르다 — 전제를 몰라 멈춘 문장만이다
         "premise_held": sorted(
@@ -337,7 +341,10 @@ COMBO_CELLS = reasons.COMBO_CELLS
 def combo_cell(p: dict) -> str:
     """행 예측 → 조합 판정 칸. 기록 판정의 칸이다(인코더 후보는 직접 낸 것만 · 옮긴 후보 제외). 규칙은 `reasons.combo_cell` (D-99)."""
     return reasons.combo_cell(
-        bool(p["committed"]), p.get("candidates", ()), p.get("enc_candidates", ())
+        bool(p["committed"]),
+        p.get("candidates", ()),
+        p.get("enc_candidates", ()),
+        not_claim=bool(p.get("not_claim_only")),
     )
 
 
@@ -573,6 +580,9 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     for p in held:
         if p["hold_reasons"]:
             reasons.update(p["hold_reasons"])
+        elif p.get("not_claim_only"):
+            # 🆕 2026-10-15 (D-348 보충 1 · D-319 결정 2) — 판정 대상 아님만 있는 행 · 품목 미확정이라 맨 위 통과를 내지 않았다
+            reasons["판정대상아님·품목미확정(D-319 ②)"] += 1
         elif p["committed"]:
             # 🔄 2026-10-02 (W5) — 위험도가 붙은 뒤의 보류는 다른 까닭이다: 종착의 재료가 없다 (`app/graph.py` 종착).
             #    🔄 2026-10-06 — 증명서 조립기는 섰다(D-320). 여기 남는 것은 사유 문안이 없는 조합과 실증 분기가 없는 지시다
