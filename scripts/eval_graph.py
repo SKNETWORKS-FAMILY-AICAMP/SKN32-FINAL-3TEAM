@@ -1,11 +1,16 @@
 """scripts/eval_graph.py — **그래프 평가 도구 (W1)**. 판정 그래프를 봉인 평가셋(`test_sentence`)에 돌려 잰다.
 
-    uv run python scripts/eval_graph.py                          # 정본 기기 · 실제 DB · 전부
-    uv run python scripts/eval_graph.py --limit 200              # 앞 200행만(실행 시간을 먼저 잰다)
-    uv run python scripts/eval_graph.py --provenance ftc_decisions_body
-    uv run python scripts/eval_graph.py --dev --encoder models/<판>   # 🆕 dev(검증 묶음)로 — 판 · 문턱 · 규칙은 여기서 고른다 (D-175)
-    uv run python scripts/eval_graph.py --stub                   # DB 없이 — 배선만(전부 미판정 · 수는 0 이 정상)
-    uv run python scripts/eval_graph.py --out build/eval/graph.json
+    uv run python scripts/eval_graph.py --dev --encoder models/<판>   # dev(검증 묶음) — 판 · 문턱 · 규칙은 여기서 고른다 (D-175)
+    uv run python scripts/eval_graph.py --dev --limit 200        # 앞 200행만(실행 시간을 먼저 잰다)
+    uv run python scripts/eval_graph.py --dev --provenance ftc_decisions_body
+    uv run python scripts/eval_graph.py --dev --stub             # DB 없이 — 배선만(전부 미판정 · 수는 0 이 정상)
+    uv run python scripts/eval_graph.py --sealed --out build/eval/graph.json   # 봉인 회차 — 날짜 하나에 한 번 (D-339 결정 7)
+
+🔴 2026-10-15 (전수 점검 · D-175 · D-339 결정 7 집행) — **봉인 평가셋은 기본값이 아니다.** 종전에는 인자 없이 돌리면 봉인 행을 읽었고,
+   「날짜 하나에 한 번」은 기록 한 줄만 남기고 막지 않았다(규칙을 고치며 여러 번 돌려도 셈만 늘었다). 이제 `--dev` · `--sealed` 중
+   하나를 반드시 고른다. `--sealed` 는 ① 잠금 **채택** 판 인코더 ② 전 행(`--limit` · `--provenance` · `--no-enc-filter` · `--stub` 불가)
+   ③ 이 기기에서 그 날짜의 첫 회차일 때만 돌고, **돌기 전에** 커밋과 함께 기록을 남긴다(도중에 죽어도 열어 본 것은 센다).
+   🚨 기록은 기기마다(`build/` 미커밋)다 — 두 기기에서 같은 날 한 번씩은 막지 못한다. 정본 기록은 원장이다 (D-178).
 
 ★ **무엇을 답하나** (설계초안 09-23 W1 · D-269 · D-275 · D-301) —
   ① 응답 분포 — 문장 판정 상태 · 종착 · **보류율을 사유별로** (D-269 「게이트 수는 보류율을 사유별로 함께」)
@@ -43,6 +48,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from app import encoder as enc  # noqa: E402
 from app import graph as g  # noqa: E402
+from app import model_lock  # noqa: E402
 from app import premise as pm  # noqa: E402
 from app.contracts import (  # noqa: E402
     Category,
@@ -575,7 +581,8 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
             reasons["미판정"] += 1
         else:
             reasons["근거없음"] += 1
-    out["hold_rate"] = len(held) / n if n else 0.0
+    # 🔴 2026-10-15 — 행이 없으면 0.0 이 아니라 「잰 것 없음」(None) — 0 % 로 찍히면 잰 것처럼 보인다 (D-220 · selective risk 와 같다)
+    out["hold_rate"] = len(held) / n if n else None
     out["hold_reasons"] = dict(reasons)
     # 조건별 대응표 (D-275)
     table: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
@@ -589,6 +596,10 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     sc = [(r, p) for r, p in zip(rows, preds, strict=True) if scored(r)]
     for r, p in sc:
         pt, ph = set(p["types"]) & TYPE_CLASSES, set(p["ho"])
+        #: 🔴 2026-10-15 — 「틀렸나」는 **예측한 유형 전부**로 본다. 유형 표(P/R/F1)는 채점 8 종만 세지만, 그래프가 8 종 밖 유형
+        #:    (기능성화장품_오인 · 추천_보증_뒷광고 · 실증책임_위반)을 확정하면 종전에는 `pt` 가 비어 「맞음」으로 셌다 —
+        #:    같은 행을 `lawful_report` 는 오탐으로 센다(두 수가 한 행에 다른 말). 판정기 B(`eval_rule.report`)도 거르지 않는다 (D-99)
+        p_all = set(p["types"])
         tt, th = truth_types(r, pt), truth_ho(r, ph)
         for t in tt:
             gold_t[t] += 1
@@ -606,7 +617,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
                 fp_h[c] += 1
         if p["committed"]:
             committed += 1
-            wrong = (not tt and pt) or (tt and not (pt & tt))
+            wrong = (not tt and p_all) or (tt and not (p_all & tt))
             errors += bool(wrong)
     out["scored_rows"] = len(sc)
     out["unscored_rows"] = n - len(sc)
@@ -628,7 +639,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["detect"] = {"positive": pos, "confirmed": conf_hit, "detected": det}
     out["encoder"] = encoder_report(rows, preds, sc)
     out["detect_types"] = detect_by_type(sc)
-    out["coverage"] = committed / len(sc) if sc else 0.0
+    out["coverage"] = committed / len(sc) if sc else None
     out["selective_risk"] = errors / committed if committed else None
     out["committed"] = committed
     # 적법 문장 (D-301) — 「울림」= 위반을 확정한 문장이 있다
@@ -680,6 +691,11 @@ def product_of(r: dict, conditional: bool) -> ProductContext:
     return ProductContext(category=Category(r["품목"]))
 
 
+def _pct(x: float | None) -> str:
+    """비율 글자 — 잰 것이 없으면(`None`) 「-」. 0 % 와 「안 쟀다」를 가른다 (D-220)."""
+    return "-" if x is None else f"{x:.1%}"
+
+
 def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -> None:
     print(
         "  [조건부 — 전제나 품목을 아는 행 · 골든 `전제` → `품목`]"
@@ -692,7 +708,7 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     print(f"  종착   {s['outcome']}")
     print(f"  문장   {s['verdict']}")
     print(f"  행     {s['class']}")
-    print(f"  보류율 {s['hold_rate']:.1%} — 사유별 {s['hold_reasons']}")
+    print(f"  보류율 {_pct(s['hold_rate'])} — 사유별 {s['hold_reasons']}")
     print("\n  조건별 대응표 (D-275 · 행 수)")
     for k, v in s["by_condition"].items():
         print(f"    {k:>2}  " + "  ".join(f"{c} {v.get(c, 0)}" for c in CLASSES))
@@ -717,7 +733,7 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
         "" if s["committed"] >= MIN_MEASURABLE else "  🔴 측정 불가 (판정을 내린 행 n<30 · D-40)"
     )
     print(
-        f"\n  selective risk {('-' if sr is None else f'{sr:.1%}')} {_ci(err, s['committed'])} · coverage {s['coverage']:.1%} "
+        f"\n  selective risk {('-' if sr is None else f'{sr:.1%}')} {_ci(err, s['committed'])} · coverage {_pct(s['coverage'])} "
         f"(판정을 내린 행 {s['committed']} / 채점 {s['scored_rows']}){sr_mark}"
     )
     d = s.get("detect") or {}
@@ -912,7 +928,7 @@ def check_dev(rows: list[dict], model_dir: pathlib.Path | None) -> dict[str, Any
     return stamp | {"dev_check": "일치"}
 
 
-def use_encoder(model_dir: pathlib.Path | None) -> dict[str, Any]:
+def use_encoder(model_dir: pathlib.Path | None, *, adopted_only: bool = False) -> dict[str, Any]:
     """인코더를 켠다 — 판 표지(폴더 이름 · 가중치 지문 · 판 지문 · 잠금 상태)를 돌려준다. 안 켜면 빈 표지다.
 
     🔴 **켰는데 못 올리면 멈춘다** (D-220) — 그래프의 `encode` 는 이 경우 경고만 남기고 규칙 판정으로 간다.
@@ -924,9 +940,19 @@ def use_encoder(model_dir: pathlib.Path | None) -> dict[str, Any]:
         os.environ[enc.ENV_MODEL_DIR] = str(model_dir)
     path = enc.configured_dir()
     if path is None:
+        if adopted_only:
+            raise SystemExit(
+                "🔴 봉인 회차는 잠금 채택 판 인코더로만 돈다(D-339 결정 7) — --encoder 나 "
+                + enc.ENV_MODEL_DIR
+            )
         return {}
-    enc.permit_unlocked()
+    if not adopted_only:
+        enc.permit_unlocked()
     try:
+        if adopted_only and (m0 := enc.lock_match(path)).status != model_lock.ADOPTED:
+            raise SystemExit(
+                f"🔴 봉인 회차는 잠금 **채택** 판으로만 돈다(D-339 결정 7) — {path.name} 는 「{m0.status}」"
+            )
         scheme = enc.encoder_at(path).scheme
         m = enc.lock_match(path)
         return {
@@ -967,12 +993,75 @@ def run(
     return preds
 
 
+def git_head(root: pathlib.Path = pathlib.Path(".")) -> str:
+    """지금 커밋 — `.git` 을 직접 읽는다(git 명령을 부르지 않는다). 못 읽으면 「미확인」 — 지어내지 않는다 (D-220).
+
+    🚨 작업 트리에 커밋 안 된 변경이 있는지는 여기서 모른다 — 기록에 그 사실을 같이 적는다.
+    """
+    try:
+        head = (root / ".git" / "HEAD").read_text(encoding="utf-8").strip()
+        if not head.startswith("ref: "):
+            return head[:12]
+        ref = head[5:]
+        loose = root / ".git" / ref
+        if loose.exists():
+            return loose.read_text(encoding="utf-8").strip()[:12]
+        for line in (root / ".git" / "packed-refs").read_text(encoding="utf-8").splitlines():
+            if line.endswith(" " + ref):
+                return line.split()[0][:12]
+    except OSError:
+        pass
+    return "미확인"
+
+
+def sealed_runs_on(date: str) -> list[dict]:
+    """이 기기에서 그 날짜(`YYYY-MM-DD`)에 연 봉인 회차들 — 기록이 없으면 빈 목록. 🔴 읽지 못하는 줄은 멈춘다(지나치지 않는다)."""
+    if not SEALED_LOG.exists():
+        return []
+    out = []
+    for x in SEALED_LOG.read_text(encoding="utf-8").splitlines():
+        if x.strip():
+            row = json.loads(x)
+            if str(row.get("at", ""))[:10] == date:
+                out.append(row)
+    return out
+
+
+def sealed_refusal(a: argparse.Namespace, today: str) -> str | None:
+    """봉인 회차를 열면 안 되는 까닭 — 열어도 되면 `None` (D-175 · D-339 결정 7). 인코더 조건은 `use_encoder` 가 본다."""
+    partial = [
+        f
+        for f, on in (
+            ("--limit", a.limit),
+            ("--provenance", a.provenance),
+            ("--no-enc-filter", a.no_enc_filter),
+            ("--stub", a.stub),
+        )
+        if on
+    ]
+    if partial:
+        return f"봉인 회차는 전 행 · 앱과 같은 조건으로 한 번이다 — {' · '.join(partial)} 와 함께 쓸 수 없다"
+    if done := sealed_runs_on(today):
+        return (
+            f"이 기기에서 {today} 에 이미 봉인 회차를 열었다({len(done)}번 · {SEALED_LOG}) — 날짜 하나에 한 번이다."
+            " 같은 날 다시 재야 하면 팀장 판정을 받고 기록 줄을 원장으로 옮긴 뒤 연다"
+        )
+    return None
+
+
 def log_sealed_run(stamp: dict[str, Any]) -> int:
-    """🆕 2026-10-08 (D-175) — 봉인 평가셋 실행 한 줄을 남기고 이 기기의 누적 횟수를 낸다. 🔴 기록을 못 쓰면 멈춘다(조용히 넘기지 않는다)."""
+    """🆕 2026-10-08 (D-175) — 봉인 평가셋 실행 한 줄을 남기고 이 기기의 누적 횟수를 낸다. 🔴 기록을 못 쓰면 멈춘다(조용히 넘기지 않는다).
+
+    🔄 2026-10-15 — **돌기 전에** 부른다(도중에 죽어도 봉인 행을 연 것은 센다) · 커밋을 같이 적는다.
+    """
     import datetime  # noqa: PLC0415
 
     SEALED_LOG.parent.mkdir(parents=True, exist_ok=True)
-    line = {"at": datetime.datetime.now().isoformat(timespec="seconds")} | stamp
+    line = {
+        "at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "commit": git_head(),
+        "worktree": "커밋 안 된 변경 여부 미확인",
+    } | stamp
     with SEALED_LOG.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
     return sum(1 for x in SEALED_LOG.read_text(encoding="utf-8").splitlines() if x.strip())
@@ -999,12 +1088,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="인코더 후보의 전제별 거름 · 옮김을 끈다 — 거름표를 걷을지 판정하는 dev 비교용 (D-336 결정 5 · 앱은 늘 켠다)",
     )
-    ap.add_argument(
+    which = ap.add_mutually_exclusive_group(required=True)
+    which.add_argument(
         "--dev",
         action="store_true",
-        help="봉인 평가셋 대신 dev(검증 묶음)로 잰다 — 판 · 문턱 · 규칙을 고르는 자리 (D-175)",
+        help="dev(검증 묶음)로 잰다 — 판 · 문턱 · 규칙을 고르는 자리 (D-175)",
+    )
+    which.add_argument(
+        "--sealed",
+        action="store_true",
+        help="봉인 평가셋(test_sentence) 회차 — 잠금 채택 판 · 전 행 · 날짜 하나에 한 번 (D-339 결정 7 · 보고 전용)",
     )
     a = ap.parse_args(argv)
+    if a.sealed:
+        import datetime  # noqa: PLC0415
+
+        if why := sealed_refusal(a, datetime.date.today().isoformat()):
+            raise SystemExit(f"🔴 {why}")
     rows = load_rows(dev=a.dev)
     #: dev 대조는 **거르기 전 전체 행**으로 한다 — 원천으로 거른 뒤에는 지문이 달라진다
     dev_stamp = check_dev(rows, a.encoder or enc.configured_dir()) if a.dev else {}
@@ -1017,10 +1117,17 @@ def main(argv: list[str] | None = None) -> int:
     #: 판 표지 — 원장에 수와 함께 적는다 (D-178). 🔴 실제 실행은 DB 사전이 파일과 같을 때만 돈다(`check_dict`)
     stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN), "conditional": a.conditional}
     stamp |= {"split": "dev" if a.dev else "test_sentence"} | dev_stamp
-    stamp |= use_encoder(a.encoder)
+    stamp |= use_encoder(a.encoder, adopted_only=a.sealed)
     if a.no_enc_filter:
         g.disable_encoder_filter()
         stamp |= {"encoder_filter": "끔"}
+    if a.sealed:
+        n_runs = log_sealed_run(
+            stamp | {"judged_by": g.JUDGED_BY, "rows": len(rows), "status": "시작"}
+        )
+        print(
+            f"  🔒 봉인 평가셋 회차를 연다 — 이 기기 기록 {n_runs}번째 ({SEALED_LOG}) · 원장에 판 표지와 함께 옮긴다 (D-175)"
+        )
     t0 = time.perf_counter()
     if a.stub:
         preds = run(rows, stub_runner(), conditional=a.conditional)
@@ -1038,19 +1145,6 @@ def main(argv: list[str] | None = None) -> int:
             )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
-    if not a.dev and not a.stub:
-        n_runs = log_sealed_run(
-            stamp
-            | {
-                "judged_by": g.JUDGED_BY,
-                "rows": len(rows),
-                "limit": a.limit,
-                "provenance": a.provenance,
-            }
-        )
-        print(
-            f"  🔒 봉인 평가셋 실행 — 이 기기 기록 {n_runs}번째 ({SEALED_LOG}) · 원장에 판 표지와 함께 옮긴다 (D-175)"
-        )
     report(s, a.conditional, dev=a.dev)
     print(
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"
