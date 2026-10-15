@@ -263,3 +263,72 @@ def test_카피_생성과_광고_생성_화면에_대조_안내가_붙는다(cat
     )
     assert r.status_code == 200
     assert "cp-fixed-match_near" in r.text
+
+
+def _gen_page(monkeypatch, **data):  # noqa: ANN202
+    from fastapi.testclient import TestClient
+
+    from app.api import app
+    from app.routers import copygen
+    from app.routers import user as user_router
+
+    monkeypatch.setattr(user_router, "_gen_gate", lambda *_a: None)
+    monkeypatch.setattr(user_router, "_fixed_notes", lambda *_a: [])
+    monkeypatch.setattr(copygen, "off_reason", lambda: "테스트 — 엔진 끔")
+    base = {"category": "hf", "cert": "yes", "age": "all", "sex": "all", "name": "본 정"}
+    return TestClient(app).post("/u/generate", data={**base, **data})
+
+
+def _forms(html: str) -> list[dict[str, str]]:
+    """「다시 만들기 · 되돌리기」 폼의 숨김 칸들."""
+    import html as h
+    import re
+
+    out = []
+    for f in re.findall(r'<form class="gn-regen".*?</form>', html, re.S):
+        fields = dict(re.findall(r'name="([a-z_]+)" value="([^"]*)"', f))
+        out.append(
+            {k: h.unescape(v) for k, v in fields.items()}
+            | {"_button": re.search(r"<button[^>]*>([^<]+)", f).group(1)}
+        )
+    return out
+
+
+def test_비슷함이면_공식_문구로_다시_만들기_버튼(catalog, monkeypatch) -> None:
+    r = _gen_page(monkeypatch, ingredients="대두이소플라본", fixed="뼈 건강에 도움을 줌")
+    forms = _forms(r.text)
+    assert len(forms) == 1
+    f = forms[0]
+    assert f["_button"] == "공식 문구로 다시 만들기"
+    assert (f["fixed"], f["fixed_orig"]) == ("뼈 건강에 도움을 줄 수 있음", "뼈 건강에 도움을 줌")
+    # 나머지 입력은 그대로 싣는다
+    assert (f["category"], f["cert"], f["name"], f["ingredients"]) == (
+        "hf",
+        "yes",
+        "본 정",
+        "대두이소플라본",
+    )
+    assert "공식 문구로 바뀜" not in r.text
+
+
+def test_다시_만든_뒤에는_바뀜_표시와_되돌리기(catalog, monkeypatch) -> None:
+    r = _gen_page(
+        monkeypatch,
+        ingredients="대두이소플라본",
+        fixed="뼈 건강에 도움을 줄 수 있음",
+        fixed_orig="뼈 건강에 도움을 줌",
+    )
+    assert "공식 문구로 바뀜" in r.text
+    assert "gn-fixed-match_same" in r.text
+    forms = _forms(r.text)
+    assert [f["_button"] for f in forms] == ["처음 적은 문구로 되돌리기"]
+    assert forms[0]["fixed"] == "뼈 건강에 도움을 줌" and "fixed_orig" not in forms[0]
+    # 「더 탐색하기」도 처음 문구를 들고 간다 — 엔진이 꺼져 있어 여기서는 폼이 없다 · 되돌린 뒤에는 표시가 없다
+    r = _gen_page(monkeypatch, fixed="뼈 건강에 도움을 줌", fixed_orig="뼈 건강에 도움을 줌")
+    assert "공식 문구로 바뀜" not in r.text
+
+
+def test_문구_여럿_중_하나만_다르면_버튼을_그리지_않는다(catalog, monkeypatch) -> None:
+    r = _gen_page(monkeypatch, fixed="면역력 증진에 도움을 줄 수 있음. 뼈 건강에 도움을 줌")
+    assert "gn-fixed-match_near" in r.text
+    assert _forms(r.text) == []

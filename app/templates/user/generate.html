@@ -83,6 +83,16 @@
 .gn-notice { border: 1px solid var(--u-warn-line); background: var(--u-warn-bg); color: var(--u-warn-ink);
              border-radius: .75rem; padding: .6rem .8rem; font-size: .82rem; margin: 0 0 .9rem; }
 /* 공식 문구 대조 — 같으면 초록, 나머지는 위 경고 색 그대로 (D-341 결정 4) */
+.gn-regen { display: inline-flex; align-items: center; gap: .5rem; margin: .5rem .5rem 0 0; }
+.gn-regen button { white-space: nowrap; border: 0; border-radius: .6rem; padding: .4rem .85rem; font: inherit; font-size: .8rem; font-weight: 700;
+                   background: var(--u-signal); color: #fff; cursor: pointer; }
+.gn-regen button.gn-ghost { background: var(--u-surface); color: var(--u-signal-ink); border: 1px solid var(--u-signal-line, var(--u-line)); }
+.gn-regen-row { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; margin-top: .55rem; }
+.gn-regen-row .gn-regen { margin: 0; }
+.gn-regen-back { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
+.gn-regen-back .gn-regen { margin-top: 0; }
+.gn-changed { display: inline-block; margin-left: .3rem; padding: .05rem .5rem; border-radius: 999px; font-size: .7rem;
+              background: var(--u-signal); color: #fff; vertical-align: middle; }
 .gn-fixed-match_same { border-color: var(--u-ok-line); background: var(--u-ok-bg); color: var(--u-ok-ink); }
 .gn-errors { border: 1px solid var(--u-bad-line); background: var(--u-bad-bg); color: var(--u-bad-ink);
              border-radius: .75rem; padding: .6rem .8rem .6rem 1.6rem; font-size: .82rem; margin: 0 0 .9rem; }
@@ -316,7 +326,8 @@
   </div>
   <div class="gn-field gn-when w-fixed">
     <label for="g-fixed">인정 · 심사받은 기능성 문구 <span class="gn-req">필수</span>
-      <span class="gn-note">(원문 그대로)</span></label>
+      <span class="gn-note">(원문 그대로)</span>
+      {%- if p.fixed_orig %} <span class="gn-changed">공식 문구로 바뀜</span>{% endif %}</label>
     <textarea id="g-fixed" name="fixed" rows="2" maxlength="{{ gen_limits.fixed }}"
               placeholder="예: 뼈 건강에 도움을 줄 수 있음">{{ p.fixed or '' }}</textarea>
     <p class="gn-note" style="margin:.3rem 0 0">🔴 이 문구는 <b>글자 그대로</b> 끼워요 — 다듬거나 범위를 넓히지 않아요.</p>
@@ -337,11 +348,44 @@
 </form>
 
 {# 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구를 따로 판정한 경고. 후보를 떨구지 않는다 · 문안은 `app/reasons.py` (FIXED_*) #}
+{# 🆕 2026-10-15 (ksr) — 「공식 문구로 다시 만들기」 · 「처음 적은 문구로 되돌리기」. 입력 전부를 숨김 칸으로 다시 보낸다(「더 탐색하기」와 같다)
+   — 인정 문구 칸만 바꾼다. 이용자가 누를 때만 다시 만든다(자동으로 바꾸지 않는다 — 가장 가까운 문구가 그 제품의 인정 문구라는 보장이 없다) #}
+{% macro regen(pk, fixed, orig, label, cls="") %}
+<form class="gn-regen" method="post" action="/u/generate" data-wait-form>
+  <input type="hidden" name="category" value="{{ pk.category }}">
+  <input type="hidden" name="cert" value="{{ pk.cert }}">
+  <input type="hidden" name="age" value="{{ pk.age }}">
+  <input type="hidden" name="sex" value="{{ pk.sex }}">
+  {% for k in ("target", "name", "kind", "phrase") %}
+  <input type="hidden" name="{{ k }}" value="{{ pk[k] }}">
+  {% endfor %}
+  {% for k in ("features", "ingredients", "certs") %}
+  <input type="hidden" name="{{ k }}" value="{{ pk[k]|join(',') }}">
+  {% endfor %}
+  <input type="hidden" name="fixed" value="{{ fixed }}">
+  {% if orig %}<input type="hidden" name="fixed_orig" value="{{ orig }}">{% endif %}
+  <button type="submit" class="{{ cls }}">{{ label }}</button>
+  <span class="gn-note" data-wait hidden role="status">다시 만드는 중이에요 · 30초쯤</span>
+</form>
+{% endmacro %}
 {% if fixed_notes %}
 <div class="gn-card">
   {% for n in fixed_notes %}
-  <p class="gn-notice gn-fixed-{{ n.level }}">{{ n.text }}</p>
+  <div class="gn-notice gn-fixed-{{ n.level }}">{{ n.text }}
+    {% if n.official and picked %}
+    <div class="gn-regen-row">
+      {{ regen(picked, n.official, picked.fixed_orig or picked.fixed, "공식 문구로 다시 만들기") }}
+      <span class="gn-note">인정 문구 칸을 「{{ n.official }}」로 바꿔 후보를 새로 만들어요 · 30초쯤</span>
+    </div>
+    {% endif %}
+  </div>
   {% endfor %}
+  {% if picked and picked.fixed_orig %}
+  <div class="gn-regen-back">
+    <span class="gn-note">인정 문구를 공식 문구로 바꿔 만들었어요 — 처음 적은 문구: 「{{ picked.fixed_orig }}」</span>
+    {{ regen(picked, picked.fixed_orig, "", "처음 적은 문구로 되돌리기", "gn-ghost") }}
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -416,6 +460,7 @@
     {% for k in ("features", "ingredients", "certs") %}
     <input type="hidden" name="{{ k }}" value="{{ picked[k]|join(',') }}">
     {% endfor %}
+    {% if picked.fixed_orig %}<input type="hidden" name="fixed_orig" value="{{ picked.fixed_orig }}">{% endif %}
     <input type="hidden" name="more" value="{{ more + 1 }}">
     {% for s in more_shown %}<input type="hidden" name="shown" value="{{ s }}">{% endfor %}
     <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>

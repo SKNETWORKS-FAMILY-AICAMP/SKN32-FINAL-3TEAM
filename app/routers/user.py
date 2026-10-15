@@ -1138,7 +1138,14 @@ def _gen_picked(form: dict[str, list[str]]) -> tuple[dict, dict, list[str]]:
         "ingredients": _gen_lines(form, "ingredients"),
         "certs": _gen_lines(form, "certs") if needs == "certs" else [],
         "fixed": _one(form, "fixed", _GEN_LIMITS["fixed"]).strip() if needs == "fixed" else "",
+        #: 🆕 10-15 (ksr) — 「공식 문구로 다시 만들기」를 눌렀을 때 **처음 적은 인정 문구**. 되돌리기 버튼 · 「바뀜」 표시에 쓴다.
+        #:    인정 문구 칸과 같을 때(되돌린 뒤 · 처음 생성)는 비운다
+        "fixed_orig": _one(form, "fixed_orig", _GEN_LIMITS["fixed"]).strip()
+        if needs == "fixed"
+        else "",
     }
+    if picked["fixed_orig"] == picked["fixed"]:
+        picked["fixed_orig"] = ""
     errors: list[str] = []
     if not any(picked[k] for k in ("name", "kind", "phrase", "features")):
         errors.append("제품명 · 제품 종류 · 간단한 문구 · 특징 중 하나는 적어 주세요.")
@@ -1514,6 +1521,9 @@ def _fixed_match_notes(
                     "text": reasons.MATCH_NEAR.format(
                         why=why, official=p.official.text, src=src(p.official.norm)
                     ),
+                    # 🆕 10-15 — 「공식 문구로 다시 만들기」가 인정 문구 칸에 넣을 글자. 문구가 하나일 때만 —
+                    #    여럿 중 하나만 다르면 어느 자리를 바꿀지 화면이 정할 수 없다(버튼을 그리지 않는다)
+                    "official": p.official.text if len(res.pieces) == 1 else "",
                 }
             )
         else:
