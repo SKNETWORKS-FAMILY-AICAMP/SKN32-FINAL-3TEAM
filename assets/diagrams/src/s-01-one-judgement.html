@@ -8,6 +8,8 @@
      ① 화면은 `JudgeRequest(text=…)` 만 넘긴다 — 품목이 없다 → 품목 미확정 → 전제별 분기 (D-319)
      ② 읽는 것은 `v_current_chunk` · `chunk_embedding` · `dict_entry` · `v_risk_lookup` 이다
      ③ **쓰는 것이 없다** — `work_doc` · `copy_sentence` · `judgment` 에 넣는 코드가 `app/` 에 없다
+  🔄 **2026-10-14 갱신** — ③ 이 뚫렸다: 판정 뒤 BFF 가 `app/judgment_store.save_review` 로 적는다(회원 ∧ 선택 동의 ① · W10).
+     `encode` 가 배선됐다(후보 칸만 · D-323) · 지시 종착이 선다(D-337) · 화면이 분기를 묻고 고른다(D-276) · 고쳐 쓰기는 D-332 결정 3.
   🚨 요소마다 `[실측]`/`[기획]` (D-219).
   ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
 -->
@@ -48,15 +50,14 @@
   <header>
     <span class="no">S-01</span>
     <h1>판정 1회 — 무엇을 읽고 무엇을 쓰는가</h1>
-    <span class="right">검수 화면의 한 요청 · [실측]/[기획] · 2026-10-06 · 클론 A</span>
+    <span class="right">검수 화면의 한 요청 · [실측]/[기획] · 2026-10-14 · 클론 A</span>
   </header>
 
   <div class="body">
     <div class="legend" style="margin:0 0 12px">
       <span class="chip pos">[실측] 지금 돈다</span>
       <span class="chip">[기획] 계약·표는 섰고 코드가 없다</span>
-      <span class="chip warn">⚠️ 판정 대기</span>
-      <span class="chip rsk">🔴 쓰는 코드가 없다</span>
+      <span class="chip warn">⚠️ 조건부로 돈다</span>
     </div>
 
     <div class="seq">
@@ -64,7 +65,7 @@
         <div class="n">1</div><div class="who"><span>사용자 → <b>BFF</b></span></div>
         <div class="what"><b>광고 문구 전달 — <code>POST /u/judge</code></b>
           <span><span class="tag m">실측</span>문구 칸(최대 5건)을 POST 로 받는다 — URL 에 싣지 않는다</span>
-          <span><span class="tag m">실측</span>BFF 는 <code>JudgeRequest(text=…)</code> 만 만든다 — 🚨 <b style="display:inline">품목을 보내지 않는다</b>. 계약(<code>POST /judge</code>)은 <code>product</code> 를 받는다</span></div>
+          <span><span class="tag m">실측</span>BFF 는 <code>JudgeRequest(text=…)</code> 만 만든다 — 🚨 <b style="display:inline">품목 없이 보낸다</b>. 품목은 응답의 분기에서 고른다 (8)</span></div>
       </div>
 
       <div class="row pos">
@@ -84,8 +85,8 @@
       <div class="row pos">
         <div class="n">4</div><div class="who">코어 → 데이터층 (읽기)</div>
         <div class="what"><b>match_dict — dict_entry 정확매칭</b>
-          <span><span class="tag m">실측</span>사전 506행 중 금지 표현 — 적중과 원문 좌표를 낸다</span>
-          <span><span class="tag p">기획</span>그 뒤 encode(인코더)는 빈 노드다</span></div>
+          <span><span class="tag m">실측</span>금지 표현 사전 — 적중과 원문 좌표를 낸다 (사전 파일 495종 · 원장 10-14(A) ⑩)</span>
+          <span><span class="tag m">실측</span>그 뒤 encode — 인코더 유형 후보를 <code>encoder_candidates</code> 칸에만 싣는다 · 판정은 읽지 않는다 (D-323 · 카드 17)</span></div>
       </div>
 
       <div class="row pos">
@@ -111,41 +112,41 @@
       <div class="row pos">
         <div class="n">8</div><div class="who">코어 → 사용자</div>
         <div class="what"><b>종착 · 문장별 판정 · 근거 조문 · 위험도</b>
-          <span><span class="tag m">실측</span>화면 요청의 종착은 <b style="display:inline">보류</b>다 · 계약이 응답을 검증한다 · <code>disclaimer</code> 는 항상 붙는다</span>
-          <span><span class="tag p">기획</span>응답에 실린 분기 · 기준 문안을 화면이 그리는 자리가 없다</span></div>
+          <span><span class="tag m">실측</span>종착은 보류 · 지시(실증 분기 · D-337) · 증명서 · 통과 중 하나 · 계약이 응답을 검증한다 · <code>disclaimer</code> 는 항상 붙는다</span>
+          <span><span class="tag m">실측</span>화면이 응답의 분기를 묻고 고르게 한다 — 다시 판정하지 않는다 (D-276 · D-263 ⑦)</span></div>
       </div>
 
-      <div class="row rsk">
-        <div class="n">9</div><div class="who">코어 → 런타임층 (쓰기)</div>
-        <div class="what"><b>work_doc · copy_sentence · judgment 저장 — 없다</b>
-          <span><span class="tag m">실측</span>표·제약은 섰다 — 동의 없으면 <code>expires_at</code> 필수 · 새 행을 쌓는 모양</span>
-          <span><span class="tag p">기획</span>🔴 <b style="display:inline">넣는 코드가 없다</b> — 판정은 화면에만 그려지고 이력(<code>/u/history</code>)은 빈 목록이다</span></div>
+      <div class="row warn">
+        <div class="n">9</div><div class="who">BFF → 런타임층 (쓰기)</div>
+        <div class="what"><b>work_doc · copy_sentence · judgment 저장 (W10)</b>
+          <span><span class="tag m">실측</span><code>app/judgment_store.save_review</code> — 문구 하나 = 문서 하나 · 기록 판정만(분기 · 인코더 후보 · 판정 대상 아님 문장은 안 적는다) · 새 행을 쌓는다</span>
+          <span>⚠️ 회원 ∧ 「검수 이력 보관」 동의일 때만 — 아니면 아무것도 쓰지 않는다(D-96 · D-307) · 실패하면 되돌리고 화면에 알린다 · 이력은 <code>/u/history</code></span></div>
       </div>
 
       <div class="row warn">
         <div class="n">+</div><div class="who">사용자 → BFF (선택)</div>
         <div class="what"><b>「이 문장 고쳐 쓰기」 — <code>POST /u/review/rewrite</code></b>
-          <span><span class="tag m">실측</span>1~8 을 다시 돈 뒤, 지적 문장을 같은 기기의 sLLM 서버에 보내고 고친 문구를 코어로 다시 판정한다 (2026-10-06 병합)</span>
-          <span>⚠️ D-265 · D-270 과의 관계와 승인 범위는 <b style="display:inline">판정 대기</b></span></div>
+          <span><span class="tag m">실측</span>1~8 을 다시 돈 뒤, 지적 문장을 같은 기기의 sLLM 서버에 보내고 고친 문구를 코어로 다시 판정한다 (D-332 결정 3)</span>
+          <span>⚠️ sLLM 서버가 떠 있을 때만 · 이 재판정은 이력에 적지 않는다</span></div>
       </div>
     </div>
 
     <div class="legend">
       <span class="chip pos">데이터층은 읽기만 한다 — 3 · 4 · 6</span>
-      <span class="chip rsk">런타임층에 쓰는 줄이 아직 없다 — 9</span>
-      <span class="chip">실측 행 <b style="display:inline">8 / 9</b></span>
+      <span class="chip warn">런타임층에 쓰는 줄은 BFF 의 9 하나 — 회원 ∧ 동의일 때</span>
+      <span class="chip">실측 행 <b style="display:inline">9 / 9</b></span>
     </div>
 
     <p class="note" style="margin:12px 0 0">
-      🚨 <b>「8행이 돈다」가 「끝까지 판정한다」는 뜻은 아니다.</b> 인코더가 붙기 전이라 사전 밖 문장은 보류이고,
-      화면이 품목을 보내지 않아 종착은 보류다. 이 줄들이 말하는 것은 <b>값이 입구에서 출구까지 실제 데이터로 흐른다</b>는 것이다.
+      🚨 <b>「9행이 돈다」가 「끝까지 판정한다」는 뜻은 아니다.</b> 인코더는 후보만 내고 확정하지 못해 사전 밖 문장은 보류이고,
+      품목 없이 보낸 문서의 기록은 대부분 보류다(dev 보류율 91.6% · 원장 10-14(A) ⑧). 이 줄들이 말하는 것은 <b>값이 입구에서 출구까지 실제 데이터로 흐른다</b>는 것이다.
     </p>
   </div>
 
   <footer>
     <span class="k">판정은 데이터층에 한 글자도 쓰지 않는다.</span>
     사용자 문구가 조문·사전·제재 표를 오염시킬 경로를 <span class="k">방향으로 막았다</span> —
-    쓰기는 런타임층에만 가도록 돼 있고, <span class="k">지금은 그 쓰기도 아직 없다</span> (E-02).
+    쓰기는 <span class="k">런타임층에만, 그것도 코어가 아니라 BFF 가</span> 한다 (E-02 · W10).
     <div class="lock">적재 수는 원장 10-06 ① (클론 A) · 라우트의 정본은 app/api.py · app/routers/user.py · 수의 정본은 docs/00_사실원장.md (D-54) · 원천은 src/s-01-one-judgement.html (D-217)</div>
   </footer>
 </div>

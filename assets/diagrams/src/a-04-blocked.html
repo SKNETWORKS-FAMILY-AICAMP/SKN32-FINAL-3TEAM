@@ -7,6 +7,8 @@
      「`retrieve` 노드는 스텁」(지금 검색 코어를 부른다). 지금 막힌 것을 코드에서 확인해 다시 그렸다 —
      `app/graph.py`(빈 노드) · `app/routers/user.py`(`_core_judge` · 이력) · `app/api.py`(501) · `app/retrieve.py`.
      ⛔ 없는 것을 있다고, 있는 것을 없다고 그리지 않는다.
+  🔄 **2026-10-14 갱신** — 판정 저장(W10) · 실증 분기 → 지시(D-337) · 인코더 배선(D-323)이 뚫렸고, 카피 생성은 화면 엔진으로 돈다(D-332).
+     병목이 옮겨 간 자리 — 인코더 위반의 확정(D-131 · D-341) · 인정 문구 대조(D-341 결정 1) · 판정 그래프 봉인 회차(D-339 결정 7).
   🚨 수는 그린 시점 실측이다 — 정본은 `docs/00_사실원장.md` (D-54).
   ⛔ PNG 를 손으로 고치지 않는다. 이 파일을 고치고 `launcher.py diagram` 으로 다시 뽑는다.
 -->
@@ -18,7 +20,7 @@
   <header>
     <span class="no">A-04</span>
     <h1>막힌 구간</h1>
-    <span class="right">무엇이 없어서 무엇이 안 되나 · [실측]/[기획] · 2026-10-06 · 클론 A</span>
+    <span class="right">무엇이 없어서 무엇이 안 되나 · [실측]/[기획] · 2026-10-14 · 클론 A</span>
   </header>
 
   <div class="body">
@@ -43,76 +45,74 @@
         <b>근거 조문 · 위험도 배지</b>
         <span><span class="tag m">실측</span>검수 결과 화면이 그린다</span>
       </div>
-      <p class="note pos">★ 이 줄은 <b>뚫렸다</b> — 09-12 판은 가운데 두 칸을 회색으로 그리고 있었다.</p>
 
-      <div class="step">
-        <b>인코더 모듈</b>
-        <span><span class="tag m">실측</span>app/encoder.py 는 저장소에 있다</span>
-        <span>3차 재학습 결과 대기</span>
+      <div class="step pos">
+        <b>judgment 표 · 제약</b>
+        <span><span class="tag m">실측</span>work_doc · copy_sentence · judgment</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step pos">
+        <b>판정 저장 (W10)</b>
+        <span><span class="tag m">실측</span>/u/judge 가 회원 ∧ 「검수 이력 보관」 동의일 때 적는다</span>
+        <span>app/judgment_store.py · 실패하면 되돌린다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step pos">
+        <b>검수 이력</b>
+        <span><span class="tag m">실측</span>/u/history 가 저장된 판정을 읽는다</span>
+      </div>
+
+      <div class="step pos">
+        <b>실증 분기 (D-337)</b>
+        <span><span class="tag m">실측</span>확정 ∧ 사유 B ∧ 거짓_과장뿐 ∧ 근거 법 하나</span>
+        <span>실증 후 상한 R0</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step pos">
+        <b>지시 종착</b>
+        <span><span class="tag m">실측</span>dev 749 행 중 63 (원장 10-14(A) ⑧)</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step pos">
+        <b>실증형 위반의 안내</b>
+        <span><span class="tag m">실측</span>문장 카드의 「고치는 방향」</span>
+      </div>
+      <p class="note pos">★ 위 세 줄은 <b>뚫렸다</b> — 10-06 판은 판정 저장 · 실증 분기를 막힌 줄로 그리고 있었다.</p>
+
+      <div class="step pos">
+        <b>판정 인코더 (카드 17)</b>
+        <span><span class="tag m">실측</span>encode 노드에 배선 · 잠금 판 (D-323 · D-333)</span>
       </div>
       <div class="arrow">→</div>
       <div class="step off">
-        <b>encode 노드</b>
-        <span><span class="tag p">기획</span>빈 노드 — 배선되지 않았다</span>
+        <b>근거 법 · 호 · 구간</b>
+        <span><span class="tag p">기획</span>인코더는 유형 후보와 확신만 낸다 (D-131)</span>
       </div>
       <div class="arrow">→</div>
       <div class="step rsk">
-        <b>사전 밖 문장은 전부 보류</b>
-        <span><span class="tag m">실측</span>통과가 나오지 않는다 (D-269)</span>
-        <span>주장이 아닌 문장도 사전 낱말에 걸린다</span>
+        <b>사전이 놓친 위반은 확정으로 못 간다</b>
+        <span><span class="tag m">실측</span>탐지 20.8% · 인코더 후보까지 83.1% (dev · 원장 10-14(A) ⑧)</span>
+        <span>AI 추정 유형 표시 · 고쳐 쓰기로만 닿는다 (D-340 · D-341)</span>
       </div>
 
       <div class="step">
         <b>검수 화면의 요청</b>
-        <span><span class="tag m">실측</span>문구만 보낸다 — 품목 칸이 없다</span>
+        <span><span class="tag m">실측</span>품목 없이 보내면 분기를 묻고 고르게 한다 (D-276)</span>
       </div>
       <div class="arrow">→</div>
       <div class="step off">
-        <b>classify · 화면의 분기 자리</b>
+        <b>classify</b>
         <span><span class="tag p">기획</span>문구로 품목을 판별하는 코드가 없다</span>
-        <span><span class="tag p">기획</span>분기 · 기준 문안을 그리는 자리가 없다</span>
       </div>
       <div class="arrow">→</div>
       <div class="step rsk">
-        <b>화면 요청은 전부 품목 미확정</b>
-        <span><span class="tag m">실측</span>전제 여섯 · 종착 보류 (D-319)</span>
-        <span>계산된 분기가 화면에 보이지 않는다</span>
-      </div>
-
-      <div class="step">
-        <b>work_doc · copy_sentence · judgment</b>
-        <span><span class="tag m">실측</span>표와 제약은 서 있다</span>
-      </div>
-      <div class="arrow">→</div>
-      <div class="step off">
-        <b>판정 저장</b>
-        <span><span class="tag p">기획</span>넣는 코드가 없다 — BFF 도 그래프도 쓰지 않는다</span>
-      </div>
-      <div class="arrow">→</div>
-      <div class="step rsk">
-        <b>검수 이력 · 홈 집계가 빈 목록</b>
-        <span><span class="tag m">실측</span>화면과 조회는 있다 (/u/history)</span>
-        <span>재검수 게이트 · 재검증 대기도 여기 걸린다</span>
+        <b>고르기 전 기록은 대부분 보류</b>
+        <span><span class="tag m">실측</span>dev 무조건부 보류율 91.6% (원장 10-14(A) ⑧)</span>
       </div>
 
       <div class="step off">
-        <b>실증 분기</b>
-        <span><span class="tag p">기획</span>채우는 코드가 없다</span>
-      </div>
-      <div class="arrow">→</div>
-      <div class="step off">
-        <b>지시 종착</b>
-        <span><span class="tag m">실측</span>재료가 없으면 보류로 내린다</span>
-      </div>
-      <div class="arrow">→</div>
-      <div class="step rsk">
-        <b>실증형 위반의 안내</b>
-        <span><span class="tag p">기획</span>뺄 구간 · 필요한 실증 자료 (D-268)</span>
-      </div>
-
-      <div class="step off">
-        <b>생성 그래프 노드 여섯</b>
-        <span><span class="tag p">기획</span>전부 빈 노드</span>
+        <b>생성 그래프 노드</b>
+        <span><span class="tag p">기획</span>전부 빈 노드 — 재생성 루프 없음</span>
       </div>
       <div class="arrow">→</div>
       <div class="step off">
@@ -121,8 +121,40 @@
       </div>
       <div class="arrow">→</div>
       <div class="step rsk">
-        <b>카피 생성 · 광고 조립 화면</b>
-        <span><span class="tag m">실측</span>화면은 뜨고 「엔진 준비 중」을 그린다</span>
+        <b>코어 생성 API 를 부를 수 없다</b>
+        <span><span class="tag m">실측</span>화면은 엔진으로 돈다 — /u/generate (D-332) · /u/compose</span>
+        <span>다른 화면 · 외부 호출 · 생성 계약(GenerateResponse)은 아직</span>
+      </div>
+
+      <div class="step">
+        <b>인정 · 심사 문구 입력</b>
+        <span><span class="tag m">실측</span>카피 생성 화면에서 이용자가 적는다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>인정서 원문 대조</b>
+        <span><span class="tag p">기획</span>대조할 원문 데이터가 없다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
+        <b>맞는 문구인지 확인 못 한다</b>
+        <span><span class="tag m">실측</span>그 전제로 따로 판정해 경고만 (D-341 결정 1)</span>
+        <span>강한 경고 1/347 (원장 10-14(A) ⑨)</span>
+      </div>
+
+      <div class="step off">
+        <b>doc_rules 노드</b>
+        <span><span class="tag p">기획</span>빈 노드 — 의무 문구 유무 등</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>문서 단위 판정</b>
+        <span><span class="tag p">기획</span>문장 판정만 있다</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
+        <b>의무 문구 누락</b>
+        <span><span class="tag p">기획</span>문서 단위로 잡지 못한다</span>
       </div>
 
       <div class="step off">
@@ -140,12 +172,26 @@
         <span><span class="tag p">기획</span>상위 근거를 다시 세우는 층이 없다</span>
       </div>
 
+      <div class="step">
+        <b>잠금 채택 판</b>
+        <span><span class="tag m">실측</span>카드 17 · sLLM q4b-v14 (D-333 · D-335)</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step off">
+        <b>판정 그래프 봉인 회차</b>
+        <span><span class="tag p">기획</span>날짜 하나 · 커밋 하나로 한 번 (D-339 결정 7) · 미실시</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step rsk">
+        <b>판정 그래프의 일반화 수</b>
+        <span><span class="tag m">실측</span>봉인 수는 인코더 전 기준선뿐 (탐지 16.1% · 원장 10-03 ㊿-40 보충 1)</span>
+      </div>
+
     </div>
 
     <p class="note" style="margin-top:14px">
-      ⚠️ <b>판정 대기</b> — 10/13 생성 관문(D-270)은 「전제 정정 · 결론 재검 대기」다 ·
-      검수 화면의 고쳐 쓰기(로컬 sLLM → 코어 재판정 · 2026-10-06 병합)는 그래프 밖에 붙어 있고 승인 범위가 판정 전이다 ·
-      인코더 배선 전의 증명서 처리도 미정이다.
+      ⚠️ <b>판정 대기</b> — 사전 재작업(D-313) · 다음 인코더 판 D4-10 의 잠금 채택(D-339 결정 1 ② ③ 측정 대기) ·
+      봉인 회차 날짜(팀장).
     </p>
   </div>
 
@@ -153,6 +199,6 @@
     <span class="k">막힌 것을 그려서 남긴다.</span>
     「설계상 있다」와 「지금 돈다」를 같은 글씨로 적지 않는다 —
     <span class="k">뚫린 줄은 초록으로 바꾸고, 병목이 옮겨 간 것도 같이 적는다.</span>
-    <div class="lock">적재 수는 원장 10-06 ① (클론 A) · 수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-04-blocked.html (D-217)</div>
+    <div class="lock">적재 수는 원장 10-06 ① · dev 수는 원장 10-14(A) ⑧ (클론 A) · 수의 정본은 docs/00_사실원장.md (D-54) · 이 도면의 원천은 src/a-04-blocked.html (D-217)</div>
   </footer>
 </div>
