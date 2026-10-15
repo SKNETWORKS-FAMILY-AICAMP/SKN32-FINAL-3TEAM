@@ -195,7 +195,38 @@ def load_sources(
                 "ON CONFLICT (source_id, use_code) DO UPDATE SET allowed=EXCLUDED.allowed",
                 (sid, USE_CODE[axis], val == "allow"),
             )
+        # 🆕 2026-10-15 (D-344 ③) — **레지스트리에서 지운 제약 · 용도는 DB 에서도 지운다**(DB = 레지스트리). 종전에는 넣기만 해서
+        #    레지스트리에서 뺀 용도 행이 남았다 — 남은 `U2_rag` 는 검색 허용으로 읽힌다(`app/retrieve.py` `_JOINS`).
+        #    🚨 선언이 비면 그 소스의 행을 모두 지운다 — 용도가 없으면 허용도 없다(fail-closed · D-220). 등록 게이트가 용도 없는 소스를 먼저 막는다
+        cur.execute(
+            "DELETE FROM source_constraint WHERE source_id = %s AND NOT (flag::text = ANY(%s::text[]))",
+            (sid, list(s.get("constraints") or [])),
+        )
+        cur.execute(
+            "DELETE FROM source_use WHERE source_id = %s AND NOT (use_code::text = ANY(%s::text[]))",
+            (sid, [USE_CODE[a] for a in (s.get("use") or {})]),
+        )
         ok += 1
+    # 🆕 2026-10-15 (D-344 ③) — **건너뛴 소스(2인 확인이 다시 열림 · attribution 없음)는 DB 의 용도를 모두 닫는다.**
+    #    ⛔ 종전에는 넣지 않기만 했다 — 레지스트리에 이름이 있어 거두지도 않으므로 마지막으로 넣은 행의 `U2_rag` 가 남아 검색을 계속 허용했다.
+    #    ★ 행은 지우지 않는다(계보 · 조각이 그 행을 가리킨다) — `allowed` 만 내린다. 다시 확인되면 다음 적재가 레지스트리 값으로 되돌린다.
+    #    🚨 소스 행의 서명 칸(`grade_*_by`)은 NOT NULL 이라 비울 수 없다 — 관리자 화면에는 옛 서명이 남는다. 그래서 이름을 찍는다
+    skipped_ids = [x.split(" ", 1)[0] for x in skipped]
+    if not dry and skipped_ids:
+        cur.execute(
+            "UPDATE source_use SET allowed = false WHERE allowed AND source_id = ANY(%s) "
+            "RETURNING source_id, use_code",
+            (skipped_ids,),
+        )
+        closed: dict[str, list[str]] = {}
+        for sid, code in cur.fetchall():
+            closed.setdefault(sid, []).append(str(code))
+        skipped = [
+            f"{x} → DB 용도 닫음({' · '.join(sorted(closed[x.split(' ', 1)[0]]))})"
+            if x.split(" ", 1)[0] in closed
+            else x
+            for x in skipped
+        ]
     # ⬜ 예행은 DB 에 안 붙는다 — **고아를 모른다.** 모르는 것을 0 으로 내지 않는다 (D-63).
     swept: list[str] = []
     kept: list[tuple[str, int, int, int]] = []

@@ -48,7 +48,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from app import encoder as enc  # noqa: E402
 from app import graph as g  # noqa: E402
-from app import model_lock  # noqa: E402
+from app import model_lock, reasons  # noqa: E402 — reasons: 조합 판정 칸은 한 곳 (D-344 ⑨)
 from app import premise as pm  # noqa: E402
 from app.contracts import (  # noqa: E402
     Category,
@@ -62,6 +62,7 @@ from collect import statute  # noqa: E402
 from preprocess import devsplit  # noqa: E402
 from preprocess.golden import lawful_kind  # noqa: E402
 from preprocess.split import APPROVED_READING  # noqa: E402
+from scripts import sealed_log  # noqa: E402 — 봉인 기록은 한 곳 (D-344 ⑧ · D-99)
 from scripts.eval_rule import (  # noqa: E402 — 채점 규칙은 한 곳 (D-99)
     CLASSES as TYPE_CLASSES,
 )
@@ -77,7 +78,9 @@ from scripts.eval_rule import (  # noqa: E402
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
 #: 🆕 2026-10-08 (D-175 집행) — **봉인 평가셋을 돌린 기록**(이 기기). 원장 · 결정이 「한 번」을 말해도 도구가 세지 않으면 지켜졌는지
 #:    알 수 없다. 🚨 `build/` 는 커밋되지 않는다 — 기기마다 따로 쌓인다. 정본 기록은 원장이다(실행마다 판 표지와 함께 옮긴다)
-SEALED_LOG = pathlib.Path("build/eval/sealed_runs.jsonl")
+SEALED_LOG = (
+    sealed_log.SEALED_LOG
+)  # 🔄 2026-10-15 (D-344 ⑧) — 정본은 `scripts/sealed_log.py` · 시험이 이 이름을 갈아 끼운다
 #: 🆕 2026-10-08 (D-321 결정 4) — 6종 표. 8종에서 이번 차수에 편입한 둘을 뺀 것(종전 6종 · 2차와 이어 본다)
 NEW_IN_D321 = frozenset({"부당_비교광고", "비방광고"})
 #: DB 사전 대조의 기준 — 적재기(`scripts/load_db.py` `load_dict`)가 읽는 바로 그 파일
@@ -316,29 +319,15 @@ def branch_encoder_report(rows: list[dict], preds: list[dict]) -> dict[str, tupl
     return {k: tuple(v) for k, v in sorted(by.items())}
 
 
-#: 조합 판정 칸 (D-340 결정 1 · 원장 10-14(A) ①) — 칸 이름. 순서가 표의 순서다
-COMBO_CELLS = (
-    "사전 확정",
-    "합의(자격 없는 적중 ∧ 인코더 같은 유형)",
-    "자격 없는 적중 · 인코더 다른 유형",
-    "자격 없는 적중 · 인코더 조용",
-    "인코더만",
-    "둘 다 조용",
-)
+#: 조합 판정 칸 (D-340 결정 1 · 원장 10-14(A) ①) — 🔄 2026-10-15 (D-344 ⑨) 칸 이름과 규칙의 정본은 `app/reasons.py` 한 곳이다
+COMBO_CELLS = reasons.COMBO_CELLS
 
 
 def combo_cell(p: dict) -> str:
-    """행 예측 → 조합 판정 칸. 기록 판정의 칸이다(인코더 후보는 직접 낸 것만 · 옮긴 후보 제외)."""
-    if p["committed"]:
-        return COMBO_CELLS[0]
-    dq, en = set(p.get("candidates", ())), set(p.get("enc_candidates", ()))
-    if dq and en & dq:
-        return COMBO_CELLS[1]
-    if dq and en:
-        return COMBO_CELLS[2]
-    if dq:
-        return COMBO_CELLS[3]
-    return COMBO_CELLS[4] if en else COMBO_CELLS[5]
+    """행 예측 → 조합 판정 칸. 기록 판정의 칸이다(인코더 후보는 직접 낸 것만 · 옮긴 후보 제외). 규칙은 `reasons.combo_cell` (D-99)."""
+    return reasons.combo_cell(
+        bool(p["committed"]), p.get("candidates", ()), p.get("enc_candidates", ())
+    )
 
 
 def combo_report(rows: list[dict], preds: list[dict]) -> dict[str, tuple[int, int, int, int]]:
@@ -994,37 +983,13 @@ def run(
 
 
 def git_head(root: pathlib.Path = pathlib.Path(".")) -> str:
-    """지금 커밋 — `.git` 을 직접 읽는다(git 명령을 부르지 않는다). 못 읽으면 「미확인」 — 지어내지 않는다 (D-220).
-
-    🚨 작업 트리에 커밋 안 된 변경이 있는지는 여기서 모른다 — 기록에 그 사실을 같이 적는다.
-    """
-    try:
-        head = (root / ".git" / "HEAD").read_text(encoding="utf-8").strip()
-        if not head.startswith("ref: "):
-            return head[:12]
-        ref = head[5:]
-        loose = root / ".git" / ref
-        if loose.exists():
-            return loose.read_text(encoding="utf-8").strip()[:12]
-        for line in (root / ".git" / "packed-refs").read_text(encoding="utf-8").splitlines():
-            if line.endswith(" " + ref):
-                return line.split()[0][:12]
-    except OSError:
-        pass
-    return "미확인"
+    """지금 커밋 — 정본은 `scripts/sealed_log.py` 한 곳 (🔄 2026-10-15 · D-344 ⑧ · D-99)."""
+    return sealed_log.git_head(root)
 
 
 def sealed_runs_on(date: str) -> list[dict]:
-    """이 기기에서 그 날짜(`YYYY-MM-DD`)에 연 봉인 회차들 — 기록이 없으면 빈 목록. 🔴 읽지 못하는 줄은 멈춘다(지나치지 않는다)."""
-    if not SEALED_LOG.exists():
-        return []
-    out = []
-    for x in SEALED_LOG.read_text(encoding="utf-8").splitlines():
-        if x.strip():
-            row = json.loads(x)
-            if str(row.get("at", ""))[:10] == date:
-                out.append(row)
-    return out
+    """이 기기에서 그 날짜(`YYYY-MM-DD`)에 연 **판정 그래프** 봉인 회차들. 판정기 B(`eval_rule`)의 줄은 세지 않는다 (D-344 ⑧)."""
+    return sealed_log.runs_on(date, tool=sealed_log.GRAPH, path=SEALED_LOG)
 
 
 def sealed_refusal(a: argparse.Namespace, today: str) -> str | None:
@@ -1053,18 +1018,9 @@ def log_sealed_run(stamp: dict[str, Any]) -> int:
     """🆕 2026-10-08 (D-175) — 봉인 평가셋 실행 한 줄을 남기고 이 기기의 누적 횟수를 낸다. 🔴 기록을 못 쓰면 멈춘다(조용히 넘기지 않는다).
 
     🔄 2026-10-15 — **돌기 전에** 부른다(도중에 죽어도 봉인 행을 연 것은 센다) · 커밋을 같이 적는다.
+    🔄 2026-10-15 (D-344 ⑧) — 기록은 `scripts/sealed_log.py` 한 곳이다 · 판정기 B 와 같은 파일에 `tool` 로 갈라 적는다.
     """
-    import datetime  # noqa: PLC0415
-
-    SEALED_LOG.parent.mkdir(parents=True, exist_ok=True)
-    line = {
-        "at": datetime.datetime.now().isoformat(timespec="seconds"),
-        "commit": git_head(),
-        "worktree": "커밋 안 된 변경 여부 미확인",
-    } | stamp
-    with SEALED_LOG.open("a", encoding="utf-8", newline="\n") as f:
-        f.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
-    return sum(1 for x in SEALED_LOG.read_text(encoding="utf-8").splitlines() if x.strip())
+    return sealed_log.append(stamp, tool=sealed_log.GRAPH, path=SEALED_LOG)
 
 
 def main(argv: list[str] | None = None) -> int:

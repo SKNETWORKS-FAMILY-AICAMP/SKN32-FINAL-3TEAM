@@ -42,6 +42,7 @@
 from __future__ import annotations
 
 import dataclasses
+import functools
 import logging
 import re
 from collections.abc import Sequence
@@ -51,6 +52,17 @@ from app.settings import PARAMS, load_kwargs
 from collect.law_map import LAWS
 
 _log = logging.getLogger("copylane.retrieve")
+
+
+@functools.cache
+def _warn_vector_off(kind: str, detail: str) -> None:
+    """벡터 갈래를 못 돌린 까닭 — **같은 까닭은 프로세스에서 한 번만** 적는다 (🆕 2026-10-15 · D-344 ④).
+
+    ★ 까닭은 기기 단위다(캐시 없음 · 임베딩 판 섞임) — 요청마다 같은 줄이 쌓이면 다른 경고가 묻힌다.
+       `app/graph.py` `_warn_encoder_off` 와 같은 꼴이다. 응답의 상태(`SearchState.vector`)는 요청마다 그대로 싣는다.
+    """
+    _log.warning("벡터 검색 불가 — %s: %s", kind, detail)
+
 
 #: 🚨 코사인이라야 한다. `scripts/embed.py` 는 `model.encode(...)` 를 그대로 쓰므로
 #:    저장된 벡터가 **정규화돼 있지 않다.** `<->`(L2)는 길이에 끌려가 뜻이 달라진다.
@@ -389,7 +401,9 @@ def encode(model_id: str, text: str) -> list[float]:
         # 🔴 **DB 에서 온 이름을 그대로 로드하지 않는다** (보안점검 P0-3 · D-212).
         #    허용 목록 밖이면 여기서 막는다 — `.bin`(pickle) 역직렬화 경로를 끊는다.
         try:
-            kwargs = load_kwargs(model_id)
+            # 🆕 2026-10-15 (D-344 ⑦) — 판정 경로는 **캐시에서만** 올린다. 외부 요청 0 (D-77 L4 · 집행계약 doctor 16).
+            #    캐시가 없으면 아래에서 `EncoderUnavailable` — 어휘 갈래만 돈다(`_candidates` 가 까닭을 상태에 싣는다)
+            kwargs = load_kwargs(model_id, local_only=True)
         except ValueError as e:
             raise EncoderUnavailable(str(e)) from e
         try:
@@ -995,7 +1009,7 @@ def _candidates(
         # 🔴 2026-09-21 (전수 재검토) — ⛔ 예외 문장을 그대로 담아 `/search` 응답으로 냈다. 그 안에는
         #    하위 예외(`{e}` · 모델 로드 실패의 경로·URL)가 섞인다. 응답에는 **우리가 쓴 고정 문장**(클래스
         #    설명 첫 줄)만, 원문은 서버 로그로 (로그는 `RedactFilter` 를 지난다 · D-76).
-        _log.warning("벡터 검색 불가 — %s: %s", type(e).__name__, e)
+        _warn_vector_off(type(e).__name__, str(e))
         vector_state = f"{type(e).__name__}: {public_reason(e)}"
     lexical_hits = by_lexical(cur, q, laws, pool, per_law=per_law)
     # 🚨 `terms()` 를 다시 부른다 — 판단을 복사하는 것이 아니라 **같은 함수**를 쓴다 (D-99).

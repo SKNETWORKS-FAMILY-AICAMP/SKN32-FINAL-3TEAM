@@ -199,3 +199,78 @@ def test_제재표_원천에_행이_없으면_표를_거두지_않는다(monkeyp
     with pytest.raises(SystemExit, match="행이 없다"):
         load_db.load_sanction_rule(cur, dry=False)
     assert not cur.deletes()
+
+
+# ── 2026-10-15 (D-344 ③) — 건너뛴 소스는 용도를 닫고 · 적재한 소스는 레지스트리와 같게 ─────────────
+
+
+class _UseCur(_Cur):
+    """`UPDATE source_use … RETURNING` 에 닫힌 (소스, 용도)를 돌려주는 대역."""
+
+    def __init__(self, opened: list[tuple[str, str]]) -> None:
+        super().__init__([])
+        self.opened = opened
+        self._last = ""
+
+    def execute(self, sql: str, params=None) -> None:  # noqa: ANN001
+        super().execute(sql, params)
+        self._last = sql
+
+    def fetchall(self):  # noqa: ANN201
+        if self._last.startswith("UPDATE source_use"):
+            return list(self.opened)
+        return []
+
+
+@pytest.mark.gate
+def test_2인_확인이_다시_열린_소스는_DB_용도를_닫는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 건너뛰기만 해서 마지막으로 넣은 `U2_rag` 가 남아 검색을 계속 허용했다 — 행은 두고 `allowed` 만 내린다 (D-344 ③)."""
+    monkeypatch.setattr(
+        load_db,
+        "_sources",
+        lambda: {
+            "ok": {"decided_by": "B", "reviewed_by": "C", "attribution": "출처", "grade": "G3"},
+            "re": {"decided_by": "B", "reviewed_by": None, "attribution": "출처", "grade": "G3"},
+        },
+    )
+    cur = _UseCur([("re", "U2_rag"), ("re", "U3_cite")])
+    _ok, skipped, _sw, _kept = load_db.load_sources(cur, dry=False)
+    upd = [p for s, p in cur.calls if s.startswith("UPDATE source_use")]
+    assert upd == [(["re"],)], upd
+    assert not any(s.startswith("DELETE FROM source ") for s, _ in cur.calls)
+    assert skipped == ["re (2인 확인 미완: 'B'/None) → DB 용도 닫음(U2_rag · U3_cite)"], skipped
+
+
+@pytest.mark.gate
+def test_예행에서는_용도를_닫지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        load_db, "_sources", lambda: {"re": {"decided_by": "B", "reviewed_by": None, "grade": "G3"}}
+    )
+    cur = _UseCur([("re", "U2_rag")])
+    load_db.load_sources(cur, dry=True)
+    assert cur.calls == []
+
+
+@pytest.mark.gate
+def test_레지스트리에서_뺀_제약과_용도는_DB_에서도_지운다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        load_db,
+        "_sources",
+        lambda: {
+            "zz": {
+                "decided_by": "B",
+                "reviewed_by": "C",
+                "attribution": "출처",
+                "grade": "G3",
+                "constraints": ["TOS"],
+                "use": {"U2": "allow", "U3": "deny"},
+            }
+        },
+    )
+    cur = _UseCur([])
+    load_db.load_sources(cur, dry=False)
+    dels = {s.split()[2]: p for s, p in cur.calls if s.startswith("DELETE FROM source_")}
+    assert dels == {
+        "source_constraint": ("zz", ["TOS"]),
+        "source_use": ("zz", ["U2_rag", "U3_cite"]),
+    }, dels

@@ -1061,3 +1061,102 @@ def test_검수_화면은_엔진_장애와_미착수를_다르게_그린다(
     )
     assert want in body
     assert not_want not in body
+
+
+# ── 2026-10-15 (D-340 결정 1 · 3 · 4 집행 · D-344 ⑨) ────────────────────────────────────────────────
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("enc", "moved", "marked"),
+    [
+        ("거짓_과장", None, True),
+        ("건강기능식품_오인", None, False),
+        ("거짓_과장", "건강기능식품_오인", False),
+    ],
+)
+def test_사전_확정에_인코더가_다른_유형을_내면_근거_보기_안에_표시한다(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, enc: str, moved: str | None, marked: bool
+) -> None:
+    """D-340 결정 3 — 사전 확정은 인코더가 뒤집지 않는다 · 다른 유형은 「AI 추정 유형 다름 — 판정 아님」 표시만. 유형 이름은 접힌 칸 안에만
+    (D-330 보충 2). 옮긴 후보는 세지 않는다(칸 판단 · `agreed_types` 와 같은 거름)."""
+    import json  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api as api  # noqa: PLC0415
+    from app import reasons  # noqa: PLC0415
+
+    raw = json.loads(
+        (api.FIXTURE_ROOT / "judge" / "05_certificate_a.json").read_text(encoding="utf-8")
+    )
+    raw["judged_by"] = "rule-0.3.0-dict+encb:abcdef123456"
+    assert raw["sentences"][0]["violations"] == ["건강기능식품_오인"]
+    cand = {"violation": enc, "confidence": 0.9}
+    if moved:
+        cand["moved_from"] = moved
+    raw["sentences"][0]["encoder_candidates"] = [cand]
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "diff_case.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(api, "FIXTURE_ROOT", tmp_path)
+    html = TestClient(api.app).get("/u/preview/diff_case").text
+    assert (reasons.ENC_DIFFERS_MARK in html) is marked
+    if marked:
+        head, inner = html.split("<summary>근거 보기</summary>", 1)
+        assert reasons.ENC_DIFFERS_MARK not in head, (
+            "🔴 겉에 그렸다 — 유형 이름은 접힌 칸 안에만 (D-330 보충 2)"
+        )
+        assert f"{reasons.ENC_DIFFERS_MARK} · 거짓 과장" in inner
+
+
+@pytest.mark.gate
+def test_조합_판정_칸은_reasons_한_곳이고_평가_도구가_그것을_쓴다() -> None:
+    """D-340 결정 1 — 칸 판단은 `app/reasons.py` 한 곳. 평가 도구는 행 단위 예측을 넣는다."""
+    from app import reasons  # noqa: PLC0415
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    c = reasons.COMBO_CELLS
+    assert eg.COMBO_CELLS is c
+    cases = [
+        ((True, ["거짓_과장"], ["소비자_기만"]), c[0]),
+        ((False, ["거짓_과장"], ["거짓_과장"]), c[1]),
+        ((False, ["거짓_과장"], ["소비자_기만"]), c[2]),
+        ((False, ["거짓_과장"], []), c[3]),
+        ((False, [], ["거짓_과장"]), c[4]),
+        ((False, [], []), c[5]),
+    ]
+    for (committed, dq, en), want in cases:
+        assert reasons.combo_cell(committed, dq, en) == want
+        assert (
+            eg.combo_cell({"committed": committed, "candidates": dq, "enc_candidates": en}) == want
+        )
+
+
+@pytest.mark.gate
+def test_결정_4_는_새_글자를_두지_않고_AI_추정_없음_줄로_갈음한다(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """D-344 ⑨ (가) — 사전 확정 ∧ 인코더 조용(D-340 결정 4)은 「근거 보기」의 「AI 추정 유형 없음 — …」 줄이 표시다.
+    「AI 위반 신호 없음」은 확정 위반 옆에서 AI 가 반대한 것처럼 읽혀 그리지 않는다."""
+    import json  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api as api  # noqa: PLC0415
+
+    raw = json.loads(
+        (api.FIXTURE_ROOT / "judge" / "05_certificate_a.json").read_text(encoding="utf-8")
+    )
+    raw["judged_by"] = "rule-0.3.0-dict+encb:abcdef123456"
+    raw["sentences"][0]["encoder_candidates"] = []
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "quiet_case.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(api, "FIXTURE_ROOT", tmp_path)
+    html = TestClient(api.app).get("/u/preview/quiet_case").text
+    inner = html.split("<summary>근거 보기</summary>", 1)[1]
+    assert "AI 추정 유형 없음 — 「문제없음」이라는 뜻은 아니에요." in inner
+    assert "AI 위반 신호 없음" not in html

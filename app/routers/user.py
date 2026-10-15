@@ -1681,6 +1681,8 @@ async def compose(request: Request) -> HTMLResponse:
         #: 판정을 지난 문장들 — 화면이 첫 문장을 헤드라인에, 나머지를 보조 문구에 얹는다
         "copy": copy,
         "note": note.strip(),
+        #: 🆕 2026-10-15 (D-344 ⑤) — 병기 문구는 판정하지 않은 글자다. 표지 글자는 `reasons` 한 곳 — 화면(JS)이 이 값을 그린다
+        "note_mark": reasons.NOTE_UNJUDGED_MARK if note.strip() else "",
         "max_text_len": PARAMS.max_text_len,
         #: 편집기의 칸 판정이 같은 품목 · 같은 인정 문구로 돌게 넘긴다 (`/u/compose/judge`)
         "branch": origin["branch"],
