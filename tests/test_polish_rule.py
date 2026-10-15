@@ -47,3 +47,33 @@ def test_식품_이름_속_크림을_화장품_크림으로_읽지_않는다() -
 )
 def test_모양을_못_읽거나_품목을_모르면_붙이지_않는다(s1: str, category: str | None) -> None:
     assert polish_by_rule(s1, category) is None
+
+
+def test_표의_어떤_문구도_용량_횟수_때를_정하지_않는다() -> None:
+    """🆕 10-15 — 섭취 · 사용 방법(「식사 후 한 알」 · 「한 숟갈」 · 「세안 후」)은 제품 표시가 정한다(팀장 지적)."""
+    from polish_rule import SAY
+    from stage_gate import DOSE_TIME
+
+    bad = [say for rows in SAY.values() for _, say in rows if DOSE_TIME.search(say)]
+    assert bad == []
+
+
+@pytest.mark.parametrize(
+    ("s1", "s2"),
+    [
+        ("오메가3 미니 캡슐 90캡슐", "오메가3 미니 캡슐 90캡슐, 식사 후 물과 함께 한 알 드세요"),
+        ("문경 오미자청", "문경 오미자청, 따뜻한 물에 한 숟갈 타서 드세요"),
+        ("수분 토너", "수분 토너, 세안 후 손바닥에 덜어 두드려 보세요"),
+        ("홍삼 스틱", "홍삼 스틱, 하루 한 번 하나씩 드세요"),
+    ],
+)
+def test_관문이_새로_정한_용량_때를_막는다(s1: str, s2: str) -> None:
+    r = check(s1, s2, persona=True)
+    assert not r.passed and any("용량" in w for w in r.reasons), r.reasons
+
+
+def test_원문에_있던_용량은_막지_않는다() -> None:
+    """1단계 문장에 이미 있던 「90캡슐」은 사실이다 — 다듬기가 새로 정한 것만 막는다. 말투의 「한 번」도 횟수가 아니다."""
+    s1 = "오메가3 미니 캡슐 90캡슐"
+    assert check(s1, f"{s1}, 물과 함께 삼켜 드세요", persona=True).passed
+    assert check(s1, f"{s1}, 한 번 드셔 보세요", persona=True).passed
