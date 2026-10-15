@@ -840,3 +840,211 @@ def test_로그인_가입_화면은_돌아갈_곳을_폼에_싣는다() -> None:
         assert 'name="next"' not in bad and "evil.example" not in bad, (
             f"🔴 {path} — 밖의 주소를 실었다"
         )
+
+
+# ── 2026-10-15 전수 점검 — 빈 칸 · 이벤트 루프 · 엔진 장애 문구 ─────────────────────────────
+
+
+def _judge_fixture():  # noqa: ANN202
+    from app.contracts import JudgeResponse  # noqa: PLC0415
+
+    path = Path(__file__).parent / "fixtures" / "judge" / "02_hold_low_conf.json"
+    return JudgeResponse.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.gate
+def test_빈_문구_칸도_칸_번호를_지킨다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 재현 — 빈 칸(`text=`)을 버리면 뒤 칸 번호가 당겨진다. 「문구 추가 → 예시 넣기」가 422 였고,
+    가운데 칸이 빈 채 `judge:3` 을 누르면 「그런 칸이 없다」, `judge:2` 는 셋째 칸을 「문구 2」로 판정했다."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    seen: list[str] = []
+
+    def fake(text, product=None):  # noqa: ANN001, ANN202
+        seen.append(text)
+        return ("ok", _judge_fixture())
+
+    monkeypatch.setattr(user_router, "_core_judge", fake)
+    client = TestClient(app)
+    form = {"Content-Type": "application/x-www-form-urlencoded"}
+    # 칸 둘(둘째는 방금 추가해 빈 칸) → 둘째 칸에 예시 넣기
+    r = client.post("/u/judge", content=b"text=AAA&text=&op=sample%3A2", headers=form)
+    assert r.status_code == 200, r.text
+    assert user_router._SAMPLE_COPY in r.text
+    # 칸 셋(가운데 빈 칸) → 셋째 칸만 판정
+    r = client.post("/u/judge", content=b"text=AAA&text=&text=CCC&op=judge%3A3", headers=form)
+    assert r.status_code == 200, r.text
+    assert seen == ["CCC"]
+    # 칸 셋 → 칸 추가는 넷을 그린다(빈 칸을 잃지 않는다)
+    r = client.post("/u/judge", content=b"text=AAA&text=&text=CCC&op=add", headers=form)
+    assert r.text.count('name="text"') >= 4
+
+
+@pytest.mark.gate
+def test_검수는_판정_코어를_이벤트_루프_밖에서_부른다(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔴 재현 — `async` 라우트에서 동기 판정 코어를 그대로 부르면 한 사람의 검수가 서버 전체를 멈춘다.
+    코어가 도는 스레드가 이벤트 루프의 스레드와 달라야 한다(`run_in_threadpool`)."""
+    import threading  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    threads: dict[str, int] = {}
+    real_render = user_router._render
+
+    def fake(text, product=None):  # noqa: ANN001, ANN202
+        threads["core"] = threading.get_ident()
+        return ("ok", _judge_fixture())
+
+    def render(*a, **k):  # noqa: ANN002, ANN003, ANN202
+        threads["loop"] = threading.get_ident()  # `_render` 는 라우트 본문(루프)에서 불린다
+        return real_render(*a, **k)
+
+    monkeypatch.setattr(user_router, "_core_judge", fake)
+    monkeypatch.setattr(user_router, "_render", render)
+    r = TestClient(app).post(
+        "/u/judge",
+        content=b"text=AAA&op=all",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200, r.text
+    assert threads["core"] != threads["loop"]
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("code", "want", "not_want"),
+    [
+        (503, "연결하지 못했어요", "아직 붙지 않았어요"),
+        (501, "아직 붙지 않았어요", "연결하지 못했어요"),
+    ],
+)
+def test_검수_화면은_엔진_장애와_미착수를_다르게_그린다(
+    monkeypatch: pytest.MonkeyPatch, code: int, want: str, not_want: str
+) -> None:
+    """🔴 재현 — 503(연결 실패)을 「아직 붙지 않았어요」로 그렸다. 광고 생성 화면과 같은 말로 가른다."""
+    from fastapi import HTTPException  # noqa: PLC0415
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api  # noqa: PLC0415
+    from app.api import app as web  # noqa: PLC0415
+
+    def boom(_req):  # noqa: ANN001, ANN202
+        raise HTTPException(code)
+
+    monkeypatch.setattr(app.api, "judge", boom)
+    body = (
+        TestClient(web)
+        .post(
+            "/u/judge",
+            content=b"text=AAA&op=all",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        .text
+    )
+    assert want in body
+    assert not_want not in body
+
+
+# ── 2026-10-15 (D-340 결정 1 · 3 · 4 집행 · D-344 ⑨) ────────────────────────────────────────────────
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("enc", "moved", "marked"),
+    [
+        ("거짓_과장", None, True),
+        ("건강기능식품_오인", None, False),
+        ("거짓_과장", "건강기능식품_오인", False),
+    ],
+)
+def test_사전_확정에_인코더가_다른_유형을_내면_근거_보기_안에_표시한다(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, enc: str, moved: str | None, marked: bool
+) -> None:
+    """D-340 결정 3 — 사전 확정은 인코더가 뒤집지 않는다 · 다른 유형은 「AI 추정 유형 다름 — 판정 아님」 표시만. 유형 이름은 접힌 칸 안에만
+    (D-330 보충 2). 옮긴 후보는 세지 않는다(칸 판단 · `agreed_types` 와 같은 거름)."""
+    import json  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api as api  # noqa: PLC0415
+    from app import reasons  # noqa: PLC0415
+
+    raw = json.loads(
+        (api.FIXTURE_ROOT / "judge" / "05_certificate_a.json").read_text(encoding="utf-8")
+    )
+    raw["judged_by"] = "rule-0.3.0-dict+encb:abcdef123456"
+    assert raw["sentences"][0]["violations"] == ["건강기능식품_오인"]
+    cand = {"violation": enc, "confidence": 0.9}
+    if moved:
+        cand["moved_from"] = moved
+    raw["sentences"][0]["encoder_candidates"] = [cand]
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "diff_case.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(api, "FIXTURE_ROOT", tmp_path)
+    html = TestClient(api.app).get("/u/preview/diff_case").text
+    assert (reasons.ENC_DIFFERS_MARK in html) is marked
+    if marked:
+        head, inner = html.split("<summary>근거 보기</summary>", 1)
+        assert reasons.ENC_DIFFERS_MARK not in head, (
+            "🔴 겉에 그렸다 — 유형 이름은 접힌 칸 안에만 (D-330 보충 2)"
+        )
+        assert f"{reasons.ENC_DIFFERS_MARK} · 거짓 과장" in inner
+
+
+@pytest.mark.gate
+def test_조합_판정_칸은_reasons_한_곳이고_평가_도구가_그것을_쓴다() -> None:
+    """D-340 결정 1 — 칸 판단은 `app/reasons.py` 한 곳. 평가 도구는 행 단위 예측을 넣는다."""
+    from app import reasons  # noqa: PLC0415
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    c = reasons.COMBO_CELLS
+    assert eg.COMBO_CELLS is c
+    cases = [
+        ((True, ["거짓_과장"], ["소비자_기만"]), c[0]),
+        ((False, ["거짓_과장"], ["거짓_과장"]), c[1]),
+        ((False, ["거짓_과장"], ["소비자_기만"]), c[2]),
+        ((False, ["거짓_과장"], []), c[3]),
+        ((False, [], ["거짓_과장"]), c[4]),
+        ((False, [], []), c[5]),
+    ]
+    for (committed, dq, en), want in cases:
+        assert reasons.combo_cell(committed, dq, en) == want
+        assert (
+            eg.combo_cell({"committed": committed, "candidates": dq, "enc_candidates": en}) == want
+        )
+
+
+@pytest.mark.gate
+def test_결정_4_는_새_글자를_두지_않고_AI_추정_없음_줄로_갈음한다(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """D-344 ⑨ (가) — 사전 확정 ∧ 인코더 조용(D-340 결정 4)은 「근거 보기」의 「AI 추정 유형 없음 — …」 줄이 표시다.
+    「AI 위반 신호 없음」은 확정 위반 옆에서 AI 가 반대한 것처럼 읽혀 그리지 않는다."""
+    import json  # noqa: PLC0415
+
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    import app.api as api  # noqa: PLC0415
+
+    raw = json.loads(
+        (api.FIXTURE_ROOT / "judge" / "05_certificate_a.json").read_text(encoding="utf-8")
+    )
+    raw["judged_by"] = "rule-0.3.0-dict+encb:abcdef123456"
+    raw["sentences"][0]["encoder_candidates"] = []
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "quiet_case.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(api, "FIXTURE_ROOT", tmp_path)
+    html = TestClient(api.app).get("/u/preview/quiet_case").text
+    inner = html.split("<summary>근거 보기</summary>", 1)[1]
+    assert "AI 추정 유형 없음 — 「문제없음」이라는 뜻은 아니에요." in inner
+    assert "AI 위반 신호 없음" not in html

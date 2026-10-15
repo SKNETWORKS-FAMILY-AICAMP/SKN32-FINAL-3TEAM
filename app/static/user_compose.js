@@ -77,6 +77,8 @@
   }
   function isDoc() { return D.key === "detail"; }
   function say(text) { $("de-msg").textContent = text; }
+  /* 병기 문구(`D.note`)를 지면에 그리는 섹션 — `notice`(필수 표기) · `caption`(캡션 · 고지) · 🆕 2026-10-15 (D-344 ⑤) */
+  var NOTE_BLOCKS = { notice: true, caption: true };
   function noticeFont() { return Math.max(Math.round(BODY * S.ratio), MIN_FONT); }
 
   /* ── 넘어온 문구로 첫 칸을 채운다 ──────────────────────────────
@@ -149,6 +151,8 @@
         (wait ? '<span class="is-bad">판정 대기 ' + wait + "</span>" : "") +
         (ng ? '<span class="is-bad">보류 ' + ng + "</span>" : "") +
         (unsure ? '<span class="is-warn">확인 필요 ' + unsure + "</span>" : "") +
+        /* 🆕 2026-10-15 (D-344 ⑤) — 필수 병기 문구는 판정하지 않은 글자다(표지 글자는 서버의 `note_mark` · app/reasons.py) */
+        (NOTE_BLOCKS[b.type] && D.note ? '<span class="is-warn">' + esc(D.note_mark) + "</span>" : "") +
         (t.locked ? "" :
           '<span class="cp-ed-item-ctl">' +
           '<button type="button" data-act="up" data-uid="' + u + '" aria-label="위로">↑</button>' +
@@ -397,10 +401,14 @@
         '<div class="cp-ed-st" id="fs-' + u + "-" + f + '"></div></div>';
     }).join("");
 
+    /* 🆕 2026-10-15 (D-344 ⑤) — 병기 문구를 그리는 섹션(필수 표기 · 캡션)에는 「판정하지 않은 글자」를 밝힌다 */
+    var noteHint = "<h4>필수 병기 문구</h4>" +
+      '<p class="cp-ed-hint">' + (D.note
+        ? "카피 생성에서 넘어온 문구를 그대로 얹어요. 여기서는 고치지 않아요. " +
+          "<b>" + esc(D.note_mark) + "</b> — 판정 엔진이 보지 않은 글자예요. 제품이 받은 인정 · 심사 내용과 같은지 확인해 주세요."
+        : "넘어온 필수 병기 문구가 없어요. [광고] 표시만 들어가요.") + "</p>";
     var notice = b.type === "notice"
-      ? "<h4>필수 병기 문구</h4>" +
-        '<p class="cp-ed-hint">' + (D.note ? "카피 생성에서 넘어온 문구가 그대로 고정돼요. 여기서는 고칠 수 없어요."
-          : "넘어온 필수 병기 문구가 없어요. [광고] 표시만 들어가요.") + "</p>" +
+      ? noteHint +
         "<h4>필수 병기 문구 크기</h4>" +
         '<input type="range" id="de-ratio" min="50" max="100" value="' + Math.round(S.ratio * 100) + '" aria-label="필수 병기 문구 크기">' +
         '<p class="cp-ed-hint" id="de-ratio-note"></p>'
@@ -412,6 +420,7 @@
       (t.imgs ? "<h4>이미지</h4>" + imgs : "") +
       (t.fields.length ? "<h4>문구 · 고치면 판정을 다시 받아요</h4>" + fields : "") +
       (t.hint ? '<p class="cp-ed-hint">' + esc(t.hint) + "</p>" : "") +
+      (b.type === "caption" && D.note ? noteHint : "") +
       notice;
 
     t.fields.forEach(function (pair) { paintStatus(b, pair[0]); });
@@ -586,6 +595,7 @@
     if (ng) parts.push("판정 보류 " + ng + "건");
     if (wait) parts.push("판정 대기 " + wait + "건");
     if (unsure) parts.push("확인 필요 " + unsure + "건");
+    if (D.note) parts.push("필수 병기 문구 " + D.note_mark);
     if (noImg) parts.push("빈 이미지 " + noImg + "칸");
     if (noAlt) parts.push("대체 텍스트 누락 " + noAlt + "건");
     say("초안 검수 · " + (parts.length ? parts.join(" · ") : "빠진 것이 없어요"));

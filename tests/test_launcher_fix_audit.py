@@ -157,12 +157,21 @@ def test_메뉴는_실패한_종료코드를_빨갛게_찍는다(monkeypatch, ca
 
 
 # ── 7. 미구현 ──────────────────────────────────────────────────────────
-@pytest.mark.parametrize("fn", [launcher.train, launcher.eval_, launcher.demo])
+@pytest.mark.parametrize("fn", [launcher.train, launcher.demo])
 def test_미구현은_0_으로_끝나지_않는다(fn) -> None:
     name = launcher.cli_name(fn)
     assert _cli(name).exit_code == launcher.STUB_EXIT != 0
     assert launcher.STUB_TAG in _cli(name, "--help").output
     assert not launcher.summary(fn).startswith(launcher.STUB_TAG), "메뉴 설명은 표를 뗀다"
+
+
+def test_eval_은_dev_만_재고_봉인은_열지_않는다(calls, monkeypatch) -> None:  # noqa: ANN001
+    """🆕 2026-10-15 (D-344 ⑩) — 메뉴 한 번으로 봉인 회차가 열리지 않게 `--dev` 만 부른다."""
+    r = _cli("eval")
+    assert r.exit_code == 0, r.output
+    assert ("uv", "run", "python", "-m", "scripts.eval_graph", "--dev") in calls
+    assert not any("--sealed" in c for c in calls)
+    assert not getattr(launcher.eval_, "_planned", False)
 
 
 # ── 8. serve ───────────────────────────────────────────────────────────
