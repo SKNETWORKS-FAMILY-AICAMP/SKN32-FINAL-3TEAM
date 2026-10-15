@@ -295,17 +295,29 @@ class EvidenceArticle(BaseModel):
     doc_title: str | None = None
 
 
+#: 🆕 2026-10-16 (D-348 결정 5 · 보충 2 결정 5) — **인코더 하한을 기록에 들이는 상한**(신뢰 층). 지금은 R1 층뿐이다 —
+#:    「위반이라면 적어도 R1」은 유형이 틀려도 참이고 그 문장이 주장이 아닐 때만 틀린다(D-273). R2 이상 층(유형을 믿을 수 있어야 한다)이
+#:    판정되면 그 결정으로 올린다. 🔴 저장의 CHECK 가 같은 수를 든다(`app/models.py` `ck_judgment_encoder_max` · D-99)
+ENCODER_RECORD_MAX = Risk.R1
+
+
 class RiskAssessment(BaseModel):
-    """D-09 래칫 — `final = max(코드 하한, 인코더 예측)`.
+    """D-09 래칫 — `final = max(코드 하한, 인코더 하한)`.
 
     🚨 **인코더는 내릴 수 없다.** 코드가 보류면 인코더가 못 뒤집는다(단조 규칙).
     🔴 상향(`final > floor`)에는 `evidence_span` 이 반드시 붙는다 (D-131).
        ⛔ 이 규칙이 DB 에서는 널로 우회되고 있었다 — 마이그레이션 0006 이 막았다.
           계약도 같은 조건을 건다. 두 곳이 다르면 늦게 터진다.
+    🔄 2026-10-16 (D-348 보충 2 결정 1 · 7) — **사전 하한과 인코더 하한은 칸이 다르다.** `floor` 는 사전 하한(재료 · 뜻 그대로 · D-313 결정 3)
+       이고 `encoder` 는 인코더 하한(인코더 유형 + 전제 → 대응표의 호 → 서명된 제재표)이다. 인코더 하한까지 올리는 것은 근거 스팬
+       대신 **호 근거**로 선다 — 문장의 인코더 후보 참조 조항(`SentenceJudgment._encoder_risk_has_basis`). 그 위로 올리는 것은
+       종전대로 근거 스팬이 필요하다. 인코더 하한은 `ENCODER_RECORD_MAX` 를 넘지 못한다.
     """
 
-    floor: Risk | None = None  # 코드 하한 (D-09 · D-130)
-    encoder: Risk | None = None  # 인코더 예측
+    floor: Risk | None = None  # 사전(코드) 하한 (D-09 · D-130 · D-313 결정 3)
+    #: 🔄 2026-10-16 (D-348 보충 2) — **인코더 하한**(기록에 들인 값 · 신뢰 층 상한 이하). 종전 뜻 「인코더 예측」을 대신한다 — 값을 내는 곳이
+    #:    없던 칸이다. 화면은 「AI 추정 · 판정 아님」 표지로 보인다. 근거는 문장의 인코더 후보 참조 조항(대응표의 호)이다
+    encoder: Risk | None = None
     final: Risk | None = None
     evidence_span: Span | None = None
     #: 🆕 2026-10-01 (D-310 개정 (다)) **가능 상한** — 하한은 「확실한 최소」다. 목(별표1)을 못 맞혀 하한이 「그 밖에 R1」로 떨어진
@@ -317,23 +329,36 @@ class RiskAssessment(BaseModel):
 
     @model_validator(mode="after")
     def _ratchet(self) -> RiskAssessment:
-        if self.final is None:
-            return self
-        if self.floor is None:
+        # 🆕 2026-10-16 (D-348 보충 2 결정 5) — 인코더 하한은 신뢰 층 상한을 넘지 못한다
+        if self.encoder is not None and self.encoder.level > ENCODER_RECORD_MAX.level:
             raise ValueError(
-                "최종 위험도를 적으려면 코드 하한이 있어야 한다 — "
+                f"인코더 하한 {self.encoder.value} 이 기록 상한 {ENCODER_RECORD_MAX.value} 을 넘는다 — "
+                "R2 이상은 유형을 믿을 수 있어야 한다 (D-348 결정 5)"
+            )
+        if self.final is None:
+            if self.encoder is not None:
+                raise ValueError(
+                    "인코더 하한을 적었는데 최종 위험도가 없다 — 합치지 않았다 (D-348 결정 4)"
+                )
+            return self
+        if self.floor is None and self.encoder is None:
+            raise ValueError(
+                "최종 위험도를 적으려면 하한(사전 또는 인코더)이 있어야 한다 — "
                 "상향의 정의가 「하한보다 높다」인데 하한이 없으면 상향이 정의되지 않는다 (D-09)"
             )
         # 🆕 2026-09-21 (전수 재검토) — ⛔ 위 docstring 이 「인코더는 내릴 수 없다」고 적었는데 `floor=R3 · final=R0` 이
         #    검증을 지났다. 래칫(D-09 · max)의 뜻 그대로 — 최종은 하한보다 낮을 수 없다.
-        if self.final.level < self.floor.level:
-            raise ValueError(
-                f"최종 위험도가 코드 하한보다 낮다 — floor={self.floor.value} final={self.final.value} (D-09 래칫)"
-            )
-        if self.final.level > self.floor.level and self.evidence_span is None:
+        for name, low in (("코드 하한", self.floor), ("인코더 하한", self.encoder)):
+            if low is not None and self.final.level < low.level:
+                raise ValueError(
+                    f"최종 위험도가 {name}보다 낮다 — {name}={low.value} final={self.final.value} (D-09 래칫)"
+                )
+        base = max((r for r in (self.floor, self.encoder) if r is not None), key=lambda r: r.level)
+        if self.final.level > base.level and self.evidence_span is None:
             raise ValueError(
                 "하한 위로 올리려면 근거 스팬이 필요하다 (D-131) — "
-                f"floor={self.floor.value} final={self.final.value}"
+                f"floor={self.floor.value if self.floor else None} encoder="
+                f"{self.encoder.value if self.encoder else None} final={self.final.value}"
             )
         return self
 
@@ -529,6 +554,22 @@ class SentenceJudgment(BaseModel):
             raise ValueError(
                 f"위반을 확정했는데 불가 사유(A/B/C)가 없다 — {[v.value for v in self.violations]} (D-273 · D-59)"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _encoder_risk_has_basis(self) -> SentenceJudgment:
+        # 🆕 2026-10-16 (D-348 보충 2 결정 2 · 3) — 인코더 하한은 **보류 문장에만** · **근거 호가 있을 때만** 적는다.
+        #    근거 = 인코더 후보의 참조 조항(대응표의 호 · D-327). 근거 없는 등급을 내지 않는다 (D-224 · D-220).
+        #    ⛔ 확정 · 판정 대상 아님에는 적지 않는다 — 사전 확정과 인코더 다른 유형은 합치지 않는다(D-340 결정 3) ·
+        #       주장이 아닌 문장은 R0 이다(D-275). 확정에 들이는 층(신뢰 규칙)이 판정되면 이 규칙을 그 결정으로 넓힌다
+        if self.risk.encoder is None:
+            return self
+        if self.verdict is not Verdict.hold or self.not_claim:
+            raise ValueError(
+                f"인코더 하한은 보류 문장에만 적는다 — {self.verdict.value} (D-348 보충 2 결정 3)"
+            )
+        if not any(c.references for c in self.encoder_candidates):
+            raise ValueError("인코더 하한의 근거 호(후보의 참조 조항)가 없다 (D-348 보충 2 결정 2)")
         return self
 
     @model_validator(mode="after")

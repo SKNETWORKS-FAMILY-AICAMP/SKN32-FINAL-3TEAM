@@ -126,11 +126,38 @@ def test_하한_없이_위험도를_적으면_막힌다() -> None:
 
 @pytest.mark.gate
 def test_근거_스팬_없이_상향하면_막힌다() -> None:
-    """D-131 — 인코더가 하한 위로 올릴 때 반드시 스팬이 붙는다."""
-    with pytest.raises(ValidationError):
+    """D-131 — 하한(사전 · 인코더) 위로 올릴 때 반드시 스팬이 붙는다.
+
+    🔄 2026-10-16 (D-348 보충 2) — 인코더 하한은 기록 상한(R1) 이하라 `encoder=R4` 는 칸 자체가 막힌다. 스팬 규칙은 따로 댄다.
+    """
+    with pytest.raises(ValidationError, match="기록 상한"):
         RiskAssessment(floor=Risk.R1, encoder=Risk.R4, final=Risk.R4)
+    with pytest.raises(ValidationError, match="D-131"):
+        RiskAssessment(floor=Risk.R1, final=Risk.R3)
+    with pytest.raises(ValidationError, match="D-131"):
+        RiskAssessment(encoder=Risk.R1, final=Risk.R2)
     # 스팬이 있으면 통과한다 — 막는 것이 조건이지 상향 자체가 아니다
     RiskAssessment(floor=Risk.R1, final=Risk.R4, evidence_span=Span(start=0, end=3))
+
+
+@pytest.mark.gate
+def test_인코더_하한은_따로_적고_최종은_둘의_큰_값이다() -> None:
+    """D-348 보충 2 결정 1 · 7 — 사전 하한(`floor`)과 인코더 하한(`encoder`)은 칸이 다르고 최종은 그 둘의 max 다.
+
+    인코더 하한까지 올리는 것은 스팬 없이 선다(근거는 문장의 호 · `SentenceJudgment` 검증기). 하한 없이 최종은 여전히 막힌다.
+    """
+    from app.contracts import ENCODER_RECORD_MAX  # noqa: PLC0415
+
+    assert ENCODER_RECORD_MAX is Risk.R1
+    RiskAssessment(encoder=Risk.R1, final=Risk.R1)  # 사전이 놓쳐도 인코더 하한으로 선다
+    RiskAssessment(floor=Risk.R1, encoder=Risk.R1, final=Risk.R1)
+    RiskAssessment(floor=Risk.R0, encoder=Risk.R1, final=Risk.R1)  # 인코더 몫까지는 스팬 없이
+    with pytest.raises(ValidationError, match="인코더 하한보다 낮다"):
+        RiskAssessment(floor=Risk.R0, encoder=Risk.R1, final=Risk.R0)
+    with pytest.raises(ValidationError, match="합치지 않았다"):
+        RiskAssessment(encoder=Risk.R1)
+    with pytest.raises(ValidationError, match="D-09"):
+        RiskAssessment(final=Risk.R1)
 
 
 @pytest.mark.gate
@@ -655,12 +682,18 @@ def test_검수_픽스처에는_후보도_재생성도_없다(path: pathlib.Path
 
 @pytest.mark.gate
 @pytest.mark.parametrize(
-    "fname", ["20260923_0018_judgment_w3.py", "20260929_0022_judgment_ratchet.py"]
+    "fname",
+    [
+        "20260923_0018_judgment_w3.py",
+        "20260929_0022_judgment_ratchet.py",
+        "20261016_0026_judgment_encoder_floor.py",
+    ],
 )
 def test_0018_의_제약_글자가_모델과_같다(fname: str) -> None:
     """🔴 D-99 — 런타임층 정본은 `app/models.py` 다. 마이그레이션 글자가 다르면 새 DB 와 옮긴 DB 가 갈린다.
 
     🔄 2026-09-29 — 0022(래칫 · 최종 ≥ 하한)도 같은 자리라 함께 댄다.
+    🔄 2026-10-16 — 0026(인코더 하한 칸 · D-348 보충 2)도 같은 자리다.
     """
     import importlib.util  # noqa: PLC0415
 

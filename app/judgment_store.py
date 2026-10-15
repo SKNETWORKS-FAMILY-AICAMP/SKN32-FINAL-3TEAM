@@ -110,6 +110,9 @@ def _judgment_row(
         evidence_span=span.model_dump(mode="json") if span is not None else None,
         risk_floor=_risk_int(s.risk.floor),
         risk_final=_risk_int(s.risk.final),
+        risk_encoder=_risk_int(
+            s.risk.encoder
+        ),  # 🆕 2026-10-16 (D-348 보충 2) — 인코더 하한 · 사전 하한과 칸이 다르다
         law_version=(res.law_version or LAW_VERSION_UNKNOWN)[:_LAW_VERSION_MAX],
         attempt=res.attempt,
         judged_by=(res.judged_by or "unknown")[:_JUDGED_BY_MAX],

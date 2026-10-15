@@ -202,6 +202,9 @@ class Judgment(Base):
     evidence_span: Mapped[dict | None] = mapped_column(JSONB)
     risk_floor: Mapped[int | None] = mapped_column(Integer)  # 코드 하한 (D-09 · D-130)
     risk_final: Mapped[int | None] = mapped_column(Integer)
+    # 🆕 2026-10-16 (D-348 보충 2 · 0026) — **인코더 하한**(기록에 들인 값). 사전 하한(`risk_floor`)과 칸을 가른다 —
+    #   화면 · 이력이 둘을 따로 보인다. 계약 `RiskAssessment.encoder` 와 같은 뜻이다
+    risk_encoder: Mapped[int | None] = mapped_column(Integer)
     # ⛔ 폐기 예정 (D-103 ③ 개정 2026-10-14) — 새 코드는 읽지 않는다 · W10 흡수 뒤 마이그레이션으로 뺀다
     law_version: Mapped[str] = mapped_column(String(40))
     # D-126 — 0-base. 총 라운드 K+1=3 이므로 0·1·2 만 가능
@@ -264,11 +267,29 @@ class Judgment(Base):
         #    상향이 정의되지 않아 무조건 통과였다.
         # ★ 새 뜻 — 최종 위험도를 적으려면 하한이 반드시 있어야 하고, 하한보다 높으면
         #    근거 스팬이 있어야 한다. 위험도를 안 적는 경우(unjudged·hold)는 그대로 통과.
+        # 🔄 2026-10-16 (D-348 보충 2 결정 7 · 0026) — 하한은 **사전 또는 인코더** 중 하나가 있으면 된다. 인코더 하한까지는 호 근거로
+        #   선다(계약 `_encoder_risk_has_basis`) · 그 위로는 종전대로 근거 스팬. ⛔ 「하한 없이 최종」은 여전히 막힌다 —
+        #   PostgreSQL 의 GREATEST 는 NULL 을 건너뛴다(둘 다 NULL 이면 NULL → 앞 조건이 먼저 막는다).
+        #   🔴 글자는 마이그레이션 0026 의 `_CHECKS` 와 같아야 한다 (게이트 `test_0018_의_제약_글자가_모델과_같다`).
         CheckConstraint(
             "risk_final IS NULL"
-            " OR (risk_floor IS NOT NULL"
-            "     AND (risk_final <= risk_floor OR evidence_span IS NOT NULL))",
+            " OR ((risk_floor IS NOT NULL OR risk_encoder IS NOT NULL)"
+            "     AND (risk_final <= GREATEST(risk_floor, risk_encoder) OR evidence_span IS NOT NULL))",
             name="ck_judgment_raise_needs_evidence",
+        ),
+        # 🆕 2026-10-16 (D-348 보충 2 · 0026) — 인코더 하한은 기록 상한(계약 `ENCODER_RECORD_MAX` = R1) 이하 · 최종이 있고 그 아래가 아니며 ·
+        #   보류 문장에만 있다(계약 `RiskAssessment._ratchet` · `SentenceJudgment._encoder_risk_has_basis` 와 같은 규칙 · D-99)
+        CheckConstraint(
+            "risk_encoder IS NULL OR risk_encoder BETWEEN 0 AND 1",
+            name="ck_judgment_encoder_max",
+        ),
+        CheckConstraint(
+            "risk_encoder IS NULL OR (risk_final IS NOT NULL AND risk_final >= risk_encoder)",
+            name="ck_judgment_final_not_below_encoder",
+        ),
+        CheckConstraint(
+            "risk_encoder IS NULL OR verdict = 'hold'",
+            name="ck_judgment_encoder_hold_only",
         ),
         # 🆕 2026-09-29 (D-09 래칫 · 계약 `RiskAssessment` 와 같은 규칙 · D-99) — 최종은 하한보다 낮을 수 없다.
         #   ⛔ 위 제약은 「하한보다 **높으면** 근거」만 보고, 하한 R3 · 최종 R0 을 받았다 — 인코더가 내린 것이다.

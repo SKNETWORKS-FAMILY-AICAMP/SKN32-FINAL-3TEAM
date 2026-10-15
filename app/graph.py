@@ -60,6 +60,7 @@ from app import premise as pm
 from app import reasons as rs
 from app import retrieve as rt
 from app.contracts import (
+    ENCODER_RECORD_MAX,
     LAW_VERSION_UNKNOWN,
     NOT_REVIEWED_UNNAMED,
     UNCOVERED_CATEGORIES,
@@ -1743,6 +1744,86 @@ def _with_risk(s: SentenceJudgment, risk: RiskAssessment) -> SentenceJudgment:
     return SentenceJudgment(**{**{k: getattr(s, k) for k in type(s).model_fields}, "risk": risk})
 
 
+# ── 인코더 하한 (🆕 2026-10-16 · D-348 결정 3 ~ 5 · 보충 2) ─────────────────────────────
+# ★ 사전 하한(`risk.floor`)과 **따로** 낸다 — 인코더 유형 + 전제 → 대응표의 호 → 서명된 제재표(`estimate_of` 와 같은 계산 · D-99).
+#   기록에 들이는 높이는 신뢰 층이 정한다(`encoder_cap`) · 최종 = max(사전 하한, 인코더 하한).
+# 🚨 판정(확정 · 보류) · 종착은 바뀌지 않는다 — 보류 문장의 위험도 칸만 채운다(보충 2 결정 3).
+
+
+def encoder_floor(
+    rows: list[dict[str, Any]], premise: Premise, cands: Iterable[EncoderTypeCandidate]
+) -> sanction.Floor:
+    """전제 하나에서 문장의 인코더 하한 — 후보(옮긴 후보 포함)마다 `estimate_of` 를 내고 합친다(`_combine_floors`).
+
+    🔴 후보 하나라도 하한을 모르면 **모른다**(`Floor(None)`) — 아는 것만으로 max 를 내지 않는다(`floor_of_sentence` 와 같은 규칙 · D-220).
+       후보가 없으면 모른다(인코더가 조용하다 ≠ R0).
+    """
+    found: list[sanction.Floor] = []
+    for c in cands:
+        e = estimate_of(rows, premise, c.violation)
+        if e.floor is None:
+            return sanction.Floor(None)
+        found.append(sanction.Floor(e.floor, ceiling=e.ceiling, ceiling_note=e.ceiling_note))
+    return _combine_floors(found)
+
+
+def encoder_cap(text: str) -> Risk | None:
+    """신뢰 층 — 인코더 하한을 **기록에 들일 높이**. 지금은 R1 층뿐이다(D-348 결정 5 · 계약 `ENCODER_RECORD_MAX`).
+
+    R1 층은 「주장인가만」 가린다(유형 무관 · D-273) — 주장 가드(`claimscope.claim_guard`)를 지나면 R1, 아니면 들이지 않는다(`None`).
+    ⬜ R2 이상 층(유형을 믿을 수 있어야 한다)은 판정 뒤 여기서 연다.
+    """
+    return ENCODER_RECORD_MAX if claimscope.claim_guard(text) else None
+
+
+def _with_encoder_risk(
+    j: SentenceJudgment, premise: Premise, rows: list[dict[str, Any]]
+) -> SentenceJudgment:
+    """보류 문장에 그 전제의 인코더 하한을 합친 새 문장 — 못 내면 그대로 (D-348 보충 2 결정 3 · 4).
+
+    🔴 보류 문장에만 · 판정 대상 아님 제외 · 근거 호(후보의 참조 조항)가 있을 때만 · 주장 가드를 지날 때만 · 하한을 알 때만 (계약
+       `_encoder_risk_has_basis` 와 같은 조건 · D-220). 이미 적힌 인코더 하한이 있으면 그대로 둔다.
+    """
+    if (
+        j.verdict is not Verdict.hold
+        or j.not_claim
+        or j.risk.encoder is not None
+        or not any(c.references for c in j.encoder_candidates)
+    ):
+        return j
+    cap = encoder_cap(j.text)
+    if cap is None:
+        return j
+    f = encoder_floor(rows, premise, j.encoder_candidates)
+    if f.floor is None:
+        return j
+    enc = min(f.floor, cap, key=lambda r: r.level)
+    return _with_risk(j, _merged(j.risk, enc))
+
+
+def _merged(risk: RiskAssessment, enc: Risk) -> RiskAssessment:
+    """사전 쪽 위험도에 인코더 하한을 합친다 — 최종 = max(그 위험도의 최종 또는 사전 하한, 인코더 하한) (D-348 결정 4 · D-09 래칫)."""
+    have = risk.final or risk.floor
+    final = enc if have is None or enc.level > have.level else have
+    return risk.model_copy(update={"encoder": enc, "final": final})
+
+
+def _record_encoder(r: SentenceJudgment, per: list[SentenceJudgment]) -> SentenceJudgment | None:
+    """기록되는 보류 문장의 인코더 하한 = **전제 최댓값** (D-348 보충 2 결정 4 · D-263 ① · 기록 ≥ 분기). 바꿀 것이 없으면 `None`.
+
+    ★ 분기를 내지 않는 경로(품목이 주어졌고 전제가 판정을 바꾸지 않는다)에서도 부른다 — 기록은 전제 최댓값이다.
+    🔴 기록 문장에 근거 호가 없으면 적지 않는다(계약) — 그때 분기에 인코더 하한이 있으면 기록 ≥ 분기 검증기가 응답을 거부한다.
+       기록 판정의 후보는 이 품목의 전제 전부로 거른 합집합이라 분기 후보의 상위 집합이다(`_encoder_candidates`) — 그 일은 없어야 한다.
+    """
+    encs = [j.risk.encoder for j in per if j.risk.encoder is not None]
+    if not encs or r.verdict is not Verdict.hold or r.not_claim or r.risk.encoder is not None:
+        return None
+    if not any(c.references for c in r.encoder_candidates):
+        return None
+    top = max(encs, key=lambda x: x.level)
+    return _with_risk(r, _merged(r.risk, top))
+
+
 def _substantiated(s: SentenceJudgment) -> SentenceJudgment:
     """확정된 실증형(B) 위반에 **실증 분기**를 붙인 새 문장 (🆕 2026-10-14 · D-337 · D-268 「지시」의 재료).
 
@@ -1776,6 +1857,8 @@ def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN00
     """위험도 — **코드 하한**(제재표) · 가능 상한 (D-09 · D-305 · D-310). 🆕 2026-10-02 (W5) 배선.
 
     ★ 확정 문장에만 적는다 — 보류 문장의 유형 후보에는 하한을 걸지 않는다(D-311 · D-313 ③).
+       🔄 2026-10-16 (D-348 보충 2) — 보류 문장에는 **인코더 하한**(`risk.encoder` · 사전 하한과 다른 칸)이 붙을 수 있다. 사전 하한 칸은
+       위 규칙 그대로다. 전제가 하나인 품목은 여기서(`_single_premise_encoder`), 여럿이면 `premise_branches` 가 붙인다
        · 위반 없는 확정 → 하한 R0 · 최종 R0 (D-130 「걸린 것이 없으면 R0」 · D-273 불변식)
        · 위반 확정 → 하한 = 한 전제 안에서 걸린 법들의 하한 중 높은 쪽(`floor_of_sentence`) · 최종 = 하한(인코더가 없다 · D-131)
     🔴 **하한을 모르면 적지 않는다** — 제재표가 비었거나(서명 전 · 적재 전) 맞는 행이 없으면 위험도가 없고, 위험도 없는 확정 위반은
@@ -1819,7 +1902,7 @@ def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN00
         if s.verdict is Verdict.confirmed and s.risk.final is None and s.sent_id not in done
     ]
     if not todo or cur is None or product.category is None:
-        return {"sentences": out} if out else {}
+        return _single_premise_encoder(state, cur, sents, out)
     # 🚨 제재표는 **적을 문장이 있을 때만** 읽는다 — 보류뿐인 요청에 질의를 하나 더 얹지 않는다 (D-77 L3)
     rows = load_sanction_rows(cur) if any(s.violations for s in todo) else []
     by_sent: dict[str, dict[str, tuple[DictHit, ...]]] = {}
@@ -1847,7 +1930,41 @@ def assess_risk(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN00
                 )
             )
         )
-    return {"sentences": out} if out else {}
+    return _single_premise_encoder(state, cur, sents, out)
+
+
+def _single_premise_encoder(
+    state: CoreState, cur: Any, sents: list[SentenceJudgment], out: list[SentenceJudgment]
+) -> dict[str, Any]:
+    """품목을 알고 전제가 **하나**면(화장품 · 일반상품) 분기 노드가 돌지 않는다 — 기록 판정의 보류 문장에 그 전제의 인코더 하한을
+    여기서 합친다 (🆕 2026-10-16 · D-348 보충 2 결정 4 · 분기 노드와 같은 함수 `_with_encoder_risk` · D-99).
+
+    ★ 전제가 여럿(품목 미상 · 식품 · 건기식)이면 `premise_branches` 가 전제마다 내고 기록 = 최댓값으로 맞춘다 — 여기서 하지 않는다.
+    🔴 DB 가 없거나 인코더 신호가 없으면 아무것도 하지 않는다(하한을 지어내지 않는다 · D-09 · D-220).
+    """
+    category = (state.get("product") or ProductContext()).category
+    premises = pm.PREMISES_OF.get(category, ()) if category is not None else ()
+    if len(premises) != 1 or cur is None or not state.get("encodings"):
+        return {"sentences": out} if out else {}
+    (premise,) = premises
+    now = {s.sent_id: s for s in sents} | {s.sent_id: s for s in out}
+    todo = [
+        s
+        for s in now.values()
+        if s.verdict is Verdict.hold
+        and not s.not_claim
+        and s.encoder_candidates
+        and s.risk.encoder is None
+    ]
+    by = {s.sent_id: s for s in out}
+    if todo:
+        rows = load_sanction_rows(cur)
+        for s in todo:
+            e = _with_encoder_risk(s, premise, rows)
+            if e is not s:
+                by[s.sent_id] = e
+    res = list(by.values())
+    return {"sentences": res} if res else {}
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -2000,6 +2117,8 @@ def _premise_sentences(
             )
             # 🆕 2026-10-15 (D-340 결정 5 · D-346) — 인코더만 잡은 문장의 추정 위험도(표시 전용 · 판정이 끝난 뒤)
             j = _with_estimates(j, premise, rows)
+            # 🆕 2026-10-16 (D-348 보충 2 결정 4) — 이 전제의 인코더 하한(보류 문장 · 기록 위험도 칸 · 판정은 그대로)
+            j = _with_encoder_risk(j, premise, rows)
         out.append(j)
     return out
 
@@ -2033,7 +2152,13 @@ def _recorded(
     hit = [j for j in per if j.verdict is Verdict.confirmed and j.violations]
     if not hit:
         return None  # 어느 전제에서도 확정 위반이 없다 — 종전 판정(사전 침묵 보류 등) 그대로
-    risks = [j.risk.final for j in per if j.risk.final is not None]
+    # 🔄 2026-10-16 (D-348 보충 2 결정 1) — 여기서 모으는 것은 **사전 쪽** 위험도다. 인코더 하한이 붙은 분기 문장은 사전 하한만 센다 —
+    #    인코더 몫은 `_record_encoder` 가 `encoder` 칸으로 따로 합친다(사전 하한 칸에 인코더 값을 섞지 않는다)
+    risks = [
+        r
+        for j in per
+        if (r := (j.risk.floor if j.risk.encoder is not None else j.risk.final)) is not None
+    ]
     top = max(risks, key=lambda r: r.level) if risks else None
     worst = max(hit, key=lambda j: j.risk.final.level if j.risk.final is not None else -1)
     risk = RiskAssessment(floor=top, final=top) if top is not None else RiskAssessment()
@@ -2096,6 +2221,27 @@ def _held_candidates(
             "evidence": evidence,
         }
     )
+
+
+def _with_record_encoder(
+    base: list[SentenceJudgment],
+    changed: list[SentenceJudgment],
+    per: dict[Premise, list[SentenceJudgment]],
+    premises: tuple[Premise, ...],
+) -> list[SentenceJudgment]:
+    """기록 문장마다 인코더 하한(전제 최댓값)을 합친 바뀐 문장 목록 — 이미 바뀐 문장은 그 위에, 그대로인 문장은 기록 판정 위에 (D-348 보충 2 결정 4)."""
+    by = {c.sent_id: c for c in changed}
+    out = list(changed)
+    for i, b in enumerate(base):
+        r = by.get(b.sent_id, b)
+        e = _record_encoder(r, [per[p][i] for p in premises])
+        if e is None:
+            continue
+        if b.sent_id in by:
+            out[out.index(by[b.sent_id])] = e
+        else:
+            out.append(e)
+    return out
 
 
 def _judgment_key(j: SentenceJudgment) -> tuple:
@@ -2166,7 +2312,9 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         # 품목이 주어졌고 전제가 판정을 바꾸지 않는다 — 고를 것이 없는 선택지를 내지 않는다.
         # ⛔ 품목을 모를 때는 같아도 낸다 — 「품목 미확정이면 분기는 언제나」(D-229 ⑥ · D-319 ②).
         # 🔄 2026-10-11 — 판정은 종전 그대로이고 보류 문장의 후보만 바로잡는다. 바꿀 것이 없으면 아무것도 내지 않는다
-        return {"sentences": held} if held else {}
+        # 🔄 2026-10-16 (D-348 보충 2 결정 4) — 분기를 내지 않아도 보류 문장의 기록 위험도는 전제 최댓값이다
+        recs = _with_record_encoder(base, held, per, premises)
+        return {"sentences": recs} if recs else {}
     reason = HoldReason.cat_unknown if category is None else HoldReason.premise_unknown
     changed = [
         r
@@ -2174,6 +2322,8 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         if (r := _recorded(b, [per[p][i] for p in premises], reason)) is not None
     ]
     changed += [h for h in held if h.sent_id not in {r.sent_id for r in changed}]
+    # 🆕 2026-10-16 (D-348 보충 2 결정 4) — 기록 문장(바뀐 것 · 그대로인 것)의 인코더 하한 = 전제 최댓값
+    changed = _with_record_encoder(base, changed, per, premises)
     branches = [
         Branch(
             premise=p,

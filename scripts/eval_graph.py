@@ -205,6 +205,9 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         #:    판정 대상 아님만 있는 행이 품목 미확정으로 보류된 까닭(D-319 결정 2)을 「종착 재료 없음」과 가른다
         "not_claim": any(s.not_claim for s in sents),
         "not_claim_only": bool(sents) and all(s.not_claim for s in sents),
+        #: 🆕 2026-10-16 (D-348 보충 2) — **기록 판정에 인코더 하한이 붙은 문장이 있나**(보류 문장 · 판정은 그대로).
+        #:    보충 1 결정 3 의 지표(적법에 하한이 붙는 비율)가 이 칸을 센다
+        "enc_risk": any(s.risk.encoder is not None for s in sents),
         #: 🆕 2026-10-06 (D-263 ① · D-319 ①) — **분기 때문에 보류로 기록된 문장에 실린 유형**(가장 보수적인 전제의 위반).
         #:    `candidates`(자격 없는 적중까지 든 보류 후보)와 다르다 — 전제를 몰라 멈춘 문장만이다
         "premise_held": sorted(
@@ -664,7 +667,39 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["combo"] = combo_report(rows, preds)
     out["reason"] = reason_report(rows, preds)
     out["recorded"] = recorded_report(rows, preds)
+    out["encoder_risk"] = encoder_risk_report(rows, preds)
     return out
+
+
+def encoder_risk_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
+    """인코더 하한이 붙은 행 (🆕 2026-10-16 · D-348 보충 1 결정 3 · 보충 2 결정 5) — 위반 · 적법 · 모호별.
+
+    ★ 지표 = **적법에 하한이 붙는 비율** · 분모 = **적법 행 전체**(조건 D · L · 보충 2 결정 5) · Wilson 95% 상한 ≤ 10% `[임의]`(D-347 결정 7 (ㄱ)
+       과 같은 예산)이면 그 가드 세기를 쓴다. 🔴 적법 행이 없으면 「잰 것 없음」(None) — 0 % 로 쓰지 않는다 (D-220).
+    🚨 진단이다 — 판정 · 종착은 이 칸을 읽지 않는다. 인코더가 돈 행만 센다(안 돈 행은 하한이 붙을 수 없다).
+    """
+    pos = law = m = pos_n = law_n = m_n = 0
+    for r, p in zip(rows, preds, strict=True):
+        if not p.get("encoded"):
+            continue
+        cond = r.get("조건") or ""
+        hit = bool(p.get("enc_risk"))
+        if cond in ("A", "B", "C"):
+            pos_n += 1
+            pos += hit
+        elif cond in ("D", "L"):
+            law_n += 1
+            law += hit
+        elif cond == "M":
+            m_n += 1
+            m += hit
+    ci = wilson(law, law_n)
+    return {
+        "violation": [pos, pos_n],
+        "lawful": [law, law_n],
+        "ambiguous": [m, m_n],
+        "lawful_upper": ci[1] if ci else None,
+    }
 
 
 def conditional_rows(rows: list[dict]) -> list[dict]:
@@ -783,6 +818,18 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
         )
         for k, (n, pos, law, m) in cb.items():
             print(f"    {k:28} {n:>5} · {pos:>4} / {law:>3} · M {m}")
+    er = s.get("encoder_risk") or {}
+    if er:
+        (vk, vn), (lk, ln), (mk, mn) = er["violation"], er["lawful"], er["ambiguous"]
+        up = er["lawful_upper"]
+        print(
+            "\n  인코더 하한 (D-348 보충 2 · 기록 판정 · 보류 문장 · 판정 아님) — 하한이 붙은 행 / 그 조건의 행"
+            f"\n    위반(A·B·C) {vk} / {vn} · 적법(D·L) {lk} / {ln}"
+            + (f" ({lk / ln:.1%} · 95% 상한 {up:.1%})" if ln else " (잰 것 없음)")
+            + f" · 모호(M) {mk} / {mn}"
+            + ("" if ln >= MIN_MEASURABLE else "  ← 적법 측정 불가 (n<30 · D-40)")
+            + "\n    ⓘ 가드 세기는 적법 95% 상한 ≤ 10% `[임의]` 로 고른다 (보충 1 결정 3) · 분모는 적법 행 전체 (보충 2 결정 5)"
+        )
     be = s.get("branch_encoder") or {}
     for name, (pos, hit, fired) in be.items():
         print(

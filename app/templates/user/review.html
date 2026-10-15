@@ -416,7 +416,12 @@
         <div class="rv-sent-head">
           <span class="rv-dot" aria-hidden="true"></span>
           <span class="rv-concl"{% if fin == "R0" and v == "confirmed" %} title="위험도 R0 — 특이사항 없음"{% endif %}>{{ sent_concl(s, premise) }}</span>
-          {% if fin in RISK and not (fin == "R0" and v != "confirmed") %}
+          {#- 🆕 2026-10-16 (D-348 보충 2 결정 1) — 최종 위험도가 **인코더 하한에서 온** 문장은 「AI 추정」을 달고 「위반이라면」으로 말한다.
+              판정이 아니다(보류 그대로) — 사전 하한에서 온 등급과 같은 칩으로 읽히지 않게 한다 #}
+          {% set enc_risk = s.risk.encoder and (not s.risk.floor or s.risk.encoder.level > s.risk.floor.level) %}
+          {% if enc_risk and fin in RISK %}
+          <span class="rv-risk {{ RISK[fin][0] }}" title="AI 추정 · 판정 아님 — 위반이라면 {{ RISK[fin][2] }}">AI 추정 · {{ RISK[fin][1] }}</span>
+          {% elif fin in RISK and not (fin == "R0" and v != "confirmed") %}
           <span class="rv-risk {{ RISK[fin][0] }}" title="위험도 {{ fin }} — {{ RISK[fin][2] }}">{{ RISK[fin][1] }}</span>
           {% elif fin and fin != "R0" %}
           <span class="rv-risk">위험도 {{ fin }}</span>
@@ -595,8 +600,10 @@
             <p class="rv-note">AI 추정 유형 없음 — 「문제없음」이라는 뜻은 아니에요.</p>
             {% endif %}
             <p class="rv-ev-label">위험도 산출 내역</p>
-            <div class="rv-calc"><span>코드 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
-            <div class="rv-calc"><span>인코더 예측</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>
+            {#- 🔄 2026-10-16 (D-348 보충 2 결정 1 · 2) — 사전 하한과 인코더 하한은 칸이 다르다. 인코더 하한의 근거는 위 AI 추정 유형의 참조 조항(대응표의 호)이다 #}
+            <div class="rv-calc"><span>사전 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
+            <div class="rv-calc"><span>인코더 하한 (AI 추정 · 판정 아님)</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>
+            {% if s.risk.encoder %}<p class="rv-note">인코더 하한의 근거는 위 AI 추정 유형의 참조 조항이에요 — 이 문구에서 찾은 근거가 아니라 「이 유형이라면 이 조항」이에요.</p>{% endif %}
             <div class="rv-calc total"><span>최종 위험도</span><b>{{ "— (보류 · 등급 미정)" if s.risk.final and s.verdict.value != "confirmed" and s.risk.final.value == "R0" else (s.risk.final.value if s.risk.final else "—") }}</b></div>
           </div>
 {% endmacro %}
