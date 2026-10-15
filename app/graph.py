@@ -125,8 +125,13 @@ class SentEvidence:
     🔴 **왜 생겼나** — 종전에는 `retrieve` 가 찾아 온 것을 놓을 칸이 상태에 **없었다.**
        ① 리듀서 없는 칸에 넣으면 문장이 여럿일 때 **마지막 하나만 남는다** ② `judge` 안에서 검색을
        다시 부르면 **코어가 두 벌이 된다** (D-99). 키가 있으면 계약이 선다.
-    🚨 `vector`·`lexical` 을 같이 나른다 — **벡터가 죽은 채 어휘 결과만으로 판정하면 근거가 반쪽인데
-       응답은 그럴듯하다.** `hold` 로 보내는 근거가 이 둘이다 (D-202).
+    🚨 `vector`·`lexical` 을 같이 나른다 — **벡터가 죽은 채 어휘 결과만으로 찾으면 참고 조문이 반쪽인데
+       응답은 그럴듯하다** (D-202).
+    🔄 2026-10-15 (D-344 ④) — ⛔ 종전 「`hold` 로 보내는 근거가 이 둘이다」는 틀렸다. 읽는 노드가 없고, 보내지도 않는다 —
+       검색은 **참고 조문**만 낸다. 확정 · 보류의 근거는 사전 적중과 그 인용이다(`_judge_one` · D-127 · D-269). 그래서 벡터가 죽어도
+       판정은 같다. 까닭은 기기 단위(검색 임베딩 캐시 없음 · 임베딩 판 섞임)라 `doctor --env` ④-4 와 프로세스당 한 번 경고
+       (`app/retrieve.py` `_warn_vector_off`)로 알린다 — 응답 칸은 두지 않는다(D-344 ④ (마)). 읽는 곳은 진단 도구(`graph_probe` ·
+       `time_graph`)뿐이다.
     """
 
     sent_id: str
@@ -136,7 +141,8 @@ class SentEvidence:
     #:       좌표로 옮기는 일은 이제 법별 노드가 한다(`LawResult.articles`).
     vector_hits: tuple[rt.Hit, ...] = ()
     lexical_hits: tuple[rt.Hit, ...] = ()
-    #: 두 갈래가 각각 돌았는가. ⛔ **둘 다 False 면 근거 없이 판정하는 것**이다 (D-224) — `hold`
+    #: 두 갈래가 각각 돌았는가. 🔄 둘 다 False 여도 판정은 사전으로 선다 — 검색 근거(참고 조문)가 없을 뿐이다 (위 docstring · D-344 ④).
+    #:    DB 가 없으면(커서 없음) 사전도 못 돌아 문장이 미판정이다 — 이 칸이 아니라 `scan.ran` 이 가른다.
     vector: bool = False
     lexical: bool = False
     #: 두 갈래 **후보 수의 합**(겹친 것은 두 번 센다 · 법을 합친 행 수 — 법마다 폭은 `rt.POOL`). 🚨 0 은 「안 겹쳤다」이고,
@@ -1527,7 +1533,8 @@ def judge(state: CoreState) -> dict[str, Any]:
     ⚠️ D-269 는 「전제 정정 · 결론 재검 대기」다 — 그래프 평가 도구(`scripts/eval_graph.py` · W1)의 수로 재검한다. 결론은 그때까지 그대로다.
     ⬜ 단서(`provisos`)는 아직 읽지 않는다 — 제품 사실을 모르면 요건 충족을 모른다(D-238 개정 (나)). 판정을 바꾸지 않는다.
        🔄 2026-10-15 (전수 점검) — ⛔ 종전 주석 「근거에 남는다」는 틀렸다. 법별 노드가 고른 단서(`LawResult.provisos`)는
-       **응답에 실리지 않는다**(읽는 곳은 `scripts/graph_probe.py` 뿐). 응답에 실을지는 ⬜ 판정 대기(2026-10-15 전수 점검).
+       **응답에 실리지 않는다**(읽는 곳은 `scripts/graph_probe.py` 뿐). 🔄 D-344 ⑥b — **일부러 싣지 않는다.** 판정이 단서를 어떻게 확인하는가(D-238 개정 (나) ⬜)가
+       정해지지 않았다 — 「다만 ~은 제외」를 보여 주면 이용자가 자기가 예외라고 읽는다. D-238 ⬜ 가 닫히면 다시 연다.
     """
     order = {name: k for k, name in enumerate(LAW_NODES)}
     results = sorted(state.get("law_results", []), key=lambda r: order.get(r.law, len(order)))
@@ -1601,7 +1608,10 @@ ORDER BY rule_key"""
 
 
 def load_sanction_rows(cur: Any) -> list[dict[str, Any]]:
-    """`v_risk_lookup` → 하한 조회 행. 서명 전이거나 적재 전이면 **빈 목록**이다 — 그러면 하한이 없어 판정이 보류로 멈춘다 (D-220)."""
+    """`v_risk_lookup` → 하한 조회 행. 서명 전이거나 적재 전이면 **빈 목록**이다 — 그러면 하한이 없어 판정이 보류로 멈춘다 (D-220).
+
+    🔄 2026-10-15 (D-343) — 식품 4~7호의 「그 밖에 R1」도 이제 이 규칙을 따른다(`sanction.floor_rows` · 그 법의 서명 행이 있어야 선다).
+    """
     cur.execute(SQL_RISK)
     return [
         {

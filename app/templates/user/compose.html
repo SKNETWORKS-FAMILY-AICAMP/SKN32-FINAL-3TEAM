@@ -259,7 +259,7 @@ main:has(.cp-ed) { max-width: 96rem; }
   {# 🆕 2026-10-08 — 카피 생성의 후보 카드에서 넘어왔다. ⬜ 엔진이 붙으면 직접 입력이 아니라 `source_copy` 경로로 옮긴다 #}
   <p class="cp-note" style="margin:0 0 .4rem">
     ★ <b>카피 생성에서 고른 문구</b>를 채워 뒀어요.
-    {%- if carried.note %} 필수 병기 문구 — <b>{{ carried.note }}</b>{% endif %}
+    {%- if carried.note %} 필수 병기 문구 — <b>{{ carried.note }}</b> ({{ NOTE_UNJUDGED_MARK }}){% endif %}
   </p>
   {% endif %}
   <textarea id="prompt" name="prompt" rows="3" maxlength="{{ max_text_len }}"

@@ -10,6 +10,7 @@ launcher는 얇은 껍데기, 로직은 여기. 출력은 「무엇이 틀렸나
   4. Alembic head == DB revision
   5. LangGraph 버전 == 핀
   6. 모델 판 — 인코더 폴더가 잠금(models.lock.json)의 판인가 (🔄 2026-10-13 · D-333 · `--env` 에서 이름·크기만)
+     🆕 2026-10-15 (D-344 ⑦) — 검색 임베딩(KURE) 캐시가 있는가. 판정 경로는 캐시에서만 올린다 · 없으면 노랑
   7. GPU 가용 → 없으면 CPU 폴백 안내
   8. kiwipiepy 사전 로드
 
@@ -31,9 +32,10 @@ launcher는 얇은 껍데기, 로직은 여기. 출력은 「무엇이 틀렸나
   15. 클라우드 반출 대상에 g3/·g2_facts/ 외 등급 디렉터리가 섞였는가 (D-78)
       🚨 AWS는 **제3자 제공 계정**이다. g2_norepub/(재배포 제약)·quarantine/(미판정)을
       올리는 것은 D-71이 가른 「재배포」 축에 걸린다. 배포 이미지·동기화 목록을 검사한다.
-  16. 판정 런타임 경로에 외부 API 호출이 있는가 → 즉시 실패 (D-73 · D-78)
-      🚨 GPT API 크레딧이 있어도 판정·생성 경로에는 들어갈 수 없다. D-77 L4의
-      「판정 경로의 외부 네트워크 요청 수 = 0」을 코드로 강제하는 검사다.
+  16. → pytest (tests/test_judge_path_offline.py · 🔄 2026-10-15 D-344 ⑦) — 판정 런타임 경로에 외부 API 호출이 있는가
+      🚨 GPT API 크레딧이 있어도 판정 경로에는 들어갈 수 없다(카피 생성의 후보 작성은 D-332 로 열렸다 — `app/routers/`).
+      D-77 L4의 「판정 경로의 외부 네트워크 요청 수 = 0」을 코드로 강제하는 검사다. 저장소에서 답이 하나라 게이트로 옮겼다(D-89).
+      기기마다 다른 절반 — 검색 임베딩 캐시 — 은 아래 `--env` ④-4 가 본다.
   17. derived/golden/*.jsonl 의 모든 행에 provenance · redistributable 이 있는가 (D-71)
       🚨 NOREDIST 소스에서 온 문장이 한 줄이라도 섞이면 그 골든셋 전체를 공개할 수 없고,
       섞인 뒤에는 어느 줄이 어디서 왔는지 되돌릴 수 없다.
@@ -711,6 +713,45 @@ def _check_models() -> int:
     return 1
 
 
+#: 검색 임베딩 모델이 캐시에서 올라오려면 있어야 하는 파일 — 설정(`config.json`) · sentence-transformers 모듈 표(`modules.json`)
+EMBED_CACHE_FILES = ("config.json", "modules.json")
+
+
+def _check_embed_cache() -> int:
+    """④-4 검색 임베딩 모델 캐시 (🆕 2026-10-15 · D-344 ⑦ · 머리말 6 「모델 캐시」) — 판정 경로는 **캐시에서만** 올린다.
+
+    ★ `app/retrieve.py` `encode` 가 `local_files_only` 로 올린다(`app/settings.py` `load_kwargs(local_only=True)`).
+       캐시가 없으면 판정은 그대로 돌고 **어휘 검색만** 한다 — 참고 조문이 줄어든다(판정 · 확정 근거는 사전 인용이라 바뀌지 않는다).
+    🟡 노랑이다(빨강이 아니다) — 데이터 · 임베딩을 안 하는 기기(화면 담당)도 앱은 돈다. 🔴 대신 그 기기의 검색은 반쪽이다.
+    ⛔ 내려받지 않는다 — 진단은 3초 안이고 외부 요청을 내지 않는다. 받는 것은 `launcher.py embed --check` 다.
+    """
+    from app.settings import ALLOWED_MODELS, PARAMS  # noqa: PLC0415
+
+    try:
+        from huggingface_hub import try_to_load_from_cache  # noqa: PLC0415
+    except ImportError:
+        print("🟡 검색 임베딩 캐시 — huggingface_hub 가 없어 확인하지 못했다 (uv sync --frozen)")
+        return 0
+    rev = PARAMS.embed_revision or None
+    for model_id in sorted(ALLOWED_MODELS):
+        missing = [
+            f
+            for f in EMBED_CACHE_FILES
+            if not isinstance(try_to_load_from_cache(model_id, f, revision=rev), str)
+        ]
+        if missing:
+            print(
+                f"🟡 검색 임베딩 {model_id} — 이 기기 캐시에 없다({' · '.join(missing)}). "
+                "판정은 돌지만 조문 검색이 어휘만 한다"
+            )
+            print(
+                "   고치는 법 — uv run python launcher.py embed --check  (모델을 한 번 받는다 · DB 불필요)"
+            )
+        else:
+            print(f"✅ 검색 임베딩 {model_id} — 캐시에 있다 (판정 경로는 캐시에서만 올린다)")
+    return 0
+
+
 def check_env() -> int:
     """환경·신원·DB 를 본다. 🔴 반환값은 **빨간 건수**다.
 
@@ -756,6 +797,9 @@ def check_env() -> int:
 
     # ④-3 모델 판 (D-333 · 머리말 6) — 이 기기의 인코더 폴더가 잠금의 판인가. 🚨 3초 안에 끝나게 이름 · 크기만 본다(sha 는 아래 안내)
     red += _check_models()
+
+    # ④-4 검색 임베딩 캐시 (D-344 ⑦) — 판정 경로는 캐시에서만 올린다. 없으면 노랑(어휘 검색만)
+    red += _check_embed_cache()
 
     # ⑤ 화면 골격 — 팀원이 첫날 여는 자리
     for rel in ("app/templates/base.html", "app/static/base.css"):
