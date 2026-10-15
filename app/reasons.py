@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import NamedTuple
 
 from app import premise as pm
@@ -169,6 +170,12 @@ FIXED_STRONG = "이 문구는 인정 · 심사받은 문구로 보기 어려워�
 FIXED_WEAK = "AI 가 질병 · 의약품 관련 표현으로 추정했어요 — 「질병 발생 위험 감소」로 인정받은 문구라면 정상이에요. 인정서의 문구와 같은지 확인해 주세요."
 FIXED_UNCHECKED = "인정 · 심사 문구를 확인하지 못했어요(판정 엔진에 연결하지 못함) — 이 문구는 검수를 거치지 않았어요."
 
+#: 🆕 2026-10-15 (D-344 ⑤) — 광고 생성의 **필수 병기 문구**(카피 생성 · 후보 카드가 넘긴 `note`) 표지. 판정하지 않는다 —
+#:    병기 문구(「…의약품이 아닙니다」 · 「기능성 인정 건강기능식품에 한해」)는 사전 · 인코더에 걸리기 쉽고, 제품 자격의 자기 신고라
+#:    인정 · 심사 문구와 같은 성격이다(그 문구를 뺀 판정은 늘 「확인 필요」 · D-147). 숨은 칸이라 이용자가 바꿀 수 있다 — 막지 않고 밝힌다.
+#: 문안은 화면 담당 검토 대상이다
+NOTE_UNJUDGED_MARK = "판정하지 않은 글자 — 확인 필요"
+
 
 def agreed_types(sentence: object) -> list[str]:
     """보류 문장의 사전 유형 후보(`violations`) ∩ 인코더 유형 후보(옮긴 후보 제외) — 이름 · 정렬. 아니면 빈 목록 (D-330 보충 3).
@@ -190,6 +197,68 @@ def agreed_types(sentence: object) -> list[str]:
 def agreed_mark(sentence: object) -> str | None:
     """유형 줄에 붙일 말 — 합의한 유형이 있으면 `AGREED_MARK` · 없으면 None (D-330 보충 3)."""
     return AGREED_MARK if agreed_types(sentence) else None
+
+
+# ── 조합 판정 칸 (🆕 2026-10-15 · D-340 결정 1 「칸 판단은 한 곳」 집행 · D-344 ⑨) ─────────────────────────
+#: 칸 이름 — 순서가 표의 순서다. 평가 도구(`scripts/eval_graph.py` `combo_report`)가 이 표로 센다.
+#: 🔄 「합의」 칸은 확정이 아니다 — 질병 합의 확정은 접었다(D-341 결정 2). 이름은 원장 10-14(A) ① 과 같게 둔다
+COMBO_CELLS = (
+    "사전 확정",
+    "합의(자격 없는 적중 ∧ 인코더 같은 유형)",
+    "자격 없는 적중 · 인코더 다른 유형",
+    "자격 없는 적중 · 인코더 조용",
+    "인코더만",
+    "둘 다 조용",
+)
+
+
+def combo_cell(committed: bool, dict_types: Iterable[str], enc_types: Iterable[str]) -> str:
+    """조합 판정 칸 — **규칙은 여기 한 곳**(D-340 결정 1 · D-99). 단위는 부르는 쪽이 정한다.
+
+    ★ `committed` — 사전 단독 확정 · `dict_types` — 사전 유형 후보(자격 없는 적중) · `enc_types` — **인코더가 직접 낸** 유형 후보.
+    ⛔ 품목 전제가 옮긴 후보(`moved_from`)는 넣지 않는다 — 평가 도구(10-10)와 `agreed_types` 가 그렇게 센다. 겉 표지
+       (`guessed_types`)는 옮긴 후보를 「유형 있음」으로 센다(D-330 보충 2 결정 ③) — 칸과 표지는 다른 물음이다.
+    🚨 평가 도구는 **행 단위**로 넣고(행 안 문장의 합) 화면은 문장 단위다 — dev 749 행 중 한 문장 708(원장 10-14(A) ⑤)이라 갈리는 행은 많아야 41.
+    """
+    if committed:
+        return COMBO_CELLS[0]
+    dq, en = set(dict_types), set(enc_types)
+    if dq and en & dq:
+        return COMBO_CELLS[1]
+    if dq and en:
+        return COMBO_CELLS[2]
+    if dq:
+        return COMBO_CELLS[3]
+    return COMBO_CELLS[4] if en else COMBO_CELLS[5]
+
+
+def _direct_enc(sentence: object) -> set[str]:
+    """인코더가 직접 낸 유형 후보 — 옮긴 후보 제외(`agreed_types` 와 같은 거름)."""
+    return {
+        c.violation.value
+        for c in getattr(sentence, "encoder_candidates", None) or ()
+        if getattr(c, "moved_from", None) is None
+    }
+
+
+#: 🆕 2026-10-15 (D-340 결정 3 집행 · D-344 ⑨) — **사전 확정** 문장에 인코더가 다른 유형을 낼 때. 판정은 그대로다(거부권 없음).
+#: ⛔ 「근거 불일치」라 부르지 않는다 — D-127 에서 그 말은 `gap2`(위험도 2 등급 차)다. 유형 이름은 「근거 보기」 안에만(D-330 보충 2)
+#: 🔴 결정 4(「사전 적중 ∧ 인코더 조용」)는 새 글자를 두지 않는다 — 「근거 보기」의 「AI 추정 유형 없음 — 「문제없음」이라는 뜻은
+#:    아니에요」(`review.html`)로 갈음한다(D-344 ⑨ (가)). 확정 위반 옆의 「AI 위반 신호 없음」은 AI 가 반대 의견을 낸 것처럼 읽힌다
+ENC_DIFFERS_MARK = "AI 추정 유형 다름 — 판정 아님"
+
+
+def differing_types(sentence: object) -> list[str]:
+    """사전 확정 문장에서 인코더가 직접 낸 유형 중 **확정 유형에 없는 것**(이름 · 정렬). 아니면 빈 목록 (D-340 결정 3).
+
+    ⛔ 확정이 아니면 빈 목록 — 보류 문장의 견줌은 `agreed_types` 다. 옮긴 후보는 세지 않는다(`combo_cell` 과 같은 거름).
+    """
+    if getattr(getattr(sentence, "verdict", None), "value", None) != "confirmed":
+        return []
+    mine = {v.value for v in getattr(sentence, "violations", None) or ()}
+    if not mine:
+        return []
+    return sorted(_direct_enc(sentence) - mine)
 
 
 # ── 실증 분기 (🆕 2026-10-14 · D-337 · D-268 「지시」 · D-304 · D-289) ─────────────────────────────

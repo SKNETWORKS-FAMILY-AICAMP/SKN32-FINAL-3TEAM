@@ -120,8 +120,18 @@ def floor_rows(rows: Iterable[Row], vtype: str, law_id: str, cites: Iterable[str
     ⛔ 상한을 하한으로 올리지 않는다 — 하한은 확실한 최소다(D-310 개정 (다)).
     🚨 행이 없는 (유형 · 법)은 **하한을 모른다**(`None`)이다 — R0 이 아니다. 없음을 낮음으로 세지 않는다 (D-72 · D-220).
     """
+    rows = list(rows)
     mine = [r for r in rows if r["type"] == vtype and r["law_id"] == law_id]
     if law_id == MOK_AXIS and Violation(vtype) in MOK_TYPES:
+        # 🔴 2026-10-15 (D-343) — 「그 밖에 → 시정명령 R1」(D-308 ⑥ · D-310)은 **서명된 그 법의 별표7 이 살아 있을 때만** 선다.
+        #    종전에는 코드 상수라 제재표가 비어도(서명 전 · 적재 전) 이 다섯 유형만 R1 을 받아 종착이 지시 · 증명서로 나갔다
+        #    — 다른 유형은 같은 상황에서 「모름 → 보류」(D-220). 판정이 받는 행은 서명된 · 현행 행뿐이고(`v_risk_lookup`)
+        #    서명은 판 단위라(D-309), **그 법의 행이 하나라도 있으면** 그 별표를 서명된 채 읽은 것이다.
+        #    ⛔ 유형 단위로 걸지 않는다 — 비방광고는 식품 별표7 에 전용 행이 0 이고 「그 밖에」가 바로 그 유형의 기본값이다.
+        #    ⛔ 표 전체 단위로 걸지 않는다 — 개정으로 식품 행만 내려가면(`superseded_at`) 다른 법 행 때문에 기본값이 살아난다.
+        #    ⬜ 다음 재서명 때 「그 밖에」를 원천의 법별 기본값 칸으로 옮겨 서명 아래에 둔다 — 그때 이 상수가 사라진다 (D-343 결정 2)
+        if not any(r["law_id"] == law_id for r in rows):
+            return Floor(None)
         codes = {c for c in map(annex1_code, cites) if c}
         hit = [r for r in mine if codes & set(r.get("annex1") or [])]
         full = [r for r in hit if r.get("cover") == "전부"]

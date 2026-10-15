@@ -392,3 +392,30 @@ def test_응답이_품목과_출처를_싣는다() -> None:
     )
     none = to_response({"sentences": [ok], "outcome": Outcome.passed, "product": ProductContext()})
     assert none.category is None and none.category_source is None
+
+
+# ── 2026-10-15 (D-343) — 「그 밖에 R1」은 서명된 그 법의 별표가 살아 있을 때만 ─────────────────────────
+
+
+@pytest.mark.parametrize("vtype", sorted(v.value for v in sanction.MOK_TYPES))
+def test_제재표가_비면_식품_4_7호도_하한을_모른다(vtype: str) -> None:
+    """🔴 재현 — 종전에는 빈 표에서도 이 다섯 유형만 「그 밖에 R1」을 받아 종착이 지시 · 증명서로 나갔다 (D-220)."""
+    assert sanction.floor_rows([], vtype, sanction.MOK_AXIS, [FOOD4]).floor is None
+
+
+def test_다른_법의_서명_행만_있으면_식품_4_7호는_하한을_모른다() -> None:
+    """⛔ 표 전체 단위로 걸지 않는다 — 식품 별표가 내려가고 다른 법 행만 남아도 기본값이 살아나면 안 된다."""
+    others = [r for r in _rows() if r["law_id"] != sanction.MOK_AXIS]
+    assert others, "🚨 전제 — 다른 법의 서명 행이 있어야 이 대조가 성립한다"
+    assert sanction.floor_rows(others, "거짓_과장", sanction.MOK_AXIS, [FOOD4]).floor is None
+
+
+def test_식품_서명_행이_있으면_전용_행_없는_비방광고도_그_밖에_R1() -> None:
+    """⛔ 유형 단위로 걸지 않는다(반대 대조) — 비방광고는 식품 별표7 에 전용 행이 0 이고 「그 밖에」가 그 유형의 기본값이다."""
+    rows = _rows()
+    food = [r for r in rows if r["law_id"] == sanction.MOK_AXIS]
+    assert food and not [r for r in food if r["type"] == "비방광고"], (
+        "🚨 전제가 바뀌었다 — 비방광고 전용 행이 생겼다"
+    )
+    f = sanction.floor_rows(rows, "비방광고", sanction.MOK_AXIS, ["013094:제8조제1항제6호"])
+    assert f.floor is Risk.R1 and f.basis == ("그 밖에(별표7)",)
