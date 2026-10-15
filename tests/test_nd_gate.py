@@ -96,6 +96,8 @@ EXEMPT = {
     "scripts/sanction_rule.py": "법령 처분 기준 검토표(공개 법령 문언 · 광고 문구를 싣지 않는다)",
     # 🆕 2026-10-02 — 응답시간 보고서다. 골든 학습 문장을 **읽기만** 하고 수(문장 수 · ms)만 쓴다
     "scripts/time_graph.py": "응답시간 보고서(문장 수 · ms — 문구를 싣지 않는다)",
+    # 🆕 2026-10-15 (D-347) — 인코더 재분할 id 목록이다. 골든을 **읽기만** 하고 행 id 만 쓴다(`--write`)
+    "preprocess/encoder_resplit.py": "재분할 id 목록(행 id 만 — 문구를 싣지 않는다)",
     # 원천 하나의 추출기 — 원문 레코드를 낸다. 라벨 파생은 위 WRITERS 가 입력에서 막는다 ·
     # `--sheet` 는 런처가 ND 소스에서 거부한다(`launcher.extract`)
     "preprocess/mfds_casebook.py": "원천 하나의 추출기",
