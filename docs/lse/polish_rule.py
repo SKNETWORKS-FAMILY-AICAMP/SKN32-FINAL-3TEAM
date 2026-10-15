@@ -127,7 +127,9 @@ def polish_by_rule(s1: str, category: str | None) -> str | None:
     form = form_in(s1, category)
     if form is None or form not in SAY:
         return None
+    # 🔄 10-15 — 문구 고르는 낱말은 **제품 이름(끝 두 낱말)** 에서만 찾는다 — 「국산 생강을 꿀에 절여 숙성한 생강청」의 「꿀」을 꿀 제품으로 읽지 않게
+    name = " ".join(_UNIT_TAIL.sub("", s1.strip()).split()[-2:])
     for pat, say in SAY[form]:
-        if pat is None or re.search(pat, s1):
+        if pat is None or re.search(pat, name):
             return f"{s1.rstrip(' .,')}, {say}"
     return None
