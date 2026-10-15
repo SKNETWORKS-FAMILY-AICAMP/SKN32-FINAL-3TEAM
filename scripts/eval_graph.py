@@ -208,6 +208,8 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         #: 🆕 2026-10-16 (D-348 보충 2) — **기록 판정에 인코더 하한이 붙은 문장이 있나**(보류 문장 · 판정은 그대로).
         #:    보충 1 결정 3 의 지표(적법에 하한이 붙는 비율)가 이 칸을 센다
         "enc_risk": any(s.risk.encoder is not None for s in sents),
+        #: 🆕 2026-10-16 — **응답 계약을 지나지 못한 행**(`to_response` 가 거부) · 앱이라면 그 요청은 오류로 끝난다. 실제 실행에서만 채운다(`_checked`)
+        "contract_error": state.get("_contract_error"),
         #: 🆕 2026-10-06 (D-263 ① · D-319 ①) — **분기 때문에 보류로 기록된 문장에 실린 유형**(가장 보수적인 전제의 위반).
         #:    `candidates`(자격 없는 적중까지 든 보류 후보)와 다르다 — 전제를 몰라 멈춘 문장만이다
         "premise_held": sorted(
@@ -668,7 +670,21 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["reason"] = reason_report(rows, preds)
     out["recorded"] = recorded_report(rows, preds)
     out["encoder_risk"] = encoder_risk_report(rows, preds)
+    out["contract_errors"] = sum(1 for p in preds if p.get("contract_error"))
     return out
+
+
+def _checked(state: dict[str, Any]) -> dict[str, Any]:
+    """그래프 상태가 **응답 계약**을 지나는가 — 못 지나면 그 까닭을 상태에 싣는다(🆕 2026-10-16 · D-220).
+
+    ⛔ 종전에는 평가가 응답을 만들지 않아, 앱에서 오류로 끝날 행(기록 ≥ 분기 위반 등)이 eval 에서는 정상으로 세어졌다
+       (10-16 인코더 하한 결함 · D-348 보충 2 결정 10). 판정 수는 그대로 세고 오류 행 수를 따로 낸다 — 0 이 아니면 보고 맨 위에 적는다.
+    """
+    try:
+        g.to_response(state)  # type: ignore[arg-type]
+    except ValueError as e:  # pydantic ValidationError 도 ValueError 다
+        return {**state, "_contract_error": str(e).splitlines()[0][:200] + " · " + str(e)[-200:]}
+    return state
 
 
 def encoder_risk_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
@@ -818,6 +834,10 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
         )
         for k, (n, pos, law, m) in cb.items():
             print(f"    {k:28} {n:>5} · {pos:>4} / {law:>3} · M {m}")
+    if s.get("contract_errors"):
+        print(
+            f"\n  🔴 응답 계약을 지나지 못한 행 {s['contract_errors']} — 앱이라면 그 요청은 오류로 끝난다 (행별 `contract_error`)"
+        )
     er = s.get("encoder_risk") or {}
     if er:
         (vk, vn), (lk, ln), (mk, mn) = er["violation"], er["lawful"], er["ambiguous"]
@@ -1199,7 +1219,7 @@ def main(argv: list[str] | None = None) -> int:
             cfg = {"configurable": {"conn": cur}}
             preds = run(
                 rows,
-                lambda t, p: review.invoke({"text": t, "product": p}, config=cfg),
+                lambda t, p: _checked(review.invoke({"text": t, "product": p}, config=cfg)),
                 conditional=a.conditional,
             )
     secs = time.perf_counter() - t0

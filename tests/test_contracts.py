@@ -131,13 +131,25 @@ def test_근거_스팬_없이_상향하면_막힌다() -> None:
     🔄 2026-10-16 (D-348 보충 2) — 인코더 하한은 기록 상한(R1) 이하라 `encoder=R4` 는 칸 자체가 막힌다. 스팬 규칙은 따로 댄다.
     """
     with pytest.raises(ValidationError, match="기록 상한"):
-        RiskAssessment(floor=Risk.R1, encoder=Risk.R4, final=Risk.R4)
+        RiskAssessment(floor=Risk.R1, encoder=Risk.R4, encoder_basis=_eb(), final=Risk.R4)
     with pytest.raises(ValidationError, match="D-131"):
         RiskAssessment(floor=Risk.R1, final=Risk.R3)
     with pytest.raises(ValidationError, match="D-131"):
-        RiskAssessment(encoder=Risk.R1, final=Risk.R2)
+        RiskAssessment(encoder=Risk.R1, encoder_basis=_eb(), final=Risk.R2)
     # 스팬이 있으면 통과한다 — 막는 것이 조건이지 상향 자체가 아니다
     RiskAssessment(floor=Risk.R1, final=Risk.R4, evidence_span=Span(start=0, end=3))
+
+
+def _eb() -> list:
+    """인코더 하한의 근거 하나 — 식품 분기 · 거짓_과장 · 식품표시광고법 제8조제1항제4호 (D-348 보충 2 결정 10)."""
+    from app.contracts import EncoderBasis, EvidenceArticle, Premise  # noqa: PLC0415
+
+    art = EvidenceArticle(law_id="013094", article="제8조", item="제1항제4호")
+    return [
+        EncoderBasis(
+            premise=Premise.식품, violation=Violation.거짓_과장, floor=Risk.R1, articles=[art]
+        )
+    ]
 
 
 @pytest.mark.gate
@@ -149,13 +161,22 @@ def test_인코더_하한은_따로_적고_최종은_둘의_큰_값이다() -> N
     from app.contracts import ENCODER_RECORD_MAX  # noqa: PLC0415
 
     assert ENCODER_RECORD_MAX is Risk.R1
-    RiskAssessment(encoder=Risk.R1, final=Risk.R1)  # 사전이 놓쳐도 인코더 하한으로 선다
-    RiskAssessment(floor=Risk.R1, encoder=Risk.R1, final=Risk.R1)
-    RiskAssessment(floor=Risk.R0, encoder=Risk.R1, final=Risk.R1)  # 인코더 몫까지는 스팬 없이
+    RiskAssessment(
+        encoder=Risk.R1, encoder_basis=_eb(), final=Risk.R1
+    )  # 사전이 놓쳐도 인코더 하한으로 선다
+    RiskAssessment(floor=Risk.R1, encoder=Risk.R1, encoder_basis=_eb(), final=Risk.R1)
+    RiskAssessment(
+        floor=Risk.R0, encoder=Risk.R1, encoder_basis=_eb(), final=Risk.R1
+    )  # 인코더 몫까지는 스팬 없이
     with pytest.raises(ValidationError, match="인코더 하한보다 낮다"):
-        RiskAssessment(floor=Risk.R0, encoder=Risk.R1, final=Risk.R0)
+        RiskAssessment(floor=Risk.R0, encoder=Risk.R1, encoder_basis=_eb(), final=Risk.R0)
     with pytest.raises(ValidationError, match="합치지 않았다"):
-        RiskAssessment(encoder=Risk.R1)
+        RiskAssessment(encoder=Risk.R1, encoder_basis=_eb())
+    # 🆕 결정 10 — 인코더 하한과 그 근거는 함께 있거나 함께 없다
+    with pytest.raises(ValidationError, match="encoder_basis"):
+        RiskAssessment(encoder=Risk.R1, final=Risk.R1)
+    with pytest.raises(ValidationError, match="encoder_basis"):
+        RiskAssessment(floor=Risk.R1, encoder_basis=_eb(), final=Risk.R1)
     with pytest.raises(ValidationError, match="D-09"):
         RiskAssessment(final=Risk.R1)
 

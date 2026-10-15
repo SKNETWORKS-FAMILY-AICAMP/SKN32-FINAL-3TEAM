@@ -70,21 +70,13 @@ def _risk_int(r: Risk | None) -> int | None:
 
 
 def _encoder_refs(s: SentenceJudgment) -> list[dict]:
-    """인코더 하한의 근거 — 참조 조항이 있는 후보의 (유형 · 조항)만 (D-348 보충 2 결정 2 · 8). 인코더 하한이 없으면 빈 목록.
+    """인코더 하한의 근거 — 위험도가 든 근거(`risk.encoder_basis` · 분기 · 유형 · 하한 · 호) 그대로 (D-348 보충 2 결정 2 · 8 · 10).
 
-    ⛔ 확률(`confidence`) · 추정 위험도는 적지 않는다 — 판정이 아니다(D-323). 옮긴 후보는 원래 유형을 함께 적는다.
+    ⛔ 확률(`confidence`) · 표시용 후보(`encoder_candidates`)는 적지 않는다 — 판정이 아니다(D-323). 인코더 하한이 없으면 빈 목록.
     """
     if s.risk.encoder is None:
         return []
-    return [
-        {
-            "violation": c.violation.value,
-            "moved_from": c.moved_from.value if c.moved_from else None,
-            "articles": [a.model_dump(mode="json") for a in c.references],
-        }
-        for c in s.encoder_candidates
-        if c.references
-    ]
+    return [b.model_dump(mode="json") for b in s.risk.encoder_basis]
 
 
 def _category(res: JudgeResponse) -> tuple[str | None, str | None]:

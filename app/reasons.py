@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from typing import NamedTuple
 
 from app import premise as pm
-from app.contracts import Category, Infeasibility, Risk, SubstBranch, Violation
+from app.contracts import Category, Infeasibility, Premise, Risk, SubstBranch, Violation
 from collect import statute
 from collect.law_map import STATUTE_ID
 
@@ -424,3 +424,71 @@ def moved_note(candidate: object) -> str | None:
     if src is None:
         return None
     return MOVED_NOTES.get((src, getattr(candidate, "violation", None)))
+
+
+# ══════════════════════════════════════════════════════════════════
+#  인코더 하한의 근거 — 화면 산출 내역 (🆕 2026-10-16 · D-348 보충 2 결정 10)
+# ══════════════════════════════════════════════════════════════════
+
+#: 산출 내역 첫 줄의 머리말. 🚨 판정이 아니다 — 「이 유형이라면 이 조항」이다. 문안은 화면 담당 검토 대상이다
+ENCODER_BASIS_HEAD = "인코더 하한의 근거"
+_LAW_NAME = {v: k for k, v in STATUTE_ID.items()}
+
+
+class EncoderBasisView(NamedTuple):
+    head: str  # 대표 한 줄
+    rest: list[str]  # 나머지(「근거 보기」 안)
+
+
+def _basis_line(premises: list[object], violation: object, art: object) -> str:
+    names = [getattr(p, "value", str(p)).replace("_", " ") for p in premises]
+    where = f"{names[0]} 분기" + (
+        f" (같은 등급: {' · '.join(names[1:])})" if len(names) > 1 else ""
+    )
+    law = _LAW_NAME.get(getattr(art, "law_id", ""), getattr(art, "law_id", ""))
+    item = getattr(art, "item", "") or ""
+    article = getattr(art, "article", "")
+    cite = article + (
+        item if item and item != "본문" and not article.endswith(("호", "목")) else ""
+    )
+    return f"{where} · {getattr(violation, 'value', str(violation)).replace('_', ' ')} · {law} {cite}".rstrip()
+
+
+def encoder_basis_view(sentence: object) -> EncoderBasisView | None:
+    """인코더 하한의 근거 → 대표 한 줄 + 나머지 (보충 2 결정 10 · 다중 라벨은 다 남기고 대표만 먼저).
+
+    ★ 대표 = 그 유형의 하한이 가장 높은 것 · 같으면 대표 순서(`ordered_candidates` · 원시 확률)를 따른다 · 그래도 같으면 유형 이름.
+    ★ 같은 유형 · 같은 조항을 낸 분기가 여럿이면 한 줄로 묶어 「(같은 등급: …)」로 적는다(분기 순서는 전제 표 순서).
+    🔴 근거가 없으면 None — 줄을 그리지 않는다(지어내지 않는다 · D-220).
+    """
+    risk = getattr(sentence, "risk", None)
+    basis = list(getattr(risk, "encoder_basis", None) or ())
+    if not basis:
+        return None
+    conf: dict[str, float] = {}
+    for c in getattr(sentence, "encoder_candidates", None) or ():
+        conf[c.violation.value] = max(conf.get(c.violation.value, 0.0), c.confidence)
+    order = list(Premise)
+    groups: dict[tuple, dict] = {}
+    for b in basis:
+        for a in b.articles:
+            key = (b.violation.value, a.law_id, a.article, a.item)
+            g = groups.setdefault(
+                key, {"violation": b.violation, "art": a, "floor": b.floor, "premises": []}
+            )
+            if b.premise not in g["premises"]:
+                g["premises"].append(b.premise)
+            if b.floor.level > g["floor"].level:
+                g["floor"] = b.floor
+    for g in groups.values():
+        g["premises"].sort(key=lambda p: order.index(p) if p in order else 99)
+    ranked = sorted(
+        groups.values(),
+        key=lambda g: (
+            -g["floor"].level,
+            -conf.get(g["violation"].value, 0.0),
+            g["violation"].value,
+        ),
+    )
+    lines = [_basis_line(g["premises"], g["violation"], g["art"]) for g in ranked]
+    return EncoderBasisView(head=f"{ENCODER_BASIS_HEAD}: {lines[0]}", rest=lines[1:])

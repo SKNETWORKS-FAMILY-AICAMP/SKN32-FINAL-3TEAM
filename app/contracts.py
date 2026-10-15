@@ -301,6 +301,25 @@ class EvidenceArticle(BaseModel):
 ENCODER_RECORD_MAX = Risk.R1
 
 
+class EncoderBasis(BaseModel):
+    """인코더 하한의 **근거 하나** — 어느 분기 · 어느 유형 · 대응표의 어느 호 · 그 유형의 하한 (🆕 2026-10-16 · D-348 보충 2 결정 2 · 10).
+
+    ★ 위험도가 **자기 근거를 갖는다** — 사전 하한(`floor`)의 근거가 `evidence` 이듯 인코더 하한(`encoder`)의 근거가 이것이다.
+       표시용 AI 추정 유형(`encoder_candidates` · 판정 아님 · D-323)과 칸을 가른다 — 기록 판정의 후보는 「모름」 입력의 것이고
+       인코더 하한은 분기(전제마다의 품목 입력)에서 온다. 둘을 섞으면 값과 근거가 다른 입력에서 온다(10-16 결함 · 결정 10).
+    🚨 「이 유형이라면 이 조항」이다 — 이 문구에서 찾은 조문이 아니다(`EvidenceArticle.basis` 는 거짓 그대로).
+    """
+
+    #: 그 하한을 낸 전제(분기). 품목을 아는 한 전제 판정이면 그 전제다
+    premise: Premise
+    violation: Violation
+    #: 전제가 옮긴 후보면 원래 유형 (`EncoderTypeCandidate.moved_from` 과 같다)
+    moved_from: Violation | None = None
+    #: 그 유형 · 그 전제의 제재표 하한(R1 이상 · D-273) — 기록에 든 값(`RiskAssessment.encoder`)은 신뢰 층 상한으로 깎인 값이다
+    floor: Risk
+    articles: list[EvidenceArticle] = Field(..., min_length=1)
+
+
 class RiskAssessment(BaseModel):
     """D-09 래칫 — `final = max(코드 하한, 인코더 하한)`.
 
@@ -318,6 +337,9 @@ class RiskAssessment(BaseModel):
     #: 🔄 2026-10-16 (D-348 보충 2) — **인코더 하한**(기록에 들인 값 · 신뢰 층 상한 이하). 종전 뜻 「인코더 예측」을 대신한다 — 값을 내는 곳이
     #:    없던 칸이다. 화면은 「AI 추정 · 판정 아님」 표지로 보인다. 근거는 문장의 인코더 후보 참조 조항(대응표의 호)이다
     encoder: Risk | None = None
+    #: 🆕 2026-10-16 (D-348 보충 2 결정 10) — **인코더 하한의 근거**(분기 · 유형 · 호 · 하한). 인코더 하한이 있으면 반드시 있고 없으면 비어 있다.
+    #:    여러 유형 · 같은 등급의 여러 분기면 전부 싣는다(화면은 대표 한 줄 + 나머지 · `app/reasons.py` `encoder_basis_view`)
+    encoder_basis: list[EncoderBasis] = Field(default_factory=list)
     final: Risk | None = None
     evidence_span: Span | None = None
     #: 🆕 2026-10-01 (D-310 개정 (다)) **가능 상한** — 하한은 「확실한 최소」다. 목(별표1)을 못 맞혀 하한이 「그 밖에 R1」로 떨어진
@@ -335,6 +357,13 @@ class RiskAssessment(BaseModel):
                 f"인코더 하한 {self.encoder.value} 이 기록 상한 {ENCODER_RECORD_MAX.value} 을 넘는다 — "
                 "R2 이상은 유형을 믿을 수 있어야 한다 (D-348 결정 5)"
             )
+        # 🆕 2026-10-16 (D-348 보충 2 결정 10) — 인코더 하한과 그 근거는 함께 있거나 함께 없다 (D-224 · 근거 없는 등급을 내지 않는다)
+        if (self.encoder is None) != (not self.encoder_basis):
+            raise ValueError(
+                "인코더 하한과 그 근거(encoder_basis)는 함께 있거나 함께 없다 (D-348 보충 2 결정 10 · D-224)"
+            )
+        if self.encoder_basis and any(b.floor.level < Risk.R1.level for b in self.encoder_basis):
+            raise ValueError("인코더 하한의 근거에 R0 하한이 있다 — 위반이라면 R1 이상이다 (D-273)")
         if self.final is None:
             if self.encoder is not None:
                 raise ValueError(
@@ -568,8 +597,11 @@ class SentenceJudgment(BaseModel):
             raise ValueError(
                 f"인코더 하한은 보류 문장에만 적는다 — {self.verdict.value} (D-348 보충 2 결정 3)"
             )
-        if not any(c.references for c in self.encoder_candidates):
-            raise ValueError("인코더 하한의 근거 호(후보의 참조 조항)가 없다 (D-348 보충 2 결정 2)")
+        # 🔄 2026-10-16 (결정 10) — 근거는 위험도 자신이 든다(`RiskAssessment.encoder_basis`) · 표시용 후보(`encoder_candidates`)를 보지 않는다
+        if not self.risk.encoder_basis:
+            raise ValueError(
+                "인코더 하한의 근거 호(encoder_basis)가 없다 (D-348 보충 2 결정 2 · 10)"
+            )
         return self
 
     @model_validator(mode="after")

@@ -99,10 +99,8 @@ def test_인코더만_잡은_보류_문장에_인코더_하한이_따로_선다(
 def test_근거_호가_없으면_적지_않고_계약도_막는다() -> None:
     bare = _held(CLAIM, _cand(Violation.거짓_과장, refs=False))
     assert g._with_encoder_risk(bare, Premise.식품, _rows()) is bare
-    with pytest.raises(ValueError, match="근거 호"):
-        SentenceJudgment(
-            **{**bare.model_dump(), "risk": RiskAssessment(encoder=Risk.R1, final=Risk.R1)}
-        )
+    with pytest.raises(ValueError, match="encoder_basis"):
+        RiskAssessment(encoder=Risk.R1, final=Risk.R1)
 
 
 @pytest.mark.parametrize(
@@ -328,3 +326,60 @@ def test_저장은_인코더_하한의_근거_호를_남긴다() -> None:
     assert row2.evidence is None and row2.risk_encoder is None, (
         "인코더 하한이 없으면 후보를 적지 않는다"
     )
+
+
+# ── 결정 10 — 위험도가 자기 근거를 갖는다 · 품목 입력마다 신호가 다를 때 ───────────────────
+
+
+def _run_inputs(unk: tuple[str, ...], food: tuple[str, ...], text: str = CLAIM) -> dict:
+    """품목 미상 · 「모름」 입력과 식품 입력의 신호가 **다른** 문장 — 대역이 모든 입력에 같은 신호를 주면 못 잡던 자리(10-16 결함)."""
+    laws = g.laws_for(None)
+    st: dict = {
+        "text": text,
+        "sents": [text],
+        "product": ProductContext(category=None),
+        "laws": laws,
+        "dict_scans": [g.DictScan(sent_id="s0", ran=True)],
+        "law_results": [g.LawResult(law=law, sent_ids=("s0",)) for law in laws],
+        "encodings": [
+            g.SentEncoding(sent_id="s0", scores=tuple((c, 0.9) for c in unk) or (("거짓_과장", 0.1),), candidates=unk, input=pm.ENCODER_UNKNOWN),
+            g.SentEncoding(sent_id="s0", scores=tuple((c, 0.9) for c in food), candidates=food, input="식품"),
+        ],
+    }  # fmt: skip
+    cfg = {"configurable": {"conn": _Cur()}}
+    st["sentences"] = g.judge(st)["sentences"]
+    st["sentences"] = g.upsert_sentences(
+        st["sentences"], g.assess_risk(st, cfg).get("sentences", [])
+    )
+    out = g.premise_branches(st, cfg)
+    st["sentences"] = g.upsert_sentences(st["sentences"], out.get("sentences", []))
+    st["branches"] = out.get("branches", [])
+    return st
+
+
+def test_모름_입력에_후보가_없어도_분기의_하한과_근거가_기록에_온다(criteria: None) -> None:
+    """10-16 결함 — 기록의 근거를 표시용 후보(「모름」 입력)에서 찾아, 그 후보가 비면 기록이 비고 응답이 거부됐다."""
+    st = _run_inputs(unk=(), food=("거짓_과장",))
+    (rec,) = st["sentences"]
+    assert rec.encoder_candidates == [], "표시용 후보는 「모름」 입력 그대로다(D-323)"
+    assert rec.risk.encoder is Risk.R1
+    assert {b.premise for b in rec.risk.encoder_basis} == {Premise.식품, Premise.일반식품_기능성}
+    resp = g.to_response({**st, "outcome": Outcome.hold})  # 기록 ≥ 분기 · 근거 — 계약을 지난다
+    assert resp.sentences[0].risk.encoder_basis
+
+
+def test_다중_라벨은_근거를_다_남기고_화면은_대표_한_줄과_나머지다(criteria: None) -> None:
+    from app import reasons  # noqa: PLC0415
+
+    st = _run_inputs(unk=(), food=("거짓_과장", "소비자_기만"))
+    (rec,) = st["sentences"]
+    assert {b.violation for b in rec.risk.encoder_basis} == {
+        Violation.거짓_과장,
+        Violation.소비자_기만,
+    }
+    view = reasons.encoder_basis_view(rec)
+    assert view is not None and view.head.startswith(
+        reasons.ENCODER_BASIS_HEAD + ": 식품 분기 (같은 등급: 일반식품 기능성)"
+    )
+    assert view.rest, "나머지 근거가 사라졌다 — 다중 라벨은 다 남긴다"
+    assert reasons.encoder_basis_view(_held()) is None, "근거가 없으면 줄을 그리지 않는다"

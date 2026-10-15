@@ -603,7 +603,12 @@
             {#- 🔄 2026-10-16 (D-348 보충 2 결정 1 · 2) — 사전 하한과 인코더 하한은 칸이 다르다. 인코더 하한의 근거는 위 AI 추정 유형의 참조 조항(대응표의 호)이다 #}
             <div class="rv-calc"><span>사전 하한</span><b>{{ s.risk.floor.value if s.risk.floor else "—" }}</b></div>
             <div class="rv-calc"><span>인코더 하한 (AI 추정 · 판정 아님)</span><b>{{ s.risk.encoder.value if s.risk.encoder else "—" }}</b></div>
-            {% if s.risk.encoder %}<p class="rv-note">인코더 하한의 근거는 위 AI 추정 유형의 참조 조항이에요 — 이 문구에서 찾은 근거가 아니라 「이 유형이라면 이 조항」이에요.</p>{% endif %}
+            {#- 🔄 2026-10-16 (결정 10) — 근거는 위험도가 든 것(`risk.encoder_basis`)이다 · 대표 한 줄 + 나머지는 접는다 · 고르는 규칙은 `encoder_basis_view` 한 곳 #}
+            {% set eb = s|encoder_basis_view %}
+            {% if eb %}
+            <p class="rv-note">{{ eb.head }}{% if eb.rest %} 외 {{ eb.rest|length }}건{% endif %} — 이 문구에서 찾은 근거가 아니라 「이 유형이라면 이 조항」이에요.</p>
+            {% if eb.rest %}<details class="rv-refs"><summary>나머지 근거 {{ eb.rest|length }}건</summary>{% for line in eb.rest %}<p class="rv-note">{{ line }}</p>{% endfor %}</details>{% endif %}
+            {% endif %}
             <div class="rv-calc total"><span>최종 위험도</span><b>{{ "— (보류 · 등급 미정)" if s.risk.final and s.verdict.value != "confirmed" and s.risk.final.value == "R0" else (s.risk.final.value if s.risk.final else "—") }}</b></div>
           </div>
 {% endmacro %}

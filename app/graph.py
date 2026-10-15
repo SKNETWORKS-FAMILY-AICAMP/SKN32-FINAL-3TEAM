@@ -72,6 +72,7 @@ from app.contracts import (
     Category,
     CategorySource,
     Certificate,
+    EncoderBasis,
     EncoderTypeCandidate,
     EvidenceArticle,
     GenerateOutcome,
@@ -1780,70 +1781,88 @@ def encoder_cap(text: str) -> Risk | None:
 def _with_encoder_risk(
     j: SentenceJudgment, premise: Premise, rows: list[dict[str, Any]]
 ) -> SentenceJudgment:
-    """보류 문장에 그 전제의 인코더 하한을 합친 새 문장 — 못 내면 그대로 (D-348 보충 2 결정 3 · 4).
+    """보류 문장에 그 전제의 인코더 하한을 합친 새 문장 — 못 내면 그대로 (D-348 보충 2 결정 3 · 4 · 10).
 
-    🔴 보류 문장에만 · 판정 대상 아님 제외 · 근거 호(후보의 참조 조항)가 있을 때만 · 주장 가드를 지날 때만 · 하한을 알 때만 (계약
-       `_encoder_risk_has_basis` 와 같은 조건 · D-220). 이미 적힌 인코더 하한이 있으면 그대로 둔다.
+    🔴 보류 문장에만 · 판정 대상 아님 제외 · 주장 가드를 지날 때만 · 근거(그 전제에서 하한을 아는 후보의 호)가 있을 때만 (D-220).
+       이미 적힌 인코더 하한이 있으면 그대로 둔다. 근거는 **이 문장의 후보**(이 전제의 품목 입력 · 이 전제로 거른 것)에서 낸다.
     """
-    if (
-        j.verdict is not Verdict.hold
-        or j.not_claim
-        or j.risk.encoder is not None
-        or not any(c.references for c in j.encoder_candidates)
-    ):
+    if j.verdict is not Verdict.hold or j.not_claim or j.risk.encoder is not None:
         return j
     cap = encoder_cap(j.text)
     if cap is None:
         return j
+    basis = _encoder_basis(rows, premise, j.encoder_candidates)
     if cap.level <= Risk.R1.level:
         # 🔄 2026-10-16 (D-348 보충 2 결정 4 개정 · 팀장) — **R1 층은 「위반이라면 적어도 R1」**(D-273)이다. 유형이 틀려도 참이라
         #    하한을 아는 후보 하나면 선다 — 모르는 후보가 이 값을 틀리게 하지 못한다. 「하나라도 모르면 비움」은 R2 이상 층(`encoder_floor`)
-        if not _r1_known(rows, premise, j.encoder_candidates):
+        if not basis:
             return j
-        return _with_risk(j, _merged(j.risk, cap))
+        return _with_risk(j, _merged(j.risk, cap, basis))
     f = encoder_floor(rows, premise, j.encoder_candidates)
-    if f.floor is None:
+    if f.floor is None or not basis:
         return j
     enc = min(f.floor, cap, key=lambda r: r.level)
-    return _with_risk(j, _merged(j.risk, enc))
+    return _with_risk(j, _merged(j.risk, enc, basis))
+
+
+def _encoder_basis(
+    rows: list[dict[str, Any]], premise: Premise, cands: Iterable[EncoderTypeCandidate]
+) -> list[EncoderBasis]:
+    """그 전제에서 인코더 하한의 근거 — **하한이 R1 이상으로 확인되고 참조 조항(호)이 있는 후보 전부** (보충 2 결정 2 · 4 개정 · 10).
+
+    ★ 다중 라벨이면 유형마다 하나씩 전부 싣는다 — R1 층에서는 각 후보가 따로 「위반이라면 적어도 R1」의 근거다. 대표는 화면이 고른다.
+    🔴 R0 하한은 모름으로 센다 — 「위반이라면 R0」은 D-273(위반이면 R1 이상)과 모순이다. 제재표에 R0 에 대응하는 처분이 들어오면
+       그것은 D-273 을 바꾸는 결정이다 — 보류 문장에 R0 을 조용히 적지 않는다(통과로 읽힌다 · D-280).
+    """
+    out: list[EncoderBasis] = []
+    for c in cands:
+        f = estimate_of(rows, premise, c.violation).floor
+        if f is None or f.level < Risk.R1.level or not c.references:
+            continue
+        out.append(
+            EncoderBasis(
+                premise=premise,
+                violation=c.violation,
+                moved_from=c.moved_from,
+                floor=f,
+                articles=list(c.references),
+            )
+        )
+    return out
 
 
 def _r1_known(
     rows: list[dict[str, Any]], premise: Premise, cands: Iterable[EncoderTypeCandidate]
 ) -> bool:
-    """R1 층 — 그 전제에서 **하한이 R1 이상으로 확인되는 후보가 하나라도** 있는가 (보충 2 결정 4 개정).
+    """R1 층 — 그 전제에서 하한이 R1 이상으로 확인되는 (근거 호가 있는) 후보가 하나라도 있는가 — `_encoder_basis` 가 비지 않음과 같다."""
+    return bool(_encoder_basis(rows, premise, cands))
 
-    🔴 R0 하한은 모름으로 센다 — 「위반이라면 R0」은 D-273(위반이면 R1 이상)과 모순이다. 제재표에 R0 에 대응하는 처분이 들어오면
-       그것은 D-273 을 바꾸는 결정이다 — 보류 문장에 R0 을 조용히 적지 않는다(통과로 읽힌다 · D-280).
+
+def _merged(risk: RiskAssessment, enc: Risk, basis: list[EncoderBasis]) -> RiskAssessment:
+    """사전 쪽 위험도에 인코더 하한과 그 근거를 합친다 — 최종 = max(그 위험도의 최종 또는 사전 하한, 인코더 하한) (D-348 결정 4 · D-09 래칫).
+
+    🔴 새로 만든다(`model_copy` 가 아니다) — 계약 검증(인코더 하한 ⇔ 근거 · 상한 · 래칫)을 다시 지나게 한다.
     """
-    return any(
-        (f := estimate_of(rows, premise, c.violation).floor) is not None
-        and f.level >= Risk.R1.level
-        for c in cands
+    have = risk.final or risk.floor
+    final = enc if have is None or enc.level > have.level else have
+    return RiskAssessment(
+        **{**risk.model_dump(), "encoder": enc, "encoder_basis": basis, "final": final}
     )
 
 
-def _merged(risk: RiskAssessment, enc: Risk) -> RiskAssessment:
-    """사전 쪽 위험도에 인코더 하한을 합친다 — 최종 = max(그 위험도의 최종 또는 사전 하한, 인코더 하한) (D-348 결정 4 · D-09 래칫)."""
-    have = risk.final or risk.floor
-    final = enc if have is None or enc.level > have.level else have
-    return risk.model_copy(update={"encoder": enc, "final": final})
-
-
 def _record_encoder(r: SentenceJudgment, per: list[SentenceJudgment]) -> SentenceJudgment | None:
-    """기록되는 보류 문장의 인코더 하한 = **전제 최댓값** (D-348 보충 2 결정 4 · D-263 ① · 기록 ≥ 분기). 바꿀 것이 없으면 `None`.
+    """기록되는 보류 문장의 인코더 하한 = **전제 최댓값** · 근거 = **그 값을 낸 분기들의 근거**(같은 등급이 여럿이면 전부) (보충 2 결정 4 · 10).
 
-    ★ 분기를 내지 않는 경로(품목이 주어졌고 전제가 판정을 바꾸지 않는다)에서도 부른다 — 기록은 전제 최댓값이다.
-    🔴 기록 문장에 근거 호가 없으면 적지 않는다(계약) — 그때 분기에 인코더 하한이 있으면 기록 ≥ 분기 검증기가 응답을 거부한다.
-       기록 판정의 후보는 이 품목의 전제 전부로 거른 합집합이라 분기 후보의 상위 집합이다(`_encoder_candidates`) — 그 일은 없어야 한다.
+    ★ 분기를 내지 않는 경로(품목이 주어졌고 전제가 판정을 바꾸지 않는다)에서도 부른다 — 기록은 전제 최댓값이다(D-263 ① · 기록 ≥ 분기).
+    ★ 근거는 분기 문장이 든 것을 그대로 옮긴다 — 값과 근거가 같은 곳(그 전제의 품목 입력)에서 온다. ⛔ 기록 문장의 표시용 후보
+       (「모름」 입력 · 판정 아님)에서 근거를 찾지 않는다 — 그 후보가 비면 분기만 하한을 갖고 기록이 비어 응답이 거부됐다(10-16 결함).
     """
     encs = [j.risk.encoder for j in per if j.risk.encoder is not None]
     if not encs or r.verdict is not Verdict.hold or r.not_claim or r.risk.encoder is not None:
         return None
-    if not any(c.references for c in r.encoder_candidates):
-        return None
     top = max(encs, key=lambda x: x.level)
-    return _with_risk(r, _merged(r.risk, top))
+    basis = [b for j in per if j.risk.encoder is top for b in j.risk.encoder_basis]
+    return _with_risk(r, _merged(r.risk, top, basis))
 
 
 def _substantiated(s: SentenceJudgment) -> SentenceJudgment:

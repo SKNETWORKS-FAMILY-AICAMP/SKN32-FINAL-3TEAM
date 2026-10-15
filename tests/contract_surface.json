@@ -132,6 +132,13 @@
       "screening": "opt list[app.contracts.SentenceJudgment]",
       "sections": "opt list[app.contracts.AdSection]"
     },
+    "EncoderBasis": {
+      "articles": "req list[app.contracts.EvidenceArticle]",
+      "floor": "req app.contracts.Risk",
+      "moved_from": "opt app.contracts.Violation | None",
+      "premise": "req app.contracts.Premise",
+      "violation": "req app.contracts.Violation"
+    },
     "EncoderTypeCandidate": {
       "confidence": "req builtins.float",
       "estimate": "opt app.contracts.RiskEstimate | None",
@@ -211,6 +218,7 @@
       "ceiling": "opt app.contracts.Risk | None",
       "ceiling_note": "opt str | None",
       "encoder": "opt app.contracts.Risk | None",
+      "encoder_basis": "opt list[app.contracts.EncoderBasis]",
       "evidence_span": "opt app.contracts.Span | None",
       "final": "opt app.contracts.Risk | None",
       "floor": "opt app.contracts.Risk | None"
