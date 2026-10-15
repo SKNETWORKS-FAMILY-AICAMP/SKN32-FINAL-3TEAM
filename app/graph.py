@@ -1601,7 +1601,10 @@ ORDER BY rule_key"""
 
 
 def load_sanction_rows(cur: Any) -> list[dict[str, Any]]:
-    """`v_risk_lookup` → 하한 조회 행. 서명 전이거나 적재 전이면 **빈 목록**이다 — 그러면 하한이 없어 판정이 보류로 멈춘다 (D-220)."""
+    """`v_risk_lookup` → 하한 조회 행. 서명 전이거나 적재 전이면 **빈 목록**이다 — 그러면 하한이 없어 판정이 보류로 멈춘다 (D-220).
+
+    🔄 2026-10-15 (D-343) — 식품 4~7호의 「그 밖에 R1」도 이제 이 규칙을 따른다(`sanction.floor_rows` · 그 법의 서명 행이 있어야 선다).
+    """
     cur.execute(SQL_RISK)
     return [
         {
