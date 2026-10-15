@@ -37,6 +37,8 @@ _KOR = re.compile(r"\(\s*국문\s*\)")
 #: 문구 뒤에 붙는 분류 · 등급 · 인정 시기 꼬리표 — 「(기타기능Ⅱ)」 「(생리활성기능 2등급)」 「('20년 2월 인정)」
 _TAG = re.compile(r"\(\s*(?:기타|생리활성|질병발생|영양소|'?\d{2}\s*년)[^()]*\)")
 _QUOTE = re.compile(r"[\"'“”‘’「」『』]")
+#: 문구 끝(「줌」 · 「있음」 · 「필요」) 뒤에 붙은 괄호 — 분류 꼬리표다 「…도움을 줌(치아건강)」 (10-15 · 고친 것)
+_TAIL_TAG = re.compile(r"(줌|있음|있습니다|필요)\s*\([^()]*\)\s*$")
 _ENDING = (
     ("있습니다", "있음"),
     ("있어요", "있음"),
@@ -79,6 +81,7 @@ def norm(s: str) -> str:
     """매칭용 정규화 — 꼬리표 · 따옴표 · 어미 차이 · 띄어쓰기를 없앤다. 낱말은 바꾸지 않는다."""
     s = unicodedata.normalize("NFKC", s)
     s = _QUOTE.sub("", _TAG.sub("", _KOR.sub("", _ENG.sub("", s))))
+    s = _TAIL_TAG.sub(lambda m: m.group(1), s.strip())
     s = re.sub(r"\s+", "", s).rstrip(".,;")
     for a, b in _ENDING:
         if s.endswith(a):
@@ -88,7 +91,10 @@ def norm(s: str) -> str:
 
 def _display(seg: str) -> str:
     """화면용 원문 조각 — 꼬리표 · 따옴표만 걷고 띄어쓰기는 남긴다."""
-    return re.sub(r"\s+", " ", _QUOTE.sub("", _TAG.sub("", _KOR.sub("", seg)))).strip(" ,.;-◆•")
+    seg = _TAIL_TAG.sub(
+        lambda m: m.group(1), _QUOTE.sub("", _TAG.sub("", _KOR.sub("", seg))).strip(" ,.;-◆•")
+    )
+    return re.sub(r"\s+", " ", seg).strip(" ,.;-◆•")
 
 
 def _split_dots(seg: str) -> list[str]:
