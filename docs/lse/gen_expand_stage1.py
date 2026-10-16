@@ -68,7 +68,7 @@ STOP_AT_USD = 8.0
 #: 100만 토큰당 달러(입력, 출력) — 🚨 보수적으로 실제 공시가보다 크게 잡는다. 모르는 모델은 비싼 쪽으로 본다
 PRICE = {"gpt-4o-mini": (0.30, 1.20), "gpt-4.1": (3.0, 12.0)}
 PRICE_UNKNOWN = (5.0, 20.0)
-BATCH = 10  # 한 번 부를 때 묶는 문장 수
+CALL_BATCH = 10  # 한 번 부를 때 묶는 문장 수
 #: 「불가」의 유형 — 여러 유형이면 무거운 것부터(행정처분 수위 순)
 SEVERITY = ["의약품_오인", "질병_예방치료_표방", "건강기능식품_오인", "기능성화장품_오인", "후기_체험기_기만",
             "소비자_기만", "부당_비교광고", "비방광고", "거짓_과장"]
@@ -365,7 +365,7 @@ def by_index(ans: dict | None, n: int) -> list[dict | None]:
 
 def estimate(part: str, n: int, model: str, vmodel: str) -> float:
     """견적 — 시범에서 잰 묶음 하나당 토큰(교정 입력 약 1,050 · 출력 약 270 / 변형 입력 약 900 · 출력 약 500)에 3할을 얹는다."""
-    calls = -(-n // BATCH)
+    calls = -(-n // CALL_BATCH)
     est = cost(model, calls * 1400, calls * 360)
     if part == "B":
         est += cost(vmodel, calls * 1200, calls * 700)
@@ -409,7 +409,7 @@ def cmd_run(part: str, n: int, offset: int, model: str, tag: str, dry: bool, sto
     swaps: list[str | None] = [None] * len(pick)
     if part == "B":
         swaps = [swap_target(s["품목"], rng) for s in pick]
-        groups = batched(list(range(len(pick))), BATCH)
+        groups = batched(list(range(len(pick))), CALL_BATCH)
         answers = ask_batches(vteacher, [variant_prompt([(pick[i]["text"], pick[i]["labels"], swaps[i]) for i in g])
                                         for g in groups], 0.9)
         texts = [""] * len(pick)
@@ -419,7 +419,7 @@ def cmd_run(part: str, n: int, offset: int, model: str, tag: str, dry: bool, sto
                 texts[i] = v.strip() if isinstance(v, str) else ""
 
     todo = [i for i in range(len(pick)) if texts[i]]
-    groups = batched(todo, BATCH)
+    groups = batched(todo, CALL_BATCH)
     fixed: dict[int, dict | None] = {}
     answers = ask_batches(teacher, [fix_prompt([(texts[i], pick[i]["labels"], pick[i]["품목"]) for i in g]) for g in groups], 0.2)
     for g, ans in zip(groups, answers, strict=True):
