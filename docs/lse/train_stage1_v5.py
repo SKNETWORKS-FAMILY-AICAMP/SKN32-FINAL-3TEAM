@@ -56,7 +56,7 @@ from sllm_meta import base_model  # noqa: E402
 
 BASE = base_model()
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1", "q4b-v17", "q4b-n2")}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1", "q4b-v17", "q4b-n2", "q4b-n3")}
 EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v8": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v10": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
@@ -215,6 +215,10 @@ NEW_ONLY = {"q4b-n1"}
 #:    확장 고침에 조건부가 0 이었다 → 두 번째 묶음(`expand_mix2.jsonl` · 사실 남기기 34% · 조건부 28% · 불가 33% · 수정쌍 5%)
 EXPAND.update({"q4b-v17": "expand_mix2.jsonl", "q4b-n2": "expand_mix2.jsonl"})
 NEW_ONLY.add("q4b-n2")
+#: 🆕 10-17 — n2 · v17 이 정답표 87 에서 지나친 거절 6 → 14 · 15(화장품 기능 주장 10). 2차 묶음의 불가 51 행이 화장품 기능 주장을
+#:    「의약품_오인 불가」로 가르쳐 조건부와 부딪혔다 → 세 번째 묶음(`expand_mix3.jsonl` · 그 불가를 빼고 화장품 조건부 2배)
+EXPAND["q4b-n3"] = "expand_mix3.jsonl"
+NEW_ONLY.add("q4b-n3")
 for _v in EXPAND:
     EXTRAS[_v] = EXTRAS["q4b-v14"]
     SYNTH[_v] = SYNTH["q4b-v14"]
@@ -341,7 +345,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1", "q4b-v17", "q4b-n2"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1", "q4b-v17", "q4b-n2", "q4b-n3"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"

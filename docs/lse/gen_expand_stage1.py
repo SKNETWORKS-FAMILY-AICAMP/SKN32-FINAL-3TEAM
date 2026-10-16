@@ -624,12 +624,19 @@ MAX_SAME_END = 0.08
 #: 🆕 v4 — 두 번째 묶음(`mix --tag v2` → `expand_mix2.jsonl`) — 사실 남기기 상한 · 조건부 꼴별 상한
 MAX_FACT_V2 = 900
 COND_CAP = {"조건부:원료사실": 300}
+#: 🆕 v5 (10-17) — 세 번째 묶음(`mix --tag v3` → `expand_mix3.jsonl`). q4b-n2 · v17 이 정답표 87 에서 지나친 거절 6 → 14 · 15.
+#:    거절 14 중 10 이 화장품 기능 주장(탈모 · 미백 · 여드름 · 아토피 건조 · 새치 · 내수성)인데, 2차 묶음의 불가 행 55 가
+#:    같은 꼴(모발 · 튼살 · 가려움 같은 화장품 기능 주장)을 「의약품_오인 불가」로 가르쳐 조건부 묶음과 부딪혔다(교사가 화장품 기능 주장을
+#:    일괄 의약품 오인으로 봤다). → 질병 · 의약품 · 시술 표현이 없는 화장품 기능 주장의 불가 행은 뺀다 · 화장품 조건부는 2배
+COS_FUNC = re.compile(r"주름|미백|자외선|선크림|탈모|여드름|아토피|피부장벽|튼살|새치|염모|모발|내수성|색소|기미|잡티|피부\s*톤|각질|"
+                      r"보습|진정|트러블|가려")
+MEDICAL = re.compile(r"필러|시술|발진|상처|흉터|재생|치료|처방|주사|발모|육모|호르몬|피부과")
 #: 🆕 v3 — 막연한 말 — 사실이 아니라 꾸밈이거나 그 자체로 주의 표현(「천연」 · 「100% 자연」). 4o-mini 가 쓴 변형에 많았다
 #:    (본 생성 1조각: 고침 439 중 구체적 사실 신호 190 · 막연한 말 95 — 4.1 변형은 29 중 25 · 1)
 VAGUE = re.compile(r"천연|자연|신선한|고급|프리미엄|엄선|비법|전문가|건강한|다양한|풍부한|가득|특별한|정성")
 
 
-def cmd_mix(v2: bool = False) -> None:
+def cmd_mix(v2: bool = False, v3: bool = False) -> None:
     """🆕 v3 — 4.1 교정 결과(`*_rows.jsonl` · generator gpt-4.1)를 모아 `_private/expand_mix.jsonl` 로. 4o-mini 교정은 넣지 않는다
     (시범에서 받아들인 고침의 절반이 위반이 남았다). 입력 중복을 빼고, 끝 낱말 상한 · 불가 상한을 건다. C(식약처 수정쌍)는 2배."""
     rng = random.Random(SEED)
@@ -653,6 +660,13 @@ def cmd_mix(v2: bool = False) -> None:
             rows.append(r)
     fixed = [r for r in rows if "body" in r["output"]]
     infeasible = [r for r in rows if "infeasible" in r["output"]]
+    if v3:
+        from stage_gate import DISEASE, DRUG  # noqa: PLC0415
+
+        cos = [r for r in infeasible if COS_FUNC.search(r["input"]) and not DISEASE.search(r["input"])
+               and not DRUG.search(r["input"]) and not MEDICAL.search(r["input"])]
+        drop["화장품 기능 주장 불가(조건부와 부딪힘)"] += len(cos)
+        infeasible = [r for r in infeasible if r not in cos]
     rng.shuffle(fixed)
     ends: collections.Counter[str] = collections.Counter()
     cap_end = max(20, int(len(fixed) * MAX_SAME_END))
@@ -697,10 +711,10 @@ def cmd_mix(v2: bool = False) -> None:
             rng.shuffle(v)
             cap = COND_CAP.get(g, len(v))
             drop[f"조건부 상한 {g}"] += max(0, len(v) - cap)
-            cond += v[:cap]
+            cond += v[:cap] * (2 if v3 and g == "조건부:화장품기능" else 1)
     out = kept_fixed + kept_inf + cond + mfds * 2
     rng.shuffle(out)
-    with (PRIV / ("expand_mix2.jsonl" if v2 else "expand_mix.jsonl")).open("w", encoding="utf-8", newline="\n") as f:
+    with (PRIV / ("expand_mix3.jsonl" if v3 else "expand_mix2.jsonl" if v2 else "expand_mix.jsonl")).open("w", encoding="utf-8", newline="\n") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     inf_t = collections.Counter(r["output"]["infeasible"] for r in kept_inf)
@@ -772,7 +786,7 @@ def main() -> None:
     elif args.cmd == "cond":
         cmd_cond(args.n, args.variants if args.variants > 1 else 3, args.model, args.tag, args.dry_run, args.stop_at)
     elif args.cmd == "mix":
-        cmd_mix(v2=args.tag == "v2")
+        cmd_mix(v2=args.tag in ("v2", "v3"), v3=args.tag == "v3")
     elif args.cmd == "refilter":
         cmd_refilter(args.part)
     else:
