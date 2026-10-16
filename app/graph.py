@@ -2587,8 +2587,12 @@ def _coords(arts: Iterable[EvidenceArticle]) -> set[tuple[str, int, int, int]]:
     out: set[tuple[str, int, int, int]] = set()
     for a in arts:
         c = statute.from_article_item(a.law_id, a.article, a.item)
-        if c is None and not a.item:
-            c = f"{a.law_id}:{a.article}"  # 참조 조항 꼴 — `_ref_article` 은 좌표를 article 한 칸에 싣는다
+        if c is None and not a.basis:
+            # 참조 조항 꼴(인코더 근거 · 대응표) — 좌표는 article 한 칸에 있다(`_ref_article` · `reference_texts`).
+            # 🔴 2026-10-17 (D-348 보충 5 · 원장 10-16(B) ⑧) — 종전 조건 `not a.item` 은 DB 가 원문과 함께 붙이는 청크 항목
+            #    (「4.」 · 「1.」 · 「본문」)이 있으면 좌표를 버렸다 → 인코더 근거 좌표가 전부 비어 호 관문이 늘 닫혔다(dev 분기 0 행).
+            #    항목 칸은 청크의 이름표라 좌표가 아니다 — 사전 인용(`basis`)은 종전 길(`from_article_item`)만 탄다
+            c = f"{a.law_id}:{a.article}"
         try:
             law, jo, hang, ho, _ = statute.parse(c) if c else (None, 0, 0, 0, None)
         except ValueError:

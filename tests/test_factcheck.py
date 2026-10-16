@@ -738,3 +738,38 @@ def test_인코더만_기록은_분기의_선택지를_싣고_보류_그대로()
     rec = got["rec"]
     assert (rec.verdict, rec.hold_reason) == (Verdict.hold, HoldReason.low_conf)
     assert rec.substantiation is not None and not is_conditional(rec)
+
+
+def test_인코더_근거에_DB_청크_항목이_붙어도_호_관문을_지난다() -> None:
+    """🆕 2026-10-17 (원장 10-16(B) ⑧) — 실제 그래프는 참조 조항에 원문과 청크 항목(「4.」 · 「본문」)을 붙인다(`reference_texts`).
+    종전엔 항목이 있으면 좌표를 버려 인코더 근거 좌표가 비었다 → 호 관문이 늘 닫혀 dev 의 인코더 쪽 분기가 0 행이었다."""
+    from app.contracts import EncoderBasis  # noqa: PLC0415
+
+    arts = [
+        EvidenceArticle(law_id="002011", article="제3조제1항제1호", item="1."),
+        EvidenceArticle(law_id="005361", article="제3조제1항"),
+        EvidenceArticle(law_id="013094", article="제8조제1항제4호", item="4."),
+        EvidenceArticle(law_id="013453", article="[별표 1]제4호", item="본문"),
+    ]
+    assert g._coords(arts) == {("002011", 3, 1, 1), ("013094", 8, 1, 4)}, (
+        "시행령 · 별표 좌표는 인용 꼴이 아니라 버린다 — 법률 호 둘만 남는다"
+    )
+    s = SentenceJudgment(
+        **{
+            **_enc_only().model_dump(),
+            "risk": RiskAssessment(
+                encoder=Risk.R1,
+                final=Risk.R1,
+                encoder_basis=[
+                    EncoderBasis(
+                        premise=Premise.식품,
+                        violation=Violation.거짓_과장,
+                        floor=Risk.R1,
+                        articles=arts,
+                    )
+                ],
+            ),
+        }
+    )
+    got = _run(s)
+    assert got is not None and got.substantiation is not None and not is_conditional(got)
