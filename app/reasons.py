@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from typing import NamedTuple
 
 from app import premise as pm
-from app.contracts import Category, Infeasibility, Risk, SubstBranch, Violation
+from app.contracts import Category, Infeasibility, Premise, Risk, SubstBranch, Violation
 from collect import statute
 from collect.law_map import STATUTE_ID
 
@@ -137,6 +137,28 @@ GUESSED_TYPE_MARK = "AI 추정 유형 있음 — 판정 아님"
 REWRITE_INFEASIBLE_TEXT = "고쳐 쓴 문장을 만들지 못했어요"
 #: 고친 문장을 다시 판정했을 때 사전은 지났는데 인코더가 유형 후보를 내면 다는 말 (D-323 결정 4 「위반 못 찾음 + 인코더 주의」)
 ENC_REMAINS_MARK = "AI 추정 유형 남음 — 판정 아님"
+
+
+#: 🆕 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반** 문장의 결론 한 줄 · 화면 두 곳(검수 · 생성 편집기 `sent_concl`)과 이력이 같은 글자를 쓴다 (D-99).
+#:    ⛔ 「보류」라 적지 않는다 — 판정은 끝났고 답하면 확정된다. ⛔ 「쓸 수 있어요」만 적지 않는다 — 조건이 앞에 온다
+CONDITIONAL_FACT_TEXT = "조건부 위반 · 그 사실이 맞으면 쓸 수 있어요"
+CONDITIONAL_SUBST_TEXT = "조건부 위반 · 실증 자료가 있으면 쓸 수 있어요"
+
+
+def conditional_label(kind: str | None) -> str:
+    """저장된 조건부 위반(`evidence.conditional.kind`)의 결론 글자 — 이력 화면이 쓴다. 검수 화면(`conditional_text`)과 같은 글자다 (D-99)."""
+    return CONDITIONAL_FACT_TEXT if kind == "fact" else CONDITIONAL_SUBST_TEXT
+
+
+def conditional_text(sentence: object) -> str:
+    """조건부 위반 문장이면 결론 한 줄, 아니면 빈 글자. 조건부의 정의는 `contracts.is_conditional` 한 곳이다 (D-99)."""
+    from app.contracts import is_conditional  # noqa: PLC0415 — 순환 import 회피
+
+    if not is_conditional(sentence):  # type: ignore[arg-type]
+        return ""
+    return (
+        CONDITIONAL_FACT_TEXT if getattr(sentence, "fact_check", None) else CONDITIONAL_SUBST_TEXT
+    )
 
 
 def guessed_types(sentence: object) -> list[str]:
@@ -267,10 +289,19 @@ COMBO_CELLS = (
     "자격 없는 적중 · 인코더 조용",
     "인코더만",
     "둘 다 조용",
+    #: 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님(L0 · 주의 · 상담 문구). 판정은 「확정 · 위반 없음 · R0」이라 「사전 확정」에 섞이면
+    #:    사전 확정의 정밀도가 떨어진 것처럼 읽힌다 — 칸을 가른다. ⛔ 앞 여섯 칸의 순서는 바꾸지 않는다(게이트가 번호로 읽는다)
+    "판정 대상 아님",
 )
 
 
-def combo_cell(committed: bool, dict_types: Iterable[str], enc_types: Iterable[str]) -> str:
+def combo_cell(
+    committed: bool,
+    dict_types: Iterable[str],
+    enc_types: Iterable[str],
+    *,
+    not_claim: bool = False,
+) -> str:
     """조합 판정 칸 — **규칙은 여기 한 곳**(D-340 결정 1 · D-99). 단위는 부르는 쪽이 정한다.
 
     ★ `committed` — 사전 단독 확정 · `dict_types` — 사전 유형 후보(자격 없는 적중) · `enc_types` — **인코더가 직접 낸** 유형 후보.
@@ -278,6 +309,10 @@ def combo_cell(committed: bool, dict_types: Iterable[str], enc_types: Iterable[s
        (`guessed_types`)는 옮긴 후보를 「유형 있음」으로 센다(D-330 보충 2 결정 ③) — 칸과 표지는 다른 물음이다.
     🚨 평가 도구는 **행 단위**로 넣고(행 안 문장의 합) 화면은 문장 단위다 — dev 749 행 중 한 문장 708(원장 10-14(A) ⑤)이라 갈리는 행은 많아야 41.
     """
+    if not_claim:
+        return COMBO_CELLS[
+            6
+        ]  # 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님만 있는 단위(행 · 문장)
     if committed:
         return COMBO_CELLS[0]
     dq, en = set(dict_types), set(enc_types)
@@ -411,3 +446,71 @@ def moved_note(candidate: object) -> str | None:
     if src is None:
         return None
     return MOVED_NOTES.get((src, getattr(candidate, "violation", None)))
+
+
+# ══════════════════════════════════════════════════════════════════
+#  인코더 하한의 근거 — 화면 산출 내역 (🆕 2026-10-16 · D-348 보충 2 결정 10)
+# ══════════════════════════════════════════════════════════════════
+
+#: 산출 내역 첫 줄의 머리말. 🚨 판정이 아니다 — 「이 유형이라면 이 조항」이다. 문안은 화면 담당 검토 대상이다
+ENCODER_BASIS_HEAD = "인코더 하한의 근거"
+_LAW_NAME = {v: k for k, v in STATUTE_ID.items()}
+
+
+class EncoderBasisView(NamedTuple):
+    head: str  # 대표 한 줄
+    rest: list[str]  # 나머지(「근거 보기」 안)
+
+
+def _basis_line(premises: list[object], violation: object, art: object) -> str:
+    names = [getattr(p, "value", str(p)).replace("_", " ") for p in premises]
+    where = f"{names[0]} 분기" + (
+        f" (같은 등급: {' · '.join(names[1:])})" if len(names) > 1 else ""
+    )
+    law = _LAW_NAME.get(getattr(art, "law_id", ""), getattr(art, "law_id", ""))
+    item = getattr(art, "item", "") or ""
+    article = getattr(art, "article", "")
+    cite = article + (
+        item if item and item != "본문" and not article.endswith(("호", "목")) else ""
+    )
+    return f"{where} · {getattr(violation, 'value', str(violation)).replace('_', ' ')} · {law} {cite}".rstrip()
+
+
+def encoder_basis_view(sentence: object) -> EncoderBasisView | None:
+    """인코더 하한의 근거 → 대표 한 줄 + 나머지 (보충 2 결정 10 · 다중 라벨은 다 남기고 대표만 먼저).
+
+    ★ 대표 = 그 유형의 하한이 가장 높은 것 · 같으면 대표 순서(`ordered_candidates` · 원시 확률)를 따른다 · 그래도 같으면 유형 이름.
+    ★ 같은 유형 · 같은 조항을 낸 분기가 여럿이면 한 줄로 묶어 「(같은 등급: …)」로 적는다(분기 순서는 전제 표 순서).
+    🔴 근거가 없으면 None — 줄을 그리지 않는다(지어내지 않는다 · D-220).
+    """
+    risk = getattr(sentence, "risk", None)
+    basis = list(getattr(risk, "encoder_basis", None) or ())
+    if not basis:
+        return None
+    conf: dict[str, float] = {}
+    for c in getattr(sentence, "encoder_candidates", None) or ():
+        conf[c.violation.value] = max(conf.get(c.violation.value, 0.0), c.confidence)
+    order = list(Premise)
+    groups: dict[tuple, dict] = {}
+    for b in basis:
+        for a in b.articles:
+            key = (b.violation.value, a.law_id, a.article, a.item)
+            g = groups.setdefault(
+                key, {"violation": b.violation, "art": a, "floor": b.floor, "premises": []}
+            )
+            if b.premise not in g["premises"]:
+                g["premises"].append(b.premise)
+            if b.floor.level > g["floor"].level:
+                g["floor"] = b.floor
+    for g in groups.values():
+        g["premises"].sort(key=lambda p: order.index(p) if p in order else 99)
+    ranked = sorted(
+        groups.values(),
+        key=lambda g: (
+            -g["floor"].level,
+            -conf.get(g["violation"].value, 0.0),
+            g["violation"].value,
+        ),
+    )
+    lines = [_basis_line(g["premises"], g["violation"], g["art"]) for g in ranked]
+    return EncoderBasisView(head=f"{ENCODER_BASIS_HEAD}: {lines[0]}", rest=lines[1:])

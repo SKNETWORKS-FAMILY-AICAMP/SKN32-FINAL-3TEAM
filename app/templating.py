@@ -60,6 +60,10 @@ templates.env.globals["ENC_DIFFERS_MARK"] = reasons.ENC_DIFFERS_MARK
 # 🆕 2026-10-15 (D-346 결정 6 · D-340 결정 5) — 후보 순서 · 대표 표지 · 추정 위험도 글자. 규칙 · 글자는 `app/reasons.py` 한 곳
 templates.env.filters["ordered_candidates"] = reasons.ordered_candidates
 templates.env.filters["estimate_text"] = reasons.estimate_text
+# 🆕 2026-10-16 (D-348 보충 2 결정 10) — 인코더 하한의 근거(대표 한 줄 + 나머지). 규칙 · 글자는 `app/reasons.py` 한 곳
+templates.env.filters["encoder_basis_view"] = reasons.encoder_basis_view
+# 🆕 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반 문장의 결론 한 줄. 규칙(`contracts.is_conditional`) · 글자는 `app/reasons.py` 한 곳
+templates.env.filters["conditional_text"] = reasons.conditional_text
 templates.env.globals["REPRESENTATIVE_MARK"] = reasons.REPRESENTATIVE_MARK
 templates.env.globals["ENC_REMAINS_MARK"] = reasons.ENC_REMAINS_MARK
 templates.env.globals["NOTE_UNJUDGED_MARK"] = (
