@@ -568,9 +568,13 @@
             {#- 🆕 2026-10-15 (D-340 결정 3 · D-344 ⑨) — 사전 확정 문장에 인코더가 다른 유형을 냈다. 판정은 그대로다(거부권 없음) · 규칙 · 글자는 `app/reasons.py` #}
             {% set dt = s|differing_types %}{% if dt %}<p class="rv-note">{{ ENC_DIFFERS_MARK }} · {{ dt|join(" · ")|replace("_", " ") }}</p>{% endif %}
             <p class="rv-note">AI 가 문장만 보고 추정한 유형이에요. 아래 조항은 이 문구에서 찾은 근거가 아니라 「이 유형이라면 이 조항」이에요.</p>
-            {% for c in s.encoder_candidates %}
+            {#- 🔄 2026-10-15 (D-346 결정 6) — 원시 확률 순으로 그리고 후보가 둘 이상이면 첫 줄에 대표 표지. 접지 않는다 · 규칙은 `app/reasons.py` #}
+            {% set enc_list = s|ordered_candidates %}
+            {% for c in enc_list %}
             {#- 🔄 2026-10-13 (D-330 안건 1 (나)) — 확률(%)을 그리지 않는다. 인코더 출력은 보정된 확률이 아니라 「N% 확률로 위반」으로 읽힌다 #}
-            <div class="rv-calc"><span>{{ c.violation.value|replace("_", " ") }}{% if c.moved_from %} · 조건부 (원래 추정 {{ c.moved_from.value|replace("_", " ") }}){% endif %}</span></div>
+            <div class="rv-calc"><span>{{ c.violation.value|replace("_", " ") }}{% if c.moved_from %} · 조건부 (원래 추정 {{ c.moved_from.value|replace("_", " ") }}){% endif %}{% if loop.first and enc_list|length > 1 %} · {{ REPRESENTATIVE_MARK }}{% endif %}</span></div>
+            {#- 🆕 2026-10-15 (D-340 결정 5 · D-346) — 분기 판정 · 인코더만 잡은 문장 · 표시 목록 유형에만 실린다. 판정이 아니다 — 「확정되면」 #}
+            {% set et = c|estimate_text %}{% if et %}<p class="rv-note">{{ et }}</p>{% endif %}
             {% if c.references %}
             <details class="rv-ev-ref">
               <summary>이 유형을 정한 조항 {{ c.references|length }}건</summary>

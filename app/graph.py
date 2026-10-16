@@ -84,6 +84,7 @@ from app.contracts import (
     ProductContext,
     Risk,
     RiskAssessment,
+    RiskEstimate,
     Segment,
     SentenceJudgment,
     Span,
@@ -1649,6 +1650,14 @@ def floor_of_sentence(
             if f.floor is None:
                 return sanction.Floor(None)
             found.append(f)
+    return _combine_floors(found)
+
+
+def _combine_floors(found: list[sanction.Floor]) -> sanction.Floor:
+    """하한들의 합 — 하한은 가장 높은 것 · 가능 상한은 그보다 높은 것 중 가장 높은 것 하나 · 근거 줄은 순서대로 (D-272 · D-310).
+
+    🚨 판정(`floor_of_sentence`)과 추정 위험도(`estimate_of`)가 **이 함수 하나**로 합친다 (D-99). 비면 모른다(`Floor(None)`).
+    """
     if not found:
         return sanction.Floor(None)
     top = max(found, key=lambda f: f.floor.level)  # type: ignore[union-attr]
@@ -1663,6 +1672,62 @@ def floor_of_sentence(
         ceiling_note=ceil.ceiling_note if ceil else None,
         basis=tuple(dict.fromkeys(b for f in found for b in f.basis)),
     )
+
+
+#: 🆕 2026-10-15 (D-340 결정 5 · D-346 결정 3 ~ 5 · D-347 결정 6) — **추정 위험도를 싣는 (전제 · 유형)**. `[측정]` D4-10 dev
+#:    「제 전제 행 · 인코더만 잡은 문장」에서 n ≥ 20 ∧ 위반 비율 ≥ 90% ∧ 다른 생성기 적법 후보율 ≤ 15%(M 은 비율 · n 모두에서 뺌 ·
+#:    비방광고 제외) — 식품 거짓_과장(n 82 · 1.00 · 적법 0 / 40) · 식품 소비자_기만(n 31 · 0.94 · 2 / 40) · 화장품 의약품_오인(n 36 ·
+#:    0.97 · 0 / 78) (2026-10-15 · 클론 A · 원장 미기록). 🔄 **새 인코더 판이 채택되면 같은 규칙으로 다시 센다** — 목록은 판에 딸린다.
+#: 🚨 표시 전용이다 — 하한 · 판정에 들지 않는다. D-131 개정 ①(위험도만)은 D-347 결정 6 의 관문을 넘은 뒤 판정한다
+ESTIMATE_TYPES: frozenset[tuple[Premise, Violation]] = frozenset(
+    {
+        (Premise.식품, Violation.거짓_과장),
+        (Premise.식품, Violation.소비자_기만),
+        (Premise.화장품, Violation.의약품_오인),
+    }
+)
+
+
+def estimate_of(rows: list[dict[str, Any]], premise: Premise, vtype: Violation) -> RiskEstimate:
+    """(전제 · 유형) → 추정 위험도 — 그 전제의 법 ∩ 그 유형의 조항이 있는 법의 서명된 제재표 · 근거 인용 없이 (D-340 결정 5).
+
+    🔴 법 하나라도 하한을 모르면 모른다 — 아는 법만으로 max 를 내지 않는다(`floor_of_sentence` 와 같은 규칙 · D-220).
+       그 전제의 법 어디에도 이 유형의 조항이 없어도 모른다. 근거 인용이 없으니 식품 4 ~ 7 호는 「그 밖에」 하한 · 가장 무거운 처분이 상한이다.
+    """
+    laws = [
+        LAW_OF_NODE[n]
+        for n in pm.PREMISE_LAWS[premise]
+        if n in LAW_OF_NODE and statute.references(vtype.value, LAW_OF_NODE[n])
+    ]
+    found: list[sanction.Floor] = []
+    for law in laws:
+        law_id = sanction.SANCTION_LAW.get(law)
+        f = sanction.floor_rows(rows, vtype.value, law_id, []) if law_id else sanction.Floor(None)
+        if f.floor is None:
+            return RiskEstimate()
+        found.append(f)
+    c = _combine_floors(found)
+    return RiskEstimate(floor=c.floor, ceiling=c.ceiling, ceiling_note=c.ceiling_note)
+
+
+def _with_estimates(
+    j: SentenceJudgment, premise: Premise, rows: list[dict[str, Any]]
+) -> SentenceJudgment:
+    """분기 문장의 인코더 후보에 추정 위험도를 싣는다 — **사전 유형이 없는 문장**(인코더만 잡은 문장)의 표시 목록 유형만 (D-340 결정 5).
+
+    ⛔ 판정 칸(판정 · 위험도 · 유형)은 건드리지 않는다 — 후보 칸만 바뀐다. 판정 대상 아님(`not_claim`) 문장은 싣지 않는다.
+    """
+    if j.violations or j.not_claim or not j.encoder_candidates:
+        return j
+    if not any((premise, c.violation) in ESTIMATE_TYPES for c in j.encoder_candidates):
+        return j
+    cands = [
+        c.model_copy(update={"estimate": estimate_of(rows, premise, c.violation)})
+        if (premise, c.violation) in ESTIMATE_TYPES
+        else c
+        for c in j.encoder_candidates
+    ]
+    return j.model_copy(update={"encoder_candidates": cands})
 
 
 def _with_risk(s: SentenceJudgment, risk: RiskAssessment) -> SentenceJudgment:
@@ -1917,6 +1982,8 @@ def _premise_sentences(
                     )
                 }
             )
+            # 🆕 2026-10-15 (D-340 결정 5 · D-346) — 인코더만 잡은 문장의 추정 위험도(표시 전용 · 판정이 끝난 뒤)
+            j = _with_estimates(j, premise, rows)
         out.append(j)
     return out
 
@@ -2066,7 +2133,8 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         return {}  # 사전을 못 훑었다 — 전제별 판정의 재료가 없다 (D-220)
     # 하한은 확정 위반에만 쓰인다 — 어느 법에서도 걸린 낱말이 없으면 제재표를 읽지 않는다(`assess_risk` 가 할 일이 없으면 안 읽는 것과 같다)
     hit = any(hs for r in state.get("law_results", []) for _, hs in r.dict_hits)
-    rows = load_sanction_rows(cur) if hit else []
+    # 🔄 2026-10-15 (D-340 결정 5) — 인코더 후보가 있으면 추정 위험도에도 쓴다. 안 읽으면 표가 빈 것처럼 「모름」이 된다(D-343)
+    rows = load_sanction_rows(cur) if hit or state.get("encodings") else []
     per = {p: _premise_sentences(p, state, rows) for p in premises}
     # 🆕 2026-10-11 — 제품을 알 때 보류 문장의 유형 후보는 그 품목의 전제로 거른 합집합이다 (`_held_candidates`)
     held = (
