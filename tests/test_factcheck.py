@@ -139,11 +139,45 @@ def test_실증_문안이_없는_유형은_조건부로_내리지_않는다() ->
     assert _run(_confirmed("다른 회사 원료보다 낫다", food7, Violation.부당_비교광고)) is None
 
 
-def test_인코더만_잡은_보류도_근거_호로_조건부가_된다() -> None:
-    got = _run(_enc_only())
+def test_신뢰_규칙_전에는_인코더만_잡은_보류는_조건부가_아니다() -> None:
+    """D-348 결정 5 — 조건부 위반은 「답하지 않으면 확정 B」다 · 확정에는 신뢰 규칙이 필요하다(보충 1 결정 2 · 문턱 None = 닫힘)."""
+    assert g.ENCODER_CONFIRM_TAU is None, (
+        "🔴 문턱이 열렸다 — 관문(데이터 밖 ≤ 2%) 기록 뒤 이 게이트를 고친다"
+    )
+    assert _run(_enc_only()) is None
+    weak = SentenceJudgment(
+        **{
+            **_enc_only().model_dump(),
+            "violations": [Violation.거짓_과장],
+            "evidence": [FOOD4.model_dump()],
+        }
+    )
+    assert _run(weak) is None, (
+        "자격 없는 사전 적중 + 인코더 하한도 확정 재료가 아니다(D-311 결정 4)"
+    )
+
+
+def test_신뢰_규칙이_열리면_주장_가드와_확신을_지난_것만(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.contracts import EncoderTypeCandidate  # noqa: PLC0415
+
+    monkeypatch.setattr(g, "ENCODER_CONFIRM_TAU", 0.8)
+    hi = EncoderTypeCandidate(violation=Violation.거짓_과장, confidence=0.9)
+    lo = EncoderTypeCandidate(violation=Violation.거짓_과장, confidence=0.5)
+    base = _enc_only().model_dump()
+    ok = SentenceJudgment(
+        **{**base, "text": "국내 판매 1위를 지켰어요", "encoder_candidates": [hi.model_dump()]}
+    )
+    got = _run(ok)
     assert got is not None and is_conditional(got) and got.substantiation is not None
-    assert got.infeasibility is Infeasibility.B and got.risk.final is Risk.R1
     JudgeResponse(outcome=Outcome.hold, sentences=[got])
+    low = SentenceJudgment(
+        **{**base, "text": "국내 판매 1위를 지켰어요", "encoder_candidates": [lo.model_dump()]}
+    )
+    assert _run(low) is None, "확신이 문턱 아래"
+    veto = SentenceJudgment(
+        **{**base, "text": "국내 판매 1위 정가 19,900원", "encoder_candidates": [hi.model_dump()]}
+    )
+    assert _run(veto) is None, "거부 가드(가격)"
 
 
 def test_실증_있음이면_확정_R0_과_출처() -> None:
@@ -332,16 +366,48 @@ def test_사용자가_참으로_고르면_확정_R0_과_출처(tables: None) -> 
     uf = UserFact(text=TEXT, kind=FactKind.인증, true=True)
     got = _run(_confirmed(), [uf])
     assert got is not None and got.verdict is Verdict.confirmed and not got.violations
-    assert got.risk.final is Risk.R0 and got.user_fact == uf
+    assert got.risk.final is Risk.R0 and got.user_facts == [uf]
 
 
-def test_성능_주장이_섞이면_참이어도_풀지_않는다(tables: None) -> None:
+def test_성능이_섞이면_사실_참_뒤_실증_조건부로_다시_선다(tables: None) -> None:
+    """보충 4 「이어 묻기」 — 답 하나는 그 사실 하나만 푼다 · 남은 성능 주장은 실증 조건부(보충 3 결정 3)."""
     text = "HACCP 인증으로 피로 개선 효과"
     uf = UserFact(text=text, kind=FactKind.인증, true=True)
     got = _run(_confirmed(text), [uf])
-    assert got is not None and got.violations and got.user_fact == uf, (
-        "남는 위험은 실증 분기의 몫(결정 3)"
+    assert got is not None and is_conditional(got) and got.fact_check is None
+    assert got.substantiation is not None and got.user_facts == [uf]
+    JudgeResponse(outcome=Outcome.hold, sentences=[got])
+    us = UserSubst(text=text, has_evidence=True)
+    done = _run(_confirmed(text), [uf], [us])
+    assert done is not None and done.risk.final is Risk.R0 and not done.violations
+    assert done.user_facts == [uf] and done.user_subst == us
+
+
+def test_사실_종류가_둘이면_하나씩_차례로_묻는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        fc, "FACT_RULES", {FactKind.특허: re.compile("특허"), FactKind.인증: re.compile("인증")}
     )
+    monkeypatch.setattr(
+        fc,
+        "FACT_TEXTS",
+        {k: fc.FactText(["(시험) 증빙"], "(시험) 기준") for k in (FactKind.특허, FactKind.인증)},
+    )
+    monkeypatch.setattr(fc, "PERFORMANCE", re.compile("효과|개선"))
+    text = "특허 원료로 만든 HACCP 인증 그래놀라"
+    first = _run(_confirmed(text))
+    assert first is not None and first.fact_check.kind is FactKind.특허
+    p1 = UserFact(text=text, kind=FactKind.특허, true=True)
+    second = _run(_confirmed(text), [p1])
+    assert second is not None and second.fact_check.kind is FactKind.인증
+    assert second.user_facts == [p1]
+    JudgeResponse(outcome=Outcome.hold, sentences=[second])
+    p2 = UserFact(text=text, kind=FactKind.인증, true=True)
+    done = _run(_confirmed(text), [p2, p1])
+    assert done is not None and done.risk.final is Risk.R0 and done.user_facts == [p1, p2]
+    lie = UserFact(text=text, kind=FactKind.인증, true=False)
+    bad = _run(_confirmed(text), [p1, lie])
+    assert bad is not None and bad.verdict is Verdict.confirmed and bad.violations
+    assert bad.user_facts == [p1, lie], "하나라도 거짓이면 확정 위반 그대로 + 출처"
 
 
 def test_사용자가_거짓으로_고르면_확정_그대로_출처(tables: None) -> None:
@@ -351,11 +417,11 @@ def test_사용자가_거짓으로_고르면_확정_그대로_출처(tables: Non
         got is not None
         and got.verdict is Verdict.confirmed
         and got.violations
-        and got.user_fact == uf
+        and got.user_facts == [uf]
     )
 
 
-def test_계약_사용자_확인은_확정에만() -> None:
+def test_계약_사용자_확인은_확정이나_남은_조건이_있는_조건부에만() -> None:
     uf = UserFact(text=TEXT, kind=FactKind.인증, true=True)
     with pytest.raises(ValueError, match="사용자 확인"):
         SentenceJudgment(
@@ -363,7 +429,30 @@ def test_계약_사용자_확인은_확정에만() -> None:
             text=TEXT,
             verdict=Verdict.hold,
             hold_reason=HoldReason.low_conf,
-            user_fact=uf,
+            user_facts=[uf],
+        )
+    with pytest.raises(ValueError, match="답이 둘"):
+        SentenceJudgment(
+            sent_id="s0",
+            text=TEXT,
+            verdict=Verdict.confirmed,
+            risk=RiskAssessment(floor=Risk.R0, final=Risk.R0),
+            user_facts=[uf, uf],
+        )
+    with pytest.raises(ValueError, match="다시 묻는다"):
+        SentenceJudgment(
+            **{
+                **_confirmed().model_dump(),
+                "verdict": Verdict.hold,
+                "hold_reason": HoldReason.premise_unknown,
+                "fact_check": {
+                    "kind": "인증",
+                    "confirmed_max": "R0",
+                    "accepted_evidence": ["x"],
+                    "criteria": "x",
+                },
+                "user_facts": [uf.model_dump()],
+            }
         )
 
 
@@ -375,7 +464,40 @@ def test_저장은_사용자_확인_출처를_남긴다(tables: None) -> None:
     row = js._judgment_row(
         uuid.uuid4(), uuid.uuid4(), got, JudgeResponse(outcome=Outcome.passed, sentences=[got])
     )
-    assert row.evidence["user_fact"]["kind"] == "인증" and row.evidence["user_fact"]["true"] is True
+    assert row.evidence["user_facts"] == [{"text": TEXT, "kind": "인증", "true": True}]
+
+
+def test_건기식_인정_질병_분기(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-348 결정 6 · 보충 3 결정 2 — 건기식_인정 전제의 「판정하지 못함」 질병 표방은 사실 확인 분기(`인정_기능성`)."""
+    from app.graph import DictHit  # noqa: PLC0415
+
+    hit = DictHit("위험 감소", "질병_예방치료_표방", ("013094:제8조제1항제1호|가목",), None)
+    assert g._disease_answer(Premise.건기식_인정, [hit], "x", []) is None, "문안 승인 전 — 종전대로"
+    monkeypatch.setattr(
+        fc,
+        "FACT_TEXTS",
+        {FactKind.인정_기능성: fc.FactText(["(시험) 인정서"], "(시험) 인정 문구 그대로인가")},
+    )
+    assert g._disease_answer(Premise.건기식_비인정, [hit], "x", []) is None, "인정 전제에서만"
+    assert g._disease_answer(Premise.건기식_인정, [hit], "x", []) == ("ask", None)
+    worst = _confirmed("골다공증 발생 위험 감소에 도움", FOOD1, Violation.질병_예방치료_표방)
+    worst = SentenceJudgment(**{**worst.model_dump(), "infeasibility": Infeasibility.C})
+    asked = g._disease_branch(worst, "ask", None)
+    assert is_conditional(asked) and asked.hold_reason is HoldReason.premise_unknown
+    assert asked.fact_check.kind is FactKind.인정_기능성 and asked.risk.final is Risk.R2
+    JudgeResponse(outcome=Outcome.hold, sentences=[asked])
+    uf = UserFact(text=worst.text, kind=FactKind.인정_기능성, true=False)
+    assert g._disease_answer(Premise.건기식_인정, [hit], worst.text, [uf]) == ("false", uf)
+    lie = g._disease_branch(worst, "false", uf)
+    assert lie.verdict is Verdict.confirmed and lie.violations and lie.user_facts == [uf]
+    ok = UserFact(text=worst.text, kind=FactKind.인정_기능성, true=True)
+    silent = SentenceJudgment(
+        sent_id="s0", text=worst.text, verdict=Verdict.hold, hold_reason=HoldReason.low_conf
+    )
+    done = g._disease_branch(silent, "true", ok)
+    assert (
+        done.verdict is Verdict.confirmed and done.risk.final is Risk.R0 and done.user_facts == [ok]
+    )
 
 
 def test_저장은_실증_답_출처를_남긴다() -> None:

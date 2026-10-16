@@ -518,7 +518,7 @@ class UserFact(BaseModel):
     """**사용자가 확인한 사실** 하나 (🆕 2026-10-16 · D-348 보충 3 결정 4 · (가) 출처를 남기고 반영).
 
     ★ 결과 화면의 사실 확인 분기에서 사용자가 고른 것 — 재검수 요청에 실려 오고, 그 문장의 판정을 그 사실로 다시 낸다.
-       책임은 사용자에게 있다 — 그래서 판정된 문장에 이 칸을 그대로 남긴다(`SentenceJudgment.user_fact` · 저장 `evidence.user_fact`).
+       책임은 사용자에게 있다 — 그래서 판정된 문장에 이 칸을 그대로 남긴다(`SentenceJudgment.user_facts` · 저장 `evidence.user_fact`).
     🚨 **검증이 아니다** — 시스템은 증빙을 대조하지 않는다(D-263 ⑥ 의 「검증된 분기」와 다르다). 화면은 「사용자 확인 전제」로 그린다(배지 ⬜).
     """
 
@@ -574,7 +574,8 @@ class SentenceJudgment(BaseModel):
     #: 🆕 2026-10-01 **사실 확인 분기** — B 에만 (D-308 ④) · 실증 분기와 **다른 칸**이다
     fact_check: FactBranch | None = None
     #: 🆕 2026-10-16 (D-348 보충 3 결정 4) — 이 문장의 판정이 **사용자가 확인한 사실**로 정해졌다(출처 · 책임). 있으면 확정이고 사실 확인 분기는 없다
-    user_fact: UserFact | None = None
+    #: 🔄 2026-10-16 (보충 4 「이어 묻기」) — 답한 사실이 여럿일 수 있다(특허 · 인증 …) · 하나에 답했고 조건이 남았으면 조건부 보류에도 실린다
+    user_facts: list[UserFact] = Field(default_factory=list)
     #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 이 문장의 판정이 **사용자가 답한 실증 여부**로 정해졌다(출처 · 책임). 있으면 확정이다
     user_subst: UserSubst | None = None
 
@@ -675,19 +676,32 @@ class SentenceJudgment(BaseModel):
         # 🔄 2026-10-16 (D-348 보충 3 결정 1 · 5) — 사실 확인 분기는 **사실을 몰라 멈춘 보류**(`premise_unknown`)에 붙는다.
         #    ⛔ 종전 「확정 B 에만」(D-308 ④)은 사실을 모르는데 위반을 확정한 꼴이었다 — 사실이 참이면 위반이 아니다.
         #    확인 전 위험도(가장 나쁜 경우)가 있어야 · 상한은 그 아래 (`_subst_is_for_B` 와 같은 규칙) · 불가 사유는 묻지 않는다(질병 C 도 붙는다)
-        if self.user_fact is not None and (
+        # 🔄 2026-10-16 (보충 4 「이어 묻기」) — 답한 사실은 확정 문장에, 또는 **남은 조건이 있는 조건부 보류**(다음 사실 · 실증)에 실린다.
+        #    같은 종류를 다시 묻지 않는다 · 같은 종류에 두 답이 없다
+        if self.user_facts:
+            kinds = [f.kind for f in self.user_facts]
+            if len(set(kinds)) != len(kinds):
+                raise ValueError(
+                    f"같은 사실 종류에 답이 둘이다 — {[k.value for k in kinds]} (보충 4)"
+                )
+            pending = (
+                self.verdict is Verdict.hold
+                and self.hold_reason is HoldReason.premise_unknown
+                and (self.fact_check is not None or self.substantiation is not None)
+            )
+            if self.verdict is not Verdict.confirmed and not pending:
+                raise ValueError(
+                    "사용자 확인 사실이 실린 문장은 확정이거나 남은 조건이 있는 조건부 보류다 (D-348 보충 3 결정 4 · 보충 4)"
+                )
+            if self.fact_check is not None and self.fact_check.kind in kinds:
+                raise ValueError(
+                    f"이미 답한 사실을 다시 묻는다 — {self.fact_check.kind.value} (보충 4)"
+                )
+        if self.user_subst is not None and (
             self.verdict is not Verdict.confirmed or self.fact_check is not None
         ):
             raise ValueError(
-                "사용자 확인 사실로 정한 문장은 확정이고 사실 확인 분기가 없다 (D-348 보충 3 결정 4)"
-            )
-        if self.user_subst is not None and (
-            self.verdict is not Verdict.confirmed
-            or self.fact_check is not None
-            or self.user_fact is not None
-        ):
-            raise ValueError(
-                "사용자가 답한 실증 여부로 정한 문장은 확정이고 사실 확인 분기 · 사용자 확인 사실이 없다 (D-348 보충 4 결정 3)"
+                "사용자가 답한 실증 여부로 정한 문장은 확정이고 사실 확인 분기가 없다 (D-348 보충 4 결정 3)"
             )
         if self.fact_check is None:
             return self

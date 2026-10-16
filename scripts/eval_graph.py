@@ -217,7 +217,7 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "enc_risk": any(s.risk.encoder is not None for s in sents),
         #: 🆕 2026-10-16 (D-348 보충 3) — 사실 확인 분기가 달린 문장이 있나 · 사용자가 확인한 사실로 정한 문장이 있나
         "fact_branch": any(s.fact_check is not None for s in sents),
-        "user_fact": any(s.user_fact is not None for s in sents),
+        "user_fact": any(s.user_facts for s in sents),
         #: 🆕 2026-10-16 (D-348 보충 4) — 조건부 위반 문장의 유형(가장 나쁜 경우 = 답 없음 · 거짓 분기의 판정) · 사전 유형, 없으면 인코더 근거의 유형
         "cond_types": sorted(
             {v.value for s in cond for v in s.violations}

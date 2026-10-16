@@ -254,7 +254,7 @@
       "spans": "opt list[app.contracts.Span]",
       "substantiation": "opt app.contracts.SubstBranch | None",
       "text": "req builtins.str",
-      "user_fact": "opt app.contracts.UserFact | None",
+      "user_facts": "opt list[app.contracts.UserFact]",
       "user_subst": "opt app.contracts.UserSubst | None",
       "verdict": "req app.contracts.Verdict",
       "violations": "opt list[app.contracts.Violation]"

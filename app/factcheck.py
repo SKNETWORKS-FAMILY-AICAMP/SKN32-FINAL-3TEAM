@@ -69,12 +69,12 @@ def in_gate(coords: Iterable[tuple[str, int, int, int]]) -> bool:
     return bool(cs) and cs <= COND_HO
 
 
-def fact_kind(text: str) -> FactKind | None:
-    """문장의 사실 주장 종류 — 낱말 규칙의 첫 일치(표 순서) · 없으면 None. 🔴 표가 비면 늘 None (D-220)."""
-    for kind, pat in FACT_RULES.items():
-        if pat.search(text or ""):
-            return kind
-    return None
+def fact_kinds(text: str) -> list[FactKind]:
+    """문장의 사실 주장 종류 **전부**(표 순서 · 묻는 순서다). 없으면 빈 목록. 🔴 표가 비면 늘 빈 목록 (D-220).
+
+    🔄 2026-10-16 (보충 4 「이어 묻기」) — 종전 `fact_kind`(첫 일치 하나)는 「특허 원료로 만든 HACCP 인증 제품」에서 인증을 묻지 않았다.
+    """
+    return [kind for kind, pat in FACT_RULES.items() if pat.search(text or "")]
 
 
 def fact_only(text: str) -> bool:
