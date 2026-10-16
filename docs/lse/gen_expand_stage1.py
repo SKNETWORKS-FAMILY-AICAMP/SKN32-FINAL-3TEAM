@@ -213,6 +213,13 @@ def answer_key_inputs() -> list[str]:
     return out
 
 
+def dev_texts() -> set[str]:
+    """🆕 10-17 — 팀 dev 평가 세트(`build/eval/gen_inputs_dev.jsonl` · D-322)의 문구. 학습에 넣으면 dev 로 잴 수 없다.
+    q4b-n2 의 확장 묶음에 dev 511 중 101 이 들어가 있었다(씨앗 기준 182 — 그때는 정답표 · 인코더 test 만 뺐다)."""
+    p = ROOT / "build" / "eval" / "gen_inputs_dev.jsonl"
+    return {norm(json.loads(line)["text"]) for line in p.open(encoding="utf-8")} if p.exists() else set()
+
+
 def leaks(text: str, keys: list[str], words: list[str]) -> bool:
     """정답표(평가 전용) 문장과 같거나 닮았는가 — `gen_synthetic_stage1` 의 거르기와 같다."""
     k = norm(text)
@@ -223,6 +230,7 @@ def leaks(text: str, keys: list[str], words: list[str]) -> bool:
 def cmd_seeds() -> None:
     keys = answer_key_inputs()
     words = json.loads((PRIV / "answer_words.json").read_text(encoding="utf-8"))
+    dev = dev_texts()
     seen, rows, drop = set(), [], collections.Counter()
     for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8"):
         r = json.loads(line)
@@ -235,6 +243,8 @@ def cmd_seeds() -> None:
             drop["길이"] += 1
         elif leaks(r["text"], keys, words):
             drop["정답표 닮음"] += 1
+        elif k in dev:
+            drop["dev 평가 문장"] += 1
         else:
             seen.add(k)
             rows.append({"sid": r["id"], "text": r["text"], "labels": r["labels"], "품목": r["품목"],
@@ -641,6 +651,8 @@ def cmd_mix(v2: bool = False, v3: bool = False) -> None:
     (시범에서 받아들인 고침의 절반이 위반이 남았다). 입력 중복을 빼고, 끝 낱말 상한 · 불가 상한을 건다. C(식약처 수정쌍)는 2배."""
     rng = random.Random(SEED)
     rows, seen, drop = [], set(), collections.Counter()
+    dev = dev_texts()
+    seed_text = {s["sid"]: norm(s["text"]) for s in map(json.loads, SEEDS.open(encoding="utf-8"))}
     for p in sorted(PRIV.glob("expand_*_rows.jsonl")):
         if p.name == "expand_mfds_rows.jsonl":
             continue
@@ -649,6 +661,9 @@ def cmd_mix(v2: bool = False, v3: bool = False) -> None:
                 drop["4o-mini 교정"] += 1
                 continue
             k = norm(r["input"])
+            if k in dev or seed_text.get(r.get("seed_sid")) in dev:
+                drop["dev 평가 문장(또는 그 변형)"] += 1  # 🆕 10-17 — dev 로 잴 수 있게
+                continue
             if k in seen:
                 drop["입력 중복"] += 1
                 continue

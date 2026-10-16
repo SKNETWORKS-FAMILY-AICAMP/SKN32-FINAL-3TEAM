@@ -234,6 +234,13 @@ _FOOD_FORM = re.compile(r"먹는|마시는|섭취|캡슐|알약|정제|환|드�
 _SUBJECT = re.compile(r"^\s*([가-힣A-Za-z0-9·\-() ]{2,40}?)(?:은|는)\s+.*도움")
 
 
+#: 건기식 꼴 기능 문구의 끝(공식 기능성화장품 문구는 「도움을 줍니다」)
+_FOOD_CLAIM_FORM = re.compile(r"도움이\s*될\s*수\s*있|도움을\s*줄\s*수\s*있")
+#: 사실 낱말 — 원료 · 산지 · 가공(이것이 있으면 제품 이름만 남은 것이 아니다)
+_FACT_WORD = re.compile(r"국산|국내산|[가-힣]{1,4}산(?![가-힣])|추출물|분말|원료|원액|착즙|숙성|건조|발효|압착|로스팅|볶은|구운|만든|담은|우려|"
+                        r"배합|함유|무첨가|유기농|무농약")
+
+
 def label_check(original: str, s: str, labels: list[str], category: str | None = None) -> list[str]:
     """🆕 10-05 (v12) — 관문이 못 보는 것. ① 위반 유형이 건강기능식품_오인인데 기능성 주장(「~에 도움」)을 냈다 —
     일반식품은 기능성 주장 자체가 안 된다(정답표 기준 불가). ② 「○○은 ~에 도움」의 주어(원료명)가 원문에 없고 공식 원료명도 아니다 —
@@ -245,6 +252,17 @@ def label_check(original: str, s: str, labels: list[str], category: str | None =
     if any(c[:8] in s for _, _, c in COSMETIC) and eats:
         why.append("먹는 제품에 화장품 기능성")
     official_cos = any(c[:8] in s for _, _, c in COSMETIC)  # 공식 화장품 문구(「튼살로 인한 붉은 선」의 「은」은 주어 표시가 아니다)
+    # 🆕 10-17 — 화장품에 건기식 꼴 기능 문구(「~에 도움을 줄 수 있음」). 조건(`condition`)은 화장품의 「도움」을 일반화장품 표현으로 보고
+    #    조건을 붙이지 않아 후보로 나갔다(q4b-n2 · 직접 만든 불가 문제 「…관절 크림」 → 「관절 건강에 도움이 될 수 있음」)
+    if not official_cos and is_cosmetic(original, category) and _FOOD_CLAIM_FORM.search(s):
+        why.append("화장품에 건기식 기능 문구")
+    # 🆕 10-17 — 질병 · 의약품 · 건기식 오인 주장을 지우고 **제품 이름만** 남았다(「…고사리 나물」 → 「고사리 나물」). 살릴 사실이 없으면 불가다
+    #    (v9 정책). 새 낱말이 든 대상 표시(「…을 위한 간식」)나 사실(원료 · 산지 · 가공 · 수치)이 든 문장은 건드리지 않는다
+    words = re.findall(r"[가-힣A-Za-z]+", s)
+    if (({"질병_예방치료_표방", "의약품_오인", "건강기능식품_오인"} & set(labels) or DISEASE.search(original) or DRUG.search(original))
+            and "도움" not in s and not re.search(r"\d", s) and not _FACT_WORD.search(s) and 0 < len(words) <= 3
+            and all(dm.norm(w) in dm.norm(original) for w in words)):
+        why.append("살릴 사실 없음(제품 이름만)")
     if not official_cos and (m := _SUBJECT.match(s)) and not re.search(r"(?:을|를|으로|로부터)\s|하$|되$", m.group(1).strip() + " "):
         # 「여드름성 피부를 완화하는 데 도움」의 「하는」은 주어 표시가 아니다 — 목적어 조사가 있거나 동사로 끝나면 주어가 아니다
         subj = m.group(1).strip()
