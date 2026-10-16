@@ -20,12 +20,14 @@ import pytest
 from app import factcheck as fc
 from app import graph as g
 from app.contracts import (
+    Branch,
     EvidenceArticle,
     FactKind,
     HoldReason,
     Infeasibility,
     JudgeResponse,
     Outcome,
+    Premise,
     ProductContext,
     Risk,
     RiskAssessment,
@@ -172,7 +174,8 @@ def test_답은_그_문장에만() -> None:
     assert got is not None and is_conditional(got) and got.user_subst is None
 
 
-def test_종착_조건부는_지시를_막지_않고_증명서_통과로_가지_않는다() -> None:
+def test_종착_조건부는_답하지_않은_확정_B로_센다() -> None:
+    """D-263 ① — 조건부 위반의 가장 나쁜 경우는 「자료 없음 = 확정 B」다. 섞인 문서의 종착은 그 기준이다."""
     cond = _run(_confirmed())
     assert cond is not None
     sub = g._cond_subst(_confirmed())
@@ -191,8 +194,94 @@ def test_종착_조건부는_지시를_막지_않고_증명서_통과로_가지_
     assert g.route_review({"sentences": [ready, cond, low]}) == "hold"
     c = _confirmed("당뇨 치료", FOOD1, Violation.질병_예방치료_표방)
     c = SentenceJudgment(**{**c.model_dump(), "sent_id": "s3", "infeasibility": Infeasibility.C})
-    assert g.route_review({"sentences": [c, cond]}) == "hold", "증명서는 전 문장 확정을 요구한다"
+    assert g.route_review({"sentences": [c, cond]}) == "certificate", (
+        "C 확정 + B 확정이면 증명서였다 — 조건부(답 없는 B)도 같다"
+    )
     assert not is_conditional(low)
+
+
+def test_자격_문제는_조건부가_아니다() -> None:
+    """10-16 결함 — 식품 8조①4호 나목(인정받지 않은 기능성 · A)은 호가 같아도 실증으로 풀리지 않는다 (D-59)."""
+    from app import premise as pm  # noqa: PLC0415
+
+    na = g._basis_article(pm.UNRECOGNIZED_FUNCTION_CITE)
+    a = SentenceJudgment(
+        **{
+            **_confirmed("관절 건강에 도움").model_dump(),
+            "infeasibility": Infeasibility.A,
+            "evidence": [na.model_dump()],
+        }
+    )
+    assert _run(a) is None
+    b = SentenceJudgment(
+        **{**_confirmed("관절 건강에 도움").model_dump(), "evidence": [na.model_dump()]}
+    )
+    assert _run(b) is None, "사유가 B 로 적혀 있어도 4.나 인용이면 자격 문제다"
+    moved = _enc_only()
+    eb = moved.risk.encoder_basis[0].model_copy(update={"moved_from": Violation.건강기능식품_오인})
+    moved = SentenceJudgment(
+        **{
+            **moved.model_dump(),
+            "risk": moved.risk.model_copy(update={"encoder_basis": [eb]}).model_dump(),
+        }
+    )
+    assert _run(moved) is None, "전제가 옮긴 인코더 근거(인정받지 않았다면)는 자격 문제다"
+
+
+def _branch(premise: str, sents: list[SentenceJudgment]) -> Branch:
+    return Branch(
+        premise=Premise(premise),
+        outcome=g._branch_outcome(Premise(premise), sents),
+        sentences=sents,
+        criteria="(시험) 기준",
+    )
+
+
+def _doc(rec: SentenceJudgment, per: dict[str, SentenceJudgment], **product: object) -> dict:
+    out = g.doc_rules(
+        {
+            "sentences": [rec],
+            "branches": [_branch(p, [s]) for p, s in per.items()],
+            "product": ProductContext(**product),
+        }
+    )
+    return {
+        "rec": (out.get("sentences") or [rec])[0],
+        "branches": out.get("branches", []),
+    }
+
+
+def test_분기마다_정하고_기록은_분기에서_모은다() -> None:
+    got = _doc(_confirmed(), {"식품": _confirmed(), "일반상품": _confirmed()})
+    assert all(is_conditional(b.sentences[0]) for b in got["branches"])
+    assert is_conditional(got["rec"]) and got["rec"].risk.final is Risk.R2
+    resp = JudgeResponse(outcome=Outcome.hold, sentences=[got["rec"]], branches=got["branches"])
+    assert resp.branches[0].sentences[0].substantiation is not None
+
+
+def test_분기마다_조건부가_갈리면_기록은_품목을_몰라_보류() -> None:
+    disease = SentenceJudgment(
+        **{
+            **_confirmed().model_dump(),
+            "violations": [Violation.거짓_과장],
+            "infeasibility": Infeasibility.A,
+        }
+    )
+    got = _doc(_confirmed(), {"식품": _confirmed(), "건기식_비인정": disease})
+    rec = got["rec"]
+    assert (rec.verdict, rec.hold_reason) == (Verdict.hold, HoldReason.cat_unknown)
+    assert rec.substantiation is None and not is_conditional(rec)
+    kinds = {b.premise.value: is_conditional(b.sentences[0]) for b in got["branches"]}
+    assert kinds == {"식품": True, "건기식_비인정": False}
+
+
+def test_답은_모든_분기와_기록에_같이() -> None:
+    us = UserSubst(text=TEXT, has_evidence=True)
+    got = _doc(_confirmed(), {"식품": _confirmed(), "일반상품": _confirmed()}, substs=[us])
+    assert all(b.sentences[0].user_subst == us for b in got["branches"])
+    rec = got["rec"]
+    assert rec.verdict is Verdict.confirmed and rec.risk.final is Risk.R0 and rec.user_subst == us
+    assert all(b.outcome is Outcome.passed or b.outcome is Outcome.hold for b in got["branches"])
 
 
 def test_계약_실증_분기는_확신_부족_보류에_못_붙는다() -> None:
@@ -348,3 +437,35 @@ def test_평가는_조건부_위반을_보류와_따로_센다() -> None:
         1,
         1,
     )
+
+
+def test_저장과_이력은_조건부_위반을_분류로_남긴다() -> None:
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from app import judgment_store as js  # noqa: PLC0415
+    from app import reasons  # noqa: PLC0415
+    from app.routers import user  # noqa: PLC0415
+
+    cond = _run(_confirmed())
+    row = js._judgment_row(
+        uuid.uuid4(), uuid.uuid4(), cond, JudgeResponse(outcome=Outcome.hold, sentences=[cond])
+    )
+    assert (
+        row.evidence["conditional"]["kind"] == "subst"
+        and row.evidence["conditional"]["max"] == "R0"
+    )
+    import datetime as dt  # noqa: PLC0415
+
+    j = SimpleNamespace(
+        **{c.name: getattr(row, c.name, None) for c in row.__table__.columns},
+    )
+    j.judged_at = dt.datetime.now(dt.UTC)
+    v = user._hist_view(j)
+    assert v.label == reasons.CONDITIONAL_SUBST_TEXT and v.hold_reason is None
+
+
+def test_평가의_보수_기록은_조건부_위반을_품목_보류로_세지_않는다() -> None:
+    from scripts import eval_graph as eg  # noqa: PLC0415
+
+    p = eg.predict({"sentences": [_run(_confirmed())]})
+    assert p["premise_held"] == [] and p["cond_types"] == ["거짓_과장"]

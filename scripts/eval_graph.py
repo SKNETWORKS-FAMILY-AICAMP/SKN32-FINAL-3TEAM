@@ -231,7 +231,10 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
             {
                 v.value
                 for s in sents
-                if s.verdict is Verdict.hold and s.hold_reason in PREMISE_HOLDS
+                if s.verdict is Verdict.hold
+                and s.hold_reason in PREMISE_HOLDS
+                # 🔄 2026-10-16 (D-348 보충 4) — 조건부 위반은 품목 · 전제 보류가 아니다(`cond_types` 로 따로 센다)
+                and not is_conditional(s)
                 for v in s.violations
             }
         ),
@@ -289,6 +292,16 @@ def _branch_view(b: Any) -> dict[str, Any]:
         "candidates": sorted(
             {v.value for s in b.sentences if s.verdict is Verdict.hold for v in s.violations}
         ),
+        #: 🆕 2026-10-16 (D-348 보충 4) — 분기 안 **조건부 위반** 문장의 유형(답 없음 = 그 분기의 가장 나쁜 경우)
+        "cond_types": sorted(
+            {v.value for s in b.sentences if is_conditional(s) for v in s.violations}
+            | {
+                x.violation.value
+                for s in b.sentences
+                if is_conditional(s) and not s.violations
+                for x in s.risk.encoder_basis
+            }
+        ),
         "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
         "committed": bool(b.sentences) and len(conf) == len(b.sentences),
     }
@@ -305,6 +318,8 @@ def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     """
     out = {"rows_with_branches": sum(1 for p in preds if p.get("branches")), "positive": 0}
     out.update({"confirmed": 0, "type_hit": 0, "ho_hit": 0, "wrong": 0})
+    #: 🆕 2026-10-16 (D-348 보충 4) — 분기의 확정 위반이 없고 조건부 위반이 있는 행 · 그 유형이 정답과 겹친 행(확정 수와 나란히)
+    out.update({"conditional": 0, "cond_hit": 0})
     by: dict[str, list[int]] = {}
     for r, p in zip(rows, preds, strict=True):
         name = r.get("전제")
@@ -317,6 +332,10 @@ def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         cell = by.setdefault(name, [0, 0, 0])
         cell[0] += 1
         if not b["types"]:
+            ct = set(b.get("cond_types", ()))
+            if ct:
+                out["conditional"] += 1
+                out["cond_hit"] += bool(ct & truth_types(r, ct))
             continue
         out["confirmed"] += 1
         cell[1] += 1
@@ -952,7 +971,8 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
             f"\n  분기 (D-319) — 분기가 나온 행 {b['rows_with_branches']} · 정답 품목의 분기를 본 위반 행 {n}"
             + (
                 f" · 그 분기의 확정 위반 {b['confirmed']}({b['confirmed'] / n:.1%}) · 유형 맞음 {b['type_hit']} · "
-                f"호 맞음 {b['ho_hit']} · 유형 틀림 {b['wrong']}"
+                f"호 맞음 {b['ho_hit']} · 유형 틀림 {b['wrong']} · 조건부 위반 {b.get('conditional', 0)}"
+                f"(유형 맞음 {b.get('cond_hit', 0)})"
                 if n
                 else ""
             )

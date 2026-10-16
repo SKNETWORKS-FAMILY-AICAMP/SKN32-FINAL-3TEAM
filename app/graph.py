@@ -2390,15 +2390,105 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     🆕 2026-10-16 (D-348 보충 3) — **사실 확인 분기**를 여기서 단다(기록 판정 · 위험도 · 품목 분기가 선 뒤 · `_with_condition`).
     🔄 2026-10-16 (D-348 보충 4) — **조건부 위반** 전부(사실 · 실증)를 여기서 낸다. 사실 확인 문안 표가 비면 그 갈래는 서지 않고
        실증 분기(문안 승인본 · `rs.subst_branch`)로 간다.
+    🔄 2026-10-16 (보충 4 · 보충 2 결정 6 「분기마다 계산 · 기록 = 분기에서」) — 분기가 있으면 **분기 문장마다** 조건부를 정하고
+       (전제마다 걸린 법 · 호가 다르다) 기록은 분기에서 모은다(`_record_condition`). 분기가 없으면 기록 문장에 바로 정한다.
     """
     product = state.get("product") or ProductContext()
     facts, substs = list(product.facts), list(product.substs)
+    sents = list(state.get("sentences", []))
+    branches = list(state.get("branches") or [])
+    if not branches:
+        changed = [f for s in sents if (f := _with_condition(s, facts, substs)) is not None]
+        return {"sentences": changed} if changed else {}
+    new_b: list[Branch] = []
+    for b in branches:
+        ss = [_with_condition(x, facts, substs) or x for x in b.sentences]
+        if all(x is y for x, y in zip(ss, b.sentences, strict=True)):
+            new_b.append(b)
+            continue
+        new_b.append(
+            Branch(
+                **{
+                    **{k: getattr(b, k) for k in type(b).model_fields},
+                    "sentences": ss,
+                    "outcome": _branch_outcome(b.premise, ss),
+                }
+            )
+        )
+    reason = HoldReason.cat_unknown if product.category is None else HoldReason.premise_unknown
+    by = [{x.sent_id: x for x in b.sentences} for b in new_b]
     changed = [
-        f
-        for s in state.get("sentences", [])
-        if (f := _with_condition(s, facts, substs)) is not None
+        r
+        for s in sents
+        if (r := _record_condition(s, [m[s.sent_id] for m in by if s.sent_id in m], reason))
+        is not None
     ]
-    return {"sentences": changed} if changed else {}
+    out: dict[str, Any] = {"branches": new_b}
+    if changed:
+        out["sentences"] = changed
+    return out
+
+
+def _record_condition(
+    rec: SentenceJudgment, per: list[SentenceJudgment], reason: HoldReason
+) -> SentenceJudgment | None:
+    """기록 문장의 조건부 여부를 **분기에서** 모은다 (🆕 2026-10-16 · D-348 보충 4 · 보충 2 결정 6). 바꿀 것이 없으면 None.
+
+    ★ 세 상태 — 확정 / 조건부 / 보류. 기록 = 분기들의 합(D-319 ① 과 같은 규칙):
+       · 위험도가 선 분기가 **전부** 조건부 → 기록도 조건부(선택지는 위험도가 가장 높은 분기의 것 · 기록 위험도 · 근거는 그대로 — 이미 전제 최댓값이다)
+       · 전부 사용자의 답으로 정해졌다 → 가장 무거운 분기의 결과(풀렸으면 R0 확정 · 출처)
+       · 조건부와 그렇지 않은 분기가 섞였다 → 품목 · 전제를 몰라 보류(분기가 선택지 · 조건이 품목에 달렸다)
+    🚨 기록이 이미 품목 · 전제 보류면 손대지 않는다 — 분기가 선택지다. 분기에 문장이 없으면 손대지 않는다.
+    """
+    if (
+        not per
+        or rec.not_claim
+        or rec.hold_reason in (HoldReason.cat_unknown, HoldReason.premise_unknown)
+    ):
+        return None
+    if not (
+        (rec.verdict is Verdict.confirmed and rec.violations)
+        or (rec.verdict is Verdict.hold and rec.hold_reason is HoldReason.low_conf)
+    ):
+        return None
+    live = [x for x in per if x.risk.final is not None and not x.not_claim]
+    cond = [x for x in live if is_conditional(x)]
+    answered = [x for x in live if x.user_fact is not None or x.user_subst is not None]
+    fields = {k: getattr(rec, k) for k in type(rec).model_fields}
+    if live and len(answered) == len(live):
+        top = max(answered, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
+        if not top.violations and top.risk.final is Risk.R0:
+            return _answered(rec, user_fact=top.user_fact, user_subst=top.user_subst)
+        if rec.verdict is Verdict.confirmed:
+            return SentenceJudgment(
+                **{**fields, "user_fact": top.user_fact, "user_subst": top.user_subst}
+            )
+        return None
+    if not cond:
+        return None
+    if len(cond) == len(live):
+        top = max(cond, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
+        if rec.risk.final is None:
+            return None  # 기록에 위험도가 없다 — 조건부를 세울 수 없다 (D-72)
+        return SentenceJudgment(
+            **{
+                **fields,
+                "verdict": Verdict.hold,
+                "hold_reason": HoldReason.premise_unknown,
+                "infeasibility": top.infeasibility,
+                "substantiation": top.substantiation,
+                "fact_check": top.fact_check,
+            }
+        )
+    return SentenceJudgment(
+        **{
+            **fields,
+            "verdict": Verdict.hold,
+            "hold_reason": reason,
+            "substantiation": None,
+            "fact_check": None,
+        }
+    )
 
 
 # ── 사실 확인 분기 (🆕 2026-10-16 · D-348 보충 3) ─────────────────────────────────────
@@ -2466,7 +2556,7 @@ def _with_condition(
         or (s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf)
     ):
         return None
-    if s.risk.final is None or not factcheck.in_gate(_ho_coords(s)):
+    if s.risk.final is None or not factcheck.in_gate(_ho_coords(s)) or _qualification(s):
         return None
     key = dm.norm(s.text)
     fields = {k: getattr(s, k) for k in type(s).model_fields}
@@ -2495,6 +2585,9 @@ def _with_condition(
                 ),
             }
         )
+    # 🔴 실증 갈래는 **실증형(B)** 만 — 자격형(A) · 절대형(C)은 실증으로 풀리지 않는다(D-59). 사유를 아직 안 정한 인코더만 잡은 문장은 유형으로 정한다
+    if (s.infeasibility or _encoder_reason(s)) is not Infeasibility.B:
+        return None
     sb = _cond_subst(s)
     if sb is None:
         return None  # 실증 문안이 없는 유형 · 두 법이 섞인 근거 — 조건부로 내리지 않는다(종전 판정 그대로 · D-220)
@@ -2516,6 +2609,29 @@ def _with_condition(
             "substantiation": sb,
         }
     )
+
+
+def _qualification(s: SentenceJudgment) -> bool:
+    """자격 문제가 섞였나 — [별표 1] 4.나(인정받지 않은 기능성 · `pm.UNRECOGNIZED_FUNCTION_CITE`)를 인용했거나 전제가 옮긴 인코더 근거가 있다.
+
+    🔴 호 관문은 호까지만 본다 — 식품 8조①4호 안에서 나목은 실증이 아니라 인정(자격 · A)의 문제다(D-59 · D-319 ④′ ②). 옮긴 인코더 근거
+       (건강기능식품 오인 → 거짓 · 과장 「인정받지 않았다면」)도 같다. 조건부로 내리지 않는다 (보충 4 · 10-16 결함).
+    """
+    want = statute.parse(pm.UNRECOGNIZED_FUNCTION_CITE)
+    for a in [e for e in s.evidence if e.basis]:
+        c = statute.from_article_item(a.law_id, a.article, a.item)
+        try:
+            if c and statute.parse(c) == want:
+                return True
+        except ValueError:
+            continue
+    return any(b.moved_from is not None for b in s.risk.encoder_basis)
+
+
+def _encoder_reason(s: SentenceJudgment) -> Infeasibility | None:
+    """사유가 비어 있는 문장(인코더만 잡은 보류)의 사유 — 인코더 근거 유형의 사유가 하나로 같을 때만 (`INFEASIBILITY_OF`). 아니면 None."""
+    rs_ = {INFEASIBILITY_OF.get(b.violation) for b in s.risk.encoder_basis}
+    return next(iter(rs_)) if len(rs_) == 1 else None
 
 
 def _answered(
@@ -2662,10 +2778,10 @@ def route_review(state: ReviewState) -> str:
     sents = state.get("sentences", [])
     if not sents:
         return "hold"
-    # 🔄 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반**(답하면 확정되는 보류)은 지시를 막지 않는다. 그 밖의 확정 아님은 보류다.
-    #    조건부 위반이 섞인 문서는 증명서 · 통과로 가지 않는다(증명서는 전 문장 확정을 요구한다 · 통과는 확정 ∧ R0)
-    open_ = [s for s in sents if s.verdict is not Verdict.confirmed]
-    if any(not is_conditional(s) for s in open_):
+    # 🔄 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반**(답하면 확정되는 보류)은 **답하지 않은 경우 = 확정 B** 로 센다
+    #    (D-263 ① 기록 = 가장 나쁜 경우) — A/C 가 섞이면 증명서 · B 만이면 지시(재료가 없으면 `guidance` 가 보류로) · 통과는 아니다(확정 ∧ R0).
+    #    그 밖의 확정 아님은 보류다
+    if any(s.verdict is not Verdict.confirmed and not is_conditional(s) for s in sents):
         return "hold"
     # 🆕 2026-10-01 (W4 1판) — **위험도가 없는 확정 위반은 증명서 · 지시로 못 간다** — 보류다 (D-268 「막힘」 · D-220).
     #    지시는 실증 분기(실증 전 위험도)를, 증명서는 사유 설명을 요구한다 — 하한(`sanction_rule` · W5)이 서기 전에는 어느 쪽도
@@ -2677,7 +2793,7 @@ def route_review(state: ReviewState) -> str:
         return "hold"
     reasons = {s.infeasibility for s in sents if s.infeasibility}
     if reasons & {Infeasibility.A, Infeasibility.C}:
-        return "hold" if open_ else "certificate"
+        return "certificate"
     if Infeasibility.B in reasons:
         return "guidance"
     # 🔴 통과는 D-125 의 정의대로만 — 확정 ∧ R0 (🔄 D-273 · `is_pass`) · 위험도가 없으면 통과가 아니다

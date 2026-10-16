@@ -1697,6 +1697,9 @@ def _hist_view(j: Judgment, raw: str | None = None) -> SimpleNamespace:
         tone, label = _INF_BADGES.get(ev.get("infeasibility"), ("bad", "위반 확정"))
     elif j.verdict == "confirmed":
         tone, label = "ok", "특이사항 없음"
+    elif j.verdict == "hold" and ev.get("conditional"):
+        # 🆕 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반은 보류가 아니라 분류다(저장 `evidence.conditional`) · 글자는 검수 화면과 같다
+        tone, label = "warn", reasons.conditional_label(ev["conditional"].get("kind"))
     elif j.verdict == "hold":
         tone, label = "hold", "보류"
     elif j.verdict == "no_basis":
@@ -1712,7 +1715,7 @@ def _hist_view(j: Judgment, raw: str | None = None) -> SimpleNamespace:
         label=label,
         hold_reason=(
             _HOLD_LABELS.get(j.hold_reason, f"알 수 없는 값 ({j.hold_reason})")
-            if j.hold_reason
+            if j.hold_reason and not ev.get("conditional")
             else None
         ),
         # ⛔ 확정이 아닌 문장의 위험도는 그리지 않는다 — 판정처럼 읽힌다 (D-280)

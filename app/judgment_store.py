@@ -41,7 +41,7 @@ import uuid
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from app.contracts import LAW_VERSION_UNKNOWN, Risk
+from app.contracts import LAW_VERSION_UNKNOWN, Risk, is_conditional
 from app.dictmatch import norm
 from app.models import CopySentence, Judgment, WorkDoc
 
@@ -110,11 +110,25 @@ def _judgment_row(
         or enc_refs
         or s.user_fact is not None
         or s.user_subst is not None
+        or is_conditional(s)
         else None
     )
     if evidence is not None and s.user_fact is not None:
         # 🆕 2026-10-16 (D-348 보충 3 결정 4) — 이 판정은 사용자가 확인한 사실로 정했다 · 출처(책임)를 남긴다
         evidence["user_fact"] = s.user_fact.model_dump(mode="json")
+    if evidence is not None and is_conditional(s):
+        # 🆕 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반**은 보류 사유가 아니라 분류다 · 이력 화면이 이 칸으로 그린다(`_hist_view`).
+        #    DB 칸(verdict · hold_reason)은 보류 · premise_unknown 그대로 — 갈래와 받는 자료 · 답하면 내려가는 상한을 남긴다
+        branch = s.fact_check or s.substantiation
+        evidence["conditional"] = {
+            "kind": "fact" if s.fact_check is not None else "subst",
+            "accepted_evidence": list(branch.accepted_evidence) if branch else [],
+            "max": (
+                s.fact_check.confirmed_max.value
+                if s.fact_check is not None
+                else s.substantiation.substantiated_max.value  # type: ignore[union-attr]
+            ),
+        }
     if evidence is not None and s.user_subst is not None:
         # 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부 · 출처(책임)를 남긴다
         evidence["user_subst"] = s.user_subst.model_dump(mode="json")

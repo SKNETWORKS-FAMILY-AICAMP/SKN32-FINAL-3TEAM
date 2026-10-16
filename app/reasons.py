@@ -145,6 +145,11 @@ CONDITIONAL_FACT_TEXT = "조건부 위반 · 그 사실이 맞으면 쓸 수 있
 CONDITIONAL_SUBST_TEXT = "조건부 위반 · 실증 자료가 있으면 쓸 수 있어요"
 
 
+def conditional_label(kind: str | None) -> str:
+    """저장된 조건부 위반(`evidence.conditional.kind`)의 결론 글자 — 이력 화면이 쓴다. 검수 화면(`conditional_text`)과 같은 글자다 (D-99)."""
+    return CONDITIONAL_FACT_TEXT if kind == "fact" else CONDITIONAL_SUBST_TEXT
+
+
 def conditional_text(sentence: object) -> str:
     """조건부 위반 문장이면 결론 한 줄, 아니면 빈 글자. 조건부의 정의는 `contracts.is_conditional` 한 곳이다 (D-99)."""
     from app.contracts import is_conditional  # noqa: PLC0415 — 순환 import 회피
