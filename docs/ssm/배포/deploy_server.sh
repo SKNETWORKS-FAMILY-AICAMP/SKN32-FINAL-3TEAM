@@ -4,7 +4,11 @@
 #   🔄 2026-10-14 · 소성민 — 인스턴스를 m7i.xlarge → g4dn.xlarge 로 바꾸며 다시 씀
 #       · GPU 드라이버 · sLLM 환경(.venv-sllm) · sLLM 모델 · sLLM 실행 단계를 더했다
 #       · 인코더 확인을 지문 한 줄에서 모델 잠금(models.lock.json · D-333) 검사로 바꿨다
-#   초안 2026-10-12 · 🚨 서버에서 실행해 본 기록이 없다. 첫 실행은 단계를 하나씩 돌린다.
+#   초안 2026-10-12 · 첫 실행은 단계를 하나씩 돌린다.
+#   🔄 2026-10-16 — **서버(g4dn)에서 처음 돌렸다**: preflight · gpu · sllm-env · model · check 통과 (작업기록_1016.md)
+#       · gpu — ubuntu-drivers 가 이 커널(7.0.0-1014-aws)에 맞는 꾸러미를 못 골라 **아무것도 설치하지 않고 끝났다**.
+#         실제로 통한 방법(커널 버전이 붙은 모듈 꾸러미를 apt 로 직접)으로 바꾸고, 설치 뒤 모듈이 있는지 확인한다
+#       · cleanup-adhoc — 10-16 오전 손으로 세운 임시 구성(copylane.service · nginx)을 걷어 내는 단계를 더했다
 #   근거  docs/05_배포/배포계획.md §1-2 · §4 / docs/lse/sLLM_연결_안내_2026-10-05.md / models.lock.json
 #
 # 쓰는 법 (서버에서 · tmux 안에서)
@@ -27,6 +31,7 @@
 #   bash deploy_server.sh services-off  #     서비스를 내리고 해제 (다시 tmux 로 띄울 때)
 #   bash deploy_server.sh update        #     새 커밋 올리기 — fetch → install → migrate → verify → 서비스 재시작
 #   bash deploy_server.sh backup        #     DB 덤프 하나 (컨테이너 DB · ~/backup · 7개만 남긴다)
+#   bash deploy_server.sh cleanup-adhoc #     10-16 임시 구성 정리 — copylane.service 해제 · nginx 끄기 (services 전에 한 번)
 #   bash deploy_server.sh all           #  3~10 을 이어서 (gpu · sllm · serve 는 따로)
 #
 #   🔄 2026-10-15 — DB 비밀번호 자동 생성(env) · 기본 비밀번호면 적재 거부(data) · services · backup 을 더했다
@@ -53,8 +58,9 @@ MIN_DISK_GB=55                               # 루트 디스크 권장 60GB — 
 # sLLM — 판은 sllm_meta.py(기본값)와 models.lock.json(채택)이 정한다. 여기서는 바꾸지 않는다
 SLLM_VENV="$APP_DIR/.venv-sllm"
 SLLM_PORT=8765
-SLLM_DRIVER="615-server-open"                # CUDA 12.8 용 torch(cu128)는 드라이버 570 이상을 요구한다 · T4(Turing)는 open 모듈 지원
-SLLM_UTILS="nvidia-utils-615-server"         # utils 꾸러미 이름에는 -open 이 붙지 않는다
+SLLM_DRIVER="${SLLM_DRIVER:-615-server-open}" # CUDA 12.8 용 torch(cu128)는 드라이버 570 이상을 요구한다 · T4(Turing)는 open 모듈 지원
+                                             # 🔄 10-16 — 7.0.0-1014-aws 커널에는 570 꾸러미가 없었다 · 615.71.09 로 동작 확인
+SLLM_UTILS="nvidia-utils-${SLLM_DRIVER%-open}" # utils 꾸러미 이름에는 -open 이 붙지 않는다 (615-server-open → nvidia-utils-615-server)
 TORCH_PIN="torch==2.11.0"
 TORCH_INDEX="https://download.pytorch.org/whl/cu128"
 SLLM_PKGS=(transformers==5.17.0 peft==0.21.0 accelerate==1.15.0 fastapi==0.142.2 uvicorn==0.54.0
@@ -153,12 +159,22 @@ gpu() {
   fi
   lspci | grep -qi nvidia && ok "GPU 장치가 보인다 ($(lspci | grep -i nvidia | head -1 | cut -d: -f3))" \
     || die "NVIDIA 장치가 없다 — 인스턴스 유형이 $EXPECT_INSTANCE 인지 콘솔에서 확인"
+  # 🔄 2026-10-16 — `ubuntu-drivers install --gpgpu nvidia:570-server` 는 오류 없이 끝났는데 **아무것도 깔리지 않았다**
+  #    (재부팅 뒤 modprobe: Module nvidia not found). 이 커널(7.0.0-1014-aws)용 570 꾸러미가 저장소에 없었다.
+  #    → 커널 버전이 붙은 미리 빌드된 모듈 꾸러미를 직접 고른다. 없으면 멈추고 이 커널에 있는 판을 보여 준다.
+  local kver mod; kver="$(uname -r)"; mod="linux-modules-nvidia-${SLLM_DRIVER}-${kver}"
   sudo apt-get update
-  sudo apt-get install -y ubuntu-drivers-common
-  # ubuntu-drivers 가 이 커널(aws)에 맞는 서명된 모듈 꾸러미를 함께 고른다
-  sudo ubuntu-drivers install --gpgpu "nvidia:$SLLM_DRIVER"
-  sudo apt-get install -y "$SLLM_UTILS"
-  warn "설치 끝 — sudo reboot 후 다시 접속해서 bash deploy_server.sh preflight 로 GPU 줄을 본다"
+  if ! apt-cache show "$mod" >/dev/null 2>&1; then
+    warn "이 커널($kver)용 $SLLM_DRIVER 모듈 꾸러미가 없다. 이 커널에 있는 판:"
+    apt-cache search "^linux-modules-nvidia-.*-${kver}\$" | awk '{print "         " $1}'
+    die "SLLM_DRIVER 를 위 목록의 판으로 바꾼다 (570 이상 · T4 는 -open 가능) — 예: SLLM_DRIVER=615-server-open bash deploy_server.sh gpu"
+  fi
+  sudo apt-get install -y "$mod" "nvidia-headless-no-dkms-${SLLM_DRIVER}" "$SLLM_UTILS"
+  # 커널이 올라가도 모듈이 따라오게 — 메타 꾸러미가 있으면 함께 (없는 판도 있다)
+  apt-cache show "linux-modules-nvidia-${SLLM_DRIVER}-aws" >/dev/null 2>&1 \
+    && sudo apt-get install -y "linux-modules-nvidia-${SLLM_DRIVER}-aws" && ok "커널 업데이트에 따라오는 메타 꾸러미도 설치"
+  dpkg -s "$mod" >/dev/null 2>&1 && ok "모듈 꾸러미 설치됨 — $mod" || die "모듈 꾸러미가 안 깔렸다 — 위 apt 출력의 E: 줄을 본다"
+  warn "설치 끝 — sudo reboot 후 다시 접속해서 nvidia-smi (또는 preflight) 로 GPU 줄을 본다"
   warn "재부팅하면 탄력적 IP 는 그대로다. tmux 는 새로 연다"
 }
 
@@ -450,6 +466,29 @@ backup() {
   warn "🚨 덤프에는 가입 계정이 들어 있다 — 저장소 · 메신저에 올리지 않는다"
 }
 
+cleanup_adhoc() {
+  say "10-16 임시 구성 정리 — copylane.service · nginx"
+  # 10-16 오전, 스크립트 전에 손으로 세운 것: 앱을 `copylane` 서비스로 · nginx 설치(80 을 Caddy 가 쥐고 있어 못 떴다)
+  # 🚨 copylane 과 copylane-app 이 함께 켜지면 8000 이 겹쳐 하나가 계속 재시작된다
+  if systemctl list-unit-files copylane.service >/dev/null 2>&1 && [ -f /etc/systemd/system/copylane.service ]; then
+    sudo systemctl disable --now copylane 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/copylane.service
+    sudo systemctl daemon-reload
+    ok "copylane.service 해제 · 삭제"
+  else
+    ok "copylane.service 없음"
+  fi
+  if systemctl list-unit-files nginx.service >/dev/null 2>&1 && systemctl is-enabled -q nginx 2>/dev/null; then
+    sudo systemctl disable --now nginx && ok "nginx 끔 (공개 진입점은 Caddy 하나)"
+  else
+    ok "nginx 꺼져 있음 (또는 없음)"
+  fi
+  [ -f /etc/nginx/sites-enabled/copylane ] && sudo rm -f /etc/nginx/sites-enabled/copylane && ok "nginx 의 copylane 사이트 링크 삭제"
+  grep -q "copylane.example.com\|^:80" /etc/caddy/Caddyfile 2>/dev/null \
+    && warn "Caddy 는 아직 임시판(IP · :80)이다 — 도메인이 서면 절차서 4단계 #24 로 Caddyfile 을 바꾼다" || true
+  warn "다음 — env (DB 비밀번호 · EDITION=cloud) → 절차서 §4-2 의 볼륨 안내를 본다 → services"
+}
+
 case "${1:-}" in
   preflight)  preflight ;;
   gpu)        gpu ;;
@@ -469,6 +508,7 @@ case "${1:-}" in
   services-off) services_off ;;
   update)     update ;;
   backup)     backup ;;
+  cleanup-adhoc) cleanup_adhoc ;;
   all)        preflight; fetch; env_file; install; model; data; verify; sllm_env; sllm_model ;;
-  *) sed -n '2,36p' "$0"; exit 1 ;;
+  *) sed -n '2,44p' "$0"; exit 1 ;;
 esac

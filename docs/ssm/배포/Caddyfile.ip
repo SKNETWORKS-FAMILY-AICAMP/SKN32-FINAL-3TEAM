@@ -1,0 +1,33 @@
+# Caddyfile.ip — 도메인 전 임시판 · 탄력적 IP · http (2026-10-16 · 소성민)
+#
+#   놓는 자리  /etc/caddy/Caddyfile
+#   적용       sudo cp ~/SKN32-FINAL-3TEAM/docs/ssm/배포/Caddyfile.ip /etc/caddy/Caddyfile
+#              sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#   확인       내 PC 브라우저 → http://<탄력적 IP>  → /u/ 사용자 화면
+#
+# 🚨 HTTPS 가 없다. 고시 제7조 제4항 — HTTPS 없이 공개하지 않는다(절차서 §1 ③).
+#    팀 안에서 화면 · 경로를 확인하는 동안만 쓰고, 주소를 밖에 돌리지 않는다. 도메인이 서면 Caddyfile 로 바꾼다.
+# 🚨 닫는 경로 · 본문 상한은 정식판(Caddyfile)과 같게 둔다 — 임시판이라고 더 열지 않는다.
+# 10-16 서버에서 이 내용(닫는 경로 제외)으로 외부 접속을 확인했다.
+
+:80 {
+    encode zstd gzip
+
+    reverse_proxy 127.0.0.1:8000
+
+    @closed path /admin /admin/* /login /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/*
+    respond @closed 404
+
+    # 앱의 `/` 는 개발자 안내 페이지다 — 정확히 `/` 일 때만 사용자 화면으로 넘긴다
+    redir / /u/ 302
+
+    request_body {
+        max_size 1MB
+    }
+
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "same-origin"
+        -Server
+    }
+}

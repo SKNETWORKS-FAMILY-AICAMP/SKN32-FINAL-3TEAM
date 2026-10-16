@@ -1,4 +1,6 @@
-# Caddyfile — CopyLane 배포용 (초안 2026-10-12 · 🔄 2026-10-14 g4dn.xlarge · 🔄 2026-10-15 닫는 경로 · 본문 상한 · 소성민)
+# Caddyfile — CopyLane 배포용 (초안 2026-10-12 · 🔄 2026-10-14 g4dn.xlarge · 🔄 2026-10-15 닫는 경로 · 본문 상한 · 🔄 2026-10-16 첫 화면 · 소성민)
+#
+#   도메인 전에는 Caddyfile.ip (IP · http · 내부 확인용) 을 쓴다 — 이 파일은 도메인이 선 뒤의 정식판이다
 #
 #   놓는 자리  /etc/caddy/Caddyfile   (서버에 apt 로 설치한 Caddy · 컨테이너 아님)
 #   적용       sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
@@ -23,6 +25,10 @@ copylane.example.com {
     #    ⚠️ base.html 상단의 「API」 링크(/docs)는 이 서버에서 404 가 된다 — 알고 닫는 것이다
     @closed path /admin /admin/* /login /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/*
     respond @closed 404
+
+    # 🔄 2026-10-16 — 주소만 치면 사용자 화면으로. 앱의 `/` 는 개발자 안내 페이지라 위에서 닫은 경로를 가리킨다.
+    #    `redir /` 는 경로가 정확히 `/` 일 때만 넘긴다 — `/u/*` · `/health` 등은 그대로 (10-16 서버에서 확인)
+    redir / /u/ 302
 
     # 🔄 2026-10-15 — 요청 본문 상한. 문구는 최대 2,000자(settings.max_text_len)이고 파일 올리기는 없다
     request_body {
