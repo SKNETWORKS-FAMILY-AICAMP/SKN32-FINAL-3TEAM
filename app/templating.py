@@ -64,6 +64,8 @@ templates.env.filters["estimate_text"] = reasons.estimate_text
 templates.env.filters["encoder_basis_view"] = reasons.encoder_basis_view
 # 🆕 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반 문장의 결론 한 줄. 규칙(`contracts.is_conditional`) · 글자는 `app/reasons.py` 한 곳
 templates.env.filters["conditional_text"] = reasons.conditional_text
+#: 🆕 2026-10-16 (D-348 보충 5) — 질문이 달린 문장(조건부 위반 · 인코더 쪽 보류 + 분기)의 결론 한 줄 · 질문 칸을 그릴지
+templates.env.filters["question_text"] = reasons.question_text
 templates.env.globals["REPRESENTATIVE_MARK"] = reasons.REPRESENTATIVE_MARK
 templates.env.globals["ENC_REMAINS_MARK"] = reasons.ENC_REMAINS_MARK
 templates.env.globals["NOTE_UNJUDGED_MARK"] = (

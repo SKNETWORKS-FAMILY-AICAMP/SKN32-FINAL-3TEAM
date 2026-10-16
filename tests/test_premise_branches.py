@@ -15,6 +15,7 @@ import pytest
 
 from app import premise as pm
 from app.contracts import (
+    Answer,
     Category,
     HoldReason,
     Infeasibility,
@@ -476,11 +477,11 @@ def test_건기식_인정의_질병_표방은_문안이_서면_사실_확인_분
         "가장 나쁜 쪽의 하한"
     )
     assert _branch(st, Premise.건기식_비인정).sentences[0].verdict is Verdict.confirmed
-    yes = UserFact(text=TEXT, kind=FactKind.인정_기능성, true=True)
+    yes = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.예)
     st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [yes])
     b = _branch(st, Premise.건기식_인정).sentences[0]
     assert b.verdict is Verdict.confirmed and not b.violations and b.user_facts == [yes]
-    no = UserFact(text=TEXT, kind=FactKind.인정_기능성, true=False)
+    no = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.아니오)
     st, out = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [no])
     assert "branches" not in out, "「거짓」이면 두 전제의 판정이 같아 분기를 내지 않는다"
     rec = st["sentences"][0]

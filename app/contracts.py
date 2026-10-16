@@ -456,6 +456,20 @@ class FactKind(enum.StrEnum):
     인정_기능성 = "인정_기능성"
 
 
+class Answer(enum.StrEnum):
+    """사용자의 답 셋 (🆕 2026-10-16 · D-348 보충 5 · 보충 3 결정 2 의 「해당 없음」 집행).
+
+    ★ 예 = 사실이 참이다 · 실증 자료가 있다 / 아니오 = 사실이 거짓이다 · 실증 자료가 없다 /
+       해당없음 = 이 문장은 그 주장을 하지 않는다(질문이 엉뚱하다 — 그 분기를 걷는다).
+    🔴 「예」 · 「아니오」는 **그 주장이 이 문장에 있다는 것까지** 사용자가 확인한 답이다 — 「해당없음」을 고르지 않았다(보충 5).
+    🚨 검증이 아니다 — 책임은 답한 사람에게 있다(`UserFact` · `UserSubst`).
+    """
+
+    예 = "예"
+    아니오 = "아니오"
+    해당없음 = "해당없음"
+
+
 class FactBranch(BaseModel):
     """**사실 확인 분기** — 문장이 **사실을 주장**하고(수상 · 인증 · 원재료) 위반 여부가 그 주장의 참에 달린 경우 (🆕 D-308 ④).
 
@@ -525,8 +539,8 @@ class UserFact(BaseModel):
     #: 그 사실 주장이 있는 문장 글자 — 재검수의 문장과 정규화(공백 · NFKC)로 맞춘다. 문장 번호는 재분할로 바뀔 수 있어 쓰지 않는다
     text: str = Field(..., min_length=1)
     kind: FactKind
-    #: 참이라고 골랐나 · 거짓이라고 골랐나
-    true: bool
+    #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · 예 = 참 · 아니오 = 거짓 · 해당없음 = 이 문장은 그 사실을 주장하지 않는다(종전 `true: bool`)
+    answer: Answer
 
 
 class UserSubst(BaseModel):
@@ -539,8 +553,8 @@ class UserSubst(BaseModel):
 
     #: 그 주장이 있는 문장 글자 — `UserFact.text` 와 같은 규칙(정규화로 맞춘다 · 문장 번호는 쓰지 않는다)
     text: str = Field(..., min_length=1)
-    #: 실증 자료가 있다고 골랐나
-    has_evidence: bool
+    #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · 예 = 자료 있음 · 아니오 = 자료 없음 · 해당없음 = 실증이 필요한 주장이 아니다(종전 `has_evidence: bool`)
+    answer: Answer
 
 
 class SentenceJudgment(BaseModel):
@@ -654,10 +668,15 @@ class SentenceJudgment(BaseModel):
             raise ValueError(
                 f"실증 분기는 B 실증형에만 붙는다 — 불가 사유 {self.infeasibility} (D-263 ④ · D-61)"
             )
-        # 🔄 2026-10-16 (D-348 보충 4 결정 1) — 확정 문장이거나 **조건부 위반**(실증 여부를 몰라 멈춘 보류 · `premise_unknown`)에만 붙는다
-        if self.verdict is Verdict.hold and self.hold_reason is not HoldReason.premise_unknown:
+        # 🔄 2026-10-16 (D-348 보충 4 결정 1) — 확정 문장이거나 **조건부 위반**(실증 여부를 몰라 멈춘 보류 · `premise_unknown`)에 붙는다
+        # 🔄 2026-10-16 (D-348 보충 5) — 또는 **인코더 쪽 판정의 보류**(`low_conf`) — 인코더 판단은 답 없이 확정하지 않는다. 분기만 붙고
+        #    조건부 위반이 아니다(`is_conditional` 은 `premise_unknown` 만)
+        if self.verdict is Verdict.hold and self.hold_reason not in (
+            HoldReason.premise_unknown,
+            HoldReason.low_conf,
+        ):
             raise ValueError(
-                f"보류 문장의 실증 분기는 조건부 위반(premise_unknown)에만 붙는다 — {self.hold_reason} (D-348 보충 4)"
+                f"보류 문장의 실증 분기는 조건부 위반(premise_unknown) · 인코더 쪽 보류(low_conf)에만 붙는다 — {self.hold_reason} (D-348 보충 4 · 5)"
             )
         if self.verdict not in (Verdict.confirmed, Verdict.hold):
             raise ValueError(f"실증 분기가 {self.verdict.value} 문장에 붙었다 (D-348 보충 4)")
@@ -689,27 +708,37 @@ class SentenceJudgment(BaseModel):
                 and self.hold_reason is HoldReason.premise_unknown
                 and (self.fact_check is not None or self.substantiation is not None)
             )
-            if self.verdict is not Verdict.confirmed and not pending:
+            # 🔄 2026-10-16 (D-348 보충 5) — 인코더 쪽 보류(`low_conf`)에도 실린다 — 답 없이 확정하지 않는 쪽의 출처(남은 분기 · 해당없음 · ⬜ 아니오)
+            enc = self.verdict is Verdict.hold and self.hold_reason is HoldReason.low_conf
+            if self.verdict is not Verdict.confirmed and not pending and not enc:
                 raise ValueError(
-                    "사용자 확인 사실이 실린 문장은 확정이거나 남은 조건이 있는 조건부 보류다 (D-348 보충 3 결정 4 · 보충 4)"
+                    "사용자 확인 사실이 실린 문장은 확정 · 남은 조건이 있는 조건부 보류 · 인코더 쪽 보류다 (D-348 보충 3 결정 4 · 보충 4 · 5)"
                 )
             if self.fact_check is not None and self.fact_check.kind in kinds:
                 raise ValueError(
                     f"이미 답한 사실을 다시 묻는다 — {self.fact_check.kind.value} (보충 4)"
                 )
         if self.user_subst is not None and (
-            self.verdict is not Verdict.confirmed or self.fact_check is not None
+            self.fact_check is not None
+            or not (
+                self.verdict is Verdict.confirmed
+                or (self.verdict is Verdict.hold and self.hold_reason is HoldReason.low_conf)
+            )
         ):
             raise ValueError(
-                "사용자가 답한 실증 여부로 정한 문장은 확정이고 사실 확인 분기가 없다 (D-348 보충 4 결정 3)"
+                "사용자가 답한 실증 여부가 실린 문장은 확정이거나 인코더 쪽 보류이고 사실 확인 분기가 없다 (D-348 보충 4 결정 3 · 보충 5)"
             )
         if self.fact_check is None:
             return self
         if self.not_claim:
             raise ValueError("판정 대상 아님 문장에 사실 확인 분기가 붙었다 (D-275)")
-        if self.verdict is not Verdict.hold or self.hold_reason is not HoldReason.premise_unknown:
+        # 🔄 2026-10-16 (D-348 보충 5) — 인코더 쪽 보류(`low_conf`)에도 붙는다(조건부가 아니다 · 실증 분기와 같은 규칙)
+        if self.verdict is not Verdict.hold or self.hold_reason not in (
+            HoldReason.premise_unknown,
+            HoldReason.low_conf,
+        ):
             raise ValueError(
-                "사실 확인 분기는 사실을 몰라 멈춘 보류(premise_unknown)에 붙는다 (D-348 보충 3 결정 1)"
+                "사실 확인 분기는 사실을 몰라 멈춘 보류(premise_unknown) · 인코더 쪽 보류(low_conf)에 붙는다 (D-348 보충 3 결정 1 · 보충 5)"
             )
         if self.risk.final is None:
             raise ValueError("사실 확인 분기가 있는데 확인 전 위험도가 없다 (D-72)")

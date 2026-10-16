@@ -932,7 +932,9 @@ async def review_rewrite(request: Request) -> HTMLResponse:
 
 
 #: 🆕 2026-10-16 (D-348 보충 4 결정 3 · 4 · 6) — 조건부 위반에 대한 답 하나. `subst:yes|no` · `fact:<종류>:true|false`
-_ANSWER = re.compile(r"^(subst:(yes|no)|fact:([가-힣_]{1,24}):(true|false))$")
+#: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · `na` = 해당 없음(이 문장은 그 주장을 하지 않는다)
+_ANSWER = re.compile(r"^(subst:(yes|no|na)|fact:([가-힣_]{1,24}):(true|false|na))$")
+_ANSWER_OF = {"yes": "예", "true": "예", "no": "아니오", "false": "아니오", "na": "해당없음"}
 #: 앞서 한 답 — `문장id|답` (그 문구 안) · 답은 서버가 다시 판정한 문장 글자에 묶는다(폼의 글자를 믿지 않는다)
 _PREV = re.compile(r"^([A-Za-z0-9_\-]{1,32})\|(.+)$")
 _MAX_ANSWERS = 12
@@ -940,7 +942,7 @@ _MAX_ANSWERS = 12
 
 def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[list, list]:
     """(문장id, 답) → (`UserFact` 목록, `UserSubst` 목록). 모르는 문장 · 모르는 종류 · 꼴이 틀린 답은 거부한다(422 · D-220)."""
-    from app.contracts import FactKind, UserFact, UserSubst  # noqa: PLC0415
+    from app.contracts import Answer, FactKind, UserFact, UserSubst  # noqa: PLC0415
 
     facts, substs = [], []
     for sid, a in pairs:
@@ -949,13 +951,13 @@ def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[li
             raise HTTPException(422, "모르는 답")
         if m.group(2):
             substs = [u for u in substs if u.text != sents[sid]]
-            substs.append(UserSubst(text=sents[sid], has_evidence=m.group(2) == "yes"))
+            substs.append(UserSubst(text=sents[sid], answer=Answer(_ANSWER_OF[m.group(2)])))
             continue
         if m.group(3) not in {k.value for k in FactKind}:
             raise HTTPException(422, "모르는 사실 종류")
         kind = FactKind(m.group(3))
         facts = [f for f in facts if not (f.text == sents[sid] and f.kind is kind)]
-        facts.append(UserFact(text=sents[sid], kind=kind, true=m.group(4) == "true"))
+        facts.append(UserFact(text=sents[sid], kind=kind, answer=Answer(_ANSWER_OF[m.group(4)])))
     return facts, substs
 
 

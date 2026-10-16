@@ -15,6 +15,8 @@ from urllib.parse import urlencode
 
 import pytest
 
+from app.contracts import Answer
+
 pytestmark = pytest.mark.gate
 
 TEXT = "국내 판매 1위 그래놀라"
@@ -50,6 +52,69 @@ def _cond_response(product=None):  # noqa: ANN001, ANN202
         Outcome.passed if got.verdict is Verdict.confirmed and not got.violations else Outcome.hold
     )
     return JudgeResponse(outcome=outcome, sentences=[got], category=None)
+
+
+def _enc_response(product=None):  # noqa: ANN001, ANN202
+    """🆕 2026-10-16 (D-348 보충 5) — 인코더만 잡은 문장(사전 근거 없음 · 인코더 하한 R1 · 식품 전제 근거)."""
+    from app import graph as g  # noqa: PLC0415
+    from app.contracts import (  # noqa: PLC0415
+        EncoderBasis,
+        EvidenceArticle,
+        HoldReason,
+        JudgeResponse,
+        Outcome,
+        Premise,
+        ProductContext,
+        Risk,
+        RiskAssessment,
+        SentenceJudgment,
+        Verdict,
+        Violation,
+    )
+
+    ref = EvidenceArticle(law_id="013094", article="제8조제1항제4호")
+    s = SentenceJudgment(
+        sent_id="s0",
+        text=TEXT,
+        verdict=Verdict.hold,
+        hold_reason=HoldReason.low_conf,
+        risk=RiskAssessment(
+            encoder=Risk.R1,
+            final=Risk.R1,
+            encoder_basis=[
+                EncoderBasis(
+                    premise=Premise.식품,
+                    violation=Violation.거짓_과장,
+                    floor=Risk.R1,
+                    articles=[ref],
+                )
+            ],
+        ),
+    )
+    out = g.doc_rules({"sentences": [s], "product": product or ProductContext()})
+    got = (out.get("sentences") or [s])[0]
+    outcome = (
+        Outcome.passed if got.verdict is Verdict.confirmed and not got.violations else Outcome.hold
+    )
+    return JudgeResponse(outcome=outcome, sentences=[got], category=None)
+
+
+@pytest.fixture
+def wired_enc(monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201
+    from app.api import app  # noqa: PLC0415
+    from app.db import get_session  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    st = SimpleNamespace(products=[])
+
+    def fake_judge(text: str, product=None):  # noqa: ANN001, ANN202
+        st.products.append(product)
+        return "ok", _enc_response(product)
+
+    monkeypatch.setattr(user_router, "_core_judge", fake_judge)
+    app.dependency_overrides[get_session] = lambda: SimpleNamespace()
+    yield st
+    app.dependency_overrides.pop(get_session, None)
 
 
 @pytest.fixture
@@ -88,6 +153,7 @@ def test_조건부_위반_문장에_질문이_그려진다(wired) -> None:  # no
     html = _post("/u/judge", [("text", TEXT), ("op", "judge:1")])
     assert "조건부 위반 · 실증 자료가 있으면 쓸 수 있어요" in html
     assert "이 표현을 실증할 자료가 있나요?" in html and 'value="subst:yes"' in html
+    assert 'value="subst:na"' in html, "해당 없음 버튼이 함께 그려진다(D-348 보충 5)"
     assert 'action="/u/review/answer"' in html
 
 
@@ -97,7 +163,7 @@ def test_답하면_그_문장에_묶어_다시_판정하고_답한_내용을_보
         [("text", TEXT), ("target", "1:s0"), ("answer", "subst:yes")],
     )
     sent = [p for p in wired.products if p is not None]
-    assert sent and sent[-1].substs[0].text == TEXT and sent[-1].substs[0].has_evidence
+    assert sent and sent[-1].substs[0].text == TEXT and sent[-1].substs[0].answer is Answer.예
     assert "답한 내용으로 다시 판정했어요" in html and "실증 자료 있음" in html
     assert "이 표현을 실증할 자료가 있나요?" not in html, (
         "답한 문장에 같은 질문을 다시 그리지 않는다"
@@ -110,7 +176,33 @@ def test_앞서_한_답을_함께_보낸다(wired) -> None:  # noqa: ANN001
         [("text", TEXT), ("target", "1:s0"), ("prev", "s0|subst:no"), ("answer", "subst:yes")],
     )
     p = [x for x in wired.products if x is not None][-1]
-    assert [u.has_evidence for u in p.substs] == [True], "같은 문장의 앞선 답은 새 답으로 바뀐다"
+    assert [u.answer for u in p.substs] == [Answer.예], "같은 문장의 앞선 답은 새 답으로 바뀐다"
+
+
+def test_인코더만_잡은_문장에도_질문이_그려지고_AI_추정으로_보인다(wired_enc) -> None:  # noqa: ANN001
+    """🆕 2026-10-16 (D-348 보충 5) — 답 없이 확정하지 않는다 — 결론은 「AI 추정 · 판정 아님」, 질문 칸은 그린다."""
+    html = _post("/u/judge", [("text", TEXT), ("op", "judge:1")])
+    assert "AI 추정 · 판정 아님" in html and "조건부 위반 · 실증 자료가 있으면" not in html
+    assert "이 표현을 실증할 자료가 있나요?" in html and 'value="subst:na"' in html
+
+
+def test_인코더만_잡은_문장에_있음으로_답하면_특이사항_없음(wired_enc) -> None:  # noqa: ANN001
+    html = _post(
+        "/u/review/answer",
+        [("text", TEXT), ("target", "1:s0"), ("answer", "subst:yes")],
+    )
+    assert "답한 내용으로 다시 판정했어요" in html and "실증 자료 있음" in html
+
+
+def test_해당_없음_답을_받는다(wired) -> None:  # noqa: ANN001
+    """🆕 2026-10-16 (D-348 보충 5) — `na` = 「이 문장은 그런 주장이 아니에요」 · 답 셋의 셋째."""
+    html = _post(
+        "/u/review/answer",
+        [("text", TEXT), ("target", "1:s0"), ("answer", "subst:na")],
+    )
+    p = [x for x in wired.products if x is not None][-1]
+    assert [u.answer for u in p.substs] == [Answer.해당없음]
+    assert "답한 내용으로 다시 판정했어요" in html and "실증 자료 해당 없음" in html
 
 
 @pytest.mark.parametrize(

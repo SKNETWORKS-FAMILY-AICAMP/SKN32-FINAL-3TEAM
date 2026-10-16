@@ -150,6 +150,30 @@ def conditional_label(kind: str | None) -> str:
     return CONDITIONAL_FACT_TEXT if kind == "fact" else CONDITIONAL_SUBST_TEXT
 
 
+#: 🆕 2026-10-16 (D-348 보충 5 · 화면 문안 초안 · 화면 담당 확인 전) — **인코더 쪽 판정의 보류 + 분기**의 결론 한 줄.
+#:    답 없이 확정하지 않는다 — 조건부 위반(답 없으면 확정)과 다른 말이다. 「AI 추정 · 판정 아님」 표지(D-348 결정 5 화면 범위)
+ENCODER_QUESTION_TEXT = "AI 추정 · 판정 아님 — 아래 질문에 답하면 다시 판정해요"
+
+
+def question_text(sentence: object) -> str:
+    """질문(분기)이 달린 문장의 결론 한 줄 — 조건부 위반이면 `conditional_text` · 인코더 쪽 보류 + 분기면 `ENCODER_QUESTION_TEXT` · 아니면 빈 글자.
+
+    ★ 화면이 질문 칸을 그릴지도 이 함수 하나로 정한다 (D-99). 인코더 쪽 보류 = 확신 부족 보류(`low_conf`) ∧ 사실 확인 · 실증 분기 (보충 5).
+    """
+    from app.contracts import HoldReason, Verdict  # noqa: PLC0415 — 순환 import 회피
+
+    t = conditional_text(sentence)
+    if t:
+        return t
+    if (
+        getattr(sentence, "verdict", None) is Verdict.hold
+        and getattr(sentence, "hold_reason", None) is HoldReason.low_conf
+        and (getattr(sentence, "fact_check", None) or getattr(sentence, "substantiation", None))
+    ):
+        return ENCODER_QUESTION_TEXT
+    return ""
+
+
 def conditional_text(sentence: object) -> str:
     """조건부 위반 문장이면 결론 한 줄, 아니면 빈 글자. 조건부의 정의는 `contracts.is_conditional` 한 곳이다 (D-99)."""
     from app.contracts import is_conditional  # noqa: PLC0415 — 순환 import 회피
