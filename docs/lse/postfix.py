@@ -198,6 +198,36 @@ def to_approved_claim(original: str, s: str, labels: list[str], category: str | 
     return None
 
 
+#: 🆕 10-17 — 되살리지 않는 표현: 치료 · 시술 · 의약품을 표방하면 화장품 기능 주장이어도 불가가 맞다
+#: 되살리기에서만 더 보는 낱말(기존 `to_approved_claim` 규칙은 그대로) — 정답표 87 의 거절에서 본 꼴
+_RESCUE_EXTRA = [
+    (("멜라닌", "색소침착", "색소 침착"), "미백", "피부의 미백에 도움을 줍니다"),
+    (("내수성",), "자외선", "자외선으로부터 피부를 보호하는 데 도움을 줍니다"),  # redistribution: ok — 자외선 차단 심사 항목 이름(일반 용어)
+    (("아토피",), "피부장벽", "아토피성 피부로 인한 건조함 등을 완화하는 데 도움을 줍니다"),
+]
+_RESCUE_BLOCK = re.compile(r"호르몬|치료|완치|처방|시술|필러|재생|주사|발모|육모|피부과|상처|흉터|발진"
+                           r"|녹여|녹이|떼어|벗겨|박피"  # 피부를 녹이거나 벗겨내는 행위(의료 행위 표방)
+                           r"|[가-힣](?<![인검보입실확])증(?![가-힣])")  # 「○○증」 질병명 — 인증 · 검증 · 보증 · 입증 · 실증 · 확증은 아니다
+
+
+def rescue_cosmetic(original: str, category: str | None = None) -> tuple[str, str] | None:
+    """🆕 10-17 — 1단계가 「불가」라고 했어도 **화장품 기능 주장**이면 (공식 문구, 심사 조건)으로 되살린다. 결과는 조건부 후보
+    (「조건 확인 필요」 보류 — 사람이 심사 여부를 확인한다)로만 나간다.
+    확장 학습판(q4b-n2 · v17)이 정답표 87 에서 화장품 기능 주장 10 을 「기능성화장품_오인 · 의약품_오인 불가」로 거절했다 — 정답은 조건부.
+    🚨 먹는 제품 · 질병 · 의약품 · 시술 표현이면 되살리지 않는다 · 기능이 하나로 모일 때만(`to_approved_claim` 과 같은 규칙)."""
+    # 「탈모」 · 「아토피」는 질병어 목록에 있지만 기능성화장품 공식 범주이기도 하다(관문도 공식 기능 문맥에서는 뺀다)
+    if category in _FOODS or _FOOD_FORM.search(original) or DISEASE.search(re.sub(r"탈모|아토피", "", original)) \
+            or DRUG.search(original) or _RESCUE_BLOCK.search(original):
+        return None
+    hits = {(cat, claim) for kws, cat, claim in COSMETIC + _RESCUE_EXTRA if any(_kw(k, original) for k in kws)}
+    if len(hits) == 2 and {c for c, _ in hits} == {"피부장벽"}:
+        hits = {h for h in hits if "아토피" in h[1]}  # 「아토피성 피부 건조」는 새 공식 문구 쪽
+    if len(hits) != 1:
+        return None
+    cat, claim = next(iter(hits))
+    return claim, f"{cat} 기능성화장품으로 심사·보고된 제품에 한함"
+
+
 # ── ④ 위반 유형 · 주어 검사 (관문은 위반 유형을 모른다) ─────────────────────────
 
 _FOOD_FORM = re.compile(r"먹는|마시는|섭취|캡슐|알약|정제|환|드세요|드시")

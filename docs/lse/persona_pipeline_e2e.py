@@ -43,23 +43,24 @@ sys.path.insert(0, str(HERE.parents[1]))
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
 from postfix import (  # noqa: E402
-    CONDITIONAL_CLAIM_NOTE,
     _CLAIM_HOLD,
+    CONDITIONAL_CLAIM_NOTE,
     condition,
     label_check,
     repair_ingredients,
+    rescue_cosmetic,
     to_approved_claim,
 )
 from rejudge import RejudgeUnavailable, rejudge  # noqa: E402
+from sllm_meta import stage1_dir, stage1_version, stage2_dir  # noqa: E402
 from stage_gate import check as gate  # noqa: E402
 from train_persona_stage2 import SYSTEM as STAGE2_SYSTEM  # noqa: E402
 from train_persona_stage2 import rule_check  # noqa: E402
+
 # 🔄 10-08 — 학습 프롬프트(SYSTEM_V6) + 사실 · 관계어 보존 규칙(프롬프트 실험 P1 채택). 학습은 그대로다
 from train_stage1_v5 import SYSTEM_SERVE as STAGE1_SYSTEM  # noqa: E402
 from train_stage1_v5 import parse as parse_stage1  # noqa: E402
 from train_stage1_v5 import user_msg as stage1_user  # noqa: E402
-
-from sllm_meta import stage1_dir, stage1_version, stage2_dir  # noqa: E402
 
 ROOT = HERE.parents[1]
 # 채택본은 v12 (10-05 · v6 → v8 → v9 → v10 → v12). 🔄 2026-10-07 — 판은 `sllm_meta` 한 곳에서 읽는다:
@@ -78,6 +79,8 @@ POLISH_CATEGORIES = ("식품", "건기식", "화장품")
 #:    0 이면 끈다. ⛔ 「조건 확인 필요」 보류는 다시 쓰지 않는다 — 인정 · 심사 제품 전용 문구를 말만 바꿔 빠져나가면 위반 포장이다(v13 포장 4).
 #:    ⛔ 「만들지 못했어요」 · 후보는 다시 쓰지 않는다. 다시 쓴 안도 후처리 · 관문 · 2단계 관문을 똑같이 지난다. 씨앗을 고정해 같은 입력이면 같은 출력
 RETRY = 0
+#: 🆕 10-17 — 1단계 「불가」 중 화장품 기능 주장을 조건부 후보로 되살린다(`postfix.rescue_cosmetic`). 시험 중 — 환경 변수로만 켠다
+RESCUE = __import__("os").environ.get("COPYLANE_SLLM_RESCUE") == "1"
 #: 🆕 10-14 다듬기 방식 — "model"(2단계 어댑터 · 종전) 또는 "rule"(`polish_rule.py` · 모양별 쓰는 법 문구를 붙임 · 모델 안 씀).
 #:    규칙판은 처음 보는 제품 2 벌(22 · 20)에서 지어낸 쓰는 법이 거의 없었다(dev 평가 §6-8). 고객층 말투(`persona`)는 늘 모델이다
 #:    🔄 10-14 — 기본을 규칙판으로(사용자 결정 · 팀장 알림). 다듬기 어댑터는 고객층 말투에만 쓴다
@@ -181,6 +184,11 @@ def _attempt(model, tok, text: str, labels: list[str], persona: str | None = Non
     res = {"input": text, "stage1": s1, "infeasible": infeasible, "gate1": None, "persona": persona,
            "stage2": None, "gate2": None, "stage2_problems": None,
            "stage1_note": out1.get("mandatory_note") if out1 else None, "repairs": [], "note": None, "note_problem": None}
+    if infeasible and RESCUE and (rc := rescue_cosmetic(text, category)) is not None:
+        # 🆕 10-17 — 화장품 기능 주장의 불가는 조건부 후보로 되살린다(아래 관문 · 「조건 확인 필요」를 그대로 지난다)
+        s1, res["stage1_note"], res["infeasible"] = rc[0], rc[1], None
+        res["rescued_from"] = infeasible
+        infeasible = None
     if infeasible:
         return {**res, "outcome": "infeasible", "final": None}  # 증명서 경로(D-32 · D-125) — 고치지 않는다
     # 🆕 10-05 후처리(`postfix.py`) — 관문 전에 기계로 고칠 수 있는 실수를 고친다: 원료명 베끼기 · 지어낸 기능성 문구

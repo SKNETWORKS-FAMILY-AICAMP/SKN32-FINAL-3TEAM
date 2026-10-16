@@ -44,6 +44,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("key", help="정답표 jsonl (docs/lse 기준 · _private 안)")
     ap.add_argument("--stage1", default=STAGE1_VER)
+    ap.add_argument("--tag", default="", help="결과 파일 이름 꼬리(같은 판을 다른 설정으로 잴 때 · 예: rescue)")
     args = ap.parse_args()
     key_path = HERE / args.key
     assert "_private" in key_path.parts, "정답표는 _private 안에 있어야 한다(재배포 불가 원문)"
@@ -61,7 +62,7 @@ def main() -> None:
         r = run_one(model, tok, k["input"], k.get("labels_all") or [k["reason"]])
         res.append({**k, "got": r, "grade": grade(r["outcome"], k["label"])})
         print(f"{i}/{len(rows)}", flush=True)
-    out = key_path.with_name(f"{key_path.stem}_result_{args.stage1}.jsonl")
+    out = key_path.with_name(f"{key_path.stem}_result_{args.stage1}{'_' + args.tag if args.tag else ''}.jsonl")
     with out.open("w", encoding="utf-8") as f:
         for x in res:
             f.write(json.dumps(x, ensure_ascii=False) + "\n")
