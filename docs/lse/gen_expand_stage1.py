@@ -486,16 +486,150 @@ def cmd_refilter(names: list[str]) -> None:
         print(f"{name}: 다시 거름 · 입력 {len(raw)} · 받아들임 {len(rows)}")
 
 
+#: 🆕 v4 (10-17) — 조건부 묶음(K). RunPod 학습(q4b-n1 · q4b-v16)이 실제 광고 31 에서 살림 3 → 1 · v16 포장 1 로 나빠졌다.
+#:    원인: 정답표에서 살릴 21 중 20 이 **조건부**(공식 기능성 문구 · 「○○ 함유(함량 병기)」 + 조건)인데, 확장 고침 1,921 은
+#:    「도움」 문구 0 · 병기 0 — 교정 지침이 기능성 문구를 금하고 병기를 비웠다. 그래서 정답을 **공개 원천에서 규칙으로** 정하고
+#:    (`gen_synthetic_stage1.build_seeds` — 고시 기능성 문구 · 원료명 · 기능성화장품 범주 · 순위 인증) GPT 는 위반 문구만 쓴다
+COND_KINDS = ("건기식기능", "화장품기능", "원료사실", "사실·인증순위")
+#: 관문의 체험기 꼴이 놓친 것(「…사라졌어요」 · 「먹고 …줄었어요」 · 「#내돈내산」) — 시범 K 에서 봤다
+COND_TESTI = re.compile(r"(?:졌|었|았|였|했|봤|됐)(?:어요|어|음|당)|먹고\s|바르고\s|써\s*보|내돈내산|인생템|리얼|솔직|저도|제가")
+HF_FORMS = ["캡슐", "정", "분말", "젤리", "음료", "스틱", "환", "액상"]
+COND_VTYPES = ["거짓_과장", "소비자_기만", "부당_비교광고", "건강기능식품_오인", "기능성화장품_오인", "후기_체험기_기만"]
+
+
+def clean_claim(body: str) -> bool:
+    """정답으로 쓸 만한 공식 문구인가 — 단서가 달린 문구(「…있으나 인체시험…」 · 「(동물시험을 통하여 …)」) · 공식 문구 둘이 붙은 것 ·
+    40 자 넘는 설명문(「○○은 …에서 정제 · 추출한 원료로서 …」)은 뺀다(시범 K 20 씨앗에서 4)."""
+    return (not body.startswith("(") and len(body) <= 40 and "으나" not in body and "원료로서" not in body
+            and body.count("도움") <= 1)
+
+
+def cond_seeds(rng: random.Random) -> list[dict]:
+    import gen_synthetic_stage1 as gs  # noqa: PLC0415
+
+    golden = [norm(json.loads(line)["text"]) for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")]
+    words = json.loads((PRIV / "answer_words.json").read_text(encoding="utf-8"))
+    seeds = [s for s in gs.build_seeds(rng, words, set(golden), "\n".join(golden))
+             if s["kind"] in COND_KINDS and clean_claim(s["target"]["body"])]
+    for s in seeds:
+        if s["kind"] == "건기식기능":
+            s["product"] = rng.choice(HF_FORMS) + " 건강기능식품"
+    # 화장품 원료명(재배포 가능) — 「○○ 함유」 + 함량 병기. 정답표 고유 원료 · 표현은 뺀다
+    cos = sorted({json.loads(x)["INGR_KOR_NAME"].strip() for x in (ROOT / "data/derived/cosmetic_ingredient.jsonl").open(encoding="utf-8")
+                  if json.loads(x).get("redistributable")})
+    cos = [c for c in cos if 4 <= len(c) <= 12 and re.search(r"(추출물|오일|씨유|수|워터)$", c)
+           and not any(w in c for w in words)]
+    for c in rng.sample(cos, min(80, len(cos))):
+        seeds.append({"kind": "원료사실", "target": {"body": f"{c} 함유", "mandatory_note": "원재료 함량을 함께 표시",
+                                                 "placement": "원료명 표시 근처"}, "product": rng.choice(COSMETIC_PRODUCTS)})
+    rng.shuffle(seeds)
+    return seeds
+
+
+def cond_prompt(batch: list[dict], k: int) -> str:
+    items = "\n".join(f"{i}. [제품: {s.get('product') or '일반'}] 적법한 문구: {s['target']['body']}" for i, s in enumerate(batch))
+    return (
+        f"각 '적법한 문구'를 쓸 수 있는 제품의 광고주가 욕심을 내어 위반 요소를 덧붙인 **위반 광고 문구**를 {k}개씩 만드세요.\n"
+        "- 위반 요소 예: 효과 과장(완전히 · 즉시 · 100% · 기적) · 근거 없는 수치 · 기간 · 1위 · 유일 · 최고 · 타사 비교 · "
+        "일반식품이 기능성을 인정받은 것처럼.\n"
+        "- 조건: 위반 요소만 빼면 그 적법한 문구의 뜻으로 돌아가야 합니다. **적법한 문구에 없는 사실(원산지 · 용량 · 제조 방법 · 다른 원료)은 "
+        "넣지 않습니다.** 원료명은 철자 그대로 씁니다. 질병 치료 · 의약품 표현과 체험담 · 후기 말투(「먹어 보니」 · "
+        "「써 봤어요」)는 넣지 않습니다 — 그런 문구는 고칠 수 없는 위반이라 이 묶음과 다릅니다.\n"
+        "- 형식을 서로 다르게: 짧은 키워드형 · 한 문장 카피 · SNS 말투 · 상세페이지 소제목 · 라이브커머스 멘트.\n"
+        "- 실존 브랜드 · 회사 · 인물 이름을 쓰지 않습니다. 광고 문구 자체를 씁니다(위반을 설명하는 글 아님).\n"
+        f"목록\n{items}\n\n"
+        '출력: {"results": [{"i": 번호, "items": [{"input": "위반 광고 문구", "violation_types": ["…"]}, …]}, …]} — 모든 번호에. '
+        f"violation_types 는 다음 중에서: {', '.join(COND_VTYPES)}"
+    )
+
+
+def cmd_cond(n: int, per: int, model: str, tag: str, dry: bool, stop_at: float) -> None:
+    """🆕 v4 — 조건부 묶음(K). 씨앗 `n` 개 × 문구 `per` 개. 정답은 씨앗의 규칙 정답 그대로."""
+    from stage_gate import (  # noqa: PLC0415
+        DISEASE,
+        DRUG,
+        TESTIMONY,
+        TESTIMONY_SRC,
+        ingredient_changed,
+    )
+
+    rng = random.Random(SEED + 17)
+    seeds = cond_seeds(rng)[:n]
+    budget = Budget()
+    budget.stop_at = min(stop_at, BUDGET_USD)
+    calls = -(-len(seeds) // 5)
+    est = cost(model, calls * 900, calls * 5 * per * 60)
+    print(f"조건부 씨앗 {len(seeds)} · {dict(collections.Counter(s['kind'] for s in seeds))} · × {per} · 견적 약 ${est:.3f} · "
+          f"누적 ${budget.data['usd']:.3f} · 멈춤선 ${budget.stop_at}")
+    if dry:
+        return
+    assert est <= budget.stop_at - budget.data["usd"], "견적 초과"
+    teacher = Teacher(model, budget)
+    groups = batched(seeds, 5)
+    answers = ask_batches(teacher, [cond_prompt(g, per) for g in groups], 0.9)
+    keys = answer_key_inputs()
+    words = json.loads((PRIV / "answer_words.json").read_text(encoding="utf-8"))
+    golden = [norm(json.loads(line)["text"]) for line in (ROOT / "data/derived/golden/golden.jsonl").open(encoding="utf-8")]
+    gset, gblob = set(golden), "\n".join(golden)
+    raw, rows, seen = [], [], set()
+    for g, ans in zip(groups, answers, strict=True):
+        for s, r in zip(g, by_index(ans, len(g)), strict=True):
+            for it in (r or {}).get("items") or []:
+                text = (it.get("input") or "").strip() if isinstance(it, dict) else ""
+                body = s["target"]["body"]
+                vt = [t for t in (it.get("violation_types") or []) if t in COND_VTYPES] or ["거짓_과장"]
+                k = norm(text)
+                why = []
+                if not text or len(text) > 120:
+                    why.append("형식")
+                elif k in gset or k in gblob:
+                    why.append("golden 겹침")
+                elif leaks(text, keys, words):
+                    why.append("정답표 닮음")
+                elif k in seen:
+                    why.append("중복")
+                elif META.search(text):
+                    why.append("설명문")
+                elif DISEASE.search(text) or DRUG.search(text):
+                    why.append("질병 · 의약품 표현")  # 정책상 불가 — 조건부로 가르치면 포장을 배운다
+                elif TESTIMONY.search(text) or TESTIMONY_SRC.search(text) or COND_TESTI.search(text):
+                    why.append("체험담 말투")  # 정책상 불가(후기_체험기_기만)
+                elif norm(text) == norm(body):
+                    why.append("원문 그대로")
+                elif ingredient_changed(text, body):
+                    why.append("원료명 불일치")  # 정답의 원료명이 문구와 다르면 「원료명을 바꿔 써도 된다」를 가르친다
+                elif fact_numbers(text) - fact_numbers(body) or (FACT_SIGNAL.search(text) and not FACT_SIGNAL.search(body)
+                                                                 and s["kind"] != "원료사실"):
+                    why.append("정답에 없는 사실")  # 정답이 그 사실을 지우면 「사실은 지운다」를 가르친다
+                seen.add(k)
+                raw.append({"kind": s["kind"], "input": text, "target": s["target"], "types": vt, "why": why})
+                if not why:
+                    rows.append({"id": f"k{len(rows):05d}", "group": f"조건부:{s['kind']}", "input": text, "violation_types": vt,
+                                 "output": s["target"], "synthetic": True, "generator": model, "prompt_version": PROMPT_VERSION})
+    name = "K" + (f"_{tag}" if tag else "")
+    for fname, data in ((f"expand_{name}_raw.jsonl", raw), (f"expand_{name}_cond.jsonl", rows)):
+        with (PRIV / fname).open("w", encoding="utf-8", newline="\n") as f:
+            for x in data:
+                f.write(json.dumps(x, ensure_ascii=False) + "\n")
+    budget.save(f"cond {name} n={n} × {per} {model}")
+    drop = collections.Counter(w for x in raw for w in x["why"])
+    print(f"조건부: 문구 {len(raw)} · 받아들임 {len(rows)} · {dict(collections.Counter(r['group'] for r in rows))} · 버림 {dict(drop)} · "
+          f"{dict(teacher.usage)} · 이번 ${budget.run_usd:.4f} · 누적 ${budget.data['usd']:.4f}")
+
+
 #: 🆕 v3 — 최종 묶음에서 불가가 차지할 몫의 상한(새 행 기준). golden 씨앗은 대부분 불가 감이라 다 넣으면 거절로 기운다
 MAX_INFEASIBLE = 0.35
 #: 같은 끝 낱말로 끝나는 고침의 상한(틀 반복 막이 · 편향 막이 3)
 MAX_SAME_END = 0.08
+#: 🆕 v4 — 두 번째 묶음(`mix --tag v2` → `expand_mix2.jsonl`) — 사실 남기기 상한 · 조건부 꼴별 상한
+MAX_FACT_V2 = 900
+COND_CAP = {"조건부:원료사실": 300}
 #: 🆕 v3 — 막연한 말 — 사실이 아니라 꾸밈이거나 그 자체로 주의 표현(「천연」 · 「100% 자연」). 4o-mini 가 쓴 변형에 많았다
 #:    (본 생성 1조각: 고침 439 중 구체적 사실 신호 190 · 막연한 말 95 — 4.1 변형은 29 중 25 · 1)
 VAGUE = re.compile(r"천연|자연|신선한|고급|프리미엄|엄선|비법|전문가|건강한|다양한|풍부한|가득|특별한|정성")
 
 
-def cmd_mix() -> None:
+def cmd_mix(v2: bool = False) -> None:
     """🆕 v3 — 4.1 교정 결과(`*_rows.jsonl` · generator gpt-4.1)를 모아 `_private/expand_mix.jsonl` 로. 4o-mini 교정은 넣지 않는다
     (시범에서 받아들인 고침의 절반이 위반이 남았다). 입력 중복을 빼고, 끝 낱말 상한 · 불가 상한을 건다. C(식약처 수정쌍)는 2배."""
     rng = random.Random(SEED)
@@ -544,14 +678,37 @@ def cmd_mix() -> None:
                 kept_inf.append(by_t[t].pop())
     drop["불가 상한"] += sum(len(v) for v in by_t.values())
     mfds = [json.loads(line) for line in (PRIV / "expand_mfds_rows.jsonl").open(encoding="utf-8")]
-    out = kept_fixed + kept_inf + mfds * 2
+    cond: list[dict] = []
+    if v2:
+        # 🆕 v4 — 사실 남기기는 상한까지만(정답표는 불가 · 조건부 위주 — 살릴 21 중 사실만 남기기는 1)
+        kept_fixed = kept_fixed[:MAX_FACT_V2]
+        # 「○○ 함유」만 남은 고침에 함량 병기를 규칙으로 붙인다(정답표 「○○추출물 함유 (함량 병기)」 · 숫자가 이미 있으면 두지 않는다)
+        for r in kept_fixed:
+            b = r["output"]["body"]
+            if "함유" in b and not re.search(r"\d", b) and not r["output"].get("mandatory_note"):
+                r["output"] = {**r["output"], "mandatory_note": "원재료 함량을 함께 표시", "placement": "원료명 표시 근처"}
+        # 조건부 묶음 — 원료 함유 꼴은 상한(578 이 다른 꼴을 덮지 않게)
+        by_k: dict[str, list[dict]] = collections.defaultdict(list)
+        for r in map(json.loads, (PRIV / "expand_K_full_cond.jsonl").open(encoding="utf-8")):
+            if norm(r["input"]) not in seen:
+                seen.add(norm(r["input"]))
+                by_k[r["group"]].append(r)
+        for g, v in by_k.items():
+            rng.shuffle(v)
+            cap = COND_CAP.get(g, len(v))
+            drop[f"조건부 상한 {g}"] += max(0, len(v) - cap)
+            cond += v[:cap]
+    out = kept_fixed + kept_inf + cond + mfds * 2
     rng.shuffle(out)
-    with (PRIV / "expand_mix.jsonl").open("w", encoding="utf-8", newline="\n") as f:
+    with (PRIV / ("expand_mix2.jsonl" if v2 else "expand_mix.jsonl")).open("w", encoding="utf-8", newline="\n") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     inf_t = collections.Counter(r["output"]["infeasible"] for r in kept_inf)
-    print(f"묶음 {len(out)} = 고침 {len(kept_fixed)} + 불가 {len(kept_inf)} + 식약처 {len(mfds)}×2 · "
-          f"A {sum(r['group'] == '확장A' for r in out)} · B {sum(r['group'] == '확장B' for r in out)}")
+    n = len(out)
+    print(f"묶음 {n} = 사실 남기기 {len(kept_fixed)} ({len(kept_fixed) / n:.0%}) + 조건부 {len(cond)} ({len(cond) / n:.0%}) + "
+          f"불가 {len(kept_inf)} ({len(kept_inf) / n:.0%}) + 식약처 {len(mfds)}×2 · 함량 병기 붙임 "
+          f"{sum(r['output'].get('mandatory_note') == '원재료 함량을 함께 표시' for r in kept_fixed)}")
+    print(f"   조건부 {dict(collections.Counter(r['group'] for r in cond))}")
     print(f"   버림 {dict(drop)} · 불가 유형 {dict(inf_t)} · 끝 낱말 상위 {[c for _, c in ends.most_common(5)]}")
 
 
@@ -593,7 +750,7 @@ def cmd_report(names: list[str]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["seeds", "mfds", "run", "refilter", "mix", "report"])
+    ap.add_argument("cmd", choices=["seeds", "mfds", "run", "refilter", "cond", "mix", "report"])
     ap.add_argument("part", nargs="*", help="run: A | B · report: 결과 이름표(A · B · A_v1 …)")
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--offset", type=int, default=0)
@@ -612,8 +769,10 @@ def main() -> None:
         assert args.part and args.part[0] in ("A", "B"), "run A | run B"
         cmd_run(args.part[0], args.n, args.offset, args.model, args.tag, args.dry_run, args.stop_at,
                 args.variant_model, args.variants)
+    elif args.cmd == "cond":
+        cmd_cond(args.n, args.variants if args.variants > 1 else 3, args.model, args.tag, args.dry_run, args.stop_at)
     elif args.cmd == "mix":
-        cmd_mix()
+        cmd_mix(v2=args.tag == "v2")
     elif args.cmd == "refilter":
         cmd_refilter(args.part)
     else:

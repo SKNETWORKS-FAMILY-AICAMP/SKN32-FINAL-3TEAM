@@ -56,7 +56,7 @@ from sllm_meta import base_model  # noqa: E402
 
 BASE = base_model()
 V4 = ROOT / "models" / "copylane_sllm_lora_adapter"
-ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1")}
+ADAPTERS = {v: ROOT / "models" / f"copylane_sllm_lora_adapter_{v}" for v in ("v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1", "q4b-v17", "q4b-n2")}
 EXTRAS = {"v5": ["stage1_v5_extra.jsonl"], "v6": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v7": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v8": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
           "v9": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"], "v10": ["stage1_v5_extra.jsonl", "stage1_v6_extra.jsonl"],
@@ -211,6 +211,10 @@ SYS["q4b-v15"] = SYS["v12"]
 #:    내장 평가는 두 판 모두 q4b-v14 와 같다 — 서로 견줄 수 있게. 본 비교는 사람 정답표(`real_answer_key.jsonl`)로 한다
 EXPAND = {"q4b-v16": "expand_mix.jsonl", "q4b-n1": "expand_mix.jsonl"}
 NEW_ONLY = {"q4b-n1"}
+#: 🆕 10-17 — v16 · n1 이 실제 광고 31 에서 살림 3 → 1(v16 포장 1). 정답표의 살릴 것은 조건부(공식 기능성 문구 · 「함유(함량 병기)」 + 조건)인데
+#:    확장 고침에 조건부가 0 이었다 → 두 번째 묶음(`expand_mix2.jsonl` · 사실 남기기 34% · 조건부 28% · 불가 33% · 수정쌍 5%)
+EXPAND.update({"q4b-v17": "expand_mix2.jsonl", "q4b-n2": "expand_mix2.jsonl"})
+NEW_ONLY.add("q4b-n2")
 for _v in EXPAND:
     EXTRAS[_v] = EXTRAS["q4b-v14"]
     SYNTH[_v] = SYNTH["q4b-v14"]
@@ -337,7 +341,7 @@ def evaluate(model, tok, ev: list[dict], real: list[dict], name: str) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1"], default="v5")
+    ap.add_argument("--version", choices=["v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "q4b-v12", "q4b-v13", "q4b-v14", "q4b-v15", "q4b-v16", "q4b-n1", "q4b-v17", "q4b-n2"], default="v5")
     args = ap.parse_args()
     CUR["system"] = SYS[args.version]
     out_path = HERE / "_private" / f"stage1_{args.version}_eval.jsonl"
