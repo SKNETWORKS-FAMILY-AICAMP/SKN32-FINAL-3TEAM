@@ -92,8 +92,9 @@ DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 
 #: 행 하나의 응답 갈래 — 조건별 대응표(D-275)와 selective risk 가 같이 쓴다.
 #: 🔴 「확정 위반」은 **전 문장 확정 ∧ 위반 있음**이 아니라 **위반을 확정한 문장이 하나라도** — 예측의 정의와 같다.
-#: 🔄 2026-10-16 (D-348 보충 4 결정 2) — 「조건부위반」: 위반을 확정한 문장은 없고, 조건부 위반 문장(답하면 확정되는 보류)이 있고,
-#:    나머지는 전부 확정이다. 확신 부족 보류와 섞지 않는다 — 판정은 끝났다(`contracts.is_conditional`)
+#: 🔄 2026-10-16 (D-348 보충 4 결정 2) — 「조건부위반」: 위반을 확정한 문장은 없고, 조건부 위반 문장(답하면 확정되는 보류)이 **하나라도** 있다
+#:    (「확정위반」의 「하나라도」와 같은 규칙 · 다른 문장이 확신 부족 보류여도 그 행은 조건부위반이다). 정의는 `contracts.is_conditional`
+#:    🔄 같은 날 고침 — 종전 「나머지가 전부 확정일 때만」은 확정위반과 규칙이 달라 같은 행(조건부 + 확신 부족)이 전에는 확정위반 · 뒤에는 보류로 세어졌다
 CLASSES = ("확정위반", "조건부위반", "확정무위반", "보류", "근거없음", "미판정")
 
 
@@ -158,7 +159,7 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
     cond = [s for s in sents if is_conditional(s)]
     if any(s.violations for s in conf):
         cls = "확정위반"
-    elif cond and len(conf) + len(cond) == len(sents):
+    elif cond:
         cls = "조건부위반"
     elif sents and len(conf) == len(sents):
         cls = "확정무위반"

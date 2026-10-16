@@ -427,7 +427,9 @@ def test_평가는_조건부_위반을_보류와_따로_센다() -> None:
     low = SentenceJudgment(
         sent_id="s2", text="x", verdict=Verdict.hold, hold_reason=HoldReason.low_conf
     )
-    assert eg.predict({"sentences": [cond, low]})["class"] == "보류"
+    assert eg.predict({"sentences": [cond, low]})["class"] == "조건부위반", (
+        "확정위반과 같은 「하나라도」 — 확신 부족 보류가 섞여도 조건부위반"
+    )
     row = {"text": TEXT, "labels": ["거짓_과장"], "조건": "B", "근거": []}
     rep = eg.conditional_report([row], [p])
     assert (rep["rows"], rep["positive"], rep["confirmed"], rep["conditional"], rep["either"]) == (
