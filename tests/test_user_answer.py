@@ -91,10 +91,14 @@ def _enc_response(product=None):  # noqa: ANN001, ANN202
             ],
         ),
     )
-    out = g.doc_rules({"sentences": [s], "product": product or ProductContext()})
+    # 원문 · 문장을 함께 준다 — 「아니오」 확정에는 문장 전체 구간이 선다(1-b · `_sentence_spans`)
+    out = g.doc_rules(
+        {"text": TEXT, "sents": [TEXT], "sentences": [s], "product": product or ProductContext()}
+    )
     got = (out.get("sentences") or [s])[0]
+    done = got.verdict is Verdict.confirmed
     outcome = (
-        Outcome.passed if got.verdict is Verdict.confirmed and not got.violations else Outcome.hold
+        Outcome.guidance if done and got.violations else Outcome.passed if done else Outcome.hold
     )
     return JudgeResponse(outcome=outcome, sentences=[got], category=None)
 
@@ -216,3 +220,13 @@ def test_해당_없음_답을_받는다(wired) -> None:  # noqa: ANN001
 )
 def test_꼴이_틀린_답은_거부한다(wired, pairs) -> None:  # noqa: ANN001
     _post("/u/review/answer", pairs, status=422)
+
+
+def test_인코더만_잡은_문장에_없음으로_답하면_확정_위반_지시(wired_enc) -> None:  # noqa: ANN001
+    """🆕 2026-10-17 (D-348 보충 5 결정 4 · 1-b) — 「아니오」 → 확정 위반(문장 전체 구간) · 실증 문안의 할 일."""
+    html = _post(
+        "/u/review/answer",
+        [("text", TEXT), ("target", "1:s0"), ("answer", "subst:no")],
+    )
+    assert "답한 내용으로 다시 판정했어요" in html and "실증 자료 없음" in html
+    assert "근거 자료가 있으면 쓸 수 있어요" in html, "확정 위반(B)의 결론 — 보류 표지가 아니다"

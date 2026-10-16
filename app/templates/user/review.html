@@ -473,6 +473,8 @@
           {%- if s.fact_check %}준비할 증빙 — {{ s.fact_check.accepted_evidence|join(" · ") }}
           {%- elif inf == "A" and premise %}이 기능성으로 인정·심사를 받은 제품만 쓸 수 있어요
           {%- elif inf == "A" %}인정·심사를 받지 않았다면 문구를 고쳐도 쓸 수 없어요
+          {#- 🆕 2026-10-17 (D-348 보충 5 결정 5 · 문안 초안) — 사실이 거짓으로 확정 — 실증으로 풀리지 않는다 #}
+          {%- elif s|fact_false %}{{ FACT_FALSE_TODO }}
           {%- elif inf == "B" and s.substantiation %}준비할 자료 — {{ s.substantiation.accepted_evidence|join(" · ") }}
           {%- elif inf == "B" %}사실임을 보일 객관적인 근거 자료를 준비해 주세요
           {%- elif inf == "C" %}{{ "표시한 부분을 빼 주세요" if shown.mark else "이 표현은 빼 주세요" }}

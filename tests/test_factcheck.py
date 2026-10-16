@@ -196,9 +196,9 @@ def test_실증_없음이면_확정_위반_그대로_출처() -> None:
     assert got.user_subst == us and got.substantiation is not None and got.risk.final is Risk.R2
 
 
-def test_인코더만_잡은_문장의_없음은_확정하지_않고_출처만_남긴다() -> None:
-    # 🔄 2026-10-16 (D-348 보충 5) — 종전 기대는 None 이었다. 답은 출처로 남는다. ⬜ 「없음 → 확정 위반」은 계약 개정 뒤(D-323 결정 3 ·
-    #    보충 2 결정 3) — 그 전까지 보류 그대로다
+def test_인코더만_잡은_문장의_없음은_구간을_모르면_확정하지_않고_출처만_남긴다() -> None:
+    # 🔄 2026-10-16 (D-348 보충 5) — 종전 기대는 None 이었다. 답은 출처로 남는다.
+    # 🔄 2026-10-17 (1-b) — 「없음 → 확정 위반」은 **구간(문장 전체)이 설 때만**이다 — 원문이 없는 상태(이 시험)에서는 보류 + 출처(D-220)
     us = UserSubst(text=TEXT, answer=Answer.아니오)
     got = _run(_enc_only(), substs=[us])
     assert got is not None and (got.verdict, got.hold_reason) == (Verdict.hold, HoldReason.low_conf)
@@ -773,3 +773,128 @@ def test_인코더_근거에_DB_청크_항목이_붙어도_호_관문을_지난�
     )
     got = _run(s)
     assert got is not None and got.substantiation is not None and not is_conditional(got)
+
+
+# ── 🆕 2026-10-17 (D-348 보충 5 결정 4 · 1-b) — 인코더 쪽 「아니오」 → 확정 위반 ─────────────────────────────
+
+
+def _run_t(
+    s: SentenceJudgment,
+    facts: list[UserFact] | None = None,
+    substs: list[UserSubst] | None = None,
+) -> SentenceJudgment | None:
+    """원문 · 문장이 있는 상태 — 문장 전체 구간이 선다(`_sentence_spans`)."""
+    out = g.doc_rules(
+        {
+            "text": "앞 문장. " + s.text,
+            "sents": ["앞 문장.", s.text],
+            "sentences": [SentenceJudgment(**{**s.model_dump(), "sent_id": g.sent_id(1)})],
+            "product": ProductContext(facts=facts or [], substs=substs or []),
+        }
+    )
+    got = out.get("sentences") or []
+    return got[0] if got else None
+
+
+def test_인코더만_실증_없음이면_확정_위반_문장_전체_구간_지시() -> None:
+    us = UserSubst(text=TEXT, answer=Answer.아니오)
+    got = _run_t(_enc_only(), substs=[us])
+    assert got is not None and got.verdict is Verdict.confirmed
+    assert got.violations == [Violation.거짓_과장] and got.infeasibility is Infeasibility.B
+    assert [(x.start, x.end) for x in got.spans] == [(6, 6 + len(TEXT))], "문장 전체 · 원문 좌표"
+    assert got.substantiation is not None and got.user_subst == us
+    assert got.risk.encoder is None and got.risk.final is Risk.R1, "제재표 하한(시험 근거 R1)"
+    assert got.evidence and not any(e.basis for e in got.evidence), (
+        "대응표 조항 — 문장에서 찾은 조문이 아니다"
+    )
+    JudgeResponse(outcome=Outcome.guidance, sentences=[got])
+
+
+def test_인코더만_사실_거짓이면_확정_위반_실증_분기_없이_지시(tables: None) -> None:
+    from app.contracts import fact_false  # noqa: PLC0415
+
+    uf = UserFact(text=TEXT, kind=FactKind.인증, answer=Answer.아니오)
+    got = _run_t(_enc_only(), [uf])
+    assert got is not None and got.verdict is Verdict.confirmed and got.violations
+    assert got.substantiation is None and fact_false(got), "실증으로 풀리지 않는다 — 고치거나 빼기"
+    JudgeResponse(outcome=Outcome.guidance, sentences=[got])
+
+
+def test_인코더_근거_유형이_분기_유형과_다르면_사실_질문을_내지_않는다(tables: None) -> None:
+    """화장품법 13조①4호는 거짓 · 과장과 기만이 같은 호다 — 관문은 지나도 기만 문장에 사실 질문을 붙이지 않는다(1-b)."""
+    from app.contracts import EncoderBasis  # noqa: PLC0415
+
+    ref = EvidenceArticle(law_id="002015", article="제13조제1항제4호")
+    s = SentenceJudgment(
+        **{
+            **_enc_only().model_dump(),
+            "risk": RiskAssessment(
+                encoder=Risk.R1,
+                final=Risk.R1,
+                encoder_basis=[
+                    EncoderBasis(
+                        premise=Premise.화장품,
+                        violation=Violation.소비자_기만,
+                        floor=Risk.R1,
+                        articles=[ref],
+                    )
+                ],
+            ),
+        }
+    )
+    assert _run(s) is None
+
+
+def test_인코더만_건기식_인정_질병은_인정_기능성_분기(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.contracts import EncoderBasis  # noqa: PLC0415
+
+    monkeypatch.setattr(
+        fc,
+        "FACT_TEXTS",
+        {FactKind.인정_기능성: fc.FactText(["(시험) 인정서"], "(시험) 인정 문구 그대로인가")},
+    )
+    ref = EvidenceArticle(law_id="013094", article="제8조제1항제1호", item="1.")
+    base = SentenceJudgment(
+        **{
+            **_enc_only().model_dump(),
+            "risk": RiskAssessment(
+                encoder=Risk.R1,
+                final=Risk.R1,
+                encoder_basis=[
+                    EncoderBasis(
+                        premise=Premise.건기식_인정,
+                        violation=Violation.질병_예방치료_표방,
+                        floor=Risk.R2,
+                        articles=[ref],
+                    )
+                ],
+            ),
+        }
+    )
+    ask = _run(base)
+    assert ask is not None and ask.fact_check.kind is FactKind.인정_기능성
+    assert ask.hold_reason is HoldReason.low_conf and not is_conditional(ask)
+    yes = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.예)
+    assert _run(base, [yes]).risk.final is Risk.R0
+    no = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.아니오)
+    got = _run_t(base, [no])
+    assert got is not None and got.verdict is Verdict.confirmed
+    assert got.violations == [Violation.질병_예방치료_표방] and got.infeasibility is Infeasibility.C
+    assert got.risk.final is Risk.R2, "그 유형 · 그 전제의 제재표 하한"
+
+
+def test_인코더만_기록은_분기가_아니오로_확정되면_확정_위반() -> None:
+    us = UserSubst(text=TEXT, answer=Answer.아니오)
+    rec = SentenceJudgment(**{**_enc_only().model_dump(), "sent_id": g.sent_id(1)})
+    out = g.doc_rules(
+        {
+            "text": "앞 문장. " + TEXT,
+            "sents": ["앞 문장.", TEXT],
+            "sentences": [rec],
+            "branches": [_branch("식품", [rec])],
+            "product": ProductContext(substs=[us]),
+        }
+    )
+    got = (out.get("sentences") or [rec])[0]
+    assert got.verdict is Verdict.confirmed and got.violations == [Violation.거짓_과장]
+    assert got.user_subst == us

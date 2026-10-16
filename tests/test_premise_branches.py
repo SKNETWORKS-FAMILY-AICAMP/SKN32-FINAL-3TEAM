@@ -487,3 +487,8 @@ def test_건기식_인정의_질병_표방은_문안이_서면_사실_확인_분
     rec = st["sentences"][0]
     assert rec.verdict is Verdict.confirmed and rec.violations == [Violation.질병_예방치료_표방]
     assert rec.user_facts == [no], "분기가 생략돼도 사용자의 답은 기록에 출처로 남는다"
+    # 🆕 2026-10-17 (D-348 보충 5 · 1-b) — 해당 없음 — 분기를 걷고 「판정하지 못함」 그대로 · 답은 출처로 남는다
+    na = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.해당없음)
+    st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [na])
+    b = _branch(st, Premise.건기식_인정).sentences[0]
+    assert b.fact_check is None and not is_conditional(b) and b.user_facts == [na]

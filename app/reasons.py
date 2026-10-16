@@ -155,6 +155,11 @@ def conditional_label(kind: str | None) -> str:
 ENCODER_QUESTION_TEXT = "AI 추정 · 판정 아님 — 아래 질문에 답하면 다시 판정해요"
 
 
+#: 🆕 2026-10-17 (D-348 보충 5 결정 5 · 1-b · 화면 문안 초안 · 화면 담당 확인 전 · 문안 승인 D-263 ②) — 사실이 **거짓**으로 확정된 문장의
+#:    할 일 한 줄. 실증으로 풀리지 않는다 — 고치거나 뺀다. ⬜ 법령 설명(유형 · 근거 호 · 필요한 표현의 예)은 질문 재료 문안과 같은 상수로(결정 5)
+FACT_FALSE_TODO = "사실과 다른 표시예요 — 문구를 고치거나 빼 주세요"
+
+
 def question_text(sentence: object) -> str:
     """질문(분기)이 달린 문장의 결론 한 줄 — 조건부 위반이면 `conditional_text` · 인코더 쪽 보류 + 분기면 `ENCODER_QUESTION_TEXT` · 아니면 빈 글자.
 

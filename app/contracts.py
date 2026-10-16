@@ -951,7 +951,13 @@ class JudgeResponse(BaseModel):
         subst = [s for s in self.sentences if s.infeasibility is Infeasibility.B and s.violations]
         if not subst:
             raise ValueError("outcome=guidance 인데 확정된 B 실증형 위반이 없다 (D-268)")
-        thin = [s.sent_id for s in subst if s.substantiation is None or not s.spans]
+        # 🔄 2026-10-17 (D-348 보충 5 결정 5 · 1-b) — 사실이 거짓으로 확정된 문장(사용자 「아니오」)은 실증으로 풀리지 않는다 —
+        #    실증 분기 없이 지시(「사실과 다른 표시 — 고치거나 빼기」)다. 뺄 구간은 그대로 필요하다
+        thin = [
+            s.sent_id
+            for s in subst
+            if (s.substantiation is None and not fact_false(s)) or not s.spans
+        ]
         if thin:
             raise ValueError(
                 f"지시 문장에 실증 분기나 뺄 구간이 없다 — {thin[:5]} (D-268 · D-265 · D-278)"
@@ -1049,6 +1055,11 @@ class JudgeResponse(BaseModel):
 def _own_choice(s: SentenceJudgment) -> bool:
     """문장 자신이 선택지(사실 확인 분기 · 실증 분기)를 든 보류인가 — 품목 분기가 없어도 된다 (D-348 보충 3 · 4)."""
     return s.fact_check is not None or s.substantiation is not None
+
+
+def fact_false(s: SentenceJudgment) -> bool:
+    """사용자가 사실을 **거짓**으로 답한 문장인가 (🆕 2026-10-17 · D-348 보충 5 결정 5) — 그 위반은 실증으로 풀리지 않는다(지시 문안 · 종착 검증이 쓴다 · D-99)."""
+    return any(f.answer is Answer.아니오 for f in s.user_facts)
 
 
 def is_conditional(s: SentenceJudgment) -> bool:
