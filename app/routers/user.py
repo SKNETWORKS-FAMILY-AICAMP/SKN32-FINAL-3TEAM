@@ -931,6 +931,105 @@ async def review_rewrite(request: Request) -> HTMLResponse:
     return _render(request, "user/review.html", _review_ctx(copies, results))
 
 
+#: 🆕 2026-10-16 (D-348 보충 4 결정 3 · 4 · 6) — 조건부 위반에 대한 답 하나. `subst:yes|no` · `fact:<종류>:true|false`
+_ANSWER = re.compile(r"^(subst:(yes|no)|fact:([가-힣_]{1,24}):(true|false))$")
+#: 앞서 한 답 — `문장id|답` (그 문구 안) · 답은 서버가 다시 판정한 문장 글자에 묶는다(폼의 글자를 믿지 않는다)
+_PREV = re.compile(r"^([A-Za-z0-9_\-]{1,32})\|(.+)$")
+_MAX_ANSWERS = 12
+
+
+def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[list, list]:
+    """(문장id, 답) → (`UserFact` 목록, `UserSubst` 목록). 모르는 문장 · 모르는 종류 · 꼴이 틀린 답은 거부한다(422 · D-220)."""
+    from app.contracts import FactKind, UserFact, UserSubst  # noqa: PLC0415
+
+    facts, substs = [], []
+    for sid, a in pairs:
+        m = _ANSWER.match(a)
+        if not m or sid not in sents:
+            raise HTTPException(422, "모르는 답")
+        if m.group(2):
+            substs = [u for u in substs if u.text != sents[sid]]
+            substs.append(UserSubst(text=sents[sid], has_evidence=m.group(2) == "yes"))
+            continue
+        if m.group(3) not in {k.value for k in FactKind}:
+            raise HTTPException(422, "모르는 사실 종류")
+        kind = FactKind(m.group(3))
+        facts = [f for f in facts if not (f.text == sents[sid] and f.kind is kind)]
+        facts.append(UserFact(text=sents[sid], kind=kind, true=m.group(4) == "true"))
+    return facts, substs
+
+
+@router.post("/review/answer", response_class=HTMLResponse)
+async def review_answer(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    """조건부 위반에 답하고 **그 문구를 답과 함께 다시 판정**한다 (🆕 2026-10-16 · D-348 보충 4 결정 3 · 4 · 6 · 보충 3 결정 4).
+
+    🔴 **POST 다** — 문구를 URL 에 싣지 않는다(P1-4). 화면에 상태가 없어 문구 칸 · 앞서 한 답(`prev`)을 다시 받는다.
+    ★ 답은 **그 문장에만** 묶는다 — 문장 글자는 서버가 먼저 판정한 결과에서 읽는다(폼의 글자를 믿지 않는다 · `review_rewrite` 와 같다).
+    ★ 품목 분기를 고른 뒤의 답이면 다시 그릴 때 그 분기를 펼쳐 둔다(`picked`). 답은 모든 분기에 같이 든다(문장에 묶였다).
+    ★ 답으로 다시 판정한 문구는 **이력에 적는다**(출처 · 책임 — 보충 3 결정 4). 다른 문구는 판정만 다시 한다.
+    🚨 답은 검증이 아니다 — 판정의 `user_facts` · `user_subst` 와 화면 문구가 그렇게 말한다.
+    """
+    form = await _form(request, keep_blank=True)
+    copies = _copies(form)
+    m = _TARGET.match(form.get("target", [""])[0])
+    if not m:
+        raise HTTPException(422, "답할 문장을 모른다")
+    want_n, want_sid = int(m.group(1)), m.group(2)
+    answer = _one(form, "answer", 40)
+    prev = form.get("prev", [])
+    if len(prev) >= _MAX_ANSWERS:
+        raise HTTPException(422, "답이 너무 많다")
+    premise = _one(form, "premise", 32)
+    if premise and premise not in _PREMISES:
+        raise HTTPException(422, "모르는 전제")
+    redo = _one(form, "round", 2) or "0"
+    if not redo.isdigit() or int(redo) > _MAX_REDO:
+        raise HTTPException(422, "모르는 회차")
+    pairs: list[tuple[str, str]] = []
+    for p in prev:
+        pm_ = _PREV.match(p)
+        if not pm_:
+            raise HTTPException(422, "모르는 답")
+        pairs.append((pm_.group(1), pm_.group(2)))
+    pairs.append((want_sid, answer))
+
+    from app.contracts import ProductContext  # noqa: PLC0415
+
+    targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
+    results: list[dict] = []
+    for n, text in targets:
+        state, res = await run_in_threadpool(_core_judge, text)
+        if state in ("pending", "down"):
+            return _render(
+                request,
+                "user/review.html",
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+            )
+        if n == want_n:
+            sents = {s.sent_id: s.text for s in res.sentences}
+            facts, substs = _answers_of(pairs, sents)
+            state, res = await run_in_threadpool(
+                _core_judge, text, ProductContext(facts=facts, substs=substs)
+            )
+            if state in ("pending", "down"):
+                return _render(
+                    request,
+                    "user/review.html",
+                    _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+                )
+            item = {"n": n, "result": res, "text": text, "answers": [f"{s}|{a}" for s, a in pairs]}
+            if premise and res.branches:
+                item["picked"] = {"premise": premise, "round": int(redo)}
+            results.append(item)
+            continue
+        results.append({"n": n, "result": res, "text": text})
+    answered = [r["result"] for r in results if r["n"] == want_n]
+    kept = await run_in_threadpool(
+        lambda: judgment_store.save_review(session, current_user(request, session), answered)
+    )
+    return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
+
+
 @router.get("/preview/{name}", response_class=HTMLResponse)
 def judge_preview(request: Request, name: str) -> HTMLResponse:
     """골든 픽스처 하나를 **결과 화면으로** 그린다 (D-124 ③).
