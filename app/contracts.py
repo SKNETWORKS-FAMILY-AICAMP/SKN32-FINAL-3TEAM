@@ -529,6 +529,20 @@ class UserFact(BaseModel):
     true: bool
 
 
+class UserSubst(BaseModel):
+    """**사용자가 답한 실증 여부** 하나 (🆕 2026-10-16 · D-348 보충 4 결정 3 · `UserFact` 의 실증 판).
+
+    ★ 조건부 위반 문장(보류 · 실증 분기)에서 사용자가 「실증 자료가 있다 / 없다」를 고른 것 — 재검수 요청에 실려 오고 그 문장에만 반영한다.
+    🚨 **검증이 아니다** — 자료를 대조하지 않는다. 책임은 사용자에게 있다 — 판정된 문장에 이 칸을 남긴다(`SentenceJudgment.user_subst`).
+    ⛔ 특허 · 수상 · 인증은 실증 자료가 아니다(D-228) — 그 사실은 `UserFact` 로 답한다.
+    """
+
+    #: 그 주장이 있는 문장 글자 — `UserFact.text` 와 같은 규칙(정규화로 맞춘다 · 문장 번호는 쓰지 않는다)
+    text: str = Field(..., min_length=1)
+    #: 실증 자료가 있다고 골랐나
+    has_evidence: bool
+
+
 class SentenceJudgment(BaseModel):
     """문장 하나의 판정. 상태 스키마 「판정 누적」이 그대로 이 모양이다."""
 
@@ -561,6 +575,8 @@ class SentenceJudgment(BaseModel):
     fact_check: FactBranch | None = None
     #: 🆕 2026-10-16 (D-348 보충 3 결정 4) — 이 문장의 판정이 **사용자가 확인한 사실**로 정해졌다(출처 · 책임). 있으면 확정이고 사실 확인 분기는 없다
     user_fact: UserFact | None = None
+    #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 이 문장의 판정이 **사용자가 답한 실증 여부**로 정해졌다(출처 · 책임). 있으면 확정이다
+    user_subst: UserSubst | None = None
 
     @model_validator(mode="after")
     def _hold_reason_iff_hold(self) -> SentenceJudgment:
@@ -637,6 +653,13 @@ class SentenceJudgment(BaseModel):
             raise ValueError(
                 f"실증 분기는 B 실증형에만 붙는다 — 불가 사유 {self.infeasibility} (D-263 ④ · D-61)"
             )
+        # 🔄 2026-10-16 (D-348 보충 4 결정 1) — 확정 문장이거나 **조건부 위반**(실증 여부를 몰라 멈춘 보류 · `premise_unknown`)에만 붙는다
+        if self.verdict is Verdict.hold and self.hold_reason is not HoldReason.premise_unknown:
+            raise ValueError(
+                f"보류 문장의 실증 분기는 조건부 위반(premise_unknown)에만 붙는다 — {self.hold_reason} (D-348 보충 4)"
+            )
+        if self.verdict not in (Verdict.confirmed, Verdict.hold):
+            raise ValueError(f"실증 분기가 {self.verdict.value} 문장에 붙었다 (D-348 보충 4)")
         # 🚨 실증은 **내리기만** 한다. 실증 전 위험도가 없으면 상한을 잴 수 없다 — 없음을 낮음으로 세지 않는다 (D-72)
         if self.risk.final is None:
             raise ValueError("실증 분기가 있는데 실증 전 위험도가 없다 (D-72)")
@@ -657,6 +680,14 @@ class SentenceJudgment(BaseModel):
         ):
             raise ValueError(
                 "사용자 확인 사실로 정한 문장은 확정이고 사실 확인 분기가 없다 (D-348 보충 3 결정 4)"
+            )
+        if self.user_subst is not None and (
+            self.verdict is not Verdict.confirmed
+            or self.fact_check is not None
+            or self.user_fact is not None
+        ):
+            raise ValueError(
+                "사용자가 답한 실증 여부로 정한 문장은 확정이고 사실 확인 분기 · 사용자 확인 사실이 없다 (D-348 보충 4 결정 3)"
             )
         if self.fact_check is None:
             return self
@@ -747,6 +778,8 @@ class ProductContext(BaseModel):
     #: 🆕 2026-10-16 (D-348 보충 3 결정 4) — 사용자가 확인한 사실(수상 · 인증 · 원재료 …). 제품에 관한 사실이라 여기 싣는다
     #:    (`has_recognized_function` 과 같은 축 — 「이 문구를 쓸 자격 · 근거가 있는가」). 비면 사실을 모른다 = 가장 나쁜 쪽(D-263 ①)
     facts: list[UserFact] = Field(default_factory=list)
+    #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부(문장 단위). 비면 모른다 = 가장 나쁜 쪽(D-263 ①)
+    substs: list[UserSubst] = Field(default_factory=list)
 
 
 class Timing(BaseModel):
@@ -862,9 +895,12 @@ class JudgeResponse(BaseModel):
         #    사용자가 받는 것 = **뺄 구간 · 실증 자료 종류 · 내려갈 수 있는 등급** (D-265 표) — 없으면 지시가 빈 카드다.
         if self.outcome is not Outcome.guidance:
             return self
-        if not self.sentences or any(s.verdict is not Verdict.confirmed for s in self.sentences):
+        # 🔄 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반(답하면 확정되는 보류)은 지시를 막지 않는다 · 그 밖의 확정 아님은 보류다
+        if not self.sentences or any(
+            s.verdict is not Verdict.confirmed and not is_conditional(s) for s in self.sentences
+        ):
             raise ValueError(
-                "outcome=guidance 인데 확정이 아닌 문장이 있거나 문장이 없다 — 보류다 (D-268)"
+                "outcome=guidance 인데 확정도 조건부 위반도 아닌 문장이 있거나 문장이 없다 — 보류다 (D-268)"
             )
         reasons = {s.infeasibility for s in self.sentences if s.infeasibility}
         if reasons & {Infeasibility.A, Infeasibility.C}:
@@ -912,7 +948,7 @@ class JudgeResponse(BaseModel):
         premise_holds = {HoldReason.cat_unknown, HoldReason.premise_unknown}
         # 🔄 2026-10-16 (D-348 보충 3) — 사실을 몰라 멈춘 문장은 그 문장의 사실 확인 분기가 선택지다(품목 분기가 없어도 된다)
         if (
-            any(s.hold_reason in premise_holds and s.fact_check is None for s in self.sentences)
+            any(s.hold_reason in premise_holds and not _own_choice(s) for s in self.sentences)
             and not self.branches
         ):
             raise ValueError(
@@ -965,6 +1001,26 @@ class JudgeResponse(BaseModel):
                 "표현이 아니라 자격의 문제라 재생성이 같은 위반을 반복한다"
             )
         return self
+
+
+def _own_choice(s: SentenceJudgment) -> bool:
+    """문장 자신이 선택지(사실 확인 분기 · 실증 분기)를 든 보류인가 — 품목 분기가 없어도 된다 (D-348 보충 3 · 4)."""
+    return s.fact_check is not None or s.substantiation is not None
+
+
+def is_conditional(s: SentenceJudgment) -> bool:
+    """**조건부 위반** — 글 밖 사실(사실 · 실증 여부)을 몰라 멈춘 보류 ∧ 그 선택지가 문장에 있다 ∧ 가장 나쁜 경우의 위험도가 섰다
+    (🆕 2026-10-16 · D-348 보충 4 결정 2).
+
+    ★ 판정은 끝났다 — 답하면 확정된다. 확신 부족 보류(`low_conf`)와 다른 분류다(평가 · 화면 · 종착이 이 함수 하나를 쓴다 · D-99).
+    🚨 위험도가 없으면 조건부 위반이 아니다 — 없음을 판정으로 세지 않는다 (D-72).
+    """
+    return (
+        s.verdict is Verdict.hold
+        and s.hold_reason is HoldReason.premise_unknown
+        and _own_choice(s)
+        and s.risk.final is not None
+    )
 
 
 def is_pass(s: SentenceJudgment) -> bool:

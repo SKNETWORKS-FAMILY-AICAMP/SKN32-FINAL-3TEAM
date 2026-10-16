@@ -91,10 +91,13 @@ from app.contracts import (
     Segment,
     SentenceJudgment,
     Span,
+    SubstBranch,
     Timing,
     UserFact,
+    UserSubst,
     Verdict,
     Violation,
+    is_conditional,
     is_pass,
 )
 from app.settings import PARAMS
@@ -2384,11 +2387,17 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     """층 3 문서 규칙 — R-D1 최소판 → 문서 경고 + `hold(rd1)` (D-83). 🔜 W8.
 
     ⛔ 「문맥을 이해한다」고 말하지 않는다 (D-83 ④) — 문장별 판정 결과의 **집합 연산**이다.
-    🆕 2026-10-16 (D-348 보충 3) — **사실 확인 분기**를 여기서 단다(기록 판정 · 위험도 · 품목 분기가 선 뒤 · `_with_fact`).
-       표(`app/factcheck.py`)가 비면 아무것도 하지 않는다 — 문안 승인 전에는 판정이 한 글자도 바뀌지 않는다.
+    🆕 2026-10-16 (D-348 보충 3) — **사실 확인 분기**를 여기서 단다(기록 판정 · 위험도 · 품목 분기가 선 뒤 · `_with_condition`).
+    🔄 2026-10-16 (D-348 보충 4) — **조건부 위반** 전부(사실 · 실증)를 여기서 낸다. 사실 확인 문안 표가 비면 그 갈래는 서지 않고
+       실증 분기(문안 승인본 · `rs.subst_branch`)로 간다.
     """
-    facts = list((state.get("product") or ProductContext()).facts)
-    changed = [f for s in state.get("sentences", []) if (f := _with_fact(s, facts)) is not None]
+    product = state.get("product") or ProductContext()
+    facts, substs = list(product.facts), list(product.substs)
+    changed = [
+        f
+        for s in state.get("sentences", [])
+        if (f := _with_condition(s, facts, substs)) is not None
+    ]
     return {"sentences": changed} if changed else {}
 
 
@@ -2414,59 +2423,113 @@ def _ho_coords(s: SentenceJudgment) -> set[tuple[str, int, int, int]]:
     return out
 
 
-def _with_fact(s: SentenceJudgment, facts: list[UserFact]) -> SentenceJudgment | None:
-    """사실에 달린 문장 → 보류(`premise_unknown`) + 사실 확인 분기, 또는 사용자가 확인한 사실로 정한 판정. 바꿀 것이 없으면 None.
+def _cond_subst(s: SentenceJudgment) -> SubstBranch | None:
+    """조건부 위반 문장의 실증 분기 — 이미 있으면 그것 · 없으면 사전 유형(없으면 인코더 근거의 유형)과 근거 법 축으로 만든다 (보충 4 결정 1).
 
-    ★ 보충 3 결정 1 ~ 4 — 호 관문(`factcheck.in_gate`) ∧ 낱말 규칙(`factcheck.fact_kind`) ∧ 그 종류의 문안이 승인됐을 때만.
-       · 사용자 확인 없음 → 보류 + 분기(참이면 상한 · 받는 증빙 · 기준 문안) · 기록 위험도는 가장 나쁜 경우 그대로(D-263 ①)
-       · 사용자가 「참」 ∧ 사실 주장 꼴만(`fact_only`) → 확정 · 위반 없음 · R0 · `user_fact`(출처)
-       · 사용자가 「거짓」 ∧ 확정 위반 → 그 판정 그대로 + `user_fact` · 보류(인코더만)면 그대로 둔다(확정은 신뢰 층의 몫 · 결정 5)
-    🔴 위험도가 없으면(하한 모름) 분기를 달지 않는다(계약 · D-72) · 판정 대상 아님 · 이미 단 문장은 건드리지 않는다.
-    ⬜ 확정 문장 · 확신 부족 보류만 본다 — 품목 · 전제 보류(cat_unknown · premise_unknown) · 미검수 보류와 겹치는 자리 · 분기마다 계산은 집행 뒤
+    문안 · 상한은 `rs.subst_branch` 한 곳이다(D-99 · D-337 과 같은 함수). 법 축을 모르는 근거가 섞이면 만들지 않는다 — `_substantiated` 와 같다.
     """
-    if s.not_claim or s.user_fact is not None or s.fact_check is not None:
+    if s.substantiation is not None:
+        return s.substantiation
+    types = list(s.violations) or sorted({b.violation for b in s.risk.encoder_basis})
+    axes = {LAW_OF_ID.get(e.law_id) for e in s.evidence if e.basis} | {
+        LAW_OF_ID.get(a.law_id) for b in s.risk.encoder_basis for a in b.articles
+    }
+    if None in axes:
+        return None
+    return rs.subst_branch(types, {a for a in axes if a is not None})
+
+
+def _with_condition(
+    s: SentenceJudgment, facts: list[UserFact], substs: list[UserSubst]
+) -> SentenceJudgment | None:
+    """**조건부 위반** — 근거 호가 전부 조건부 호인 문장 → 보류(`premise_unknown`) + 선택지, 또는 사용자의 답으로 정한 판정. 바꿀 것이 없으면 None.
+
+    ★ D-348 보충 4 결정 1 · 3 (보충 3 결정 1 ~ 4 를 실증까지 넓혔다)
+       · 조건부인지 = 호 관문(`factcheck.in_gate` · 근거 호가 **전부** 조건부 호) · 위험도(가장 나쁜 경우)가 섰을 때만
+       · 무엇을 물을지 = 낱말 규칙 — 사실 표지(그 종류의 문안이 승인됐을 때)면 사실 확인 분기, 아니면 실증 분기(조건부의 기본값 · D-228)
+       · 답 없음 → 보류 + 분기 · 기록 위험도는 가장 나쁜 경우 그대로(D-263 ①) · 불가 사유 B
+       · 사실 「참」 ∧ 사실 주장 꼴만(`fact_only`) / 실증 「있음」 ∧ 실증 상한 R0 → 확정 · 위반 없음 · R0 · 출처(`user_fact` · `user_subst`)
+       · 사실 「거짓」 / 실증 「없음」 ∧ 확정 위반 → 그 판정 그대로 + 출처 · 인코더만 잡은 보류면 그대로 둔다(확정은 신뢰 층의 몫 · 보충 2 결정 5)
+    🔴 답은 **그 문장에만** 맞춘다 — 정규화한 문장 글자가 같을 때(보충 4 결정 4 · 제품 단위 답 · 입력 자동 반영은 대조 장치 뒤 ⬜)
+    ⬜ 확정 문장 · 확신 부족 보류만 본다 — 품목 · 전제 보류와 겹치는 자리 · 분기마다 계산은 집행 뒤
+    """
+    if (
+        s.not_claim
+        or s.user_fact is not None
+        or s.user_subst is not None
+        or s.fact_check is not None
+        or is_conditional(s)
+    ):
         return None
     if not (
         (s.verdict is Verdict.confirmed and s.violations)
         or (s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf)
     ):
         return None
-    kind = factcheck.fact_kind(s.text)
-    if kind is None or kind not in factcheck.FACT_TEXTS or s.risk.final is None:
-        return None
-    if not factcheck.in_gate(_ho_coords(s)):
+    if s.risk.final is None or not factcheck.in_gate(_ho_coords(s)):
         return None
     key = dm.norm(s.text)
-    uf = next((f for f in facts if f.kind is kind and dm.norm(f.text) == key), None)
     fields = {k: getattr(s, k) for k in type(s).model_fields}
-    if uf is not None:
-        if uf.true and factcheck.fact_only(s.text):
-            return SentenceJudgment(
-                sent_id=s.sent_id,
-                text=s.text,
-                verdict=Verdict.confirmed,
-                risk=RiskAssessment(floor=Risk.R0, final=Risk.R0),
-                encoder_candidates=s.encoder_candidates,
-                user_fact=uf,
-            )
-        if s.verdict is Verdict.confirmed:
-            return SentenceJudgment(**{**fields, "user_fact": uf})
-        return None
-    t = factcheck.FACT_TEXTS[kind]
-    cap = min(t.confirmed_max, s.risk.final, key=lambda r: r.level)
+    kind = factcheck.fact_kind(s.text)
+    if kind is not None and kind in factcheck.FACT_TEXTS:
+        uf = next((f for f in facts if f.kind is kind and dm.norm(f.text) == key), None)
+        if uf is not None:
+            if uf.true and factcheck.fact_only(s.text):
+                return _answered(s, user_fact=uf)
+            if s.verdict is Verdict.confirmed:
+                return SentenceJudgment(**{**fields, "user_fact": uf})
+            return None
+        t = factcheck.FACT_TEXTS[kind]
+        cap = min(t.confirmed_max, s.risk.final, key=lambda r: r.level)
+        return SentenceJudgment(
+            **{
+                **fields,
+                "verdict": Verdict.hold,
+                "hold_reason": HoldReason.premise_unknown,
+                "substantiation": None if factcheck.fact_only(s.text) else s.substantiation,
+                "fact_check": FactBranch(
+                    kind=kind,
+                    confirmed_max=cap,
+                    accepted_evidence=list(t.accepted_evidence),
+                    criteria=t.criteria,
+                ),
+            }
+        )
+    sb = _cond_subst(s)
+    if sb is None:
+        return None  # 실증 문안이 없는 유형 · 두 법이 섞인 근거 — 조건부로 내리지 않는다(종전 판정 그대로 · D-220)
+    us = next((u for u in substs if dm.norm(u.text) == key), None)
+    if us is not None:
+        if us.has_evidence and sb.substantiated_max is Risk.R0:
+            return _answered(s, user_subst=us)
+        if not us.has_evidence and s.verdict is Verdict.confirmed:
+            return SentenceJudgment(**{**fields, "user_subst": us, "substantiation": sb})
+        # ⬜ 실증 상한이 R0 이 아닌 유형(지금 `SUBST_MAX` 에 없다) · 인코더만 잡은 문장의 「없음」 — 답을 반영할 규칙이 아직 없다
+        if not us.has_evidence:
+            return None
     return SentenceJudgment(
         **{
             **fields,
             "verdict": Verdict.hold,
             "hold_reason": HoldReason.premise_unknown,
-            "substantiation": None if factcheck.fact_only(s.text) else s.substantiation,
-            "fact_check": FactBranch(
-                kind=kind,
-                confirmed_max=cap,
-                accepted_evidence=list(t.accepted_evidence),
-                criteria=t.criteria,
-            ),
+            "infeasibility": Infeasibility.B,
+            "substantiation": sb,
         }
+    )
+
+
+def _answered(
+    s: SentenceJudgment, *, user_fact: UserFact | None = None, user_subst: UserSubst | None = None
+) -> SentenceJudgment:
+    """사용자의 답으로 위반이 풀린 문장 — 확정 · 위반 없음 · R0 · 출처 (보충 3 결정 4 · 보충 4 결정 3). 인코더 후보(표시용)는 남긴다."""
+    return SentenceJudgment(
+        sent_id=s.sent_id,
+        text=s.text,
+        verdict=Verdict.confirmed,
+        risk=RiskAssessment(floor=Risk.R0, final=Risk.R0),
+        encoder_candidates=s.encoder_candidates,
+        user_fact=user_fact,
+        user_subst=user_subst,
     )
 
 
@@ -2599,7 +2662,10 @@ def route_review(state: ReviewState) -> str:
     sents = state.get("sentences", [])
     if not sents:
         return "hold"
-    if any(s.verdict is not Verdict.confirmed for s in sents):
+    # 🔄 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반**(답하면 확정되는 보류)은 지시를 막지 않는다. 그 밖의 확정 아님은 보류다.
+    #    조건부 위반이 섞인 문서는 증명서 · 통과로 가지 않는다(증명서는 전 문장 확정을 요구한다 · 통과는 확정 ∧ R0)
+    open_ = [s for s in sents if s.verdict is not Verdict.confirmed]
+    if any(not is_conditional(s) for s in open_):
         return "hold"
     # 🆕 2026-10-01 (W4 1판) — **위험도가 없는 확정 위반은 증명서 · 지시로 못 간다** — 보류다 (D-268 「막힘」 · D-220).
     #    지시는 실증 분기(실증 전 위험도)를, 증명서는 사유 설명을 요구한다 — 하한(`sanction_rule` · W5)이 서기 전에는 어느 쪽도
@@ -2611,7 +2677,7 @@ def route_review(state: ReviewState) -> str:
         return "hold"
     reasons = {s.infeasibility for s in sents if s.infeasibility}
     if reasons & {Infeasibility.A, Infeasibility.C}:
-        return "certificate"
+        return "hold" if open_ else "certificate"
     if Infeasibility.B in reasons:
         return "guidance"
     # 🔴 통과는 D-125 의 정의대로만 — 확정 ∧ R0 (🔄 D-273 · `is_pass`) · 위험도가 없으면 통과가 아니다

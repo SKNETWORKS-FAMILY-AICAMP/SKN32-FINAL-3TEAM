@@ -105,12 +105,19 @@ def _judgment_row(
             # 🆕 2026-10-14 (ksr 흡수) — 이력 배지가 읽는다(`_hist_view`). 확정 위반이 아니면 None
             "infeasibility": s.infeasibility.value if s.infeasibility else None,
         }
-        if violations or s.evidence or enc_refs or s.user_fact is not None
+        if violations
+        or s.evidence
+        or enc_refs
+        or s.user_fact is not None
+        or s.user_subst is not None
         else None
     )
     if evidence is not None and s.user_fact is not None:
         # 🆕 2026-10-16 (D-348 보충 3 결정 4) — 이 판정은 사용자가 확인한 사실로 정했다 · 출처(책임)를 남긴다
         evidence["user_fact"] = s.user_fact.model_dump(mode="json")
+    if evidence is not None and s.user_subst is not None:
+        # 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부 · 출처(책임)를 남긴다
+        evidence["user_subst"] = s.user_subst.model_dump(mode="json")
     if evidence is not None and enc_refs:
         # 🆕 2026-10-16 (D-348 보충 2 결정 8) — 인코더 하한의 근거 호 · DB 가 `ck_judgment_encoder_has_basis` 로 댄다
         evidence["encoder_refs"] = enc_refs

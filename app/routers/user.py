@@ -1387,6 +1387,9 @@ def _why_blocked(s) -> str:  # noqa: ANN001
     types = " · ".join(v.value.replace("_", " ") for v in s.violations)
     if s.verdict is Verdict.confirmed:
         head = _INFEASIBLE_WHY.get(s.infeasibility.value if s.infeasibility else "", "위반 확정")
+    elif reasons.conditional_text(s):
+        # 🆕 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반은 보류 사유가 아니라 조건을 적는다(화면 결론 줄과 같은 글자)
+        head = reasons.conditional_text(s)
     elif s.verdict is Verdict.hold:
         head = "보류 — " + _HOLD_WHY.get(s.hold_reason.value if s.hold_reason else "", "사유 없음")
     elif s.verdict is Verdict.no_basis:

@@ -139,6 +139,23 @@ REWRITE_INFEASIBLE_TEXT = "고쳐 쓴 문장을 만들지 못했어요"
 ENC_REMAINS_MARK = "AI 추정 유형 남음 — 판정 아님"
 
 
+#: 🆕 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반** 문장의 결론 한 줄 · 화면 두 곳(검수 · 생성 편집기 `sent_concl`)과 이력이 같은 글자를 쓴다 (D-99).
+#:    ⛔ 「보류」라 적지 않는다 — 판정은 끝났고 답하면 확정된다. ⛔ 「쓸 수 있어요」만 적지 않는다 — 조건이 앞에 온다
+CONDITIONAL_FACT_TEXT = "조건부 위반 · 그 사실이 맞으면 쓸 수 있어요"
+CONDITIONAL_SUBST_TEXT = "조건부 위반 · 실증 자료가 있으면 쓸 수 있어요"
+
+
+def conditional_text(sentence: object) -> str:
+    """조건부 위반 문장이면 결론 한 줄, 아니면 빈 글자. 조건부의 정의는 `contracts.is_conditional` 한 곳이다 (D-99)."""
+    from app.contracts import is_conditional  # noqa: PLC0415 — 순환 import 회피
+
+    if not is_conditional(sentence):  # type: ignore[arg-type]
+        return ""
+    return (
+        CONDITIONAL_FACT_TEXT if getattr(sentence, "fact_check", None) else CONDITIONAL_SUBST_TEXT
+    )
+
+
 def guessed_types(sentence: object) -> list[str]:
     """사전 유형(`violations`)이 없고 **인코더 유형 후보만** 있는 문장의 추정 유형 이름(정렬). 아니면 빈 목록.
 

@@ -57,6 +57,7 @@ from app.contracts import (  # noqa: E402
     ProductContext,
     SentenceJudgment,
     Verdict,
+    is_conditional,
 )
 from collect import statute  # noqa: E402
 from preprocess import devsplit  # noqa: E402
@@ -91,7 +92,9 @@ DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 
 #: 행 하나의 응답 갈래 — 조건별 대응표(D-275)와 selective risk 가 같이 쓴다.
 #: 🔴 「확정 위반」은 **전 문장 확정 ∧ 위반 있음**이 아니라 **위반을 확정한 문장이 하나라도** — 예측의 정의와 같다.
-CLASSES = ("확정위반", "확정무위반", "보류", "근거없음", "미판정")
+#: 🔄 2026-10-16 (D-348 보충 4 결정 2) — 「조건부위반」: 위반을 확정한 문장은 없고, 조건부 위반 문장(답하면 확정되는 보류)이 있고,
+#:    나머지는 전부 확정이다. 확신 부족 보류와 섞지 않는다 — 판정은 끝났다(`contracts.is_conditional`)
+CLASSES = ("확정위반", "조건부위반", "확정무위반", "보류", "근거없음", "미판정")
 
 
 def load_rows(
@@ -152,8 +155,11 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
     cands = sorted({v.value for s in sents if s.verdict is Verdict.hold for v in s.violations})
     ho = sorted({h for s in conf if s.violations for h in _ho(s)})
     verdicts = [s.verdict.value for s in sents]
+    cond = [s for s in sents if is_conditional(s)]
     if any(s.violations for s in conf):
         cls = "확정위반"
+    elif cond and len(conf) + len(cond) == len(sents):
+        cls = "조건부위반"
     elif sents and len(conf) == len(sents):
         cls = "확정무위반"
     elif any(s.verdict is Verdict.unjudged for s in sents) or not sents:
@@ -211,6 +217,12 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         #: 🆕 2026-10-16 (D-348 보충 3) — 사실 확인 분기가 달린 문장이 있나 · 사용자가 확인한 사실로 정한 문장이 있나
         "fact_branch": any(s.fact_check is not None for s in sents),
         "user_fact": any(s.user_fact is not None for s in sents),
+        #: 🆕 2026-10-16 (D-348 보충 4) — 조건부 위반 문장의 유형(가장 나쁜 경우 = 답 없음 · 거짓 분기의 판정) · 사전 유형, 없으면 인코더 근거의 유형
+        "cond_types": sorted(
+            {v.value for s in cond for v in s.violations}
+            | {b.violation.value for s in cond if not s.violations for b in s.risk.encoder_basis}
+        ),
+        "user_subst": any(s.user_subst is not None for s in sents),
         #: 🆕 2026-10-16 — **응답 계약을 지나지 못한 행**(`to_response` 가 거부) · 앱이라면 그 요청은 오류로 끝난다. 실제 실행에서만 채운다(`_checked`)
         "contract_error": state.get("_contract_error"),
         #: 🆕 2026-10-06 (D-263 ① · D-319 ①) — **분기 때문에 보류로 기록된 문장에 실린 유형**(가장 보수적인 전제의 위반).
@@ -675,7 +687,38 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["encoder_risk"] = encoder_risk_report(rows, preds)
     out["contract_errors"] = sum(1 for p in preds if p.get("contract_error"))
     out["fact_branch_rows"] = sum(1 for p in preds if p.get("fact_branch"))
+    out["conditional"] = conditional_report(rows, preds)
     return out
+
+
+def conditional_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
+    """조건부 위반 (🆕 2026-10-16 · D-348 보충 4 결정 2) — 「답 없음 · 거짓」 분기의 판정을 골든과 맞댄다.
+
+    ★ 골든의 위반 라벨은 그 사건에서 사실이 거짓 · 실증을 못 했다는 전제다 — 조건부 위반은 그 분기에서 위반이므로 유형이 맞으면 맞힌 것이다.
+       확정 재현율과 **나란히** 싣는다(`확정 ∪ 조건부`) — 확정 재현율을 대신하지 않는다.
+    🚨 적법 행의 조건부 위반은 따로 센다 — 답하면 풀리지만 묻는 것 자체가 사용자 부담이다(오탐의 다른 모양).
+    """
+    sc = [(r, p) for r, p in zip(rows, preds, strict=True) if scored(r)]
+    pos = conf_hit = cond_hit = either = 0
+    for r, p in sc:
+        pt, ct = set(p["types"]), set(p.get("cond_types", ()))
+        tt = truth_types(r, pt | ct)
+        if not tt:
+            continue
+        pos += 1
+        conf_hit += bool(pt & tt)
+        cond_hit += bool(p["class"] == "조건부위반" and ct & tt)
+        either += bool((pt | (ct if p["class"] == "조건부위반" else set())) & tt)
+    lawful = [p for r, p in zip(rows, preds, strict=True) if lawful_kind(r)]
+    return {
+        "rows": sum(1 for p in preds if p["class"] == "조건부위반"),
+        "positive": pos,
+        "confirmed": conf_hit,
+        "conditional": cond_hit,
+        "either": either,
+        "lawful_rows": len(lawful),
+        "lawful_conditional": sum(1 for p in lawful if p["class"] == "조건부위반"),
+    }
 
 
 def _checked(state: dict[str, Any]) -> dict[str, Any]:
@@ -845,6 +888,13 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     if s.get("fact_branch_rows"):
         print(
             f"\n  사실 확인 분기가 달린 행 {s['fact_branch_rows']} (D-348 보충 3 · 기록은 보류 · 선택지)"
+        )
+    cd = s.get("conditional") or {}
+    if cd.get("rows"):
+        print(
+            f"\n  조건부 위반 행 {cd['rows']} (D-348 보충 4 · 답하면 확정) — 위반 행 {cd['positive']} 중 "
+            f"확정 {cd['confirmed']} · 조건부 {cd['conditional']} · 확정 ∪ 조건부 {cd['either']} · "
+            f"적법 {cd['lawful_rows']} 중 조건부 {cd['lawful_conditional']}"
         )
     er = s.get("encoder_risk") or {}
     if er:
