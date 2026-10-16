@@ -25,6 +25,7 @@
 #   bash deploy_server.sh check         #     실행 중 상태 한 번에 보기 (GPU · 두 서버 · 포트)
 #   bash deploy_server.sh services      # 13. 상시 가동 — sLLM · 앱을 systemd 서비스로 (재부팅해도 다시 뜬다)
 #   bash deploy_server.sh services-off  #     서비스를 내리고 해제 (다시 tmux 로 띄울 때)
+#   bash deploy_server.sh update        #     새 커밋 올리기 — fetch → install → migrate → verify → 서비스 재시작
 #   bash deploy_server.sh backup        #     DB 덤프 하나 (컨테이너 DB · ~/backup · 7개만 남긴다)
 #   bash deploy_server.sh all           #  3~10 을 이어서 (gpu · sllm · serve 는 따로)
 #
@@ -52,7 +53,8 @@ MIN_DISK_GB=55                               # 루트 디스크 권장 60GB — 
 # sLLM — 판은 sllm_meta.py(기본값)와 models.lock.json(채택)이 정한다. 여기서는 바꾸지 않는다
 SLLM_VENV="$APP_DIR/.venv-sllm"
 SLLM_PORT=8765
-SLLM_DRIVER="570-server"                     # CUDA 12.8 용 torch(cu128)는 드라이버 570 이상을 요구한다
+SLLM_DRIVER="615-server-open"                # CUDA 12.8 용 torch(cu128)는 드라이버 570 이상을 요구한다 · T4(Turing)는 open 모듈 지원
+SLLM_UTILS="nvidia-utils-615-server"         # utils 꾸러미 이름에는 -open 이 붙지 않는다
 TORCH_PIN="torch==2.11.0"
 TORCH_INDEX="https://download.pytorch.org/whl/cu128"
 SLLM_PKGS=(transformers==5.17.0 peft==0.21.0 accelerate==1.15.0 fastapi==0.142.2 uvicorn==0.54.0
@@ -155,7 +157,7 @@ gpu() {
   sudo apt-get install -y ubuntu-drivers-common
   # ubuntu-drivers 가 이 커널(aws)에 맞는 서명된 모듈 꾸러미를 함께 고른다
   sudo ubuntu-drivers install --gpgpu "nvidia:$SLLM_DRIVER"
-  sudo apt-get install -y "nvidia-utils-$SLLM_DRIVER"
+  sudo apt-get install -y "$SLLM_UTILS"
   warn "설치 끝 — sudo reboot 후 다시 접속해서 bash deploy_server.sh preflight 로 GPU 줄을 본다"
   warn "재부팅하면 탄력적 IP 는 그대로다. tmux 는 새로 연다"
 }
@@ -417,6 +419,24 @@ services_off() {
   warn "다시 tmux 로 띄울 때는 창 1 sllm · 창 2 serve"
 }
 
+# ── 새 커밋 올리기 (🔄 2026-10-16) — 이미 한 번 다 올린 서버에서 ─────────────────
+update() {
+  say "업데이트 — $DEPLOY_REF"
+  [ -d "$APP_DIR/.git" ] || die "저장소가 없다 — 처음이면 fetch 부터 차례로"
+  fetch
+  install
+  L migrate
+  verify
+  warn "데이터(골든 · 사전 · 묶음)가 바뀐 커밋이면 bash deploy_server.sh data 를 다시 돈다"
+  if systemctl is-active -q copylane-app 2>/dev/null; then
+    systemctl is-active -q copylane-sllm 2>/dev/null && sudo systemctl restart copylane-sllm && ok "copylane-sllm 재시작"
+    sudo systemctl restart copylane-app && ok "copylane-app 재시작"
+    warn "sLLM 은 약 30초 뒤에 응답한다 — 그 뒤 bash deploy_server.sh check"
+  else
+    warn "서비스가 안 떠 있다 — tmux 의 sllm · serve 창을 다시 띄우거나 bash deploy_server.sh services"
+  fi
+}
+
 # ── DB 백업 (🔄 2026-10-15) — 컨테이너 DB 만. RDS 는 자동 백업이 있다 ──────────
 backup() {
   say "DB 백업"
@@ -447,7 +467,8 @@ case "${1:-}" in
   check)      check ;;
   services)   services ;;
   services-off) services_off ;;
+  update)     update ;;
   backup)     backup ;;
   all)        preflight; fetch; env_file; install; model; data; verify; sllm_env; sllm_model ;;
-  *) sed -n '2,35p' "$0"; exit 1 ;;
+  *) sed -n '2,36p' "$0"; exit 1 ;;
 esac
