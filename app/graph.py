@@ -745,6 +745,9 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
         return {"dict_scans": [DictScan(sent_id=sent_id(i)) for i in range(len(sents))]}
     entries = load_dict_entries(cur)
     weak = load_weak_entries(cur)  # 🆕 D-311 — 보류 문장의 유형 후보
+    entries, weak = _viewed(
+        entries, weak
+    )  # 🆕 2026-10-18 (보충 15 결정 3) 측정 전용 사전 판 · 앱은 원래 사전
 
     def _hits(text: str, es: list[dm.Entry]) -> tuple[DictHit, ...]:
         return tuple(
@@ -1435,20 +1438,54 @@ def infeasibility_of(
     return next(x for x in _INFEAS_ORDER if x in found)
 
 
-def _hit_cells(hits: Iterable[DictHit]) -> list[tuple[Violation, str | None]]:
-    """사전 적중 → (유형 · 법 축) 쌍 — 유형은 인용에서(`_hit_types` 와 같은 규칙 · D-282) · 법 축은 그 인용의 법. 법별 노드가 이미 보낸 법 것만 남겼다."""
+def _cells_of(
+    basis: Iterable[str], violation_type: str | None
+) -> list[tuple[Violation, str | None]]:
+    """사전 항목 · 적중 하나의 (유형 · 법 축) 쌍 — 유형은 인용에서(`_hit_types` 와 같은 규칙 · D-282) · 법 축은 그 인용의 법 (`_hit_cells` · `entry_cell` 공통 · D-99)."""
     out: list[tuple[Violation, str | None]] = []
-    for h in hits:
-        typed = False
-        for c in h.basis:
-            t_ = statute.type_of(c)
-            if t_ and t_ in Violation.__members__:
-                out.append((Violation(t_), statute.law_of(c)))
-                typed = True
-        if not typed and h.violation_type and h.violation_type in Violation.__members__:
-            axes = {statute.law_of(c) for c in h.basis} or {None}
-            out.extend((Violation(h.violation_type), ax) for ax in axes)
+    basis = tuple(basis)
+    typed = False
+    for c in basis:
+        t_ = statute.type_of(c)
+        if t_ and t_ in Violation.__members__:
+            out.append((Violation(t_), statute.law_of(c)))
+            typed = True
+    if not typed and violation_type and violation_type in Violation.__members__:
+        axes = {statute.law_of(c) for c in basis} or {None}
+        out.extend((Violation(violation_type), ax) for ax in axes)
     return out
+
+
+def _hit_cells(hits: Iterable[DictHit]) -> list[tuple[Violation, str | None]]:
+    """사전 적중 → (유형 · 법 축) 쌍. 법별 노드가 이미 보낸 법 것만 남겼다."""
+    return [c for h in hits for c in _cells_of(h.basis, h.violation_type)]
+
+
+def entry_cell(e: dm.Entry) -> Infeasibility | None:
+    """사전 항목 하나의 불가 사유 칸 — 적중과 같은 조회(`infeasibility_of`) · 비방의 낱말 규칙은 항목 글자로 본다(근사 · 보충 15 결정 3 측정용)."""
+    return infeasibility_of(_cells_of(e.basis, e.violation_type), e.term)
+
+
+#: 🆕 2026-10-18 (D-348 보충 15 결정 3 · 보충 6 결정 7 · **측정 전용**) — 사전 판. None = 원래 사전 ·
+#:    「c_only」 = 단독판정 항목 중 칸이 C 인 것만 · 자격 없는 항목 없음(좁히기 뒤의 사전을 흉내 낸다).
+#:    끄고 켜는 것은 평가 도구뿐이다(`scripts/eval_graph.py --dict-view`) — 앱은 부르지 않는다 · 봉인 회차에서는 쓰지 않는다.
+#:    🚨 근사 — 항목 칸은 항목의 인용으로만 본다(전제마다 다른 C — 건기식 인정 전제의 질병 표현 등 — 는 가르지 않는다)
+_DICT_VIEW: str | None = None
+DICT_VIEWS = ("c_only",)
+
+
+def set_dict_view(view: str) -> None:
+    """이 프로세스의 사전 판을 바꾼다 — **평가 도구만** 부른다. 모르는 판은 멈춘다 (D-220)."""
+    global _DICT_VIEW  # noqa: PLW0603 — 프로세스 단위 스위치다(`disable_encoder_filter` 와 같은 모양)
+    if view not in DICT_VIEWS:
+        raise ValueError(f"🔴 모르는 사전 판 {view!r} — {DICT_VIEWS}")
+    _DICT_VIEW = view
+
+
+def _viewed(entries: list[dm.Entry], weak: list[dm.Entry]) -> tuple[list[dm.Entry], list[dm.Entry]]:
+    if _DICT_VIEW is None:
+        return entries, weak
+    return [e for e in entries if entry_cell(e) is Infeasibility.C], []
 
 
 def _basis_cells(basis: Iterable[EncoderBasis]) -> list[tuple[Violation, str | None]]:
