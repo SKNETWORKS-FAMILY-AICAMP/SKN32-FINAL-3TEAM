@@ -15,8 +15,8 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
-from app import encoder, reasons
-from app.contracts import LAW_VERSION_UNKNOWN
+from app import encoder, factcheck, reasons
+from app.contracts import LAW_VERSION_UNKNOWN, fact_false
 
 TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates"
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
@@ -60,6 +60,20 @@ templates.env.globals["ENC_DIFFERS_MARK"] = reasons.ENC_DIFFERS_MARK
 # 🆕 2026-10-15 (D-346 결정 6 · D-340 결정 5) — 후보 순서 · 대표 표지 · 추정 위험도 글자. 규칙 · 글자는 `app/reasons.py` 한 곳
 templates.env.filters["ordered_candidates"] = reasons.ordered_candidates
 templates.env.filters["estimate_text"] = reasons.estimate_text
+# 🆕 2026-10-16 (D-348 보충 2 결정 10) — 인코더 하한의 근거(대표 한 줄 + 나머지). 규칙 · 글자는 `app/reasons.py` 한 곳
+templates.env.filters["encoder_basis_view"] = reasons.encoder_basis_view
+# 🆕 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반 문장의 결론 한 줄. 규칙(`contracts.is_conditional`) · 글자는 `app/reasons.py` 한 곳
+templates.env.filters["conditional_text"] = reasons.conditional_text
+#: 🆕 2026-10-16 (D-348 보충 5) — 질문이 달린 문장(조건부 위반 · 인코더 쪽 보류 + 분기)의 결론 한 줄 · 질문 칸을 그릴지
+templates.env.filters["question_text"] = reasons.question_text
+#: 🆕 2026-10-17 (D-348 보충 5 결정 5) — 사실이 거짓으로 확정된 문장인가(할 일 줄을 「고치거나 빼기」로) · 정의는 계약 한 곳
+templates.env.filters["fact_false"] = fact_false
+templates.env.globals["FACT_FALSE_TODO"] = reasons.FACT_FALSE_TODO
+#: 🆕 2026-10-17 (D-348 보충 6 결정 8) — 일반상품 안내 두 줄(문안 초안)
+templates.env.filters["general_goods_notes"] = reasons.general_goods_notes
+templates.env.filters["slander_note"] = reasons.slander_note  # 🆕 2026-10-17 (D-348 보충 11)
+#: 🆕 2026-10-17 (보충 5 결정 5 의 집행 꼴) — 종류별 질문 한 줄(승인 전에는 공통 질문)
+templates.env.filters["fact_question"] = factcheck.fact_question
 templates.env.globals["REPRESENTATIVE_MARK"] = reasons.REPRESENTATIVE_MARK
 templates.env.globals["ENC_REMAINS_MARK"] = reasons.ENC_REMAINS_MARK
 templates.env.globals["NOTE_UNJUDGED_MARK"] = (

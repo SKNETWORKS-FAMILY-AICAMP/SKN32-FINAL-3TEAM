@@ -23,7 +23,7 @@ from app.contracts import (
     Violation,
 )
 from app.graph import (
-    INFEASIBILITY_OF,
+    INFEASIBILITY_CELL,
     DictHit,
     DictScan,
     LawResult,
@@ -100,8 +100,12 @@ def test_사유가_여럿이면_더_막힌_쪽이다() -> None:
 
 @pytest.mark.gate
 def test_불가_사유가_없는_유형은_확정하지_않는다() -> None:
-    """🔄 2026-10-01 (D-308 ⑨) — 표에 없는 유형은 보류다(D-273). 남은 하나는 뒷광고 — D-255 범위 밖이라 일부러 뺐다."""
-    assert set(Violation) - set(INFEASIBILITY_OF) == {Violation.추천_보증_뒷광고}
+    """🔄 2026-10-01 (D-308 ⑨) — 표에 없는 유형은 보류다(D-273). 뒷광고 — D-255 범위 밖이라 일부러 뺐다.
+    🔄 2026-10-17 (D-348 보충 6 결정 1 · 보충 7 결정 10) — 표는 (유형 × 법 축) 칸이다 · 실증책임_위반도 칸이 없다(대응표 칸 없음)."""
+    assert set(Violation) - {v for v, _ in INFEASIBILITY_CELL} == {
+        Violation.추천_보증_뒷광고,
+        Violation.실증책임_위반,
+    }
     # 인용이 유형을 못 주면(식품 9호) 사전 칸의 유형을 쓴다 — 뒷광고는 인용으로 갈 호가 없다(D-255 범위 밖)
     h = DictHit("체험", "추천_보증_뒷광고", ("013094:제8조제1항제9호",), (0, 2))
     s = _one(_state("체험 후기", [h]))

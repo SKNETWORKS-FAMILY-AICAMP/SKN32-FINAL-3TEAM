@@ -295,17 +295,51 @@ class EvidenceArticle(BaseModel):
     doc_title: str | None = None
 
 
+#: 🆕 2026-10-16 (D-348 결정 5 · 보충 2 결정 5) — **인코더 하한을 기록에 들이는 상한**(신뢰 층). 지금은 R1 층뿐이다 —
+#:    「위반이라면 적어도 R1」은 유형이 틀려도 참이고 그 문장이 주장이 아닐 때만 틀린다(D-273). R2 이상 층(유형을 믿을 수 있어야 한다)이
+#:    판정되면 그 결정으로 올린다. 🔴 저장의 CHECK 가 같은 수를 든다(`app/models.py` `ck_judgment_encoder_max` · D-99)
+ENCODER_RECORD_MAX = Risk.R1
+
+
+class EncoderBasis(BaseModel):
+    """인코더 하한의 **근거 하나** — 어느 분기 · 어느 유형 · 대응표의 어느 호 · 그 유형의 하한 (🆕 2026-10-16 · D-348 보충 2 결정 2 · 10).
+
+    ★ 위험도가 **자기 근거를 갖는다** — 사전 하한(`floor`)의 근거가 `evidence` 이듯 인코더 하한(`encoder`)의 근거가 이것이다.
+       표시용 AI 추정 유형(`encoder_candidates` · 판정 아님 · D-323)과 칸을 가른다 — 기록 판정의 후보는 「모름」 입력의 것이고
+       인코더 하한은 분기(전제마다의 품목 입력)에서 온다. 둘을 섞으면 값과 근거가 다른 입력에서 온다(10-16 결함 · 결정 10).
+    🚨 「이 유형이라면 이 조항」이다 — 이 문구에서 찾은 조문이 아니다(`EvidenceArticle.basis` 는 거짓 그대로).
+    """
+
+    #: 그 하한을 낸 전제(분기). 품목을 아는 한 전제 판정이면 그 전제다
+    premise: Premise
+    violation: Violation
+    #: 전제가 옮긴 후보면 원래 유형 (`EncoderTypeCandidate.moved_from` 과 같다)
+    moved_from: Violation | None = None
+    #: 그 유형 · 그 전제의 제재표 하한(R1 이상 · D-273) — 기록에 든 값(`RiskAssessment.encoder`)은 신뢰 층 상한으로 깎인 값이다
+    floor: Risk
+    articles: list[EvidenceArticle] = Field(..., min_length=1)
+
+
 class RiskAssessment(BaseModel):
-    """D-09 래칫 — `final = max(코드 하한, 인코더 예측)`.
+    """D-09 래칫 — `final = max(코드 하한, 인코더 하한)`.
 
     🚨 **인코더는 내릴 수 없다.** 코드가 보류면 인코더가 못 뒤집는다(단조 규칙).
     🔴 상향(`final > floor`)에는 `evidence_span` 이 반드시 붙는다 (D-131).
        ⛔ 이 규칙이 DB 에서는 널로 우회되고 있었다 — 마이그레이션 0006 이 막았다.
           계약도 같은 조건을 건다. 두 곳이 다르면 늦게 터진다.
+    🔄 2026-10-16 (D-348 보충 2 결정 1 · 7) — **사전 하한과 인코더 하한은 칸이 다르다.** `floor` 는 사전 하한(재료 · 뜻 그대로 · D-313 결정 3)
+       이고 `encoder` 는 인코더 하한(인코더 유형 + 전제 → 대응표의 호 → 서명된 제재표)이다. 인코더 하한까지 올리는 것은 근거 스팬
+       대신 **호 근거**로 선다 — 문장의 인코더 후보 참조 조항(`SentenceJudgment._encoder_risk_has_basis`). 그 위로 올리는 것은
+       종전대로 근거 스팬이 필요하다. 인코더 하한은 `ENCODER_RECORD_MAX` 를 넘지 못한다.
     """
 
-    floor: Risk | None = None  # 코드 하한 (D-09 · D-130)
-    encoder: Risk | None = None  # 인코더 예측
+    floor: Risk | None = None  # 사전(코드) 하한 (D-09 · D-130 · D-313 결정 3)
+    #: 🔄 2026-10-16 (D-348 보충 2) — **인코더 하한**(기록에 들인 값 · 신뢰 층 상한 이하). 종전 뜻 「인코더 예측」을 대신한다 — 값을 내는 곳이
+    #:    없던 칸이다. 화면은 「AI 추정 · 판정 아님」 표지로 보인다. 근거는 문장의 인코더 후보 참조 조항(대응표의 호)이다
+    encoder: Risk | None = None
+    #: 🆕 2026-10-16 (D-348 보충 2 결정 10) — **인코더 하한의 근거**(분기 · 유형 · 호 · 하한). 인코더 하한이 있으면 반드시 있고 없으면 비어 있다.
+    #:    여러 유형 · 같은 등급의 여러 분기면 전부 싣는다(화면은 대표 한 줄 + 나머지 · `app/reasons.py` `encoder_basis_view`)
+    encoder_basis: list[EncoderBasis] = Field(default_factory=list)
     final: Risk | None = None
     evidence_span: Span | None = None
     #: 🆕 2026-10-01 (D-310 개정 (다)) **가능 상한** — 하한은 「확실한 최소」다. 목(별표1)을 못 맞혀 하한이 「그 밖에 R1」로 떨어진
@@ -317,23 +351,43 @@ class RiskAssessment(BaseModel):
 
     @model_validator(mode="after")
     def _ratchet(self) -> RiskAssessment:
-        if self.final is None:
-            return self
-        if self.floor is None:
+        # 🆕 2026-10-16 (D-348 보충 2 결정 5) — 인코더 하한은 신뢰 층 상한을 넘지 못한다
+        if self.encoder is not None and self.encoder.level > ENCODER_RECORD_MAX.level:
             raise ValueError(
-                "최종 위험도를 적으려면 코드 하한이 있어야 한다 — "
+                f"인코더 하한 {self.encoder.value} 이 기록 상한 {ENCODER_RECORD_MAX.value} 을 넘는다 — "
+                "R2 이상은 유형을 믿을 수 있어야 한다 (D-348 결정 5)"
+            )
+        # 🆕 2026-10-16 (D-348 보충 2 결정 10) — 인코더 하한과 그 근거는 함께 있거나 함께 없다 (D-224 · 근거 없는 등급을 내지 않는다)
+        if (self.encoder is None) != (not self.encoder_basis):
+            raise ValueError(
+                "인코더 하한과 그 근거(encoder_basis)는 함께 있거나 함께 없다 (D-348 보충 2 결정 10 · D-224)"
+            )
+        if self.encoder_basis and any(b.floor.level < Risk.R1.level for b in self.encoder_basis):
+            raise ValueError("인코더 하한의 근거에 R0 하한이 있다 — 위반이라면 R1 이상이다 (D-273)")
+        if self.final is None:
+            if self.encoder is not None:
+                raise ValueError(
+                    "인코더 하한을 적었는데 최종 위험도가 없다 — 합치지 않았다 (D-348 결정 4)"
+                )
+            return self
+        if self.floor is None and self.encoder is None:
+            raise ValueError(
+                "최종 위험도를 적으려면 하한(사전 또는 인코더)이 있어야 한다 — "
                 "상향의 정의가 「하한보다 높다」인데 하한이 없으면 상향이 정의되지 않는다 (D-09)"
             )
         # 🆕 2026-09-21 (전수 재검토) — ⛔ 위 docstring 이 「인코더는 내릴 수 없다」고 적었는데 `floor=R3 · final=R0` 이
         #    검증을 지났다. 래칫(D-09 · max)의 뜻 그대로 — 최종은 하한보다 낮을 수 없다.
-        if self.final.level < self.floor.level:
-            raise ValueError(
-                f"최종 위험도가 코드 하한보다 낮다 — floor={self.floor.value} final={self.final.value} (D-09 래칫)"
-            )
-        if self.final.level > self.floor.level and self.evidence_span is None:
+        for name, low in (("코드 하한", self.floor), ("인코더 하한", self.encoder)):
+            if low is not None and self.final.level < low.level:
+                raise ValueError(
+                    f"최종 위험도가 {name}보다 낮다 — {name}={low.value} final={self.final.value} (D-09 래칫)"
+                )
+        base = max((r for r in (self.floor, self.encoder) if r is not None), key=lambda r: r.level)
+        if self.final.level > base.level and self.evidence_span is None:
             raise ValueError(
                 "하한 위로 올리려면 근거 스팬이 필요하다 (D-131) — "
-                f"floor={self.floor.value} final={self.final.value}"
+                f"floor={self.floor.value if self.floor else None} encoder="
+                f"{self.encoder.value if self.encoder else None} final={self.final.value}"
             )
         return self
 
@@ -394,6 +448,37 @@ class FactKind(enum.StrEnum):
     수상_상장 = "수상_상장"
     인증 = "인증"
     원재료 = "원재료"
+    #: 🆕 2026-10-16 (D-348 보충 3 결정 5) — 표시광고법 3조①1호로 의결된 사실 주장(원장 10-14(B) ⑤) · 건기식 인정 전제의 질병 문구
+    특허 = "특허"
+    등급 = "등급"
+    자격 = "자격"
+    #: 건기식 인정 전제에서 질병 문구가 **인정받은 기능성 그대로인가**(질병 발생 위험 감소 등 · [별표 1] 1호 목 나 · 다가 아님) — 결정 2
+    인정_기능성 = "인정_기능성"
+    #: 🆕 2026-10-17 (D-348 보충 6 결정 3 · 4 · 보충 7 결정 5 · 6 · 7) — **유형에 딸린** 사실 종류(낱말이 아니라 인코더 근거 유형이 묻게 한다)
+    #:    부당 비교 — 비교 대상 · 기준을 밝혔나(표시광고법 시행령 3③ · 식품 [별표 1] 7.가 · 화장품 [별표 5] 2.바 앞부분)
+    비교_기준 = "비교_기준"
+    #: 비방 ② — 경쟁 제품의 불리한 사실만 고른 게 아닌가(같은 광고에 장점 · 비교 조건을 함께 밝혔나 · 표시광고법 시행령 3④)
+    비방_선별 = "비방_선별"
+    #: 소비자 기만(은폐 · 누락) — 같은 광고에 조건(제한 · 부대비용 등)을 함께 밝혔나
+    조건_고지 = "조건_고지"
+    #: 소비자 기만(가짜 후기) — 실존 소비자가 실제로 사용하고 쓴 후기인가(추천 · 보증 심사지침 35032)
+    후기_실재 = "후기_실재"
+    #: 무첨가 — 고시의 표시 조건(식품등의 표시기준 36814 별지 1.아.3)을 모두 지켰나(식품 [별표 1] 7.나)
+    무첨가_조건 = "무첨가_조건"
+
+
+class Answer(enum.StrEnum):
+    """사용자의 답 셋 (🆕 2026-10-16 · D-348 보충 5 · 보충 3 결정 2 의 「해당 없음」 집행).
+
+    ★ 예 = 사실이 참이다 · 실증 자료가 있다 / 아니오 = 사실이 거짓이다 · 실증 자료가 없다 /
+       해당없음 = 이 문장은 그 주장을 하지 않는다(질문이 엉뚱하다 — 그 분기를 걷는다).
+    🔴 「예」 · 「아니오」는 **그 주장이 이 문장에 있다는 것까지** 사용자가 확인한 답이다 — 「해당없음」을 고르지 않았다(보충 5).
+    🚨 검증이 아니다 — 책임은 답한 사람에게 있다(`UserFact` · `UserSubst`).
+    """
+
+    예 = "예"
+    아니오 = "아니오"
+    해당없음 = "해당없음"
 
 
 class FactBranch(BaseModel):
@@ -454,6 +539,35 @@ class EncoderTypeCandidate(BaseModel):
     estimate: RiskEstimate | None = None
 
 
+class UserFact(BaseModel):
+    """**사용자가 확인한 사실** 하나 (🆕 2026-10-16 · D-348 보충 3 결정 4 · (가) 출처를 남기고 반영).
+
+    ★ 결과 화면의 사실 확인 분기에서 사용자가 고른 것 — 재검수 요청에 실려 오고, 그 문장의 판정을 그 사실로 다시 낸다.
+       책임은 사용자에게 있다 — 그래서 판정된 문장에 이 칸을 그대로 남긴다(`SentenceJudgment.user_facts` · 저장 `evidence.user_fact`).
+    🚨 **검증이 아니다** — 시스템은 증빙을 대조하지 않는다(D-263 ⑥ 의 「검증된 분기」와 다르다). 화면은 「사용자 확인 전제」로 그린다(배지 ⬜).
+    """
+
+    #: 그 사실 주장이 있는 문장 글자 — 재검수의 문장과 정규화(공백 · NFKC)로 맞춘다. 문장 번호는 재분할로 바뀔 수 있어 쓰지 않는다
+    text: str = Field(..., min_length=1)
+    kind: FactKind
+    #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · 예 = 참 · 아니오 = 거짓 · 해당없음 = 이 문장은 그 사실을 주장하지 않는다(종전 `true: bool`)
+    answer: Answer
+
+
+class UserSubst(BaseModel):
+    """**사용자가 답한 실증 여부** 하나 (🆕 2026-10-16 · D-348 보충 4 결정 3 · `UserFact` 의 실증 판).
+
+    ★ 조건부 위반 문장(보류 · 실증 분기)에서 사용자가 「실증 자료가 있다 / 없다」를 고른 것 — 재검수 요청에 실려 오고 그 문장에만 반영한다.
+    🚨 **검증이 아니다** — 자료를 대조하지 않는다. 책임은 사용자에게 있다 — 판정된 문장에 이 칸을 남긴다(`SentenceJudgment.user_subst`).
+    ⛔ 특허 · 수상 · 인증은 실증 자료가 아니다(D-228) — 그 사실은 `UserFact` 로 답한다.
+    """
+
+    #: 그 주장이 있는 문장 글자 — `UserFact.text` 와 같은 규칙(정규화로 맞춘다 · 문장 번호는 쓰지 않는다)
+    text: str = Field(..., min_length=1)
+    #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · 예 = 자료 있음 · 아니오 = 자료 없음 · 해당없음 = 실증이 필요한 주장이 아니다(종전 `has_evidence: bool`)
+    answer: Answer
+
+
 class SentenceJudgment(BaseModel):
     """문장 하나의 판정. 상태 스키마 「판정 누적」이 그대로 이 모양이다."""
 
@@ -484,6 +598,11 @@ class SentenceJudgment(BaseModel):
     substantiation: SubstBranch | None = None
     #: 🆕 2026-10-01 **사실 확인 분기** — B 에만 (D-308 ④) · 실증 분기와 **다른 칸**이다
     fact_check: FactBranch | None = None
+    #: 🆕 2026-10-16 (D-348 보충 3 결정 4) — 이 문장의 판정이 **사용자가 확인한 사실**로 정해졌다(출처 · 책임). 있으면 확정이고 사실 확인 분기는 없다
+    #: 🔄 2026-10-16 (보충 4 「이어 묻기」) — 답한 사실이 여럿일 수 있다(특허 · 인증 …) · 하나에 답했고 조건이 남았으면 조건부 보류에도 실린다
+    user_facts: list[UserFact] = Field(default_factory=list)
+    #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 이 문장의 판정이 **사용자가 답한 실증 여부**로 정해졌다(출처 · 책임). 있으면 확정이다
+    user_subst: UserSubst | None = None
 
     @model_validator(mode="after")
     def _hold_reason_iff_hold(self) -> SentenceJudgment:
@@ -532,6 +651,25 @@ class SentenceJudgment(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _encoder_risk_has_basis(self) -> SentenceJudgment:
+        # 🆕 2026-10-16 (D-348 보충 2 결정 2 · 3) — 인코더 하한은 **보류 문장에만** · **근거 호가 있을 때만** 적는다.
+        #    근거 = 인코더 후보의 참조 조항(대응표의 호 · D-327). 근거 없는 등급을 내지 않는다 (D-224 · D-220).
+        #    ⛔ 확정 · 판정 대상 아님에는 적지 않는다 — 사전 확정과 인코더 다른 유형은 합치지 않는다(D-340 결정 3) ·
+        #       주장이 아닌 문장은 R0 이다(D-275). 확정에 들이는 층(신뢰 규칙)이 판정되면 이 규칙을 그 결정으로 넓힌다
+        if self.risk.encoder is None:
+            return self
+        if self.verdict is not Verdict.hold or self.not_claim:
+            raise ValueError(
+                f"인코더 하한은 보류 문장에만 적는다 — {self.verdict.value} (D-348 보충 2 결정 3)"
+            )
+        # 🔄 2026-10-16 (결정 10) — 근거는 위험도 자신이 든다(`RiskAssessment.encoder_basis`) · 표시용 후보(`encoder_candidates`)를 보지 않는다
+        if not self.risk.encoder_basis:
+            raise ValueError(
+                "인코더 하한의 근거 호(encoder_basis)가 없다 (D-348 보충 2 결정 2 · 10)"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _subst_is_for_B(self) -> SentenceJudgment:
         # 🆕 D-263 ④ · D-61 — 실증 분기는 **B 실증형에만** 붙는다. C 절대형은 선택지가 없다 (D-263 ⑤).
         #    ★ 2판의 `condition=B ⇔ substantiation` 을 불가 사유로 대신한다 — 조건 칸은 응답에 싣지 않는다 (D-275).
@@ -541,6 +679,18 @@ class SentenceJudgment(BaseModel):
             raise ValueError(
                 f"실증 분기는 B 실증형에만 붙는다 — 불가 사유 {self.infeasibility} (D-263 ④ · D-61)"
             )
+        # 🔄 2026-10-16 (D-348 보충 4 결정 1) — 확정 문장이거나 **조건부 위반**(실증 여부를 몰라 멈춘 보류 · `premise_unknown`)에 붙는다
+        # 🔄 2026-10-16 (D-348 보충 5) — 또는 **인코더 쪽 판정의 보류**(`low_conf`) — 인코더 판단은 답 없이 확정하지 않는다. 분기만 붙고
+        #    조건부 위반이 아니다(`is_conditional` 은 `premise_unknown` 만)
+        if self.verdict is Verdict.hold and self.hold_reason not in (
+            HoldReason.premise_unknown,
+            HoldReason.low_conf,
+        ):
+            raise ValueError(
+                f"보류 문장의 실증 분기는 조건부 위반(premise_unknown) · 인코더 쪽 보류(low_conf)에만 붙는다 — {self.hold_reason} (D-348 보충 4 · 5)"
+            )
+        if self.verdict not in (Verdict.confirmed, Verdict.hold):
+            raise ValueError(f"실증 분기가 {self.verdict.value} 문장에 붙었다 (D-348 보충 4)")
         # 🚨 실증은 **내리기만** 한다. 실증 전 위험도가 없으면 상한을 잴 수 없다 — 없음을 낮음으로 세지 않는다 (D-72)
         if self.risk.final is None:
             raise ValueError("실증 분기가 있는데 실증 전 위험도가 없다 (D-72)")
@@ -553,14 +703,53 @@ class SentenceJudgment(BaseModel):
 
     @model_validator(mode="after")
     def _fact_is_for_B(self) -> SentenceJudgment:
-        # 🆕 D-308 ④ — 사실 확인 분기도 **B 에만** · 확인 전 위험도가 있어야 · 상한은 그 아래 (`_subst_is_for_B` 와 같은 규칙)
+        # 🔄 2026-10-16 (D-348 보충 3 결정 1 · 5) — 사실 확인 분기는 **사실을 몰라 멈춘 보류**(`premise_unknown`)에 붙는다.
+        #    ⛔ 종전 「확정 B 에만」(D-308 ④)은 사실을 모르는데 위반을 확정한 꼴이었다 — 사실이 참이면 위반이 아니다.
+        #    확인 전 위험도(가장 나쁜 경우)가 있어야 · 상한은 그 아래 (`_subst_is_for_B` 와 같은 규칙) · 불가 사유는 묻지 않는다(질병 C 도 붙는다)
+        # 🔄 2026-10-16 (보충 4 「이어 묻기」) — 답한 사실은 확정 문장에, 또는 **남은 조건이 있는 조건부 보류**(다음 사실 · 실증)에 실린다.
+        #    같은 종류를 다시 묻지 않는다 · 같은 종류에 두 답이 없다
+        if self.user_facts:
+            kinds = [f.kind for f in self.user_facts]
+            if len(set(kinds)) != len(kinds):
+                raise ValueError(
+                    f"같은 사실 종류에 답이 둘이다 — {[k.value for k in kinds]} (보충 4)"
+                )
+            pending = (
+                self.verdict is Verdict.hold
+                and self.hold_reason is HoldReason.premise_unknown
+                and (self.fact_check is not None or self.substantiation is not None)
+            )
+            # 🔄 2026-10-16 (D-348 보충 5) — 인코더 쪽 보류(`low_conf`)에도 실린다 — 답 없이 확정하지 않는 쪽의 출처(남은 분기 · 해당없음 · ⬜ 아니오)
+            enc = self.verdict is Verdict.hold and self.hold_reason is HoldReason.low_conf
+            if self.verdict is not Verdict.confirmed and not pending and not enc:
+                raise ValueError(
+                    "사용자 확인 사실이 실린 문장은 확정 · 남은 조건이 있는 조건부 보류 · 인코더 쪽 보류다 (D-348 보충 3 결정 4 · 보충 4 · 5)"
+                )
+            if self.fact_check is not None and self.fact_check.kind in kinds:
+                raise ValueError(
+                    f"이미 답한 사실을 다시 묻는다 — {self.fact_check.kind.value} (보충 4)"
+                )
+        if self.user_subst is not None and (
+            self.fact_check is not None
+            or not (
+                self.verdict is Verdict.confirmed
+                or (self.verdict is Verdict.hold and self.hold_reason is HoldReason.low_conf)
+            )
+        ):
+            raise ValueError(
+                "사용자가 답한 실증 여부가 실린 문장은 확정이거나 인코더 쪽 보류이고 사실 확인 분기가 없다 (D-348 보충 4 결정 3 · 보충 5)"
+            )
         if self.fact_check is None:
             return self
         if self.not_claim:
             raise ValueError("판정 대상 아님 문장에 사실 확인 분기가 붙었다 (D-275)")
-        if self.infeasibility is not Infeasibility.B:
+        # 🔄 2026-10-16 (D-348 보충 5) — 인코더 쪽 보류(`low_conf`)에도 붙는다(조건부가 아니다 · 실증 분기와 같은 규칙)
+        if self.verdict is not Verdict.hold or self.hold_reason not in (
+            HoldReason.premise_unknown,
+            HoldReason.low_conf,
+        ):
             raise ValueError(
-                f"사실 확인 분기는 B 에만 붙는다 — 불가 사유 {self.infeasibility} (D-308)"
+                "사실 확인 분기는 사실을 몰라 멈춘 보류(premise_unknown) · 인코더 쪽 보류(low_conf)에 붙는다 (D-348 보충 3 결정 1 · 보충 5)"
             )
         if self.risk.final is None:
             raise ValueError("사실 확인 분기가 있는데 확인 전 위험도가 없다 (D-72)")
@@ -640,6 +829,11 @@ class ProductContext(BaseModel):
     #:   이지 자격이 아니다(함량 30% · 안전관리인증업소 제조가 요건) — D-228 의 특허와 같은 어법.
     has_recognized_function: bool = False
     recognition_no: str | None = None
+    #: 🆕 2026-10-16 (D-348 보충 3 결정 4) — 사용자가 확인한 사실(수상 · 인증 · 원재료 …). 제품에 관한 사실이라 여기 싣는다
+    #:    (`has_recognized_function` 과 같은 축 — 「이 문구를 쓸 자격 · 근거가 있는가」). 비면 사실을 모른다 = 가장 나쁜 쪽(D-263 ①)
+    facts: list[UserFact] = Field(default_factory=list)
+    #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부(문장 단위). 비면 모른다 = 가장 나쁜 쪽(D-263 ①)
+    substs: list[UserSubst] = Field(default_factory=list)
 
 
 class Timing(BaseModel):
@@ -755,9 +949,12 @@ class JudgeResponse(BaseModel):
         #    사용자가 받는 것 = **뺄 구간 · 실증 자료 종류 · 내려갈 수 있는 등급** (D-265 표) — 없으면 지시가 빈 카드다.
         if self.outcome is not Outcome.guidance:
             return self
-        if not self.sentences or any(s.verdict is not Verdict.confirmed for s in self.sentences):
+        # 🔄 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반(답하면 확정되는 보류)은 지시를 막지 않는다 · 그 밖의 확정 아님은 보류다
+        if not self.sentences or any(
+            s.verdict is not Verdict.confirmed and not is_conditional(s) for s in self.sentences
+        ):
             raise ValueError(
-                "outcome=guidance 인데 확정이 아닌 문장이 있거나 문장이 없다 — 보류다 (D-268)"
+                "outcome=guidance 인데 확정도 조건부 위반도 아닌 문장이 있거나 문장이 없다 — 보류다 (D-268)"
             )
         reasons = {s.infeasibility for s in self.sentences if s.infeasibility}
         if reasons & {Infeasibility.A, Infeasibility.C}:
@@ -765,7 +962,13 @@ class JudgeResponse(BaseModel):
         subst = [s for s in self.sentences if s.infeasibility is Infeasibility.B and s.violations]
         if not subst:
             raise ValueError("outcome=guidance 인데 확정된 B 실증형 위반이 없다 (D-268)")
-        thin = [s.sent_id for s in subst if s.substantiation is None or not s.spans]
+        # 🔄 2026-10-17 (D-348 보충 5 결정 5 · 1-b) — 사실이 거짓으로 확정된 문장(사용자 「아니오」)은 실증으로 풀리지 않는다 —
+        #    실증 분기 없이 지시(「사실과 다른 표시 — 고치거나 빼기」)다. 뺄 구간은 그대로 필요하다
+        thin = [
+            s.sent_id
+            for s in subst
+            if (s.substantiation is None and not fact_false(s)) or not s.spans
+        ]
         if thin:
             raise ValueError(
                 f"지시 문장에 실증 분기나 뺄 구간이 없다 — {thin[:5]} (D-268 · D-265 · D-278)"
@@ -803,7 +1006,11 @@ class JudgeResponse(BaseModel):
         #       `app/graph.py` `premise_branches` 가 만들지만(D-319) DB 가 없거나 기준 문안이 비면 분기를 내지 않는다 —
         #       지금 걸면 그 응답이 깨진다 (D-192).
         premise_holds = {HoldReason.cat_unknown, HoldReason.premise_unknown}
-        if any(s.hold_reason in premise_holds for s in self.sentences) and not self.branches:
+        # 🔄 2026-10-16 (D-348 보충 3) — 사실을 몰라 멈춘 문장은 그 문장의 사실 확인 분기가 선택지다(품목 분기가 없어도 된다)
+        if (
+            any(s.hold_reason in premise_holds and not _own_choice(s) for s in self.sentences)
+            and not self.branches
+        ):
             raise ValueError(
                 "전제를 몰라 보류했는데 분기가 없다 — 선택지를 주지 않았다 (D-263 ② · D-229 ⑥)"
             )
@@ -854,6 +1061,45 @@ class JudgeResponse(BaseModel):
                 "표현이 아니라 자격의 문제라 재생성이 같은 위반을 반복한다"
             )
         return self
+
+
+def _own_choice(s: SentenceJudgment) -> bool:
+    """문장 자신이 선택지(사실 확인 분기 · 실증 분기)를 든 보류인가 — 품목 분기가 없어도 된다 (D-348 보충 3 · 4)."""
+    return s.fact_check is not None or s.substantiation is not None
+
+
+def fact_false(s: SentenceJudgment) -> bool:
+    """사용자가 사실을 **거짓**으로 답한 문장인가 (🆕 2026-10-17 · D-348 보충 5 결정 5) — 그 위반은 실증으로 풀리지 않는다(지시 문안 · 종착 검증이 쓴다 · D-99)."""
+    return any(f.answer is Answer.아니오 for f in s.user_facts)
+
+
+def encoder_judged(s: SentenceJudgment) -> bool:
+    """**인코더 판정**으로 확정된 위반인가 — 사전 근거(`basis`)도 사용자 답도 없는 확정 위반 (🆕 2026-10-17 · D-348 보충 6 결정 5).
+
+    인코더 쪽 절대형(C) 위반이 이 꼴이다. 화면 · 기록이 「AI 판정 · 신뢰 판단 대기」 출처를 가릴 때 쓴다(정의는 여기 한 곳 · D-99).
+    """
+    return (
+        s.verdict is Verdict.confirmed
+        and bool(s.violations)
+        and not any(e.basis for e in s.evidence)
+        and not s.user_facts
+        and s.user_subst is None
+    )
+
+
+def is_conditional(s: SentenceJudgment) -> bool:
+    """**조건부 위반** — 글 밖 사실(사실 · 실증 여부)을 몰라 멈춘 보류 ∧ 그 선택지가 문장에 있다 ∧ 가장 나쁜 경우의 위험도가 섰다
+    (🆕 2026-10-16 · D-348 보충 4 결정 2).
+
+    ★ 판정은 끝났다 — 답하면 확정된다. 확신 부족 보류(`low_conf`)와 다른 분류다(평가 · 화면 · 종착이 이 함수 하나를 쓴다 · D-99).
+    🚨 위험도가 없으면 조건부 위반이 아니다 — 없음을 판정으로 세지 않는다 (D-72).
+    """
+    return (
+        s.verdict is Verdict.hold
+        and s.hold_reason is HoldReason.premise_unknown
+        and _own_choice(s)
+        and s.risk.final is not None
+    )
 
 
 def is_pass(s: SentenceJudgment) -> bool:

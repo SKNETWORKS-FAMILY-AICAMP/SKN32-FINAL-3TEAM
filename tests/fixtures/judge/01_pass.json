@@ -14,7 +14,7 @@
       "evidence": [],
       "risk": {
         "floor": "R0",
-        "encoder": "R0",
+        "encoder": null,
         "final": "R0",
         "evidence_span": null
       },
