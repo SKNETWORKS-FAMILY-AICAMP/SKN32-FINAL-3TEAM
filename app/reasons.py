@@ -209,19 +209,51 @@ SLANDER_HOLD_NOTE = "다른 회사 제품을 낮춰 말하는 것으로 읽히�
 _SLANDER_AXES = frozenset({"식품표시광고법", "화장품법"})
 
 
+#: 🆕 2026-10-17 (D-348 보충 15 · 화면 문안 — 확인 대기 · 문안 승인 D-263 ②) — 묻지 않는 조건표 밖 무첨가 문장의 기준 한 줄.
+#:    식품 [별표 1] 7.나 본문과 단서(고시가 정한 원재료 · 성분의 무첨가 표시만 제외) — 설탕 · 나트륨은 고시 36814 별지 1.아.3
+NOFREE_HOLD_NOTE = (
+    "고시가 정한 무첨가 표시(설탕 · 나트륨 무첨가 등)가 아니면, 쓰지 않은 원재료 · 성분을 내세워 "
+    "다른 제품과 다르게 보이게 할 수 없어요 — 문장을 고쳐 주세요"
+)
+_FOOD_AXIS = "식품표시광고법"
+
+
+def _held_unasked(sentence: object) -> list[object]:
+    """주장 ∧ 보류 ∧ 질문 없음인 문장의 인코더 근거 — 아니면 빈 목록 (기준 한 줄 둘이 같이 쓴다 · D-99)."""
+    if getattr(sentence, "not_claim", False) or getattr(sentence, "fact_check", None) is not None:
+        return []
+    v = getattr(sentence, "verdict", None)
+    if v is None or getattr(v, "value", v) != "hold":
+        return []
+    return list(getattr(getattr(sentence, "risk", None), "encoder_basis", None) or [])
+
+
+def nofree_note(sentence: object) -> str:
+    """묻지 않는 조건표 밖 무첨가 문장의 기준 한 줄(보충 15) — 해당이 아니면 빈 글자.
+
+    조건: 주장 ∧ 보류 ∧ 질문 없음 ∧ 인코더 근거에 식품 축의 부당 비교 · 비방 ∧ 조건표 밖 무첨가 꼴(`factcheck.nofree_outside_table`).
+    """
+    basis = _held_unasked(sentence)
+    if not any(
+        b.violation in (Violation.부당_비교광고, Violation.비방광고)
+        and any(LAW_OF_ID.get(a.law_id) == _FOOD_AXIS for a in b.articles)
+        for b in basis
+    ):
+        return ""
+    return (
+        NOFREE_HOLD_NOTE
+        if factcheck.nofree_outside_table(getattr(sentence, "text", "") or "")
+        else ""
+    )
+
+
 def slander_note(sentence: object) -> str:
     """묻지 않는 비방 후보의 기준 한 줄(보충 11) — 해당이 아니면 빈 글자.
 
     조건: 주장 ∧ 보류 ∧ 질문 없음 ∧ 인코더 근거에 식품 · 화장품 축의 비방 ∧ 타사 ∧ 부정 아님 ∧ 비교 · 우월 표지 없음.
     🔴 낱말 규칙은 `app/factcheck.py` 한 곳 · 법 축은 `collect/law_map.py` `LAW_OF_ID` 한 곳 (D-99).
     """
-    if getattr(sentence, "not_claim", False) or getattr(sentence, "fact_check", None) is not None:
-        return ""
-    v = getattr(sentence, "verdict", None)
-    if v is None or getattr(v, "value", v) != "hold":
-        return ""
-    risk = getattr(sentence, "risk", None)
-    basis = getattr(risk, "encoder_basis", None) or []
+    basis = _held_unasked(sentence)
     if not any(
         b.violation is Violation.비방광고
         and any(LAW_OF_ID.get(a.law_id) in _SLANDER_AXES for a in b.articles)
@@ -231,6 +263,8 @@ def slander_note(sentence: object) -> str:
     text = getattr(sentence, "text", "") or ""
     if factcheck.slander_absolute(text) or factcheck.comparison_claim(text):
         return ""
+    if nofree_note(sentence):
+        return ""  # 무첨가 꼴이면 그쪽 기준 한 줄만(보충 15)
     return SLANDER_HOLD_NOTE
 
 
@@ -527,6 +561,15 @@ def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBran
 #: 화장품 전제에서 인코더가 낸 유형 → 우리 라벨 규약의 유형. 골든 화장품 행의 질병 · 건강 기능류 주장은 의약품_오인이다
 #: (화장품 골든 라벨 의약품_오인 296 · 기능성화장품_오인 43 · 질병 표방 0 · 원장 10-14(B) ④). ⛔ 인코더 후보 전용 — 사전 경로(`pm.NO_HF_MISLEAD`)는
 #: 건드리지 않는다. D-336 새 판(품목 입력)이 관문을 넘으면 걷는다
+#: 🔄 2026-10-17 (D-348 보충 15 · D-338 의 법적 근거 줄 · (나) 코퍼스 조문만) — 화장품의 질병 · 건강 기능 주장 → 의약품 오인:
+#:    화장품법 제13조①1호(「의약품으로 잘못 인식할 우려가 있는 표시 또는 광고」) · 시행규칙 [별표 5] 2.가(「의약품으로 잘못 인식할 우려가 있는
+#:    내용, 제품의 명칭 및 효능ㆍ효과 등에 대한 표시ㆍ광고를 하지 말 것」) · 화장품법 제2조1호 단서(「「약사법」 제2조제4호의 의약품에 해당하는
+#:    물품은 제외한다」 — 화장품은 정의상 의약품이 아니다) `[문헌]` · 약사법 원문(의약품 정의)은 코퍼스에 없다 — 인용하지 않는다
+COSMETIC_MOVE_BASIS: tuple[str, ...] = (
+    "화장품법 제13조①1호",
+    "화장품법 시행규칙 [별표 5] 2.가",
+    "화장품법 제2조1호 단서",
+)
 COSMETIC_MOVE: dict[Violation, Violation] = {
     Violation.질병_예방치료_표방: Violation.의약품_오인,
     Violation.건강기능식품_오인: Violation.의약품_오인,

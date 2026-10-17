@@ -2933,6 +2933,17 @@ def _encoder_side(
             )
         ):
             return [FactKind.무첨가_조건]
+        # 🆕 (보충 15) 조건표 밖 무첨가 꼴은 묻지 않는다 — 7.나 단서는 고시가 정한 표시뿐이라 비교 기준 질문이 맞지 않는다 ·
+        #    보류 그대로 + 화면의 기준 한 줄(`reasons.nofree_note`)
+        if (
+            v in (Violation.부당_비교광고, Violation.비방광고)
+            and factcheck.nofree_outside_table(s.text)
+            and any(
+                ax == _FOOD_AX
+                for _, ax in _basis_cells(b for b in s.risk.encoder_basis if b.violation is v)
+            )
+        ):
+            return []
         return factcheck.type_kinds(_ask_as(v))
 
     t_kinds = [
