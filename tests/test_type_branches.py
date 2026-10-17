@@ -185,3 +185,16 @@ def test_검수_화면_틀이_안내_줄과_함께_읽힌다() -> None:
     from app.templating import templates  # noqa: PLC0415
 
     templates.env.get_template("user/review.html")
+
+
+def test_질문은_사실_하나_승인_전에는_공통_질문() -> None:
+    """🆕 2026-10-17 — 질문 초안은 종류마다 한 줄 · 설명은 기준 문안 칸 · 승인 전 화면은 종전 공통 질문."""
+    assert set(fc.FACT_QUESTION_DRAFTS) == set(fc.FACT_TEXT_DRAFTS)
+    assert fc.FACT_QUESTIONS == {}, "🔴 승인 전 질문 표가 채워졌다"
+    assert fc.fact_question(FactKind.비방_선별) == fc.FALLBACK_QUESTION
+    assert (
+        fc.FACT_QUESTION_DRAFTS[FactKind.비방_선별]
+        == "같은 광고에 경쟁 제품의 장점이나 비교 조건도 함께 밝혔나요?"
+    )
+    for q in fc.FACT_QUESTION_DRAFTS.values():
+        assert q.count("?") == 1 and "요" in q, "질문 하나"
