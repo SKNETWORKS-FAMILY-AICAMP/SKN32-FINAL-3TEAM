@@ -2911,6 +2911,13 @@ def _encoder_side(
         #    보류 그대로 + 화면의 기준 한 줄(`reasons.slander_note`). 맞지 않는 질문을 띄우지 않는다(보충 9 결정 1 · 질문은 사실 하나)
         if v is Violation.비방광고 and not factcheck.slander_absolute(s.text):
             return [Violation.부당_비교광고.value] if factcheck.comparison_claim(s.text) else []
+        # 🆕 (보충 13) 조건 고지(표시광고법 제3조①2호 · 은폐 · 축소)는 **표시광고법 축의 기만에만** 묻는다 — 전용법 축(식품 8조①5호 ·
+        #    화장품 13조①4호)의 근거가 있으면 묻지 않는다: 식품 [별표 1] 5(가 ~ 카)에 은폐 · 축소 목이 없고, 「예」가 R0 으로 닫는다(보충 6)
+        if v is Violation.소비자_기만 and any(
+            ax in _SPECIAL_AXES
+            for _, ax in _basis_cells(b for b in s.risk.encoder_basis if b.violation is v)
+        ):
+            return []
         return [v.value]
 
     t_kinds = [
