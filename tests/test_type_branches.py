@@ -1,7 +1,7 @@
 """유형에 딸린 분기 뼈대 — 부당 비교 · 비방 ② · 기만(조건 고지 · 가짜 후기) · 무첨가 (🆕 2026-10-17 · D-348 보충 6 결정 3 · 4 · 보충 7 결정 5 ~ 7).
 
 지키는 것
-  ① 문안이 승인되기 전에는 서지 않는다 — `FACT_TEXTS` 가 비면 유형 분기도 없다 · 초안(`FACT_TEXT_DRAFTS` · `NOFREE_CONDITIONS`)은 판정에 쓰지 않는다
+  ① 문안은 승인본(`docs/ohb/기준문안_초안_2026-10-02.md` §14)과 글자가 같다 — 🔄 2026-10-17 승인(종전 「승인 전에는 서지 않는다」)
   ② 인코더만 잡은 문장 · 그 전제 축의 칸이 B 인 유형만 묻는다 — 「아니오」 → 그 유형으로 확정 위반 · 「해당 없음」 → 걷는다
   ③ 갈래 ① (객관적 근거)이 따로 있는 유형(비방 · 부당 비교)은 사실 갈래가 「예」여도 실증 갈래가 서지 않으면 R0 으로 닫지 않는다
   ④ 갈래 ① 이 없는 유형(기만)은 사실이 전부 「예」면 R0 · 출처
@@ -9,6 +9,8 @@
 """
 
 from __future__ import annotations
+
+import pathlib
 
 import pytest
 
@@ -72,35 +74,47 @@ def _run(
     return got[0] if got else None
 
 
-@pytest.fixture
-def drafts(monkeypatch: pytest.MonkeyPatch) -> None:
-    """🚨 시험에서만 초안을 문안 표에 올린다 — 실제 표는 승인된 줄만 든다(D-263 ②)."""
-    monkeypatch.setattr(fc, "FACT_TEXTS", dict(fc.FACT_TEXT_DRAFTS))
-
-
 def _uf(kind: FactKind, a: Answer, text: str = TEXT) -> UserFact:
     return UserFact(text=text, kind=kind, answer=a)
 
 
-def test_승인_전에는_유형_분기가_서지_않는다() -> None:
-    assert fc.FACT_TEXTS == {}, (
-        "🔴 승인 전 문안 표가 채워졌다 — 승인(D-263 ②) 뒤 이 게이트를 고친다"
-    )
-    assert fc.type_kinds(["비방광고", "부당_비교광고", "소비자_기만"]) == []
-    got = _run(_enc(Premise.일반상품, Violation.비방광고, FAIR4), "일반상품")
-    assert got is None or got.fact_check is None
+DOC = pathlib.Path("docs/ohb/기준문안_초안_2026-10-02.md")
 
 
-def test_초안은_모든_유형_종류를_덮는다() -> None:
+def _sec14() -> str:
+    text = DOC.read_text(encoding="utf-8")
+    return text[text.index("## 14. ") :]
+
+
+def test_문안은_승인본과_글자가_같다() -> None:
+    """🔄 2026-10-17 — 질문 · 기준 문안 · 증빙 · 화면 안내는 정본 §14 와 글자가 같다 (D-99 · D-147 · D-263 ②)."""
+    sec = _sec14()
+    assert set(fc.FACT_QUESTIONS) == set(fc.FACT_TEXTS)
+    for k, q in fc.FACT_QUESTIONS.items():
+        assert f"질문: {q}" in sec, k
+        t = fc.FACT_TEXTS[k]
+        assert f"기준: {t.criteria}" in sec, k
+        assert f"증빙: {' · '.join(t.accepted_evidence)}" in sec, k
+    for line in (
+        reasons.GENERAL_GOODS_RISK_NOTE,
+        reasons.GENERAL_GOODS_UNJUDGEABLE,
+        reasons.SLANDER_HOLD_NOTE,
+        reasons.FACT_FALSE_TODO,
+        reasons.ENCODER_QUESTION_TEXT,
+    ):
+        assert f": {line}" in sec, line
+
+
+def test_유형_종류는_모두_문안이_있다() -> None:
     for kinds in fc.TYPE_KINDS.values():
-        assert all(k in fc.FACT_TEXT_DRAFTS for k in kinds)
-    assert FactKind.후기_실재 in fc.FACT_TEXT_DRAFTS and FactKind.무첨가_조건 in fc.FACT_TEXT_DRAFTS
+        assert all(k in fc.FACT_TEXTS for k in kinds)
+    assert FactKind.후기_실재 in fc.FACT_TEXTS and FactKind.무첨가_조건 in fc.FACT_TEXTS
     assert all(len(c) >= 3 for c in fc.NOFREE_CONDITIONS.values()), (
         "고시 원문 조건(36814 별지 1.아.3)"
     )
 
 
-def test_일반상품_비방은_선별을_묻는다(drafts: None) -> None:
+def test_일반상품_비방은_선별을_묻는다() -> None:
     got = _run(_enc(Premise.일반상품, Violation.비방광고, FAIR4), "일반상품")
     assert (
         got is not None and got.fact_check is not None and got.fact_check.kind is FactKind.비방_선별
@@ -110,7 +124,7 @@ def test_일반상품_비방은_선별을_묻는다(drafts: None) -> None:
     )
 
 
-def test_비방_선별_아니오는_비방_확정_위반(drafts: None) -> None:
+def test_비방_선별_아니오는_비방_확정_위반() -> None:
     got = _run(
         _enc(Premise.일반상품, Violation.비방광고, FAIR4),
         "일반상품",
@@ -120,7 +134,7 @@ def test_비방_선별_아니오는_비방_확정_위반(drafts: None) -> None:
     assert got.violations == [Violation.비방광고] and got.infeasibility is Infeasibility.B
 
 
-def test_비방_선별_예여도_근거_갈래가_없으면_R0_으로_닫지_않는다(drafts: None) -> None:
+def test_비방_선별_예여도_근거_갈래가_없으면_R0_으로_닫지_않는다() -> None:
     got = _run(
         _enc(Premise.일반상품, Violation.비방광고, FAIR4),
         "일반상품",
@@ -130,7 +144,7 @@ def test_비방_선별_예여도_근거_갈래가_없으면_R0_으로_닫지_않
     assert got.risk.final is not Risk.R0
 
 
-def test_기만_조건_고지_예는_R0(drafts: None) -> None:
+def test_기만_조건_고지_예는_R0() -> None:
     got = _run(
         _enc(Premise.식품, Violation.소비자_기만, FOOD5, FAIR2),
         "식품",
@@ -140,13 +154,13 @@ def test_기만_조건_고지_예는_R0(drafts: None) -> None:
     assert got.risk.final is Risk.R0 and got.user_facts
 
 
-def test_해당_없음은_그_갈래를_걷는다(drafts: None) -> None:
+def test_해당_없음은_그_갈래를_걷는다() -> None:
     na = _uf(FactKind.조건_고지, Answer.해당없음)
     got = _run(_enc(Premise.식품, Violation.소비자_기만, FOOD5, FAIR2), "식품", [na])
     assert got is None or (got.fact_check is None and got.verdict is Verdict.hold)
 
 
-def test_식품_비방은_절대형이라_묻지_않는다(drafts: None) -> None:
+def test_식품_비방은_절대형이라_묻지_않는다() -> None:
     food6 = EvidenceArticle(law_id="013094", article="제8조제1항제6호")
     got = _run(_enc(Premise.식품, Violation.비방광고, food6, FAIR4), "식품")
     assert got is not None and got.verdict is Verdict.confirmed and got.fact_check is None
@@ -187,16 +201,13 @@ def test_검수_화면_틀이_안내_줄과_함께_읽힌다() -> None:
     templates.env.get_template("user/review.html")
 
 
-def test_질문은_사실_하나_승인_전에는_공통_질문() -> None:
-    """🆕 2026-10-17 — 질문 초안은 종류마다 한 줄 · 설명은 기준 문안 칸 · 승인 전 화면은 종전 공통 질문."""
-    assert set(fc.FACT_QUESTION_DRAFTS) == set(fc.FACT_TEXT_DRAFTS)
-    assert fc.FACT_QUESTIONS == {}, "🔴 승인 전 질문 표가 채워졌다"
-    assert fc.fact_question(FactKind.비방_선별) == fc.FALLBACK_QUESTION
-    assert (
-        fc.FACT_QUESTION_DRAFTS[FactKind.비방_선별]
-        == "같은 광고에 경쟁 제품의 장점이나 비교 조건도 함께 밝혔나요?"
+def test_질문은_사실_하나_표에_없으면_공통_질문() -> None:
+    """질문은 종류마다 한 줄 · 설명은 기준 문안 칸 · 표에 없는 종류는 종전 공통 질문."""
+    assert fc.fact_question(FactKind.비방_선별) == (
+        "같은 광고에 경쟁 제품의 장점이나 비교 조건도 함께 밝혔나요?"
     )
-    for q in fc.FACT_QUESTION_DRAFTS.values():
+    assert fc.fact_question(FactKind.인증) == fc.FALLBACK_QUESTION
+    for q in fc.FACT_QUESTIONS.values():
         assert q.count("?") == 1 and "요" in q, "질문 하나"
 
 
@@ -223,7 +234,7 @@ def test_비교_우월_표지(text: str, claim: bool) -> None:
     assert fc.comparison_claim(text) is claim
 
 
-def test_식품_비방_비교_표지가_있으면_비교_기준을_묻는다(drafts: None) -> None:
+def test_식품_비방_비교_표지가_있으면_비교_기준을_묻는다() -> None:
     got = _run(_enc(Premise.식품, Violation.비방광고, FOOD6, text="국내 판매 NO.1"), "식품")
     assert got is not None and got.fact_check is not None
     assert got.fact_check.kind is FactKind.비교_기준
@@ -231,7 +242,7 @@ def test_식품_비방_비교_표지가_있으면_비교_기준을_묻는다(dra
     assert reasons.slander_note(got) == "", "질문이 선 문장에는 기준 줄을 달지 않는다"
 
 
-def test_식품_비방_표지가_없으면_묻지_않고_기준_한_줄(drafts: None) -> None:
+def test_식품_비방_표지가_없으면_묻지_않고_기준_한_줄() -> None:
     text = "지금까지 ○○ 음료는 오히려 우리 몸의 수분을 빼앗아 갔다"
     s = _enc(Premise.식품, Violation.비방광고, FOOD6, text=text)
     got = _run(s, "식품")
