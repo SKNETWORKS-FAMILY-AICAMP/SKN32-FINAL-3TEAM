@@ -2497,16 +2497,20 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     sents = list(state.get("sentences", []))
     branches = list(state.get("branches") or [])
     spans = _sentence_spans(state)
+    # 🔄 2026-10-17 (보충 8 결정 1) — 인코더 쪽 절대형 확정은 품목이 정해졌을 때만(사용자가 품목을 고르면 그 품목으로 다시 판정)
+    known = product.category is not None
     if not branches:
         changed = [
             f
             for s in sents
-            if (f := _with_condition(s, facts, substs, spans.get(s.sent_id))) is not None
+            if (f := _with_condition(s, facts, substs, spans.get(s.sent_id), known)) is not None
         ]
         return {"sentences": changed} if changed else {}
     new_b: list[Branch] = []
     for b in branches:
-        ss = [_with_condition(x, facts, substs, spans.get(x.sent_id)) or x for x in b.sentences]
+        ss = [
+            _with_condition(x, facts, substs, spans.get(x.sent_id), known) or x for x in b.sentences
+        ]
         if all(x is y for x, y in zip(ss, b.sentences, strict=True)):
             new_b.append(b)
             continue
@@ -2527,10 +2531,12 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
         r = _record_condition(s, per, reason)
         # 🆕 2026-10-17 (보충 6 결정 5 · D-263 ①) — 분기가 답 없이 확정 위반(절대형)이 되면 기록이 그보다 낮을 수 없다
         r2 = _record_at_least(r or s, per)
-        if r2 is not None:
-            changed.append(r2)
-        elif r is not None:
-            changed.append(r)
+        x = r2 or r
+        r3 = None if known else _mark_category_needed(x or s, per)
+        if r3 is not None:
+            changed.append(r3)
+        elif x is not None:
+            changed.append(x)
     out: dict[str, Any] = {"branches": new_b}
     if changed:
         out["sentences"] = changed
@@ -2577,6 +2583,34 @@ def _with_record_answers(
                 **{**{k: getattr(rec, k) for k in type(rec).model_fields}, "user_facts": got}
             )
     return list(out.values())
+
+
+def _mark_category_needed(
+    rec: SentenceJudgment, per: list[SentenceJudgment]
+) -> SentenceJudgment | None:
+    """품목을 모르는데 어떤 전제에서는 절대형(C) 위반이 서는 문장 → 기록을 **품목 선택 필요**(`cat_unknown`)로 (🆕 2026-10-17 · 보충 8 결정 1).
+
+    ★ 전제마다 등급이 갈린다(D-229 · `cat_unknown` 의 뜻) — 그 전제에서는 답 없이 위반, 다른 전제에서는 아니다. 품목을 고르면 다시 판정한다.
+    🔴 확신 부족 보류 · 선택지 · 답이 없는 기록만 — 선택지(`fact_check` · `substantiation`)는 `cat_unknown` 에 실을 수 없다(계약). 바꿀 것이 없으면 None.
+    """
+    if (
+        rec.verdict is not Verdict.hold
+        or rec.hold_reason is not HoldReason.low_conf
+        or rec.fact_check is not None
+        or rec.substantiation is not None
+        or rec.user_facts
+        or rec.user_subst is not None
+        or rec.not_claim
+    ):
+        return None
+    if not any(_encoder_only(x) and _absolute_types(x) for x in per):
+        return None
+    return SentenceJudgment(
+        **{
+            **{k: getattr(rec, k) for k in type(rec).model_fields},
+            "hold_reason": HoldReason.cat_unknown,
+        }
+    )
 
 
 def _record_at_least(rec: SentenceJudgment, per: list[SentenceJudgment]) -> SentenceJudgment | None:
@@ -2802,6 +2836,7 @@ def _encoder_side(
     facts: list[UserFact],
     substs: list[UserSubst],
     span: Span | None = None,
+    absolute_ok: bool = True,
 ) -> SentenceJudgment | None:
     """**인코더 쪽 판정** — 사전 쪽 판정이 없는 문장(`_encoder_only`)의 분기와 답. 바꿀 것이 없으면 None (🆕 2026-10-16 · D-348 보충 5 · 1 단계).
 
@@ -2821,7 +2856,9 @@ def _encoder_side(
         absolute = _absolute_types(s)
         if absolute:
             # 🆕 2026-10-17 (보충 6 결정 5 · 6) — 그 법 축 칸이 C 인 유형은 **답 없이 위반** · 분기를 열지 않는다(관문 (b) — C 가 이긴다)
-            return _enc_absolute(s, absolute, span)
+            # 🔄 2026-10-17 (보충 8 결정 1) — **품목이 정해졌을 때만** 확정한다. 품목을 모르면 전제 자체가 가정이다 — 보류 그대로(분기 없음) ·
+            #    기록은 「품목 선택 필요」(`cat_unknown` · `_mark_category_needed`) · 품목을 고르면 그 품목으로 다시 판정한다
+            return _enc_absolute(s, absolute, span) if absolute_ok else None
     if any(b.moved_from is not None for b in s.risk.encoder_basis):
         return None  # 전제가 옮긴 근거(인정받지 않은 기능성 · 4.나)는 자격(A) 문제다 — 사실 · 실증으로 풀리지 않는다(`_qualification` 과 같다)
     types = {b.violation for b in s.risk.encoder_basis}
@@ -3038,6 +3075,7 @@ def _with_condition(
     facts: list[UserFact],
     substs: list[UserSubst],
     span: Span | None = None,
+    absolute_ok: bool = True,
 ) -> SentenceJudgment | None:
     """**조건부 위반** — 근거 호가 전부 조건부 호인 문장 → 보류(`premise_unknown`) + 선택지, 또는 사용자의 답으로 정한 판정. 바꿀 것이 없으면 None.
 
@@ -3063,7 +3101,7 @@ def _with_condition(
         return None
     # 🔄 2026-10-16 (D-348 보충 5 · 1 단계) — **사전과 인코더는 따로 판정한다.** 사전 쪽 판정이 없는 문장(인코더만)은 인코더 쪽 판정으로
     if _encoder_only(s):
-        return _encoder_side(s, facts, substs, span)
+        return _encoder_side(s, facts, substs, span, absolute_ok)
     if s.verdict is not Verdict.confirmed:
         # 사전 쪽 판정이 있는 확신 부족 보류(자격 없는 사전 적중 등)는 2 단계(사전 쪽을 같은 판정으로 옮김)까지 분기를 달지 않는다.
         # ⛔ 종전엔 아래 사실 갈래가 신뢰 규칙 없이 이 문장을 조건부 위반(답 없으면 확정)으로 만들 수 있었다 — 문안 표가 비어 드러나지

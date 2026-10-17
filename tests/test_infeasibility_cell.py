@@ -56,8 +56,21 @@ def _b(premise: Premise, v: Violation, floor: Risk, *arts: EvidenceArticle) -> E
     return EncoderBasis(premise=premise, violation=v, floor=floor, articles=list(arts))
 
 
-def _run(s: SentenceJudgment, *, with_text: bool = True) -> SentenceJudgment | None:
-    state = {"sentences": [s], "product": ProductContext()}
+_CAT = {
+    Premise.화장품: "화장품",
+    Premise.식품: "식품",
+    Premise.일반상품: "일반상품",
+}
+
+
+def _run(
+    s: SentenceJudgment, *, with_text: bool = True, known: bool = True
+) -> SentenceJudgment | None:
+    from app.contracts import Category  # noqa: PLC0415
+
+    prem = {b.premise for b in s.risk.encoder_basis}
+    cat = Category(_CAT[next(iter(prem))]) if known and len(prem) == 1 else None
+    state = {"sentences": [s], "product": ProductContext(category=cat)}
     if with_text:
         state |= {"text": "앞 문장. " + s.text, "sents": ["앞 문장.", s.text]}
     got = g.doc_rules(state).get("sentences") or []
@@ -118,6 +131,12 @@ def test_인코더만_화장품_비방은_답_없이_확정_위반() -> None:
         JudgeResponse(outcome=Outcome.hold, sentences=[got])
     else:
         JudgeResponse(outcome=Outcome.certificate, certificate=cert, sentences=[got])
+
+
+def test_품목을_모르면_절대형도_확정하지_않는다() -> None:
+    """🔄 2026-10-17 (보충 8 결정 1) — 품목을 모르면 전제 자체가 가정이다 · 품목을 고르면 그 품목으로 다시 판정한다."""
+    s = _enc(_b(Premise.화장품, Violation.비방광고, Risk.R2, COSM_SLANDER, FAIR_SLANDER))
+    assert _run(s, known=False) is None
 
 
 def test_구간을_못_세우면_보류_그대로_분기도_없다() -> None:
@@ -189,39 +208,43 @@ def _branch(premise: Premise, sents: list[SentenceJudgment]):  # noqa: ANN202
 
 
 def _doc(
-    rec: SentenceJudgment, per: dict[Premise, SentenceJudgment]
+    rec: SentenceJudgment, per: dict[Premise, SentenceJudgment], category: str | None = None
 ) -> tuple[SentenceJudgment, list]:
+    from app.contracts import Category  # noqa: PLC0415
+
     state = {
         "text": "앞 문장. " + rec.text,
         "sents": ["앞 문장.", rec.text],
         "sentences": [rec],
         "branches": [_branch(p, [s]) for p, s in per.items()],
-        "product": ProductContext(),
+        "product": ProductContext(category=Category(category) if category else None),
     }
     out = g.doc_rules(state)
     got = (out.get("sentences") or [rec])[0]
     return got, out.get("branches") or state["branches"]
 
 
-def test_한_분기만_절대형_위반이면_기록은_보류인_채_위험도를_분기만큼_올린다() -> None:
+def test_품목을_모르면_분기는_보류_기록은_품목_선택_필요() -> None:
+    """🔄 2026-10-17 (보충 8 결정 1) — 화장품 가정에서만 절대형이 서는 문장: 분기 확정 없음 · 기록 `cat_unknown`(등급이 전제마다 갈린다 · D-229)."""
     drug = _b(Premise.화장품, Violation.의약품_오인, Risk.R2, COSM_DRUG)
     false_ = _b(Premise.식품, Violation.거짓_과장, Risk.R1, FOOD_FALSE)
-    rec = _enc(drug, false_)
-    got, bs = _doc(rec, {Premise.화장품: _enc(drug), Premise.식품: _enc(false_)})
+    got, bs = _doc(_enc(drug, false_), {Premise.화장품: _enc(drug), Premise.식품: _enc(false_)})
     cosm = next(b for b in bs if b.premise is Premise.화장품).sentences[0]
-    assert cosm.verdict is Verdict.confirmed and cosm.risk.final is Risk.R2
-    assert got.verdict is Verdict.hold, (
-        "다른 전제에서는 위반이 서지 않았다 — 품목에 달렸다(D-319 ①)"
-    )
-    assert got.risk.final is Risk.R2, "기록은 가장 보수적인 경우(D-263 ①)"
+    assert cosm.verdict is Verdict.hold, "품목을 모르면 확정하지 않는다"
+    assert got.verdict is Verdict.hold and got.hold_reason is HoldReason.cat_unknown
+    assert got.risk.final is Risk.R1, "인코더 R1 층 그대로 — 화장품 가정이 기록을 올리지 않는다"
     JudgeResponse(outcome=Outcome.hold, sentences=[got], branches=bs)
 
 
-def test_모든_분기가_같은_절대형_위반이면_기록도_확정_위반() -> None:
-    a = _b(Premise.화장품, Violation.비방광고, Risk.R2, COSM_SLANDER)
-    food6 = EvidenceArticle(law_id="013094", article="제8조제1항제6호")
-    b = _b(Premise.식품, Violation.비방광고, Risk.R1, food6)
-    got, bs = _doc(_enc(a, b), {Premise.화장품: _enc(a), Premise.식품: _enc(b)})
-    assert got.verdict is Verdict.confirmed and got.violations == [Violation.비방광고]
+def test_품목을_알고_전제가_둘이면_분기가_모두_같은_절대형일_때_기록도_확정() -> None:
+    """건기식 품목(인정 · 비인정 두 전제) — 두 분기가 같은 절대형으로 확정되면 기록도 확정(D-319 ① · `_record_at_least`)."""
+    food2 = EvidenceArticle(law_id="013094", article="제8조제1항제2호")
+    a = _b(Premise.건기식_인정, Violation.의약품_오인, Risk.R2, food2)
+    b = _b(Premise.건기식_비인정, Violation.의약품_오인, Risk.R2, food2)
+    got, bs = _doc(
+        _enc(a, b), {Premise.건기식_인정: _enc(a), Premise.건기식_비인정: _enc(b)}, "건기식"
+    )
+    assert all(x.sentences[0].verdict is Verdict.confirmed for x in bs)
+    assert got.verdict is Verdict.confirmed and got.violations == [Violation.의약품_오인]
     assert got.risk.final is Risk.R2
     JudgeResponse(outcome=Outcome.hold, sentences=[got], branches=bs)
