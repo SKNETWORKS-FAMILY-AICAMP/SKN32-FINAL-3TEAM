@@ -161,6 +161,23 @@ def slander_absolute(text: str) -> bool:
     return bool(COMPETITOR.search(t) and COMPETITOR_NEG.search(t))
 
 
+#: 🆕 2026-10-17 (D-348 보충 10 개정 · 보충 11) **비교 · 우월 주장의 표지** — 타사를 깎지 않는 「비방」 문장 중 이 표지가 있는 것만
+#:    부당 비교로 보고 비교 기준을 묻는다. 없으면 묻지 않는다 — 보류 + 기준 한 줄(`app/reasons.py` `slander_note`).
+#:    출처 `[문헌]` 고시 34717 Ⅲ.14.나(「최대」 · 「최고」 · 「최초」 · 「제일」 · 「유일」 등 배타성을 띤 절대적 표현) ·
+#:    고시 69549 제2조 4.나(객관적 근거 없이 우량 · 유리하다는 용어) · 보충 10 맥락의 자사 우월 비교 꼴(보다 · 대비 · 배) ·
+#:    `[관행]` 순위 · 넘버원 · 가장 · 독보 · 처음으로(같은 뜻의 다른 꼴) — dev 를 보며 고르지 않았다(D-175).
+#:    ⬜ 낱말 근사다 — 「처음 드시는 분」 같은 비주장도 걸린다(대가는 비교 기준 질문 하나)
+COMPARE_CUE = re.compile(
+    r"보다|대비|비해|비교(?!적)|\d\s?배|최고|최상|최초|최대|최다|최적|제일|유일|독보|가장|처음으로|넘버\s?원|no\.?\s?1|\d\s?위|1등(?!급)|일등|\bonly\b",
+    re.IGNORECASE,
+)
+
+
+def comparison_claim(text: str) -> bool:
+    """비교 · 우월(최상급 · 순위 포함) 주장의 표지가 있는가 — 타사를 깎지 않는 비방 문장에 비교 기준을 물을지 가른다 (보충 11 · D-99 한 곳)."""
+    return bool(COMPARE_CUE.search(text or ""))
+
+
 def type_kinds(types: Iterable[str]) -> list[FactKind]:
     """유형들 → 유형에 딸린 사실 종류(유형 순서 · 표 순서 · 문안이 승인된 것만). 🔴 문안 표가 비면 늘 빈 목록 (D-220)."""
     out: list[FactKind] = []
@@ -179,6 +196,25 @@ def in_gate(coords: Iterable[tuple[str, int, int, int]]) -> bool:
     """
     cs = set(coords)
     return bool(cs) and cs <= COND_HO
+
+
+_FOOD_SLANDER = (STATUTE_ID["식품표시광고법"], 8, 1, 6)
+_FOOD_COMPARE = (STATUTE_ID["식품표시광고법"], 8, 1, 7)
+
+
+def slander_gate_coords(
+    coords: Iterable[tuple[str, int, int, int]], text: str
+) -> set[tuple[str, int, int, int]]:
+    """호 관문에 넣을 좌표 — 타사를 깎지 않는 식품 비방(6호)은 부당 비교(7호)로 본다 (보충 10 · 11).
+
+    🆕 2026-10-17 — 보충 10 이 칸(사유)만 부당 비교 칸으로 옮기고 관문 좌표는 6호 그대로라, 인코더 쪽에서 비교 기준 질문이 서지
+       않았다(6호는 조건부 호가 아니다). 칸 조회(`graph._cell`)와 같은 낱말 규칙으로 옮긴다 (D-99). 🔴 인코더 쪽만 쓴다 — 사전 쪽
+       조건부 위반(`_with_condition`)의 관문은 그대로다(사전 쪽 판정의 이동은 2 단계).
+    """
+    cs = set(coords)
+    if _FOOD_SLANDER in cs and not slander_absolute(text):
+        cs = (cs - {_FOOD_SLANDER}) | {_FOOD_COMPARE}
+    return cs
 
 
 def fact_kinds(text: str) -> list[FactKind]:

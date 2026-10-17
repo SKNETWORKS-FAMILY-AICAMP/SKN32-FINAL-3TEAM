@@ -71,6 +71,7 @@ templates.env.filters["fact_false"] = fact_false
 templates.env.globals["FACT_FALSE_TODO"] = reasons.FACT_FALSE_TODO
 #: 🆕 2026-10-17 (D-348 보충 6 결정 8) — 일반상품 안내 두 줄(문안 초안)
 templates.env.filters["general_goods_notes"] = reasons.general_goods_notes
+templates.env.filters["slander_note"] = reasons.slander_note  # 🆕 2026-10-17 (D-348 보충 11)
 #: 🆕 2026-10-17 (보충 5 결정 5 의 집행 꼴) — 종류별 질문 한 줄(승인 전에는 공통 질문)
 templates.env.filters["fact_question"] = factcheck.fact_question
 templates.env.globals["REPRESENTATIVE_MARK"] = reasons.REPRESENTATIVE_MARK

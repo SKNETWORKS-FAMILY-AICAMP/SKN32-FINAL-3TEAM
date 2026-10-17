@@ -14,10 +14,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import NamedTuple
 
+from app import factcheck
 from app import premise as pm
 from app.contracts import Category, Infeasibility, Premise, Risk, SubstBranch, Violation
 from collect import statute
-from collect.law_map import STATUTE_ID
+from collect.law_map import LAW_OF_ID, STATUTE_ID
 
 FOOD = STATUTE_ID["식품표시광고법"]
 COSM = STATUTE_ID["화장품법"]
@@ -187,6 +188,39 @@ def general_goods_notes(sentence: object, premise: str) -> list[str]:
     if any(not statute.references(v, _FAIR_LAW) for v in seen):
         out.append(GENERAL_GOODS_UNJUDGEABLE)
     return out
+
+
+#: 🆕 2026-10-17 (D-348 보충 11 · 화면 문안 초안 · 화면 담당 확인 전 · 문안 승인 D-263 ②) — 묻지 않는 비방 후보의 기준 한 줄.
+#:    식품 · 화장품 축에서 인코더가 비방을 보았는데 타사 ∧ 부정(`slander_absolute`)도, 비교 · 우월 표지(`comparison_claim`)도 없는 보류 문장.
+#:    범주 전체를 깎는 문장의 간접 비방 여부(대상에 다른 업체 제품이 드는가)는 문구 밖이다 — 묻는 대신 기준을 보인다
+#:    (고시 34717 Ⅲ.14.라 「경쟁관계에 있는 사업자를 구체적으로 밝히지 아니하더라도 일반적으로 어느 사업자를 지칭하는지 명백한 경우」 · 시행령 013453 [별표 1] 6 「간접적으로 비방」)
+SLANDER_HOLD_NOTE = "다른 회사 제품을 낮춰 말하는 것으로 읽히면 비방이에요 — 자료로 풀리지 않으니 문장을 고쳐 주세요"
+_SLANDER_AXES = frozenset({"식품표시광고법", "화장품법"})
+
+
+def slander_note(sentence: object) -> str:
+    """묻지 않는 비방 후보의 기준 한 줄(보충 11) — 해당이 아니면 빈 글자.
+
+    조건: 주장 ∧ 보류 ∧ 질문 없음 ∧ 인코더 근거에 식품 · 화장품 축의 비방 ∧ 타사 ∧ 부정 아님 ∧ 비교 · 우월 표지 없음.
+    🔴 낱말 규칙은 `app/factcheck.py` 한 곳 · 법 축은 `collect/law_map.py` `LAW_OF_ID` 한 곳 (D-99).
+    """
+    if getattr(sentence, "not_claim", False) or getattr(sentence, "fact_check", None) is not None:
+        return ""
+    v = getattr(sentence, "verdict", None)
+    if v is None or getattr(v, "value", v) != "hold":
+        return ""
+    risk = getattr(sentence, "risk", None)
+    basis = getattr(risk, "encoder_basis", None) or []
+    if not any(
+        b.violation is Violation.비방광고
+        and any(LAW_OF_ID.get(a.law_id) in _SLANDER_AXES for a in b.articles)
+        for b in basis
+    ):
+        return ""
+    text = getattr(sentence, "text", "") or ""
+    if factcheck.slander_absolute(text) or factcheck.comparison_claim(text):
+        return ""
+    return SLANDER_HOLD_NOTE
 
 
 def question_text(sentence: object) -> str:

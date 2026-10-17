@@ -198,3 +198,54 @@ def test_질문은_사실_하나_승인_전에는_공통_질문() -> None:
     )
     for q in fc.FACT_QUESTION_DRAFTS.values():
         assert q.count("?") == 1 and "요" in q, "질문 하나"
+
+
+# ── 묻지 않는 비방 후보 (🆕 2026-10-17 · D-348 보충 11) ─────────────────────────────────────────
+
+FOOD6 = EvidenceArticle(law_id="013094", article="제8조제1항제6호")
+
+
+@pytest.mark.parametrize(
+    ("text", "claim"),
+    [
+        ("국내 판매 NO.1", True),
+        ("타사 제품보다 2배", True),
+        ("대한민국 처음으로 ooo런칭", True),
+        ("The Only 오직 oo에만", True),
+        ("시장 점유율 1위를 지켰다", True),
+        ("아기전문회사", False),
+        ("지금까지 ○○ 음료는 오히려 우리 몸의 수분을 빼앗아 갔다", False),
+        ("한우 1등급", False),
+        ("비교적 순한 맛", False),
+    ],
+)
+def test_비교_우월_표지(text: str, claim: bool) -> None:
+    assert fc.comparison_claim(text) is claim
+
+
+def test_식품_비방_비교_표지가_있으면_비교_기준을_묻는다(drafts: None) -> None:
+    got = _run(_enc(Premise.식품, Violation.비방광고, FOOD6, text="국내 판매 NO.1"), "식품")
+    assert got is not None and got.fact_check is not None
+    assert got.fact_check.kind is FactKind.비교_기준
+    assert got.verdict is Verdict.hold, "답 없이 확정하지 않는다"
+    assert reasons.slander_note(got) == "", "질문이 선 문장에는 기준 줄을 달지 않는다"
+
+
+def test_식품_비방_표지가_없으면_묻지_않고_기준_한_줄(drafts: None) -> None:
+    text = "지금까지 ○○ 음료는 오히려 우리 몸의 수분을 빼앗아 갔다"
+    s = _enc(Premise.식품, Violation.비방광고, FOOD6, text=text)
+    got = _run(s, "식품")
+    assert got is None or (got.fact_check is None and got.verdict is Verdict.hold), (
+        "맞지 않는 질문을 띄우지 않는다 — 보류 그대로"
+    )
+    assert reasons.slander_note(got or s) == reasons.SLANDER_HOLD_NOTE
+
+
+def test_기준_한_줄은_식품_화장품_축의_보류_비방만() -> None:
+    text = "아기전문회사"
+    assert (
+        reasons.slander_note(_enc(Premise.일반상품, Violation.비방광고, FAIR4, text=text)) == ""
+    ), "표시광고법 축의 비방은 C 가 아니다 — 「비방이에요」라고 말하지 않는다"
+    assert reasons.slander_note(_enc(Premise.식품, Violation.거짓_과장, FOOD6, text=text)) == ""
+    s = _enc(Premise.식품, Violation.비방광고, FOOD6, text="타사 제품은 해롭습니다")
+    assert reasons.slander_note(s) == "", "타사 ∧ 부정은 C 확정 길이다"

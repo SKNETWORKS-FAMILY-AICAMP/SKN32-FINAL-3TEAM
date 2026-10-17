@@ -467,6 +467,8 @@
         {% if cc %}<p class="rv-why">{{ cc }}</p>{% endif %}
         {#- 🆕 2026-10-17 (D-348 보충 6 결정 8 · 문안 초안 — 화면 담당 확인 전) 일반상품 — 표시광고법 기준 위험도 · 판정할 수 없는 표현 안내 #}
         {% for gn in s|general_goods_notes(premise or category) %}<p class="rv-why">{{ gn }}</p>{% endfor %}
+        {#- 🆕 2026-10-17 (D-348 보충 11 · 문안 초안 — 화면 담당 확인 전) 묻지 않는 비방 후보 — 질문 대신 기준 한 줄 #}
+        {% set sn = s|slander_note %}{% if sn %}<p class="rv-why">{{ sn }}</p>{% endif %}
 
         {# 할 일 한 줄 — 확정 문장에만. 긴 「고치는 방향」(지시 · D-265 · D-268 · `SubstBranch`)은 「근거 보기」 안에 그대로 있다 #}
         {#- 🔄 2026-10-16 (D-348 보충 4 · 문안 초안) — 조건부 위반에도 할 일(준비할 자료 · 증빙)을 단다 #}

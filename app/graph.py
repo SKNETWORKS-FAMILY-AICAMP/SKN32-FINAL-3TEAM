@@ -2882,7 +2882,12 @@ def _encoder_side(
     fields = {k: getattr(s, k) for k in type(s).model_fields}
     if types == {Violation.질병_예방치료_표방} and premises == {Premise.건기식_인정}:
         return _enc_disease(s, facts, span)
-    if not factcheck.in_gate(_coords(a for b in s.risk.encoder_basis for a in b.articles)):
+    # 🔄 2026-10-17 (보충 11) 타사를 깎지 않는 식품 비방은 7호(부당 비교) 좌표로 관문을 본다 — 칸 조회(`_cell`)와 같은 낱말 규칙
+    if not factcheck.in_gate(
+        factcheck.slander_gate_coords(
+            _coords(a for b in s.risk.encoder_basis for a in b.articles), s.text
+        )
+    ):
         return None
     # 🔴 (1-b) 낱말 사실 확인 분기는 분기 유형(거짓_과장)에만 — 화장품법 13조①4호는 기만과 같은 호라 관문만으로는 기만 문장에도 선다
     word_kinds = (
@@ -2900,15 +2905,21 @@ def _encoder_side(
         is Infeasibility.B
     ]
 
-    def _ask_as(v: Violation) -> str:
+    def _ask_as(v: Violation) -> list[str]:
         # 🆕 (보충 10) 타사를 깎아내리지 않는 「비방」 문장은 비교 · 우월 주장이다 — 비교 기준을 묻는다
+        # 🔄 (보충 11) 비교 · 우월 표지(`comparison_claim`)가 있을 때만 묻는다 — 없으면(범주 깎기 · 전문성 자랑 등) 묻지 않는다:
+        #    보류 그대로 + 화면의 기준 한 줄(`reasons.slander_note`). 맞지 않는 질문을 띄우지 않는다(보충 9 결정 1 · 질문은 사실 하나)
         if v is Violation.비방광고 and not factcheck.slander_absolute(s.text):
-            return Violation.부당_비교광고.value
-        return v.value
+            return [Violation.부당_비교광고.value] if factcheck.comparison_claim(s.text) else []
+        return [v.value]
 
-    t_kinds = [k for k in factcheck.type_kinds(_ask_as(v) for v in b_types) if k not in word_kinds]
+    t_kinds = [
+        k
+        for k in factcheck.type_kinds(t for v in b_types for t in _ask_as(v))
+        if k not in word_kinds
+    ]
     kind_type = {k: Violation.거짓_과장 for k in word_kinds} | {
-        k: v for v in b_types for k in factcheck.type_kinds([_ask_as(v)])
+        k: v for v in b_types for k in factcheck.type_kinds(_ask_as(v))
     }
     kinds = word_kinds + t_kinds
     ans: dict[FactKind, UserFact] = {}
