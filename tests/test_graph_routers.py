@@ -946,3 +946,33 @@ def test_법별_노드에_사전_적중이_실린다() -> None:
 
     sc = [DictScan(sent_id="s0", ran=True)]
     assert law_payload({"sents": ["가"], "dict_scans": sc})["dict_scans"] == sc
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("category", "confirmed"),
+    [(None, False), (Category.식품, True)],
+)
+def test_품목을_모르면_사전_C_적중도_기록_판정을_확정하지_않는다(
+    monkeypatch: pytest.MonkeyPatch, category: Category | None, confirmed: bool
+) -> None:
+    """🆕 2026-10-18 (D-348 보충 16 · D-319 ① · 원장 10-18(B) ⑥) — 사전 C 항목은 법 축 · 품목마다 다르다. 품목을 모르면 품목 분기에서만
+    확정이 서고 기록 판정은 확정이 아니다 — 품목을 고르면 그 품목으로 확정한다. ⛔ 이 성질은 품목 분기 · 기록 규칙으로 간접적으로 선다 — 깨지지 않게 박는다."""
+    import app.graph as g
+    from app import retrieve as rt
+
+    monkeypatch.setattr(rt, "wide", _fake_wide([]))
+    monkeypatch.setattr(
+        g,
+        "load_dict_entries",
+        _entries(("암예방", "질병_예방치료_표방", ("013094:제8조제1항제1호",))),
+    )
+    out = build_review().invoke(
+        _init("암 예방에 탁월합니다", category), config={"configurable": {"conn": "CUR"}}
+    )
+    rec = out["sentences"][0]
+    assert (rec.verdict is Verdict.confirmed) is confirmed
+    # 사전 C 확정에는 분기가 서지 않는다 — 실증 · 사실 확인 · 조건부는 B 의 몫이다(보충 15 결정 3 · 사전 쪽 분기 경로는 C 항목이 들어가지 않는다)
+    assert rec.substantiation is None and rec.fact_check is None
+    if confirmed:
+        assert rec.infeasibility is Infeasibility.C

@@ -2060,6 +2060,8 @@ def _substantiated(s: SentenceJudgment) -> SentenceJudgment:
     axes = {LAW_OF_ID.get(e.law_id) for e in s.evidence if e.basis}
     if None in axes:
         return s
+    # 🚨 2026-10-18 (D-348 보충 16 결정 5) — 사전 확정 문장의 실증 분기(D-337)는 **B 확정에만** 선다 · 기본 사전은 C 만 확정하므로
+    #    들어올 문장이 없다(종전 사전 판에서만) · 실증은 인코더 쪽(`_enc_subst`)이 맡는다 — 걷기는 마감 뒤
     sb = rs.subst_branch(list(s.violations), {a for a in axes if a is not None})
     if sb is None:
         return s
@@ -2338,6 +2340,8 @@ def _premise_sentences(
                         )
                     )
         if disease is not None:
+            # 🚨 2026-10-18 (D-348 보충 16 결정 5) — 건기식 인정 전제의 사전 질병 적중 분기 · 「그 전제에서는 질병 표현이 C 가 아니다」라는
+            #    **전제별 제외**의 자리로 당분간 남긴다([별표 1] 1.가.2) — 전제별 제외로 바꾸는 것은 마감 뒤
             j = _disease_branch(j, *disease)
         if sid in encs and not j.not_claim:
             # 분기 문장 — 이 전제 하나로 거른다 (D-323 결정 6). 판정 대상 아님에는 싣지 않는다(D-348 보충 1 · `judge` 와 같다).
@@ -3279,6 +3283,8 @@ def _with_condition(
         # ⛔ 종전엔 아래 사실 갈래가 신뢰 규칙 없이 이 문장을 조건부 위반(답 없으면 확정)으로 만들 수 있었다 — 문안 표가 비어 드러나지
         #    않았던 결함이다(10-16). 실증 갈래는 신뢰 규칙 아래(τ 닫힘)라 이 문장에 분기가 선 적이 없다 — 동작은 종전과 같다
         return None
+    # 🚨 2026-10-18 (D-348 보충 16 결정 5) — **아래는 사전 쪽 조건부 위반 경로다 · 기본 사전(칸 C 만 단독판정)에서는 들어올 문장이 없다**
+    #    (C 항목의 호는 조건부 호가 아니다 · `factcheck.in_gate`). 종전 사전 판(`--dict-view legacy`)에서만 돈다 — 걷기는 마감 뒤(보충 16 결정 5)
     if s.risk.final is None or not factcheck.in_gate(_ho_coords(s)) or _qualification(s):
         return None
     key = dm.norm(s.text)
