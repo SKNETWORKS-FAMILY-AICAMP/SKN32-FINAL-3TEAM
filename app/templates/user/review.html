@@ -380,7 +380,7 @@
 {% block user_content %}
 {# 문장 하나 — 기록되는 판정과 분기 결과가 같은 그림을 쓴다.
    `rw_item` 을 주면 문장 아래에 고쳐 쓰기(버튼 · 결과 · 없는 이유)를 단다 — `premise` 는 고른 분기의 전제, `r` 은 회차 #}
-{% macro sent_block(s, flag=false, marks=none, rw_item=none, premise="", r=0, enc_on=false) %}
+{% macro sent_block(s, flag=false, marks=none, rw_item=none, premise="", r=0, enc_on=false, category="") %}
       {# 🔄 2026-10-13 (ksr) — 문장 칸은 **결과에 따라 색이 다른 카드**다 (프로토타입 v7.2 의 문장 카드 구조).
          색 점 + 결론(+ 위험도) → 검수한 문장(흰 상자 · 따옴표 · 걸린 곳 형광) → 이유 → 「근거 보기」(접힘 · 조문 · 산출 내역 · AI 추정).
          · 빨강 = 쓸 수 없다(절대형 C · 전제를 고른 뒤의 자격형 · 종류가 실리지 않은 위반) · 주황 = 조건이 맞으면 쓸 수 있다(A · B)
@@ -465,6 +465,10 @@
         {% if gm %}<p class="rv-types rv-guess">{{ gm }}</p>{% endif %}
         {% set cc = s|candidate_condition %}
         {% if cc %}<p class="rv-why">{{ cc }}</p>{% endif %}
+        {#- 🆕 2026-10-17 (D-348 보충 6 결정 8 · 문안 승인 10-17) 일반상품 — 표시광고법 기준 위험도 · 판정할 수 없는 표현 안내 #}
+        {% for gn in s|general_goods_notes(premise or category) %}<p class="rv-why">{{ gn }}</p>{% endfor %}
+        {#- 🆕 2026-10-17 (D-348 보충 11 · 문안 승인 10-17) 묻지 않는 비방 후보 — 질문 대신 기준 한 줄 #}
+        {% set sn = s|slander_note %}{% if sn %}<p class="rv-why">{{ sn }}</p>{% endif %}
 
         {# 할 일 한 줄 — 확정 문장에만. 긴 「고치는 방향」(지시 · D-265 · D-268 · `SubstBranch`)은 「근거 보기」 안에 그대로 있다 #}
         {#- 🔄 2026-10-16 (D-348 보충 4 · 문안 초안) — 조건부 위반에도 할 일(준비할 자료 · 증빙)을 단다 #}
@@ -504,7 +508,9 @@
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
           {% if s.fact_check %}
-          <p class="rv-todo">이 사실이 맞나요? <small>({{ s.fact_check.kind.value|replace("_", " ") }} · 증빙 — {{ s.fact_check.accepted_evidence|join(" · ") }})</small></p>
+          {#- 🔄 2026-10-17 — 질문은 종류마다 한 줄(승인 전에는 종전 공통 질문) · 설명 · 예는 기준 문안 칸 #}
+          <p class="rv-todo">{{ s.fact_check.kind|fact_question }} <small>({{ s.fact_check.kind.value|replace("_", " ") }} · 증빙 — {{ s.fact_check.accepted_evidence|join(" · ") }})</small></p>
+          <p class="rv-why">{{ s.fact_check.criteria }}</p>
           <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:true">맞아요</button>
           <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:false">아니에요</button>
           {#- 🆕 2026-10-16 (D-348 보충 5 — 화면 문안 초안 · 화면 담당 확인 전) 해당 없음 — 다른 두 버튼과 같은 무게로 둔다 #}
@@ -816,7 +822,7 @@
 
     {# 기록되는 판정 — 고르기 전에만 보인다(회차마다). 유형을 모를 때의 가장 보수적인 경우다 (D-263 ①) #}
     <div class="rv-rec">
-      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), enc_on=result.judged_by|encoder_ran) }}{% endfor %}
+      {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), enc_on=result.judged_by|encoder_ran, category=(result.category.value if result.category else "")) }}{% endfor %}
       {% if result.certificate %}
       <div class="rv-sub">
         <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서</h2>
@@ -965,7 +971,7 @@
       {{ branch_wizard(item) }}
       {% else %}
       {% for s in result.sentences %}
-      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on=result.judged_by|encoder_ran) }}
+      {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on=result.judged_by|encoder_ran, category=(result.category.value if result.category else "")) }}
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}

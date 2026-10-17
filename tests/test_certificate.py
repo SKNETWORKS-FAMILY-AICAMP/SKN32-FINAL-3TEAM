@@ -52,7 +52,7 @@ def _doc_rows() -> dict[str, tuple[str, str | None]]:
     sec = text[text.index("## 9. ") : text.index("### 9-1.")]
     rows = {}
     for line in sec.splitlines():
-        if re.match(r"\| \d \|", line):
+        if re.match(r"\| \d+ \|", line):
             c = [x.strip() for x in line.strip().strip("|").split("|")]
             rows[c[0]] = (c[4], None if c[5] == "—" else c[5])
     return rows
@@ -60,7 +60,7 @@ def _doc_rows() -> dict[str, tuple[str, str | None]]:
 
 def test_문안_표는_승인본과_글자가_같다() -> None:
     rows = _doc_rows()
-    approved = [rows[n] for n in ("1", "2", "3", "5", "6", "7", "8")]
+    approved = [rows[n] for n in ("1", "2", "3", "5", "6", "7", "8", "9", "10")]
     got = [(t.explanation, t.guidance) for t in rs.REASON_TEXT.values()]
     assert got == approved, (
         "🚨 사유 문안이 승인본(§9 의 1 · 2 · 3 · 5 · 6 · 7 · 8)과 다르다 — 문서를 먼저 고치고 다시 승인받는다 (D-147 · D-263 ②)"

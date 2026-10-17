@@ -57,6 +57,7 @@ from app.contracts import (  # noqa: E402
     ProductContext,
     SentenceJudgment,
     Verdict,
+    encoder_judged,
     is_conditional,
 )
 from collect import statute  # noqa: E402
@@ -205,6 +206,8 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "class": cls,
         #: 판정을 내린 행 — **전 문장이 확정**이다(selective risk 의 분모 · D-77 L1 #8)
         "committed": bool(sents) and len(conf) == len(sents),
+        #: 🆕 2026-10-17 (D-348 보충 6 결정 5) — 확정 문장 중 **인코더 판정**(사전 근거 · 사용자 답 없음)이 있나 — 조합 칸 「인코더 판정 확정」
+        "enc_judged": any(encoder_judged(s) for s in conf),
         #: 🆕 2026-10-02 (W5) — 확정 위반 문장에 **위험도가 다 붙었나**. 붙었는데 종착이 보류면 하한이 아니라 종착 재료(증명서 · 지시 문안)가 없다
         "risked": all(s.risk.final is not None for s in conf if s.violations),
         "n_sents": len(sents),
@@ -392,6 +395,7 @@ def combo_cell(p: dict) -> str:
         p.get("candidates", ()),
         p.get("enc_candidates", ()),
         not_claim=bool(p.get("not_claim_only")),
+        encoder_judged=bool(p.get("enc_judged")),
     )
 
 

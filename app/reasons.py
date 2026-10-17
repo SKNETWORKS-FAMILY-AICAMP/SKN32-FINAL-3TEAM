@@ -14,10 +14,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import NamedTuple
 
+from app import factcheck
 from app import premise as pm
 from app.contracts import Category, Infeasibility, Premise, Risk, SubstBranch, Violation
 from collect import statute
-from collect.law_map import STATUTE_ID
+from collect.law_map import LAW_OF_ID, STATUTE_ID
 
 FOOD = STATUTE_ID["식품표시광고법"]
 COSM = STATUTE_ID["화장품법"]
@@ -38,6 +39,7 @@ class ReasonText(NamedTuple):
 
 
 #: (법, 유형, 사유) → 문안. ✅ 2026-10-06 승인 — 오한빈 (모델 권고 승인 · 글자는 모델이 옮겨 적음) · 일곱 줄
+#: 🔄 2026-10-17 ✅ 승인 — 오한빈 (문안 묶음 (가)) · 비방 C 두 줄(§9 의 9 · 10 · D-348 보충 10 의 식품 · 화장품 비방 칸) — 아홉 줄
 REASON_TEXT: dict[tuple[str, Violation, Infeasibility], ReasonText] = {
     # §9 의 1
     (FOOD, Violation.질병_예방치료_표방, Infeasibility.C): ReasonText(
@@ -73,6 +75,16 @@ REASON_TEXT: dict[tuple[str, Violation, Infeasibility], ReasonText] = {
     (COSM, Violation.기능성화장품_오인, Infeasibility.A): ReasonText(
         "기능성화장품이 아닌 제품은 기능성화장품의 효능이 있는 것으로 표현할 수 없고, 기능성화장품이라도 심사받거나 보고한 내용과 다르게 표현할 수 없습니다.",
         "기능성화장품 심사를 받거나 보고를 마치면 그 범위에서 표시할 수 있습니다.",
+    ),
+    # §9 의 9 — 식품 별표 6 에는 「사실 유무와 관계없이」가 없다 · 「근거 자료가 있어도」까지만(D-320 ③)
+    (FOOD, Violation.비방광고, Infeasibility.C): ReasonText(
+        "다른 업체나 다른 업체의 제품을 비방하는 표현은 근거 자료가 있어도 쓸 수 없습니다. 비교하는 표현으로 간접적으로 깎아내려도 같습니다.",
+        None,
+    ),
+    # §9 의 10 — 시행규칙 [별표 5] 2.카 「사실 유무와 관계없이」
+    (COSM, Violation.비방광고, Infeasibility.C): ReasonText(
+        "다른 제품을 비방하거나 비방한다고 의심되는 표현은 사실인지와 관계없이 쓸 수 없습니다.",
+        None,
     ),
 }
 
@@ -150,14 +162,76 @@ def conditional_label(kind: str | None) -> str:
     return CONDITIONAL_FACT_TEXT if kind == "fact" else CONDITIONAL_SUBST_TEXT
 
 
-#: 🆕 2026-10-16 (D-348 보충 5 · 화면 문안 초안 · 화면 담당 확인 전) — **인코더 쪽 판정의 보류 + 분기**의 결론 한 줄.
+#: 🆕 2026-10-16 (D-348 보충 5) — **인코더 쪽 판정의 보류 + 분기**의 결론 한 줄. ✅ 2026-10-17 문안 승인 — 오한빈(정본 §14).
 #:    답 없이 확정하지 않는다 — 조건부 위반(답 없으면 확정)과 다른 말이다. 「AI 추정 · 판정 아님」 표지(D-348 결정 5 화면 범위)
 ENCODER_QUESTION_TEXT = "AI 추정 · 판정 아님 — 아래 질문에 답하면 다시 판정해요"
 
 
-#: 🆕 2026-10-17 (D-348 보충 5 결정 5 · 1-b · 화면 문안 초안 · 화면 담당 확인 전 · 문안 승인 D-263 ②) — 사실이 **거짓**으로 확정된 문장의
+#: 🆕 2026-10-17 (D-348 보충 5 결정 5 · 1-b · ✅ 2026-10-17 문안 승인 — 오한빈 · 정본 §14) — 사실이 **거짓**으로 확정된 문장의
 #:    할 일 한 줄. 실증으로 풀리지 않는다 — 고치거나 뺀다. ⬜ 법령 설명(유형 · 근거 호 · 필요한 표현의 예)은 질문 재료 문안과 같은 상수로(결정 5)
 FACT_FALSE_TODO = "사실과 다른 표시예요 — 문구를 고치거나 빼 주세요"
+
+#: 🆕 2026-10-17 (D-348 보충 6 결정 8 · ✅ 2026-10-17 문안 승인 — 오한빈 · 정본 §14) — **일반상품**(전용법을 검수하지 않은 품목)의 안내 두 줄.
+#:    ① 표시광고법 호가 있는 유형은 표시광고법 기준으로 판정한다 — 그 위험도 옆에 ② 호가 없는 유형(질병 표방 · 의약품 오인 · 건강기능식품 오인)은
+#:    판정하지 않는다 — 그 표현이 보이면. 통과는 여전히 없다(D-314 · D-277).
+GENERAL_GOODS_RISK_NOTE = (
+    "표시광고법 기준으로 낸 위험도예요 — 이 품목에 따로 적용되는 법(전용법)은 확인이 필요해요"
+)
+GENERAL_GOODS_UNJUDGEABLE = "표시광고법으로 판정할 수 없는 표현이에요 — 해당 품목의 전용법(의료기기법 · 약사법 등) 확인이 필요해요"
+_GENERAL = Premise.일반상품.value
+_FAIR_LAW = "표시광고법"
+
+
+def general_goods_notes(sentence: object, premise: str) -> list[str]:
+    """일반상품 전제 · 품목의 문장 안내(보충 6 결정 8) — 위험도가 선 문장에 ①, 표시광고법 호가 없는 유형(사전 · 인코더 후보 · 유형)이 보이면 ②.
+
+    🔴 일반상품이 아니면 빈 목록. 호가 있는지는 대응표 한 곳(`statute.references`)으로 본다 (D-99).
+    """
+    if premise != _GENERAL or getattr(sentence, "not_claim", False):
+        return []
+    out: list[str] = []
+    risk = getattr(sentence, "risk", None)
+    if risk is not None and risk.final is not None:
+        out.append(GENERAL_GOODS_RISK_NOTE)
+    seen = {v.value for v in getattr(sentence, "violations", [])} | {
+        c.violation.value for c in getattr(sentence, "encoder_candidates", [])
+    }
+    if any(not statute.references(v, _FAIR_LAW) for v in seen):
+        out.append(GENERAL_GOODS_UNJUDGEABLE)
+    return out
+
+
+#: 🆕 2026-10-17 (D-348 보충 11 · ✅ 2026-10-17 문안 승인 — 오한빈 · 정본 §14) — 묻지 않는 비방 후보의 기준 한 줄.
+#:    식품 · 화장품 축에서 인코더가 비방을 보았는데 타사 ∧ 부정(`slander_absolute`)도, 비교 · 우월 표지(`comparison_claim`)도 없는 보류 문장.
+#:    범주 전체를 깎는 문장의 간접 비방 여부(대상에 다른 업체 제품이 드는가)는 문구 밖이다 — 묻는 대신 기준을 보인다
+#:    (고시 34717 Ⅲ.14.라 「경쟁관계에 있는 사업자를 구체적으로 밝히지 아니하더라도 일반적으로 어느 사업자를 지칭하는지 명백한 경우」 · 시행령 013453 [별표 1] 6 「간접적으로 비방」)
+SLANDER_HOLD_NOTE = "다른 회사 제품을 낮춰 말하는 것으로 읽히면 비방이에요 — 자료로 풀리지 않으니 문장을 고쳐 주세요"
+_SLANDER_AXES = frozenset({"식품표시광고법", "화장품법"})
+
+
+def slander_note(sentence: object) -> str:
+    """묻지 않는 비방 후보의 기준 한 줄(보충 11) — 해당이 아니면 빈 글자.
+
+    조건: 주장 ∧ 보류 ∧ 질문 없음 ∧ 인코더 근거에 식품 · 화장품 축의 비방 ∧ 타사 ∧ 부정 아님 ∧ 비교 · 우월 표지 없음.
+    🔴 낱말 규칙은 `app/factcheck.py` 한 곳 · 법 축은 `collect/law_map.py` `LAW_OF_ID` 한 곳 (D-99).
+    """
+    if getattr(sentence, "not_claim", False) or getattr(sentence, "fact_check", None) is not None:
+        return ""
+    v = getattr(sentence, "verdict", None)
+    if v is None or getattr(v, "value", v) != "hold":
+        return ""
+    risk = getattr(sentence, "risk", None)
+    basis = getattr(risk, "encoder_basis", None) or []
+    if not any(
+        b.violation is Violation.비방광고
+        and any(LAW_OF_ID.get(a.law_id) in _SLANDER_AXES for a in b.articles)
+        for b in basis
+    ):
+        return ""
+    text = getattr(sentence, "text", "") or ""
+    if factcheck.slander_absolute(text) or factcheck.comparison_claim(text):
+        return ""
+    return SLANDER_HOLD_NOTE
 
 
 def question_text(sentence: object) -> str:
@@ -321,6 +395,9 @@ COMBO_CELLS = (
     #: 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님(L0 · 주의 · 상담 문구). 판정은 「확정 · 위반 없음 · R0」이라 「사전 확정」에 섞이면
     #:    사전 확정의 정밀도가 떨어진 것처럼 읽힌다 — 칸을 가른다. ⛔ 앞 여섯 칸의 순서는 바꾸지 않는다(게이트가 번호로 읽는다)
     "판정 대상 아님",
+    #: 🆕 2026-10-17 (D-348 보충 6 결정 5 · 원장 10-17(B) ⑤) — 인코더 판정으로 확정된 위반(사전 근거도 사용자 답도 없다 · `contracts.encoder_judged`).
+    #:    종전에는 확정이면 출처를 보지 않고 「사전 확정」으로 셌다 — 사전 확정의 정밀도에 인코더 판정이 섞였다
+    "인코더 판정 확정",
 )
 
 
@@ -330,6 +407,7 @@ def combo_cell(
     enc_types: Iterable[str],
     *,
     not_claim: bool = False,
+    encoder_judged: bool = False,
 ) -> str:
     """조합 판정 칸 — **규칙은 여기 한 곳**(D-340 결정 1 · D-99). 단위는 부르는 쪽이 정한다.
 
@@ -342,6 +420,8 @@ def combo_cell(
         return COMBO_CELLS[
             6
         ]  # 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님만 있는 단위(행 · 문장)
+    if committed and encoder_judged:
+        return COMBO_CELLS[7]  # 🆕 2026-10-17 — 인코더 판정 확정(사전 확정과 가른다)
     if committed:
         return COMBO_CELLS[0]
     dq, en = set(dict_types), set(enc_types)

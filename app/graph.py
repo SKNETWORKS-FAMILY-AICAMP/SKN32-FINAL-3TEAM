@@ -1396,7 +1396,22 @@ _SPECIAL_AXES = frozenset({_FOOD_AX, _COSM_AX})
 _INFEAS_ORDER = (Infeasibility.C, Infeasibility.A, Infeasibility.B)
 
 
-def infeasibility_of(cells: Iterable[tuple[Violation, str | None]]) -> Infeasibility | None:
+def _cell(v: Violation, law: str, text: str | None) -> Infeasibility | None:
+    """칸 하나 — 🆕 2026-10-17 (D-348 보충 10) 식품 · 화장품 축의 비방은 **낱말로 가른다**: 타사 언급 ∧ 부정(`factcheck.slander_absolute`)이면
+    비방 칸(C), 아니면 그 축의 부당 비교 칸(B — 자사 우월 비교 · 최상급 · 순위). 문장을 모르면(`text` 없음) 칸 그대로."""
+    if (
+        v is Violation.비방광고
+        and law in _SPECIAL_AXES
+        and text is not None
+        and not factcheck.slander_absolute(text)
+    ):
+        return INFEASIBILITY_CELL.get((Violation.부당_비교광고, law))
+    return INFEASIBILITY_CELL.get((v, law))
+
+
+def infeasibility_of(
+    cells: Iterable[tuple[Violation, str | None]], text: str | None = None
+) -> Infeasibility | None:
     """(유형 · 법 축) 쌍들 → 문장의 불가 사유 — **조회는 여기 한 곳**(D-99 · 🆕 2026-10-17 · 보충 6 결정 1).
 
     ① 유형마다 그 유형의 칸을 모은다 — 전용법 칸(`_SPECIAL_AXES`)이 있으면 그것만(식품 · 화장품 먼저) · 없으면 걸린 칸 전부
@@ -1406,7 +1421,7 @@ def infeasibility_of(cells: Iterable[tuple[Violation, str | None]]) -> Infeasibi
     """
     by: dict[Violation, list[tuple[str | None, Infeasibility | None]]] = {}
     for v, law in cells:
-        by.setdefault(v, []).append((law, INFEASIBILITY_CELL.get((v, law)) if law else None))
+        by.setdefault(v, []).append((law, _cell(v, law, text) if law else None))
     if not by:
         return None
     found: set[Infeasibility] = set()
@@ -1544,7 +1559,7 @@ def _judge_one(
                 sent_id=sid, text=text, verdict=Verdict.hold, hold_reason=HoldReason.low_conf
             )
         # 🔄 2026-10-17 (보충 6 결정 1) — 사유는 (유형 × 법 축) 칸에서 · 적중 인용의 법이 칸의 법이다
-        reason = infeasibility_of(_hit_cells(hits))
+        reason = infeasibility_of(_hit_cells(hits), text)
         if reason is None:
             # 🔴 D-273 — 사유를 못 정하면 보류. ⬜ 사유 칸(`low_conf`)은 D-273 「결정 4 의 보류 문장을 어느 사유로」(W4)의 1판이다
             return SentenceJudgment(
@@ -2867,22 +2882,55 @@ def _encoder_side(
     fields = {k: getattr(s, k) for k in type(s).model_fields}
     if types == {Violation.질병_예방치료_표방} and premises == {Premise.건기식_인정}:
         return _enc_disease(s, facts, span)
-    if not factcheck.in_gate(_coords(a for b in s.risk.encoder_basis for a in b.articles)):
+    # 🔄 2026-10-17 (보충 11) 타사를 깎지 않는 식품 비방은 7호(부당 비교) 좌표로 관문을 본다 — 칸 조회(`_cell`)와 같은 낱말 규칙
+    if not factcheck.in_gate(
+        factcheck.slander_gate_coords(
+            _coords(a for b in s.risk.encoder_basis for a in b.articles), s.text
+        )
+    ):
         return None
-    # 🔴 (1-b) 사실 확인 분기는 분기 유형(거짓_과장)에만 — 화장품법 13조①4호는 기만과 같은 호라 관문만으로는 기만 문장에도 선다
-    kinds = (
+    # 🔴 (1-b) 낱말 사실 확인 분기는 분기 유형(거짓_과장)에만 — 화장품법 13조①4호는 기만과 같은 호라 관문만으로는 기만 문장에도 선다
+    word_kinds = (
         [k for k in factcheck.fact_kinds(s.text) if k in factcheck.FACT_TEXTS]
         if types == {Violation.거짓_과장}
         else []
     )
+    # 🆕 2026-10-17 (보충 6 결정 3 · 4 · 보충 7 결정 7) — **유형에 딸린 사실 종류** — 그 전제 축의 칸이 B 인 유형만(C 는 위에서 끝났다)
+    b_types = [
+        v
+        for v in sorted(types, key=list(Violation).index)
+        if infeasibility_of(
+            _basis_cells(b for b in s.risk.encoder_basis if b.violation is v), s.text
+        )
+        is Infeasibility.B
+    ]
+
+    def _ask_as(v: Violation) -> list[str]:
+        # 🆕 (보충 10) 타사를 깎아내리지 않는 「비방」 문장은 비교 · 우월 주장이다 — 비교 기준을 묻는다
+        # 🔄 (보충 11) 비교 · 우월 표지(`comparison_claim`)가 있을 때만 묻는다 — 없으면(범주 깎기 · 전문성 자랑 등) 묻지 않는다:
+        #    보류 그대로 + 화면의 기준 한 줄(`reasons.slander_note`). 맞지 않는 질문을 띄우지 않는다(보충 9 결정 1 · 질문은 사실 하나)
+        if v is Violation.비방광고 and not factcheck.slander_absolute(s.text):
+            return [Violation.부당_비교광고.value] if factcheck.comparison_claim(s.text) else []
+        return [v.value]
+
+    t_kinds = [
+        k
+        for k in factcheck.type_kinds(t for v in b_types for t in _ask_as(v))
+        if k not in word_kinds
+    ]
+    kind_type = {k: Violation.거짓_과장 for k in word_kinds} | {
+        k: v for v in b_types for k in factcheck.type_kinds(_ask_as(v))
+    }
+    kinds = word_kinds + t_kinds
     ans: dict[FactKind, UserFact] = {}
     for f in facts:
         if f.kind in kinds and f.kind not in ans and dm.norm(f.text) == key:
             ans[f.kind] = f
     carried = [ans[k] for k in kinds if k in ans]
     kinds = [k for k in kinds if not (k in ans and ans[k].answer is Answer.해당없음)]
-    if any(ans[k].answer is Answer.아니오 for k in kinds if k in ans):
-        return _enc_confirmed(s, Violation.거짓_과장, span, user_facts=carried)
+    no = [k for k in kinds if k in ans and ans[k].answer is Answer.아니오]
+    if no:
+        return _enc_confirmed(s, kind_type[no[0]], span, user_facts=carried)
     reason = _encoder_reason(s)
     sb = _enc_subst(s) if reason is Infeasibility.B else None
     pending = [k for k in kinds if k not in ans]
@@ -2904,7 +2952,15 @@ def _encoder_side(
                 "user_facts": carried,
             }
         )
-    if kinds and factcheck.fact_only(s.text):
+    if [
+        k for k in t_kinds if k in kinds
+    ] and not word_kinds:  # 「해당 없음」으로 걷힌 갈래는 세지 않는다
+        # 🆕 (보충 6 결정 3 · 4) 유형에 딸린 사실이 전부 「예」 — 갈래 ① (객관적 근거)이 따로 있는 유형은 실증 갈래가 서야 닫는다(갈래 결과 max)
+        if any(v.value in factcheck.NEED_SUBST for v in b_types) and sb is None:
+            return SentenceJudgment(**{**fields, "user_facts": carried})
+        if sb is None:
+            return _answered(s, user_facts=carried)
+    elif kinds and factcheck.fact_only(s.text):
         return _answered(s, user_facts=carried)  # 남은 사실이 전부 참 · 사실만 주장
     if sb is None:
         return SentenceJudgment(**{**fields, "user_facts": carried}) if carried else None
@@ -2913,9 +2969,8 @@ def _encoder_side(
         if us.answer is Answer.예 and sb.substantiated_max is Risk.R0:
             return _answered(s, user_facts=carried, user_subst=us)
         if us.answer is Answer.아니오:
-            return _enc_confirmed(
-                s, Violation.거짓_과장, span, user_facts=carried, user_subst=us, subst=sb
-            )
+            sv = b_types[0] if len(b_types) == 1 else Violation.거짓_과장
+            return _enc_confirmed(s, sv, span, user_facts=carried, user_subst=us, subst=sb)
         # 해당없음 — 실증 분기를 걷는다 · 보류 + 출처
         return SentenceJudgment(**{**fields, "user_facts": carried, "user_subst": us})
     return SentenceJudgment(
@@ -2933,7 +2988,7 @@ def _absolute_types(s: SentenceJudgment) -> set[Violation]:
     out: set[Violation] = set()
     for v in {b.violation for b in s.risk.encoder_basis}:
         cells = _basis_cells(b for b in s.risk.encoder_basis if b.violation is v)
-        if infeasibility_of(cells) is Infeasibility.C:
+        if infeasibility_of(cells, s.text) is Infeasibility.C:
             out.add(v)
     return out
 
@@ -3035,7 +3090,7 @@ def _enc_confirmed(
         for a in b.articles:
             if a not in arts:
                 arts.append(a)
-    reason = infeasibility_of(_basis_cells(basis))
+    reason = infeasibility_of(_basis_cells(basis), s.text)
     if reason is None:
         return held
     return SentenceJudgment(
@@ -3316,7 +3371,7 @@ def _encoder_reason(s: SentenceJudgment) -> Infeasibility | None:
     🔄 2026-10-17 (보충 6 결정 6) — 종전 「유형의 사유가 하나로 같을 때만」은 화장품 상품의 비방(화장품 C · 표시광고법 B)에서 사유를 비웠다.
        칸은 그 근거가 선 전제의 법만 센다(`_basis_cells`) · 칸이 없는 유형이 섞이면 None(사유 모름).
     """
-    return infeasibility_of(_basis_cells(s.risk.encoder_basis))
+    return infeasibility_of(_basis_cells(s.risk.encoder_basis), s.text)
 
 
 def _answered(

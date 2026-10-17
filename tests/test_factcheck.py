@@ -105,8 +105,20 @@ def _run(
 
 
 def test_사실_확인_표가_비면_사실_분기는_서지_않고_실증_분기다() -> None:
-    assert fc.FACT_RULES == {} and fc.FACT_TEXTS == {} and fc.PERFORMANCE is None, (
+    # 🔄 2026-10-17 — 유형에 딸린 다섯 종류는 승인됐다(정본 §14) · 낱말 사실 확인 종류는 여전히 승인 전이다
+    word_kinds = (
+        set(FactKind)
+        - {k for ks in fc.TYPE_KINDS.values() for k in ks}
+        - {
+            FactKind.후기_실재,
+            FactKind.무첨가_조건,
+        }
+    )
+    assert fc.FACT_RULES == {} and fc.PERFORMANCE is None, (
         "🔴 승인 전 표가 채워졌다 — 문안 승인(D-263 ②) 뒤 이 게이트를 고친다"
+    )
+    assert not (word_kinds & set(fc.FACT_TEXTS)), (
+        "🔴 낱말 사실 확인 종류의 문안이 승인 없이 들어왔다"
     )
     got = _run(_confirmed())
     assert got is not None and got.fact_check is None
