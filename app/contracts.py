@@ -1062,6 +1062,20 @@ def fact_false(s: SentenceJudgment) -> bool:
     return any(f.answer is Answer.아니오 for f in s.user_facts)
 
 
+def encoder_judged(s: SentenceJudgment) -> bool:
+    """**인코더 판정**으로 확정된 위반인가 — 사전 근거(`basis`)도 사용자 답도 없는 확정 위반 (🆕 2026-10-17 · D-348 보충 6 결정 5).
+
+    인코더 쪽 절대형(C) 위반이 이 꼴이다. 화면 · 기록이 「AI 판정 · 신뢰 판단 대기」 출처를 가릴 때 쓴다(정의는 여기 한 곳 · D-99).
+    """
+    return (
+        s.verdict is Verdict.confirmed
+        and bool(s.violations)
+        and not any(e.basis for e in s.evidence)
+        and not s.user_facts
+        and s.user_subst is None
+    )
+
+
 def is_conditional(s: SentenceJudgment) -> bool:
     """**조건부 위반** — 글 밖 사실(사실 · 실증 여부)을 몰라 멈춘 보류 ∧ 그 선택지가 문장에 있다 ∧ 가장 나쁜 경우의 위험도가 섰다
     (🆕 2026-10-16 · D-348 보충 4 결정 2).

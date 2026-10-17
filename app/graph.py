@@ -1355,29 +1355,101 @@ def merge_laws(state: CoreState) -> dict[str, Any]:
     return {}
 
 
-#: 🆕 2026-10-01 (W4 · D-273 결정 3) — 위반 유형 → **불가 사유**(A 자격형 · B 실증형 · C 절대형 · D-59).
-#:    출처 `[문헌]` — `docs/ohb/sanction_rule_초안_2026-09-16.md` §6(별표 1 각 목의 단서 · 문언). D-273 이 이 표를 전제로 결정 3 을 세웠다.
-#: 🔴 **표에 없는 유형은 확정하지 않는다 — 보류다** (D-273 「사유를 못 정하면 보류」 · D-72).
-#: 🔄 2026-10-01 (D-308 ⑨) — `후기_체험기_기만` = C(체험기 형식 자체 금지 · 8①5 다목) · `기능성화장품_오인` = A(심사 · 보고를 받으면 표시)
-#:    🚨 `추천_보증_뒷광고` 는 판정이 A 지만 **표에 넣지 않는다** — D-255 가 범위 밖으로 뒀다(대가 표시 **누락**이 위반이라 문구로 못 본다).
-#:       넣으면 인용이 그 유형을 낼 때 확정이 생긴다 — 범위 밖 유형은 보류로 남는다 (D-192 · 들어올 자리에 적는다)
-#: 🔄 2026-10-01 (D-304) — `비방광고` = **B** · 실증 분기의 상한은 **R0 아래로 못 간다**(「불리한 사실만 골라 비방」은 사실이어도
-#:    남는다 · 표시광고 고시). 상한은 실증 분기(`SubstBranch.substantiated_max`)가 싣는다 — 하한(W5)이 선 뒤에 만든다.
-INFEASIBILITY_OF: dict[Violation, Infeasibility] = {
-    Violation.질병_예방치료_표방: Infeasibility.C,
-    Violation.의약품_오인: Infeasibility.C,
-    Violation.건강기능식품_오인: Infeasibility.A,
-    Violation.거짓_과장: Infeasibility.B,
-    Violation.소비자_기만: Infeasibility.B,
-    Violation.부당_비교광고: Infeasibility.B,
-    Violation.실증책임_위반: Infeasibility.B,
-    Violation.비방광고: Infeasibility.B,  # D-304 — 실증 분기 상한 ≥ R1
-    Violation.후기_체험기_기만: Infeasibility.C,  # D-308 ⑨
-    Violation.기능성화장품_오인: Infeasibility.A,  # D-308 ⑨
+#: 🆕 2026-10-01 (W4 · D-273 결정 3) — 불가 사유(A 자격형 · B 실증형 · C 절대형 · D-59).
+#: 🔄 2026-10-17 (D-348 보충 6 결정 1 · 2 · D-273 결정 3 개정) — **(유형 × 법 축) 칸**이다. 종전의 「유형 하나에 사유 하나」는 비방에서
+#:    거짓이 됐다 — 식품 제8조①6호 · 화장품 시행규칙 [별표 5] 2.카 는 근거와 관계없이 위반(C), 표시광고법 시행령 제3조④ 는 「객관적 근거
+#:    없이 · 불리한 사실만」(B). 출처 `[문헌]` — 각 칸의 조문(보충 6 의 칸 표 · `collect/statute.references` 가 같은 자리를 덮는다 — 게이트).
+#: 🔴 **빈 칸은 사유를 모름 → 보류다** (D-273 「사유를 못 정하면 보류」 · D-72 · D-220) — 대응표에 조항이 없는 칸(예: 표시광고법 × 질병)은
+#:    그 법 축으로 판정하지 않는다(보충 6 결정 8). 기본값을 두지 않는다 — 기본값이 검토하지 않은 법 축으로 새면 C 가 답 없는 위반을 낸다.
+#:    🚨 `추천_보증_뒷광고` 는 칸이 없다 — D-255 가 범위 밖으로 뒀다(대가 표시 **누락**이 위반이라 문구로 못 본다 · D-192).
+#:    🚨 `실증책임_위반` 은 세 법 모두 대응표 칸이 없다 — 칸 없음(보충 7 결정 10 · 사전 항목 0 · 인코더 라벨 없음).
+#: ⬜ 화장품 [별표 5] 2.바 뒷부분(「"최고" · "최상" 등 절대적 표현」)은 C 지만 유형이 `부당_비교광고` 와 같은 목이다 — 사전 항목(보충 7
+#:    결정 3 · 4)이 C 로 들고 온다. 이 칸은 앞부분(비교 대상 · 기준 · 객관적 확인)의 B 다.
+_FOOD_AX, _FAIR_AX, _COSM_AX = "식품표시광고법", "표시광고법", "화장품법"
+INFEASIBILITY_CELL: dict[tuple[Violation, str], Infeasibility] = {
+    (Violation.질병_예방치료_표방, _FOOD_AX): Infeasibility.C,  # 8①1
+    (Violation.의약품_오인, _FOOD_AX): Infeasibility.C,  # 8①2
+    (Violation.의약품_오인, _COSM_AX): Infeasibility.C,  # 13①1 · [별표 5] 2.가
+    (Violation.건강기능식품_오인, _FOOD_AX): Infeasibility.A,  # 8①3
+    (Violation.기능성화장품_오인, _COSM_AX): Infeasibility.A,  # 13①2 · 2.나 (D-308 ⑨)
+    (Violation.거짓_과장, _FOOD_AX): Infeasibility.B,  # 8①4
+    (Violation.거짓_과장, _FAIR_AX): Infeasibility.B,  # 3①1
+    (Violation.거짓_과장, _COSM_AX): Infeasibility.B,  # 13①4 · 2.사 · 2.아
+    (Violation.소비자_기만, _FOOD_AX): Infeasibility.B,  # 8①5
+    (Violation.소비자_기만, _FAIR_AX): Infeasibility.B,  # 3①2
+    (Violation.소비자_기만, _COSM_AX): Infeasibility.B,  # 13①4 · 2.사
+    (Violation.후기_체험기_기만, _FOOD_AX): Infeasibility.C,  # [별표 1] 5.다 (D-308 ⑨ · D-282)
+    (Violation.부당_비교광고, _FOOD_AX): Infeasibility.B,  # 8①7 「객관적인 근거 없이」
+    (Violation.부당_비교광고, _FAIR_AX): Infeasibility.B,  # 시행령 3③
+    (Violation.부당_비교광고, _COSM_AX): Infeasibility.B,  # 2.바 앞부분
+    (
+        Violation.비방광고,
+        _FOOD_AX,
+    ): Infeasibility.C,  # 8①6 · [별표 1] 6 — 근거 조건 없음 (보충 6 결정 3)
+    (Violation.비방광고, _FAIR_AX): Infeasibility.B,  # 시행령 3④ — 두 갈래 (보충 6 결정 3)
+    (Violation.비방광고, _COSM_AX): Infeasibility.C,  # [별표 5] 2.카 「사실 유무와 관계없이」
 }
+#: 전용법 축 — 같은 유형에 전용법 칸이 있으면 그 칸이 먼저다(보충 6 결정 1 · 식품표시광고법 제3조 · 화장품은 `[관행]` 특별법 우선 · 보충 7 결정 1)
+_SPECIAL_AXES = frozenset({_FOOD_AX, _COSM_AX})
 
 #: 사유가 여럿이면 **더 막힌 쪽** — 종착 우선순위(증명서 A·C > 지시 B · D-268)와 같은 순서다.
 _INFEAS_ORDER = (Infeasibility.C, Infeasibility.A, Infeasibility.B)
+
+
+def infeasibility_of(cells: Iterable[tuple[Violation, str | None]]) -> Infeasibility | None:
+    """(유형 · 법 축) 쌍들 → 문장의 불가 사유 — **조회는 여기 한 곳**(D-99 · 🆕 2026-10-17 · 보충 6 결정 1).
+
+    ① 유형마다 그 유형의 칸을 모은다 — 전용법 칸(`_SPECIAL_AXES`)이 있으면 그것만(식품 · 화장품 먼저) · 없으면 걸린 칸 전부
+    ② 한 유형이라도 칸이 하나도 없으면 **None**(사유를 모름 → 보류 · D-273 · D-220) · 쌍이 없어도 None
+    ③ 유형들의 사유 중 더 막힌 쪽(`_INFEAS_ORDER`)
+    🚨 부르는 쪽이 **그 품목에 걸린 법의 쌍만** 넘긴다(보충 6 결정 1 「그 법이 이 품목에 걸릴 때만」) — 인코더 근거는 `_basis_cells`.
+    """
+    by: dict[Violation, list[tuple[str | None, Infeasibility | None]]] = {}
+    for v, law in cells:
+        by.setdefault(v, []).append((law, INFEASIBILITY_CELL.get((v, law)) if law else None))
+    if not by:
+        return None
+    found: set[Infeasibility] = set()
+    for pairs in by.values():
+        known = [(law, r) for law, r in pairs if r is not None]
+        special = [r for law, r in known if law in _SPECIAL_AXES]
+        rs_ = special or [r for _, r in known]
+        if not rs_:
+            return None
+        found.add(next(x for x in _INFEAS_ORDER if x in rs_))
+    return next(x for x in _INFEAS_ORDER if x in found)
+
+
+def _hit_cells(hits: Iterable[DictHit]) -> list[tuple[Violation, str | None]]:
+    """사전 적중 → (유형 · 법 축) 쌍 — 유형은 인용에서(`_hit_types` 와 같은 규칙 · D-282) · 법 축은 그 인용의 법. 법별 노드가 이미 보낸 법 것만 남겼다."""
+    out: list[tuple[Violation, str | None]] = []
+    for h in hits:
+        typed = False
+        for c in h.basis:
+            t_ = statute.type_of(c)
+            if t_ and t_ in Violation.__members__:
+                out.append((Violation(t_), statute.law_of(c)))
+                typed = True
+        if not typed and h.violation_type and h.violation_type in Violation.__members__:
+            axes = {statute.law_of(c) for c in h.basis} or {None}
+            out.extend((Violation(h.violation_type), ax) for ax in axes)
+    return out
+
+
+def _basis_cells(basis: Iterable[EncoderBasis]) -> list[tuple[Violation, str | None]]:
+    """인코더 근거 → (유형 · 법 축) 쌍 — **그 근거가 선 전제의 법만**(`pm.PREMISE_LAWS` · 보충 6 결정 1 「그 법이 이 품목에 걸릴 때만」).
+
+    🔴 품목을 모르면 세 법을 모두 보내 참조 조항이 법마다 실린다(`laws_for(None)` · `_candidate_refs`) — 화장품 축의 C 가 식품 전제 근거에
+       붙지 않게 전제의 법으로 거른다. 거르고 남는 축이 없으면 그 근거는 쌍을 내지 않는다(→ 그 유형은 사유 모름).
+    """
+    out: list[tuple[Violation, str | None]] = []
+    for b in basis:
+        allowed = {LAW_OF_NODE[n] for n in pm.PREMISE_LAWS.get(b.premise, ()) if n in LAW_OF_NODE}
+        axes = {LAW_OF_ID.get(a.law_id) for a in b.articles} & allowed
+        out.extend((b.violation, ax) for ax in sorted(axes, key=str))
+        if not axes:
+            out.append((b.violation, None))
+    return out
 
 
 def _basis_article(
@@ -1443,7 +1515,7 @@ def _judge_one(
 
     ① 사전을 **못 훑었으면** 미판정 — 못 본 것을 본 것처럼 말하지 않는다 (D-220 · D-63)
     ② 이 판정에 보낸 법의 인용을 가진 적중(`hits` — 법별 노드가 거른 것)이 있으면 **위반 확정** (D-269)
-       — 근거 = 적중의 인용 조문 + 법별 노드가 고른 조문 · 뺄 구간 = 적중의 원문 좌표 · 불가 사유 = `INFEASIBILITY_OF`
+       — 근거 = 적중의 인용 조문 + 법별 노드가 고른 조문 · 뺄 구간 = 적중의 원문 좌표 · 불가 사유 = `infeasibility_of`(칸 · 보충 6)
        🔴 유형마다 사유를 못 정하면(표에 없음) **보류** · 인용 좌표를 하나도 못 세우면 **근거 없음** (D-273 · D-127 · D-224)
     ③ 적중은 있는데 그 인용이 **어느 법인지 못 정한다** → 근거 없음 — 유형은 유지 (D-127 「유형은 잡았는데 조문이 없다」)
        ⛔ 인용이 **보내지 않은 법** 것이면 근거 없음이 아니다 — 이 판정이 볼 법이 아니다(D-267)
@@ -1471,8 +1543,9 @@ def _judge_one(
             return SentenceJudgment(
                 sent_id=sid, text=text, verdict=Verdict.hold, hold_reason=HoldReason.low_conf
             )
-        reasons = {INFEASIBILITY_OF.get(t) for t in types}
-        if None in reasons:
+        # 🔄 2026-10-17 (보충 6 결정 1) — 사유는 (유형 × 법 축) 칸에서 · 적중 인용의 법이 칸의 법이다
+        reason = infeasibility_of(_hit_cells(hits))
+        if reason is None:
             # 🔴 D-273 — 사유를 못 정하면 보류. ⬜ 사유 칸(`low_conf`)은 D-273 「결정 4 의 보류 문장을 어느 사유로」(W4)의 1판이다
             return SentenceJudgment(
                 sent_id=sid,
@@ -1508,7 +1581,7 @@ def _judge_one(
             text=text,
             verdict=Verdict.confirmed,
             violations=types,
-            infeasibility=next(r for r in _INFEAS_ORDER if r in reasons),
+            infeasibility=reason,
             evidence=evidence,
             spans=spans,
         )
@@ -2424,16 +2497,20 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     sents = list(state.get("sentences", []))
     branches = list(state.get("branches") or [])
     spans = _sentence_spans(state)
+    # 🔄 2026-10-17 (보충 8 결정 1) — 인코더 쪽 절대형 확정은 품목이 정해졌을 때만(사용자가 품목을 고르면 그 품목으로 다시 판정)
+    known = product.category is not None
     if not branches:
         changed = [
             f
             for s in sents
-            if (f := _with_condition(s, facts, substs, spans.get(s.sent_id))) is not None
+            if (f := _with_condition(s, facts, substs, spans.get(s.sent_id), known)) is not None
         ]
         return {"sentences": changed} if changed else {}
     new_b: list[Branch] = []
     for b in branches:
-        ss = [_with_condition(x, facts, substs, spans.get(x.sent_id)) or x for x in b.sentences]
+        ss = [
+            _with_condition(x, facts, substs, spans.get(x.sent_id), known) or x for x in b.sentences
+        ]
         if all(x is y for x, y in zip(ss, b.sentences, strict=True)):
             new_b.append(b)
             continue
@@ -2448,12 +2525,18 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
         )
     reason = HoldReason.cat_unknown if product.category is None else HoldReason.premise_unknown
     by = [{x.sent_id: x for x in b.sentences} for b in new_b]
-    changed = [
-        r
-        for s in sents
-        if (r := _record_condition(s, [m[s.sent_id] for m in by if s.sent_id in m], reason))
-        is not None
-    ]
+    changed = []
+    for s in sents:
+        per = [m[s.sent_id] for m in by if s.sent_id in m]
+        r = _record_condition(s, per, reason)
+        # 🆕 2026-10-17 (보충 6 결정 5 · D-263 ①) — 분기가 답 없이 확정 위반(절대형)이 되면 기록이 그보다 낮을 수 없다
+        r2 = _record_at_least(r or s, per)
+        x = r2 or r
+        r3 = None if known else _mark_category_needed(x or s, per)
+        if r3 is not None:
+            changed.append(r3)
+        elif x is not None:
+            changed.append(x)
     out: dict[str, Any] = {"branches": new_b}
     if changed:
         out["sentences"] = changed
@@ -2500,6 +2583,70 @@ def _with_record_answers(
                 **{**{k: getattr(rec, k) for k in type(rec).model_fields}, "user_facts": got}
             )
     return list(out.values())
+
+
+def _mark_category_needed(
+    rec: SentenceJudgment, per: list[SentenceJudgment]
+) -> SentenceJudgment | None:
+    """품목을 모르는데 어떤 전제에서는 절대형(C) 위반이 서는 문장 → 기록을 **품목 선택 필요**(`cat_unknown`)로 (🆕 2026-10-17 · 보충 8 결정 1).
+
+    ★ 전제마다 등급이 갈린다(D-229 · `cat_unknown` 의 뜻) — 그 전제에서는 답 없이 위반, 다른 전제에서는 아니다. 품목을 고르면 다시 판정한다.
+    🔴 확신 부족 보류 · 선택지 · 답이 없는 기록만 — 선택지(`fact_check` · `substantiation`)는 `cat_unknown` 에 실을 수 없다(계약). 바꿀 것이 없으면 None.
+    """
+    if (
+        rec.verdict is not Verdict.hold
+        or rec.hold_reason is not HoldReason.low_conf
+        or rec.fact_check is not None
+        or rec.substantiation is not None
+        or rec.user_facts
+        or rec.user_subst is not None
+        or rec.not_claim
+    ):
+        return None
+    if not any(_encoder_only(x) and _absolute_types(x) for x in per):
+        return None
+    return SentenceJudgment(
+        **{
+            **{k: getattr(rec, k) for k in type(rec).model_fields},
+            "hold_reason": HoldReason.cat_unknown,
+        }
+    )
+
+
+def _record_at_least(rec: SentenceJudgment, per: list[SentenceJudgment]) -> SentenceJudgment | None:
+    """기록 문장을 분기의 가장 나쁜 경우 **이상**으로 (🆕 2026-10-17 · D-263 ① · D-319 ① · 보충 6 결정 5). 바꿀 것이 없으면 None.
+
+    ★ 분기 문장이 기록 뒤에(`doc_rules`) 인코더 쪽 절대형 위반으로 오르면 기록의 위험도가 분기보다 낮아진다 — 계약이 거부한다
+       (`_recorded_is_conservative`). 두 경우:
+       · 위험도가 선 분기가 **전부** 확정 위반이고 유형이 같다 → 기록 = 가장 무거운 분기의 판정(D-319 ① 「모든 전제에서 같은 위반」)
+       · 그 밖 → 판정은 그대로(품목 · 전제에 달렸다) · 위험도만 분기 최댓값으로 올린다(기록 = 가장 보수적인 경우)
+    """
+    live = [x for x in per if x.risk.final is not None and not x.not_claim]
+    if not live or rec.not_claim:
+        return None
+    top = max(live, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
+    have = rec.risk.final
+    if have is not None and have.level >= top.risk.final.level:  # type: ignore[union-attr]
+        return None
+    confirmed = [x for x in live if x.verdict is Verdict.confirmed and x.violations]
+    if len(confirmed) == len(live) and len({tuple(x.violations) for x in confirmed}) == 1:
+        return SentenceJudgment(
+            **{
+                **{k: getattr(top, k) for k in type(top).model_fields},
+                "sent_id": rec.sent_id,
+                "encoder_candidates": rec.encoder_candidates,
+            }
+        )
+    # 하한 칸은 분기가 든 하한(그 유형 · 전제의 제재표 하한 — `_enc_absolute` 와 같은 칸)을 올려 싣는다 — 근거 스팬 없이 하한 위로 올리지 않는다(D-131)
+    lows = [r for r in (rec.risk.floor, top.risk.floor) if r is not None]
+    if not lows:
+        return None
+    floor = max(lows, key=lambda r: r.level)
+    final = max((floor, top.risk.final), key=lambda r: r.level)  # type: ignore[arg-type]
+    risk = RiskAssessment(**{**rec.risk.model_dump(), "floor": floor, "final": final})
+    return SentenceJudgment(
+        **{**{k: getattr(rec, k) for k in type(rec).model_fields}, "risk": risk}
+    )
 
 
 def _record_condition(
@@ -2689,6 +2836,7 @@ def _encoder_side(
     facts: list[UserFact],
     substs: list[UserSubst],
     span: Span | None = None,
+    absolute_ok: bool = True,
 ) -> SentenceJudgment | None:
     """**인코더 쪽 판정** — 사전 쪽 판정이 없는 문장(`_encoder_only`)의 분기와 답. 바꿀 것이 없으면 None (🆕 2026-10-16 · D-348 보충 5 · 1 단계).
 
@@ -2702,6 +2850,15 @@ def _encoder_side(
     """
     if s.not_claim:
         return None
+    types0 = {b.violation for b in s.risk.encoder_basis}
+    prem0 = {b.premise for b in s.risk.encoder_basis}
+    if not (types0 == {Violation.질병_예방치료_표방} and prem0 == {Premise.건기식_인정}):
+        absolute = _absolute_types(s)
+        if absolute:
+            # 🆕 2026-10-17 (보충 6 결정 5 · 6) — 그 법 축 칸이 C 인 유형은 **답 없이 위반** · 분기를 열지 않는다(관문 (b) — C 가 이긴다)
+            # 🔄 2026-10-17 (보충 8 결정 1) — **품목이 정해졌을 때만** 확정한다. 품목을 모르면 전제 자체가 가정이다 — 보류 그대로(분기 없음) ·
+            #    기록은 「품목 선택 필요」(`cat_unknown` · `_mark_category_needed`) · 품목을 고르면 그 품목으로 다시 판정한다
+            return _enc_absolute(s, absolute, span) if absolute_ok else None
     if any(b.moved_from is not None for b in s.risk.encoder_basis):
         return None  # 전제가 옮긴 근거(인정받지 않은 기능성 · 4.나)는 자격(A) 문제다 — 사실 · 실증으로 풀리지 않는다(`_qualification` 과 같다)
     types = {b.violation for b in s.risk.encoder_basis}
@@ -2771,6 +2928,49 @@ def _encoder_side(
     )
 
 
+def _absolute_types(s: SentenceJudgment) -> set[Violation]:
+    """인코더 근거 중 **사유가 C 인 유형** — 유형마다 그 유형 근거의 칸으로(`infeasibility_of` · 전용법 칸 먼저 · 전제의 법만)."""
+    out: set[Violation] = set()
+    for v in {b.violation for b in s.risk.encoder_basis}:
+        cells = _basis_cells(b for b in s.risk.encoder_basis if b.violation is v)
+        if infeasibility_of(cells) is Infeasibility.C:
+            out.add(v)
+    return out
+
+
+def _enc_absolute(
+    s: SentenceJudgment, types: set[Violation], span: Span | None
+) -> SentenceJudgment | None:
+    """인코더 쪽 **절대형(C) 위반** — 답 없이 확정한다 (🆕 2026-10-17 · D-348 보충 6 결정 5 · 보충 7 결정 10).
+
+    ★ 칸 — 유형 = 칸이 C 인 인코더 근거 유형(섞인 A · B 유형은 싣지 않는다 — C 가 남는 한 그 답으로 결론이 바뀌지 않는다) ·
+       근거 = 대응표 조항(`basis` 거짓) · 구간 = **문장 전체** · 위험도 = 그 유형 · 전제의 **제재표 하한**(`EncoderBasis.floor` · 1-b 와 같은 값) ·
+       사유 C · 실증 분기 없음. 출처는 사전 근거(`basis`)도 사용자 답도 없는 확정이다 — 화면은 `contracts.encoder_judged` 로 가린다.
+    🔴 구간을 못 세우면 None(보류 그대로 · 분기 없음 · D-220). 🚨 인코더를 믿어도 되는지(신뢰 규칙)는 2 단계에서 판정한다(보충 5 결정 6).
+    """
+    basis = [b for b in s.risk.encoder_basis if b.violation in types]
+    if span is None or not basis:
+        return None
+    floor = max((b.floor for b in basis), key=lambda r: r.level)
+    arts: list[EvidenceArticle] = []
+    for b in basis:
+        for a in b.articles:
+            if a not in arts:
+                arts.append(a)
+    vs = sorted(types, key=list(Violation).index)
+    return SentenceJudgment(
+        sent_id=s.sent_id,
+        text=s.text,
+        verdict=Verdict.confirmed,
+        violations=vs,
+        infeasibility=Infeasibility.C,
+        evidence=arts,
+        risk=RiskAssessment(floor=floor, final=floor),
+        encoder_candidates=s.encoder_candidates,
+        spans=[Span(start=span.start, end=span.end, label=",".join(v.value for v in vs))],
+    )
+
+
 def _enc_disease(
     s: SentenceJudgment, facts: list[UserFact], span: Span | None
 ) -> SentenceJudgment | None:
@@ -2817,7 +3017,7 @@ def _enc_confirmed(
 
     ★ 칸 — 유형 = 그 분기의 유형(인코더 근거 유형과 같을 때만) · 근거 = 그 유형의 대응표 조항(문장에서 찾은 조문이 아니다 · `basis` 거짓) ·
        구간 = **문장 전체**(결정 3) · 위험도 = 그 유형 · 그 전제의 **제재표 하한**(`EncoderBasis.floor` · 사전 확정이 인용 호의 하한을 쓰는 것과 같다) ·
-       사유 = 유형의 사유(`INFEASIBILITY_OF`) · 실증 없음이면 실증 분기(지시 문안) · 사실 거짓이면 실증 분기 없음(지시 문안은 「고치거나 빼기」).
+       사유 = 그 근거의 칸(`infeasibility_of` · 보충 6) · 실증 없음이면 실증 분기(지시 문안) · 사실 거짓이면 실증 분기 없음(지시 문안은 「고치거나 빼기」).
     🔴 못 세우면(구간을 모른다 · 근거 유형이 다르다 · 섞였다) **보류 + 출처** — 지어내지 않는다 (D-220 · D-224).
     🚨 `[판정 대기]` 위험도를 제재표 하한으로 올린다 — 답 없는 인코더 쪽의 기록 위험도(R1 층 상한)보다 높을 수 있다. 유형은 질문이 보인 유형을
        사용자가 「해당없음」으로 닫지 않은 것으로 섰다고 본다(결정 5 「R2 이상: 유형을 믿을 수 있어야」의 해석).
@@ -2835,7 +3035,7 @@ def _enc_confirmed(
         for a in b.articles:
             if a not in arts:
                 arts.append(a)
-    reason = INFEASIBILITY_OF.get(v)
+    reason = infeasibility_of(_basis_cells(basis))
     if reason is None:
         return held
     return SentenceJudgment(
@@ -2875,6 +3075,7 @@ def _with_condition(
     facts: list[UserFact],
     substs: list[UserSubst],
     span: Span | None = None,
+    absolute_ok: bool = True,
 ) -> SentenceJudgment | None:
     """**조건부 위반** — 근거 호가 전부 조건부 호인 문장 → 보류(`premise_unknown`) + 선택지, 또는 사용자의 답으로 정한 판정. 바꿀 것이 없으면 None.
 
@@ -2900,7 +3101,7 @@ def _with_condition(
         return None
     # 🔄 2026-10-16 (D-348 보충 5 · 1 단계) — **사전과 인코더는 따로 판정한다.** 사전 쪽 판정이 없는 문장(인코더만)은 인코더 쪽 판정으로
     if _encoder_only(s):
-        return _encoder_side(s, facts, substs, span)
+        return _encoder_side(s, facts, substs, span, absolute_ok)
     if s.verdict is not Verdict.confirmed:
         # 사전 쪽 판정이 있는 확신 부족 보류(자격 없는 사전 적중 등)는 2 단계(사전 쪽을 같은 판정으로 옮김)까지 분기를 달지 않는다.
         # ⛔ 종전엔 아래 사실 갈래가 신뢰 규칙 없이 이 문장을 조건부 위반(답 없으면 확정)으로 만들 수 있었다 — 문안 표가 비어 드러나지
@@ -3110,9 +3311,12 @@ def _encoder_trusted(s: SentenceJudgment) -> bool:
 
 
 def _encoder_reason(s: SentenceJudgment) -> Infeasibility | None:
-    """사유가 비어 있는 문장(인코더만 잡은 보류)의 사유 — 인코더 근거 유형의 사유가 하나로 같을 때만 (`INFEASIBILITY_OF`). 아니면 None."""
-    rs_ = {INFEASIBILITY_OF.get(b.violation) for b in s.risk.encoder_basis}
-    return next(iter(rs_)) if len(rs_) == 1 else None
+    """사유가 비어 있는 문장(인코더만 잡은 보류)의 사유 — 인코더 근거의 (유형 × 법 축) 칸에서 **더 막힌 쪽**(`infeasibility_of`).
+
+    🔄 2026-10-17 (보충 6 결정 6) — 종전 「유형의 사유가 하나로 같을 때만」은 화장품 상품의 비방(화장품 C · 표시광고법 B)에서 사유를 비웠다.
+       칸은 그 근거가 선 전제의 법만 센다(`_basis_cells`) · 칸이 없는 유형이 섞이면 None(사유 모름).
+    """
+    return infeasibility_of(_basis_cells(s.risk.encoder_basis))
 
 
 def _answered(
