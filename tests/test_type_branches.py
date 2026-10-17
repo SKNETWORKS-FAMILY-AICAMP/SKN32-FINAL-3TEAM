@@ -146,8 +146,8 @@ def test_비방_선별_예여도_근거_갈래가_없으면_R0_으로_닫지_않
 
 def test_기만_조건_고지_예는_R0() -> None:
     got = _run(
-        _enc(Premise.식품, Violation.소비자_기만, FOOD5, FAIR2),
-        "식품",
+        _enc(Premise.일반상품, Violation.소비자_기만, FAIR2),
+        "일반상품",
         [_uf(FactKind.조건_고지, Answer.예)],
     )
     assert got is not None and got.verdict is Verdict.confirmed and not got.violations
@@ -156,7 +156,7 @@ def test_기만_조건_고지_예는_R0() -> None:
 
 def test_해당_없음은_그_갈래를_걷는다() -> None:
     na = _uf(FactKind.조건_고지, Answer.해당없음)
-    got = _run(_enc(Premise.식품, Violation.소비자_기만, FOOD5, FAIR2), "식품", [na])
+    got = _run(_enc(Premise.일반상품, Violation.소비자_기만, FAIR2), "일반상품", [na])
     assert got is None or (got.fact_check is None and got.verdict is Verdict.hold)
 
 
@@ -260,3 +260,23 @@ def test_기준_한_줄은_식품_화장품_축의_보류_비방만() -> None:
     assert reasons.slander_note(_enc(Premise.식품, Violation.거짓_과장, FOOD6, text=text)) == ""
     s = _enc(Premise.식품, Violation.비방광고, FOOD6, text="타사 제품은 해롭습니다")
     assert reasons.slander_note(s) == "", "타사 ∧ 부정은 C 확정 길이다"
+
+
+# ── 조건 고지는 표시광고법 축의 기만에만 (🆕 2026-10-17 · D-348 보충 13) ─────────────────────────
+
+
+def test_식품_기만에는_조건_고지를_묻지_않는다() -> None:
+    """식품 [별표 1] 5(가 ~ 카)에 은폐 · 축소 목이 없다 — 식품 축 근거가 있으면 묻지 않고, 「예」로 R0 이 되지도 않는다."""
+    s = _enc(Premise.식품, Violation.소비자_기만, FOOD5, FAIR2, text="설탕 0%")
+    got = _run(s, "식품")
+    assert got is None or (got.fact_check is None and got.verdict is Verdict.hold)
+    got = _run(s, "식품", [_uf(FactKind.조건_고지, Answer.예, text="설탕 0%")])
+    assert got is None or (got.verdict is Verdict.hold and got.risk.final is not Risk.R0), (
+        "묻지 않은 질문의 답으로 닫지 않는다"
+    )
+
+
+def test_일반상품_기만에는_조건_고지를_묻는다() -> None:
+    got = _run(_enc(Premise.일반상품, Violation.소비자_기만, FAIR2), "일반상품")
+    assert got is not None and got.fact_check is not None
+    assert got.fact_check.kind is FactKind.조건_고지
