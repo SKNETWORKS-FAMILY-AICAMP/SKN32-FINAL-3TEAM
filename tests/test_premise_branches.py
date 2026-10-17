@@ -15,6 +15,7 @@ import pytest
 
 from app import premise as pm
 from app.contracts import (
+    Answer,
     Category,
     HoldReason,
     Infeasibility,
@@ -73,13 +74,15 @@ def _hit(*basis: str) -> DictHit:
     return DictHit(term="낱말", violation_type=None, basis=basis, span=(0, 2))
 
 
-def _run(by_law: dict[str, list[DictHit]], category: Category | None = None) -> tuple[dict, dict]:
+def _run(
+    by_law: dict[str, list[DictHit]], category: Category | None = None, facts: list | None = None
+) -> tuple[dict, dict]:
     """문장 하나 · 법별 적중으로 `judge` → `assess_risk` → `premise_branches` 를 실제로 돌린다. `(상태, 분기 노드가 낸 것)`."""
     laws = LAW_NODES if category is None else tuple(by_law) or ("law_ftc",)
     st: dict = {
         "text": TEXT,
         "sents": [TEXT],
-        "product": ProductContext(category=category),
+        "product": ProductContext(category=category, facts=facts or []),
         "laws": laws,
         "dict_scans": [
             DictScan(sent_id="s0", ran=True, hits=tuple(h for hs in by_law.values() for h in hs))
@@ -453,3 +456,39 @@ def test_조건부_후보에는_조건_문안이_붙는다(criteria: None) -> No
     # 글자는 승인본(기준 문안 §11)과 같다
     doc = pathlib.Path("docs/ohb/기준문안_초안_2026-10-02.md").read_text(encoding="utf-8")
     assert f"| {reasons.UNRECOGNIZED_CANDIDATE_NOTE} |" in doc.split("## 11.")[1]
+
+
+def test_건기식_인정의_질병_표방은_문안이_서면_사실_확인_분기다(
+    criteria: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🆕 2026-10-16 (D-348 결정 6 · 보충 3 결정 2 · D-319 ③ 개정) — 「판정하지 못함」 자리를 사용자가 고르는 분기로. 답은 그 문장에만."""
+    from app import factcheck as fc  # noqa: PLC0415
+    from app.contracts import FactKind, UserFact, is_conditional  # noqa: PLC0415
+
+    monkeypatch.setattr(
+        fc,
+        "FACT_TEXTS",
+        {FactKind.인정_기능성: fc.FactText(["(시험) 인정서"], "(시험) 인정 문구 그대로인가")},
+    )
+    st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식)
+    b = _branch(st, Premise.건기식_인정).sentences[0]
+    assert is_conditional(b) and b.fact_check.kind is FactKind.인정_기능성
+    assert b.violations == [Violation.질병_예방치료_표방] and b.risk.final is not None, (
+        "가장 나쁜 쪽의 하한"
+    )
+    assert _branch(st, Premise.건기식_비인정).sentences[0].verdict is Verdict.confirmed
+    yes = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.예)
+    st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [yes])
+    b = _branch(st, Premise.건기식_인정).sentences[0]
+    assert b.verdict is Verdict.confirmed and not b.violations and b.user_facts == [yes]
+    no = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.아니오)
+    st, out = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [no])
+    assert "branches" not in out, "「거짓」이면 두 전제의 판정이 같아 분기를 내지 않는다"
+    rec = st["sentences"][0]
+    assert rec.verdict is Verdict.confirmed and rec.violations == [Violation.질병_예방치료_표방]
+    assert rec.user_facts == [no], "분기가 생략돼도 사용자의 답은 기록에 출처로 남는다"
+    # 🆕 2026-10-17 (D-348 보충 5 · 1-b) — 해당 없음 — 분기를 걷고 「판정하지 못함」 그대로 · 답은 출처로 남는다
+    na = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.해당없음)
+    st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [na])
+    b = _branch(st, Premise.건기식_인정).sentences[0]
+    assert b.fact_check is None and not is_conditional(b) and b.user_facts == [na]

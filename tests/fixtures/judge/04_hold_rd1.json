@@ -24,7 +24,7 @@
       ],
       "risk": {
         "floor": "R2",
-        "encoder": "R3",
+        "encoder": null,
         "final": "R3",
         "evidence_span": {
           "start": 0,

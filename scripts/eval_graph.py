@@ -57,6 +57,7 @@ from app.contracts import (  # noqa: E402
     ProductContext,
     SentenceJudgment,
     Verdict,
+    is_conditional,
 )
 from collect import statute  # noqa: E402
 from preprocess import devsplit  # noqa: E402
@@ -91,7 +92,10 @@ DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 
 #: 행 하나의 응답 갈래 — 조건별 대응표(D-275)와 selective risk 가 같이 쓴다.
 #: 🔴 「확정 위반」은 **전 문장 확정 ∧ 위반 있음**이 아니라 **위반을 확정한 문장이 하나라도** — 예측의 정의와 같다.
-CLASSES = ("확정위반", "확정무위반", "보류", "근거없음", "미판정")
+#: 🔄 2026-10-16 (D-348 보충 4 결정 2) — 「조건부위반」: 위반을 확정한 문장은 없고, 조건부 위반 문장(답하면 확정되는 보류)이 **하나라도** 있다
+#:    (「확정위반」의 「하나라도」와 같은 규칙 · 다른 문장이 확신 부족 보류여도 그 행은 조건부위반이다). 정의는 `contracts.is_conditional`
+#:    🔄 같은 날 고침 — 종전 「나머지가 전부 확정일 때만」은 확정위반과 규칙이 달라 같은 행(조건부 + 확신 부족)이 전에는 확정위반 · 뒤에는 보류로 세어졌다
+CLASSES = ("확정위반", "조건부위반", "확정무위반", "보류", "근거없음", "미판정")
 
 
 def load_rows(
@@ -152,8 +156,11 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
     cands = sorted({v.value for s in sents if s.verdict is Verdict.hold for v in s.violations})
     ho = sorted({h for s in conf if s.violations for h in _ho(s)})
     verdicts = [s.verdict.value for s in sents]
+    cond = [s for s in sents if is_conditional(s)]
     if any(s.violations for s in conf):
         cls = "확정위반"
+    elif cond:
+        cls = "조건부위반"
     elif sents and len(conf) == len(sents):
         cls = "확정무위반"
     elif any(s.verdict is Verdict.unjudged for s in sents) or not sents:
@@ -201,13 +208,41 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         #: 🆕 2026-10-02 (W5) — 확정 위반 문장에 **위험도가 다 붙었나**. 붙었는데 종착이 보류면 하한이 아니라 종착 재료(증명서 · 지시 문안)가 없다
         "risked": all(s.risk.final is not None for s in conf if s.violations),
         "n_sents": len(sents),
+        #: 🆕 2026-10-15 (D-348 보충 1) — **판정 대상 아님 문장이 있나**(L0 · 주의 · 상담 문구). 칸 표에서 「사전 확정」과 가르고,
+        #:    판정 대상 아님만 있는 행이 품목 미확정으로 보류된 까닭(D-319 결정 2)을 「종착 재료 없음」과 가른다
+        "not_claim": any(s.not_claim for s in sents),
+        "not_claim_only": bool(sents) and all(s.not_claim for s in sents),
+        #: 🆕 2026-10-16 (D-348 보충 2) — **기록 판정에 인코더 하한이 붙은 문장이 있나**(보류 문장 · 판정은 그대로).
+        #:    보충 1 결정 3 의 지표(적법에 하한이 붙는 비율)가 이 칸을 센다
+        "enc_risk": any(s.risk.encoder is not None for s in sents),
+        #: 🆕 2026-10-16 (D-348 보충 3) — 사실 확인 분기가 달린 문장이 있나 · 사용자가 확인한 사실로 정한 문장이 있나
+        "fact_branch": any(s.fact_check is not None for s in sents),
+        "user_fact": any(s.user_facts for s in sents),
+        #: 🆕 2026-10-16 (D-348 보충 4) — 조건부 위반 문장의 유형(가장 나쁜 경우 = 답 없음 · 거짓 분기의 판정) · 사전 유형, 없으면 인코더 근거의 유형
+        "cond_types": sorted(
+            {v.value for s in cond for v in s.violations}
+            | {b.violation.value for s in cond if not s.violations for b in s.risk.encoder_basis}
+        ),
+        "user_subst": any(s.user_subst is not None for s in sents),
+        #: 🆕 2026-10-16 (D-348 보충 5) — **인코더 쪽 보류 + 분기**(답 없이 확정하지 않는다 · 조건부가 아니다)가 달린 문장이 있나 · 그 유형
+        "enc_choice": any(
+            s.verdict is Verdict.hold
+            and s.hold_reason is HoldReason.low_conf
+            and (s.fact_check is not None or s.substantiation is not None)
+            for s in sents
+        ),
+        #: 🆕 2026-10-16 — **응답 계약을 지나지 못한 행**(`to_response` 가 거부) · 앱이라면 그 요청은 오류로 끝난다. 실제 실행에서만 채운다(`_checked`)
+        "contract_error": state.get("_contract_error"),
         #: 🆕 2026-10-06 (D-263 ① · D-319 ①) — **분기 때문에 보류로 기록된 문장에 실린 유형**(가장 보수적인 전제의 위반).
         #:    `candidates`(자격 없는 적중까지 든 보류 후보)와 다르다 — 전제를 몰라 멈춘 문장만이다
         "premise_held": sorted(
             {
                 v.value
                 for s in sents
-                if s.verdict is Verdict.hold and s.hold_reason in PREMISE_HOLDS
+                if s.verdict is Verdict.hold
+                and s.hold_reason in PREMISE_HOLDS
+                # 🔄 2026-10-16 (D-348 보충 4) — 조건부 위반은 품목 · 전제 보류가 아니다(`cond_types` 로 따로 센다)
+                and not is_conditional(s)
                 for v in s.violations
             }
         ),
@@ -265,6 +300,16 @@ def _branch_view(b: Any) -> dict[str, Any]:
         "candidates": sorted(
             {v.value for s in b.sentences if s.verdict is Verdict.hold for v in s.violations}
         ),
+        #: 🆕 2026-10-16 (D-348 보충 4) — 분기 안 **조건부 위반** 문장의 유형(답 없음 = 그 분기의 가장 나쁜 경우)
+        "cond_types": sorted(
+            {v.value for s in b.sentences if is_conditional(s) for v in s.violations}
+            | {
+                x.violation.value
+                for s in b.sentences
+                if is_conditional(s) and not s.violations
+                for x in s.risk.encoder_basis
+            }
+        ),
         "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
         "committed": bool(b.sentences) and len(conf) == len(b.sentences),
     }
@@ -281,6 +326,8 @@ def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     """
     out = {"rows_with_branches": sum(1 for p in preds if p.get("branches")), "positive": 0}
     out.update({"confirmed": 0, "type_hit": 0, "ho_hit": 0, "wrong": 0})
+    #: 🆕 2026-10-16 (D-348 보충 4) — 분기의 확정 위반이 없고 조건부 위반이 있는 행 · 그 유형이 정답과 겹친 행(확정 수와 나란히)
+    out.update({"conditional": 0, "cond_hit": 0})
     by: dict[str, list[int]] = {}
     for r, p in zip(rows, preds, strict=True):
         name = r.get("전제")
@@ -293,6 +340,10 @@ def branch_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         cell = by.setdefault(name, [0, 0, 0])
         cell[0] += 1
         if not b["types"]:
+            ct = set(b.get("cond_types", ()))
+            if ct:
+                out["conditional"] += 1
+                out["cond_hit"] += bool(ct & truth_types(r, ct))
             continue
         out["confirmed"] += 1
         cell[1] += 1
@@ -337,7 +388,10 @@ COMBO_CELLS = reasons.COMBO_CELLS
 def combo_cell(p: dict) -> str:
     """행 예측 → 조합 판정 칸. 기록 판정의 칸이다(인코더 후보는 직접 낸 것만 · 옮긴 후보 제외). 규칙은 `reasons.combo_cell` (D-99)."""
     return reasons.combo_cell(
-        bool(p["committed"]), p.get("candidates", ()), p.get("enc_candidates", ())
+        bool(p["committed"]),
+        p.get("candidates", ()),
+        p.get("enc_candidates", ()),
+        not_claim=bool(p.get("not_claim_only")),
     )
 
 
@@ -573,6 +627,9 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     for p in held:
         if p["hold_reasons"]:
             reasons.update(p["hold_reasons"])
+        elif p.get("not_claim_only"):
+            # 🆕 2026-10-15 (D-348 보충 1 · D-319 결정 2) — 판정 대상 아님만 있는 행 · 품목 미확정이라 맨 위 통과를 내지 않았다
+            reasons["판정대상아님·품목미확정(D-319 ②)"] += 1
         elif p["committed"]:
             # 🔄 2026-10-02 (W5) — 위험도가 붙은 뒤의 보류는 다른 까닭이다: 종착의 재료가 없다 (`app/graph.py` 종착).
             #    🔄 2026-10-06 — 증명서 조립기는 섰다(D-320). 여기 남는 것은 사유 문안이 없는 조합과 실증 분기가 없는 지시다
@@ -654,7 +711,86 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["combo"] = combo_report(rows, preds)
     out["reason"] = reason_report(rows, preds)
     out["recorded"] = recorded_report(rows, preds)
+    out["encoder_risk"] = encoder_risk_report(rows, preds)
+    out["contract_errors"] = sum(1 for p in preds if p.get("contract_error"))
+    out["fact_branch_rows"] = sum(1 for p in preds if p.get("fact_branch"))
+    out["enc_choice_rows"] = sum(1 for p in preds if p.get("enc_choice"))
+    out["conditional"] = conditional_report(rows, preds)
     return out
+
+
+def conditional_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
+    """조건부 위반 (🆕 2026-10-16 · D-348 보충 4 결정 2) — 「답 없음 · 거짓」 분기의 판정을 골든과 맞댄다.
+
+    ★ 골든의 위반 라벨은 그 사건에서 사실이 거짓 · 실증을 못 했다는 전제다 — 조건부 위반은 그 분기에서 위반이므로 유형이 맞으면 맞힌 것이다.
+       확정 재현율과 **나란히** 싣는다(`확정 ∪ 조건부`) — 확정 재현율을 대신하지 않는다.
+    🚨 적법 행의 조건부 위반은 따로 센다 — 답하면 풀리지만 묻는 것 자체가 사용자 부담이다(오탐의 다른 모양).
+    """
+    sc = [(r, p) for r, p in zip(rows, preds, strict=True) if scored(r)]
+    pos = conf_hit = cond_hit = either = 0
+    for r, p in sc:
+        pt, ct = set(p["types"]), set(p.get("cond_types", ()))
+        tt = truth_types(r, pt | ct)
+        if not tt:
+            continue
+        pos += 1
+        conf_hit += bool(pt & tt)
+        cond_hit += bool(p["class"] == "조건부위반" and ct & tt)
+        either += bool((pt | (ct if p["class"] == "조건부위반" else set())) & tt)
+    lawful = [p for r, p in zip(rows, preds, strict=True) if lawful_kind(r)]
+    return {
+        "rows": sum(1 for p in preds if p["class"] == "조건부위반"),
+        "positive": pos,
+        "confirmed": conf_hit,
+        "conditional": cond_hit,
+        "either": either,
+        "lawful_rows": len(lawful),
+        "lawful_conditional": sum(1 for p in lawful if p["class"] == "조건부위반"),
+    }
+
+
+def _checked(state: dict[str, Any]) -> dict[str, Any]:
+    """그래프 상태가 **응답 계약**을 지나는가 — 못 지나면 그 까닭을 상태에 싣는다(🆕 2026-10-16 · D-220).
+
+    ⛔ 종전에는 평가가 응답을 만들지 않아, 앱에서 오류로 끝날 행(기록 ≥ 분기 위반 등)이 eval 에서는 정상으로 세어졌다
+       (10-16 인코더 하한 결함 · D-348 보충 2 결정 10). 판정 수는 그대로 세고 오류 행 수를 따로 낸다 — 0 이 아니면 보고 맨 위에 적는다.
+    """
+    try:
+        g.to_response(state)  # type: ignore[arg-type]
+    except ValueError as e:  # pydantic ValidationError 도 ValueError 다
+        return {**state, "_contract_error": str(e).splitlines()[0][:200] + " · " + str(e)[-200:]}
+    return state
+
+
+def encoder_risk_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
+    """인코더 하한이 붙은 행 (🆕 2026-10-16 · D-348 보충 1 결정 3 · 보충 2 결정 5) — 위반 · 적법 · 모호별.
+
+    ★ 지표 = **적법에 하한이 붙는 비율** · 분모 = **적법 행 전체**(조건 D · L · 보충 2 결정 5) · Wilson 95% 상한 ≤ 10% `[임의]`(D-347 결정 7 (ㄱ)
+       과 같은 예산)이면 그 가드 세기를 쓴다. 🔴 적법 행이 없으면 「잰 것 없음」(None) — 0 % 로 쓰지 않는다 (D-220).
+    🚨 진단이다 — 판정 · 종착은 이 칸을 읽지 않는다. 인코더가 돈 행만 센다(안 돈 행은 하한이 붙을 수 없다).
+    """
+    pos = law = m = pos_n = law_n = m_n = 0
+    for r, p in zip(rows, preds, strict=True):
+        if not p.get("encoded"):
+            continue
+        cond = r.get("조건") or ""
+        hit = bool(p.get("enc_risk"))
+        if cond in ("A", "B", "C"):
+            pos_n += 1
+            pos += hit
+        elif cond in ("D", "L"):
+            law_n += 1
+            law += hit
+        elif cond == "M":
+            m_n += 1
+            m += hit
+    ci = wilson(law, law_n)
+    return {
+        "violation": [pos, pos_n],
+        "lawful": [law, law_n],
+        "ambiguous": [m, m_n],
+        "lawful_upper": ci[1] if ci else None,
+    }
 
 
 def conditional_rows(rows: list[dict]) -> list[dict]:
@@ -773,6 +909,37 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
         )
         for k, (n, pos, law, m) in cb.items():
             print(f"    {k:28} {n:>5} · {pos:>4} / {law:>3} · M {m}")
+    if s.get("contract_errors"):
+        print(
+            f"\n  🔴 응답 계약을 지나지 못한 행 {s['contract_errors']} — 앱이라면 그 요청은 오류로 끝난다 (행별 `contract_error`)"
+        )
+    if s.get("fact_branch_rows"):
+        print(
+            f"\n  사실 확인 분기가 달린 행 {s['fact_branch_rows']} (D-348 보충 3 · 기록은 보류 · 선택지)"
+        )
+    if s.get("enc_choice_rows"):
+        print(
+            f"\n  인코더 쪽 보류 + 분기가 달린 행 {s['enc_choice_rows']} (D-348 보충 5 · 답 없이 확정하지 않는다 · 분류는 보류)"
+        )
+    cd = s.get("conditional") or {}
+    if cd.get("rows"):
+        print(
+            f"\n  조건부 위반 행 {cd['rows']} (D-348 보충 4 · 답하면 확정) — 위반 행 {cd['positive']} 중 "
+            f"확정 {cd['confirmed']} · 조건부 {cd['conditional']} · 확정 ∪ 조건부 {cd['either']} · "
+            f"적법 {cd['lawful_rows']} 중 조건부 {cd['lawful_conditional']}"
+        )
+    er = s.get("encoder_risk") or {}
+    if er:
+        (vk, vn), (lk, ln), (mk, mn) = er["violation"], er["lawful"], er["ambiguous"]
+        up = er["lawful_upper"]
+        print(
+            "\n  인코더 하한 (D-348 보충 2 · 기록 판정 · 보류 문장 · 판정 아님) — 하한이 붙은 행 / 그 조건의 행"
+            f"\n    위반(A·B·C) {vk} / {vn} · 적법(D·L) {lk} / {ln}"
+            + (f" ({lk / ln:.1%} · 95% 상한 {up:.1%})" if ln else " (잰 것 없음)")
+            + f" · 모호(M) {mk} / {mn}"
+            + ("" if ln >= MIN_MEASURABLE else "  ← 적법 측정 불가 (n<30 · D-40)")
+            + "\n    ⓘ 가드 세기는 적법 95% 상한 ≤ 10% `[임의]` 로 고른다 (보충 1 결정 3) · 분모는 적법 행 전체 (보충 2 결정 5)"
+        )
     be = s.get("branch_encoder") or {}
     for name, (pos, hit, fired) in be.items():
         print(
@@ -817,7 +984,8 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
             f"\n  분기 (D-319) — 분기가 나온 행 {b['rows_with_branches']} · 정답 품목의 분기를 본 위반 행 {n}"
             + (
                 f" · 그 분기의 확정 위반 {b['confirmed']}({b['confirmed'] / n:.1%}) · 유형 맞음 {b['type_hit']} · "
-                f"호 맞음 {b['ho_hit']} · 유형 틀림 {b['wrong']}"
+                f"호 맞음 {b['ho_hit']} · 유형 틀림 {b['wrong']} · 조건부 위반 {b.get('conditional', 0)}"
+                f"(유형 맞음 {b.get('cond_hit', 0)})"
                 if n
                 else ""
             )
@@ -1142,7 +1310,7 @@ def main(argv: list[str] | None = None) -> int:
             cfg = {"configurable": {"conn": cur}}
             preds = run(
                 rows,
-                lambda t, p: review.invoke({"text": t, "product": p}, config=cfg),
+                lambda t, p: _checked(review.invoke({"text": t, "product": p}, config=cfg)),
                 conditional=a.conditional,
             )
     secs = time.perf_counter() - t0
