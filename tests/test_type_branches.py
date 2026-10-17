@@ -280,3 +280,57 @@ def test_일반상품_기만에는_조건_고지를_묻는다() -> None:
     got = _run(_enc(Premise.일반상품, Violation.소비자_기만, FAIR2), "일반상품")
     assert got is not None and got.fact_check is not None
     assert got.fact_check.kind is FactKind.조건_고지
+
+
+# ── 무첨가 조건 (🆕 2026-10-17 · D-348 보충 14) ──────────────────────────────────────────────────
+
+FOOD7 = EvidenceArticle(law_id="013094", article="제8조제1항제7호")
+
+
+@pytest.mark.parametrize(
+    ("text", "names"),
+    [
+        ("설탕 무첨가 오렌지주스", ["설탕 무첨가"]),
+        ("무가당이라 좋아요", ["설탕 무첨가"]),
+        ("나트륨무첨가", ["나트륨 무첨가"]),
+        ("무가염 버터", ["나트륨 무첨가"]),
+        ("무설탕 캔디", []),
+        ("인공색소를 사용하지 않았습니다", []),
+    ],
+)
+def test_무첨가_표현은_조건표에_있는_것만(text: str, names: list[str]) -> None:
+    assert [n for n, _ in fc.nofree_conditions(text)] == names
+
+
+def test_식품_비교의_무첨가_표현은_무첨가_조건을_묻는다() -> None:
+    s = _enc(Premise.식품, Violation.부당_비교광고, FOOD7, text="설탕 무첨가 오렌지주스")
+    got = _run(s, "식품")
+    assert got is not None and got.fact_check is not None
+    assert got.fact_check.kind is FactKind.무첨가_조건
+    no = _run(s, "식품", [_uf(FactKind.무첨가_조건, Answer.아니오, text="설탕 무첨가 오렌지주스")])
+    assert no is not None and no.verdict is Verdict.confirmed
+    assert no.violations == [Violation.부당_비교광고], "조건을 지키지 않은 무첨가는 7.나 부당 비교"
+
+
+def test_조건표에_없는_무첨가는_비교_기준_그대로() -> None:
+    s = _enc(Premise.식품, Violation.부당_비교광고, FOOD7, text="인공색소를 사용하지 않았습니다")
+    got = _run(s, "식품")
+    assert got is not None and got.fact_check is not None
+    assert got.fact_check.kind is FactKind.비교_기준
+
+
+def test_무첨가_조건_목록이_화면에_펼쳐진다() -> None:
+    """화면은 질문의 「아래 조건」을 필터(`nofree_conditions`)로 펼친다 — 필터 등록 · 틀의 사용 자리 · 펼친 글자."""
+    import pathlib as _p  # noqa: PLC0415
+
+    from app.templating import templates  # noqa: PLC0415
+
+    assert templates.env.filters["nofree_conditions"] is fc.nofree_conditions
+    src = _p.Path("app/templates/user/review.html").read_text(encoding="utf-8")
+    assert "s.text|nofree_conditions" in src and '"무첨가_조건"' in src
+    html = templates.env.from_string(
+        "{% for name, conds in t|nofree_conditions %}「{{ name }}」 조건"
+        "{% for c in conds %}<li>{{ c }}</li>{% endfor %}{% endfor %}"
+    ).render(t="설탕 무첨가 오렌지주스")
+    assert "「설탕 무첨가」 조건" in html
+    assert fc.NOFREE_CONDITIONS[("설탕 무첨가", "무가당")][0] in html

@@ -2920,13 +2920,26 @@ def _encoder_side(
             return []
         return [v.value]
 
+    def _kinds_of(v: Violation) -> list[FactKind]:
+        # 🆕 (보충 14) 조건표에 있는 무첨가 표현(설탕 무첨가 · 무가당 · 나트륨 무첨가 · 무가염)을 쓴 식품 축의 비교 · 비방 문장은
+        #    비교 기준 대신 무첨가 조건을 묻는다 — 식품 [별표 1] 7.나 단서(고시가 정한 무첨가 표시는 조건을 지키면 쓸 수 있다)
+        if (
+            v in (Violation.부당_비교광고, Violation.비방광고)
+            and FactKind.무첨가_조건 in factcheck.FACT_TEXTS
+            and factcheck.nofree_conditions(s.text)
+            and any(
+                ax == _FOOD_AX
+                for _, ax in _basis_cells(b for b in s.risk.encoder_basis if b.violation is v)
+            )
+        ):
+            return [FactKind.무첨가_조건]
+        return factcheck.type_kinds(_ask_as(v))
+
     t_kinds = [
-        k
-        for k in factcheck.type_kinds(t for v in b_types for t in _ask_as(v))
-        if k not in word_kinds
+        k for k in dict.fromkeys(k for v in b_types for k in _kinds_of(v)) if k not in word_kinds
     ]
     kind_type = {k: Violation.거짓_과장 for k in word_kinds} | {
-        k: v for v in b_types for k in factcheck.type_kinds(_ask_as(v))
+        k: v for v in b_types for k in _kinds_of(v)
     }
     kinds = word_kinds + t_kinds
     ans: dict[FactKind, UserFact] = {}

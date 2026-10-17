@@ -74,6 +74,9 @@ templates.env.filters["general_goods_notes"] = reasons.general_goods_notes
 templates.env.filters["slander_note"] = reasons.slander_note  # 🆕 2026-10-17 (D-348 보충 11)
 #: 🆕 2026-10-17 (보충 5 결정 5 의 집행 꼴) — 종류별 질문 한 줄(승인 전에는 공통 질문)
 templates.env.filters["fact_question"] = factcheck.fact_question
+templates.env.filters["nofree_conditions"] = (
+    factcheck.nofree_conditions
+)  # 🆕 2026-10-17 (D-348 보충 14)
 templates.env.globals["REPRESENTATIVE_MARK"] = reasons.REPRESENTATIVE_MARK
 templates.env.globals["ENC_REMAINS_MARK"] = reasons.ENC_REMAINS_MARK
 templates.env.globals["NOTE_UNJUDGED_MARK"] = (

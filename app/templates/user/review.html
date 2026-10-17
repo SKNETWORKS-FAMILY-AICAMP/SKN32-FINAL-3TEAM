@@ -511,6 +511,11 @@
           {#- 🔄 2026-10-17 — 질문은 종류마다 한 줄(승인 전에는 종전 공통 질문) · 설명 · 예는 기준 문안 칸 #}
           <p class="rv-todo">{{ s.fact_check.kind|fact_question }} <small>({{ s.fact_check.kind.value|replace("_", " ") }} · 증빙 — {{ s.fact_check.accepted_evidence|join(" · ") }})</small></p>
           <p class="rv-why">{{ s.fact_check.criteria }}</p>
+          {#- 🆕 2026-10-17 (D-348 보충 14) 무첨가 조건 — 질문의 「아래 조건」을 고시 원문(36814 별지 1.아.3) 그대로 펼친다 #}
+          {% if s.fact_check.kind.value == "무첨가_조건" %}{% for name, conds in s.text|nofree_conditions %}
+          <p class="rv-why"><b>「{{ name }}」 조건</b></p>
+          <ol class="rv-why">{% for c in conds %}<li>{{ c }}</li>{% endfor %}</ol>
+          {% endfor %}{% endif %}
           <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:true">맞아요</button>
           <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:false">아니에요</button>
           {#- 🆕 2026-10-16 (D-348 보충 5 — 화면 문안 초안 · 화면 담당 확인 전) 해당 없음 — 다른 두 버튼과 같은 무게로 둔다 #}
