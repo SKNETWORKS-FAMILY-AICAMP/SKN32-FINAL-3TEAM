@@ -159,6 +159,35 @@ ENCODER_QUESTION_TEXT = "AI 추정 · 판정 아님 — 아래 질문에 답하�
 #:    할 일 한 줄. 실증으로 풀리지 않는다 — 고치거나 뺀다. ⬜ 법령 설명(유형 · 근거 호 · 필요한 표현의 예)은 질문 재료 문안과 같은 상수로(결정 5)
 FACT_FALSE_TODO = "사실과 다른 표시예요 — 문구를 고치거나 빼 주세요"
 
+#: 🆕 2026-10-17 (D-348 보충 6 결정 8 · 화면 문안 초안 · 화면 담당 확인 전 · 문안 승인 D-263 ②) — **일반상품**(전용법을 검수하지 않은 품목)의 안내 두 줄.
+#:    ① 표시광고법 호가 있는 유형은 표시광고법 기준으로 판정한다 — 그 위험도 옆에 ② 호가 없는 유형(질병 표방 · 의약품 오인 · 건강기능식품 오인)은
+#:    판정하지 않는다 — 그 표현이 보이면. 통과는 여전히 없다(D-314 · D-277).
+GENERAL_GOODS_RISK_NOTE = (
+    "표시광고법 기준으로 낸 위험도예요 — 이 품목에 따로 적용되는 법(전용법)은 확인이 필요해요"
+)
+GENERAL_GOODS_UNJUDGEABLE = "표시광고법으로 판정할 수 없는 표현이에요 — 해당 품목의 전용법(의료기기법 · 약사법 등) 확인이 필요해요"
+_GENERAL = Premise.일반상품.value
+_FAIR_LAW = "표시광고법"
+
+
+def general_goods_notes(sentence: object, premise: str) -> list[str]:
+    """일반상품 전제 · 품목의 문장 안내(보충 6 결정 8) — 위험도가 선 문장에 ①, 표시광고법 호가 없는 유형(사전 · 인코더 후보 · 유형)이 보이면 ②.
+
+    🔴 일반상품이 아니면 빈 목록. 호가 있는지는 대응표 한 곳(`statute.references`)으로 본다 (D-99).
+    """
+    if premise != _GENERAL or getattr(sentence, "not_claim", False):
+        return []
+    out: list[str] = []
+    risk = getattr(sentence, "risk", None)
+    if risk is not None and risk.final is not None:
+        out.append(GENERAL_GOODS_RISK_NOTE)
+    seen = {v.value for v in getattr(sentence, "violations", [])} | {
+        c.violation.value for c in getattr(sentence, "encoder_candidates", [])
+    }
+    if any(not statute.references(v, _FAIR_LAW) for v in seen):
+        out.append(GENERAL_GOODS_UNJUDGEABLE)
+    return out
+
 
 def question_text(sentence: object) -> str:
     """질문(분기)이 달린 문장의 결론 한 줄 — 조건부 위반이면 `conditional_text` · 인코더 쪽 보류 + 분기면 `ENCODER_QUESTION_TEXT` · 아니면 빈 글자.

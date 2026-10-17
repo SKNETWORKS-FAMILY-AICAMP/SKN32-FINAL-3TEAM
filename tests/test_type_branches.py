@@ -156,3 +156,32 @@ def test_식품_비방은_절대형이라_묻지_않는다(drafts: None) -> None
 def test_조합_칸은_인코더_판정_확정을_가른다() -> None:
     assert reasons.combo_cell(True, (), ("비방광고",), encoder_judged=True) == "인코더 판정 확정"
     assert reasons.combo_cell(True, (), ()) == reasons.COMBO_CELLS[0]
+
+
+# ── 일반상품 안내 (🆕 2026-10-17 · D-348 보충 6 결정 8 · 문안 초안) ─────────────────────────────
+
+
+def test_일반상품_안내_두_줄() -> None:
+    from app.contracts import EncoderTypeCandidate  # noqa: PLC0415
+
+    s = _enc(Premise.일반상품, Violation.비방광고, FAIR4)
+    assert reasons.general_goods_notes(s, "일반상품") == [reasons.GENERAL_GOODS_RISK_NOTE]
+    assert reasons.general_goods_notes(s, "식품") == [], "일반상품이 아니면 안내 없음"
+    q = SentenceJudgment(
+        sent_id="s0",
+        text="관절염이 낫습니다",
+        verdict=Verdict.hold,
+        hold_reason=HoldReason.low_conf,
+        encoder_candidates=[
+            EncoderTypeCandidate(violation=Violation.질병_예방치료_표방, confidence=0.9)
+        ],
+    )
+    assert reasons.general_goods_notes(q, "일반상품") == [reasons.GENERAL_GOODS_UNJUDGEABLE], (
+        "표시광고법에 질병 호가 없다 — 판정하지 않고 전용법 확인 안내(위험도가 없으면 ① 은 없다)"
+    )
+
+
+def test_검수_화면_틀이_안내_줄과_함께_읽힌다() -> None:
+    from app.templating import templates  # noqa: PLC0415
+
+    templates.env.get_template("user/review.html")
