@@ -2521,12 +2521,16 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
         )
     reason = HoldReason.cat_unknown if product.category is None else HoldReason.premise_unknown
     by = [{x.sent_id: x for x in b.sentences} for b in new_b]
-    changed = [
-        r
-        for s in sents
-        if (r := _record_condition(s, [m[s.sent_id] for m in by if s.sent_id in m], reason))
-        is not None
-    ]
+    changed = []
+    for s in sents:
+        per = [m[s.sent_id] for m in by if s.sent_id in m]
+        r = _record_condition(s, per, reason)
+        # 🆕 2026-10-17 (보충 6 결정 5 · D-263 ①) — 분기가 답 없이 확정 위반(절대형)이 되면 기록이 그보다 낮을 수 없다
+        r2 = _record_at_least(r or s, per)
+        if r2 is not None:
+            changed.append(r2)
+        elif r is not None:
+            changed.append(r)
     out: dict[str, Any] = {"branches": new_b}
     if changed:
         out["sentences"] = changed
@@ -2573,6 +2577,42 @@ def _with_record_answers(
                 **{**{k: getattr(rec, k) for k in type(rec).model_fields}, "user_facts": got}
             )
     return list(out.values())
+
+
+def _record_at_least(rec: SentenceJudgment, per: list[SentenceJudgment]) -> SentenceJudgment | None:
+    """기록 문장을 분기의 가장 나쁜 경우 **이상**으로 (🆕 2026-10-17 · D-263 ① · D-319 ① · 보충 6 결정 5). 바꿀 것이 없으면 None.
+
+    ★ 분기 문장이 기록 뒤에(`doc_rules`) 인코더 쪽 절대형 위반으로 오르면 기록의 위험도가 분기보다 낮아진다 — 계약이 거부한다
+       (`_recorded_is_conservative`). 두 경우:
+       · 위험도가 선 분기가 **전부** 확정 위반이고 유형이 같다 → 기록 = 가장 무거운 분기의 판정(D-319 ① 「모든 전제에서 같은 위반」)
+       · 그 밖 → 판정은 그대로(품목 · 전제에 달렸다) · 위험도만 분기 최댓값으로 올린다(기록 = 가장 보수적인 경우)
+    """
+    live = [x for x in per if x.risk.final is not None and not x.not_claim]
+    if not live or rec.not_claim:
+        return None
+    top = max(live, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
+    have = rec.risk.final
+    if have is not None and have.level >= top.risk.final.level:  # type: ignore[union-attr]
+        return None
+    confirmed = [x for x in live if x.verdict is Verdict.confirmed and x.violations]
+    if len(confirmed) == len(live) and len({tuple(x.violations) for x in confirmed}) == 1:
+        return SentenceJudgment(
+            **{
+                **{k: getattr(top, k) for k in type(top).model_fields},
+                "sent_id": rec.sent_id,
+                "encoder_candidates": rec.encoder_candidates,
+            }
+        )
+    # 하한 칸은 분기가 든 하한(그 유형 · 전제의 제재표 하한 — `_enc_absolute` 와 같은 칸)을 올려 싣는다 — 근거 스팬 없이 하한 위로 올리지 않는다(D-131)
+    lows = [r for r in (rec.risk.floor, top.risk.floor) if r is not None]
+    if not lows:
+        return None
+    floor = max(lows, key=lambda r: r.level)
+    final = max((floor, top.risk.final), key=lambda r: r.level)  # type: ignore[arg-type]
+    risk = RiskAssessment(**{**rec.risk.model_dump(), "floor": floor, "final": final})
+    return SentenceJudgment(
+        **{**{k: getattr(rec, k) for k in type(rec).model_fields}, "risk": risk}
+    )
 
 
 def _record_condition(

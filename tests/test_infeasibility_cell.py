@@ -172,3 +172,56 @@ def test_사유_모음은_더_막힌_쪽() -> None:
         ),
     )
     assert g._encoder_reason(s) is Infeasibility.C
+
+
+# ── 기록 = 분기의 가장 나쁜 경우 이상 (🆕 2026-10-17 · D-263 ① · D-319 ① · 원장 10-17(B) ④) ──────────────
+
+
+def _branch(premise: Premise, sents: list[SentenceJudgment]):  # noqa: ANN202
+    from app.contracts import Branch  # noqa: PLC0415
+
+    return Branch(
+        premise=premise,
+        outcome=g._branch_outcome(premise, sents),
+        sentences=sents,
+        criteria="(시험) 기준",
+    )
+
+
+def _doc(
+    rec: SentenceJudgment, per: dict[Premise, SentenceJudgment]
+) -> tuple[SentenceJudgment, list]:
+    state = {
+        "text": "앞 문장. " + rec.text,
+        "sents": ["앞 문장.", rec.text],
+        "sentences": [rec],
+        "branches": [_branch(p, [s]) for p, s in per.items()],
+        "product": ProductContext(),
+    }
+    out = g.doc_rules(state)
+    got = (out.get("sentences") or [rec])[0]
+    return got, out.get("branches") or state["branches"]
+
+
+def test_한_분기만_절대형_위반이면_기록은_보류인_채_위험도를_분기만큼_올린다() -> None:
+    drug = _b(Premise.화장품, Violation.의약품_오인, Risk.R2, COSM_DRUG)
+    false_ = _b(Premise.식품, Violation.거짓_과장, Risk.R1, FOOD_FALSE)
+    rec = _enc(drug, false_)
+    got, bs = _doc(rec, {Premise.화장품: _enc(drug), Premise.식품: _enc(false_)})
+    cosm = next(b for b in bs if b.premise is Premise.화장품).sentences[0]
+    assert cosm.verdict is Verdict.confirmed and cosm.risk.final is Risk.R2
+    assert got.verdict is Verdict.hold, (
+        "다른 전제에서는 위반이 서지 않았다 — 품목에 달렸다(D-319 ①)"
+    )
+    assert got.risk.final is Risk.R2, "기록은 가장 보수적인 경우(D-263 ①)"
+    JudgeResponse(outcome=Outcome.hold, sentences=[got], branches=bs)
+
+
+def test_모든_분기가_같은_절대형_위반이면_기록도_확정_위반() -> None:
+    a = _b(Premise.화장품, Violation.비방광고, Risk.R2, COSM_SLANDER)
+    food6 = EvidenceArticle(law_id="013094", article="제8조제1항제6호")
+    b = _b(Premise.식품, Violation.비방광고, Risk.R1, food6)
+    got, bs = _doc(_enc(a, b), {Premise.화장품: _enc(a), Premise.식품: _enc(b)})
+    assert got.verdict is Verdict.confirmed and got.violations == [Violation.비방광고]
+    assert got.risk.final is Risk.R2
+    JudgeResponse(outcome=Outcome.hold, sentences=[got], branches=bs)
