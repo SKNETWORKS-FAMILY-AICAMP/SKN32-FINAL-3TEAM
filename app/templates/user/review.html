@@ -149,12 +149,6 @@
 .rv-fix-go:hover { background: var(--u-signal-ink); }
 .rv-fix-go small { font-weight: 400; opacity: .85; font-size: .72rem; }
 .rv-fix-go:disabled { opacity: .55; cursor: wait; }
-/* 🆕 2026-10-15 (ksr · 점검 0) — 검수 중 표시. 카피 생성(`.gn-wait`)과 같은 점 넷 */
-.rv-wait { margin: .6rem 0 0; font-size: .86rem; font-weight: 600; color: var(--u-signal-ink); }
-.rv-wait i { font-style: normal; display: inline-block; margin-right: .18em; opacity: .2; animation: rv-wait 1.6s infinite; }
-.rv-wait i:nth-child(2) { animation-delay: .2s; } .rv-wait i:nth-child(3) { animation-delay: .4s; } .rv-wait i:nth-child(4) { animation-delay: .6s; }
-@keyframes rv-wait { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .rv-wait i { animation: none; opacity: .7; } }
 .rv-copy-go:disabled, .rv-all:disabled { opacity: .6; cursor: wait; }
 /* 🆕 2026-10-13 (lse) — 고쳐 쓰는 중 표시: 빛나는 별 · 차례로 바뀌는 단계 문구(빛이 지나가는 글자) · 흐르는 자리표시 줄 */
 .rv-think { display: flex; gap: .75rem; align-items: flex-start; margin: .7rem 0 0; padding: .8rem .95rem;
@@ -569,7 +563,7 @@
         {% if rw_kind == "result" %}
         {% include "user/_review_rewrite.html" %}
         {% elif rw_kind == "button" %}
-        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0" data-wait-form>
+        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0" data-wait-form data-wait-overlay="busy-rw">
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
           <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
           {% if premise %}
@@ -577,20 +571,7 @@
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
           <button type="submit" class="rv-fix-go">✨ 이 문장 고쳐 쓰기{% if not s.violations %} · AI 추정 유형 기준{% endif %} <small>· 위반을 지우고 쓰는 법을 더해요 (20초 안팎)</small></button>
-          {# 🆕 2026-10-13 (lse) — 고쳐 쓰는 동안의 표시. `user_wait.js`(ksr · 카피 생성과 같은 파일)가 제출 때 `hidden` 을 푼다.
-             움직임은 전부 CSS 다 — 단계 문구가 차례로 바뀌고 글자에 빛이 지나간다. 스크립트가 안 돌아도 고쳐 쓰기는 된다 #}
-          <div class="rv-think" data-wait hidden role="status" aria-live="polite">
-            <span class="rv-think-orb" aria-hidden="true">✦</span>
-            <div class="rv-think-body">
-              <div class="rv-think-steps">
-                <span>위반 표현을 짚는 중</span>
-                <span>위반만 지운 문장을 쓰는 중</span>
-                <span>자연스럽게 다듬는 중</span>
-                <span>판정 코어로 다시 확인하는 중</span>
-              </div>
-              <div class="rv-skel" aria-hidden="true"><i></i><i></i></div>
-            </div>
-          </div>
+          {# 🔄 2026-10-17 (ksr) — 고쳐 쓰는 동안의 표시(lse 의 `.rv-think`)를 공용 덮개 `busy-rw` 로 바꿨다 — 단계 문구는 그대로 옮겼다 #}
         </form>
         {% endif %}
       </div>
@@ -872,7 +853,7 @@
 
   <div>
     {# 🆕 2026-10-15 (ksr · 점검 0) — 검수 버튼을 누르면 「검수 중…」. 「예시 넣기」 · 「칸 추가」 · 「삭제」는 띄우지 않는다(`user_wait.js` `data-wait-only`) #}
-    <form class="rv-card" method="post" action="/u/judge" data-wait-form data-wait-only>
+    <form class="rv-card" method="post" action="/u/judge" data-wait-form data-wait-only data-wait-overlay="busy-rv">
       <h2>검수할 문구
         <span class="rv-count">{{ copies|length }} / {{ max_copies }}건 · 문구당 최대 {{ max_text_len }}자</span>
       </h2>
@@ -895,17 +876,16 @@
           <textarea id="text-{{ loop.index }}" name="text" rows="4" maxlength="{{ max_text_len }}"
                     placeholder="검수할 광고 문구를 붙여넣으세요.">{{ c }}</textarea>
           <button class="rv-copy-go" type="submit" name="op" value="judge:{{ loop.index }}"
-                  title="이 문구 검수하기" data-wait-go data-wait-label="검수 중…">검수</button>
+                  title="이 문구 검수하기" data-wait-go>검수</button>
         </div>
       </div>
       {% endfor %}
       <div class="rv-copy-tools">
         <button class="rv-add" type="submit" name="op" value="add" formnovalidate><b>+ 검수할 문구 추가</b> · 최대 {{ max_copies }}개를 한 번에 검수할 수 있어요</button>
         {% if copies|length > 1 %}
-        <button class="rv-all" type="submit" name="op" value="all" data-wait-go data-wait-label="검수 중…">전체 검수</button>
+        <button class="rv-all" type="submit" name="op" value="all" data-wait-go>전체 검수</button>
         {% endif %}
       </div>
-      <p class="rv-wait" data-wait hidden role="status" aria-live="polite"><i>·</i><i>·</i><i>·</i><i>·</i> 검수 중이에요 — 문장마다 조문을 찾고 있어요</p>
 
       {# ⬜ 파일 업로드는 `multipart/form-data` → `python-multipart` 새 의존성(uv.lock 은 팀장 · §5) ·
             이미지 판정은 향후 과제(D-104). 그래서 비활성으로 두고, 접어 둔다 #}
@@ -1080,6 +1060,10 @@
 </div>
 {# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
 <script src="/static/user_count.js" defer></script>
-<script src="/static/user_wait.js" defer></script>
+{# 🆕 2026-10-17 (ksr) — 기다리는 동안 공용 덮개(`user/_busy.html`) — 검수 · 고쳐 쓰기 #}
+{% from "user/_busy.html" import busy %}
+{{ busy("busy-rv", "문구를 검수하고 있어요", ["문장을 나누고 있어요", "문장마다 조문을 찾고 있어요", "위반 여부를 판정하고 있어요"], "잠시 걸려요") }}
+{{ busy("busy-rw", "문장을 고쳐 쓰고 있어요", ["위반 표현을 짚고 있어요", "위반만 지운 문장을 쓰고 있어요", "검수 엔진으로 다시 확인하고 있어요"], "20초 안팎 걸려요") }}
+<script src="/static/user_wait.js?v=20261017f" defer></script>
 <script src="/static/rewrite_copy.js" defer></script>
 {% endblock %}

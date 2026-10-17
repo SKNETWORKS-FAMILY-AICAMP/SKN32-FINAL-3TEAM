@@ -1,0 +1,19 @@
+{# app/templates/user/_busy.html — 기다리는 화면 공용 덮개 · 소유자 ksr (🆕 2026-10-17)
+
+  오래 걸리는 제출(카피 생성 · AI 광고 생성 · 검수 · 고쳐 쓰기)에서 화면 전체를 어둡게 덮고 공룡이 달리는 그림을 띄운다.
+  ★ 화면마다 한 가지 표시만 쓴다 — 버튼 글자 바꾸기 · 폼 안의 「… 중입니다」 줄은 이 덮개로 대신한다.
+  쓰는 법: `{% from "user/_busy.html" import busy %}` → `{{ busy("busy-gen", "카피를 만들고 있어요", [...], "30초~1분쯤 걸려요") }}`
+           폼에 `data-wait-form data-wait-overlay="busy-gen"`. 띄우고 내리는 것은 `user_wait.js` · 모양은 `user.css` (`.ub-*`).
+  🚨 덮개는 `.user-shell` 안에 둔다 — 색 토큰이 그 안에만 있다. #}
+{% macro busy(id, title, msgs, foot) %}
+<div class="ub-busy" id="{{ id }}" data-wait-page hidden role="status" aria-live="polite">
+  <div class="ub-box">
+    {# 공룡이 걸어가며 제목을 써 낸다 — 읽는 이(스크린 리더)에게는 제목만 한 번 들린다 #}
+    <div class="ub-write"><span class="ub-text">{{ title }}</span><span class="ub-dino" aria-hidden="true"><i>🦖</i></span></div>
+    <div class="ub-msgs" aria-hidden="true">
+      {% for m in msgs %}<span>{{ m }}</span>{% endfor %}
+    </div>
+    <span class="ub-foot">{{ foot }} · 끝날 때까지 이 화면에서 기다려 주세요</span>
+  </div>
+</div>
+{% endmacro %}
