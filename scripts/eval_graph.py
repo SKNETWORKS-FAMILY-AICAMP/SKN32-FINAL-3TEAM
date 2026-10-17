@@ -224,6 +224,13 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
             | {b.violation.value for s in cond if not s.violations for b in s.risk.encoder_basis}
         ),
         "user_subst": any(s.user_subst is not None for s in sents),
+        #: 🆕 2026-10-16 (D-348 보충 5) — **인코더 쪽 보류 + 분기**(답 없이 확정하지 않는다 · 조건부가 아니다)가 달린 문장이 있나 · 그 유형
+        "enc_choice": any(
+            s.verdict is Verdict.hold
+            and s.hold_reason is HoldReason.low_conf
+            and (s.fact_check is not None or s.substantiation is not None)
+            for s in sents
+        ),
         #: 🆕 2026-10-16 — **응답 계약을 지나지 못한 행**(`to_response` 가 거부) · 앱이라면 그 요청은 오류로 끝난다. 실제 실행에서만 채운다(`_checked`)
         "contract_error": state.get("_contract_error"),
         #: 🆕 2026-10-06 (D-263 ① · D-319 ①) — **분기 때문에 보류로 기록된 문장에 실린 유형**(가장 보수적인 전제의 위반).
@@ -707,6 +714,7 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["encoder_risk"] = encoder_risk_report(rows, preds)
     out["contract_errors"] = sum(1 for p in preds if p.get("contract_error"))
     out["fact_branch_rows"] = sum(1 for p in preds if p.get("fact_branch"))
+    out["enc_choice_rows"] = sum(1 for p in preds if p.get("enc_choice"))
     out["conditional"] = conditional_report(rows, preds)
     return out
 
@@ -908,6 +916,10 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     if s.get("fact_branch_rows"):
         print(
             f"\n  사실 확인 분기가 달린 행 {s['fact_branch_rows']} (D-348 보충 3 · 기록은 보류 · 선택지)"
+        )
+    if s.get("enc_choice_rows"):
+        print(
+            f"\n  인코더 쪽 보류 + 분기가 달린 행 {s['enc_choice_rows']} (D-348 보충 5 · 답 없이 확정하지 않는다 · 분류는 보류)"
         )
     cd = s.get("conditional") or {}
     if cd.get("rows"):

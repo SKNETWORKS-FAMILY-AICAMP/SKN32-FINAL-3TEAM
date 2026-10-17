@@ -5,6 +5,11 @@
       "상세페이지",
       "카드뉴스"
     ],
+    "Answer": [
+      "아니오",
+      "예",
+      "해당없음"
+    ],
     "Category": [
       "건기식",
       "식품",
@@ -274,12 +279,12 @@
       "node": "req builtins.str"
     },
     "UserFact": {
+      "answer": "req app.contracts.Answer",
       "kind": "req app.contracts.FactKind",
-      "text": "req builtins.str",
-      "true": "req builtins.bool"
+      "text": "req builtins.str"
     },
     "UserSubst": {
-      "has_evidence": "req builtins.bool",
+      "answer": "req app.contracts.Answer",
       "text": "req builtins.str"
     }
   },

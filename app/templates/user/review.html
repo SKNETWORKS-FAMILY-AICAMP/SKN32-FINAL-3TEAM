@@ -468,11 +468,13 @@
 
         {# 할 일 한 줄 — 확정 문장에만. 긴 「고치는 방향」(지시 · D-265 · D-268 · `SubstBranch`)은 「근거 보기」 안에 그대로 있다 #}
         {#- 🔄 2026-10-16 (D-348 보충 4 · 문안 초안) — 조건부 위반에도 할 일(준비할 자료 · 증빙)을 단다 #}
-        {% if hit or s|conditional_text %}
+        {% if hit or s|question_text %}
         <p class="rv-todo">
           {%- if s.fact_check %}준비할 증빙 — {{ s.fact_check.accepted_evidence|join(" · ") }}
           {%- elif inf == "A" and premise %}이 기능성으로 인정·심사를 받은 제품만 쓸 수 있어요
           {%- elif inf == "A" %}인정·심사를 받지 않았다면 문구를 고쳐도 쓸 수 없어요
+          {#- 🆕 2026-10-17 (D-348 보충 5 결정 5 · 문안 초안) — 사실이 거짓으로 확정 — 실증으로 풀리지 않는다 #}
+          {%- elif s|fact_false %}{{ FACT_FALSE_TODO }}
           {%- elif inf == "B" and s.substantiation %}준비할 자료 — {{ s.substantiation.accepted_evidence|join(" · ") }}
           {%- elif inf == "B" %}사실임을 보일 객관적인 근거 자료를 준비해 주세요
           {%- elif inf == "C" %}{{ "표시한 부분을 빼 주세요" if shown.mark else "이 표현은 빼 주세요" }}
@@ -484,6 +486,42 @@
            ⛔ 이 줄에 조건의 내용을 풀어 쓰지 않는다 — 기준 문안이 아니다 #}
         {% if s.substantiation %}
         <p class="rv-why">함께 밝혀야 하는 사항이 있어요 — 「근거 보기」에서 확인하세요.</p>
+        {% endif %}
+
+        {#- 🆕 2026-10-16 (D-348 보충 4 결정 2 · 3 · 6 — 화면 문안 초안 · 화면 담당 확인 전) **조건부 위반에 답하기**.
+            ★ 질문은 문장당 하나 · 묻는 순서는 품목 → 사실 → 실증 — 품목 분기가 있는 문구는 **유형을 고른 뒤**(분기 안)에만 묻는다.
+            ★ 답하면 그 문구를 답과 함께 **다시 판정**한다(`POST /u/review/answer`) — 답은 그 문장에만 · 앞서 한 답은 함께 보낸다.
+            🚨 답은 확인되지 않는다 — 책임은 답한 분께 있다(판정에 출처가 남는다). 자료를 대조하지 않는다 #}
+        {#- 🔄 2026-10-16 (D-348 보충 5) — 인코더 쪽 보류 + 분기에도 질문을 그린다(`question_text`) #}
+        {% set cq = s|question_text %}
+        {% if cq and rw_item is not none %}
+        <form method="post" action="/u/review/answer" class="rv-answer" style="margin:.5rem 0 0">
+          {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
+          <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
+          {% for a in rw_item.answers|default([]) %}<input type="hidden" name="prev" value="{{ a }}">{% endfor %}
+          {% if premise %}
+          <input type="hidden" name="premise" value="{{ premise }}">
+          <input type="hidden" name="round" value="{{ r }}">
+          {% endif %}
+          {% if s.fact_check %}
+          <p class="rv-todo">이 사실이 맞나요? <small>({{ s.fact_check.kind.value|replace("_", " ") }} · 증빙 — {{ s.fact_check.accepted_evidence|join(" · ") }})</small></p>
+          <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:true">맞아요</button>
+          <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:false">아니에요</button>
+          {#- 🆕 2026-10-16 (D-348 보충 5 — 화면 문안 초안 · 화면 담당 확인 전) 해당 없음 — 다른 두 버튼과 같은 무게로 둔다 #}
+          <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:na">이 문장은 그런 말이 아니에요</button>
+          {% elif s.substantiation %}
+          <p class="rv-todo">이 표현을 실증할 자료가 있나요? <small>(인정되는 자료 — {{ s.substantiation.accepted_evidence|join(" · ") }})</small></p>
+          <button type="submit" class="rv-btn" name="answer" value="subst:yes">있어요</button>
+          <button type="submit" class="rv-btn" name="answer" value="subst:no">없어요</button>
+          <button type="submit" class="rv-btn" name="answer" value="subst:na">이 문장은 그런 주장이 아니에요</button>
+          {% endif %}
+          <p class="rv-note">답은 확인되지 않아요 — 판정에 「답한 내용」으로 남고, 자료는 직접 보관해 주세요.</p>
+        </form>
+        {% endif %}
+        {% if s.user_subst or s.user_facts %}
+        <p class="rv-note">답한 내용으로 다시 판정했어요 —
+          {%- for f in s.user_facts %} {{ f.kind.value|replace("_", " ") }} {{ {"예": "맞음", "아니오": "아님", "해당없음": "해당 없음"}[f.answer.value] }}{% if not loop.last %} ·{% endif %}{% endfor %}
+          {%- if s.user_subst %}{% if s.user_facts %} ·{% endif %} 실증 자료 {{ {"예": "있음", "아니오": "없음", "해당없음": "해당 없음"}[s.user_subst.answer.value] }}{% endif %} (확인되지 않은 답)</p>
         {% endif %}
 
         {% if flag or s.violations or s.evidence or s.encoder_candidates or enc_on or s.substantiation %}

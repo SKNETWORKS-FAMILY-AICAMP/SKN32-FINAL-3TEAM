@@ -67,6 +67,7 @@ from app.contracts import (
     AdaptedCopy,
     AdFormat,
     AdSection,
+    Answer,
     Branch,
     Candidate,
     Category,
@@ -2115,6 +2116,7 @@ def _premise_sentences(
         disease = _disease_answer(premise, undecided, text, facts)
         if disease is not None:
             mode, uf = disease
+        if disease is not None and disease[0] != "na":
             # 그 적중은 `unknown`(보류 후보)에도 들어 있다 — 답으로 정한 적중은 후보에서도 뺀다
             unknown = [h for h in unknown if h not in undecided]
             if mode == "true":
@@ -2421,12 +2423,17 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     facts, substs = list(product.facts), list(product.substs)
     sents = list(state.get("sentences", []))
     branches = list(state.get("branches") or [])
+    spans = _sentence_spans(state)
     if not branches:
-        changed = [f for s in sents if (f := _with_condition(s, facts, substs)) is not None]
+        changed = [
+            f
+            for s in sents
+            if (f := _with_condition(s, facts, substs, spans.get(s.sent_id))) is not None
+        ]
         return {"sentences": changed} if changed else {}
     new_b: list[Branch] = []
     for b in branches:
-        ss = [_with_condition(x, facts, substs) or x for x in b.sentences]
+        ss = [_with_condition(x, facts, substs, spans.get(x.sent_id)) or x for x in b.sentences]
         if all(x is y for x, y in zip(ss, b.sentences, strict=True)):
             new_b.append(b)
             continue
@@ -2451,6 +2458,23 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     if changed:
         out["sentences"] = changed
     return out
+
+
+def _sentence_spans(state: CoreState) -> dict[str, Span]:
+    """문장 번호 → **문장 전체** 구간(원문 좌표) — 인코더 쪽 확정 위반의 뺄 구간이다(D-348 결정 3 「문장 단위」 · 보충 5 · 1-b).
+
+    좌표는 `sentsplit.offsets` 한 곳(D-99 · `judge` 와 같다). 못 찾으면 빈 표 — 그 문장은 확정하지 않는다(D-220).
+    """
+    sents = state.get("sents", [])
+    try:
+        starts = list(sentsplit.offsets(state.get("text", ""), sents))
+    except ValueError:
+        return {}
+    return {
+        sent_id(i): Span(start=st, end=st + len(t))
+        for i, (t, st) in enumerate(zip(sents, starts, strict=False))
+        if st is not None and t
+    }
 
 
 def _with_record_answers(
@@ -2503,19 +2527,66 @@ def _record_condition(
     live = [x for x in per if x.risk.final is not None and not x.not_claim]
     cond = [x for x in live if is_conditional(x)]
     # 「답으로 정해졌다」 = 조건이 남지 않은 문장(확정) — 사실 하나에 답했고 실증 · 다음 사실이 남은 조건부 보류는 조건부 쪽이다
+    # 🔄 2026-10-16 (D-348 보충 5) — 인코더 쪽 보류 + 분기(`low_conf` · 남은 선택지)는 「답으로 정해졌다」가 아니다
+    enc = [
+        x
+        for x in live
+        if x.verdict is Verdict.hold
+        and x.hold_reason is HoldReason.low_conf
+        and (x.fact_check is not None or x.substantiation is not None)
+    ]
     answered = [
-        x for x in live if not is_conditional(x) and (x.user_facts or x.user_subst is not None)
+        x
+        for x in live
+        if not is_conditional(x) and x not in enc and (x.user_facts or x.user_subst is not None)
     ]
     fields = {k: getattr(rec, k) for k in type(rec).model_fields}
     if live and len(answered) == len(live):
-        top = max(answered, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
+        # 🔄 2026-10-17 (보충 5 결정 1 · 1-b) — 가장 나쁜 분기 = 판정 순서(확정 위반 > 보류 > R0) · 같으면 위험도
+        top = max(
+            answered,
+            key=lambda x: (
+                2 if x.verdict is Verdict.confirmed and x.violations else 0 if is_pass(x) else 1,
+                x.risk.final.level,  # type: ignore[union-attr]
+            ),
+        )
         if not top.violations and top.risk.final is Risk.R0:
             return _answered(rec, user_facts=top.user_facts, user_subst=top.user_subst)
-        if rec.verdict is Verdict.confirmed:
+        if (
+            top.verdict is Verdict.confirmed
+            and top.violations
+            and rec.verdict is Verdict.hold
+            and rec.hold_reason is HoldReason.low_conf
+        ):
+            # 🆕 (1-b) 인코더 쪽 보류 기록이 분기에서 「아니오」로 확정 위반이 됐다 — 기록 = 가장 나쁜 분기의 판정(표시용 후보는 기록 것)
+            return SentenceJudgment(
+                **{
+                    **{k: getattr(top, k) for k in type(top).model_fields},
+                    "encoder_candidates": rec.encoder_candidates,
+                }
+            )
+        if rec.verdict is Verdict.confirmed or (
+            rec.verdict is Verdict.hold and rec.hold_reason is HoldReason.low_conf
+        ):
+            # 🔄 (보충 5) 인코더 쪽 보류에도 답(출처)을 싣는다 — 판정은 그대로
             return SentenceJudgment(
                 **{**fields, "user_facts": top.user_facts, "user_subst": top.user_subst}
             )
         return None
+    if enc and len(enc) == len(live) and rec.hold_reason is HoldReason.low_conf:
+        # 🆕 (보충 5) 분기가 전부 인코더 쪽 보류 + 선택지 → 기록도 그대로(확신 부족 보류)에 위험도가 가장 높은 분기의 선택지
+        top = max(enc, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
+        if rec.risk.final is None:
+            return None
+        return SentenceJudgment(
+            **{
+                **fields,
+                "infeasibility": top.infeasibility,
+                "substantiation": top.substantiation,
+                "fact_check": top.fact_check,
+                "user_facts": top.user_facts,
+            }
+        )
     if not cond:
         return None
     if len(cond) == len(live):
@@ -2549,14 +2620,22 @@ def _record_condition(
 
 def _ho_coords(s: SentenceJudgment) -> set[tuple[str, int, int, int]]:
     """문장이 기대는 호 — 사전 인용 근거 + 인코더 하한의 근거 호(대응표) · 좌표를 못 읽는 것은 버린다 (호 관문의 재료 · 보충 3 결정 2)."""
-    arts = [e for e in s.evidence if e.basis] + [
-        a for b in s.risk.encoder_basis for a in b.articles
-    ]
+    return _coords(
+        [e for e in s.evidence if e.basis] + [a for b in s.risk.encoder_basis for a in b.articles]
+    )
+
+
+def _coords(arts: Iterable[EvidenceArticle]) -> set[tuple[str, int, int, int]]:
+    """조문 → 호 좌표 · 못 읽는 것은 버린다 — `_ho_coords`(합친 문장) · `_encoder_side`(인코더 근거만)가 같이 쓴다 (D-99)."""
     out: set[tuple[str, int, int, int]] = set()
     for a in arts:
         c = statute.from_article_item(a.law_id, a.article, a.item)
-        if c is None and not a.item:
-            c = f"{a.law_id}:{a.article}"  # 참조 조항 꼴 — `_ref_article` 은 좌표를 article 한 칸에 싣는다
+        if c is None and not a.basis:
+            # 참조 조항 꼴(인코더 근거 · 대응표) — 좌표는 article 한 칸에 있다(`_ref_article` · `reference_texts`).
+            # 🔴 2026-10-17 (D-348 보충 5 · 원장 10-16(B) ⑧) — 종전 조건 `not a.item` 은 DB 가 원문과 함께 붙이는 청크 항목
+            #    (「4.」 · 「1.」 · 「본문」)이 있으면 좌표를 버렸다 → 인코더 근거 좌표가 전부 비어 호 관문이 늘 닫혔다(dev 분기 0 행).
+            #    항목 칸은 청크의 이름표라 좌표가 아니다 — 사전 인용(`basis`)은 종전 길(`from_article_item`)만 탄다
+            c = f"{a.law_id}:{a.article}"
         try:
             law, jo, hang, ho, _ = statute.parse(c) if c else (None, 0, 0, 0, None)
         except ValueError:
@@ -2564,6 +2643,215 @@ def _ho_coords(s: SentenceJudgment) -> set[tuple[str, int, int, int]]:
         if law:
             out.add((law, jo, hang, ho))
     return out
+
+
+# ── 인코더 쪽 판정 (🆕 2026-10-16 · D-348 보충 5 · 1 단계) ─────────────────────────────────────
+
+#: 인코더 쪽 실증 문안의 법 축 — **그 전제의 주 근거**(D-272 개정 (나) ① · ⑥). 인코더 근거는 문장이 보내진 법마다 실려(`_candidate_refs`)
+#:   표시광고법(늘 보낸다)이 함께 들어 축이 둘이 된다 — 축 하나를 요구하는 `rs.subst_branch` 에 전제의 주 근거 축을 준다.
+#:   🔴 화장품은 고르지 않는다 — 화장품법과 표시광고법의 주 근거는 ⬜(D-272 개정 (나) ⑥) · 분기 없음(D-220).
+#:   🚨 `[가정]` 문장의 사항이 거래 조건(가격 · 할인 · 출처)이면 주 근거는 표시광고법이다(같은 개정 ②) — 인코더는 사항을 가리지 않는다.
+ENC_SUBST_AXIS: dict[Premise, str | None] = {
+    Premise.식품: "식품표시광고법",
+    Premise.일반식품_기능성: "식품표시광고법",
+    Premise.건기식_인정: "식품표시광고법",
+    Premise.건기식_비인정: "식품표시광고법",
+    Premise.화장품: None,
+    Premise.일반상품: "표시광고법",
+}
+
+
+def _encoder_only(s: SentenceJudgment) -> bool:
+    """사전 쪽 판정이 없는 문장인가 — 사전 근거 적중(자격 있는 · 없는) 없이 인코더 하한만 선 확신 부족 보류 (보충 5 · 1 단계의 대상)."""
+    return (
+        s.verdict is Verdict.hold
+        and s.hold_reason is HoldReason.low_conf
+        and not s.violations
+        and not any(e.basis for e in s.evidence)
+        and s.risk.encoder is not None
+        and bool(s.risk.encoder_basis)
+    )
+
+
+def _enc_subst(s: SentenceJudgment) -> SubstBranch | None:
+    """인코더 쪽 실증 분기 — 인코더 근거 유형 · 그 근거가 선 전제의 주 근거 축(`ENC_SUBST_AXIS`). 전제가 둘 이상(기록 문장) · 축이 없으면 None."""
+    premises = {b.premise for b in s.risk.encoder_basis}
+    if len(premises) != 1:
+        return None  # 기록 문장 — 분기마다 정하고 기록은 분기에서 모은다(`_record_condition`)
+    axis = ENC_SUBST_AXIS.get(next(iter(premises)))
+    if axis is None:
+        return None
+    return rs.subst_branch(sorted({b.violation for b in s.risk.encoder_basis}), {axis})
+
+
+def _encoder_side(
+    s: SentenceJudgment,
+    facts: list[UserFact],
+    substs: list[UserSubst],
+    span: Span | None = None,
+) -> SentenceJudgment | None:
+    """**인코더 쪽 판정** — 사전 쪽 판정이 없는 문장(`_encoder_only`)의 분기와 답. 바꿀 것이 없으면 None (🆕 2026-10-16 · D-348 보충 5 · 1 단계).
+
+    ★ 사전과 따로 판정한다 — 호 관문 · 실증 유형 · 법 축은 **인코더 근거만** 본다(사전 근거와 합치지 않는다).
+    ★ **답 없이 확정하지 않는다** — 답이 없으면 확신 부족 보류(`low_conf`) 그대로 + 분기. 조건부 위반이 아니다(`is_conditional` 은 `premise_unknown` 만).
+       신뢰 게이트(`_encoder_trusted`)는 여기서 보지 않는다 — 어디에 어떻게 걸지는 사전과 합치는 단계(2 단계)에서 판정 뒤 정한다(D-192).
+    ★ 분기는 **문구 밖 사실이 있는 유형에만**(보충 5 결정 2) — 거짓_과장의 사실 확인(문안이 승인된 종류) · 실증(`_enc_subst`) ·
+       건기식 인정 전제의 질병 표방(`인정_기능성` · 결정 2 의 자격형). 인코더 근거 유형이 그 분기의 유형과 같을 때만 묻는다.
+    ★ 답 셋(`Answer`) — 예: 사실 참(∧ 사실만 주장) · 실증 있음 · 인정 기능성 그대로 → 확정 · R0 · 출처 / 해당없음: 그 분기를 걷는다 /
+       아니오: **확정 위반** + 출처(`_enc_confirmed` · 보충 5 결정 4 · 1-b) — 「해당없음」을 고르지 않았으니 주장 있음까지 사용자가 확인했다.
+    """
+    if s.not_claim:
+        return None
+    if any(b.moved_from is not None for b in s.risk.encoder_basis):
+        return None  # 전제가 옮긴 근거(인정받지 않은 기능성 · 4.나)는 자격(A) 문제다 — 사실 · 실증으로 풀리지 않는다(`_qualification` 과 같다)
+    types = {b.violation for b in s.risk.encoder_basis}
+    premises = {b.premise for b in s.risk.encoder_basis}
+    key = dm.norm(s.text)
+    fields = {k: getattr(s, k) for k in type(s).model_fields}
+    if types == {Violation.질병_예방치료_표방} and premises == {Premise.건기식_인정}:
+        return _enc_disease(s, facts, span)
+    if not factcheck.in_gate(_coords(a for b in s.risk.encoder_basis for a in b.articles)):
+        return None
+    # 🔴 (1-b) 사실 확인 분기는 분기 유형(거짓_과장)에만 — 화장품법 13조①4호는 기만과 같은 호라 관문만으로는 기만 문장에도 선다
+    kinds = (
+        [k for k in factcheck.fact_kinds(s.text) if k in factcheck.FACT_TEXTS]
+        if types == {Violation.거짓_과장}
+        else []
+    )
+    ans: dict[FactKind, UserFact] = {}
+    for f in facts:
+        if f.kind in kinds and f.kind not in ans and dm.norm(f.text) == key:
+            ans[f.kind] = f
+    carried = [ans[k] for k in kinds if k in ans]
+    kinds = [k for k in kinds if not (k in ans and ans[k].answer is Answer.해당없음)]
+    if any(ans[k].answer is Answer.아니오 for k in kinds if k in ans):
+        return _enc_confirmed(s, Violation.거짓_과장, span, user_facts=carried)
+    reason = _encoder_reason(s)
+    sb = _enc_subst(s) if reason is Infeasibility.B else None
+    pending = [k for k in kinds if k not in ans]
+    if pending:
+        t = factcheck.FACT_TEXTS[pending[0]]
+        cap = min(t.confirmed_max, s.risk.final, key=lambda r: r.level)  # type: ignore[arg-type]
+        then = None if factcheck.fact_only(s.text) else sb
+        return SentenceJudgment(
+            **{
+                **fields,
+                "infeasibility": Infeasibility.B if then is not None else s.infeasibility,
+                "substantiation": then,
+                "fact_check": FactBranch(
+                    kind=pending[0],
+                    confirmed_max=cap,
+                    accepted_evidence=list(t.accepted_evidence),
+                    criteria=t.criteria,
+                ),
+                "user_facts": carried,
+            }
+        )
+    if kinds and factcheck.fact_only(s.text):
+        return _answered(s, user_facts=carried)  # 남은 사실이 전부 참 · 사실만 주장
+    if sb is None:
+        return SentenceJudgment(**{**fields, "user_facts": carried}) if carried else None
+    us = next((u for u in substs if dm.norm(u.text) == key), None)
+    if us is not None:
+        if us.answer is Answer.예 and sb.substantiated_max is Risk.R0:
+            return _answered(s, user_facts=carried, user_subst=us)
+        if us.answer is Answer.아니오:
+            return _enc_confirmed(
+                s, Violation.거짓_과장, span, user_facts=carried, user_subst=us, subst=sb
+            )
+        # 해당없음 — 실증 분기를 걷는다 · 보류 + 출처
+        return SentenceJudgment(**{**fields, "user_facts": carried, "user_subst": us})
+    return SentenceJudgment(
+        **{
+            **fields,
+            "infeasibility": Infeasibility.B,
+            "substantiation": sb,
+            "user_facts": carried,
+        }
+    )
+
+
+def _enc_disease(
+    s: SentenceJudgment, facts: list[UserFact], span: Span | None
+) -> SentenceJudgment | None:
+    """인코더 쪽 **건기식 인정 질병 분기** — 건기식_인정 전제에서 인코더만 질병 표방을 잡은 문장 (🆕 2026-10-17 · 보충 5 결정 2 · 1-b).
+
+    ★ 사전 쪽(`_disease_answer` · `_disease_branch`)과 같은 질문(`인정_기능성` · 인정받은 기능성 문구 그대로인가) · 문안이 승인되기 전에는 서지 않는다.
+       답 없음 → 보류 그대로 + 분기 · 예 → 확정 · R0 · 출처 · 아니오 → 질병 표방 확정 위반(C) + 출처 · 해당없음 → 보류 + 출처.
+    """
+    if FactKind.인정_기능성 not in factcheck.FACT_TEXTS or s.risk.final is None:
+        return None
+    key = dm.norm(s.text)
+    fields = {k: getattr(s, k) for k in type(s).model_fields}
+    uf = next((f for f in facts if f.kind is FactKind.인정_기능성 and dm.norm(f.text) == key), None)
+    if uf is None:
+        t = factcheck.FACT_TEXTS[FactKind.인정_기능성]
+        return SentenceJudgment(
+            **{
+                **fields,
+                "fact_check": FactBranch(
+                    kind=FactKind.인정_기능성,
+                    confirmed_max=min(t.confirmed_max, s.risk.final, key=lambda r: r.level),
+                    accepted_evidence=list(t.accepted_evidence),
+                    criteria=t.criteria,
+                ),
+            }
+        )
+    if uf.answer is Answer.예:
+        return _answered(s, user_facts=[uf])
+    if uf.answer is Answer.아니오:
+        return _enc_confirmed(s, Violation.질병_예방치료_표방, span, user_facts=[uf])
+    return SentenceJudgment(**{**fields, "user_facts": [uf]})
+
+
+def _enc_confirmed(
+    s: SentenceJudgment,
+    v: Violation,
+    span: Span | None,
+    *,
+    user_facts: list[UserFact] | None = None,
+    user_subst: UserSubst | None = None,
+    subst: SubstBranch | None = None,
+) -> SentenceJudgment:
+    """인코더 쪽 문장을 **사용자의 「아니오」로 확정 위반**으로 (🆕 2026-10-17 · D-348 보충 5 결정 4 · 1-b · D-348 결정 3 의 칸).
+
+    ★ 칸 — 유형 = 그 분기의 유형(인코더 근거 유형과 같을 때만) · 근거 = 그 유형의 대응표 조항(문장에서 찾은 조문이 아니다 · `basis` 거짓) ·
+       구간 = **문장 전체**(결정 3) · 위험도 = 그 유형 · 그 전제의 **제재표 하한**(`EncoderBasis.floor` · 사전 확정이 인용 호의 하한을 쓰는 것과 같다) ·
+       사유 = 유형의 사유(`INFEASIBILITY_OF`) · 실증 없음이면 실증 분기(지시 문안) · 사실 거짓이면 실증 분기 없음(지시 문안은 「고치거나 빼기」).
+    🔴 못 세우면(구간을 모른다 · 근거 유형이 다르다 · 섞였다) **보류 + 출처** — 지어내지 않는다 (D-220 · D-224).
+    🚨 `[판정 대기]` 위험도를 제재표 하한으로 올린다 — 답 없는 인코더 쪽의 기록 위험도(R1 층 상한)보다 높을 수 있다. 유형은 질문이 보인 유형을
+       사용자가 「해당없음」으로 닫지 않은 것으로 섰다고 본다(결정 5 「R2 이상: 유형을 믿을 수 있어야」의 해석).
+    """
+    fields = {k: getattr(s, k) for k in type(s).model_fields}
+    held = SentenceJudgment(
+        **{**fields, "user_facts": list(user_facts or []), "user_subst": user_subst}
+    )
+    basis = [b for b in s.risk.encoder_basis if b.violation is v]
+    if span is None or not basis or {b.violation for b in s.risk.encoder_basis} != {v}:
+        return held
+    floor = max((b.floor for b in basis), key=lambda r: r.level)
+    arts: list[EvidenceArticle] = []
+    for b in basis:
+        for a in b.articles:
+            if a not in arts:
+                arts.append(a)
+    reason = INFEASIBILITY_OF.get(v)
+    if reason is None:
+        return held
+    return SentenceJudgment(
+        sent_id=s.sent_id,
+        text=s.text,
+        verdict=Verdict.confirmed,
+        violations=[v],
+        infeasibility=reason,
+        evidence=arts,
+        risk=RiskAssessment(floor=floor, final=floor),
+        encoder_candidates=s.encoder_candidates,
+        spans=[Span(start=span.start, end=span.end, label=v.value)],
+        substantiation=subst if reason is Infeasibility.B else None,
+        user_facts=list(user_facts or []),
+        user_subst=user_subst,
+    )
 
 
 def _cond_subst(s: SentenceJudgment) -> SubstBranch | None:
@@ -2583,7 +2871,10 @@ def _cond_subst(s: SentenceJudgment) -> SubstBranch | None:
 
 
 def _with_condition(
-    s: SentenceJudgment, facts: list[UserFact], substs: list[UserSubst]
+    s: SentenceJudgment,
+    facts: list[UserFact],
+    substs: list[UserSubst],
+    span: Span | None = None,
 ) -> SentenceJudgment | None:
     """**조건부 위반** — 근거 호가 전부 조건부 호인 문장 → 보류(`premise_unknown`) + 선택지, 또는 사용자의 답으로 정한 판정. 바꿀 것이 없으면 None.
 
@@ -2607,6 +2898,14 @@ def _with_condition(
         or (s.verdict is Verdict.hold and s.hold_reason is HoldReason.low_conf)
     ):
         return None
+    # 🔄 2026-10-16 (D-348 보충 5 · 1 단계) — **사전과 인코더는 따로 판정한다.** 사전 쪽 판정이 없는 문장(인코더만)은 인코더 쪽 판정으로
+    if _encoder_only(s):
+        return _encoder_side(s, facts, substs, span)
+    if s.verdict is not Verdict.confirmed:
+        # 사전 쪽 판정이 있는 확신 부족 보류(자격 없는 사전 적중 등)는 2 단계(사전 쪽을 같은 판정으로 옮김)까지 분기를 달지 않는다.
+        # ⛔ 종전엔 아래 사실 갈래가 신뢰 규칙 없이 이 문장을 조건부 위반(답 없으면 확정)으로 만들 수 있었다 — 문안 표가 비어 드러나지
+        #    않았던 결함이다(10-16). 실증 갈래는 신뢰 규칙 아래(τ 닫힘)라 이 문장에 분기가 선 적이 없다 — 동작은 종전과 같다
+        return None
     if s.risk.final is None or not factcheck.in_gate(_ho_coords(s)) or _qualification(s):
         return None
     key = dm.norm(s.text)
@@ -2619,7 +2918,10 @@ def _with_condition(
             if f.kind in kinds and f.kind not in ans and dm.norm(f.text) == key:
                 ans[f.kind] = f
         carried = [ans[k] for k in kinds if k in ans]
-        if any(not f.true for f in carried):
+        # 🆕 2026-10-16 (D-348 보충 5) — 「해당없음」은 그 종류를 걷는다(다시 묻지 않는다 · 답은 출처로만 따라간다)
+        kinds = [k for k in kinds if not (k in ans and ans[k].answer is Answer.해당없음)]
+    if kinds:
+        if any(ans[k].answer is Answer.아니오 for k in kinds if k in ans):
             if s.verdict is Verdict.confirmed:
                 return SentenceJudgment(**{**fields, "user_facts": carried})
             return None
@@ -2654,6 +2956,9 @@ def _with_condition(
         )
     # 🔴 2026-10-16 (D-348 결정 5 · 보충 1 결정 2) — 조건부 위반은 「답하지 않으면 확정 B」다. 확정에는 신뢰 규칙이 필요하다 —
     #    사전 단독판정으로 확정된 문장은 그대로 · 확신 부족 보류(인코더만 · 자격 없는 적중 + 인코더 하한)는 **신뢰 규칙을 지난 것만**(`_encoder_trusted`)
+    # 🔄 2026-10-16 (D-348 보충 5 · 1 단계) — 확정이 아닌 문장은 위에서 이미 갈랐다(인코더만 → `_encoder_side` · 그 밖 → 분기 없음).
+    #    ⬜ 신뢰 게이트(`_encoder_trusted`)를 **어디에 어떻게 걸지는 사전과 인코더를 합치는 단계(2 단계)에서 판정 뒤 정한다**(D-192) —
+    #       지금 이 줄은 닫힌 채(τ = None) 남은 종전 자리다
     if s.verdict is not Verdict.confirmed and not _encoder_trusted(s):
         return None
     sb = _cond_subst(s)
@@ -2666,14 +2971,21 @@ def _with_condition(
         )
     us = next((u for u in substs if dm.norm(u.text) == key), None)
     if us is not None:
-        if us.has_evidence and sb.substantiated_max is Risk.R0:
+        if us.answer is Answer.예 and sb.substantiated_max is Risk.R0:
             return _answered(s, user_facts=carried, user_subst=us)
-        if not us.has_evidence and s.verdict is Verdict.confirmed:
+        if us.answer is Answer.아니오 and s.verdict is Verdict.confirmed:
             return SentenceJudgment(
                 **{**fields, "user_subst": us, "substantiation": sb, "user_facts": carried}
             )
+        # 🆕 2026-10-16 (D-348 보충 5) — 「해당없음」 = 실증이 필요한 주장이 아니다 → 실증 분기를 걷고 원래 판정 + 출처(확정이면)
+        if us.answer is Answer.해당없음:
+            return (
+                SentenceJudgment(**{**fields, "user_subst": us, "user_facts": carried})
+                if s.verdict is Verdict.confirmed
+                else None
+            )
         # ⬜ 실증 상한이 R0 이 아닌 유형(지금 `SUBST_MAX` 에 없다) · 인코더만 잡은 문장의 「없음」 — 답을 반영할 규칙이 아직 없다
-        if not us.has_evidence:
+        if us.answer is Answer.아니오:
             return None
     return SentenceJudgment(
         **{
@@ -2704,13 +3016,25 @@ def _disease_answer(
     uf = next((f for f in facts if f.kind is FactKind.인정_기능성 and dm.norm(f.text) == key), None)
     if uf is None:
         return ("ask", None)
-    return ("true" if uf.true else "false", uf)
+    if uf.answer is Answer.해당없음:
+        # 🆕 2026-10-16 (D-348 보충 5) — 「이 문장은 질병을 말하지 않는다」 → 분기를 걷는다(종전 「판정하지 못함」 그대로)
+        # 🔄 2026-10-17 (1-b) — 답은 출처로 남긴다(`_disease_branch` 「na」)
+        return ("na", uf)
+    return ("true" if uf.answer is Answer.예 else "false", uf)
 
 
 def _disease_branch(j: SentenceJudgment, mode: str, uf: UserFact | None) -> SentenceJudgment:
     """건기식 인정 질병 분기의 문장 — 답 없음: 가장 나쁜 쪽(질병 표방 확정)의 판정 · 하한을 보류(`premise_unknown`) + 사실 확인 분기로 ·
     「거짓」: 그 확정 + 출처 · 「참」: 질병 적중을 뺀 판정 + 출처(남은 적중이 없으면 확정 · R0). 하한을 못 읽었으면(위험도 없음) 분기를 달지 않는다(D-72)."""
     fields = {k: getattr(j, k) for k in type(j).model_fields}
+    if mode == "na":
+        # 🆕 2026-10-17 (보충 5 · 1-b) — 해당 없음 — 판정은 그대로(「판정하지 못함」) · 답만 출처로 싣는다(실을 수 있는 판정일 때만 · 계약)
+        if uf is not None and (
+            j.verdict is Verdict.confirmed
+            or (j.verdict is Verdict.hold and j.hold_reason is HoldReason.low_conf)
+        ):
+            return SentenceJudgment(**{**fields, "user_facts": [uf]})
+        return j
     if mode == "true":
         if j.verdict is Verdict.confirmed:
             return SentenceJudgment(**{**fields, "user_facts": [uf]})
