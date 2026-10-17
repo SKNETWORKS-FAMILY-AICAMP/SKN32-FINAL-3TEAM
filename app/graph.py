@@ -2869,20 +2869,33 @@ def _encoder_side(
         return _enc_disease(s, facts, span)
     if not factcheck.in_gate(_coords(a for b in s.risk.encoder_basis for a in b.articles)):
         return None
-    # 🔴 (1-b) 사실 확인 분기는 분기 유형(거짓_과장)에만 — 화장품법 13조①4호는 기만과 같은 호라 관문만으로는 기만 문장에도 선다
-    kinds = (
+    # 🔴 (1-b) 낱말 사실 확인 분기는 분기 유형(거짓_과장)에만 — 화장품법 13조①4호는 기만과 같은 호라 관문만으로는 기만 문장에도 선다
+    word_kinds = (
         [k for k in factcheck.fact_kinds(s.text) if k in factcheck.FACT_TEXTS]
         if types == {Violation.거짓_과장}
         else []
     )
+    # 🆕 2026-10-17 (보충 6 결정 3 · 4 · 보충 7 결정 7) — **유형에 딸린 사실 종류** — 그 전제 축의 칸이 B 인 유형만(C 는 위에서 끝났다)
+    b_types = [
+        v
+        for v in sorted(types, key=list(Violation).index)
+        if infeasibility_of(_basis_cells(b for b in s.risk.encoder_basis if b.violation is v))
+        is Infeasibility.B
+    ]
+    t_kinds = [k for k in factcheck.type_kinds(v.value for v in b_types) if k not in word_kinds]
+    kind_type = {k: Violation.거짓_과장 for k in word_kinds} | {
+        k: v for v in b_types for k in factcheck.type_kinds([v.value])
+    }
+    kinds = word_kinds + t_kinds
     ans: dict[FactKind, UserFact] = {}
     for f in facts:
         if f.kind in kinds and f.kind not in ans and dm.norm(f.text) == key:
             ans[f.kind] = f
     carried = [ans[k] for k in kinds if k in ans]
     kinds = [k for k in kinds if not (k in ans and ans[k].answer is Answer.해당없음)]
-    if any(ans[k].answer is Answer.아니오 for k in kinds if k in ans):
-        return _enc_confirmed(s, Violation.거짓_과장, span, user_facts=carried)
+    no = [k for k in kinds if k in ans and ans[k].answer is Answer.아니오]
+    if no:
+        return _enc_confirmed(s, kind_type[no[0]], span, user_facts=carried)
     reason = _encoder_reason(s)
     sb = _enc_subst(s) if reason is Infeasibility.B else None
     pending = [k for k in kinds if k not in ans]
@@ -2904,7 +2917,15 @@ def _encoder_side(
                 "user_facts": carried,
             }
         )
-    if kinds and factcheck.fact_only(s.text):
+    if [
+        k for k in t_kinds if k in kinds
+    ] and not word_kinds:  # 「해당 없음」으로 걷힌 갈래는 세지 않는다
+        # 🆕 (보충 6 결정 3 · 4) 유형에 딸린 사실이 전부 「예」 — 갈래 ① (객관적 근거)이 따로 있는 유형은 실증 갈래가 서야 닫는다(갈래 결과 max)
+        if any(v.value in factcheck.NEED_SUBST for v in b_types) and sb is None:
+            return SentenceJudgment(**{**fields, "user_facts": carried})
+        if sb is None:
+            return _answered(s, user_facts=carried)
+    elif kinds and factcheck.fact_only(s.text):
         return _answered(s, user_facts=carried)  # 남은 사실이 전부 참 · 사실만 주장
     if sb is None:
         return SentenceJudgment(**{**fields, "user_facts": carried}) if carried else None
@@ -2913,9 +2934,8 @@ def _encoder_side(
         if us.answer is Answer.예 and sb.substantiated_max is Risk.R0:
             return _answered(s, user_facts=carried, user_subst=us)
         if us.answer is Answer.아니오:
-            return _enc_confirmed(
-                s, Violation.거짓_과장, span, user_facts=carried, user_subst=us, subst=sb
-            )
+            sv = b_types[0] if len(b_types) == 1 else Violation.거짓_과장
+            return _enc_confirmed(s, sv, span, user_facts=carried, user_subst=us, subst=sb)
         # 해당없음 — 실증 분기를 걷는다 · 보류 + 출처
         return SentenceJudgment(**{**fields, "user_facts": carried, "user_subst": us})
     return SentenceJudgment(

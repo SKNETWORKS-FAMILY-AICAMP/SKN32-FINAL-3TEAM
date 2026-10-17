@@ -321,6 +321,9 @@ COMBO_CELLS = (
     #: 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님(L0 · 주의 · 상담 문구). 판정은 「확정 · 위반 없음 · R0」이라 「사전 확정」에 섞이면
     #:    사전 확정의 정밀도가 떨어진 것처럼 읽힌다 — 칸을 가른다. ⛔ 앞 여섯 칸의 순서는 바꾸지 않는다(게이트가 번호로 읽는다)
     "판정 대상 아님",
+    #: 🆕 2026-10-17 (D-348 보충 6 결정 5 · 원장 10-17(B) ⑤) — 인코더 판정으로 확정된 위반(사전 근거도 사용자 답도 없다 · `contracts.encoder_judged`).
+    #:    종전에는 확정이면 출처를 보지 않고 「사전 확정」으로 셌다 — 사전 확정의 정밀도에 인코더 판정이 섞였다
+    "인코더 판정 확정",
 )
 
 
@@ -330,6 +333,7 @@ def combo_cell(
     enc_types: Iterable[str],
     *,
     not_claim: bool = False,
+    encoder_judged: bool = False,
 ) -> str:
     """조합 판정 칸 — **규칙은 여기 한 곳**(D-340 결정 1 · D-99). 단위는 부르는 쪽이 정한다.
 
@@ -342,6 +346,8 @@ def combo_cell(
         return COMBO_CELLS[
             6
         ]  # 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님만 있는 단위(행 · 문장)
+    if committed and encoder_judged:
+        return COMBO_CELLS[7]  # 🆕 2026-10-17 — 인코더 판정 확정(사전 확정과 가른다)
     if committed:
         return COMBO_CELLS[0]
     dq, en = set(dict_types), set(enc_types)
