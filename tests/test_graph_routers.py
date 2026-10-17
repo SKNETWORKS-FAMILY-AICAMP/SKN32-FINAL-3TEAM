@@ -925,7 +925,9 @@ def test_건강기능식품법_인용만_가진_사전_적중은_어느_노드�
         g, "load_dict_entries", _entries(("면역력", None, ("009353:제18조제1항제1호",)))
     )
     out = build_review().invoke(_init("면역력 강화"), config={"configurable": {"conn": "CUR"}})
-    assert out["dict_scans"][0].hits, "🚨 적중 사실은 남아야 한다"
+    # 🔄 2026-10-18 (D-348 보충 16) — 칸이 C 가 아닌 항목(참고 전용 법 인용은 칸이 없다)은 **내린 후보**로 남는다
+    scan = out["dict_scans"][0]
+    assert scan.hits or any(h.demoted for h in scan.weak), "🚨 적중 사실은 남아야 한다"
     assert all(hs == () for r in out["law_results"] for _, hs in r.dict_hits)
 
 

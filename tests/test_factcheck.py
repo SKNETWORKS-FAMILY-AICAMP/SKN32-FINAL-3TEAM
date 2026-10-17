@@ -169,8 +169,12 @@ def test_신뢰_규칙_전에는_인코더만_잡은_보류는_조건부가_아�
             "evidence": [FOOD4.model_dump()],
         }
     )
-    assert _run(weak) is None, (
-        "자격 없는 사전 적중 + 인코더 하한도 확정 재료가 아니다(D-311 결정 4)"
+    # 🔄 2026-10-18 (D-348 보충 16 · 2 단계 = 사전 좁히기) — 사전 후보는 판정을 막지 않는다 · 인코더 쪽 판정(보류 + 분기)으로 간다 ·
+    #    후보는 여전히 확정 재료가 아니다(D-311 결정 4) — 확정도 조건부도 아니다
+    got = _run(weak)
+    assert got is not None and (got.verdict, got.hold_reason) == (Verdict.hold, HoldReason.low_conf)
+    assert not is_conditional(got) and got.violations == [Violation.거짓_과장], (
+        "유형 후보는 실려 간다"
     )
 
 

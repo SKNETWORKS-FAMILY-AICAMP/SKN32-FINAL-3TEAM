@@ -305,11 +305,14 @@ def test_사전_판_c_only_는_C_항목만_남기고_자격_없는_항목을_뺀
     )
     exag = dm.Entry(term="최고급", violation_type="거짓_과장", basis=("013094:제8조제1항제4호",))
     assert g.entry_cell(disease) is Infeasibility.C and g.entry_cell(exag) is Infeasibility.B
-    assert g._viewed([disease, exag], [exag]) == ([disease, exag], [exag]), "기본은 원래 사전"
+    # 🔄 2026-10-18 (D-348 보충 16) — 기본은 칸 C 만 단독판정 · 나머지 단독판정 항목은 내린 후보
+    assert g._viewed([disease, exag], [exag]) == ([disease], [exag], [exag])
     monkeypatch.setattr(g, "_DICT_VIEW", None)
-    g.set_dict_view("c_only")
     try:
-        assert g._viewed([disease, exag], [exag]) == ([disease], [])
+        g.set_dict_view("c_only")
+        assert g._viewed([disease, exag], [exag]) == ([disease], [], [])
+        g.set_dict_view("legacy")
+        assert g._viewed([disease, exag], [exag]) == ([disease, exag], [exag], []), "종전 사전"
     finally:
         monkeypatch.setattr(g, "_DICT_VIEW", None)
     with pytest.raises(ValueError):

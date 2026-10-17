@@ -224,6 +224,9 @@ class DictHit:
     #: 근거 조문 인용(D-282 꼴). 🚨 법별 노드가 **제 법의 인용만** 남긴다(`statute.law_of`)
     basis: tuple[str, ...]
     span: tuple[int, int] | None
+    #: 🆕 2026-10-18 (D-348 보충 16) — 단독판정 항목이었으나 **후보로 내린** 적중(칸이 C 가 아님 · 또는 확정 막기 가드에 걸림).
+    #:    🔴 후보(`weak`)로만 실린다 · 판정 대상 아님(`claimscope.is_caution`)을 열지 못한다 — 위반 낱말이 주의 문맥에서 통과로 새지 않게
+    demoted: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -745,9 +748,8 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
         return {"dict_scans": [DictScan(sent_id=sent_id(i)) for i in range(len(sents))]}
     entries = load_dict_entries(cur)
     weak = load_weak_entries(cur)  # 🆕 D-311 — 보류 문장의 유형 후보
-    entries, weak = _viewed(
-        entries, weak
-    )  # 🆕 2026-10-18 (보충 15 결정 3) 측정 전용 사전 판 · 앱은 원래 사전
+    # 🔄 2026-10-18 (D-348 보충 16) — 단독판정은 칸이 C 인 항목만 · 나머지 단독판정 항목은 후보로 내린다(`demoted`)
+    entries, weak, lowered = _viewed(entries, weak)
 
     def _hits(text: str, es: list[dm.Entry]) -> tuple[DictHit, ...]:
         return tuple(
@@ -760,8 +762,25 @@ def match_dict(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
             for m in dm.find(text, es)
         )
 
+    def _lowered(text: str) -> tuple[DictHit, ...]:
+        return tuple(
+            DictHit(
+                term=h.term,
+                violation_type=h.violation_type,
+                basis=h.basis,
+                span=h.span,
+                demoted=True,
+            )
+            for h in _hits(text, lowered)
+        )
+
     scans = [
-        DictScan(sent_id=sent_id(i), ran=True, hits=_hits(text, entries), weak=_hits(text, weak))
+        DictScan(
+            sent_id=sent_id(i),
+            ran=True,
+            hits=_hits(text, entries),
+            weak=_hits(text, weak) + _lowered(text),
+        )
         for i, text in enumerate(sents)
     ]
     # 🆕 2026-10-08 — 걸린 항목의 인용 조문에 원문을 붙일 재료 (근거 표시 「(나)」 · D-224 ④). 같은 커서로 한 번만 묻는다
@@ -1471,7 +1490,7 @@ def entry_cell(e: dm.Entry) -> Infeasibility | None:
 #:    끄고 켜는 것은 평가 도구뿐이다(`scripts/eval_graph.py --dict-view`) — 앱은 부르지 않는다 · 봉인 회차에서는 쓰지 않는다.
 #:    🚨 근사 — 항목 칸은 항목의 인용으로만 본다(전제마다 다른 C — 건기식 인정 전제의 질병 표현 등 — 는 가르지 않는다)
 _DICT_VIEW: str | None = None
-DICT_VIEWS = ("c_only",)
+DICT_VIEWS = ("c_only", "legacy")
 
 
 def set_dict_view(view: str) -> None:
@@ -1482,10 +1501,17 @@ def set_dict_view(view: str) -> None:
     _DICT_VIEW = view
 
 
-def _viewed(entries: list[dm.Entry], weak: list[dm.Entry]) -> tuple[list[dm.Entry], list[dm.Entry]]:
-    if _DICT_VIEW is None:
-        return entries, weak
-    return [e for e in entries if entry_cell(e) is Infeasibility.C], []
+def _viewed(
+    entries: list[dm.Entry], weak: list[dm.Entry]
+) -> tuple[list[dm.Entry], list[dm.Entry], list[dm.Entry]]:
+    """(단독판정 · 자격 없는 후보 · 내린 후보) — 🔄 2026-10-18 (D-348 보충 16) **기본 = 칸이 C 인 단독판정 항목만 단독판정**,
+    나머지 단독판정 항목은 **후보로 내린다**(보충 15 결정 3 · 후보 전용 (나)) · 「legacy」 = 종전 사전 · 「c_only」 = 10-18(B) ① 의 측정 판(후보 없음)."""
+    if _DICT_VIEW == "legacy":
+        return entries, weak, []
+    keep = [e for e in entries if entry_cell(e) is Infeasibility.C]
+    if _DICT_VIEW == "c_only":
+        return keep, [], []
+    return keep, weak, [e for e in entries if entry_cell(e) is not Infeasibility.C]
 
 
 def _basis_cells(basis: Iterable[EncoderBasis]) -> list[tuple[Violation, str | None]]:
@@ -1583,7 +1609,24 @@ def _judge_one(
         return SentenceJudgment(
             sent_id=sid, text=text, verdict=Verdict.unjudged, evidence=retrieved
         )
-    if not scan.hits and claimscope.is_caution(text):
+    # 🆕 2026-10-18 (D-348 보충 16) — 확정 막기 가드: 주장이 아닌 자리의 적중은 확정하지 않고 후보로 내린다(인코더 쪽 판정으로)
+    blocked = [h for h in hits if claimscope.confirm_block(text, h.span)]
+    if blocked:
+        hits = [h for h in hits if h not in blocked]
+        weak = [
+            *(weak or ()),
+            *(
+                DictHit(
+                    term=h.term,
+                    violation_type=h.violation_type,
+                    basis=h.basis,
+                    span=h.span,
+                    demoted=True,
+                )
+                for h in blocked
+            ),
+        ]
+    if not scan.hits and not any(h.demoted for h in scan.weak) and claimscope.is_caution(text):
         # 🆕 2026-10-15 (D-348 보충 1 결정 1 · D-275) — 주의 · 상담 문구는 **판정 대상 아님**(확정 · 위반 없음 · R0 은 `assess_risk`).
         #    🔴 사전 자격 적중이 하나라도 있으면(법을 가리지 않는다 · `scan.hits`) 쓰지 않는다 — 주장이 섞인 문장을 지우지 않는다.
         #    자격 없는 적중(`weak` · 「당뇨」 비주장문맥 등)은 막지 않는다 — 그 적중을 주의 문맥에서 끄는 것이 이 규칙의 목적이다.
@@ -2861,12 +2904,18 @@ ENC_SUBST_AXIS: dict[Premise, str | None] = {
 
 
 def _encoder_only(s: SentenceJudgment) -> bool:
-    """사전 쪽 판정이 없는 문장인가 — 사전 근거 적중(자격 있는 · 없는) 없이 인코더 하한만 선 확신 부족 보류 (보충 5 · 1 단계의 대상)."""
+    """사전 쪽 판정이 없는 문장인가 — 사전이 확정하지 않은(사유 · 구간 없음) 확신 부족 보류에 인코더 하한이 선 문장 (보충 5 · 1 단계의 대상).
+
+    🔄 2026-10-18 (D-348 보충 15 결정 3 · 보충 16 — 2 단계 = 사전 좁히기) — **사전 후보만 울린 문장도 인코더 쪽 판정으로 간다.**
+       사전은 칸이 C 인 항목만 단독판정이고, 나머지 · 확정 막기 가드에 걸린 적중은 후보(`weak` · 유형 후보 · 근거 표시)다 —
+       후보는 판정을 막지 않는다. ⛔ 종전(보충 5 결정 8)에는 후보가 울린 문장을 막았다 — 그때의 결함(신뢰 규칙 없이 조건부 위반)은
+       인코더 쪽 판정이 답 없이 확정하지 않으므로(보충 5) 다시 생기지 않는다. 유형 후보 칸(`violations`)은 그대로 실려 간다.
+    """
     return (
         s.verdict is Verdict.hold
         and s.hold_reason is HoldReason.low_conf
-        and not s.violations
-        and not any(e.basis for e in s.evidence)
+        and s.infeasibility is None
+        and not s.spans
         and s.risk.encoder is not None
         and bool(s.risk.encoder_basis)
     )
