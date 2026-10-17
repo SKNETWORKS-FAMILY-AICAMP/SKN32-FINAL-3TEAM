@@ -116,6 +116,13 @@ STAT_INFO = re.compile(
     r"\d+\s?명\s?(중|가운데)|\d+(\.\d+)?\s?%|통계|조사에\s?따르면|유병률|환자(가|는|수)?\s?.{0,12}(증가|늘|달해)|fact\s?sheet",
     re.IGNORECASE,
 )
+#: 🆕 2026-10-18 (D-348 보충 19) 대상 꼴 — 적중(질병명) **바로 뒤** 「(이 · 가) 있는 아기 · 분 · 환자 …」 = **누가 먹을지**를 말한다(질병을 고친다는 주장이 아니다) ·
+#:    `[문헌]` 식품 [별표 1] 1.가 예외(특수의료용도식품의 섭취 대상 표시)와 같은 꼴 · `[측정]` 코퍼스 사전 C 적중 ∧ 대상 꼴 비봉인 2 행(적법 1 · 통계 1) · 봉인 0 (원장 10-18(B) ⑪) — 고른 근거 n=1
+TARGET_FORM = re.compile(
+    r"^\s?(이|가)\s?(있는|있으신|생긴)\s?(아기|아이|분|사람|환자|어린이|영유아|유아|성인|노인|임산부|산모)|^\s?환자(는|분|의\s?경우)"
+)
+#: 대상 꼴이라도 같은 절에 효능 낱말이 있으면 막지 않는다 — 「당뇨가 있는 분께 좋습니다」 · 「아토피 있는 아이에게 추천」은 질병 표방이다
+TARGET_CLAIM = re.compile(r"좋|효과|효능|개선|예방|치료|완화|도움|낫|해소|극복|추천|관리")
 #: 법정 고지 문구 — 🔴 원문을 아직 수집하지 않았다(건강기능식품 표시기준) · 빈 목록이면 아무것도 막지 않는다 (D-220)
 NOTICE_PHRASES: tuple[str, ...] = ()
 
@@ -127,7 +134,7 @@ def _clause(text: str, start: int, end: int) -> tuple[int, int]:
 
 
 def confirm_block(text: str, span: tuple[int, int] | None) -> str | None:
-    """사전 적중 하나의 확정을 막는 사유 — 정체부정 · 효능부정 · 주의 · 부작용 · 통계정보 · 고지. 막지 않으면 None.
+    """사전 적중 하나의 확정을 막는 사유 — 정체부정 · 효능부정 · 주의 · 부작용 · 통계정보 · 대상 · 고지. 막지 않으면 None.
 
     🔴 구간을 모르면(`span` 없음) 막지 않는다 — 절을 정할 수 없다 · 확정은 종전대로. 판정 대상 아님(`is_caution`)과 섞지 않는다.
     """
@@ -149,6 +156,8 @@ def confirm_block(text: str, span: tuple[int, int] | None) -> str | None:
         return "부작용"
     if STAT_INFO.search(cl):
         return "통계정보"
+    if TARGET_FORM.search(t[e:b]) and not TARGET_CLAIM.search(cl):
+        return "대상"
     if any(p and p in t for p in NOTICE_PHRASES):
         return "고지"
     return None
