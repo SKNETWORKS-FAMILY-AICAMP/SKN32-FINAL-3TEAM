@@ -131,7 +131,7 @@ def candidate_condition(sentence: object) -> str | None:
 #: 🚨 문안은 화면 담당(ksr) 검토 대상이다(D-330 ⬜ 검토 A ~ H) — 고치면 여기 한 곳을 고친다 (D-99)
 GUESSED_TYPE_MARK = "AI 추정 유형 있음 — 판정 아님"
 #: 고쳐 쓰기에 생성 서버(sLLM)가 「고칠 수 없음」(`infeasible`)으로 답했을 때의 말 — **유형의 출처와 무관하게 이 말 하나다**.
-#: ⛔ 「합법화 불가」라 그리지 않는다 — 불가는 코드의 불가 사유(D-59 · `INFEASIBILITY_OF`)만 말한다(D-10 · D-323 보충 개정 10-14).
+#: ⛔ 「합법화 불가」라 그리지 않는다 — 불가는 코드의 불가 사유(D-59 · `app/graph.py` `INFEASIBILITY_CELL`)만 말한다(D-10 · D-323 보충 개정 10-14).
 #:    코드가 「실증하면 쓸 수 있다」(B)로 정한 문장 70 중 13 에 sLLM 이 불가로 답했다 — 같은 카드에서 말이 갈린다
 #:    (`docs/lse/고쳐쓰기_dev평가_2026-10-11.md` §1 · 3B v12 · 정답 유형 입력). 사유 C 문장은 카드가 이미 「불가」를 말한다
 REWRITE_INFEASIBLE_TEXT = "고쳐 쓴 문장을 만들지 못했어요"
