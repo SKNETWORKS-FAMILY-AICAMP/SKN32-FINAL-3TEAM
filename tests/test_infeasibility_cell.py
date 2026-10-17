@@ -248,3 +248,45 @@ def test_품목을_알고_전제가_둘이면_분기가_모두_같은_절대형�
     assert got.verdict is Verdict.confirmed and got.violations == [Violation.의약품_오인]
     assert got.risk.final is Risk.R2
     JudgeResponse(outcome=Outcome.hold, sentences=[got], branches=bs)
+
+
+# ── 식품 · 화장품 비방은 낱말로 가른다 (🆕 2026-10-17 · D-348 보충 10) ─────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "absolute"),
+    [
+        (
+            "다른 우유와 달리 이 우유는 첨가물을 넣지 않습니다",
+            True,
+        ),  # 고시 69549 제2조 4.가 예시 꼴
+        ("타사제품은 불쾌감과 악취가 나는 반면에 저희 제품은 산뜻합니다", True),
+        ("타사 크림은 피부를 망칩니다", True),
+        ("타사 제품보다 2배 빠른 흡수", False),  # 자사 우월 비교 — 부당 비교
+        ("국내 최초 무항생제 인증 목장원유", False),  # 우월 주장 — 고시 4.나
+        ("동종 제품 중 면역기능 증진 1위", False),
+    ],
+)
+def test_비방_낱말_규칙(text: str, absolute: bool) -> None:
+    from app import factcheck  # noqa: PLC0415
+
+    assert factcheck.slander_absolute(text) is absolute
+
+
+def test_식품_비방_칸은_문장으로_가른다() -> None:
+    io = g.infeasibility_of
+    assert io([(Violation.비방광고, F)], "타사 제품은 효과가 없습니다") is Infeasibility.C
+    assert io([(Violation.비방광고, F)], "국내 최초로 개발한 제품") is Infeasibility.B
+    assert io([(Violation.비방광고, C)], "타사 제품보다 보습력이 2배") is Infeasibility.B
+    assert io([(Violation.비방광고, F)]) is Infeasibility.C, "문장을 모르면 칸 그대로"
+    assert io([(Violation.비방광고, P)], "국내 최초") is Infeasibility.B, "표시광고법 축은 원래 B"
+
+
+def test_타사를_깎아내리지_않는_식품_비방은_답_없이_확정하지_않는다() -> None:
+    food6 = EvidenceArticle(law_id="013094", article="제8조제1항제6호")
+    s = _enc(
+        _b(Premise.식품, Violation.비방광고, Risk.R1, food6, FAIR_SLANDER),
+        text="시중에서 판매되는 타제품보다 높은 함유율",
+    )
+    got = _run(s)
+    assert got is None or got.verdict is Verdict.hold, "원장 10-17(B) ⑤ 의 꼴 — 부당 비교(B)로 본다"
