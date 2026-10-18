@@ -41,7 +41,10 @@ if str(ROOT) not in sys.path:
 #:    지나친 거절 6 그대로 · 보류 23 → 11, 직접 만든 119 동등 · 포장 0. dev 511 은 불가가 크게 늘었다(450 · 표본 30 검토에서 대부분
 #:    불가가 맞고, 식품 · 화장품 밖 업종은 살릴 것도 거절) — 식품 · 건기식 · 화장품 위주라 채택(사용자 10-17 · `데이터확장_시범결과_2026-10-16.md`).
 #:    v14 로 돌아가려면 COPYLANE_SLLM_STAGE1=q4b-v14 · COPYLANE_SLLM_RESCUE=0
-DEFAULT_STAGE1 = "q4b-n2"
+#: ⛔ 2026-10-19 — 위 교체는 **잠금(models.lock.json · D-335) 등재 전이라 되돌렸다.** q4b-n2 는 잠금에 없어 서버가 뜨지 않았다
+#:    (`LockOutside` — 앱 고쳐 쓰기 「연결하지 못했어요」). 팀장이 잠금에 q4b-n2 를 등재하면 이 줄을 "q4b-n2" 로 · RESCUE 기본을 켠다.
+#:    그 전에 n2 를 쓰려면 잠금 등재 판이 아니므로 서버가 막는다 — 시험은 `eval_*.py`(잠금을 보지 않는다)로만
+DEFAULT_STAGE1 = "q4b-v14"
 DEFAULT_BASE = "Qwen/Qwen3-4B-Instruct-2507"
 #: 🔄 2026-10-12 — 2단계는 다듬기 데이터(`persona_polish.jsonl`)를 더해 다시 학습한 판(`…_q4b_polish`). 고객층 없이 다듬기 39/39 통과
 #:    (종전 판 16/39 · 「건강 · 도움」을 붙여 막힘). 종전 판으로 돌아가려면 COPYLANE_SLLM_STAGE2=models\copylane_sllm_persona_adapter_q4b
