@@ -3190,6 +3190,19 @@ def _absolute_types(s: SentenceJudgment) -> set[Violation]:
         cells = _basis_cells(b for b in s.risk.encoder_basis if b.violation is v)
         if infeasibility_of(cells, s.text) is Infeasibility.C:
             out.add(v)
+    # 🆕 2026-10-19 (D-348 보충 25) 화장품 전제의 의약품 오인이 인증 · 실증 꼴뿐이면(질병 · 의학 낱말 없음) C 로 세우지 않는다 —
+    #    「ISO 22716 인증」은 제4호(인증 오인) · [별표 2](실증 대상) 몫이다. 확정만 막는다 — 보류로 남고 다른 칸 분기는 그대로 본다.
+    #    여기 한 곳에서 거른다 — 확정(`_encoder_side`)과 품목 선택 필요(`_mark_category_needed`)가 같은 답을 본다(D-99)
+    if (
+        Violation.의약품_오인 in out
+        and any(
+            b.premise is Premise.화장품
+            for b in s.risk.encoder_basis
+            if b.violation is Violation.의약품_오인
+        )
+        and claimscope.cert_not_drug(s.text)
+    ):
+        out.discard(Violation.의약품_오인)
     return out
 
 
