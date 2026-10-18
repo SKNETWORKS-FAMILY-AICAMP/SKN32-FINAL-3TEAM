@@ -89,7 +89,8 @@ def _sec14() -> str:
 def test_문안은_승인본과_글자가_같다() -> None:
     """🔄 2026-10-17 — 질문 · 기준 문안 · 증빙 · 화면 안내는 정본 §14 와 글자가 같다 (D-99 · D-147 · D-263 ②)."""
     sec = _sec14()
-    assert set(fc.FACT_QUESTIONS) == set(fc.FACT_TEXTS)
+    # 🔄 2026-10-19 (보충 28 결정 4) — 낱말 사실 두 종류(특허 · 인증)는 문안이 §20 에 있고 질문은 아직 공통 질문이다(`tests/test_word_facts.py`)
+    assert set(fc.FACT_QUESTIONS) == set(fc.FACT_TEXTS) - {FactKind.특허, FactKind.인증}
     for k, q in fc.FACT_QUESTIONS.items():
         assert f"질문: {q}" in sec, k
         t = fc.FACT_TEXTS[k]
