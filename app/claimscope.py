@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import re
 
+from app import factcheck
+
 #: 섭취 주의 · 전문가 상담 · 과량 섭취 경고 꼴 (D-348 보충 1 결정 1 · L0 (가)). 🔴 꼴을 넓히기 전에 위반에 걸리는지 잰다 —
 #: 「알레르기」 단독은 위반 문장(「알레르기 유발 물질 99.95% 정화」)에 걸려 「알레르기를 나타내 · 알레르기가 있는」 꼴로 좁혔다.
 CAUTION = re.compile(
@@ -88,3 +90,74 @@ def claim_guard(text: str) -> bool:
     if not t or is_caution(t) or is_veto(t):
         return False
     return bool(PREDICATE.search(t) or AD_CUE.search(t))
+
+
+# ══════════════════════════════════════════════════════════════════
+#  확정 막기 가드 (🆕 2026-10-18 · D-348 보충 16) — 사전 C 적중이 **주장이 아닌 자리**에 있으면 확정하지 않는다
+# ══════════════════════════════════════════════════════════════════
+#: ★ 위의 `CAUTION`(판정 대상 아님 · 통과 쪽)과 목적이 다르다 — 이것은 **확정만 막는다**(보류 쪽 · 인코더 쪽 판정으로 넘긴다).
+#:    틀려도 보류로 남을 뿐이라 비대칭 원칙(보충 1)에 따라 넓게 잡을 수 있다 — 그래도 진짜 위반을 내리는 꼴은 넣지 않는다:
+#:    ⛔ 「~ 없는 · ~ 없이 · ~ 않는」 같은 수식어 부정은 넣지 않는다 — 「탈모 걱정 없이」 · 「아토피 고민 없는 피부」는 효능 주장이다
+#:       `[측정]` 넓은 판은 봉인 위반 2 행 · 코퍼스 위반 꼴 3 을 내렸다 · 좁힌 판은 0 (원장 10-18(B) ② · 봉인은 수만 · 규칙은 비봉인으로 골랐다)
+#:    🔴 범위는 **적중이 든 절**이다 — 「당뇨에 좋고, 임산부는 섭취에 주의」의 주장 절을 지우지 않는다
+CLAUSE_BOUND = re.compile(r"[.,!?;·…\n]|그러나|하지만|그런데")
+#: 정체 부정 — 적중 낱말 **바로 뒤** 「(이 · 가 · 은 · 는) 아닙니다 …」 · 「변비약이 아닙니다」 `[관행]` 국어 부정 서술
+NEG_IDENTITY = re.compile(
+    r"^\s?(이|가|은|는)?\s?(아닙니다|아니며|아니고|아님|아니에요|아닌|아니다)"
+)
+#: 효능 부정 — 같은 절의 「효과 · 효능 · 작용」 뒤 부정 · 「암 예방 효과는 확인되지 않았습니다」 `[관행]`
+NEG_EFFICACY = re.compile(
+    r"(효과|효능|작용)(는|가|이|은)?\s?(없습니다|없음|없다|없으며|확인되지\s?않|입증되지\s?않|검증되지\s?않|밝혀지지\s?않)"
+)
+#: 부작용 · 이상반응 — 같은 절 · `[문헌]` 인정 원료의 섭취 주의사항 원문(`hf_display_claims` — 「과잉섭취 시 … 불면증을 유발할 수 있음」)
+SIDE_EFFECT = re.compile(r"유발할\s?수\s?있|과잉\s?섭취|이상\s?반응|부작용이\s?(나타|생|있)")
+#: 질병 통계 · 정보 — 같은 절 · `[측정]` 비봉인 가이드 표시내용 3 행(라벨 소비자 기만 B · 사전은 질병 C 로 확정하던 행 · 원장 10-18(B) ③)
+STAT_INFO = re.compile(
+    r"\d+\s?명\s?(중|가운데)|\d+(\.\d+)?\s?%|통계|조사에\s?따르면|유병률|환자(가|는|수)?\s?.{0,12}(증가|늘|달해)|fact\s?sheet",
+    re.IGNORECASE,
+)
+#: 🆕 2026-10-18 (D-348 보충 19) 대상 꼴 — 적중(질병명) **바로 뒤** 「(이 · 가) 있는 아기 · 분 · 환자 …」 = **누가 먹을지**를 말한다(질병을 고친다는 주장이 아니다) ·
+#:    `[문헌]` 식품 [별표 1] 1.가 예외(특수의료용도식품의 섭취 대상 표시)와 같은 꼴 · `[측정]` 코퍼스 사전 C 적중 ∧ 대상 꼴 비봉인 2 행(적법 1 · 통계 1) · 봉인 0 (원장 10-18(B) ⑪) — 고른 근거 n=1
+TARGET_FORM = re.compile(
+    r"^\s?(이|가)\s?(있는|있으신|생긴)\s?(아기|아이|분|사람|환자|어린이|영유아|유아|성인|노인|임산부|산모)|^\s?환자(는|분|의\s?경우)"
+)
+#: 대상 꼴이라도 같은 절에 효능 낱말이 있으면 막지 않는다 — 「당뇨가 있는 분께 좋습니다」 · 「아토피 있는 아이에게 추천」은 질병 표방이다
+TARGET_CLAIM = re.compile(r"좋|효과|효능|개선|예방|치료|완화|도움|낫|해소|극복|추천|관리")
+#: 법정 고지 문구 — 🔴 원문을 아직 수집하지 않았다(건강기능식품 표시기준) · 빈 목록이면 아무것도 막지 않는다 (D-220)
+NOTICE_PHRASES: tuple[str, ...] = ()
+
+
+def _clause(text: str, start: int, end: int) -> tuple[int, int]:
+    a = max([m.end() for m in CLAUSE_BOUND.finditer(text, 0, start)] or [0])
+    m = CLAUSE_BOUND.search(text, end)
+    return a, (m.start() if m else len(text))
+
+
+def confirm_block(text: str, span: tuple[int, int] | None) -> str | None:
+    """사전 적중 하나의 확정을 막는 사유 — 정체부정 · 효능부정 · 주의 · 부작용 · 통계정보 · 대상 · 고지. 막지 않으면 None.
+
+    🔴 구간을 모르면(`span` 없음) 막지 않는다 — 절을 정할 수 없다 · 확정은 종전대로. 판정 대상 아님(`is_caution`)과 섞지 않는다.
+    """
+    if span is None:
+        return None
+    t = text or ""
+    s, e = span
+    a, b = _clause(t, s, e)
+    # 🔴 부정이 **타사**를 향하면(「경쟁사 제품은 효과 없음」) 부인이 아니라 비방이다 — 부정 사유로 막지 않는다(타사 표지는 `factcheck` 한 곳 · D-99)
+    other = bool(factcheck.COMPETITOR.search(t[a:b]))
+    if not other and NEG_IDENTITY.search(t[e:b]):
+        return "정체부정"
+    if not other and NEG_EFFICACY.search(t[e:b]):
+        return "효능부정"
+    cl = t[a:b]
+    if CAUTION.search(cl):
+        return "주의"
+    if SIDE_EFFECT.search(cl):
+        return "부작용"
+    if STAT_INFO.search(cl):
+        return "통계정보"
+    if TARGET_FORM.search(t[e:b]) and not TARGET_CLAIM.search(cl):
+        return "대상"
+    if any(p and p in t for p in NOTICE_PHRASES):
+        return "고지"
+    return None

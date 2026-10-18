@@ -1253,6 +1253,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="인코더 후보의 전제별 거름 · 옮김을 끈다 — 거름표를 걷을지 판정하는 dev 비교용 (D-336 결정 5 · 앱은 늘 켠다)",
     )
+    ap.add_argument(
+        "--dict-view",
+        choices=g.DICT_VIEWS,
+        help="사전 판 — c_only: 칸이 C 인 단독판정 항목만 · 자격 없는 항목 없음(사전 좁히기 전 잃는 몫 측정 · D-348 보충 15 결정 3 · 봉인 회차에는 쓰지 않는다)",
+    )
     which = ap.add_mutually_exclusive_group(required=True)
     which.add_argument(
         "--dev",
@@ -1274,6 +1279,8 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(
             "🔴 --guide-dev 는 --dev 와 함께만 — 봉인 평가셋에는 해설서 dev 가 없다 (D-347)"
         )
+    if a.sealed and a.dict_view:
+        raise SystemExit("🔴 --dict-view 는 dev 측정 전용 — 봉인 회차는 원래 사전으로만 (D-175)")
     if a.sealed:
         import datetime  # noqa: PLC0415
 
@@ -1295,6 +1302,9 @@ def main(argv: list[str] | None = None) -> int:
     if a.no_enc_filter:
         g.disable_encoder_filter()
         stamp |= {"encoder_filter": "끔"}
+    if a.dict_view:
+        g.set_dict_view(a.dict_view)
+        stamp |= {"dict_view": a.dict_view}
     if a.sealed:
         n_runs = log_sealed_run(
             stamp | {"judged_by": g.JUDGED_BY, "rows": len(rows), "status": "시작"}
@@ -1311,6 +1321,9 @@ def main(argv: list[str] | None = None) -> int:
         review = g.build_review()
         with pg_connect() as conn, conn.cursor() as cur:
             stamp |= check_dict(cur)
+            if a.dict_view:
+                kept = [e for e in g.load_dict_entries(cur) if g.entry_cell(e) is g.Infeasibility.C]
+                stamp |= {"dict_view_kept": len(kept)}  # 남긴 단독판정 항목 수(자격 없는 항목은 0)
             cfg = {"configurable": {"conn": cur}}
             preds = run(
                 rows,

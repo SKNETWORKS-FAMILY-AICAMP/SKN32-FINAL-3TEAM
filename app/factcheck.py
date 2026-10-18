@@ -181,6 +181,35 @@ def comparison_claim(text: str) -> bool:
     return bool(COMPARE_CUE.search(text or ""))
 
 
+#: 🆕 2026-10-17 (보충 7 결정 5 · 보충 12 · 무첨가 낱말 규칙) — 조건표(`NOFREE_CONDITIONS`)의 표현을 그대로 찾는다(D-99 — 표현 목록은 조건표 한 곳).
+#:    낱말 사이 띄어쓰기만 느슨하게 · 「무설탕」 · 「무당」(함량 기준 표시 — 36814 의 다른 칸) · 「인공색소 무첨가」처럼 조건표에 없는 표현은 잡지 않는다
+_NOFREE_RE: list[tuple[tuple[str, ...], re.Pattern[str]]] = [
+    (key, re.compile("|".join(r"\s?".join(map(re.escape, e.split())) for e in key)))
+    for key in NOFREE_CONDITIONS
+]
+
+
+def nofree_conditions(text: str) -> list[tuple[str, tuple[str, ...]]]:
+    """문장이 쓴 무첨가 표현 → (대표 표현, 고시 원문 조건) 목록 — 조건표에 있는 표현만. 없으면 빈 목록 (D-220)."""
+    t = text or ""
+    return [(key[0], NOFREE_CONDITIONS[key]) for key, rx in _NOFREE_RE if rx.search(t)]
+
+
+#: 🆕 2026-10-17 (D-348 보충 15) **무첨가 꼴** — 쓰지 않은 원재료 · 성분을 내세우는 표현. 조건표 밖이면 묻지 않는다(보류 + 기준 한 줄).
+#:    출처 `[문헌]` 식품 [별표 1] 7.나 「사용하지 않은 원재료 또는 성분을 강조」 · 고시 69549 제2조 3(「무MSG」 · 「방부제 무첨가」 예시) ·
+#:    `[사례]` train 무첨가 꼴 28 행(무색소 · 무방부제 · 「첨가하지 않은」 · 「넣지 않았습니다」 · 「○ FREE」) — dev 를 보며 고르지 않았다(D-175) · ⬜ 낱말 근사
+NOFREE_LIKE = re.compile(
+    r"무첨가|무\s?(색소|방부제|보존료|MSG|향료|착색료|감미료|합성)|(사용|첨가)(하)?지\s?않|(넣|쓰)지\s?않|\bfree\b|프리\b",
+    re.IGNORECASE,
+)
+
+
+def nofree_outside_table(text: str) -> bool:
+    """무첨가 꼴인데 조건표(고시가 정한 무첨가 표시)에 없는 표현인가 — 맞으면 묻지 않는다 (보충 15 · D-99 한 곳)."""
+    t = text or ""
+    return bool(NOFREE_LIKE.search(t)) and not nofree_conditions(t)
+
+
 def type_kinds(types: Iterable[str]) -> list[FactKind]:
     """유형들 → 유형에 딸린 사실 종류(유형 순서 · 표 순서 · 문안이 승인된 것만). 🔴 문안 표가 비면 늘 빈 목록 (D-220)."""
     out: list[FactKind] = []

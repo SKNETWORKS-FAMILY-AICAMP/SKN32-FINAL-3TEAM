@@ -280,3 +280,95 @@ def test_일반상품_기만에는_조건_고지를_묻는다() -> None:
     got = _run(_enc(Premise.일반상품, Violation.소비자_기만, FAIR2), "일반상품")
     assert got is not None and got.fact_check is not None
     assert got.fact_check.kind is FactKind.조건_고지
+
+
+# ── 무첨가 조건 (🆕 2026-10-17 · D-348 보충 14) ──────────────────────────────────────────────────
+
+FOOD7 = EvidenceArticle(law_id="013094", article="제8조제1항제7호")
+
+
+@pytest.mark.parametrize(
+    ("text", "names"),
+    [
+        ("설탕 무첨가 오렌지주스", ["설탕 무첨가"]),
+        ("무가당이라 좋아요", ["설탕 무첨가"]),
+        ("나트륨무첨가", ["나트륨 무첨가"]),
+        ("무가염 버터", ["나트륨 무첨가"]),
+        ("무설탕 캔디", []),
+        ("인공색소를 사용하지 않았습니다", []),
+    ],
+)
+def test_무첨가_표현은_조건표에_있는_것만(text: str, names: list[str]) -> None:
+    assert [n for n, _ in fc.nofree_conditions(text)] == names
+
+
+def test_식품_비교의_무첨가_표현은_무첨가_조건을_묻는다() -> None:
+    s = _enc(Premise.식품, Violation.부당_비교광고, FOOD7, text="설탕 무첨가 오렌지주스")
+    got = _run(s, "식품")
+    assert got is not None and got.fact_check is not None
+    assert got.fact_check.kind is FactKind.무첨가_조건
+    no = _run(s, "식품", [_uf(FactKind.무첨가_조건, Answer.아니오, text="설탕 무첨가 오렌지주스")])
+    assert no is not None and no.verdict is Verdict.confirmed
+    assert no.violations == [Violation.부당_비교광고], "조건을 지키지 않은 무첨가는 7.나 부당 비교"
+
+
+def test_무첨가_조건_목록이_화면에_펼쳐진다() -> None:
+    """화면은 질문의 「아래 조건」을 필터(`nofree_conditions`)로 펼친다 — 필터 등록 · 틀의 사용 자리 · 펼친 글자."""
+    import pathlib as _p  # noqa: PLC0415
+
+    from app.templating import templates  # noqa: PLC0415
+
+    assert templates.env.filters["nofree_conditions"] is fc.nofree_conditions
+    src = _p.Path("app/templates/user/review.html").read_text(encoding="utf-8")
+    assert "s.text|nofree_conditions" in src and '"무첨가_조건"' in src
+    html = templates.env.from_string(
+        "{% for name, conds in t|nofree_conditions %}「{{ name }}」 조건"
+        "{% for c in conds %}<li>{{ c }}</li>{% endfor %}{% endfor %}"
+    ).render(t="설탕 무첨가 오렌지주스")
+    assert "「설탕 무첨가」 조건" in html
+    assert fc.NOFREE_CONDITIONS[("설탕 무첨가", "무가당")][0] in html
+
+
+# ── 조건표 밖 무첨가 · D-338 근거 줄 (🆕 2026-10-17 · D-348 보충 15) ─────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "outside"),
+    [
+        ("인공색소를 사용하지 않았습니다", True),
+        ("분리대두단백을 전혀 사용하지 않고", True),
+        ("무색소/무방부제", True),
+        ("10 FREE(7 보존제)", True),
+        ("설탕 무첨가 오렌지주스", False),
+        ("국내 판매 NO.1", False),
+    ],
+)
+def test_조건표_밖_무첨가_꼴(text: str, outside: bool) -> None:
+    assert fc.nofree_outside_table(text) is outside
+
+
+def test_조건표_밖_무첨가는_묻지_않고_기준_한_줄() -> None:
+    text = "인공색소를 사용하지 않았습니다"
+    s = _enc(Premise.식품, Violation.부당_비교광고, FOOD7, text=text)
+    got = _run(s, "식품")
+    assert got is None or (got.fact_check is None and got.verdict is Verdict.hold), (
+        "맞지 않는 비교 기준 질문을 띄우지 않는다"
+    )
+    assert reasons.nofree_note(got or s) == reasons.NOFREE_HOLD_NOTE
+    b = _enc(Premise.식품, Violation.비방광고, FOOD6, text="불필요한 것을 일체 넣지 않습니다")
+    assert reasons.nofree_note(b) == reasons.NOFREE_HOLD_NOTE
+    assert reasons.slander_note(b) == "", "무첨가 꼴이면 기준 줄은 하나만"
+    assert (
+        reasons.nofree_note(_enc(Premise.일반상품, Violation.부당_비교광고, FAIR4, text=text)) == ""
+    )
+
+
+def test_화장품_옮김의_근거_줄은_코퍼스_조문() -> None:
+    assert reasons.COSMETIC_MOVE_BASIS == (
+        "화장품법 제13조①1호",
+        "화장품법 시행규칙 [별표 5] 2.가",
+        "화장품법 제2조1호 단서",
+    )
+    assert not any("약사법" in x for x in reasons.COSMETIC_MOVE_BASIS), (
+        "약사법 원문은 코퍼스에 없다"
+    )
