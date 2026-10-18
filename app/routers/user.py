@@ -951,6 +951,107 @@ async def review_rewrite(request: Request) -> HTMLResponse:
     return _render(request, "user/review.html", _review_ctx(copies, results))
 
 
+#: 🆕 2026-10-16 (D-348 보충 4 결정 3 · 4 · 6) — 조건부 위반에 대한 답 하나. `subst:yes|no` · `fact:<종류>:true|false`
+#: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · `na` = 해당 없음(이 문장은 그 주장을 하지 않는다)
+_ANSWER = re.compile(r"^(subst:(yes|no|na)|fact:([가-힣_]{1,24}):(true|false|na))$")
+_ANSWER_OF = {"yes": "예", "true": "예", "no": "아니오", "false": "아니오", "na": "해당없음"}
+#: 앞서 한 답 — `문장id|답` (그 문구 안) · 답은 서버가 다시 판정한 문장 글자에 묶는다(폼의 글자를 믿지 않는다)
+_PREV = re.compile(r"^([A-Za-z0-9_\-]{1,32})\|(.+)$")
+_MAX_ANSWERS = 12
+
+
+def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[list, list]:
+    """(문장id, 답) → (`UserFact` 목록, `UserSubst` 목록). 모르는 문장 · 모르는 종류 · 꼴이 틀린 답은 거부한다(422 · D-220)."""
+    from app.contracts import Answer, FactKind, UserFact, UserSubst  # noqa: PLC0415
+
+    facts, substs = [], []
+    for sid, a in pairs:
+        m = _ANSWER.match(a)
+        if not m or sid not in sents:
+            raise HTTPException(422, "모르는 답")
+        if m.group(2):
+            substs = [u for u in substs if u.text != sents[sid]]
+            substs.append(UserSubst(text=sents[sid], answer=Answer(_ANSWER_OF[m.group(2)])))
+            continue
+        if m.group(3) not in {k.value for k in FactKind}:
+            raise HTTPException(422, "모르는 사실 종류")
+        kind = FactKind(m.group(3))
+        facts = [f for f in facts if not (f.text == sents[sid] and f.kind is kind)]
+        facts.append(UserFact(text=sents[sid], kind=kind, answer=Answer(_ANSWER_OF[m.group(4)])))
+    return facts, substs
+
+
+@router.post("/review/answer", response_class=HTMLResponse)
+async def review_answer(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    """조건부 위반에 답하고 **그 문구를 답과 함께 다시 판정**한다 (🆕 2026-10-16 · D-348 보충 4 결정 3 · 4 · 6 · 보충 3 결정 4).
+
+    🔴 **POST 다** — 문구를 URL 에 싣지 않는다(P1-4). 화면에 상태가 없어 문구 칸 · 앞서 한 답(`prev`)을 다시 받는다.
+    ★ 답은 **그 문장에만** 묶는다 — 문장 글자는 서버가 먼저 판정한 결과에서 읽는다(폼의 글자를 믿지 않는다 · `review_rewrite` 와 같다).
+    ★ 품목 분기를 고른 뒤의 답이면 다시 그릴 때 그 분기를 펼쳐 둔다(`picked`). 답은 모든 분기에 같이 든다(문장에 묶였다).
+    ★ 답으로 다시 판정한 문구는 **이력에 적는다**(출처 · 책임 — 보충 3 결정 4). 다른 문구는 판정만 다시 한다.
+    🚨 답은 검증이 아니다 — 판정의 `user_facts` · `user_subst` 와 화면 문구가 그렇게 말한다.
+    """
+    form = await _form(request, keep_blank=True)
+    copies = _copies(form)
+    m = _TARGET.match(form.get("target", [""])[0])
+    if not m:
+        raise HTTPException(422, "답할 문장을 모른다")
+    want_n, want_sid = int(m.group(1)), m.group(2)
+    answer = _one(form, "answer", 40)
+    prev = form.get("prev", [])
+    if len(prev) >= _MAX_ANSWERS:
+        raise HTTPException(422, "답이 너무 많다")
+    premise = _one(form, "premise", 32)
+    if premise and premise not in _PREMISES:
+        raise HTTPException(422, "모르는 전제")
+    redo = _one(form, "round", 2) or "0"
+    if not redo.isdigit() or int(redo) > _MAX_REDO:
+        raise HTTPException(422, "모르는 회차")
+    pairs: list[tuple[str, str]] = []
+    for p in prev:
+        pm_ = _PREV.match(p)
+        if not pm_:
+            raise HTTPException(422, "모르는 답")
+        pairs.append((pm_.group(1), pm_.group(2)))
+    pairs.append((want_sid, answer))
+
+    from app.contracts import ProductContext  # noqa: PLC0415
+
+    targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
+    results: list[dict] = []
+    for n, text in targets:
+        state, res = await run_in_threadpool(_core_judge, text)
+        if state in ("pending", "down"):
+            return _render(
+                request,
+                "user/review.html",
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+            )
+        if n == want_n:
+            sents = {s.sent_id: s.text for s in res.sentences}
+            facts, substs = _answers_of(pairs, sents)
+            state, res = await run_in_threadpool(
+                _core_judge, text, ProductContext(facts=facts, substs=substs)
+            )
+            if state in ("pending", "down"):
+                return _render(
+                    request,
+                    "user/review.html",
+                    _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+                )
+            item = {"n": n, "result": res, "text": text, "answers": [f"{s}|{a}" for s, a in pairs]}
+            if premise and res.branches:
+                item["picked"] = {"premise": premise, "round": int(redo)}
+            results.append(item)
+            continue
+        results.append({"n": n, "result": res, "text": text})
+    answered = [r["result"] for r in results if r["n"] == want_n]
+    kept = await run_in_threadpool(
+        lambda: judgment_store.save_review(session, current_user(request, session), answered)
+    )
+    return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
+
+
 @router.get("/preview/{name}", response_class=HTMLResponse)
 def judge_preview(request: Request, name: str) -> HTMLResponse:
     """골든 픽스처 하나를 **결과 화면으로** 그린다 (D-124 ③).
@@ -1419,6 +1520,9 @@ def _why_blocked(s) -> str:  # noqa: ANN001
     types = " · ".join(v.value.replace("_", " ") for v in s.violations)
     if s.verdict is Verdict.confirmed:
         head = _INFEASIBLE_WHY.get(s.infeasibility.value if s.infeasibility else "", "위반 확정")
+    elif reasons.conditional_text(s):
+        # 🆕 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반은 보류 사유가 아니라 조건을 적는다(화면 결론 줄과 같은 글자)
+        head = reasons.conditional_text(s)
     elif s.verdict is Verdict.hold:
         head = "보류 — " + _HOLD_WHY.get(s.hold_reason.value if s.hold_reason else "", "사유 없음")
     elif s.verdict is Verdict.no_basis:
@@ -1830,6 +1934,9 @@ def _hist_view(j: Judgment, raw: str | None = None) -> SimpleNamespace:
         tone, label = _INF_BADGES.get(ev.get("infeasibility"), ("bad", "위반 확정"))
     elif j.verdict == "confirmed":
         tone, label = "ok", "특이사항 없음"
+    elif j.verdict == "hold" and ev.get("conditional"):
+        # 🆕 2026-10-16 (D-348 보충 4 결정 2) — 조건부 위반은 보류가 아니라 분류다(저장 `evidence.conditional`) · 글자는 검수 화면과 같다
+        tone, label = "warn", reasons.conditional_label(ev["conditional"].get("kind"))
     elif j.verdict == "hold":
         tone, label = "hold", "보류"
     elif j.verdict == "no_basis":
@@ -1845,7 +1952,7 @@ def _hist_view(j: Judgment, raw: str | None = None) -> SimpleNamespace:
         label=label,
         hold_reason=(
             _HOLD_LABELS.get(j.hold_reason, f"알 수 없는 값 ({j.hold_reason})")
-            if j.hold_reason
+            if j.hold_reason and not ev.get("conditional")
             else None
         ),
         # ⛔ 확정이 아닌 문장의 위험도는 그리지 않는다 — 판정처럼 읽힌다 (D-280)

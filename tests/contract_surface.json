@@ -5,6 +5,11 @@
       "상세페이지",
       "카드뉴스"
     ],
+    "Answer": [
+      "아니오",
+      "예",
+      "해당없음"
+    ],
     "Category": [
       "건기식",
       "식품",
@@ -23,9 +28,18 @@
       "인스타"
     ],
     "FactKind": [
+      "등급",
+      "무첨가_조건",
+      "비교_기준",
+      "비방_선별",
       "수상_상장",
       "원재료",
-      "인증"
+      "인정_기능성",
+      "인증",
+      "자격",
+      "조건_고지",
+      "특허",
+      "후기_실재"
     ],
     "GenerateOutcome": [
       "frontier",
@@ -132,8 +146,16 @@
       "screening": "opt list[app.contracts.SentenceJudgment]",
       "sections": "opt list[app.contracts.AdSection]"
     },
+    "EncoderBasis": {
+      "articles": "req list[app.contracts.EvidenceArticle]",
+      "floor": "req app.contracts.Risk",
+      "moved_from": "opt app.contracts.Violation | None",
+      "premise": "req app.contracts.Premise",
+      "violation": "req app.contracts.Violation"
+    },
     "EncoderTypeCandidate": {
       "confidence": "req builtins.float",
+      "estimate": "opt app.contracts.RiskEstimate | None",
       "moved_from": "opt app.contracts.Violation | None",
       "references": "opt list[app.contracts.EvidenceArticle]",
       "violation": "req app.contracts.Violation"
@@ -198,8 +220,10 @@
     },
     "ProductContext": {
       "category": "opt app.contracts.Category | None",
+      "facts": "opt list[app.contracts.UserFact]",
       "has_recognized_function": "opt builtins.bool",
-      "recognition_no": "opt str | None"
+      "recognition_no": "opt str | None",
+      "substs": "opt list[app.contracts.UserSubst]"
     },
     "RewriteSet": {
       "body": "req builtins.str",
@@ -210,8 +234,14 @@
       "ceiling": "opt app.contracts.Risk | None",
       "ceiling_note": "opt str | None",
       "encoder": "opt app.contracts.Risk | None",
+      "encoder_basis": "opt list[app.contracts.EncoderBasis]",
       "evidence_span": "opt app.contracts.Span | None",
       "final": "opt app.contracts.Risk | None",
+      "floor": "opt app.contracts.Risk | None"
+    },
+    "RiskEstimate": {
+      "ceiling": "opt app.contracts.Risk | None",
+      "ceiling_note": "opt str | None",
       "floor": "opt app.contracts.Risk | None"
     },
     "Segment": {
@@ -234,6 +264,8 @@
       "spans": "opt list[app.contracts.Span]",
       "substantiation": "opt app.contracts.SubstBranch | None",
       "text": "req builtins.str",
+      "user_facts": "opt list[app.contracts.UserFact]",
+      "user_subst": "opt app.contracts.UserSubst | None",
       "verdict": "req app.contracts.Verdict",
       "violations": "opt list[app.contracts.Violation]"
     },
@@ -250,6 +282,15 @@
     "Timing": {
       "ms": "req builtins.float",
       "node": "req builtins.str"
+    },
+    "UserFact": {
+      "answer": "req app.contracts.Answer",
+      "kind": "req app.contracts.FactKind",
+      "text": "req builtins.str"
+    },
+    "UserSubst": {
+      "answer": "req app.contracts.Answer",
+      "text": "req builtins.str"
     }
   },
   "routes": [

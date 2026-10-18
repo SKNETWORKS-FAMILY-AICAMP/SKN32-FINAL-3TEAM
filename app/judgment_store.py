@@ -26,6 +26,8 @@
    「선택한 전제의 저장은 판정 저장과 함께 정한다」(D-319 결정 7 ⬜) · 「고른 전제의 결과는 통과율에 섞지 않는다」(D-263 ①).
 ⚠️ `judgment.violation_type` 은 한 칸이다 — 문장에 위반 유형이 여럿이면 **첫 유형**을 적고, 전부는 `evidence.violations` 에 남긴다.
 ⚠️ 인코더 후보(`encoder_candidates`)는 적지 않는다 — 판정이 아니라 추정이다(D-323). 적을지는 따로 정한다.
+   🔄 2026-10-16 (D-348 보충 2 결정 8 · D-323 좁힘) — **인코더 하한(`risk_encoder`)이 적힌 문장은 그 근거 호만 적는다**
+   (`evidence.encoder_refs` · 유형과 참조 조항). 저장된 등급마다 근거가 남아야 한다(D-224) — 후보 전체 · 확률은 여전히 적지 않는다.
 🔴 🆕 2026-10-14 (흡수 중 고침 · 팀장 (다)) — **판정 대상 아님(`not_claim`) 문장은 적지 않는다.** 표에 그 칸이 없어 적으면
    「확정 · 위반 없음 · R0」 — 이력 · 통계에서 「특이사항 없음」(통과에 가까운 상태)으로 읽힌다. 통과는 닫아 두었다(D-275 · D-323 결정 5).
    ksr 의 이력 저장(`_save_review` · 10-13)과 같은 규칙이다 — 저장은 이 모듈 하나로 모은다(ksr 흡수 때 나머지 규칙을 옮긴다 · D-99).
@@ -39,7 +41,7 @@ import uuid
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from app.contracts import LAW_VERSION_UNKNOWN, Risk
+from app.contracts import LAW_VERSION_UNKNOWN, Risk, is_conditional
 from app.dictmatch import norm
 from app.models import CopySentence, Judgment, WorkDoc
 
@@ -67,6 +69,16 @@ def _risk_int(r: Risk | None) -> int | None:
     return None if r is None else int(r.value[1:])
 
 
+def _encoder_refs(s: SentenceJudgment) -> list[dict]:
+    """인코더 하한의 근거 — 위험도가 든 근거(`risk.encoder_basis` · 분기 · 유형 · 하한 · 호) 그대로 (D-348 보충 2 결정 2 · 8 · 10).
+
+    ⛔ 확률(`confidence`) · 표시용 후보(`encoder_candidates`)는 적지 않는다 — 판정이 아니다(D-323). 인코더 하한이 없으면 빈 목록.
+    """
+    if s.risk.encoder is None:
+        return []
+    return [b.model_dump(mode="json") for b in s.risk.encoder_basis]
+
+
 def _category(res: JudgeResponse) -> tuple[str | None, str | None]:
     """(품목, 품목 출처) — **둘 다 있거나 둘 다 없다** (`ck_judgment_category_source_pair` · D-276).
 
@@ -85,16 +97,44 @@ def _judgment_row(
 ) -> Judgment:
     category, source = _category(res)
     violations = [v.value for v in s.violations]
-    evidence = (
+    enc_refs = _encoder_refs(s)
+    evidence: dict | None = (
         {
             "violations": violations,
             "articles": [a.model_dump(mode="json") for a in s.evidence],
             # 🆕 2026-10-14 (ksr 흡수) — 이력 배지가 읽는다(`_hist_view`). 확정 위반이 아니면 None
             "infeasibility": s.infeasibility.value if s.infeasibility else None,
         }
-        if violations or s.evidence
+        if violations
+        or s.evidence
+        or enc_refs
+        or bool(s.user_facts)
+        or s.user_subst is not None
+        or is_conditional(s)
         else None
     )
+    if evidence is not None and s.user_facts:
+        # 🆕 2026-10-16 (D-348 보충 3 결정 4) — 이 판정은 사용자가 확인한 사실로 정했다 · 출처(책임)를 남긴다
+        evidence["user_facts"] = [f.model_dump(mode="json") for f in s.user_facts]
+    if evidence is not None and is_conditional(s):
+        # 🆕 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반**은 보류 사유가 아니라 분류다 · 이력 화면이 이 칸으로 그린다(`_hist_view`).
+        #    DB 칸(verdict · hold_reason)은 보류 · premise_unknown 그대로 — 갈래와 받는 자료 · 답하면 내려가는 상한을 남긴다
+        branch = s.fact_check or s.substantiation
+        evidence["conditional"] = {
+            "kind": "fact" if s.fact_check is not None else "subst",
+            "accepted_evidence": list(branch.accepted_evidence) if branch else [],
+            "max": (
+                s.fact_check.confirmed_max.value
+                if s.fact_check is not None
+                else s.substantiation.substantiated_max.value  # type: ignore[union-attr]
+            ),
+        }
+    if evidence is not None and s.user_subst is not None:
+        # 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부 · 출처(책임)를 남긴다
+        evidence["user_subst"] = s.user_subst.model_dump(mode="json")
+    if evidence is not None and enc_refs:
+        # 🆕 2026-10-16 (D-348 보충 2 결정 8) — 인코더 하한의 근거 호 · DB 가 `ck_judgment_encoder_has_basis` 로 댄다
+        evidence["encoder_refs"] = enc_refs
     span = s.risk.evidence_span
     return Judgment(
         id=uuid.uuid4(),
@@ -110,6 +150,9 @@ def _judgment_row(
         evidence_span=span.model_dump(mode="json") if span is not None else None,
         risk_floor=_risk_int(s.risk.floor),
         risk_final=_risk_int(s.risk.final),
+        risk_encoder=_risk_int(
+            s.risk.encoder
+        ),  # 🆕 2026-10-16 (D-348 보충 2) — 인코더 하한 · 사전 하한과 칸이 다르다
         law_version=(res.law_version or LAW_VERSION_UNKNOWN)[:_LAW_VERSION_MAX],
         attempt=res.attempt,
         judged_by=(res.judged_by or "unknown")[:_JUDGED_BY_MAX],
