@@ -3183,16 +3183,54 @@ def _encoder_side(
     )
 
 
+#: 🆕 2026-10-19 (D-348 보충 26 결정 3 · 보충 17 결정 2 · 보충 1 결정 2 · 5) **인코더 쪽 절대형 확정의 확신 문턱 τ** — 판(판 지문)마다 고른 값.
+#:    고르는 규칙(측정 전 고정): 확장 dev 조건부의 인코더 쪽 절대형 확정에서 틀림(라벨에 없는 유형 · 모호 · 적법) ≤ 1 인 가장 낮은 τ →
+#:    데이터 밖(다른 생성기 적법 213 · 품목 입력)의 절대형 확정 95 % 상한 ≤ 2 % `[임의]` 이면 연다.
+#:    `[측정]` D4-20 `c451942436f0` — 기능성 거름 · 인증 거름 뒤 틀림 0.6985 · 0.8319 → τ ∈ (0.6985, 0.70] · 경계 반올림을 피해 0.699 ·
+#:    잃는 맞는 확정 3 / 20 · 데이터 밖 0 / 213(상한 1.8 %) (원장 10-19(B) ④) · 🚨 맞는 확정 0.70 과 0.0015 차이 — 흔들리기 쉬운 값
+#:    🔴 표에 없는 판(되돌림 판 · 잠금 밖 실험 판)은 τ 를 걸지 않는다(보충 17 결정 1 그대로) — 잠금 채택 판이 바뀌면 같은 규칙으로 다시 재고 여기에 적는다
+#:       (`tests/test_absolute_tau.py` 가 채택 판의 값이 있는지 지킨다)
+ENCODER_ABSOLUTE_TAU: dict[str, float] = {"c451942436f0": 0.699}
+
+
+def _absolute_tau() -> float | None:
+    """지금 판의 절대형 확정 τ — 인코더가 없거나 표에 없는 판이면 None(문턱 없음)."""
+    d = enc.configured_dir()
+    return None if d is None else ENCODER_ABSOLUTE_TAU.get(enc.bundle_mark(d))
+
+
 def _absolute_types(s: SentenceJudgment) -> set[Violation]:
-    """인코더 근거 중 **사유가 C 인 유형** — 유형마다 그 유형 근거의 칸으로(`infeasibility_of` · 전용법 칸 먼저 · 전제의 법만)."""
+    """인코더 근거 중 **사유가 C 인 유형** — 유형마다 그 유형 근거의 칸으로(`infeasibility_of` · 전용법 칸 먼저 · 전제의 법만).
+
+    🔄 2026-10-19 (D-348 보충 26) — 셋을 더 본다. 여기 한 곳에서 거른다 — 확정(`_encoder_side`)과 품목 선택 필요(`_mark_category_needed`)가
+       같은 답을 본다(D-99).
+      ① **옮긴 근거는 세지 않는다**(결정 2) — 화장품 전제가 건강기능식품 오인 · 질병 표방 후보를 의약품 오인으로 옮긴 근거(`moved_from`)는
+         의약품 오인 점수가 문턱 아래라 직접 후보가 서지 않았을 때만 생긴다(`_encoder_candidates` 의 「직접 냈으면 더하지 않는다」) —
+         그 근거로 C 를 세우면 의약품 오인 문턱을 우회한다. 사전 쪽 옮김이 건강기능식품 오인을 옮기지 않는 것과 같은 이유다(보충 23 결정 2)
+      ② **확신 문턱 τ**(결정 3 · `ENCODER_ABSOLUTE_TAU`) — 그 유형의 직접 후보 확신이 τ 아래면 C 로 세우지 않는다
+      ③ 화장품 전제의 의약품 오인 — 인증 · 실증 꼴(보충 25) · 기능성 정형 낱말(결정 1)뿐이면 C 로 세우지 않는다
+    🔴 모두 확정만 막는다 — 보류로 남고 후보 · 하한 · 다른 칸 분기는 그대로다(보충 1 비대칭).
+    """
     out: set[Violation] = set()
-    for v in {b.violation for b in s.risk.encoder_basis}:
-        cells = _basis_cells(b for b in s.risk.encoder_basis if b.violation is v)
-        if infeasibility_of(cells, s.text) is Infeasibility.C:
-            out.add(v)
-    # 🆕 2026-10-19 (D-348 보충 25) 화장품 전제의 의약품 오인이 인증 · 실증 꼴뿐이면(질병 · 의학 낱말 없음) C 로 세우지 않는다 —
-    #    「ISO 22716 인증」은 제4호(인증 오인) · [별표 2](실증 대상) 몫이다. 확정만 막는다 — 보류로 남고 다른 칸 분기는 그대로 본다.
-    #    여기 한 곳에서 거른다 — 확정(`_encoder_side`)과 품목 선택 필요(`_mark_category_needed`)가 같은 답을 본다(D-99)
+    tau = _absolute_tau()
+    for v in {b.violation for b in s.risk.encoder_basis if b.moved_from is None}:
+        cells = _basis_cells(
+            b for b in s.risk.encoder_basis if b.violation is v and b.moved_from is None
+        )
+        if infeasibility_of(cells, s.text) is not Infeasibility.C:
+            continue
+        if tau is not None:
+            conf = max(
+                (
+                    c.confidence
+                    for c in s.encoder_candidates
+                    if c.violation is v and c.moved_from is None
+                ),
+                default=0.0,
+            )
+            if conf < tau:
+                continue
+        out.add(v)
     if (
         Violation.의약품_오인 in out
         and any(
@@ -3200,7 +3238,7 @@ def _absolute_types(s: SentenceJudgment) -> set[Violation]:
             for b in s.risk.encoder_basis
             if b.violation is Violation.의약품_오인
         )
-        and claimscope.cert_not_drug(s.text)
+        and (claimscope.cert_not_drug(s.text) or claimscope.functional_not_drug(s.text))
     ):
         out.discard(Violation.의약품_오인)
     return out
