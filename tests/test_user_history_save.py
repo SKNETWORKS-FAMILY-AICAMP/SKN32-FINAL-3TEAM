@@ -87,8 +87,15 @@ def _check_row(j: Judgment) -> None:
     if j.verdict == "confirmed" and j.risk_final is not None:
         assert (j.violation_type is None) == (j.risk_final == 0)
     if j.risk_final is not None:
-        assert j.risk_floor is not None and j.risk_final >= j.risk_floor
-        assert j.risk_final <= j.risk_floor or j.evidence_span is not None
+        # 🔄 2026-10-16 (D-348 보충 2 · 0026) — 하한은 사전 또는 인코더 · 인코더 하한은 R1 이하 · 보류에만
+        lows = [r for r in (j.risk_floor, j.risk_encoder) if r is not None]
+        assert lows and all(j.risk_final >= r for r in lows)
+        assert j.risk_final <= max(lows) or j.evidence_span is not None
+    if j.risk_encoder is not None:
+        assert j.risk_encoder <= 1 and j.verdict == "hold" and j.risk_final is not None
+        assert (j.evidence or {}).get("encoder_refs"), (
+            "🔴 ck_judgment_encoder_has_basis — 인코더 하한의 근거 호가 없다"
+        )
     assert j.hold_reason is None or len(j.hold_reason) <= 16
     assert len(j.law_version) <= 40 and len(j.judged_by) <= 80
 

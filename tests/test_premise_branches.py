@@ -15,6 +15,7 @@ import pytest
 
 from app import premise as pm
 from app.contracts import (
+    Answer,
     Category,
     HoldReason,
     Infeasibility,
@@ -73,13 +74,15 @@ def _hit(*basis: str) -> DictHit:
     return DictHit(term="낱말", violation_type=None, basis=basis, span=(0, 2))
 
 
-def _run(by_law: dict[str, list[DictHit]], category: Category | None = None) -> tuple[dict, dict]:
+def _run(
+    by_law: dict[str, list[DictHit]], category: Category | None = None, facts: list | None = None
+) -> tuple[dict, dict]:
     """문장 하나 · 법별 적중으로 `judge` → `assess_risk` → `premise_branches` 를 실제로 돌린다. `(상태, 분기 노드가 낸 것)`."""
     laws = LAW_NODES if category is None else tuple(by_law) or ("law_ftc",)
     st: dict = {
         "text": TEXT,
         "sents": [TEXT],
-        "product": ProductContext(category=category),
+        "product": ProductContext(category=category, facts=facts or []),
         "laws": laws,
         "dict_scans": [
             DictScan(sent_id="s0", ran=True, hits=tuple(h for hs in by_law.values() for h in hs))
@@ -453,3 +456,30 @@ def test_조건부_후보에는_조건_문안이_붙는다(criteria: None) -> No
     # 글자는 승인본(기준 문안 §11)과 같다
     doc = pathlib.Path("docs/ohb/기준문안_초안_2026-10-02.md").read_text(encoding="utf-8")
     assert f"| {reasons.UNRECOGNIZED_CANDIDATE_NOTE} |" in doc.split("## 11.")[1]
+
+
+def test_건기식_인정의_사전_질병_적중은_문안이_서도_분기_없이_판정하지_못함(
+    criteria: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔄 2026-10-18 (D-348 보충 20 · 보충 16 결정 5 집행) — 종전에는 건기식_인정 전제의 사전 질병 적중에 사실 확인 분기(`인정_기능성`)를 달았다.
+    사전 쪽 분기는 걷었다 — 그 전제에서 질병 표현은 C 가 아니라 **전제별 제외**로 보류(「판정하지 못함」 · [별표 1] 1.가.2)다.
+    같은 질문은 인코더 쪽(`_enc_disease`)만 단다. 비인정 전제는 종전대로 확정이다."""
+    from app import factcheck as fc  # noqa: PLC0415
+    from app.contracts import FactKind, UserFact, is_conditional  # noqa: PLC0415
+
+    monkeypatch.setattr(
+        fc,
+        "FACT_TEXTS",
+        {FactKind.인정_기능성: fc.FactText(["(시험) 인정서"], "(시험) 인정 문구 그대로인가")},
+    )
+    st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식)
+    b = _branch(st, Premise.건기식_인정).sentences[0]
+    assert b.verdict is Verdict.hold and b.fact_check is None and not is_conditional(b)
+    assert Violation.질병_예방치료_표방 in b.violations, "유형 후보로는 실린다"
+    assert _branch(st, Premise.건기식_비인정).sentences[0].verdict is Verdict.confirmed
+    yes = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.예)
+    st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [yes])
+    b = _branch(st, Premise.건기식_인정).sentences[0]
+    assert b.verdict is Verdict.hold and b.fact_check is None, (
+        "사전 쪽은 답으로 판정을 바꾸지 않는다"
+    )

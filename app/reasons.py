@@ -14,10 +14,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import NamedTuple
 
+from app import factcheck
 from app import premise as pm
-from app.contracts import Category, Infeasibility, Risk, SubstBranch, Violation
+from app.contracts import Category, Infeasibility, Premise, Risk, SubstBranch, Violation
 from collect import statute
-from collect.law_map import STATUTE_ID
+from collect.law_map import LAW_OF_ID, STATUTE_ID
 
 FOOD = STATUTE_ID["식품표시광고법"]
 COSM = STATUTE_ID["화장품법"]
@@ -38,6 +39,7 @@ class ReasonText(NamedTuple):
 
 
 #: (법, 유형, 사유) → 문안. ✅ 2026-10-06 승인 — 오한빈 (모델 권고 승인 · 글자는 모델이 옮겨 적음) · 일곱 줄
+#: 🔄 2026-10-17 ✅ 승인 — 오한빈 (문안 묶음 (가)) · 비방 C 두 줄(§9 의 9 · 10 · D-348 보충 10 의 식품 · 화장품 비방 칸) — 아홉 줄
 REASON_TEXT: dict[tuple[str, Violation, Infeasibility], ReasonText] = {
     # §9 의 1
     (FOOD, Violation.질병_예방치료_표방, Infeasibility.C): ReasonText(
@@ -73,6 +75,16 @@ REASON_TEXT: dict[tuple[str, Violation, Infeasibility], ReasonText] = {
     (COSM, Violation.기능성화장품_오인, Infeasibility.A): ReasonText(
         "기능성화장품이 아닌 제품은 기능성화장품의 효능이 있는 것으로 표현할 수 없고, 기능성화장품이라도 심사받거나 보고한 내용과 다르게 표현할 수 없습니다.",
         "기능성화장품 심사를 받거나 보고를 마치면 그 범위에서 표시할 수 있습니다.",
+    ),
+    # §9 의 9 — 식품 별표 6 에는 「사실 유무와 관계없이」가 없다 · 「근거 자료가 있어도」까지만(D-320 ③)
+    (FOOD, Violation.비방광고, Infeasibility.C): ReasonText(
+        "다른 업체나 다른 업체의 제품을 비방하는 표현은 근거 자료가 있어도 쓸 수 없습니다. 비교하는 표현으로 간접적으로 깎아내려도 같습니다.",
+        None,
+    ),
+    # §9 의 10 — 시행규칙 [별표 5] 2.카 「사실 유무와 관계없이」
+    (COSM, Violation.비방광고, Infeasibility.C): ReasonText(
+        "다른 제품을 비방하거나 비방한다고 의심되는 표현은 사실인지와 관계없이 쓸 수 없습니다.",
+        None,
     ),
 }
 
@@ -131,12 +143,159 @@ def candidate_condition(sentence: object) -> str | None:
 #: 🚨 문안은 화면 담당(ksr) 검토 대상이다(D-330 ⬜ 검토 A ~ H) — 고치면 여기 한 곳을 고친다 (D-99)
 GUESSED_TYPE_MARK = "AI 추정 유형 있음 — 판정 아님"
 #: 고쳐 쓰기에 생성 서버(sLLM)가 「고칠 수 없음」(`infeasible`)으로 답했을 때의 말 — **유형의 출처와 무관하게 이 말 하나다**.
-#: ⛔ 「합법화 불가」라 그리지 않는다 — 불가는 코드의 불가 사유(D-59 · `INFEASIBILITY_OF`)만 말한다(D-10 · D-323 보충 개정 10-14).
+#: ⛔ 「합법화 불가」라 그리지 않는다 — 불가는 코드의 불가 사유(D-59 · `app/graph.py` `INFEASIBILITY_CELL`)만 말한다(D-10 · D-323 보충 개정 10-14).
 #:    코드가 「실증하면 쓸 수 있다」(B)로 정한 문장 70 중 13 에 sLLM 이 불가로 답했다 — 같은 카드에서 말이 갈린다
 #:    (`docs/lse/고쳐쓰기_dev평가_2026-10-11.md` §1 · 3B v12 · 정답 유형 입력). 사유 C 문장은 카드가 이미 「불가」를 말한다
 REWRITE_INFEASIBLE_TEXT = "고쳐 쓴 문장을 만들지 못했어요"
 #: 고친 문장을 다시 판정했을 때 사전은 지났는데 인코더가 유형 후보를 내면 다는 말 (D-323 결정 4 「위반 못 찾음 + 인코더 주의」)
 ENC_REMAINS_MARK = "AI 추정 유형 남음 — 판정 아님"
+
+
+#: 🆕 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반** 문장의 결론 한 줄 · 화면 두 곳(검수 · 생성 편집기 `sent_concl`)과 이력이 같은 글자를 쓴다 (D-99).
+#:    ⛔ 「보류」라 적지 않는다 — 판정은 끝났고 답하면 확정된다. ⛔ 「쓸 수 있어요」만 적지 않는다 — 조건이 앞에 온다
+CONDITIONAL_FACT_TEXT = "조건부 위반 · 그 사실이 맞으면 쓸 수 있어요"
+CONDITIONAL_SUBST_TEXT = "조건부 위반 · 실증 자료가 있으면 쓸 수 있어요"
+
+
+def conditional_label(kind: str | None) -> str:
+    """저장된 조건부 위반(`evidence.conditional.kind`)의 결론 글자 — 이력 화면이 쓴다. 검수 화면(`conditional_text`)과 같은 글자다 (D-99)."""
+    return CONDITIONAL_FACT_TEXT if kind == "fact" else CONDITIONAL_SUBST_TEXT
+
+
+#: 🆕 2026-10-16 (D-348 보충 5) — **인코더 쪽 판정의 보류 + 분기**의 결론 한 줄. ✅ 2026-10-17 문안 승인 — 오한빈(정본 §14).
+#:    답 없이 확정하지 않는다 — 조건부 위반(답 없으면 확정)과 다른 말이다. 「AI 추정 · 판정 아님」 표지(D-348 결정 5 화면 범위)
+ENCODER_QUESTION_TEXT = "AI 추정 · 판정 아님 — 아래 질문에 답하면 다시 판정해요"
+
+
+#: 🆕 2026-10-17 (D-348 보충 5 결정 5 · 1-b · ✅ 2026-10-17 문안 승인 — 오한빈 · 정본 §14) — 사실이 **거짓**으로 확정된 문장의
+#:    할 일 한 줄. 실증으로 풀리지 않는다 — 고치거나 뺀다. ⬜ 법령 설명(유형 · 근거 호 · 필요한 표현의 예)은 질문 재료 문안과 같은 상수로(결정 5)
+FACT_FALSE_TODO = "사실과 다른 표시예요 — 문구를 고치거나 빼 주세요"
+
+#: 🆕 2026-10-17 (D-348 보충 6 결정 8 · ✅ 2026-10-17 문안 승인 — 오한빈 · 정본 §14) — **일반상품**(전용법을 검수하지 않은 품목)의 안내 두 줄.
+#:    ① 표시광고법 호가 있는 유형은 표시광고법 기준으로 판정한다 — 그 위험도 옆에 ② 호가 없는 유형(질병 표방 · 의약품 오인 · 건강기능식품 오인)은
+#:    판정하지 않는다 — 그 표현이 보이면. 통과는 여전히 없다(D-314 · D-277).
+GENERAL_GOODS_RISK_NOTE = (
+    "표시광고법 기준으로 낸 위험도예요 — 이 품목에 따로 적용되는 법(전용법)은 확인이 필요해요"
+)
+GENERAL_GOODS_UNJUDGEABLE = "표시광고법으로 판정할 수 없는 표현이에요 — 해당 품목의 전용법(의료기기법 · 약사법 등) 확인이 필요해요"
+_GENERAL = Premise.일반상품.value
+_FAIR_LAW = "표시광고법"
+
+
+def general_goods_notes(sentence: object, premise: str) -> list[str]:
+    """일반상품 전제 · 품목의 문장 안내(보충 6 결정 8) — 위험도가 선 문장에 ①, 표시광고법 호가 없는 유형(사전 · 인코더 후보 · 유형)이 보이면 ②.
+
+    🔴 일반상품이 아니면 빈 목록. 호가 있는지는 대응표 한 곳(`statute.references`)으로 본다 (D-99).
+    """
+    if premise != _GENERAL or getattr(sentence, "not_claim", False):
+        return []
+    out: list[str] = []
+    risk = getattr(sentence, "risk", None)
+    if risk is not None and risk.final is not None:
+        out.append(GENERAL_GOODS_RISK_NOTE)
+    seen = {v.value for v in getattr(sentence, "violations", [])} | {
+        c.violation.value for c in getattr(sentence, "encoder_candidates", [])
+    }
+    if any(not statute.references(v, _FAIR_LAW) for v in seen):
+        out.append(GENERAL_GOODS_UNJUDGEABLE)
+    return out
+
+
+#: 🆕 2026-10-17 (D-348 보충 11 · ✅ 2026-10-17 문안 승인 — 오한빈 · 정본 §14) — 묻지 않는 비방 후보의 기준 한 줄.
+#:    식품 · 화장품 축에서 인코더가 비방을 보았는데 타사 ∧ 부정(`slander_absolute`)도, 비교 · 우월 표지(`comparison_claim`)도 없는 보류 문장.
+#:    범주 전체를 깎는 문장의 간접 비방 여부(대상에 다른 업체 제품이 드는가)는 문구 밖이다 — 묻는 대신 기준을 보인다
+#:    (고시 34717 Ⅲ.14.라 「경쟁관계에 있는 사업자를 구체적으로 밝히지 아니하더라도 일반적으로 어느 사업자를 지칭하는지 명백한 경우」 · 시행령 013453 [별표 1] 6 「간접적으로 비방」)
+SLANDER_HOLD_NOTE = "다른 회사 제품을 낮춰 말하는 것으로 읽히면 비방이에요 — 자료로 풀리지 않으니 문장을 고쳐 주세요"
+_SLANDER_AXES = frozenset({"식품표시광고법", "화장품법"})
+
+
+#: 🆕 2026-10-17 (D-348 보충 15 · 화면 문안 — ✅ 승인 2026-10-18 보충 19 결정 4 · D-263 ②) — 묻지 않는 조건표 밖 무첨가 문장의 기준 한 줄.
+#:    식품 [별표 1] 7.나 본문과 단서(고시가 정한 원재료 · 성분의 무첨가 표시만 제외) — 설탕 · 나트륨은 고시 36814 별지 1.아.3
+NOFREE_HOLD_NOTE = (
+    "고시가 정한 무첨가 표시(설탕 · 나트륨 무첨가 등)가 아니면, 쓰지 않은 원재료 · 성분을 내세워 "
+    "다른 제품과 다르게 보이게 할 수 없어요 — 문장을 고쳐 주세요"
+)
+_FOOD_AXIS = "식품표시광고법"
+
+
+def _held_unasked(sentence: object) -> list[object]:
+    """주장 ∧ 보류 ∧ 질문 없음인 문장의 인코더 근거 — 아니면 빈 목록 (기준 한 줄 둘이 같이 쓴다 · D-99)."""
+    if getattr(sentence, "not_claim", False) or getattr(sentence, "fact_check", None) is not None:
+        return []
+    v = getattr(sentence, "verdict", None)
+    if v is None or getattr(v, "value", v) != "hold":
+        return []
+    return list(getattr(getattr(sentence, "risk", None), "encoder_basis", None) or [])
+
+
+def nofree_note(sentence: object) -> str:
+    """묻지 않는 조건표 밖 무첨가 문장의 기준 한 줄(보충 15) — 해당이 아니면 빈 글자.
+
+    조건: 주장 ∧ 보류 ∧ 질문 없음 ∧ 인코더 근거에 식품 축의 부당 비교 · 비방 ∧ 조건표 밖 무첨가 꼴(`factcheck.nofree_outside_table`).
+    """
+    basis = _held_unasked(sentence)
+    if not any(
+        b.violation in (Violation.부당_비교광고, Violation.비방광고)
+        and any(LAW_OF_ID.get(a.law_id) == _FOOD_AXIS for a in b.articles)
+        for b in basis
+    ):
+        return ""
+    return (
+        NOFREE_HOLD_NOTE
+        if factcheck.nofree_outside_table(getattr(sentence, "text", "") or "")
+        else ""
+    )
+
+
+def slander_note(sentence: object) -> str:
+    """묻지 않는 비방 후보의 기준 한 줄(보충 11) — 해당이 아니면 빈 글자.
+
+    조건: 주장 ∧ 보류 ∧ 질문 없음 ∧ 인코더 근거에 식품 · 화장품 축의 비방 ∧ 타사 ∧ 부정 아님 ∧ 비교 · 우월 표지 없음.
+    🔴 낱말 규칙은 `app/factcheck.py` 한 곳 · 법 축은 `collect/law_map.py` `LAW_OF_ID` 한 곳 (D-99).
+    """
+    basis = _held_unasked(sentence)
+    if not any(
+        b.violation is Violation.비방광고
+        and any(LAW_OF_ID.get(a.law_id) in _SLANDER_AXES for a in b.articles)
+        for b in basis
+    ):
+        return ""
+    text = getattr(sentence, "text", "") or ""
+    if factcheck.slander_absolute(text) or factcheck.comparison_claim(text):
+        return ""
+    if nofree_note(sentence):
+        return ""  # 무첨가 꼴이면 그쪽 기준 한 줄만(보충 15)
+    return SLANDER_HOLD_NOTE
+
+
+def question_text(sentence: object) -> str:
+    """질문(분기)이 달린 문장의 결론 한 줄 — 조건부 위반이면 `conditional_text` · 인코더 쪽 보류 + 분기면 `ENCODER_QUESTION_TEXT` · 아니면 빈 글자.
+
+    ★ 화면이 질문 칸을 그릴지도 이 함수 하나로 정한다 (D-99). 인코더 쪽 보류 = 확신 부족 보류(`low_conf`) ∧ 사실 확인 · 실증 분기 (보충 5).
+    """
+    from app.contracts import HoldReason, Verdict  # noqa: PLC0415 — 순환 import 회피
+
+    t = conditional_text(sentence)
+    if t:
+        return t
+    if (
+        getattr(sentence, "verdict", None) is Verdict.hold
+        and getattr(sentence, "hold_reason", None) is HoldReason.low_conf
+        and (getattr(sentence, "fact_check", None) or getattr(sentence, "substantiation", None))
+    ):
+        return ENCODER_QUESTION_TEXT
+    return ""
+
+
+def conditional_text(sentence: object) -> str:
+    """조건부 위반 문장이면 결론 한 줄, 아니면 빈 글자. 조건부의 정의는 `contracts.is_conditional` 한 곳이다 (D-99)."""
+    from app.contracts import is_conditional  # noqa: PLC0415 — 순환 import 회피
+
+    if not is_conditional(sentence):  # type: ignore[arg-type]
+        return ""
+    return (
+        CONDITIONAL_FACT_TEXT if getattr(sentence, "fact_check", None) else CONDITIONAL_SUBST_TEXT
+    )
 
 
 def guessed_types(sentence: object) -> list[str]:
@@ -267,10 +426,23 @@ COMBO_CELLS = (
     "자격 없는 적중 · 인코더 조용",
     "인코더만",
     "둘 다 조용",
+    #: 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님(L0 · 주의 · 상담 문구). 판정은 「확정 · 위반 없음 · R0」이라 「사전 확정」에 섞이면
+    #:    사전 확정의 정밀도가 떨어진 것처럼 읽힌다 — 칸을 가른다. ⛔ 앞 여섯 칸의 순서는 바꾸지 않는다(게이트가 번호로 읽는다)
+    "판정 대상 아님",
+    #: 🆕 2026-10-17 (D-348 보충 6 결정 5 · 원장 10-17(B) ⑤) — 인코더 판정으로 확정된 위반(사전 근거도 사용자 답도 없다 · `contracts.encoder_judged`).
+    #:    종전에는 확정이면 출처를 보지 않고 「사전 확정」으로 셌다 — 사전 확정의 정밀도에 인코더 판정이 섞였다
+    "인코더 판정 확정",
 )
 
 
-def combo_cell(committed: bool, dict_types: Iterable[str], enc_types: Iterable[str]) -> str:
+def combo_cell(
+    committed: bool,
+    dict_types: Iterable[str],
+    enc_types: Iterable[str],
+    *,
+    not_claim: bool = False,
+    encoder_judged: bool = False,
+) -> str:
     """조합 판정 칸 — **규칙은 여기 한 곳**(D-340 결정 1 · D-99). 단위는 부르는 쪽이 정한다.
 
     ★ `committed` — 사전 단독 확정 · `dict_types` — 사전 유형 후보(자격 없는 적중) · `enc_types` — **인코더가 직접 낸** 유형 후보.
@@ -278,6 +450,12 @@ def combo_cell(committed: bool, dict_types: Iterable[str], enc_types: Iterable[s
        (`guessed_types`)는 옮긴 후보를 「유형 있음」으로 센다(D-330 보충 2 결정 ③) — 칸과 표지는 다른 물음이다.
     🚨 평가 도구는 **행 단위**로 넣고(행 안 문장의 합) 화면은 문장 단위다 — dev 749 행 중 한 문장 708(원장 10-14(A) ⑤)이라 갈리는 행은 많아야 41.
     """
+    if not_claim:
+        return COMBO_CELLS[
+            6
+        ]  # 🆕 2026-10-15 (D-348 보충 1) — 판정 대상 아님만 있는 단위(행 · 문장)
+    if committed and encoder_judged:
+        return COMBO_CELLS[7]  # 🆕 2026-10-17 — 인코더 판정 확정(사전 확정과 가른다)
     if committed:
         return COMBO_CELLS[0]
     dq, en = set(dict_types), set(enc_types)
@@ -381,12 +559,34 @@ def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBran
 
 # ── 화장품 전제의 인코더 후보 옮김 (🆕 2026-10-14 · D-338) ─────────────────────────────────────
 #: 화장품 전제에서 인코더가 낸 유형 → 우리 라벨 규약의 유형. 골든 화장품 행의 질병 · 건강 기능류 주장은 의약품_오인이다
-#: (화장품 골든 라벨 의약품_오인 296 · 기능성화장품_오인 43 · 질병 표방 0 · 원장 10-14(B) ④). ⛔ 인코더 후보 전용 — 사전 경로(`pm.NO_HF_MISLEAD`)는
-#: 건드리지 않는다. D-336 새 판(품목 입력)이 관문을 넘으면 걷는다
+#: (화장품 골든 라벨 의약품_오인 296 · 기능성화장품_오인 43 · 질병 표방 0 · 원장 10-14(B) ④). 🔄 2026-10-18 (보충 23 결정 2) 사전 쪽도 옮긴다 — 아래
+#: `COSMETIC_DICT_FROM`(종전 「⛔ 인코더 후보 전용 — 사전 경로는 건드리지 않는다」). D-336 새 판(품목 입력)이 관문을 넘으면 걷는다
+#: 🔄 2026-10-17 (D-348 보충 15 · D-338 의 법적 근거 줄 · (나) 코퍼스 조문만) — 화장품의 질병 · 건강 기능 주장 → 의약품 오인:
+#:    화장품법 제13조①1호(「의약품으로 잘못 인식할 우려가 있는 표시 또는 광고」) · 시행규칙 [별표 5] 2.가(「의약품으로 잘못 인식할 우려가 있는
+#:    내용, 제품의 명칭 및 효능ㆍ효과 등에 대한 표시ㆍ광고를 하지 말 것」) · 화장품법 제2조1호 단서(「「약사법」 제2조제4호의 의약품에 해당하는
+#:    물품은 제외한다」 — 화장품은 정의상 의약품이 아니다) `[문헌]` · 약사법 원문(의약품 정의)은 코퍼스에 없다 — 인용하지 않는다
+COSMETIC_MOVE_BASIS: tuple[str, ...] = (
+    "화장품법 제13조①1호",
+    "화장품법 시행규칙 [별표 5] 2.가",
+    "화장품법 제2조1호 단서",
+)
 COSMETIC_MOVE: dict[Violation, Violation] = {
     Violation.질병_예방치료_표방: Violation.의약품_오인,
     Violation.건강기능식품_오인: Violation.의약품_오인,
 }
+
+#: 🆕 2026-10-18 (D-348 보충 23 결정 2 · **D-338 개정**) — **사전 쪽 옮김.** 화장품 전제에서 식품 축의 질병 표방 · 의약품 오인 인용(둘 다 칸 C)은
+#:    화장품법 13①1(의약품 오인 · 칸 C)로 옮겨 쓴다 — 인코더 쪽 옮김(위)과 같은 라벨 규약 · 같은 근거 줄(`COSMETIC_MOVE_BASIS`).
+#:    종전 「⛔ 인코더 후보 전용 — 사전 경로는 건드리지 않는다」는 사전에 A · B 항목이 섞여 있던 때의 단서였다 — 보충 16 이후 사전은 칸 C 만 단독판정한다.
+#:    ⛔ 건강기능식품 오인 인용(식품 칸 A)은 옮기지 않는다 — A 를 C 로 바꾸게 된다. 단독판정 적중만 옮긴다(후보는 옮기지 않는다 — 소음)
+COSMETIC_DICT_FROM: frozenset[str] = frozenset(
+    {Violation.질병_예방치료_표방.value, Violation.의약품_오인.value}
+)
+#: 옮기지 않는 낱말 — 화장품에서는 기능성 정형 문구(A · 「탈모 증상의 완화에 도움」)이거나 낱말만 있는 M 이다.
+#:    `[측정]` 골든 화장품 A · M 3 행이 이 낱말로만 걸렸다(원장 10-18(B) ㉑) · `[문헌]` 시행규칙 제2조 탈모 기능성 · 지침 [별표 1] 비고
+COSMETIC_DICT_KEEP_OUT: frozenset[str] = frozenset({"탈모", "탈모완화", "탈모개선"})
+#: 옮겨 갈 인용 — 화장품법 제13조제1항제1호(유형 의약품 오인 · `collect.statute` 대응표)
+COSMETIC_DRUG_CITE = f"{COSM}:제13조제1항제1호"
 
 #: 옮긴 후보 아래 붙는 한 줄 — (원래 유형, 옮긴 유형) → 말. 문안은 화면 담당 검토 대상이다
 MOVED_NOTES: dict[tuple[Violation, Violation], str] = {
@@ -411,3 +611,71 @@ def moved_note(candidate: object) -> str | None:
     if src is None:
         return None
     return MOVED_NOTES.get((src, getattr(candidate, "violation", None)))
+
+
+# ══════════════════════════════════════════════════════════════════
+#  인코더 하한의 근거 — 화면 산출 내역 (🆕 2026-10-16 · D-348 보충 2 결정 10)
+# ══════════════════════════════════════════════════════════════════
+
+#: 산출 내역 첫 줄의 머리말. 🚨 판정이 아니다 — 「이 유형이라면 이 조항」이다. 문안은 화면 담당 검토 대상이다
+ENCODER_BASIS_HEAD = "인코더 하한의 근거"
+_LAW_NAME = {v: k for k, v in STATUTE_ID.items()}
+
+
+class EncoderBasisView(NamedTuple):
+    head: str  # 대표 한 줄
+    rest: list[str]  # 나머지(「근거 보기」 안)
+
+
+def _basis_line(premises: list[object], violation: object, art: object) -> str:
+    names = [getattr(p, "value", str(p)).replace("_", " ") for p in premises]
+    where = f"{names[0]} 분기" + (
+        f" (같은 등급: {' · '.join(names[1:])})" if len(names) > 1 else ""
+    )
+    law = _LAW_NAME.get(getattr(art, "law_id", ""), getattr(art, "law_id", ""))
+    item = getattr(art, "item", "") or ""
+    article = getattr(art, "article", "")
+    cite = article + (
+        item if item and item != "본문" and not article.endswith(("호", "목")) else ""
+    )
+    return f"{where} · {getattr(violation, 'value', str(violation)).replace('_', ' ')} · {law} {cite}".rstrip()
+
+
+def encoder_basis_view(sentence: object) -> EncoderBasisView | None:
+    """인코더 하한의 근거 → 대표 한 줄 + 나머지 (보충 2 결정 10 · 다중 라벨은 다 남기고 대표만 먼저).
+
+    ★ 대표 = 그 유형의 하한이 가장 높은 것 · 같으면 대표 순서(`ordered_candidates` · 원시 확률)를 따른다 · 그래도 같으면 유형 이름.
+    ★ 같은 유형 · 같은 조항을 낸 분기가 여럿이면 한 줄로 묶어 「(같은 등급: …)」로 적는다(분기 순서는 전제 표 순서).
+    🔴 근거가 없으면 None — 줄을 그리지 않는다(지어내지 않는다 · D-220).
+    """
+    risk = getattr(sentence, "risk", None)
+    basis = list(getattr(risk, "encoder_basis", None) or ())
+    if not basis:
+        return None
+    conf: dict[str, float] = {}
+    for c in getattr(sentence, "encoder_candidates", None) or ():
+        conf[c.violation.value] = max(conf.get(c.violation.value, 0.0), c.confidence)
+    order = list(Premise)
+    groups: dict[tuple, dict] = {}
+    for b in basis:
+        for a in b.articles:
+            key = (b.violation.value, a.law_id, a.article, a.item)
+            g = groups.setdefault(
+                key, {"violation": b.violation, "art": a, "floor": b.floor, "premises": []}
+            )
+            if b.premise not in g["premises"]:
+                g["premises"].append(b.premise)
+            if b.floor.level > g["floor"].level:
+                g["floor"] = b.floor
+    for g in groups.values():
+        g["premises"].sort(key=lambda p: order.index(p) if p in order else 99)
+    ranked = sorted(
+        groups.values(),
+        key=lambda g: (
+            -g["floor"].level,
+            -conf.get(g["violation"].value, 0.0),
+            g["violation"].value,
+        ),
+    )
+    lines = [_basis_line(g["premises"], g["violation"], g["art"]) for g in ranked]
+    return EncoderBasisView(head=f"{ENCODER_BASIS_HEAD}: {lines[0]}", rest=lines[1:])

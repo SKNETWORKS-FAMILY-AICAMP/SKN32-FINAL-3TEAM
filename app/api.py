@@ -426,6 +426,7 @@ def judge(req: JudgeRequest) -> JudgeResponse:
        🔄 2026-10-06 — 판정은 **인코더 전 규칙 판정**이다(D-269 · `judged_by` = `app/graph.py` `JUDGED_BY`). 사전의 단독 판정 항목이
        걸린 문장만 위반으로 확정하고, 걸린 것이 없는 문장은 **보류**다 — 그래서 종착은 대부분 `hold` 다. 확정 위반에 위험도 하한과
        승인된 사유 문안이 다 있으면 `certificate` 가 나온다(D-320).
+       🔄 2026-10-18 (D-348 보충 20) — 사전 쪽 실증 분기(`_substantiated`)는 걷었다 · 아래 줄은 종전 기록이다.
        🔄 2026-10-14 — 확정된 B 실증형에 실증 분기(`app/graph.py` `_substantiated` · D-337)가 붙고 문장이 전부 확정이면 `guidance` 가
        선다(dev 보류 686 · 지시 63 · 증명서 · 통과 0 — 원장 10-14(B) ⑤ · 클론 B). `pass` 는 닫아 둔다(D-323 결정 5) — 사전에 안 걸린
        주장 문장은 보류다. `encode` 는 인코더 후보를 문장의 `encoder_candidates` 칸에 싣지만 판정은 그 칸을 읽지 않는다(D-323).
