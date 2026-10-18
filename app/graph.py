@@ -2401,7 +2401,16 @@ def _hf_premise(
     floor = estimate_of(rows, premise, Violation.거짓_과장).floor
     if floor is None or floor.level < Risk.R1.level:
         return j  # 「위반이라면」의 하한을 모른다 — 묻지 않는다(확인 전 위험도가 없으면 분기를 세우지 않는다 · D-72)
-    arts = [_ref_article(x) for x in statute.reference_of_cite(pm.RECOGNIZED_DIFF_CITE)]
+    # 🔄 (보충 24 결정 2) 근거 조항 = [별표 1] 4.가(신고한 사항과 다르게) · 4.나(인정하지 않은 기능성) — 둘 다 제4호라 유형 · 사유는 같다
+    arts = [
+        _ref_article(x)
+        for x in dict.fromkeys(
+            [
+                *statute.reference_of_cite(pm.RECOGNIZED_DIFF_CITE),
+                *statute.reference_of_cite(pm.UNRECOGNIZED_FUNCTION_CITE),
+            ]
+        )
+    ]
     eb = EncoderBasis(
         premise=premise,
         violation=Violation.거짓_과장,

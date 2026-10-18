@@ -60,6 +60,7 @@ from app.contracts import (  # noqa: E402
     encoder_judged,
     is_conditional,
 )
+from app.dictmatch import norm as dict_norm  # noqa: E402 — 정규화는 한 곳 (D-99)
 from collect import statute  # noqa: E402
 from preprocess import devsplit  # noqa: E402
 from preprocess import (
@@ -1073,6 +1074,26 @@ def check_dict(cur: Any, path: pathlib.Path = DICT_FILE) -> dict[str, Any]:
     return {"dict_sha": _sha12(path), "dict_entries": d["file"]}
 
 
+def dict_echo(
+    rows: list[dict], preds: list[dict[str, Any]], dict_rows: list[dict]
+) -> dict[str, Any]:
+    """🆕 2026-10-18 (D-348 보충 24 결정 1) **사전 낱말과 글자가 같은 채점 행** — 「목록에서 찾아 맞힌 몫」을 따로 센다.
+
+    ★ 금지 낱말은 법령 · 지침 · 질의응답집에 똑같이 나온다 — 같은 글자는 누수가 아니라(누수는 빌드의 출처 게이트 · `tests/test_dictionary_leak.py`)
+       일반화와 다른 몫이다. D-174 사고(누수 포함 F1 0.161 → 0.027)처럼 몇 행이 점수를 끌 수 있어 **나란히** 적는다.
+    🔴 같은 글자 = 정규화한 평가 문장 전체가 사전 항목 하나와 같다(`tests/test_split.py` 와 같은 규칙 · D-99). 채점 행(라벨 있음)만 센다.
+    """
+    src = {r["term"]: tuple(r.get("출처") or ()) for r in dict_rows}
+    hit = [
+        (r, p)
+        for r, p in zip(rows, preds, strict=True)
+        if r.get("labels") and dict_norm(r["text"]) in src
+    ]
+    by = collections.Counter(" · ".join(src[dict_norm(r["text"])]) for r, _ in hit)
+    right = sum(1 for r, p in hit if set(map(str, r["labels"])) & set(p.get("types") or ()))
+    return {"rows": len(hit), "type_hit": right, "by_source": dict(by)}
+
+
 def check_dev(rows: list[dict], model_dir: pathlib.Path | None) -> dict[str, Any]:
     """dev 행이 **그 인코더가 학습에서 뺀 dev 와 같은지** — 모델 폴더의 `label_scheme.json`(`dev_sha` · `dev_rows`)과 대조한다.
 
@@ -1333,6 +1354,22 @@ def main(argv: list[str] | None = None) -> int:
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
     report(s, a.conditional, dev=a.dev)
+    # 🆕 2026-10-18 (D-348 보충 24 결정 1) 사전 낱말과 글자가 같은 채점 행 — 일반화 지표와 나란히 읽는다
+    if DICT_FILE.exists():
+        echo = dict_echo(
+            rows,
+            preds,
+            [
+                json.loads(x)
+                for x in DICT_FILE.read_text(encoding="utf-8").splitlines()
+                if x.strip()
+            ],
+        )
+        s["dict_echo"] = echo
+        print(
+            f"\n  사전 낱말과 글자가 같은 채점 행 {echo['rows']} · 그중 확정 유형 맞음 {echo['type_hit']}"
+            f" (목록에서 찾아 맞힌 몫 · 위 지표에 들어 있다 — 빼고 읽을 때 쓴다 · 출처 {echo['by_source']} · D-348 보충 24)"
+        )
     print(
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"
         f" · " + " · ".join(f"{k} {v}" for k, v in stamp.items())
