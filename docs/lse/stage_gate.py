@@ -458,6 +458,30 @@ def dict_entries() -> tuple[dm.Entry, ...]:
     return tuple(out)
 
 
+#: 🆕 10-18 — 화장품 광고 가이드라인에서 온 단독 판정어(D-348 보충 23 · 화장품 전용 의약품 오인 낱말 23 — 살균 · 소독 · 체중감량 …).
+#:    판정 그래프는 화장품 전제에서만 쓴다. 관문이 품목 없이 다 쓰면 식품의 공정 사실(「저온 살균한 목장 우유」)을 막는다(gate_regress 정상 1)
+COSMETIC_ONLY_SOURCES = frozenset({"mfds_cosmetic_ad_guideline"})
+
+
+def _cosmetic_text(original: str) -> bool:
+    """원문이 화장품인가 — 후처리의 판별(`postfix.is_cosmetic` · 화장품 낱말)을 그대로 쓴다(D-99 · 한 곳).
+    postfix 가 이 파일을 import 하므로 여기서는 부를 때 가져온다."""
+    from postfix import is_cosmetic  # noqa: PLC0415
+
+    return is_cosmetic(original)
+
+
+@cache
+def cosmetic_only_terms() -> frozenset[str]:
+    """출처가 화장품 가이드라인뿐인 단독 판정어 — 원문이 화장품일 때만 관문이 쓴다."""
+    out = set()
+    for line in DICT.open(encoding="utf-8"):
+        r = json.loads(line)
+        if r.get("단독판정") and set(r.get("출처") or []) and set(r["출처"]) <= COSMETIC_ONLY_SOURCES:
+            out.add(r["term"])
+    return frozenset(out)
+
+
 def check(original: str, stage1: str | None, persona: bool = False) -> GateResult:
     """1단계 결과가 2단계로 넘어가도 되는가. 하나라도 걸리면 보류.
 
@@ -476,6 +500,8 @@ def check(original: str, stage1: str | None, persona: bool = False) -> GateResul
         if "기능성" in original or (concept in original and not _DRUG_ORIGIN.search(original)):
             s_claim = s_claim.replace(c, " ")
     hits = dm.find(s_claim, dict_entries())
+    if hits and not _cosmetic_text(original):
+        hits = [h for h in hits if h.entry.term not in cosmetic_only_terms()]  # 🆕 10-18 — 화장품 전용 낱말은 화장품에서만
     if hits:
         why.append("금지 사전: " + ", ".join(sorted({h.entry.term for h in hits})[:3]))
     if m := DISEASE.search(s_claim):
