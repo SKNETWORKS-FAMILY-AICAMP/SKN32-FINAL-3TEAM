@@ -105,6 +105,21 @@ CLAUSE_BOUND = re.compile(r"[.,!?;·…\n]|그러나|하지만|그런데")
 NEG_IDENTITY = re.compile(
     r"^\s?(이|가|은|는)?\s?(아닙니다|아니며|아니고|아님|아니에요|아닌|아니다)"
 )
+#: 🆕 2026-10-18 (D-348 보충 21 결정 1) 고지 꼴 정체 부정 — 적중 **바로 뒤** 「(를) 위한 의약품 · 약 · 치료제가 아닙니다」 ·
+#:    「본 제품은 고혈압 치료를 위한 의약품이 아닙니다」 `[관행]` 국어 부정 서술 · `[측정]` 시험 문장 70 이름 중 확정 69 → 막힘 · 골든에서 막는 적중 0
+#:    (원장 10-18(B) ⑬ · 근거가 합성 문장이다 — 실제 광고 분포는 재지 못했다) · 이름만 있는 적중(「탈모」 → 「탈모 치료를 위한 …」)은 동사를 건너뛰고 본다
+NEG_IDENTITY_FOR = re.compile(
+    r"^\s?(예방|치료|완치|완화|개선|방지|억제|회복|극복|해소|퇴치)?\s?(을|를)?\s?위한\s?(의약품|약품|약|치료제)(이|가|은|는)?\s?(아닙니다|아니며|아니고|아님|아니에요|아닌|아니다)"
+)
+#: 🆕 2026-10-18 (D-348 보충 21) 약 이름 — 「치료 · 예방 · 억제 · 개선」으로 **끝나는** 적중 바로 뒤의 「제」(「고혈압치료제 복용 시」 · 제품은 아니다).
+#:    이름만 있는 적중은 아래 `DRUG_SUFFIX_BARE` 가 본다(보충 21 결정 3)
+#:    🚨 맞은 위반도 막는다 — `[측정]` 골든에서 막는 적중 4 · 모두 위반 · 적법 0 (원장 10-18(B) ⑬ · 사전 오탐 0 쪽을 골랐다)
+DRUG_VERB_END = re.compile(r"(치료|예방|억제|개선)$")
+DRUG_SUFFIX = re.compile(r"^\s?제(?![가-힣]?품)")
+#: 🆕 2026-10-18 (D-348 보충 21 결정 3) 이름만 있는 적중(「아토피」 · 「항암」) 바로 뒤의 「(치료 · 예방 · 개선) 제 · 약」 — 「아토피 치료제와는 다른 식품」.
+#:    🚨 맞은 위반도 막는다 — `[측정]` 골든 3 적중 · 모두 위반(`dg:jmogcvdpw5o6#0` 는 같은 문장에 다른 확정 항목이 없어 사전 침묵) ·
+#:    오탐은 되돌릴 수 없고(사전은 거부권 없음 · D-340) 침묵은 인코더가 받는다는 쪽을 골랐다 (원장 10-18(B) ⑬)
+DRUG_SUFFIX_BARE = re.compile(r"^\s?(치료|예방|개선)?\s?(제|약)(?!품)")
 #: 효능 부정 — 같은 절의 「효과 · 효능 · 작용」 뒤 부정 · 「암 예방 효과는 확인되지 않았습니다」 `[관행]`
 NEG_EFFICACY = re.compile(
     r"(효과|효능|작용)(는|가|이|은)?\s?(없습니다|없음|없다|없으며|확인되지\s?않|입증되지\s?않|검증되지\s?않|밝혀지지\s?않)"
@@ -134,7 +149,7 @@ def _clause(text: str, start: int, end: int) -> tuple[int, int]:
 
 
 def confirm_block(text: str, span: tuple[int, int] | None) -> str | None:
-    """사전 적중 하나의 확정을 막는 사유 — 정체부정 · 효능부정 · 주의 · 부작용 · 통계정보 · 대상 · 고지. 막지 않으면 None.
+    """사전 적중 하나의 확정을 막는 사유 — 정체부정 · 효능부정 · 약명 · 주의 · 부작용 · 통계정보 · 대상 · 고지. 막지 않으면 None.
 
     🔴 구간을 모르면(`span` 없음) 막지 않는다 — 절을 정할 수 없다 · 확정은 종전대로. 판정 대상 아님(`is_caution`)과 섞지 않는다.
     """
@@ -145,11 +160,15 @@ def confirm_block(text: str, span: tuple[int, int] | None) -> str | None:
     a, b = _clause(t, s, e)
     # 🔴 부정이 **타사**를 향하면(「경쟁사 제품은 효과 없음」) 부인이 아니라 비방이다 — 부정 사유로 막지 않는다(타사 표지는 `factcheck` 한 곳 · D-99)
     other = bool(factcheck.COMPETITOR.search(t[a:b]))
-    if not other and NEG_IDENTITY.search(t[e:b]):
+    if not other and (NEG_IDENTITY.search(t[e:b]) or NEG_IDENTITY_FOR.search(t[e:b])):
         return "정체부정"
     if not other and NEG_EFFICACY.search(t[e:b]):
         return "효능부정"
     cl = t[a:b]
+    if (
+        DRUG_SUFFIX if DRUG_VERB_END.search(re.sub(r"\s", "", t[s:e])) else DRUG_SUFFIX_BARE
+    ).search(t[e:b]):
+        return "약명"
     if CAUTION.search(cl):
         return "주의"
     if SIDE_EFFECT.search(cl):
