@@ -8,6 +8,9 @@
   ④ 답 — 사실 「참」 ∧ 꼴만 / 실증 「있음」 → 확정 · R0 · 출처 · 「거짓」 / 「없음」 ∧ 확정 → 그대로 + 출처 · 답은 그 문장에만 (결정 3 · 4)
   ⑤ 조건부 위반은 보류와 다른 분류다 — 지시 종착을 막지 않는다 · 증명서 · 통과로는 가지 않는다 (결정 2)
   ⑥ 저장은 출처를 남긴다
+🔄 2026-10-18 (D-348 보충 20 · 보충 16 결정 5 집행) — **사전 확정 문장에는 분기를 달지 않는다**(사전 쪽 조건부 경로를 걷었다 · 사전은 칸 C 만 확정).
+   ①~④ 의 사실 · 실증 분기와 답은 이제 **인코더 쪽 판정**이 단다(아래 「인코더만 …」 시험) · 조건부 위반 분류(⑤)와 뒷단(종착 · 기록 모음 · 저장 ·
+   화면 · 평가)은 남는다 — 지금은 생성처가 없어(인코더 쪽 신뢰 규칙의 자리는 판정 대기 · 보충 17 결정 2) 시험은 조건부 문장을 직접 만든다(`_cond`)
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ import pytest
 
 from app import factcheck as fc
 from app import graph as g
+from app import reasons as rs
 from app.contracts import (
     Answer,
     Branch,
@@ -59,6 +63,22 @@ def _confirmed(
         infeasibility=Infeasibility.B,
         evidence=[ev],
         risk=RiskAssessment(floor=Risk.R2, final=Risk.R2),
+    )
+
+
+def _cond(text: str = TEXT, sent_id: str = "s0") -> SentenceJudgment:
+    """조건부 위반 문장(보류 · `premise_unknown` · 실증 분기 · 가장 나쁜 경우의 위험도) — 🔄 2026-10-18 (보충 20) 그래프에 지금 생성처가 없다 ·
+    뒷단 계약을 지키려고 직접 만든다(종전 사전 쪽 경로가 내던 꼴과 같다)."""
+    sub = rs.subst_branch([Violation.거짓_과장], {"식품표시광고법"})
+    assert sub is not None
+    return SentenceJudgment(
+        **{
+            **_confirmed(text).model_dump(),
+            "sent_id": sent_id,
+            "verdict": Verdict.hold,
+            "hold_reason": HoldReason.premise_unknown,
+            "substantiation": sub.model_dump(),
+        }
     )
 
 
@@ -104,22 +124,26 @@ def _run(
     return got[0] if got else None
 
 
-def test_사실_확인_표가_비면_사실_분기는_서지_않고_실증_분기다() -> None:
-    assert fc.FACT_RULES == {} and fc.FACT_TEXTS == {} and fc.PERFORMANCE is None, (
+def test_사실_확인_표가_비면_사실_분기는_서지_않고_사전_확정에는_분기가_없다() -> None:
+    # 🔄 2026-10-17 — 유형에 딸린 다섯 종류는 승인됐다(정본 §14) · 낱말 사실 확인 종류는 여전히 승인 전이다
+    word_kinds = (
+        set(FactKind)
+        - {k for ks in fc.TYPE_KINDS.values() for k in ks}
+        - {
+            FactKind.후기_실재,
+            FactKind.무첨가_조건,
+        }
+    )
+    assert fc.FACT_RULES == {} and fc.PERFORMANCE is None, (
         "🔴 승인 전 표가 채워졌다 — 문안 승인(D-263 ②) 뒤 이 게이트를 고친다"
     )
-    got = _run(_confirmed())
-    assert got is not None and got.fact_check is None
-    assert (got.verdict, got.hold_reason, got.infeasibility) == (
-        Verdict.hold,
-        HoldReason.premise_unknown,
-        Infeasibility.B,
+    assert not (word_kinds & set(fc.FACT_TEXTS)), (
+        "🔴 낱말 사실 확인 종류의 문안이 승인 없이 들어왔다"
     )
-    assert got.substantiation is not None and got.substantiation.substantiated_max is Risk.R0
-    assert got.risk.final is Risk.R2, "기록 위험도는 가장 나쁜 경우(실증 못 함) 그대로 (D-263 ①)"
-    assert got.violations == [Violation.거짓_과장] and got.evidence, "보류에도 유형 · 근거는 실린다"
-    assert is_conditional(got)
-    JudgeResponse(outcome=Outcome.hold, sentences=[got])  # 품목 분기 없이도 계약을 지난다
+    # 🔄 2026-10-18 (보충 20) — 종전 기대는 「보류 + 실증 분기(조건부 위반)」였다. 사전 확정 문장에는 분기를 달지 않는다
+    assert _run(_confirmed()) is None, (
+        "사전 확정 문장은 그대로 — 분기 · 조건부가 붙지 않는다(보충 15 결정 3)"
+    )
 
 
 def test_무조건_호가_섞이면_확정_그대로() -> None:
@@ -157,8 +181,12 @@ def test_신뢰_규칙_전에는_인코더만_잡은_보류는_조건부가_아�
             "evidence": [FOOD4.model_dump()],
         }
     )
-    assert _run(weak) is None, (
-        "자격 없는 사전 적중 + 인코더 하한도 확정 재료가 아니다(D-311 결정 4)"
+    # 🔄 2026-10-18 (D-348 보충 16 · 2 단계 = 사전 좁히기) — 사전 후보는 판정을 막지 않는다 · 인코더 쪽 판정(보류 + 분기)으로 간다 ·
+    #    후보는 여전히 확정 재료가 아니다(D-311 결정 4) — 확정도 조건부도 아니다
+    got = _run(weak)
+    assert got is not None and (got.verdict, got.hold_reason) == (Verdict.hold, HoldReason.low_conf)
+    assert not is_conditional(got) and got.violations == [Violation.거짓_과장], (
+        "유형 후보는 실려 간다"
     )
 
 
@@ -181,21 +209,6 @@ def test_인코더_쪽_판정은_신뢰_문턱과_무관하게_조건부가_아�
     JudgeResponse(outcome=Outcome.hold, sentences=[got])
 
 
-def test_실증_있음이면_확정_R0_과_출처() -> None:
-    us = UserSubst(text=TEXT, answer=Answer.예)
-    got = _run(_confirmed(), substs=[us])
-    assert got is not None and got.verdict is Verdict.confirmed and not got.violations
-    assert got.risk.final is Risk.R0 and got.user_subst == us
-    JudgeResponse(outcome=Outcome.passed, sentences=[got], product=ProductContext(category=None))
-
-
-def test_실증_없음이면_확정_위반_그대로_출처() -> None:
-    us = UserSubst(text=TEXT, answer=Answer.아니오)
-    got = _run(_confirmed(), substs=[us])
-    assert got is not None and got.verdict is Verdict.confirmed and got.violations
-    assert got.user_subst == us and got.substantiation is not None and got.risk.final is Risk.R2
-
-
 def test_인코더만_잡은_문장의_없음은_구간을_모르면_확정하지_않고_출처만_남긴다() -> None:
     # 🔄 2026-10-16 (D-348 보충 5) — 종전 기대는 None 이었다. 답은 출처로 남는다.
     # 🔄 2026-10-17 (1-b) — 「없음 → 확정 위반」은 **구간(문장 전체)이 설 때만**이다 — 원문이 없는 상태(이 시험)에서는 보류 + 출처(D-220)
@@ -206,21 +219,20 @@ def test_인코더만_잡은_문장의_없음은_구간을_모르면_확정하�
 
 
 def test_답은_그_문장에만() -> None:
+    # 🔄 2026-10-18 (보충 20) — 종전 재료는 사전 확정 문장이었다 · 같은 규칙을 인코더 쪽 판정으로 본다
     us = UserSubst(text="다른 문장", answer=Answer.예)
-    got = _run(_confirmed(), substs=[us])
-    assert got is not None and is_conditional(got) and got.user_subst is None
+    got = _run(_enc_only(), substs=[us])
+    assert got is not None and got.substantiation is not None and got.user_subst is None
 
 
 def test_종착_조건부는_답하지_않은_확정_B로_센다() -> None:
     """D-263 ① — 조건부 위반의 가장 나쁜 경우는 「자료 없음 = 확정 B」다. 섞인 문서의 종착은 그 기준이다."""
-    cond = _run(_confirmed())
-    assert cond is not None
-    sub = g._cond_subst(_confirmed())
+    cond = _cond(sent_id="s9")
     ready = SentenceJudgment(
         **{
             **_confirmed().model_dump(),
             "sent_id": "s1",
-            "substantiation": sub.model_dump(),
+            "substantiation": cond.substantiation.model_dump(),
             "spans": [Span(start=0, end=2, label="거짓_과장").model_dump()],
         }
     )
@@ -289,7 +301,8 @@ def _doc(rec: SentenceJudgment, per: dict[str, SentenceJudgment], **product: obj
 
 
 def test_분기마다_정하고_기록은_분기에서_모은다() -> None:
-    got = _doc(_confirmed(), {"식품": _confirmed(), "일반상품": _confirmed()})
+    # 🔄 2026-10-18 (보충 20) — 분기 문장이 조건부 위반이면(지금은 생성처 없음 · 직접 만든다) 기록 문장도 조건부로 모은다
+    got = _doc(_confirmed(), {"식품": _cond(), "일반상품": _cond()})
     assert all(is_conditional(b.sentences[0]) for b in got["branches"])
     assert is_conditional(got["rec"]) and got["rec"].risk.final is Risk.R2
     resp = JudgeResponse(outcome=Outcome.hold, sentences=[got["rec"]], branches=got["branches"])
@@ -304,7 +317,7 @@ def test_분기마다_조건부가_갈리면_기록은_품목을_몰라_보류()
             "infeasibility": Infeasibility.A,
         }
     )
-    got = _doc(_confirmed(), {"식품": _confirmed(), "건기식_비인정": disease})
+    got = _doc(_confirmed(), {"식품": _cond(), "건기식_비인정": disease})
     rec = got["rec"]
     assert (rec.verdict, rec.hold_reason) == (Verdict.hold, HoldReason.cat_unknown)
     assert rec.substantiation is None and not is_conditional(rec)
@@ -312,19 +325,10 @@ def test_분기마다_조건부가_갈리면_기록은_품목을_몰라_보류()
     assert kinds == {"식품": True, "건기식_비인정": False}
 
 
-def test_답은_모든_분기와_기록에_같이() -> None:
-    us = UserSubst(text=TEXT, answer=Answer.예)
-    got = _doc(_confirmed(), {"식품": _confirmed(), "일반상품": _confirmed()}, substs=[us])
-    assert all(b.sentences[0].user_subst == us for b in got["branches"])
-    rec = got["rec"]
-    assert rec.verdict is Verdict.confirmed and rec.risk.final is Risk.R0 and rec.user_subst == us
-    assert all(b.outcome is Outcome.passed or b.outcome is Outcome.hold for b in got["branches"])
-
-
 def test_계약_실증_분기는_인코더_쪽_보류에도_붙되_조건부가_아니다() -> None:
     # 🔄 2026-10-16 (D-348 보충 5) — 종전 「확신 부족 보류에 못 붙는다」를 바꿨다. 인코더 쪽 판정은 답 없이 확정하지 않으므로
     #    확신 부족 보류(`low_conf`)에 분기만 붙고 조건부 위반으로 세지 않는다. 그 밖의 보류 사유에는 여전히 못 붙는다
-    sub = g._cond_subst(_confirmed())
+    sub = rs.subst_branch([Violation.거짓_과장], {"식품표시광고법"})
     enc = SentenceJudgment(
         sent_id="s0",
         text=TEXT,
@@ -362,18 +366,6 @@ def test_계약_실증_분기는_인코더_쪽_보류에도_붙되_조건부가_
         )
 
 
-def test_사실에_달린_문장은_보류와_분기다(tables: None) -> None:
-    got = _run(_confirmed())
-    assert got is not None and (got.verdict, got.hold_reason) == (
-        Verdict.hold,
-        HoldReason.premise_unknown,
-    )
-    assert got.risk.final is Risk.R2, "기록 위험도는 가장 나쁜 경우(사실 거짓) 그대로 (D-263 ①)"
-    assert got.fact_check.kind is FactKind.인증 and got.fact_check.confirmed_max is Risk.R0
-    assert got.violations == [Violation.거짓_과장], "보류에도 유형 · 근거는 실린다"
-    JudgeResponse(outcome=Outcome.hold, sentences=[got])  # 품목 분기 없이도 계약을 지난다
-
-
 def test_호_관문_밖이면_낱말이_있어도_분기를_달지_않는다(tables: None) -> None:
     disease = _confirmed("인증받은 원료로 당뇨를 치료", FOOD1, Violation.질병_예방치료_표방)
     assert _run(disease) is None, "질병 표방(1호)은 조건부 호가 아니다"
@@ -388,28 +380,8 @@ def test_인코더만_잡은_보류도_사실_표지면_사실_분기(tables: No
     JudgeResponse(outcome=Outcome.hold, sentences=[got])
 
 
-def test_사용자가_참으로_고르면_확정_R0_과_출처(tables: None) -> None:
-    uf = UserFact(text=TEXT, kind=FactKind.인증, answer=Answer.예)
-    got = _run(_confirmed(), [uf])
-    assert got is not None and got.verdict is Verdict.confirmed and not got.violations
-    assert got.risk.final is Risk.R0 and got.user_facts == [uf]
-
-
-def test_성능이_섞이면_사실_참_뒤_실증_조건부로_다시_선다(tables: None) -> None:
-    """보충 4 「이어 묻기」 — 답 하나는 그 사실 하나만 푼다 · 남은 성능 주장은 실증 조건부(보충 3 결정 3)."""
-    text = "HACCP 인증으로 피로 개선 효과"
-    uf = UserFact(text=text, kind=FactKind.인증, answer=Answer.예)
-    got = _run(_confirmed(text), [uf])
-    assert got is not None and is_conditional(got) and got.fact_check is None
-    assert got.substantiation is not None and got.user_facts == [uf]
-    JudgeResponse(outcome=Outcome.hold, sentences=[got])
-    us = UserSubst(text=text, answer=Answer.예)
-    done = _run(_confirmed(text), [uf], [us])
-    assert done is not None and done.risk.final is Risk.R0 and not done.violations
-    assert done.user_facts == [uf] and done.user_subst == us
-
-
 def test_사실_종류가_둘이면_하나씩_차례로_묻는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 🔄 2026-10-18 (보충 20) — 종전 재료는 사전 확정 문장이었다 · 같은 「이어 묻기」를 인코더 쪽 판정으로 본다
     monkeypatch.setattr(
         fc, "FACT_RULES", {FactKind.특허: re.compile("특허"), FactKind.인증: re.compile("인증")}
     )
@@ -420,31 +392,17 @@ def test_사실_종류가_둘이면_하나씩_차례로_묻는다(monkeypatch: p
     )
     monkeypatch.setattr(fc, "PERFORMANCE", re.compile("효과|개선"))
     text = "특허 원료로 만든 HACCP 인증 그래놀라"
-    first = _run(_confirmed(text))
+    enc = SentenceJudgment(**{**_enc_only().model_dump(), "text": text})
+    first = _run(enc)
     assert first is not None and first.fact_check.kind is FactKind.특허
     p1 = UserFact(text=text, kind=FactKind.특허, answer=Answer.예)
-    second = _run(_confirmed(text), [p1])
+    second = _run(enc, [p1])
     assert second is not None and second.fact_check.kind is FactKind.인증
     assert second.user_facts == [p1]
     JudgeResponse(outcome=Outcome.hold, sentences=[second])
     p2 = UserFact(text=text, kind=FactKind.인증, answer=Answer.예)
-    done = _run(_confirmed(text), [p2, p1])
+    done = _run(enc, [p2, p1])
     assert done is not None and done.risk.final is Risk.R0 and done.user_facts == [p1, p2]
-    lie = UserFact(text=text, kind=FactKind.인증, answer=Answer.아니오)
-    bad = _run(_confirmed(text), [p1, lie])
-    assert bad is not None and bad.verdict is Verdict.confirmed and bad.violations
-    assert bad.user_facts == [p1, lie], "하나라도 거짓이면 확정 위반 그대로 + 출처"
-
-
-def test_사용자가_거짓으로_고르면_확정_그대로_출처(tables: None) -> None:
-    uf = UserFact(text=TEXT, kind=FactKind.인증, answer=Answer.아니오)
-    got = _run(_confirmed(), [uf])
-    assert (
-        got is not None
-        and got.verdict is Verdict.confirmed
-        and got.violations
-        and got.user_facts == [uf]
-    )
 
 
 def test_계약_사용자_확인은_확정이나_남은_조건이_있는_조건부에만() -> None:
@@ -493,52 +451,20 @@ def test_계약_사용자_확인은_확정이나_남은_조건이_있는_조건�
 def test_저장은_사용자_확인_출처를_남긴다(tables: None) -> None:
     from app import judgment_store as js  # noqa: PLC0415
 
+    # 🔄 2026-10-18 (보충 20) — 출처를 내는 쪽은 인코더 쪽 판정이다(사실 참 ∧ 사실만 주장 → 확정 · R0)
     uf = UserFact(text=TEXT, kind=FactKind.인증, answer=Answer.예)
-    got = _run(_confirmed(), [uf])
+    got = _run(_enc_only(), [uf])
     row = js._judgment_row(
         uuid.uuid4(), uuid.uuid4(), got, JudgeResponse(outcome=Outcome.passed, sentences=[got])
     )
     assert row.evidence["user_facts"] == [{"text": TEXT, "kind": "인증", "answer": "예"}]
 
 
-def test_건기식_인정_질병_분기(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-348 결정 6 · 보충 3 결정 2 — 건기식_인정 전제의 「판정하지 못함」 질병 표방은 사실 확인 분기(`인정_기능성`)."""
-    from app.graph import DictHit  # noqa: PLC0415
-
-    hit = DictHit("위험 감소", "질병_예방치료_표방", ("013094:제8조제1항제1호|가목",), None)
-    assert g._disease_answer(Premise.건기식_인정, [hit], "x", []) is None, "문안 승인 전 — 종전대로"
-    monkeypatch.setattr(
-        fc,
-        "FACT_TEXTS",
-        {FactKind.인정_기능성: fc.FactText(["(시험) 인정서"], "(시험) 인정 문구 그대로인가")},
-    )
-    assert g._disease_answer(Premise.건기식_비인정, [hit], "x", []) is None, "인정 전제에서만"
-    assert g._disease_answer(Premise.건기식_인정, [hit], "x", []) == ("ask", None)
-    worst = _confirmed("골다공증 발생 위험 감소에 도움", FOOD1, Violation.질병_예방치료_표방)
-    worst = SentenceJudgment(**{**worst.model_dump(), "infeasibility": Infeasibility.C})
-    asked = g._disease_branch(worst, "ask", None)
-    assert is_conditional(asked) and asked.hold_reason is HoldReason.premise_unknown
-    assert asked.fact_check.kind is FactKind.인정_기능성 and asked.risk.final is Risk.R2
-    JudgeResponse(outcome=Outcome.hold, sentences=[asked])
-    uf = UserFact(text=worst.text, kind=FactKind.인정_기능성, answer=Answer.아니오)
-    assert g._disease_answer(Premise.건기식_인정, [hit], worst.text, [uf]) == ("false", uf)
-    lie = g._disease_branch(worst, "false", uf)
-    assert lie.verdict is Verdict.confirmed and lie.violations and lie.user_facts == [uf]
-    ok = UserFact(text=worst.text, kind=FactKind.인정_기능성, answer=Answer.예)
-    silent = SentenceJudgment(
-        sent_id="s0", text=worst.text, verdict=Verdict.hold, hold_reason=HoldReason.low_conf
-    )
-    done = g._disease_branch(silent, "true", ok)
-    assert (
-        done.verdict is Verdict.confirmed and done.risk.final is Risk.R0 and done.user_facts == [ok]
-    )
-
-
 def test_저장은_실증_답_출처를_남긴다() -> None:
     from app import judgment_store as js  # noqa: PLC0415
 
     us = UserSubst(text=TEXT, answer=Answer.예)
-    got = _run(_confirmed(), substs=[us])
+    got = _run(_enc_only(), substs=[us])  # 🔄 2026-10-18 (보충 20) — 인코더 쪽 실증 답
     row = js._judgment_row(
         uuid.uuid4(), uuid.uuid4(), got, JudgeResponse(outcome=Outcome.passed, sentences=[got])
     )
@@ -566,7 +492,7 @@ def test_화면_결론_줄은_보류가_아니라_조건부_위반이다() -> No
     from app.templating import templates  # noqa: PLC0415
 
     m = templates.env.get_template("user/_sent_words.html").module
-    got = _run(_confirmed())
+    got = _cond()
     assert str(m.sent_concl(got)).strip() == reasons.CONDITIONAL_SUBST_TEXT
     low = SentenceJudgment(
         sent_id="s2", text="x", verdict=Verdict.hold, hold_reason=HoldReason.low_conf
@@ -577,7 +503,7 @@ def test_화면_결론_줄은_보류가_아니라_조건부_위반이다() -> No
 def test_평가는_조건부_위반을_보류와_따로_센다() -> None:
     from scripts import eval_graph as eg  # noqa: PLC0415
 
-    cond = _run(_confirmed())
+    cond = _cond()
     p = eg.predict({"sentences": [cond]})
     assert p["class"] == "조건부위반" and p["cond_types"] == ["거짓_과장"] and p["types"] == []
     low = SentenceJudgment(
@@ -604,7 +530,7 @@ def test_저장과_이력은_조건부_위반을_분류로_남긴다() -> None:
     from app import reasons  # noqa: PLC0415
     from app.routers import user  # noqa: PLC0415
 
-    cond = _run(_confirmed())
+    cond = _cond()
     row = js._judgment_row(
         uuid.uuid4(), uuid.uuid4(), cond, JudgeResponse(outcome=Outcome.hold, sentences=[cond])
     )
@@ -625,23 +551,15 @@ def test_저장과_이력은_조건부_위반을_분류로_남긴다() -> None:
 def test_평가의_보수_기록은_조건부_위반을_품목_보류로_세지_않는다() -> None:
     from scripts import eval_graph as eg  # noqa: PLC0415
 
-    p = eg.predict({"sentences": [_run(_confirmed())]})
+    p = eg.predict({"sentences": [_cond()]})
     assert p["premise_held"] == [] and p["cond_types"] == ["거짓_과장"]
 
 
 # ── 🆕 2026-10-16 (D-348 보충 5) — 답 셋 · 「해당없음」(보충 3 결정 2 의 집행) ─────────────────────────────
 
 
-def test_실증_해당없음이면_분기를_걷고_원래_판정_출처() -> None:
-    us = UserSubst(text=TEXT, answer=Answer.해당없음)
-    got = _run(_confirmed(), substs=[us])
-    assert got is not None and got.verdict is Verdict.confirmed and got.violations, (
-        "사전이 확정한 문장 — 실증 분기를 걷으면 사전 확정 위반 그대로"
-    )
-    assert got.user_subst == us and not is_conditional(got)
-
-
 def test_사실_해당없음이면_그_종류는_묻지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 🔄 2026-10-18 (보충 20) — 같은 규칙을 인코더 쪽 판정으로 본다(종전 재료는 사전 확정 문장)
     monkeypatch.setattr(
         fc, "FACT_RULES", {FactKind.특허: re.compile("특허"), FactKind.인증: re.compile("인증")}
     )
@@ -652,16 +570,17 @@ def test_사실_해당없음이면_그_종류는_묻지_않는다(monkeypatch: p
     )
     monkeypatch.setattr(fc, "PERFORMANCE", re.compile("효과|개선"))
     text = "특허 원료로 만든 HACCP 인증 그래놀라"
+    enc = SentenceJudgment(**{**_enc_only().model_dump(), "text": text})
     na = UserFact(text=text, kind=FactKind.특허, answer=Answer.해당없음)
-    got = _run(_confirmed(text), [na])
+    got = _run(enc, [na])
     assert got is not None and got.fact_check.kind is FactKind.인증, "해당없음인 종류를 건너뛴다"
     assert got.user_facts == [na], "해당없음 답은 출처로 따라간다"
     both = [na, UserFact(text=text, kind=FactKind.인증, answer=Answer.해당없음)]
-    rest = _run(_confirmed(text), both)
-    assert rest is not None and rest.fact_check is None and is_conditional(rest), (
-        "사실 종류를 전부 걷으면 실증 조건부로 남는다 — R0 으로 가지 않는다"
+    rest = _run(enc, both)
+    assert rest is not None and rest.fact_check is None and rest.substantiation is not None, (
+        "사실 종류를 전부 걷으면 실증 질문으로 남는다 — R0 으로 가지 않는다"
     )
-    assert rest.risk.final is not Risk.R0
+    assert rest.risk.final is not Risk.R0 and not is_conditional(rest)
 
 
 # ── 🆕 2026-10-16 (D-348 보충 5 · 1 단계) — 인코더 쪽 판정 ─────────────────────────────────────
@@ -673,6 +592,34 @@ def test_인코더만_실증_있음이면_확정_R0_과_출처() -> None:
     assert got is not None and got.verdict is Verdict.confirmed and not got.violations
     assert got.risk.final is Risk.R0 and got.user_subst == us
     JudgeResponse(outcome=Outcome.passed, sentences=[got], product=ProductContext(category=None))
+
+
+def test_화장품_전제의_인코더_쪽_거짓과장에도_화장품법_실증_질문이_선다() -> None:
+    """🆕 2026-10-18 (D-348 보충 7 결정 2 집행) — 화장품 축 실증 문안 = 화장품법. 종전에는 축 표(`ENC_SUBST_AXIS`)가 화장품을 비워 질문이 없었다."""
+    from app.contracts import EncoderBasis  # noqa: PLC0415
+
+    text = "피부 탄력이 2주 만에 눈에 띄게 좋아집니다"
+    ref = EvidenceArticle(law_id=rs.COSM, article="제13조제1항제4호")
+    basis = [
+        EncoderBasis(
+            premise=Premise.화장품, violation=Violation.거짓_과장, floor=Risk.R1, articles=[ref]
+        )
+    ]
+    enc = SentenceJudgment(
+        sent_id="s0",
+        text=text,
+        verdict=Verdict.hold,
+        hold_reason=HoldReason.low_conf,
+        risk=RiskAssessment(encoder=Risk.R1, encoder_basis=basis, final=Risk.R1),
+    )
+    assert g.ENC_SUBST_AXIS[Premise.화장품] == "화장품법"
+    got = _run(enc)
+    assert got is not None and got.substantiation is not None
+    assert got.substantiation.criteria == rs.SUBST_TEXT["화장품법"].criteria, (
+        "화장품법 문안(승인본)"
+    )
+    yes = _run(enc, substs=[UserSubst(text=text, answer=Answer.예)])
+    assert yes is not None and yes.verdict is Verdict.confirmed and yes.risk.final is Risk.R0
 
 
 def test_인코더만_실증_해당없음이면_분기를_걷고_보류() -> None:
@@ -706,29 +653,8 @@ def test_인코더만_사실_거짓은_확정하지_않고_출처만(tables: Non
     assert got.user_facts == [uf]
 
 
-def test_인코더만_화장품_전제는_실증_문안의_축을_고르지_않는다() -> None:
-    """D-272 개정 (나) ⑥ — 화장품의 주 근거는 ⬜ → 분기 없음(D-220)."""
-    from app.contracts import EncoderBasis  # noqa: PLC0415
-
-    ref = EvidenceArticle(law_id="002015", article="제13조제1항제4호")
-    s = SentenceJudgment(
-        **{
-            **_enc_only().model_dump(),
-            "risk": RiskAssessment(
-                encoder=Risk.R1,
-                final=Risk.R1,
-                encoder_basis=[
-                    EncoderBasis(
-                        premise=Premise.화장품,
-                        violation=Violation.거짓_과장,
-                        floor=Risk.R1,
-                        articles=[ref],
-                    )
-                ],
-            ),
-        }
-    )
-    assert _run(s) is None
+# 🔄 2026-10-18 (D-348 보충 7 결정 2) — 종전 시험 「인코더만_화장품_전제는_실증_문안의_축을_고르지_않는다」(D-272 개정 (나) ⑥ ⬜)는
+#    보충 7 결정 2(화장품 축 실증 문안 = 화장품법)로 뒤집혔다 → `test_화장품_전제의_인코더_쪽_거짓과장에도_화장품법_실증_질문이_선다`
 
 
 def test_인코더만_기록은_분기의_선택지를_싣고_보류_그대로() -> None:

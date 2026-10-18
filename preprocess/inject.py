@@ -45,6 +45,7 @@ import re
 
 from collect import registry
 from preprocess import split as split_mod
+from preprocess.dictionary import PATTERN_SOURCE
 from preprocess.split import approved_docs as split_approved
 
 HF = pathlib.Path("data/derived/mfds_hf_labels.jsonl")
@@ -144,6 +145,10 @@ def disease_terms() -> list[str]:
         if not line.strip():
             continue
         r = json.loads(line)
+        # 🆕 2026-10-18 (D-348 보충 21 결정 4) — 조문 꼴 × 질병명 항목은 넣지 않는다 — 이름을 판정이 골랐다(「내가 고르지 않는다」 · D-158).
+        #    🔴 넣으면 골든의 주입 행이 바뀐다(학습 데이터가 사전 확장에 끌려간다). 값은 `preprocess.dictionary.PATTERN_SOURCE` 와 같다(D-99)
+        if r.get("출처") == [PATTERN_SOURCE]:
+            continue
         if r["유형"] == ["질병_예방치료_표방"] and 2 <= len(r["term"]) <= 8:
             # ⛔ 사전 항목이 이미 「소아비만예방」처럼 **동작어를 달고** 온다.
             #    그대로 틀에 넣으면 「소아비만예방 예방·치료에」가 된다 — 떼고 넣는다.

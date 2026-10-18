@@ -4,6 +4,7 @@
    - 문안 · 자료 종류는 승인본(`docs/ohb/기준문안_초안_2026-10-02.md` §13)과 글자가 같다 (D-147 · D-263 ②)
    - 붙는 유형은 거짓_과장뿐 · 상한 R0 — 비방은 R1 이상이라(D-304) 1 단계 밖이다
    - 법 축이 둘 이상 섞이면 붙이지 않는다 · 위험도가 없으면 붙이지 않는다(계약 `_subst_is_for_B`)
+   - 🔄 2026-10-18 (보충 20) 사전 확정 문장에는 실증 분기를 달지 않는다 — 인코더 쪽(`_enc_subst`)만
    - 화장품 전제의 인코더 후보 옮김은 인코더 전용이다 — 사전 경로의 거름표(`pm.NO_HF_MISLEAD`)는 그대로 (D-338)
 """
 
@@ -17,7 +18,6 @@ import pytest
 from app import graph as g
 from app import reasons as rs
 from app.contracts import (
-    EvidenceArticle,
     JudgeResponse,
     Premise,
     Risk,
@@ -71,34 +71,17 @@ def test_붙는_유형은_거짓과장뿐이고_상한은_R0이다() -> None:
     assert rs.subst_branch([], {"표시광고법"}) is None
 
 
-def test_확정_B_거짓과장에_실증_분기가_붙고_지시의_재료가_선다() -> None:
+def test_사전_확정_B_에는_실증_분기를_달지_않고_지시_재료는_계약대로다() -> None:
+    """🔄 2026-10-18 (D-348 보충 20 · 보충 16 결정 5 집행) — 종전에는 사전이 확정한 B 문장에 실증 분기(`_substantiated`)를 붙였다.
+    사전은 칸 C 만 확정하므로 그 경로를 걷었다 · 실증 분기는 인코더 쪽(`_enc_subst`)만 단다. 지시(D-268)의 재료 규칙은 그대로다."""
+    assert not hasattr(g, "_substantiated"), "사전 쪽 실증 분기를 다시 달지 않는다(보충 15 결정 3)"
     s = _confirmed_b()
-    assert not g.guidance_ready([s]), "지우고 나면 지시 재료가 없어야 한다 — 시험의 전제"
-    got = g._substantiated(s)
-    assert got.substantiation is not None
-    assert got.substantiation.criteria == rs.SUBST_TEXT["식품표시광고법"].criteria
-    assert got.substantiation.substantiated_max is Risk.R0
-    assert g.guidance_ready([got]), "🔴 실증 분기 · 뺄 구간이 있으면 지시가 선다 (D-268)"
-
-
-def test_붙일_수_없으면_그대로다() -> None:
-    s = _confirmed_b()
-    # 위험도가 없다 — 실증 전 등급을 모르면 상한을 잴 수 없다 (계약 `_subst_is_for_B` · D-72)
-    assert (
-        g._substantiated(
-            s.model_copy(update={"risk": s.risk.model_copy(update={"final": None, "floor": None})})
-        ).substantiation
-        is None
+    assert not g.guidance_ready([s]), "실증 분기가 없으면 지시 재료가 없다"
+    sub = rs.subst_branch([Violation.거짓_과장], {"식품표시광고법"})
+    assert sub is not None and sub.criteria == rs.SUBST_TEXT["식품표시광고법"].criteria
+    assert g.guidance_ready([s.model_copy(update={"substantiation": sub})]), (
+        "🔴 실증 분기 · 뺄 구간이 있으면 지시가 선다 (D-268)"
     )
-    # 두 법이 섞인 인용
-    ftc = EvidenceArticle(law_id="002011", article="제3조", item="제1항제1호", basis=True)
-    assert (
-        g._substantiated(s.model_copy(update={"evidence": [*s.evidence, ftc]})).substantiation
-        is None
-    )
-    # 보류 문장
-    held = s.model_copy(update={"verdict": g.Verdict.hold, "hold_reason": g.HoldReason.low_conf})
-    assert g._substantiated(held).substantiation is None
 
 
 def test_화장품_전제에서는_질병_표방과_건기식_오인_후보를_의약품_오인으로_옮긴다() -> None:
