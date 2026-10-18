@@ -25,6 +25,8 @@ from scripts import derived_manifest as dm
 
 DICT = pathlib.Path("data/derived/banned_terms.jsonl")
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
+#: 🆕 2026-10-18 (D-348 보충 24 결정 1) 같은 글자 평가 문구의 비율 경보 `[임의]` — 넘으면 빌드가 평가 문서를 읽은 꼴로 본다(D-174 사고는 100 %)
+ECHO_ALARM = 0.05
 
 
 @pytest.fixture(scope="module")
@@ -86,8 +88,19 @@ def test_사전이_평가문구로_만들어지지_않았다() -> None:
         if r["split"] == "test_sentence"
     ]
     leaked = [r for r in ev if r["labels"] and norm(r["text"]) in terms]
-    assert not leaked, (
-        f"🚨 평가 문구 {len(leaked)}개가 사전에 **그대로** 있다 — 매칭기가 외운 것을 맞힌다.\n"
+    scored = [r for r in ev if r["labels"]]
+    # 🔄 2026-10-18 (D-348 보충 24 결정 1) — **같은 글자는 실패가 아니라 보고다.** 금지 낱말은 법령 · 지침 · 질의응답집에 똑같이 나온다 —
+    #    글자가 같다고 사전에서 빼면 흔한 금지 표현일수록 빠진다. 누수(사전이 평가 문서를 읽었나)는 빌드의 출처 게이트가 지킨다
+    #    (`tests/test_dictionary_leak.py` · 사전 · 주입은 train 만 읽는다) · 같은 글자 행은 평가 보고가 따로 센다(`scripts/eval_graph.py` `dict_echo`).
+    #    🚨 남은 실패는 **비율 경보** 하나 — D-174 사고(봉인 118 중 118)처럼 빌드가 평가 문서를 통째로 읽은 꼴을 잡는다.
+    #    `[임의]` 문턱 5 % — 지금 0.4 %(채점 행 7 / 1,714 · 지침 낱말) · 사고 때 100 % (원장 10-18(B) ㉒)
+    share = len(leaked) / max(len(scored), 1)
+    print(
+        f"  ⓘ 사전 낱말과 글자가 같은 평가 문구 {len(leaked)} / {len(scored)} ({share:.1%}) — "
+        f"예: {[r['text'][:20] for r in leaked[:3]]}"
+    )
+    assert share <= ECHO_ALARM, (
+        f"🚨 평가 문구 {len(leaked)}개({share:.1%})가 사전에 **그대로** 있다 — 빌드가 평가 문서를 읽은 꼴이다(D-174).\n"
         f"   예: {[r['text'][:30] for r in leaked[:3]]}\n"
         "   분할을 먼저 돌린 뒤 사전을 다시 만든다 (`launcher golden` 의 순서)."
     )
@@ -182,3 +195,22 @@ def test_골든셋의_인용_문구는_상한_안이고_재배포_불가다() ->
     assert not wrong, (
         f"재배포 표시가 계보 표와 다르다 {len(wrong)}행: {wrong[:5]} — `golden --write` 로 다시 만든다"
     )
+
+
+def test_사전_낱말과_같은_글자인_채점_행은_따로_센다() -> None:
+    """🆕 2026-10-18 (D-348 보충 24 결정 1) — 같은 글자 행 · 그중 확정 유형이 맞은 행 · 출처별 수. 라벨 없는 행은 세지 않는다."""
+    from scripts.eval_graph import dict_echo
+
+    rows = [
+        {"text": "코스메슈티컬", "labels": ["의약품_오인"]},
+        {"text": "발 모", "labels": ["의약품_오인"]},  # 공백은 정규화로 접힌다
+        {"text": "코스메슈티컬", "labels": []},  # 적법 행 — 세지 않는다
+        {"text": "이 크림은 발모에 좋다", "labels": ["의약품_오인"]},  # 문장 전체가 같아야 한다
+    ]
+    preds = [{"types": ["의약품_오인"]}, {"types": []}, {"types": []}, {"types": ["의약품_오인"]}]
+    dict_rows = [
+        {"term": "코스메슈티컬", "출처": ["mfds_cosmetic_ad_guideline"]},
+        {"term": "발모", "출처": ["mfds_cosmetic_ad_guideline"]},
+    ]
+    got = dict_echo(rows, preds, dict_rows)
+    assert got == {"rows": 2, "type_hit": 1, "by_source": {"mfds_cosmetic_ad_guideline": 2}}

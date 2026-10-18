@@ -104,7 +104,10 @@ def test_인정은_묻고_확인_전_위험도가_있다() -> None:
     assert got.risk.final is Risk.R1
     (b,) = got.risk.encoder_basis
     assert b.premise is Premise.건기식_인정 and b.moved_from is Violation.건강기능식품_오인
-    assert any("가" in f"{a.article}{a.item or ''}" for a in b.articles), "4.가 의 조항을 싣는다"
+    got_arts = {f"{a.article}{a.item or ''}" for a in b.articles}
+    assert any("가목" in x for x in got_arts) and any("나목" in x for x in got_arts), (
+        "4.가 · 4.나 의 조항을 싣는다(보충 24 결정 2)"
+    )
 
 
 @pytest.mark.parametrize(
