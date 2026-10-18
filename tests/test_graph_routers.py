@@ -976,3 +976,39 @@ def test_품목을_모르면_사전_C_적중도_기록_판정을_확정하지_�
     assert rec.substantiation is None and rec.fact_check is None
     if confirmed:
         assert rec.infeasibility is Infeasibility.C
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("category", [Category.식품, None])
+def test_사전이_확정한_문장에는_조건부_실증_질병_분기가_서지_않는다(
+    monkeypatch: pytest.MonkeyPatch, category: Category | None
+) -> None:
+    """🆕 2026-10-18 (D-348 보충 20 · 보충 16 결정 5 집행) — 사전 단계부터 돌린다(중간 상태를 손으로 넣지 않는다 — 설계가 바뀌면 여기서 드러난다).
+    사전 B 항목이 단독판정되는 측정 판(`legacy`)에서도 사전 확정 문장에는 조건부 위반 · 실증 분기 · 사실 확인 분기가 붙지 않는다 —
+    사전 확정에는 분기를 달지 않는다(보충 15 결정 3 · 사전 쪽 분기 경로를 걷었다). 분기 문장도 같다."""
+    import app.graph as g
+    from app import retrieve as rt
+    from app import sanction
+    from app.contracts import HoldReason, Risk, is_conditional
+
+    monkeypatch.setattr(rt, "wide", _fake_wide([]))
+    monkeypatch.setattr(g, "_DICT_VIEW", "legacy")
+    # 하한이 서야 종전 분기 경로(실증 · 조건부)가 문을 열었다 — 대역 하한 R2 를 준다(없으면 이 시험이 아무것도 못 잡는다)
+    monkeypatch.setattr(g, "floor_of_sentence", lambda rows, by_law: sanction.Floor(floor=Risk.R2))
+    monkeypatch.setattr(
+        g,
+        "load_dict_entries",
+        _entries(("국내최초", "거짓_과장", ("013094:제8조제1항제4호",))),
+    )
+    out = build_review().invoke(
+        _init("국내 최초 그래놀라", category), config={"configurable": {"conn": "CUR"}}
+    )
+    every = [*out["sentences"], *(s for b in out.get("branches") or [] for s in b.sentences)]
+    assert every, "판정된 문장이 없다 — 시험의 전제"
+    for s in every:
+        assert not is_conditional(s) and s.hold_reason is not HoldReason.premise_unknown
+        assert s.substantiation is None and s.fact_check is None, (
+            "🔴 사전 확정 문장에 분기가 붙었다 — 사전 쪽 분기 경로가 되살아났다"
+        )
+    if category is not None:
+        assert out["sentences"][0].verdict is Verdict.confirmed, "legacy 판에서 B 항목은 확정이다"

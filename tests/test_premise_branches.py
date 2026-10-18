@@ -458,10 +458,12 @@ def test_조건부_후보에는_조건_문안이_붙는다(criteria: None) -> No
     assert f"| {reasons.UNRECOGNIZED_CANDIDATE_NOTE} |" in doc.split("## 11.")[1]
 
 
-def test_건기식_인정의_질병_표방은_문안이_서면_사실_확인_분기다(
+def test_건기식_인정의_사전_질병_적중은_문안이_서도_분기_없이_판정하지_못함(
     criteria: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """🆕 2026-10-16 (D-348 결정 6 · 보충 3 결정 2 · D-319 ③ 개정) — 「판정하지 못함」 자리를 사용자가 고르는 분기로. 답은 그 문장에만."""
+    """🔄 2026-10-18 (D-348 보충 20 · 보충 16 결정 5 집행) — 종전에는 건기식_인정 전제의 사전 질병 적중에 사실 확인 분기(`인정_기능성`)를 달았다.
+    사전 쪽 분기는 걷었다 — 그 전제에서 질병 표현은 C 가 아니라 **전제별 제외**로 보류(「판정하지 못함」 · [별표 1] 1.가.2)다.
+    같은 질문은 인코더 쪽(`_enc_disease`)만 단다. 비인정 전제는 종전대로 확정이다."""
     from app import factcheck as fc  # noqa: PLC0415
     from app.contracts import FactKind, UserFact, is_conditional  # noqa: PLC0415
 
@@ -472,23 +474,12 @@ def test_건기식_인정의_질병_표방은_문안이_서면_사실_확인_분
     )
     st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식)
     b = _branch(st, Premise.건기식_인정).sentences[0]
-    assert is_conditional(b) and b.fact_check.kind is FactKind.인정_기능성
-    assert b.violations == [Violation.질병_예방치료_표방] and b.risk.final is not None, (
-        "가장 나쁜 쪽의 하한"
-    )
+    assert b.verdict is Verdict.hold and b.fact_check is None and not is_conditional(b)
+    assert Violation.질병_예방치료_표방 in b.violations, "유형 후보로는 실린다"
     assert _branch(st, Premise.건기식_비인정).sentences[0].verdict is Verdict.confirmed
     yes = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.예)
     st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [yes])
     b = _branch(st, Premise.건기식_인정).sentences[0]
-    assert b.verdict is Verdict.confirmed and not b.violations and b.user_facts == [yes]
-    no = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.아니오)
-    st, out = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [no])
-    assert "branches" not in out, "「거짓」이면 두 전제의 판정이 같아 분기를 내지 않는다"
-    rec = st["sentences"][0]
-    assert rec.verdict is Verdict.confirmed and rec.violations == [Violation.질병_예방치료_표방]
-    assert rec.user_facts == [no], "분기가 생략돼도 사용자의 답은 기록에 출처로 남는다"
-    # 🆕 2026-10-17 (D-348 보충 5 · 1-b) — 해당 없음 — 분기를 걷고 「판정하지 못함」 그대로 · 답은 출처로 남는다
-    na = UserFact(text=TEXT, kind=FactKind.인정_기능성, answer=Answer.해당없음)
-    st, _ = _run({"law_food": [_hit(FOOD1)]}, Category.건기식, [na])
-    b = _branch(st, Premise.건기식_인정).sentences[0]
-    assert b.fact_check is None and not is_conditional(b) and b.user_facts == [na]
+    assert b.verdict is Verdict.hold and b.fact_check is None, (
+        "사전 쪽은 답으로 판정을 바꾸지 않는다"
+    )
