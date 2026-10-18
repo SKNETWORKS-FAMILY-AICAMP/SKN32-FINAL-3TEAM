@@ -120,6 +120,23 @@ DRUG_SUFFIX = re.compile(r"^\s?제(?![가-힣]?품)")
 #:    🚨 맞은 위반도 막는다 — `[측정]` 골든 3 적중 · 모두 위반(`dg:jmogcvdpw5o6#0` 는 같은 문장에 다른 확정 항목이 없어 사전 침묵) ·
 #:    오탐은 되돌릴 수 없고(사전은 거부권 없음 · D-340) 침묵은 인코더가 받는다는 쪽을 골랐다 (원장 10-18(B) ⑬)
 DRUG_SUFFIX_BARE = re.compile(r"^\s?(치료|예방|개선)?\s?(제|약)(?!품)")
+#: 🆕 2026-10-18 (D-348 보충 23 결정 1) **동사로 끝나는 적중**(조사 낀 꼴 「고혈압을 치료」) 바로 뒤의 꼴 셋 — 붙은 꼴에서는 약 이름 가드(「고혈압치료**제**」)가
+#:    막던 것이 조사가 끼면 「치료하는 약」으로 풀려 새었다(원장 10-18(B) ⑳ · ㉑ — 합성 문장 3 이 확정). `[관행]` 국어 부정 · 관형 서술
+#:    `[측정]` 골든 비봉인 · 봉인에서 새로 막는 적중 0 · 적법 묶음 영향 0 (원장 10-18(B) ㉑) — 근거가 합성 문장이다(실제 광고 분포는 재지 못했다)
+#:    ① 정체 부정 「~하는 약 · 의약품 · 치료제가 아닙니다」
+NEG_IDENTITY_VERB = re.compile(
+    r"^\s?(하는|하기\s?위한|용)\s?(의약품|약품|약|치료제)(이|가|은|는)?\s?(아닙니다|아니며|아니고|아님|아니에요|아닌|아니다)"
+)
+#:    ② 효능 부정 「~하지 않습니다 · ~되지 못합니다」 — 🚨 「개선되지 않으면 병원에」 같은 안내도 막는다(보류로 남을 뿐 · 비대칭 원칙)
+NEG_EFFICACY_VERB = re.compile(r"^\s?(하|되|시키)?지\s?(않|못)")
+#:    ③ 약 이름 「~하는 의약품 · 치료제 · 약(을 복용)」 — 🚨 「고혈압을 치료하는 약처럼 효과가 좋다」 같은 위반도 막는다(침묵은 인코더가 받는다 · 보충 21 과 같은 선택)
+DRUG_VERB_ATTR = re.compile(
+    r"^\s?(하는|하기\s?위한|용)\s?(의약품|약품|치료제|약)(?![가-힣]?품)(을|를|이|가|은|는|과|와|\s|$)"
+)
+#: 🆕 2026-10-18 (D-348 보충 23 결정 1 · 2) 확정만 막는 주의 꼴 — 「복용 중」 · 「상담하세요」 · 「전문의와 상담」.
+#:    ⛔ `CAUTION`(판정 대상 아님 · 통과 쪽)에 넣지 않는다 — 넓히면 위반 문장이 통과로 샌다(보충 1 비대칭). 여기는 보류 쪽이다
+#:    `[측정]` 골든에서 새로 막는 적중 0 (원장 10-18(B) ㉑) · 「아토피 피부염 환자는 사용 전 전문의와 상담하세요」(⑲ ③)
+CONFIRM_CAUTION = re.compile(r"복용\s?중|상담(하세요|해\s?주세요|\s?후)|전문의(와|의)?\s?상담")
 #: 효능 부정 — 같은 절의 「효과 · 효능 · 작용」 뒤 부정 · 「암 예방 효과는 확인되지 않았습니다」 `[관행]`
 NEG_EFFICACY = re.compile(
     r"(효과|효능|작용)(는|가|이|은)?\s?(없습니다|없음|없다|없으며|확인되지\s?않|입증되지\s?않|검증되지\s?않|밝혀지지\s?않)"
@@ -154,6 +171,8 @@ def _clause(text: str, start: int, end: int) -> tuple[int, int]:
 def confirm_block(text: str, span: tuple[int, int] | None) -> str | None:
     """사전 적중 하나의 확정을 막는 사유 — 정체부정 · 효능부정 · 약명 · 주의 · 부작용 · 통계정보 · 대상 · 고지. 막지 않으면 None.
 
+    🔄 2026-10-18 (D-348 보충 23) — 동사로 끝나는 적중(조사 낀 꼴) 뒤의 정체 부정 · 효능 부정 · 약 이름과 확정만 막는 주의 꼴을 더했다.
+
     🔴 구간을 모르면(`span` 없음) 막지 않는다 — 절을 정할 수 없다 · 확정은 종전대로. 판정 대상 아님(`is_caution`)과 섞지 않는다.
     """
     if span is None:
@@ -167,12 +186,19 @@ def confirm_block(text: str, span: tuple[int, int] | None) -> str | None:
         return "정체부정"
     if not other and NEG_EFFICACY.search(t[e:b]):
         return "효능부정"
+    # 🆕 2026-10-18 (보충 23 결정 1) 동사로 끝나는 적중 뒤의 정체 부정 · 효능 부정
+    if not other and NEG_IDENTITY_VERB.search(t[e:b]):
+        return "정체부정"
+    if not other and NEG_EFFICACY_VERB.search(t[e:b]):
+        return "효능부정"
     cl = t[a:b]
     if (
         DRUG_SUFFIX if DRUG_VERB_END.search(re.sub(r"\s", "", t[s:e])) else DRUG_SUFFIX_BARE
     ).search(t[e:b]):
         return "약명"
-    if CAUTION.search(cl):
+    if DRUG_VERB_ATTR.search(t[e:b]):
+        return "약명"
+    if CAUTION.search(cl) or CONFIRM_CAUTION.search(cl):
         return "주의"
     if SIDE_EFFECT.search(cl):
         return "부작용"

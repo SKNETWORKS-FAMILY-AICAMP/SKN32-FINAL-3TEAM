@@ -1296,6 +1296,29 @@ def _mine(hits: Iterable[DictHit], law: str) -> tuple[DictHit, ...]:
     return tuple(mine)
 
 
+def _cosmetic_dict_moved(hits: Iterable[DictHit]) -> tuple[DictHit, ...]:
+    """🆕 2026-10-18 (D-348 보충 23 결정 2 · D-338 개정) — 화장품법이 받는 **옮긴 사전 적중**. 식품 축 질병 표방 · 의약품 오인 인용(칸 C)을
+    가진 단독판정 적중을 화장품법 13①1(의약품 오인 · 칸 C)로 옮긴다 — 인코더 쪽 옮김(`_candidates` 의 `rs.COSMETIC_MOVE`)과 같은 규약.
+
+    🔴 이미 화장품법 인용이 있는 적중은 옮기지 않는다(그 인용이 정본) · 옮기지 않는 낱말(`rs.COSMETIC_DICT_KEEP_OUT`)은 뺀다.
+    ⛔ 자격 없는 적중(후보)은 옮기지 않는다 — 품목 미상 기록의 후보에 화장품 사본이 붙으면 소음이다(D-338 이 인코더 기록에서 피한 것과 같다).
+    """
+    out = []
+    for h in hits:
+        if dm.norm(h.term) in rs.COSMETIC_DICT_KEEP_OUT:
+            continue
+        if any(statute.law_of(b) == "화장품법" for b in h.basis):
+            continue
+        if any(
+            statute.law_of(b) == "식품표시광고법" and statute.type_of(b) in rs.COSMETIC_DICT_FROM
+            for b in h.basis
+        ):
+            out.append(
+                DictHit(h.term, Violation.의약품_오인.value, (rs.COSMETIC_DRUG_CITE,), h.span)
+            )
+    return tuple(out)
+
+
 def _law_node(name: str) -> Callable[..., dict[str, Any]]:
     """법별 노드 하나 (D-267). 🔜 자기 법의 조문 적용(유형 유효성 · 단서)은 아직 없다. 하한은 이 노드가 아니라
     `assess_risk` 가 법별 적중으로 읽는다(`floor_of_sentence`).
@@ -1335,7 +1358,12 @@ def _law_node(name: str) -> Callable[..., dict[str, Any]]:
             picked.append((sid, arts))
             proviso_picked.append((sid, provs))
             # 🆕 W4 — 사전 적중 중 **이 법의 인용**을 가진 것만, 인용도 이 법 것만 남긴다. 법을 못 정한 인용은 버린다 (D-220)
-            dict_picked.append((sid, _mine(scans[sid].hits if sid in scans else (), law)))
+            strong = scans[sid].hits if sid in scans else ()
+            mine = _mine(strong, law)
+            if law == "화장품법":
+                # 🆕 2026-10-18 (보충 23 결정 2) 식품 축 질병 · 의약품 C 적중을 화장품법 13①1 로 옮겨 받는다 — 화장품 전제의 판정(D-338 개정)
+                mine += _cosmetic_dict_moved(strong)
+            dict_picked.append((sid, mine))
             weak_picked.append((sid, _mine(scans[sid].weak if sid in scans else (), law)))
         return {
             "law_results": [
@@ -2311,8 +2339,105 @@ def _premise_sentences(
             j = _with_estimates(j, premise, rows)
             # 🆕 2026-10-16 (D-348 보충 2 결정 4) — 이 전제의 인코더 하한(보류 문장 · 기록 위험도 칸 · 판정은 그대로)
             j = _with_encoder_risk(j, premise, rows)
+            # 🆕 2026-10-18 (D-348 보충 23 결정 4) — 건강기능식품 두 전제: 인정 여부(전제)가 자격의 답이다
+            span = (
+                Span(start=starts[i], end=starts[i] + len(text), label=Violation.거짓_과장.value)
+                if starts[i] is not None
+                else None
+            )
+            facts = list((state.get("product") or ProductContext()).facts)
+            j = _hf_premise(premise, j, encs[sid], facts, span, rows)
         out.append(j)
     return out
+
+
+def _hf_premise(
+    premise: Premise,
+    j: SentenceJudgment,
+    e: SentEncoding,
+    facts: list[UserFact],
+    span: Span | None,
+    rows: list[dict[str, Any]],
+) -> SentenceJudgment:
+    """🆕 2026-10-18 (D-348 보충 23 결정 4) **건강기능식품 두 전제의 인코더 쪽 판정** — 인코더(건기식 입력)가 건강기능식품 오인 후보를 낸 문장.
+
+    ★ 전제 기준 문안(`pm.CRITERIA`)이 화면에 말하는 그대로 판정한다 — 종전에는 두 전제가 모두 보류라 분기가 접혀(`_branch_key` 같음)
+       인정 여부를 고를 자리가 없었다(원장 10-18(B) ⑲ ②).
+       · `건기식_비인정` — 「그 기능성을 내세우는 표현은 위반」 → 옮긴 근거(4.나)로 **확정 위반 · 사유 A**(자격형 · 사전 쪽 옮김 `converted` 와 같다)
+       · `건기식_인정` — 「인정받은 내용 그대로의 문구는 위반으로 보지 않습니다 · 바꾼 표현은 위반」 → **묻는다**(`인정_기능성` · 문구 밖 사실 · D-348 결정 1)
+         예 → 확정 · R0 · 출처 / 아니오 → 거짓 · 과장 확정(4.가 2) · 사유 A) · 출처 / 해당없음 → 보류 + 출처
+    🔴 손대지 않는다 — 판정 대상 아님 · 보류가 아님(사전이 확정함) · 확신 부족 보류가 아님 · 주장이 아님(`encoder_cap`) · 구간을 모름 ·
+       다른 인코더 유형이 함께 섰다(그 유형의 판정이 먼저다)
+    🚨 비인정 확정은 인코더 확률에 기댄다 — 오탐은 신뢰 규칙(τ · 보충 17 결정 2 · 재학습판 뒤)의 몫이다. `[측정]` 조건 없는 적법 문장 0 행 (원장 10-18(B) ⑳ (d))
+    """
+    if premise not in (Premise.건기식_인정, Premise.건기식_비인정):
+        return j
+    if (
+        j.not_claim
+        or j.verdict is not Verdict.hold
+        or j.hold_reason is not HoldReason.low_conf
+        or span is None
+        or pm.HF_MISLEAD not in e.candidates
+        or encoder_cap(j.text) is None
+    ):
+        return j
+    basis = list(j.risk.encoder_basis)
+    if premise is Premise.건기식_비인정:
+        if not basis or any(b.moved_from is None for b in basis):
+            return j
+        c = _enc_confirmed(j, Violation(_UNRECOGNIZED_TYPE), span)
+        if c.verdict is not Verdict.confirmed:
+            return j
+        return c.model_copy(update={"infeasibility": Infeasibility.A, "substantiation": None})
+    # 건기식_인정 — 전제가 3호 후보를 지운 자리. 다른 유형이 섰으면 그 판정이 먼저다
+    if basis:
+        return j
+    # 🔴 질병 · 의약품 후보가 걸린 문장(사전 「판정하지 못함」 · 보충 20)과 치료 꼴은 묻지 않는다 — 「예」가 질병 주장을 R0 으로 푼다
+    #    (보충 22 결정 2 · 3 — 질병 자리의 같은 질문은 걷었다) · `[측정]` dev 질병 C 1 행(「백내장예방」 꼴)이 이 거름 전에는 질문을 받았다(원장 10-18(B) ㉑)
+    if {Violation.질병_예방치료_표방, Violation.의약품_오인} & set(
+        j.violations
+    ) or factcheck.TREATMENT_FORM.search(j.text):
+        return j
+    floor = estimate_of(rows, premise, Violation.거짓_과장).floor
+    if floor is None or floor.level < Risk.R1.level:
+        return j  # 「위반이라면」의 하한을 모른다 — 묻지 않는다(확인 전 위험도가 없으면 분기를 세우지 않는다 · D-72)
+    arts = [_ref_article(x) for x in statute.reference_of_cite(pm.RECOGNIZED_DIFF_CITE)]
+    eb = EncoderBasis(
+        premise=premise,
+        violation=Violation.거짓_과장,
+        moved_from=Violation.건강기능식품_오인,
+        floor=floor,
+        articles=arts,
+    )
+    held = j.model_copy(
+        update={
+            "risk": j.risk.model_copy(
+                update={"encoder": floor, "final": floor, "encoder_basis": [eb]}
+            )
+        }
+    )
+    key = dm.norm(j.text)
+    uf = next((f for f in facts if f.kind is FactKind.인정_기능성 and dm.norm(f.text) == key), None)
+    if uf is None:
+        t = factcheck.RECOGNIZED_TEXT
+        return held.model_copy(
+            update={
+                "fact_check": FactBranch(
+                    kind=FactKind.인정_기능성,
+                    confirmed_max=Risk.R0,
+                    accepted_evidence=list(t.accepted_evidence),
+                    criteria=t.criteria,
+                )
+            }
+        )
+    if uf.answer is Answer.예:
+        return _answered(held, user_facts=[uf])
+    if uf.answer is Answer.아니오:
+        c = _enc_confirmed(held, Violation.거짓_과장, span, user_facts=[uf])
+        if c.verdict is Verdict.confirmed:
+            return c.model_copy(update={"infeasibility": Infeasibility.A, "substantiation": None})
+        return c
+    return held.model_copy(update={"user_facts": [uf]})
 
 
 def _branch_outcome(premise: Premise, sents: list[SentenceJudgment]) -> Outcome:
@@ -2838,14 +2963,16 @@ def _coords(arts: Iterable[EvidenceArticle]) -> set[tuple[str, int, int, int]]:
 
 #: 인코더 쪽 실증 문안의 법 축 — **그 전제의 주 근거**(D-272 개정 (나) ① · ⑥). 인코더 근거는 문장이 보내진 법마다 실려(`_candidate_refs`)
 #:   표시광고법(늘 보낸다)이 함께 들어 축이 둘이 된다 — 축 하나를 요구하는 `rs.subst_branch` 에 전제의 주 근거 축을 준다.
-#:   🔴 화장품은 고르지 않는다 — 화장품법과 표시광고법의 주 근거는 ⬜(D-272 개정 (나) ⑥) · 분기 없음(D-220).
+#:   🔄 2026-10-18 (D-348 보충 7 결정 2 집행) — 화장품 → **화장품법**. 종전 「화장품은 고르지 않는다(D-272 개정 (나) ⑥ ⬜ · 분기 없음)」는
+#:      보충 7 결정 2 가 닫았는데 이 표에 옮기지 않아 화장품의 인코더 쪽 거짓 · 과장 문장에 실증 질문이 서지 않았다(원장 10-18(B) ⑲).
+#:      문안은 `reasons.SUBST_TEXT["화장품법"]`(승인본) — 두 곳을 함께 본다(D-99).
 #:   🚨 `[가정]` 문장의 사항이 거래 조건(가격 · 할인 · 출처)이면 주 근거는 표시광고법이다(같은 개정 ②) — 인코더는 사항을 가리지 않는다.
 ENC_SUBST_AXIS: dict[Premise, str | None] = {
     Premise.식품: "식품표시광고법",
     Premise.일반식품_기능성: "식품표시광고법",
     Premise.건기식_인정: "식품표시광고법",
     Premise.건기식_비인정: "식품표시광고법",
-    Premise.화장품: None,
+    Premise.화장품: "화장품법",
     Premise.일반상품: "표시광고법",
 }
 
