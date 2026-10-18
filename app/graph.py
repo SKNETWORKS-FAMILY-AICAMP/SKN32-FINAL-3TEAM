@@ -3045,6 +3045,10 @@ def _encoder_side(
             return _enc_absolute(s, absolute, span) if absolute_ok else None
     if any(b.moved_from is not None for b in s.risk.encoder_basis):
         return None  # 전제가 옮긴 근거(인정받지 않은 기능성 · 4.나)는 자격(A) 문제다 — 사실 · 실증으로 풀리지 않는다(`_qualification` 과 같다)
+    # 🆕 2026-10-19 (보충 6 결정 9 · 보충 27) 화장품 전제 · C 가 서지 않았고 기능성화장품 오인이 남았으면 심사 · 보고를 묻는다
+    cf = _cosmetic_function(s, facts, span)
+    if cf is not None:
+        return cf
     types = {b.violation for b in s.risk.encoder_basis}
     premises = {b.premise for b in s.risk.encoder_basis}
     key = dm.norm(s.text)
@@ -3242,6 +3246,64 @@ def _absolute_types(s: SentenceJudgment) -> set[Violation]:
     ):
         out.discard(Violation.의약품_오인)
     return out
+
+
+def _cosmetic_function(
+    s: SentenceJudgment, facts: list[UserFact], span: Span | None
+) -> SentenceJudgment | None:
+    """화장품 전제의 **기능성화장품 오인 질문**(`기능성_심사`) — 묻지 않는 문장이면 None (🆕 2026-10-19 · D-348 보충 6 결정 9 · 보충 27).
+
+    ★ 서는 자리 = **C 가 서지 않았고**(`_absolute_types` 뒤 · 이 함수는 그 뒤에서만 불린다) 인코더 근거에 화장품 전제의 기능성화장품 오인(칸 A)이
+       남은 문장 — 설계의 칸 그대로다(C 면 확정 · A 면 그 유형의 문구 밖 사실을 묻는다 · 보충 6). 질문 전용 낱말 목록은 두지 않는다(보충 27 결정 2).
+    ★ 묻지 않는다 — ① 다른 유형의 근거가 남았다(「예」가 그 유형까지 풀지 않게 · 단 기능성 정형 낱말 · 인증 꼴로 C 에서 내려온 의약품 오인은
+       같은 문장의 A 몫이다 — 보충 25 · 26) ② 치료 꼴(`factcheck.TREATMENT_FORM` · §16 과 같은 자리) ③ 「위반이라면」의 하한이 R1 아래(D-72)
+    ★ 답 — 예: R0 · 출처 / 아니오: 기능성화장품 오인 확정(13①2 · 사유 A) · 출처 / 해당 없음: 보류 + 출처.
+    🚨 인코더가 진짜 의약품 오인을 기능성으로 고르면 그 문장에도 선다 — 사실대로라면 「아니오」(심사 효능은 제2조 범위뿐 · 법 제4조②)이고,
+       「예」는 거짓 답이다(책임 · 출처 · 보충 5 결정 3). 봉인 뒤 「예」 답 표본을 다시 본다(보충 27 ⬜)
+    """
+    fv = Violation.기능성화장품_오인
+    basis = [
+        b
+        for b in s.risk.encoder_basis
+        if b.violation is fv and b.premise is Premise.화장품 and b.moved_from is None
+    ]
+    if not basis:
+        return None
+    down = (
+        {Violation.의약품_오인}
+        if claimscope.functional_not_drug(s.text) or claimscope.cert_not_drug(s.text)
+        else set()
+    )
+    if {b.violation for b in s.risk.encoder_basis} - {fv} - down:
+        return None
+    if factcheck.TREATMENT_FORM.search(s.text):
+        return None
+    floor = max((b.floor for b in basis), key=lambda r: r.level)
+    if floor.level < Risk.R1.level or s.risk.final is None:
+        return None
+    held = s.model_copy(update={"risk": s.risk.model_copy(update={"encoder_basis": basis})})
+    key = dm.norm(s.text)
+    uf = next((f for f in facts if f.kind is FactKind.기능성_심사 and dm.norm(f.text) == key), None)
+    if uf is None:
+        t = factcheck.COSMETIC_FUNC_TEXT
+        return held.model_copy(
+            update={
+                "fact_check": FactBranch(
+                    kind=FactKind.기능성_심사,
+                    confirmed_max=Risk.R0,
+                    accepted_evidence=list(t.accepted_evidence),
+                    criteria=t.criteria,
+                )
+            }
+        )
+    if uf.answer is Answer.예:
+        return _answered(held, user_facts=[uf])
+    if uf.answer is Answer.아니오:
+        c = _enc_confirmed(held, fv, span, user_facts=[uf])
+        if c.verdict is Verdict.confirmed:
+            return c.model_copy(update={"infeasibility": Infeasibility.A, "substantiation": None})
+        return c
+    return held.model_copy(update={"user_facts": [uf]})
 
 
 def _enc_absolute(
