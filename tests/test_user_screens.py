@@ -255,6 +255,28 @@ def test_검수_분기_다시_선택은_5회다() -> None:
     assert 'id="rvr-1-6"' not in body
 
 
+@pytest.mark.gate
+def test_품목을_모르면_고르기_전에는_품목_선택만_안내한다() -> None:
+    """🆕 2026-10-18 (D-348 보충 18) — 품목을 모르면 고르기 전 자리(`rv-rec`)에 기록 판정(「모름」 입력의 후보 · 질문 · 판정)을 그리지 않는다 ·
+    품목을 고르면 그 품목의 분기 결과가 보인다 · 지적 건수 자리는 「특이사항 없음」이 아니라 「품목 선택 필요」다.
+    품목을 아는데 인증 여부만 모르면(건강기능식품) 종전대로 기록 판정을 보인다."""
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    body = TestClient(app).get("/u/preview/03_hold_cat_unknown").text
+    recs = [part.split('class="rv-round ')[0] for part in body.split('<div class="rv-rec">')[1:]]
+    assert recs and all("rv-wait" in r for r in recs), "고르기 전 자리에 품목 선택 안내가 있다"
+    assert all("rv-sent" not in r and "rv-todo" not in r for r in recs), (
+        "🔴 고르기 전 자리에 문장 판정 · 질문이 그려졌다"
+    )
+    assert 'class="rv-res rv-res-food"' in body, "품목을 고르면 볼 분기 결과는 그대로 있다"
+    assert 'content: "품목 선택 필요"' in body
+    known = TestClient(app).get("/u/preview/15_hold_premise_unknown").text
+    krec = [part.split('class="rv-round ')[0] for part in known.split('<div class="rv-rec">')[1:]]
+    assert krec and all("rv-wait" not in r for r in krec), "품목을 알면 기록 판정을 그대로 보인다"
+
+
 @pytest.mark.parametrize(
     ("fixture", "want"),
     [
