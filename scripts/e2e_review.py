@@ -277,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
             d = Path(args.save_fixtures)
             d.mkdir(parents=True, exist_ok=True)
             (d / f"live_{name}.json").write_text(
-                res_screen.model_dump_json(indent=1), encoding="utf-8"
+                res_screen.model_dump_json(indent=1) + "\n", encoding="utf-8", newline="\n"
             )
         mark = "✅" if not bad else "🔴"
         print(
@@ -294,7 +294,9 @@ def main(argv: list[str] | None = None) -> int:
         or f"build/e2e/e2e_{time.strftime('%Y%m%d_%H%M%S')}{'_fixtures' if args.fixtures else ''}.json"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    out.write_text(
+        json.dumps(report, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
+    )
     print(f"\n문구 {len(cases)} · 실패 검사 {fails} → {out}")
     return 1 if fails else 0
 
