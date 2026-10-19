@@ -79,11 +79,11 @@ def _table_counts() -> dict[str, int]:
 def index(request: Request) -> HTMLResponse:
     """운영 대시보드. 기존 예시 집계와 실제 데이터 층 조회는 구분해서 표시한다."""
     actor = require_governor(request)
-    # 🔄 2026-10-20 (psj) — 문의 · 회원 수는 DB 를 읽는다(`admin_cs.recent` · `admin_dbread`). 이용 추이 · 승인 대기는
-    #    아직 표가 없어 예시 그대로다 — 화면이 둘을 갈라 적는다. 못 읽으면 「-」 + 안내 (D-72).
+    # 🔄 2026-10-20 (psj) — 문의 · 회원 수는 DB 를 읽는다(`admin_cs.recent` · `admin_dbread`). 이용 추이는 아직 표가
+    #    없어 예시 그대로다 — 화면이 둘을 갈라 적는다. 못 읽으면 「-」 + 안내 (D-72). 가입 심사는 닫은 화면이라 라벨만.
     from app.models import TICKET_STATUSES  # noqa: PLC0415
     from app.routers import admin_cs, admin_dbread  # noqa: PLC0415
-    from app.routers.admin_signup_review import _DUMMY_REVIEWS  # noqa: PLC0415
+    from app.routers.admin_signup_review import LABEL as SIGNUP_LABEL  # noqa: PLC0415
     from app.routers.admin_stats import (  # noqa: PLC0415
         _DASH_DATA,
         _PERIOD_LABEL,
@@ -117,7 +117,8 @@ def index(request: Request) -> HTMLResponse:
             "ticket_source": inbox["source"],
             "ticket_status": ticket_status,
             "ticket_statuses": TICKET_STATUSES,
-            "pending_reviews": sum(r["status"] == "pending" for r in _DUMMY_REVIEWS),
+            # 🔄 2026-10-20 — 가입 심사는 닫은 화면이다(D-260 ④) — 건수 대신 사유 라벨을 그린다
+            "signup_label": SIGNUP_LABEL,
             "pending_tickets": inbox["counts"]["open"],
         },
     )

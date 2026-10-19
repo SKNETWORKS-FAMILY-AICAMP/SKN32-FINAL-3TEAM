@@ -1,143 +1,51 @@
-"""app/routers/admin_enterprise.py — 회원관리(기업 회원) 화면 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+"""app/routers/admin_enterprise.py — 회원관리(기업 회원) 화면 · **비활성 + 사유** · 소유자 **psj** (병렬작업 계약 §5)
 
-★ `admin.py` 와 파일을 가른다 (D-208 · admin_members.py 와 같은 패턴). 붙이는 자리는
-   `app/routers/__init__.py` 한 줄 — `admin_router` 아래에 매단다.
+🔄 2026-10-20 — **닫은 화면이다** (D-260 ④ · D-107). 기업 표(`enterprise`)는 만들지 않기로 했다 — 기업 단위
+   계정 · 사업자 인증은 검증 수단이 없고, 회원은 `user_account.org`(소속 자유 기재 · FK 아님)까지만 둔다(D-260 ②).
+   종전 더미(목업 `ENTERPRISES_V22` — 사업자번호 형식 값)를 지우고 사유 라벨 `외부 감사 전` 화면만 그린다.
+   🚨 입력 요소 · POST 를 두지 않는다 (D-107 조건 1).
 
-✅ **읽기 전용이다.** 이 파일에 POST 는 없다.
-✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
-
-🔴 **기업 회원을 담는 테이블 자체가 없다** — 회원 목록(admin_members.py)과 같은 이유다.
-   서비스 쪽 기업 가입 기능(ksr·lse 담당)이 스키마와 함께 먼저 생겨야 한다. 그래서 DB
-   조회를 시도하지 않고 **더미로만** 그린다.
-   ⬜ 스키마가 생기면 admin_errors.py 패턴(우선 DB, 실패 시 더미)으로 바꾼다.
-
-🚨 목업(`app/static/mockup.html`)의 `ENTERPRISES_V22` 배열·`enterprise`/`enterprise-detail`
-   뷰 구조를 그대로 따른다. 목업 상세 화면은 탭(구성원·사용량 분석·결제 이력)을 JS 로
-   전환하지만, 여기는 스크립트 없이(CSP `script-src 'self'`) 세 섹션을 순서대로 모두
-   펼쳐서 보여준다 — admin/members/detail.html 과 같은 방식.
-   이용량 추이·기능별 사용량·구성원 명단·결제 내역은 목업에서도 하드코딩된 예시라
-   그대로 옮긴다 (담는 집계·결제 테이블이 아직 없다).
+⬜ **되살릴 때** — `docs/psj/notes/닫힌_관리자화면_되살리기.md`. 화면 구조는
+   `admin/members/enterprise_list.html` · `enterprise_detail.html` 에 남겨 두었고, 더미 · 라우터는 git 기록(`653974b`)에 있다.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from app.routers.admin import require_governor
 from app.templating import templates
 
-#: 🚨 prefix 는 `/enterprise` 다 — `admin_router`(prefix `/admin`) 아래에 매달려
-#:    `/admin/enterprise`, `/admin/enterprise/{id}` 가 된다.
+#: 🚨 prefix 는 `/enterprise` 다 — `/admin/enterprise`, `/admin/enterprise/{id}` 가 된다.
 router = APIRouter(prefix="/enterprise")
 
-ENTERPRISE_PLANS = ("Basic", "Pro", "Enterprise")
+LABEL = "외부 감사 전"
 
-# ─────────────────────────────────────────────────────────────
-# 더미 — 기업 회원 테이블 자체가 아직 없다. ⬜ 테이블 승인·적재 뒤 DB 조회로 바꾼다.
-# 목업 app/static/mockup.html 의 ENTERPRISES_V22 배열을 그대로 옮겨온 것 — 실제 기업
-# 정보가 아니라 화면 구조 확인용이다.
-# ─────────────────────────────────────────────────────────────
-_DUMMY_ENTERPRISES: list[dict] = [
-    {
-        "id": "e1",
-        "name": "(주)미래광고",
-        "biz": "120-88-12345",
-        "rep": "김민아",
-        "members": 24,
-        "plan": "Enterprise",
-        "joined": "2025.11.05",
-        "status": "활성",
-    },
-    {
-        "id": "e2",
-        "name": "브랜드원",
-        "biz": "211-09-45678",
-        "rep": "윤하람",
-        "members": 12,
-        "plan": "Enterprise",
-        "joined": "2026.01.20",
-        "status": "활성",
-    },
-    {
-        "id": "e3",
-        "name": "푸드마켓",
-        "biz": "314-81-90876",
-        "rep": "장우진",
-        "members": 8,
-        "plan": "Pro",
-        "joined": "2026.03.17",
-        "status": "활성",
-    },
-    {
-        "id": "e4",
-        "name": "헬스뷰티랩",
-        "biz": "501-22-33445",
-        "rep": "서민지",
-        "members": 5,
-        "plan": "Basic",
-        "joined": "2026.06.02",
-        "status": "검토중",
-    },
-]
-
-# 목업 enterprise-detail 에 하드코딩된 예시 수치 — 담는 집계·결제 테이블이 아직 없다.
-_USAGE_TREND = [("4월", 820), ("5월", 940), ("6월", 1010), ("7월", 1130), ("8월", 1248)]
-_FEATURE_USAGE = [
-    ("문구 판정", "1,248건"),
-    ("카피 생성", "864건"),
-    ("문서 저장", "326건"),
-    ("API 호출", "2,410회"),
-]
-
-
-def _clean_choice(value: str | None, allowed: tuple[str, ...]) -> str | None:
-    return value if value in allowed else None
+CLOSED = {
+    "page_title": "기업 회원",
+    "label": LABEL,
+    "decision": "D-260 ④ · D-107",
+    "why": [
+        "사업자 · 법인 정보를 검증할 수단이 없어요 — 사업자번호 · 대표자명을 받아도 진위를 확인할 수 없어요 (D-104).",
+        "요금제 · 결제가 없어 기업 단위로 묶을 이유가 아직 없어요 (D-69).",
+        "회원의 소속은 자유 기재(`user_account.org`)까지만 받아요 — 회원 목록에서 볼 수 있어요 (D-260 ②).",
+    ],
+    "needs": [
+        "사업자 진위 확인 수단 — 외부 감사 또는 확인 API (외부 의존 판정)",
+        "기업 단위로 무엇이 달라지는지 — 요금제 · 구성원 권한 (D-69 · D-66 개정)",
+        "기업 표(`enterprise`) 스키마와 `user_account.org` 정규화 여부 (팀장)",
+    ],
+}
 
 
 @router.get("", response_class=HTMLResponse)
 def enterprise_list(request: Request) -> HTMLResponse:
-    """기업 회원 목록 — 읽기 전용. 기업 회원 테이블이 아직 없어 더미로만 그린다."""
     actor = require_governor(request)
-    qp = request.query_params
-    plan = _clean_choice(qp.get("plan"), ENTERPRISE_PLANS)
-
-    rows = _DUMMY_ENTERPRISES
-    if plan:
-        rows = [r for r in rows if r["plan"] == plan]
-
-    return templates.TemplateResponse(
-        request,
-        "admin/members/enterprise_list.html",
-        {
-            "actor": actor,
-            "rows": rows,
-            "plan": plan or "",
-            "plans": ENTERPRISE_PLANS,
-            "total": len(_DUMMY_ENTERPRISES),
-        },
-    )
+    return templates.TemplateResponse(request, "admin/_closed.html", {"actor": actor, **CLOSED})
 
 
 @router.get("/{enterprise_id}", response_class=HTMLResponse)
-def enterprise_detail(request: Request, enterprise_id: str) -> HTMLResponse:
-    """기업 회원 상세 — 읽기 전용. 구성원·사용량 분석·결제 이력을 한 화면에 순서대로."""
+def enterprise_detail(request: Request, enterprise_id: str) -> HTMLResponse:  # noqa: ARG001
     actor = require_governor(request)
-    row = next((r for r in _DUMMY_ENTERPRISES if r["id"] == enterprise_id), None)
-    if row is None:
-        raise HTTPException(status_code=404)
-
-    max_usage = max(v for _, v in _USAGE_TREND)
-
-    return templates.TemplateResponse(
-        request,
-        "admin/members/enterprise_detail.html",
-        {
-            "actor": actor,
-            "row": row,
-            "usage_trend": _USAGE_TREND,
-            "max_usage": max_usage,
-            "feature_usage": _FEATURE_USAGE,
-        },
-    )
+    return templates.TemplateResponse(request, "admin/_closed.html", {"actor": actor, **CLOSED})

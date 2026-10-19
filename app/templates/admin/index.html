@@ -10,9 +10,9 @@
 {% block admin_content %}
 <div class="admin-overview-head">
   <div><h1>운영 대시보드</h1><p>서비스 이용 현황과 확인이 필요한 업무를 모아봤어요.</p></div>
-  <span class="admin-sample">이용 추이 · 승인 대기는 예시 · 문의 · 회원 수는 실제 데이터</span>
+  <span class="admin-sample">이용 추이는 예시 · 문의 · 회원 수는 실제 데이터</span>
 </div>
-<p class="warn"><b>일부는 예시 데이터입니다.</b> 이용 추이 · 검수 · 생성 건수와 가입 승인 대기는 아직 집계 표가 없어 예시를 표시합니다. 회원 수와 문의는 DB 를 읽은 실제 값입니다.</p>
+<p class="warn"><b>일부는 예시 데이터입니다.</b> 이용 추이와 검수 · 생성 건수는 아직 집계를 연결하지 않아 예시를 표시합니다. 회원 수와 문의는 DB 를 읽은 실제 값입니다.</p>
 <div class="admin-overview-kpis">
   <section class="admin-overview-card"><div class="kpi-title">{{ period_label[period] }} 검수 요청{{ icon('review') }}</div><div class="kpi-value">{{ dash.kpi.judge }}<small>건</small></div><div class="kpi-delta">{{ dash.delta.judge }}</div></section>
   <section class="admin-overview-card"><div class="kpi-title">{{ period_label[period] }} 카피 생성{{ icon('spark') }}</div><div class="kpi-value">{{ dash.kpi.gen }}<small>건</small></div><div class="kpi-delta">{{ dash.delta.gen }}</div></section>
@@ -28,8 +28,8 @@
     <p class="admin-chart-note">요청 건수 · 최대 {{ dash_max }}건 · 예시 집계</p>
     <details class="admin-chart-note"><summary>추이 수치 확인</summary><div class="admin-table-scroll"><table><tr><th>기간</th><th>검수</th><th>생성</th></tr>{% for label in dash.labels %}<tr><td>{{ label }}</td><td>{{ dash.judge_series[loop.index0] }}건</td><td>{{ dash.gen_series[loop.index0] }}건</td></tr>{% endfor %}</table></div></details>
   </section>
-  <section class="admin-overview-card"><div class="admin-card-head"><h2>확인이 필요한 업무</h2><span class="admin-status">승인 대기는 예시</span></div>
-    <a class="admin-task" href="/admin/signup-review">{{ icon('check',20) }}<span>가입 승인 대기</span><b>{{ pending_reviews }}<small>건</small></b><em>›</em></a>
+  <section class="admin-overview-card"><div class="admin-card-head"><h2>확인이 필요한 업무</h2></div>
+    <a class="admin-task" href="/admin/signup-review">{{ icon('check',20) }}<span>가입 승인 심사</span><small class="admin-status">{{ signup_label }}</small><em>›</em></a>
     <a class="admin-task" href="/admin/cs/tickets?status=open">{{ icon('help',20) }}<span>미처리 문의</span><b>{{ pending_tickets if pending_tickets is not none else '-' }}<small>건</small></b><em>›</em></a>
     <a class="admin-task" href="/admin/errors">{{ icon('info',20) }}<span>오류 로그</span><small>기록 확인</small><em>›</em></a>
     <p class="admin-chart-note">각 항목에서 상세 내용을 확인하세요. 오류 건수는 여기서 집계하지 않습니다.</p>

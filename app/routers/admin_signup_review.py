@@ -1,27 +1,19 @@
-"""app/routers/admin_signup_review.py — 회원관리(승인 심사) 화면 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+"""app/routers/admin_signup_review.py — 회원관리(승인 심사) 화면 · **비활성 + 사유** · 소유자 **psj** (병렬작업 계약 §5)
 
-★ `admin.py` 와 파일을 가른다 (D-208 · admin_members.py 와 같은 패턴). 붙이는 자리는
-   `app/routers/__init__.py` 한 줄 — `admin_router` 아래에 매단다.
+🔄 2026-10-20 — **닫은 화면이다** (D-260 ④ · D-107). 가입 심사 표(`signup_review`)는 만들지 않기로 했다 —
+   D-66 은 역할을 두지 않는다(「행동이 역할을 정한다」). **승인해도 켜 주는 권한이 없는** 심사 흐름은 실제 데이터가
+   흘러도 가짜 절차다. 그래서 종전 더미(목업 `REVIEWS_V22` — 실재 도메인 이메일 · 사업자번호 형식 값)를 지우고
+   사유 라벨 `외부 감사 전` 화면(`admin/_closed.html`)만 그린다.
+   🚨 입력 요소 · POST 를 두지 않는다 (D-107 조건 1).
 
-✅ **읽기 전용이다.** 승인·반려 버튼, 처리 사유 선택은 전부 `disabled` 뼈대다 — 실제
-   처리(상태를 바꾸는 POST)는 아직 없다.
-✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
-
-🔴 **승인 심사(신청) 를 담는 테이블 자체가 없다** — 회원 테이블과 같은 이유다
-   (admin_members.py 참고). 인플루언서·기업 가입 신청 기능(ksr·lse 담당)이 스키마와
-   함께 먼저 생겨야 한다. 그래서 DB 조회를 시도하지 않고 **더미로만** 그린다.
-   ⬜ 스키마가 생기면 admin_errors.py 패턴(우선 DB, 실패 시 더미)으로 바꾼다.
-
-🚨 목업(`app/static/mockup.html`)의 `REVIEWS_V22` 배열·`signup-review`/`review-detail`
-   뷰(마지막에 덮어써진 v23·v24 최종본 — 제출 서류 체크리스트, 승인/반려 선택 UI) 구조를
-   그대로 따른다. 제출 서류 확인 체크박스도 목업처럼 있지만 여기서는 읽기 전용이라
-   전부 `disabled` 로 그린다.
+⬜ **되살릴 때** — `docs/psj/notes/닫힌_관리자화면_되살리기.md`. 화면 구조(목록 · 상세 템플릿)는
+   `admin/members/signup_review.html` · `review_detail.html` 에 그대로 남겨 두었고, 더미 데이터 · 라우터는
+   git 기록(커밋 `653974b` 의 이 파일)에 있다.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from app.routers.admin import require_governor
@@ -31,156 +23,34 @@ from app.templating import templates
 #:    `/admin/signup-review`, `/admin/signup-review/{id}` 가 된다.
 router = APIRouter(prefix="/signup-review")
 
-REVIEW_TYPES = ("인플루언서", "기업")
-REVIEW_STATUSES = ("pending", "approved", "rejected")
-_STATUS_LABEL = {"pending": "검토 대기", "approved": "승인", "rejected": "반려"}
+#: 사유 라벨 — 🚨 D-107 조건 5 의 다섯 중 하나만 쓴다. 대시보드도 이 글자를 읽는다 (D-99)
+LABEL = "외부 감사 전"
 
-# ─────────────────────────────────────────────────────────────
-# 더미 — 승인 심사(가입 신청) 테이블 자체가 아직 없다. ⬜ 테이블 승인·적재 뒤 DB 조회로
-# 바꾼다. 목업 app/static/mockup.html 의 REVIEWS_V22 배열을 그대로 옮겨온 것 — 실제
-# 신청 정보가 아니라 화면 구조 확인용이다.
-# ─────────────────────────────────────────────────────────────
-_DUMMY_REVIEWS: list[dict] = [
-    {
-        "id": "r1",
-        "type": "인플루언서",
-        "name": "윤채린",
-        "email": "chaerin@naver.com",
-        "date": "2026.08.28 09:42",
-        "channel": "@chaerin_daily",
-        "followers": "86,200",
-        "category": "뷰티·라이프",
-        "biz": None,
-        "rep": None,
-        "employees": None,
-        "status": "pending",
-        "docs": [
-            {"name": "본인인증서.pdf", "kind": "본인 확인", "submitted": "2026.08.28"},
-            {"name": "채널소유인증.png", "kind": "채널 소유 확인", "submitted": "2026.08.28"},
-            {"name": "활동포트폴리오.pdf", "kind": "활동·광고 이력", "submitted": "2026.08.28"},
-        ],
-    },
-    {
-        "id": "r2",
-        "type": "기업",
-        "name": "(주)헬스푸드",
-        "email": "biz@healthfood.co.kr",
-        "date": "2026.08.28 08:15",
-        "channel": None,
-        "followers": None,
-        "category": None,
-        "biz": "120-81-88776",
-        "rep": "정도현",
-        "employees": "32명",
-        "status": "pending",
-        "docs": [
-            {"name": "사업자등록증.pdf", "kind": "사업자 정보", "submitted": "2026.08.28"},
-            {"name": "대표자재직증명서.pdf", "kind": "대표자 확인", "submitted": "2026.08.28"},
-            {"name": "법인등기부등본.pdf", "kind": "법인 정보", "submitted": "2026.08.28"},
-        ],
-    },
-    {
-        "id": "r3",
-        "type": "인플루언서",
-        "name": "김도윤",
-        "email": "doyoon@kakao.com",
-        "date": "2026.08.27 17:30",
-        "channel": "@doyoon_fit",
-        "followers": "154,000",
-        "category": "헬스·운동",
-        "biz": None,
-        "rep": None,
-        "employees": None,
-        "status": "pending",
-        "docs": [
-            {"name": "본인인증서.pdf", "kind": "본인 확인", "submitted": "2026.08.27"},
-            {"name": "채널소유인증.png", "kind": "채널 소유 확인", "submitted": "2026.08.27"},
-            {"name": "활동포트폴리오.pdf", "kind": "활동·광고 이력", "submitted": "2026.08.27"},
-        ],
-    },
-    {
-        "id": "r4",
-        "type": "기업",
-        "name": "브랜드팩토리",
-        "email": "admin@brandfactory.kr",
-        "date": "2026.08.27 15:20",
-        "channel": None,
-        "followers": None,
-        "category": None,
-        "biz": "211-88-12390",
-        "rep": "한지수",
-        "employees": "18명",
-        "status": "pending",
-        "docs": [
-            {"name": "사업자등록증.pdf", "kind": "사업자 정보", "submitted": "2026.08.27"},
-            {"name": "대표자재직증명서.pdf", "kind": "대표자 확인", "submitted": "2026.08.27"},
-            {"name": "법인등기부등본.pdf", "kind": "법인 정보", "submitted": "2026.08.27"},
-        ],
-    },
-]
-
-_REJECT_REASONS_COMMON = ("서류 미비", "신청 정보 불일치", "중복 신청", "기타")
-_REJECT_REASON_INFLUENCER = "활동 기준 미충족"
-_REJECT_REASON_CORP = "업종 부적합"
-
-
-def _clean_choice(value: str | None, allowed: tuple[str, ...]) -> str | None:
-    return value if value in allowed else None
+CLOSED = {
+    "page_title": "승인 심사",
+    "label": LABEL,
+    "decision": "D-260 ④ · D-107",
+    "why": [
+        "가입 시 역할을 고르지 않아요 — 승인해도 켜 줄 권한이 없어 심사가 바꾸는 것이 없어요 (D-66).",
+        "인플루언서 · 기업 여부를 검증할 수단이 없어요 — 사업자번호 · 팔로워 수를 확인하려면 외부 감사가 먼저예요 (D-104 · D-107).",
+        "신원 서류는 받지 않아요 — 파일을 받는 순간 보관 · 파기 책임이 생겨요 (D-260 ⑤).",
+    ],
+    "needs": [
+        "승인이 무엇을 켜 주는지 — 역할 · 프로필 공개 권한 같은 결정 (D-66 · D-68 개정)",
+        "검증 수단 — 외부 감사 또는 사업자 진위 확인 API (외부 의존 판정)",
+        "가입 신청 표(`signup_review`) 스키마 · 마이그레이션 (팀장)",
+        "승인 · 반려 쓰기 경로 — 관리자 쓰기 허용 목록 · CSRF · 쓰기 기록 (D-260 ⑦)",
+    ],
+}
 
 
 @router.get("", response_class=HTMLResponse)
 def review_list(request: Request) -> HTMLResponse:
-    """승인 심사 목록 — 읽기 전용. 가입 신청 테이블이 아직 없어 더미로만 그린다."""
     actor = require_governor(request)
-    qp = request.query_params
-    review_type = _clean_choice(qp.get("type"), REVIEW_TYPES)
-
-    rows = _DUMMY_REVIEWS
-    if review_type:
-        rows = [r for r in rows if r["type"] == review_type]
-
-    pending = sum(1 for r in _DUMMY_REVIEWS if r["status"] == "pending")
-    approved = sum(1 for r in _DUMMY_REVIEWS if r["status"] == "approved")
-    rejected = sum(1 for r in _DUMMY_REVIEWS if r["status"] == "rejected")
-
-    return templates.TemplateResponse(
-        request,
-        "admin/members/signup_review.html",
-        {
-            "actor": actor,
-            "rows": rows,
-            "review_type": review_type or "",
-            "types": REVIEW_TYPES,
-            "status_label": _STATUS_LABEL,
-            "pending": pending,
-            "approved": approved,
-            "rejected": rejected,
-            "total": len(_DUMMY_REVIEWS),
-        },
-    )
+    return templates.TemplateResponse(request, "admin/_closed.html", {"actor": actor, **CLOSED})
 
 
 @router.get("/{review_id}", response_class=HTMLResponse)
-def review_detail(request: Request, review_id: str) -> HTMLResponse:
-    """승인 심사 상세 — 읽기 전용. 제출 서류 확인·승인/반려는 전부 disabled 뼈대."""
+def review_detail(request: Request, review_id: str) -> HTMLResponse:  # noqa: ARG001 — 옛 링크가 깨지지 않게 같은 안내
     actor = require_governor(request)
-    row = next((r for r in _DUMMY_REVIEWS if r["id"] == review_id), None)
-    if row is None:
-        raise HTTPException(status_code=404)
-
-    reject_reasons = list(_REJECT_REASONS_COMMON)
-    reject_reasons.insert(
-        -1,
-        _REJECT_REASON_INFLUENCER if row["type"] == "인플루언서" else _REJECT_REASON_CORP,
-    )
-
-    return templates.TemplateResponse(
-        request,
-        "admin/members/review_detail.html",
-        {
-            "actor": actor,
-            "row": row,
-            "status_label": _STATUS_LABEL,
-            "reject_reasons": reject_reasons,
-        },
-    )
+    return templates.TemplateResponse(request, "admin/_closed.html", {"actor": actor, **CLOSED})
