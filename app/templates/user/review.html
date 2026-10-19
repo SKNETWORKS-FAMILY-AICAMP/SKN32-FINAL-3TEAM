@@ -577,6 +577,8 @@
         <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0" data-wait-form>
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
           <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
+          {#- 🆕 2026-10-19 (lse) — 조건부 위반에 앞서 한 답도 싣는다 — 고쳐 쓰기가 답으로 다시 판정한 결과를 쓴다(`review_rewrite`) #}
+          {% for a in rw_item.answers|default([]) %}<input type="hidden" name="prev" value="{{ a }}">{% endfor %}
           {% if premise %}
           <input type="hidden" name="premise" value="{{ premise }}">
           <input type="hidden" name="round" value="{{ r }}">

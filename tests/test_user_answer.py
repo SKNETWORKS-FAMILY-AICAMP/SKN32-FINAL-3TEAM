@@ -235,3 +235,30 @@ def test_인코더만_잡은_문장에_없음으로_답하면_확정_위반_지�
     )
     assert "답한 내용으로 다시 판정했어요" in html and "실증 자료 없음" in html
     assert "근거 자료가 있으면 쓸 수 있어요" in html, "확정 위반(B)의 결론 — 보류 표지가 아니다"
+
+
+def test_고쳐_쓰기도_앞서_한_답으로_다시_판정한_결과를_쓴다(
+    wired, monkeypatch: pytest.MonkeyPatch
+) -> None:  # noqa: ANN001
+    """🆕 2026-10-19 (lse · 한빈 요청) — 사용자의 답이 판정을 바꾸므로 고쳐 쓰기도 답과 함께 판정한 결과로 고쳐 쓴다.
+    ⛔ 종전에는 답 없이 다시 판정해 답하기 전 판정으로 고쳐 썼고, 다시 그린 화면에서 답이 사라졌다."""
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    seen = []
+
+    def fake_rewrite(sent, *_a):  # noqa: ANN001, ANN202
+        seen.append(sent)
+        return {"no_violation": True}
+
+    monkeypatch.setattr(user_router, "_rewrite_sentence", fake_rewrite)
+    html = _post(
+        "/u/review/rewrite",
+        [("text", TEXT), ("target", "1:s0"), ("prev", "s0|subst:yes")],
+    )
+    p = [x for x in wired.products if x is not None]
+    assert p and [u.answer for u in p[-1].substs] == [Answer.예], "고쳐 쓰기도 답을 판정에 넘긴다"
+    assert 'name="prev" value="s0|subst:yes"' in html, "다시 그린 화면의 폼이 답을 이어 싣는다"
+
+
+def test_고쳐_쓰기는_꼴이_틀린_답을_거부한다(wired) -> None:  # noqa: ANN001
+    _post("/u/review/rewrite", [("text", TEXT), ("target", "1:s0"), ("prev", "s0|xx")], status=422)

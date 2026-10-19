@@ -878,18 +878,42 @@ async def review_rewrite(request: Request) -> HTMLResponse:
     redo = _one(form, "round", 2) or "0"
     if not redo.isdigit() or int(redo) > _MAX_REDO:
         raise HTTPException(422, "모르는 회차")
+    # 🆕 2026-10-19 (lse · 한빈 요청 「사용자의 선택이 판정에 영향 → 대체 문구도 그대로 받아야」) — 조건부 위반에 앞서 한 답(`prev`)을
+    #    받아 그 문구를 **답과 함께 판정한 결과**로 고쳐 쓴다(`review_answer` 와 같은 규칙). ⛔ 종전에는 답 없이 다시 판정해
+    #    답으로 바뀐 판정이 아니라 답하기 전 판정(조건부 위반 유형)으로 고쳐 썼고, 다시 그린 화면에서 답이 사라졌다
+    prev = form.get("prev", [])
+    if len(prev) > _MAX_ANSWERS:
+        raise HTTPException(422, "답이 너무 많다")
+    pairs: list[tuple[str, str]] = []
+    for p in prev:
+        pm_ = _PREV.match(p)
+        if not pm_:
+            raise HTTPException(422, "모르는 답")
+        pairs.append((pm_.group(1), pm_.group(2)))
+
+    from app.contracts import ProductContext  # noqa: PLC0415
 
     targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
     results: list[dict] = []
     for n, text in targets:
         state, res = await run_in_threadpool(_core_judge, text)
+        if state not in ("pending", "down") and n == want_n and pairs:
+            facts, substs = _answers_of(pairs, {s.sent_id: s.text for s in res.sentences})
+            state, res = await run_in_threadpool(
+                _core_judge, text, ProductContext(facts=facts, substs=substs)
+            )
         if state in ("pending", "down"):
             return _render(
                 request,
                 "user/review.html",
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
-        results.append({"n": n, "result": res, "text": text, "rewrites": {}})
+        item_ = {"n": n, "result": res, "text": text, "rewrites": {}}
+        if n == want_n and pairs:
+            item_["answers"] = [
+                f"{s}|{a}" for s, a in pairs
+            ]  # 다시 그린 화면의 폼이 답을 이어 싣는다
+        results.append(item_)
 
     item = next((r for r in results if r["n"] == want_n), None)
     source = item and item["result"]
