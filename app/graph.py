@@ -667,7 +667,9 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
        🔄 2026-09-28 (W4 · D-291) — `rt.wide()` 를 부른다(법마다 폭만큼 · 두 갈래 따로). 법별 노드가 `rt.law_view()` 로
           자기 법 것만 골라 섞는다 — 법 필터로 따로 찾은 것과 후보가 같다(사실원장 ㊲ · ㊳ · ㊵ 124/124).
           ⛔ 종전에는 `search()`(전역 상위 `top_k` 5)를 불러 세 법이 다섯 자리를 나눠 썼다.
-    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 근거 없이 판정하면 D-224 위반이다.
+    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 벡터 갈래 실패는 `rt.wide` 안에서 상태로 남고(어휘는 돈다) 그 밖의 실패는 올린다.
+       🔄 2026-10-19 (D-348 보충 30) — ⛔ 종전 이유(「근거 없이 판정하면 D-224 위반」)는 낡았다 — 판정 근거(호)는 표에서 오고
+       (사전 인용 · `statute.references` · D-327) 검색 결과는 참고 조문으로만 쓴다. 참고 조문은 판정 뒤 `references` 가 유형 · 법 안에서 고른다.
     """
     sents = state.get("sents", [])
     if not sents:
@@ -3640,13 +3642,102 @@ def _answered(
     )
 
 
+def _ref_types(s: SentenceJudgment) -> set[str]:
+    """참고 조문을 고를 유형 — 확정 유형 · 인코더 근거 유형 · 인코더 후보 유형의 합(판정 뒤라야 선다)."""
+    return {
+        *(v.value for v in s.violations),
+        *(b.violation.value for b in s.risk.encoder_basis),
+        *(c.violation.value for c in s.encoder_candidates),
+    }
+
+
+@timed
+def references(state: CoreState) -> dict[str, Any]:
+    """🆕 2026-10-19 (D-348 「검색 · 리랭커의 자리」 (나)) **참고 조문을 판정 뒤에 유형 · 법 안에서 다시 고른다**.
+
+    ★ 판정 앞에서 넓게 한 번 찾은 후보(`retrieve` · 문장마다 법마다 폭만큼)는 그대로 쓴다 — 고르는 자리만 판정 뒤로 옮겼다.
+       문장의 유형(`_ref_types`)이 정해진 뒤 그 (유형 · 법)의 규범 문서(`statute.REFERENCE_DOCS`) 안의 후보만 남겨
+       법별 노드와 같은 규칙으로 고른다(`rt.law_view` → 참고 범위 `in_reference_scope` → `_pick` · D-99).
+       기록 문장은 이 판정에 보낸 법, 분기 문장은 그 전제의 법(`pm.PREMISE_LAWS`)으로 고른다.
+    🔴 판정 칸(판정 · 유형 · 근거 조문(호) · 위험도 · 분기)은 건드리지 않는다 — `evidence` 의 참고 조문 자리만 바꾼다.
+       근거 조문은 법별 노드가 고른 참고 조문(`law_results[*].articles`)이 **아닌** 줄이다 — 그 줄은 그대로 둔다.
+    🔴 유형이 없는 문장 · 표에 없는 (유형 · 법)은 참고 조문을 싣지 않는다(D-220) — 닮은 글자만으로 고른 조문을 보이지 않는다.
+    ⛔ DB 가 없어 후보가 없으면(`vector_hits` · `lexical_hits` 빔) 참고 조문이 비는 것은 종전과 같다.
+    """
+    evid = {e.sent_id: e for e in state.get("evidence", [])}
+    sents = list(state.get("sentences") or [])
+    if not evid or not sents:
+        return {}
+    scope = frozenset(state.get("annex_scope") or ())
+    body = frozenset(state.get("body_scope") or ())
+    picked: dict[str, list[EvidenceArticle]] = {}
+    for r in state.get("law_results", []):
+        for sid, arts in r.articles:
+            picked.setdefault(sid, []).extend(arts)
+
+    def retarget(s: SentenceJudgment, laws: tuple[str, ...]) -> SentenceJudgment:
+        old = picked.get(s.sent_id, [])
+        own = [a for a in s.evidence if a.basis or a not in old]
+        types = _ref_types(s)
+        e = evid.get(s.sent_id)
+        refs: list[EvidenceArticle] = []
+        if types and e is not None and not s.not_claim:
+            for law in laws:
+                docs = statute.reference_docs(types, law)
+                if not docs:
+                    continue
+                hits = [
+                    h
+                    for h in rt.law_view(e.vector_hits, e.lexical_hits, law)
+                    if h.law_id in docs and in_reference_scope(h, scope, body)
+                ]
+                refs += [a for a in _pick(hits)[0] if a not in refs]
+        new = own + _references(refs, own)
+        return s if new == s.evidence else s.model_copy(update={"evidence": new})
+
+    record_laws = tuple(LAW_OF_NODE[n] for n in state.get("laws") or () if n in LAW_OF_NODE)
+    out: dict[str, Any] = {"sentences": [retarget(s, record_laws) for s in sents]}
+    branches = state.get("branches") or []
+    if branches:
+        out["branches"] = [
+            b.model_copy(
+                update={
+                    "sentences": [
+                        retarget(
+                            s,
+                            tuple(
+                                LAW_OF_NODE[n]
+                                for n in pm.PREMISE_LAWS[b.premise]
+                                if n in LAW_OF_NODE
+                            ),
+                        )
+                        for s in b.sentences
+                    ]
+                }
+            )
+            for b in branches
+        ]
+    return out
+
+
 #: 코어 순서 — 팬아웃 앞 · 법별 노드(`LAW_NODES` · 병렬) · 팬아웃 뒤. 컴파일본과 스텁이 **이 표 하나**를 쓴다 (D-99).
 CORE_BEFORE_LAWS = ("split", "classify", "retrieve", "match_dict", "encode")
-CORE_AFTER_LAWS = ("merge_laws", "judge", "assess_risk", "premise_branches", "doc_rules")
+CORE_AFTER_LAWS = (
+    "merge_laws",
+    "judge",
+    "assess_risk",
+    "premise_branches",
+    "doc_rules",
+    # 🆕 2026-10-19 — 참고 조문을 판정 뒤에 유형 · 법 안에서 고른다(판정 칸은 그대로)
+    "references",
+)
 NODES: dict[str, Callable[..., dict[str, Any]]] = {
     **{f.__name__: f for f in (split, classify, retrieve, match_dict, encode)},
     **{name: _law_node(name) for name in LAW_NODES},
-    **{f.__name__: f for f in (merge_laws, judge, assess_risk, premise_branches, doc_rules)},
+    **{
+        f.__name__: f
+        for f in (merge_laws, judge, assess_risk, premise_branches, doc_rules, references)
+    },
 }
 
 
