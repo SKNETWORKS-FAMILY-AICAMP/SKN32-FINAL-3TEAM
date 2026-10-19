@@ -102,6 +102,24 @@ def _enc_only() -> SentenceJudgment:
     )
 
 
+#: 🆕 2026-10-19 (D-348 보충 28 결정 4) 실제 낱말 사실 표(특허 · 인증)를 들여오기 전의 값 — 이 파일의 시험은 「표가 비었을 때」의 배선을 본다
+_REAL_RULES = dict(fc.FACT_RULES)
+_REAL_TEXTS = set(fc.FACT_TEXTS)
+_REAL_PERF = fc.PERFORMANCE
+
+
+@pytest.fixture(autouse=True)
+def _no_word_tables(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🔄 2026-10-19 (보충 28 결정 4) — 이 파일의 문장(「HACCP 인증을 받은 …」)은 표가 빈 배선을 본다. 실제 표의 시험은 `tests/test_word_facts.py`."""
+    monkeypatch.setattr(fc, "FACT_RULES", {})
+    monkeypatch.setattr(fc, "PERFORMANCE", None)
+    monkeypatch.setattr(
+        fc,
+        "FACT_TEXTS",
+        {k: v for k, v in fc.FACT_TEXTS.items() if k not in (FactKind.특허, FactKind.인증)},
+    )
+
+
 @pytest.fixture
 def tables(monkeypatch: pytest.MonkeyPatch) -> None:
     """🚨 시험용 꼴 · 문안이다 — 실제 표는 승인된 줄만 든다(결정 6)."""
@@ -124,22 +142,14 @@ def _run(
     return got[0] if got else None
 
 
-def test_사실_확인_표가_비면_사실_분기는_서지_않고_사전_확정에는_분기가_없다() -> None:
-    # 🔄 2026-10-17 — 유형에 딸린 다섯 종류는 승인됐다(정본 §14) · 낱말 사실 확인 종류는 여전히 승인 전이다
-    word_kinds = (
-        set(FactKind)
-        - {k for ks in fc.TYPE_KINDS.values() for k in ks}
-        - {
-            FactKind.후기_실재,
-            FactKind.무첨가_조건,
-        }
-    )
-    assert fc.FACT_RULES == {} and fc.PERFORMANCE is None, (
-        "🔴 승인 전 표가 채워졌다 — 문안 승인(D-263 ②) 뒤 이 게이트를 고친다"
-    )
-    assert not (word_kinds & set(fc.FACT_TEXTS)), (
-        "🔴 낱말 사실 확인 종류의 문안이 승인 없이 들어왔다"
-    )
+def test_낱말_사실_표는_승인된_두_종류만_열고_사전_확정에는_분기가_없다() -> None:
+    # 🔄 2026-10-17 — 유형에 딸린 다섯 종류는 승인됐다(정본 §14)
+    # 🔄 2026-10-19 (D-348 보충 28 결정 4) — 낱말 사실 확인은 특허 · 인증 두 종류만 연다(「불충분」 기준 · 정본 §20) · 수상 · 등급 · 자격은 닫힘
+    assert set(_REAL_RULES) == {FactKind.특허, FactKind.인증}, "🔴 기준을 넘지 않은 종류가 열렸다"
+    assert _REAL_PERF is not None
+    closed = {FactKind.수상_상장, FactKind.등급, FactKind.자격, FactKind.원재료}
+    assert not (closed & _REAL_TEXTS), "🔴 닫은 종류의 문안이 들어왔다"
+    assert {FactKind.특허, FactKind.인증} <= _REAL_TEXTS
     # 🔄 2026-10-18 (보충 20) — 종전 기대는 「보류 + 실증 분기(조건부 위반)」였다. 사전 확정 문장에는 분기를 달지 않는다
     assert _run(_confirmed()) is None, (
         "사전 확정 문장은 그대로 — 분기 · 조건부가 붙지 않는다(보충 15 결정 3)"
@@ -594,6 +604,34 @@ def test_인코더만_실증_있음이면_확정_R0_과_출처() -> None:
     JudgeResponse(outcome=Outcome.passed, sentences=[got], product=ProductContext(category=None))
 
 
+def test_화장품_전제의_인코더_쪽_거짓과장에도_화장품법_실증_질문이_선다() -> None:
+    """🆕 2026-10-18 (D-348 보충 7 결정 2 집행) — 화장품 축 실증 문안 = 화장품법. 종전에는 축 표(`ENC_SUBST_AXIS`)가 화장품을 비워 질문이 없었다."""
+    from app.contracts import EncoderBasis  # noqa: PLC0415
+
+    text = "피부 탄력이 2주 만에 눈에 띄게 좋아집니다"
+    ref = EvidenceArticle(law_id=rs.COSM, article="제13조제1항제4호")
+    basis = [
+        EncoderBasis(
+            premise=Premise.화장품, violation=Violation.거짓_과장, floor=Risk.R1, articles=[ref]
+        )
+    ]
+    enc = SentenceJudgment(
+        sent_id="s0",
+        text=text,
+        verdict=Verdict.hold,
+        hold_reason=HoldReason.low_conf,
+        risk=RiskAssessment(encoder=Risk.R1, encoder_basis=basis, final=Risk.R1),
+    )
+    assert g.ENC_SUBST_AXIS[Premise.화장품] == "화장품법"
+    got = _run(enc)
+    assert got is not None and got.substantiation is not None
+    assert got.substantiation.criteria == rs.SUBST_TEXT["화장품법"].criteria, (
+        "화장품법 문안(승인본)"
+    )
+    yes = _run(enc, substs=[UserSubst(text=text, answer=Answer.예)])
+    assert yes is not None and yes.verdict is Verdict.confirmed and yes.risk.final is Risk.R0
+
+
 def test_인코더만_실증_해당없음이면_분기를_걷고_보류() -> None:
     us = UserSubst(text=TEXT, answer=Answer.해당없음)
     got = _run(_enc_only(), substs=[us])
@@ -625,29 +663,8 @@ def test_인코더만_사실_거짓은_확정하지_않고_출처만(tables: Non
     assert got.user_facts == [uf]
 
 
-def test_인코더만_화장품_전제는_실증_문안의_축을_고르지_않는다() -> None:
-    """D-272 개정 (나) ⑥ — 화장품의 주 근거는 ⬜ → 분기 없음(D-220)."""
-    from app.contracts import EncoderBasis  # noqa: PLC0415
-
-    ref = EvidenceArticle(law_id="002015", article="제13조제1항제4호")
-    s = SentenceJudgment(
-        **{
-            **_enc_only().model_dump(),
-            "risk": RiskAssessment(
-                encoder=Risk.R1,
-                final=Risk.R1,
-                encoder_basis=[
-                    EncoderBasis(
-                        premise=Premise.화장품,
-                        violation=Violation.거짓_과장,
-                        floor=Risk.R1,
-                        articles=[ref],
-                    )
-                ],
-            ),
-        }
-    )
-    assert _run(s) is None
+# 🔄 2026-10-18 (D-348 보충 7 결정 2) — 종전 시험 「인코더만_화장품_전제는_실증_문안의_축을_고르지_않는다」(D-272 개정 (나) ⑥ ⬜)는
+#    보충 7 결정 2(화장품 축 실증 문안 = 화장품법)로 뒤집혔다 → `test_화장품_전제의_인코더_쪽_거짓과장에도_화장품법_실증_질문이_선다`
 
 
 def test_인코더만_기록은_분기의_선택지를_싣고_보류_그대로() -> None:

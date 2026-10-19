@@ -58,13 +58,19 @@ def test_문안과_자료_종류는_승인본과_글자가_같다() -> None:
     )
 
 
-def test_붙는_유형은_거짓과장뿐이고_상한은_R0이다() -> None:
-    assert {Violation.거짓_과장: Risk.R0} == rs.SUBST_MAX
+def test_붙는_유형과_상한은_R0이다() -> None:
+    # 🔄 2026-10-19 (D-348 보충 28 결정 2) — 부당 비교 · 비방도 붙는다(문안은 §18 · `tests/test_compare_subst.py`)
+    assert {
+        Violation.거짓_과장: Risk.R0,
+        Violation.부당_비교광고: Risk.R0,
+        Violation.비방광고: Risk.R0,
+    } == rs.SUBST_MAX
     sb = rs.subst_branch([Violation.거짓_과장], {"표시광고법"})
     assert sb is not None and sb.substantiated_max is Risk.R0
     assert sb.criteria == rs.SUBST_TEXT["표시광고법"].criteria
-    # ⛔ 비방(D-304 · R1 이상) · 섞인 유형 · 법 축 둘 · 모르는 축 — 붙이지 않는다
-    assert rs.subst_branch([Violation.비방광고], {"표시광고법"}) is None
+    # ⛔ 식품 · 화장품 축 비방(칸 C · 줄 없음) · 섞인 유형 · 법 축 둘 · 모르는 축 — 붙이지 않는다
+    assert rs.subst_branch([Violation.비방광고], {"식품표시광고법"}) is None
+    assert rs.subst_branch([Violation.부당_비교광고, Violation.거짓_과장], {"표시광고법"}) is None
     assert rs.subst_branch([Violation.거짓_과장, Violation.소비자_기만], {"표시광고법"}) is None
     assert rs.subst_branch([Violation.거짓_과장], {"표시광고법", "식품표시광고법"}) is None
     assert rs.subst_branch([Violation.거짓_과장], {"건강기능식품법"}) is None
