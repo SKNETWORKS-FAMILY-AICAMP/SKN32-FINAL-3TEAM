@@ -667,7 +667,9 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
        🔄 2026-09-28 (W4 · D-291) — `rt.wide()` 를 부른다(법마다 폭만큼 · 두 갈래 따로). 법별 노드가 `rt.law_view()` 로
           자기 법 것만 골라 섞는다 — 법 필터로 따로 찾은 것과 후보가 같다(사실원장 ㊲ · ㊳ · ㊵ 124/124).
           ⛔ 종전에는 `search()`(전역 상위 `top_k` 5)를 불러 세 법이 다섯 자리를 나눠 썼다.
-    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 근거 없이 판정하면 D-224 위반이다.
+    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 벡터 갈래 실패는 `rt.wide` 안에서 상태로 남고(어휘는 돈다) 그 밖의 실패는 올린다.
+       🔄 2026-10-19 (D-348 보충 30) — ⛔ 종전 이유(「근거 없이 판정하면 D-224 위반」)는 낡았다 — 판정 근거(호)는 표에서 오고
+       (사전 인용 · `statute.references` · D-327) 검색 결과는 참고 조문으로만 쓴다. 참고 조문은 판정 뒤 `references` 가 유형 · 법 안에서 고른다.
     """
     sents = state.get("sents", [])
     if not sents:
@@ -2387,6 +2389,9 @@ def _hf_premise(
     if premise is Premise.건기식_비인정:
         if not basis or any(b.moved_from is None for b in basis):
             return j
+        # 🆕 (보충 29) 전제 확정의 확신 문턱 — 아래면 확정하지 않고 보류(하한 · 근거는 그대로)
+        if not _premise_confident(e, Violation(pm.HF_MISLEAD)):
+            return j
         c = _enc_confirmed(j, Violation(_UNRECOGNIZED_TYPE), span)
         if c.verdict is not Verdict.confirmed:
             return j
@@ -2480,6 +2485,9 @@ def _food_premise(
     basis = list(j.risk.encoder_basis)
     if premise is Premise.식품:
         if not basis or any(b.violation is not hf or b.moved_from is not None for b in basis):
+            return j
+        # 🆕 (보충 29) 전제 확정의 확신 문턱 — 아래면 확정하지 않고 보류(하한 · 근거는 그대로)
+        if not _premise_confident(e, hf):
             return j
         c = _enc_confirmed(j, hf, span)
         if c.verdict is not Verdict.confirmed:
@@ -3288,10 +3296,41 @@ def _encoder_side(
 ENCODER_ABSOLUTE_TAU: dict[str, float] = {"c451942436f0": 0.699}
 
 
+def _bundle() -> str | None:
+    """지금 판의 판 지문 — 인코더가 없으면 None. 두 τ 표(`ENCODER_ABSOLUTE_TAU` · `ENCODER_PREMISE_TAU`)가 같은 열쇠를 쓴다(D-99)."""
+    d = enc.configured_dir()
+    return None if d is None else enc.bundle_mark(d)
+
+
 def _absolute_tau() -> float | None:
     """지금 판의 절대형 확정 τ — 인코더가 없거나 표에 없는 판이면 None(문턱 없음)."""
-    d = enc.configured_dir()
-    return None if d is None else ENCODER_ABSOLUTE_TAU.get(enc.bundle_mark(d))
+    b = _bundle()
+    return None if b is None else ENCODER_ABSOLUTE_TAU.get(b)
+
+
+#: 🆕 2026-10-19 (D-348 보충 29) **전제가 답인 확정(답 없이)의 확신 문턱** — 판 지문 → 인코더 유형 → τ.
+#:    서는 자리 — `_food_premise`(`식품` 전제 3호) · `_hf_premise`(`건기식_비인정` 전제 · 옮긴 근거) — 전제가 「기능성 표시 요건 없음 · 인정 없음」을
+#:    답했고 남는 불확실은 인코더의 유형 판단 하나라 절대형(C)과 같은 신뢰 규칙의 몫이다(보충 17 결정 2). 두 자리 모두 같은 점수(건강기능식품 오인)라 유형 단위로 둔다.
+#:    고르는 규칙 — `ENCODER_ABSOLUTE_TAU` 와 같다(확장 dev 조건부의 그 자리 확정에서 틀림 ≤ 1 인 가장 낮은 τ · 측정 전 고정 · 보충 17 결정 2).
+#:    `[측정]` D4-20 `c451942436f0` — `식품` 분기 3호 확정 47 행 · 틀림 0.5616 · 0.6926 · 0.8143 → τ ∈ (0.6926, 0.7402] · 0.693 · 잃는 맞는 확정 5 / 43 ·
+#:       데이터 밖 적법 확정 1 → 0(`gpt-038` 0.618) (원장 10-19(B) ⑨ ⑩) · 「다이어트를 도와드립니다」(D · 원천 체중조절용 조제식품)는 전제가 맞지 않는 행이라
+#:       틀림으로 세지 않았다(⬜ 특수용도식품 전제 · 보충 29 결정 2) · 🚨 틀린 행과 0.0004 차이(맞는 쪽은 0.047)
+#:    🔴 표에 없는 판 · 유형은 문턱 없음(`ENCODER_ABSOLUTE_TAU` 와 같다) — 채택 판이 바뀌면 다시 잰다(`tests/test_absolute_tau.py`)
+ENCODER_PREMISE_TAU: dict[str, dict[Violation, float]] = {
+    "c451942436f0": {Violation.건강기능식품_오인: 0.693}
+}
+
+
+def _premise_tau(v: Violation) -> float | None:
+    """지금 판 · 그 유형의 전제 확정 τ — 인코더가 없거나 표에 없으면 None(문턱 없음)."""
+    b = _bundle()
+    return None if b is None else ENCODER_PREMISE_TAU.get(b, {}).get(v)
+
+
+def _premise_confident(e: SentEncoding, v: Violation) -> bool:
+    """전제가 답인 확정을 세울 만큼 인코더가 그 유형을 믿는가 — 문턱이 없으면 참(종전대로) · 점수가 없으면 0 으로 센다(D-220)."""
+    tau = _premise_tau(v)
+    return tau is None or dict(e.scores).get(v.value, 0.0) >= tau
 
 
 def _absolute_types(s: SentenceJudgment) -> set[Violation]:
@@ -3603,13 +3642,102 @@ def _answered(
     )
 
 
+def _ref_types(s: SentenceJudgment) -> set[str]:
+    """참고 조문을 고를 유형 — 확정 유형 · 인코더 근거 유형 · 인코더 후보 유형의 합(판정 뒤라야 선다)."""
+    return {
+        *(v.value for v in s.violations),
+        *(b.violation.value for b in s.risk.encoder_basis),
+        *(c.violation.value for c in s.encoder_candidates),
+    }
+
+
+@timed
+def references(state: CoreState) -> dict[str, Any]:
+    """🆕 2026-10-19 (D-348 「검색 · 리랭커의 자리」 (나)) **참고 조문을 판정 뒤에 유형 · 법 안에서 다시 고른다**.
+
+    ★ 판정 앞에서 넓게 한 번 찾은 후보(`retrieve` · 문장마다 법마다 폭만큼)는 그대로 쓴다 — 고르는 자리만 판정 뒤로 옮겼다.
+       문장의 유형(`_ref_types`)이 정해진 뒤 그 (유형 · 법)의 규범 문서(`statute.REFERENCE_DOCS`) 안의 후보만 남겨
+       법별 노드와 같은 규칙으로 고른다(`rt.law_view` → 참고 범위 `in_reference_scope` → `_pick` · D-99).
+       기록 문장은 이 판정에 보낸 법, 분기 문장은 그 전제의 법(`pm.PREMISE_LAWS`)으로 고른다.
+    🔴 판정 칸(판정 · 유형 · 근거 조문(호) · 위험도 · 분기)은 건드리지 않는다 — `evidence` 의 참고 조문 자리만 바꾼다.
+       근거 조문은 법별 노드가 고른 참고 조문(`law_results[*].articles`)이 **아닌** 줄이다 — 그 줄은 그대로 둔다.
+    🔴 유형이 없는 문장 · 표에 없는 (유형 · 법)은 참고 조문을 싣지 않는다(D-220) — 닮은 글자만으로 고른 조문을 보이지 않는다.
+    ⛔ DB 가 없어 후보가 없으면(`vector_hits` · `lexical_hits` 빔) 참고 조문이 비는 것은 종전과 같다.
+    """
+    evid = {e.sent_id: e for e in state.get("evidence", [])}
+    sents = list(state.get("sentences") or [])
+    if not evid or not sents:
+        return {}
+    scope = frozenset(state.get("annex_scope") or ())
+    body = frozenset(state.get("body_scope") or ())
+    picked: dict[str, list[EvidenceArticle]] = {}
+    for r in state.get("law_results", []):
+        for sid, arts in r.articles:
+            picked.setdefault(sid, []).extend(arts)
+
+    def retarget(s: SentenceJudgment, laws: tuple[str, ...]) -> SentenceJudgment:
+        old = picked.get(s.sent_id, [])
+        own = [a for a in s.evidence if a.basis or a not in old]
+        types = _ref_types(s)
+        e = evid.get(s.sent_id)
+        refs: list[EvidenceArticle] = []
+        if types and e is not None and not s.not_claim:
+            for law in laws:
+                docs = statute.reference_docs(types, law)
+                if not docs:
+                    continue
+                hits = [
+                    h
+                    for h in rt.law_view(e.vector_hits, e.lexical_hits, law)
+                    if h.law_id in docs and in_reference_scope(h, scope, body)
+                ]
+                refs += [a for a in _pick(hits)[0] if a not in refs]
+        new = own + _references(refs, own)
+        return s if new == s.evidence else s.model_copy(update={"evidence": new})
+
+    record_laws = tuple(LAW_OF_NODE[n] for n in state.get("laws") or () if n in LAW_OF_NODE)
+    out: dict[str, Any] = {"sentences": [retarget(s, record_laws) for s in sents]}
+    branches = state.get("branches") or []
+    if branches:
+        out["branches"] = [
+            b.model_copy(
+                update={
+                    "sentences": [
+                        retarget(
+                            s,
+                            tuple(
+                                LAW_OF_NODE[n]
+                                for n in pm.PREMISE_LAWS[b.premise]
+                                if n in LAW_OF_NODE
+                            ),
+                        )
+                        for s in b.sentences
+                    ]
+                }
+            )
+            for b in branches
+        ]
+    return out
+
+
 #: 코어 순서 — 팬아웃 앞 · 법별 노드(`LAW_NODES` · 병렬) · 팬아웃 뒤. 컴파일본과 스텁이 **이 표 하나**를 쓴다 (D-99).
 CORE_BEFORE_LAWS = ("split", "classify", "retrieve", "match_dict", "encode")
-CORE_AFTER_LAWS = ("merge_laws", "judge", "assess_risk", "premise_branches", "doc_rules")
+CORE_AFTER_LAWS = (
+    "merge_laws",
+    "judge",
+    "assess_risk",
+    "premise_branches",
+    "doc_rules",
+    # 🆕 2026-10-19 — 참고 조문을 판정 뒤에 유형 · 법 안에서 고른다(판정 칸은 그대로)
+    "references",
+)
 NODES: dict[str, Callable[..., dict[str, Any]]] = {
     **{f.__name__: f for f in (split, classify, retrieve, match_dict, encode)},
     **{name: _law_node(name) for name in LAW_NODES},
-    **{f.__name__: f for f in (merge_laws, judge, assess_risk, premise_branches, doc_rules)},
+    **{
+        f.__name__: f
+        for f in (merge_laws, judge, assess_risk, premise_branches, doc_rules, references)
+    },
 }
 
 

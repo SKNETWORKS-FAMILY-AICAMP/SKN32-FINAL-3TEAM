@@ -751,8 +751,16 @@ def test_커서가_코어_안까지_가서_문장마다_근거가_쌓인다(monk
     out = build_review().invoke(_init(), config={"configurable": {"conn": "CUR"}})
     assert [e.sent_id for e in out["evidence"]] == ["s0", "s1", "s2"]
     assert [s.sent_id for s in out["sentences"]] == ["s0", "s1", "s2"]
-    assert all(len(s.evidence) == 1 for s in out["sentences"]), "🚨 judge 가 근거를 못 붙였다"
-    assert out["sentences"][0].evidence[0].article == "제8조제1항제1호"
+    # 🔄 2026-10-19 (D-348 「검색 · 리랭커의 자리」 (나)) — 참고 조문은 판정 뒤 유형 · 법 안에서 고른다(`graph.references`).
+    #    유형이 없는 문장(인코더 꺼짐 · 사전 침묵)에는 싣지 않는다 — 근거가 문장마다 붙는지는 법별 노드의 고름에서 본다
+    food_arts = dict(next(r for r in out["law_results"] if r.law == "law_food").articles)
+    assert all(len(food_arts[sid]) == 1 for sid in ("s0", "s1", "s2")), (
+        "🚨 법별 노드가 근거를 못 골랐다"
+    )
+    assert food_arts["s0"][0].article == "제8조제1항제1호"
+    assert all(not s.evidence for s in out["sentences"]), (
+        "유형이 없는 문장에는 참고 조문을 싣지 않는다"
+    )
     assert all(r.sent_ids == ("s0", "s1", "s2") for r in out["law_results"])
     # 🆕 W4 — 식품표시광고법 청크는 `law_food` 만 고른다
     food = next(r for r in out["law_results"] if r.law == "law_food")
@@ -772,7 +780,8 @@ def test_좌표를_못_세운_근거는_안_나간다(monkeypatch: pytest.Monkey
         rt, "wide", _fake_wide([_hit(), _hit(chunk_id="annex", doc_type="별표", citation=None)])
     )
     out = build_review().invoke(_init(), config={"configurable": {"conn": "CUR"}})
-    ev = out["sentences"][0].evidence
+    # 🔄 2026-10-19 — 고르는 규칙은 법별 노드(`_pick`)에 있다 · 판정 뒤 참고 조문도 같은 `_pick` 을 쓴다(`graph.references`)
+    ev = dict(next(r for r in out["law_results"] if r.law == "law_food").articles)["s0"]
     assert len(ev) == 1, "🚨 좌표 없는 근거가 나갔다"
     assert ev[0].chunk_id == "c0", "🚨 조각 여부가 따라가야 한다 (D-199)"
 
@@ -801,7 +810,8 @@ def test_건강기능식품법_청크는_근거로_나가지_않는다(monkeypat
     hf = _hit(chunk_id="hf", law_id="009353", law="건강기능식품법", citation="제18조")
     monkeypatch.setattr(rt, "wide", _fake_wide([hf, _hit()]))
     out = build_review().invoke(_init(), config={"configurable": {"conn": "CUR"}})
-    ids = [a.chunk_id for s in out["sentences"] for a in s.evidence]
+    # 🔄 2026-10-19 — 고름은 법별 노드에서 본다(참고 조문은 판정 뒤 유형 · 법 안에서 고른다 · 노드가 없는 법은 고를 수 없다)
+    ids = [a.chunk_id for r in out["law_results"] for _, arts in r.articles for a in arts]
     assert "hf" not in ids, "🚨 건강기능식품법 청크가 근거로 나갔다 (D-271 ⑥)"
     assert ids == ["c0"]
 
@@ -816,8 +826,8 @@ def test_법별_노드는_자기_법_근거만_고른다(monkeypatch: pytest.Mon
     out = build_review().invoke(_init(), config={"configurable": {"conn": "CUR"}})
     got = {r.law: [a.chunk_id for _, arts in r.articles for a in arts] for r in out["law_results"]}
     assert got == {"law_ftc": ["ftc"], "law_food": ["c0"], "law_cosmetic": []}
-    # judge 는 `LAW_NODES` 순서로 모은다 — 표시광고법 먼저
-    assert [a.chunk_id for a in out["sentences"][0].evidence] == ["ftc", "c0"]
+    # 🔄 2026-10-19 — 문장의 참고 조문은 판정 뒤 유형 · 법 안에서 고른다(`tests/test_reference_docs.py`) · 유형이 없으면 비어 있다
+    assert out["sentences"][0].evidence == []
 
 
 @pytest.mark.gate

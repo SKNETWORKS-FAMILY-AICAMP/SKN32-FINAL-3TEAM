@@ -65,6 +65,10 @@ def test_두_종류만_열고_문안은_정본_20절과_같다() -> None:
         t = fc.FACT_TEXTS[k]
         assert t.criteria in sec and " · ".join(t.accepted_evidence) in sec, k
     assert fc.PERFORMANCE is not None and fc.PERFORMANCE.pattern in sec
+    for k in (FactKind.특허, FactKind.인증):
+        q = fc.fact_question(k)
+        assert q != fc.FALLBACK_QUESTION and f"질문: {q}" in sec, k
+        assert q.count("?") == 1, "질문 하나 · 설명은 기준 칸(보충 9 결정 1)"
 
 
 @pytest.mark.parametrize(
