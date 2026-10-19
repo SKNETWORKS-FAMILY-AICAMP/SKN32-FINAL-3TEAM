@@ -123,3 +123,14 @@ def test_분기_문장은_그_전제의_법으로_고른다() -> None:
 def test_후보가_없으면_아무것도_하지_않는다() -> None:
     out = g.references({"sentences": [_sent([Violation.소비자_기만])], "evidence": []})
     assert "sentences" not in out and "branches" not in out
+
+
+def test_판정한_네_곳() -> None:
+    """🔄 2026-10-19 (보충 30 결정 2 · 판정) — 초안에서 고친 네 곳이 되돌아가지 않는다."""
+    docs = statute.reference_docs
+    for v in ("질병_예방치료_표방", "의약품_오인", "건강기능식품_오인"):
+        assert "002011" in docs([v], "표시광고법"), f"① {v} × 표시광고법이 비었다"
+    assert "35037" not in docs(["거짓_과장", "소비자_기만"], "표시광고법"), "② 환경 심사지침"
+    assert "37098" not in docs(["의약품_오인"], "화장품법"), "③ 화장품 안전기준"
+    assert "2052445" not in docs(["거짓_과장"], "표시광고법"), "④ 인터넷 — 거짓 · 과장에서 뺌"
+    assert "2052445" in docs(["소비자_기만"], "표시광고법"), "④ 인터넷 — 기만에는 남김"
