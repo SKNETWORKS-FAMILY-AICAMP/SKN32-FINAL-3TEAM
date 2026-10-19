@@ -211,6 +211,15 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "enc_judged": any(encoder_judged(s) for s in conf),
         #: 🆕 2026-10-02 (W5) — 확정 위반 문장에 **위험도가 다 붙었나**. 붙었는데 종착이 보류면 하한이 아니라 종착 재료(증명서 · 지시 문안)가 없다
         "risked": all(s.risk.final is not None for s in conf if s.violations),
+        #: 🆕 2026-10-20 (D-348 보충 31) — **기록 위험도의 가장 높은 등급**(문장들의 `risk.final` 최댓값 · 없으면 None).
+        #:    보류 기록이 가정 위의 확정으로 끌려 오르는지(보충 8 · 31)를 이 칸으로 센다 · 판정이 아니다
+        "risk_max": max(
+            (s.risk.final for s in sents if s.risk.final is not None),
+            key=lambda r: r.level,
+            default=None,
+        ).value
+        if any(s.risk.final is not None for s in sents)
+        else None,
         "n_sents": len(sents),
         #: 🆕 2026-10-15 (D-348 보충 1) — **판정 대상 아님 문장이 있나**(L0 · 주의 · 상담 문구). 칸 표에서 「사전 확정」과 가르고,
         #:    판정 대상 아님만 있는 행이 품목 미확정으로 보류된 까닭(D-319 결정 2)을 「종착 재료 없음」과 가른다
@@ -1305,17 +1314,22 @@ def main(argv: list[str] | None = None) -> int:
     if a.sealed:
         import datetime  # noqa: PLC0415
 
+        if a.conditional:
+            raise SystemExit(
+                "🔴 봉인 회차는 무조건부 · 조건부를 **한 실행에** 함께 잰다 — --conditional 을 붙이지 않는다(D-306 · D-339 결정 7)"
+            )
         if why := sealed_refusal(a, datetime.date.today().isoformat()):
+            raise SystemExit(f"🔴 {why}")
+        if why := sealed_log.worktree_refusal():
             raise SystemExit(f"🔴 {why}")
     rows = load_rows(dev=a.dev, guide_dev=a.guide_dev)
     #: dev 대조는 **거르기 전 전체 행**으로 한다 — 원천으로 거른 뒤에는 지문이 달라진다
     dev_stamp = check_dev(rows, a.encoder or enc.configured_dir()) if a.dev else {}
     if a.provenance:
         rows = [r for r in rows if r.get("provenance") == a.provenance]
-    if a.conditional:
-        rows = conditional_rows(rows)
-    if a.limit:
-        rows = rows[: a.limit]
+    #: 🆕 2026-10-20 — 잴 모드. 봉인 회차는 **무조건부 → 조건부를 한 실행에**(기록 한 줄 · 결과 파일 둘 · D-306 「두 번 돌려 나란히」를 한 회차로)
+    modes = (False, True) if a.sealed else (a.conditional,)
+    all_rows = rows
     #: 판 표지 — 원장에 수와 함께 적는다 (D-178). 🔴 실제 실행은 DB 사전이 파일과 같을 때만 돈다(`check_dict`)
     stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN), "conditional": a.conditional}
     stamp |= {"split": "dev" if a.dev else "test_sentence", "resplit": resplit.VERSION} | dev_stamp
@@ -1328,32 +1342,60 @@ def main(argv: list[str] | None = None) -> int:
         stamp |= {"dict_view": a.dict_view}
     if a.sealed:
         n_runs = log_sealed_run(
-            stamp | {"judged_by": g.JUDGED_BY, "rows": len(rows), "status": "시작"}
+            stamp
+            | {
+                "conditional": "무조건부 · 조건부",
+                "judged_by": g.JUDGED_BY,
+                "rows": len(all_rows),
+                "rows_conditional": len(conditional_rows(all_rows)),
+                "status": "시작",
+            }
         )
         print(
             f"  🔒 봉인 평가셋 회차를 연다 — 이 기기 기록 {n_runs}번째 ({SEALED_LOG}) · 원장에 판 표지와 함께 옮긴다 (D-175)"
         )
-    t0 = time.perf_counter()
     if a.stub:
-        preds = run(rows, stub_runner(), conditional=a.conditional)
-    else:
-        from app.db import pg_connect  # noqa: PLC0415 — DB 가 없어도 --stub 은 돈다
+        for cond in modes:
+            _one_mode(a, cond, _mode_rows(all_rows, cond, a.limit), stamp, stub_runner())
+        return 0
+    from app.db import pg_connect  # noqa: PLC0415 — DB 가 없어도 --stub 은 돈다
 
-        review = g.build_review()
-        with pg_connect() as conn, conn.cursor() as cur:
-            stamp |= check_dict(cur)
-            if a.dict_view:
-                kept = [e for e in g.load_dict_entries(cur) if g.entry_cell(e) is g.Infeasibility.C]
-                stamp |= {"dict_view_kept": len(kept)}  # 남긴 단독판정 항목 수(자격 없는 항목은 0)
-            cfg = {"configurable": {"conn": cur}}
-            preds = run(
-                rows,
-                lambda t, p: _checked(review.invoke({"text": t, "product": p}, config=cfg)),
-                conditional=a.conditional,
-            )
+    review = g.build_review()
+    with pg_connect() as conn, conn.cursor() as cur:
+        stamp |= check_dict(cur)
+        if a.dict_view:
+            kept = [e for e in g.load_dict_entries(cur) if g.entry_cell(e) is g.Infeasibility.C]
+            stamp |= {"dict_view_kept": len(kept)}  # 남긴 단독판정 항목 수(자격 없는 항목은 0)
+        cfg = {"configurable": {"conn": cur}}
+
+        def runner(t: str, p: ProductContext) -> dict[str, Any]:
+            return _checked(review.invoke({"text": t, "product": p}, config=cfg))
+
+        for cond in modes:
+            _one_mode(a, cond, _mode_rows(all_rows, cond, a.limit), stamp, runner)
+    return 0
+
+
+def _mode_rows(rows: list[dict], conditional: bool, limit: int | None) -> list[dict]:
+    """한 모드에서 잴 행 — 조건부면 품목 · 전제를 아는 행만(`conditional_rows`) · `--limit` 은 그 뒤에 자른다(종전 순서 그대로)."""
+    out = conditional_rows(rows) if conditional else rows
+    return out[:limit] if limit else out
+
+
+def _one_mode(
+    a: argparse.Namespace,
+    conditional: bool,
+    rows: list[dict],
+    stamp: dict[str, Any],
+    runner: Callable[[str, ProductContext], dict[str, Any]],
+) -> None:
+    """한 모드를 재고 보고 · 결과 파일을 쓴다 — 봉인 회차는 두 모드를 차례로 부른다(`--out` 이름에 `_uncond` · `_cond` 를 붙인다)."""
+    stamp = stamp | {"conditional": conditional}
+    t0 = time.perf_counter()
+    preds = run(rows, runner, conditional=conditional)
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
-    report(s, a.conditional, dev=a.dev)
+    report(s, conditional, dev=a.dev)
     # 🆕 2026-10-18 (D-348 보충 24 결정 1) 사전 낱말과 글자가 같은 채점 행 — 일반화 지표와 나란히 읽는다
     if DICT_FILE.exists():
         echo = dict_echo(
@@ -1374,9 +1416,12 @@ def main(argv: list[str] | None = None) -> int:
         f"\n  실행 {secs:.0f}초 · 행당 {secs / max(len(rows), 1) * 1000:.0f} ms · judged_by {g.JUDGED_BY}"
         f" · " + " · ".join(f"{k} {v}" for k, v in stamp.items())
     )
-    if a.out:
-        a.out.parent.mkdir(parents=True, exist_ok=True)
-        a.out.write_text(
+    out = a.out
+    if out and a.sealed:
+        out = out.with_name(f"{out.stem}_{'cond' if conditional else 'uncond'}{out.suffix}")
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
             json.dumps(
                 {
                     "summary": s,
@@ -1391,8 +1436,7 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
             newline="\n",
         )
-        print(f"  → {a.out}")
-    return 0
+        print(f"  → {out}")
 
 
 if __name__ == "__main__":
