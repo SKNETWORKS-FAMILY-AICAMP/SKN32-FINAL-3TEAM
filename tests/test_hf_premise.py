@@ -183,3 +183,13 @@ def test_문안은_정본과_같고_질병_분기는_켜지지_않는다() -> No
         "넣으면 걷은 질병 분기(`_enc_disease`)가 다시 켜진다"
     )
     assert pm.RECOGNIZED_DIFF_CITE.endswith("가목")
+
+
+def test_비인정_확정은_전제_확신_문턱_아래면_보류(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-10-19 (D-348 보충 29) — 건강기능식품 오인 점수 0.8 이 문턱 아래면 확정하지 않는다 · 위면 종전대로."""
+    monkeypatch.setattr(g, "_premise_tau", lambda v: 0.85)
+    held = _held(_moved())
+    assert g._hf_premise(Premise.건기식_비인정, held, HF, [], SPAN, []) is held
+    monkeypatch.setattr(g, "_premise_tau", lambda v: 0.75)
+    got = g._hf_premise(Premise.건기식_비인정, _held(_moved()), HF, [], SPAN, [])
+    assert got.verdict is Verdict.confirmed
