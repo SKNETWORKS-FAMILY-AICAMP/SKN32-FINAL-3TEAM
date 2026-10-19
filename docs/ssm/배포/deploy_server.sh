@@ -9,6 +9,7 @@
 #       · gpu — ubuntu-drivers 가 이 커널(7.0.0-1014-aws)에 맞는 꾸러미를 못 골라 **아무것도 설치하지 않고 끝났다**.
 #         실제로 통한 방법(커널 버전이 붙은 모듈 꾸러미를 apt 로 직접)으로 바꾸고, 설치 뒤 모듈이 있는지 확인한다
 #       · cleanup-adhoc — 10-16 오전 손으로 세운 임시 구성(copylane.service · nginx)을 걷어 내는 단계를 더했다
+#   🔄 2026-10-19 — services 가 이미 떠 있는 서비스도 restart 한다(.env 변경 반영 · 5차 보고서)
 #   근거  docs/05_배포/배포계획.md §1-2 · §4 / docs/lse/sLLM_연결_안내_2026-10-05.md / models.lock.json
 #
 # 쓰는 법 (서버에서 · tmux 안에서)
@@ -421,8 +422,13 @@ WantedBy=multi-user.target
 UNIT
 
   sudo systemctl daemon-reload
-  [ "$with_sllm" = 1 ] && sudo systemctl enable --now copylane-sllm
-  sudo systemctl enable --now copylane-app
+  # 🔄 2026-10-19 — `enable --now` 는 이미 떠 있는 서비스를 다시 시작하지 않는다. 그러면 .env 를 바꿔도
+  #    (예: COPYLANE_SLLM_URL=off → 주소) 떠 있던 앱은 옛 값을 쥔 채 「고쳐 쓰기를 제공하지 않아요」를 그렸다.
+  #    → 등록(enable)과 시작을 나누고 **항상 restart** 한다. 이 단계를 다시 돌리면 .env 가 반영된다.
+  if [ "$with_sllm" = 1 ]; then
+    sudo systemctl enable copylane-sllm && sudo systemctl restart copylane-sllm
+  fi
+  sudo systemctl enable copylane-app && sudo systemctl restart copylane-app
   ok "등록 끝 — 상태: systemctl status copylane-app · 로그: journalctl -u copylane-app -f"
   warn "sLLM 은 약 30초 뒤에 응답한다 — 그 뒤 bash deploy_server.sh check"
 }

@@ -31,3 +31,17 @@
         -Server
     }
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🆕 2026-10-19 — 관리자 화면을 쓸 때 (COPYLANE_EDITION=demo · 5차 보고서)
+#   demo 에디션은 /admin · /login 을 붙인다. HTTPS 전에는 **허용한 IP 에서만** 통과시킨다.
+#   위 블록의 `@closed` 두 줄 아래에 이 네 줄을 넣고, <허용 IP> 를 공인 IP 로(여럿이면 띄어쓰기로) 바꾼다.
+#   🚨 IP 값은 이 파일(저장소)에 적지 않는다 — 서버의 /etc/caddy/Caddyfile 에서만 바꾼다.
+#
+#     @admin_outside {
+#         path /admin /admin/* /login
+#         not remote_ip <허용 IP>
+#     }
+#     respond @admin_outside 404
+#
+#   접속 장소가 바뀌면 IP 도 바뀐다 — 그때 갱신하고 validate → reload.
