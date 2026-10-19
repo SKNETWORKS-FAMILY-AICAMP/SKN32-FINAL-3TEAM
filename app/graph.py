@@ -2420,13 +2420,11 @@ def _hf_premise(
         floor=floor,
         articles=arts,
     )
-    held = j.model_copy(
-        update={
-            "risk": j.risk.model_copy(
-                update={"encoder": floor, "final": floor, "encoder_basis": [eb]}
-            )
-        }
-    )
+    # 🔄 2026-10-19 — 근거의 하한(제재표 · R2 일 수 있다)과 기록되는 인코더 하한(R1 층 상한 · `encoder_cap`)을 가른다 ·
+    #    `_merged` 로 새로 만들어 계약 검증을 지나게 한다(`model_copy` 는 검증을 건너뛰어 기록 합칠 때 터졌다 · `_with_encoder_risk` 와 같은 모양)
+    cap = encoder_cap(j.text)
+    assert cap is not None  # 위에서 걸렀다
+    held = _with_risk(j, _merged(j.risk, cap, [eb]))
     key = dm.norm(j.text)
     uf = next((f for f in facts if f.kind is FactKind.인정_기능성 and dm.norm(f.text) == key), None)
     if uf is None:
@@ -2500,13 +2498,11 @@ def _food_premise(
         _ref_article(x) for x in dict.fromkeys(statute.reference_of_cite(pm.FOOD_FUNCTION_CITE))
     ]
     eb = EncoderBasis(premise=premise, violation=hf, floor=floor, articles=arts)
-    held = j.model_copy(
-        update={
-            "risk": j.risk.model_copy(
-                update={"encoder": floor, "final": floor, "encoder_basis": [eb]}
-            )
-        }
-    )
+    # 🔄 2026-10-19 — 근거의 하한(제재표 · R2 일 수 있다)과 기록되는 인코더 하한(R1 층 상한 · `encoder_cap`)을 가른다 ·
+    #    `_merged` 로 새로 만들어 계약 검증을 지나게 한다(`model_copy` 는 검증을 건너뛰어 기록 합칠 때 터졌다 · `_with_encoder_risk` 와 같은 모양)
+    cap = encoder_cap(j.text)
+    assert cap is not None  # 위에서 걸렀다
+    held = _with_risk(j, _merged(j.risk, cap, [eb]))
     key = dm.norm(j.text)
     uf = next((f for f in facts if f.kind is FactKind.기능성_표시 and dm.norm(f.text) == key), None)
     if uf is None:

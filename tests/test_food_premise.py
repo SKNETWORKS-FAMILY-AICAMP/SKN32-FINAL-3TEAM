@@ -137,3 +137,28 @@ def test_문안은_정본_19절과_같다() -> None:
     assert f"증빙: {fc.FOOD_FUNC_TEXT.accepted_evidence[0]}" in sec
     assert fc.fact_question(FactKind.기능성_표시) == fc.FOOD_FUNC_QUESTION
     assert FactKind.기능성_표시 not in fc.FACT_TEXTS
+
+
+def test_제재표_하한이_R2여도_기록되는_인코더_하한은_R1_층() -> None:
+    """🔴 10-19 결함 — 근거 하한(R2)을 인코더 하한에 그대로 적어 기록 합칠 때 계약 검증(상한 R1)이 터졌다."""
+    from app.contracts import RiskAssessment as RA
+
+    r2 = SimpleNamespace(floor=Risk.R2)
+    mp = pytest.MonkeyPatch()
+    mp.setattr(g, "estimate_of", lambda rows, premise, v: r2)
+    try:
+        got = g._food_premise(Premise.일반식품_기능성, _held(), HF, [], SPAN, [])
+        hf_text = "혈당을 확 낮춰 줍니다"
+        hf = g._hf_premise(
+            Premise.건기식_인정,
+            _held(text=hf_text),
+            HF,
+            [],
+            Span(start=0, end=len(hf_text), label=Violation.거짓_과장.value),
+            [],
+        )
+    finally:
+        mp.undo()
+    for j in (got, hf):
+        assert j.risk.encoder is Risk.R1 and j.risk.encoder_basis[0].floor is Risk.R2
+        RA.model_validate(j.risk.model_dump())
