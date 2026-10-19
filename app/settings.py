@@ -48,7 +48,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 #: 🚨 `docker-compose.yml` 의 기본 사용자·비밀번호와 같아야 한다. 값이 갈리면
 #:    「내 기기에서는 붙는데」가 난다. 이 문자열이 **저장소에서 유일**해야 하는 이유다.
 #: ⛔ 진짜 비밀번호를 여기 적지 않는다 — 로컬 개발 기본값이고 `127.0.0.1` 에만 열려 있다.
-DEFAULT_DATABASE_URL = "postgresql://copylane:copylane@localhost:5432/copylane"
+#: 🔄 2026-10-20 — 호스트를 `localhost` → `127.0.0.1`. compose 가 `127.0.0.1:5432` 에만 연다(IPv4). Windows 는 `localhost` 를
+#:    IPv6 `::1` 부터 시도하는데 거기는 듣는 프로세스가 없어 응답 없이 걸리고, `DB_CONNECT_TIMEOUT_S` 만큼 기다린 뒤에야
+#:    `127.0.0.1` 로 넘어갔다 — 요청마다 연결 3,130 ms → 15 ms (`scripts/latency_probe.py` · 원장 10-20 ① · 클론 B 집 기기).
+#:    🔗 짝 — `.env.example` 의 `DATABASE_URL` 줄 · `tests/test_settings.py` 의 기본 DSN 검사.
+DEFAULT_DATABASE_URL = "postgresql://copylane:copylane@127.0.0.1:5432/copylane"
 
 #: SQLAlchemy(alembic·ORM)가 요구하는 드라이버. psycopg 직결은 이것을 **못 읽는다.**
 SQLALCHEMY_DRIVER = "psycopg"
