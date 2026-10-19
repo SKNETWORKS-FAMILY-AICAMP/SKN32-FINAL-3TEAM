@@ -168,8 +168,9 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-foot a:hover { color: var(--u-ink); }
 .ld-foot img { width: 1.25rem; height: 1.25rem; border-radius: .3rem; vertical-align: -4px; margin-right: .4rem; }
 
-@media (prefers-reduced-motion: reduce) { .ld-badge i, .ld-flow b { animation: none; } }
 
+
+@media (prefers-reduced-motion: reduce) { .ld-badge i, .ld-flow b { animation: none; } }
 /* ══ 🆕 10-14 움직임 — 시안보다 더 ══════════════════════════════════════════ */
 /* 첫 화면 무대: 떠다니는 빛 덩어리 · 격자 · 마우스를 따라오는 조명(landing.js) */
 .ld-hero-zone { position: relative; overflow: hidden; isolation: isolate; --mx: 70%; --my: 30%; }
@@ -297,6 +298,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-end-card .ld-btn-line { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .6); }
 .ld-end-card .ld-btn-line:hover { background: rgba(255, 255, 255, .12); }
 
+
 @media (prefers-reduced-motion: reduce) {
   .ld-page *, .ld-page *::before, .ld-page *::after { animation: none !important; transition: none !important; }
   .ld-line, .ld-kicker, .ld-lead, .ld-hero .ld-actions, .ld-try, .ld-demo-stage, .ld-seq { opacity: 1; transform: none; }
@@ -304,8 +306,12 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 }
 /* Keep the introduction calm; the example stays visible instead of replaying. */
 .ld-orbs { opacity:.5; }
-.ld-orbs i { animation:none; }
-.ld-demo { animation:none; transform:none; box-shadow:0 8px 30px rgba(99,63,132,.1); }
+.ld-orbs i:nth-child(n) { animation:ld-ambient 24s ease-in-out infinite; }
+.ld-orbs i:nth-child(2) { animation-delay:-8s; animation-direction:reverse; }
+.ld-orbs i:nth-child(3) { animation-delay:-16s; }
+@keyframes ld-ambient { 0%,100% { transform:translate(0,0); } 50% { transform:translate(20px,12px); } }
+.ld-demo { animation:ld-gentle-float 8s ease-in-out infinite; transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)); box-shadow:0 8px 30px rgba(99,63,132,.1); }
+@keyframes ld-gentle-float { 0%,100% { translate:0 0; } 50% { translate:0 -3px; } }
 .ld-demo::after { display:none; }
 .ld-seq { animation:none; opacity:1; transform:none; }
 .ld-hero .ld-btn-grad { animation:none; }
@@ -313,6 +319,12 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-flow b { animation:none; }
 .ld-brand:hover img { transform:scale(1.03); }
 .ld-hero :is(.ld-line,.ld-kicker,.ld-lead,.ld-actions,.ld-try), .ld-page .ld-demo-stage { animation:ld-rise .35s ease-out both; }
+@media(hover:none), (pointer:coarse) { .ld-demo { animation:none; transform:none; } }
+
+@media(prefers-reduced-motion:reduce) {
+  .ld-demo { translate:none; transform:none!important; }
+  .ld-page [data-reveal] { opacity:1!important; transform:none!important; }
+}
 </style>{% endblock %}
 {% block content %}
 <div class="user-shell ld-page">
@@ -478,5 +490,5 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 </footer>
 
 </div>
-<script src="/static/landing.js" defer></script>
+<script src="/static/landing.js?v=4" defer></script>
 {% endblock %}

@@ -6,11 +6,12 @@
   const active = new Map();
   const visible = element => element && element.getClientRects().length &&
     !element.closest('[hidden]') && getComputedStyle(element).visibility !== 'hidden';
-  const fade = (element, duration = 180, delay = 0) => {
+  const fade = (element, duration = 220, delay = 0) => {
     if (preference.matches || document.hidden || !visible(element)) return;
+    if (element.contains(document.activeElement)) return;
     active.get(element)?.cancel();
     // Opacity alone leaves sticky headers, panel heights and scroll offsets intact.
-    const animation = element.animate([{opacity: .78}, {opacity: 1}], {
+    const animation = element.animate([{opacity: .35}, {opacity: 1}], {
       duration, delay, easing: 'ease-out'
     });
     active.set(element, animation);
@@ -23,17 +24,28 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
   window.addEventListener('pagehide', cancel);
 
-  // Content is visible even without JS. Only panels already in view get a small entrance fade.
+  // Below-fold content gets the same once-only entrance when it enters its scroll area.
+  // Nothing is hidden while waiting for the observer; skipped motion never hides content.
   const panels = [...main.querySelectorAll(
-    '.hm-cards, .hm-stats, .rv-input-pane, .rv-results-pane, .cl-product-section,' +
-    '.gn-cands, .cp-card, .cl-history-table, .history-detail, .hg-purposes, .hg-guide, .hg-faq,' +
-    '.csb-form, .csb-history, .csb-login'
-  )].filter(element => {
-    if (!visible(element)) return false;
-    const box = element.getBoundingClientRect();
-    return box.top < innerHeight && box.bottom > 0;
-  });
-  panels.slice(0, 4).forEach((panel, index) => fade(panel, 220, index * 25));
+    '.hm-card, .hm-stats, .hm-sect, .rv-input-pane, .rv-results-pane, .cl-product-section,' +
+    '.gn-cand, .cp-card, .cl-history-table, .history-detail, .hg-purposes, .hg-guide, .hg-faq,' +
+    '.hg-help-card, .csb-form, .csb-history, .csb-login, .mp-card, .auth-card'
+  )];
+  if ('IntersectionObserver' in window && !preference.matches) {
+    const observer = new IntersectionObserver(entries => {
+      let order = 0;
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        observer.unobserve(entry.target);
+        fade(entry.target, 320, Math.min(order++, 3) * 45);
+      });
+    }, {threshold: .08});
+    panels.forEach(panel => observer.observe(panel));
+    window.addEventListener('pagehide', () => observer.disconnect(), {once:true});
+    preference.addEventListener('change', () => { if (preference.matches) observer.disconnect(); });
+  } else if (!preference.matches) {
+    panels.filter(visible).slice(0, 4).forEach((panel, index) => fade(panel, 300, index * 40));
+  }
 
   // Opening a disclosure is feedback on the user's action, not an expanding height animation.
   document.addEventListener('toggle', event => {
@@ -41,7 +53,7 @@
     if (!(details instanceof HTMLDetailsElement) || !details.open) return;
     if (!details.closest('.user-shell')) return;
     const body = details.querySelector('.fq-answer, .ws-profile-menu, .nt-panel');
-    if (body) fade(body, 150);
+    if (body) fade(body, 220);
   }, true);
 
   let lastSelection = '';
@@ -62,7 +74,7 @@
       const panel = main.querySelector('.rv-results-pane');
       if (!panel) return;
       const content = [...panel.querySelectorAll('[data-result-copy], .cl-detail-editors')].find(visible);
-      if (content) fade(content, 140);
+      if (content) fade(content, 220);
     });
   });
 })();
