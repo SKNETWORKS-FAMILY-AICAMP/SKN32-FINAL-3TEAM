@@ -11,13 +11,17 @@
       (없으면 화면의 첫 `[data-wait-page]` 를) 띄우고, 덮개에서 `body` 까지 올라가며 길 밖의 형제를 모두 `inert` 로 묶는다
       — 기다리는 동안 메뉴 · 다른 버튼을 누르거나 Tab 으로 옮겨 가지 못한다.
       🚨 덮개를 `body` 로 옮기지 않는다 — 색 토큰이 `.user-shell` 안에만 있어 밖으로 나가면 상자가 투명해진다.
-      덮개가 없는 화면은 예전처럼 폼 안의 `[data-wait]` 를 보이고 `data-wait-label` 로 버튼 글자를 바꾼다. */
+      덮개가 없는 화면은 예전처럼 폼 안의 `[data-wait]` 를 보이고 `data-wait-label` 로 버튼 글자를 바꾼다.
+   🔄 2026-10-19 (ksr) — `data-wait-overlay` 가 없고 폼 안에 자기 `[data-wait]` 가 있으면 덮개를 찾지 않는다
+      (검수 화면의 고쳐 쓰기 폼은 lse 의 `.rv-think` 를 쓴다 — 화면의 첫 덮개 `busy-rv` 가 대신 뜨지 않게). */
 (function () {
   "use strict";
 
   function overlayOf(form) {
     var id = form.getAttribute("data-wait-overlay");
-    return (id && document.getElementById(id)) || document.querySelector("[data-wait-page]");
+    if (id) return document.getElementById(id);
+    if (form.querySelector("[data-wait]")) return null;
+    return document.querySelector("[data-wait-page]");
   }
 
   function lock(page, waiting) {

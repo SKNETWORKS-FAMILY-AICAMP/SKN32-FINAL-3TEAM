@@ -587,7 +587,7 @@
         {% if rw_kind == "result" %}
         {% include "user/_review_rewrite.html" %}
         {% elif rw_kind == "button" %}
-        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0" data-wait-form data-wait-overlay="busy-rw">
+        <form method="post" action="/u/review/rewrite" style="margin:.5rem 0 0" data-wait-form>
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
           <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
           {% if premise %}
@@ -595,7 +595,21 @@
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
           <button type="submit" class="rv-fix-go">✨ 이 문장 고쳐 쓰기{% if not s.violations %} · AI 추정 유형 기준{% endif %} <small>· 위반을 지우고 쓰는 법을 더해요 (20초 안팎)</small></button>
-          {# 🔄 2026-10-17 (ksr) — 고쳐 쓰는 동안의 표시(lse 의 `.rv-think`)를 공용 덮개 `busy-rw` 로 바꿨다 — 단계 문구는 그대로 옮겼다 #}
+          {# 🆕 2026-10-13 (lse) — 고쳐 쓰는 동안의 표시. `user_wait.js`(ksr · 카피 생성과 같은 파일)가 제출 때 `hidden` 을 푼다.
+             움직임은 전부 CSS 다 — 단계 문구가 차례로 바뀌고 글자에 빛이 지나간다. 스크립트가 안 돌아도 고쳐 쓰기는 된다
+             🔄 2026-10-19 (ksr) — 10-17 에 공용 덮개 `busy-rw` 로 바꿨던 것을 lse 의 표시로 되돌렸다 #}
+          <div class="rv-think" data-wait hidden role="status" aria-live="polite">
+            <span class="rv-think-orb" aria-hidden="true">✦</span>
+            <div class="rv-think-body">
+              <div class="rv-think-steps">
+                <span>위반 표현을 짚는 중</span>
+                <span>위반만 지운 문장을 쓰는 중</span>
+                <span>자연스럽게 다듬는 중</span>
+                <span>판정 코어로 다시 확인하는 중</span>
+              </div>
+              <div class="rv-skel" aria-hidden="true"><i></i><i></i></div>
+            </div>
+          </div>
         </form>
         {% endif %}
       </div>
@@ -1091,10 +1105,9 @@
 </div>
 {# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
 <script src="/static/user_count.js" defer></script>
-{# 🆕 2026-10-17 (ksr) — 기다리는 동안 공용 덮개(`user/_busy.html`) — 검수 · 고쳐 쓰기 #}
+{# 🆕 2026-10-17 (ksr) — 기다리는 동안 공용 덮개(`user/_busy.html`) — 검수만. 고쳐 쓰기는 lse 의 `.rv-think`(2026-10-19 되돌림) #}
 {% from "user/_busy.html" import busy %}
 {{ busy("busy-rv", "문구를 검수하고 있어요", ["문장을 나누고 있어요", "문장마다 조문을 찾고 있어요", "위반 여부를 판정하고 있어요"], "잠시 걸려요") }}
-{{ busy("busy-rw", "문장을 고쳐 쓰고 있어요", ["위반 표현을 짚고 있어요", "위반만 지운 문장을 쓰고 있어요", "검수 엔진으로 다시 확인하고 있어요"], "20초 안팎 걸려요") }}
-<script src="/static/user_wait.js?v=20261017f" defer></script>
+<script src="/static/user_wait.js?v=20261019a" defer></script>
 <script src="/static/rewrite_copy.js" defer></script>
 {% endblock %}

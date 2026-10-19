@@ -358,7 +358,7 @@ main:has(.cp-ed) { max-width: 96rem; }
 {# 🆕 2026-10-17 (ksr) — 기다리는 동안 공용 덮개(`user/_busy.html`) · 버튼 글자 바꾸기 · 폼 안 안내 줄은 뺐다 #}
 {% from "user/_busy.html" import busy %}
 {{ busy("busy-cp", "광고 틀을 만들고 있어요", ["문구 검수를 먼저 하고 있어요", "광고 틀에 문구를 배치하고 있어요", "판정 결과를 정리하고 있어요"], "잠시 걸려요") }}
-<script src="/static/user_wait.js?v=20261017f" defer></script>
+<script src="/static/user_wait.js?v=20261019a" defer></script>
 
 {# 판정 목록 — 픽스처 결과(`result.screening`)와 방금 받은 판정(`screening` · 얹지 못한 문장이 있을 때)을 같은 모양으로 그린다 #}
 {% set scr = screening if screening else (result.screening if result else []) %}
