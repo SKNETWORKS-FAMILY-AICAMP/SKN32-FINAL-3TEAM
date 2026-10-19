@@ -11,7 +11,7 @@
   🚨 이 화면은 nav 를 넣지 않는다 — 로그인 전 화면이라 사용자 메뉴가 없다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 광고 문구 준법 검수 · 카피생성{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">
 <style>
 /* 공통 머리 · 꼬리(개발용 링크)는 랜딩에서만 감춘다 — base.html(팀장 소유)은 고치지 않는다 */
 body:has(.ld-page) > header, body:has(.ld-page) > footer { display: none; }

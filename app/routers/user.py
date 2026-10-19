@@ -29,7 +29,7 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -166,6 +166,7 @@ def _render(
     ctx.setdefault("here", _POST_ONLY.get(request.url.path, request.url.path))
     ctx.setdefault("today", _today_label())
     path = _screen_path(request.url.path)
+    ctx.setdefault("ui_screen", path)
     section = _SCREEN_SECTION.get(path)
     ctx.setdefault("active_section", section)
     ctx.setdefault("section_label", _SECTION_LABELS.get(section) if section else None)
@@ -1978,12 +1979,26 @@ def _history_stmt(owner_id: uuid.UUID) -> Select:
 
 
 def _history_rows(
-    session: Session, owner_id: uuid.UUID, verdict: str | None, page: int
+    session: Session,
+    owner_id: uuid.UUID,
+    verdict: str | None,
+    page: int,
+    *,
+    query: str = "",
+    category: str = "",
+    days: int = 0,
 ) -> tuple[list, int]:
     """이력 한 쪽의 행과 전체 건수. `judgment` × `copy_sentence` 조인 (ksr 원문 조인 · lse 필터·페이지)."""
     stmt = _history_stmt(owner_id)
     if verdict:
         stmt = stmt.where(Judgment.verdict == verdict)
+
+    if query:
+        stmt = stmt.where(CopySentence.raw.contains(query, autoescape=True))
+    if category:
+        stmt = stmt.where(Judgment.product_category == category)
+    if days:
+        stmt = stmt.where(Judgment.judged_at >= datetime.now(UTC) - timedelta(days=days))
 
     total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     raw_rows = session.execute(
@@ -2022,6 +2037,9 @@ def history(
     verdict: str | None = None,
     page: int = 1,
     open_id: str | None = None,
+    q: str = "",
+    category: str = "",
+    days: int = 0,
 ) -> HTMLResponse:
     """검수 이력 — 🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인).
 
@@ -2038,13 +2056,27 @@ def history(
        DB 가 없으면 로그인 여부를 알 수 없으니 「DB 없음」 안내가 먼저다 (D-72).
     """
     page = max(page, 1)
+    q = q.strip()[:200]
+    category = category if category in {c.value for c in Category} else ""
+    days = days if days in (7, 30, 90) else 0
+    filters = {"q": q, "category": category, "days": days}
+    filter_qs = (
+        "&" + urlencode({k: v for k, v in filters.items() if v}) if any(filters.values()) else ""
+    )
     if verdict not in (None, *_VERDICTS):
         verdict = None
     db_down = not reachable(session)
     user = None if db_down else current_user(request, session)
     if not db_down and user is None:
         return _render(request, "user/history.html", {"need_login": True})
-    rows, total = ([], 0) if user is None else _history_rows(session, user.id, verdict, page)
+    if user is None:
+        rows, total = [], 0
+    elif q or category or days:
+        rows, total = _history_rows(
+            session, user.id, verdict, page, query=q, category=category, days=days
+        )
+    else:
+        rows, total = _history_rows(session, user.id, verdict, page)
     opened = next((r for r in rows if str(r.id) == open_id), None) if open_id else None
     return _render(
         request,
@@ -2053,6 +2085,7 @@ def history(
             # 🚨 못 붙었으면 빈 목록을 「기록 없음」으로 그리지 않는다 — 못 읽은 것이다 (D-72).
             "db_down": db_down,
             "judgments": rows,
+            "total": total,
             "verdicts": _VERDICTS,
             "verdict_labels": _VERDICT_LABELS,
             "pattern": None if user is None else _repeat_pattern(session, user.id),
@@ -2062,7 +2095,10 @@ def history(
             "page": page,
             "has_prev": page > 1,
             "has_next": page * _PAGE_SIZE < total,
-            "base_qs": f"&verdict={verdict}" if verdict else "",
+            "base_qs": (f"&verdict={verdict}" if verdict else "") + filter_qs,
+            "filter_qs": filter_qs,
+            "filters": filters,
+            "categories": [c.value for c in Category],
             "opened": opened,
         },
     )

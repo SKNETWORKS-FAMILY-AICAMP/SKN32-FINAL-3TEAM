@@ -106,7 +106,7 @@
     var t = TYPES[type];
     var b = {
       uid: "b" + (++S.uid), type: type,
-      imgs: [], alts: [],
+      imgs: [], alts: [], align: "left",
       text: {},   // 칸에 적은 글
       live: {},   // 판정을 지나 지면에 얹힌 글
       mark: {},   // 얹힌 글의 표시 — "" 통과 · "unsure" 확인 필요
@@ -134,6 +134,7 @@
   /* ── 섹션 목록 ─────────────────────────────────────────────── */
 
   function renderList() {
+    renderReview();
     $("de-count").textContent = S.blocks.length + "개";
     $("de-blocks").innerHTML = S.blocks.map(function (b, i) {
       var t = TYPES[b.type];
@@ -182,6 +183,7 @@
   /* 얹힌 글만 그린다. 비었으면 흐린 안내 글자 — 지면에 나가는 글이 아니다.
      `lines` 를 주면 그 줄 수에서 자른다(규격이 고정인 캔버스) — 잘린 칸은 초안 검수가 센다 */
   function txt(b, f, style, lines) {
+    style += "text-align:" + b.align + ";";
     var v = b.live[f];
     if (v && lines) {
       return '<p data-clamp="1" style="' + style + "display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:" +
@@ -358,7 +360,39 @@
     return { cls: " is-ok", html: "✓ 판정 통과" };
   }
 
+  // The review panel reflects the editor's existing field states; it never invents a verdict.
+  function renderReview() {
+    var status = $("de-review-status"), details = $("de-review-details");
+    if (!status || !details) return;
+    var dirty = 0, unsure = 0, blocked = 0, busy = 0, filled = 0;
+    var rows = [];
+    S.blocks.forEach(function (b) {
+      TYPES[b.type].fields.forEach(function (pair) {
+        var f = pair[0], state = b.state[f];
+        if (b.text[f].trim()) filled++;
+        if (state === "dirty" || state === "err") dirty++;
+        if (state === "busy") busy++;
+        if (state === "ng") blocked++;
+        if (state === "unsure") unsure++;
+        var label = !b.text[f].trim() ? "비어 있음" :
+          ({dirty:"변경됨 · 재검수 필요", busy:"검수 중", ng:"수정 필요", err:"검수 실패", unsure:"추가 검토 필요"}[state] || "판정 통과");
+        rows.push('<div class="cl-editor-state-row"><span>' + esc(TYPES[b.type].name + " · " + pair[1]) +
+          '</span><span>' + esc(label) + '</span></div>');
+      });
+    });
+    var headline = busy ? "문구를 검수하고 있어요" : dirty ? "수정 후 재검수 필요" :
+      blocked ? "표현 수정 필요" : unsure ? "추가 검토 필요" : filled ? "문구 검수를 완료했어요" : "문구를 입력해주세요";
+    var tone = !dirty && !blocked && !busy && filled ? (unsure ? " is-review" : " is-ok") : "";
+    status.innerHTML = '<div class="cl-editor-status' + tone + '">' + esc(headline) + '</div>' +
+      '<p class="cl-editor-state-note">' + (unsure ? "확인 필요는 적법 확정이 아니에요. 최종 게재 전 검토해주세요." :
+      "문구를 변경하면 다시 검수한 뒤 지면에 반영해요.") + '</p>';
+    var judgeAllButton = root.querySelector('[data-act="judge-all"]');
+    if (judgeAllButton) judgeAllButton.disabled = !(dirty || blocked) || !!busy;
+    details.innerHTML = rows.join("") + '<div class="cl-editor-state-row"><span>광고 표시</span><span>포함 · 유지됨</span></div>';
+  }
+
   function paintStatus(b, f) {
+    renderReview();
     var node = $("fs-" + b.uid + "-" + f);
     var input = $("fi-" + b.uid + "-" + f);
     if (node) {
@@ -417,8 +451,13 @@
     box.innerHTML =
       "<h3>" + esc(t.name) + (t.locked ? " · 고정" : "") + "</h3>" +
       '<p class="cp-ed-layout">' + esc(t.layout) + "</p>" +
-      (t.imgs ? "<h4>이미지</h4>" + imgs : "") +
       (t.fields.length ? "<h4>문구 · 고치면 판정을 다시 받아요</h4>" + fields : "") +
+      (t.imgs ? "<h4>이미지</h4>" + imgs : "") +
+      (t.fields.length ? '<h4>글자 정렬</h4><div class="cl-align-tools" role="group" aria-label="글자 정렬">' +
+        [["left", "왼쪽"], ["center", "가운데"], ["right", "오른쪽"]].map(function (pair) {
+          return '<button type="button" data-act="align" data-uid="' + u + '" data-align="' + pair[0] +
+            '" aria-pressed="' + (b.align === pair[0]) + '">' + pair[1] + '</button>';
+        }).join("") + '</div><p class="cp-ed-hint">광고 표시는 유지됩니다.</p>' : "") +
       (t.hint ? '<p class="cp-ed-hint">' + esc(t.hint) + "</p>" : "") +
       (b.type === "caption" && D.note ? noteHint : "") +
       notice;
@@ -614,7 +653,22 @@
       case "remove": if (b) remove(b.uid); break;
       case "add": add(); break;
       case "zoom": zoom(Number(el.dataset.d)); break;
+      case "align":
+        if (b && ["left", "center", "right"].indexOf(el.dataset.align) >= 0) {
+          b.align = el.dataset.align;
+          renderStage(); renderInspector();
+        }
+        break;
       case "audit": audit(); break;
+      case "judge-all":
+        S.blocks.forEach(function (b) {
+          TYPES[b.type].fields.forEach(function (pair) {
+            var f = pair[0];
+            if (b.text[f].trim() && ["dirty", "err", "ng"].indexOf(b.state[f]) >= 0) judge(b, f);
+          });
+        });
+        renderReview();
+        break;
       case "judge": if (b) judge(b, el.dataset.f); break;
       case "img": if (b) pickImage(b, i); break;
       case "imgclear": if (b) { b.imgs[i] = null; b.alts[i] = ""; renderAll(); } break;

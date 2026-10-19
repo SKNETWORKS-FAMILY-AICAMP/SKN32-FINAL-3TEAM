@@ -204,9 +204,10 @@
 </style>
 {% endblock %}
 {% block user_content %}
+{% from "user/_icons.html" import icon %}
 <div class="gn-head">
-  <h1>카피 생성</h1>
-  <p>품목과 인증 여부를 고르고 제품 내용을 적으면, <b>적어 주신 사실 안에서만</b> 카피를 만들어요.</p>
+  <h1>{{ "마음에 드는 카피를 골라보세요." if live or result else "제품 정보를 입력해주세요." }}</h1>
+  <p>{{ "표현을 비교하고, 선택한 문구로 광고를 만들어보세요." if live or result else "입력한 정보를 바탕으로 광고 문구 후보를 만들어드려요." }}</p>
 </div>
 
 {% if need_login %}
@@ -227,20 +228,37 @@
 </div>
 {% else %}
 
+<ol class="cl-flow cl-gen-flow" data-phase="{{ 'result' if live or result else 'input' }}"><li class="is-done"><b>{{ '✓' if live or result else '1' }}</b>제품 정보</li><li class="{{ 'is-current' if live or result else '' }}"><b>2</b>카피 선택</li><li><b>3</b>광고 만들기</li></ol>
 {% set p = picked or {} %}
-<form class="gn-card" id="gen-form" method="post" action="/u/generate" data-wait-form>
- <div class="gn-cols">
- <div>
-  <h2>품목</h2>
-  <div class="gn-pick">
+{% if live or result %}
+<div class="ws-product"><strong>{{ icon("cube", 29) }} 제품 정보</strong><div><b>{{ p.name or '제품명 미입력' }}</b> · {{ branch.label if branch else '품목 미선택' }}<p>{{ p.features|join(' · ') if p.features else (p.phrase or '제품 정보를 입력해주세요') }}</p></div><button type="button" data-edit-product>{{ icon("pencil", 17) }} 제품 정보 수정</button></div>
+{% endif %}
+<details class="ws-product-editor" id="product-editor" data-has-result="{{ '1' if live or result else '0' }}"{% if not (live or result) or errors %} open{% endif %}><summary>제품 정보 입력 · 수정</summary>
+<form class="cl-product-form" id="gen-form" method="post" action="/u/generate" data-wait-form>
+{% if errors %}<ul class="gn-errors" role="alert">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<section class="cl-product-section"><h2><span>01</span> 제품 기본 정보 <small>검수할 제품에 대해 알려주세요.</small></h2>
+<h3>제품 분류</h3>  <div class="gn-pick">
     {% for key, label in gen_categories %}
     <input type="radio" id="g-cat-{{ key }}" name="category" value="{{ key }}"
            {% if (p.category or gen_categories[0][0]) == key %}checked{% endif %}>
-    <label for="g-cat-{{ key }}">{{ label }}</label>
+    <label for="g-cat-{{ key }}">{{ icon({"food":"food","hf":"hf","cos":"cos"}[key], 26) }}<b>{{ label }}</b><span class="cl-radio-dot" aria-hidden="true"></span></label>
     {% endfor %}
-  </div>
-
-  <h2>인증 · 기능성 인정이 있나요?</h2>
+  </div><div class="cl-product-name-row"><div class="gn-field">
+      <label for="g-name">제품명</label>
+      <input type="text" id="g-name" name="name" maxlength="{{ gen_limits.name }}" value="{{ p.name or '' }}"
+             placeholder="예: 아침곡간 그래놀라">
+    </div><div class="gn-field">
+      <label for="g-kind">제품 종류</label>
+      <input type="text" id="g-kind" name="kind" maxlength="{{ gen_limits.kind }}" value="{{ p.kind or '' }}"
+             placeholder="예: 그래놀라">
+    </div></div><div class="gn-field">
+      <label for="g-features">제품 특징 <span class="gn-note">(쉼표로 구분)</span></label>
+      <textarea id="g-features" name="features" rows="2" maxlength="{{ gen_limits.list }}" placeholder="예: 바삭한 식감, 요거트에 바로">{{ (p.features or [])|join(', ') }}</textarea>
+    </div><div class="gn-field">
+    <label for="g-phrase">간단한 문구 <span class="gn-note">(제품을 한 줄로)</span></label>
+    <input type="text" id="g-phrase" name="phrase" maxlength="{{ gen_limits.phrase }}" value="{{ p.phrase or '' }}"
+           placeholder="예: 끈적임 없이 산뜻한 수분크림">
+  </div>  <h3>인증 · 기능성 인정이 있나요?</h3>
   <div class="gn-pick" style="margin-bottom:.4rem">
     <input type="radio" id="g-cert-no" name="cert" value="no" {% if p.cert != "yes" %}checked{% endif %}>
     <label for="g-cert-no">아니오</label>
@@ -255,9 +273,23 @@
 
   <p class="gn-notice gn-when w-hf-no">{{ gen_hf_no_notice }}</p>
 
-  {# 🆕 2026-10-08 — 대상 고객은 나이대 × 성별로 고른다(축은 둘까지 · K-익명). 건강 고민 · 증상은 축이 아니다 (D-27).
-     ⬜ 나이대별 특징 카드(추천)는 페르소나 관문(D-270) 뒤에 붙인다 — 지금은 수치 · 문구를 싣지 않는다 #}
-  <h2>대상 고객</h2>
+<div class="gn-field gn-when w-food-yes">
+    <label for="g-certs">인증 이름 <span class="gn-req">필수</span>
+      <span class="gn-note">(정확한 이름 · 한 줄에 하나)</span></label>
+    <textarea id="g-certs" name="certs" rows="2" placeholder="예: HACCP">{{ (p.certs or [])|join("\n") }}</textarea>
+  </div><div class="gn-field gn-when w-fixed">
+    <label for="g-fixed">인정 · 심사받은 기능성 문구 <span class="gn-req">필수</span>
+      <span class="gn-note">(원문 그대로)</span>
+      {%- if p.fixed_orig %} <span class="gn-changed">공식 문구로 바뀜</span>{% endif %}</label>
+    <textarea id="g-fixed" name="fixed" rows="2" maxlength="{{ gen_limits.fixed }}"
+              placeholder="예: 뼈 건강에 도움을 줄 수 있음">{{ p.fixed or '' }}</textarea>
+    <p class="gn-note" style="margin:.3rem 0 0">🔴 이 문구는 <b>글자 그대로</b> 끼워요 — 다듬거나 범위를 넓히지 않아요.</p>
+  </div></section>
+<section class="cl-product-section cl-product-optional"><h2><span>02</span> 추가 정보 <span class="cl-pill">선택</span><small>더 구체적인 문구를 만드는 데 도움이 돼요.</small></h2><div class="gn-field">
+      <label for="g-ingredients">원재료 · 성분 <span class="gn-note">(쉼표로 구분)</span></label>
+      <input type="text" id="g-ingredients" name="ingredients" maxlength="{{ gen_limits.list }}"
+             value="{{ (p.ingredients or [])|join(', ') }}" placeholder="예: 통귀리, 아몬드">
+    </div>  <details class="cl-audience-details"><summary>대상 고객 세부설정 <span class="cl-optional">선택</span></summary>
   <div class="gn-pick" style="margin-bottom:.5rem">
     {% for key, label in gen_ages %}
     <input type="radio" id="g-age-{{ key }}" name="age" value="{{ key }}"
@@ -272,68 +304,13 @@
     <label for="g-sex-{{ key }}">{{ label }}</label>
     {% endfor %}
   </div>
-  <div class="gn-field" style="margin-bottom:1.1rem">
+  </details><div class="gn-field" style="margin-bottom:1.1rem">
     <label for="g-target" style="font-weight:400">메모 <span class="gn-note">(선택 · 더 알려 주고 싶은 것)</span></label>
     <input type="text" id="g-target" name="target" maxlength="{{ gen_limits.target }}" value="{{ p.target or '' }}"
            placeholder="예: 아침을 간단히 먹는 직장인">
   </div>
- </div>
-
- <div>
-  {% if errors %}
-  <ul class="gn-errors">
-    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
-  </ul>
-  {% endif %}
-
-  <h2>제품 내용</h2>
-  <p class="gn-note" style="margin:0 0 .8rem">
-    🚨 여기 적힌 것이 <b>제품 사실의 전부</b>예요 — 적지 않은 수치 · 성분 · 인증은 카피에 나오지 않아요.
-    제품명 · 제품 종류 · 간단한 문구 · 특징 중 하나는 적어 주세요.
-  </p>
-  <div class="gn-row4">
-    <div class="gn-field">
-      <label for="g-name">제품명</label>
-      <input type="text" id="g-name" name="name" maxlength="{{ gen_limits.name }}" value="{{ p.name or '' }}"
-             placeholder="예: 아침곡간 그래놀라">
-    </div>
-    <div class="gn-field">
-      <label for="g-kind">제품 종류</label>
-      <input type="text" id="g-kind" name="kind" maxlength="{{ gen_limits.kind }}" value="{{ p.kind or '' }}"
-             placeholder="예: 그래놀라">
-    </div>
-    <div class="gn-field">
-      <label for="g-features">제품 특징 <span class="gn-note">(쉼표로 구분)</span></label>
-      <input type="text" id="g-features" name="features" maxlength="{{ gen_limits.list }}"
-             value="{{ (p.features or [])|join(', ') }}" placeholder="예: 바삭한 식감, 요거트에 바로">
-    </div>
-    <div class="gn-field">
-      <label for="g-ingredients">원재료 · 성분 <span class="gn-note">(쉼표로 구분)</span></label>
-      <input type="text" id="g-ingredients" name="ingredients" maxlength="{{ gen_limits.list }}"
-             value="{{ (p.ingredients or [])|join(', ') }}" placeholder="예: 통귀리, 아몬드">
-    </div>
-  </div>
-  <div class="gn-field">
-    <label for="g-phrase">간단한 문구 <span class="gn-note">(제품을 한 줄로)</span></label>
-    <input type="text" id="g-phrase" name="phrase" maxlength="{{ gen_limits.phrase }}" value="{{ p.phrase or '' }}"
-           placeholder="예: 끈적임 없이 산뜻한 수분크림">
-  </div>
-
-  <div class="gn-field gn-when w-food-yes">
-    <label for="g-certs">인증 이름 <span class="gn-req">필수</span>
-      <span class="gn-note">(정확한 이름 · 한 줄에 하나)</span></label>
-    <textarea id="g-certs" name="certs" rows="2" placeholder="예: HACCP">{{ (p.certs or [])|join("\n") }}</textarea>
-  </div>
-  <div class="gn-field gn-when w-fixed">
-    <label for="g-fixed">인정 · 심사받은 기능성 문구 <span class="gn-req">필수</span>
-      <span class="gn-note">(원문 그대로)</span>
-      {%- if p.fixed_orig %} <span class="gn-changed">공식 문구로 바뀜</span>{% endif %}</label>
-    <textarea id="g-fixed" name="fixed" rows="2" maxlength="{{ gen_limits.fixed }}"
-              placeholder="예: 뼈 건강에 도움을 줄 수 있음">{{ p.fixed or '' }}</textarea>
-    <p class="gn-note" style="margin:.3rem 0 0">🔴 이 문구는 <b>글자 그대로</b> 끼워요 — 다듬거나 범위를 넓히지 않아요.</p>
-  </div>
-
-  {% if gen_external %}
+</section>
+<div class="cl-product-submit">  {% if gen_external %}
   {# 🆕 2026-10-13 — 생성 엔진(GPT)이 켜진 환경에서만 적는다. 무엇이 밖으로 나가는지 누르기 전에 알린다 #}
   <p class="gn-note" style="margin:.2rem 0 .6rem">
     🔴 위에 적은 <b>제품 정보</b>(제품명 · 종류 · 문구 · 특징 · 원료 · 인증 이름 · 대상)는 문구를 쓰기 위해 <b>외부 생성 모델(OpenAI)</b>로 보내요.
@@ -343,9 +320,8 @@
   {% endif %}
   <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
   <button class="gn-submit" type="submit">이 내용으로 카피 생성</button>
- </div>
- </div>
-</form>
+</div></form>
+</details>
 
 {# 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구를 따로 판정한 경고. 후보를 떨구지 않는다 · 문안은 `app/reasons.py` (FIXED_*) #}
 {# 🆕 2026-10-15 (ksr) — 「공식 문구로 다시 만들기」 · 「처음 적은 문구로 되돌리기」. 입력 전부를 숨김 칸으로 다시 보낸다(「더 탐색하기」와 같다)
@@ -419,7 +395,7 @@
   {% if live.picked %}
   <div class="gn-cands">
     {% for c in live.picked %}
-    <div class="gn-cand">
+    <article class="gn-cand">
       <h3>{{ c.tier or "후보" }}</h3>
       <p>{{ c.text }}</p>
       {% if c.angle %}<p class="gn-meta">각도 · {{ c.angle }}</p>{% endif %}
@@ -436,7 +412,7 @@
         {% if picked.fixed %}<input type="hidden" name="fixed" value="{{ picked.fixed }}">{% endif %}
         <button class="gn-next" type="submit">AI 광고 생성 →</button>
       </form>
-    </div>
+    </article>
     {% endfor %}
   </div>
   {% endif %}
@@ -508,7 +484,7 @@
 {% endif %}
 
 {% if result %}
-<div class="gn-card">
+<div class="gn-card cl-fixture-summary">
   <h2>생성된 카피 {{ result.candidates|length }}종{% if fixture_name %} <span class="gn-note">— {{ fixture_name }}</span>{% endif %}</h2>
 
   {% if points %}
@@ -576,10 +552,10 @@
 
 {% if result.candidates %}
 <div class="gn-card gn-candbox">
-  <h2>후보</h2>
+  <h2>생성된 카피 <span class="gn-note">{{ result.candidates|length }}개 후보</span></h2>
   <div class="gn-cands">
     {% for c in result.candidates %}
-    <div class="gn-cand">
+    <article class="gn-cand">
       <h3>{{ c.label }}</h3>
       <p>{{ c.rewrite.body }}</p>
       {% if c.rewrite.mandatory_note %}<p class="gn-meta">필수 병기 · {{ c.rewrite.mandatory_note }}</p>{% endif %}
@@ -595,7 +571,7 @@
         <input type="hidden" name="note" value="{{ c.rewrite.mandatory_note or '' }}">
         <button class="gn-next" type="submit">AI 광고 생성 →</button>
       </form>
-    </div>
+    </article>
     {% endfor %}
   </div>
 </div>

@@ -15,6 +15,8 @@
      ⛔ 스크립트 없이 돈다 — 버튼 하나가 `op` 를 단 폼 제출이고 서버가 다시 그린다(CSP). 접기는 `<details>`.
 #}{% extends "user/_base.html" %}
 {% from "user/_sent_words.html" import sent_concl %}
+{% from "user/_icons.html" import icon %}
+{% from "user/_review_overview.html" import overview %}
 {% block title %}CopyLane — 문구 검수{% endblock %}
 {% block screen_css %}
 <style>
@@ -437,7 +439,7 @@
         {% endif %}
         <div class="rv-sent-head">
           <span class="rv-dot" aria-hidden="true"></span>
-          <span class="rv-concl"{% if fin == "R0" and v == "confirmed" %} title="위험도 R0 — 특이사항 없음"{% endif %}>{{ sent_concl(s, premise) }}</span>
+          <span class="rv-concl"{% if fin == "R0" and v == "confirmed" %} title="위험도 R0 — 특이사항 없음"{% endif %}>{{ 'AI 추정 · 판정 아님 — 제품 정보 확인 필요' if s.fact_check and 'AI 추정' in (s|question_text) else sent_concl(s, premise) }}</span>
           {#- 🆕 2026-10-16 (D-348 보충 2 결정 1) — 최종 위험도가 **인코더 하한에서 온** 문장은 「AI 추정」을 달고 「위반이라면」으로 말한다.
               판정이 아니다(보류 그대로) — 사전 하한에서 온 등급과 같은 칩으로 읽히지 않게 한다 #}
           {% set enc_risk = s.risk.encoder and (not s.risk.floor or s.risk.encoder.level > s.risk.floor.level) %}
@@ -528,7 +530,8 @@
         {#- 🔄 2026-10-16 (D-348 보충 5) — 인코더 쪽 보류 + 분기에도 질문을 그린다(`question_text`) #}
         {% set cq = s|question_text %}
         {% if cq and rw_item is not none %}
-        <form method="post" action="/u/review/answer" class="rv-answer" style="margin:.5rem 0 0">
+        {% if s.fact_check %}<section class="rv-answer cl-fact-info" style="margin:.5rem 0 0">{% else %}<form method="post" action="/u/review/answer" class="rv-answer" style="margin:.5rem 0 0">{% endif %}
+          {% if not s.fact_check %}
           {% for c in copies %}<input type="hidden" name="text" value="{{ c }}">{% endfor %}
           <input type="hidden" name="target" value="{{ rw_item.n }}:{{ s.sent_id }}">
           {% for a in rw_item.answers|default([]) %}<input type="hidden" name="prev" value="{{ a }}">{% endfor %}
@@ -536,27 +539,24 @@
           <input type="hidden" name="premise" value="{{ premise }}">
           <input type="hidden" name="round" value="{{ r }}">
           {% endif %}
+          {% endif %}
           {% if s.fact_check %}
           {#- 🔄 2026-10-17 — 질문은 종류마다 한 줄(승인 전에는 종전 공통 질문) · 설명 · 예는 기준 문안 칸 #}
-          <p class="rv-todo">{{ s.fact_check.kind|fact_question }} <small>({{ s.fact_check.kind.value|replace("_", " ") }} · 증빙 — {{ s.fact_check.accepted_evidence|join(" · ") }})</small></p>
+          <p class="rv-todo">확인할 기준 — {{ s.fact_check.kind.value|replace("_", " ") }}</p>
           <p class="rv-why">{{ s.fact_check.criteria }}</p>
           {#- 🆕 2026-10-17 (D-348 보충 14) 무첨가 조건 — 질문의 「아래 조건」을 고시 원문(36814 별지 1.아.3) 그대로 펼친다 #}
           {% if s.fact_check.kind.value == "무첨가_조건" %}{% for name, conds in s.text|nofree_conditions %}
           <p class="rv-why"><b>「{{ name }}」 조건</b></p>
           <ol class="rv-why">{% for c in conds %}<li>{{ c }}</li>{% endfor %}</ol>
           {% endfor %}{% endif %}
-          <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:true">맞아요</button>
-          <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:false">아니에요</button>
-          {#- 🆕 2026-10-16 (D-348 보충 5 — 화면 문안 초안 · 화면 담당 확인 전) 해당 없음 — 다른 두 버튼과 같은 무게로 둔다 #}
-          <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:na">이 문장은 그런 말이 아니에요</button>
           {% elif s.substantiation %}
           <p class="rv-todo">이 표현을 실증할 자료가 있나요? <small>(인정되는 자료 — {{ s.substantiation.accepted_evidence|join(" · ") }})</small></p>
           <button type="submit" class="rv-btn" name="answer" value="subst:yes">있어요</button>
           <button type="submit" class="rv-btn" name="answer" value="subst:no">없어요</button>
           <button type="submit" class="rv-btn" name="answer" value="subst:na">이 문장은 그런 주장이 아니에요</button>
           {% endif %}
-          <p class="rv-note">답은 확인되지 않아요 — 판정에 「답한 내용」으로 남고, 자료는 직접 보관해 주세요.</p>
-        </form>
+          {% if not s.fact_check %}<p class="rv-note">답은 확인되지 않아요 — 판정에 「답한 내용」으로 남고, 자료는 직접 보관해 주세요.</p>{% endif %}
+        {% if s.fact_check %}</section>{% else %}</form>{% endif %}
         {% endif %}
         {% if s.user_subst or s.user_facts %}
         <p class="rv-note">답한 내용으로 다시 판정했어요 —
@@ -577,16 +577,16 @@
           </div>
           {% endif %}
           {{ ev_body(s, premise, enc_on) }}
-          {% if rw_kind == "a" %}
-          <p class="rv-note">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 · 심사를 받은 제품만 쓸 수 있는 말이라 고쳐 써도 같은 위반이에요 (D-59).</p>
-          {% elif rw_kind == "off" %}
-          <p class="rv-note">이 환경에서는 문장 고쳐 쓰기를 제공하지 않아요.</p>
-          {% elif rw_kind == "none" %}
-          <p class="rv-note">고쳐 쓰기 없음 · 위반 유형이 특정되지 않았어요(확신 부족 보류) — 고칠 곳이 정해지지 않았어요.</p>
-          {% endif %}
         </details>
         {% endif %}
 
+        {% if rw_kind == "a" %}
+        <p class="rv-note cl-rewrite-unavailable">고쳐 쓰기 없음 · 사유 A(자격형) — 인정 · 심사를 받은 제품만 쓸 수 있는 말이라 고쳐 써도 같은 위반이에요 (D-59).</p>
+        {% elif rw_kind == "off" %}
+        <p class="rv-note cl-rewrite-unavailable">이 환경에서는 문장 고쳐 쓰기를 제공하지 않아요.</p>
+        {% elif rw_kind == "none" %}
+        <p class="rv-note cl-rewrite-unavailable">자동 고쳐 쓰기를 제공하지 않아요 — 수정할 위반 유형을 특정하지 못했어요. 문제없는 문구라는 뜻은 아니에요.</p>
+        {% endif %}
         {% if rw_kind == "result" %}
         {% include "user/_review_rewrite.html" %}
         {% elif rw_kind == "button" %}
@@ -731,13 +731,13 @@
 {% set pp = SLUG.get(item.picked.premise) if item.picked else none %}
 {% set pr = item.picked.round if pp else -1 %}
 {% set pk = "hf" if pp in ("hfy", "hfn") else pp %}
-<div class="rv-br">
+<div class="rv-br" data-copy-number="{{ n }}">
   {% for r in range(1, max_redo + 1) %}
   <input class="visually-hidden rv-redo-{{ r }}" type="checkbox" id="rvr-{{ n }}-{{ r }}"
          aria-label="문구 {{ n }} 다시 선택 {{ r }}회차"{% if r <= pr %} checked{% endif %}>
   {% endfor %}
   {% for r in range(max_redo + 1) %}
-  <div class="rv-round rv-round-{{ r }}">
+  <div class="rv-round rv-round-{{ r }}" data-only-hf="{{ 'true' if only_hf else 'false' }}">
     {% if not only_hf %}
     <input class="visually-hidden rv-k-none" type="radio" name="rvk-{{ n }}-{{ r }}" id="rvk-{{ n }}-{{ r }}-none"
            {%- if r != pr %} checked{% endif %}
@@ -768,28 +768,37 @@
       {% endfor %}
     </p>
 
+    <ol class="cl-review-progress" aria-label="검수 진행 단계"><li><b>1</b><span>제품 유형</span></li><li><b>2</b><span>추가 정보</span></li><li><b>3</b><span>검수 결과</span></li></ol>
     <div class="rv-q rv-q1">
-      <p class="rv-q-title">이 제품은 어떤 유형인가요?</p>
+      <p class="rv-q-title">이 문구는 어떤 제품에 사용하나요?</p>
       <p class="rv-note">유형에 따라 적용되는 조문이 달라서 판정을 잠시 멈췄어요.</p>
+      <blockquote class="cl-branch-quote">문구 {{ n }}<br>{{ copies[n - 1] }}</blockquote>
       <div class="rv-opts">
         {% for k in ns.kinds %}
-        <label class="rv-opt" for="rvk-{{ n }}-{{ r }}-{{ k }}">{{ KIND[k][0] }}<small>{{ KIND[k][1] }}</small></label>
+        <label class="rv-opt" for="rvk-{{ n }}-{{ r }}-{{ k }}"><span class="cl-radio-dot" aria-hidden="true"></span>{{ icon({'food':'food','hf':'hf','cos':'cos','gen':'bag'}[k], 29) }}<span><b>{{ KIND[k][0] }}</b><small>{{ KIND[k][1] }}</small><small>예: {{ {'food':'과자, 음료','hf':'건강기능식품 표시가 있는 영양제','cos':'로션, 크림','gen':'의류, 생활용품'}[k] }}</small></span></label>
         {% endfor %}
       </div>
+      <div class="cl-selection-note">선택한 유형: <b data-selected-kind>유형을 선택해주세요</b></div>
+      <button type="button" class="cl-continue" data-review-next>이 유형으로 계속하기 <span>→</span></button>
+      <p class="rv-note">이 조건은 문구 {{ n }}에만 적용돼요. 필요한 경우 인증 여부를 추가로 확인해요.</p>
+      <p class="cl-info-note">{{ icon("info", 18) }} 제품 정보를 확인하는 단계이며, 아직 판정이 완료되지 않았어요.</p>
     </div>
 
     <div class="rv-q rv-q2">
+      <div class="cl-selection-note">선택한 유형: <b>건강기능식품</b><button type="button" data-review-type-back>유형 다시 선택</button></div>
       <p class="rv-q-title">건강기능식품 인증을 받았나요?</p>
       <p class="rv-note">이 기능성으로 식약처 인정을 받았는지에 따라 쓸 수 있는 표현이 달라요.</p>
       <div class="rv-opts">
         {% for p, label, sub in (("hfy", "예 (Y)", "인정 · 신고 완료"), ("hfn", "아니오 (N)", "인증 없음")) %}
         {% if p in ns.have %}
-        <label class="rv-opt" for="rvc-{{ n }}-{{ r }}-{{ p }}">{{ label }}<small>{{ sub }}</small></label>
+        <label class="rv-opt" for="rvc-{{ n }}-{{ r }}-{{ p }}"><span class="cl-radio-dot" aria-hidden="true"></span><span><b>{{ "예, 받았어요" if p == "hfy" else "아니요, 받지 않았어요" }}</b><small>{{ sub }}</small></span></label>
         {% else %}
         <span class="rv-opt rv-opt-off">{{ label }}<small>이 경우의 판정이 응답에 없어요</small></span>
         {% endif %}
         {% endfor %}
       </div>
+      <p class="cl-info-note">{{ icon("info", 18) }} 선택한 정보에 따라 검수하며, 인증 사실을 자동으로 확인하지는 않아요.</p>
+      <button type="button" class="cl-continue" data-review-finish>이 조건으로 검수 결과 보기 <span>→</span></button>
       {% if not only_hf %}
       <label class="rv-link rv-back" for="rvk-{{ n }}-{{ r }}-none">← 유형 다시 고르기</label>
       {% endif %}
@@ -798,6 +807,7 @@
     {% for b in result.branches if SLUG.get(b.premise.value) %}
     {% set p = SLUG[b.premise.value] %}
     <div class="rv-res rv-res-{{ p }}">
+      {{ overview(b.outcome.value) }}
       <div class="rv-chips rv-premise-row" style="margin:.45rem 0 .5rem">
         {# 칩은 왼쪽에 세로로 쌓는다 — 옆의 전제 문안이 여러 줄일 때 칩 아래가 비지 않게 #}
         <div class="rv-premise-chips">
@@ -809,8 +819,8 @@
           {% endif %}
         </div>
         {# 🔄 2026-10-12 — 전제 문안(「이 전제라면 …」)은 상자 대신 칩 옆에 이어 적는다 (D-263 ③ — 분기 결과는 전제와 함께만 그린다) #}
-        <span class="rv-premise"><b>이 전제라면</b> · {{ b.criteria }}
-          {%- if not b.verified %} <span class="rv-note">고르신 내용을 그대로 받은 결과예요 — 인정번호 대조는 하지 않았어요.</span>{% endif %}</span>
+        <details class="rv-premise cl-premise-detail"><summary>적용 조건 자세히 보기</summary><p><b>이 전제라면</b> · {{ b.criteria }}</p></details>
+        {%- if not b.verified %} <span class="rv-note cl-unverified-condition">선택한 조건 기준 · 인증 사실은 확인하지 않았어요.</span>{% endif %}
       </div>
       {% for s in b.sentences %}{{ sent_block(s, s.sent_id in item.branch_flagged[b.premise.value], none, item, b.premise.value, r, result.judged_by|encoder_ran) }}{% endfor %}
       {# 「다시 선택」은 위험도 판정 바로 아래 — 증명서 · 근거 보기보다 위다 (2026-10-01) #}
@@ -825,7 +835,8 @@
       {# 🔄 근거 보기 · 증명서도 **고른 분기 기준**이다 — 분기 안에 두어 고른 것만 보인다.
          🚨 계약의 `Branch` 에는 증명서 칸이 없다 — 사유는 이 분기 문장의 불가 유형에서 읽고, 설명문은 지어내지 않는다 (D-147) #}
       {% if b.outcome.value == "certificate" %}
-      <div class="rv-sub">
+      <details class="rv-sub cl-certificate-details">
+        <summary>사용 불가 사유 자세히 보기</summary>
         <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서 <span class="rv-count">고르신 내용 기준</span></h2>
         <div class="rv-cert">
           {% for v in b.sentences|selectattr("infeasibility")|map(attribute="infeasibility.value")|unique|sort %}
@@ -835,7 +846,7 @@
           {% endfor %}
           <p>설명은 위의 「이 전제라면」 기준 문안을 따라요.</p>
         </div>
-      </div>
+      </details>
       {% endif %}
       {% if b.evidence %}
       <details class="rv-ev">
@@ -881,31 +892,31 @@
 {% endmacro %}
 <div class="rv-head">
   <div>
-    <h1>문구 검수</h1>
+    <h1 data-review-page-title>{{ "검수 결과" if results and not (results|selectattr("result.branches")|list) else "문구 검수" }}</h1>
     {# 🔄 2026-10-15 (ksr · 점검 19) — 모바일은 결과가 아래에 쌓여 「오른쪽」이 틀렸다 #}
-    <p>문구를 넣고 <b>검수</b>를 누르면 위험도와 근거가 나와요.</p>
+    <p>문구를 입력하고, 제품에 맞는 기준으로 검수해보세요.</p>
   </div>
   <div class="rv-actions">
     {# ⬜ 팀 공유 — 팀(기업 회원)이 없다. D-260 ④ 가 `enterprise` 를 만들지 않기로 했다 #}
     {# 🔄 2026-10-15 (ksr · 점검 12) — 이유가 마우스를 올려야만 보였다(모바일은 볼 방법 없음) — 글자로 적는다 #}
-    <button class="rv-btn" type="button" disabled title="팀(기업 회원) 기능이 아직 없어 공유할 곳이 없어요 (D-260)">팀에 공유 · 준비 중</button>
-    <a class="rv-btn" href="/u/review">+ 새로 검수</a>
+
+    <a class="rv-btn" href="/u/review">{{ icon("refresh", 18) }} 새로 검수</a>
   </div>
 </div>
 
 <div class="rv-grid">
 
-  <div>
+  <div class="rv-input-pane" role="region" aria-label="검수 문구 입력" tabindex="0">
     {# 🆕 2026-10-15 (ksr · 점검 0) — 검수 버튼을 누르면 「검수 중…」. 「예시 넣기」 · 「칸 추가」 · 「삭제」는 띄우지 않는다(`user_wait.js` `data-wait-only`) #}
     <form class="rv-card" method="post" action="/u/judge" data-wait-form data-wait-only>
-      <h2>검수할 문구
-        <span class="rv-count">{{ copies|length }} / {{ max_copies }}건 · 문구당 최대 {{ max_text_len }}자</span>
-      </h2>
+      <h2>검수할 문구 <span class="cl-pill">{{ copies|length }} / {{ max_copies }}건</span></h2>
+      <div class="cl-input-scroll" tabindex="0" role="region" aria-label="검수 문구 목록">
       {% if notice %}<p class="rv-toast" role="status">{{ notice }}</p>{% endif %}
       {% for c in copies %}
-      <div class="rv-copy">
+      <div class="rv-copy" data-input-copy="{{ loop.index }}">
         <div class="rv-copy-bar">
           <span>문구 {{ loop.index }}</span>
+          <span class="cl-copy-status" data-input-status="{{ loop.index }}"></span>
           <span>
             {# 🆕 2026-10-12 — 글자 수. 숫자는 `user_count.js` 가 적는다 — 스크립트가 안 돌면 숨은 채로 남는다 #}
             <span class="rv-len" data-count-for="text-{{ loop.index }}" hidden>{{ c|length }}/{{ max_text_len }}</span>
@@ -919,16 +930,18 @@
           <label class="visually-hidden" for="text-{{ loop.index }}">문구 {{ loop.index }}</label>
           <textarea id="text-{{ loop.index }}" name="text" rows="4" maxlength="{{ max_text_len }}"
                     placeholder="검수할 광고 문구를 붙여넣으세요.">{{ c }}</textarea>
-          <button class="rv-copy-go" type="submit" name="op" value="judge:{{ loop.index }}"
-                  title="이 문구 검수하기" data-wait-go data-wait-label="검수 중…">검수</button>
+          {% if copies|length > 1 %}<button class="rv-copy-go" type="submit" name="op" value="judge:{{ loop.index }}"
+                  title="이 문구 검수하기" data-wait-go data-wait-label="검수 중…">이 문구 검수</button>{% endif %}
         </div>
+        <p class="cl-input-limit">최대 {{ max_text_len }}자</p>
       </div>
       {% endfor %}
+      <p class="cl-conditional-note">{{ icon('info', 16) }} 추가 정보는 검수 중 분기 선택이 필요한 문장에만 요청해요.</p>
+      </div>
+      <div class="cl-input-footer">
       <div class="rv-copy-tools">
-        <button class="rv-add" type="submit" name="op" value="add" formnovalidate><b>+ 검수할 문구 추가</b> · 최대 {{ max_copies }}개를 한 번에 검수할 수 있어요</button>
-        {% if copies|length > 1 %}
-        <button class="rv-all" type="submit" name="op" value="all" data-wait-go data-wait-label="검수 중…">전체 검수</button>
-        {% endif %}
+        <button class="rv-add" type="submit" name="op" value="add" formnovalidate>{{ icon("plus", 20) }} 문구 추가</button>
+        <button class="rv-all" type="submit" name="op" value="{{ 'all' if copies|length > 1 else 'judge:1' }}" data-wait-go data-wait-label="검수 중…">{{ '전체 검수' if copies|length > 1 else '문구 검수하기' }} <span aria-hidden="true">→</span></button>
       </div>
       <p class="rv-wait" data-wait hidden role="status" aria-live="polite"><i>·</i><i>·</i><i>·</i><i>·</i> 검수 중이에요 — 문장마다 조문을 찾고 있어요</p>
 
@@ -954,6 +967,7 @@
       {% elif history_kept == "failed" %}
       <p class="rv-hist" role="status">이 검수를 <b>이력에 저장하지 못했어요</b> — 검수 결과는 오른쪽 그대로예요.</p>
       {% endif %}
+      </div>
     </form>
 
     {# 🔄 2026-10-13 — 이용자가 읽을 것이 아니라 접어 둔다. 지우지 않는다 — 화면 분기를 확인하는 길이다 (D-124) #}
@@ -972,7 +986,7 @@
     </details>
   </div>
 
-  <div>
+  <div class="rv-results-pane" role="region" aria-label="검수 결과" tabindex="0">
   {% if engine_pending %}
     <div class="rv-card">
       <h2>위험도</h2>
@@ -990,7 +1004,7 @@
     {# 분기가 있는 문구가 하나뿐이면 재검수 회차를 카드 머리(지적 건수 왼쪽)로 올린다 — 여럿이면 문구 줄 오른쪽에 둔다 #}
     {# 🆕 2026-10-15 (ksr · 점검 19) — 좁은 화면(한 줄로 쌓임)에서는 검수 뒤 결과 카드로 내려 준다(`user_wait.js` `data-scroll-narrow`) #}
     <div class="rv-card{% if live %} rv-card-live{% endif %}{% if results|selectattr("result.branches")|list|length == 1 %} rv-one{% endif %}" data-scroll-narrow="48rem">
-      <h2 class="rv-risk-head">위험도
+      <h2 class="rv-risk-head"><span data-review-title>검수 결과</span>
         {% if not live %}
         <span class="rv-summary {{ 's-bad' if flagged else 's-ok' }}">
           {#- 🔄 2026-10-15 (ksr · 점검 11) — 「지적」은 확정 위반처럼 읽혀 보류까지 세는 이 수와 맞지 않았다 #}
@@ -998,8 +1012,13 @@
         </span>
         {% endif %}
       </h2>
+      <nav class="cl-result-tabs" role="tablist" aria-label="문구별 검수 결과">
+      {% for item in results %}<button type="button" id="result-tab-{{ item.n }}" role="tab" aria-controls="result-copy-{{ item.n }}" aria-selected="{{ 'true' if loop.first else 'false' }}" tabindex="{{ '0' if loop.first else '-1' }}" data-result-tab="{{ item.n }}">문구 {{ item.n }} <span data-tab-status>{{ '조건 확인 필요' if item.result.branches else '검수 완료' }}</span></button>{% endfor %}
+      </nav>
     {% for item in results %}
       {% set result = item.result %}
+      <section class="cl-result-copy" id="result-copy-{{ item.n }}" role="tabpanel" aria-labelledby="result-tab-{{ item.n }}" data-result-copy="{{ item.n }}" data-has-branches="{{ 'true' if result.branches else 'false' }}" tabindex="0">
+      <p class="cl-result-stale" data-result-stale hidden role="status">입력 문구가 변경됐어요. 아래는 수정 전 결과입니다. 문구를 다시 검수해주세요.</p>
       {% if not result.branches %}
       <p class="rv-copyno">문구 {{ item.n }}{% if result.category %} · {{ result.category.value }}{% endif %}
         <span class="rv-outcome o-{{ result.outcome.value }}">
@@ -1018,21 +1037,25 @@
       {% if result.branches %}
       {{ branch_wizard(item) }}
       {% else %}
+      {{ overview(result.outcome.value) }}
+      <h3 class="cl-evidence-title">문장별 결과</h3>
       {% for s in result.sentences %}
       {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on=result.judged_by|encoder_ran, category=(result.category.value if result.category else "")) }}
       {% else %}
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}
       {% endif %}
+      </section>
     {% endfor %}
       {# 🚨 문장들 **뒤에** 있어야 카운터가 다 세어진다 — 자리는 CSS 가 머리 오른쪽으로 올린다 #}
+      <div class="cl-result-footer"><span>제품 조건과 근거를 함께 확인해주세요.</span><button type="button" data-copy-review>{{ icon("copy", 17) }} 결과 문구 복사</button></div>
       {% if live %}<span class="rv-summary rv-live" role="status"></span>{% endif %}
     </div>
 
     {% for item in results %}
     {% set result = item.result %}
     {% if result.certificate and not result.branches %}
-    <div class="rv-card">
+    <div class="rv-card" data-result-extra="{{ item.n }}">
       <h2>합법화 불가 증명서{% if results|length > 1 %} <span class="rv-count">문구 {{ item.n }}</span>{% endif %}</h2>
       <div class="rv-cert">
         <p><b>사유 {{ result.certificate.reason.value }}</b>
@@ -1050,7 +1073,7 @@
     {% endif %}
 
     {% if result.candidates %}
-    <div class="rv-card">
+    <div class="rv-card" data-result-extra="{{ item.n }}">
       <h2>대체 문구 후보</h2>
       {% for c in result.candidates %}
       <div class="rv-cand">
@@ -1095,9 +1118,9 @@
     {% endfor %}
   {% else %}
     <div class="rv-card">
-      <h2 class="rv-risk-head">위험도 <span class="rv-summary">검수 전</span></h2>
+      <h2 class="rv-risk-head">검수 결과 <span class="rv-summary">검수 전</span></h2>
       <p class="rv-pending" style="text-align:center">
-        문구칸 옆의 <b>검수 버튼</b>을 눌러 주세요.<br>
+        왼쪽 문구를 입력하고 <b>문구 검수하기</b>를 눌러 주세요.<br>
         <span class="rv-note">문장마다 결과와 근거 조문이 여기에 나와요.</span>
       </p>
     </div>
