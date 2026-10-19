@@ -260,6 +260,17 @@
   {%- endfor -%}
 {%- endfor -%}
 {%- endmacro %}
+{% macro rv_wait_sel() -%}
+> .rv-wait
+{%- for r in range(max_redo + 1) -%}
+  {%- for tail in (".rv-k-none:checked ~ .rv-rec .rv-wait", ".rv-k-hf:checked ~ .rv-c-none:checked ~ .rv-rec .rv-wait") -%}
+    , {% if r > 0 %}.rv-redo-{{ r }}:checked ~ {% endif %}{% if r < max_redo %}.rv-redo-{{ r + 1 }}:not(:checked) ~ {% endif %}.rv-round-{{ r }} > {{ tail }}
+  {%- endfor -%}
+{%- endfor -%}
+{%- endmacro %}
+{# 🆕 2026-10-18 (보충 18) — 보이는 기록 자리에 품목 선택 안내만 있으면 「특이사항 없음」이 아니라 「품목 선택 필요」다(지적이 보이면 아래 규칙이 이긴다) #}
+.rv-card-live:has({{ rv_wait_sel() }}) .rv-live { background: var(--u-signal-soft); color: var(--u-signal-ink); }
+.rv-card-live:has({{ rv_wait_sel() }}) .rv-live::before { content: "품목 선택 필요"; }
 .rv-card-live:has({{ rv_flag_sel() }}) .rv-live { background: var(--u-bad-bg); color: var(--u-bad-ink); }
 .rv-card-live:has({{ rv_flag_sel() }}) .rv-live::before { content: "지적 " counter(rvflag) "건"; }
 .rv-q { border: 1px solid var(--u-signal); background: var(--u-signal-soft); border-radius: .75rem;
@@ -469,6 +480,8 @@
         {% for gn in s|general_goods_notes(premise or category) %}<p class="rv-why">{{ gn }}</p>{% endfor %}
         {#- 🆕 2026-10-17 (D-348 보충 11 · 문안 승인 10-17) 묻지 않는 비방 후보 — 질문 대신 기준 한 줄 #}
         {% set sn = s|slander_note %}{% if sn %}<p class="rv-why">{{ sn }}</p>{% endif %}
+        {#- 🆕 2026-10-17 (D-348 보충 15 · 문안 확인 대기) 묻지 않는 조건표 밖 무첨가 — 질문 대신 기준 한 줄 #}
+        {% set nn = s|nofree_note %}{% if nn %}<p class="rv-why">{{ nn }}</p>{% endif %}
 
         {# 할 일 한 줄 — 확정 문장에만. 긴 「고치는 방향」(지시 · D-265 · D-268 · `SubstBranch`)은 「근거 보기」 안에 그대로 있다 #}
         {#- 🔄 2026-10-16 (D-348 보충 4 · 문안 초안) — 조건부 위반에도 할 일(준비할 자료 · 증빙)을 단다 #}
@@ -511,6 +524,11 @@
           {#- 🔄 2026-10-17 — 질문은 종류마다 한 줄(승인 전에는 종전 공통 질문) · 설명 · 예는 기준 문안 칸 #}
           <p class="rv-todo">{{ s.fact_check.kind|fact_question }} <small>({{ s.fact_check.kind.value|replace("_", " ") }} · 증빙 — {{ s.fact_check.accepted_evidence|join(" · ") }})</small></p>
           <p class="rv-why">{{ s.fact_check.criteria }}</p>
+          {#- 🆕 2026-10-17 (D-348 보충 14) 무첨가 조건 — 질문의 「아래 조건」을 고시 원문(36814 별지 1.아.3) 그대로 펼친다 #}
+          {% if s.fact_check.kind.value == "무첨가_조건" %}{% for name, conds in s.text|nofree_conditions %}
+          <p class="rv-why"><b>「{{ name }}」 조건</b></p>
+          <ol class="rv-why">{% for c in conds %}<li>{{ c }}</li>{% endfor %}</ol>
+          {% endfor %}{% endif %}
           <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:true">맞아요</button>
           <button type="submit" class="rv-btn" name="answer" value="fact:{{ s.fact_check.kind.value }}:false">아니에요</button>
           {#- 🆕 2026-10-16 (D-348 보충 5 — 화면 문안 초안 · 화면 담당 확인 전) 해당 없음 — 다른 두 버튼과 같은 무게로 둔다 #}
@@ -821,7 +839,13 @@
     {% endfor %}
 
     {# 기록되는 판정 — 고르기 전에만 보인다(회차마다). 유형을 모를 때의 가장 보수적인 경우다 (D-263 ①) #}
+    {# 🆕 2026-10-18 (D-348 보충 18) — **품목을 모르면 고르기 전에는 품목 선택만 안내한다.** 기록 판정(「모름」 입력의 유형 후보 · 질문 ·
+       판정)은 그리지 않는다 — 품목을 고르면 그 품목의 분기 결과(위 `rv-res`)를 보인다. 기록 판정 자체는 응답 · 저장에 그대로 남는다(D-263 ①).
+       품목을 아는데 전제만 모르는 경우(건강기능식품의 인증 여부)는 종전대로 기록 판정을 보인다 #}
     <div class="rv-rec">
+      {% if not result.category %}
+      <p class="rv-note rv-wait">품목을 고르면 그 품목의 판정 결과를 보여 드려요.</p>
+      {% else %}
       {% for s in result.sentences %}{{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), enc_on=result.judged_by|encoder_ran, category=(result.category.value if result.category else "")) }}{% endfor %}
       {% if result.certificate %}
       <div class="rv-sub">
@@ -832,6 +856,7 @@
           {% if result.certificate.guidance %}<p>{{ result.certificate.guidance }}</p>{% endif %}
         </div>
       </div>
+      {% endif %}
       {% endif %}
     </div>
   </div>

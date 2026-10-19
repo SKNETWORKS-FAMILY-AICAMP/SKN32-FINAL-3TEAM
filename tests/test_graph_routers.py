@@ -879,10 +879,12 @@ def test_사전이_울리면_법별_노드가_제_법_인용만_남긴다(monkey
     got = {
         r.law: [b for _, hs in r.dict_hits for h in hs for b in h.basis] for r in out["law_results"]
     }
+    # 🔄 2026-10-18 (D-348 보충 23 결정 2) — 화장품법 노드는 식품 질병 · 의약품 C 인용을 화장품법 13①1(의약품 오인)로 **옮겨** 받는다
+    #    (화장품이라면의 판정 · `_cosmetic_dict_moved`). 종전 기대값은 「law_cosmetic: []」였다
     assert got == {
         "law_ftc": ["002011:제3조제1항제1호"],
         "law_food": ["013094:제8조제1항제1호"],
-        "law_cosmetic": [],
+        "law_cosmetic": ["002015:제13조제1항제1호"],
     }
     # 🔄 2026-10-01 (W4 1판 · D-269) — 사전 적중이 **보낸 법의 인용**과 짝지어지면 위반 확정이다(인코더 전).
     #    ⛔ 종전 기대값은 「미판정」이었다(판정 노드 스텁). 근거는 적중의 인용 조문 · 구간은 원문 좌표 · 사유는 표(C)
@@ -925,7 +927,9 @@ def test_건강기능식품법_인용만_가진_사전_적중은_어느_노드�
         g, "load_dict_entries", _entries(("면역력", None, ("009353:제18조제1항제1호",)))
     )
     out = build_review().invoke(_init("면역력 강화"), config={"configurable": {"conn": "CUR"}})
-    assert out["dict_scans"][0].hits, "🚨 적중 사실은 남아야 한다"
+    # 🔄 2026-10-18 (D-348 보충 16) — 칸이 C 가 아닌 항목(참고 전용 법 인용은 칸이 없다)은 **내린 후보**로 남는다
+    scan = out["dict_scans"][0]
+    assert scan.hits or any(h.demoted for h in scan.weak), "🚨 적중 사실은 남아야 한다"
     assert all(hs == () for r in out["law_results"] for _, hs in r.dict_hits)
 
 
@@ -944,3 +948,69 @@ def test_법별_노드에_사전_적중이_실린다() -> None:
 
     sc = [DictScan(sent_id="s0", ran=True)]
     assert law_payload({"sents": ["가"], "dict_scans": sc})["dict_scans"] == sc
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize(
+    ("category", "confirmed"),
+    [(None, False), (Category.식품, True)],
+)
+def test_품목을_모르면_사전_C_적중도_기록_판정을_확정하지_않는다(
+    monkeypatch: pytest.MonkeyPatch, category: Category | None, confirmed: bool
+) -> None:
+    """🆕 2026-10-18 (D-348 보충 16 · D-319 ① · 원장 10-18(B) ⑥) — 사전 C 항목은 법 축 · 품목마다 다르다. 품목을 모르면 품목 분기에서만
+    확정이 서고 기록 판정은 확정이 아니다 — 품목을 고르면 그 품목으로 확정한다. ⛔ 이 성질은 품목 분기 · 기록 규칙으로 간접적으로 선다 — 깨지지 않게 박는다."""
+    import app.graph as g
+    from app import retrieve as rt
+
+    monkeypatch.setattr(rt, "wide", _fake_wide([]))
+    monkeypatch.setattr(
+        g,
+        "load_dict_entries",
+        _entries(("암예방", "질병_예방치료_표방", ("013094:제8조제1항제1호",))),
+    )
+    out = build_review().invoke(
+        _init("암 예방에 탁월합니다", category), config={"configurable": {"conn": "CUR"}}
+    )
+    rec = out["sentences"][0]
+    assert (rec.verdict is Verdict.confirmed) is confirmed
+    # 사전 C 확정에는 분기가 서지 않는다 — 실증 · 사실 확인 · 조건부는 B 의 몫이다(보충 15 결정 3 · 사전 쪽 분기 경로는 C 항목이 들어가지 않는다)
+    assert rec.substantiation is None and rec.fact_check is None
+    if confirmed:
+        assert rec.infeasibility is Infeasibility.C
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("category", [Category.식품, None])
+def test_사전이_확정한_문장에는_조건부_실증_질병_분기가_서지_않는다(
+    monkeypatch: pytest.MonkeyPatch, category: Category | None
+) -> None:
+    """🆕 2026-10-18 (D-348 보충 20 · 보충 16 결정 5 집행) — 사전 단계부터 돌린다(중간 상태를 손으로 넣지 않는다 — 설계가 바뀌면 여기서 드러난다).
+    사전 B 항목이 단독판정되는 측정 판(`legacy`)에서도 사전 확정 문장에는 조건부 위반 · 실증 분기 · 사실 확인 분기가 붙지 않는다 —
+    사전 확정에는 분기를 달지 않는다(보충 15 결정 3 · 사전 쪽 분기 경로를 걷었다). 분기 문장도 같다."""
+    import app.graph as g
+    from app import retrieve as rt
+    from app import sanction
+    from app.contracts import HoldReason, Risk, is_conditional
+
+    monkeypatch.setattr(rt, "wide", _fake_wide([]))
+    monkeypatch.setattr(g, "_DICT_VIEW", "legacy")
+    # 하한이 서야 종전 분기 경로(실증 · 조건부)가 문을 열었다 — 대역 하한 R2 를 준다(없으면 이 시험이 아무것도 못 잡는다)
+    monkeypatch.setattr(g, "floor_of_sentence", lambda rows, by_law: sanction.Floor(floor=Risk.R2))
+    monkeypatch.setattr(
+        g,
+        "load_dict_entries",
+        _entries(("국내최초", "거짓_과장", ("013094:제8조제1항제4호",))),
+    )
+    out = build_review().invoke(
+        _init("국내 최초 그래놀라", category), config={"configurable": {"conn": "CUR"}}
+    )
+    every = [*out["sentences"], *(s for b in out.get("branches") or [] for s in b.sentences)]
+    assert every, "판정된 문장이 없다 — 시험의 전제"
+    for s in every:
+        assert not is_conditional(s) and s.hold_reason is not HoldReason.premise_unknown
+        assert s.substantiation is None and s.fact_check is None, (
+            "🔴 사전 확정 문장에 분기가 붙었다 — 사전 쪽 분기 경로가 되살아났다"
+        )
+    if category is not None:
+        assert out["sentences"][0].verdict is Verdict.confirmed, "legacy 판에서 B 항목은 확정이다"

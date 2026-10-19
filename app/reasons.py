@@ -209,19 +209,51 @@ SLANDER_HOLD_NOTE = "다른 회사 제품을 낮춰 말하는 것으로 읽히�
 _SLANDER_AXES = frozenset({"식품표시광고법", "화장품법"})
 
 
+#: 🆕 2026-10-17 (D-348 보충 15 · 화면 문안 — ✅ 승인 2026-10-18 보충 19 결정 4 · D-263 ②) — 묻지 않는 조건표 밖 무첨가 문장의 기준 한 줄.
+#:    식품 [별표 1] 7.나 본문과 단서(고시가 정한 원재료 · 성분의 무첨가 표시만 제외) — 설탕 · 나트륨은 고시 36814 별지 1.아.3
+NOFREE_HOLD_NOTE = (
+    "고시가 정한 무첨가 표시(설탕 · 나트륨 무첨가 등)가 아니면, 쓰지 않은 원재료 · 성분을 내세워 "
+    "다른 제품과 다르게 보이게 할 수 없어요 — 문장을 고쳐 주세요"
+)
+_FOOD_AXIS = "식품표시광고법"
+
+
+def _held_unasked(sentence: object) -> list[object]:
+    """주장 ∧ 보류 ∧ 질문 없음인 문장의 인코더 근거 — 아니면 빈 목록 (기준 한 줄 둘이 같이 쓴다 · D-99)."""
+    if getattr(sentence, "not_claim", False) or getattr(sentence, "fact_check", None) is not None:
+        return []
+    v = getattr(sentence, "verdict", None)
+    if v is None or getattr(v, "value", v) != "hold":
+        return []
+    return list(getattr(getattr(sentence, "risk", None), "encoder_basis", None) or [])
+
+
+def nofree_note(sentence: object) -> str:
+    """묻지 않는 조건표 밖 무첨가 문장의 기준 한 줄(보충 15) — 해당이 아니면 빈 글자.
+
+    조건: 주장 ∧ 보류 ∧ 질문 없음 ∧ 인코더 근거에 식품 축의 부당 비교 · 비방 ∧ 조건표 밖 무첨가 꼴(`factcheck.nofree_outside_table`).
+    """
+    basis = _held_unasked(sentence)
+    if not any(
+        b.violation in (Violation.부당_비교광고, Violation.비방광고)
+        and any(LAW_OF_ID.get(a.law_id) == _FOOD_AXIS for a in b.articles)
+        for b in basis
+    ):
+        return ""
+    return (
+        NOFREE_HOLD_NOTE
+        if factcheck.nofree_outside_table(getattr(sentence, "text", "") or "")
+        else ""
+    )
+
+
 def slander_note(sentence: object) -> str:
     """묻지 않는 비방 후보의 기준 한 줄(보충 11) — 해당이 아니면 빈 글자.
 
     조건: 주장 ∧ 보류 ∧ 질문 없음 ∧ 인코더 근거에 식품 · 화장품 축의 비방 ∧ 타사 ∧ 부정 아님 ∧ 비교 · 우월 표지 없음.
     🔴 낱말 규칙은 `app/factcheck.py` 한 곳 · 법 축은 `collect/law_map.py` `LAW_OF_ID` 한 곳 (D-99).
     """
-    if getattr(sentence, "not_claim", False) or getattr(sentence, "fact_check", None) is not None:
-        return ""
-    v = getattr(sentence, "verdict", None)
-    if v is None or getattr(v, "value", v) != "hold":
-        return ""
-    risk = getattr(sentence, "risk", None)
-    basis = getattr(risk, "encoder_basis", None) or []
+    basis = _held_unasked(sentence)
     if not any(
         b.violation is Violation.비방광고
         and any(LAW_OF_ID.get(a.law_id) in _SLANDER_AXES for a in b.articles)
@@ -231,6 +263,8 @@ def slander_note(sentence: object) -> str:
     text = getattr(sentence, "text", "") or ""
     if factcheck.slander_absolute(text) or factcheck.comparison_claim(text):
         return ""
+    if nofree_note(sentence):
+        return ""  # 무첨가 꼴이면 그쪽 기준 한 줄만(보충 15)
     return SLANDER_HOLD_NOTE
 
 
@@ -525,12 +559,34 @@ def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBran
 
 # ── 화장품 전제의 인코더 후보 옮김 (🆕 2026-10-14 · D-338) ─────────────────────────────────────
 #: 화장품 전제에서 인코더가 낸 유형 → 우리 라벨 규약의 유형. 골든 화장품 행의 질병 · 건강 기능류 주장은 의약품_오인이다
-#: (화장품 골든 라벨 의약품_오인 296 · 기능성화장품_오인 43 · 질병 표방 0 · 원장 10-14(B) ④). ⛔ 인코더 후보 전용 — 사전 경로(`pm.NO_HF_MISLEAD`)는
-#: 건드리지 않는다. D-336 새 판(품목 입력)이 관문을 넘으면 걷는다
+#: (화장품 골든 라벨 의약품_오인 296 · 기능성화장품_오인 43 · 질병 표방 0 · 원장 10-14(B) ④). 🔄 2026-10-18 (보충 23 결정 2) 사전 쪽도 옮긴다 — 아래
+#: `COSMETIC_DICT_FROM`(종전 「⛔ 인코더 후보 전용 — 사전 경로는 건드리지 않는다」). D-336 새 판(품목 입력)이 관문을 넘으면 걷는다
+#: 🔄 2026-10-17 (D-348 보충 15 · D-338 의 법적 근거 줄 · (나) 코퍼스 조문만) — 화장품의 질병 · 건강 기능 주장 → 의약품 오인:
+#:    화장품법 제13조①1호(「의약품으로 잘못 인식할 우려가 있는 표시 또는 광고」) · 시행규칙 [별표 5] 2.가(「의약품으로 잘못 인식할 우려가 있는
+#:    내용, 제품의 명칭 및 효능ㆍ효과 등에 대한 표시ㆍ광고를 하지 말 것」) · 화장품법 제2조1호 단서(「「약사법」 제2조제4호의 의약품에 해당하는
+#:    물품은 제외한다」 — 화장품은 정의상 의약품이 아니다) `[문헌]` · 약사법 원문(의약품 정의)은 코퍼스에 없다 — 인용하지 않는다
+COSMETIC_MOVE_BASIS: tuple[str, ...] = (
+    "화장품법 제13조①1호",
+    "화장품법 시행규칙 [별표 5] 2.가",
+    "화장품법 제2조1호 단서",
+)
 COSMETIC_MOVE: dict[Violation, Violation] = {
     Violation.질병_예방치료_표방: Violation.의약품_오인,
     Violation.건강기능식품_오인: Violation.의약품_오인,
 }
+
+#: 🆕 2026-10-18 (D-348 보충 23 결정 2 · **D-338 개정**) — **사전 쪽 옮김.** 화장품 전제에서 식품 축의 질병 표방 · 의약품 오인 인용(둘 다 칸 C)은
+#:    화장품법 13①1(의약품 오인 · 칸 C)로 옮겨 쓴다 — 인코더 쪽 옮김(위)과 같은 라벨 규약 · 같은 근거 줄(`COSMETIC_MOVE_BASIS`).
+#:    종전 「⛔ 인코더 후보 전용 — 사전 경로는 건드리지 않는다」는 사전에 A · B 항목이 섞여 있던 때의 단서였다 — 보충 16 이후 사전은 칸 C 만 단독판정한다.
+#:    ⛔ 건강기능식품 오인 인용(식품 칸 A)은 옮기지 않는다 — A 를 C 로 바꾸게 된다. 단독판정 적중만 옮긴다(후보는 옮기지 않는다 — 소음)
+COSMETIC_DICT_FROM: frozenset[str] = frozenset(
+    {Violation.질병_예방치료_표방.value, Violation.의약품_오인.value}
+)
+#: 옮기지 않는 낱말 — 화장품에서는 기능성 정형 문구(A · 「탈모 증상의 완화에 도움」)이거나 낱말만 있는 M 이다.
+#:    `[측정]` 골든 화장품 A · M 3 행이 이 낱말로만 걸렸다(원장 10-18(B) ㉑) · `[문헌]` 시행규칙 제2조 탈모 기능성 · 지침 [별표 1] 비고
+COSMETIC_DICT_KEEP_OUT: frozenset[str] = frozenset({"탈모", "탈모완화", "탈모개선"})
+#: 옮겨 갈 인용 — 화장품법 제13조제1항제1호(유형 의약품 오인 · `collect.statute` 대응표)
+COSMETIC_DRUG_CITE = f"{COSM}:제13조제1항제1호"
 
 #: 옮긴 후보 아래 붙는 한 줄 — (원래 유형, 옮긴 유형) → 말. 문안은 화면 담당 검토 대상이다
 MOVED_NOTES: dict[tuple[Violation, Violation], str] = {

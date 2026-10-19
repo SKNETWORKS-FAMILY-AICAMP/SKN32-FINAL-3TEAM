@@ -290,3 +290,30 @@ def test_타사를_깎아내리지_않는_식품_비방은_답_없이_확정하�
     )
     got = _run(s)
     assert got is None or got.verdict is Verdict.hold, "원장 10-17(B) ⑤ 의 꼴 — 부당 비교(B)로 본다"
+
+
+# ── 측정 전용 사전 판 (🆕 2026-10-18 · D-348 보충 15 결정 3) ─────────────────────────────────────
+
+
+def test_사전_판_c_only_는_C_항목만_남기고_자격_없는_항목을_뺀다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import dictmatch as dm  # noqa: PLC0415
+
+    disease = dm.Entry(
+        term="암 치료", violation_type="질병_예방치료_표방", basis=("013094:제8조제1항제1호",)
+    )
+    exag = dm.Entry(term="최고급", violation_type="거짓_과장", basis=("013094:제8조제1항제4호",))
+    assert g.entry_cell(disease) is Infeasibility.C and g.entry_cell(exag) is Infeasibility.B
+    # 🔄 2026-10-18 (D-348 보충 16) — 기본은 칸 C 만 단독판정 · 나머지 단독판정 항목은 내린 후보
+    assert g._viewed([disease, exag], [exag]) == ([disease], [exag], [exag])
+    monkeypatch.setattr(g, "_DICT_VIEW", None)
+    try:
+        g.set_dict_view("c_only")
+        assert g._viewed([disease, exag], [exag]) == ([disease], [], [])
+        g.set_dict_view("legacy")
+        assert g._viewed([disease, exag], [exag]) == ([disease, exag], [exag], []), "종전 사전"
+    finally:
+        monkeypatch.setattr(g, "_DICT_VIEW", None)
+    with pytest.raises(ValueError):
+        g.set_dict_view("모르는 판")
