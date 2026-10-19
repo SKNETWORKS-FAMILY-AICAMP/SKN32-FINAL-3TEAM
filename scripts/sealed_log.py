@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 import json
 import pathlib
+import subprocess
 from typing import Any
 
 SEALED_LOG = pathlib.Path("build/eval/sealed_runs.jsonl")
@@ -41,6 +42,45 @@ def git_head(root: pathlib.Path = pathlib.Path(".")) -> str:
     return "미확인"
 
 
+#: 작업 트리 상태 — 모르면 이 글자다(지어내지 않는다 · D-220)
+WORKTREE_UNKNOWN = "커밋 안 된 변경 여부 미확인"
+WORKTREE_CLEAN = "깨끗함"
+
+
+def worktree_state(root: pathlib.Path = pathlib.Path(".")) -> str:
+    """🆕 2026-10-20 (D-339 결정 7 「그날의 ohb 커밋 하나」) — **추적 중인 파일에 커밋 안 된 변경이 있나.**
+
+    ★ `git status --porcelain --untracked-files=no` 한 번 — 추적 밖 파일(`build/` · 초안)은 보지 않는다 · 판정 코드는 모두 추적 중이다.
+    🔴 git 을 못 부르거나 실패하면 `WORKTREE_UNKNOWN` — 「깨끗함」으로 치지 않는다 (D-220). ⛔ `git_head` 는 종전대로 git 을 부르지 않는다.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return WORKTREE_UNKNOWN
+    if out.returncode != 0:
+        return WORKTREE_UNKNOWN
+    lines = [x for x in out.stdout.splitlines() if x.strip()]
+    return WORKTREE_CLEAN if not lines else f"커밋 안 된 변경 {len(lines)} 파일"
+
+
+def worktree_refusal(root: pathlib.Path = pathlib.Path(".")) -> str | None:
+    """봉인 회차를 열면 안 되는 작업 트리면 그 까닭 — 깨끗하면 `None`. 판정 그래프 · 판정기 B 의 `--sealed` 가 **돌기 전에** 부른다 (D-99)."""
+    st = worktree_state(root)
+    if st == WORKTREE_CLEAN:
+        return None
+    return (
+        f"작업 트리가 커밋 하나로 서지 않았다({st}) — 봉인 회차는 그날의 커밋 하나로 연다(D-339 결정 7). "
+        "커밋하거나 되돌린 뒤 연다 · `git status` 로 본다"
+    )
+
+
 def _rows(path: pathlib.Path) -> list[dict]:
     """기록 줄 — 없으면 빈 목록. 🔴 읽지 못하는 줄은 멈춘다(지나치지 않는다)."""
     if not path.exists():
@@ -64,7 +104,7 @@ def append(stamp: dict[str, Any], *, tool: str, path: pathlib.Path = SEALED_LOG)
         "at": datetime.datetime.now().isoformat(timespec="seconds"),
         "tool": tool,
         "commit": git_head(),
-        "worktree": "커밋 안 된 변경 여부 미확인",
+        "worktree": worktree_state(),
     } | stamp
     with path.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")

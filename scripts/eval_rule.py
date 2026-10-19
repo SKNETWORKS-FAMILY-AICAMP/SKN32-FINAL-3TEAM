@@ -338,6 +338,9 @@ def main(argv: list[str] | None = None) -> int:
         help="봉인 평가셋(test_sentence)을 연다 — 돌기 전에 기록 · 보고 전용 · 규칙을 고르지 않는다",
     )
     ap.parse_args(argv)
+    # 🆕 2026-10-20 — 봉인은 그날의 커밋 하나로 연다 — 판정 그래프와 같은 검사(`sealed_log.worktree_refusal` · D-99)
+    if why := sealed_log.worktree_refusal():
+        raise SystemExit(f"🔴 {why}")
     rules = load_rules()
     if not GOLDEN.exists():
         print(f"🔴 {GOLDEN} 가 없다 — uv run python launcher.py golden --write", file=sys.stderr)
