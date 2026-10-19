@@ -49,8 +49,8 @@ set -euo pipefail
 REPO_URL="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN32-FINAL-3TEAM.git"
 DEPLOY_REF="${DEPLOY_REF:-main}"            # 브랜치 · 태그 · 커밋. 배포 때는 커밋 해시를 권한다
 APP_DIR="${APP_DIR:-$HOME/SKN32-FINAL-3TEAM}"
-EXPECT_GOLDEN="f6ccc5a7de44"                 # 골든 지문 (sha256 앞 12자 · 원장 data/derived_manifest.jsonl)
-EXPECT_DICT="c6e29452c81b"                   # 사전 지문
+EXPECT_GOLDEN="94a79fe34363"                 # 골든 지문 (10-19 main 1f16723 원장)
+EXPECT_DICT="2ff0168c4a28"                   # 사전 지문
 DB_MODE="${DB_MODE:-container}"              # container = 서버 안 pgvector 컨테이너 · rds = RDS (승인 뒤)
 EXPECT_INSTANCE="g4dn.xlarge"
 MIN_DISK_GB=55                               # 루트 디스크 권장 60GB — 40GB 면 sLLM 까지 못 담는다
