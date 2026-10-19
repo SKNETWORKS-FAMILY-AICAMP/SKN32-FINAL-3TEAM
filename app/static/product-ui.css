@@ -1,0 +1,205 @@
+/* Workspace density: readable working surfaces, restrained accents, clear actions. */
+.user-body { background:var(--ws-bg); }
+.user-main { box-sizing:border-box; max-width:1440px; padding:24px 28px; }
+.user-main h1 { font-size:26px; letter-spacing:-.035em; line-height:1.35; }
+.user-main h2 { font-size:18px; }
+.cl-breadcrumb, .hg-breadcrumb, .csb-breadcrumb { margin-bottom:18px; font-size:12px; }
+.user-sidebar { flex-basis:208px; width:208px; padding:22px 10px 18px; gap:4px; }
+.user-sidebar-label { font-size:12px; color:var(--u-clay); margin-bottom:8px; }
+.user-sidebar-item { font-size:14px; padding:10px 14px; gap:12px; border-radius:7px; min-height:42px; }
+.user-sidebar-item-active { background:linear-gradient(110deg,var(--u-signal-soft),color-mix(in srgb,var(--ws-pink) 55%,var(--u-surface))); }
+.user-sidebar-cs { font-size:13px; padding:18px 14px 0; }
+.user-topnav-brand { font-size:17px; min-width:164px; }
+.user-topnav-brand img { width:29px; height:29px; }
+.user-topnav-pill { font-size:13px; }
+.user-main :is(.gn-card,.rv-card,.cp-card,.mp-card,.auth-card) { border-radius:9px; }
+.user-main :is(.gn-field input,.gn-field textarea,.ws-filters input,.ws-filters select) { font-size:14px; }
+.cl-page-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.cl-page-action { display:inline-flex; align-items:center; justify-content:center; gap:10px; border:0; border-radius:7px; padding:11px 17px; background:var(--ws-gradient); color:white; font:inherit; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.cl-page-action:focus-visible { outline:2px solid var(--u-signal); outline-offset:4px; }
+.gn-head, .cp-head, .rv-head, .hm-head { margin-bottom:20px; }
+.gn-head p, .cp-head>p, .rv-head p, .hm-head p { font-size:14px; line-height:1.65; }
+/* The home cards remain equal, with content instead of decorative mock screens. */
+.hm-card { min-height:180px; grid-template-columns:36px 1fr; gap:10px 12px; padding:20px; border-radius:9px; }
+.hm-icon { width:36px; height:36px; }
+.hm-icon svg { width:24px; height:24px; }
+.hm-card>b { font-size:17px; }
+.hm-card>span { max-width:none; min-height:40px; font-size:13px; line-height:1.7; }
+.hm-start { border:0; border-top:1px solid var(--u-line); border-radius:0; text-align:left; padding:12px 0 0; margin-top:2px; font-size:13px; background:transparent; }
+.hm-card:hover .hm-start { background:transparent; }
+.hm-stats { padding:12px 0; border-radius:8px; }
+.hm-stat .hm-v { font-size:23px; }
+.hm-sect { padding:20px; border-radius:9px; min-height:0; }
+.hm-sect .cl-history-empty, .hm-sect .hm-empty { padding:16px; margin-top:12px; }
+.hm-empty .cl-icon { width:30px; height:30px; margin-bottom:10px; }
+.hm-empty>b { font-size:14px; }
+.hm-empty-actions { margin-top:8px; }
+.ws-guide { padding:16px 20px; border-radius:8px; }
+.ws-guide>.cl-icon { width:26px; height:26px; }
+/* All four work screens share the available width and the same header/body grid. */
+html:has(.cl-workspace-screen) { scrollbar-gutter:stable; }
+.user-main.cl-workspace-screen {
+  --workspace-gap:20px;
+  max-width:none;
+  min-width:0;
+  margin:0;
+  padding:24px 28px;
+  scrollbar-gutter:auto;
+}
+.user-main.cl-workspace-screen>.cl-breadcrumb { margin:0 0 16px; min-height:20px; }
+.cl-workspace-screen>.cl-workspace-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  min-height:68px;
+  margin:0 0 var(--workspace-gap);
+  padding:0;
+  width:100%;
+  max-width:none;
+  flex-shrink:0;
+  box-sizing:border-box;
+}
+.cl-workspace-head>div:first-child { min-width:0; }
+.cl-workspace-screen>.cl-workspace-head h1 { margin:0 0 8px; font-size:26px; line-height:1.35; }
+.cl-workspace-screen>.cl-workspace-head p { margin:0; font-size:14px; line-height:1.65; max-width:none; width:auto; }
+.cl-workspace-screen .cl-product-form, .cl-workspace-screen .ws-product { max-width:none; width:100%; margin-left:0; margin-right:0; box-sizing:border-box; }
+.cl-workspace-screen .cl-product-form>.cl-product-section:first-of-type { margin-top:0; }
+.cl-workspace-screen .cp-card.cl-compose-form { padding:0; margin:0; }
+.cl-workspace-screen .rv-input-pane { padding:0; }
+.cl-workspace-screen .cp-head .cl-compose-flow { position:static; flex-shrink:0; margin:0; }
+.cl-workspace-screen .cp-head .cl-compose-flow li { flex-shrink:0; }
+.cl-workspace-screen .cl-product-section .gn-pick:has(input[name=category]) { width:100%; max-width:none; }
+.cl-product-section { padding:20px 22px; margin:14px 0; border-radius:9px; }
+.cl-product-section h2 { font-size:17px; gap:8px; margin:0 0 6px; }
+.cl-product-section h2 .cl-optional { color:var(--u-clay); }
+.cl-section-description { font-size:12px; color:var(--u-clay); line-height:1.7; margin:0 0 16px; }
+.cl-product-section h3 { margin:14px 0 8px; font-size:13px; }
+.cl-product-section .gn-field { margin:12px 0; }
+.cl-product-name-row { gap:18px; margin-top:8px; }
+.gn-field label { margin-bottom:6px; }
+.gn-field input, .gn-field textarea { padding:10px 12px; min-height:40px; border-radius:7px; }
+.gn-field textarea { line-height:1.6; }
+#gen-form .gn-pick:has(input[name=category]) { gap:8px; }
+#gen-form .gn-pick:has(input[name=category]) label { padding:10px 12px; gap:10px; min-height:46px; text-align:left; font-size:13px; }
+#gen-form .gn-pick:has(input[name=category]) label>.cl-icon { width:20px; height:20px; }
+#gen-form .gn-pick:has(input[name=category]) .cl-radio-dot { width:15px; height:15px; }
+#gen-form .gn-pick input:checked+label { background:var(--u-signal-soft); }
+#gen-form .gn-pick:has(input[name=cert]) label { padding:8px 15px; }
+.cl-audience-open { margin:18px 0; padding-top:16px; }
+.cl-audience-open fieldset { margin-bottom:14px; }
+.cl-product-optional>.gn-field { margin-bottom:16px; }
+.cl-product-submit { margin:16px 0; padding-top:14px; border-top:1px solid var(--u-line); }
+.cl-product-submit .gn-submit { min-height:42px; min-width:190px; padding:10px 18px; font-size:13px; }
+.cl-data-info { flex:1; min-width:240px; color:var(--u-clay); font-size:12px; }
+.cl-data-info summary { cursor:pointer; line-height:1.7; }
+.cl-data-info p { margin:10px 0 0; line-height:1.8; }
+.gn-cands { gap:14px; }
+.gn-cand { padding:18px; border-radius:9px; }
+.ws-product { padding:15px 18px; border-radius:8px; }
+.ws-selection { padding:16px 18px; border-radius:8px; }
+.ws-selection p { font-size:17px; }
+/* Review keeps its independent scroll areas; reduce repeated padding, not font legibility. */
+.user-main:has(.rv-results-pane), .user-main:has(.cp-ed) { max-width:none; }
+.rv-head { gap:16px; }
+.rv-card { padding:18px; }
+.cl-focus-ready .rv-results-pane { border-radius:9px; }
+.cl-focus-ready .cl-focus-head { padding:14px 18px; }
+.cl-focus-head h2 { font-size:16px; }
+.cl-focus-ready .cl-copy-nav-item { padding:0; margin-bottom:8px; }
+.cl-focus-ready .cl-copy-nav { padding:13px 32px 13px 14px; gap:7px; border-radius:8px; }
+.cl-focus-ready .cl-focus-actions { padding:12px 18px; }
+.cl-focus-ready .cl-result-copy .rv-text { font-size:17px; line-height:1.75; padding:16px; background:var(--u-surface2); }
+.cl-focus-ready .cl-detail-editors .rv-copy { padding:18px; }
+.cl-focus-ready .cl-focus-empty-quote:not([hidden]) { font-size:17px; padding:16px; margin:18px 18px 0; }
+.rv-opt { border-radius:8px; }
+.cl-result-copy .rv-opt { min-height:76px; }
+/* Tables and editor controls use the same compact rhythm. */
+.cl-history-page .cl-history-table .history-row { min-height:62px; padding-top:14px; padding-bottom:14px; }
+.history-detail { padding:24px; }
+.history-detail-head { top:-24px; }
+.cp-head { margin-bottom:18px; }
+.cp-card.cl-compose-form { padding:22px; }
+.cp-pick { gap:10px; }
+.cp-pick label { padding:12px!important; gap:10px; }
+.cl-format-art { width:36px; height:40px; background:var(--u-signal-soft); }
+.cl-format-art svg { width:24px; height:24px; }
+.cp-pick label b { font-size:14px; }
+.ws-compose-content { margin:18px 0; gap:16px; }
+.ws-compose-content>div:first-child { padding:18px; border-radius:8px; }
+.ws-layout-preview { padding:18px; border-radius:8px; background:var(--u-surface2); }
+.cl-compose-footer { padding-top:14px; }
+.cl-flow { font-size:12px; margin:18px 0; }
+.cl-flow b { width:24px; height:24px; font-size:11px; }
+.cl-flow li+li::before { margin:0 16px; }
+/* Help remains concept C; support remains concept B, with quieter supporting surfaces. */
+.hg-page, .csb-page { max-width:1160px; }
+.user-main .hg-heading h1 { font-size:26px; }
+.hg-heading, .csb-heading { margin-bottom:20px; }
+.hg-purpose { min-height:76px; padding:15px 12px; gap:12px; }
+.hg-purpose>svg { width:23px; height:23px; }
+.hg-guide { padding:22px; border-radius:9px; }
+.user-main .hg-guide h2 { font-size:21px; }
+.hg-guide-heading { margin-bottom:22px; }
+.hg-step { padding:16px; gap:10px; }
+.hg-step-icon { width:38px; height:44px; background:transparent; }
+.hg-help-card { padding:17px 15px; }
+.hg-help-icon { width:36px; height:36px; }
+.hg-help-icon svg { width:21px; height:21px; }
+.fq-search { padding:20px; background:var(--u-surface); }
+.fq-search-field { background:var(--u-surface2); }
+.hg-question { padding:17px 0; }
+.fq-contact { padding:20px; }
+.csb-form { padding:22px; border-radius:9px; }
+.csb-help { padding:15px 20px; background:var(--u-surface); }
+.csb-form-heading { margin-bottom:22px; }
+.user-main .csb-form-heading h2 { font-size:19px; }
+.csb-row { margin-bottom:18px; }
+.csb-form input[type=text], .csb-form textarea { padding:10px 12px; }
+.csb-form textarea { min-height:170px; }
+.csb-form-footer .csb-primary { padding:12px 22px; }
+.csb-process { padding-top:18px; }
+.csb-process li>span { width:32px; height:32px; }
+.mp-card { border-radius:9px; }
+.mp-tabs { margin-bottom:22px; }
+.auth-card { box-shadow:0 3px 18px rgba(60,35,80,.035); border-radius:10px; }
+@media(min-width:48rem) {
+  .user-topnav { height:64px; padding-left:24px; padding-right:24px; gap:22px; }
+  .user-shell:has(.rv-results-pane)>.user-topnav { flex-basis:64px; }
+  .user-body, .user-sidebar { min-height:calc(100vh - 64px); }
+  .user-body:has(.rv-results-pane), .user-body:has(.rv-results-pane)>.user-sidebar { min-height:0; }
+  .user-main:has(.rv-results-pane) { padding-bottom:24px; }
+  .history-detail { top:64px; }
+}
+@media(max-width:1100px) and (min-width:48rem) {
+  .user-sidebar { width:184px; flex-basis:184px; }
+  .user-sidebar-item { font-size:13px; padding:10px; gap:9px; }
+  .user-main { padding:22px; }
+  .hm-card { padding:16px; }
+  .hm-card>b { font-size:15px; }
+}
+@media(max-width:47.999rem) {
+  .user-topnav-brand { min-width:0; }
+  .user-sidebar { width:100%; flex-basis:auto; box-sizing:border-box; min-height:0; padding:8px 12px; }
+  .user-sidebar-item { font-size:12px; padding:8px; gap:5px; }
+  .user-sidebar-cs { font-size:11px; padding:8px; }
+  .user-main { padding:20px 16px; max-width:100%; }
+  .user-main h1, .user-main .hg-heading h1 { font-size:24px; }
+  .cl-page-heading { align-items:flex-start; gap:12px; flex-wrap:wrap; }
+  .cl-page-action { min-height:42px; }
+  .cl-product-section { padding:18px 16px; }
+  #gen-form .gn-pick:has(input[name=category]) { grid-template-columns:1fr; max-width:none; }
+  #gen-form .gn-pick:has(input[name=category]) label { min-height:44px; }
+  .cl-product-submit { flex-direction:column; align-items:stretch; }
+  .cl-product-submit .gn-submit { width:100%; margin:0; }
+  .hm-card { min-height:160px; }
+  .cp-card.cl-compose-form { padding:18px 16px; }
+  .hg-guide { padding:18px 16px; }
+  .hg-purpose { min-height:68px; }
+  .csb-form { padding:20px 16px; }
+  .csb-help { padding:16px; }
+  .user-main.cl-workspace-screen { padding:20px 16px; }
+  .cl-workspace-screen>.cl-workspace-head { min-height:0; flex-wrap:wrap; gap:12px; }
+  .cl-workspace-screen>.cl-workspace-head h1 { font-size:24px; }
+  .cl-workspace-screen .cp-head .cl-compose-flow { flex-basis:100%; justify-content:flex-start; }
+}

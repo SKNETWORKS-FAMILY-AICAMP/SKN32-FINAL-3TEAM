@@ -32,7 +32,7 @@
 <div class="user-shell">
 <form class="auth-card auth-card-wide" method="post" action="/u/signup">
   <h1>회원가입</h1>
-  <p class="auth-sub">가입하면 검수·카피생성 기록을 내 계정으로 모아 볼 수 있어요.</p>
+  <p class="auth-sub">가입하면 카피 생성을 이용하고, 검수 이력 보관을 설정할 수 있어요.</p>
   {% if error %}<p class="auth-err" role="alert">{{ error }}</p>{% endif %}
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   {# 🆕 2026-10-14 — 회원 전용 안내에서 넘어왔으면 가입 뒤 그 화면으로 돌아간다 (`_next_path`) #}

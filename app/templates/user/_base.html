@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">{% block screen_css %}{% endblock %}<link rel="stylesheet" href="/static/workspace.css?v=2"><link rel="stylesheet" href="/static/design.css?v=20"><link rel="stylesheet" href="/static/motion.css?v=1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">{% block screen_css %}{% endblock %}<link rel="stylesheet" href="/static/workspace.css?v=2"><link rel="stylesheet" href="/static/design.css?v=20"><link rel="stylesheet" href="/static/product-ui.css?v=2"><link rel="stylesheet" href="/static/motion.css?v=1">{% endblock %}
 {% block content %}
 {% from "user/_icons.html" import icon %}
 <a class="ws-skip" href="#workspace-main">본문 바로가기</a>
@@ -7,8 +7,8 @@
 {% include "user/_topnav.html" %}
 <div class="user-body">
   {% include "user/_sidebar.html" %}
-  <section class="user-main" id="workspace-main" aria-label="작업 내용">
-    {% if ui_screen in ['/u/', '/u/review', '/u/generate', '/u/compose', '/u/history'] %}<nav class="cl-breadcrumb" aria-label="현재 위치"><a href="/u/">작업 공간</a><span>/</span><span>{{ {'/u/':'홈','/u/review':'문구 검수','/u/generate':'카피 생성','/u/compose':'광고 만들기','/u/history':'검수 이력'}[ui_screen] }}</span></nav>{% endif %}
+  <section class="user-main{{ ' cl-workspace-screen' if ui_screen in ['/u/', '/u/review', '/u/generate', '/u/compose'] }}" id="workspace-main" aria-label="작업 내용">
+    {% if ui_screen in ['/u/', '/u/review', '/u/generate', '/u/compose', '/u/history'] %}<nav class="cl-breadcrumb" aria-label="현재 위치"><a href="/u/">작업 공간</a><span>/</span><span>{{ {'/u/':'홈','/u/review':'문구 검수','/u/generate':'카피 생성','/u/compose':'AI 광고 생성','/u/history':'검수 이력'}[ui_screen] }}</span></nav>{% endif %}
     {% block user_content %}{% endblock %}
   </section>
 </div>

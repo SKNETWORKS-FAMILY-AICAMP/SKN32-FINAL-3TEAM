@@ -302,6 +302,17 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   .ld-line, .ld-kicker, .ld-lead, .ld-hero .ld-actions, .ld-try, .ld-demo-stage, .ld-seq { opacity: 1; transform: none; }
   .ld-mark { background-size: 100% 100%, 100% 2px; }
 }
+/* Keep the introduction calm; the example stays visible instead of replaying. */
+.ld-orbs { opacity:.5; }
+.ld-orbs i { animation:none; }
+.ld-demo { animation:none; transform:none; box-shadow:0 8px 30px rgba(99,63,132,.1); }
+.ld-demo::after { display:none; }
+.ld-seq { animation:none; opacity:1; transform:none; }
+.ld-hero .ld-btn-grad { animation:none; }
+.ld-hero .ld-btn-grad::after { display:none; }
+.ld-flow b { animation:none; }
+.ld-brand:hover img { transform:scale(1.03); }
+.ld-hero :is(.ld-line,.ld-kicker,.ld-lead,.ld-actions,.ld-try), .ld-page .ld-demo-stage { animation:ld-rise .35s ease-out both; }
 </style>{% endblock %}
 {% block content %}
 <div class="user-shell ld-page">
@@ -352,7 +363,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   <div class="ld-demo" aria-label="검수와 고쳐 쓰기 예시">
     <div class="ld-demo-top">
       <small>검수 미리보기 · 예시</small>
-      <span class="ld-badge"><i>✦</i> AI 실시간 진단</span>
+      <span class="ld-badge">검수 흐름 예시</span>
     </div>
     <p class="ld-bubble ld-seq ld-s1">
       <span class="ld-pin ld-pin-bad" aria-hidden="true">!</span>

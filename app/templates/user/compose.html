@@ -224,10 +224,10 @@ main:has(.cp-ed) { max-width: 96rem; }
 {% endblock %}
 {% block user_content %}
 {% from "user/_icons.html" import icon %}
-<div class="cp-head">
-  <h1>{{ "광고를 편집하고 확인하세요." if draft else "어떤 광고를 만들까요?" }}</h1>
+<div class="cp-head cl-workspace-head">
+  <div><h1>{{ "광고 편집" if draft else "AI 광고 생성" }}</h1>
+  <p>{{ "문구·이미지를 편집한 뒤 다시 검수하세요." if draft else "광고 형식을 고르고 사용할 문구를 입력하세요." }}</p></div>
   <ol class="cl-flow cl-compose-flow"><li class="{{ 'is-done' if draft else 'is-current' }}"><b>{{ '✓' if draft else '1' }}</b>광고 설정</li><li class="{{ 'is-current' if draft else '' }}"><b>2</b>편집 · 검수</li></ol>
-  <p>{{ "문구와 이미지를 조정하고, 변경한 문구는 다시 검수해주세요." if draft else "형식을 고르고 사용할 문구를 입력해주세요. 이미지와 세부 배치는 다음 단계에서 편집해요." }}</p>
 </div>
 
 {% if not draft %}
@@ -289,7 +289,7 @@ main:has(.cp-ed) { max-width: 96rem; }
   <div class="cl-compose-footer"><p>{{ icon("info", 19) }} 입력한 문구를 검수한 뒤 편집 화면을 열어요.</p><button class="cp-submit" type="submit" data-wait-label="생성 중…">검수 후 편집하기 <span>→</span></button></div>
   <p class="cp-wait" data-wait hidden role="status" aria-live="polite">광고 틀을 만드는 중이에요 — 문구 검수를 먼저 하고 있어요</p>
   <p class="cp-note" style="margin-top:.6rem">
-    규격 · 여백 · 글자 크기는 KRDS 표준형 스타일 기준으로 셋팅돼요.
+    선택한 형식에 맞춰 규격과 여백이 적용돼요.
   </p>
 </form>
 {% endif %}
@@ -299,7 +299,7 @@ main:has(.cp-ed) { max-width: 96rem; }
   <h2>판정 결과</h2>
   <p class="cp-pending">
     {% if engine_down %}판정 엔진에 연결하지 못했어요.{% else %}판정 엔진이 아직 준비되지 않았어요.{% endif %}
-    판정을 지나지 않은 문구로는 템플릿을 만들지 않아요 — <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
+    문구 검수를 완료하지 못해 광고 편집 화면을 열 수 없어요. 입력한 내용은 유지돼요.<br>
     고르신 것 — 종류 <b>{{ picked.ad_format }}</b>
     {%- if picked.prompt %} · 내용 「{{ picked.prompt }}」{% endif %}
     {%- if picked.note %} · 필수 병기 문구 「{{ picked.note }}」{% endif %}

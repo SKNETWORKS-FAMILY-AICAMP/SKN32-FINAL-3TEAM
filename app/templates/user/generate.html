@@ -205,9 +205,10 @@
 {% endblock %}
 {% block user_content %}
 {% from "user/_icons.html" import icon %}
-<div class="gn-head">
-  <h1>{{ "마음에 드는 카피를 골라보세요." if live or result else "제품 정보를 입력해주세요." }}</h1>
-  <p>{{ "표현을 비교하고, 선택한 문구로 광고를 만들어보세요." if live or result else "입력한 정보를 바탕으로 광고 문구 후보를 만들어드려요." }}</p>
+<div class="gn-head cl-page-heading cl-workspace-head">
+  <div><h1>{{ "카피 생성 결과" if live or result else "카피 생성" }}</h1>
+  <p>{{ "후보의 표현과 검수 내용을 비교한 뒤 광고에 사용할 문구를 선택하세요." if live or result else "제품 정보를 입력하면 광고 문구 후보를 만들어요." }}</p></div>
+  {% if not need_login and not (live or result) %}<button class="cl-page-action" type="submit" form="gen-form">카피 생성하기 {{ icon('spark', 16) }}</button>{% endif %}
 </div>
 
 {% if need_login %}
@@ -236,7 +237,7 @@
 <details class="ws-product-editor" id="product-editor" data-has-result="{{ '1' if live or result else '0' }}"{% if not (live or result) or errors %} open{% endif %}><summary>제품 정보 입력 · 수정</summary>
 <form class="cl-product-form" id="gen-form" method="post" action="/u/generate" data-wait-form>
 {% if errors %}<ul class="gn-errors" role="alert">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-<section class="cl-product-section"><h2><span>01</span> 제품 기본 정보 <small>검수할 제품에 대해 알려주세요.</small></h2>
+<section class="cl-product-section"><h2>제품 기본 정보</h2><p class="cl-section-description">제품명·종류·특징·한 줄 설명 중 하나 이상 입력해주세요.</p>
 <h3>제품 분류</h3>  <div class="gn-pick">
     {% for key, label in gen_categories %}
     <input type="radio" id="g-cat-{{ key }}" name="category" value="{{ key }}"
@@ -285,7 +286,7 @@
               placeholder="예: 뼈 건강에 도움을 줄 수 있음">{{ p.fixed or '' }}</textarea>
     <p class="gn-note" style="margin:.3rem 0 0">🔴 이 문구는 <b>글자 그대로</b> 끼워요 — 다듬거나 범위를 넓히지 않아요.</p>
   </div></section>
-<section class="cl-product-section cl-product-optional"><h2><span>02</span> 추가 정보 <span class="cl-pill">선택</span><small>더 구체적인 문구를 만드는 데 도움이 돼요.</small></h2><div class="gn-field">
+<section class="cl-product-section cl-product-optional"><h2>추가 정보 <span class="cl-optional">선택</span></h2><p class="cl-section-description">원재료와 대상 고객을 알려주시면 더 구체적인 문구를 만들 수 있어요.</p><div class="gn-field">
       <label for="g-ingredients">원재료 · 성분 <span class="gn-note">(쉼표로 구분)</span></label>
       <input type="text" id="g-ingredients" name="ingredients" maxlength="{{ gen_limits.list }}"
              value="{{ (p.ingredients or [])|join(', ') }}" placeholder="예: 통귀리, 아몬드">
@@ -315,11 +316,7 @@
 </section>
 <div class="cl-product-submit">  {% if gen_external %}
   {# 🆕 2026-10-13 — 생성 엔진(GPT)이 켜진 환경에서만 적는다. 무엇이 밖으로 나가는지 누르기 전에 알린다 #}
-  <p class="gn-note" style="margin:.2rem 0 .6rem">
-    🔴 위에 적은 <b>제품 정보</b>(제품명 · 종류 · 문구 · 특징 · 원료 · 인증 이름 · 대상)는 문구를 쓰기 위해 <b>외부 생성 모델(OpenAI)</b>로 보내요.
-    인정 · 심사받은 기능성 문구는 보내지 않고 우리 코드가 글자 그대로 끼워요. 만들어진 문구는 우리 검수 엔진(사전 · 조문 검색 · 판정 인코더) 전체를 지나야 후보로 나와요.
-    후보가 나오기까지 <b>30초~1분</b>쯤 걸려요.
-  </p>
+  <details class="cl-data-info"><summary>제품 정보가 OpenAI로 전송돼요 · 생성에 약 30초~1분</summary><p class="gn-note">제품명·종류·문구·특징·원료·인증 이름·대상을 외부 생성 모델(OpenAI)로 보내요. 인정·심사받은 기능성 문구는 전송하지 않고 원문 그대로 사용해요. 생성한 후보는 사전·조문 검색·판정 인코더 검수를 거쳐 표시돼요.</p></details>
   {% endif %}
   <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
   <button class="gn-submit" type="submit">이 내용으로 카피 생성</button>
@@ -374,13 +371,13 @@
   <p class="gn-pending">
     {% if engine_failed %}문구를 만들다 실패했어요. 잠시 뒤 다시 눌러 주세요.
     {% else %}{{ engine_why or "카피 생성 엔진이 준비되지 않았어요." }}{% endif %}
-    <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
-    받은 입력 — 분기 <b>{{ branch.label }}</b> · 판정 전제 <b>{{ branch.premise.value }}</b>
+    입력한 제품 정보는 유지돼요. 잠시 뒤 다시 시도해주세요.<br>
+    제품 분류 — <b>{{ branch.label }}</b> · 생성 기준 <b>{{ branch.premise.value }}</b>
     {%- if picked.name %} · 제품 <b>{{ picked.name }}</b>{% endif %}
  · 대상 <b>{{ picked.audience }}</b>
     {%- if picked.target %} ({{ picked.target }}){% endif %}<br>
     {% if branch.notice %}{{ branch.notice }}<br>{% endif %}
-    지금은 아래 골든 픽스처로 결과 화면의 모든 분기를 볼 수 있어요.
+    제품 정보 수정에서 입력한 내용을 확인할 수 있어요.
   </p>
 </div>
 {% endif %}

@@ -531,7 +531,7 @@ def test_생성_입력은_분기와_판정_전제를_되돌려_그린다() -> No
     r = _gen_post(category="hf", cert="no", name="지어낸 곡물바", age="30", sex="f")
     assert r.status_code == 200
     assert "건강기능식품 · 인증 아니오" in r.text
-    assert "판정 전제 <b>식품</b>" in r.text  # 인정 없는 건강기능식품은 일반식품으로 생성한다
+    assert "생성 기준 <b>식품</b>" in r.text  # 인정 없는 건강기능식품은 일반식품으로 생성한다
     assert "30대 여성" in r.text
 
 

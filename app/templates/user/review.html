@@ -890,7 +890,7 @@
   {% endfor %}
 </div>
 {% endmacro %}
-<div class="rv-head">
+<div class="rv-head cl-workspace-head">
   <div>
     <h1 data-review-page-title>{{ "검수 결과" if results and not (results|selectattr("result.branches")|list) else "문구 검수" }}</h1>
     {# 🔄 2026-10-15 (ksr · 점검 19) — 모바일은 결과가 아래에 쌓여 「오른쪽」이 틀렸다 #}
@@ -1001,8 +1001,8 @@
       {#- 🔴 2026-10-15 (전수 점검) — 연결 실패(503 · `engine_down`)를 「아직 안 붙음」(501)으로 그리던 자리. 문구는 광고 생성 화면(`compose.html`)과 같은 말 #}
       <p class="rv-pending">
         {% if engine_down %}판정 엔진에 연결하지 못했어요.{% else %}판정 엔진이 아직 붙지 않았어요.{% endif %}
-        넣으신 문구는 그대로 두고, <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
-        {% if not engine_down %}지금은 왼쪽의 골든 픽스처로 각 분기가 어떻게 보이는지 확인할 수 있어요.{% endif %}
+        입력한 문구는 유지돼요. 잠시 뒤 다시 검수해주세요.<br>
+        {% if not engine_down %}검수 서비스를 사용할 수 없어 결과를 표시하지 못했어요.{% endif %}
       </p>
     </div>
   {% elif results %}
