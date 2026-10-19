@@ -567,11 +567,47 @@ SUBST_TEXT: dict[str, SubstText] = {
     ),
 }
 
+#: 🆕 2026-10-19 (D-348 보충 28 결정 2 · 보충 6 결정 3 · 4) **부당 비교 · 비방의 실증 갈래 ①(객관적 근거)** — (유형 · 법 축) → 문안.
+#:    ✅ 2026-10-19 승인 — 오한빈(보충 28 · 글자는 모델이 옮겨 적음). 정본 글자는 `docs/ohb/기준문안_초안_2026-10-02.md` §18 · 게이트 `tests/test_compare_subst.py`.
+#:    `[문헌]` 표시광고법 시행령 제3조③(「비교 대상 및 기준을 분명하게 밝히지 아니하거나 객관적인 근거 없이 … 우량 또는 유리하다고」) ·
+#:    ④(「객관적인 근거가 없는 내용으로 표시ㆍ광고하여 비방하거나 불리한 사실만을 표시ㆍ광고하여 비방」) · 식품표시광고법 시행령 [별표 1] 7.가
+#:    (「비교대상 및 비교기준이 명확하지 않거나 비교내용 및 비교방법이 적정하지 않은」) · 화장품법 시행규칙 [별표 5] 2.바(「비교 대상 및 기준을 분명히
+#:    밝히고 객관적으로 확인될 수 있는 사항만」) — 코퍼스 `law_005361` · `013453_annex_0001` · `008741_annex_0005`. 자료 종류는 §13 의 법 축 줄과 같다
+#:    ⛔ 식품 · 화장품 축의 비방은 칸 C 라 실증 줄이 없다(보충 6 결정 1 · 보충 10) — 표에 없으면 분기 없음(D-220)
+TYPE_SUBST_TEXT: dict[tuple[Violation, str], SubstText] = {
+    (Violation.부당_비교광고, "표시광고법"): SubstText(
+        "비교하는 표현은 비교 대상과 기준을 분명히 밝히고 객관적인 근거가 있어야 합니다(시행령 제3조③). "
+        "비교 내용을 실증할 수 있는 자료가 있고 비교 대상 · 기준을 같은 광고에 밝혔다면 등급이 내려갈 수 있습니다.",
+        SUBST_TEXT["표시광고법"].evidence,
+    ),
+    (Violation.부당_비교광고, "식품표시광고법"): SubstText(
+        "비교 광고는 비교대상과 비교기준이 명확하고 비교 내용과 방법이 적정해야 합니다(시행령 [별표 1] 7.가). "
+        "비교 내용을 실증할 수 있는 자료가 있고 대상 · 기준을 같은 광고에 밝혔다면 등급이 내려갈 수 있습니다.",
+        SUBST_TEXT["식품표시광고법"].evidence,
+    ),
+    (Violation.부당_비교광고, "화장품법"): SubstText(
+        "경쟁상품과 비교하는 광고는 비교 대상과 기준을 분명히 밝히고 객관적으로 확인될 수 있는 사항만 쓸 수 있습니다(시행규칙 [별표 5] 2.바). "
+        "비교 내용을 실증할 수 있는 자료가 있고 대상 · 기준을 같은 광고에 밝혔다면 등급이 내려갈 수 있습니다. "
+        "「최고」 · 「최상」 같은 절대적 표현은 자료가 있어도 쓸 수 없습니다.",
+        SUBST_TEXT["화장품법"].evidence,
+    ),
+    (Violation.비방광고, "표시광고법"): SubstText(
+        "다른 사업자의 상품에 관한 내용은 객관적인 근거가 있어야 합니다(시행령 제3조④). "
+        "그 내용을 실증할 수 있는 자료가 있다면 등급이 내려갈 수 있습니다. 불리한 사실만 골라 싣지 않았는지는 따로 묻습니다.",
+        SUBST_TEXT["표시광고법"].evidence,
+    ),
+}
+
 #: 실증 분기를 붙이는 유형 → 실증했을 때의 상한 (D-337 결정 1).
 #: `[문헌]` 실증 책임 조문 — 식품표시광고법 제9조① · 화장품법 제14조① · 표시광고법 제5조① 「사실과 관련한 사항 … 실증할 수 있어야」.
-#: ⛔ 비방광고는 상한이 R1 이상이고(D-304 · 「불리한 사실만 골라 비방」은 사실이어도 남는다) 문안이 따로 있어야 한다 · 소비자 기만 ·
-#:    부당 비교는 자료로 풀리지 않는 갈래(은폐 · 누락 · 비교 방법)가 있다 — 1 단계 밖이다. 이 유형의 확정은 지시가 아니라 보류로 남는다 (D-192)
-SUBST_MAX: dict[Violation, Risk] = {Violation.거짓_과장: Risk.R0}
+#: 🔄 2026-10-19 (D-348 보충 28 결정 2) — 부당 비교 · 비방도 R0 — 두 갈래(사실 갈래 · 실증 갈래)를 모두 지나야 닫는다(갈래 결과 max · 보충 6 결정 3 · 4 ·
+#:    `factcheck.NEED_SUBST`). ⛔ 종전 「비방 R1 이상(D-304)」은 보충 6 결정 3 이전 내용이다(표시광고법 비방은 B 두 갈래 · 식품 · 화장품 비방은 C)
+#:    ⛔ 소비자 기만은 자료로 풀리지 않는 갈래(은폐 · 누락)라 넣지 않는다 — 조건 고지 사실 확인이 맡는다(보충 7 결정 7)
+SUBST_MAX: dict[Violation, Risk] = {
+    Violation.거짓_과장: Risk.R0,
+    Violation.부당_비교광고: Risk.R0,
+    Violation.비방광고: Risk.R0,
+}
 
 
 def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBranch | None:
@@ -583,7 +619,14 @@ def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBran
     vs = set(violations)
     if not vs or not vs <= set(SUBST_MAX) or len(basis_axes) != 1:
         return None
-    text = SUBST_TEXT.get(next(iter(basis_axes)))
+    axis = next(iter(basis_axes))
+    # 🔄 2026-10-19 (보충 28 결정 2) 거짓 · 과장뿐이면 §13 줄 · 부당 비교 · 비방 하나면 그 유형의 줄(§18) · 섞이면 어느 줄인지 정하지 않는다
+    if vs == {Violation.거짓_과장}:
+        text = SUBST_TEXT.get(axis)
+    elif len(vs) == 1:
+        text = TYPE_SUBST_TEXT.get((next(iter(vs)), axis))
+    else:
+        text = None
     if text is None:
         return None
     top = max((SUBST_MAX[v] for v in vs), key=lambda r: r.level)
