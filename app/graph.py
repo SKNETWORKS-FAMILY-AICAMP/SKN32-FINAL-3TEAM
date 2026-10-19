@@ -2347,6 +2347,8 @@ def _premise_sentences(
             )
             facts = list((state.get("product") or ProductContext()).facts)
             j = _hf_premise(premise, j, encs[sid], facts, span, rows)
+            # 🆕 2026-10-19 (D-348 보충 28 결정 3) — 식품 두 전제: 기능성 표시 고시 요건(전제)이 자격의 답이다(건기식 두 전제와 같은 모양)
+            j = _food_premise(premise, j, encs[sid], facts, span, rows)
         out.append(j)
     return out
 
@@ -2418,13 +2420,11 @@ def _hf_premise(
         floor=floor,
         articles=arts,
     )
-    held = j.model_copy(
-        update={
-            "risk": j.risk.model_copy(
-                update={"encoder": floor, "final": floor, "encoder_basis": [eb]}
-            )
-        }
-    )
+    # 🔄 2026-10-19 — 근거의 하한(제재표 · R2 일 수 있다)과 기록되는 인코더 하한(R1 층 상한 · `encoder_cap`)을 가른다 ·
+    #    `_merged` 로 새로 만들어 계약 검증을 지나게 한다(`model_copy` 는 검증을 건너뛰어 기록 합칠 때 터졌다 · `_with_encoder_risk` 와 같은 모양)
+    cap = encoder_cap(j.text)
+    assert cap is not None  # 위에서 걸렀다
+    held = _with_risk(j, _merged(j.risk, cap, [eb]))
     key = dm.norm(j.text)
     uf = next((f for f in facts if f.kind is FactKind.인정_기능성 and dm.norm(f.text) == key), None)
     if uf is None:
@@ -2443,6 +2443,84 @@ def _hf_premise(
         return _answered(held, user_facts=[uf])
     if uf.answer is Answer.아니오:
         c = _enc_confirmed(held, Violation.거짓_과장, span, user_facts=[uf])
+        if c.verdict is Verdict.confirmed:
+            return c.model_copy(update={"infeasibility": Infeasibility.A, "substantiation": None})
+        return c
+    return held.model_copy(update={"user_facts": [uf]})
+
+
+def _food_premise(
+    premise: Premise,
+    j: SentenceJudgment,
+    e: SentEncoding,
+    facts: list[UserFact],
+    span: Span | None,
+    rows: list[dict[str, Any]],
+) -> SentenceJudgment:
+    """🆕 2026-10-19 (D-348 보충 28 결정 3) **식품 두 전제의 인코더 쪽 판정** — 인코더(식품 입력)가 건강기능식품 오인 후보를 낸 문장.
+
+    ★ `_hf_premise` 와 같은 모양이다 — 두 전제가 모두 보류라 분기가 접혀(원장 10-18(B) ㉑ · dev 15) 기능성 표시 여부를 고를 자리가 없었다.
+       · `식품` — 기능성 표시 고시 요건을 갖추지 않은 일반식품이 기능성을 내세우면 3호(건강기능식품 오인) → **확정 위반 · 사유 A**(답 없이 · 전제가 답이다)
+       · `일반식품_기능성` — 전제가 3호 후보를 지운 자리 → **묻는다**(`기능성_표시` · 정본 §19) — 예 R0 · 아니오 3호 확정(사유 A) · 해당 없음 보류 + 출처
+    🔴 손대지 않는다 — `_hf_premise` 와 같은 조건(판정 대상 아님 · 확신 부족 보류가 아님 · 주장 아님 · 구간 모름 · 3호 후보 없음) ·
+       `식품` 에서 다른 인코더 유형의 근거가 함께 섰다 · `일반식품_기능성` 에서 근거가 섰거나 질병 · 의약품 후보 · 치료 꼴(「예」가 질병 주장을 R0 으로 풀지 않게)
+    """
+    if premise not in (Premise.식품, Premise.일반식품_기능성):
+        return j
+    if (
+        j.not_claim
+        or j.verdict is not Verdict.hold
+        or j.hold_reason is not HoldReason.low_conf
+        or span is None
+        or pm.HF_MISLEAD not in e.candidates
+        or encoder_cap(j.text) is None
+    ):
+        return j
+    hf = Violation(pm.HF_MISLEAD)
+    basis = list(j.risk.encoder_basis)
+    if premise is Premise.식품:
+        if not basis or any(b.violation is not hf or b.moved_from is not None for b in basis):
+            return j
+        c = _enc_confirmed(j, hf, span)
+        if c.verdict is not Verdict.confirmed:
+            return j
+        return c.model_copy(update={"infeasibility": Infeasibility.A, "substantiation": None})
+    if basis:
+        return j
+    if {Violation.질병_예방치료_표방, Violation.의약품_오인} & set(
+        j.violations
+    ) or factcheck.TREATMENT_FORM.search(j.text):
+        return j
+    floor = estimate_of(rows, premise, hf).floor
+    if floor is None or floor.level < Risk.R1.level:
+        return j
+    arts = [
+        _ref_article(x) for x in dict.fromkeys(statute.reference_of_cite(pm.FOOD_FUNCTION_CITE))
+    ]
+    eb = EncoderBasis(premise=premise, violation=hf, floor=floor, articles=arts)
+    # 🔄 2026-10-19 — 근거의 하한(제재표 · R2 일 수 있다)과 기록되는 인코더 하한(R1 층 상한 · `encoder_cap`)을 가른다 ·
+    #    `_merged` 로 새로 만들어 계약 검증을 지나게 한다(`model_copy` 는 검증을 건너뛰어 기록 합칠 때 터졌다 · `_with_encoder_risk` 와 같은 모양)
+    cap = encoder_cap(j.text)
+    assert cap is not None  # 위에서 걸렀다
+    held = _with_risk(j, _merged(j.risk, cap, [eb]))
+    key = dm.norm(j.text)
+    uf = next((f for f in facts if f.kind is FactKind.기능성_표시 and dm.norm(f.text) == key), None)
+    if uf is None:
+        t = factcheck.FOOD_FUNC_TEXT
+        return held.model_copy(
+            update={
+                "fact_check": FactBranch(
+                    kind=FactKind.기능성_표시,
+                    confirmed_max=Risk.R0,
+                    accepted_evidence=list(t.accepted_evidence),
+                    criteria=t.criteria,
+                )
+            }
+        )
+    if uf.answer is Answer.예:
+        return _answered(held, user_facts=[uf])
+    if uf.answer is Answer.아니오:
+        c = _enc_confirmed(held, hf, span, user_facts=[uf])
         if c.verdict is Verdict.confirmed:
             return c.model_copy(update={"infeasibility": Infeasibility.A, "substantiation": None})
         return c
@@ -3117,6 +3195,19 @@ def _encoder_side(
             )
         ):
             return []
+        # 🆕 2026-10-19 (보충 28 결정 1 · 보충 7 결정 6) 표시광고법 축의 소비자 기만에 인코더 후기 후보가 함께 섰으면 조건 고지 대신 후기 실재를 묻는다 —
+        #    가짜 · 미사용 후기는 기만의 사실 확인 분기다(대응표는 그대로 · 후기 유형에는 표시광고법 조항이 없다) · 유형으로 고른다(낱말 문 없음 · 보충 27 결정 2)
+        #    `[측정]` D4-20 공정위 의결 행에서 기만 ∧ 후기 후보가 함께 선 행 dev · train · 봉인 0 — 데이터가 생기면 선다(원장 10-19(B) ⑧)
+        if (
+            v is Violation.소비자_기만
+            and _ask_as(v)
+            and FactKind.후기_실재 in factcheck.FACT_TEXTS
+            and any(
+                c.violation is Violation.후기_체험기_기만 and c.moved_from is None
+                for c in s.encoder_candidates
+            )
+        ):
+            return [FactKind.후기_실재]
         return factcheck.type_kinds(_ask_as(v))
 
     t_kinds = [
