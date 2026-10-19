@@ -904,15 +904,19 @@
   </div>
 </div>
 
-<div class="rv-grid">
+<div class="rv-grid cl-focus-review">
 
   <div class="rv-input-pane" role="region" aria-label="검수 문구 입력" tabindex="0">
     {# 🆕 2026-10-15 (ksr · 점검 0) — 검수 버튼을 누르면 「검수 중…」. 「예시 넣기」 · 「칸 추가」 · 「삭제」는 띄우지 않는다(`user_wait.js` `data-wait-only`) #}
-    <form class="rv-card" method="post" action="/u/judge" data-wait-form data-wait-only>
-      <h2>검수할 문구 <span class="cl-pill">{{ copies|length }} / {{ max_copies }}건</span></h2>
+    <form id="review-input-form" class="rv-card" method="post" action="/u/judge" data-wait-form data-wait-only>
+      <h2>검수 문구 <span class="cl-pill">{{ copies|length }} / {{ max_copies }}건</span></h2>
       <div class="cl-input-scroll" tabindex="0" role="region" aria-label="검수 문구 목록">
       {% if notice %}<p class="rv-toast" role="status">{{ notice }}</p>{% endif %}
       {% for c in copies %}
+      <div class="cl-copy-nav-item">
+        <button type="button" class="cl-copy-nav" data-copy-nav="{{ loop.index }}" aria-pressed="false"><span class="cl-copy-nav-number">문구 {{ loop.index }}</span><span class="cl-nav-status" data-nav-status="{{ loop.index }}">검수 전</span><span class="cl-nav-preview" data-nav-preview="{{ loop.index }}">{{ c or '문구를 입력해주세요.' }}</span></button>
+        {% if copies|length > 1 %}<button class="cl-nav-delete" type="submit" name="op" value="del:{{ loop.index }}" formnovalidate aria-label="문구 {{ loop.index }} 삭제">×</button>{% endif %}
+      </div>
       <div class="rv-copy" data-input-copy="{{ loop.index }}">
         <div class="rv-copy-bar">
           <span>문구 {{ loop.index }}</span>
@@ -929,7 +933,7 @@
         <div class="rv-copy-row">
           <label class="visually-hidden" for="text-{{ loop.index }}">문구 {{ loop.index }}</label>
           <textarea id="text-{{ loop.index }}" name="text" rows="4" maxlength="{{ max_text_len }}"
-                    placeholder="검수할 광고 문구를 붙여넣으세요.">{{ c }}</textarea>
+                    placeholder="검수할 광고 문구를 입력하세요.">{{ c }}</textarea>
           {% if copies|length > 1 %}<button class="rv-copy-go" type="submit" name="op" value="judge:{{ loop.index }}"
                   title="이 문구 검수하기" data-wait-go data-wait-label="검수 중…">이 문구 검수</button>{% endif %}
         </div>
@@ -987,8 +991,12 @@
   </div>
 
   <div class="rv-results-pane" role="region" aria-label="검수 결과" tabindex="0">
+    <div class="cl-focus-head"><h2 data-focus-copy-title>문구 1</h2><button type="button" data-edit-copy>{{ icon('pencil', 17) }} 문구 편집</button></div>
+    <div class="cl-detail-editors"></div>
+    <p class="cl-focus-empty-quote" data-focus-quote hidden></p>
+    <p class="cl-focus-unsent" data-focus-unsent hidden>아직 검수하지 않은 문구예요. 내용을 입력한 뒤 아래 검수 버튼을 눌러주세요.</p>
   {% if engine_pending %}
-    <div class="rv-card">
+    <div class="rv-card" data-engine-state>
       <h2>위험도</h2>
       {#- 🔴 2026-10-15 (전수 점검) — 연결 실패(503 · `engine_down`)를 「아직 안 붙음」(501)으로 그리던 자리. 문구는 광고 생성 화면(`compose.html`)과 같은 말 #}
       <p class="rv-pending">
@@ -1130,11 +1138,12 @@
       본 진단은 문장 단위 1차 스크리닝이며 법적 확정 판단이 아니에요.
       최종 판단은 심의기구·전문가 검토를 따르세요.
     </p>
+    <div class="cl-focus-actions"><span data-focus-action-note>선택한 문구를 검수해보세요.</span><button type="submit" form="review-input-form" name="op" value="judge:1" class="cl-focus-judge" data-focus-judge data-wait-go data-wait-label="검수 중…">문구 검수하기</button><button type="button" data-edit-copy>{{ icon('pencil', 17) }} 문구 편집</button></div>
   </div>
 
 </div>
 {# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
 <script src="/static/user_count.js" defer></script>
-<script src="/static/user_wait.js" defer></script>
+<script src="/static/user_wait.js?v=2" defer></script>
 <script src="/static/rewrite_copy.js" defer></script>
 {% endblock %}

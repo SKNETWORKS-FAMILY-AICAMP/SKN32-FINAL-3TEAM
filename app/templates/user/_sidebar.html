@@ -1,11 +1,16 @@
 {% from "user/_icons.html" import icon as ui_icon %}
 <aside class="user-sidebar" aria-label="작업 메뉴">
+  {% if active_section == 'about' %}
+  <p class="user-sidebar-label">이용 가이드</p>
+  <a class="user-sidebar-item{{ ' user-sidebar-item-active' if active_sub != 'faq' }}" href="/u/help?tab=guide"{% if active_sub != 'faq' %} aria-current="page"{% endif %}>{{ ui_icon('book') }}사용방법</a>
+  <a class="user-sidebar-item{{ ' user-sidebar-item-active' if active_sub == 'faq' }}" href="/u/help?tab=faq"{% if active_sub == 'faq' %} aria-current="page"{% endif %}>{{ ui_icon('info') }}자주 묻는 질문</a>
+  {% else %}
   <p class="user-sidebar-label">작업 공간</p>
-  {% for href, label, icon in [('/u/', '홈', 'home'), ('/u/review', '문구 검수', 'review'), ('/u/generate', '카피 생성', 'spark'), ('/u/compose', '광고 만들기', '')] %}
+  {% for href, label, icon in [('/u/', '홈', 'home'), ('/u/review', '문구 검수', 'review'), ('/u/generate', '카피 생성', 'spark'), ('/u/compose', 'AI 광고 생성', '')] %}
   <a class="user-sidebar-item{{ ' user-sidebar-item-active' if ui_screen == href }}" href="{{ href }}"{% if ui_screen == href %} aria-current="page"{% endif %}><span aria-hidden="true">{% if href == '/u/compose' %}{% include "user/_ad_icon.html" %}{% else %}{{ ui_icon(icon) }}{% endif %}</span>{{ label }}</a>
   {% endfor %}
   <p class="user-sidebar-label sidebar-records">내 기록</p>
   <a class="user-sidebar-item{{ ' user-sidebar-item-active' if ui_screen == '/u/history' }}" href="/u/history"{% if ui_screen == '/u/history' %} aria-current="page"{% endif %}><span aria-hidden="true">{{ ui_icon("history") }}</span>검수 이력</a>
-  {% if active_section == 'about' %}<a class="user-sidebar-item user-sidebar-item-active" href="/u/help?tab=guide">이용 가이드</a>{% endif %}
-  <a class="user-sidebar-cs" href="/u/cs">{{ ui_icon("help") }}고객센터{% if me and me.cs_unread %}<span class="user-sidebar-dot" aria-label="새 답변"></span>{% endif %}</a>
+  {% endif %}
+  <a class="user-sidebar-cs{{ ' user-sidebar-item-active' if request.url.path.startswith('/u/cs') }}" href="/u/cs"{% if request.url.path.startswith('/u/cs') %} aria-current="page"{% endif %}>{{ ui_icon("help") }}고객센터{% if me and me.cs_unread %}<span class="user-sidebar-dot" aria-label="새 답변"></span>{% endif %}</a>
 </aside>

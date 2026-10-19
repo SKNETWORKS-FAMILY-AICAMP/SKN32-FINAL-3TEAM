@@ -1,0 +1,43 @@
+/* Short feedback only: no layout/height animations or automatic scrolling. */
+@media (prefers-reduced-motion: no-preference) {
+  .user-shell :where(button, .user-sidebar-item, .user-sidebar-cs, .user-topnav-pill,
+    .hg-purpose, .history-row, .csb-ticket, .cl-copy-nav-item, .filter-chip,
+    .gn-pick label, .csb-categories label, .cp-format, .ws-copy, summary) {
+    transition-property:background-color, border-color, color, box-shadow, opacity;
+    transition-duration:160ms;
+    transition-timing-function:ease-out;
+  }
+  .user-shell :where(input[type=text], input[type=search], input[type=email],
+    input[type=password], textarea, select) {
+    transition:border-color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+  .user-shell :where(.hm-card, .gn-cand, .hg-help-card) {
+    transition:border-color 180ms ease-out, box-shadow 180ms ease-out, translate 180ms ease-out;
+  }
+  .user-shell :where(.hg-question-toggle, .history-row-chevron) {
+    transition:transform 160ms ease-out;
+  }
+  .user-shell :where(.gn-submit, .csb-primary, .cl-focus-actions button[type=submit],
+    .cl-input-actions button, .hg-launch, .fq-contact-actions a:last-child) {
+    transition:box-shadow 160ms ease-out, filter 160ms ease-out, translate 100ms ease-out;
+  }
+  .user-shell :where(.gn-submit, .csb-primary, .cl-focus-actions button[type=submit],
+    .cl-input-actions button):not(:disabled):active { translate:0 1px; }
+  @media (hover:hover) and (pointer:fine) {
+    .user-shell .hm-card:hover { translate:0 -2px; box-shadow:0 6px 18px rgba(105, 61, 133, .08); }
+    .user-shell :where(.gn-cand, .hg-help-card):hover {
+      border-color:color-mix(in srgb, var(--u-signal) 35%, var(--u-line));
+      box-shadow:0 4px 14px rgba(105, 61, 133, .05);
+    }
+    .user-shell :where(.gn-submit, .csb-primary, .hg-launch):not(:disabled):hover {
+      box-shadow:0 4px 12px rgba(124, 66, 153, .12);
+    }
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .user-shell *, .user-shell *::before, .user-shell *::after {
+    transition:none!important;
+    animation:none!important;
+    scroll-behavior:auto!important;
+  }
+}

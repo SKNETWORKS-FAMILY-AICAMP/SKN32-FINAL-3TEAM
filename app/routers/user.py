@@ -485,13 +485,13 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
 
 @router.get("/landing", response_class=HTMLResponse)
 def landing(request: Request) -> HTMLResponse:
-    """랜딩 — 로그인 전 첫 화면 (ksr, 2026-09-13).
+    """랜딩 — 로그인 상태에 따라 작업 바로가기 또는 가입 안내를 표시한다.
 
-    🚨 nav 를 넣지 않는다 — 로그인 전이라 사용자 메뉴가 없다.
+    작업 공간의 전체 nav 대신 랜딩 전용 프로필과 작업 바로가기를 표시한다.
     ⛔ 프로토타입의 사용량 수치(「240개 팀 · 12,000건」)는 **지어낸 값**이라 옮기지 않았다 (D-147).
     🔄 2026-09-16 — `/login`(governor 전용) 대신 오늘 생긴 `/u/login`·`/u/signup` 으로 잇는다.
     """
-    return templates.TemplateResponse(request, "user/landing.html", {})
+    return _render(request, "user/landing.html")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2105,14 +2105,16 @@ def history(
 
 
 @router.get("/help", response_class=HTMLResponse)
-def help_page(request: Request, tab: str = "guide") -> HTMLResponse:
+def help_page(request: Request, tab: str = "guide", topic: str = "review") -> HTMLResponse:
     """copylane 소개 (ksr 2026-09-13) — `tab`(guide·faq)이 "사용방법"·"자주 묻는 질문"
     사이드바 두 항목을 가른다. ⛔ 탭 전환을 스크립트로 하지 않는다 (CSP) — 쿼리스트링으로
     서버가 고른다.
     """
     if tab not in ("guide", "faq"):
         tab = "guide"
-    return _render(request, "user/help.html", {"tab": tab}, active_sub=tab)
+    if topic not in ("review", "copy", "ad"):
+        topic = "review"
+    return _render(request, "user/help.html", {"tab": tab, "topic": topic}, active_sub=tab)
 
 
 @router.get("/matching", response_class=HTMLResponse)
@@ -2199,7 +2201,11 @@ def _cs_list_ctx(session: Session, user: UserAccount) -> dict:
 
 
 @router.get("/cs", response_class=HTMLResponse)
-def cs(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+def cs(
+    request: Request,
+    tab: str = "write",
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
     """고객센터 문의 — 각 구역 사이드바 하단 「CS 문의」 버튼으로 들어온다 (구역 밖).
 
     ⛔ 로그아웃 상태면 리다이렉트하지 않고 로그인 안내를 그린다(200) — 로그인 벽을 세우지 않는다(D-66).
@@ -2207,7 +2213,15 @@ def cs(request: Request, session: Session = Depends(get_session)) -> HTMLRespons
     user = current_user(request, session)
     if user is None:
         return _render(request, "user/cs.html", {"need_login": True})
-    return _render_form(request, "user/cs.html", {**_cs_list_ctx(session, user), "form": {}})
+    return _render_form(
+        request,
+        "user/cs.html",
+        {
+            **_cs_list_ctx(session, user),
+            "form": {},
+            "cs_tab": "history" if tab == "history" else "write",
+        },
+    )
 
 
 @router.post("/cs")

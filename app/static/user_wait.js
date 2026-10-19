@@ -15,7 +15,8 @@
     Array.prototype.forEach.call(form.querySelectorAll("[data-wait]"), function (note) {
       note.hidden = !waiting;
     });
-    Array.prototype.forEach.call(form.querySelectorAll('button[type="submit"]'), function (b) {
+    Array.prototype.forEach.call(form.elements, function (b) {
+      if (!b.matches('button[type="submit"]')) return;
       b.disabled = waiting;
       if (!waiting && b.hasAttribute("data-wait-orig")) {
         b.textContent = b.getAttribute("data-wait-orig");

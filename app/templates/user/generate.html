@@ -289,22 +289,25 @@
       <label for="g-ingredients">원재료 · 성분 <span class="gn-note">(쉼표로 구분)</span></label>
       <input type="text" id="g-ingredients" name="ingredients" maxlength="{{ gen_limits.list }}"
              value="{{ (p.ingredients or [])|join(', ') }}" placeholder="예: 통귀리, 아몬드">
-    </div>  <details class="cl-audience-details"><summary>대상 고객 세부설정 <span class="cl-optional">선택</span></summary>
-  <div class="gn-pick" style="margin-bottom:.5rem">
+    </div>
+  <section class="cl-audience-details cl-audience-open" aria-labelledby="g-audience-title">
+  <h3 id="g-audience-title">대상 고객 <span class="cl-optional">선택</span></h3>
+  <p class="gn-note">특정 대상이 없다면 연령대와 성별을 ‘전체’로 두세요.</p>
+  <fieldset><legend>연령대 <span>하나만 선택</span></legend><div class="gn-pick">
     {% for key, label in gen_ages %}
     <input type="radio" id="g-age-{{ key }}" name="age" value="{{ key }}"
            {% if (p.age or gen_ages[0][0]) == key %}checked{% endif %}>
-    <label for="g-age-{{ key }}">{{ label }}</label>
+    <label for="g-age-{{ key }}">{{ '전체' if key == 'all' else label }}</label>
     {% endfor %}
-  </div>
-  <div class="gn-pick" style="margin-bottom:.5rem">
+  </div></fieldset>
+  <fieldset><legend>성별 <span>하나만 선택</span></legend><div class="gn-pick">
     {% for key, label in gen_sexes %}
     <input type="radio" id="g-sex-{{ key }}" name="sex" value="{{ key }}"
            {% if (p.sex or gen_sexes[0][0]) == key %}checked{% endif %}>
-    <label for="g-sex-{{ key }}">{{ label }}</label>
+    <label for="g-sex-{{ key }}">{{ '전체' if key == 'all' else label }}</label>
     {% endfor %}
-  </div>
-  </details><div class="gn-field" style="margin-bottom:1.1rem">
+  </div></fieldset>
+  </section><div class="gn-field" style="margin-bottom:1.1rem">
     <label for="g-target" style="font-weight:400">메모 <span class="gn-note">(선택 · 더 알려 주고 싶은 것)</span></label>
     <input type="text" id="g-target" name="target" maxlength="{{ gen_limits.target }}" value="{{ p.target or '' }}"
            placeholder="예: 아침을 간단히 먹는 직장인">

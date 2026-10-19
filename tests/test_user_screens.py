@@ -73,7 +73,7 @@ def test_작업_화면에_공통_사이드바가_있다() -> None:
     for path in ("/u/review", "/u/cs", "/u/compose"):
         body = client.get(path).text
         assert 'class="user-sidebar"' in body
-        for label in ("홈", "문구 검수", "카피 생성", "광고 만들기", "검수 이력"):
+        for label in ("홈", "문구 검수", "카피 생성", "AI 광고 생성", "검수 이력"):
             assert label in body
 
 
@@ -99,6 +99,28 @@ def test_copylane_소개_탭이_사용방법과_FAQ를_가른다() -> None:
     assert "자주 묻는 질문" in faq
     assert "user-sidebar-item-active" in guide
     assert "user-sidebar-item-active" in faq
+
+
+@pytest.mark.parametrize(
+    ("topic", "title", "href"),
+    [
+        ("review", "광고 문구, 이렇게 확인하세요", "/u/review"),
+        ("copy", "제품 정보로 새 문구를 만들어보세요", "/u/generate"),
+        ("ad", "문구를 광고 형식에 맞춰 구성해요", "/u/compose"),
+        ("unknown", "광고 문구, 이렇게 확인하세요", "/u/review"),
+    ],
+)
+def test_이용가이드_목적별_내용과_실행화면이_연결된다(topic: str, title: str, href: str) -> None:
+    from fastapi.testclient import TestClient
+
+    from app.api import app
+
+    response = TestClient(app).get("/u/help", params={"topic": topic})
+    assert response.status_code == 200
+    assert f'<h2 id="hg-guide-title">{title}</h2>' in response.text
+    assert f'class="hg-launch" href="{href}"' in response.text
+    assert response.text.count('class="hg-step"') == 4
+    assert response.text.count('class="hg-purpose is-active"') == 1
 
 
 def test_검수_POST가_문구를_되돌려_그린다() -> None:
@@ -315,6 +337,28 @@ def test_랜딩은_governor_로그인이_아니라_일반_회원_로그인으로
     body = TestClient(app).get("/u/landing").text
     assert 'href="/u/login"' in body
     assert 'href="/u/signup"' in body
+
+
+def test_랜딩_로그인_상태에는_작업_바로가기를_표시한다(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    from app.api import app
+    from app.routers import user as user_router
+
+    monkeypatch.setattr(
+        user_router, "_nav_user", lambda _request: SimpleNamespace(name="유저", initials="유")
+    )
+    response = TestClient(app).get("/u/landing")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert "유저 님 계정 메뉴" in response.text
+    assert "문구 검수하기 →" in response.text
+    assert "작업 공간으로 돌아가기 →" in response.text
+    assert 'href="/u/login"' not in response.text
+    assert 'href="/u/signup"' not in response.text
+    assert "로그인 없이 문구 검수해 보기" not in response.text
 
 
 def test_로그인_전에_들어오면_랜딩이_첫_화면이다(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -8,7 +8,7 @@
      아이콘 카드 · 동작 순서 · 업종 칩. 미리보기는 **실제 검수 → 고쳐 쓰기 흐름**(위반 문장 → 근거 → 담백한 안 · 다듬은 안)으로
      바꿨다 — 예시 문장은 직접 만든 것이고, 고친 문장은 그 문장을 실제로 돌린 결과다(10-13 · q4b-v14 + 다듬기).
      업종 칩은 지금 판정이 다루는 범위만 적는다(시안의 의료기기 · 금융은 범위 밖이라 뺐다).
-  🚨 이 화면은 nav 를 넣지 않는다 — 로그인 전 화면이라 사용자 메뉴가 없다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
+  로그인 상태에는 프로필과 작업 바로가기를 표시한다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 광고 문구 준법 검수 · 카피생성{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">
@@ -36,6 +36,23 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-word { font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; background: var(--ld-grad);
            -webkit-background-clip: text; background-clip: text; color: transparent; }
 .ld-nav { display: flex; gap: .5rem; align-items: center; }
+.ld-profile { position: relative; margin-right: .6rem; }
+.ld-profile summary { display: flex; align-items: center; gap: .65rem; cursor: pointer; list-style: none; font-size: .9rem; }
+.ld-profile summary::-webkit-details-marker { display: none; }
+.ld-profile summary:focus-visible { outline: 2px solid var(--u-signal); outline-offset: 5px; border-radius: .5rem; }
+.ld-avatar { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; flex-shrink: 0; border-radius: 50%; background: var(--ld-grad); color: #fff; font-weight: 700; }
+.ld-profile-name { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-profile-menu { position: absolute; right: 0; top: calc(100% + .8rem); width: 12rem; padding: .5rem; border: 1px solid var(--u-line); border-radius: .8rem; background: var(--u-surface); box-shadow: 0 8px 24px rgba(71, 42, 99, .12); }
+.ld-profile-menu a, .ld-profile-menu button { display: block; width: 100%; box-sizing: border-box; padding: .7rem .8rem; border: 0; border-radius: .5rem; background: transparent; color: var(--u-ink); font: inherit; font-size: .85rem; text-decoration: none; text-align: left; cursor: pointer; }
+.ld-profile-menu a:hover, .ld-profile-menu button:hover { background: var(--u-surface2); }
+.ld-profile-menu form { margin: 0; }
+@media (max-width: 480px) {
+  .ld-head .ld-wrap { padding-inline: 1rem; }
+  .ld-profile { margin-right: 0; }
+  .ld-profile-name { display: none; }
+  .ld-nav { gap: .4rem; }
+  .ld-nav .ld-btn { padding-inline: .7rem; }
+}
 
 /* 버튼 */
 .ld-btn { display: inline-flex; align-items: center; justify-content: center; height: 2.75rem; padding: 0 1.4rem;
@@ -293,8 +310,16 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   <div class="ld-wrap">
     <a class="ld-brand" href="/u/landing"><img src="/static/brand/symbol-180.png" alt=""><span class="ld-word">copylane</span></a>
     <nav class="ld-nav">
+      {% if me %}
+      <details class="ld-profile">
+        <summary aria-label="{{ me.name }} 님 계정 메뉴"><span class="ld-avatar" aria-hidden="true">{{ me.initials }}</span><span class="ld-profile-name">{{ me.name }} 님</span><span aria-hidden="true">⌄</span></summary>
+        <div class="ld-profile-menu"><a href="/u/mypage">마이페이지</a><a href="/u/mypage?tab=account">계정 설정</a><form method="post" action="/u/logout"><button type="submit">로그아웃</button></form></div>
+      </details>
+      <a class="ld-btn ld-btn-sm ld-btn-grad" href="/u/">작업 공간으로 →</a>
+      {% else %}
       <a class="ld-btn ld-btn-sm ld-btn-text" href="/u/login">로그인</a>
       <a class="ld-btn ld-btn-sm ld-btn-grad" href="/u/signup">무료로 시작하기</a>
+      {% endif %}
     </nav>
   </div>
 </header>
@@ -310,10 +335,17 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
       <b>고쳐 써</b> 드려요. 진단을 통과하는 어휘 안에서 <b>새 카피</b>까지 만들어 드려요.
     </p>
     <div class="ld-actions">
+      {% if me %}
+      <a class="ld-btn ld-btn-grad" href="/u/review">문구 검수하기 →</a>
+      <a class="ld-btn ld-btn-line" href="/u/">작업 공간으로</a>
+      {% else %}
       <a class="ld-btn ld-btn-grad" href="/u/login">로그인하고 시작하기</a>
       <a class="ld-btn ld-btn-line" href="/u/signup">회원가입</a>
+      {% endif %}
     </div>
+    {% if not me %}
     <p class="ld-try">가입 전에 해 보고 싶다면 → <a href="/u/review">로그인 없이 문구 검수해 보기</a> · 로그인하지 않고 검수한 문구는 이력에 남지 않아요</p>
+    {% endif %}
   </div>
 
   <div class="ld-demo-stage">
@@ -412,19 +444,25 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
 <section class="ld-sec ld-end">
   <div class="ld-wrap"><div class="ld-end-card" data-reveal>
+    {% if me %}
+    <h2>이제 문구를 만들어볼까요?</h2>
+    <p class="ld-sub">작업 공간에서 문구 검수와 카피 생성을 이어가세요.</p>
+    <div class="ld-actions"><a class="ld-btn ld-btn-grad" href="/u/">작업 공간으로 돌아가기 →</a></div>
+    {% else %}
     <h2>지금 시작해 보세요</h2>
     <p class="ld-sub">가입은 무료이고, 첫 검수까지 3분이면 충분해요</p>
     <div class="ld-actions">
       <a class="ld-btn ld-btn-grad" href="/u/login">로그인하고 시작하기</a>
       <a class="ld-btn ld-btn-line" href="/u/signup">회원가입</a>
     </div>
+    {% endif %}
   </div></div>
 </section>
 
 <footer class="ld-foot">
   <div class="ld-wrap">
-    <span><img src="/static/brand/symbol-180.png" alt="">© 2026 CopyLane</span>
-    <span><a href="/u/help">도움말</a><a href="/u/signup">회원가입</a><a href="/u/login">로그인</a></span>
+    <span><a href="/u/landing"><img src="/static/brand/symbol-180.png" alt="">© 2026 CopyLane</a></span>
+    <span><a href="/u/help">도움말</a>{% if me %}<a href="/u/">작업 공간</a><a href="/u/mypage">마이페이지</a>{% else %}<a href="/u/signup">회원가입</a><a href="/u/login">로그인</a>{% endif %}</span>
   </div>
 </footer>
 

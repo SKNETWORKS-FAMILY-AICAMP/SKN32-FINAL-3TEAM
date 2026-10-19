@@ -1,169 +1,102 @@
-{# app/templates/user/help.html — copylane 소개 · 소유자 ksr (병렬작업 계약 §5)
-
-  ★ 프로토타입의 `data-screen="help"` 를 옮긴 것이다 (ksr, 2026-09-13 — 2026-09-16 lse 셸로 이식).
-  🚨 `about` 섹션은 하위가 둘이다 — **사용방법 / 자주 묻는 질문**.
-     ⛔ 탭 전환을 스크립트로 하지 않는다 (CSP). **쿼리스트링으로 서버가 고른다** —
-        `/u/help` 가 사용방법, `/u/help?tab=faq` 가 FAQ 다. JS 없이도 돈다.
-  ⛔ 마이페이지 기본값 · 이력 · 매칭처럼 **아직 없는 기능**은 설명하지 않는다 —
-     없는 기능을 있는 것처럼 보이면 D-147 위반이다. STEP 은 지금 되는 것만 적는다.
-#}{% extends "user/_base.html" %}
-{% block title %}CopyLane — {% if tab == "faq" %}자주 묻는 질문{% else %}사용방법{% endif %}{% endblock %}
-{% block screen_css %}
-<style>
-.hp-head { margin-bottom: 1.25rem; }
-.hp-head h1 { margin: 0 0 .25rem; }
-.hp-head p { margin: 0; color: var(--u-clay); font-size: .875rem; }
-
-.hp-card { border: 1px solid var(--u-line); border-radius: 1rem;
-           background: var(--u-surface); padding: 1.1rem 1.15rem; margin-bottom: 1rem; }
-.hp-card > h2 { margin: 0 0 .2rem; font-size: .98rem; }
-.hp-step { display: inline-block; font-size: .7rem; letter-spacing: .06em;
-           color: var(--u-signal-ink); background: var(--u-signal-soft);
-           border-radius: 999px; padding: .12rem .55rem; margin-bottom: .4rem; }
-.hp-card ol { margin: .5rem 0 0; padding-left: 1.2rem; }
-.hp-card ol li { font-size: .87rem; line-height: 1.75; margin-bottom: .2rem; }
-.hp-card ul.hp-plain { list-style: none; margin: .5rem 0 0; padding-left: 1.2rem; }
-.hp-card ul.hp-plain li { font-size: .87rem; line-height: 1.75; }
-
-.hp-steps { margin-top: .5rem; }
-.hp-stp { padding: 1.5rem 0; border-top: 1px solid var(--u-line); }
-.hp-stp:first-child { border-top: 0; padding-top: .2rem; }
-.hp-stp > h2 { font-size: 1rem; margin: 0 0 .8rem; }
-.hp-stp > h2 .hp-no { margin-right: 1.1rem; }
-.hp-stp p { margin: 0 0 .75rem; font-size: .9rem; line-height: 1.85; }
-.hp-stp p:last-child { margin-bottom: 0; }
-.hp-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
-
-.hp-badges { display: grid; gap: .4rem; margin: .5rem 0 0; }
-.hp-badge { display: flex; gap: .6rem; align-items: baseline;
-            border: 1px solid var(--u-line); border-radius: .6rem; padding: .5rem .7rem; }
-.hp-badge b { font-size: .8rem; white-space: nowrap; }
-.hp-badge span { font-size: .82rem; color: var(--u-clay); }
-.hp-badge.b-high { background: var(--u-bad-bg); border-color: var(--u-bad-line); }
-.hp-badge.b-high b { color: var(--u-bad-ink); }
-.hp-badge.b-caution { background: var(--u-warn-bg); border-color: var(--u-warn-line); }
-.hp-badge.b-caution b { color: var(--u-warn-ink); }
-.hp-badge.b-safe { background: var(--u-ok-bg); border-color: var(--u-ok-line); }
-.hp-badge.b-safe b { color: var(--u-ok-ink); }
-.hp-badge.b-hold { background: var(--u-signal-soft); border-color: var(--u-signal-soft); }
-.hp-badge.b-hold b { color: var(--u-signal-ink); }
-
-.hp-qa { border-top: 1px solid var(--u-line); padding: .9rem 0; }
-.hp-qa:first-of-type { border-top: 0; padding-top: .2rem; }
-.hp-qa b { display: block; font-size: .89rem; margin-bottom: .3rem; }
-.hp-qa b::before { content: "Q. "; color: var(--u-signal-ink); }
-.hp-qa p { margin: 0; font-size: .85rem; color: var(--u-clay); line-height: 1.8; }
-
-.hp-soon { list-style: none; padding: 0; margin: .4rem 0 0; }
-.hp-soon li { font-size: .84rem; color: var(--u-clay); padding: .25rem 0;
-              border-top: 1px solid var(--u-line); }
-.hp-soon li:first-child { border-top: 0; }
-</style>
-{% endblock %}
+{% extends "user/_base.html" %}
+{% from "user/_icons.html" import icon %}
+{% block title %}CopyLane — 이용 가이드{% endblock %}
+{% block screen_css %}<link rel="stylesheet" href="/static/help.css?v=2">{% endblock %}
 {% block user_content %}
-<div class="hp-head">
-  <h1>{% if tab == "faq" %}자주 묻는 질문{% else %}사용방법{% endif %}</h1>
-  <p>{% if tab == "faq" %}검수·카피생성·광고생성에서 자주 나온 질문을 모았어요.{% else %}처음이시라면 아래 순서대로 따라와 보세요.{% endif %}</p>
-</div>
-
-{% if tab != "faq" %}
-
-<section class="hp-steps">
-
-  <div class="hp-stp">
-    {# 🔄 2026-10-15 (ksr · 점검 03) — 「광고 기본값」 탭을 지워 STEP 1 을 바꿨다 #}
-    <h2><span class="hp-no">STEP 1</span>가입하고 이력 보관을 켜요</h2>
-    <p>문구 검수는 로그인하지 않아도 쓸 수 있어요. 가입하면 <b>카피 생성</b>까지 쓸 수 있어요.</p>
-    <p>지난 검수를 다시 보고 싶다면 마이페이지 → <b>계정</b>에서 <b>① 검수 이력 보관</b>을 켜 주세요.
-      켠 뒤에 한 검수부터 이력에 남아요.</p>
-  </div>
-
-  <div class="hp-stp">
-    <h2><span class="hp-no">STEP 2</span>이미 쓴 문구를 검수해요</h2>
-    <p>① 상단 메뉴에서 <b>검수</b>를 눌러요.</p>
-    <p>② 광고 문구를 붙여넣고 <b>검수하기</b>를 눌러요. 카테고리와 광고 정보를 함께 입력하면
-      해당 조건을 기준으로 문구를 검토해요.</p>
-    <p>③ 결과 화면에서 문장에 색이 칠해진 부분이 <b>확인이 필요한 구간</b>이에요.
-      위험도와 판정 결과를 함께 보고 어떤 표현을 주의해야 하는지 확인할 수 있어요.</p>
-    <p>④ <b>근거 보기</b>를 누르면 관련 조문과 판단 근거, 유사 사례 등 상세 내용을 확인할 수 있어요.
-      어떤 부분 때문에 해당 결과가 나왔는지 함께 보여드려요.</p>
-    <p>⑤ 더 궁금한 부분이 있다면 문장 카드의 <b>이 문구로 질문하기</b>를 눌러요.
-      해당 문구와 검수 결과를 바탕으로 이어서 질문할 수 있고, 대화 내용도 문장별로 따로 저장돼요.</p>
-  </div>
-
-  <div class="hp-stp">
-    <h2><span class="hp-no">STEP 3</span>새 카피를 만들고 AI 광고까지 완성해요</h2>
-    <p>① 상단 메뉴에서 <b>카피 생성</b>을 눌러요.</p>
-    <p>② 제품과 대상 고객을 선택하고 <b>지향 키워드 생성</b>을 눌러요.
-      목록에 원하는 키워드가 없다면 직접 추가할 수도 있어요.</p>
-    <p>③ 생성된 키워드 중 사용하고 싶은 것을 고른 뒤 <b>선택한 키워드로 카피 생성</b>을 눌러요.
-      선택한 방향에 맞춰 여러 가지 카피를 확인할 수 있어요.</p>
-    <p>④ 마음에 드는 카피를 선택하면 <b>AI 광고 생성</b>으로 바로 이어서 작업할 수 있어요.
-      선택한 카피와 앞에서 입력한 정보를 다시 입력할 필요 없이 광고 제작에 활용할 수 있습니다.</p>
-    <p>⑤ 카피 생성 없이 바로 광고를 만들고 싶다면 상단 메뉴의 <b>AI 광고 생성</b>을 눌러 시작해도 돼요.
-      제품 정보와 광고에 필요한 내용을 직접 입력해 광고 초안을 만들 수 있어요.</p>
-    <p>⑥ 생성된 광고가 마음에 들지 않는다면 내용을 조정하거나 다시 생성할 수 있어요.
-      완성된 광고는 검수까지 이어서 확인해 <b>카피 생성 → AI 광고 생성 → 검수</b>를
-      하나의 흐름으로 진행할 수 있습니다.</p>
-  </div>
-
-  <div class="hp-stp">
-    <h2><span class="hp-no">STEP 4</span>지난 작업을 다시 열어봐요</h2>
-    <p>이력에서 이전에 진행한 검수·카피 생성·AI 광고 생성 내역을 다시 확인할 수 있어요.</p>
-    <p>원하는 작업을 누르면 당시 입력한 내용과 결과가 그대로 열려 이전 작업을 다시 확인하거나
-        이어서 작업할 수 있습니다. <b>검수 이력</b>에서는 판정 결과와 근거를 다시 살펴볼 수 있고,</p>
-      <p><b>생성 이력</b>에서는 이전에 만든 카피와 광고 결과를 확인할 수 있어요.</p>
-    <p>상단의 <b>반복 지적 패턴</b>에서는 최근 검수에서 자주 발견된 위험 표현도 확인할 수 있어,
-      반복해서 주의해야 할 광고 표현을 한눈에 살펴볼 수 있습니다.</p>
-  </div>
-
-</section>
-
-{% else %}
-{# ───────────── 자주 묻는 질문 ───────────── #}
-<div class="hp-card">
-  <div class="hp-qa">
-    <b>문구 검수는 어떻게 하나요?</b>
-    <p>사이드바의 '검수' 메뉴에서 문구를 붙여넣고 검수하기를 누르면,
-      문장별로 위법 소지와 근거 조항을 바로 확인할 수 있어요.</p>
-  </div>
-
-  <div class="hp-qa">
-    <b>위험도 배지는 무엇을 의미하나요?</b>
-    <p>'위법 소지 높음'은 고시·가이드라인이 명시적으로 금지한 표현, '주의'는 실증 자료가 필요하거나
-      맥락에 따라 갈리는 표현이에요. '판정 보류'는 모델 확신이 낮아 전문가 검토가 필요한 경우,
-      '근거 불일치'는 코드 규칙이 정한 위험도 하한과 모델 예측이 2등급 이상 벌어져 하한을 유지한 채
-      전문가 검토를 권고하는 경우예요. 모든 진단은 법적 확정 판단이 아닌 1차 스크리닝입니다.</p>
-    <div class="hp-badges">
-      <div class="hp-badge b-safe"><b>특이사항 없음</b><span>걸리는 조문이 없어요</span></div>
-      <div class="hp-badge b-caution"><b>주의</b><span>실증 자료가 필요하거나 맥락에 따라 갈려요</span></div>
-      <div class="hp-badge b-high"><b>위법 소지 높음</b><span>고시·가이드라인이 명시적으로 금지한 표현이에요</span></div>
-      <div class="hp-badge b-hold"><b>판정 보류</b><span>모델 확신이 낮아요 — 전문가 검토를 권해요</span></div>
-      <div class="hp-badge b-hold"><b>근거 불일치</b><span>코드 하한과 모델 예측이 벌어졌어요 — 하한을 유지해요</span></div>
+{% set topic = topic|default('review') %}
+{% set guides = {
+  'review': {
+    'name': '문구 검수', 'purpose': '쓴 문구를 검수하고 싶어요', 'icon': 'review', 'url': '/u/review',
+    'title': '광고 문구, 이렇게 확인하세요',
+    'flow': ['문구 입력', '검수 실행', '필요 시 조건 선택', '결과·근거 확인'],
+    'steps': [
+      ['문구는 최대 5개까지', '검수할 광고 문구를 입력하세요.', '문구 추가로 함께 검수할 수 있어요.', 'review'],
+      ['검수 후 문구 선택', '문구 검수하기를 누르세요.', '왼쪽 목록에서 확인할 문구를 고르세요.', 'check'],
+      ['추가 질문이 나타나면', '필요한 문장에만 제품 유형·인증을 확인해요.', '처음부터 조건을 입력하지 않아도 돼요.', 'info'],
+      ['결과와 근거 함께 보기', '오른쪽에서 선택한 문구의 결과를 확인하세요.', '근거 보기에서 관련 내용을 살펴보세요.', 'book']
+    ]
+  },
+  'copy': {
+    'name': '카피 생성', 'purpose': '새 문구를 만들고 싶어요', 'icon': 'pencil', 'url': '/u/generate',
+    'title': '제품 정보로 새 문구를 만들어보세요',
+    'flow': ['제품 정보 입력', '추가 정보 선택', '카피 생성', '후보 비교·활용'],
+    'steps': [
+      ['제품의 사실을 알려주세요', '제품 분류와 제품명·종류·특징을 입력하세요.', '인증 여부는 실제 제품 정보를 기준으로 선택해요.', 'cube'],
+      ['추가 정보는 선택이에요', '원재료·성분과 대상 고객을 선택할 수 있어요.', '특정 대상이 없다면 연령대와 성별을 전체로 두세요.', 'info'],
+      ['입력한 정보로 카피 생성', '이 내용으로 카피 생성을 누르세요.', '문구 후보가 나올 때까지 잠시 기다려주세요.', 'spark'],
+      ['후보를 비교하고 활용해요', '각 후보의 문구와 검수 안내를 함께 확인하세요.', '원하는 후보에서 AI 광고 생성으로 이어갈 수 있어요.', 'copy']
+    ]
+  },
+  'ad': {
+    'name': 'AI 광고 생성', 'purpose': '광고를 구성하고 싶어요', 'icon': 'image', 'url': '/u/compose',
+    'title': '문구를 광고 형식에 맞춰 구성해요',
+    'flow': ['형식 선택', '내용 입력', '초안 편집', '초안 검수'],
+    'steps': [
+      ['사용할 광고 형식을 골라요', 'SNS 피드·상세페이지·배너 중 선택하세요.', '선택한 형식에 맞는 규격과 구성이 준비돼요.', 'image'],
+      ['광고에 담을 문구 입력', '헤드라인과 보조 문구로 사용할 내용을 적어주세요.', '입력한 문구는 먼저 검수를 거쳐요.', 'pencil'],
+      ['이미지와 문구를 채워요', '편집 화면에서 섹션을 선택해 내용을 수정하세요.', '미리보기를 보면서 이미지와 문구를 확인해요.', 'cube'],
+      ['초안을 한 번 더 확인해요', '초안 검수를 눌러 결과를 확인하세요.', '저장·공유·다운로드는 아직 제공하지 않아요.', 'check']
+    ]
+  }
+} %}
+<div class="hg-page">
+  <nav class="hg-breadcrumb" aria-label="현재 위치"><a href="/u/help?tab=guide">이용 가이드</a><span>/</span><span>{{ '자주 묻는 질문' if tab == 'faq' else '사용방법' }}</span></nav>
+  <header class="hg-heading">
+    <div><h1>{{ '자주 묻는 질문' if tab == 'faq' else '무엇을 하고 싶으세요?' }}</h1><p>{{ '주제를 선택하거나 검색해서 필요한 답변을 찾아보세요.' if tab == 'faq' else '원하는 작업부터 골라, 사용 방법을 빠르게 확인하세요.' }}</p></div>
+    <a class="hg-text-link" href="/u/">작업 공간으로 <span aria-hidden="true">→</span></a>
+  </header>
+  {% if tab != 'faq' %}
+  <nav class="hg-purposes" aria-label="목적별 사용 가이드">
+    {% for key, guide in guides.items() %}
+    <a href="/u/help?tab=guide&amp;topic={{ key }}" class="hg-purpose{{ ' is-active' if topic == key }}"{% if topic == key %} aria-current="page"{% endif %}>{{ icon(guide.icon, 28) }}<span><strong>{{ guide.purpose }}</strong><small>{{ guide.name }}</small></span></a>
+    {% endfor %}
+  </nav>
+  {% set guide = guides[topic] %}
+  <section class="hg-guide" aria-labelledby="hg-guide-title">
+    <div class="hg-guide-heading"><div><p class="hg-eyebrow">{{ guide.name }} 안내</p><h2 id="hg-guide-title">{{ guide.title }}</h2></div><a class="hg-launch" href="{{ guide.url }}">{{ guide.name }} 화면 열기 <span aria-hidden="true">↗</span></a></div>
+    <ol class="hg-flow" aria-label="전체 사용 순서">
+      {% for step in guide.flow %}<li><span class="hg-flow-number">{{ loop.index }}</span><span>{{ step }}</span>{% if topic == 'review' and loop.index == 3 %}<small>해당 문장만</small>{% endif %}</li>{% endfor %}
+    </ol>
+    <div class="hg-steps">
+      {% for step in guide.steps %}<article class="hg-step"><span class="hg-step-number">{{ '%02d'|format(loop.index) }}</span><span class="hg-step-icon">{{ icon(step[3], 26) }}</span><div><h3>{{ step[0] }}</h3><p>{{ step[1] }}<br>{{ step[2] }}</p></div></article>{% endfor %}
     </div>
-    <p style="margin-top:.6rem">산출 내역의 「하한 / 인코더 / 최종」은 각각 코드 규칙이 정한 최소 위험도,
-      모델이 예측한 값, 둘 중 높은 쪽이에요. </p>
+    {% if topic == 'ad' %}<p class="hg-ad-note">{{ icon('info', 16) }} 새로고침하거나 화면을 나가면 편집한 내용이 사라질 수 있어요.</p>{% endif %}
+  </section>
+  {% else %}
+  <div class="fq-tools" data-faq-tools hidden>
+    <form class="fq-search" role="search" data-faq-search>
+      <label for="faq-query">궁금한 내용을 검색해보세요</label>
+      <div class="fq-search-field"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input type="search" id="faq-query" placeholder="예: 인증, 이력 보관, 다운로드" autocomplete="off" aria-controls="faq-list"><button type="submit">검색</button></div>
+    </form>
+    <div class="fq-categories" role="group" aria-label="질문 주제">
+      {% for key, label in [('all', '전체'), ('review', '문구 검수'), ('copy', '카피 생성'), ('ad', 'AI 광고 생성'), ('account', '이력·계정')] %}<button type="button" data-faq-category="{{ key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ label }}</button>{% endfor %}
+    </div>
   </div>
-
-  <div class="hp-qa">
-    <b>질의응답은 문구마다 따로 저장되나요?</b>
-    <p>네. 검수한 문구별로 대화가 분리되어 저장돼요. 이력에서 문구를 선택하면
-      그 문구에 대해 나눴던 대화가 그대로 이어집니다.</p>
-  </div>
-
-  <div class="hp-qa">
-    <b>검수 결과를 팀원과 공유할 수 있나요?</b>
-    {# 🔄 2026-10-15 (ksr · 점검 12) — 공유는 아직 없다(검수 화면 「팀에 공유 · 준비 중」 · 랜딩 FAQ 와 같은 말) #}
-    <p><b>아직 준비 중이에요.</b> 같은 조직으로 로그인한 팀원끼리 검수 결과를 함께 보는 것을 목표로 하고 있어요. 외부로는 공유되지 않아요.</p>
-  </div>
-
-  <div class="hp-qa">
-    <b>카피 생성에서 회색 키워드는 왜 막혀있나요?</b>
-    <p>판정 코어가 문장을 만들기 전, 어휘 단계에서 먼저 걸러낸 거예요. 문장을 다 만든 뒤 거르면
-      탈락률이 높아 재생성이 반복되기 때문에, 애초에 합법 어휘 안에서만 생성해요.</p>
-  </div>
-
+  <div class="fq-list-heading"><h2>질문 목록 <span data-faq-count></span></h2><p data-faq-status role="status" aria-live="polite"></p></div>
+  <section class="hg-faq" id="faq-list" aria-label="자주 묻는 질문과 답변">
+    {% for category, label, question, answer in [
+      ('review', '문구 검수', '문구 검수 전에 제품 조건을 입력해야 하나요?', '아니요. 먼저 문구를 입력하고 검수하세요. 추가 확인이 필요한 문장에만 제품 유형이나 인증 여부를 묻는 선택 영역이 나타나요.'),
+      ('review', '문구 검수', '검수 결과는 법적 확정 판단인가요?', '아니요. 검수는 문장 단위의 1차 스크리닝이며 참고용이에요. 결과와 근거를 함께 확인하고, 최종 게재 여부는 전문가 검토를 거쳐 결정하세요.'),
+      ('review', '문구 검수', '추가 확인 필요와 전문가 검토 필요는 어떻게 다른가요?', '추가 확인이 필요하면 해당 문장의 제품 조건을 선택해주세요. 전문가 검토가 필요하다는 결과는 현재 정보와 검수 범위로 판정을 확정하지 못했다는 뜻이에요. 문제가 없다는 의미는 아니에요.'),
+      ('account', '이력·계정', '검수 이력이 남지 않는 이유는 무엇인가요?', '로그인한 뒤 마이페이지의 계정에서 검수 이력 보관을 켜주세요. 켠 뒤 진행한 검수부터 남아요. 로그인 없이 검수한 문구는 이력에 남지 않아요.'),
+      ('copy', '카피 생성', '카피 생성의 대상 고객은 꼭 선택해야 하나요?', '선택 정보예요. 특정 고객을 정하지 않았다면 연령대와 성별을 전체로 두세요. 각 항목에서 하나씩 선택할 수 있어요.'),
+      ('ad', 'AI 광고 생성', '광고 편집 내용을 저장하거나 다운로드할 수 있나요?', '저장·공유·다운로드는 아직 제공하지 않아요. 새로고침하거나 화면을 나가면 편집한 내용이 사라질 수 있어요.'),
+      ('account', '이력·계정', '검수 결과를 팀원과 공유할 수 있나요?', '팀원과 결과를 공유하는 기능은 아직 준비 중이에요.')
+    ] %}<details class="hg-question" data-faq-item data-category="{{ category }}"><summary><span class="fq-q">Q</span><span class="fq-question-title"><small>{{ label }}</small>{{ question }}</span><span class="hg-question-toggle" aria-hidden="true">+</span></summary><div class="fq-answer"><span aria-hidden="true">A</span><p>{{ answer }}</p></div></details>{% endfor %}
+    <div class="fq-empty" data-faq-empty hidden>{{ icon('info', 30) }}<h3>일치하는 질문이 없어요</h3><p>다른 검색어를 입력하거나 전체 질문을 확인해보세요.</p><button type="button" data-faq-reset>전체 질문 보기</button></div>
+  </section>
+  <aside class="fq-contact"><span class="fq-contact-icon">{{ icon('help', 28) }}</span><div><h2>아직 궁금한 점이 남아 있나요?</h2><p>사용방법을 살펴보거나 고객센터로 문의해주세요.</p></div><div class="fq-contact-actions"><a href="/u/help?tab=guide">사용방법 보기</a><a href="/u/cs">고객센터 문의 →</a></div></aside>
+  <script src="/static/help.js?v=1" defer></script>
+  {% endif %}
+  {% if tab != 'faq' %}
+  <section class="hg-help" aria-labelledby="hg-help-title"><h2 id="hg-help-title">알아두면 더 편해요</h2><div class="hg-help-grid">
+    {% for name, description, label, href, glyph in [
+      ('검수 이력 보관', '마이페이지에서 보관을 켠 뒤 검수한 내용부터 남아요.', '계정 설정', '/u/mypage?tab=account', 'history'),
+      ('검수 결과의 의미', '진단은 참고용이며 법적 확정 판단은 아니에요.', '자주 묻는 질문', '/u/help?tab=faq', 'info'),
+      ('도움이 필요할 때', '사용 중 궁금한 점은 고객센터에 문의해주세요.', '고객센터', '/u/cs', 'help')
+    ] %}<article class="hg-help-card"><span class="hg-help-icon">{{ icon(glyph, 25) }}</span><div><h3>{{ name }}</h3><p>{{ description }}</p><a href="{{ href }}">{{ label }} <span aria-hidden="true">→</span></a></div></article>{% endfor %}
+  </div></section>
+  {% endif %}
+  <p class="hg-footnote">안내는 현재 제공 중인 기능을 기준으로 작성했어요.</p>
 </div>
-
-{% endif %}
 {% endblock %}
