@@ -77,10 +77,49 @@ def _table_counts() -> dict[str, int]:
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
-    """관리자 첫 화면. 🚨 **DB 가 없어도 뜬다** — 빈 표를 그리고 고치는 법을 낸다 (D-51)."""
+    """운영 대시보드. 기존 예시 집계와 실제 데이터 층 조회는 구분해서 표시한다."""
     actor = require_governor(request)
+    # 🔄 2026-10-20 (psj) — 문의 · 회원 수는 DB 를 읽는다(`admin_cs.recent` · `admin_dbread`). 이용 추이 · 승인 대기는
+    #    아직 표가 없어 예시 그대로다 — 화면이 둘을 갈라 적는다. 못 읽으면 「-」 + 안내 (D-72).
+    from app.models import TICKET_STATUSES  # noqa: PLC0415
+    from app.routers import admin_cs, admin_dbread  # noqa: PLC0415
+    from app.routers.admin_signup_review import _DUMMY_REVIEWS  # noqa: PLC0415
+    from app.routers.admin_stats import (  # noqa: PLC0415
+        _DASH_DATA,
+        _PERIOD_LABEL,
+        _PERIODS,
+        _clean_period,
+    )
+
+    period = _clean_period(request.query_params.get("period"))
+    ticket_status = request.query_params.get("status", "")
+    if ticket_status not in TICKET_STATUSES:
+        ticket_status = ""
+    inbox = admin_cs.recent(ticket_status or None, limit=5)
+    msrc, mout = admin_dbread.run(
+        [("SELECT count(*) AS n FROM user_account WHERE disabled_at IS NULL", [])],
+        what="index.members",
+    )
+    dash = _DASH_DATA[period]
     return templates.TemplateResponse(
-        request, "admin/index.html", {"counts": _table_counts(), "actor": actor}
+        request,
+        "admin/index.html",
+        {
+            "counts": _table_counts(),
+            "actor": actor,
+            "period": period,
+            "periods": _PERIODS,
+            "period_label": _PERIOD_LABEL,
+            "dash": dash,
+            "dash_max": max(dash["judge_series"] + dash["gen_series"]),
+            "member_total": mout[0][0]["n"] if msrc == "db" else None,
+            "tickets": inbox["rows"],
+            "ticket_source": inbox["source"],
+            "ticket_status": ticket_status,
+            "ticket_statuses": TICKET_STATUSES,
+            "pending_reviews": sum(r["status"] == "pending" for r in _DUMMY_REVIEWS),
+            "pending_tickets": inbox["counts"]["open"],
+        },
     )
 
 

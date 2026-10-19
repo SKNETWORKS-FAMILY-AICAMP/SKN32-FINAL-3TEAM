@@ -3,13 +3,11 @@
 
   🚨 **읽기 전용이다.** 등급 판정·2인 확인 쓰기 경로는 아직 없다 (§8 ⑬ 이 정해지기 전까지).
   ✅ `governor` 로그인을 지나야 뜬다 (index.html 과 같은 이유, D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 판정 근거{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>판정 근거 관리</h1>
 <p class="warn">🚨 <b>읽기 전용이다.</b> 등급 판정·2인 확인은 별도 절차가 정해진 뒤에 연다.</p>
 
@@ -48,7 +46,7 @@
 {% elif not sources %}
 <p>조건에 맞는 소스가 없다.</p>
 {% else %}
-<table>
+<div class="admin-table-scroll"><table>
   <tr>
     <th>소스명</th><th>발행처</th><th>층</th><th>등급</th>
     <th>검증</th><th>판정일</th><th>1차 확인자</th><th>2차 확인자</th>
@@ -65,7 +63,7 @@
     <td>{{ s.grade_reviewed_by }}</td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 
 {% if total_pages > 1 %}
 <nav class="pager" aria-label="페이지">
@@ -77,6 +75,4 @@
 {% endif %}
 {% endif %}
 
-</div>
-</div>
 {% endblock %}

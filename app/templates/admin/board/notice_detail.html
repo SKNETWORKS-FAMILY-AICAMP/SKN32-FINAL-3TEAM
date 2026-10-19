@@ -2,29 +2,29 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** 수정·삭제 버튼은 disabled 뼈대다.
-  🔴 `notice` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 더미다.
+  🔄 2026-10-20 — `notice` 표를 읽는다(admin_board.py). 못 읽으면 안내만 — 404 는 읽었는데 없을 때만 (D-188).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 공지사항 상세{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 
 <p><a href="/admin/board/notices">← 공지사항 목록</a></p>
 
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>notice</code> 표는 생겼지만 이 화면은 아직 그 표를 읽지 않아요.</p>
+{% with table="notice" %}{% include "admin/_db_notice.html" %}{% endwith %}
+{% if row %}
 
 <h1>{{ "📌 " if row.pinned else "" }}{{ row.title }}</h1>
-<table class="kv">
+<div class="admin-table-scroll"><table class="kv">
   <tr><th>분류</th><td>{{ row.category }}</td></tr>
   <tr><th>작성자</th><td>{{ row.author }}</td></tr>
   <tr><th>게시일</th><td>{{ row.date }}</td></tr>
+  <tr><th>마지막 수정</th><td>{{ row.updated }}</td></tr>
   <tr><th>게시 기간</th><td>{{ row.period }}</td></tr>
   <tr><th>상태</th><td>{{ row.status }}</td></tr>
   <tr><th>고정</th><td>{{ "고정됨" if row.pinned else "-" }}</td></tr>
-</table>
+</table></div>
 
 <h2>내용</h2>
 <pre class="board-content">{{ row.content }}</pre>
@@ -35,7 +35,8 @@
   <button type="button">삭제</button>
   <button type="button">고정 {{ "해제" if row.pinned else "" }}</button>
 </fieldset>
-<p class="hint">⬜ notice 테이블 승인 뒤 실제 쓰기 라우트를 붙인다.</p>
+<p class="hint">⬜ 공지 작성 · 수정 · 삭제 라우트는 아직 없어요 — 이 화면은 읽기 전용이에요.</p>
+{% endif %}
 
 <style>
 .admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
@@ -46,6 +47,4 @@
 .admin-shell .board-disabled { display: flex; gap: .5rem; border: none; padding: 0; }
 .admin-shell .board-disabled button { padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--a-line); background: var(--a-surface2); color: var(--a-ink); cursor: not-allowed; opacity: .6; }
 </style>
-</div>
-</div>
 {% endblock %}

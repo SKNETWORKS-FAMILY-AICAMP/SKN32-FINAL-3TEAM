@@ -6,13 +6,11 @@
   🚨 판정/생성 상세는 별도 화면 — /admin/stats/quality/judge, /admin/stats/quality/generation.
      (목업 `qualityCombinedViewV2()` 를 패널 단위로 나눈 것과 같은 이유)
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 검수 통계{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>검수 통계</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> <code>judge_stat</code>/<code>generation_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
 
@@ -58,6 +56,4 @@
 .admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
 </style>
-</div>
-</div>
 {% endblock %}

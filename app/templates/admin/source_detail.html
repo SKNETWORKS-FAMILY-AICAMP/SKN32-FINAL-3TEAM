@@ -9,13 +9,11 @@
      `source_evidence_tier_history` 테이블 팀장 승인(db/** 등급 1)이 먼저다.
      승인 나오면 여기에 POST 라우트만 붙인다 (docs/psj/소스등급_판정흐름_스키마초안.md).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 소스 상세{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 
 <p><a href="/admin/sources">← 판정 근거 목록</a></p>
 
@@ -29,7 +27,7 @@
 
 <section>
   <h2>기본 정보</h2>
-  <table class="kv">
+  <div class="admin-table-scroll"><table class="kv">
     <tr><th>소스 ID</th><td>{{ source.source_id }}</td></tr>
     <tr><th>발행처</th><td>{{ source.publisher }}</td></tr>
     <tr><th>URL</th><td>{% if source.url %}<a href="{{ source.url }}" target="_blank" rel="noopener">{{ source.url }}</a>{% else %}-{% endif %}</td></tr>
@@ -42,32 +40,32 @@
     <tr><th>출처표시</th><td>{{ source.attribution or "-" }}</td></tr>
     <tr><th>검증</th><td>{{ "검증 완료" if source.verified else "미검증" }}</td></tr>
     <tr><th>비고</th><td>{{ source.note or "-" }}</td></tr>
-  </table>
+  </table></div>
 </section>
 
 <section>
   <h2>현재 근거 등급 (L, evidence_tier)</h2>
   <p class="hint">⬜ <code>evidence_tier</code> 컬럼 팀장 승인 전이라 아직 값이 없다.
     승인 나오면 아래 표에 현재 L등급·판정일·1차/2차 확인자가 뜬다.</p>
-  <table class="kv">
+  <div class="admin-table-scroll"><table class="kv">
     <tr><th>근거 등급</th><td><i>미승인 — 컬럼 없음</i></td></tr>
     <tr><th>판정일</th><td>-</td></tr>
     <tr><th>1차 확인자</th><td>-</td></tr>
     <tr><th>2차 확인자</th><td>-</td></tr>
     <tr><th>근거 URL</th><td>-</td></tr>
-  </table>
+  </table></div>
 </section>
 
 <section>
   <h2>등급 판단 기준 (참고)</h2>
   <p class="hint">1차·2차 확인자가 참고하는 기준표 — 자세한 건
     <code>docs/psj/판정근거_등급기준_초안.md</code> 참고.</p>
-  <table class="kv small">
+  <div class="admin-table-scroll"><table class="kv small">
     <tr><th>L1 법적 기준</th><td>국가법령정보센터에 조문으로 특정 가능한 법률·시행령·시행규칙</td></tr>
     <tr><th>L2 행정 기준</th><td>관보 고시번호가 있는 행정규칙·고시·지침</td></tr>
     <tr><th>L3 공식 참고</th><td>정부·공공기관 명의로 발행된 안내서·가이드라인(고시번호 없음)</td></tr>
     <tr><th>L4 내부 검증</th><td>L1~L3 을 근거로 팀이 재정리, 원출처 역추적 가능</td></tr>
-  </table>
+  </table></div>
 </section>
 
 <section>
@@ -123,6 +121,4 @@
   background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed; opacity: .6;
 }
 </style>
-</div>
-</div>
 {% endblock %}

@@ -1,0 +1,9 @@
+{# app/templates/admin/_db_notice.html — 운영 표를 못 읽었을 때의 안내 · 소유자 **psj** (2026-10-20)
+
+  ★ `admin_dbread.run` 의 상태(`source`)를 받아 그린다. 못 읽은 화면은 **빈 화면 + 이 안내**다 — 0건과 다르다 (D-72 · D-147).
+  넘길 것: `source` · `table`(표 이름 글자)
+#}{% if source == "no_table" %}
+<p class="warn">⚠️ <b>기록을 못 읽었어요.</b> <code>{{ table }}</code> 표가 아직 없어요 — <code>launcher.py migrate</code> 를 먼저 실행해 주세요.</p>
+{% elif source == "no_db" %}
+<p class="warn">⚠️ <b>기록을 못 읽었어요.</b> DB 에 연결하지 못했어요 — <code>launcher.py db-up</code> 상태를 확인해 주세요. 0건이라는 뜻이 아니에요.</p>
+{% endif %}

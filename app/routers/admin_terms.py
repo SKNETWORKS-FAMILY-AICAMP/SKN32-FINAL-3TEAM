@@ -1,21 +1,17 @@
-"""app/routers/admin_terms.py — 문서관리(약관 관리) 화면 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+"""app/routers/admin_terms.py — 문서관리(약관 버전) 화면 · 소유자 **psj** (병렬작업 계약 §5)
 
-★ `admin.py` 와 파일을 가른다 (D-208 · admin_review_docs.py 와 같은 패턴). 붙이는 자리는
+★ `admin.py` 와 파일을 가른다 (D-208 · admin_errors.py 와 같은 패턴). 붙이는 자리는
    `app/routers/__init__.py` 한 줄 — `admin_router` 아래에 매단다.
 
-✅ **읽기 전용이다.** "새 버전 등록" 버튼은 자리만 잡은 뼈대다 — action 없음. "이력" 도
-   같은 상세 페이지 안에 읽기 전용으로 둔다(목업은 모달, 여기는 별도 페이지).
+✅ **읽기 전용이다.** 이 파일에 POST 는 없다. "새 버전 등록" 은 `disabled` 뼈대다.
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **이 화면은 아직 DB 를 읽지 않는다 — 더미로만 그린다.** 🔄 약관 버전 표 `terms` 는 생겼다
-   (alembic `0017_ops_tables` · `app/models.py` `Terms` · D-260 ①). 가입 화면(`app/routers/user.py`)은
-   그 표에서 현행 버전을 읽는데, 이 관리자 화면은 아직 옮기지 않았다. 새 버전을 쓰는 경로도 없다.
-   ⬜ DB 조회로 바꿀 때는 admin_errors.py 패턴(읽었다 · 표가 없다 · 못 붙었다를 가른다)을 따른다.
-
-🚨 목업(`app/static/mockup.html`)의 `terms` 뷰(10650번 줄대) 하드코딩 배열 구조를
-   그대로 따른다. 이전 버전 이력은 목업에서도 `showTermsHistory()` 모달에 하드코딩된
-   예시 1건뿐이라 여기서도 상세 화면에 그 정도로만 둔다.
+🔄 2026-10-20 — **`terms` 표를 읽는다** (alembic `0017_ops_tables` · `app/models.py` `Terms` · D-260 ①).
+   가입 화면이 동의 버전을 읽는 것과 같은 표다. 종전 더미(목업 terms 뷰 — SLA · 기업 계약서)는 지웠다.
+   ★ 못 읽으면 빈 화면 + 안내다 — 0건이라 말하지 않는다 (`admin_dbread` · D-72).
+   🚨 종류 이름은 `app/models.py` `TERMS_KINDS` 한 벌이다 (D-99).
+   🚨 상태 · 이전 버전은 저장하지 않는다(`Terms` docstring) — 같은 종류의 시행일 순서에서 계산한다:
+      시행일이 오늘 이후 = 예정 · 오늘 이전 중 가장 늦은 것 = 시행 중 · 그보다 앞선 것 = 지난 버전.
 """
 
 from __future__ import annotations
@@ -23,6 +19,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.models import TERMS_KINDS
+from app.routers import admin_dbread as db
 from app.routers.admin import require_governor
 from app.templating import templates
 
@@ -30,71 +28,88 @@ from app.templating import templates
 #:    `/admin/terms`, `/admin/terms/{term_id}` 가 된다.
 router = APIRouter(prefix="/terms")
 
-# ─────────────────────────────────────────────────────────────
-# 더미 — `terms` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다. ⬜ DB 조회로 바꾼다.
-# 목업 app/static/mockup.html 의 terms 뷰 하드코딩 배열을 그대로 옮겨온 것 — 실제
-# 약관 내용이 아니라 화면 구조 확인용이다.
-# ─────────────────────────────────────────────────────────────
-_DUMMY_TERMS: list[dict] = [
-    {
-        "id": 1,
-        "name": "서비스 이용약관",
-        "version": "v3.2",
-        "effective_date": "2026.08.01",
-        "prev_version": "v3.1",
-        "reason": "AI 판정 면책 조항 추가",
-        "status": "시행 중",
-    },
-    {
-        "id": 2,
-        "name": "개인정보처리방침",
-        "version": "v4.0",
-        "effective_date": "2026.08.10",
-        "prev_version": "v3.5",
-        "reason": "개정 개인정보보호법 반영",
-        "status": "시행 중",
-    },
-    {
-        "id": 3,
-        "name": "광고 검수 서비스 SLA",
-        "version": "v2.1",
-        "effective_date": "2026.07.15",
-        "prev_version": "v2.0",
-        "reason": "응답시간 보증 기준 변경",
-        "status": "시행 중",
-    },
-    {
-        "id": 4,
-        "name": "기업 이용 계약서",
-        "version": "v2.3",
-        "effective_date": "2026.09.01",
-        "prev_version": "v2.2",
-        "reason": "기업 데이터 보호 조항 강화",
-        "status": "예정",
-    },
-]
+#: 버전이 아주 많아질 일은 없다 — 화면 상한만 둔다
+_LIMIT = 500
+
+_SELECT = """
+SELECT t.id::text AS id, t.kind, t.version, t.effective_on, t.body, t.change_reason,
+       t.created_at, a.display_name AS created_by
+FROM terms t
+LEFT JOIN app_account a ON a.id = t.created_by
+"""
+
+
+def _views(rows: list[dict]) -> list[dict]:
+    """같은 종류끼리 시행일 순으로 세워 상태 · 이전 버전을 계산한다. 결과는 종류 순 · 최신 시행일 먼저."""
+    today = db.today_kst()
+    by_kind: dict[str, list[dict]] = {}
+    for r in sorted(rows, key=lambda r: (r["kind"], r["effective_on"], r["created_at"])):
+        by_kind.setdefault(r["kind"], []).append(r)
+    out: list[dict] = []
+    for kind in sorted(by_kind, key=lambda k: list(TERMS_KINDS).index(k) if k in TERMS_KINDS else 99):
+        seq = by_kind[kind]
+        current = max(
+            (i for i, r in enumerate(seq) if r["effective_on"] <= today), default=None
+        )
+        views = []
+        for i, r in enumerate(seq):
+            if r["effective_on"] > today:
+                status = "예정"
+            elif i == current:
+                status = "시행 중"
+            else:
+                status = "지난 버전"
+            views.append(
+                {
+                    "id": r["id"],
+                    "kind": kind,
+                    "name": TERMS_KINDS.get(kind, kind),
+                    "version": r["version"],
+                    "effective_date": db.fmt_dt(r["effective_on"], "%Y.%m.%d"),
+                    "prev_version": seq[i - 1]["version"] if i > 0 else "-",
+                    "reason": r["change_reason"],
+                    "status": status,
+                    "body": r["body"],
+                    "created_by": r["created_by"] or "-",
+                    "created_at": db.fmt_dt(r["created_at"]),
+                }
+            )
+        out.extend(reversed(views))
+    return out
 
 
 @router.get("", response_class=HTMLResponse)
 def terms_list(request: Request) -> HTMLResponse:
-    """약관 버전 목록 — 읽기 전용. `terms` 표를 아직 읽지 않고 더미로만 그린다."""
+    """약관 버전 목록 — 읽기 전용. 종류별로 최신 시행일 먼저."""
     actor = require_governor(request)
+    source, out = db.run([(f"{_SELECT} LIMIT %s", [_LIMIT])], what="terms.list")  # noqa: S608
+    rows = _views(out[0]) if source == "db" else []
     return templates.TemplateResponse(
         request,
         "admin/docs/terms_list.html",
-        {"actor": actor, "rows": _DUMMY_TERMS},
+        {"actor": actor, "source": source, "rows": rows},
     )
 
 
 @router.get("/{term_id}", response_class=HTMLResponse)
-def terms_detail(request: Request, term_id: int) -> HTMLResponse:
-    """약관 버전 상세(이력) — 읽기 전용."""
+def terms_detail(request: Request, term_id: str) -> HTMLResponse:
+    """약관 버전 상세 — 본문 + 같은 종류의 버전 이력. 읽기 전용."""
     actor = require_governor(request)
-    row = next((r for r in _DUMMY_TERMS if r["id"] == term_id), None)
-    if row is None:
+    source, out = db.run(
+        [
+            (
+                f"{_SELECT} WHERE t.kind = (SELECT kind FROM terms WHERE id::text = %s) LIMIT %s",  # noqa: S608
+                [term_id[:64], _LIMIT],
+            )
+        ],
+        what="terms.detail",
+    )
+    history = _views(out[0]) if source == "db" else []
+    row = next((v for v in history if v["id"] == term_id), None)
+    if source == "db" and row is None:
         raise HTTPException(status_code=404)
     return templates.TemplateResponse(
         request,
         "admin/docs/terms_detail.html",
-        {"actor": actor, "row": row},
+        {"actor": actor, "source": source, "row": row, "history": history},
     )

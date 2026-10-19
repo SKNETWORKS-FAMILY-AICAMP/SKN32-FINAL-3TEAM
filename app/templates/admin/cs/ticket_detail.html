@@ -2,40 +2,46 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** 상태 변경·답변 작성·담당자 배정 폼은 disabled 뼈대다.
-  🔴 `ticket` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 더미다.
+  🔄 2026-10-20 — `ticket` 표를 읽는다(admin_cs.py). 못 읽으면 안내만 그린다 — 404 는 읽었는데 없을 때만 (D-188).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 티켓 상세{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 
 <p><a href="/admin/cs/tickets">← 문의 관리</a></p>
 
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>ticket</code> 표는 생겼지만 이 화면은 아직 그 표를 읽지 않아요 — 사용자가 접수한 문의는 여기 보이지 않습니다.</p>
+{% with table="ticket" %}{% include "admin/_db_notice.html" %}{% endwith %}
+{% if row %}
 
 <h1>{{ row.title }}</h1>
-<table class="kv">
-  <tr><th>티켓 ID</th><td>{{ row.id }}</td></tr>
-  <tr><th>접수일</th><td>{{ row.at }}</td></tr>
-  <tr><th>문의자</th><td>{{ row.who }}</td></tr>
+<div class="admin-table-scroll"><table class="kv">
+  <tr><th>티켓 번호</th><td>{{ row.no }}</td></tr>
+  <tr><th>접수일</th><td>{{ row.at_full }}</td></tr>
+  <tr><th>문의자</th><td>{{ row.who }} <small class="hint">{{ row.who_email }}</small></td></tr>
   <tr><th>유형</th><td>{{ row.type }}</td></tr>
   <tr><th>우선순위</th><td><span class="cs-pri cs-pri-{{ row.priority }}">{{ row.priority }}</span></td></tr>
   <tr><th>상태</th><td><span class="cs-status cs-status-{{ row.status }}">{{ row.status }}</span></td></tr>
   <tr><th>담당자</th><td>{{ row.owner }}</td></tr>
-</table>
+  {% if row.status_code == "closed" %}
+  <tr><th>완료 시각</th><td>{{ row.closed_at }}</td></tr>
+  <tr><th>파기 예정일</th><td>{{ row.expires_at }}</td></tr>
+  {% endif %}
+</table></div>
 
 <h2>문의 내용</h2>
 <pre class="board-content">{{ row.content }}</pre>
+
+<h2>등록된 답변</h2>
+{% if row.reply %}<pre class="board-content">{{ row.reply }}</pre>{% else %}<p class="hint">아직 답변이 없어요.</p>{% endif %}
 
 <h2>답변 작성 <small class="hint">(승인 대기 · 비활성)</small></h2>
 <fieldset class="board-disabled-form" disabled>
   <label>상태 변경
     <select>
-      {% for s in statuses %}
-      <option {% if row.status == s %}selected{% endif %}>{{ s }}</option>
+      {% for code, label in statuses.items() %}
+      <option {% if row.status_code == code %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </label>
@@ -47,7 +53,8 @@
   </label>
   <button type="button">저장</button>
 </fieldset>
-<p class="hint">⬜ ticket 테이블 승인 뒤 실제 쓰기 라우트를 붙인다.</p>
+<p class="hint">⬜ 답변 · 상태 변경 쓰기 라우트는 아직 없어요 — 이 화면은 읽기 전용이에요.</p>
+{% endif %}
 
 <style>
 .admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
@@ -75,6 +82,4 @@
 .admin-shell .cs-status-처리중 { background: #dbeafe; color: #1d4ed8; }
 .admin-shell .cs-status-완료 { background: #dcfce7; color: #15803d; }
 </style>
-</div>
-</div>
 {% endblock %}

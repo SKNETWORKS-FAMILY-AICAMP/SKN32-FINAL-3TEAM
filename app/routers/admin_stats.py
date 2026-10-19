@@ -7,7 +7,8 @@
 ✅ **읽기 전용이다.** CSV 다운로드 버튼은 전부 `disabled` 뼈대다(목업은 `mockDownload()`).
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **관련 테이블(회원 통계·매출·판정 통계·생성 통계)이 전부 없다** — `db/schema.sql` 에
+🔄 2026-10-20 — **검수(판정) 통계(`/quality/judge`)는 `judgment` 표를 읽는다** (아래 `_load_judge`).
+🔴 **나머지 관련 테이블(회원 통계·매출·생성 통계)은 없다** — `db/schema.sql` 에
    흔적이 없다. DB 승인 요청조차 안 한 상태라 **더미로만** 그린다
    (admin_board.py 와 같은 이유 — admin_errors.py 의 dummy_no_table 분기보다 한 단계 이르다).
    ⬜ 스키마가 생기면 admin_errors.py 패턴(우선 DB, 실패 시 더미)으로 바꾼다.
@@ -185,38 +186,6 @@ _ENGINE_MIX = [
     {"label": "sLLM기반", "pct": 35},
 ]
 
-_JUDGE_KPI = {
-    "accuracy": "94.2%",
-    "total_cases": "48,921건",
-    "avg_time": "1.8초",
-    "appeal_approval_rate": "12.6%",
-}
-
-_JUDGE_MISCASES = [
-    {
-        "id": "JC-2291",
-        "category": "건기식",
-        "predicted": "부적합",
-        "actual": "적합",
-        "date": "09.14",
-    },
-    {
-        "id": "JC-2288",
-        "category": "의료기기",
-        "predicted": "적합",
-        "actual": "부적합",
-        "date": "09.13",
-    },
-    {
-        "id": "JC-2279",
-        "category": "화장품",
-        "predicted": "부적합",
-        "actual": "적합",
-        "date": "09.12",
-    },
-    {"id": "JC-2261", "category": "식품", "predicted": "적합", "actual": "부적합", "date": "09.10"},
-]
-
 _GEN_KPI = {
     "quality_score": "88.4점",
     "total_cases": "31,204건",
@@ -301,20 +270,110 @@ def quality_stats(request: Request) -> HTMLResponse:
     )
 
 
+# ─────────────────────────────────────────────────────────────
+# 🔄 2026-10-20 — 검수(판정) 통계는 **`judgment` 표를 읽는다** (`admin_dbread` · D-72).
+#    ⛔ 종전 더미(정확도 94.2% · 이의제기 승인율 · 오판정 사례)는 지웠다 — 운영 판정에는 정답 라벨이 없어
+#       정확도를 셀 수 없다. 셀 수 없는 수를 그리면 없는 사실을 만든다 (D-147).
+#    ★ 세는 것: 문장 판정 수 · 검수 요청(문서) 수 · 판정 상태 · 보류 사유 · 품목 · 위험도 · 위반 유형 · 인코더 사용률 · 일별 추이.
+#    🔴 원문은 읽지 않는다 — 건수만 (D-76 열람 경계). 이력 보관에 동의한 검수만 저장된다 (D-96).
+#    🚨 상태 · 보류 사유 글자는 사용자 화면(`user.py` `_VERDICT_LABELS` · `_HOLD_LABELS`)과 같은 한 벌 (D-99).
+# ─────────────────────────────────────────────────────────────
+_JUDGE_DAYS = (7, 30, 90)
+_RISK_LABEL = {0: "R0 특이사항 없음", 1: "R1 시정명령 위험", 2: "R2 업무정지 위험", 3: "R3 영업 상실 위험"}
+#: 일별 추이를 그리는 최대 일수 — 「전체」 기간도 최근 이만큼만 막대로 그린다
+_TREND_MAX_DAYS = 30
+
+
+def _bars(rows: list[dict], label_of=lambda k: k) -> list[dict]:  # noqa: ANN001
+    total = sum(r["n"] for r in rows) or 1
+    return [
+        {"label": label_of(r["k"]), "n": r["n"], "pct": round(r["n"] * 100 / total, 1)}
+        for r in rows
+    ]
+
+
+def _load_judge(days: int) -> dict:
+    from app.encoder import JUDGED_BY_MARK  # noqa: PLC0415
+    from app.routers import admin_dbread as db  # noqa: PLC0415
+
+    where = "WHERE judged_at >= now() - make_interval(days => %s)" if days else ""
+    p: list[object] = [days] if days else []
+    trend_days = min(days or _TREND_MAX_DAYS, _TREND_MAX_DAYS)
+    group = "SELECT {k} AS k, count(*) AS n FROM judgment {w} {extra} GROUP BY 1 ORDER BY 2 DESC"
+    source, out = db.run(
+        [
+            (
+                "SELECT count(*) AS n, count(DISTINCT doc_id) AS docs, "
+                "count(*) FILTER (WHERE judged_by LIKE %s ESCAPE '\\') AS enc, "
+                "min(judged_at) AS first_at, max(judged_at) AS last_at "
+                f"FROM judgment {where}",
+                [db.like_param(JUDGED_BY_MARK), *p],
+            ),
+            (group.format(k="verdict", w=where, extra=""), p),
+            (
+                group.format(
+                    k="hold_reason", w=where or "WHERE TRUE", extra="AND verdict = 'hold'"
+                ),
+                p,
+            ),
+            (group.format(k="coalesce(product_category, '미확정')", w=where, extra=""), p),
+            (group.format(k="risk_final", w=where or "WHERE TRUE", extra="AND risk_final IS NOT NULL"), p),
+            (
+                group.format(
+                    k="violation_type", w=where or "WHERE TRUE", extra="AND violation_type IS NOT NULL"
+                )
+                + " LIMIT 10",
+                p,
+            ),
+            (
+                "SELECT (judged_at AT TIME ZONE 'Asia/Seoul')::date AS d, count(*) AS n FROM judgment "
+                "WHERE judged_at >= now() - make_interval(days => %s) GROUP BY 1 ORDER BY 1",
+                [trend_days],
+            ),
+        ],
+        what="stats.judge",
+    )
+    if source != "db":
+        return {"source": source}
+    from app.routers.user import _HOLD_LABELS, _VERDICT_LABELS  # noqa: PLC0415
+
+    k = out[0][0]
+    n = k["n"]
+    trend = [{"label": db.fmt_dt(r["d"], "%m.%d"), "n": r["n"]} for r in out[6]]
+    return {
+        "source": source,
+        "kpi": {
+            "sentences": n,
+            "docs": k["docs"],
+            "enc_pct": round(k["enc"] * 100 / n, 1) if n else None,
+            "first_at": db.fmt_dt(k["first_at"], "%Y.%m.%d"),
+            "last_at": db.fmt_dt(k["last_at"]),
+        },
+        "by_verdict": _bars(out[1], lambda v: _VERDICT_LABELS.get(v, v)),
+        "by_hold": _bars(out[2], lambda v: _HOLD_LABELS.get(v, v or "사유 없음")),
+        "by_category": _bars(out[3]),
+        "by_risk": _bars(sorted(out[4], key=lambda r: r["k"]), lambda v: _RISK_LABEL.get(v, f"R{v}")),
+        "by_type": _bars(out[5], lambda v: str(v).replace("_", " ")),
+        "trend": trend,
+        "trend_max": max((r["n"] for r in trend), default=0),
+        "trend_days": trend_days,
+    }
+
+
 @router.get("/quality/judge", response_class=HTMLResponse)
 def judge_stats(request: Request) -> HTMLResponse:
-    """판정 통계 — 읽기 전용. 품질 통계 원본(목업 `qualityCombinedViewV2()`)의
-    `qp-judge` 패널에 해당. `judge_stat` 테이블이 아직 없어 더미로만 그린다.
-    """
+    """검수(판정) 통계 — 읽기 전용 · `judgment` 표에서 센다. 기간: 최근 7 · 30 · 90일 · 전체."""
     actor = require_governor(request)
+    raw = request.query_params.get("days", "30")
+    days = int(raw) if raw.isdigit() and int(raw) in _JUDGE_DAYS else (0 if raw == "all" else 30)
     return templates.TemplateResponse(
         request,
         "admin/stats/judge.html",
         {
             "actor": actor,
-            "kpi": _JUDGE_KPI,
-            "engine_mix": _ENGINE_MIX,
-            "miscases": _JUDGE_MISCASES,
+            "days": days,
+            "day_options": _JUDGE_DAYS,
+            **_load_judge(days),
         },
     )
 

@@ -13,17 +13,18 @@
      관리자 화면 전체가 지금까지 "스크립트 없음"으로 일관되어 왔어서 선례를 만들기 전에
      ssm·팀장과 맞추기로 했다.
 #}
+{% from "user/_icons.html" import icon %}
 <aside class="admin-sidebar" aria-label="관리자 메뉴">
-  <a class="admin-sidebar-brand" href="/u/landing">CopyLane 관리자</a>
+  <p class="admin-nav-label">OVERVIEW</p>
+
 
   <a class="admin-sidebar-top" href="/admin/"
-     {% if request.url.path == "/admin/" %}aria-current="page"{% endif %}>대시보드</a>
+     {% if request.url.path == "/admin/" %}aria-current="page"{% endif %}>{{ icon('home',18) }}<span>대시보드</span></a>
 
+  <p class="admin-nav-label">운영 관리</p>
   <details class="admin-nav-cat" {% if request.url.path.startswith("/admin/stats/") %}open{% endif %}>
-    <summary>통계</summary>
+    <summary>{{ icon('history',18) }}<span>통계</span></summary>
     <div class="admin-nav-sub-list">
-      <a class="admin-nav-sub" href="/admin/stats/dashboard"
-         {% if request.url.path == "/admin/stats/dashboard" %}aria-current="page"{% endif %}>대시보드</a>
       <a class="admin-nav-sub" href="/admin/stats/quality"
          {% if request.url.path == "/admin/stats/quality" or request.url.path == "/admin/stats/quality/judge" %}aria-current="page"{% endif %}>검수 통계</a>
       <a class="admin-nav-sub" href="/admin/stats/quality/generation"
@@ -36,7 +37,7 @@
   </details>
 
   <details class="admin-nav-cat" {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") or request.url.path == "/admin/review-docs" or request.url.path.startswith("/admin/review-docs/") or request.url.path == "/admin/terms" or request.url.path.startswith("/admin/terms/") %}open{% endif %}>
-    <summary>문서관리</summary>
+    <summary>{{ icon('book',18) }}<span>문서관리</span></summary>
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/sources"
          {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") %}aria-current="page"{% endif %}>판정 근거</a>
@@ -48,7 +49,7 @@
   </details>
 
   <details class="admin-nav-cat" {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") or request.url.path == "/admin/enterprise" or request.url.path.startswith("/admin/enterprise/") or request.url.path == "/admin/admins" or request.url.path == "/admin/signup-review" or request.url.path.startswith("/admin/signup-review/") %}open{% endif %}>
-    <summary>회원관리</summary>
+    <summary>{{ icon('bag',18) }}<span>회원관리</span></summary>
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/members"
          {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") %}aria-current="page"{% endif %}>회원 목록</a>
@@ -62,7 +63,7 @@
   </details>
 
   <details class="admin-nav-cat" {% if request.url.path.startswith("/admin/board/") or request.url.path.startswith("/admin/cs/") %}open{% endif %}>
-    <summary>소식·문의</summary>
+    <summary>{{ icon('help',18) }}<span>소식·문의</span></summary>
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/board/notices"
          {% if request.url.path == "/admin/board/notices" or request.url.path.startswith("/admin/board/notices/") %}aria-current="page"{% endif %}>공지사항</a>
@@ -72,5 +73,5 @@
   </details>
 
   <a class="admin-sidebar-top" href="/admin/errors"
-     {% if request.url.path == "/admin/errors" or request.url.path.startswith("/admin/errors/") %}aria-current="page"{% endif %}>오류 로그</a>
+     {% if request.url.path == "/admin/errors" or request.url.path.startswith("/admin/errors/") %}aria-current="page"{% endif %}>{{ icon('info',18) }}<span>오류 로그</span></a>
 </aside>

@@ -5,13 +5,11 @@
   🔴 `generation_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
   🚨 품질 통계 원본(목업 `qualityCombinedViewV2()`)의 `qp-gen` 패널에 해당한다.
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 생성 통계{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>생성 통계</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> <code>generation_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
 
@@ -34,12 +32,12 @@
 </div>
 
 <h2>재생성 사유 분석</h2>
-<table>
+<div class="admin-table-scroll"><table>
   <tr><th>사유</th><th>건수</th><th>비중</th></tr>
   {% for r in reasons %}
   <tr><td>{{ r.reason }}</td><td>{{ r.count }}</td><td>{{ r.pct }}%</td></tr>
   {% endfor %}
-</table>
+</table></div>
 <p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
 
 <style>
@@ -54,6 +52,4 @@
 .admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
 </style>
-</div>
-</div>
 {% endblock %}

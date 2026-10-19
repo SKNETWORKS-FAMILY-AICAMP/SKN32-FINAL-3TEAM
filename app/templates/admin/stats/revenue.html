@@ -7,13 +7,11 @@
      다른 화면과 동일하게 `require_governor`만 건다 (2026-09-16).
   🔴 일/주/월 토글은 목업에서 JS 지만 여기는 GET 쿼리(`?period=`)로 전환한다.
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 매출 통계{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>매출 통계</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> <code>revenue</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
 
@@ -67,6 +65,4 @@
 .admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
 </style>
-</div>
-</div>
 {% endblock %}

@@ -1,22 +1,20 @@
-"""app/routers/admin_board.py — 게시판관리(공지사항) 화면 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+"""app/routers/admin_board.py — 게시판관리(공지사항) 화면 · 소유자 **psj** (병렬작업 계약 §5)
 
 ★ `admin.py` 와 파일을 가른다 (D-208 · admin_errors.py 와 같은 패턴). 붙이는 자리는
    `app/routers/__init__.py` 한 줄 — `admin_router` 아래에 매단다.
 
-✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 화면의 "새 공지 작성" 버튼은 `disabled` 뼈대다.
+✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 화면의 "새 공지 작성" · 수정 · 삭제 버튼은 `disabled` 뼈대다.
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **이 화면은 아직 DB 를 읽지 않는다 — 더미로만 그린다.** 🔄 `notice` 표는 생겼다
-   (alembic `0017_ops_tables` · `app/models.py` `Notice` · D-260 ①). 사용자 화면의 알림
-   (`app/routers/user.py`)은 그 표를 읽는데, 이 관리자 화면은 아직 옮기지 않았다.
-   ⬜ DB 조회로 바꿀 때는 admin_errors.py 패턴(읽었다 · 표가 없다 · 못 붙었다를 가른다)을 따른다.
+🔄 2026-10-20 — **`notice` 표를 읽는다** (alembic `0017_ops_tables` · `app/models.py` `Notice` · D-260 ①).
+   사용자 화면의 알림(`app/routers/user.py`)이 읽는 것과 같은 표다. 종전 더미(목업 `_notices`)는 지웠다.
+   ★ 못 읽으면 빈 화면 + 안내다 — 0건이라 말하지 않는다 (`admin_dbread` · D-72).
+   🚨 분류 값은 `app/models.py` `NOTICE_CATEGORIES` 한 벌이다(표의 CHECK 와 같다 · D-99).
+   🚨 상태는 저장하지 않는다(`Notice` docstring) — `hidden_at` · `starts_on` · `ends_on` 에서 계산한다:
+      숨김 > 예정(시작 전) > 종료(끝난 뒤) > 게시중.
+   ⬜ 공지를 쓰는 길(관리자 작성 폼)은 아직 없다 — 표에는 DB 에 직접 넣은 공지만 있다.
 
-🚨 목업(`app/static/mockup.html`)의 `_notices` 배열 구조를 그대로 따른다 —
-   나중에 실데이터 붙을 때 필드명이 어긋나지 않게.
-
-🔴 **FAQ 관리는 뺐다** — 목업 최종본(11648번 줄 대 NAV)엔 게시판관리에 FAQ 가 없다.
-   구버전(7797번 줄 대)에만 있던 항목이라 2026-09-16 사용자 확인 뒤 제거했다.
+🔴 **FAQ 관리는 뺐다** — 목업 최종본(11648번 줄 대 NAV)엔 게시판관리에 FAQ 가 없다 (2026-09-16 사용자 확인).
 """
 
 from __future__ import annotations
@@ -24,6 +22,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.models import NOTICE_CATEGORIES
+from app.routers import admin_dbread as db
 from app.routers.admin import require_governor
 from app.templating import templates
 
@@ -33,145 +33,101 @@ router = APIRouter(prefix="/board")
 
 PAGE_SIZE = 20
 
-# ─────────────────────────────────────────────────────────────
-# 더미 — `notice` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다. ⬜ DB 조회로 바꾼다.
-# 목업 app/static/mockup.html 의 _notices 배열을 그대로 옮겨온 것 — 실제 운영
-# 문구가 아니라 화면 구조 확인용이다.
-# ─────────────────────────────────────────────────────────────
-
-_DUMMY_NOTICES: list[dict] = [
-    {
-        "id": 1,
-        "title": "[중요] 건강기능식품 광고 심사 기준 변경 안내",
-        "category": "규정 변경",
-        "author": "박수진",
-        "date": "08.28",
-        "period": "08.28 ~ 상시",
-        "status": "게시중",
-        "pinned": True,
-        "content": (
-            "건강기능식품에 관한 법률 제18조 개정에 따라 광고 심사 기준이 "
-            "아래와 같이 변경됩니다.\n\n1. 기능성 표현 범위 확대\n"
-            "2. 인체적용시험 결과 인용 기준 강화\n3. 비교광고 허용 범위 조정\n\n"
-            "변경된 기준은 2026년 9월 1일부터 적용됩니다."
-        ),
-    },
-    {
-        "id": 2,
-        "title": "8월 시스템 정기점검 안내 (08.30 02:00~06:00)",
-        "category": "시스템",
-        "author": "김민수",
-        "date": "08.27",
-        "period": "08.27 ~ 08.31",
-        "status": "게시중",
-        "pinned": False,
-        "content": (
-            "안녕하세요, CopyLane 운영팀입니다.\n\n"
-            "아래와 같이 시스템 정기점검을 실시합니다.\n\n"
-            "- 일시: 2026.08.30 (토) 02:00 ~ 06:00 (4시간)\n"
-            "- 영향: 서비스 전체 이용 불가\n- 사유: DB 마이그레이션 및 보안 패치"
-        ),
-    },
-    {
-        "id": 3,
-        "title": "Enterprise 플랜 신규 기능 출시",
-        "category": "업데이트",
-        "author": "이서은",
-        "date": "08.25",
-        "period": "08.25 ~ 09.25",
-        "status": "게시중",
-        "pinned": False,
-        "content": (
-            "Enterprise 플랜에 새로운 기능이 추가되었습니다.\n\n"
-            "1. 팀 공동 작업 기능\n2. 고급 분석 대시보드\n"
-            "3. API 호출 한도 확대 (월 10,000회)"
-        ),
-    },
-    {
-        "id": 4,
-        "title": "AI 판정 모델 v2.5 업데이트 안내",
-        "category": "업데이트",
-        "author": "김민수",
-        "date": "08.15",
-        "period": "08.15 ~ 상시",
-        "status": "게시중",
-        "pinned": False,
-        "content": (
-            "AI 판정 모델이 v2.5로 업데이트되었습니다.\n\n주요 개선사항:\n"
-            "- 건기식 카테고리 정확도 3.2%p 향상\n- 신규 규정 반영 속도 개선\n"
-            "- 오판정 자동 학습 파이프라인 도입"
-        ),
-    },
-    {
-        "id": 5,
-        "title": "개인정보처리방침 개정 안내",
-        "category": "규정 변경",
-        "author": "박수진",
-        "date": "08.10",
-        "period": "08.10 ~ 상시",
-        "status": "게시중",
-        "pinned": False,
-        "content": (
-            "개인정보처리방침이 일부 개정되었습니다.\n\n주요 변경사항:\n"
-            "- 마케팅 수신동의 항목 세분화\n- 제3자 제공 동의 절차 강화\n"
-            "- 개인정보 보유기간 명확화"
-        ),
-    },
-]
+_SELECT = """
+SELECT n.id::text AS id, n.title, n.category, n.body, n.pinned, n.starts_on, n.ends_on,
+       n.hidden_at, n.created_at, n.updated_at, a.display_name AS author
+FROM notice n
+LEFT JOIN app_account a ON a.id = n.author_id
+"""
 
 
-def _clean_page(value: str | None) -> int:
-    try:
-        return max(1, int(value or 1))
-    except ValueError:
-        return 1
+def _status(r: dict) -> str:
+    today = db.today_kst()
+    if r["hidden_at"] is not None:
+        return "숨김"
+    if r["starts_on"] is not None and r["starts_on"] > today:
+        return "예정"
+    if r["ends_on"] is not None and r["ends_on"] < today:
+        return "종료"
+    return "게시중"
 
 
-def _paginate(rows: list[dict], page: int) -> tuple[list[dict], int]:
-    total = len(rows)
-    start = (page - 1) * PAGE_SIZE
-    return rows[start : start + PAGE_SIZE], total
+def view(r: dict) -> dict:
+    start = db.fmt_dt(r["starts_on"], "%m.%d") if r["starts_on"] else db.fmt_dt(r["created_at"], "%m.%d")
+    end = db.fmt_dt(r["ends_on"], "%m.%d") if r["ends_on"] else "상시"
+    return {
+        "id": r["id"],
+        "title": r["title"],
+        "category": NOTICE_CATEGORIES.get(r["category"], r["category"]),
+        "author": r["author"] or "-",
+        "date": db.fmt_dt(r["created_at"], "%m.%d"),
+        "updated": db.fmt_dt(r["updated_at"]),
+        "period": f"{start} ~ {end}",
+        "status": _status(r),
+        "pinned": bool(r["pinned"]),
+        "content": r["body"],
+    }
 
 
 @router.get("/notices", response_class=HTMLResponse)
 def notice_list(request: Request) -> HTMLResponse:
-    """공지사항 목록 — 읽기 전용. `notice` 표를 아직 읽지 않고 더미로만 그린다."""
+    """공지사항 목록 — 읽기 전용 · 고정 공지 먼저, 그다음 최신순."""
     actor = require_governor(request)
     qp = request.query_params
-    category = (qp.get("category") or "").strip() or None
-    page = _clean_page(qp.get("page"))
+    category = qp.get("category") if qp.get("category") in NOTICE_CATEGORIES else None
+    page = db.clean_page(qp.get("page"))
 
-    rows = _DUMMY_NOTICES
-    if category:
-        rows = [r for r in rows if r["category"] == category]
-    # 고정(pinned) 공지를 앞으로
-    rows = sorted(rows, key=lambda r: (not r["pinned"], -r["id"]))
+    where_sql, params = ("WHERE n.category = %s", [category]) if category else ("", [])
+    source, out = db.run(
+        [(f"SELECT count(*) AS n FROM notice n {where_sql}", params)],  # noqa: S608 — 고정 조각만
+        what="board.count",
+    )
+    rows: list[dict] = []
+    total: int | None = None
+    if source == "db":
+        total = out[0][0]["n"]
+        page = min(page, db.page_count(total, PAGE_SIZE))
+        source, out = db.run(
+            [
+                (
+                    f"{_SELECT} {where_sql} ORDER BY n.pinned DESC, n.created_at DESC "  # noqa: S608
+                    "LIMIT %s OFFSET %s",
+                    [*params, PAGE_SIZE, (page - 1) * PAGE_SIZE],
+                )
+            ],
+            what="board.list",
+        )
+        rows = [view(r) for r in out[0]] if source == "db" else []
 
-    page_rows, total = _paginate(rows, page)
-    pages = max(1, -(-total // PAGE_SIZE))
-    categories = sorted({r["category"] for r in _DUMMY_NOTICES})
     return templates.TemplateResponse(
         request,
         "admin/board/notices.html",
         {
             "actor": actor,
-            "rows": page_rows,
+            "source": source,
+            "rows": rows,
             "total": total,
             "page": page,
-            "pages": pages,
+            "pages": db.page_count(total or 0, PAGE_SIZE),
             "category": category or "",
-            "categories": categories,
+            "categories": NOTICE_CATEGORIES,
         },
     )
 
 
 @router.get("/notices/{notice_id}", response_class=HTMLResponse)
-def notice_detail(request: Request, notice_id: int) -> HTMLResponse:
-    """공지사항 상세 — 읽기 전용. 수정·삭제 버튼은 뼈대만."""
+def notice_detail(request: Request, notice_id: str) -> HTMLResponse:
+    """공지사항 상세 — 읽기 전용. 수정 · 삭제 버튼은 뼈대만."""
     actor = require_governor(request)
-    row = next((r for r in _DUMMY_NOTICES if r["id"] == notice_id), None)
-    if row is None:
+    source, out = db.run(
+        [(f"{_SELECT} WHERE n.id::text = %s", [notice_id[:64]])],  # noqa: S608
+        what="board.detail",
+    )
+    row = view(out[0][0]) if source == "db" and out[0] else None
+    if source == "db" and row is None:
         raise HTTPException(status_code=404)
     return templates.TemplateResponse(
-        request, "admin/board/notice_detail.html", {"actor": actor, "row": row}
+        request,
+        "admin/board/notice_detail.html",
+        {"actor": actor, "source": source, "row": row},
     )

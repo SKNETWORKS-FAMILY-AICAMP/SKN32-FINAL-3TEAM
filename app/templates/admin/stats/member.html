@@ -5,13 +5,11 @@
   🔴 `member_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
   🔴 일/주/월 토글은 목업에서 JS 지만 여기는 GET 쿼리(`?period=`)로 전환한다.
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 이용자 통계{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>이용자 통계</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> <code>member_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
 
@@ -50,12 +48,12 @@
   <a href="/admin/stats/member?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>
   {% endfor %}
 </nav>
-<table>
+<div class="admin-table-scroll"><table>
   <tr><th>구간</th><th>가입</th><th>탈퇴</th></tr>
   {% for t in trend %}
   <tr><td>{{ t.label }}</td><td>{{ t.join }}</td><td>{{ t.leave }}</td></tr>
   {% endfor %}
-</table>
+</table></div>
 <p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
 
 <style>
@@ -78,6 +76,4 @@
 .admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
 </style>
-</div>
-</div>
 {% endblock %}

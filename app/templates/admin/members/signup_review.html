@@ -4,13 +4,11 @@
   🚨 **읽기 전용이다.** 승인·반려는 상세 화면에서도 disabled 뼈대다.
   🔴 가입 신청(인플루언서·기업) 테이블이 아직 없다 — 전부 더미다 (admin_signup_review.py 참고).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 승인 심사{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>승인 심사</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> 가입 신청 테이블이 아직 없어요 — 서비스 쪽 가입 신청 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
 
@@ -39,7 +37,7 @@
 {% if not rows %}
 <p>조건에 맞는 신청이 없다.</p>
 {% else %}
-<table>
+<div class="admin-table-scroll"><table>
   <tr>
     <th>신청자/기업</th><th>신청 유형</th><th>이메일</th><th>신청일시</th><th>검토 상태</th>
   </tr>
@@ -52,7 +50,7 @@
     <td>{{ status_label[r.status] }}</td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 {% endif %}
 
 <style>
@@ -61,6 +59,4 @@
 .admin-shell .cs-kpi span { font-size: .8rem; color: var(--a-clay); }
 .admin-shell .cs-kpi b { font-size: 1.3rem; }
 </style>
-</div>
-</div>
 {% endblock %}
