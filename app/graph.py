@@ -2387,6 +2387,9 @@ def _hf_premise(
     if premise is Premise.건기식_비인정:
         if not basis or any(b.moved_from is None for b in basis):
             return j
+        # 🆕 (보충 29) 전제 확정의 확신 문턱 — 아래면 확정하지 않고 보류(하한 · 근거는 그대로)
+        if not _premise_confident(e, Violation(pm.HF_MISLEAD)):
+            return j
         c = _enc_confirmed(j, Violation(_UNRECOGNIZED_TYPE), span)
         if c.verdict is not Verdict.confirmed:
             return j
@@ -2480,6 +2483,9 @@ def _food_premise(
     basis = list(j.risk.encoder_basis)
     if premise is Premise.식품:
         if not basis or any(b.violation is not hf or b.moved_from is not None for b in basis):
+            return j
+        # 🆕 (보충 29) 전제 확정의 확신 문턱 — 아래면 확정하지 않고 보류(하한 · 근거는 그대로)
+        if not _premise_confident(e, hf):
             return j
         c = _enc_confirmed(j, hf, span)
         if c.verdict is not Verdict.confirmed:
@@ -3288,10 +3294,41 @@ def _encoder_side(
 ENCODER_ABSOLUTE_TAU: dict[str, float] = {"c451942436f0": 0.699}
 
 
+def _bundle() -> str | None:
+    """지금 판의 판 지문 — 인코더가 없으면 None. 두 τ 표(`ENCODER_ABSOLUTE_TAU` · `ENCODER_PREMISE_TAU`)가 같은 열쇠를 쓴다(D-99)."""
+    d = enc.configured_dir()
+    return None if d is None else enc.bundle_mark(d)
+
+
 def _absolute_tau() -> float | None:
     """지금 판의 절대형 확정 τ — 인코더가 없거나 표에 없는 판이면 None(문턱 없음)."""
-    d = enc.configured_dir()
-    return None if d is None else ENCODER_ABSOLUTE_TAU.get(enc.bundle_mark(d))
+    b = _bundle()
+    return None if b is None else ENCODER_ABSOLUTE_TAU.get(b)
+
+
+#: 🆕 2026-10-19 (D-348 보충 29) **전제가 답인 확정(답 없이)의 확신 문턱** — 판 지문 → 인코더 유형 → τ.
+#:    서는 자리 — `_food_premise`(`식품` 전제 3호) · `_hf_premise`(`건기식_비인정` 전제 · 옮긴 근거) — 전제가 「기능성 표시 요건 없음 · 인정 없음」을
+#:    답했고 남는 불확실은 인코더의 유형 판단 하나라 절대형(C)과 같은 신뢰 규칙의 몫이다(보충 17 결정 2). 두 자리 모두 같은 점수(건강기능식품 오인)라 유형 단위로 둔다.
+#:    고르는 규칙 — `ENCODER_ABSOLUTE_TAU` 와 같다(확장 dev 조건부의 그 자리 확정에서 틀림 ≤ 1 인 가장 낮은 τ · 측정 전 고정 · 보충 17 결정 2).
+#:    `[측정]` D4-20 `c451942436f0` — `식품` 분기 3호 확정 47 행 · 틀림 0.5616 · 0.6926 · 0.8143 → τ ∈ (0.6926, 0.7402] · 0.693 · 잃는 맞는 확정 5 / 43 ·
+#:       데이터 밖 적법 확정 1 → 0(`gpt-038` 0.618) (원장 10-19(B) ⑨ ⑩) · 「다이어트를 도와드립니다」(D · 원천 체중조절용 조제식품)는 전제가 맞지 않는 행이라
+#:       틀림으로 세지 않았다(⬜ 특수용도식품 전제 · 보충 29 결정 2) · 🚨 틀린 행과 0.0004 차이(맞는 쪽은 0.047)
+#:    🔴 표에 없는 판 · 유형은 문턱 없음(`ENCODER_ABSOLUTE_TAU` 와 같다) — 채택 판이 바뀌면 다시 잰다(`tests/test_absolute_tau.py`)
+ENCODER_PREMISE_TAU: dict[str, dict[Violation, float]] = {
+    "c451942436f0": {Violation.건강기능식품_오인: 0.693}
+}
+
+
+def _premise_tau(v: Violation) -> float | None:
+    """지금 판 · 그 유형의 전제 확정 τ — 인코더가 없거나 표에 없으면 None(문턱 없음)."""
+    b = _bundle()
+    return None if b is None else ENCODER_PREMISE_TAU.get(b, {}).get(v)
+
+
+def _premise_confident(e: SentEncoding, v: Violation) -> bool:
+    """전제가 답인 확정을 세울 만큼 인코더가 그 유형을 믿는가 — 문턱이 없으면 참(종전대로) · 점수가 없으면 0 으로 센다(D-220)."""
+    tau = _premise_tau(v)
+    return tau is None or dict(e.scores).get(v.value, 0.0) >= tau
 
 
 def _absolute_types(s: SentenceJudgment) -> set[Violation]:
