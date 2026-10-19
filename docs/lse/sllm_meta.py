@@ -80,6 +80,23 @@ def base_model() -> str:
     return _env(ENV_BASE) or DEFAULT_BASE
 
 
+#: 🆕 2026-10-19 — 추론 정밀도. 배포 서버가 **Tesla T4**(AWS g4dn.xlarge · Turing sm_75)라 bf16 을 하드웨어로 못 한다 —
+#:    bf16 고정이면 안 돌거나 매우 느리다. `auto`(기본)는 GPU 가 bf16 을 하면 bf16, 아니면 fp16 · 바꾸려면 `COPYLANE_SLLM_DTYPE=bf16|fp16`.
+#:    학습 스크립트는 Ampere 이상(RTX 3080 · RunPod)에서만 돌려 bf16 그대로다
+ENV_DTYPE = "COPYLANE_SLLM_DTYPE"
+
+
+def serve_dtype():  # noqa: ANN201 — torch.dtype (이 모듈은 torch 없이 읽혀야 해서 여기서 가져온다)
+    import torch  # noqa: PLC0415
+
+    want = (_env(ENV_DTYPE) or "auto").lower()
+    if want in ("bf16", "bfloat16"):
+        return torch.bfloat16
+    if want in ("fp16", "float16", "half"):
+        return torch.float16
+    return torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+
+
 def adapter_base(adapter_dir: Path) -> str:
     """어댑터가 학습된 베이스 — `adapter_config.json` 의 `base_model_name_or_path`. 못 읽으면 멈춘다 (D-220)."""
     path = adapter_dir / "adapter_config.json"

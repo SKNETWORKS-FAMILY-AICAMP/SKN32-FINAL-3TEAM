@@ -40,6 +40,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
 
+import sllm_meta  # noqa: E402
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
 from postfix import (  # noqa: E402
@@ -246,7 +247,7 @@ def main() -> None:
     persona = PERSONAS[args.persona] if args.persona else None
 
     tok = AutoTokenizer.from_pretrained(BASE)
-    base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
+    base = AutoModelForCausalLM.from_pretrained(BASE, dtype=sllm_meta.serve_dtype(), device_map="cuda")  # 🆕 10-19 T4(fp16) 대응
     model = PeftModel.from_pretrained(base, str(stage1), adapter_name="stage1")
     model.load_adapter(str(STAGE2), adapter_name="stage2")
     model.eval()
