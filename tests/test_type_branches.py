@@ -89,9 +89,12 @@ def _sec14() -> str:
 def test_문안은_승인본과_글자가_같다() -> None:
     """🔄 2026-10-17 — 질문 · 기준 문안 · 증빙 · 화면 안내는 정본 §14 와 글자가 같다 (D-99 · D-147 · D-263 ②)."""
     sec = _sec14()
-    # 🔄 2026-10-19 (보충 28 결정 4) — 낱말 사실 두 종류(특허 · 인증)는 문안이 §20 에 있고 질문은 아직 공통 질문이다(`tests/test_word_facts.py`)
-    assert set(fc.FACT_QUESTIONS) == set(fc.FACT_TEXTS) - {FactKind.특허, FactKind.인증}
+    # 🔄 2026-10-19 (보충 28 결정 4) — 낱말 사실 두 종류(특허 · 인증)는 문안 · 질문이 §20 에 있다(`tests/test_word_facts.py`)
+    word = {FactKind.특허, FactKind.인증}
+    assert set(fc.FACT_QUESTIONS) == set(fc.FACT_TEXTS)
     for k, q in fc.FACT_QUESTIONS.items():
+        if k in word:
+            continue
         assert f"질문: {q}" in sec, k
         t = fc.FACT_TEXTS[k]
         assert f"기준: {t.criteria}" in sec, k
@@ -207,7 +210,7 @@ def test_질문은_사실_하나_표에_없으면_공통_질문() -> None:
     assert fc.fact_question(FactKind.비방_선별) == (
         "같은 광고에 경쟁 제품의 장점이나 비교 조건도 함께 밝혔나요?"
     )
-    assert fc.fact_question(FactKind.인증) == fc.FALLBACK_QUESTION
+    assert fc.fact_question(FactKind.수상_상장) == fc.FALLBACK_QUESTION, "열지 않은 종류"
     for q in fc.FACT_QUESTIONS.values():
         assert q.count("?") == 1 and "요" in q, "질문 하나"
 
