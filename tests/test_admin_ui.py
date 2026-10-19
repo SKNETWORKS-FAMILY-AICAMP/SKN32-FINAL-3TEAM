@@ -83,7 +83,7 @@ def test_admin_pages_share_one_accessible_shell(client: TestClient, path: str) -
     assert response.status_code == 200
     assert response.text.count('id="admin-content"') == 1
     assert response.text.count('class="admin-shell"') == 1
-    assert "/static/admin-ui.css?v=1" in response.text
+    assert "/static/admin-ui.css?v=2" in response.text
     assert "/static/brand/symbol-180.png" in response.text
     assert 'href="/u/landing"' in response.text
 
@@ -106,7 +106,9 @@ def test_dashboard_filters_preserve_period_and_sample_provenance(client: TestCli
 def test_dashboard_escapes_reused_ticket_content(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from test_admin_dbread_screens import fake_run  # noqa: PLC0415 — pytest 가 tests/ 를 sys.path 에 둔다
+    from test_admin_dbread_screens import (
+        fake_run,  # noqa: PLC0415 — pytest 가 tests/ 를 sys.path 에 둔다
+    )
 
     monkeypatch.setattr(
         admin_dbread, "run", fake_run(ticket_title='<img src=x onerror="alert(1)">')
@@ -120,3 +122,21 @@ def test_all_admin_templates_compile_after_inheritance_migration() -> None:
     for name in templates.env.list_templates():
         if name.startswith("admin/"):
             templates.env.get_template(name)
+
+
+@pytest.mark.parametrize(("raw", "days"), [("7", 7), ("all", 0), ("invalid", 30)])
+def test_stats_menu_uses_existing_live_judgment_data(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, raw: str, days: int
+) -> None:
+    from test_admin_dbread_screens import fake_run  # noqa: PLC0415
+
+    calls: list = []
+    monkeypatch.setattr(admin_dbread, "run", fake_run(calls=calls))
+    response = client.get("/admin/stats/quality", params={"days": raw})
+    assert response.status_code == 200
+    assert response.context["source"] == "db"
+    assert response.context["days"] == days
+    assert response.context["kpi"]["sentences"] == 12
+    assert calls[0][0] == "stats.judge"
+    assert "94.2%" not in response.text
+    assert "더미 데이터" not in response.text

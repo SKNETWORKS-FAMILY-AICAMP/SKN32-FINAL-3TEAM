@@ -120,6 +120,30 @@ body:has(.admin-shell) .admin-topbar { display:flex; align-items:center; justify
 .admin-data details { margin-top:20px; }
 .admin-data summary { cursor:pointer; color:var(--a-clay); font-size:13px; }
 .admin-data>p { color:var(--a-clay); font-size:12px; }
+.admin-sidebar .admin-nav-closed { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.admin-sidebar .admin-nav-closed .admin-nav-name { color:var(--a-clay); flex-shrink:0; }
+.admin-closed-badge { display:inline-flex; flex-direction:column; align-items:center; gap:1px; padding:3px 5px; border:1px solid var(--a-line); border-radius:5px; background:var(--a-surface2); color:var(--a-clay); font-size:10px; line-height:1.5; text-align:center; }
+.admin-closed-badge small { font-size:10px; white-space:nowrap; }
+.admin-nav-closed:hover .admin-closed-badge { border-color:var(--a-lavender); }
+.admin-closed { --as-radius:10px; }
+.admin-closed-head { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px; }
+.admin-closed-head h1 { margin:0; }
+.admin-closed-meta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; font-size:12px; color:var(--a-clay); margin:0 0 10px; }
+.admin-closed-meta b { color:var(--a-signal-ink); font-weight:500; }
+.admin-closed-lead { color:var(--a-clay); font-size:13px; margin:0 0 24px; }
+.admin-closed-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.admin-closed .as-panel h2 { margin:0 0 18px; font-size:16px; }
+.admin-closed :is(ul,ol) { padding-left:20px; margin:0; font-size:13px; line-height:1.9; }
+.admin-closed li+li { margin-top:12px; }
+.admin-closed li::marker { color:var(--a-signal-ink); }
+.admin-closed-alt { margin-top:20px; }
+.admin-closed-alt a { display:flex; align-items:center; justify-content:space-between; gap:16px; text-decoration:none; color:var(--a-signal-ink); padding:12px 14px; border:1px solid var(--a-line); border-radius:7px; }
+.admin-closed-alt a:hover { background:var(--a-signal-soft); }
+.admin-closed-alt b { display:block; font-size:14px; font-weight:600; }
+.admin-closed-alt small { display:block; font-size:12px; color:var(--a-clay); margin-top:4px; }
+.admin-closed-summary { display:flex; flex-direction:column; align-items:flex-start; gap:10px; color:var(--a-ink); text-decoration:none; }
+.admin-closed-summary>small { font-size:12px; color:var(--a-clay); }
+@media(max-width:900px) { .admin-closed-grid { grid-template-columns:1fr; } }
 @media(hover:hover) and (prefers-reduced-motion:no-preference) {
   .admin-sidebar :is(a,summary),.admin-main :is(button,a) { transition:background-color .16s,color .16s,border-color .16s; }
 }

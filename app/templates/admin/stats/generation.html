@@ -1,55 +1,53 @@
-{# app/templates/admin/stats/generation.html — 생성 통계 (뼈대) · 소유자 **psj**
+{# app/templates/admin/stats/generation.html — 생성 통계 · 소유자 **psj**
    (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다(목업 `mockDownload`).
-  🔴 `generation_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
-  🚨 품질 통계 원본(목업 `qualityCombinedViewV2()`)의 `qp-gen` 패널에 해당한다.
+  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다.
+  🔄 2026-10-20 — `copy_sentence` 를 출처(`origin`)별로 센다(admin_stats.py `_load_generation`). 원문은 읽지 않는다 — 건수만 (D-76).
+     🚨 생성 결과를 저장하는 경로가 아직 없어 「카피 생성」은 0 건이 정상이다 — 「사용이 없다」가 아니라 「저장하지 않는다」로 적는다.
+     예시 수치(품질 점수 · 모델 구성 · 재생성 사유)는 지웠다 (D-147). 못 읽으면 안내 (D-72).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "admin/_base.html" %}
-{% block title %}CopyLane — 생성 통계{% endblock %}
-{% block admin_css %}{% endblock %}
-{% block admin_content %}
-
-<h1>생성 통계</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>generation_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
-
-<div class="stat-kpis">
-  <div class="stat-kpi"><span>생성 품질 점수</span><b>{{ kpi.quality_score }}</b></div>
-  <div class="stat-kpi"><span>총 생성 건수</span><b>{{ kpi.total_cases }}</b></div>
-  <div class="stat-kpi"><span>평균 생성·판정 시간</span><b>{{ kpi.avg_time }}</b></div>
-  <div class="stat-kpi"><span>재생성 요청률</span><b>{{ kpi.regen_rate }}</b></div>
+#}
+{% extends "admin/stats/_base.html" %}
+{% from "admin/stats/_parts.html" import metric,distribution %}
+{% block stats_title %}생성 통계{% endblock %}
+{% block stats_description %}저장된 문구를 출처별로 세어 카피 생성 이용 현황을 확인하세요.{% endblock %}
+{% block stats_filters %}
+<span class="as-filter-context">저장된 문구 · 집계 기간</span>
+<nav class="period-tabs" aria-label="집계 기간">
+  {% for d in day_options %}<a href="?days={{ d }}" {% if days == d %}class="active" aria-current="page"{% endif %}>최근 {{ d }}일</a>{% endfor %}
+  <a href="?days=all" {% if days == 0 %}class="active" aria-current="page"{% endif %}>전체</a>
+</nav>
+{% endblock %}
+{% block stats_notice %}
+{% with table="copy_sentence" %}{% include "admin/_db_notice.html" %}{% endwith %}
+{% if source == 'db' %}<p class="as-notice">문구 원문은 표시하지 않고 건수만 셉니다. 품질 점수 · 모델 구성처럼 셀 근거가 없는 지표는 표시하지 않습니다.</p>{% endif %}
+{% endblock %}
+{% block stats_content %}
+{% if source == 'db' %}
+<div class="as-kpis">
+  {{ metric('카피 생성 문구','{:,}건'.format(kpi.generated),'저장된 생성 문구','spark') }}
+  {{ metric('생성이 담긴 문서','{:,}건'.format(kpi.docs),'작업 문서 기준') }}
+  {{ metric('승인된 생성 문구','{:,}건'.format(kpi.approved),'사용자가 승인한 문구') }}
+  {{ metric('저장 문구 중 생성 비중',kpi.share ~ '%' if kpi.share is not none else '—','전체 저장 문구 ' ~ '{:,}'.format(kpi.stored_total) ~ '건 대비') }}
 </div>
-
-<h2>생성 모델 구성</h2>
-<div class="usage-trend">
-  {% for row in model_mix %}
-  <div class="usage-row">
-    <span class="usage-label">{{ row.label }}</span>
-    <div class="usage-bar" style="width: {{ row.pct }}%;"></div>
-    <span class="usage-value">{{ row.pct }}%</span>
+{% if not kpi.generated %}
+<section class="as-panel as-unavailable">
+  <h2>저장된 카피 생성 기록이 없어요.</h2>
+  <p>지금은 카피 생성 · 광고 생성 결과를 저장하지 않아요. 그래서 0건은 <b>생성 기능을 쓰지 않았다는 뜻이 아니에요</b>. 검수 이력만 사용자 동의를 받아 저장하고 있어요.</p>
+  <p class="as-explainer">생성 결과 저장을 열려면 동의 · 보관 기한 결정이 먼저 필요해요 (D-96 · D-129 · D-307).</p>
+</section>
+{% else %}
+<section class="as-panel">
+  <div class="as-panel-head"><h2>일별 카피 생성</h2><span class="as-unit">단위 · 건</span></div>
+  <p class="as-legend"><span><i></i>생성 문구</span></p>
+  {% if trend %}
+  <div class="as-chart{% if trend|length > 10 %} as-chart--many{% endif %}" role="img" aria-label="최근 {{ trend_days }}일 카피 생성 건수. 상세 수치는 아래에서 확인할 수 있습니다.">
+    {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.n / trend_max * 100)|round(1) if trend_max else 0 }}%" title="{{ row.label }} · {{ row.n }}건"></span></div><small>{% if trend|length <= 10 or loop.first or loop.last or loop.index0 % 5 == 0 %}{{ row.label }}{% endif %}</small></div>{% endfor %}
   </div>
-  {% endfor %}
-</div>
-
-<h2>재생성 사유 분석</h2>
-<div class="admin-table-scroll"><table>
-  <tr><th>사유</th><th>건수</th><th>비중</th></tr>
-  {% for r in reasons %}
-  <tr><td>{{ r.reason }}</td><td>{{ r.count }}</td><td>{{ r.pct }}%</td></tr>
-  {% endfor %}
-</table></div>
-<p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
-
-<style>
-.admin-shell .stat-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
-.admin-shell .stat-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 8rem; }
-.admin-shell .stat-kpi span { font-size: .8rem; color: var(--a-clay); }
-.admin-shell .stat-kpi b { font-size: 1.2rem; }
-.admin-shell .usage-trend { display: flex; flex-direction: column; gap: .5rem; max-width: 30rem; margin-bottom: 1.5rem; }
-.admin-shell .usage-row { display: flex; align-items: center; gap: .6rem; }
-.admin-shell .usage-label { width: 8rem; font-size: .8rem; color: var(--a-clay); }
-.admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
-.admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
-.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
-</style>
+  {% else %}<p class="as-empty">최근 {{ trend_days }}일에 저장된 생성 문구가 없어요.</p>{% endif %}
+  <p class="as-context">최근 {{ trend_days }}일 · 축 상한 {{ trend_max }}건 · 마지막 생성 {{ kpi.last_at }}</p>
+</section>
+{% endif %}
+<section class="as-panel"><div class="as-panel-head"><h2>저장 문구 출처</h2><span class="as-unit">선택한 기간</span></div>{{ distribution(by_origin) }}<p class="as-explainer">직접 입력 · 검수는 이력 보관에 동의한 검수 문구예요.</p></section>
+{% else %}<section class="as-panel as-unavailable"><h2>생성 통계를 확인할 수 없습니다.</h2><p>저장된 기록을 읽지 못했습니다. 연결 상태를 확인한 후 다시 조회해주세요.</p></section>{% endif %}
 {% endblock %}

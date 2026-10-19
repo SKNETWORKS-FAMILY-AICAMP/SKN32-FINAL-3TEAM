@@ -8,10 +8,13 @@
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
 🔄 2026-10-20 — **검수(판정) 통계(`/quality/judge`)는 `judgment` 표를 읽는다** (아래 `_load_judge`).
-🔴 **나머지 관련 테이블(회원 통계·매출·생성 통계)은 없다** — `db/schema.sql` 에
+🔄 2026-10-20 — **생성 통계(`/quality/generation`)는 `copy_sentence` 출처별 건수를 읽는다** (아래 `_load_generation` ·
+   생성 결과를 저장하는 경로가 아직 없어 `generated` 는 0 건이 정상이다).
+🔴 **이용자 통계 전용 테이블은 없다** — `db/schema.sql` 에
    흔적이 없다. DB 승인 요청조차 안 한 상태라 **더미로만** 그린다
    (admin_board.py 와 같은 이유 — admin_errors.py 의 dummy_no_table 분기보다 한 단계 이르다).
-   ⬜ 스키마가 생기면 admin_errors.py 패턴(우선 DB, 실패 시 더미)으로 바꾼다.
+   ⬜ 스키마가 생기면 실제 집계를 읽고, 못 읽었을 때 예시로 채우지 않는다.
+🔄 매출 통계는 D-260 ⑥ · D-69 · D-107에 따라 닫힘 사유만 표시한다.
 
 🚨 목업(`app/static/mockup.html`)의 `VIEWS['member-stats']`/`VIEWS['revenue']`/
    `VIEWS['quality']`(=`qualityCombinedViewV2()` 원본, `qp-judge`/`qp-gen` 패널로 슬라이스됨)
@@ -31,8 +34,7 @@
    같은 더미 데이터 원본에서 함수만 나눠 각 화면을 그린다 — 데이터 구조 자체는 공유한다.
 
 🚨 **`/admin/stats/dashboard` — 목업 `VIEWS['dashboard']`(app/static/mockup.html 11670번 줄,
-   최종본) 구조.** KPI 3개(검수·생성 건수·매출) + 일/주/월 토글 + 시간대별 검수·생성 추이 +
-   월별 매출. `/admin/`(기존 거버넌스 대시보드 — 데이터 층 표)과는 다른 화면이다 —
+   최종본) 구조.** 검수·생성 KPI + 매출 닫힘 라벨 + 일/주/월 토글 + 검수·생성 추이. `/admin/`(기존 거버넌스 대시보드 — 데이터 층 표)과는 다른 화면이다 —
    운영 현황은 사이드바 "통계" 카테고리 안 별도 대시보드로 둔다 (2026-09-16 사용자 결정).
 """
 
@@ -50,6 +52,25 @@ router = APIRouter(prefix="/stats")
 
 _PERIODS = ("daily", "weekly", "monthly")
 _PERIOD_LABEL = {"daily": "일간", "weekly": "주간", "monthly": "월간"}
+
+# D-260 ⑥: revenue stays closed. The label is the single edit point pending schedule review.
+LABEL = "Phase 4 이후"
+CLOSED = {
+    "page_title": "매출 통계",
+    "label": LABEL,
+    "decision": "D-260 ⑥ · D-69 · D-107",
+    "why": [
+        "결제(PG) 연동은 프로젝트 범위 밖이에요 (D-69).",
+        "요금제·결제 테이블이 없어요 (D-69).",
+        "실제 사용 데이터가 없어 매출을 집계할 수 없어요 (D-96).",
+    ],
+    "needs": [
+        "과금 정책 확정",
+        "PG 연동 판정",
+        "payment / subscription 테이블 스키마 (팀장)",
+    ],
+    "alt": [],
+}
 
 
 def _clean_period(value: str | None) -> str:
@@ -117,53 +138,6 @@ _JOIN_LEAVE_TREND = {
     ],
 }
 
-_REVENUE_KPI = {
-    "period_revenue": "₩284,920,000",
-    "mrr": "₩198,340,000",
-    "arpu": "₩22,830",
-    "receivable": "₩6,120,000",
-}
-
-_REVENUE_TREND = {
-    "daily": [
-        {"label": f"{d}일", "value": v}
-        for d, v in [
-            ("09/10", 8_420_000),
-            ("09/11", 7_890_000),
-            ("09/12", 9_210_000),
-            ("09/13", 8_760_000),
-            ("09/14", 10_340_000),
-            ("09/15", 9_580_000),
-            ("09/16", 8_990_000),
-        ]
-    ],
-    "weekly": [
-        {"label": f"{w}주차", "value": v}
-        for w, v in [
-            ("8월 3주", 58_200_000),
-            ("8월 4주", 61_400_000),
-            ("9월 1주", 64_900_000),
-            ("9월 2주", 63_100_000),
-        ]
-    ],
-    "monthly": [
-        {"label": m, "value": v}
-        for m, v in [
-            ("5월", 231_000_000),
-            ("6월", 248_500_000),
-            ("7월", 262_100_000),
-            ("8월", 271_800_000),
-            ("9월", 284_920_000),
-        ]
-    ],
-}
-
-_REVENUE_BY_PLAN = [
-    {"label": "Basic", "value": 89_200_000, "max": 300_000_000},
-    {"label": "Pro", "value": 112_400_000, "max": 300_000_000},
-    {"label": "Enterprise", "value": 83_320_000, "max": 300_000_000},
-]
-
 # 품질 통계 — 카테고리별 정확도/품질(전체 요약용)
 _QUALITY_BY_CATEGORY = [
     {"label": "식품", "value": 96.1, "max": 100},
@@ -185,27 +159,6 @@ _ENGINE_MIX = [
     {"label": "인코더기반", "pct": 27},
     {"label": "sLLM기반", "pct": 35},
 ]
-
-_GEN_KPI = {
-    "quality_score": "88.4점",
-    "total_cases": "31,204건",
-    "avg_time": "2.6초",
-    "regen_rate": "7.1%",
-}
-
-_GEN_MODEL_MIX = [
-    {"label": "GPT-4o", "pct": 45},
-    {"label": "Claude", "pct": 35},
-    {"label": "자체 Fine-tuned", "pct": 20},
-]
-
-_GEN_REASONS = [
-    {"reason": "톤·스타일 불일치", "count": 412, "pct": 38.2},
-    {"reason": "법률 근거 누락", "count": 289, "pct": 26.8},
-    {"reason": "과장 표현 잔존", "count": 201, "pct": 18.6},
-    {"reason": "글자 수 초과", "count": 176, "pct": 16.4},
-]
-
 
 @router.get("/member", response_class=HTMLResponse)
 def member_stats(request: Request) -> HTMLResponse:
@@ -230,44 +183,21 @@ def member_stats(request: Request) -> HTMLResponse:
 
 @router.get("/revenue", response_class=HTMLResponse)
 def revenue_stats(request: Request) -> HTMLResponse:
-    """매출 통계 — 읽기 전용. 목업에서 `role:'super'` 전용이었지만 관리자 등급 구분을
-    없앤 팀 결정에 따라 다른 화면과 동일하게 `require_governor`만 건다.
-    `revenue` 테이블이 아직 없어 더미로만 그린다.
-    """
+    """매출은 비활성 사유만 표시한다. 예시 금액·입력·쓰기 기능을 제공하지 않는다."""
     actor = require_governor(request)
-    period = _clean_period(request.query_params.get("period"))
-    return templates.TemplateResponse(
-        request,
-        "admin/stats/revenue.html",
-        {
-            "actor": actor,
-            "kpi": _REVENUE_KPI,
-            "by_plan": _REVENUE_BY_PLAN,
-            "period": period,
-            "periods": _PERIODS,
-            "period_label": _PERIOD_LABEL,
-            "trend": _REVENUE_TREND[period],
-            "max_trend": max(r["value"] for r in _REVENUE_TREND[period]),
-        },
-    )
+    return templates.TemplateResponse(request, "admin/_closed.html", {"actor": actor, **CLOSED})
+
+
+@router.get("/revenue/{revenue_id}", response_class=HTMLResponse)
+def revenue_detail(request: Request, revenue_id: str) -> HTMLResponse:  # noqa: ARG001
+    """상세 경로도 동일한 닫힘 안내를 제공한다."""
+    return revenue_stats(request)
 
 
 @router.get("/quality", response_class=HTMLResponse)
 def quality_stats(request: Request) -> HTMLResponse:
-    """품질 통계(전체 요약) — 읽기 전용. `judge_stat`/`generation_stat` 테이블이 아직
-    없어 더미로만 그린다. 판정/생성 상세는 별도 라우트(`/quality/judge`, `/quality/generation`).
-    """
-    actor = require_governor(request)
-    return templates.TemplateResponse(
-        request,
-        "admin/stats/quality.html",
-        {
-            "actor": actor,
-            "kpi": _QUALITY_KPI,
-            "by_category": _QUALITY_BY_CATEGORY,
-            "engine_mix": _ENGINE_MIX,
-        },
-    )
+    """메뉴의 검수 통계도 기존 운영 집계를 사용한다. 인증·기간 정규화는 같은 경로다."""
+    return judge_stats(request)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -279,7 +209,12 @@ def quality_stats(request: Request) -> HTMLResponse:
 #    🚨 상태 · 보류 사유 글자는 사용자 화면(`user.py` `_VERDICT_LABELS` · `_HOLD_LABELS`)과 같은 한 벌 (D-99).
 # ─────────────────────────────────────────────────────────────
 _JUDGE_DAYS = (7, 30, 90)
-_RISK_LABEL = {0: "R0 특이사항 없음", 1: "R1 시정명령 위험", 2: "R2 업무정지 위험", 3: "R3 영업 상실 위험"}
+_RISK_LABEL = {
+    0: "R0 특이사항 없음",
+    1: "R1 시정명령 위험",
+    2: "R2 업무정지 위험",
+    3: "R3 영업 상실 위험",
+}
 #: 일별 추이를 그리는 최대 일수 — 「전체」 기간도 최근 이만큼만 막대로 그린다
 _TREND_MAX_DAYS = 30
 
@@ -317,10 +252,17 @@ def _load_judge(days: int) -> dict:
                 p,
             ),
             (group.format(k="coalesce(product_category, '미확정')", w=where, extra=""), p),
-            (group.format(k="risk_final", w=where or "WHERE TRUE", extra="AND risk_final IS NOT NULL"), p),
             (
                 group.format(
-                    k="violation_type", w=where or "WHERE TRUE", extra="AND violation_type IS NOT NULL"
+                    k="risk_final", w=where or "WHERE TRUE", extra="AND risk_final IS NOT NULL"
+                ),
+                p,
+            ),
+            (
+                group.format(
+                    k="violation_type",
+                    w=where or "WHERE TRUE",
+                    extra="AND violation_type IS NOT NULL",
                 )
                 + " LIMIT 10",
                 p,
@@ -352,7 +294,9 @@ def _load_judge(days: int) -> dict:
         "by_verdict": _bars(out[1], lambda v: _VERDICT_LABELS.get(v, v)),
         "by_hold": _bars(out[2], lambda v: _HOLD_LABELS.get(v, v or "사유 없음")),
         "by_category": _bars(out[3]),
-        "by_risk": _bars(sorted(out[4], key=lambda r: r["k"]), lambda v: _RISK_LABEL.get(v, f"R{v}")),
+        "by_risk": _bars(
+            sorted(out[4], key=lambda r: r["k"]), lambda v: _RISK_LABEL.get(v, f"R{v}")
+        ),
         "by_type": _bars(out[5], lambda v: str(v).replace("_", " ")),
         "trend": trend,
         "trend_max": max((r["n"] for r in trend), default=0),
@@ -378,51 +322,114 @@ def judge_stats(request: Request) -> HTMLResponse:
     )
 
 
+# ─────────────────────────────────────────────────────────────
+# 🔄 2026-10-20 — 생성 통계는 **`copy_sentence` 를 출처(`origin`)별로 센다** (`admin_dbread` · D-72).
+#    ⛔ 종전 더미(품질 88.4점 · GPT-4o 45% · 재생성 사유)는 지웠다 — 실제 구성과도 달랐고 셀 근거가 없다 (D-147).
+#    🚨 **지금은 생성 결과를 저장하는 경로가 없다** — `copy_sentence` 에 쓰는 곳은 검수 이력(`judgment_store.save_review`,
+#       `origin='user'`)뿐이다. 그래서 `generated` 는 0 건이 정상이고, 화면은 「사용이 없다」가 아니라 「저장하지 않는다」로 적는다.
+#       생성 저장을 열려면 동의 · 보관 기한 판정이 먼저다 (D-96 · D-129 · D-307).
+#    🔴 원문은 읽지 않는다 — 건수만 (D-76).
+# ─────────────────────────────────────────────────────────────
+_ORIGIN_LABEL = {
+    "user": "직접 입력 · 검수",
+    "generated": "카피 생성",
+    "batch": "일괄 검수",
+    "crawl": "URL 수집 (설계만)",
+}
+
+
+def _load_generation(days: int) -> dict:
+    from app.routers import admin_dbread as db  # noqa: PLC0415
+
+    where = "WHERE created_at >= now() - make_interval(days => %s)" if days else ""
+    gen_where = (where + " AND " if where else "WHERE ") + "origin = 'generated'"
+    p: list[object] = [days] if days else []
+    trend_days = min(days or _TREND_MAX_DAYS, _TREND_MAX_DAYS)
+    source, out = db.run(
+        [
+            (f"SELECT origin AS k, count(*) AS n FROM copy_sentence {where} GROUP BY 1 ORDER BY 2 DESC", p),  # noqa: S608
+            (
+                "SELECT count(*) AS n, count(DISTINCT doc_id) AS docs, "
+                "count(*) FILTER (WHERE approved_at IS NOT NULL) AS approved, max(created_at) AS last_at "
+                f"FROM copy_sentence {gen_where}",  # noqa: S608
+                p,
+            ),
+            (
+                "SELECT (created_at AT TIME ZONE 'Asia/Seoul')::date AS d, count(*) AS n FROM copy_sentence "
+                "WHERE origin = 'generated' AND created_at >= now() - make_interval(days => %s) "
+                "GROUP BY 1 ORDER BY 1",
+                [trend_days],
+            ),
+        ],
+        what="stats.generation",
+    )
+    if source != "db":
+        return {"source": source}
+    by_origin = _bars(out[0], lambda v: _ORIGIN_LABEL.get(v, v))
+    g = out[1][0]
+    total = sum(r["n"] for r in out[0])
+    trend = [{"label": db.fmt_dt(r["d"], "%m.%d"), "n": r["n"]} for r in out[2]]
+    return {
+        "source": source,
+        "kpi": {
+            "generated": g["n"],
+            "docs": g["docs"],
+            "approved": g["approved"],
+            "share": round(g["n"] * 100 / total, 1) if total else None,
+            "last_at": db.fmt_dt(g["last_at"]),
+            "stored_total": total,
+        },
+        "by_origin": by_origin,
+        "trend": trend,
+        "trend_max": max((r["n"] for r in trend), default=0),
+        "trend_days": trend_days,
+    }
+
+
 @router.get("/quality/generation", response_class=HTMLResponse)
 def generation_stats(request: Request) -> HTMLResponse:
-    """생성 통계 — 읽기 전용. 품질 통계 원본(목업 `qualityCombinedViewV2()`)의
-    `qp-gen` 패널에 해당. `generation_stat` 테이블이 아직 없어 더미로만 그린다.
-    """
+    """생성 통계 — 읽기 전용 · `copy_sentence` 출처별 건수. 기간: 최근 7 · 30 · 90일 · 전체."""
     actor = require_governor(request)
+    raw = request.query_params.get("days", "30")
+    days = int(raw) if raw.isdigit() and int(raw) in _JUDGE_DAYS else (0 if raw == "all" else 30)
     return templates.TemplateResponse(
         request,
         "admin/stats/generation.html",
         {
             "actor": actor,
-            "kpi": _GEN_KPI,
-            "model_mix": _GEN_MODEL_MIX,
-            "reasons": _GEN_REASONS,
+            "days": days,
+            "day_options": _JUDGE_DAYS,
+            **_load_generation(days),
         },
     )
 
 
 # ─────────────────────────────────────────────────────────────
-# 대시보드 — 목업 VIEWS['dashboard'] 구조. service_log·revenue 류 테이블이 없어 더미다.
+# 대시보드 — 검수·생성은 기존 예시, 매출은 닫힘 라벨만 표시한다.
 # ─────────────────────────────────────────────────────────────
 
 _DASH_DATA = {
     "daily": {
-        "kpi": {"judge": "143", "gen": "86", "sales": "₩1.8M"},
-        "delta": {"judge": "▲ 12% 전일 대비", "gen": "▲ 9% 전일 대비", "sales": "▲ 6.4% 전일 대비"},
+        "kpi": {"judge": "143", "gen": "86"},
+        "delta": {"judge": "▲ 12% 전일 대비", "gen": "▲ 9% 전일 대비"},
         "trend_title": "시간대별 서비스 이용",
         "labels": ["09시", "11시", "13시", "15시", "17시", "19시", "21시"],
         "judge_series": [11, 18, 23, 19, 28, 22, 22],
         "gen_series": [7, 10, 15, 12, 18, 13, 11],
     },
     "weekly": {
-        "kpi": {"judge": "892", "gen": "534", "sales": "₩12.1M"},
-        "delta": {"judge": "▲ 8% 전주 대비", "gen": "▲ 11% 전주 대비", "sales": "▲ 5.3% 전주 대비"},
+        "kpi": {"judge": "892", "gen": "534"},
+        "delta": {"judge": "▲ 8% 전주 대비", "gen": "▲ 11% 전주 대비"},
         "trend_title": "요일별 서비스 이용",
         "labels": ["월", "화", "수", "목", "금", "토", "일"],
         "judge_series": [95, 112, 108, 132, 151, 139, 155],
         "gen_series": [56, 64, 61, 79, 91, 84, 99],
     },
     "monthly": {
-        "kpi": {"judge": "3,842", "gen": "2,318", "sales": "₩48.2M"},
+        "kpi": {"judge": "3,842", "gen": "2,318"},
         "delta": {
             "judge": "▲ 15% 전월 대비",
             "gen": "▲ 12% 전월 대비",
-            "sales": "▲ 8.7% 전월 대비",
         },
         "trend_title": "월별 서비스 이용",
         "labels": ["2월", "3월", "4월", "5월", "6월", "7월", "8월"],
@@ -431,20 +438,10 @@ _DASH_DATA = {
     },
 }
 
-_DASH_MONTHLY_SALES = [
-    {"label": "2월", "value": "32.1"},
-    {"label": "3월", "value": "34.5"},
-    {"label": "4월", "value": "36.8"},
-    {"label": "5월", "value": "39.4"},
-    {"label": "6월", "value": "42.0"},
-    {"label": "7월", "value": "44.3"},
-    {"label": "8월", "value": "48.2"},
-]
-
 
 @router.get("/dashboard", response_class=HTMLResponse)
 def stats_dashboard(request: Request) -> HTMLResponse:
-    """통계 대시보드 — 읽기 전용. 목업 `VIEWS['dashboard']` 구조(KPI·시간대별 추이·월별 매출).
+    """통계 대시보드 — 검수·생성 예시 집계와 매출 닫힘 상태를 표시한다.
     `/admin/`(거버넌스 대시보드)과는 별개 화면이다. 집계 테이블이 없어 더미로만 그린다.
     """
     actor = require_governor(request)
@@ -461,6 +458,6 @@ def stats_dashboard(request: Request) -> HTMLResponse:
             "period_label": _PERIOD_LABEL,
             "dash": d,
             "dash_max": dash_max,
-            "monthly_sales": _DASH_MONTHLY_SALES,
+            "revenue_label": LABEL,
         },
     )

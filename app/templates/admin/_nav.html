@@ -14,6 +14,8 @@
      ssm·팀장과 맞추기로 했다.
 #}
 {% from "user/_icons.html" import icon %}
+{% set closed_menus = admin_closed_menus() %}
+{% macro closed_badge(path) %}<span class="admin-closed-badge">{{ closed_menus[path].state }}</span>{% endmacro %}
 <aside class="admin-sidebar" aria-label="관리자 메뉴">
   <p class="admin-nav-label">OVERVIEW</p>
 
@@ -31,8 +33,8 @@
          {% if request.url.path == "/admin/stats/quality/generation" %}aria-current="page"{% endif %}>생성 통계</a>
       <a class="admin-nav-sub" href="/admin/stats/member"
          {% if request.url.path == "/admin/stats/member" %}aria-current="page"{% endif %}>이용자 통계</a>
-      <a class="admin-nav-sub" href="/admin/stats/revenue"
-         {% if request.url.path == "/admin/stats/revenue" %}aria-current="page"{% endif %}>매출 통계</a>
+      <a class="admin-nav-sub admin-nav-closed" href="/admin/stats/revenue"
+         {% if request.url.path == "/admin/stats/revenue" or request.url.path.startswith("/admin/stats/revenue/") %}aria-current="page"{% endif %}><span class="admin-nav-name">매출 통계</span>{{ closed_badge('/admin/stats/revenue') }}</a>
     </div>
   </details>
 
@@ -41,10 +43,10 @@
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/sources"
          {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") %}aria-current="page"{% endif %}>판정 근거</a>
-      <a class="admin-nav-sub" href="/admin/review-docs"
-         {% if request.url.path == "/admin/review-docs" or request.url.path.startswith("/admin/review-docs/") %}aria-current="page"{% endif %}>심사 서류</a>
       <a class="admin-nav-sub" href="/admin/terms"
          {% if request.url.path == "/admin/terms" or request.url.path.startswith("/admin/terms/") %}aria-current="page"{% endif %}>약관 관리</a>
+      <a class="admin-nav-sub admin-nav-closed" href="/admin/review-docs"
+         {% if request.url.path == "/admin/review-docs" or request.url.path.startswith("/admin/review-docs/") %}aria-current="page"{% endif %}><span class="admin-nav-name">심사 서류</span>{{ closed_badge('/admin/review-docs') }}</a>
     </div>
   </details>
 
@@ -53,12 +55,12 @@
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/members"
          {% if request.url.path == "/admin/members" or request.url.path.startswith("/admin/members/") %}aria-current="page"{% endif %}>회원 목록</a>
-      <a class="admin-nav-sub" href="/admin/enterprise"
-         {% if request.url.path == "/admin/enterprise" or request.url.path.startswith("/admin/enterprise/") %}aria-current="page"{% endif %}>기업 회원</a>
-      <a class="admin-nav-sub" href="/admin/signup-review"
-         {% if request.url.path == "/admin/signup-review" or request.url.path.startswith("/admin/signup-review/") %}aria-current="page"{% endif %}>승인 심사</a>
       <a class="admin-nav-sub" href="/admin/admins"
          {% if request.url.path == "/admin/admins" %}aria-current="page"{% endif %}>관리자 목록</a>
+      <a class="admin-nav-sub admin-nav-closed" href="/admin/enterprise"
+         {% if request.url.path == "/admin/enterprise" or request.url.path.startswith("/admin/enterprise/") %}aria-current="page"{% endif %}><span class="admin-nav-name">기업 회원</span>{{ closed_badge('/admin/enterprise') }}</a>
+      <a class="admin-nav-sub admin-nav-closed" href="/admin/signup-review"
+         {% if request.url.path == "/admin/signup-review" or request.url.path.startswith("/admin/signup-review/") %}aria-current="page"{% endif %}><span class="admin-nav-name">승인 심사</span>{{ closed_badge('/admin/signup-review') }}</a>
     </div>
   </details>
 

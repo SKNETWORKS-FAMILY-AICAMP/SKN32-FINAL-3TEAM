@@ -7,62 +7,26 @@
      다른 화면과 동일하게 `require_governor`만 건다 (2026-09-16).
   🔴 일/주/월 토글은 목업에서 JS 지만 여기는 GET 쿼리(`?period=`)로 전환한다.
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "admin/_base.html" %}
-{% block title %}CopyLane — 매출 통계{% endblock %}
-{% block admin_css %}{% endblock %}
-{% block admin_content %}
-
-<h1>매출 통계</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>revenue</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
-
-<div class="stat-kpis">
-  <div class="stat-kpi"><span>기간 매출</span><b>{{ kpi.period_revenue }}</b></div>
-  <div class="stat-kpi"><span>MRR</span><b>{{ kpi.mrr }}</b></div>
-  <div class="stat-kpi"><span>ARPU</span><b>{{ kpi.arpu }}</b></div>
-  <div class="stat-kpi"><span>미수금</span><b>{{ kpi.receivable }}</b></div>
+#}
+{% extends "admin/stats/_base.html" %}
+{% from "admin/stats/_parts.html" import metric %}
+{% block stats_title %}매출 통계{% endblock %}
+{% block stats_description %}매출 추이와 플랜별 매출 구성을 확인하세요.{% endblock %}
+{% block stats_filters %}<span>매출 추이 기간 · 요약 지표와 플랜별 매출은 고정 예시 기준</span><nav class="period-tabs" aria-label="매출 추이 기간">{% for p in periods %}<a href="?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>{% endfor %}</nav>{% endblock %}
+{% block stats_content %}
+<div class="as-kpis as-currency">
+  {{ metric('기간 매출',kpi.period_revenue,'기존 고정 예시 집계','bag') }}
+  {{ metric('월 반복 매출 · MRR',kpi.mrr,'월 반복 매출 예시') }}
+  {{ metric('이용자당 평균 매출 · ARPU',kpi.arpu,'평균 매출 예시') }}
+  {{ metric('미수금',kpi.receivable,'미수금 예시') }}
 </div>
-
-<h2>매출 추이</h2>
-<nav class="period-tabs" aria-label="기간">
-  {% for p in periods %}
-  <a href="/admin/stats/revenue?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>
-  {% endfor %}
-</nav>
-<div class="usage-trend">
-  {% for t in trend %}
-  <div class="usage-row">
-    <span class="usage-label">{{ t.label }}</span>
-    <div class="usage-bar" style="width: {{ (t.value / max_trend * 100) | round(1) }}%;"></div>
-    <span class="usage-value">₩{{ "{:,}".format(t.value) }}</span>
-  </div>
-  {% endfor %}
+<div class="as-grid">
+  <section class="as-panel"><div class="as-panel-head"><h2>매출 추이</h2><span class="as-unit">{{ period_label[period] }} · 원</span></div><p class="as-legend"><span><i></i>매출</span></p>
+    <div class="as-chart" role="img" aria-label="{{ period_label[period] }} 매출 추이. 상세 금액은 아래 표에서 확인할 수 있습니다.">
+      {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.value / max_trend * 100)|round(1) if max_trend else 0 }}%" title="{{ row.label }} · ₩{{ '{:,}'.format(row.value) }}"></span></div><small>{{ row.label }}</small></div>{% endfor %}
+    </div><p class="as-context">축 상한 ₩{{ '{:,}'.format(max_trend) }} · 예시 집계</p>
+  </section>
+  <section class="as-panel"><div class="as-panel-head"><h2>플랜별 매출</h2><span class="as-unit">전체 고정 예시</span></div><div class="as-distribution">{% for row in by_plan %}<div class="as-distribution-row"><div class="as-distribution-label"><span>{{ row.label }}</span><span><b>₩{{ '{:,}'.format(row.value) }}</b></span></div><div class="as-track"><span style="width:{{ (row.value / row.max * 100)|round(1) }}%"></span></div></div>{% endfor %}</div><p class="as-context">각 막대의 기준 상한은 3억 원입니다. 기간 필터는 왼쪽 추이에 적용됩니다.</p></section>
 </div>
-
-<h2>플랜별 매출 비중</h2>
-<div class="usage-trend">
-  {% for row in by_plan %}
-  <div class="usage-row">
-    <span class="usage-label">{{ row.label }}</span>
-    <div class="usage-bar" style="width: {{ (row.value / row.max * 100) | round(1) }}%;"></div>
-    <span class="usage-value">₩{{ "{:,}".format(row.value) }}</span>
-  </div>
-  {% endfor %}
-</div>
-<p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
-
-<style>
-.admin-shell .stat-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
-.admin-shell .stat-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 9rem; }
-.admin-shell .stat-kpi span { font-size: .8rem; color: var(--a-clay); }
-.admin-shell .stat-kpi b { font-size: 1.2rem; }
-.admin-shell .usage-trend { display: flex; flex-direction: column; gap: .5rem; max-width: 32rem; margin-bottom: 1.5rem; }
-.admin-shell .usage-row { display: flex; align-items: center; gap: .6rem; }
-.admin-shell .usage-label { width: 5rem; font-size: .8rem; color: var(--a-clay); }
-.admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
-.admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
-.admin-shell .period-tabs { display: flex; gap: .4rem; margin-bottom: .8rem; }
-.admin-shell .period-tabs a { padding: .3rem .8rem; border: 1px solid var(--a-line); border-radius: .4rem; text-decoration: none; color: var(--a-ink); font-size: .85rem; }
-.admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
-.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
-</style>
+<section class="as-panel"><div class="as-panel-head"><h2>기간별 매출 상세</h2><span class="as-unit">단위 · 원</span></div><div class="admin-table-scroll"><table><thead><tr><th>집계 기간</th><th>매출</th></tr></thead><tbody>{% for row in trend %}<tr><td>{{ row.label }}</td><td>₩{{ '{:,}'.format(row.value) }}</td></tr>{% endfor %}</tbody></table></div><p class="as-table-note">상단 요약 지표는 기존 고정 예시이며, 선택 기간의 추이 합계와 일치하지 않을 수 있습니다.</p></section>
 {% endblock %}

@@ -2,7 +2,7 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.**
-  🔴 검수·생성·매출 집계 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
+  🔴 검수·생성은 예시 집계다. 매출은 D-260 ⑥에 따라 닫힘 라벨만 표시한다.
   🚨 목업(`app/static/mockup.html`) `VIEWS['dashboard']`(11670번 줄, 최종본) 구조를 따른다.
   🔴 일/주/월 토글은 목업에서 JS 지만 여기는 GET 쿼리(`?period=`)로 전환한다.
   🚨 `/admin/`(기존 거버넌스 대시보드 — 데이터 층 표)과는 다른 화면이다. 검수·생성 KPI 카드는
@@ -10,13 +10,13 @@
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 통계 대시보드{% endblock %}
-{% block admin_css %}{% endblock %}
+{% block admin_css %}<link rel="stylesheet" href="/static/admin-stats.css?v=1">{% endblock %}
 {% block admin_content %}
 
 <p class="dash-sub">CopyLane Admin</p>
 <h1>대시보드</h1>
-<p class="page-desc">검수 · 생성 · 매출의 핵심 운영 현황을 확인하세요.</p>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> 검수·생성·매출 집계 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
+<p class="page-desc">검수·생성 이용 현황과 기능 제공 상태를 확인하세요.</p>
+<p class="warn"><b>예시 데이터입니다.</b> 검수·생성 수치는 화면 구조 확인용이며, 매출 집계는 제공하지 않습니다.</p>
 
 <nav class="period-tabs" aria-label="기간">
   {% for p in periods %}
@@ -31,8 +31,8 @@
   <a class="dash-kpi" href="/admin/stats/quality/generation">
     <span>생성 건수</span><b>{{ dash.kpi.gen }}</b><small>{{ dash.delta.gen }}</small>
   </a>
-  <a class="dash-kpi" href="/admin/stats/revenue">
-    <span>매출</span><b>{{ dash.kpi.sales }}</b><small>{{ dash.delta.sales }}</small>
+  <a class="as-panel admin-closed-summary" href="/admin/stats/revenue">
+    <span>매출</span><span class="admin-status">{{ revenue_label }}</span><small>비활성 · 미구현 — 닫힌 이유 확인하기 →</small>
   </a>
 </div>
 
@@ -70,15 +70,6 @@
     </div>
   </div>
 
-  <div class="dash-card">
-    <h2>월별 매출 통계</h2>
-    <p class="dash-card-sub">최근 7개월</p>
-    <div class="admin-table-scroll"><table class="dash-sales-table">
-      {% for row in monthly_sales %}
-      <tr><td>{{ row.label }}</td><td><b>₩{{ row.value }}M</b></td></tr>
-      {% endfor %}
-    </table></div>
-  </div>
 </div>
 
 <style>
@@ -92,7 +83,7 @@
 .admin-shell .dash-kpi span { font-size: .8rem; color: var(--a-clay); }
 .admin-shell .dash-kpi b { font-size: 1.4rem; }
 .admin-shell .dash-kpi small { font-size: .75rem; color: #15803d; }
-.admin-shell .dash-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1.5rem; max-width: 52rem; }
+.admin-shell .dash-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1.5rem; }
 .admin-shell .dash-card { border: 1px solid var(--a-line); border-radius: .6rem; padding: 1rem 1.2rem; background: var(--a-surface2); }
 .admin-shell .dash-card h2 { font-size: .95rem; margin: 0; }
 .admin-shell .dash-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .8rem; }
@@ -111,8 +102,5 @@
 .admin-shell .dash-bar-judge { background: var(--a-signal); }
 .admin-shell .dash-bar-gen { background: #d6336c; }
 .admin-shell .dash-bar-label { font-size: .65rem; color: var(--a-clay); }
-.admin-shell .dash-sales-table { width: 100%; border-collapse: collapse; }
-.admin-shell .dash-sales-table td { padding: .45rem 0; border-bottom: 1px solid var(--a-line); font-size: .85rem; }
-.admin-shell .dash-sales-table td:last-child { text-align: right; }
 </style>
 {% endblock %}

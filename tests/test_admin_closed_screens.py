@@ -1,4 +1,4 @@
-"""닫은 관리자 화면 — 가입 심사 · 기업 회원 · 심사 서류 (2026-10-20 · psj · D-260 ④⑤ · D-107).
+"""닫은 관리자 화면 — 가입 심사 · 기업 회원 · 심사 서류 · 매출 (D-260 ④⑤⑥ · D-107).
 
 지키는 것
   ① 화면은 남는다 — 목록 · 상세 경로가 200 으로 「비활성 + 사유」를 그린다 (D-107 (c) · 옛 링크가 깨지지 않게)
@@ -28,12 +28,20 @@ CLOSED_PATHS = [
     "/admin/enterprise/e1",
     "/admin/review-docs",
     "/admin/review-docs/1",
+    "/admin/stats/revenue",
+    "/admin/stats/revenue/any-id",
 ]
 
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    for name in ("admin", "admin_signup_review", "admin_enterprise", "admin_review_docs"):
+    for name in (
+        "admin",
+        "admin_signup_review",
+        "admin_enterprise",
+        "admin_review_docs",
+        "admin_stats",
+    ):
         module = importlib.import_module(f"app.routers.{name}")
         monkeypatch.setattr(module, "require_governor", lambda request: "UI-TEST")
     monkeypatch.setattr(admin, "_table_counts", lambda: {})
@@ -75,3 +83,68 @@ def test_대시보드는_승인_대기_건수_대신_라벨을_그린다(client:
     assert r.context["signup_label"] == "외부 감사 전"
     assert "pending_reviews" not in r.context
     assert "가입 승인 심사" in r.text and "외부 감사 전" in r.text
+
+
+@pytest.mark.parametrize(
+    ("path", "module_name"),
+    [
+        ("/admin/signup-review", "admin_signup_review"),
+        ("/admin/enterprise", "admin_enterprise"),
+        ("/admin/review-docs", "admin_review_docs"),
+        ("/admin/stats/revenue", "admin_stats"),
+    ],
+)
+def test_메뉴는_닫힘만_표시하고_사유와_링크는_본문에_남긴다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str, module_name: str
+) -> None:
+    module = importlib.import_module(f"app.routers.{module_name}")
+    html = client.get("/admin/").text
+    nav = html[html.index('<aside class="admin-sidebar"') : html.index("</aside>")]
+    link = re.search(r'<a\b[^>]*href="' + re.escape(path) + r'".*?</a>', nav, re.S)
+    assert link is not None
+    assert "닫힘" in link.group() and module.LABEL not in link.group()
+    assert module.LABEL in _main(client.get(path).text)
+    monkeypatch.setattr(module, "LABEL", "라벨 변경 확인")
+    html = client.get("/admin/").text
+    nav = html[html.index('<aside class="admin-sidebar"') : html.index("</aside>")]
+    assert "라벨 변경 확인" not in nav
+
+
+@pytest.mark.parametrize("period", ["daily", "weekly", "monthly", "invalid"])
+def test_매출과_통계_대시보드에_예시_금액이_없다(client: TestClient, period: str) -> None:
+    from app.routers import admin_stats  # noqa: PLC0415
+
+    for path in ("/admin/stats/revenue", "/admin/stats/dashboard"):
+        response = client.get(path, params={"period": period})
+        assert response.status_code == 200
+        body = _main(response.text)
+        assert "₩" not in body
+        assert admin_stats.LABEL in body
+        assert "월별 매출 통계" not in body
+    assert "sales" not in response.context["dash"]["kpi"]
+    assert "sales" not in response.context["dash"]["delta"]
+
+
+@pytest.mark.parametrize(
+    ("path", "has_alt"),
+    [
+        ("/admin/enterprise", True),
+        ("/admin/enterprise/e1", True),
+        ("/admin/signup-review", True),
+        ("/admin/signup-review/r1", True),
+        ("/admin/review-docs", False),
+        ("/admin/stats/revenue", False),
+    ],
+)
+def test_대체_안내는_라우터의_alt가_있을_때만_그린다(
+    client: TestClient, path: str, has_alt: bool
+) -> None:
+    response = client.get(path)
+    body = _main(response.text)
+    if has_alt:
+        assert "대신 볼 수 있는 곳" in body
+        for item in response.context["alt"]:
+            assert f'href="{item["href"]}"' in body
+            assert item["name"] in body and item["description"] in body
+    else:
+        assert "대신 볼 수 있는 곳" not in body

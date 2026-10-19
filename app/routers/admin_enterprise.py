@@ -36,6 +36,13 @@ CLOSED = {
         "기업 단위로 무엇이 달라지는지 — 요금제 · 구성원 권한 (D-69 · D-66 개정)",
         "기업 표(`enterprise`) 스키마와 `user_account.org` 정규화 여부 (팀장)",
     ],
+    "alt": [
+        {
+            "name": "회원 목록",
+            "href": "/admin/members",
+            "description": "소속(org)으로 검색할 수 있어요",
+        },
+    ],
 }
 
 

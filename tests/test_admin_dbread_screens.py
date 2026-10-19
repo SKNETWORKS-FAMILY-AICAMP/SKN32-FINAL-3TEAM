@@ -32,7 +32,7 @@ NOW = datetime(2026, 10, 20, 3, 0, tzinfo=UTC)
 TODAY = date.today()
 
 
-def fake_run(*, ticket_title: str = "검수 결과 문의", calls: list | None = None):  # noqa: ANN201
+def fake_run(*, ticket_title: str = "검수 결과 문의", calls: list | None = None, generated: bool = False):  # noqa: ANN201
     """`what` 마다 정해 둔 행을 돌려준다. `calls` 에 (what, queries) 를 쌓는다."""
     ticket = {
         "id": TID,
@@ -101,6 +101,12 @@ def fake_run(*, ticket_title: str = "검수 결과 문의", calls: list | None =
                 [{"sentences": 12, "requests": 4, "month": 5, "last_at": NOW}],
                 [{"id": TID, "created_at": NOW, "title": "검수 결과 문의", "status": "open"}],
             ],
+            "stats.generation": [
+                [{"k": "user", "n": 12}] + ([{"k": "generated", "n": 4}] if generated else []),
+                [{"n": 4 if generated else 0, "docs": 2 if generated else 0,
+                  "approved": 1 if generated else 0, "last_at": NOW if generated else None}],
+                [{"d": TODAY, "n": 4}] if generated else [],
+            ],
             "stats.judge": [
                 [{"n": 12, "docs": 4, "enc": 9, "first_at": NOW, "last_at": NOW}],
                 [{"k": "hold", "n": 8}, {"k": "confirmed", "n": 4}],
@@ -160,7 +166,7 @@ def test_문의_상세_없음과_못읽음을_가른다(client: TestClient, monk
 def test_못_읽으면_0건이라_말하지_않는다(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(admin_dbread, "run", lambda queries, what: ("no_table", []))
     for path in ("/admin/cs/tickets", "/admin/board/notices", "/admin/terms", "/admin/members",
-                 "/admin/stats/quality/judge"):
+                 "/admin/stats/quality/judge", "/admin/stats/quality/generation"):
         r = client.get(path)
         assert r.status_code == 200, path
         assert "launcher.py migrate" in r.text, path
@@ -227,3 +233,23 @@ def test_운영_대시보드의_문의와_회원수는_DB_값이다(client: Test
     assert r.context["pending_tickets"] == 1
     assert r.context["tickets"][0]["id"] == TID
     assert "/admin/cs/tickets?status=open" in r.text
+
+
+def test_생성_통계는_저장_안_함을_0건과_구분해_알린다(client: TestClient) -> None:
+    r = client.get("/admin/stats/quality/generation")
+    assert r.status_code == 200
+    assert r.context["kpi"]["generated"] == 0
+    assert "저장하지 않아요" in r.text and "쓰지 않았다는 뜻이 아니에요" in r.text
+    assert "88.4" not in r.text and "GPT-4o" not in r.text and "재생성 사유" not in r.text
+
+
+def test_생성_통계는_출처별_건수를_센다(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list = []
+    monkeypatch.setattr(admin_dbread, "run", fake_run(generated=True, calls=calls))
+    r = client.get("/admin/stats/quality/generation", params={"days": "7"})
+    assert r.context["days"] == 7
+    assert r.context["kpi"]["generated"] == 4 and r.context["kpi"]["share"] == 25.0
+    assert "카피 생성" in r.text and "직접 입력 · 검수" in r.text
+    assert "저장하지 않아요" not in r.text
+    sql = calls[0][1][1][0]
+    assert "origin = 'generated'" in sql and "raw" not in sql  # 원문 칸을 읽지 않는다 (D-76)
