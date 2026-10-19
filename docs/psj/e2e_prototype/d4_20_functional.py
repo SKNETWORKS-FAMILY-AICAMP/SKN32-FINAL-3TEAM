@@ -47,7 +47,10 @@ def main(argv=None):
     ap.add_argument("--golden", default=sd.GOLDEN)
     ap.add_argument("--out-md", default=None)
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--ref-tag", default=W18, help="🆕 E1-03 — 기준 판 태그 (--d18-dir 의 CSV · 기본 D4-18 ×2)")
+    ap.add_argument("--cand-tag", default=W20, help="🆕 E1-03 — 견줄 판 태그 (--dir 의 CSV · 기본 D4-20)")
     a = ap.parse_args(argv)
+    nm = lambda t: t.replace("copylane-encoder-kcbert-", "").replace("copylane-openai-", "")
     dev, guide, gsha, mark = ext_dev(a.golden)
     D, C = dev + guide, sd.CONF8
     ifn, irx = sd.LABELS.index(FN), sd.LABELS.index(RX)
@@ -59,7 +62,7 @@ def main(argv=None):
     miss = [i for i in WATCH if i not in idx]
     if miss:
         raise SystemExit(f"🔴 8행이 확장 dev 에 없다 — {miss}")
-    runs = {W18: ("D4-18 ×2", a.d18_dir, W18), W20: ("D4-20 기능성편입", a.d18_dir if a.self_test else a.dir, W18 if a.self_test else W20)}
+    runs = {W18: (nm(a.ref_tag), a.d18_dir, a.ref_tag), W20: (nm(a.cand_tag), a.d18_dir if a.self_test else a.dir, a.ref_tag if a.self_test else a.cand_tag)}
     cos = [k for k, r in enumerate(D) if r.get("품목") == "화장품" and r["bucket"] not in ("M",)]
 
     def one(run, m, s):
@@ -127,7 +130,9 @@ def main(argv=None):
             md.append(f"| {nm} | {r['prauc6']:.4f} | {r['det']:.1f} | {r['hit']:.1f} | {r['F1']:.1f} | {r['F2']:.1f} | {r['neg']:.1f} | {r['syn_flag']:.1f} | "
                       f"{r['th_fn']:.3f} · {r['fn_pp']:.1f} · {r['fn_tp']:.1f} · {r['fn_neg']:.1f} · {r['fn_syn']:.1f} |")
         b = R[(W18, m)]
-        md += ["", "관문 (D4-20 대 D4-18 ×2 · 8종 · 기능성 칸 뺌) — " + " · ".join(
+        dp = R[(W20, m)]["prauc6"] - b["prauc6"]
+        md += ["", f"E1 판단 (6종 PR-AUC 차이 ±0.02 이내 동등) — {dp:+.4f} → " + ("동등" if abs(dp) <= 0.02 + 1e-12 else (f"{runs[W20][0]} 우세" if dp > 0 else f"{runs[W18][0]} 우세"))]
+        md += ["", f"관문 ({runs[W20][0]} 대 {runs[W18][0]} · 8종 · 기능성 칸 뺌) — " + " · ".join(
             f"{k} {'✅' if v else '❌'}" for k, v in g.items()) + f" · G1 은 eval_graph (참고 — 탐지 {R[(W20, m)]['det'] - b['det']:+.1f}행 · {(R[(W20, m)]['det'] - b['det']) / sc * 100:+.1f}%p)", ""]
         md += [f"### 화장품 dev 혼동표 (정답 × 후보 · 시드 합 / 3 · {len(cos)}행 · 조건 M 뺌)", "",
                "| 판 · 정답 | 후보 의약품 | 후보 기능성 | 둘 다 | 없음 |", "|---|---:|---:|---:|---:|"]
@@ -137,8 +142,8 @@ def main(argv=None):
                 md.append(f"| {nm} · {t} | " + " | ".join(f"{x:.1f}" for x in v) + " |")
         md.append("")
     md += ["## dev 8행 — 배포 시드의 확정 유형과 확신 (팀장 지정 · 그래프 신뢰 문턱 고르기용)", "",
-           f"배포 시드 = (가) 6종 PR-AUC 최고 — D4-18 ×2 시드 {best[W18]} · D4-20 시드 {best[W20]}. 🚨 8행은 dev 안이다", "",
-           "| id | 정답 | 입력 | D4-18 ×2 후보 (확률) | D4-20 후보 (확률) | D4-20 기능성 · 의약품 확률 |", "|---|---|---|---|---|---|"]
+           f"배포 시드 = (가) 6종 PR-AUC 최고 — {runs[W18][0]} 시드 {best[W18]} · {runs[W20][0]} 시드 {best[W20]}. 🚨 8행은 dev 안이다", "",
+           f"| id | 정답 | 입력 | {runs[W18][0]} 후보 (확률) | {runs[W20][0]} 후보 (확률) | {runs[W20][0]} 기능성 · 의약품 확률 |", "|---|---|---|---|---|---|"]
     for i in WATCH:
         k = idx[i]
         truth = "·".join(D[k]["target"]) or f"없음({D[k]['조건']})"
