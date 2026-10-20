@@ -2237,9 +2237,19 @@ def _premise_hits(
 
 
 def _premise_sentences(
-    premise: Premise, state: CoreState, rows: list[dict[str, Any]]
+    premise: Premise,
+    state: CoreState,
+    rows: list[dict[str, Any]],
+    pending: set[str] | None = None,
 ) -> list[SentenceJudgment]:
-    """전제 하나에서의 문장 판정 — 위험도까지. `judge` · `assess_risk` 와 같은 함수를 전제의 법 묶음으로 다시 부른다 (D-99)."""
+    """전제 하나에서의 문장 판정 — 위험도까지. `judge` · `assess_risk` 와 같은 함수를 전제의 법 묶음으로 다시 부른다 (D-99).
+
+    🆕 2026-10-20 (D-348 보충 31) — **품목을 모르면 전제가 답인 확정(답 없이)을 하지 않는다**(`known` · 보충 8 결정 1 과 같은 문 —
+       `doc_rules` 의 인코더 쪽 절대형과 같은 기준 · 한 품목에 전제가 둘이어도 품목이 정해진 것이다). 품목을 모르는 분기는 고르기 전
+       안내용이고(보충 18 결정 2) 판정 결과는 고른 품목으로 다시 판정해 낸다(보충 31 (가)). 그 분기에서 품목이 정해지면 확정될 문장은
+       `pending` 에 적는다 — 기록을 「품목 선택 필요」로 두는 재료다(`premise_branches` · `_category_needed`).
+    """
+    known = (state.get("product") or ProductContext()).category is not None
     laws = pm.PREMISE_LAWS[premise]
     results = {r.law: r for r in state.get("law_results", [])}
     scans = {s.sent_id: s for s in state.get("dict_scans", [])}
@@ -2348,9 +2358,22 @@ def _premise_sentences(
                 else None
             )
             facts = list((state.get("product") or ProductContext()).facts)
-            j = _hf_premise(premise, j, encs[sid], facts, span, rows)
+            before = j
+            j = _hf_premise(premise, j, encs[sid], facts, span, rows, known=known)
             # 🆕 2026-10-19 (D-348 보충 28 결정 3) — 식품 두 전제: 기능성 표시 고시 요건(전제)이 자격의 답이다(건기식 두 전제와 같은 모양)
-            j = _food_premise(premise, j, encs[sid], facts, span, rows)
+            j = _food_premise(premise, j, encs[sid], facts, span, rows, known=known)
+            # 🆕 2026-10-20 (보충 31) — 품목을 몰라 막은 전제 확정이 있었나 — **같은 함수**를 품목이 정해진 것으로 다시 불러 본다(D-99 · 판정 두 벌 없음)
+            if not known and pending is not None and premise in _PREMISE_CONFIRM:
+                again = _food_premise(
+                    premise,
+                    _hf_premise(premise, before, encs[sid], facts, span, rows),
+                    encs[sid],
+                    facts,
+                    span,
+                    rows,
+                )
+                if again.verdict is Verdict.confirmed and again.violations:
+                    pending.add(sid)
         out.append(j)
     return out
 
@@ -2362,6 +2385,7 @@ def _hf_premise(
     facts: list[UserFact],
     span: Span | None,
     rows: list[dict[str, Any]],
+    known: bool = True,
 ) -> SentenceJudgment:
     """🆕 2026-10-18 (D-348 보충 23 결정 4) **건강기능식품 두 전제의 인코더 쪽 판정** — 인코더(건기식 입력)가 건강기능식품 오인 후보를 낸 문장.
 
@@ -2391,6 +2415,9 @@ def _hf_premise(
             return j
         # 🆕 (보충 29) 전제 확정의 확신 문턱 — 아래면 확정하지 않고 보류(하한 · 근거는 그대로)
         if not _premise_confident(e, Violation(pm.HF_MISLEAD)):
+            return j
+        # 🆕 2026-10-20 (보충 31) 품목을 모르면 답 없는 전제 확정을 하지 않는다 — 보류 그대로(하한 · 근거는 그대로 · 보충 8 결정 1 과 같은 문)
+        if not known:
             return j
         c = _enc_confirmed(j, Violation(_UNRECOGNIZED_TYPE), span)
         if c.verdict is not Verdict.confirmed:
@@ -2461,6 +2488,7 @@ def _food_premise(
     facts: list[UserFact],
     span: Span | None,
     rows: list[dict[str, Any]],
+    known: bool = True,
 ) -> SentenceJudgment:
     """🆕 2026-10-19 (D-348 보충 28 결정 3) **식품 두 전제의 인코더 쪽 판정** — 인코더(식품 입력)가 건강기능식품 오인 후보를 낸 문장.
 
@@ -2488,6 +2516,9 @@ def _food_premise(
             return j
         # 🆕 (보충 29) 전제 확정의 확신 문턱 — 아래면 확정하지 않고 보류(하한 · 근거는 그대로)
         if not _premise_confident(e, hf):
+            return j
+        # 🆕 2026-10-20 (보충 31) 품목을 모르면 답 없는 전제 확정을 하지 않는다 — `_hf_premise` 와 같은 문
+        if not known:
             return j
         c = _enc_confirmed(j, hf, span)
         if c.verdict is not Verdict.confirmed:
@@ -2533,6 +2564,58 @@ def _food_premise(
             return c.model_copy(update={"infeasibility": Infeasibility.A, "substantiation": None})
         return c
     return held.model_copy(update={"user_facts": [uf]})
+
+
+#: 🆕 2026-10-20 (보충 31) **답 없는 전제 확정이 서는 전제** — `_food_premise`(`식품` 3호) · `_hf_premise`(`건기식_비인정` 4.나).
+#:    품목을 모르면 이 둘에서 확정하지 않고, 확정될 문장이었으면 기록을 「품목 선택 필요」로 둔다(`_premise_sentences` 의 `pending`)
+_PREMISE_CONFIRM = frozenset({Premise.식품, Premise.건기식_비인정})
+
+
+def _category_markable(rec: SentenceJudgment) -> bool:
+    """기록을 「품목 선택 필요」(`cat_unknown`)로 바꿀 수 있는 문장인가 — 확신 부족 보류 · 선택지 · 답이 없음 · 판정 대상 아님이 아님.
+
+    🔴 선택지(`fact_check` · `substantiation`)는 `cat_unknown` 에 실을 수 없다(계약). `_mark_category_needed`(절대형 · 보충 8)와
+       `_category_needed`(전제 확정 · 보충 31)가 같은 조건을 쓴다 (D-99).
+    """
+    return (
+        rec.verdict is Verdict.hold
+        and rec.hold_reason is HoldReason.low_conf
+        and rec.fact_check is None
+        and rec.substantiation is None
+        and not rec.user_facts
+        and rec.user_subst is None
+        and not rec.not_claim
+    )
+
+
+def _category_needed(
+    base: list[SentenceJudgment], changed: list[SentenceJudgment], pending: set[str]
+) -> list[SentenceJudgment]:
+    """🆕 2026-10-20 (보충 31) 품목을 몰라 전제 확정을 막은 문장의 기록 → **품목 선택 필요**(`cat_unknown`). 바뀐 문장 목록을 낸다.
+
+    ★ 종전에는 분기에 전제 확정이 서서 `_recorded` 가 기록을 `cat_unknown` 으로 두었다(위험도는 그 분기의 제재표 하한).
+       확정을 막은 뒤에도 「결과가 품목에 달렸다」는 그대로라 사유만 남긴다 — 위험도는 기록 자신의 것(인코더 하한은 R1 층)이다.
+    🚨 이미 바뀐 문장은 그 위에서 · 조건이 안 맞으면(`_category_markable`) 그대로다.
+    """
+    by = {c.sent_id: c for c in changed}
+    out = list(changed)
+    for b in base:
+        if b.sent_id not in pending:
+            continue
+        rec = by.get(b.sent_id, b)
+        if not _category_markable(rec):
+            continue
+        new = SentenceJudgment(
+            **{
+                **{k: getattr(rec, k) for k in type(rec).model_fields},
+                "hold_reason": HoldReason.cat_unknown,
+            }
+        )
+        if b.sent_id in by:
+            out[out.index(by[b.sent_id])] = new
+        else:
+            out.append(new)
+    return out
 
 
 def _branch_outcome(premise: Premise, sents: list[SentenceJudgment]) -> Outcome:
@@ -2709,7 +2792,9 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
     hit = any(hs for r in state.get("law_results", []) for _, hs in r.dict_hits)
     # 🔄 2026-10-15 (D-340 결정 5) — 인코더 후보가 있으면 추정 위험도에도 쓴다. 안 읽으면 표가 빈 것처럼 「모름」이 된다(D-343)
     rows = load_sanction_rows(cur) if hit or state.get("encodings") else []
-    per = {p: _premise_sentences(p, state, rows) for p in premises}
+    # 🆕 2026-10-20 (보충 31) 품목을 몰라 막은 전제 확정 — 기록을 「품목 선택 필요」로 둘 문장
+    pending: set[str] = set()
+    per = {p: _premise_sentences(p, state, rows, pending) for p in premises}
     # 🆕 2026-10-11 — 제품을 알 때 보류 문장의 유형 후보는 그 품목의 전제로 거른 합집합이다 (`_held_candidates`)
     held = (
         []
@@ -2738,6 +2823,8 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
     changed += [h for h in held if h.sent_id not in {r.sent_id for r in changed}]
     # 🆕 2026-10-16 (D-348 보충 2 결정 4) — 기록 문장(바뀐 것 · 그대로인 것)의 인코더 하한 = 전제 최댓값
     changed = _with_record_encoder(base, changed, per, premises)
+    if pending:
+        changed = _category_needed(base, changed, pending)
     branches = [
         Branch(
             premise=p,
@@ -2767,6 +2854,8 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     branches = list(state.get("branches") or [])
     spans = _sentence_spans(state)
     # 🔄 2026-10-17 (보충 8 결정 1) — 인코더 쪽 절대형 확정은 품목이 정해졌을 때만(사용자가 품목을 고르면 그 품목으로 다시 판정)
+    #    ⚠️ 2026-10-20 (보충 31) — 검수 화면은 아직 다시 판정하지 않는다(고른 분기를 펼친다 · `review.html` 분기 고르기) — 화면 쪽 집행 대기(ksr).
+    #       그동안 화면에서 품목을 고르면 이 문으로 막힌 미리보기가 보인다(dev 조건부 확정위반 32 중 18 · 원장 10-20 ②)
     known = product.category is not None
     if not branches:
         changed = [
@@ -2862,15 +2951,7 @@ def _mark_category_needed(
     ★ 전제마다 등급이 갈린다(D-229 · `cat_unknown` 의 뜻) — 그 전제에서는 답 없이 위반, 다른 전제에서는 아니다. 품목을 고르면 다시 판정한다.
     🔴 확신 부족 보류 · 선택지 · 답이 없는 기록만 — 선택지(`fact_check` · `substantiation`)는 `cat_unknown` 에 실을 수 없다(계약). 바꿀 것이 없으면 None.
     """
-    if (
-        rec.verdict is not Verdict.hold
-        or rec.hold_reason is not HoldReason.low_conf
-        or rec.fact_check is not None
-        or rec.substantiation is not None
-        or rec.user_facts
-        or rec.user_subst is not None
-        or rec.not_claim
-    ):
+    if not _category_markable(rec):
         return None
     if not any(_encoder_only(x) and _absolute_types(x) for x in per):
         return None
