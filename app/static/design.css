@@ -2703,3 +2703,4 @@
 .user-shell .rv-empty-tags span { padding:5px 9px; font-size:12px; }
 .user-shell .rv-empty-title { font-size:16px; }
 .user-shell .rv-empty-label { margin-bottom:6px; }
+.user-shell .cl-detail-editors textarea { min-height:150px !important; }
