@@ -230,6 +230,7 @@ def _nav_user(request: Request) -> SimpleNamespace | None:
         return SimpleNamespace(
             name=user.name,
             org=user.org,
+            email=user.email,  # 🆕 2026-10-20 (lse) — 계정 메뉴 머리에 보인다
             initials=user.name.strip()[:2],
             verified=user.email_verified_at is not None,
             notifs=notifs,

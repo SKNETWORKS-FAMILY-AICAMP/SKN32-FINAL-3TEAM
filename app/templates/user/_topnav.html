@@ -56,9 +56,16 @@
       </form>
     </div>
   </details>
+  {#- 🔄 2026-10-20 (lse · 사용자 「계정 바가 별로」) — 알약 모양 계정 칸 · 펼치면 이름 · 이메일 머리가 있는 카드 메뉴 #}
   <details class="ws-profile">
-    <summary class="user-topnav-me"><span class="user-topnav-avatar" aria-hidden="true">{{ me.initials }}</span><span>{{ me.name }}</span><span aria-hidden="true">⌄</span></summary>
-    <div class="ws-profile-menu"><a href="/u/mypage">마이페이지</a><a href="/u/mypage?tab=account">계정 · 이력 보관 설정</a><form method="post" action="/u/logout"><button type="submit">로그아웃</button></form></div>
+    <summary class="user-topnav-me"><span class="user-topnav-avatar" aria-hidden="true">{{ me.initials }}</span><span class="user-topnav-name">{{ me.name }}</span><svg class="user-topnav-caret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <div class="ws-profile-menu">
+      <div class="ws-profile-head"><span class="user-topnav-avatar" aria-hidden="true">{{ me.initials }}</span><span><b>{{ me.name }}</b>{% if me.email %}<small>{{ me.email }}</small>{% endif %}</span></div>
+      <a href="/u/mypage"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>마이페이지</a>
+      <a href="/u/history"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>검수 이력</a>
+      <a href="/u/mypage?tab=account"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>계정 설정</a>
+      <form method="post" action="/u/logout"><button type="submit"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>로그아웃</button></form>
+    </div>
   </details>
   {% else %}
   <a class="user-topnav-mypage" href="/u/login">로그인</a>

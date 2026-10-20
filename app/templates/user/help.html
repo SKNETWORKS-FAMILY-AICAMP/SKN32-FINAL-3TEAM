@@ -43,7 +43,7 @@
   <nav class="hg-breadcrumb" aria-label="현재 위치"><a href="/u/help?tab=guide">이용 가이드</a><span>/</span><span>{{ '자주 묻는 질문' if tab == 'faq' else '사용방법' }}</span></nav>
   <header class="hg-heading">
     <div><h1>{{ '자주 묻는 질문' if tab == 'faq' else '무엇을 하고 싶으세요?' }}</h1><p>{{ '주제를 선택하거나 검색해서 필요한 답변을 찾아보세요.' if tab == 'faq' else '원하는 작업부터 골라, 사용 방법을 빠르게 확인하세요.' }}</p></div>
-    <a class="hg-text-link" href="/u/">작업 공간으로 <span aria-hidden="true">→</span></a>
+    <a class="hg-text-link" href="/u/"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>작업 공간으로 <span aria-hidden="true">→</span></a>
   </header>
   {% if tab != 'faq' %}
   <nav class="hg-purposes" aria-label="목적별 사용 가이드">

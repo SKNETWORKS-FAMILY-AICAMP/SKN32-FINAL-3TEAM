@@ -2557,3 +2557,30 @@
     background-attachment:fixed;
   }
 }
+/* 🆕 2026-10-20 (lse · 사용자 「계정 바 · 작업 공간으로 버튼이 별로」) — 헤더 오른쪽: 둥근 아이콘 버튼 · 알약 계정 칸 · 카드 메뉴 */
+.user-shell .user-topnav-icon { width:38px; height:38px; display:inline-grid; place-items:center; padding:0; border-radius:12px; border:1px solid transparent; color:var(--u-clay); background:transparent; transition:background .15s, border-color .15s, color .15s; }
+.user-shell .user-topnav-icon:hover { background:var(--u-signal-soft); border-color:color-mix(in srgb, var(--u-signal) 25%, transparent); color:var(--u-signal-ink); }
+.user-shell .user-topnav-me { display:inline-flex; align-items:center; gap:9px; padding:4px 12px 4px 4px; border-radius:999px; border:1px solid var(--u-line); background:var(--u-surface); color:var(--u-ink); font-size:14px; font-weight:600; cursor:pointer; list-style:none;
+  box-shadow:0 1px 2px rgba(60,20,40,.04); transition:border-color .15s, box-shadow .15s; }
+.user-shell .user-topnav-me:hover, .user-shell .ws-profile[open] > .user-topnav-me { border-color:color-mix(in srgb, var(--u-signal) 45%, var(--u-line)); box-shadow:0 4px 14px rgba(150,40,90,.12); }
+.user-shell .user-topnav-me .user-topnav-avatar, .user-shell .ws-profile-head .user-topnav-avatar { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:800; color:#fff; letter-spacing:-.02em;
+  background:linear-gradient(135deg, #833AB4, #E1306C 60%, #F56040); box-shadow:0 0 0 2px var(--u-surface), 0 0 0 3.5px color-mix(in srgb, #E1306C 35%, transparent); }
+.user-shell .user-topnav-caret { color:var(--u-clay); transition:transform .2s; }
+.user-shell .ws-profile[open] .user-topnav-caret { transform:rotate(180deg); }
+.user-shell .ws-profile-menu { min-width:240px; padding:8px; border-radius:16px; border:1px solid var(--u-line); background:var(--u-surface);
+  box-shadow:0 2px 6px rgba(60,20,40,.06), 0 18px 40px -12px rgba(150,40,90,.25); }
+.user-shell .ws-profile-head { display:flex; align-items:center; gap:10px; padding:10px 10px 12px; margin-bottom:6px; border-bottom:1px solid var(--u-line); }
+.user-shell .ws-profile-head b { display:block; font-size:14px; color:var(--u-ink); }
+.user-shell .ws-profile-head small { display:block; font-size:12px; color:var(--u-clay); max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.user-shell .ws-profile-menu > a, .user-shell .ws-profile-menu button { display:flex; align-items:center; gap:10px; width:100%; padding:9px 10px; border-radius:10px; font-size:14px; font-weight:500; color:var(--u-ink); text-decoration:none; background:none; border:0; cursor:pointer; text-align:left; }
+.user-shell .ws-profile-menu > a svg, .user-shell .ws-profile-menu button svg { color:var(--u-clay); flex:0 0 auto; }
+.user-shell .ws-profile-menu > a:hover, .user-shell .ws-profile-menu button:hover { background:var(--u-signal-soft); color:var(--u-signal-ink); }
+.user-shell .ws-profile-menu > a:hover svg, .user-shell .ws-profile-menu button:hover svg { color:var(--u-signal-ink); }
+.user-shell .ws-profile-menu form { margin:6px 0 0; padding-top:6px; border-top:1px solid var(--u-line); }
+/* 이용 가이드의 「작업 공간으로」 — 밑줄 링크 → 그라데이션 테두리 알약 버튼 */
+.hg-text-link { display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:999px; text-decoration:none; font-size:14px; font-weight:700; color:var(--u-ink);
+  border:1.5px solid transparent; background:linear-gradient(var(--u-surface), var(--u-surface)) padding-box, linear-gradient(115deg,#833AB4,#E1306C,#F56040) border-box;
+  box-shadow:0 4px 14px -6px rgba(225,48,108,.35); transition:box-shadow .15s, transform .15s; }
+.hg-text-link:hover { transform:translateY(-1px); box-shadow:0 8px 20px -8px rgba(225,48,108,.5); color:#C2185B; }
+.hg-text-link svg { color:#E1306C; }
+.hg-text-link span { margin-left:2px; }
