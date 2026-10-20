@@ -1,0 +1,32 @@
+{# app/templates/admin/board/_notice_fields.html — 공지 작성 · 수정 폼의 칸 · 소유자 **psj** (2026-10-20)
+
+  넘길 것: `form`(다시 그릴 값) · `categories` · `title_max` · `body_max` · `csrf_field` · `csrf_token` · `edit`(수정이면 참)
+  🚨 CSRF 이중 제출 — 토큰은 쿠키와 이 hidden 칸 양쪽에 있다 (admin_dbwrite.render_form).
+  ⛔ 작성자 칸이 없다 — 로그인한 계정이 작성자다.
+#}<input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+<label>제목 <small class="hint">({{ title_max }}자까지)</small>
+  <input name="title" value="{{ form.title }}" maxlength="{{ title_max }}" required>
+</label>
+<label>분류
+  <select name="category" required>
+    <option value="" {% if not form.category %}selected{% endif %} disabled>분류를 골라 주세요</option>
+    {% for code, label in categories.items() %}
+    <option value="{{ code }}" {% if form.category == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</label>
+<label>내용 <small class="hint">({{ "{:,}".format(body_max) }}자까지)</small>
+  <textarea name="body" rows="10" maxlength="{{ body_max }}" required>{{ form.body }}</textarea>
+</label>
+<div class="nf-row">
+  <label>게시 시작일 <small class="hint">(비우면 바로)</small>
+    <input type="date" name="starts_on" value="{{ form.starts_on }}">
+  </label>
+  <label>게시 종료일 <small class="hint">(비우면 상시)</small>
+    <input type="date" name="ends_on" value="{{ form.ends_on }}">
+  </label>
+</div>
+<label class="nf-check"><input type="checkbox" name="pinned" value="1" {% if form.pinned %}checked{% endif %}> 목록 맨 위에 고정</label>
+{% if edit %}
+<label class="nf-check"><input type="checkbox" name="hidden" value="1" {% if form.hidden %}checked{% endif %}> 숨김 <small class="hint">— 사용자 화면에서 내려요. 지우지는 않아요.</small></label>
+{% endif %}

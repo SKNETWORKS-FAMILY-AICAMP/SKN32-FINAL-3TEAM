@@ -1,7 +1,7 @@
 {# app/templates/admin/board/notices.html — 공지사항 목록 (뼈대) · 소유자 **psj**
    (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** "새 공지 작성" 버튼은 자리만 잡은 뼈대다 — action 없음.
+  🔄 2026-10-20 — "새 공지 작성"이 열렸다 → `/admin/board/notices/new` (D-260 ⑦).
   🔄 2026-10-20 — `notice` 표를 읽는다(admin_board.py). 못 읽으면 빈 화면 + `_db_notice.html` 안내 (D-72).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "admin/_base.html" %}
@@ -25,12 +25,12 @@
   {% if category %}
   <a class="reset-link" href="/admin/board/notices">초기화</a>
   {% endif %}
-  <button type="button" class="new-btn" disabled title="⬜ 아직 못 쓴다 — 테이블 승인 대기 중">+ 새 공지 작성</button>
+  <a class="new-btn" href="/admin/board/notices/new">+ 새 공지 작성</a>
 </form>
 
 {% if source != "db" %}
 {% elif not rows %}
-<p>{{ "조건에 맞는 공지가 없어요." if category else "등록된 공지가 없어요. 공지 작성 화면은 아직 없어요." }}</p>
+<p>{{ "조건에 맞는 공지가 없어요." if category else "등록된 공지가 없어요. 오른쪽 위 「새 공지 작성」으로 올려 주세요." }}</p>
 {% else %}
 <div class="admin-table-scroll"><table>
   <tr>
@@ -60,6 +60,6 @@
 {% endif %}
 
 <style>
-.admin-shell .new-btn { margin-left: auto; padding: .5rem 1rem; border-radius: .5rem; border: none; background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed; opacity: .6; }
+.admin-shell .new-btn { margin-left: auto; padding: .5rem 1rem; border-radius: .5rem; border: none; background: var(--a-signal); color: #fff; font-weight: 600; text-decoration: none; }
 </style>
 {% endblock %}

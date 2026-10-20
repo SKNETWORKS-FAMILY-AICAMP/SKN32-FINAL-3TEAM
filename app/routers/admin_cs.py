@@ -3,7 +3,6 @@
 ★ `admin.py` 와 파일을 가른다 (D-208 · admin_errors.py 와 같은 패턴). 붙이는 자리는
    `app/routers/__init__.py` 한 줄 — `admin_router` 아래에 매단다.
 
-✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 상태 변경 · 담당자 배정 · 답변 폼은 `disabled` 뼈대다.
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
 🔄 2026-10-20 — **`ticket` 표를 읽는다** (alembic `0017_ops_tables` · `app/models.py` `Ticket` · D-260 ③).
@@ -12,16 +11,29 @@
    🚨 분류 · 우선순위 · 상태의 값은 `app/models.py` `TICKET_*` 한 벌이다(표의 CHECK 와 같다 · D-99). 쿼리 값은 저장 코드다.
    🔴 문의에는 판정 원문 · 판정 id 칸이 없다(D-76 열람 경계) — 이 화면도 문의 본문만 보인다.
    표시 번호(`TK-…`)는 저장하지 않는다 — `created_at` 과 id 앞자리로 만든다(`Ticket` docstring).
+
+🆕 2026-10-20 — **답변 · 상태 · 우선순위 · 담당자 저장을 열었다** (D-260 ⑦ — 허용 목록 `POST /tickets/{id}`).
+   ★ 핸들러는 `require_governor` · `auth.csrf_ok` · `auth.audit` 를 본문에서 부른다 (`tests/test_auth_boundary.py`).
+   🔴 「완료」로 바꾸면 `closed_at` 과 파기 기한 `expires_at = closed_at + TICKET_RETENTION_DAYS` 를 **같이** 채운다 —
+      표의 CHECK(`ck_ticket_closed_expiry`)가 둘을 묶는다 (D-129). 다시 열면 둘 다 비운다. 이미 닫힌 문의는 처음 닫은 시각을 지킨다.
+   ★ 답변을 저장하면 사용자 화면에 알림이 뜬다(`user.py` `_ticket_alert_key` — 답변 r · 완료 c).
+   ⛔ 답변은 한 칸이다(스레드는 범위 밖 · `Ticket` docstring) — 고치면 덮어쓴다. 길이는 자르지 않고 거부한다 (D-220).
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from urllib.parse import parse_qs
 
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+from app import auth
+from app.formbody import read_capped
 from app.models import TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES
 from app.routers import admin_dbread as db
+from app.routers import admin_dbwrite as dbw
 from app.routers.admin import require_governor
+from app.settings import TICKET_RETENTION_DAYS, TICKET_TEXT_MAX
 from app.templating import templates
 
 #: 🚨 prefix 는 `/cs` 다 — `admin_router`(prefix `/admin`) 아래에 매달려 `/admin/cs/tickets` 가 된다.
@@ -29,10 +41,13 @@ router = APIRouter(prefix="/cs")
 
 PAGE_SIZE = 20
 
+#: 한글은 퍼센트 인코딩으로 글자당 9바이트 — 사용자 문의 폼(`_CS_BODY`)과 같은 여유
+_FORM_BODY = TICKET_TEXT_MAX * 16
+
 _SELECT = """
 SELECT t.id::text AS id, t.created_at, t.category, t.title, t.body, t.priority, t.status,
        t.reply, t.closed_at, t.expires_at,
-       u.name AS who, u.email AS who_email, a.display_name AS owner
+       u.name AS who, u.email AS who_email, a.display_name AS owner, a.initials AS owner_initials
 FROM ticket t
 JOIN user_account u ON u.id = t.requester_id
 LEFT JOIN app_account a ON a.id = t.assignee_id
@@ -69,6 +84,7 @@ def view(r: dict) -> dict:
         "status_code": r["status"],
         "status": TICKET_STATUSES.get(r["status"], r["status"]),
         "owner": r["owner"] or "미배정",
+        "owner_initials": r.get("owner_initials") or "",
         "closed_at": db.fmt_dt(r["closed_at"]),
         "expires_at": db.fmt_dt(r["expires_at"], "%Y.%m.%d"),
     }
@@ -97,7 +113,7 @@ def recent(status: str | None, limit: int = 5) -> dict:
 
 @router.get("/tickets", response_class=HTMLResponse)
 def ticket_list(request: Request) -> HTMLResponse:
-    """CS 티켓 목록 — 읽기 전용 · 최신순."""
+    """CS 티켓 목록 — 최신순."""
     actor = require_governor(request)
     qp = request.query_params
     ticket_type = _clean_choice(qp.get("type"), TICKET_CATEGORIES)
@@ -159,20 +175,109 @@ def ticket_list(request: Request) -> HTMLResponse:
     )
 
 
-@router.get("/tickets/{ticket_id}", response_class=HTMLResponse)
-def ticket_detail(request: Request, ticket_id: str) -> HTMLResponse:
-    """CS 티켓 상세 — 읽기 전용. 상태 변경 · 답변 작성 폼은 뼈대만."""
-    actor = require_governor(request)
+_ASSIGNEES = "SELECT initials, display_name FROM app_account WHERE disabled_at IS NULL ORDER BY display_name"
+
+
+def _load_one(ticket_id: str) -> tuple[str, dict | None, list[dict]]:
+    """(source, 문의, 담당자로 고를 수 있는 관리자 계정)."""
     source, out = db.run(
         [(f"{_SELECT} WHERE t.id::text = %s", [ticket_id[:64]])],  # noqa: S608
         what="cs.detail",
     )
     row = view(out[0][0]) if source == "db" and out[0] else None
+    assignees: list[dict] = []
+    if row is not None:
+        src, got = db.run([(_ASSIGNEES, [])], what="cs.assignees")
+        assignees = got[0] if src == "db" else []
+    return source, row, assignees
+
+
+def _form_of(row: dict | None) -> dict:
+    if row is None:
+        return {"status": "", "priority": "", "assignee": "", "reply": ""}
+    return {"status": row["status_code"], "priority": row["priority_code"],
+            "assignee": row["owner_initials"], "reply": row["reply"] or ""}
+
+
+def _detail_page(
+    request: Request, actor: str, source: str, row: dict | None, assignees: list[dict], *,
+    form: dict | None = None, error: str | None = None, saved: bool = False, code: int = 200,
+) -> HTMLResponse:
+    return dbw.render_form(
+        request,
+        "admin/cs/ticket_detail.html",
+        {"actor": actor, "source": source, "row": row, "statuses": TICKET_STATUSES,
+         "priorities": TICKET_PRIORITIES, "assignees": assignees, "form": form or _form_of(row),
+         "error": error, "saved": saved, "reply_max": TICKET_TEXT_MAX,
+         "retention_days": TICKET_RETENTION_DAYS},
+        code,
+    )
+
+
+@router.get("/tickets/{ticket_id}", response_class=HTMLResponse)
+def ticket_detail(request: Request, ticket_id: str) -> HTMLResponse:
+    """CS 티켓 상세 + 답변 · 상태 변경 폼."""
+    actor = require_governor(request)
+    source, row, assignees = _load_one(ticket_id)
     # ★ 404 는 읽었는데 없을 때만 — 못 읽었으면 안내를 그린다 (D-188)
     if source == "db" and row is None:
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse(
-        request,
-        "admin/cs/ticket_detail.html",
-        {"actor": actor, "source": source, "row": row, "statuses": TICKET_STATUSES},
+    saved = request.query_params.get("saved") == "1"
+    return _detail_page(request, actor, source, row, assignees, saved=saved)
+
+
+@router.post("/tickets/{ticket_id}")
+async def ticket_update(request: Request, ticket_id: str):  # noqa: ANN201 — 화면(오류) 또는 이동(PRG)
+    """답변 · 상태 · 우선순위 · 담당자 저장 → 그 상세로 (PRG)."""
+    actor = require_governor(request)
+    raw = await read_capped(request, _FORM_BODY, "답변이 너무 길어요")
+    form = parse_qs(raw.decode("utf-8", "replace"), keep_blank_values=True)
+
+    def one(key: str) -> str:
+        return (form.get(key) or [""])[0]
+
+    kept = {"status": one("status"), "priority": one("priority"),
+            "assignee": one("assignee"), "reply": one("reply").strip()}
+    source, row, assignees = _load_one(ticket_id)
+    if source == "db" and row is None:
+        raise HTTPException(status_code=404)
+
+    def again(msg: str, code: int) -> HTMLResponse:
+        return _detail_page(request, actor, source, row, assignees, form=kept, error=msg, code=code)
+
+    if not auth.csrf_ok(*dbw.form_csrf_ok(request, form)):
+        auth.audit("admin_ticket_update", actor, ok=False)
+        return again("화면이 오래돼서 다시 불러왔어요. 한 번 더 저장해 주세요.", 403)
+    if source != "db":
+        auth.audit("admin_ticket_update", actor, ok=False)
+        return again("저장하지 못했어요. DB 연결 상태를 확인한 뒤 다시 저장해 주세요. 쓴 답변은 그대로 두었어요.", 503)
+    if kept["status"] not in TICKET_STATUSES:
+        return again("상태를 골라 주세요.", 422)
+    if kept["priority"] not in TICKET_PRIORITIES:
+        return again("우선순위를 골라 주세요.", 422)
+    if kept["assignee"] and kept["assignee"] not in {a["initials"] for a in assignees}:
+        return again("담당자를 목록에서 골라 주세요.", 422)
+    if len(kept["reply"]) > TICKET_TEXT_MAX:
+        return again(f"답변을 {TICKET_TEXT_MAX:,}자 안으로 적어 주세요.", 422)
+
+    closed = kept["status"] == "closed"
+    src, rows = dbw.run(
+        """UPDATE ticket SET status = %s, priority = %s,
+                  assignee_id = (SELECT id FROM app_account WHERE initials = %s AND disabled_at IS NULL),
+                  reply = %s,
+                  closed_at = CASE WHEN %s THEN COALESCE(closed_at, now()) ELSE NULL END,
+                  expires_at = CASE WHEN %s THEN COALESCE(closed_at, now()) + make_interval(days => %s)
+                                    ELSE NULL END
+           WHERE id::text = %s
+           RETURNING id::text AS id""",
+        [kept["status"], kept["priority"], kept["assignee"], kept["reply"] or None, closed, closed,
+         TICKET_RETENTION_DAYS, ticket_id[:64]],
+        what="cs.update",
     )
+    if src != "db" or not rows:
+        auth.audit("admin_ticket_update", actor, ok=False)
+        if src == "db":
+            raise HTTPException(status_code=404)
+        return again("저장하지 못했어요. DB 연결 상태를 확인한 뒤 다시 저장해 주세요. 쓴 답변은 그대로 두었어요.", 503)
+    auth.audit("admin_ticket_update", actor, ok=True)
+    return RedirectResponse(f"/admin/cs/tickets/{rows[0]['id']}?saved=1", status_code=303)

@@ -1,18 +1,22 @@
 {# app/templates/admin/board/notice_detail.html — 공지사항 상세 (뼈대) · 소유자 **psj**
    (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** 수정·삭제 버튼은 disabled 뼈대다.
+  🔄 2026-10-20 — 수정 폼이 열렸다 → `POST /admin/board/notices/{id}` (D-260 ⑦). ⛔ 삭제는 없다 — 「숨김」으로 내린다.
   🔄 2026-10-20 — `notice` 표를 읽는다(admin_board.py). 못 읽으면 안내만 — 404 는 읽었는데 없을 때만 (D-188).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "admin/_base.html" %}
-{% block title %}CopyLane — 공지사항 상세{% endblock %}
-{% block admin_css %}{% endblock %}
+{% block title %}CopyLane — 공지사항 상세{% include "admin/board/_notice_form_style.html" %}
+{% endblock %}
+{% block admin_css %}{% include "admin/board/_notice_form_style.html" %}
+{% endblock %}
 {% block admin_content %}
 
 
 <p><a href="/admin/board/notices">← 공지사항 목록</a></p>
 
 {% with table="notice" %}{% include "admin/_db_notice.html" %}{% endwith %}
+{% if error %}<p class="warn" role="alert">⚠️ {{ error }}</p>{% endif %}
+{% if saved %}<p class="ok" role="status">✅ 저장했어요.</p>{% endif %}
 {% if row %}
 
 <h1>{{ "📌 " if row.pinned else "" }}{{ row.title }}</h1>
@@ -29,13 +33,16 @@
 <h2>내용</h2>
 <pre class="board-content">{{ row.content }}</pre>
 
-<h2>관리 <small class="hint">(승인 대기 · 비활성)</small></h2>
-<fieldset class="board-disabled" disabled>
-  <button type="button">수정</button>
-  <button type="button">삭제</button>
-  <button type="button">고정 {{ "해제" if row.pinned else "" }}</button>
-</fieldset>
-<p class="hint">⬜ 공지 작성 · 수정 · 삭제 라우트는 아직 없어요 — 이 화면은 읽기 전용이에요.</p>
+<h2>수정</h2>
+<details class="notice-edit" {% if error %}open{% endif %}>
+  <summary>이 공지 고치기 · 고정 · 숨김</summary>
+  <form class="notice-form" method="post" action="/admin/board/notices/{{ row.id }}">
+    {% set edit = true %}
+    {% include "admin/board/_notice_fields.html" %}
+    <div class="nf-actions"><button type="submit">저장</button></div>
+  </form>
+</details>
+<p class="hint">삭제는 없어요 — 내리려면 「숨김」에 체크해 주세요. 사용자 알림이 가리키던 공지가 사라지지 않게 남겨 둬요.</p>
 {% endif %}
 
 <style>
@@ -44,7 +51,7 @@
 .admin-shell table.kv td { padding: .3rem 0; }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
 .admin-shell .board-content { white-space: pre-wrap; font-family: inherit; background: var(--a-surface2); border: 1px solid var(--a-line); border-radius: .5rem; padding: 1rem; max-width: 40rem; }
-.admin-shell .board-disabled { display: flex; gap: .5rem; border: none; padding: 0; }
-.admin-shell .board-disabled button { padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--a-line); background: var(--a-surface2); color: var(--a-ink); cursor: not-allowed; opacity: .6; }
+.admin-shell .notice-edit summary { cursor: pointer; margin-bottom: .75rem; color: var(--a-signal); font-weight: 600; }
 </style>
+{% include "admin/board/_notice_form_style.html" %}
 {% endblock %}

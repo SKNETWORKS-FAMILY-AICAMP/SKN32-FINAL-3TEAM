@@ -88,6 +88,7 @@ def fake_run(*, ticket_title: str = "검수 결과 문의", calls: list | None =
             "cs.list": [[ticket]],
             "cs.recent": [[ticket], [counts]],
             "cs.detail": [[ticket] if detail_id == TID else []],
+            "cs.assignees": [[{"initials": "psj", "display_name": "박수진"}]],
             "index.members": [[{"n": 3}]],
             "board.count": [[{"n": 1}]],
             "board.list": [[notice]],
