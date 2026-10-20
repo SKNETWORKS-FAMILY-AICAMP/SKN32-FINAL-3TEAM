@@ -4,7 +4,9 @@
 
 🔴 **저장 조건 — 둘 다일 때만 쓴다**
    ① 로그인한 회원이다 — 비회원 판정은 응답만 내고 아무것도 쓰지 않는다 (D-307)
-   ② 회원이 선택 동의 ①「검수 이력 보관」을 했다(`user_account.consent_history_at`) — 동의가 없으면 쓰지 않는다 (D-96)
+   ② 🔄 2026-10-20 (lse · 멘토 피드백 · 사용자 결정) — 「검수 이력 보관」은 **선택 동의가 아니라 필수**다. 회원이면 쓴다.
+      종전(D-96)에는 선택 동의 ①(`user_account.consent_history_at`)이 있어야 썼다. 가입 때 약관 동의와 함께 받는다(`consent_history_at` = 가입 시각).
+      ⚠️ D-96 개정은 팀장 확인 대상이다 — 결정 기록 반영 전
       ★ 그래서 `work_doc.consent_store` 는 늘 참이고 `expires_at` 은 비운다(`ck_work_doc_expiry_without_consent`).
         동의 없는 회원 행을 만들었다가 지우는 길(TTL · 파기 증명)을 만들지 않는다 — 처음부터 안 쓰는 것이 D-96 의 기본값이다.
    ③ `work_doc.consent_train` 은 선택 동의 ②(`consent_improve_at`)를 그대로 옮긴다 — 학습 · 원문 조회의 유일한 문(D-128)
@@ -60,8 +62,8 @@ _JUDGED_BY_MAX = 80
 
 
 def should_store(user: UserAccount | None) -> bool:
-    """이 사용자의 판정을 적는가 — 회원 ∧ 선택 동의 ① (D-307 · D-96)."""
-    return user is not None and user.consent_history_at is not None
+    """이 사용자의 판정을 적는가 — 회원이면 적는다 (D-307 · 🔄 2026-10-20 이력 보관 필수 — 종전 D-96 선택 동의 ①)."""
+    return user is not None
 
 
 def _risk_int(r: Risk | None) -> int | None:

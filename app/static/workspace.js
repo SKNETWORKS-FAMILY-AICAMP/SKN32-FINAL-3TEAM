@@ -23,10 +23,12 @@
       const radio = document.createElement('input'); radio.type = 'radio'; radio.name = `copy-choice-${group}`;
       // Attribute used only for styling; each group retains independent selection.
       radio.setAttribute('data-copy-choice','');
-      radio.setAttribute('aria-label', '후보 ' + (index + 1) + ' 선택');
-      const number = document.createElement('span'); number.className = 'cl-pill'; number.textContent = '후보 ' + (index + 1);
+      // 2026-10-20 (lse) — 카드 이름은 템플릿이 단 A안 · B안 · C안(data-name). 없으면 종전대로 「후보 N」
+      const name = card.dataset.name || ('후보 ' + (index + 1));
+      radio.setAttribute('aria-label', name + ' 선택');
+      const number = document.createElement('span'); number.className = 'cl-pill'; number.textContent = name;
       choice.append(number, radio); card.prepend(choice);
-      const select = () => {selected=form; text.textContent=body;label.textContent='선택한 문구 · 후보 '+(index+1);};
+      const select = () => {selected=form; text.textContent=body;label.textContent='선택한 문구 · '+name;};
       card.addEventListener('click',event=>{if(event.target.closest('button,details,a,form,input,label'))return;radio.checked=true;select();});
       radio.addEventListener('change',select);
       const metadata = [...card.children].filter(el => el.matches('.gn-meta,.gn-chips'));

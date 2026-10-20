@@ -112,10 +112,10 @@
   {% else %}
   {# 🔄 2026-10-15 (ksr · 점검 05) — 이력 저장(10-13)을 붙이기 전 문구였다. 보관 동의가 기본으로 꺼져 있어 그 길을 알린다 #}
   <p class="hm-empty">{{ icon("history", 48) }}<b>아직 보관된 검수 이력이 없어요.</b><br>
-    <span class="hm-note">이력을 남기려면 <a href="/u/mypage?tab=account">마이페이지 › 계정</a>에서 <b>① 검수 이력 보관</b>을 켜 주세요.</span>
+    <span class="hm-note">문구를 검수하면 여기에 쌓여요.</span>
   </p>
   {% endif %}
-  {% if not recent %}<div class="hm-empty-actions"><a class="ws-primary" href="/u/review">첫 문구 검수하기 →</a><a href="/u/mypage?tab=account">이력 보관 설정</a></div>{% endif %}
+  {% if not recent %}<div class="hm-empty-actions"><a class="ws-primary" href="/u/review">첫 문구 검수하기 →</a><a href="/u/help?tab=guide">이용 가이드</a></div>{% endif %}
 </div>
 <a class="ws-guide" href="/u/help?tab=guide">{{ icon("book", 36) }}<span><b>처음 사용하시나요?</b><br>문구 검수부터 광고 만들기까지, 이용 방법을 확인해보세요.</span><strong>가이드 보기 →</strong></a>
 {% endblock %}

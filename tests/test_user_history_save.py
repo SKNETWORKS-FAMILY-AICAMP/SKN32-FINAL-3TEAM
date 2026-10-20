@@ -192,15 +192,13 @@ def test_비회원_검수는_적지_않는다(judged: _Keeper) -> None:
 
 
 @pytest.mark.gate
-def test_이력_보관에_동의하지_않으면_적지_않고_알린다(
+def test_이력_보관은_필수라_회원의_검수는_늘_적는다(
     judged: _Keeper, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-96 — 기본값은 미보관이다. 검수는 그대로 된다 — 동의는 기능의 대가가 아니다."""
+    """🔄 2026-10-20 (lse · 사용자 결정) — 검수 이력 보관은 필수다(종전 D-96 선택 동의). 동의 칸이 빈 옛 회원도 적는다."""
     monkeypatch.setattr(user_router, "current_user", lambda *_a: _user(history=False))
-    text = _post()
-    assert not judged.rows, "🔴 동의 없이 검수 문구를 적었다"
-    assert "위험도" in text, "🔴 동의가 없다고 검수 결과를 안 그렸다"
-    assert "이력에 저장됐어요" not in text
+    _post()
+    assert judged.of(Judgment) and judged.committed, "🔴 회원의 검수를 적지 않았다"
 
 
 @pytest.mark.gate

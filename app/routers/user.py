@@ -2304,7 +2304,7 @@ def history(
             "verdict_labels": _VERDICT_LABELS,
             "pattern": None if user is None else _repeat_pattern(session, user.id),
             # 동의가 꺼져 있으면 새 검수가 안 쌓인다 — 빈 목록의 까닭을 알린다 (D-96)
-            "consent_off": user is not None and user.consent_history_at is None,
+            "consent_off": False,  # 🔄 2026-10-20 — 이력 보관은 필수다(끌 수 없다)
             "verdict": verdict,
             "page": page,
             "has_prev": page > 1,
@@ -2617,17 +2617,10 @@ async def mypage_save(request: Request, session: Session = Depends(get_session))
         return _render_form(request, "user/mypage.html", _mypage_ctx(user, tab, saved=True))
 
     if section == "consent":
-        c1 = bool(_one(form, "consent_history", 8))
+        # 🔄 2026-10-20 (lse) — 검수 이력 보관은 필수라 끌 수 없다. 여기서는 ② 품질 개선 활용(선택 · 기본 꺼짐)만 정한다
         c2 = bool(_one(form, "consent_improve", 8))
-        if c2 and not c1:
-            return _render_form(
-                request,
-                "user/mypage.html",
-                _mypage_ctx(user, tab, error="②는 ①에 동의해야 고를 수 있어요."),
-                422,
-            )
         now = datetime.now(UTC)
-        user.consent_history_at = now if c1 else None
+        user.consent_history_at = user.consent_history_at or now
         user.consent_improve_at = now if c2 else None
         session.commit()
         auth.audit("user_consent_save", _actor(user.id), ok=True)
@@ -2992,6 +2985,8 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
         terms_version=_terms_version(session),
         terms_agreed_at=now,
         disclaimer_agreed_at=now,
+        # 🔄 2026-10-20 (lse) — 검수 이력 보관은 필수다 — 가입 때 약관과 함께 동의한다(`judgment_store.should_store`)
+        consent_history_at=now,
         last_login_at=now,
     )
     session.add(user)

@@ -117,21 +117,20 @@
 <form class="mp-card" method="post" action="/u/mypage">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   <input type="hidden" name="section" value="consent">
-  <h2>선택 동의</h2>
-  <p class="mp-note">둘 다 선택이에요 — 기능을 쓰는 대가가 아니에요(D-96). 안 골라도 검수·카피생성은 그대로 됩니다.</p>
+  <h2>동의 관리</h2>
+  <p class="mp-note">검수 이력 보관은 서비스 기본 기능이라 항상 켜져 있어요. 품질 개선 활용은 선택이며, 안 골라도 검수·카피생성은 그대로 됩니다.</p>
 
   <div class="mp-pick" style="flex-direction:column; align-items:flex-start; gap:.5rem">
     <label style="display:flex; align-items:center; gap:.5rem; padding:0; border:0; background:none; font-weight:400">
-      <input type="checkbox" name="consent_history" value="1" id="consent-history"
-             style="position:static; opacity:1; width:auto; height:auto"
-             {% if consent_history %}checked{% endif %}>
-      ① 검수 이력 보관 — 이력 화면에서 지난 검수를 다시 볼 수 있어요
+      <input type="checkbox" id="consent-history" checked disabled
+             style="position:static; opacity:1; width:auto; height:auto">
+      (필수) 검수 이력 보관 — 이력 화면에서 지난 검수를 다시 볼 수 있어요
     </label>
     <label style="display:flex; align-items:center; gap:.5rem; padding:0; border:0; background:none; font-weight:400">
       <input type="checkbox" name="consent_improve" value="1" id="consent-improve"
              style="position:static; opacity:1; width:auto; height:auto"
              {% if consent_improve %}checked{% endif %}>
-      ② 품질 개선 활용 — ①에 동의해야 고를 수 있어요
+      (선택) 품질 개선 활용 — 검수한 문구를 서비스 품질 개선에 써요
     </label>
   </div>
 

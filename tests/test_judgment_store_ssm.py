@@ -83,16 +83,18 @@ class _Writer:
 
 
 @pytest.mark.gate
-@pytest.mark.parametrize(
-    ("user", "status"),
-    [(None, None), (_user(history=False, improve=True), js.OFF)],
-    ids=["비회원", "미동의"],
-)
-def test_비회원과_미동의_회원은_아무것도_쓰지_않는다(user: object, status: str | None) -> None:
-    """🔄 2026-10-14 — 미동의 회원은 `off` 로 알린다(화면이 「이력 보관이 꺼져 있다」를 그린다 · D-96)."""
+def test_비회원은_아무것도_쓰지_않는다() -> None:
     w = _Writer()
-    assert js.save_review(w, user, [_resp("02_hold_low_conf.json")]) == status  # type: ignore[arg-type]
+    assert js.save_review(w, None, [_resp("02_hold_low_conf.json")]) is None  # type: ignore[arg-type]
     assert not w.added and not w.committed, f"🔴 써서는 안 되는 판정을 적었다 — {w.added}"
+
+
+@pytest.mark.gate
+def test_이력_보관은_필수라_동의_기록이_없는_회원도_적는다() -> None:
+    """🔄 2026-10-20 (lse · 사용자 결정) — 검수 이력 보관은 필수다(종전 D-96 선택 동의 ①). 가입 전 회원(동의 칸 빈 값)도 적는다."""
+    w = _Writer()
+    assert js.save_review(w, _user(history=False), [_resp("02_hold_low_conf.json")]) == js.SAVED  # type: ignore[arg-type]
+    assert w.added and w.committed
 
 
 # ── ② 적는 칸 ─────────────────────────────────────────────────

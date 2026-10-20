@@ -519,8 +519,10 @@ def test_화면은_셋의_이름을_적고_문턱_수치는_카드에_적지_않
     monkeypatch.setattr(copygen._llm, "make", lambda: gen)
     monkeypatch.setattr(copygen, "GraphJudge", Scored)
     body = _post(features="고소하고 바삭한 식감").text
-    for name in pipeline.TIERS:
-        assert f"<h3>{name}</h3>" in body
+    # 🔄 2026-10-20 (lse · 멘토 피드백) — 화면 이름은 A안 · B안 · C안 + 성격(엔진 이름 `pipeline.TIERS` 는 그대로)
+    assert pipeline.TIERS == ("보수안", "균형안", "공격안")
+    for name, view in (("A안", "🛡️ 안전형"), ("B안", "⚖️ 균형형"), ("C안", "🔥 과감형")):
+        assert f'data-name="{name}"' in body and f"<h3>{view}</h3>" in body
     # 문턱 수치는 카드에 적지 않는다 — 이용자가 읽을 수 없는 값이다 (10-13 권소라)
     assert "문턱의 20%" not in body and "/ 문턱 0.5" not in body
     assert "통과한 후보 4개가 안전 ↔ 주의 어디쯤인지 보기" in body
