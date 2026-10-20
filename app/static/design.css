@@ -2335,3 +2335,19 @@
   .user-shell .user-main { zoom: 1.12; }
   .user-shell .user-sidebar { zoom: 1.06; }
 }
+/* 🆕 2026-10-20 (lse · 멘토 피드백 「공백이 너무 많다」) — 내용보다 큰 최소 높이 · 겹겹이 쌓인 여백을 줄인다(위의 확대와 짝) */
+.user-shell .user-main { padding:16px 24px 20px; }
+.user-shell :is(.cl-workspace-head, .cl-page-heading) { margin-bottom:12px; }
+.user-shell .hm-cards { margin-bottom:12px; }
+.user-shell .hm-card { min-height:0; padding:16px 18px; }
+.user-shell .hm-card>span { min-height:0; }
+.user-shell .hm-sect { min-height:0; padding:16px 18px; margin-bottom:12px; }
+.user-shell .gn-candbox .gn-cand { min-height:0; padding:18px; gap:12px; }
+.user-shell .cl-product-section { padding:16px 20px; margin:10px 0; }
+.user-shell .cl-product-section h3 { margin:10px 0 6px; }
+.user-shell .cl-product-section .gn-field { margin:8px 0; }
+.user-shell .cl-product-name-row { margin-top:6px; }
+.user-shell .history-row { padding-top:10px; padding-bottom:10px; }
+.user-shell .filter-chips { margin-bottom:14px; }
+.user-shell .ws-filters { margin-bottom:12px; }
+.user-shell .rv-copy-row textarea { min-height:140px; }
