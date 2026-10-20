@@ -2704,3 +2704,9 @@
 .user-shell .rv-empty-title { font-size:16px; }
 .user-shell .rv-empty-label { margin-bottom:6px; }
 .user-shell .cl-detail-editors textarea { min-height:150px !important; }
+.user-shell .cl-focus-unsent:empty { display:none !important; }
+/* 검수 전 — 입력칸이 결과 칸의 남는 높이를 채운다(큰 입력창) */
+.user-shell .rv-results-pane > .cl-detail-editors:not([hidden]) { flex:1 1 auto; display:flex; flex-direction:column; min-height:0; }
+.user-shell .rv-results-pane > .cl-detail-editors .rv-copy:not([hidden]) { flex:1 1 auto; display:flex; flex-direction:column; min-height:0; }
+.user-shell .rv-results-pane > .cl-detail-editors .rv-copy:not([hidden]) textarea { flex:1 1 auto; min-height:150px !important; resize:none; }
+.user-shell .rv-results-pane > .cl-detail-editors .rv-copy:not([hidden]) > .rv-copy-row { flex:1 1 auto; min-height:0; }

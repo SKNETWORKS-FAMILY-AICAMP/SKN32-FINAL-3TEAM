@@ -947,15 +947,8 @@
     <div class="cl-detail-editors"></div>
     <p class="cl-focus-empty-quote" data-focus-quote hidden></p>
     {#- 🔄 2026-10-20 (lse · 사용자 「입력 전 화면이 텅 비고 짜친다」) — 검수 전 안내를 채운다: 3단계 · 잡는 표현 태그. `data-focus-unsent` 는 design.js 가 켜고 끈다 #}
-    <div class="cl-focus-unsent rv-empty" data-focus-unsent hidden>
-      <p class="rv-empty-title">아직 검수하지 않은 문구예요</p>
-      <p class="rv-empty-sub">위 칸에 광고 문구를 넣고 <b>문구 검수하기</b>를 누르면, 문장마다 위법 소지와 근거 조문을 짚어 드려요.</p>
-      <p class="rv-empty-label">이런 표현을 잡아요</p>
-      <div class="rv-empty-tags">
-        <span class="t1">질병 예방 · 치료 표방</span><span class="t2">건강기능식품 오인</span><span class="t3">거짓 · 과장</span>
-        <span class="t4">의약품 오인</span><span class="t5">부당 비교 · 1위 표현</span>
-      </div>
-    </div>
+    {#- 🔄 2026-10-20 (lse · 사용자) — 검수 전 안내 카드는 뺐다. 자리(`data-focus-unsent`)는 design.js 가 찾으므로 빈 채로 남긴다 #}
+    <div class="cl-focus-unsent" data-focus-unsent hidden></div>
   {% if engine_pending %}
     <div class="rv-card" data-engine-state>
       <h2>위험도</h2>
@@ -1097,10 +1090,7 @@
     </div>
   {% endif %}
     {# 프로토타입 그대로 — 결과가 있든 없든 오른쪽 맨 아래에 둔다 #}
-    <p class="rv-disclaimer">
-      본 진단은 문장 단위 1차 스크리닝이며 법적 확정 판단이 아니에요.
-      최종 판단은 심의기구·전문가 검토를 따르세요.
-    </p>
+    {#- 🔄 2026-10-20 (lse · 사용자) — 결과 칸 아래 「본 진단은 … 1차 스크리닝 …」 줄은 뺐다. 결과가 있으면 아래 버튼 줄이 「검수 결과는 법적 확정 판단이 아니에요」로 알린다 #}
     <div class="cl-focus-actions"><span data-focus-action-note>선택한 문구를 검수해보세요.</span><button type="submit" form="review-input-form" name="op" value="judge:1" class="cl-focus-judge" data-focus-judge data-wait-go data-wait-label="검수 중…">문구 검수하기</button><button type="button" data-edit-copy>{{ icon('pencil', 17) }} 문구 편집</button></div>
   </div>
 
