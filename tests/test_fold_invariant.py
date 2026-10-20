@@ -195,6 +195,55 @@ def test_두_하위_전제가_같은_위반으로_확정하면_기록도_확정(
     assert _sig(_run(cat)) == folded
 
 
+@pytest.mark.parametrize("cat", TWO)
+def test_한_전제만_확정하고_다른_전제가_위험도_없는_보류면_기록은_확정하지_않는다(
+    cat: Category, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🆕 2026-10-21 (D-348 보충 33 · 답하기 전은 답 대기) — 한 하위 전제만 확정하면 기록은 확정하지 않는다 · 위험도가 없는 분기도 센다.
+
+    🔴 되돌림 막이 — 「위험도가 선 분기」만 세게 고쳤을 때 무조건부 4 · 조건부 4 행이 한 전제의 확정만으로 기록 확정됐다(원장 10-21 ③ ·
+       조건부 4 행은 라벨과 맞았지만 답하지 않은 하위 전제를 가정한 확정이다).
+    ★ 기록 모음(`_record_at_least`)은 품목을 알든 모르든 한 함수다 — 품목 모름은 분기 확정이 막혀(보충 8 · 31) 여기서는 품목을 넘겨 확정 분기를 만든다.
+    """
+    monkeypatch.setattr(
+        g,
+        "_absolute_types",
+        lambda s: (
+            {b.violation for b in s.risk.encoder_basis if b.moved_from is None}
+            & {Violation.거짓_과장}
+        ),
+    )
+    st = _run(cat)
+    branches = st.get("branches") or st.get("folded") or []
+    (rec,) = st["sentences"]
+    one, *rest = [b.sentences[0] for b in branches]
+    assert one.verdict is Verdict.confirmed and rest
+    # 다른 전제들을 위험도 없는 보류로 바꿔 기록을 다시 모은다
+    held = [
+        x.model_copy(
+            update={
+                "verdict": Verdict.hold,
+                "hold_reason": HoldReason.low_conf,
+                "violations": [],
+                "infeasibility": None,
+                "spans": [],
+                "risk": type(x.risk)(),
+            }
+        )
+        for x in rest
+    ]
+    base = rec.model_copy(
+        update={"verdict": Verdict.hold, "hold_reason": HoldReason.low_conf, "violations": []}
+    )
+    got = g._record_at_least(base, [one, *held])
+    assert got is None or got.verdict is not Verdict.confirmed, (
+        "한 전제의 확정으로 기록을 확정하지 않는다"
+    )
+    # 모든 분기가 같은 위반으로 확정하면 확정
+    got = g._record_at_least(base, [one, *(one for _ in rest)])
+    assert got is not None and got.verdict is Verdict.confirmed
+
+
 def test_단일_전제_품목은_종전_그대로() -> None:
     st = _run(Category.화장품)
     assert not st.get("branches") and not st.get("folded")

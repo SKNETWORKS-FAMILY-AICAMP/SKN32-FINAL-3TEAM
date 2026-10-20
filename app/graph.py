@@ -2644,7 +2644,9 @@ def _recorded(
     """기록되는 판정 하나 (D-319 ① ①′ · D-263 ①). 바꿀 것이 없으면 `None`.
 
     🔴 **모든 전제에서 같은 위반이 설 때만 확정이다.** 한 전제라도 판정하지 못하거나(사전 침묵) 위반이 없으면 보류 + 분기다 —
-       적용되는지 모르는 법의 조문으로 확정하지 않는다. 보류에도 유형 · 근거 · 가장 보수적인 위험도를 싣는다
+       적용되는지 모르는 법의 조문으로 확정하지 않는다.
+       🔄 2026-10-21 (D-348 보충 33) — 품목을 알고 하위 전제(인정 여부 · 기능성 표시 여부)만 모를 때도 같다 — 답하지 않은 하위 전제를
+       가장 나쁜 쪽으로 가정해 확정하지 않는다(답 대기 · 판정은 답 뒤). 위험도는 분기 최댓값을 싣는다(D-348 결정 4). 보류에도 유형 · 근거 · 가장 보수적인 위험도를 싣는다
        (계약 `_recorded_is_conservative` — 기록된 위험도 ≥ 검증 안 된 모든 분기의 위험도).
     🚨 인코더 후보는 **기록 판정의 것**(`base` — 이 품목의 전제 전부로 거른 합집합)을 그대로 둔다. 가장 무거운 전제의
        문장을 옮겨 올 때 그 전제 하나로 거른 후보가 따라오면 다른 전제에서 서는 후보가 사라진다 (D-323 · 2026-10-09 (다)).
@@ -3017,37 +3019,42 @@ def _mark_category_needed(
 
 
 def _record_at_least(rec: SentenceJudgment, per: list[SentenceJudgment]) -> SentenceJudgment | None:
-    """기록 문장을 분기의 가장 나쁜 경우 **이상**으로 (🆕 2026-10-17 · D-263 ① · D-319 ① · 보충 6 결정 5). 바꿀 것이 없으면 None.
+    """기록 문장을 분기에 맞춘다 (🆕 2026-10-17 · 보충 6 결정 5 · 🔄 2026-10-21 D-348 보충 33). 바꿀 것이 없으면 None.
 
     ★ 분기 문장이 기록 뒤에(`doc_rules`) 인코더 쪽 절대형 위반으로 오르면 기록의 위험도가 분기보다 낮아진다 — 계약이 거부한다
        (`_recorded_is_conservative`). 두 경우:
-       · 위험도가 선 분기가 **전부** 확정 위반이고 유형이 같다 → 기록 = 가장 무거운 분기의 판정(D-319 ① 「모든 전제에서 같은 위반」)
-       · 그 밖 → 판정은 그대로(품목 · 전제에 달렸다) · 위험도만 분기 최댓값으로 올린다(기록 = 가장 보수적인 경우)
+       · **모든 분기**(위험도가 없는 분기까지)가 같은 위반으로 확정 → 기록 = 그 판정(어느 전제를 골라도 같은 판정이다 · 물을 것이 없다)
+       · 그 밖 → **판정은 답 대기 그대로**(어느 분기인지는 사용자가 답한다 · 보충 33) · 위험도만 분기 최댓값으로 올린다(계약 · D-348 결정 4)
+    ⛔ 종전에는 「위험도가 선 분기만 전부 확정」이어도 기록을 확정했다 — 위험도 없는 분기를 빼고 세어 한 전제만 확정해도 기록이
+       확정될 수 있었다(10-21 에 넓게 옮겼다가 무조건부 4 · 조건부 4 행 · 원장 10-21 ③). 답하지 않은 하위 전제를 가정한 확정이라 걷었다(보충 33).
     """
     live = [x for x in per if x.risk.final is not None and not x.not_claim]
     if not live or rec.not_claim:
         return None
     top = max(live, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
     have = rec.risk.final
-    confirmed = [x for x in live if x.verdict is Verdict.confirmed and x.violations]
-    # 🔄 2026-10-21 (D-348 보충 32 · 결함 A 고침의 퇴행) — 「모든 분기가 같은 위반으로 확정 → 기록도 그 판정」을 **위험도 비교보다 먼저** 본다.
-    #    종전에는 기록 위험도가 분기 이상이면(같은 R1 등) 여기서 끝나 기록이 보류로 남았다 — 접힌 분기(보충 32 결정 1)에서
-    #    두 하위 전제가 모두 절대형으로 확정해도 기록이 확정되지 않았다(dev 조건부 7 행 · 원장 10-21 ①)
-    if len(confirmed) == len(live) and len({tuple(x.violations) for x in confirmed}) == 1:
-        if (
+    # 🔄 2026-10-21 (D-348 보충 32 · 33) — **모든 분기**(위험도가 없는 분기까지)가 같은 위반으로 확정하면 기록도 그 판정이다 ·
+    #    위험도 비교보다 먼저 본다 — 접힌 분기에서 두 하위 전제가 모두 절대형으로 확정했는데 기록 위험도가 같아(R1) 보류로 남던 것(원장 10-21 ①)
+    if (
+        all(x.verdict is Verdict.confirmed and x.violations and not x.not_claim for x in per)
+        and len({tuple(x.violations) for x in per}) == 1
+    ):
+        worst = max(per, key=lambda x: x.risk.final.level if x.risk.final is not None else -1)
+        if not (
             rec.verdict is Verdict.confirmed
-            and rec.violations == top.violations
+            and rec.violations == worst.violations
             and have is not None
-            and have.level >= top.risk.final.level  # type: ignore[union-attr]
+            and worst.risk.final is not None
+            and have.level >= worst.risk.final.level
         ):
-            return None  # 이미 그 판정 · 그 위험도 이상이다
-        return SentenceJudgment(
-            **{
-                **{k: getattr(top, k) for k in type(top).model_fields},
-                "sent_id": rec.sent_id,
-                "encoder_candidates": rec.encoder_candidates,
-            }
-        )
+            return SentenceJudgment(
+                **{
+                    **{k: getattr(worst, k) for k in type(worst).model_fields},
+                    "sent_id": rec.sent_id,
+                    "encoder_candidates": rec.encoder_candidates,
+                }
+            )
+        return None  # 이미 그 판정 · 그 위험도 이상이다
     if have is not None and have.level >= top.risk.final.level:  # type: ignore[union-attr]
         return None
     # 하한 칸은 분기가 든 하한(그 유형 · 전제의 제재표 하한 — `_enc_absolute` 와 같은 칸)을 올려 싣는다 — 근거 스팬 없이 하한 위로 올리지 않는다(D-131)
@@ -4005,10 +4012,10 @@ def route_review(state: ReviewState) -> str:
     sents = state.get("sentences", [])
     if not sents:
         return "hold"
-    # 🔄 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반**(답하면 확정되는 보류)은 **답하지 않은 경우 = 확정 B** 로 센다
-    #    (D-263 ① 기록 = 가장 나쁜 경우) — A/C 가 섞이면 증명서 · B 만이면 지시(재료가 없으면 `guidance` 가 보류로) · 통과는 아니다(확정 ∧ R0).
-    #    그 밖의 확정 아님은 보류다
-    if any(s.verdict is not Verdict.confirmed and not is_conditional(s) for s in sents):
+    # 🔄 2026-10-21 (D-348 보충 33) — **답하기 전은 답 대기다** · 조건부 위반(답하면 확정되는 보류)도 보류다. 판정은 답 뒤에 낸다.
+    #    ⛔ 종전(보충 4 결정 2 · D-263 ①)에는 「답하지 않은 경우 = 확정 B」로 세어 증명서 · 지시로 보냈다 — 사용자가 답하지 않은
+    #       사실을 가장 나쁜 쪽으로 가정해 판정한 것이다(보충 33 이 걷음). 확정 아님은 모두 보류다
+    if any(s.verdict is not Verdict.confirmed for s in sents):
         return "hold"
     # 🆕 2026-10-01 (W4 1판) — **위험도가 없는 확정 위반은 증명서 · 지시로 못 간다** — 보류다 (D-268 「막힘」 · D-220).
     #    지시는 실증 분기(실증 전 위험도)를, 증명서는 사유 설명을 요구한다 — 하한(`sanction_rule` · W5)이 서기 전에는 어느 쪽도
