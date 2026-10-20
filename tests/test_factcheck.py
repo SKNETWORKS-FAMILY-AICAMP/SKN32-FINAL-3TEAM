@@ -6,7 +6,7 @@
   ② 사실 표지가 없으면(또는 그 종류의 문안이 승인 전이면) 실증 분기 — 보류(premise_unknown) + 실증 분기 · 위험도는 가장 나쁜 경우 그대로 (결정 1)
   ③ 사실 확인 문안 표가 비면 사실 확인 분기는 서지 않는다 — 승인 전 사실 문안을 지어내지 않는다 (보충 3 결정 6)
   ④ 답 — 사실 「참」 ∧ 꼴만 / 실증 「있음」 → 확정 · R0 · 출처 · 「거짓」 / 「없음」 ∧ 확정 → 그대로 + 출처 · 답은 그 문장에만 (결정 3 · 4)
-  ⑤ 조건부 위반은 보류와 다른 분류다 — 지시 종착을 막지 않는다 · 증명서 · 통과로는 가지 않는다 (결정 2)
+  ⑤ 조건부 위반은 보류와 다른 분류다(결정 2) · 🔄 2026-10-21 (D-348 보충 33) 종착은 답 대기라 보류다(종전: 지시 종착을 막지 않았다)
   ⑥ 저장은 출처를 남긴다
 🔄 2026-10-18 (D-348 보충 20 · 보충 16 결정 5 집행) — **사전 확정 문장에는 분기를 달지 않는다**(사전 쪽 조건부 경로를 걷었다 · 사전은 칸 C 만 확정).
    ①~④ 의 사실 · 실증 분기와 답은 이제 **인코더 쪽 판정**이 단다(아래 「인코더만 …」 시험) · 조건부 위반 분류(⑤)와 뒷단(종착 · 기록 모음 · 저장 ·
@@ -235,8 +235,11 @@ def test_답은_그_문장에만() -> None:
     assert got is not None and got.substantiation is not None and got.user_subst is None
 
 
-def test_종착_조건부는_답하지_않은_확정_B로_센다() -> None:
-    """D-263 ① — 조건부 위반의 가장 나쁜 경우는 「자료 없음 = 확정 B」다. 섞인 문서의 종착은 그 기준이다."""
+def test_종착_조건부는_답_대기라_보류다() -> None:
+    """🔄 2026-10-21 (D-348 보충 33) — 답하기 전은 답 대기다 · 조건부 위반이 섞인 문서의 종착은 보류다.
+
+    ⛔ 종전(보충 4 결정 2 · D-263 ①)에는 「답하지 않은 경우 = 확정 B」로 세어 지시 · 증명서로 보냈다.
+    """
     cond = _cond(sent_id="s9")
     ready = SentenceJudgment(
         **{
@@ -246,17 +249,14 @@ def test_종착_조건부는_답하지_않은_확정_B로_센다() -> None:
             "spans": [Span(start=0, end=2, label="거짓_과장").model_dump()],
         }
     )
-    assert g.route_review({"sentences": [ready, cond]}) == "guidance"
-    low = SentenceJudgment(
-        sent_id="s2", text="x", verdict=Verdict.hold, hold_reason=HoldReason.low_conf
+    assert g.route_review({"sentences": [ready]}) == "guidance", (
+        "답이 필요 없는 문장만이면 종전대로"
     )
-    assert g.route_review({"sentences": [ready, cond, low]}) == "hold"
+    assert g.route_review({"sentences": [ready, cond]}) == "hold"
     c = _confirmed("당뇨 치료", FOOD1, Violation.질병_예방치료_표방)
     c = SentenceJudgment(**{**c.model_dump(), "sent_id": "s3", "infeasibility": Infeasibility.C})
-    assert g.route_review({"sentences": [c, cond]}) == "certificate", (
-        "C 확정 + B 확정이면 증명서였다 — 조건부(답 없는 B)도 같다"
-    )
-    assert not is_conditional(low)
+    assert g.route_review({"sentences": [c, cond]}) == "hold", "조건부 문장이 답을 기다린다"
+    assert is_conditional(cond)
 
 
 def test_자격_문제는_조건부가_아니다() -> None:

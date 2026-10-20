@@ -119,6 +119,7 @@
     "Branch": {
       "criteria": "req builtins.str",
       "evidence": "opt list[app.contracts.EvidenceArticle]",
+      "guide": "opt app.contracts.Guide | None",
       "outcome": "req app.contracts.Outcome",
       "premise": "req app.contracts.Premise",
       "sentences": "opt list[app.contracts.SentenceJudgment]",
@@ -175,6 +176,7 @@
       "accepted_evidence": "req list[str]",
       "confirmed_max": "req app.contracts.Risk",
       "criteria": "req builtins.str",
+      "guide": "opt app.contracts.Guide | None",
       "kind": "req app.contracts.FactKind"
     },
     "GenerateRequest": {
@@ -188,6 +190,19 @@
       "candidates": "opt list[app.contracts.Candidate]",
       "keywords": "opt list[app.contracts.KeywordScreen]",
       "outcome": "req app.contracts.GenerateOutcome"
+    },
+    "Guide": {
+      "articles": "opt list[app.contracts.GuideArticle]",
+      "check": "opt str | None",
+      "pitfall": "opt str | None",
+      "what": "opt str | None"
+    },
+    "GuideArticle": {
+      "law_name": "req builtins.str",
+      "lead": "opt str | None",
+      "text": "req builtins.str",
+      "version": "opt str | None",
+      "where": "req builtins.str"
     },
     "JudgeRequest": {
       "product": "opt app.contracts.ProductContext",
@@ -224,6 +239,7 @@
       "category": "opt app.contracts.Category | None",
       "facts": "opt list[app.contracts.UserFact]",
       "has_recognized_function": "opt builtins.bool",
+      "premise": "opt app.contracts.Premise | None",
       "recognition_no": "opt str | None",
       "substs": "opt list[app.contracts.UserSubst]"
     },
@@ -279,6 +295,7 @@
     "SubstBranch": {
       "accepted_evidence": "req list[str]",
       "criteria": "req builtins.str",
+      "guide": "opt app.contracts.Guide | None",
       "substantiated_max": "req app.contracts.Risk"
     },
     "Timing": {
