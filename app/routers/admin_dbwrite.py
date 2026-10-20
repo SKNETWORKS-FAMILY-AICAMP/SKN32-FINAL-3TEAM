@@ -40,9 +40,7 @@ def run(sql: str, params: list[Any], *, what: str) -> tuple[str, list[dict]]:
         return "no_db", []
 
 
-def render_form(
-    request: Request, template: str, ctx: dict, status_code: int = 200
-) -> HTMLResponse:
+def render_form(request: Request, template: str, ctx: dict, status_code: int = 200) -> HTMLResponse:
     """폼이 있는 관리자 화면 — CSRF 토큰을 **쿠키와 폼 양쪽에** 심는다 (로그인 · 사용자 쓰기 화면과 같은 이중 제출 · P1-7)."""
     token = auth.new_csrf()
     resp = templates.TemplateResponse(

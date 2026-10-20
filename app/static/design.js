@@ -126,84 +126,15 @@ document.documentElement.classList.add('cl-js');
       }
       updateFocus();
     }
+    // Product selection is a native POST. JavaScript only updates presentation;
+    // it never substitutes a precomputed branch for a product-aware judgment.
     rounds.forEach(round=>{
-      const kind=()=>round.querySelector('.rv-k:checked');
-      const cert=()=>round.querySelector('.rv-c:checked');
-      const next=round.querySelector('[data-review-next]');
-      const finish=round.querySelector('[data-review-finish]');
-      function update(){
-        const selected=kind();
-        const leaf=selected?.className.match(/rv-p-(\w+)/)?.[1];
-        const p=leaf||cert()?.className.match(/rv-p-(\w+)/)?.[1];
-        round.querySelectorAll('.rv-res').forEach(res=>res.classList.toggle('is-shown',!!p&&res.classList.contains('rv-res-'+p)));
-        round.querySelectorAll('.rv-opt[for]').forEach(label=>{
-          const radio=document.getElementById(label.htmlFor);
-          label.classList.toggle('is-selected',!!radio?.checked);
-          label.setAttribute('aria-checked',String(!!radio?.checked));
-          const group=[...label.parentElement.querySelectorAll('.rv-opt[for]')];
-          const checked=group.find(option=>document.getElementById(option.htmlFor)?.checked);
-          label.tabIndex=(checked||group[0])===label?0:-1;
-        });
-        const selectedLabel=selected?.getAttribute('aria-label')||'';
-        const note=round.querySelector('[data-selected-kind]');if(note)note.textContent=selectedLabel||'유형을 선택해주세요';
-        if(next)next.disabled=!selected;
-        if(finish)finish.disabled=!cert();
-        round.querySelectorAll('.cl-review-progress li').forEach((li,i)=>{
-          const step={type:0,cert:1,result:2}[round.dataset.uiStage];
-          li.classList.toggle('is-current',i===step);li.classList.toggle('is-done',i<step);
-          if(i===step)li.setAttribute('aria-current','step');else li.removeAttribute('aria-current');
-        });
-        if(round.dataset.uiStage==='result'&&visible(round)){
-          const number=round.closest('.rv-br').dataset.copyNumber;
-          const condition=document.querySelector('[data-current-category="'+number+'"]');
-          if(condition)condition.textContent=selectedLabel+(selected?.classList.contains('rv-k-hf')?' · '+(cert()?.getAttribute('aria-label')||''):'');
-        }
-        refreshHeading();
-      }
-      round.querySelectorAll('.rv-opt[for]').forEach(label=>{
-        const radio=document.getElementById(label.htmlFor);
-        if(!radio)return;
-        // Native label activation focuses the off-screen sibling input and scrolls the pane.
-        // Keep focus on the visible option while retaining the original radio state/CSS.
-        radio.tabIndex=-1;
-        label.setAttribute('role','radio');
-        label.parentElement.setAttribute('role','radiogroup');
-        label.parentElement.setAttribute('aria-label',radio.classList.contains('rv-c')?'인증 여부':'제품 유형');
-        let pointerScroll;
-        const captureScroll=()=>({pane:panel.scrollTop,x:window.scrollX,y:window.scrollY});
-        label.addEventListener('pointerdown',event=>{pointerScroll=captureScroll();event.preventDefault();});
-        label.addEventListener('click',event=>{
-          event.preventDefault();
-          if(radio.disabled)return;
-          const position=pointerScroll||captureScroll();pointerScroll=null;
-          radio.checked=true;
-          label.focus({preventScroll:true});
-          radio.dispatchEvent(new Event('change',{bubbles:true}));
-          const restore=()=>{panel.scrollTop=position.pane;window.scrollTo({left:position.x,top:position.y,behavior:'instant'});};
-          restore();requestAnimationFrame(restore);
-        });
-        label.addEventListener('keydown',event=>{
-          const options=[...label.parentElement.querySelectorAll('.rv-opt[for]')];
-          const index=options.indexOf(label);
-          let next;
-          if(event.key===' '||event.key==='Enter')next=index;
-          else if(event.key==='ArrowRight'||event.key==='ArrowDown')next=(index+1)%options.length;
-          else if(event.key==='ArrowLeft'||event.key==='ArrowUp')next=(index+options.length-1)%options.length;
-          else if(event.key==='Home')next=0;
-          else if(event.key==='End')next=options.length-1;
-          else return;
-          event.preventDefault();options[next].click();
-        });
+      round.querySelectorAll('.cl-review-progress li').forEach((li,i)=>{
+        const step={type:0,cert:1,food:1,result:2}[round.dataset.uiStage];
+        li.classList.toggle('is-current',i===step);li.classList.toggle('is-done',i<step);
+        if(i===step)li.setAttribute('aria-current','step');else li.removeAttribute('aria-current');
       });
-      round.dataset.uiStage=kind()?(kind().classList.contains('rv-k-hf')?(cert()?'result':'cert'):'result'):'type';
-      next?.addEventListener('click',()=>{if(!kind())return;round.dataset.uiStage=kind().classList.contains('rv-k-hf')?'cert':'result';update();panel.scrollTop=0;});
-      finish?.addEventListener('click',()=>{if(!cert())return;round.dataset.uiStage='result';update();panel.scrollTop=0;});
-      const back=round.querySelector('[data-review-type-back]');
-      if(round.dataset.onlyHf==='true'&&back)back.hidden=true;
-      back?.addEventListener('click',()=>{round.dataset.uiStage='type';update();panel.scrollTop=0;});
-      round.addEventListener('change',update);update();
     });
-    panel.querySelectorAll('.rv-br>input[type=checkbox]').forEach(input=>input.addEventListener('change',refreshHeading));
     focusReady=true;
     document.addEventListener('submit',event=>{
       if(event.target!==form&&!panel.contains(event.target))return;
@@ -230,7 +161,7 @@ document.documentElement.classList.add('cl-js');
     });
     document.querySelector('[data-focus-conditions]')?.addEventListener('click',()=>{
       const current=rounds.find(visible);
-      const retry=current?.querySelector('.rv-redo label');
+      const retry=current?.querySelector('.rv-redo button[name=op]');
       if(current?.dataset.uiStage==='result'&&retry)retry.click();
       panel.focus({preventScroll:true});panel.scrollTo({top:0,behavior:'smooth'});refreshHeading();
     });

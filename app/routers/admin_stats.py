@@ -160,6 +160,7 @@ _ENGINE_MIX = [
     {"label": "sLLM기반", "pct": 35},
 ]
 
+
 @router.get("/member", response_class=HTMLResponse)
 def member_stats(request: Request) -> HTMLResponse:
     """이용자 통계 — 읽기 전용. `member_stat` 테이블이 아직 없어 더미로만 그린다."""
@@ -347,7 +348,10 @@ def _load_generation(days: int) -> dict:
     trend_days = min(days or _TREND_MAX_DAYS, _TREND_MAX_DAYS)
     source, out = db.run(
         [
-            (f"SELECT origin AS k, count(*) AS n FROM copy_sentence {where} GROUP BY 1 ORDER BY 2 DESC", p),  # noqa: S608
+            (
+                f"SELECT origin AS k, count(*) AS n FROM copy_sentence {where} GROUP BY 1 ORDER BY 2 DESC",
+                p,
+            ),  # noqa: S608
             (
                 "SELECT count(*) AS n, count(DISTINCT doc_id) AS docs, "
                 "count(*) FILTER (WHERE approved_at IS NOT NULL) AS approved, max(created_at) AS last_at "

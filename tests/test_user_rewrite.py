@@ -402,15 +402,16 @@ def test_분기가_있으면_고른_전제의_위반_유형으로_고쳐_쓴다(
     assert wired.cats == ["화장품"], (
         "🔴 고른 전제의 품목을 sLLM 서버에 넘기지 않았다(서버가 문구에서 추측한다)"
     )
-    assert wired.products == [None, None], (
-        "🔴 재판정에 품목을 넘겼다 — 고른 전제의 분기가 생략될 수 있다"
+    assert wired.products == [None, "화장품", "화장품"], (
+        "원문 id 확인 뒤 원문과 후보 모두 고른 품목으로 재판정한다"
     )
     assert "고친 문구 후보" in html, (
         "🔴 재판정을 고른 전제의 분기로 읽지 않았다(기록 판정의 위반으로 탈락)"
     )
     # 다시 그릴 때 고른 자리(2회차 · 화장품)가 펼쳐져 있어야 결과가 보인다
-    assert 'id="rvk-1-2-cos" aria-label="화장품" checked' in html
-    assert 'id="rvr-1-2"' in html and html.count('회차" checked') == 2
+    assert 'data-ui-stage="result" data-round="2"' in html
+    assert 'class="rv-res rv-res-cos is-shown"' in html
+    assert 'name="round" value="2"' in html
 
 
 def test_분기를_고르지_않으면_고쳐_쓰지_않는다(wired) -> None:  # noqa: ANN001

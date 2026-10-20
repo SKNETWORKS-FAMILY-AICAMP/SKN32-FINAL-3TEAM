@@ -70,7 +70,11 @@ def _status(r: dict) -> str:
 
 
 def view(r: dict) -> dict:
-    start = db.fmt_dt(r["starts_on"], "%m.%d") if r["starts_on"] else db.fmt_dt(r["created_at"], "%m.%d")
+    start = (
+        db.fmt_dt(r["starts_on"], "%m.%d")
+        if r["starts_on"]
+        else db.fmt_dt(r["created_at"], "%m.%d")
+    )
     end = db.fmt_dt(r["ends_on"], "%m.%d") if r["ends_on"] else "상시"
     return {
         "id": r["id"],
@@ -94,15 +98,29 @@ def view(r: dict) -> dict:
 def _form_of(row: dict | None) -> dict:
     """폼 기본값 — 새 공지면 빈 칸, 수정이면 지금 값."""
     if row is None:
-        return {"title": "", "category": "", "body": "", "pinned": False,
-                "starts_on": "", "ends_on": "", "hidden": False}
-    return {"title": row["title"], "category": row["category_code"], "body": row["content"],
-            "pinned": row["pinned"], "starts_on": row["starts_on"], "ends_on": row["ends_on"],
-            "hidden": row["hidden"]}
+        return {
+            "title": "",
+            "category": "",
+            "body": "",
+            "pinned": False,
+            "starts_on": "",
+            "ends_on": "",
+            "hidden": False,
+        }
+    return {
+        "title": row["title"],
+        "category": row["category_code"],
+        "body": row["content"],
+        "pinned": row["pinned"],
+        "starts_on": row["starts_on"],
+        "ends_on": row["ends_on"],
+        "hidden": row["hidden"],
+    }
 
 
 def _clean(form: dict[str, list[str]]) -> tuple[dict, dict | None, str | None]:
     """폼 → (다시 그릴 값, 저장할 값, 오류). 오류가 있으면 저장할 값은 `None`."""
+
     def one(key: str) -> str:
         return (form.get(key) or [""])[0]
 
@@ -139,8 +157,14 @@ async def _read_form(request: Request) -> dict[str, list[str]]:
 
 def _save_error(source: str) -> tuple[str, int]:
     if source == "db":
-        return "저장하지 못했어요 — 로그인한 관리자 계정을 찾지 못했어요. 다시 로그인해 주세요.", 403
-    return "저장하지 못했어요. DB 연결 상태를 확인한 뒤 다시 저장해 주세요. 쓴 내용은 그대로 두었어요.", 503
+        return (
+            "저장하지 못했어요 — 로그인한 관리자 계정을 찾지 못했어요. 다시 로그인해 주세요.",
+            403,
+        )
+    return (
+        "저장하지 못했어요. DB 연결 상태를 확인한 뒤 다시 저장해 주세요. 쓴 내용은 그대로 두었어요.",
+        503,
+    )
 
 
 @router.get("/notices", response_class=HTMLResponse)
@@ -189,12 +213,20 @@ def notice_list(request: Request) -> HTMLResponse:
     )
 
 
-def _new_page(request: Request, actor: str, form: dict, error: str | None, code: int = 200) -> HTMLResponse:
+def _new_page(
+    request: Request, actor: str, form: dict, error: str | None, code: int = 200
+) -> HTMLResponse:
     return dbw.render_form(
         request,
         "admin/board/notice_form.html",
-        {"actor": actor, "form": form, "error": error, "categories": NOTICE_CATEGORIES,
-         "title_max": NOTICE_TITLE_MAX, "body_max": NOTICE_BODY_MAX},
+        {
+            "actor": actor,
+            "form": form,
+            "error": error,
+            "categories": NOTICE_CATEGORIES,
+            "title_max": NOTICE_TITLE_MAX,
+            "body_max": NOTICE_BODY_MAX,
+        },
         code,
     )
 
@@ -215,7 +247,9 @@ async def notice_create(request: Request):  # noqa: ANN201 — 화면(오류) �
     if not auth.csrf_ok(*dbw.form_csrf_ok(request, form)):
         auth.audit("admin_notice_create", actor, ok=False)
         kept, _, _ = _clean(form)
-        return _new_page(request, actor, kept, "화면이 오래돼서 다시 불러왔어요. 한 번 더 저장해 주세요.", 403)
+        return _new_page(
+            request, actor, kept, "화면이 오래돼서 다시 불러왔어요. 한 번 더 저장해 주세요.", 403
+        )
     kept, v, error = _clean(form)
     if v is None:
         return _new_page(request, actor, kept, error, 422)
@@ -224,8 +258,16 @@ async def notice_create(request: Request):  # noqa: ANN201 — 화면(오류) �
            SELECT %s, %s, %s, %s, a.id, %s, %s, %s FROM app_account a
            WHERE a.initials = %s AND a.disabled_at IS NULL
            RETURNING id::text AS id""",
-        [uuid.uuid4(), v["title"], v["category"], v["body"], v["pinned"], v["starts_on"],
-         v["ends_on"], actor],
+        [
+            uuid.uuid4(),
+            v["title"],
+            v["category"],
+            v["body"],
+            v["pinned"],
+            v["starts_on"],
+            v["ends_on"],
+            actor,
+        ],
         what="board.create",
     )
     if source != "db" or not rows:
@@ -245,15 +287,30 @@ def _load_one(notice_id: str) -> tuple[str, dict | None]:
 
 
 def _detail_page(
-    request: Request, actor: str, source: str, row: dict | None, *,
-    form: dict | None = None, error: str | None = None, saved: bool = False, code: int = 200,
+    request: Request,
+    actor: str,
+    source: str,
+    row: dict | None,
+    *,
+    form: dict | None = None,
+    error: str | None = None,
+    saved: bool = False,
+    code: int = 200,
 ) -> HTMLResponse:
     return dbw.render_form(
         request,
         "admin/board/notice_detail.html",
-        {"actor": actor, "source": source, "row": row, "form": form or _form_of(row),
-         "error": error, "saved": saved, "categories": NOTICE_CATEGORIES,
-         "title_max": NOTICE_TITLE_MAX, "body_max": NOTICE_BODY_MAX},
+        {
+            "actor": actor,
+            "source": source,
+            "row": row,
+            "form": form or _form_of(row),
+            "error": error,
+            "saved": saved,
+            "categories": NOTICE_CATEGORIES,
+            "title_max": NOTICE_TITLE_MAX,
+            "body_max": NOTICE_BODY_MAX,
+        },
         code,
     )
 
@@ -288,13 +345,23 @@ async def notice_update(request: Request, notice_id: str):  # noqa: ANN201
                       updated_at = now()
                WHERE id::text = %s
                RETURNING id::text AS id""",
-            [v["title"], v["category"], v["body"], v["pinned"], v["starts_on"], v["ends_on"],
-             v["hidden"], notice_id[:64]],
+            [
+                v["title"],
+                v["category"],
+                v["body"],
+                v["pinned"],
+                v["starts_on"],
+                v["ends_on"],
+                v["hidden"],
+                notice_id[:64],
+            ],
             what="board.update",
         )
         if source == "db" and rows:
             auth.audit("admin_notice_update", actor, ok=True)
-            return RedirectResponse(f"/admin/board/notices/{rows[0]['id']}?saved=1", status_code=303)
+            return RedirectResponse(
+                f"/admin/board/notices/{rows[0]['id']}?saved=1", status_code=303
+            )
         auth.audit("admin_notice_update", actor, ok=False)
         if source == "db":
             raise HTTPException(status_code=404)

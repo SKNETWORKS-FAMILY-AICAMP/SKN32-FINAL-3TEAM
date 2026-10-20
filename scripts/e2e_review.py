@@ -35,6 +35,7 @@ from app.contracts import (  # noqa: E402
     Category,
     JudgeRequest,
     JudgeResponse,
+    Premise,
     ProductContext,
     UserFact,
 )
@@ -173,13 +174,19 @@ def _answer_round(client: Any, text: str, res: JudgeResponse, judge_json: Any) -
         ),
         Check("답 화면에 「다시 판정」 안내", "답한 내용으로 다시 판정했어요" in r.text),
     ]
+    from app import premise as pm  # noqa: PLC0415
+
+    product = pm.product_of(Premise(where)) if where else ProductContext()
     after = judge_json(
-        text, ProductContext(facts=[UserFact(text=s.text, kind=k, answer=Answer.예)])
+        text,
+        product.model_copy(update={"facts": [UserFact(text=s.text, kind=k, answer=Answer.예)]}),
     )
     pool = (
         after.sentences
         if where is None
-        else next((b.sentences for b in after.branches if b.premise.value == where), [])
+        else next(
+            (b.sentences for b in after.branches if b.premise.value == where), after.sentences
+        )
     )
     same = [x for x in pool if x.text == s.text]
     closed = bool(same) and all(not (x.fact_check and x.fact_check.kind is k) for x in same)
@@ -252,7 +259,11 @@ def main(argv: list[str] | None = None) -> int:
         checks = _json_checks(res) + _json_checks(res_screen)
         checks.append(Check("화면 HTTP 200", page.status_code == 200, str(page.status_code)))
         checks += _html_checks(res_screen, page.text)
-        checks += _answer_round(client, text, res_screen, judge_json)
+        # Fixed responses cannot change in response to an answer. Do not claim
+        # a dynamic answer check in fixture mode; test_user_answer/pick cover it.
+        if not args.fixtures:
+            checks += _answer_round(client, text, res_screen, judge_json)
+        row["answer_check"] = "skipped_static_fixture" if args.fixtures else "live"
         kinds = {
             s.fact_check.kind.value
             for _, s in _questions(res) + _questions(res_screen)
@@ -298,6 +309,10 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(report, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
     )
     print(f"\n문구 {len(cases)} · 실패 검사 {fails} → {out}")
+    if args.fixtures:
+        print(
+            "정적 픽스처 모드: 응답→화면 검사만 실행 · 답 재판정은 단위 테스트/실제 엔진 모드에서 확인"
+        )
     return 1 if fails else 0
 
 

@@ -30,15 +30,33 @@ TID = "3f2a9c1e-0000-4000-8000-000000000001"
 NOW = datetime(2026, 10, 20, 3, 0, tzinfo=UTC)
 
 NOTICE = {
-    "id": NID, "title": "점검 안내", "category": "system", "body": "점검합니다.", "pinned": False,
-    "starts_on": None, "ends_on": None, "hidden_at": None, "created_at": NOW, "updated_at": NOW,
+    "id": NID,
+    "title": "점검 안내",
+    "category": "system",
+    "body": "점검합니다.",
+    "pinned": False,
+    "starts_on": None,
+    "ends_on": None,
+    "hidden_at": None,
+    "created_at": NOW,
+    "updated_at": NOW,
     "author": "박수진",
 }
 TICKET = {
-    "id": TID, "created_at": NOW, "category": "judge", "title": "검수 결과 문의",
-    "body": "같은 문구인데 결과가 달라요.", "priority": "normal", "status": "open", "reply": None,
-    "closed_at": None, "expires_at": None, "who": "홍길동", "who_email": "hong@example.com",
-    "owner": None, "owner_initials": None,
+    "id": TID,
+    "created_at": NOW,
+    "category": "judge",
+    "title": "검수 결과 문의",
+    "body": "같은 문구인데 결과가 달라요.",
+    "priority": "normal",
+    "status": "open",
+    "reply": None,
+    "closed_at": None,
+    "expires_at": None,
+    "who": "홍길동",
+    "who_email": "hong@example.com",
+    "owner": None,
+    "owner_initials": None,
 }
 
 
@@ -89,7 +107,12 @@ def _token(client: TestClient, path: str) -> str:
 
 
 def _notice(**over: str) -> dict:
-    return {"title": "새 기능 안내", "category": "update", "body": "검수 화면이 바뀌었어요.", **over}
+    return {
+        "title": "새 기능 안내",
+        "category": "update",
+        "body": "검수 화면이 바뀌었어요.",
+        **over,
+    }
 
 
 # ── 공지 ────────────────────────────────────────────────
@@ -102,13 +125,18 @@ def test_새_공지_폼이_뜨고_목록에서_간다(client: TestClient) -> Non
     assert 'name="hidden"' not in r.text  # 새 공지에는 숨김이 없다
 
 
-def test_공지_등록은_작성자를_로그인_계정으로_쓰고_상세로_간다(client: TestClient, fake: FakeDB) -> None:
+def test_공지_등록은_작성자를_로그인_계정으로_쓰고_상세로_간다(
+    client: TestClient, fake: FakeDB
+) -> None:
     token = _token(client, "/admin/board/notices/new")
-    r = client.post("/admin/board/notices", data={**_notice(pinned="1", author="해커"), "csrf_token": token},
-                    follow_redirects=False)
+    r = client.post(
+        "/admin/board/notices",
+        data={**_notice(pinned="1", author="해커"), "csrf_token": token},
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     assert r.headers["location"] == f"/admin/board/notices/{NID}?saved=1"
-    (sql, params, what), = fake.writes
+    ((sql, params, what),) = fake.writes
     assert what == "board.create" and sql.lstrip().startswith("INSERT INTO notice")
     assert params[1:5] == ["새 기능 안내", "update", "검수 화면이 바뀌었어요.", True]
     assert params[-1] == "psj" and "해커" not in params
@@ -133,7 +161,9 @@ def test_CSRF_없는_공지_등록은_403_이고_쓰지_않는다(client: TestCl
         ({"starts_on": "2026-13-40"}, "날짜를"),
     ],
 )
-def test_공지_값이_틀리면_422_이고_쓰지_않는다(client: TestClient, fake: FakeDB, over: dict, msg: str) -> None:
+def test_공지_값이_틀리면_422_이고_쓰지_않는다(
+    client: TestClient, fake: FakeDB, over: dict, msg: str
+) -> None:
     token = _token(client, "/admin/board/notices/new")
     r = client.post("/admin/board/notices", data={**_notice(**over), "csrf_token": token})
     assert r.status_code == 422 and msg in r.text
@@ -157,10 +187,13 @@ def test_공지_수정_폼은_지금_값으로_차_있고_숨김이_있다(clien
 
 def test_공지_숨김은_hidden_at_으로_내린다(client: TestClient, fake: FakeDB) -> None:
     token = _token(client, f"/admin/board/notices/{NID}")
-    r = client.post(f"/admin/board/notices/{NID}", data={**_notice(hidden="1"), "csrf_token": token},
-                    follow_redirects=False)
+    r = client.post(
+        f"/admin/board/notices/{NID}",
+        data={**_notice(hidden="1"), "csrf_token": token},
+        follow_redirects=False,
+    )
     assert r.status_code == 303
-    (sql, params, what), = fake.writes
+    ((sql, params, what),) = fake.writes
     assert what == "board.update" and "hidden_at = CASE" in sql and "DELETE" not in sql
     assert params[6] is True and params[-1] == NID
     assert "저장했어요" in client.get(r.headers["location"]).text
@@ -177,7 +210,13 @@ def test_없는_공지는_404(client: TestClient, fake: FakeDB) -> None:
 
 
 def _ticket(**over: str) -> dict:
-    return {"status": "in_progress", "priority": "urgent", "assignee": "psj", "reply": "확인 중이에요.", **over}
+    return {
+        "status": "in_progress",
+        "priority": "urgent",
+        "assignee": "psj",
+        "reply": "확인 중이에요.",
+        **over,
+    }
 
 
 def test_문의_상세에_답변_폼과_담당자_목록이_있다(client: TestClient) -> None:
@@ -190,9 +229,11 @@ def test_문의_상세에_답변_폼과_담당자_목록이_있다(client: TestC
 def test_문의_답변_저장(client: TestClient, fake: FakeDB) -> None:
     fake.write_result = ("db", [{"id": TID}])
     token = _token(client, f"/admin/cs/tickets/{TID}")
-    r = client.post(f"/admin/cs/tickets/{TID}", data={**_ticket(), "csrf_token": token}, follow_redirects=False)
+    r = client.post(
+        f"/admin/cs/tickets/{TID}", data={**_ticket(), "csrf_token": token}, follow_redirects=False
+    )
     assert r.status_code == 303 and r.headers["location"] == f"/admin/cs/tickets/{TID}?saved=1"
-    (sql, params, what), = fake.writes
+    ((sql, params, what),) = fake.writes
     assert what == "cs.update"
     assert params[:4] == ["in_progress", "urgent", "psj", "확인 중이에요."]
     assert params[4] is False and params[5] is False  # 안 닫았으면 파기 기한도 없다
@@ -201,9 +242,11 @@ def test_문의_답변_저장(client: TestClient, fake: FakeDB) -> None:
 def test_완료는_파기_기한을_같이_잡는다(client: TestClient, fake: FakeDB) -> None:
     fake.write_result = ("db", [{"id": TID}])
     token = _token(client, f"/admin/cs/tickets/{TID}")
-    client.post(f"/admin/cs/tickets/{TID}", data={**_ticket(status="closed", assignee="", reply=""),
-                                                   "csrf_token": token})
-    (sql, params, _), = fake.writes
+    client.post(
+        f"/admin/cs/tickets/{TID}",
+        data={**_ticket(status="closed", assignee="", reply=""), "csrf_token": token},
+    )
+    ((sql, params, _),) = fake.writes
     assert "COALESCE(closed_at, now())" in sql and "expires_at" in sql
     assert params[2] == "" and params[3] is None  # 미배정 · 빈 답변은 NULL
     assert params[4] is True and params[5] is True and params[6] == TICKET_RETENTION_DAYS
@@ -218,7 +261,9 @@ def test_완료는_파기_기한을_같이_잡는다(client: TestClient, fake: F
         ({"reply": "가" * (TICKET_TEXT_MAX + 1)}, "답변을"),
     ],
 )
-def test_문의_값이_틀리면_422_이고_쓰지_않는다(client: TestClient, fake: FakeDB, over: dict, msg: str) -> None:
+def test_문의_값이_틀리면_422_이고_쓰지_않는다(
+    client: TestClient, fake: FakeDB, over: dict, msg: str
+) -> None:
     token = _token(client, f"/admin/cs/tickets/{TID}")
     r = client.post(f"/admin/cs/tickets/{TID}", data={**_ticket(**over), "csrf_token": token})
     assert r.status_code == 422 and msg in r.text
@@ -240,7 +285,9 @@ def test_없는_문의는_404(client: TestClient) -> None:
 # ── 로그인 ──────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("path", ["/admin/board/notices", f"/admin/board/notices/{NID}", f"/admin/cs/tickets/{TID}"])
+@pytest.mark.parametrize(
+    "path", ["/admin/board/notices", f"/admin/board/notices/{NID}", f"/admin/cs/tickets/{TID}"]
+)
 def test_로그인_없이는_쓰기도_로그인_화면으로(path: str, fake: FakeDB) -> None:  # noqa: ARG001
     app = FastAPI()
     app.include_router(admin_router)

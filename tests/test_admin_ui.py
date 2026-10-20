@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import re
 
 import pytest
 from fastapi import FastAPI
@@ -52,6 +53,30 @@ def test_admin_dashboard_still_requires_login() -> None:
     response = _client().get("/admin/", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/login"
+
+
+@pytest.mark.parametrize(
+    ("path", "parent"),
+    [
+        ("/admin/stats/revenue", "통계"),
+        ("/admin/terms/any-id", "문서관리"),
+        ("/admin/members/any-id", "회원관리"),
+        ("/admin/cs/tickets/any-id", "소식·문의"),
+    ],
+)
+def test_top_navigation_marks_current_parent_without_opening_it(
+    client: TestClient, path: str, parent: str
+) -> None:
+    html = client.get(path).text
+    nav = html.split('<nav id="admin-navigation"', 1)[1].split("</nav>", 1)[0]
+    current = re.findall(
+        r'<details class="admin-nav-cat is-current">\s*<summary><span>(.*?)</span>', nav
+    )
+    assert current == [parent]
+    assert not re.search(r"<details[^>]*\sopen(?:\s|>)", nav)
+    assert 'class="admin-sidebar"' not in html
+    assert 'src="/static/admin-nav.js?v=1" defer' in html
+    assert 'aria-controls="admin-navigation"' in html
 
 
 @pytest.mark.parametrize(

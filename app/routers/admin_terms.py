@@ -46,11 +46,11 @@ def _views(rows: list[dict]) -> list[dict]:
     for r in sorted(rows, key=lambda r: (r["kind"], r["effective_on"], r["created_at"])):
         by_kind.setdefault(r["kind"], []).append(r)
     out: list[dict] = []
-    for kind in sorted(by_kind, key=lambda k: list(TERMS_KINDS).index(k) if k in TERMS_KINDS else 99):
+    for kind in sorted(
+        by_kind, key=lambda k: list(TERMS_KINDS).index(k) if k in TERMS_KINDS else 99
+    ):
         seq = by_kind[kind]
-        current = max(
-            (i for i, r in enumerate(seq) if r["effective_on"] <= today), default=None
-        )
+        current = max((i for i, r in enumerate(seq) if r["effective_on"] <= today), default=None)
         views = []
         for i, r in enumerate(seq):
             if r["effective_on"] > today:

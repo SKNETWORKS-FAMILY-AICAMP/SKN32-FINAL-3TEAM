@@ -32,7 +32,9 @@ NOW = datetime(2026, 10, 20, 3, 0, tzinfo=UTC)
 TODAY = date.today()
 
 
-def fake_run(*, ticket_title: str = "검수 결과 문의", calls: list | None = None, generated: bool = False):  # noqa: ANN201
+def fake_run(
+    *, ticket_title: str = "검수 결과 문의", calls: list | None = None, generated: bool = False
+):  # noqa: ANN201
     """`what` 마다 정해 둔 행을 돌려준다. `calls` 에 (what, queries) 를 쌓는다."""
     ticket = {
         "id": TID,
@@ -64,18 +66,51 @@ def fake_run(*, ticket_title: str = "검수 결과 문의", calls: list | None =
         "author": "박수진",
     }
     terms = [
-        {"id": T1, "kind": "service", "version": "v1", "effective_on": TODAY - timedelta(days=30),
-         "body": "본문1", "change_reason": "최초", "created_at": NOW, "created_by": "psj"},
-        {"id": T2, "kind": "service", "version": "v2", "effective_on": TODAY + timedelta(days=10),
-         "body": "본문2", "change_reason": "면책 조항", "created_at": NOW, "created_by": "psj"},
-        {"id": T3, "kind": "privacy", "version": "p1", "effective_on": TODAY - timedelta(days=5),
-         "body": "본문3", "change_reason": "최초", "created_at": NOW, "created_by": None},
+        {
+            "id": T1,
+            "kind": "service",
+            "version": "v1",
+            "effective_on": TODAY - timedelta(days=30),
+            "body": "본문1",
+            "change_reason": "최초",
+            "created_at": NOW,
+            "created_by": "psj",
+        },
+        {
+            "id": T2,
+            "kind": "service",
+            "version": "v2",
+            "effective_on": TODAY + timedelta(days=10),
+            "body": "본문2",
+            "change_reason": "면책 조항",
+            "created_at": NOW,
+            "created_by": "psj",
+        },
+        {
+            "id": T3,
+            "kind": "privacy",
+            "version": "p1",
+            "effective_on": TODAY - timedelta(days=5),
+            "body": "본문3",
+            "change_reason": "최초",
+            "created_at": NOW,
+            "created_by": None,
+        },
     ]
     member = {
-        "id": MID, "email": "kim@example.com", "name": "김회원", "org": "푸드랩",
-        "created_at": NOW, "last_login_at": None, "disabled_at": None,
-        "terms_version": "v1", "terms_agreed_at": NOW, "consent_history_at": NOW,
-        "consent_improve_at": None, "email_verified_at": None, "status": "active",
+        "id": MID,
+        "email": "kim@example.com",
+        "name": "김회원",
+        "org": "푸드랩",
+        "created_at": NOW,
+        "last_login_at": None,
+        "disabled_at": None,
+        "terms_version": "v1",
+        "terms_agreed_at": NOW,
+        "consent_history_at": NOW,
+        "consent_improve_at": None,
+        "email_verified_at": None,
+        "status": "active",
     }
 
     def run(queries, what):  # noqa: ANN001, ANN202
@@ -104,8 +139,14 @@ def fake_run(*, ticket_title: str = "검수 결과 문의", calls: list | None =
             ],
             "stats.generation": [
                 [{"k": "user", "n": 12}] + ([{"k": "generated", "n": 4}] if generated else []),
-                [{"n": 4 if generated else 0, "docs": 2 if generated else 0,
-                  "approved": 1 if generated else 0, "last_at": NOW if generated else None}],
+                [
+                    {
+                        "n": 4 if generated else 0,
+                        "docs": 2 if generated else 0,
+                        "approved": 1 if generated else 0,
+                        "last_at": NOW if generated else None,
+                    }
+                ],
                 [{"d": TODAY, "n": 4}] if generated else [],
             ],
             "stats.judge": [
@@ -146,7 +187,9 @@ def test_문의_목록은_표의_값과_모델_라벨로_그린다(client: TestC
     assert "더미" not in r.text and "결제" not in r.text and "매칭" not in r.text
 
 
-def test_문의_필터는_허용_값만_SQL_로_간다(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_문의_필터는_허용_값만_SQL_로_간다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     calls: list = []
     monkeypatch.setattr(admin_dbread, "run", fake_run(calls=calls))
     client.get("/admin/cs/tickets", params={"status": "closed", "type": "결제", "priority": "x"})
@@ -155,7 +198,9 @@ def test_문의_필터는_허용_값만_SQL_로_간다(client: TestClient, monke
     assert "t.status = %s" in sql and "t.category" not in sql
 
 
-def test_문의_상세_없음과_못읽음을_가른다(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_문의_상세_없음과_못읽음을_가른다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     assert client.get(f"/admin/cs/tickets/{TID}").status_code == 200
     assert client.get("/admin/cs/tickets/no-such").status_code == 404
     monkeypatch.setattr(admin_dbread, "run", lambda queries, what: ("no_db", []))
@@ -164,14 +209,28 @@ def test_문의_상세_없음과_못읽음을_가른다(client: TestClient, monk
     assert "DB 에 연결하지 못했어요" in r.text
 
 
-def test_못_읽으면_0건이라_말하지_않는다(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_못_읽으면_0건이라_말하지_않는다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(admin_dbread, "run", lambda queries, what: ("no_table", []))
-    for path in ("/admin/cs/tickets", "/admin/board/notices", "/admin/terms", "/admin/members",
-                 "/admin/stats/quality/judge", "/admin/stats/quality/generation"):
+    for path in (
+        "/admin/cs/tickets",
+        "/admin/board/notices",
+        "/admin/terms",
+        "/admin/members",
+        "/admin/stats/quality/judge",
+        "/admin/stats/quality/generation",
+    ):
         r = client.get(path)
         assert r.status_code == 200, path
         assert "launcher.py migrate" in r.text, path
-        for empty in ("아직 접수된", "등록된 공지가", "등록된 약관 버전이", "아직 가입한", "저장된 검수가"):
+        for empty in (
+            "아직 접수된",
+            "등록된 공지가",
+            "등록된 약관 버전이",
+            "아직 가입한",
+            "저장된 검수가",
+        ):
             assert empty not in r.text, (path, empty)
 
 
@@ -244,7 +303,9 @@ def test_생성_통계는_저장_안_함을_0건과_구분해_알린다(client: 
     assert "88.4" not in r.text and "GPT-4o" not in r.text and "재생성 사유" not in r.text
 
 
-def test_생성_통계는_출처별_건수를_센다(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_생성_통계는_출처별_건수를_센다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     calls: list = []
     monkeypatch.setattr(admin_dbread, "run", fake_run(generated=True, calls=calls))
     r = client.get("/admin/stats/quality/generation", params={"days": "7"})

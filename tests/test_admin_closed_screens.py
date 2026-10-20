@@ -99,14 +99,22 @@ def test_메뉴는_닫힘만_표시하고_사유와_링크는_본문에_남긴�
 ) -> None:
     module = importlib.import_module(f"app.routers.{module_name}")
     html = client.get("/admin/").text
-    nav = html[html.index('<aside class="admin-sidebar"') : html.index("</aside>")]
+    nav = html[
+        html.index('<nav id="admin-navigation"') : html.index(
+            "</nav>", html.index('<nav id="admin-navigation"')
+        )
+    ]
     link = re.search(r'<a\b[^>]*href="' + re.escape(path) + r'".*?</a>', nav, re.S)
     assert link is not None
     assert "닫힘" in link.group() and module.LABEL not in link.group()
     assert module.LABEL in _main(client.get(path).text)
     monkeypatch.setattr(module, "LABEL", "라벨 변경 확인")
     html = client.get("/admin/").text
-    nav = html[html.index('<aside class="admin-sidebar"') : html.index("</aside>")]
+    nav = html[
+        html.index('<nav id="admin-navigation"') : html.index(
+            "</nav>", html.index('<nav id="admin-navigation"')
+        )
+    ]
     assert "라벨 변경 확인" not in nav
 
 

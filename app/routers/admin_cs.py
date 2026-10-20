@@ -175,7 +175,9 @@ def ticket_list(request: Request) -> HTMLResponse:
     )
 
 
-_ASSIGNEES = "SELECT initials, display_name FROM app_account WHERE disabled_at IS NULL ORDER BY display_name"
+_ASSIGNEES = (
+    "SELECT initials, display_name FROM app_account WHERE disabled_at IS NULL ORDER BY display_name"
+)
 
 
 def _load_one(ticket_id: str) -> tuple[str, dict | None, list[dict]]:
@@ -195,21 +197,42 @@ def _load_one(ticket_id: str) -> tuple[str, dict | None, list[dict]]:
 def _form_of(row: dict | None) -> dict:
     if row is None:
         return {"status": "", "priority": "", "assignee": "", "reply": ""}
-    return {"status": row["status_code"], "priority": row["priority_code"],
-            "assignee": row["owner_initials"], "reply": row["reply"] or ""}
+    return {
+        "status": row["status_code"],
+        "priority": row["priority_code"],
+        "assignee": row["owner_initials"],
+        "reply": row["reply"] or "",
+    }
 
 
 def _detail_page(
-    request: Request, actor: str, source: str, row: dict | None, assignees: list[dict], *,
-    form: dict | None = None, error: str | None = None, saved: bool = False, code: int = 200,
+    request: Request,
+    actor: str,
+    source: str,
+    row: dict | None,
+    assignees: list[dict],
+    *,
+    form: dict | None = None,
+    error: str | None = None,
+    saved: bool = False,
+    code: int = 200,
 ) -> HTMLResponse:
     return dbw.render_form(
         request,
         "admin/cs/ticket_detail.html",
-        {"actor": actor, "source": source, "row": row, "statuses": TICKET_STATUSES,
-         "priorities": TICKET_PRIORITIES, "assignees": assignees, "form": form or _form_of(row),
-         "error": error, "saved": saved, "reply_max": TICKET_TEXT_MAX,
-         "retention_days": TICKET_RETENTION_DAYS},
+        {
+            "actor": actor,
+            "source": source,
+            "row": row,
+            "statuses": TICKET_STATUSES,
+            "priorities": TICKET_PRIORITIES,
+            "assignees": assignees,
+            "form": form or _form_of(row),
+            "error": error,
+            "saved": saved,
+            "reply_max": TICKET_TEXT_MAX,
+            "retention_days": TICKET_RETENTION_DAYS,
+        },
         code,
     )
 
@@ -236,8 +259,12 @@ async def ticket_update(request: Request, ticket_id: str):  # noqa: ANN201 — �
     def one(key: str) -> str:
         return (form.get(key) or [""])[0]
 
-    kept = {"status": one("status"), "priority": one("priority"),
-            "assignee": one("assignee"), "reply": one("reply").strip()}
+    kept = {
+        "status": one("status"),
+        "priority": one("priority"),
+        "assignee": one("assignee"),
+        "reply": one("reply").strip(),
+    }
     source, row, assignees = _load_one(ticket_id)
     if source == "db" and row is None:
         raise HTTPException(status_code=404)
@@ -250,7 +277,10 @@ async def ticket_update(request: Request, ticket_id: str):  # noqa: ANN201 — �
         return again("화면이 오래돼서 다시 불러왔어요. 한 번 더 저장해 주세요.", 403)
     if source != "db":
         auth.audit("admin_ticket_update", actor, ok=False)
-        return again("저장하지 못했어요. DB 연결 상태를 확인한 뒤 다시 저장해 주세요. 쓴 답변은 그대로 두었어요.", 503)
+        return again(
+            "저장하지 못했어요. DB 연결 상태를 확인한 뒤 다시 저장해 주세요. 쓴 답변은 그대로 두었어요.",
+            503,
+        )
     if kept["status"] not in TICKET_STATUSES:
         return again("상태를 골라 주세요.", 422)
     if kept["priority"] not in TICKET_PRIORITIES:
@@ -270,14 +300,25 @@ async def ticket_update(request: Request, ticket_id: str):  # noqa: ANN201 — �
                                     ELSE NULL END
            WHERE id::text = %s
            RETURNING id::text AS id""",
-        [kept["status"], kept["priority"], kept["assignee"], kept["reply"] or None, closed, closed,
-         TICKET_RETENTION_DAYS, ticket_id[:64]],
+        [
+            kept["status"],
+            kept["priority"],
+            kept["assignee"],
+            kept["reply"] or None,
+            closed,
+            closed,
+            TICKET_RETENTION_DAYS,
+            ticket_id[:64],
+        ],
         what="cs.update",
     )
     if src != "db" or not rows:
         auth.audit("admin_ticket_update", actor, ok=False)
         if src == "db":
             raise HTTPException(status_code=404)
-        return again("저장하지 못했어요. DB 연결 상태를 확인한 뒤 다시 저장해 주세요. 쓴 답변은 그대로 두었어요.", 503)
+        return again(
+            "저장하지 못했어요. DB 연결 상태를 확인한 뒤 다시 저장해 주세요. 쓴 답변은 그대로 두었어요.",
+            503,
+        )
     auth.audit("admin_ticket_update", actor, ok=True)
     return RedirectResponse(f"/admin/cs/tickets/{rows[0]['id']}?saved=1", status_code=303)
