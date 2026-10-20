@@ -411,6 +411,44 @@ class RiskAssessment(BaseModel):
         return self
 
 
+class GuideArticle(BaseModel):
+    """**원문 보기** 한 조각 — 수집본 조문의 글자 그대로 (🆕 2026-10-20 · D-348 보충 32 결정 3).
+
+    🚨 판정이 아니다 — 판정 · 분기 열쇠 · 위험도 어디에도 들지 않는다(표시 전용). 글자는 수집본(`data/derived/law_article.jsonl`)에서
+       `scripts/guide_build.py` 가 옮긴다 — 손으로 적지 않는다(D-90).
+    """
+
+    #: 문서 이름(「부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정」)
+    law_name: str = Field(..., min_length=1)
+    #: 조 · 항 · 호 표기(「제6조③」 · 「제3조②3.」)
+    where: str = Field(..., min_length=1)
+    #: 호를 가리킬 때 그 호가 딸린 항의 머리 글(「② 제1항에도 불구하고 … 제외한다.」) — 항 · 조를 가리키면 None
+    lead: str | None = None
+    text: str = Field(..., min_length=1)
+    #: 수집본 판의 날짜(파일 이름의 `YYYYMMDD` → `YYYY-MM-DD`) — 모르면 None(지어내지 않는다 · D-220). 현행 여부는 말하지 않는다
+    version: str | None = None
+
+
+class Guide(BaseModel):
+    """**두 겹 안내** — 사용자가 전제 · 답을 고를 때 펼쳐 보는 설명 (🆕 2026-10-20 · D-348 보충 32 결정 3).
+
+    ★ 두 겹 — 쉬운 풀이(무엇인가 · 확인하는 법 · 헷갈리기 쉬운 것)와 원문 보기(조문 그대로).
+    🔴 **승인된 글 · 짝 표만** 싣는다(D-147 · D-263 ②) — 승인 전에는 칸이 없다(`app/guide.py`). 「적법」 · 「안전」을 쓰지 않는다(D-05 · D-130).
+    🚨 판정이 아니다 — 판정 · 분기 열쇠 · 위험도 어디에도 들지 않는다(표시 전용 · 응답을 만든 뒤 붙인다).
+    """
+
+    what: str | None = None
+    check: str | None = None
+    pitfall: str | None = None
+    articles: list[GuideArticle] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> Guide:
+        if not (self.what or self.check or self.pitfall or self.articles):
+            raise ValueError("빈 안내 — 승인된 글 · 조문이 없으면 칸을 두지 않는다 (D-220)")
+        return self
+
+
 class SubstBranch(BaseModel):
     """**실증 분기** — 문장 하나의 주석 (🆕 D-263 ④ · D-268 「지시」의 내용).
 
@@ -425,6 +463,8 @@ class SubstBranch(BaseModel):
     accepted_evidence: list[str] = Field(..., min_length=1)
     #: 기준 문안 — 조문을 인용한 설명 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
     criteria: str = Field(..., min_length=1)
+    #: 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내 — 승인된 것만 · 없으면 None(표시 전용)
+    guide: Guide | None = None
 
     @model_validator(mode="after")
     def _not_patent_or_award(self) -> SubstBranch:
@@ -502,6 +542,8 @@ class FactBranch(BaseModel):
     accepted_evidence: list[str] = Field(..., min_length=1)
     #: 기준 문안 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
     criteria: str = Field(..., min_length=1)
+    #: 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내 — 승인된 것만 · 없으면 None(표시 전용)
+    guide: Guide | None = None
 
 
 class RiskEstimate(BaseModel):
@@ -840,6 +882,27 @@ class ProductContext(BaseModel):
     facts: list[UserFact] = Field(default_factory=list)
     #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부(문장 단위). 비면 모른다 = 가장 나쁜 쪽(D-263 ①)
     substs: list[UserSubst] = Field(default_factory=list)
+    #: 🆕 2026-10-21 (D-348 보충 34 결정 1) — 사용자가 **고른 전제**(하위 전제까지 · 예: 건기식_인정). 비면 고르지 않았다.
+    #:    🔴 `has_recognized_function` 으로 대신하지 않는다 — 기본값 거짓이 「안 줬다」와 「인정 없음이라고 줬다」를 가르지 못한다(D-72 와 같은 꼴).
+    #:    고르면 그래프는 그 전제 하나로 판정한다(`app/graph.py` `premise_branches` · 분기 없음). 품목은 전제의 품목이어야 한다(아래 검증).
+    #:    🚨 검증이 아니다 — 사용자의 자기 신고다(책임은 고른 사람 · 출처는 화면의 이력이 남긴다 · D-61 · 보충 3 결정 4).
+    premise: Premise | None = None
+
+    @model_validator(mode="after")
+    def _premise_matches_category(self) -> ProductContext:
+        # 🆕 2026-10-21 (보충 34) — 전제와 품목이 어긋나면 거부한다. 품목을 비우고 전제만 주면 전제의 품목으로 채운다(전제가 품목을 정한다)
+        if self.premise is None:
+            return self
+        from app import premise as pm  # noqa: PLC0415 — app.premise 가 이 모듈을 읽는다(순환)
+
+        cat = pm.PREMISE_CATEGORY[self.premise]
+        if self.category is None:
+            self.category = cat
+        elif self.category is not cat:
+            raise ValueError(
+                f"고른 전제 {self.premise.value} 는 품목 {cat.value} 의 전제다 — 품목 {self.category.value} 와 어긋난다 (D-348 보충 34)"
+            )
+        return self
 
 
 class Timing(BaseModel):
@@ -879,6 +942,8 @@ class Branch(BaseModel):
     #: 기준 문안 — 조문을 인용한 설명 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
     criteria: str = Field(..., min_length=1)
     evidence: list[EvidenceArticle] = Field(default_factory=list)
+    #: 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내 — 이 전제가 무엇인지 · 어떻게 확인하는지(승인된 것만 · 없으면 None · 표시 전용)
+    guide: Guide | None = None
 
 
 class JudgeResponse(BaseModel):
