@@ -371,6 +371,7 @@
   <p class="gn-pending">
     {% if engine_failed %}문구를 만들다 실패했어요. 잠시 뒤 다시 눌러 주세요.
     {% else %}{{ engine_why or "카피 생성 엔진이 준비되지 않았어요." }}{% endif %}
+    <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
     입력한 제품 정보는 유지돼요. 잠시 뒤 다시 시도해주세요.<br>
     제품 분류 — <b>{{ branch.label }}</b> · 생성 기준 <b>{{ branch.premise.value }}</b>
     {%- if picked.name %} · 제품 <b>{{ picked.name }}</b>{% endif %}
