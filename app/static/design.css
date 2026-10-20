@@ -2359,7 +2359,6 @@
   .user-shell #gen-form > .cl-product-section:not(.cl-product-optional) { grid-column:1; grid-row:span 2; }
   .user-shell #gen-form > .cl-product-optional { grid-column:2; }
   .user-shell #gen-form > .cl-product-submit { grid-column:2; margin:0; padding:0; border:0; }
-  .user-shell #gen-form > .cl-product-submit .gn-submit { width:100%; }
   .user-shell #gen-form textarea[name=features] { min-height:64px; }
   .user-shell #gen-form .cl-audience-details { margin-top:10px; padding-top:10px; }
   .user-shell #gen-form .cl-audience-details > .gn-note { margin:0 0 4px; }
@@ -2369,3 +2368,18 @@
   .user-shell #gen-form > .cl-product-submit { display:flex; flex-direction:column-reverse; gap:6px; }
   .user-shell .gn-head.cl-page-heading { margin-bottom:8px; }
 }
+/* 🆕 2026-10-20 (lse · 사용자 「버튼이 촌스럽다」) — 생성 버튼: 꽉 찬 분홍 그라데이션 막대 대신 단색 · 아이콘 · 오른쪽 정렬.
+   🚨 workspace.css 가 .gn-submit 배경을 !important 그라데이션으로 박아 둬서 여기서도 !important 로 덮는다 */
+.user-shell #gen-form > .cl-product-submit { align-items:flex-end; }
+.user-shell #gen-form .cl-product-submit .gn-submit {
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  width:auto; min-width:220px; min-height:46px; padding:0 22px; margin:0;
+  border:0; border-radius:10px; background:var(--u-signal-ink) !important; color:#fff;
+  font-size:15px; font-weight:600; letter-spacing:-.01em;
+  box-shadow:0 1px 2px rgba(40,20,70,.12), 0 6px 18px rgba(119,57,189,.22);
+  transition:background .15s, box-shadow .15s, transform .15s;
+}
+.user-shell #gen-form .cl-product-submit .gn-submit:hover { background:#6a2fb0 !important; box-shadow:0 2px 4px rgba(40,20,70,.14), 0 10px 24px rgba(119,57,189,.28); }
+.user-shell #gen-form .cl-product-submit .gn-submit:active { transform:translateY(1px); }
+.user-shell #gen-form .cl-product-submit .gn-submit svg { flex:0 0 auto; }
+@media (max-width: 900px) { .user-shell #gen-form .cl-product-submit .gn-submit { width:100%; } }

@@ -208,7 +208,7 @@
 <div class="gn-head cl-page-heading cl-workspace-head">
   <div><h1>{{ "카피 생성 결과" if live or result else "카피 생성" }}</h1>
   <p>{{ "후보의 표현과 검수 내용을 비교한 뒤 광고에 사용할 문구를 선택하세요." if live or result else "제품 정보를 입력하면 광고 문구 후보를 만들어요." }}</p></div>
-  {% if not need_login and not (live or result) %}<button class="cl-page-action" type="submit" form="gen-form">카피 생성하기 {{ icon('spark', 16) }}</button>{% endif %}
+  {#- 🔄 2026-10-20 (lse) — 제목 옆 「카피 생성하기」(같은 폼을 내는 지름길)는 뺐다 — 두 칸 배치로 아래 버튼이 첫 화면에 보인다 #}
 </div>
 
 {% if need_login %}
@@ -321,7 +321,7 @@
   <details class="cl-data-info"><summary>제품 정보가 OpenAI로 전송돼요 · 생성에 약 30초~1분</summary><p class="gn-note">제품명·종류·문구·특징·원료·인증 이름·대상을 외부 생성 모델(OpenAI)로 보내요. 인정·심사받은 기능성 문구는 전송하지 않고 원문 그대로 사용해요. 생성한 후보는 사전·조문 검색·판정 인코더 검수를 거쳐 표시돼요.</p></details>
   {% endif %}
   <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
-  <button class="gn-submit" type="submit">이 내용으로 카피 생성</button>
+  <button class="gn-submit" type="submit">{{ icon('spark', 17) }} 이 내용으로 카피 생성</button>
 </div></form>
 </details>
 
