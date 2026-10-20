@@ -32,6 +32,7 @@
 | [`Caddyfile.ip`](Caddyfile.ip) | 서버 `/etc/caddy/Caddyfile` | **도메인 전 임시판** — 탄력적 IP · http. 닫는 경로는 정식판과 같다 · 🆕 관리자 화면용 IP 제한 블록(주석) |
 | [`pack_store.py`](pack_store.py) | 내 PC (저장소 루트) | 서버로 올릴 파생물 묶음 만들기 (절차서 §4-1) |
 | [`load_test.py`](load_test.py) | 서버 (시스템 python3) | 부하 시험 (절차서 #29) |
+| 🆕 [`perf_report.py`](perf_report.py) | 서버 (`load_test.py` 와 같은 폴더) | **성능 시험 한 번에 + 보고서 자동 작성** — 검수 · 고쳐 쓰기 · 섞인 부하 · GPU · 로그 집계 → `~/perf_reports/성능시험_<MMDD_HHMM>.md` |
 
 자주 쓰는 단계
 
@@ -47,6 +48,7 @@ bash ~/deploy_server.sh update      # main 의 새 커밋 반영 — fetch → i
 |---|---|
 | [`작업기록_1016.md`](작업기록_1016.md) | 10-16 서버 작업 · 막힌 것과 고친 것 · 지금 서버 상태 · 다음 접속 때 순서 |
 | [`작업기록_1019.md`](작업기록_1019.md) | 10-19 데이터 적재 · 인코더 D4-20 · API 점검 표 · sLLM · 카피 생성 |
+| [`성능시험/`](성능시험/) | `perf_report.py` 가 만든 성능 시험 보고서 모음 |
 
 작업한 날마다 `작업기록_<MMDD>.md` 를 하나 더한다 (절차서 §8 다섯 칸).
 
