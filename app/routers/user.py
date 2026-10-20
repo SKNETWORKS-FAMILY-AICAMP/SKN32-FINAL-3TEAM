@@ -1081,7 +1081,11 @@ def _previous_answers(form: dict[str, list[str]]) -> list[tuple[str, str]]:
 async def _review_pick(
     request: Request, copies: list[str], form: dict[str, list[str]], op: str
 ) -> HTMLResponse:
-    """D-348 보충 31: 선택은 POST로 받고 실제 품목으로 재판정한다. 이력 저장은 하지 않는다."""
+    """D-348 보충 31: 선택은 POST로 받고 실제 품목으로 재판정한다.
+
+    🔄 2026-10-20 (lse · 사용자 결정) — 품목을 고른 재판정은 **이력에 바꿔 적는다**(`judgment_store.replace_review` —
+       같은 문구의 고르기 전 기록(보류)을 지우고 고른 품목의 판정으로). 종전에는 적지 않아 이력 · 홈 통계가 보류만 셌다.
+    """
     kind, number, *tail = op.split(":")
     n = int(number)
     if not 1 <= n <= len(copies) or not copies[n - 1].strip():
@@ -1106,6 +1110,7 @@ async def _review_pick(
             raise HTTPException(422, "다시 선택 횟수를 모두 썼어요")
         redo += 1
     results = []
+    picked_res = None
     for number, text in enumerate(copies, 1):
         if not text.strip():
             continue
@@ -1139,8 +1144,26 @@ async def _review_pick(
                     choices=baseline.branches,
                     picked={"premise": premise, "round": redo},
                 )
+                picked_res = res
         results.append(item)
-    return _render(request, "user/review.html", _review_ctx(copies, results))
+    kept = None
+    if picked_res is not None:
+        # 이력 저장은 부가 기능이다 — DB 가 없거나 실패해도 고른 품목의 판정 화면은 그대로 그린다
+        try:
+            gen = get_session()
+            session = next(gen)
+            try:
+                kept = await run_in_threadpool(
+                    lambda: judgment_store.replace_review(
+                        session, current_user(request, session), picked_res
+                    )
+                )
+            finally:
+                gen.close()
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).warning("고른 품목 판정 저장 실패 — %s", type(e).__name__)
+            kept = judgment_store.FAILED
+    return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
 
 
 @router.post("/review/answer", response_class=HTMLResponse)

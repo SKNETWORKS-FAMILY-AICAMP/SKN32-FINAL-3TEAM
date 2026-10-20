@@ -235,3 +235,51 @@ def save_review(
             session.rollback()
         _log.warning("판정 저장 실패 — %s", type(e).__name__)
         return FAILED
+
+
+#: 같은 문구의 앞 기록을 찾는 범위 — 고르기 전 판정(보류)을 품목 판정으로 바꿔 적을 때만 쓴다
+_REPLACE_WINDOW_HOURS = 6
+_REPLACE_SCAN = 20
+
+
+def replace_review(session: Session, user: UserAccount | None, res: JudgeResponse) -> str | None:
+    """🆕 2026-10-20 (lse · 사용자 결정) — 품목을 고른 재판정을 이력에 적는다. 같은 문구의 **가장 최근 기록을 바꿔 적는다.**
+
+    ⛔ 종전(D-348 보충 31 · 「이력 정책 대기」)에는 고른 뒤 판정을 적지 않아, 이력 · 홈 통계에는 **고르기 전의 보류만** 남았다
+       (사용자가 화면에서 본 「위반 확정」이 홈의 「위법 소지 발견」에 0건으로 보였다 · 10-20 시연 계정 46줄 전부 보류).
+    ★ 찾는 기록: 이 사람의 문서 중 최근 `_REPLACE_WINDOW_HOURS` 시간 안 · 문장 글자 묶음이 같은 가장 최근 하나.
+      찾으면 그 문서를 지우고(문장 · 판정은 FK CASCADE) 새로 적는다 — 한 문구에 기록이 두 벌 남지 않는다. 못 찾으면 새로 적는다.
+    🚨 실패해도 판정 응답은 나간다 — 상태 글자만 돌려준다(`save_review` 와 같다).
+    """
+    if user is None or not should_store(user):
+        return None if user is None else OFF
+    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
+
+    from sqlalchemy import delete, select  # noqa: PLC0415
+
+    try:
+        want = sorted(s.text for s in _judged(res))
+        if want:
+            since = datetime.now(UTC) - timedelta(hours=_REPLACE_WINDOW_HOURS)
+            recent = session.scalars(
+                select(WorkDoc.id)
+                .where(WorkDoc.owner_id == user.id, WorkDoc.created_at >= since)
+                .order_by(WorkDoc.created_at.desc())
+                .limit(_REPLACE_SCAN)
+            ).all()
+            for doc_id in recent:
+                raws = sorted(
+                    session.scalars(
+                        select(CopySentence.raw).where(CopySentence.doc_id == doc_id)
+                    ).all()
+                )
+                if raws == want:
+                    session.execute(delete(WorkDoc).where(WorkDoc.id == doc_id))
+                    session.flush()
+                    break
+    except Exception as e:  # noqa: BLE001 — 저장 실패가 판정 응답을 막지 않는다
+        with contextlib.suppress(Exception):
+            session.rollback()
+        _log.warning("판정 바꿔 적기 실패 — %s", type(e).__name__)
+        return FAILED
+    return save_review(session, user, [res])
