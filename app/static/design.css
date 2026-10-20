@@ -729,6 +729,10 @@
 .rv-round[data-ui-stage=type]>.rv-q1,.rv-round[data-ui-stage=cert]>.rv-q2,.rv-round[data-ui-stage=result]>.rv-res.is-shown {
   display:block!important;
 }
+/* 2026-10-20 (lse) — 두 번째 질문(하위 선택)은 품목마다 있다 — 고른 품목(`data-sub`)의 것만 */
+.rv-round[data-ui-stage=cert][data-sub=hf]>.rv-q2-food,.rv-round[data-ui-stage=cert][data-sub=food]>.rv-q2-hf {
+  display:none!important;
+}
 .rv-round[data-ui-stage=type] .rv-bd,.rv-round[data-ui-stage=cert] .rv-bd {
   display:none!important;
 }

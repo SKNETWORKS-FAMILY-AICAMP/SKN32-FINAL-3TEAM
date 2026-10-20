@@ -237,19 +237,28 @@
 .rv-redo-{{ r }}:checked ~ .rv-round-{{ r }} { display: block; }
 {% endfor %}
 .rv-k:checked ~ .rv-q1 { display: none; }
-.rv-k-hf:checked ~ .rv-q2 { display: block; }
-.rv-k-hf:checked ~ .rv-c:checked ~ .rv-q2 { display: none; }
-.rv-leafk:checked ~ .rv-rec, .rv-k-hf:checked ~ .rv-c:checked ~ .rv-rec { display: none; }
-.rv-p-food:checked ~ .rv-res-food, .rv-p-cos:checked ~ .rv-res-cos, .rv-p-gen:checked ~ .rv-res-gen,
+.rv-k-hf:checked ~ .rv-q2-hf { display: block; }
+.rv-k-hf:checked ~ .rv-c.rv-sub-hf:checked ~ .rv-q2-hf { display: none; }
+/* 🆕 2026-10-20 — 식품의 하위 선택(일반식품_기능성) · 건강기능식품과 같은 꼴 */
+.rv-k-sub[data-sub=food]:checked ~ .rv-q2-food { display: block; }
+.rv-k-sub[data-sub=food]:checked ~ .rv-c.rv-sub-food:checked ~ .rv-q2-food { display: none; }
+.rv-leafk:checked ~ .rv-rec, .rv-k-hf:checked ~ .rv-c.rv-sub-hf:checked ~ .rv-rec,
+.rv-k-sub[data-sub=food]:checked ~ .rv-c.rv-sub-food:checked ~ .rv-rec { display: none; }
+.rv-leafk.rv-p-food:checked ~ .rv-res-food, .rv-p-cos:checked ~ .rv-res-cos, .rv-p-gen:checked ~ .rv-res-gen,
+.rv-k-sub[data-sub=food]:checked ~ .rv-sub-food.rv-p-food:checked ~ .rv-res-food,
+.rv-k-sub[data-sub=food]:checked ~ .rv-p-foodfn:checked ~ .rv-res-foodfn,
 .rv-k-hf:checked ~ .rv-p-hfy:checked ~ .rv-res-hfy,
 .rv-k-hf:checked ~ .rv-p-hfn:checked ~ .rv-res-hfn { display: block; }
 .rv-sub { border-top: 1px solid var(--u-line); margin-top: 1rem; padding-top: .8rem; }
 .rv-bd { display: none; }
-.rv-p-food:checked ~ .rv-copyno .rv-bd-food, .rv-p-cos:checked ~ .rv-copyno .rv-bd-cos,
+.rv-leafk.rv-p-food:checked ~ .rv-copyno .rv-bd-food, .rv-p-cos:checked ~ .rv-copyno .rv-bd-cos,
 .rv-p-gen:checked ~ .rv-copyno .rv-bd-gen,
+.rv-k-sub[data-sub=food]:checked ~ .rv-sub-food.rv-p-food:checked ~ .rv-copyno .rv-bd-food,
+.rv-k-sub[data-sub=food]:checked ~ .rv-p-foodfn:checked ~ .rv-copyno .rv-bd-foodfn,
 .rv-k-hf:checked ~ .rv-p-hfy:checked ~ .rv-copyno .rv-bd-hfy,
 .rv-k-hf:checked ~ .rv-p-hfn:checked ~ .rv-copyno .rv-bd-hfn { display: inline; }
-.rv-leafk:checked ~ .rv-copyno .rv-bd-rec, .rv-k-hf:checked ~ .rv-c:checked ~ .rv-copyno .rv-bd-rec { display: none; }
+.rv-leafk:checked ~ .rv-copyno .rv-bd-rec, .rv-k-hf:checked ~ .rv-c.rv-sub-hf:checked ~ .rv-copyno .rv-bd-rec,
+.rv-k-sub[data-sub=food]:checked ~ .rv-c.rv-sub-food:checked ~ .rv-copyno .rv-bd-rec { display: none; }
 /* 지적 건수 — 보이는 지적 문장만 센다(`display:none` 은 카운터를 올리지 않는다) */
 .rv-card-live { position: relative; counter-reset: rvflag; }
 .rv-flag { counter-increment: rvflag; }
@@ -260,9 +269,11 @@
 {% macro rv_flag_sel() -%}
 > .rv-flag
 {%- for r in range(max_redo + 1) -%}
-  {%- for tail in (".rv-k-none:checked ~ .rv-rec .rv-flag", ".rv-k-hf:checked ~ .rv-c-none:checked ~ .rv-rec .rv-flag",
+  {%- for tail in (".rv-k-none:checked ~ .rv-rec .rv-flag", ".rv-k-hf:checked ~ .rv-none-hf:checked ~ .rv-rec .rv-flag",
+                  ".rv-k-sub[data-sub=food]:checked ~ .rv-none-food:checked ~ .rv-rec .rv-flag",
                   ".rv-p-food:checked ~ .rv-res-food .rv-flag", ".rv-p-cos:checked ~ .rv-res-cos .rv-flag",
                   ".rv-p-gen:checked ~ .rv-res-gen .rv-flag",
+                  ".rv-k-sub[data-sub=food]:checked ~ .rv-p-foodfn:checked ~ .rv-res-foodfn .rv-flag",
                   ".rv-k-hf:checked ~ .rv-p-hfy:checked ~ .rv-res-hfy .rv-flag",
                   ".rv-k-hf:checked ~ .rv-p-hfn:checked ~ .rv-res-hfn .rv-flag") -%}
     , {% if r > 0 %}.rv-redo-{{ r }}:checked ~ {% endif %}{% if r < max_redo %}.rv-redo-{{ r + 1 }}:not(:checked) ~ {% endif %}.rv-round-{{ r }} > {{ tail }}
@@ -272,7 +283,8 @@
 {% macro rv_wait_sel() -%}
 > .rv-wait
 {%- for r in range(max_redo + 1) -%}
-  {%- for tail in (".rv-k-none:checked ~ .rv-rec .rv-wait", ".rv-k-hf:checked ~ .rv-c-none:checked ~ .rv-rec .rv-wait") -%}
+  {%- for tail in (".rv-k-none:checked ~ .rv-rec .rv-wait", ".rv-k-hf:checked ~ .rv-none-hf:checked ~ .rv-rec .rv-wait",
+                  ".rv-k-sub[data-sub=food]:checked ~ .rv-none-food:checked ~ .rv-rec .rv-wait") -%}
     , {% if r > 0 %}.rv-redo-{{ r }}:checked ~ {% endif %}{% if r < max_redo %}.rv-redo-{{ r + 1 }}:not(:checked) ~ {% endif %}.rv-round-{{ r }} > {{ tail }}
   {%- endfor -%}
 {%- endfor -%}
@@ -721,23 +733,30 @@
 {% macro branch_wizard(item) %}
 {% set result = item.result %}
 {% set n = item.n %}
-{% set SLUG = {"식품": "food", "건기식_인정": "hfy", "건기식_비인정": "hfn", "화장품": "cos", "일반상품": "gen"} %}
+{#- 🔄 2026-10-20 (lse) — 「일반식품_기능성」(D-295 · 일반식품이지만 기능성 표시 고시 요건을 갖춘 식품) 분기를 그린다. 종전에는 이름표에 없어
+    화면이 이 분기를 통째로 건너뛰었다(`test_live_fixtures_screen` 의 예상 실패 · 한빈 e2e_review). 건강기능식품의 「인정 · 비인정」처럼
+    **식품 안의 하위 선택**으로 둔다 — 이 분기가 응답에 있을 때만 식품이 하위 선택을 가진다(없으면 종전처럼 식품을 바로 고른다) #}
+{% set SLUG = {"식품": "food", "일반식품_기능성": "foodfn", "건기식_인정": "hfy", "건기식_비인정": "hfn", "화장품": "cos", "일반상품": "gen"} %}
 {% set KIND = {"food": ("식품", "일반식품 · 가공식품"), "hf": ("건강기능식품", "기능성을 표방하는 제품"),
                "cos": ("화장품", "바르는 제품"), "gen": ("일반상품", "식품 · 화장품이 아닌 상품")} %}
+{#- 하위 선택의 부모 — 잎(전제) → 고르는 품목 #}
+{% set PARENT = {"hfy": "hf", "hfn": "hf", "food": "food", "foodfn": "food", "cos": "cos", "gen": "gen"} %}
 {% set ns = namespace(have=[], kinds=[]) %}
 {% for b in result.branches %}
   {% set p = SLUG.get(b.premise.value) %}
   {% if p %}
     {% set ns.have = ns.have + [p] %}
-    {% set k = "hf" if p in ("hfy", "hfn") else p %}
+    {% set k = PARENT[p] %}
     {% if k not in ns.kinds %}{% set ns.kinds = ns.kinds + [k] %}{% endif %}
   {% endif %}
 {% endfor %}
+{#- 하위 선택이 있는 품목 — 건강기능식품은 늘 · 식품은 기능성 표시 분기가 있을 때만 #}
+{% set SUBS = ["hf"] + (["food"] if "foodfn" in ns.have else []) %}
 {% set only_hf = ns.kinds == ["hf"] %}
 {# 🆕 2026-10-06 — 고쳐 쓰기는 서버를 다녀온다. 화면에 상태가 없으니 서버가 받은 전제 · 회차(`picked`)로 같은 자리를 펼친다 #}
 {% set pp = SLUG.get(item.picked.premise) if item.picked else none %}
 {% set pr = item.picked.round if pp else -1 %}
-{% set pk = "hf" if pp in ("hfy", "hfn") else pp %}
+{% set pk = PARENT.get(pp) if pp else none %}
 <div class="rv-br" data-copy-number="{{ n }}">
   {% for r in range(1, max_redo + 1) %}
   <input class="visually-hidden rv-redo-{{ r }}" type="checkbox" id="rvr-{{ n }}-{{ r }}"
@@ -751,18 +770,22 @@
            aria-label="유형 고르지 않음">
     {% endif %}
     {% for k in ns.kinds %}
-    <input class="visually-hidden rv-k {{ 'rv-k-hf' if k == 'hf' else 'rv-leafk rv-p-' ~ k }}" type="radio"
+    {#- 하위 선택이 있는 품목은 `rv-k-sub`(+ `data-sub`) — 건강기능식품은 종전 이름표 `rv-k-hf` 도 그대로 단다 #}
+    <input class="visually-hidden rv-k {{ ('rv-k-sub' ~ (' rv-k-hf' if k == 'hf' else '')) if k in SUBS else 'rv-leafk rv-p-' ~ k }}" type="radio"
            name="rvk-{{ n }}-{{ r }}" id="rvk-{{ n }}-{{ r }}-{{ k }}" aria-label="{{ KIND[k][0] }}"
+           {%- if k in SUBS %} data-sub="{{ k }}"{% endif %}
            {%- if only_hf or (r == pr and k == pk) %} checked{% endif %}>
     {% endfor %}
-    {% if "hf" in ns.kinds %}
-    <input class="visually-hidden rv-c-none" type="radio" name="rvc-{{ n }}-{{ r }}"
-           {%- if not (r == pr and pk == "hf") %} checked{% endif %} aria-label="인증 고르지 않음">
-    {% endif %}
-    {% for p in ("hfy", "hfn") if p in ns.have %}
-    <input class="visually-hidden rv-c rv-p-{{ p }}" type="radio" name="rvc-{{ n }}-{{ r }}"
-           id="rvc-{{ n }}-{{ r }}-{{ p }}" aria-label="인증 {{ '받음' if p == 'hfy' else '안 받음' }}"
+    {#- 하위 선택 — 품목마다 따로 고른다(이름 `rvc-…-<품목>`) · 종전 건강기능식품 「인증 받음 · 안 받음」과 같은 자리 #}
+    {% for sk, leaves in (("hf", ("hfy", "hfn")), ("food", ("food", "foodfn"))) if sk in SUBS and sk in ns.kinds %}
+    <input class="visually-hidden rv-c-none rv-none-{{ sk }}" type="radio" name="rvc-{{ n }}-{{ r }}-{{ sk }}"
+           {%- if not (r == pr and pk == sk) %} checked{% endif %} aria-label="{{ '인증' if sk == 'hf' else '기능성 표시 요건' }} 고르지 않음">
+    {% for p in leaves if p in ns.have %}
+    <input class="visually-hidden rv-c rv-sub-{{ sk }} rv-p-{{ p }}" type="radio" name="rvc-{{ n }}-{{ r }}-{{ sk }}"
+           id="rvc-{{ n }}-{{ r }}-{{ p }}"
+           aria-label="{{ {'hfy': '인증 받음', 'hfn': '인증 안 받음', 'food': '일반 식품', 'foodfn': '기능성 표시 요건 갖춤'}[p] }}"
            {%- if r == pr and p == pp %} checked{% endif %}>
+    {% endfor %}
     {% endfor %}
 
     {# 🔄 배지는 **고른 분기의 결과**로 바뀐다 — 고르기 전에는 기록되는 판정(보류)이다. 고른 뒤에는 「고르신 내용 기준」을 단다 #}
@@ -791,7 +814,28 @@
       <p class="cl-info-note">{{ icon("info", 18) }} 제품 정보를 확인하는 단계이며, 아직 판정이 완료되지 않았어요.</p>
     </div>
 
-    <div class="rv-q rv-q2">
+    {% if "food" in SUBS and "food" in ns.kinds %}
+    {#- 🆕 2026-10-20 (lse) — 식품의 하위 선택 · 일반식품_기능성(D-295) #}
+    <div class="rv-q rv-q2 rv-q2-food">
+      <div class="cl-selection-note">선택한 유형: <b>식품</b><button type="button" data-review-type-back>유형 다시 선택</button></div>
+      <p class="rv-q-title">기능성 표시 요건을 모두 갖춘 식품인가요?</p>
+      <p class="rv-note">일반식품도 기능성 표시 고시의 요건을 모두 채우면 정해진 기능성 표시를 할 수 있어요.</p>
+      <div class="rv-opts">
+        {% for p, sub in (("food", "일반식품 · 가공식품"), ("foodfn", "고시가 정한 기능성 표시 요건을 모두 갖춤")) %}
+        {% if p in ns.have %}
+        <label class="rv-opt" for="rvc-{{ n }}-{{ r }}-{{ p }}"><span class="cl-radio-dot" aria-hidden="true"></span><span><b>{{ "아니요, 일반 식품이에요" if p == "food" else "예, 요건을 갖췄어요" }}</b><small>{{ sub }}</small></span></label>
+        {% else %}
+        <span class="rv-opt rv-opt-off">{{ "일반 식품" if p == "food" else "기능성 표시 요건 갖춤" }}<small>이 경우의 판정이 응답에 없어요</small></span>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <p class="cl-info-note">{{ icon("info", 18) }} 선택한 정보에 따라 검수하며, 요건 충족 여부를 자동으로 확인하지는 않아요.</p>
+      <button type="button" class="cl-continue" data-review-finish>이 조건으로 검수 결과 보기 <span>→</span></button>
+      <label class="rv-link rv-back" for="rvk-{{ n }}-{{ r }}-none">← 유형 다시 고르기</label>
+    </div>
+    {% endif %}
+
+    <div class="rv-q rv-q2 rv-q2-hf">
       <div class="cl-selection-note">선택한 유형: <b>건강기능식품</b><button type="button" data-review-type-back>유형 다시 선택</button></div>
       <p class="rv-q-title">건강기능식품 인증을 받았나요?</p>
       <p class="rv-note">이 기능성으로 식약처 인정을 받았는지에 따라 쓸 수 있는 표현이 달라요.</p>
@@ -821,6 +865,9 @@
           {% if p in ("hfy", "hfn") %}
           <span class="rv-chip c-violation">건강기능식품</span>
           <span class="rv-chip c-violation">인증 {{ "받음" if p == "hfy" else "안 받음" }}</span>
+          {% elif p == "foodfn" or (p == "food" and "food" in SUBS) %}
+          <span class="rv-chip c-violation">식품</span>
+          <span class="rv-chip c-violation">{{ "기능성 표시 요건 갖춤" if p == "foodfn" else "일반 식품" }}</span>
           {% else %}
           <span class="rv-chip c-violation">{{ KIND[p][0] }}</span>
           {% endif %}

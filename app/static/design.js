@@ -128,12 +128,15 @@ document.documentElement.classList.add('cl-js');
     }
     rounds.forEach(round=>{
       const kind=()=>round.querySelector('.rv-k:checked');
-      const cert=()=>round.querySelector('.rv-c:checked');
+      // 2026-10-20 (lse) — 하위 선택이 있는 품목(건강기능식품 · 기능성 표시 분기가 있을 때의 식품)은 `data-sub` 를 단다.
+      // 하위 선택은 **지금 고른 품목의 것만** 읽는다 — 품목마다 라디오 묶음이 따로다(`rv-sub-<품목>`)
+      const sub=()=>kind()?.dataset.sub||'';
+      const cert=()=>sub()?round.querySelector('.rv-c.rv-sub-'+sub()+':checked'):null;
       const next=round.querySelector('[data-review-next]');
-      const finish=round.querySelector('[data-review-finish]');
       function update(){
         const selected=kind();
         const leaf=selected?.className.match(/rv-p-(\w+)/)?.[1];
+        round.dataset.sub=sub();
         const p=leaf||cert()?.className.match(/rv-p-(\w+)/)?.[1];
         round.querySelectorAll('.rv-res').forEach(res=>res.classList.toggle('is-shown',!!p&&res.classList.contains('rv-res-'+p)));
         round.querySelectorAll('.rv-opt[for]').forEach(label=>{
@@ -147,7 +150,7 @@ document.documentElement.classList.add('cl-js');
         const selectedLabel=selected?.getAttribute('aria-label')||'';
         const note=round.querySelector('[data-selected-kind]');if(note)note.textContent=selectedLabel||'유형을 선택해주세요';
         if(next)next.disabled=!selected;
-        if(finish)finish.disabled=!cert();
+        round.querySelectorAll('[data-review-finish]').forEach(b=>{b.disabled=!cert();});
         round.querySelectorAll('.cl-review-progress li').forEach((li,i)=>{
           const step={type:0,cert:1,result:2}[round.dataset.uiStage];
           li.classList.toggle('is-current',i===step);li.classList.toggle('is-done',i<step);
@@ -156,7 +159,7 @@ document.documentElement.classList.add('cl-js');
         if(round.dataset.uiStage==='result'&&visible(round)){
           const number=round.closest('.rv-br').dataset.copyNumber;
           const condition=document.querySelector('[data-current-category="'+number+'"]');
-          if(condition)condition.textContent=selectedLabel+(selected?.classList.contains('rv-k-hf')?' · '+(cert()?.getAttribute('aria-label')||''):'');
+          if(condition)condition.textContent=selectedLabel+(sub()?' · '+(cert()?.getAttribute('aria-label')||''):'');
         }
         refreshHeading();
       }
@@ -168,7 +171,7 @@ document.documentElement.classList.add('cl-js');
         radio.tabIndex=-1;
         label.setAttribute('role','radio');
         label.parentElement.setAttribute('role','radiogroup');
-        label.parentElement.setAttribute('aria-label',radio.classList.contains('rv-c')?'인증 여부':'제품 유형');
+        label.parentElement.setAttribute('aria-label',radio.classList.contains('rv-c')?(radio.classList.contains('rv-sub-food')?'기능성 표시 요건':'인증 여부'):'제품 유형');
         let pointerScroll;
         const captureScroll=()=>({pane:panel.scrollTop,x:window.scrollX,y:window.scrollY});
         label.addEventListener('pointerdown',event=>{pointerScroll=captureScroll();event.preventDefault();});
@@ -195,12 +198,14 @@ document.documentElement.classList.add('cl-js');
           event.preventDefault();options[next].click();
         });
       });
-      round.dataset.uiStage=kind()?(kind().classList.contains('rv-k-hf')?(cert()?'result':'cert'):'result'):'type';
-      next?.addEventListener('click',()=>{if(!kind())return;round.dataset.uiStage=kind().classList.contains('rv-k-hf')?'cert':'result';update();panel.scrollTop=0;});
-      finish?.addEventListener('click',()=>{if(!cert())return;round.dataset.uiStage='result';update();panel.scrollTop=0;});
-      const back=round.querySelector('[data-review-type-back]');
-      if(round.dataset.onlyHf==='true'&&back)back.hidden=true;
-      back?.addEventListener('click',()=>{round.dataset.uiStage='type';update();panel.scrollTop=0;});
+      round.dataset.uiStage=kind()?(sub()?(cert()?'result':'cert'):'result'):'type';
+      next?.addEventListener('click',()=>{if(!kind())return;round.dataset.uiStage=sub()?'cert':'result';update();panel.scrollTop=0;});
+      // 두 번째 질문(하위 선택) 화면이 품목마다 있다 — 「결과 보기」 버튼도 여럿이다
+      round.querySelectorAll('[data-review-finish]').forEach(b=>b.addEventListener('click',()=>{if(!cert())return;round.dataset.uiStage='result';update();panel.scrollTop=0;}));
+      round.querySelectorAll('[data-review-type-back]').forEach(back=>{
+        if(round.dataset.onlyHf==='true')back.hidden=true;
+        back.addEventListener('click',()=>{round.dataset.uiStage='type';update();panel.scrollTop=0;});
+      });
       round.addEventListener('change',update);update();
     });
     panel.querySelectorAll('.rv-br>input[type=checkbox]').forEach(input=>input.addEventListener('change',refreshHeading));
