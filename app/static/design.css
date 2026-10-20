@@ -2584,3 +2584,65 @@
 .hg-text-link:hover { transform:translateY(-1px); box-shadow:0 8px 20px -8px rgba(225,48,108,.5); color:#C2185B; }
 .hg-text-link svg { color:#E1306C; }
 .hg-text-link span { margin-left:2px; }
+/* 🆕 2026-10-20 (lse · 사용자 「검수 페이지 클로드 냄새 빼기 · 벤치마킹」) — 그래머리 · 맞춤법 검사기 결
+   요약판(문장 수 · 상태 색 막대) · 문장 카드(왼쪽 상태 색 띠 · 맨 위 상태 배지 · 따옴표 회색 상자 없이 · 걸린 곳 물결 밑줄) · 버튼 한 줄 */
+.user-shell .rv-results-pane { --t-bad:#E5484D; --t-orange:#F76B15; --t-hold:#8B8D98; --t-ok:#30A46C; }
+/* 결과 머리 — 베이지 상자 → 흰 카드 + 큰 결론 + 요약판 */
+.user-shell .rv-results-pane .cl-result-overview { position:relative; overflow:hidden; padding:18px 20px 16px !important; margin:0 0 16px !important;
+  border:1px solid var(--u-line); border-radius:16px; background:var(--u-surface) !important; box-shadow:0 1px 2px rgba(60,20,40,.04), 0 6px 18px rgba(150,40,90,.06); }
+.user-shell .rv-results-pane .cl-result-overview::before { content:""; position:absolute; left:0; top:0; right:0; height:4px; background:linear-gradient(90deg,#833AB4,#E1306C,#F56040); }
+.user-shell .rv-results-pane .cl-result-overview > h2 { font-size:20px !important; font-weight:800; letter-spacing:-.03em; margin:2px 0 4px !important; }
+.user-shell .rv-results-pane .cl-result-overview > p { font-size:13px !important; color:var(--u-clay); margin:0 !important; }
+.user-shell .rv-score { margin-top:14px; padding-top:14px; border-top:1px dashed var(--u-line); }
+.user-shell .rv-score-head { margin:0 0 8px; font-size:13px; color:var(--u-clay); }
+.user-shell .rv-score-head b { font-size:22px; font-weight:800; color:var(--u-ink); margin-right:4px; letter-spacing:-.02em; }
+.user-shell .rv-score-bar { display:flex; gap:3px; height:10px; border-radius:99px; overflow:hidden; background:var(--u-surface2); }
+.user-shell .rv-score-bar i { display:block; min-width:10px; }
+.user-shell .rv-seg-bad { background:var(--t-bad); } .user-shell .rv-seg-orange { background:var(--t-orange); }
+.user-shell .rv-seg-hold { background:var(--t-hold); } .user-shell .rv-seg-ok { background:var(--t-ok); }
+.user-shell .rv-score-list { display:flex; flex-wrap:wrap; gap:6px 16px; margin:10px 0 0; padding:0; list-style:none; font-size:13px; color:var(--u-ink); }
+.user-shell .rv-score-list li { display:flex; align-items:center; gap:6px; }
+.user-shell .rv-score-list li span { width:9px; height:9px; border-radius:3px; }
+.user-shell .rv-sc-bad span { background:var(--t-bad); } .user-shell .rv-sc-orange span { background:var(--t-orange); }
+.user-shell .rv-sc-hold span { background:var(--t-hold); } .user-shell .rv-sc-ok span { background:var(--t-ok); }
+.user-shell .rv-score-list li.is-zero { opacity:.4; }
+/* 문장 카드 */
+.user-shell .rv-results-pane .rv-sent { --tc:var(--t-hold); position:relative; display:flex; flex-direction:column; gap:8px;
+  margin:0 0 12px !important; padding:16px 18px 14px 22px !important; border:1px solid var(--u-line) !important; border-radius:14px !important;
+  background:var(--u-surface) !important; box-shadow:0 1px 2px rgba(60,20,40,.04); }
+.user-shell .rv-results-pane .rv-sent::before { content:""; position:absolute; left:0; top:12px; bottom:12px; width:4px; border-radius:0 4px 4px 0; background:var(--tc); }
+.user-shell .rv-results-pane .rv-t-bad { --tc:var(--t-bad); } .user-shell .rv-results-pane .rv-t-orange { --tc:var(--t-orange); }
+.user-shell .rv-results-pane .rv-t-hold { --tc:var(--t-hold); } .user-shell .rv-results-pane .rv-t-ok { --tc:var(--t-ok); }
+/* 상태 배지(결론 한 줄)를 맨 위로 */
+.user-shell .rv-results-pane .rv-sent > .rv-sent-head { order:-1; display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 !important; }
+.user-shell .rv-results-pane .rv-sent .rv-dot { display:none; }
+.user-shell .rv-results-pane .rv-sent .rv-concl { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:8px; font-size:13px !important; font-weight:700;
+  color:var(--tc); background:color-mix(in srgb, var(--tc) 11%, var(--u-surface)); }
+.user-shell .rv-results-pane .rv-sent .rv-concl::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--tc); }
+.user-shell .rv-results-pane .rv-sent :is(.rv-risk, .rv-encpill) { padding:3px 8px; border-radius:8px; font-size:12px; font-weight:600; border:1px solid var(--u-line); background:var(--u-surface); color:var(--u-clay); }
+/* 문장 — 회색 상자 · 따옴표 없이, 크게 */
+.user-shell .rv-results-pane .rv-sent .rv-text { margin:2px 0 0 !important; padding:0 !important; border:0 !important; background:none !important;
+  font-size:18px !important; font-weight:700 !important; line-height:1.6 !important; letter-spacing:-.02em; color:var(--u-ink); }
+.user-shell .rv-results-pane .rv-sent .rv-text::before, .user-shell .rv-results-pane .rv-sent .rv-text::after { content:none; }
+/* 걸린 곳 — 맞춤법 검사기처럼 물결 밑줄 */
+.user-shell .rv-results-pane .rv-sent .rv-hit { background:color-mix(in srgb, var(--tc) 10%, transparent); color:inherit; padding:0 1px; border-radius:3px;
+  text-decoration:underline wavy var(--tc); text-decoration-thickness:1.5px; text-underline-offset:5px; }
+.user-shell .rv-results-pane .rv-sent .rv-types { margin:0 !important; font-size:13.5px !important; color:var(--u-clay); }
+.user-shell .rv-results-pane .rv-sent .rv-todo { margin:0 !important; font-size:13.5px !important; font-weight:700; color:var(--u-ink); text-decoration:none !important; }
+.user-shell .rv-results-pane .rv-sent .rv-todo::before { content:"→ "; color:var(--tc); }
+/* 근거 보기 · 고쳐 쓰기 — 한 줄의 작은 버튼 */
+.user-shell .rv-results-pane .rv-sent > details.rv-more > summary { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:9px; border:1px solid var(--u-line);
+  font-size:13px; font-weight:600; color:var(--u-ink); background:var(--u-surface); cursor:pointer; list-style:none; }
+.user-shell .rv-results-pane .rv-sent > details.rv-more > summary::-webkit-details-marker { display:none; }
+.user-shell .rv-results-pane .rv-sent > details.rv-more > summary:hover { border-color:var(--tc); color:var(--tc); }
+.user-shell .rv-results-pane .rv-sent > details.rv-more[open] > summary { margin-bottom:10px; }
+.user-shell .rv-results-pane .rv-sent .rv-fix-go { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border:0; border-radius:10px; cursor:pointer;
+  background:var(--u-ink) !important; color:var(--u-surface) !important; font-size:13px; font-weight:700; box-shadow:none; }
+.user-shell .rv-results-pane .rv-sent .rv-fix-go:hover { filter:none; background:linear-gradient(115deg,#833AB4,#E1306C,#F56040) !important; color:#fff !important; }
+.user-shell .rv-results-pane .rv-sent .rv-fix-go small { font-weight:500; opacity:.75; }
+/* 문장 카드 — 「근거 보기」 · 「고쳐 쓰기」를 한 줄에(접혀 있을 때) */
+.user-shell .rv-results-pane .rv-sent { flex-direction:row; flex-wrap:wrap; column-gap:8px; }
+.user-shell .rv-results-pane .rv-sent > * { flex:1 1 100%; min-width:0; }
+.user-shell .rv-results-pane .rv-sent > details.rv-more:not([open]) { flex:0 0 auto; }
+.user-shell .rv-results-pane .rv-sent > form:has(.rv-fix-go) { flex:0 0 auto; margin:0 !important; }
+.user-shell .rv-results-pane .rv-sent > form:has(.rv-fix-go) .rv-think { flex-basis:100%; }
