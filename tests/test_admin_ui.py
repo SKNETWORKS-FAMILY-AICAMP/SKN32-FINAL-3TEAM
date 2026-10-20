@@ -119,7 +119,7 @@ def test_dashboard_filters_preserve_period_and_sample_provenance(client: TestCli
     assert response.context["ticket_status"] == "open"
     assert response.context["tickets"] == []  # DB 를 못 읽으면 예시로 채우지 않는다
     assert 'name="period" value="weekly"' in response.text
-    assert "일부는 예시 데이터입니다" in response.text
+    assert "이용 기록을 읽지 못했어요" in response.text  # 🔄 10-20 — 예시 대신 못 읽음 안내 (D-72)
     assert "문의를 읽지 못했습니다" in response.text
     assert "테이블 건수를 확인할 수 없습니다" in response.text
     assert 'href="/admin/errors"' in response.text

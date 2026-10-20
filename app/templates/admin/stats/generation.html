@@ -1,53 +1,62 @@
-{# app/templates/admin/stats/generation.html — 생성 통계 · 소유자 **psj**
-   (병렬작업 계약 §5)
+{# app/templates/admin/stats/generation.html — 생성 통계 · 소유자 **psj** (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다.
-  🔄 2026-10-20 — `copy_sentence` 를 출처(`origin`)별로 센다(admin_stats.py `_load_generation`). 원문은 읽지 않는다 — 건수만 (D-76).
-     🚨 생성 결과를 저장하는 경로가 아직 없어 「카피 생성」은 0 건이 정상이다 — 「사용이 없다」가 아니라 「저장하지 않는다」로 적는다.
-     예시 수치(품질 점수 · 모델 구성 · 재생성 사유)는 지웠다 (D-147). 못 읽으면 안내 (D-72).
+  🔄 2026-10-20 — **셀 수 있는 것만** 그린다 (admin_stats.py `_load_generation` · D-147).
+     ① 엔진 상태(`copygen.off_reason`) ② 생성 실패(`app_error_log` 의 WARNING `카피 생성 실패` · 예외 클래스 이름만) ③ 집계를 열 조건.
+     ⛔ 생성 문구 · 승인 · 비중 · 추이는 지웠다 — 생성 결과도 요청도 저장하지 않아 늘 0 이었다.
+  🔴 오류 로그를 DB 에 쌓지 않는 환경이면 실패 수는 0 이 아니라 「기록 안 함」 (settings.error_log_enabled).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}
 {% extends "admin/stats/_base.html" %}
 {% from "admin/stats/_parts.html" import metric,distribution %}
 {% block stats_title %}생성 통계{% endblock %}
-{% block stats_description %}저장된 문구를 출처별로 세어 카피 생성 이용 현황을 확인하세요.{% endblock %}
+{% block stats_description %}카피 생성 엔진의 상태와 실패 기록을 확인하세요.{% endblock %}
 {% block stats_filters %}
-<span class="as-filter-context">저장된 문구 · 집계 기간</span>
+<span class="as-filter-context">생성 실패 · 집계 기간</span>
 <nav class="period-tabs" aria-label="집계 기간">
   {% for d in day_options %}<a href="?days={{ d }}" {% if days == d %}class="active" aria-current="page"{% endif %}>최근 {{ d }}일</a>{% endfor %}
-  <a href="?days=all" {% if days == 0 %}class="active" aria-current="page"{% endif %}>전체</a>
+  <a href="?days=all" {% if days == 0 %}class="active" aria-current="page"{% endif %}>전체 ({{ retention_days }}일 보관)</a>
 </nav>
 {% endblock %}
 {% block stats_notice %}
-{% with table="copy_sentence" %}{% include "admin/_db_notice.html" %}{% endwith %}
-{% if source == 'db' %}<p class="as-notice">문구 원문은 표시하지 않고 건수만 셉니다. 품질 점수 · 모델 구성처럼 셀 근거가 없는 지표는 표시하지 않습니다.</p>{% endif %}
+<p class="as-notice">카피 생성 결과와 요청은 <b>저장하지 않아요</b>. 그래서 생성 건수 · 성공률 · 품목별 분포는 셀 수 없어 표시하지 않아요 — 사용하지 않았다는 뜻이 아니에요.</p>
 {% endblock %}
 {% block stats_content %}
-{% if source == 'db' %}
 <div class="as-kpis">
-  {{ metric('카피 생성 문구','{:,}건'.format(kpi.generated),'저장된 생성 문구','spark') }}
-  {{ metric('생성이 담긴 문서','{:,}건'.format(kpi.docs),'작업 문서 기준') }}
-  {{ metric('승인된 생성 문구','{:,}건'.format(kpi.approved),'사용자가 승인한 문구') }}
-  {{ metric('저장 문구 중 생성 비중',kpi.share ~ '%' if kpi.share is not none else '—','전체 저장 문구 ' ~ '{:,}'.format(kpi.stored_total) ~ '건 대비') }}
+  {{ metric('생성 엔진', '켜짐' if engine.on else '꺼짐', '지금 이 서버에서 생성할 수 있어요' if engine.on else engine.why, 'spark') }}
+  {% if not log_on %}
+  {{ metric('생성 실패', '기록 안 함', '이 환경은 오류 로그를 DB 에 쌓지 않아요') }}
+  {% elif source == 'db' %}
+  {{ metric('생성 실패', '{:,}건'.format(fail.n), '최근 ' ~ span_days ~ '일') }}
+  {{ metric('마지막 실패', fail.last_at, '서버 로그 기준') }}
+  {% else %}
+  {{ metric('생성 실패', '-', '기록을 읽지 못했어요') }}
+  {% endif %}
 </div>
-{% if not kpi.generated %}
-<section class="as-panel as-unavailable">
-  <h2>저장된 카피 생성 기록이 없어요.</h2>
-  <p>지금은 카피 생성 · 광고 생성 결과를 저장하지 않아요. 그래서 0건은 <b>생성 기능을 쓰지 않았다는 뜻이 아니에요</b>. 검수 이력만 사용자 동의를 받아 저장하고 있어요.</p>
-  <p class="as-explainer">생성 결과 저장을 열려면 동의 · 보관 기한 결정이 먼저 필요해요 (D-96 · D-129 · D-307).</p>
-</section>
-{% else %}
-<section class="as-panel">
-  <div class="as-panel-head"><h2>일별 카피 생성</h2><span class="as-unit">단위 · 건</span></div>
-  <p class="as-legend"><span><i></i>생성 문구</span></p>
-  {% if trend %}
-  <div class="as-chart{% if trend|length > 10 %} as-chart--many{% endif %}" role="img" aria-label="최근 {{ trend_days }}일 카피 생성 건수. 상세 수치는 아래에서 확인할 수 있습니다.">
-    {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.n / trend_max * 100)|round(1) if trend_max else 0 }}%" title="{{ row.label }} · {{ row.n }}건"></span></div><small>{% if trend|length <= 10 or loop.first or loop.last or loop.index0 % 5 == 0 %}{{ row.label }}{% endif %}</small></div>{% endfor %}
-  </div>
-  {% else %}<p class="as-empty">최근 {{ trend_days }}일에 저장된 생성 문구가 없어요.</p>{% endif %}
-  <p class="as-context">최근 {{ trend_days }}일 · 축 상한 {{ trend_max }}건 · 마지막 생성 {{ kpi.last_at }}</p>
-</section>
+
+{% with table="app_error_log" %}{% include "admin/_db_notice.html" %}{% endwith %}
+{% if log_on and source == 'db' %}
+<div class="as-grid">
+  <section class="as-panel">
+    <div class="as-panel-head"><h2>일별 생성 실패</h2><span class="as-unit">최근 {{ trend_days }}일 · 건</span></div>
+    {% if trend %}
+    <div class="as-chart{% if trend|length > 10 %} as-chart--many{% endif %}" role="img" aria-label="최근 {{ trend_days }}일 생성 실패 건수. 상세 수치는 오류 로그에서 확인할 수 있습니다.">
+      {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.n / trend_max * 100)|round(1) if trend_max else 0 }}%" title="{{ row.label }} · {{ row.n }}건"></span></div><small>{% if trend|length <= 10 or loop.first or loop.last or loop.index0 % 5 == 0 %}{{ row.label }}{% endif %}</small></div>{% endfor %}
+    </div>
+    <p class="as-context">축 상한 {{ trend_max }}건 · 실패가 있었던 날만 표시해요</p>
+    {% else %}<p class="as-empty">최근 {{ trend_days }}일에 생성 실패 기록이 없어요.</p>{% endif %}
+  </section>
+  <section class="as-panel">
+    <div class="as-panel-head"><h2>실패 원인 (예외 종류)</h2><span class="as-unit">선택한 기간</span></div>
+    {{ distribution(by_exc) }}
+    <p class="as-explainer">예외 클래스 이름만 저장돼요 — 사용자가 적은 내용은 남지 않아요. 자세한 기록은 <a href="/admin/errors">오류 로그</a>에서 확인하세요.</p>
+  </section>
+</div>
 {% endif %}
-<section class="as-panel"><div class="as-panel-head"><h2>저장 문구 출처</h2><span class="as-unit">선택한 기간</span></div>{{ distribution(by_origin) }}<p class="as-explainer">직접 입력 · 검수는 이력 보관에 동의한 검수 문구예요.</p></section>
-{% else %}<section class="as-panel as-unavailable"><h2>생성 통계를 확인할 수 없습니다.</h2><p>저장된 기록을 읽지 못했습니다. 연결 상태를 확인한 후 다시 조회해주세요.</p></section>{% endif %}
+
+<section class="as-panel">
+  <div class="as-panel-head"><h2>집계를 열려면 필요한 결정</h2></div>
+  <div class="admin-table-scroll"><table><thead><tr><th>보고 싶은 수</th><th>먼저 필요한 것</th></tr></thead><tbody>
+    {% for what, need in needs %}<tr><td>{{ what }}</td><td>{{ need }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
 {% endblock %}

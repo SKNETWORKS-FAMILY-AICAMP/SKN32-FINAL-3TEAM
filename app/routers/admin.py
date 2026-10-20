@@ -78,18 +78,18 @@ def _table_counts() -> dict[str, int]:
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
-    """운영 대시보드. 기존 예시 집계와 실제 데이터 층 조회는 구분해서 표시한다."""
+    """운영 대시보드 — 검수 이용 · 회원 수 · 문의를 DB 에서 읽는다. 못 읽으면 「-」 + 안내 (D-72)."""
     actor = require_governor(request)
-    # 🔄 2026-10-20 (psj) — 문의 · 회원 수는 DB 를 읽는다(`admin_cs.recent` · `admin_dbread`). 이용 추이는 아직 표가
-    #    없어 예시 그대로다 — 화면이 둘을 갈라 적는다. 못 읽으면 「-」 + 안내 (D-72). 가입 심사는 닫은 화면이라 라벨만.
+    # 🔄 2026-10-20 (psj) — 문의 · 회원 수는 DB 를 읽는다(`admin_cs.recent` · `admin_dbread`). 이용 추이도 `judgment` 를
+    #    센다(`admin_stats._load_usage` — 통계 대시보드와 같은 집계 · D-99). 생성은 저장하지 않아 「저장 안 함」. 가입 심사는 라벨만.
     from app.models import TICKET_STATUSES  # noqa: PLC0415
     from app.routers import admin_cs, admin_dbread  # noqa: PLC0415
     from app.routers.admin_signup_review import LABEL as SIGNUP_LABEL  # noqa: PLC0415
     from app.routers.admin_stats import (  # noqa: PLC0415
-        _DASH_DATA,
         _PERIOD_LABEL,
         _PERIODS,
         _clean_period,
+        _load_usage,
     )
 
     period = _clean_period(request.query_params.get("period"))
@@ -101,7 +101,7 @@ def index(request: Request) -> HTMLResponse:
         [("SELECT count(*) AS n FROM user_account WHERE disabled_at IS NULL", [])],
         what="index.members",
     )
-    dash = _DASH_DATA[period]
+    dash = _load_usage(period)
     return templates.TemplateResponse(
         request,
         "admin/index.html",
@@ -112,7 +112,7 @@ def index(request: Request) -> HTMLResponse:
             "periods": _PERIODS,
             "period_label": _PERIOD_LABEL,
             "dash": dash,
-            "dash_max": max(dash["judge_series"] + dash["gen_series"]),
+            "dash_max": dash["max"],
             "member_total": mout[0][0]["n"] if msrc == "db" else None,
             "tickets": inbox["rows"],
             "ticket_source": inbox["source"],

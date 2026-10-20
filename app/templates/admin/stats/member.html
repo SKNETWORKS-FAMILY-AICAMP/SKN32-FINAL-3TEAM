@@ -1,32 +1,37 @@
-{# app/templates/admin/stats/member.html — 이용자 통계 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+{# app/templates/admin/stats/member.html — 이용자 통계 · 소유자 **psj** (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다(목업 `mockDownload`).
-  🔴 `member_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
-  🔴 일/주/월 토글은 목업에서 JS 지만 여기는 GET 쿼리(`?period=`)로 전환한다.
+  🔄 2026-10-20 — `user_account` 를 센다(admin_stats `_load_members`). 예시 수치(회원 12,483명 · 플랜 분포 · 유형별 현황)는 지웠다 (D-147).
+  🔴 회원 유형 · 요금제 칸은 표에 없다 (D-66 · D-69) — 그 분포는 그리지 않는다. 못 읽으면 안내 (D-72).
+  ★ 상태는 회원 목록과 같은 식 — 비활성(`disabled_at`) > 휴면(마지막 접속 {{ dormant_days }}일 전) > 활성.
+  🔴 일/주/월 토글은 GET 쿼리(`?period=`)로 전환한다 (CSP `script-src 'self'`).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}
 {% extends "admin/stats/_base.html" %}
 {% from "admin/stats/_parts.html" import metric,distribution %}
 {% block stats_title %}이용자 통계{% endblock %}
-{% block stats_description %}회원 구성과 가입·탈퇴 흐름을 확인하세요.{% endblock %}
-{% block stats_filters %}<span>가입·탈퇴 추이 기간 · 회원 수와 플랜 분포는 전체 예시 기준</span><nav class="period-tabs" aria-label="가입·탈퇴 집계 기간">{% for p in periods %}<a href="?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>{% endfor %}</nav>{% endblock %}
+{% block stats_description %}회원 상태와 가입 · 비활성 흐름을 확인하세요.{% endblock %}
+{% block stats_filters %}<span>가입 · 비활성 추이 기간</span><nav class="period-tabs" aria-label="가입·비활성 집계 기간">{% for p in periods %}<a href="?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>{% endfor %}</nav>{% endblock %}
+{% block stats_notice %}
+{% with table="user_account" %}{% include "admin/_db_notice.html" %}{% endwith %}
+{% if source == 'db' %}<p class="as-notice">회원 유형 · 요금제는 저장하는 칸이 없어 집계하지 않아요 (D-66 · D-69). 회원 상태는 회원 목록과 같은 기준이에요.</p>{% endif %}
+{% endblock %}
 {% block stats_content %}
+{% if source == 'db' %}
 <div class="as-kpis">
-  {{ metric('전체 회원수','{:,}명'.format(kpi.total),'전체 예시 계정','bag') }}
-  {{ metric('일반 계정수','{:,}명'.format(kpi.general),'일반 회원') }}
-  {{ metric('인플루언서 계정수','{:,}명'.format(kpi.influencer),'인플루언서 회원') }}
-  {{ metric('기업수','{:,}개'.format(kpi.enterprise),'기업 회원') }}
+  {{ metric('전체 회원','{:,}명'.format(kpi.live),'비활성 계정 제외','bag') }}
+  {{ metric('활성','{:,}명'.format(kpi.active),'최근 ' ~ dormant_days ~ '일 안에 접속') }}
+  {{ metric('휴면','{:,}명'.format(kpi.dormant),dormant_days ~ '일 넘게 접속 없음') }}
+  {{ metric('비활성','{:,}명'.format(kpi.disabled),'계정을 끈 회원 · 마지막 가입 ' ~ kpi.last_join) }}
 </div>
 <div class="as-grid">
-  <section class="as-panel"><div class="as-panel-head"><h2>가입·탈퇴 추이</h2><span class="as-unit">{{ period_label[period] }} · 명</span></div><p class="as-legend"><span><i></i>가입</span><span><i class="as-secondary"></i>탈퇴</span></p>
+  <section class="as-panel"><div class="as-panel-head"><h2>가입 · 비활성 추이</h2><span class="as-unit">{{ trend_scope }} · 명</span></div><p class="as-legend"><span><i></i>가입</span><span><i class="as-secondary"></i>비활성</span></p>
     {% set join_max = trend|map(attribute='join')|max %}{% set leave_max = trend|map(attribute='leave')|max %}{% set scale = [join_max,leave_max]|max %}
-    <div class="as-chart" role="img" aria-label="{{ period_label[period] }} 가입과 탈퇴 인원 비교. 상세 수치는 아래 표에서 확인할 수 있습니다.">
-      {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.join / scale * 100)|round(1) if scale else 0 }}%" title="{{ row.label }} 가입 {{ row.join }}명"></span><span class="as-chart-bar as-secondary" style="height:{{ (row.leave / scale * 100)|round(1) if scale else 0 }}%" title="{{ row.label }} 탈퇴 {{ row.leave }}명"></span></div><small>{{ row.label }}</small></div>{% endfor %}
-    </div><p class="as-context">단위 · 명 · 축 상한 {{ '{:,}'.format(scale) }}명 · 예시 기간</p>
+    <div class="as-chart" role="img" aria-label="{{ trend_scope }} 가입과 비활성 전환 인원 비교. 상세 수치는 아래 표에서 확인할 수 있습니다.">
+      {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.join / scale * 100)|round(1) if scale else 0 }}%" title="{{ row.label }} 가입 {{ row.join }}명"></span><span class="as-chart-bar as-secondary" style="height:{{ (row.leave / scale * 100)|round(1) if scale else 0 }}%" title="{{ row.label }} 비활성 {{ row.leave }}명"></span></div><small>{{ row.label }}</small></div>{% endfor %}
+    </div><p class="as-context">단위 · 명 · 축 상한 {{ '{:,}'.format(scale) }}명 · 비활성은 계정을 끈 날 기준이에요</p>
   </section>
-  <section class="as-panel"><div class="as-panel-head"><h2>유료 계정 분포</h2><span class="as-unit">전체 예시 기준</span></div>{{ distribution(paid_plans,'value','명','') }}<p class="as-context">각 막대의 기준 상한은 1,500명입니다. 전체 회원수 대비 비율이 아닙니다.</p></section>
+  <section class="as-panel"><div class="as-panel-head"><h2>동의 · 인증 현황</h2><span class="as-unit">전체 회원 대비</span></div>{{ distribution(consents,'n','명') }}<p class="as-context">검수 이력은 보관에 동의한 회원의 것만 저장돼요 (D-96).</p></section>
 </div>
-<section class="as-panel"><div class="as-panel-head"><h2>회원 유형별 현황</h2><span class="as-unit">단위 · 명</span></div><div class="admin-table-scroll"><table><thead><tr><th>회원 유형</th><th>설명</th><th>회원수</th></tr></thead><tbody>{% for row in type_cards %}<tr><td>{{ row.type }}</td><td>{{ row.desc }}</td><td>{{ '{:,}'.format(row.count) }}</td></tr>{% endfor %}</tbody></table></div></section>
-<section class="as-panel" style="margin-top:20px"><div class="as-panel-head"><h2>가입·탈퇴 상세</h2><span class="as-unit">{{ period_label[period] }} · 명</span></div><div class="admin-table-scroll"><table><thead><tr><th>기간</th><th>가입</th><th>탈퇴</th></tr></thead><tbody>{% for row in trend %}<tr><td>{{ row.label }}</td><td>{{ '{:,}'.format(row.join) }}</td><td>{{ '{:,}'.format(row.leave) }}</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="as-panel" style="margin-top:20px"><div class="as-panel-head"><h2>가입 · 비활성 상세</h2><span class="as-unit">{{ trend_scope }} · 명</span></div><div class="admin-table-scroll"><table><thead><tr><th>기간</th><th>가입</th><th>비활성</th></tr></thead><tbody>{% for row in trend %}<tr><td>{{ row.label }}</td><td>{{ '{:,}'.format(row.join) }}</td><td>{{ '{:,}'.format(row.leave) }}</td></tr>{% endfor %}</tbody></table></div></section>
+{% else %}<section class="as-panel as-unavailable"><h2>이용자 통계를 확인할 수 없습니다.</h2><p>회원 기록을 읽지 못했습니다. 연결 상태를 확인한 후 다시 조회해주세요.</p></section>{% endif %}
 {% endblock %}

@@ -8,12 +8,10 @@
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
 🔄 2026-10-20 — **검수(판정) 통계(`/quality/judge`)는 `judgment` 표를 읽는다** (아래 `_load_judge`).
-🔄 2026-10-20 — **생성 통계(`/quality/generation`)는 `copy_sentence` 출처별 건수를 읽는다** (아래 `_load_generation` ·
-   생성 결과를 저장하는 경로가 아직 없어 `generated` 는 0 건이 정상이다).
-🔴 **이용자 통계 전용 테이블은 없다** — `db/schema.sql` 에
-   흔적이 없다. DB 승인 요청조차 안 한 상태라 **더미로만** 그린다
-   (admin_board.py 와 같은 이유 — admin_errors.py 의 dummy_no_table 분기보다 한 단계 이르다).
-   ⬜ 스키마가 생기면 실제 집계를 읽고, 못 읽었을 때 예시로 채우지 않는다.
+🔄 2026-10-20 — **생성 통계(`/quality/generation`)는 엔진 상태와 생성 실패(`app_error_log`)만 그린다** (아래 `_load_generation` ·
+   생성 결과 · 요청을 저장하지 않아 그 밖의 수는 셀 근거가 없다 · D-147).
+🔄 2026-10-20 — **이용자 통계(`/member`)는 `user_account` 를, 대시보드(`/dashboard` · `/admin/`)는 `judgment` 를 센다**
+   (아래 `_load_members` · `_load_usage`). 예시 수치는 모두 지웠다 — 못 읽으면 「-」 + 안내 (D-72 · D-147).
 🔄 매출 통계는 D-260 ⑥ · D-69 · D-107에 따라 닫힘 사유만 표시한다.
 
 🚨 목업(`app/static/mockup.html`)의 `VIEWS['member-stats']`/`VIEWS['revenue']`/
@@ -39,6 +37,8 @@
 """
 
 from __future__ import annotations
+
+from datetime import datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -78,92 +78,125 @@ def _clean_period(value: str | None) -> str:
 
 
 # ─────────────────────────────────────────────────────────────
-# 더미 — member_stat·revenue·judge_stat·generation_stat 테이블 자체가 아직 없다.
-# ⬜ 테이블 승인·적재 뒤 DB 조회로 바꾼다.
-# 목업 app/static/mockup.html 의 VIEWS['member-stats']/VIEWS['revenue']/qualityCombinedViewV2()
-# 데이터를 그대로 옮겨온 것 — 실제 운영 수치가 아니라 화면 구조 확인용이다.
+# 🔄 2026-10-20 — 이용자 통계 · 대시보드의 이용 추이는 **운영 표를 읽는다** (`admin_dbread` · D-72 · D-147).
+#    ⛔ 종전 더미(회원 12,483명 · 인플루언서 · 기업 · Basic/Pro 플랜 · 가입 추이 · 검수 143건 …)는 지웠다.
+#    🔴 회원 유형 · 요금제 칸은 표에 없다(D-66 · D-69 · `UserAccount` docstring) — 그 분포는 그리지 않는다.
+#    ★ 회원 상태는 회원 목록(`admin_members._STATUS_SQL`)과 같은 식이다 — 비활성 > 휴면(마지막 접속 365일 전) > 활성 (D-99).
+#    ★ 검수 이용은 `judgment` 에서 센다 — 이력 보관에 동의한 검수만 저장된다(D-96). 생성 결과는 저장하지 않는다.
+#    🚨 시각은 KST 고정 +9 (`admin_dbread.KST`) — 칸(시 · 일 · 주 · 월)은 KST 로 자른다.
 # ─────────────────────────────────────────────────────────────
 
-_MEMBER_KPI = {
-    "total": 12483,
-    "general": 10921,
-    "influencer": 1327,
-    "enterprise": 235,
-}
+_UNIT_SQL = {"hour": "hour", "day": "day", "week": "week", "month": "month"}
 
-_PAID_PLAN_DIST = [
-    {"label": "Basic", "value": 892, "max": 1500},
-    {"label": "Pro", "value": 341, "max": 1500},
-    {"label": "Enterprise", "value": 235, "max": 1500},
-]
 
-_MEMBER_TYPE_CARDS = [
-    {"type": "일반 회원", "desc": "개인 크리에이터 · 무료/Basic 플랜 중심", "count": 10921},
-    {"type": "인플루언서 회원", "desc": "채널 연동 · 팔로워 인증 완료 계정", "count": 1327},
-    {"type": "기업 회원", "desc": "사업자 인증 · 팀 단위 이용", "count": 235},
-]
+def _month_add(d, months: int):  # noqa: ANN001, ANN202
+    y, m = divmod(d.month - 1 + months, 12)
+    return d.replace(year=d.year + y, month=m + 1, day=1)
 
-# 가입·탈퇴 추이 — period 별 막대(간이 트렌드). 실제 값은 예시 수치.
-_JOIN_LEAVE_TREND = {
-    "daily": [
-        {"label": f"{d}일", "join": j, "leave": lv}
-        for d, j, lv in [
-            ("09/10", 42, 6),
-            ("09/11", 38, 5),
-            ("09/12", 51, 9),
-            ("09/13", 47, 7),
-            ("09/14", 55, 4),
-            ("09/15", 49, 8),
-            ("09/16", 44, 6),
-        ]
-    ],
-    "weekly": [
-        {"label": f"{w}주차", "join": j, "leave": lv}
-        for w, j, lv in [
-            ("8월 3주", 289, 41),
-            ("8월 4주", 312, 38),
-            ("9월 1주", 334, 45),
-            ("9월 2주", 326, 40),
-        ]
-    ],
-    "monthly": [
-        {"label": m, "join": j, "leave": lv}
-        for m, j, lv in [
-            ("5월", 1102, 154),
-            ("6월", 1245, 167),
-            ("7월", 1389, 172),
-            ("8월", 1421, 189),
-            ("9월", 660, 85),
-        ]
-    ],
-}
 
-# 품질 통계 — 카테고리별 정확도/품질(전체 요약용)
-_QUALITY_BY_CATEGORY = [
-    {"label": "식품", "value": 96.1, "max": 100},
-    {"label": "건기식", "value": 91.4, "max": 100},
-    {"label": "화장품", "value": 93.8, "max": 100},
-    {"label": "의료기기", "value": 88.2, "max": 100},
-    {"label": "일반", "value": 97.3, "max": 100},
-]
+def _axis(unit: str, count: int, now):  # noqa: ANN001, ANN202
+    """(시작 시각 · 칸 키 목록 · 칸 이름 목록). 키는 KST 기준 naive datetime — SQL `date_trunc(… AT TIME ZONE)` 결과와 맞댄다."""
+    from datetime import timedelta  # noqa: PLC0415
 
-_QUALITY_KPI = {
-    "avg_accuracy": "94.2%",
-    "total_cases": "48,921건",
-    "avg_review_time": "1.8초",
-    "low_quality_rate": "2.4%",
-}
+    day0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if unit == "hour":
+        keys = [day0 + timedelta(hours=h) for h in range(now.hour + 1)]
+        labels = [f"{k.hour:02d}시" for k in keys]
+    elif unit == "day":
+        keys = [day0 - timedelta(days=i) for i in range(count - 1, -1, -1)]
+        labels = [k.strftime("%m.%d") for k in keys]
+    elif unit == "week":
+        monday = day0 - timedelta(days=day0.weekday())
+        keys = [monday - timedelta(weeks=i) for i in range(count - 1, -1, -1)]
+        labels = [k.strftime("%m.%d") + "~" for k in keys]
+    else:
+        first = day0.replace(day=1)
+        keys = [_month_add(first, -i) for i in range(count - 1, -1, -1)]
+        labels = [f"{k.month}월" for k in keys]
+    return keys[0], [k.replace(tzinfo=None) for k in keys], labels
 
-_ENGINE_MIX = [
-    {"label": "코드기반", "pct": 38},
-    {"label": "인코더기반", "pct": 27},
-    {"label": "sLLM기반", "pct": 35},
-]
+
+def _series(keys: list, rows: list[dict]) -> list[int]:
+    got = {r["b"].replace(tzinfo=None): r["n"] for r in rows}
+    return [got.get(k, 0) for k in keys]
+
+
+def _bucket_sql(table: str, col: str) -> str:
+    return (
+        f"SELECT date_trunc(%s, {col} AT TIME ZONE 'Asia/Seoul') AS b, count(*) AS n "  # noqa: S608 — 고정 조각만
+        f"FROM {table} WHERE {col} >= %s GROUP BY 1"
+    )
+
+
+#: 회원 추이 — 기간별 (칸 단위, 칸 수)
+_MEMBER_AXIS = {"daily": ("day", 7), "weekly": ("week", 8), "monthly": ("month", 6)}
+_MEMBER_AXIS_LABEL = {"daily": "최근 7일", "weekly": "최근 8주", "monthly": "최근 6개월"}
+
+
+def _load_members(period: str) -> dict:
+    from app.routers import admin_dbread as db  # noqa: PLC0415
+    from app.routers.admin_members import DORMANT_DAYS  # noqa: PLC0415
+
+    unit, count = _MEMBER_AXIS[period]
+    start, keys, labels = _axis(unit, count, datetime.now(db.KST))
+    source, out = db.run(
+        [
+            (
+                "SELECT count(*) FILTER (WHERE disabled_at IS NULL) AS live, "
+                "count(*) FILTER (WHERE disabled_at IS NULL AND coalesce(last_login_at, created_at) "
+                "< now() - make_interval(days => %s)) AS dormant, "
+                "count(*) FILTER (WHERE disabled_at IS NOT NULL) AS disabled, "
+                "count(*) FILTER (WHERE disabled_at IS NULL AND email_verified_at IS NOT NULL) AS verified, "
+                "count(*) FILTER (WHERE disabled_at IS NULL AND consent_history_at IS NOT NULL) AS history, "
+                "count(*) FILTER (WHERE disabled_at IS NULL AND consent_improve_at IS NOT NULL) AS improve, "
+                "count(*) FILTER (WHERE disabled_at IS NULL AND coalesce(org, '') <> '') AS with_org, "
+                "max(created_at) AS last_join FROM user_account",
+                [DORMANT_DAYS],
+            ),
+            (_bucket_sql("user_account", "created_at"), [_UNIT_SQL[unit], start]),
+            (_bucket_sql("user_account", "disabled_at"), [_UNIT_SQL[unit], start]),
+        ],
+        what="stats.members",
+    )
+    if source != "db":
+        return {"source": source}
+    k = out[0][0]
+    live = k["live"]
+
+    def share(n: int) -> float:
+        return round(n * 100 / live, 1) if live else 0.0
+
+    joins, leaves = _series(keys, out[1]), _series(keys, out[2])
+    return {
+        "source": source,
+        "kpi": {
+            "live": live,
+            "active": live - k["dormant"],
+            "dormant": k["dormant"],
+            "disabled": k["disabled"],
+            "last_join": db.fmt_dt(k["last_join"]) if k["last_join"] else "가입 기록 없음",
+        },
+        "consents": [
+            {"label": label, "n": k[key], "pct": share(k[key])}
+            for label, key in (
+                ("검수 이력 보관 동의", "history"),
+                ("서비스 개선 활용 동의", "improve"),
+                ("이메일 인증 완료", "verified"),
+                ("소속 기재", "with_org"),
+            )
+        ],
+        "trend": [
+            {"label": lb, "join": j, "leave": lv}
+            for lb, j, lv in zip(labels, joins, leaves, strict=True)
+        ],
+        "trend_scope": _MEMBER_AXIS_LABEL[period],
+        "dormant_days": DORMANT_DAYS,
+    }
 
 
 @router.get("/member", response_class=HTMLResponse)
 def member_stats(request: Request) -> HTMLResponse:
-    """이용자 통계 — 읽기 전용. `member_stat` 테이블이 아직 없어 더미로만 그린다."""
+    """이용자 통계 — `user_account` 에서 센다. 회원 유형 · 요금제 칸은 표에 없어 그리지 않는다."""
     actor = require_governor(request)
     period = _clean_period(request.query_params.get("period"))
     return templates.TemplateResponse(
@@ -171,13 +204,10 @@ def member_stats(request: Request) -> HTMLResponse:
         "admin/stats/member.html",
         {
             "actor": actor,
-            "kpi": _MEMBER_KPI,
-            "paid_plans": _PAID_PLAN_DIST,
-            "type_cards": _MEMBER_TYPE_CARDS,
             "period": period,
             "periods": _PERIODS,
             "period_label": _PERIOD_LABEL,
-            "trend": _JOIN_LEAVE_TREND[period],
+            **_load_members(period),
         },
     )
 
@@ -228,8 +258,36 @@ def _bars(rows: list[dict], label_of=lambda k: k) -> list[dict]:  # noqa: ANN001
     ]
 
 
+#: 판정 상태 — 「확정」을 위반 / 무위반으로 가른다(`violation_type` 유무). 🚨 미판정은 통과가 아니다 (D-127)
+_VERDICT_SPLIT_SQL = (
+    "CASE WHEN verdict = 'confirmed' AND violation_type IS NOT NULL THEN 'confirmed_viol' "
+    "WHEN verdict = 'confirmed' THEN 'confirmed_pass' ELSE verdict END"
+)
+_VERDICT_SPLIT_LABEL = {
+    "confirmed_viol": "확정 위반",
+    "confirmed_pass": "확정 무위반",
+    "hold": "보류",
+    "no_basis": "근거 없음",
+    "unjudged": "미판정 (오류 · 시간 초과)",
+}
+_CATEGORY_SOURCE_LABEL = {
+    "classified": "자동 판별",
+    "user_selected": "사용자가 고름",
+    "none": "품목 미확정",
+}
+#: 위험도 하한 — 사전(`risk_floor`) vs 인코더(`risk_encoder` · D-348 보충 2)
+_RISK_SOURCE_SQL = (
+    "CASE WHEN risk_encoder IS NULL THEN 'dict_only' "
+    "WHEN risk_encoder > coalesce(risk_floor, 0) THEN 'enc_up' ELSE 'enc_same' END"
+)
+_RISK_SOURCE_LABEL = {
+    "dict_only": "사전 하한만",
+    "enc_up": "인코더가 위험도를 올림",
+    "enc_same": "인코더 하한 ≤ 사전 하한",
+}
+
+
 def _load_judge(days: int) -> dict:
-    from app.encoder import JUDGED_BY_MARK  # noqa: PLC0415
     from app.routers import admin_dbread as db  # noqa: PLC0415
 
     where = "WHERE judged_at >= now() - make_interval(days => %s)" if days else ""
@@ -240,12 +298,14 @@ def _load_judge(days: int) -> dict:
         [
             (
                 "SELECT count(*) AS n, count(DISTINCT doc_id) AS docs, "
-                "count(*) FILTER (WHERE judged_by LIKE %s ESCAPE '\\') AS enc, "
+                "count(*) FILTER (WHERE verdict = 'unjudged') AS unjudged, "
+                "count(*) FILTER (WHERE verdict = 'no_basis') AS no_basis, "
+                "count(*) FILTER (WHERE verdict = 'confirmed' AND violation_type IS NOT NULL) AS viol, "
                 "min(judged_at) AS first_at, max(judged_at) AS last_at "
                 f"FROM judgment {where}",
-                [db.like_param(JUDGED_BY_MARK), *p],
+                p,
             ),
-            (group.format(k="verdict", w=where, extra=""), p),
+            (group.format(k=_VERDICT_SPLIT_SQL, w=where, extra=""), p),
             (
                 group.format(
                     k="hold_reason", w=where or "WHERE TRUE", extra="AND verdict = 'hold'"
@@ -273,32 +333,46 @@ def _load_judge(days: int) -> dict:
                 "WHERE judged_at >= now() - make_interval(days => %s) GROUP BY 1 ORDER BY 1",
                 [trend_days],
             ),
+            (group.format(k="coalesce(product_category_source, 'none')", w=where, extra=""), p),
+            (group.format(k="judged_by", w=where, extra="") + " LIMIT 10", p),
+            (
+                group.format(
+                    k=_RISK_SOURCE_SQL,
+                    w=where or "WHERE TRUE",
+                    extra="AND (risk_floor IS NOT NULL OR risk_encoder IS NOT NULL)",
+                ),
+                p,
+            ),
         ],
         what="stats.judge",
     )
     if source != "db":
         return {"source": source}
-    from app.routers.user import _HOLD_LABELS, _VERDICT_LABELS  # noqa: PLC0415
+    from app.routers.user import _HOLD_LABELS  # noqa: PLC0415
 
     k = out[0][0]
-    n = k["n"]
     trend = [{"label": db.fmt_dt(r["d"], "%m.%d"), "n": r["n"]} for r in out[6]]
     return {
         "source": source,
         "kpi": {
-            "sentences": n,
+            "sentences": k["n"],
             "docs": k["docs"],
-            "enc_pct": round(k["enc"] * 100 / n, 1) if n else None,
+            "viol": k["viol"],
+            "unjudged": k["unjudged"],
+            "no_basis": k["no_basis"],
             "first_at": db.fmt_dt(k["first_at"], "%Y.%m.%d"),
             "last_at": db.fmt_dt(k["last_at"]),
         },
-        "by_verdict": _bars(out[1], lambda v: _VERDICT_LABELS.get(v, v)),
+        "by_verdict": _bars(out[1], lambda v: _VERDICT_SPLIT_LABEL.get(v, v)),
         "by_hold": _bars(out[2], lambda v: _HOLD_LABELS.get(v, v or "사유 없음")),
         "by_category": _bars(out[3]),
         "by_risk": _bars(
             sorted(out[4], key=lambda r: r["k"]), lambda v: _RISK_LABEL.get(v, f"R{v}")
         ),
         "by_type": _bars(out[5], lambda v: str(v).replace("_", " ")),
+        "by_source": _bars(out[7], lambda v: _CATEGORY_SOURCE_LABEL.get(v, v)),
+        "by_version": _bars(out[8]),
+        "by_risk_source": _bars(out[9], lambda v: _RISK_SOURCE_LABEL.get(v, v)),
         "trend": trend,
         "trend_max": max((r["n"] for r in trend), default=0),
         "trend_days": trend_days,
@@ -324,75 +398,95 @@ def judge_stats(request: Request) -> HTMLResponse:
 
 
 # ─────────────────────────────────────────────────────────────
-# 🔄 2026-10-20 — 생성 통계는 **`copy_sentence` 를 출처(`origin`)별로 센다** (`admin_dbread` · D-72).
-#    ⛔ 종전 더미(품질 88.4점 · GPT-4o 45% · 재생성 사유)는 지웠다 — 실제 구성과도 달랐고 셀 근거가 없다 (D-147).
-#    🚨 **지금은 생성 결과를 저장하는 경로가 없다** — `copy_sentence` 에 쓰는 곳은 검수 이력(`judgment_store.save_review`,
-#       `origin='user'`)뿐이다. 그래서 `generated` 는 0 건이 정상이고, 화면은 「사용이 없다」가 아니라 「저장하지 않는다」로 적는다.
-#       생성 저장을 열려면 동의 · 보관 기한 판정이 먼저다 (D-96 · D-129 · D-307).
-#    🔴 원문은 읽지 않는다 — 건수만 (D-76).
+# 🔄 2026-10-20 — 생성 통계는 **셀 수 있는 것만** 그린다 (D-147).
+#    🚨 생성 결과도 생성 요청도 저장하지 않는다 — `copy_sentence` 의 `generated` 는 늘 0 이라 지웠다(종전 KPI · 추이 · 출처 분포).
+#    ★ 그리는 것 ① 엔진 상태 — `copygen.off_reason()`(스위치 · 키 · 판정 인코더) 를 그대로
+#               ② 생성 실패 — 생성 처리부(`user.py` `generate`)가 남기는 WARNING `카피 생성 실패` 를 `app_error_log` 에서 센다.
+#                  예외는 **클래스 이름만** 저장된다(`app/error_log.py` `to_row`) — 사용자 입력은 없다 (D-76).
+#                  🔴 오류 로그를 DB 에 쌓지 않는 환경(`settings.error_log_enabled()` 거짓 — local 등)에서는 0 이 아니라 「기록 안 함」
+#                  ⚠️ 보관은 `ERROR_LOG_RETENTION_DAYS` 일 — 「전체」도 그만큼이다
+#               ③ 집계를 열려면 필요한 결정 (D-96 · D-129 · D-307)
+#    ⛔ 성공 건수 · 성공률은 그리지 않는다 — 분모(요청 수)가 없다.
 # ─────────────────────────────────────────────────────────────
-_ORIGIN_LABEL = {
-    "user": "직접 입력 · 검수",
-    "generated": "카피 생성",
-    "batch": "일괄 검수",
-    "crawl": "URL 수집 (설계만)",
-}
+
+#: 생성 실패 로그의 자리 — `app/routers/user.py` 의 `logging.getLogger(__name__).warning("카피 생성 실패", …)`.
+#: 🚨 글자가 바뀌면 0 건으로 보인다 — `tests/test_admin_dbread_screens.py` 가 user.py 소스와 맞댄다.
+GEN_FAIL_LOGGER = "app.routers.user"
+GEN_FAIL_MESSAGE = "카피 생성 실패"
+
+_GEN_NEEDS = [
+    (
+        "생성 요청 수 · 성공률",
+        "원문 없이 건수만 남기는 기록 표 — 스키마 판정 (팀장 · D-129 보관 기한)",
+    ),
+    ("생성 문구 · 승인 · 검수로 넘긴 수", "생성 결과 저장과 동의 범위 (D-96 · D-307)"),
+    ("품목 · 분기별 생성 분포", "위 기록 표에 품목 칸 (D-263)"),
+]
+
+
+def _engine_state() -> dict:
+    """생성 엔진을 지금 쓸 수 있는가 — 생성 화면이 보는 것과 같은 판단(`copygen.off_reason`) (D-99)."""
+    try:
+        from app.routers import copygen  # noqa: PLC0415
+
+        why = copygen.off_reason()
+    except Exception as e:  # noqa: BLE001 — 상태 화면이 생성 모듈 오류로 죽지 않게
+        return {"on": False, "why": f"엔진 상태를 확인하지 못했어요 ({type(e).__name__})"}
+    return {"on": why is None, "why": why}
 
 
 def _load_generation(days: int) -> dict:
     from app.routers import admin_dbread as db  # noqa: PLC0415
+    from app.settings import ERROR_LOG_RETENTION_DAYS, error_log_enabled  # noqa: PLC0415
 
-    where = "WHERE created_at >= now() - make_interval(days => %s)" if days else ""
-    gen_where = (where + " AND " if where else "WHERE ") + "origin = 'generated'"
-    p: list[object] = [days] if days else []
-    trend_days = min(days or _TREND_MAX_DAYS, _TREND_MAX_DAYS)
+    base = {
+        "engine": _engine_state(),
+        "needs": _GEN_NEEDS,
+        "retention_days": ERROR_LOG_RETENTION_DAYS,
+        "log_on": error_log_enabled(),
+    }
+    span = days or ERROR_LOG_RETENTION_DAYS
+    trend_days = min(span, _TREND_MAX_DAYS)
+    cond = "logger_name = %s AND message = %s AND occurred_at >= now() - make_interval(days => %s)"
+    p: list[object] = [GEN_FAIL_LOGGER, GEN_FAIL_MESSAGE, span]
     source, out = db.run(
         [
             (
-                f"SELECT origin AS k, count(*) AS n FROM copy_sentence {where} GROUP BY 1 ORDER BY 2 DESC",
+                f"SELECT count(*) AS n, max(occurred_at) AS last_at FROM app_error_log WHERE {cond}",
                 p,
             ),  # noqa: S608
             (
-                "SELECT count(*) AS n, count(DISTINCT doc_id) AS docs, "
-                "count(*) FILTER (WHERE approved_at IS NOT NULL) AS approved, max(created_at) AS last_at "
-                f"FROM copy_sentence {gen_where}",  # noqa: S608
+                "SELECT coalesce(exc_type, '알 수 없음') AS k, count(*) AS n FROM app_error_log "  # noqa: S608
+                f"WHERE {cond} GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
                 p,
             ),
             (
-                "SELECT (created_at AT TIME ZONE 'Asia/Seoul')::date AS d, count(*) AS n FROM copy_sentence "
-                "WHERE origin = 'generated' AND created_at >= now() - make_interval(days => %s) "
-                "GROUP BY 1 ORDER BY 1",
-                [trend_days],
+                "SELECT (occurred_at AT TIME ZONE 'Asia/Seoul')::date AS d, count(*) AS n FROM app_error_log "  # noqa: S608
+                f"WHERE {cond} GROUP BY 1 ORDER BY 1",
+                [GEN_FAIL_LOGGER, GEN_FAIL_MESSAGE, trend_days],
             ),
         ],
         what="stats.generation",
     )
     if source != "db":
-        return {"source": source}
-    by_origin = _bars(out[0], lambda v: _ORIGIN_LABEL.get(v, v))
-    g = out[1][0]
-    total = sum(r["n"] for r in out[0])
+        return {**base, "source": source}
+    k = out[0][0]
     trend = [{"label": db.fmt_dt(r["d"], "%m.%d"), "n": r["n"]} for r in out[2]]
     return {
+        **base,
         "source": source,
-        "kpi": {
-            "generated": g["n"],
-            "docs": g["docs"],
-            "approved": g["approved"],
-            "share": round(g["n"] * 100 / total, 1) if total else None,
-            "last_at": db.fmt_dt(g["last_at"]),
-            "stored_total": total,
-        },
-        "by_origin": by_origin,
+        "fail": {"n": k["n"], "last_at": db.fmt_dt(k["last_at"]) if k["last_at"] else "없음"},
+        "by_exc": _bars(out[1]),
         "trend": trend,
         "trend_max": max((r["n"] for r in trend), default=0),
         "trend_days": trend_days,
+        "span_days": span,
     }
 
 
 @router.get("/quality/generation", response_class=HTMLResponse)
 def generation_stats(request: Request) -> HTMLResponse:
-    """생성 통계 — 읽기 전용 · `copy_sentence` 출처별 건수. 기간: 최근 7 · 30 · 90일 · 전체."""
+    """생성 통계 — 엔진 상태 · 생성 실패(`app_error_log`) · 집계를 열 조건. 기간: 최근 7 · 30 · 90일 · 전체(= 로그 보관 기간)."""
     actor = require_governor(request)
     raw = request.query_params.get("days", "30")
     days = int(raw) if raw.isdigit() and int(raw) in _JUDGE_DAYS else (0 if raw == "all" else 30)
@@ -409,49 +503,86 @@ def generation_stats(request: Request) -> HTMLResponse:
 
 
 # ─────────────────────────────────────────────────────────────
-# 대시보드 — 검수·생성은 기존 예시, 매출은 닫힘 라벨만 표시한다.
+# 🔄 2026-10-20 — 대시보드(통계 · 운영 `/admin/` 둘 다)의 검수 이용은 **`judgment` 를 센다** — 매출은 닫힘 라벨만.
+#    ★ 검수 요청 = 판정이 담긴 작업 문서 수(`doc_id`) · 문장 = 판정 행 수. 이력 보관 동의분만 저장된다 (D-96).
+#    🔴 생성은 저장 경로가 없다 — 0 건을 「안 썼다」로 읽히게 그리지 않고 「저장하지 않아요」로 적는다 (D-147).
+#    기간 — 일간: 오늘 0시부터 · 시간대별 (비교: 어제 같은 시각까지)
+#           주간: 최근 7일 · 일별 (비교: 그 전 7일)
+#           월간: 이번 달 1일부터 (비교: 지난달 같은 날수까지) · 추이는 최근 6개월 월별
 # ─────────────────────────────────────────────────────────────
 
-_DASH_DATA = {
-    "daily": {
-        "kpi": {"judge": "143", "gen": "86"},
-        "delta": {"judge": "▲ 12% 전일 대비", "gen": "▲ 9% 전일 대비"},
-        "trend_title": "시간대별 서비스 이용",
-        "labels": ["09시", "11시", "13시", "15시", "17시", "19시", "21시"],
-        "judge_series": [11, 18, 23, 19, 28, 22, 22],
-        "gen_series": [7, 10, 15, 12, 18, 13, 11],
-    },
-    "weekly": {
-        "kpi": {"judge": "892", "gen": "534"},
-        "delta": {"judge": "▲ 8% 전주 대비", "gen": "▲ 11% 전주 대비"},
-        "trend_title": "요일별 서비스 이용",
-        "labels": ["월", "화", "수", "목", "금", "토", "일"],
-        "judge_series": [95, 112, 108, 132, 151, 139, 155],
-        "gen_series": [56, 64, 61, 79, 91, 84, 99],
-    },
-    "monthly": {
-        "kpi": {"judge": "3,842", "gen": "2,318"},
-        "delta": {
-            "judge": "▲ 15% 전월 대비",
-            "gen": "▲ 12% 전월 대비",
-        },
-        "trend_title": "월별 서비스 이용",
-        "labels": ["2월", "3월", "4월", "5월", "6월", "7월", "8월"],
-        "judge_series": [2100, 2450, 2680, 2920, 3180, 3540, 3842],
-        "gen_series": [1260, 1480, 1610, 1770, 1910, 2140, 2318],
-    },
+_USAGE = {
+    "daily": {"title": "오늘 시간대별 검수", "axis": ("hour", 24), "vs": "어제 같은 시각까지"},
+    "weekly": {"title": "최근 7일 일별 검수", "axis": ("day", 7), "vs": "그 전 7일"},
+    "monthly": {"title": "최근 6개월 월별 검수", "axis": ("month", 6), "vs": "지난달 같은 기간"},
 }
+_GEN_NOTE = "생성 결과는 저장하지 않아요"
+
+
+def _usage_windows(period: str, now):  # noqa: ANN001, ANN202
+    """(이번 기간 시작, 비교 기간 시작, 비교 기간 끝)."""
+    from datetime import timedelta  # noqa: PLC0415
+
+    day0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "daily":
+        return day0, day0 - timedelta(days=1), now - timedelta(days=1)
+    if period == "weekly":
+        start = day0 - timedelta(days=6)
+        return start, start - timedelta(days=7), start
+    start = day0.replace(day=1)
+    prev = _month_add(start, -1)
+    return start, prev, min(prev + (now - start), start)
+
+
+def _load_usage(period: str) -> dict:
+    """대시보드 이용 현황. 템플릿 키(`kpi` · `delta` · `labels` · `judge_series`)는 종전 예시와 같은 모양이다."""
+    from app.routers import admin_dbread as db  # noqa: PLC0415
+
+    conf = _USAGE[period]
+    now = datetime.now(db.KST)
+    cur, prev_from, prev_to = _usage_windows(period, now)
+    unit, count = conf["axis"]
+    chart_from, keys, labels = _axis(unit, count, now)
+    window = (
+        "SELECT count(DISTINCT doc_id) AS docs, count(*) AS n FROM judgment "
+        "WHERE judged_at >= %s AND judged_at < %s"
+    )
+    source, out = db.run(
+        [
+            (window, [cur, now]),
+            (window, [prev_from, prev_to]),
+            (_bucket_sql("judgment", "judged_at"), [_UNIT_SQL[unit], chart_from]),
+        ],
+        what="stats.usage",
+    )
+    base = {"source": source, "trend_title": conf["title"], "labels": labels, "gen_note": _GEN_NOTE}
+    if source != "db":
+        return {
+            **base,
+            "kpi": {"judge": "-", "gen": "-", "sentences": None},
+            "delta": {"judge": "기록을 읽지 못했어요", "gen": _GEN_NOTE},
+            "judge_series": [],
+            "max": 0,
+        }
+    now_k, prev_k = out[0][0], out[1][0]
+    series = _series(keys, out[2])
+    return {
+        **base,
+        "kpi": {"judge": f"{now_k['docs']:,}", "gen": "저장 안 함", "sentences": now_k["n"]},
+        "delta": {"judge": f"{conf['vs']} {prev_k['docs']:,}건", "gen": _GEN_NOTE},
+        "judge_series": series,
+        "max": max(series, default=0),
+    }
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
 def stats_dashboard(request: Request) -> HTMLResponse:
-    """통계 대시보드 — 검수·생성 예시 집계와 매출 닫힘 상태를 표시한다.
-    `/admin/`(거버넌스 대시보드)과는 별개 화면이다. 집계 테이블이 없어 더미로만 그린다.
+    """통계 대시보드 — 검수 이용(`judgment`) · 생성은 저장 안 함 안내 · 매출 닫힘 라벨.
+    `/admin/`(운영 대시보드)과는 별개 화면이다 — 같은 집계(`_load_usage`)를 쓴다 (D-99).
     """
     actor = require_governor(request)
     period = _clean_period(request.query_params.get("period"))
-    d = _DASH_DATA[period]
-    dash_max = max(d["judge_series"] + d["gen_series"])
+    d = _load_usage(period)
     return templates.TemplateResponse(
         request,
         "admin/stats/dashboard.html",
@@ -461,7 +592,7 @@ def stats_dashboard(request: Request) -> HTMLResponse:
             "periods": _PERIODS,
             "period_label": _PERIOD_LABEL,
             "dash": d,
-            "dash_max": dash_max,
+            "dash_max": d["max"],
             "revenue_label": LABEL,
         },
     )

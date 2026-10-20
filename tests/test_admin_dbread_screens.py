@@ -30,6 +30,10 @@ T3 = "a3000000-0000-4000-8000-000000000013"
 
 NOW = datetime(2026, 10, 20, 3, 0, tzinfo=UTC)
 TODAY = date.today()
+#: 집계 칸 키 — KST 오늘 0시 (naive · SQL `date_trunc(… AT TIME ZONE 'Asia/Seoul')` 결과 모양)
+TODAY0 = datetime.now(admin_dbread.KST).replace(
+    hour=0, minute=0, second=0, microsecond=0, tzinfo=None
+)
 
 
 def fake_run(
@@ -137,26 +141,53 @@ def fake_run(
                 [{"sentences": 12, "requests": 4, "month": 5, "last_at": NOW}],
                 [{"id": TID, "created_at": NOW, "title": "검수 결과 문의", "status": "open"}],
             ],
-            "stats.generation": [
-                [{"k": "user", "n": 12}] + ([{"k": "generated", "n": 4}] if generated else []),
+            "stats.usage": [
+                [{"docs": 3, "n": 7}],
+                [{"docs": 2, "n": 4}],
+                [{"b": TODAY0, "n": 7}],
+            ],
+            "stats.members": [
                 [
                     {
-                        "n": 4 if generated else 0,
-                        "docs": 2 if generated else 0,
-                        "approved": 1 if generated else 0,
-                        "last_at": NOW if generated else None,
+                        "live": 5,
+                        "dormant": 1,
+                        "disabled": 2,
+                        "verified": 3,
+                        "history": 4,
+                        "improve": 1,
+                        "with_org": 2,
+                        "last_join": NOW,
                     }
                 ],
-                [{"d": TODAY, "n": 4}] if generated else [],
+                [{"b": TODAY0, "n": 2}],
+                [{"b": TODAY0, "n": 1}],
+            ],
+            "stats.generation": [
+                [{"n": 3 if generated else 0, "last_at": NOW if generated else None}],
+                [{"k": "TimeoutError", "n": 2}, {"k": "CopyGenError", "n": 1}] if generated else [],
+                [{"d": TODAY, "n": 3}] if generated else [],
             ],
             "stats.judge": [
-                [{"n": 12, "docs": 4, "enc": 9, "first_at": NOW, "last_at": NOW}],
-                [{"k": "hold", "n": 8}, {"k": "confirmed", "n": 4}],
+                [
+                    {
+                        "n": 12,
+                        "docs": 4,
+                        "unjudged": 1,
+                        "no_basis": 0,
+                        "viol": 3,
+                        "first_at": NOW,
+                        "last_at": NOW,
+                    }
+                ],
+                [{"k": "hold", "n": 8}, {"k": "confirmed_viol", "n": 3}, {"k": "unjudged", "n": 1}],
                 [{"k": "low_conf", "n": 8}],
                 [{"k": "식품", "n": 12}],
                 [{"k": 0, "n": 2}, {"k": 2, "n": 2}],
                 [{"k": "거짓_과장", "n": 3}],
                 [{"d": TODAY, "n": 12}],
+                [{"k": "classified", "n": 10}, {"k": "none", "n": 2}],
+                [{"k": "rule-0.3.0-dict+encb:c451942436f0", "n": 12}],
+                [{"k": "enc_up", "n": 2}, {"k": "dict_only", "n": 5}],
             ],
         }
         if what == "terms.detail" and queries[0][1][0] not in (T1, T2):
@@ -280,8 +311,13 @@ def test_검수_통계는_judgment_건수만_그린다(client: TestClient) -> No
     r = client.get("/admin/stats/quality/judge", params={"days": "7"})
     assert r.status_code == 200
     assert r.context["days"] == 7
-    assert r.context["kpi"]["enc_pct"] == 75.0
+    kpi = r.context["kpi"]
+    assert (kpi["viol"], kpi["unjudged"]) == (3, 1) and "enc_pct" not in kpi
     assert "보류" in r.text and "확신 부족" in r.text and "R2 업무정지 위험" in r.text
+    assert "확정 위반" in r.text and "미판정 (오류 · 시간 초과)" in r.text
+    assert "자동 판별" in r.text and "품목 미확정" in r.text
+    assert "인코더가 위험도를 올림" in r.text and "c451942436f0" in r.text
+    assert "첫 검수" in r.text and "인코더가 함께 판정" not in r.text
     assert "94.2%" not in r.text and "이의제기" not in r.text and "더미" not in r.text
     assert client.get("/admin/stats/quality/judge?days=13").context["days"] == 30
     assert client.get("/admin/stats/quality/judge?days=all").context["days"] == 0
@@ -295,23 +331,116 @@ def test_운영_대시보드의_문의와_회원수는_DB_값이다(client: Test
     assert "/admin/cs/tickets?status=open" in r.text
 
 
-def test_생성_통계는_저장_안_함을_0건과_구분해_알린다(client: TestClient) -> None:
+def test_생성_통계는_셀_수_없는_수를_그리지_않는다(client: TestClient) -> None:
     r = client.get("/admin/stats/quality/generation")
     assert r.status_code == 200
-    assert r.context["kpi"]["generated"] == 0
-    assert "저장하지 않아요" in r.text and "쓰지 않았다는 뜻이 아니에요" in r.text
-    assert "88.4" not in r.text and "GPT-4o" not in r.text and "재생성 사유" not in r.text
+    assert "kpi" not in r.context and "by_origin" not in r.context
+    assert "저장하지 않아요" in r.text and "사용하지 않았다는 뜻이 아니에요" in r.text
+    for gone in (
+        "카피 생성 문구",
+        "승인된 생성 문구",
+        "생성 비중",
+        "저장 문구 출처",
+        "88.4",
+        "GPT-4o",
+        "재생성 사유",
+    ):
+        assert gone not in r.text, gone
+    assert "집계를 열려면 필요한 결정" in r.text and "생성 엔진" in r.text
 
 
-def test_생성_통계는_출처별_건수를_센다(
+def test_생성_실패는_오류_로그에서_센다(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from app.routers import admin_stats  # noqa: PLC0415
+
+    monkeypatch.setattr("app.settings.error_log_enabled", lambda s=None: True)
     calls: list = []
     monkeypatch.setattr(admin_dbread, "run", fake_run(generated=True, calls=calls))
     r = client.get("/admin/stats/quality/generation", params={"days": "7"})
-    assert r.context["days"] == 7
-    assert r.context["kpi"]["generated"] == 4 and r.context["kpi"]["share"] == 25.0
-    assert "카피 생성" in r.text and "직접 입력 · 검수" in r.text
-    assert "저장하지 않아요" not in r.text
-    sql = calls[0][1][1][0]
-    assert "origin = 'generated'" in sql and "raw" not in sql  # 원문 칸을 읽지 않는다 (D-76)
+    assert r.context["days"] == 7 and r.context["fail"]["n"] == 3
+    assert "3건" in r.text and "TimeoutError" in r.text and "일별 생성 실패" in r.text
+    sql, params = calls[0][1][0]
+    assert "app_error_log" in sql and params == [
+        admin_stats.GEN_FAIL_LOGGER,
+        admin_stats.GEN_FAIL_MESSAGE,
+        7,
+    ]
+    # 「전체」는 로그 보관 기간만큼이다
+    client.get("/admin/stats/quality/generation", params={"days": "all"})
+    from app.settings import ERROR_LOG_RETENTION_DAYS  # noqa: PLC0415
+
+    assert calls[-1][1][0][1][-1] == ERROR_LOG_RETENTION_DAYS
+
+
+def test_오류_로그를_안_쌓는_환경이면_0이_아니라_기록_안_함(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.settings.error_log_enabled", lambda s=None: False)
+    r = client.get("/admin/stats/quality/generation")
+    assert "기록 안 함" in r.text and "일별 생성 실패" not in r.text
+
+
+def test_생성_실패_로그_자리가_user_py_와_맞다() -> None:
+    """🚨 글자가 어긋나면 실패가 조용히 0 건으로 보인다 — 생성 처리부의 로그 호출과 맞댄다."""
+    from pathlib import Path  # noqa: PLC0415
+
+    from app.routers import admin_stats  # noqa: PLC0415
+
+    src = (Path(__file__).resolve().parents[1] / "app" / "routers" / "user.py").read_text(
+        encoding="utf-8"
+    )
+    assert admin_stats.GEN_FAIL_LOGGER == "app.routers.user"
+    assert f'warning("{admin_stats.GEN_FAIL_MESSAGE}", exc_info=True)' in src
+
+
+@pytest.mark.parametrize("path", ["/admin/", "/admin/stats/dashboard"])
+def test_대시보드_이용_현황은_judgment_건수다(client: TestClient, path: str) -> None:
+    for period, n_bars in (("daily", None), ("weekly", 7), ("monthly", 6)):
+        r = client.get(path, params={"period": period})
+        assert r.status_code == 200
+        dash = r.context["dash"]
+        assert dash["source"] == "db"
+        assert dash["kpi"]["judge"] == "3" and dash["kpi"]["sentences"] == 7
+        assert dash["kpi"]["gen"] == "저장 안 함"
+        assert "2건" in dash["delta"]["judge"]
+        assert len(dash["judge_series"]) == len(dash["labels"])
+        if n_bars:
+            assert len(dash["labels"]) == n_bars
+        if period != "monthly":
+            assert sum(dash["judge_series"]) == 7
+        # 예시 수치가 남지 않았다
+        assert "143" not in r.text and "3,842" not in r.text and "예시" not in r.text
+
+
+def test_대시보드를_못_읽으면_대시와_안내다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(admin_dbread, "run", lambda queries, what: ("no_db", []))
+    for path in ("/admin/", "/admin/stats/dashboard"):
+        r = client.get(path)
+        assert r.context["dash"]["kpi"]["judge"] == "-"
+        assert "이용 기록을 읽지 못했어요" in r.text and "0건이라는 뜻이 아니에요" in r.text
+
+
+def test_이용자_통계는_user_account_에서_센다(client: TestClient) -> None:
+    r = client.get("/admin/stats/member", params={"period": "daily"})
+    assert r.status_code == 200
+    k = r.context["kpi"]
+    assert (k["live"], k["active"], k["dormant"], k["disabled"]) == (5, 4, 1, 2)
+    assert [c["pct"] for c in r.context["consents"]] == [80.0, 20.0, 60.0, 40.0]
+    trend = r.context["trend"]
+    assert len(trend) == 7 and trend[-1]["join"] == 2 and trend[-1]["leave"] == 1
+    for gone in ("12,483", "인플루언서", "Basic", "Enterprise", "유료 계정", "예시"):
+        assert gone not in r.text, gone
+    assert len(client.get("/admin/stats/member?period=weekly").context["trend"]) == 8
+    assert len(client.get("/admin/stats/member?period=monthly").context["trend"]) == 6
+
+
+def test_이용자_통계를_못_읽으면_안내다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(admin_dbread, "run", lambda queries, what: ("no_table", []))
+    r = client.get("/admin/stats/member")
+    assert r.status_code == 200
+    assert "launcher.py migrate" in r.text and "이용자 통계를 확인할 수 없습니다" in r.text
