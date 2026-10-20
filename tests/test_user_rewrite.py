@@ -682,6 +682,74 @@ def test_복사_버튼은_검수_입력_상자와_클래스가_겹치지_않는�
 
     html = _go()
     assert 'class="rv-cand-copy"' in html and '<button type="button" class="rv-copy"' not in html
-    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "user.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "user.css").read_text(
+        encoding="utf-8"
+    )
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)  # 주석 속 이름은 규칙이 아니다
-    assert not re.search(r"\.rv-copy(?![-\w])", css), "공용 CSS 에 검수 입력 상자 이름(.rv-copy)을 쓰는 규칙이 있다"
+    assert not re.search(r"\.rv-copy(?![-\w])", css), (
+        "공용 CSS 에 검수 입력 상자 이름(.rv-copy)을 쓰는 규칙이 있다"
+    )
+
+
+# ── 🆕 2026-10-20 (lse · 10-15 회의 §3) — 고쳐 쓸 수 없는 문장 → 카피 생성으로 잇기 ─────────────────────
+
+
+def test_고칠_수_없음이면_카피_생성으로_잇는_버튼을_그린다(wired) -> None:  # noqa: ANN001
+    base = {"rewrite": None, "reasons": [], "repairs": [], "model": "v14", "latency_ms": 5000}
+    wired.sllm_out = ("ok", {**base, "outcome": "infeasible", "infeasible": "거짓_과장"})
+    html = _go()
+    if "/u/generate/from-review" not in html:
+        # 판별 품목이 카피 생성 분기에 없는 픽스처(일반상품 등)면 버튼을 그리지 않는 것이 맞다
+        from app.routers.user import review_to_gen_ok  # noqa: PLC0415
+
+        res = _fixture("02_hold_low_conf")
+        assert not review_to_gen_ok(res.category and res.category.value), (
+            "🔴 분기가 있는데 버튼이 없다"
+        )
+        return
+    assert "이 제품으로 새 카피 만들기" in html
+    assert 'action="/u/generate/from-review"' in html and 'method="post"' in html
+
+
+def _from_review(**data: str):  # noqa: ANN202
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(user_router, "_gen_gate", lambda *_a: None)
+        return TestClient(app).post("/u/generate/from-review", data=data)
+
+
+def test_카피_생성은_위반_구간을_뺀_나머지로_미리_채운다() -> None:
+    text = "위암을 예방하는 양파즙"
+    r = _from_review(premise="식품", text=text, rest=" 양파즙")
+    assert r.status_code == 200
+    assert 'value="양파즙"' in r.text, "🔴 남은 내용을 「간단한 문구」 칸에 채우지 않았다"
+    assert "위암을 예방하는" not in r.text, "🔴 위반 표현을 생성 입력으로 넘겼다"
+    assert 'id="g-cat-food" name="category" value="food"\n           checked' in r.text or (
+        'value="food"' in r.text and "checked" in r.text
+    )
+    assert "검수에서 고쳐 쓸 수 없던 문장" in r.text
+
+
+def test_뺀_것이_없으면_간단한_문구를_비운다() -> None:
+    text = "위암을 예방하는 양파즙"
+    r = _from_review(premise="화장품", text=text, rest=text)
+    assert r.status_code == 200
+    assert "위암을 예방하는" not in r.text, "🔴 위반 구간을 못 찾았는데 원문을 그대로 넘겼다"
+    assert 'value="양파즙"' in r.text, (
+        "🔴 걸린 구간을 몰라도 문장 끝 제품 이름은 「제품 종류」에 채운다"
+    )
+
+
+def test_카피_생성_잇기도_비회원에게는_로그인_안내다() -> None:
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from app.api import app  # noqa: PLC0415
+
+    r = TestClient(app).post(
+        "/u/generate/from-review", data={"premise": "식품", "text": "x", "rest": ""}
+    )
+    assert r.status_code == 401

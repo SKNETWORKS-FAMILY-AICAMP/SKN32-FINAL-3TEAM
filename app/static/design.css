@@ -2310,3 +2310,8 @@
 .rv-answer .rv-note { margin-top:8px; font-size:11px; }
 /* 판정이 나온 뒤의 「다시 검수」는 보조 버튼이다 — 유형 고르기 · 답하기와 겹쳐 눈에 띄지 않게. 문구를 고치면 다시 주 버튼이 된다 */
 .cl-focus-ready .cl-focus-judge.is-quiet { background:var(--u-surface); color:var(--u-ink); border:1px solid var(--u-line); }
+/* 🆕 2026-10-20 (lse · 10-15 회의 §3) — 고쳐 쓸 수 없는 문장 → 카피 생성으로 잇기 */
+.rv-to-gen { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:10px 0 0; padding:12px 14px; border:1px dashed var(--u-signal); border-radius:10px; background:var(--u-signal-soft); }
+.rv-to-gen .rv-btn { border:0; background:var(--ws-gradient, var(--u-signal)); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+.rv-to-gen .rv-note { margin:0; font-size:12px; }
+.gn-from-review { margin:0 0 14px; padding:10px 14px; border-radius:8px; background:var(--u-signal-soft); color:var(--u-ink); font-size:13px; line-height:1.6; }

@@ -236,6 +236,8 @@
 {% endif %}
 <details class="ws-product-editor" id="product-editor" data-has-result="{{ '1' if live or result else '0' }}"{% if not (live or result) or errors %} open{% endif %}><summary>제품 정보 입력 · 수정</summary>
 <form class="cl-product-form" id="gen-form" method="post" action="/u/generate" data-wait-form>
+{#- 🆕 2026-10-20 (lse) — 검수에서 고쳐 쓸 수 없던 문장으로 들어왔다(`/u/generate/from-review`) #}
+{% if from_review %}<p class="gn-from-review" role="status">검수에서 고쳐 쓸 수 없던 문장이에요. 위반 표현을 뺀 내용으로 채워 두었어요 — 제품 정보를 확인하고 <b>카피 생성</b>을 눌러 주세요.</p>{% endif %}
 {% if errors %}<ul class="gn-errors" role="alert">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
 <section class="cl-product-section"><h2>제품 기본 정보</h2><p class="cl-section-description">제품명·종류·특징·한 줄 설명 중 하나 이상 입력해주세요.</p>
 <h3>제품 분류</h3>  <div class="gn-pick">

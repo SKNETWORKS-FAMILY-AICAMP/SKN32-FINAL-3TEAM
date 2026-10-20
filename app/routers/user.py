@@ -1343,6 +1343,78 @@ def generate_page(
     return _render(request, "user/generate.html", _gen_ctx())
 
 
+#: 🆕 2026-10-20 (lse · 10-15 회의 §3) — 검수 전제(또는 판별 품목) → 카피 생성 분기(품목 · 인증). 대응이 없는 것(일반상품)은 버튼을 안 그린다.
+#:    🚨 건기식_인정은 인정 문구(`fixed`)를 이용자가 적어야 한다 — 비워서 넘기고 생성 화면의 안내가 받는다
+_REVIEW_TO_GEN: dict[str, tuple[str, str]] = {
+    "식품": ("food", "no"),
+    "일반식품_기능성": ("food", "no"),
+    "건기식": ("hf", "no"),
+    "건기식_인정": ("hf", "yes"),
+    "건기식_비인정": ("hf", "no"),
+    "화장품": ("cos", "no"),
+}
+#: 남은 내용의 앞뒤에 붙어 남는 구두점 · 접속 꼬리
+_REST_EDGE = re.compile(r"^[\s,.·、!?~\-—]+|[\s,.·、!?~\-—]+$")
+
+
+def review_to_gen_ok(premise: str | None) -> bool:
+    """검수 문장 아래 「이 제품으로 새 카피 만들기」를 그려도 되는가 — 카피 생성에 맞는 분기가 있을 때만."""
+    return bool(premise) and str(premise) in _REVIEW_TO_GEN
+
+
+def _review_rest(text: str, rest: str) -> str:
+    """위반 구간을 뺀 나머지를 「간단한 문구」 칸에 넣을 모양으로 다듬는다. 원문과 같으면(뺀 것이 없으면) 비운다."""
+    rest = _REST_EDGE.sub("", re.sub(r"\s+", " ", rest or "")).strip()
+    if not rest or rest == _REST_EDGE.sub("", text.strip()) or len(rest) < 2:
+        return ""
+    return rest[: _GEN_LIMITS["phrase"]]
+
+
+#: 문장 끝의 제품 이름 — 「위암을 예방하는 양파즙」의 「양파즙」. 서술로 끝나는 문장(…다 · …요)은 고르지 않는다
+_TAIL_NOUN = re.compile(r"(?:^|\s)([가-힣A-Za-z0-9]{2,12})\s*[.!]?\s*$")
+
+
+def _review_kind(text: str) -> str:
+    """걸린 구간을 몰라 남은 내용을 못 만들 때 — 문장 끝 명사(제품 이름 후보)를 「제품 종류」 칸에. 없으면 비운다."""
+    m = _TAIL_NOUN.search(text.strip())
+    if not m or m.group(1).endswith(("다", "요", "니다", "세요")):
+        return ""
+    return m.group(1)[: _GEN_LIMITS["kind"]]
+
+
+templates.env.globals["review_to_gen_ok"] = review_to_gen_ok
+
+
+@router.post("/generate/from-review", response_class=HTMLResponse)
+async def generate_from_review(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
+    """검수에서 고쳐 쓸 수 없던 문장 → 카피 생성 입력 화면을 **미리 채워** 연다 (🆕 2026-10-20 · 10-15 회의 §3).
+
+    ★ 생성은 부르지 않는다 — 이용자가 제품 정보를 확인하고 「카피 생성」을 누른다(GPT 비용 · 외부 전송 안내는 생성 화면 그대로).
+    ★ 채우는 것: 품목 · 인증(검수 전제에서) · 「간단한 문구」 = 위반 구간을 뺀 나머지. 위반 표현은 넘기지 않는다.
+    🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4).
+    """
+    if gate := _gen_gate(request, session):
+        resp = _render(request, "user/generate.html", gate)
+        resp.status_code = 401
+        return resp
+    form = await _form(request)
+    category, cert = _REVIEW_TO_GEN.get(_one(form, "premise", 32), ("", "no"))
+    text = _one(form, "text", 2000)
+    picked = {
+        "category": category,
+        "cert": cert,
+        "age": "all",
+        "sex": "all",
+        "phrase": _review_rest(text, _one(form, "rest", 2000)),
+    }
+    if not picked["phrase"]:
+        picked["kind"] = _review_kind(text)
+    return _render(request, "user/generate.html", _gen_ctx({"picked": picked, "from_review": True}))
+
+
 @router.post("/generate", response_class=HTMLResponse)
 async def generate(
     request: Request,
