@@ -1,0 +1,45 @@
+/* Pretendard v1.3.9 — original font and SIL OFL in fonts/pretendard/. */
+@font-face {
+  font-family: "Pretendard";
+  src: url("/static/fonts/pretendard/PretendardVariable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
+
+.user-shell,
+.ld-page {
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+  line-height: 1.65;
+}
+
+:is(.user-shell, .ld-page) :is(button, input, textarea, select) {
+  font-family: inherit;
+}
+
+body :is(.user-shell, .ld-page) :is(h1, h2, h3) {
+  font-weight: 700;
+}
+
+:is(.user-shell, .ld-page) :is(.user-sidebar-item, .user-topnav-pill, button) {
+  font-weight: 600;
+}
+
+:is(.user-shell, .ld-page) :is(input, textarea) {
+  font-weight: 400;
+}
+
+/* User-facing labels use the same Korean face instead of monospace fallbacks. */
+:is(.user-shell, .ld-page) :is(
+  .rv-copy-bar span, .rv-copyno, .rv-ev-label, .rv-enc-label,
+  .hm-date, .nt-kind, .nt-when, .cs-no, .cd-head h1, .cp-sid,
+  .ld-kicker, .ld-demo-top small, .ld-flow span
+) {
+  font-family: inherit;
+}
+
+/* Keep the existing wordmark's letterforms along with the original logo image. */
+.user-topnav-brand,
+.ld-word {
+  font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif;
+}

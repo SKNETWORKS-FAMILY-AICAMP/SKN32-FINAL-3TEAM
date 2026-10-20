@@ -542,6 +542,22 @@ body:has(.user-shell[data-theme="dark"]) { background: #1a191c; color: #f1f0f2; 
   .user-main { padding: 1.25rem 1rem; }
 }
 
+/* 🆕 2026-10-15 (ksr · 점검 01) — 테마 버튼 둘 중 지금 테마에 맞는 하나만 보인다. 속성이 없으면(쿠키 없음) 「어둡게」를 보인다 */
+.user-shell:not([data-theme="dark"]) .tn-to-light,
+.user-shell[data-theme="dark"] .tn-to-dark { display: none; }
+
+/* 🆕 2026-10-15 (ksr · 점검 02) — 공유 레이아웃(`base.html` · 팀장 파일)의 개발용 머리줄(사용자 · 관리자 · API)과
+   꼬리말(「골든 픽스처로 그린다」)을 사용자 화면에서는 숨기고, 화면 맨 아래 접힌 「개발자 정보」(`user/_base.html`)로 옮긴다.
+   ⬜ 추후 삭제 — 배포 전에 접힌 블록째 지운다 */
+body:has(> main .user-shell) > header,
+body:has(> main .user-shell) > footer { display: none; }
+.user-devbar { margin: 2.5rem 1.5rem 1.5rem; font-size: .78rem; color: var(--u-mute, #888); }
+.user-devbar summary { cursor: pointer; }
+.user-devbar nav { display: flex; gap: 1rem; margin: .5rem 0 .25rem; }
+.user-devbar a { color: inherit; }
+/* 🆕 2026-10-15 (ksr · 점검 09) — 화면 안의 접힌 개발자 메모. ⬜ 추후 삭제 */
+.user-devnote { margin-top: 1.5rem; font-size: .8rem; color: var(--u-mute, #888); }
+.user-devnote summary { cursor: pointer; }
 /* 🆕 10-14 좁은 화면 — 검수 화면의 「✨ 이 문장 고쳐 쓰기」 버튼(`review.html` `.rv-fix-go` · lse)이 본문과 설명을 옆으로 붙여
    글자가 조각나던 것을 위아래로 쌓는다. 화면 파일의 인라인 스타일보다 늦게 와도 이기게 `form` 을 붙인다 */
 @media (max-width: 44rem) {

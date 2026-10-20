@@ -10,12 +10,13 @@
   ⛔ 구역(work·about·adgen·matching) 셸 밖이다 — 로그인 전 화면이라 사이드바가 없다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 로그인{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">{% endblock %}
 {% block content %}
 <div class="user-shell">
 <form class="auth-card" method="post" action="/u/login">
   <h1>로그인</h1>
-  <p class="auth-sub">조직 계정으로 로그인하세요.</p>
+  {# 🔄 2026-10-15 (ksr · 점검 14) — 조직 단위 계정은 없다(D-260 ④ · 기업 회원 표시만). 누구나 이메일로 가입한다 #}
+  <p class="auth-sub">가입한 이메일로 로그인하세요.</p>
   {% if error %}<p class="auth-err" role="alert">{{ error }}</p>{% endif %}
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   {# 🆕 2026-10-14 — 회원 전용 안내에서 넘어왔으면 로그인 뒤 그 화면으로 돌아간다. 값은 서버가 거른 경로다 (`_next_path`) #}

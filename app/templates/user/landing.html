@@ -8,10 +8,10 @@
      아이콘 카드 · 동작 순서 · 업종 칩. 미리보기는 **실제 검수 → 고쳐 쓰기 흐름**(위반 문장 → 근거 → 담백한 안 · 다듬은 안)으로
      바꿨다 — 예시 문장은 직접 만든 것이고, 고친 문장은 그 문장을 실제로 돌린 결과다(10-13 · q4b-v14 + 다듬기).
      업종 칩은 지금 판정이 다루는 범위만 적는다(시안의 의료기기 · 금융은 범위 밖이라 뺐다).
-  🚨 이 화면은 nav 를 넣지 않는다 — 로그인 전 화면이라 사용자 메뉴가 없다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
+  로그인 상태에는 프로필과 작업 바로가기를 표시한다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 광고 문구 준법 검수 · 카피생성{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">
 <style>
 /* 공통 머리 · 꼬리(개발용 링크)는 랜딩에서만 감춘다 — base.html(팀장 소유)은 고치지 않는다 */
 body:has(.ld-page) > header, body:has(.ld-page) > footer { display: none; }
@@ -36,6 +36,23 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-word { font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; background: var(--ld-grad);
            -webkit-background-clip: text; background-clip: text; color: transparent; }
 .ld-nav { display: flex; gap: .5rem; align-items: center; }
+.ld-profile { position: relative; margin-right: .6rem; }
+.ld-profile summary { display: flex; align-items: center; gap: .65rem; cursor: pointer; list-style: none; font-size: .9rem; }
+.ld-profile summary::-webkit-details-marker { display: none; }
+.ld-profile summary:focus-visible { outline: 2px solid var(--u-signal); outline-offset: 5px; border-radius: .5rem; }
+.ld-avatar { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; flex-shrink: 0; border-radius: 50%; background: var(--ld-grad); color: #fff; font-weight: 700; }
+.ld-profile-name { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-profile-menu { position: absolute; right: 0; top: calc(100% + .8rem); width: 12rem; padding: .5rem; border: 1px solid var(--u-line); border-radius: .8rem; background: var(--u-surface); box-shadow: 0 8px 24px rgba(71, 42, 99, .12); }
+.ld-profile-menu a, .ld-profile-menu button { display: block; width: 100%; box-sizing: border-box; padding: .7rem .8rem; border: 0; border-radius: .5rem; background: transparent; color: var(--u-ink); font: inherit; font-size: .85rem; text-decoration: none; text-align: left; cursor: pointer; }
+.ld-profile-menu a:hover, .ld-profile-menu button:hover { background: var(--u-surface2); }
+.ld-profile-menu form { margin: 0; }
+@media (max-width: 480px) {
+  .ld-head .ld-wrap { padding-inline: 1rem; }
+  .ld-profile { margin-right: 0; }
+  .ld-profile-name { display: none; }
+  .ld-nav { gap: .4rem; }
+  .ld-nav .ld-btn { padding-inline: .7rem; }
+}
 
 /* 버튼 */
 .ld-btn { display: inline-flex; align-items: center; justify-content: center; height: 2.75rem; padding: 0 1.4rem;
@@ -151,8 +168,9 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-foot a:hover { color: var(--u-ink); }
 .ld-foot img { width: 1.25rem; height: 1.25rem; border-radius: .3rem; vertical-align: -4px; margin-right: .4rem; }
 
-@media (prefers-reduced-motion: reduce) { .ld-badge i, .ld-flow b { animation: none; } }
 
+
+@media (prefers-reduced-motion: reduce) { .ld-badge i, .ld-flow b { animation: none; } }
 /* ══ 🆕 10-14 움직임 — 시안보다 더 ══════════════════════════════════════════ */
 /* 첫 화면 무대: 떠다니는 빛 덩어리 · 격자 · 마우스를 따라오는 조명(landing.js) */
 .ld-hero-zone { position: relative; overflow: hidden; isolation: isolate; --mx: 70%; --my: 30%; }
@@ -280,10 +298,32 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-end-card .ld-btn-line { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .6); }
 .ld-end-card .ld-btn-line:hover { background: rgba(255, 255, 255, .12); }
 
+
 @media (prefers-reduced-motion: reduce) {
   .ld-page *, .ld-page *::before, .ld-page *::after { animation: none !important; transition: none !important; }
   .ld-line, .ld-kicker, .ld-lead, .ld-hero .ld-actions, .ld-try, .ld-demo-stage, .ld-seq { opacity: 1; transform: none; }
   .ld-mark { background-size: 100% 100%, 100% 2px; }
+}
+/* Keep the introduction calm; the example stays visible instead of replaying. */
+.ld-orbs { opacity:.5; }
+.ld-orbs i:nth-child(n) { animation:ld-ambient 24s ease-in-out infinite; }
+.ld-orbs i:nth-child(2) { animation-delay:-8s; animation-direction:reverse; }
+.ld-orbs i:nth-child(3) { animation-delay:-16s; }
+@keyframes ld-ambient { 0%,100% { transform:translate(0,0); } 50% { transform:translate(20px,12px); } }
+.ld-demo { animation:ld-gentle-float 8s ease-in-out infinite; transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)); box-shadow:0 8px 30px rgba(99,63,132,.1); }
+@keyframes ld-gentle-float { 0%,100% { translate:0 0; } 50% { translate:0 -3px; } }
+.ld-demo::after { display:none; }
+.ld-seq { animation:none; opacity:1; transform:none; }
+.ld-hero .ld-btn-grad { animation:none; }
+.ld-hero .ld-btn-grad::after { display:none; }
+.ld-flow b { animation:none; }
+.ld-brand:hover img { transform:scale(1.03); }
+.ld-hero :is(.ld-line,.ld-kicker,.ld-lead,.ld-actions,.ld-try), .ld-page .ld-demo-stage { animation:ld-rise .35s ease-out both; }
+@media(hover:none), (pointer:coarse) { .ld-demo { animation:none; transform:none; } }
+
+@media(prefers-reduced-motion:reduce) {
+  .ld-demo { translate:none; transform:none!important; }
+  .ld-page [data-reveal] { opacity:1!important; transform:none!important; }
 }
 </style>{% endblock %}
 {% block content %}
@@ -293,8 +333,16 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   <div class="ld-wrap">
     <a class="ld-brand" href="/u/landing"><img src="/static/brand/symbol-180.png" alt=""><span class="ld-word">copylane</span></a>
     <nav class="ld-nav">
+      {% if me %}
+      <details class="ld-profile">
+        <summary aria-label="{{ me.name }} 님 계정 메뉴"><span class="ld-avatar" aria-hidden="true">{{ me.initials }}</span><span class="ld-profile-name">{{ me.name }} 님</span><span aria-hidden="true">⌄</span></summary>
+        <div class="ld-profile-menu"><a href="/u/mypage">마이페이지</a><a href="/u/mypage?tab=account">계정 설정</a><form method="post" action="/u/logout"><button type="submit">로그아웃</button></form></div>
+      </details>
+      <a class="ld-btn ld-btn-sm ld-btn-grad" href="/u/">작업 공간으로 →</a>
+      {% else %}
       <a class="ld-btn ld-btn-sm ld-btn-text" href="/u/login">로그인</a>
       <a class="ld-btn ld-btn-sm ld-btn-grad" href="/u/signup">무료로 시작하기</a>
+      {% endif %}
     </nav>
   </div>
 </header>
@@ -310,17 +358,24 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
       <b>고쳐 써</b> 드려요. 진단을 통과하는 어휘 안에서 <b>새 카피</b>까지 만들어 드려요.
     </p>
     <div class="ld-actions">
+      {% if me %}
+      <a class="ld-btn ld-btn-grad" href="/u/review">문구 검수하기 →</a>
+      <a class="ld-btn ld-btn-line" href="/u/">작업 공간으로</a>
+      {% else %}
       <a class="ld-btn ld-btn-grad" href="/u/login">로그인하고 시작하기</a>
       <a class="ld-btn ld-btn-line" href="/u/signup">회원가입</a>
+      {% endif %}
     </div>
+    {% if not me %}
     <p class="ld-try">가입 전에 해 보고 싶다면 → <a href="/u/review">로그인 없이 문구 검수해 보기</a> · 로그인하지 않고 검수한 문구는 이력에 남지 않아요</p>
+    {% endif %}
   </div>
 
   <div class="ld-demo-stage">
   <div class="ld-demo" aria-label="검수와 고쳐 쓰기 예시">
     <div class="ld-demo-top">
       <small>검수 미리보기 · 예시</small>
-      <span class="ld-badge"><i>✦</i> AI 실시간 진단</span>
+      <span class="ld-badge">검수 흐름 예시</span>
     </div>
     <p class="ld-bubble ld-seq ld-s1">
       <span class="ld-pin ld-pin-bad" aria-hidden="true">!</span>
@@ -404,7 +459,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
     <div class="ld-qa-grid">
       <div class="ld-qa" data-reveal style="--i:0"><b>진단은 법적 확정 판단인가요?</b><p>아니요, 참고용 진단이에요. 위험 표현과 근거 조항을 미리 보여 드리지만, 최종 게재 여부는 법무 검토를 거쳐 직접 결정하셔야 해요.</p></div>
       <div class="ld-qa" data-reveal style="--i:1"><b>고쳐 쓴 문구는 바로 써도 되나요?</b><p>고친 문구도 다시 판정을 거치지만 적법 확정은 아니에요. 「조건부 후보」는 제품이 기능성 인정 · 심사를 받았을 때만 쓸 수 있어요.</p></div>
-      <div class="ld-qa" data-reveal style="--i:2"><b>같은 조직 계정끼리 결과를 공유하나요?</b><p>같은 조직으로 로그인한 팀원끼리 검수 결과를 함께 보는 것을 목표로 하고 있어요. 조직 밖으로는 공유되지 않아요.</p></div>
+      <div class="ld-qa" data-reveal style="--i:2"><b>같은 조직 계정끼리 결과를 공유하나요?</b><p><b>아직 준비 중이에요.</b> 같은 조직으로 로그인한 팀원끼리 검수 결과를 함께 보는 것을 목표로 하고 있어요. 조직 밖으로는 공유되지 않아요.</p></div>
       <div class="ld-qa" data-reveal style="--i:3"><b>가입에 비용이 드나요?</b><p>검수 · 카피생성 기본 기능은 무료로 시작할 수 있어요. 자세한 이용 조건은 로그인 후 확인하실 수 있어요.</p></div>
     </div>
   </div>
@@ -412,22 +467,28 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
 <section class="ld-sec ld-end">
   <div class="ld-wrap"><div class="ld-end-card" data-reveal>
+    {% if me %}
+    <h2>이제 문구를 만들어볼까요?</h2>
+    <p class="ld-sub">작업 공간에서 문구 검수와 카피 생성을 이어가세요.</p>
+    <div class="ld-actions"><a class="ld-btn ld-btn-grad" href="/u/">작업 공간으로 돌아가기 →</a></div>
+    {% else %}
     <h2>지금 시작해 보세요</h2>
     <p class="ld-sub">가입은 무료이고, 첫 검수까지 3분이면 충분해요</p>
     <div class="ld-actions">
       <a class="ld-btn ld-btn-grad" href="/u/login">로그인하고 시작하기</a>
       <a class="ld-btn ld-btn-line" href="/u/signup">회원가입</a>
     </div>
+    {% endif %}
   </div></div>
 </section>
 
 <footer class="ld-foot">
   <div class="ld-wrap">
-    <span><img src="/static/brand/symbol-180.png" alt="">© 2026 CopyLane</span>
-    <span><a href="/u/help">도움말</a><a href="/u/signup">회원가입</a><a href="/u/login">로그인</a></span>
+    <span><a href="/u/landing"><img src="/static/brand/symbol-180.png" alt="">© 2026 CopyLane</a></span>
+    <span><a href="/u/help">도움말</a>{% if me %}<a href="/u/">작업 공간</a><a href="/u/mypage">마이페이지</a>{% else %}<a href="/u/signup">회원가입</a><a href="/u/login">로그인</a>{% endif %}</span>
   </div>
 </footer>
 
 </div>
-<script src="/static/landing.js" defer></script>
+<script src="/static/landing.js?v=4" defer></script>
 {% endblock %}

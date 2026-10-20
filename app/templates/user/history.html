@@ -19,6 +19,8 @@
 </style>
 {% endblock %}
 {% block user_content %}
+{% from "user/_icons.html" import icon %}
+<div class="cl-history-page">
 <h1>검수 이력</h1>
 
 {% if need_login %}
@@ -28,15 +30,9 @@
 <p>로그인하지 않고 검수한 문구는 <b>이력에 남지 않아요</b> — 로그인한 뒤 검수한 것부터 쌓여요.</p>
 <p><a href="/u/login">로그인</a> · <a href="/u/signup">회원가입</a></p>
 {% else %}
-<p class="history-sub">문구를 누르면 오른쪽에 상세가 열려요. 다시 누르면 접힙니다.</p>
+<p class="history-sub">이전 기록을 찾아 검수 내용과 근거를 확인하세요.</p>
 
-{% if consent_off %}
-{# 🚨 동의가 꺼져 있으면 새 검수가 쌓이지 않는다 (D-96). 빈 목록의 까닭을 숨기지 않는다 #}
-<p class="history-band history-band-off" role="status">
-  <b>검수 이력 보관이 꺼져 있어요</b> — 지금 검수하는 문구는 이력에 남지 않아요.
-  <a href="/u/mypage?tab=account">마이페이지 › 계정</a>에서 「① 검수 이력 보관」을 켜면 그 뒤 검수부터 쌓여요.
-</p>
-{% endif %}
+
 
 {% if pattern %}
 <p class="history-band" role="status">
@@ -44,14 +40,23 @@
 </p>
 {% endif %}
 
+<form class="ws-filters cl-history-filters" method="get" action="/u/history">
+  {% if verdict %}<input type="hidden" name="verdict" value="{{ verdict }}">{% endif %}
+  <label class="cl-history-search">{{ icon('review', 19) }}<span class="sr-only">문구 검색</span><input type="search" name="q" value="{{ filters.q }}" maxlength="200" placeholder="문구로 검색"></label>
+  <label>품목<select name="category"><option value="">전체 품목</option>{% for c in categories %}<option value="{{ c }}"{% if filters.category == c %} selected{% endif %}>{{ c|replace('_', ' ') }}</option>{% endfor %}</select></label>
+  <label>기간<select name="days"><option value="0">전체 기간</option>{% for d in [7,30,90] %}<option value="{{ d }}"{% if filters.days == d %} selected{% endif %}>최근 {{ d }}일</option>{% endfor %}</select></label>
+  <button type="submit">검색</button><a href="/u/history">초기화</a>
+</form>
 <div class="filter-chips">
-  <a class="filter-chip{{ ' filter-chip-active' if not verdict }}" href="?page=1">전체</a>
+  <a class="filter-chip{{ ' filter-chip-active' if not verdict }}" href="?page=1{{ filter_qs }}">전체</a>
   {% for v in verdicts %}
-  <a class="filter-chip{{ ' filter-chip-active' if verdict == v }}" href="?page=1&verdict={{ v }}">{{ verdict_labels[v] }}</a>
+  <a class="filter-chip{{ ' filter-chip-active' if verdict == v }}" href="?page=1&verdict={{ v }}{{ filter_qs }}">{{ verdict_labels[v] }}</a>
   {% endfor %}
 </div>
 
 <div class="history-layout">
+  {% if not db_down %}<div class="cl-history-caption">검색 결과 {{ total or 0 }}건</div>{% endif %}
+  <div class="cl-history-table"><div class="cl-history-table-head"><span>날짜</span><span>검수한 문구</span><span>제품 분류</span><span>결과</span><span></span></div>
   {% if judgments %}
   <ul class="history-list">
     {% for j in judgments %}
@@ -60,8 +65,8 @@
       <a class="history-row{{ ' history-row-open' if is_open }}"
          href="?page={{ page }}{{ base_qs }}{{ '' if is_open else '&open_id=' ~ j.id }}">
         <span class="history-row-date">{{ j.at }}</span>
+        <span class="history-row-text">{{ j.text }}</span>
         <span class="history-row-cat">{{ j.category or "—" }}</span>
-        <span class="history-row-text">"{{ j.text }}"</span>
         <span class="hist-badge hist-{{ j.tone }}"><i aria-hidden="true"></i>{{ j.label }}</span>
         <span class="history-row-chevron">{{ '‹' if is_open else '›' }}</span>
       </a>
@@ -69,34 +74,37 @@
     {% endfor %}
   </ul>
   {% elif db_down %}
-  <p role="status"><b>DB 에 붙지 못해 이력을 읽지 못했다</b> — 기록이 없다는 뜻이 아니다.
-    개발 기기라면 <code>launcher.py db-up</code> 으로 DB 를 켠 뒤 새로고침한다.</p>
-  {% elif verdict or page > 1 %}
-  <p>이 조건에 맞는 검수 기록이 없어요. <a href="?page=1">전체 보기</a></p>
+  <div class="cl-history-empty" role="status">{{ icon('info', 34) }}<h2>검수 이력을 불러오지 못했어요.</h2><p><b>DB 에 붙지 못해 이력을 읽지 못했다</b> — 기록이 없다는 뜻이 아니다.</p><a class="cl-history-empty-action" href="/u/history">다시 불러오기</a></div>
+  {% elif verdict or page > 1 or filters.q or filters.category or filters.days %}
+  <div class="cl-history-empty">{{ icon('history', 34) }}<h2>이 조건에 맞는 검수 기록이 없어요.</h2><p>검색어나 제품 분류, 기간을 바꿔보세요.</p><a class="cl-history-empty-action" href="/u/history">전체 보기</a></div>
   {% else %}
-  <p>아직 검수 기록이 없어요 — <a href="/u/review">문구를 검수</a>하면 여기에 쌓여요.</p>
+  <div class="cl-history-empty">{{ icon('history', 34) }}<h2>아직 검수 기록이 없어요.</h2><p>{% if consent_off %}검수 이력 보관을 켜면, 이후 검수한 문구를 여기에서 다시 볼 수 있어요.{% else %}문구를 검수하면 여기에 쌓여요. 이전 결과와 근거를 한눈에 확인하세요.{% endif %}</p><a class="cl-history-empty-action" href="{{ '/u/mypage?tab=account' if consent_off else '/u/review' }}">{{ '검수 이력 보관 설정하기' if consent_off else '문구를 검수하러 가기' }} {{ icon('plus', 17) }}</a></div>
   {% endif %}
+  </div>
 
   {% if opened %}
-  <aside class="history-detail">
+  <aside class="history-detail" tabindex="-1" aria-label="검수 상세">
     <div class="history-detail-head">
       <p>검수 상세</p>
-      <a href="?page={{ page }}{{ base_qs }}" title="접기">✕</a>
+      <a href="?page={{ page }}{{ base_qs }}" title="상세 닫기" data-close-history>✕</a>
     </div>
     <div class="history-detail-meta">
       <span class="hist-badge hist-{{ opened.tone }}"><i aria-hidden="true"></i>{{ opened.label }}</span>
       {% if opened.risk %}<span class="hist-risk">{{ opened.risk }}</span>{% endif %}
       <span class="history-detail-when">{{ opened.at }}{% if opened.category %} · {{ opened.category }}{% endif %}</span>
     </div>
-    <p class="history-detail-text">"{{ opened.text }}"</p>
+    <h3>검수한 문구</h3><p class="history-detail-text">{{ opened.text }}</p>
+    {% if opened.verdict == 'hold' %}<section class="cl-history-conclusion"><span class="cl-pill">판정 보류</span><h2>전문가 검토가 필요해요.</h2><p>현재 확인한 정보로는 위반 여부를 확정하지 못했어요.</p><p class="history-detail-note">{{ icon("info", 16) }} 판정 보류는 문제없다는 뜻이 아니에요.</p></section>{% endif %}
     {% if opened.hold_reason %}
     <p class="history-detail-note">보류 사유 — {{ opened.hold_reason }}</p>
     {% endif %}
     {% if opened.violations %}
     <p class="history-detail-note">지적 유형 — {{ opened.violations|map("replace", "_", " ")|join(" · ") }}</p>
     {% endif %}
+    {% if opened.verdict == 'hold' %}<section class="cl-history-followup"><h3>확인할 내용</h3><p>제품의 인정·심사 범위와 표현이 일치하는지 확인하고, 효능을 뒷받침할 자료를 검토해주세요.</p></section>{% endif %}
 
     {# 근거 — 검수 화면의 「근거 보기」와 같은 규칙: 인용 근거와 참고 조문을 가르고, 확정이 아니면 「위반 근거」라 부르지 않는다 #}
+    <details class="cl-history-evidence"><summary>근거와 참고 조문 보기</summary>
     <p class="history-detail-label">{{ "위반 근거" if opened.verdict == "confirmed" and opened.violations else "근거" }}</p>
     <div class="history-ev">
       {% for e in opened.basis %}
@@ -119,17 +127,27 @@
       </details>
       {% endif %}
     </div>
+    </details>
     <p class="history-detail-note">법령 기준 {{ opened.law_version|law_version_label }}</p>
 
     {# 문구를 검수 입력칸에 담기만 한다(`op=load`) — 판정은 이용자가 「검수」를 눌러야 돈다. 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4) #}
-    <form method="post" action="/u/judge">
+    <div class="cl-drawer-actions"><form method="post" action="/u/judge">
       <input type="hidden" name="text" value="{{ opened.text }}">
       <button class="history-again" type="submit" name="op" value="load">이 문구로 다시 검수하기</button>
-    </form>
+    </form><button type="button" class="cl-copy-history" data-copy-history>{{ icon("copy", 18) }} 복사</button></div>
   </aside>
   {% endif %}
 </div>
 
-{% include "user/_pagination.html" %}
+{% if judgments or has_prev or has_next %}{% include "user/_pagination.html" %}{% endif %}
+{% if consent_off %}
+{# 🚨 동의가 꺼져 있으면 새 검수가 쌓이지 않는다 (D-96). 빈 목록의 까닭을 숨기지 않는다 #}
+<p class="history-band history-band-off" role="status">
+  <b>검수 이력 보관이 꺼져 있어요</b> — 지금 검수하는 문구는 이력에 남지 않아요.
+  <a href="/u/mypage?tab=account">마이페이지 › 계정</a>에서 「① 검수 이력 보관」을 켜면 그 뒤 검수부터 쌓여요.
+</p>
 {% endif %}
+<p class="cl-history-footnote">{{ icon('info', 17) }} 보관에 동의한 기록만 표시됩니다. 검수 결과는 법적 확정 판단이 아닌 1차 검토 결과입니다.</p>
+{% endif %}
+</div>
 {% endblock %}
