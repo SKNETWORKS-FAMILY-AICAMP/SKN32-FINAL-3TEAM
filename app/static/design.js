@@ -67,7 +67,7 @@ document.documentElement.classList.add('cl-js');
       const quote=panel.querySelector('[data-focus-quote]');quote.hidden=editing||!!section;quote.textContent=text||'문구를 입력해주세요.';
       panel.querySelector('[data-focus-unsent]').hidden=!!section||enginePending;
       panel.querySelectorAll('[data-edit-copy]').forEach(button=>{button.textContent=editing?'편집 닫기':'문구 편집';button.setAttribute('aria-expanded',String(editing));});
-      const judge=panel.querySelector('[data-focus-judge]');judge.value='judge:'+selectedCopy;judge.textContent=section?'문구 다시 검수하기':'문구 검수하기';
+      const judge=panel.querySelector('[data-focus-judge]');judge.value='judge:'+selectedCopy;judge.textContent=section?'문구 다시 검수하기':'문구 검수하기';judge.classList.toggle('is-quiet',!!section&&card?.dataset.dirty!=='true');
       const pending=section?.dataset.pending==='true';
       panel.querySelector('[data-focus-action-note]').textContent=pending?'이 문구에 필요한 조건을 확인해주세요.':card?.dataset.dirty==='true'?'수정한 문구를 다시 검수해주세요.':section?'검수 결과는 법적 확정 판단이 아니에요.':'선택한 문구를 검수해보세요.';
       if(section){
