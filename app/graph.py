@@ -2786,9 +2786,14 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
        응답을 내지 않는다 (D-147 · D-220). 그때는 종전대로다(품목 미확정의 확정 위반은 위험도 없이 보류로 내려간다).
     🔴 DB 가 없으면(하한을 못 읽는다) 아무것도 하지 않는다 — 분기마다 위험도를 지어내지 않는다 (D-09).
     🚨 `judge` · `assess_risk` 가 낸 문장을 **바꿔 끼운다**(`upsert_sentences`) — 문장 수는 늘지 않는다.
+    🆕 2026-10-21 (D-348 보충 34 결정 1) — **사용자가 전제를 골랐으면**(`ProductContext.premise`) 그 전제 하나로 판정하고 기록 = 그 전제의
+       판정이다(분기 없음). 분기 문장과 **같은 함수**(`_premise_sentences`)라 「분기에서 읽은 결과 = 전제를 넣은 결과」다(D-99 ·
+       `tests/test_premise_chosen.py`). 전제가 하나뿐인 품목(화장품 · 일반상품)은 종전 그대로다 — 고를 것이 없었다.
     """
-    category = (state.get("product") or ProductContext()).category
+    product = state.get("product") or ProductContext()
+    category = product.category
     premises = pm.PREMISES_OF[category]
+    chosen = product.premise if len(premises) > 1 and product.premise in premises else None
     cur = ((config or {}).get("configurable") or {}).get("conn")
     base = list(state.get("sentences", []))
     if len(premises) < 2 or not pm.criteria_ready(premises) or cur is None or not base:
@@ -2801,6 +2806,9 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
     rows = load_sanction_rows(cur) if hit or state.get("encodings") else []
     # 🆕 2026-10-20 (보충 31) 품목을 몰라 막은 전제 확정 — 기록을 「품목 선택 필요」로 둘 문장
     pending: set[str] = set()
+    if chosen is not None:
+        # 🆕 (보충 34) 고른 전제 — 기록 = 그 전제의 판정. 다른 전제는 계산하지 않는다(고를 것이 남지 않았다 · 합칠 것이 없다)
+        return {"sentences": _premise_sentences(chosen, state, rows, pending)}
     per = {p: _premise_sentences(p, state, rows, pending) for p in premises}
     # 🆕 2026-10-11 — 제품을 알 때 보류 문장의 유형 후보는 그 품목의 전제로 거른 합집합이다 (`_held_candidates`)
     held = (
@@ -3109,7 +3117,17 @@ def _record_condition(
     ]
     fields = {k: getattr(rec, k) for k in type(rec).model_fields}
     if live and len(answered) == len(live):
-        # 🔄 2026-10-17 (보충 5 결정 1 · 1-b) — 가장 나쁜 분기 = 판정 순서(확정 위반 > 보류 > R0) · 같으면 위험도
+        # 🔄 2026-10-21 (D-348 보충 33 결정 1 · 2 · 보충 34 결정 3) — 답한 뒤에도 **모든 분기**(위험도가 없는 분기까지)가 같은 판정일 때만
+        #    기록을 그 판정으로 둔다. 갈리면 남은 것은 전제(하위 전제 · 품목)다 — 답하지 않은 전제를 가장 나쁜 쪽으로 가정해 확정하지 않는다.
+        #    기록은 전제 보류(분기가 선택지 · 접혀 있었으면 `doc_rules` 가 펼친다)이고 위험도는 분기 최댓값(`_record_at_least`).
+        #    ⛔ 종전(10-17 · 1-b)에는 「가장 나쁜 분기 = 기록」이었다 — 보충 5 결정 1 의 「판정 = 더 나쁜 쪽」은 **출처**(사전 · 인코더)를 합치는
+        #       규칙인데 전제를 합치는 데까지 넓혀 썼다. 보충 33 집행 때 이 자리를 빠뜨렸다(2026-10-21 · 대역 재현)
+        if rec.verdict is Verdict.hold and not (
+            all(x.verdict is Verdict.confirmed and not x.not_claim for x in per)
+            and len({tuple(x.violations) for x in per}) == 1
+        ):
+            return _premise_hold(fields, reason)
+        # 🔄 2026-10-17 (보충 5 결정 1 · 1-b) — 모든 분기가 같은 판정이다 · 실을 분기 = 판정 순서(확정 위반 > 보류 > R0) · 같으면 위험도
         top = max(
             answered,
             key=lambda x: (
@@ -3171,6 +3189,14 @@ def _record_condition(
                 "user_facts": top.user_facts,
             }
         )
+    return _premise_hold(fields, reason)
+
+
+def _premise_hold(fields: dict[str, Any], reason: HoldReason) -> SentenceJudgment:
+    """분기끼리 갈린 기록 — 전제(품목 · 하위 전제)를 몰라 보류 · 분기가 선택지다(선택지 칸은 비운다 · 위험도 · 근거는 그대로).
+
+    `_record_condition` 의 두 자리(조건부가 섞임 · 답한 뒤 갈림)가 같이 쓴다(D-99 · 🆕 2026-10-21 보충 34).
+    """
     return SentenceJudgment(
         **{
             **fields,

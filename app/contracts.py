@@ -882,6 +882,27 @@ class ProductContext(BaseModel):
     facts: list[UserFact] = Field(default_factory=list)
     #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부(문장 단위). 비면 모른다 = 가장 나쁜 쪽(D-263 ①)
     substs: list[UserSubst] = Field(default_factory=list)
+    #: 🆕 2026-10-21 (D-348 보충 34 결정 1) — 사용자가 **고른 전제**(하위 전제까지 · 예: 건기식_인정). 비면 고르지 않았다.
+    #:    🔴 `has_recognized_function` 으로 대신하지 않는다 — 기본값 거짓이 「안 줬다」와 「인정 없음이라고 줬다」를 가르지 못한다(D-72 와 같은 꼴).
+    #:    고르면 그래프는 그 전제 하나로 판정한다(`app/graph.py` `premise_branches` · 분기 없음). 품목은 전제의 품목이어야 한다(아래 검증).
+    #:    🚨 검증이 아니다 — 사용자의 자기 신고다(책임은 고른 사람 · 출처는 화면의 이력이 남긴다 · D-61 · 보충 3 결정 4).
+    premise: Premise | None = None
+
+    @model_validator(mode="after")
+    def _premise_matches_category(self) -> ProductContext:
+        # 🆕 2026-10-21 (보충 34) — 전제와 품목이 어긋나면 거부한다. 품목을 비우고 전제만 주면 전제의 품목으로 채운다(전제가 품목을 정한다)
+        if self.premise is None:
+            return self
+        from app import premise as pm  # noqa: PLC0415 — app.premise 가 이 모듈을 읽는다(순환)
+
+        cat = pm.PREMISE_CATEGORY[self.premise]
+        if self.category is None:
+            self.category = cat
+        elif self.category is not cat:
+            raise ValueError(
+                f"고른 전제 {self.premise.value} 는 품목 {cat.value} 의 전제다 — 품목 {self.category.value} 와 어긋난다 (D-348 보충 34)"
+            )
+        return self
 
 
 class Timing(BaseModel):
