@@ -2328,3 +2328,10 @@
 .rv-to-gen .rv-btn { border:0; background:var(--ws-gradient, var(--u-signal)); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
 .rv-to-gen .rv-note { margin:0; font-size:12px; }
 .gn-from-review { margin:0 0 14px; padding:10px 14px; border-radius:8px; background:var(--u-signal-soft); color:var(--u-ink); font-size:13px; line-height:1.6; }
+/* 🆕 2026-10-20 (lse · 멘토 피드백 「글씨를 키워야 · 텅 비어 보임」) — 작업 화면 본문을 비율로 키운다.
+   글자 크기가 파일마다 px 로 박혀 있어(11 · 12px 100곳 넘음) 하나씩 바꾸면 화면 담당(psj) 파일과 대량으로 겹친다 — 비율 한 줄로 푼다.
+   🚨 검수 화면은 창 높이에 맞춘 두 칸이다 — 1.12 에서 넘치지 않는 것을 1440×900 으로 확인했다. 좁은 화면(휴대폰)은 키우지 않는다 */
+@media (min-width: 901px) {
+  .user-shell .user-main { zoom: 1.12; }
+  .user-shell .user-sidebar { zoom: 1.06; }
+}
