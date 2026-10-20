@@ -183,7 +183,14 @@ gpu() {
 fetch() {
   say "3. 저장소 받기 — $DEPLOY_REF"
   if [ -d "$APP_DIR/.git" ]; then git -C "$APP_DIR" fetch origin; else git clone "$REPO_URL" "$APP_DIR"; fi
-  git -C "$APP_DIR" checkout --detach "$(git -C "$APP_DIR" rev-parse "origin/$DEPLOY_REF" 2>/dev/null || echo "$DEPLOY_REF")"
+  # 🔄 2026-10-20 — 커밋 해시를 주면 멈췄다(`--detach does not take a path argument 'origin/<해시>\n<해시>'`).
+  #    `rev-parse` 는 실패해도 넣은 글자를 그대로 찍어서 `|| echo` 와 두 줄이 붙었다 → `--verify --quiet` 로 고친다.
+  #    브랜치 이름이면 origin/<이름> · 아니면 해시 · 태그로 본다. 둘 다 아니면 멈춘다.
+  local target
+  target="$(git -C "$APP_DIR" rev-parse --verify --quiet "origin/$DEPLOY_REF^{commit}" \
+            || git -C "$APP_DIR" rev-parse --verify --quiet "$DEPLOY_REF^{commit}")" \
+    || die "배포할 판을 못 찾았다 — DEPLOY_REF=$DEPLOY_REF (브랜치 이름 · 커밋 해시 · 태그)"
+  git -C "$APP_DIR" checkout --detach "$target"
   ok "배포 커밋 $(git -C "$APP_DIR" log -1 --format='%h %s')"
   warn "이 커밋 해시를 작업기록에 적는다 — 커밋을 바꾸면 7번(data)을 다시 돈다"
 }
@@ -278,7 +285,12 @@ verify() {
   d="$(sha256sum "$APP_DIR/data/derived/banned_terms.jsonl" | cut -c1-12)"
   [ "$g" = "$EXPECT_GOLDEN" ] && ok "골든 $g" || die "골든 지문이 다르다 — $g (기대 $EXPECT_GOLDEN)"
   [ "$d" = "$EXPECT_DICT" ]   && ok "사전 $d" || die "사전 지문이 다르다 — $d (기대 $EXPECT_DICT)"
-  [ "$(get_env COPYLANE_EDITION)" = cloud ] && ok "COPYLANE_EDITION=cloud" || die "COPYLANE_EDITION 이 cloud 가 아니다"
+  # 🔄 2026-10-20 — 관리자 화면을 쓰는 동안은 demo 다(5차 보고서 · Caddy 에서 허용 IP 만). demo 는 멈추지 않고 경고한다.
+  case "$(get_env COPYLANE_EDITION)" in
+    cloud) ok "COPYLANE_EDITION=cloud" ;;
+    demo)  warn "COPYLANE_EDITION=demo — /admin · /login 이 붙는다. Caddy 가 허용 IP 만 통과시키는지 확인 (Caddyfile.ip 아래 주석)" ;;
+    *)     die "COPYLANE_EDITION 이 $(get_env COPYLANE_EDITION) 이다 — 배포는 cloud 또는 demo" ;;
+  esac
   [ -f "$APP_DIR/data/derived/hf_display_claims.jsonl" ] && ok "sLLM 관문용 hf_display_claims.jsonl 있음" \
     || warn "hf_display_claims.jsonl 이 없다 — sLLM /rewrite 가 500 을 낸다 (data-sync 확인)"
   # 🆕 2026-10-15 (D-344 ⑦) — 팀 진단(doctor --env)의 검색 임베딩 캐시 줄. 🔴 줄이 있으면 보여 준다(배포 기기에서 뜻 없는 것도 섞인다)
