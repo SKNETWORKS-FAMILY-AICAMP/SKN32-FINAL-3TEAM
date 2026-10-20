@@ -870,6 +870,13 @@
       </div>
       {% endfor %}
       <p class="cl-conditional-note">{{ icon('info', 16) }} 추가 정보는 검수 중 분기 선택이 필요한 문장에만 요청해요.</p>
+      {#- 🆕 2026-10-20 (lse) — 예시 문구로 바로 해 보기. 누르면 지금 고른 문구 칸에 글자만 채운다(`review_score.js` · 서버로 보내지 않는다) #}
+      <div class="rv-try">
+        <p class="rv-try-label">예시 문구로 바로 해 보기</p>
+        <button type="button" class="rv-try-item" data-fill-sample="고혈압 예방에 효과적인 문경 오미자청, 설탕에 100일 숙성했어요."><b>식품</b>고혈압 예방에 효과적인 오미자청…</button>
+        <button type="button" class="rv-try-item" data-fill-sample="국내 판매 1위 오미자청, 한 잔에 담은 문경의 맛"><b>비교 표현</b>국내 판매 1위 오미자청…</button>
+        <button type="button" class="rv-try-item" data-fill-sample="면역력 강화에 도움을 줍니다. 하루 한 포로 간편하게 챙기세요."><b>건강기능식품</b>면역력 강화에 도움을 줍니다…</button>
+      </div>
       </div>
       <div class="cl-input-footer">
       <div class="rv-copy-tools">
@@ -939,7 +946,21 @@
     <div class="cl-focus-head"><h2 data-focus-copy-title>문구 1</h2><button type="button" data-edit-copy>{{ icon('pencil', 17) }} 문구 편집</button></div>
     <div class="cl-detail-editors"></div>
     <p class="cl-focus-empty-quote" data-focus-quote hidden></p>
-    <p class="cl-focus-unsent" data-focus-unsent hidden>아직 검수하지 않은 문구예요. 내용을 입력한 뒤 아래 검수 버튼을 눌러주세요.</p>
+    {#- 🔄 2026-10-20 (lse · 사용자 「입력 전 화면이 텅 비고 짜친다」) — 검수 전 안내를 채운다: 3단계 · 잡는 표현 태그. `data-focus-unsent` 는 design.js 가 켜고 끈다 #}
+    <div class="cl-focus-unsent rv-empty" data-focus-unsent hidden>
+      <p class="rv-empty-title">아직 검수하지 않은 문구예요</p>
+      <p class="rv-empty-sub">위 칸에 광고 문구를 넣고 <b>문구 검수하기</b>를 누르면, 문장마다 위법 소지와 근거 조문을 짚어 드려요.</p>
+      <ol class="rv-empty-steps">
+        <li><span>1</span><b>문장으로 나눠요</b><small>문구를 문장 단위로 쪼개 하나씩 봐요</small></li>
+        <li><span>2</span><b>두 번 판정해요</b><small>금지 표현 사전 + 자체 판정 AI</small></li>
+        <li><span>3</span><b>근거와 대안까지</b><small>근거 조문 · 고쳐 쓴 문장 · 새 카피</small></li>
+      </ol>
+      <p class="rv-empty-label">이런 표현을 잡아요</p>
+      <div class="rv-empty-tags">
+        <span class="t1">질병 예방 · 치료 표방</span><span class="t2">건강기능식품 오인</span><span class="t3">거짓 · 과장</span>
+        <span class="t4">의약품 오인</span><span class="t5">부당 비교 · 1위 표현</span>
+      </div>
+    </div>
   {% if engine_pending %}
     <div class="rv-card" data-engine-state>
       <h2>위험도</h2>
@@ -1092,6 +1113,6 @@
 {# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
 <script src="/static/user_count.js" defer></script>
 <script src="/static/user_wait.js?v=3" defer></script>
-<script src="/static/review_score.js?v=1" defer></script>
+<script src="/static/review_score.js?v=2" defer></script>
 <script src="/static/rewrite_copy.js" defer></script>
 {% endblock %}

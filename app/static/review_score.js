@@ -59,4 +59,18 @@
   }
 
   Array.prototype.forEach.call(document.querySelectorAll(".cl-result-overview"), draw);
+
+  /* 🆕 2026-10-20 — 「예시 문구로 바로 해 보기」: 지금 보이는 문구 칸(없으면 첫 칸)에 글자를 채운다. 제출은 사용자가 한다 */
+  Array.prototype.forEach.call(document.querySelectorAll("[data-fill-sample]"), function (btn) {
+    btn.addEventListener("click", function () {
+      var areas = Array.prototype.filter.call(document.querySelectorAll('textarea[name="text"]'), function (t) {
+        return t.offsetParent !== null;
+      });
+      var ta = areas[0] || document.querySelector('textarea[name="text"]');
+      if (!ta) return;
+      ta.value = btn.getAttribute("data-fill-sample");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.focus();
+    });
+  });
 })();
