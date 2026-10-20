@@ -162,3 +162,36 @@ def test_제재표_하한이_R2여도_기록되는_인코더_하한은_R1_층() 
     for j in (got, hf):
         assert j.risk.encoder is Risk.R1 and j.risk.encoder_basis[0].floor is Risk.R2
         RA.model_validate(j.risk.model_dump())
+
+
+def test_식품_확정은_전제_확신_문턱_아래면_보류(monkeypatch: pytest.MonkeyPatch) -> None:
+    """🆕 2026-10-19 (D-348 보충 29) — 문턱 아래면 확정하지 않고 보류 그대로 · 위면 확정 · 문턱이 없으면 종전대로 · 질문 자리는 문턱과 무관."""
+    monkeypatch.setattr(g, "_premise_tau", lambda v: 0.85)
+    held = _held(_hf())
+    assert g._food_premise(Premise.식품, held, HF, [], SPAN, []) is held
+    q = g._food_premise(Premise.일반식품_기능성, _held(), HF, [], SPAN, [])
+    assert q.fact_check is not None, "질문은 답을 받으므로 문턱을 걸지 않는다"
+    monkeypatch.setattr(g, "_premise_tau", lambda v: 0.75)
+    assert (
+        g._food_premise(Premise.식품, _held(_hf()), HF, [], SPAN, []).verdict is Verdict.confirmed
+    )
+    monkeypatch.setattr(g, "_premise_tau", lambda v: None)
+    assert (
+        g._food_premise(Premise.식품, _held(_hf()), HF, [], SPAN, []).verdict is Verdict.confirmed
+    )
+
+
+def test_점수가_없으면_문턱을_넘지_못한다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(g, "_premise_tau", lambda v: 0.1)
+    held = _held(_hf())
+    assert (
+        g._food_premise(
+            Premise.식품,
+            held,
+            g.SentEncoding(sent_id="s0", scores=(), candidates=("건강기능식품_오인",)),
+            [],
+            SPAN,
+            [],
+        )
+        is held
+    )

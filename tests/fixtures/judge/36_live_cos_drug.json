@@ -1,0 +1,1167 @@
+{
+ "outcome": "hold",
+ "category": null,
+ "category_source": null,
+ "not_reviewed": [],
+ "sentences": [
+  {
+   "sent_id": "s0",
+   "text": "아토피 피부염을 치료해 주는 크림입니다.",
+   "verdict": "hold",
+   "hold_reason": "cat_unknown",
+   "violations": [
+    "질병_예방치료_표방"
+   ],
+   "infeasibility": "C",
+   "evidence": [
+    {
+     "law_id": "013094",
+     "article": "제8조",
+     "item": "제1항제1호",
+     "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+     "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+     "basis": true,
+     "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+    },
+    {
+     "law_id": "35032",
+     "article": "Ⅴ.3",
+     "item": "",
+     "quote": null,
+     "chunk_id": "law:admrul_35032_20260601#prose-25#1",
+     "basis": false,
+     "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+    },
+    {
+     "law_id": "34717",
+     "article": "Ⅲ.14.라",
+     "item": "",
+     "quote": null,
+     "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+     "basis": false,
+     "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+    },
+    {
+     "law_id": "35032",
+     "article": "Ⅴ.1",
+     "item": "",
+     "quote": null,
+     "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+     "basis": false,
+     "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+    },
+    {
+     "law_id": "2052445",
+     "article": "Ⅲ.5",
+     "item": "",
+     "quote": "5. \"이용후기 광고\"란 사업자의 인터넷 홈페이지 등에 게시한 소비자의 상품에 대한 이용후기를 이용하여 광고하는 것을 말한다.",
+     "chunk_id": "law:admrul_2052445_20161223#prose-7#0",
+     "basis": false,
+     "doc_title": "인터넷 광고에 관한 심사지침"
+    },
+    {
+     "law_id": "20246",
+     "article": "Ⅲ.1.①",
+     "item": "",
+     "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+     "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+     "basis": false,
+     "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+    }
+   ],
+   "risk": {
+    "floor": "R2",
+    "encoder": "R1",
+    "encoder_basis": [
+     {
+      "premise": "건기식_인정",
+      "violation": "질병_예방치료_표방",
+      "moved_from": null,
+      "floor": "R2",
+      "articles": [
+       {
+        "law_id": "013094",
+        "article": "제8조제1항제1호",
+        "item": "1.",
+        "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+        "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+        "basis": false,
+        "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+       },
+       {
+        "law_id": "013453",
+        "article": "[별표 1]제1호",
+        "item": "본문",
+        "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+        "chunk_id": "annex:013453_0001#본문#1#0",
+        "basis": false,
+        "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+       }
+      ]
+     }
+    ],
+    "final": "R2",
+    "evidence_span": null,
+    "ceiling": null,
+    "ceiling_note": null
+   },
+   "encoder_candidates": [
+    {
+     "violation": "질병_예방치료_표방",
+     "confidence": 0.8823431730270386,
+     "moved_from": null,
+     "references": [
+      {
+       "law_id": "013094",
+       "article": "제8조제1항제1호",
+       "item": "1.",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": false,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호",
+       "item": "본문",
+       "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+       "chunk_id": "annex:013453_0001#본문#1#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "estimate": null
+    },
+    {
+     "violation": "의약품_오인",
+     "confidence": 0.5584017634391785,
+     "moved_from": null,
+     "references": [
+      {
+       "law_id": "013094",
+       "article": "제8조제1항제2호",
+       "item": "2.",
+       "quote": "2. 식품등을 의약품으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-1#0",
+       "basis": false,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제2호",
+       "item": "본문",
+       "quote": "식품등을 의약품으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+       "chunk_id": "annex:013453_0001#본문#2#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "002015",
+       "article": "제13조제1항제1호",
+       "item": "1.",
+       "quote": "1. 의약품으로 잘못 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_002015_20260402#0013001-0-0#0",
+       "basis": false,
+       "doc_title": "화장품법"
+      },
+      {
+       "law_id": "008741",
+       "article": "[별표 5]제2호가목",
+       "item": "본문",
+       "quote": "의약품으로 잘못 인식할 우려가 있는 내용, 제품의 명칭 및 효능ㆍ효과 등에대한 표시ㆍ광고를 하지 말 것",
+       "chunk_id": "annex:008741_0005#본문#2.가#0",
+       "basis": false,
+       "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+      }
+     ],
+     "estimate": null
+    }
+   ],
+   "evidence_mismatch": false,
+   "not_claim": false,
+   "spans": [
+    {
+     "start": 0,
+     "end": 3,
+     "label": "질병_예방치료_표방"
+    },
+    {
+     "start": 0,
+     "end": 7,
+     "label": "질병_예방치료_표방"
+    },
+    {
+     "start": 0,
+     "end": 11,
+     "label": "질병_예방치료_표방"
+    }
+   ],
+   "substantiation": null,
+   "fact_check": null,
+   "user_facts": [],
+   "user_subst": null
+  }
+ ],
+ "branches": [
+  {
+   "premise": "식품",
+   "verified": false,
+   "outcome": "certificate",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "아토피 피부염을 치료해 주는 크림입니다.",
+     "verdict": "confirmed",
+     "hold_reason": null,
+     "violations": [
+      "질병_예방치료_표방"
+     ],
+     "infeasibility": "C",
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제1호",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.3",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-25#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "2052445",
+       "article": "Ⅲ.5",
+       "item": "",
+       "quote": "5. \"이용후기 광고\"란 사업자의 인터넷 홈페이지 등에 게시한 소비자의 상품에 대한 이용후기를 이용하여 광고하는 것을 말한다.",
+       "chunk_id": "law:admrul_2052445_20161223#prose-7#0",
+       "basis": false,
+       "doc_title": "인터넷 광고에 관한 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      }
+     ],
+     "risk": {
+      "floor": "R2",
+      "encoder": null,
+      "encoder_basis": [],
+      "final": "R2",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8825947046279907,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제1호",
+         "item": "1.",
+         "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제1호",
+         "item": "본문",
+         "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+         "chunk_id": "annex:013453_0001#본문#1#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      },
+      {
+       "violation": "건강기능식품_오인",
+       "confidence": 0.54897141456604,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제3호",
+         "item": "3.",
+         "quote": "3. 건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-2#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제3호",
+         "item": "본문",
+         "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고:  「건강기능식품에 관한 법률」 제3조제2호에 따른 기능성이 있는 것으로 표현하는 표시ㆍ광고. 다만, 다음 각 목의 어느 하나에 해당하는 표시ㆍ광고는 제외한다.",
+         "chunk_id": "annex:013453_0001#본문#3#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [
+      {
+       "start": 0,
+       "end": 3,
+       "label": "질병_예방치료_표방"
+      },
+      {
+       "start": 0,
+       "end": 7,
+       "label": "질병_예방치료_표방"
+      },
+      {
+       "start": 0,
+       "end": 11,
+       "label": "질병_예방치료_표방"
+      }
+     ],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "일반식품(건강기능식품이 아닌 식품)이라면 식품표시광고법과 표시광고법 기준으로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "일반식품_기능성",
+   "verified": false,
+   "outcome": "certificate",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "아토피 피부염을 치료해 주는 크림입니다.",
+     "verdict": "confirmed",
+     "hold_reason": null,
+     "violations": [
+      "질병_예방치료_표방"
+     ],
+     "infeasibility": "C",
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제1호",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.3",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-25#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "2052445",
+       "article": "Ⅲ.5",
+       "item": "",
+       "quote": "5. \"이용후기 광고\"란 사업자의 인터넷 홈페이지 등에 게시한 소비자의 상품에 대한 이용후기를 이용하여 광고하는 것을 말한다.",
+       "chunk_id": "law:admrul_2052445_20161223#prose-7#0",
+       "basis": false,
+       "doc_title": "인터넷 광고에 관한 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      }
+     ],
+     "risk": {
+      "floor": "R2",
+      "encoder": null,
+      "encoder_basis": [],
+      "final": "R2",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8825947046279907,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제1호",
+         "item": "1.",
+         "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제1호",
+         "item": "본문",
+         "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+         "chunk_id": "annex:013453_0001#본문#1#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [
+      {
+       "start": 0,
+       "end": 3,
+       "label": "질병_예방치료_표방"
+      },
+      {
+       "start": 0,
+       "end": 7,
+       "label": "질병_예방치료_표방"
+      },
+      {
+       "start": 0,
+       "end": 11,
+       "label": "질병_예방치료_표방"
+      }
+     ],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "일반식품이지만 기능성 표시 고시의 요건을 모두 채워 정해진 기능성 표시를 한 제품(기능성표시식품)이라면 이 전제입니다. 이런 제품의 광고는 자율심의 대상이고 「본 제품은 건강기능식품이 아닙니다.」가 들어가야 합니다. 이 문구를 적는 것만으로는 이 전제가 아닙니다.",
+   "evidence": []
+  },
+  {
+   "premise": "건기식_인정",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "아토피 피부염을 치료해 주는 크림입니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [
+      "질병_예방치료_표방"
+     ],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제1호",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.3",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-25#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "2052445",
+       "article": "Ⅲ.5",
+       "item": "",
+       "quote": "5. \"이용후기 광고\"란 사업자의 인터넷 홈페이지 등에 게시한 소비자의 상품에 대한 이용후기를 이용하여 광고하는 것을 말한다.",
+       "chunk_id": "law:admrul_2052445_20161223#prose-7#0",
+       "basis": false,
+       "doc_title": "인터넷 광고에 관한 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "건기식_인정",
+        "violation": "질병_예방치료_표방",
+        "moved_from": null,
+        "floor": "R2",
+        "articles": [
+         {
+          "law_id": "013094",
+          "article": "제8조제1항제1호",
+          "item": "1.",
+          "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+          "basis": false,
+          "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+         },
+         {
+          "law_id": "013453",
+          "article": "[별표 1]제1호",
+          "item": "본문",
+          "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+          "chunk_id": "annex:013453_0001#본문#1#0",
+          "basis": false,
+          "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8335955739021301,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제1호",
+         "item": "1.",
+         "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제1호",
+         "item": "본문",
+         "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+         "chunk_id": "annex:013453_0001#본문#1#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "이 기능성으로 제품이 인정받은 건강기능식품이라면 인정받은 내용 그대로의 문구는 위반으로 보지 않습니다. 인정 원료가 들어 있다는 것만으로는 이 전제가 아닙니다. 인정받은 내용을 일부 빼거나 바꾼 표현, 질병을 치료한다는 표현, 질병의 증상을 예방 · 치료한다는 표현은 이 전제에서도 위반으로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "건기식_비인정",
+   "verified": false,
+   "outcome": "certificate",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "아토피 피부염을 치료해 주는 크림입니다.",
+     "verdict": "confirmed",
+     "hold_reason": null,
+     "violations": [
+      "질병_예방치료_표방"
+     ],
+     "infeasibility": "C",
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제1호",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.3",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-25#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "2052445",
+       "article": "Ⅲ.5",
+       "item": "",
+       "quote": "5. \"이용후기 광고\"란 사업자의 인터넷 홈페이지 등에 게시한 소비자의 상품에 대한 이용후기를 이용하여 광고하는 것을 말한다.",
+       "chunk_id": "law:admrul_2052445_20161223#prose-7#0",
+       "basis": false,
+       "doc_title": "인터넷 광고에 관한 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      }
+     ],
+     "risk": {
+      "floor": "R2",
+      "encoder": null,
+      "encoder_basis": [],
+      "final": "R2",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8335955739021301,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제1호",
+         "item": "1.",
+         "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제1호",
+         "item": "본문",
+         "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+         "chunk_id": "annex:013453_0001#본문#1#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      },
+      {
+       "violation": "거짓_과장",
+       "confidence": 0.5325177311897278,
+       "moved_from": "건강기능식품_오인",
+       "references": [
+        {
+         "law_id": "002011",
+         "article": "제3조제1항제1호",
+         "item": "1.",
+         "quote": "1. 거짓ㆍ과장의 표시ㆍ광고",
+         "chunk_id": "law:law_002011_20250121#0003001-0-0#0",
+         "basis": false,
+         "doc_title": "표시ㆍ광고의 공정화에 관한 법률"
+        },
+        {
+         "law_id": "005361",
+         "article": "제3조제1항",
+         "item": "",
+         "quote": "① 법 제3조제1항제1호에 따른 거짓ㆍ과장의 표시ㆍ광고는 사실과 다르게 표시ㆍ광고하거나 사실을 지나치게 부풀려 표시ㆍ광고하는 것으로 한다.",
+         "chunk_id": "law:law_005361_20260701#0003001-0#0",
+         "basis": false,
+         "doc_title": "표시ㆍ광고의 공정화에 관한 법률 시행령"
+        },
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제4호",
+         "item": "4.",
+         "quote": "4. 거짓ㆍ과장된 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-3#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제4호나목",
+         "item": "본문",
+         "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
+         "chunk_id": "annex:013453_0001#본문#4.나#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [
+      {
+       "start": 0,
+       "end": 3,
+       "label": "질병_예방치료_표방"
+      },
+      {
+       "start": 0,
+       "end": 7,
+       "label": "질병_예방치료_표방"
+      },
+      {
+       "start": 0,
+       "end": 11,
+       "label": "질병_예방치료_표방"
+      }
+     ],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "건강기능식품이지만 이 기능성으로는 인정받지 않았다면 그 기능성을 내세우는 표현은 위반으로 봅니다. 특허 · 수상 · 논문은 인정을 대신하지 않습니다.",
+   "evidence": []
+  },
+  {
+   "premise": "화장품",
+   "verified": false,
+   "outcome": "certificate",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "아토피 피부염을 치료해 주는 크림입니다.",
+     "verdict": "confirmed",
+     "hold_reason": null,
+     "violations": [
+      "의약품_오인"
+     ],
+     "infeasibility": "C",
+     "evidence": [
+      {
+       "law_id": "002015",
+       "article": "제13조",
+       "item": "제1항제1호",
+       "quote": null,
+       "chunk_id": null,
+       "basis": true,
+       "doc_title": null
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.3",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-25#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "2052445",
+       "article": "Ⅲ.5",
+       "item": "",
+       "quote": "5. \"이용후기 광고\"란 사업자의 인터넷 홈페이지 등에 게시한 소비자의 상품에 대한 이용후기를 이용하여 광고하는 것을 말한다.",
+       "chunk_id": "law:admrul_2052445_20161223#prose-7#0",
+       "basis": false,
+       "doc_title": "인터넷 광고에 관한 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "002015",
+       "article": "제2조제1항제2호",
+       "item": "2.",
+       "quote": "2. \"기능성화장품\"이란 화장품 중에서 다음 각 목의 어느 하나에 해당되는 것으로서 총리령으로 정하는 화장품을 말한다.\n가. 피부의 미백에 도움을 주는 제품\n나. 피부의 주름개선에 도움을 주는 제품\n다. 피부를 곱게 태워주거나 자외선으로부터 피부를 보호하는 데에 도움을 주는 제품\n라. 모발의 색상 변화ㆍ제거 또는 영양공급에 도움을 주는 제품\n마. 피부나 모발의 기능 약화로 인한 건조함, 갈라짐, 빠짐, 각질화 등을 방지하거나 개선하는 데에 도움을 주는 제품",
+       "chunk_id": "law:law_002015_20260402#0002001-0-1#0",
+       "basis": false,
+       "doc_title": "화장품법"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제9호",
+       "item": "9.",
+       "quote": "9. 여드름성 피부를 완화하는 데 도움을 주는 화장품. 다만, 인체세정용 제품류로 한정한다.",
+       "chunk_id": "law:law_008741_20260402#0002001-0-8#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제8호",
+       "item": "8.",
+       "quote": "8. 탈모 증상의 완화에 도움을 주는 화장품. 다만, 코팅 등 물리적으로 모발을 굵게 보이게 하는 제품은 제외한다.",
+       "chunk_id": "law:law_008741_20260402#0002001-0-7#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      },
+      {
+       "law_id": "41277",
+       "article": "제2조제1항제3호",
+       "item": "3.",
+       "quote": "3. \"인체 적용시험”은 화장품의 표시·광고 내용을 증명할 목적으로 해당 화장품의 효과 및 안전성을 확인하기 위하여 사람을 대상으로 실시하는 시험 또는 연구를 말한다.",
+       "chunk_id": "law:admrul_41277_20200904#adm-1-0-2#0",
+       "basis": false,
+       "doc_title": "화장품 표시·광고 실증에 관한 규정"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제10호",
+       "item": "10.",
+       "quote": "10. 피부장벽(피부의 가장 바깥 쪽에 존재하는 각질층의 표피를 말한다)의 기능을 회복하여 가려움 등의 개선에 도움을 주는 화장품",
+       "chunk_id": "law:law_008741_20260402#0002001-0-9#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      }
+     ],
+     "risk": {
+      "floor": "R2",
+      "encoder": null,
+      "encoder_basis": [],
+      "final": "R2",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "의약품_오인",
+       "confidence": 0.8371109962463379,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "002015",
+         "article": "제13조제1항제1호",
+         "item": "1.",
+         "quote": "1. 의약품으로 잘못 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_002015_20260402#0013001-0-0#0",
+         "basis": false,
+         "doc_title": "화장품법"
+        },
+        {
+         "law_id": "008741",
+         "article": "[별표 5]제2호가목",
+         "item": "본문",
+         "quote": "의약품으로 잘못 인식할 우려가 있는 내용, 제품의 명칭 및 효능ㆍ효과 등에대한 표시ㆍ광고를 하지 말 것",
+         "chunk_id": "annex:008741_0005#본문#2.가#0",
+         "basis": false,
+         "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [
+      {
+       "start": 0,
+       "end": 3,
+       "label": "의약품_오인"
+      },
+      {
+       "start": 0,
+       "end": 7,
+       "label": "의약품_오인"
+      },
+      {
+       "start": 0,
+       "end": 11,
+       "label": "의약품_오인"
+      }
+     ],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "화장품이라면 화장품법과 표시광고법 기준으로 봅니다. 질병을 예방 · 치료한다는 표현은 의약품으로 잘못 인식할 우려가 있는 광고로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "일반상품",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "아토피 피부염을 치료해 주는 크림입니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.3",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-25#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "2052445",
+       "article": "Ⅲ.5",
+       "item": "",
+       "quote": "5. \"이용후기 광고\"란 사업자의 인터넷 홈페이지 등에 게시한 소비자의 상품에 대한 이용후기를 이용하여 광고하는 것을 말한다.",
+       "chunk_id": "law:admrul_2052445_20161223#prose-7#0",
+       "basis": false,
+       "doc_title": "인터넷 광고에 관한 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": null,
+      "encoder_basis": [],
+      "final": null,
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8823431730270386,
+       "moved_from": null,
+       "references": [],
+       "estimate": null
+      },
+      {
+       "violation": "의약품_오인",
+       "confidence": 0.5584017634391785,
+       "moved_from": null,
+       "references": [],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "식품 · 화장품이 아닌 상품이라면 표시광고법 기준만 보았습니다. 이 품목에 따로 적용되는 법은 검수하지 않았습니다.",
+   "evidence": []
+  }
+ ],
+ "candidates": [],
+ "certificate": null,
+ "attempt": 0,
+ "timings": [
+  {
+   "node": "split",
+   "ms": 0.028699985705316067
+  },
+  {
+   "node": "classify",
+   "ms": 0.00790000194683671
+  },
+  {
+   "node": "retrieve",
+   "ms": 286.0145000158809
+  },
+  {
+   "node": "match_dict",
+   "ms": 130.0022000214085
+  },
+  {
+   "node": "encode",
+   "ms": 121.79349997313693
+  },
+  {
+   "node": "law_ftc",
+   "ms": 0.846999988425523
+  },
+  {
+   "node": "law_food",
+   "ms": 0.6373999640345573
+  },
+  {
+   "node": "law_cosmetic",
+   "ms": 0.978900003246963
+  },
+  {
+   "node": "merge_laws",
+   "ms": 0.01109996810555458
+  },
+  {
+   "node": "judge",
+   "ms": 0.4133000038564205
+  },
+  {
+   "node": "assess_risk",
+   "ms": 0.007299997378140688
+  },
+  {
+   "node": "premise_branches",
+   "ms": 3.7542000063695014
+  },
+  {
+   "node": "doc_rules",
+   "ms": 0.09249994764104486
+  },
+  {
+   "node": "hold",
+   "ms": 0.0017999554984271526
+  }
+ ],
+ "law_version": "unknown",
+ "judged_by": "rule-0.3.0-dict+encb:c451942436f0"
+}

@@ -1,0 +1,1441 @@
+{
+ "outcome": "hold",
+ "category": null,
+ "category_source": null,
+ "not_reviewed": [],
+ "sentences": [
+  {
+   "sent_id": "s0",
+   "text": "당뇨병 치료에 효과가 있습니다.",
+   "verdict": "hold",
+   "hold_reason": "cat_unknown",
+   "violations": [
+    "질병_예방치료_표방"
+   ],
+   "infeasibility": null,
+   "evidence": [
+    {
+     "law_id": "013094",
+     "article": "제8조",
+     "item": "제1항제1호",
+     "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+     "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+     "basis": true,
+     "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+    },
+    {
+     "law_id": "34717",
+     "article": "Ⅲ.5.마",
+     "item": "",
+     "quote": null,
+     "chunk_id": "law:admrul_34717_20191212#prose-60#1",
+     "basis": false,
+     "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+    },
+    {
+     "law_id": "20246",
+     "article": "Ⅲ.1.①",
+     "item": "",
+     "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+     "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+     "basis": false,
+     "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+    },
+    {
+     "law_id": "35032",
+     "article": "Ⅴ.1",
+     "item": "",
+     "quote": null,
+     "chunk_id": "law:admrul_35032_20260601#prose-19#2",
+     "basis": false,
+     "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+    },
+    {
+     "law_id": "20246",
+     "article": "Ⅲ.3",
+     "item": "",
+     "quote": "3. 성능, 효능, 품질에 관한 내용인 경우 〈예시〉 ① \"-원의 연료비 절약 가능, 연비 향상\" 등의 표현 ⑤ \"○○ 유해 성분의 차단 효과\"등의 표현",
+     "chunk_id": "law:admrul_20246_20260903#prose-17#0",
+     "basis": false,
+     "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+    },
+    {
+     "law_id": "35032",
+     "article": "Ⅴ.2.라",
+     "item": "",
+     "quote": null,
+     "chunk_id": "law:admrul_35032_20260601#prose-24#1",
+     "basis": false,
+     "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+    },
+    {
+     "law_id": "013453",
+     "article": "[별표 1]제1호나목",
+     "item": "본문",
+     "quote": "질병 또는 질병군에 치료 효과가 있다는 내용의 표시ㆍ광고",
+     "chunk_id": "annex:013453_0001#본문#1.나#0",
+     "basis": false,
+     "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+    },
+    {
+     "law_id": "013453",
+     "article": "[별표 1]제2호라목",
+     "item": "본문",
+     "quote": "의약품의 효능 또는 질병 치료의 효과를 증대시킨다는 내용의 표시ㆍ광고",
+     "chunk_id": "annex:013453_0001#본문#2.라#0",
+     "basis": false,
+     "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+    },
+    {
+     "law_id": "013453",
+     "article": "[별표 1]제1호다목",
+     "item": "본문",
+     "quote": "질병의 특징적인 징후 또는 증상에 예방ㆍ치료 효과가 있다는 내용의 표시ㆍ광고",
+     "chunk_id": "annex:013453_0001#본문#1.다#0",
+     "basis": false,
+     "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+    },
+    {
+     "law_id": "013453",
+     "article": "[별표 1]제5호아목",
+     "item": "본문",
+     "quote": "「건강기능식품에 관한 법률」 제15조제2항 본문에 따라 식품의약품안전처장이 인정한 사항의 일부 내용을 삭제하거나 변경하여 표현함으로써 해당 건강기능식품의 기능 또는 효과에 대하여 소비자를 오인하게 하거나 기만하는표시ㆍ광고",
+     "chunk_id": "annex:013453_0001#본문#5.아#0",
+     "basis": false,
+     "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+    },
+    {
+     "law_id": "013453",
+     "article": "[별표 1]제7호나목",
+     "item": "본문",
+     "quote": "제품의 제조방법ㆍ품질ㆍ영양가ㆍ원재료ㆍ성분 또는 효과와 직접적인 관련이 적은 내용이나 사용하지 않은 원재료 또는 성분을 강조함으로써 다른 업소의 제품을 간접적으로 다르게 인식하게 하는 내용의 표시ㆍ광고. 다만, 식품의약품안전처장이 소비자의 판단에 도움을 주기 위하여 표시ㆍ광고할 필요가 있다고 인정하여 고시하는 원재료 또는 성분을 사용하지 않았다는 표시ㆍ광고는 제외한다.",
+     "chunk_id": "annex:013453_0001#본문#7.나#0",
+     "basis": false,
+     "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+    },
+    {
+     "law_id": "41277",
+     "article": "제4조제1항제2호",
+     "item": "2.",
+     "quote": null,
+     "chunk_id": "law:admrul_41277_20200904#adm-3-0-1#2",
+     "basis": false,
+     "doc_title": "화장품 표시·광고 실증에 관한 규정"
+    },
+    {
+     "law_id": "008741",
+     "article": "제2조제1항제9호",
+     "item": "9.",
+     "quote": "9. 여드름성 피부를 완화하는 데 도움을 주는 화장품. 다만, 인체세정용 제품류로 한정한다.",
+     "chunk_id": "law:law_008741_20260402#0002001-0-8#0",
+     "basis": false,
+     "doc_title": "화장품법 시행규칙"
+    },
+    {
+     "law_id": "008741",
+     "article": "제2조제1항제8호",
+     "item": "8.",
+     "quote": "8. 탈모 증상의 완화에 도움을 주는 화장품. 다만, 코팅 등 물리적으로 모발을 굵게 보이게 하는 제품은 제외한다.",
+     "chunk_id": "law:law_008741_20260402#0002001-0-7#0",
+     "basis": false,
+     "doc_title": "화장품법 시행규칙"
+    },
+    {
+     "law_id": "41277",
+     "article": "제3조제3항",
+     "item": "",
+     "quote": "③ 실증자료의 내용은 광고에서 주장하는 내용과 직접적인 관계가 있어야 한다.\n(예시) 실증자료에서 입증한 내용이 표시·광고에서 주장하는 내용과 관련이 없는 경우: 효능이나 성능에 대한 표시·광고에 대하여 일반 소비자를 대상으로 한 설문조사나, 그 제품을 소비한 경험이 있는 일부 소비자를 대상으로 한 조사결과를 제출한 경우\n· 해당 제품의 ‘여드름 개선’ 효과를 표방하는 표시·광고에 대하여 해당 제품에 여드름 개선 효과가 있음을 입증하는 자료를 제출하지 아니하고 ‘여드름 피부개선용 화장료 조성물’ 특허자료 등을 제출하는 경우\n(예시) 실증자료에서 입증한 내용이 표시·광고에서 주장하는 내용과 부분적으로만 상관이 있는 경우 : 제품에 특정 성분이 들어 있지 않다는 \"무(무) oo” 광고 내용과 관련하여 제품에 특정 성분이 함유되어 있지 않다는 시험자료를 제출하지 아니하고 제조과정에 특정 성분을 첨가하지 않았다는 제조관리기록서나 원료에 관한 시험자료를 제출한 경우",
+     "chunk_id": "law:admrul_41277_20200904#adm-2-2#0",
+     "basis": false,
+     "doc_title": "화장품 표시·광고 실증에 관한 규정"
+    },
+    {
+     "law_id": "41277",
+     "article": "제2조제1항제3호",
+     "item": "3.",
+     "quote": "3. \"인체 적용시험”은 화장품의 표시·광고 내용을 증명할 목적으로 해당 화장품의 효과 및 안전성을 확인하기 위하여 사람을 대상으로 실시하는 시험 또는 연구를 말한다.",
+     "chunk_id": "law:admrul_41277_20200904#adm-1-0-2#0",
+     "basis": false,
+     "doc_title": "화장품 표시·광고 실증에 관한 규정"
+    }
+   ],
+   "risk": {
+    "floor": null,
+    "encoder": "R1",
+    "encoder_basis": [
+     {
+      "premise": "식품",
+      "violation": "질병_예방치료_표방",
+      "moved_from": null,
+      "floor": "R2",
+      "articles": [
+       {
+        "law_id": "013094",
+        "article": "제8조제1항제1호",
+        "item": "1.",
+        "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+        "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+        "basis": false,
+        "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+       },
+       {
+        "law_id": "013453",
+        "article": "[별표 1]제1호",
+        "item": "본문",
+        "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+        "chunk_id": "annex:013453_0001#본문#1#0",
+        "basis": false,
+        "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+       }
+      ]
+     },
+     {
+      "premise": "일반식품_기능성",
+      "violation": "질병_예방치료_표방",
+      "moved_from": null,
+      "floor": "R2",
+      "articles": [
+       {
+        "law_id": "013094",
+        "article": "제8조제1항제1호",
+        "item": "1.",
+        "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+        "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+        "basis": false,
+        "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+       },
+       {
+        "law_id": "013453",
+        "article": "[별표 1]제1호",
+        "item": "본문",
+        "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+        "chunk_id": "annex:013453_0001#본문#1#0",
+        "basis": false,
+        "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+       }
+      ]
+     },
+     {
+      "premise": "건기식_인정",
+      "violation": "질병_예방치료_표방",
+      "moved_from": null,
+      "floor": "R2",
+      "articles": [
+       {
+        "law_id": "013094",
+        "article": "제8조제1항제1호",
+        "item": "1.",
+        "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+        "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+        "basis": false,
+        "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+       },
+       {
+        "law_id": "013453",
+        "article": "[별표 1]제1호",
+        "item": "본문",
+        "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+        "chunk_id": "annex:013453_0001#본문#1#0",
+        "basis": false,
+        "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+       }
+      ]
+     },
+     {
+      "premise": "건기식_비인정",
+      "violation": "질병_예방치료_표방",
+      "moved_from": null,
+      "floor": "R2",
+      "articles": [
+       {
+        "law_id": "013094",
+        "article": "제8조제1항제1호",
+        "item": "1.",
+        "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+        "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+        "basis": false,
+        "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+       },
+       {
+        "law_id": "013453",
+        "article": "[별표 1]제1호",
+        "item": "본문",
+        "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+        "chunk_id": "annex:013453_0001#본문#1#0",
+        "basis": false,
+        "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+       }
+      ]
+     },
+     {
+      "premise": "화장품",
+      "violation": "의약품_오인",
+      "moved_from": null,
+      "floor": "R2",
+      "articles": [
+       {
+        "law_id": "002015",
+        "article": "제13조제1항제1호",
+        "item": "1.",
+        "quote": "1. 의약품으로 잘못 인식할 우려가 있는 표시 또는 광고",
+        "chunk_id": "law:law_002015_20260402#0013001-0-0#0",
+        "basis": false,
+        "doc_title": "화장품법"
+       },
+       {
+        "law_id": "008741",
+        "article": "[별표 5]제2호가목",
+        "item": "본문",
+        "quote": "의약품으로 잘못 인식할 우려가 있는 내용, 제품의 명칭 및 효능ㆍ효과 등에대한 표시ㆍ광고를 하지 말 것",
+        "chunk_id": "annex:008741_0005#본문#2.가#0",
+        "basis": false,
+        "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+       }
+      ]
+     }
+    ],
+    "final": "R1",
+    "evidence_span": null,
+    "ceiling": null,
+    "ceiling_note": null
+   },
+   "encoder_candidates": [
+    {
+     "violation": "질병_예방치료_표방",
+     "confidence": 0.8709508776664734,
+     "moved_from": null,
+     "references": [
+      {
+       "law_id": "013094",
+       "article": "제8조제1항제1호",
+       "item": "1.",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": false,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호",
+       "item": "본문",
+       "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+       "chunk_id": "annex:013453_0001#본문#1#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "estimate": null
+    }
+   ],
+   "evidence_mismatch": false,
+   "not_claim": false,
+   "spans": [],
+   "substantiation": null,
+   "fact_check": null,
+   "user_facts": [],
+   "user_subst": null
+  }
+ ],
+ "branches": [
+  {
+   "premise": "식품",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "당뇨병 치료에 효과가 있습니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [
+      "질병_예방치료_표방"
+     ],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제1호",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.5.마",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-60#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#2",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.3",
+       "item": "",
+       "quote": "3. 성능, 효능, 품질에 관한 내용인 경우 〈예시〉 ① \"-원의 연료비 절약 가능, 연비 향상\" 등의 표현 ⑤ \"○○ 유해 성분의 차단 효과\"등의 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-17#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.2.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-24#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호나목",
+       "item": "본문",
+       "quote": "질병 또는 질병군에 치료 효과가 있다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#1.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제2호라목",
+       "item": "본문",
+       "quote": "의약품의 효능 또는 질병 치료의 효과를 증대시킨다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#2.라#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호다목",
+       "item": "본문",
+       "quote": "질병의 특징적인 징후 또는 증상에 예방ㆍ치료 효과가 있다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#1.다#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제5호아목",
+       "item": "본문",
+       "quote": "「건강기능식품에 관한 법률」 제15조제2항 본문에 따라 식품의약품안전처장이 인정한 사항의 일부 내용을 삭제하거나 변경하여 표현함으로써 해당 건강기능식품의 기능 또는 효과에 대하여 소비자를 오인하게 하거나 기만하는표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#5.아#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제7호나목",
+       "item": "본문",
+       "quote": "제품의 제조방법ㆍ품질ㆍ영양가ㆍ원재료ㆍ성분 또는 효과와 직접적인 관련이 적은 내용이나 사용하지 않은 원재료 또는 성분을 강조함으로써 다른 업소의 제품을 간접적으로 다르게 인식하게 하는 내용의 표시ㆍ광고. 다만, 식품의약품안전처장이 소비자의 판단에 도움을 주기 위하여 표시ㆍ광고할 필요가 있다고 인정하여 고시하는 원재료 또는 성분을 사용하지 않았다는 표시ㆍ광고는 제외한다.",
+       "chunk_id": "annex:013453_0001#본문#7.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "식품",
+        "violation": "질병_예방치료_표방",
+        "moved_from": null,
+        "floor": "R2",
+        "articles": [
+         {
+          "law_id": "013094",
+          "article": "제8조제1항제1호",
+          "item": "1.",
+          "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+          "basis": false,
+          "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+         },
+         {
+          "law_id": "013453",
+          "article": "[별표 1]제1호",
+          "item": "본문",
+          "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+          "chunk_id": "annex:013453_0001#본문#1#0",
+          "basis": false,
+          "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8778337240219116,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제1호",
+         "item": "1.",
+         "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제1호",
+         "item": "본문",
+         "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+         "chunk_id": "annex:013453_0001#본문#1#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "일반식품(건강기능식품이 아닌 식품)이라면 식품표시광고법과 표시광고법 기준으로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "일반식품_기능성",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "당뇨병 치료에 효과가 있습니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [
+      "질병_예방치료_표방"
+     ],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제1호",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.5.마",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-60#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#2",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.3",
+       "item": "",
+       "quote": "3. 성능, 효능, 품질에 관한 내용인 경우 〈예시〉 ① \"-원의 연료비 절약 가능, 연비 향상\" 등의 표현 ⑤ \"○○ 유해 성분의 차단 효과\"등의 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-17#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.2.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-24#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호나목",
+       "item": "본문",
+       "quote": "질병 또는 질병군에 치료 효과가 있다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#1.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제2호라목",
+       "item": "본문",
+       "quote": "의약품의 효능 또는 질병 치료의 효과를 증대시킨다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#2.라#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호다목",
+       "item": "본문",
+       "quote": "질병의 특징적인 징후 또는 증상에 예방ㆍ치료 효과가 있다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#1.다#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제5호아목",
+       "item": "본문",
+       "quote": "「건강기능식품에 관한 법률」 제15조제2항 본문에 따라 식품의약품안전처장이 인정한 사항의 일부 내용을 삭제하거나 변경하여 표현함으로써 해당 건강기능식품의 기능 또는 효과에 대하여 소비자를 오인하게 하거나 기만하는표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#5.아#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제7호나목",
+       "item": "본문",
+       "quote": "제품의 제조방법ㆍ품질ㆍ영양가ㆍ원재료ㆍ성분 또는 효과와 직접적인 관련이 적은 내용이나 사용하지 않은 원재료 또는 성분을 강조함으로써 다른 업소의 제품을 간접적으로 다르게 인식하게 하는 내용의 표시ㆍ광고. 다만, 식품의약품안전처장이 소비자의 판단에 도움을 주기 위하여 표시ㆍ광고할 필요가 있다고 인정하여 고시하는 원재료 또는 성분을 사용하지 않았다는 표시ㆍ광고는 제외한다.",
+       "chunk_id": "annex:013453_0001#본문#7.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "일반식품_기능성",
+        "violation": "질병_예방치료_표방",
+        "moved_from": null,
+        "floor": "R2",
+        "articles": [
+         {
+          "law_id": "013094",
+          "article": "제8조제1항제1호",
+          "item": "1.",
+          "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+          "basis": false,
+          "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+         },
+         {
+          "law_id": "013453",
+          "article": "[별표 1]제1호",
+          "item": "본문",
+          "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+          "chunk_id": "annex:013453_0001#본문#1#0",
+          "basis": false,
+          "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8778337240219116,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제1호",
+         "item": "1.",
+         "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제1호",
+         "item": "본문",
+         "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+         "chunk_id": "annex:013453_0001#본문#1#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "일반식품이지만 기능성 표시 고시의 요건을 모두 채워 정해진 기능성 표시를 한 제품(기능성표시식품)이라면 이 전제입니다. 이런 제품의 광고는 자율심의 대상이고 「본 제품은 건강기능식품이 아닙니다.」가 들어가야 합니다. 이 문구를 적는 것만으로는 이 전제가 아닙니다.",
+   "evidence": []
+  },
+  {
+   "premise": "건기식_인정",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "당뇨병 치료에 효과가 있습니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [
+      "질병_예방치료_표방"
+     ],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제1호",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.5.마",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-60#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#2",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.3",
+       "item": "",
+       "quote": "3. 성능, 효능, 품질에 관한 내용인 경우 〈예시〉 ① \"-원의 연료비 절약 가능, 연비 향상\" 등의 표현 ⑤ \"○○ 유해 성분의 차단 효과\"등의 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-17#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.2.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-24#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호나목",
+       "item": "본문",
+       "quote": "질병 또는 질병군에 치료 효과가 있다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#1.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제2호라목",
+       "item": "본문",
+       "quote": "의약품의 효능 또는 질병 치료의 효과를 증대시킨다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#2.라#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호다목",
+       "item": "본문",
+       "quote": "질병의 특징적인 징후 또는 증상에 예방ㆍ치료 효과가 있다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#1.다#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제5호아목",
+       "item": "본문",
+       "quote": "「건강기능식품에 관한 법률」 제15조제2항 본문에 따라 식품의약품안전처장이 인정한 사항의 일부 내용을 삭제하거나 변경하여 표현함으로써 해당 건강기능식품의 기능 또는 효과에 대하여 소비자를 오인하게 하거나 기만하는표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#5.아#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제7호나목",
+       "item": "본문",
+       "quote": "제품의 제조방법ㆍ품질ㆍ영양가ㆍ원재료ㆍ성분 또는 효과와 직접적인 관련이 적은 내용이나 사용하지 않은 원재료 또는 성분을 강조함으로써 다른 업소의 제품을 간접적으로 다르게 인식하게 하는 내용의 표시ㆍ광고. 다만, 식품의약품안전처장이 소비자의 판단에 도움을 주기 위하여 표시ㆍ광고할 필요가 있다고 인정하여 고시하는 원재료 또는 성분을 사용하지 않았다는 표시ㆍ광고는 제외한다.",
+       "chunk_id": "annex:013453_0001#본문#7.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "건기식_인정",
+        "violation": "질병_예방치료_표방",
+        "moved_from": null,
+        "floor": "R2",
+        "articles": [
+         {
+          "law_id": "013094",
+          "article": "제8조제1항제1호",
+          "item": "1.",
+          "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+          "basis": false,
+          "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+         },
+         {
+          "law_id": "013453",
+          "article": "[별표 1]제1호",
+          "item": "본문",
+          "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+          "chunk_id": "annex:013453_0001#본문#1#0",
+          "basis": false,
+          "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8772459030151367,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제1호",
+         "item": "1.",
+         "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제1호",
+         "item": "본문",
+         "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+         "chunk_id": "annex:013453_0001#본문#1#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "이 기능성으로 제품이 인정받은 건강기능식품이라면 인정받은 내용 그대로의 문구는 위반으로 보지 않습니다. 인정 원료가 들어 있다는 것만으로는 이 전제가 아닙니다. 인정받은 내용을 일부 빼거나 바꾼 표현, 질병을 치료한다는 표현, 질병의 증상을 예방 · 치료한다는 표현은 이 전제에서도 위반으로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "건기식_비인정",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "당뇨병 치료에 효과가 있습니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [
+      "질병_예방치료_표방"
+     ],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제1호",
+       "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.5.마",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-60#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#2",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.3",
+       "item": "",
+       "quote": "3. 성능, 효능, 품질에 관한 내용인 경우 〈예시〉 ① \"-원의 연료비 절약 가능, 연비 향상\" 등의 표현 ⑤ \"○○ 유해 성분의 차단 효과\"등의 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-17#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.2.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-24#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호나목",
+       "item": "본문",
+       "quote": "질병 또는 질병군에 치료 효과가 있다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#1.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제2호라목",
+       "item": "본문",
+       "quote": "의약품의 효능 또는 질병 치료의 효과를 증대시킨다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#2.라#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호다목",
+       "item": "본문",
+       "quote": "질병의 특징적인 징후 또는 증상에 예방ㆍ치료 효과가 있다는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#1.다#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제5호아목",
+       "item": "본문",
+       "quote": "「건강기능식품에 관한 법률」 제15조제2항 본문에 따라 식품의약품안전처장이 인정한 사항의 일부 내용을 삭제하거나 변경하여 표현함으로써 해당 건강기능식품의 기능 또는 효과에 대하여 소비자를 오인하게 하거나 기만하는표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#5.아#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제7호나목",
+       "item": "본문",
+       "quote": "제품의 제조방법ㆍ품질ㆍ영양가ㆍ원재료ㆍ성분 또는 효과와 직접적인 관련이 적은 내용이나 사용하지 않은 원재료 또는 성분을 강조함으로써 다른 업소의 제품을 간접적으로 다르게 인식하게 하는 내용의 표시ㆍ광고. 다만, 식품의약품안전처장이 소비자의 판단에 도움을 주기 위하여 표시ㆍ광고할 필요가 있다고 인정하여 고시하는 원재료 또는 성분을 사용하지 않았다는 표시ㆍ광고는 제외한다.",
+       "chunk_id": "annex:013453_0001#본문#7.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "건기식_비인정",
+        "violation": "질병_예방치료_표방",
+        "moved_from": null,
+        "floor": "R2",
+        "articles": [
+         {
+          "law_id": "013094",
+          "article": "제8조제1항제1호",
+          "item": "1.",
+          "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+          "basis": false,
+          "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+         },
+         {
+          "law_id": "013453",
+          "article": "[별표 1]제1호",
+          "item": "본문",
+          "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+          "chunk_id": "annex:013453_0001#본문#1#0",
+          "basis": false,
+          "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8772459030151367,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제1호",
+         "item": "1.",
+         "quote": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-0#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제1호",
+         "item": "본문",
+         "quote": "질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 다음 각 목의 표시 또는 광고",
+         "chunk_id": "annex:013453_0001#본문#1#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "건강기능식품이지만 이 기능성으로는 인정받지 않았다면 그 기능성을 내세우는 표현은 위반으로 봅니다. 특허 · 수상 · 논문은 인정을 대신하지 않습니다.",
+   "evidence": []
+  },
+  {
+   "premise": "화장품",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "당뇨병 치료에 효과가 있습니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.5.마",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-60#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#2",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.3",
+       "item": "",
+       "quote": "3. 성능, 효능, 품질에 관한 내용인 경우 〈예시〉 ① \"-원의 연료비 절약 가능, 연비 향상\" 등의 표현 ⑤ \"○○ 유해 성분의 차단 효과\"등의 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-17#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.2.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-24#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "41277",
+       "article": "제4조제1항제2호",
+       "item": "2.",
+       "quote": null,
+       "chunk_id": "law:admrul_41277_20200904#adm-3-0-1#2",
+       "basis": false,
+       "doc_title": "화장품 표시·광고 실증에 관한 규정"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제9호",
+       "item": "9.",
+       "quote": "9. 여드름성 피부를 완화하는 데 도움을 주는 화장품. 다만, 인체세정용 제품류로 한정한다.",
+       "chunk_id": "law:law_008741_20260402#0002001-0-8#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제8호",
+       "item": "8.",
+       "quote": "8. 탈모 증상의 완화에 도움을 주는 화장품. 다만, 코팅 등 물리적으로 모발을 굵게 보이게 하는 제품은 제외한다.",
+       "chunk_id": "law:law_008741_20260402#0002001-0-7#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      },
+      {
+       "law_id": "41277",
+       "article": "제3조제3항",
+       "item": "",
+       "quote": "③ 실증자료의 내용은 광고에서 주장하는 내용과 직접적인 관계가 있어야 한다.\n(예시) 실증자료에서 입증한 내용이 표시·광고에서 주장하는 내용과 관련이 없는 경우: 효능이나 성능에 대한 표시·광고에 대하여 일반 소비자를 대상으로 한 설문조사나, 그 제품을 소비한 경험이 있는 일부 소비자를 대상으로 한 조사결과를 제출한 경우\n· 해당 제품의 ‘여드름 개선’ 효과를 표방하는 표시·광고에 대하여 해당 제품에 여드름 개선 효과가 있음을 입증하는 자료를 제출하지 아니하고 ‘여드름 피부개선용 화장료 조성물’ 특허자료 등을 제출하는 경우\n(예시) 실증자료에서 입증한 내용이 표시·광고에서 주장하는 내용과 부분적으로만 상관이 있는 경우 : 제품에 특정 성분이 들어 있지 않다는 \"무(무) oo” 광고 내용과 관련하여 제품에 특정 성분이 함유되어 있지 않다는 시험자료를 제출하지 아니하고 제조과정에 특정 성분을 첨가하지 않았다는 제조관리기록서나 원료에 관한 시험자료를 제출한 경우",
+       "chunk_id": "law:admrul_41277_20200904#adm-2-2#0",
+       "basis": false,
+       "doc_title": "화장품 표시·광고 실증에 관한 규정"
+      },
+      {
+       "law_id": "41277",
+       "article": "제2조제1항제3호",
+       "item": "3.",
+       "quote": "3. \"인체 적용시험”은 화장품의 표시·광고 내용을 증명할 목적으로 해당 화장품의 효과 및 안전성을 확인하기 위하여 사람을 대상으로 실시하는 시험 또는 연구를 말한다.",
+       "chunk_id": "law:admrul_41277_20200904#adm-1-0-2#0",
+       "basis": false,
+       "doc_title": "화장품 표시·광고 실증에 관한 규정"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "화장품",
+        "violation": "의약품_오인",
+        "moved_from": null,
+        "floor": "R2",
+        "articles": [
+         {
+          "law_id": "002015",
+          "article": "제13조제1항제1호",
+          "item": "1.",
+          "quote": "1. 의약품으로 잘못 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "law:law_002015_20260402#0013001-0-0#0",
+          "basis": false,
+          "doc_title": "화장품법"
+         },
+         {
+          "law_id": "008741",
+          "article": "[별표 5]제2호가목",
+          "item": "본문",
+          "quote": "의약품으로 잘못 인식할 우려가 있는 내용, 제품의 명칭 및 효능ㆍ효과 등에대한 표시ㆍ광고를 하지 말 것",
+          "chunk_id": "annex:008741_0005#본문#2.가#0",
+          "basis": false,
+          "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "의약품_오인",
+       "confidence": 0.7969985604286194,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "002015",
+         "article": "제13조제1항제1호",
+         "item": "1.",
+         "quote": "1. 의약품으로 잘못 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_002015_20260402#0013001-0-0#0",
+         "basis": false,
+         "doc_title": "화장품법"
+        },
+        {
+         "law_id": "008741",
+         "article": "[별표 5]제2호가목",
+         "item": "본문",
+         "quote": "의약품으로 잘못 인식할 우려가 있는 내용, 제품의 명칭 및 효능ㆍ효과 등에대한 표시ㆍ광고를 하지 말 것",
+         "chunk_id": "annex:008741_0005#본문#2.가#0",
+         "basis": false,
+         "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+        }
+       ],
+       "estimate": {
+        "floor": "R2",
+        "ceiling": null,
+        "ceiling_note": null
+       }
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "화장품이라면 화장품법과 표시광고법 기준으로 봅니다. 질병을 예방 · 치료한다는 표현은 의약품으로 잘못 인식할 우려가 있는 광고로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "일반상품",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "당뇨병 치료에 효과가 있습니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.5.마",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-60#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.1.①",
+       "item": "",
+       "quote": "① \"담즙분비 촉진효과\", \"소화흡수율이 95% 이상\"등 신체에 대한 효과와 관련된 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-8#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#2",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅲ.3",
+       "item": "",
+       "quote": "3. 성능, 효능, 품질에 관한 내용인 경우 〈예시〉 ① \"-원의 연료비 절약 가능, 연비 향상\" 등의 표현 ⑤ \"○○ 유해 성분의 차단 효과\"등의 표현",
+       "chunk_id": "law:admrul_20246_20260903#prose-17#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.2.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-24#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": null,
+      "encoder_basis": [],
+      "final": null,
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "질병_예방치료_표방",
+       "confidence": 0.8709508776664734,
+       "moved_from": null,
+       "references": [],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "식품 · 화장품이 아닌 상품이라면 표시광고법 기준만 보았습니다. 이 품목에 따로 적용되는 법은 검수하지 않았습니다.",
+   "evidence": []
+  }
+ ],
+ "candidates": [],
+ "certificate": null,
+ "attempt": 0,
+ "timings": [
+  {
+   "node": "split",
+   "ms": 0.011999974958598614
+  },
+  {
+   "node": "classify",
+   "ms": 0.017900019884109497
+  },
+  {
+   "node": "retrieve",
+   "ms": 336.718300008215
+  },
+  {
+   "node": "match_dict",
+   "ms": 109.09330000868067
+  },
+  {
+   "node": "encode",
+   "ms": 74.88169998396188
+  },
+  {
+   "node": "law_ftc",
+   "ms": 1.2091000098735094
+  },
+  {
+   "node": "law_food",
+   "ms": 0.8452000329270959
+  },
+  {
+   "node": "law_cosmetic",
+   "ms": 0.8027000003494322
+  },
+  {
+   "node": "merge_laws",
+   "ms": 0.008600007276982069
+  },
+  {
+   "node": "judge",
+   "ms": 0.21079997532069683
+  },
+  {
+   "node": "assess_risk",
+   "ms": 0.006999995093792677
+  },
+  {
+   "node": "premise_branches",
+   "ms": 4.027600050903857
+  },
+  {
+   "node": "doc_rules",
+   "ms": 1.048400008585304
+  },
+  {
+   "node": "hold",
+   "ms": 0.001500011421740055
+  }
+ ],
+ "law_version": "unknown",
+ "judged_by": "rule-0.3.0-dict+encb:c451942436f0"
+}
