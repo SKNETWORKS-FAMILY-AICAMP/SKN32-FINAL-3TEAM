@@ -363,7 +363,7 @@ main:has(.cp-ed) { max-width: 96rem; }
 <script type="application/json" id="de-data">{{ draft|tojson }}</script>
 <script src="/static/user_compose.js?v=4" defer></script>
 {% endif %}
-<script src="/static/user_wait.js" defer></script>
+<script src="/static/user_wait.js?v=3" defer></script>
 
 {# 판정 목록 — 픽스처 결과(`result.screening`)와 방금 받은 판정(`screening` · 얹지 못한 문장이 있을 때)을 같은 모양으로 그린다 #}
 {% set scr = screening if screening else (result.screening if result else []) %}

@@ -66,7 +66,8 @@ def test_DB_가_없어도_홈이_뜨고_수를_0건으로_적지_않는다(down_
     assert "DB 에 붙지 못해" in r.text, "🔴 못 붙었다는 안내가 없다"
     # 🚨 셀 수 없는 것을 0 으로 적으면 없음이 사실로 둔갑한다 (D-72)
     assert '<div class="hm-v">0건</div>' not in r.text, "🔴 DB 없음을 0건으로 그렸다"
-    assert r.text.count('<div class="hm-v">—</div>') == 3, "🔴 통계 셋이 「—」(모름)로 안 그려졌다"
+    # 🔄 2026-10-20 (lse) — 「오늘 검수한 문장」 칸이 늘어 넷이다
+    assert r.text.count('<div class="hm-v">—</div>') == 4, "🔴 통계 넷이 「—」(모름)로 안 그려졌다"
 
 
 @pytest.mark.gate

@@ -8,9 +8,10 @@
   ⛔ 구역 셸 밖이다 — 로그인 전 화면이라 사이드바가 없다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 비밀번호 재설정{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css?v=2"><link rel="stylesheet" href="/static/typography.css?v=1"><link rel="stylesheet" href="/static/auth.css?v=1">{% endblock %}
 {% block content %}
-<div class="user-shell">
+<div class="user-shell auth-page">
+{% include "user/_auth_brand.html" %}
 <div class="auth-card">
   <h1>비밀번호 재설정</h1>
   <p class="auth-sub">비밀번호를 잊으셨나요?</p>

@@ -15,6 +15,12 @@
     Array.prototype.forEach.call(form.querySelectorAll("[data-wait]"), function (note) {
       note.hidden = !waiting;
     });
+    /* 🆕 2026-10-20 (lse) — 폼 밖의 표시도 켠다: `data-wait-for="<폼 id>"`(검수 결과 칸의 「검수 중」 화면) */
+    if (form.id) {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-wait-for="' + form.id + '"]'), function (note) {
+        note.hidden = !waiting;
+      });
+    }
     Array.prototype.forEach.call(form.elements, function (b) {
       if (!b.matches('button[type="submit"]')) return;
       b.disabled = waiting;

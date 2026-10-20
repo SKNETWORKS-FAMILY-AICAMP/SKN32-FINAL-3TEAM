@@ -1,13 +1,13 @@
-/* Shared workspace: violet actions, pink supporting surfaces, semantic risk colours. */
+/* Shared workspace: 🔄 2026-10-20 (lse · 멘토 피드백) 보라 → 인스타그램 계열(보라 · 핑크 · 다홍) actions, peach supporting surfaces, semantic risk colours. */
 .user-shell {
-  --u-signal:#9254df;
-  --u-signal-ink:#7739bd;
-  --u-signal-soft:#f6edf9;
-  --u-clay:#706779;
-  --u-line:#e9e2ed;
-  --ws-bg:#faf8fc;
-  --ws-pink:#faeaf4;
-  --ws-gradient:linear-gradient(115deg,#8b4ed5,#b94491);
+  --u-signal:#E1306C;
+  --u-signal-ink:#C2185B;
+  --u-signal-soft:#FDEEF3;
+  --u-clay:#736A6E;
+  --u-line:#F1E3EA;
+  --ws-bg:#FBF5F7;
+  --ws-pink:#FFEFEA;
+  --ws-gradient:linear-gradient(115deg,#833AB4 0%,#C13584 35%,#E1306C 65%,#F56040 100%);
   background:var(--ws-bg);
   min-height:100vh
 }
@@ -414,25 +414,25 @@ a:focus-visible,button:focus-visible,summary:focus-visible {
   padding:10px 26px
 }
 .user-shell[data-theme=dark] {
-  --u-signal:#bd89ff;
-  --u-signal-ink:#d7b3ff;
-  --u-signal-soft:#33243e;
-  --u-clay:#beb2c7;
-  --u-line:#49374f;
-  --ws-bg:#19151e;
-  --ws-pink:#412736;
-  --ws-gradient:linear-gradient(115deg,#7841c7,#b4498e)
+  --u-signal:#FF6F9C;
+  --u-signal-ink:#FFA3C0;
+  --u-signal-soft:#3B1C2A;
+  --u-clay:#C2B6BC;
+  --u-line:#4D3540;
+  --ws-bg:#1A1417;
+  --ws-pink:#45231F;
+  --ws-gradient:linear-gradient(115deg,#7A35A8 0%,#B8317C 35%,#D9305F 65%,#E8573A 100%)
 }
 @media(prefers-color-scheme:dark) {
   .user-shell:not([data-theme=light]) {
-    --u-signal:#bd89ff;
-    --u-signal-ink:#d7b3ff;
-    --u-signal-soft:#33243e;
-    --u-clay:#beb2c7;
-    --u-line:#49374f;
-    --ws-bg:#19151e;
-    --ws-pink:#412736;
-    --ws-gradient:linear-gradient(115deg,#7841c7,#b4498e)
+    --u-signal:#FF6F9C;
+    --u-signal-ink:#FFA3C0;
+    --u-signal-soft:#3B1C2A;
+    --u-clay:#C2B6BC;
+    --u-line:#4D3540;
+    --ws-bg:#1A1417;
+    --ws-pink:#45231F;
+    --ws-gradient:linear-gradient(115deg,#7A35A8 0%,#B8317C 35%,#D9305F 65%,#E8573A 100%)
   }
 }
 @media(max-width:900px) {
@@ -813,18 +813,18 @@ a:focus-visible,button:focus-visible,summary:focus-visible {
   left:16px;
   z-index:100;
   background:#fff;
-  color:#7739bd;
+  color:#C2185B;
   padding:12px
 }
 .ws-skip:focus {
   top:10px
 }
 .user-shell[data-theme=light] {
-  --u-signal:#9254df;
-  --u-signal-ink:#7739bd;
-  --u-signal-soft:#f6edf9;
-  --u-clay:#706779;
-  --u-line:#e9e2ed
+  --u-signal:#E1306C;
+  --u-signal-ink:#C2185B;
+  --u-signal-soft:#FDEEF3;
+  --u-clay:#736A6E;
+  --u-line:#F1E3EA
 }
 .cp-card:has(#f-banner:checked) .ws-image-slot {
   min-height:90px

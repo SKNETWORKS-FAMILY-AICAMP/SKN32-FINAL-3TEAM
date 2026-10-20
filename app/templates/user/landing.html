@@ -11,15 +11,15 @@
   로그인 상태에는 프로필과 작업 바로가기를 표시한다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 광고 문구 준법 검수 · 카피생성{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css?v=2"><link rel="stylesheet" href="/static/typography.css?v=1">
 <style>
 /* 공통 머리 · 꼬리(개발용 링크)는 랜딩에서만 감춘다 — base.html(팀장 소유)은 고치지 않는다 */
 body:has(.ld-page) > header, body:has(.ld-page) > footer { display: none; }
 body:has(.ld-page) { max-width: none; margin: 0; padding: 0; }
 body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
-.ld-page { --ld-grad: linear-gradient(135deg, #8b5cf6 0%, #c77df3 50%, #f472b6 100%);
-           --ld-grad-hover: linear-gradient(135deg, #7c3aed 0%, #b15fe0 50%, #ec5aa0 100%);
+.ld-page { --ld-grad: linear-gradient(135deg, #833AB4 0%, #C13584 35%, #E1306C 65%, #F56040 100%);
+           --ld-grad-hover: linear-gradient(135deg, #6E2C9C 0%, #A82C72 35%, #C9245B 65%, #E04A2E 100%);
            background: var(--u-surface); color: var(--u-ink); min-height: 100vh; }
 .ld-wrap { max-width: 70rem; margin: 0 auto; padding: 0 1.5rem; }
 
@@ -42,7 +42,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-profile summary:focus-visible { outline: 2px solid var(--u-signal); outline-offset: 5px; border-radius: .5rem; }
 .ld-avatar { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; flex-shrink: 0; border-radius: 50%; background: var(--ld-grad); color: #fff; font-weight: 700; }
 .ld-profile-name { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ld-profile-menu { position: absolute; right: 0; top: calc(100% + .8rem); width: 12rem; padding: .5rem; border: 1px solid var(--u-line); border-radius: .8rem; background: var(--u-surface); box-shadow: 0 8px 24px rgba(71, 42, 99, .12); }
+.ld-profile-menu { position: absolute; right: 0; top: calc(100% + .8rem); width: 12rem; padding: .5rem; border: 1px solid var(--u-line); border-radius: .8rem; background: var(--u-surface); box-shadow: 0 8px 24px rgba(90, 25, 60, .12); }
 .ld-profile-menu a, .ld-profile-menu button { display: block; width: 100%; box-sizing: border-box; padding: .7rem .8rem; border: 0; border-radius: .5rem; background: transparent; color: var(--u-ink); font: inherit; font-size: .85rem; text-decoration: none; text-align: left; cursor: pointer; }
 .ld-profile-menu a:hover, .ld-profile-menu button:hover { background: var(--u-surface2); }
 .ld-profile-menu form { margin: 0; }
@@ -58,7 +58,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-btn { display: inline-flex; align-items: center; justify-content: center; height: 2.75rem; padding: 0 1.4rem;
           border-radius: .8rem; font-size: .92rem; font-weight: 600; text-decoration: none; transition: all .15s ease; }
 .ld-btn-sm { height: 2.25rem; padding: 0 1rem; font-size: .82rem; }
-.ld-btn-grad { color: #fff; background: var(--ld-grad); box-shadow: 0 6px 18px -6px rgba(139, 92, 246, .55); }
+.ld-btn-grad { color: #fff; background: var(--ld-grad); box-shadow: 0 6px 18px -6px rgba(225, 48, 108, .55); }
 .ld-btn-grad:hover { background: var(--ld-grad-hover); transform: translateY(-1px); }
 .ld-btn-line { color: var(--u-ink); border: 1px solid var(--u-line); background: var(--u-surface); font-weight: 500; }
 .ld-btn-line:hover { background: var(--u-surface2); }
@@ -82,7 +82,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 /* 미리보기 카드 */
 .ld-demo { position: relative; overflow: hidden; border: 1px solid var(--u-line); border-radius: 1.25rem;
            background: var(--u-surface); padding: 1.5rem 1.25rem 1.25rem;
-           box-shadow: 0 18px 44px -14px rgba(139, 92, 246, .32); }
+           box-shadow: 0 18px 44px -14px rgba(225, 48, 108, .32); }
 .ld-demo::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--ld-grad); }
 .ld-demo-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .9rem; }
 .ld-demo-top small { font-family: ui-monospace, monospace; font-size: .66rem; letter-spacing: .08em; color: var(--u-clay); }
@@ -107,7 +107,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-flow hr { flex: 1; border: 0; border-top: 1px solid var(--u-line); margin: 0; }
 .ld-flow span { font-family: ui-monospace, monospace; font-size: .64rem; letter-spacing: .06em; color: var(--u-clay); white-space: nowrap; }
 .ld-flow b { width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center; color: #fff;
-             font-size: .78rem; background: var(--ld-grad); box-shadow: 0 2px 10px rgba(139, 92, 246, .35);
+             font-size: .78rem; background: var(--ld-grad); box-shadow: 0 2px 10px rgba(225, 48, 108, .35);
              animation: ld-bob 1.8s ease-in-out infinite; }
 @keyframes ld-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
 .ld-good { border-color: var(--u-ok-line); background: var(--u-ok-bg); color: var(--u-ink); margin-bottom: .6rem; }
@@ -130,7 +130,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 @media (min-width: 52rem) { .ld-feats { grid-template-columns: repeat(3, 1fr); } }
 .ld-feat { display: block; border: 1px solid var(--u-line); border-radius: 1.1rem; padding: 1.5rem; text-decoration: none;
            color: inherit; background: var(--u-surface); transition: border-color .15s, box-shadow .15s, transform .15s; }
-.ld-feat:hover { border-color: var(--u-signal); box-shadow: 0 6px 20px rgba(139, 92, 246, .16); transform: translateY(-2px); }
+.ld-feat:hover { border-color: var(--u-signal); box-shadow: 0 6px 20px rgba(225, 48, 108, .16); transform: translateY(-2px); }
 .ld-ico { width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: var(--u-signal-soft); display: grid;
           place-items: center; margin-bottom: 1rem; color: var(--u-signal); }
 .ld-ico svg { width: 1.2rem; height: 1.2rem; }
@@ -179,12 +179,12 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   background-size: 44px 44px; -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
   mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%); }
 .ld-hero-zone::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(520px circle at var(--mx) var(--my), rgba(167, 139, 250, .22), transparent 60%); }
+  background: radial-gradient(520px circle at var(--mx) var(--my), rgba(193, 53, 132, .18), transparent 60%); }
 .ld-orbs { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
 .ld-orbs i { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .45; }
-.ld-orbs i:nth-child(1) { width: 26rem; height: 26rem; background: #a78bfa; top: -8rem; left: -6rem; animation: ld-float1 16s ease-in-out infinite; }
-.ld-orbs i:nth-child(2) { width: 22rem; height: 22rem; background: #f472b6; top: 6rem; right: -6rem; opacity: .3; animation: ld-float2 19s ease-in-out infinite; }
-.ld-orbs i:nth-child(3) { width: 18rem; height: 18rem; background: #c77df3; bottom: -8rem; left: 40%; opacity: .3; animation: ld-float1 22s ease-in-out infinite reverse; }
+.ld-orbs i:nth-child(1) { width: 26rem; height: 26rem; background: #C13584; top: -8rem; left: -6rem; animation: ld-float1 16s ease-in-out infinite; }
+.ld-orbs i:nth-child(2) { width: 22rem; height: 22rem; background: #F56040; top: 6rem; right: -6rem; opacity: .3; animation: ld-float2 19s ease-in-out infinite; }
+.ld-orbs i:nth-child(3) { width: 18rem; height: 18rem; background: #E1306C; bottom: -8rem; left: 40%; opacity: .3; animation: ld-float1 22s ease-in-out infinite reverse; }
 @keyframes ld-float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(60px, 40px) scale(1.08); } 66% { transform: translate(-30px, 70px) scale(.94); } }
 @keyframes ld-float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-80px, 50px) scale(1.12); } }
 
@@ -197,10 +197,10 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-kicker, .ld-lead, .ld-hero .ld-actions, .ld-try { opacity: 0; animation: ld-rise .9s cubic-bezier(.2, .8, .2, 1) forwards; }
 .ld-lead { animation-delay: .45s; } .ld-hero .ld-actions { animation-delay: .58s; } .ld-try { animation-delay: .7s; }
 @keyframes ld-rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
-.ld-hero h1 em { background: linear-gradient(90deg, #8b5cf6, #c77df3, #f472b6, #c77df3, #8b5cf6); background-size: 300% 100%;
+.ld-hero h1 em { background: linear-gradient(90deg, #833AB4, #E1306C, #F56040, #E1306C, #833AB4); background-size: 300% 100%;
   -webkit-background-clip: text; background-clip: text; animation: ld-flow 6s linear infinite; }
 @keyframes ld-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
-.ld-word { background-size: 300% 100%; background-image: linear-gradient(90deg, #8b5cf6, #c77df3, #f472b6, #c77df3, #8b5cf6);
+.ld-word { background-size: 300% 100%; background-image: linear-gradient(90deg, #833AB4, #E1306C, #F56040, #E1306C, #833AB4);
   animation: ld-flow 8s linear infinite; }
 
 /* 버튼 — 빛이 쓸고 지나가고, 첫 화면 버튼은 숨 쉰다 */
@@ -210,7 +210,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   animation: ld-sheen 3.6s ease-in-out infinite; }
 @keyframes ld-sheen { 0%, 60% { left: -60%; } 100% { left: 130%; } }
 .ld-hero .ld-btn-grad { animation: ld-glow 2.8s ease-in-out infinite; }
-@keyframes ld-glow { 0%, 100% { box-shadow: 0 6px 18px -6px rgba(139, 92, 246, .55); } 50% { box-shadow: 0 10px 30px -4px rgba(244, 114, 182, .6); } }
+@keyframes ld-glow { 0%, 100% { box-shadow: 0 6px 18px -6px rgba(225, 48, 108, .55); } 50% { box-shadow: 0 10px 30px -4px rgba(245, 96, 64, .6); } }
 .ld-btn:active { transform: scale(.97); }
 
 /* 미리보기 카드 — 떠 있고, 마우스 쪽으로 기울고, 테두리에 빛이 돌고, 검수 → 고쳐 쓰기가 12초마다 되풀이된다 */
@@ -220,7 +220,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 @keyframes ld-hover { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
 @property --ld-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .ld-demo::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
-  background: conic-gradient(from var(--ld-ang), transparent 0 68%, #c77df3 80%, #f472b6 88%, transparent 96%);
+  background: conic-gradient(from var(--ld-ang), transparent 0 68%, #E1306C 80%, #F56040 88%, transparent 96%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
   animation: ld-spin 5s linear infinite; }
 @keyframes ld-spin { to { --ld-ang: 360deg; } }
@@ -250,25 +250,25 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 /* 기능 카드 — 떠오르고, 아이콘이 돌고, 그라디언트 테두리 */
 .ld-feat { position: relative; }
 .ld-feat::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; opacity: 0; transition: opacity .3s;
-  background: linear-gradient(135deg, #8b5cf6, #f472b6); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  background: linear-gradient(135deg, #833AB4, #F56040); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
 .ld-feat:hover::before { opacity: 1; }
-.ld-feat:hover, .ld-js .ld-feat.is-in:hover { transform: translateY(-6px); box-shadow: 0 18px 40px -14px rgba(139, 92, 246, .35); border-color: transparent; transition-delay: 0s; }
+.ld-feat:hover, .ld-js .ld-feat.is-in:hover { transform: translateY(-6px); box-shadow: 0 18px 40px -14px rgba(225, 48, 108, .35); border-color: transparent; transition-delay: 0s; }
 .ld-ico { transition: transform .5s cubic-bezier(.2, .9, .3, 1.4), background .3s, color .3s; }
-.ld-feat:hover .ld-ico { transform: rotate(-10deg) scale(1.15); background: linear-gradient(135deg, #8b5cf6, #f472b6); color: #fff; }
+.ld-feat:hover .ld-ico { transform: rotate(-10deg) scale(1.15); background: linear-gradient(135deg, #833AB4, #F56040); color: #fff; }
 
 /* 단계 — 이어진 빛줄기 · 번호가 뛴다 */
 .ld-steps { position: relative; }
 @media (min-width: 52rem) {
   .ld-steps::before { content: ""; position: absolute; top: 2.3rem; left: 8%; right: 8%; height: 2px; z-index: 0;
-    background: linear-gradient(90deg, transparent, #8b5cf6, #f472b6, #8b5cf6, transparent); background-size: 200% 100%;
+    background: linear-gradient(90deg, transparent, #833AB4, #F56040, #833AB4, transparent); background-size: 200% 100%;
     animation: ld-flow 3s linear infinite; opacity: .6; }
 }
 .ld-step { z-index: 1; }
-.ld-step:hover, .ld-js .ld-step.is-in:hover { transform: translateY(-4px); box-shadow: 0 14px 30px -14px rgba(139, 92, 246, .35); transition-delay: 0s; }
+.ld-step:hover, .ld-js .ld-step.is-in:hover { transform: translateY(-4px); box-shadow: 0 14px 30px -14px rgba(225, 48, 108, .35); transition-delay: 0s; }
 .ld-step::before { animation: ld-beat 2.4s ease-in-out infinite; position: relative; }
 .ld-step:nth-child(2)::before { animation-delay: .8s; } .ld-step:nth-child(3)::before { animation-delay: 1.6s; }
-@keyframes ld-beat { 0%, 70%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, .45); } 35% { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); } }
+@keyframes ld-beat { 0%, 70%, 100% { box-shadow: 0 0 0 0 rgba(225, 48, 108, .45); } 35% { box-shadow: 0 0 0 10px rgba(225, 48, 108, 0); } }
 
 /* 짚는 위반 유형 — 끝없이 흐르는 띠 */
 .ld-marquee { position: relative; overflow: hidden; margin-top: 1.25rem;
@@ -285,8 +285,8 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
 /* 마무리 — 흐르는 그라디언트 판 */
 .ld-end-card { position: relative; overflow: hidden; border-radius: 1.75rem; padding: 3.5rem 1.5rem; color: #fff;
-  background: linear-gradient(120deg, #7c3aed, #a855f7, #ec4899, #a855f7, #7c3aed); background-size: 300% 300%;
-  animation: ld-pan 12s ease infinite; box-shadow: 0 30px 60px -24px rgba(139, 92, 246, .55); }
+  background: linear-gradient(120deg, #7A2E9E, #C13584, #F56040, #C13584, #7A2E9E); background-size: 300% 300%;
+  animation: ld-pan 12s ease infinite; box-shadow: 0 30px 60px -24px rgba(225, 48, 108, .55); }
 @keyframes ld-pan { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 .ld-end-card::before, .ld-end-card::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255, 255, 255, .14); }
 .ld-end-card::before { width: 16rem; height: 16rem; top: -6rem; left: -4rem; animation: ld-float1 14s ease-in-out infinite; }
@@ -294,7 +294,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-end-card h2 { color: #fff; position: relative; }
 .ld-end-card .ld-sub { color: rgba(255, 255, 255, .88); position: relative; }
 .ld-end-card .ld-actions { position: relative; }
-.ld-end-card .ld-btn-grad { background: #fff; color: #7c3aed; }
+.ld-end-card .ld-btn-grad { background: #fff; color: #7A2E9E; }
 .ld-end-card .ld-btn-line { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .6); }
 .ld-end-card .ld-btn-line:hover { background: rgba(255, 255, 255, .12); }
 
@@ -310,7 +310,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-orbs i:nth-child(2) { animation-delay:-8s; animation-direction:reverse; }
 .ld-orbs i:nth-child(3) { animation-delay:-16s; }
 @keyframes ld-ambient { 0%,100% { transform:translate(0,0); } 50% { transform:translate(20px,12px); } }
-.ld-demo { animation:ld-gentle-float 8s ease-in-out infinite; transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)); box-shadow:0 8px 30px rgba(99,63,132,.1); }
+.ld-demo { animation:ld-gentle-float 8s ease-in-out infinite; transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)); box-shadow:0 8px 30px rgba(110,30,70,.1); }
 @keyframes ld-gentle-float { 0%,100% { translate:0 0; } 50% { translate:0 -3px; } }
 .ld-demo::after { display:none; }
 .ld-seq { animation:none; opacity:1; transform:none; }

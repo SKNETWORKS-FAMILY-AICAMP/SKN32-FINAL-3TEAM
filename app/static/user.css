@@ -8,9 +8,9 @@
   --u-ink: #1c1c1f;
   --u-clay: #86848c;
   --u-line: #e6e5e9;
-  --u-signal: #8b5cf6;
-  --u-signal-ink: #7c3aed;
-  --u-signal-soft: #f5eefc;
+  --u-signal: #E1306C;
+  --u-signal-ink: #C2185B;
+  --u-signal-soft: #FDEEF3;
   /* 🆕 상태색(통과·주의·위험) — 칩·배지·안내 상자가 같이 쓴다. 어두운 화면에서 연한 바탕이 튀지 않게 토큰으로 묶었다 */
   --u-ok-bg: #ecfdf5; --u-ok-ink: #065f46; --u-ok-line: #a7f3d0; --u-ok-dot: #15803d;
   --u-warn-bg: #fffbeb; --u-warn-ink: #92400e; --u-warn-line: #fde68a; --u-warn-dot: #b45309;
@@ -24,9 +24,9 @@
     --u-ink: #f1f0f2;
     --u-clay: #918f94;
     --u-line: #38373b;
-    --u-signal: #a78bfa;
-    --u-signal-ink: #c4b5fd;
-    --u-signal-soft: #2a2140;
+    --u-signal: #FF6F9C;
+    --u-signal-ink: #FFA3C0;
+    --u-signal-soft: #3B1C2A;
     --u-ok-bg: #0f2a20; --u-ok-ink: #6ee7b7; --u-ok-line: #1f5b43; --u-ok-dot: #4ade80;
     --u-warn-bg: #2b2210; --u-warn-ink: #fcd34d; --u-warn-line: #6b4f14; --u-warn-dot: #fbbf24;
     --u-bad-bg: #2d1616; --u-bad-ink: #fca5a5; --u-bad-line: #6e2a2a; --u-bad-dot: #f87171;
@@ -172,9 +172,9 @@ a.nt-item:hover { background: var(--u-surface2); }
   --u-ink: #f1f0f2;
   --u-clay: #918f94;
   --u-line: #38373b;
-  --u-signal: #a78bfa;
-  --u-signal-ink: #c4b5fd;
-  --u-signal-soft: #2a2140;
+  --u-signal: #FF6F9C;
+  --u-signal-ink: #FFA3C0;
+  --u-signal-soft: #3B1C2A;
   --u-ok-bg: #0f2a20; --u-ok-ink: #6ee7b7; --u-ok-line: #1f5b43; --u-ok-dot: #4ade80;
   --u-warn-bg: #2b2210; --u-warn-ink: #fcd34d; --u-warn-line: #6b4f14; --u-warn-dot: #fbbf24;
   --u-bad-bg: #2d1616; --u-bad-ink: #fca5a5; --u-bad-line: #6e2a2a; --u-bad-dot: #f87171;
@@ -186,9 +186,9 @@ a.nt-item:hover { background: var(--u-surface2); }
   --u-ink: #1c1c1f;
   --u-clay: #86848c;
   --u-line: #e6e5e9;
-  --u-signal: #8b5cf6;
-  --u-signal-ink: #7c3aed;
-  --u-signal-soft: #f5eefc;
+  --u-signal: #E1306C;
+  --u-signal-ink: #C2185B;
+  --u-signal-soft: #FDEEF3;
   /* 🆕 상태색(통과·주의·위험) — 칩·배지·안내 상자가 같이 쓴다. 어두운 화면에서 연한 바탕이 튀지 않게 토큰으로 묶었다 */
   --u-ok-bg: #ecfdf5; --u-ok-ink: #065f46; --u-ok-line: #a7f3d0; --u-ok-dot: #15803d;
   --u-warn-bg: #fffbeb; --u-warn-ink: #92400e; --u-warn-line: #fde68a; --u-warn-dot: #b45309;

@@ -320,7 +320,7 @@
   {# 🆕 2026-10-13 — 생성 엔진(GPT)이 켜진 환경에서만 적는다. 무엇이 밖으로 나가는지 누르기 전에 알린다 #}
   <details class="cl-data-info"><summary>제품 정보가 OpenAI로 전송돼요 · 생성에 약 30초~1분</summary><p class="gn-note">제품명·종류·문구·특징·원료·인증 이름·대상을 외부 생성 모델(OpenAI)로 보내요. 인정·심사받은 기능성 문구는 전송하지 않고 원문 그대로 사용해요. 생성한 후보는 사전·조문 검색·판정 인코더 검수를 거쳐 표시돼요.</p></details>
   {% endif %}
-  <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
+  {% include "user/_gen_wait.html" %}
   <button class="gn-submit" type="submit">{{ icon('spark', 17) }} 이 내용으로 카피 생성</button>
 </div></form>
 </details>
@@ -343,7 +343,8 @@
   <input type="hidden" name="fixed" value="{{ fixed }}">
   {% if orig %}<input type="hidden" name="fixed_orig" value="{{ orig }}">{% endif %}
   <button type="submit" class="{{ cls }}">{{ label }}</button>
-  <span class="gn-note" data-wait hidden role="status">다시 만드는 중이에요 · 30초쯤</span>
+  <span class="gn-note cl-waitline" data-wait hidden role="status">다시 만드는 중이에요 · 30초쯤</span>
+  {% include "user/_gen_wait.html" %}
 </form>
 {% endmacro %}
 {% if fixed_notes %}
@@ -401,8 +402,9 @@
     {% set TIER = {"보수안": ("A안", "🛡️"), "균형안": ("B안", "⚖️"), "공격안": ("C안", "🔥")} %}
     {% for c in live.picked %}
     {% set tv = TIER.get(c.tier) %}
-    <article class="gn-cand"{% if tv %} data-name="{{ tv[0] }}"{% endif %}>
-      <h3>{{ tv[1] if tv else (c.tier or "후보") }}</h3>
+    {#- 🔄 2026-10-20 (lse) — 이모티콘은 알약 안으로(「🛡️ A안」 · `workspace.js` 가 `data-name` 을 알약에 쓴다). 제목은 화면 읽기용으로만 #}
+    <article class="gn-cand"{% if tv %} data-name="{{ tv[1] }} {{ tv[0] }}"{% endif %}>
+      <h3{% if tv %} class="sr-only"{% endif %}>{{ (tv[1] ~ " " ~ tv[0]) if tv else (c.tier or "후보") }}</h3>
       <p>{{ c.text }}</p>
       {% if c.angle %}<p class="gn-meta">각도 · {{ c.angle }}</p>{% endif %}
       {# 🔄 2026-10-13 (권소라) — 문턱 수치 칩(문턱의 N% · 유형 확률)은 카드에서 뺐다. 이용자가 읽을 수 없는 값이다.
@@ -445,7 +447,7 @@
     {% if picked.fixed_orig %}<input type="hidden" name="fixed_orig" value="{{ picked.fixed_orig }}">{% endif %}
     <input type="hidden" name="more" value="{{ more + 1 }}">
     {% for s in more_shown %}<input type="hidden" name="shown" value="{{ s }}">{% endfor %}
-    <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
+    {% include "user/_gen_wait.html" %}
     <button type="submit">다른 문구 더 탐색하기 ({{ more + 1 }}/{{ more_max }})</button>
     <span class="gn-note">지금까지 보여 드린 문구는 빼고 만들어요.</span>
   </form>
@@ -656,6 +658,6 @@
   </ul>
 </details>
 {# 🆕 2026-10-13 — 생성 중 표시. 안 돌아도 생성은 된다 #}
-<script src="/static/user_wait.js" defer></script>
+<script src="/static/user_wait.js?v=3" defer></script>
 {% endif %}
 {% endblock %}

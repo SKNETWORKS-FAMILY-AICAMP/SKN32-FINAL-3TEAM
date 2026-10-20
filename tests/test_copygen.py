@@ -522,7 +522,10 @@ def test_화면은_셋의_이름을_적고_문턱_수치는_카드에_적지_않
     # 🔄 2026-10-20 (lse · 멘토 피드백) — 화면 이름은 A안 · B안 · C안 + 성격(엔진 이름 `pipeline.TIERS` 는 그대로)
     assert pipeline.TIERS == ("보수안", "균형안", "공격안")
     for name, view in (("A안", "🛡️"), ("B안", "⚖️"), ("C안", "🔥")):
-        assert f'data-name="{name}"' in body and f"<h3>{view}</h3>" in body
+        assert (
+            f'data-name="{view} {name}"' in body
+            and f'<h3 class="sr-only">{view} {name}</h3>' in body
+        )
     # 문턱 수치는 카드에 적지 않는다 — 이용자가 읽을 수 없는 값이다 (10-13 권소라)
     assert "문턱의 20%" not in body and "/ 문턱 0.5" not in body
     assert "통과한 후보 4개가 안전 ↔ 주의 어디쯤인지 보기" in body
@@ -617,7 +620,9 @@ def test_더_탐색하기는_세_번까지다(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_생성_폼은_생성_중_표시를_갖고_있다() -> None:
-    """가운뎃점 넷 + 「문구 생성 중입니다」 — 처음에는 숨겨 두고 `user_wait.js` 가 제출 때 보인다."""
+    """생성 중 화면 — 처음에는 숨겨 두고 `user_wait.js` 가 제출 때 보인다.
+
+    🔄 2026-10-20 (lse · 사용자 「촌스럽다」) — 가운뎃점 넷 + 「문구 생성 중입니다」 → 화면 전체 대기 화면(`_gen_wait.html`)."""
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
@@ -625,11 +630,9 @@ def test_생성_폼은_생성_중_표시를_갖고_있다() -> None:
     c = TestClient(app)
     body = c.get("/u/generate").text
     assert 'id="gen-form" method="post" action="/u/generate" data-wait-form' in body
-    assert (
-        '<p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>'
-        in body
-    )
-    assert '<script src="/static/user_wait.js" defer></script>' in body
+    assert '<div class="rv-judging gn-gen-wait" data-wait hidden role="status"' in body
+    assert "카피를 만들고 있어요" in body
+    assert '<script src="/static/user_wait.js?v=3" defer></script>' in body
     assert c.get("/static/user_wait.js").status_code == 200
 
 

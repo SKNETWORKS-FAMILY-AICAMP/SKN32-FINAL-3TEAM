@@ -722,7 +722,7 @@
         {% endfor %}
         </div>
         <button type="submit" class="cl-continue" name="op" value="choose:{{ n }}" data-review-next data-wait-label="선택한 유형 확인 중…">이 유형으로 계속하기 <span>→</span></button>
-        <p class="rv-note" data-wait hidden role="status">선택한 제품 유형을 확인하고 있어요.</p>
+        <p class="rv-note cl-waitline" data-wait hidden role="status">선택한 제품 유형을 확인하고 있어요.</p>
       </form>
       <p class="rv-note">이 조건은 문구 {{ n }}에만 적용돼요.</p>
     </div>
@@ -741,7 +741,7 @@
           {% else %}<span class="rv-opt rv-opt-off" aria-disabled="true">{{ label }}<small>이 경우의 판정이 응답에 없어요</small></span>{% endif %}
         {% endfor %}
         </div>
-        <p class="rv-note" data-wait hidden role="status">선택한 품목으로 다시 검수하고 있어요.</p>
+        <p class="rv-note cl-waitline" data-wait hidden role="status">선택한 품목으로 다시 검수하고 있어요.</p>
         {% if not only_hf %}<button type="submit" class="rv-link rv-back" name="op" value="type:{{ n }}">← 유형 다시 고르기</button>{% endif %}
       </form>
       {% if group == "food" %}<p class="cl-info-note">기능성표시식품은 자율심의 대상이며 「본 제품은 건강기능식품이 아닙니다.」 표시가 필요해요.</p>{% endif %}
@@ -775,7 +775,7 @@
         <span class="rv-note">선택을 바꿔 다시 볼 수 있어요 · {{ max_redo - r }}회 남음</span>
         <button type="submit" class="rv-btn" name="op" value="redo:{{ n }}">다시 선택</button>
         {% else %}<span class="rv-note">재검수 {{ max_redo }}회를 모두 썼어요 — <b>새로 검수</b>로 시작해 주세요.</span>{% endif %}
-        <p class="rv-note" data-wait hidden role="status">제품 유형 선택 화면을 불러오고 있어요.</p>
+        <p class="rv-note cl-waitline" data-wait hidden role="status">제품 유형 선택 화면을 불러오고 있어요.</p>
       </form>
       {# 🔄 근거 보기 · 증명서도 **고른 분기 기준**이다 — 분기 안에 두어 고른 것만 보인다.
          🚨 계약의 `Branch` 에는 증명서 칸이 없다 — 사유는 이 분기 문장의 불가 유형에서 읽고, 설명문은 지어내지 않는다 (D-147) #}
@@ -876,7 +876,7 @@
         <button class="rv-add" type="submit" name="op" value="add" formnovalidate>{{ icon("plus", 20) }} 문구 추가</button>
         <button class="rv-all" type="submit" name="op" value="{{ 'all' if copies|length > 1 else 'judge:1' }}" data-wait-go data-wait-label="검수 중…">{{ '전체 검수' if copies|length > 1 else '문구 검수하기' }} <span aria-hidden="true">→</span></button>
       </div>
-      <p class="rv-wait" data-wait hidden role="status" aria-live="polite"><i>·</i><i>·</i><i>·</i><i>·</i> 검수 중이에요 — 문장마다 조문을 찾고 있어요</p>
+      <p class="rv-note cl-waitline" data-wait hidden role="status" aria-live="polite">검수 중이에요 — 문장마다 조문을 찾고 있어요</p>
 
       {# ⬜ 파일 업로드는 `multipart/form-data` → `python-multipart` 새 의존성(uv.lock 은 팀장 · §5) ·
             이미지 판정은 향후 과제(D-104). 그래서 비활성으로 두고, 접어 둔다 #}
@@ -920,6 +920,22 @@
   </div>
 
   <div class="rv-results-pane" role="region" aria-label="검수 결과" tabindex="0">
+    {#- 🆕 2026-10-20 (lse · 사용자 「검수 중 표시가 촌스럽다 — 재생성처럼」) — 검수 버튼을 누르면 결과 칸 전체에 띄운다.
+        `user_wait.js` 가 `data-wait-for` 로 켠다 · 움직임은 전부 CSS(design.css `.rv-judging`) · 스크립트가 없어도 검수는 된다 #}
+    <div class="rv-judging" data-wait-for="review-input-form" hidden role="status" aria-live="polite">
+      <div class="rv-judging-card">
+        <div class="rv-judging-orb" aria-hidden="true"><span>✦</span></div>
+        <p class="rv-judging-title">문구를 검수하고 있어요</p>
+        <div class="rv-judging-steps">
+          <span>문장을 나누는 중</span>
+          <span>금지 표현 사전과 대조하는 중</span>
+          <span>판정 인코더로 위반 유형을 살피는 중</span>
+          <span>근거 조문을 찾는 중</span>
+          <span>위험도를 매기는 중</span>
+        </div>
+        <div class="rv-judging-skel" aria-hidden="true"><i></i><i></i><i></i></div>
+      </div>
+    </div>
     <div class="cl-focus-head"><h2 data-focus-copy-title>문구 1</h2><button type="button" data-edit-copy>{{ icon('pencil', 17) }} 문구 편집</button></div>
     <div class="cl-detail-editors"></div>
     <p class="cl-focus-empty-quote" data-focus-quote hidden></p>
@@ -1075,6 +1091,6 @@
 </div>
 {# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
 <script src="/static/user_count.js" defer></script>
-<script src="/static/user_wait.js?v=2" defer></script>
+<script src="/static/user_wait.js?v=3" defer></script>
 <script src="/static/rewrite_copy.js" defer></script>
 {% endblock %}

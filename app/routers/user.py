@@ -464,6 +464,28 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
         or 0
     )
     pass_rate = round(pass_count / total_month * 100) if total_month else None
+    # 🆕 2026-10-20 (lse · 멘토 피드백 「오늘 건수 · 그래프」) — 최근 7일 날짜별 검수 문장 수(한국 시간) · 오늘 건수
+    kst = timezone(timedelta(hours=9))
+    today = datetime.now(kst).date()
+    week_from = datetime.combine(today - timedelta(days=6), datetime.min.time(), kst)
+    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+    per_day = dict.fromkeys(days, 0)
+    for (at,) in session.execute(
+        mine.with_only_columns(Judgment.judged_at).where(Judgment.judged_at >= week_from)
+    ).all():
+        d = at.astimezone(kst).date()
+        if d in per_day:
+            per_day[d] += 1
+    top = max(per_day.values()) or 1
+    daily = [
+        {
+            "label": "오늘" if d == today else f"{d.month}/{d.day}",
+            "n": n,
+            "pct": round(n / top * 100),
+            "today": d == today,
+        }
+        for d, n in per_day.items()
+    ]
 
     recent = [
         _hist_view(j, raw)
@@ -479,6 +501,8 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
             "violation_count": violation_count,
             "pass_rate": pass_rate,
             "recent": recent,
+            "daily": daily,
+            "today_count": per_day[today],
         },
     )
 

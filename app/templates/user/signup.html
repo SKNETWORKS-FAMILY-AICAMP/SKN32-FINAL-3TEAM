@@ -13,7 +13,7 @@
   ⛔ 구역 셸 밖이다 — 가입 전 화면이라 사이드바가 없다.
 #}{% extends "base.html" %}
 {% block title %}CopyLane — 회원가입{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css"><link rel="stylesheet" href="/static/typography.css?v=1">
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css?v=2"><link rel="stylesheet" href="/static/typography.css?v=1"><link rel="stylesheet" href="/static/auth.css?v=1">
 <style>
 /* 회원가입 전용 — 프로토타입 max-w-[480px]. 화면 하나짜리 스타일이라 user.css 가 아니라 여기 둔다 */
 .auth-card.auth-card-wide { max-width: 30rem; }
@@ -29,10 +29,11 @@
 .auth-consent label > span { flex: 1 1 auto; min-width: 0; text-align: left; }
 </style>{% endblock %}
 {% block content %}
-<div class="user-shell">
+<div class="user-shell auth-page">
+{% include "user/_auth_brand.html" %}
 <form class="auth-card auth-card-wide" method="post" action="/u/signup">
   <h1>회원가입</h1>
-  <p class="auth-sub">가입하면 카피 생성을 이용하고, 검수 이력 보관을 설정할 수 있어요.</p>
+  <p class="auth-sub">가입하면 카피 생성 · AI 광고 생성과 검수 이력을 이용할 수 있어요.</p>
   {% if error %}<p class="auth-err" role="alert">{{ error }}</p>{% endif %}
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   {# 🆕 2026-10-14 — 회원 전용 안내에서 넘어왔으면 가입 뒤 그 화면으로 돌아간다 (`_next_path`) #}

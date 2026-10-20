@@ -128,3 +128,37 @@
   .hg-help-card p { font-size:13px; }
   .hg-faq { padding:0 16px; }
 }
+
+/* 🆕 2026-10-20 (lse · 사용자 「한 색이라 단조롭다」) — 인스타그램 팔레트를 칸마다 나눠 쓴다(보라 · 자홍 · 핑크 · 다홍 · 주황) */
+.hg-page { --hg-c1:#833AB4; --hg-c2:#C13584; --hg-c3:#E1306C; --hg-c4:#F56040; --hg-c5:#F77737; }
+/* 목적 탭 — 아이콘마다 다른 그라데이션 동그라미 */
+.hg-purpose>svg { box-sizing:content-box; padding:10px; border-radius:14px; color:#fff !important; background:linear-gradient(135deg, var(--a, var(--hg-c1)), var(--b, var(--hg-c2))); }
+.hg-purpose:nth-child(1) { --a:var(--hg-c1); --b:var(--hg-c2); }
+.hg-purpose:nth-child(2) { --a:var(--hg-c2); --b:var(--hg-c3); }
+.hg-purpose:nth-child(3) { --a:var(--hg-c3); --b:var(--hg-c4); }
+.hg-purpose.is-active { outline:0; border:2px solid transparent; color:var(--u-ink);
+  background:linear-gradient(color-mix(in srgb, var(--a) 7%, var(--u-surface)), color-mix(in srgb, var(--b) 7%, var(--u-surface))) padding-box,
+             linear-gradient(115deg, var(--a), var(--b)) border-box; }
+.hg-purpose.is-active strong { color:color-mix(in srgb, var(--a) 70%, var(--u-ink)); }
+.hg-purpose:hover:not(.is-active) { background:color-mix(in srgb, var(--a) 6%, var(--u-surface)); }
+/* 안내 머리 — 그라데이션 글자 · 그라데이션 버튼 */
+.hg-eyebrow { background:linear-gradient(90deg, var(--hg-c1), var(--hg-c3), var(--hg-c4)); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:700; }
+.hg-launch { border:0; color:#fff; background:linear-gradient(115deg, var(--hg-c1), var(--hg-c2) 35%, var(--hg-c3) 65%, var(--hg-c4)); box-shadow:0 6px 16px -8px rgba(225,48,108,.6); }
+.hg-launch:hover { background:linear-gradient(115deg, var(--hg-c1), var(--hg-c2) 35%, var(--hg-c3) 65%, var(--hg-c4)); filter:brightness(1.06); }
+/* 순서 1~4 — 보라 → 자홍 → 핑크 → 다홍 */
+.hg-flow li:nth-child(1) { --s:var(--hg-c1); } .hg-flow li:nth-child(2) { --s:var(--hg-c2); }
+.hg-flow li:nth-child(3) { --s:var(--hg-c3); } .hg-flow li:nth-child(4) { --s:var(--hg-c4); }
+.hg-flow-number { color:#fff; font-weight:700; background:var(--s, var(--hg-c3)); box-shadow:0 0 0 5px color-mix(in srgb, var(--s, var(--hg-c3)) 14%, transparent); }
+/* 단계 카드 — 카드마다 색 · 왼쪽 강조선 */
+.hg-step:nth-child(1) { --s:var(--hg-c1); } .hg-step:nth-child(2) { --s:var(--hg-c2); }
+.hg-step:nth-child(3) { --s:var(--hg-c3); } .hg-step:nth-child(4) { --s:var(--hg-c4); } .hg-step:nth-child(5) { --s:var(--hg-c5); }
+.hg-step { position:relative; overflow:hidden; background:linear-gradient(135deg, color-mix(in srgb, var(--s) 5%, var(--u-surface)), var(--u-surface) 60%); }
+.hg-step::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--s); }
+.hg-step-number { color:#fff; background:var(--s); font-weight:700; }
+.hg-step-icon { color:var(--s); background:color-mix(in srgb, var(--s) 12%, var(--u-surface)); }
+/* 알아두면 카드 — 아이콘마다 다른 그라데이션 */
+.hg-help-card:nth-child(1) { --a:var(--hg-c1); --b:var(--hg-c2); }
+.hg-help-card:nth-child(2) { --a:var(--hg-c2); --b:var(--hg-c3); }
+.hg-help-card:nth-child(3) { --a:var(--hg-c3); --b:var(--hg-c5); }
+.hg-help-card .hg-help-icon, .hg-help-card:nth-child(2) .hg-help-icon { color:#fff; background:linear-gradient(135deg, var(--a), var(--b)); }
+.hg-help-card { border-top:3px solid var(--a); }

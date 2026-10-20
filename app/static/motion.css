@@ -24,14 +24,14 @@
   .user-shell :where(.gn-submit, .cl-page-action, .csb-primary, .cl-focus-actions button[type=submit],
     .cl-input-actions button):not(:disabled):active { translate:0 1px; }
   @media (hover:hover) and (pointer:fine) {
-    .user-shell .hm-card:hover { translate:0 -3px; box-shadow:0 8px 20px rgba(105, 61, 133, .1); }
+    .user-shell .hm-card:hover { translate:0 -3px; box-shadow:0 8px 20px rgba(150, 40, 90, .1); }
     .user-shell :where(.gn-cand, .hg-help-card):hover {
       translate:0 -2px;
       border-color:color-mix(in srgb, var(--u-signal) 35%, var(--u-line));
-      box-shadow:0 4px 14px rgba(105, 61, 133, .05);
+      box-shadow:0 4px 14px rgba(150, 40, 90, .05);
     }
     .user-shell :where(.gn-submit, .cl-page-action, .csb-primary, .hg-launch):not(:disabled):hover {
-      box-shadow:0 4px 12px rgba(124, 66, 153, .12);
+      box-shadow:0 4px 12px rgba(193, 53, 132, .12);
     }
     .user-shell :where(.hm-icon, .hg-purpose>.cl-icon, .csb-help>span>.cl-icon) {
       transition:transform 240ms ease-out;

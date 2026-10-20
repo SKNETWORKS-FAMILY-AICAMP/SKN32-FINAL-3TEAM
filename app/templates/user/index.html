@@ -77,16 +77,30 @@
   </a>
 </div>
 
-<div class="hm-stats"><div class="hm-stat hm-stat-intro"><b>이번 달 검수 현황</b><small>저장된 검수 기록을 기준으로 집계해요.</small></div>
-  {# 🔄 2026-10-15 (ksr · 점검 11) — 이름을 계산에 맞췄다. 수는 **문장** 단위(`judgment` 한 줄 = 문장 하나)이고,
+{#- 🔄 2026-10-20 (lse · 멘토 피드백 「칸이 안 나뉘어 보인다 · 오늘 건수 띄우기」) — 숫자마다 카드 하나. 오늘 건수를 맨 앞에 강조 #}
+<div class="hm-stats hm-kpis">
+  <div class="hm-stat hm-kpi hm-kpi-today"><div class="hm-k">오늘 검수한 문장</div><div class="hm-v">{{ (today_count ~ "건") if today_count is defined and today_count is not none else "—" }}</div><small>한국 시간 기준</small></div>
+  {# 🔄 2026-10-15 (ksr · 점검 11) — 수는 **문장** 단위(`judgment` 한 줄 = 문장 하나)이고,
      통과 비율은 재검수와 상관없이 「이번 달 검수한 문장 중 통과(확정 ∧ R0)」다(`user.py` `user_home`) #}
-  <div class="hm-stat"><div class="hm-k">이번 달 검수한 문장</div><div class="hm-v">{{ (total_month ~ "건") if total_month is not none else "—" }}</div></div>
-  <div class="hm-stat"><div class="hm-k">위법 소지 발견 (확정)</div><div class="hm-v">{{ (violation_count ~ "건") if violation_count is not none else "—" }}</div></div>
-  <div class="hm-stat"><div class="hm-k">통과 비율</div><div class="hm-v">{{ (pass_rate ~ "%") if pass_rate is not none else "—" }}</div></div>
+  <div class="hm-stat hm-kpi"><div class="hm-k">이번 달 검수한 문장</div><div class="hm-v">{{ (total_month ~ "건") if total_month is not none else "—" }}</div><small>저장된 검수 기록 기준</small></div>
+  <div class="hm-stat hm-kpi hm-kpi-bad"><div class="hm-k">위법 소지 발견 (확정)</div><div class="hm-v">{{ (violation_count ~ "건") if violation_count is not none else "—" }}</div><small>이번 달</small></div>
+  <div class="hm-stat hm-kpi hm-kpi-ok"><div class="hm-k">통과 비율</div><div class="hm-v">{{ (pass_rate ~ "%") if pass_rate is not none else "—" }}</div><small>확정 ∧ 위험 없음</small></div>
 </div>
 
 <div class="hm-sect">
   <div class="cl-section-head"><h2>최근 검수 이력</h2><a href="/u/history">전체 이력 보기 →</a></div>
+  {#- 🆕 2026-10-20 (lse · 멘토 피드백 「최근 검수 이력에도 그래프」) — 최근 7일 날짜별 검수 문장 수 #}
+  {% if daily is defined and daily %}
+  <div class="hm-recent">
+  <figure class="hm-chart" aria-label="최근 7일 검수한 문장 수">
+    <figcaption>최근 7일 · <b>{{ daily|sum(attribute="n") }}건</b></figcaption>
+    <div class="hm-bars">
+      {% for d in daily %}
+      <div class="hm-bar{% if d.today %} is-today{% endif %}" title="{{ d.label }} {{ d.n }}건"><span class="hm-bar-n">{{ d.n }}</span><i style="height:{{ [d.pct, 4]|max }}%"></i><span class="hm-bar-d">{{ d.label }}</span></div>
+      {% endfor %}
+    </div>
+  </figure>
+  {% endif %}
   {% if recent %}
   <ul class="history-list">
     {% for j in recent %}
@@ -115,6 +129,7 @@
     <span class="hm-note">문구를 검수하면 여기에 쌓여요.</span>
   </p>
   {% endif %}
+  {% if daily is defined and daily %}</div>{% endif %}
   {% if not recent %}<div class="hm-empty-actions"><a class="ws-primary" href="/u/review">첫 문구 검수하기 →</a><a href="/u/help?tab=guide">이용 가이드</a></div>{% endif %}
 </div>
 <a class="ws-guide" href="/u/help?tab=guide">{{ icon("book", 36) }}<span><b>처음 사용하시나요?</b><br>문구 검수부터 광고 만들기까지, 이용 방법을 확인해보세요.</span><strong>가이드 보기 →</strong></a>
