@@ -5,8 +5,7 @@
    문구는 우리가 지은 문장이다(재배포 제한 원천 문구가 아니다).
 🔴 지키는 것 — 응답에 있는 것이 화면 HTML 에 있다: 분기마다 기준 줄 · 답 칸을 그려야 하는 문장(`reasons.question_text`)의
    질문 글자 · 답 버튼 셋. 검사는 E2E 도구와 **같은 함수**다(`scripts/e2e_review.py` `_html_checks` · D-99).
-🔄 2026-10-20 (lse) — `일반식품_기능성` 분기를 화면에 그렸다(식품 안의 하위 선택 · `review.html` `SLUG` · `design.js`) —
-   종전 strict xfail 표시를 걷었다.
+일반식품_기능성 분기도 식품의 두 번째 선택에 표시한다(D-348 보충 31).
 """
 
 from __future__ import annotations

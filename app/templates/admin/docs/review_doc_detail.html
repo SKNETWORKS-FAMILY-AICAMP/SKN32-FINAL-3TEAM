@@ -4,26 +4,24 @@
   🚨 **읽기 전용이다.** 승인·반려는 disabled 뼈대다. 파일을 직접 여는 기능도 아직 없다.
   🔴 심사 서류 테이블이 아직 없다 — 더미다 (admin_review_docs.py 참고).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 심사 서류 상세{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 
 <p><a href="/admin/review-docs">← 심사 서류 목록</a></p>
 
 <p class="warn">🧪 <b>더미 데이터입니다.</b> 심사 서류 테이블이 아직 없어요 — 승인·반려 처리는 실제로 동작하지 않습니다.</p>
 
 <h1>{{ row.name }} <small class="hint">{{ status_label[row.status] }}</small></h1>
-<table class="kv">
+<div class="admin-table-scroll"><table class="kv">
   <tr><th>제출자</th><td>{{ row.who }}</td></tr>
   <tr><th>유형</th><td>{{ row.type }}</td></tr>
   <tr><th>제출일</th><td>{{ row.date }}</td></tr>
   <tr><th>파일명</th><td>{{ row.file }}</td></tr>
   <tr><th>용량</th><td>{{ row.size }}</td></tr>
-</table>
+</table></div>
 
 <p class="hint">⬜ 파일 원본을 직접 여는 기능은 아직 없다 — 파일명만 표시한다.</p>
 
@@ -53,6 +51,4 @@
   background: var(--a-signal); color: #fff; font-weight: 600; cursor: not-allowed;
 }
 </style>
-</div>
-</div>
 {% endblock %}

@@ -1,59 +1,62 @@
-{# app/templates/admin/stats/generation.html — 생성 통계 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+{# app/templates/admin/stats/generation.html — 생성 통계 · 소유자 **psj** (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다(목업 `mockDownload`).
-  🔴 `generation_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
-  🚨 품질 통계 원본(목업 `qualityCombinedViewV2()`)의 `qp-gen` 패널에 해당한다.
+  🔄 2026-10-20 — **셀 수 있는 것만** 그린다 (admin_stats.py `_load_generation` · D-147).
+     ① 엔진 상태(`copygen.off_reason`) ② 생성 실패(`app_error_log` 의 WARNING `카피 생성 실패` · 예외 클래스 이름만) ③ 집계를 열 조건.
+     ⛔ 생성 문구 · 승인 · 비중 · 추이는 지웠다 — 생성 결과도 요청도 저장하지 않아 늘 0 이었다.
+  🔴 오류 로그를 DB 에 쌓지 않는 환경이면 실패 수는 0 이 아니라 「기록 안 함」 (settings.error_log_enabled).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 생성 통계{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
-<h1>생성 통계</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>generation_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
-
-<div class="stat-kpis">
-  <div class="stat-kpi"><span>생성 품질 점수</span><b>{{ kpi.quality_score }}</b></div>
-  <div class="stat-kpi"><span>총 생성 건수</span><b>{{ kpi.total_cases }}</b></div>
-  <div class="stat-kpi"><span>평균 생성·판정 시간</span><b>{{ kpi.avg_time }}</b></div>
-  <div class="stat-kpi"><span>재생성 요청률</span><b>{{ kpi.regen_rate }}</b></div>
+#}
+{% extends "admin/stats/_base.html" %}
+{% from "admin/stats/_parts.html" import metric,distribution %}
+{% block stats_title %}생성 통계{% endblock %}
+{% block stats_description %}카피 생성 엔진의 상태와 실패 기록을 확인하세요.{% endblock %}
+{% block stats_filters %}
+<span class="as-filter-context">생성 실패 · 집계 기간</span>
+<nav class="period-tabs" aria-label="집계 기간">
+  {% for d in day_options %}<a href="?days={{ d }}" {% if days == d %}class="active" aria-current="page"{% endif %}>최근 {{ d }}일</a>{% endfor %}
+  <a href="?days=all" {% if days == 0 %}class="active" aria-current="page"{% endif %}>전체 ({{ retention_days }}일 보관)</a>
+</nav>
+{% endblock %}
+{% block stats_notice %}
+<p class="as-notice">카피 생성 결과와 요청은 <b>저장하지 않아요</b>. 그래서 생성 건수 · 성공률 · 품목별 분포는 셀 수 없어 표시하지 않아요 — 사용하지 않았다는 뜻이 아니에요.</p>
+{% endblock %}
+{% block stats_content %}
+<div class="as-kpis">
+  {{ metric('생성 엔진', '켜짐' if engine.on else '꺼짐', '지금 이 서버에서 생성할 수 있어요' if engine.on else engine.why, 'spark') }}
+  {% if not log_on %}
+  {{ metric('생성 실패', '기록 안 함', '이 환경은 오류 로그를 DB 에 쌓지 않아요') }}
+  {% elif source == 'db' %}
+  {{ metric('생성 실패', '{:,}건'.format(fail.n), '최근 ' ~ span_days ~ '일') }}
+  {{ metric('마지막 실패', fail.last_at, '서버 로그 기준') }}
+  {% else %}
+  {{ metric('생성 실패', '-', '기록을 읽지 못했어요') }}
+  {% endif %}
 </div>
 
-<h2>생성 모델 구성</h2>
-<div class="usage-trend">
-  {% for row in model_mix %}
-  <div class="usage-row">
-    <span class="usage-label">{{ row.label }}</span>
-    <div class="usage-bar" style="width: {{ row.pct }}%;"></div>
-    <span class="usage-value">{{ row.pct }}%</span>
-  </div>
-  {% endfor %}
+{% with table="app_error_log" %}{% include "admin/_db_notice.html" %}{% endwith %}
+{% if log_on and source == 'db' %}
+<div class="as-grid">
+  <section class="as-panel">
+    <div class="as-panel-head"><h2>일별 생성 실패</h2><span class="as-unit">최근 {{ trend_days }}일 · 건</span></div>
+    {% if trend %}
+    <div class="as-chart{% if trend|length > 10 %} as-chart--many{% endif %}" role="img" aria-label="최근 {{ trend_days }}일 생성 실패 건수. 상세 수치는 오류 로그에서 확인할 수 있습니다.">
+      {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.n / trend_max * 100)|round(1) if trend_max else 0 }}%" title="{{ row.label }} · {{ row.n }}건"></span></div><small>{% if trend|length <= 10 or loop.first or loop.last or loop.index0 % 5 == 0 %}{{ row.label }}{% endif %}</small></div>{% endfor %}
+    </div>
+    <p class="as-context">축 상한 {{ trend_max }}건 · 실패가 있었던 날만 표시해요</p>
+    {% else %}<p class="as-empty">최근 {{ trend_days }}일에 생성 실패 기록이 없어요.</p>{% endif %}
+  </section>
+  <section class="as-panel">
+    <div class="as-panel-head"><h2>실패 원인 (예외 종류)</h2><span class="as-unit">선택한 기간</span></div>
+    {{ distribution(by_exc) }}
+    <p class="as-explainer">예외 클래스 이름만 저장돼요 — 사용자가 적은 내용은 남지 않아요. 자세한 기록은 <a href="/admin/errors">오류 로그</a>에서 확인하세요.</p>
+  </section>
 </div>
+{% endif %}
 
-<h2>재생성 사유 분석</h2>
-<table>
-  <tr><th>사유</th><th>건수</th><th>비중</th></tr>
-  {% for r in reasons %}
-  <tr><td>{{ r.reason }}</td><td>{{ r.count }}</td><td>{{ r.pct }}%</td></tr>
-  {% endfor %}
-</table>
-<p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
-
-<style>
-.admin-shell .stat-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
-.admin-shell .stat-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 8rem; }
-.admin-shell .stat-kpi span { font-size: .8rem; color: var(--a-clay); }
-.admin-shell .stat-kpi b { font-size: 1.2rem; }
-.admin-shell .usage-trend { display: flex; flex-direction: column; gap: .5rem; max-width: 30rem; margin-bottom: 1.5rem; }
-.admin-shell .usage-row { display: flex; align-items: center; gap: .6rem; }
-.admin-shell .usage-label { width: 8rem; font-size: .8rem; color: var(--a-clay); }
-.admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
-.admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
-.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
-</style>
-</div>
-</div>
+<section class="as-panel">
+  <div class="as-panel-head"><h2>집계를 열려면 필요한 결정</h2></div>
+  <div class="admin-table-scroll"><table><thead><tr><th>보고 싶은 수</th><th>먼저 필요한 것</th></tr></thead><tbody>
+    {% for what, need in needs %}<tr><td>{{ what }}</td><td>{{ need }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
 {% endblock %}

@@ -499,8 +499,8 @@ def landing(request: Request) -> HTMLResponse:
 # ══════════════════════════════════════════════════════════════════════
 
 
-#: 품목 분기를 고른 뒤 「다시 선택」할 수 있는 횟수 (팀장 2026-10-01). 화면이 회차만큼 미리 그려 두고 넘긴다.
-#: 🔄 2026-10-06 — 3 → 5. 분기별 판정 결과를 바꿔 보는 횟수다 — 엔진을 다시 돌리지 않는다.
+#: 품목 분기를 고른 뒤 「다시 선택」할 수 있는 횟수. 회차는 서버가 받으며 다시 선택할 때 올린다.
+#: 🔄 2026-10-06 — 3 → 5. 선택을 바꿀 때 서버가 회차를 올리고 고른 품목으로 다시 판정한다(D-348 보충 31).
 _MAX_REDO = 5
 
 #: 「예시 넣기」 문구 — 프로토타입 `SAMPLE_COPY` 그대로. 🚨 실제 광고 인용이 아니라 화면용 예시다.
@@ -510,7 +510,9 @@ _SAMPLE_COPY = (
 )
 
 #: 🔴 버튼 하나 = 폼 제출 하나 (`op`). CSP 가 스크립트를 막아 문구 추가·삭제도 서버가 다시 그린다.
-_OP = re.compile(r"^(add|all|load|del:\d|sample:\d|judge:\d)$")
+_OP = re.compile(
+    r"^(add|all|load|del:\d|sample:\d|judge:\d|choose:\d|type:\d|redo:\d|pick:\d:[가-힣_]{1,32})$"
+)
 
 
 def _copies(form: dict[str, list[str]]) -> list[str]:
@@ -537,7 +539,7 @@ def _core_judge(text: str, product=None):  # noqa: ANN001, ANN202
     from app.contracts import JudgeRequest  # noqa: PLC0415
 
     try:
-        # 🆕 10-06 (lse) — 고쳐 쓴 문구의 재판정은 원문 판정의 품목을 넘긴다(D-319). 검수는 종전대로 품목 없이
+        # 🆕 10-06 (lse) — 고쳐 쓴 문구의 재판정은 원문 판정의 품목을 넘긴다(D-319). 첫 검수는 품목 없이, 고른 뒤에는 해당 전제의 제품 정보로
         req = (
             JudgeRequest(text=text) if product is None else JudgeRequest(text=text, product=product)
         )
@@ -623,9 +625,37 @@ def _review_ctx(copies: list[str], results: list[dict] | None = None, **extra) -
         r["flagged"] = _flagged(r["result"])
         r["marks"] = _marks(r.get("text"), r["result"])
         # 분기마다의 지적 문장 — 화면이 고른 분기 기준으로 지적 건수를 센다 (2026-10-01)
-        r["branch_flagged"] = {b.premise.value: _flagged(b) for b in r["result"].branches}
+        choices = r.get("choices", r["result"].branches)
+        r["views"] = [
+            {
+                "premise": b.premise.value,
+                "result": b,
+                "criteria": b.criteria,
+                "verified": b.verified,
+            }
+            for b in choices
+        ]
+        picked = r.get("picked")
+        if picked:
+            premise = picked["premise"]
+            selected = _branch_of(r["result"], premise) or r["result"]
+            view = next((v for v in r["views"] if v["premise"] == premise), None)
+            if view is None:
+                view = {
+                    "premise": premise,
+                    "criteria": pm.CRITERIA[Premise(premise)],
+                    "verified": False,
+                }
+                r["views"].append(view)
+            view["result"] = selected
+            if selected is not r["result"]:
+                view.update(criteria=selected.criteria, verified=selected.verified)
+        r["branch_flagged"] = {v["premise"]: _flagged(v["result"]) for v in r["views"]}
     if results:
-        ctx["flagged"] = sum(len(r["flagged"]) for r in results)
+        ctx["flagged"] = sum(
+            len(r["branch_flagged"][r["picked"]["premise"]] if r.get("picked") else r["flagged"])
+            for r in results
+        )
     ctx.update(extra)
     return ctx
 
@@ -636,6 +666,7 @@ def review(request: Request) -> HTMLResponse:
     return _render(request, "user/review.html", _review_ctx([""]))
 
 
+@router.post("/review", response_class=HTMLResponse)
 @router.post("/judge", response_class=HTMLResponse)
 async def judge(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
     """문구 검수 BFF — 문구 칸 조작과 판정 호출 (ksr 2026-09-29 · 프로토타입 v7.2 `goReview`).
@@ -657,6 +688,8 @@ async def judge(request: Request, session: Session = Depends(get_session)) -> HT
     op = form.get("op", ["all"])[0]
     if not _OP.match(op):
         raise HTTPException(422, "모르는 동작")
+    if op.startswith(("pick:", "choose:", "type:", "redo:")):
+        return await _review_pick(request, copies, form, op)
     kind, _, arg = op.partition(":")
     idx = int(arg) - 1 if arg else -1
     if arg and not 0 <= idx < len(copies):
@@ -741,8 +774,7 @@ def _sllm_category(category: str | None, premise: str) -> str | None:
     원문 판정에 품목이 있으면 그 품목 · 없고 분기를 골랐으면 **고른 전제의 품목**(`pm.PREMISE_CATEGORY` — 판정이 쓰는 표 · D-99) ·
     둘 다 없으면 `None`(서버가 문구에서 추측한다). ⛔ 종전에는 분기를 고른 문구가 늘 `None` 이었다 — 사용자가 화장품을 골랐는데
     서버는 문구로 식품이라 추측할 수 있었다.
-    🚨 재판정에는 이 값을 넘기지 않는다 — 재판정은 종전대로 품목 없이 판정하고 고른 전제의 분기를 읽는다(`_rejudge`).
-       품목을 넘기면 전제가 줄어 그 분기가 생략될 수 있다(전제마다 판정이 같으면 분기를 내지 않는다).
+    재판정도 고른 전제의 제품 정보로 호출한다(`_rejudge`). 품목을 넘겨 분기가 생략되면 기록 판정을 읽는다(D-348 보충 31).
     ⬜ 건강기능식품의 **인정 여부**(전제 `건기식_인정` · `건기식_비인정`)는 넘어가지 않는다 — 서버에 받는 칸이 없다(이서은 확인 대기).
     """
     if category or not premise:
@@ -756,12 +788,15 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     🆕 2026-10-06 (ksr) — 분기를 고르고 고쳐 썼으면 재판정도 **같은 전제의 분기**로 읽는다. 재판정에 그 분기가
        없으면(전제마다 판정이 같아 분기가 생략됨) 기록되는 판정을 읽는다.
     🆕 2026-10-06 (lse) — 원문 판정에 품목이 있으면 재판정에도 그 품목을 넘긴다(D-319). 분기를 고른 문구는 원문 판정의
-       품목이 비어 있다 — 그때는 종전대로 품목 없이 판정하고 고른 전제의 분기를 읽는다.
+       품목이 비어 있어도 고른 전제가 있으면 그 전제의 제품 정보로 판정한다(D-348 보충 31).
     """
     from app.contracts import Category, ProductContext  # noqa: PLC0415
 
     state, res = _core_judge(
-        body, ProductContext(category=Category(category)) if category else None
+        body,
+        pm.product_of(Premise(premise))
+        if premise
+        else (ProductContext(category=Category(category)) if category else None),
     )
     if state != "ok":
         return {"status": "unavailable"}
@@ -896,63 +931,55 @@ async def review_rewrite(request: Request) -> HTMLResponse:
     premise = _one(form, "premise", 32)
     if premise and premise not in _PREMISES:
         raise HTTPException(422, "모르는 전제")
-    redo = _one(form, "round", 2) or "0"
-    if not redo.isdigit() or int(redo) > _MAX_REDO:
-        raise HTTPException(422, "모르는 회차")
-    # 🆕 2026-10-19 (lse · 한빈 요청 「사용자의 선택이 판정에 영향 → 대체 문구도 그대로 받아야」) — 조건부 위반에 앞서 한 답(`prev`)을
-    #    받아 그 문구를 **답과 함께 판정한 결과**로 고쳐 쓴다(`review_answer` 와 같은 규칙). ⛔ 종전에는 답 없이 다시 판정해
-    #    답으로 바뀐 판정이 아니라 답하기 전 판정(조건부 위반 유형)으로 고쳐 썼고, 다시 그린 화면에서 답이 사라졌다
-    prev = form.get("prev", [])
-    if len(prev) > _MAX_ANSWERS:
-        raise HTTPException(422, "답이 너무 많다")
-    pairs: list[tuple[str, str]] = []
-    for p in prev:
-        pm_ = _PREV.match(p)
-        if not pm_:
-            raise HTTPException(422, "모르는 답")
-        pairs.append((pm_.group(1), pm_.group(2)))
-
-    from app.contracts import ProductContext  # noqa: PLC0415
+    redo = _review_round(form)
 
     targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
     results: list[dict] = []
     for n, text in targets:
         state, res = await run_in_threadpool(_core_judge, text)
-        if state not in ("pending", "down") and n == want_n and pairs:
-            facts, substs = _answers_of(pairs, {s.sent_id: s.text for s in res.sentences})
-            state, res = await run_in_threadpool(
-                _core_judge, text, ProductContext(facts=facts, substs=substs)
-            )
         if state in ("pending", "down"):
             return _render(
                 request,
                 "user/review.html",
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
-        item_ = {"n": n, "result": res, "text": text, "rewrites": {}}
-        if n == want_n and pairs:
-            item_["answers"] = [
-                f"{s}|{a}" for s, a in pairs
-            ]  # 다시 그린 화면의 폼이 답을 이어 싣는다
-        results.append(item_)
+        results.append({"n": n, "result": res, "text": text, "rewrites": {}})
 
     item = next((r for r in results if r["n"] == want_n), None)
     source = item and item["result"]
-    if source is not None and source.branches:
-        source = _branch_of(source, premise)
-        if source is None:
+    if source is not None and source.branches and not premise:
+        return _render(
+            request,
+            "user/review.html",
+            _review_ctx(
+                copies,
+                results,
+                notice="제품 유형을 먼저 골라 주세요 — 고른 유형의 판정으로 고쳐 써요",
+            ),
+        )
+    pairs = _previous_answers(form)
+    if source is not None and (premise or pairs):
+        from app.contracts import ProductContext  # noqa: PLC0415
+
+        facts, substs = _answers_of(pairs, {s.sent_id: s.text for s in source.sentences})
+        product = (pm.product_of(Premise(premise)) if premise else ProductContext()).model_copy(
+            update={"facts": facts, "substs": substs}
+        )
+        state, res = await run_in_threadpool(_core_judge, item["text"], product)
+        if state != "ok":
             return _render(
                 request,
                 "user/review.html",
-                _review_ctx(
-                    copies,
-                    results,
-                    notice="제품 유형을 먼저 골라 주세요 — 고른 유형의 판정으로 고쳐 써요",
-                ),
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
-        item["picked"] = {"premise": premise, "round": int(redo)}
-    else:
-        premise = ""
+        item.update(
+            choices=source.branches,
+            result=res,
+            answers=[f"{sid}|{answer}" for sid, answer in pairs],
+        )
+        if premise:
+            item["picked"] = {"premise": premise, "round": int(redo)}
+        source = _branch_of(res, premise) or res
     sent = source and next((s for s in source.sentences if s.sent_id == want_sid), None)
     if sent is None:
         return _render(
@@ -1006,6 +1033,91 @@ def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[li
     return facts, substs
 
 
+def _review_round(form: dict[str, list[str]]) -> int:
+    value = _one(form, "round", 2) or "0"
+    if not re.fullmatch(r"[0-9]{1,2}", value) or not 0 <= int(value) <= _MAX_REDO:
+        raise HTTPException(422, "모르는 회차")
+    return int(value)
+
+
+def _previous_answers(form: dict[str, list[str]]) -> list[tuple[str, str]]:
+    values = form.get("prev", [])
+    if len(values) > _MAX_ANSWERS:
+        raise HTTPException(422, "답이 너무 많다")
+    pairs = []
+    for value in values:
+        match = _PREV.fullmatch(value)
+        if not match:
+            raise HTTPException(422, "모르는 답")
+        pairs.append((match.group(1), match.group(2)))
+    return pairs
+
+
+async def _review_pick(
+    request: Request, copies: list[str], form: dict[str, list[str]], op: str
+) -> HTMLResponse:
+    """D-348 보충 31: 선택은 POST로 받고 실제 품목으로 재판정한다. 이력 저장은 하지 않는다."""
+    kind, number, *tail = op.split(":")
+    n = int(number)
+    if not 1 <= n <= len(copies) or not copies[n - 1].strip():
+        raise HTTPException(422, "그런 문구 칸이 없다")
+    redo = _review_round(form)
+    pairs = _previous_answers(form)
+    premise, stage = "", "type"
+    if kind == "pick":
+        premise = tail[0]
+        if premise not in _PREMISES:
+            raise HTTPException(422, "모르는 전제")
+    elif kind == "choose":
+        choice = _one(form, "kind", 8)
+        if choice not in {"food", "hf", "cos", "gen"}:
+            raise HTTPException(422, "모르는 유형")
+        if choice in {"food", "hf"}:
+            stage = "food" if choice == "food" else "cert"
+        else:
+            premise = "화장품" if choice == "cos" else "일반상품"
+    elif kind == "redo":
+        if redo >= _MAX_REDO:
+            raise HTTPException(422, "다시 선택 횟수를 모두 썼어요")
+        redo += 1
+    results = []
+    for number, text in enumerate(copies, 1):
+        if not text.strip():
+            continue
+        text = text.strip()
+        state, baseline = await run_in_threadpool(_core_judge, text)
+        if state != "ok":
+            return _render(
+                request,
+                "user/review.html",
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+            )
+        item = {"n": number, "text": text, "result": baseline}
+        if number == n:
+            facts, substs = _answers_of(pairs, {s.sent_id: s.text for s in baseline.sentences})
+            item.update(
+                answers=[f"{sid}|{answer}" for sid, answer in pairs], round=redo, stage=stage
+            )
+            if premise:
+                product = pm.product_of(Premise(premise)).model_copy(
+                    update={"facts": facts, "substs": substs}
+                )
+                state, res = await run_in_threadpool(_core_judge, text, product)
+                if state != "ok":
+                    return _render(
+                        request,
+                        "user/review.html",
+                        _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+                    )
+                item.update(
+                    result=res,
+                    choices=baseline.branches,
+                    picked={"premise": premise, "round": redo},
+                )
+        results.append(item)
+    return _render(request, "user/review.html", _review_ctx(copies, results))
+
+
 @router.post("/review/answer", response_class=HTMLResponse)
 async def review_answer(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
     """조건부 위반에 답하고 **그 문구를 답과 함께 다시 판정**한다 (🆕 2026-10-16 · D-348 보충 4 결정 3 · 4 · 6 · 보충 3 결정 4).
@@ -1013,7 +1125,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
     🔴 **POST 다** — 문구를 URL 에 싣지 않는다(P1-4). 화면에 상태가 없어 문구 칸 · 앞서 한 답(`prev`)을 다시 받는다.
     ★ 답은 **그 문장에만** 묶는다 — 문장 글자는 서버가 먼저 판정한 결과에서 읽는다(폼의 글자를 믿지 않는다 · `review_rewrite` 와 같다).
     ★ 품목 분기를 고른 뒤의 답이면 다시 그릴 때 그 분기를 펼쳐 둔다(`picked`). 답은 모든 분기에 같이 든다(문장에 묶였다).
-    ★ 답으로 다시 판정한 문구는 **이력에 적는다**(출처 · 책임 — 보충 3 결정 4). 다른 문구는 판정만 다시 한다.
+    ★ 품목을 고르지 않은 답 재판정의 저장은 종전대로다(보충 3 결정 4). 고른 뒤 판정은 저장하지 않는다(보충 31 · 이력 정책 대기).
     🚨 답은 검증이 아니다 — 판정의 `user_facts` · `user_subst` 와 화면 문구가 그렇게 말한다.
     """
     form = await _form(request, keep_blank=True)
@@ -1029,9 +1141,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
     premise = _one(form, "premise", 32)
     if premise and premise not in _PREMISES:
         raise HTTPException(422, "모르는 전제")
-    redo = _one(form, "round", 2) or "0"
-    if not redo.isdigit() or int(redo) > _MAX_REDO:
-        raise HTTPException(422, "모르는 회차")
+    redo = _review_round(form)
     pairs: list[tuple[str, str]] = []
     for p in prev:
         pm_ = _PREV.match(p)
@@ -1053,10 +1163,15 @@ async def review_answer(request: Request, session: Session = Depends(get_session
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
         if n == want_n:
+            choices = res.branches
             sents = {s.sent_id: s.text for s in res.sentences}
             facts, substs = _answers_of(pairs, sents)
             state, res = await run_in_threadpool(
-                _core_judge, text, ProductContext(facts=facts, substs=substs)
+                _core_judge,
+                text,
+                (pm.product_of(Premise(premise)) if premise else ProductContext()).model_copy(
+                    update={"facts": facts, "substs": substs}
+                ),
             )
             if state in ("pending", "down"):
                 return _render(
@@ -1065,15 +1180,18 @@ async def review_answer(request: Request, session: Session = Depends(get_session
                     _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
                 )
             item = {"n": n, "result": res, "text": text, "answers": [f"{s}|{a}" for s, a in pairs]}
-            if premise and res.branches:
+            if premise:
                 item["picked"] = {"premise": premise, "round": int(redo)}
+                item["choices"] = choices
             results.append(item)
             continue
         results.append({"n": n, "result": res, "text": text})
-    answered = [r["result"] for r in results if r["n"] == want_n]
-    kept = await run_in_threadpool(
-        lambda: judgment_store.save_review(session, current_user(request, session), answered)
-    )
+    answered = [r["result"] for r in results if r["n"] == want_n and not premise]
+    kept = None
+    if answered:
+        kept = await run_in_threadpool(
+            lambda: judgment_store.save_review(session, current_user(request, session), answered)
+        )
     return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
 
 

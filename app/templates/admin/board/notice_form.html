@@ -1,0 +1,24 @@
+{# app/templates/admin/board/notice_form.html — 새 공지 작성 · 소유자 **psj** (2026-10-20 · D-260 ⑦)
+
+  ★ `POST /admin/board/notices` 로 보낸다 — 저장되면 그 공지 상세로 간다 (PRG).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "admin/_base.html" %}
+{% block title %}CopyLane — 새 공지 작성{% endblock %}
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
+<p><a href="/admin/board/notices">← 공지사항 목록</a></p>
+<h1>새 공지 작성</h1>
+{% if error %}<p class="warn" role="alert">⚠️ {{ error }}</p>{% endif %}
+
+<form class="notice-form" method="post" action="/admin/board/notices">
+  {% set edit = false %}
+  {% include "admin/board/_notice_fields.html" %}
+  <div class="nf-actions">
+    <button type="submit">등록</button>
+    <a href="/admin/board/notices">취소</a>
+  </div>
+</form>
+
+{% include "admin/board/_notice_form_style.html" %}
+{% endblock %}

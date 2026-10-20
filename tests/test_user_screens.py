@@ -405,8 +405,9 @@ def test_검수_분기_다시_선택은_5회다() -> None:
     from app.api import app  # noqa: PLC0415
 
     body = TestClient(app).get("/u/preview/21_hold_cat_unknown_hair").text
-    assert 'id="rvr-1-5"' in body
-    assert 'id="rvr-1-6"' not in body
+    assert "재검수 0/5" in body
+    assert 'value="redo:1"' in body
+    assert 'type="checkbox" id="rvr-' not in body
 
 
 @pytest.mark.gate

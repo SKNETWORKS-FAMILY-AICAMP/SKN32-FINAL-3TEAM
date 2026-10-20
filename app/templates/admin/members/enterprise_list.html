@@ -4,13 +4,11 @@
   🚨 **읽기 전용이다.**
   🔴 기업 회원 테이블이 아직 없다 — 전부 더미다 (admin_enterprise.py 참고).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
+#}{% extends "admin/_base.html" %}
 {% block title %}CopyLane — 기업 회원{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>기업 회원</h1>
 <p class="warn">🧪 <b>더미 데이터입니다.</b> 기업 회원 테이블이 아직 없어요 — 서비스 쪽 기업 가입 기능이 먼저 생겨야 실데이터가 흐릅니다.</p>
 
@@ -34,7 +32,7 @@
 {% if not rows %}
 <p>조건에 맞는 기업이 없다.</p>
 {% else %}
-<table>
+<div class="admin-table-scroll"><table>
   <tr>
     <th>기업명</th><th>사업자등록번호</th><th>대표자</th><th>구성원</th><th>플랜</th><th>가입일</th><th>상태</th>
   </tr>
@@ -49,9 +47,7 @@
     <td>{{ r.status }}</td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 {% endif %}
 
-</div>
-</div>
 {% endblock %}
