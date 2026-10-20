@@ -202,7 +202,15 @@ def setup_logging(level: int = logging.INFO) -> None:
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     # 🆕 2026-09-22 — 오류 로그 표(`app_error_log`). 🚨 켜는 조건은 `settings.error_log_enabled()` 한 곳이다 (D-99) —
     #    `onprem`·`demo` 만(`auto`). 개발 기기(`local`)·테스트·`cloud` 는 붙지 않는다. 핸들러는 백그라운드로 쓴다.
-    from app.settings import error_log_enabled  # noqa: PLC0415 — 부를 때만 `.env` 를 읽는다
+    from app.settings import (  # noqa: PLC0415 — 부를 때만 `.env` 를 읽는다
+        error_log_enabled,
+        trace_enabled,
+    )
+
+    # 🆕 2026-10-15 — 판정 노드 추적(`app/trace.py`). 켜면 INFO 로 찍고, 끄면 WARNING 으로 눌러 요약을 만들지도 않는다
+    logging.getLogger("copylane.trace").setLevel(
+        logging.INFO if trace_enabled() else logging.WARNING
+    )
 
     if error_log_enabled():
         from app import error_log  # noqa: PLC0415
