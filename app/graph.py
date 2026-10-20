@@ -54,7 +54,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import Annotated, Any, TypedDict
 
-from app import claimscope, factcheck, sanction, sentsplit
+from app import claimscope, factcheck, guide, sanction, sentsplit
 from app import dictmatch as dm
 from app import encoder as enc
 from app import premise as pm
@@ -352,6 +352,11 @@ class CoreState(TypedDict, total=False):
     sentences: Annotated[list[SentenceJudgment], upsert_sentences]
     # ── 품목 분기 (🆕 2026-10-05 · D-319 · D-263 ⑦) — `premise_branches` **한 노드만** 쓴다. 덮어쓰는 칸이다(리듀서 없음)
     branches: list[Branch]
+    #: 🆕 2026-10-20 (D-348 보충 32 · 결함 A) — **접힌 분기** — 품목이 주어졌고 전제마다 판정이 같아 보이지 않는 분기.
+    #:    `premise_branches` 가 쓰고 `doc_rules` 가 읽는다(전제마다 질문 · 답을 정하고 기록은 분기에서 모은다).
+    #:    ⛔ `CORE_OUT` 에 넣지 않는다 — 응답에 나가는 분기는 `branches` 하나다. 질문까지 정한 뒤 기록이 전제에 달리면
+    #:       `doc_rules` 가 이것을 `branches` 로 드러낸다(`_premise_dependent`).
+    folded: list[Branch]
     # ── 계측 (D-77 · D-43 이 LangSmith 를 배제해 이것이 유일한 경로) 🔴 누적 ──
     timings: Annotated[list[Timing], operator.add]
 
@@ -2813,7 +2818,13 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         recs = _with_record_encoder(base, held, per, premises)
         # 🆕 2026-10-16 (보충 3 결정 4 · 건기식 인정 질병 분기) — 분기를 내지 않아도 사용자의 답은 기록에 출처로 남긴다(전제마다 판정이 같아 분기가 생략된 경우)
         recs = _with_record_answers(base, recs, per, premises)
-        return {"sentences": recs} if recs else {}
+        # 🆕 2026-10-20 (D-348 보충 32 · 결함 A) — 접어도 분기는 계산해 둔다. 질문(사실 · 실증 · 유형 질문)은 `doc_rules` 가
+        #    **전제마다** 정한다 — 접힌 기록 문장은 근거 전제가 둘이라 질문을 정하지 못한다(`_enc_subst` 「전제가 둘 이상이면 None」).
+        #    ★ 접을지는 질문까지 정한 뒤에 다시 본다 — 여기서는 「질문 전 판정이 같다」만 안다(`_branch_key`).
+        out: dict[str, Any] = {"folded": _make_branches(premises, per)}
+        if recs:
+            out["sentences"] = recs
+        return out
     reason = HoldReason.cat_unknown if category is None else HoldReason.premise_unknown
     changed = [
         r
@@ -2825,7 +2836,14 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
     changed = _with_record_encoder(base, changed, per, premises)
     if pending:
         changed = _category_needed(base, changed, pending)
-    branches = [
+    return {"branches": _make_branches(premises, per), "sentences": changed}
+
+
+def _make_branches(
+    premises: tuple[Premise, ...], per: dict[Premise, list[SentenceJudgment]]
+) -> list[Branch]:
+    """전제마다 분기 하나 — 보이는 분기(`branches`)와 접힌 분기(`folded`)가 같은 모양이다 (D-99)."""
+    return [
         Branch(
             premise=p,
             outcome=_branch_outcome(p, per[p]),
@@ -2834,7 +2852,6 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         )
         for p in premises
     ]
-    return {"branches": branches, "sentences": changed}
 
 
 @timed
@@ -2852,6 +2869,11 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     facts, substs = list(product.facts), list(product.substs)
     sents = list(state.get("sentences", []))
     branches = list(state.get("branches") or [])
+    # 🆕 2026-10-20 (D-348 보충 32 · 결함 A) — 접힌 분기도 분기처럼 전제마다 질문 · 답을 정하고 기록은 분기에서 모은다.
+    #    「같은 문장 · 같은 품목이면 분기를 접든 펼치든 기록은 같다」(`tests/test_fold_invariant.py`)
+    folded = not branches and bool(state.get("folded"))
+    if folded:
+        branches = list(state.get("folded") or [])
     spans = _sentence_spans(state)
     # 🔄 2026-10-17 (보충 8 결정 1) — 인코더 쪽 절대형 확정은 품목이 정해졌을 때만(사용자가 품목을 고르면 그 품목으로 다시 판정)
     #    ⚠️ 2026-10-20 (보충 31) — 검수 화면은 아직 다시 판정하지 않는다(고른 분기를 펼친다 · `review.html` 분기 고르기) — 화면 쪽 집행 대기(ksr).
@@ -2896,9 +2918,40 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
         elif x is not None:
             changed.append(x)
     out: dict[str, Any] = {"branches": new_b}
+    if folded:
+        # 🆕 (보충 32 · 펼침 규칙) 질문까지 정한 뒤 **전제끼리 결과가 갈리면** 분기를 드러낸다 — 판정 · 질문(사실 · 실증)이
+        #    다르면 고를 것이 생긴 것이다. 숨긴 채 두면 그 전제의 질문이 보이지 않거나(한쪽만 질문) 기록이 막다른 보류가 된다
+        #    (선택지 없는 전제 보류 · `_premise_dependent`). 같으면 접힌 채다(보이는 분기 없음 · 종전 모양).
+        by_new = {c.sent_id: c for c in changed}
+        same = len({tuple(map(_shown_key, b.sentences)) for b in new_b}) == 1
+        if same and not any(_premise_dependent(by_new.get(s.sent_id, s)) for s in sents):
+            out = {"folded": new_b}
     if changed:
         out["sentences"] = changed
     return out
+
+
+def _shown_key(j: SentenceJudgment) -> tuple:
+    """질문까지 정한 뒤 분기를 접어도 되는가 보는 열쇠 — 분기를 낼지 보는 열쇠(`_branch_key`) + 선택지(사실 · 실증 질문) (🆕 2026-10-20 · 보충 32)."""
+    return (
+        _branch_key(j),
+        None if j.fact_check is None else j.fact_check.model_dump_json(),
+        None if j.substantiation is None else j.substantiation.model_dump_json(),
+    )
+
+
+def _premise_dependent(rec: SentenceJudgment) -> bool:
+    """기록이 **전제에 달렸나** — 품목 · 전제를 몰라 보류이고 선택지(사실 · 실증 질문)가 없다 (🆕 2026-10-20 · D-348 보충 32).
+
+    ★ 분기가 보이면 분기가 선택지다(`_record_condition` 의 「섞였다 → 보류 + 분기」). 분기가 접혀 있으면 이 기록은 막다른 보류다 —
+       `doc_rules` 가 이때 분기를 드러낸다. 조건부 위반(전제 보류 + 선택지)은 질문이 선택지라 해당하지 않는다.
+    """
+    return (
+        rec.verdict is Verdict.hold
+        and rec.hold_reason in (HoldReason.premise_unknown, HoldReason.cat_unknown)
+        and rec.fact_check is None
+        and rec.substantiation is None
+    )
 
 
 def _sentence_spans(state: CoreState) -> dict[str, Span]:
@@ -4153,6 +4206,12 @@ def to_response(state: ReviewState) -> JudgeResponse:
        않았으면 빈 목록이다(`app/premise.py` `criteria_ready`).
     """
     category = (state.get("product") or ProductContext()).category
+    # 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내는 **판정을 다 낸 뒤** 붙인다 — 판정 · 분기 열쇠에 들지 않는다(표시 전용)
+    return guide.attach(_response(state, category))
+
+
+def _response(state: ReviewState, category: Category | None) -> JudgeResponse:
+    """`to_response` 의 계약 옮김 — 안내를 붙이기 전."""
     return JudgeResponse(
         outcome=state.get("outcome", Outcome.hold),
         category=category,

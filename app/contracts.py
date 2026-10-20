@@ -411,6 +411,44 @@ class RiskAssessment(BaseModel):
         return self
 
 
+class GuideArticle(BaseModel):
+    """**원문 보기** 한 조각 — 수집본 조문의 글자 그대로 (🆕 2026-10-20 · D-348 보충 32 결정 3).
+
+    🚨 판정이 아니다 — 판정 · 분기 열쇠 · 위험도 어디에도 들지 않는다(표시 전용). 글자는 수집본(`data/derived/law_article.jsonl`)에서
+       `scripts/guide_build.py` 가 옮긴다 — 손으로 적지 않는다(D-90).
+    """
+
+    #: 문서 이름(「부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정」)
+    law_name: str = Field(..., min_length=1)
+    #: 조 · 항 · 호 표기(「제6조③」 · 「제3조②3.」)
+    where: str = Field(..., min_length=1)
+    #: 호를 가리킬 때 그 호가 딸린 항의 머리 글(「② 제1항에도 불구하고 … 제외한다.」) — 항 · 조를 가리키면 None
+    lead: str | None = None
+    text: str = Field(..., min_length=1)
+    #: 수집본 판의 날짜(파일 이름의 `YYYYMMDD` → `YYYY-MM-DD`) — 모르면 None(지어내지 않는다 · D-220). 현행 여부는 말하지 않는다
+    version: str | None = None
+
+
+class Guide(BaseModel):
+    """**두 겹 안내** — 사용자가 전제 · 답을 고를 때 펼쳐 보는 설명 (🆕 2026-10-20 · D-348 보충 32 결정 3).
+
+    ★ 두 겹 — 쉬운 풀이(무엇인가 · 확인하는 법 · 헷갈리기 쉬운 것)와 원문 보기(조문 그대로).
+    🔴 **승인된 글 · 짝 표만** 싣는다(D-147 · D-263 ②) — 승인 전에는 칸이 없다(`app/guide.py`). 「적법」 · 「안전」을 쓰지 않는다(D-05 · D-130).
+    🚨 판정이 아니다 — 판정 · 분기 열쇠 · 위험도 어디에도 들지 않는다(표시 전용 · 응답을 만든 뒤 붙인다).
+    """
+
+    what: str | None = None
+    check: str | None = None
+    pitfall: str | None = None
+    articles: list[GuideArticle] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> Guide:
+        if not (self.what or self.check or self.pitfall or self.articles):
+            raise ValueError("빈 안내 — 승인된 글 · 조문이 없으면 칸을 두지 않는다 (D-220)")
+        return self
+
+
 class SubstBranch(BaseModel):
     """**실증 분기** — 문장 하나의 주석 (🆕 D-263 ④ · D-268 「지시」의 내용).
 
@@ -425,6 +463,8 @@ class SubstBranch(BaseModel):
     accepted_evidence: list[str] = Field(..., min_length=1)
     #: 기준 문안 — 조문을 인용한 설명 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
     criteria: str = Field(..., min_length=1)
+    #: 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내 — 승인된 것만 · 없으면 None(표시 전용)
+    guide: Guide | None = None
 
     @model_validator(mode="after")
     def _not_patent_or_award(self) -> SubstBranch:
@@ -502,6 +542,8 @@ class FactBranch(BaseModel):
     accepted_evidence: list[str] = Field(..., min_length=1)
     #: 기준 문안 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
     criteria: str = Field(..., min_length=1)
+    #: 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내 — 승인된 것만 · 없으면 None(표시 전용)
+    guide: Guide | None = None
 
 
 class RiskEstimate(BaseModel):
@@ -879,6 +921,8 @@ class Branch(BaseModel):
     #: 기준 문안 — 조문을 인용한 설명 (D-263 ②). 🚨 문안 확정은 조문 대조 뒤다
     criteria: str = Field(..., min_length=1)
     evidence: list[EvidenceArticle] = Field(default_factory=list)
+    #: 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내 — 이 전제가 무엇인지 · 어떻게 확인하는지(승인된 것만 · 없으면 None · 표시 전용)
+    guide: Guide | None = None
 
 
 class JudgeResponse(BaseModel):

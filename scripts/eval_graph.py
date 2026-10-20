@@ -61,6 +61,7 @@ from app.contracts import (  # noqa: E402
     is_conditional,
 )
 from app.dictmatch import norm as dict_norm  # noqa: E402 — 정규화는 한 곳 (D-99)
+from app.sanction import SANCTION_LAW  # noqa: E402 — 법 ID 는 한 곳 (D-99)
 from collect import statute  # noqa: E402
 from preprocess import devsplit  # noqa: E402
 from preprocess import (
@@ -825,7 +826,33 @@ def conditional_rows(rows: list[dict]) -> list[dict]:
         )
     # 🔴 승인 문구 규칙 행의 `품목`(건기식)은 원천이다 — 그 행은 `전제`(식품)로만 든다. `전제` 가 빈 승인 문구 행이 있으면
     #    품목으로 넘기지 않는다(그래프는 건강기능식품으로 보고 4.나를 내고 채점은 3호를 기대한다 · 원장 10-03 ㊿-40)
-    return [r for r in rows if r["전제"] or (r["품목"] and r.get("판독") != APPROVED_READING)]
+    return [
+        r
+        for r in rows
+        if r["전제"] or (r["품목"] and r.get("판독") != APPROVED_READING) or general_row(r)
+    ]
+
+
+#: 🆕 2026-10-20 (D-348 보충 32 · 측정 기준 (ㄴ)) 일반상품으로 채점하는 행의 근거 법 — 표시광고법(법률 ID · `app.sanction.SANCTION_LAW`)
+GENERAL_LAW = SANCTION_LAW["표시광고법"]
+
+
+def general_row(r: dict) -> bool:
+    """**일반상품 규칙** — 골든 `전제` · `품목` 이 비었고 근거 조문이 **모두 표시광고법**인 행 → 일반상품 전제로 채점한다 (🆕 2026-10-20 · 보충 32).
+
+    ★ 까닭 — 품목을 고른 뒤의 성적(조건부)이 품목 빈칸 행을 통째로 뺐다(확장 dev 의 공정위 의결서 404 행이 조건부 0 행).
+       근거가 표시광고법뿐인 라벨은 「표시광고법 위반」만 말한다 — 표시광고법은 품목과 무관하게 걸리므로 일반상품 전제
+       (표시광고법만 본다 · `premise.CRITERIA`)로 채점해도 라벨의 범위와 맞다.
+    🚨 근거가 빈 행(위반 없음 라벨)은 이 규칙에 들지 않는다 — 「근거 법이 표시광고법뿐」을 말할 근거가 없다(D-220).
+    ⛔ 근거 조문 글자는 `<법 ID>:<조문>` 꼴이다(골든 `근거`) — 꼴이 다르면 들지 않는다.
+    """
+    basis = r.get("근거") or []
+    return (
+        not r.get("전제")
+        and not r.get("품목")
+        and bool(basis)
+        and all(str(x).split(":", 1)[0] == GENERAL_LAW for x in basis)
+    )
 
 
 def product_of(r: dict, conditional: bool) -> ProductContext:
@@ -838,6 +865,8 @@ def product_of(r: dict, conditional: bool) -> ProductContext:
         return ProductContext()
     if r.get("전제"):
         return pm.product_of(Premise(r["전제"]))
+    if general_row(r):
+        return ProductContext(category=Category.일반상품)  # 🆕 2026-10-20 (보충 32) 일반상품 규칙
     return ProductContext(category=Category(r["품목"]))
 
 
