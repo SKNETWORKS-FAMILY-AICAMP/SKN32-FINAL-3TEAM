@@ -166,6 +166,35 @@ def test_한쪽_전제에만_질문이_서면_분기를_드러낸다(monkeypatch
     g.to_response(st)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("cat", TWO)
+def test_두_하위_전제가_같은_위반으로_확정하면_기록도_확정(
+    cat: Category, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🆕 2026-10-21 — 접힌 분기에서 두 하위 전제가 모두 인코더 쪽 절대형(C)으로 같은 위반을 확정하면 기록도 그 판정이다.
+
+    🔴 되돌림 막이 — 첫 고침에서 기록 위험도가 분기와 같으면(R1) 기록을 올리지 않아 보류로 남았다(dev 조건부 7 행 · 원장 10-21 ①).
+    """
+    monkeypatch.setattr(
+        g,
+        "_absolute_types",
+        lambda s: (
+            {b.violation for b in s.risk.encoder_basis if b.moved_from is None}
+            & {Violation.거짓_과장}
+        ),
+    )
+    st = _run(cat)
+    hidden = st.get("folded") or []
+    assert not st.get("branches") and hidden, "두 전제 결과가 같다 — 접힌 채다"
+    assert all(b.sentences[0].verdict is Verdict.confirmed for b in hidden)
+    (r,) = st["sentences"]
+    assert r.verdict is Verdict.confirmed and r.violations == [Violation.거짓_과장]
+    g.to_response(st)  # type: ignore[arg-type]
+    # 불변식 — 강제로 펼친 경로도 같은 기록
+    folded = _sig(st)
+    monkeypatch.setattr(g, "_branch_key", lambda j: id(j))
+    assert _sig(_run(cat)) == folded
+
+
 def test_단일_전제_품목은_종전_그대로() -> None:
     st = _run(Category.화장품)
     assert not st.get("branches") and not st.get("folded")

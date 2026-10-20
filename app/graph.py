@@ -3029,10 +3029,18 @@ def _record_at_least(rec: SentenceJudgment, per: list[SentenceJudgment]) -> Sent
         return None
     top = max(live, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
     have = rec.risk.final
-    if have is not None and have.level >= top.risk.final.level:  # type: ignore[union-attr]
-        return None
     confirmed = [x for x in live if x.verdict is Verdict.confirmed and x.violations]
+    # 🔄 2026-10-21 (D-348 보충 32 · 결함 A 고침의 퇴행) — 「모든 분기가 같은 위반으로 확정 → 기록도 그 판정」을 **위험도 비교보다 먼저** 본다.
+    #    종전에는 기록 위험도가 분기 이상이면(같은 R1 등) 여기서 끝나 기록이 보류로 남았다 — 접힌 분기(보충 32 결정 1)에서
+    #    두 하위 전제가 모두 절대형으로 확정해도 기록이 확정되지 않았다(dev 조건부 7 행 · 원장 10-21 ①)
     if len(confirmed) == len(live) and len({tuple(x.violations) for x in confirmed}) == 1:
+        if (
+            rec.verdict is Verdict.confirmed
+            and rec.violations == top.violations
+            and have is not None
+            and have.level >= top.risk.final.level  # type: ignore[union-attr]
+        ):
+            return None  # 이미 그 판정 · 그 위험도 이상이다
         return SentenceJudgment(
             **{
                 **{k: getattr(top, k) for k in type(top).model_fields},
@@ -3040,6 +3048,8 @@ def _record_at_least(rec: SentenceJudgment, per: list[SentenceJudgment]) -> Sent
                 "encoder_candidates": rec.encoder_candidates,
             }
         )
+    if have is not None and have.level >= top.risk.final.level:  # type: ignore[union-attr]
+        return None
     # 하한 칸은 분기가 든 하한(그 유형 · 전제의 제재표 하한 — `_enc_absolute` 와 같은 칸)을 올려 싣는다 — 근거 스팬 없이 하한 위로 올리지 않는다(D-131)
     lows = [r for r in (rec.risk.floor, top.risk.floor) if r is not None]
     if not lows:
