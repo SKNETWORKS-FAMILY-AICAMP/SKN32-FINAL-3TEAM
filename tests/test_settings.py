@@ -87,7 +87,7 @@ def test_기본_DSN_문자열이_저장소에_하나뿐이다() -> None:
     🚨 `docker-compose.yml` 은 사용자·비밀번호를 **환경변수 치환**으로 들고 있어 이 문자열을
        그대로 적지 않는다 — 그래서 이 검사의 대상은 파이썬 소스뿐이다.
     """
-    needle = "postgresql://copylane:copylane@localhost:5432/copylane"
+    needle = "postgresql://copylane:copylane@127.0.0.1:5432/copylane"
     where = [_rel(p) for p in _sources() if needle in p.read_text(encoding="utf-8")]
     assert where == ["app/settings.py"], f"🔴 기본 DSN 이 여기도 있다: {where}"
 

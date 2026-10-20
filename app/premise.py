@@ -79,11 +79,15 @@ RECOGNIZED_PREMISES = frozenset({Premise.건기식_인정, Premise.일반식품_
 def product_of(premise: Premise) -> ProductContext:
     """전제 → 계약의 제품 정보. **전제를 아는 쪽이 제품 정보를 만드는 한 곳이다** — 골든의 `전제` 칸(평가) · 고른 분기(화면).
 
-    🚨 그래프는 지금 `has_recognized_function` 을 읽지 않는다 — 품목의 전제를 전부 계산하고 화면 · 평가가 그 전제의 분기를
-       골라 읽는다(D-263 ⑦ · D-276). 자격 칸은 생성 쪽(고쳐 쓰기 서버)이 전제를 알아야 할 때를 위해 같이 채운다.
+    🚨 그래프는 `has_recognized_function` 을 읽지 않는다 — 자격 칸은 생성 쪽(고쳐 쓰기 서버)이 전제를 알아야 할 때를 위해 같이 채운다.
+    🔄 2026-10-21 (D-348 보충 34 결정 1) — **고른 전제(`premise`)도 싣는다.** 그래프가 그 전제 하나로 판정한다(분기 없음 · 기록 = 그 전제의
+       판정). 종전에는 품목만 실어 품목의 전제를 전부 계산하고 읽는 쪽이 그 전제의 분기를 골라 읽었다(D-263 ⑦ · D-276) — 답을 넣어 다시
+       판정하면 하위 전제가 다시 미정으로 돌아갔다. 조건부 평가의 골든 `전제` 도 이 길이다(보충 33 결정 5 「골든 전제를 답으로 넣은 판정」).
     """
     return ProductContext(
-        category=PREMISE_CATEGORY[premise], has_recognized_function=premise in RECOGNIZED_PREMISES
+        category=PREMISE_CATEGORY[premise],
+        has_recognized_function=premise in RECOGNIZED_PREMISES,
+        premise=premise,
     )
 
 

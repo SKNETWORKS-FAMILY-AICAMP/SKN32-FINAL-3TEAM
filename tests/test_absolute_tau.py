@@ -133,3 +133,17 @@ def test_잠금_채택_판에는_문턱_값이_있다() -> None:
     assert mark in g.ENCODER_ABSOLUTE_TAU, (
         f"채택 판 {name}({mark})의 절대형 확정 τ 가 없다 — 확장 dev · 데이터 밖으로 다시 고른다"
     )
+
+
+def test_잠금_채택_판에는_전제_확정_문턱_값이_있다() -> None:
+    """🆕 2026-10-19 (D-348 보충 29) — 채택 판이 바뀌면 같은 규칙으로 전제 확정 τ(건강기능식품 오인)도 다시 잰다."""
+    data = model_lock.load()
+    name = data["roles"]["encoder"]["adopted"]
+    mark = model_lock.bundle_sha(data["bundles"][name]["files"])
+    assert Violation.건강기능식품_오인 in g.ENCODER_PREMISE_TAU.get(mark, {}), (
+        f"채택 판 {name}({mark})의 전제 확정 τ 가 없다 — 확장 dev 로 다시 고른다"
+    )
+
+
+def test_인코더가_꺼지면_전제_문턱도_없다() -> None:
+    assert g._premise_tau(Violation.건강기능식품_오인) is None

@@ -54,7 +54,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import Annotated, Any, TypedDict
 
-from app import claimscope, factcheck, sanction, sentsplit
+from app import claimscope, factcheck, guide, sanction, sentsplit
 from app import dictmatch as dm
 from app import encoder as enc
 from app import premise as pm
@@ -352,6 +352,11 @@ class CoreState(TypedDict, total=False):
     sentences: Annotated[list[SentenceJudgment], upsert_sentences]
     # ── 품목 분기 (🆕 2026-10-05 · D-319 · D-263 ⑦) — `premise_branches` **한 노드만** 쓴다. 덮어쓰는 칸이다(리듀서 없음)
     branches: list[Branch]
+    #: 🆕 2026-10-20 (D-348 보충 32 · 결함 A) — **접힌 분기** — 품목이 주어졌고 전제마다 판정이 같아 보이지 않는 분기.
+    #:    `premise_branches` 가 쓰고 `doc_rules` 가 읽는다(전제마다 질문 · 답을 정하고 기록은 분기에서 모은다).
+    #:    ⛔ `CORE_OUT` 에 넣지 않는다 — 응답에 나가는 분기는 `branches` 하나다. 질문까지 정한 뒤 기록이 전제에 달리면
+    #:       `doc_rules` 가 이것을 `branches` 로 드러낸다(`_premise_dependent`).
+    folded: list[Branch]
     # ── 계측 (D-77 · D-43 이 LangSmith 를 배제해 이것이 유일한 경로) 🔴 누적 ──
     timings: Annotated[list[Timing], operator.add]
 
@@ -667,7 +672,9 @@ def retrieve(state: CoreState, config=None) -> dict[str, Any]:  # noqa: ANN001
        🔄 2026-09-28 (W4 · D-291) — `rt.wide()` 를 부른다(법마다 폭만큼 · 두 갈래 따로). 법별 노드가 `rt.law_view()` 로
           자기 법 것만 골라 섞는다 — 법 필터로 따로 찾은 것과 후보가 같다(사실원장 ㊲ · ㊳ · ㊵ 124/124).
           ⛔ 종전에는 `search()`(전역 상위 `top_k` 5)를 불러 세 법이 다섯 자리를 나눠 썼다.
-    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 근거 없이 판정하면 D-224 위반이다.
+    🚨 `rt.RetrieveError` 는 여기서 삼키지 않는다 — 벡터 갈래 실패는 `rt.wide` 안에서 상태로 남고(어휘는 돈다) 그 밖의 실패는 올린다.
+       🔄 2026-10-19 (D-348 보충 30) — ⛔ 종전 이유(「근거 없이 판정하면 D-224 위반」)는 낡았다 — 판정 근거(호)는 표에서 오고
+       (사전 인용 · `statute.references` · D-327) 검색 결과는 참고 조문으로만 쓴다. 참고 조문은 판정 뒤 `references` 가 유형 · 법 안에서 고른다.
     """
     sents = state.get("sents", [])
     if not sents:
@@ -2235,9 +2242,19 @@ def _premise_hits(
 
 
 def _premise_sentences(
-    premise: Premise, state: CoreState, rows: list[dict[str, Any]]
+    premise: Premise,
+    state: CoreState,
+    rows: list[dict[str, Any]],
+    pending: set[str] | None = None,
 ) -> list[SentenceJudgment]:
-    """전제 하나에서의 문장 판정 — 위험도까지. `judge` · `assess_risk` 와 같은 함수를 전제의 법 묶음으로 다시 부른다 (D-99)."""
+    """전제 하나에서의 문장 판정 — 위험도까지. `judge` · `assess_risk` 와 같은 함수를 전제의 법 묶음으로 다시 부른다 (D-99).
+
+    🆕 2026-10-20 (D-348 보충 31) — **품목을 모르면 전제가 답인 확정(답 없이)을 하지 않는다**(`known` · 보충 8 결정 1 과 같은 문 —
+       `doc_rules` 의 인코더 쪽 절대형과 같은 기준 · 한 품목에 전제가 둘이어도 품목이 정해진 것이다). 품목을 모르는 분기는 고르기 전
+       안내용이고(보충 18 결정 2) 판정 결과는 고른 품목으로 다시 판정해 낸다(보충 31 (가)). 그 분기에서 품목이 정해지면 확정될 문장은
+       `pending` 에 적는다 — 기록을 「품목 선택 필요」로 두는 재료다(`premise_branches` · `_category_needed`).
+    """
+    known = (state.get("product") or ProductContext()).category is not None
     laws = pm.PREMISE_LAWS[premise]
     results = {r.law: r for r in state.get("law_results", [])}
     scans = {s.sent_id: s for s in state.get("dict_scans", [])}
@@ -2346,9 +2363,22 @@ def _premise_sentences(
                 else None
             )
             facts = list((state.get("product") or ProductContext()).facts)
-            j = _hf_premise(premise, j, encs[sid], facts, span, rows)
+            before = j
+            j = _hf_premise(premise, j, encs[sid], facts, span, rows, known=known)
             # 🆕 2026-10-19 (D-348 보충 28 결정 3) — 식품 두 전제: 기능성 표시 고시 요건(전제)이 자격의 답이다(건기식 두 전제와 같은 모양)
-            j = _food_premise(premise, j, encs[sid], facts, span, rows)
+            j = _food_premise(premise, j, encs[sid], facts, span, rows, known=known)
+            # 🆕 2026-10-20 (보충 31) — 품목을 몰라 막은 전제 확정이 있었나 — **같은 함수**를 품목이 정해진 것으로 다시 불러 본다(D-99 · 판정 두 벌 없음)
+            if not known and pending is not None and premise in _PREMISE_CONFIRM:
+                again = _food_premise(
+                    premise,
+                    _hf_premise(premise, before, encs[sid], facts, span, rows),
+                    encs[sid],
+                    facts,
+                    span,
+                    rows,
+                )
+                if again.verdict is Verdict.confirmed and again.violations:
+                    pending.add(sid)
         out.append(j)
     return out
 
@@ -2360,6 +2390,7 @@ def _hf_premise(
     facts: list[UserFact],
     span: Span | None,
     rows: list[dict[str, Any]],
+    known: bool = True,
 ) -> SentenceJudgment:
     """🆕 2026-10-18 (D-348 보충 23 결정 4) **건강기능식품 두 전제의 인코더 쪽 판정** — 인코더(건기식 입력)가 건강기능식품 오인 후보를 낸 문장.
 
@@ -2386,6 +2417,12 @@ def _hf_premise(
     basis = list(j.risk.encoder_basis)
     if premise is Premise.건기식_비인정:
         if not basis or any(b.moved_from is None for b in basis):
+            return j
+        # 🆕 (보충 29) 전제 확정의 확신 문턱 — 아래면 확정하지 않고 보류(하한 · 근거는 그대로)
+        if not _premise_confident(e, Violation(pm.HF_MISLEAD)):
+            return j
+        # 🆕 2026-10-20 (보충 31) 품목을 모르면 답 없는 전제 확정을 하지 않는다 — 보류 그대로(하한 · 근거는 그대로 · 보충 8 결정 1 과 같은 문)
+        if not known:
             return j
         c = _enc_confirmed(j, Violation(_UNRECOGNIZED_TYPE), span)
         if c.verdict is not Verdict.confirmed:
@@ -2456,6 +2493,7 @@ def _food_premise(
     facts: list[UserFact],
     span: Span | None,
     rows: list[dict[str, Any]],
+    known: bool = True,
 ) -> SentenceJudgment:
     """🆕 2026-10-19 (D-348 보충 28 결정 3) **식품 두 전제의 인코더 쪽 판정** — 인코더(식품 입력)가 건강기능식품 오인 후보를 낸 문장.
 
@@ -2480,6 +2518,12 @@ def _food_premise(
     basis = list(j.risk.encoder_basis)
     if premise is Premise.식품:
         if not basis or any(b.violation is not hf or b.moved_from is not None for b in basis):
+            return j
+        # 🆕 (보충 29) 전제 확정의 확신 문턱 — 아래면 확정하지 않고 보류(하한 · 근거는 그대로)
+        if not _premise_confident(e, hf):
+            return j
+        # 🆕 2026-10-20 (보충 31) 품목을 모르면 답 없는 전제 확정을 하지 않는다 — `_hf_premise` 와 같은 문
+        if not known:
             return j
         c = _enc_confirmed(j, hf, span)
         if c.verdict is not Verdict.confirmed:
@@ -2527,6 +2571,58 @@ def _food_premise(
     return held.model_copy(update={"user_facts": [uf]})
 
 
+#: 🆕 2026-10-20 (보충 31) **답 없는 전제 확정이 서는 전제** — `_food_premise`(`식품` 3호) · `_hf_premise`(`건기식_비인정` 4.나).
+#:    품목을 모르면 이 둘에서 확정하지 않고, 확정될 문장이었으면 기록을 「품목 선택 필요」로 둔다(`_premise_sentences` 의 `pending`)
+_PREMISE_CONFIRM = frozenset({Premise.식품, Premise.건기식_비인정})
+
+
+def _category_markable(rec: SentenceJudgment) -> bool:
+    """기록을 「품목 선택 필요」(`cat_unknown`)로 바꿀 수 있는 문장인가 — 확신 부족 보류 · 선택지 · 답이 없음 · 판정 대상 아님이 아님.
+
+    🔴 선택지(`fact_check` · `substantiation`)는 `cat_unknown` 에 실을 수 없다(계약). `_mark_category_needed`(절대형 · 보충 8)와
+       `_category_needed`(전제 확정 · 보충 31)가 같은 조건을 쓴다 (D-99).
+    """
+    return (
+        rec.verdict is Verdict.hold
+        and rec.hold_reason is HoldReason.low_conf
+        and rec.fact_check is None
+        and rec.substantiation is None
+        and not rec.user_facts
+        and rec.user_subst is None
+        and not rec.not_claim
+    )
+
+
+def _category_needed(
+    base: list[SentenceJudgment], changed: list[SentenceJudgment], pending: set[str]
+) -> list[SentenceJudgment]:
+    """🆕 2026-10-20 (보충 31) 품목을 몰라 전제 확정을 막은 문장의 기록 → **품목 선택 필요**(`cat_unknown`). 바뀐 문장 목록을 낸다.
+
+    ★ 종전에는 분기에 전제 확정이 서서 `_recorded` 가 기록을 `cat_unknown` 으로 두었다(위험도는 그 분기의 제재표 하한).
+       확정을 막은 뒤에도 「결과가 품목에 달렸다」는 그대로라 사유만 남긴다 — 위험도는 기록 자신의 것(인코더 하한은 R1 층)이다.
+    🚨 이미 바뀐 문장은 그 위에서 · 조건이 안 맞으면(`_category_markable`) 그대로다.
+    """
+    by = {c.sent_id: c for c in changed}
+    out = list(changed)
+    for b in base:
+        if b.sent_id not in pending:
+            continue
+        rec = by.get(b.sent_id, b)
+        if not _category_markable(rec):
+            continue
+        new = SentenceJudgment(
+            **{
+                **{k: getattr(rec, k) for k in type(rec).model_fields},
+                "hold_reason": HoldReason.cat_unknown,
+            }
+        )
+        if b.sent_id in by:
+            out[out.index(by[b.sent_id])] = new
+        else:
+            out.append(new)
+    return out
+
+
 def _branch_outcome(premise: Premise, sents: list[SentenceJudgment]) -> Outcome:
     """분기의 종착 — 검수 종착과 같은 라우터를 전제의 품목으로 부른다 (D-99). 지시는 재료가 다 있을 때만(`guidance_ready`)."""
     name = route_review(
@@ -2548,7 +2644,9 @@ def _recorded(
     """기록되는 판정 하나 (D-319 ① ①′ · D-263 ①). 바꿀 것이 없으면 `None`.
 
     🔴 **모든 전제에서 같은 위반이 설 때만 확정이다.** 한 전제라도 판정하지 못하거나(사전 침묵) 위반이 없으면 보류 + 분기다 —
-       적용되는지 모르는 법의 조문으로 확정하지 않는다. 보류에도 유형 · 근거 · 가장 보수적인 위험도를 싣는다
+       적용되는지 모르는 법의 조문으로 확정하지 않는다.
+       🔄 2026-10-21 (D-348 보충 33) — 품목을 알고 하위 전제(인정 여부 · 기능성 표시 여부)만 모를 때도 같다 — 답하지 않은 하위 전제를
+       가장 나쁜 쪽으로 가정해 확정하지 않는다(답 대기 · 판정은 답 뒤). 위험도는 분기 최댓값을 싣는다(D-348 결정 4). 보류에도 유형 · 근거 · 가장 보수적인 위험도를 싣는다
        (계약 `_recorded_is_conservative` — 기록된 위험도 ≥ 검증 안 된 모든 분기의 위험도).
     🚨 인코더 후보는 **기록 판정의 것**(`base` — 이 품목의 전제 전부로 거른 합집합)을 그대로 둔다. 가장 무거운 전제의
        문장을 옮겨 올 때 그 전제 하나로 거른 후보가 따라오면 다른 전제에서 서는 후보가 사라진다 (D-323 · 2026-10-09 (다)).
@@ -2688,9 +2786,14 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
        응답을 내지 않는다 (D-147 · D-220). 그때는 종전대로다(품목 미확정의 확정 위반은 위험도 없이 보류로 내려간다).
     🔴 DB 가 없으면(하한을 못 읽는다) 아무것도 하지 않는다 — 분기마다 위험도를 지어내지 않는다 (D-09).
     🚨 `judge` · `assess_risk` 가 낸 문장을 **바꿔 끼운다**(`upsert_sentences`) — 문장 수는 늘지 않는다.
+    🆕 2026-10-21 (D-348 보충 34 결정 1) — **사용자가 전제를 골랐으면**(`ProductContext.premise`) 그 전제 하나로 판정하고 기록 = 그 전제의
+       판정이다(분기 없음). 분기 문장과 **같은 함수**(`_premise_sentences`)라 「분기에서 읽은 결과 = 전제를 넣은 결과」다(D-99 ·
+       `tests/test_premise_chosen.py`). 전제가 하나뿐인 품목(화장품 · 일반상품)은 종전 그대로다 — 고를 것이 없었다.
     """
-    category = (state.get("product") or ProductContext()).category
+    product = state.get("product") or ProductContext()
+    category = product.category
     premises = pm.PREMISES_OF[category]
+    chosen = product.premise if len(premises) > 1 and product.premise in premises else None
     cur = ((config or {}).get("configurable") or {}).get("conn")
     base = list(state.get("sentences", []))
     if len(premises) < 2 or not pm.criteria_ready(premises) or cur is None or not base:
@@ -2701,7 +2804,12 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
     hit = any(hs for r in state.get("law_results", []) for _, hs in r.dict_hits)
     # 🔄 2026-10-15 (D-340 결정 5) — 인코더 후보가 있으면 추정 위험도에도 쓴다. 안 읽으면 표가 빈 것처럼 「모름」이 된다(D-343)
     rows = load_sanction_rows(cur) if hit or state.get("encodings") else []
-    per = {p: _premise_sentences(p, state, rows) for p in premises}
+    # 🆕 2026-10-20 (보충 31) 품목을 몰라 막은 전제 확정 — 기록을 「품목 선택 필요」로 둘 문장
+    pending: set[str] = set()
+    if chosen is not None:
+        # 🆕 (보충 34) 고른 전제 — 기록 = 그 전제의 판정. 다른 전제는 계산하지 않는다(고를 것이 남지 않았다 · 합칠 것이 없다)
+        return {"sentences": _premise_sentences(chosen, state, rows, pending)}
+    per = {p: _premise_sentences(p, state, rows, pending) for p in premises}
     # 🆕 2026-10-11 — 제품을 알 때 보류 문장의 유형 후보는 그 품목의 전제로 거른 합집합이다 (`_held_candidates`)
     held = (
         []
@@ -2720,7 +2828,13 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         recs = _with_record_encoder(base, held, per, premises)
         # 🆕 2026-10-16 (보충 3 결정 4 · 건기식 인정 질병 분기) — 분기를 내지 않아도 사용자의 답은 기록에 출처로 남긴다(전제마다 판정이 같아 분기가 생략된 경우)
         recs = _with_record_answers(base, recs, per, premises)
-        return {"sentences": recs} if recs else {}
+        # 🆕 2026-10-20 (D-348 보충 32 · 결함 A) — 접어도 분기는 계산해 둔다. 질문(사실 · 실증 · 유형 질문)은 `doc_rules` 가
+        #    **전제마다** 정한다 — 접힌 기록 문장은 근거 전제가 둘이라 질문을 정하지 못한다(`_enc_subst` 「전제가 둘 이상이면 None」).
+        #    ★ 접을지는 질문까지 정한 뒤에 다시 본다 — 여기서는 「질문 전 판정이 같다」만 안다(`_branch_key`).
+        out: dict[str, Any] = {"folded": _make_branches(premises, per)}
+        if recs:
+            out["sentences"] = recs
+        return out
     reason = HoldReason.cat_unknown if category is None else HoldReason.premise_unknown
     changed = [
         r
@@ -2730,7 +2844,16 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
     changed += [h for h in held if h.sent_id not in {r.sent_id for r in changed}]
     # 🆕 2026-10-16 (D-348 보충 2 결정 4) — 기록 문장(바뀐 것 · 그대로인 것)의 인코더 하한 = 전제 최댓값
     changed = _with_record_encoder(base, changed, per, premises)
-    branches = [
+    if pending:
+        changed = _category_needed(base, changed, pending)
+    return {"branches": _make_branches(premises, per), "sentences": changed}
+
+
+def _make_branches(
+    premises: tuple[Premise, ...], per: dict[Premise, list[SentenceJudgment]]
+) -> list[Branch]:
+    """전제마다 분기 하나 — 보이는 분기(`branches`)와 접힌 분기(`folded`)가 같은 모양이다 (D-99)."""
+    return [
         Branch(
             premise=p,
             outcome=_branch_outcome(p, per[p]),
@@ -2739,7 +2862,6 @@ def premise_branches(state: CoreState, config=None) -> dict[str, Any]:  # noqa: 
         )
         for p in premises
     ]
-    return {"branches": branches, "sentences": changed}
 
 
 @timed
@@ -2757,8 +2879,15 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     facts, substs = list(product.facts), list(product.substs)
     sents = list(state.get("sentences", []))
     branches = list(state.get("branches") or [])
+    # 🆕 2026-10-20 (D-348 보충 32 · 결함 A) — 접힌 분기도 분기처럼 전제마다 질문 · 답을 정하고 기록은 분기에서 모은다.
+    #    「같은 문장 · 같은 품목이면 분기를 접든 펼치든 기록은 같다」(`tests/test_fold_invariant.py`)
+    folded = not branches and bool(state.get("folded"))
+    if folded:
+        branches = list(state.get("folded") or [])
     spans = _sentence_spans(state)
     # 🔄 2026-10-17 (보충 8 결정 1) — 인코더 쪽 절대형 확정은 품목이 정해졌을 때만(사용자가 품목을 고르면 그 품목으로 다시 판정)
+    #    ⚠️ 2026-10-20 (보충 31) — 검수 화면은 아직 다시 판정하지 않는다(고른 분기를 펼친다 · `review.html` 분기 고르기) — 화면 쪽 집행 대기(ksr).
+    #       그동안 화면에서 품목을 고르면 이 문으로 막힌 미리보기가 보인다(dev 조건부 확정위반 32 중 18 · 원장 10-20 ②)
     known = product.category is not None
     if not branches:
         changed = [
@@ -2799,9 +2928,40 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
         elif x is not None:
             changed.append(x)
     out: dict[str, Any] = {"branches": new_b}
+    if folded:
+        # 🆕 (보충 32 · 펼침 규칙) 질문까지 정한 뒤 **전제끼리 결과가 갈리면** 분기를 드러낸다 — 판정 · 질문(사실 · 실증)이
+        #    다르면 고를 것이 생긴 것이다. 숨긴 채 두면 그 전제의 질문이 보이지 않거나(한쪽만 질문) 기록이 막다른 보류가 된다
+        #    (선택지 없는 전제 보류 · `_premise_dependent`). 같으면 접힌 채다(보이는 분기 없음 · 종전 모양).
+        by_new = {c.sent_id: c for c in changed}
+        same = len({tuple(map(_shown_key, b.sentences)) for b in new_b}) == 1
+        if same and not any(_premise_dependent(by_new.get(s.sent_id, s)) for s in sents):
+            out = {"folded": new_b}
     if changed:
         out["sentences"] = changed
     return out
+
+
+def _shown_key(j: SentenceJudgment) -> tuple:
+    """질문까지 정한 뒤 분기를 접어도 되는가 보는 열쇠 — 분기를 낼지 보는 열쇠(`_branch_key`) + 선택지(사실 · 실증 질문) (🆕 2026-10-20 · 보충 32)."""
+    return (
+        _branch_key(j),
+        None if j.fact_check is None else j.fact_check.model_dump_json(),
+        None if j.substantiation is None else j.substantiation.model_dump_json(),
+    )
+
+
+def _premise_dependent(rec: SentenceJudgment) -> bool:
+    """기록이 **전제에 달렸나** — 품목 · 전제를 몰라 보류이고 선택지(사실 · 실증 질문)가 없다 (🆕 2026-10-20 · D-348 보충 32).
+
+    ★ 분기가 보이면 분기가 선택지다(`_record_condition` 의 「섞였다 → 보류 + 분기」). 분기가 접혀 있으면 이 기록은 막다른 보류다 —
+       `doc_rules` 가 이때 분기를 드러낸다. 조건부 위반(전제 보류 + 선택지)은 질문이 선택지라 해당하지 않는다.
+    """
+    return (
+        rec.verdict is Verdict.hold
+        and rec.hold_reason in (HoldReason.premise_unknown, HoldReason.cat_unknown)
+        and rec.fact_check is None
+        and rec.substantiation is None
+    )
 
 
 def _sentence_spans(state: CoreState) -> dict[str, Span]:
@@ -2854,15 +3014,7 @@ def _mark_category_needed(
     ★ 전제마다 등급이 갈린다(D-229 · `cat_unknown` 의 뜻) — 그 전제에서는 답 없이 위반, 다른 전제에서는 아니다. 품목을 고르면 다시 판정한다.
     🔴 확신 부족 보류 · 선택지 · 답이 없는 기록만 — 선택지(`fact_check` · `substantiation`)는 `cat_unknown` 에 실을 수 없다(계약). 바꿀 것이 없으면 None.
     """
-    if (
-        rec.verdict is not Verdict.hold
-        or rec.hold_reason is not HoldReason.low_conf
-        or rec.fact_check is not None
-        or rec.substantiation is not None
-        or rec.user_facts
-        or rec.user_subst is not None
-        or rec.not_claim
-    ):
+    if not _category_markable(rec):
         return None
     if not any(_encoder_only(x) and _absolute_types(x) for x in per):
         return None
@@ -2875,29 +3027,44 @@ def _mark_category_needed(
 
 
 def _record_at_least(rec: SentenceJudgment, per: list[SentenceJudgment]) -> SentenceJudgment | None:
-    """기록 문장을 분기의 가장 나쁜 경우 **이상**으로 (🆕 2026-10-17 · D-263 ① · D-319 ① · 보충 6 결정 5). 바꿀 것이 없으면 None.
+    """기록 문장을 분기에 맞춘다 (🆕 2026-10-17 · 보충 6 결정 5 · 🔄 2026-10-21 D-348 보충 33). 바꿀 것이 없으면 None.
 
     ★ 분기 문장이 기록 뒤에(`doc_rules`) 인코더 쪽 절대형 위반으로 오르면 기록의 위험도가 분기보다 낮아진다 — 계약이 거부한다
        (`_recorded_is_conservative`). 두 경우:
-       · 위험도가 선 분기가 **전부** 확정 위반이고 유형이 같다 → 기록 = 가장 무거운 분기의 판정(D-319 ① 「모든 전제에서 같은 위반」)
-       · 그 밖 → 판정은 그대로(품목 · 전제에 달렸다) · 위험도만 분기 최댓값으로 올린다(기록 = 가장 보수적인 경우)
+       · **모든 분기**(위험도가 없는 분기까지)가 같은 위반으로 확정 → 기록 = 그 판정(어느 전제를 골라도 같은 판정이다 · 물을 것이 없다)
+       · 그 밖 → **판정은 답 대기 그대로**(어느 분기인지는 사용자가 답한다 · 보충 33) · 위험도만 분기 최댓값으로 올린다(계약 · D-348 결정 4)
+    ⛔ 종전에는 「위험도가 선 분기만 전부 확정」이어도 기록을 확정했다 — 위험도 없는 분기를 빼고 세어 한 전제만 확정해도 기록이
+       확정될 수 있었다(10-21 에 넓게 옮겼다가 무조건부 4 · 조건부 4 행 · 원장 10-21 ③). 답하지 않은 하위 전제를 가정한 확정이라 걷었다(보충 33).
     """
     live = [x for x in per if x.risk.final is not None and not x.not_claim]
     if not live or rec.not_claim:
         return None
     top = max(live, key=lambda x: x.risk.final.level)  # type: ignore[union-attr]
     have = rec.risk.final
+    # 🔄 2026-10-21 (D-348 보충 32 · 33) — **모든 분기**(위험도가 없는 분기까지)가 같은 위반으로 확정하면 기록도 그 판정이다 ·
+    #    위험도 비교보다 먼저 본다 — 접힌 분기에서 두 하위 전제가 모두 절대형으로 확정했는데 기록 위험도가 같아(R1) 보류로 남던 것(원장 10-21 ①)
+    if (
+        all(x.verdict is Verdict.confirmed and x.violations and not x.not_claim for x in per)
+        and len({tuple(x.violations) for x in per}) == 1
+    ):
+        worst = max(per, key=lambda x: x.risk.final.level if x.risk.final is not None else -1)
+        if not (
+            rec.verdict is Verdict.confirmed
+            and rec.violations == worst.violations
+            and have is not None
+            and worst.risk.final is not None
+            and have.level >= worst.risk.final.level
+        ):
+            return SentenceJudgment(
+                **{
+                    **{k: getattr(worst, k) for k in type(worst).model_fields},
+                    "sent_id": rec.sent_id,
+                    "encoder_candidates": rec.encoder_candidates,
+                }
+            )
+        return None  # 이미 그 판정 · 그 위험도 이상이다
     if have is not None and have.level >= top.risk.final.level:  # type: ignore[union-attr]
         return None
-    confirmed = [x for x in live if x.verdict is Verdict.confirmed and x.violations]
-    if len(confirmed) == len(live) and len({tuple(x.violations) for x in confirmed}) == 1:
-        return SentenceJudgment(
-            **{
-                **{k: getattr(top, k) for k in type(top).model_fields},
-                "sent_id": rec.sent_id,
-                "encoder_candidates": rec.encoder_candidates,
-            }
-        )
     # 하한 칸은 분기가 든 하한(그 유형 · 전제의 제재표 하한 — `_enc_absolute` 와 같은 칸)을 올려 싣는다 — 근거 스팬 없이 하한 위로 올리지 않는다(D-131)
     lows = [r for r in (rec.risk.floor, top.risk.floor) if r is not None]
     if not lows:
@@ -2950,7 +3117,17 @@ def _record_condition(
     ]
     fields = {k: getattr(rec, k) for k in type(rec).model_fields}
     if live and len(answered) == len(live):
-        # 🔄 2026-10-17 (보충 5 결정 1 · 1-b) — 가장 나쁜 분기 = 판정 순서(확정 위반 > 보류 > R0) · 같으면 위험도
+        # 🔄 2026-10-21 (D-348 보충 33 결정 1 · 2 · 보충 34 결정 3) — 답한 뒤에도 **모든 분기**(위험도가 없는 분기까지)가 같은 판정일 때만
+        #    기록을 그 판정으로 둔다. 갈리면 남은 것은 전제(하위 전제 · 품목)다 — 답하지 않은 전제를 가장 나쁜 쪽으로 가정해 확정하지 않는다.
+        #    기록은 전제 보류(분기가 선택지 · 접혀 있었으면 `doc_rules` 가 펼친다)이고 위험도는 분기 최댓값(`_record_at_least`).
+        #    ⛔ 종전(10-17 · 1-b)에는 「가장 나쁜 분기 = 기록」이었다 — 보충 5 결정 1 의 「판정 = 더 나쁜 쪽」은 **출처**(사전 · 인코더)를 합치는
+        #       규칙인데 전제를 합치는 데까지 넓혀 썼다. 보충 33 집행 때 이 자리를 빠뜨렸다(2026-10-21 · 대역 재현)
+        if rec.verdict is Verdict.hold and not (
+            all(x.verdict is Verdict.confirmed and not x.not_claim for x in per)
+            and len({tuple(x.violations) for x in per}) == 1
+        ):
+            return _premise_hold(fields, reason)
+        # 🔄 2026-10-17 (보충 5 결정 1 · 1-b) — 모든 분기가 같은 판정이다 · 실을 분기 = 판정 순서(확정 위반 > 보류 > R0) · 같으면 위험도
         top = max(
             answered,
             key=lambda x: (
@@ -3012,6 +3189,14 @@ def _record_condition(
                 "user_facts": top.user_facts,
             }
         )
+    return _premise_hold(fields, reason)
+
+
+def _premise_hold(fields: dict[str, Any], reason: HoldReason) -> SentenceJudgment:
+    """분기끼리 갈린 기록 — 전제(품목 · 하위 전제)를 몰라 보류 · 분기가 선택지다(선택지 칸은 비운다 · 위험도 · 근거는 그대로).
+
+    `_record_condition` 의 두 자리(조건부가 섞임 · 답한 뒤 갈림)가 같이 쓴다(D-99 · 🆕 2026-10-21 보충 34).
+    """
     return SentenceJudgment(
         **{
             **fields,
@@ -3288,10 +3473,41 @@ def _encoder_side(
 ENCODER_ABSOLUTE_TAU: dict[str, float] = {"c451942436f0": 0.699}
 
 
+def _bundle() -> str | None:
+    """지금 판의 판 지문 — 인코더가 없으면 None. 두 τ 표(`ENCODER_ABSOLUTE_TAU` · `ENCODER_PREMISE_TAU`)가 같은 열쇠를 쓴다(D-99)."""
+    d = enc.configured_dir()
+    return None if d is None else enc.bundle_mark(d)
+
+
 def _absolute_tau() -> float | None:
     """지금 판의 절대형 확정 τ — 인코더가 없거나 표에 없는 판이면 None(문턱 없음)."""
-    d = enc.configured_dir()
-    return None if d is None else ENCODER_ABSOLUTE_TAU.get(enc.bundle_mark(d))
+    b = _bundle()
+    return None if b is None else ENCODER_ABSOLUTE_TAU.get(b)
+
+
+#: 🆕 2026-10-19 (D-348 보충 29) **전제가 답인 확정(답 없이)의 확신 문턱** — 판 지문 → 인코더 유형 → τ.
+#:    서는 자리 — `_food_premise`(`식품` 전제 3호) · `_hf_premise`(`건기식_비인정` 전제 · 옮긴 근거) — 전제가 「기능성 표시 요건 없음 · 인정 없음」을
+#:    답했고 남는 불확실은 인코더의 유형 판단 하나라 절대형(C)과 같은 신뢰 규칙의 몫이다(보충 17 결정 2). 두 자리 모두 같은 점수(건강기능식품 오인)라 유형 단위로 둔다.
+#:    고르는 규칙 — `ENCODER_ABSOLUTE_TAU` 와 같다(확장 dev 조건부의 그 자리 확정에서 틀림 ≤ 1 인 가장 낮은 τ · 측정 전 고정 · 보충 17 결정 2).
+#:    `[측정]` D4-20 `c451942436f0` — `식품` 분기 3호 확정 47 행 · 틀림 0.5616 · 0.6926 · 0.8143 → τ ∈ (0.6926, 0.7402] · 0.693 · 잃는 맞는 확정 5 / 43 ·
+#:       데이터 밖 적법 확정 1 → 0(`gpt-038` 0.618) (원장 10-19(B) ⑨ ⑩) · 「다이어트를 도와드립니다」(D · 원천 체중조절용 조제식품)는 전제가 맞지 않는 행이라
+#:       틀림으로 세지 않았다(⬜ 특수용도식품 전제 · 보충 29 결정 2) · 🚨 틀린 행과 0.0004 차이(맞는 쪽은 0.047)
+#:    🔴 표에 없는 판 · 유형은 문턱 없음(`ENCODER_ABSOLUTE_TAU` 와 같다) — 채택 판이 바뀌면 다시 잰다(`tests/test_absolute_tau.py`)
+ENCODER_PREMISE_TAU: dict[str, dict[Violation, float]] = {
+    "c451942436f0": {Violation.건강기능식품_오인: 0.693}
+}
+
+
+def _premise_tau(v: Violation) -> float | None:
+    """지금 판 · 그 유형의 전제 확정 τ — 인코더가 없거나 표에 없으면 None(문턱 없음)."""
+    b = _bundle()
+    return None if b is None else ENCODER_PREMISE_TAU.get(b, {}).get(v)
+
+
+def _premise_confident(e: SentEncoding, v: Violation) -> bool:
+    """전제가 답인 확정을 세울 만큼 인코더가 그 유형을 믿는가 — 문턱이 없으면 참(종전대로) · 점수가 없으면 0 으로 센다(D-220)."""
+    tau = _premise_tau(v)
+    return tau is None or dict(e.scores).get(v.value, 0.0) >= tau
 
 
 def _absolute_types(s: SentenceJudgment) -> set[Violation]:
@@ -3603,13 +3819,102 @@ def _answered(
     )
 
 
+def _ref_types(s: SentenceJudgment) -> set[str]:
+    """참고 조문을 고를 유형 — 확정 유형 · 인코더 근거 유형 · 인코더 후보 유형의 합(판정 뒤라야 선다)."""
+    return {
+        *(v.value for v in s.violations),
+        *(b.violation.value for b in s.risk.encoder_basis),
+        *(c.violation.value for c in s.encoder_candidates),
+    }
+
+
+@timed
+def references(state: CoreState) -> dict[str, Any]:
+    """🆕 2026-10-19 (D-348 「검색 · 리랭커의 자리」 (나)) **참고 조문을 판정 뒤에 유형 · 법 안에서 다시 고른다**.
+
+    ★ 판정 앞에서 넓게 한 번 찾은 후보(`retrieve` · 문장마다 법마다 폭만큼)는 그대로 쓴다 — 고르는 자리만 판정 뒤로 옮겼다.
+       문장의 유형(`_ref_types`)이 정해진 뒤 그 (유형 · 법)의 규범 문서(`statute.REFERENCE_DOCS`) 안의 후보만 남겨
+       법별 노드와 같은 규칙으로 고른다(`rt.law_view` → 참고 범위 `in_reference_scope` → `_pick` · D-99).
+       기록 문장은 이 판정에 보낸 법, 분기 문장은 그 전제의 법(`pm.PREMISE_LAWS`)으로 고른다.
+    🔴 판정 칸(판정 · 유형 · 근거 조문(호) · 위험도 · 분기)은 건드리지 않는다 — `evidence` 의 참고 조문 자리만 바꾼다.
+       근거 조문은 법별 노드가 고른 참고 조문(`law_results[*].articles`)이 **아닌** 줄이다 — 그 줄은 그대로 둔다.
+    🔴 유형이 없는 문장 · 표에 없는 (유형 · 법)은 참고 조문을 싣지 않는다(D-220) — 닮은 글자만으로 고른 조문을 보이지 않는다.
+    ⛔ DB 가 없어 후보가 없으면(`vector_hits` · `lexical_hits` 빔) 참고 조문이 비는 것은 종전과 같다.
+    """
+    evid = {e.sent_id: e for e in state.get("evidence", [])}
+    sents = list(state.get("sentences") or [])
+    if not evid or not sents:
+        return {}
+    scope = frozenset(state.get("annex_scope") or ())
+    body = frozenset(state.get("body_scope") or ())
+    picked: dict[str, list[EvidenceArticle]] = {}
+    for r in state.get("law_results", []):
+        for sid, arts in r.articles:
+            picked.setdefault(sid, []).extend(arts)
+
+    def retarget(s: SentenceJudgment, laws: tuple[str, ...]) -> SentenceJudgment:
+        old = picked.get(s.sent_id, [])
+        own = [a for a in s.evidence if a.basis or a not in old]
+        types = _ref_types(s)
+        e = evid.get(s.sent_id)
+        refs: list[EvidenceArticle] = []
+        if types and e is not None and not s.not_claim:
+            for law in laws:
+                docs = statute.reference_docs(types, law)
+                if not docs:
+                    continue
+                hits = [
+                    h
+                    for h in rt.law_view(e.vector_hits, e.lexical_hits, law)
+                    if h.law_id in docs and in_reference_scope(h, scope, body)
+                ]
+                refs += [a for a in _pick(hits)[0] if a not in refs]
+        new = own + _references(refs, own)
+        return s if new == s.evidence else s.model_copy(update={"evidence": new})
+
+    record_laws = tuple(LAW_OF_NODE[n] for n in state.get("laws") or () if n in LAW_OF_NODE)
+    out: dict[str, Any] = {"sentences": [retarget(s, record_laws) for s in sents]}
+    branches = state.get("branches") or []
+    if branches:
+        out["branches"] = [
+            b.model_copy(
+                update={
+                    "sentences": [
+                        retarget(
+                            s,
+                            tuple(
+                                LAW_OF_NODE[n]
+                                for n in pm.PREMISE_LAWS[b.premise]
+                                if n in LAW_OF_NODE
+                            ),
+                        )
+                        for s in b.sentences
+                    ]
+                }
+            )
+            for b in branches
+        ]
+    return out
+
+
 #: 코어 순서 — 팬아웃 앞 · 법별 노드(`LAW_NODES` · 병렬) · 팬아웃 뒤. 컴파일본과 스텁이 **이 표 하나**를 쓴다 (D-99).
 CORE_BEFORE_LAWS = ("split", "classify", "retrieve", "match_dict", "encode")
-CORE_AFTER_LAWS = ("merge_laws", "judge", "assess_risk", "premise_branches", "doc_rules")
+CORE_AFTER_LAWS = (
+    "merge_laws",
+    "judge",
+    "assess_risk",
+    "premise_branches",
+    "doc_rules",
+    # 🆕 2026-10-19 — 참고 조문을 판정 뒤에 유형 · 법 안에서 고른다(판정 칸은 그대로)
+    "references",
+)
 NODES: dict[str, Callable[..., dict[str, Any]]] = {
     **{f.__name__: f for f in (split, classify, retrieve, match_dict, encode)},
     **{name: _law_node(name) for name in LAW_NODES},
-    **{f.__name__: f for f in (merge_laws, judge, assess_risk, premise_branches, doc_rules)},
+    **{
+        f.__name__: f
+        for f in (merge_laws, judge, assess_risk, premise_branches, doc_rules, references)
+    },
 }
 
 
@@ -3733,10 +4038,10 @@ def route_review(state: ReviewState) -> str:
     sents = state.get("sentences", [])
     if not sents:
         return "hold"
-    # 🔄 2026-10-16 (D-348 보충 4 결정 2) — **조건부 위반**(답하면 확정되는 보류)은 **답하지 않은 경우 = 확정 B** 로 센다
-    #    (D-263 ① 기록 = 가장 나쁜 경우) — A/C 가 섞이면 증명서 · B 만이면 지시(재료가 없으면 `guidance` 가 보류로) · 통과는 아니다(확정 ∧ R0).
-    #    그 밖의 확정 아님은 보류다
-    if any(s.verdict is not Verdict.confirmed and not is_conditional(s) for s in sents):
+    # 🔄 2026-10-21 (D-348 보충 33) — **답하기 전은 답 대기다** · 조건부 위반(답하면 확정되는 보류)도 보류다. 판정은 답 뒤에 낸다.
+    #    ⛔ 종전(보충 4 결정 2 · D-263 ①)에는 「답하지 않은 경우 = 확정 B」로 세어 증명서 · 지시로 보냈다 — 사용자가 답하지 않은
+    #       사실을 가장 나쁜 쪽으로 가정해 판정한 것이다(보충 33 이 걷음). 확정 아님은 모두 보류다
+    if any(s.verdict is not Verdict.confirmed for s in sents):
         return "hold"
     # 🆕 2026-10-01 (W4 1판) — **위험도가 없는 확정 위반은 증명서 · 지시로 못 간다** — 보류다 (D-268 「막힘」 · D-220).
     #    지시는 실증 분기(실증 전 위험도)를, 증명서는 사유 설명을 요구한다 — 하한(`sanction_rule` · W5)이 서기 전에는 어느 쪽도
@@ -3944,6 +4249,12 @@ def to_response(state: ReviewState) -> JudgeResponse:
        않았으면 빈 목록이다(`app/premise.py` `criteria_ready`).
     """
     category = (state.get("product") or ProductContext()).category
+    # 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내는 **판정을 다 낸 뒤** 붙인다 — 판정 · 분기 열쇠에 들지 않는다(표시 전용)
+    return guide.attach(_response(state, category))
+
+
+def _response(state: ReviewState, category: Category | None) -> JudgeResponse:
+    """`to_response` 의 계약 옮김 — 안내를 붙이기 전."""
     return JudgeResponse(
         outcome=state.get("outcome", Outcome.hold),
         category=category,

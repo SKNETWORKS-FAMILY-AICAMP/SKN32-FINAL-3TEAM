@@ -1,0 +1,1132 @@
+{
+ "outcome": "hold",
+ "category": null,
+ "category_source": null,
+ "not_reviewed": [],
+ "sentences": [
+  {
+   "sent_id": "s0",
+   "text": "이 크림은 피부 미백에 도움을 줍니다.",
+   "verdict": "hold",
+   "hold_reason": "cat_unknown",
+   "violations": [
+    "건강기능식품_오인"
+   ],
+   "infeasibility": "A",
+   "evidence": [
+    {
+     "law_id": "013094",
+     "article": "제8조제1항제3호",
+     "item": "3.",
+     "quote": "3. 건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+     "chunk_id": "law:law_013094_20250919#0008001-0-2#0",
+     "basis": false,
+     "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+    },
+    {
+     "law_id": "013453",
+     "article": "[별표 1]제3호",
+     "item": "본문",
+     "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고:  「건강기능식품에 관한 법률」 제3조제2호에 따른 기능성이 있는 것으로 표현하는 표시ㆍ광고. 다만, 다음 각 목의 어느 하나에 해당하는 표시ㆍ광고는 제외한다.",
+     "chunk_id": "annex:013453_0001#본문#3#0",
+     "basis": false,
+     "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+    }
+   ],
+   "risk": {
+    "floor": "R2",
+    "encoder": "R1",
+    "encoder_basis": [
+     {
+      "premise": "일반식품_기능성",
+      "violation": "건강기능식품_오인",
+      "moved_from": null,
+      "floor": "R2",
+      "articles": [
+       {
+        "law_id": "013094",
+        "article": "제8조제1항제3호",
+        "item": "",
+        "quote": null,
+        "chunk_id": null,
+        "basis": false,
+        "doc_title": null
+       },
+       {
+        "law_id": "013453",
+        "article": "[별표 1]제3호",
+        "item": "",
+        "quote": null,
+        "chunk_id": null,
+        "basis": false,
+        "doc_title": null
+       }
+      ]
+     },
+     {
+      "premise": "건기식_인정",
+      "violation": "거짓_과장",
+      "moved_from": "건강기능식품_오인",
+      "floor": "R1",
+      "articles": [
+       {
+        "law_id": "013094",
+        "article": "제8조제1항제4호",
+        "item": "",
+        "quote": null,
+        "chunk_id": null,
+        "basis": false,
+        "doc_title": null
+       },
+       {
+        "law_id": "013453",
+        "article": "[별표 1]제4호가목",
+        "item": "",
+        "quote": null,
+        "chunk_id": null,
+        "basis": false,
+        "doc_title": null
+       },
+       {
+        "law_id": "013453",
+        "article": "[별표 1]제4호나목",
+        "item": "",
+        "quote": null,
+        "chunk_id": null,
+        "basis": false,
+        "doc_title": null
+       }
+      ]
+     },
+     {
+      "premise": "화장품",
+      "violation": "의약품_오인",
+      "moved_from": "건강기능식품_오인",
+      "floor": "R2",
+      "articles": [
+       {
+        "law_id": "002015",
+        "article": "제13조제1항제1호",
+        "item": "1.",
+        "quote": "1. 의약품으로 잘못 인식할 우려가 있는 표시 또는 광고",
+        "chunk_id": "law:law_002015_20260402#0013001-0-0#0",
+        "basis": false,
+        "doc_title": "화장품법"
+       },
+       {
+        "law_id": "008741",
+        "article": "[별표 5]제2호가목",
+        "item": "본문",
+        "quote": "의약품으로 잘못 인식할 우려가 있는 내용, 제품의 명칭 및 효능ㆍ효과 등에대한 표시ㆍ광고를 하지 말 것",
+        "chunk_id": "annex:008741_0005#본문#2.가#0",
+        "basis": false,
+        "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+       }
+      ]
+     }
+    ],
+    "final": "R2",
+    "evidence_span": null,
+    "ceiling": null,
+    "ceiling_note": null
+   },
+   "encoder_candidates": [
+    {
+     "violation": "건강기능식품_오인",
+     "confidence": 0.8382971882820129,
+     "moved_from": null,
+     "references": [
+      {
+       "law_id": "013094",
+       "article": "제8조제1항제3호",
+       "item": "3.",
+       "quote": "3. 건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-2#0",
+       "basis": false,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제3호",
+       "item": "본문",
+       "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고:  「건강기능식품에 관한 법률」 제3조제2호에 따른 기능성이 있는 것으로 표현하는 표시ㆍ광고. 다만, 다음 각 목의 어느 하나에 해당하는 표시ㆍ광고는 제외한다.",
+       "chunk_id": "annex:013453_0001#본문#3#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "estimate": null
+    },
+    {
+     "violation": "거짓_과장",
+     "confidence": 0.8382971882820129,
+     "moved_from": "건강기능식품_오인",
+     "references": [
+      {
+       "law_id": "002011",
+       "article": "제3조제1항제1호",
+       "item": "1.",
+       "quote": "1. 거짓ㆍ과장의 표시ㆍ광고",
+       "chunk_id": "law:law_002011_20250121#0003001-0-0#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고의 공정화에 관한 법률"
+      },
+      {
+       "law_id": "005361",
+       "article": "제3조제1항",
+       "item": "",
+       "quote": "① 법 제3조제1항제1호에 따른 거짓ㆍ과장의 표시ㆍ광고는 사실과 다르게 표시ㆍ광고하거나 사실을 지나치게 부풀려 표시ㆍ광고하는 것으로 한다.",
+       "chunk_id": "law:law_005361_20260701#0003001-0#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고의 공정화에 관한 법률 시행령"
+      },
+      {
+       "law_id": "013094",
+       "article": "제8조제1항제4호",
+       "item": "4.",
+       "quote": "4. 거짓ㆍ과장된 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-3#0",
+       "basis": false,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제4호나목",
+       "item": "본문",
+       "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#4.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "002015",
+       "article": "제13조제1항제4호",
+       "item": "4.",
+       "quote": "4. 그 밖에 사실과 다르게 소비자를 속이거나 소비자가 잘못 인식하도록 할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_002015_20260402#0013001-0-3#0",
+       "basis": false,
+       "doc_title": "화장품법"
+      },
+      {
+       "law_id": "008741",
+       "article": "[별표 5]제2호사목",
+       "item": "본문",
+       "quote": "사실과 다르거나 부분적으로 사실이라고 하더라도 전체적으로 보아 소비자가 잘못 인식할 우려가 있는 표시ㆍ광고 또는 소비자를 속이거나 소비자가속을 우려가 있는 표시ㆍ광고를 하지 말 것",
+       "chunk_id": "annex:008741_0005#본문#2.사#0",
+       "basis": false,
+       "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+      },
+      {
+       "law_id": "008741",
+       "article": "[별표 5]제2호아목",
+       "item": "본문",
+       "quote": "품질ㆍ효능 등에 관하여 객관적으로 확인될 수 없거나 확인되지 않았는데도불구하고 이를 광고하거나 법 제2조제1호에 따른 화장품의 범위를 벗어나는표시ㆍ광고를 하지 말 것",
+       "chunk_id": "annex:008741_0005#본문#2.아#0",
+       "basis": false,
+       "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+      }
+     ],
+     "estimate": null
+    }
+   ],
+   "evidence_mismatch": false,
+   "not_claim": false,
+   "spans": [
+    {
+     "start": 0,
+     "end": 21,
+     "label": "건강기능식품_오인"
+    }
+   ],
+   "substantiation": null,
+   "fact_check": null,
+   "user_facts": [],
+   "user_subst": null
+  }
+ ],
+ "branches": [
+  {
+   "premise": "식품",
+   "verified": false,
+   "outcome": "certificate",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "이 크림은 피부 미백에 도움을 줍니다.",
+     "verdict": "confirmed",
+     "hold_reason": null,
+     "violations": [
+      "건강기능식품_오인"
+     ],
+     "infeasibility": "A",
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조제1항제3호",
+       "item": "3.",
+       "quote": "3. 건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-2#0",
+       "basis": false,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제3호",
+       "item": "본문",
+       "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고:  「건강기능식품에 관한 법률」 제3조제2호에 따른 기능성이 있는 것으로 표현하는 표시ㆍ광고. 다만, 다음 각 목의 어느 하나에 해당하는 표시ㆍ광고는 제외한다.",
+       "chunk_id": "annex:013453_0001#본문#3#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "risk": {
+      "floor": "R2",
+      "encoder": null,
+      "encoder_basis": [],
+      "final": "R2",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "건강기능식품_오인",
+       "confidence": 0.911272406578064,
+       "moved_from": null,
+       "references": [
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제3호",
+         "item": "3.",
+         "quote": "3. 건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-2#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제3호",
+         "item": "본문",
+         "quote": "건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고:  「건강기능식품에 관한 법률」 제3조제2호에 따른 기능성이 있는 것으로 표현하는 표시ㆍ광고. 다만, 다음 각 목의 어느 하나에 해당하는 표시ㆍ광고는 제외한다.",
+         "chunk_id": "annex:013453_0001#본문#3#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [
+      {
+       "start": 0,
+       "end": 21,
+       "label": "건강기능식품_오인"
+      }
+     ],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "일반식품(건강기능식품이 아닌 식품)이라면 식품표시광고법과 표시광고법 기준으로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "일반식품_기능성",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "이 크림은 피부 미백에 도움을 줍니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [
+      "거짓_과장"
+     ],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제4호",
+       "quote": "4. 거짓ㆍ과장된 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-3#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅴ.2.다.(2)",
+       "item": "",
+       "quote": "(2) 전문가 개인의 견해는 당해 분야의 전문 지식에 기초하여야 하고, 그 내용은 당해 분야의 전문가라면 일반적으로 인정할 수 있는 내용이어야 하며, 반드시 그 견해는 사적이 아니라 공식적으로 밝힌 것이어야 한다. <예시> 피부과 전문의가 피부와 직간접적으로 관련되지 않은 내용에 대하여 밝힌 견해는 전문가 견해로 보기 어려움",
+       "chunk_id": "law:admrul_20246_20260903#prose-79#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.16.나",
+       "item": "",
+       "quote": "나. 반품, 교환, 대금지불방법, 상품우송료 등 부대비용, 금융이용 등 기타 거래내용 및 거래조건 등에 관하여 표시ㆍ광고함에 있어서는 사실대로 하여야 한다. 따라서 사실과 다르게 또는 과장하여 표시ㆍ광고하거나 모호하게 표시ㆍ광고하여 일반소비자를 오인시킬 우려가 있는 표시ㆍ광고행위는 부당한 표시ㆍ광고가 된다. <예  시> - 아파트 또는 상가 등의 분양 광고시 \"도심으로부터 10분 거리\"라고만 표시ㆍ광고하고 그것이 「출근시간(rush  hour)」기준인지 아니면 「조용한 밤 시간」 기준인지를 밝히지 아니함은 물론 또한 「버스」기준인지 「택시」기준 등인지를 밝히지 않는 경우 - \"무료증정\"이라고 하였는데 불구하고 실제는 특정상품을 일정액이상 구입해야 증정하는 경우 - \"불량품, 하자품을 언제든지 교환해 줍니다\"라고 표시ㆍ광고하였는데도 불구하고 교환하려 하면 정당한 이유 없이 \"불량품이 아니다\"라든가 \"기간이 넘었다\"든가 \"우리가 판매한 것이 아니다\"라는 식으로 교환을 거절하는 경우 - 통신판매 광고 시 어떤 제품의 가격이 10,000원이라고 표기하였으나 상품구매자가 실제로 지불해야 하는 금액은 상품우송료 3,000원을 포함하여 13,000원인 경우",
+       "chunk_id": "law:admrul_34717_20191212#prose-95#0",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35037",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35037_20230901#prose-40#1",
+       "basis": false,
+       "doc_title": "환경 관련 표시·광고에 관한 심사지침"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호라목",
+       "item": "본문",
+       "quote": null,
+       "chunk_id": null,
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제3호",
+       "item": "본문",
+       "quote": null,
+       "chunk_id": null,
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "75449",
+       "article": "제6조제1항제1호",
+       "item": "1.",
+       "quote": "1. 기능성에 도움을 줄 수 있다고 알려진 또는 보고된 기능성 원재료 또는 성분이 식품등에 들어있다는 내용\n예 : 본 제품에는 A(기능성)에 도움을 줄 수 있다고 알려진(또는 보고된) B(기능성 원재료 또는 성분)가 들어 있습니다.",
+       "chunk_id": "law:admrul_75449_20250101#adm-6-0-0#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제7호나목",
+       "item": "본문",
+       "quote": "제품의 제조방법ㆍ품질ㆍ영양가ㆍ원재료ㆍ성분 또는 효과와 직접적인 관련이 적은 내용이나 사용하지 않은 원재료 또는 성분을 강조함으로써 다른 업소의 제품을 간접적으로 다르게 인식하게 하는 내용의 표시ㆍ광고. 다만, 식품의약품안전처장이 소비자의 판단에 도움을 주기 위하여 표시ㆍ광고할 필요가 있다고 인정하여 고시하는 원재료 또는 성분을 사용하지 않았다는 표시ㆍ광고는 제외한다.",
+       "chunk_id": "annex:013453_0001#본문#7.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "일반식품_기능성",
+        "violation": "건강기능식품_오인",
+        "moved_from": null,
+        "floor": "R2",
+        "articles": [
+         {
+          "law_id": "013094",
+          "article": "제8조제1항제3호",
+          "item": "",
+          "quote": null,
+          "chunk_id": null,
+          "basis": false,
+          "doc_title": null
+         },
+         {
+          "law_id": "013453",
+          "article": "[별표 1]제3호",
+          "item": "",
+          "quote": null,
+          "chunk_id": null,
+          "basis": false,
+          "doc_title": null
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": {
+      "kind": "기능성_표시",
+      "confirmed_max": "R0",
+      "accepted_evidence": [
+       "기능성 표시 고시 요건 확인 자료(기능성 원재료 · 함량 · 제조업소 인증) · 표시 · 광고 자율심의 결과"
+      ],
+      "criteria": "일반식품은 「부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정」의 요건(기능성 범위 · 제조업소 · 원료 함량 등)을 모두 갖추었을 때만, 고시가 정한 방법대로 기능성을 표시할 수 있어요(식품표시광고법 시행령 [별표 1] 3.나). 예를 들어 「본 제품에는 ○○에 도움을 줄 수 있다고 알려진 △△가 들어 있습니다」처럼 원재료가 들어 있다는 형식으로 쓰고 「본 제품은 건강기능식품이 아닙니다」를 함께 적어야 하며, 「먹으면 살이 빠져요」처럼 쓰면 문제가 돼요."
+     },
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "일반식품이지만 기능성 표시 고시의 요건을 모두 채워 정해진 기능성 표시를 한 제품(기능성표시식품)이라면 이 전제입니다. 이런 제품의 광고는 자율심의 대상이고 「본 제품은 건강기능식품이 아닙니다.」가 들어가야 합니다. 이 문구를 적는 것만으로는 이 전제가 아닙니다.",
+   "evidence": []
+  },
+  {
+   "premise": "건기식_인정",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "이 크림은 피부 미백에 도움을 줍니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [
+      "거짓_과장"
+     ],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "013094",
+       "article": "제8조",
+       "item": "제1항제4호",
+       "quote": "4. 거짓ㆍ과장된 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-3#0",
+       "basis": true,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅴ.2.다.(2)",
+       "item": "",
+       "quote": "(2) 전문가 개인의 견해는 당해 분야의 전문 지식에 기초하여야 하고, 그 내용은 당해 분야의 전문가라면 일반적으로 인정할 수 있는 내용이어야 하며, 반드시 그 견해는 사적이 아니라 공식적으로 밝힌 것이어야 한다. <예시> 피부과 전문의가 피부와 직간접적으로 관련되지 않은 내용에 대하여 밝힌 견해는 전문가 견해로 보기 어려움",
+       "chunk_id": "law:admrul_20246_20260903#prose-79#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.16.나",
+       "item": "",
+       "quote": "나. 반품, 교환, 대금지불방법, 상품우송료 등 부대비용, 금융이용 등 기타 거래내용 및 거래조건 등에 관하여 표시ㆍ광고함에 있어서는 사실대로 하여야 한다. 따라서 사실과 다르게 또는 과장하여 표시ㆍ광고하거나 모호하게 표시ㆍ광고하여 일반소비자를 오인시킬 우려가 있는 표시ㆍ광고행위는 부당한 표시ㆍ광고가 된다. <예  시> - 아파트 또는 상가 등의 분양 광고시 \"도심으로부터 10분 거리\"라고만 표시ㆍ광고하고 그것이 「출근시간(rush  hour)」기준인지 아니면 「조용한 밤 시간」 기준인지를 밝히지 아니함은 물론 또한 「버스」기준인지 「택시」기준 등인지를 밝히지 않는 경우 - \"무료증정\"이라고 하였는데 불구하고 실제는 특정상품을 일정액이상 구입해야 증정하는 경우 - \"불량품, 하자품을 언제든지 교환해 줍니다\"라고 표시ㆍ광고하였는데도 불구하고 교환하려 하면 정당한 이유 없이 \"불량품이 아니다\"라든가 \"기간이 넘었다\"든가 \"우리가 판매한 것이 아니다\"라는 식으로 교환을 거절하는 경우 - 통신판매 광고 시 어떤 제품의 가격이 10,000원이라고 표기하였으나 상품구매자가 실제로 지불해야 하는 금액은 상품우송료 3,000원을 포함하여 13,000원인 경우",
+       "chunk_id": "law:admrul_34717_20191212#prose-95#0",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35037",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35037_20230901#prose-40#1",
+       "basis": false,
+       "doc_title": "환경 관련 표시·광고에 관한 심사지침"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제1호라목",
+       "item": "본문",
+       "quote": null,
+       "chunk_id": null,
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제3호",
+       "item": "본문",
+       "quote": null,
+       "chunk_id": null,
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      },
+      {
+       "law_id": "75449",
+       "article": "제6조제1항제1호",
+       "item": "1.",
+       "quote": "1. 기능성에 도움을 줄 수 있다고 알려진 또는 보고된 기능성 원재료 또는 성분이 식품등에 들어있다는 내용\n예 : 본 제품에는 A(기능성)에 도움을 줄 수 있다고 알려진(또는 보고된) B(기능성 원재료 또는 성분)가 들어 있습니다.",
+       "chunk_id": "law:admrul_75449_20250101#adm-6-0-0#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제7호나목",
+       "item": "본문",
+       "quote": "제품의 제조방법ㆍ품질ㆍ영양가ㆍ원재료ㆍ성분 또는 효과와 직접적인 관련이 적은 내용이나 사용하지 않은 원재료 또는 성분을 강조함으로써 다른 업소의 제품을 간접적으로 다르게 인식하게 하는 내용의 표시ㆍ광고. 다만, 식품의약품안전처장이 소비자의 판단에 도움을 주기 위하여 표시ㆍ광고할 필요가 있다고 인정하여 고시하는 원재료 또는 성분을 사용하지 않았다는 표시ㆍ광고는 제외한다.",
+       "chunk_id": "annex:013453_0001#본문#7.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "건기식_인정",
+        "violation": "거짓_과장",
+        "moved_from": "건강기능식품_오인",
+        "floor": "R1",
+        "articles": [
+         {
+          "law_id": "013094",
+          "article": "제8조제1항제4호",
+          "item": "",
+          "quote": null,
+          "chunk_id": null,
+          "basis": false,
+          "doc_title": null
+         },
+         {
+          "law_id": "013453",
+          "article": "[별표 1]제4호가목",
+          "item": "",
+          "quote": null,
+          "chunk_id": null,
+          "basis": false,
+          "doc_title": null
+         },
+         {
+          "law_id": "013453",
+          "article": "[별표 1]제4호나목",
+          "item": "",
+          "quote": null,
+          "chunk_id": null,
+          "basis": false,
+          "doc_title": null
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": {
+      "kind": "인정_기능성",
+      "confirmed_max": "R0",
+      "accepted_evidence": [
+       "기능성 원료 인정서 또는 건강기능식품 기능성 원료 고시의 기능성 내용 · 품목제조신고서"
+      ],
+      "criteria": "건강기능식품은 식품의약품안전처장이 고시하거나 인정한 기능성만, 신고한 내용 그대로 표현해야 해요(식품표시광고법 시행령 [별표 1] 4.가 · 4.나). 예를 들어 「혈중 콜레스테롤 개선에 도움을 줄 수 있음」처럼 고시 · 인정서의 기능성 문구 그대로 써야 하고, 「콜레스테롤을 확 낮춰 줍니다」처럼 바꿔 쓰면 문제가 돼요."
+     },
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "이 기능성으로 제품이 인정받은 건강기능식품이라면 인정받은 내용 그대로의 문구는 위반으로 보지 않습니다. 인정 원료가 들어 있다는 것만으로는 이 전제가 아닙니다. 인정받은 내용을 일부 빼거나 바꾼 표현, 질병을 치료한다는 표현, 질병의 증상을 예방 · 치료한다는 표현은 이 전제에서도 위반으로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "건기식_비인정",
+   "verified": false,
+   "outcome": "certificate",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "이 크림은 피부 미백에 도움을 줍니다.",
+     "verdict": "confirmed",
+     "hold_reason": null,
+     "violations": [
+      "거짓_과장"
+     ],
+     "infeasibility": "A",
+     "evidence": [
+      {
+       "law_id": "002011",
+       "article": "제3조제1항제1호",
+       "item": "1.",
+       "quote": "1. 거짓ㆍ과장의 표시ㆍ광고",
+       "chunk_id": "law:law_002011_20250121#0003001-0-0#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고의 공정화에 관한 법률"
+      },
+      {
+       "law_id": "005361",
+       "article": "제3조제1항",
+       "item": "",
+       "quote": "① 법 제3조제1항제1호에 따른 거짓ㆍ과장의 표시ㆍ광고는 사실과 다르게 표시ㆍ광고하거나 사실을 지나치게 부풀려 표시ㆍ광고하는 것으로 한다.",
+       "chunk_id": "law:law_005361_20260701#0003001-0#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고의 공정화에 관한 법률 시행령"
+      },
+      {
+       "law_id": "013094",
+       "article": "제8조제1항제4호",
+       "item": "4.",
+       "quote": "4. 거짓ㆍ과장된 표시 또는 광고",
+       "chunk_id": "law:law_013094_20250919#0008001-0-3#0",
+       "basis": false,
+       "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+      },
+      {
+       "law_id": "013453",
+       "article": "[별표 1]제4호나목",
+       "item": "본문",
+       "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
+       "chunk_id": "annex:013453_0001#본문#4.나#0",
+       "basis": false,
+       "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+      }
+     ],
+     "risk": {
+      "floor": "R1",
+      "encoder": null,
+      "encoder_basis": [],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "거짓_과장",
+       "confidence": 0.8757537007331848,
+       "moved_from": "건강기능식품_오인",
+       "references": [
+        {
+         "law_id": "002011",
+         "article": "제3조제1항제1호",
+         "item": "1.",
+         "quote": "1. 거짓ㆍ과장의 표시ㆍ광고",
+         "chunk_id": "law:law_002011_20250121#0003001-0-0#0",
+         "basis": false,
+         "doc_title": "표시ㆍ광고의 공정화에 관한 법률"
+        },
+        {
+         "law_id": "005361",
+         "article": "제3조제1항",
+         "item": "",
+         "quote": "① 법 제3조제1항제1호에 따른 거짓ㆍ과장의 표시ㆍ광고는 사실과 다르게 표시ㆍ광고하거나 사실을 지나치게 부풀려 표시ㆍ광고하는 것으로 한다.",
+         "chunk_id": "law:law_005361_20260701#0003001-0#0",
+         "basis": false,
+         "doc_title": "표시ㆍ광고의 공정화에 관한 법률 시행령"
+        },
+        {
+         "law_id": "013094",
+         "article": "제8조제1항제4호",
+         "item": "4.",
+         "quote": "4. 거짓ㆍ과장된 표시 또는 광고",
+         "chunk_id": "law:law_013094_20250919#0008001-0-3#0",
+         "basis": false,
+         "doc_title": "식품 등의 표시ㆍ광고에 관한 법률"
+        },
+        {
+         "law_id": "013453",
+         "article": "[별표 1]제4호나목",
+         "item": "본문",
+         "quote": "건강기능식품의 경우 식품의약품안전처장이 인정하지 않은 기능성을 나타내는 내용의 표시ㆍ광고",
+         "chunk_id": "annex:013453_0001#본문#4.나#0",
+         "basis": false,
+         "doc_title": "부당한 표시 또는 광고의 내용(제3조제1항 관련)"
+        }
+       ],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [
+      {
+       "start": 0,
+       "end": 21,
+       "label": "거짓_과장"
+      }
+     ],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "건강기능식품이지만 이 기능성으로는 인정받지 않았다면 그 기능성을 내세우는 표현은 위반으로 봅니다. 특허 · 수상 · 논문은 인정을 대신하지 않습니다.",
+   "evidence": []
+  },
+  {
+   "premise": "화장품",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "이 크림은 피부 미백에 도움을 줍니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅴ.2.다.(2)",
+       "item": "",
+       "quote": "(2) 전문가 개인의 견해는 당해 분야의 전문 지식에 기초하여야 하고, 그 내용은 당해 분야의 전문가라면 일반적으로 인정할 수 있는 내용이어야 하며, 반드시 그 견해는 사적이 아니라 공식적으로 밝힌 것이어야 한다. <예시> 피부과 전문의가 피부와 직간접적으로 관련되지 않은 내용에 대하여 밝힌 견해는 전문가 견해로 보기 어려움",
+       "chunk_id": "law:admrul_20246_20260903#prose-79#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.16.나",
+       "item": "",
+       "quote": "나. 반품, 교환, 대금지불방법, 상품우송료 등 부대비용, 금융이용 등 기타 거래내용 및 거래조건 등에 관하여 표시ㆍ광고함에 있어서는 사실대로 하여야 한다. 따라서 사실과 다르게 또는 과장하여 표시ㆍ광고하거나 모호하게 표시ㆍ광고하여 일반소비자를 오인시킬 우려가 있는 표시ㆍ광고행위는 부당한 표시ㆍ광고가 된다. <예  시> - 아파트 또는 상가 등의 분양 광고시 \"도심으로부터 10분 거리\"라고만 표시ㆍ광고하고 그것이 「출근시간(rush  hour)」기준인지 아니면 「조용한 밤 시간」 기준인지를 밝히지 아니함은 물론 또한 「버스」기준인지 「택시」기준 등인지를 밝히지 않는 경우 - \"무료증정\"이라고 하였는데 불구하고 실제는 특정상품을 일정액이상 구입해야 증정하는 경우 - \"불량품, 하자품을 언제든지 교환해 줍니다\"라고 표시ㆍ광고하였는데도 불구하고 교환하려 하면 정당한 이유 없이 \"불량품이 아니다\"라든가 \"기간이 넘었다\"든가 \"우리가 판매한 것이 아니다\"라는 식으로 교환을 거절하는 경우 - 통신판매 광고 시 어떤 제품의 가격이 10,000원이라고 표기하였으나 상품구매자가 실제로 지불해야 하는 금액은 상품우송료 3,000원을 포함하여 13,000원인 경우",
+       "chunk_id": "law:admrul_34717_20191212#prose-95#0",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35037",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35037_20230901#prose-40#1",
+       "basis": false,
+       "doc_title": "환경 관련 표시·광고에 관한 심사지침"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제2호",
+       "item": "2.",
+       "quote": "2. 피부에 침착된 멜라닌색소의 색을 엷게 하여 피부의 미백에 도움을 주는 기능을 가진 화장품",
+       "chunk_id": "law:law_008741_20260402#0002001-0-1#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제1호",
+       "item": "1.",
+       "quote": "1. 피부에 멜라닌색소가 침착하는 것을 방지하여 기미ㆍ주근깨 등의 생성을 억제함으로써 피부의 미백에 도움을 주는 기능을 가진 화장품",
+       "chunk_id": "law:law_008741_20260402#0002001-0-0#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      },
+      {
+       "law_id": "002015",
+       "article": "제2조제1항제2호",
+       "item": "2.",
+       "quote": "2. \"기능성화장품\"이란 화장품 중에서 다음 각 목의 어느 하나에 해당되는 것으로서 총리령으로 정하는 화장품을 말한다.\n가. 피부의 미백에 도움을 주는 제품\n나. 피부의 주름개선에 도움을 주는 제품\n다. 피부를 곱게 태워주거나 자외선으로부터 피부를 보호하는 데에 도움을 주는 제품\n라. 모발의 색상 변화ㆍ제거 또는 영양공급에 도움을 주는 제품\n마. 피부나 모발의 기능 약화로 인한 건조함, 갈라짐, 빠짐, 각질화 등을 방지하거나 개선하는 데에 도움을 주는 제품",
+       "chunk_id": "law:law_002015_20260402#0002001-0-1#0",
+       "basis": false,
+       "doc_title": "화장품법"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제10호",
+       "item": "10.",
+       "quote": "10. 피부장벽(피부의 가장 바깥 쪽에 존재하는 각질층의 표피를 말한다)의 기능을 회복하여 가려움 등의 개선에 도움을 주는 화장품",
+       "chunk_id": "law:law_008741_20260402#0002001-0-9#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      },
+      {
+       "law_id": "008741",
+       "article": "제2조제1항제9호",
+       "item": "9.",
+       "quote": "9. 여드름성 피부를 완화하는 데 도움을 주는 화장품. 다만, 인체세정용 제품류로 한정한다.",
+       "chunk_id": "law:law_008741_20260402#0002001-0-8#0",
+       "basis": false,
+       "doc_title": "화장품법 시행규칙"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": "R1",
+      "encoder_basis": [
+       {
+        "premise": "화장품",
+        "violation": "의약품_오인",
+        "moved_from": "건강기능식품_오인",
+        "floor": "R2",
+        "articles": [
+         {
+          "law_id": "002015",
+          "article": "제13조제1항제1호",
+          "item": "1.",
+          "quote": "1. 의약품으로 잘못 인식할 우려가 있는 표시 또는 광고",
+          "chunk_id": "law:law_002015_20260402#0013001-0-0#0",
+          "basis": false,
+          "doc_title": "화장품법"
+         },
+         {
+          "law_id": "008741",
+          "article": "[별표 5]제2호가목",
+          "item": "본문",
+          "quote": "의약품으로 잘못 인식할 우려가 있는 내용, 제품의 명칭 및 효능ㆍ효과 등에대한 표시ㆍ광고를 하지 말 것",
+          "chunk_id": "annex:008741_0005#본문#2.가#0",
+          "basis": false,
+          "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+         }
+        ]
+       }
+      ],
+      "final": "R1",
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "의약품_오인",
+       "confidence": 0.49651187658309937,
+       "moved_from": "건강기능식품_오인",
+       "references": [
+        {
+         "law_id": "002015",
+         "article": "제13조제1항제1호",
+         "item": "1.",
+         "quote": "1. 의약품으로 잘못 인식할 우려가 있는 표시 또는 광고",
+         "chunk_id": "law:law_002015_20260402#0013001-0-0#0",
+         "basis": false,
+         "doc_title": "화장품법"
+        },
+        {
+         "law_id": "008741",
+         "article": "[별표 5]제2호가목",
+         "item": "본문",
+         "quote": "의약품으로 잘못 인식할 우려가 있는 내용, 제품의 명칭 및 효능ㆍ효과 등에대한 표시ㆍ광고를 하지 말 것",
+         "chunk_id": "annex:008741_0005#본문#2.가#0",
+         "basis": false,
+         "doc_title": "화장품 표시ㆍ광고의 범위 및 준수사항(제22조 관련)"
+        }
+       ],
+       "estimate": {
+        "floor": "R2",
+        "ceiling": null,
+        "ceiling_note": null
+       }
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "화장품이라면 화장품법과 표시광고법 기준으로 봅니다. 질병을 예방 · 치료한다는 표현은 의약품으로 잘못 인식할 우려가 있는 광고로 봅니다.",
+   "evidence": []
+  },
+  {
+   "premise": "일반상품",
+   "verified": false,
+   "outcome": "hold",
+   "sentences": [
+    {
+     "sent_id": "s0",
+     "text": "이 크림은 피부 미백에 도움을 줍니다.",
+     "verdict": "hold",
+     "hold_reason": "low_conf",
+     "violations": [],
+     "infeasibility": null,
+     "evidence": [
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.14.라",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_34717_20191212#prose-91#1",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "20246",
+       "article": "Ⅴ.2.다.(2)",
+       "item": "",
+       "quote": "(2) 전문가 개인의 견해는 당해 분야의 전문 지식에 기초하여야 하고, 그 내용은 당해 분야의 전문가라면 일반적으로 인정할 수 있는 내용이어야 하며, 반드시 그 견해는 사적이 아니라 공식적으로 밝힌 것이어야 한다. <예시> 피부과 전문의가 피부와 직간접적으로 관련되지 않은 내용에 대하여 밝힌 견해는 전문가 견해로 보기 어려움",
+       "chunk_id": "law:admrul_20246_20260903#prose-79#0",
+       "basis": false,
+       "doc_title": "표시ㆍ광고 내용의 실증에 관한 운영 고시"
+      },
+      {
+       "law_id": "35032",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35032_20260601#prose-19#1",
+       "basis": false,
+       "doc_title": "추천ㆍ보증 등에 관한 표시ㆍ광고 심사지침"
+      },
+      {
+       "law_id": "34717",
+       "article": "Ⅲ.16.나",
+       "item": "",
+       "quote": "나. 반품, 교환, 대금지불방법, 상품우송료 등 부대비용, 금융이용 등 기타 거래내용 및 거래조건 등에 관하여 표시ㆍ광고함에 있어서는 사실대로 하여야 한다. 따라서 사실과 다르게 또는 과장하여 표시ㆍ광고하거나 모호하게 표시ㆍ광고하여 일반소비자를 오인시킬 우려가 있는 표시ㆍ광고행위는 부당한 표시ㆍ광고가 된다. <예  시> - 아파트 또는 상가 등의 분양 광고시 \"도심으로부터 10분 거리\"라고만 표시ㆍ광고하고 그것이 「출근시간(rush  hour)」기준인지 아니면 「조용한 밤 시간」 기준인지를 밝히지 아니함은 물론 또한 「버스」기준인지 「택시」기준 등인지를 밝히지 않는 경우 - \"무료증정\"이라고 하였는데 불구하고 실제는 특정상품을 일정액이상 구입해야 증정하는 경우 - \"불량품, 하자품을 언제든지 교환해 줍니다\"라고 표시ㆍ광고하였는데도 불구하고 교환하려 하면 정당한 이유 없이 \"불량품이 아니다\"라든가 \"기간이 넘었다\"든가 \"우리가 판매한 것이 아니다\"라는 식으로 교환을 거절하는 경우 - 통신판매 광고 시 어떤 제품의 가격이 10,000원이라고 표기하였으나 상품구매자가 실제로 지불해야 하는 금액은 상품우송료 3,000원을 포함하여 13,000원인 경우",
+       "chunk_id": "law:admrul_34717_20191212#prose-95#0",
+       "basis": false,
+       "doc_title": "부당한 표시·광고행위의 유형 및 기준 지정고시"
+      },
+      {
+       "law_id": "35037",
+       "article": "Ⅴ.1",
+       "item": "",
+       "quote": null,
+       "chunk_id": "law:admrul_35037_20230901#prose-40#1",
+       "basis": false,
+       "doc_title": "환경 관련 표시·광고에 관한 심사지침"
+      }
+     ],
+     "risk": {
+      "floor": null,
+      "encoder": null,
+      "encoder_basis": [],
+      "final": null,
+      "evidence_span": null,
+      "ceiling": null,
+      "ceiling_note": null
+     },
+     "encoder_candidates": [
+      {
+       "violation": "건강기능식품_오인",
+       "confidence": 0.8382971882820129,
+       "moved_from": null,
+       "references": [],
+       "estimate": null
+      }
+     ],
+     "evidence_mismatch": false,
+     "not_claim": false,
+     "spans": [],
+     "substantiation": null,
+     "fact_check": null,
+     "user_facts": [],
+     "user_subst": null
+    }
+   ],
+   "criteria": "식품 · 화장품이 아닌 상품이라면 표시광고법 기준만 보았습니다. 이 품목에 따로 적용되는 법은 검수하지 않았습니다.",
+   "evidence": []
+  }
+ ],
+ "candidates": [],
+ "certificate": null,
+ "attempt": 0,
+ "timings": [
+  {
+   "node": "split",
+   "ms": 0.013200042303651571
+  },
+  {
+   "node": "classify",
+   "ms": 0.006399990525096655
+  },
+  {
+   "node": "retrieve",
+   "ms": 363.7445999775082
+  },
+  {
+   "node": "match_dict",
+   "ms": 111.08790000434965
+  },
+  {
+   "node": "encode",
+   "ms": 165.1430000201799
+  },
+  {
+   "node": "law_ftc",
+   "ms": 1.4106999733485281
+  },
+  {
+   "node": "law_food",
+   "ms": 1.1261000181548297
+  },
+  {
+   "node": "law_cosmetic",
+   "ms": 1.1534999939613044
+  },
+  {
+   "node": "merge_laws",
+   "ms": 0.010199961252510548
+  },
+  {
+   "node": "judge",
+   "ms": 0.2470999606885016
+  },
+  {
+   "node": "assess_risk",
+   "ms": 0.007700000423938036
+  },
+  {
+   "node": "premise_branches",
+   "ms": 5.077400011941791
+  },
+  {
+   "node": "doc_rules",
+   "ms": 0.327400048263371
+  },
+  {
+   "node": "hold",
+   "ms": 0.001700012944638729
+  }
+ ],
+ "law_version": "unknown",
+ "judged_by": "rule-0.3.0-dict+encb:c451942436f0"
+}
