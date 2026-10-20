@@ -54,7 +54,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import Annotated, Any, TypedDict
 
-from app import claimscope, factcheck, sanction, sentsplit, trace
+from app import claimscope, factcheck, sanction, sentsplit
 from app import dictmatch as dm
 from app import encoder as enc
 from app import premise as pm
@@ -461,7 +461,6 @@ def timed(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
         t0 = time.perf_counter()
         out = fn(state, *rest, **kw)
         ms = (time.perf_counter() - t0) * 1000
-        trace.node(fn.__name__, out, ms)  # 🆕 2026-10-15 — COPYLANE_TRACE=on 일 때만 찍는다
         out.setdefault("timings", [])
         out["timings"] = [*out["timings"], Timing(node=fn.__name__, ms=ms)]
         return out

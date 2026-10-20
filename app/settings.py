@@ -233,16 +233,6 @@ class Settings(BaseModel):
     #: 🆕 2026-09-22 — 오류 로그를 DB(`app_error_log`)에도 쌓는가. `auto` · `on` · `off` (`error_log_enabled()`).
     error_log: str = Field("auto")
 
-    #: 🆕 2026-10-15 — 판정 노드별 추적을 콘솔에 찍는가. `on` · `off` (`trace_enabled()` · `app/trace.py`).
-    trace: str = Field("off")
-
-    @field_validator("trace")
-    @classmethod
-    def _known_trace(cls, v: str) -> str:
-        if v not in ("on", "off"):
-            raise ValueError(f"COPYLANE_TRACE 가 {v!r} 이다 — on · off 만 받는다 (D-220)")
-        return v
-
     @field_validator("error_log")
     @classmethod
     def _known_error_log(cls, v: str) -> str:
@@ -304,7 +294,6 @@ def settings() -> Settings:
         edition=os.environ.get("COPYLANE_EDITION") or "local",
         session_secret=os.environ.get("COPYLANE_SESSION_SECRET") or "",
         error_log=os.environ.get("COPYLANE_ERROR_LOG") or "auto",
-        trace=os.environ.get("COPYLANE_TRACE") or "off",
     )
 
 
@@ -327,12 +316,6 @@ def error_log_enabled(s: Settings | None = None) -> bool:
     if s.edition in ADMIN_CLOSED_EDITIONS or s.error_log == "off":
         return False
     return s.error_log == "on" or s.edition in ERROR_LOG_AUTO_EDITIONS
-
-
-def trace_enabled(s: Settings | None = None) -> bool:
-    """판정 노드 추적을 찍는가 (🆕 2026-10-15). 🚨 `cloud` 는 `on` 이어도 끈다 — 개발 · 시연 기기에서만 본다."""
-    s = s or settings()
-    return s.trace == "on" and s.edition not in ADMIN_CLOSED_EDITIONS
 
 
 def dsn() -> str:
