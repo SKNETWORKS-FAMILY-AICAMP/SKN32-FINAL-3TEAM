@@ -24,6 +24,9 @@
       🚨 판정(확정 · 보류 · `violations` · 하한 · 분기 열쇠)은 그 칸을 **읽지 않는다** — 여전히 인코더 전 규칙 판정이다(`JUDGED_BY`).
    🔄 2026-10-14 (D-337) — 확정된 B 실증형에 실증 분기(`_substantiated`)가 붙으면 종착 `guidance` 가 선다.
    🔄 2026-10-18 (D-348 보충 20) — 사전 쪽 실증 분기는 걷었다(사전은 칸 C 만 확정) · 지시 종착의 재료는 인코더 쪽 실증 답(「없음」 → 확정)이다.
+   🔄 2026-10-21 (문서 정정 · 인계 10-20 클론A §3) — 위 10-09 줄의 「판정은 인코더 칸을 읽지 않는다」는 그 판의 말이다. D-348 보충 5 · 6 · 17
+      이후 판정은 인코더 근거를 읽는다 — 인코더 쪽 절대형 확정 · 사실 · 실증 질문(`_encoder_side`) · 기록 위험도의 인코더 하한(`assess_risk`).
+      판 표지 앞머리(`JUDGED_BY`)의 이름만 그대로다. 위 10-14 줄의 `_substantiated` 는 10-18 에 걷었다.
 
 ★ D-124 가 정한 검사 셋도 그대로다 —
    ① **라우터 함수는 그래프 없이 단독 테스트한다** → langgraph 를 **모듈 최상단에서 import 하지 않는다.**
@@ -170,6 +173,8 @@ class SentEncoding:
     """문장 하나의 **인코더 신호** (🆕 2026-10-07 · 그림자 배선). 🚨 판정이 아니다 — 유형 후보와 확신뿐이다 (D-131).
 
     ⛔ 판정(`_judge_one`) · 분기 열쇠 · 종착은 이 칸을 읽지 않는다. 읽는 쪽은 응답의 후보 칸으로 옮기는 `_encoder_candidates` 뿐이다.
+       🔄 2026-10-21 (문서 정정) — 10-09 판의 말이다. 지금은 `assess_risk`(인코더 하한) · `doc_rules` → `_encoder_side`(절대형 확정 · 질문)도
+       이 신호를 읽는다(D-348 보충 2 · 5 · 6 · 17). `_judge_one`(사전 판정)이 읽지 않는 것은 그대로다.
        판정에 쓰는 규칙(합의 · 통과 · 후보를 어느 칸에 싣나)은 팀장 판정 뒤에 들어온다 — 그 자리는 `judge` 다 (D-192).
     ⛔ 문장 판정의 `violations` 에 섞지 않는다 — 그 칸은 고쳐 쓰기(`app/routers/user.py` 버튼 · sLLM 에 넘기는 유형 ·
        `_rejudge` 의 탈락 기준)가 읽는다. 섞으면 적법 문장에 버튼이 뜨고 고친 문구가 재판정에서 탈락한다.
@@ -561,7 +566,8 @@ def route_laws(state: CoreState) -> tuple[str, ...]:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  코어 노드 — `doc_rules` 는 자리와 계약만 있다(빈 노드) · `encode` 의 신호는 후보 칸으로만 나간다(판정이 읽지 않는다 · D-323)
+#  코어 노드 — 🔄 2026-10-21 문서 정정: `doc_rules` 는 이제 인코더 쪽 판정 · 질문 · 기록 모음 · 불변식을 맡는다(D-348 보충 3 ~ 35) ·
+#  `encode` 의 신호는 후보 칸 · 인코더 하한 · 인코더 쪽 판정이 읽는다(종전 「판정이 읽지 않는다 · D-323」은 10-09 판의 말)
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -2923,10 +2929,13 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
         r2 = _record_at_least(r or s, per)
         x = r2 or r
         r3 = None if known else _mark_category_needed(x or s, per)
-        if r3 is not None:
-            changed.append(r3)
-        elif x is not None:
-            changed.append(x)
+        got = r3 or x
+        # 🆕 2026-10-21 (D-348 보충 35 결정 1 · 인계 10-21 클론B §1 #1) — 분기에서 모은 기록이 분기와 맞는지 마지막에 본다(`_invariant`)
+        fixed = _invariant(got or s, per, reason)
+        if fixed is not None:
+            got = fixed
+        if got is not None:
+            changed.append(got)
     out: dict[str, Any] = {"branches": new_b}
     if folded:
         # 🆕 (보충 32 · 펼침 규칙) 질문까지 정한 뒤 **전제끼리 결과가 갈리면** 분기를 드러낸다 — 판정 · 질문(사실 · 실증)이
@@ -3206,6 +3215,72 @@ def _premise_hold(fields: dict[str, Any], reason: HoldReason) -> SentenceJudgmen
             "fact_check": None,
         }
     )
+
+
+# ── 불변식 — 기록과 분기 (🆕 2026-10-21 · D-348 보충 35 결정 1 · 인계 10-21 클론B §1 #1 (다′)) ───────────
+
+#: 불변식이 깨진 자리를 적는 로거 — 평가 도구가 이 이름으로 행에 표시한다(`scripts/eval_graph.py` `_InvariantLog`)
+INVARIANT_LOG = "copylane.invariant"
+_inv_log = logging.getLogger(INVARIANT_LOG)
+#: 이 환경변수가 `raise` 면 불변식 위반을 바로잡지 않고 거부한다 — 시험이 켠다(`tests/conftest.py`). 운영 · 평가는 꺼 둔다
+INVARIANT_ENV = "COPYLANE_INVARIANT"
+
+
+class InvariantBreach(AssertionError):
+    """기록이 분기와 어긋났다 — 시험 환경에서만 던진다(`INVARIANT_ENV=raise`)."""
+
+
+def _all_same_confirmed(per: list[SentenceJudgment]) -> frozenset[Violation] | None:
+    """모든 분기 문장이 **같은 위반 집합으로 확정**했으면 그 집합 · 아니면 None. 위반 없는 확정(답으로 풀린 R0)도 빈 집합으로 같다."""
+    if not per or any(x.verdict is not Verdict.confirmed or x.not_claim for x in per):
+        return None
+    got = {frozenset(x.violations) for x in per}
+    return next(iter(got)) if len(got) == 1 else None
+
+
+def _invariant(
+    rec: SentenceJudgment, per: list[SentenceJudgment], reason: HoldReason
+) -> SentenceJudgment | None:
+    """기록 문장이 분기 문장들과 맞는가 — 맞으면 None · 어긋나면 바로잡은 기록 (🆕 2026-10-21 · D-348 보충 35 결정 1).
+
+    ★ 불변식 셋(인계 10-21 클론B §1 #1 · 보충 33 · 34 결정 3):
+       ① **기록 확정 ⇒ 모든 분기가 같은 판정으로 확정** — 어긋나면 **전제 보류로 내린다**(가장 나쁜 쪽을 가정한 확정을 막는다 ·
+          fail-closed D-220). 분기가 선택지다 — 접혀 있었으면 `doc_rules` 가 펼친다(`_premise_dependent`).
+       ② 모든 분기가 같은 위반으로 확정 ⇒ 기록도 확정 — 어긋나면 **로그만** 남긴다(기록을 올리지 않는다 · 올리는 자리는
+          `_record_at_least` 하나다 · D-99). 보류로 남는 쪽이라 위험하지 않다.
+       ③ 기록 위험도 ≥ 모든 분기(검증된 분기 예외) — 이미 응답 계약(`_recorded_is_conservative`)이 거부한다. 여기서 다시 보지 않는다.
+    🚨 바로잡아도 결함은 결함이다 — 로거(`INVARIANT_LOG`)에 남기고 평가가 행에 표시한다(증상만 없애지 않는다 · D-162).
+       시험은 거부한다(`INVARIANT_ENV=raise`).
+    🚨 기록이 판정 대상 아님이거나 분기에 이 문장이 없으면 보지 않는다 · 사용자가 고른 전제의 판정(분기 없음)은 이 함수를 지나지 않는다.
+    """
+    if not per or rec.not_claim:
+        return None
+    same = _all_same_confirmed(per)
+    if rec.verdict is Verdict.confirmed:
+        if same is not None and same == frozenset(rec.violations):
+            return None
+        _breach("①", rec, per, fixed=True)
+        return _premise_hold({k: getattr(rec, k) for k in type(rec).model_fields}, reason)
+    if (
+        same
+    ):  # 위반이 있는 같은 확정 — 빈 집합(답으로 풀림)은 `_record_condition` 의 몫이라 보지 않는다
+        _breach("②", rec, per, fixed=False)
+    return None
+
+
+def _breach(which: str, rec: SentenceJudgment, per: list[SentenceJudgment], *, fixed: bool) -> None:
+    """불변식 위반을 남긴다 — 문장 글자는 싣지 않는다(문장 번호 · 판정 칸만). 시험 환경이면 던진다."""
+    import os  # noqa: PLC0415 — 이 자리만 쓴다
+
+    msg = (
+        f"불변식 {which} — {rec.sent_id} 기록 {rec.verdict.value}"
+        f"{sorted(v.value for v in rec.violations)} · 분기 "
+        + " | ".join(f"{x.verdict.value}{sorted(v.value for v in x.violations)}" for x in per)
+        + (" → 전제 보류로 내림" if fixed else " → 기록 그대로(로그만)")
+    )
+    if os.environ.get(INVARIANT_ENV) == "raise":
+        raise InvariantBreach(msg)
+    _inv_log.warning(msg, extra={"invariant": which, "sent_id": rec.sent_id, "fixed": fixed})
 
 
 # ── 사실 확인 분기 (🆕 2026-10-16 · D-348 보충 3) ─────────────────────────────────────
@@ -3694,7 +3769,7 @@ def _enc_confirmed(
        구간 = **문장 전체**(결정 3) · 위험도 = 그 유형 · 그 전제의 **제재표 하한**(`EncoderBasis.floor` · 사전 확정이 인용 호의 하한을 쓰는 것과 같다) ·
        사유 = 그 근거의 칸(`infeasibility_of` · 보충 6) · 실증 없음이면 실증 분기(지시 문안) · 사실 거짓이면 실증 분기 없음(지시 문안은 「고치거나 빼기」).
     🔴 못 세우면(구간을 모른다 · 근거 유형이 다르다 · 섞였다) **보류 + 출처** — 지어내지 않는다 (D-220 · D-224).
-    🚨 `[판정 대기]` 위험도를 제재표 하한으로 올린다 — 답 없는 인코더 쪽의 기록 위험도(R1 층 상한)보다 높을 수 있다. 유형은 질문이 보인 유형을
+    🚨 위험도를 제재표 하한으로 올린다(🔄 2026-10-21 문서 정정 — 종전 `[판정 대기]` 표시는 D-348 보충 7 결정 10 「1-b 확정 위반 위험도 = 제재표 하한 채택」으로 닫혔다) — 답 없는 인코더 쪽의 기록 위험도(R1 층 상한)보다 높을 수 있다. 유형은 질문이 보인 유형을
        사용자가 「해당없음」으로 닫지 않은 것으로 섰다고 본다(결정 5 「R2 이상: 유형을 믿을 수 있어야」의 해석).
     """
     fields = {k: getattr(s, k) for k in type(s).model_fields}
@@ -4229,6 +4304,8 @@ def judged_by(state: dict[str, Any]) -> str:
        판 지문은 판의 **파일 전부**로 낸다(`app/model_lock.py` `bundle_sha`). 접두를 바꿔 옛 표지와 섞이지 않게 한다(D-178).
 
     ★ 앞머리는 그대로 `JUDGED_BY` 다 — **판정은 규칙 판정**이고 인코더는 `encoder_candidates` 만 채웠다 (D-323).
+       🔄 2026-10-21 (문서 정정) — 10-09 판의 말이다. 지금은 인코더 근거가 판정에도 든다(D-348 보충 5 · 6 · 17) · 앞머리 이름만 그대로다 —
+       바꾸면 원장 · 결과 파일의 판 표지와 이어 보지 못한다(D-178).
     🔴 인코더가 안 돌았으면(설정 없음 · 못 올림) 붙이지 않는다 — 신호가 실린 응답만 인코더 판을 적는다.
     """
     model_dir = enc.configured_dir()

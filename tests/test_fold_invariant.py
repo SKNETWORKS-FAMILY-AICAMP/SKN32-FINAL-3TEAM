@@ -249,3 +249,55 @@ def test_단일_전제_품목은_종전_그대로() -> None:
     assert not st.get("branches") and not st.get("folded")
     (r,) = st["sentences"]
     assert r.substantiation is not None and r.hold_reason is HoldReason.low_conf
+
+
+# ── 🆕 2026-10-21 (D-348 보충 35 결정 1) 불변식 검사 — 기록 확정인데 분기가 갈리면 ─────────────────────
+
+
+def _wrong_record_at_least(rec, per):  # noqa: ANN001, ANN202
+    """일부러 넓게 고친 기록 모음(대역) — 분기가 확정하지 않았는데도 기록을 확정한다(원장 10-21 ③ 의 꼴)."""
+    return rec.model_copy(
+        update={
+            "verdict": Verdict.confirmed,
+            "hold_reason": None,
+            "violations": [Violation.거짓_과장],
+            "substantiation": None,
+            "fact_check": None,
+        }
+    )
+
+
+@pytest.mark.parametrize("cat", TWO)
+def test_불변식_시험에서는_기록_확정이_분기와_어긋나면_거부한다(
+    cat: Category, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(g, "_record_at_least", _wrong_record_at_least)
+    with pytest.raises(g.InvariantBreach, match="불변식 ①"):
+        _run(cat)
+
+
+@pytest.mark.parametrize("cat", TWO)
+def test_불변식_운영에서는_전제_보류로_내리고_분기를_드러내고_로그를_남긴다(
+    cat: Category, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """(다′) — 운영 · 평가는 바로잡는다(확정 → 전제 보류 · 분기가 선택지) · 로거 `copylane.invariant` 에 남긴다."""
+    monkeypatch.delenv(g.INVARIANT_ENV, raising=False)
+    monkeypatch.setattr(g, "_record_at_least", _wrong_record_at_least)
+    with caplog.at_level("WARNING", logger=g.INVARIANT_LOG):
+        st = _run(cat)
+    (r,) = st["sentences"]
+    assert r.verdict is Verdict.hold and r.hold_reason is HoldReason.premise_unknown
+    assert st.get("branches"), "막다른 전제 보류 — 분기를 드러낸다"
+    assert any("불변식 ①" in m for m in caplog.messages)
+    g.to_response(st)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("cat", TWO)
+def test_불변식_정상_경로에서는_로그가_없다(
+    cat: Category, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.delenv(g.INVARIANT_ENV, raising=False)
+    for answer in (None, Answer.예, Answer.아니오, Answer.해당없음):
+        with caplog.at_level("WARNING", logger=g.INVARIANT_LOG):
+            _run(cat, answer)
+    assert not [m for m in caplog.messages if "불변식" in m]

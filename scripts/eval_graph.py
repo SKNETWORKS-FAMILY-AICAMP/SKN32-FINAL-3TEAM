@@ -5,6 +5,8 @@
     uv run python scripts/eval_graph.py --dev --provenance ftc_decisions_body
     uv run python scripts/eval_graph.py --dev --stub             # DB 없이 — 배선만(전부 미판정 · 수는 0 이 정상)
     uv run python scripts/eval_graph.py --sealed --out build/eval/graph.json   # 봉인 회차 — 날짜 하나에 한 번 (D-339 결정 7)
+    uv run python scripts/eval_graph.py --dev --guide-dev --conditional --answers --out …   # 답 경로(모두 예 · 모두 아니오) 🆕 10-21 보충 35
+    uv run python scripts/eval_graph.py --dev --guide-dev --conditional --category-only --out …  # 경로 동치의 짝(품목만) → `scripts/eval_diff.py equiv`
 
 🔴 2026-10-15 (전수 점검 · D-175 · D-339 결정 7 집행) — **봉인 평가셋은 기본값이 아니다.** 종전에는 인자 없이 돌리면 봉인 행을 읽었고,
    「날짜 하나에 한 번」은 기록 한 줄만 남기고 막지 않았다(규칙을 고치며 여러 번 돌려도 셈만 늘었다). 이제 `--dev` · `--sealed` 중
@@ -37,6 +39,7 @@ import argparse
 import collections
 import hashlib
 import json
+import logging
 import os
 import pathlib
 import sys
@@ -51,11 +54,14 @@ from app import graph as g  # noqa: E402
 from app import model_lock, reasons  # noqa: E402 — reasons: 조합 판정 칸은 한 곳 (D-344 ⑨)
 from app import premise as pm  # noqa: E402
 from app.contracts import (  # noqa: E402
+    Answer,
     Category,
     HoldReason,
     Premise,
     ProductContext,
     SentenceJudgment,
+    UserFact,
+    UserSubst,
     Verdict,
     encoder_judged,
     is_conditional,
@@ -150,6 +156,23 @@ def _ho(sent: SentenceJudgment) -> set[str]:
     return out
 
 
+def _questions(sents: Iterable[SentenceJudgment]) -> list[str]:
+    """문장들에 선 질문 — `<문장>:fact:<종류>` · `<문장>:subst` (🆕 2026-10-21 · D-348 보충 35). 결과 파일끼리 질문이 같은지 맞대는 열쇠다."""
+    out = []
+    for s in sents:
+        if s.fact_check is not None:
+            out.append(f"{s.sent_id}:fact:{s.fact_check.kind.value}")
+        if s.substantiation is not None:
+            out.append(f"{s.sent_id}:subst")
+    return sorted(out)
+
+
+def _risk_max(sents: Iterable[SentenceJudgment]) -> str | None:
+    """문장들의 `risk.final` 최댓값 — 없으면 None(낮음으로 세지 않는다 · D-72)."""
+    got = [s.risk.final for s in sents if s.risk.final is not None]
+    return max(got, key=lambda r: r.level).value if got else None
+
+
 def predict(state: dict[str, Any]) -> dict[str, Any]:
     """그래프 상태 → 행 예측. 예측 유형 · 호는 **확정 문장의 위반만**이다 (D-127 · 보류는 예측이 아니다)."""
     sents: list[SentenceJudgment] = list(state.get("sentences", []))
@@ -214,13 +237,7 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "risked": all(s.risk.final is not None for s in conf if s.violations),
         #: 🆕 2026-10-20 (D-348 보충 31) — **기록 위험도의 가장 높은 등급**(문장들의 `risk.final` 최댓값 · 없으면 None).
         #:    보류 기록이 가정 위의 확정으로 끌려 오르는지(보충 8 · 31)를 이 칸으로 센다 · 판정이 아니다
-        "risk_max": max(
-            (s.risk.final for s in sents if s.risk.final is not None),
-            key=lambda r: r.level,
-            default=None,
-        ).value
-        if any(s.risk.final is not None for s in sents)
-        else None,
+        "risk_max": _risk_max(sents),
         "n_sents": len(sents),
         #: 🆕 2026-10-15 (D-348 보충 1) — **판정 대상 아님 문장이 있나**(L0 · 주의 · 상담 문구). 칸 표에서 「사전 확정」과 가르고,
         #:    판정 대상 아님만 있는 행이 품목 미확정으로 보류된 까닭(D-319 결정 2)을 「종착 재료 없음」과 가른다
@@ -231,6 +248,8 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "enc_risk": any(s.risk.encoder is not None for s in sents),
         #: 🆕 2026-10-16 (D-348 보충 3) — 사실 확인 분기가 달린 문장이 있나 · 사용자가 확인한 사실로 정한 문장이 있나
         "fact_branch": any(s.fact_check is not None for s in sents),
+        #: 🆕 2026-10-21 (D-348 보충 35) — 기록 문장에 선 질문(`_questions`) · 경로 동치 대조(`scripts/eval_diff.py`)와 답 경로의 재료
+        "questions": _questions(sents),
         "user_fact": any(s.user_facts for s in sents),
         #: 🆕 2026-10-16 (D-348 보충 4) — 조건부 위반 문장의 유형(가장 나쁜 경우 = 답 없음 · 거짓 분기의 판정) · 사전 유형, 없으면 인코더 근거의 유형
         "cond_types": sorted(
@@ -326,6 +345,13 @@ def _branch_view(b: Any) -> dict[str, Any]:
         ),
         "ho": sorted({h for s in conf if s.violations for h in _ho(s)}),
         "committed": bool(b.sentences) and len(conf) == len(b.sentences),
+        #: 🆕 2026-10-21 (D-348 보충 35 결정 2) — 경로 동치 대조의 칸(기록 쪽 `predict` 와 같은 이름 · 같은 함수)
+        "verdicts": [x.verdict.value for x in b.sentences],
+        "hold_reasons": sorted(
+            {x.hold_reason.value for x in b.sentences if x.hold_reason is not None}
+        ),
+        "questions": _questions(b.sentences),
+        "risk_max": _risk_max(b.sentences),
     }
 
 
@@ -731,6 +757,54 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["fact_branch_rows"] = sum(1 for p in preds if p.get("fact_branch"))
     out["enc_choice_rows"] = sum(1 for p in preds if p.get("enc_choice"))
     out["conditional"] = conditional_report(rows, preds)
+    #: 🆕 2026-10-21 (D-348 보충 35 결정 1) — 불변식이 깨진 행(운영은 바로잡았다 · 0 이어야 한다 · 봉인 조건)
+    out["invariant_rows"] = sum(1 for p in preds if p.get("invariant"))
+    #: 🆕 2026-10-21 (D-348 보충 35 결정 2) — 답 경로(`--answers` 로 잰 행만)
+    if any("answer_path" in p for p in preds):
+        out["answers"] = answer_report(rows, preds)
+    return out
+
+
+def answer_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
+    """답 경로 채점 (🆕 2026-10-21 · D-348 보충 35 결정 2 · 인계 10-21 클론B §1 #2 채점표 초안) — 질문이 선 행만 · 라벨 조건별.
+
+    ★ 칸(조건 → 뜻):
+       · A · B(위반) — 「아니오」에 골든 유형 확정 = **도달**(답하면 맞힌다) · 「예」에 그 유형 확정 = **답 미반영**
+       · C(답 없이 위반) — 질문이 선 것 자체를 센다(D-61 · 묻지 않고 확정할 자리였나의 후보)
+       · D(적법) — 「예」에 위반 확정 = **틀림** · 「아니오」에 위반 확정 = **답에 달린 오탐**(사용자가 「없다」고 하면 위반으로 나간다)
+       · M · L · 그 밖 — 수만(종착 분포)
+       · 이어 묻기 상한 뒤에도 질문이 남은 행 — 따로 센다 · 도달로 세지 않는다
+    🚨 「아니오 = 골든 위반 라벨」은 D-59 의 실증형 정의에 기댄다(사건마다 실증이 없었는지는 보지 않았다 · 인계 10-21 §4).
+    🚨 보고 지표다 — 게이트 아님 · 판정은 이 수를 읽지 않는다. 계약 오류 행은 따로 센다(0 이어야 한다).
+    """
+    out: dict[str, Any] = {"rows": 0, "by_condition": {}, "left": 0, "contract_errors": 0}
+    tab: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for r, p in zip(rows, preds, strict=True):
+        ap_ = p.get("answer_path")
+        if not ap_:
+            continue
+        out["rows"] += 1
+        yes, no = ap_[Answer.예.value], ap_[Answer.아니오.value]
+        out["contract_errors"] += bool(yes.get("contract_error")) + bool(no.get("contract_error"))
+        cond = r.get("조건") or "-"
+        c = tab[cond]
+        c["질문"] += 1
+        left = yes["left"] or no["left"]
+        if left:
+            out["left"] += 1
+            c["남음"] += 1
+        tt = truth_types(r, set(no["types"]) | set(yes["types"]))
+        if cond in ("A", "B"):
+            if not left and tt & set(no["types"]):
+                c["도달"] += 1
+            if tt & set(yes["types"]):
+                c["답미반영"] += 1
+        elif cond == "D":
+            c["예에위반"] += yes["class"] == "확정위반"
+            c["아니오에위반"] += no["class"] == "확정위반"
+        for a, x in ((Answer.예.value, yes), (Answer.아니오.value, no)):
+            c[f"{a}:{x['class']}"] += 1
+    out["by_condition"] = {k: dict(v) for k, v in sorted(tab.items())}
     return out
 
 
@@ -855,7 +929,7 @@ def general_row(r: dict) -> bool:
     )
 
 
-def product_of(r: dict, conditional: bool) -> ProductContext:
+def product_of(r: dict, conditional: bool, *, category_only: bool = False) -> ProductContext:
     """행의 제품 정보 — 무조건부면 빈 것(세 법) · 조건부면 **아는 만큼**: 골든 `전제` 가 있으면 그 전제의 것 · 없으면 `품목`.
 
     🚨 채점은 여전히 **기록되는 판정**으로 한다(D-263 결정 1 「게이트 수치도 이것으로 잰다」).
@@ -863,14 +937,49 @@ def product_of(r: dict, conditional: bool) -> ProductContext:
        그래프가 그 전제 하나로 판정 · 분기 없음). 종전에는 품목만 실려 하위 전제(인정 여부 · 기능성 표시 여부)가 답 대기로 남았다.
        ⚠️ 그래서 조건부 모드의 분기 지표(`branch_report` · `branch_encoder_report`)는 하위 전제가 둘인 품목의 `전제` 행에서 0 이 된다 —
        그 전제의 판정이 기록 쪽에 있다. 무조건부 모드의 분기 지표는 그대로다(전제를 넘기지 않는다).
+    🆕 2026-10-21 (D-348 보충 35 결정 2) — `category_only` 면 골든 `전제` 의 **품목만** 넘긴다(전제를 고르기 전 · 분기 미리보기 쪽).
+       경로 동치 대조의 짝이다 — 「전제를 고른 판정의 기록」 = 「품목만 넘긴 판정의 그 전제 분기」(`scripts/eval_diff.py equiv`).
     """
     if not conditional:
         return ProductContext()
     if r.get("전제"):
-        return pm.product_of(Premise(r["전제"]))
+        p = pm.product_of(Premise(r["전제"]))
+        return ProductContext(category=p.category) if category_only else p
     if general_row(r):
         return ProductContext(category=Category.일반상품)  # 🆕 2026-10-20 (보충 32) 일반상품 규칙
     return ProductContext(category=Category(r["품목"]))
+
+
+def _print_answers(a: dict[str, Any]) -> None:
+    """답 경로 표 (D-348 보충 35 결정 2) — 조건별 · 95% 구간은 도달 · 오탐 칸만."""
+    print(
+        f"\n  답 경로 (D-348 보충 35 · 질문이 선 행 {a['rows']} · 모두 예 / 모두 아니오 · 이어 묻기 {ANSWER_ROUNDS}회까지 · 보고 지표)"
+    )
+    for k, c in a["by_condition"].items():
+        n = c.get("질문", 0)
+        bits = [f"질문 {n}"]
+        if k in ("A", "B"):
+            bits += [
+                f"도달 {c.get('도달', 0)} {_ci(c.get('도달', 0), n)}",
+                f"답 미반영 {c.get('답미반영', 0)}",
+            ]
+        if k == "D":
+            bits += [
+                f"예에 위반(틀림) {c.get('예에위반', 0)}",
+                f"아니오에 위반(답에 달린 오탐) {c.get('아니오에위반', 0)} {_ci(c.get('아니오에위반', 0), n)}",
+            ]
+        if k == "C":
+            bits += ["질문이 선 C 행 = D-61 후보(묻지 않고 확정할 자리였나)"]
+        if c.get("남음"):
+            bits += [f"상한 뒤에도 질문 남음 {c['남음']}(도달로 세지 않음)"]
+        print(f"    {k:>2}  " + " · ".join(bits))
+        for ans in (Answer.예.value, Answer.아니오.value):
+            dist = {x.split(":", 1)[1]: v for x, v in c.items() if x.startswith(ans + ":")}
+            print(f"        {ans:4} → {dist}")
+    if a["left"]:
+        print(f"    상한 뒤에도 질문이 남은 행 {a['left']}")
+    if a["contract_errors"]:
+        print(f"    🔴 답 경로에서 응답 계약을 지나지 못한 판정 {a['contract_errors']}")
 
 
 def _pct(x: float | None) -> str:
@@ -955,6 +1064,12 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
         )
         for k, (n, pos, law, m) in cb.items():
             print(f"    {k:28} {n:>5} · {pos:>4} / {law:>3} · M {m}")
+    if s.get("invariant_rows"):
+        print(
+            f"\n  🔴 불변식이 깨진 행 {s['invariant_rows']} — 운영은 전제 보류로 바로잡았다 · 0 이어야 한다(행별 `invariant` · D-348 보충 35)"
+        )
+    if s.get("answers"):
+        _print_answers(s["answers"])
     if s.get("contract_errors"):
         print(
             f"\n  🔴 응답 계약을 지나지 못한 행 {s['contract_errors']} — 앱이라면 그 요청은 오류로 끝난다 (행별 `contract_error`)"
@@ -1237,19 +1352,123 @@ def stub_runner() -> Callable[[str, ProductContext], dict[str, Any]]:
     return lambda text, product: g.run_review_stub(text)[0]
 
 
+class _InvariantLog(logging.Handler):
+    """그래프의 불변식 로거(`app.graph.INVARIANT_LOG`)를 행마다 받아 둔다 (🆕 2026-10-21 · D-348 보충 35 결정 1).
+
+    ★ 운영 · 평가는 불변식 위반을 바로잡고(전제 보류) 로그만 남긴다 — 평가가 그 로그를 행에 싣지 않으면 바로잡은 결함이 수에 묻힌다(D-162).
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.got: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.got.append(record.getMessage())
+
+
+#: 답 경로의 이어 묻기 상한 — 품목 → 하위 전제 → 사실 → 실증(보충 34 결정 2)에서 문장 쪽은 사실 · 실증 두 겹이라 셋이면 남는다 `[임의]`
+#: (인계 10-21 클론B §1 #2 (가′) · 보고 지표 · 게이트 아님 · 셋 뒤에도 질문이 남은 행은 따로 센다)
+ANSWER_ROUNDS = 3
+#: 답 경로의 두 벌 — 사실 확인 문안은 모두 「예 = 적법 조건을 갖춤」이다(`app/factcheck.py` `FACT_QUESTIONS`) → 예 = 가장 좋은 경우 · 아니오 = 가장 나쁜 경우
+ANSWER_SETS = (Answer.예, Answer.아니오)
+
+
+def _open_questions(state: dict[str, Any]) -> list[tuple[str, str, str | None]]:
+    """상태의 질문 — (문장 글자, `fact` · `subst`, 사실 종류). 기록 문장과 보이는 분기 문장 모두 · 답은 문장 글자에 묶여 모든 분기에 든다(`app/routers/user.py` `_answers_of`)."""
+    sents = list(state.get("sentences", [])) + [
+        x for b in state.get("branches", []) for x in b.sentences
+    ]
+    out: dict[tuple[str, str, str | None], None] = {}
+    for x in sents:
+        if x.fact_check is not None:
+            out[(x.text, "fact", x.fact_check.kind.value)] = None
+        if x.substantiation is not None:
+            out[(x.text, "subst", None)] = None
+    return list(out)
+
+
+def answer_path(
+    runner: Callable[[str, ProductContext], dict[str, Any]],
+    text: str,
+    product: ProductContext,
+    first: dict[str, Any],
+    answer: Answer,
+) -> dict[str, Any]:
+    """질문이 선 행을 한 가지 답으로 끝까지 — 선 질문에 모두 `answer` 로 답하고 다시 판정 · 새 질문이 서면 또 (상한 `ANSWER_ROUNDS`).
+
+    🆕 2026-10-21 (D-348 보충 35 결정 2 · 인계 10-21 클론B §1 #2 (가′)). 보충 33 으로 판정이 답 뒤로 갔다 — 답하기 전 상태만 재면 판정을 못 잰다.
+    🚨 답은 검증이 아니다 · 이 수는 「사용자가 그렇게 답하면」의 판정이다(골든 라벨과 맞대는 해석은 `answer_report`).
+    """
+    from app.contracts import FactKind  # noqa: PLC0415
+
+    facts, substs = list(product.facts), list(product.substs)
+    asked: set[tuple[str, str, str | None]] = set()
+    st, rounds = first, 0
+    for _ in range(ANSWER_ROUNDS):
+        new = [q for q in _open_questions(st) if q not in asked]
+        if not new:
+            break
+        for t, kind, fk in new:
+            asked.add((t, kind, fk))
+            if kind == "fact":
+                facts.append(UserFact(text=t, kind=FactKind(fk), answer=answer))
+            else:
+                substs.append(UserSubst(text=t, answer=answer))
+        st = runner(text, product.model_copy(update={"facts": facts, "substs": substs}))
+        rounds += 1
+    p = predict(st)
+    left = [q for q in _open_questions(st) if q not in asked]
+    return {
+        "class": p["class"],
+        "types": p["types"],
+        "cond_types": p["cond_types"],
+        "verdicts": p["verdicts"],
+        "hold_reasons": p["hold_reasons"],
+        "risk_max": p["risk_max"],
+        "rounds": rounds,
+        "asked": len(asked),
+        "left": len(left),
+        "contract_error": p.get("contract_error"),
+    }
+
+
 def run(
     rows: Iterable[dict],
     runner: Callable[[str, ProductContext], dict[str, Any]],
     every: int = 100,
     *,
     conditional: bool = False,
+    category_only: bool = False,
+    answers: bool = False,
 ) -> list[dict]:
     preds = []
     t0 = time.perf_counter()
-    for k, r in enumerate(rows, 1):
-        preds.append(predict(runner(r["text"], product_of(r, conditional))))
-        if every and k % every == 0:
-            print(f"  … {k}행 · {time.perf_counter() - t0:.0f}초", file=sys.stderr)
+    inv = _InvariantLog()
+    log = logging.getLogger(g.INVARIANT_LOG)
+    log.addHandler(inv)
+    try:
+        for k, r in enumerate(rows, 1):
+            product = product_of(r, conditional, category_only=category_only)
+            inv.got = []
+            st = runner(r["text"], product)
+            p = predict(st)
+            if answers and _open_questions(st):
+                #: 🆕 (보충 35 결정 2) 답 경로 — 질문이 선 행만 · 두 벌
+                p["answer_path"] = {
+                    a.value: answer_path(runner, r["text"], product, st, a) for a in ANSWER_SETS
+                }
+            #: 🆕 (보충 35 결정 1) 이 행에서 불변식이 깨진 자리 — 답 경로의 재판정까지 포함
+            p["invariant"] = list(inv.got)
+            #: 🆕 (보충 35 결정 2) 넘긴 제품 정보 — 경로 동치 대조(`scripts/eval_diff.py`)가 행을 짝짓는다
+            p["product"] = {
+                "category": None if product.category is None else product.category.value,
+                "premise": None if product.premise is None else product.premise.value,
+            }
+            preds.append(p)
+            if every and k % every == 0:
+                print(f"  … {k}행 · {time.perf_counter() - t0:.0f}초", file=sys.stderr)
+    finally:
+        log.removeHandler(inv)
     return preds
 
 
@@ -1336,7 +1555,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="확장 dev — dev 에 재분할의 해설서 dev 를 더한다 (D-347 · `--dev` 와 함께만)",
     )
+    ap.add_argument(
+        "--category-only",
+        action="store_true",
+        help="조건부에서 골든 `전제` 의 품목만 넘긴다(전제를 고르기 전) — 경로 동치 대조의 짝(`scripts/eval_diff.py equiv` · D-348 보충 35 · dev 전용)",
+    )
+    ap.add_argument(
+        "--answers",
+        action="store_true",
+        help=f"답 경로 — 질문이 선 행을 모두 「예」 · 모두 「아니오」로 끝까지(이어 묻기 {ANSWER_ROUNDS} 회까지 · D-348 보충 35 · 보고 지표)",
+    )
     a = ap.parse_args(argv)
+    if a.category_only and (not a.conditional or a.sealed):
+        raise SystemExit(
+            "🔴 --category-only 는 dev 조건부 전용 — 경로 동치 대조의 짝이다(D-348 보충 35 · 봉인 회차는 고른 전제로 잰다)"
+        )
     if a.guide_dev and not a.dev:
         raise SystemExit(
             "🔴 --guide-dev 는 --dev 와 함께만 — 봉인 평가셋에는 해설서 dev 가 없다 (D-347)"
@@ -1364,6 +1597,10 @@ def main(argv: list[str] | None = None) -> int:
     all_rows = rows
     #: 판 표지 — 원장에 수와 함께 적는다 (D-178). 🔴 실제 실행은 DB 사전이 파일과 같을 때만 돈다(`check_dict`)
     stamp: dict[str, Any] = {"golden_sha": _sha12(GOLDEN), "conditional": a.conditional}
+    if a.category_only:
+        stamp |= {"category_only": True}
+    if a.answers:
+        stamp |= {"answers": f"예 · 아니오 · {ANSWER_ROUNDS}회"}
     stamp |= {"split": "dev" if a.dev else "test_sentence", "resplit": resplit.VERSION} | dev_stamp
     stamp |= use_encoder(a.encoder, adopted_only=a.sealed)
     if a.no_enc_filter:
@@ -1424,7 +1661,13 @@ def _one_mode(
     """한 모드를 재고 보고 · 결과 파일을 쓴다 — 봉인 회차는 두 모드를 차례로 부른다(`--out` 이름에 `_uncond` · `_cond` 를 붙인다)."""
     stamp = stamp | {"conditional": conditional}
     t0 = time.perf_counter()
-    preds = run(rows, runner, conditional=conditional)
+    preds = run(
+        rows,
+        runner,
+        conditional=conditional,
+        category_only=getattr(a, "category_only", False),
+        answers=getattr(a, "answers", False),
+    )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
     report(s, conditional, dev=a.dev)
