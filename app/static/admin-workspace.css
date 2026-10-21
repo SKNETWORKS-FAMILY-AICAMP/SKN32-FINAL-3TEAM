@@ -1,0 +1,154 @@
+/* The same workspace language as user/product-ui: light surfaces, compact
+   controls and restrained brand accents. These rules only target admin pages. */
+body:has(.admin-shell),.admin-shell {
+  --a-bg:#f5f6fb;
+  --a-nav-gradient:linear-gradient(135deg,#edf1fc 0%,#f5f6fb 45%,#eee8f7 100%);
+  --a-nav-surface:#f5f3fa;
+  --a-nav-hover:#e9e8f5;
+  --a-nav-line:#e0e2ee;
+  --a-page-gradient:radial-gradient(ellipse at 0% 10%,#c7d4f4 0%,transparent 58%),radial-gradient(ellipse at 100% 90%,#d5bfeb 0%,transparent 60%),linear-gradient(135deg,#e3eafa 0%,#f3f2fa 48%,#e7daf3 100%);
+  --a-surface:#fff;
+  --a-surface2:#f7f8fc;
+  --a-ink:#24304a;
+  --a-clay:#68748b;
+  --a-line:#e3e6f0;
+  --a-signal:#535fba;
+  --a-signal-ink:#4854aa;
+  --a-signal-soft:#eff0fb;
+  --a-lavender:#a49bc9;
+  --a-brand:linear-gradient(115deg,#4657a8 0%,#6557ae 65%,#7b5da8 100%);
+  --a-shadow:0 3px 12px rgb(57 32 79 / 2.5%);
+}
+@media(prefers-color-scheme:dark) {
+  body:has(.admin-shell),.admin-shell {
+    --a-bg:#161b29; --a-surface:#20293b; --a-surface2:#293248;
+    --a-nav-gradient:linear-gradient(135deg,#19243b 0%,#161b29 45%,#28213b 100%);
+    --a-nav-surface:#22283a;
+    --a-nav-hover:#2d334b;
+    --a-nav-line:#363e56;
+    --a-page-gradient:radial-gradient(ellipse at 0% 10%,#293f68 0%,transparent 58%),radial-gradient(ellipse at 100% 90%,#47305c 0%,transparent 60%),linear-gradient(135deg,#1d2b46 0%,#1b2031 48%,#332540 100%);
+    --a-ink:#eef1fa; --a-clay:#b1bdd2; --a-line:#3a465f;
+    --a-signal:#aab4f1; --a-signal-ink:#c2c9ff; --a-signal-soft:#303957;
+    --a-lavender:#c3b4e7; --a-shadow:none;
+  }
+}
+body:has(.admin-shell) {
+  line-height:1.65;
+  background-color:var(--a-bg);
+  background-image:var(--a-page-gradient);
+  background-size:100% 100dvh;
+  background-repeat:no-repeat;
+  background-attachment:fixed;
+}
+.admin-shell { background:transparent; }
+body:has(.admin-shell) .admin-topbar {
+  min-height:64px;
+  background:var(--a-nav-gradient);
+  border-bottom-color:var(--a-nav-line);
+  box-shadow:0 2px 12px rgb(49 56 99 / 6%);
+}
+.admin-topbar .admin-navigation .admin-nav-sub-list,
+.admin-topbar .admin-account button,
+.admin-topbar .admin-menu-toggle { background:var(--a-nav-surface); border-color:var(--a-nav-line); }
+.admin-topbar .admin-navigation :is(summary,.admin-nav-link):hover,
+.admin-topbar .admin-navigation details[open]>summary,
+.admin-topbar .admin-navigation .admin-nav-sub:hover { background:var(--a-nav-hover); }
+.admin-brand { font-size:18px; gap:9px; }
+.admin-brand img { width:29px; height:29px; }
+.admin-brand>span { color:var(--a-signal-ink); }
+.admin-brand small { border:1px solid var(--a-line); background:var(--a-signal-soft); margin-left:4px; padding:3px 7px; border-radius:5px; font-size:12px; letter-spacing:1px; }
+.admin-avatar { background:var(--a-brand); color:#fff; font-weight:600; }
+.admin-account button { min-height:34px; border-radius:7px; background:var(--a-surface); }
+.admin-navigation .admin-nav-link,.admin-navigation summary { padding-block:20px; }
+.admin-navigation .admin-nav-sub-list { border-radius:10px; box-shadow:0 10px 28px rgb(57 32 79 / 8%); }
+.admin-navigation .admin-nav-sub { padding:10px 12px; border-radius:7px; }
+.admin-navigation .admin-nav-closed,.admin-closed-badge { color:var(--a-clay); }
+.admin-shell { min-height:calc(100dvh - 65px); }
+.admin-shell .admin-main { padding-top:24px; }
+.admin-main h1 { font-size:28px; line-height:1.35; letter-spacing:-.035em; }
+.admin-breadcrumb { margin-bottom:18px; font-size:14px; }
+.admin-overview-head,.as-head { margin-bottom:20px; }
+.admin-overview-head p,.as-head p { font-size:16px; line-height:1.65; }
+.admin-overview-kpis { margin:20px 0; gap:16px; }
+.admin-main :is(.admin-overview-card,.as-panel,.as-metric) { border-radius:10px; border-color:var(--a-line); box-shadow:var(--a-shadow); }
+.admin-main :is(.admin-overview-card,.as-panel) { padding:20px 22px; }
+.admin-main :is(.admin-card-head,.as-panel-head) h2 { font-size:19px; font-weight:650; }
+.admin-main :is(.admin-card-head,.as-panel-head) { border-bottom:1px solid var(--a-line); padding-bottom:14px; margin-bottom:16px; }
+.admin-overview-card .kpi-value,.as-metric-value { font-size:28px; letter-spacing:-.04em; margin-block:10px 6px; }
+.admin-overview-card .kpi-title,.as-metric-label { font-size:15px; }
+.kpi-title .cl-icon { width:34px; height:34px; border-radius:9px; }
+.admin-task { padding-block:14px; font-size:15px; }
+.admin-task:hover { color:var(--a-signal-ink); }
+.admin-main :is(.filter-bar,.er-filter,.as-toolbar) { border-radius:9px; box-shadow:var(--a-shadow); }
+.admin-main :is(input,select,textarea,button) { font-size:15px; }
+.admin-main :is(input:not([type=checkbox]):not([type=radio]),select,textarea) {
+  background:var(--a-surface); border:1px solid var(--a-line);
+  border-radius:7px; padding:10px 12px; min-height:40px;
+}
+.admin-main textarea { line-height:1.7; }
+.admin-main :is(input,select,textarea):focus-visible { outline:2px solid var(--a-signal); outline-offset:2px; }
+.admin-main button:not(:disabled),
+.admin-main[data-admin-layout] :is(.notice-form,.ticket-form) button[type=submit] {
+  background:var(--a-brand); color:#fff; border:1px solid transparent;
+  border-radius:7px; padding:10px 17px; font-size:15px; font-weight:600;
+}
+.admin-main button:not(:disabled):hover { filter:brightness(.96); }
+.admin-main button:disabled { background:var(--a-surface2); color:var(--a-clay); border:1px solid var(--a-line); opacity:1; }
+.admin-main .period-tabs a { border-radius:7px; min-height:34px; display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; }
+.admin-main .period-tabs a.active { background:var(--a-signal-soft); border-color:color-mix(in srgb,var(--a-signal) 35%,var(--a-line)); color:var(--a-signal-ink); font-weight:600; }
+.admin-status,.as-badge { border-radius:6px; }
+.admin-main .admin-table-scroll { border-radius:10px; background:var(--a-surface); }
+.admin-main table th { background:var(--a-surface2); color:var(--a-clay); font-size:14px; font-weight:500; padding:13px 16px; }
+.admin-main table td { padding:15px 16px; }
+.admin-main .admin-table-scroll>table:has(tr>:nth-child(5)) { min-width:720px; }
+.admin-main .admin-table-scroll>table:has(tr>:nth-child(5)) td { word-break:keep-all; }
+.admin-main table td>a { text-decoration:none; font-weight:500; }
+.admin-main table td>a:hover { text-decoration:underline; }
+.admin-main table tbody tr:hover td { background:color-mix(in srgb,var(--a-signal-soft) 45%,var(--a-surface)); }
+.admin-main[data-admin-layout] :is(.notice-form,.ticket-form) { box-shadow:var(--a-shadow); border-radius:10px; padding:22px; gap:18px; }
+.admin-main[data-admin-layout] :is(.notice-form,.ticket-form) label { font-size:15px; color:var(--a-ink); font-weight:500; gap:6px; }
+.admin-main[data-admin-layout] :is(.notice-form,.ticket-form) label>.hint { color:var(--a-clay); font-size:14px; font-weight:400; }
+.admin-main[data-admin-layout] :is(.notice-form,.ticket-form) :is(input:not([type=checkbox]),select,textarea) { background:var(--a-surface); color:var(--a-ink); font:inherit; border-color:var(--a-line); padding:10px 12px; border-radius:7px; }
+.admin-main[data-admin-layout] :is(.notice-form,.ticket-form) textarea { min-height:170px; line-height:1.7; }
+.admin-main :is(.nf-actions,.tf-actions) { border-top:1px solid var(--a-line); padding-top:18px; margin-top:4px; }
+.admin-main .board-content { border-radius:10px; box-shadow:var(--a-shadow); }
+.admin-main .reset-link { color:var(--a-clay); font-size:14px; }
+.admin-main[data-admin-layout] a.new-btn { background:var(--a-brand); color:#fff; padding:10px 17px; font-size:15px; border-radius:7px; }
+.admin-main .as-explainer { border-radius:7px; line-height:1.7; }
+@media(prefers-reduced-motion:no-preference) {
+  .admin-topbar :is(a,summary),.admin-main :is(button,input,select,textarea) { transition:background-color .15s,border-color .15s,box-shadow .15s; }
+}
+@media(max-width:1050px) and (min-width:701px) {
+  .admin-navigation .admin-nav-link,.admin-navigation summary { padding-block:12px; }
+}
+@media(max-width:700px) {
+  .admin-shell .admin-main { padding-top:20px; }
+  .admin-main h1 { font-size:26px; }
+  .admin-main :is(.admin-overview-card,.as-panel,.as-metric) { padding:18px 16px; }
+  .admin-main[data-admin-layout] :is(.notice-form,.ticket-form) { padding:18px 16px; }
+  .admin-navigation .admin-nav-link,.admin-navigation summary { padding-block:11px; }
+}
+
+/* Admin-only reading scale: body 16px, supporting text at least 14px. */
+body:has(.admin-shell) { font-size:16px; }
+.admin-account,.admin-account button,
+.admin-navigation .admin-nav-link,.admin-navigation summary,
+.admin-navigation .admin-nav-sub { font-size:15px; }
+.admin-main h2 { font-size:18px; }
+.admin-main table,.admin-main .as-panel .admin-table-scroll table { font-size:15px; }
+.admin-main :is(.filter-bar,.er-filter) label,
+.admin-main :is(.period-tabs a,.pager,.as-toolbar,.as-toolbar label),
+.admin-main :is(.as-empty,.as-unavailable p,.admin-closed-lead),
+.admin-main .admin-closed :is(ul,ol) { font-size:15px; }
+.admin-main :is(.warn,.er-dummy,.er-muted,.as-notice,.as-explainer),
+.admin-main :is(.as-metric p,.as-unit,.as-context,.as-legend,.as-table-note,.as-export),
+.admin-main :is(.as-chart-col>small,.as-chart-value,.as-distribution-label small),
+.admin-main :is(.admin-chart-col small,.admin-chart-note,.admin-legend),
+.admin-main :is(.kpi-delta,.admin-task small,.admin-data>p),
+.admin-main :is(.admin-closed-meta,.admin-closed-alt small,.admin-closed-summary>small),
+.admin-main :is(.admin-status,.as-badge,.admin-sample,code),
+.admin-page-footer { font-size:14px; line-height:1.7; }
+.admin-main .as-distribution-label { font-size:15px; }
+.admin-main .as-panel-head { flex-wrap:wrap; }
+.admin-main .as-panel-head h2 { min-width:0; }
+.admin-page-footer { overflow-wrap:anywhere; }

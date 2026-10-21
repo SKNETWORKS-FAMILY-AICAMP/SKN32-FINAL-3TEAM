@@ -1,12 +1,11 @@
 {% extends "base.html" %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css?v=2"><link rel="stylesheet" href="/static/typography.css?v=1">{% block screen_css %}{% endblock %}<link rel="stylesheet" href="/static/workspace.css?v=5"><link rel="stylesheet" href="/static/design.css?v=57"><link rel="stylesheet" href="/static/product-ui.css?v=2"><link rel="stylesheet" href="/static/motion.css?v=5">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css?v=2"><link rel="stylesheet" href="/static/typography.css?v=1">{% block screen_css %}{% endblock %}<link rel="stylesheet" href="/static/workspace.css?v=5"><link rel="stylesheet" href="/static/design.css?v=57"><link rel="stylesheet" href="/static/product-ui.css?v=3"><link rel="stylesheet" href="/static/motion.css?v=5"><link rel="stylesheet" href="/static/user-navigation.css?v=11"><link rel="stylesheet" href="/static/review-pairs.css?v=29"><link rel="stylesheet" href="/static/user-reading.css?v=2">{% endblock %}
 {% block content %}
 {% from "user/_icons.html" import icon %}
 <a class="ws-skip" href="#workspace-main">본문 바로가기</a>
 <div class="user-shell"{% if theme %} data-theme="{{ theme }}"{% endif %}>
 {% include "user/_topnav.html" %}
 <div class="user-body">
-  {% include "user/_sidebar.html" %}
   <section class="user-main{{ ' cl-workspace-screen' if ui_screen in ['/u/', '/u/review', '/u/generate', '/u/compose'] }}" id="workspace-main" aria-label="작업 내용">
     {% if ui_screen in ['/u/', '/u/review', '/u/generate', '/u/compose', '/u/history'] %}<nav class="cl-breadcrumb" aria-label="현재 위치"><a href="/u/">작업 공간</a><span>/</span><span>{{ {'/u/':'홈','/u/review':'문구 검수','/u/generate':'카피 생성','/u/compose':'AI 광고 생성','/u/history':'검수 이력'}[ui_screen] }}</span></nav>{% endif %}
     {% block user_content %}{% endblock %}
@@ -20,7 +19,8 @@
 </details>
 </div>
 <script src="/static/user_theme.js" defer></script>
-<script src="/static/workspace.js?v=5" defer></script>
+<script src="/static/workspace.js?v=6" defer></script>
+<script src="/static/user-navigation.js?v=2" defer></script>
 <script src="/static/design.js?v=15" defer></script>
 <script src="/static/motion.js?v=4" defer></script>
 {% endblock %}

@@ -39,18 +39,20 @@ def test_화면_골격이_DB_없이도_뜬다(path: str) -> None:
     assert r.status_code == 200, f"🔴 {path} 가 안 뜬다 — {r.status_code}"
 
 
-def test_상단과_사이드바의_역할이_분리된다() -> None:
+def test_상단에_작업메뉴와_이용가이드가_통합된다() -> None:
     from fastapi.testclient import TestClient
 
     from app.api import app
 
     body = TestClient(app).get("/u/review").text
     nav = body.split('<nav class="user-topnav"', 1)[1].split("</nav>", 1)[0]
-    assert ">작업 공간</a>" in nav
-    assert ">이용 가이드</a>" in nav
+    for label in ("홈", "문구 검수", "카피 생성", "AI 광고 생성", "검수 이력"):
+        assert f">{label}</a>" in nav
+    assert "이용 가이드" in nav
     assert ">매칭</a>" not in nav
     assert 'src="/static/brand/symbol-180.png"' in nav
-    assert "고객센터" not in nav
+    for href in ("/u/help?tab=guide", "/u/help?tab=faq", "/u/cs"):
+        assert f'href="{href}"' in nav
     assert 'aria-current="page"' in body
 
 
@@ -64,7 +66,7 @@ def test_사이드바에_하위_화면이_새지_않는다() -> None:
     assert 'href="/u/segments"' not in body, "🔴 하위 화면이 사이드바에 새어나왔다"
 
 
-def test_작업_화면에_공통_사이드바가_있다() -> None:
+def test_작업_화면은_사이드바_없이_공통_상단메뉴를_쓴다() -> None:
     from fastapi.testclient import TestClient
 
     from app.api import app
@@ -72,12 +74,13 @@ def test_작업_화면에_공통_사이드바가_있다() -> None:
     client = TestClient(app)
     for path in ("/u/review", "/u/cs", "/u/compose"):
         body = client.get(path).text
-        assert 'class="user-sidebar"' in body
+        assert 'class="user-sidebar"' not in body
+        assert 'id="cl-user-navigation"' in body
         for label in ("홈", "문구 검수", "카피 생성", "AI 광고 생성", "검수 이력"):
             assert label in body
 
 
-def test_현재_작업이_사이드바에서_선택된다() -> None:
+def test_현재_작업이_상단메뉴에서_선택된다() -> None:
     from fastapi.testclient import TestClient
 
     from app.api import app
@@ -97,8 +100,8 @@ def test_copylane_소개_탭이_사용방법과_FAQ를_가른다() -> None:
     faq = client.get("/u/help?tab=faq").text
     assert "사용방법" in guide
     assert "자주 묻는 질문" in faq
-    assert "user-sidebar-item-active" in guide
-    assert "user-sidebar-item-active" in faq
+    assert 'href="/u/help?tab=guide" aria-current="page"' in guide
+    assert 'href="/u/help?tab=faq" aria-current="page"' in faq
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,7 @@
   🔴 트레이스백 전문은 **저장하지 않는다** — 마스킹 필터를 안 지나기 때문이다 (요청 메모 §2).
 #}{% extends "admin/_base.html" %}
 {% block title %}오류 로그 상세 | CopyLane 관리자{% endblock %}
+{% block admin_layout %}reading{% endblock %}
 {% block admin_content %}
 
 <link rel="stylesheet" href="/static/admin_errors.css">

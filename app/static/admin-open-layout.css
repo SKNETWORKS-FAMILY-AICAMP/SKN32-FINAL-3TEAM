@@ -1,0 +1,148 @@
+/* Open admin surfaces: group with tone and space, keep rules for tabular data. */
+body:has(.admin-shell),.admin-shell {
+  --a-page-gradient:radial-gradient(ellipse at 0% 10%,#e4e9f8 0%,transparent 60%),radial-gradient(ellipse at 100% 90%,#e9e1f4 0%,transparent 60%),linear-gradient(135deg,#f7f8fc,#f6f3fa);
+  --a-summary-band:linear-gradient(110deg,color-mix(in srgb,var(--a-signal-soft) 78%,transparent),color-mix(in srgb,var(--a-signal-soft) 30%,transparent));
+}
+@media(prefers-color-scheme:dark) {
+  body:has(.admin-shell),.admin-shell {
+    --a-page-gradient:radial-gradient(ellipse at 0% 10%,#22304a 0%,transparent 60%),radial-gradient(ellipse at 100% 90%,#30263d 0%,transparent 60%),linear-gradient(135deg,#181e2d,#211d2b);
+  }
+}
+.admin-shell .admin-main :is(.admin-overview-card,.as-panel,.as-metric,.dash-card,.dash-kpi,.member-kpi,.cs-kpi,.docs-kpi) {
+  background:transparent; border:0; border-radius:0; box-shadow:none;
+  padding:0; min-width:0;
+}
+.admin-shell .admin-main :is(.admin-overview-kpis,.as-kpis,.dash-kpis,.member-kpis,.cs-kpis,.docs-kpis) {
+  gap:24px; padding:26px 24px; margin:24px 0 38px;
+  background:var(--a-summary-band); border:0; border-radius:0; box-shadow:none;
+}
+.admin-shell .admin-main .admin-overview-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.admin-shell .admin-main :is(.admin-card-head,.as-panel-head,.dash-card-head) {
+  border:0; padding-bottom:0; margin-bottom:22px; gap:16px;
+}
+.admin-shell .admin-main :is(.admin-overview-grid,.as-grid,.dash-grid) {
+  column-gap:48px; row-gap:36px; margin-bottom:38px;
+}
+.admin-shell .admin-main :is(.as-detail-grid,.admin-closed-grid) { gap:36px 48px; margin-top:36px; }
+.admin-shell .admin-main :is(.as-page>.as-panel,.admin-main>.as-panel,.admin-inquiries) { margin-top:36px; }
+.admin-shell .admin-main .kpi-title .cl-icon { background:transparent; padding:0; width:20px; height:20px; border-radius:0; }
+.admin-shell .admin-main .kpi-title { justify-content:flex-start; gap:10px; }
+.admin-shell .admin-main .kpi-title .cl-icon { order:-1; }
+.admin-shell .admin-main .admin-task { border:0; padding:18px 4px; border-radius:6px; }
+.admin-shell .admin-main .admin-task:hover { background:color-mix(in srgb,var(--a-signal-soft) 65%,transparent); }
+.admin-shell .admin-main :is(.admin-overview-head,.as-head) { margin-bottom:24px; flex-wrap:wrap; }
+.admin-shell .admin-main .period-tabs a { background:transparent; border-color:transparent; }
+.admin-shell .admin-main .period-tabs a.active { background:var(--a-signal-soft); border-color:transparent; box-shadow:inset 0 -2px var(--a-signal); }
+.admin-shell .admin-main :is(.filter-bar,.er-filter,.as-toolbar) { background:transparent; border:0; box-shadow:none; border-radius:0; padding:12px 0; }
+.admin-shell .admin-main .admin-table-scroll { background:transparent; border:0; border-radius:0; box-shadow:none; }
+.admin-shell .admin-main table { background:transparent; }
+.admin-shell .admin-main table th { background:color-mix(in srgb,var(--a-signal-soft) 60%,transparent); border-bottom:1px solid var(--a-line); }
+.admin-shell .admin-main table td { border-color:color-mix(in srgb,var(--a-line) 65%,transparent); }
+.admin-shell .admin-main :is(.notice-form,.ticket-form,.board-content) { background:transparent; border:0; box-shadow:none; border-radius:0; padding:12px 0; }
+.admin-shell .admin-main :is(.admin-chart-bars,.as-chart-bars) { background:repeating-linear-gradient(to top,transparent 0,transparent 85px,color-mix(in srgb,var(--a-line) 55%,transparent) 86px); }
+.admin-shell .admin-main .admin-closed-alt a { border:0; border-radius:6px; padding:14px 0; }
+.admin-shell .admin-main .admin-closed-alt a:hover { background:transparent; text-decoration:underline; }
+@media(max-width:960px) {
+  .admin-shell .admin-main .admin-overview-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .admin-shell .admin-main :is(.admin-overview-grid,.as-grid,.dash-grid) { row-gap:32px; }
+}
+@media(max-width:700px) {
+  .admin-shell .admin-main :is(.admin-overview-kpis,.as-kpis,.dash-kpis,.member-kpis,.cs-kpis,.docs-kpis) { padding:20px 16px; gap:24px 16px; margin:20px 0 30px; }
+  .admin-shell .admin-main :is(.as-detail-grid,.admin-closed-grid) { gap:30px; }
+  .admin-shell .admin-main :is(.admin-card-head,.as-panel-head,.dash-card-head) { margin-bottom:18px; }
+}
+/* Compact reporting: one reading width and short, aligned comparisons. */
+.admin-shell .admin-main:has(>.as-compact),
+.admin-shell .admin-main:has(>.admin-overview-head) { max-width:1160px; }
+body:has(.as-compact),body:has(.admin-summary) {
+  --a-page-gradient:linear-gradient(135deg,#f5f7fc 0%,#f8f7fc 55%,#f5f2fa 100%);
+}
+.admin-summary { margin:26px 0 38px; }
+.admin-summary-head { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px 24px; }
+.admin-summary-head h2 { margin:0 0 5px; }
+.admin-summary-head p,.admin-summary-head>span { color:var(--a-clay); font-size:14px; margin:0; }
+.admin-shell .admin-main .admin-summary .admin-overview-kpis {
+  grid-template-columns:repeat(3,minmax(0,1fr)); background:var(--a-summary-band);
+  gap:20px; padding:22px 20px; margin:18px 0;
+}
+.admin-summary .kpi-value { margin-block:10px; }
+.admin-summary .admin-chart-note { margin-top:6px; }
+.admin-generation-note { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; background:var(--a-summary-band); padding:14px 16px; }
+.admin-generation-note>.cl-icon { color:var(--a-signal-ink); flex-shrink:0; }
+.admin-generation-note p { margin:0; color:var(--a-clay); font-size:14px; }
+.admin-shell .admin-main .as-compact .as-grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:32px; }
+.admin-shell .admin-main .as-compact :is(.as-panel-head,.admin-card-head) { justify-content:flex-start; gap:8px 16px; margin-bottom:20px; }
+.admin-shell .admin-main .as-compact .as-panel-head h2 { font-size:18px; }
+.admin-shell .admin-main .as-compact .as-kpis { grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:20px; padding:22px 20px; margin-bottom:18px; }
+.as-metric-link { color:inherit; text-decoration:none; min-width:0; }
+.as-metric-link:hover .as-metric-label { color:var(--a-signal-ink); text-decoration:underline; }
+.as-compact .as-metric-value { overflow-wrap:anywhere; }
+.as-status-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; margin-top:32px; }
+.as-status-strip>a { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; padding:14px 16px; background:var(--a-summary-band); color:var(--a-ink); text-decoration:none; }
+.as-status-strip>a>span:last-child { flex-basis:100%; color:var(--a-clay); font-size:14px; }
+.as-status-strip>a:hover { background:var(--a-signal-soft); }
+.as-compact>.as-context { margin-bottom:28px; }
+.as-compact-analysis { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; margin:32px 0; }
+.as-compact-distribution { display:flex; flex-direction:column; gap:20px; }
+.as-compact-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(60px,120px) max-content 48px; align-items:center; gap:10px; font-size:14px; }
+.as-compact-label { overflow-wrap:anywhere; }
+.as-compact-row>b,.as-compact-percent { text-align:right; font-variant-numeric:tabular-nums; }
+.as-compact-percent { color:var(--a-clay); }
+.as-compact-row>.as-track { height:7px; background:var(--a-line); }
+.as-compact-row:nth-child(even)>.as-track>span { background:var(--a-lavender); }
+.admin-shell .admin-main .as-type-ranking { margin-top:32px; }
+.as-type-ranking table { width:100%; }
+.as-type-ranking td:first-child { width:62%; }
+.as-rank { display:inline-block; min-width:28px; margin-right:12px; color:var(--a-clay); font-variant-numeric:tabular-nums; }
+.as-type-comparison { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:32px; align-items:start; }
+.as-type-figure { min-width:0; margin:0; padding-top:4px; }
+.as-type-figure figcaption { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.as-type-figure .as-legend { margin:0; }
+.as-type-columns { display:flex; gap:10px; padding-top:30px; }
+.as-type-col { flex:1; min-width:0; text-align:center; }
+.as-type-plot { height:180px; display:flex; align-items:flex-end; justify-content:center; border-bottom:1px solid var(--a-line); background:repeating-linear-gradient(to top,transparent 0,transparent 59px,color-mix(in srgb,var(--a-line) 50%,transparent) 60px); }
+.as-type-column { position:relative; display:block; width:28px; max-width:65%; background:var(--a-signal); border-radius:4px 4px 0 0; }
+.as-type-col:nth-child(even) .as-type-column { background:var(--a-lavender); }
+.as-type-value { position:absolute; bottom:100%; left:50%; transform:translateX(-50%); margin-bottom:6px; white-space:nowrap; color:var(--a-ink); font-size:12px; font-variant-numeric:tabular-nums; }
+.as-type-axis { display:block; margin-top:9px; color:var(--a-clay); font-size:13px; font-variant-numeric:tabular-nums; }
+.as-analysis-details { margin-top:32px; }
+.as-analysis-details>summary { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:16px 18px; background:var(--a-summary-band); list-style:none; cursor:pointer; }
+.as-analysis-details>summary::-webkit-details-marker { display:none; }
+.as-analysis-details>summary::before { content:'›'; color:var(--a-signal-ink); font-size:22px; line-height:1; }
+.as-analysis-details[open]>summary::before { transform:rotate(90deg); }
+.as-analysis-title { font-weight:650; }
+.as-analysis-description,.as-analysis-hint { color:var(--a-clay); font-size:14px; }
+.as-analysis-hint { margin-left:auto; }
+.as-analysis-details[open] .as-analysis-hint { display:none; }
+@media(prefers-color-scheme:dark) {
+  body:has(.as-compact),body:has(.admin-summary) { --a-page-gradient:linear-gradient(135deg,#1b2232,#211e2d); }
+}
+@media(max-width:850px) {
+  .admin-shell .admin-main .as-compact .as-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .admin-shell .admin-main .as-compact .as-grid,.as-compact-analysis { grid-template-columns:1fr; }
+  .as-compact-row { grid-template-columns:minmax(0,1fr) minmax(60px,180px) max-content 48px; }
+}
+@media(max-width:600px) {
+  .admin-shell .admin-main .admin-summary .admin-overview-kpis { grid-template-columns:1fr; gap:22px; }
+  .admin-generation-note p { flex-basis:100%; }
+  .as-compact-row { grid-template-columns:minmax(0,1fr) 64px max-content 42px; gap:8px; }
+  .as-analysis-description { flex-basis:100%; padding-left:20px; }
+  .as-analysis-hint { display:none; }
+  .as-status-strip { grid-template-columns:1fr; gap:16px; }
+}
+
+@media(max-width:850px) { .as-type-comparison { grid-template-columns:1fr; gap:24px; } }
+
+/* Keep only the top-level metrics as individual cards. */
+.admin-shell .admin-main :is(.as-compact .as-kpis,.admin-summary .admin-overview-kpis,.dash-kpis,.member-kpis,.cs-kpis,.docs-kpis) {
+  background:transparent; padding:0; gap:16px; border:0; box-shadow:none;
+}
+.admin-shell .admin-main :is(.as-kpis,.admin-overview-kpis,.dash-kpis,.member-kpis,.cs-kpis,.docs-kpis) :is(.as-metric,.admin-overview-card,.dash-kpi,.member-kpi,.cs-kpi,.docs-kpi) {
+  background:var(--a-surface); border:1px solid var(--a-line);
+  border-radius:10px; padding:20px 22px; box-shadow:var(--a-shadow);
+}
+.as-kpis>.as-metric-link { display:flex; }
+.as-kpis>.as-metric-link>.as-metric { flex:1; }
+@media(max-width:700px) {
+  .admin-shell .admin-main :is(.as-kpis,.admin-overview-kpis,.dash-kpis,.member-kpis,.cs-kpis,.docs-kpis) :is(.as-metric,.admin-overview-card,.dash-kpi,.member-kpi,.cs-kpi,.docs-kpi) { padding:18px 16px; }
+}

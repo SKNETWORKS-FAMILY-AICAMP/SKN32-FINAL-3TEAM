@@ -25,7 +25,11 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
 /* 머리 */
 .ld-page .ld-head { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--u-line);
-           background: color-mix(in srgb, var(--u-surface) 88%, transparent); backdrop-filter: blur(8px); }
+           background:linear-gradient(110deg,#f5f1fc 0%,#fcfafc 52%,#fcf1f6 100%); backdrop-filter:blur(8px); }
+.user-shell.ld-page[data-theme=dark] .ld-head { background:linear-gradient(110deg,#292331 0%,#242127 52%,#30232c 100%); }
+@media(prefers-color-scheme:dark) {
+  .user-shell.ld-page:not([data-theme=light]) .ld-head { background:linear-gradient(110deg,#292331 0%,#242127 52%,#30232c 100%); }
+}
 /* base.css 의 전역 header · footer · h2 규칙(개발 화면용)을 랜딩에서 되돌린다 */
 .ld-page header, .ld-page footer { display: block; margin: 0; padding: 0; gap: 0; }
 .ld-page header nav { margin-left: 0; }
@@ -36,11 +40,14 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-word { font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; background: var(--ld-grad);
            -webkit-background-clip: text; background-clip: text; color: transparent; }
 .ld-nav { display: flex; gap: .5rem; align-items: center; }
-.ld-profile { position: relative; margin-right: .6rem; }
-.ld-profile summary { display: flex; align-items: center; gap: .65rem; cursor: pointer; list-style: none; font-size: .9rem; }
+.ld-profile { position:relative; margin:0 .6rem 0 0; padding:0; border:0; background:transparent; }
+.ld-profile summary { display:inline-flex; align-items:center; gap:9px; padding:4px 12px 4px 4px; border:1px solid var(--u-line); border-radius:999px; background:var(--u-surface); color:var(--u-ink); box-shadow:0 1px 2px rgba(60,20,40,.04); cursor:pointer; list-style:none; font-size:14px; font-weight:600; white-space:nowrap; transition:border-color .15s,box-shadow .15s; }
+.ld-profile summary:hover,.ld-profile[open]>summary { border-color:color-mix(in srgb,var(--u-signal) 45%,var(--u-line)); box-shadow:0 4px 14px rgba(150,40,90,.12); }
 .ld-profile summary::-webkit-details-marker { display: none; }
-.ld-profile summary:focus-visible { outline: 2px solid var(--u-signal); outline-offset: 5px; border-radius: .5rem; }
-.ld-avatar { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; flex-shrink: 0; border-radius: 50%; background: var(--ld-grad); color: #fff; font-weight: 700; }
+.ld-profile summary:focus-visible { outline:2px solid var(--u-signal); outline-offset:3px; }
+.ld-avatar { display:grid; place-items:center; width:32px; height:32px; flex-shrink:0; border-radius:50%; background:var(--ld-grad); color:#fff; font-size:12px; font-weight:800; box-shadow:0 0 0 2px var(--u-surface),0 0 0 3.5px color-mix(in srgb,#E1306C 35%,transparent); }
+.ld-profile-caret { display:block; flex:0 0 16px; color:var(--u-clay); transition:transform .2s; }
+.ld-profile[open] .ld-profile-caret { transform:rotate(180deg); }
 .ld-profile-name { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ld-profile-menu { position: absolute; right: 0; top: calc(100% + .8rem); width: 12rem; padding: .5rem; border: 1px solid var(--u-line); border-radius: .8rem; background: var(--u-surface); box-shadow: 0 8px 24px rgba(90, 25, 60, .12); }
 .ld-profile-menu a, .ld-profile-menu button { display: block; width: 100%; box-sizing: border-box; padding: .7rem .8rem; border: 0; border-radius: .5rem; background: transparent; color: var(--u-ink); font: inherit; font-size: .85rem; text-decoration: none; text-align: left; cursor: pointer; }
@@ -325,7 +332,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   .ld-demo { translate:none; transform:none!important; }
   .ld-page [data-reveal] { opacity:1!important; transform:none!important; }
 }
-</style>{% endblock %}
+</style><link rel="stylesheet" href="/static/user-reading.css?v=2">{% endblock %}
 {% block content %}
 <div class="user-shell ld-page">
 
@@ -335,7 +342,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
     <nav class="ld-nav">
       {% if me %}
       <details class="ld-profile">
-        <summary aria-label="{{ me.name }} 님 계정 메뉴"><span class="ld-avatar" aria-hidden="true">{{ me.initials }}</span><span class="ld-profile-name">{{ me.name }} 님</span><span aria-hidden="true">⌄</span></summary>
+        <summary aria-label="{{ me.name }} 님 계정 메뉴"><span class="ld-avatar" aria-hidden="true">{{ me.initials }}</span><span class="ld-profile-name">{{ me.name }}</span><svg class="ld-profile-caret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
         <div class="ld-profile-menu"><a href="/u/mypage">마이페이지</a><a href="/u/mypage?tab=account">계정 설정</a><form method="post" action="/u/logout"><button type="submit">로그아웃</button></form></div>
       </details>
       <a class="ld-btn ld-btn-sm ld-btn-grad" href="/u/">작업 공간으로 →</a>

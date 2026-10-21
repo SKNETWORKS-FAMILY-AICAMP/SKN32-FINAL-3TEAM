@@ -12,3 +12,15 @@
 {% else %}<p class="as-empty">해당하는 기록이 없습니다.</p>{% endfor %}
 </div>
 {% endmacro %}
+
+{% macro compact_distribution(items,unit='건') %}
+<div class="as-compact-distribution">
+{% for row in items %}
+  <div class="as-compact-row">
+    <span class="as-compact-label">{{ row.label }}</span>
+    <span class="as-track" aria-hidden="true"><span style="width:{{ row.pct }}%"></span></span>
+    <b>{{ '{:,}'.format(row.n) }}{{ unit }}</b><span class="as-compact-percent">{{ row.pct }}%</span>
+  </div>
+{% else %}<p class="as-empty">해당하는 기록이 없습니다.</p>{% endfor %}
+</div>
+{% endmacro %}

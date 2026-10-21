@@ -2,7 +2,7 @@
 {% block title %}{{ self.stats_title() }} | CopyLane 관리자{% endblock %}
 {% block admin_css %}<link rel="stylesheet" href="/static/admin-stats.css?v=1">{% endblock %}
 {% block admin_content %}
-<div class="as-page">
+<div class="as-page as-compact{% block stats_page_class %}{% endblock %}">
   <div class="as-head">
     <div><h1>{% block stats_title %}통계{% endblock %}</h1><p>{% block stats_description %}{% endblock %}</p></div>
     <span class="as-badge">{% if source is defined %}{% if source == 'db' %}저장된 기록 기준{% else %}집계 확인 필요{% endif %}{% else %}예시 데이터 · 운영 집계 연동 전{% endif %}</span>

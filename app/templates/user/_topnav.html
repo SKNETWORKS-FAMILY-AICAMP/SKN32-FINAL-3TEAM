@@ -1,8 +1,21 @@
 <nav class="user-topnav" aria-label="주요 메뉴">
   <a class="user-topnav-brand" href="/u/landing"><img src="/static/brand/symbol-180.png" alt=""><span class="user-brand-word">CopyLane</span></a>
-  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section != 'about' }}" href="/u/">작업 공간</a>
-  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'about' }}" href="/u/help?tab=guide">이용 가이드</a>
-  <span class="user-topnav-spacer"></span>
+  <button class="cl-user-menu-toggle" type="button" aria-expanded="false" aria-controls="cl-user-navigation" hidden>메뉴 <span aria-hidden="true">☰</span></button>
+  <div class="cl-user-navigation" id="cl-user-navigation">
+    {% for href, label in [('/u/', '홈'), ('/u/review', '문구 검수'), ('/u/generate', '카피 생성'), ('/u/compose', 'AI 광고 생성'), ('/u/history', '검수 이력')] %}
+    <a class="cl-user-nav-link" href="{{ href }}"{% if ui_screen == href %} aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+
+  </div>
+  <div class="cl-user-account">
+    <details class="cl-user-help"{% if active_section == 'about' or request.url.path.startswith('/u/cs') %} data-current="true"{% endif %}>
+      <summary>이용 가이드 <svg class="cl-user-help-caret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>{% if me and me.cs_unread %}<span class="cl-user-help-dot" aria-label="새 답변"></span>{% endif %}</summary>
+      <div class="cl-user-help-menu">
+        <a href="/u/help?tab=guide"{% if active_section == 'about' and active_sub != 'faq' %} aria-current="page"{% endif %}>사용방법</a>
+        <a href="/u/help?tab=faq"{% if active_section == 'about' and active_sub == 'faq' %} aria-current="page"{% endif %}>자주 묻는 질문</a>
+        <a href="/u/cs"{% if request.url.path.startswith('/u/cs') %} aria-current="page"{% endif %}>고객센터{% if me and me.cs_unread %}<span class="cl-user-help-dot" aria-label="새 답변"></span>{% endif %}</a>
+      </div>
+    </details>
 
   {# 🔄 2026-10-15 (ksr · 점검 01) — 두 버튼을 다 그리고 지금 테마에 맞는 하나만 보인다(`user.css` `.tn-to-*`).
      `user_theme.js` 가 폼 대신 쿠키만 바꾸고 화면 색을 바로 바꾼다 — 검수 결과 · 광고 편집이 사라지지 않는다.
@@ -71,4 +84,5 @@
   <a class="user-topnav-mypage" href="/u/login">로그인</a>
   <a class="user-topnav-join" href="/u/signup">회원가입</a>
   {% endif %}
+  </div>
 </nav>

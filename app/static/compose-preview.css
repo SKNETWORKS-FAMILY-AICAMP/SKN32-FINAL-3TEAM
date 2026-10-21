@@ -1,0 +1,37 @@
+/* Scaled layout examples mirror the editor's visual, section and caption blocks. */
+.user-shell .ws-layout-preview .ws-layout-paper {
+  --preview-stripe:repeating-linear-gradient(45deg,var(--u-surface2) 0 9px,var(--u-line) 9px 10px);
+  width:100%; max-width:380px; box-sizing:border-box; max-height:540px;
+  margin:18px auto; padding:0; border-radius:3px; overflow:auto;
+  background:var(--u-surface); box-shadow:0 3px 12px rgb(40 20 30 / 8%);
+  scrollbar-width:thin; overscroll-behavior-y:contain;
+}
+.ws-preview-hero { position:relative; aspect-ratio:1; overflow:hidden; background:var(--preview-stripe); }
+.ws-preview-hero::after { content:""; position:absolute; inset:0; background:linear-gradient(rgba(0,0,0,.32),transparent 28%,transparent 40%,rgba(0,0,0,.72)); pointer-events:none; }
+.user-shell .ws-preview-ad { position:absolute; z-index:1; top:14px; left:16px; padding:2px 7px; border-radius:3px; background:rgba(0,0,0,.55); color:#fff; font-size:11px; font-weight:700; }
+.ws-preview-image-label { position:absolute; left:50%; top:43%; transform:translate(-50%,-50%); padding:4px 8px; border-radius:20px; background:color-mix(in srgb,var(--u-surface) 85%,transparent); color:var(--u-clay); font-size:11px; }
+.ws-preview-copy { position:absolute; z-index:1; left:20px; right:20px; bottom:22px; color:#fff; }
+.user-shell .user-main .ws-preview-copy>strong { display:block; color:#fff; font-size:24px; line-height:1.45; letter-spacing:-.03em; overflow-wrap:anywhere; }
+.user-shell .user-main .ws-preview-copy>p { margin:10px 0 0; color:rgba(255,255,255,.7); font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.ws-preview-detail { display:none; }
+.user-shell .user-main .ws-preview-detail h3 { margin:0 0 14px; color:var(--u-clay); font-size:14px; line-height:1.6; font-style:italic; }
+.ws-preview-points,.ws-preview-facts { padding:24px 20px; }
+.ws-preview-point-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.ws-preview-placeholder { display:grid; place-items:center; aspect-ratio:1; border-radius:4px; background:var(--preview-stripe); color:var(--u-clay); font-size:10px; }
+.user-shell .user-main .ws-preview-point-grid p { margin:7px 0 0; color:var(--u-clay); font-size:10px; font-style:italic; }
+.ws-preview-spec { display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:16px; padding:18px 20px; }
+.user-shell .user-main .ws-preview-spec p { margin:8px 0 0; font-size:11px; color:var(--u-clay); }
+.ws-preview-facts>div { display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--u-line); color:var(--u-clay); font-size:11px; }
+.ws-preview-notice { padding:20px; border-top:1px solid var(--u-line); color:var(--u-clay); font-size:10px; }
+.ws-preview-caption { padding:14px 18px; border-top:1px solid var(--u-line); }
+.ws-preview-caption>b { color:var(--u-clay); font-size:11px; }
+.user-shell .user-main .ws-preview-caption>p { margin:6px 0 0; color:var(--u-clay); font-size:12px; line-height:1.65; white-space:pre-line; overflow-wrap:anywhere; }
+.user-shell .user-main .ws-preview-disclaimer { margin:8px 0 0; color:var(--u-clay); font-size:13px; line-height:1.65; }
+.cp-card:has(#f-detail:checked) .ws-preview-detail { display:block; }
+.cp-card:has(#f-detail:checked) .ws-preview-caption { display:none; }
+.cp-card:has(#f-detail:checked) .ws-preview-hero { aspect-ratio:1.4; }
+.cp-card:has(#f-detail:checked) .ws-preview-copy>strong { font-size:21px; }
+.cp-card:has(#f-banner:checked) .ws-layout-paper { max-width:300px; }
+.cp-card:has(#f-banner:checked) .ws-preview-hero { aspect-ratio:6/5; }
+.cp-card:has(#f-banner:checked) .ws-preview-copy { left:14px; right:14px; bottom:16px; }
+.cp-card:has(#f-banner:checked) .ws-preview-copy>strong { font-size:20px; }

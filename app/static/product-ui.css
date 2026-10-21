@@ -122,8 +122,8 @@ html:has(.cl-workspace-screen) { scrollbar-gutter:stable; }
 .cp-card.cl-compose-form { padding:22px; }
 .cp-pick { gap:10px; }
 .cp-pick label { padding:12px!important; gap:10px; }
-.cl-format-art { width:36px; height:40px; background:var(--u-signal-soft); }
-.cl-format-art svg { width:24px; height:24px; }
+.cp-pick label .cl-format-art { display:grid; place-items:center; align-self:center; width:36px; height:40px; background:transparent; }
+.cl-format-art svg { display:block; width:24px; height:24px; margin:0; }
 .cp-pick label b { font-size:14px; }
 .ws-compose-content { margin:18px 0; gap:16px; }
 .ws-compose-content>div:first-child { padding:18px; border-radius:8px; }
