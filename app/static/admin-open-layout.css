@@ -39,6 +39,10 @@ body:has(.admin-shell),.admin-shell {
 .admin-shell .admin-main table th { background:color-mix(in srgb,var(--a-signal-soft) 60%,transparent); border-bottom:1px solid var(--a-line); }
 .admin-shell .admin-main table td { border-color:color-mix(in srgb,var(--a-line) 65%,transparent); }
 .admin-shell .admin-main :is(.notice-form,.ticket-form,.board-content) { background:transparent; border:0; box-shadow:none; border-radius:0; padding:12px 0; }
+/* Reserve the same label row even when an hourly tick is omitted. */
+.admin-shell .admin-main .admin-chart-col { display:grid; grid-template-rows:minmax(0,1fr) 24px; row-gap:7px; }
+.admin-shell .admin-main .admin-chart-bars { height:auto; min-height:0; }
+.admin-shell .admin-main .admin-chart-col>small { display:block; margin-top:0; line-height:24px; white-space:nowrap; }
 .admin-shell .admin-main :is(.admin-chart-bars,.as-chart-bars) { background:repeating-linear-gradient(to top,transparent 0,transparent 85px,color-mix(in srgb,var(--a-line) 55%,transparent) 86px); }
 .admin-shell .admin-main .admin-closed-alt a { border:0; border-radius:6px; padding:14px 0; }
 .admin-shell .admin-main .admin-closed-alt a:hover { background:transparent; text-decoration:underline; }

@@ -477,7 +477,7 @@ def test_생성_엔진_구성은_설정에서_읽는다(
     cfg = r.context["config"]
     assert cfg["models"] == ["model-a", "model-b"]
     assert len(cfg["branches"]) == len(BRANCHES)
-    assert "생성 엔진 구성" in r.text and "model-a · model-b" in r.text and "A안" in r.text
+    assert "카피 생성 엔진 구성" in r.text and "<li>model-a</li>" in r.text and "<li>model-b</li>" in r.text and "A안" in r.text
 
 
 def test_서버_시작_이후_생성_현황은_메모리_카운터다(client: TestClient) -> None:
@@ -504,7 +504,7 @@ def test_서버_시작_이후_생성_현황은_메모리_카운터다(client: Te
     assert u["reasons"][0] == {"label": "입력에 없는 수치", "n": 6, "pct": 75.0}
     assert u["reasons"][1]["label"] == "판정엔진 미통과"
     r = client.get("/admin/stats/quality/generation")
-    assert "서버를 다시 켜면 0부터" in r.text and "이후 · 이 서버" in r.text
+    assert "서버를 다시 켜면 0부터" in r.text and "이후</b> 이 서버" in r.text
     assert "후보 통과율" in r.text and "입력에 없는 수치" in r.text and "평균 탐색 라운드" in r.text
     gen_usage.reset()
 
