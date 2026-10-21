@@ -16,7 +16,7 @@
 <p class="dash-sub">CopyLane Admin</p>
 <h1>대시보드</h1>
 <p class="page-desc">검수·생성 이용 현황과 기능 제공 상태를 확인하세요.</p>
-{% if dash.source != "db" %}<p class="warn"><b>이용 기록을 읽지 못했어요.</b> DB 에 연결된 뒤 표시돼요 — 0건이라는 뜻이 아니에요.</p>{% else %}<p class="dash-note">검수 이력 보관에 동의한 검수만 저장돼 집계돼요 (D-96). 매출 집계는 제공하지 않습니다.</p>{% endif %}
+{% if dash.source != "db" %}<p class="warn"><b>이용 기록을 읽지 못했어요.</b> DB 에 연결된 뒤 표시돼요 — 0건이라는 뜻이 아니에요.</p>{% else %}<p class="dash-note">회원 검수 기준이에요 — 10-20 이전 기록은 이력 보관에 동의한 회원 것만 있어요. 매출 집계는 제공하지 않습니다.</p>{% endif %}
 
 <nav class="period-tabs" aria-label="기간">
   {% for p in periods %}

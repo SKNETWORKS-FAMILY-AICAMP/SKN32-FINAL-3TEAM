@@ -13,7 +13,7 @@
 {% block stats_filters %}<span>가입 · 비활성 추이 기간</span><nav class="period-tabs" aria-label="가입·비활성 집계 기간">{% for p in periods %}<a href="?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>{% endfor %}</nav>{% endblock %}
 {% block stats_notice %}
 {% with table="user_account" %}{% include "admin/_db_notice.html" %}{% endwith %}
-{% if source == 'db' %}<p class="as-notice">회원 유형 · 요금제는 저장하는 칸이 없어 집계하지 않아요 (D-66 · D-69). 회원 상태는 회원 목록과 같은 기준이에요.</p>{% endif %}
+{% if source == 'db' %}<p class="as-notice">회원 유형 · 요금제는 저장하는 칸이 없어 집계하지 않아요. 회원 상태는 회원 목록과 같은 기준이에요.</p>{% endif %}
 {% endblock %}
 {% block stats_content %}
 {% if source == 'db' %}
@@ -30,7 +30,7 @@
       {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.join / scale * 100)|round(1) if scale else 0 }}%" title="{{ row.label }} 가입 {{ row.join }}명"></span><span class="as-chart-bar as-secondary" style="height:{{ (row.leave / scale * 100)|round(1) if scale else 0 }}%" title="{{ row.label }} 비활성 {{ row.leave }}명"></span></div><small>{{ row.label }}</small></div>{% endfor %}
     </div><p class="as-context">단위 · 명 · 축 상한 {{ '{:,}'.format(scale) }}명 · 비활성은 계정을 끈 날 기준이에요</p>
   </section>
-  <section class="as-panel"><div class="as-panel-head"><h2>동의 · 인증 현황</h2><span class="as-unit">전체 회원 대비</span></div>{{ distribution(consents,'n','명') }}<p class="as-context">검수 이력은 보관에 동의한 회원의 것만 저장돼요 (D-96).</p></section>
+  <section class="as-panel"><div class="as-panel-head"><h2>동의 · 인증 현황</h2><span class="as-unit">전체 회원 대비</span></div>{{ distribution(consents,'n','명') }}<p class="as-context">검수 이력 보관은 가입 때 필수 동의예요 — 그래서 여기서는 세지 않아요.</p></section>
 </div>
 <section class="as-panel" style="margin-top:20px"><div class="as-panel-head"><h2>가입 · 비활성 상세</h2><span class="as-unit">{{ trend_scope }} · 명</span></div><div class="admin-table-scroll"><table><thead><tr><th>기간</th><th>가입</th><th>비활성</th></tr></thead><tbody>{% for row in trend %}<tr><td>{{ row.label }}</td><td>{{ '{:,}'.format(row.join) }}</td><td>{{ '{:,}'.format(row.leave) }}</td></tr>{% endfor %}</tbody></table></div></section>
 {% else %}<section class="as-panel as-unavailable"><h2>이용자 통계를 확인할 수 없습니다.</h2><p>회원 기록을 읽지 못했습니다. 연결 상태를 확인한 후 다시 조회해주세요.</p></section>{% endif %}

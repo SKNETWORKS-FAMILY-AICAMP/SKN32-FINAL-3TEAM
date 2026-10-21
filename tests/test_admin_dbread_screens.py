@@ -317,7 +317,7 @@ def test_검수_통계는_judgment_건수만_그린다(client: TestClient) -> No
     assert "확정 위반" in r.text and "미판정 (오류 · 시간 초과)" in r.text
     assert "자동 판별" in r.text and "품목 미확정" in r.text
     assert "인코더가 위험도를 올림" in r.text and "c451942436f0" in r.text
-    assert "첫 검수" in r.text and "인코더가 함께 판정" not in r.text
+    assert "마지막 판정" in r.text and "인코더가 함께 판정" not in r.text
     assert "94.2%" not in r.text and "이의제기" not in r.text and "더미" not in r.text
     assert client.get("/admin/stats/quality/judge?days=13").context["days"] == 30
     assert client.get("/admin/stats/quality/judge?days=all").context["days"] == 0
@@ -428,7 +428,7 @@ def test_이용자_통계는_user_account_에서_센다(client: TestClient) -> N
     assert r.status_code == 200
     k = r.context["kpi"]
     assert (k["live"], k["active"], k["dormant"], k["disabled"]) == (5, 4, 1, 2)
-    assert [c["pct"] for c in r.context["consents"]] == [80.0, 20.0, 60.0, 40.0]
+    assert [c["pct"] for c in r.context["consents"]] == [20.0, 60.0, 40.0]
     trend = r.context["trend"]
     assert len(trend) == 7 and trend[-1]["join"] == 2 and trend[-1]["leave"] == 1
     for gone in ("12,483", "인플루언서", "Basic", "Enterprise", "유료 계정", "예시"):
@@ -444,3 +444,23 @@ def test_이용자_통계를_못_읽으면_안내다(
     r = client.get("/admin/stats/member")
     assert r.status_code == 200
     assert "launcher.py migrate" in r.text and "이용자 통계를 확인할 수 없습니다" in r.text
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/admin/",
+        "/admin/stats/dashboard",
+        "/admin/stats/member",
+        "/admin/stats/quality/judge",
+        "/admin/stats/quality/generation",
+    ],
+)
+def test_통계_화면에는_결정_번호를_띄우지_않는다(client: TestClient, path: str) -> None:
+    """근거 번호(D-…)는 코드 · 커밋에만 남긴다 — 화면 본문에는 싣지 않는다 (10-21 사용자 요청)."""
+    import re  # noqa: PLC0415
+
+    html = client.get(path).text
+    start = html.index('id="admin-content"')
+    body = html[start : html.index('class="admin-page-footer"', start)]  # 공용 바닥글은 이 화면 밖
+    assert not re.search(r"D-\d+", body), re.findall(r".{20}D-\d+.{5}", body)

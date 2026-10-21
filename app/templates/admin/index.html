@@ -25,7 +25,7 @@
     <div class="admin-chart" role="img" aria-label="{{ dash.trend_title }} · 검수 판정 문장 수. 상세 수치는 아래에서 확인할 수 있습니다.">
       {% for label in dash.labels %}{% set n = loop.index0 %}<div class="admin-chart-col"><div class="admin-chart-bars"><span style="height:{{ (dash.judge_series[n] / dash_max * 100)|round if dash_max else 0 }}%" title="{{ label }} 검수 {{ dash.judge_series[n] }}건"></span></div><small>{% if dash.labels|length <= 12 or loop.first or loop.last or n % 3 == 0 %}{{ label }}{% endif %}</small></div>{% endfor %}
     </div>
-    <p class="admin-chart-note">판정 문장 수 · 축 상한 {{ dash_max }}건 · 이력 보관에 동의한 검수만 저장돼요 · {{ dash.gen_note }}</p>
+    <p class="admin-chart-note">판정 문장 수 · 축 상한 {{ dash_max }}건 · 회원 검수 기준(10-20 이전은 동의한 회원 것만) · {{ dash.gen_note }}</p>
     <details class="admin-chart-note"><summary>추이 수치 확인</summary><div class="admin-table-scroll"><table><tr><th>기간</th><th>검수 문장</th></tr>{% for label in dash.labels %}<tr><td>{{ label }}</td><td>{{ dash.judge_series[loop.index0] }}건</td></tr>{% endfor %}</table></div></details>
     {% else %}<p class="as-empty">이용 추이를 읽지 못했어요.</p>{% endif %}
   </section>
