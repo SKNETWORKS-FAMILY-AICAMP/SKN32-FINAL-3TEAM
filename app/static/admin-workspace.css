@@ -1,35 +1,35 @@
 /* The same workspace language as user/product-ui: light surfaces, compact
    controls and restrained brand accents. These rules only target admin pages. */
 body:has(.admin-shell),.admin-shell {
-  --a-bg:#f5f6fb;
-  --a-nav-gradient:linear-gradient(135deg,#edf1fc 0%,#f5f6fb 45%,#eee8f7 100%);
-  --a-nav-surface:#f5f3fa;
-  --a-nav-hover:#e9e8f5;
-  --a-nav-line:#e0e2ee;
-  --a-page-gradient:radial-gradient(ellipse at 0% 10%,#c7d4f4 0%,transparent 58%),radial-gradient(ellipse at 100% 90%,#d5bfeb 0%,transparent 60%),linear-gradient(135deg,#e3eafa 0%,#f3f2fa 48%,#e7daf3 100%);
-  --a-surface:#fff;
-  --a-surface2:#f7f8fc;
-  --a-ink:#24304a;
-  --a-clay:#68748b;
-  --a-line:#e3e6f0;
-  --a-signal:#535fba;
-  --a-signal-ink:#4854aa;
-  --a-signal-soft:#eff0fb;
-  --a-lavender:#a49bc9;
-  --a-brand:linear-gradient(115deg,#4657a8 0%,#6557ae 65%,#7b5da8 100%);
-  --a-shadow:0 3px 12px rgb(57 32 79 / 2.5%);
+  --a-bg:#FCF6F5;
+  --a-nav-gradient:linear-gradient(110deg,#FFF0F2 0%,#FFFAF9 52%,#FFF1EC 100%);
+  --a-nav-surface:#ffffff;
+  --a-nav-hover:#FFF0F2;
+  --a-nav-line:#F1DFE2;
+  --a-page-gradient:radial-gradient(48rem 34rem at 8% 0%,rgba(234,43,82,.08),transparent 62%),radial-gradient(44rem 32rem at 100% 12%,rgba(245,107,80,.08),transparent 60%),radial-gradient(52rem 36rem at 60% 105%,rgba(234,43,82,.06),transparent 62%),linear-gradient(180deg,#FCF2F3 0%,#FFF7F3 100%);
+  --a-surface:#ffffff;
+  --a-surface2:#FAF5F5;
+  --a-ink:#1c1c1f;
+  --a-clay:#776B6E;
+  --a-line:#F1DFE2;
+  --a-signal:#EA2B52;
+  --a-signal-ink:#C91F43;
+  --a-signal-soft:#FFF0F2;
+  --a-lavender:#F47789;
+  --a-brand:linear-gradient(115deg,#D92350 0%,#EA2B52 55%,#F56B50 100%);
+  --a-shadow:0 3px 12px rgb(100 32 47 / 2.5%);
 }
 @media(prefers-color-scheme:dark) {
   body:has(.admin-shell),.admin-shell {
-    --a-bg:#161b29; --a-surface:#20293b; --a-surface2:#293248;
-    --a-nav-gradient:linear-gradient(135deg,#19243b 0%,#161b29 45%,#28213b 100%);
-    --a-nav-surface:#22283a;
-    --a-nav-hover:#2d334b;
-    --a-nav-line:#363e56;
-    --a-page-gradient:radial-gradient(ellipse at 0% 10%,#293f68 0%,transparent 58%),radial-gradient(ellipse at 100% 90%,#47305c 0%,transparent 60%),linear-gradient(135deg,#1d2b46 0%,#1b2031 48%,#332540 100%);
-    --a-ink:#eef1fa; --a-clay:#b1bdd2; --a-line:#3a465f;
-    --a-signal:#aab4f1; --a-signal-ink:#c2c9ff; --a-signal-soft:#303957;
-    --a-lavender:#c3b4e7; --a-shadow:none;
+    --a-bg:#1C1416; --a-surface:#241D20; --a-surface2:#302629;
+    --a-nav-gradient:linear-gradient(110deg,#332126 0%,#281E21 52%,#362321 100%);
+    --a-nav-surface:#241D20;
+    --a-nav-hover:#431F29;
+    --a-nav-line:#51353D;
+    --a-page-gradient:radial-gradient(48rem 34rem at 8% 0%,rgba(234,43,82,.12),transparent 62%),radial-gradient(44rem 32rem at 100% 12%,rgba(245,107,80,.09),transparent 60%),radial-gradient(52rem 36rem at 60% 105%,rgba(234,43,82,.08),transparent 62%),linear-gradient(#1C1416,#1C1416);
+    --a-ink:#f1f0f2; --a-clay:#C9B7BB; --a-line:#51353D;
+    --a-signal:#FF708D; --a-signal-ink:#FFA6B8; --a-signal-soft:#431F29;
+    --a-lavender:#F5A08F; --a-brand:linear-gradient(115deg,#C7294D 0%,#DE3154 55%,#E86249 100%); --a-shadow:none;
   }
 }
 body:has(.admin-shell) {
@@ -45,7 +45,7 @@ body:has(.admin-shell) .admin-topbar {
   min-height:64px;
   background:var(--a-nav-gradient);
   border-bottom-color:var(--a-nav-line);
-  box-shadow:0 2px 12px rgb(49 56 99 / 6%);
+  box-shadow:0 2px 12px rgb(100 32 47 / 6%);
 }
 .admin-topbar .admin-navigation .admin-nav-sub-list,
 .admin-topbar .admin-account button,

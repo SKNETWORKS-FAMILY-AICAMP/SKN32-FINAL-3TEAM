@@ -24,8 +24,8 @@
     <div class="admin-nav-sub-list">
       <a class="admin-nav-sub" href="/admin/sources"
          {% if request.url.path == "/admin/sources" or request.url.path.startswith("/admin/sources/") %}aria-current="page"{% endif %}>판정 근거</a>
-      <a class="admin-nav-sub" href="/admin/terms"
-         {% if request.url.path == "/admin/terms" or request.url.path.startswith("/admin/terms/") %}aria-current="page"{% endif %}>약관 관리</a>
+      <a class="admin-nav-sub admin-nav-closed" href="/admin/terms"
+         {% if request.url.path == "/admin/terms" or request.url.path.startswith("/admin/terms/") %}aria-current="page"{% endif %}><span class="admin-nav-name">약관 관리</span>{{ closed_badge('/admin/terms') }}</a>
       <a class="admin-nav-sub admin-nav-closed" href="/admin/review-docs"
          {% if request.url.path == "/admin/review-docs" or request.url.path.startswith("/admin/review-docs/") %}aria-current="page"{% endif %}><span class="admin-nav-name">심사 서류</span>{{ closed_badge('/admin/review-docs') }}</a>
     </div>

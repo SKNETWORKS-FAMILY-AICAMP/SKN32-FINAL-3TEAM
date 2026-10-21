@@ -4,8 +4,8 @@
   🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다.
   🔄 2026-10-20 — `judgment` 표에서 센다(admin_stats.py `_load_judge`). 원문은 읽지 않는다 — 건수만 (D-76).
      정답 라벨이 없어 정확도 · 오판정은 세지 않는다 (D-147). 못 읽으면 빈 화면 + 안내 (D-72).
-  🔄 2026-10-20 — 확정을 위반 / 무위반으로 가른다 · 미판정 · 근거 없음 KPI · 품목 출처(D-276) · 위험도 하한 출처(사전 vs 인코더) · 판정 버전(`judged_by`).
-     ⛔ 「인코더가 함께 판정 %」는 지웠다 — 인코더가 켜져 있으면 늘 100% 라 정보가 없다. 판정 버전 분포가 대신한다.
+  🔄 2026-10-20 — 확정을 위반 / 무위반으로 가른다 · 미판정 · 근거 없음 KPI · 품목 출처(D-276) · 위험도 하한 출처(사전 vs 인코더).
+     ⛔ 「인코더가 함께 판정 %」는 지웠다 — 인코더가 켜져 있으면 늘 100% 라 정보가 없다.
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}
 {% extends "admin/stats/_base.html" %}
@@ -81,12 +81,11 @@
   </div>
 </section>
 <details class="as-analysis-details">
-  <summary><span class="as-analysis-title">상세 분석</span><span class="as-analysis-description">품목 출처 · 위험도 하한 출처 · 판정 버전</span><span class="as-analysis-hint">펼쳐 확인하기</span></summary>
+  <summary><span class="as-analysis-title">상세 분석</span><span class="as-analysis-description">품목 출처 · 위험도 하한 출처</span><span class="as-analysis-hint">펼쳐 확인하기</span></summary>
   <div class="as-compact-analysis">
     <section class="as-panel"><div class="as-panel-head"><h2>품목 출처</h2><span class="as-unit">문장 기준</span></div>{{ compact_distribution(by_source) }}<p class="as-context">사용자가 고른 품목이 판별과 다르면 「선택 전제 결과」예요.</p></section>
     <section class="as-panel"><div class="as-panel-head"><h2>위험도 하한 출처</h2><span class="as-unit">하한이 기록된 문장</span></div>{{ compact_distribution(by_risk_source) }}<p class="as-context">사전 하한과 인코더 하한을 비교해요.</p></section>
   </div>
-  <section class="as-panel"><div class="as-panel-head"><h2>판정 버전</h2><span class="as-unit">상위 10개 · 문장 기준</span></div>{{ compact_distribution(by_version) }}<p class="as-context">규칙 · 사전 판과 인코더 판 지문이에요. 판이 바뀐 시점을 확인할 때 써요.</p></section>
 </details>
 <details class="as-context"><summary>일별 집계 수치 확인</summary><div class="admin-table-scroll"><table><tr><th>날짜</th><th>문장 판정</th></tr>{% for row in trend %}<tr><td>{{ row.label }}</td><td>{{ '{:,}'.format(row.n) }}건</td></tr>{% endfor %}</table></div></details>
 {% else %}<section class="as-panel as-unavailable"><h2>이 기간에 저장된 검수가 없어요.</h2><p>기간을 변경하거나 이력 보관에 동의한 검수 기록을 확인해주세요.</p></section>{% endif %}

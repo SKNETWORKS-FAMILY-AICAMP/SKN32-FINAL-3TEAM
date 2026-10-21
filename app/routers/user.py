@@ -26,6 +26,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -1688,7 +1689,12 @@ async def generate(
         ctx["fixed_notes"] = await run_in_threadpool(
             _fixed_all_notes, picked["fixed"], key, picked["ingredients"]
         )
+    # 🆕 10-21 (psj) 관리자 생성 통계의 메모리 카운터 · 건수와 시간만
+    from app import gen_usage  # noqa: PLC0415
+
+    branch_key = f"{picked['category']}_{picked['cert']}"
     if why := copygen.off_reason():
+        gen_usage.record("off", branch_key, more=bool(shown))
         ctx |= {"engine_pending": True, "engine_why": why}
         return _render(request, "user/generate.html", _gen_ctx(ctx))
     fields = {
@@ -1701,17 +1707,28 @@ async def generate(
             if v
         ),
     }
+    t0 = time.monotonic()
     try:
-        live = await run_in_threadpool(
-            copygen.generate, f"{picked['category']}_{picked['cert']}", fields, tuple(shown)
-        )
+        live = await run_in_threadpool(copygen.generate, branch_key, fields, tuple(shown))
     except copygen.CopyGenOff as e:
+        gen_usage.record("off", branch_key, more=bool(shown))
         ctx |= {"engine_pending": True, "engine_why": str(e)}
     except copygen.CopyGenError:
+        gen_usage.record("failed", branch_key, more=bool(shown))
         # 🚨 까닭은 서버 로그에만 — 화면에는 「실패했다」만 그린다 (P1-4)
         logging.getLogger(__name__).warning("카피 생성 실패", exc_info=True)
         ctx |= {"engine_pending": True, "engine_failed": True}
     else:
+        gen_usage.record(
+            "ok",
+            branch_key,
+            time.monotonic() - t0,
+            more=bool(shown),
+            candidates=len(live.kept) + len(live.dropped),
+            passed=len(live.kept),
+            reasons=live.reasons(),
+            rounds=len(live.rounds),
+        )
         ctx |= {
             "live": live,
             "live_reasons": [(copygen.REASONS[k], n) for k, n in live.reasons().most_common()],
@@ -2088,6 +2105,10 @@ async def compose(request: Request) -> HTMLResponse:
             "user/compose.html",
             _compose_ctx({**base, "errors": ["광고에 담을 문구를 적어 주세요."]}),
         )
+    # 🆕 10-21 (psj) 관리자 생성 통계 · 요청 수와 광고 종류만
+    from app import gen_usage  # noqa: PLC0415
+
+    gen_usage.record_compose(ad_format)
     # 🆕 2026-10-13 — 인정 · 심사 문구가 그 문구에 그대로 들어 있을 때만 뺀다. 문구를 고쳐 인정 문구가 깨졌으면 전부 판정한다
     fixed = origin["fixed"] if origin["fixed"] and origin["fixed"] in prompt else ""
     part = _judged_part(prompt, fixed)
@@ -2981,6 +3002,10 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
         auth.audit("user_login", _actor(email=email), ok=False)
         return again("화면이 오래돼서 다시 불러왔어요. 한 번 더 로그인해 주세요.", 403)
+    # 🆕 2026-10-21 (psj) — 관리자 도메인(`psj@admin.copylane`)이면 **관리자 인증**으로 넘긴다 — 스키마 · 쿠키 · 명단은 그대로.
+    #    🚨 실패 문구는 사용자와 **같다** — 관리자 계정이 있는지 흘리지 않는다(P1-5). 관리자 화면이 없는 판(cloud)도 같은 답이다(D-213)
+    if (admin_id := auth.admin_initials_of(email)) is not None:
+        return _admin_login_via_user_form(request, admin_id, password, again)
     key = f"u:{email}"
     if auth.throttle.blocked(key):
         auth.audit("user_login_blocked", _actor(email=email), ok=False)
@@ -3005,6 +3030,25 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     session.commit()
     auth.audit("user_login", _actor(user.id), ok=True)
     return _login_cookie(RedirectResponse(_next_path(nxt), status_code=303), request, user)
+
+
+def _admin_login_via_user_form(request: Request, initials: str, password: str, again):  # noqa: ANN001, ANN202
+    """사용자 로그인 화면에서 관리자로 — 관리자 로그인과 같은 함수(`routers.auth.admin_sign_in`)를 지난다 (D-99)."""
+    from app.settings import admin_is_mounted  # noqa: PLC0415
+
+    if not initials or not admin_is_mounted():
+        # 🚨 걸린 시간이 다르지 않게 — 없는 계정과 같은 해시 한 번 (P1-5)
+        auth.verify_account(None, password)
+        auth.audit("login", initials or None, ok=False)
+        return again("이메일이나 비밀번호가 맞지 않아요.", 401)
+    from app.routers.auth import admin_sign_in  # noqa: PLC0415
+
+    result, resp = admin_sign_in(request, initials, password)
+    if result == "blocked":
+        return again(f"시도가 너무 많아요. {auth.LOCKOUT_SEC // 60}분 뒤에 다시 해 주세요.", 429)
+    if result == "bad":
+        return again("이메일이나 비밀번호가 맞지 않아요.", 401)
+    return resp
 
 
 @router.post("/logout")
@@ -3122,6 +3166,9 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
         return again(f"이름을 1~{_NAME_MAX}자로 적어 주세요.")
     if len(email) > _EMAIL_MAX or not _EMAIL_SHAPE.match(email):
         return again("이메일 형식을 확인해 주세요.")
+    # 🆕 2026-10-21 — 관리자 로그인 도메인으로는 가입하지 않는다 — 같은 꼴의 사용자 계정이 생기면 로그인 화면이 둘을 못 가른다
+    if email.endswith(auth.ADMIN_EMAIL_DOMAIN):
+        return again("이 이메일 주소로는 가입할 수 없어요.")
     if not _PW_MIN <= len(pw) <= _PW_MAX:
         return again(f"비밀번호는 {_PW_MIN}~{_PW_MAX}자로 정해 주세요.")
     if pw != pw2:
