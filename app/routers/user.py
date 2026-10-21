@@ -439,7 +439,8 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
         #    「copylane 소개」 메뉴는 랜딩이 아니라 사용방법으로 간다(종전대로). DB 가 없을 때는 위에서 홈의 안내를 그린다
         return templates.TemplateResponse(request, "user/landing.html", {})
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    mine = _owned_judgments(user.id)
+    # 🔄 2026-10-22 (ksr 흡수 · 보충 36 결정 2) 홈 수는 같은 문구의 최신 판정만 센다 — 이력이 새 행으로 쌓인다
+    mine = _latest_judgments(user.id)
     month = mine.where(Judgment.judged_at >= month_start)
     pass_level = PASS_RISK_MAX.level
 
@@ -1121,9 +1122,14 @@ def _review_round(form: dict[str, list[str]]) -> int:
     return int(value)
 
 
-def _previous_answers(form: dict[str, list[str]]) -> list[tuple[str, str]]:
+def _previous_answers(form: dict[str, list[str]], extra: int = 0) -> list[tuple[str, str]]:
+    """폼의 앞서 한 답(`prev` · `문장id|답`) — 꼴이 틀리면 422 (D-220).
+
+    🔄 2026-10-22 (ksr 흡수 · D-99) 답 재판정(`review_answer`)도 이 함수를 쓴다 — 종전에는 같은 파싱이 두 벌이었고 상한 비교가 달랐다
+       (`>=` · `>`). 상한은 **앞선 답 + 이번 요청의 새 답(`extra`) ≤ `_MAX_ANSWERS`** 하나로 센다.
+    """
     values = form.get("prev", [])
-    if len(values) > _MAX_ANSWERS:
+    if len(values) + extra > _MAX_ANSWERS:
         raise HTTPException(422, "답이 너무 많다")
     pairs = []
     for value in values:
@@ -1139,8 +1145,10 @@ async def _review_pick(
 ) -> HTMLResponse:
     """D-348 보충 31: 선택은 POST로 받고 실제 품목으로 재판정한다.
 
-    🔄 2026-10-20 (lse · 사용자 결정) — 품목을 고른 재판정은 **이력에 바꿔 적는다**(`judgment_store.replace_review` —
-       같은 문구의 고르기 전 기록(보류)을 지우고 고른 품목의 판정으로). 종전에는 적지 않아 이력 · 홈 통계가 보류만 셌다.
+    🔄 2026-10-20 (lse · 사용자 결정) — 품목을 고른 재판정을 이력에 적는다. 종전에는 적지 않아 이력 · 홈 통계가 보류만 셌다.
+    🔄 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) — **새 판정 행으로 적는다**(`save_review`) · 같은 문구의 앞 기록(고르기 전 보류)을
+       지우지 않는다(종전 `replace_review` — 6 시간 · 20 문서 안 글자가 같은 문서를 지움 · `[임의]`) · 고른 품목은 출처 `user_selected` 로
+       남는다(그래프 응답) · 홈 통계 · 반복 지적은 같은 문구의 최신 판정만 센다(`_latest_judgments`) · 이력 목록은 모든 행
     """
     kind, number, *tail = op.split(":")
     n = int(number)
@@ -1210,8 +1218,8 @@ async def _review_pick(
             session = next(gen)
             try:
                 kept = await run_in_threadpool(
-                    lambda: judgment_store.replace_review(
-                        session, current_user(request, session), picked_res
+                    lambda: judgment_store.save_review(
+                        session, current_user(request, session), [picked_res]
                     )
                 )
             finally:
@@ -1229,7 +1237,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
     🔴 **POST 다** — 문구를 URL 에 싣지 않는다(P1-4). 화면에 상태가 없어 문구 칸 · 앞서 한 답(`prev`)을 다시 받는다.
     ★ 답은 **그 문장에만** 묶는다 — 문장 글자는 서버가 먼저 판정한 결과에서 읽는다(폼의 글자를 믿지 않는다 · `review_rewrite` 와 같다).
     ★ 품목 분기를 고른 뒤의 답이면 다시 그릴 때 그 분기를 펼쳐 둔다(`picked`). 답은 모든 분기에 같이 든다(문장에 묶였다).
-    ★ 품목을 고르지 않은 답 재판정의 저장은 종전대로다(보충 3 결정 4). 고른 뒤 판정은 저장하지 않는다(보충 31 · 이력 정책 대기).
+    ★ 답 재판정은 이력에 새 행으로 적는다(보충 3 결정 4) — 🔄 2026-10-22 고른 전제가 있어도 적는다(보충 34 결정 4 · 보충 36 결정 2).
     🚨 답은 검증이 아니다 — 판정의 `user_facts` · `user_subst` 와 화면 문구가 그렇게 말한다.
     """
     form = await _form(request, keep_blank=True)
@@ -1239,22 +1247,18 @@ async def review_answer(request: Request, session: Session = Depends(get_session
         raise HTTPException(422, "답할 문장을 모른다")
     want_n, want_sid = int(m.group(1)), m.group(2)
     answer = _one(form, "answer", 40)
-    prev = form.get("prev", [])
-    if len(prev) >= _MAX_ANSWERS:
-        raise HTTPException(422, "답이 너무 많다")
+    pairs = _previous_answers(form, extra=1)
     premise = _one(form, "premise", 32)
     if premise and premise not in _PREMISES:
         raise HTTPException(422, "모르는 전제")
     redo = _review_round(form)
-    pairs: list[tuple[str, str]] = []
-    for p in prev:
-        pm_ = _PREV.match(p)
-        if not pm_:
-            raise HTTPException(422, "모르는 답")
-        pairs.append((pm_.group(1), pm_.group(2)))
     pairs.append((want_sid, answer))
 
     from app.contracts import ProductContext  # noqa: PLC0415
+
+    #: 🆕 2026-10-22 (ksr 흡수 · 보충 34 결정 2) 고른 전제가 있으면 **모든 판정**(유형 묶기의 미리 판정 · 답 재판정)에 같은 제품 정보 —
+    #:    종전에는 미리 판정만 전제 없이 해 사용자가 본 화면(고른 전제의 판정)과 다른 판정에서 질문 유형을 읽었다
+    base = pm.product_of(Premise(premise)) if premise else ProductContext()
 
     targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
     results: list[dict] = []
@@ -1275,7 +1279,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
                 seen = res
                 if f0 or s0:
                     state, seen = await run_in_threadpool(
-                        _core_judge, text, ProductContext(facts=f0, substs=s0)
+                        _core_judge, text, base.model_copy(update={"facts": f0, "substs": s0})
                     )
                     if state in ("pending", "down"):
                         return _render(
@@ -1286,11 +1290,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
                 pairs[-1] = (want_sid, _tag_subst(answer, want_sid, seen))
             facts, substs = _answers_of(pairs, sents)
             state, res = await run_in_threadpool(
-                _core_judge,
-                text,
-                (pm.product_of(Premise(premise)) if premise else ProductContext()).model_copy(
-                    update={"facts": facts, "substs": substs}
-                ),
+                _core_judge, text, base.model_copy(update={"facts": facts, "substs": substs})
             )
             if state in ("pending", "down"):
                 return _render(
@@ -1305,7 +1305,9 @@ async def review_answer(request: Request, session: Session = Depends(get_session
             results.append(item)
             continue
         results.append({"n": n, "result": res, "text": text})
-    answered = [r["result"] for r in results if r["n"] == want_n and not premise]
+    # 🔄 2026-10-22 (ksr 흡수 · 보충 34 결정 4 · 보충 36 결정 2) 고른 뒤 답한 판정도 새 행으로 적는다 — 종전 ksr 판은 `and not premise` 로
+    #    적지 않았다(「이력 정책 대기」 · 10-21 에 정해졌다)
+    answered = [r["result"] for r in results if r["n"] == want_n]
     kept = None
     if answered:
         kept = await run_in_threadpool(
@@ -2245,6 +2247,33 @@ def _owned_judgments(owner_id: uuid.UUID) -> Select:
     )
 
 
+def _latest_judgments(owner_id: uuid.UUID) -> Select:
+    """🆕 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) **내 판정 중 같은 문장 글자의 최신 판정만** — 홈 통계 · 반복 지적 패턴이 센다.
+
+    ★ 이력은 새 행으로 쌓인다(고르기 전 보류 → 고른 품목의 판정 · 답한 뒤 판정) — 모두 세면 같은 문구가 두 번 세어진다.
+       이력 목록(`_history_rows`)은 모든 행을 보인다(출처와 함께 · 순서가 남는 것이 이력이다).
+    ★ 「같은 문구」 = 같은 사람의 같은 문장 글자(`copy_sentence.raw`) · 최신 = `judged_at` 이 가장 늦은 것(같으면 `id` 로 하나)
+    """
+    ranked = (
+        select(
+            Judgment.id.label("jid"),
+            func.row_number()
+            .over(
+                partition_by=CopySentence.raw,
+                order_by=(Judgment.judged_at.desc(), Judgment.id.desc()),
+            )
+            .label("rn"),
+        )
+        .join(WorkDoc, WorkDoc.id == Judgment.doc_id)
+        .join(CopySentence, CopySentence.id == Judgment.subject_id)
+        .where(WorkDoc.owner_id == owner_id, Judgment.subject_type == "copy_sentence")
+        .subquery()
+    )
+    return _owned_judgments(owner_id).where(
+        Judgment.id.in_(select(ranked.c.jid).where(ranked.c.rn == 1))
+    )
+
+
 #: 필터 칩의 글자 — 값(`_VERDICTS`)은 URL 에, 글자는 화면에
 _VERDICT_LABELS = {
     "confirmed": "확정",
@@ -2354,7 +2383,7 @@ def _repeat_pattern(session: Session, owner_id: uuid.UUID) -> SimpleNamespace | 
     🚨 실제 판정에서 센다 — 거듭 나온 유형이 없으면 띠를 그리지 않는다 (D-147).
     """
     rows = session.execute(
-        _owned_judgments(owner_id)
+        _latest_judgments(owner_id)  # 🔄 2026-10-22 같은 문구의 최신 판정만 (보충 36 결정 2)
         .with_only_columns(Judgment.violation_type)
         .order_by(Judgment.judged_at.desc())
         .limit(_PATTERN_WINDOW)

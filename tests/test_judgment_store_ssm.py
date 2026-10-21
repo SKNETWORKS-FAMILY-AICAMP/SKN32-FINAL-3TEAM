@@ -312,48 +312,28 @@ def test_실제_DB_가_모든_픽스처의_행을_받는다() -> None:
         session.close()
 
 
-# ── 🆕 2026-10-20 (lse) 품목을 고른 재판정 — 같은 문구의 앞 기록을 바꿔 적는다(`replace_review`) ──────────
+# ── 🔄 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) 품목을 고른 재판정도 **새 행**으로 적는다 — 앞 기록을 지우지 않는다 ──────────
 
 
-class _Replacer(_Writer):
-    """앞 기록 찾기(`scalars`) · 지우기(`execute`)를 받는 세션 — 최근 문서 하나의 문장 글자를 들고 있다."""
-
-    def __init__(self, prior_raws: list[str]) -> None:
-        super().__init__()
-        self.prior_id = uuid.uuid4()
-        self.prior_raws = prior_raws
-        self.deleted: list[str] = []
-        self._calls = 0
-
-    def scalars(self, stmt: object) -> SimpleNamespace:
-        self._calls += 1
-        rows = [self.prior_id] if self._calls == 1 else list(self.prior_raws)
-        return SimpleNamespace(all=lambda: rows)
+class _NoDelete(_Writer):
+    """지우기(`execute`)가 오면 시험이 깨지는 세션 — 이력은 새 행으로만 쌓인다."""
 
     def execute(self, stmt: object) -> None:
-        self.deleted.append(str(stmt))
+        raise AssertionError(f"🔴 이력 저장이 지우기를 불렀다 — {stmt}")
 
 
-def test_고른_품목의_판정은_같은_문구의_앞_기록을_바꿔_적는다() -> None:
-    res = _resp("02_hold_low_conf.json")
-    raws = [s.text for s in res.sentences if not s.not_claim]
-    w = _Replacer(raws)
-    assert js.replace_review(w, _user(), res) == js.SAVED  # type: ignore[arg-type]
-    assert w.deleted and "DELETE FROM work_doc" in w.deleted[0], (
-        "🔴 앞 기록(고르기 전 보류)을 지우지 않았다"
+@pytest.mark.gate
+def test_고른_품목의_판정은_새_행으로_적고_앞_기록을_지우지_않는다() -> None:
+    w = _NoDelete()
+    before = _resp("02_hold_low_conf.json")
+    assert js.save_review(w, _user(), [before]) == js.SAVED  # type: ignore[arg-type]
+    n = len(w.added)
+    assert js.save_review(w, _user(), [before]) == js.SAVED  # type: ignore[arg-type]
+    assert len(w.added) == 2 * n, "🔴 같은 문구의 두 번째 판정이 새 행으로 쌓이지 않았다"
+
+
+@pytest.mark.gate
+def test_앞_기록을_지우는_저장_길은_없다() -> None:
+    assert not hasattr(js, "replace_review"), (
+        "🔴 지우고 다시 적는 길이 되살아났다(D-348 보충 36 결정 2)"
     )
-    assert w.added and w.committed, "🔴 고른 품목의 판정을 적지 않았다"
-
-
-def test_글자가_다른_문구의_기록은_지우지_않는다() -> None:
-    res = _resp("02_hold_low_conf.json")
-    w = _Replacer(["전혀 다른 문장"])
-    assert js.replace_review(w, _user(), res) == js.SAVED  # type: ignore[arg-type]
-    assert not w.deleted, "🔴 다른 문구의 기록을 지웠다"
-    assert w.added and w.committed
-
-
-def test_비회원의_고른_판정은_적지_않는다() -> None:
-    w = _Replacer([])
-    assert js.replace_review(w, None, _resp("02_hold_low_conf.json")) is None  # type: ignore[arg-type]
-    assert not w.added and not w.deleted
