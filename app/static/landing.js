@@ -8,7 +8,9 @@
    ⛔ 이 파일이 안 돌아도 화면은 다 보인다 — 숨김은 `ld-js` 표시가 붙었을 때만 건다. 움직임 줄이기 설정이면 아무것도 하지 않는다. */
 (function () {
   "use strict";
-  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+  if (reduced.matches) return;
+  var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
   var root = document.documentElement;
 
   /* ① 스크롤 등장 */
@@ -32,6 +34,7 @@
   if (!zone) return;
   var raf = 0;
   zone.addEventListener("pointermove", function (ev) {
+    if (reduced.matches || !finePointer.matches) return;
     if (raf) return;
     raf = window.requestAnimationFrame(function () {
       raf = 0;
@@ -42,8 +45,8 @@
         var c = card.getBoundingClientRect();
         var dx = (ev.clientX - (c.left + c.width / 2)) / c.width;
         var dy = (ev.clientY - (c.top + c.height / 2)) / c.height;
-        card.style.setProperty("--rx", (-dy * 5).toFixed(2) + "deg");
-        card.style.setProperty("--ry", (dx * 7).toFixed(2) + "deg");
+        card.style.setProperty("--rx", Math.max(-1.2, Math.min(1.2, -dy * 2)).toFixed(2) + "deg");
+        card.style.setProperty("--ry", Math.max(-1.2, Math.min(1.2, dx * 2)).toFixed(2) + "deg");
       }
     });
   });

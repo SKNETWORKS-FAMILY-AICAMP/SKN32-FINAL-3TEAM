@@ -69,13 +69,11 @@ def load(stage1: str | None = None) -> tuple:
     """모델을 한 번만 올린다. (model, tok, 어댑터 버전)."""
     global _MODEL
     if _MODEL is None:
-        import torch  # noqa: PLC0415
+        import sllm_meta  # noqa: PLC0415
         from peft import PeftModel  # noqa: PLC0415
         from persona_experiment import BASE  # noqa: PLC0415
         from persona_pipeline_e2e import STAGE1_VER, STAGE2  # noqa: PLC0415
         from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: PLC0415
-
-        import sllm_meta  # noqa: PLC0415
 
         ver = stage1 or STAGE1_VER
         adapter = sllm_meta.stage1_dir(ver)
@@ -97,10 +95,11 @@ def load(stage1: str | None = None) -> tuple:
                 print(f"⚠️ 2단계를 올리지 않는다 — {e}", flush=True)
                 stage2 = None
         _META.update(model=ver, base=BASE, adapter_sha=sllm_meta.adapter_sha12(adapter),
+                     dtype=str(sllm_meta.serve_dtype()).removeprefix("torch."),  # 🆕 10-19 — T4 는 float16 이어야 한다
                      stage2=stage2.name if stage2 else None,
                      lock_stage1=f"{m1.status}:{m1.bundle}", lock_stage2=f"{m2.status}:{m2.bundle}" if stage2 and m2 else None)
         tok = AutoTokenizer.from_pretrained(BASE)
-        base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
+        base = AutoModelForCausalLM.from_pretrained(BASE, dtype=sllm_meta.serve_dtype(), device_map="cuda")  # 🆕 10-19 T4(fp16) 대응
         model = PeftModel.from_pretrained(base, str(adapter), adapter_name="stage1")
         if stage2 is not None:
             model.load_adapter(str(stage2), adapter_name="stage2")

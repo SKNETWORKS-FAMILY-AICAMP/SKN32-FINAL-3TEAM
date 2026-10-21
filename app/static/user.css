@@ -8,9 +8,9 @@
   --u-ink: #1c1c1f;
   --u-clay: #86848c;
   --u-line: #e6e5e9;
-  --u-signal: #8b5cf6;
-  --u-signal-ink: #7c3aed;
-  --u-signal-soft: #f5eefc;
+  --u-signal: #E1306C;
+  --u-signal-ink: #C2185B;
+  --u-signal-soft: #FDEEF3;
   /* 🆕 상태색(통과·주의·위험) — 칩·배지·안내 상자가 같이 쓴다. 어두운 화면에서 연한 바탕이 튀지 않게 토큰으로 묶었다 */
   --u-ok-bg: #ecfdf5; --u-ok-ink: #065f46; --u-ok-line: #a7f3d0; --u-ok-dot: #15803d;
   --u-warn-bg: #fffbeb; --u-warn-ink: #92400e; --u-warn-line: #fde68a; --u-warn-dot: #b45309;
@@ -24,9 +24,9 @@
     --u-ink: #f1f0f2;
     --u-clay: #918f94;
     --u-line: #38373b;
-    --u-signal: #a78bfa;
-    --u-signal-ink: #c4b5fd;
-    --u-signal-soft: #2a2140;
+    --u-signal: #FF6F9C;
+    --u-signal-ink: #FFA3C0;
+    --u-signal-soft: #3B1C2A;
     --u-ok-bg: #0f2a20; --u-ok-ink: #6ee7b7; --u-ok-line: #1f5b43; --u-ok-dot: #4ade80;
     --u-warn-bg: #2b2210; --u-warn-ink: #fcd34d; --u-warn-line: #6b4f14; --u-warn-dot: #fbbf24;
     --u-bad-bg: #2d1616; --u-bad-ink: #fca5a5; --u-bad-line: #6e2a2a; --u-bad-dot: #f87171;
@@ -172,9 +172,9 @@ a.nt-item:hover { background: var(--u-surface2); }
   --u-ink: #f1f0f2;
   --u-clay: #918f94;
   --u-line: #38373b;
-  --u-signal: #a78bfa;
-  --u-signal-ink: #c4b5fd;
-  --u-signal-soft: #2a2140;
+  --u-signal: #FF6F9C;
+  --u-signal-ink: #FFA3C0;
+  --u-signal-soft: #3B1C2A;
   --u-ok-bg: #0f2a20; --u-ok-ink: #6ee7b7; --u-ok-line: #1f5b43; --u-ok-dot: #4ade80;
   --u-warn-bg: #2b2210; --u-warn-ink: #fcd34d; --u-warn-line: #6b4f14; --u-warn-dot: #fbbf24;
   --u-bad-bg: #2d1616; --u-bad-ink: #fca5a5; --u-bad-line: #6e2a2a; --u-bad-dot: #f87171;
@@ -186,9 +186,9 @@ a.nt-item:hover { background: var(--u-surface2); }
   --u-ink: #1c1c1f;
   --u-clay: #86848c;
   --u-line: #e6e5e9;
-  --u-signal: #8b5cf6;
-  --u-signal-ink: #7c3aed;
-  --u-signal-soft: #f5eefc;
+  --u-signal: #E1306C;
+  --u-signal-ink: #C2185B;
+  --u-signal-soft: #FDEEF3;
   /* 🆕 상태색(통과·주의·위험) — 칩·배지·안내 상자가 같이 쓴다. 어두운 화면에서 연한 바탕이 튀지 않게 토큰으로 묶었다 */
   --u-ok-bg: #ecfdf5; --u-ok-ink: #065f46; --u-ok-line: #a7f3d0; --u-ok-dot: #15803d;
   --u-warn-bg: #fffbeb; --u-warn-ink: #92400e; --u-warn-line: #fde68a; --u-warn-dot: #b45309;
@@ -576,43 +576,3 @@ body:has(> main .user-shell) > footer { display: none; }
 }
 .rv-cand-copy:hover { border-color: var(--u-signal); color: var(--u-signal-ink); }
 .rv-cand-copy.is-done { border-color: #15803d; color: #15803d; }
-
-/* 🆕 2026-10-17 (ksr) — 기다리는 화면 공용 덮개(`user/_busy.html`) · 카피 생성 · AI 광고 생성 · 검수 · 고쳐 쓰기가 같이 쓴다.
-   오래 걸리는 제출 중에는 화면 전체를 살짝 어둡게 덮는다 — 덮개가 클릭을 받고 `user_wait.js` 가 나머지 화면을 `inert` 로 묶는다.
-   🔄 같은 날 오후 — 단순하게: 공룡이 걸어가며 제목을 한 글자씩 써 낸다(지나간 자리에 글자가 나타난다) · 아래 안내 한 줄이 바뀐다.
-   전부 CSS 다(스크립트 없이). 색은 토큰에 기본값을 붙였다 — 토큰이 안 닿아도 상자가 투명해지지 않는다 */
-.ub-busy { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
-           background: rgba(20, 18, 30, .38); cursor: wait; }
-.ub-busy[hidden] { display: none; }
-.ub-box { display: flex; flex-direction: column; align-items: center; gap: .6rem; width: min(22rem, calc(100vw - 2rem));
-          padding: 1.5rem 1.4rem 1.2rem; border-radius: 1.1rem; background: var(--u-surface, #fff);
-          color: var(--u-ink, #1d1b22); border: 1px solid var(--u-line, #e6e3ec);
-          box-shadow: 0 14px 40px rgba(0,0,0,.25); text-align: center; }
-
-/* 공룡이 쓰는 제목 — 글자는 공룡이 지나간 만큼만 보인다(`clip-path`). 공룡은 그 끝에 붙어 걷는다 · 다 쓰면 잠깐 멈췄다 다시 */
-.ub-write { position: relative; display: inline-block; margin: 1.6rem 1.6rem 0 0; font-size: 1.05rem; font-weight: 700;
-            white-space: nowrap; border-bottom: 2px dashed var(--u-line, #e6e3ec); padding-bottom: .35rem; }
-.ub-text { display: inline-block; clip-path: inset(0 100% 0 0); animation: ub-reveal 4.2s linear infinite; }
-.ub-dino { position: absolute; bottom: .15rem; left: 0; font-size: 1.7rem; line-height: 1; animation: ub-walk 4.2s linear infinite; }
-/* 이모지는 색을 못 정한다 — 초록 공룡의 색조를 돌려 서비스 보라색에 맞춘다 */
-.ub-dino i { display: inline-block; font-style: normal; transform: scaleX(-1); animation: ub-step .3s steps(2) infinite;
-             filter: hue-rotate(112deg) saturate(1.4); }
-@keyframes ub-reveal { 0% { clip-path: inset(0 100% 0 0); } 75%, 100% { clip-path: inset(0 0 0 0); } }
-@keyframes ub-walk { 0% { left: 0; opacity: 1; } 75% { left: 100%; opacity: 1; } 92% { left: 100%; opacity: 1; } 100% { left: 100%; opacity: 0; } }
-@keyframes ub-step { from { transform: scaleX(-1) translateY(0) rotate(0); } to { transform: scaleX(-1) translateY(-3px) rotate(-4deg); } }
-
-/* 지금 하는 일 — 세 줄이 3초씩 번갈아 보인다 */
-.ub-msgs { position: relative; width: 100%; height: 1.3rem; font-size: .82rem; color: var(--u-signal-ink, #5b3fd1); font-weight: 600; }
-.ub-msgs span { position: absolute; left: 0; right: 0; opacity: 0; animation: ub-msg 9s infinite; }
-.ub-msgs span:nth-child(2) { animation-delay: 3s; }
-.ub-msgs span:nth-child(3) { animation-delay: 6s; }
-@keyframes ub-msg { 0% { opacity: 0; transform: translateY(5px); } 4%, 30% { opacity: 1; transform: none; }
-                    34%, 100% { opacity: 0; transform: translateY(-5px); } }
-.ub-foot { font-size: .76rem; color: var(--u-clay, #7a7484); }
-
-@media (prefers-reduced-motion: reduce) {
-  .ub-text { animation: none; clip-path: none; }
-  .ub-dino { animation: none; left: 100%; }
-  .ub-dino i, .ub-msgs span { animation: none; }
-  .ub-msgs span:first-child { opacity: 1; }
-}

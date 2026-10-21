@@ -519,8 +519,13 @@ def test_화면은_셋의_이름을_적고_문턱_수치는_카드에_적지_않
     monkeypatch.setattr(copygen._llm, "make", lambda: gen)
     monkeypatch.setattr(copygen, "GraphJudge", Scored)
     body = _post(features="고소하고 바삭한 식감").text
-    for name in pipeline.TIERS:
-        assert f"<h3>{name}</h3>" in body
+    # 🔄 2026-10-20 (lse · 멘토 피드백) — 화면 이름은 A안 · B안 · C안 + 성격(엔진 이름 `pipeline.TIERS` 는 그대로)
+    assert pipeline.TIERS == ("보수안", "균형안", "공격안")
+    for name, view in (("A안", "🛡️"), ("B안", "⚖️"), ("C안", "🔥")):
+        assert (
+            f'data-name="{view} {name}"' in body
+            and f'<h3 class="sr-only">{view} {name}</h3>' in body
+        )
     # 문턱 수치는 카드에 적지 않는다 — 이용자가 읽을 수 없는 값이다 (10-13 권소라)
     assert "문턱의 20%" not in body and "/ 문턱 0.5" not in body
     assert "통과한 후보 4개가 안전 ↔ 주의 어디쯤인지 보기" in body
@@ -615,50 +620,20 @@ def test_더_탐색하기는_세_번까지다(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_생성_폼은_생성_중_표시를_갖고_있다() -> None:
-    """🔄 2026-10-17 (ksr) — 생성 중 표시는 공용 덮개 하나다(공룡 · 바뀌는 안내 줄). 처음에는 숨겨 두고 `user_wait.js` 가 제출 때 띄운다.
+    """생성 중 화면 — 처음에는 숨겨 두고 `user_wait.js` 가 제출 때 보인다.
 
-    폼 안의 「문구 생성 중입니다」 줄은 덮개와 겹쳐 뺐다 — 표시가 둘 뜨지 않는다.
-    """
+    🔄 2026-10-20 (lse · 사용자 「촌스럽다」) — 가운뎃점 넷 + 「문구 생성 중입니다」 → 화면 전체 대기 화면(`_gen_wait.html`)."""
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
 
     c = TestClient(app)
     body = c.get("/u/generate").text
-    assert (
-        'id="gen-form" method="post" action="/u/generate" data-wait-form data-wait-overlay="busy-gen"'
-        in body
-    )
-    assert '<div class="ub-busy" id="busy-gen" data-wait-page hidden role="status"' in body
-    assert "카피를 만들고 있어요" in body and "🦖" in body
-    assert "문구 생성 중입니다" not in body  # 표시는 하나만
-    assert '<script src="/static/user_wait.js?v=' in body
-    js = c.get("/static/user_wait.js")
-    assert js.status_code == 200 and "data-wait-overlay" in js.text
-
-
-def test_고르지_않은_통과_후보는_회색_점의_말풍선에_문구가_있다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """🆕 2026-10-17 (ksr) — 통과했지만 고르지 않은 후보는 버리지 않고 띠의 회색 점에 문구를 단다. 고른 셋에는 달지 않는다."""
-
-    class Scored(_FakeJudge):
-        scores = iter((0.2, 0.5, 0.9, 0.6))
-
-        def judge(self, text, branch):  # noqa: ANN001, ANN201
-            c = next(self.scores)
-            return judge.Judged(True, "대역", "", c, "거짓_과장", c / 2, 0.5)
-
-    gen = _FakeLLM([GOOD])
-    monkeypatch.setattr(copygen, "off_reason", lambda: None)
-    monkeypatch.setattr(copygen._llm, "make", lambda: gen)
-    monkeypatch.setattr(copygen, "GraphJudge", Scored)
-    body = _post(features="고소하고 바삭한 식감").text
-    assert body.count('<span class="gn-tip" aria-hidden="true">') == 1
-    assert body.count('class="gn-sd gn-sd-pick') == 3
-    rest = body.split('<span class="gn-tip" aria-hidden="true">')[1].split("</span>")[0]
-    assert rest in [t for _, t in GOOD]
-    assert f"<p>{rest}</p>" not in body  # 카드로는 그리지 않는다 — 말풍선에만
+    assert 'id="gen-form" method="post" action="/u/generate" data-wait-form' in body
+    assert '<div class="rv-judging gn-gen-wait" data-wait hidden role="status"' in body
+    assert "카피를 만들고 있어요" in body
+    assert '<script src="/static/user_wait.js?v=3" defer></script>' in body
+    assert c.get("/static/user_wait.js").status_code == 200
 
 
 # ── 판정 그래프 전체를 지난다 (2026-10-13 오후) ─────────────────────────

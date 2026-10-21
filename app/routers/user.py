@@ -29,7 +29,7 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -166,6 +166,7 @@ def _render(
     ctx.setdefault("here", _POST_ONLY.get(request.url.path, request.url.path))
     ctx.setdefault("today", _today_label())
     path = _screen_path(request.url.path)
+    ctx.setdefault("ui_screen", path)
     section = _SCREEN_SECTION.get(path)
     ctx.setdefault("active_section", section)
     ctx.setdefault("section_label", _SECTION_LABELS.get(section) if section else None)
@@ -229,6 +230,7 @@ def _nav_user(request: Request) -> SimpleNamespace | None:
         return SimpleNamespace(
             name=user.name,
             org=user.org,
+            email=user.email,  # 🆕 2026-10-20 (lse) — 계정 메뉴 머리에 보인다
             initials=user.name.strip()[:2],
             verified=user.email_verified_at is not None,
             notifs=notifs,
@@ -463,6 +465,28 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
         or 0
     )
     pass_rate = round(pass_count / total_month * 100) if total_month else None
+    # 🆕 2026-10-20 (lse · 멘토 피드백 「오늘 건수 · 그래프」) — 최근 7일 날짜별 검수 문장 수(한국 시간) · 오늘 건수
+    kst = timezone(timedelta(hours=9))
+    today = datetime.now(kst).date()
+    week_from = datetime.combine(today - timedelta(days=6), datetime.min.time(), kst)
+    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+    per_day = dict.fromkeys(days, 0)
+    for (at,) in session.execute(
+        mine.with_only_columns(Judgment.judged_at).where(Judgment.judged_at >= week_from)
+    ).all():
+        d = at.astimezone(kst).date()
+        if d in per_day:
+            per_day[d] += 1
+    top = max(per_day.values()) or 1
+    daily = [
+        {
+            "label": "오늘" if d == today else f"{d.month}/{d.day}",
+            "n": n,
+            "pct": round(n / top * 100),
+            "today": d == today,
+        }
+        for d, n in per_day.items()
+    ]
 
     recent = [
         _hist_view(j, raw)
@@ -478,19 +502,21 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
             "violation_count": violation_count,
             "pass_rate": pass_rate,
             "recent": recent,
+            "daily": daily,
+            "today_count": per_day[today],
         },
     )
 
 
 @router.get("/landing", response_class=HTMLResponse)
 def landing(request: Request) -> HTMLResponse:
-    """랜딩 — 로그인 전 첫 화면 (ksr, 2026-09-13).
+    """랜딩 — 로그인 상태에 따라 작업 바로가기 또는 가입 안내를 표시한다.
 
-    🚨 nav 를 넣지 않는다 — 로그인 전이라 사용자 메뉴가 없다.
+    작업 공간의 전체 nav 대신 랜딩 전용 프로필과 작업 바로가기를 표시한다.
     ⛔ 프로토타입의 사용량 수치(「240개 팀 · 12,000건」)는 **지어낸 값**이라 옮기지 않았다 (D-147).
     🔄 2026-09-16 — `/login`(governor 전용) 대신 오늘 생긴 `/u/login`·`/u/signup` 으로 잇는다.
     """
-    return templates.TemplateResponse(request, "user/landing.html", {})
+    return _render(request, "user/landing.html")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -498,8 +524,8 @@ def landing(request: Request) -> HTMLResponse:
 # ══════════════════════════════════════════════════════════════════════
 
 
-#: 품목 분기를 고른 뒤 「다시 선택」할 수 있는 횟수 (팀장 2026-10-01). 화면이 회차만큼 미리 그려 두고 넘긴다.
-#: 🔄 2026-10-06 — 3 → 5. 분기별 판정 결과를 바꿔 보는 횟수다 — 엔진을 다시 돌리지 않는다.
+#: 품목 분기를 고른 뒤 「다시 선택」할 수 있는 횟수. 회차는 서버가 받으며 다시 선택할 때 올린다.
+#: 🔄 2026-10-06 — 3 → 5. 선택을 바꿀 때 서버가 회차를 올리고 고른 품목으로 다시 판정한다(D-348 보충 31).
 _MAX_REDO = 5
 
 #: 「예시 넣기」 문구 — 프로토타입 `SAMPLE_COPY` 그대로. 🚨 실제 광고 인용이 아니라 화면용 예시다.
@@ -509,7 +535,9 @@ _SAMPLE_COPY = (
 )
 
 #: 🔴 버튼 하나 = 폼 제출 하나 (`op`). CSP 가 스크립트를 막아 문구 추가·삭제도 서버가 다시 그린다.
-_OP = re.compile(r"^(add|all|load|del:\d|sample:\d|judge:\d)$")
+_OP = re.compile(
+    r"^(add|all|load|del:\d|sample:\d|judge:\d|choose:\d|type:\d|redo:\d|pick:\d:[가-힣_]{1,32})$"
+)
 
 
 def _copies(form: dict[str, list[str]]) -> list[str]:
@@ -536,7 +564,7 @@ def _core_judge(text: str, product=None):  # noqa: ANN001, ANN202
     from app.contracts import JudgeRequest  # noqa: PLC0415
 
     try:
-        # 🆕 10-06 (lse) — 고쳐 쓴 문구의 재판정은 원문 판정의 품목을 넘긴다(D-319). 검수는 종전대로 품목 없이
+        # 🆕 10-06 (lse) — 고쳐 쓴 문구의 재판정은 원문 판정의 품목을 넘긴다(D-319). 첫 검수는 품목 없이, 고른 뒤에는 해당 전제의 제품 정보로
         req = (
             JudgeRequest(text=text) if product is None else JudgeRequest(text=text, product=product)
         )
@@ -622,9 +650,37 @@ def _review_ctx(copies: list[str], results: list[dict] | None = None, **extra) -
         r["flagged"] = _flagged(r["result"])
         r["marks"] = _marks(r.get("text"), r["result"])
         # 분기마다의 지적 문장 — 화면이 고른 분기 기준으로 지적 건수를 센다 (2026-10-01)
-        r["branch_flagged"] = {b.premise.value: _flagged(b) for b in r["result"].branches}
+        choices = r.get("choices", r["result"].branches)
+        r["views"] = [
+            {
+                "premise": b.premise.value,
+                "result": b,
+                "criteria": b.criteria,
+                "verified": b.verified,
+            }
+            for b in choices
+        ]
+        picked = r.get("picked")
+        if picked:
+            premise = picked["premise"]
+            selected = _branch_of(r["result"], premise) or r["result"]
+            view = next((v for v in r["views"] if v["premise"] == premise), None)
+            if view is None:
+                view = {
+                    "premise": premise,
+                    "criteria": pm.CRITERIA[Premise(premise)],
+                    "verified": False,
+                }
+                r["views"].append(view)
+            view["result"] = selected
+            if selected is not r["result"]:
+                view.update(criteria=selected.criteria, verified=selected.verified)
+        r["branch_flagged"] = {v["premise"]: _flagged(v["result"]) for v in r["views"]}
     if results:
-        ctx["flagged"] = sum(len(r["flagged"]) for r in results)
+        ctx["flagged"] = sum(
+            len(r["branch_flagged"][r["picked"]["premise"]] if r.get("picked") else r["flagged"])
+            for r in results
+        )
     ctx.update(extra)
     return ctx
 
@@ -635,6 +691,7 @@ def review(request: Request) -> HTMLResponse:
     return _render(request, "user/review.html", _review_ctx([""]))
 
 
+@router.post("/review", response_class=HTMLResponse)
 @router.post("/judge", response_class=HTMLResponse)
 async def judge(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
     """문구 검수 BFF — 문구 칸 조작과 판정 호출 (ksr 2026-09-29 · 프로토타입 v7.2 `goReview`).
@@ -656,6 +713,8 @@ async def judge(request: Request, session: Session = Depends(get_session)) -> HT
     op = form.get("op", ["all"])[0]
     if not _OP.match(op):
         raise HTTPException(422, "모르는 동작")
+    if op.startswith(("pick:", "choose:", "type:", "redo:")):
+        return await _review_pick(request, copies, form, op)
     kind, _, arg = op.partition(":")
     idx = int(arg) - 1 if arg else -1
     if arg and not 0 <= idx < len(copies):
@@ -740,8 +799,7 @@ def _sllm_category(category: str | None, premise: str) -> str | None:
     원문 판정에 품목이 있으면 그 품목 · 없고 분기를 골랐으면 **고른 전제의 품목**(`pm.PREMISE_CATEGORY` — 판정이 쓰는 표 · D-99) ·
     둘 다 없으면 `None`(서버가 문구에서 추측한다). ⛔ 종전에는 분기를 고른 문구가 늘 `None` 이었다 — 사용자가 화장품을 골랐는데
     서버는 문구로 식품이라 추측할 수 있었다.
-    🚨 재판정에는 이 값을 넘기지 않는다 — 재판정은 종전대로 품목 없이 판정하고 고른 전제의 분기를 읽는다(`_rejudge`).
-       품목을 넘기면 전제가 줄어 그 분기가 생략될 수 있다(전제마다 판정이 같으면 분기를 내지 않는다).
+    재판정도 고른 전제의 제품 정보로 호출한다(`_rejudge`). 품목을 넘겨 분기가 생략되면 기록 판정을 읽는다(D-348 보충 31).
     ⬜ 건강기능식품의 **인정 여부**(전제 `건기식_인정` · `건기식_비인정`)는 넘어가지 않는다 — 서버에 받는 칸이 없다(이서은 확인 대기).
     """
     if category or not premise:
@@ -755,12 +813,15 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     🆕 2026-10-06 (ksr) — 분기를 고르고 고쳐 썼으면 재판정도 **같은 전제의 분기**로 읽는다. 재판정에 그 분기가
        없으면(전제마다 판정이 같아 분기가 생략됨) 기록되는 판정을 읽는다.
     🆕 2026-10-06 (lse) — 원문 판정에 품목이 있으면 재판정에도 그 품목을 넘긴다(D-319). 분기를 고른 문구는 원문 판정의
-       품목이 비어 있다 — 그때는 종전대로 품목 없이 판정하고 고른 전제의 분기를 읽는다.
+       품목이 비어 있어도 고른 전제가 있으면 그 전제의 제품 정보로 판정한다(D-348 보충 31).
     """
     from app.contracts import Category, ProductContext  # noqa: PLC0415
 
     state, res = _core_judge(
-        body, ProductContext(category=Category(category)) if category else None
+        body,
+        pm.product_of(Premise(premise))
+        if premise
+        else (ProductContext(category=Category(category)) if category else None),
     )
     if state != "ok":
         return {"status": "unavailable"}
@@ -895,9 +956,7 @@ async def review_rewrite(request: Request) -> HTMLResponse:
     premise = _one(form, "premise", 32)
     if premise and premise not in _PREMISES:
         raise HTTPException(422, "모르는 전제")
-    redo = _one(form, "round", 2) or "0"
-    if not redo.isdigit() or int(redo) > _MAX_REDO:
-        raise HTTPException(422, "모르는 회차")
+    redo = _review_round(form)
 
     targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
     results: list[dict] = []
@@ -913,21 +972,39 @@ async def review_rewrite(request: Request) -> HTMLResponse:
 
     item = next((r for r in results if r["n"] == want_n), None)
     source = item and item["result"]
-    if source is not None and source.branches:
-        source = _branch_of(source, premise)
-        if source is None:
+    if source is not None and source.branches and not premise:
+        return _render(
+            request,
+            "user/review.html",
+            _review_ctx(
+                copies,
+                results,
+                notice="제품 유형을 먼저 골라 주세요 — 고른 유형의 판정으로 고쳐 써요",
+            ),
+        )
+    pairs = _previous_answers(form)
+    if source is not None and (premise or pairs):
+        from app.contracts import ProductContext  # noqa: PLC0415
+
+        facts, substs = _answers_of(pairs, {s.sent_id: s.text for s in source.sentences})
+        product = (pm.product_of(Premise(premise)) if premise else ProductContext()).model_copy(
+            update={"facts": facts, "substs": substs}
+        )
+        state, res = await run_in_threadpool(_core_judge, item["text"], product)
+        if state != "ok":
             return _render(
                 request,
                 "user/review.html",
-                _review_ctx(
-                    copies,
-                    results,
-                    notice="제품 유형을 먼저 골라 주세요 — 고른 유형의 판정으로 고쳐 써요",
-                ),
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
-        item["picked"] = {"premise": premise, "round": int(redo)}
-    else:
-        premise = ""
+        item.update(
+            choices=source.branches,
+            result=res,
+            answers=[f"{sid}|{answer}" for sid, answer in pairs],
+        )
+        if premise:
+            item["picked"] = {"premise": premise, "round": int(redo)}
+        source = _branch_of(res, premise) or res
     sent = source and next((s for s in source.sentences if s.sent_id == want_sid), None)
     if sent is None:
         return _render(
@@ -981,6 +1058,114 @@ def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[li
     return facts, substs
 
 
+def _review_round(form: dict[str, list[str]]) -> int:
+    value = _one(form, "round", 2) or "0"
+    if not re.fullmatch(r"[0-9]{1,2}", value) or not 0 <= int(value) <= _MAX_REDO:
+        raise HTTPException(422, "모르는 회차")
+    return int(value)
+
+
+def _previous_answers(form: dict[str, list[str]]) -> list[tuple[str, str]]:
+    values = form.get("prev", [])
+    if len(values) > _MAX_ANSWERS:
+        raise HTTPException(422, "답이 너무 많다")
+    pairs = []
+    for value in values:
+        match = _PREV.fullmatch(value)
+        if not match:
+            raise HTTPException(422, "모르는 답")
+        pairs.append((match.group(1), match.group(2)))
+    return pairs
+
+
+async def _review_pick(
+    request: Request, copies: list[str], form: dict[str, list[str]], op: str
+) -> HTMLResponse:
+    """D-348 보충 31: 선택은 POST로 받고 실제 품목으로 재판정한다.
+
+    🔄 2026-10-20 (lse · 사용자 결정) — 품목을 고른 재판정은 **이력에 바꿔 적는다**(`judgment_store.replace_review` —
+       같은 문구의 고르기 전 기록(보류)을 지우고 고른 품목의 판정으로). 종전에는 적지 않아 이력 · 홈 통계가 보류만 셌다.
+    """
+    kind, number, *tail = op.split(":")
+    n = int(number)
+    if not 1 <= n <= len(copies) or not copies[n - 1].strip():
+        raise HTTPException(422, "그런 문구 칸이 없다")
+    redo = _review_round(form)
+    pairs = _previous_answers(form)
+    premise, stage = "", "type"
+    if kind == "pick":
+        premise = tail[0]
+        if premise not in _PREMISES:
+            raise HTTPException(422, "모르는 전제")
+    elif kind == "choose":
+        choice = _one(form, "kind", 8)
+        if choice not in {"food", "hf", "cos", "gen"}:
+            raise HTTPException(422, "모르는 유형")
+        if choice in {"food", "hf"}:
+            stage = "food" if choice == "food" else "cert"
+        else:
+            premise = "화장품" if choice == "cos" else "일반상품"
+    elif kind == "redo":
+        if redo >= _MAX_REDO:
+            raise HTTPException(422, "다시 선택 횟수를 모두 썼어요")
+        redo += 1
+    results = []
+    picked_res = None
+    for number, text in enumerate(copies, 1):
+        if not text.strip():
+            continue
+        text = text.strip()
+        state, baseline = await run_in_threadpool(_core_judge, text)
+        if state != "ok":
+            return _render(
+                request,
+                "user/review.html",
+                _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+            )
+        item = {"n": number, "text": text, "result": baseline}
+        if number == n:
+            facts, substs = _answers_of(pairs, {s.sent_id: s.text for s in baseline.sentences})
+            item.update(
+                answers=[f"{sid}|{answer}" for sid, answer in pairs], round=redo, stage=stage
+            )
+            if premise:
+                product = pm.product_of(Premise(premise)).model_copy(
+                    update={"facts": facts, "substs": substs}
+                )
+                state, res = await run_in_threadpool(_core_judge, text, product)
+                if state != "ok":
+                    return _render(
+                        request,
+                        "user/review.html",
+                        _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+                    )
+                item.update(
+                    result=res,
+                    choices=baseline.branches,
+                    picked={"premise": premise, "round": redo},
+                )
+                picked_res = res
+        results.append(item)
+    kept = None
+    if picked_res is not None:
+        # 이력 저장은 부가 기능이다 — DB 가 없거나 실패해도 고른 품목의 판정 화면은 그대로 그린다
+        try:
+            gen = get_session()
+            session = next(gen)
+            try:
+                kept = await run_in_threadpool(
+                    lambda: judgment_store.replace_review(
+                        session, current_user(request, session), picked_res
+                    )
+                )
+            finally:
+                gen.close()
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).warning("고른 품목 판정 저장 실패 — %s", type(e).__name__)
+            kept = judgment_store.FAILED
+    return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
+
+
 @router.post("/review/answer", response_class=HTMLResponse)
 async def review_answer(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
     """조건부 위반에 답하고 **그 문구를 답과 함께 다시 판정**한다 (🆕 2026-10-16 · D-348 보충 4 결정 3 · 4 · 6 · 보충 3 결정 4).
@@ -988,7 +1173,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
     🔴 **POST 다** — 문구를 URL 에 싣지 않는다(P1-4). 화면에 상태가 없어 문구 칸 · 앞서 한 답(`prev`)을 다시 받는다.
     ★ 답은 **그 문장에만** 묶는다 — 문장 글자는 서버가 먼저 판정한 결과에서 읽는다(폼의 글자를 믿지 않는다 · `review_rewrite` 와 같다).
     ★ 품목 분기를 고른 뒤의 답이면 다시 그릴 때 그 분기를 펼쳐 둔다(`picked`). 답은 모든 분기에 같이 든다(문장에 묶였다).
-    ★ 답으로 다시 판정한 문구는 **이력에 적는다**(출처 · 책임 — 보충 3 결정 4). 다른 문구는 판정만 다시 한다.
+    ★ 품목을 고르지 않은 답 재판정의 저장은 종전대로다(보충 3 결정 4). 고른 뒤 판정은 저장하지 않는다(보충 31 · 이력 정책 대기).
     🚨 답은 검증이 아니다 — 판정의 `user_facts` · `user_subst` 와 화면 문구가 그렇게 말한다.
     """
     form = await _form(request, keep_blank=True)
@@ -1004,9 +1189,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
     premise = _one(form, "premise", 32)
     if premise and premise not in _PREMISES:
         raise HTTPException(422, "모르는 전제")
-    redo = _one(form, "round", 2) or "0"
-    if not redo.isdigit() or int(redo) > _MAX_REDO:
-        raise HTTPException(422, "모르는 회차")
+    redo = _review_round(form)
     pairs: list[tuple[str, str]] = []
     for p in prev:
         pm_ = _PREV.match(p)
@@ -1028,10 +1211,15 @@ async def review_answer(request: Request, session: Session = Depends(get_session
                 _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
             )
         if n == want_n:
+            choices = res.branches
             sents = {s.sent_id: s.text for s in res.sentences}
             facts, substs = _answers_of(pairs, sents)
             state, res = await run_in_threadpool(
-                _core_judge, text, ProductContext(facts=facts, substs=substs)
+                _core_judge,
+                text,
+                (pm.product_of(Premise(premise)) if premise else ProductContext()).model_copy(
+                    update={"facts": facts, "substs": substs}
+                ),
             )
             if state in ("pending", "down"):
                 return _render(
@@ -1040,15 +1228,18 @@ async def review_answer(request: Request, session: Session = Depends(get_session
                     _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
                 )
             item = {"n": n, "result": res, "text": text, "answers": [f"{s}|{a}" for s, a in pairs]}
-            if premise and res.branches:
+            if premise:
                 item["picked"] = {"premise": premise, "round": int(redo)}
+                item["choices"] = choices
             results.append(item)
             continue
         results.append({"n": n, "result": res, "text": text})
-    answered = [r["result"] for r in results if r["n"] == want_n]
-    kept = await run_in_threadpool(
-        lambda: judgment_store.save_review(session, current_user(request, session), answered)
-    )
+    answered = [r["result"] for r in results if r["n"] == want_n and not premise]
+    kept = None
+    if answered:
+        kept = await run_in_threadpool(
+            lambda: judgment_store.save_review(session, current_user(request, session), answered)
+        )
     return _render(request, "user/review.html", _review_ctx(copies, results, history_kept=kept))
 
 
@@ -1316,6 +1507,78 @@ def generate_page(
     if gate := _gen_gate(request, session):
         return _render(request, "user/generate.html", gate)
     return _render(request, "user/generate.html", _gen_ctx())
+
+
+#: 🆕 2026-10-20 (lse · 10-15 회의 §3) — 검수 전제(또는 판별 품목) → 카피 생성 분기(품목 · 인증). 대응이 없는 것(일반상품)은 버튼을 안 그린다.
+#:    🚨 건기식_인정은 인정 문구(`fixed`)를 이용자가 적어야 한다 — 비워서 넘기고 생성 화면의 안내가 받는다
+_REVIEW_TO_GEN: dict[str, tuple[str, str]] = {
+    "식품": ("food", "no"),
+    "일반식품_기능성": ("food", "no"),
+    "건기식": ("hf", "no"),
+    "건기식_인정": ("hf", "yes"),
+    "건기식_비인정": ("hf", "no"),
+    "화장품": ("cos", "no"),
+}
+#: 남은 내용의 앞뒤에 붙어 남는 구두점 · 접속 꼬리
+_REST_EDGE = re.compile(r"^[\s,.·、!?~\-—]+|[\s,.·、!?~\-—]+$")
+
+
+def review_to_gen_ok(premise: str | None) -> bool:
+    """검수 문장 아래 「이 제품으로 새 카피 만들기」를 그려도 되는가 — 카피 생성에 맞는 분기가 있을 때만."""
+    return bool(premise) and str(premise) in _REVIEW_TO_GEN
+
+
+def _review_rest(text: str, rest: str) -> str:
+    """위반 구간을 뺀 나머지를 「간단한 문구」 칸에 넣을 모양으로 다듬는다. 원문과 같으면(뺀 것이 없으면) 비운다."""
+    rest = _REST_EDGE.sub("", re.sub(r"\s+", " ", rest or "")).strip()
+    if not rest or rest == _REST_EDGE.sub("", text.strip()) or len(rest) < 2:
+        return ""
+    return rest[: _GEN_LIMITS["phrase"]]
+
+
+#: 문장 끝의 제품 이름 — 「위암을 예방하는 양파즙」의 「양파즙」. 서술로 끝나는 문장(…다 · …요)은 고르지 않는다
+_TAIL_NOUN = re.compile(r"(?:^|\s)([가-힣A-Za-z0-9]{2,12})\s*[.!]?\s*$")
+
+
+def _review_kind(text: str) -> str:
+    """걸린 구간을 몰라 남은 내용을 못 만들 때 — 문장 끝 명사(제품 이름 후보)를 「제품 종류」 칸에. 없으면 비운다."""
+    m = _TAIL_NOUN.search(text.strip())
+    if not m or m.group(1).endswith(("다", "요", "니다", "세요")):
+        return ""
+    return m.group(1)[: _GEN_LIMITS["kind"]]
+
+
+templates.env.globals["review_to_gen_ok"] = review_to_gen_ok
+
+
+@router.post("/generate/from-review", response_class=HTMLResponse)
+async def generate_from_review(
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
+    """검수에서 고쳐 쓸 수 없던 문장 → 카피 생성 입력 화면을 **미리 채워** 연다 (🆕 2026-10-20 · 10-15 회의 §3).
+
+    ★ 생성은 부르지 않는다 — 이용자가 제품 정보를 확인하고 「카피 생성」을 누른다(GPT 비용 · 외부 전송 안내는 생성 화면 그대로).
+    ★ 채우는 것: 품목 · 인증(검수 전제에서) · 「간단한 문구」 = 위반 구간을 뺀 나머지. 위반 표현은 넘기지 않는다.
+    🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4).
+    """
+    if gate := _gen_gate(request, session):
+        resp = _render(request, "user/generate.html", gate)
+        resp.status_code = 401
+        return resp
+    form = await _form(request)
+    category, cert = _REVIEW_TO_GEN.get(_one(form, "premise", 32), ("", "no"))
+    text = _one(form, "text", 2000)
+    picked = {
+        "category": category,
+        "cert": cert,
+        "age": "all",
+        "sex": "all",
+        "phrase": _review_rest(text, _one(form, "rest", 2000)),
+    }
+    if not picked["phrase"]:
+        picked["kind"] = _review_kind(text)
+    return _render(request, "user/generate.html", _gen_ctx({"picked": picked, "from_review": True}))
 
 
 @router.post("/generate", response_class=HTMLResponse)
@@ -1984,12 +2247,26 @@ def _history_stmt(owner_id: uuid.UUID) -> Select:
 
 
 def _history_rows(
-    session: Session, owner_id: uuid.UUID, verdict: str | None, page: int
+    session: Session,
+    owner_id: uuid.UUID,
+    verdict: str | None,
+    page: int,
+    *,
+    query: str = "",
+    category: str = "",
+    days: int = 0,
 ) -> tuple[list, int]:
     """이력 한 쪽의 행과 전체 건수. `judgment` × `copy_sentence` 조인 (ksr 원문 조인 · lse 필터·페이지)."""
     stmt = _history_stmt(owner_id)
     if verdict:
         stmt = stmt.where(Judgment.verdict == verdict)
+
+    if query:
+        stmt = stmt.where(CopySentence.raw.contains(query, autoescape=True))
+    if category:
+        stmt = stmt.where(Judgment.product_category == category)
+    if days:
+        stmt = stmt.where(Judgment.judged_at >= datetime.now(UTC) - timedelta(days=days))
 
     total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     raw_rows = session.execute(
@@ -2028,6 +2305,9 @@ def history(
     verdict: str | None = None,
     page: int = 1,
     open_id: str | None = None,
+    q: str = "",
+    category: str = "",
+    days: int = 0,
 ) -> HTMLResponse:
     """검수 이력 — 🚨 **DB 에 직접 붙는 첫 화면**이다 (2026-09-13 한빈님 확인).
 
@@ -2044,13 +2324,27 @@ def history(
        DB 가 없으면 로그인 여부를 알 수 없으니 「DB 없음」 안내가 먼저다 (D-72).
     """
     page = max(page, 1)
+    q = q.strip()[:200]
+    category = category if category in {c.value for c in Category} else ""
+    days = days if days in (7, 30, 90) else 0
+    filters = {"q": q, "category": category, "days": days}
+    filter_qs = (
+        "&" + urlencode({k: v for k, v in filters.items() if v}) if any(filters.values()) else ""
+    )
     if verdict not in (None, *_VERDICTS):
         verdict = None
     db_down = not reachable(session)
     user = None if db_down else current_user(request, session)
     if not db_down and user is None:
         return _render(request, "user/history.html", {"need_login": True})
-    rows, total = ([], 0) if user is None else _history_rows(session, user.id, verdict, page)
+    if user is None:
+        rows, total = [], 0
+    elif q or category or days:
+        rows, total = _history_rows(
+            session, user.id, verdict, page, query=q, category=category, days=days
+        )
+    else:
+        rows, total = _history_rows(session, user.id, verdict, page)
     opened = next((r for r in rows if str(r.id) == open_id), None) if open_id else None
     return _render(
         request,
@@ -2059,30 +2353,36 @@ def history(
             # 🚨 못 붙었으면 빈 목록을 「기록 없음」으로 그리지 않는다 — 못 읽은 것이다 (D-72).
             "db_down": db_down,
             "judgments": rows,
+            "total": total,
             "verdicts": _VERDICTS,
             "verdict_labels": _VERDICT_LABELS,
             "pattern": None if user is None else _repeat_pattern(session, user.id),
             # 동의가 꺼져 있으면 새 검수가 안 쌓인다 — 빈 목록의 까닭을 알린다 (D-96)
-            "consent_off": user is not None and user.consent_history_at is None,
+            "consent_off": False,  # 🔄 2026-10-20 — 이력 보관은 필수다(끌 수 없다)
             "verdict": verdict,
             "page": page,
             "has_prev": page > 1,
             "has_next": page * _PAGE_SIZE < total,
-            "base_qs": f"&verdict={verdict}" if verdict else "",
+            "base_qs": (f"&verdict={verdict}" if verdict else "") + filter_qs,
+            "filter_qs": filter_qs,
+            "filters": filters,
+            "categories": [c.value for c in Category],
             "opened": opened,
         },
     )
 
 
 @router.get("/help", response_class=HTMLResponse)
-def help_page(request: Request, tab: str = "guide") -> HTMLResponse:
+def help_page(request: Request, tab: str = "guide", topic: str = "review") -> HTMLResponse:
     """copylane 소개 (ksr 2026-09-13) — `tab`(guide·faq)이 "사용방법"·"자주 묻는 질문"
     사이드바 두 항목을 가른다. ⛔ 탭 전환을 스크립트로 하지 않는다 (CSP) — 쿼리스트링으로
     서버가 고른다.
     """
     if tab not in ("guide", "faq"):
         tab = "guide"
-    return _render(request, "user/help.html", {"tab": tab}, active_sub=tab)
+    if topic not in ("review", "copy", "ad"):
+        topic = "review"
+    return _render(request, "user/help.html", {"tab": tab, "topic": topic}, active_sub=tab)
 
 
 @router.get("/matching", response_class=HTMLResponse)
@@ -2169,7 +2469,11 @@ def _cs_list_ctx(session: Session, user: UserAccount) -> dict:
 
 
 @router.get("/cs", response_class=HTMLResponse)
-def cs(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+def cs(
+    request: Request,
+    tab: str = "write",
+    session: Session = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
     """고객센터 문의 — 각 구역 사이드바 하단 「CS 문의」 버튼으로 들어온다 (구역 밖).
 
     ⛔ 로그아웃 상태면 리다이렉트하지 않고 로그인 안내를 그린다(200) — 로그인 벽을 세우지 않는다(D-66).
@@ -2177,7 +2481,15 @@ def cs(request: Request, session: Session = Depends(get_session)) -> HTMLRespons
     user = current_user(request, session)
     if user is None:
         return _render(request, "user/cs.html", {"need_login": True})
-    return _render_form(request, "user/cs.html", {**_cs_list_ctx(session, user), "form": {}})
+    return _render_form(
+        request,
+        "user/cs.html",
+        {
+            **_cs_list_ctx(session, user),
+            "form": {},
+            "cs_tab": "history" if tab == "history" else "write",
+        },
+    )
 
 
 @router.post("/cs")
@@ -2359,17 +2671,10 @@ async def mypage_save(request: Request, session: Session = Depends(get_session))
         return _render_form(request, "user/mypage.html", _mypage_ctx(user, tab, saved=True))
 
     if section == "consent":
-        c1 = bool(_one(form, "consent_history", 8))
+        # 🔄 2026-10-20 (lse) — 검수 이력 보관은 필수라 끌 수 없다. 여기서는 ② 품질 개선 활용(선택 · 기본 꺼짐)만 정한다
         c2 = bool(_one(form, "consent_improve", 8))
-        if c2 and not c1:
-            return _render_form(
-                request,
-                "user/mypage.html",
-                _mypage_ctx(user, tab, error="②는 ①에 동의해야 고를 수 있어요."),
-                422,
-            )
         now = datetime.now(UTC)
-        user.consent_history_at = now if c1 else None
+        user.consent_history_at = user.consent_history_at or now
         user.consent_improve_at = now if c2 else None
         session.commit()
         auth.audit("user_consent_save", _actor(user.id), ok=True)
@@ -2734,6 +3039,8 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
         terms_version=_terms_version(session),
         terms_agreed_at=now,
         disclaimer_agreed_at=now,
+        # 🔄 2026-10-20 (lse) — 검수 이력 보관은 필수다 — 가입 때 약관과 함께 동의한다(`judgment_store.should_store`)
+        consent_history_at=now,
         last_login_at=now,
     )
     session.add(user)

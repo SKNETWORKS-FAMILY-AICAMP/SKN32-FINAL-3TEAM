@@ -1,24 +1,20 @@
-"""app/routers/admin_members.py — 회원관리(회원 목록·상세) 화면 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+"""app/routers/admin_members.py — 회원관리(회원 목록 · 상세) 화면 · 소유자 **psj** (병렬작업 계약 §5)
 
-★ `admin.py` 와 파일을 가른다 (D-208 · admin_board.py·admin_cs.py 와 같은 패턴). 붙이는
+★ `admin.py` 와 파일을 가른다 (D-208 · admin_board.py · admin_cs.py 와 같은 패턴). 붙이는
    자리는 `app/routers/__init__.py` 한 줄 — `admin_router` 아래에 매단다.
 
-✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 상태 변경 등은 화면에 없다(목업에도 없음).
+✅ **읽기 전용이다.** 이 파일에 POST 는 없다. 비활성화 등 상태 변경은 화면에 없다.
 ✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
 
-🔴 **이 화면은 아직 DB 를 읽지 않는다 — 더미로만 그린다** (admin_board.py·admin_cs.py 와 같다).
-   🔄 일반 사용자 계정 표 `user_account` 는 생겼고(alembic `0017_ops_tables` · `app/models.py`
-   `UserAccount` · D-260 ②) 서비스 쪽 가입·로그인(`app/routers/user.py`)이 그 표를 쓴다.
-   `app_account` 는 `governor`(관리자) 로그인 전용 테이블이라 다른 개념이다 (alembic 0012_app_account.py 참고).
-   🚨 `user_account` 에는 회원 유형 · 요금제 · 상태 칸이 **없다**(`UserAccount` docstring) — 아래 더미의
-      유형(인플루언서·기업) · 플랜 칸은 목업 것이고 표에 대응하는 칸이 없다.
-   ⬜ DB 조회로 바꿀 때는 admin_errors.py 패턴(읽었다 · 표가 없다 · 못 붙었다를 가른다)을 따른다.
-
-🚨 목업(`app/static/mockup.html`)의 `MEMBERS_V22` 배열·`member-detail` 뷰 구조를 그대로
-   따른다 — 나중에 실데이터 붙을 때 필드명이 어긋나지 않게. 결제 이력은 목업에서도
-   `member-detail` 안에 하드코딩된 예시 1~2행뿐이라 여기서도 상세 화면에 예시로만 둔다
-   (결제 이력을 담는 테이블도 아직 없다).
+🔄 2026-10-20 — **`user_account` 표를 읽는다** (alembic `0017_ops_tables` · `app/models.py` `UserAccount` · D-260 ②).
+   서비스 가입 · 로그인(`app/routers/user.py`)이 쓰는 표다. `app_account`(관리자 로그인)와 다른 표다.
+   ★ 못 읽으면 빈 화면 + 안내다 — 0건이라 말하지 않는다 (`admin_dbread` · D-72).
+   🚨 표에 **회원 유형 · 요금제 · 결제 칸이 없다**(D-66 · D-69 · `UserAccount` docstring) — 종전 더미의 유형 ·
+      플랜 필터와 결제 이력 예시는 지웠다. 대응하는 칸 없이 그리면 없는 사실을 만든다.
+   🚨 상태는 저장하지 않고 **계산한다**(`UserAccount` docstring) — 비활성(`disabled_at`) > 휴면(마지막 로그인 ·
+      없으면 가입이 `DORMANT_DAYS` 보다 오래됨) > 활성.
+   🔴 이용 내역은 **건수만** 센다 — 검수 원문은 읽지 않는다(D-76 열람 경계). 검수 이력은 사용자가 보관에
+      동의한 것만 저장되므로(D-96) 「보관 동의한 검수」 건수다.
 """
 
 from __future__ import annotations
@@ -26,6 +22,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.models import TICKET_STATUSES
+from app.routers import admin_dbread as db
 from app.routers.admin import require_governor
 from app.templating import templates
 
@@ -34,215 +32,162 @@ from app.templating import templates
 router = APIRouter(prefix="/members")
 
 PAGE_SIZE = 20
+_MAX_Q = 80
 
-MEMBER_TYPES = ("일반 회원", "인플루언서", "기업 대표자", "기업 구성원")
-MEMBER_PLANS = ("Basic", "Pro", "Enterprise")
-MEMBER_STATUSES = ("active", "dormant")
-_STATUS_LABEL = {"active": "활성", "dormant": "휴면"}
+#: 휴면으로 보는 기준(일) — `[임의]` 화면 표시 기준이다. 계정을 막지 않는다
+DORMANT_DAYS = 365
 
-# ─────────────────────────────────────────────────────────────
-# 더미 — `user_account` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다. ⬜ DB 조회로 바꾼다.
-# 목업 app/static/mockup.html 의 MEMBERS_V22 배열을 그대로 옮겨온 것 — 실제 회원
-# 정보가 아니라 화면 구조 확인용이다.
-# ─────────────────────────────────────────────────────────────
-_DUMMY_MEMBERS: list[dict] = [
-    {
-        "id": "m1",
-        "name": "김민아",
-        "email": "mina@future-ad.co",
-        "type": "기업 대표자",
-        "company": "(주)미래광고",
-        "role": "대표자",
-        "channel": None,
-        "followers": None,
-        "plan": "Enterprise",
-        "joined": "2026.03.12",
-        "last_seen": "오늘 10:32",
-        "status": "active",
-    },
-    {
-        "id": "m2",
-        "name": "이재현",
-        "email": "jh.lee@gmail.com",
-        "type": "인플루언서",
-        "company": None,
-        "role": None,
-        "channel": "@jh_daily",
-        "followers": "128,400",
-        "plan": "Pro",
-        "joined": "2026.05.08",
-        "last_seen": "오늘 10:21",
-        "status": "active",
-    },
-    {
-        "id": "m3",
-        "name": "박서윤",
-        "email": "sy.park@brand1.kr",
-        "type": "기업 구성원",
-        "company": "브랜드원",
-        "role": "구성원",
-        "channel": None,
-        "followers": None,
-        "plan": "Enterprise",
-        "joined": "2026.01.20",
-        "last_seen": "오늘 10:08",
-        "status": "active",
-    },
-    {
-        "id": "m4",
-        "name": "최하늘",
-        "email": "sky.choi@naver.com",
-        "type": "일반 회원",
-        "company": None,
-        "role": None,
-        "channel": None,
-        "followers": None,
-        "plan": "Basic",
-        "joined": "2026.07.15",
-        "last_seen": "어제 18:45",
-        "status": "active",
-    },
-    {
-        "id": "m5",
-        "name": "정은서",
-        "email": "es.jung@kakao.com",
-        "type": "인플루언서",
-        "company": None,
-        "role": None,
-        "channel": "@eunseo_beauty",
-        "followers": "72,900",
-        "plan": "Pro",
-        "joined": "2026.08.01",
-        "last_seen": "어제 14:22",
-        "status": "active",
-    },
-    {
-        "id": "m6",
-        "name": "한도윤",
-        "email": "dy.han@test.com",
-        "type": "일반 회원",
-        "company": None,
-        "role": None,
-        "channel": None,
-        "followers": None,
-        "plan": "Pro",
-        "joined": "2026.04.22",
-        "last_seen": "3일 전",
-        "status": "active",
-    },
-    {
-        "id": "m7",
-        "name": "송유진",
-        "email": "yj.song@outlook.com",
-        "type": "일반 회원",
-        "company": None,
-        "role": None,
-        "channel": None,
-        "followers": None,
-        "plan": "Basic",
-        "joined": "2026.06.30",
-        "last_seen": "7일 전",
-        "status": "dormant",
-    },
-    {
-        "id": "m8",
-        "name": "장우진",
-        "email": "wj.jang@foodmkt.co",
-        "type": "기업 대표자",
-        "company": "푸드마켓",
-        "role": "대표자",
-        "channel": None,
-        "followers": None,
-        "plan": "Enterprise",
-        "joined": "2025.11.05",
-        "last_seen": "오늘 09:15",
-        "status": "active",
-    },
-]
+MEMBER_STATUSES = ("active", "dormant", "disabled")
+_STATUS_LABEL = {"active": "활성", "dormant": "휴면", "disabled": "비활성"}
 
-# 결제 이력도 담는 테이블이 없다 — 목업처럼 플랜 기준 금액만 계산해서 예시로 보여준다.
-_PLAN_PRICE = {"Enterprise": "990,000원", "Pro": "49,000원", "Basic": "19,000원"}
+#: 상태 계산식 — 목록 · 필터 · 상세가 같은 식을 쓴다 (D-99). 값은 파라미터로 넘긴다
+_STATUS_SQL = (
+    "CASE WHEN u.disabled_at IS NOT NULL THEN 'disabled' "
+    "WHEN coalesce(u.last_login_at, u.created_at) < now() - make_interval(days => %s) "
+    "THEN 'dormant' ELSE 'active' END"
+)
+
+_SELECT = f"""
+SELECT u.id::text AS id, u.email, u.name, u.org, u.created_at, u.last_login_at, u.disabled_at,
+       u.terms_version, u.terms_agreed_at, u.consent_history_at, u.consent_improve_at,
+       u.email_verified_at, {_STATUS_SQL} AS status
+FROM user_account u
+"""
 
 
-def _clean_page(value: str | None) -> int:
-    try:
-        return max(1, int(value or 1))
-    except ValueError:
-        return 1
-
-
-def _clean_choice(value: str | None, allowed: tuple[str, ...]) -> str | None:
-    return value if value in allowed else None
+def view(r: dict) -> dict:
+    return {
+        "id": r["id"],
+        "name": r["name"],
+        "email": r["email"],
+        "company": r["org"],
+        "joined": db.fmt_dt(r["created_at"], "%Y.%m.%d"),
+        "last_seen": db.fmt_dt(r["last_login_at"]) if r["last_login_at"] else "로그인 기록 없음",
+        "status": r["status"],
+        "disabled_at": db.fmt_dt(r["disabled_at"]),
+        "terms_version": r["terms_version"],
+        "terms_agreed_at": db.fmt_dt(r["terms_agreed_at"]),
+        "consent_history": db.fmt_dt(r["consent_history_at"]) if r["consent_history_at"] else None,
+        "consent_improve": db.fmt_dt(r["consent_improve_at"]) if r["consent_improve_at"] else None,
+        "email_verified": r["email_verified_at"] is not None,
+    }
 
 
 @router.get("", response_class=HTMLResponse)
 def member_list(request: Request) -> HTMLResponse:
-    """회원 목록 — 읽기 전용. `user_account` 표를 아직 읽지 않고 더미로만 그린다."""
+    """회원 목록 — 읽기 전용 · 최근 가입 먼저."""
     actor = require_governor(request)
     qp = request.query_params
-    q = (qp.get("q") or "").strip()
-    member_type = _clean_choice(qp.get("type"), MEMBER_TYPES)
-    plan = _clean_choice(qp.get("plan"), MEMBER_PLANS)
-    status = _clean_choice(qp.get("status"), MEMBER_STATUSES)
-    page = _clean_page(qp.get("page"))
+    q = (qp.get("q") or "").strip()[:_MAX_Q]
+    status = qp.get("status") if qp.get("status") in MEMBER_STATUSES else None
+    page = db.clean_page(qp.get("page"))
 
-    rows = _DUMMY_MEMBERS
+    where: list[str] = []
+    params: list[object] = []
     if q:
-        needle = q.lower()
-        rows = [
-            r
-            for r in rows
-            if needle in r["name"].lower()
-            or needle in r["email"].lower()
-            or (r["company"] and needle in r["company"].lower())
-        ]
-    if member_type:
-        rows = [r for r in rows if r["type"] == member_type]
-    if plan:
-        rows = [r for r in rows if r["plan"] == plan]
+        where.append(
+            r"(u.name ILIKE %s ESCAPE '\' OR u.email ILIKE %s ESCAPE '\' OR u.org ILIKE %s ESCAPE '\')"
+        )
+        params += [db.like_param(q)] * 3
     if status:
-        rows = [r for r in rows if r["status"] == status]
+        where.append(f"{_STATUS_SQL} = %s")
+        params += [DORMANT_DAYS, status]
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
-    total = len(rows)
-    start = (page - 1) * PAGE_SIZE
-    page_rows = rows[start : start + PAGE_SIZE]
-    pages = max(1, -(-total // PAGE_SIZE))
+    source, out = db.run(
+        [(f"SELECT count(*) AS n FROM user_account u {where_sql}", params)],  # noqa: S608 — 고정 조각만
+        what="members.count",
+    )
+    rows: list[dict] = []
+    total: int | None = None
+    if source == "db":
+        total = out[0][0]["n"]
+        page = min(page, db.page_count(total, PAGE_SIZE))
+        source, out = db.run(
+            [
+                (
+                    f"{_SELECT} {where_sql} ORDER BY u.created_at DESC LIMIT %s OFFSET %s",  # noqa: S608
+                    [DORMANT_DAYS, *params, PAGE_SIZE, (page - 1) * PAGE_SIZE],
+                )
+            ],
+            what="members.list",
+        )
+        rows = [view(r) for r in out[0]] if source == "db" else []
 
     return templates.TemplateResponse(
         request,
         "admin/members/list.html",
         {
             "actor": actor,
-            "rows": page_rows,
+            "source": source,
+            "rows": rows,
             "total": total,
             "page": page,
-            "pages": pages,
+            "pages": db.page_count(total or 0, PAGE_SIZE),
             "q": q,
-            "member_type": member_type or "",
-            "plan": plan or "",
             "status": status or "",
-            "types": MEMBER_TYPES,
-            "plans": MEMBER_PLANS,
             "statuses": MEMBER_STATUSES,
             "status_label": _STATUS_LABEL,
+            "dormant_days": DORMANT_DAYS,
         },
     )
 
 
 @router.get("/{member_id}", response_class=HTMLResponse)
 def member_detail(request: Request, member_id: str) -> HTMLResponse:
-    """회원 상세 — 읽기 전용. 기본 정보·이용 내역(더미 수치)·결제 이력(예시)을 한 화면에."""
+    """회원 상세 — 계정 · 동의 · 이용 건수 · 문의. 읽기 전용."""
     actor = require_governor(request)
-    row = next((r for r in _DUMMY_MEMBERS if r["id"] == member_id), None)
-    if row is None:
+    mid = member_id[:64]
+    source, out = db.run(
+        [
+            (f"{_SELECT} WHERE u.id::text = %s", [DORMANT_DAYS, mid]),  # noqa: S608
+            (
+                "SELECT count(*) AS sentences, count(DISTINCT j.doc_id) AS requests, "
+                "count(*) FILTER (WHERE j.judged_at >= date_trunc('month', now())) AS month, "
+                "max(j.judged_at) AS last_at "
+                "FROM judgment j JOIN work_doc w ON w.id = j.doc_id WHERE w.owner_id::text = %s",
+                [mid],
+            ),
+            (
+                "SELECT id::text AS id, created_at, title, status FROM ticket "
+                "WHERE requester_id::text = %s ORDER BY created_at DESC LIMIT 10",
+                [mid],
+            ),
+        ],
+        what="members.detail",
+    )
+    row = view(out[0][0]) if source == "db" and out[0] else None
+    if source == "db" and row is None:
         raise HTTPException(status_code=404)
+    usage = None
+    tickets: list[dict] = []
+    if row is not None:
+        u = out[1][0]
+        usage = {
+            "requests": u["requests"],
+            "sentences": u["sentences"],
+            "month": u["month"],
+            "last_at": db.fmt_dt(u["last_at"]),
+        }
+        tickets = [
+            {
+                "id": t["id"],
+                "at": db.fmt_dt(t["created_at"], "%Y.%m.%d"),
+                "title": t["title"],
+                "status": TICKET_STATUSES.get(t["status"], t["status"]),
+            }
+            for t in out[2]
+        ]
     return templates.TemplateResponse(
         request,
         "admin/members/detail.html",
         {
             "actor": actor,
+            "source": source,
             "row": row,
+            "usage": usage,
+            "tickets": tickets,
             "status_label": _STATUS_LABEL,
-            "price": _PLAN_PRICE.get(row["plan"], "-"),
+            "dormant_days": DORMANT_DAYS,
         },
     )

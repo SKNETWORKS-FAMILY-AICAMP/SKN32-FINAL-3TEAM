@@ -39,16 +39,19 @@ def test_화면_골격이_DB_없이도_뜬다(path: str) -> None:
     assert r.status_code == 200, f"🔴 {path} 가 안 뜬다 — {r.status_code}"
 
 
-def test_상단_pill은_구역_넷뿐이다() -> None:
-    """🔴 고객센터·마이페이지·홈·도움말은 상단 pill 이 아니다."""
-    from fastapi.testclient import TestClient  # noqa: PLC0415
+def test_상단과_사이드바의_역할이_분리된다() -> None:
+    from fastapi.testclient import TestClient
 
-    from app.api import app  # noqa: PLC0415
+    from app.api import app
 
     body = TestClient(app).get("/u/review").text
-    for label in ("copylane 소개", "검수 및 카피생성", "AI 광고 생성", "매칭"):
-        assert f">{label}</a>" in body, f"🔴 상단 pill에 「{label}」이 없다"
-    assert "고객센터" not in body, "🔴 고객센터가 상단 pill로 새어나왔다 — 사이드바 하단이어야 한다"
+    nav = body.split('<nav class="user-topnav"', 1)[1].split("</nav>", 1)[0]
+    assert ">작업 공간</a>" in nav
+    assert ">이용 가이드</a>" in nav
+    assert ">매칭</a>" not in nav
+    assert 'src="/static/brand/symbol-180.png"' in nav
+    assert "고객센터" not in nav
+    assert 'aria-current="page"' in body
 
 
 def test_사이드바에_하위_화면이_새지_않는다() -> None:
@@ -61,31 +64,26 @@ def test_사이드바에_하위_화면이_새지_않는다() -> None:
     assert 'href="/u/segments"' not in body, "🔴 하위 화면이 사이드바에 새어나왔다"
 
 
-def test_구역_없는_화면은_사이드바가_없다() -> None:
-    """🚨 홈·마이페이지·고객센터는 디자인상 구역 밖이라 사이드바가 안 뜬다."""
-    from fastapi.testclient import TestClient  # noqa: PLC0415
+def test_작업_화면에_공통_사이드바가_있다() -> None:
+    from fastapi.testclient import TestClient
 
-    from app.api import app  # noqa: PLC0415
+    from app.api import app
 
     client = TestClient(app)
-    for path in ("/u/", "/u/cs"):
+    for path in ("/u/review", "/u/cs", "/u/compose"):
         body = client.get(path).text
-        assert 'class="user-sidebar"' not in body, (
-            f"🔴 {path} 에 사이드바가 붙었다 — 구역 밖이어야 한다"
-        )
+        assert 'class="user-sidebar"' in body
+        for label in ("홈", "문구 검수", "카피 생성", "AI 광고 생성", "검수 이력"):
+            assert label in body
 
 
-def test_활성_pill과_사이드바_항목에_활성_표시가_붙는다() -> None:
-    """🚨 지금 보고 있는 구역·항목이 시각적으로 구분돼야 한다."""
-    from fastapi.testclient import TestClient  # noqa: PLC0415
+def test_현재_작업이_사이드바에서_선택된다() -> None:
+    from fastapi.testclient import TestClient
 
-    from app.api import app  # noqa: PLC0415
+    from app.api import app
 
-    body = TestClient(app).get("/u/matching").text
-    assert "user-topnav-pill user-topnav-pill-active" in body, (
-        "🔴 매칭 pill 에 활성 표시가 안 붙는다"
-    )
-    assert 'href="/u/matching">' in body, "🔴 매칭 pill 링크가 없다"
+    body = TestClient(app).get("/u/review").text
+    assert 'href="/u/review" aria-current="page"' in body
 
 
 def test_copylane_소개_탭이_사용방법과_FAQ를_가른다() -> None:
@@ -101,6 +99,28 @@ def test_copylane_소개_탭이_사용방법과_FAQ를_가른다() -> None:
     assert "자주 묻는 질문" in faq
     assert "user-sidebar-item-active" in guide
     assert "user-sidebar-item-active" in faq
+
+
+@pytest.mark.parametrize(
+    ("topic", "title", "href"),
+    [
+        ("review", "광고 문구, 이렇게 확인하세요", "/u/review"),
+        ("copy", "제품 정보로 새 문구를 만들어보세요", "/u/generate"),
+        ("ad", "문구를 광고 형식에 맞춰 구성해요", "/u/compose"),
+        ("unknown", "광고 문구, 이렇게 확인하세요", "/u/review"),
+    ],
+)
+def test_이용가이드_목적별_내용과_실행화면이_연결된다(topic: str, title: str, href: str) -> None:
+    from fastapi.testclient import TestClient
+
+    from app.api import app
+
+    response = TestClient(app).get("/u/help", params={"topic": topic})
+    assert response.status_code == 200
+    assert f'<h2 id="hg-guide-title">{title}</h2>' in response.text
+    assert f'class="hg-launch" href="{href}"' in response.text
+    assert response.text.count('class="hg-step"') == 4
+    assert response.text.count('class="hg-purpose is-active"') == 1
 
 
 def test_검수_POST가_문구를_되돌려_그린다() -> None:
@@ -319,6 +339,28 @@ def test_랜딩은_governor_로그인이_아니라_일반_회원_로그인으로
     assert 'href="/u/signup"' in body
 
 
+def test_랜딩_로그인_상태에는_작업_바로가기를_표시한다(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    from app.api import app
+    from app.routers import user as user_router
+
+    monkeypatch.setattr(
+        user_router, "_nav_user", lambda _request: SimpleNamespace(name="유저", initials="유")
+    )
+    response = TestClient(app).get("/u/landing")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert "유저 님 계정 메뉴" in response.text
+    assert "문구 검수하기 →" in response.text
+    assert "작업 공간으로 돌아가기 →" in response.text
+    assert 'href="/u/login"' not in response.text
+    assert 'href="/u/signup"' not in response.text
+    assert "로그인 없이 문구 검수해 보기" not in response.text
+
+
 def test_로그인_전에_들어오면_랜딩이_첫_화면이다(monkeypatch: pytest.MonkeyPatch) -> None:
     """🆕 2026-10-14 (사용자 요청) — 로그인 전 `/u/` 는 그 자리에서 랜딩을 그린다(로그인 벽 아님 · D-66). 「copylane 소개」 메뉴는 랜딩이 아니라 사용방법이다."""
     from fastapi.testclient import TestClient  # noqa: PLC0415
@@ -331,7 +373,7 @@ def test_로그인_전에_들어오면_랜딩이_첫_화면이다(monkeypatch: p
     r = TestClient(app).get("/u/", follow_redirects=False)
     assert r.status_code == 200 and "ld-hero" in r.text, "🔴 로그인 전 첫 화면이 랜딩이 아니다"
     body = TestClient(app).get("/u/review").text
-    assert 'href="/u/help?tab=guide">copylane 소개</a>' in body
+    assert 'href="/u/help?tab=guide">이용 가이드</a>' in body
 
 
 @pytest.mark.gate
@@ -363,8 +405,9 @@ def test_검수_분기_다시_선택은_5회다() -> None:
     from app.api import app  # noqa: PLC0415
 
     body = TestClient(app).get("/u/preview/21_hold_cat_unknown_hair").text
-    assert 'id="rvr-1-5"' in body
-    assert 'id="rvr-1-6"' not in body
+    assert "재검수 0/5" in body
+    assert 'value="redo:1"' in body
+    assert 'type="checkbox" id="rvr-' not in body
 
 
 @pytest.mark.gate
@@ -489,7 +532,7 @@ def test_생성_입력은_분기와_판정_전제를_되돌려_그린다() -> No
     r = _gen_post(category="hf", cert="no", name="지어낸 곡물바", age="30", sex="f")
     assert r.status_code == 200
     assert "건강기능식품 · 인증 아니오" in r.text
-    assert "판정 전제 <b>식품</b>" in r.text  # 인정 없는 건강기능식품은 일반식품으로 생성한다
+    assert "생성 기준 <b>식품</b>" in r.text  # 인정 없는 건강기능식품은 일반식품으로 생성한다
     assert "30대 여성" in r.text
 
 
@@ -718,6 +761,8 @@ def test_얹는_기준은_통과와_후보_없는_확신부족_보류뿐이다(h
 def test_광고생성은_판정을_지난_문구로_편집기를_연다(
     monkeypatch: pytest.MonkeyPatch, fmt: str, key: str, w: int, h: int | None
 ) -> None:
+    import re  # noqa: PLC0415
+
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
     from app.api import app  # noqa: PLC0415
@@ -748,7 +793,7 @@ def test_광고생성은_판정을_지난_문구로_편집기를_연다(
         {"text": "지어낸 둘째 문장.", "unsure": True},
     ]
     assert draft["note"] == "지어낸 병기 문구"
-    assert 'src="/static/user_compose.js"' in body
+    assert re.search(r'src="/static/user_compose\.js(?:\?[^"]*)?"', body)
     assert 'name="ad_format"' not in body  # 편집기가 뜨면 입력 폼은 감춘다
     # 「종류 다시 고르기」가 문구와 병기 문구를 들고 돌아간다
     assert 'name="note" value="지어낸 병기 문구"' in body

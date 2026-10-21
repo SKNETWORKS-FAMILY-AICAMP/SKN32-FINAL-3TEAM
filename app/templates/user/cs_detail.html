@@ -5,7 +5,7 @@
   🚨 답변은 **한 번**이다(`ticket.reply` · 스레드는 범위 밖). 그래서 프로토타입의 「추가 문의 작성 · 전송」과
      「문의 종료하기」는 비활성 + 사유다 (팀장 승인 요청 5번). 상담원 이름 칸은 없다 — 담당자 배정 여부만 보인다.
 #}{% extends "user/_base.html" %}
-{% block title %}CopyLane — 문의 {{ no }}{% endblock %}
+{% block title %}문의 {{ no }} | CopyLane{% endblock %}
 {% block screen_css %}
 <style>
 .cd-back { font-size: .82rem; color: var(--u-clay); text-decoration: none; }
@@ -36,7 +36,7 @@
 </style>
 {% endblock %}
 {% block user_content %}
-<a class="cd-back" href="/u/cs">← 문의 목록</a>
+<a class="cd-back" href="/u/cs?tab=history">← 문의 목록</a>
 <div class="cd-head">
   <h1>{{ no }}</h1>
   <span class="cd-badge p-{{ t.priority }}">{{ priority_label }}</span>

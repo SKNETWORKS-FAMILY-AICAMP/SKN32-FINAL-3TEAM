@@ -1,25 +1,7 @@
-{# app/templates/user/_topnav.html — 상단 4-pill 메뉴 · 소유자 lse (병렬작업 계약 §5)
-
-  🚨 딱 4개다 (about·work·adgen·matching) — 화면이 늘어도 여기는 안 늘어난다.
-     새 화면은 어느 구역의 사이드바에 들어갈지를 정하는 것이지, 새 pill 이 아니다.
-  ⬜ "관리자" pill 은 여기 없다 — 관리자 화면은 app/routers/admin.py 소관(ssm·psj)이고
-     별도 로그인(D-66)을 지난다. 사용자 nav 에 admin 을 섞지 않는다.
-  🔄 2026-09-29 (ksr) — 오른쪽을 프로토타입 v7.2 처럼 채웠다. **값은 로그인한 사람의 실제 정보**다(`me` —
-     `user.py` `_nav_user`). 소속 배지(적었을 때만) · 다크모드 · 아바타+이름(→ 마이페이지) · 로그아웃.
-     로그아웃 상태면 로그인 · 회원가입. ⛔ 스크립트 없이 폼 제출(CSP).
-     ⬜ 알림 벨은 알림 단계에서 붙인다(새 공지 + 내 문의 답변).
-#}
 <nav class="user-topnav" aria-label="주요 메뉴">
-  <a class="user-topnav-brand" href="/u/">CopyLane</a>
-  {% if me and me.org %}<span class="user-topnav-org" title="소속">{{ me.org }}</span>{% endif %}
-  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'about' }}"
-     href="/u/help?tab=guide">copylane 소개</a>
-  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'work' }}"
-     href="/u/review">검수 및 카피생성</a>
-  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'adgen' }}"
-     href="/u/compose">AI 광고 생성</a>
-  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'matching' }}"
-     href="/u/matching">매칭</a>
+  <a class="user-topnav-brand" href="/u/landing"><img src="/static/brand/symbol-180.png" alt=""><span class="user-brand-word">CopyLane</span></a>
+  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section != 'about' }}" href="/u/">작업 공간</a>
+  <a class="user-topnav-pill{{ ' user-topnav-pill-active' if active_section == 'about' }}" href="/u/help?tab=guide">이용 가이드</a>
   <span class="user-topnav-spacer"></span>
 
   {# 🔄 2026-10-15 (ksr · 점검 01) — 두 버튼을 다 그리고 지금 테마에 맞는 하나만 보인다(`user.css` `.tn-to-*`).
@@ -74,15 +56,17 @@
       </form>
     </div>
   </details>
-  <a class="user-topnav-me" href="/u/mypage" title="마이페이지">
-    <span class="user-topnav-avatar" aria-hidden="true">{{ me.initials }}</span>
-    <span>{{ me.name }}</span>
-  </a>
-  <form class="user-topnav-form" method="post" action="/u/logout">
-    <button class="user-topnav-icon" type="submit" title="로그아웃" aria-label="로그아웃">
-      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
-    </button>
-  </form>
+  {#- 🔄 2026-10-20 (lse · 사용자 「계정 바가 별로」) — 알약 모양 계정 칸 · 펼치면 이름 · 이메일 머리가 있는 카드 메뉴 #}
+  <details class="ws-profile">
+    <summary class="user-topnav-me"><span class="user-topnav-avatar" aria-hidden="true">{{ me.initials }}</span><span class="user-topnav-name">{{ me.name }}</span><svg class="user-topnav-caret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <div class="ws-profile-menu">
+      <div class="ws-profile-head"><span class="user-topnav-avatar" aria-hidden="true">{{ me.initials }}</span><span><b>{{ me.name }}</b>{% if me.email %}<small>{{ me.email }}</small>{% endif %}</span></div>
+      <a href="/u/mypage"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>마이페이지</a>
+      <a href="/u/history"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>검수 이력</a>
+      <a href="/u/mypage?tab=account"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>계정 설정</a>
+      <form method="post" action="/u/logout"><button type="submit"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>로그아웃</button></form>
+    </div>
+  </details>
   {% else %}
   <a class="user-topnav-mypage" href="/u/login">로그인</a>
   <a class="user-topnav-join" href="/u/signup">회원가입</a>

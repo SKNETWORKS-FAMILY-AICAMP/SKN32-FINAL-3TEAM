@@ -1,57 +1,56 @@
-{# app/templates/admin/members/detail.html — 회원 상세 (뼈대) · 소유자 **psj**
+{# app/templates/admin/members/detail.html — 회원 상세 · 소유자 **psj**
    (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** 이용 내역·결제 이력은 예시 수치다 — 담는 테이블이 아직 없다.
-  🔴 계정 표(`user_account`)는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 더미다 (admin_members.py 참고).
+  🚨 **읽기 전용이다.**
+  🔄 2026-10-20 — 계정 표(`user_account`)를 읽는다(admin_members.py). 이용 내역은 `judgment` 건수만 —
+     검수 원문은 보이지 않는다(D-76). 회원 유형 · 요금제 · 결제 이력은 표에 없어 뺐다(D-66 · D-69).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 회원 상세{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+#}{% extends "admin/_base.html" %}
+{% block title %}회원 상세 | CopyLane 관리자{% endblock %}
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 
 <p><a href="/admin/members">← 회원 목록</a></p>
 
-<p class="warn">🧪 <b>더미 데이터입니다.</b> 계정 표(<code>user_account</code>)는 생겼지만 이 화면은 아직 그 표를 읽지 않아요 — 이용 내역·결제 이력도 예시 수치입니다.</p>
+{% with table="user_account" %}{% include "admin/_db_notice.html" %}{% endwith %}
 
-<h1>{{ row.name }} <small class="hint">{{ row.type }}</small></h1>
-<table class="kv">
-  <tr><th>이메일</th><td>{{ row.email }}</td></tr>
+{% if row %}
+<h1>{{ row.name }} <small class="hint">{{ status_label[row.status] }}</small></h1>
+<div class="admin-table-scroll"><table class="kv">
+  <tr><th>이메일</th><td>{{ row.email }} <small class="hint">{{ "인증됨" if row.email_verified else "미인증" }}</small></td></tr>
+  <tr><th>소속</th><td>{{ row.company or "-" }}</td></tr>
   <tr><th>가입일</th><td>{{ row.joined }}</td></tr>
-  <tr><th>최근 접속</th><td>{{ row.last_seen }}</td></tr>
-  <tr><th>플랜</th><td>{{ row.plan }}</td></tr>
-  <tr><th>상태</th><td>{{ status_label[row.status] }}</td></tr>
-</table>
+  <tr><th>최근 로그인</th><td>{{ row.last_seen }}</td></tr>
+  <tr><th>상태</th><td>{{ status_label[row.status] }}{% if row.status == "disabled" %} · {{ row.disabled_at }}{% elif row.status == "dormant" %} <small class="hint">({{ dormant_days }}일 넘게 로그인 없음)</small>{% endif %}</td></tr>
+</table></div>
 
-{% if row.type in ("기업 대표자", "기업 구성원") %}
-<h2>기업 소속 정보</h2>
-<table class="kv">
-  <tr><th>기업명</th><td>{{ row.company }}</td></tr>
-  <tr><th>소속 역할</th><td>{{ row.role }}</td></tr>
-  <tr><th>기업 플랜</th><td>{{ row.plan }}</td></tr>
-</table>
-{% elif row.type == "인플루언서" %}
-<h2>인플루언서 정보</h2>
-<table class="kv">
-  <tr><th>대표 채널</th><td>{{ row.channel }}</td></tr>
-  <tr><th>팔로워</th><td>{{ row.followers }}</td></tr>
-  <tr><th>인증 상태</th><td>인증 완료</td></tr>
-</table>
+<h2>동의 현황</h2>
+<div class="admin-table-scroll"><table class="kv">
+  <tr><th>이용약관</th><td>{{ row.terms_version }} · {{ row.terms_agreed_at }}</td></tr>
+  <tr><th>① 검수 이력 보관</th><td>{{ row.consent_history or "미동의" }}</td></tr>
+  <tr><th>② 품질 개선 활용</th><td>{{ row.consent_improve or "미동의" }}</td></tr>
+</table></div>
+
+<h2>이용 내역 <small class="hint">(이력 보관에 동의한 검수만 저장돼요)</small></h2>
+<div class="admin-table-scroll"><table class="kv">
+  <tr><th>검수 요청</th><td>{{ usage.requests }}건 <small class="hint">(문장 판정 {{ usage.sentences }}건)</small></td></tr>
+  <tr><th>이번 달 문장 판정</th><td>{{ usage.month }}건</td></tr>
+  <tr><th>마지막 검수</th><td>{{ usage.last_at }}</td></tr>
+</table></div>
+
+<h2>문의 내역</h2>
+{% if tickets %}
+<div class="admin-table-scroll"><table>
+  <tr><th>접수일</th><th>제목</th><th>상태</th></tr>
+  {% for t in tickets %}
+  <tr><td>{{ t.at }}</td><td><a href="/admin/cs/tickets/{{ t.id }}">{{ t.title }}</a></td><td>{{ t.status }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<p class="hint">접수한 문의가 없어요.</p>
 {% endif %}
-
-<h2>이용 내역 <small class="hint">(예시 수치 — 집계 테이블 없음)</small></h2>
-<table class="kv">
-  <tr><th>이번 달 검수</th><td>48건</td></tr>
-  <tr><th>이번 달 생성</th><td>31건</td></tr>
-</table>
-
-<h2>결제 이력 <small class="hint">(예시 — 결제 테이블 없음)</small></h2>
-<table>
-  <tr><th>결제일</th><th>상품</th><th>금액</th><th>결제 수단</th><th>상태</th></tr>
-  <tr><td>2026.08.12</td><td>{{ row.plan }} 월간</td><td>{{ price }}</td><td>법인/신용카드</td><td>결제 완료</td></tr>
-</table>
+{% endif %}
 
 <style>
 .admin-shell table.kv { border-collapse: collapse; margin: .5rem 0 1.5rem; }
@@ -59,6 +58,4 @@
 .admin-shell table.kv td { padding: .3rem 0; }
 .admin-shell .hint { color: var(--a-clay); font-size: .85rem; font-weight: 400; }
 </style>
-</div>
-</div>
 {% endblock %}
