@@ -129,6 +129,45 @@ def test_이어_묻기는_상한까지_남은_질문은_따로() -> None:
     )  # 남은 행은 도달로 세지 않는다
 
 
+def test_답한_질문이_다시_서면_따로_세고_도달로_세지_않는다() -> None:
+    """🆕 2026-10-21 (인계 10-21 클론A §2) — 종전에는 `asked` 로 걸러 다시 답하지도 · `left` 에 세지도 않아 조용히 묻혔다(D-220)."""
+    calls: list[ProductContext] = []
+
+    def run(text: str, p: ProductContext) -> dict:
+        calls.append(p)  # 답해도 같은 질문(같은 문장 · 같은 종류)이 다시 선다 — 그래프 결함 대역
+        if p.substs and p.substs[-1].answer is Answer.아니오:
+            return {
+                "sentences": [_viol(), _held().model_copy(update={"sent_id": "s1"})],
+                "outcome": None,
+            }
+        return {"sentences": [_held()], "outcome": None}
+
+    rows = [{"id": "a", "text": TEXT, "조건": "B", "labels": ["거짓_과장"]}]
+    (p,) = eg.run(rows, run, 0, answers=True)
+    no = p["answer_path"]["아니오"]
+    assert no["reasked"] == 1 and no["left"] == 0, "다시 선 질문은 `left` 가 아니라 따로"
+    assert p["answer_path"]["예"]["reasked"] == 1
+    rep = eg.answer_report(rows, [p])
+    assert rep["reasked"] == 1
+    assert rep["by_condition"]["B"].get("도달", 0) == 0, "골든 유형이 확정돼도 도달로 세지 않는다"
+    assert rep["by_condition"]["B"]["재질문"] == 1
+
+
+def test_종전_결과_파일은_재질문_칸이_없어도_읽는다() -> None:
+    rows = [{"id": "b", "text": TEXT, "조건": "B", "labels": ["거짓_과장"]}]
+    path = {"class": "확정위반", "types": ["거짓_과장"], "left": 0}
+    rep = eg.answer_report(rows, [{"answer_path": {"예": dict(path), "아니오": dict(path)}}])
+    assert rep["reasked"] == 0 and rep["by_condition"]["B"]["도달"] == 1
+
+
+def test_실증_질문의_열쇠에_유형이_실린다() -> None:
+    typed = _held().model_copy(
+        update={"substantiation": _SUBST.model_copy(update={"violation": Violation.비방광고})}
+    )
+    assert eg._questions([typed]) == ["s0:subst:비방광고"]
+    assert eg._questions([_held()]) == ["s0:subst"], "유형이 빈 질문은 종전 꼴"
+
+
 def test_채점표_도달과_답에_달린_오탐() -> None:
     rows = [
         {"id": "b", "text": TEXT, "조건": "B", "labels": ["거짓_과장"]},
