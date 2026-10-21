@@ -1050,6 +1050,9 @@ class JudgeResponse(BaseModel):
     def _recorded_is_conservative(self) -> JudgeResponse:
         # 🆕 D-263 ① · D-276 결정 2 — **기록되는 판정은 가장 보수적인 경우다.** 검증 안 된 분기가 기록을 낮추지 못한다.
         #    검증된(인정번호 대조) 분기는 많아야 하나 — 그때는 기록이 그 분기를 따른다 (D-263 ⑥).
+        # 🔄 2026-10-21 (근거 정정 · D-348 보충 33 · 인계 10-21 클론B §0-3) — 이 검증기가 지키는 것은 **위험도**다(D-348 결정 4 · D-263 ① 의
+        #    위험도 쪽). 판정(확정 · 보류)은 보충 33 으로 「답 대기 · 판정은 답 뒤」라 가장 나쁜 쪽을 가정해 확정하지 않는다 —
+        #    기록 판정과 분기의 짝은 `app/graph.py` `_invariant`(보충 35 결정 1)가 본다.
         verified = [b for b in self.branches if b.verified]
         if len(verified) > 1:
             raise ValueError(f"검증된 분기가 {len(verified)}개다 — 제품은 하나다 (D-263 ⑥)")
