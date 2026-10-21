@@ -48,6 +48,13 @@
       "hold",
       "search_failed"
     ],
+    "HoldKind": [
+      "awaiting_answer",
+      "awaiting_pick",
+      "nothing_found",
+      "other",
+      "unconfirmed"
+    ],
     "HoldReason": [
       "cat_unknown",
       "gap2",
