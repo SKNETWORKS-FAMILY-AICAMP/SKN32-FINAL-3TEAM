@@ -705,6 +705,20 @@ class SentenceJudgment(BaseModel):
             )
         return data
 
+    def model_copy(
+        self, *, update: dict[str, Any] | None = None, deep: bool = False
+    ) -> SentenceJudgment:  # type: ignore[override]
+        """🆕 2026-10-21 (인계 10-21 클론A §2 · 보충 39 결정 6) 계산 칸 `user_subst` 를 `update` 로 바꾸려 하면 거부한다.
+
+        ⛔ pydantic 의 `model_copy(update=…)` 는 검증을 건너뛰고 계산 칸 이름은 그냥 버린다 — 답을 바꾼 줄 알았는데 **조용히 그대로**다(D-220).
+           옮겨 주지 않고 막는다 — 정본은 목록 하나다(D-99) · 답을 바꿀 때는 `user_substs` 를 쓴다. 생성자 · JSON 입력은 `_user_subst_in` 이 옮긴다(종전 저장 JSON).
+        """
+        if update and "user_subst" in update:
+            raise ValueError(
+                "user_subst 는 계산 칸이다 — model_copy 로 바꾸지 않는다 · 답을 바꿀 때는 user_substs (보충 39 결정 6)"
+            )
+        return super().model_copy(update=update, deep=deep)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def user_subst(self) -> UserSubst | None:
