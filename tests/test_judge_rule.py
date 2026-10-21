@@ -534,6 +534,49 @@ def test_일반상품_규칙_근거가_표시광고법뿐인_품목_빈칸_행�
     assert eg.GENERAL_LAW == "002011"
 
 
+@pytest.mark.gate
+def test_일반상품_규칙_근거가_빈_공정위_의결서_행도_든다() -> None:
+    """🆕 2026-10-21 (D-348 보충 38 결정 2) — 공정위 의결서 원천의 위반 없음 행(근거 · 근거 후보 · 라벨 빈칸)은 일반상품 적법 표본이다."""
+    from scripts import eval_graph as eg
+
+    base = {"품목": None, "전제": None, "근거": [], "근거_후보": [], "labels": []}
+    ok = base | {"id": "ftc", "provenance": "ftc_decisions_body"}
+    assert eg.general_row(ok)
+    assert not eg.general_row(base | {"id": "o", "provenance": "mfds_casebook"}), (
+        "다른 원천은 근거 법을 말할 근거가 없다"
+    )
+    assert not eg.general_row(ok | {"labels": ["거짓_과장"]}), "라벨이 있으면 근거가 있어야 한다"
+    assert not eg.general_row(ok | {"근거_후보": [["013094:제8조제1항제1호"]]})
+    assert not eg.general_row({k: v for k, v in ok.items() if k != "근거"}), (
+        "근거 칸 자체가 없으면 들지 않는다"
+    )
+    assert not eg.general_row(ok | {"품목": "식품"})
+
+
+@pytest.mark.gate
+def test_그물_틀린_확정_행을_센다() -> None:
+    """🆕 2026-10-21 (D-348 보충 38 결정 1) — 위반 확정인데 라벨과 하나도 안 겹치는 행(채점 밖 포함)."""
+    from scripts import eval_graph as eg
+
+    rows = [
+        {"id": "ok", "text": "ok", "조건": "C", "labels": ["거짓_과장"]},
+        {"id": "law", "text": "law", "조건": "D", "labels": []},
+        {"id": "type", "text": "type", "조건": "B", "labels": ["소비자_기만"]},
+        {"id": "hold", "text": "hold", "조건": "B", "labels": ["거짓_과장"]},
+    ]
+    preds = [
+        {"class": c, "types": t}
+        for c, t in (
+            ("확정위반", ["거짓_과장"]),
+            ("확정위반", ["거짓_과장"]),
+            ("확정위반", ["거짓_과장"]),
+            ("보류", []),
+        )
+    ]
+    full = [eg.predict({"sentences": [], "outcome": None}) | p for p in preds]
+    assert eg.summarize(rows, full)["wrong_confirm_ids"] == ["law", "type"]
+
+
 # ── 2026-10-08 평가 규칙 집행 (D-321 · D-40 · D-175) ─────────────────────────────────────────────
 def test_유형_없는_위반_행과_편입_대기_유형만_붙은_행은_채점_밖이다() -> None:
     """★ D-321 — 「유형이 없어 학습 · 채점에서 빠진다」(평가 131) · 편입 대기 유형은 게이트 · 발표 지표에 넣지 않는다."""

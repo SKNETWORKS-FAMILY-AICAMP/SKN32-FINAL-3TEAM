@@ -776,6 +776,13 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["conditional"] = conditional_report(rows, preds)
     #: 🆕 2026-10-21 (D-348 보충 35 결정 1) — 불변식이 깨진 행(운영은 바로잡았다 · 0 이어야 한다 · 봉인 조건)
     out["invariant_rows"] = sum(1 for p in preds if p.get("invariant"))
+    #: 🆕 2026-10-21 (D-348 보충 38 결정 1 · #3 (나)) **틀린 확정 행** — 위반을 확정했는데 라벨에 위반이 없거나 유형이 하나도 안 겹친다(채점 밖 M · D 포함).
+    #:    무조건부에서는 「품목을 모르면 확정하지 않는다」(보충 8 · 31)가 새지 않았는지 보는 그물이다 — **0 이어야 한다(봉인 조건)**
+    out["wrong_confirm_ids"] = [
+        r["id"]
+        for r, p in zip(rows, preds, strict=True)
+        if p["class"] == "확정위반" and not (set(p["types"]) & truth_types(r, set(p["types"])))
+    ]
     #: 🆕 2026-10-21 (D-348 보충 36 결정 4) — 보류 종류(행 단위 · 한 행에 종류가 여럿이면 각각 센다) × 라벨 조건
     kinds: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for r, p in zip(rows, preds, strict=True):
@@ -932,6 +939,8 @@ def conditional_rows(rows: list[dict]) -> list[dict]:
 
 #: 🆕 2026-10-20 (D-348 보충 32 · 측정 기준 (ㄴ)) 일반상품으로 채점하는 행의 근거 법 — 표시광고법(법률 ID · `app.sanction.SANCTION_LAW`)
 GENERAL_LAW = SANCTION_LAW["표시광고법"]
+#: 🆕 2026-10-21 (D-348 보충 38 결정 2) 근거가 빈 행도 일반상품으로 드는 원천 — 공정위 의결서(표시광고법 사건) `[문헌]` 원천 정의 `data_sources.yaml`
+GENERAL_SOURCE = "ftc_decisions_body"
 
 
 def general_row(r: dict) -> bool:
@@ -941,14 +950,21 @@ def general_row(r: dict) -> bool:
        근거가 표시광고법뿐인 라벨은 「표시광고법 위반」만 말한다 — 표시광고법은 품목과 무관하게 걸리므로 일반상품 전제
        (표시광고법만 본다 · `premise.CRITERIA`)로 채점해도 라벨의 범위와 맞다.
     🚨 근거가 빈 행(위반 없음 라벨)은 이 규칙에 들지 않는다 — 「근거 법이 표시광고법뿐」을 말할 근거가 없다(D-220).
+       🔄 2026-10-21 (D-348 보충 38 결정 2 · 인계 10-21 클론B §1 #12 (가)) — **예외 하나: 공정위 의결서 원천**의 위반 없음 행
+       (근거 · 근거 후보 · 라벨이 모두 비었다)은 일반상품으로 든다 — 원천 자체가 표시광고법 사건이다(공정위 의결서 · `GENERAL_SOURCE`).
+       일반상품 조건부에 적법 표본이 0 행이던 자리를 메운다(dev 15 행 · 모두 조건 D · 원장 10-21(A) ⑦).
     ⛔ 근거 조문 글자는 `<법 ID>:<조문>` 꼴이다(골든 `근거`) — 꼴이 다르면 들지 않는다.
     """
+    if r.get("전제") or r.get("품목"):
+        return False
     basis = r.get("근거") or []
+    if basis:
+        return all(str(x).split(":", 1)[0] == GENERAL_LAW for x in basis)
     return (
-        not r.get("전제")
-        and not r.get("품목")
-        and bool(basis)
-        and all(str(x).split(":", 1)[0] == GENERAL_LAW for x in basis)
+        r.get("provenance") == GENERAL_SOURCE
+        and not r.get("근거_후보")
+        and not r.get("labels")
+        and "근거" in r
     )
 
 
@@ -1101,6 +1117,12 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
             print(
                 f"    {k:16} {sum(v.values()):>5}  " + " · ".join(f"{c} {n}" for c, n in v.items())
             )
+    if not conditional:
+        bad = s.get("wrong_confirm_ids") or []
+        print(
+            f"\n  {'✅' if not bad else '🔴'} 그물 — 무조건부 틀린 확정 {len(bad)} 행(0 이어야 한다 · 봉인 조건 · D-348 보충 38 결정 1)"
+            + (f" · {bad[:5]}" if bad else "")
+        )
     if s.get("invariant_rows"):
         print(
             f"\n  🔴 불변식이 깨진 행 {s['invariant_rows']} — 운영은 전제 보류로 바로잡았다 · 0 이어야 한다(행별 `invariant` · D-348 보충 35)"
