@@ -246,7 +246,6 @@ def test_못_읽으면_0건이라_말하지_않는다(
     for path in (
         "/admin/cs/tickets",
         "/admin/board/notices",
-        "/admin/terms",
         "/admin/members",
         "/admin/stats/quality/judge",
         "/admin/stats/quality/generation",
@@ -271,18 +270,21 @@ def test_공지_상태는_계산한다(client: TestClient) -> None:
     assert client.get("/admin/board/notices/no-such").status_code == 404
 
 
-def test_약관_상태와_이전_버전을_시행일_순서로_계산한다(client: TestClient) -> None:
-    rows = client.get("/admin/terms").context["rows"]
-    by_version = {r["version"]: r for r in rows}
-    assert by_version["v1"]["status"] == "시행 중"
-    assert by_version["v2"]["status"] == "예정"
-    assert by_version["v2"]["prev_version"] == "v1"
-    assert by_version["p1"]["status"] == "시행 중"
-    assert [r["kind"] for r in rows] == ["service", "service", "privacy"]
-    d = client.get(f"/admin/terms/{T1}")
-    assert d.status_code == 200
-    assert [h["version"] for h in d.context["history"]] == ["v2", "v1"]
-    assert client.get("/admin/terms/no-such").status_code == 404
+def test_약관_목록과_상세는_DB_조회_없이_닫힘_안내다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected_read(*args, **kwargs):
+        raise AssertionError("닫힌 약관 화면은 DB를 읽지 않는다")
+
+    monkeypatch.setattr(admin_dbread, "run", unexpected_read)
+    for path in ("/admin/terms", f"/admin/terms/{T1}", "/admin/terms/no-such"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.template.name == "admin/_closed.html"
+        assert response.context["page_title"] == "약관 관리"
+        assert "닫혀 있습니다" in response.text
+        assert "새 버전 등록" not in response.text
+        assert "rows" not in response.context and "history" not in response.context
 
 
 def test_회원_상태_필터는_계산식에_기준일과_같이_간다(
