@@ -64,6 +64,7 @@ from app.contracts import (  # noqa: E402
     UserSubst,
     Verdict,
     encoder_judged,
+    hold_kind,
     is_conditional,
 )
 from app.dictmatch import norm as dict_norm  # noqa: E402 — 정규화는 한 곳 (D-99)
@@ -250,6 +251,8 @@ def predict(state: dict[str, Any]) -> dict[str, Any]:
         "fact_branch": any(s.fact_check is not None for s in sents),
         #: 🆕 2026-10-21 (D-348 보충 35) — 기록 문장에 선 질문(`_questions`) · 경로 동치 대조(`scripts/eval_diff.py`)와 답 경로의 재료
         "questions": _questions(sents),
+        #: 🆕 2026-10-21 (D-348 보충 36 결정 4) — 보류 문장의 종류(답 대기 · 고르기 대기 · 확인 못 함 · 걸린 것 없음 · 그 밖) · 계약 `hold_kind` 한 곳
+        "hold_kinds": sorted({k.value for s in sents if (k := hold_kind(s)) is not None}),
         "user_fact": any(s.user_facts for s in sents),
         #: 🆕 2026-10-16 (D-348 보충 4) — 조건부 위반 문장의 유형(가장 나쁜 경우 = 답 없음 · 거짓 분기의 판정) · 사전 유형, 없으면 인코더 근거의 유형
         "cond_types": sorted(
@@ -759,6 +762,12 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["conditional"] = conditional_report(rows, preds)
     #: 🆕 2026-10-21 (D-348 보충 35 결정 1) — 불변식이 깨진 행(운영은 바로잡았다 · 0 이어야 한다 · 봉인 조건)
     out["invariant_rows"] = sum(1 for p in preds if p.get("invariant"))
+    #: 🆕 2026-10-21 (D-348 보충 36 결정 4) — 보류 종류(행 단위 · 한 행에 종류가 여럿이면 각각 센다) × 라벨 조건
+    kinds: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for r, p in zip(rows, preds, strict=True):
+        for k in p.get("hold_kinds", ()):
+            kinds[k][r.get("조건") or "-"] += 1
+    out["hold_kinds"] = {k: dict(sorted(v.items())) for k, v in sorted(kinds.items())}
     #: 🆕 2026-10-21 (D-348 보충 35 결정 2) — 답 경로(`--answers` 로 잰 행만)
     if any("answer_path" in p for p in preds):
         out["answers"] = answer_report(rows, preds)
@@ -1064,6 +1073,12 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
         )
         for k, (n, pos, law, m) in cb.items():
             print(f"    {k:28} {n:>5} · {pos:>4} / {law:>3} · M {m}")
+    if s.get("hold_kinds"):
+        print("\n  보류 종류 (D-348 보충 36 · 행 단위 · 라벨 조건별 · 통과가 아니다)")
+        for k, v in s["hold_kinds"].items():
+            print(
+                f"    {k:16} {sum(v.values()):>5}  " + " · ".join(f"{c} {n}" for c, n in v.items())
+            )
     if s.get("invariant_rows"):
         print(
             f"\n  🔴 불변식이 깨진 행 {s['invariant_rows']} — 운영은 전제 보류로 바로잡았다 · 0 이어야 한다(행별 `invariant` · D-348 보충 35)"
