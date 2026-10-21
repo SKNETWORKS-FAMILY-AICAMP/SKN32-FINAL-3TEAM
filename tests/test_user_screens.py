@@ -145,7 +145,12 @@ def _textareas(html: str) -> list[str]:
 
     return [
         h.unescape(v)
-        for v in re.findall(r'<textarea[^>]*name="text"[^>]*>(.*?)</textarea>', html, re.S)
+        # 🔄 10-21 — 문구 칸 복제용 `<template>` 안의 빈 칸은 제출되지 않는다 — 세지 않는다
+        for v in re.findall(
+            r'<textarea[^>]*name="text"[^>]*>(.*?)</textarea>',
+            re.sub(r"<template\b.*?</template>", "", html, flags=re.S),
+            re.S,
+        )
     ]
 
 
@@ -376,7 +381,8 @@ def test_로그인_전에_들어오면_랜딩이_첫_화면이다(monkeypatch: p
     r = TestClient(app).get("/u/", follow_redirects=False)
     assert r.status_code == 200 and "ld-hero" in r.text, "🔴 로그인 전 첫 화면이 랜딩이 아니다"
     body = TestClient(app).get("/u/review").text
-    assert 'href="/u/help?tab=guide">이용 가이드</a>' in body
+    # 🔄 10-21 — 「이용 가이드」는 상단 드롭다운 제목이 됐고, 안의 「사용방법」이 가이드 탭으로 간다
+    assert "이용 가이드" in body and 'href="/u/help?tab=guide"' in body
 
 
 @pytest.mark.gate
