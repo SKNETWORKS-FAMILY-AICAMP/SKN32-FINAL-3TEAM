@@ -312,6 +312,66 @@ def test_실제_DB_가_모든_픽스처의_행을_받는다() -> None:
         session.close()
 
 
+@pytest.mark.skipif(
+    os.environ.get("COPYLANE_DB_IT") != "1", reason="실제 DB 에 쓴다 — COPYLANE_DB_IT=1 일 때만"
+)
+def test_실제_DB_에서_홈_통계는_같은_문구의_최신_판정만_센다() -> None:
+    """🆕 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) 같은 문구를 두 번 적으면 이력(`_owned_judgments`)은 두 벌 ·
+    홈 통계(`_latest_judgments`)는 문장마다 **나중 판정** 하나. 🚨 한 트랜잭션 안에서 재고 되돌린다(앞 시험과 같다)."""
+    from datetime import timedelta  # noqa: PLC0415
+
+    from sqlalchemy import func, select  # noqa: PLC0415
+
+    from app.auth import hash_password  # noqa: PLC0415
+    from app.db import _SessionLocal  # noqa: PLC0415
+    from app.models import UserAccount  # noqa: PLC0415
+
+    session = _SessionLocal()
+    try:
+        now = datetime.now(UTC)
+        user = UserAccount(
+            id=uuid.uuid4(),
+            email=f"it-{uuid.uuid4().hex[:8]}@example.com",
+            pw_hash=hash_password("x" * 12),
+            name="it",
+            terms_version="v1",
+            terms_agreed_at=now,
+            disclaimer_agreed_at=now,
+            consent_history_at=now,
+        )
+        session.add(user)
+        session.flush()
+        res = _resp("02_hold_low_conf.json")
+        batches = []
+        for k in range(2):  # 같은 문구를 두 번 — 앞은 이르게 · 뒤는 늦게
+            docs, sents, judgs = js.build_rows(user, [res])
+            for j in judgs:
+                j.judged_at = now + timedelta(seconds=k)
+            session.add_all(docs)
+            session.flush()
+            session.add_all(sents)
+            session.flush()
+            session.add_all(judgs)
+            session.flush()
+            batches.append((sents, judgs))
+
+        def ids(stmt) -> set:  # noqa: ANN001
+            return set(session.scalars(stmt.with_only_columns(Judgment.id)).all())
+
+        def count(stmt) -> int:  # noqa: ANN001
+            return session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+
+        n = len(batches[0][1])
+        raws = {s.raw for s in batches[0][0]}
+        assert count(user_router._owned_judgments(user.id)) == 2 * n, "이력은 두 벌"
+        latest = ids(user_router._latest_judgments(user.id))
+        assert len(latest) == len(raws), "🔴 같은 문장 글자가 둘 이상 세어졌다"
+        assert latest <= {j.id for j in batches[1][1]}, "🔴 최신이 아닌 판정을 셌다"
+    finally:
+        session.rollback()
+        session.close()
+
+
 # ── 🔄 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) 품목을 고른 재판정도 **새 행**으로 적는다 — 앞 기록을 지우지 않는다 ──────────
 
 
