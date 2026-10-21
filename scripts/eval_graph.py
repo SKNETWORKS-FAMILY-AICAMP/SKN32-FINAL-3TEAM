@@ -65,6 +65,7 @@ from app.contracts import (  # noqa: E402
     UserFact,
     UserSubst,
     Verdict,
+    Violation,
     encoder_judged,
     hold_kind,
     is_conditional,
@@ -1442,7 +1443,9 @@ def _open_questions(state: dict[str, Any]) -> list[tuple[str, str, str | None]]:
         if x.fact_check is not None:
             out[(x.text, "fact", x.fact_check.kind.value)] = None
         if x.substantiation is not None:
-            out[(x.text, "subst", None)] = None
+            # 🔄 2026-10-21 (D-348 보충 39 결정 6) 실증 질문은 유형마다 — 유형을 담아 묻고 답한다(빈 유형은 종전 질문)
+            v = x.substantiation.violation
+            out[(x.text, "subst", v.value if v is not None else None)] = None
     return list(out)
 
 
@@ -1472,7 +1475,9 @@ def answer_path(
             if kind == "fact":
                 facts.append(UserFact(text=t, kind=FactKind(fk), answer=answer))
             else:
-                substs.append(UserSubst(text=t, answer=answer))
+                substs.append(
+                    UserSubst(text=t, answer=answer, violation=Violation(fk) if fk else None)
+                )
         st = runner(text, product.model_copy(update={"facts": facts, "substs": substs}))
         rounds += 1
     p = predict(st)

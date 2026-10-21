@@ -132,6 +132,9 @@ def _judgment_row(
     if evidence is not None and s.user_subst is not None:
         # 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부 · 출처(책임)를 남긴다
         evidence["user_subst"] = s.user_subst.model_dump(mode="json")
+        # 🆕 2026-10-21 (D-348 보충 39 결정 6 · 2 단계) 섞인 유형은 실증 답이 유형마다 하나씩 — 목록 전부를 남긴다(정본 `user_substs`) ·
+        #    `user_subst` 는 그 첫 답(종전 칸 · 이력 화면이 읽는다 · 계약의 계산 칸과 같은 값)
+        evidence["user_substs"] = [u.model_dump(mode="json") for u in s.user_substs]
     if evidence is not None and enc_refs:
         # 🆕 2026-10-16 (D-348 보충 2 결정 8) — 인코더 하한의 근거 호 · DB 가 `ck_judgment_encoder_has_basis` 로 댄다
         evidence["encoder_refs"] = enc_refs

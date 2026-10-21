@@ -290,7 +290,7 @@
       "substantiation": "opt app.contracts.SubstBranch | None",
       "text": "req builtins.str",
       "user_facts": "opt list[app.contracts.UserFact]",
-      "user_subst": "opt app.contracts.UserSubst | None",
+      "user_substs": "opt list[app.contracts.UserSubst]",
       "verdict": "req app.contracts.Verdict",
       "violations": "opt list[app.contracts.Violation]"
     },
@@ -303,7 +303,8 @@
       "accepted_evidence": "req list[str]",
       "criteria": "req builtins.str",
       "guide": "opt app.contracts.Guide | None",
-      "substantiated_max": "req app.contracts.Risk"
+      "substantiated_max": "req app.contracts.Risk",
+      "violation": "opt app.contracts.Violation | None"
     },
     "Timing": {
       "ms": "req builtins.float",
@@ -316,7 +317,8 @@
     },
     "UserSubst": {
       "answer": "req app.contracts.Answer",
-      "text": "req builtins.str"
+      "text": "req builtins.str",
+      "violation": "opt app.contracts.Violation | None"
     }
   },
   "routes": [
