@@ -1,10 +1,13 @@
-# Caddyfile — CopyLane 배포용 (초안 2026-10-12 · 🔄 2026-10-14 g4dn.xlarge · 소성민)
+# Caddyfile — CopyLane 배포용 (초안 2026-10-12 · 🔄 2026-10-14 g4dn.xlarge · 🔄 2026-10-15 닫는 경로 · 본문 상한 · 🔄 2026-10-16 첫 화면 · 소성민)
+#
+#   도메인 전에는 Caddyfile.ip (IP · http · 내부 확인용) 을 쓴다 — 이 파일은 도메인이 선 뒤의 정식판이다
 #
 #   놓는 자리  /etc/caddy/Caddyfile   (서버에 apt 로 설치한 Caddy · 컨테이너 아님)
-#   적용       sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#   적용       bash ~/deploy_server.sh caddy   (🔄 10-21 — ~/.copylane-deploy 에 CADDY_MODE=domain · CADDY_DOMAIN=<도메인>)
+#              스크립트가 copylane.example.com 을 CADDY_DOMAIN 으로 바꾸고 validate → 적용 → 응답 확인 · 실패하면 앞 판으로
 #   전제       도메인의 A 레코드가 탄력적 IP 를 가리킨다 · 보안 그룹과 ufw 에 80 · 443 이 열려 있다
 #
-# 🚨 서버에서 실행해 본 기록이 없다. `copylane.example.com` 을 실제 도메인으로 바꾼다.
+# 🚨 서버에서 실행해 본 기록이 없다. `copylane.example.com` 은 자리 표시다 — 이 파일에서 바꾸지 않는다(스크립트가 바꾼다).
 # 🚨 밖으로 넘기는 곳은 앱(127.0.0.1:8000) 하나다.
 #    sLLM 서버(127.0.0.1:8765)는 인증이 없다 — 여기서 넘기지 않는다. 앱이 서버 안에서만 부른다 (보안점검 P2-22).
 # 🔄 g4dn — 고쳐 쓰기 한 번은 앱이 문구를 다시 판정하고 sLLM 을 부르느라 수십 초 걸릴 수 있다
@@ -17,9 +20,26 @@ copylane.example.com {
     # 그 헤더를 기본으로 믿는다 — 세션 쿠키에 Secure 가 붙는지 배포 뒤 확인한다 (배포계획 Phase 4)
     reverse_proxy 127.0.0.1:8000
 
-    # cloud 에디션에서는 앱이 /admin 과 /login 을 붙이지 않는다(404). 여기서 한 번 더 막는다
-    @closed path /admin /admin/* /login
+    # cloud 에디션에서는 앱이 /admin 과 /login 을 붙이지 않는다(404). 아래 @admin 으로 한 번 더 막는다
+    # 🔄 2026-10-15 — 무인증 API 문서 · 고정 응답도 닫는다 (배포점검 10-14 #1 · 병렬작업 계약 ⑮)
+    #    ⏳ `/docs` 공개 여부는 팀장 판정 대기다. 열기로 하면 아래 줄에서 /docs /docs/* /redoc /openapi.json 을 지운다
+    #    ⚠️ base.html 상단의 「API」 링크(/docs)는 이 서버에서 404 가 된다 — 알고 닫는 것이다
+    @closed path /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/*
     respond @closed 404
+
+    # 관리자 화면 — 기본은 닫힘. 🚨 이 줄은 손대지 않는다: deploy_server.sh caddy 가 demo 에디션이고
+    #   ~/.copylane-deploy 의 ADMIN_ALLOW_IPS 가 있을 때만 「허용 IP 가 아니면 404」 블록으로 바꿔 적용한다
+    @admin path /admin /admin/* /login
+    respond @admin 404
+
+    # 🔄 2026-10-16 — 주소만 치면 사용자 화면으로. 앱의 `/` 는 개발자 안내 페이지라 위에서 닫은 경로를 가리킨다.
+    #    `redir /` 는 경로가 정확히 `/` 일 때만 넘긴다 — `/u/*` · `/health` 등은 그대로 (10-16 서버에서 확인)
+    redir / /u/ 302
+
+    # 🔄 2026-10-15 — 요청 본문 상한. 문구는 최대 2,000자(settings.max_text_len)이고 파일 올리기는 없다
+    request_body {
+        max_size 1MB
+    }
 
     header {
         Strict-Transport-Security "max-age=31536000"

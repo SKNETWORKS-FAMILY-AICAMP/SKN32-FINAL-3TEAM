@@ -1,0 +1,19 @@
+# deploy.conf.example — 서버 전용 배포 설정의 틀 (🆕 2026-10-21 · 소성민)
+#
+#   놓는 자리  서버 ~/.copylane-deploy   (저장소 밖 · 권한 600)
+#   만드는 법  bash ~/deploy_server.sh env  또는  main-switch 가 없으면 이 틀로 만든다 (DB_MODE 는 .env 로 짐작)
+#   고치는 법  nano ~/.copylane-deploy  →  bash ~/deploy_server.sh caddy   (Caddy 관련 값을 바꿨을 때)
+#
+# 🚨 이 틀(저장소)에는 실제 값을 적지 않는다 — IP · 도메인 · 비밀번호는 서버의 ~/.copylane-deploy 에만.
+# 🚨 앱 비밀값(DB 비밀번호 · API 키 · 세션 비밀)은 여기가 아니라 ~/SKN32-FINAL-3TEAM/.env 에 둔다.
+# 배포할 판(main)은 여기서 정하지 않는다 — deploy_server.sh 가 origin/main 에 들어 있는 커밋만 받는다.
+
+# DB — container = 서버 안 pgvector 컨테이너 · rds = RDS
+DB_MODE=container
+
+# Caddy — ip = Caddyfile.ip (도메인 전 · http) · domain = Caddyfile (정식판 · HTTPS)
+CADDY_MODE=ip
+CADDY_DOMAIN=
+
+# 관리자 화면(COPYLANE_EDITION=demo 일 때만)을 열 공인 IP — 띄어쓰기로 여럿 · CIDR 가능 · 비우면 닫힘
+ADMIN_ALLOW_IPS=""
