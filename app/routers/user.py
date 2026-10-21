@@ -956,7 +956,11 @@ async def review_rewrite(request: Request) -> HTMLResponse:
 
 #: 🆕 2026-10-16 (D-348 보충 4 결정 3 · 4 · 6) — 조건부 위반에 대한 답 하나. `subst:yes|no` · `fact:<종류>:true|false`
 #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · `na` = 해당 없음(이 문장은 그 주장을 하지 않는다)
-_ANSWER = re.compile(r"^(subst:(yes|no|na)|fact:([가-힣_]{1,24}):(true|false|na))$")
+#: 🔄 2026-10-21 (D-348 보충 39 결정 6 · 2 단계) 실증 답에 유형을 담을 수 있다 — `subst:yes:거짓_과장` (질문의 `SubstBranch.violation`) ·
+#:    유형이 빈 답은 받은 뒤 서버가 지금 보인 질문의 유형으로 묶는다(`_tag_subst` · 유형을 담지 않는 종전 화면 · D-220)
+_ANSWER = re.compile(
+    r"^(subst:(yes|no|na)(?::([가-힣_]{1,24}))?|fact:([가-힣_]{1,24}):(true|false|na))$"
+)
 _ANSWER_OF = {"yes": "예", "true": "예", "no": "아니오", "false": "아니오", "na": "해당없음"}
 #: 앞서 한 답 — `문장id|답` (그 문구 안) · 답은 서버가 다시 판정한 문장 글자에 묶는다(폼의 글자를 믿지 않는다)
 _PREV = re.compile(r"^([A-Za-z0-9_\-]{1,32})\|(.+)$")
@@ -965,7 +969,7 @@ _MAX_ANSWERS = 12
 
 def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[list, list]:
     """(문장id, 답) → (`UserFact` 목록, `UserSubst` 목록). 모르는 문장 · 모르는 종류 · 꼴이 틀린 답은 거부한다(422 · D-220)."""
-    from app.contracts import Answer, FactKind, UserFact, UserSubst  # noqa: PLC0415
+    from app.contracts import Answer, FactKind, UserFact, UserSubst, Violation  # noqa: PLC0415
 
     facts, substs = [], []
     for sid, a in pairs:
@@ -973,15 +977,46 @@ def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[li
         if not m or sid not in sents:
             raise HTTPException(422, "모르는 답")
         if m.group(2):
-            substs = [u for u in substs if u.text != sents[sid]]
-            substs.append(UserSubst(text=sents[sid], answer=Answer(_ANSWER_OF[m.group(2)])))
+            # 🔄 2026-10-21 (보충 39 결정 6) 유형이 있으면 같은 문장 · 같은 유형의 앞선 답만 바꾼다 — 유형마다 답이 하나씩 남는다
+            if m.group(3) and m.group(3) not in {v.value for v in Violation}:
+                raise HTTPException(422, "모르는 유형")
+            v = Violation(m.group(3)) if m.group(3) else None
+            substs = [u for u in substs if not (u.text == sents[sid] and u.violation is v)]
+            substs.append(
+                UserSubst(text=sents[sid], answer=Answer(_ANSWER_OF[m.group(2)]), violation=v)
+            )
             continue
-        if m.group(3) not in {k.value for k in FactKind}:
+        if m.group(4) not in {k.value for k in FactKind}:
             raise HTTPException(422, "모르는 사실 종류")
-        kind = FactKind(m.group(3))
+        kind = FactKind(m.group(4))
         facts = [f for f in facts if not (f.text == sents[sid] and f.kind is kind)]
-        facts.append(UserFact(text=sents[sid], kind=kind, answer=Answer(_ANSWER_OF[m.group(4)])))
+        facts.append(UserFact(text=sents[sid], kind=kind, answer=Answer(_ANSWER_OF[m.group(5)])))
     return facts, substs
+
+
+def _tag_subst(answer: str, sid: str, res) -> str:  # noqa: ANN001
+    """유형이 빈 실증 답을 **지금 보인 질문의 유형**으로 묶는다 (🆕 2026-10-21 · D-348 보충 39 결정 6 · 2 단계).
+
+    ★ `res` = 앞서 한 답까지 넣어 다시 판정한 결과(사용자가 본 화면) · 그 문장의 실증 질문(기록 문장 먼저 · 없으면 보이는 분기)의
+       `SubstBranch.violation` 을 답에 붙인다(`subst:yes` → `subst:yes:부당_비교광고`). 묶은 답이 이력(`prev`)으로 돌아가므로 다음 회차에도 유형이 남는다.
+    🔴 유형을 못 찾으면 그대로 둔다 — 그래프가 첫 실증형 유형의 답으로 읽는다(1 단계와 같다 · `app.graph._subst_answer`).
+    ⛔ 묶지 않으면 — 섞인 유형 문장에서 둘째 질문에 한 답이 유형 없이 와 앞선 답을 지우고 **첫 유형의 답으로 읽혀** 그 유형을 잘못 확정한다.
+    """
+    m = _ANSWER.match(answer)
+    if not m or not m.group(2) or m.group(3):
+        return answer
+    cands = [x for x in res.sentences if x.sent_id == sid] + [
+        x for b in res.branches for x in b.sentences if x.sent_id == sid
+    ]
+    v = next(
+        (
+            x.substantiation.violation
+            for x in cands
+            if x.substantiation is not None and x.substantiation.violation
+        ),
+        None,
+    )
+    return answer if v is None else f"{answer}:{v.value}"
 
 
 @router.post("/review/answer", response_class=HTMLResponse)
@@ -1032,6 +1067,21 @@ async def review_answer(request: Request, session: Session = Depends(get_session
             )
         if n == want_n:
             sents = {s.sent_id: s.text for s in res.sentences}
+            # 🆕 2026-10-21 (보충 39 결정 6) 유형이 빈 실증 답은 앞선 답까지 넣은 판정(사용자가 본 화면)의 질문 유형으로 묶는다(`_tag_subst`)
+            if _ANSWER.match(answer) and answer.startswith("subst:"):
+                f0, s0 = _answers_of(pairs[:-1], sents)
+                seen = res
+                if f0 or s0:
+                    state, seen = await run_in_threadpool(
+                        _core_judge, text, ProductContext(facts=f0, substs=s0)
+                    )
+                    if state in ("pending", "down"):
+                        return _render(
+                            request,
+                            "user/review.html",
+                            _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+                        )
+                pairs[-1] = (want_sid, _tag_subst(answer, want_sid, seen))
             facts, substs = _answers_of(pairs, sents)
             state, res = await run_in_threadpool(
                 _core_judge, text, ProductContext(facts=facts, substs=substs)

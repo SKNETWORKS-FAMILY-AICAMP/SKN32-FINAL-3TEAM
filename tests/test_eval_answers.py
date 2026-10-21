@@ -196,3 +196,11 @@ def test_보류_종류가_행과_요약에_실린다() -> None:
     ]
     s = eg.summarize(rows, preds)
     assert s["hold_kinds"] == {"awaiting_answer": {"B": 1}, "nothing_found": {"D": 1}}
+
+
+def test_대표_지표는_고른_뒤_답_뒤를_잰다() -> None:
+    """🆕 2026-10-21 (D-348 보충 37 결정 8 · (다)) — 보수 기록은 진단 칸 · 대표는 조건부 · 답 경로 · 경로 동치 · 불변식."""
+    text = " ".join(eg.REPRESENTATIVE)
+    for word in ("조건부", "답 경로", "경로 동치", "불변식"):
+        assert word in text
+    assert "보수 기록" not in text

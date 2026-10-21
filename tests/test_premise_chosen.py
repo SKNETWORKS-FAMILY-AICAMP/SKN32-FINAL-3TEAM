@@ -205,7 +205,7 @@ def test_답한_뒤_분기끼리_갈리면_기록은_전제_보류다(cat: Categ
             "verdict": Verdict.hold,
             "hold_reason": HoldReason.low_conf,
             "violations": [],
-            "user_subst": None,
+            "user_substs": [],
         }
     )
     got = g._record_condition(base, [bad, ok], HoldReason.premise_unknown)

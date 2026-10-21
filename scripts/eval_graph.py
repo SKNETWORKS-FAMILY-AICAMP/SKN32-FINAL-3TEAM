@@ -20,6 +20,8 @@
   ③ selective risk — 판정을 내린 행(전 문장 확정) 중 틀린 비율 · coverage 와 쌍으로 (D-77 L1 #8)
   ④ 조건별 대응표 — 라벨 조건(C/A/B/M/D/L) × 응답 (D-275 가 W1 몫으로 넘긴 표)
   ⑦ 보수 기록 — 확정 ∪ 분기 보류에 실린 유형을 「기록된 판정」으로 센다 (🆕 2026-10-06 · D-263 ① 「게이트 수치도 이것으로」)
+     🔄 2026-10-21 (D-348 보충 37 결정 8 · (다)) — **진단 칸이다 · 대표 지표가 아니다.** 보충 33 으로 「가장 보수적」은 위험도에만 남았고 판정은 답 뒤다 —
+        보류 사유 이름만 바뀌어도 수가 흔들렸다(원장 10-21(A) ⑥ · 55 → 87 행). 봉인 보고의 대표 지표는 `REPRESENTATIVE`.
   ⑥ 불가 사유 진단 — 확정 위반의 사유(A/B/C)를 라벨 조건과 대조 (🆕 2026-10-06 · 원장 10-03 ㊿-36). 🚨 게이트가 아니다
   ⑤ 적법 문장 오탐률 — 내역(주장 있음 · 주장 없음)과 함께만 (D-301)
 🔴 **채점 규칙은 판정기 B 와 한 곳이다** — `scored` · `truth_types` · `truth_ho` · `lawful_report` · D-40 문턱을
@@ -63,6 +65,7 @@ from app.contracts import (  # noqa: E402
     UserFact,
     UserSubst,
     Verdict,
+    Violation,
     encoder_judged,
     hold_kind,
     is_conditional,
@@ -106,6 +109,15 @@ DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 #:    (「확정위반」의 「하나라도」와 같은 규칙 · 다른 문장이 확신 부족 보류여도 그 행은 조건부위반이다). 정의는 `contracts.is_conditional`
 #:    🔄 같은 날 고침 — 종전 「나머지가 전부 확정일 때만」은 확정위반과 규칙이 달라 같은 행(조건부 + 확신 부족)이 전에는 확정위반 · 뒤에는 보류로 세어졌다
 CLASSES = ("확정위반", "조건부위반", "확정무위반", "보류", "근거없음", "미판정")
+
+#: 🆕 2026-10-21 (D-348 보충 37 결정 8 · (다)) **봉인 보고의 대표 지표** — 고른 뒤 · 답 뒤의 판정을 잰다(보충 33 · 34).
+#:    무조건부 수 · 보수 기록은 진단 칸이다(대표가 아니다). 측정 기준은 봉인 전에 고정한다(D-339 결정 7).
+REPRESENTATIVE = (
+    "조건부(골든 전제를 고른 판정) — 분류 · selective risk · coverage · 확정 재현율 · 유형 P/R",
+    "답 경로(`--answers` · 보충 35 결정 2) — 조건별 도달 · 답에 달린 오탐 · 상한 뒤 남은 질문",
+    "경로 동치(`scripts/eval_diff.py equiv` · 보충 35 결정 3) — 어긋난 행 0 · 봉인 조건",
+    "불변식(보충 35 결정 1) — 위반 행 0 · 봉인 조건 · 세 모드 모두",
+)
 
 
 def load_rows(
@@ -467,6 +479,9 @@ PREMISE_HOLDS = frozenset({HoldReason.cat_unknown, HoldReason.premise_unknown})
 def recorded_report(rows: list[dict], preds: list[dict]) -> dict[str, int]:
     """보수 기록 지표 (🆕 2026-10-06 · D-263 ① 「기록되는 판정 = 가장 보수적인 전제 · 게이트 수치도 이것으로 잰다」).
 
+    🔄 2026-10-21 (D-348 보충 37 결정 8 · (다)) — **진단 칸**으로 내린다(대표 지표 · 게이트 수치가 아니다 · `REPRESENTATIVE`).
+       보충 33 이 D-263 ① 의 판정 쪽을 걷었다 · 사유 표지(`low_conf` → `cat_unknown`)만 바뀌어도 수가 흔들린다(원장 10-21(A) ⑥).
+
     ★ 기록된 유형 = 확정 문장의 위반 ∪ 분기 때문에 보류된 문장에 실린 위반(`premise_held`). 채점 행만 센다.
        `rows` 기록이 있는 행 · `wrong` 기록이 정답과 하나도 안 겹친다(적법 행에 기록이 있는 것 포함) ·
        `positive` 위반 행 · `hit` 그중 기록이 정답과 겹친다.
@@ -762,6 +777,13 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     out["conditional"] = conditional_report(rows, preds)
     #: 🆕 2026-10-21 (D-348 보충 35 결정 1) — 불변식이 깨진 행(운영은 바로잡았다 · 0 이어야 한다 · 봉인 조건)
     out["invariant_rows"] = sum(1 for p in preds if p.get("invariant"))
+    #: 🆕 2026-10-21 (D-348 보충 38 결정 1 · #3 (나)) **틀린 확정 행** — 위반을 확정했는데 라벨에 위반이 없거나 유형이 하나도 안 겹친다(채점 밖 M · D 포함).
+    #:    무조건부에서는 「품목을 모르면 확정하지 않는다」(보충 8 · 31)가 새지 않았는지 보는 그물이다 — **0 이어야 한다(봉인 조건)**
+    out["wrong_confirm_ids"] = [
+        r["id"]
+        for r, p in zip(rows, preds, strict=True)
+        if p["class"] == "확정위반" and not (set(p["types"]) & truth_types(r, set(p["types"])))
+    ]
     #: 🆕 2026-10-21 (D-348 보충 36 결정 4) — 보류 종류(행 단위 · 한 행에 종류가 여럿이면 각각 센다) × 라벨 조건
     kinds: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for r, p in zip(rows, preds, strict=True):
@@ -918,6 +940,8 @@ def conditional_rows(rows: list[dict]) -> list[dict]:
 
 #: 🆕 2026-10-20 (D-348 보충 32 · 측정 기준 (ㄴ)) 일반상품으로 채점하는 행의 근거 법 — 표시광고법(법률 ID · `app.sanction.SANCTION_LAW`)
 GENERAL_LAW = SANCTION_LAW["표시광고법"]
+#: 🆕 2026-10-21 (D-348 보충 38 결정 2) 근거가 빈 행도 일반상품으로 드는 원천 — 공정위 의결서(표시광고법 사건) `[문헌]` 원천 정의 `data_sources.yaml`
+GENERAL_SOURCE = "ftc_decisions_body"
 
 
 def general_row(r: dict) -> bool:
@@ -927,14 +951,21 @@ def general_row(r: dict) -> bool:
        근거가 표시광고법뿐인 라벨은 「표시광고법 위반」만 말한다 — 표시광고법은 품목과 무관하게 걸리므로 일반상품 전제
        (표시광고법만 본다 · `premise.CRITERIA`)로 채점해도 라벨의 범위와 맞다.
     🚨 근거가 빈 행(위반 없음 라벨)은 이 규칙에 들지 않는다 — 「근거 법이 표시광고법뿐」을 말할 근거가 없다(D-220).
+       🔄 2026-10-21 (D-348 보충 38 결정 2 · 인계 10-21 클론B §1 #12 (가)) — **예외 하나: 공정위 의결서 원천**의 위반 없음 행
+       (근거 · 근거 후보 · 라벨이 모두 비었다)은 일반상품으로 든다 — 원천 자체가 표시광고법 사건이다(공정위 의결서 · `GENERAL_SOURCE`).
+       일반상품 조건부에 적법 표본이 0 행이던 자리를 메운다(dev 15 행 · 모두 조건 D · 원장 10-21(A) ⑦).
     ⛔ 근거 조문 글자는 `<법 ID>:<조문>` 꼴이다(골든 `근거`) — 꼴이 다르면 들지 않는다.
     """
+    if r.get("전제") or r.get("품목"):
+        return False
     basis = r.get("근거") or []
+    if basis:
+        return all(str(x).split(":", 1)[0] == GENERAL_LAW for x in basis)
     return (
-        not r.get("전제")
-        and not r.get("품목")
-        and bool(basis)
-        and all(str(x).split(":", 1)[0] == GENERAL_LAW for x in basis)
+        r.get("provenance") == GENERAL_SOURCE
+        and not r.get("근거_후보")
+        and not r.get("labels")
+        and "근거" in r
     )
 
 
@@ -1009,6 +1040,14 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     print(f"  문장   {s['verdict']}")
     print(f"  행     {s['class']}")
     print(f"  보류율 {_pct(s['hold_rate'])} — 사유별 {s['hold_reasons']}")
+    print(
+        "  ⓘ 봉인 보고의 대표 지표(D-348 보충 37 결정 8) — "
+        + (
+            " / ".join(REPRESENTATIVE)
+            if conditional
+            else "무조건부 수는 진단이다 · 대표는 조건부 · 답 경로 · 경로 동치 · 불변식"
+        )
+    )
     print("\n  조건별 대응표 (D-275 · 행 수)")
     for k, v in s["by_condition"].items():
         print(f"    {k:>2}  " + "  ".join(f"{c} {v.get(c, 0)}" for c in CLASSES))
@@ -1079,6 +1118,12 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
             print(
                 f"    {k:16} {sum(v.values()):>5}  " + " · ".join(f"{c} {n}" for c, n in v.items())
             )
+    if not conditional:
+        bad = s.get("wrong_confirm_ids") or []
+        print(
+            f"\n  {'✅' if not bad else '🔴'} 그물 — 무조건부 틀린 확정 {len(bad)} 행(0 이어야 한다 · 봉인 조건 · D-348 보충 38 결정 1)"
+            + (f" · {bad[:5]}" if bad else "")
+        )
     if s.get("invariant_rows"):
         print(
             f"\n  🔴 불변식이 깨진 행 {s['invariant_rows']} — 운영은 전제 보류로 바로잡았다 · 0 이어야 한다(행별 `invariant` · D-348 보충 35)"
@@ -1141,7 +1186,7 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     w = s.get("recorded") or {}
     if w.get("rows"):
         print(
-            f"\n  보수 기록 (D-263 ① · 확정 ∪ 분기 보류에 실린 유형) — 기록이 있는 채점 행 {w['rows']} · "
+            f"\n  보수 기록 (진단 · 대표 지표 아님 · D-348 보충 37 결정 8 · 확정 ∪ 분기 보류에 실린 유형) — 기록이 있는 채점 행 {w['rows']} · "
             f"틀림 {w['wrong']}({w['wrong'] / w['rows']:.1%}) · 위반 행 {w['positive']} 중 기록이 맞은 것 {w['hit']}"
             + (f"({w['hit'] / w['positive']:.1%})" if w["positive"] else "")
             + "  (확정만 센 수와 나란히만 읽는다)"
@@ -1398,7 +1443,9 @@ def _open_questions(state: dict[str, Any]) -> list[tuple[str, str, str | None]]:
         if x.fact_check is not None:
             out[(x.text, "fact", x.fact_check.kind.value)] = None
         if x.substantiation is not None:
-            out[(x.text, "subst", None)] = None
+            # 🔄 2026-10-21 (D-348 보충 39 결정 6) 실증 질문은 유형마다 — 유형을 담아 묻고 답한다(빈 유형은 종전 질문)
+            v = x.substantiation.violation
+            out[(x.text, "subst", v.value if v is not None else None)] = None
     return list(out)
 
 
@@ -1428,7 +1475,9 @@ def answer_path(
             if kind == "fact":
                 facts.append(UserFact(text=t, kind=FactKind(fk), answer=answer))
             else:
-                substs.append(UserSubst(text=t, answer=answer))
+                substs.append(
+                    UserSubst(text=t, answer=answer, violation=Violation(fk) if fk else None)
+                )
         st = runner(text, product.model_copy(update={"facts": facts, "substs": substs}))
         rounds += 1
     p = predict(st)

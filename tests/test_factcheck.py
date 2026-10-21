@@ -490,7 +490,10 @@ def test_저장은_실증_답_출처를_남긴다() -> None:
     row = js._judgment_row(
         uuid.uuid4(), uuid.uuid4(), got, JudgeResponse(outcome=Outcome.passed, sentences=[got])
     )
-    assert row.evidence["user_subst"] == {"text": TEXT, "answer": "예"}
+    assert row.evidence["user_subst"] == {"text": TEXT, "answer": "예", "violation": None}
+    assert row.evidence["user_substs"] == [row.evidence["user_subst"]], (
+        "실증 답 목록 전부(보충 39 결정 6)"
+    )
 
 
 def test_제재표의_사실_칸_유형은_호_관문_안이다() -> None:
