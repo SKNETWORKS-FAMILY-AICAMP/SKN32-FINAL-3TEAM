@@ -3421,6 +3421,9 @@ def _encoder_side(
         )
     ):
         return None
+    # 🆕 2026-10-21 (D-348 보충 39 결정 5 · 보충 37 결정 1 · 1 단계) **섞인 유형은 유형마다 묻고 답을 모두 받은 뒤 합친다** — 아래 `_kinds_of`
+    #    (유형에 딸린 사실 종류)를 쓰므로 그 정의 뒤에서 `_enc_mixed` 로 보낸다. 한 유형 문장은 종전 경로 그대로다
+    mixed = len(types) > 1
     # 🔴 (1-b) 낱말 사실 확인 분기는 분기 유형(거짓_과장)에만 — 화장품법 13조①4호는 기만과 같은 호라 관문만으로는 기만 문장에도 선다
     word_kinds = (
         [k for k in factcheck.fact_kinds(s.text) if k in factcheck.FACT_TEXTS]
@@ -3491,6 +3494,8 @@ def _encoder_side(
             return [FactKind.후기_실재]
         return factcheck.type_kinds(_ask_as(v))
 
+    if mixed:
+        return _enc_mixed(s, facts, substs, span, b_types, _kinds_of)
     t_kinds = [
         k for k in dict.fromkeys(k for v in b_types for k in _kinds_of(v)) if k not in word_kinds
     ]
@@ -3775,9 +3780,133 @@ def _enc_disease(
     return SentenceJudgment(**{**fields, "user_facts": [uf]})
 
 
+def _enc_mixed(
+    s: SentenceJudgment,
+    facts: list[UserFact],
+    substs: list[UserSubst],
+    span: Span | None,
+    b_types: list[Violation],
+    kinds_of: Callable[[Violation], list[FactKind]],
+) -> SentenceJudgment | None:
+    """인코더 쪽 **섞인 유형** 문장 — 유형마다 그 유형의 질문을 이어 묻고, 답을 모두 받은 뒤 합친다 (🆕 2026-10-21 · D-348 보충 39 결정 5 · 보충 37 결정 1 · 1 단계).
+
+    ★ 유형의 질문 — 칸이 B 인 유형(`b_types`)만 묻는다: 그 유형에 딸린 사실(`kinds_of` · 비교 기준 · 비방 선별 · 조건 고지 · 무첨가 조건 · 후기 실재) ·
+       거짓 · 과장은 낱말 사실(인증 · 특허 등)도 · 실증형 유형(`reasons.SUBST_MAX`)은 실증. 칸이 B 가 아닌 유형(A · 칸 없음)과 문안이 없는 유형
+       (식품 축 기만 · 보충 13 등)은 **물을 질문이 없는 유형**으로 남는다.
+    ★ 실증 답은 문장에 하나다(`UserSubst` 에 유형 칸 없음 · 2 단계 = 보충 39 결정 6 에서 유형별로). 그래서 1 단계의 실증 질문은 **실증형 유형 중
+       첫 유형 하나의 문안**(그 유형만의 승인 문안 · `rs.subst_branch([v])`)으로 서고 답은 **그 유형에만** 든다 — 한 유형의 문안에 답한 「예」가
+       다른 주장의 자료까지 있다는 뜻이 아니고(묶음 문안을 고르지 않은 까닭 · 보충 39 결정 6), 「아니오」를 다른 유형까지 넓히면 과잉 확정이다.
+       둘째 실증형 유형은 1 단계에서 물을 질문이 없는 유형으로 남는다.
+    ★ 합치기(답을 모두 받은 뒤 · 보충 37 결정 1 「더 나쁜 쪽」) — 「아니오」인 유형이 하나라도 있으면 **그 유형 모두 확정 위반**(`_enc_confirmed` 유형 묶음) ·
+       모든 유형이 「예」로 풀렸을 때만 R0(`_answered`) · 그 밖(물을 질문이 없는 유형이 남음 · 「해당없음」으로 걷힌 유형)은 **확인 못 함 보류** + 출처
+       (D-340 결정 6 · D-269 — 못 본 의심을 통과로 세지 않는다). 아직 답하지 않은 질문이 있으면 「아니오」가 먼저 왔어도 계속 묻는다(답 대기).
+    🔴 물을 질문이 하나도 없으면 None(보류 그대로 · 종전과 같다).
+    ⛔ 종전(보충 5 결정 2 ⬜ 그대로 둔 꼴) — 섞이면 실증 분기가 서지 않고(`rs.subst_branch` 는 유형이 모두 실증형 ∧ 한 줄일 때만) 「아니오」는 확정하지
+       못했으며(`_enc_confirmed` 는 유형 하나), 유형에 딸린 사실이 모두 「예」면 남은 유형을 묻지 않고 R0 으로 닫았다(예: 일반상품 거짓 · 과장 + 기만 —
+       조건 고지 「예」 하나로 거짓 · 과장까지 R0).
+    """
+    types = {b.violation for b in s.risk.encoder_basis}
+    key = dm.norm(s.text)
+    fields = {k: getattr(s, k) for k in type(s).model_fields}
+    word = [k for k in factcheck.fact_kinds(s.text) if k in factcheck.FACT_TEXTS]
+    q: dict[Violation, list[FactKind]] = {}
+    for v in b_types:
+        own = list(kinds_of(v))
+        q[v] = list(dict.fromkeys((word + own) if v is Violation.거짓_과장 else own))
+    # 실증 — 전제 하나 · 축 하나일 때만(`_enc_subst` 와 같은 문) · 실증형 유형 중 첫 유형의 문안
+    premises = {b.premise for b in s.risk.encoder_basis}
+    axis = ENC_SUBST_AXIS.get(next(iter(premises))) if len(premises) == 1 else None
+    subst_v: Violation | None = None
+    sb: SubstBranch | None = None
+    if axis is not None:
+        for v in b_types:
+            if v in rs.SUBST_MAX:
+                sb = rs.subst_branch([v], {axis})
+                if sb is not None:
+                    subst_v = v
+                    break
+    asked = [k for v in b_types for k in q[v]]
+    if not asked and sb is None:
+        return None
+    ans: dict[FactKind, UserFact] = {}
+    for f in facts:
+        if f.kind in asked and f.kind not in ans and dm.norm(f.text) == key:
+            ans[f.kind] = f
+    carried = [ans[k] for k in dict.fromkeys(asked) if k in ans]
+    us = next((u for u in substs if dm.norm(u.text) == key), None) if sb is not None else None
+    # 거짓 · 과장이 사실 주장 꼴뿐이면(성능 · 효능 표현 없음) 사실이 모두 「예」일 때 실증 없이 풀린다 — 한 유형 경로의 `fact_only` 와 같다
+    fact_only = bool(q.get(Violation.거짓_과장)) and factcheck.fact_only(s.text)
+    subst_needed = sb is not None and not (subst_v is Violation.거짓_과장 and fact_only)
+    pending = [k for k in dict.fromkeys(asked) if k not in ans]
+    if pending or (subst_needed and us is None):
+        then = sb if subst_needed and us is None else None
+        out = {
+            **fields,
+            "infeasibility": Infeasibility.B if then is not None else s.infeasibility,
+            "substantiation": then,
+            "user_facts": carried,
+            "user_subst": us,
+        }
+        if pending:
+            t = factcheck.FACT_TEXTS[pending[0]]
+            out["fact_check"] = FactBranch(
+                kind=pending[0],
+                confirmed_max=min(t.confirmed_max, s.risk.final, key=lambda r: r.level),  # type: ignore[arg-type]
+                accepted_evidence=list(t.accepted_evidence),
+                criteria=t.criteria,
+            )
+        return SentenceJudgment(**out)
+
+    def _said(k: FactKind, a: Answer) -> bool:
+        return k in ans and ans[k].answer is a
+
+    no: set[Violation] = set()
+    cleared: set[Violation] = set()
+    for v in b_types:
+        if any(_said(k, Answer.아니오) for k in q[v]) or (
+            v is subst_v and us is not None and us.answer is Answer.아니오
+        ):
+            no.add(v)
+            continue
+        facts_ok = all(_said(k, Answer.예) for k in q[v])
+        if not facts_ok:
+            continue  # 「해당없음」으로 걷힌 질문이 있다 — 풀리지 않았다
+        if v is subst_v:
+            if (
+                (
+                    us is not None
+                    and us.answer is Answer.예
+                    and sb is not None
+                    and sb.substantiated_max is Risk.R0
+                )
+                or v is Violation.거짓_과장
+                and fact_only
+                and q[v]
+            ):
+                cleared.add(v)
+        elif v in rs.SUBST_MAX:
+            if v is Violation.거짓_과장 and fact_only and q[v]:
+                cleared.add(v)
+            # 그 밖의 실증형 유형은 1 단계에서 실증을 묻지 못한다 — 남는다
+        elif q[v]:
+            cleared.add(v)
+    if no:
+        return _enc_confirmed(
+            s,
+            frozenset(no),
+            span,
+            user_facts=carried,
+            user_subst=us,
+            subst=sb if subst_v in no and us is not None and us.answer is Answer.아니오 else None,
+        )
+    if cleared == types:
+        return _answered(s, user_facts=carried, user_subst=us)
+    return SentenceJudgment(**{**fields, "user_facts": carried, "user_subst": us})
+
+
 def _enc_confirmed(
     s: SentenceJudgment,
-    v: Violation,
+    v: Violation | frozenset[Violation],
     span: Span | None,
     *,
     user_facts: list[UserFact] | None = None,
@@ -3790,6 +3919,10 @@ def _enc_confirmed(
        구간 = **문장 전체**(결정 3) · 위험도 = 그 유형 · 그 전제의 **제재표 하한**(`EncoderBasis.floor` · 사전 확정이 인용 호의 하한을 쓰는 것과 같다) ·
        사유 = 그 근거의 칸(`infeasibility_of` · 보충 6) · 실증 없음이면 실증 분기(지시 문안) · 사실 거짓이면 실증 분기 없음(지시 문안은 「고치거나 빼기」).
     🔴 못 세우면(구간을 모른다 · 근거 유형이 다르다 · 섞였다) **보류 + 출처** — 지어내지 않는다 (D-220 · D-224).
+    🆕 2026-10-21 (D-348 보충 39 결정 5) **유형 묶음**(`frozenset`)을 받으면 그 유형들을 함께 확정한다 — 섞인 유형 문장에서 「아니오」인 유형 모두(`_enc_mixed`) ·
+       묶음은 인코더 근거 유형의 **부분집합**이면 된다(질문이 없어 남은 유형은 싣지 않는다) · 위험도 = 그 유형들 근거의 하한 중 높은 쪽(보충 5 결정 1) ·
+       근거 = 그 유형들의 대응표 조항 모두 · 사유 = 그 근거 칸의 더 막힌 쪽(`infeasibility_of` · 계약 칸이 하나다) ·
+       ⛔ 유형 하나(`Violation`)는 종전대로 **근거 유형이 그 하나일 때만** — 전제 확정 자리(`_food_premise` · `_hf_premise`)가 섞인 문장을 보류로 두는 데 기댄다
     🚨 위험도를 제재표 하한으로 올린다(🔄 2026-10-21 문서 정정 — 종전 `[판정 대기]` 표시는 D-348 보충 7 결정 10 「1-b 확정 위반 위험도 = 제재표 하한 채택」으로 닫혔다) — 답 없는 인코더 쪽의 기록 위험도(R1 층 상한)보다 높을 수 있다. 유형은 질문이 보인 유형을
        사용자가 「해당없음」으로 닫지 않은 것으로 섰다고 본다(결정 5 「R2 이상: 유형을 믿을 수 있어야」의 해석).
     """
@@ -3797,8 +3930,14 @@ def _enc_confirmed(
     held = SentenceJudgment(
         **{**fields, "user_facts": list(user_facts or []), "user_subst": user_subst}
     )
-    basis = [b for b in s.risk.encoder_basis if b.violation is v]
-    if span is None or not basis or {b.violation for b in s.risk.encoder_basis} != {v}:
+    all_types = {b.violation for b in s.risk.encoder_basis}
+    if isinstance(v, Violation):
+        vs, ok = [v], all_types == {v}
+    else:
+        vs = sorted(v, key=list(Violation).index)
+        ok = bool(vs) and set(vs) <= all_types
+    basis = [b for b in s.risk.encoder_basis if b.violation in vs]
+    if span is None or not basis or not ok:
         return held
     floor = max((b.floor for b in basis), key=lambda r: r.level)
     arts: list[EvidenceArticle] = []
@@ -3813,12 +3952,12 @@ def _enc_confirmed(
         sent_id=s.sent_id,
         text=s.text,
         verdict=Verdict.confirmed,
-        violations=[v],
+        violations=vs,
         infeasibility=reason,
         evidence=arts,
         risk=RiskAssessment(floor=floor, final=floor),
         encoder_candidates=s.encoder_candidates,
-        spans=[Span(start=span.start, end=span.end, label=v.value)],
+        spans=[Span(start=span.start, end=span.end, label=",".join(x.value for x in vs))],
         substantiation=subst if reason is Infeasibility.B else None,
         user_facts=list(user_facts or []),
         user_subst=user_subst,
