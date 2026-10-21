@@ -178,3 +178,21 @@ def test_품목만_넘기기와_행의_제품_정보() -> None:
 def test_category_only_는_조건부_dev_전용() -> None:
     with pytest.raises(SystemExit, match="category-only"):
         eg.main(["--dev", "--category-only", "--stub"])
+
+
+def test_보류_종류가_행과_요약에_실린다() -> None:
+    """🆕 2026-10-21 (D-348 보충 36 결정 4) — 행의 `hold_kinds` · 요약의 종류 × 조건 표."""
+    rows = [
+        {"id": "a", "text": TEXT, "조건": "B", "labels": ["거짓_과장"]},
+        {"id": "b", "text": TEXT, "조건": "D", "labels": []},
+    ]
+    nothing = SentenceJudgment(
+        sent_id="s0", text=TEXT, verdict=Verdict.hold, hold_reason=HoldReason.low_conf
+    )
+    out = iter([_held(), nothing])
+    preds = eg.run(rows, lambda t, x: {"sentences": [next(out)], "outcome": None}, 0)
+    assert preds[0]["hold_kinds"] == ["awaiting_answer"] and preds[1]["hold_kinds"] == [
+        "nothing_found"
+    ]
+    s = eg.summarize(rows, preds)
+    assert s["hold_kinds"] == {"awaiting_answer": {"B": 1}, "nothing_found": {"D": 1}}
