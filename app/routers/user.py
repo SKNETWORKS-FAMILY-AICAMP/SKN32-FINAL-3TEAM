@@ -1652,34 +1652,28 @@ async def generate(
 
 
 #: 띠 그래프의 그릴 자리 — 가로 한 줄. 왼쪽 = 문턱에서 멀다 · 오른쪽 끝 = 문턱
-#: 🔄 2026-10-17 (ksr) — SVG 좌표에서 HTML 점의 자리(가로 % · 축에서 띄울 px)로. 카드 폭을 다 채우고 점에 문구 말풍선을 단다
-_STRIP = {"rows": 4, "gap": 13, "lift": 16, "bucket": 2}
+_STRIP = {"x0": 24, "x1": 316, "y": 46}
 
 
 def _gen_strip(live) -> list[dict]:  # noqa: ANN001
-    """통과한 후보 전부를 「문턱까지의 거리」 한 축에 찍을 자리 (🆕 2026-10-13 · 픽스처의 프론티어 그림 자리).
+    """통과한 후보 전부를 「문턱까지의 거리」 한 축에 찍을 좌표 (🆕 2026-10-13 · 픽스처의 프론티어 그림 자리).
 
     🚨 세로축이 없다 — 소구력 보존을 재는 노드가 없다. 지어내지 않고 한 축만 그린다 (D-147).
-    ★ 고른 셋은 이름(보수 · 균형 · 공격)을 달고, 겹친 점은 위로 조금씩 쌓는다.
-    🆕 2026-10-17 (ksr) — 고르지 않은 통과 후보도 문구(`text`)를 싣는다 — 회색 점에 마우스를 올리면 보인다.
-       관문과 판정을 **통과한** 문구만이다 — 탈락 문구 원문은 여전히 싣지 않는다.
+    ★ 고른 셋은 이름(보수 · 균형 · 공격)을 달고, 겹친 점은 위아래로 조금씩 벌린다.
     """
+    span = _STRIP["x1"] - _STRIP["x0"]
     points: list[dict] = []
     stack: dict[int, int] = {}
     for k in sorted(live.kept, key=lambda k: (not k.tier, k.closeness)):
-        left = round(min(max(k.closeness, 0.0), 1.0) * 100, 1)
-        n = 0
-        if not k.tier:
-            b = int(left // _STRIP["bucket"])
-            n = stack.get(b, 0)
-            stack[b] = n + 1
+        cx = round(_STRIP["x0"] + min(max(k.closeness, 0.0), 1.0) * span)
+        n = stack.get(cx // 8, 0)
+        stack[cx // 8] = n + 1
         points.append(
             {
-                "left": left,
-                "up": 0 if k.tier else _STRIP["lift"] + _STRIP["gap"] * (n % _STRIP["rows"]),
+                "cx": cx,
+                "cy": _STRIP["y"] - (0 if k.tier else 14 + 9 * (n % 3)),
                 "tier": k.tier,
                 "pct": round(k.closeness * 100),
-                "text": k.text,
             }
         )
     return points
