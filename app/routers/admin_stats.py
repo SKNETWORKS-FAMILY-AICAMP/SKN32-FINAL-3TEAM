@@ -484,7 +484,8 @@ def _usage_since_start() -> dict:
     ]
     u["since"] = db.fmt_dt(u["started_at"])
     try:
-        from app.routers.copygen.filters import REASONS  # noqa: PLC0415 — 탈락 사유 글자는 생성 화면과 한 벌 (D-99)
+        # 탈락 사유 글자는 생성 화면과 한 벌 (D-99)
+        from app.routers.copygen.filters import REASONS  # noqa: PLC0415
     except Exception:  # noqa: BLE001
         REASONS = {}  # noqa: N806
     ctotal = u["compose_total"] or 1
