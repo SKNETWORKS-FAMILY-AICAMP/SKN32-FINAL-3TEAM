@@ -100,12 +100,30 @@ def _approve(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guide, "TEXTS", {"c1": ART})
 
 
-def test_승인_표가_비면_안내_칸이_없다() -> None:
-    assert guide.PLAIN == {} and guide.ARTICLES == {}, (
-        "승인 전 — 표가 비어 있어야 한다(초안은 문서에)"
-    )
+def test_승인_표가_비면_안내_칸이_없다(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 🔄 2026-10-21 (D-348 보충 37 결정 7) — 표가 승인돼 찼다 · 「비면 칸이 없다」는 대역 표로 지킨다
+    monkeypatch.setattr(guide, "PLAIN", {})
+    monkeypatch.setattr(guide, "ARTICLES", {})
     resp = _resp()
     assert resp.branches and all(x is None for x in _guides(resp))
+
+
+def test_승인_표는_초안_23_열쇠이고_열쇠가_모두_실제_자리다() -> None:
+    """🆕 2026-10-21 (D-348 보충 37 결정 7 · 초안 `docs/ohb/안내문안_초안_2026-10-20.md` 전부 승인).
+
+    열쇠가 틀리면(전제 · 종류 · 실증 줄 이름) 안내가 어디에도 붙지 않는다 — 조용한 빈칸을 막는다(D-220).
+    """
+    from app.contracts import FactKind  # noqa: PLC0415
+
+    assert set(guide.PLAIN) == set(guide.ARTICLES) and len(guide.PLAIN) == 23
+    premises = {guide.premise_key(p) for p in Premise}
+    facts = {guide.fact_key(k) for k in FactKind}
+    substs = set(guide.SUBST_KEYS.values())
+    for key in guide.PLAIN:
+        assert key in premises | facts | substs, f"붙을 자리가 없는 열쇠 — {key}"
+    assert all(all(v) for v in guide.PLAIN.values()), "쉬운 풀이 세 칸이 모두 찼다(초안 그대로)"
+    coords = {c for cs in guide.ARTICLES.values() for c in cs}
+    assert len(coords) == 70 and not guide.missing_texts(guide.ARTICLES, guide.TEXTS)
 
 
 def test_승인된_열쇠에_안내가_붙는다(monkeypatch: pytest.MonkeyPatch) -> None:
