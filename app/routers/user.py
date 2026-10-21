@@ -2023,6 +2023,9 @@ async def compose(request: Request) -> HTMLResponse:
             "user/compose.html",
             _compose_ctx({**base, "errors": ["광고에 담을 문구를 적어 주세요."]}),
         )
+    from app import gen_usage  # noqa: PLC0415 — 🆕 10-21 (psj) 관리자 생성 통계 · 요청 수와 광고 종류만
+
+    gen_usage.record_compose(ad_format)
     # 🆕 2026-10-13 — 인정 · 심사 문구가 그 문구에 그대로 들어 있을 때만 뺀다. 문구를 고쳐 인정 문구가 깨졌으면 전부 판정한다
     fixed = origin["fixed"] if origin["fixed"] and origin["fixed"] in prompt else ""
     part = _judged_part(prompt, fixed)

@@ -519,3 +519,25 @@ def test_생성_처리부가_세_갈래를_모두_센다() -> None:
     )
     for outcome in ("ok", "failed", "off"):
         assert re.search(rf'gen_usage\.record\(\s*"{outcome}"', src), outcome
+
+
+def test_AI_광고_생성_요청과_광고_종류를_센다(client: TestClient) -> None:
+    import re  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    from app import gen_usage  # noqa: PLC0415
+
+    gen_usage.reset()
+    assert "아직 광고 만들기 요청이 없어요" in client.get("/admin/stats/quality/generation").text
+    for fmt in ("SNS 피드", "SNS 피드", "배너"):
+        gen_usage.record_compose(fmt)
+    r = client.get("/admin/stats/quality/generation")
+    u = r.context["usage"]
+    assert u["compose_total"] == 3
+    assert u["compose_by_format"][0] == {"label": "SNS 피드", "n": 2, "pct": 66.7}
+    assert "광고 만들기 요청" in r.text and "고른 광고 종류" in r.text
+    gen_usage.reset()
+    src = (Path(__file__).resolve().parents[1] / "app" / "routers" / "user.py").read_text(
+        encoding="utf-8"
+    )
+    assert re.search(r"gen_usage\.record_compose\(ad_format\)", src)  # 광고 생성 처리부가 센다

@@ -76,6 +76,16 @@
 </section>
 
 <section class="as-panel">
+  <div class="as-panel-head"><h2>AI 광고 생성</h2><span class="as-unit">{{ usage.since }} 이후 · 이 서버</span></div>
+  <p class="as-context">광고 만들기를 누른 요청이에요. 이 화면은 문구를 새로 만들지 않고, 판정을 지난 문구를 광고 지면에 얹어요.</p>
+  {% if usage.compose_total %}
+  <div class="as-kpis">{{ metric('광고 만들기 요청', '{:,}건'.format(usage.compose_total), '서버 시작 이후') }}</div>
+  <h3 class="as-subhead">고른 광고 종류</h3>
+  {{ compact_distribution(usage.compose_by_format) }}
+  {% else %}<p class="as-empty">서버가 켜진 뒤 아직 광고 만들기 요청이 없어요.</p>{% endif %}
+</section>
+
+<section class="as-panel">
   <div class="as-panel-head"><h2>생성 엔진 구성</h2><span class="as-unit">현재 설정</span></div>
   {% if config.error %}<p class="as-empty">구성을 읽지 못했어요 ({{ config.error }}).</p>{% else %}
   <div class="admin-table-scroll"><table><tbody>

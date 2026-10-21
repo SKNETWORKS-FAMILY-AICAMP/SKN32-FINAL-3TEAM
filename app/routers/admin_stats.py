@@ -477,6 +477,11 @@ def _usage_since_start() -> dict:
         from app.routers.copygen.filters import REASONS  # noqa: PLC0415 — 탈락 사유 글자는 생성 화면과 한 벌 (D-99)
     except Exception:  # noqa: BLE001
         REASONS = {}  # noqa: N806
+    ctotal = u["compose_total"] or 1
+    u["compose_by_format"] = [
+        {"label": k, "n": n, "pct": round(n * 100 / ctotal, 1)}
+        for k, n in sorted(u["compose_by_format"].items(), key=lambda kv: -kv[1])
+    ]
     drops = sum(u["reasons"].values()) or 1
     u["reasons"] = [
         {"label": REASONS.get(k, k), "n": n, "pct": round(n * 100 / drops, 1)}

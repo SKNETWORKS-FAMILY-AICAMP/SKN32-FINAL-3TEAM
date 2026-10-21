@@ -30,6 +30,8 @@ _passed = 0
 _reasons: Counter[str] = Counter()
 _rounds_sum = 0
 _rounds_n = 0
+#: 🆕 10-21 — AI 광고 생성(`/u/compose`) 요청 수 · 고른 광고 종류. 이 화면은 생성 엔진을 부르지 않는다(판정 + 편집기)
+_compose: Counter[str] = Counter()
 
 
 def record(
@@ -67,6 +69,12 @@ def record(
             _rounds_n += 1
 
 
+def record_compose(ad_format: str) -> None:
+    """AI 광고 생성 요청 한 번 — 고른 광고 종류(`user._AD_FORMATS` 키)만. 문구는 받지 않는다."""
+    with _lock:
+        _compose[ad_format] += 1
+
+
 def snapshot() -> dict:
     """지금까지의 수 — 복사본이다."""
     with _lock:
@@ -90,6 +98,8 @@ def snapshot() -> dict:
             "pass_pct": round(_passed * 100 / _candidates, 1) if _candidates else None,
             "reasons": dict(_reasons),
             "avg_rounds": round(_rounds_sum / _rounds_n, 1) if _rounds_n else None,
+            "compose_total": sum(_compose.values()),
+            "compose_by_format": dict(_compose),
         }
 
 
@@ -101,6 +111,7 @@ def reset() -> None:
         _count.clear()
         _by_branch.clear()
         _reasons.clear()
+        _compose.clear()
         _more = 0
         _secs_sum = _secs_max = 0.0
         _candidates = _passed = _rounds_sum = _rounds_n = 0
