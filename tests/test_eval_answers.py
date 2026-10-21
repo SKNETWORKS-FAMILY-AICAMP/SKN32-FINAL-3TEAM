@@ -153,6 +153,22 @@ def test_답한_질문이_다시_서면_따로_세고_도달로_세지_않는다
     assert rep["by_condition"]["B"]["재질문"] == 1
 
 
+def test_확정_위반에_실린_지시는_다시_선_질문이_아니다() -> None:
+    """원장 10-21 ⑦ — 「아니오」로 확정된 문장은 실증 분기를 지시로 싣는다(D-337) · 보류 문장의 질문만 센다."""
+
+    def run(text: str, p: ProductContext) -> dict:
+        if not p.substs:
+            return {"sentences": [_held()], "outcome": None}
+        s = _viol() if p.substs[-1].answer is Answer.아니오 else _clean()
+        return {"sentences": [s.model_copy(update={"substantiation": _SUBST})], "outcome": None}
+
+    rows = [{"id": "a", "text": TEXT, "조건": "B", "labels": ["거짓_과장"]}]
+    (p,) = eg.run(rows, run, 0, answers=True)
+    assert p["answer_path"]["아니오"]["reasked"] == 0
+    assert p["answer_path"]["예"]["reasked"] == 0
+    assert eg.answer_report(rows, [p])["by_condition"]["B"]["도달"] == 1
+
+
 def test_종전_결과_파일은_재질문_칸이_없어도_읽는다() -> None:
     rows = [{"id": "b", "text": TEXT, "조건": "B", "labels": ["거짓_과장"]}]
     path = {"class": "확정위반", "types": ["거짓_과장"], "left": 0}

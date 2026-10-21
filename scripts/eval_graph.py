@@ -1457,11 +1457,19 @@ ANSWER_ROUNDS = 3
 ANSWER_SETS = (Answer.예, Answer.아니오)
 
 
-def _open_questions(state: dict[str, Any]) -> list[tuple[str, str, str | None]]:
-    """상태의 질문 — (문장 글자, `fact` · `subst`, 사실 종류). 기록 문장과 보이는 분기 문장 모두 · 답은 문장 글자에 묶여 모든 분기에 든다(`app/routers/user.py` `_answers_of`)."""
+def _open_questions(
+    state: dict[str, Any], *, held: bool = False
+) -> list[tuple[str, str, str | None]]:
+    """상태의 질문 — (문장 글자, `fact` · `subst`, 사실 종류). 기록 문장과 보이는 분기 문장 모두 · 답은 문장 글자에 묶여 모든 분기에 든다(`app/routers/user.py` `_answers_of`).
+
+    `held` — 보류 문장의 질문만(🆕 2026-10-21 · 다시 선 질문 셈). 확정 위반 문장은 실증 분기를 **지시**로 싣는다(D-337 · D-268) — 답을 기다리는
+    질문이 아니다. 이걸 빼지 않으면 「아니오」로 확정된 문장의 지시가 「답한 질문이 다시 섰다」로 잘못 잡힌다(원장 10-21 ⑦ — 252 행이 이 꼴).
+    """
     sents = list(state.get("sentences", [])) + [
         x for b in state.get("branches", []) for x in b.sentences
     ]
+    if held:
+        sents = [x for x in sents if x.verdict is Verdict.hold]
     out: dict[tuple[str, str, str | None], None] = {}
     for x in sents:
         if x.fact_check is not None:
@@ -1489,7 +1497,7 @@ def answer_path(
 
     facts, substs = list(product.facts), list(product.substs)
     asked: set[tuple[str, str, str | None]] = set()
-    # 🆕 2026-10-21 (인계 10-21 클론A §2 · 답 경로의 알려진 한계) 이미 답한 질문이 다시 서면 그래프 결함이다 — 종전에는 `asked` 로 걸러
+    # 🆕 2026-10-21 (인계 10-21 클론A §2 · 답 경로의 알려진 한계) 이미 답한 질문이 **보류 문장에** 다시 서면 그래프 결함이다 — 종전에는 `asked` 로 걸러
     #    다시 답하지도 않고 `left` 에도 세지 않아 **조용히 묻혔다**(D-220). 따로 세고 도달로 세지 않는다(`answer_report`)
     reasked: set[tuple[str, str, str | None]] = set()
     st, rounds = first, 0
@@ -1507,7 +1515,7 @@ def answer_path(
                 )
         st = runner(text, product.model_copy(update={"facts": facts, "substs": substs}))
         rounds += 1
-        reasked.update(q for q in _open_questions(st) if q in asked)
+        reasked.update(q for q in _open_questions(st, held=True) if q in asked)
     p = predict(st)
     left = [q for q in _open_questions(st) if q not in asked]
     return {
