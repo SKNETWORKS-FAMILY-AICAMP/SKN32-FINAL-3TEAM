@@ -7,6 +7,8 @@
   ④ 관리자 도메인으로는 가입할 수 없다
   ⑤ 관리자 로그인(`/login`)도 같은 꼴을 받는다 — 같은 함수(`admin_sign_in`)를 지난다
   ⑥ 스키마 · 세션은 그대로 — 쿠키 주체는 이니셜이다
+  ⑦ 🆕 2026-10-22 (D-350) 시도 제한이 관리자 분기 **앞**이다 — 꼴이 틀린 입력 · 관리자 화면이 없는 판도 같은 횟수에서 429 ·
+     막힌 뒤에는 해시를 돌리지 않는다 · 성공하면 그 키를 지운다 (P2-11 · D-213). 게이트로 올렸다 — 로그인 경로다
 DB 없이 돈다 — 관리자 계정 조회(`routers.auth._lookup`)를 가짜로 바꾼다.
 """
 
@@ -21,6 +23,8 @@ from fastapi.testclient import TestClient
 from app import auth
 from app.routers import auth as auth_router_mod
 from app.routers import auth_router, user_router
+
+pytestmark = pytest.mark.gate
 
 PW = "correct horse battery"
 
@@ -138,3 +142,56 @@ def test_관리자_로그인_화면도_같은_꼴을_받는다(client: TestClien
     )
     assert r.status_code == 303 and r.headers["location"] == "/admin/"
     assert auth.read_session(r.cookies.get(auth.SESSION_COOKIE)) == "psj"
+
+
+# ── 🆕 2026-10-22 (D-350) 시도 제한은 관리자 분기 앞 · 어느 갈래든 센다 ──────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("email", "mounted"),
+    [
+        ("p.sj@admin.copylane", True),  # 꼴이 틀림 — 종전에는 해시만 돌고 세지 않았다
+        ("psj@admin.copylane", False),  # 관리자 화면이 없는 판(배포판) — 종전에는 늘 401
+        ("nobody@admin.copylane", True),  # 없는 관리자
+    ],
+)
+def test_관리자_도메인의_어느_실패든_같은_횟수에서_막힌다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, email: str, mounted: bool
+) -> None:
+    monkeypatch.setattr("app.settings.admin_is_mounted", lambda: mounted)
+    for _ in range(auth.MAX_ATTEMPTS):
+        assert _login(client, email, "wrong password!!").status_code == 401
+    r = _login(client, email, "wrong password!!")
+    assert r.status_code == 429 and "시도가 너무 많아요" in r.text
+
+
+def test_막힌_뒤에는_해시를_돌리지_않는다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.settings.admin_is_mounted", lambda: False)
+    for _ in range(auth.MAX_ATTEMPTS):
+        _login(client, "psj@admin.copylane", "wrong password!!")
+    calls: list[object] = []
+    real = auth.verify_account
+    monkeypatch.setattr(auth, "verify_account", lambda *a: calls.append(a) or real(*a))
+    assert _login(client, "psj@admin.copylane", "wrong password!!").status_code == 429
+    assert not calls, "🔴 막혔는데 해시를 돌렸다(P2-11)"
+
+
+def test_실패마다_해시는_한_번이다(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+    real = auth.verify_account
+    monkeypatch.setattr(auth, "verify_account", lambda *a: calls.append(a) or real(*a))
+    for email, mounted in (("p.sj@admin.copylane", True), ("psj@admin.copylane", False)):
+        monkeypatch.setattr("app.settings.admin_is_mounted", lambda m=mounted: m)
+        calls.clear()
+        assert _login(client, email, "wrong password!!").status_code == 401
+        assert len(calls) == 1, f"🔴 해시 횟수가 {len(calls)} — 걸린 시간이 갈래를 알린다(P1-5)"
+
+
+def test_성공하면_그_입력의_실패_횟수를_지운다(client: TestClient) -> None:
+    for _ in range(auth.MAX_ATTEMPTS - 1):
+        _login(client, "psj@admin.copylane", "wrong password!!")
+    assert _login(client, "psj@admin.copylane").status_code == 303
+    for _ in range(auth.MAX_ATTEMPTS - 1):
+        assert _login(client, "psj@admin.copylane", "wrong password!!").status_code == 401

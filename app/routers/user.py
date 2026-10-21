@@ -3002,14 +3002,25 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
         auth.audit("user_login", _actor(email=email), ok=False)
         return again("화면이 오래돼서 다시 불러왔어요. 한 번 더 로그인해 주세요.", 403)
-    # 🆕 2026-10-21 (psj) — 관리자 도메인(`psj@admin.copylane`)이면 **관리자 인증**으로 넘긴다 — 스키마 · 쿠키 · 명단은 그대로.
-    #    🚨 실패 문구는 사용자와 **같다** — 관리자 계정이 있는지 흘리지 않는다(P1-5). 관리자 화면이 없는 판(cloud)도 같은 답이다(D-213)
-    if (admin_id := auth.admin_initials_of(email)) is not None:
-        return _admin_login_via_user_form(request, admin_id, password, again)
+    # 🔄 2026-10-22 (D-350) 시도 제한을 **관리자 분기 앞**에서 본다 — 관리자 도메인 입력도 같은 키(`u:<입력>`) · 해시보다 먼저(P2-11).
+    #    ⛔ 종전(psj 10-21)에는 관리자 분기가 이 제한보다 앞이라 「꼴이 틀린 이니셜」 · 「관리자 화면이 없는 판」이 해시를 돌리고 세지 않았다 —
+    #       배포판에서 횟수 제한 없이 Argon2 를 돌리게 할 수 있었고, 관리자 화면이 있는 판만 429 를 내 그 유무가 드러났다(D-213)
+    blocked = f"시도가 너무 많아요. {auth.LOCKOUT_SEC // 60}분 뒤에 다시 해 주세요."
     key = f"u:{email}"
     if auth.throttle.blocked(key):
         auth.audit("user_login_blocked", _actor(email=email), ok=False)
-        return again(f"시도가 너무 많아요. {auth.LOCKOUT_SEC // 60}분 뒤에 다시 해 주세요.", 429)
+        return again(blocked, 429)
+    # 🆕 2026-10-21 (psj) — 관리자 도메인(`psj@admin.copylane`)이면 **관리자 인증**으로 넘긴다 — 스키마 · 쿠키 · 명단은 그대로.
+    #    🚨 실패 문구는 사용자와 **같다** — 관리자 계정이 있는지 흘리지 않는다(P1-5). 관리자 화면이 없는 판(cloud)도 같은 답이다(D-213)
+    if (admin_id := auth.admin_initials_of(email)) is not None:
+        result, resp = _admin_login_via_user_form(request, admin_id, password)
+        if result == "ok":
+            auth.throttle.clear(key)
+            return resp
+        if result == "blocked":  # 관리자 이니셜 키의 제한(두 번째 축)
+            return again(blocked, 429)
+        auth.throttle.fail(key)  # 🔴 어느 갈래의 실패든 센다(D-350 결정 2)
+        return again("이메일이나 비밀번호가 맞지 않아요.", 401)
     if not reachable(session):
         return again("지금은 로그인할 수 없어요 — 데이터베이스에 연결되지 않았어요.", 503)
 
@@ -3032,23 +3043,25 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     return _login_cookie(RedirectResponse(_next_path(nxt), status_code=303), request, user)
 
 
-def _admin_login_via_user_form(request: Request, initials: str, password: str, again):  # noqa: ANN001, ANN202
-    """사용자 로그인 화면에서 관리자로 — 관리자 로그인과 같은 함수(`routers.auth.admin_sign_in`)를 지난다 (D-99)."""
+def _admin_login_via_user_form(
+    request: Request, initials: str, password: str
+) -> tuple[str, RedirectResponse | None]:
+    """사용자 로그인 화면에서 관리자로 — 관리자 로그인과 같은 함수(`routers.auth.admin_sign_in`)를 지난다 (D-99).
+
+    `("ok", 응답)` · `("blocked", None)` · `("bad", None)` — 화면 · 시도 제한(`u:<입력>` 키)은 부르는 쪽(`user_login_post`)이 맡는다.
+    🔴 2026-10-22 (D-350 결정 2) — 어느 갈래든 **해시를 정확히 한 번** 돈다(꼴이 틀림 · 관리자 화면 없음 · 틀린 비밀번호) ·
+       막힘(`blocked`)만 해시 앞에서 돌아온다.
+    """
     from app.settings import admin_is_mounted  # noqa: PLC0415
 
     if not initials or not admin_is_mounted():
         # 🚨 걸린 시간이 다르지 않게 — 없는 계정과 같은 해시 한 번 (P1-5)
         auth.verify_account(None, password)
         auth.audit("login", initials or None, ok=False)
-        return again("이메일이나 비밀번호가 맞지 않아요.", 401)
+        return "bad", None
     from app.routers.auth import admin_sign_in  # noqa: PLC0415
 
-    result, resp = admin_sign_in(request, initials, password)
-    if result == "blocked":
-        return again(f"시도가 너무 많아요. {auth.LOCKOUT_SEC // 60}분 뒤에 다시 해 주세요.", 429)
-    if result == "bad":
-        return again("이메일이나 비밀번호가 맞지 않아요.", 401)
-    return resp
+    return admin_sign_in(request, initials, password)
 
 
 @router.post("/logout")
