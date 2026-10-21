@@ -1,0 +1,67 @@
+/* A shared content frame keeps wide displays from stretching every component. */
+body:has(.admin-shell) .admin-topbar {
+  padding-inline:max(28px,calc((100% - 1296px)/2));
+  gap:24px;
+}
+.admin-shell .admin-main {
+  width:100%;
+  max-width:1360px;
+  margin-inline:auto;
+  padding:32px 32px 24px;
+}
+.admin-shell .admin-main[data-admin-layout=reading] { max-width:1104px; }
+.admin-shell .admin-main[data-admin-layout=editor] { max-width:1008px; }
+.admin-breadcrumb { margin-bottom:24px; }
+.admin-main h1 { font-size:26px; letter-spacing:-.6px; }
+.admin-overview-head,.as-head { margin-bottom:24px; }
+.admin-overview-kpis { gap:16px; margin:24px 0; }
+.admin-overview-card { padding:22px 24px; }
+.admin-overview-grid { grid-template-columns:minmax(0,1fr) minmax(280px,340px); gap:24px; margin-bottom:24px; align-items:start; }
+.admin-overview-card .kpi-value { font-size:30px; }
+.as-kpis { gap:16px; margin-bottom:24px; }
+.as-metric { padding:20px 22px; }
+.as-metric-value { font-size:28px; }
+.as-grid { grid-template-columns:minmax(0,1fr) minmax(280px,360px); gap:24px; margin-bottom:24px; align-items:start; }
+.as-detail-grid { gap:24px; margin-top:24px; }
+.as-panel { padding:22px 24px; }
+.admin-main .filter-bar { display:flex; align-items:flex-end; flex-wrap:wrap; gap:14px; padding:16px 20px; }
+.admin-main .filter-bar label:has(input[type=text]) { flex:1 1 240px; max-width:420px; }
+.admin-main .filter-bar input[type=text] { width:100%; box-sizing:border-box; }
+.admin-main[data-admin-layout=reading] .kv th { width:160px; text-align:left; }
+.admin-main[data-admin-layout] table.kv { margin:0; }
+.admin-main[data-admin-layout] table.kv :is(th,td) { padding:12px 16px; }
+.admin-main[data-admin-layout] .board-content { max-width:none; background:var(--a-surface); padding:20px 24px; line-height:1.8; }
+.admin-main[data-admin-layout] .notice-form,.admin-main[data-admin-layout] .ticket-form {
+  max-width:none;
+  padding:24px;
+  border:1px solid var(--a-line);
+  border-radius:10px;
+  background:var(--a-surface);
+}
+.admin-main[data-admin-layout] :is(.notice-form,.ticket-form) textarea { width:100%; box-sizing:border-box; }
+.admin-page-footer { margin-top:28px; }
+@media(min-width:1051px) and (max-width:1250px) {
+  body:has(.admin-shell) .admin-topbar { flex-wrap:nowrap; gap:16px; padding-inline:24px; }
+  .admin-navigation { order:0; width:auto; margin-top:0; gap:2px; }
+  .admin-navigation .admin-nav-link,.admin-navigation summary { padding:24px 9px; }
+  .admin-account { margin-left:0; }
+  .admin-account small { display:none; }
+}
+@media(max-width:1050px) {
+  body:has(.admin-shell) .admin-topbar { padding-inline:24px; }
+  .admin-shell .admin-main { padding:28px 24px 20px; }
+}
+@media(max-width:960px) {
+  .admin-overview-grid,.as-grid { grid-template-columns:1fr; }
+  .admin-overview-grid,.as-grid,.as-detail-grid { gap:20px; }
+}
+@media(max-width:700px) {
+  body:has(.admin-shell) .admin-topbar { padding-inline:16px; gap:12px; }
+  .admin-shell .admin-main { padding:24px 16px 20px; }
+  .admin-main h1 { font-size:24px; }
+  .admin-overview-card,.as-panel,.as-metric { padding:18px; }
+  .admin-overview-kpis,.as-kpis { gap:12px; }
+  .admin-main[data-admin-layout] .notice-form,.admin-main[data-admin-layout] .ticket-form { padding:18px; }
+  .admin-main .filter-bar label:has(input[type=text]) { max-width:none; }
+  .admin-main[data-admin-layout=reading] .kv th { width:110px; }
+}

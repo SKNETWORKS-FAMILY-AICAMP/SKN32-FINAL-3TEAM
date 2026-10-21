@@ -100,3 +100,41 @@ templates.env.filters["law_version_label"] = law_version_label
 # 🆕 2026-10-13 (D-333) — 이 응답에서 인코더가 돌았는가. ⛔ 종전에는 화면이 `"+enc:" in judged_by` 를 직접 적었다 —
 #    표지가 `+encb:` 로 바뀌면 화면만 조용히 「사용 안 함」이 된다. 표지 글자는 `app/encoder.py` 한 곳이다 (D-99)
 templates.env.filters["encoder_ran"] = encoder.ran
+
+
+def admin_closed_menus() -> dict[str, dict[str, str]]:
+    """Read each router's current label lazily; eager imports would create a router cycle."""
+    from app.routers import (  # noqa: PLC0415
+        admin_enterprise,
+        admin_review_docs,
+        admin_signup_review,
+        admin_stats,
+        admin_terms,
+    )
+
+    return {
+        path: {"state": "닫힘", "label": module.LABEL}
+        for path, module in (
+            ("/admin/signup-review", admin_signup_review),
+            ("/admin/enterprise", admin_enterprise),
+            ("/admin/review-docs", admin_review_docs),
+            ("/admin/terms", admin_terms),
+            ("/admin/stats/revenue", admin_stats),
+        )
+    }
+
+
+templates.env.globals["admin_closed_menus"] = admin_closed_menus
+
+
+def premise_guide(premise: str):  # noqa: ANN201 — Guide | None
+    """품목 선택지의 「?」 도움말 — 승인된 두 겹 안내(`app/guide.py` · D-348 보충 37 결정 7)를 전제 이름으로 꺼낸다.
+
+    🆕 2026-10-21 (ksr) — 엔진이 응답에 붙이는 것과 같은 표다. 선택지는 응답 분기가 없어도 그리므로 표에서 바로 읽는다.
+    """
+    from app import guide  # noqa: PLC0415 — 조문 생성물 검사를 화면 import 때 한 번만
+
+    return guide.guide_for(f"premise:{premise}")
+
+
+templates.env.globals["premise_guide"] = premise_guide

@@ -36,6 +36,14 @@ if str(ROOT) not in sys.path:
 #: 🔄 2026-10-12 — 1단계 q4b-v13 → **q4b-v14**(보강 2차 · 직접 만든 55 행). 실제 광고 87 — 포장 4 → 0 · 불가를 불가로 47 → 55,
 #:    dev 바뀐 위험 33 행 검수의 위법 의심 2 는 관문 보강으로 0(`docs/lse/고쳐쓰기_dev평가_2026-10-11.md` §6-3).
 #:    보강 3차 q4b-v15 는 실제 광고에서 v14 보다 나빠(포장 1 · 불가 막음 48) 채택하지 않았다. v13 으로 돌아가려면 COPYLANE_SLLM_STAGE1=q4b-v13
+#: 🔄 2026-10-17 — 1단계 q4b-v14 → **q4b-n2**(확장 2차만 · 2,570 행 · `gen_expand_stage1.py`) + 화장품 기능 주장 되살리기
+#:    (`postfix.rescue_cosmetic` · `persona_pipeline_e2e.RESCUE` 기본 켬). 실제 광고 87 — 불가를 불가로 55 → 66 · 살림 3 → 4 · 포장 0 ·
+#:    지나친 거절 6 그대로 · 보류 23 → 11, 직접 만든 119 동등 · 포장 0. dev 511 은 불가가 크게 늘었다(450 · 표본 30 검토에서 대부분
+#:    불가가 맞고, 식품 · 화장품 밖 업종은 살릴 것도 거절) — 식품 · 건기식 · 화장품 위주라 채택(사용자 10-17 · `데이터확장_시범결과_2026-10-16.md`).
+#:    v14 로 돌아가려면 COPYLANE_SLLM_STAGE1=q4b-v14 · COPYLANE_SLLM_RESCUE=0
+#: ⛔ 2026-10-19 — 위 교체는 **잠금(models.lock.json · D-335) 등재 전이라 되돌렸다.** q4b-n2 는 잠금에 없어 서버가 뜨지 않았다
+#:    (`LockOutside` — 앱 고쳐 쓰기 「연결하지 못했어요」). 팀장이 잠금에 q4b-n2 를 등재하면 이 줄을 "q4b-n2" 로 · RESCUE 기본을 켠다.
+#:    그 전에 n2 를 쓰려면 잠금 등재 판이 아니므로 서버가 막는다 — 시험은 `eval_*.py`(잠금을 보지 않는다)로만
 DEFAULT_STAGE1 = "q4b-v14"
 DEFAULT_BASE = "Qwen/Qwen3-4B-Instruct-2507"
 #: 🔄 2026-10-12 — 2단계는 다듬기 데이터(`persona_polish.jsonl`)를 더해 다시 학습한 판(`…_q4b_polish`). 고객층 없이 다듬기 39/39 통과
@@ -70,6 +78,23 @@ def stage2_dir() -> Path:
 
 def base_model() -> str:
     return _env(ENV_BASE) or DEFAULT_BASE
+
+
+#: 🆕 2026-10-19 — 추론 정밀도. 배포 서버가 **Tesla T4**(AWS g4dn.xlarge · Turing sm_75)라 bf16 을 하드웨어로 못 한다 —
+#:    bf16 고정이면 안 돌거나 매우 느리다. `auto`(기본)는 GPU 가 bf16 을 하면 bf16, 아니면 fp16 · 바꾸려면 `COPYLANE_SLLM_DTYPE=bf16|fp16`.
+#:    학습 스크립트는 Ampere 이상(RTX 3080 · RunPod)에서만 돌려 bf16 그대로다
+ENV_DTYPE = "COPYLANE_SLLM_DTYPE"
+
+
+def serve_dtype():  # noqa: ANN201 — torch.dtype (이 모듈은 torch 없이 읽혀야 해서 여기서 가져온다)
+    import torch  # noqa: PLC0415
+
+    want = (_env(ENV_DTYPE) or "auto").lower()
+    if want in ("bf16", "bfloat16"):
+        return torch.bfloat16
+    if want in ("fp16", "float16", "half"):
+        return torch.float16
+    return torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
 
 
 def adapter_base(adapter_dir: Path) -> str:

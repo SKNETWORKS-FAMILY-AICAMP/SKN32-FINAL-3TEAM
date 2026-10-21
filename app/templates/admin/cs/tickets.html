@@ -2,48 +2,46 @@
    (병렬작업 계약 §5)
 
   🚨 **읽기 전용이다.** 상태 변경·담당자 배정 폼은 disabled 뼈대다.
-  🔴 `ticket` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 전부 더미다 (admin_cs.py 참고).
-     사용자 쪽 티켓 접수(ksr·lse)는 그 표에 쓴다.
+  🔄 2026-10-20 — `ticket` 표를 읽는다(admin_cs.py). 사용자 고객센터가 접수한 문의가 뜬다.
+     못 읽으면 빈 화면 + `_db_notice.html` 안내 — 0건이라 말하지 않는다 (D-72).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 문의 관리{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+#}{% extends "admin/_base.html" %}
+{% block title %}문의 관리 | CopyLane 관리자{% endblock %}
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>문의 관리</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>ticket</code> 표는 생겼지만 이 화면은 아직 그 표를 읽지 않아요 — 사용자가 접수한 문의는 여기 보이지 않습니다.</p>
+{% with table="ticket" %}{% include "admin/_db_notice.html" %}{% endwith %}
 
 <div class="cs-kpis">
-  <div class="cs-kpi"><span>전체</span><b>{{ counts["전체"] }}</b></div>
-  <div class="cs-kpi"><span>미처리</span><b>{{ counts["미처리"] }}</b></div>
-  <div class="cs-kpi"><span>처리중</span><b>{{ counts["처리중"] }}</b></div>
-  <div class="cs-kpi"><span>긴급(미완료)</span><b>{{ counts["긴급"] }}</b></div>
+  <div class="cs-kpi"><span>전체</span><b>{{ counts.total if counts.total is not none else "-" }}</b></div>
+  <div class="cs-kpi"><span>미처리</span><b>{{ counts.open if counts.open is not none else "-" }}</b></div>
+  <div class="cs-kpi"><span>처리중</span><b>{{ counts.in_progress if counts.in_progress is not none else "-" }}</b></div>
+  <div class="cs-kpi"><span>긴급(미완료)</span><b>{{ counts.urgent if counts.urgent is not none else "-" }}</b></div>
 </div>
 
 <form class="filter-bar" method="get" action="/admin/cs/tickets">
   <label>유형
     <select name="type">
       <option value="" {% if not ticket_type %}selected{% endif %}>전체</option>
-      {% for t in types %}
-      <option value="{{ t }}" {% if ticket_type == t %}selected{% endif %}>{{ t }}</option>
+      {% for code, label in types.items() %}
+      <option value="{{ code }}" {% if ticket_type == code %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </label>
   <label>우선순위
     <select name="priority">
       <option value="" {% if not priority %}selected{% endif %}>전체</option>
-      {% for p in priorities %}
-      <option value="{{ p }}" {% if priority == p %}selected{% endif %}>{{ p }}</option>
+      {% for code, label in priorities.items() %}
+      <option value="{{ code }}" {% if priority == code %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </label>
   <label>상태
     <select name="status">
       <option value="" {% if not status %}selected{% endif %}>전체</option>
-      {% for s in statuses %}
-      <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+      {% for code, label in statuses.items() %}
+      <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </label>
@@ -53,17 +51,18 @@
   {% endif %}
 </form>
 
-{% if not rows %}
-<p>조건에 맞는 티켓이 없다.</p>
+{% if source != "db" %}
+{% elif not rows %}
+<p>{{ "조건에 맞는 문의가 없어요." if ticket_type or priority or status else "아직 접수된 문의가 없어요." }}</p>
 {% else %}
-<table>
+<div class="admin-table-scroll"><table>
   <tr>
     <th>접수일</th><th>티켓 ID</th><th>문의자</th><th>유형</th><th>제목</th><th>우선순위</th><th>상태</th><th>담당자</th>
   </tr>
   {% for r in rows %}
   <tr>
     <td class="nowrap">{{ r.at }}</td>
-    <td><a href="/admin/cs/tickets/{{ r.id }}">{{ r.id }}</a></td>
+    <td><a href="/admin/cs/tickets/{{ r.id }}">{{ r.no }}</a></td>
     <td>{{ r.who }}</td>
     <td>{{ r.type }}</td>
     <td>{{ r.title }}</td>
@@ -72,7 +71,7 @@
     <td>{{ r.owner }}</td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 
 {% if pages > 1 %}
 <nav class="pager" aria-label="페이지">
@@ -98,6 +97,4 @@
 .admin-shell .cs-status-처리중 { background: #dbeafe; color: #1d4ed8; }
 .admin-shell .cs-status-완료 { background: #dcfce7; color: #15803d; }
 </style>
-</div>
-</div>
 {% endblock %}

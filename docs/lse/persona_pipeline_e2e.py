@@ -40,26 +40,28 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
 
+import sllm_meta  # noqa: E402
 from persona_experiment import BASE, load_inputs  # noqa: E402
 from persona_two_stage import load_kadlint  # noqa: E402
 from postfix import (  # noqa: E402
-    CONDITIONAL_CLAIM_NOTE,
     _CLAIM_HOLD,
+    CONDITIONAL_CLAIM_NOTE,
     condition,
     label_check,
     repair_ingredients,
+    rescue_cosmetic,
     to_approved_claim,
 )
 from rejudge import RejudgeUnavailable, rejudge  # noqa: E402
+from sllm_meta import stage1_dir, stage1_version, stage2_dir  # noqa: E402
 from stage_gate import check as gate  # noqa: E402
 from train_persona_stage2 import SYSTEM as STAGE2_SYSTEM  # noqa: E402
 from train_persona_stage2 import rule_check  # noqa: E402
+
 # 🔄 10-08 — 학습 프롬프트(SYSTEM_V6) + 사실 · 관계어 보존 규칙(프롬프트 실험 P1 채택). 학습은 그대로다
 from train_stage1_v5 import SYSTEM_SERVE as STAGE1_SYSTEM  # noqa: E402
 from train_stage1_v5 import parse as parse_stage1  # noqa: E402
 from train_stage1_v5 import user_msg as stage1_user  # noqa: E402
-
-from sllm_meta import stage1_dir, stage1_version, stage2_dir  # noqa: E402
 
 ROOT = HERE.parents[1]
 # 채택본은 v12 (10-05 · v6 → v8 → v9 → v10 → v12). 🔄 2026-10-07 — 판은 `sllm_meta` 한 곳에서 읽는다:
@@ -74,6 +76,20 @@ NEUTRAL_PERSONA = "일반 소비자 — 특정 고객층을 짚지 않고, 제�
 #: 🆕 10-13 — 다듬기는 **서비스 범위 품목**에서만. dev 후보(부동산 · 교육 · 가전 · 품목 모름)에 다듬기를 붙이면 말이 안 되는 쓰임이 절반 가까이 붙었다
 #:    (`eval_polish_dev.py` · dev 평가 §6-3-1). 쓰는 법 사전(`usage_dict.py`)도 식품 · 화장품 모양만 안다 — 그 밖은 담백한 안(1단계)만 낸다
 POLISH_CATEGORIES = ("식품", "건기식", "화장품")
+#: 🆕 10-14 다시 만들기(D-126 · 서버 안) — 1단계가 **관문에 걸려 보류**되면 표본 추출로 몇 번 더 써 보고 관문을 넘는 첫 안을 낸다.
+#:    0 이면 끈다. ⛔ 「조건 확인 필요」 보류는 다시 쓰지 않는다 — 인정 · 심사 제품 전용 문구를 말만 바꿔 빠져나가면 위반 포장이다(v13 포장 4).
+#:    ⛔ 「만들지 못했어요」 · 후보는 다시 쓰지 않는다. 다시 쓴 안도 후처리 · 관문 · 2단계 관문을 똑같이 지난다. 씨앗을 고정해 같은 입력이면 같은 출력
+RETRY = 0
+#: 🆕 10-17 — 1단계 「불가」 중 화장품 기능 주장을 조건부 후보로 되살린다(`postfix.rescue_cosmetic`).
+#: 🔄 10-17 q4b-n2 채택과 함께 기본 켬 → ⛔ 10-19 잠금 등재 전이라 1단계를 q4b-v14 로 되돌리며 **다시 끔**(v14 와는 잰 적이 없다).
+#:    켜기: COPYLANE_SLLM_RESCUE=1 · 잠금에 q4b-n2 가 등재되면 기본을 다시 켠다
+RESCUE = __import__("os").environ.get("COPYLANE_SLLM_RESCUE") == "1"
+#: 🆕 10-14 다듬기 방식 — "model"(2단계 어댑터 · 종전) 또는 "rule"(`polish_rule.py` · 모양별 쓰는 법 문구를 붙임 · 모델 안 씀).
+#:    규칙판은 처음 보는 제품 2 벌(22 · 20)에서 지어낸 쓰는 법이 거의 없었다(dev 평가 §6-8). 고객층 말투(`persona`)는 늘 모델이다
+#:    🔄 10-14 — 기본을 규칙판으로(사용자 결정 · 팀장 알림). 다듬기 어댑터는 고객층 말투에만 쓴다
+POLISH_MODE = "rule"
+RETRY_TEMPERATURE = 0.7
+RETRY_TOP_P = 0.9
 #: 고를 수 있는 고객층 — 🚨 D-27 고민 · 증상 축 없음. 실제 서비스에서는 세그먼트(`app.contracts.Segment.label`)가 들어온다
 PERSONAS = {
     "p1": "30대 직장인 — 바쁜 일상 속 간편한 관리",
@@ -87,12 +103,17 @@ PERSONAS = {
 }
 
 
-def chat(model, tok, system: str, user: str, n: int) -> str:
+def chat(model, tok, system: str, user: str, n: int, seed: int | None = None) -> str:
+    """`seed` 가 없으면 그리디(종전 · 재현) · 있으면 그 씨앗으로 표본 추출(🆕 10-14 다시 만들기)."""
     msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     prompt = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
     ids = tok(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
-        out = model.generate(**ids, max_new_tokens=n, do_sample=False)
+        if seed is None:
+            out = model.generate(**ids, max_new_tokens=n, do_sample=False)
+        else:
+            torch.manual_seed(seed)
+            out = model.generate(**ids, max_new_tokens=n, do_sample=True, temperature=RETRY_TEMPERATURE, top_p=RETRY_TOP_P)
     return tok.decode(out[0][ids["input_ids"].shape[1]:], skip_special_tokens=True)
 
 
@@ -125,18 +146,52 @@ def run_one(model, tok, text: str, labels: list[str], persona: str | None = None
     `polish` — 🆕 10-12 고객층이 없어도 2단계로 자연스럽게 다듬는다(`NEUTRAL_PERSONA`). 실패하면 1단계 문장을 낸다.
     🔄 10-13 품목이 `POLISH_CATEGORIES` 일 때만 — 품목을 모르거나 그 밖이면 다듬지 않는다."""
     if not persona and polish and category in POLISH_CATEGORIES:
+        if POLISH_MODE == "rule":
+            return with_rejudge(_polish_rule(_run_one(model, tok, text, labels, None, category), category), do_rejudge, category)
         persona = NEUTRAL_PERSONA
     return with_rejudge(_run_one(model, tok, text, labels, persona, category), do_rejudge, category)
 
 
+def _polish_rule(res: dict, category: str | None) -> dict:
+    """🆕 10-14 규칙판 다듬기 — 1단계 후보에 모양별 쓰는 법 문구를 붙이고 관문(말투 모드)을 다시 지난다. 못 붙이거나 막히면 1단계 문장 그대로."""
+    from polish_rule import polish_by_rule  # noqa: PLC0415
+
+    s1 = res.get("final")
+    if res["outcome"] != "candidate" or not s1:
+        return res
+    s2 = polish_by_rule(s1, category)
+    g2 = gate(s1, s2, persona=True) if s2 else None
+    res = {**res, "persona": "rule", "stage2": s2, "gate2": list(g2.reasons) if g2 else None}
+    if not s2 or not g2.passed:
+        return {**res, "persona_failed": bool(s2)}
+    return {**res, "final": s2, "stage1_final": s1}
+
+
 def _run_one(model, tok, text: str, labels: list[str], persona: str | None = None, category: str | None = None) -> dict:
+    res = _attempt(model, tok, text, labels, persona, category)
+    if not RETRY or res["outcome"] != "hold" or any(x.startswith("조건 확인 필요") for x in res.get("gate1") or []):
+        return res
+    for k in range(1, RETRY + 1):
+        r2 = _attempt(model, tok, text, labels, persona, category, seed=k)
+        if r2["outcome"] == "candidate":
+            return {**r2, "retry": k, "first_gate1": res["gate1"]}  # 처음 안이 왜 걸렸는지 남긴다
+    return {**res, "retry": 0, "retry_tried": RETRY}
+
+
+def _attempt(model, tok, text: str, labels: list[str], persona: str | None = None, category: str | None = None,
+             seed: int | None = None) -> dict:
     model.set_adapter("stage1")
-    out1 = parse_stage1(chat(model, tok, STAGE1_SYSTEM, stage1_user({"input": text, "violation_types": labels}), 220))
+    out1 = parse_stage1(chat(model, tok, STAGE1_SYSTEM, stage1_user({"input": text, "violation_types": labels}), 220, seed))
     infeasible = out1.get("infeasible") if out1 else None
     s1 = out1.get("body") if out1 and not infeasible else None
     res = {"input": text, "stage1": s1, "infeasible": infeasible, "gate1": None, "persona": persona,
            "stage2": None, "gate2": None, "stage2_problems": None,
            "stage1_note": out1.get("mandatory_note") if out1 else None, "repairs": [], "note": None, "note_problem": None}
+    if infeasible and RESCUE and (rc := rescue_cosmetic(text, category)) is not None:
+        # 🆕 10-17 — 화장품 기능 주장의 불가는 조건부 후보로 되살린다(아래 관문 · 「조건 확인 필요」를 그대로 지난다)
+        s1, res["stage1_note"], res["infeasible"] = rc[0], rc[1], None
+        res["rescued_from"] = infeasible
+        infeasible = None
     if infeasible:
         return {**res, "outcome": "infeasible", "final": None}  # 증명서 경로(D-32 · D-125) — 고치지 않는다
     # 🆕 10-05 후처리(`postfix.py`) — 관문 전에 기계로 고칠 수 있는 실수를 고친다: 원료명 베끼기 · 지어낸 기능성 문구
@@ -192,7 +247,7 @@ def main() -> None:
     persona = PERSONAS[args.persona] if args.persona else None
 
     tok = AutoTokenizer.from_pretrained(BASE)
-    base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
+    base = AutoModelForCausalLM.from_pretrained(BASE, dtype=sllm_meta.serve_dtype(), device_map="cuda")  # 🆕 10-19 T4(fp16) 대응
     model = PeftModel.from_pretrained(base, str(stage1), adapter_name="stage1")
     model.load_adapter(str(STAGE2), adapter_name="stage2")
     model.eval()

@@ -30,6 +30,7 @@ import base64
 import hashlib
 import hmac
 import logging
+import re
 import secrets
 import threading
 import time
@@ -181,6 +182,24 @@ def _sign(payload: str) -> str:
 #:    ⛔ 쿠키 하나에 역할 칸을 두는 안(나)은 기각 — 역할 칸을 읽는 곳 하나가 빠지면 사용자 세션이 관리자 문을 연다.
 USER_SESSION_COOKIE = "copylane_user"
 USER_PREFIX = "u:"
+
+#: 🆕 2026-10-21 (psj) — **사용자 로그인 화면에서 관리자로 들어가는 도메인.** `psj@admin.copylane` → 이니셜 `psj`.
+#:    🚨 스키마는 그대로다 — 관리자 계정의 열쇠는 계속 이니셜(`app_account.initials`)이고, 세션 · 감사 로그도 이니셜이다.
+#:       이 도메인은 **로그인 입력의 겉모양**일 뿐 메일 주소가 아니다(존재하지 않는 도메인으로 골랐다 — 메일로 오해하지 않게).
+#:    🔴 이 도메인으로는 사용자 가입을 막는다(`user.py` 가입) — 막지 않으면 관리자와 같은 꼴의 사용자 계정이 생긴다.
+ADMIN_EMAIL_DOMAIN = "@admin.copylane"
+#: 이니셜 꼴 — `docs/<이니셜>/` 폴더 이름과 같은 글자만(소문자 · 숫자 · `_` `-` · 16자 = `app_account.initials` 칸)
+_INITIALS_SHAPE = re.compile(r"^[a-z0-9_-]{1,16}$")
+
+
+def admin_initials_of(login_id: str) -> str | None:
+    """로그인 입력이 관리자 도메인이면 이니셜, 아니면 `None`. 꼴이 틀리면(빈 앞부분 · 점 · 17자 이상) `None` 이 아니라 `""` —
+    부르는 쪽은 「관리자 도메인인데 틀린 꼴」을 일반 실패와 같은 답으로 낸다(존재 여부를 흘리지 않는다)."""
+    v = (login_id or "").strip().lower()
+    if not v.endswith(ADMIN_EMAIL_DOMAIN):
+        return None
+    local = v[: -len(ADMIN_EMAIL_DOMAIN)]
+    return local if _INITIALS_SHAPE.match(local) else ""
 
 
 def _issue(subject: str) -> str:

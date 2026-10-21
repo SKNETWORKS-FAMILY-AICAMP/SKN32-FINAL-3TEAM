@@ -49,34 +49,26 @@ def login_form(request: Request) -> HTMLResponse:
     return resp
 
 
-@router.post("/login")
-async def login(request: Request) -> RedirectResponse:
-    """로그인. ⛔ **없는 계정과 틀린 비밀번호를 같은 답으로 낸다** — 존재 여부가 정보다 (P1-5).
+def admin_sign_in(
+    request: Request, initials: str, password: str
+) -> tuple[str, RedirectResponse | None]:
+    """관리자 인증 한 번 — `("ok", 관리자 화면으로 가는 응답)` · `("blocked", None)` · `("bad", None)`.
 
-    🚨 **시도 제한이 먼저다** (P2-11) — Argon2id 는 19 MiB 를 잡는다. 세는 것보다 **해시를
-       돌리는 것이 비싸므로** 막는 판단이 해시 앞에 와야 한다.
+    🆕 2026-10-21 (psj) — 관리자 로그인(`/login`)과 사용자 로그인 화면의 관리자 도메인(`auth.ADMIN_EMAIL_DOMAIN`)이
+       **같은 함수**를 지난다 — 시도 제한 · 해시 · 재해시 · 감사 · 쿠키가 한 벌이다 (D-99). CSRF 는 부르는 쪽이 먼저 본다.
     """
-    body = await read_capped(request, _MAX_BODY)  # 🔄 09-21 — 다 읽고 재지 않는다 (app/formbody.py)
-    form = parse_qs(body.decode("utf-8", "replace"))
-    initials = (form.get("initials", [""])[0] or "").strip()[:16]
-    password = form.get("password", [""])[0] or ""
-
-    if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
-        auth.audit("login", initials or None, ok=False)
-        raise HTTPException(403, "요청이 만료됐다 — 로그인 화면을 다시 연다")
-
     # 🚨 IP 가 아니라 **이니셜**로 센다 — 한 계정을 여러 곳에서 두드리는 것을 막는다.
     #    ⬜ IP 축은 따로다. 지금은 로컬뿐이라 안 넣었다 (D-188 — 안 넣은 것이지 없는 게 아니다).
     if auth.throttle.blocked(initials):
         auth.audit("login_blocked", initials or None, ok=False)
-        raise HTTPException(429, f"시도가 많다 — {auth.LOCKOUT_SEC // 60}분 뒤에 다시")
+        return "blocked", None
 
     stored = _lookup(initials)
     # 🔄 2026-09-21 (전수 재검토) — 없는 계정도 해시를 한 번 돈다 — 걸린 시간이 존재를 알리지 않게 (P1-5)
     if not auth.verify_account(stored, password):
         auth.throttle.fail(initials)
         auth.audit("login", initials or None, ok=False)
-        raise HTTPException(401, "이니셜이나 비밀번호가 맞지 않는다")
+        return "bad", None
 
     auth.throttle.clear(initials)
     if auth.needs_rehash(stored):
@@ -86,6 +78,33 @@ async def login(request: Request) -> RedirectResponse:
 
     resp = RedirectResponse("/admin/", status_code=303)
     resp.set_cookie(auth.SESSION_COOKIE, auth.issue_session(initials), **_cookie_kwargs(request))  # type: ignore[arg-type]
+    return "ok", resp
+
+
+@router.post("/login")
+async def login(request: Request) -> RedirectResponse:
+    """로그인. ⛔ **없는 계정과 틀린 비밀번호를 같은 답으로 낸다** — 존재 여부가 정보다 (P1-5).
+
+    🚨 **시도 제한이 먼저다** (P2-11) — Argon2id 는 19 MiB 를 잡는다. 세는 것보다 **해시를
+       돌리는 것이 비싸므로** 막는 판단이 해시 앞에 와야 한다.
+    """
+    body = await read_capped(request, _MAX_BODY)  # 🔄 09-21 — 다 읽고 재지 않는다 (app/formbody.py)
+    form = parse_qs(body.decode("utf-8", "replace"))
+    raw_id = (form.get("initials", [""])[0] or "").strip()
+    # 🆕 2026-10-21 — `psj@admin.copylane` 꼴도 받는다(사용자 로그인 화면과 같은 꼴) · 꼴이 틀리면 없는 이니셜로 친다
+    as_admin = auth.admin_initials_of(raw_id)
+    initials = raw_id[:16] if as_admin is None else as_admin
+    password = form.get("password", [""])[0] or ""
+
+    if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
+        auth.audit("login", initials or None, ok=False)
+        raise HTTPException(403, "요청이 만료됐다 — 로그인 화면을 다시 연다")
+
+    result, resp = admin_sign_in(request, initials, password)
+    if result == "blocked":
+        raise HTTPException(429, f"시도가 많다 — {auth.LOCKOUT_SEC // 60}분 뒤에 다시")
+    if result == "bad":
+        raise HTTPException(401, "이니셜이나 비밀번호가 맞지 않는다")
     return resp
 
 

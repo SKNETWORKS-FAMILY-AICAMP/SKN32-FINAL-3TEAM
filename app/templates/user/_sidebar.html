@@ -1,14 +1,16 @@
-{# app/templates/user/_sidebar.html — 구역별 왼쪽 사이드바 · 소유자 lse (병렬작업 계약 §5)
-
-  🚨 `section_subs`(key·label·href 튜플 목록)·`active_sub` 는 라우터의 `_render()` 가 채운다.
-  🔴 맨 아래 "CS 문의" 버튼은 디자인 그대로 **사이드바가 있는 구역에만** 붙는다.
-#}
-<aside class="user-sidebar">
-  <p class="user-sidebar-label">{{ section_label }}</p>
-  {% for key, label, href in section_subs %}
-  <a class="user-sidebar-item{{ ' user-sidebar-item-active' if key == active_sub }}"
-     href="{{ href }}">{{ label }}</a>
+{% from "user/_icons.html" import icon as ui_icon %}
+<aside class="user-sidebar" aria-label="작업 메뉴">
+  {% if active_section == 'about' %}
+  <p class="user-sidebar-label">이용 가이드</p>
+  <a class="user-sidebar-item{{ ' user-sidebar-item-active' if active_sub != 'faq' }}" href="/u/help?tab=guide"{% if active_sub != 'faq' %} aria-current="page"{% endif %}>{{ ui_icon('book') }}사용방법</a>
+  <a class="user-sidebar-item{{ ' user-sidebar-item-active' if active_sub == 'faq' }}" href="/u/help?tab=faq"{% if active_sub == 'faq' %} aria-current="page"{% endif %}>{{ ui_icon('info') }}자주 묻는 질문</a>
+  {% else %}
+  <p class="user-sidebar-label">작업 공간</p>
+  {% for href, label, icon in [('/u/', '홈', 'home'), ('/u/review', '문구 검수', 'review'), ('/u/generate', '카피 생성', 'spark'), ('/u/compose', 'AI 광고 생성', '')] %}
+  <a class="user-sidebar-item{{ ' user-sidebar-item-active' if ui_screen == href }}" href="{{ href }}"{% if ui_screen == href %} aria-current="page"{% endif %}><span aria-hidden="true">{% if href == '/u/compose' %}{% include "user/_ad_icon.html" %}{% else %}{{ ui_icon(icon) }}{% endif %}</span>{{ label }}</a>
   {% endfor %}
-  {# 🆕 2026-09-29 — 안 읽은 문의 답변 · 완료가 있으면 점을 켠다 (프로토타입 `cs-badge`) #}
-  <a class="user-sidebar-cs" href="/u/cs">CS 문의{% if me and me.cs_unread %} <span class="user-sidebar-dot" aria-label="새 답변"></span>{% endif %}</a>
+  <p class="user-sidebar-label sidebar-records">내 기록</p>
+  <a class="user-sidebar-item{{ ' user-sidebar-item-active' if ui_screen == '/u/history' }}" href="/u/history"{% if ui_screen == '/u/history' %} aria-current="page"{% endif %}><span aria-hidden="true">{{ ui_icon("history") }}</span>검수 이력</a>
+  {% endif %}
+  <a class="user-sidebar-cs{{ ' user-sidebar-item-active' if request.url.path.startswith('/u/cs') }}" href="/u/cs"{% if request.url.path.startswith('/u/cs') %} aria-current="page"{% endif %}>{{ ui_icon("help") }}고객센터{% if me and me.cs_unread %}<span class="user-sidebar-dot" aria-label="새 답변"></span>{% endif %}</a>
 </aside>

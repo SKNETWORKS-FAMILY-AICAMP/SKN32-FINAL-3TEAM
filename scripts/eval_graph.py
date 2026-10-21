@@ -170,13 +170,19 @@ def _ho(sent: SentenceJudgment) -> set[str]:
 
 
 def _questions(sents: Iterable[SentenceJudgment]) -> list[str]:
-    """문장들에 선 질문 — `<문장>:fact:<종류>` · `<문장>:subst` (🆕 2026-10-21 · D-348 보충 35). 결과 파일끼리 질문이 같은지 맞대는 열쇠다."""
+    """문장들에 선 질문 — `<문장>:fact:<종류>` · `<문장>:subst:<유형>` (🆕 2026-10-21 · D-348 보충 35). 결과 파일끼리 질문이 같은지 맞대는 열쇠다.
+
+    🔄 2026-10-21 (보충 39 결정 6 · 2 단계) 실증 질문은 유형마다 따로 선다 — 열쇠에 유형을 싣는다(`SubstBranch.violation`) · 유형이 빈 질문은 종전 꼴
+       `<문장>:subst`. 분기마다 다른 유형을 묻는 문장(`app/routers/user.py` `_tag_subst` 의 알려진 한계)을 결과 파일로 세는 열쇠다.
+       ⚠️ 이 판 전 결과 파일과 `eval_diff diff` 로 맞대면 실증 질문이 선 행은 질문 칸이 바뀐 것으로 나온다(열쇠 꼴이 바뀜 · 판정은 같음).
+    """
     out = []
     for s in sents:
         if s.fact_check is not None:
             out.append(f"{s.sent_id}:fact:{s.fact_check.kind.value}")
         if s.substantiation is not None:
-            out.append(f"{s.sent_id}:subst")
+            v = s.substantiation.violation
+            out.append(f"{s.sent_id}:subst" + (f":{v.value}" if v is not None else ""))
     return sorted(out)
 
 
@@ -805,10 +811,17 @@ def answer_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
        · D(적법) — 「예」에 위반 확정 = **틀림** · 「아니오」에 위반 확정 = **답에 달린 오탐**(사용자가 「없다」고 하면 위반으로 나간다)
        · M · L · 그 밖 — 수만(종착 분포)
        · 이어 묻기 상한 뒤에도 질문이 남은 행 — 따로 센다 · 도달로 세지 않는다
+       · 🆕 이미 답한 질문이 다시 선 행(`reasked` · 그래프 결함) — 따로 센다 · 도달로 세지 않는다 · 0 이어야 한다
     🚨 「아니오 = 골든 위반 라벨」은 D-59 의 실증형 정의에 기댄다(사건마다 실증이 없었는지는 보지 않았다 · 인계 10-21 §4).
     🚨 보고 지표다 — 게이트 아님 · 판정은 이 수를 읽지 않는다. 계약 오류 행은 따로 센다(0 이어야 한다).
     """
-    out: dict[str, Any] = {"rows": 0, "by_condition": {}, "left": 0, "contract_errors": 0}
+    out: dict[str, Any] = {
+        "rows": 0,
+        "by_condition": {},
+        "left": 0,
+        "reasked": 0,
+        "contract_errors": 0,
+    }
     tab: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for r, p in zip(rows, preds, strict=True):
         ap_ = p.get("answer_path")
@@ -824,9 +837,14 @@ def answer_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
         if left:
             out["left"] += 1
             c["남음"] += 1
+        # 종전 결과 파일(이 칸 전)은 0 으로 읽는다
+        again = yes.get("reasked", 0) or no.get("reasked", 0)
+        if again:
+            out["reasked"] += 1
+            c["재질문"] += 1
         tt = truth_types(r, set(no["types"]) | set(yes["types"]))
         if cond in ("A", "B"):
-            if not left and tt & set(no["types"]):
+            if not left and not again and tt & set(no["types"]):
                 c["도달"] += 1
             if tt & set(yes["types"]):
                 c["답미반영"] += 1
@@ -1012,12 +1030,18 @@ def _print_answers(a: dict[str, Any]) -> None:
             bits += ["질문이 선 C 행 = D-61 후보(묻지 않고 확정할 자리였나)"]
         if c.get("남음"):
             bits += [f"상한 뒤에도 질문 남음 {c['남음']}(도달로 세지 않음)"]
+        if c.get("재질문"):
+            bits += [f"🔴 답한 질문이 다시 섬 {c['재질문']}(도달로 세지 않음)"]
         print(f"    {k:>2}  " + " · ".join(bits))
         for ans in (Answer.예.value, Answer.아니오.value):
             dist = {x.split(":", 1)[1]: v for x, v in c.items() if x.startswith(ans + ":")}
             print(f"        {ans:4} → {dist}")
     if a["left"]:
         print(f"    상한 뒤에도 질문이 남은 행 {a['left']}")
+    if a.get("reasked"):
+        print(
+            f"    🔴 이미 답한 질문이 다시 선 행 {a['reasked']} — 그래프 결함(0 이어야 한다 · 답 경로 결과를 그대로 읽지 않는다)"
+        )
     if a["contract_errors"]:
         print(f"    🔴 답 경로에서 응답 계약을 지나지 못한 판정 {a['contract_errors']}")
 
@@ -1433,11 +1457,19 @@ ANSWER_ROUNDS = 3
 ANSWER_SETS = (Answer.예, Answer.아니오)
 
 
-def _open_questions(state: dict[str, Any]) -> list[tuple[str, str, str | None]]:
-    """상태의 질문 — (문장 글자, `fact` · `subst`, 사실 종류). 기록 문장과 보이는 분기 문장 모두 · 답은 문장 글자에 묶여 모든 분기에 든다(`app/routers/user.py` `_answers_of`)."""
+def _open_questions(
+    state: dict[str, Any], *, held: bool = False
+) -> list[tuple[str, str, str | None]]:
+    """상태의 질문 — (문장 글자, `fact` · `subst`, 사실 종류). 기록 문장과 보이는 분기 문장 모두 · 답은 문장 글자에 묶여 모든 분기에 든다(`app/routers/user.py` `_answers_of`).
+
+    `held` — 보류 문장의 질문만(🆕 2026-10-21 · 다시 선 질문 셈). 확정 위반 문장은 실증 분기를 **지시**로 싣는다(D-337 · D-268) — 답을 기다리는
+    질문이 아니다. 이걸 빼지 않으면 「아니오」로 확정된 문장의 지시가 「답한 질문이 다시 섰다」로 잘못 잡힌다(원장 10-21 ⑦ — 252 행이 이 꼴).
+    """
     sents = list(state.get("sentences", [])) + [
         x for b in state.get("branches", []) for x in b.sentences
     ]
+    if held:
+        sents = [x for x in sents if x.verdict is Verdict.hold]
     out: dict[tuple[str, str, str | None], None] = {}
     for x in sents:
         if x.fact_check is not None:
@@ -1465,6 +1497,9 @@ def answer_path(
 
     facts, substs = list(product.facts), list(product.substs)
     asked: set[tuple[str, str, str | None]] = set()
+    # 🆕 2026-10-21 (인계 10-21 클론A §2 · 답 경로의 알려진 한계) 이미 답한 질문이 **보류 문장에** 다시 서면 그래프 결함이다 — 종전에는 `asked` 로 걸러
+    #    다시 답하지도 않고 `left` 에도 세지 않아 **조용히 묻혔다**(D-220). 따로 세고 도달로 세지 않는다(`answer_report`)
+    reasked: set[tuple[str, str, str | None]] = set()
     st, rounds = first, 0
     for _ in range(ANSWER_ROUNDS):
         new = [q for q in _open_questions(st) if q not in asked]
@@ -1480,6 +1515,7 @@ def answer_path(
                 )
         st = runner(text, product.model_copy(update={"facts": facts, "substs": substs}))
         rounds += 1
+        reasked.update(q for q in _open_questions(st, held=True) if q in asked)
     p = predict(st)
     left = [q for q in _open_questions(st) if q not in asked]
     return {
@@ -1492,6 +1528,7 @@ def answer_path(
         "rounds": rounds,
         "asked": len(asked),
         "left": len(left),
+        "reasked": len(reasked),
         "contract_error": p.get("contract_error"),
     }
 

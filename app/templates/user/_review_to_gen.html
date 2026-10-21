@@ -1,0 +1,19 @@
+{#- 🆕 2026-10-20 (lse · 10-15 회의 §3) — 고쳐 쓸 수 없는 문장이면 「다 잘렸다」로 끝내지 않고 카피 생성으로 잇는다.
+    카피 생성 입력 화면을 품목 · 인증 · 「간단한 문구」(위반 구간을 뺀 나머지)로 미리 채워 연다(`POST /u/generate/from-review`).
+    ★ 생성은 이용자가 누른다 — 여기서 부르지 않는다. 🔴 POST — 문구를 URL 에 싣지 않는다 (P1-4) #}
+{% set gp = premise or category %}
+{% if review_to_gen_ok(gp) %}
+{% set rest = namespace(t="") %}
+{% if marks %}
+  {% for piece, on in marks %}{% if not on %}{% set rest.t = rest.t ~ piece %}{% endif %}{% endfor %}
+{% elif s.risk.evidence_span and s.risk.evidence_span.end > s.risk.evidence_span.start and s.risk.evidence_span.end <= s.text|length %}
+  {% set rest.t = s.text[:s.risk.evidence_span.start] ~ s.text[s.risk.evidence_span.end:] %}
+{% endif %}
+<form method="post" action="/u/generate/from-review" class="rv-to-gen">
+  <input type="hidden" name="premise" value="{{ gp }}">
+  <input type="hidden" name="text" value="{{ s.text }}">
+  <input type="hidden" name="rest" value="{{ rest.t }}">
+  <button type="submit" class="rv-btn">✨ 이 제품으로 새 카피 만들기 →</button>
+  <span class="rv-note">고쳐 쓸 수 없는 문장이에요 — 위반 표현을 뺀 제품 정보로 새 카피를 만들어 보세요.</span>
+</form>
+{% endif %}

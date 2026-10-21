@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import NamedTuple
 
 from app import factcheck
@@ -387,6 +387,41 @@ FIXED_STRONG = "이 문구는 인정 · 심사받은 문구로 보기 어려워�
 FIXED_WEAK = "AI 가 질병 · 의약품 관련 표현으로 추정했어요 — 「질병 발생 위험 감소」로 인정받은 문구라면 정상이에요. 인정서의 문구와 같은지 확인해 주세요."
 FIXED_UNCHECKED = "인정 · 심사 문구를 확인하지 못했어요(판정 엔진에 연결하지 못함) — 이 문구는 검수를 거치지 않았어요."
 
+#: 🆕 2026-10-15 (ksr · D-341 상태 줄 「약한 경고 문안 검토(화면 담당)」) — 약한 경고를 **공식 문구 대조와 섞어** 고른다.
+#:    `FIXED_WEAK` 는 늘 「질병 발생 위험 감소 인정 문구라면 정상」이라 말해, 「관절염을 치료합니다」 같은 치료 표현에도 정상일 수 있다고
+#:    안내했다. 대조가 답을 아는 경우는 그 답으로 고른다 —
+#:    · 공식 문구와 같음 → 약한 경고를 내지 않는다(인정 · 고시 문구임을 글자로 확인했다)
+#:    · 비슷함 · 목록에 없음 → 아래 문안(정상일 수 있다고 말하지 않는다)
+#:    · 화장품(대조 목록 없음) → 화장품 문안(「질병 발생 위험 감소」는 건강기능식품의 말이다)
+FIXED_WEAK_UNLISTED = "AI 가 질병 · 의약품 관련 표현으로 추정했고, 식약처 인정 · 고시 문구 목록에도 없는 문구예요 — 인정을 받아도 쓸 수 없는 표현일 수 있어요. 인정서의 문구와 같은지 확인해 주세요."
+FIXED_WEAK_COS = "AI 가 의약품 관련 표현으로 추정했어요 — 기능성화장품 심사를 받은 문구라면 정상일 수 있어요(심사 문구 목록이 아직 없어 대조하지는 못했어요). 심사서의 문구와 같은지 확인해 주세요."
+
+#: 🆕 2026-10-14 (ksr · D-341 결정 4) — 인정 · 심사 문구를 **공식 문구 목록과 글자로 대조**한 결과 (`app/claim_match.py`).
+#:    · 같음 — 고시형 · 개별인정형 문구 목록에 그대로 있다. `{src}` = 「인삼(고시형 2-1) · 대두이소플라본(고시형 2-10)」 — 원료 셋까지 · 나머지는 「외 N」
+#:      🚨 제품이 그 인정을 받았는지는 모른다 — 문장에 그대로 적는다. 다른 원료의 문구일 수 있어 원료 이름을 같이 보인다
+#:    · 비슷함 — 가장 가까운 공식 문구와 다른 점(`{why}`)과 그 문구 원문(`{official}`)을 보인다
+#:    · 목록에 없음 · 대조 못 함 — 「문제없음」으로 그리지 않는다 (D-220)
+MATCH_SAME = "적어 주신 문구는 식약처 인정 · 고시 문구와 같아요 — {src}의 문구예요. 제품이 실제로 이 인정을 받았는지는 확인하지 않았어요."
+MATCH_NEAR = "적어 주신 문구는 공식 문구와 달라요 — {why}. 공식 문구: 「{official}」 · {src}. 인정 문구는 저희가 고치지 않아서, 카피에는 적어 주신 문구가 그대로 들어가요."
+MATCH_NONE = "적어 주신 문구 「{piece}」를 식약처 인정 · 고시 문구 목록에서 찾지 못했어요. 인정서의 문구를 원문 그대로 적었는지 확인해 주세요."
+#: 원재료를 적었는데 그 문구의 원료가 하나도 없다 — 다른 원료의 인정 문구를 옮겨 왔을 수 있다 (10-14 측정 · 업체 표시 문구 22건)
+#: 🚨 「원료가 없다」고 단정하지 않는다 — 목록(개별인정형 447)에 없는 인정 원료일 수 있다
+MATCH_OTHER = "적어 주신 원재료({given})로는 이 문구의 원료를 목록에서 찾지 못했어요 — 목록에서 「{official}」은 {src}의 문구예요. 원료와 문구가 맞는지 확인해 주세요."
+MATCH_NO_LIST = (
+    "기능성화장품 심사 문구는 대조할 목록이 아직 없어 공식 문구와 같은지 확인하지 못했어요."
+)
+MATCH_NO_DATA = "인정 문구 목록을 불러오지 못해 공식 문구와 같은지 확인하지 못했어요."
+#: 다른 점 — 앞의 둘까지 「·」로 잇는다
+#: 🔄 10-15 — 주어를 「적어 주신 문구」로 분명히 했다. 「…로 바꿨어요」가 「저희가 고쳤다」로 읽혀, 후보에 원래 문구가 남은 것이
+#:    오류처럼 보였다(사용자 시나리오). 대조는 알리기만 하고 고치지 않는다 — 문장이 그렇게 말한다
+MATCH_WHY = {
+    "assertive": "공식 문구의 「줄 수 있음」이 단정하는 말로 바뀌어 있어요",
+    "emphasis": "공식 문구에 없는 강조하는 말이 붙어 있어요",
+    "narrowed": "공식 문구의 대상 · 조건이 빠져 있어요",
+    "added": "공식 문구에 없는 말이 붙어 있어요",
+    "changed": "글자가 공식 문구와 달라요",
+}
+
 #: 🆕 2026-10-15 (D-344 ⑤) — 광고 생성의 **필수 병기 문구**(카피 생성 · 후보 카드가 넘긴 `note`) 표지. 판정하지 않는다 —
 #:    병기 문구(「…의약품이 아닙니다」 · 「기능성 인정 건강기능식품에 한해」)는 사전 · 인코더에 걸리기 쉽고, 제품 자격의 자기 신고라
 #:    인정 · 심사 문구와 같은 성격이다(그 문구를 뺀 판정은 늘 「확인 필요」 · D-147). 숨은 칸이라 이용자가 바꿀 수 있다 — 막지 않고 밝힌다.
@@ -538,7 +573,10 @@ SUBST_TEXT: dict[str, SubstText] = {
 #:    ④(「객관적인 근거가 없는 내용으로 표시ㆍ광고하여 비방하거나 불리한 사실만을 표시ㆍ광고하여 비방」) · 식품표시광고법 시행령 [별표 1] 7.가
 #:    (「비교대상 및 비교기준이 명확하지 않거나 비교내용 및 비교방법이 적정하지 않은」) · 화장품법 시행규칙 [별표 5] 2.바(「비교 대상 및 기준을 분명히
 #:    밝히고 객관적으로 확인될 수 있는 사항만」) — 코퍼스 `law_005361` · `013453_annex_0001` · `008741_annex_0005`. 자료 종류는 §13 의 법 축 줄과 같다
-#:    ⛔ 식품 · 화장품 축의 비방은 칸 C 라 실증 줄이 없다(보충 6 결정 1 · 보충 10) — 표에 없으면 분기 없음(D-220)
+#:    ⛔ 식품 · 화장품 축의 비방 중 칸 C(타사 ∧ 부정 · `factcheck.slander_absolute`)는 실증 줄이 없다(보충 6 결정 1 · 보충 10) — 표에 없으면 분기 없음(D-220)
+#:    🔄 2026-10-21 (D-348 보충 40) 식품 축 비방 중 B 칸의 **최상급 · 순위 꼴**(고시 69549 제2조 4.나 · `factcheck.superlative_only`)에만 줄을 둔다 —
+#:       그 밖의 식품 축 비방(자사 우월 비교 꼴 · 표지 없음)은 줄 없음 · 조건은 `subst_branch` 가 문장 글자로 본다 · 화장품 축 B 칸 비방은 기록만(보충 40 결정 5)
+#:       `[문헌]` 코퍼스 `69549_20251204.xml` 제2조 4.나 · ✅ 2026-10-21 승인 — 오한빈(보충 40 결정 4)
 TYPE_SUBST_TEXT: dict[tuple[Violation, str], SubstText] = {
     (Violation.부당_비교광고, "표시광고법"): SubstText(
         "비교하는 표현은 비교 대상과 기준을 분명히 밝히고 객관적인 근거가 있어야 합니다(시행령 제3조③). "
@@ -561,6 +599,16 @@ TYPE_SUBST_TEXT: dict[tuple[Violation, str], SubstText] = {
         "그 내용을 실증할 수 있는 자료가 있다면 등급이 내려갈 수 있습니다. 불리한 사실만 골라 싣지 않았는지는 따로 묻습니다.",
         SUBST_TEXT["표시광고법"].evidence,
     ),
+    (Violation.비방광고, "식품표시광고법"): SubstText(
+        "자기 제품이 객관적 근거 없이 경쟁 업체의 것보다 우량하거나 유리하다는 표현(최초 · 최고 · 유일 · 1위 등)은 쓸 수 없습니다(고시 제2조 4.나). "
+        "그 표현을 실증할 수 있는 자료가 있고, 순위라면 조사 기관 · 대상 · 기간처럼 함께 밝혀야 할 사항을 같은 광고에 밝혔다면 등급이 내려갈 수 있습니다.",
+        SUBST_TEXT["식품표시광고법"].evidence,
+    ),
+}
+
+#: 🆕 2026-10-21 (D-348 보충 40 결정 1) 문장 글자로 줄을 거르는 (유형 · 법 축) — 조건을 지나야 줄이 선다 · 글자가 없으면 서지 않는다(D-220)
+TYPE_SUBST_GUARD: dict[tuple[Violation, str], Callable[[str | None], bool]] = {
+    (Violation.비방광고, "식품표시광고법"): factcheck.superlative_only,
 }
 
 #: 실증 분기를 붙이는 유형 → 실증했을 때의 상한 (D-337 결정 1).
@@ -575,11 +623,14 @@ SUBST_MAX: dict[Violation, Risk] = {
 }
 
 
-def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBranch | None:
+def subst_branch(
+    violations: list[Violation], basis_axes: set[str], text: str | None = None
+) -> SubstBranch | None:
     """확정된 실증형 위반의 실증 분기 — 붙일 수 없으면 None (그 문장은 지시가 서지 않고 보류로 남는다 · D-220).
 
     ★ 문장의 위반이 **전부** `SUBST_MAX` 의 유형이어야 한다 — 하나라도 다른 유형이면 그 유형이 실증으로 풀리는지 모른다.
     ★ 문안의 열쇠는 **인용 근거가 속한 법 축 하나**다. 둘 이상이면(두 법이 섞인 문장) 어느 줄인지 정하지 않는다 — None.
+    🆕 2026-10-21 (D-348 보충 40 결정 3) `text` — 문장 글자로 거르는 줄(`TYPE_SUBST_GUARD`)은 조건을 지나야 선다(식품 축 비방 = 최상급 · 순위 꼴만).
     """
     vs = set(violations)
     if not vs or not vs <= set(SUBST_MAX) or len(basis_axes) != 1:
@@ -587,16 +638,18 @@ def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBran
     axis = next(iter(basis_axes))
     # 🔄 2026-10-19 (보충 28 결정 2) 거짓 · 과장뿐이면 §13 줄 · 부당 비교 · 비방 하나면 그 유형의 줄(§18) · 섞이면 어느 줄인지 정하지 않는다
     if vs == {Violation.거짓_과장}:
-        text = SUBST_TEXT.get(axis)
+        line = SUBST_TEXT.get(axis)
     elif len(vs) == 1:
-        text = TYPE_SUBST_TEXT.get((next(iter(vs)), axis))
+        key = (next(iter(vs)), axis)
+        guard = TYPE_SUBST_GUARD.get(key)
+        line = TYPE_SUBST_TEXT.get(key) if guard is None or guard(text) else None
     else:
-        text = None
-    if text is None:
+        line = None
+    if line is None:
         return None
     top = max((SUBST_MAX[v] for v in vs), key=lambda r: r.level)
     return SubstBranch(
-        substantiated_max=top, accepted_evidence=list(text.evidence), criteria=text.criteria
+        substantiated_max=top, accepted_evidence=list(line.evidence), criteria=line.criteria
     )
 
 

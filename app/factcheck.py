@@ -263,15 +263,32 @@ def slander_absolute(text: str) -> bool:
 #:    고시 69549 제2조 4.나(객관적 근거 없이 우량 · 유리하다는 용어) · 보충 10 맥락의 자사 우월 비교 꼴(보다 · 대비 · 배) ·
 #:    `[관행]` 순위 · 넘버원 · 가장 · 독보 · 처음으로(같은 뜻의 다른 꼴) — dev 를 보며 고르지 않았다(D-175).
 #:    ⬜ 낱말 근사다 — 「처음 드시는 분」 같은 비주장도 걸린다(대가는 비교 기준 질문 하나)
-COMPARE_CUE = re.compile(
-    r"보다|대비|비해|비교(?!적)|\d\s?배|최고|최상|최초|최대|최다|최적|제일|유일|독보|가장|처음으로|넘버\s?원|no\.?\s?1|\d\s?위|1등(?!급)|일등|\bonly\b",
+#:    🔄 2026-10-21 (D-348 보충 40 결정 2) 두 갈래로 가른다 — 낱말은 그대로(새로 고르지 않는다 · D-175) · 합(`COMPARE_CUE`)은 종전과 같다
+#:       · `COMPARE_ONLY_CUE` — 자사 우월 비교 꼴(보다 · 대비 · 비해 · 비교 · 배 · 보충 10 맥락)
+#:       · `SUPERLATIVE_CUE` — 최상급 · 순위 꼴(고시 34717 Ⅲ.14.나 · 고시 69549 제2조 4.나 · `[관행]` 같은 뜻의 다른 꼴)
+COMPARE_ONLY_CUE = re.compile(r"보다|대비|비해|비교(?!적)|\d\s?배", re.IGNORECASE)
+SUPERLATIVE_CUE = re.compile(
+    r"최고|최상|최초|최대|최다|최적|제일|유일|독보|가장|처음으로|넘버\s?원|no\.?\s?1|\d\s?위|1등(?!급)|일등|\bonly\b",
     re.IGNORECASE,
 )
+COMPARE_CUE = re.compile(f"{COMPARE_ONLY_CUE.pattern}|{SUPERLATIVE_CUE.pattern}", re.IGNORECASE)
 
 
 def comparison_claim(text: str) -> bool:
     """비교 · 우월(최상급 · 순위 포함) 주장의 표지가 있는가 — 타사를 깎지 않는 비방 문장에 비교 기준을 물을지 가른다 (보충 11 · D-99 한 곳)."""
     return bool(COMPARE_CUE.search(text or ""))
+
+
+def superlative_only(text: str | None) -> bool:
+    """최상급 · 순위 꼴뿐인가 — 최상급 · 순위 표지 ∧ 비교 표지 없음 ∧ 타사 언급 없음 (🆕 2026-10-21 · D-348 보충 40 결정 1).
+
+    고시 69549 제2조 4.나(「객관적 근거없이 경쟁사업자의 것보다 우량 또는 유리하다는 용어」)의 꼴 — 식품 축 비방에 실증 줄을 두는 조건이다
+    (`app/reasons.py` `subst_branch`). 🔴 글자가 없으면 아니다(D-220) · 타사를 돌려 말하는 문장은 `COMPETITOR` 가 놓친다(보충 10 의 한계).
+    """
+    t = text or ""
+    return bool(
+        SUPERLATIVE_CUE.search(t) and not COMPARE_ONLY_CUE.search(t) and not COMPETITOR.search(t)
+    )
 
 
 #: 🆕 2026-10-17 (보충 7 결정 5 · 보충 12 · 무첨가 낱말 규칙) — 조건표(`NOFREE_CONDITIONS`)의 표현을 그대로 찾는다(D-99 — 표현 목록은 조건표 한 곳).

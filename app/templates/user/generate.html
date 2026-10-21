@@ -12,7 +12,7 @@
         숨은 칸의 값도 같이 넘어온다 → 어느 칸을 읽을지는 `app/routers/user.py` `_gen_picked()` 가 분기로 정한다.
      ★ 결과(위험도 × 보존율 프론티어 · 후보)는 그대로다. 탐색 실패 화면만 기획서 §5 의 선택지를 더했다.
 #}{% extends "user/_base.html" %}
-{% block title %}CopyLane — 카피 생성{% endblock %}
+{% block title %}카피 생성 | CopyLane{% endblock %}
 {% block screen_css %}
 <style>
 .gn-head { margin-bottom: 1.25rem; }
@@ -25,6 +25,10 @@
 }
 .gn-card > h2, .gn-cols > div > h2 { margin: 0 0 .6rem; font-size: .95rem; }
 .gn-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+/* 접어 두는 카드 — `.rv-dev` 와 같은 모양 */
+.gn-dev { padding: .7rem 1.15rem; border-style: dashed; }
+.gn-dev > summary { cursor: pointer; font-size: .75rem; color: var(--u-clay); }
+.gn-dev[open] > summary { margin-bottom: .7rem; }
 
 .gn-pick { display: flex; flex-wrap: wrap; gap: .45rem; margin: .2rem 0 1rem; }
 .gn-pick input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -78,6 +82,18 @@
 }
 .gn-notice { border: 1px solid var(--u-warn-line); background: var(--u-warn-bg); color: var(--u-warn-ink);
              border-radius: .75rem; padding: .6rem .8rem; font-size: .82rem; margin: 0 0 .9rem; }
+/* 공식 문구 대조 — 같으면 초록, 나머지는 위 경고 색 그대로 (D-341 결정 4) */
+.gn-regen { display: inline-flex; align-items: center; gap: .5rem; margin: .5rem .5rem 0 0; }
+.gn-regen button { white-space: nowrap; border: 0; border-radius: .6rem; padding: .4rem .85rem; font: inherit; font-size: .8rem; font-weight: 700;
+                   background: var(--u-signal); color: #fff; cursor: pointer; }
+.gn-regen button.gn-ghost { background: var(--u-surface); color: var(--u-signal-ink); border: 1px solid var(--u-signal-line, var(--u-line)); }
+.gn-regen-row { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; margin-top: .55rem; }
+.gn-regen-row .gn-regen { margin: 0; }
+.gn-regen-back { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
+.gn-regen-back .gn-regen { margin-top: 0; }
+.gn-changed { display: inline-block; margin-left: .3rem; padding: .05rem .5rem; border-radius: 999px; font-size: .7rem;
+              background: var(--u-signal); color: #fff; vertical-align: middle; }
+.gn-fixed-match_same { border-color: var(--u-ok-line); background: var(--u-ok-bg); color: var(--u-ok-ink); }
 .gn-errors { border: 1px solid var(--u-bad-line); background: var(--u-bad-bg); color: var(--u-bad-ink);
              border-radius: .75rem; padding: .6rem .8rem .6rem 1.6rem; font-size: .82rem; margin: 0 0 .9rem; }
 
@@ -116,6 +132,33 @@
 .gn-dot.c-r2 { fill: var(--u-warn-dot); }
 .gn-dot.c-r3, .gn-dot.c-r4 { fill: var(--u-bad-dot); }
 .gn-dotlabel { fill: var(--u-ink); font-size: 10px; text-anchor: middle; }
+/* 🆕 2026-10-21 (ksr) — 넓힌 띠 그래프(HTML 점 · 카드 폭을 다 쓴다) · 회색 점 말풍선.
+   점 자리는 라우터 `_gen_strip` 의 left(%) · up(px). 폭이 줄어도 점 · 글자 크기는 그대로다 */
+.gn-strip-box { position: relative; height: 9.2rem; margin: 0 1.1rem; }
+.gn-strip-axis { position: absolute; left: 0; right: 0; bottom: 3.4rem; border-top: 1px solid var(--u-line); }
+.gn-strip-end { position: absolute; right: 0; bottom: 3rem; height: 4.6rem; border-left: 1px solid var(--u-line); }
+.gn-strip-tick { position: absolute; bottom: .2rem; font-size: .76rem; color: var(--u-clay); }
+.gn-strip-tick.is-l { left: 0; transform: translateX(-30%); }
+.gn-strip-tick.is-r { right: 0; transform: translateX(30%); }
+.gn-pt { position: absolute; transform: translate(-50%, 50%); border-radius: 50%; padding: 0; margin: 0; }
+.gn-pt-pick { width: 1rem; height: 1rem; border: 2px solid var(--u-surface); z-index: 2; }
+.gn-pt-pick.c-r0, .gn-pt-pick.c-r1 { background: var(--u-ok-dot); }
+.gn-pt-pick.c-r2 { background: var(--u-warn-dot); }
+.gn-pt-pick > b { position: absolute; top: calc(100% + .3rem); left: 50%; transform: translateX(-50%);
+                  font-size: .85rem; color: var(--u-ink); }
+.gn-pt-gray { width: .7rem; height: .7rem; border: 0; background: var(--u-clay); opacity: .45; cursor: pointer;
+              transition: opacity .1s, box-shadow .1s; }
+.gn-pt-gray:hover, .gn-pt-gray:focus-visible { opacity: 1; background: var(--u-signal); outline: none; z-index: 4;
+              box-shadow: 0 0 0 4px color-mix(in srgb, var(--u-signal) 25%, transparent); }
+.gn-tip { position: absolute; bottom: calc(100% + .45rem); left: 50%; transform: translateX(-50%);
+          width: max-content; max-width: min(22rem, 60vw); padding: .45rem .65rem; border-radius: .55rem;
+          background: var(--u-ink); color: var(--u-surface); font-size: .82rem; line-height: 1.45; text-align: left;
+          font-weight: 500; white-space: normal; box-shadow: 0 8px 22px rgba(0,0,0,.18); pointer-events: none;
+          display: none; }
+.gn-pt-gray.is-r .gn-tip { left: auto; right: -.3rem; transform: none; }
+.gn-pt-gray.is-l .gn-tip { left: -.3rem; transform: none; }
+/* 숨긴 말풍선이 자리를 차지하면 좁은 화면에서 가로로 넘친다 — 보일 때만 그린다 */
+.gn-pt-gray:hover .gn-tip, .gn-pt-gray:focus-visible .gn-tip { display: block; }
 .gn-explain {
   border: 1px solid var(--u-line); border-radius: 1rem; padding: 1rem 1.1rem;
   background: var(--u-surface2); font-size: .85rem; line-height: 1.7;
@@ -188,9 +231,11 @@
 </style>
 {% endblock %}
 {% block user_content %}
-<div class="gn-head">
-  <h1>카피 생성</h1>
-  <p>품목과 인증 여부를 고르고 제품 내용을 적으면, <b>적어 주신 사실 안에서만</b> 카피를 만들어요.</p>
+{% from "user/_icons.html" import icon %}
+<div class="gn-head cl-page-heading cl-workspace-head">
+  <div><h1>{{ "카피 생성 결과" if live or result else "카피 생성" }}</h1>
+  <p>{{ "후보의 표현과 검수 내용을 비교한 뒤 광고에 사용할 문구를 선택하세요." if live or result else "제품 정보를 입력하면 광고 문구 후보를 만들어요." }}</p></div>
+  {#- 🔄 2026-10-20 (lse) — 제목 옆 「카피 생성하기」(같은 폼을 내는 지름길)는 뺐다 — 두 칸 배치로 아래 버튼이 첫 화면에 보인다 #}
 </div>
 
 {% if need_login %}
@@ -211,20 +256,39 @@
 </div>
 {% else %}
 
+<ol class="cl-flow cl-gen-flow" data-phase="{{ 'result' if live or result else 'input' }}"><li class="is-done"><b>{{ '✓' if live or result else '1' }}</b>제품 정보</li><li class="{{ 'is-current' if live or result else '' }}"><b>2</b>카피 선택</li><li><b>3</b>광고 만들기</li></ol>
 {% set p = picked or {} %}
-<form class="gn-card" id="gen-form" method="post" action="/u/generate" data-wait-form>
- <div class="gn-cols">
- <div>
-  <h2>품목</h2>
-  <div class="gn-pick">
+{% if live or result %}
+<div class="ws-product"><strong>{{ icon("cube", 29) }} 제품 정보</strong><div><b>{{ p.name or '제품명 미입력' }}</b> · {{ branch.label if branch else '품목 미선택' }}<p>{{ p.features|join(' · ') if p.features else (p.phrase or '제품 정보를 입력해주세요') }}</p></div><button type="button" data-edit-product>{{ icon("pencil", 17) }} 제품 정보 수정</button></div>
+{% endif %}
+<details class="ws-product-editor" id="product-editor" data-has-result="{{ '1' if live or result else '0' }}"{% if not (live or result) or errors %} open{% endif %}><summary>제품 정보 입력 · 수정</summary>
+<form class="cl-product-form" id="gen-form" method="post" action="/u/generate" data-wait-form>
+{#- 🆕 2026-10-20 (lse) — 검수에서 고쳐 쓸 수 없던 문장으로 들어왔다(`/u/generate/from-review`) #}
+{% if from_review %}<p class="gn-from-review" role="status">검수에서 고쳐 쓸 수 없던 문장이에요. 위반 표현을 뺀 내용으로 채워 두었어요 — 제품 정보를 확인하고 <b>카피 생성</b>을 눌러 주세요.</p>{% endif %}
+{% if errors %}<ul class="gn-errors" role="alert">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<section class="cl-product-section"><h2>제품 기본 정보</h2><p class="cl-section-description">제품명·종류·특징·한 줄 설명 중 하나 이상 입력해주세요.</p>
+<h3>제품 분류</h3>  <div class="gn-pick">
     {% for key, label in gen_categories %}
     <input type="radio" id="g-cat-{{ key }}" name="category" value="{{ key }}"
            {% if (p.category or gen_categories[0][0]) == key %}checked{% endif %}>
-    <label for="g-cat-{{ key }}">{{ label }}</label>
+    <label for="g-cat-{{ key }}">{{ icon({"food":"food","hf":"hf","cos":"cos"}[key], 26) }}<b>{{ label }}</b><span class="cl-radio-dot" aria-hidden="true"></span></label>
     {% endfor %}
-  </div>
-
-  <h2>인증 · 기능성 인정이 있나요?</h2>
+  </div><div class="cl-product-name-row"><div class="gn-field">
+      <label for="g-name">제품명</label>
+      <input type="text" id="g-name" name="name" maxlength="{{ gen_limits.name }}" value="{{ p.name or '' }}"
+             placeholder="예: 아침곡간 그래놀라">
+    </div><div class="gn-field">
+      <label for="g-kind">제품 종류</label>
+      <input type="text" id="g-kind" name="kind" maxlength="{{ gen_limits.kind }}" value="{{ p.kind or '' }}"
+             placeholder="예: 그래놀라">
+    </div></div><div class="gn-field">
+      <label for="g-features">제품 특징 <span class="gn-note">(쉼표로 구분)</span></label>
+      <textarea id="g-features" name="features" rows="2" maxlength="{{ gen_limits.list }}" placeholder="예: 바삭한 식감, 요거트에 바로">{{ (p.features or [])|join(', ') }}</textarea>
+    </div><div class="gn-field">
+    <label for="g-phrase">간단한 문구 <span class="gn-note">(제품을 한 줄로)</span></label>
+    <input type="text" id="g-phrase" name="phrase" maxlength="{{ gen_limits.phrase }}" value="{{ p.phrase or '' }}"
+           placeholder="예: 끈적임 없이 산뜻한 수분크림">
+  </div>  <h3>인증 · 기능성 인정이 있나요?</h3>
   <div class="gn-pick" style="margin-bottom:.4rem">
     <input type="radio" id="g-cert-no" name="cert" value="no" {% if p.cert != "yes" %}checked{% endif %}>
     <label for="g-cert-no">아니오</label>
@@ -239,103 +303,95 @@
 
   <p class="gn-notice gn-when w-hf-no">{{ gen_hf_no_notice }}</p>
 
-  {# 🆕 2026-10-08 — 대상 고객은 나이대 × 성별로 고른다(축은 둘까지 · K-익명). 건강 고민 · 증상은 축이 아니다 (D-27).
-     ⬜ 나이대별 특징 카드(추천)는 페르소나 관문(D-270) 뒤에 붙인다 — 지금은 수치 · 문구를 싣지 않는다 #}
-  <h2>대상 고객</h2>
-  <div class="gn-pick" style="margin-bottom:.5rem">
-    {% for key, label in gen_ages %}
-    <input type="radio" id="g-age-{{ key }}" name="age" value="{{ key }}"
-           {% if (p.age or gen_ages[0][0]) == key %}checked{% endif %}>
-    <label for="g-age-{{ key }}">{{ label }}</label>
-    {% endfor %}
-  </div>
-  <div class="gn-pick" style="margin-bottom:.5rem">
-    {% for key, label in gen_sexes %}
-    <input type="radio" id="g-sex-{{ key }}" name="sex" value="{{ key }}"
-           {% if (p.sex or gen_sexes[0][0]) == key %}checked{% endif %}>
-    <label for="g-sex-{{ key }}">{{ label }}</label>
-    {% endfor %}
-  </div>
-  <div class="gn-field" style="margin-bottom:1.1rem">
-    <label for="g-target" style="font-weight:400">메모 <span class="gn-note">(선택 · 더 알려 주고 싶은 것)</span></label>
-    <input type="text" id="g-target" name="target" maxlength="{{ gen_limits.target }}" value="{{ p.target or '' }}"
-           placeholder="예: 아침을 간단히 먹는 직장인">
-  </div>
- </div>
-
- <div>
-  {% if errors %}
-  <ul class="gn-errors">
-    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
-  </ul>
-  {% endif %}
-
-  <h2>제품 내용</h2>
-  <p class="gn-note" style="margin:0 0 .8rem">
-    🚨 여기 적힌 것이 <b>제품 사실의 전부</b>예요 — 적지 않은 수치 · 성분 · 인증은 카피에 나오지 않아요.
-    제품명 · 제품 종류 · 간단한 문구 · 특징 중 하나는 적어 주세요.
-  </p>
-  <div class="gn-row4">
-    <div class="gn-field">
-      <label for="g-name">제품명</label>
-      <input type="text" id="g-name" name="name" maxlength="{{ gen_limits.name }}" value="{{ p.name or '' }}"
-             placeholder="예: 아침곡간 그래놀라">
-    </div>
-    <div class="gn-field">
-      <label for="g-kind">제품 종류</label>
-      <input type="text" id="g-kind" name="kind" maxlength="{{ gen_limits.kind }}" value="{{ p.kind or '' }}"
-             placeholder="예: 그래놀라">
-    </div>
-    <div class="gn-field">
-      <label for="g-features">제품 특징 <span class="gn-note">(쉼표로 구분)</span></label>
-      <input type="text" id="g-features" name="features" maxlength="{{ gen_limits.list }}"
-             value="{{ (p.features or [])|join(', ') }}" placeholder="예: 바삭한 식감, 요거트에 바로">
-    </div>
-    <div class="gn-field">
+<div class="gn-field gn-when w-food-yes">
+    <label for="g-certs">인증 이름 <span class="gn-req">필수</span>
+      <span class="gn-note">(정확한 이름 · 한 줄에 하나)</span></label>
+    <textarea id="g-certs" name="certs" rows="2" placeholder="예: HACCP">{{ (p.certs or [])|join("\n") }}</textarea>
+  </div><div class="gn-field gn-when w-fixed">
+    <label for="g-fixed">인정 · 심사받은 기능성 문구 <span class="gn-req">필수</span>
+      <span class="gn-note">(원문 그대로)</span>
+      {%- if p.fixed_orig %} <span class="gn-changed">공식 문구로 바뀜</span>{% endif %}</label>
+    <textarea id="g-fixed" name="fixed" rows="2" maxlength="{{ gen_limits.fixed }}"
+              placeholder="예: 뼈 건강에 도움을 줄 수 있음">{{ p.fixed or '' }}</textarea>
+    <p class="gn-note" style="margin:.3rem 0 0">🔴 이 문구는 <b>글자 그대로</b> 끼워요 — 다듬거나 범위를 넓히지 않아요.</p>
+  </div></section>
+<section class="cl-product-section cl-product-optional"><h2>추가 정보 <span class="cl-optional">선택</span></h2><p class="cl-section-description">원재료와 대상 고객을 알려주시면 더 구체적인 문구를 만들 수 있어요.</p><div class="gn-field">
       <label for="g-ingredients">원재료 · 성분 <span class="gn-note">(쉼표로 구분)</span></label>
       <input type="text" id="g-ingredients" name="ingredients" maxlength="{{ gen_limits.list }}"
              value="{{ (p.ingredients or [])|join(', ') }}" placeholder="예: 통귀리, 아몬드">
     </div>
+  <section class="cl-audience-details cl-audience-open" aria-labelledby="g-audience-title">
+  <h3 id="g-audience-title">대상 고객 <span class="cl-optional">선택</span></h3>
+  <p class="gn-note">특정 대상이 없다면 연령대와 성별을 ‘전체’로 두세요.</p>
+  <fieldset><legend>연령대 <span>하나만 선택</span></legend><div class="gn-pick">
+    {% for key, label in gen_ages %}
+    <input type="radio" id="g-age-{{ key }}" name="age" value="{{ key }}"
+           {% if (p.age or gen_ages[0][0]) == key %}checked{% endif %}>
+    <label for="g-age-{{ key }}">{{ '전체' if key == 'all' else label }}</label>
+    {% endfor %}
+  </div></fieldset>
+  <fieldset><legend>성별 <span>하나만 선택</span></legend><div class="gn-pick">
+    {% for key, label in gen_sexes %}
+    <input type="radio" id="g-sex-{{ key }}" name="sex" value="{{ key }}"
+           {% if (p.sex or gen_sexes[0][0]) == key %}checked{% endif %}>
+    <label for="g-sex-{{ key }}">{{ '전체' if key == 'all' else label }}</label>
+    {% endfor %}
+  </div></fieldset>
+  </section><div class="gn-field" style="margin-bottom:1.1rem">
+    <label for="g-target" style="font-weight:400">메모 <span class="gn-note">(선택 · 더 알려 주고 싶은 것)</span></label>
+    <input type="text" id="g-target" name="target" maxlength="{{ gen_limits.target }}" value="{{ p.target or '' }}"
+           placeholder="예: 아침을 간단히 먹는 직장인">
   </div>
-  <div class="gn-field">
-    <label for="g-phrase">간단한 문구 <span class="gn-note">(제품을 한 줄로)</span></label>
-    <input type="text" id="g-phrase" name="phrase" maxlength="{{ gen_limits.phrase }}" value="{{ p.phrase or '' }}"
-           placeholder="예: 끈적임 없이 산뜻한 수분크림">
-  </div>
-
-  <div class="gn-field gn-when w-food-yes">
-    <label for="g-certs">인증 이름 <span class="gn-req">필수</span>
-      <span class="gn-note">(정확한 이름 · 한 줄에 하나)</span></label>
-    <textarea id="g-certs" name="certs" rows="2" placeholder="예: HACCP">{{ (p.certs or [])|join("\n") }}</textarea>
-  </div>
-  <div class="gn-field gn-when w-fixed">
-    <label for="g-fixed">인정 · 심사받은 기능성 문구 <span class="gn-req">필수</span>
-      <span class="gn-note">(원문 그대로)</span></label>
-    <textarea id="g-fixed" name="fixed" rows="2" maxlength="{{ gen_limits.fixed }}"
-              placeholder="예: 뼈 건강에 도움을 줄 수 있음">{{ p.fixed or '' }}</textarea>
-    <p class="gn-note" style="margin:.3rem 0 0">🔴 이 문구는 <b>글자 그대로</b> 끼워요 — 다듬거나 범위를 넓히지 않아요.</p>
-  </div>
-
-  {% if gen_external %}
+</section>
+<div class="cl-product-submit">  {% if gen_external %}
   {# 🆕 2026-10-13 — 생성 엔진(GPT)이 켜진 환경에서만 적는다. 무엇이 밖으로 나가는지 누르기 전에 알린다 #}
-  <p class="gn-note" style="margin:.2rem 0 .6rem">
-    🔴 위에 적은 <b>제품 정보</b>(제품명 · 종류 · 문구 · 특징 · 원료 · 인증 이름 · 대상)는 문구를 쓰기 위해 <b>외부 생성 모델(OpenAI)</b>로 보내요.
-    인정 · 심사받은 기능성 문구는 보내지 않고 우리 코드가 글자 그대로 끼워요. 만들어진 문구는 우리 검수 엔진(사전 · 조문 검색 · 판정 인코더) 전체를 지나야 후보로 나와요.
-    후보가 나오기까지 <b>30초~1분</b>쯤 걸려요.
-  </p>
+  <details class="cl-data-info"><summary>제품 정보가 OpenAI로 전송돼요 · 생성에 약 30초~1분</summary><p class="gn-note">제품명·종류·문구·특징·원료·인증 이름·대상을 외부 생성 모델(OpenAI)로 보내요. 인정·심사받은 기능성 문구는 전송하지 않고 원문 그대로 사용해요. 생성한 후보는 사전·조문 검색·판정 인코더 검수를 거쳐 표시돼요.</p></details>
   {% endif %}
-  <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
-  <button class="gn-submit" type="submit">이 내용으로 카피 생성</button>
- </div>
- </div>
-</form>
+  {% include "user/_gen_wait.html" %}
+  <button class="gn-submit" type="submit">{{ icon('spark', 17) }} 이 내용으로 카피 생성</button>
+</div></form>
+</details>
 
 {# 🆕 2026-10-14 (D-341 결정 1) — 인정 · 심사 문구를 따로 판정한 경고. 후보를 떨구지 않는다 · 문안은 `app/reasons.py` (FIXED_*) #}
+{# 🆕 2026-10-15 (ksr) — 「공식 문구로 다시 만들기」 · 「처음 적은 문구로 되돌리기」. 입력 전부를 숨김 칸으로 다시 보낸다(「더 탐색하기」와 같다)
+   — 인정 문구 칸만 바꾼다. 이용자가 누를 때만 다시 만든다(자동으로 바꾸지 않는다 — 가장 가까운 문구가 그 제품의 인정 문구라는 보장이 없다) #}
+{% macro regen(pk, fixed, orig, label, cls="") %}
+<form class="gn-regen" method="post" action="/u/generate" data-wait-form>
+  <input type="hidden" name="category" value="{{ pk.category }}">
+  <input type="hidden" name="cert" value="{{ pk.cert }}">
+  <input type="hidden" name="age" value="{{ pk.age }}">
+  <input type="hidden" name="sex" value="{{ pk.sex }}">
+  {% for k in ("target", "name", "kind", "phrase") %}
+  <input type="hidden" name="{{ k }}" value="{{ pk[k] }}">
+  {% endfor %}
+  {% for k in ("features", "ingredients", "certs") %}
+  <input type="hidden" name="{{ k }}" value="{{ pk[k]|join(',') }}">
+  {% endfor %}
+  <input type="hidden" name="fixed" value="{{ fixed }}">
+  {% if orig %}<input type="hidden" name="fixed_orig" value="{{ orig }}">{% endif %}
+  <button type="submit" class="{{ cls }}">{{ label }}</button>
+  <span class="gn-note cl-waitline" data-wait hidden role="status">다시 만드는 중이에요 · 30초쯤</span>
+  {% include "user/_gen_wait.html" %}
+</form>
+{% endmacro %}
 {% if fixed_notes %}
 <div class="gn-card">
   {% for n in fixed_notes %}
-  <p class="gn-notice gn-fixed-{{ n.level }}">{{ n.text }}</p>
+  <div class="gn-notice gn-fixed-{{ n.level }}">{{ n.text }}
+    {% if n.official and picked %}
+    <div class="gn-regen-row">
+      {{ regen(picked, n.official, picked.fixed_orig or picked.fixed, "공식 문구로 다시 만들기") }}
+      <span class="gn-note">인정 문구 칸을 「{{ n.official }}」로 바꿔 후보를 새로 만들어요 · 30초쯤</span>
+    </div>
+    {% endif %}
+  </div>
   {% endfor %}
+  {% if picked and picked.fixed_orig %}
+  <div class="gn-regen-back">
+    <span class="gn-note">인정 문구를 공식 문구로 바꿔 만들었어요 — 처음 적은 문구: 「{{ picked.fixed_orig }}」</span>
+    {{ regen(picked, picked.fixed_orig, "", "처음 적은 문구로 되돌리기", "gn-ghost") }}
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -345,13 +401,14 @@
   <p class="gn-pending">
     {% if engine_failed %}문구를 만들다 실패했어요. 잠시 뒤 다시 눌러 주세요.
     {% else %}{{ engine_why or "카피 생성 엔진이 준비되지 않았어요." }}{% endif %}
-    <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
-    받은 입력 — 분기 <b>{{ branch.label }}</b> · 판정 전제 <b>{{ branch.premise.value }}</b>
+    {#- 🔄 2026-10-20 (lse · psj 화면 병합) — 「가짜 결과를 만들지 않아요」는 남긴다(내부 번호만 뺌 · D-147 · `test_copygen`) #}
+    <b>가짜 결과를 만들지 않아요.</b> 입력한 제품 정보는 유지돼요. 잠시 뒤 다시 시도해주세요.<br>
+    제품 분류 — <b>{{ branch.label }}</b> · 생성 기준 <b>{{ branch.premise.value }}</b>
     {%- if picked.name %} · 제품 <b>{{ picked.name }}</b>{% endif %}
  · 대상 <b>{{ picked.audience }}</b>
     {%- if picked.target %} ({{ picked.target }}){% endif %}<br>
     {% if branch.notice %}{{ branch.notice }}<br>{% endif %}
-    지금은 아래 골든 픽스처로 결과 화면의 모든 분기를 볼 수 있어요.
+    제품 정보 수정에서 입력한 내용을 확인할 수 있어요.
   </p>
 </div>
 {% endif %}
@@ -368,9 +425,13 @@
   {% if live.notice %}<p class="gn-note">{{ live.notice }}</p>{% endif %}
   {% if live.picked %}
   <div class="gn-cands">
+    {#- 🔄 2026-10-20 (lse · 멘토 피드백) — 화면 이름은 A안 · B안 · C안 + 성격 한 마디. 엔진 · 계약의 이름(보수안 · 균형안 · 공격안 · D-34)은 그대로 #}
+    {% set TIER = {"보수안": ("A안", "🛡️"), "균형안": ("B안", "⚖️"), "공격안": ("C안", "🔥")} %}
     {% for c in live.picked %}
-    <div class="gn-cand">
-      <h3>{{ c.tier or "후보" }}</h3>
+    {% set tv = TIER.get(c.tier) %}
+    {#- 🔄 2026-10-20 (lse) — 이모티콘은 알약 안으로(「🛡️ A안」 · `workspace.js` 가 `data-name` 을 알약에 쓴다). 제목은 화면 읽기용으로만 #}
+    <article class="gn-cand"{% if tv %} data-name="{{ tv[1] }} {{ tv[0] }}"{% endif %}>
+      <h3{% if tv %} class="sr-only"{% endif %}>{{ (tv[1] ~ " " ~ tv[0]) if tv else (c.tier or "후보") }}</h3>
       <p>{{ c.text }}</p>
       {% if c.angle %}<p class="gn-meta">각도 · {{ c.angle }}</p>{% endif %}
       {# 🔄 2026-10-13 (권소라) — 문턱 수치 칩(문턱의 N% · 유형 확률)은 카드에서 뺐다. 이용자가 읽을 수 없는 값이다.
@@ -386,7 +447,7 @@
         {% if picked.fixed %}<input type="hidden" name="fixed" value="{{ picked.fixed }}">{% endif %}
         <button class="gn-next" type="submit">AI 광고 생성 →</button>
       </form>
-    </div>
+    </article>
     {% endfor %}
   </div>
   {% endif %}
@@ -410,9 +471,10 @@
     {% for k in ("features", "ingredients", "certs") %}
     <input type="hidden" name="{{ k }}" value="{{ picked[k]|join(',') }}">
     {% endfor %}
+    {% if picked.fixed_orig %}<input type="hidden" name="fixed_orig" value="{{ picked.fixed_orig }}">{% endif %}
     <input type="hidden" name="more" value="{{ more + 1 }}">
     {% for s in more_shown %}<input type="hidden" name="shown" value="{{ s }}">{% endfor %}
-    <p class="gn-wait" data-wait hidden role="status"><i>·</i><i>·</i><i>·</i><i>·</i> 문구 생성 중입니다</p>
+    {% include "user/_gen_wait.html" %}
     <button type="submit">다른 문구 더 탐색하기 ({{ more + 1 }}/{{ more_max }})</button>
     <span class="gn-note">지금까지 보여 드린 문구는 빼고 만들어요.</span>
   </form>
@@ -424,31 +486,34 @@
   {# 🆕 2026-10-13 — 픽스처의 프론티어 그림 자리. 세로축(소구력 보존)은 잴 수 없어 한 축만 그린다 · `<details>` 라 스크립트 없이 열린다 #}
   <details class="gn-fold" style="margin-top:.8rem">
   <summary>통과한 후보 {{ live.kept|length }}개가 안전 ↔ 주의 어디쯤인지 보기</summary>
-  <div class="gn-plot" style="max-width:26rem">
-    {# 🔄 2026-10-13 (권소라) — 축 이름을 「멀다 ↔ 문턱」에서 「안전 ↔ 주의」로. 값은 같다(`Kept.closeness`) #}
-    <svg viewBox="0 0 340 78" role="img" aria-label="통과한 후보를 안전에서 주의 쪽으로 늘어놓은 그림">
-      <line class="gn-axis" x1="24" y1="46" x2="316" y2="46"/>
-      <line class="gn-axis" x1="316" y1="20" x2="316" y2="52"/>
-      <text class="gn-tick" x="24" y="72">안전</text>
-      <text class="gn-tick" x="316" y="72" text-anchor="end">주의</text>
+  <div class="gn-plot gn-strip">
+    {# 🔄 2026-10-13 (권소라) — 축 이름을 「멀다 ↔ 문턱」에서 「안전 ↔ 주의」로. 값은 같다(`Kept.closeness`)
+       🔄 2026-10-21 (ksr) — SVG(폭 26rem) → HTML 점으로 카드 폭을 다 쓴다. 회색 점은 단추라 마우스를 올리거나
+          탭 · Tab 으로 고르면 후보 문구가 말풍선으로 보인다 — 스크립트 없음 #}
+    <div class="gn-strip-box" role="group" aria-label="통과한 후보를 안전에서 주의 쪽으로 늘어놓은 그림">
+      <span class="gn-strip-axis"></span><span class="gn-strip-end"></span>
+      <span class="gn-strip-tick is-l">안전</span><span class="gn-strip-tick is-r">주의</span>
       {% for p in live_strip %}
       {% if p.tier %}
-      <circle class="gn-dot c-{{ 'r0' if p.tier == '보수안' else ('r2' if p.tier == '공격안' else 'r1') }}" cx="{{ p.cx }}" cy="{{ p.cy }}" r="6"/>
-      <text class="gn-dotlabel" x="{{ p.cx }}" y="{{ p.cy + 17 }}">{{ p.tier[:2] }}</text>
+      <span class="gn-pt gn-pt-pick c-{{ 'r0' if p.tier == '보수안' else ('r2' if p.tier == '공격안' else 'r1') }}"
+            style="left:{{ p.left }}%;bottom:3.4rem"><b>{{ {"보수안": "A", "균형안": "B", "공격안": "C"}.get(p.tier, p.tier[:2]) }}</b></span>
       {% else %}
-      <circle cx="{{ p.cx }}" cy="{{ p.cy }}" r="3" fill="var(--u-clay)" opacity=".55"/>
+      <button type="button" class="gn-pt gn-pt-gray{{ ' is-r' if p.left > 70 else (' is-l' if p.left < 30 else '') }}"
+              style="left:{{ p.left }}%;bottom:calc(3.4rem + {{ p.up }}px)" aria-label="고르지 않은 통과 후보: {{ p.text }}">
+        <span class="gn-tip" role="tooltip">{{ p.text }}</span>
+      </button>
       {% endif %}
       {% endfor %}
-    </svg>
+    </div>
     <p class="gn-note" style="margin:.3rem 0 0">
       오른쪽으로 갈수록 판정 인코더가 위반 유형에 가깝다고 본 문구예요. 오른쪽 끝을 넘은 문구는 탈락이라 여기 없어요.
-      작은 점은 고르지 않은 통과 후보예요. <b>위험도 등급도, 소구력도 아니에요</b> — 소구력은 재지 않아요.
+      작은 회색 점은 고르지 않은 통과 후보예요 — 마우스를 올리면 문구가 보여요. <b>위험도 등급도, 소구력도 아니에요</b> — 소구력은 재지 않아요.
     </p>
   </div>
   </details>
   {% endif %}
   <p class="gn-note" style="margin-top:.7rem">
-    {% if live.status == "ok" %}★ <b>보수안</b>은 통과한 후보 중 판정 인코더가 위반 유형과 가장 멀다고 본 것, <b>공격안</b>은 가장 가깝다고 본 쪽, <b>균형안</b>은 그 사이에서 골라요. 셋은 각도와 글자가 덜 겹치는 것을 앞세워요.<br>{% endif %}
+    {% if live.status == "ok" %}★ <b>🛡️ A안</b>은 통과한 후보 중 판정 인코더가 위반 유형과 가장 멀다고 본 것, <b>🔥 C안</b>은 가장 가깝다고 본 쪽, <b>⚖️ B안</b>은 그 사이에서 골라요. 셋은 각도와 글자가 덜 겹치는 것을 앞세워요.<br>{% endif %}
     🚨 <b>「위반 후보를 못 찾았다」는 적법하다는 뜻이 아니에요.</b> 검수 엔진의 사전과 판정 인코더가 아는 표현 · 유형만 봐요. 「AI 광고 생성」으로 넘기면 검수 엔진이 한 번 더 봐요.<br>
     {% for r in live.rounds %}라운드 {{ loop.index }} — 만든 것 {{ r.generated or 0 }} · 남긴 것 {{ r.kept or 0 }}{% if not loop.last %} &nbsp;/&nbsp; {% endif %}{% endfor %}
     {% if live_reasons %}<br>걸러진 까닭 — {% for label, n in live_reasons %}{{ label }} {{ n }}건{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}
@@ -457,7 +522,7 @@
 {% endif %}
 
 {% if result %}
-<div class="gn-card">
+<div class="gn-card cl-fixture-summary">
   <h2>생성된 카피 {{ result.candidates|length }}종{% if fixture_name %} <span class="gn-note">— {{ fixture_name }}</span>{% endif %}</h2>
 
   {% if points %}
@@ -525,10 +590,10 @@
 
 {% if result.candidates %}
 <div class="gn-card gn-candbox">
-  <h2>후보</h2>
+  <h2>생성된 카피 <span class="gn-note">{{ result.candidates|length }}개 후보</span></h2>
   <div class="gn-cands">
     {% for c in result.candidates %}
-    <div class="gn-cand">
+    <article class="gn-cand">
       <h3>{{ c.label }}</h3>
       <p>{{ c.rewrite.body }}</p>
       {% if c.rewrite.mandatory_note %}<p class="gn-meta">필수 병기 · {{ c.rewrite.mandatory_note }}</p>{% endif %}
@@ -544,7 +609,7 @@
         <input type="hidden" name="note" value="{{ c.rewrite.mandatory_note or '' }}">
         <button class="gn-next" type="submit">AI 광고 생성 →</button>
       </form>
-    </div>
+    </article>
     {% endfor %}
   </div>
 </div>
@@ -605,18 +670,24 @@
 {% endif %}
 {% endif %}
 
-<div class="gn-card">
-  <h2>골든 픽스처로 분기 보기</h2>
+{# 🔄 2026-10-14 — 이용자가 읽을 것이 아니라 접어 둔다(검수 화면과 같다). 지우지 않는다 — 화면 분기를 확인하는 길이다 (D-124) #}
+<details class="gn-card gn-dev">
+  <summary>개발자 정보 — 골든 픽스처로 분기 보기</summary>
   <p class="gn-note">
-    ⛔ 엔진이 없어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).
+    {# 🔄 2026-10-14 — 생성 엔진이 켜져 있으면 「엔진이 없어서」가 틀린 말이다(시나리오 테스트 10-14). 켜짐 여부는 `gen_external` #}
+    {% if gen_external %}
+    아래는 실제 생성 결과가 아니라 <b>예시 응답(골든 픽스처)</b>으로 화면의 분기를 확인하는 곳이에요 (D-124).
+    {% else %}
+    ⛔ 생성 엔진이 꺼져 있어서 화면은 <b>픽스처로 모든 분기를 그려요</b> (D-124).
+    {% endif %}
   </p>
   <ul class="gn-fixtures">
   {% for name in fixtures %}
     <li><a href="/u/generate/preview/{{ name }}">{{ name }}</a></li>
   {% endfor %}
   </ul>
-</div>
+</details>
 {# 🆕 2026-10-13 — 생성 중 표시. 안 돌아도 생성은 된다 #}
-<script src="/static/user_wait.js" defer></script>
+<script src="/static/user_wait.js?v=3" defer></script>
 {% endif %}
 {% endblock %}

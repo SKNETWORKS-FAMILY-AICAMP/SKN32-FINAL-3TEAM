@@ -301,6 +301,24 @@ def test_종전_칸으로_들어온_실증_답은_목록으로_옮긴다() -> No
         )
 
 
+def test_계산_칸을_model_copy_로_바꾸려_하면_거부한다() -> None:
+    """🆕 2026-10-21 (인계 10-21 클론A §2) — pydantic 은 `update` 의 계산 칸 이름을 조용히 버린다 · 막지 않으면 답이 그대로 남는다(D-220)."""
+    one = UserSubst(text=GEN, answer=Answer.예)
+    s = SentenceJudgment(
+        sent_id="s0",
+        text=GEN,
+        verdict=Verdict.confirmed,
+        risk=RiskAssessment(floor=Risk.R0, final=Risk.R0),
+        user_substs=[one],
+    )
+    other = UserSubst(text=GEN, answer=Answer.아니오)
+    with pytest.raises(ValueError, match="계산 칸"):
+        s.model_copy(update={"user_subst": other})
+    moved = s.model_copy(update={"user_substs": [other]})
+    assert moved.user_substs == [other] and moved.user_subst == other, "정본 칸으로는 바뀐다"
+    assert s.model_copy(update={"text": GEN}).user_substs == [one], "다른 칸의 복사는 그대로"
+
+
 def test_유형_하나를_주면_종전대로_근거_유형이_그_하나일_때만() -> None:
     s = _general()
     span = Span(start=0, end=len(GEN))

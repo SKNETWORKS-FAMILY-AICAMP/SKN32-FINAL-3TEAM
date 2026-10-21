@@ -1,0 +1,98 @@
+/* One content frame and a centered menu replace the former sidebar layout.
+   Reset the old main-only zoom so widths and auto margins use the same scale. */
+.user-shell {
+  --user-content-width:1440px;
+  --user-nav-bg:linear-gradient(110deg,#f5f1fc 0%,#fcfafc 52%,#fcf1f6 100%);
+}
+.user-shell[data-theme=dark] {
+  --user-nav-bg:linear-gradient(110deg,#292331 0%,#242127 52%,#30232c 100%);
+}
+@media(prefers-color-scheme:dark) {
+  .user-shell:not([data-theme=light]) {
+    --user-nav-bg:linear-gradient(110deg,#292331 0%,#242127 52%,#30232c 100%);
+  }
+}
+.user-shell>.user-topnav {
+  display:grid; grid-template-columns:minmax(0,1fr) max-content minmax(0,1fr);
+  height:64px; min-height:64px; flex-basis:64px;
+  flex-wrap:nowrap; gap:18px; margin:0;
+  padding:0 max(28px,calc((100% - var(--user-content-width))/2 + 28px));
+  background:var(--user-nav-bg); border-bottom:1px solid var(--u-line);
+}
+.user-topnav .user-topnav-brand { min-width:0; margin:0; justify-self:start; flex-shrink:0; }
+.cl-user-navigation { display:flex; justify-content:center; align-items:stretch; align-self:stretch; min-width:0; gap:30px; }
+.cl-user-account { display:flex; justify-content:flex-end; align-items:center; justify-self:end; gap:12px; min-width:0; height:100%; }
+.cl-user-nav-link,.cl-user-help>summary {
+  position:relative; display:flex; align-items:center; gap:8px;
+  padding:0 12px; min-height:44px; margin:0; border-radius:0;
+  color:var(--u-clay); font-size:16px; font-weight:500;
+  text-decoration:none; white-space:nowrap; cursor:pointer; list-style:none;
+}
+.cl-user-nav-link {
+  flex:0 0 96px; width:96px; box-sizing:border-box;
+  justify-content:center; padding-inline:10px;
+}
+.cl-user-help>summary::-webkit-details-marker { display:none; }
+.cl-user-nav-link:hover,.cl-user-help>summary:hover { color:var(--u-ink); background:color-mix(in srgb,var(--u-signal-soft) 50%,transparent); }
+.cl-user-nav-link[aria-current=page],.cl-user-help[data-current]>summary { color:var(--u-signal-ink); font-weight:650; }
+.cl-user-nav-link[aria-current=page]::after,.cl-user-help[data-current]>summary::after {
+  content:""; position:absolute; bottom:0; left:12px; right:12px; height:3px; border-radius:3px 3px 0 0; background:var(--ws-gradient);
+}
+.cl-user-help { position:relative; display:flex; align-self:stretch; margin:0; padding:0; border:0; background:none; }
+.cl-user-help>summary { height:100%; box-sizing:border-box; }
+.cl-user-help-caret { display:block; flex:0 0 16px; align-self:center; }
+.cl-user-help-menu {
+  position:absolute; z-index:35; top:calc(100% + 6px); right:0;
+  width:210px; padding:8px; box-sizing:border-box;
+  background:var(--u-surface); border:1px solid var(--u-line); border-radius:10px;
+  box-shadow:0 10px 28px rgb(57 32 79 / 10%);
+}
+.cl-user-help-menu a { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:7px; color:var(--u-ink); text-decoration:none; font-size:16px; }
+.cl-user-help-menu a:hover,.cl-user-help-menu a[aria-current=page] { background:var(--u-signal-soft); color:var(--u-signal-ink); }
+.cl-user-help-dot { width:6px; height:6px; border-radius:50%; background:var(--u-signal); flex-shrink:0; }
+.cl-user-menu-toggle { display:none; }
+.user-topnav :is(.cl-user-nav-link,.cl-user-help summary,.cl-user-help-menu a,.cl-user-menu-toggle):focus-visible { outline:2px solid var(--u-signal); outline-offset:-3px; }
+.user-shell .user-body { width:100%; justify-content:center; margin:0; }
+.user-shell .user-main,.user-shell .user-main.cl-workspace-screen {
+  flex:0 1 var(--user-content-width); width:100%; min-width:0; max-width:var(--user-content-width);
+  margin:0 auto; box-sizing:border-box; padding:28px; zoom:1;
+}
+/* Preserve the review workbench's independent scrolling and viewport height. */
+@media(min-width:1251px) {
+  .user-shell:has(.rv-results-pane)>.user-topnav { height:64px; min-height:64px; flex-basis:64px; }
+}
+@media(min-width:1251px) and (max-width:1439px) {
+  .cl-user-navigation { gap:0; }
+}
+@media(max-width:1250px) {
+  .user-shell>.user-topnav { display:flex; height:auto; min-height:64px; flex-basis:auto; flex-wrap:wrap; padding:12px 24px; gap:10px; }
+  .user-shell:has(.rv-results-pane)>.user-topnav { height:auto; flex-basis:auto; flex-shrink:0; }
+  .user-topnav .user-topnav-brand { margin-right:auto; }
+  .cl-user-menu-toggle:not([hidden]) { display:inline-flex; align-items:center; gap:8px; margin:0; padding:8px 12px; font:inherit; font-size:16px; color:var(--u-ink); background:var(--u-surface); border:1px solid var(--u-line); border-radius:7px; cursor:pointer; }
+  .cl-user-navigation { order:10; width:100%; flex-basis:100%; flex-wrap:wrap; gap:4px; padding-top:8px; border-top:1px solid var(--u-line); }
+  .cl-user-nav-ready .cl-user-navigation:not(.is-expanded) { display:none; }
+  .cl-user-account { height:auto; }
+  .cl-user-help { margin-left:0; }
+  .cl-user-help>summary { min-height:44px; }
+  .user-shell .user-main,.user-shell .user-main.cl-workspace-screen { padding:24px; }
+}
+@media(max-width:600px) {
+  .user-shell>.user-topnav { padding:10px 16px; gap:6px; }
+  .user-topnav .user-topnav-brand { font-size:16px; gap:6px; }
+  .user-topnav .user-topnav-brand img { width:25px; height:25px; }
+  .cl-user-account { order:2; width:100%; justify-content:flex-end; }
+  .cl-user-account .cl-user-help { margin-right:auto; }
+  .user-shell .user-topnav-me { padding:3px; gap:0; }
+  .user-topnav .user-topnav-name,.user-topnav .user-topnav-caret { display:none; }
+  .cl-user-navigation { flex-direction:column; align-items:stretch; }
+  .cl-user-nav-link { flex-basis:auto; width:100%; border-radius:7px; }
+  .cl-user-nav-link[aria-current=page] { background:var(--u-signal-soft); }
+  .cl-user-nav-link[aria-current=page]::after { left:0; top:10px; bottom:10px; height:auto; width:3px; }
+  .cl-user-help { display:block; margin:0; }
+  .cl-user-help-menu { right:auto; left:0; }
+  .user-shell .user-main,.user-shell .user-main.cl-workspace-screen { padding:20px 16px; }
+  .user-shell .nt-panel { position:fixed; top:74px; right:12px; width:min(26rem,calc(100vw - 24px)); }
+}
+@media(max-width:767px) {
+  .user-shell .user-body { display:block; }
+}

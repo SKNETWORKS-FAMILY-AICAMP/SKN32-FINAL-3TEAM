@@ -1,100 +1,43 @@
-"""app/routers/admin_terms.py — 문서관리(약관 관리) 화면 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+"""관리자 약관 관리는 닫힘 안내만 제공한다. 사용자 약관·동의 흐름은 유지한다.
 
-★ `admin.py` 와 파일을 가른다 (D-208 · admin_review_docs.py 와 같은 패턴). 붙이는 자리는
-   `app/routers/__init__.py` 한 줄 — `admin_router` 아래에 매단다.
-
-✅ **읽기 전용이다.** "새 버전 등록" 버튼은 자리만 잡은 뼈대다 — action 없음. "이력" 도
-   같은 상세 페이지 안에 읽기 전용으로 둔다(목업은 모달, 여기는 별도 페이지).
-✅ `require_governor` 를 지나야 뜬다 — `admin.py` 와 같은 함수를 쓴다 (D-99 · 두 벌 금지).
-
-🔴 **이 화면은 아직 DB 를 읽지 않는다 — 더미로만 그린다.** 🔄 약관 버전 표 `terms` 는 생겼다
-   (alembic `0017_ops_tables` · `app/models.py` `Terms` · D-260 ①). 가입 화면(`app/routers/user.py`)은
-   그 표에서 현행 버전을 읽는데, 이 관리자 화면은 아직 옮기지 않았다. 새 버전을 쓰는 경로도 없다.
-   ⬜ DB 조회로 바꿀 때는 admin_errors.py 패턴(읽었다 · 표가 없다 · 못 붙었다를 가른다)을 따른다.
-
-🚨 목업(`app/static/mockup.html`)의 `terms` 뷰(10650번 줄대) 하드코딩 배열 구조를
-   그대로 따른다. 이전 버전 이력은 목업에서도 `showTermsHistory()` 모달에 하드코딩된
-   예시 1건뿐이라 여기서도 상세 화면에 그 정도로만 둔다.
+🔄 2026-10-21 (psj) — 관리자 약관 쓰기 범위 · 운영 절차가 승인 대기라 닫는다. `terms` 표(0017)와 가입 화면의 동의 버전 읽기는 그대로.
+⚠️ D-260 ① 은 이 화면을 연다고 했다 — 닫음은 그 결정의 되돌림이라 팀장 확인 대상이다.
+⚠️ 라벨 「관리 기능 비활성」은 D-107 조건 5 의 다섯 라벨 밖이다(예외) — 「승인 대기」 라벨을 더할지 팀장 확인.
+⬜ 다시 열 때 — 목록 · 상세 템플릿(`admin/docs/terms_list.html` · `terms_detail.html`)과 종전 조회 코드(git `fd3623a` 이전)가 남아 있다.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from app.routers.admin import require_governor
 from app.templating import templates
 
-#: 🚨 prefix 는 `/terms` 다 — `admin_router`(prefix `/admin`) 아래에 매달려
-#:    `/admin/terms`, `/admin/terms/{term_id}` 가 된다.
 router = APIRouter(prefix="/terms")
 
-# ─────────────────────────────────────────────────────────────
-# 더미 — `terms` 표는 생겼지만(0017) 이 화면은 아직 읽지 않는다. ⬜ DB 조회로 바꾼다.
-# 목업 app/static/mockup.html 의 terms 뷰 하드코딩 배열을 그대로 옮겨온 것 — 실제
-# 약관 내용이 아니라 화면 구조 확인용이다.
-# ─────────────────────────────────────────────────────────────
-_DUMMY_TERMS: list[dict] = [
-    {
-        "id": 1,
-        "name": "서비스 이용약관",
-        "version": "v3.2",
-        "effective_date": "2026.08.01",
-        "prev_version": "v3.1",
-        "reason": "AI 판정 면책 조항 추가",
-        "status": "시행 중",
-    },
-    {
-        "id": 2,
-        "name": "개인정보처리방침",
-        "version": "v4.0",
-        "effective_date": "2026.08.10",
-        "prev_version": "v3.5",
-        "reason": "개정 개인정보보호법 반영",
-        "status": "시행 중",
-    },
-    {
-        "id": 3,
-        "name": "광고 검수 서비스 SLA",
-        "version": "v2.1",
-        "effective_date": "2026.07.15",
-        "prev_version": "v2.0",
-        "reason": "응답시간 보증 기준 변경",
-        "status": "시행 중",
-    },
-    {
-        "id": 4,
-        "name": "기업 이용 계약서",
-        "version": "v2.3",
-        "effective_date": "2026.09.01",
-        "prev_version": "v2.2",
-        "reason": "기업 데이터 보호 조항 강화",
-        "status": "예정",
-    },
-]
+LABEL = "관리 기능 비활성"
+CLOSED = {
+    "page_title": "약관 관리",
+    "label": LABEL,
+    "decision": "관리자 약관 관리 화면 닫힘",
+    "why": [
+        "약관 등록 · 수정 기능과 운영 절차가 승인 대기 중이에요.",
+        "이 화면에서는 약관 버전 조회 · 등록 · 수정 기능을 제공하지 않아요.",
+        "가입 화면의 약관 동의는 그대로 동작해요.",
+    ],
+    "needs": ["관리자 약관 쓰기 범위와 운영 절차 승인 (팀장)"],
+    "alt": [],
+}
 
 
 @router.get("", response_class=HTMLResponse)
 def terms_list(request: Request) -> HTMLResponse:
-    """약관 버전 목록 — 읽기 전용. `terms` 표를 아직 읽지 않고 더미로만 그린다."""
     actor = require_governor(request)
-    return templates.TemplateResponse(
-        request,
-        "admin/docs/terms_list.html",
-        {"actor": actor, "rows": _DUMMY_TERMS},
-    )
+    return templates.TemplateResponse(request, "admin/_closed.html", {"actor": actor, **CLOSED})
 
 
 @router.get("/{term_id}", response_class=HTMLResponse)
-def terms_detail(request: Request, term_id: int) -> HTMLResponse:
-    """약관 버전 상세(이력) — 읽기 전용."""
+def terms_detail(request: Request, term_id: str) -> HTMLResponse:  # noqa: ARG001
     actor = require_governor(request)
-    row = next((r for r in _DUMMY_TERMS if r["id"] == term_id), None)
-    if row is None:
-        raise HTTPException(status_code=404)
-    return templates.TemplateResponse(
-        request,
-        "admin/docs/terms_detail.html",
-        {"actor": actor, "row": row},
-    )
+    return templates.TemplateResponse(request, "admin/_closed.html", {"actor": actor, **CLOSED})

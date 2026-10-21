@@ -4,7 +4,18 @@
 #   🔄 2026-10-14 · 소성민 — 인스턴스를 m7i.xlarge → g4dn.xlarge 로 바꾸며 다시 씀
 #       · GPU 드라이버 · sLLM 환경(.venv-sllm) · sLLM 모델 · sLLM 실행 단계를 더했다
 #       · 인코더 확인을 지문 한 줄에서 모델 잠금(models.lock.json · D-333) 검사로 바꿨다
-#   초안 2026-10-12 · 🚨 서버에서 실행해 본 기록이 없다. 첫 실행은 단계를 하나씩 돌린다.
+#   초안 2026-10-12 · 첫 실행은 단계를 하나씩 돌린다.
+#   🔄 2026-10-16 — **서버(g4dn)에서 처음 돌렸다**: preflight · gpu · sllm-env · model · check 통과 (작업기록_1016.md)
+#       · gpu — ubuntu-drivers 가 이 커널(7.0.0-1014-aws)에 맞는 꾸러미를 못 골라 **아무것도 설치하지 않고 끝났다**.
+#         실제로 통한 방법(커널 버전이 붙은 모듈 꾸러미를 apt 로 직접)으로 바꾸고, 설치 뒤 모듈이 있는지 확인한다
+#       · cleanup-adhoc — 10-16 오전 손으로 세운 임시 구성(copylane.service · nginx)을 걷어 내는 단계를 더했다
+#   🔄 2026-10-19 — services 가 이미 떠 있는 서비스도 restart 한다(.env 변경 반영 · 5차 보고서)
+#   🔄 2026-10-21 — **main 하나로 배포** (ssm 참조 끝 · README 「main 전환」)
+#       · fetch 는 origin/main 에 들어 있는 커밋만 받는다 — 서버에서 고친 파일이 있으면 멈춘다
+#       · ~/deploy_server.sh 는 저장소 안 사본을 가리키는 링크 — update 가 새 판을 받으면 새 스크립트로 이어서 돈다
+#       · 서버 전용 설정은 ~/.copylane-deploy (deploy.conf.example) — DB_MODE · Caddy 판 · 관리자 허용 IP
+#       · caddy — 저장소 Caddyfile(.ip)에 허용 IP 를 넣어 만들고 validate → 적용 → 응답 확인 · 실패하면 앞 판으로 되돌린다
+#       · verify 의 지문 기대값은 배포 커밋의 data/derived_manifest.jsonl 에서 읽는다 (손으로 적은 값 없음)
 #   근거  docs/05_배포/배포계획.md §1-2 · §4 / docs/lse/sLLM_연결_안내_2026-10-05.md / models.lock.json
 #
 # 쓰는 법 (서버에서 · tmux 안에서)
@@ -14,7 +25,8 @@
 #   bash deploy_server.sh fetch         #  3. 저장소 받기 · 배포 커밋으로 맞추기
 #   bash deploy_server.sh env           #  4. .env 자리 만들기 (비밀 값은 넣지 않는다)
 #   bash deploy_server.sh install       #  5. 앱 패키지 설치 (.venv · CPU torch)
-#   bash deploy_server.sh model         #  6. 임베딩 모델 받기 · 판정 인코더 잠금 검사
+#   bash deploy_server.sh model         #  6. 임베딩 모델 받기 · 캐시에서 올라오는지 확인 · 판정 인코더 잠금 검사
+#   bash deploy_server.sh embed-cache   #     검색 임베딩 캐시만 다시 확인 (판정 경로와 같은 길 · 허브 차단)
 #   bash deploy_server.sh data          #  7. migrate → data-sync → load → embed
 #   bash deploy_server.sh verify        #  8. 지문 대조
 #   bash deploy_server.sh sllm-env      #  9. sLLM 가상환경 (.venv-sllm · GPU torch)
@@ -22,7 +34,20 @@
 #   bash deploy_server.sh sllm          # 11. sLLM 서버 실행 (127.0.0.1:8765 · tmux 창 1)
 #   bash deploy_server.sh serve         # 12. 앱 실행 (127.0.0.1:8000 · tmux 창 2 · 앞에 Caddy)
 #   bash deploy_server.sh check         #     실행 중 상태 한 번에 보기 (GPU · 두 서버 · 포트)
+#   bash deploy_server.sh services      # 13. 상시 가동 — sLLM · 앱을 systemd 서비스로 (재부팅해도 다시 뜬다)
+#   bash deploy_server.sh services-off  #     서비스를 내리고 해제 (다시 tmux 로 띄울 때)
+#   bash deploy_server.sh update        #     새 커밋 올리기 — fetch → install → migrate → verify → 서비스 재시작
+#   bash deploy_server.sh backup        #     DB 덤프 하나 (컨테이너 DB · ~/backup · 7개만 남긴다)
+#   bash deploy_server.sh cleanup-adhoc #     10-16 임시 구성 정리 — copylane.service 해제 · nginx 끄기 (services 전에 한 번)
+#   bash deploy_server.sh caddy         #     Caddy 설정 만들기 · 검사 · 적용 · 응답 확인 (허용 IP 는 ~/.copylane-deploy)
+#   bash deploy_server.sh main-switch   #     🆕 ssm 시절 서버를 main 기준으로 한 번 옮기기 (README 「main 전환」)
 #   bash deploy_server.sh all           #  3~10 을 이어서 (gpu · sllm · serve 는 따로)
+#
+#   🔄 2026-10-15 — DB 비밀번호 자동 생성(env) · 기본 비밀번호면 적재 거부(data) · services · backup 을 더했다
+#   🔄 2026-10-15 오후 (D-344 ⑦) — 판정 경로가 검색 임베딩(KURE)을 **캐시에서만** 올리게 바뀌었다.
+#       캐시가 없으면 앱은 뜨지만 벡터 검색이 꺼지고 어휘 검색만 한다(오류 없이 조용히). 그래서
+#       model 이 받은 뒤 허브를 막고 다시 올려 보고(embed-cache) · verify 가 doctor --env 의 캐시 줄을 보고 ·
+#       serve · services 는 캐시가 없으면 멈추고 · check 가 앱 로그의 「벡터 검색 불가」를 센다
 #
 # 🚨 이 파일에는 비밀번호 · 키 · DB 접속 문자열을 적지 않는다. 그 값은 서버의 .env 에만 둔다.
 # 🚨 g4dn 의 로컬 NVMe(125GB · /dev/nvme1n1 등)는 **인스턴스를 중지하면 지워진다**. 모델 · DB 를 거기 두지 않는다.
@@ -31,18 +56,32 @@ set -euo pipefail
 
 # ── 배포할 판 — 올리기 전에 이 줄들만 확인한다 ────────────────────────────────
 REPO_URL="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN32-FINAL-3TEAM.git"
-DEPLOY_REF="${DEPLOY_REF:-main}"            # 브랜치 · 태그 · 커밋. 배포 때는 커밋 해시를 권한다
 APP_DIR="${APP_DIR:-$HOME/SKN32-FINAL-3TEAM}"
-EXPECT_GOLDEN="f6ccc5a7de44"                 # 골든 지문 (sha256 앞 12자 · 원장 data/derived_manifest.jsonl)
-EXPECT_DICT="c6e29452c81b"                   # 사전 지문
-DB_MODE="${DB_MODE:-container}"              # container = 서버 안 pgvector 컨테이너 · rds = RDS (승인 뒤)
+DEPLOY_BRANCH="main"                         # 🔄 10-21 — 배포 기준 브랜치는 main 하나. 바꾸지 않는다
+DEPLOY_CONF="${DEPLOY_CONF:-$HOME/.copylane-deploy}"   # 서버 전용 설정 (저장소 밖 · 틀은 deploy.conf.example)
+REPO_SCRIPT="$APP_DIR/docs/ssm/배포/deploy_server.sh"
+LINK_SCRIPT="$HOME/deploy_server.sh"
+
+# 서버 전용 설정을 읽는다 — 명령 앞에 직접 준 값(DB_MODE=rds bash … · DEPLOY_REF=<해시> bash …)이 이긴다
+_cli_db_mode="${DB_MODE:-}"; _cli_ref="${DEPLOY_REF:-}"
+# shellcheck source=/dev/null
+[ -f "$DEPLOY_CONF" ] && . "$DEPLOY_CONF"
+[ -n "$_cli_db_mode" ] && DB_MODE="$_cli_db_mode"
+[ -n "$_cli_ref" ] && DEPLOY_REF="$_cli_ref"
+DEPLOY_REF="${DEPLOY_REF:-$DEPLOY_BRANCH}"   # main · 또는 main 에 들어 있는 커밋 해시 · 태그 (되돌릴 때)
+DB_MODE="${DB_MODE:-container}"              # container = 서버 안 pgvector 컨테이너 · rds = RDS
+CADDY_MODE="${CADDY_MODE:-ip}"               # ip = Caddyfile.ip (도메인 전) · domain = Caddyfile (정식판)
+CADDY_DOMAIN="${CADDY_DOMAIN:-}"             # CADDY_MODE=domain 일 때 실제 도메인
+ADMIN_ALLOW_IPS="${ADMIN_ALLOW_IPS:-}"       # demo 에디션 관리자 화면을 열 공인 IP (띄어쓰기로 여럿 · 비우면 닫힘)
 EXPECT_INSTANCE="g4dn.xlarge"
 MIN_DISK_GB=55                               # 루트 디스크 권장 60GB — 40GB 면 sLLM 까지 못 담는다
 
 # sLLM — 판은 sllm_meta.py(기본값)와 models.lock.json(채택)이 정한다. 여기서는 바꾸지 않는다
 SLLM_VENV="$APP_DIR/.venv-sllm"
 SLLM_PORT=8765
-SLLM_DRIVER="570-server"                     # CUDA 12.8 용 torch(cu128)는 드라이버 570 이상을 요구한다
+SLLM_DRIVER="${SLLM_DRIVER:-615-server-open}" # CUDA 12.8 용 torch(cu128)는 드라이버 570 이상을 요구한다 · T4(Turing)는 open 모듈 지원
+                                             # 🔄 10-16 — 7.0.0-1014-aws 커널에는 570 꾸러미가 없었다 · 615.71.09 로 동작 확인
+SLLM_UTILS="nvidia-utils-${SLLM_DRIVER%-open}" # utils 꾸러미 이름에는 -open 이 붙지 않는다 (615-server-open → nvidia-utils-615-server)
 TORCH_PIN="torch==2.11.0"
 TORCH_INDEX="https://download.pytorch.org/whl/cu128"
 SLLM_PKGS=(transformers==5.17.0 peft==0.21.0 accelerate==1.15.0 fastapi==0.142.2 uvicorn==0.54.0
@@ -70,6 +109,37 @@ adopted() {
 lock_check() {   # $1 = 폴더 · $2 = 역할 — 잠금 밖 판이면 멈춘다 (app 과 같은 규칙 · app/model_lock.py)
   (cd "$APP_DIR" && uv run python -m scripts.model_lock check "$1" --role "$2") \
     && ok "잠금 일치 — $2 · $(basename "$1")" || die "잠금 밖 판이다 — $1 ($2). 폴더를 다시 옮긴다"
+}
+
+# ── 검색 임베딩 캐시 (🆕 2026-10-15 · D-344 ⑦) ─────────────────────────────────
+# 판정 경로(app/retrieve.py encode)는 load_kwargs(local_only=True) 로 **캐시에서만** 올린다.
+# 캐시가 없으면 오류 없이 어휘 검색만 한다 — 그래서 배포에서는 「있다」를 눈으로 확인하고 넘어간다.
+# 🚨 캐시는 이 스크립트를 돌린 사용자의 ~/.cache/huggingface 다(루트 디스크). 서비스도 같은 사용자로 돈다(services).
+embed_cache() {
+  say "6-1. 검색 임베딩 캐시 — 판정 경로와 같은 길로 올려 본다 (허브 차단 · D-344 ⑦)"
+  local out
+  if out="$(cd "$APP_DIR" && HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 uv run python - 2>&1 <<'PY'
+from huggingface_hub import constants
+from app.retrieve import encode
+from app.settings import PARAMS
+v = encode(PARAMS.embed_model_id, "부당한 표시·광고의 내용")  # 판정 경로와 같은 함수 — local_files_only
+print(f"RESULT {PARAMS.embed_model_id} · 차원 {len(v)} · 캐시 {constants.HF_HUB_CACHE}")
+PY
+)"; then
+    ok "캐시에서 올라왔다 — $(printf '%s\n' "$out" | grep '^RESULT' | cut -c8-)"
+    case "$out" in *"/opt/dlami/nvme"*|*"/mnt/"*) warn "캐시가 로컬 NVMe 쪽이다 — 중지하면 지워진다. HF_HOME 을 지우고 다시 받는다";; esac
+  else
+    printf '%s\n' "$out" | tail -5 | sed 's/^/         /'
+    die "캐시에서 못 올렸다 — 이대로면 벡터 검색이 꺼진 채 돈다. bash deploy_server.sh model 로 다시 받는다"
+  fi
+}
+
+# 빠른 확인 — doctor 의 캐시 검사(파일 두 개 · 외부 요청 없음 · 모델을 올리지 않는다). 있으면 0
+embed_cache_quick() {
+  local line
+  line="$(cd "$APP_DIR" && uv run python -c 'from scripts.doctor import _check_embed_cache; _check_embed_cache()' 2>&1 | grep '검색 임베딩' | head -1)"
+  printf '  %s\n' "${line:-검색 임베딩 캐시 — 확인하지 못했다}"
+  case "$line" in "✅"*) return 0;; *) return 1;; esac
 }
 
 instance_type() {  # IMDSv2
@@ -110,22 +180,96 @@ gpu() {
   fi
   lspci | grep -qi nvidia && ok "GPU 장치가 보인다 ($(lspci | grep -i nvidia | head -1 | cut -d: -f3))" \
     || die "NVIDIA 장치가 없다 — 인스턴스 유형이 $EXPECT_INSTANCE 인지 콘솔에서 확인"
+  # 🔄 2026-10-16 — `ubuntu-drivers install --gpgpu nvidia:570-server` 는 오류 없이 끝났는데 **아무것도 깔리지 않았다**
+  #    (재부팅 뒤 modprobe: Module nvidia not found). 이 커널(7.0.0-1014-aws)용 570 꾸러미가 저장소에 없었다.
+  #    → 커널 버전이 붙은 미리 빌드된 모듈 꾸러미를 직접 고른다. 없으면 멈추고 이 커널에 있는 판을 보여 준다.
+  local kver mod; kver="$(uname -r)"; mod="linux-modules-nvidia-${SLLM_DRIVER}-${kver}"
   sudo apt-get update
-  sudo apt-get install -y ubuntu-drivers-common
-  # ubuntu-drivers 가 이 커널(aws)에 맞는 서명된 모듈 꾸러미를 함께 고른다
-  sudo ubuntu-drivers install --gpgpu "nvidia:$SLLM_DRIVER"
-  sudo apt-get install -y "nvidia-utils-$SLLM_DRIVER"
-  warn "설치 끝 — sudo reboot 후 다시 접속해서 bash deploy_server.sh preflight 로 GPU 줄을 본다"
+  if ! apt-cache show "$mod" >/dev/null 2>&1; then
+    warn "이 커널($kver)용 $SLLM_DRIVER 모듈 꾸러미가 없다. 이 커널에 있는 판:"
+    apt-cache search "^linux-modules-nvidia-.*-${kver}\$" | awk '{print "         " $1}'
+    die "SLLM_DRIVER 를 위 목록의 판으로 바꾼다 (570 이상 · T4 는 -open 가능) — 예: SLLM_DRIVER=615-server-open bash deploy_server.sh gpu"
+  fi
+  sudo apt-get install -y "$mod" "nvidia-headless-no-dkms-${SLLM_DRIVER}" "$SLLM_UTILS"
+  # 커널이 올라가도 모듈이 따라오게 — 메타 꾸러미가 있으면 함께 (없는 판도 있다)
+  apt-cache show "linux-modules-nvidia-${SLLM_DRIVER}-aws" >/dev/null 2>&1 \
+    && sudo apt-get install -y "linux-modules-nvidia-${SLLM_DRIVER}-aws" && ok "커널 업데이트에 따라오는 메타 꾸러미도 설치"
+  dpkg -s "$mod" >/dev/null 2>&1 && ok "모듈 꾸러미 설치됨 — $mod" || die "모듈 꾸러미가 안 깔렸다 — 위 apt 출력의 E: 줄을 본다"
+  warn "설치 끝 — sudo reboot 후 다시 접속해서 nvidia-smi (또는 preflight) 로 GPU 줄을 본다"
   warn "재부팅하면 탄력적 IP 는 그대로다. tmux 는 새로 연다"
 }
 
 # ── 3. 저장소 ───────────────────────────────────────────────────────────────
 fetch() {
-  say "3. 저장소 받기 — $DEPLOY_REF"
-  if [ -d "$APP_DIR/.git" ]; then git -C "$APP_DIR" fetch origin; else git clone "$REPO_URL" "$APP_DIR"; fi
-  git -C "$APP_DIR" checkout --detach "$(git -C "$APP_DIR" rev-parse "origin/$DEPLOY_REF" 2>/dev/null || echo "$DEPLOY_REF")"
+  say "3. 저장소 받기 — $DEPLOY_REF (기준 $DEPLOY_BRANCH)"
+  if [ -d "$APP_DIR/.git" ]; then
+    # 🔄 2026-10-21 — 서버에서 고친 파일이 있으면 멈춘다(10-20 Caddy 사고). 고칠 곳은 PC → main 이다
+    if ! git -C "$APP_DIR" diff --quiet || ! git -C "$APP_DIR" diff --cached --quiet; then
+      git -C "$APP_DIR" status --short --untracked-files=no | sed 's/^/  [수정됨] /'
+      die "서버 저장소에 고친 파일이 있다 — 필요한 내용은 PC 로 옮기고 git -C $APP_DIR checkout -- . 로 되돌린 뒤 다시"
+    fi
+    git -C "$APP_DIR" fetch --prune origin
+  else
+    git clone "$REPO_URL" "$APP_DIR"
+  fi
+  # 🔄 2026-10-20 — 커밋 해시를 주면 멈췄다(`--detach does not take a path argument 'origin/<해시>\n<해시>'`).
+  #    `rev-parse` 는 실패해도 넣은 글자를 그대로 찍어서 `|| echo` 와 두 줄이 붙었다 → `--verify --quiet` 로 고친다.
+  #    브랜치 이름이면 origin/<이름> · 아니면 해시 · 태그로 본다. 둘 다 아니면 멈춘다.
+  local target
+  target="$(git -C "$APP_DIR" rev-parse --verify --quiet "origin/$DEPLOY_REF^{commit}" \
+            || git -C "$APP_DIR" rev-parse --verify --quiet "$DEPLOY_REF^{commit}")" \
+    || die "배포할 판을 못 찾았다 — DEPLOY_REF=$DEPLOY_REF (main · 커밋 해시 · 태그)"
+  # 🔄 2026-10-21 — main 에 들어 있지 않은 판(ssm · 다른 브랜치 · 머지 전 커밋)은 받지 않는다
+  git -C "$APP_DIR" merge-base --is-ancestor "$target" "origin/$DEPLOY_BRANCH" \
+    || die "$DEPLOY_REF ($(git -C "$APP_DIR" rev-parse --short "$target")) 는 origin/$DEPLOY_BRANCH 에 없다 — main 에 머지한 뒤 다시"
+  git -C "$APP_DIR" checkout --detach "$target"
   ok "배포 커밋 $(git -C "$APP_DIR" log -1 --format='%h %s')"
+  [ "$target" = "$(git -C "$APP_DIR" rev-parse "origin/$DEPLOY_BRANCH")" ] \
+    || warn "main 최신이 아니다 — main 은 $(git -C "$APP_DIR" rev-parse --short "origin/$DEPLOY_BRANCH") (되돌린 상태면 정상)"
+  printf '%s\t%s\t%s\n' "$(date '+%F %T')" "$(git -C "$APP_DIR" rev-parse --short HEAD)" "$DEPLOY_REF" >> "$HOME/deploy_history.log"
+  self_link
   warn "이 커밋 해시를 작업기록에 적는다 — 커밋을 바꾸면 7번(data)을 다시 돈다"
+}
+
+# ~/deploy_server.sh 를 저장소 안 사본을 가리키는 링크로 둔다 — 서버에 따로 노는 사본을 두지 않는다 (🆕 10-21)
+self_link() {
+  [ -f "$REPO_SCRIPT" ] || { warn "이 커밋에는 $REPO_SCRIPT 가 없다 — 링크를 만들지 않는다"; return 0; }
+  if [ -L "$LINK_SCRIPT" ] && [ "$(readlink -f "$LINK_SCRIPT")" = "$(readlink -f "$REPO_SCRIPT")" ]; then
+    return 0
+  fi
+  if [ -e "$LINK_SCRIPT" ] && [ ! -L "$LINK_SCRIPT" ]; then
+    mv "$LINK_SCRIPT" "$LINK_SCRIPT.old-$(date +%m%d_%H%M)"
+    ok "옛 사본을 $LINK_SCRIPT.old-* 로 옮겼다"
+  fi
+  ln -sfn "$REPO_SCRIPT" "$LINK_SCRIPT"
+  ok "$LINK_SCRIPT → 저장소 사본 (main 을 받으면 같이 바뀐다)"
+}
+
+# 서버 전용 설정 파일 — 없으면 틀(deploy.conf.example)에서 만든다. DB_MODE 는 .env 의 DATABASE_URL 로 짐작한다
+conf_init() {
+  [ -f "$DEPLOY_CONF" ] && { ok "$DEPLOY_CONF 있음"; return 0; }
+  local src="$APP_DIR/docs/ssm/배포/deploy.conf.example" mode=container
+  [ -f "$src" ] || die "$src 가 없다"
+  grep -q '^DATABASE_URL=.*rds\.amazonaws\.com' "$APP_DIR/.env" 2>/dev/null && mode=rds
+  sed "s|^DB_MODE=.*|DB_MODE=$mode|" "$src" > "$DEPLOY_CONF"
+  chmod 600 "$DEPLOY_CONF"
+  [ -n "$_cli_db_mode" ] || DB_MODE="$mode"
+  ok "$DEPLOY_CONF 를 만들었다 (DB_MODE=$mode) — nano $DEPLOY_CONF 로 확인"
+}
+
+# 파생물 원장(data/derived_manifest.jsonl)에서 파일 하나의 sha256 앞 12자를 읽는다
+manifest_sha() {
+  python3 - "$APP_DIR/data/derived_manifest.jsonl" "$1" <<'PY'
+import json, sys
+for line in open(sys.argv[1], encoding="utf-8"):
+    line = line.strip()
+    if line:
+        r = json.loads(line)
+        if r.get("경로") == sys.argv[2]:
+            print(r["sha256"][:12])
+            sys.exit(0)
+sys.exit(1)
+PY
 }
 
 # ── 4. .env ────────────────────────────────────────────────────────────────
@@ -133,7 +277,8 @@ env_file() {
   say "4. .env 자리 만들기"
   cd "$APP_DIR"
   [ -f .env ] || { cp .env.example .env; chmod 600 .env; ok ".env 를 .env.example 에서 만들었다 (권한 600)"; }
-  set_env COPYLANE_EDITION cloud
+  # 🔄 2026-10-21 — 이미 demo · cloud 로 정해 두었으면 그대로 둔다 (관리자 화면을 쓰는 동안은 demo)
+  case "$(get_env COPYLANE_EDITION)" in cloud|demo) ;; *) set_env COPYLANE_EDITION cloud ;; esac
   set_env DATA_ROLE replica
   set_env COPYLANE_MODEL_DIR "$(adopted encoder)"          # 판 이름 — app 이 models/<이름> 을 본다 (D-333)
   set_env COPYLANE_SLLM_URL "http://127.0.0.1:$SLLM_PORT"  # 🔄 g4dn — 같은 서버의 sLLM 을 부른다 (빈 값이면 꺼진다)
@@ -143,11 +288,28 @@ env_file() {
     set_env COPYLANE_SESSION_SECRET "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
     ok "COPYLANE_SESSION_SECRET 을 만들어 넣었다"
   fi
+  # 🔄 2026-10-15 — 컨테이너 DB 비밀번호. compose 는 같은 폴더의 .env 에서 POSTGRES_PASSWORD 를 읽는다.
+  #    🚨 첫 db-up 전에만 뜻이 있다 — DB 폴더(볼륨)가 한 번 만들어지면 비밀번호는 그때 값으로 굳는다.
+  #    16진수만 쓰므로 URL 에 넣어도 바꿀 글자가 없다.
+  if [ "$DB_MODE" = container ] && [ -z "$(get_env POSTGRES_PASSWORD)" ]; then
+    local pw; pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+    set_env POSTGRES_PASSWORD "$pw"
+    set_env DATABASE_URL "postgresql+psycopg://copylane:${pw}@localhost:5432/copylane"
+    ok "DB 비밀번호를 만들어 POSTGRES_PASSWORD · DATABASE_URL 에 넣었다 (화면에 찍지 않음)"
+    if docker volume ls -q 2>/dev/null | grep -q "pgdata"; then
+      warn "이미 DB 볼륨이 있다 — 옛 비밀번호로 만들어졌으면 접속이 거부된다. 적재 전이면: docker compose down -v 뒤 data 단계"
+    fi
+  fi
   ok "COPYLANE_MODEL_DIR=$(get_env COPYLANE_MODEL_DIR)"
   ok "COPYLANE_SLLM_URL=$(get_env COPYLANE_SLLM_URL)"
   warn "sLLM 을 싣지 않기로 판정되면 COPYLANE_SLLM_URL=off 로 바꾼다"
-  warn "직접 채울 것 — DATABASE_URL (DB_MODE=$DB_MODE) · DATA_STORE (공유 저장소 사본 폴더 경로)"
+  if [ "$DB_MODE" = container ]; then
+    warn "직접 채울 것 — DATA_STORE=$HOME/CopyLane_store (파생물을 올린 폴더 · 절차서 §4-1)"
+  else
+    warn "직접 채울 것 — DATABASE_URL (RDS · 끝에 ?sslmode=require · 절차서 §4-3) · DATA_STORE"
+  fi
   warn "편집: nano $APP_DIR/.env   🚨 값을 셸 인자나 대화창에 쓰지 않는다"
+  conf_init
 }
 
 # ── 5. 앱 패키지 ────────────────────────────────────────────────────────────
@@ -160,7 +322,10 @@ install() {
 # ── 6. 임베딩 · 판정 인코더 ─────────────────────────────────────────────────
 model() {
   say "6. 임베딩 · 판정 인코더"
-  L embed --check && ok "임베딩 모델(KURE-v1) 차원 확인" || die "embed --check 실패"
+  # 🚨 받는 단계는 이것 하나다 — 셸에 HF_HUB_OFFLINE=1 이 남아 있어도 받도록 0 으로 연다 (D-344 ⑦)
+  (export HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0; L embed --check) \
+    && ok "임베딩 모델(KURE-v1) 받기 · 차원 확인" || die "embed --check 실패 — 허브에 닿는지 · 디스크(df -h /)"
+  embed_cache
   local enc; enc="$APP_DIR/models/$(adopted encoder)"
   [ -d "$enc" ] || die "인코더 폴더가 없다 — $enc (PC 에서 SFTP 로 폴더째 올린다)"
   lock_check "$enc" encoder
@@ -171,6 +336,12 @@ data() {
   say "7. DB · 데이터"
   [ -n "$(get_env DATABASE_URL)" ] || die ".env 의 DATABASE_URL 이 비어 있다"
   [ -n "$(get_env DATA_STORE)" ]   || die ".env 의 DATA_STORE 가 비어 있다"
+  # 🔄 2026-10-15 — .env.example 의 개발용 기본 접속(copylane:copylane)으로는 배포 DB 를 만들지 않는다
+  case "$(get_env DATABASE_URL)" in
+    *copylane:copylane@*) die "DATABASE_URL 이 개발용 기본 비밀번호다 — POSTGRES_PASSWORD 줄을 지우고 env 단계를 다시" ;;
+  esac
+  [ -d "$(get_env DATA_STORE)/copylane-derived/objects" ] \
+    || die "DATA_STORE 아래 copylane-derived/objects 가 없다 — pack_store.py 로 만든 묶음을 그 구조대로 올린다 (절차서 §4-1)"
   if [ "$DB_MODE" = container ]; then
     L db-up
     docker compose -f "$APP_DIR/docker-compose.yml" ps | grep -q "0.0.0.0:5432" && die "5432 가 0.0.0.0 에 열려 있다" || ok "5432 는 127.0.0.1 에만"
@@ -188,14 +359,28 @@ data() {
 # ── 8. 지문 대조 ────────────────────────────────────────────────────────────
 verify() {
   say "8. 지문 대조"
-  local g d
-  g="$(sha256sum "$APP_DIR/data/derived/golden/golden.jsonl" | cut -c1-12)"
-  d="$(sha256sum "$APP_DIR/data/derived/banned_terms.jsonl" | cut -c1-12)"
-  [ "$g" = "$EXPECT_GOLDEN" ] && ok "골든 $g" || die "골든 지문이 다르다 — $g (기대 $EXPECT_GOLDEN)"
-  [ "$d" = "$EXPECT_DICT" ]   && ok "사전 $d" || die "사전 지문이 다르다 — $d (기대 $EXPECT_DICT)"
-  [ "$(get_env COPYLANE_EDITION)" = cloud ] && ok "COPYLANE_EDITION=cloud" || die "COPYLANE_EDITION 이 cloud 가 아니다"
+  # 🔄 2026-10-21 — 기대값은 배포 커밋의 파생물 원장(data/derived_manifest.jsonl)에서 읽는다. main 이 데이터를 바꾸면 같이 바뀐다
+  local rel want got
+  for rel in data/derived/golden/golden.jsonl data/derived/banned_terms.jsonl; do
+    want="$(manifest_sha "$rel")" || die "data/derived_manifest.jsonl 에 $rel 이 없다"
+    got="$(sha256sum "$APP_DIR/$rel" 2>/dev/null | cut -c1-12 || true)"
+    [ "$got" = "$want" ] && ok "$(basename "$rel") $got (main 원장과 같음)" \
+      || die "$(basename "$rel") 지문이 다르다 — 서버 ${got:-없음} · main 원장 $want → 파생물 묶음을 새로 올리고 bash deploy_server.sh data"
+  done
+  # 🔄 2026-10-20 — 관리자 화면을 쓰는 동안은 demo 다(5차 보고서 · Caddy 에서 허용 IP 만). demo 는 멈추지 않고 경고한다.
+  case "$(get_env COPYLANE_EDITION)" in
+    cloud) ok "COPYLANE_EDITION=cloud" ;;
+    demo)  warn "COPYLANE_EDITION=demo — /admin · /login 이 붙는다. Caddy 가 허용 IP 만 통과시키는지 확인 (Caddyfile.ip 아래 주석)" ;;
+    *)     die "COPYLANE_EDITION 이 $(get_env COPYLANE_EDITION) 이다 — 배포는 cloud 또는 demo" ;;
+  esac
   [ -f "$APP_DIR/data/derived/hf_display_claims.jsonl" ] && ok "sLLM 관문용 hf_display_claims.jsonl 있음" \
     || warn "hf_display_claims.jsonl 이 없다 — sLLM /rewrite 가 500 을 낸다 (data-sync 확인)"
+  # 🆕 2026-10-15 (D-344 ⑦) — 팀 진단(doctor --env)의 검색 임베딩 캐시 줄. 🔴 줄이 있으면 보여 준다(배포 기기에서 뜻 없는 것도 섞인다)
+  local doc; doc="$(L doctor --env 2>&1 || true)"
+  printf '%s\n' "$doc" | grep '🔴' | sed 's/^/  [doctor] /' || true
+  printf '%s\n' "$doc" | grep '검색 임베딩' | sed 's/^/  [doctor] /' || true
+  printf '%s\n' "$doc" | grep -q '✅ 검색 임베딩' && ok "doctor --env — 검색 임베딩 캐시 있음" \
+    || die "doctor --env 가 검색 임베딩 캐시를 못 찾았다 — bash deploy_server.sh model"
   warn "DB 사전이 파일과 같은지는 평가 도구(scripts/eval_graph.py --dev)가 도는지로 본다"
 }
 
@@ -252,19 +437,283 @@ sllm() {
 serve() {
   say "12. 앱 실행 — 127.0.0.1:8000 (밖으로는 Caddy 만 연다)"
   export HF_HUB_OFFLINE=1      # 모델을 받은 뒤에는 허브로 나가지 않는다
+  embed_cache_quick || die "검색 임베딩 캐시가 없다 — 이대로 띄우면 벡터 검색이 꺼진다. bash deploy_server.sh model (D-344 ⑦)"
   L serve --no-reload
 }
 
 # ── 실행 중 상태 ────────────────────────────────────────────────────────────
 check() {
   say "실행 중 상태"
+  local cur head
+  cur="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  head="$(git -C "$APP_DIR" rev-parse --short "origin/$DEPLOY_BRANCH" 2>/dev/null || echo '?')"
+  [ "$cur" = "$head" ] && ok "서버 판 $cur = origin/main (마지막 fetch 기준)" || warn "서버 판 $cur · origin/main $head"
+  [ -L "$LINK_SCRIPT" ] && ok "~/deploy_server.sh → 저장소 사본" || warn "~/deploy_server.sh 가 링크가 아니다 — README 「main 전환」"
+  systemctl is-active -q caddy && ok "caddy 동작 ($CADDY_MODE 판)" || warn "caddy 가 안 떠 있다"
   nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv,noheader \
     | awk '{print "  [정보] GPU " $0}' || warn "nvidia-smi 실패"
   curl -s -m 5 "http://127.0.0.1:$SLLM_PORT/health" && echo || warn "sLLM /health 응답 없음"
   curl -s -o /dev/null -m 5 -w "  [정보] 앱 HTTP %{http_code}\n" http://127.0.0.1:8000/ || warn "앱 응답 없음"
+  embed_cache_quick || warn "검색 임베딩 캐시가 없다 — 벡터 검색이 꺼져 있다 (bash deploy_server.sh model)"
+  if systemctl is-active -q copylane-app 2>/dev/null; then   # tmux 로 띄웠으면 창 2 화면에서 같은 줄을 찾는다
+    local n; n="$(journalctl -u copylane-app -b --no-pager 2>/dev/null | grep -c '벡터 검색 불가' || true)"
+    [ "${n:-0}" = 0 ] && ok "앱 로그에 「벡터 검색 불가」 없음" \
+      || warn "앱 로그에 「벡터 검색 불가」 ${n}줄 — journalctl -u copylane-app | grep '벡터 검색 불가'"
+  fi
   ss -ltn | awk 'NR>1 {print $4}' | grep -E ':(8000|8765|5432)$' | while read -r a; do
     case "$a" in 127.0.0.1:*) ok "$a (안쪽만)";; *) warn "$a — 밖에 열려 있다";; esac
   done
+}
+
+# ── 13. 상시 가동 — systemd 서비스 (🔄 2026-10-15) ──────────────────────────
+# tmux 로 띄운 서버는 재부팅 · 접속 끊김 사고에 같이 죽는다. 10/24 ~ 26 상시 가동 구간은 서비스로 둔다.
+# 🚨 tmux 의 sllm · serve 창을 먼저 끈다(Ctrl-C) — 포트가 겹치면 서비스가 못 뜬다.
+services() {
+  say "13. 서비스 등록 — copylane-sllm · copylane-app"
+  local uvbin user; uvbin="$(command -v uv)" || die "uv 없음"; user="$(id -un)"
+  if ss -ltn | awk '{print $4}' | grep -qE ':(8000|8765)$' && ! systemctl is-active -q copylane-app copylane-sllm 2>/dev/null; then
+    die "8000 이나 8765 를 이미 누가 쓰고 있다 — tmux 의 serve · sllm 창을 Ctrl-C 로 끈 뒤 다시"
+  fi
+  embed_cache || die "검색 임베딩 캐시가 먼저다 — 서비스는 허브를 막고(HF_HUB_OFFLINE=1) 돈다"
+  local with_sllm=1
+  [ "$(get_env COPYLANE_SLLM_URL)" = off ] && { with_sllm=0; warn "COPYLANE_SLLM_URL=off — sLLM 서비스는 만들지 않는다"; }
+
+  if [ "$with_sllm" = 1 ]; then
+    [ -x "$SLLM_VENV/bin/python" ] || die "9번(sllm-env)이 먼저다"
+    sudo tee /etc/systemd/system/copylane-sllm.service >/dev/null <<UNIT
+[Unit]
+Description=CopyLane sLLM rewrite server (127.0.0.1:$SLLM_PORT)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=$user
+WorkingDirectory=$APP_DIR
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+ExecStart=$SLLM_VENV/bin/python docs/lse/sllm_service.py --serve --port $SLLM_PORT
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  fi
+
+  sudo tee /etc/systemd/system/copylane-app.service >/dev/null <<UNIT
+[Unit]
+Description=CopyLane app (uvicorn 127.0.0.1:8000)
+After=network-online.target docker.service$( [ "$with_sllm" = 1 ] && echo " copylane-sllm.service")
+Wants=network-online.target
+
+[Service]
+User=$user
+WorkingDirectory=$APP_DIR
+Environment=HF_HUB_OFFLINE=1
+Environment=UV_FROZEN=1
+# launcher 가 안에서 다시 uv 를 부른다 — systemd 의 기본 PATH 에는 ~/.local/bin 이 없다
+Environment=PATH=$(dirname "$uvbin"):/usr/local/bin:/usr/bin:/bin
+ExecStart=$uvbin run python launcher.py serve --no-reload
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  sudo systemctl daemon-reload
+  # 🔄 2026-10-19 — `enable --now` 는 이미 떠 있는 서비스를 다시 시작하지 않는다. 그러면 .env 를 바꿔도
+  #    (예: COPYLANE_SLLM_URL=off → 주소) 떠 있던 앱은 옛 값을 쥔 채 「고쳐 쓰기를 제공하지 않아요」를 그렸다.
+  #    → 등록(enable)과 시작을 나누고 **항상 restart** 한다. 이 단계를 다시 돌리면 .env 가 반영된다.
+  if [ "$with_sllm" = 1 ]; then
+    sudo systemctl enable copylane-sllm && sudo systemctl restart copylane-sllm
+  fi
+  sudo systemctl enable copylane-app && sudo systemctl restart copylane-app
+  ok "등록 끝 — 상태: systemctl status copylane-app · 로그: journalctl -u copylane-app -f"
+  warn "sLLM 은 약 30초 뒤에 응답한다 — 그 뒤 bash deploy_server.sh check"
+}
+
+services_off() {
+  say "서비스 내리기 · 해제"
+  for u in copylane-app copylane-sllm; do
+    systemctl list-unit-files "$u.service" >/dev/null 2>&1 && sudo systemctl disable --now "$u" 2>/dev/null && ok "$u 내림" || true
+  done
+  warn "다시 tmux 로 띄울 때는 창 1 sllm · 창 2 serve"
+}
+
+# ── 새 커밋 올리기 (🔄 2026-10-16) — 이미 한 번 다 올린 서버에서 ─────────────────
+update() {
+  say "업데이트 — $DEPLOY_REF"
+  [ -d "$APP_DIR/.git" ] || die "저장소가 없다 — 처음이면 fetch 부터 차례로"
+  local before; before="$(sha256sum "$(readlink -f "$0")" 2>/dev/null | cut -c1-64 || true)"
+  fetch
+  # 🔄 2026-10-21 — 받은 커밋의 스크립트가 지금 도는 것과 다르면 새 스크립트로 나머지를 돈다
+  if [ -f "$REPO_SCRIPT" ] && [ "$(sha256sum "$REPO_SCRIPT" | cut -c1-64)" != "$before" ]; then
+    ok "배포 스크립트가 바뀌었다 — 새 판으로 이어서"
+    exec bash "$REPO_SCRIPT" update-rest
+  fi
+  update_rest
+}
+
+update_rest() {
+  install
+  L migrate
+  verify
+  warn "데이터(골든 · 사전 · 묶음)가 바뀐 커밋이면 bash deploy_server.sh data 를 다시 돈다"
+  if systemctl is-active -q copylane-app 2>/dev/null; then
+    systemctl is-active -q copylane-sllm 2>/dev/null && sudo systemctl restart copylane-sllm && ok "copylane-sllm 재시작"
+    sudo systemctl restart copylane-app && ok "copylane-app 재시작"
+    warn "sLLM 은 약 30초 뒤에 응답한다 — 그 뒤 bash deploy_server.sh check"
+  else
+    warn "서비스가 안 떠 있다 — tmux 의 sllm · serve 창을 다시 띄우거나 bash deploy_server.sh services"
+  fi
+  caddy_apply
+  ok "업데이트 끝 — $(git -C "$APP_DIR" log -1 --format='%h %s') · 기록 ~/deploy_history.log"
+}
+
+# ── Caddy (🆕 2026-10-21) — 저장소 판으로 만들고 · 검사하고 · 적용하고 · 응답을 본다 ─────
+# 🚨 /etc/caddy/Caddyfile 을 손으로 고치지 않는다 — 허용 IP 는 ~/.copylane-deploy 의 ADMIN_ALLOW_IPS
+CADDY_RENDER="$HOME/.Caddyfile.render"
+caddy_render() {
+  local src edition ips="" ip
+  edition="$(get_env COPYLANE_EDITION)"
+  case "$CADDY_MODE" in
+    ip)     src="$APP_DIR/docs/ssm/배포/Caddyfile.ip" ;;
+    domain) src="$APP_DIR/docs/ssm/배포/Caddyfile"
+            [ -n "$CADDY_DOMAIN" ] || die "CADDY_MODE=domain 인데 CADDY_DOMAIN 이 비었다 — nano $DEPLOY_CONF" ;;
+    *)      die "CADDY_MODE 는 ip 또는 domain — 지금 $CADDY_MODE" ;;
+  esac
+  [ -f "$src" ] || die "$src 가 없다"
+  if [ "$edition" = demo ] && [ -n "$ADMIN_ALLOW_IPS" ]; then
+    for ip in $ADMIN_ALLOW_IPS; do
+      [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]] || die "ADMIN_ALLOW_IPS 에 IP 가 아닌 값이 있다 — nano $DEPLOY_CONF"
+    done
+    ips="$ADMIN_ALLOW_IPS"
+  fi
+  python3 - "$src" "$CADDY_RENDER" "$([ "$CADDY_MODE" = domain ] && echo "$CADDY_DOMAIN")" "$ips" <<'PY'
+import sys
+src, out, domain, ips = sys.argv[1:5]
+text = open(src, encoding="utf-8").read()
+gate = "    @admin path /admin /admin/* /login\n"
+if text.count(gate) != 1:
+    sys.exit("  [중단] Caddy 원본에 관리자 줄(@admin path /admin /admin/* /login)이 정확히 한 번 있어야 한다")
+if ips:
+    text = text.replace(gate, "    @admin {\n        path /admin /admin/* /login\n        not remote_ip " + ips + "\n    }\n")
+if domain:
+    if "copylane.example.com" not in text:
+        sys.exit("  [중단] 정식판에 copylane.example.com 자리가 없다")
+    text = text.replace("copylane.example.com", domain)
+open(out, "w", encoding="utf-8").write(text)
+PY
+  if [ -n "$ips" ]; then ok "관리자 화면 — 허용 IP $(wc -w <<<"$ips")개에서만 연다 (demo)"
+  elif [ "$edition" = demo ]; then warn "COPYLANE_EDITION=demo 인데 ADMIN_ALLOW_IPS 가 비었다 — 관리자 화면은 닫아 둔다"
+  else ok "관리자 화면 — 닫힘 ($edition)"; fi
+}
+
+caddy_probe() {   # Caddy 를 거쳐 /u/ 를 부른다 — 앱이 꺼져 있어 502 면 Caddy 는 정상으로 본다
+  sleep 2
+  systemctl is-active -q caddy || return 1
+  local code
+  if [ "$CADDY_MODE" = domain ]; then
+    code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' --resolve "$CADDY_DOMAIN:443:127.0.0.1" "https://$CADDY_DOMAIN/u/" || true)"
+  else
+    code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' http://127.0.0.1/u/ || true)"
+  fi
+  case "$code" in
+    2??|3??)     ok "Caddy 를 거친 /u/ — HTTP $code" ;;
+    502|503|504) warn "Caddy 는 응답하지만 앱이 안 떠 있다 (HTTP $code) — services 또는 tmux serve" ;;
+    *)           warn "Caddy 를 거친 /u/ — HTTP ${code:-응답 없음}"; return 1 ;;
+  esac
+}
+
+caddy_apply() {
+  say "Caddy — $CADDY_MODE 판 만들기 · 검사 · 적용"
+  command -v caddy >/dev/null || die "caddy 없음"
+  local live=/etc/caddy/Caddyfile bak=""
+  caddy_render
+  if ! sudo caddy validate --config "$CADDY_RENDER" --adapter caddyfile >/dev/null 2>&1; then
+    sudo caddy validate --config "$CADDY_RENDER" --adapter caddyfile 2>&1 | tail -5 | sed 's/^/  [caddy] /' || true
+    die "만든 설정이 검사(validate)를 못 넘었다 — 서버 설정은 그대로다"
+  fi
+  ok "검사(validate) 통과"
+  if sudo cmp -s "$CADDY_RENDER" "$live"; then ok "지금 설정과 같다 — 바꾸지 않음"; rm -f "$CADDY_RENDER"; return 0; fi
+  if sudo test -f "$live"; then
+    bak="$live.bak-$(date +%m%d_%H%M%S)"
+    sudo cp -p "$live" "$bak"
+    sudo sh -c 'ls -1t /etc/caddy/Caddyfile.bak-* 2>/dev/null | tail -n +6 | xargs -r rm --'
+  fi
+  sudo install -m 644 "$CADDY_RENDER" "$live"
+  rm -f "$CADDY_RENDER"
+  if sudo systemctl reload caddy && caddy_probe; then
+    ok "적용 끝 (앞 판: ${bak:-없음})"
+  else
+    [ -n "$bak" ] || die "적용 뒤 응답이 없다 — 되돌릴 앞 판도 없다. journalctl -u caddy -n 50"
+    sudo cp -p "$bak" "$live" && sudo systemctl reload caddy || true
+    die "적용 뒤 응답이 없어 앞 판으로 되돌렸다 — journalctl -u caddy -n 50"
+  fi
+}
+
+# ── main 전환 (🆕 2026-10-21) — ssm 시절 서버를 main 기준으로 한 번 옮긴다 ──────────
+main_switch() {
+  say "main 전환 — 서버를 main 기준으로"
+  [ -d "$APP_DIR/.git" ] || die "저장소가 없다 — 처음 서버면 fetch 부터 차례로"
+  [ "$DEPLOY_REF" = "$DEPLOY_BRANCH" ] || die "main-switch 는 main 최신으로만 한다 — DEPLOY_REF 를 빼고 다시"
+  local f old found
+  for f in "$HOME/.bashrc" "$HOME/.profile" "$APP_DIR/.env"; do
+    grep -n 'DEPLOY_REF\|origin/ssm\|checkout ssm' "$f" 2>/dev/null | sed "s|^|  [확인] $f:|" || true
+  done
+  fetch                                   # 서버에서 고친 파일이 있으면 여기서 멈춘다 · ~/deploy_server.sh 를 링크로
+  [ -f "$REPO_SCRIPT" ] || die "main 에 배포 폴더가 아직 없다 — 머지된 뒤 다시"
+  conf_init
+  for old in load_test.py perf_report.py; do
+    if [ -f "$HOME/$old" ]; then mv "$HOME/$old" "$HOME/$old.old-$(date +%m%d)"; ok "~/$old → .old (이제 저장소의 docs/ssm/배포/$old 를 쓴다)"; fi
+  done
+  # 손으로 넣어 둔 관리자 허용 IP 가 있으면 설정 파일로 옮긴다 (화면에 찍지 않는다)
+  if [ -z "$ADMIN_ALLOW_IPS" ]; then
+    found="$(sudo grep -oP 'not remote_ip \K[0-9./ ]+' /etc/caddy/Caddyfile 2>/dev/null | head -1 | xargs || true)"
+    if [ -n "$found" ]; then
+      sed -i "s|^ADMIN_ALLOW_IPS=.*|ADMIN_ALLOW_IPS=\"$found\"|" "$DEPLOY_CONF"
+      ok "Caddy 에 손으로 넣은 허용 IP 를 $DEPLOY_CONF 로 옮겼다"
+    fi
+  fi
+  ok "이어서 업데이트(install → migrate → verify → 재시작 → caddy) — 새 스크립트로"
+  exec bash "$REPO_SCRIPT" update-rest
+}
+
+# ── DB 백업 (🔄 2026-10-15) — 컨테이너 DB 만. RDS 는 자동 백업이 있다 ──────────
+backup() {
+  say "DB 백업"
+  [ "$DB_MODE" = container ] || { warn "DB_MODE=$DB_MODE — RDS 는 콘솔의 자동 백업 · 스냅샷을 쓴다"; return; }
+  mkdir -p "$HOME/backup" && chmod 700 "$HOME/backup"
+  local f; f="$HOME/backup/copylane_$(date +%Y%m%d_%H%M).sql.gz"
+  docker exec copylane-postgres pg_dump -U copylane copylane | gzip > "$f"
+  [ -s "$f" ] && ok "$f ($(du -h "$f" | cut -f1))" || die "덤프가 비었다 — $f"
+  ls -1t "$HOME/backup"/copylane_*.sql.gz | tail -n +8 | xargs -r rm --
+  warn "주 1회는 MobaXterm SFTP 로 내 PC 에 내려받는다 — 서버 안에만 있는 백업은 백업이 아니다"
+  warn "🚨 덤프에는 가입 계정이 들어 있다 — 저장소 · 메신저에 올리지 않는다"
+}
+
+cleanup_adhoc() {
+  say "10-16 임시 구성 정리 — copylane.service · nginx"
+  # 10-16 오전, 스크립트 전에 손으로 세운 것: 앱을 `copylane` 서비스로 · nginx 설치(80 을 Caddy 가 쥐고 있어 못 떴다)
+  # 🚨 copylane 과 copylane-app 이 함께 켜지면 8000 이 겹쳐 하나가 계속 재시작된다
+  if systemctl list-unit-files copylane.service >/dev/null 2>&1 && [ -f /etc/systemd/system/copylane.service ]; then
+    sudo systemctl disable --now copylane 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/copylane.service
+    sudo systemctl daemon-reload
+    ok "copylane.service 해제 · 삭제"
+  else
+    ok "copylane.service 없음"
+  fi
+  if systemctl list-unit-files nginx.service >/dev/null 2>&1 && systemctl is-enabled -q nginx 2>/dev/null; then
+    sudo systemctl disable --now nginx && ok "nginx 끔 (공개 진입점은 Caddy 하나)"
+  else
+    ok "nginx 꺼져 있음 (또는 없음)"
+  fi
+  [ -f /etc/nginx/sites-enabled/copylane ] && sudo rm -f /etc/nginx/sites-enabled/copylane && ok "nginx 의 copylane 사이트 링크 삭제"
+  grep -q "copylane.example.com\|^:80" /etc/caddy/Caddyfile 2>/dev/null \
+    && warn "Caddy 는 아직 임시판(IP · :80)이다 — 도메인이 서면 절차서 4단계 #24 로 Caddyfile 을 바꾼다" || true
+  warn "다음 — env (DB 비밀번호 · EDITION=cloud) → 절차서 §4-2 의 볼륨 안내를 본다 → services"
 }
 
 case "${1:-}" in
@@ -274,6 +723,7 @@ case "${1:-}" in
   env)        env_file ;;
   install)    install ;;
   model)      model ;;
+  embed-cache) embed_cache ;;
   data)       data ;;
   verify)     verify ;;
   sllm-env)   sllm_env ;;
@@ -281,6 +731,14 @@ case "${1:-}" in
   sllm)       sllm ;;
   serve)      serve ;;
   check)      check ;;
+  services)   services ;;
+  services-off) services_off ;;
+  update)     update ;;
+  update-rest) update_rest ;;
+  caddy)      caddy_apply ;;
+  main-switch) main_switch ;;
+  backup)     backup ;;
+  cleanup-adhoc) cleanup_adhoc ;;
   all)        preflight; fetch; env_file; install; model; data; verify; sllm_env; sllm_model ;;
-  *) sed -n '2,30p' "$0"; exit 1 ;;
+  *) awk 'NR==1{next} /^#/{print; next} {exit}' "$0"; exit 1 ;;
 esac

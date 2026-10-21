@@ -29,7 +29,7 @@ def test_값이_없으면_종전_채택본이다(monkeypatch: pytest.MonkeyPatch
     for name in (meta.ENV_STAGE1, meta.ENV_STAGE2, meta.ENV_BASE):
         monkeypatch.delenv(name, raising=False)
     # 🔄 2026-10-11 — 채택본이 Qwen3-4B(q4b-v13)로 · 10-12 q4b-v14 · 2단계 다듬기 판(`docs/lse/sllm_meta.py` 주석)
-    assert meta.stage1_version() == "q4b-v14"  # 🔄 10-12 보강 2차
+    assert meta.stage1_version() == "q4b-v14"  # 🔄 10-19 q4b-n2 는 잠금 등재 전 — 되돌림
     assert meta.stage1_dir().name == "copylane_sllm_lora_adapter_q4b-v14"
     assert (
         meta.stage2_dir().name == "copylane_sllm_persona_adapter_q4b_polish"

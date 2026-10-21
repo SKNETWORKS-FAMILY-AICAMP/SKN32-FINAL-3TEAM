@@ -5,7 +5,7 @@
   🚨 답변은 **한 번**이다(`ticket.reply` · 스레드는 범위 밖). 그래서 프로토타입의 「추가 문의 작성 · 전송」과
      「문의 종료하기」는 비활성 + 사유다 (팀장 승인 요청 5번). 상담원 이름 칸은 없다 — 담당자 배정 여부만 보인다.
 #}{% extends "user/_base.html" %}
-{% block title %}CopyLane — 문의 {{ no }}{% endblock %}
+{% block title %}문의 {{ no }} | CopyLane{% endblock %}
 {% block screen_css %}
 <style>
 .cd-back { font-size: .82rem; color: var(--u-clay); text-decoration: none; }
@@ -36,7 +36,7 @@
 </style>
 {% endblock %}
 {% block user_content %}
-<a class="cd-back" href="/u/cs">← 문의 목록</a>
+<a class="cd-back" href="/u/cs?tab=history">← 문의 목록</a>
 <div class="cd-head">
   <h1>{{ no }}</h1>
   <span class="cd-badge p-{{ t.priority }}">{{ priority_label }}</span>
@@ -60,12 +60,10 @@
     <div class="cd-card cd-wait">아직 답변이 없어요. 담당자가 확인하면 여기에 답변이 달려요.</div>
     {% endif %}
 
-    {# ⬜ 추가 문의(스레드) — `ticket.reply` 는 한 번 답하는 모양이다 (D-260 ③ · 팀장 승인 요청 5번) #}
-    <div class="cd-card cd-off" aria-disabled="true">
-      <p class="cd-label">추가 문의 작성</p>
-      <textarea rows="3" disabled placeholder="답변에 이어서 물어보는 기능은 아직 준비 중이에요."></textarea>
-      <button type="button" disabled>전송</button>
-      <p class="cd-note">이어서 물어볼 내용이 있으면 새 문의로 접수해 주세요.</p>
+    {# ⬜ 추가 문의(스레드) — `ticket.reply` 는 한 번 답하는 모양이다 (D-260 ③ · 팀장 승인 요청 5번)
+       🔄 2026-10-15 (ksr · 점검 17) — 눌리지 않는 입력칸 · 전송 버튼을 걷고 새 문의 링크만 둔다 #}
+    <div class="cd-card">
+      <p class="cd-note">이어서 물어볼 내용이 있으면 <a href="/u/cs">새 문의로 접수</a>해 주세요.</p>
     </div>
   </div>
 
@@ -81,9 +79,8 @@
     </div>
     <div class="cd-card">
       <p class="cd-label">문의 관리</p>
-      {# ⬜ 사용자가 직접 닫아도 되는지 정해지지 않았다 (팀장 승인 요청 5번) #}
-      <button class="cd-close" type="button" disabled>문의 종료하기</button>
-      <p class="cd-note">문의 종료는 아직 담당자만 할 수 있어요. 완료된 문의는 {{ retention_days }}일 동안 보관한 뒤 지워져요.</p>
+      {# ⬜ 사용자가 직접 닫아도 되는지 정해지지 않았다 (팀장 승인 요청 5번) · 🔄 10-15 (점검 17) — 눌리지 않는 버튼은 걷었다 #}
+      <p class="cd-note">문의는 담당자가 확인한 뒤 닫아요. 완료된 문의는 {{ retention_days }}일 동안 보관한 뒤 지워져요.</p>
     </div>
   </div>
 </div>

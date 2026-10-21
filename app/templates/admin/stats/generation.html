@@ -1,59 +1,126 @@
-{# app/templates/admin/stats/generation.html — 생성 통계 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
-
-  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다(목업 `mockDownload`).
-  🔴 `generation_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
-  🚨 품질 통계 원본(목업 `qualityCombinedViewV2()`)의 `qp-gen` 패널에 해당한다.
-  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 생성 통계{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
-<h1>생성 통계</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>generation_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
-
-<div class="stat-kpis">
-  <div class="stat-kpi"><span>생성 품질 점수</span><b>{{ kpi.quality_score }}</b></div>
-  <div class="stat-kpi"><span>총 생성 건수</span><b>{{ kpi.total_cases }}</b></div>
-  <div class="stat-kpi"><span>평균 생성·판정 시간</span><b>{{ kpi.avg_time }}</b></div>
-  <div class="stat-kpi"><span>재생성 요청률</span><b>{{ kpi.regen_rate }}</b></div>
-</div>
-
-<h2>생성 모델 구성</h2>
-<div class="usage-trend">
-  {% for row in model_mix %}
-  <div class="usage-row">
-    <span class="usage-label">{{ row.label }}</span>
-    <div class="usage-bar" style="width: {{ row.pct }}%;"></div>
-    <span class="usage-value">{{ row.pct }}%</span>
+{# Existing server counters and error logs have separate aggregation scopes. #}
+{% extends "admin/_base.html" %}
+{% from "admin/stats/_parts.html" import metric,distribution %}
+{% macro help(id,label,text) %}<details class="ag-help"><summary aria-label="{{ label }} 설명" aria-describedby="{{ id }}"><span aria-hidden="true">ⓘ</span></summary><span id="{{ id }}" class="ag-help-text" role="tooltip">{{ text }}</span></details>{% endmacro %}
+{% block title %}생성 통계 | CopyLane 관리자{% endblock %}
+{% block admin_css %}
+<link rel="stylesheet" href="/static/admin-stats.css?v=1">
+<link rel="stylesheet" href="/static/admin-generation.css?v=4">
+{% endblock %}
+{% block admin_content %}
+<div class="as-page as-compact ag-page">
+  <div class="as-head">
+    <div><h1>생성 통계</h1><p>카피와 광고 생성 현황을 한눈에 확인하세요.</p></div>
+    <span class="ag-engine{% if not engine.on %} ag-engine-off{% endif %}"><i aria-hidden="true"></i>카피 생성 엔진 {{ '켜짐' if engine.on else '꺼짐' }}</span>
   </div>
-  {% endfor %}
-</div>
+  {% if not engine.on %}<p class="as-notice">{{ engine.why }}</p>{% endif %}
+  <p class="as-notice">생성 결과는 저장하지 않으며, 실패 기록은 오류 로그에서 확인해요. 요청 수 · 성공률 · 후보 품질은 <b>{{ usage.since }} 이후</b> 이 서버 메모리에서 센 값이라, 서버를 다시 켜면 0부터 세요.</p>
+  <div class="ag-summary-groups">
+    <section aria-labelledby="ag-copy-title"><h2 id="ag-copy-title" class="ag-group-title">카피 생성</h2>
+    <div class="as-kpis ag-kpis">
+    {{ metric('카피 생성 요청', '{:,}건'.format(usage.total), '엔진 꺼짐 ' ~ usage.off ~ '건 포함', 'spark') }}
+    {{ metric('생성 성공률', (usage.success_pct ~ '%') if usage.success_pct is not none else '—', '성공 ' ~ usage.ok ~ '건 · 실패 ' ~ usage.failed ~ '건 (꺼짐 제외)') }}
+    {{ metric('평균 생성 시간', (usage.avg_secs ~ '초') if usage.avg_secs is not none else '—', '최대 ' ~ ((usage.max_secs ~ '초') if usage.max_secs is not none else '—') ~ ' · 성공 요청 기준') }}
+    </div></section>
+    <section aria-labelledby="ag-ad-title"><h2 id="ag-ad-title" class="ag-group-title">AI 광고 생성</h2>
+    <div class="as-kpis ag-ad-kpis">
+    {{ metric('광고 만들기 요청', '{:,}건'.format(usage.compose_total), '광고 형식별 배치 요청 기준') }}
+    </div></section>
+  </div>
+  <div class="ag-columns ag-distributions">
+    <section class="ag-section">
+      <div class="as-panel-head"><h2>품목별 카피 생성</h2><span class="as-unit">요청 수 · 건</span></div>
+      {% if usage.total %}{{ distribution(usage.by_branch) }}{% else %}<p class="as-empty">서버가 켜진 뒤 아직 생성 요청이 없어요.</p>{% endif %}
+    </section>
+    <section class="ag-section">
+      <div class="as-panel-head"><div class="ag-help-label"><h2>AI 광고 생성 · 형식별 요청</h2>{{ help('ag-ad-help','광고 형식별 요청','판정을 지난 문구를 광고 지면에 배치하는 요청이에요. 문구를 새로 생성하지 않아요.') }}</div><span class="as-unit">고른 광고 종류 · 건</span></div>
+      {% if usage.compose_total %}{{ distribution(usage.compose_by_format) }}{% else %}<p class="as-empty">서버가 켜진 뒤 아직 광고 만들기 요청이 없어요.</p>{% endif %}
+    </section>
+  </div>
+  <section class="ag-section ag-quality">
+    <div class="as-panel-head"><h2>카피 생성 · 후보 품질</h2><span class="as-unit">서버 시작 이후</span></div>
+    <div class="ag-columns">
+      <div>
+        <h3 class="ag-subhead">후보 통과 현황</h3>
+        <div class="as-distribution-label"><span>후보 통과율</span><b>{{ (usage.pass_pct ~ '%') if usage.pass_pct is not none else '—' }}</b></div>
+        {% if usage.pass_pct is not none %}<div class="as-track" role="img" aria-label="후보 통과율 {{ usage.pass_pct }}%"><span style="width:{{ usage.pass_pct }}%"></span></div>{% endif %}
+        <p class="as-context">생성 후보 {{ '{:,}'.format(usage.candidates) }}개 중 {{ '{:,}'.format(usage.passed) }}개 통과</p>
+        <dl class="ag-quality-metrics">
+          <div><dt class="ag-help-label">평균 탐색 라운드{{ help('ag-rounds-help','평균 탐색 라운드','3안을 찾기 위해 탐색한 평균 횟수예요. 성공한 요청을 기준으로 해요.') }}</dt><dd>{{ (usage.avg_rounds ~ '회') if usage.avg_rounds is not none else '—' }}</dd></div>
+          <div><dt class="ag-help-label">더 탐색하기{{ help('ag-more-help','더 탐색하기','전체 카피 생성 요청 중 다시 만들어 본 요청 ' ~ usage.more ~ '건의 비율이에요.') }}</dt><dd>{{ (usage.more_pct ~ '%') if usage.more_pct is not none else '—' }}</dd></div>
+        </dl>
+      </div>
+      <div>
+        <h3 class="ag-subhead">후보 탈락 사유</h3>
+        {% if usage.reasons %}{{ distribution(usage.reasons, unit='개') }}{% else %}<p class="as-empty">{{ '걸러진 후보가 없어요.' if usage.total else '생성 요청이 생기면 탈락 사유가 표시돼요.' }}</p>{% endif %}
+      </div>
+    </div>
+  </section>
+  <section class="ag-section ag-failures" id="generation-failures">
+    <div class="as-panel-head">
+      <div><h2>카피 생성 · 실패 기록</h2><p class="as-context">오류 로그 기준 · 아래 기간은 실패 기록에만 적용돼요.</p></div>
+      <nav class="period-tabs" aria-label="카피 생성 실패 집계 기간">
+        {% for d in day_options %}<a href="?days={{ d }}#generation-failures" {% if days == d %}class="active" aria-current="page"{% endif %}>최근 {{ d }}일</a>{% endfor %}
+        <a href="?days=all#generation-failures" {% if days == 0 %}class="active" aria-current="page"{% endif %}>전체 ({{ retention_days }}일 보관)</a>
+      </nav>
+    </div>
+    <div class="ag-log-summary">
+      {% if not log_on %}
+      <span><b>생성 실패</b> 기록 안 함</span><p>이 환경은 오류 로그를 DB에 쌓지 않아요.</p>
+      {% elif source == 'db' %}
+      <span><b>생성 실패</b> {{ '{:,}'.format(fail.n) }}건 · 최근 {{ span_days }}일</span><span><b>마지막 실패</b> {{ fail.last_at }} · 서버 로그 기준</span>
+      {% else %}
+      <span><b>생성 실패</b> —</span><p>기록을 읽지 못했어요. 0건이라는 뜻이 아니에요.</p>
+      {% endif %}
+    </div>
+    {% with table="app_error_log" %}{% include "admin/_db_notice.html" %}{% endwith %}
+    {% if log_on and source == 'db' %}
+    <div class="ag-columns">
+      <div>
+        <div class="as-panel-head"><h3 class="ag-subhead">일별 생성 실패</h3><span class="as-unit">최근 {{ trend_days }}일 · 건</span></div>
+        {% if trend %}
+        <div class="as-chart{% if trend|length > 10 %} as-chart--many{% endif %}" role="img" aria-label="최근 {{ trend_days }}일 생성 실패 건수. 상세 수치는 오류 로그에서 확인할 수 있습니다.">
+          {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.n / trend_max * 100)|round(1) if trend_max else 0 }}%" title="{{ row.label }} · {{ row.n }}건"></span></div><small>{% if trend|length <= 10 or loop.first or loop.last or loop.index0 % 5 == 0 %}{{ row.label }}{% endif %}</small></div>{% endfor %}
+        </div>
+        <p class="as-context">축 상한 {{ trend_max }}건 · 실패가 있었던 날만 표시해요.</p>
+        {% else %}<p class="as-empty">최근 {{ trend_days }}일에 생성 실패 기록이 없어요.</p>{% endif %}
+      </div>
+      <div>
+        <h3 class="ag-subhead">실패 원인 (예외 종류)</h3>
+        {{ distribution(by_exc) }}
+        <p class="as-context">예외 클래스 이름만 저장돼요. 사용자가 적은 내용은 남지 않아요. 자세한 기록은 <a href="/admin/errors">오류 로그</a>에서 확인하세요.</p>
+      </div>
+    </div>
+    {% endif %}
+  </section>
 
-<h2>재생성 사유 분석</h2>
-<table>
-  <tr><th>사유</th><th>건수</th><th>비중</th></tr>
-  {% for r in reasons %}
-  <tr><td>{{ r.reason }}</td><td>{{ r.count }}</td><td>{{ r.pct }}%</td></tr>
-  {% endfor %}
-</table>
-<p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
+<section class="as-panel ag-config">
+  <div class="as-panel-head"><h2>카피 생성 엔진 구성</h2><span class="as-unit">현재 설정</span></div>
+  {% if config.error %}<p class="as-empty">구성을 읽지 못했어요 ({{ config.error }}).</p>{% else %}
+  <div class="ag-config-top">
+    <div class="ag-models">
+      <h3 class="ag-subhead">생성 모델</h3>
+      <ul class="ag-model-list" aria-label="사용 중인 생성 모델">{% for model in config.models %}<li>{{ model }}</li>{% else %}<li>설정된 모델이 없어요.</li>{% endfor %}</ul>
+      {% if config.models|length > 1 %}<p class="as-context">여러 모델을 섞어서 사용해요.</p>{% endif %}
+    </div>
+    <div class="ag-branches">
+      <h3 class="ag-subhead">지원 분기 <span class="ag-count">{{ config.branches|length }}개</span></h3>
+      <ul class="ag-branch-list">{% for branch in config.branches %}<li>{{ branch.label }}</li>{% else %}<li>지원 분기가 없어요.</li>{% endfor %}</ul>
+    </div>
+  </div>
+  <div class="ag-tiers" aria-label="후보 선택 기준">
+    {% for name, desc in config.tiers %}<section class="ag-tier"><h3>{{ name }}</h3><p>{{ desc }}</p></section>{% endfor %}
+  </div>
+  {% endif %}
+</section>
 
-<style>
-.admin-shell .stat-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
-.admin-shell .stat-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 8rem; }
-.admin-shell .stat-kpi span { font-size: .8rem; color: var(--a-clay); }
-.admin-shell .stat-kpi b { font-size: 1.2rem; }
-.admin-shell .usage-trend { display: flex; flex-direction: column; gap: .5rem; max-width: 30rem; margin-bottom: 1.5rem; }
-.admin-shell .usage-row { display: flex; align-items: center; gap: .6rem; }
-.admin-shell .usage-label { width: 8rem; font-size: .8rem; color: var(--a-clay); }
-.admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
-.admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
-.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
-</style>
-</div>
+<details class="as-analysis-details"><summary><span class="as-analysis-title">집계 범위 안내</span><span class="as-analysis-description">추가 통계에 필요한 조건</span><span class="as-analysis-hint">펼쳐 확인하기</span></summary>
+  <p class="as-context">생성 요청·결과를 DB에 저장하지 않아 기간별 누적 이용 통계는 제공하지 않아요. 위 이용 지표는 이 서버가 시작된 이후 메모리에서 센 수이며, 실패 기록만 오류 로그의 선택 기간으로 집계해요.</p>
+  <div class="admin-table-scroll"><table><thead><tr><th>보고 싶은 수</th><th>먼저 필요한 것</th></tr></thead><tbody>
+    {% for what, need in needs %}<tr><td>{{ what }}</td><td>{{ need }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</details>
+
+<div class="as-export"><button type="button" disabled>CSV 다운로드</button><span>내보내기 기능 준비 중</span></div>
 </div>
 {% endblock %}

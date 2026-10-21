@@ -17,7 +17,6 @@ import json
 import sys
 from pathlib import Path
 
-import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -26,6 +25,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 
+import sllm_meta  # noqa: E402
 from persona_experiment import BASE  # noqa: E402
 from persona_pipeline_e2e import STAGE1_VER, STAGE2, run_one  # noqa: E402
 
@@ -44,12 +44,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("key", help="정답표 jsonl (docs/lse 기준 · _private 안)")
     ap.add_argument("--stage1", default=STAGE1_VER)
+    ap.add_argument("--tag", default="", help="결과 파일 이름 꼬리(같은 판을 다른 설정으로 잴 때 · 예: rescue)")
     args = ap.parse_args()
     key_path = HERE / args.key
     assert "_private" in key_path.parts, "정답표는 _private 안에 있어야 한다(재배포 불가 원문)"
     rows = [json.loads(line) for line in key_path.open(encoding="utf-8") if line.strip()]
     tok = AutoTokenizer.from_pretrained(BASE)
-    base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
+    base = AutoModelForCausalLM.from_pretrained(BASE, dtype=sllm_meta.serve_dtype(), device_map="cuda")  # 🆕 10-19 T4(fp16) 대응
     model = PeftModel.from_pretrained(
         base, str(ROOT / "models" / f"copylane_sllm_lora_adapter_{args.stage1}"), adapter_name="stage1"
     )
@@ -61,7 +62,7 @@ def main() -> None:
         r = run_one(model, tok, k["input"], k.get("labels_all") or [k["reason"]])
         res.append({**k, "got": r, "grade": grade(r["outcome"], k["label"])})
         print(f"{i}/{len(rows)}", flush=True)
-    out = key_path.with_name(f"{key_path.stem}_result_{args.stage1}.jsonl")
+    out = key_path.with_name(f"{key_path.stem}_result_{args.stage1}{'_' + args.tag if args.tag else ''}.jsonl")
     with out.open("w", encoding="utf-8") as f:
         for x in res:
             f.write(json.dumps(x, ensure_ascii=False) + "\n")

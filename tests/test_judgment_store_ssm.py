@@ -83,16 +83,18 @@ class _Writer:
 
 
 @pytest.mark.gate
-@pytest.mark.parametrize(
-    ("user", "status"),
-    [(None, None), (_user(history=False, improve=True), js.OFF)],
-    ids=["비회원", "미동의"],
-)
-def test_비회원과_미동의_회원은_아무것도_쓰지_않는다(user: object, status: str | None) -> None:
-    """🔄 2026-10-14 — 미동의 회원은 `off` 로 알린다(화면이 「이력 보관이 꺼져 있다」를 그린다 · D-96)."""
+def test_비회원은_아무것도_쓰지_않는다() -> None:
     w = _Writer()
-    assert js.save_review(w, user, [_resp("02_hold_low_conf.json")]) == status  # type: ignore[arg-type]
+    assert js.save_review(w, None, [_resp("02_hold_low_conf.json")]) is None  # type: ignore[arg-type]
     assert not w.added and not w.committed, f"🔴 써서는 안 되는 판정을 적었다 — {w.added}"
+
+
+@pytest.mark.gate
+def test_이력_보관은_필수라_동의_기록이_없는_회원도_적는다() -> None:
+    """🔄 2026-10-20 (lse · 사용자 결정) — 검수 이력 보관은 필수다(종전 D-96 선택 동의 ①). 가입 전 회원(동의 칸 빈 값)도 적는다."""
+    w = _Writer()
+    assert js.save_review(w, _user(history=False), [_resp("02_hold_low_conf.json")]) == js.SAVED  # type: ignore[arg-type]
+    assert w.added and w.committed
 
 
 # ── ② 적는 칸 ─────────────────────────────────────────────────
@@ -308,3 +310,90 @@ def test_실제_DB_가_모든_픽스처의_행을_받는다() -> None:
     finally:
         session.rollback()
         session.close()
+
+
+@pytest.mark.skipif(
+    os.environ.get("COPYLANE_DB_IT") != "1", reason="실제 DB 에 쓴다 — COPYLANE_DB_IT=1 일 때만"
+)
+def test_실제_DB_에서_홈_통계는_같은_문구의_최신_판정만_센다() -> None:
+    """🆕 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) 같은 문구를 두 번 적으면 이력(`_owned_judgments`)은 두 벌 ·
+    홈 통계(`_latest_judgments`)는 문장마다 **나중 판정** 하나. 🚨 한 트랜잭션 안에서 재고 되돌린다(앞 시험과 같다)."""
+    from datetime import timedelta  # noqa: PLC0415
+
+    from sqlalchemy import func, select  # noqa: PLC0415
+
+    from app.auth import hash_password  # noqa: PLC0415
+    from app.db import _SessionLocal  # noqa: PLC0415
+    from app.models import UserAccount  # noqa: PLC0415
+
+    session = _SessionLocal()
+    try:
+        now = datetime.now(UTC)
+        user = UserAccount(
+            id=uuid.uuid4(),
+            email=f"it-{uuid.uuid4().hex[:8]}@example.com",
+            pw_hash=hash_password("x" * 12),
+            name="it",
+            terms_version="v1",
+            terms_agreed_at=now,
+            disclaimer_agreed_at=now,
+            consent_history_at=now,
+        )
+        session.add(user)
+        session.flush()
+        res = _resp("02_hold_low_conf.json")
+        batches = []
+        for k in range(2):  # 같은 문구를 두 번 — 앞은 이르게 · 뒤는 늦게
+            docs, sents, judgs = js.build_rows(user, [res])
+            for j in judgs:
+                j.judged_at = now + timedelta(seconds=k)
+            session.add_all(docs)
+            session.flush()
+            session.add_all(sents)
+            session.flush()
+            session.add_all(judgs)
+            session.flush()
+            batches.append((sents, judgs))
+
+        def ids(stmt) -> set:  # noqa: ANN001
+            return set(session.scalars(stmt.with_only_columns(Judgment.id)).all())
+
+        def count(stmt) -> int:  # noqa: ANN001
+            return session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+
+        n = len(batches[0][1])
+        raws = {s.raw for s in batches[0][0]}
+        assert count(user_router._owned_judgments(user.id)) == 2 * n, "이력은 두 벌"
+        latest = ids(user_router._latest_judgments(user.id))
+        assert len(latest) == len(raws), "🔴 같은 문장 글자가 둘 이상 세어졌다"
+        assert latest <= {j.id for j in batches[1][1]}, "🔴 최신이 아닌 판정을 셌다"
+    finally:
+        session.rollback()
+        session.close()
+
+
+# ── 🔄 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) 품목을 고른 재판정도 **새 행**으로 적는다 — 앞 기록을 지우지 않는다 ──────────
+
+
+class _NoDelete(_Writer):
+    """지우기(`execute`)가 오면 시험이 깨지는 세션 — 이력은 새 행으로만 쌓인다."""
+
+    def execute(self, stmt: object) -> None:
+        raise AssertionError(f"🔴 이력 저장이 지우기를 불렀다 — {stmt}")
+
+
+@pytest.mark.gate
+def test_고른_품목의_판정은_새_행으로_적고_앞_기록을_지우지_않는다() -> None:
+    w = _NoDelete()
+    before = _resp("02_hold_low_conf.json")
+    assert js.save_review(w, _user(), [before]) == js.SAVED  # type: ignore[arg-type]
+    n = len(w.added)
+    assert js.save_review(w, _user(), [before]) == js.SAVED  # type: ignore[arg-type]
+    assert len(w.added) == 2 * n, "🔴 같은 문구의 두 번째 판정이 새 행으로 쌓이지 않았다"
+
+
+@pytest.mark.gate
+def test_앞_기록을_지우는_저장_길은_없다() -> None:
+    assert not hasattr(js, "replace_review"), (
+        "🔴 지우고 다시 적는 길이 되살아났다(D-348 보충 36 결정 2)"
+    )
