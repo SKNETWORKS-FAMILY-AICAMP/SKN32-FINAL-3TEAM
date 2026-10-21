@@ -935,8 +935,7 @@
     </section>
     <section class="rv-pair-result" aria-label="문구 {{ n }} 결과">{{ review_loading() }}<h3>검수 결과</h3>
       {% if item %}{{ pair_result(item) }}
-      {#- 🔄 2026-10-21 (ksr · psj 병합) — 연결 실패(503 · `engine_down`)와 엔진 미착수(501)를 다시 가른다(10-15 전수 점검 · 시험이 지킨다) #}
-      {% elif engine_pending %}<p class="rv-pending">{% if engine_down %}판정 엔진에 연결하지 못했어요. 입력한 문구는 유지돼요. 잠시 뒤 다시 검수해주세요.{% else %}판정 엔진이 아직 붙지 않았어요. 검수 서비스를 사용할 수 없어 결과를 표시하지 못했어요.{% endif %}</p>
+      {% elif engine_pending %}{#- 🔄 2026-10-21 (lse) — 연결 실패(503 · engine_down)와 아직 안 붙음(501)을 가른다(10-15 전수 점검 · compose.html 과 같은 말) #}<p class="rv-pending">{% if engine_down %}판정 엔진에 연결하지 못했어요.{% else %}판정 엔진이 아직 붙지 않았어요.{% endif %} 입력한 문구는 유지돼요. 잠시 뒤 다시 검수해주세요.</p>
       {% else %}<div class="rv-pair-empty"><p>검수 결과가 여기에 표시돼요.</p><span>문구를 입력한 뒤 검수 버튼을 눌러주세요.</span></div>{% endif %}
     </section>
   </div>

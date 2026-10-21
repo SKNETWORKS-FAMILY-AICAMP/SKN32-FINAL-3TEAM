@@ -145,7 +145,12 @@ def _textareas(html: str) -> list[str]:
 
     return [
         h.unescape(v)
-        for v in re.findall(r'<textarea[^>]*name="text"[^>]*>(.*?)</textarea>', html, re.S)
+        # 🔄 2026-10-21 (lse) — 문구 짝 틀(`<template id="review-pair-template">`)의 칸은 제출되지 않는다 — 빼고 센다
+        for v in re.findall(
+            r'<textarea[^>]*name="text"[^>]*>(.*?)</textarea>',
+            re.sub(r"<template\b.*?</template>", "", html, flags=re.S),
+            re.S,
+        )
     ]
 
 
@@ -376,7 +381,8 @@ def test_로그인_전에_들어오면_랜딩이_첫_화면이다(monkeypatch: p
     r = TestClient(app).get("/u/", follow_redirects=False)
     assert r.status_code == 200 and "ld-hero" in r.text, "🔴 로그인 전 첫 화면이 랜딩이 아니다"
     body = TestClient(app).get("/u/review").text
-    assert 'href="/u/help?tab=guide">이용 가이드</a>' in body
+    # 🔄 2026-10-21 (lse · psj 39d7eeb) — 「이용 가이드」는 헤더 드롭다운이고 링크 글자는 「사용방법」이다
+    assert 'href="/u/help?tab=guide"' in body and "이용 가이드" in body
 
 
 @pytest.mark.gate
