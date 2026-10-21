@@ -1,11 +1,11 @@
 /* Open admin surfaces: group with tone and space, keep rules for tabular data. */
 body:has(.admin-shell),.admin-shell {
-  --a-page-gradient:radial-gradient(ellipse at 0% 10%,#e4e9f8 0%,transparent 60%),radial-gradient(ellipse at 100% 90%,#e9e1f4 0%,transparent 60%),linear-gradient(135deg,#f7f8fc,#f6f3fa);
+  --a-page-gradient:radial-gradient(48rem 34rem at 8% 0%,rgba(234,43,82,.08),transparent 62%),radial-gradient(44rem 32rem at 100% 12%,rgba(245,107,80,.08),transparent 60%),radial-gradient(52rem 36rem at 60% 105%,rgba(234,43,82,.06),transparent 62%),linear-gradient(180deg,#FCF2F3 0%,#FFF7F3 100%);
   --a-summary-band:linear-gradient(110deg,color-mix(in srgb,var(--a-signal-soft) 78%,transparent),color-mix(in srgb,var(--a-signal-soft) 30%,transparent));
 }
 @media(prefers-color-scheme:dark) {
   body:has(.admin-shell),.admin-shell {
-    --a-page-gradient:radial-gradient(ellipse at 0% 10%,#22304a 0%,transparent 60%),radial-gradient(ellipse at 100% 90%,#30263d 0%,transparent 60%),linear-gradient(135deg,#181e2d,#211d2b);
+    --a-page-gradient:radial-gradient(48rem 34rem at 8% 0%,rgba(234,43,82,.12),transparent 62%),radial-gradient(44rem 32rem at 100% 12%,rgba(245,107,80,.09),transparent 60%),radial-gradient(52rem 36rem at 60% 105%,rgba(234,43,82,.08),transparent 62%),linear-gradient(#1C1416,#1C1416);
   }
 }
 .admin-shell .admin-main :is(.admin-overview-card,.as-panel,.as-metric,.dash-card,.dash-kpi,.member-kpi,.cs-kpi,.docs-kpi) {
@@ -55,7 +55,7 @@ body:has(.admin-shell),.admin-shell {
 .admin-shell .admin-main:has(>.as-compact),
 .admin-shell .admin-main:has(>.admin-overview-head) { max-width:1160px; }
 body:has(.as-compact),body:has(.admin-summary) {
-  --a-page-gradient:linear-gradient(135deg,#f5f7fc 0%,#f8f7fc 55%,#f5f2fa 100%);
+  --a-page-gradient:radial-gradient(48rem 34rem at 8% 0%,rgba(234,43,82,.08),transparent 62%),radial-gradient(44rem 32rem at 100% 12%,rgba(245,107,80,.08),transparent 60%),radial-gradient(52rem 36rem at 60% 105%,rgba(234,43,82,.06),transparent 62%),linear-gradient(180deg,#FCF2F3 0%,#FFF7F3 100%);
 }
 .admin-summary { margin:26px 0 38px; }
 .admin-summary-head { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px 24px; }
@@ -115,7 +115,7 @@ body:has(.as-compact),body:has(.admin-summary) {
 .as-analysis-hint { margin-left:auto; }
 .as-analysis-details[open] .as-analysis-hint { display:none; }
 @media(prefers-color-scheme:dark) {
-  body:has(.as-compact),body:has(.admin-summary) { --a-page-gradient:linear-gradient(135deg,#1b2232,#211e2d); }
+  body:has(.as-compact),body:has(.admin-summary) { --a-page-gradient:radial-gradient(48rem 34rem at 8% 0%,rgba(234,43,82,.12),transparent 62%),radial-gradient(44rem 32rem at 100% 12%,rgba(245,107,80,.09),transparent 60%),radial-gradient(52rem 36rem at 60% 105%,rgba(234,43,82,.08),transparent 62%),linear-gradient(#1C1416,#1C1416); }
 }
 @media(max-width:850px) {
   .admin-shell .admin-main .as-compact .as-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
