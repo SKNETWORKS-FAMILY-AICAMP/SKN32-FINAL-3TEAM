@@ -26,6 +26,9 @@ os.environ["COPYLANE_COPYGEN"] = "off"
 # 🆕 2026-10-13 (D-333) — **판정 인코더를 끈다** (`COPYLANE_MODEL_DIR`). 인코더는 이제 `.env` 에서도 켜진다(`collect.env.setting`) —
 #    켜 둔 기기에서 그래프를 도는 테스트가 수백 MB 모델을 올리고 결과가 기기마다 갈리면 안 된다. 켜진 동작은 대역을 끼워 잰다.
 os.environ["COPYLANE_MODEL_DIR"] = ""
+# 🆕 2026-10-21 (D-348 보충 35 결정 1) — **기록 · 분기 불변식이 깨지면 시험은 거부한다** (`app.graph.INVARIANT_ENV`).
+#    운영 · 평가는 바로잡고(전제 보류로 내림) 로그를 남긴다 — 시험에서 바로잡으면 결함이 초록불 뒤에 숨는다(D-162).
+os.environ["COPYLANE_INVARIANT"] = "raise"
 # 🆕 2026-10-14 — **`.env` 를 여기서 한 번 읽는다** (`override=False` — 위에서 박은 값이 이긴다).
 #    ⛔ 처음 읽는 때가 실행 순서에 달려 있었다 — 값을 지운(`delenv`) 테스트 뒤에 처음 읽히면 `.env` 값이 다시 채워져
 #       파일 몇 개만 돌리면 깨지고 전체로 돌리면 지나갔다(`tests/test_encode_node.py` `off` · 2026-10-14).
