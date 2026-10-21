@@ -83,16 +83,18 @@ class _Writer:
 
 
 @pytest.mark.gate
-@pytest.mark.parametrize(
-    ("user", "status"),
-    [(None, None), (_user(history=False, improve=True), js.OFF)],
-    ids=["비회원", "미동의"],
-)
-def test_비회원과_미동의_회원은_아무것도_쓰지_않는다(user: object, status: str | None) -> None:
-    """🔄 2026-10-14 — 미동의 회원은 `off` 로 알린다(화면이 「이력 보관이 꺼져 있다」를 그린다 · D-96)."""
+def test_비회원은_아무것도_쓰지_않는다() -> None:
     w = _Writer()
-    assert js.save_review(w, user, [_resp("02_hold_low_conf.json")]) == status  # type: ignore[arg-type]
+    assert js.save_review(w, None, [_resp("02_hold_low_conf.json")]) is None  # type: ignore[arg-type]
     assert not w.added and not w.committed, f"🔴 써서는 안 되는 판정을 적었다 — {w.added}"
+
+
+@pytest.mark.gate
+def test_이력_보관은_필수라_동의_기록이_없는_회원도_적는다() -> None:
+    """🔄 2026-10-20 (lse · 사용자 결정) — 검수 이력 보관은 필수다(종전 D-96 선택 동의 ①). 가입 전 회원(동의 칸 빈 값)도 적는다."""
+    w = _Writer()
+    assert js.save_review(w, _user(history=False), [_resp("02_hold_low_conf.json")]) == js.SAVED  # type: ignore[arg-type]
+    assert w.added and w.committed
 
 
 # ── ② 적는 칸 ─────────────────────────────────────────────────
@@ -308,3 +310,50 @@ def test_실제_DB_가_모든_픽스처의_행을_받는다() -> None:
     finally:
         session.rollback()
         session.close()
+
+
+# ── 🆕 2026-10-20 (lse) 품목을 고른 재판정 — 같은 문구의 앞 기록을 바꿔 적는다(`replace_review`) ──────────
+
+
+class _Replacer(_Writer):
+    """앞 기록 찾기(`scalars`) · 지우기(`execute`)를 받는 세션 — 최근 문서 하나의 문장 글자를 들고 있다."""
+
+    def __init__(self, prior_raws: list[str]) -> None:
+        super().__init__()
+        self.prior_id = uuid.uuid4()
+        self.prior_raws = prior_raws
+        self.deleted: list[str] = []
+        self._calls = 0
+
+    def scalars(self, stmt: object) -> SimpleNamespace:
+        self._calls += 1
+        rows = [self.prior_id] if self._calls == 1 else list(self.prior_raws)
+        return SimpleNamespace(all=lambda: rows)
+
+    def execute(self, stmt: object) -> None:
+        self.deleted.append(str(stmt))
+
+
+def test_고른_품목의_판정은_같은_문구의_앞_기록을_바꿔_적는다() -> None:
+    res = _resp("02_hold_low_conf.json")
+    raws = [s.text for s in res.sentences if not s.not_claim]
+    w = _Replacer(raws)
+    assert js.replace_review(w, _user(), res) == js.SAVED  # type: ignore[arg-type]
+    assert w.deleted and "DELETE FROM work_doc" in w.deleted[0], (
+        "🔴 앞 기록(고르기 전 보류)을 지우지 않았다"
+    )
+    assert w.added and w.committed, "🔴 고른 품목의 판정을 적지 않았다"
+
+
+def test_글자가_다른_문구의_기록은_지우지_않는다() -> None:
+    res = _resp("02_hold_low_conf.json")
+    w = _Replacer(["전혀 다른 문장"])
+    assert js.replace_review(w, _user(), res) == js.SAVED  # type: ignore[arg-type]
+    assert not w.deleted, "🔴 다른 문구의 기록을 지웠다"
+    assert w.added and w.committed
+
+
+def test_비회원의_고른_판정은_적지_않는다() -> None:
+    w = _Replacer([])
+    assert js.replace_review(w, None, _resp("02_hold_low_conf.json")) is None  # type: ignore[arg-type]
+    assert not w.added and not w.deleted

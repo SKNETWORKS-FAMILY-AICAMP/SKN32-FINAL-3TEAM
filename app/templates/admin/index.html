@@ -4,40 +4,46 @@
   ✅ **`governor` 로그인을 지나야 뜬다** (D-66 구현 · D-213). 읽기도 막는다 — 이 화면이 내는
      것은 등급 판정 근거와 **2인 확인 서명(사람 이름)** 이다.
   🔴 **클라우드 에디션에서는 이 화면이 아예 안 붙는다** — 라우트가 없으면 404 다 (D-213).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 관리자{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
-<h1>관리자</h1>
-
-<p><b>{{ actor }}</b> 로 로그인했다.
-  <form method="post" action="/logout" class="inline">
-    <button type="submit">로그아웃</button>
-  </form></p>
-<p class="warn">🚨 <b>쓰기 경로는 아직 없다.</b> 2인 확인·등급 변경은 별도 판정 뒤에 연다.</p>
-
-<section>
-  <h2>데이터 층</h2>
-  <table>
-    <tr><th>테이블</th><th>행</th></tr>
-    {% for name, n in counts.items() %}
-    <tr><td>{{ name }}</td><td>{{ n }}</td></tr>
-    {% endfor %}
-  </table>
-  {% if not counts %}<p>DB 에 못 붙었다 — <code>launcher.py db-up</code> 을 먼저 돌린다.</p>{% endif %}
-</section>
-
-<section>
-  <h2>거버넌스</h2>
-  {# ⬜ 2인 확인 워크플로 · 판정매트릭스 열람이 여기 붙는다.
-     🚨 **생성물은 화면이 만들지 않는다** — 보여 주기만 한다 (D-90 · 집행계약 §6).
-     🔄 상단 메뉴(admin/_nav.html)로 옮겼다 — 화면 셋(판정 근거·표현 사전·관리자 계정)
-        전부 nav 에서 바로 간다. 여기는 아직 없는 것만 남긴다. #}
-  <p>⬜ 2인 확인 쓰기 · 판정매트릭스 — 아직 없다.</p>
-</section>
+#}{% extends "admin/_base.html" %}
+{% from "user/_icons.html" import icon %}
+{% block title %}운영 대시보드 | CopyLane 관리자{% endblock %}
+{% block admin_content %}
+<div class="admin-overview-head">
+  <div><h1>운영 현황</h1><p>서비스 이용 현황과 확인이 필요한 업무를 살펴보세요.</p></div>
+  <nav class="period-tabs" aria-label="이용 추이 기간">{% for p in periods %}<a href="/admin/?{{ {'period':p,'status':ticket_status}|urlencode }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>{% endfor %}</nav>
 </div>
+{% if dash.source != "db" %}<p class="warn"><b>이용 기록을 읽지 못했어요.</b> 검수 건수와 추이는 DB 에 연결된 뒤 표시돼요 — 0건이라는 뜻이 아니에요.</p>{% endif %}
+<section class="admin-summary" aria-labelledby="admin-summary-title">
+  <div class="admin-summary-head"><div><h2 id="admin-summary-title">주요 운영 지표</h2><p>서비스 운영에 필요한 수치를 확인하세요.</p></div><span>검수: {{ period_label[period] }} · 회원·문의: 현재 기준</span></div>
+  <div class="admin-overview-kpis">
+    <section class="admin-overview-card"><div class="kpi-title">검수 요청{{ icon('review') }}</div><div class="kpi-value">{{ dash.kpi.judge }}<small>건</small></div><div class="admin-chart-note">{{ dash.delta.judge }}{% if dash.kpi.sentences is not none %} · 검수 문장 {{ '{:,}'.format(dash.kpi.sentences) }}개{% endif %}</div></section>
+    <section class="admin-overview-card"><div class="kpi-title">전체 회원<svg class="cl-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M17 15a5 5 0 0 1 4 4v2"/></svg></div><div class="kpi-value">{{ '{:,}'.format(member_total) if member_total is not none else '-' }}<small>명</small></div><div class="admin-chart-note">{{ '활성 · 휴면 계정 기준 (비활성 제외)' if member_total is not none else 'DB 에 연결하지 못했어요' }}</div></section>
+    <section class="admin-overview-card"><div class="kpi-title">미처리 문의{{ icon('help') }}</div><div class="kpi-value">{{ pending_tickets if pending_tickets is not none else '-' }}<small>건</small></div><div class="admin-chart-note">현재 접수된 미처리 문의</div></section>
+  </div>
+  <div class="admin-generation-note">{{ icon('spark',20) }}<b>카피 생성</b><span class="admin-status">집계 미제공</span><p>생성 결과를 저장하지 않아 이용 건수를 집계하지 않아요.</p></div>
+</section>
+<div class="admin-overview-grid">
+  <section class="admin-overview-card">
+    <div class="admin-card-head"><h2>{{ dash.trend_title }}</h2></div>
+    <p class="admin-legend"><span><i></i>문구 검수 (요청 문장 수)</span></p>
+    {% if dash.source == "db" %}
+    <div class="admin-chart" role="img" aria-label="{{ dash.trend_title }} · 검수 판정 문장 수. 상세 수치는 아래에서 확인할 수 있습니다.">
+      {% for label in dash.labels %}{% set n = loop.index0 %}<div class="admin-chart-col"><div class="admin-chart-bars"><span style="height:{{ (dash.judge_series[n] / dash_max * 100)|round if dash_max else 0 }}%" title="{{ label }} 검수 {{ dash.judge_series[n] }}건"></span></div><small>{% if dash.labels|length <= 12 or loop.first or loop.last or n % 3 == 0 %}{{ label }}{% endif %}</small></div>{% endfor %}
+    </div>
+    <p class="admin-chart-note">판정 문장 수 · 축 상한 {{ dash_max }}건 · 회원 검수 기준(10-20 이전은 동의한 회원 것만) · {{ dash.gen_note }}</p>
+    <details class="admin-chart-note"><summary>추이 수치 확인</summary><div class="admin-table-scroll"><table><tr><th>기간</th><th>검수 문장</th></tr>{% for label in dash.labels %}<tr><td>{{ label }}</td><td>{{ dash.judge_series[loop.index0] }}건</td></tr>{% endfor %}</table></div></details>
+    {% else %}<p class="as-empty">이용 추이를 읽지 못했어요.</p>{% endif %}
+  </section>
+  <section class="admin-overview-card"><div class="admin-card-head"><h2>확인이 필요한 업무</h2></div>
+    <a class="admin-task" href="/admin/cs/tickets?status=open">{{ icon('help',20) }}<span>미처리 문의</span><b>{{ pending_tickets if pending_tickets is not none else '-' }}<small>건</small></b><em>›</em></a>
+    <a class="admin-task" href="/admin/errors">{{ icon('info',20) }}<span>오류 로그</span><small>기록 확인</small><em>›</em></a>
+    <a class="admin-task" href="/admin/signup-review">{{ icon('check',20) }}<span>가입 승인 심사</span><small class="admin-status">{{ signup_label }}</small><em>›</em></a>
+    <p class="admin-chart-note">각 항목에서 상세 내용을 확인하세요. 오류 건수는 여기서 집계하지 않습니다.</p>
+  </section>
 </div>
+<section class="admin-overview-card admin-inquiries">
+  <div class="admin-card-head"><h2>최근 접수된 문의</h2><form method="get" action="/admin/"><input type="hidden" name="period" value="{{ period }}"><select name="status" aria-label="문의 상태"><option value="">전체 상태</option>{% for code, label in ticket_statuses.items() %}<option value="{{ code }}" {% if ticket_status == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button type="submit">적용</button></form></div>
+  <div class="admin-table-scroll"><table><thead><tr><th>문의 내용</th><th>유형</th><th>상태</th><th>접수일</th></tr></thead><tbody>{% for ticket in tickets %}<tr><td><a href="/admin/cs/tickets/{{ ticket.id }}">{{ ticket.title }}</a></td><td>{{ ticket.type }}</td><td><span class="admin-status{% if ticket.status == '미처리' %} wait{% endif %}">{{ ticket.status }}</span></td><td>{{ ticket.at }}</td></tr>{% else %}<tr><td colspan="4">{% if ticket_source == "db" %}해당 상태의 문의가 없습니다.{% else %}문의를 읽지 못했습니다 — DB 연결 상태를 확인해주세요.{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+</section>
+<section class="admin-data"><details><summary>데이터 층 · 실제 조회 결과</summary>{% if counts %}<div class="admin-table-scroll"><table><tr><th>테이블</th><th>행</th></tr>{% for name,n in counts.items() %}<tr><td>{{ name }}</td><td>{{ n }}</td></tr>{% endfor %}</table></div>{% else %}<p class="warn">DB에 연결하지 못해 테이블 건수를 확인할 수 없습니다. <code>launcher.py db-up</code> 실행 상태를 확인해주세요.</p>{% endif %}</details><p>읽기 전용입니다. 2인 확인·등급 변경은 별도 절차가 마련된 뒤 사용할 수 있습니다.</p></section>
 {% endblock %}

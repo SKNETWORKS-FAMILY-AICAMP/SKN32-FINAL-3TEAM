@@ -1,83 +1,38 @@
-{# app/templates/admin/stats/member.html — 이용자 통계 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
+{# app/templates/admin/stats/member.html — 이용자 통계 · 소유자 **psj** (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** CSV 다운로드 버튼은 disabled 뼈대다(목업 `mockDownload`).
-  🔴 `member_stat` 테이블이 아직 없다 — 더미다 (admin_stats.py 참고).
-  🔴 일/주/월 토글은 목업에서 JS 지만 여기는 GET 쿼리(`?period=`)로 전환한다.
+  🔄 2026-10-20 — `user_account` 를 센다(admin_stats `_load_members`). 예시 수치(회원 12,483명 · 플랜 분포 · 유형별 현황)는 지웠다 (D-147).
+  🔴 회원 유형 · 요금제 칸은 표에 없다 (D-66 · D-69) — 그 분포는 그리지 않는다. 못 읽으면 안내 (D-72).
+  ★ 상태는 회원 목록과 같은 식 — 비활성(`disabled_at`) > 휴면(마지막 접속 {{ dormant_days }}일 전) > 활성.
+  🔴 일/주/월 토글은 GET 쿼리(`?period=`)로 전환한다 (CSP `script-src 'self'`).
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 이용자 통계{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
-<h1>이용자 통계</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> <code>member_stat</code> 테이블이 아직 없어요 — 수치는 화면 구조 확인용입니다.</p>
-
-<div class="stat-kpis">
-  <div class="stat-kpi"><span>전체 회원수</span><b>{{ "{:,}".format(kpi.total) }}</b></div>
-  <div class="stat-kpi"><span>일반 계정수</span><b>{{ "{:,}".format(kpi.general) }}</b></div>
-  <div class="stat-kpi"><span>인플루언서 계정수</span><b>{{ "{:,}".format(kpi.influencer) }}</b></div>
-  <div class="stat-kpi"><span>기업수</span><b>{{ "{:,}".format(kpi.enterprise) }}</b></div>
+#}
+{% extends "admin/stats/_base.html" %}
+{% from "admin/stats/_parts.html" import metric,compact_distribution %}
+{% block stats_title %}이용자 통계{% endblock %}
+{% block stats_description %}회원 상태와 가입 · 비활성 흐름을 확인하세요.{% endblock %}
+{% block stats_filters %}<span>가입 · 비활성 추이 기간</span><nav class="period-tabs" aria-label="가입·비활성 집계 기간">{% for p in periods %}<a href="?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>{% endfor %}</nav>{% endblock %}
+{% block stats_notice %}
+{% with table="user_account" %}{% include "admin/_db_notice.html" %}{% endwith %}
+{% if source == 'db' %}<p class="as-notice">회원 유형 · 요금제는 저장하는 칸이 없어 집계하지 않아요. 회원 상태는 회원 목록과 같은 기준이에요.</p>{% endif %}
+{% endblock %}
+{% block stats_content %}
+{% if source == 'db' %}
+<div class="as-kpis">
+  {{ metric('전체 회원','{:,}명'.format(kpi.live),'비활성 계정 제외','bag') }}
+  {{ metric('활성','{:,}명'.format(kpi.active),'최근 ' ~ dormant_days ~ '일 안에 접속') }}
+  {{ metric('휴면','{:,}명'.format(kpi.dormant),dormant_days ~ '일 넘게 접속 없음') }}
+  {{ metric('비활성','{:,}명'.format(kpi.disabled),'계정을 끈 회원') }}
 </div>
-
-<h2>유료 계정 분포</h2>
-<div class="usage-trend">
-  {% for row in paid_plans %}
-  <div class="usage-row">
-    <span class="usage-label">{{ row.label }}</span>
-    <div class="usage-bar" style="width: {{ (row.value / row.max * 100) | round(1) }}%;"></div>
-    <span class="usage-value">{{ "{:,}".format(row.value) }}</span>
-  </div>
-  {% endfor %}
+<p class="as-context">마지막 가입 {{ kpi.last_join }}</p>
+<div class="as-grid">
+  <section class="as-panel"><div class="as-panel-head"><h2>가입 · 비활성 추이</h2><span class="as-unit">{{ trend_scope }} · 명</span></div><p class="as-legend"><span><i></i>가입</span><span><i class="as-secondary"></i>비활성</span></p>
+    {% set join_max = (trend|map(attribute='join')|max) if trend else 0 %}{% set leave_max = (trend|map(attribute='leave')|max) if trend else 0 %}{% set scale = [join_max,leave_max]|max %}
+    <div class="as-chart" role="img" aria-label="{{ trend_scope }} 가입과 비활성 전환 인원 비교. 상세 수치는 아래 표에서 확인할 수 있습니다.">
+      {% for row in trend %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (row.join / scale * 100)|round(1) if scale else 0 }}%" title="{{ row.label }} 가입 {{ row.join }}명"></span><span class="as-chart-bar as-secondary" style="height:{{ (row.leave / scale * 100)|round(1) if scale else 0 }}%" title="{{ row.label }} 비활성 {{ row.leave }}명"></span></div><small>{{ row.label }}</small></div>{% endfor %}
+    </div><p class="as-context">단위 · 명 · 축 상한 {{ '{:,}'.format(scale) }}명 · 비활성은 계정을 끈 날 기준이에요</p>
+  </section>
+  <section class="as-panel"><div class="as-panel-head"><h2>동의 · 인증 현황</h2><span class="as-unit">전체 회원 대비</span></div>{{ compact_distribution(consents,'명') }}<p class="as-context">검수 이력 보관은 가입 때 필수 동의예요 — 그래서 여기서는 세지 않아요.</p></section>
 </div>
-
-<h2>회원 유형</h2>
-<div class="stat-type-cards">
-  {% for c in type_cards %}
-  <div class="stat-type-card">
-    <h3>{{ c.type }}</h3>
-    <p>{{ c.desc }}</p>
-    <b>{{ "{:,}".format(c.count) }}명</b>
-  </div>
-  {% endfor %}
-</div>
-
-<h2>가입 · 탈퇴 추이</h2>
-<nav class="period-tabs" aria-label="기간">
-  {% for p in periods %}
-  <a href="/admin/stats/member?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>
-  {% endfor %}
-</nav>
-<table>
-  <tr><th>구간</th><th>가입</th><th>탈퇴</th></tr>
-  {% for t in trend %}
-  <tr><td>{{ t.label }}</td><td>{{ t.join }}</td><td>{{ t.leave }}</td></tr>
-  {% endfor %}
-</table>
-<p><button type="button" disabled>CSV 다운로드</button> <span class="hint">⬜ 실데이터 붙을 때 연다</span></p>
-
-<style>
-.admin-shell .stat-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
-.admin-shell .stat-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 8rem; }
-.admin-shell .stat-kpi span { font-size: .8rem; color: var(--a-clay); }
-.admin-shell .stat-kpi b { font-size: 1.3rem; }
-.admin-shell .usage-trend { display: flex; flex-direction: column; gap: .5rem; max-width: 30rem; margin-bottom: 1.5rem; }
-.admin-shell .usage-row { display: flex; align-items: center; gap: .6rem; }
-.admin-shell .usage-label { width: 5rem; font-size: .8rem; color: var(--a-clay); }
-.admin-shell .usage-bar { height: .6rem; background: var(--a-signal); border-radius: .3rem; min-width: .3rem; }
-.admin-shell .usage-value { font-size: .8rem; white-space: nowrap; }
-.admin-shell .stat-type-cards { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-.admin-shell .stat-type-card { border: 1px solid var(--a-line); border-radius: .6rem; padding: .8rem 1rem; background: var(--a-surface2); max-width: 16rem; }
-.admin-shell .stat-type-card h3 { margin: 0 0 .3rem; font-size: 1rem; }
-.admin-shell .stat-type-card p { margin: 0 0 .5rem; font-size: .85rem; color: var(--a-clay); }
-.admin-shell .stat-type-card b { font-size: 1.1rem; }
-.admin-shell .period-tabs { display: flex; gap: .4rem; margin-bottom: .8rem; }
-.admin-shell .period-tabs a { padding: .3rem .8rem; border: 1px solid var(--a-line); border-radius: .4rem; text-decoration: none; color: var(--a-ink); font-size: .85rem; }
-.admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
-.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
-</style>
-</div>
-</div>
+<details class="as-analysis-details"><summary><span class="as-analysis-title">가입 · 비활성 상세</span><span class="as-analysis-description">{{ trend_scope }} · 명</span><span class="as-analysis-hint">펼쳐 확인하기</span></summary><div class="admin-table-scroll"><table><thead><tr><th>기간</th><th>가입</th><th>비활성</th></tr></thead><tbody>{% for row in trend %}<tr><td>{{ row.label }}</td><td>{{ '{:,}'.format(row.join) }}</td><td>{{ '{:,}'.format(row.leave) }}</td></tr>{% endfor %}</tbody></table></div></details>
+{% else %}<section class="as-panel as-unavailable"><h2>이용자 통계를 확인할 수 없습니다.</h2><p>회원 기록을 읽지 못했습니다. 연결 상태를 확인한 후 다시 조회해주세요.</p></section>{% endif %}
 {% endblock %}

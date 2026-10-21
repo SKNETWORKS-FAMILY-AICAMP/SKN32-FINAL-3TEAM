@@ -17,6 +17,9 @@
       JSON·오류 응답은 그 밖이었다. 헤더는 하나가 전부를 덮는다.
    🚨 정책 내용은 `_CSP_PAGE` 하나가 든다. 게이트가 **응답 헤더를 실제로 받아** 확인한다 #}
 <title>{% block title %}CopyLane{% endblock %}</title>
+<link rel="icon" type="image/png" sizes="16x16" href="/static/brand/favicon-16.png?v=1">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/brand/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="48x48" href="/static/brand/favicon-48.png?v=1">
 <link rel="stylesheet" href="/static/base.css">
 {# 화면 갈래별(사용자/관리자) 공통 스타일을 여기서 얹는다 — base.css 에는 화면별 스타일을 안 쓴다 (위 주석) #}
 {% block extra_css %}{% endblock %}
@@ -28,7 +31,7 @@
 </head>
 <body>
 <header>
-  <a href="/"><b>CopyLane</b></a>
+  <a href="/u/landing"><b>CopyLane</b></a>
   <nav>
     <a href="/u/">사용자</a>
     <a href="/admin/">관리자</a>

@@ -12,8 +12,8 @@
   ⬜ 온프레미스 에디션에서 이 화면을 닫을지는 D-79 로 미뤄져 있다(설계초안 09-22 운영테이블 §8).
   ⛔ 구역 셸 밖이다 — 가입 전 화면이라 사이드바가 없다.
 #}{% extends "base.html" %}
-{% block title %}CopyLane — 회원가입{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+{% block title %}회원가입 | CopyLane{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css?v=2"><link rel="stylesheet" href="/static/typography.css?v=1"><link rel="stylesheet" href="/static/auth.css?v=1">
 <style>
 /* 회원가입 전용 — 프로토타입 max-w-[480px]. 화면 하나짜리 스타일이라 user.css 가 아니라 여기 둔다 */
 .auth-card.auth-card-wide { max-width: 30rem; }
@@ -27,12 +27,13 @@
 .auth-consent input[type="checkbox"] { flex: 0 0 auto; width: 1rem; height: 1rem;
                                        margin: .2rem 0 0; padding: 0; }
 .auth-consent label > span { flex: 1 1 auto; min-width: 0; text-align: left; }
-</style>{% endblock %}
+</style><link rel="stylesheet" href="/static/user-reading.css?v=2">{% endblock %}
 {% block content %}
-<div class="user-shell">
+<div class="user-shell auth-page">
+{% include "user/_auth_brand.html" %}
 <form class="auth-card auth-card-wide" method="post" action="/u/signup">
   <h1>회원가입</h1>
-  <p class="auth-sub">가입하면 검수·카피생성 기록을 내 계정으로 모아 볼 수 있어요.</p>
+  <p class="auth-sub">가입하면 카피 생성 · AI 광고 생성과 검수 이력을 이용할 수 있어요.</p>
   {% if error %}<p class="auth-err" role="alert">{{ error }}</p>{% endif %}
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   {# 🆕 2026-10-14 — 회원 전용 안내에서 넘어왔으면 가입 뒤 그 화면으로 돌아간다 (`_next_path`) #}
@@ -61,14 +62,14 @@
 
   <div class="auth-consent">
     <label><input type="checkbox" name="agree_terms" {% if form.agree_terms %}checked{% endif %} required>
-      <span>(필수) 이용약관 및 개인정보처리방침에 동의합니다.</span></label>
+      <span>(필수) 이용약관 및 개인정보처리방침에 동의합니다. 검수한 문구와 결과는 <b>검수 이력</b>으로 보관돼요.</span></label>
     <label><input type="checkbox" name="agree_disclaimer" {% if form.agree_disclaimer %}checked{% endif %} required>
       <span>(필수) CopyLane의 진단은 <b>법적 확정 판단이 아닌 심의 통과 가능성
       진단</b>이며, 최종 판단은 전문가 검토를 따라야 함을 이해했습니다.</span></label>
   </div>
 
   <p class="auth-note">가입 확인 메일은 보내지 않아요 — 계정은 <b>미인증</b>으로 표시돼요.
-  검수 이력 보관 · 품질 개선 활용 동의(선택)는 가입 후 <b>마이페이지</b>에서 정할 수 있어요.</p>
+  품질 개선 활용 동의(선택)는 가입 후 <b>마이페이지</b>에서 정할 수 있어요.</p>
 
   <button class="auth-submit" type="submit">가입하기</button>
 

@@ -1,0 +1,42 @@
+/* Match the review reading scale inside user content only, never navigation. */
+.user-shell .user-main:not(:has([data-review-pairs])) { font-size:15px; }
+.user-shell .user-main:not(:has([data-review-pairs])) h1 { font-size:27px; }
+.user-shell .user-main:not(:has([data-review-pairs])) h2 { font-size:20px; }
+.user-shell .user-main:not(:has([data-review-pairs])) h3 { font-size:17px; }
+.user-shell .user-main:not(:has([data-review-pairs])) :is(p,li,td,summary) { font-size:15px; }
+.user-shell .user-main:not(:has([data-review-pairs])) :is(input:not([type=range]),textarea) { font-size:17px; }
+.user-shell .user-main:not(:has([data-review-pairs])) :is(label,legend,select,button) { font-size:16px; }
+.user-shell .user-main:not(:has([data-review-pairs])) :is(
+  .cl-workspace-head p,.gn-head p,.cp-head p,.hm-head p,.mp-head p,
+  .hg-heading p,.csb-heading p,.history-sub,.cl-section-description,
+  .gn-note,.cp-note,.mp-note,.csb-hint,.cl-data-info,.history-detail-note,
+  .hm-card>span,.hm-empty p,.hg-step p,.cl-history-footnote
+) { font-size:15px; }
+.user-shell .user-main:not(:has([data-review-pairs])) :is(
+  .cl-breadcrumb,.hg-breadcrumb,.csb-breadcrumb,small,.hm-date,
+  .history-detail-when,.csb-ticket-meta,.cp-ed-spec,.cp-ed-hint
+) { font-size:13px; }
+.user-shell .user-main:not(:has([data-review-pairs])) :is(
+  .cl-page-action,.gn-submit,.hm-start,.history-again,.cl-copy-history,
+  .csb-primary,.csb-outline,.hg-text-link,.mp-tab,.cp-pick label b
+) { font-size:16px; }
+.user-shell .user-main:not(:has([data-review-pairs])) .hm-card>b { font-size:19px; }
+.user-shell .user-main #gen-form .gn-pick label { font-size:16px; }
+.user-shell .user-main:not(:has([data-review-pairs])) :is(.gn-field,.mp-field) label { font-size:16px; }
+/* The ad's own typography belongs to its editor, not the surrounding UI. */
+.user-shell .user-main .ws-layout-paper p { font-size:inherit; }
+
+/* Authentication screens have no workspace main or navigation menu. */
+.user-shell.auth-page .auth-card { font-size:15px; }
+.user-shell.auth-page .auth-card h1 { font-size:27px; }
+.user-shell.auth-page .auth-card :is(p,.auth-sub,.auth-note,.auth-switch,.auth-forgot) { font-size:15px; }
+.user-shell.auth-page .auth-card label { font-size:16px; }
+.user-shell.auth-page .auth-card input:not([type=checkbox]) { font-size:17px; }
+.user-shell.auth-page .auth-card :is(button,.auth-alt) { font-size:16px; }
+.user-shell.auth-page .auth-card small { font-size:13px; }
+.user-shell.auth-page .auth-foot { font-size:15px; }
+.user-shell.auth-page .auth-foot small { font-size:13px; }
+
+/* Landing content only; keep its navigation and hero title scale. */
+.ld-page :is(.ld-lead,.ld-note,.ld-feature p,.ld-step p,.ld-faq p) { font-size:15px; }
+.ld-page :is(.ld-kicker,.ld-demo-top small) { font-size:13px; }

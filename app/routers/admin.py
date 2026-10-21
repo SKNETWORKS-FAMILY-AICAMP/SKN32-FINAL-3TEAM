@@ -4,7 +4,8 @@
    **읽기도 막는다.** 이 화면이 내는 것은 등급 판정 근거와 **2인 확인 서명(사람 이름)** 이다.
 🔴 **클라우드 에디션에서는 이 라우터가 아예 안 붙는다** (D-213) — 라우트가 없으면 404 다.
    배포 그림에 제품 관리자 화면의 자리가 없었고, 그것을 에디션(compose 프로파일)으로 갈랐다.
-⬜ **쓰기 경로는 아직 없다.** 게이트가 막고 있고, 여는 것은 별도 판정이다 (§8 ⑬ 의 남은 절반).
+🔄 2026-10-20 — 운영 표 쓰기(공지 `admin_board.py` · 문의 `admin_cs.py`)만 열었다 (D-260 ⑦ · 허용 목록 게이트).
+   ⬜ 거버넌스 쓰기(등급 변경 · 2인 확인 서명)는 아직 없다 — 여는 것은 별도 판정이다 (§8 ⑬ 의 남은 절반).
 
 ★ **거버넌스 운영 화면이 여기 붙는다** — 소스 레지스트리 2인 확인 · 판정매트릭스 열람.
   🚨 **생성물은 화면이 만들지 않는다** — 보여 주기만 한다 (D-90 · 집행계약 §6).
@@ -77,10 +78,50 @@ def _table_counts() -> dict[str, int]:
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
-    """관리자 첫 화면. 🚨 **DB 가 없어도 뜬다** — 빈 표를 그리고 고치는 법을 낸다 (D-51)."""
+    """운영 대시보드 — 검수 이용 · 회원 수 · 문의를 DB 에서 읽는다. 못 읽으면 「-」 + 안내 (D-72)."""
     actor = require_governor(request)
+    # 🔄 2026-10-20 (psj) — 문의 · 회원 수는 DB 를 읽는다(`admin_cs.recent` · `admin_dbread`). 이용 추이도 `judgment` 를
+    #    센다(`admin_stats._load_usage` — 통계 대시보드와 같은 집계 · D-99). 생성은 저장하지 않아 「저장 안 함」. 가입 심사는 라벨만.
+    from app.models import TICKET_STATUSES  # noqa: PLC0415
+    from app.routers import admin_cs, admin_dbread  # noqa: PLC0415
+    from app.routers.admin_signup_review import LABEL as SIGNUP_LABEL  # noqa: PLC0415
+    from app.routers.admin_stats import (  # noqa: PLC0415
+        _PERIOD_LABEL,
+        _PERIODS,
+        _clean_period,
+        _load_usage,
+    )
+
+    period = _clean_period(request.query_params.get("period"))
+    ticket_status = request.query_params.get("status", "")
+    if ticket_status not in TICKET_STATUSES:
+        ticket_status = ""
+    inbox = admin_cs.recent(ticket_status or None, limit=5)
+    msrc, mout = admin_dbread.run(
+        [("SELECT count(*) AS n FROM user_account WHERE disabled_at IS NULL", [])],
+        what="index.members",
+    )
+    dash = _load_usage(period)
     return templates.TemplateResponse(
-        request, "admin/index.html", {"counts": _table_counts(), "actor": actor}
+        request,
+        "admin/index.html",
+        {
+            "counts": _table_counts(),
+            "actor": actor,
+            "period": period,
+            "periods": _PERIODS,
+            "period_label": _PERIOD_LABEL,
+            "dash": dash,
+            "dash_max": dash["max"],
+            "member_total": mout[0][0]["n"] if msrc == "db" else None,
+            "tickets": inbox["rows"],
+            "ticket_source": inbox["source"],
+            "ticket_status": ticket_status,
+            "ticket_statuses": TICKET_STATUSES,
+            # 🔄 2026-10-20 — 가입 심사는 닫은 화면이다(D-260 ④) — 건수 대신 사유 라벨을 그린다
+            "signup_label": SIGNUP_LABEL,
+            "pending_tickets": inbox["counts"]["open"],
+        },
     )
 
 

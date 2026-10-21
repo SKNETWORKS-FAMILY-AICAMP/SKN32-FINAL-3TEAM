@@ -1,0 +1,44 @@
+/* Admin-only top navigation; the shared user shell is unchanged. */
+body:has(.admin-shell) .admin-topbar { padding:0 28px; gap:24px; flex-wrap:nowrap; position:relative; z-index:30; }
+.admin-brand { flex-shrink:0; }
+.admin-navigation { display:flex; align-items:stretch; gap:8px; align-self:stretch; margin-right:auto; }
+.admin-navigation .admin-nav-link,.admin-navigation summary { display:flex; align-items:center; justify-content:center; gap:8px; padding:24px 12px; color:var(--a-clay); font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; cursor:pointer; border-bottom:3px solid transparent; list-style:none; }
+.admin-navigation summary::-webkit-details-marker { display:none; }
+.admin-navigation summary::after { content:''; width:6px; height:6px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(45deg); margin-top:-4px; transition:transform .15s; }
+.admin-navigation details[open]>summary::after { transform:rotate(225deg); margin-top:3px; }
+.admin-navigation .is-current>summary,.admin-navigation .admin-nav-link[aria-current=page] { color:var(--a-signal-ink); border-bottom-color:var(--a-signal); }
+.admin-navigation :is(summary,.admin-nav-link):hover,.admin-navigation details[open]>summary { color:var(--a-signal-ink); background:var(--a-surface2); }
+.admin-navigation .admin-nav-cat { position:relative; margin:0; padding:0; border:0; background:none; }
+.admin-navigation .admin-nav-sub-list { position:absolute; top:calc(100% + 6px); left:0; width:225px; box-sizing:border-box; margin:0; padding:8px; border:1px solid var(--a-line); border-radius:10px; background:var(--a-surface); box-shadow:0 12px 30px #1c2d4b14; }
+.admin-navigation .admin-nav-sub { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-radius:6px; color:var(--a-ink); text-decoration:none; font-size:13px; }
+.admin-navigation .admin-nav-sub:hover { background:var(--a-surface2); }
+.admin-navigation .admin-nav-sub[aria-current=page] { background:var(--a-signal-soft); color:var(--a-signal-ink); font-weight:600; }
+.admin-navigation .admin-nav-sub[aria-current=page]:not(.admin-nav-closed)::after { content:'✓'; }
+.admin-navigation .admin-nav-closed { color:var(--a-clay); }
+.admin-navigation .admin-nav-sub:not(.admin-nav-closed)+.admin-nav-closed { border-top:1px solid var(--a-line); border-radius:0 0 6px 6px; margin-top:6px; padding-top:14px; }
+.admin-navigation .admin-closed-badge { font-weight:400; padding:1px 6px; white-space:nowrap; }
+.admin-account { flex-shrink:0; }
+.admin-menu-toggle { display:none; font:inherit; color:var(--a-ink); border:1px solid var(--a-line); background:var(--a-surface); border-radius:6px; padding:7px 12px; cursor:pointer; margin:0; }
+.admin-topbar :is(a,button,summary):focus-visible { outline:2px solid var(--a-signal); outline-offset:3px; }
+.admin-shell { display:block; }
+.admin-shell .admin-main { width:auto; max-width:none; margin:0; box-sizing:border-box; }
+@media(max-width:1250px) {
+  body:has(.admin-shell) .admin-topbar { gap:16px; padding:0 24px; flex-wrap:wrap; }
+  .admin-account { margin-left:auto; padding:14px 0; }
+  .admin-navigation { order:3; width:100%; margin-top:-10px; }
+  .admin-navigation .admin-nav-link,.admin-navigation summary { padding:12px 16px; }
+}
+@media(max-width:700px) {
+  body:has(.admin-shell) .admin-topbar { padding:14px 16px; gap:12px; }
+  .admin-brand { font-size:18px; gap:7px; }
+  .admin-brand small { font-size:9px; margin-left:3px; padding-left:9px; }
+  .admin-account { order:2; width:100%; margin:0; padding:0; font-size:12px; }
+  .admin-account form { margin-left:auto; }
+  .admin-menu-toggle:not([hidden]) { display:block; margin-left:auto; }
+  .admin-navigation { display:flex; flex-direction:column; gap:2px; margin-top:0; border-top:1px solid var(--a-line); padding-top:8px; }
+  .admin-nav-ready .admin-navigation:not(.is-expanded) { display:none; }
+  .admin-navigation .admin-nav-link,.admin-navigation summary { justify-content:space-between; padding:11px 12px; border-bottom:0; border-radius:6px; }
+  .admin-navigation .is-current>summary,.admin-navigation .admin-nav-link[aria-current=page] { background:var(--a-signal-soft); }
+  .admin-navigation .admin-nav-sub-list { position:static; width:auto; margin:4px 0 8px 12px; box-shadow:none; }
+  .admin-shell .admin-main { padding:24px 16px 16px; }
+}

@@ -73,7 +73,15 @@ def _login(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.gate
-@pytest.mark.parametrize("path", ["/u/history", "/u/history?verdict=hold&page=2", "/u/"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/u/history",
+        "/u/history?verdict=hold&page=2",
+        "/u/history?q=100%25&category=식품&days=30",
+        "/u/",
+    ],
+)
 def test_판정을_읽는_쿼리는_모두_내_문서로_걸러진다(
     rec: _Recorder, monkeypatch: pytest.MonkeyPatch, path: str
 ) -> None:
@@ -130,3 +138,14 @@ def test_판정_소유자_조건은_세션으로_넓히지_않는다() -> None:
     """🆕 2026-10-01 — `session_id` 로 이력을 읽는 길을 열지 않는다. 비회원 문서의 그 키는 지울 키다 (D-129)."""
     sql = str(user_router._owned_judgments(_ME).compile(dialect=postgresql.dialect()))
     assert "owner_id" in sql and "session_id" not in sql, f"🔴 이력 조건에 세션이 섞였다 — {sql}"
+
+
+def test_검색_필터는_개수와_목록에_함께_적용된다(rec: _Recorder) -> None:
+    user_router._history_rows(rec, _ME, None, 1, query="100%_", category="식품", days=30)
+    assert len(rec.sql) == 2
+    for sql in rec.sql:
+        assert str(_ME) in sql
+        assert "judgment.product_category = '식품'" in sql
+        assert "judgment.judged_at >=" in sql
+        assert "ESCAPE '/'" in sql
+        assert "100/%/_" in sql.replace("%%", "%")

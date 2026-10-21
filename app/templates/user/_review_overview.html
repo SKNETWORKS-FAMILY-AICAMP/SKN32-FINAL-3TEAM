@@ -1,0 +1,12 @@
+{% from "user/_icons.html" import icon %}
+{% macro overview(outcome) %}
+<section class="cl-result-overview cl-result-{{ outcome }}">
+  <h2>{{ {'hold':'전문가 검토가 필요해요.','pass':'검수 결과를 확인해주세요.','certificate':'이 조건에서는 사용할 수 없는 표현이에요.','guidance':'객관적인 근거 자료가 필요해요.'}.get(outcome, '판정을 완료하지 못했어요.') }}</h2>
+  {% if outcome == 'hold' %}
+  <p>판정 보류 · 위반 여부를 확정하지 못했어요. 아래 문장별 내용을 확인해주세요.</p>
+  {% elif outcome == 'pass' %}<p>적용한 검수 기준에서 특이사항을 찾지 못했어요. 실제 게재 전 최종 검토가 필요해요.</p>
+  {% elif outcome == 'certificate' %}<p>아래 사유와 적용 조건을 확인해주세요. 인정 여부와 표현 자체에 따라 수정 방향이 달라져요.</p>
+  {% elif outcome == 'guidance' %}<p>표현을 뒷받침할 자료와 문장별 안내를 함께 확인해주세요.</p>
+  {% else %}<p>문장별 판정 상태와 검수 범위를 확인해주세요.</p>{% endif %}
+</section>
+{% endmacro %}

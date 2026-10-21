@@ -3,12 +3,13 @@
   ✅ 읽기 전용. 「처리 상태」 섹션은 **자리만 잡았다** — 폼은 전부 disabled 이고 action 이 없다.
      ⬜ 확인 여부·메모를 저장할 칸은 `app_error_log` 초안에 없다. 필요하면 테이블 요청에 더한다.
   🔴 트레이스백 전문은 **저장하지 않는다** — 마스킹 필터를 안 지나기 때문이다 (요청 메모 §2).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 오류 로그 상세{% endblock %}
-{% block content %}
-<link rel="stylesheet" href="/static/admin.css">
+#}{% extends "admin/_base.html" %}
+{% block title %}오류 로그 상세 | CopyLane 관리자{% endblock %}
+{% block admin_layout %}reading{% endblock %}
+{% block admin_content %}
+
 <link rel="stylesheet" href="/static/admin_errors.css">
-{% include "admin/_nav.html" %}
+
 
 <p><a href="/admin/errors">← 오류 로그 목록</a></p>
 {% if row is none %}
@@ -19,7 +20,7 @@
 <p class="warn">🚨 <b>읽기 전용이다.</b> 아래 처리 상태 기록은 팀장 승인 전까지 비활성 상태다.</p>
 
 <h2>기본 정보</h2>
-<table class="er-kv">
+<div class="admin-table-scroll"><table class="er-kv">
   <tr><th>로그 ID</th><td>{{ row.id }}</td></tr>
   <tr><th>발생 시각</th><td>{{ row.occurred_at.strftime("%Y-%m-%d %H:%M:%S %Z") }}</td></tr>
   <tr><th>레벨</th><td><b>{{ row.level }}</b></td></tr>
@@ -28,7 +29,7 @@
   <tr><th>파일</th><td>{{ row.module or "-" }}</td></tr>
   <tr><th>함수</th><td>{{ row.func_name or "-" }}</td></tr>
   <tr><th>줄 번호</th><td>{{ row.lineno or "-" }}</td></tr>
-</table>
+</table></div>
 
 <h2>내용</h2>
 <pre class="er-msg">{{ row.message }}</pre>
@@ -38,7 +39,7 @@
 {% if not same %}
 <p class="er-muted">같은 위치(파일·함수·줄)에서 난 다른 기록이 없다.</p>
 {% else %}
-<table class="er-tbl">
+<div class="admin-table-scroll"><table class="er-tbl">
   <tr><th>발생 시각</th><th>레벨</th><th>내용</th></tr>
   {% for r in same %}
   <tr>
@@ -47,7 +48,7 @@
     <td>{{ r.message }}</td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 {% endif %}
 
 <h2>처리 상태 <small class="er-muted">(승인 대기 · 비활성)</small></h2>
@@ -65,9 +66,9 @@
 <p class="er-muted">⬜ 저장할 칸(상태·메모·확인자·확인 시각)이 테이블 초안에 없다 — 필요하면 팀장 요청에 더한다.</p>
 
 <h2>보관 정책</h2>
-<table class="er-kv">
+<div class="admin-table-scroll"><table class="er-kv">
   <tr><th>보관 기간</th><td>{{ retention_days }}일 <small class="er-muted">(<code>settings.ERROR_LOG_RETENTION_DAYS</code> · [임의] 팀장 확인 대기)</small></td></tr>
   <tr><th>자동 삭제</th><td>기록기(<code>app/error_log.py</code>)가 {{ purge_every_h }}시간마다 지난 행을 지운다</td></tr>
-</table>
+</table></div>
 {% endif %}
 {% endblock %}

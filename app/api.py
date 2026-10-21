@@ -30,7 +30,7 @@ import re
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -243,9 +243,19 @@ class SearchResult(BaseModel):
     counts: dict[str, int] = Field(default_factory=dict)
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """사이트 주소를 열면 사용자 첫 화면(`/u/` — 로그아웃이면 랜딩 · 로그인이면 홈)으로 간다.
+
+    🔄 2026-10-20 (lse · 화면 점검) — 배포 주소를 처음 연 사람에게 개발용 현황판이 보였다.
+       현황판은 `/dev` 로 옮겼다 — 팀원이 여는 자리는 그대로 있다.
+    """
+    return RedirectResponse("/u/", status_code=307)
+
+
+@app.get("/dev", response_class=HTMLResponse)
 def index() -> str:
-    """무엇이 있고 무엇이 아직 없는지 한 화면에 낸다.
+    """무엇이 있고 무엇이 아직 없는지 한 화면에 낸다 (🔄 2026-10-20 — `/` 에서 `/dev` 로 옮겼다).
 
     ⛔ 2026-09-09 — 서버를 처음 띄우고 브라우저로 열었더니 **404** 였다. 루트가 비어 있었다.
        🚨 **처음 여는 자리를 비워 두면 「안 도는 것」처럼 보인다.** 실제로는 돌고 있었다.

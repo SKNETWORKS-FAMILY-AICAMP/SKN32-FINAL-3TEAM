@@ -13,7 +13,7 @@
   ⛔ `POST /compose` 코어(템플릿 엔진)는 아직 없다 — 부르지 않는다 (D-124 · D-147).
 #}{% extends "user/_base.html" %}
 {% from "user/_sent_words.html" import sent_concl %}
-{% block title %}CopyLane — AI 광고 생성{% endblock %}
+{% block title %}AI 광고 생성 | CopyLane{% endblock %}
 {% block screen_css %}
 <style>
 .cp-head { margin-bottom: 1.25rem; }
@@ -25,6 +25,12 @@
 .cp-card > h2 { margin: 0 0 .6rem; font-size: .95rem; }
 .cp-step { font-size: .72rem; color: var(--u-clay); letter-spacing: .04em; }
 .cp-note { color: var(--u-clay); font-size: .78rem; line-height: 1.6; }
+/* 공식 문구 대조 — 같으면 초록 글씨 (D-341 결정 4) */
+.cp-fixed-match_same { color: var(--u-ok-ink); }
+/* 접어 두는 카드 — `.rv-dev` 와 같은 모양 */
+.cp-dev { padding: .7rem 1.15rem; border-style: dashed; }
+.cp-dev > summary { cursor: pointer; font-size: .75rem; color: var(--u-clay); }
+.cp-dev[open] > summary { margin-bottom: .7rem; }
 
 /* 종류 카드 셋 — 프로토타입 `fmt-pick`. 규격과 고지 위치를 같이 적는다 */
 .cp-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin: .2rem 0 1rem; }
@@ -122,6 +128,10 @@ main:has(.cp-ed) { max-width: 96rem; }
 
 .cp-submit { background: var(--u-signal); border-color: var(--u-signal);
              color: #fff; font-weight: 600; margin-top: .75rem; }
+.cp-submit:disabled { opacity: .6; cursor: wait; }
+/* 🆕 2026-10-15 (ksr · 점검 0 · 09) — 생성 중 표시 · 접어 둔 개발자 메모 */
+.cp-wait { margin: .5rem 0 0; font-size: .86rem; font-weight: 600; color: var(--u-signal-ink); }
+.cp-devnote summary { cursor: pointer; }
 
 .cp-board { border: 1px solid var(--u-line); border-radius: .75rem; overflow: hidden; }
 .cp-sec { display: flex; gap: .75rem; align-items: flex-start;
@@ -210,17 +220,20 @@ main:has(.cp-ed) { max-width: 96rem; }
 .user-shell[data-theme="dark"] .cp-t-orange .cp-concl { color: #fdba74; }
 .user-shell[data-theme="dark"] .cp-risk.rk-1 { color: #fde047; border-color: #7a6612; }
 .user-shell[data-theme="dark"] .cp-risk.rk-2 { color: #fdba74; border-color: #8a4a1c; }
-</style>
+</style><link rel="stylesheet" href="/static/compose-preview.css?v=1">
 {% endblock %}
 {% block user_content %}
-<div class="cp-head">
-  <h1>AI 광고 생성</h1>
-  <p>고른 카피를 어디에 쓸지 정하면 <b>규격과 섹션 골격을 먼저 깔아드려요.</b> 이미지와 문구는 섹션별로 직접 채우면 돼요.</p>
+{% from "user/_icons.html" import icon %}
+<div class="cp-head cl-workspace-head">
+  <div><h1>{{ "광고 편집" if draft else "AI 광고 생성" }}</h1>
+  <p>{{ "문구·이미지를 편집한 뒤 다시 검수하세요." if draft else "광고 형식을 고르고 사용할 문구를 입력하세요." }}</p></div>
+  <ol class="cl-flow cl-compose-flow"><li class="{{ 'is-done' if draft else 'is-current' }}"><b>{{ '✓' if draft else '1' }}</b>광고 설정</li><li class="{{ 'is-current' if draft else '' }}"><b>2</b>편집 · 검수</li></ol>
 </div>
 
 {% if not draft %}
-<form class="cp-card" method="post" action="/u/compose">
-  <h2><span class="cp-step">01 ·</span> 어떤 종류로 만들까요</h2>
+{# 🆕 2026-10-15 (ksr · 점검 0) — 「판정 받고 템플릿 만들기」를 누르면 「생성 중…」(`user_wait.js`) #}
+<form class="cp-card cl-compose-form" method="post" action="/u/compose" data-wait-form>
+  <h2>광고 형식</h2>
   {# 🔄 10-08 (lse) — 「상세페이지」에 checked 가 박혀 있어 다른 종류를 골라 제출해도 상세페이지로 돌아갔다.
      고른 값(picked) → 픽스처 결과의 포맷 → 기본 상세페이지 순으로 체크한다.
      🔄 10-12 (ksr) — 종류가 SNS 피드 · 상세페이지 · 배너 셋이다(`ad_formats`). 픽스처의 「카드뉴스」는 여기 없어 아무것도 체크하지 않는다 #}
@@ -228,11 +241,12 @@ main:has(.cp-ed) { max-width: 96rem; }
   <div class="cp-pick">
     {% for val, f in ad_formats.items() %}
     <input type="radio" id="f-{{ f.key }}" name="ad_format" value="{{ val }}"{% if fmt == val %} checked{% endif %}>
-    <label for="f-{{ f.key }}"><b>{{ val }}</b><span>{{ f.spec }}</span><span>고지 · {{ f.disclose }}</span></label>
+    <label for="f-{{ f.key }}"><span class="cl-radio-dot" aria-hidden="true"></span><span class="cl-format-art cl-format-{{ f.key }}" aria-hidden="true">{{ icon({"sns":"format-feed","detail":"format-detail","banner":"format-banner"}.get(f.key,"image"), 42) }}</span><span><b>{{ val }}</b><small>{{ f.spec }}</small><small>{{ {"sns":"이미지와 짧은 문구","detail":"여러 섹션으로 제품 소개","banner":"짧고 간결한 메시지"}.get(f.key, f.disclose) }}</small></span></label>
     {% endfor %}
   </div>
 
-  <h2><span class="cp-step">02 ·</span> 어떤 내용을 담을까요</h2>
+  <div class="ws-compose-content"><div>
+  <h2>사용할 문구{% if carried %}<span class="cl-pill">카피 생성에서 가져옴</span>{% endif %}</h2>
   <p class="cp-note" style="margin:0 0 .4rem">
     광고에 담을 문구를 적어주세요. 첫 문장이 헤드라인, 나머지가 보조 문구로 들어가요.
   </p>
@@ -262,15 +276,32 @@ main:has(.cp-ed) { max-width: 96rem; }
     {%- if carried.note %} 필수 병기 문구 — <b>{{ carried.note }}</b> ({{ NOTE_UNJUDGED_MARK }}){% endif %}
   </p>
   {% endif %}
-  <textarea id="prompt" name="prompt" rows="3" maxlength="{{ max_text_len }}"
+  <label class="visually-hidden" for="prompt">사용할 문구</label>
+  <textarea id="prompt" name="prompt" rows="7" maxlength="{{ max_text_len }}"
             placeholder="예: 건조한 계절에 쓰기 좋은 보습 제품이라는 점을 알리고 싶어요">{{ carried.prompt if carried else (picked.prompt if picked and picked.prompt else "") }}</textarea>
+  {# 🔄 2026-10-15 (ksr · 점검 09) — 결정 번호 · 「판정 코어」는 이용자 말이 아니라 접어 둔다. ⬜ 추후 삭제 #}
   <p class="cp-note" style="margin-top:.4rem">
-    🚨 <b>판정 코어가 입력한 내용을 먼저 걸러요.</b> 걸러지지 않은 문구는 지면에 얹히지 않아요 (D-63 · D-119).
+    <b>적은 문구는 먼저 검수를 거쳐요.</b> 확인되지 않은 문구는 광고에 얹지 않아요.
   </p>
+  </div><aside class="ws-layout-preview" aria-label="광고 배치 예시"><b>배치 미리보기</b><p class="cp-note">실제 이미지와 문구는 다음 단계에서 편집해요.</p><div class="ws-layout-paper">
+    <div class="ws-preview-hero">
+      <span class="ws-preview-ad">[광고]</span>
+      <span class="ws-preview-image-label">이미지 1</span>
+      <div class="ws-preview-copy"><strong data-preview-head>헤드라인을 적어 주세요</strong><p data-preview-sub>보조 문구를 적어 주세요</p></div>
+    </div>
+    <div class="ws-preview-detail">
+      <section class="ws-preview-points"><h3>헤드라인을 적어 주세요</h3><div class="ws-preview-point-grid">
+        {% for n in [1,2,3] %}<div><div class="ws-preview-placeholder">이미지 {{ n }}</div><p>소구점 {{ n }}</p></div>{% endfor %}
+      </div></section>
+    </div>
+    <div class="ws-preview-caption"><b>캡션 · 고지</b><p data-preview-caption>캡션 본문을 적어 주세요</p></div>
+  </div><small data-preview-format></small><p class="ws-preview-disclaimer">검수 전 배치 예시예요. 문구와 이미지는 편집 단계에서 조정할 수 있어요.</p></aside></div>
+  <details class="cp-note cp-devnote"><summary>개발자 메모</summary>판정 코어가 입력을 먼저 거른다 — 걸러지지 않은 문구는 지면에 얹히지 않는다 (D-63 · D-119).</details>
 
-  <button class="cp-submit" type="submit">판정 받고 템플릿 만들기</button>
+  <div class="cl-compose-footer"><p>{{ icon("info", 19) }} 입력한 문구를 검수한 뒤 편집 화면을 열어요.</p><button class="cp-submit" type="submit" data-wait-label="생성 중…">검수 후 편집하기 <span>→</span></button></div>
+  <p class="cp-wait" data-wait hidden role="status" aria-live="polite">광고 틀을 만드는 중이에요 — 문구 검수를 먼저 하고 있어요</p>
   <p class="cp-note" style="margin-top:.6rem">
-    규격 · 여백 · 글자 크기는 KRDS 표준형 스타일 기준으로 셋팅돼요.
+    선택한 형식에 맞춰 규격과 여백이 적용돼요.
   </p>
 </form>
 {% endif %}
@@ -280,7 +311,7 @@ main:has(.cp-ed) { max-width: 96rem; }
   <h2>판정 결과</h2>
   <p class="cp-pending">
     {% if engine_down %}판정 엔진에 연결하지 못했어요.{% else %}판정 엔진이 아직 준비되지 않았어요.{% endif %}
-    판정을 지나지 않은 문구로는 템플릿을 만들지 않아요 — <b>가짜 결과를 만들지 않아요</b> (D-147).<br>
+    문구 검수를 완료하지 못해 광고 편집 화면을 열 수 없어요. 입력한 내용은 유지돼요.<br>
     고르신 것 — 종류 <b>{{ picked.ad_format }}</b>
     {%- if picked.prompt %} · 내용 「{{ picked.prompt }}」{% endif %}
     {%- if picked.note %} · 필수 병기 문구 「{{ picked.note }}」{% endif %}
@@ -327,13 +358,14 @@ main:has(.cp-ed) { max-width: 96rem; }
     <button type="button" class="is-main" data-act="audit">초안 검수</button>
   </div>
   <div class="cp-ed-cols">
-    <div class="cp-ed-list">
+    <div class="cp-ed-list cl-editor-content"><h2>콘텐츠 편집</h2><div class="cp-ed-insp" id="de-insp"></div>
+      <details class="cl-editor-sections"><summary>섹션 관리</summary>
       <p class="cp-ed-cap"><span>섹션</span><span id="de-count"></span></p>
       <div class="cp-ed-blocks" id="de-blocks"></div>
-      <div class="cp-ed-add" id="de-add"></div>
+      <div class="cp-ed-add" id="de-add"></div></details>
     </div>
     <div class="cp-ed-stagewrap" id="de-stagewrap"><div class="cp-ed-stage" id="de-stage"></div></div>
-    <div class="cp-ed-insp" id="de-insp"></div>
+    <aside class="cl-editor-audit"><h2>문구 검수</h2><div id="de-review-status" aria-live="polite"></div><button type="button" class="cl-audit-judge" data-act="judge-all">변경한 문구 검수하기</button><details open><summary>상세 검수 내용</summary><div id="de-review-details"></div></details><p class="cp-ed-hint">문구 변경 후 다시 검수해주세요. 광고 표시는 유지됩니다.</p></aside>
   </div>
   <p class="cp-ed-foot">
     고지 위치 · {{ draft.disclose }} &nbsp;·&nbsp; ⬜ 저장 · 공유 · 다운로드는 아직 없어요 — 화면을 새로 고치면 편집한 내용이 사라져요.
@@ -341,8 +373,9 @@ main:has(.cp-ed) { max-width: 96rem; }
   <noscript><p class="cp-ed-foot">편집기는 스크립트가 켜져 있어야 떠요.</p></noscript>
 </div>
 <script type="application/json" id="de-data">{{ draft|tojson }}</script>
-<script src="/static/user_compose.js" defer></script>
+<script src="/static/user_compose.js?v=4" defer></script>
 {% endif %}
+<script src="/static/user_wait.js?v=3" defer></script>
 
 {# 판정 목록 — 픽스처 결과(`result.screening`)와 방금 받은 판정(`screening` · 얹지 못한 문장이 있을 때)을 같은 모양으로 그린다 #}
 {% set scr = screening if screening else (result.screening if result else []) %}
@@ -452,14 +485,15 @@ main:has(.cp-ed) { max-width: 96rem; }
 {% endif %}
 
 {% if not draft %}
-<div class="cp-card">
-  <h2>골든 픽스처로 분기 보기</h2>
+{# 🔄 2026-10-14 — 이용자가 읽을 것이 아니라 접어 둔다(검수 화면과 같다). 지우지 않는다 (D-124) #}
+<details class="cp-card cp-dev">
+  <summary>개발자 정보 — 골든 픽스처로 분기 보기</summary>
   <p class="cp-note">⛔ 템플릿 엔진(코어 <code>/compose</code>)은 아직 없어서, 그 응답 모양은 <b>픽스처로 그려요</b> (D-124).</p>
   <ul class="cp-fixtures">
   {% for name in fixtures %}
     <li><a href="/u/compose/preview/{{ name }}">{{ name }}</a></li>
   {% endfor %}
   </ul>
-</div>
+</details>
 {% endif %}
 {% endblock %}

@@ -69,13 +69,11 @@ def load(stage1: str | None = None) -> tuple:
     """모델을 한 번만 올린다. (model, tok, 어댑터 버전)."""
     global _MODEL
     if _MODEL is None:
-        import torch  # noqa: PLC0415
+        import sllm_meta  # noqa: PLC0415
         from peft import PeftModel  # noqa: PLC0415
         from persona_experiment import BASE  # noqa: PLC0415
         from persona_pipeline_e2e import STAGE1_VER, STAGE2  # noqa: PLC0415
         from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: PLC0415
-
-        import sllm_meta  # noqa: PLC0415
 
         ver = stage1 or STAGE1_VER
         adapter = sllm_meta.stage1_dir(ver)
@@ -97,10 +95,11 @@ def load(stage1: str | None = None) -> tuple:
                 print(f"⚠️ 2단계를 올리지 않는다 — {e}", flush=True)
                 stage2 = None
         _META.update(model=ver, base=BASE, adapter_sha=sllm_meta.adapter_sha12(adapter),
+                     dtype=str(sllm_meta.serve_dtype()).removeprefix("torch."),  # 🆕 10-19 — T4 는 float16 이어야 한다
                      stage2=stage2.name if stage2 else None,
                      lock_stage1=f"{m1.status}:{m1.bundle}", lock_stage2=f"{m2.status}:{m2.bundle}" if stage2 and m2 else None)
         tok = AutoTokenizer.from_pretrained(BASE)
-        base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
+        base = AutoModelForCausalLM.from_pretrained(BASE, dtype=sllm_meta.serve_dtype(), device_map="cuda")  # 🆕 10-19 T4(fp16) 대응
         model = PeftModel.from_pretrained(base, str(adapter), adapter_name="stage1")
         if stage2 is not None:
             model.load_adapter(str(stage2), adapter_name="stage2")
@@ -125,6 +124,18 @@ def _rejudge_view(r: dict) -> dict | None:
     }
 
 
+def _rule_sha12() -> str:
+    from polish_rule import rule_sha12  # noqa: PLC0415
+
+    return rule_sha12()
+
+
+def _polish_is_rule() -> bool:
+    import persona_pipeline_e2e as pe  # noqa: PLC0415
+
+    return pe.POLISH_MODE == "rule"
+
+
 def rewrite(text: str, violation_types: list[str] | None = None, persona: str | None = None,
             do_rejudge: bool = False, category: str | None = None, polish: bool = False) -> dict:
     """문구 하나를 고쳐 쓴다. 위반 유형은 판정 코어(검수)가 준 것을 그대로 넘긴다 — 없으면 빈 목록."""
@@ -132,7 +143,9 @@ def rewrite(text: str, violation_types: list[str] | None = None, persona: str | 
 
     model, tok, ver = load()
     if not _META.get("stage2"):
-        persona, polish = None, False  # 🆕 10-13 — 2단계를 올리지 않았다(잠금 밖 · 폴더 없음) → 1단계 문장만
+        persona = None  # 🆕 10-13 — 2단계를 올리지 않았다(잠금 밖 · 폴더 없음) → 고객층 말투 없음
+        # 🔄 10-14 — 다듬기가 규칙판이면 어댑터 없이도 된다(`persona_pipeline_e2e.POLISH_MODE`)
+        polish = polish and _polish_is_rule()
     t0 = time.time()
     with _LOCK:
         r = run_one(model, tok, text, list(violation_types or []), persona, do_rejudge=do_rejudge, category=category,
@@ -148,7 +161,11 @@ def rewrite(text: str, violation_types: list[str] | None = None, persona: str | 
         "model": ver,
         # 🆕 10-14 (D-335) — 이 문장을 쓴 판을 잠금 대조 결과와 함께 싣는다(「채택:판 지문」). 2단계는 실제로 다듬었을 때만
         "lock": {"stage1": _META.get("lock_stage1"),
-                 "stage2": _META.get("lock_stage2") if (persona or polish) else None},
+                 # 🔄 10-14 — 2단계 어댑터를 실제로 쓴 때만(고객층 말투 · 모델판 다듬기). 규칙판 다듬기는 어댑터를 쓰지 않는다
+                 "stage2": _META.get("lock_stage2") if (persona or (polish and not _polish_is_rule())) else None},
+        "polish_mode": ("rule" if _polish_is_rule() else "model") if polish and not persona else None,
+        # 🆕 10-15 (D-342 ⓒ) — 규칙판으로 다듬었으면 규칙표의 판 지문(어댑터 대신 표가 썼다)
+        "polish_rule": _rule_sha12() if polish and not persona and _polish_is_rule() else None,
         "latency_ms": int((time.time() - t0) * 1000),
     }
     if r.get("rejudge") == "rejected":

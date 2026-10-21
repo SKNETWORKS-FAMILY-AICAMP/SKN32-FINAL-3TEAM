@@ -1,38 +1,21 @@
-{# app/templates/admin/members/list.html — 회원 목록 (뼈대) · 소유자 **psj**
+{# app/templates/admin/members/list.html — 회원 목록 · 소유자 **psj**
    (병렬작업 계약 §5)
 
-  🚨 **읽기 전용이다.** 상태 변경·비활성화 등은 화면에 없다(목업에도 없음).
-  🔴 계정 표(`user_account`)는 생겼지만(0017) 이 화면은 아직 읽지 않는다 — 전부 더미다 (admin_members.py 참고).
+  🚨 **읽기 전용이다.** 상태 변경 · 비활성화 등은 화면에 없다.
+  🔄 2026-10-20 — 계정 표(`user_account`)를 읽는다(admin_members.py). 표에 회원 유형 · 요금제 칸이 없어
+     그 필터 · 열은 뺐다. 상태(활성 · 휴면 · 비활성)는 계산한 값이다.
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "base.html" %}
-{% block title %}CopyLane — 회원 목록{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
-{% block content %}
-<div class="admin-shell">
-{% include "admin/_nav.html" %}
-<div class="admin-main">
+#}{% extends "admin/_base.html" %}
+{% block title %}회원 목록 | CopyLane 관리자{% endblock %}
+{% block admin_css %}{% endblock %}
+{% block admin_content %}
+
 <h1>회원 목록</h1>
-<p class="warn">🧪 <b>더미 데이터입니다.</b> 계정 표(<code>user_account</code>)는 생겼지만 이 화면은 아직 그 표를 읽지 않아요 — 가입한 사용자는 여기 보이지 않습니다.</p>
+{% with table="user_account" %}{% include "admin/_db_notice.html" %}{% endwith %}
 
 <form class="filter-bar" method="get" action="/admin/members">
   <label>검색
-    <input type="text" name="q" value="{{ q }}" maxlength="80" placeholder="이름, 이메일, 기업명">
-  </label>
-  <label>유형
-    <select name="type">
-      <option value="" {% if not member_type %}selected{% endif %}>전체</option>
-      {% for t in types %}
-      <option value="{{ t }}" {% if member_type == t %}selected{% endif %}>{{ t }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>플랜
-    <select name="plan">
-      <option value="" {% if not plan %}selected{% endif %}>전체</option>
-      {% for p in plans %}
-      <option value="{{ p }}" {% if plan == p %}selected{% endif %}>{{ p }}</option>
-      {% endfor %}
-    </select>
+    <input type="text" name="q" value="{{ q }}" maxlength="80" placeholder="이름, 이메일, 소속">
   </label>
   <label>상태
     <select name="status">
@@ -43,44 +26,42 @@
     </select>
   </label>
   <button type="submit">적용</button>
-  {% if q or member_type or plan or status %}
+  {% if q or status %}
   <a class="reset-link" href="/admin/members">초기화</a>
   {% endif %}
 </form>
 
-<p class="er-muted">조건에 맞는 회원 <b>{{ total }}</b>명</p>
-
+{% if source == "db" %}
+<p class="er-muted">조건에 맞는 회원 <b>{{ total }}</b>명 · 휴면 = 마지막 로그인(없으면 가입)이 {{ dormant_days }}일 넘음</p>
 {% if not rows %}
-<p>조건에 맞는 회원이 없다.</p>
+<p>{{ "조건에 맞는 회원이 없어요." if q or status else "아직 가입한 회원이 없어요." }}</p>
 {% else %}
-<table>
+<div class="admin-table-scroll"><table>
   <tr>
-    <th>이름</th><th>이메일</th><th>회원 유형</th><th>기업</th><th>플랜</th><th>가입일</th><th>최근 접속</th><th>상태</th>
+    <th>이름</th><th>이메일</th><th>소속</th><th>가입일</th><th>최근 로그인</th><th>이력 보관</th><th>상태</th>
   </tr>
   {% for r in rows %}
   <tr>
     <td><a href="/admin/members/{{ r.id }}">{{ r.name }}</a></td>
     <td>{{ r.email }}</td>
-    <td>{{ r.type }}</td>
     <td>{{ r.company or "-" }}</td>
-    <td>{{ r.plan }}</td>
     <td>{{ r.joined }}</td>
     <td>{{ r.last_seen }}</td>
+    <td>{{ "동의" if r.consent_history else "-" }}</td>
     <td>{{ status_label[r.status] }}</td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 
 {% if pages > 1 %}
 <nav class="pager" aria-label="페이지">
-  {% set qs = "q=" ~ (q or "") ~ "&type=" ~ (member_type or "") ~ "&plan=" ~ (plan or "") ~ "&status=" ~ (status or "") %}
+  {% set qs = {"q": q, "status": status}|urlencode %}
   <a href="/admin/members?{{ qs }}&page={{ page - 1 }}" {% if page <= 1 %}class="disabled"{% endif %}>← 이전</a>
   <span>{{ page }} / {{ pages }} 쪽 (전체 {{ total }}명)</span>
   <a href="/admin/members?{{ qs }}&page={{ page + 1 }}" {% if page >= pages %}class="disabled"{% endif %}>다음 →</a>
 </nav>
 {% endif %}
 {% endif %}
+{% endif %}
 
-</div>
-</div>
 {% endblock %}

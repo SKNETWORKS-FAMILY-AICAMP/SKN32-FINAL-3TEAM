@@ -1,0 +1,17 @@
+{#- 🆕 2026-10-20 (lse · 사용자 「문구 생성 중입니다가 촌스럽다」) — 카피 생성 대기 화면. 25~50초 걸려 화면 전체를 덮는다.
+    폼 안에 둔다 — `user_wait.js` 가 제출 때 `[data-wait]` 를 켠다. 움직임은 전부 CSS(design.css `.gn-gen-wait`) #}
+<div class="rv-judging gn-gen-wait" data-wait hidden role="status" aria-live="polite">
+  <div class="rv-judging-card">
+    <div class="rv-judging-orb" aria-hidden="true"><span>✦</span></div>
+    <p class="rv-judging-title">카피를 만들고 있어요</p>
+    <div class="rv-judging-steps gn-gen-steps">
+      <span>제품 정보를 읽는 중</span>
+      <span>카피 후보를 여러 개 쓰는 중</span>
+      <span>금지 표현 · 위반 문구를 거르는 중</span>
+      <span>판정 인코더로 하나씩 검수하는 중</span>
+      <span>서로 덜 닮은 A · B · C안을 고르는 중</span>
+    </div>
+    <div class="gn-gen-bar" aria-hidden="true"><i></i></div>
+    <p class="gn-gen-note">보통 30초~1분 걸려요 · 이 화면을 닫지 말아 주세요</p>
+  </div>
+</div>

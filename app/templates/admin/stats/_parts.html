@@ -1,0 +1,26 @@
+{% from "user/_icons.html" import icon %}
+{% macro metric(label,value,note='',symbol='') %}
+<section class="as-metric"><div class="as-metric-label">{{ label }}{% if symbol %}{{ icon(symbol,18) }}{% endif %}</div><div class="as-metric-value">{{ value }}</div><p>{{ note }}</p></section>
+{% endmacro %}
+{% macro distribution(items,count_key='n',unit='건',percent_key='pct') %}
+<div class="as-distribution">
+{% for row in items %}
+  <div class="as-distribution-row">
+    <div class="as-distribution-label"><span>{{ row.label }}</span><span><b>{{ '{:,}'.format(row[count_key]) }}{{ unit }}</b>{% if percent_key and count_key != percent_key %}<small>{{ row[percent_key] }}%</small>{% endif %}</span></div>
+    <div class="as-track"><span style="width:{{ row[percent_key] if percent_key else (row.value / row.max * 100)|round(1) }}%"></span></div>
+  </div>
+{% else %}<p class="as-empty">해당하는 기록이 없습니다.</p>{% endfor %}
+</div>
+{% endmacro %}
+
+{% macro compact_distribution(items,unit='건') %}
+<div class="as-compact-distribution">
+{% for row in items %}
+  <div class="as-compact-row">
+    <span class="as-compact-label">{{ row.label }}</span>
+    <span class="as-track" aria-hidden="true"><span style="width:{{ row.pct }}%"></span></span>
+    <b>{{ '{:,}'.format(row.n) }}{{ unit }}</b><span class="as-compact-percent">{{ row.pct }}%</span>
+  </div>
+{% else %}<p class="as-empty">해당하는 기록이 없습니다.</p>{% endfor %}
+</div>
+{% endmacro %}

@@ -23,7 +23,6 @@ import json
 import sys
 from pathlib import Path
 
-import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -32,6 +31,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 
+import sllm_meta  # noqa: E402
 from persona_experiment import BASE  # noqa: E402
 from persona_pipeline_e2e import STAGE1_VER, STAGE2, run_one  # noqa: E402
 
@@ -55,7 +55,7 @@ def main() -> None:
     args = ap.parse_args()
     rows = [json.loads(line) for line in (HERE / args.eval).open(encoding="utf-8") if line.strip()]
     tok = AutoTokenizer.from_pretrained(BASE)
-    base = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.bfloat16, device_map="cuda")
+    base = AutoModelForCausalLM.from_pretrained(BASE, dtype=sllm_meta.serve_dtype(), device_map="cuda")  # 🆕 10-19 T4(fp16) 대응
     model = PeftModel.from_pretrained(base, str(ROOT / "models" / f"copylane_sllm_lora_adapter_{args.stage1}"),
                                       adapter_name="stage1")
     model.load_adapter(str(STAGE2), adapter_name="stage2")

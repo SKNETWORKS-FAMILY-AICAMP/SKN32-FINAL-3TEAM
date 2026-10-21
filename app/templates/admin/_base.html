@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/typography.css?v=1">
+<link rel="stylesheet" href="/static/admin.css?v=2">
+{% block admin_css %}{% endblock %}
+<link rel="stylesheet" href="/static/admin-ui.css?v=2">
+<link rel="stylesheet" href="/static/admin-nav.css?v=1">
+<link rel="stylesheet" href="/static/admin-layout.css?v=1">
+<link rel="stylesheet" href="/static/admin-workspace.css?v=6">
+<link rel="stylesheet" href="/static/admin-open-layout.css?v=7">
+<script src="/static/admin-nav.js?v=1" defer></script>
+{% endblock %}
+{% block content %}
+<a class="admin-skip" href="#admin-content">본문 바로가기</a>
+<header class="admin-topbar">
+  <a class="admin-brand" href="/u/landing"><img src="/static/brand/symbol-180.png" alt=""><span>CopyLane</span><small>ADMIN</small></a>
+  <button class="admin-menu-toggle" type="button" aria-expanded="false" aria-controls="admin-navigation" hidden>메뉴 <span aria-hidden="true">☰</span></button>
+  {% include "admin/_nav.html" %}
+  <div class="admin-account"><span class="admin-avatar" aria-hidden="true">관</span><span>{{ actor }} <small>· 운영 관리</small></span><form method="post" action="/logout"><button type="submit">로그아웃</button></form></div>
+</header>
+<div class="admin-shell">
+<div class="admin-main" id="admin-content" data-admin-layout="{% block admin_layout %}workspace{% endblock %}">
+  <nav class="admin-breadcrumb" aria-label="현재 위치"><a href="/admin/">관리자</a><span>/</span><span>{{ self.title() | replace('CopyLane — ', '') | replace(' | CopyLane 관리자', '') | trim }}</span></nav>
+  {% block admin_content %}{% endblock %}
+  <div class="admin-page-footer">CopyLane · 관리자 작업 공간</div>
+</div>
+</div>
+{% endblock %}

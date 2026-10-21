@@ -1,0 +1,13 @@
+{# 공지 작성 · 수정 폼 모양 — 두 화면이 같이 쓴다 (D-99) #}<style>
+.admin-shell .notice-form { display: flex; flex-direction: column; gap: .75rem; max-width: 40rem; }
+.admin-shell .notice-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; }
+.admin-shell .notice-form input:not([type=checkbox]), .admin-shell .notice-form select, .admin-shell .notice-form textarea {
+  padding: .45rem .55rem; border: 1px solid var(--a-line); border-radius: .4rem; background: var(--a-surface2); color: var(--a-ink); font: inherit;
+}
+.admin-shell .notice-form .nf-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+.admin-shell .notice-form .nf-check { flex-direction: row; align-items: center; gap: .4rem; }
+.admin-shell .notice-form .nf-actions { display: flex; gap: 1rem; align-items: center; }
+.admin-shell .notice-form button[type=submit] { padding: .5rem 1.2rem; border-radius: .5rem; border: none; background: var(--a-signal); color: #fff; font-weight: 600; cursor: pointer; }
+.admin-shell .hint { color: var(--a-clay); font-size: .85rem; }
+.admin-shell .ok { color: #15803d; }
+</style>

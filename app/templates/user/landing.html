@@ -8,24 +8,28 @@
      아이콘 카드 · 동작 순서 · 업종 칩. 미리보기는 **실제 검수 → 고쳐 쓰기 흐름**(위반 문장 → 근거 → 담백한 안 · 다듬은 안)으로
      바꿨다 — 예시 문장은 직접 만든 것이고, 고친 문장은 그 문장을 실제로 돌린 결과다(10-13 · q4b-v14 + 다듬기).
      업종 칩은 지금 판정이 다루는 범위만 적는다(시안의 의료기기 · 금융은 범위 밖이라 뺐다).
-  🚨 이 화면은 nav 를 넣지 않는다 — 로그인 전 화면이라 사용자 메뉴가 없다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
+  로그인 상태에는 프로필과 작업 바로가기를 표시한다. 공통 머리 · 꼬리(base.html)는 이 화면에서만 감춘다.
 #}{% extends "base.html" %}
-{% block title %}CopyLane — 광고 문구 준법 검수 · 카피생성{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/static/user.css">
+{% block title %}CopyLane · 올리기 전에, 위법 소지부터{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/user.css?v=2"><link rel="stylesheet" href="/static/typography.css?v=1">
 <style>
 /* 공통 머리 · 꼬리(개발용 링크)는 랜딩에서만 감춘다 — base.html(팀장 소유)은 고치지 않는다 */
 body:has(.ld-page) > header, body:has(.ld-page) > footer { display: none; }
 body:has(.ld-page) { max-width: none; margin: 0; padding: 0; }
 body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
-.ld-page { --ld-grad: linear-gradient(135deg, #8b5cf6 0%, #c77df3 50%, #f472b6 100%);
-           --ld-grad-hover: linear-gradient(135deg, #7c3aed 0%, #b15fe0 50%, #ec5aa0 100%);
+.ld-page { --ld-grad: linear-gradient(135deg, #833AB4 0%, #C13584 35%, #E1306C 65%, #F56040 100%);
+           --ld-grad-hover: linear-gradient(135deg, #6E2C9C 0%, #A82C72 35%, #C9245B 65%, #E04A2E 100%);
            background: var(--u-surface); color: var(--u-ink); min-height: 100vh; }
 .ld-wrap { max-width: 70rem; margin: 0 auto; padding: 0 1.5rem; }
 
 /* 머리 */
 .ld-page .ld-head { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--u-line);
-           background: color-mix(in srgb, var(--u-surface) 88%, transparent); backdrop-filter: blur(8px); }
+           background:linear-gradient(110deg,#f5f1fc 0%,#fcfafc 52%,#fcf1f6 100%); backdrop-filter:blur(8px); }
+.user-shell.ld-page[data-theme=dark] .ld-head { background:linear-gradient(110deg,#292331 0%,#242127 52%,#30232c 100%); }
+@media(prefers-color-scheme:dark) {
+  .user-shell.ld-page:not([data-theme=light]) .ld-head { background:linear-gradient(110deg,#292331 0%,#242127 52%,#30232c 100%); }
+}
 /* base.css 의 전역 header · footer · h2 규칙(개발 화면용)을 랜딩에서 되돌린다 */
 .ld-page header, .ld-page footer { display: block; margin: 0; padding: 0; gap: 0; }
 .ld-page header nav { margin-left: 0; }
@@ -36,12 +40,32 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-word { font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; background: var(--ld-grad);
            -webkit-background-clip: text; background-clip: text; color: transparent; }
 .ld-nav { display: flex; gap: .5rem; align-items: center; }
+.ld-profile { position:relative; margin:0 .6rem 0 0; padding:0; border:0; background:transparent; }
+.ld-profile summary { display:inline-flex; align-items:center; gap:9px; padding:4px 12px 4px 4px; border:1px solid var(--u-line); border-radius:999px; background:var(--u-surface); color:var(--u-ink); box-shadow:0 1px 2px rgba(60,20,40,.04); cursor:pointer; list-style:none; font-size:14px; font-weight:600; white-space:nowrap; transition:border-color .15s,box-shadow .15s; }
+.ld-profile summary:hover,.ld-profile[open]>summary { border-color:color-mix(in srgb,var(--u-signal) 45%,var(--u-line)); box-shadow:0 4px 14px rgba(150,40,90,.12); }
+.ld-profile summary::-webkit-details-marker { display: none; }
+.ld-profile summary:focus-visible { outline:2px solid var(--u-signal); outline-offset:3px; }
+.ld-avatar { display:grid; place-items:center; width:32px; height:32px; flex-shrink:0; border-radius:50%; background:var(--ld-grad); color:#fff; font-size:12px; font-weight:800; box-shadow:0 0 0 2px var(--u-surface),0 0 0 3.5px color-mix(in srgb,#E1306C 35%,transparent); }
+.ld-profile-caret { display:block; flex:0 0 16px; color:var(--u-clay); transition:transform .2s; }
+.ld-profile[open] .ld-profile-caret { transform:rotate(180deg); }
+.ld-profile-name { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-profile-menu { position: absolute; right: 0; top: calc(100% + .8rem); width: 12rem; padding: .5rem; border: 1px solid var(--u-line); border-radius: .8rem; background: var(--u-surface); box-shadow: 0 8px 24px rgba(90, 25, 60, .12); }
+.ld-profile-menu a, .ld-profile-menu button { display: block; width: 100%; box-sizing: border-box; padding: .7rem .8rem; border: 0; border-radius: .5rem; background: transparent; color: var(--u-ink); font: inherit; font-size: .85rem; text-decoration: none; text-align: left; cursor: pointer; }
+.ld-profile-menu a:hover, .ld-profile-menu button:hover { background: var(--u-surface2); }
+.ld-profile-menu form { margin: 0; }
+@media (max-width: 480px) {
+  .ld-head .ld-wrap { padding-inline: 1rem; }
+  .ld-profile { margin-right: 0; }
+  .ld-profile-name { display: none; }
+  .ld-nav { gap: .4rem; }
+  .ld-nav .ld-btn { padding-inline: .7rem; }
+}
 
 /* 버튼 */
 .ld-btn { display: inline-flex; align-items: center; justify-content: center; height: 2.75rem; padding: 0 1.4rem;
           border-radius: .8rem; font-size: .92rem; font-weight: 600; text-decoration: none; transition: all .15s ease; }
 .ld-btn-sm { height: 2.25rem; padding: 0 1rem; font-size: .82rem; }
-.ld-btn-grad { color: #fff; background: var(--ld-grad); box-shadow: 0 6px 18px -6px rgba(139, 92, 246, .55); }
+.ld-btn-grad { color: #fff; background: var(--ld-grad); box-shadow: 0 6px 18px -6px rgba(225, 48, 108, .55); }
 .ld-btn-grad:hover { background: var(--ld-grad-hover); transform: translateY(-1px); }
 .ld-btn-line { color: var(--u-ink); border: 1px solid var(--u-line); background: var(--u-surface); font-weight: 500; }
 .ld-btn-line:hover { background: var(--u-surface2); }
@@ -65,7 +89,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 /* 미리보기 카드 */
 .ld-demo { position: relative; overflow: hidden; border: 1px solid var(--u-line); border-radius: 1.25rem;
            background: var(--u-surface); padding: 1.5rem 1.25rem 1.25rem;
-           box-shadow: 0 18px 44px -14px rgba(139, 92, 246, .32); }
+           box-shadow: 0 18px 44px -14px rgba(225, 48, 108, .32); }
 .ld-demo::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--ld-grad); }
 .ld-demo-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .9rem; }
 .ld-demo-top small { font-family: ui-monospace, monospace; font-size: .66rem; letter-spacing: .08em; color: var(--u-clay); }
@@ -90,7 +114,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-flow hr { flex: 1; border: 0; border-top: 1px solid var(--u-line); margin: 0; }
 .ld-flow span { font-family: ui-monospace, monospace; font-size: .64rem; letter-spacing: .06em; color: var(--u-clay); white-space: nowrap; }
 .ld-flow b { width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center; color: #fff;
-             font-size: .78rem; background: var(--ld-grad); box-shadow: 0 2px 10px rgba(139, 92, 246, .35);
+             font-size: .78rem; background: var(--ld-grad); box-shadow: 0 2px 10px rgba(225, 48, 108, .35);
              animation: ld-bob 1.8s ease-in-out infinite; }
 @keyframes ld-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
 .ld-good { border-color: var(--u-ok-line); background: var(--u-ok-bg); color: var(--u-ink); margin-bottom: .6rem; }
@@ -113,7 +137,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 @media (min-width: 52rem) { .ld-feats { grid-template-columns: repeat(3, 1fr); } }
 .ld-feat { display: block; border: 1px solid var(--u-line); border-radius: 1.1rem; padding: 1.5rem; text-decoration: none;
            color: inherit; background: var(--u-surface); transition: border-color .15s, box-shadow .15s, transform .15s; }
-.ld-feat:hover { border-color: var(--u-signal); box-shadow: 0 6px 20px rgba(139, 92, 246, .16); transform: translateY(-2px); }
+.ld-feat:hover { border-color: var(--u-signal); box-shadow: 0 6px 20px rgba(225, 48, 108, .16); transform: translateY(-2px); }
 .ld-ico { width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: var(--u-signal-soft); display: grid;
           place-items: center; margin-bottom: 1rem; color: var(--u-signal); }
 .ld-ico svg { width: 1.2rem; height: 1.2rem; }
@@ -151,8 +175,9 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-foot a:hover { color: var(--u-ink); }
 .ld-foot img { width: 1.25rem; height: 1.25rem; border-radius: .3rem; vertical-align: -4px; margin-right: .4rem; }
 
-@media (prefers-reduced-motion: reduce) { .ld-badge i, .ld-flow b { animation: none; } }
 
+
+@media (prefers-reduced-motion: reduce) { .ld-badge i, .ld-flow b { animation: none; } }
 /* ══ 🆕 10-14 움직임 — 시안보다 더 ══════════════════════════════════════════ */
 /* 첫 화면 무대: 떠다니는 빛 덩어리 · 격자 · 마우스를 따라오는 조명(landing.js) */
 .ld-hero-zone { position: relative; overflow: hidden; isolation: isolate; --mx: 70%; --my: 30%; }
@@ -161,12 +186,12 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   background-size: 44px 44px; -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
   mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%); }
 .ld-hero-zone::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(520px circle at var(--mx) var(--my), rgba(167, 139, 250, .22), transparent 60%); }
+  background: radial-gradient(520px circle at var(--mx) var(--my), rgba(193, 53, 132, .18), transparent 60%); }
 .ld-orbs { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
 .ld-orbs i { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .45; }
-.ld-orbs i:nth-child(1) { width: 26rem; height: 26rem; background: #a78bfa; top: -8rem; left: -6rem; animation: ld-float1 16s ease-in-out infinite; }
-.ld-orbs i:nth-child(2) { width: 22rem; height: 22rem; background: #f472b6; top: 6rem; right: -6rem; opacity: .3; animation: ld-float2 19s ease-in-out infinite; }
-.ld-orbs i:nth-child(3) { width: 18rem; height: 18rem; background: #c77df3; bottom: -8rem; left: 40%; opacity: .3; animation: ld-float1 22s ease-in-out infinite reverse; }
+.ld-orbs i:nth-child(1) { width: 26rem; height: 26rem; background: #C13584; top: -8rem; left: -6rem; animation: ld-float1 16s ease-in-out infinite; }
+.ld-orbs i:nth-child(2) { width: 22rem; height: 22rem; background: #F56040; top: 6rem; right: -6rem; opacity: .3; animation: ld-float2 19s ease-in-out infinite; }
+.ld-orbs i:nth-child(3) { width: 18rem; height: 18rem; background: #E1306C; bottom: -8rem; left: 40%; opacity: .3; animation: ld-float1 22s ease-in-out infinite reverse; }
 @keyframes ld-float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(60px, 40px) scale(1.08); } 66% { transform: translate(-30px, 70px) scale(.94); } }
 @keyframes ld-float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-80px, 50px) scale(1.12); } }
 
@@ -179,10 +204,10 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-kicker, .ld-lead, .ld-hero .ld-actions, .ld-try { opacity: 0; animation: ld-rise .9s cubic-bezier(.2, .8, .2, 1) forwards; }
 .ld-lead { animation-delay: .45s; } .ld-hero .ld-actions { animation-delay: .58s; } .ld-try { animation-delay: .7s; }
 @keyframes ld-rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
-.ld-hero h1 em { background: linear-gradient(90deg, #8b5cf6, #c77df3, #f472b6, #c77df3, #8b5cf6); background-size: 300% 100%;
+.ld-hero h1 em { background: linear-gradient(90deg, #833AB4, #E1306C, #F56040, #E1306C, #833AB4); background-size: 300% 100%;
   -webkit-background-clip: text; background-clip: text; animation: ld-flow 6s linear infinite; }
 @keyframes ld-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
-.ld-word { background-size: 300% 100%; background-image: linear-gradient(90deg, #8b5cf6, #c77df3, #f472b6, #c77df3, #8b5cf6);
+.ld-word { background-size: 300% 100%; background-image: linear-gradient(90deg, #833AB4, #E1306C, #F56040, #E1306C, #833AB4);
   animation: ld-flow 8s linear infinite; }
 
 /* 버튼 — 빛이 쓸고 지나가고, 첫 화면 버튼은 숨 쉰다 */
@@ -192,7 +217,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
   animation: ld-sheen 3.6s ease-in-out infinite; }
 @keyframes ld-sheen { 0%, 60% { left: -60%; } 100% { left: 130%; } }
 .ld-hero .ld-btn-grad { animation: ld-glow 2.8s ease-in-out infinite; }
-@keyframes ld-glow { 0%, 100% { box-shadow: 0 6px 18px -6px rgba(139, 92, 246, .55); } 50% { box-shadow: 0 10px 30px -4px rgba(244, 114, 182, .6); } }
+@keyframes ld-glow { 0%, 100% { box-shadow: 0 6px 18px -6px rgba(225, 48, 108, .55); } 50% { box-shadow: 0 10px 30px -4px rgba(245, 96, 64, .6); } }
 .ld-btn:active { transform: scale(.97); }
 
 /* 미리보기 카드 — 떠 있고, 마우스 쪽으로 기울고, 테두리에 빛이 돌고, 검수 → 고쳐 쓰기가 12초마다 되풀이된다 */
@@ -202,7 +227,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 @keyframes ld-hover { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
 @property --ld-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .ld-demo::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
-  background: conic-gradient(from var(--ld-ang), transparent 0 68%, #c77df3 80%, #f472b6 88%, transparent 96%);
+  background: conic-gradient(from var(--ld-ang), transparent 0 68%, #E1306C 80%, #F56040 88%, transparent 96%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
   animation: ld-spin 5s linear infinite; }
 @keyframes ld-spin { to { --ld-ang: 360deg; } }
@@ -232,25 +257,25 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 /* 기능 카드 — 떠오르고, 아이콘이 돌고, 그라디언트 테두리 */
 .ld-feat { position: relative; }
 .ld-feat::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; opacity: 0; transition: opacity .3s;
-  background: linear-gradient(135deg, #8b5cf6, #f472b6); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  background: linear-gradient(135deg, #833AB4, #F56040); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
 .ld-feat:hover::before { opacity: 1; }
-.ld-feat:hover, .ld-js .ld-feat.is-in:hover { transform: translateY(-6px); box-shadow: 0 18px 40px -14px rgba(139, 92, 246, .35); border-color: transparent; transition-delay: 0s; }
+.ld-feat:hover, .ld-js .ld-feat.is-in:hover { transform: translateY(-6px); box-shadow: 0 18px 40px -14px rgba(225, 48, 108, .35); border-color: transparent; transition-delay: 0s; }
 .ld-ico { transition: transform .5s cubic-bezier(.2, .9, .3, 1.4), background .3s, color .3s; }
-.ld-feat:hover .ld-ico { transform: rotate(-10deg) scale(1.15); background: linear-gradient(135deg, #8b5cf6, #f472b6); color: #fff; }
+.ld-feat:hover .ld-ico { transform: rotate(-10deg) scale(1.15); background: linear-gradient(135deg, #833AB4, #F56040); color: #fff; }
 
 /* 단계 — 이어진 빛줄기 · 번호가 뛴다 */
 .ld-steps { position: relative; }
 @media (min-width: 52rem) {
   .ld-steps::before { content: ""; position: absolute; top: 2.3rem; left: 8%; right: 8%; height: 2px; z-index: 0;
-    background: linear-gradient(90deg, transparent, #8b5cf6, #f472b6, #8b5cf6, transparent); background-size: 200% 100%;
+    background: linear-gradient(90deg, transparent, #833AB4, #F56040, #833AB4, transparent); background-size: 200% 100%;
     animation: ld-flow 3s linear infinite; opacity: .6; }
 }
 .ld-step { z-index: 1; }
-.ld-step:hover, .ld-js .ld-step.is-in:hover { transform: translateY(-4px); box-shadow: 0 14px 30px -14px rgba(139, 92, 246, .35); transition-delay: 0s; }
+.ld-step:hover, .ld-js .ld-step.is-in:hover { transform: translateY(-4px); box-shadow: 0 14px 30px -14px rgba(225, 48, 108, .35); transition-delay: 0s; }
 .ld-step::before { animation: ld-beat 2.4s ease-in-out infinite; position: relative; }
 .ld-step:nth-child(2)::before { animation-delay: .8s; } .ld-step:nth-child(3)::before { animation-delay: 1.6s; }
-@keyframes ld-beat { 0%, 70%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, .45); } 35% { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); } }
+@keyframes ld-beat { 0%, 70%, 100% { box-shadow: 0 0 0 0 rgba(225, 48, 108, .45); } 35% { box-shadow: 0 0 0 10px rgba(225, 48, 108, 0); } }
 
 /* 짚는 위반 유형 — 끝없이 흐르는 띠 */
 .ld-marquee { position: relative; overflow: hidden; margin-top: 1.25rem;
@@ -267,8 +292,8 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
 /* 마무리 — 흐르는 그라디언트 판 */
 .ld-end-card { position: relative; overflow: hidden; border-radius: 1.75rem; padding: 3.5rem 1.5rem; color: #fff;
-  background: linear-gradient(120deg, #7c3aed, #a855f7, #ec4899, #a855f7, #7c3aed); background-size: 300% 300%;
-  animation: ld-pan 12s ease infinite; box-shadow: 0 30px 60px -24px rgba(139, 92, 246, .55); }
+  background: linear-gradient(120deg, #7A2E9E, #C13584, #F56040, #C13584, #7A2E9E); background-size: 300% 300%;
+  animation: ld-pan 12s ease infinite; box-shadow: 0 30px 60px -24px rgba(225, 48, 108, .55); }
 @keyframes ld-pan { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 .ld-end-card::before, .ld-end-card::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255, 255, 255, .14); }
 .ld-end-card::before { width: 16rem; height: 16rem; top: -6rem; left: -4rem; animation: ld-float1 14s ease-in-out infinite; }
@@ -276,25 +301,55 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 .ld-end-card h2 { color: #fff; position: relative; }
 .ld-end-card .ld-sub { color: rgba(255, 255, 255, .88); position: relative; }
 .ld-end-card .ld-actions { position: relative; }
-.ld-end-card .ld-btn-grad { background: #fff; color: #7c3aed; }
+.ld-end-card .ld-btn-grad { background: #fff; color: #7A2E9E; }
 .ld-end-card .ld-btn-line { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .6); }
 .ld-end-card .ld-btn-line:hover { background: rgba(255, 255, 255, .12); }
+
 
 @media (prefers-reduced-motion: reduce) {
   .ld-page *, .ld-page *::before, .ld-page *::after { animation: none !important; transition: none !important; }
   .ld-line, .ld-kicker, .ld-lead, .ld-hero .ld-actions, .ld-try, .ld-demo-stage, .ld-seq { opacity: 1; transform: none; }
   .ld-mark { background-size: 100% 100%, 100% 2px; }
 }
-</style>{% endblock %}
+/* Keep the introduction calm; the example stays visible instead of replaying. */
+.ld-orbs { opacity:.5; }
+.ld-orbs i:nth-child(n) { animation:ld-ambient 24s ease-in-out infinite; }
+.ld-orbs i:nth-child(2) { animation-delay:-8s; animation-direction:reverse; }
+.ld-orbs i:nth-child(3) { animation-delay:-16s; }
+@keyframes ld-ambient { 0%,100% { transform:translate(0,0); } 50% { transform:translate(20px,12px); } }
+.ld-demo { animation:ld-gentle-float 8s ease-in-out infinite; transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)); box-shadow:0 8px 30px rgba(110,30,70,.1); }
+@keyframes ld-gentle-float { 0%,100% { translate:0 0; } 50% { translate:0 -3px; } }
+.ld-demo::after { display:none; }
+.ld-seq { animation:none; opacity:1; transform:none; }
+.ld-hero .ld-btn-grad { animation:none; }
+.ld-hero .ld-btn-grad::after { display:none; }
+.ld-flow b { animation:none; }
+.ld-brand:hover img { transform:scale(1.03); }
+.ld-hero :is(.ld-line,.ld-kicker,.ld-lead,.ld-actions,.ld-try), .ld-page .ld-demo-stage { animation:ld-rise .35s ease-out both; }
+@media(hover:none), (pointer:coarse) { .ld-demo { animation:none; transform:none; } }
+
+@media(prefers-reduced-motion:reduce) {
+  .ld-demo { translate:none; transform:none!important; }
+  .ld-page [data-reveal] { opacity:1!important; transform:none!important; }
+}
+</style><link rel="stylesheet" href="/static/user-reading.css?v=2">{% endblock %}
 {% block content %}
 <div class="user-shell ld-page">
 
 <header class="ld-head">
   <div class="ld-wrap">
-    <a class="ld-brand" href="/u/landing"><img src="/static/brand/symbol-180.png" alt=""><span class="ld-word">copylane</span></a>
+    <a class="ld-brand" href="/u/landing"><img src="/static/brand/symbol-180.png" alt=""><span class="ld-word">CopyLane</span></a>
     <nav class="ld-nav">
+      {% if me %}
+      <details class="ld-profile">
+        <summary aria-label="{{ me.name }} 님 계정 메뉴"><span class="ld-avatar" aria-hidden="true">{{ me.initials }}</span><span class="ld-profile-name">{{ me.name }}</span><svg class="ld-profile-caret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <div class="ld-profile-menu"><a href="/u/mypage">마이페이지</a><a href="/u/mypage?tab=account">계정 설정</a><form method="post" action="/u/logout"><button type="submit">로그아웃</button></form></div>
+      </details>
+      <a class="ld-btn ld-btn-sm ld-btn-grad" href="/u/">작업 공간으로 →</a>
+      {% else %}
       <a class="ld-btn ld-btn-sm ld-btn-text" href="/u/login">로그인</a>
       <a class="ld-btn ld-btn-sm ld-btn-grad" href="/u/signup">무료로 시작하기</a>
+      {% endif %}
     </nav>
   </div>
 </header>
@@ -310,17 +365,24 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
       <b>고쳐 써</b> 드려요. 진단을 통과하는 어휘 안에서 <b>새 카피</b>까지 만들어 드려요.
     </p>
     <div class="ld-actions">
+      {% if me %}
+      <a class="ld-btn ld-btn-grad" href="/u/review">문구 검수하기 →</a>
+      <a class="ld-btn ld-btn-line" href="/u/">작업 공간으로</a>
+      {% else %}
       <a class="ld-btn ld-btn-grad" href="/u/login">로그인하고 시작하기</a>
       <a class="ld-btn ld-btn-line" href="/u/signup">회원가입</a>
+      {% endif %}
     </div>
+    {% if not me %}
     <p class="ld-try">가입 전에 해 보고 싶다면 → <a href="/u/review">로그인 없이 문구 검수해 보기</a> · 로그인하지 않고 검수한 문구는 이력에 남지 않아요</p>
+    {% endif %}
   </div>
 
   <div class="ld-demo-stage">
   <div class="ld-demo" aria-label="검수와 고쳐 쓰기 예시">
     <div class="ld-demo-top">
       <small>검수 미리보기 · 예시</small>
-      <span class="ld-badge"><i>✦</i> AI 실시간 진단</span>
+      <span class="ld-badge">검수 흐름 예시</span>
     </div>
     <p class="ld-bubble ld-seq ld-s1">
       <span class="ld-pin ld-pin-bad" aria-hidden="true">!</span>
@@ -404,7 +466,7 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
     <div class="ld-qa-grid">
       <div class="ld-qa" data-reveal style="--i:0"><b>진단은 법적 확정 판단인가요?</b><p>아니요, 참고용 진단이에요. 위험 표현과 근거 조항을 미리 보여 드리지만, 최종 게재 여부는 법무 검토를 거쳐 직접 결정하셔야 해요.</p></div>
       <div class="ld-qa" data-reveal style="--i:1"><b>고쳐 쓴 문구는 바로 써도 되나요?</b><p>고친 문구도 다시 판정을 거치지만 적법 확정은 아니에요. 「조건부 후보」는 제품이 기능성 인정 · 심사를 받았을 때만 쓸 수 있어요.</p></div>
-      <div class="ld-qa" data-reveal style="--i:2"><b>같은 조직 계정끼리 결과를 공유하나요?</b><p>같은 조직으로 로그인한 팀원끼리 검수 결과를 함께 보는 것을 목표로 하고 있어요. 조직 밖으로는 공유되지 않아요.</p></div>
+      <div class="ld-qa" data-reveal style="--i:2"><b>같은 조직 계정끼리 결과를 공유하나요?</b><p><b>아직 준비 중이에요.</b> 같은 조직으로 로그인한 팀원끼리 검수 결과를 함께 보는 것을 목표로 하고 있어요. 조직 밖으로는 공유되지 않아요.</p></div>
       <div class="ld-qa" data-reveal style="--i:3"><b>가입에 비용이 드나요?</b><p>검수 · 카피생성 기본 기능은 무료로 시작할 수 있어요. 자세한 이용 조건은 로그인 후 확인하실 수 있어요.</p></div>
     </div>
   </div>
@@ -412,22 +474,28 @@ body:has(.ld-page) > main { max-width: none; margin: 0; padding: 0; }
 
 <section class="ld-sec ld-end">
   <div class="ld-wrap"><div class="ld-end-card" data-reveal>
+    {% if me %}
+    <h2>이제 문구를 만들어볼까요?</h2>
+    <p class="ld-sub">작업 공간에서 문구 검수와 카피 생성을 이어가세요.</p>
+    <div class="ld-actions"><a class="ld-btn ld-btn-grad" href="/u/">작업 공간으로 돌아가기 →</a></div>
+    {% else %}
     <h2>지금 시작해 보세요</h2>
     <p class="ld-sub">가입은 무료이고, 첫 검수까지 3분이면 충분해요</p>
     <div class="ld-actions">
       <a class="ld-btn ld-btn-grad" href="/u/login">로그인하고 시작하기</a>
       <a class="ld-btn ld-btn-line" href="/u/signup">회원가입</a>
     </div>
+    {% endif %}
   </div></div>
 </section>
 
 <footer class="ld-foot">
   <div class="ld-wrap">
-    <span><img src="/static/brand/symbol-180.png" alt="">© 2026 CopyLane</span>
-    <span><a href="/u/help">도움말</a><a href="/u/signup">회원가입</a><a href="/u/login">로그인</a></span>
+    <span><a href="/u/landing"><img src="/static/brand/symbol-180.png" alt="">© 2026 CopyLane</a></span>
+    <span><a href="/u/help">도움말</a>{% if me %}<a href="/u/">작업 공간</a><a href="/u/mypage">마이페이지</a>{% else %}<a href="/u/signup">회원가입</a><a href="/u/login">로그인</a>{% endif %}</span>
   </div>
 </footer>
 
 </div>
-<script src="/static/landing.js" defer></script>
+<script src="/static/landing.js?v=4" defer></script>
 {% endblock %}

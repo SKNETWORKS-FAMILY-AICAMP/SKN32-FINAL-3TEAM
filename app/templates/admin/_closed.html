@@ -1,0 +1,24 @@
+{# app/templates/admin/_closed.html — 「비활성 + 사유」 화면 · 소유자 **psj** (2026-10-20 · D-107 · D-260 ④⑤⑥)
+
+  ★ 안 하기로 한 화면은 지우지 않고 **사유를 단 채로** 남긴다 (D-107 (c)). 넘길 것:
+     page_title · label(사유 라벨 — D-107 조건 5 의 다섯 중 하나) · decision(근거 결정 번호) · why(왜 닫았나 · 목록) ·
+     needs(되살리려면 먼저 정해야 하는 것 · 목록) · alt(대신 볼 수 있는 곳 · 목록)
+  🚨 **입력 요소 · 파일 선택 · POST 를 두지 않는다** (D-107 조건 1) — 이 템플릿에는 form 이 없다.
+  🚨 예시 행 · 예시 수치를 그리지 않는다 — 받지 않은 데이터를 화면에 두면 그 값이 지어낸 데이터다 (D-260 ⑤).
+  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
+#}{% extends "admin/_base.html" %}
+{% block title %}{{ page_title }} | CopyLane 관리자{% endblock %}
+{% block admin_css %}<link rel="stylesheet" href="/static/admin-stats.css?v=1">{% endblock %}
+{% block admin_layout %}reading{% endblock %}
+{% block admin_content %}
+<div class="admin-closed" aria-label="비활성 화면 안내">
+  <div class="admin-closed-head"><h1>{{ page_title }}</h1><span class="admin-status">{{ label }}</span></div>
+  <p class="admin-closed-meta"><b>비활성 · 미구현</b><span>{{ decision }}</span></p>
+  <p class="admin-closed-lead">이 화면은 현재 닫혀 있습니다. 데이터를 받거나 처리하는 기능은 제공하지 않습니다.</p>
+  <div class="admin-closed-grid">
+    <section class="as-panel"><h2>왜 닫았나요</h2><ul>{% for w in why %}<li>{{ w }}</li>{% endfor %}</ul></section>
+    <section class="as-panel"><h2>열려면 먼저 정할 것</h2><ol>{% for n in needs %}<li>{{ n }}</li>{% endfor %}</ol></section>
+  </div>
+  {% if alt %}<section class="as-panel admin-closed-alt"><h2>대신 볼 수 있는 곳</h2>{% for item in alt %}<a href="{{ item.href }}"><span><b>{{ item.name }}</b><small>{{ item.description }}</small></span><span aria-hidden="true">→</span></a>{% endfor %}</section>{% endif %}
+</div>
+{% endblock %}
