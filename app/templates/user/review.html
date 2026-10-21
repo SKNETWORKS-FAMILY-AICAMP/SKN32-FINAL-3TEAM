@@ -685,6 +685,50 @@
   {% for answer in item.answers|default([]) %}<input type="hidden" name="prev" value="{{ answer }}">{% endfor %}
   <input type="hidden" name="round" value="{{ r }}">
 {% endmacro %}
+{#- 🆕 2026-10-21 (ksr) — 품목 선택지 옆 「?」 도움말. 위: 쉬운 풀이(승인된 두 겹 안내 · D-348 보충 37 결정 7) · 아래: 근거 조문 원문 전체.
+    선택지 하나가 전제 둘을 묶으면(식품 · 건강기능식품) 두 전제의 풀이를 차례로 싣고 조문은 겹치지 않게 한 번씩만 싣는다 #}
+{% macro kind_help(k, title) %}
+{% set PREMS = {"food": (("식품", "일반식품"), ("일반식품_기능성", "기능성표시식품")), "hf": (("건기식_인정", "인정받은 기능성을 광고할 때"), ("건기식_비인정", "인정받지 않은 기능성을 광고할 때")), "cos": (("화장품", ""),), "gen": (("일반상품", ""),)} %}
+{% set hs = namespace(guides=[], seen=[], arts=[]) %}
+{% for premise, label in PREMS[k] %}{% set g = premise_guide(premise) %}{% if g %}
+  {% set hs.guides = hs.guides + [(label, g)] %}
+  {% for a in g.articles %}{% set key = a.law_name ~ "|" ~ a.where %}{% if key not in hs.seen %}{% set hs.seen = hs.seen + [key] %}{% set hs.arts = hs.arts + [a] %}{% endif %}{% endfor %}
+{% endif %}{% endfor %}
+{% if hs.guides %}
+<button type="button" class="rv-help-btn" data-help-open aria-haspopup="dialog" aria-label="{{ title }} 도움말" title="{{ title }} 도움말">?</button>
+<dialog class="rv-help" aria-label="{{ title }} 도움말">
+  <div class="rv-help-head"><h3>{{ title }}</h3><button type="button" class="rv-help-close" data-help-close aria-label="도움말 닫기">✕</button></div>
+  <div class="rv-help-body">
+    <section class="rv-help-plain" aria-label="쉬운 풀이">
+      <p class="rv-help-kicker">근거 조문 요약</p>
+      {% for label, g in hs.guides %}
+      <div class="rv-help-card">
+        {% if label %}<h4>{{ label }}</h4>{% endif %}
+        <dl>
+          {% if g.what %}<dt>무엇인가요</dt><dd>{{ g.what }}</dd>{% endif %}
+          {% if g.check %}<dt>확인하는 법</dt><dd>{{ g.check }}</dd>{% endif %}
+          {% if g.pitfall %}<dt>헷갈리기 쉬운 것</dt><dd>{{ g.pitfall }}</dd>{% endif %}
+        </dl>
+      </div>
+      {% endfor %}
+    </section>
+    {% if hs.arts %}
+    <section class="rv-help-articles" aria-label="근거 조문 원문">
+      <p class="rv-help-kicker">근거 조문 원문 <span>{{ hs.arts|length }}건</span></p>
+      {% for a in hs.arts %}
+      <article class="rv-help-law">
+        <p class="rv-help-law-name">{{ a.law_name }} · {{ a.where }}{% if a.version %} <small>({{ a.version }} 판)</small>{% endif %}</p>
+        {% if a.lead %}<p class="rv-help-law-lead">{{ a.lead }}</p>{% endif %}
+        <p class="rv-help-law-text">{{ a.text }}</p>
+      </article>
+      {% endfor %}
+    </section>
+    {% endif %}
+    <p class="rv-help-note">{{ icon("info", 16) }} 이해를 돕는 안내예요. 판정 결과나 법적 확정 판단이 아니에요.</p>
+  </div>
+</dialog>
+{% endif %}
+{% endmacro %}
 {% macro branch_wizard(item) %}
 {% set result = item.result %}
 {% set n = item.n %}
@@ -718,13 +762,15 @@
         {{ review_state_fields(item, r) }}
         <div class="rv-opts">
         {% for k in ns.kinds %}
+          <div class="rv-opt-wrap">
           <label class="rv-opt"><input class="rv-kind-input" type="radio" name="kind" value="{{ k }}" required><span>{{ icon({'food':'food','hf':'hf','cos':'cos','gen':'bag'}[k], 24) }}<b>{{ KIND[k][0] }}</b><small>{{ KIND[k][1] }}</small></span></label>
+          {{ kind_help(k, KIND[k][0]) }}
+          </div>
         {% endfor %}
         </div>
         <button type="submit" class="cl-continue" name="op" value="choose:{{ n }}" data-review-next data-wait-label="선택한 유형 확인 중…">이 유형으로 계속하기 <span>→</span></button>
         <p class="rv-note cl-waitline" data-wait hidden role="status">선택한 제품 유형을 확인하고 있어요.</p>
       </form>
-      <p class="rv-note">이 조건은 문구 {{ n }}에만 적용돼요.</p>
     </div>
     {% for group, question, explanation, options in (
       ("cert", "건강기능식품 인증을 받았나요?", "이 기능성으로 식약처 인정을 받았는지에 따라 쓸 수 있는 표현이 달라요.", (("hfy", "건기식_인정", "예, 받았어요"), ("hfn", "건기식_비인정", "아니요, 받지 않았어요"))),
@@ -923,7 +969,8 @@
           <button type="button" data-review-example="{{ example }}" title="{{ example }}" aria-label="{{ kind }} 예시 넣기: {{ example }}"><b class="rv-inline-example-kind">{{ kind }}</b><span class="rv-inline-example-text">{{ example }}</span></button>
           {% endfor %}
         </div>
-        <div class="rv-pair-input-actions"><span>최대 {{ max_text_len }}자</span><button type="submit" form="review-input-form" class="rv-pair-judge" name="op" value="judge:{{ n }}" data-wait-go data-wait-label="검수 중…">{{ '다시 검수' if item else '이 문구 검수' }}</button></div>
+        {#- 🔄 2026-10-21 (ksr) — 「문구 추가」를 위 도구줄에서 문구 칸 안으로(다시 검수 왼쪽) #}
+        <div class="rv-pair-input-actions"><span>최대 {{ max_text_len }}자</span><div class="rv-pairs-tools"><button type="submit" form="review-input-form" class="rv-pairs-add" name="op" value="add" formnovalidate data-pair-add{% if copies|length >= max_copies %} disabled{% endif %}>{{ icon('plus',18) }} 문구 추가</button><button type="submit" form="review-input-form" class="rv-pair-judge" name="op" value="judge:{{ n }}" data-wait-go data-wait-label="검수 중…">{{ '다시 검수' if item else '이 문구 검수' }}</button></div></div>
         <div class="rv-input-history">
           {% if not me %}
           <p>로그인하지 않으면 검수한 문구가 이력에 남지 않아요.</p><a href="/u/login">로그인 →</a>
@@ -945,12 +992,14 @@
 <div class="rv-head cl-workspace-head"><div><h1 data-review-page-title>문구 검수</h1><p>문구를 입력하고, 제품에 맞는 기준으로 검수해보세요.</p></div><a class="rv-btn" href="/u/review">{{ icon('refresh',18) }} 새로 검수</a></div>
 <div class="rv-pairs-workspace" data-review-pairs data-max-copies="{{ max_copies }}">
   <form id="review-input-form" method="post" action="/u/judge" data-wait-form data-wait-only></form>
-  <div class="rv-pairs-toolbar"><div><b>검수 문구 <span data-pair-count>{{ copies|length }}</span> / {{ max_copies }}건</b><p>추가 정보는 검수 후 필요한 문구에만 요청해요.</p></div><div class="rv-pairs-tools"><button type="submit" form="review-input-form" class="rv-pairs-add" name="op" value="add" formnovalidate data-pair-add>{{ icon('plus',18) }} 문구 추가</button><button type="submit" form="review-input-form" class="rv-pairs-all" name="op" value="all" data-wait-go data-wait-label="전체 검수 중…">전체 검수 {{ icon('review',18) }}</button></div></div>
+  <div class="rv-pairs-toolbar"><div><b>검수 문구 <span data-pair-count>{{ copies|length }}</span> / {{ max_copies }}건</b></div></div>
   {% if notice %}<p class="rv-toast" role="status">{{ notice }}</p>{% endif %}
   <p class="rv-note" data-pairs-message hidden role="status"></p>
   <div class="rv-pairs-list" data-pairs-list>
     {% for c in copies %}{% set n = loop.index %}{% set item = results|selectattr('n','equalto',n)|first|default(none) %}{{ review_pair(n,c,item) }}{% endfor %}
   </div>
+  {#- 🔄 2026-10-21 (ksr) — 「전체 검수」는 문구가 둘 이상일 때만 목록 오른쪽 아래에 #}
+  <div class="rv-pairs-tools rv-pairs-bottom" data-pairs-bottom{% if copies|length < 2 %} hidden{% endif %}><button type="submit" form="review-input-form" class="rv-pairs-all" name="op" value="all" data-wait-go data-wait-label="전체 검수 중…">전체 검수 {{ icon('review',18) }}</button></div>
   <template id="review-pair-template">{{ review_pair(0,'') }}</template>
   <div class="rv-pairs-footnote" hidden>
     {% if not me %}<p>로그인하지 않으면 검수한 문구가 이력에 남지 않아요. <a href="/u/login">로그인</a></p>
@@ -964,5 +1013,6 @@
 <script src="/static/user_wait.js?v=3" defer></script>
 <script src="/static/review_score.js?v=3" defer></script>
 <script src="/static/rewrite_copy.js" defer></script>
-<script src="/static/review-pairs.js?v=8" defer></script>
+<script src="/static/review-pairs.js?v=9" defer></script>
+<script src="/static/review_help.js?v=1" defer></script>
 {% endblock %}

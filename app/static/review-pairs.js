@@ -22,7 +22,8 @@
   function refresh(){
     const all=pairs();
     root.querySelector('[data-pair-count]').textContent=all.length;
-    root.querySelector('[data-pair-add]').disabled=all.length>=Number(root.dataset.maxCopies);
+    root.querySelectorAll('[data-pair-add]').forEach(add=>{add.disabled=all.length>=Number(root.dataset.maxCopies);});
+    const bottom=root.querySelector('[data-pairs-bottom]');if(bottom)bottom.hidden=all.length<2;
     root.querySelector('.rv-pairs-all').disabled=!areas().some(input=>input.value.trim());
     all.forEach(pair=>{pair.querySelector('[data-pair-delete]').hidden=all.length<2;pair.querySelector('.rv-pair-judge').disabled=!pair.querySelector('textarea').value.trim();});
   }

@@ -173,3 +173,45 @@ body:has([data-review-pairs]) { height:auto; overflow:auto; }
 .rv-inline-example-text { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-weight:600; }
 .rv-inline-examples>button:hover { background:var(--u-signal-soft); border-color:var(--u-signal); }
 .rv-inline-examples>button:focus-visible { outline:2px solid var(--u-signal); outline-offset:2px; }
+
+/* 🆕 2026-10-21 (ksr) — 「문구 추가」는 문구 칸 안(다시 검수 왼쪽) · 「전체 검수」는 문구가 둘 이상일 때 목록 오른쪽 아래 */
+.rv-pair-input-actions>.rv-pairs-tools { flex-wrap:nowrap; }
+.rv-pairs-bottom { justify-content:flex-end; margin-top:20px; }
+.rv-pairs-bottom[hidden] { display:none; }
+.rv-pairs-bottom .rv-pairs-all { padding:12px 22px; font-size:.9rem; font-weight:600; }
+
+/* 🆕 2026-10-21 (ksr) — 품목 선택지 옆 「?」 도움말 · 위 쉬운 풀이 · 아래 근거 조문 원문 */
+.rv-opt-wrap { position:relative; min-width:0; display:flex; }
+.rv-opt-wrap>.rv-opt { flex:1; padding-right:44px!important; }
+.rv-help-btn { position:absolute; top:12px; right:12px; width:24px; height:24px; padding:0; border:1.5px solid var(--u-clay); border-radius:50%; background:var(--u-surface); color:var(--u-clay); font:inherit; font-size:13px; font-weight:700; line-height:1; cursor:pointer; display:grid; place-items:center; transition:color .16s,border-color .16s,background .16s; }
+.rv-help-btn:hover { color:var(--u-signal-ink); border-color:var(--u-signal); background:var(--u-signal-soft); }
+.rv-help-btn:focus-visible { outline:2px solid var(--u-signal); outline-offset:2px; }
+dialog.rv-help { width:min(680px,calc(100vw - 32px)); max-height:min(82vh,860px); padding:0; border:1px solid var(--u-line); border-radius:14px; background:var(--u-surface); color:var(--u-ink); box-shadow:0 24px 70px #43235f33; overflow:hidden; }
+dialog.rv-help[open] { display:flex; flex-direction:column; animation:rv-help-in .18s ease-out; }
+dialog.rv-help::backdrop { background:rgb(28 20 36 / .45); }
+@keyframes rv-help-in { from { opacity:0; transform:translateY(8px) scale(.98); } to { opacity:1; transform:none; } }
+.rv-help-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px 24px 16px; border-bottom:1px solid var(--u-line); }
+.rv-help-head h3 { margin:0; font-size:20px; font-weight:700; }
+.rv-help-close { width:34px; height:34px; border:0; border-radius:8px; background:transparent; color:var(--u-clay); font-size:18px; cursor:pointer; }
+.rv-help-close:hover { background:var(--u-signal-soft); color:var(--u-signal-ink); }
+.rv-help-body { overflow:auto; padding:20px 24px 24px; display:flex; flex-direction:column; gap:22px; }
+.rv-help-kicker { margin:0 0 10px; color:var(--u-signal-ink); font-size:13px; font-weight:700; letter-spacing:.02em; }
+.rv-help-kicker span { color:var(--u-clay); font-weight:500; margin-left:4px; }
+.rv-help-card { padding:16px 18px; border-radius:10px; background:var(--u-signal-soft); }
+.rv-help-card+.rv-help-card { margin-top:10px; }
+.rv-help-card h4 { margin:0 0 8px; font-size:15px; font-weight:700; }
+.rv-help-card dl { margin:0; display:grid; grid-template-columns:110px 1fr; gap:8px 14px; font-size:14px; line-height:1.7; }
+.rv-help-card dt { color:var(--u-clay); font-weight:600; }
+.rv-help-card dd { margin:0; }
+.rv-help-articles { border-top:1px dashed var(--u-line); padding-top:18px; }
+.rv-help-law { padding:14px 0; border-bottom:1px solid var(--u-line); }
+.rv-help-law:last-child { border-bottom:0; }
+.rv-help-law-name { margin:0 0 6px; font-size:14px; font-weight:700; }
+.rv-help-law-name small { color:var(--u-clay); font-weight:400; }
+.rv-help-law-lead { margin:0 0 4px; color:var(--u-clay); font-size:13px; line-height:1.7; }
+.rv-help-law-text { margin:0; font-size:14px; line-height:1.8; white-space:pre-line; word-break:keep-all; }
+.rv-help-note { display:flex; align-items:center; gap:6px; margin:0; color:var(--u-clay); font-size:13px; }
+@media(max-width:600px) {
+  .rv-help-card dl { grid-template-columns:1fr; gap:2px; }
+  .rv-help-card dd { margin-bottom:8px; }
+}

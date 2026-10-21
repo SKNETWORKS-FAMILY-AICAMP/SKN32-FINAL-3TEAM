@@ -166,10 +166,12 @@ document.documentElement.classList.add('cl-js');
       panel.focus({preventScroll:true});panel.scrollTo({top:0,behavior:'smooth'});refreshHeading();
     });
   }
-  document.querySelector('[data-copy-history]')?.addEventListener('click',async event=>{
-    const text=document.querySelector('.history-detail-text')?.textContent||'';
-    try{await navigator.clipboard.writeText(text);event.currentTarget.textContent='복사 완료';}
-    catch{event.currentTarget.textContent='문구를 직접 선택해 복사해주세요';}
+  // 🔄 2026-10-21 (ksr) — 이력 상세가 갈아 끼워지므로 문서에 위임한다
+  document.addEventListener('click',async event=>{
+    const button=event.target.closest('[data-copy-history]');if(!button)return;
+    const text=button.closest('.history-detail')?.querySelector('.history-detail-text')?.textContent||'';
+    try{await navigator.clipboard.writeText(text);button.textContent='복사 완료';}
+    catch{button.textContent='문구를 직접 선택해 복사해주세요';}
   });
 })();
 

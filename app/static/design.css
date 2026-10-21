@@ -2710,3 +2710,18 @@
 .user-shell .rv-results-pane > .cl-detail-editors .rv-copy:not([hidden]) { flex:1 1 auto; display:flex; flex-direction:column; min-height:0; }
 .user-shell .rv-results-pane > .cl-detail-editors .rv-copy:not([hidden]) textarea { flex:1 1 auto; min-height:150px !important; resize:none; }
 .user-shell .rv-results-pane > .cl-detail-editors .rv-copy:not([hidden]) > .rv-copy-row { flex:1 1 auto; min-height:0; }
+
+/* 🔄 2026-10-21 (ksr) — 이력 상세: 오른쪽 한 면 전체로 밀려 나오고, 목록은 왼쪽으로 밀린다(위에 덮지 않는다) */
+:root { --hist-drawer-w:min(560px,44vw); }
+.history-detail { top:64px; bottom:0; width:var(--hist-drawer-w); border:0; border-left:1px solid var(--u-line); border-radius:0; box-shadow:-6px 0 24px #43235f12; transform:translateX(0); transition:transform .3s cubic-bezier(.2,.8,.2,1); }
+.history-detail.is-entering,.history-detail.is-closing { transform:translateX(100%); }
+.user-main:has(.history-detail) { transition:padding-right .3s cubic-bezier(.2,.8,.2,1); }
+@media(min-width:48rem) {
+  .user-main:has(.history-detail:not(.is-closing)) { padding-right:calc(var(--hist-drawer-w) + 24px); }
+}
+@media(max-width:47.99rem) {
+  .history-detail { top:0; width:100%; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .history-detail,.user-main:has(.history-detail) { transition:none; }
+}

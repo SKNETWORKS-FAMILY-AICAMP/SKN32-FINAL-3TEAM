@@ -123,3 +123,16 @@ def admin_closed_menus() -> dict[str, dict[str, str]]:
 
 
 templates.env.globals["admin_closed_menus"] = admin_closed_menus
+
+
+def premise_guide(premise: str):  # noqa: ANN201 — Guide | None
+    """품목 선택지의 「?」 도움말 — 승인된 두 겹 안내(`app/guide.py` · D-348 보충 37 결정 7)를 전제 이름으로 꺼낸다.
+
+    🆕 2026-10-21 (ksr) — 엔진이 응답에 붙이는 것과 같은 표다. 선택지는 응답 분기가 없어도 그리므로 표에서 바로 읽는다.
+    """
+    from app import guide  # noqa: PLC0415 — 조문 생성물 검사를 화면 import 때 한 번만
+
+    return guide.guide_for(f"premise:{premise}")
+
+
+templates.env.globals["premise_guide"] = premise_guide

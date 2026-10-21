@@ -48,16 +48,57 @@
     go.addEventListener('click',()=>selected?.requestSubmit());
     grid.classList.add('ws-enhanced');
   });
-  const drawer = document.querySelector('.history-detail');
-  if(drawer){
-    drawer.focus({preventScroll:true});
+  // 🔄 2026-10-21 (ksr) — 이력 상세는 오른쪽에서 밀려 나오고 목록은 왼쪽으로 밀린다(덮지 않는다).
+  //    링크(`?open_id=`)는 그대로 두고, 스크립트가 있으면 페이지를 다시 그리지 않고 상세만 갈아 끼운다
+  const layout = document.querySelector('.history-layout');
+  if(layout){
+    const drawerOf = () => layout.querySelector('.history-detail');
+    const setUrl = href => {const url=new URL(href,location.href);history.replaceState(null,'',url);};
     const close = event => {
-      event.preventDefault();drawer.remove();
-      const url = new URL(location.href);url.searchParams.delete('open_id');history.replaceState(null,'',url);
-      document.querySelector('.history-row-open')?.focus();
+      event?.preventDefault();
+      const drawer = drawerOf();if(!drawer||drawer.classList.contains('is-closing'))return;
+      drawer.classList.add('is-closing');
+      const done = () => drawer.remove();
+      drawer.addEventListener('transitionend',done,{once:true});setTimeout(done,400);
+      layout.querySelectorAll('.history-row-open').forEach(row=>{row.classList.remove('history-row-open');const c=row.querySelector('.history-row-chevron');if(c)c.textContent='›';});
+      const url=new URL(location.href);url.searchParams.delete('open_id');history.replaceState(null,'',url);
     };
-    drawer.querySelector('[data-close-history]')?.addEventListener('click',close);
-    document.addEventListener('keydown',event=>{if(event.key==='Escape'&&drawer.isConnected)close(event);});
+    const open = async (row, event) => {
+      event.preventDefault();
+      try{
+        const page=new DOMParser().parseFromString(await (await fetch(row.href,{credentials:'same-origin'})).text(),'text/html');
+        const list=page.querySelector('.history-layout .cl-history-table'),fresh=page.querySelector('.history-layout .history-detail');
+        if(list)layout.querySelector('.cl-history-table')?.replaceWith(document.importNode(list,true));
+        setUrl(row.href);
+        if(!fresh){close();return;}
+        const drawer=drawerOf();
+        if(drawer&&!drawer.classList.contains('is-closing')){drawer.replaceChildren(...[...fresh.childNodes].map(n=>document.importNode(n,true)));drawer.scrollTop=0;}
+        else{
+          drawer?.remove();
+          const node=document.importNode(fresh,true);node.classList.add('is-entering');layout.append(node);
+          requestAnimationFrame(()=>requestAnimationFrame(()=>node.classList.remove('is-entering')));
+        }
+        drawerOf()?.focus({preventScroll:true});
+      }catch{location.href=row.href;}
+    };
+    layout.addEventListener('click',event=>{
+      const row=event.target.closest('a.history-row');if(row){open(row,event);return;}
+      if(event.target.closest('[data-close-history]'))close(event);
+    });
+    document.addEventListener('keydown',event=>{if(event.key==='Escape'&&drawerOf())close(event);});
+    // 위 메뉴줄이 스크롤로 올라가면 상세가 그만큼 위로 붙어 화면 높이를 꽉 채운다(빈 띠가 남지 않게).
+    // 본문이 확대(`zoom`)돼 있어 고정 위치도 그 배율로 늘어난다 — 배율로 나눠 맞춘다
+    const nav=document.querySelector('.user-topnav'),main=layout.closest('.user-main');
+    const place=()=>{
+      const drawer=drawerOf();if(!drawer)return;
+      if(innerWidth<768||!nav){drawer.style.top='';return;}
+      const zoom=parseFloat(getComputedStyle(main||document.body).zoom)||1;
+      drawer.style.top=Math.max(0,nav.getBoundingClientRect().bottom)/zoom+'px';
+    };
+    addEventListener('scroll',place,{passive:true});addEventListener('resize',place);
+    new MutationObserver(place).observe(layout,{childList:true});
+    place();
+    drawerOf()?.focus({preventScroll:true});
   }
 })();
 (() => {
