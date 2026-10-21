@@ -20,6 +20,8 @@
   ③ selective risk — 판정을 내린 행(전 문장 확정) 중 틀린 비율 · coverage 와 쌍으로 (D-77 L1 #8)
   ④ 조건별 대응표 — 라벨 조건(C/A/B/M/D/L) × 응답 (D-275 가 W1 몫으로 넘긴 표)
   ⑦ 보수 기록 — 확정 ∪ 분기 보류에 실린 유형을 「기록된 판정」으로 센다 (🆕 2026-10-06 · D-263 ① 「게이트 수치도 이것으로」)
+     🔄 2026-10-21 (D-348 보충 37 결정 8 · (다)) — **진단 칸이다 · 대표 지표가 아니다.** 보충 33 으로 「가장 보수적」은 위험도에만 남았고 판정은 답 뒤다 —
+        보류 사유 이름만 바뀌어도 수가 흔들렸다(원장 10-21(A) ⑥ · 55 → 87 행). 봉인 보고의 대표 지표는 `REPRESENTATIVE`.
   ⑥ 불가 사유 진단 — 확정 위반의 사유(A/B/C)를 라벨 조건과 대조 (🆕 2026-10-06 · 원장 10-03 ㊿-36). 🚨 게이트가 아니다
   ⑤ 적법 문장 오탐률 — 내역(주장 있음 · 주장 없음)과 함께만 (D-301)
 🔴 **채점 규칙은 판정기 B 와 한 곳이다** — `scored` · `truth_types` · `truth_ho` · `lawful_report` · D-40 문턱을
@@ -106,6 +108,15 @@ DICT_FILE = pathlib.Path("data/derived/banned_terms.jsonl")
 #:    (「확정위반」의 「하나라도」와 같은 규칙 · 다른 문장이 확신 부족 보류여도 그 행은 조건부위반이다). 정의는 `contracts.is_conditional`
 #:    🔄 같은 날 고침 — 종전 「나머지가 전부 확정일 때만」은 확정위반과 규칙이 달라 같은 행(조건부 + 확신 부족)이 전에는 확정위반 · 뒤에는 보류로 세어졌다
 CLASSES = ("확정위반", "조건부위반", "확정무위반", "보류", "근거없음", "미판정")
+
+#: 🆕 2026-10-21 (D-348 보충 37 결정 8 · (다)) **봉인 보고의 대표 지표** — 고른 뒤 · 답 뒤의 판정을 잰다(보충 33 · 34).
+#:    무조건부 수 · 보수 기록은 진단 칸이다(대표가 아니다). 측정 기준은 봉인 전에 고정한다(D-339 결정 7).
+REPRESENTATIVE = (
+    "조건부(골든 전제를 고른 판정) — 분류 · selective risk · coverage · 확정 재현율 · 유형 P/R",
+    "답 경로(`--answers` · 보충 35 결정 2) — 조건별 도달 · 답에 달린 오탐 · 상한 뒤 남은 질문",
+    "경로 동치(`scripts/eval_diff.py equiv` · 보충 35 결정 3) — 어긋난 행 0 · 봉인 조건",
+    "불변식(보충 35 결정 1) — 위반 행 0 · 봉인 조건 · 세 모드 모두",
+)
 
 
 def load_rows(
@@ -466,6 +477,9 @@ PREMISE_HOLDS = frozenset({HoldReason.cat_unknown, HoldReason.premise_unknown})
 
 def recorded_report(rows: list[dict], preds: list[dict]) -> dict[str, int]:
     """보수 기록 지표 (🆕 2026-10-06 · D-263 ① 「기록되는 판정 = 가장 보수적인 전제 · 게이트 수치도 이것으로 잰다」).
+
+    🔄 2026-10-21 (D-348 보충 37 결정 8 · (다)) — **진단 칸**으로 내린다(대표 지표 · 게이트 수치가 아니다 · `REPRESENTATIVE`).
+       보충 33 이 D-263 ① 의 판정 쪽을 걷었다 · 사유 표지(`low_conf` → `cat_unknown`)만 바뀌어도 수가 흔들린다(원장 10-21(A) ⑥).
 
     ★ 기록된 유형 = 확정 문장의 위반 ∪ 분기 때문에 보류된 문장에 실린 위반(`premise_held`). 채점 행만 센다.
        `rows` 기록이 있는 행 · `wrong` 기록이 정답과 하나도 안 겹친다(적법 행에 기록이 있는 것 포함) ·
@@ -1009,6 +1023,14 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     print(f"  문장   {s['verdict']}")
     print(f"  행     {s['class']}")
     print(f"  보류율 {_pct(s['hold_rate'])} — 사유별 {s['hold_reasons']}")
+    print(
+        "  ⓘ 봉인 보고의 대표 지표(D-348 보충 37 결정 8) — "
+        + (
+            " / ".join(REPRESENTATIVE)
+            if conditional
+            else "무조건부 수는 진단이다 · 대표는 조건부 · 답 경로 · 경로 동치 · 불변식"
+        )
+    )
     print("\n  조건별 대응표 (D-275 · 행 수)")
     for k, v in s["by_condition"].items():
         print(f"    {k:>2}  " + "  ".join(f"{c} {v.get(c, 0)}" for c in CLASSES))
@@ -1141,7 +1163,7 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
     w = s.get("recorded") or {}
     if w.get("rows"):
         print(
-            f"\n  보수 기록 (D-263 ① · 확정 ∪ 분기 보류에 실린 유형) — 기록이 있는 채점 행 {w['rows']} · "
+            f"\n  보수 기록 (진단 · 대표 지표 아님 · D-348 보충 37 결정 8 · 확정 ∪ 분기 보류에 실린 유형) — 기록이 있는 채점 행 {w['rows']} · "
             f"틀림 {w['wrong']}({w['wrong'] / w['rows']:.1%}) · 위반 행 {w['positive']} 중 기록이 맞은 것 {w['hit']}"
             + (f"({w['hit'] / w['positive']:.1%})" if w["positive"] else "")
             + "  (확정만 센 수와 나란히만 읽는다)"
