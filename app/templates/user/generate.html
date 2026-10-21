@@ -132,6 +132,33 @@
 .gn-dot.c-r2 { fill: var(--u-warn-dot); }
 .gn-dot.c-r3, .gn-dot.c-r4 { fill: var(--u-bad-dot); }
 .gn-dotlabel { fill: var(--u-ink); font-size: 10px; text-anchor: middle; }
+/* 🆕 2026-10-21 (ksr) — 넓힌 띠 그래프(HTML 점 · 카드 폭을 다 쓴다) · 회색 점 말풍선.
+   점 자리는 라우터 `_gen_strip` 의 left(%) · up(px). 폭이 줄어도 점 · 글자 크기는 그대로다 */
+.gn-strip-box { position: relative; height: 9.2rem; margin: 0 1.1rem; }
+.gn-strip-axis { position: absolute; left: 0; right: 0; bottom: 3.4rem; border-top: 1px solid var(--u-line); }
+.gn-strip-end { position: absolute; right: 0; bottom: 3rem; height: 4.6rem; border-left: 1px solid var(--u-line); }
+.gn-strip-tick { position: absolute; bottom: .2rem; font-size: .76rem; color: var(--u-clay); }
+.gn-strip-tick.is-l { left: 0; transform: translateX(-30%); }
+.gn-strip-tick.is-r { right: 0; transform: translateX(30%); }
+.gn-pt { position: absolute; transform: translate(-50%, 50%); border-radius: 50%; padding: 0; margin: 0; }
+.gn-pt-pick { width: 1rem; height: 1rem; border: 2px solid var(--u-surface); z-index: 2; }
+.gn-pt-pick.c-r0, .gn-pt-pick.c-r1 { background: var(--u-ok-dot); }
+.gn-pt-pick.c-r2 { background: var(--u-warn-dot); }
+.gn-pt-pick > b { position: absolute; top: calc(100% + .3rem); left: 50%; transform: translateX(-50%);
+                  font-size: .85rem; color: var(--u-ink); }
+.gn-pt-gray { width: .7rem; height: .7rem; border: 0; background: var(--u-clay); opacity: .45; cursor: pointer;
+              transition: opacity .1s, box-shadow .1s; }
+.gn-pt-gray:hover, .gn-pt-gray:focus-visible { opacity: 1; background: var(--u-signal); outline: none; z-index: 4;
+              box-shadow: 0 0 0 4px color-mix(in srgb, var(--u-signal) 25%, transparent); }
+.gn-tip { position: absolute; bottom: calc(100% + .45rem); left: 50%; transform: translateX(-50%);
+          width: max-content; max-width: min(22rem, 60vw); padding: .45rem .65rem; border-radius: .55rem;
+          background: var(--u-ink); color: var(--u-surface); font-size: .82rem; line-height: 1.45; text-align: left;
+          font-weight: 500; white-space: normal; box-shadow: 0 8px 22px rgba(0,0,0,.18); pointer-events: none;
+          display: none; }
+.gn-pt-gray.is-r .gn-tip { left: auto; right: -.3rem; transform: none; }
+.gn-pt-gray.is-l .gn-tip { left: -.3rem; transform: none; }
+/* 숨긴 말풍선이 자리를 차지하면 좁은 화면에서 가로로 넘친다 — 보일 때만 그린다 */
+.gn-pt-gray:hover .gn-tip, .gn-pt-gray:focus-visible .gn-tip { display: block; }
 .gn-explain {
   border: 1px solid var(--u-line); border-radius: 1rem; padding: 1rem 1.1rem;
   background: var(--u-surface2); font-size: .85rem; line-height: 1.7;
@@ -459,25 +486,28 @@
   {# 🆕 2026-10-13 — 픽스처의 프론티어 그림 자리. 세로축(소구력 보존)은 잴 수 없어 한 축만 그린다 · `<details>` 라 스크립트 없이 열린다 #}
   <details class="gn-fold" style="margin-top:.8rem">
   <summary>통과한 후보 {{ live.kept|length }}개가 안전 ↔ 주의 어디쯤인지 보기</summary>
-  <div class="gn-plot" style="max-width:26rem">
-    {# 🔄 2026-10-13 (권소라) — 축 이름을 「멀다 ↔ 문턱」에서 「안전 ↔ 주의」로. 값은 같다(`Kept.closeness`) #}
-    <svg viewBox="0 0 340 78" role="img" aria-label="통과한 후보를 안전에서 주의 쪽으로 늘어놓은 그림">
-      <line class="gn-axis" x1="24" y1="46" x2="316" y2="46"/>
-      <line class="gn-axis" x1="316" y1="20" x2="316" y2="52"/>
-      <text class="gn-tick" x="24" y="72">안전</text>
-      <text class="gn-tick" x="316" y="72" text-anchor="end">주의</text>
+  <div class="gn-plot gn-strip">
+    {# 🔄 2026-10-13 (권소라) — 축 이름을 「멀다 ↔ 문턱」에서 「안전 ↔ 주의」로. 값은 같다(`Kept.closeness`)
+       🔄 2026-10-21 (ksr) — SVG(폭 26rem) → HTML 점으로 카드 폭을 다 쓴다. 회색 점은 단추라 마우스를 올리거나
+          탭 · Tab 으로 고르면 후보 문구가 말풍선으로 보인다 — 스크립트 없음 #}
+    <div class="gn-strip-box" role="group" aria-label="통과한 후보를 안전에서 주의 쪽으로 늘어놓은 그림">
+      <span class="gn-strip-axis"></span><span class="gn-strip-end"></span>
+      <span class="gn-strip-tick is-l">안전</span><span class="gn-strip-tick is-r">주의</span>
       {% for p in live_strip %}
       {% if p.tier %}
-      <circle class="gn-dot c-{{ 'r0' if p.tier == '보수안' else ('r2' if p.tier == '공격안' else 'r1') }}" cx="{{ p.cx }}" cy="{{ p.cy }}" r="6"/>
-      <text class="gn-dotlabel" x="{{ p.cx }}" y="{{ p.cy + 17 }}">{{ {"보수안": "A", "균형안": "B", "공격안": "C"}.get(p.tier, p.tier[:2]) }}</text>
+      <span class="gn-pt gn-pt-pick c-{{ 'r0' if p.tier == '보수안' else ('r2' if p.tier == '공격안' else 'r1') }}"
+            style="left:{{ p.left }}%;bottom:3.4rem"><b>{{ {"보수안": "A", "균형안": "B", "공격안": "C"}.get(p.tier, p.tier[:2]) }}</b></span>
       {% else %}
-      <circle cx="{{ p.cx }}" cy="{{ p.cy }}" r="3" fill="var(--u-clay)" opacity=".55"/>
+      <button type="button" class="gn-pt gn-pt-gray{{ ' is-r' if p.left > 70 else (' is-l' if p.left < 30 else '') }}"
+              style="left:{{ p.left }}%;bottom:calc(3.4rem + {{ p.up }}px)" aria-label="고르지 않은 통과 후보: {{ p.text }}">
+        <span class="gn-tip" role="tooltip">{{ p.text }}</span>
+      </button>
       {% endif %}
       {% endfor %}
-    </svg>
+    </div>
     <p class="gn-note" style="margin:.3rem 0 0">
       오른쪽으로 갈수록 판정 인코더가 위반 유형에 가깝다고 본 문구예요. 오른쪽 끝을 넘은 문구는 탈락이라 여기 없어요.
-      작은 점은 고르지 않은 통과 후보예요. <b>위험도 등급도, 소구력도 아니에요</b> — 소구력은 재지 않아요.
+      작은 회색 점은 고르지 않은 통과 후보예요 — 마우스를 올리면 문구가 보여요. <b>위험도 등급도, 소구력도 아니에요</b> — 소구력은 재지 않아요.
     </p>
   </div>
   </details>

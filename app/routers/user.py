@@ -1652,28 +1652,36 @@ async def generate(
 
 
 #: 띠 그래프의 그릴 자리 — 가로 한 줄. 왼쪽 = 문턱에서 멀다 · 오른쪽 끝 = 문턱
-_STRIP = {"x0": 24, "x1": 316, "y": 46}
+#: 🔄 2026-10-21 (ksr) — SVG(폭 340 고정 비율) → HTML 점(가로 % · 축에서 띄울 px). 카드 폭을 다 채우고
+#:    폭이 줄어도 점 · 글자 크기는 그대로다. 겹친 회색 점은 `bucket`(%) 칸마다 위로 쌓는다
+_STRIP = {"bucket": 3.5, "lift": 18, "gap": 13, "rows": 4}
 
 
 def _gen_strip(live) -> list[dict]:  # noqa: ANN001
-    """통과한 후보 전부를 「문턱까지의 거리」 한 축에 찍을 좌표 (🆕 2026-10-13 · 픽스처의 프론티어 그림 자리).
+    """통과한 후보 전부를 「문턱까지의 거리」 한 축에 찍을 자리 (🆕 2026-10-13 · 픽스처의 프론티어 그림 자리).
 
     🚨 세로축이 없다 — 소구력 보존을 재는 노드가 없다. 지어내지 않고 한 축만 그린다 (D-147).
-    ★ 고른 셋은 이름(보수 · 균형 · 공격)을 달고, 겹친 점은 위아래로 조금씩 벌린다.
+    ★ 고른 셋은 이름(보수 · 균형 · 공격)을 달고, 겹친 회색 점은 위로 조금씩 쌓는다.
+    🆕 2026-10-21 (ksr) — 고르지 않은 회색 점에도 문구(`text`)를 싣는다 — 마우스를 올리면 말풍선으로 보인다.
+       `live.kept` 는 관문과 판정을 **통과한** 문구만이다 — 탈락 문구 원문은 여전히 싣지 않는다.
     """
-    span = _STRIP["x1"] - _STRIP["x0"]
+    s = _STRIP
     points: list[dict] = []
     stack: dict[int, int] = {}
     for k in sorted(live.kept, key=lambda k: (not k.tier, k.closeness)):
-        cx = round(_STRIP["x0"] + min(max(k.closeness, 0.0), 1.0) * span)
-        n = stack.get(cx // 8, 0)
-        stack[cx // 8] = n + 1
+        left = round(min(max(k.closeness, 0.0), 1.0) * 100, 2)
+        n = 0
+        if not k.tier:
+            b = int(left // s["bucket"])
+            n = stack.get(b, 0)
+            stack[b] = n + 1
         points.append(
             {
-                "cx": cx,
-                "cy": _STRIP["y"] - (0 if k.tier else 14 + 9 * (n % 3)),
+                "left": left,
+                "up": 0 if k.tier else s["lift"] + s["gap"] * (n % s["rows"]),
                 "tier": k.tier,
                 "pct": round(k.closeness * 100),
+                "text": k.text,
             }
         )
     return points

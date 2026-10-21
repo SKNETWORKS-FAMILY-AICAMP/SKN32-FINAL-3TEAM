@@ -619,6 +619,35 @@ def test_더_탐색하기는_세_번까지다(monkeypatch: pytest.MonkeyPatch) -
         assert _post(more=bad).status_code == 422, bad
 
 
+def test_고르지_않은_통과_후보는_회색_점의_말풍선에_문구가_있다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """🆕 2026-10-21 (ksr) — 띠 그래프를 카드 폭으로 넓히고, 고르지 않은 통과 후보(회색 점)에 문구를 단다.
+
+    고른 셋(A · B · C)에는 말풍선을 달지 않는다 — 위 카드에 이미 있다.
+    """
+
+    class Scored(_FakeJudge):
+        scores = iter((0.2, 0.5, 0.9, 0.6))
+
+        def judge(self, text, branch):  # noqa: ANN001, ANN201
+            c = next(self.scores)
+            return judge.Judged(True, "대역", "", c, "거짓_과장", c / 2, 0.5)
+
+    gen = _FakeLLM([GOOD])
+    monkeypatch.setattr(copygen, "off_reason", lambda: None)
+    monkeypatch.setattr(copygen._llm, "make", lambda: gen)
+    monkeypatch.setattr(copygen, "GraphJudge", Scored)
+    r = _post(features="고소하고 바삭한 식감")
+    assert r.status_code == 200
+    body = r.text
+    assert '<div class="gn-strip-box" role="group"' in body
+    assert body.count('class="gn-pt gn-pt-pick') == 3
+    assert body.count('<span class="gn-tip" role="tooltip">') == 1
+    tip = body.split('<span class="gn-tip" role="tooltip">')[1].split("</span>")[0]
+    assert tip in [t for _, t in GOOD]
+
+
 def test_생성_폼은_생성_중_표시를_갖고_있다() -> None:
     """생성 중 화면 — 처음에는 숨겨 두고 `user_wait.js` 가 제출 때 보인다.
 
