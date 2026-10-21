@@ -3372,7 +3372,7 @@ def _enc_subst(s: SentenceJudgment) -> SubstBranch | None:
     if axis is None:
         return None
     vs = sorted({b.violation for b in s.risk.encoder_basis})
-    sb = rs.subst_branch(vs, {axis})
+    sb = rs.subst_branch(vs, {axis}, s.text)  # 🔄 보충 40 결정 3 — 글자로 거르는 줄
     # 🆕 2026-10-21 (보충 39 결정 6) 한 유형이면 질문에 그 유형을 싣는다 — 화면이 답에 담아 보낸다(`UserSubst.violation`)
     return sb.model_copy(update={"violation": vs[0]}) if sb is not None and len(vs) == 1 else sb
 
@@ -3839,7 +3839,7 @@ def _enc_mixed(
     if axis is not None:
         for v in b_types:
             if v in rs.SUBST_MAX:
-                b = rs.subst_branch([v], {axis})
+                b = rs.subst_branch([v], {axis}, s.text)  # 🔄 보충 40 결정 3
                 if b is not None:
                     sb_of[v] = b.model_copy(update={"violation": v})
     asked = [k for v in b_types for k in q[v]]
