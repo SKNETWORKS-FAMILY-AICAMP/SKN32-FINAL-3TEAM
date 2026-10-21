@@ -118,6 +118,19 @@ def test_한_유형의_예만으로는_R0_이_아니다() -> None:
     assert got.hold_kind is HoldKind.awaiting_answer
 
 
+def test_실증을_먼저_답해도_남은_사실을_묻고_실증_답은_싣지_않는다() -> None:
+    """계약은 「실증 답 ∧ 사실 확인 분기」를 거부한다(보충 4 결정 3) — 사실이 남았으면 실증 답은 입력에만 두고 다음 판정에 든다.
+
+    dev 답 경로(이어 묻기)에서 처음 드러났다 — 실증에 먼저 답한 섞인 문장이 계약 오류로 멈췄다.
+    """
+    got = _run(_general(), substs=_subst(GEN, Answer.예))
+    assert got.verdict is Verdict.hold and got.hold_kind is HoldKind.awaiting_answer
+    assert got.fact_check is not None and got.fact_check.kind is FactKind.조건_고지
+    assert got.user_subst is None and got.substantiation is None, "실증은 이미 답했다"
+    done = _run(_general(), _cond(Answer.예), _subst(GEN, Answer.예))
+    assert done.verdict is Verdict.confirmed and done.risk.final is Risk.R0
+
+
 def test_모두_예면_R0() -> None:
     got = _run(_general(), _cond(Answer.예), _subst(GEN, Answer.예))
     assert got.verdict is Verdict.confirmed and not got.violations

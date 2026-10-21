@@ -3845,7 +3845,9 @@ def _enc_mixed(
             "infeasibility": Infeasibility.B if then is not None else s.infeasibility,
             "substantiation": then,
             "user_facts": carried,
-            "user_subst": us,
+            # 🔴 사실 질문이 남았으면 실증 답을 싣지 않는다 — 계약이 「실증 답 ∧ 사실 확인 분기」를 거부한다(보충 4 결정 3) ·
+            #    답은 입력(`ProductContext.substs`)에 남아 다음 판정에서 다시 든다(원장 10-21(A) ⑩ — dev 답 경로에서 처음 드러남)
+            "user_subst": None if pending else us,
         }
         if pending:
             t = factcheck.FACT_TEXTS[pending[0]]
