@@ -63,7 +63,19 @@
 (() => {
  const input=document.querySelector('#prompt'),head=document.querySelector('[data-preview-head]'),format=document.querySelector('[data-preview-format]');
  if(!input||!head)return;
- const update=()=>{const lines=input.value.trim().split('\n');head.textContent=lines[0]||'광고 문구를 입력해주세요';const sub=document.querySelector('[data-preview-sub]');if(sub)sub.textContent=lines.slice(1).join(' ')||'보조 문구 영역';format.textContent=(document.querySelector('input[name=ad_format]:checked')?.value||'')+' · 배치 예시';};
+ const update=()=>{
+   const lines=input.value.trim().split('\n');
+   head.textContent=lines[0]||'헤드라인을 적어 주세요';
+   const sub=document.querySelector('[data-preview-sub]');
+   if(sub)sub.textContent=lines.slice(1).join(' ')||'보조 문구를 적어 주세요';
+   const caption=document.querySelector('[data-preview-caption]');
+   if(caption)caption.textContent=input.value.trim()||'캡션 본문을 적어 주세요';
+   const selected=document.querySelector('input[name=ad_format]:checked');
+   const specs={'f-sns':'1080 × 1080 · 1:1','f-detail':'860px · 세로 가변','f-banner':'300 × 250 · 6:5'};
+   if(format)format.textContent=(selected?.value||'')+' · '+(specs[selected?.id]||'')+' · 배치 예시';
+   const paper=document.querySelector('.ws-layout-paper');
+   if(paper&&paper.dataset.format!==selected?.id){paper.scrollTop=0;paper.dataset.format=selected?.id||'';}
+ };
  input.addEventListener('input',update);document.querySelectorAll('input[name=ad_format]').forEach(r=>r.addEventListener('change',update));update();
 })();
 document.querySelectorAll('a[href="#gen-form"]').forEach(link=>link.addEventListener('click',()=>{const editor=document.querySelector('#product-editor');if(editor)editor.open=true;}));

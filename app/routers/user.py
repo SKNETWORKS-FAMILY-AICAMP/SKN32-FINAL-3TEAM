@@ -2581,7 +2581,7 @@ _MYPAGE_TABS: tuple[tuple[str, str], ...] = (
 )
 _MYPAGE_SECTION_TAB = {"profile": "profile", "consent": "account"}
 #: 계정을 끌 때 정확히 이렇게 입력해야 한다 — 실수로 끄는 것을 막는 확인 문구다.
-_MYPAGE_DISABLE_CONFIRM = "끄기"
+_MYPAGE_DISABLE_CONFIRM = "비활성화"
 
 
 def _mypage_picked(user: UserAccount) -> dict[str, str]:
@@ -2596,6 +2596,7 @@ def _mypage_ctx(user: UserAccount, tab: str, **extra: object) -> dict[str, objec
         "email": user.email,
         "consent_history": user.consent_history_at is not None,
         "consent_improve": user.consent_improve_at is not None,
+        "disable_confirm": _MYPAGE_DISABLE_CONFIRM,
         **extra,
     }
 

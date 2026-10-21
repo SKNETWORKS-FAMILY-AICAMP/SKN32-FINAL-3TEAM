@@ -1,93 +1,34 @@
-{# app/templates/admin/stats/dashboard.html — 통계 대시보드 (뼈대) · 소유자 **psj**
-   (병렬작업 계약 §5)
-
-  🚨 **읽기 전용이다.**
-  🔄 2026-10-20 — 검수는 `judgment` 를 센다(admin_stats `_load_usage`). 생성은 저장하지 않아 「저장 안 함」. 매출은 D-260 ⑥ 닫힘 라벨.
-  🚨 목업(`app/static/mockup.html`) `VIEWS['dashboard']`(11670번 줄, 최종본) 구조를 따른다.
-  🔴 일/주/월 토글은 목업에서 JS 지만 여기는 GET 쿼리(`?period=`)로 전환한다.
-  🚨 `/admin/`(기존 거버넌스 대시보드 — 데이터 층 표)과는 다른 화면이다. 검수·생성 KPI 카드는
-     각각 `/admin/stats/quality`, `/admin/stats/quality/generation` 으로 이동한다.
-  ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
-#}{% extends "admin/_base.html" %}
-{% block title %}통계 대시보드 | CopyLane 관리자{% endblock %}
-{% block admin_css %}<link rel="stylesheet" href="/static/admin-stats.css?v=1">{% endblock %}
-{% block admin_content %}
-
-<p class="dash-sub">CopyLane Admin</p>
-<h1>대시보드</h1>
-<p class="page-desc">검수·생성 이용 현황과 기능 제공 상태를 확인하세요.</p>
-{% if dash.source != "db" %}<p class="warn"><b>이용 기록을 읽지 못했어요.</b> DB 에 연결된 뒤 표시돼요 — 0건이라는 뜻이 아니에요.</p>{% else %}<p class="dash-note">회원 검수 기준이에요 — 10-20 이전 기록은 이력 보관에 동의한 회원 것만 있어요. 매출 집계는 제공하지 않습니다.</p>{% endif %}
-
-<nav class="period-tabs" aria-label="기간">
-  {% for p in periods %}
-  <a href="/admin/stats/dashboard?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>
-  {% endfor %}
-</nav>
-
-<div class="dash-kpis">
-  <a class="dash-kpi" href="/admin/stats/quality">
-    <span>검수 요청</span><b>{{ dash.kpi.judge }}</b><small>{{ dash.delta.judge }}{% if dash.kpi.sentences is not none %} · 문장 {{ '{:,}'.format(dash.kpi.sentences) }}개{% endif %}</small>
-  </a>
-  <a class="dash-kpi" href="/admin/stats/quality/generation">
-    <span>카피 생성</span><b>{{ dash.kpi.gen }}</b><small class="dash-muted">{{ dash.delta.gen }}</small>
-  </a>
-  <a class="as-panel admin-closed-summary" href="/admin/stats/revenue">
-    <span>매출</span><span class="admin-status">{{ revenue_label }}</span><small>비활성 · 미구현 — 닫힌 이유 확인하기 →</small>
-  </a>
+{# Statistics overview uses the same compact reporting frame and actual route data. #}
+{% extends "admin/stats/_base.html" %}
+{% from "admin/stats/_parts.html" import metric %}
+{% set source = dash.source %}
+{% block stats_title %}통계 대시보드{% endblock %}
+{% block stats_description %}검수 이용 현황과 기능 제공 상태를 확인하세요.{% endblock %}
+{% block stats_filters %}
+<span>검수 집계 기간</span>
+<nav class="period-tabs" aria-label="기간">{% for p in periods %}<a href="/admin/stats/dashboard?period={{ p }}" {% if period == p %}class="active" aria-current="page"{% endif %}>{{ period_label[p] }}</a>{% endfor %}</nav>
+{% endblock %}
+{% block stats_notice %}
+{% if dash.source != 'db' %}<p class="warn"><b>이용 기록을 읽지 못했어요.</b> DB 연결 후 집계할 수 있어요. 0건이라는 뜻은 아니에요.</p>
+{% else %}<p class="as-notice">저장된 회원 검수 기록을 기준으로 집계해요.</p>{% endif %}
+{% endblock %}
+{% block stats_content %}
+<div class="as-kpis">
+  <a class="as-metric-link" href="/admin/stats/quality">{{ metric('검수 요청',dash.kpi.judge ~ '건',dash.delta.judge,'review') }}</a>
+  <a class="as-metric-link" href="/admin/stats/quality">{{ metric('검수 문장',('{:,}건'.format(dash.kpi.sentences) if dash.kpi.sentences is not none else '—'),'저장된 문장 기준') }}</a>
 </div>
-
-<div class="dash-grid">
-  <div class="dash-card">
-    <div class="dash-card-head">
-      <h2>{{ dash.trend_title }}</h2>
-      <span class="dash-legend"><i class="dash-dot dash-dot-judge"></i> 검수 판정 문장</span>
-    </div>
-    {% if dash.source == "db" %}
-    <div class="dash-bars">
-      {% for label in dash.labels %}
-      <div class="dash-bar-col">
-        <span class="dash-bar-v">{{ dash.judge_series[loop.index0] }}</span>
-        <div class="dash-bar dash-bar-judge" style="height: {{ [4, ((dash.judge_series[loop.index0] / dash_max * 125) if dash_max else 0) | round(0, 'floor')] | max }}px;"></div>
-        <span class="dash-bar-label">{{ label }}</span>
-      </div>
-      {% endfor %}
-    </div>
-    <p class="dash-card-sub">축 상한 {{ dash_max }}건 · {{ dash.gen_note }}</p>
-    {% else %}<p class="dash-card-sub">이용 추이를 읽지 못했어요.</p>{% endif %}
-  </div>
+<section class="as-panel">
+  <div class="as-panel-head"><h2>{{ dash.trend_title }}</h2><span class="as-unit">문장 기준 · 건</span></div>
+  <p class="as-legend"><span><i></i>문장 판정</span></p>
+  {% if dash.source == 'db' %}
+  <div class="as-chart{% if dash.labels|length > 10 %} as-chart--many{% endif %}" role="img" aria-label="기간별 검수 문장 수">
+    {% for label in dash.labels %}<div class="as-chart-col"><div class="as-chart-bars"><span class="as-chart-bar" style="height:{{ (dash.judge_series[loop.index0] / dash_max * 100)|round(1) if dash_max else 0 }}%" title="{{ label }} · {{ dash.judge_series[loop.index0] }}건"></span></div><small>{% if dash.labels|length <= 10 or loop.first or loop.last or loop.index0 % 3 == 0 %}{{ label }}{% endif %}</small></div>{% endfor %}
+  </div><p class="as-context">축 상한 {{ dash_max }}건</p>
+  {% else %}<p class="as-empty">이용 추이를 읽지 못했어요.</p>{% endif %}
+</section>
+<div class="as-status-strip">
+  <a href="/admin/stats/quality/generation"><b>카피 생성</b><span class="admin-status">집계 미제공</span><span>엔진 상태·실패 기록 확인 →</span></a>
+  <a href="/admin/stats/revenue"><b>매출 통계</b><span class="admin-status">{{ revenue_label }}</span><span>닫힌 이유 확인 →</span></a>
 </div>
-
-<style>
-.admin-shell .dash-sub { font-size: .75rem; color: var(--a-clay); margin: 0 0 .2rem; }
-.admin-shell .page-desc { color: var(--a-clay); margin: 0 0 1rem; }
-.admin-shell .period-tabs { display: flex; gap: .4rem; margin-bottom: 1rem; }
-.admin-shell .period-tabs a { padding: .3rem .8rem; border: 1px solid var(--a-line); border-radius: .4rem; text-decoration: none; color: var(--a-ink); font-size: .85rem; }
-.admin-shell .period-tabs a.active { background: var(--a-signal); color: #fff; border-color: var(--a-signal); }
-.admin-shell .dash-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; max-width: 42rem; }
-.admin-shell .dash-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .8rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); text-decoration: none; color: inherit; }
-.admin-shell .dash-kpi span { font-size: .8rem; color: var(--a-clay); }
-.admin-shell .dash-kpi b { font-size: 1.4rem; }
-.admin-shell .dash-kpi small { font-size: .75rem; color: #15803d; }
-.admin-shell .dash-kpi small.dash-muted { color: var(--a-clay); }
-.admin-shell .dash-note { color: var(--a-clay); font-size: .85rem; margin: 0 0 1rem; }
-.admin-shell .dash-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1.5rem; }
-.admin-shell .dash-card { border: 1px solid var(--a-line); border-radius: .6rem; padding: 1rem 1.2rem; background: var(--a-surface2); }
-.admin-shell .dash-card h2 { font-size: .95rem; margin: 0; }
-.admin-shell .dash-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .8rem; }
-.admin-shell .dash-card-sub { font-size: .75rem; color: var(--a-clay); margin: 0 0 .5rem; }
-.admin-shell .dash-legend { font-size: .75rem; color: var(--a-clay); }
-.admin-shell .dash-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; }
-.admin-shell .dash-dot-judge { background: var(--a-signal); }
-.admin-shell .dash-dot-gen { background: #d6336c; }
-.admin-shell .dash-bars-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.admin-shell .dash-bars-label { font-size: .75rem; font-weight: 600; margin-bottom: .5rem; }
-.admin-shell .dash-bars-label-gen { color: #d6336c; }
-.admin-shell .dash-bars { display: flex; align-items: flex-end; gap: .4rem; height: 10rem; }
-.admin-shell .dash-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: .25rem; min-width: 2rem; }
-.admin-shell .dash-bar-v { font-size: .65rem; color: var(--a-clay); }
-.admin-shell .dash-bar { width: 100%; border-radius: .25rem .25rem 0 0; }
-.admin-shell .dash-bar-judge { background: var(--a-signal); }
-.admin-shell .dash-bar-gen { background: #d6336c; }
-.admin-shell .dash-bar-label { font-size: .65rem; color: var(--a-clay); }
-</style>
+<details class="as-analysis-details"><summary><span class="as-analysis-title">집계 기준 자세히</span><span class="as-analysis-hint">펼쳐 확인하기</span></summary><p class="as-context">10월 20일 이전 기록은 이력 보관에 동의한 회원만 포함해요. {{ dash.gen_note }} 매출 집계는 제공하지 않아요.</p></details>
 {% endblock %}

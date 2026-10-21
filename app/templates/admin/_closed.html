@@ -9,6 +9,7 @@
 #}{% extends "admin/_base.html" %}
 {% block title %}{{ page_title }} | CopyLane 관리자{% endblock %}
 {% block admin_css %}<link rel="stylesheet" href="/static/admin-stats.css?v=1">{% endblock %}
+{% block admin_layout %}reading{% endblock %}
 {% block admin_content %}
 <div class="admin-closed" aria-label="비활성 화면 안내">
   <div class="admin-closed-head"><h1>{{ page_title }}</h1><span class="admin-status">{{ label }}</span></div>

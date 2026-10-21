@@ -779,9 +779,8 @@
       </form>
       {# 🔄 근거 보기 · 증명서도 **고른 분기 기준**이다 — 분기 안에 두어 고른 것만 보인다.
          🚨 계약의 `Branch` 에는 증명서 칸이 없다 — 사유는 이 분기 문장의 불가 유형에서 읽고, 설명문은 지어내지 않는다 (D-147) #}
-      {% if b.outcome.value == "certificate" %}
-      <details class="rv-sub cl-certificate-details">
-        <summary>사용 불가 사유 자세히 보기</summary>
+      {% if b.outcome.value == "certificate" and not (result.certificate and not result.branches) %}
+      <section class="rv-sub cl-certificate-details">
         <h2 class="rv-risk-head" style="font-size:.88rem">합법화 불가 증명서 <span class="rv-count">고르신 내용 기준</span></h2>
         <div class="rv-cert">
           {% for v in b.sentences|selectattr("infeasibility")|map(attribute="infeasibility.value")|unique|sort %}
@@ -791,7 +790,7 @@
           {% endfor %}
           <p>설명은 위의 「이 전제라면」 기준 문안을 따라요.</p>
         </div>
-      </details>
+      </section>
       {% endif %}
       {% if b.evidence %}
       <details class="rv-ev">
@@ -819,169 +818,9 @@
   </div>
 </div>
 {% endmacro %}
-<div class="rv-head cl-workspace-head">
-  <div>
-    <h1 data-review-page-title>{{ "검수 결과" if results and not (results|selectattr("result.branches")|list) else "문구 검수" }}</h1>
-    {# 🔄 2026-10-15 (ksr · 점검 19) — 모바일은 결과가 아래에 쌓여 「오른쪽」이 틀렸다 #}
-    <p>문구를 입력하고, 제품에 맞는 기준으로 검수해보세요.</p>
-  </div>
-  <div class="rv-actions">
-    {# ⬜ 팀 공유 — 팀(기업 회원)이 없다. D-260 ④ 가 `enterprise` 를 만들지 않기로 했다 #}
-    {# 🔄 2026-10-15 (ksr · 점검 12) — 이유가 마우스를 올려야만 보였다(모바일은 볼 방법 없음) — 글자로 적는다 #}
-
-    <a class="rv-btn" href="/u/review">{{ icon("refresh", 18) }} 새로 검수</a>
-  </div>
-</div>
-
-<div class="rv-grid cl-focus-review">
-
-  <div class="rv-input-pane" role="region" aria-label="검수 문구 입력" tabindex="0">
-    {# 🆕 2026-10-15 (ksr · 점검 0) — 검수 버튼을 누르면 「검수 중…」. 「예시 넣기」 · 「칸 추가」 · 「삭제」는 띄우지 않는다(`user_wait.js` `data-wait-only`) #}
-    <form id="review-input-form" class="rv-card" method="post" action="/u/judge" data-wait-form data-wait-only>
-      <h2>검수 문구 <span class="cl-pill">{{ copies|length }} / {{ max_copies }}건</span></h2>
-      <div class="cl-input-scroll" tabindex="0" role="region" aria-label="검수 문구 목록">
-      {% if notice %}<p class="rv-toast" role="status">{{ notice }}</p>{% endif %}
-      {% for c in copies %}
-      <div class="cl-copy-nav-item">
-        <button type="button" class="cl-copy-nav" data-copy-nav="{{ loop.index }}" aria-pressed="false"><span class="cl-copy-nav-number">문구 {{ loop.index }}</span><span class="cl-nav-status" data-nav-status="{{ loop.index }}">검수 전</span><span class="cl-nav-preview" data-nav-preview="{{ loop.index }}">{{ c or '문구를 입력해주세요.' }}</span></button>
-        {% if copies|length > 1 %}<button class="cl-nav-delete" type="submit" name="op" value="del:{{ loop.index }}" formnovalidate aria-label="문구 {{ loop.index }} 삭제">×</button>{% endif %}
-      </div>
-      <div class="rv-copy" data-input-copy="{{ loop.index }}">
-        <div class="rv-copy-bar">
-          <span>문구 {{ loop.index }}</span>
-          <span class="cl-copy-status" data-input-status="{{ loop.index }}"></span>
-          <span>
-            {# 🆕 2026-10-12 — 글자 수. 숫자는 `user_count.js` 가 적는다 — 스크립트가 안 돌면 숨은 채로 남는다 #}
-            <span class="rv-len" data-count-for="text-{{ loop.index }}" hidden>{{ c|length }}/{{ max_text_len }}</span>
-            <button class="rv-link" type="submit" name="op" value="sample:{{ loop.index }}" formnovalidate>예시 넣기</button>
-            {% if copies|length > 1 %}
-            <button class="rv-link rv-del" type="submit" name="op" value="del:{{ loop.index }}" formnovalidate>삭제</button>
-            {% endif %}
-          </span>
-        </div>
-        <div class="rv-copy-row">
-          <label class="visually-hidden" for="text-{{ loop.index }}">문구 {{ loop.index }}</label>
-          <textarea id="text-{{ loop.index }}" name="text" rows="4" maxlength="{{ max_text_len }}"
-                    placeholder="검수할 광고 문구를 입력하세요.">{{ c }}</textarea>
-          {% if copies|length > 1 %}<button class="rv-copy-go" type="submit" name="op" value="judge:{{ loop.index }}"
-                  title="이 문구 검수하기" data-wait-go data-wait-label="검수 중…">이 문구 검수</button>{% endif %}
-        </div>
-        <p class="cl-input-limit">최대 {{ max_text_len }}자</p>
-      </div>
-      {% endfor %}
-      <p class="cl-conditional-note">{{ icon('info', 16) }} 추가 정보는 검수 중 분기 선택이 필요한 문장에만 요청해요.</p>
-      {#- 🆕 2026-10-20 (lse) — 예시 문구로 바로 해 보기. 누르면 지금 고른 문구 칸에 글자만 채운다(`review_score.js` · 서버로 보내지 않는다) #}
-      <div class="rv-try">
-        <p class="rv-try-label">예시 문구로 바로 해 보기</p>
-        <button type="button" class="rv-try-item" data-fill-sample="고혈압 예방에 효과적인 문경 오미자청, 설탕에 100일 숙성했어요."><b>식품</b>고혈압 예방에 효과적인 오미자청…</button>
-        <button type="button" class="rv-try-item" data-fill-sample="국내 판매 1위 오미자청, 한 잔에 담은 문경의 맛"><b>비교 표현</b>국내 판매 1위 오미자청…</button>
-        <button type="button" class="rv-try-item" data-fill-sample="면역력 강화에 도움을 줍니다. 하루 한 포로 간편하게 챙기세요."><b>건강기능식품</b>면역력 강화에 도움을 줍니다…</button>
-      </div>
-      </div>
-      <div class="cl-input-footer">
-      <div class="rv-copy-tools">
-        <button class="rv-add" type="submit" name="op" value="add" formnovalidate>{{ icon("plus", 20) }} 문구 추가</button>
-        <button class="rv-all" type="submit" name="op" value="{{ 'all' if copies|length > 1 else 'judge:1' }}" data-wait-go data-wait-label="검수 중…">{{ '전체 검수' if copies|length > 1 else '문구 검수하기' }} <span aria-hidden="true">→</span></button>
-      </div>
-      <p class="rv-note cl-waitline" data-wait hidden role="status" aria-live="polite">검수 중이에요 — 문장마다 조문을 찾고 있어요</p>
-
-      {# ⬜ 파일 업로드는 `multipart/form-data` → `python-multipart` 새 의존성(uv.lock 은 팀장 · §5) ·
-            이미지 판정은 향후 과제(D-104). 그래서 비활성으로 두고, 접어 둔다 #}
-      <details class="rv-fold">
-        <summary>참고 자료 첨부 <span class="rv-soon">아직 준비 중이에요</span>
-          <span class="rv-count">최대 5개 · 이미지 · 문서</span></summary>
-        <div class="rv-attach" aria-disabled="true">
-          ＋ 상세페이지 캡처 · 기존 광고물 올리기<br>
-          <span class="rv-note">파일 첨부는 아직 준비 중이에요 — 업로드 처리(새 의존성)와 이미지 판정이 정해지면 열려요.</span>
-        </div>
-      </details>
-      {# 🔴 2026-10-01 — 비회원 검수는 이력에 쌓이지 않는다 (D-69). 검수는 그대로 된다 — 로그인 벽이 아니다 (D-66).
-         🔄 2026-10-13 — 입력을 가리지 않게 카드 맨 아래 한 줄로 옮겼다 #}
-      {% if not me %}
-      <p class="rv-hist">로그인하지 않으면 검수한 문구가 <b>이력에 남지 않아요</b> · <a href="/u/login">로그인</a></p>
-      {# 🆕 2026-10-13 — 방금 한 검수가 이력에 어떻게 됐는지 그대로 알린다. 못 적었으면 「저장됐다」고 말하지 않는다 (D-147) #}
-      {% elif history_kept == "saved" %}
-      <p class="rv-hist" role="status">이 검수는 <b>이력에 저장됐어요</b> · <a href="/u/history">이력 보기</a></p>
-      {% elif history_kept == "off" %}
-      <p class="rv-hist" role="status">이 검수는 <b>이력에 남지 않아요</b></p>
-      {% elif history_kept == "failed" %}
-      <p class="rv-hist" role="status">이 검수를 <b>이력에 저장하지 못했어요</b> — 검수 결과는 오른쪽 그대로예요.</p>
-      {% endif %}
-      </div>
-    </form>
-
-    {# 🔄 2026-10-13 — 이용자가 읽을 것이 아니라 접어 둔다. 지우지 않는다 — 화면 분기를 확인하는 길이다 (D-124) #}
-    <details class="rv-card rv-dev">
-      <summary>개발자 정보 — 골든 픽스처로 분기 보기</summary>
-      <p class="rv-note">
-        {# 🔄 2026-10-14 — 검수는 실제 판정 엔진이 돈다. 「엔진이 없어서」는 낡은 말이라 바꿨다 #}
-        아래는 실제 판정이 아니라 <b>예시 응답(골든 픽스처)</b>으로 화면의 분기를 확인하는 곳이에요 (D-124).
-        가짜 200 을 만들지 않아요 — 진짜가 오면 두 번 고쳐야 하니까요 (D-147).
-      </p>
-      <ul class="rv-fixtures">
-      {% for name in fixtures %}
-        <li><a href="/u/preview/{{ name }}">{{ name }}</a></li>
-      {% endfor %}
-      </ul>
-    </details>
-  </div>
-
-  <div class="rv-results-pane" role="region" aria-label="검수 결과" tabindex="0">
-    {#- 🆕 2026-10-20 (lse · 사용자 「검수 중 표시가 촌스럽다 — 재생성처럼」) — 검수 버튼을 누르면 결과 칸 전체에 띄운다.
-        `user_wait.js` 가 `data-wait-for` 로 켠다 · 움직임은 전부 CSS(design.css `.rv-judging`) · 스크립트가 없어도 검수는 된다 #}
-    <div class="rv-judging" data-wait-for="review-input-form" hidden role="status" aria-live="polite">
-      <div class="rv-judging-card">
-        <div class="rv-judging-orb" aria-hidden="true"><span>✦</span></div>
-        <p class="rv-judging-title">문구를 검수하고 있어요</p>
-        <div class="rv-judging-steps">
-          <span>문장을 나누는 중</span>
-          <span>금지 표현 사전과 대조하는 중</span>
-          <span>판정 인코더로 위반 유형을 살피는 중</span>
-          <span>근거 조문을 찾는 중</span>
-          <span>위험도를 매기는 중</span>
-        </div>
-        <div class="rv-judging-skel" aria-hidden="true"><i></i><i></i><i></i></div>
-      </div>
-    </div>
-    <div class="cl-focus-head"><h2 data-focus-copy-title>문구 1</h2><button type="button" data-edit-copy>{{ icon('pencil', 17) }} 문구 편집</button></div>
-    <div class="cl-detail-editors"></div>
-    <p class="cl-focus-empty-quote" data-focus-quote hidden></p>
-    {#- 🔄 2026-10-20 (lse · 사용자 「입력 전 화면이 텅 비고 짜친다」) — 검수 전 안내를 채운다: 3단계 · 잡는 표현 태그. `data-focus-unsent` 는 design.js 가 켜고 끈다 #}
-    {#- 🔄 2026-10-20 (lse · 사용자) — 검수 전 안내 카드는 뺐다. 자리(`data-focus-unsent`)는 design.js 가 찾으므로 빈 채로 남긴다 #}
-    <div class="cl-focus-unsent" data-focus-unsent hidden></div>
-  {% if engine_pending %}
-    <div class="rv-card" data-engine-state>
-      <h2>위험도</h2>
-      {#- 🔴 2026-10-15 (전수 점검) — 연결 실패(503 · `engine_down`)를 「아직 안 붙음」(501)으로 그리던 자리. 문구는 광고 생성 화면(`compose.html`)과 같은 말 #}
-      <p class="rv-pending">
-        {% if engine_down %}판정 엔진에 연결하지 못했어요.{% else %}판정 엔진이 아직 붙지 않았어요.{% endif %}
-        입력한 문구는 유지돼요. 잠시 뒤 다시 검수해주세요.<br>
-        {% if not engine_down %}검수 서비스를 사용할 수 없어 결과를 표시하지 못했어요.{% endif %}
-      </p>
-    </div>
-  {% elif results %}
-    {# 🔄 2026-10-01 — 분기가 있으면 지적 건수는 **고른 분기 기준**으로 바뀐다. 서버는 어느 분기를 골랐는지 모르므로
-       CSS 가 센다 — 보이는 지적 문장(`.rv-flag`)을 카운터로 세고, 하나도 없으면 「특이사항 없음」이다 #}
-    {% set live_state = namespace(pending=false) %}
-    {% for entry in results %}{% if (entry.result.branches or entry.stage) and not entry.picked %}{% set live_state.pending = true %}{% endif %}{% endfor %}
-    {% set live = live_state.pending %}
-    {# 분기가 있는 문구가 하나뿐이면 재검수 회차를 카드 머리(지적 건수 왼쪽)로 올린다 — 여럿이면 문구 줄 오른쪽에 둔다 #}
-    {# 🆕 2026-10-15 (ksr · 점검 19) — 좁은 화면(한 줄로 쌓임)에서는 검수 뒤 결과 카드로 내려 준다(`user_wait.js` `data-scroll-narrow`) #}
-    <div class="rv-card{% if live %} rv-card-live{% endif %}{% if results|selectattr("result.branches")|list|length == 1 %} rv-one{% endif %}" data-scroll-narrow="48rem">
-      <h2 class="rv-risk-head"><span data-review-title>검수 결과</span>
-        {% if not live %}
-        <span class="rv-summary {{ 's-bad' if flagged else 's-ok' }}">
-          {#- 🔄 2026-10-15 (ksr · 점검 11) — 「지적」은 확정 위반처럼 읽혀 보류까지 세는 이 수와 맞지 않았다 #}
-          {%- if flagged %}확인할 문장 {{ flagged }}건{% else %}특이사항 없음{% endif -%}
-        </span>
-        {% endif %}
-      </h2>
-      <nav class="cl-result-tabs" role="tablist" aria-label="문구별 검수 결과">
-      {% for item in results %}<button type="button" id="result-tab-{{ item.n }}" role="tab" aria-controls="result-copy-{{ item.n }}" aria-selected="{{ 'true' if loop.first else 'false' }}" tabindex="{{ '0' if loop.first else '-1' }}" data-result-tab="{{ item.n }}">문구 {{ item.n }} <span data-tab-status>{{ '조건 확인 필요' if item.result.branches else '검수 완료' }}</span></button>{% endfor %}
-      </nav>
-    {% for item in results %}
-      {% set result = item.result %}
-      <section class="cl-result-copy" id="result-copy-{{ item.n }}" role="tabpanel" aria-labelledby="result-tab-{{ item.n }}" data-result-copy="{{ item.n }}" data-has-branches="{{ 'true' if result.branches else 'false' }}" tabindex="0">
+{% macro pair_result(item) %}
+{% set result = item.result %}
+<section class="cl-result-copy" id="result-copy-{{ item.n }}" data-result-copy="{{ item.n }}" data-has-branches="{{ 'true' if result.branches else 'false' }}" aria-label="문구 {{ item.n }} 검수 결과">
       <p class="cl-result-stale" data-result-stale hidden role="status">입력 문구가 변경됐어요. 아래는 수정 전 결과입니다. 문구를 다시 검수해주세요.</p>
       {% if not result.branches and not item.picked %}
       <p class="rv-copyno">문구 {{ item.n }}{% if result.category %} · {{ result.category.value }}{% endif %}
@@ -1009,15 +848,8 @@
       <p class="rv-empty">문장 판정이 없어요.</p>
       {% endfor %}
       {% endif %}
-      </section>
-    {% endfor %}
-      {# 🚨 문장들 **뒤에** 있어야 카운터가 다 세어진다 — 자리는 CSS 가 머리 오른쪽으로 올린다 #}
-      <div class="cl-result-footer"><span>제품 조건과 근거를 함께 확인해주세요.</span><button type="button" data-copy-review>{{ icon("copy", 17) }} 결과 문구 복사</button></div>
-      {% if live %}<span class="rv-summary rv-live" role="status"></span>{% endif %}
-    </div>
 
-    {% for item in results %}
-    {% set result = item.result %}
+</section>
     {% if result.certificate and not result.branches %}
     <div class="rv-card" data-result-extra="{{ item.n }}">
       <h2>합법화 불가 증명서{% if results|length > 1 %} <span class="rv-count">문구 {{ item.n }}</span>{% endif %}</h2>
@@ -1062,42 +894,75 @@
     </div>
     {% endif %}
 
-    <details class="rv-card rv-dev">
-      <summary>개발자 정보 — 판정 메타{% if results|length > 1 %} · 문구 {{ item.n }}{% endif %}</summary>
-      <table>
-        <tr><th>법령판</th><td>{{ result.law_version|law_version_label }}</td></tr>
-        <tr><th>판정 버전</th><td>{{ result.judged_by }}</td></tr>
-        <tr><th>라운드</th><td>{{ result.attempt }}</td></tr>
-        {# 🆕 2026-10-12 (ksr · 안) — 인코더가 돌았는가. 돌지 않았으면 문장에 추정 줄이 없다 — 「추정 없음」과 가른다 #}
-        <tr><th>AI 추정</th><td>{{ "사용함" if result.judged_by|encoder_ran else "사용 안 함 — 문장에 AI 추정 유형이 나오지 않아요" }}</td></tr>
-      </table>
-      {% if result.timings %}
-      <table>
-        {% for t in result.timings %}
-        <tr><th>{{ t.node }}</th><td>{{ "%.1f"|format(t.ms) }} ms</td></tr>
-        {% endfor %}
-      </table>
-      {% endif %}
-    </details>
-    {% endfor %}
-  {% else %}
-    <div class="rv-card">
-      <h2 class="rv-risk-head">검수 결과 <span class="rv-summary">검수 전</span></h2>
-      <p class="rv-pending" style="text-align:center">
-        왼쪽 문구를 입력하고 <b>문구 검수하기</b>를 눌러 주세요.<br>
-        <span class="rv-note">문장마다 결과와 근거 조문이 여기에 나와요.</span>
-      </p>
-    </div>
-  {% endif %}
-    {# 프로토타입 그대로 — 결과가 있든 없든 오른쪽 맨 아래에 둔다 #}
-    {#- 🔄 2026-10-20 (lse · 사용자) — 결과 칸 아래 「본 진단은 … 1차 스크리닝 …」 줄은 뺐다. 결과가 있으면 아래 버튼 줄이 「검수 결과는 법적 확정 판단이 아니에요」로 알린다 #}
-    <div class="cl-focus-actions"><span data-focus-action-note>선택한 문구를 검수해보세요.</span><button type="submit" form="review-input-form" name="op" value="judge:1" class="cl-focus-judge" data-focus-judge data-wait-go data-wait-label="검수 중…">문구 검수하기</button><button type="button" data-edit-copy>{{ icon('pencil', 17) }} 문구 편집</button></div>
-  </div>
 
+<p class="rv-pair-result-note">검수 결과는 법적 확정 판단이 아니에요. 제품 조건과 근거를 함께 확인해주세요.</p>
+<button type="button" class="rv-btn" data-copy-pair>{{ icon('copy',18) }} 결과 문구 복사</button>
+{% endmacro %}
+
+{% macro review_loading() %}
+<div class="rv-judging" data-review-loading data-wait-for="review-input-form" hidden role="status" aria-live="polite">
+  <div class="rv-judging-card">
+    <div class="rv-judging-orb" aria-hidden="true"><span>✦</span></div>
+    <h3 class="rv-judging-title" data-loading-title>문구를 검수하고 있어요</h3>
+    <div class="rv-judging-steps" aria-hidden="true"><span>금지 표현 사전과 대조하는 중</span><span>제품에 맞는 기준을 확인하는 중</span><span>참고할 근거를 확인하는 중</span><span>문장별 결과를 정리하는 중</span><span>검수 결과를 준비하는 중</span></div>
+    <div class="rv-judging-skel" aria-hidden="true"><i></i><i></i><i></i></div>
+  </div>
+</div>
+{% endmacro %}
+{% macro review_pair(n, text, item=none) %}
+<article class="rv-pair" data-review-pair="{{ n }}" id="review-pair-{{ n }}" aria-labelledby="pair-title-{{ n }}">
+  <header class="rv-pair-head"><h2 id="pair-title-{{ n }}" data-pair-title>문구 {{ n }}</h2><span class="cl-pill" data-pair-status>{{ '검수 완료' if item else '검수 전' }}</span><button type="submit" form="review-input-form" class="rv-link rv-pair-delete" name="op" value="del:{{ n }}" data-pair-delete formnovalidate{% if copies|length < 2 %} hidden{% endif %}>삭제</button></header>
+  <div class="rv-pair-columns">
+    <section class="rv-pair-input" aria-label="문구 {{ n }} 입력">
+      <div class="rv-copy" data-input-copy="{{ n }}">
+        <div class="rv-copy-bar"><label for="text-{{ n }}">검수할 문구</label><span><span class="rv-len" data-count-for="text-{{ n }}">{{ text|length }}/{{ max_text_len }}</span></span></div>
+        <textarea id="text-{{ n }}" form="review-input-form" name="text" rows="6" maxlength="{{ max_text_len }}" placeholder="검수할 광고 문구를 입력하세요.">{{ text }}</textarea>
+        <div class="rv-inline-examples" role="group" aria-label="예시 문구 넣기">
+          <span>예시 문구로 바로 해보기</span>
+          {% for kind, example in [('식품', '고혈압 예방에 효과적인 오미자청'), ('비교 표현', '국내 판매 1위 오미자청'), ('건강기능식품', '면역력 강화에 도움을 줍니다.')] %}
+          <button type="button" data-review-example="{{ example }}" title="{{ example }}" aria-label="{{ kind }} 예시 넣기: {{ example }}"><b class="rv-inline-example-kind">{{ kind }}</b><span class="rv-inline-example-text">{{ example }}</span></button>
+          {% endfor %}
+        </div>
+        <div class="rv-pair-input-actions"><span>최대 {{ max_text_len }}자</span><button type="submit" form="review-input-form" class="rv-pair-judge" name="op" value="judge:{{ n }}" data-wait-go data-wait-label="검수 중…">{{ '다시 검수' if item else '이 문구 검수' }}</button></div>
+        <div class="rv-input-history">
+          {% if not me %}
+          <p>로그인하지 않으면 검수한 문구가 이력에 남지 않아요.</p><a href="/u/login">로그인 →</a>
+          {% else %}
+          <p>{% if item and history_kept == 'saved' %}이 검수는 이력에 저장됐어요.{% elif item and history_kept == 'failed' %}이 검수를 이력에 저장하지 못했어요.{% else %}검수 이력에서 이전 문구와 결과를 확인할 수 있어요.{% endif %}</p><a href="/u/history">검수 이력 보기 <span aria-hidden="true">→</span></a>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+    <section class="rv-pair-result" aria-label="문구 {{ n }} 결과">{{ review_loading() }}<h3>검수 결과</h3>
+      {% if item %}{{ pair_result(item) }}
+      {% elif engine_pending %}<p class="rv-pending">판정 엔진에 연결하지 못했어요. 입력한 문구는 유지돼요. 잠시 뒤 다시 검수해주세요.</p>
+      {% else %}<div class="rv-pair-empty"><p>검수 결과가 여기에 표시돼요.</p><span>문구를 입력한 뒤 검수 버튼을 눌러주세요.</span></div>{% endif %}
+    </section>
+  </div>
+</article>
+{% endmacro %}
+
+<div class="rv-head cl-workspace-head"><div><h1 data-review-page-title>문구 검수</h1><p>문구를 입력하고, 제품에 맞는 기준으로 검수해보세요.</p></div><a class="rv-btn" href="/u/review">{{ icon('refresh',18) }} 새로 검수</a></div>
+<div class="rv-pairs-workspace" data-review-pairs data-max-copies="{{ max_copies }}">
+  <form id="review-input-form" method="post" action="/u/judge" data-wait-form data-wait-only></form>
+  <div class="rv-pairs-toolbar"><div><b>검수 문구 <span data-pair-count>{{ copies|length }}</span> / {{ max_copies }}건</b><p>추가 정보는 검수 후 필요한 문구에만 요청해요.</p></div><div class="rv-pairs-tools"><button type="submit" form="review-input-form" class="rv-pairs-add" name="op" value="add" formnovalidate data-pair-add>{{ icon('plus',18) }} 문구 추가</button><button type="submit" form="review-input-form" class="rv-pairs-all" name="op" value="all" data-wait-go data-wait-label="전체 검수 중…">전체 검수 {{ icon('review',18) }}</button></div></div>
+  {% if notice %}<p class="rv-toast" role="status">{{ notice }}</p>{% endif %}
+  <p class="rv-note" data-pairs-message hidden role="status"></p>
+  <div class="rv-pairs-list" data-pairs-list>
+    {% for c in copies %}{% set n = loop.index %}{% set item = results|selectattr('n','equalto',n)|first|default(none) %}{{ review_pair(n,c,item) }}{% endfor %}
+  </div>
+  <template id="review-pair-template">{{ review_pair(0,'') }}</template>
+  <div class="rv-pairs-footnote" hidden>
+    {% if not me %}<p>로그인하지 않으면 검수한 문구가 이력에 남지 않아요. <a href="/u/login">로그인</a></p>
+    {% elif history_kept == 'saved' %}<p role="status">이 검수는 이력에 저장됐어요. <a href="/u/history">이력 보기</a></p>
+    {% elif history_kept == 'failed' %}<p role="status">이 검수를 이력에 저장하지 못했어요. 결과는 각 문구에서 확인할 수 있어요.</p>{% endif %}
+  </div>
+  <details class="rv-dev"><summary>개발자 정보 — 골든 픽스처로 분기 보기</summary><ul>{% for name in fixtures %}<li><a href="/u/preview/{{ name }}">{{ name }}</a></li>{% endfor %}</ul></details>
 </div>
 {# 🆕 2026-10-12 — 사용자 화면의 첫 스크립트다. 직접 쓴 파일 하나 · 같은 서버에서만 온다(CSP `script-src 'self'`) #}
 <script src="/static/user_count.js" defer></script>
 <script src="/static/user_wait.js?v=3" defer></script>
-<script src="/static/review_score.js?v=2" defer></script>
+<script src="/static/review_score.js?v=3" defer></script>
 <script src="/static/rewrite_copy.js" defer></script>
+<script src="/static/review-pairs.js?v=8" defer></script>
 {% endblock %}
