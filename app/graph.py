@@ -2934,6 +2934,10 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
         fixed = _invariant(got or s, per, reason)
         if fixed is not None:
             got = fixed
+        # 🆕 2026-10-21 (D-348 보충 37 결정 2) — 품목을 모르면 기록 문장에는 질문을 싣지 않는다(묻는 순서 = 품목 먼저 · 보충 34 결정 2)
+        picked = None if known else _pick_first(got or s)
+        if picked is not None:
+            got = picked
         if got is not None:
             changed.append(got)
     out: dict[str, Any] = {"branches": new_b}
@@ -2948,6 +2952,23 @@ def doc_rules(state: CoreState) -> dict[str, Any]:
     if changed:
         out["sentences"] = changed
     return out
+
+
+def _pick_first(rec: SentenceJudgment) -> SentenceJudgment | None:
+    """품목을 모를 때 **기록 문장의 질문을 걷는다** — 고르기 대기(`cat_unknown`)로 둔다 (🆕 2026-10-21 · D-348 보충 37 결정 2 · (나)).
+
+    ★ 까닭 — 묻는 순서는 품목 → 하위 전제 → 사실 → 실증이다(보충 34 결정 2). 품목을 모르는 기록에 사실 · 실증 질문이 서면 화면은 그것을
+       고르기 전에 보이지 않고(보충 18) 고르면 다시 판정해 질문을 새로 만든다(보충 31 · 34) — 기록의 질문은 쓰이지 않으면서 보류 종류를
+       「답 대기」로 보이게 했다(`contracts.hold_kind` 는 질문을 먼저 본다 · 보충 36 결정 4).
+    ★ 분기 미리보기 안의 질문은 그대로다(「이 품목이면 이걸 묻는다」 · 경로 동치 대조의 칸 · 보충 35 결정 3) — 기록만 걷는다.
+    🚨 보류이고 질문이 있는 기록만 · 확정(답으로 풀린 것 · 사전 확정)은 손대지 않는다 · 유형 · 위험도 · 근거 · 답(출처)은 그대로(`_premise_hold`).
+    🚨 분기가 있는 경로에서만 부른다(`doc_rules`) — 분기가 없으면(기준 문안 · DB 없음) 품목 보류에 선택지가 없어 계약이 거부한다(D-263 ②).
+    """
+    if rec.verdict is not Verdict.hold or (rec.fact_check is None and rec.substantiation is None):
+        return None
+    return _premise_hold(
+        {k: getattr(rec, k) for k in type(rec).model_fields}, HoldReason.cat_unknown
+    )
 
 
 def _shown_key(j: SentenceJudgment) -> tuple:

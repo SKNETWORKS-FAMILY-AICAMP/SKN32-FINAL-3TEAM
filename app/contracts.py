@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from app.settings import PARAMS
 
@@ -66,6 +66,24 @@ class HoldReason(enum.StrEnum):
     )
     #: 전용법 품목(의료기기 · 의약외품 등)에서 표시광고법으로 걸린 것이 없는 문장 — 안 본 법이 있다 (D-271 ⑤ · D-277)
     law_uncovered = "law_uncovered"
+
+
+class HoldKind(enum.StrEnum):
+    """**보류의 종류** — 화면 · 평가가 보류를 나눠 보이는 칸 (🆕 2026-10-21 · D-348 보충 36 결정 4 · (나) 계산 칸 · 흐름 ⑧).
+
+    ★ 사유 코드(`HoldReason`)가 아니다 — 이미 있는 칸(사유 · 질문 · 후보 유무)에서 **계산**한다(`hold_kind` 한 곳 · D-99).
+       DB 제약(`ck_judgment_hold_reason_values`)과 저장 칸은 그대로다.
+    ⛔ 종전에는 `low_conf` 하나가 「잡았는데 확정 못 함」과 「사전 · 인코더 둘 다 못 잡음」을 함께 담았다(인계 10-21 클론B §1 #4).
+    🚨 어느 것도 「적법」 · 「통과」가 아니다(D-340 결정 6 통과 닫힘) — 「걸린 것 없음」도 보류다.
+    """
+
+    awaiting_answer = "awaiting_answer"  # 답 대기 — 문장에 질문(사실 확인 · 실증)이 섰다 · 답하면 판정이 난다(보충 33)
+    awaiting_pick = "awaiting_pick"  # 고르기 대기 — 품목 · 하위 전제에 달렸다 · 분기가 선택지다
+    unconfirmed = "unconfirmed"  # 확인 못 함 — 사전 후보 · 인코더 후보 · 인코더 근거가 있는데 질문도 확정도 없다(막다른 보류)
+    nothing_found = (
+        "nothing_found"  # 걸린 것 없음 — 사전 · 인코더 둘 다 못 잡았다(흐름 ⑧) · 통과가 아니다
+    )
+    other = "other"  # 그 밖의 사유(코드 · 모델 등급 차 · 공존 규칙 · 전용법 미검수) — 사유 코드를 그대로 읽는다
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -652,6 +670,12 @@ class SentenceJudgment(BaseModel):
     #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 이 문장의 판정이 **사용자가 답한 실증 여부**로 정해졌다(출처 · 책임). 있으면 확정이다
     user_subst: UserSubst | None = None
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hold_kind(self) -> HoldKind | None:
+        """🆕 2026-10-21 (D-348 보충 36 결정 4) 보류의 종류 — 응답 JSON 에 실린다 · 보류가 아니면 None (`hold_kind` 함수 한 곳)."""
+        return hold_kind(self)
+
     @model_validator(mode="after")
     def _hold_reason_iff_hold(self) -> SentenceJudgment:
         # `app/models.py` ck_judgment_hold_reason 과 **같은 규칙**이다
@@ -1174,6 +1198,28 @@ def is_conditional(s: SentenceJudgment) -> bool:
         and _own_choice(s)
         and s.risk.final is not None
     )
+
+
+def hold_kind(s: SentenceJudgment) -> HoldKind | None:
+    """보류의 종류 (🆕 2026-10-21 · D-348 보충 36 결정 4) — 보류가 아니면 None. 순서가 뜻이다(앞이 이긴다).
+
+    ① 문장에 질문이 섰다(`_own_choice`) → 답 대기 — 조건부 위반(`premise_unknown` + 선택지)도 여기다
+    ② 품목 · 전제 보류(`cat_unknown` · `premise_unknown`) → 고르기 대기 — 분기가 선택지다
+    ③ 확신 부족(`low_conf`) ∧ 후보가 있다(사전 후보 `violations` · 인코더 후보 · 인코더 근거) → 확인 못 함
+    ④ 확신 부족 ∧ 후보가 없다 → 걸린 것 없음
+    ⑤ 그 밖의 사유 → 그 밖(사유 코드를 읽는다)
+    🚨 판정 대상 아님(`not_claim`)은 확정이라 보류가 아니다 · 미판정(`unjudged`)은 보류가 아니다(None).
+    """
+    if s.verdict is not Verdict.hold:
+        return None
+    if _own_choice(s):
+        return HoldKind.awaiting_answer
+    if s.hold_reason in (HoldReason.cat_unknown, HoldReason.premise_unknown):
+        return HoldKind.awaiting_pick
+    if s.hold_reason is HoldReason.low_conf:
+        found = bool(s.violations or s.encoder_candidates or s.risk.encoder_basis)
+        return HoldKind.unconfirmed if found else HoldKind.nothing_found
+    return HoldKind.other
 
 
 def is_pass(s: SentenceJudgment) -> bool:

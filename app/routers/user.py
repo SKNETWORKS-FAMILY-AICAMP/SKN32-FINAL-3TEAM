@@ -720,8 +720,8 @@ def _sllm_category(category: str | None, premise: str) -> str | None:
     원문 판정에 품목이 있으면 그 품목 · 없고 분기를 골랐으면 **고른 전제의 품목**(`pm.PREMISE_CATEGORY` — 판정이 쓰는 표 · D-99) ·
     둘 다 없으면 `None`(서버가 문구에서 추측한다). ⛔ 종전에는 분기를 고른 문구가 늘 `None` 이었다 — 사용자가 화장품을 골랐는데
     서버는 문구로 식품이라 추측할 수 있었다.
-    🚨 재판정에는 이 값을 넘기지 않는다 — 재판정은 종전대로 품목 없이 판정하고 고른 전제의 분기를 읽는다(`_rejudge`).
-       품목을 넘기면 전제가 줄어 그 분기가 생략될 수 있다(전제마다 판정이 같으면 분기를 내지 않는다).
+    🔄 2026-10-21 (D-348 보충 34 · 보충 37 결정 5) — 재판정은 이제 **고른 전제를 입력으로** 판정한다(`_rejudge` · `pm.product_of`).
+       종전 「품목 없이 판정하고 고른 전제의 분기를 읽는다」는 분기가 생략되면(접힘) 기록을 읽어 고른 전제와 다른 판정이 될 수 있었다.
     ⬜ 건강기능식품의 **인정 여부**(전제 `건기식_인정` · `건기식_비인정`)는 넘어가지 않는다 — 서버에 받는 칸이 없다(이서은 확인 대기).
     """
     if category or not premise:
@@ -729,8 +729,20 @@ def _sllm_category(category: str | None, premise: str) -> str | None:
     return pm.PREMISE_CATEGORY[Premise(premise)].value
 
 
-def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
+def _rejudge(
+    body: str,
+    premise: str = "",
+    category: str | None = None,
+    *,
+    facts: list | None = None,
+    substs: list | None = None,
+) -> dict:
     """고친 문구를 판정 코어에 다시 넣는다(D-119). 🚨 `no_violation` 은 「위반을 못 찾음」이지 통과가 아니다.
+
+    🔄 2026-10-21 (D-348 보충 34 결정 1 · 보충 37 결정 5) — **고른 전제가 있으면 그 전제를 입력으로** 판정한다(`pm.product_of` ·
+       그래프가 그 전제 하나로 판정 · 분기 없음 · 원문 판정과 같은 규칙). 앞서 한 답(`facts` · `substs`)도 같이 넘긴다 —
+       답은 문장 글자에 묶여(`UserFact.text`) 고쳐 쓴 문장에는 글자가 같은 문장에만 든다(고친 주장에 옛 답이 붙지 않는다).
+       재판정의 탈락은 사전 · 인코더뿐 아니라 고른 전제 · 답까지 종합한 결과다.
 
     🆕 2026-10-06 (ksr) — 분기를 고르고 고쳐 썼으면 재판정도 **같은 전제의 분기**로 읽는다. 재판정에 그 분기가
        없으면(전제마다 판정이 같아 분기가 생략됨) 기록되는 판정을 읽는다.
@@ -739,11 +751,22 @@ def _rejudge(body: str, premise: str = "", category: str | None = None) -> dict:
     """
     from app.contracts import Category, ProductContext  # noqa: PLC0415
 
-    state, res = _core_judge(
-        body, ProductContext(category=Category(category)) if category else None
-    )
+    if premise:
+        product: ProductContext | None = pm.product_of(Premise(premise))
+    elif category:
+        product = ProductContext(category=Category(category))
+    else:
+        product = None
+    if product is not None and (facts or substs):
+        product = product.model_copy(
+            update={"facts": list(facts or []), "substs": list(substs or [])}
+        )
+    elif product is None and (facts or substs):
+        product = ProductContext(facts=list(facts or []), substs=list(substs or []))
+    state, res = _core_judge(body, product)
     if state != "ok":
         return {"status": "unavailable"}
+    # 고른 전제를 넣었으면 분기가 없다 — 기록이 그 전제의 판정이다(보충 34). 분기 고르기는 전제를 못 넣은 옛 경로의 안전장치로만 남긴다
     res = (_branch_of(res, premise) if premise else None) or res
     violations = _violations_of(res)
     hold = sorted({s.hold_reason.value for s in res.sentences if s.hold_reason})
