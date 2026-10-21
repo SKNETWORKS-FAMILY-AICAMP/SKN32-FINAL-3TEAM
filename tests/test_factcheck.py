@@ -26,6 +26,7 @@ from app import reasons as rs
 from app.contracts import (
     Answer,
     Branch,
+    Category,
     EvidenceArticle,
     FactKind,
     HoldReason,
@@ -314,9 +315,20 @@ def test_분기마다_정하고_기록은_분기에서_모은다() -> None:
     # 🔄 2026-10-18 (보충 20) — 분기 문장이 조건부 위반이면(지금은 생성처 없음 · 직접 만든다) 기록 문장도 조건부로 모은다
     got = _doc(_confirmed(), {"식품": _cond(), "일반상품": _cond()})
     assert all(is_conditional(b.sentences[0]) for b in got["branches"])
-    assert is_conditional(got["rec"]) and got["rec"].risk.final is Risk.R2
-    resp = JudgeResponse(outcome=Outcome.hold, sentences=[got["rec"]], branches=got["branches"])
+    # 분기에서 모으는 규칙 자체(조건부 → 조건부)는 그대로다
+    per = [b.sentences[0] for b in got["branches"]]
+    assert is_conditional(g._record_condition(_confirmed(), per, HoldReason.cat_unknown))
+    # 🔄 2026-10-21 (D-348 보충 37 결정 2) — 품목을 모르면 기록에는 질문을 싣지 않는다(고르기 대기) · 위험도는 그대로
+    rec = got["rec"]
+    assert (rec.verdict, rec.hold_reason) == (Verdict.hold, HoldReason.cat_unknown)
+    assert rec.substantiation is None and rec.risk.final is Risk.R2
+    resp = JudgeResponse(outcome=Outcome.hold, sentences=[rec], branches=got["branches"])
     assert resp.branches[0].sentences[0].substantiation is not None
+    # 품목을 알면 기록이 조건부로 모인다(종전 그대로)
+    known = _doc(
+        _confirmed(), {"식품": _cond(), "일반식품_기능성": _cond()}, category=Category.식품
+    )
+    assert is_conditional(known["rec"]) and known["rec"].risk.final is Risk.R2
 
 
 def test_분기마다_조건부가_갈리면_기록은_품목을_몰라_보류() -> None:
@@ -668,12 +680,19 @@ def test_인코더만_사실_거짓은_확정하지_않고_출처만(tables: Non
 
 
 def test_인코더만_기록은_분기의_선택지를_싣고_보류_그대로() -> None:
-    got = _doc(_enc_only(), {"식품": _enc_only()})
+    got = _doc(_enc_only(), {"식품": _enc_only()}, category=Category.식품)
     b = got["branches"][0].sentences[0]
     assert b.hold_reason is HoldReason.low_conf and b.substantiation is not None
     rec = got["rec"]
     assert (rec.verdict, rec.hold_reason) == (Verdict.hold, HoldReason.low_conf)
     assert rec.substantiation is not None and not is_conditional(rec)
+    # 🔄 2026-10-21 (D-348 보충 37 결정 2) — 품목을 모르면 기록에는 싣지 않는다(분기에는 남는다)
+    unknown = _doc(_enc_only(), {"식품": _enc_only()})
+    assert (
+        unknown["rec"].substantiation is None
+        and unknown["rec"].hold_reason is HoldReason.cat_unknown
+    )
+    assert unknown["branches"][0].sentences[0].substantiation is not None
 
 
 def test_인코더_근거에_DB_청크_항목이_붙어도_호_관문을_지난다() -> None:

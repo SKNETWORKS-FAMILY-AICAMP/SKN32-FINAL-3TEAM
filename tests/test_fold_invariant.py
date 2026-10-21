@@ -301,3 +301,34 @@ def test_불변식_정상_경로에서는_로그가_없다(
         with caplog.at_level("WARNING", logger=g.INVARIANT_LOG):
             _run(cat, answer)
     assert not [m for m in caplog.messages if "불변식" in m]
+
+
+# ── 🆕 2026-10-21 (D-348 보충 37 결정 2 · (나)) 품목을 모르면 기록 문장에 질문을 싣지 않는다 ─────────────
+
+
+@pytest.mark.parametrize("answer", [None, Answer.해당없음])
+def test_품목을_모르면_기록에는_질문이_없고_고르기_대기다(answer: Answer | None) -> None:
+    from app.contracts import HoldKind
+
+    st = _run(None, answer)
+    (r,) = st["sentences"]
+    assert r.verdict is Verdict.hold and r.hold_reason is HoldReason.cat_unknown
+    assert r.substantiation is None and r.fact_check is None
+    assert r.hold_kind is HoldKind.awaiting_pick
+    assert st.get("branches"), "고를 선택지(분기)는 남는다"
+    g.to_response(st)  # type: ignore[arg-type]
+
+
+def test_품목을_모르면_분기_미리보기의_질문은_그대로다() -> None:
+    st = _run(None)
+    by = {b.premise: b.sentences[0] for b in st["branches"]}
+    assert by[Premise.식품].substantiation is not None, (
+        "이 품목이면 무엇을 묻는지는 미리보기에 남는다"
+    )
+
+
+@pytest.mark.parametrize("cat", TWO)
+def test_품목을_알면_기록의_질문은_그대로다(cat: Category) -> None:
+    st = _run(cat)
+    (r,) = st["sentences"]
+    assert r.substantiation is not None
