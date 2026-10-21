@@ -17,7 +17,20 @@ _LSE = Path(__file__).resolve().parents[1] / "docs" / "lse"
 sys.path.insert(0, str(_LSE))
 
 from polish_rule import polish_by_rule  # noqa: E402
-from stage_gate import check  # noqa: E402
+from stage_gate import DICT, check  # noqa: E402
+
+
+def _need_dict() -> None:
+    """관문(`check`)은 금지 표현 사전 없이 돌지 않는다(D-220) — 사전이 없는 기기(CI)에서는 이름을 남기고 건너뛴다.
+
+    🆕 2026-10-22 (ohb 흡수 · CI 빨간불) — 사전은 `data/` 라 커밋하지 않는다(D-19 기기 축).
+    ⛔ 가짜 사전을 넣어 통과시키지 않는다 — 실제 사전과 어긋난 채 초록불이 된다(D-188).
+    ★ 다듬기(`polish_by_rule`) 단언은 사전 없이 돈다 — 그래서 시험 전체가 아니라 관문 앞에서만 건너뛴다.
+    """
+    if not DICT.exists():
+        pytest.skip(
+            "banned_terms.jsonl 이 이 기기에 없다 — 기기 축 (D-19) · 관문은 사전 없이 돌지 않는다 (D-220)"
+        )
 
 
 @pytest.mark.parametrize(
@@ -33,6 +46,7 @@ from stage_gate import check  # noqa: E402
 def test_모양에_맞는_쓰는_법을_붙이고_관문을_지난다(s1: str, category: str, want: str) -> None:
     out = polish_by_rule(s1, category)
     assert out is not None and out.startswith(s1) and want in out
+    _need_dict()
     assert check(s1, out, persona=True).passed, out
 
 
@@ -68,6 +82,7 @@ def test_표의_어떤_문구도_용량_횟수_때를_정하지_않는다() -> N
     ],
 )
 def test_관문이_새로_정한_용량_때를_막는다(s1: str, s2: str) -> None:
+    _need_dict()
     r = check(s1, s2, persona=True)
     assert not r.passed and any("용량" in w for w in r.reasons), r.reasons
 
@@ -75,6 +90,7 @@ def test_관문이_새로_정한_용량_때를_막는다(s1: str, s2: str) -> No
 def test_원문에_있던_용량은_막지_않는다() -> None:
     """1단계 문장에 이미 있던 「90캡슐」은 사실이다 — 다듬기가 새로 정한 것만 막는다. 말투의 「한 번」도 횟수가 아니다."""
     s1 = "오메가3 미니 캡슐 90캡슐"
+    _need_dict()
     assert check(s1, f"{s1}, 물과 함께 삼켜 드세요", persona=True).passed
     assert check(s1, f"{s1}, 한 번 드셔 보세요", persona=True).passed
 
@@ -86,6 +102,7 @@ def test_숫자가_든_제품_이름에서도_모양을_읽는다(s1: str) -> No
     """🆕 10-15 (D-342 ⓔ) — 단위 떼기가 「오메가3 캡슐」의 「3 캡슐」을 수량으로 먹어 「오메가」만 남기던 것."""
     out = polish_by_rule(s1, "건기식")
     assert out == f"{s1}, 물과 함께 삼켜 드세요"
+    _need_dict()
     assert check(s1, out, persona=True).passed
 
 
