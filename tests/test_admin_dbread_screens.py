@@ -335,7 +335,8 @@ def test_생성_통계는_셀_수_없는_수를_그리지_않는다(client: Test
     r = client.get("/admin/stats/quality/generation")
     assert r.status_code == 200
     assert "kpi" not in r.context and "by_origin" not in r.context
-    assert "저장하지 않아요" in r.text and "사용하지 않았다는 뜻이 아니에요" in r.text
+    # 🔄 2026-10-21 (lse · psj bdadc9c 문구 변경) — 「저장하지 않으며 … 집계하지 않아요」
+    assert "저장하지 않" in r.text and "집계하지 않아요" in r.text
     for gone in (
         "카피 생성 문구",
         "승인된 생성 문구",
@@ -346,7 +347,9 @@ def test_생성_통계는_셀_수_없는_수를_그리지_않는다(client: Test
         "재생성 사유",
     ):
         assert gone not in r.text, gone
-    assert "집계를 열려면 필요한 결정" in r.text and "생성 엔진" in r.text
+    assert (
+        "추가 통계에 필요한 조건" in r.text and "생성 엔진" in r.text
+    )  # 🔄 10-21 psj 문구(결정 번호 걷음)
 
 
 def test_생성_실패는_오류_로그에서_센다(
@@ -420,7 +423,8 @@ def test_대시보드를_못_읽으면_대시와_안내다(
     for path in ("/admin/", "/admin/stats/dashboard"):
         r = client.get(path)
         assert r.context["dash"]["kpi"]["judge"] == "-"
-        assert "이용 기록을 읽지 못했어요" in r.text and "0건이라는 뜻이 아니에요" in r.text
+        # 🔄 2026-10-21 (lse · psj 문구 변경) — 「뜻이 아니에요」 · 「뜻은 아니에요」 둘 다 쓴다
+        assert "이용 기록을 읽지 못했어요" in r.text and "0건이라는 뜻" in r.text
 
 
 def test_이용자_통계는_user_account_에서_센다(client: TestClient) -> None:
