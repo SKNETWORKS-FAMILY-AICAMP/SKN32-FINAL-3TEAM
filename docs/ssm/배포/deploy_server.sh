@@ -10,6 +10,12 @@
 #         실제로 통한 방법(커널 버전이 붙은 모듈 꾸러미를 apt 로 직접)으로 바꾸고, 설치 뒤 모듈이 있는지 확인한다
 #       · cleanup-adhoc — 10-16 오전 손으로 세운 임시 구성(copylane.service · nginx)을 걷어 내는 단계를 더했다
 #   🔄 2026-10-19 — services 가 이미 떠 있는 서비스도 restart 한다(.env 변경 반영 · 5차 보고서)
+#   🔄 2026-10-21 — **main 하나로 배포** (ssm 참조 끝 · README 「main 전환」)
+#       · fetch 는 origin/main 에 들어 있는 커밋만 받는다 — 서버에서 고친 파일이 있으면 멈춘다
+#       · ~/deploy_server.sh 는 저장소 안 사본을 가리키는 링크 — update 가 새 판을 받으면 새 스크립트로 이어서 돈다
+#       · 서버 전용 설정은 ~/.copylane-deploy (deploy.conf.example) — DB_MODE · Caddy 판 · 관리자 허용 IP
+#       · caddy — 저장소 Caddyfile(.ip)에 허용 IP 를 넣어 만들고 validate → 적용 → 응답 확인 · 실패하면 앞 판으로 되돌린다
+#       · verify 의 지문 기대값은 배포 커밋의 data/derived_manifest.jsonl 에서 읽는다 (손으로 적은 값 없음)
 #   근거  docs/05_배포/배포계획.md §1-2 · §4 / docs/lse/sLLM_연결_안내_2026-10-05.md / models.lock.json
 #
 # 쓰는 법 (서버에서 · tmux 안에서)
@@ -33,6 +39,8 @@
 #   bash deploy_server.sh update        #     새 커밋 올리기 — fetch → install → migrate → verify → 서비스 재시작
 #   bash deploy_server.sh backup        #     DB 덤프 하나 (컨테이너 DB · ~/backup · 7개만 남긴다)
 #   bash deploy_server.sh cleanup-adhoc #     10-16 임시 구성 정리 — copylane.service 해제 · nginx 끄기 (services 전에 한 번)
+#   bash deploy_server.sh caddy         #     Caddy 설정 만들기 · 검사 · 적용 · 응답 확인 (허용 IP 는 ~/.copylane-deploy)
+#   bash deploy_server.sh main-switch   #     🆕 ssm 시절 서버를 main 기준으로 한 번 옮기기 (README 「main 전환」)
 #   bash deploy_server.sh all           #  3~10 을 이어서 (gpu · sllm · serve 는 따로)
 #
 #   🔄 2026-10-15 — DB 비밀번호 자동 생성(env) · 기본 비밀번호면 적재 거부(data) · services · backup 을 더했다
@@ -48,11 +56,23 @@ set -euo pipefail
 
 # ── 배포할 판 — 올리기 전에 이 줄들만 확인한다 ────────────────────────────────
 REPO_URL="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN32-FINAL-3TEAM.git"
-DEPLOY_REF="${DEPLOY_REF:-main}"            # 브랜치 · 태그 · 커밋. 배포 때는 커밋 해시를 권한다
 APP_DIR="${APP_DIR:-$HOME/SKN32-FINAL-3TEAM}"
-EXPECT_GOLDEN="94a79fe34363"                 # 골든 지문 (10-19 main 1f16723 원장)
-EXPECT_DICT="2ff0168c4a28"                   # 사전 지문
-DB_MODE="${DB_MODE:-container}"              # container = 서버 안 pgvector 컨테이너 · rds = RDS (승인 뒤)
+DEPLOY_BRANCH="main"                         # 🔄 10-21 — 배포 기준 브랜치는 main 하나. 바꾸지 않는다
+DEPLOY_CONF="${DEPLOY_CONF:-$HOME/.copylane-deploy}"   # 서버 전용 설정 (저장소 밖 · 틀은 deploy.conf.example)
+REPO_SCRIPT="$APP_DIR/docs/ssm/배포/deploy_server.sh"
+LINK_SCRIPT="$HOME/deploy_server.sh"
+
+# 서버 전용 설정을 읽는다 — 명령 앞에 직접 준 값(DB_MODE=rds bash … · DEPLOY_REF=<해시> bash …)이 이긴다
+_cli_db_mode="${DB_MODE:-}"; _cli_ref="${DEPLOY_REF:-}"
+# shellcheck source=/dev/null
+[ -f "$DEPLOY_CONF" ] && . "$DEPLOY_CONF"
+[ -n "$_cli_db_mode" ] && DB_MODE="$_cli_db_mode"
+[ -n "$_cli_ref" ] && DEPLOY_REF="$_cli_ref"
+DEPLOY_REF="${DEPLOY_REF:-$DEPLOY_BRANCH}"   # main · 또는 main 에 들어 있는 커밋 해시 · 태그 (되돌릴 때)
+DB_MODE="${DB_MODE:-container}"              # container = 서버 안 pgvector 컨테이너 · rds = RDS
+CADDY_MODE="${CADDY_MODE:-ip}"               # ip = Caddyfile.ip (도메인 전) · domain = Caddyfile (정식판)
+CADDY_DOMAIN="${CADDY_DOMAIN:-}"             # CADDY_MODE=domain 일 때 실제 도메인
+ADMIN_ALLOW_IPS="${ADMIN_ALLOW_IPS:-}"       # demo 에디션 관리자 화면을 열 공인 IP (띄어쓰기로 여럿 · 비우면 닫힘)
 EXPECT_INSTANCE="g4dn.xlarge"
 MIN_DISK_GB=55                               # 루트 디스크 권장 60GB — 40GB 면 sLLM 까지 못 담는다
 
@@ -181,18 +201,75 @@ gpu() {
 
 # ── 3. 저장소 ───────────────────────────────────────────────────────────────
 fetch() {
-  say "3. 저장소 받기 — $DEPLOY_REF"
-  if [ -d "$APP_DIR/.git" ]; then git -C "$APP_DIR" fetch origin; else git clone "$REPO_URL" "$APP_DIR"; fi
+  say "3. 저장소 받기 — $DEPLOY_REF (기준 $DEPLOY_BRANCH)"
+  if [ -d "$APP_DIR/.git" ]; then
+    # 🔄 2026-10-21 — 서버에서 고친 파일이 있으면 멈춘다(10-20 Caddy 사고). 고칠 곳은 PC → main 이다
+    if ! git -C "$APP_DIR" diff --quiet || ! git -C "$APP_DIR" diff --cached --quiet; then
+      git -C "$APP_DIR" status --short --untracked-files=no | sed 's/^/  [수정됨] /'
+      die "서버 저장소에 고친 파일이 있다 — 필요한 내용은 PC 로 옮기고 git -C $APP_DIR checkout -- . 로 되돌린 뒤 다시"
+    fi
+    git -C "$APP_DIR" fetch --prune origin
+  else
+    git clone "$REPO_URL" "$APP_DIR"
+  fi
   # 🔄 2026-10-20 — 커밋 해시를 주면 멈췄다(`--detach does not take a path argument 'origin/<해시>\n<해시>'`).
   #    `rev-parse` 는 실패해도 넣은 글자를 그대로 찍어서 `|| echo` 와 두 줄이 붙었다 → `--verify --quiet` 로 고친다.
   #    브랜치 이름이면 origin/<이름> · 아니면 해시 · 태그로 본다. 둘 다 아니면 멈춘다.
   local target
   target="$(git -C "$APP_DIR" rev-parse --verify --quiet "origin/$DEPLOY_REF^{commit}" \
             || git -C "$APP_DIR" rev-parse --verify --quiet "$DEPLOY_REF^{commit}")" \
-    || die "배포할 판을 못 찾았다 — DEPLOY_REF=$DEPLOY_REF (브랜치 이름 · 커밋 해시 · 태그)"
+    || die "배포할 판을 못 찾았다 — DEPLOY_REF=$DEPLOY_REF (main · 커밋 해시 · 태그)"
+  # 🔄 2026-10-21 — main 에 들어 있지 않은 판(ssm · 다른 브랜치 · 머지 전 커밋)은 받지 않는다
+  git -C "$APP_DIR" merge-base --is-ancestor "$target" "origin/$DEPLOY_BRANCH" \
+    || die "$DEPLOY_REF ($(git -C "$APP_DIR" rev-parse --short "$target")) 는 origin/$DEPLOY_BRANCH 에 없다 — main 에 머지한 뒤 다시"
   git -C "$APP_DIR" checkout --detach "$target"
   ok "배포 커밋 $(git -C "$APP_DIR" log -1 --format='%h %s')"
+  [ "$target" = "$(git -C "$APP_DIR" rev-parse "origin/$DEPLOY_BRANCH")" ] \
+    || warn "main 최신이 아니다 — main 은 $(git -C "$APP_DIR" rev-parse --short "origin/$DEPLOY_BRANCH") (되돌린 상태면 정상)"
+  printf '%s\t%s\t%s\n' "$(date '+%F %T')" "$(git -C "$APP_DIR" rev-parse --short HEAD)" "$DEPLOY_REF" >> "$HOME/deploy_history.log"
+  self_link
   warn "이 커밋 해시를 작업기록에 적는다 — 커밋을 바꾸면 7번(data)을 다시 돈다"
+}
+
+# ~/deploy_server.sh 를 저장소 안 사본을 가리키는 링크로 둔다 — 서버에 따로 노는 사본을 두지 않는다 (🆕 10-21)
+self_link() {
+  [ -f "$REPO_SCRIPT" ] || { warn "이 커밋에는 $REPO_SCRIPT 가 없다 — 링크를 만들지 않는다"; return 0; }
+  if [ -L "$LINK_SCRIPT" ] && [ "$(readlink -f "$LINK_SCRIPT")" = "$(readlink -f "$REPO_SCRIPT")" ]; then
+    return 0
+  fi
+  if [ -e "$LINK_SCRIPT" ] && [ ! -L "$LINK_SCRIPT" ]; then
+    mv "$LINK_SCRIPT" "$LINK_SCRIPT.old-$(date +%m%d_%H%M)"
+    ok "옛 사본을 $LINK_SCRIPT.old-* 로 옮겼다"
+  fi
+  ln -sfn "$REPO_SCRIPT" "$LINK_SCRIPT"
+  ok "$LINK_SCRIPT → 저장소 사본 (main 을 받으면 같이 바뀐다)"
+}
+
+# 서버 전용 설정 파일 — 없으면 틀(deploy.conf.example)에서 만든다. DB_MODE 는 .env 의 DATABASE_URL 로 짐작한다
+conf_init() {
+  [ -f "$DEPLOY_CONF" ] && { ok "$DEPLOY_CONF 있음"; return 0; }
+  local src="$APP_DIR/docs/ssm/배포/deploy.conf.example" mode=container
+  [ -f "$src" ] || die "$src 가 없다"
+  grep -q '^DATABASE_URL=.*rds\.amazonaws\.com' "$APP_DIR/.env" 2>/dev/null && mode=rds
+  sed "s|^DB_MODE=.*|DB_MODE=$mode|" "$src" > "$DEPLOY_CONF"
+  chmod 600 "$DEPLOY_CONF"
+  [ -n "$_cli_db_mode" ] || DB_MODE="$mode"
+  ok "$DEPLOY_CONF 를 만들었다 (DB_MODE=$mode) — nano $DEPLOY_CONF 로 확인"
+}
+
+# 파생물 원장(data/derived_manifest.jsonl)에서 파일 하나의 sha256 앞 12자를 읽는다
+manifest_sha() {
+  python3 - "$APP_DIR/data/derived_manifest.jsonl" "$1" <<'PY'
+import json, sys
+for line in open(sys.argv[1], encoding="utf-8"):
+    line = line.strip()
+    if line:
+        r = json.loads(line)
+        if r.get("경로") == sys.argv[2]:
+            print(r["sha256"][:12])
+            sys.exit(0)
+sys.exit(1)
+PY
 }
 
 # ── 4. .env ────────────────────────────────────────────────────────────────
@@ -200,7 +277,8 @@ env_file() {
   say "4. .env 자리 만들기"
   cd "$APP_DIR"
   [ -f .env ] || { cp .env.example .env; chmod 600 .env; ok ".env 를 .env.example 에서 만들었다 (권한 600)"; }
-  set_env COPYLANE_EDITION cloud
+  # 🔄 2026-10-21 — 이미 demo · cloud 로 정해 두었으면 그대로 둔다 (관리자 화면을 쓰는 동안은 demo)
+  case "$(get_env COPYLANE_EDITION)" in cloud|demo) ;; *) set_env COPYLANE_EDITION cloud ;; esac
   set_env DATA_ROLE replica
   set_env COPYLANE_MODEL_DIR "$(adopted encoder)"          # 판 이름 — app 이 models/<이름> 을 본다 (D-333)
   set_env COPYLANE_SLLM_URL "http://127.0.0.1:$SLLM_PORT"  # 🔄 g4dn — 같은 서버의 sLLM 을 부른다 (빈 값이면 꺼진다)
@@ -231,6 +309,7 @@ env_file() {
     warn "직접 채울 것 — DATABASE_URL (RDS · 끝에 ?sslmode=require · 절차서 §4-3) · DATA_STORE"
   fi
   warn "편집: nano $APP_DIR/.env   🚨 값을 셸 인자나 대화창에 쓰지 않는다"
+  conf_init
 }
 
 # ── 5. 앱 패키지 ────────────────────────────────────────────────────────────
@@ -280,11 +359,14 @@ data() {
 # ── 8. 지문 대조 ────────────────────────────────────────────────────────────
 verify() {
   say "8. 지문 대조"
-  local g d
-  g="$(sha256sum "$APP_DIR/data/derived/golden/golden.jsonl" | cut -c1-12)"
-  d="$(sha256sum "$APP_DIR/data/derived/banned_terms.jsonl" | cut -c1-12)"
-  [ "$g" = "$EXPECT_GOLDEN" ] && ok "골든 $g" || die "골든 지문이 다르다 — $g (기대 $EXPECT_GOLDEN)"
-  [ "$d" = "$EXPECT_DICT" ]   && ok "사전 $d" || die "사전 지문이 다르다 — $d (기대 $EXPECT_DICT)"
+  # 🔄 2026-10-21 — 기대값은 배포 커밋의 파생물 원장(data/derived_manifest.jsonl)에서 읽는다. main 이 데이터를 바꾸면 같이 바뀐다
+  local rel want got
+  for rel in data/derived/golden/golden.jsonl data/derived/banned_terms.jsonl; do
+    want="$(manifest_sha "$rel")" || die "data/derived_manifest.jsonl 에 $rel 이 없다"
+    got="$(sha256sum "$APP_DIR/$rel" 2>/dev/null | cut -c1-12 || true)"
+    [ "$got" = "$want" ] && ok "$(basename "$rel") $got (main 원장과 같음)" \
+      || die "$(basename "$rel") 지문이 다르다 — 서버 ${got:-없음} · main 원장 $want → 파생물 묶음을 새로 올리고 bash deploy_server.sh data"
+  done
   # 🔄 2026-10-20 — 관리자 화면을 쓰는 동안은 demo 다(5차 보고서 · Caddy 에서 허용 IP 만). demo 는 멈추지 않고 경고한다.
   case "$(get_env COPYLANE_EDITION)" in
     cloud) ok "COPYLANE_EDITION=cloud" ;;
@@ -362,6 +444,12 @@ serve() {
 # ── 실행 중 상태 ────────────────────────────────────────────────────────────
 check() {
   say "실행 중 상태"
+  local cur head
+  cur="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  head="$(git -C "$APP_DIR" rev-parse --short "origin/$DEPLOY_BRANCH" 2>/dev/null || echo '?')"
+  [ "$cur" = "$head" ] && ok "서버 판 $cur = origin/main (마지막 fetch 기준)" || warn "서버 판 $cur · origin/main $head"
+  [ -L "$LINK_SCRIPT" ] && ok "~/deploy_server.sh → 저장소 사본" || warn "~/deploy_server.sh 가 링크가 아니다 — README 「main 전환」"
+  systemctl is-active -q caddy && ok "caddy 동작 ($CADDY_MODE 판)" || warn "caddy 가 안 떠 있다"
   nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv,noheader \
     | awk '{print "  [정보] GPU " $0}' || warn "nvidia-smi 실패"
   curl -s -m 5 "http://127.0.0.1:$SLLM_PORT/health" && echo || warn "sLLM /health 응답 없음"
@@ -457,7 +545,17 @@ services_off() {
 update() {
   say "업데이트 — $DEPLOY_REF"
   [ -d "$APP_DIR/.git" ] || die "저장소가 없다 — 처음이면 fetch 부터 차례로"
+  local before; before="$(sha256sum "$(readlink -f "$0")" 2>/dev/null | cut -c1-64 || true)"
   fetch
+  # 🔄 2026-10-21 — 받은 커밋의 스크립트가 지금 도는 것과 다르면 새 스크립트로 나머지를 돈다
+  if [ -f "$REPO_SCRIPT" ] && [ "$(sha256sum "$REPO_SCRIPT" | cut -c1-64)" != "$before" ]; then
+    ok "배포 스크립트가 바뀌었다 — 새 판으로 이어서"
+    exec bash "$REPO_SCRIPT" update-rest
+  fi
+  update_rest
+}
+
+update_rest() {
   install
   L migrate
   verify
@@ -469,6 +567,117 @@ update() {
   else
     warn "서비스가 안 떠 있다 — tmux 의 sllm · serve 창을 다시 띄우거나 bash deploy_server.sh services"
   fi
+  caddy_apply
+  ok "업데이트 끝 — $(git -C "$APP_DIR" log -1 --format='%h %s') · 기록 ~/deploy_history.log"
+}
+
+# ── Caddy (🆕 2026-10-21) — 저장소 판으로 만들고 · 검사하고 · 적용하고 · 응답을 본다 ─────
+# 🚨 /etc/caddy/Caddyfile 을 손으로 고치지 않는다 — 허용 IP 는 ~/.copylane-deploy 의 ADMIN_ALLOW_IPS
+CADDY_RENDER="$HOME/.Caddyfile.render"
+caddy_render() {
+  local src edition ips="" ip
+  edition="$(get_env COPYLANE_EDITION)"
+  case "$CADDY_MODE" in
+    ip)     src="$APP_DIR/docs/ssm/배포/Caddyfile.ip" ;;
+    domain) src="$APP_DIR/docs/ssm/배포/Caddyfile"
+            [ -n "$CADDY_DOMAIN" ] || die "CADDY_MODE=domain 인데 CADDY_DOMAIN 이 비었다 — nano $DEPLOY_CONF" ;;
+    *)      die "CADDY_MODE 는 ip 또는 domain — 지금 $CADDY_MODE" ;;
+  esac
+  [ -f "$src" ] || die "$src 가 없다"
+  if [ "$edition" = demo ] && [ -n "$ADMIN_ALLOW_IPS" ]; then
+    for ip in $ADMIN_ALLOW_IPS; do
+      [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]] || die "ADMIN_ALLOW_IPS 에 IP 가 아닌 값이 있다 — nano $DEPLOY_CONF"
+    done
+    ips="$ADMIN_ALLOW_IPS"
+  fi
+  python3 - "$src" "$CADDY_RENDER" "$([ "$CADDY_MODE" = domain ] && echo "$CADDY_DOMAIN")" "$ips" <<'PY'
+import sys
+src, out, domain, ips = sys.argv[1:5]
+text = open(src, encoding="utf-8").read()
+gate = "    @admin path /admin /admin/* /login\n"
+if text.count(gate) != 1:
+    sys.exit("  [중단] Caddy 원본에 관리자 줄(@admin path /admin /admin/* /login)이 정확히 한 번 있어야 한다")
+if ips:
+    text = text.replace(gate, "    @admin {\n        path /admin /admin/* /login\n        not remote_ip " + ips + "\n    }\n")
+if domain:
+    if "copylane.example.com" not in text:
+        sys.exit("  [중단] 정식판에 copylane.example.com 자리가 없다")
+    text = text.replace("copylane.example.com", domain)
+open(out, "w", encoding="utf-8").write(text)
+PY
+  if [ -n "$ips" ]; then ok "관리자 화면 — 허용 IP $(wc -w <<<"$ips")개에서만 연다 (demo)"
+  elif [ "$edition" = demo ]; then warn "COPYLANE_EDITION=demo 인데 ADMIN_ALLOW_IPS 가 비었다 — 관리자 화면은 닫아 둔다"
+  else ok "관리자 화면 — 닫힘 ($edition)"; fi
+}
+
+caddy_probe() {   # Caddy 를 거쳐 /u/ 를 부른다 — 앱이 꺼져 있어 502 면 Caddy 는 정상으로 본다
+  sleep 2
+  systemctl is-active -q caddy || return 1
+  local code
+  if [ "$CADDY_MODE" = domain ]; then
+    code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' --resolve "$CADDY_DOMAIN:443:127.0.0.1" "https://$CADDY_DOMAIN/u/" || true)"
+  else
+    code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' http://127.0.0.1/u/ || true)"
+  fi
+  case "$code" in
+    2??|3??)     ok "Caddy 를 거친 /u/ — HTTP $code" ;;
+    502|503|504) warn "Caddy 는 응답하지만 앱이 안 떠 있다 (HTTP $code) — services 또는 tmux serve" ;;
+    *)           warn "Caddy 를 거친 /u/ — HTTP ${code:-응답 없음}"; return 1 ;;
+  esac
+}
+
+caddy_apply() {
+  say "Caddy — $CADDY_MODE 판 만들기 · 검사 · 적용"
+  command -v caddy >/dev/null || die "caddy 없음"
+  local live=/etc/caddy/Caddyfile bak=""
+  caddy_render
+  if ! sudo caddy validate --config "$CADDY_RENDER" --adapter caddyfile >/dev/null 2>&1; then
+    sudo caddy validate --config "$CADDY_RENDER" --adapter caddyfile 2>&1 | tail -5 | sed 's/^/  [caddy] /' || true
+    die "만든 설정이 검사(validate)를 못 넘었다 — 서버 설정은 그대로다"
+  fi
+  ok "검사(validate) 통과"
+  if sudo cmp -s "$CADDY_RENDER" "$live"; then ok "지금 설정과 같다 — 바꾸지 않음"; rm -f "$CADDY_RENDER"; return 0; fi
+  if sudo test -f "$live"; then
+    bak="$live.bak-$(date +%m%d_%H%M%S)"
+    sudo cp -p "$live" "$bak"
+    sudo sh -c 'ls -1t /etc/caddy/Caddyfile.bak-* 2>/dev/null | tail -n +6 | xargs -r rm --'
+  fi
+  sudo install -m 644 "$CADDY_RENDER" "$live"
+  rm -f "$CADDY_RENDER"
+  if sudo systemctl reload caddy && caddy_probe; then
+    ok "적용 끝 (앞 판: ${bak:-없음})"
+  else
+    [ -n "$bak" ] || die "적용 뒤 응답이 없다 — 되돌릴 앞 판도 없다. journalctl -u caddy -n 50"
+    sudo cp -p "$bak" "$live" && sudo systemctl reload caddy || true
+    die "적용 뒤 응답이 없어 앞 판으로 되돌렸다 — journalctl -u caddy -n 50"
+  fi
+}
+
+# ── main 전환 (🆕 2026-10-21) — ssm 시절 서버를 main 기준으로 한 번 옮긴다 ──────────
+main_switch() {
+  say "main 전환 — 서버를 main 기준으로"
+  [ -d "$APP_DIR/.git" ] || die "저장소가 없다 — 처음 서버면 fetch 부터 차례로"
+  [ "$DEPLOY_REF" = "$DEPLOY_BRANCH" ] || die "main-switch 는 main 최신으로만 한다 — DEPLOY_REF 를 빼고 다시"
+  local f old found
+  for f in "$HOME/.bashrc" "$HOME/.profile" "$APP_DIR/.env"; do
+    grep -n 'DEPLOY_REF\|origin/ssm\|checkout ssm' "$f" 2>/dev/null | sed "s|^|  [확인] $f:|" || true
+  done
+  fetch                                   # 서버에서 고친 파일이 있으면 여기서 멈춘다 · ~/deploy_server.sh 를 링크로
+  [ -f "$REPO_SCRIPT" ] || die "main 에 배포 폴더가 아직 없다 — 머지된 뒤 다시"
+  conf_init
+  for old in load_test.py perf_report.py; do
+    if [ -f "$HOME/$old" ]; then mv "$HOME/$old" "$HOME/$old.old-$(date +%m%d)"; ok "~/$old → .old (이제 저장소의 docs/ssm/배포/$old 를 쓴다)"; fi
+  done
+  # 손으로 넣어 둔 관리자 허용 IP 가 있으면 설정 파일로 옮긴다 (화면에 찍지 않는다)
+  if [ -z "$ADMIN_ALLOW_IPS" ]; then
+    found="$(sudo grep -oP 'not remote_ip \K[0-9./ ]+' /etc/caddy/Caddyfile 2>/dev/null | head -1 | xargs || true)"
+    if [ -n "$found" ]; then
+      sed -i "s|^ADMIN_ALLOW_IPS=.*|ADMIN_ALLOW_IPS=\"$found\"|" "$DEPLOY_CONF"
+      ok "Caddy 에 손으로 넣은 허용 IP 를 $DEPLOY_CONF 로 옮겼다"
+    fi
+  fi
+  ok "이어서 업데이트(install → migrate → verify → 재시작 → caddy) — 새 스크립트로"
+  exec bash "$REPO_SCRIPT" update-rest
 }
 
 # ── DB 백업 (🔄 2026-10-15) — 컨테이너 DB 만. RDS 는 자동 백업이 있다 ──────────
@@ -525,8 +734,11 @@ case "${1:-}" in
   services)   services ;;
   services-off) services_off ;;
   update)     update ;;
+  update-rest) update_rest ;;
+  caddy)      caddy_apply ;;
+  main-switch) main_switch ;;
   backup)     backup ;;
   cleanup-adhoc) cleanup_adhoc ;;
   all)        preflight; fetch; env_file; install; model; data; verify; sllm_env; sllm_model ;;
-  *) sed -n '2,44p' "$0"; exit 1 ;;
+  *) awk 'NR==1{next} /^#/{print; next} {exit}' "$0"; exit 1 ;;
 esac

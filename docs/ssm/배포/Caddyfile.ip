@@ -1,8 +1,8 @@
 # Caddyfile.ip — 도메인 전 임시판 · 탄력적 IP · http (2026-10-16 · 소성민)
 #
 #   놓는 자리  /etc/caddy/Caddyfile
-#   적용       sudo cp ~/SKN32-FINAL-3TEAM/docs/ssm/배포/Caddyfile.ip /etc/caddy/Caddyfile
-#              sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#   적용       bash ~/deploy_server.sh caddy   (🔄 10-21 — 손으로 cp 하지 않는다 · update 도 마지막에 이 단계를 돈다)
+#              ~/.copylane-deploy 의 CADDY_MODE=ip 일 때 이 파일을 쓴다 · 만들기 → validate → 적용 → 응답 확인 · 실패하면 앞 판으로
 #   확인       내 PC 브라우저 → http://<탄력적 IP>  → /u/ 사용자 화면
 #
 # 🚨 HTTPS 가 없다. 고시 제7조 제4항 — HTTPS 없이 공개하지 않는다(절차서 §1 ③).
@@ -15,8 +15,13 @@
 
     reverse_proxy 127.0.0.1:8000
 
-    @closed path /admin /admin/* /login /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/*
+    @closed path /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/*
     respond @closed 404
+
+    # 관리자 화면 — 기본은 닫힘. 🚨 이 줄은 손대지 않는다: deploy_server.sh caddy 가 demo 에디션이고
+    #   ~/.copylane-deploy 의 ADMIN_ALLOW_IPS 가 있을 때만 「허용 IP 가 아니면 404」 블록으로 바꿔 적용한다
+    @admin path /admin /admin/* /login
+    respond @admin 404
 
     # 앱의 `/` 는 개발자 안내 페이지다 — 정확히 `/` 일 때만 사용자 화면으로 넘긴다
     redir / /u/ 302
@@ -33,15 +38,12 @@
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 🆕 2026-10-19 — 관리자 화면을 쓸 때 (COPYLANE_EDITION=demo · 5차 보고서)
-#   demo 에디션은 /admin · /login 을 붙인다. HTTPS 전에는 **허용한 IP 에서만** 통과시킨다.
-#   위 블록의 `@closed` 두 줄 아래에 이 네 줄을 넣고, <허용 IP> 를 공인 IP 로(여럿이면 띄어쓰기로) 바꾼다.
-#   🚨 IP 값은 이 파일(저장소)에 적지 않는다 — 서버의 /etc/caddy/Caddyfile 에서만 바꾼다.
-#
-#     @admin_outside {
-#         path /admin /admin/* /login
-#         not remote_ip <허용 IP>
-#     }
-#     respond @admin_outside 404
-#
-#   접속 장소가 바뀌면 IP 도 바뀐다 — 그때 갱신하고 validate → reload.
+# 관리자 화면을 쓸 때 (COPYLANE_EDITION=demo · 5차 보고서 · 🔄 2026-10-21 스크립트로)
+#   1. 서버 .env 의 COPYLANE_EDITION=demo
+#   2. 서버 ~/.copylane-deploy 의 ADMIN_ALLOW_IPS="<공인 IP> <공인 IP>"   (🚨 IP 는 저장소에 적지 않는다)
+#   3. bash ~/deploy_server.sh caddy  → 위 `@admin path …` 한 줄이 아래 꼴로 바뀌어 적용된다
+#        @admin {
+#            path /admin /admin/* /login
+#            not remote_ip <허용 IP>
+#        }
+#   접속 장소가 바뀌면 2 → 3 만 다시 한다.

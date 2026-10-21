@@ -5,11 +5,11 @@
 표준 라이브러리만 쓴다 — 서버의 시스템 python3 로 돈다(앱 .venv 불필요).
 합격선은 두지 않는다(D-322 결정 A). 「참고 목표」는 sLLM 담당이 말한 고쳐 쓰기 10~20초 하나만 적는다.
 
-쓰는 법 (서버 · tmux 안 · 앱과 sLLM 이 떠 있을 때 · load_test.py 와 같은 폴더)
-  python3 ~/perf_report.py                 # 전부 — 약 15~25분
-  python3 ~/perf_report.py --quick         # 짧게 — 약 5분 (리허설 전 확인용)
-  python3 ~/perf_report.py --skip-rewrite  # sLLM 을 끈 서버
-  python3 ~/perf_report.py --note "9b59728 업데이트 직후"
+쓰는 법 (서버 · tmux 안 · 앱과 sLLM 이 떠 있을 때 · 저장소 안 사본을 그대로 쓴다 · 🔄 10-21)
+  python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/perf_report.py                 # 전부 — 약 15~25분
+  python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/perf_report.py --quick         # 짧게 — 약 5분 (리허설 전 확인용)
+  python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/perf_report.py --skip-rewrite  # sLLM 을 끈 서버
+  python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/perf_report.py --note "9b59728 업데이트 직후"
 
 무엇을 하나 — 순서대로
   1. 환경 — 배포 커밋 · 인스턴스 유형 · GPU · /health 행 수 · 인코더 지문(judged_by) · sLLM 잠금 지문
@@ -43,7 +43,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 try:
     import load_test as lt  # noqa: E402 — 같은 폴더의 load_test.py (측정 함수의 정본)
 except ImportError:
-    sys.exit("[중단] load_test.py 가 이 파일과 같은 폴더에 없다 — git show origin/ssm:docs/ssm/배포/load_test.py > ~/load_test.py")
+    sys.exit("[중단] load_test.py 가 이 파일과 같은 폴더에 없다 — 저장소에서 실행한다: python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/perf_report.py")
 
 APP_DIR = pathlib.Path(os.environ.get("APP_DIR", str(pathlib.Path.home() / "SKN32-FINAL-3TEAM")))
 REWRITE_TARGET_S = (10, 20)  # sLLM 담당(lse) 기준 — 한 문장 10~20초 (참고용 · 합격선 아님)
