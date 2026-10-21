@@ -333,7 +333,6 @@ def _load_judge(days: int) -> dict:
                 [trend_days],
             ),
             (group.format(k="coalesce(product_category_source, 'none')", w=where, extra=""), p),
-            (group.format(k="judged_by", w=where, extra="") + " LIMIT 10", p),
             (
                 group.format(
                     k=_RISK_SOURCE_SQL,
@@ -370,8 +369,7 @@ def _load_judge(days: int) -> dict:
         ),
         "by_type": _bars(out[5], lambda v: str(v).replace("_", " ")),
         "by_source": _bars(out[7], lambda v: _CATEGORY_SOURCE_LABEL.get(v, v)),
-        "by_version": _bars(out[8]),
-        "by_risk_source": _bars(out[9], lambda v: _RISK_SOURCE_LABEL.get(v, v)),
+        "by_risk_source": _bars(out[8], lambda v: _RISK_SOURCE_LABEL.get(v, v)),
         "trend": trend,
         "trend_max": max((r["n"] for r in trend), default=0),
         "trend_days": trend_days,

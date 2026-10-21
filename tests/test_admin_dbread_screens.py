@@ -186,7 +186,6 @@ def fake_run(
                 [{"k": "거짓_과장", "n": 3}],
                 [{"d": TODAY, "n": 12}],
                 [{"k": "classified", "n": 10}, {"k": "none", "n": 2}],
-                [{"k": "rule-0.3.0-dict+encb:c451942436f0", "n": 12}],
                 [{"k": "enc_up", "n": 2}, {"k": "dict_only", "n": 5}],
             ],
         }
@@ -316,7 +315,8 @@ def test_검수_통계는_judgment_건수만_그린다(client: TestClient) -> No
     assert "보류" in r.text and "확신 부족" in r.text and "R2 업무정지 위험" in r.text
     assert "확정 위반" in r.text and "미판정 (오류 · 시간 초과)" in r.text
     assert "자동 판별" in r.text and "품목 미확정" in r.text
-    assert "인코더가 위험도를 올림" in r.text and "c451942436f0" in r.text
+    assert "인코더가 위험도를 올림" in r.text
+    assert "by_version" not in r.context  # 10-21 — 판정 버전 구역은 화면에서 뺐다
     assert "마지막 판정" in r.text and "인코더가 함께 판정" not in r.text
     assert "94.2%" not in r.text and "이의제기" not in r.text and "더미" not in r.text
     assert client.get("/admin/stats/quality/judge?days=13").context["days"] == 30
@@ -477,7 +477,12 @@ def test_생성_엔진_구성은_설정에서_읽는다(
     cfg = r.context["config"]
     assert cfg["models"] == ["model-a", "model-b"]
     assert len(cfg["branches"]) == len(BRANCHES)
-    assert "카피 생성 엔진 구성" in r.text and "<li>model-a</li>" in r.text and "<li>model-b</li>" in r.text and "A안" in r.text
+    assert (
+        "카피 생성 엔진 구성" in r.text
+        and "<li>model-a</li>" in r.text
+        and "<li>model-b</li>" in r.text
+        and "A안" in r.text
+    )
 
 
 def test_서버_시작_이후_생성_현황은_메모리_카운터다(client: TestClient) -> None:
