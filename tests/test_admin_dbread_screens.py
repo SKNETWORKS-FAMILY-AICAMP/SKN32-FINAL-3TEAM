@@ -464,3 +464,58 @@ def test_통계_화면에는_결정_번호를_띄우지_않는다(client: TestCl
     start = html.index('id="admin-content"')
     body = html[start : html.index('class="admin-page-footer"', start)]  # 공용 바닥글은 이 화면 밖
     assert not re.search(r"D-\d+", body), re.findall(r".{20}D-\d+.{5}", body)
+
+
+def test_생성_엔진_구성은_설정에서_읽는다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.routers.copygen import llm  # noqa: PLC0415
+    from app.routers.copygen.branches import BRANCHES  # noqa: PLC0415
+
+    monkeypatch.setenv(llm.ENV_MODEL, "model-a, model-b")
+    r = client.get("/admin/stats/quality/generation")
+    cfg = r.context["config"]
+    assert cfg["models"] == ["model-a", "model-b"]
+    assert len(cfg["branches"]) == len(BRANCHES)
+    assert "생성 엔진 구성" in r.text and "model-a · model-b" in r.text and "A안" in r.text
+
+
+def test_서버_시작_이후_생성_현황은_메모리_카운터다(client: TestClient) -> None:
+    from app import gen_usage  # noqa: PLC0415
+
+    gen_usage.reset()
+    r = client.get("/admin/stats/quality/generation")
+    assert r.context["usage"]["total"] == 0 and "아직 생성 요청이 없어요" in r.text
+    gen_usage.record(
+        "ok", "food_no", 12.0, candidates=10, passed=4, reasons={"number": 4, "judge": 2}, rounds=2
+    )
+    gen_usage.record(
+        "ok", "food_no", 8.0, more=True, candidates=6, passed=4, reasons={"number": 2}, rounds=1
+    )
+    gen_usage.record("failed", "cos_no")
+    gen_usage.record("off", "food_no")
+    gen_usage.record("이상한값", "food_no")  # 모르는 결과는 세지 않는다
+    u = client.get("/admin/stats/quality/generation").context["usage"]
+    assert (u["total"], u["ok"], u["failed"], u["off"]) == (4, 2, 1, 1)
+    assert u["success_pct"] == 66.7  # 꺼짐은 분모에서 뺀다
+    assert (u["avg_secs"], u["max_secs"], u["more"]) == (10.0, 12.0, 1)
+    assert u["by_branch"][0]["n"] == 3 and "식품" in u["by_branch"][0]["label"]
+    assert (u["candidates"], u["passed"], u["pass_pct"], u["avg_rounds"]) == (16, 8, 50.0, 1.5)
+    assert u["reasons"][0] == {"label": "입력에 없는 수치", "n": 6, "pct": 75.0}
+    assert u["reasons"][1]["label"] == "판정엔진 미통과"
+    r = client.get("/admin/stats/quality/generation")
+    assert "서버를 다시 켜면 0부터" in r.text and "이후 · 이 서버" in r.text
+    assert "후보 통과율" in r.text and "입력에 없는 수치" in r.text and "평균 탐색 라운드" in r.text
+    gen_usage.reset()
+
+
+def test_생성_처리부가_세_갈래를_모두_센다() -> None:
+    """🚨 생성 처리부에서 세는 줄이 빠지면 화면이 조용히 0 으로 보인다 — 소스와 맞댄다."""
+    import re  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    src = (Path(__file__).resolve().parents[1] / "app" / "routers" / "user.py").read_text(
+        encoding="utf-8"
+    )
+    for outcome in ("ok", "failed", "off"):
+        assert re.search(rf'gen_usage\.record\(\s*"{outcome}"', src), outcome

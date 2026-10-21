@@ -415,7 +415,7 @@ GEN_FAIL_MESSAGE = "카피 생성 실패"
 
 _GEN_NEEDS = [
     (
-        "생성 요청 수 · 성공률",
+        "누적 · 기간별 생성 요청 수와 성공률 (지금은 서버 시작 이후만)",
         "원문 없이 건수만 남기는 기록 표 — 스키마와 보관 기한 결정 (팀장)",
     ),
     ("생성 문구 · 승인 · 검수로 넘긴 수", "생성 결과 저장과 동의 범위 결정"),
@@ -434,12 +434,65 @@ def _engine_state() -> dict:
     return {"on": why is None, "why": why}
 
 
+#: 후보 세 안 — 생성 화면(`user/generate.html` `TIER`)과 같은 이름 · 엔진 이름(보수안 · 균형안 · 공격안)은 그대로
+_GEN_TIERS = [
+    ("🛡️ A안 (보수안)", "통과한 후보 중 판정 인코더가 위반 유형과 가장 멀다고 본 것"),
+    ("⚖️ B안 (균형안)", "그 사이"),
+    ("🔥 C안 (공격안)", "통과한 후보 중 위반 유형에 가장 가깝다고 본 것"),
+]
+
+
+def _engine_config() -> dict:
+    """생성 엔진의 구성 — 설정값과 코드에서 읽는다(지어낸 수 없음). 못 읽으면 빈 값."""
+    try:
+        from app.routers.copygen import llm  # noqa: PLC0415
+        from app.routers.copygen.branches import BRANCHES  # noqa: PLC0415
+        from collect import env  # noqa: PLC0415 — `.env` 를 읽는 곳은 하나다 (D-99)
+
+        models = [
+            m.strip()
+            for m in (env.setting(llm.ENV_MODEL) or llm.DEFAULT_MODEL).split(",")
+            if m.strip()
+        ]
+        branches = [{"key": k, "label": b.label} for k, b in BRANCHES.items()]
+    except Exception as e:  # noqa: BLE001
+        return {"error": type(e).__name__, "models": [], "branches": [], "tiers": _GEN_TIERS}
+    return {"error": None, "models": models, "branches": branches, "tiers": _GEN_TIERS}
+
+
+def _usage_since_start() -> dict:
+    """서버 메모리 카운터(`app.gen_usage`) — 이 프로세스가 켜진 뒤부터만. 분기 이름을 붙여 낸다."""
+    from app import gen_usage  # noqa: PLC0415
+    from app.routers import admin_dbread as db  # noqa: PLC0415
+
+    u = gen_usage.snapshot()
+    labels = {b["key"]: b["label"] for b in _engine_config()["branches"]}
+    rows = sorted(u["by_branch"].items(), key=lambda kv: -kv[1])
+    total = u["total"] or 1
+    u["by_branch"] = [
+        {"label": labels.get(k, k), "n": n, "pct": round(n * 100 / total, 1)} for k, n in rows
+    ]
+    u["since"] = db.fmt_dt(u["started_at"])
+    try:
+        from app.routers.copygen.filters import REASONS  # noqa: PLC0415 — 탈락 사유 글자는 생성 화면과 한 벌 (D-99)
+    except Exception:  # noqa: BLE001
+        REASONS = {}  # noqa: N806
+    drops = sum(u["reasons"].values()) or 1
+    u["reasons"] = [
+        {"label": REASONS.get(k, k), "n": n, "pct": round(n * 100 / drops, 1)}
+        for k, n in sorted(u["reasons"].items(), key=lambda kv: -kv[1])
+    ]
+    return u
+
+
 def _load_generation(days: int) -> dict:
     from app.routers import admin_dbread as db  # noqa: PLC0415
     from app.settings import ERROR_LOG_RETENTION_DAYS, error_log_enabled  # noqa: PLC0415
 
     base = {
         "engine": _engine_state(),
+        "config": _engine_config(),
+        "usage": _usage_since_start(),
         "needs": _GEN_NEEDS,
         "retention_days": ERROR_LOG_RETENTION_DAYS,
         "log_on": error_log_enabled(),

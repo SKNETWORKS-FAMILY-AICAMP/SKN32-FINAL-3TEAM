@@ -53,6 +53,39 @@
 </div>
 {% endif %}
 
+<section class="as-panel">
+  <div class="as-panel-head"><h2>서버 시작 이후 생성 현황</h2><span class="as-unit">{{ usage.since }} 이후 · 이 서버</span></div>
+  <p class="as-context">서버 메모리에서만 세는 수예요. 서버를 다시 켜면 0부터 세요 — 누적 통계가 아니에요. 문구 원문은 세지 않아요.</p>
+  {% if usage.total %}
+  <div class="as-kpis">
+    {{ metric('생성 요청', '{:,}건'.format(usage.total), '엔진 꺼짐 ' ~ usage.off ~ '건 포함') }}
+    {{ metric('성공률', (usage.success_pct ~ '%') if usage.success_pct is not none else '—', '성공 ' ~ usage.ok ~ ' · 실패 ' ~ usage.failed ~ '건 (꺼짐 제외)') }}
+    {{ metric('평균 소요', (usage.avg_secs ~ '초') if usage.avg_secs is not none else '—', '최대 ' ~ ((usage.max_secs ~ '초') if usage.max_secs is not none else '—') ~ ' · 성공한 요청 기준') }}
+    {{ metric('더 탐색하기', (usage.more_pct ~ '%') if usage.more_pct is not none else '—', '다시 만들어 본 요청 ' ~ usage.more ~ '건') }}
+  </div>
+  <div class="as-kpis">
+    {{ metric('후보 통과율', (usage.pass_pct ~ '%') if usage.pass_pct is not none else '—', '만든 후보 ' ~ '{:,}'.format(usage.candidates) ~ ' 중 ' ~ '{:,}'.format(usage.passed) ~ '개가 필터 · 판정 통과') }}
+    {{ metric('평균 탐색 라운드', (usage.avg_rounds ~ '회') if usage.avg_rounds is not none else '—', '3안을 찾느라 다시 돈 횟수 · 성공한 요청 기준') }}
+  </div>
+  <h3 class="as-subhead">후보 탈락 사유</h3>
+  {% if usage.reasons %}{{ compact_distribution(usage.reasons, '개') }}<p class="as-context">만든 후보가 왜 걸러졌는지예요 — 생성 모델이 자주 넘는 선이에요.</p>
+  {% else %}<p class="as-empty">걸러진 후보가 없어요.</p>{% endif %}
+  <h3 class="as-subhead">분기(품목)별 요청</h3>
+  {{ compact_distribution(usage.by_branch) }}
+  {% else %}<p class="as-empty">서버가 켜진 뒤 아직 생성 요청이 없어요.</p>{% endif %}
+</section>
+
+<section class="as-panel">
+  <div class="as-panel-head"><h2>생성 엔진 구성</h2><span class="as-unit">현재 설정</span></div>
+  {% if config.error %}<p class="as-empty">구성을 읽지 못했어요 ({{ config.error }}).</p>{% else %}
+  <div class="admin-table-scroll"><table><tbody>
+    <tr><th>생성 모델</th><td>{{ config.models|join(' · ') }}{% if config.models|length > 1 %} <small class="as-context">(섞어서 돌려요)</small>{% endif %}</td></tr>
+    <tr><th>지원 분기</th><td>{{ config.branches|length }}개 — {{ config.branches|map(attribute='label')|join(' / ') }}</td></tr>
+    {% for name, desc in config.tiers %}<tr><th>{{ name }}</th><td>{{ desc }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+</section>
+
 <details class="as-analysis-details"><summary><span class="as-analysis-title">집계 범위 안내</span><span class="as-analysis-description">추가 통계에 필요한 조건</span><span class="as-analysis-hint">펼쳐 확인하기</span></summary>
   <p class="as-context">생성 요청·결과를 저장하지 않아 생성 건수·성공률·품목별 분포는 집계하지 않아요.</p>
   <div class="admin-table-scroll"><table><thead><tr><th>보고 싶은 수</th><th>먼저 필요한 것</th></tr></thead><tbody>

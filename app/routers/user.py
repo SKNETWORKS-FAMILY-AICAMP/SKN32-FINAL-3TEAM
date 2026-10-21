@@ -26,6 +26,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -1615,7 +1616,11 @@ async def generate(
         ctx["fixed_notes"] = await run_in_threadpool(
             _fixed_all_notes, picked["fixed"], key, picked["ingredients"]
         )
+    from app import gen_usage  # noqa: PLC0415 — 🆕 10-21 (psj) 관리자 생성 통계의 메모리 카운터 · 건수와 시간만
+
+    branch_key = f"{picked['category']}_{picked['cert']}"
     if why := copygen.off_reason():
+        gen_usage.record("off", branch_key, more=bool(shown))
         ctx |= {"engine_pending": True, "engine_why": why}
         return _render(request, "user/generate.html", _gen_ctx(ctx))
     fields = {
@@ -1628,17 +1633,28 @@ async def generate(
             if v
         ),
     }
+    t0 = time.monotonic()
     try:
-        live = await run_in_threadpool(
-            copygen.generate, f"{picked['category']}_{picked['cert']}", fields, tuple(shown)
-        )
+        live = await run_in_threadpool(copygen.generate, branch_key, fields, tuple(shown))
     except copygen.CopyGenOff as e:
+        gen_usage.record("off", branch_key, more=bool(shown))
         ctx |= {"engine_pending": True, "engine_why": str(e)}
     except copygen.CopyGenError:
+        gen_usage.record("failed", branch_key, more=bool(shown))
         # 🚨 까닭은 서버 로그에만 — 화면에는 「실패했다」만 그린다 (P1-4)
         logging.getLogger(__name__).warning("카피 생성 실패", exc_info=True)
         ctx |= {"engine_pending": True, "engine_failed": True}
     else:
+        gen_usage.record(
+            "ok",
+            branch_key,
+            time.monotonic() - t0,
+            more=bool(shown),
+            candidates=len(live.kept) + len(live.dropped),
+            passed=len(live.kept),
+            reasons=live.reasons(),
+            rounds=len(live.rounds),
+        )
         ctx |= {
             "live": live,
             "live_reasons": [(copygen.REASONS[k], n) for k, n in live.reasons().most_common()],
