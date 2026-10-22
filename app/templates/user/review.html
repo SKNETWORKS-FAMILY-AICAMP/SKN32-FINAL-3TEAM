@@ -343,6 +343,8 @@
 .rv-more > .rv-note { margin: .5rem 0 0; }
 .rv-rw-btn { margin: .55rem 0 0; padding: .3rem .8rem; border-radius: 999px; border: 1px solid var(--u-signal);
              background: var(--u-surface); color: var(--u-signal-ink); font-size: .8125rem; font-weight: 500; cursor: pointer; }
+.rv-holdkind { font-size: .8125rem; color: var(--u-ink); margin: 0 0 .45rem; padding: .3rem .6rem; border-left: 3px solid var(--u-line);
+               background: var(--u-surface); border-radius: 0 .4rem .4rem 0; }
 @media (prefers-color-scheme: dark) {
   .user-shell:not([data-theme="light"]) .rv-t-orange { background: #3a1d0b; border-color: #8a4a1c; }
   .user-shell:not([data-theme="light"]) .rv-t-orange .rv-concl { color: #fdba74; }
@@ -446,6 +448,18 @@
         {#- 🆕 2026-10-14 (D-330 보충 2) — 사전 유형 없이 인코더 후보만 있는 문장의 겉 표지. 유형 이름 · 확률은 접힌 칸 안에만 #}
         {% set gm = s|guessed_mark %}
         {% if gm %}<p class="rv-types rv-guess">{{ gm }}</p>{% endif %}
+        {#- 🆕 2026-10-22 (ksr · D-348 보충 36 결정 4 · 문안 초안 — 승인 전) 보류 종류(`hold_kind`) 한 줄.
+            답 대기는 바로 아래 질문 칸이 같은 말을 해서 뺐다(사용자 요청). 🚨 어느 것도 통과 · 초록으로 그리지 않는다(D-340 결정 6) #}
+        {% set hk = s.hold_kind.value if s.hold_kind else "" %}
+        {% set HOLD_KIND = {"awaiting_pick": "품목(또는 인정 여부)을 고르면 다시 판정해요",
+                            "unconfirmed": "위반일 수 있는 표현이 보였지만 확인할 방법이 없어요 — 문장을 고쳐 주세요",
+                            "nothing_found": "찾은 위반 표현은 없어요 — 위반이 없다는 뜻은 아니에요"} %}
+        {% if hk in HOLD_KIND %}<p class="rv-holdkind">{{ HOLD_KIND[hk] }}</p>{% endif %}
+        {#- 섞인 문장에서 답한 주장은 풀렸는데 보류가 남았다 — 남은 주장은 인코더 후보에서 답한 유형을 뺀 것(추정 · 「위반」이라 부르지 않는다) #}
+        {% if hk == "unconfirmed" and s.user_substs %}
+        {% set left = s.encoder_candidates|rejectattr("violation", "in", s.user_substs|map(attribute="violation")|list)|list %}
+        {% if left %}<p class="rv-why">답한 주장은 풀렸지만 다른 주장은 아직 확인하지 못했어요 — {% for c in left %}{{ c.violation.value|replace("_", " ") }}{% if not loop.last %} · {% endif %}{% endfor %} (추정)</p>{% endif %}
+        {% endif %}
         {% set cc = s|candidate_condition %}
         {% if cc %}<p class="rv-why">{{ cc }}</p>{% endif %}
         {#- 🆕 2026-10-17 (D-348 보충 6 결정 8 · 문안 승인 10-17) 일반상품 — 표시광고법 기준 위험도 · 판정할 수 없는 표현 안내 #}
@@ -514,21 +528,26 @@
           </div>
           <details class="rv-ask-more"><summary>판단 기준 자세히 보기</summary><p class="rv-why">{{ s.fact_check.criteria }}</p></details>
           {% elif s.substantiation %}
-          <p class="rv-ask-q">이 표현을 실증할 자료가 있나요?</p>
+          {#- 🆕 2026-10-22 (ksr · D-348 보충 39 결정 6) 섞인 유형은 유형마다 따로 묻는다 — 질문에 유형이 있으면 줄에 보이고
+              답 값 끝에 싣는다(`subst:yes:거짓_과장`). 유형이 비면 종전 꼴 그대로 #}
+          {% set sv = s.substantiation.violation %}{% set sx = (":" ~ sv.value) if sv else "" %}
+          {% if sv %}<p class="rv-ask-label">확인할 주장 · {{ sv.value|replace("_", " ") }}</p>{% endif %}
+          <p class="rv-ask-q">{% if sv %}{{ sv.value|replace("_", " ") }} 주장 — {% endif %}이 표현을 실증할 자료가 있나요?</p>
           <p class="rv-ask-ev">인정되는 자료 — {{ s.substantiation.accepted_evidence|join(" · ") }}</p>
           <div class="rv-ask-btns">
-          <button type="submit" class="rv-btn" name="answer" value="subst:yes">있어요</button>
-          <button type="submit" class="rv-btn" name="answer" value="subst:no">없어요</button>
-          <button type="submit" class="rv-btn" name="answer" value="subst:na">이 문장은 그런 주장이 아니에요</button>
+          <button type="submit" class="rv-btn" name="answer" value="subst:yes{{ sx }}">있어요</button>
+          <button type="submit" class="rv-btn" name="answer" value="subst:no{{ sx }}">없어요</button>
+          <button type="submit" class="rv-btn" name="answer" value="subst:na{{ sx }}">이 문장은 그런 주장이 아니에요</button>
           </div>
           {% endif %}
           <p class="rv-note">답은 확인되지 않아요 — 판정에 「답한 내용」으로 남고, 자료는 직접 보관해 주세요.</p>
         </form>
         {% endif %}
-        {% if s.user_subst or s.user_facts %}
+        {#- 🔄 2026-10-22 (ksr · 보충 39 결정 6) 실증 답은 목록(`user_substs`)이 정본이다 — 유형이 있으면 「(유형) 실증 자료 있음」 #}
+        {% if s.user_substs or s.user_facts %}
         <p class="rv-note">답한 내용으로 다시 판정했어요 —
           {%- for f in s.user_facts %} {{ f.kind.value|replace("_", " ") }} {{ {"예": "맞음", "아니오": "아님", "해당없음": "해당 없음"}[f.answer.value] }}{% if not loop.last %} ·{% endif %}{% endfor %}
-          {%- if s.user_subst %}{% if s.user_facts %} ·{% endif %} 실증 자료 {{ {"예": "있음", "아니오": "없음", "해당없음": "해당 없음"}[s.user_subst.answer.value] }}{% endif %} (확인되지 않은 답)</p>
+          {%- for u in s.user_substs %}{% if s.user_facts or not loop.first %} ·{% endif %} {% if u.violation %}({{ u.violation.value|replace("_", " ") }}) {% endif %}실증 자료 {{ {"예": "있음", "아니오": "없음", "해당없음": "해당 없음"}[u.answer.value] }}{% endfor %} (확인되지 않은 답)</p>
         {% endif %}
 
         {% if flag or s.violations or s.evidence or s.encoder_candidates or enc_on or s.substantiation %}
