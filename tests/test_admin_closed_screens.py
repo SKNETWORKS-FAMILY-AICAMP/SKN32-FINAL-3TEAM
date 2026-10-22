@@ -65,7 +65,10 @@ def test_닫은_화면은_사유와_함께_남고_입력이_없다(client: TestC
     body = _main(r.text)
     label = r.context["label"]
     assert label in LABELS or label.startswith("범위 밖 (D-")
-    assert label in body and "비활성" in body and "D-260" in body
+    assert label in body and "비활성" in body
+    # 🔄 10-22 — 근거 결정 번호는 화면에 싣지 않는다(코드 · 커밋에만) — 사유 · 열 조건 글에도 없다
+    assert not re.search(r"D-\d", body), re.findall(r".{15}D-\d+.{5}", body)
+    assert "`" not in body, "마크다운 백틱(코드 표기)이 화면에 그대로 보인다"
     assert "<form" not in body and "<input" not in body and "<textarea" not in body
     assert not re.search(r"[\w.-]+@[\w-]+\.[\w.]+", body), "예시 이메일이 남았다"
     assert not re.search(r"\d{3}-\d{2}-\d{5}", body), "사업자번호 꼴 값이 남았다"
@@ -156,3 +159,10 @@ def test_대체_안내는_라우터의_alt가_있을_때만_그린다(
             assert item["name"] in body and item["description"] in body
     else:
         assert "대신 볼 수 있는 곳" not in body
+
+
+def test_관리자_화면은_공용_바닥글의_결정_번호를_싣지_않는다(client: TestClient) -> None:
+    """🆕 10-22 — 관리자 화면은 자체 바닥글만(`admin/_base.html` 의 `site_footer` 비움)."""
+    for path in ("/admin/", *CLOSED_PATHS):
+        html = client.get(path).text
+        assert "(D-124)" not in html and "admin-page-footer" in html, path

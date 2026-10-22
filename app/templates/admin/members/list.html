@@ -7,7 +7,13 @@
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "admin/_base.html" %}
 {% block title %}회원 목록 | CopyLane 관리자{% endblock %}
-{% block admin_css %}{% endblock %}
+{% block admin_css %}
+<script src="/static/admin-row-link.js?v=1" defer></script>
+<style>
+.admin-shell tr[data-row-href] { cursor: pointer; }
+.admin-shell tr[data-row-href]:hover td { background: var(--a-surface2); }
+</style>
+{% endblock %}
 {% block admin_content %}
 
 <h1>회원 목록</h1>
@@ -41,7 +47,7 @@
     <th>이름</th><th>이메일</th><th>소속</th><th>가입일</th><th>최근 로그인</th><th>이력 보관</th><th>상태</th>
   </tr>
   {% for r in rows %}
-  <tr>
+  <tr data-row-href="/admin/members/{{ r.id }}">
     <td><a href="/admin/members/{{ r.id }}">{{ r.name }}</a></td>
     <td>{{ r.email }}</td>
     <td>{{ r.company or "-" }}</td>

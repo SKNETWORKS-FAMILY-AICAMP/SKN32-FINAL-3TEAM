@@ -818,7 +818,7 @@
     {% set p = SLUG[view.premise] %}
     {% set b = view.result %}
     <div class="rv-res rv-res-{{ p }}{% if p == pp %} is-shown{% endif %}"{% if p != pp %} hidden{% endif %}>
-      {{ overview(b.outcome.value) }}
+      {{ overview(b.outcome.value, b.sentences|length) }}
       <div class="rv-chips rv-premise-row" style="margin:.45rem 0 .5rem">
         {# 칩은 왼쪽에 세로로 쌓는다 — 옆의 전제 문안이 여러 줄일 때 칩 아래가 비지 않게 #}
         <div class="rv-premise-chips">
@@ -906,7 +906,7 @@
       {% if result.branches or item.picked or item.stage %}
       {{ branch_wizard(item) }}
       {% else %}
-      {{ overview(result.outcome.value) }}
+      {{ overview(result.outcome.value, result.sentences|length) }}
       <h3 class="cl-evidence-title">문장별 결과</h3>
       {% for s in result.sentences %}
       {{ sent_block(s, s.sent_id in item.flagged, item.marks.get(s.sent_id), item, enc_on=result.judged_by|encoder_ran, category=(result.category.value if result.category else "")) }}
