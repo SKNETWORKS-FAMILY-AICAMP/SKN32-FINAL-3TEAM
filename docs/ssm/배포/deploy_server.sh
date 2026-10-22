@@ -16,6 +16,11 @@
 #       · 서버 전용 설정은 ~/.copylane-deploy (deploy.conf.example) — DB_MODE · Caddy 판 · 관리자 허용 IP
 #       · caddy — 저장소 Caddyfile(.ip)에 허용 IP 를 넣어 만들고 validate → 적용 → 응답 확인 · 실패하면 앞 판으로 되돌린다
 #       · verify 의 지문 기대값은 배포 커밋의 data/derived_manifest.jsonl 에서 읽는다 (손으로 적은 값 없음)
+#   🔄 2026-10-22 — 도메인 · HTTPS 를 서버에서 처음 적용하며 고침 (작업기록_1022.md)
+#       · caddy — 적용 2초 뒤 한 번만 확인해서, 첫 인증서 발급(10~30초) 전에 「응답 없음」으로 앞 판으로 되돌렸다.
+#         domain 판은 최대 60초 · ip 판은 최대 10초까지 2초 간격으로 다시 확인한다
+#       · env · check — .env 권한을 600 으로 맞추고 check 가 .env · ~/.copylane-deploy 권한을 본다 (보안 점검 10-22 — 664 였다)
+#       · check — domain 판이면 https://<도메인>/u/ 응답을 본다
 #   근거  docs/05_배포/배포계획.md §1-2 · §4 / docs/lse/sLLM_연결_안내_2026-10-05.md / models.lock.json
 #
 # 쓰는 법 (서버에서 · tmux 안에서)
@@ -276,7 +281,8 @@ PY
 env_file() {
   say "4. .env 자리 만들기"
   cd "$APP_DIR"
-  [ -f .env ] || { cp .env.example .env; chmod 600 .env; ok ".env 를 .env.example 에서 만들었다 (권한 600)"; }
+  [ -f .env ] || { cp .env.example .env; ok ".env 를 .env.example 에서 만들었다"; }
+  chmod 600 .env    # 🔄 10-22 — 손으로 만든 .env 가 664 였다(보안 점검). 있어도 매번 맞춘다
   # 🔄 2026-10-21 — 이미 demo · cloud 로 정해 두었으면 그대로 둔다 (관리자 화면을 쓰는 동안은 demo)
   case "$(get_env COPYLANE_EDITION)" in cloud|demo) ;; *) set_env COPYLANE_EDITION cloud ;; esac
   set_env DATA_ROLE replica
@@ -450,6 +456,16 @@ check() {
   [ "$cur" = "$head" ] && ok "서버 판 $cur = origin/main (마지막 fetch 기준)" || warn "서버 판 $cur · origin/main $head"
   [ -L "$LINK_SCRIPT" ] && ok "~/deploy_server.sh → 저장소 사본" || warn "~/deploy_server.sh 가 링크가 아니다 — README 「main 전환」"
   systemctl is-active -q caddy && ok "caddy 동작 ($CADDY_MODE 판)" || warn "caddy 가 안 떠 있다"
+  if [ "$CADDY_MODE" = domain ] && [ -n "$CADDY_DOMAIN" ]; then   # 🔄 10-22
+    curl -s -o /dev/null -m 10 -w "  [정보] https://$CADDY_DOMAIN/u/ — HTTP %{http_code}\n" \
+      --resolve "$CADDY_DOMAIN:443:127.0.0.1" "https://$CADDY_DOMAIN/u/" || warn "https 응답 없음 — journalctl -u caddy -n 50"
+  fi
+  local f m
+  for f in "$APP_DIR/.env" "$DEPLOY_CONF"; do                       # 🔄 10-22 — 비밀값 · 서버 설정은 600
+    [ -f "$f" ] || continue
+    m="$(stat -c %a "$f")"
+    [ "$m" = 600 ] && ok "$(basename "$f") 권한 600" || warn "$(basename "$f") 권한 $m — chmod 600 $f"
+  done
   nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv,noheader \
     | awk '{print "  [정보] GPU " $0}' || warn "nvidia-smi 실패"
   curl -s -m 5 "http://127.0.0.1:$SLLM_PORT/health" && echo || warn "sLLM /health 응답 없음"
@@ -611,14 +627,20 @@ PY
 }
 
 caddy_probe() {   # Caddy 를 거쳐 /u/ 를 부른다 — 앱이 꺼져 있어 502 면 Caddy 는 정상으로 본다
-  sleep 2
-  systemctl is-active -q caddy || return 1
-  local code
-  if [ "$CADDY_MODE" = domain ]; then
-    code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' --resolve "$CADDY_DOMAIN:443:127.0.0.1" "https://$CADDY_DOMAIN/u/" || true)"
-  else
-    code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' http://127.0.0.1/u/ || true)"
-  fi
+  # 🔄 10-22 — 한 번만 보면 첫 인증서 발급(10~30초) 전에 실패로 보고 앞 판으로 되돌렸다. 응답이 올 때까지 다시 본다
+  local code="" i tries=5                                  # ip 판 — 최대 10초
+  [ "$CADDY_MODE" = domain ] && tries=30                   # domain 판 — 최대 60초 (Let's Encrypt 발급 대기)
+  for ((i = 1; i <= tries; i++)); do
+    sleep "${CADDY_PROBE_INTERVAL:-2}"
+    systemctl is-active -q caddy || return 1
+    if [ "$CADDY_MODE" = domain ]; then
+      code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' --resolve "$CADDY_DOMAIN:443:127.0.0.1" "https://$CADDY_DOMAIN/u/" || true)"
+    else
+      code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' http://127.0.0.1/u/ || true)"
+    fi
+    case "$code" in 2??|3??|502|503|504) break ;; esac
+    [ "$i" = 1 ] && [ "$CADDY_MODE" = domain ] && printf '  [정보] 아직 응답 없음 — 인증서를 받는 중일 수 있다 · 최대 60초 기다린다\n'
+  done
   case "$code" in
     2??|3??)     ok "Caddy 를 거친 /u/ — HTTP $code" ;;
     502|503|504) warn "Caddy 는 응답하지만 앱이 안 떠 있다 (HTTP $code) — services 또는 tmux serve" ;;
