@@ -24,7 +24,8 @@ copylane.example.com {
     # 🔄 2026-10-15 — 무인증 API 문서 · 고정 응답도 닫는다 (배포점검 10-14 #1 · 병렬작업 계약 ⑮)
     #    ⏳ `/docs` 공개 여부는 팀장 판정 대기다. 열기로 하면 아래 줄에서 /docs /docs/* /redoc /openapi.json 을 지운다
     #    ⚠️ base.html 상단의 「API」 링크(/docs)는 이 서버에서 404 가 된다 — 알고 닫는 것이다
-    @closed path /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/*
+    # 🔄 2026-10-22 — /dev(개발 현황판 · 10-20 에 / 에서 옮김)도 닫는다 — 내부 API · 미구현 목록이 보였다(서비스시험 SEC-01-6)
+    @closed path /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/* /dev
     respond @closed 404
 
     # 관리자 화면 — 기본은 닫힘. 🚨 이 줄은 손대지 않는다: deploy_server.sh caddy 가 demo 에디션이고
