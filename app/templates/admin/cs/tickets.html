@@ -84,8 +84,9 @@
 {% endif %}
 
 <style>
-.admin-shell .cs-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
-.admin-shell .cs-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 6rem; }
+.admin-shell .admin-main .cs-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,160px)); justify-content:start; gap:14px; margin:20px 0 28px; padding:0; background:transparent; }
+.admin-shell .admin-main .cs-kpis .cs-kpi { display:flex; flex-direction:column; justify-content:center; gap:6px; min-width:0; min-height:90px; padding:14px 18px; border:1px solid var(--a-line); border-radius:10px; background:var(--a-surface); box-shadow:var(--a-shadow); overflow-wrap:anywhere; }
+@media(max-width:600px) { .admin-shell .admin-main .cs-kpis { grid-template-columns:repeat(2,minmax(0,160px)); gap:12px; } }
 .admin-shell .cs-kpi span { font-size: .8rem; color: var(--a-clay); }
 .admin-shell .cs-kpi b { font-size: 1.3rem; }
 .admin-shell td.nowrap { white-space: nowrap; }
