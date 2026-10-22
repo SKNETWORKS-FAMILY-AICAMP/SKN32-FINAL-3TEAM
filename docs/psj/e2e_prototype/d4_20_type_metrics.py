@@ -124,7 +124,7 @@ def main() -> int:
         "rows": len(rows), "min_measurable": MIN_MEASURABLE, "date": today,
     }
     (rep / f"D4-20_유형별지표_확장dev_{today}.json").write_text(
-        json.dumps({"meta": meta, **out}, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps({"meta": meta, **out}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     lines = [
         f"# D4-20 판정 인코더 — 확장 dev 유형별 지표 ({today})",
@@ -155,7 +155,7 @@ def main() -> int:
             "",
         ]
     md = rep / f"D4-20_유형별지표_확장dev_{today}.md"
-    md.write_text("\n".join(lines), encoding="utf-8")
+    md.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"✅ {md.relative_to(ROOT)}")
     return 0
 
