@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from urllib.parse import urlencode
 
@@ -191,7 +192,9 @@ def test_인코더만_잡은_문장에도_질문이_그려지고_AI_추정으로
     """🆕 2026-10-16 (D-348 보충 5) — 답 없이 확정하지 않는다 — 결론은 「AI 추정 · 판정 아님」, 질문 칸은 그린다."""
     html = _post("/u/judge", [("text", TEXT), ("op", "judge:1")])
     assert "AI 추정 · 판정 아님" in html and "조건부 위반 · 실증 자료가 있으면" not in html
-    assert "이 표현을 실증할 자료가 있나요?" in html and 'value="subst:na"' in html
+    assert "이 표현을 실증할 자료가 있나요?" in html
+    # 🔄 2026-10-22 (ksr · 보충 39 결정 6) 인코더 쪽 질문은 유형을 싣는다 — 답 값 끝에 그 유형(`subst:na:거짓_과장`)
+    assert re.search(r'value="subst:na(:[^"]+)?"', html)
 
 
 def test_인코더만_잡은_문장에_있음으로_답하면_특이사항_없음(wired_enc) -> None:  # noqa: ANN001

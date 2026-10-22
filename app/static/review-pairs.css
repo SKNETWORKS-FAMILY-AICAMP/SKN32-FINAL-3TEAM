@@ -130,6 +130,8 @@ body:has([data-review-pairs]) { height:auto; overflow:auto; }
     overflow-y:auto; overflow-x:hidden; scrollbar-gutter:stable;
     overscroll-behavior-y:contain; scrollbar-width:thin;
   }
+  /* 2026-10-22 (ksr) 검수 중에는 결과 칸 스크롤을 잠근다 — 가림막은 칸 맨 위 한 화면만 덮어서 내리면 이전 결과가 선명하게 보였다 */
+  .user-shell .rv-pair-result:has(>.rv-judging:not([hidden])) { overflow-y:hidden; }
 }
 @media(min-width:1001px) and (max-height:649px) {
   .user-shell .rv-pair-result { max-height:none; overflow:visible; scrollbar-gutter:auto; }
