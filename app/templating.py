@@ -109,6 +109,7 @@ def admin_closed_menus() -> dict[str, dict[str, str]]:
         admin_review_docs,
         admin_signup_review,
         admin_stats,
+        admin_terms,
     )
 
     return {
@@ -117,6 +118,7 @@ def admin_closed_menus() -> dict[str, dict[str, str]]:
             ("/admin/signup-review", admin_signup_review),
             ("/admin/enterprise", admin_enterprise),
             ("/admin/review-docs", admin_review_docs),
+            ("/admin/terms", admin_terms),
             ("/admin/stats/revenue", admin_stats),
         )
     }

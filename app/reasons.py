@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import NamedTuple
 
 from app import factcheck
@@ -573,7 +573,10 @@ SUBST_TEXT: dict[str, SubstText] = {
 #:    ④(「객관적인 근거가 없는 내용으로 표시ㆍ광고하여 비방하거나 불리한 사실만을 표시ㆍ광고하여 비방」) · 식품표시광고법 시행령 [별표 1] 7.가
 #:    (「비교대상 및 비교기준이 명확하지 않거나 비교내용 및 비교방법이 적정하지 않은」) · 화장품법 시행규칙 [별표 5] 2.바(「비교 대상 및 기준을 분명히
 #:    밝히고 객관적으로 확인될 수 있는 사항만」) — 코퍼스 `law_005361` · `013453_annex_0001` · `008741_annex_0005`. 자료 종류는 §13 의 법 축 줄과 같다
-#:    ⛔ 식품 · 화장품 축의 비방은 칸 C 라 실증 줄이 없다(보충 6 결정 1 · 보충 10) — 표에 없으면 분기 없음(D-220)
+#:    ⛔ 식품 · 화장품 축의 비방 중 칸 C(타사 ∧ 부정 · `factcheck.slander_absolute`)는 실증 줄이 없다(보충 6 결정 1 · 보충 10) — 표에 없으면 분기 없음(D-220)
+#:    🔄 2026-10-21 (D-348 보충 40) 식품 축 비방 중 B 칸의 **최상급 · 순위 꼴**(고시 69549 제2조 4.나 · `factcheck.superlative_only`)에만 줄을 둔다 —
+#:       그 밖의 식품 축 비방(자사 우월 비교 꼴 · 표지 없음)은 줄 없음 · 조건은 `subst_branch` 가 문장 글자로 본다 · 화장품 축 B 칸 비방은 기록만(보충 40 결정 5)
+#:       `[문헌]` 코퍼스 `69549_20251204.xml` 제2조 4.나 · ✅ 2026-10-21 승인 — 오한빈(보충 40 결정 4)
 TYPE_SUBST_TEXT: dict[tuple[Violation, str], SubstText] = {
     (Violation.부당_비교광고, "표시광고법"): SubstText(
         "비교하는 표현은 비교 대상과 기준을 분명히 밝히고 객관적인 근거가 있어야 합니다(시행령 제3조③). "
@@ -596,6 +599,16 @@ TYPE_SUBST_TEXT: dict[tuple[Violation, str], SubstText] = {
         "그 내용을 실증할 수 있는 자료가 있다면 등급이 내려갈 수 있습니다. 불리한 사실만 골라 싣지 않았는지는 따로 묻습니다.",
         SUBST_TEXT["표시광고법"].evidence,
     ),
+    (Violation.비방광고, "식품표시광고법"): SubstText(
+        "자기 제품이 객관적 근거 없이 경쟁 업체의 것보다 우량하거나 유리하다는 표현(최초 · 최고 · 유일 · 1위 등)은 쓸 수 없습니다(고시 제2조 4.나). "
+        "그 표현을 실증할 수 있는 자료가 있고, 순위라면 조사 기관 · 대상 · 기간처럼 함께 밝혀야 할 사항을 같은 광고에 밝혔다면 등급이 내려갈 수 있습니다.",
+        SUBST_TEXT["식품표시광고법"].evidence,
+    ),
+}
+
+#: 🆕 2026-10-21 (D-348 보충 40 결정 1) 문장 글자로 줄을 거르는 (유형 · 법 축) — 조건을 지나야 줄이 선다 · 글자가 없으면 서지 않는다(D-220)
+TYPE_SUBST_GUARD: dict[tuple[Violation, str], Callable[[str | None], bool]] = {
+    (Violation.비방광고, "식품표시광고법"): factcheck.superlative_only,
 }
 
 #: 실증 분기를 붙이는 유형 → 실증했을 때의 상한 (D-337 결정 1).
@@ -610,11 +623,14 @@ SUBST_MAX: dict[Violation, Risk] = {
 }
 
 
-def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBranch | None:
+def subst_branch(
+    violations: list[Violation], basis_axes: set[str], text: str | None = None
+) -> SubstBranch | None:
     """확정된 실증형 위반의 실증 분기 — 붙일 수 없으면 None (그 문장은 지시가 서지 않고 보류로 남는다 · D-220).
 
     ★ 문장의 위반이 **전부** `SUBST_MAX` 의 유형이어야 한다 — 하나라도 다른 유형이면 그 유형이 실증으로 풀리는지 모른다.
     ★ 문안의 열쇠는 **인용 근거가 속한 법 축 하나**다. 둘 이상이면(두 법이 섞인 문장) 어느 줄인지 정하지 않는다 — None.
+    🆕 2026-10-21 (D-348 보충 40 결정 3) `text` — 문장 글자로 거르는 줄(`TYPE_SUBST_GUARD`)은 조건을 지나야 선다(식품 축 비방 = 최상급 · 순위 꼴만).
     """
     vs = set(violations)
     if not vs or not vs <= set(SUBST_MAX) or len(basis_axes) != 1:
@@ -622,16 +638,18 @@ def subst_branch(violations: list[Violation], basis_axes: set[str]) -> SubstBran
     axis = next(iter(basis_axes))
     # 🔄 2026-10-19 (보충 28 결정 2) 거짓 · 과장뿐이면 §13 줄 · 부당 비교 · 비방 하나면 그 유형의 줄(§18) · 섞이면 어느 줄인지 정하지 않는다
     if vs == {Violation.거짓_과장}:
-        text = SUBST_TEXT.get(axis)
+        line = SUBST_TEXT.get(axis)
     elif len(vs) == 1:
-        text = TYPE_SUBST_TEXT.get((next(iter(vs)), axis))
+        key = (next(iter(vs)), axis)
+        guard = TYPE_SUBST_GUARD.get(key)
+        line = TYPE_SUBST_TEXT.get(key) if guard is None or guard(text) else None
     else:
-        text = None
-    if text is None:
+        line = None
+    if line is None:
         return None
     top = max((SUBST_MAX[v] for v in vs), key=lambda r: r.level)
     return SubstBranch(
-        substantiated_max=top, accepted_evidence=list(text.evidence), criteria=text.criteria
+        substantiated_max=top, accepted_evidence=list(line.evidence), criteria=line.criteria
     )
 
 

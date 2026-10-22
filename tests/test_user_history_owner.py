@@ -140,6 +140,20 @@ def test_판정_소유자_조건은_세션으로_넓히지_않는다() -> None:
     assert "owner_id" in sql and "session_id" not in sql, f"🔴 이력 조건에 세션이 섞였다 — {sql}"
 
 
+@pytest.mark.gate
+def test_홈_통계는_같은_문구의_최신_판정만_센다() -> None:
+    """🆕 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) — 이력은 새 행으로 쌓인다 · 홈 통계 · 반복 지적은 같은 사람 · 같은 문장 글자의
+    최신 판정 하나만 센다(`_latest_judgments`). 소유자 조건은 그대로 · 세션 키는 섞이지 않는다. 실제 DB 실행은
+    `tests/test_judgment_store_ssm.py` 의 통합 시험(`COPYLANE_DB_IT=1`)이 본다."""
+    sql = " ".join(
+        str(user_router._latest_judgments(_ME).compile(dialect=postgresql.dialect())).split()
+    )
+    assert "owner_id" in sql and "session_id" not in sql, sql
+    assert "row_number() OVER (PARTITION BY copy_sentence.raw" in sql, sql
+    assert "ORDER BY judgment.judged_at DESC, judgment.id DESC" in sql, sql
+    assert "subject_type" in sql, sql
+
+
 def test_검색_필터는_개수와_목록에_함께_적용된다(rec: _Recorder) -> None:
     user_router._history_rows(rec, _ME, None, 1, query="100%_", category="식품", days=30)
     assert len(rec.sql) == 2

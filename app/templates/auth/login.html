@@ -11,8 +11,8 @@
 
 <form method="post" action="/login">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label for="initials">이니셜</label>
-  <input id="initials" name="initials" autocomplete="username" maxlength="16" required>
+  <label for="initials">이니셜 또는 관리자 이메일</label>
+  <input id="initials" name="initials" autocomplete="username" maxlength="40" placeholder="psj 또는 psj@admin.copylane" required>
   <label for="password">비밀번호</label>
   <input id="password" name="password" type="password" autocomplete="current-password" required>
   <button type="submit">로그인</button>

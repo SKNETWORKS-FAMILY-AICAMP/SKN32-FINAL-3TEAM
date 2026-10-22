@@ -26,6 +26,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -439,7 +440,8 @@ def index(request: Request, session: Session = Depends(get_session)) -> HTMLResp
         #    「copylane 소개」 메뉴는 랜딩이 아니라 사용방법으로 간다(종전대로). DB 가 없을 때는 위에서 홈의 안내를 그린다
         return templates.TemplateResponse(request, "user/landing.html", {})
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    mine = _owned_judgments(user.id)
+    # 🔄 2026-10-22 (ksr 흡수 · 보충 36 결정 2) 홈 수는 같은 문구의 최신 판정만 센다 — 이력이 새 행으로 쌓인다
+    mine = _latest_judgments(user.id)
     month = mine.where(Judgment.judged_at >= month_start)
     pass_level = PASS_RISK_MAX.level
 
@@ -1051,7 +1053,11 @@ async def review_rewrite(request: Request) -> HTMLResponse:
 
 #: 🆕 2026-10-16 (D-348 보충 4 결정 3 · 4 · 6) — 조건부 위반에 대한 답 하나. `subst:yes|no` · `fact:<종류>:true|false`
 #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · `na` = 해당 없음(이 문장은 그 주장을 하지 않는다)
-_ANSWER = re.compile(r"^(subst:(yes|no|na)|fact:([가-힣_]{1,24}):(true|false|na))$")
+#: 🔄 2026-10-21 (D-348 보충 39 결정 6 · 2 단계) 실증 답에 유형을 담을 수 있다 — `subst:yes:거짓_과장` (질문의 `SubstBranch.violation`) ·
+#:    유형이 빈 답은 받은 뒤 서버가 지금 보인 질문의 유형으로 묶는다(`_tag_subst` · 유형을 담지 않는 종전 화면 · D-220)
+_ANSWER = re.compile(
+    r"^(subst:(yes|no|na)(?::([가-힣_]{1,24}))?|fact:([가-힣_]{1,24}):(true|false|na))$"
+)
 _ANSWER_OF = {"yes": "예", "true": "예", "no": "아니오", "false": "아니오", "na": "해당없음"}
 #: 앞서 한 답 — `문장id|답` (그 문구 안) · 답은 서버가 다시 판정한 문장 글자에 묶는다(폼의 글자를 믿지 않는다)
 _PREV = re.compile(r"^([A-Za-z0-9_\-]{1,32})\|(.+)$")
@@ -1060,7 +1066,7 @@ _MAX_ANSWERS = 12
 
 def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[list, list]:
     """(문장id, 답) → (`UserFact` 목록, `UserSubst` 목록). 모르는 문장 · 모르는 종류 · 꼴이 틀린 답은 거부한다(422 · D-220)."""
-    from app.contracts import Answer, FactKind, UserFact, UserSubst  # noqa: PLC0415
+    from app.contracts import Answer, FactKind, UserFact, UserSubst, Violation  # noqa: PLC0415
 
     facts, substs = [], []
     for sid, a in pairs:
@@ -1068,15 +1074,46 @@ def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[li
         if not m or sid not in sents:
             raise HTTPException(422, "모르는 답")
         if m.group(2):
-            substs = [u for u in substs if u.text != sents[sid]]
-            substs.append(UserSubst(text=sents[sid], answer=Answer(_ANSWER_OF[m.group(2)])))
+            # 🔄 2026-10-21 (보충 39 결정 6) 유형이 있으면 같은 문장 · 같은 유형의 앞선 답만 바꾼다 — 유형마다 답이 하나씩 남는다
+            if m.group(3) and m.group(3) not in {v.value for v in Violation}:
+                raise HTTPException(422, "모르는 유형")
+            v = Violation(m.group(3)) if m.group(3) else None
+            substs = [u for u in substs if not (u.text == sents[sid] and u.violation is v)]
+            substs.append(
+                UserSubst(text=sents[sid], answer=Answer(_ANSWER_OF[m.group(2)]), violation=v)
+            )
             continue
-        if m.group(3) not in {k.value for k in FactKind}:
+        if m.group(4) not in {k.value for k in FactKind}:
             raise HTTPException(422, "모르는 사실 종류")
-        kind = FactKind(m.group(3))
+        kind = FactKind(m.group(4))
         facts = [f for f in facts if not (f.text == sents[sid] and f.kind is kind)]
-        facts.append(UserFact(text=sents[sid], kind=kind, answer=Answer(_ANSWER_OF[m.group(4)])))
+        facts.append(UserFact(text=sents[sid], kind=kind, answer=Answer(_ANSWER_OF[m.group(5)])))
     return facts, substs
+
+
+def _tag_subst(answer: str, sid: str, res) -> str:  # noqa: ANN001
+    """유형이 빈 실증 답을 **지금 보인 질문의 유형**으로 묶는다 (🆕 2026-10-21 · D-348 보충 39 결정 6 · 2 단계).
+
+    ★ `res` = 앞서 한 답까지 넣어 다시 판정한 결과(사용자가 본 화면) · 그 문장의 실증 질문(기록 문장 먼저 · 없으면 보이는 분기)의
+       `SubstBranch.violation` 을 답에 붙인다(`subst:yes` → `subst:yes:부당_비교광고`). 묶은 답이 이력(`prev`)으로 돌아가므로 다음 회차에도 유형이 남는다.
+    🔴 유형을 못 찾으면 그대로 둔다 — 그래프가 첫 실증형 유형의 답으로 읽는다(1 단계와 같다 · `app.graph._subst_answer`).
+    ⛔ 묶지 않으면 — 섞인 유형 문장에서 둘째 질문에 한 답이 유형 없이 와 앞선 답을 지우고 **첫 유형의 답으로 읽혀** 그 유형을 잘못 확정한다.
+    """
+    m = _ANSWER.match(answer)
+    if not m or not m.group(2) or m.group(3):
+        return answer
+    cands = [x for x in res.sentences if x.sent_id == sid] + [
+        x for b in res.branches for x in b.sentences if x.sent_id == sid
+    ]
+    v = next(
+        (
+            x.substantiation.violation
+            for x in cands
+            if x.substantiation is not None and x.substantiation.violation
+        ),
+        None,
+    )
+    return answer if v is None else f"{answer}:{v.value}"
 
 
 def _review_round(form: dict[str, list[str]]) -> int:
@@ -1086,9 +1123,14 @@ def _review_round(form: dict[str, list[str]]) -> int:
     return int(value)
 
 
-def _previous_answers(form: dict[str, list[str]]) -> list[tuple[str, str]]:
+def _previous_answers(form: dict[str, list[str]], extra: int = 0) -> list[tuple[str, str]]:
+    """폼의 앞서 한 답(`prev` · `문장id|답`) — 꼴이 틀리면 422 (D-220).
+
+    🔄 2026-10-22 (ksr 흡수 · D-99) 답 재판정(`review_answer`)도 이 함수를 쓴다 — 종전에는 같은 파싱이 두 벌이었고 상한 비교가 달랐다
+       (`>=` · `>`). 상한은 **앞선 답 + 이번 요청의 새 답(`extra`) ≤ `_MAX_ANSWERS`** 하나로 센다.
+    """
     values = form.get("prev", [])
-    if len(values) > _MAX_ANSWERS:
+    if len(values) + extra > _MAX_ANSWERS:
         raise HTTPException(422, "답이 너무 많다")
     pairs = []
     for value in values:
@@ -1104,8 +1146,10 @@ async def _review_pick(
 ) -> HTMLResponse:
     """D-348 보충 31: 선택은 POST로 받고 실제 품목으로 재판정한다.
 
-    🔄 2026-10-20 (lse · 사용자 결정) — 품목을 고른 재판정은 **이력에 바꿔 적는다**(`judgment_store.replace_review` —
-       같은 문구의 고르기 전 기록(보류)을 지우고 고른 품목의 판정으로). 종전에는 적지 않아 이력 · 홈 통계가 보류만 셌다.
+    🔄 2026-10-20 (lse · 사용자 결정) — 품목을 고른 재판정을 이력에 적는다. 종전에는 적지 않아 이력 · 홈 통계가 보류만 셌다.
+    🔄 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) — **새 판정 행으로 적는다**(`save_review`) · 같은 문구의 앞 기록(고르기 전 보류)을
+       지우지 않는다(종전 `replace_review` — 6 시간 · 20 문서 안 글자가 같은 문서를 지움 · `[임의]`) · 고른 품목은 출처 `user_selected` 로
+       남는다(그래프 응답) · 홈 통계 · 반복 지적은 같은 문구의 최신 판정만 센다(`_latest_judgments`) · 이력 목록은 모든 행
     """
     kind, number, *tail = op.split(":")
     n = int(number)
@@ -1175,8 +1219,8 @@ async def _review_pick(
             session = next(gen)
             try:
                 kept = await run_in_threadpool(
-                    lambda: judgment_store.replace_review(
-                        session, current_user(request, session), picked_res
+                    lambda: judgment_store.save_review(
+                        session, current_user(request, session), [picked_res]
                     )
                 )
             finally:
@@ -1194,7 +1238,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
     🔴 **POST 다** — 문구를 URL 에 싣지 않는다(P1-4). 화면에 상태가 없어 문구 칸 · 앞서 한 답(`prev`)을 다시 받는다.
     ★ 답은 **그 문장에만** 묶는다 — 문장 글자는 서버가 먼저 판정한 결과에서 읽는다(폼의 글자를 믿지 않는다 · `review_rewrite` 와 같다).
     ★ 품목 분기를 고른 뒤의 답이면 다시 그릴 때 그 분기를 펼쳐 둔다(`picked`). 답은 모든 분기에 같이 든다(문장에 묶였다).
-    ★ 품목을 고르지 않은 답 재판정의 저장은 종전대로다(보충 3 결정 4). 고른 뒤 판정은 저장하지 않는다(보충 31 · 이력 정책 대기).
+    ★ 답 재판정은 이력에 새 행으로 적는다(보충 3 결정 4) — 🔄 2026-10-22 고른 전제가 있어도 적는다(보충 34 결정 4 · 보충 36 결정 2).
     🚨 답은 검증이 아니다 — 판정의 `user_facts` · `user_subst` 와 화면 문구가 그렇게 말한다.
     """
     form = await _form(request, keep_blank=True)
@@ -1204,22 +1248,18 @@ async def review_answer(request: Request, session: Session = Depends(get_session
         raise HTTPException(422, "답할 문장을 모른다")
     want_n, want_sid = int(m.group(1)), m.group(2)
     answer = _one(form, "answer", 40)
-    prev = form.get("prev", [])
-    if len(prev) >= _MAX_ANSWERS:
-        raise HTTPException(422, "답이 너무 많다")
+    pairs = _previous_answers(form, extra=1)
     premise = _one(form, "premise", 32)
     if premise and premise not in _PREMISES:
         raise HTTPException(422, "모르는 전제")
     redo = _review_round(form)
-    pairs: list[tuple[str, str]] = []
-    for p in prev:
-        pm_ = _PREV.match(p)
-        if not pm_:
-            raise HTTPException(422, "모르는 답")
-        pairs.append((pm_.group(1), pm_.group(2)))
     pairs.append((want_sid, answer))
 
     from app.contracts import ProductContext  # noqa: PLC0415
+
+    #: 🆕 2026-10-22 (ksr 흡수 · 보충 34 결정 2) 고른 전제가 있으면 **모든 판정**(유형 묶기의 미리 판정 · 답 재판정)에 같은 제품 정보 —
+    #:    종전에는 미리 판정만 전제 없이 해 사용자가 본 화면(고른 전제의 판정)과 다른 판정에서 질문 유형을 읽었다
+    base = pm.product_of(Premise(premise)) if premise else ProductContext()
 
     targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
     results: list[dict] = []
@@ -1234,13 +1274,24 @@ async def review_answer(request: Request, session: Session = Depends(get_session
         if n == want_n:
             choices = res.branches
             sents = {s.sent_id: s.text for s in res.sentences}
+            # 🆕 2026-10-21 (보충 39 결정 6) 유형이 빈 실증 답은 앞선 답까지 넣은 판정(사용자가 본 화면)의 질문 유형으로 묶는다(`_tag_subst`)
+            if _ANSWER.match(answer) and answer.startswith("subst:"):
+                f0, s0 = _answers_of(pairs[:-1], sents)
+                seen = res
+                if f0 or s0:
+                    state, seen = await run_in_threadpool(
+                        _core_judge, text, base.model_copy(update={"facts": f0, "substs": s0})
+                    )
+                    if state in ("pending", "down"):
+                        return _render(
+                            request,
+                            "user/review.html",
+                            _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
+                        )
+                pairs[-1] = (want_sid, _tag_subst(answer, want_sid, seen))
             facts, substs = _answers_of(pairs, sents)
             state, res = await run_in_threadpool(
-                _core_judge,
-                text,
-                (pm.product_of(Premise(premise)) if premise else ProductContext()).model_copy(
-                    update={"facts": facts, "substs": substs}
-                ),
+                _core_judge, text, base.model_copy(update={"facts": facts, "substs": substs})
             )
             if state in ("pending", "down"):
                 return _render(
@@ -1255,7 +1306,9 @@ async def review_answer(request: Request, session: Session = Depends(get_session
             results.append(item)
             continue
         results.append({"n": n, "result": res, "text": text})
-    answered = [r["result"] for r in results if r["n"] == want_n and not premise]
+    # 🔄 2026-10-22 (ksr 흡수 · 보충 34 결정 4 · 보충 36 결정 2) 고른 뒤 답한 판정도 새 행으로 적는다 — 종전 ksr 판은 `and not premise` 로
+    #    적지 않았다(「이력 정책 대기」 · 10-21 에 정해졌다)
+    answered = [r["result"] for r in results if r["n"] == want_n]
     kept = None
     if answered:
         kept = await run_in_threadpool(
@@ -1636,7 +1689,12 @@ async def generate(
         ctx["fixed_notes"] = await run_in_threadpool(
             _fixed_all_notes, picked["fixed"], key, picked["ingredients"]
         )
+    # 🆕 10-21 (psj) 관리자 생성 통계의 메모리 카운터 · 건수와 시간만
+    from app import gen_usage  # noqa: PLC0415
+
+    branch_key = f"{picked['category']}_{picked['cert']}"
     if why := copygen.off_reason():
+        gen_usage.record("off", branch_key, more=bool(shown))
         ctx |= {"engine_pending": True, "engine_why": why}
         return _render(request, "user/generate.html", _gen_ctx(ctx))
     fields = {
@@ -1649,17 +1707,28 @@ async def generate(
             if v
         ),
     }
+    t0 = time.monotonic()
     try:
-        live = await run_in_threadpool(
-            copygen.generate, f"{picked['category']}_{picked['cert']}", fields, tuple(shown)
-        )
+        live = await run_in_threadpool(copygen.generate, branch_key, fields, tuple(shown))
     except copygen.CopyGenOff as e:
+        gen_usage.record("off", branch_key, more=bool(shown))
         ctx |= {"engine_pending": True, "engine_why": str(e)}
     except copygen.CopyGenError:
+        gen_usage.record("failed", branch_key, more=bool(shown))
         # 🚨 까닭은 서버 로그에만 — 화면에는 「실패했다」만 그린다 (P1-4)
         logging.getLogger(__name__).warning("카피 생성 실패", exc_info=True)
         ctx |= {"engine_pending": True, "engine_failed": True}
     else:
+        gen_usage.record(
+            "ok",
+            branch_key,
+            time.monotonic() - t0,
+            more=bool(shown),
+            candidates=len(live.kept) + len(live.dropped),
+            passed=len(live.kept),
+            reasons=live.reasons(),
+            rounds=len(live.rounds),
+        )
         ctx |= {
             "live": live,
             "live_reasons": [(copygen.REASONS[k], n) for k, n in live.reasons().most_common()],
@@ -2036,6 +2105,10 @@ async def compose(request: Request) -> HTMLResponse:
             "user/compose.html",
             _compose_ctx({**base, "errors": ["광고에 담을 문구를 적어 주세요."]}),
         )
+    # 🆕 10-21 (psj) 관리자 생성 통계 · 요청 수와 광고 종류만
+    from app import gen_usage  # noqa: PLC0415
+
+    gen_usage.record_compose(ad_format)
     # 🆕 2026-10-13 — 인정 · 심사 문구가 그 문구에 그대로 들어 있을 때만 뺀다. 문구를 고쳐 인정 문구가 깨졌으면 전부 판정한다
     fixed = origin["fixed"] if origin["fixed"] and origin["fixed"] in prompt else ""
     part = _judged_part(prompt, fixed)
@@ -2195,6 +2268,33 @@ def _owned_judgments(owner_id: uuid.UUID) -> Select:
     )
 
 
+def _latest_judgments(owner_id: uuid.UUID) -> Select:
+    """🆕 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) **내 판정 중 같은 문장 글자의 최신 판정만** — 홈 통계 · 반복 지적 패턴이 센다.
+
+    ★ 이력은 새 행으로 쌓인다(고르기 전 보류 → 고른 품목의 판정 · 답한 뒤 판정) — 모두 세면 같은 문구가 두 번 세어진다.
+       이력 목록(`_history_rows`)은 모든 행을 보인다(출처와 함께 · 순서가 남는 것이 이력이다).
+    ★ 「같은 문구」 = 같은 사람의 같은 문장 글자(`copy_sentence.raw`) · 최신 = `judged_at` 이 가장 늦은 것(같으면 `id` 로 하나)
+    """
+    ranked = (
+        select(
+            Judgment.id.label("jid"),
+            func.row_number()
+            .over(
+                partition_by=CopySentence.raw,
+                order_by=(Judgment.judged_at.desc(), Judgment.id.desc()),
+            )
+            .label("rn"),
+        )
+        .join(WorkDoc, WorkDoc.id == Judgment.doc_id)
+        .join(CopySentence, CopySentence.id == Judgment.subject_id)
+        .where(WorkDoc.owner_id == owner_id, Judgment.subject_type == "copy_sentence")
+        .subquery()
+    )
+    return _owned_judgments(owner_id).where(
+        Judgment.id.in_(select(ranked.c.jid).where(ranked.c.rn == 1))
+    )
+
+
 #: 필터 칩의 글자 — 값(`_VERDICTS`)은 URL 에, 글자는 화면에
 _VERDICT_LABELS = {
     "confirmed": "확정",
@@ -2304,7 +2404,7 @@ def _repeat_pattern(session: Session, owner_id: uuid.UUID) -> SimpleNamespace | 
     🚨 실제 판정에서 센다 — 거듭 나온 유형이 없으면 띠를 그리지 않는다 (D-147).
     """
     rows = session.execute(
-        _owned_judgments(owner_id)
+        _latest_judgments(owner_id)  # 🔄 2026-10-22 같은 문구의 최신 판정만 (보충 36 결정 2)
         .with_only_columns(Judgment.violation_type)
         .order_by(Judgment.judged_at.desc())
         .limit(_PATTERN_WINDOW)
@@ -2902,10 +3002,25 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     if not auth.csrf_ok(request.cookies.get(auth.CSRF_COOKIE), form.get(auth.CSRF_FIELD, [""])[0]):
         auth.audit("user_login", _actor(email=email), ok=False)
         return again("화면이 오래돼서 다시 불러왔어요. 한 번 더 로그인해 주세요.", 403)
+    # 🔄 2026-10-22 (D-350) 시도 제한을 **관리자 분기 앞**에서 본다 — 관리자 도메인 입력도 같은 키(`u:<입력>`) · 해시보다 먼저(P2-11).
+    #    ⛔ 종전(psj 10-21)에는 관리자 분기가 이 제한보다 앞이라 「꼴이 틀린 이니셜」 · 「관리자 화면이 없는 판」이 해시를 돌리고 세지 않았다 —
+    #       배포판에서 횟수 제한 없이 Argon2 를 돌리게 할 수 있었고, 관리자 화면이 있는 판만 429 를 내 그 유무가 드러났다(D-213)
+    blocked = f"시도가 너무 많아요. {auth.LOCKOUT_SEC // 60}분 뒤에 다시 해 주세요."
     key = f"u:{email}"
     if auth.throttle.blocked(key):
         auth.audit("user_login_blocked", _actor(email=email), ok=False)
-        return again(f"시도가 너무 많아요. {auth.LOCKOUT_SEC // 60}분 뒤에 다시 해 주세요.", 429)
+        return again(blocked, 429)
+    # 🆕 2026-10-21 (psj) — 관리자 도메인(`psj@admin.copylane`)이면 **관리자 인증**으로 넘긴다 — 스키마 · 쿠키 · 명단은 그대로.
+    #    🚨 실패 문구는 사용자와 **같다** — 관리자 계정이 있는지 흘리지 않는다(P1-5). 관리자 화면이 없는 판(cloud)도 같은 답이다(D-213)
+    if (admin_id := auth.admin_initials_of(email)) is not None:
+        result, resp = _admin_login_via_user_form(request, admin_id, password)
+        if result == "ok":
+            auth.throttle.clear(key)
+            return resp
+        if result == "blocked":  # 관리자 이니셜 키의 제한(두 번째 축)
+            return again(blocked, 429)
+        auth.throttle.fail(key)  # 🔴 어느 갈래의 실패든 센다(D-350 결정 2)
+        return again("이메일이나 비밀번호가 맞지 않아요.", 401)
     if not reachable(session):
         return again("지금은 로그인할 수 없어요 — 데이터베이스에 연결되지 않았어요.", 503)
 
@@ -2926,6 +3041,27 @@ async def user_login_post(request: Request, session: Session = Depends(get_sessi
     session.commit()
     auth.audit("user_login", _actor(user.id), ok=True)
     return _login_cookie(RedirectResponse(_next_path(nxt), status_code=303), request, user)
+
+
+def _admin_login_via_user_form(
+    request: Request, initials: str, password: str
+) -> tuple[str, RedirectResponse | None]:
+    """사용자 로그인 화면에서 관리자로 — 관리자 로그인과 같은 함수(`routers.auth.admin_sign_in`)를 지난다 (D-99).
+
+    `("ok", 응답)` · `("blocked", None)` · `("bad", None)` — 화면 · 시도 제한(`u:<입력>` 키)은 부르는 쪽(`user_login_post`)이 맡는다.
+    🔴 2026-10-22 (D-350 결정 2) — 어느 갈래든 **해시를 정확히 한 번** 돈다(꼴이 틀림 · 관리자 화면 없음 · 틀린 비밀번호) ·
+       막힘(`blocked`)만 해시 앞에서 돌아온다.
+    """
+    from app.settings import admin_is_mounted  # noqa: PLC0415
+
+    if not initials or not admin_is_mounted():
+        # 🚨 걸린 시간이 다르지 않게 — 없는 계정과 같은 해시 한 번 (P1-5)
+        auth.verify_account(None, password)
+        auth.audit("login", initials or None, ok=False)
+        return "bad", None
+    from app.routers.auth import admin_sign_in  # noqa: PLC0415
+
+    return admin_sign_in(request, initials, password)
 
 
 @router.post("/logout")
@@ -3043,6 +3179,9 @@ async def user_signup_post(request: Request, session: Session = Depends(get_sess
         return again(f"이름을 1~{_NAME_MAX}자로 적어 주세요.")
     if len(email) > _EMAIL_MAX or not _EMAIL_SHAPE.match(email):
         return again("이메일 형식을 확인해 주세요.")
+    # 🆕 2026-10-21 — 관리자 로그인 도메인으로는 가입하지 않는다 — 같은 꼴의 사용자 계정이 생기면 로그인 화면이 둘을 못 가른다
+    if email.endswith(auth.ADMIN_EMAIL_DOMAIN):
+        return again("이 이메일 주소로는 가입할 수 없어요.")
     if not _PW_MIN <= len(pw) <= _PW_MAX:
         return again(f"비밀번호는 {_PW_MIN}~{_PW_MAX}자로 정해 주세요.")
     if pw != pw2:

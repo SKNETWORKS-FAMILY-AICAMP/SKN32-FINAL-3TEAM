@@ -186,7 +186,6 @@ def fake_run(
                 [{"k": "거짓_과장", "n": 3}],
                 [{"d": TODAY, "n": 12}],
                 [{"k": "classified", "n": 10}, {"k": "none", "n": 2}],
-                [{"k": "rule-0.3.0-dict+encb:c451942436f0", "n": 12}],
                 [{"k": "enc_up", "n": 2}, {"k": "dict_only", "n": 5}],
             ],
         }
@@ -247,7 +246,6 @@ def test_못_읽으면_0건이라_말하지_않는다(
     for path in (
         "/admin/cs/tickets",
         "/admin/board/notices",
-        "/admin/terms",
         "/admin/members",
         "/admin/stats/quality/judge",
         "/admin/stats/quality/generation",
@@ -272,18 +270,21 @@ def test_공지_상태는_계산한다(client: TestClient) -> None:
     assert client.get("/admin/board/notices/no-such").status_code == 404
 
 
-def test_약관_상태와_이전_버전을_시행일_순서로_계산한다(client: TestClient) -> None:
-    rows = client.get("/admin/terms").context["rows"]
-    by_version = {r["version"]: r for r in rows}
-    assert by_version["v1"]["status"] == "시행 중"
-    assert by_version["v2"]["status"] == "예정"
-    assert by_version["v2"]["prev_version"] == "v1"
-    assert by_version["p1"]["status"] == "시행 중"
-    assert [r["kind"] for r in rows] == ["service", "service", "privacy"]
-    d = client.get(f"/admin/terms/{T1}")
-    assert d.status_code == 200
-    assert [h["version"] for h in d.context["history"]] == ["v2", "v1"]
-    assert client.get("/admin/terms/no-such").status_code == 404
+def test_약관_목록과_상세는_DB_조회_없이_닫힘_안내다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected_read(*args, **kwargs):
+        raise AssertionError("닫힌 약관 화면은 DB를 읽지 않는다")
+
+    monkeypatch.setattr(admin_dbread, "run", unexpected_read)
+    for path in ("/admin/terms", f"/admin/terms/{T1}", "/admin/terms/no-such"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.template.name == "admin/_closed.html"
+        assert response.context["page_title"] == "약관 관리"
+        assert "닫혀 있습니다" in response.text
+        assert "새 버전 등록" not in response.text
+        assert "rows" not in response.context and "history" not in response.context
 
 
 def test_회원_상태_필터는_계산식에_기준일과_같이_간다(
@@ -316,7 +317,8 @@ def test_검수_통계는_judgment_건수만_그린다(client: TestClient) -> No
     assert "보류" in r.text and "확신 부족" in r.text and "R2 업무정지 위험" in r.text
     assert "확정 위반" in r.text and "미판정 (오류 · 시간 초과)" in r.text
     assert "자동 판별" in r.text and "품목 미확정" in r.text
-    assert "인코더가 위험도를 올림" in r.text and "c451942436f0" in r.text
+    assert "인코더가 위험도를 올림" in r.text
+    assert "by_version" not in r.context  # 10-21 — 판정 버전 구역은 화면에서 뺐다
     assert "마지막 판정" in r.text and "인코더가 함께 판정" not in r.text
     assert "94.2%" not in r.text and "이의제기" not in r.text and "더미" not in r.text
     assert client.get("/admin/stats/quality/judge?days=13").context["days"] == 30
@@ -335,8 +337,7 @@ def test_생성_통계는_셀_수_없는_수를_그리지_않는다(client: Test
     r = client.get("/admin/stats/quality/generation")
     assert r.status_code == 200
     assert "kpi" not in r.context and "by_origin" not in r.context
-    # 🔄 2026-10-21 (lse · psj bdadc9c 문구 변경) — 「저장하지 않으며 … 집계하지 않아요」
-    assert "저장하지 않" in r.text and "집계하지 않아요" in r.text
+    assert "생성 결과는 저장하지 않으며" in r.text
     for gone in (
         "카피 생성 문구",
         "승인된 생성 문구",
@@ -347,9 +348,7 @@ def test_생성_통계는_셀_수_없는_수를_그리지_않는다(client: Test
         "재생성 사유",
     ):
         assert gone not in r.text, gone
-    assert (
-        "추가 통계에 필요한 조건" in r.text and "생성 엔진" in r.text
-    )  # 🔄 10-21 psj 문구(결정 번호 걷음)
+    assert "집계 범위 안내" in r.text and "생성 엔진" in r.text
 
 
 def test_생성_실패는_오류_로그에서_센다(
@@ -423,7 +422,6 @@ def test_대시보드를_못_읽으면_대시와_안내다(
     for path in ("/admin/", "/admin/stats/dashboard"):
         r = client.get(path)
         assert r.context["dash"]["kpi"]["judge"] == "-"
-        # 🔄 2026-10-21 (lse · psj 문구 변경) — 「뜻이 아니에요」 · 「뜻은 아니에요」 둘 다 쓴다
         assert "이용 기록을 읽지 못했어요" in r.text and "0건이라는 뜻" in r.text
 
 
@@ -468,3 +466,85 @@ def test_통계_화면에는_결정_번호를_띄우지_않는다(client: TestCl
     start = html.index('id="admin-content"')
     body = html[start : html.index('class="admin-page-footer"', start)]  # 공용 바닥글은 이 화면 밖
     assert not re.search(r"D-\d+", body), re.findall(r".{20}D-\d+.{5}", body)
+
+
+def test_생성_엔진_구성은_설정에서_읽는다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.routers.copygen import llm  # noqa: PLC0415
+    from app.routers.copygen.branches import BRANCHES  # noqa: PLC0415
+
+    monkeypatch.setenv(llm.ENV_MODEL, "model-a, model-b")
+    r = client.get("/admin/stats/quality/generation")
+    cfg = r.context["config"]
+    assert cfg["models"] == ["model-a", "model-b"]
+    assert len(cfg["branches"]) == len(BRANCHES)
+    assert (
+        "카피 생성 엔진 구성" in r.text
+        and "<li>model-a</li>" in r.text
+        and "<li>model-b</li>" in r.text
+        and "A안" in r.text
+    )
+
+
+def test_서버_시작_이후_생성_현황은_메모리_카운터다(client: TestClient) -> None:
+    from app import gen_usage  # noqa: PLC0415
+
+    gen_usage.reset()
+    r = client.get("/admin/stats/quality/generation")
+    assert r.context["usage"]["total"] == 0 and "아직 생성 요청이 없어요" in r.text
+    gen_usage.record(
+        "ok", "food_no", 12.0, candidates=10, passed=4, reasons={"number": 4, "judge": 2}, rounds=2
+    )
+    gen_usage.record(
+        "ok", "food_no", 8.0, more=True, candidates=6, passed=4, reasons={"number": 2}, rounds=1
+    )
+    gen_usage.record("failed", "cos_no")
+    gen_usage.record("off", "food_no")
+    gen_usage.record("이상한값", "food_no")  # 모르는 결과는 세지 않는다
+    u = client.get("/admin/stats/quality/generation").context["usage"]
+    assert (u["total"], u["ok"], u["failed"], u["off"]) == (4, 2, 1, 1)
+    assert u["success_pct"] == 66.7  # 꺼짐은 분모에서 뺀다
+    assert (u["avg_secs"], u["max_secs"], u["more"]) == (10.0, 12.0, 1)
+    assert u["by_branch"][0]["n"] == 3 and "식품" in u["by_branch"][0]["label"]
+    assert (u["candidates"], u["passed"], u["pass_pct"], u["avg_rounds"]) == (16, 8, 50.0, 1.5)
+    assert u["reasons"][0] == {"label": "입력에 없는 수치", "n": 6, "pct": 75.0}
+    assert u["reasons"][1]["label"] == "판정엔진 미통과"
+    r = client.get("/admin/stats/quality/generation")
+    assert "서버를 다시 켜면 0부터" in r.text and "이후</b> 이 서버" in r.text
+    assert "후보 통과율" in r.text and "입력에 없는 수치" in r.text and "평균 탐색 라운드" in r.text
+    gen_usage.reset()
+
+
+def test_생성_처리부가_세_갈래를_모두_센다() -> None:
+    """🚨 생성 처리부에서 세는 줄이 빠지면 화면이 조용히 0 으로 보인다 — 소스와 맞댄다."""
+    import re  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    src = (Path(__file__).resolve().parents[1] / "app" / "routers" / "user.py").read_text(
+        encoding="utf-8"
+    )
+    for outcome in ("ok", "failed", "off"):
+        assert re.search(rf'gen_usage\.record\(\s*"{outcome}"', src), outcome
+
+
+def test_AI_광고_생성_요청과_광고_종류를_센다(client: TestClient) -> None:
+    import re  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    from app import gen_usage  # noqa: PLC0415
+
+    gen_usage.reset()
+    assert "아직 광고 만들기 요청이 없어요" in client.get("/admin/stats/quality/generation").text
+    for fmt in ("SNS 피드", "SNS 피드", "배너"):
+        gen_usage.record_compose(fmt)
+    r = client.get("/admin/stats/quality/generation")
+    u = r.context["usage"]
+    assert u["compose_total"] == 3
+    assert u["compose_by_format"][0] == {"label": "SNS 피드", "n": 2, "pct": 66.7}
+    assert "광고 만들기 요청" in r.text and "고른 광고 종류" in r.text
+    gen_usage.reset()
+    src = (Path(__file__).resolve().parents[1] / "app" / "routers" / "user.py").read_text(
+        encoding="utf-8"
+    )
+    assert re.search(r"gen_usage\.record_compose\(ad_format\)", src)  # 광고 생성 처리부가 센다

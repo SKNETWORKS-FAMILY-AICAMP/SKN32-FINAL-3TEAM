@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import enum
+from typing import Any
 
 from pydantic import BaseModel, Field, computed_field, model_validator
 
@@ -483,6 +484,9 @@ class SubstBranch(BaseModel):
     criteria: str = Field(..., min_length=1)
     #: 🆕 2026-10-20 (D-348 보충 32 결정 3) 두 겹 안내 — 승인된 것만 · 없으면 None(표시 전용)
     guide: Guide | None = None
+    #: 🆕 2026-10-21 (D-348 보충 39 결정 6 · 2 단계) **어느 유형의 실증 질문인가** — 섞인 유형 문장은 유형마다 따로 묻는다(`app/graph.py` `_enc_mixed`).
+    #:    화면은 이 값을 답(`UserSubst.violation`)에 그대로 담아 보낸다 · 비면 유형을 가리지 않은 질문(사전 쪽 · 종전 판)
+    violation: Violation | None = None
 
     @model_validator(mode="after")
     def _not_patent_or_award(self) -> SubstBranch:
@@ -632,6 +636,9 @@ class UserSubst(BaseModel):
     text: str = Field(..., min_length=1)
     #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · 예 = 자료 있음 · 아니오 = 자료 없음 · 해당없음 = 실증이 필요한 주장이 아니다(종전 `has_evidence: bool`)
     answer: Answer
+    #: 🆕 2026-10-21 (D-348 보충 39 결정 6 · 2 단계) **어느 주장(유형)의 자료인가** — 질문의 `SubstBranch.violation` 을 그대로 담는다.
+    #:    🔴 비면 그 문장의 **첫 실증형 유형**의 답으로 읽는다(1 단계 · 보충 39 결정 5 — 유형을 담지 않는 종전 화면이 깨지지 않게)
+    violation: Violation | None = None
 
 
 class SentenceJudgment(BaseModel):
@@ -667,8 +674,56 @@ class SentenceJudgment(BaseModel):
     #: 🆕 2026-10-16 (D-348 보충 3 결정 4) — 이 문장의 판정이 **사용자가 확인한 사실**로 정해졌다(출처 · 책임). 있으면 확정이고 사실 확인 분기는 없다
     #: 🔄 2026-10-16 (보충 4 「이어 묻기」) — 답한 사실이 여럿일 수 있다(특허 · 인증 …) · 하나에 답했고 조건이 남았으면 조건부 보류에도 실린다
     user_facts: list[UserFact] = Field(default_factory=list)
-    #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 이 문장의 판정이 **사용자가 답한 실증 여부**로 정해졌다(출처 · 책임). 있으면 확정이다
-    user_subst: UserSubst | None = None
+    #: 🆕 2026-10-16 (D-348 보충 4 결정 3) — 이 문장의 판정이 **사용자가 답한 실증 여부**로 정해졌다(출처 · 책임)
+    #: 🔄 2026-10-21 (D-348 보충 39 결정 6 · 2 단계 · 팀장 (나)) — **답이 여럿일 수 있다**(섞인 유형 · 유형마다 하나) · 이 목록이 정본이다.
+    #:    종전 칸 `user_subst` 는 이 목록의 첫 답을 보이는 **계산 칸**이다(아래 · 지금 화면 · 저장이 그대로 읽는다) — 입력에 `user_subst` 가 오면
+    #:    목록으로 옮긴다(`_user_subst_in` · 종전 응답 · 저장 JSON · 종전 호출)
+    user_substs: list[UserSubst] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _user_subst_in(cls, data: Any) -> Any:
+        # 🆕 2026-10-21 (보충 39 결정 6) 종전 칸 `user_subst` 로 들어온 답을 목록으로 — 계산 칸은 입력에서 무시되므로(pydantic) 여기서 옮기지 않으면
+        #    답이 **조용히 사라진다**(D-220). 둘이 함께 오고 어긋나면 거부한다 — 어느 쪽이 맞는지 정하지 않는다
+        if not isinstance(data, dict) or "user_subst" not in data:
+            return data
+        data = dict(data)
+        one = data.pop("user_subst")
+        if one is None:
+            return data
+        many = data.get("user_substs") or []
+        if not many:
+            data["user_substs"] = [one]
+            return data
+        first = many[0]
+        same = (first.model_dump() if isinstance(first, BaseModel) else first) == (
+            one.model_dump() if isinstance(one, BaseModel) else one
+        )
+        if not same:
+            raise ValueError(
+                "user_subst 가 user_substs 의 첫 답과 다르다 — 정본은 목록이다 (보충 39 결정 6)"
+            )
+        return data
+
+    def model_copy(
+        self, *, update: dict[str, Any] | None = None, deep: bool = False
+    ) -> SentenceJudgment:  # type: ignore[override]
+        """🆕 2026-10-21 (인계 10-21 클론A §2 · 보충 39 결정 6) 계산 칸 `user_subst` 를 `update` 로 바꾸려 하면 거부한다.
+
+        ⛔ pydantic 의 `model_copy(update=…)` 는 검증을 건너뛰고 계산 칸 이름은 그냥 버린다 — 답을 바꾼 줄 알았는데 **조용히 그대로**다(D-220).
+           옮겨 주지 않고 막는다 — 정본은 목록 하나다(D-99) · 답을 바꿀 때는 `user_substs` 를 쓴다. 생성자 · JSON 입력은 `_user_subst_in` 이 옮긴다(종전 저장 JSON).
+        """
+        if update and "user_subst" in update:
+            raise ValueError(
+                "user_subst 는 계산 칸이다 — model_copy 로 바꾸지 않는다 · 답을 바꿀 때는 user_substs (보충 39 결정 6)"
+            )
+        return super().model_copy(update=update, deep=deep)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def user_subst(self) -> UserSubst | None:
+        """🔄 2026-10-21 (D-348 보충 39 결정 6 (나)) 실증 답 목록의 첫 답 — 계산 칸(지금 화면 · 저장 · 평가가 읽는다) · 답이 없으면 None."""
+        return self.user_substs[0] if self.user_substs else None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

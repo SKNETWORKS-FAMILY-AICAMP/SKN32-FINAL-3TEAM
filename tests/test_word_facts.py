@@ -3,7 +3,8 @@
 지키는 것
   ① 표는 「불충분」 기준을 넘은 두 종류만 연다 · 문안은 정본 §20 과 글자가 같다
   ② 인코더 쪽 거짓 · 과장 문장에 그 사실을 묻는다 · 사실만 주장한 문장은 「예」로 닫히고(R0) · 성능 꼴이 있으면 실증이 이어진다
-  ③ 다른 유형의 근거가 함께 선 문장 · 열지 않은 종류(수상 등)에는 묻지 않는다
+  ③ 열지 않은 종류(수상 등)에는 묻지 않는다 · 🔄 2026-10-21 (D-348 보충 39 결정 5) 다른 유형이 함께 선 문장에는 **거짓 · 과장의 질문으로** 묻고
+     「예」여도 남은 유형이 풀리지 않으면 R0 이 아니다(종전 「묻지 않는다」 — 「예」가 다른 유형까지 풀지 않게 막던 자리를 합치기 규칙이 맡는다)
 """
 
 from __future__ import annotations
@@ -97,7 +98,7 @@ def test_성능_꼴이_있으면_실증이_이어진다() -> None:
     assert got is not None and got.verdict is Verdict.hold and got.substantiation is not None
 
 
-def test_묻지_않는_문장() -> None:
+def test_섞인_문장과_열지_않은_종류() -> None:
     mixed = _enc(
         "HACCP 인증 제품",
         [
@@ -110,8 +111,12 @@ def test_묻지_않는_문장() -> None:
         ],
     )
     got = _run(mixed)
-    assert got is None or got.fact_check is None or got.fact_check.kind is not FactKind.인증, (
-        "다른 유형이 함께 섰다"
+    assert (
+        got is not None and got.fact_check is not None and got.fact_check.kind is FactKind.인증
+    ), "섞인 문장도 거짓 · 과장의 사실을 묻는다(보충 39 결정 5)"
+    yes = _run(mixed, [UserFact(text="HACCP 인증 제품", kind=FactKind.인증, answer=Answer.예)])
+    assert yes is not None and yes.verdict is Verdict.hold, (
+        "식품 축 기만은 물을 질문이 없어 남는다 — R0 이 아니다(D-340 결정 6)"
     )
     award = _run(_enc("대한민국 브랜드 대상 수상"))
     assert award is None or award.fact_check is None, "열지 않은 종류(수상)"

@@ -1,4 +1,8 @@
-"""D-348 supplement 31: selected product reaches the core; selection never writes history."""
+"""D-348 supplement 31: selected product reaches the core.
+
+🔄 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2 · 보충 34 결정 4) — 비회원은 적지 않는다(D-307) · 회원은 고른 품목의 판정과
+   고른 뒤 답한 판정을 **새 행**으로 적는다(`save_review` · 앞 기록을 지우지 않는다). 게이트로 올렸다 — 이력은 출처 · 책임이 남는 자리다.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +18,8 @@ from app import premise as pm
 from app.contracts import JudgeResponse, Premise
 from app.db import get_session
 from app.routers import user
+
+pytestmark = pytest.mark.gate
 
 
 @pytest.fixture
@@ -31,7 +37,14 @@ def flow(monkeypatch):
 
     monkeypatch.setattr(user, "_core_judge", judge)
     monkeypatch.setattr(user, "current_user", lambda *_: None)
-    monkeypatch.setattr(user.judgment_store, "save_review", lambda *args: state.saved.append(args))
+    # 실제 `save_review` 처럼 비회원(`user is None`)이면 아무것도 적지 않는다 — 회원이면 (사용자, 판정들)을 남긴다
+    monkeypatch.setattr(
+        user.judgment_store,
+        "save_review",
+        lambda session, member, results: (
+            state.saved.append((member, list(results))) if member is not None else None
+        ),
+    )
     app = FastAPI()
     app.include_router(user.router)
     app.dependency_overrides[get_session] = lambda: SimpleNamespace()
@@ -179,5 +192,34 @@ def test_answer_uses_selected_product_or_no_category(flow, premise):
     product = flow.calls[1][1]
     assert product.category == (pm.PREMISE_CATEGORY[Premise(premise)] if premise else None)
     assert product.substs[0].text == flow.baseline.sentences[0].text
-    if premise:
-        assert not flow.saved
+    assert not flow.saved  # 비회원
+
+
+def _member_session():
+    yield SimpleNamespace()
+
+
+def test_member_pick_saves_selected_judgment_as_new_row(flow, monkeypatch):
+    member = SimpleNamespace(id="m")
+    monkeypatch.setattr(user, "current_user", lambda *_: member)
+    monkeypatch.setattr(user, "get_session", _member_session)
+    response = post(flow, "pick:1:화장품")
+    assert response.status_code == 200
+    assert len(flow.saved) == 1 and flow.saved[0][0] is member
+    assert flow.saved[0][1] == [flow.conditional], "고른 품목의 판정을 그대로 적는다(새 행)"
+
+
+def test_member_answer_after_pick_is_saved(flow, monkeypatch):
+    member = SimpleNamespace(id="m")
+    monkeypatch.setattr(user, "current_user", lambda *_: member)
+    sid = flow.baseline.sentences[0].sent_id
+    response = post(
+        flow,
+        "all",
+        [("target", f"1:{sid}"), ("answer", "subst:yes"), ("premise", "화장품")],
+        path="/u/review/answer",
+    )
+    assert response.status_code == 200
+    assert len(flow.saved) == 1 and flow.saved[0][0] is member, (
+        "고른 뒤 답한 판정도 적는다(보충 34 결정 4 · 종전 ksr 판은 적지 않았다)"
+    )

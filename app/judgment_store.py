@@ -134,6 +134,9 @@ def _judgment_row(
     if evidence is not None and s.user_subst is not None:
         # 🆕 2026-10-16 (D-348 보충 4 결정 3) — 사용자가 답한 실증 여부 · 출처(책임)를 남긴다
         evidence["user_subst"] = s.user_subst.model_dump(mode="json")
+        # 🆕 2026-10-21 (D-348 보충 39 결정 6 · 2 단계) 섞인 유형은 실증 답이 유형마다 하나씩 — 목록 전부를 남긴다(정본 `user_substs`) ·
+        #    `user_subst` 는 그 첫 답(종전 칸 · 이력 화면이 읽는다 · 계약의 계산 칸과 같은 값)
+        evidence["user_substs"] = [u.model_dump(mode="json") for u in s.user_substs]
     if evidence is not None and enc_refs:
         # 🆕 2026-10-16 (D-348 보충 2 결정 8) — 인코더 하한의 근거 호 · DB 가 `ck_judgment_encoder_has_basis` 로 댄다
         evidence["encoder_refs"] = enc_refs
@@ -237,49 +240,6 @@ def save_review(
         return FAILED
 
 
-#: 같은 문구의 앞 기록을 찾는 범위 — 고르기 전 판정(보류)을 품목 판정으로 바꿔 적을 때만 쓴다
-_REPLACE_WINDOW_HOURS = 6
-_REPLACE_SCAN = 20
-
-
-def replace_review(session: Session, user: UserAccount | None, res: JudgeResponse) -> str | None:
-    """🆕 2026-10-20 (lse · 사용자 결정) — 품목을 고른 재판정을 이력에 적는다. 같은 문구의 **가장 최근 기록을 바꿔 적는다.**
-
-    ⛔ 종전(D-348 보충 31 · 「이력 정책 대기」)에는 고른 뒤 판정을 적지 않아, 이력 · 홈 통계에는 **고르기 전의 보류만** 남았다
-       (사용자가 화면에서 본 「위반 확정」이 홈의 「위법 소지 발견」에 0건으로 보였다 · 10-20 시연 계정 46줄 전부 보류).
-    ★ 찾는 기록: 이 사람의 문서 중 최근 `_REPLACE_WINDOW_HOURS` 시간 안 · 문장 글자 묶음이 같은 가장 최근 하나.
-      찾으면 그 문서를 지우고(문장 · 판정은 FK CASCADE) 새로 적는다 — 한 문구에 기록이 두 벌 남지 않는다. 못 찾으면 새로 적는다.
-    🚨 실패해도 판정 응답은 나간다 — 상태 글자만 돌려준다(`save_review` 와 같다).
-    """
-    if user is None or not should_store(user):
-        return None if user is None else OFF
-    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
-
-    from sqlalchemy import delete, select  # noqa: PLC0415
-
-    try:
-        want = sorted(s.text for s in _judged(res))
-        if want:
-            since = datetime.now(UTC) - timedelta(hours=_REPLACE_WINDOW_HOURS)
-            recent = session.scalars(
-                select(WorkDoc.id)
-                .where(WorkDoc.owner_id == user.id, WorkDoc.created_at >= since)
-                .order_by(WorkDoc.created_at.desc())
-                .limit(_REPLACE_SCAN)
-            ).all()
-            for doc_id in recent:
-                raws = sorted(
-                    session.scalars(
-                        select(CopySentence.raw).where(CopySentence.doc_id == doc_id)
-                    ).all()
-                )
-                if raws == want:
-                    session.execute(delete(WorkDoc).where(WorkDoc.id == doc_id))
-                    session.flush()
-                    break
-    except Exception as e:  # noqa: BLE001 — 저장 실패가 판정 응답을 막지 않는다
-        with contextlib.suppress(Exception):
-            session.rollback()
-        _log.warning("판정 바꿔 적기 실패 — %s", type(e).__name__)
-        return FAILED
-    return save_review(session, user, [res])
+#: ⛔ 2026-10-22 (ksr 흡수 · D-348 보충 36 결정 2) `replace_review`(lse 10-20 — 품목을 고른 재판정을 적을 때 같은 문구의 앞 기록을
+#:    지우고 다시 적음)는 걷었다 — 이력은 새 행 + 출처로 쌓고(`save_review`), 홈 통계 · 반복 지적은 같은 문구의 최신 판정만 센다
+#:    (`app/routers/user.py` `_latest_judgments`). 지우는 길을 다시 두지 않는다(D-192)
