@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko" data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+.grid{display:grid;grid-template-columns:208px repeat(4,1fr);column-gap:22px}
+/* input */
+.input{grid-row:1;border:1.5px solid var(--line);border-radius:14px;background:var(--surface-2);
+  padding:20px 18px 18px;position:relative;align-self:start}
+.input .cap{font-size:15px;color:var(--faint);margin-bottom:12px;display:flex;gap:6px;align-items:center}
+.input .t{font-size:22px;font-weight:700;line-height:1.35;letter-spacing:-0.02em}
+.input .caret{display:inline-block;width:2px;height:22px;background:var(--accent);vertical-align:-3px;margin-left:3px}
+.input .s{margin-top:10px;font-size:19px;color:var(--muted);line-height:1.45}
+/* track */
+.track{grid-column:2/6;grid-row:1;position:relative;display:grid;grid-template-columns:repeat(4,1fr);column-gap:22px}
+.rail{position:absolute;left:-22px;right:calc(25% - 22px*0.75 - 18px + 4px);top:17px;height:2px;background:var(--grad);border-radius:1px}
+.rail::before{content:"";position:absolute;left:-8px;top:-4px;width:10px;height:10px;border-radius:50%;background:#542DB8}
+.step{position:relative}
+.num{width:36px;height:36px;border-radius:50%;background:var(--bg);border:2px solid var(--accent);
+  color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;position:relative;z-index:1}
+.step h3{margin-top:18px;font-size:24px;font-weight:700;letter-spacing:-0.02em}
+.step p{margin-top:8px;text-wrap:balance;font-size:19px;line-height:1.5;color:var(--muted)}
+.step ul{list-style:none;margin-top:10px}
+.step li{font-size:19px;line-height:1.5;color:var(--muted);padding-left:14px;position:relative}
+.step li::before{content:"";position:absolute;left:0;top:13px;width:5px;height:5px;border-radius:50%;background:var(--faint)}
+.box{margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.box b{display:block;font-size:19px;font-weight:600;color:var(--text)}
+.box span{display:block;font-size:17px;color:var(--muted);margin-top:2px}
+.box + .box{margin-top:8px}
+.who{margin-top:10px;font-size:17px;color:var(--faint)}
+.laws{margin-top:10px;display:flex;flex-direction:column;gap:8px;position:relative;padding-left:16px}
+.laws::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:8px;border:1.5px solid var(--line);border-right:0;border-radius:6px 0 0 6px}
+.law{font-size:19px;font-weight:600;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 14px;width:max-content}
+.loop{margin-top:14px;display:flex;align-items:center;gap:8px;font-size:19px;font-weight:600;color:var(--accent)}
+/* outcomes */
+.outs{grid-column:1/6;margin:44px -24px 0;padding:28px 24px 26px;border-radius:16px;background:var(--surface);border:1px solid var(--line-soft);display:grid;grid-template-columns:208px repeat(4,1fr);column-gap:22px}
+.olabel{font-size:22px;font-weight:700;letter-spacing:-0.02em;line-height:1.35;padding-top:3px}
+.olabel span{display:block;font-size:19px;color:var(--muted);font-weight:400;margin-top:6px;line-height:1.45}
+.out{}
+.out p{margin-top:12px;text-wrap:balance;font-size:19px;line-height:1.5;color:var(--muted)}
+.out p b{color:var(--text);font-weight:600}
+/* footer */
+.foot{margin-top:28px;padding-left:2px;display:flex;gap:36px}
+.foot div{display:flex;align-items:center;gap:10px;font-size:19px;color:var(--text)}
+.foot svg{flex:none;color:var(--accent)}
+</style></head>
+<body><div class="frame">
+  <div class="head"><div class="bar"></div><h1>문구 한 줄이 판정되기까지</h1></div>
+
+  <div class="grid">
+    <div class="input">
+      <div class="cap">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2.5" width="10" height="11.5" rx="2"/><path d="M6 2.5h4v2H6z"/></svg>
+        입력</div>
+      <div class="t">광고 문구 붙여넣기<span class="caret"></span></div>
+      <div class="s">품목을 몰라도 됩니다</div>
+    </div>
+
+    <div class="track">
+      <div class="rail"></div>
+      <div class="step">
+        <div class="num">1</div>
+        <h3>읽기</h3>
+        <ul><li>문장 분할</li><li>품목에 맞는 법 고르기</li><li>조문 검색<br>(어휘 + 벡터)</li></ul>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>잡기</h3>
+        <div class="who">두 판단 주체</div>
+        <div class="box"><b>금지 표현 사전</b><span>4,342</span></div>
+        <div class="box"><b>판정 인코더</b><span>KcBERT · 위반 유형 9</span></div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>법별 판정</h3>
+        <div class="who">병렬</div>
+        <div class="laws"><div class="law">표시광고법</div><div class="law">식품표시광고법</div><div class="law">화장품법</div></div>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <h3>묻기</h3>
+        <p>문구 밖 사실(품목 · 인정 · 실증)은 질문으로</p>
+        <div class="loop">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 10a6 6 0 1 1-2-4.47"/><path d="M14.5 2.5v3.2h-3.2"/></svg>
+          답하면 다시 판정</div>
+      </div>
+    </div>
+
+    <div class="outs">
+    <div class="olabel">네 가지 결론</div>
+    <div class="out"><span class="chip caution">보류</span><p>무엇이 더 필요한지 알려 준다</p></div>
+    <div class="out"><span class="chip violation">합법화 불가 증명서</span><p>고쳐도 안 되는 이유와 근거</p></div>
+    <div class="out"><span class="chip directive">지시 + 고쳐 쓰기</span><p>자체 sLLM 이 고친 문장은 <b>처음부터 다시 판정</b></p></div>
+    <div class="out"><span class="chip pass">통과</span><p>모든 문장이 확정 · 위험도 R0 일 때만</p></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l4 4v12H5z"/><path d="M13 3v4h4M8 11h6M8 14.5h6"/></svg>모든 판정에 근거 조문과 제재 기준 위험도가 붙습니다</div>
+    <div><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9.5" width="14" height="9.5" rx="2"/><path d="M7.5 9.5V7a3.5 3.5 0 0 1 7 0v2.5"/></svg>판정 경로는 외부 API 를 부르지 않습니다</div>
+  </div>
+</div></body></html>
