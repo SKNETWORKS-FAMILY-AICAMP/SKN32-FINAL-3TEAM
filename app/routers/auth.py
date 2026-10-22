@@ -71,9 +71,9 @@ def admin_sign_in(
         return "bad", None
 
     auth.throttle.clear(initials)
-    if auth.needs_rehash(stored):
-        # 🚨 파라미터가 올라가면 **로그인 성공 시점에 조용히 재해시**한다 — 사용자는 모른다
-        _store_hash(initials, auth.hash_password(password))
+    # 🔄 2026-10-22 (psj) — 마지막 로그인은 **성공할 때마다** 적는다. 종전에는 재해시 때만 적혀
+    #    관리자 화면 「마지막 로그인」이 실제와 달랐다(확인요청 10-22 · 오한빈 16).
+    _store_hash(initials, auth.hash_password(password) if auth.needs_rehash(stored) else None)
     auth.audit("login", initials, ok=True)
 
     resp = RedirectResponse("/admin/", status_code=303)
@@ -112,7 +112,9 @@ async def login(request: Request) -> RedirectResponse:
 def logout(request: Request) -> RedirectResponse:
     """로그아웃. 🚨 쿠키를 지우는 것으로 끝난다 — 세션은 서버에 없다."""
     auth.audit("logout", auth.read_session(request.cookies.get(auth.SESSION_COOKIE)), ok=True)
-    resp = RedirectResponse("/login", status_code=303)
+    # 🔄 2026-10-22 (psj) — 랜딩으로 보낸다 — 사용자 로그아웃(`/u/logout` → `/u/landing`)과 같은 자리.
+    #    다시 들어올 때는 랜딩의 로그인에서 `이니셜@admin.copylane` 으로(D-350) · `/login` 은 그대로 남는다
+    resp = RedirectResponse("/u/landing", status_code=303)
     resp.delete_cookie(auth.SESSION_COOKIE, path="/")
     return resp
 
@@ -144,14 +146,18 @@ def account_active(initials: str) -> bool:
     return _lookup(initials) is not None
 
 
-def _store_hash(initials: str, pw_hash: str) -> None:
-    """재해시 결과를 쓴다. 🚨 실패해도 로그인은 성공시킨다 — 다음 로그인에 다시 시도한다."""
+def _store_hash(initials: str, pw_hash: str | None) -> None:
+    """로그인 성공 기록 — 마지막 로그인 시각을 적고, 재해시가 필요했으면(`pw_hash`) 해시도 바꾼다.
+
+    🚨 실패해도 로그인은 성공시킨다 — 다음 로그인에 다시 시도한다.
+    """
     try:
         from app.db import pg_connect  # noqa: PLC0415 — 대기 상한 한 곳 (D-99)
 
         with pg_connect() as conn, conn.cursor() as cur:
             cur.execute(
-                "UPDATE app_account SET pw_hash = %s, last_login_at = now() WHERE initials = %s",
+                "UPDATE app_account SET pw_hash = coalesce(%s, pw_hash), last_login_at = now() "
+                "WHERE initials = %s",
                 (pw_hash, initials),
             )
     except Exception:  # noqa: BLE001, S110 — 재해시 실패가 로그인을 막지 않는다

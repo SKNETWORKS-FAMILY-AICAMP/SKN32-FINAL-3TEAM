@@ -548,3 +548,18 @@ def test_AI_광고_생성_요청과_광고_종류를_센다(client: TestClient) 
         encoding="utf-8"
     )
     assert re.search(r"gen_usage\.record_compose\(ad_format\)", src)  # 광고 생성 처리부가 센다
+
+
+def test_회원_목록은_줄을_눌러도_상세로_간다(client: TestClient) -> None:
+    """🆕 10-22 — 줄 클릭(`admin-row-link.js`)은 덧붙임 · 이름 링크는 그대로 남는다(스크립트 없이도 · 키보드로도)."""
+    r = client.get("/admin/members")
+    assert f'<tr data-row-href="/admin/members/{MID}">' in r.text
+    assert f'<a href="/admin/members/{MID}">' in r.text
+    assert "/static/admin-row-link.js" in r.text
+
+
+def test_문의_목록도_줄을_눌러도_상세로_간다(client: TestClient) -> None:
+    r = client.get("/admin/cs/tickets")
+    assert f'<tr data-row-href="/admin/cs/tickets/{TID}">' in r.text
+    assert f'href="/admin/cs/tickets/{TID}"' in r.text  # 티켓 번호 링크는 그대로
+    assert "/static/admin-row-link.js" in r.text
