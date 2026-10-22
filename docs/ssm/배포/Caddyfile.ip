@@ -15,7 +15,8 @@
 
     reverse_proxy 127.0.0.1:8000
 
-    @closed path /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/*
+    # 🔄 2026-10-22 — /dev(개발 현황판 · 10-20 에 / 에서 옮김)도 닫는다 — 내부 API · 미구현 목록이 보였다(서비스시험 SEC-01-6)
+    @closed path /docs /docs/* /redoc /redoc/* /openapi.json /fixtures /fixtures/* /dev
     respond @closed 404
 
     # 관리자 화면 — 기본은 닫힘. 🚨 이 줄은 손대지 않는다: deploy_server.sh caddy 가 demo 에디션이고
