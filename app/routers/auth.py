@@ -112,7 +112,9 @@ async def login(request: Request) -> RedirectResponse:
 def logout(request: Request) -> RedirectResponse:
     """로그아웃. 🚨 쿠키를 지우는 것으로 끝난다 — 세션은 서버에 없다."""
     auth.audit("logout", auth.read_session(request.cookies.get(auth.SESSION_COOKIE)), ok=True)
-    resp = RedirectResponse("/login", status_code=303)
+    # 🔄 2026-10-22 (psj) — 랜딩으로 보낸다 — 사용자 로그아웃(`/u/logout` → `/u/landing`)과 같은 자리.
+    #    다시 들어올 때는 랜딩의 로그인에서 `이니셜@admin.copylane` 으로(D-350) · `/login` 은 그대로 남는다
+    resp = RedirectResponse("/u/landing", status_code=303)
     resp.delete_cookie(auth.SESSION_COOKIE, path="/")
     return resp
 

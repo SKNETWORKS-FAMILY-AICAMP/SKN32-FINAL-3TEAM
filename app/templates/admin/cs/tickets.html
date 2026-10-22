@@ -7,7 +7,13 @@
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "admin/_base.html" %}
 {% block title %}문의 관리 | CopyLane 관리자{% endblock %}
-{% block admin_css %}{% endblock %}
+{% block admin_css %}
+<script src="/static/admin-row-link.js?v=1" defer></script>
+<style>
+.admin-shell tr[data-row-href] { cursor: pointer; }
+.admin-shell tr[data-row-href]:hover td { background: var(--a-surface2); }
+</style>
+{% endblock %}
 {% block admin_content %}
 
 <h1>문의 관리</h1>
@@ -60,7 +66,7 @@
     <th>접수일</th><th>티켓 ID</th><th>문의자</th><th>유형</th><th>제목</th><th>우선순위</th><th>상태</th><th>담당자</th>
   </tr>
   {% for r in rows %}
-  <tr>
+  <tr data-row-href="/admin/cs/tickets/{{ r.id }}">
     <td class="nowrap">{{ r.at }}</td>
     <td><a href="/admin/cs/tickets/{{ r.id }}">{{ r.no }}</a></td>
     <td>{{ r.who }}</td>
