@@ -202,3 +202,16 @@ def test_관리자_로그아웃은_랜딩으로_간다(client: TestClient) -> No
     r = client.post("/logout", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/u/landing"
     assert auth.SESSION_COOKIE in r.headers.get("set-cookie", "")
+
+
+def test_관리자_로그인_성공마다_마지막_로그인을_적는다(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🆕 10-22 — 종전에는 재해시 때만 `last_login_at` 이 적혔다(관리자 화면 「마지막 로그인」이 실제와 다름)."""
+    calls: list = []
+    monkeypatch.setattr(auth_router_mod, "_store_hash", lambda ini, h: calls.append((ini, h)))
+    monkeypatch.setattr(auth, "needs_rehash", lambda stored: False)
+    assert _login(client, "psj@admin.copylane").status_code == 303
+    assert calls == [("psj", None)]  # 재해시 없이도 적는다 · 해시는 그대로(None)
+    _login(client, "psj@admin.copylane", "wrong password!!")
+    assert len(calls) == 1  # 실패는 적지 않는다
