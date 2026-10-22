@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko" data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+.groups{display:grid;grid-template-columns:1fr 1fr;column-gap:56px;row-gap:44px}
+.g h2{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:14px;border-bottom:2px solid var(--text)}
+.g h2 b{font-size:24px;font-weight:700;letter-spacing:-0.02em}
+.g h2 small{font-size:16px;font-weight:500;color:var(--faint)}
+.row{display:grid;grid-template-columns:190px 1fr;column-gap:20px;align-items:center;padding:16px 0;border-bottom:1px solid var(--line-soft)}
+.v{font-size:40px;font-weight:700;letter-spacing:-0.03em;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.v u{text-decoration:none;font-size:22px;font-weight:600;color:var(--muted);margin-left:4px;letter-spacing:0}
+.v.word{font-size:30px;letter-spacing:-0.01em}
+.d{font-size:19px;line-height:1.45;color:var(--muted);text-wrap:balance}
+.d strong{color:var(--text);font-weight:600}
+.ci{margin-top:10px;position:relative;height:18px}
+.ci .axis{position:absolute;left:0;right:0;top:8px;height:2px;background:var(--line-soft);border-radius:1px}
+.ci .rng{position:absolute;top:6px;height:6px;border-radius:3px;background:var(--accent);opacity:.35}
+.ci .pt{position:absolute;top:3px;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
+.ci .tk{position:absolute;top:2px;width:1.5px;height:14px;background:var(--line)}
+.ci-l{display:flex;justify-content:space-between;font-size:14px;color:var(--faint);margin-top:2px}
+.lock{color:var(--text);display:flex}
+.foot{margin-top:36px;font-size:16px;line-height:1.6;color:var(--faint);text-wrap:balance}
+</style></head>
+<body><div class="frame">
+  <div class="head"><div class="bar"></div><h1>숫자로 본 CopyLane</h1></div>
+
+  <div class="groups">
+    <section class="g">
+      <h2><b>근거</b></h2>
+      <div class="row"><div class="v">6,686</div><div class="d">조문 청크 (4개 법)</div></div>
+      <div class="row"><div class="v">4,342</div><div class="d">금지 표현 사전</div></div>
+      <div class="row"><div class="v">8,383<u>문장</u></div><div class="d">라벨 데이터</div></div>
+      <div class="row"><div class="v">70</div><div class="d">데이터 원천 등록부<br>미등록 원천은 수집 차단</div></div>
+    </section>
+
+    <section class="g">
+      <h2><b>판정</b><small>dev 평가셋 · 2026-10-21</small></h2>
+      <div class="row"><div class="v">1.5<u>%</u></div>
+        <div class="d">확정한 판정의 오류율<br>95 % 구간 0.3 – 8.1 %
+          <div class="ci">
+            <div class="axis"></div>
+            <div class="tk" style="left:0"></div><div class="tk" style="left:calc(100% - 1.5px)"></div>
+            <div class="rng" style="left:3%;width:78%"></div>
+            <div class="pt" style="left:15%"></div>
+          </div>
+          <div class="ci-l"><span>0 %</span><span>10 %</span></div>
+        </div></div>
+      <div class="row"><div class="v">8.4<u>%</u></div><div class="d">확정 범위<br><strong>「확신할 때만 확정」</strong></div></div>
+      <div class="row"><div class="v">90.7<u>%</u></div><div class="d">실증 질문에 답한 뒤 정답 유형 도달</div></div>
+    </section>
+
+    <section class="g">
+      <h2><b>운영</b><small>2026-10-22</small></h2>
+      <div class="row"><div class="v word">HTTPS</div><div class="d"><strong>copylane.site</strong> 운영</div></div>
+      <div class="row"><div class="v">0.60<u>초</u></div><div class="d">검수 응답 (p50 · 외부)</div></div>
+      <div class="row"><div class="v">80<u>/ 84</u></div><div class="d">서비스 테스트 통과<br>서비스 장애 0</div></div>
+      <div class="row"><div class="v">0</div><div class="d">부하 시험 실패 요청</div></div>
+    </section>
+
+    <section class="g">
+      <h2><b>엔지니어링</b></h2>
+      <div class="row"><div class="v">3,429</div><div class="d">자동 시험 통과</div></div>
+      <div class="row"><div class="v">350<u>건</u></div><div class="d">설계 결정 기록</div></div>
+      <div class="row"><div class="v lock"><svg width="40" height="44" viewBox="0 0 40 44" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="19" width="30" height="21" rx="4"/><path d="M12 19v-6a8 8 0 0 1 16 0v6"/><path d="M20 27.5v5"/></svg></div><div class="d">모델은 판 지문으로 잠금</div></div>
+    </section>
+  </div>
+
+  <p class="foot">판정 지표는 개발 평가셋(dev · 조건부 1,147 행 · 2026-10-21) 기준이며 판을 고른 세트라 낙관값입니다. 봉인 평가셋은 아직 열지 않았습니다. 운영 수치 2026-10-22.</p>
+</div></body></html>
