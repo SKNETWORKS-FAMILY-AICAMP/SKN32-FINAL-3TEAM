@@ -756,3 +756,32 @@ def test_카피_생성_잇기도_비회원에게는_로그인_안내다() -> Non
         "/u/generate/from-review", data={"premise": "식품", "text": "x", "rest": ""}
     )
     assert r.status_code == 401
+
+
+def test_고친_문구_재판정에_앞서_한_답을_넘긴다(wired, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
+    """🆕 2026-10-22 (보충 34 결정 1 · 보충 37 결정 5 집행) — `_rejudge` 세 자리가 앞선 답(`facts` · `substs`)을 받는다.
+
+    답은 원문 문장 글자에 묶여 넘어간다 — 고친 문장에는 글자가 같은 문장에만 든다(`_rejudge` 독스트링).
+    """
+    from app.routers import user as user_router  # noqa: PLC0415
+
+    seen: list = []
+
+    def judge(text: str, product=None):  # noqa: ANN001, ANN202
+        seen.append((text, product))
+        return wired.judge_out[text]
+
+    monkeypatch.setattr(user_router, "_core_judge", judge)
+    _post([("text", ORIGINAL), ("target", "1:s1"), ("prev", "s1|subst:yes")])
+    body = [p for t, p in seen if t == BODY]
+    assert body and body[-1] is not None, "🔴 고친 문구 재판정에 제품 정보가 없다"
+    assert [(u.text, u.answer.value) for u in body[-1].substs] == [(ORIGINAL, "예")], (
+        "🔴 앞서 한 실증 답을 고친 문구 재판정에 넘기지 않았다"
+    )
+
+
+def test_앞선_답이_없으면_재판정에_빈_답이다(wired) -> None:  # noqa: ANN001
+    _go()
+    assert wired.products == [None, None], (
+        "답도 품목도 없으면 제품 정보 없이 재판정한다(종전과 같음)"
+    )

@@ -249,7 +249,7 @@ def test_고쳐_쓰기도_앞서_한_답으로_다시_판정한_결과를_쓴다
 
     seen = []
 
-    def fake_rewrite(sent, *_a):  # noqa: ANN001, ANN202
+    def fake_rewrite(sent, *_a, **_k):  # noqa: ANN001, ANN202 — 🔄 10-22 앞선 답(facts · substs)을 키워드로 받는다
         seen.append(sent)
         return {"no_violation": True}
 

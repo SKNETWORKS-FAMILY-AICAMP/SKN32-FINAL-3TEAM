@@ -119,6 +119,8 @@
     }
   }
   pairs().forEach(init);refresh();
+  // 2026-10-22 (V-08) — user_wait.js 가 pageshow 에서 제출 버튼을 모두 풀어 빈 칸 버튼도 눌렸다 — 그 뒤에 잠금을 다시 맞춘다.
+  window.addEventListener('pageshow',()=>{setTimeout(refresh,0);});
   root.addEventListener('input',event=>{
     if(!event.target.matches('textarea[name=text]'))return;
     const input=event.target,pair=input.closest('[data-review-pair]');
@@ -150,6 +152,12 @@
       const input=button.closest('[data-review-pair]').querySelector('textarea');
       input.value='건조한 계절에 쓰기 좋은 보습 로션, 산뜻하게 발라보세요.';
       input.dispatchEvent(new Event('input',{bubbles:true}));input.focus({preventScroll:true});return;
+    }
+    // 2026-10-22 (V-08) — 빈 칸 검수는 서버로 보내지 않고 서버와 같은 안내를 이 자리에 띄운다(응답의 안내는 카드 밖이라 버려졌다).
+    const blankPair=event.target===form&&button?.matches('.rv-pair-judge')&&!button.closest('[data-review-pair]')?.querySelector('textarea[name=text]')?.value.trim();
+    const blankAll=event.target===form&&button?.value==='all'&&!areas().some(input=>input.value.trim());
+    if(blankPair||blankAll){
+      event.preventDefault();event.stopImmediatePropagation();showMessage('검수할 문구를 입력해주세요');return;
     }
     if(event.target!==form){
       const pair=event.target.closest('[data-review-pair]');

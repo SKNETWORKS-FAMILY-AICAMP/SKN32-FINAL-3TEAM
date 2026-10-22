@@ -895,12 +895,20 @@ def _note_conflict(note: str | None, premise: str, category: str | None) -> bool
 
 
 def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
-    sentence, premise: str = "", category: str | None = None, sllm_category: str | None = None
+    sentence,
+    premise: str = "",
+    category: str | None = None,
+    sllm_category: str | None = None,
+    *,
+    facts: list | None = None,
+    substs: list | None = None,
 ) -> dict:
     """지적 문장 하나를 고쳐 쓰고 재판정한다. 화면용 dict(`rw`).
 
     `category` 는 원문 판정의 품목(재판정에 넘긴다) · `sllm_category` 는 생성 서버에 넘기는 품목이다 — 둘이 다른 것은
     분기를 고른 문구뿐이다(원문 판정의 품목은 비어 있고, 고른 전제가 품목을 말한다 · `_sllm_category`).
+    🔄 2026-10-22 (ksr · 보충 34 결정 1 · 보충 37 결정 5 집행) — 앞서 한 답(`facts` · `substs`)을 세 재판정(다듬은 안 · 담백한 안 ·
+       조건부 후보)에 모두 넘긴다. 답은 문장 글자에 묶여 있어 글자가 같은 문장에만 든다(`_rejudge`).
     """
     from app.routers import sllm_client  # noqa: PLC0415
 
@@ -925,7 +933,9 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
         #    ⛔ 「합법화 불가」는 코드의 불가 사유만 말한다 (D-59 · D-10) — 같은 카드에서 코드(실증 B)와 말이 갈리던 자리
         rw["infeasible_note"] = reasons.REWRITE_INFEASIBLE_TEXT
     if out and out["outcome"] == "candidate" and out.get("rewrite"):
-        rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise, category)
+        rw["rejudge"] = _rejudge(
+            out["rewrite"]["body"], premise, category, facts=facts, substs=substs
+        )
         # 🆕 2026-10-10 — 후보의 조건이 이 전제에서 채워질 수 없으면 후보로 내지 않는다(재판정이 못 거르는 자리)
         rw["note_conflict"] = _note_conflict(
             out["rewrite"].get("mandatory_note"), premise, category
@@ -934,7 +944,7 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
         #    다듬은 안이 재판정에서 떨어지면 담백한 안을 후보로 올린다 · 둘 다 살면 담백한 안을 두 번째 안으로 보인다
         plain = out.get("plain")
         if plain:
-            p_rejudge = _rejudge(plain, premise, category)
+            p_rejudge = _rejudge(plain, premise, category, facts=facts, substs=substs)
             if p_rejudge.get("status") != "rejected":
                 # 🆕 2026-10-14 — 다듬은 안에만 AI 추정 유형이 남으면 담백한 안을 올린다(사전 탈락과 같은 자리 · 더 보수적인 쪽)
                 enc_only_polished = bool(rw["rejudge"].get("enc_types")) and not p_rejudge.get(
@@ -950,7 +960,7 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     #    사람이 제품의 인정 · 심사 여부를 확인한 뒤 쓰는 문장이다
     cond = out.get("conditional") if out and out["outcome"] == "hold" else None
     if cond and not _note_conflict(cond.get("mandatory_note"), premise, category):
-        c_rejudge = _rejudge(cond["body"], premise, category)
+        c_rejudge = _rejudge(cond["body"], premise, category, facts=facts, substs=substs)
         if c_rejudge.get("status") != "rejected":
             rw["conditional"] = {**cond, "rejudge": c_rejudge}
     return rw
@@ -1006,6 +1016,8 @@ async def review_rewrite(request: Request) -> HTMLResponse:
             ),
         )
     pairs = _previous_answers(form)
+    facts: list = []
+    substs: list = []
     if source is not None and (premise or pairs):
         from app.contracts import ProductContext  # noqa: PLC0415
 
@@ -1044,7 +1056,13 @@ async def review_rewrite(request: Request) -> HTMLResponse:
     else:
         cat = item["result"].category.value if item["result"].category else None
         rw = await run_in_threadpool(
-            _rewrite_sentence, sent, premise, cat, _sllm_category(cat, premise)
+            _rewrite_sentence,
+            sent,
+            premise,
+            cat,
+            _sllm_category(cat, premise),
+            facts=facts,
+            substs=substs,
         )
     # 열쇠는 (전제, 문장) — 분기 없는 문구의 전제는 빈 글자다. 다른 분기의 같은 문장에 붙지 않는다
     item["rewrites"][premise] = {want_sid: rw}
