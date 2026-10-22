@@ -90,7 +90,7 @@ body:has([data-review-pairs]) { height:auto; overflow:auto; }
 .user-shell .rv-pair-result .rv-concl::before { content:""; width:8px; height:8px; flex-shrink:0; border-radius:50%; background:var(--tc); }
 .user-shell .rv-pair-result .rv-sent :is(.rv-risk,.rv-encpill) { padding:5px 9px; border:1px solid var(--u-line); border-radius:8px; background:var(--u-surface); color:var(--u-clay); font-size:14px; font-weight:600; }
 .user-shell .rv-pair-result .rv-sent .rv-text { margin:0; padding:0; border:0; background:none; font-size:20px; font-weight:700; line-height:1.7; letter-spacing:-.02em; }
-.user-shell .rv-pair-result .rv-text::before,.user-shell .rv-pair-result .rv-text::after { content:none; }
+.user-shell .rv-pair-result .rv-text::before,.user-shell .rv-pair-result .rv-text::after { content:'"'; color:inherit; }
 .user-shell .rv-pair-result .rv-hit { padding:0 1px; border-radius:3px; color:inherit; background:color-mix(in srgb,var(--tc) 10%,transparent); text-decoration:underline wavy var(--tc); text-decoration-thickness:1.5px; text-underline-offset:5px; }
 .user-shell .rv-pair-result .rv-sent>.cl-result-overview { margin:0 0 2px; }
 .user-shell .rv-pair-result .rv-sent :is(.rv-types,.rv-why,.rv-todo) { margin:0; font-size:15px; line-height:1.75; }
