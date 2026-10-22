@@ -1,0 +1,53 @@
+/* Inquiry body on the left, existing processing controls on the right. */
+.admin-shell .admin-main:has(.ticket-detail) { max-width:1200px; }
+.ticket-detail .td-back { display:inline-block; margin-bottom:22px; color:var(--a-clay); text-decoration:none; font-size:14px; }
+.ticket-detail .td-back:hover { color:var(--a-signal-ink); text-decoration:underline; }
+.ticket-detail .td-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:26px; }
+.admin-shell .admin-main .ticket-detail h1 { margin:0; overflow-wrap:anywhere; }
+.ticket-detail .td-ticket-number { color:var(--a-clay); font-size:12px; margin:9px 0 0; }
+.admin-shell .admin-main .ticket-detail .td-form { display:grid; grid-template-columns:minmax(0,1.9fr) minmax(280px,1fr); align-items:start; gap:24px; margin:0; padding:0; background:none; border:0; max-width:none; }
+.ticket-detail .td-body,.ticket-detail .td-side { display:grid; gap:20px; min-width:0; }
+.admin-shell .admin-main .ticket-detail .td-card { min-width:0; padding:24px; background:var(--a-surface); border:1px solid var(--a-line); border-radius:12px; box-shadow:var(--a-shadow); }
+.admin-shell .admin-main .ticket-detail .td-card h2 { font-size:16px; margin:0; }
+.ticket-detail .td-card-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:22px; }
+.ticket-detail .td-badge { display:inline-flex; align-items:center; padding:4px 9px; border-radius:5px; background:var(--a-surface2); color:var(--a-clay); font-size:12px; line-height:1.5; }
+.ticket-detail .td-status-closed { color:var(--a-good); background:color-mix(in srgb,var(--a-good) 10%,var(--a-surface)); }
+.ticket-detail .td-status-open,.ticket-detail .td-priority-urgent { color:var(--a-danger); background:color-mix(in srgb,var(--a-danger) 10%,var(--a-surface)); }
+.ticket-detail .td-status-in_progress { color:var(--a-signal-ink); background:var(--a-signal-soft); }
+.ticket-detail .td-priority-normal { color:var(--a-warn); background:var(--a-warn-bg); }
+.ticket-detail .td-author { display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+.ticket-detail .td-avatar { width:34px; height:34px; flex-shrink:0; display:grid; place-items:center; border-radius:50%; background:var(--a-signal-soft); color:var(--a-signal-ink); font-weight:600; }
+.ticket-detail .td-author b { font-size:14px; font-weight:500; overflow-wrap:anywhere; }
+.ticket-detail .td-author div>span { display:block; margin-top:2px; color:var(--a-clay); font-size:12px; overflow-wrap:anywhere; }
+.admin-shell .admin-main .ticket-detail .td-message { margin:0; padding:0; border:0; border-radius:0; background:none; color:var(--a-ink); font:inherit; font-size:14px; line-height:1.9; white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; max-width:none; }
+.ticket-detail .td-request .td-message { min-height:110px; }
+.admin-shell .admin-main .ticket-detail .td-reply { border-top:3px solid var(--a-signal); }
+.ticket-detail .td-muted { color:var(--a-clay); font-size:13px; margin:0; }
+.admin-shell .admin-main .ticket-detail .td-reply-editor { margin:22px 0 0; padding:0; border:0; }
+.ticket-detail .td-reply-editor>summary { color:var(--a-signal-ink); cursor:pointer; font-size:13px; width:fit-content; }
+.ticket-detail .td-reply-editor[open]>summary { margin-bottom:18px; }
+.admin-shell .admin-main .ticket-detail label { display:block; font-size:13px; color:var(--a-clay); margin:0 0 8px; }
+.ticket-detail label small { display:block; margin-top:4px; font-size:11px; font-weight:400; }
+.admin-shell .admin-main .ticket-detail :is(select,textarea) { display:block; width:100%; box-sizing:border-box; padding:10px 12px; font:inherit; font-size:14px; color:var(--a-ink); background:var(--a-surface); border:1px solid var(--a-line); border-radius:7px; }
+.ticket-detail textarea { min-height:180px; resize:vertical; line-height:1.8; }
+.ticket-detail :is(select,textarea):focus-visible { outline:2px solid var(--a-signal); outline-offset:2px; }
+.ticket-detail .td-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px; }
+.ticket-detail .td-fields>div { min-width:0; }
+.ticket-detail .td-save-note { margin:20px 0 10px; color:var(--a-clay); font-size:12px; }
+.admin-shell .admin-main .ticket-detail .td-save { width:100%; padding:11px 16px; border:0; border-radius:7px; color:#fff; background:var(--a-signal); font-size:14px; font-weight:600; cursor:pointer; }
+.ticket-detail .td-save:hover { filter:brightness(.94); box-shadow:0 3px 10px color-mix(in srgb,var(--a-signal) 20%,transparent); }
+.ticket-detail .td-retention-note { margin:12px 0 0; font-size:12px; color:var(--a-clay); line-height:1.7; }
+.ticket-detail .td-timeline { margin:24px 0 0 4px; border-left:2px solid var(--a-line); padding-left:18px; display:grid; gap:24px; }
+.ticket-detail .td-timeline>div { position:relative; }
+.ticket-detail .td-timeline>div::before { content:""; position:absolute; left:-23px; top:6px; width:8px; height:8px; background:var(--a-signal); border-radius:50%; }
+.ticket-detail dt { font-size:13px; font-weight:500; }
+.ticket-detail dd { margin:5px 0 0; color:var(--a-clay); font-size:12px; overflow-wrap:anywhere; }
+.ticket-detail .td-expiry { margin:24px 0 0; padding-top:18px; border-top:1px solid var(--a-line); }
+.ticket-detail .td-saved { margin:0 0 20px; color:var(--a-good); }
+@media(max-width:850px) {
+  .admin-shell .admin-main .ticket-detail .td-form { grid-template-columns:1fr; }
+}
+@media(max-width:480px) {
+  .admin-shell .admin-main .ticket-detail .td-card { padding:20px 16px; }
+  .ticket-detail .td-fields { grid-template-columns:1fr; }
+}

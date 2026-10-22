@@ -7,7 +7,13 @@
   ✅ `governor` 로그인을 지나야 뜬다 (D-66 · D-213).
 #}{% extends "admin/_base.html" %}
 {% block title %}문의 관리 | CopyLane 관리자{% endblock %}
-{% block admin_css %}{% endblock %}
+{% block admin_css %}
+<script src="/static/admin-row-link.js?v=1" defer></script>
+<style>
+.admin-shell tr[data-row-href] { cursor: pointer; }
+.admin-shell tr[data-row-href]:hover td { background: var(--a-surface2); }
+</style>
+{% endblock %}
 {% block admin_content %}
 
 <h1>문의 관리</h1>
@@ -60,7 +66,7 @@
     <th>접수일</th><th>티켓 ID</th><th>문의자</th><th>유형</th><th>제목</th><th>우선순위</th><th>상태</th><th>담당자</th>
   </tr>
   {% for r in rows %}
-  <tr>
+  <tr data-row-href="/admin/cs/tickets/{{ r.id }}">
     <td class="nowrap">{{ r.at }}</td>
     <td><a href="/admin/cs/tickets/{{ r.id }}">{{ r.no }}</a></td>
     <td>{{ r.who }}</td>
@@ -84,8 +90,9 @@
 {% endif %}
 
 <style>
-.admin-shell .cs-kpis { display: flex; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
-.admin-shell .cs-kpi { display: flex; flex-direction: column; gap: .2rem; padding: .6rem 1rem; border: 1px solid var(--a-line); border-radius: .6rem; background: var(--a-surface2); min-width: 6rem; }
+.admin-shell .admin-main .cs-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,160px)); justify-content:start; gap:14px; margin:20px 0 28px; padding:0; background:transparent; }
+.admin-shell .admin-main .cs-kpis .cs-kpi { display:flex; flex-direction:column; justify-content:center; gap:6px; min-width:0; min-height:90px; padding:14px 18px; border:1px solid var(--a-line); border-radius:10px; background:var(--a-surface); box-shadow:var(--a-shadow); overflow-wrap:anywhere; }
+@media(max-width:600px) { .admin-shell .admin-main .cs-kpis { grid-template-columns:repeat(2,minmax(0,160px)); gap:12px; } }
 .admin-shell .cs-kpi span { font-size: .8rem; color: var(--a-clay); }
 .admin-shell .cs-kpi b { font-size: 1.3rem; }
 .admin-shell td.nowrap { white-space: nowrap; }
