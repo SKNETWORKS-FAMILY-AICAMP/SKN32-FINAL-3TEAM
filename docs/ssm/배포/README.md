@@ -59,6 +59,7 @@ bash /tmp/deploy_server.sh main-switch
 | [`pack_store.py`](pack_store.py) | 내 PC (저장소 루트) | 서버로 올릴 파생물 묶음 만들기 (절차서 §4-1) |
 | [`load_test.py`](load_test.py) | 서버 · 저장소 사본 (시스템 python3) | 부하 시험 (절차서 #29) |
 | [`perf_report.py`](perf_report.py) | 서버 · 저장소 사본 | **성능 시험 한 번에 + 보고서 자동 작성** → `~/perf_reports/성능시험_<MMDD_HHMM>.md` |
+| 🆕 [`test_evidence.py`](test_evidence.py) | 서버 · 저장소 사본 (시스템 python3) | **서비스 테스트 증빙** — 시험 시간대 Caddy 접속 기록 · 앱 로그 · 오류 로그 표를 집계해 계획서 항목 ID 별 근거를 붙임 → `~/test_evidence/서비스테스트증빙_<MMDD_HHMM>.md` |
 
 자주 쓰는 단계
 
@@ -69,6 +70,7 @@ bash ~/deploy_server.sh caddy       # ~/.copylane-deploy 를 바꾼 뒤 (허용 
 DEPLOY_REF=<main 의 커밋 해시> bash ~/deploy_server.sh update   # 되돌리기 — main 에 들어 있는 커밋만 된다
 cat ~/deploy_history.log            # 언제 어느 커밋을 올렸는지
 python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/perf_report.py --quick   # 성능 시험
+python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/test_evidence.py --since "2026-10-22 14:00" --until "2026-10-22 16:00" --marker <마커>   # 서비스 테스트 증빙
 ```
 
 ## 기록
@@ -79,6 +81,7 @@ python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/perf_report.py --quick   # 성능 �
 | [`작업기록_1019.md`](작업기록_1019.md) | 10-19 데이터 적재 · 인코더 D4-20 · API 점검 표 · sLLM · 카피 생성 |
 | [`작업기록_1022.md`](작업기록_1022.md) | 10-22 서버 main 전환 · 도메인 · HTTPS · 보안 점검 · 스크립트 수정(Caddy 확인 대기 · `.env` 권한) |
 | [`성능시험/`](성능시험/) | `perf_report.py` 가 만든 성능 시험 보고서 모음 |
+| [`서비스테스트/`](서비스테스트/) | `test_evidence.py` 가 만든 서비스 테스트 증빙 · 캡처 |
 
 작업한 날마다 `작업기록_<MMDD>.md` 를 하나 더한다 (절차서 §8 다섯 칸).
 
@@ -97,7 +100,7 @@ python3 ~/SKN32-FINAL-3TEAM/docs/ssm/배포/perf_report.py --quick   # 성능 �
 | `AWS_배포작업보고_4차_데이터적재·인코더·API점검_소성민_20261019.docx` | 팀 공유 보고 — 적재 · 인코더 D4-20 · API 오류 및 응답시간 |
 | `AWS_배포작업보고_5차_sLLM·카피생성·보안_소성민_20261019.docx` | 팀 공유 보고 — sLLM · 카피 생성 · **보안 주의사항** |
 | `AWS_배포작업보고_6차_main일원화·도메인·HTTPS·보안점검_소성민_20261022.docx` | 팀 공유 보고 — 서버 main 전환 · 도메인 · HTTPS · 실서버 보안 점검 · 스크립트 수정 |
-| `서비스테스트_계획서_소성민_20261022.docx` | 서비스 테스트 계획 — 0단계(main 반영 · 기준판 고정) · 사용자 · 관리자 · 오류 · 버그 · 성능 · 보안 재확인 · 결함 관리 |
+| `서비스테스트_계획서_소성민_20261022.docx` | 서비스 테스트 계획 (로그 증빙판) — 0단계(main 반영 · 기준판 고정) · 항목별 로그 증빙 · 사용자 · 관리자 · 오류 · 버그 · 보안 재확인 · 결함 관리 |
 | `성능테스트_보고서_소성민_20261022.docx` | 성능 테스트 — 검수 · 고쳐 쓰기 · 섞인 부하 · 밖(HTTPS) 측정 · 486건 실패 0 · 처리량 한계 초당 약 3.2건 |
 
 > 3차 · 4차 보고서의 「ssm → main 전환 방법」은 10-21 의 `main-switch` 로 대체됐다.
