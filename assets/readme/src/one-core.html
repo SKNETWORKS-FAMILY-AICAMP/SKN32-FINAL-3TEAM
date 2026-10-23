@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko" data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+.entries{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.entry{border:1.5px solid var(--line);border-radius:14px;padding:22px 22px 22px;background:var(--surface-2)}
+.entry .k{display:flex;align-items:center;gap:12px}
+.letter{width:32px;height:32px;border-radius:8px;border:1.5px solid var(--line);color:var(--muted);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;flex:none}
+.entry h3{font-size:24px;font-weight:700;letter-spacing:-0.02em}
+.entry p{margin-top:14px;font-size:19px;line-height:1.5;color:var(--muted);text-wrap:balance}
+.tags{display:flex;gap:6px;margin-top:12px}
+.tag{font-size:16px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:3px 9px;background:var(--surface)}
+.join{display:block;width:1088px;height:76px}
+.join path{fill:none;stroke:var(--faint);stroke-opacity:.7;stroke-width:1.5}
+.join .tip{fill:var(--faint);fill-opacity:.9;stroke:none}
+.core{width:760px;margin:0 auto;border-radius:20px;padding:2px;background:var(--grad)}
+.core .in{border-radius:18px;background:var(--bg);padding:30px 36px 32px;text-align:center}
+.core h2{font-size:32px;font-weight:700;letter-spacing:-0.025em}
+.core .sub{margin-top:8px;font-size:20px;color:var(--muted)}
+.nodes{margin-top:26px;display:flex;align-items:center;justify-content:center}
+.node{font-size:18px;font-weight:600;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 15px;white-space:nowrap}
+.wire{width:18px;height:1.5px;background:var(--line)}
+.claims{width:760px;margin:36px auto 0;display:grid;gap:14px}
+.claim{display:flex;gap:14px;align-items:flex-start;font-size:20px;line-height:1.45}
+.claim svg{flex:none;color:var(--accent);margin-top:2px}
+.claim.main{font-size:23px;font-weight:700;letter-spacing:-0.02em}
+.claim.sub{color:var(--muted)}
+</style></head>
+<body><div class="frame">
+  <div class="head"><div class="bar"></div><h1>입구는 셋, 판정 기준은 하나</h1></div>
+
+  <div class="entries">
+    <div class="entry">
+      <div class="k"><div class="letter">A</div><h3>문구 검수</h3></div>
+      <p>쓴 문구를 문장마다 판정<br>근거 조문</p>
+    </div>
+    <div class="entry">
+      <div class="k"><div class="letter">B</div><h3>카피 생성</h3></div>
+      <p>GPT 가 후보를 쓰고<br>코드 필터 · 판정 코어가 거른다</p>
+      <div class="tags"><span class="tag">A안</span><span class="tag">B안</span><span class="tag">C안</span></div>
+    </div>
+    <div class="entry">
+      <div class="k"><div class="letter">C</div><h3>AI 광고 생성</h3></div>
+      <p>지면 편집기<br>칸마다 다시 판정</p>
+    </div>
+  </div>
+
+  <svg class="join" viewBox="0 0 1088 76">
+    <path d="M178 0 C178 40 544 26 544 58"/>
+    <path d="M544 0 V58"/>
+    <path d="M910 0 C910 40 544 26 544 58"/>
+    <path class="tip" d="M538 58 L550 58 L544 68 Z"/>
+  </svg>
+
+  <div class="core"><div class="in">
+    <h2>판정 코어 하나</h2>
+    <div class="sub">LangGraph 판정 그래프</div>
+    <div class="nodes">
+      <span class="node">사전</span><span class="wire"></span>
+      <span class="node">인코더</span><span class="wire"></span>
+      <span class="node">법별 노드</span><span class="wire"></span>
+      <span class="node">위험도</span><span class="wire"></span>
+      <span class="node">분기</span>
+    </div>
+  </div></div>
+
+  <div class="claims">
+    <div class="claim main">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0zM8 21h8"/></svg>
+      어디로 들어와도 같은 법 · 같은 기준 · 같은 근거</div>
+    <div class="claim sub">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M17.5 3.5v3.8h-3.8"/></svg>
+      생성된 문구도 판정을 다시 통과해야 화면에 나온다</div>
+  </div>
+</div></body></html>
