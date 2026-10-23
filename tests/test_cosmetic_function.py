@@ -121,7 +121,8 @@ def test_인코더_쪽_판정에서_기능성_정형_문장은_C_대신_질문�
     got = g._encoder_side(_held(TEXT, [_b(F, COS2), _b(D, COS1)]), [], [], _span(TEXT))
     assert got is not None and got.verdict is Verdict.hold
     assert got.fact_check is not None and got.fact_check.kind is FactKind.기능성_심사
-    drug = "아토피 피부염 치료 크림"
+    #: 🔄 2026-10-24 (D-348 보충 41 결정 2 ②) — 답 없는 확정은 지금 주장 가드를 지나는 문장만 · 명사구(「… 치료 크림」)는 관문에서 막힌다
+    drug = "아토피 피부염을 치료하는 크림입니다"
     c = g._encoder_side(_held(drug, [_b(D, COS1)]), [], [], _span(drug))
     assert c is not None and c.verdict is Verdict.confirmed, "기준 — 의약품 오인 문장은 C 확정"
 

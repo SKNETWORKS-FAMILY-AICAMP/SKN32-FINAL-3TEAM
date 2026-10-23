@@ -1995,6 +1995,14 @@ def encoder_cap(text: str) -> Risk | None:
     return ENCODER_RECORD_MAX if claimscope.claim_guard(text) else None
 
 
+def encoder_floor_cap(text: str) -> Risk | None:
+    """하한 자리의 높이 — `encoder_cap` 과 같되 **하한 가드**(`claimscope.floor_guard`)로 거른다 (🆕 2026-10-24 · D-348 보충 41 결정 2 ①).
+
+    🔴 `_with_encoder_risk`(보류 문장의 인코더 하한)만 부른다 — 전제가 답인 확정 경로 · 답 없는 확정 관문(`_absolute_types`)은 지금 주장 가드다(결정 2 ②).
+    """
+    return ENCODER_RECORD_MAX if claimscope.floor_guard(text) else None
+
+
 def _with_encoder_risk(
     j: SentenceJudgment, premise: Premise, rows: list[dict[str, Any]]
 ) -> SentenceJudgment:
@@ -2005,7 +2013,8 @@ def _with_encoder_risk(
     """
     if j.verdict is not Verdict.hold or j.not_claim or j.risk.encoder is not None:
         return j
-    cap = encoder_cap(j.text)
+    # 🔄 2026-10-24 (D-348 보충 41 결정 2 ①) 하한 가드 — 지금 주장 가드보다 넓다(관형형 · 동작 · 상태 명사 끝) · 확정은 `_absolute_types` 가 막는다
+    cap = encoder_floor_cap(j.text)
     if cap is None:
         return j
     basis = _encoder_basis(rows, premise, j.encoder_candidates)
@@ -3641,6 +3650,11 @@ def _absolute_types(s: SentenceJudgment) -> set[Violation]:
       ③ 화장품 전제의 의약품 오인 — 인증 · 실증 꼴(보충 25) · 기능성 정형 낱말(결정 1)뿐이면 C 로 세우지 않는다
     🔴 모두 확정만 막는다 — 보류로 남고 후보 · 하한 · 다른 칸 분기는 그대로다(보충 1 비대칭).
     """
+    # 🆕 2026-10-24 (D-348 보충 41 결정 2 ②) — **지금 주장 가드를 지나는 문장만** 답 없는 확정 · 품목 선택 필요로 간다.
+    #    하한은 하한 가드(더 넓음)로 붙으므로 근거(`encoder_basis`)가 있어도 여기서 다시 본다 — 안 보면 넓힌 하한이 그대로 확정으로 번진다
+    #    (흉내 실측 dev 확정 위반 72 → 86 · 원장 10-23(B) ④). 거짓이면 보류로 남고 질문 · 하한은 그대로다(보충 1 비대칭).
+    if not claimscope.claim_guard(s.text):
+        return set()
     out: set[Violation] = set()
     tau = _absolute_tau()
     for v in {b.violation for b in s.risk.encoder_basis if b.moved_from is None}:

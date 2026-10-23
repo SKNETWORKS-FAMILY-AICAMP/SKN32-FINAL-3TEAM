@@ -51,9 +51,13 @@ from typing import Any
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+from app import (  # noqa: E402 — reasons: 조합 판정 칸은 한 곳 (D-344 ⑨)
+    claimscope,  # noqa: E402 — 하한 가드 목록 지문(D-348 보충 41)
+    model_lock,
+    reasons,
+)
 from app import encoder as enc  # noqa: E402
 from app import graph as g  # noqa: E402
-from app import model_lock, reasons  # noqa: E402 — reasons: 조합 판정 칸은 한 곳 (D-344 ⑨)
 from app import premise as pm  # noqa: E402
 from app.contracts import (  # noqa: E402
     Answer,
@@ -1704,6 +1708,8 @@ def main(argv: list[str] | None = None) -> int:
         stamp |= {"answers": f"예 · 아니오 · {ANSWER_ROUNDS}회"}
     stamp |= {"split": "dev" if a.dev else "test_sentence", "resplit": resplit.VERSION} | dev_stamp
     stamp |= use_encoder(a.encoder, adopted_only=a.sealed)
+    #: 🆕 2026-10-24 (D-348 보충 41 결정 3) 하한 가드의 동작 · 상태 명사 목록 — 없으면 None(하한 가드 = 지금 주장 가드)
+    stamp |= {"claim_nouns": claimscope.nouns_stamp()}
     if a.no_enc_filter:
         g.disable_encoder_filter()
         stamp |= {"encoder_filter": "끔"}

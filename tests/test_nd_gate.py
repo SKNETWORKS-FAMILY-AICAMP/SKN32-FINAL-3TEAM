@@ -110,6 +110,8 @@ EXEMPT = {
     "preprocess/hf_api.py": "원천 하나의 추출기",
     # 🆕 2026-10-14 — 고시 「건강기능식품의 기준 및 규격」 전문에서 원료 · 기능성 문구만 뽑는다(공개 고시 문언 · 광고 문구 없음)
     "preprocess/hf_gosi.py": "원천 하나의 추출기",
+    # 🆕 2026-10-24 (D-348 보충 41 결정 3) — 동작 · 상태 명사 목록. 골든(ND 는 golden 이 막았다)과 공개 법령 청크를 **읽기만** 하고 낱말 · 횟수만 쓴다
+    "preprocess/claim_nouns.py": "낱말 목록(동작 · 상태 명사 · 횟수 — 문구를 싣지 않는다)",
     "preprocess/law_norm.py": "법령 [별표] 파서 — 원문 노드",
     "preprocess/evasion_scan.py": "센다 — 데이터셋을 쓰지 않는다",
     "preprocess/ftc_reason_probe.py": "표본 탐침 — 의결서(ftc) 전용",
