@@ -1,0 +1,36 @@
+/* CopyLane README graphics — shared tokens
+   Light/dark neutrals follow GitHub's canvas so the PNG sits natively in a README. */
+:root{
+  --bg:#FFFFFF; --surface:#F6F8FA; --surface-2:#FFFFFF;
+  --line:#D1D9E0; --line-soft:#E6EAEF;
+  --text:#1F2328; --muted:#59636E; --faint:#6E7781;
+  --accent:#5B2EBC;           /* brand/violet — icons, small emphasis */
+  --accent-soft:rgba(91,46,188,.08);
+  --grad:linear-gradient(90deg,#542DB8 0%,#FC649E 100%);
+  --pass:#0F7B4F; --caution:#B45309; --violation:#B42318; --directive:#5B2EBC;
+}
+html[data-theme="dark"]{
+  --bg:#0D1117; --surface:#151B23; --surface-2:#0D1117;
+  --line:#3D444D; --line-soft:#262C36;
+  --text:#F0F6FC; --muted:#9198A1; --faint:#7D8590;
+  --accent:#A58BF2;           /* lilac lifted for dark (brand README: reverse = +L) */
+  --accent-soft:rgba(134,103,232,.14);
+  --directive:#6E44D4;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg)}
+body{width:1200px;font-family:"Pretendard",sans-serif;color:var(--text);
+  font-feature-settings:"tnum" 1;-webkit-font-smoothing:antialiased;word-break:keep-all}
+.frame{width:1200px;padding:60px 56px 52px;background:var(--bg)}
+.head{margin-bottom:40px}
+.head .bar{width:44px;height:4px;border-radius:2px;background:var(--grad);margin-bottom:20px}
+.head h1{font-size:36px;font-weight:700;letter-spacing:-0.025em;line-height:1.25}
+.mono{font-family:"DejaVu Sans Mono",monospace;font-size:.88em;letter-spacing:-0.02em}
+.chip{display:inline-flex;align-items:center;height:32px;padding:0 13px;border-radius:8px;
+  color:#fff;font-size:19px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap}
+.chip.pass{background:var(--pass)} .chip.caution{background:var(--caution)}
+.chip.violation{background:var(--violation)} .chip.directive{background:var(--directive)}
+/* README 에서는 마크다운 제목(##)이 위에 있으므로 그림 속 제목은 숨긴다 — 그라디언트 서명 막대만 남김 */
+.head{margin-bottom:28px}
+.head h1{display:none}
+.head .bar{margin-bottom:0}
