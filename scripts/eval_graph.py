@@ -840,7 +840,7 @@ def wrong_kind(r: dict, p: dict) -> str:
         return f"위반 아님({c})"
     if c == "M":
         return "모호(M)"
-    if untyped_violation(r):
+    if untyped_violation(r) and not scored(r):
         return "유형 없는 위반"
     if c in ("A", "B", "C"):
         return (

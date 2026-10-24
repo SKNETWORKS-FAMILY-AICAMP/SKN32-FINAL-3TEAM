@@ -562,6 +562,8 @@ def _core_judge(text: str, product=None):  # noqa: ANN001, ANN202
        종전에는 501 만 받아서 503 이 화면 오류로 떨어졌다. 🚨 화면 문구는 화면 담당(ksr · lse)이 정한다 — 지금은
        `engine_pending` 그림을 같이 쓰고 `engine_down` 을 넘겨 둔다.
     """
+    from pydantic import ValidationError  # noqa: PLC0415
+
     from app.api import judge as core_judge  # noqa: PLC0415 — 순환 import 를 피한다
     from app.contracts import JudgeRequest  # noqa: PLC0415
 
@@ -570,6 +572,10 @@ def _core_judge(text: str, product=None):  # noqa: ANN001, ANN202
         req = (
             JudgeRequest(text=text) if product is None else JudgeRequest(text=text, product=product)
         )
+    except ValidationError as e:
+        # 🆕 2026-10-25 (D-348 보충 44 결정 5) 요청 꼴이 틀렸다(품목 없는 답 등) — 422 · 삼키지 않는다(D-162)
+        raise HTTPException(422, "요청을 받지 못했다 — 품목을 고른 뒤 답해 주세요") from e
+    try:
         return "ok", core_judge(req)
     except HTTPException as e:
         # 🔄 2026-10-01 (ksr 병합) — ksr 도 같은 503 수정을 따로 했다(`in (501, 503)` → pending). ohb 의 갈래를 둔다:

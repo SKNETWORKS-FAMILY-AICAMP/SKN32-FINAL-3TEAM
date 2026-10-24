@@ -134,14 +134,37 @@ def _held(text: str, v: Violation) -> SentenceJudgment:
     )
 
 
-def test_명사구_주장에_하한이_서고_답_없는_확정은_서지_않는다(nouns: frozenset[str]) -> None:
-    text = "욕창 예방"
+def test_명사구_주장에_하한이_서고_질병_치료_신호가_없으면_답_없는_확정은_서지_않는다(
+    nouns: frozenset[str],
+) -> None:
+    # 🔄 2026-10-25 (D-348 보충 44 결정 1) 관문 = 지금 가드 ∨ (하한 가드 ∧ 질병 · 치료 신호) · 신호 없는 명사구는 종전대로 막힌다
+    text = "피부 장벽 강화"
     s = g._with_encoder_risk(_held(text, Violation.질병_예방치료_표방), Premise.식품, _rows())
     assert s.risk.encoder is Risk.R1, "하한 가드가 열었다"
     assert s.risk.encoder.level <= ENCODER_RECORD_MAX.level
     assert (s.verdict, s.hold_reason) == (Verdict.hold, HoldReason.low_conf), "판정은 그대로다"
+    assert not claimscope.disease_signal(text)
     assert g._absolute_types(s) == set(), (
-        "🔴 넓힌 하한으로 답 없는 확정 관문이 열렸다 (보충 41 결정 2 ② · 원장 10-23(B) ④)"
+        "🔴 질병 · 치료 신호 없는 명사구로 답 없는 확정 관문이 열렸다 (보충 44 결정 1 · 보충 41 결정 2 ②)"
+    )
+
+
+def test_질병_치료_신호가_있는_명사구는_확정_관문을_연다(nouns: frozenset[str]) -> None:
+    """🆕 2026-10-25 (D-348 보충 44 결정 1 (라)) — 「욕창 예방」(예방) · 「당뇨 걱정 없는」(질병명) · 시행령 [별표 1] 1.가 는 내용 기준이다."""
+    for text in ("욕창 예방", "당뇨 걱정 없는"):
+        assert not claimscope.claim_guard(text) and claimscope.confirm_gate(text), text
+        s = g._with_encoder_risk(_held(text, Violation.질병_예방치료_표방), Premise.식품, _rows())
+        assert Violation.질병_예방치료_표방 in g._absolute_types(s), text
+    assert not claimscope.confirm_gate("모발강화"), (
+        "질병 · 치료 신호 없는 화장품 낱말(원장 10-25(B) ① 의 적법 오탐)"
+    )
+
+
+def test_질병명_목록은_사전_빌드와_한_곳이다() -> None:
+    from preprocess import dictionary  # noqa: PLC0415
+
+    assert dictionary.DISEASE_NAMES is claimscope.DISEASE_NAMES, (
+        "🔴 질병명 목록이 두 벌이다 (D-99 · 보충 44 결정 1)"
     )
 
 

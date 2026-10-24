@@ -3650,10 +3650,11 @@ def _absolute_types(s: SentenceJudgment) -> set[Violation]:
       ③ 화장품 전제의 의약품 오인 — 인증 · 실증 꼴(보충 25) · 기능성 정형 낱말(결정 1)뿐이면 C 로 세우지 않는다
     🔴 모두 확정만 막는다 — 보류로 남고 후보 · 하한 · 다른 칸 분기는 그대로다(보충 1 비대칭).
     """
-    # 🆕 2026-10-24 (D-348 보충 41 결정 2 ②) — **지금 주장 가드를 지나는 문장만** 답 없는 확정 · 품목 선택 필요로 간다.
+    # 🆕 2026-10-24 (D-348 보충 41 결정 2 ②) — **관문 가드를 지나는 문장만** 답 없는 확정 · 품목 선택 필요로 간다.
     #    하한은 하한 가드(더 넓음)로 붙으므로 근거(`encoder_basis`)가 있어도 여기서 다시 본다 — 안 보면 넓힌 하한이 그대로 확정으로 번진다
     #    (흉내 실측 dev 확정 위반 72 → 86 · 원장 10-23(B) ④). 거짓이면 보류로 남고 질문 · 하한은 그대로다(보충 1 비대칭).
-    if not claimscope.claim_guard(s.text):
+    # 🔄 2026-10-25 (D-348 보충 44 결정 1 (라)) 관문 = 지금 가드 ∨ (하한 가드 ∧ 질병 · 치료 신호) — `claimscope.confirm_gate`
+    if not claimscope.confirm_gate(s.text):
         return set()
     out: set[Violation] = set()
     tau = _absolute_tau()

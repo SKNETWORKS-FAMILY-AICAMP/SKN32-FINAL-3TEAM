@@ -241,9 +241,12 @@ def test_틀린_확정의_묶음과_위반_아닌_문장의_확정() -> None:
     assert eg.wrong_kind({"조건": "D", "labels": []}, p) == "위반 아님(D)"
     assert eg.wrong_kind({"조건": "M", "labels": []}, p) == "모호(M)"
     assert (
-        eg.wrong_kind({"조건": "B", "labels": [], "근거": ["002015:제13조제1항제4호"]}, p)
+        eg.wrong_kind({"조건": "B", "labels": [], "근거": ["013094:제8조제1항제9호"]}, p)
         == "유형 없는 위반"
     )
+    assert eg.wrong_kind(
+        {"조건": "B", "labels": [], "근거": ["002015:제13조제1항제4호"]}, p
+    ).startswith("채점"), "화장품 13①4 는 채점한다 (보충 44 결정 4)"
     assert (
         eg.wrong_kind({"조건": "C", "labels": ["질병_예방치료_표방"]}, p)
         == "채점 · 전 문장 확정 · 유형 다름"

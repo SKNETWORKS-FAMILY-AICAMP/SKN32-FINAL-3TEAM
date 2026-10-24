@@ -582,7 +582,9 @@ def test_유형_없는_위반_행과_편입_대기_유형만_붙은_행은_채�
     """★ D-321 — 「유형이 없어 학습 · 채점에서 빠진다」(평가 131) · 편입 대기 유형은 게이트 · 발표 지표에 넣지 않는다."""
     from scripts.eval_rule import scored, truth_types, untyped_violation  # noqa: PLC0415
 
-    untyped = {"조건": "C", "labels": [], "근거": ["002015:제13조제1항제4호"]}
+    # 🔄 2026-10-25 (D-348 보충 44 결정 4) 화장품 13①4 는 보여 줄 유형(거짓 · 과장 · 기만)으로 채점한다 — 채점 밖 예는 보여 줄 유형이 없는 인용(식품 9호)
+    untyped = {"조건": "C", "labels": [], "근거": ["013094:제8조제1항제9호"]}
+    cosm4 = {"조건": "B", "labels": [], "근거": ["002015:제13조제1항제4호"]}
     pending = {"조건": "A", "labels": ["기능성화장품_오인"], "근거": ["002015:제13조제1항제2호"]}
     mixed = {
         "조건": "B",
@@ -592,6 +594,10 @@ def test_유형_없는_위반_행과_편입_대기_유형만_붙은_행은_채�
     lawful = {"조건": "L", "labels": [], "근거": []}
     cand = {"조건": "B", "labels": [], "근거": [], "근거_후보": [["002011:제3조제1항제1호"]]}
     assert untyped_violation(untyped) and not scored(untyped)
+    assert untyped_violation(cosm4) and scored(cosm4), "유형 없는 위반의 뜻은 그대로 · 채점은 한다"
+    assert truth_types(cosm4, {"소비자_기만"}) == {"소비자_기만"} and truth_types(
+        cosm4, {"의약품_오인"}
+    ) == {"거짓_과장"}
     assert untyped_violation(pending) and not scored(pending)
     assert scored(mixed) and truth_types(mixed, set()) == {"거짓_과장"}, (
         "편입 대기 유형은 정답에서 빠진다"

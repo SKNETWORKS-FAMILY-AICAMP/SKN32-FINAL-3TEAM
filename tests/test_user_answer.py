@@ -194,6 +194,19 @@ def test_앞서_한_답을_함께_보낸다(wired) -> None:  # noqa: ANN001
     assert [u.answer for u in p.substs] == [Answer.예], "같은 문장의 앞선 답은 새 답으로 바뀐다"
 
 
+def test_품목_없는_답은_계약이_받지_않는다() -> None:
+    """🆕 2026-10-25 (D-348 보충 44 결정 5) — 품목을 모르면 답을 받지 않는다(그래프가 품목 보류 기록에 답을 실으려다 멈췄다 · 원장 10-24(B) ④)."""
+    from pydantic import ValidationError  # noqa: PLC0415
+
+    from app.contracts import Category, JudgeRequest, ProductContext, UserSubst  # noqa: PLC0415
+
+    sub = UserSubst(text=TEXT, answer=Answer.예)
+    with pytest.raises(ValidationError, match="품목 없이 답"):
+        JudgeRequest(text=TEXT, product=ProductContext(substs=[sub]))
+    assert JudgeRequest(text=TEXT, product=ProductContext(category=Category.식품, substs=[sub]))
+    assert JudgeRequest(text=TEXT), "답이 없으면 품목이 없어도 받는다(첫 검수 · D-82)"
+
+
 @pytest.mark.parametrize("prev", ["s0|subst:no", "s0|subst:no:거짓_과장"])
 def test_같은_문장의_둘째_실증_답이_유형_없이_오면_422(wired, prev) -> None:  # noqa: ANN001
     """🆕 2026-10-24 (D-348 보충 42 결정 1) — 첫 유형의 답으로 잘못 읽히는 꼴이다 · 다시 판정해 유형을 찾지 않는다(D-220)."""
