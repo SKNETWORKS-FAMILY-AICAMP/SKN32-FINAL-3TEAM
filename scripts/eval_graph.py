@@ -1675,6 +1675,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(
             "🔴 --category-only 는 dev 조건부 전용 — 경로 동치 대조의 짝이다(D-348 보충 35 · 봉인 회차는 고른 전제로 잰다)"
         )
+    if a.answers and not (a.conditional or a.sealed):
+        # 🆕 2026-10-24 (보충 35 결정 2 · 보충 34 결정 2 · 보충 37 결정 2) 품목을 모르면 답하지 않는다 — 묻는 순서는 품목 먼저 · 무조건부의 질문은
+        #    분기 미리보기다. 종전에는 미리보기 질문에 바로 답해 계약 오류로 멈췄다(봉인 회차 10-24 · 원장 10-24(B) ④)
+        raise SystemExit(
+            "🔴 --answers 는 조건부(--conditional)에서만 — 품목을 모르면 답하지 않는다(D-348 보충 34 결정 2 · 37 결정 2) · 봉인 회차는 조건부 모드에만 돈다"
+        )
     if a.guide_dev and not a.dev:
         raise SystemExit(
             "🔴 --guide-dev 는 --dev 와 함께만 — 봉인 평가셋에는 해설서 dev 가 없다 (D-347)"
@@ -1758,6 +1764,14 @@ def _mode_rows(rows: list[dict], conditional: bool, limit: int | None) -> list[d
     return out[:limit] if limit else out
 
 
+def mode_answers(a: argparse.Namespace, conditional: bool) -> bool:
+    """이 모드에서 답 경로를 도는가 — **조건부에서만** (🆕 2026-10-24 · D-348 보충 35 결정 2 · 보충 34 결정 2 · 보충 37 결정 2).
+
+    🔴 무조건부(품목 모름)의 질문은 분기 미리보기다 — 화면은 품목을 고른 뒤 그 전제로 묻는다. 봉인 회차(`--sealed --answers`)는 무조건부 모드를 답 없이 잰다.
+    """
+    return bool(getattr(a, "answers", False)) and conditional
+
+
 def _one_mode(
     a: argparse.Namespace,
     conditional: bool,
@@ -1766,14 +1780,15 @@ def _one_mode(
     runner: Callable[[str, ProductContext], dict[str, Any]],
 ) -> None:
     """한 모드를 재고 보고 · 결과 파일을 쓴다 — 봉인 회차는 두 모드를 차례로 부른다(`--out` 이름에 `_uncond` · `_cond` 를 붙인다)."""
-    stamp = stamp | {"conditional": conditional}
+    on = mode_answers(a, conditional)
+    stamp = {k: v for k, v in stamp.items() if on or k != "answers"} | {"conditional": conditional}
     t0 = time.perf_counter()
     preds = run(
         rows,
         runner,
         conditional=conditional,
         category_only=getattr(a, "category_only", False),
-        answers=getattr(a, "answers", False),
+        answers=on,
     )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)

@@ -235,6 +235,17 @@ def test_category_only_는_조건부_dev_전용() -> None:
         eg.main(["--dev", "--category-only", "--stub"])
 
 
+def test_답_경로는_조건부_모드에서만() -> None:
+    """🆕 2026-10-24 (D-348 보충 35 결정 2 · 보충 34 결정 2 · 37 결정 2) 품목을 모르면 답하지 않는다 — 봉인 회차는 무조건부를 답 없이 잰다."""
+    import argparse
+
+    a = argparse.Namespace(answers=True)
+    assert eg.mode_answers(a, True) and not eg.mode_answers(a, False)
+    assert not eg.mode_answers(argparse.Namespace(answers=False), True)
+    with pytest.raises(SystemExit, match="조건부"):
+        eg.main(["--dev", "--answers", "--stub"])
+
+
 def test_보류_종류가_행과_요약에_실린다() -> None:
     """🆕 2026-10-21 (D-348 보충 36 결정 4) — 행의 `hold_kinds` · 요약의 종류 × 조건 표."""
     rows = [
