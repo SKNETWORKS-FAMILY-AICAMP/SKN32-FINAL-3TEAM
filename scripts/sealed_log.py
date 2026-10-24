@@ -19,6 +19,9 @@ SEALED_LOG = pathlib.Path("build/eval/sealed_runs.jsonl")
 #: 판정 그래프 봉인 회차 — `tool` 이 없는 옛 줄도 이것이다
 GRAPH = "eval_graph"
 RULE = "eval_rule"
+#: 🆕 2026-10-25 (D-348 보충 43 결정 2 ⑤) 봉인 회차와 같은 플래그의 **dev 선행 실행** 기록 — 이 기기 · 커밋마다.
+#:    까닭 — 봉인 회차 1 번째(10-24)가 dev 에서 한 번도 돌지 않은 플래그 조합(무조건부 + 답 경로)으로 열려 계약 오류로 멈췄다(원장 10-24(B) ④)
+DEV_LOG = pathlib.Path("build/eval/dev_runs.jsonl")
 
 
 def git_head(root: pathlib.Path = pathlib.Path(".")) -> str:
@@ -79,6 +82,60 @@ def worktree_refusal(root: pathlib.Path = pathlib.Path(".")) -> str | None:
         f"작업 트리가 커밋 하나로 서지 않았다({st}) — 봉인 회차는 그날의 커밋 하나로 연다(D-339 결정 7). "
         "커밋하거나 되돌린 뒤 연다 · `git status` 로 본다"
     )
+
+
+def append_dev(rec: dict[str, Any], *, path: pathlib.Path = DEV_LOG) -> None:
+    """dev 실행 한 줄 — 커밋 · 작업 트리와 함께(보충 43 결정 2 ⑤). 🔴 기록을 못 쓰면 멈춘다(조용히 넘기지 않는다)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = {
+        "at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "commit": git_head(),
+        "worktree": worktree_state(),
+    } | rec
+    with path.open("a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
+
+
+def dev_precheck_refusal(
+    answers: bool, *, path: pathlib.Path = DEV_LOG, root: pathlib.Path = pathlib.Path(".")
+) -> str | None:
+    """봉인 회차를 열기 전 — **같은 커밋 · 깨끗한 작업 트리**에서 봉인과 같은 두 모드를 dev 전 행으로 끝까지 돌렸나 (보충 43 결정 2 ⑤).
+
+    ★ 두 모드 = 무조건부(답 경로 없음 · `eval_graph.mode_answers`) · 조건부(봉인에 `--answers` 를 주면 답 경로도) · 품목만(`--category-only`) 줄은 세지 않는다.
+    ★ 그 모드의 가장 최근 줄에서 불변식 위반 · 계약 오류 · 답 경로 계약 오류가 0 이어야 한다.
+    🚨 경로 동치(`scripts/eval_diff.py equiv`)는 여기서 보지 않는다 — 결과 파일 둘을 맞대는 별도 도구다(봉인 조건은 원장에 적는다).
+    """
+    head = git_head(root)
+    rows = [
+        r
+        for r in _rows(path)
+        if r.get("commit") == head and r.get("worktree") == WORKTREE_CLEAN and r.get("full")
+    ]
+    why = []
+    for name, cond, ans in (("무조건부", False, False), ("조건부", True, answers)):
+        got = [
+            r
+            for r in rows
+            if r.get("conditional") is cond
+            and bool(r.get("answers")) is ans
+            and not r.get("category_only")
+        ]
+        if not got:
+            why.append(f"{name}{' · 답 경로' if ans else ''} 줄 없음")
+            continue
+        bad = [
+            k
+            for k in ("invariant_rows", "contract_errors", "answer_contract_errors")
+            if got[-1].get(k)
+        ]
+        if bad:
+            why.append(f"{name} — {' · '.join(bad)} 가 0 이 아니다")
+    if why:
+        return (
+            f"같은 커밋({head}) · 깨끗한 작업 트리 · 같은 플래그의 dev 선행 실행이 없다 — {' / '.join(why)} "
+            "(`eval_graph.py --dev --guide-dev` · `--dev --guide-dev --conditional[ --answers]` 를 먼저 · D-348 보충 43 결정 2 ⑤ · 원장 10-24(B) ④)"
+        )
+    return None
 
 
 def _rows(path: pathlib.Path) -> list[dict]:
