@@ -1054,7 +1054,8 @@ async def review_rewrite(request: Request) -> HTMLResponse:
 #: 🆕 2026-10-16 (D-348 보충 4 결정 3 · 4 · 6) — 조건부 위반에 대한 답 하나. `subst:yes|no` · `fact:<종류>:true|false`
 #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · `na` = 해당 없음(이 문장은 그 주장을 하지 않는다)
 #: 🔄 2026-10-21 (D-348 보충 39 결정 6 · 2 단계) 실증 답에 유형을 담을 수 있다 — `subst:yes:거짓_과장` (질문의 `SubstBranch.violation`) ·
-#:    유형이 빈 답은 받은 뒤 서버가 지금 보인 질문의 유형으로 묶는다(`_tag_subst` · 유형을 담지 않는 종전 화면 · D-220)
+#:    유형이 빈 답 = 유형을 담지 않는 종전 화면 · 그래프가 첫 실증형 유형의 답으로 읽는다(`app.graph._subst_answer`)
+#:    🔄 2026-10-24 (보충 42 결정 1) 같은 문장에 앞선 실증 답이 있으면 유형 없는 실증 답은 받지 않는다(`_untyped_again` · 422 · D-220)
 _ANSWER = re.compile(
     r"^(subst:(yes|no|na)(?::([가-힣_]{1,24}))?|fact:([가-힣_]{1,24}):(true|false|na))$"
 )
@@ -1091,29 +1092,20 @@ def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[li
     return facts, substs
 
 
-def _tag_subst(answer: str, sid: str, res) -> str:  # noqa: ANN001
-    """유형이 빈 실증 답을 **지금 보인 질문의 유형**으로 묶는다 (🆕 2026-10-21 · D-348 보충 39 결정 6 · 2 단계).
+def _untyped_again(pairs: list[tuple[str, str]]) -> bool:
+    """마지막 답이 **유형 없는 실증 답**인데 같은 문장에 앞선 실증 답이 있는가 (🆕 2026-10-24 · D-348 보충 42 결정 1 · 종전 `_tag_subst` 를 걷은 자리).
 
-    ★ `res` = 앞서 한 답까지 넣어 다시 판정한 결과(사용자가 본 화면) · 그 문장의 실증 질문(기록 문장 먼저 · 없으면 보이는 분기)의
-       `SubstBranch.violation` 을 답에 붙인다(`subst:yes` → `subst:yes:부당_비교광고`). 묶은 답이 이력(`prev`)으로 돌아가므로 다음 회차에도 유형이 남는다.
-    🔴 유형을 못 찾으면 그대로 둔다 — 그래프가 첫 실증형 유형의 답으로 읽는다(1 단계와 같다 · `app.graph._subst_answer`).
-    ⛔ 묶지 않으면 — 섞인 유형 문장에서 둘째 질문에 한 답이 유형 없이 와 앞선 답을 지우고 **첫 유형의 답으로 읽혀** 그 유형을 잘못 확정한다.
+    ★ 그래프가 내는 실증 질문에는 늘 유형이 있다 — 만드는 곳이 하나(`app.reasons.subst_branch` → `app.graph._enc_subst` · 섞인 유형 경로)이고
+       dev 답 경로 모든 회차 1,517 질문 중 유형 없음 0 · 같은 문장의 둘째 실증 질문 54 중 유형 없음 0(원장 10-24(B) ③). 화면은 그 유형을 답에 싣는다.
+    ★ 유형 없는 첫 답은 받는다 — 그래프가 첫 실증형 유형의 답으로 읽고, 첫 질문도 그 유형이다(맞게 읽힌다).
+    🔴 참이면 422 — 같은 문장의 둘째 실증 질문(섞인 유형)에 유형 없이 온 답은 **첫 유형의 답으로 잘못 읽혀** 그 유형을 잘못 확정한다(보충 39 결정 6 ⛔).
+       반영 전에 연 화면 · 손으로 만든 요청에서만 온다 · 다시 판정해 유형을 찾지 않는다(종전 미리 판정 — 유형이 있는 답에도 판정이 한 번 더 돌았다).
     """
+    sid, answer = pairs[-1]
     m = _ANSWER.match(answer)
     if not m or not m.group(2) or m.group(3):
-        return answer
-    cands = [x for x in res.sentences if x.sent_id == sid] + [
-        x for b in res.branches for x in b.sentences if x.sent_id == sid
-    ]
-    v = next(
-        (
-            x.substantiation.violation
-            for x in cands
-            if x.substantiation is not None and x.substantiation.violation
-        ),
-        None,
-    )
-    return answer if v is None else f"{answer}:{v.value}"
+        return False
+    return any(s == sid and a.startswith("subst:") for s, a in pairs[:-1])
 
 
 def _review_round(form: dict[str, list[str]]) -> int:
@@ -1254,11 +1246,12 @@ async def review_answer(request: Request, session: Session = Depends(get_session
         raise HTTPException(422, "모르는 전제")
     redo = _review_round(form)
     pairs.append((want_sid, answer))
+    if _untyped_again(pairs):
+        raise HTTPException(422, "유형 없는 실증 답 — 화면을 새로 고쳐 다시 답해 주세요")
 
     from app.contracts import ProductContext  # noqa: PLC0415
 
-    #: 🆕 2026-10-22 (ksr 흡수 · 보충 34 결정 2) 고른 전제가 있으면 **모든 판정**(유형 묶기의 미리 판정 · 답 재판정)에 같은 제품 정보 —
-    #:    종전에는 미리 판정만 전제 없이 해 사용자가 본 화면(고른 전제의 판정)과 다른 판정에서 질문 유형을 읽었다
+    #: 🆕 2026-10-22 (ksr 흡수 · 보충 34 결정 2) 고른 전제가 있으면 답 재판정에 같은 제품 정보(🔄 10-24 보충 42 — 미리 판정은 걷었다)
     base = pm.product_of(Premise(premise)) if premise else ProductContext()
 
     targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
@@ -1274,21 +1267,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
         if n == want_n:
             choices = res.branches
             sents = {s.sent_id: s.text for s in res.sentences}
-            # 🆕 2026-10-21 (보충 39 결정 6) 유형이 빈 실증 답은 앞선 답까지 넣은 판정(사용자가 본 화면)의 질문 유형으로 묶는다(`_tag_subst`)
-            if _ANSWER.match(answer) and answer.startswith("subst:"):
-                f0, s0 = _answers_of(pairs[:-1], sents)
-                seen = res
-                if f0 or s0:
-                    state, seen = await run_in_threadpool(
-                        _core_judge, text, base.model_copy(update={"facts": f0, "substs": s0})
-                    )
-                    if state in ("pending", "down"):
-                        return _render(
-                            request,
-                            "user/review.html",
-                            _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
-                        )
-                pairs[-1] = (want_sid, _tag_subst(answer, want_sid, seen))
+            # 🔄 2026-10-24 (보충 42 결정 1) 유형 묶기의 미리 판정을 걷었다 — 화면이 유형을 싣고 위험한 꼴은 `_untyped_again` 이 막는다
             facts, substs = _answers_of(pairs, sents)
             state, res = await run_in_threadpool(
                 _core_judge, text, base.model_copy(update={"facts": facts, "substs": substs})

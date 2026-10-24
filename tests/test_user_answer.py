@@ -180,12 +180,45 @@ def test_답하면_그_문장에_묶어_다시_판정하고_답한_내용을_보
 
 
 def test_앞서_한_답을_함께_보낸다(wired) -> None:  # noqa: ANN001
+    # 🔄 2026-10-24 (D-348 보충 42 결정 1) 같은 문장 · 같은 유형의 답 — 유형을 싣는다(유형 없는 둘째 실증 답은 422 · 아래)
     _post(
         "/u/review/answer",
-        [("text", TEXT), ("target", "1:s0"), ("prev", "s0|subst:no"), ("answer", "subst:yes")],
+        [
+            ("text", TEXT),
+            ("target", "1:s0"),
+            ("prev", "s0|subst:no:거짓_과장"),
+            ("answer", "subst:yes:거짓_과장"),
+        ],
     )
     p = [x for x in wired.products if x is not None][-1]
     assert [u.answer for u in p.substs] == [Answer.예], "같은 문장의 앞선 답은 새 답으로 바뀐다"
+
+
+@pytest.mark.parametrize("prev", ["s0|subst:no", "s0|subst:no:거짓_과장"])
+def test_같은_문장의_둘째_실증_답이_유형_없이_오면_422(wired, prev) -> None:  # noqa: ANN001
+    """🆕 2026-10-24 (D-348 보충 42 결정 1) — 첫 유형의 답으로 잘못 읽히는 꼴이다 · 다시 판정해 유형을 찾지 않는다(D-220)."""
+    _post(
+        "/u/review/answer",
+        [("text", TEXT), ("target", "1:s0"), ("prev", prev), ("answer", "subst:yes")],
+        status=422,
+    )
+    assert all(p is None for p in wired.products), "막은 요청으로 답 재판정을 하지 않는다"
+
+
+def test_유형이_있는_답에는_미리_판정이_없다(wired_enc) -> None:  # noqa: ANN001
+    """🆕 2026-10-24 (D-348 보충 42 결정 1) — 종전 `_tag_subst` 의 미리 판정(앞선 답만 넣은 판정)이 유형이 있는 답에도 돌았다 · 걷었다."""
+    _post(
+        "/u/review/answer",
+        [
+            ("text", TEXT),
+            ("target", "1:s0"),
+            ("prev", "s0|fact:인증:true"),
+            ("answer", "subst:yes:거짓_과장"),
+        ],
+    )
+    with_answers = [p for p in wired_enc.products if p is not None]
+    assert len(with_answers) == 1, f"답을 넣은 판정은 한 번이어야 한다 — {len(with_answers)} 번"
+    assert [u.violation.value for u in with_answers[0].substs] == ["거짓_과장"]
 
 
 def test_인코더만_잡은_문장에도_질문이_그려지고_AI_추정으로_보인다(wired_enc) -> None:  # noqa: ANN001
