@@ -255,19 +255,26 @@ def test_유형이_빈_답은_첫_실증형_유형의_답이다() -> None:
     )
 
 
-def test_화면의_유형_없는_답은_보인_질문의_유형으로_묶는다() -> None:
-    """`app/routers/user.py` `_tag_subst` · `_answers_of` — 둘째 질문에 한 유형 없는 답이 앞선 답을 지우고 첫 유형으로 읽히면 안 된다."""
+def test_같은_문장의_둘째_실증_답이_유형_없이_오면_거부한다() -> None:
+    """`app/routers/user.py` `_untyped_again` · `_answers_of` (🔄 2026-10-24 · D-348 보충 42 결정 1 · 종전 `_tag_subst`) —
+    둘째 질문에 한 유형 없는 답이 앞선 답을 지우고 첫 유형으로 읽히면 안 된다 → 받지 않는다(422)."""
     from app.routers import user as u
 
-    seen = type(
-        "R", (), {"sentences": [_two([_typed(Violation.거짓_과장, Answer.예)])], "branches": []}
-    )()
-    seen.sentences[0] = seen.sentences[0].model_copy(update={"sent_id": "s0"})
-    assert u._tag_subst("subst:no", "s0", seen) == "subst:no:부당_비교광고"
-    assert u._tag_subst("subst:no:거짓_과장", "s0", seen) == "subst:no:거짓_과장", (
-        "유형이 있으면 그대로"
+    assert u._untyped_again([("s0", "subst:yes:거짓_과장"), ("s0", "subst:no")]), (
+        "앞선 실증 답이 있는 문장 · 유형 없음"
     )
-    assert u._tag_subst("fact:인증:true", "s0", seen) == "fact:인증:true"
+    assert u._untyped_again([("s0", "subst:yes"), ("s0", "subst:no")])
+    assert not u._untyped_again([("s0", "subst:no")]), "유형 없는 첫 답은 받는다(첫 유형 = 첫 질문)"
+    assert not u._untyped_again(
+        [("s0", "subst:yes:거짓_과장"), ("s0", "subst:no:부당_비교광고")]
+    ), "유형이 있으면 받는다"
+    assert not u._untyped_again([("s1", "subst:yes:거짓_과장"), ("s0", "subst:no")]), (
+        "다른 문장의 답은 보지 않는다"
+    )
+    assert not u._untyped_again([("s0", "fact:인증:true"), ("s0", "subst:no")]), (
+        "앞선 사실 답은 실증 답이 아니다"
+    )
+    assert not u._untyped_again([("s0", "subst:yes"), ("s0", "fact:인증:true")])
     facts, substs = u._answers_of(
         [("s0", "subst:yes:거짓_과장"), ("s0", "subst:no:부당_비교광고")], {"s0": T2}
     )

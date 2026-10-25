@@ -22,7 +22,7 @@
   {%- elif s|conditional_text %}{{ s|conditional_text }}
   {#- 🆕 2026-10-16 (D-348 보충 5) — 인코더 쪽 보류 + 분기 — 「AI 추정 · 판정 아님」(답 없이 확정하지 않는다) #}
   {%- elif s|question_text %}{{ s|question_text }}
-  {#- 🆕 2026-10-22 (ksr · 이서은 확인) 확신 부족 보류는 보류 종류(`hold_kind`)로 나눠 적는다 — 할 일은 카드의 보류 종류 줄에 있다.
+  {#- 🆕 2026-10-22 (ksr · 이서은 확인 · 🔄 문안 승인 10-24 · D-348 보충 42 결정 2 — 생성 화면(`compose.html`)의 결론 줄도 이 문구) 확신 부족 보류는 보류 종류(`hold_kind`)로 나눠 적는다 — 할 일은 카드의 보류 종류 줄에 있다.
       🚨 「걸린 것 없음」은 통과로 읽히면 안 된다 — 「판정 보류」를 꼭 붙인다 #}
   {%- elif s.hold_kind and s.hold_kind.value == "unconfirmed" %}위반일 수 있지만 확정하지 못했어요
   {%- elif s.hold_kind and s.hold_kind.value == "nothing_found" %}걸린 위반 표현은 없어요 · 판정 보류

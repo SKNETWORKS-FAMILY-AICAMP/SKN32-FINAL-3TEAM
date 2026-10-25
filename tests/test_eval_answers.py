@@ -235,6 +235,46 @@ def test_category_only_는_조건부_dev_전용() -> None:
         eg.main(["--dev", "--category-only", "--stub"])
 
 
+def test_틀린_확정의_묶음과_위반_아닌_문장의_확정() -> None:
+    """🆕 2026-10-25 (D-348 보충 43 · 원장 10-24(B) ⑤ 정정) — 그물 칸(`wrong_confirm_ids`)을 묶음으로 나눈다 · 진단 칸."""
+    p = {"committed": True}
+    assert eg.wrong_kind({"조건": "D", "labels": []}, p) == "위반 아님(D)"
+    assert eg.wrong_kind({"조건": "M", "labels": []}, p) == "모호(M)"
+    assert (
+        eg.wrong_kind({"조건": "B", "labels": [], "근거": ["013094:제8조제1항제9호"]}, p)
+        == "유형 없는 위반"
+    )
+    assert eg.wrong_kind(
+        {"조건": "B", "labels": [], "근거": ["002015:제13조제1항제4호"]}, p
+    ).startswith("채점"), "화장품 13①4 는 채점한다 (보충 44 결정 4)"
+    assert (
+        eg.wrong_kind({"조건": "C", "labels": ["질병_예방치료_표방"]}, p)
+        == "채점 · 전 문장 확정 · 유형 다름"
+    )
+    assert eg.wrong_kind(
+        {"조건": "C", "labels": ["질병_예방치료_표방"]}, {"committed": False}
+    ).startswith("채점 · 일부")
+
+
+def test_답_경로에_아니오_확정의_유형과_C_의_예에_문제없음() -> None:
+    rows = [{"id": "c", "text": TEXT, "조건": "C", "labels": ["거짓_과장"]}]
+    preds = eg.run(rows, _runner([]), 0, answers=True)
+    c = eg.answer_report(rows, preds)["by_condition"]["C"]
+    assert c["아니오확정"] == 1 and c["아니오유형맞음"] == 1
+    assert c.get("예에문제없음", 0) == (preds[0]["answer_path"]["예"]["class"] == "확정무위반")
+
+
+def test_답_경로는_조건부_모드에서만() -> None:
+    """🆕 2026-10-24 (D-348 보충 35 결정 2 · 보충 34 결정 2 · 37 결정 2) 품목을 모르면 답하지 않는다 — 봉인 회차는 무조건부를 답 없이 잰다."""
+    import argparse
+
+    a = argparse.Namespace(answers=True)
+    assert eg.mode_answers(a, True) and not eg.mode_answers(a, False)
+    assert not eg.mode_answers(argparse.Namespace(answers=False), True)
+    with pytest.raises(SystemExit, match="조건부"):
+        eg.main(["--dev", "--answers", "--stub"])
+
+
 def test_보류_종류가_행과_요약에_실린다() -> None:
     """🆕 2026-10-21 (D-348 보충 36 결정 4) — 행의 `hold_kinds` · 요약의 종류 × 조건 표."""
     rows = [

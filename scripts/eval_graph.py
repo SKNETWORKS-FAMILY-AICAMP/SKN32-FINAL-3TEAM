@@ -51,9 +51,13 @@ from typing import Any
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+from app import (  # noqa: E402 — reasons: 조합 판정 칸은 한 곳 (D-344 ⑨)
+    claimscope,  # noqa: E402 — 하한 가드 목록 지문(D-348 보충 41)
+    model_lock,
+    reasons,
+)
 from app import encoder as enc  # noqa: E402
 from app import graph as g  # noqa: E402
-from app import model_lock, reasons  # noqa: E402 — reasons: 조합 판정 칸은 한 곳 (D-344 ⑨)
 from app import premise as pm  # noqa: E402
 from app.contracts import (  # noqa: E402
     Answer,
@@ -90,6 +94,7 @@ from scripts.eval_rule import (  # noqa: E402
     scored,
     truth_ho,
     truth_types,
+    untyped_violation,
 )
 
 GOLDEN = pathlib.Path("data/derived/golden/golden.jsonl")
@@ -173,7 +178,7 @@ def _questions(sents: Iterable[SentenceJudgment]) -> list[str]:
     """문장들에 선 질문 — `<문장>:fact:<종류>` · `<문장>:subst:<유형>` (🆕 2026-10-21 · D-348 보충 35). 결과 파일끼리 질문이 같은지 맞대는 열쇠다.
 
     🔄 2026-10-21 (보충 39 결정 6 · 2 단계) 실증 질문은 유형마다 따로 선다 — 열쇠에 유형을 싣는다(`SubstBranch.violation`) · 유형이 빈 질문은 종전 꼴
-       `<문장>:subst`. 분기마다 다른 유형을 묻는 문장(`app/routers/user.py` `_tag_subst` 의 알려진 한계)을 결과 파일로 세는 열쇠다.
+       `<문장>:subst`. 분기마다 다른 유형을 묻는 문장(종전 `_tag_subst` 의 알려진 한계 · 🔄 10-24 보충 42 로 걷음)을 결과 파일로 세는 열쇠다.
        ⚠️ 이 판 전 결과 파일과 `eval_diff diff` 로 맞대면 실증 질문이 선 행은 질문 칸이 바뀐 것으로 나온다(열쇠 꼴이 바뀜 · 판정은 같음).
     """
     out = []
@@ -786,10 +791,27 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     #: 🆕 2026-10-21 (D-348 보충 38 결정 1 · #3 (나)) **틀린 확정 행** — 위반을 확정했는데 라벨에 위반이 없거나 유형이 하나도 안 겹친다(채점 밖 M · D 포함).
     #:    무조건부에서는 「품목을 모르면 확정하지 않는다」(보충 8 · 31)가 새지 않았는지 보는 그물이다 — **0 이어야 한다(봉인 조건)**
     out["wrong_confirm_ids"] = [
-        r["id"]
-        for r, p in zip(rows, preds, strict=True)
-        if p["class"] == "확정위반" and not (set(p["types"]) & truth_types(r, set(p["types"])))
+        r["id"] for r, p in zip(rows, preds, strict=True) if wrong_confirm(r, p)
     ]
+    #: 🆕 2026-10-25 (D-348 보충 43 · 원장 10-24(B) ⑤ 해석 정정) 틀린 확정 행의 묶음 · 위반 아닌 문장의 위반 확정 — **진단 칸 · 대표 지표 아님**
+    #:    까닭 — `wrong_confirm_ids` 는 그물 칸이라 채점 밖 행(M · D · 유형 없는 위반)을 함께 담는다 · 그대로 읽으면 「틀린 확정 23」을 오탐으로 읽는다
+    #:    🔴 같은 판정식(`wrong_confirm`)을 두 칸이 쓴다(D-99) — 대역 행에는 `id` 가 없을 수 있어 id 로 되찾지 않는다
+    out["wrong_confirm_kinds"] = dict(
+        collections.Counter(
+            wrong_kind(r, p) for r, p in zip(rows, preds, strict=True) if wrong_confirm(r, p)
+        )
+    )
+    out["nonviolation_confirms"] = {
+        c: [
+            sum(
+                1
+                for r, p in zip(rows, preds, strict=True)
+                if r.get("조건") == c and p["class"] == "확정위반"
+            ),
+            sum(1 for r in rows if r.get("조건") == c),
+        ]
+        for c in ("D", "L")
+    }
     #: 🆕 2026-10-21 (D-348 보충 36 결정 4) — 보류 종류(행 단위 · 한 행에 종류가 여럿이면 각각 센다) × 라벨 조건
     kinds: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for r, p in zip(rows, preds, strict=True):
@@ -800,6 +822,33 @@ def summarize(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
     if any("answer_path" in p for p in preds):
         out["answers"] = answer_report(rows, preds)
     return out
+
+
+def wrong_confirm(r: dict, p: dict) -> bool:
+    """틀린 확정 행 — 위반을 확정했는데 라벨 유형과 하나도 안 겹친다(채점 밖 M · D 포함 · D-348 보충 38 결정 1 그물 · 보충 43 묶음이 같이 쓴다 · D-99)."""
+    return p["class"] == "확정위반" and not (set(p["types"]) & truth_types(r, set(p["types"])))
+
+
+def wrong_kind(r: dict, p: dict) -> str:
+    """틀린 확정 행(`wrong_confirm_ids`)의 묶음 (🆕 2026-10-25 · D-348 보충 43 · 원장 10-24(B) ⑤ 정정) — 진단 칸.
+
+    ★ 위반 아님(D · L) = 위반이 아닌 문장의 위반 확정(진짜 오탐) · 모호(M) = 정답 미정 · 유형 없는 위반 = 정답 유형이 비어 맞고 틀림을 셀 수 없다
+       (`scripts/eval_rule.py` `untyped_violation`) · 채점 행 = 위반은 맞고 유형이 다름(전 문장 확정이면 selective risk 의 틀림).
+    """
+    c = r.get("조건") or "-"
+    if c in ("D", "L"):
+        return f"위반 아님({c})"
+    if c == "M":
+        return "모호(M)"
+    if untyped_violation(r) and not scored(r):
+        return "유형 없는 위반"
+    if c in ("A", "B", "C"):
+        return (
+            "채점 · 전 문장 확정 · 유형 다름"
+            if p.get("committed")
+            else "채점 · 일부 문장 확정 · 유형 다름"
+        )
+    return f"그 밖({c})"
 
 
 def answer_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
@@ -843,6 +892,12 @@ def answer_report(rows: list[dict], preds: list[dict]) -> dict[str, Any]:
             out["reasked"] += 1
             c["재질문"] += 1
         tt = truth_types(r, set(no["types"]) | set(yes["types"]))
+        # 🆕 2026-10-25 (D-348 보충 43 · 원장 10-24(B) ⑤) 「아니오」로 확정한 행의 유형 맞음 · C 행 「예」에 문제없음(C 를 놓친 질문이 답 하나에 풀림)
+        if cond in ("A", "B", "C") and no["class"] == "확정위반":
+            c["아니오확정"] += 1
+            c["아니오유형맞음"] += bool(tt & set(no["types"]))
+        if cond == "C":
+            c["예에문제없음"] += yes["class"] == "확정무위반"
         if cond in ("A", "B"):
             if not left and not again and tt & set(no["types"]):
                 c["도달"] += 1
@@ -1027,7 +1082,14 @@ def _print_answers(a: dict[str, Any]) -> None:
                 f"아니오에 위반(답에 달린 오탐) {c.get('아니오에위반', 0)} {_ci(c.get('아니오에위반', 0), n)}",
             ]
         if k == "C":
-            bits += ["질문이 선 C 행 = D-61 후보(묻지 않고 확정할 자리였나)"]
+            bits += [
+                "질문이 선 C 행 = D-61 후보(묻지 않고 확정할 자리였나)",
+                f"「예」에 문제없음 {c.get('예에문제없음', 0)} {_ci(c.get('예에문제없음', 0), n)}(C 를 놓친 질문이 답 하나에 풀림)",
+            ]
+        if k in ("A", "B", "C") and c.get("아니오확정"):
+            bits += [
+                f"「아니오」 확정의 유형 맞음 {c.get('아니오유형맞음', 0)} / {c['아니오확정']} {_ci(c.get('아니오유형맞음', 0), c['아니오확정'])}"
+            ]
         if c.get("남음"):
             bits += [f"상한 뒤에도 질문 남음 {c['남음']}(도달로 세지 않음)"]
         if c.get("재질문"):
@@ -1147,6 +1209,20 @@ def report(s: dict[str, Any], conditional: bool = False, *, dev: bool = False) -
         print(
             f"\n  {'✅' if not bad else '🔴'} 그물 — 무조건부 틀린 확정 {len(bad)} 행(0 이어야 한다 · 봉인 조건 · D-348 보충 38 결정 1)"
             + (f" · {bad[:5]}" if bad else "")
+        )
+    if s.get("wrong_confirm_kinds"):
+        print(
+            "\n  틀린 확정 행의 묶음 (진단 · 대표 지표 아님 · D-348 보충 43) — "
+            + " · ".join(f"{k} {v}" for k, v in sorted(s["wrong_confirm_kinds"].items()))
+        )
+    if s.get("nonviolation_confirms"):
+        print(
+            "  위반 아닌 문장의 위반 확정 (진단) — "
+            + " · ".join(
+                f"{c} {k} / {n} {_ci(k, n)}"
+                for c, (k, n) in s["nonviolation_confirms"].items()
+                if n
+            )
         )
     if s.get("invariant_rows"):
         print(
@@ -1671,6 +1747,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(
             "🔴 --category-only 는 dev 조건부 전용 — 경로 동치 대조의 짝이다(D-348 보충 35 · 봉인 회차는 고른 전제로 잰다)"
         )
+    if a.answers and not (a.conditional or a.sealed):
+        # 🆕 2026-10-24 (보충 35 결정 2 · 보충 34 결정 2 · 보충 37 결정 2) 품목을 모르면 답하지 않는다 — 묻는 순서는 품목 먼저 · 무조건부의 질문은
+        #    분기 미리보기다. 종전에는 미리보기 질문에 바로 답해 계약 오류로 멈췄다(봉인 회차 10-24 · 원장 10-24(B) ④)
+        raise SystemExit(
+            "🔴 --answers 는 조건부(--conditional)에서만 — 품목을 모르면 답하지 않는다(D-348 보충 34 결정 2 · 37 결정 2) · 봉인 회차는 조건부 모드에만 돈다"
+        )
     if a.guide_dev and not a.dev:
         raise SystemExit(
             "🔴 --guide-dev 는 --dev 와 함께만 — 봉인 평가셋에는 해설서 dev 가 없다 (D-347)"
@@ -1688,6 +1770,8 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"🔴 {why}")
         if why := sealed_log.worktree_refusal():
             raise SystemExit(f"🔴 {why}")
+        if why := sealed_log.dev_precheck_refusal(bool(a.answers)):
+            raise SystemExit(f"🔴 {why}")
     rows = load_rows(dev=a.dev, guide_dev=a.guide_dev)
     #: dev 대조는 **거르기 전 전체 행**으로 한다 — 원천으로 거른 뒤에는 지문이 달라진다
     dev_stamp = check_dev(rows, a.encoder or enc.configured_dir()) if a.dev else {}
@@ -1704,6 +1788,8 @@ def main(argv: list[str] | None = None) -> int:
         stamp |= {"answers": f"예 · 아니오 · {ANSWER_ROUNDS}회"}
     stamp |= {"split": "dev" if a.dev else "test_sentence", "resplit": resplit.VERSION} | dev_stamp
     stamp |= use_encoder(a.encoder, adopted_only=a.sealed)
+    #: 🆕 2026-10-24 (D-348 보충 41 결정 3) 하한 가드의 동작 · 상태 명사 목록 — 없으면 None(하한 가드 = 지금 주장 가드)
+    stamp |= {"claim_nouns": claimscope.nouns_stamp()}
     if a.no_enc_filter:
         g.disable_encoder_filter()
         stamp |= {"encoder_filter": "끔"}
@@ -1752,6 +1838,14 @@ def _mode_rows(rows: list[dict], conditional: bool, limit: int | None) -> list[d
     return out[:limit] if limit else out
 
 
+def mode_answers(a: argparse.Namespace, conditional: bool) -> bool:
+    """이 모드에서 답 경로를 도는가 — **조건부에서만** (🆕 2026-10-24 · D-348 보충 35 결정 2 · 보충 34 결정 2 · 보충 37 결정 2).
+
+    🔴 무조건부(품목 모름)의 질문은 분기 미리보기다 — 화면은 품목을 고른 뒤 그 전제로 묻는다. 봉인 회차(`--sealed --answers`)는 무조건부 모드를 답 없이 잰다.
+    """
+    return bool(getattr(a, "answers", False)) and conditional
+
+
 def _one_mode(
     a: argparse.Namespace,
     conditional: bool,
@@ -1760,18 +1854,36 @@ def _one_mode(
     runner: Callable[[str, ProductContext], dict[str, Any]],
 ) -> None:
     """한 모드를 재고 보고 · 결과 파일을 쓴다 — 봉인 회차는 두 모드를 차례로 부른다(`--out` 이름에 `_uncond` · `_cond` 를 붙인다)."""
-    stamp = stamp | {"conditional": conditional}
+    on = mode_answers(a, conditional)
+    stamp = {k: v for k, v in stamp.items() if on or k != "answers"} | {"conditional": conditional}
     t0 = time.perf_counter()
     preds = run(
         rows,
         runner,
         conditional=conditional,
         category_only=getattr(a, "category_only", False),
-        answers=getattr(a, "answers", False),
+        answers=on,
     )
     secs = time.perf_counter() - t0
     s = summarize(rows, preds)
     report(s, conditional, dev=a.dev)
+    if a.dev and not a.stub:
+        # 🆕 2026-10-25 (D-348 보충 43 결정 2 ⑤) dev 선행 실행 기록 — 봉인 회차가 이 줄을 본다(`sealed_log.dev_precheck_refusal`)
+        sealed_log.append_dev(
+            {
+                "conditional": conditional,
+                "answers": on,
+                "category_only": bool(getattr(a, "category_only", False)),
+                "full": bool(getattr(a, "guide_dev", False))
+                and not (
+                    a.limit or a.provenance or a.no_enc_filter or getattr(a, "dict_view", None)
+                ),
+                "rows": len(rows),
+                "invariant_rows": s.get("invariant_rows", 0),
+                "contract_errors": s.get("contract_errors", 0),
+                "answer_contract_errors": (s.get("answers") or {}).get("contract_errors", 0),
+            }
+        )
     # 🆕 2026-10-18 (D-348 보충 24 결정 1) 사전 낱말과 글자가 같은 채점 행 — 일반화 지표와 나란히 읽는다
     if DICT_FILE.exists():
         echo = dict_echo(

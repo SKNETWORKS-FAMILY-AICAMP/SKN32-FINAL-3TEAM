@@ -562,6 +562,8 @@ def _core_judge(text: str, product=None):  # noqa: ANN001, ANN202
        종전에는 501 만 받아서 503 이 화면 오류로 떨어졌다. 🚨 화면 문구는 화면 담당(ksr · lse)이 정한다 — 지금은
        `engine_pending` 그림을 같이 쓰고 `engine_down` 을 넘겨 둔다.
     """
+    from pydantic import ValidationError  # noqa: PLC0415
+
     from app.api import judge as core_judge  # noqa: PLC0415 — 순환 import 를 피한다
     from app.contracts import JudgeRequest  # noqa: PLC0415
 
@@ -570,6 +572,10 @@ def _core_judge(text: str, product=None):  # noqa: ANN001, ANN202
         req = (
             JudgeRequest(text=text) if product is None else JudgeRequest(text=text, product=product)
         )
+    except ValidationError as e:
+        # 🆕 2026-10-25 (D-348 보충 44 결정 5) 요청 꼴이 틀렸다(품목 없는 답 등) — 422 · 삼키지 않는다(D-162)
+        raise HTTPException(422, "요청을 받지 못했다 — 품목을 고른 뒤 답해 주세요") from e
+    try:
         return "ok", core_judge(req)
     except HTTPException as e:
         # 🔄 2026-10-01 (ksr 병합) — ksr 도 같은 503 수정을 따로 했다(`in (501, 503)` → pending). ohb 의 갈래를 둔다:
@@ -895,12 +901,20 @@ def _note_conflict(note: str | None, premise: str, category: str | None) -> bool
 
 
 def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
-    sentence, premise: str = "", category: str | None = None, sllm_category: str | None = None
+    sentence,
+    premise: str = "",
+    category: str | None = None,
+    sllm_category: str | None = None,
+    *,
+    facts: list | None = None,
+    substs: list | None = None,
 ) -> dict:
     """지적 문장 하나를 고쳐 쓰고 재판정한다. 화면용 dict(`rw`).
 
     `category` 는 원문 판정의 품목(재판정에 넘긴다) · `sllm_category` 는 생성 서버에 넘기는 품목이다 — 둘이 다른 것은
     분기를 고른 문구뿐이다(원문 판정의 품목은 비어 있고, 고른 전제가 품목을 말한다 · `_sllm_category`).
+    🔄 2026-10-22 (ksr · 보충 34 결정 1 · 보충 37 결정 5 집행) — 앞서 한 답(`facts` · `substs`)을 세 재판정(다듬은 안 · 담백한 안 ·
+       조건부 후보)에 모두 넘긴다. 답은 문장 글자에 묶여 있어 글자가 같은 문장에만 든다(`_rejudge`).
     """
     from app.routers import sllm_client  # noqa: PLC0415
 
@@ -925,7 +939,9 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
         #    ⛔ 「합법화 불가」는 코드의 불가 사유만 말한다 (D-59 · D-10) — 같은 카드에서 코드(실증 B)와 말이 갈리던 자리
         rw["infeasible_note"] = reasons.REWRITE_INFEASIBLE_TEXT
     if out and out["outcome"] == "candidate" and out.get("rewrite"):
-        rw["rejudge"] = _rejudge(out["rewrite"]["body"], premise, category)
+        rw["rejudge"] = _rejudge(
+            out["rewrite"]["body"], premise, category, facts=facts, substs=substs
+        )
         # 🆕 2026-10-10 — 후보의 조건이 이 전제에서 채워질 수 없으면 후보로 내지 않는다(재판정이 못 거르는 자리)
         rw["note_conflict"] = _note_conflict(
             out["rewrite"].get("mandatory_note"), premise, category
@@ -934,7 +950,7 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
         #    다듬은 안이 재판정에서 떨어지면 담백한 안을 후보로 올린다 · 둘 다 살면 담백한 안을 두 번째 안으로 보인다
         plain = out.get("plain")
         if plain:
-            p_rejudge = _rejudge(plain, premise, category)
+            p_rejudge = _rejudge(plain, premise, category, facts=facts, substs=substs)
             if p_rejudge.get("status") != "rejected":
                 # 🆕 2026-10-14 — 다듬은 안에만 AI 추정 유형이 남으면 담백한 안을 올린다(사전 탈락과 같은 자리 · 더 보수적인 쪽)
                 enc_only_polished = bool(rw["rejudge"].get("enc_types")) and not p_rejudge.get(
@@ -950,7 +966,7 @@ def _rewrite_sentence(  # noqa: ANN001 — SentenceJudgment
     #    사람이 제품의 인정 · 심사 여부를 확인한 뒤 쓰는 문장이다
     cond = out.get("conditional") if out and out["outcome"] == "hold" else None
     if cond and not _note_conflict(cond.get("mandatory_note"), premise, category):
-        c_rejudge = _rejudge(cond["body"], premise, category)
+        c_rejudge = _rejudge(cond["body"], premise, category, facts=facts, substs=substs)
         if c_rejudge.get("status") != "rejected":
             rw["conditional"] = {**cond, "rejudge": c_rejudge}
     return rw
@@ -1006,6 +1022,8 @@ async def review_rewrite(request: Request) -> HTMLResponse:
             ),
         )
     pairs = _previous_answers(form)
+    facts: list = []
+    substs: list = []
     if source is not None and (premise or pairs):
         from app.contracts import ProductContext  # noqa: PLC0415
 
@@ -1044,7 +1062,13 @@ async def review_rewrite(request: Request) -> HTMLResponse:
     else:
         cat = item["result"].category.value if item["result"].category else None
         rw = await run_in_threadpool(
-            _rewrite_sentence, sent, premise, cat, _sllm_category(cat, premise)
+            _rewrite_sentence,
+            sent,
+            premise,
+            cat,
+            _sllm_category(cat, premise),
+            facts=facts,
+            substs=substs,
         )
     # 열쇠는 (전제, 문장) — 분기 없는 문구의 전제는 빈 글자다. 다른 분기의 같은 문장에 붙지 않는다
     item["rewrites"][premise] = {want_sid: rw}
@@ -1054,7 +1078,8 @@ async def review_rewrite(request: Request) -> HTMLResponse:
 #: 🆕 2026-10-16 (D-348 보충 4 결정 3 · 4 · 6) — 조건부 위반에 대한 답 하나. `subst:yes|no` · `fact:<종류>:true|false`
 #: 🔄 2026-10-16 (D-348 보충 5) — 답 셋 · `na` = 해당 없음(이 문장은 그 주장을 하지 않는다)
 #: 🔄 2026-10-21 (D-348 보충 39 결정 6 · 2 단계) 실증 답에 유형을 담을 수 있다 — `subst:yes:거짓_과장` (질문의 `SubstBranch.violation`) ·
-#:    유형이 빈 답은 받은 뒤 서버가 지금 보인 질문의 유형으로 묶는다(`_tag_subst` · 유형을 담지 않는 종전 화면 · D-220)
+#:    유형이 빈 답 = 유형을 담지 않는 종전 화면 · 그래프가 첫 실증형 유형의 답으로 읽는다(`app.graph._subst_answer`)
+#:    🔄 2026-10-24 (보충 42 결정 1) 같은 문장에 앞선 실증 답이 있으면 유형 없는 실증 답은 받지 않는다(`_untyped_again` · 422 · D-220)
 _ANSWER = re.compile(
     r"^(subst:(yes|no|na)(?::([가-힣_]{1,24}))?|fact:([가-힣_]{1,24}):(true|false|na))$"
 )
@@ -1091,29 +1116,20 @@ def _answers_of(pairs: list[tuple[str, str]], sents: dict[str, str]) -> tuple[li
     return facts, substs
 
 
-def _tag_subst(answer: str, sid: str, res) -> str:  # noqa: ANN001
-    """유형이 빈 실증 답을 **지금 보인 질문의 유형**으로 묶는다 (🆕 2026-10-21 · D-348 보충 39 결정 6 · 2 단계).
+def _untyped_again(pairs: list[tuple[str, str]]) -> bool:
+    """마지막 답이 **유형 없는 실증 답**인데 같은 문장에 앞선 실증 답이 있는가 (🆕 2026-10-24 · D-348 보충 42 결정 1 · 종전 `_tag_subst` 를 걷은 자리).
 
-    ★ `res` = 앞서 한 답까지 넣어 다시 판정한 결과(사용자가 본 화면) · 그 문장의 실증 질문(기록 문장 먼저 · 없으면 보이는 분기)의
-       `SubstBranch.violation` 을 답에 붙인다(`subst:yes` → `subst:yes:부당_비교광고`). 묶은 답이 이력(`prev`)으로 돌아가므로 다음 회차에도 유형이 남는다.
-    🔴 유형을 못 찾으면 그대로 둔다 — 그래프가 첫 실증형 유형의 답으로 읽는다(1 단계와 같다 · `app.graph._subst_answer`).
-    ⛔ 묶지 않으면 — 섞인 유형 문장에서 둘째 질문에 한 답이 유형 없이 와 앞선 답을 지우고 **첫 유형의 답으로 읽혀** 그 유형을 잘못 확정한다.
+    ★ 그래프가 내는 실증 질문에는 늘 유형이 있다 — 만드는 곳이 하나(`app.reasons.subst_branch` → `app.graph._enc_subst` · 섞인 유형 경로)이고
+       dev 답 경로 모든 회차 1,517 질문 중 유형 없음 0 · 같은 문장의 둘째 실증 질문 54 중 유형 없음 0(원장 10-24(B) ③). 화면은 그 유형을 답에 싣는다.
+    ★ 유형 없는 첫 답은 받는다 — 그래프가 첫 실증형 유형의 답으로 읽고, 첫 질문도 그 유형이다(맞게 읽힌다).
+    🔴 참이면 422 — 같은 문장의 둘째 실증 질문(섞인 유형)에 유형 없이 온 답은 **첫 유형의 답으로 잘못 읽혀** 그 유형을 잘못 확정한다(보충 39 결정 6 ⛔).
+       반영 전에 연 화면 · 손으로 만든 요청에서만 온다 · 다시 판정해 유형을 찾지 않는다(종전 미리 판정 — 유형이 있는 답에도 판정이 한 번 더 돌았다).
     """
+    sid, answer = pairs[-1]
     m = _ANSWER.match(answer)
     if not m or not m.group(2) or m.group(3):
-        return answer
-    cands = [x for x in res.sentences if x.sent_id == sid] + [
-        x for b in res.branches for x in b.sentences if x.sent_id == sid
-    ]
-    v = next(
-        (
-            x.substantiation.violation
-            for x in cands
-            if x.substantiation is not None and x.substantiation.violation
-        ),
-        None,
-    )
-    return answer if v is None else f"{answer}:{v.value}"
+        return False
+    return any(s == sid and a.startswith("subst:") for s, a in pairs[:-1])
 
 
 def _review_round(form: dict[str, list[str]]) -> int:
@@ -1254,11 +1270,12 @@ async def review_answer(request: Request, session: Session = Depends(get_session
         raise HTTPException(422, "모르는 전제")
     redo = _review_round(form)
     pairs.append((want_sid, answer))
+    if _untyped_again(pairs):
+        raise HTTPException(422, "유형 없는 실증 답 — 화면을 새로 고쳐 다시 답해 주세요")
 
     from app.contracts import ProductContext  # noqa: PLC0415
 
-    #: 🆕 2026-10-22 (ksr 흡수 · 보충 34 결정 2) 고른 전제가 있으면 **모든 판정**(유형 묶기의 미리 판정 · 답 재판정)에 같은 제품 정보 —
-    #:    종전에는 미리 판정만 전제 없이 해 사용자가 본 화면(고른 전제의 판정)과 다른 판정에서 질문 유형을 읽었다
+    #: 🆕 2026-10-22 (ksr 흡수 · 보충 34 결정 2) 고른 전제가 있으면 답 재판정에 같은 제품 정보(🔄 10-24 보충 42 — 미리 판정은 걷었다)
     base = pm.product_of(Premise(premise)) if premise else ProductContext()
 
     targets = [(n, t.strip()) for n, t in enumerate(copies, 1) if t.strip()]
@@ -1274,21 +1291,7 @@ async def review_answer(request: Request, session: Session = Depends(get_session
         if n == want_n:
             choices = res.branches
             sents = {s.sent_id: s.text for s in res.sentences}
-            # 🆕 2026-10-21 (보충 39 결정 6) 유형이 빈 실증 답은 앞선 답까지 넣은 판정(사용자가 본 화면)의 질문 유형으로 묶는다(`_tag_subst`)
-            if _ANSWER.match(answer) and answer.startswith("subst:"):
-                f0, s0 = _answers_of(pairs[:-1], sents)
-                seen = res
-                if f0 or s0:
-                    state, seen = await run_in_threadpool(
-                        _core_judge, text, base.model_copy(update={"facts": f0, "substs": s0})
-                    )
-                    if state in ("pending", "down"):
-                        return _render(
-                            request,
-                            "user/review.html",
-                            _review_ctx(copies, engine_pending=True, engine_down=state == "down"),
-                        )
-                pairs[-1] = (want_sid, _tag_subst(answer, want_sid, seen))
+            # 🔄 2026-10-24 (보충 42 결정 1) 유형 묶기의 미리 판정을 걷었다 — 화면이 유형을 싣고 위험한 꼴은 `_untyped_again` 이 막는다
             facts, substs = _answers_of(pairs, sents)
             state, res = await run_in_threadpool(
                 _core_judge, text, base.model_copy(update={"facts": facts, "substs": substs})

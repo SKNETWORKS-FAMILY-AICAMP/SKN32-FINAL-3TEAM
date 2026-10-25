@@ -205,6 +205,14 @@ _COSM_REF: dict[str, tuple[str, ...]] = {
 }
 
 
+def shown_types(cite: str) -> list[str]:
+    """유형을 주지 않는 인용이 **보여 줄** 유형 — 화장품법 13①4 → 거짓_과장 · 소비자_기만 (`_COSM_REF` · D-327).
+
+    🆕 2026-10-25 (D-348 보충 44 결정 4) — 채점이 13①4 행의 정답 집합으로 쓴다(`scripts/eval_rule.py` `truth_types` · `scored`). 라벨(`labels`)은 바꾸지 않는다.
+    """
+    return [t for t, refs in _COSM_REF.items() if cite in refs and "제13조제1항" in cite]
+
+
 def _detail(law_id: str, ho: int, mok: str | None = None) -> str | None:
     """법률의 호 → 그 호를 푼 세부 기준 좌표. 화장품법은 `_COSM_REF` 가 맡는다 — 여기서는 None."""
     if law_id == FOOD[0]:

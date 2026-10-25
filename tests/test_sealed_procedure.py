@@ -38,6 +38,41 @@ def test_깨끗하면_막지_않고_변경이_있으면_막는다(monkeypatch: p
     assert "2 파일" in (sealed_log.worktree_refusal() or "")
 
 
+def test_봉인_전_같은_커밋_같은_플래그의_dev_선행_실행이_있어야_연다(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🆕 2026-10-25 (D-348 보충 43 결정 2 ⑤ · 원장 10-24(B) ④) — 봉인 1 번째가 dev 에서 돌지 않은 조합으로 열려 멈췄다."""
+    log = tmp_path / "dev_runs.jsonl"
+    monkeypatch.setattr(sealed_log, "git_head", lambda root=None: "abc123")
+    monkeypatch.setattr(sealed_log, "worktree_state", lambda root=None: sealed_log.WORKTREE_CLEAN)
+    assert "줄 없음" in (sealed_log.dev_precheck_refusal(True, path=log) or "")
+    base = {
+        "full": True,
+        "category_only": False,
+        "invariant_rows": 0,
+        "contract_errors": 0,
+        "answer_contract_errors": 0,
+    }
+    sealed_log.append_dev(base | {"conditional": False, "answers": False}, path=log)
+    sealed_log.append_dev(base | {"conditional": True, "answers": False}, path=log)
+    assert "조건부 · 답 경로 줄 없음" in (sealed_log.dev_precheck_refusal(True, path=log) or ""), (
+        "답 경로를 봉인에 주면 dev 도 답 경로로"
+    )
+    assert sealed_log.dev_precheck_refusal(False, path=log) is None
+    sealed_log.append_dev(
+        base | {"conditional": True, "answers": True, "contract_errors": 2}, path=log
+    )
+    assert "contract_errors" in (sealed_log.dev_precheck_refusal(True, path=log) or "")
+    sealed_log.append_dev(base | {"conditional": True, "answers": True}, path=log)
+    assert sealed_log.dev_precheck_refusal(True, path=log) is None, "가장 최근 줄로 본다"
+    monkeypatch.setattr(sealed_log, "git_head", lambda root=None: "def456")
+    assert sealed_log.dev_precheck_refusal(True, path=log), "다른 커밋의 줄은 세지 않는다"
+    sealed_log.append_dev(base | {"conditional": False, "answers": False, "full": False}, path=log)
+    assert "무조건부 줄 없음" in (sealed_log.dev_precheck_refusal(False, path=log) or ""), (
+        "일부 행만 돈 줄은 세지 않는다"
+    )
+
+
 def test_모드별_행은_조건부를_거른_뒤_자른다() -> None:
     rows = [
         {"id": "a", "품목": "식품", "전제": "식품"},

@@ -1004,6 +1004,16 @@ class JudgeRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=PARAMS.max_text_len)
     product: ProductContext = Field(default_factory=ProductContext)
 
+    @model_validator(mode="after")
+    def _no_answer_without_category(self) -> JudgeRequest:
+        # 🆕 2026-10-25 (D-348 보충 44 결정 5) 품목을 모르면 답을 받지 않는다 — 묻는 순서는 품목 먼저(보충 34 결정 2 · 37 결정 2) ·
+        #    받으면 그래프가 품목 보류 기록에 답을 실으려다 계약에서 멈춘다(원장 10-24(B) ④) · `/judge` 는 422 · 화면은 `_core_judge` 가 422 로
+        if (self.product.facts or self.product.substs) and self.product.category is None:
+            raise ValueError(
+                "품목 없이 답을 받지 않는다 — 품목을 고른 뒤 답한다 (D-348 보충 44 결정 5)"
+            )
+        return self
+
 
 class Branch(BaseModel):
     """**품목 분기** — 전제 하나에서 계산한 문서 판정 (🆕 D-263 · D-267 · D-276).

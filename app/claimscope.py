@@ -14,7 +14,11 @@
 
 from __future__ import annotations
 
+import functools
+import hashlib
+import json
 import re
+from pathlib import Path
 
 from app import factcheck
 from app.dictmatch import norm as _norm
@@ -91,6 +95,104 @@ def claim_guard(text: str) -> bool:
     if not t or is_caution(t) or is_veto(t):
         return False
     return bool(PREDICATE.search(t) or AD_CUE.search(t))
+
+
+# ══════════════════════════════════════════════════════════════════
+#  하한 가드 (🆕 2026-10-24 · D-348 보충 41 결정 2 · 3) — 인코더 하한(R1 층)을 **기록에 들일 문장** · 확정 관문과 다른 규칙이다
+# ══════════════════════════════════════════════════════════════════
+# ★ 주장 가드(위 `claim_guard`)는 명사구 주장(「트랜스지방 ZERO」 · 「~ 예방」 · 「~ 차단」)의 하한을 막는다 — 확장 dev 조건부 위반 284 행
+#   (원장 10-23(B) ① · 가드를 늘 참으로 둔 판과의 차). 하한 가드는 그중 **모양으로 주장인 것**만 더 연다:
+#   지금 주장 가드 ∨ (주의 · 상담 아님 ∧ 거부 가드에 안 걸림 ∧ (관형형으로 끝남 ∨ 동작 · 상태 명사로 끝남)).
+# 🔴 확정은 넓히지 않는다 — 답 없는 확정 · 품목 선택 필요의 관문(`app/graph.py` `_absolute_types`) · 전제가 답인 확정(`encoder_cap`)은
+#    지금 주장 가드를 본다(보충 41 결정 2 ②). 넓힌 하한은 표시 · 질문까지만 연다.
+# `[측정]` 흉내(코드 미변경) dev 조건부 위반 하한 297 → 408 · 확정 그대로 · 적법 「확인 못 함 + 하한」 3 / 183(95 % 상한 4.7 %) ·
+#   데이터 밖 같은 지표 ≤ 8.2 % (원장 10-23(B) ⑥ · 목록에 정상 카피 900 이 든 판 — 이 파일의 목록(보충 41 (가))으로는 구현 뒤 다시 잰다)
+#: 관형형 끝 — 「~하는」 · 「~없는」 · 「~된」 (인계 10-22 클론A §1 #1 의 V1 · `[임의]`) · 🚨 끝 「인」 때문에 「확인 · 승인」 같은 명사에도 걸린다(원장 10-23(B) ②)
+ADNOMINAL_END = re.compile(r"(는|은|운|한|인|된|진|던|할|될|줄)\s*[.!?~]*\s*$")
+#: 동작 · 상태 명사 목록 — 생성물(`preprocess/claim_nouns.py` · 🔗 그 파일의 `OUT` 과 같은 이름)
+CLAIM_NOUNS = Path(__file__).resolve().parent.parent / "data" / "derived" / "claim_nouns.jsonl"
+_TAIL_PUNCT = re.compile(r"[\s.!?~·,'\"”’)\]]+$")
+_LAST_HANGUL = re.compile(r"([가-힣]+)$")
+
+
+@functools.cache
+def claim_nouns() -> frozenset[str] | None:
+    """동작 · 상태 명사 목록 — 🔴 파일이 없거나 비었으면 None(넓히지 않는다 · D-220 · 보충 41 결정 3). 다시 만든 뒤에는 `claim_nouns.cache_clear()`."""
+    if not CLAIM_NOUNS.exists():
+        return None
+    got = frozenset(
+        json.loads(x)["낱말"]
+        for x in CLAIM_NOUNS.read_text(encoding="utf-8").splitlines()
+        if x.strip()
+    )
+    return got or None
+
+
+def nouns_stamp() -> str | None:
+    """판 표지 — 목록 파일 sha256 앞 12 자(없으면 None). 평가 도구가 결과 파일에 적는다(D-178)."""
+    if claim_nouns() is None:
+        return None
+    return hashlib.sha256(CLAIM_NOUNS.read_bytes()).hexdigest()[:12]
+
+
+def noun_end(text: str, words: frozenset[str]) -> bool:
+    """마지막 한글 덩어리의 끝 2 ~ 4 자가 목록에 있는가 — 「소아과 전문의 영양설계」 → 「설계」 · 끝 문장부호 · 따옴표 · 괄호는 뗀다."""
+    t = _TAIL_PUNCT.sub("", (text or "").strip())
+    m = _LAST_HANGUL.search(t)
+    if not m:
+        return False
+    w = m.group(1)
+    return any(w[-n:] in words for n in range(min(4, len(w)), 1, -1))
+
+
+def floor_guard(text: str) -> bool:
+    """하한 가드 — 인코더 하한(R1 층)을 기록에 들일 문장인가 (보충 41 결정 2 ①). 지금 주장 가드보다 넓다 · 확정에는 쓰지 않는다.
+
+    🔴 목록이 없으면 지금 주장 가드와 같다(관형형 끝도 열지 않는다 · 보충 41 결정 3). 빈 글자 · 주의 · 상담 · 거부 가드는 언제나 거짓.
+    """
+    if claim_guard(text):
+        return True
+    t = (text or "").strip()
+    if not t or is_caution(t) or is_veto(t):
+        return False
+    words = claim_nouns()
+    if words is None:
+        return False
+    return bool(ADNOMINAL_END.search(t)) or noun_end(t, words)
+
+
+#: 🆕 2026-10-25 (D-348 보충 44 결정 1) 질병명 목록 — `[판정]` 팀장 검토 2026-10-18(보충 21 결정 1 · 근거 · 뺀 이름은 `preprocess/dictionary.py` 그 자리 주석).
+#:    사전의 「조문 꼴 × 질병명」 빌드(`preprocess/dictionary.py`)와 확정 관문의 질병 신호(`confirm_gate`)가 같은 목록을 쓴다(D-99)
+DISEASE_NAMES: tuple[str, ...] = (
+    "탈모", "치매", "골다공증", "감기", "비만", "소아비만", "변비", "당뇨병", "당뇨", "치주염",
+    "방광염", "전립선비대증", "뇌경색", "빈혈", "성인병", "고지혈증", "관절염", "심장병", "잇몸질환", "다낭성난소증후군",
+    "난임", "충치", "전립선암", "갱년기장애", "성장장애", "알레르기질환", "협심증", "뇌졸중", "고혈압", "만성피로증후군",
+    "동맥경화", "중풍", "편두통", "우울증", "심혈관질환", "혈관질환", "천식", "폐질환", "아토피", "아토피피부염",
+    "습진", "암", "심근경색", "이질", "불면증", "역류성식도염", "위염", "위궤양", "장염", "간염",
+    "지방간", "비염", "결막염", "안구건조증", "녹내장", "백내장", "통풍", "류마티스", "신장병", "요실금",
+    "생리통", "생리불순", "치질", "두통", "과민성대장증후군", "대장암", "위암", "폐암", "간암", "유방암",
+)  # fmt: skip
+
+
+def disease_signal(text: str) -> bool:
+    """질병 · 치료 신호 — 질병명(`DISEASE_NAMES`) 또는 의약 · 치료 낱말(`DRUG_CLAIM_GENERAL` · 지침 [별표 1] 제1호 · 보충 26 결정 1)이 있다 (🆕 2026-10-25 · 보충 44 결정 1).
+
+    `[문헌]` 식품표시광고법 시행령 [별표 1] 1.가 ~ 다(질병의 예방 · 치료 · 징후 · 증상) · 화장품법 시행규칙 [별표 5] 2.가(의약품 오인) — 두 칸의 핵심은 문장 꼴이 아니라 질병 · 치료 **내용**이다.
+    """
+    t = text or ""
+    # 🔴 한 글자 이름(「암」)은 글자 포함으로 대지 않는다 — 「암반수」 같은 낱말에 걸린다 · 사전 빌드의 최소 길이와 같다(`preprocess/dictionary.py` `MIN_TERM` 2) ·
+    #    「이질」(이질감) · 「통풍」(환기)처럼 두 글자도 다른 뜻이 있다 — 하한 가드 ∧ 인코더 C 후보 τ 이상일 때만 보는 자리라 남긴다(보충 44 대가)
+    return bool(DRUG_CLAIM_GENERAL.search(t)) or any(len(n) >= 2 and n in t for n in DISEASE_NAMES)
+
+
+def confirm_gate(text: str) -> bool:
+    """답 없는 확정 · 품목 선택 필요의 관문 가드 (🆕 2026-10-25 · D-348 보충 44 결정 1 · 보충 41 결정 2 ② 개정).
+
+    = 지금 주장 가드 ∨ (하한 가드 ∧ 질병 · 치료 신호). 명사구 · 관형형 끝 주장(「욕창 예방」 · 「당뇨 걱정 없는」)은 질병 · 치료 내용이 있을 때만 연다.
+    `[측정]` 관문 전부를 하한 가드로 넓힌 흉내 dev 확정 +13(맞음 9 · 적법 1 · 판정 불가 3) · 이 가드 +5(맞음 5 · 틀림 0) · 데이터 밖 1,226 행 확정 0 그대로(원장 10-25(B) ① ③).
+    🔴 목록이 없으면(`claim_nouns` 없음) 하한 가드가 지금 가드와 같아 이 가드도 지금 가드다(넓히지 않는다 · 보충 41 결정 3).
+    """
+    return claim_guard(text) or (floor_guard(text) and disease_signal(text))
 
 
 # ══════════════════════════════════════════════════════════════════

@@ -127,7 +127,8 @@ def scored(r: dict) -> bool:
     ⛔ 빼지 않으면 `labels` 가 빈 이 행들이 **적법 표본**으로 세져 오탐률이 부푼다(지시서 §7). 뺀 수는 따로 보인다.
     🔄 2026-10-08 (D-321) — 유형 없는 위반 행도 뺀다(`untyped_violation`).
     """
-    return r.get("조건") not in ("M", "D") and not untyped_violation(r)
+    # 🔄 2026-10-25 (D-348 보충 44 결정 4) 유형 없는 위반이라도 근거가 보여 줄 유형이 있으면(화장품 13①4) 채점한다 — `untyped_violation` 의 뜻은 그대로
+    return r.get("조건") not in ("M", "D") and (not untyped_violation(r) or bool(shown_truth(r)))
 
 
 def _best(cands: list[set], pred: set) -> set:
@@ -142,7 +143,20 @@ def truth_types(r: dict, pred: set[str]) -> set[str]:
     """
     if r.get("근거_후보") and not r["labels"]:
         return _best([set(statute.types_of(c)) & CLASSES for c in r["근거_후보"]], pred)
+    # 🆕 2026-10-25 (D-348 보충 44 결정 4) 유형을 주지 않는 인용(화장품 13①4)의 정답 집합 — 보여 줄 유형 중 하나면 맞힌다(근거 후보와 같은 고르기)
+    if not r["labels"] and (shown := shown_truth(r)):
+        return _best([{t} for t in shown], pred)
     return set(r["labels"]) & CLASSES
+
+
+def shown_truth(r: dict) -> list[str]:
+    """유형 없는 위반 행의 근거가 **보여 줄** 유형(`statute.shown_types`) — 확정 클래스만 · 없으면 빈 목록 (🆕 2026-10-25 · 보충 44 결정 4)."""
+    out = []
+    for c in r.get("근거") or []:
+        for t in statute.shown_types(c):
+            if t in CLASSES and t not in out:
+                out.append(t)
+    return out
 
 
 def truth_ho(r: dict, pred: set[str]) -> set[str]:
