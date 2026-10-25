@@ -27,7 +27,9 @@ def test_review_one(http: Client) -> None:
     r = review(http, [TEXT], "all")
     assert r.status_code == 200, f"상태 {r.status_code}"
     assert_no_server_error(r)
-    assert "rv-pending" not in r.text, "「판정 엔진에 연결하지 못했어요」가 떴다"
+    # 클래스 이름(rv-pending)은 화면 안 <style> 에 늘 있다 — 문구로 본다
+    assert "판정 엔진에 연결하지 못했어요" not in r.text, "「판정 엔진에 연결하지 못했어요」가 떴다"
+    assert "판정 엔진이 아직 붙지 않았어요" not in r.text, "「판정 엔진이 아직 붙지 않았어요」가 떴다"
     assert "cl-result-copy" in r.text, "검수 결과 영역이 없다"
 
 
